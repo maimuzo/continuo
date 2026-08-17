@@ -1,0 +1,12 @@
+continuo
+Copyright (c) 2026 maimuzo
+
+This product includes a redistributed copy of the Symphony Service Specification
+from the openai/symphony project (https://github.com/openai/symphony), located at
+docs/spec/symphony/SPEC.md.
+
+That file is licensed under the Apache License, Version 2.0. A copy of the license
+is included as LICENSE-APACHE-2.0.txt. The file is redistributed unmodified apart
+from an attribution header added at the top.
+
+All other files in this repository are licensed under the MIT License; see LICENSE.
