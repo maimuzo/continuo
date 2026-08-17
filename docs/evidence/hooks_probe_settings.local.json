@@ -1,0 +1,110 @@
+{
+  "permissions": {
+    "allow": [
+      "Task",
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(sleep:*)",
+      "Bash(pwd)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py SessionStart@wt-87"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py UserPromptSubmit@wt-87"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py SubagentStart@wt-87"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py SubagentStop@wt-87"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py Stop@wt-87"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py SessionEnd@wt-87"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py Notification@wt-87"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py PreToolUse-Task@wt-87"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/scratch/hooks-probe/probe.py PostToolUse-Task@wt-87"
+          }
+        ]
+      }
+    ]
+  }
+}
