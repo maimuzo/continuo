@@ -26,11 +26,11 @@ updated: 2026-08-17
 
 ## 1. 何に名前をつけるのか
 
-**herdr の上に乗る Go 製の常駐プロセス。**herdr-symphony の単純な移植版ではないため、**元の名前を含む名前（`herdr-symphony-go` 等）にはしない。**この決定は 2026-08-13 に確定済みで、[docs/plans/setup_herdr-symphony.md:100](plans/setup_herdr-symphony.md#L100) の設計判断表にある。
+**herdr の上に乗る Go 製の常駐プロセス。**herdr-symphony の単純な移植版ではないため、**元の名前を含む名前（`herdr-symphony-go` 等）にはしない。**この決定は 2026-08-13 に確定済みで、**先行調査の設計判断表にある**（記録は非公開のリポジトリにあるため、この文書からは参照できない）。
 
 ### このツールが何をするか（名前の材料）
 
-出典は [docs/plans/setup_herdr-symphony.md:92-108](plans/setup_herdr-symphony.md#L92-L108) と [同:1841-1857](plans/setup_herdr-symphony.md#L1841-L1857)。
+**出典は先行調査の記録である。**非公開のリポジトリにあるため、この文書からは参照できない。**必要な結論は [docs/plans/continuo_design.md](plans/continuo_design.md) に転記してある。**
 
 | 性質 | 内容 |
 | --- | --- |

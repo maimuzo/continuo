@@ -73,6 +73,14 @@ herdr agent read <名前> --source recent-unwrapped --lines 50
 
 ---
 
+## プランファイルの書き方
+
+[.claude/rules/plan-file.md](.claude/rules/plan-file.md) に従うこと。とくに次の3点。
+
+- **節の冒頭に「言いたいこと」を3行以内で置く。**そのあとに結論、最後に詳細
+- **修正の履歴を書かない。**置くのは最新の仕様・選定根拠・比較した案の否定根拠だけ
+- **1つの節は50行以内。**長くなったら要約版を別ファイルに作る（元は残す）
+
 ## 報告のルール
 
 [.claude/rules/reporting.md](.claude/rules/reporting.md) に従うこと。とくに次の3点。

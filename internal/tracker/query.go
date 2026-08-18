@@ -1,0 +1,682 @@
+package tracker
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// itemFieldsFragment は project item 1件を取得するときに共通して要る GraphQL フィールドの
+// 断片である。候補の取得（fetch_issues_by_states）と ID 指定の取り直し
+// （fetch_issues_by_ids）の両方で使い回す。
+//
+// **Priority は意図的にここに含めない。**continuo は Priority を読まないと決めている
+// （設計 4-2）。この断片にどんな名前であれ "riority" を含む文字列を足さないこと。
+// テスト（TestFetchIssuesByStates_Priorityを読まない）はこの断片を経由したクエリの
+// 送信内容を検査して確認している。
+//
+// $statusField は呼び出し側が変数として渡す（tracker.provider.status_field。既定 "Status"）。
+//
+// **item そのものの `type` と `updatedAt` は要求しない。**item の種別は
+// `content.__typename` で判別でき、更新時刻は `content.updatedAt` を使うため、
+// どちらも読み手がいなかった。**取るのに使わない値は最初から要求しない。**
+//
+// **`isArchived` は archive 済みの item を弾くために読む**（mapRawItemToIssue）。
+// 候補の取得（`items(...)`）は既定の archivedStates が `[NOT_ARCHIVED]` なので archive 済みは
+// そもそも返らないが、ID 指定の取り直し（`nodes(ids:)`）にはその既定が効かない
+// （2026-08-18 に introspection で確認）。
+const itemFieldsFragment = `
+  id
+  isArchived
+  fieldValueByName(name: $statusField) {
+    __typename
+    ... on ProjectV2ItemFieldSingleSelectValue { name optionId }
+  }
+  content {
+    __typename
+    ... on Issue {
+      id
+      number
+      title
+      body
+      url
+      state
+      createdAt
+      updatedAt
+      repository { nameWithOwner defaultBranchRef { name } }
+      labels(first: 50) { nodes { name } }
+      assignees(first: 1) { nodes { id login } }
+      blockedBy(first: 20) { nodes { id number state repository { nameWithOwner } } }
+      linkedBranches(first: 1) { nodes { ref { name } } }
+      comments { totalCount }
+    }
+    ... on DraftIssue {
+      id
+      title
+      body
+      createdAt
+      updatedAt
+      assignees(first: 1) { nodes { id login } }
+    }
+  }
+`
+
+// candidateQueryTemplate は fetch_issues_by_states が使うクエリである。
+// `items(query: $q)` のサーバ側フィルタで Status を絞り込み、返ってきた順序をそのまま使う
+// （自前で並べ替えない。設計 4-2）。
+//
+// **`orderBy: { field: POSITION, direction: ASC }` を明示的に渡す。**POSITION の昇順は
+// 「人間がボード上でドラッグして決めた並び順」そのものであり、continuo は実行順序の全部を
+// この順序に賭けている（設計 4-2 / 4-4）。**省略してもいまは同じ既定値になる**
+// （2026-08-18 の introspection で `{field: POSITION, direction: ASC}` を実測）**が、
+// 既定値は provider 側の都合で変わりうる。**黙って実行順序が変わるのを防ぐため、
+// 明示して固定する。
+//
+// **owner が organization か user かをこちらで判定する必要が無いよう、
+// `repositoryOwner` を使う。**Organization / User はどちらも ProjectV2Owner インターフェースを
+// 実装しているため、`... on ProjectV2Owner` のフラグメントで両対応できる
+// （2026-08-18 に project #3 で読み取り専用の introspection とクエリで実測確認済み）。
+const candidateQueryTemplate = `
+query($login: String!, $number: Int!, $statusField: String!, $q: String!, $after: String) {
+  repositoryOwner(login: $login) {
+    ... on ProjectV2Owner {
+      projectV2(number: $number) {
+        items(first: 100, after: $after, query: $q, orderBy: { field: POSITION, direction: ASC }) {
+          pageInfo { hasNextPage endCursor }
+          nodes {` + itemFieldsFragment + `
+          }
+        }
+      }
+    }
+  }
+}
+`
+
+// byIDsQueryTemplate は fetch_issues_by_ids が使うクエリである。
+// `nodes(ids:)` は見つからない ID に対して null を返す（削除・archive 等で
+// 「もう見えない」ID を、エラーにせず「見えなくなった」として扱える。2026-08-18 に実測確認）。
+const byIDsQueryTemplate = `
+query($statusField: String!, $ids: [ID!]!) {
+  nodes(ids: $ids) {
+    __typename
+    ... on ProjectV2Item {` + itemFieldsFragment + `
+    }
+  }
+}
+`
+
+// bootstrapQueryTemplate は起動時の検査（Bootstrap）が使うクエリである。
+// project の ID・Status フィールドの ID・各選択肢の ID と名前を1リクエストで取る
+// （設計 3-6 / 2-2: 「選択肢名の照合と同じリクエストで取れる」）。
+const bootstrapQueryTemplate = `
+query($login: String!, $number: Int!, $statusField: String!) {
+  repositoryOwner(login: $login) {
+    ... on ProjectV2Owner {
+      projectV2(number: $number) {
+        id
+        field(name: $statusField) {
+          __typename
+          ... on ProjectV2SingleSelectField {
+            id
+            options { id name }
+          }
+        }
+      }
+    }
+  }
+}
+`
+
+// updateStatusMutation は Status を書き込むミューテーションである（設計「その4」）。
+// 1件の Status 値だけを書く `updateProjectV2ItemFieldValue` を使う。
+// Status の選択肢そのものを書き換える mutation（選択肢の指定が全件置き換えとして扱われ、
+// 設定済みの Status を全部消す）は使わない。
+const updateStatusMutation = `
+mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+  updateProjectV2ItemFieldValue(
+    input: {
+      projectId: $projectId
+      itemId: $itemId
+      fieldId: $fieldId
+      value: { singleSelectOptionId: $optionId }
+    }
+  ) {
+    projectV2Item { id }
+  }
+}
+`
+
+// commentsQueryTemplate は作業開始時に既存コメントを取るクエリである（設計「その7」）。
+// IssueCommentOrderField の取りうる値は UPDATED_AT のみ（2026-08-18 に introspection で確認）。
+//
+// **降順（DESC）で取る。**設定の `comments.max` は「判別のために何件まで遡るか」であり
+// （設計 5-2）、遡るとは新しい方から過去へ数えることである。昇順で先頭から max 件を取ると、
+// コメントが max 件を超える issue で**最新のコメントが落ちて最古のコメントだけが残る。**
+// 代筆の要否（エージェントが直近の turn でコメントを書いたか）の判別には最新側が要る。
+// **Go 側で受け取ってから逆順に並べ替え、古い順（oldest_first）にして返す**（FetchComments）。
+const commentsQueryTemplate = `
+query($issueId: ID!, $first: Int!) {
+  node(id: $issueId) {
+    __typename
+    ... on Issue {
+      comments(first: $first, orderBy: { field: UPDATED_AT, direction: DESC }) {
+        nodes { id url body createdAt author { login } }
+      }
+    }
+  }
+}
+`
+
+// maxCommentsPerFetch は1回のコメント取得で要求できる件数の上限である。
+//
+// **GitHub の connection は `first` の上限が 100 である。**101 を要求すると
+// EXCESSIVE_PAGINATION のエラーになる（2026-08-18 に実測。
+// "Requesting 101 records on the `comments` connection exceeds the `first` limit of
+// 100 records."）。設定に 200 と書けてしまうと、起動時ではなく毎回のコメント取得で失敗するため、
+// 設定の検査（internal/config の validate）と FetchComments の両方でここへ丸める。
+const maxCommentsPerFetch = 100
+
+// defaultCommentsPerFetch は comments.max が未設定（0以下）のときに使う件数である
+// （設計 5-2 の設定例の `max: 50`）。
+const defaultCommentsPerFetch = 50
+
+// commentsOrderOldestFirst は tracker.provider.comments.order が受け付ける唯一の値である
+// （設計 5-2）。他の値を黙って無視すると、書いたつもりの設定が効かないことに気づけない。
+const commentsOrderOldestFirst = "oldest_first"
+
+// addCommentMutation は continuo がコメントを代筆するときに使うミューテーションである
+// （設計「その7」/ 3-25）。subjectId には Issue.NativeRef["issue_node_id"] を渡す
+// （project item の ID ではなく、下敷きの GitHub issue のノード ID が要る）。
+const addCommentMutation = `
+mutation($subjectId: ID!, $body: String!) {
+  addComment(input: { subjectId: $subjectId, body: $body }) {
+    commentEdge {
+      node { id url body createdAt author { login } }
+    }
+  }
+}
+`
+
+// ===== 応答の wire format =====
+
+type rawRef struct {
+	Name string `json:"name"`
+}
+
+type rawLinkedBranch struct {
+	Ref *rawRef `json:"ref"`
+}
+
+type rawLinkedBranchConn struct {
+	Nodes []rawLinkedBranch `json:"nodes"`
+}
+
+type rawLabel struct {
+	Name string `json:"name"`
+}
+
+type rawLabelConn struct {
+	Nodes []rawLabel `json:"nodes"`
+}
+
+type rawUser struct {
+	ID    string `json:"id"`
+	Login string `json:"login"`
+}
+
+type rawUserConn struct {
+	Nodes []rawUser `json:"nodes"`
+}
+
+type rawRepository struct {
+	NameWithOwner    string  `json:"nameWithOwner"`
+	DefaultBranchRef *rawRef `json:"defaultBranchRef"`
+}
+
+type rawBlockerIssue struct {
+	ID         string         `json:"id"`
+	Number     int            `json:"number"`
+	State      string         `json:"state"`
+	Repository *rawRepository `json:"repository"`
+}
+
+type rawBlockerConn struct {
+	Nodes []rawBlockerIssue `json:"nodes"`
+}
+
+type rawCommentsCount struct {
+	TotalCount int `json:"totalCount"`
+}
+
+// rawContent は ProjectV2Item.content の中身である。Issue と DraftIssue のフィールドを
+// すべて1つの構造体に平らに持つ（GraphQL のインラインフラグメントは同じ JSON オブジェクトに
+// マージされる）。どちらの型のフィールドかは Typename で判別する。
+type rawContent struct {
+	Typename       string               `json:"__typename"`
+	ID             string               `json:"id"`
+	Number         int                  `json:"number"`
+	Title          string               `json:"title"`
+	Body           string               `json:"body"`
+	URL            string               `json:"url"`
+	State          string               `json:"state"`
+	CreatedAt      *time.Time           `json:"createdAt"`
+	UpdatedAt      *time.Time           `json:"updatedAt"`
+	Repository     *rawRepository       `json:"repository"`
+	Labels         *rawLabelConn        `json:"labels"`
+	Assignees      *rawUserConn         `json:"assignees"`
+	BlockedBy      *rawBlockerConn      `json:"blockedBy"`
+	LinkedBranches *rawLinkedBranchConn `json:"linkedBranches"`
+	Comments       *rawCommentsCount    `json:"comments"`
+}
+
+// rawStatusValue は fieldValueByName(name: "Status") の応答である。
+// __typename が ProjectV2ItemFieldSingleSelectValue でない場合（Status が単一選択でない
+// 設定になっている等）は Name が空のまま届く。
+type rawStatusValue struct {
+	Typename string `json:"__typename"`
+	Name     string `json:"name"`
+	OptionID string `json:"optionId"`
+}
+
+// rawItem は ProjectV2Item 1件の応答である。fetch_issues_by_states と fetch_issues_by_ids の
+// 両方で共通して使う。
+type rawItem struct {
+	// Typename は fetch_issues_by_ids（nodes(ids:) 経由）でだけ埋まる。
+	// items() 経由（fetch_issues_by_states）では常に ProjectV2Item なので送っていない。
+	Typename string `json:"__typename"`
+	ID       string `json:"id"`
+	// IsArchived は item がボード上で archive されているかどうかである。
+	// **archive 済みの item は「もう見えない」として扱う**（mapRawItemToIssue）。
+	IsArchived       bool            `json:"isArchived"`
+	FieldValueByName *rawStatusValue `json:"fieldValueByName"`
+	Content          *rawContent     `json:"content"`
+}
+
+type rawItemConnection struct {
+	PageInfo struct {
+		HasNextPage bool   `json:"hasNextPage"`
+		EndCursor   string `json:"endCursor"`
+	} `json:"pageInfo"`
+	Nodes []rawItem `json:"nodes"`
+}
+
+type rawProjectForItems struct {
+	Items rawItemConnection `json:"items"`
+}
+
+type rawRepositoryOwnerForItems struct {
+	ProjectV2 *rawProjectForItems `json:"projectV2"`
+}
+
+type candidateQueryResponse struct {
+	RepositoryOwner *rawRepositoryOwnerForItems `json:"repositoryOwner"`
+}
+
+type byIDsQueryResponse struct {
+	Nodes []*rawItem `json:"nodes"`
+}
+
+type rawOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type rawStatusField struct {
+	Typename string      `json:"__typename"`
+	ID       string      `json:"id"`
+	Options  []rawOption `json:"options"`
+}
+
+type rawProjectForBootstrap struct {
+	ID    string          `json:"id"`
+	Field *rawStatusField `json:"field"`
+}
+
+type rawRepositoryOwnerForBootstrap struct {
+	ProjectV2 *rawProjectForBootstrap `json:"projectV2"`
+}
+
+type bootstrapQueryResponse struct {
+	RepositoryOwner *rawRepositoryOwnerForBootstrap `json:"repositoryOwner"`
+}
+
+type updateStatusResponse struct {
+	UpdateProjectV2ItemFieldValue *struct {
+		ProjectV2Item *struct {
+			ID string `json:"id"`
+		} `json:"projectV2Item"`
+	} `json:"updateProjectV2ItemFieldValue"`
+}
+
+type rawComment struct {
+	ID        string     `json:"id"`
+	URL       string     `json:"url"`
+	Body      string     `json:"body"`
+	CreatedAt *time.Time `json:"createdAt"`
+	Author    *rawUser   `json:"author"`
+}
+
+type rawCommentConn struct {
+	Nodes []rawComment `json:"nodes"`
+}
+
+type rawIssueForComments struct {
+	Typename string          `json:"__typename"`
+	Comments *rawCommentConn `json:"comments"`
+}
+
+type commentsQueryResponse struct {
+	Node *rawIssueForComments `json:"node"`
+}
+
+type addCommentResponse struct {
+	AddComment *struct {
+		CommentEdge *struct {
+			Node rawComment `json:"node"`
+		} `json:"commentEdge"`
+	} `json:"addComment"`
+}
+
+// ===== クエリの組み立て =====
+
+// buildStatusSearchQuery は active_states / terminal_states の一覧から、
+// `items(query:)` に渡す検索クエリ文字列を組み立てる。
+//
+// GitHub Projects の検索構文は、同じキーの複数の値を1つの `status:` に
+// カンマ区切りで並べると OR として扱う（`status:"A","B"` で A または B。
+// `status:"A" status:"B"` と別々に書くと AND になり0件になる。
+// 2026-08-18 に project #3 への読み取り専用クエリで実測確認済み）。
+//
+// states: 対象にする Status 名の一覧。
+// 戻り値: `status:"A","B",...` の形の検索クエリ文字列。states が空なら空文字を返す
+// （呼び出し側は states が空の時点でリクエストを送らないため、実際には呼ばれない）。
+func buildStatusSearchQuery(states []string) string {
+	if len(states) == 0 {
+		return ""
+	}
+	quoted := make([]string, len(states))
+	for i, s := range states {
+		quoted[i] = quoteSearchValue(s)
+	}
+	return "status:" + strings.Join(quoted, ",")
+}
+
+// quoteSearchValue は GitHub Projects の検索構文向けに値をダブルクオートで囲む。
+// 値の中にダブルクオートが含まれる場合はバックスラッシュでエスケープする
+// （Status の選択肢名にダブルクオートを使う運用は無いはずだが、含まれていても
+// 壊れたクエリを送らないようにする）。
+func quoteSearchValue(s string) string {
+	escaped := strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + escaped + `"`
+}
+
+// foldStatus は Status 名の比較用に、前後の空白を落として小文字にする
+// （SPEC.md 11.3: "Compare states after trimming surrounding whitespace and applying
+// lowercase."）。**表示用の値はこの関数を通さず、GitHub の綴りをそのまま使う**（3-13）。
+func foldStatus(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// containsFoldedStatus は states の中に target と（foldStatus で比較して）一致するものが
+// あるかどうかを判定する。
+func containsFoldedStatus(states []string, target string) bool {
+	folded := foldStatus(target)
+	for _, s := range states {
+		if foldStatus(s) == folded {
+			return true
+		}
+	}
+	return false
+}
+
+// ===== 正規化（設計 3-13 / SPEC.md 11.3） =====
+
+// normalizeLabels はラベルの一覧を正規化する。
+// 前後の空白を落として小文字にし、空のラベルは捨て、重複は取り除く（3-13 / SPEC.md 11.3）。
+// 順序は最初に現れた順を保つ（決定的な出力にするため、map の反復順に頼らない）。
+func normalizeLabels(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	result := make([]string, 0, len(names))
+	for _, raw := range names {
+		normalized := strings.ToLower(strings.TrimSpace(raw))
+		if normalized == "" {
+			continue
+		}
+		if seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		result = append(result, normalized)
+	}
+	return result
+}
+
+// mapItemResult は mapRawItemToIssue の結果である。
+type mapItemResult struct {
+	Issue Issue
+	// Ok が false のとき、Issue は無効である。呼び出し側は Reason をログまたはエラーに使う。
+	// state-list 呼び出し（fetch_issues_by_states）はこの結果を「省いてログに残す」
+	// （SHOULD）。ID 指定の呼び出し（fetch_issues_by_ids）は「エラーにする」（MUST）
+	// （SPEC.md 11.1 / 設計 3-13）。この使い分けは呼び出し側（adapter.go）が行う。
+	Ok bool
+	// Gone は「item は provider 側に存在するが、continuo から見える範囲にはもう無い」ことを
+	// 示す。いまのところ archive 済みの item だけがこれに当たる。
+	// **Ok が false でも Gone が true のものは、ID 指定の取り直しでもエラーにせず省く。**
+	// 「もう見えない」と「壊れている」は意味が違い、前者の省略は SPEC.md 11.1 が
+	// 明示的に許している（"IDs no longer visible in the configured scope are omitted"）。
+	Gone bool
+	// Reason は Ok が false のときの理由（人間可読）である。
+	Reason string
+	// NotDispatchableReason は Ok が true かつ Issue.Dispatchable が false のときに、
+	// なぜ dispatch できないかを人間可読で示す（設計 3-13: 「ログに残す」）。
+	NotDispatchableReason string
+}
+
+// mapRawItemToIssue は GraphQL から返ってきた1件の project item を、正規化した Issue へ
+// 変換する。
+//
+// raw: 変換対象。nil を渡してはならない（「見つからない ID」の扱いは呼び出し側が
+// raw そのものが nil かどうかで判定する。「もう見えない」ことと「正規化できない」ことは
+// 別の意味を持つため、この関数の責務にしない）。
+// statusFieldName: エラーメッセージ用（tracker.provider.status_field の値）。
+// repoTrusted: `<owner>/<repo>` が Claude Code に信頼登録されているかを判定する関数
+// （設計 3-13 の「リポジトリが信頼済み」）。nil なら全て信頼済みとして扱う。
+// 戻り値: Ok が true なら Issue が有効。false なら Reason に理由（人間可読）が入る。
+//   - archive 済みの item（Gone も true になる。「壊れている」ではなく「もう見えない」）
+//   - content が無い、または Issue でも DraftIssue でもない型（PullRequest 等）
+//   - Status が未設定（fieldValueByName が nil、または name が空）
+//     （3-13: 「Status 未設定の item」。一覧では省き、ID 指定の取り直しでは呼び出し側が
+//     これをエラーとして扱う）
+//   - Issue 型なのに repository が無い（想定外。安全側に倒して弾く）
+func mapRawItemToIssue(raw *rawItem, statusFieldName string, repoTrusted RepoTrustFunc) mapItemResult {
+	if raw.IsArchived {
+		// archive 済みの item はボード上でもう見えない。候補の取得は `items(...)` の既定
+		// （archivedStates: [NOT_ARCHIVED]）で最初から返らないが、ID 指定の取り直しには
+		// その既定が効かないため、ここで弾く。**「まだ作業中の状態にある」と誤認しないため。**
+		return mapItemResult{
+			Ok:     false,
+			Gone:   true,
+			Reason: "item が archive 済みです（ボード上ではもう見えません）",
+		}
+	}
+	if raw.Content == nil {
+		return mapItemResult{Ok: false, Reason: "content が空です（provider 側の異常）"}
+	}
+	if raw.FieldValueByName == nil || strings.TrimSpace(raw.FieldValueByName.Name) == "" {
+		return mapItemResult{Ok: false, Reason: fmt.Sprintf("Status（%s）が未設定です", statusFieldName)}
+	}
+
+	state := raw.FieldValueByName.Name
+	nativeRef := map[string]any{}
+
+	switch raw.Content.Typename {
+	case "Issue":
+		if raw.Content.Repository == nil || raw.Content.Repository.NameWithOwner == "" {
+			return mapItemResult{Ok: false, Reason: "Issue なのに repository が空です（provider 側の異常）"}
+		}
+		owner, repo, ok := strings.Cut(raw.Content.Repository.NameWithOwner, "/")
+		if !ok {
+			return mapItemResult{
+				Ok:     false,
+				Reason: fmt.Sprintf("repository.nameWithOwner の形が不正です: %q", raw.Content.Repository.NameWithOwner),
+			}
+		}
+
+		identifier := fmt.Sprintf("%s/%s#%d", owner, repo, raw.Content.Number)
+
+		var description *string
+		if raw.Content.Body != "" {
+			d := raw.Content.Body
+			description = &d
+		}
+
+		var url *string
+		if raw.Content.URL != "" {
+			u := raw.Content.URL
+			url = &u
+		}
+
+		var branchName *string
+		if raw.Content.LinkedBranches != nil && len(raw.Content.LinkedBranches.Nodes) > 0 {
+			if ref := raw.Content.LinkedBranches.Nodes[0].Ref; ref != nil && ref.Name != "" {
+				name := ref.Name
+				branchName = &name
+			}
+		}
+
+		var assigneeID *string
+		if raw.Content.Assignees != nil && len(raw.Content.Assignees.Nodes) > 0 {
+			a := raw.Content.Assignees.Nodes[0]
+			id := a.ID
+			assigneeID = &id
+			nativeRef["assignee_login"] = a.Login
+		}
+
+		var labels []string
+		if raw.Content.Labels != nil {
+			names := make([]string, len(raw.Content.Labels.Nodes))
+			for i, l := range raw.Content.Labels.Nodes {
+				names[i] = l.Name
+			}
+			labels = normalizeLabels(names)
+		}
+
+		var blockedBy []BlockerRef
+		if raw.Content.BlockedBy != nil {
+			for _, b := range raw.Content.BlockedBy.Nodes {
+				ref := BlockerRef{ID: b.ID, State: b.State}
+				if b.Repository != nil && b.Repository.NameWithOwner != "" {
+					ref.Identifier = fmt.Sprintf("%s#%d", b.Repository.NameWithOwner, b.Number)
+				}
+				blockedBy = append(blockedBy, ref)
+			}
+		}
+
+		commentCount := 0
+		if raw.Content.Comments != nil {
+			commentCount = raw.Content.Comments.TotalCount
+		}
+
+		nativeRef["issue_node_id"] = raw.Content.ID
+		nativeRef["content_type"] = "ISSUE"
+		if raw.Content.State != "" {
+			nativeRef["github_issue_state"] = raw.Content.State
+		}
+		if raw.Content.Repository.DefaultBranchRef != nil {
+			nativeRef["default_branch"] = raw.Content.Repository.DefaultBranchRef.Name
+		}
+
+		// 設計 3-13: dispatchable は「draft issue でない・Status が設定済み・リポジトリが
+		// 信頼済み」をすべて集約した1つの真偽値である。ここまで来た時点で前2つは満たしている
+		// ので、残る信頼の判定をここで行う。**受け皿をここに置かないと、GitHub 固有の分岐が
+		// orchestrator へ積み上がる。**
+		dispatchable := true
+		notDispatchableReason := ""
+		if repoTrusted != nil && !repoTrusted(owner, repo) {
+			dispatchable = false
+			notDispatchableReason = fmt.Sprintf(
+				"リポジトリ %s/%s が Claude Code に信頼登録されていません"+
+					"（信頼していないフォルダでは hook が1つも動かず、turn 終了の検知が全滅する。設計 3-6 / 4-3）",
+				owner, repo,
+			)
+		}
+
+		issue := Issue{
+			ID:           raw.ID,
+			NativeRef:    nativeRef,
+			Identifier:   identifier,
+			Title:        raw.Content.Title,
+			Description:  description,
+			Priority:     nil, // 設計 4-2: Priority を読まない。常に nil。
+			State:        state,
+			BranchName:   branchName,
+			URL:          url,
+			AssigneeID:   assigneeID,
+			Labels:       labels,
+			BlockedBy:    blockedBy,
+			Dispatchable: dispatchable,
+			CreatedAt:    raw.Content.CreatedAt,
+			UpdatedAt:    raw.Content.UpdatedAt,
+			Owner:        owner,
+			Repo:         repo,
+			Number:       raw.Content.Number,
+			CommentCount: commentCount,
+		}
+		return mapItemResult{Ok: true, Issue: issue, NotDispatchableReason: notDispatchableReason}
+
+	case "DraftIssue":
+		// 設計 3-13: draft issue は dispatchable=false にして残す。取得の段では落とさない。
+		// repository を持たないため、owner/repo/number は空のまま（3-13 が明記する制約）。
+		identifier := "draft:" + raw.ID
+
+		var description *string
+		if raw.Content.Body != "" {
+			d := raw.Content.Body
+			description = &d
+		}
+
+		var assigneeID *string
+		if raw.Content.Assignees != nil && len(raw.Content.Assignees.Nodes) > 0 {
+			a := raw.Content.Assignees.Nodes[0]
+			id := a.ID
+			assigneeID = &id
+			nativeRef["assignee_login"] = a.Login
+		}
+
+		nativeRef["issue_node_id"] = raw.Content.ID
+		nativeRef["content_type"] = "DRAFT_ISSUE"
+
+		issue := Issue{
+			ID:           raw.ID,
+			NativeRef:    nativeRef,
+			Identifier:   identifier,
+			Title:        raw.Content.Title,
+			Description:  description,
+			Priority:     nil,
+			State:        state,
+			BranchName:   nil,
+			URL:          nil,
+			AssigneeID:   assigneeID,
+			Labels:       nil,
+			BlockedBy:    nil,
+			Dispatchable: false,
+			CreatedAt:    raw.Content.CreatedAt,
+			UpdatedAt:    raw.Content.UpdatedAt,
+			Owner:        "",
+			Repo:         "",
+			Number:       0,
+			CommentCount: 0,
+		}
+		return mapItemResult{
+			Ok:                    true,
+			Issue:                 issue,
+			NotDispatchableReason: "draft issue はリポジトリを持たないので作業ディレクトリを決められません（設計 3-13）",
+		}
+
+	default:
+		return mapItemResult{
+			Ok:     false,
+			Reason: fmt.Sprintf("Issue でも DraftIssue でもない content です（%s）。dispatch できないため除外します", raw.Content.Typename),
+		}
+	}
+}

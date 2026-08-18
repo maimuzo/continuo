@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py SessionStart@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py SessionStart@wt-87"
           }
         ]
       }
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py UserPromptSubmit@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py UserPromptSubmit@wt-87"
           }
         ]
       }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py SubagentStart@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py SubagentStart@wt-87"
           }
         ]
       }
@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py SubagentStop@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py SubagentStop@wt-87"
           }
         ]
       }
@@ -59,7 +59,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py Stop@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py Stop@wt-87"
           }
         ]
       }
@@ -69,7 +69,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py SessionEnd@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py SessionEnd@wt-87"
           }
         ]
       }
@@ -79,7 +79,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py Notification@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py Notification@wt-87"
           }
         ]
       }
@@ -90,7 +90,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py PreToolUse-Task@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py PreToolUse-Task@wt-87"
           }
         ]
       }
@@ -101,7 +101,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/scratch/hooks-probe/probe.py PostToolUse-Task@wt-87"
+            "command": "<検証用ディレクトリ>/hooks_probe.py PostToolUse-Task@wt-87"
           }
         ]
       }
