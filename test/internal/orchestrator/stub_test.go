@@ -161,6 +161,8 @@ type stubFixtureOptions struct {
 	AgentStatus herdr.AgentStatus
 	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない。
 	RateLimit *ratelimit.Reader
+	// GHAuthCheck は `gh` の認証の検査である。nil なら検査しない。
+	GHAuthCheck func(ctx context.Context) error
 }
 
 // newStubFixture は通信を行わない検査対象を組み立てる。
@@ -211,6 +213,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		HookSocketPath: filepath.Join(root, "hooks.sock"),
 		ContinuoPath:   "/opt/continuo/bin/continuo",
 		Logger:         logger,
+		GHAuthCheck:    opts.GHAuthCheck,
 	})
 	if err != nil {
 		t.Fatalf("orchestrator.New に失敗した: %v", err)

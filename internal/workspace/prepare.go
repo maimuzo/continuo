@@ -65,7 +65,8 @@ type PrepareResult struct {
 // Prepare は issue のための worktree を用意する（3-22 の手順7段を、その順で実行する）。
 //
 //  1. git worktree prune
-//  2. 目的のパスに worktree があり git にも登録されていれば再利用する
+//  2. 目的のパスに worktree があり git にも登録されていて、**その worktree が
+//     目的の branch をチェックアウトしていれば**再利用する
 //  3. 実体はあるが登録が無ければエラーにする（乗っ取らない）
 //  4. 無ければ作る（branch があればチェックアウト、無ければ base から作る）
 //  5. 作成に失敗したらその場で孤児 branch を消す
@@ -83,7 +84,8 @@ type PrepareResult struct {
 // issue: 対象の issue。
 // 戻り値の1つ目: 用意した worktree の情報。
 // 戻り値の2つ目: clone を引けない（ErrCloneNotFound）・base を決められない
-// （ErrBaseUnknown）・登録の無い実体がある（ErrUnregisteredWorktree）・
+// （ErrBaseUnknown）・登録の無い実体がある／**別の branch を出している**
+// （ErrUnregisteredWorktree）・
 // 封じ込め検査に落ちた・git や herdr の実行に失敗した場合のエラー。
 func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, error) {
 	loc, warnings, err := Locate(m.resolvedRoot, m.cfg.Herdr.Worktree.BranchTemplate, issue)
@@ -128,7 +130,23 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 
 	switch {
 	case exists && registered:
-		// 段2: 再利用する。既存の身元ファイルを先に読む（3-18）。
+		// 段2: 再利用する。
+		//
+		// **再利用する前に、その worktree が本当に目的の branch を出しているかを
+		// git に答えさせる。**人間が同じ worktree で別の branch へ切り替えていた場合、
+		// そのまま再利用するとエージェントが意図しない branch の上で作業し、
+		// 食い違いに気づくのは片付けのとき（成果が別 branch に積まれたあと）になる。
+		head, err := gitCurrentBranch(ctx, loc.Path)
+		if err != nil {
+			return nil, err
+		}
+		if head != loc.Branch.String() {
+			// 段3 と同じ判断である。**乗っ取らない。**
+			return nil, fmt.Errorf(
+				"%w: %s は %q をチェックアウトしています（期待は %q）",
+				ErrUnregisteredWorktree, loc.Path, head, loc.Branch.String())
+		}
+		// 既存の身元ファイルを先に読む（3-18）。
 		result.Created = false
 		if identity, err := m.ReadIdentity(loc.Path); err != nil {
 			// 無い・壊れているときは新規として扱う（3-18）。**消さない。**

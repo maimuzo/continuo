@@ -180,3 +180,52 @@ func TestWorktreeOpen_pathを送れる(t *testing.T) {
 	}
 	assertSchemaKeys(t, params, herdr.MethodWorktreeOpen, worktreeOpenSchemaKeys)
 }
+
+// 目的: worktree 系の呼び出しが Read（既定5秒）ではなく Startup（既定60秒）で待つことを
+// 確認する（レビュー指摘「worktree.create / open / remove が Read を使っている」の回帰テスト）。
+//
+// **これらは待ちを伴う呼び出しである。**herdr 側で workspace・tab・pane を作り、
+// `git worktree` を動かす。5秒で切れると、着手の段7（worktree.open）が原因の分かりにくい
+// 形で失敗し、しかも herdr 側では workspace が作られている可能性がある（片付けの取りこぼし）。
+//
+// 与える情報: 応答を 300 ミリ秒遅らせる偽サーバと、Read=50ミリ秒・Startup=5秒のクライアント。
+// 成功条件: WorktreeOpen / WorktreeCreate / WorktreeRemove のいずれも成功すること
+// （Read を使っていれば 50 ミリ秒で打ち切られて失敗する）。
+func TestWorktree_Readではなく起動用の長い待ち時間を使う(t *testing.T) {
+	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
+		var req rpcRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			t.Errorf("偽サーバがリクエストを解析できませんでした: %v", err)
+			return
+		}
+		var sent struct {
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal(line, &sent); err != nil {
+			t.Errorf("偽サーバが method を解析できませんでした: %v", err)
+			return
+		}
+		// Read（50ミリ秒）より長く、Startup（5秒）より短い時間だけ待たせる。
+		time.Sleep(300 * time.Millisecond)
+		switch sent.Method {
+		case herdr.MethodWorktreeCreate:
+			writeResult(t, conn, req.ID, herdr.WorktreeCreateResult{Type: "worktree_created"})
+		case herdr.MethodWorktreeOpen:
+			writeResult(t, conn, req.ID, herdr.WorktreeOpenResult{Type: "worktree_opened"})
+		default:
+			writeResult(t, conn, req.ID, herdr.WorktreeRemoveResult{Type: "worktree_removed"})
+		}
+	})
+
+	client := herdr.New(fs.SocketPath(), herdr.Timeouts{Read: 50 * time.Millisecond, Startup: 5 * time.Second})
+
+	if _, err := client.WorktreeOpen(context.Background(), herdr.WorktreeOpenParams{Path: "/tmp/wt"}); err != nil {
+		t.Fatalf("WorktreeOpen が Read の上限で打ち切られた（Startup を使っていない）: %v", err)
+	}
+	if _, err := client.WorktreeCreate(context.Background(), herdr.WorktreeCreateParams{Path: "/tmp/wt"}); err != nil {
+		t.Fatalf("WorktreeCreate が Read の上限で打ち切られた（Startup を使っていない）: %v", err)
+	}
+	if _, err := client.WorktreeRemove(context.Background(), herdr.WorktreeRemoveParams{WorkspaceID: "w1"}); err != nil {
+		t.Fatalf("WorktreeRemove が Read の上限で打ち切られた（Startup を使っていない）: %v", err)
+	}
+}

@@ -66,7 +66,16 @@ func ResolvePath(argPath, workDir string) (string, error) {
 //     無人運用では気づけないため）
 //   - front matter の値が型として不正、または値として不正である
 //   - 5-5 の展開規則に反する（未定義の環境変数・$ の誤用・~user 形式など）
+//   - path が絶対パスでない（相対パスの解決の基準を決められないため。5-1）
 func Load(path string) (*Loaded, error) {
+	if !filepath.IsAbs(path) {
+		return nil, fmt.Errorf(
+			"WORKFLOW.md のパス %q が絶対パスではありません（設定に書いた相対パスの解決の基準に"+
+				"なるため、絶対パスで渡すこと。config.ResolvePath が絶対パスへ直す）",
+			path,
+		)
+	}
+
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("WORKFLOW.md を読み込めません: %s: %w", path, err)
@@ -86,8 +95,11 @@ func Load(path string) (*Loaded, error) {
 		return nil, fmt.Errorf("%s の設定値の展開に失敗しました: %w", path, err)
 	}
 
-	// 絶対パスの検査は展開のあとでなければ成立しない（"~/run/continuo.lock" は
-	// 展開前には絶対パスに見えないため）。
+	// 相対パスの解決は展開のあとに行う（"~/worktrees" は展開前には相対パスに見えるため）。
+	resolveRelativePaths(filepath.Dir(path), cfg)
+
+	// 絶対パスの検査は展開・相対パスの解決のあとでなければ成立しない
+	// （"~/run/continuo.lock" は展開前には絶対パスに見えないため）。
 	if err := validateExpanded(cfg); err != nil {
 		return nil, fmt.Errorf("%s の front matter が不正です: %w", path, err)
 	}
@@ -97,6 +109,24 @@ func Load(path string) (*Loaded, error) {
 		PromptTemplate: body,
 		Path:           path,
 	}, nil
+}
+
+// resolveRelativePaths は、相対パスで書かれた設定値を WORKFLOW.md が置かれている
+// ディレクトリを基準に絶対パスへ直す（設計 5-1。SPEC.md 5.3.3 / 5.4）。
+//
+// **対象は workspace.root だけである。**claude.hook_bridge.listen と runtime.lock_file は
+// 絶対パスのまま要求する（validateExpanded が弾く）。この2つは身元ファイルに書いたパスとの
+// 一致検査（3-23 / 3-18）と flock による排他（3-17）に使うため、書き手が絶対パスで
+// 1つに決めたことを明示していないと困るからである。
+// herdr.socket は continuo が作るファイルではなく herdr が待ち受けている場所なので、
+// WORKFLOW.md の置き場所を基準にするのは筋が通らない。ここでは触らない。
+//
+// baseDir: WORKFLOW.md が置かれているディレクトリの絶対パス。
+// cfg: 5-5 の展開まで終えた Config。対象キーの値が絶対パスへ書き換わる。
+func resolveRelativePaths(baseDir string, cfg *Config) {
+	if cfg.Workspace.Root != "" && !filepath.IsAbs(cfg.Workspace.Root) {
+		cfg.Workspace.Root = filepath.Join(baseDir, cfg.Workspace.Root)
+	}
 }
 
 // parseFrontMatter は YAML 文字列を Config へパースし、意味的な妥当性まで検証する。

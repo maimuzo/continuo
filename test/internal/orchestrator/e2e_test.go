@@ -256,12 +256,15 @@ func TestTick_設定ファイルに8つのhookと環境変数を書く(t *testin
 			t.Fatalf("hook %s が設定ファイルに無い: %s", name, raw)
 		}
 		cmd := entries[0].Hooks[0].Command
-		if !strings.Contains(cmd, "--socket "+fx.SocketPath) {
-			t.Fatalf("hook %s のコマンド行に socket の絶対パスが無い: %q", name, cmd)
+		// **パスは shell の単一引用符で包む。**この文字列は Claude Code が shell で
+		// 実行するので、引用しないとパスの空白でコマンド行が別の引数へ割れ、
+		// hook が1つも届かなくなる。
+		if !strings.Contains(cmd, "--socket '"+fx.SocketPath+"'") {
+			t.Fatalf("hook %s のコマンド行に、引用した socket の絶対パスが無い: %q", name, cmd)
 		}
 		wantPending := filepath.Join(fx.RuntimeDir, "issues", "maimuzo-koetsumugi-188", "pending")
-		if !strings.Contains(cmd, "--pending-dir "+wantPending) {
-			t.Fatalf("hook %s のコマンド行に逃がし先の絶対パスが無い: %q", name, cmd)
+		if !strings.Contains(cmd, "--pending-dir '"+wantPending+"'") {
+			t.Fatalf("hook %s のコマンド行に、引用した逃がし先の絶対パスが無い: %q", name, cmd)
 		}
 		if (name == "PreToolUse" || name == "PostToolUse") && entries[0].Matcher != "*" {
 			t.Fatalf("%s の matcher を絞っている（メインが叩いた Bash の記録が落ちる）: %q",

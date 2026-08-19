@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -46,6 +47,9 @@ type daemonEnv struct {
 	// ServerPort は WORKFLOW.md に書く `server.port` である。
 	// **nil なら書かない**（既定どおりダッシュボードを開かない）。
 	ServerPort *int
+	// ClaudeReadTimeoutMs は WORKFLOW.md に書く `claude.read_timeout_ms` である。
+	// **0 なら 3000 を書く。**相手は herdr の socket API の応答である（設計 8-1）。
+	ClaudeReadTimeoutMs int
 	// Timeline は偽 herdr と偽 GitHub の呼び出しを混ぜた1本の並びである。
 	Timeline *timeline
 }
@@ -125,6 +129,7 @@ func newDaemonEnv(t *testing.T) *daemonEnv {
 // t: 呼び出し元のテスト。
 func (e *daemonEnv) writeWorkflow(t *testing.T) {
 	t.Helper()
+	// 書き出す値の順序は content の %%d / %%s の並びに合わせてある。
 	content := fmt.Sprintf(`---
 tracker:
   provider:
@@ -141,7 +146,7 @@ claude:
   poll_wait_ms: 300
   settle_ms: 200
   turn_timeout_ms: 20000
-  read_timeout_ms: 3000
+  read_timeout_ms: %d
   startup_timeout_ms: 3000
   stall_timeout_ms: 600000
 herdr:
@@ -159,11 +164,22 @@ rate_limit:
     gh issue view {{.issue.url}} --comments
 
 作業の区切りがついたら CONTINUO-STATUS: の行を1行書いてください。
-`, e.WorktreeRoot, e.Herdr.SocketPath, serverSection(e.ServerPort))
+`, e.WorktreeRoot, readTimeoutMs(e.ClaudeReadTimeoutMs), e.Herdr.SocketPath, serverSection(e.ServerPort))
 
 	if err := os.WriteFile(e.WorkflowPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}
+}
+
+// readTimeoutMs は WORKFLOW.md に書く `claude.read_timeout_ms` を決める。
+//
+// value: daemonEnv に設定された値（0 なら既定を使う）。
+// 戻り値: 書き出す値。
+func readTimeoutMs(value int) int {
+	if value <= 0 {
+		return 3000
+	}
+	return value
 }
 
 // prepareRun は「continuo が落ちる前に着手の段6 まで進んでいた」状態をディスクの上に作る。
@@ -780,5 +796,82 @@ func TestDaemon_CLIのportでダッシュボードを開いて実行中のrunを
 	}
 	if _, err := client.Get("http://" + addr + "/api/v1/state"); err == nil {
 		t.Fatal("終了したのにダッシュボードへ接続できた")
+	}
+}
+
+// TestDaemon_hookの受け口はclaudeのread_timeout_msで接続を切らない は、
+// 期限のつまみが相手ごとに分かれていることを確かめる。
+//
+// 目的: `claude.read_timeout_ms` は **herdr の socket API の応答を待つ上限**である
+// （設計 8-1。「`read_timeout_ms` 一本ですべてを打ち切ってはならない」）。これを hook の
+// 受け口へ流用すると、herdr が遅い環境に合わせて値を上げたときに、hook の接続を
+// 掴んだままにする時間まで一緒に動く。
+//
+// 与える情報: `claude.read_timeout_ms: 200`（hookserver の既定 10 秒よりずっと短い）で
+// 起動した continuo と、繋いだだけで何も送らない接続。
+//
+// 成功条件: 繋いでから 1 秒たっても受け口が接続を閉じないこと（読み出しが EOF ではなく
+// 待ちで返ること）。そのあとに送った hook が受け付けられること。
+func TestDaemon_hookの受け口はclaudeのread_timeout_msで接続を切らない(t *testing.T) {
+	env := newDaemonEnv(t)
+	env.ClaudeReadTimeoutMs = 200
+	env.writeWorkflow(t)
+	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline)
+	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "pane_list", "panes": []any{}}, nil
+	})
+	env.Herdr.Handle("agent.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "agent_list", "agents": []any{}}, nil
+	})
+
+	cmd, logs := env.start(t)
+	t.Cleanup(func() {
+		if t.Failed() || testing.Verbose() {
+			t.Logf("continuo の出力:\n%s", logs.String())
+		}
+	})
+	waitFor(t, 30*time.Second, "巡回が始まる", func() bool {
+		return strings.Contains(logs.String(), "巡回を始めます")
+	})
+
+	conn, err := net.Dial("unix", env.SocketPath)
+	if err != nil {
+		t.Fatalf("hook の受け口へ繋げません（%s）: %v", env.SocketPath, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// **`claude.read_timeout_ms` の5倍待つ。**流用されていれば、ここで閉じられている。
+	time.Sleep(time.Second)
+
+	if err := conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
+		t.Fatalf("読み出しの期限を設定できません: %v", err)
+	}
+	buf := make([]byte, 1)
+	_, readErr := conn.Read(buf)
+	var netErr net.Error
+	switch {
+	case readErr == nil:
+		t.Fatal("何も送っていないのに応答が返った")
+	case errors.As(readErr, &netErr) && netErr.Timeout():
+		// **こちらの読み出しが待ちで返った＝受け口はまだ接続を持っている。**期待どおり。
+	default:
+		t.Fatalf("claude.read_timeout_ms（%dms）で hook の接続が切られた: %v",
+			env.ClaudeReadTimeoutMs, readErr)
+	}
+
+	// 切られていないことの裏取りとして、この接続でそのまま hook を1件送れることを見る。
+	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("書き出しの期限を設定できません: %v", err)
+	}
+	line := `{"hook_event_name":"Stop","session_id":"sess-none","cwd":"` + env.WorktreeRoot + `"}` + "\n"
+	if _, err := conn.Write([]byte(line)); err != nil {
+		t.Fatalf("待たせたあとの接続へ hook を送れなかった: %v", err)
+	}
+
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("SIGTERM を送れません: %v", err)
+	}
+	if code, finished := waitProcess(context.Background(), cmd, 20*time.Second); !finished || code != 0 {
+		t.Fatalf("SIGTERM で正常に終わらなかった（finished=%v, code=%d）\n%s", finished, code, logs.String())
 	}
 }

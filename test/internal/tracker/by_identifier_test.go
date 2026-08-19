@@ -2,7 +2,10 @@ package tracker_test
 
 import (
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // 目的: 識別子で1件引けること、そのときに **Status で絞らない**ことを確認する
@@ -95,5 +98,117 @@ func TestFetchIssueByIdentifier_ページをまたいでも引ける(t *testing.
 	}
 	if !ok || issue.ID != "item-47" {
 		t.Fatalf("2ページ目の issue を引けなかった: ok=%v issue=%+v", ok, issue)
+	}
+}
+
+// 目的: 識別子で引くときに、識別子が一致しない item へ信頼の判定関数を呼ばないことを
+// 確認する（レビュー指摘「照合の前に item ごとに信頼判定が走る」の回帰テスト）。
+//
+// **信頼の判定は毎回 ghq と git を起動して `~/.claude.json` を読み直す**（約56ミリ秒／件）。
+// 照合の前に全件へ掛けると、表明1行あたりボード104件ぶん・外部プロセス208回になる。
+//
+// 与える情報: 3件の item が載ったボードと、呼ばれた `<owner>/<repo>` を記録する判定関数。
+// 成功条件: 判定関数が呼ばれたのは一致した1件のリポジトリだけであること。
+// 引いた Issue の Dispatchable にその判定結果が反映されていること。
+func TestFetchIssueByIdentifier_一致した1件にだけ信頼判定を掛ける(t *testing.T) {
+	items := []map[string]any{
+		issueItemJSON(testIssueItemOpts{
+			ItemID: "item-10", Status: "Ready", Owner: "maimuzo", Repo: "other-a", Number: 10,
+			Title: "別のリポジトリ", URL: "https://github.com/maimuzo/other-a/issues/10",
+		}),
+		issueItemJSON(testIssueItemOpts{
+			ItemID: "item-45", Status: "Ice Box", Owner: "maimuzo", Repo: "koetsumugi", Number: 45,
+			Title: "引きたい issue", URL: "https://github.com/maimuzo/koetsumugi/issues/45",
+		}),
+		issueItemJSON(testIssueItemOpts{
+			ItemID: "item-99", Status: "Ready", Owner: "maimuzo", Repo: "other-b", Number: 99,
+			Title: "さらに別のリポジトリ", URL: "https://github.com/maimuzo/other-b/issues/99",
+		}),
+	}
+
+	var mu sync.Mutex
+	var asked []string
+	trust := func(owner, repo string) bool {
+		mu.Lock()
+		asked = append(asked, owner+"/"+repo)
+		mu.Unlock()
+		return true
+	}
+
+	fs := newFakeGraphQLServer(t, single(dataResponse(
+		candidateItemsPayload(items, false, ""))))
+	a := newAdapterWithTrust(t, fs, trust)
+
+	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#45")
+	if err != nil {
+		t.Fatalf("識別子で引くのに失敗した: %v", err)
+	}
+	if !ok {
+		t.Fatalf("ボードに載っている issue を引けなかった")
+	}
+	if !issue.Dispatchable {
+		t.Fatalf("一致した1件に信頼の判定が反映されていない")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(asked) != 1 || asked[0] != "maimuzo/koetsumugi" {
+		t.Fatalf("一致しない item にも信頼の判定を掛けている（外部プロセスが件数ぶん起動する）: %v", asked)
+	}
+}
+
+// 目的: 一致した item のリポジトリが信頼登録されていなければ Dispatchable が偽になることを
+// 確認する（信頼の判定を遅らせても、結果は落とさない）。
+// 与える情報: 常に偽を返す信頼判定関数。
+// 成功条件: 引いた Issue の Dispatchable が false であること。
+func TestFetchIssueByIdentifier_信頼されていなければDispatchableが偽になる(t *testing.T) {
+	item := issueItemJSON(testIssueItemOpts{
+		ItemID: "item-45", Status: "Ice Box", Owner: "maimuzo", Repo: "koetsumugi", Number: 45,
+		Title: "引きたい issue", URL: "https://github.com/maimuzo/koetsumugi/issues/45",
+	})
+	fs := newFakeGraphQLServer(t, single(dataResponse(
+		candidateItemsPayload([]map[string]any{item}, false, ""))))
+	a := newAdapterWithTrust(t, fs, func(owner, repo string) bool { return false })
+
+	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#45")
+	if err != nil {
+		t.Fatalf("識別子で引くのに失敗した: %v", err)
+	}
+	if !ok {
+		t.Fatalf("ボードに載っている issue を引けなかった")
+	}
+	if issue.Dispatchable {
+		t.Fatalf("信頼登録されていないのに Dispatchable が真である")
+	}
+}
+
+// 目的: ボードのページ数に上限があり、超えたら CategoryPagination で落ちることを確認する
+// （レビュー指摘「両方のページングに上限が無い」の回帰テスト）。
+//
+// **上限が無いと、ボードが育つほど1回の呼び出しのコストが黙って増える。**
+// 表明の対象1件ごとにボードを全ページ読むので、GitHub の API 枠（5,000 point/時。設計 3-31）
+// を無言で食い潰す。
+//
+// 与える情報: 常に hasNextPage が真で、目的の識別子が1件も載っていないボードの応答。
+// 成功条件: 無限に読み続けず、CategoryPagination のエラーで止まること。
+func TestFetchIssueByIdentifier_ページ数の上限を超えたら落とす(t *testing.T) {
+	item := issueItemJSON(testIssueItemOpts{
+		ItemID: "item-10", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 10,
+		Title: "別の issue", URL: "https://github.com/maimuzo/koetsumugi/issues/10",
+	})
+	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
+		return dataResponse(candidateItemsPayload([]map[string]any{item}, true, "cursor"))
+	})
+	a := newAdapterForFetch(t, fs)
+
+	_, _, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#45")
+	if err == nil {
+		t.Fatalf("ページが尽きないのに止まらなかった（上限が効いていない）")
+	}
+	if !tracker.IsCategory(err, tracker.CategoryPagination) {
+		t.Fatalf("エラーの分類が想定と違う: %v", err)
+	}
+	if fs.RequestCount() > 25 {
+		t.Fatalf("上限を超えて読み続けている: %d リクエスト", fs.RequestCount())
 	}
 }

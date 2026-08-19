@@ -172,6 +172,13 @@ type Options struct {
 	NewSessionUUID func() (string, error)
 	// GHAuthCheck は `gh` の認証の検査である。nil なら検査しない。
 	GHAuthCheck GHAuthCheckFunc
+	// TranscriptRoot は hook が渡す `transcript_path` を受け入れる根である。
+	//
+	// **空なら `~/.claude/projects` を使う**（Claude Code が transcript を書く場所。設計 3-15）。
+	// **この外を指す `transcript_path` は捨てる。**hook の中身はエージェントが
+	// 書き換えられる外部入力であり、別の run の transcript や任意のファイルを
+	// 読ませる経路になる。テストが一時ディレクトリを渡せるようにしてある。
+	TranscriptRoot string
 }
 
 // Orchestrator は巡回・dispatch・turn ループ・照合・リトライ・stall 検知を持つ。
@@ -185,6 +192,7 @@ type Orchestrator struct {
 	socketPath     string
 	runtimeDir     string
 	continuoPath   string
+	transcriptRoot string
 	logger         *slog.Logger
 	now            func() time.Time
 	newSessionUUID func() (string, error)
@@ -251,6 +259,14 @@ func New(opts Options) (*Orchestrator, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+
+	// hook が渡す transcript_path を受け入れる根を決める（外部入力の検査に使う）。
+	transcriptRoot, rootErr := resolveTranscriptRoot(opts.TranscriptRoot)
+	if rootErr != nil {
+		// **起動は止めない。**根が決まらなくても「通常のファイルか」の検査は効く。
+		logger.Warn("transcript の置き場所の根を決められません（置き場所の検査だけを行いません）",
+			"error", rootErr)
+	}
 	nowFunc := opts.Now
 	if nowFunc == nil {
 		nowFunc = time.Now
@@ -270,6 +286,7 @@ func New(opts Options) (*Orchestrator, error) {
 		socketPath:     opts.HookSocketPath,
 		runtimeDir:     filepath.Dir(opts.HookSocketPath),
 		continuoPath:   continuoPath,
+		transcriptRoot: transcriptRoot,
 		logger:         logger,
 		now:            nowFunc,
 		newSessionUUID: newUUID,
@@ -317,15 +334,17 @@ func (o *Orchestrator) Close() {
 //
 // 順番は設計 3-25 / 3-16 が定めるとおりである。
 //
-//  1. バックオフが明けた run を拾う（**候補の取得より前。**空きスロットの計算に効く）
-//  2. 枠を読む（poll_interval_ms に1回。`rate_limit.source: none` なら1回も叩かない）
-//  3. verify_states_every に1回、Status の選択肢名と gh の認証を検査する
+//  1. verify_states_every に1回、Status の選択肢名と gh の認証を検査する
+//     （**バックオフ明けの再 dispatch より前。**再 dispatch も段0 から入り直す dispatch
+//     なので、検査に落ちた巡回では見送る）
+//  2. バックオフが明けた run を拾う（**候補の取得より前。**空きスロットの計算に効く）
+//  3. 枠を読む（poll_interval_ms に1回。`rate_limit.source: none` なら1回も叩かない）
 //  4. 候補を取る                 ← 巡回の GraphQL リクエスト 1本目
 //  5. 実行中の Status を照合する  ← 2本目
 //  6. worktree を照合する         ← 3本目
 //  7. stall を判定する
-//  8. 空きスロットが尽きるまで dispatch する（着手の13段）
-//  9. NeedsPrompt が立った run の turn ループを起こす
+//  8. 空きスロットが尽きるまで印を付ける（着手の段0〜1）。**段2以降は別の goroutine で回す**
+//  9. turn ループを起こす（NeedsPrompt / 引き継いだ working の run）
 //
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) Tick(ctx context.Context) {
@@ -334,10 +353,12 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	tick := o.tickCount
 	o.mu.Unlock()
 
-	o.resumeBackoff(ctx)
-	o.pollQuota(ctx)
-
+	// **検査を先に行う。**落ちた巡回では新規の dispatch も再 dispatch も見送る
+	// （再 dispatch も着手の段0 から入り直す dispatch である。設計 3-25）。
 	dispatchAllowed := o.verifyPeriodically(ctx, tick)
+
+	o.resumeBackoff(ctx, dispatchAllowed)
+	o.pollQuota(ctx)
 
 	candidates, err := o.tracker.FetchIssuesByStates(ctx, o.cfg.Tracker.ActiveStates)
 	if err != nil {
@@ -353,7 +374,7 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 		o.dispatchCandidates(ctx, candidates)
 	}
 
-	o.wakeNeedsPrompt(ctx)
+	o.wakeRuns(ctx)
 }
 
 // verifyPeriodically は Status の選択肢名と `gh` の認証を、
@@ -449,20 +470,38 @@ func (o *Orchestrator) dispatchPaused() bool {
 	return snap.MaxPercent() > o.cfg.RateLimit.PauseAbovePercent
 }
 
-// wakeNeedsPrompt は NeedsPrompt が立った run の turn ループを起こす（設計 3-8 / 3-4 の段5c）。
+// wakeRuns は turn ループの goroutine を必要な run について起こす（設計 3-8 / 3-4 の段5a2・段5c）。
+//
+// **起こす対象は2種類ある。**
+//
+//	awaitTurnEnd が立っている  … 復元で `working` を引き継いだ run。**turn は送らず**、
+//	                             走っている turn の終わりを待つところから入る（段5a2）
+//	NeedsPrompt が立っている   … 次の turn を送る run（段5c、および起こし損ねた run）
 //
 // **巡回のループはブロックしない。**turn ループは run ごとの goroutine で回す。
+// **起こせなかったら印を立て直す。**古い turn ループが待ち受けから戻っていないと
+// 2本目は立てられないので、黙って捨てずに次の巡回で起こし直す。
 //
 // ctx: turn ループへ渡すコンテキスト。
-func (o *Orchestrator) wakeNeedsPrompt(ctx context.Context) {
+func (o *Orchestrator) wakeRuns(ctx context.Context) {
 	for _, rs := range o.snapshotRuns() {
 		if rs.isFinished() {
+			continue
+		}
+		if rs.takeAwaitTurnEnd() {
+			if !o.startTurnLoop(ctx, rs, true) {
+				rs.setAwaitTurnEnd()
+			}
 			continue
 		}
 		if !rs.takeNeedsPrompt() {
 			continue
 		}
-		o.startTurnLoop(ctx, rs)
+		if !o.startTurnLoop(ctx, rs, false) {
+			o.logger.Warn("turn ループが既に走っているので、次の巡回で起こし直します",
+				"identifier", rs.issue().Identifier)
+			rs.setNeedsPrompt()
+		}
 	}
 }
 
@@ -590,6 +629,9 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	// 引き継いだ時刻を入れる（「この run が書いたコメント」の判別に使う。設計 3-25）。
 	rs.StartedAt = now
 	rs.NeedsPrompt = needsPrompt
+	// **`agent_status` が `working` の run はこちらを立てる**（設計 3-4 の段5a2）。
+	// turn は送らないが、走っている turn の `Stop` を読む goroutine は要る。
+	rs.awaitTurnEnd = state.AwaitTurnEnd
 	// **FreshSession は立てない**（ゼロ値の偽のままにする）。セッションは引き継いで
 	// いるので、送るのは**継続の指示（5-4）**である。**1回目の本文（5-3）ではない**
 	// （設計 3-4 の段5c）。エージェントは issue の URL も完了の作法も既に知っている。
@@ -621,19 +663,34 @@ type AdoptedRun struct {
 	SettingsPath string
 	// HerdrWorkspaceID は herdr の workspace の ID である。
 	HerdrWorkspaceID string
+	// AwaitTurnEnd は「turn を送らずに、走っている turn の終わりを待つ」ことを表す。
+	//
+	// **`agent_status` が `working` の run を引き継ぐときに真にする**（設計 3-4 の段5a2）。
+	// **`NeedsPrompt` とは同時に立てない。**立てないと turn ループの goroutine が1本も
+	// 起きず、その run の `Stop` hook を誰も読まないまま stall_timeout_ms まで放置される。
+	AwaitTurnEnd bool
 }
 
 // OnHook は hookserver から hook を1件受け取る（hookserver.HookSink の実装）。
 //
-// **判断はここではほとんどしない。**stall の時計を進め、prompt_id と transcript のパスを
-// 覚え、turn の終わりの判定に使うイベントを run の受け口へ流すだけである。
+// **判断はここではほとんどしない。**外部入力を検査し、stall の時計を進め、prompt_id と
+// transcript のパスを覚え、turn の終わりの判定に使うイベントを run の受け口へ流すだけである。
 //
 // ev: 届いた hook。
 // 戻り値: 知っている session_id なら true。知らなければ false（hookserver が警告を出して捨てる）。
+// **検査に落ちて捨てた hook でも true を返す**（session_id そのものは知っているため）。
 func (o *Orchestrator) OnHook(ev hookserver.HookEvent) bool {
 	rs, ok := o.lookupRunBySession(ev.SessionID)
 	if !ok {
 		return false
+	}
+
+	// **hook の中身は外部入力である**（設計 3-2）。`cwd` と `transcript_path` を先に検査し、
+	// 通らなかったものは捨てる。とくに `transcript_path` は、そのまま `os.Open` へ渡すと
+	// FIFO で永久に返らず、turn ループの goroutine ごと固まる。
+	ev, ok = o.sanitizeHookEvent(ev, rs)
+	if !ok {
+		return true
 	}
 
 	// `agent_type` が空文字の SubagentStop は数えない（設計 1-3。対応する SubagentStart が

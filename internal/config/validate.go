@@ -83,8 +83,47 @@ func validate(cfg *Config) error {
 	if !containsString(cfg.Tracker.ActiveStates, cfg.Tracker.DispatchState) {
 		return invalidValueError("tracker.dispatch_state", cfg.Tracker.DispatchState, "tracker.active_states に含まれる値にすること")
 	}
+	// 状態の集合どうしが互いに素であることを見る（設計 3-9 / 3-10 / 4-1）。
+	// ここを検査しないと、完了として片付けた issue を次の巡回で作業中として拾い直す、
+	// 打ち切った issue が永久に再 dispatch される、といった無限の往復が起動を通ってしまう。
+	for _, state := range cfg.Tracker.ActiveStates {
+		if containsString(cfg.Tracker.TerminalStates, state) {
+			return invalidValueError(
+				"tracker.active_states", state,
+				"tracker.terminal_states と同じ値を含めないこと（完了として片付けた issue を、次の巡回で作業中として拾い直す。3-9 / 3-10）",
+			)
+		}
+	}
+	if containsString(cfg.Tracker.ActiveStates, cfg.Tracker.FailureState) {
+		return invalidValueError(
+			"tracker.failure_state", cfg.Tracker.FailureState,
+			"tracker.active_states に含まれない値にすること（打ち切った issue が永久に再 dispatch される。4-1）",
+		)
+	}
+	// running_state が terminal_states に入る場合は、上の active_states と terminal_states の
+	// 重なりとして必ず先に落ちる（running_state は active_states に含まれることを既に要求して
+	// いるため）。同じことを二重に検査しない。
+
+	// cleanup.on_states は「片付けを始める状態」である。作業中の状態を書くと、
+	// 走っている worktree を消してしまう（設計 3-9）。
+	for _, state := range cfg.Cleanup.OnStates {
+		if containsString(cfg.Tracker.ActiveStates, state) {
+			return invalidValueError(
+				"cleanup.on_states", state,
+				"tracker.active_states と同じ値を含めないこと（作業中の worktree を片付けてしまう。3-9）",
+			)
+		}
+	}
+
 	if cfg.Tracker.StatusSignalPrefix == "" {
 		return requiredValueError("tracker.status_signal_prefix")
+	}
+	// 0 は「間隔をあけない」「起動時だけ照合する」という意味を持つので許す。負の値は意味を持たない。
+	if cfg.Tracker.WriteIntervalMs < 0 {
+		return invalidValueError("tracker.write_interval_ms", cfg.Tracker.WriteIntervalMs, "0以上の整数（ミリ秒）にすること（0 なら間隔をあけない）")
+	}
+	if cfg.Tracker.VerifyStatesEvery < 0 {
+		return invalidValueError("tracker.verify_states_every", cfg.Tracker.VerifyStatesEvery, "0以上の整数にすること（0 なら起動時だけ照合する）")
 	}
 	// status_signal_map の値は「動かす先の Status 名」である。null は「Status を動かさない」
 	// という意味を持つので許すが、空文字の Status 名は存在しないので誤りとして止める。
@@ -129,6 +168,9 @@ func validate(cfg *Config) error {
 		return invalidValueError("agent.max_retries", cfg.Agent.MaxRetries, "0以上の整数にすること（0 ならリトライしない）")
 	}
 
+	if cfg.Claude.Kind == "" {
+		return requiredValueError("claude.kind")
+	}
 	if cfg.Claude.PermissionMode != "dontAsk" {
 		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode, `無人運用で入力を待たない唯一のモードである "dontAsk" のみサポートする（設計 3-11）`)
 	}
@@ -138,6 +180,44 @@ func validate(cfg *Config) error {
 	// 起動は通るのに実装が無い経路へ入るのを防ぐ。
 	if cfg.Claude.HookBridge.Mode != "settings_flag" {
 		return invalidValueError("claude.hook_bridge.mode", cfg.Claude.HookBridge.Mode, `"settings_flag" のみサポートする（設計 3-12）`)
+	}
+
+	// 時間を表す値をまとめて検査する。**ここを検査しないと待ちが成立しない。**
+	// たとえば claude.poll_wait_ms: 0 は turn の待ち受けの待ち時間を 0 にするため、
+	// herdr の socket を無停止で叩き続けるループになり、それが turn_timeout_ms
+	// （既定1時間）続く。settle_ms: 0 なら逆に、正常な turn が最初の確認で必ず stall と
+	// 判定される。claude.stall_timeout_ms だけは「0 以下で無効」と決めてある（3-21）ので
+	// この一覧に入れない。
+	for _, item := range []struct {
+		key   string
+		value int
+	}{
+		{"claude.poll_wait_ms", cfg.Claude.PollWaitMs},
+		{"claude.settle_ms", cfg.Claude.SettleMs},
+		{"claude.turn_timeout_ms", cfg.Claude.TurnTimeoutMs},
+		{"claude.read_timeout_ms", cfg.Claude.ReadTimeoutMs},
+		{"claude.startup_timeout_ms", cfg.Claude.StartupTimeoutMs},
+		{"agent.max_retry_backoff_ms", cfg.Agent.MaxRetryBackoffMs},
+		{"rate_limit.poll_interval_ms", cfg.RateLimit.PollIntervalMs},
+		{"workspace_hooks.timeout_ms", cfg.WorkspaceHooks.TimeoutMs},
+	} {
+		if item.value <= 0 {
+			return invalidValueError(item.key, item.value, "0より大きい整数（ミリ秒）にすること")
+		}
+	}
+	// 待ちの大小関係も見る。turn 全体の上限より1回の待ちが長い、1回の待ちより猶予が長い、
+	// といった書き間違いは、起動時に落としたほうが原因が分かる。
+	if cfg.Claude.PollWaitMs > cfg.Claude.TurnTimeoutMs {
+		return invalidValueError(
+			"claude.poll_wait_ms", cfg.Claude.PollWaitMs,
+			"claude.turn_timeout_ms 以下にすること（1回の待ちが turn 全体の上限より長いと、上限が効かない）",
+		)
+	}
+	if cfg.Claude.SettleMs > cfg.Claude.PollWaitMs {
+		return invalidValueError(
+			"claude.settle_ms", cfg.Claude.SettleMs,
+			"claude.poll_wait_ms 以下にすること（turn の終わりを確かめる猶予が、1回の待ちより長い）",
+		)
 	}
 
 	if cfg.Herdr.Socket == "" {
@@ -163,7 +243,14 @@ func validate(cfg *Config) error {
 		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" か "none" のどちらか（設計 3-27）`)
 	}
 	switch cfg.RateLimit.TokenSource {
-	case "claude_credentials", "env":
+	case "claude_credentials":
+		// ~/.claude/.credentials.json を読む。token_env は参照しない。
+	case "env":
+		// tracker.provider.token_env と同じ扱いにする。空のまま起動を通すと、
+		// 5分ごとの取得が毎回 ErrNoCredentials になり、枠の判定が黙って無効化される（5-5）。
+		if cfg.RateLimit.TokenEnv == "" {
+			return requiredValueError("rate_limit.token_env（rate_limit.token_source が env のとき必須）")
+		}
 	default:
 		return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource, `"claude_credentials" か "env" のどちらか（読み取りだけで書き換えない。3-27）`)
 	}
@@ -196,6 +283,8 @@ func validate(cfg *Config) error {
 // 弾いてしまうため、絶対パスの検査だけはここに分けてある。
 //
 // 検査するもの:
+//   - workspace.root が絶対パスであること。相対パスは Load が WORKFLOW.md の置き場所を
+//     基準に解決済みなので（5-1）、ここに相対パスが残るのは基準が決められなかった場合だけである
 //   - claude.hook_bridge.listen が非 null なら絶対パスであること。相対パスだと
 //     continuo をどのディレクトリから起動したかで socket の場所が変わり、身元ファイルに
 //     書いたパスとの一致検査（3-23 / 3-18）が成立しない
@@ -206,12 +295,22 @@ func validate(cfg *Config) error {
 // 戻り値: 最初に見つかった不正な値についてのエラー。エラーメッセージには設定キーの名前と
 // 実際に入っていた値（展開後の文字列）を含める（5-5）。
 func validateExpanded(cfg *Config) error {
+	if !filepath.IsAbs(cfg.Workspace.Root) {
+		return invalidValueError(
+			keyWorkspaceRoot,
+			cfg.Workspace.Root,
+			"絶対パスにすること（相対パスは WORKFLOW.md が置かれているディレクトリを基準に解決する。5-1）",
+		)
+	}
 	if cfg.Claude.HookBridge.Listen != nil && *cfg.Claude.HookBridge.Listen != "" {
 		if !filepath.IsAbs(*cfg.Claude.HookBridge.Listen) {
 			return invalidValueError(
 				keyClaudeHookListen,
 				*cfg.Claude.HookBridge.Listen,
-				"絶対パスにすること（相対パスだと continuo を起動したディレクトリによって socket の場所が変わる。null にすれば 3-23 の探索順で決まる）",
+				"絶対パスにすること（相対パスだと continuo を起動したディレクトリによって socket の場所が変わる。"+
+					"null にすれば 3-23 の探索順で決まる）。**既にある共用のディレクトリ（ホーム直下など）の直下を"+
+					"指さないこと。**その親ディレクトリは socket・ロックファイル・issue ごとの逃がし先を置く"+
+					"実行時ディレクトリとして使われ、権限が 0700 でなければ起動を止める（3-23）",
 			)
 		}
 	}

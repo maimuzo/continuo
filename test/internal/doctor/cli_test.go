@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/maimuzo/continuo/internal/doctor"
 )
 
 // buildBinary は `continuo` をビルドする。
@@ -51,13 +53,26 @@ func buildBinary(t *testing.T, outDir string) string {
 // 戻り値の2つ目: 終了コード。
 func runDoctorBinary(t *testing.T, fx *fixture, bin string) (string, int) {
 	t.Helper()
+	return runDoctorBinaryWithEndpoint(t, fx, bin, fx.GitHub.URL)
+}
+
+// runDoctorBinaryWithEndpoint は接続先を指定して `continuo doctor` を実行する。
+//
+// t: 呼び出し元のテスト。
+// fx: 偽のサーバと一時ディレクトリの一式。
+// bin: ビルドしたバイナリの絶対パス。
+// endpoint: `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` に入れる値。
+// 戻り値の1つ目: 標準出力と標準エラーを連結した出力。
+// 戻り値の2つ目: 終了コード。
+func runDoctorBinaryWithEndpoint(t *testing.T, fx *fixture, bin, endpoint string) (string, int) {
+	t.Helper()
 
 	cmd := exec.Command(bin, "doctor", fx.WorkflowPath)
 	cmd.Dir = fx.Root
 	cmd.Env = []string{
 		"PATH=" + fx.BinDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"HOME=" + fx.Home,
-		"CONTINUO_GITHUB_GRAPHQL_ENDPOINT=" + fx.GitHub.URL,
+		"CONTINUO_GITHUB_GRAPHQL_ENDPOINT=" + endpoint,
 		"CONTINUO_TEST_TOKEN=dummy-token-for-the-fake-server",
 	}
 	out, err := cmd.CombinedOutput()
@@ -164,5 +179,30 @@ func TestDoctorCLI_位置引数を2つ以上渡したら使い方の誤りとし
 	}
 	if !strings.Contains(string(out), "1つだけ受け付けます") {
 		t.Fatalf("理由が出ていない:\n%s", out)
+	}
+}
+
+// TestDoctorCLI_接続先がループバック以外のhttpなら検査せずに止まる は、
+// トークンの送り先の検査が `continuo doctor` にも入っていることを確かめる。
+//
+// 目的: doctor もボードを読むために `gh auth token` のトークンを送る。**常駐プロセスと
+// 同じ検査を通していないと、doctor だけが平文で外部へトークンを送る経路になる。**
+// 与える情報: `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` に `http://example.com/graphql`。
+// 成功条件: 検査結果を出さずに止まり、終了コードが `✗` の 1 とも引数の誤りの 2 とも
+// 違う 3 になること。文言が https を求めていること。
+func TestDoctorCLI_接続先がループバック以外のhttpなら検査せずに止まる(t *testing.T) {
+	fx := newFixture(t)
+	bin := buildBinary(t, fx.Root)
+
+	out, code := runDoctorBinaryWithEndpoint(t, fx, bin, "http://example.com/graphql")
+
+	if code != 3 {
+		t.Fatalf("終了コードが 3 ではない: got %d\n%s", code, out)
+	}
+	if !strings.Contains(out, "https") {
+		t.Fatalf("https を求める文言が出ていない:\n%s", out)
+	}
+	if strings.Contains(out, doctor.LabelBoard) {
+		t.Fatalf("接続先が不正なのに検査を始めている:\n%s", out)
 	}
 }

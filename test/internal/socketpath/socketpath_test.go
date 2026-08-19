@@ -4,6 +4,7 @@ package socketpath_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -159,4 +160,137 @@ func TestResolveHookSocketPath_相対パスのlistenはエラーになる(t *tes
 	if !strings.Contains(err.Error(), "claude.hook_bridge.listen") {
 		t.Errorf("エラーメッセージに設定キー名が含まれていない: %q", err.Error())
 	}
+}
+
+// 目的: EnsureDir が「自分で作っていない既存ディレクトリ」の権限を書き換えないことを
+// 確認する（設計 3-23）。claude.hook_bridge.listen に "~/hooks.sock" と書くと、
+// ここへ渡るのは利用者のホームディレクトリそのものになる。無条件に 0700 へ落とすと、
+// 誰の許可も取らずにホームの権限を壊してしまう。
+// 与える情報: あらかじめ 0755 で作っておいたディレクトリ。
+// 成功条件: EnsureDir がエラーを返し（人間に直させる）、権限が 0755 のまま変わらないこと。
+func TestEnsureDir_既存ディレクトリの権限を書き換えない(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "already-there")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatalf("テスト用のディレクトリを作れません: %v", err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("テスト用のディレクトリの権限を設定できません: %v", err)
+	}
+
+	err := socketpath.EnsureDir(dir)
+	if err == nil {
+		t.Fatal("権限が開いている既存ディレクトリなのにエラーが返らなかった")
+	}
+
+	info, statErr := os.Stat(dir)
+	if statErr != nil {
+		t.Fatalf("stat に失敗した: %v", statErr)
+	}
+	if perm := info.Mode().Perm(); perm != 0o755 {
+		t.Fatalf("既存ディレクトリの権限が書き換えられた: got %o, want 755", perm)
+	}
+	if !strings.Contains(err.Error(), dir) {
+		t.Errorf("エラーメッセージに対象のディレクトリが含まれていない: %q", err.Error())
+	}
+}
+
+// 目的: 既に 0700 で存在するディレクトリはそのまま受け入れることを確認する。
+// 2回目以降の起動は必ずこの経路を通るので、ここでエラーになってはならない。
+// 与える情報: EnsureDir が1度作ったディレクトリ。
+// 成功条件: 2回目の EnsureDir が成功し、権限が 0700 のままであること。
+func TestEnsureDir_2回目の呼び出しは成功する(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "continuo-run")
+
+	if err := socketpath.EnsureDir(dir); err != nil {
+		t.Fatalf("1回目の EnsureDir に失敗した: %v", err)
+	}
+	if err := socketpath.EnsureDir(dir); err != nil {
+		t.Fatalf("2回目の EnsureDir に失敗した: %v", err)
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat に失敗した: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("ディレクトリの権限が 0700 ではない: got %o", perm)
+	}
+}
+
+// 目的: 置き場所が symlink だったらエラーにすることを確認する。
+// 辿った先へ socket とロックファイルが落ちるため、二重起動の判定も hook の受け口も
+// 意図しない場所に作られてしまう（設計 3-17 / 3-23）。
+// 与える情報: 0700 のディレクトリを指す symlink。
+// 成功条件: EnsureDir がエラーを返し、その文に "symlink" が含まれること。
+func TestEnsureDir_symlinkはエラーになる(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	if err := os.Mkdir(real, 0o700); err != nil {
+		t.Fatalf("テスト用のディレクトリを作れません: %v", err)
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatalf("テスト用の symlink を作れません: %v", err)
+	}
+
+	err := socketpath.EnsureDir(link)
+	if err == nil {
+		t.Fatal("symlink を渡したのにエラーが返らなかった")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("エラーメッセージが symlink であることを示していない: %q", err.Error())
+	}
+}
+
+// 目的: 設計 3-23 の探索順のうち、テストが無かった3番目（macOS の $TMPDIR/continuo）と
+// 4番目（~/.continuo/run）が効くこと、および上位が設定されている間は下位へ落ちないことを
+// 確認する。このマシンは macOS なので、本番で実際に使われるのは3番目である。
+// 与える情報: XDG_RUNTIME_DIR と TMPDIR を段ごとに設定・解除した環境。
+// 成功条件: それぞれの段で、設計 3-23 が定める置き場所が返ること。
+func TestRuntimeDir_探索順が設計3_23のとおりである(t *testing.T) {
+	t.Run("XDGが設定されていればdarwinでもTMPDIRへ落ちない", func(t *testing.T) {
+		t.Setenv("XDG_RUNTIME_DIR", "/xdg-run")
+		t.Setenv("TMPDIR", "/tmpdir-for-test")
+
+		got, err := socketpath.RuntimeDir("")
+		if err != nil {
+			t.Fatalf("RuntimeDir に失敗した: %v", err)
+		}
+		if want := filepath.Join("/xdg-run", "continuo"); got != want {
+			t.Fatalf("XDG_RUNTIME_DIR が最優先になっていない: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("XDGが無ければdarwinはTMPDIRを使う", func(t *testing.T) {
+		if runtime.GOOS != "darwin" {
+			t.Skip("darwin 以外では通らない経路である（設計 3-23 の3番目）")
+		}
+		t.Setenv("XDG_RUNTIME_DIR", "")
+		t.Setenv("TMPDIR", "/tmpdir-for-test")
+
+		got, err := socketpath.RuntimeDir("")
+		if err != nil {
+			t.Fatalf("RuntimeDir に失敗した: %v", err)
+		}
+		if want := filepath.Join("/tmpdir-for-test", "continuo"); got != want {
+			t.Fatalf("TMPDIR が使われていない: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("どれも無ければホーム配下へ落ちる", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skipf("ホームディレクトリを取得できないためスキップする: %v", err)
+		}
+		t.Setenv("XDG_RUNTIME_DIR", "")
+		t.Setenv("TMPDIR", "")
+
+		got, err := socketpath.RuntimeDir("")
+		if err != nil {
+			t.Fatalf("RuntimeDir に失敗した: %v", err)
+		}
+		if want := filepath.Join(home, ".continuo", "run"); got != want {
+			t.Fatalf("既定の置き場所になっていない: got %q, want %q", got, want)
+		}
+	})
 }

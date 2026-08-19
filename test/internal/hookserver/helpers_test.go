@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -304,4 +305,59 @@ func pendingEntryNames(t *testing.T, dir string) []string {
 		names = append(names, e.Name())
 	}
 	return names
+}
+
+// dialAndKeep は socket へ繋いだ接続を返す（あとから書き込むために保持する）。
+//
+// t: 呼び出し元のテスト。後始末（接続を閉じる）を t.Cleanup に登録する。
+// 戻り値: 繋いだ接続。まだ1バイトも書いていない。
+func (ts *testServer) dialAndKeep(t *testing.T) net.Conn {
+	t.Helper()
+	conn, err := net.DialTimeout("unix", ts.socketPath, deliverWaitTimeout)
+	if err != nil {
+		t.Fatalf("hook の socket へ接続できません: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn
+}
+
+// sendLines は1つの接続へ複数行を書いて閉じる。
+//
+// 設計 3-2 の約束は「1コネクション1メッセージ」なので、これは約束を破る書き手の再現である
+// （1接続あたりの上限が効いていることの検査に使う）。
+//
+// t: 呼び出し元のテスト。
+// lines: 送る JSON（末尾の改行はこの関数が付ける）。
+func (ts *testServer) sendLines(t *testing.T, lines ...string) {
+	t.Helper()
+	conn, err := net.DialTimeout("unix", ts.socketPath, deliverWaitTimeout)
+	if err != nil {
+		t.Fatalf("hook の socket へ接続できません: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	for _, l := range lines {
+		if _, err := conn.Write([]byte(l + "\n")); err != nil {
+			t.Fatalf("hook の socket へ書き込めません: %v", err)
+		}
+	}
+}
+
+// waitForLogCount はログに substr が n 回以上現れるまで待つ。
+//
+// **「起きていないこと」を時間で確かめないための同期点である。**
+//
+// t: 呼び出し元のテスト。
+// ts: 見る testServer。
+// substr: 待つ文字列。
+// n: 待つ回数。deliverWaitTimeout を超えたら t.Fatalf で落とす。
+func waitForLogCount(t *testing.T, ts *testServer, substr string, n int) {
+	t.Helper()
+	deadline := time.Now().Add(deliverWaitTimeout)
+	for time.Now().Before(deadline) {
+		if strings.Count(ts.logs.String(), substr) >= n {
+			return
+		}
+		time.Sleep(queuePollInterval)
+	}
+	t.Fatalf("ログに %q が %d 回現れませんでした: %s", substr, n, ts.logs.String())
 }

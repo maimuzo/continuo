@@ -3,6 +3,7 @@
 # continuo の実装タスク
 
 **言いたいこと。**01〜09 はすべて実装済みである。
+**仕様に対する既知の欠落は「設定の読み直し」の1件だけである**（下の「未実装として残っているもの」）。
 **着手する前に、そのタスクファイルと、そこから参照している設計の節を読むこと。**
 **設計の正は [continuo_design.md](../continuo_design.md) である。**タスクファイルは設計を転記しない。
 
@@ -21,6 +22,43 @@
 | `[x]` | 09 | [HTTP ダッシュボード](09_dashboard.md) | run の状況を人間が見られる（任意） |
 
 **記号。**`[ ]` 未着手 / `[>]` 進行中 / `[x]` 完了
+
+## 未実装として残っているもの
+
+**言いたいこと。**`SPEC.md` 6.2 が REQUIRED としている**設定の読み直しを実装していない。**
+**`WORKFLOW.md` を編集しても、continuo を再起動するまで何も変わらない。**
+仕様に対する既知の欠落はこれ1件である。
+
+### 設定の読み直し（`SPEC.md` 6.2 / 設計 [3-24](../continuo_design.md)）
+
+**仕様が求めていること。**
+
+> - The software MUST detect `WORKFLOW.md` changes.
+> - On change, it MUST re-read and re-apply workflow config and prompt template without restart.
+> - Invalid reloads MUST NOT crash the service; keep operating with the last known good effective
+>   configuration and emit an operator-visible error.
+
+**訳:** `WORKFLOW.md` の変更を検知しなければならない（MUST）。変更があったら、**再起動なしで**
+設定とプロンプトのテンプレートを読み直して適用し直さなければならない（MUST）。不正な読み直しで
+サービスを落としてはならない（MUST NOT）。**最後に正常だった実効設定で動き続け**、
+オペレータに見えるエラーを出すこと。
+
+**何が無いか。**設定は起動時に1回だけ読む。変更の検知（設計 3-24 が定めた「`stat` と内容の
+ハッシュで見る」）も、読み直しも、読み直しに失敗したときの「最後に正常だった設定のまま
+動き続ける」も、コードが存在しない。`internal/daemon` と `internal/server` の
+コメントが「読み直しは実装していない」と明記している。
+
+**何が影響を受けるか。**
+
+| 設定を変えても効かないもの | 反映するには |
+| --- | --- |
+| `polling.interval_ms` / `agent.max_concurrent_agents` / `tracker.active_states` などの挙動を決める値 | continuo を再起動する（走行中の issue は再起動時の復元で拾い直す。設計 3-4） |
+| 本文のプロンプトのテンプレート | 同上。次に dispatch する issue から新しい本文になる |
+| `server.port` / `claude.hook_bridge.listen` / `runtime.lock_file` | **読み直しを実装しても再起動が要る。**自前のリソースを掴んでいるため、仕様 6.2 が再起動を明示的に許している |
+
+**なぜいま実装しないか。**読み直しを入れると「走行中の run が見ている設定」と「新しく読んだ設定」の
+2つが同時に存在することになり、どの段でどちらを使うかを決めないと、turn の途中で待ち時間や
+上限が入れ替わる。その決めごとは設計 3-24 に無い。**先に設計を足し、そのあとで実装する。**
 
 ## 進め方
 

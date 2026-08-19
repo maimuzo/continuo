@@ -290,11 +290,12 @@ func TestルーティングGET以外は受け付けない(t *testing.T) {
 	}
 }
 
-// 目的: 設定を読み直しても待ち受け先が変わらないことを確認する（設計 3-24。自前の
-// リソースを掴んでいるので、変えるには continuo の再起動が要る）。
+// 目的: 待ち受け先が New の時点の値で固定されることを確認する（設計 3-24。自前の
+// リソースを掴んでいるので、変えるには continuo の再起動が要る。**設定の読み直しは
+// 実装していない**が、入れるとしても `server.port` は反映しない）。
 // 与える情報: 起動後に、New へ渡したポート番号の変数そのものを書き換える。
 // 成功条件: 待ち受け先が変わらず、書き換えた後の番号では接続できないこと。
-func Test待ち受け先は設定を書き換えても変わらない(t *testing.T) {
+func Test待ち受け先はポート番号の変数を書き換えても変わらない(t *testing.T) {
 	src := &fakeSource{views: sampleViews()}
 	port := 0
 	s, err := server.New(server.Options{
@@ -313,7 +314,7 @@ func Test待ち受け先は設定を書き換えても変わらない(t *testing
 
 	before := s.Addr()
 
-	// 設定の読み直しに相当する書き換え。**サーバは New の時点で値を写し取っている**ので、
+	// 設定を書き換えたのと同じ操作。**サーバは New の時点で値を写し取っている**ので、
 	// 参照の先を書き換えても待ち受け先は動かない。
 	port = 65535
 
@@ -572,5 +573,74 @@ func TestCSP_他のページに埋め込ませない(t *testing.T) {
 	csp := rec.Result().Header.Get("Content-Security-Policy")
 	if !strings.Contains(csp, "frame-ancestors 'none'") {
 		t.Fatalf("frame-ancestors が無いので iframe に埋め込める: %q", csp)
+	}
+}
+
+// 目的: Start を2回呼んだときに2本目を断ることを確認する。**`server.port` が 0 のとき、
+// 2本目を素通しにすると別のポートで待ち受けてしまい、ログに出した待ち受け先と
+// 実際に開いているポートが食い違う。**
+// 与える情報: ポート 0 で起動したあと、もう一度 Start を呼ぶ。
+// 成功条件: 2本目がエラーになり、待ち受け先が1本目のまま変わらないこと。
+func TestStart_2回目は待ち受けずに断る(t *testing.T) {
+	s, _ := newTestServer(t, sampleViews())
+	if err := s.Start(); err != nil {
+		t.Fatalf("待ち受けを開始できなかった: %v", err)
+	}
+	defer func() { _ = s.Close(context.Background()) }()
+
+	first := s.Addr()
+	if err := s.Start(); err == nil {
+		t.Fatal("2本目の Start を受け付けてしまった（待ち受け先が2つになる）")
+	}
+	if got := s.Addr(); got != first {
+		t.Fatalf("2本目の Start で待ち受け先が変わった: before %q, after %q", first, got)
+	}
+	if code, _ := httpGet(t, "http://"+first+server.APIStatePath); code != http.StatusOK {
+		t.Fatalf("1本目の待ち受け先が応答しなくなった: got %d", code)
+	}
+}
+
+// 目的: 閉じたあとに Addr が古い待ち受け先を返さないことを確認する。
+// もう繋がらない宛先を人間にもログにも見せないためである。
+// 与える情報: 起動して待ち受け先を控えたあと、Close を呼ぶ。
+// 成功条件: Close の前は `127.0.0.1:<ポート>` を返し、Close のあとは空文字になること。
+func TestClose_閉じたあとの待ち受け先は空になる(t *testing.T) {
+	s, _ := newTestServer(t, sampleViews())
+	if err := s.Start(); err != nil {
+		t.Fatalf("待ち受けを開始できなかった: %v", err)
+	}
+	if before := s.Addr(); before == "" {
+		t.Fatal("待ち受け中なのに待ち受け先が空だった")
+	}
+	if err := s.Close(context.Background()); err != nil {
+		t.Fatalf("閉じられなかった: %v", err)
+	}
+	if after := s.Addr(); after != "" {
+		t.Fatalf("閉じたあとも待ち受け先を返した: %q", after)
+	}
+}
+
+// 目的: 応答の期限が4つとも埋まっていることを確認する。**このサーバは認証を持たない**ので、
+// 同じマシンのどのプロセスからでも接続でき、期限が抜けていると1本の接続で goroutine を
+// 握られ続ける（ヘッダの期限だけでは、本文をだらだら送る接続も、応答を読まない接続も切れない）。
+// 与える情報: 既定で組み立てたダッシュボード。
+// 成功条件: ヘッダ・本文・書き出し・待機の4つとも 0 でないこと。
+func Test応答の期限が4つとも埋まっている(t *testing.T) {
+	s, _ := newTestServer(t, sampleViews())
+
+	readHeader, read, write, idle := s.ResponseTimeouts()
+	limits := map[string]time.Duration{
+		"ヘッダを読み切るまで": readHeader,
+		"本文まで読み切るまで": read,
+		"応答を書き終えるまで": write,
+		"次の要求を待つ":    idle,
+	}
+	for name, d := range limits {
+		if d <= 0 {
+			t.Errorf("%s の期限が入っていない: %v", name, d)
+		}
+	}
+	if readHeader > read {
+		t.Errorf("ヘッダの期限が本文の期限より長い: header %v, read %v", readHeader, read)
 	}
 }

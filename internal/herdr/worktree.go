@@ -10,6 +10,14 @@ import (
 // 確認済みである（docs/plans/continuo_design.md 2-1 の
 // 「socket API の実在するメソッドと引数」。protocol=19 / herdr 0.8.0）。
 // result に出てくる値の形は types.go を参照すること。
+//
+// **worktree 系の3つは Read（既定5秒）ではなく Startup（既定60秒）で待つ。**
+// これらは herdr 側で workspace・tab・pane を作ったり `git worktree` を動かしたりする
+// 「待ちを伴う呼び出し」であり、pane.rename や pane.list のような即答の呼び出しとは
+// 性質が違う（設計 5-2 の `read_timeout_ms` は「待ちを伴う呼び出しには適用しない」）。
+// 5秒で切ると、着手の段7（worktree.open）が原因の分かりにくい形で失敗し、しかも herdr 側では
+// workspace が作られている可能性がある（片付けの取りこぼしになる）。
+// **所要時間の実測はまだ取れていない。**取れたら専用の上限を Timeouts に足すか検討すること。
 const (
 	// MethodWorktreeCreate は worktree を作って herdr の workspace として開く
 	// メソッド名である。
@@ -81,7 +89,7 @@ type WorktreeCreateResult struct {
 // params: 開く worktree のパス・branch など。
 // 戻り値: 開かれた workspace・tab・pane・worktree。herdr のエラー応答は *Error として返る。
 func (c *Client) WorktreeCreate(ctx context.Context, params WorktreeCreateParams) (*WorktreeCreateResult, error) {
-	raw, err := c.call(ctx, MethodWorktreeCreate, params, c.timeouts.Read)
+	raw, err := c.call(ctx, MethodWorktreeCreate, params, c.timeouts.Startup)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +154,7 @@ type WorktreeOpenResult struct {
 // 戻り値: 開かれた workspace・tab・pane・worktree と、既に開かれていたかどうか。
 // herdr のエラー応答は *Error として返る。
 func (c *Client) WorktreeOpen(ctx context.Context, params WorktreeOpenParams) (*WorktreeOpenResult, error) {
-	raw, err := c.call(ctx, MethodWorktreeOpen, params, c.timeouts.Read)
+	raw, err := c.call(ctx, MethodWorktreeOpen, params, c.timeouts.Startup)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +209,7 @@ type WorktreeRemoveResult struct {
 // params: 消す workspace の ID（path でも branch でもない。3-9）。
 // 戻り値: herdr の応答。herdr のエラー応答は *Error として返る。
 func (c *Client) WorktreeRemove(ctx context.Context, params WorktreeRemoveParams) (*WorktreeRemoveResult, error) {
-	raw, err := c.call(ctx, MethodWorktreeRemove, params, c.timeouts.Read)
+	raw, err := c.call(ctx, MethodWorktreeRemove, params, c.timeouts.Startup)
 	if err != nil {
 		return nil, err
 	}

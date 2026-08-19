@@ -109,7 +109,9 @@ type runState struct {
 	// TokensAt は Tokens を集計した時刻である。ゼロ値なら一度も集計していない。
 	TokensAt time.Time
 	// GraceGiven は stall の猶予を1回与えたことを表す（設計 3-21 / 3-27）。
-	// **2回目は与えない。**`working` のまま固まる場合があるためである。
+	// **その turn の2回目は与えない。**`working` のまま固まる場合があるためである。
+	// **turn を送るたびに偽へ戻す**（beginTurn）。猶予は1つの stall の局面につき1回であり、
+	// run の生涯に1回ではない。
 	GraceGiven bool
 	// MissingSignal は前回の turn に表明が無かったことを表す（設計 3-25 の第3層）。
 	// 真なら次の継続の指示に、表明を促す1文を差し込む。
@@ -167,6 +169,19 @@ type runState struct {
 	// turnLoopRunning は turn ループの goroutine が走っているかどうかである。
 	// **同じ run に2本目を立てない**ための印である。
 	turnLoopRunning bool
+	// awaitTurnEnd は「turn を送らずに、走っている turn の終わりを待つ」ことを表す。
+	//
+	// **復元で `agent_status` が `working` の run を引き継いだときに立てる**
+	// （設計 3-4 の段5a2）。立てないと、その run の turn ループが1本も起きず、
+	// `Stop` hook を誰も読まないまま stall_timeout_ms まで放置される。
+	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
+	awaitTurnEnd bool
+	// handoffPosted は引き渡しの通知を投稿済みであることを表す。
+	//
+	// **1つの run について1件だけにする。**failure_state へ落とす経路（finishRunClaimed）と
+	// コメントを書かせられなかった経路（failCommentRecovery）が続けて走ると、
+	// 理由の違う通知が2件並ぶ。
+	handoffPosted bool
 }
 
 // clearStopSeen は「background_tasks が空の Stop」を受けた記録を消す。
@@ -280,6 +295,10 @@ func (rs *runState) beginTurn(now time.Time) int {
 	rs.FreshSession = false
 	rs.stopSeenAt = time.Time{}
 	rs.hookSeenThisTurn = false
+	// **stall の猶予は turn ごとに1回である**（設計 3-21）。ここで戻さないと
+	// 「run の生涯に1回」になり、3 turn 目に長いコマンドで猶予を使うと、
+	// 10 turn 目の正当な長い道具呼び出しでは猶予なしで worker を殺すことになる。
+	rs.GraceGiven = false
 	rs.LastSeenAt = now
 	if rs.StartedAt.IsZero() {
 		rs.StartedAt = now
@@ -379,7 +398,9 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 // grantGrace は stall の猶予を1回だけ与える（設計 3-21 / 3-27）。
 //
 // **`LastSeenAt` を現在時刻にして、もう一度 `stall_timeout_ms` だけ待つ。**
-// 与えたことを記録し、2回目は与えない。
+// 与えたことを記録し、**その turn の2回目は与えない**（`working` のまま固まって
+// いる場合があるため）。**記録は次の turn を送る時点（beginTurn）で戻す。**
+// 「1回」の単位は1つの stall の局面であって、run の生涯ではない。
 //
 // now: いまの時刻。
 // 戻り値: 与えたら true。既に与えていたら false。
@@ -408,11 +429,50 @@ func (rs *runState) isFinished() bool {
 	return rs.Finished
 }
 
-// setNeedsPrompt は「次の turn を送るべき」を立てる（設計 3-4 の段5c）。
+// setNeedsPrompt は「次の turn を送るべき」を立てる（設計 3-4 の段5c / 3-8）。
+//
+// **turn ループを起こせなかったときに立て直すのにも使う。**古い turn ループが
+// `agent.prompt` の待ち受けから戻っていないと2本目は立てられないので、
+// 黙って捨てずにこれを立て、次の巡回で起こし直す。
 func (rs *runState) setNeedsPrompt() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.NeedsPrompt = true
+}
+
+// setAwaitTurnEnd は「turn を送らずに turn の終わりを待つ」を立てる（設計 3-4 の段5a2）。
+func (rs *runState) setAwaitTurnEnd() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.awaitTurnEnd = true
+}
+
+// takeAwaitTurnEnd は awaitTurnEnd が立っていれば下ろして true を返す。
+//
+// 戻り値: 立っていたら true。
+func (rs *runState) takeAwaitTurnEnd() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !rs.awaitTurnEnd {
+		return false
+	}
+	rs.awaitTurnEnd = false
+	return true
+}
+
+// takeHandoffPost は引き渡しの通知をこの run で初めて投稿するかを返す。
+//
+// **投稿してよいのは1回だけである。**2回目以降は偽を返す。
+//
+// 戻り値: 投稿してよければ true。
+func (rs *runState) takeHandoffPost() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.handoffPosted {
+		return false
+	}
+	rs.handoffPosted = true
+	return true
 }
 
 // takeNeedsPrompt は NeedsPrompt が立っていれば下ろして true を返す。

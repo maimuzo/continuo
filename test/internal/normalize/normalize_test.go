@@ -108,3 +108,48 @@ func TestCommandArgs_SafeNameを文字列スライスへ変換する(t *testing.
 		t.Fatalf("CommandArgs の結果が一致しない: got %v", got)
 	}
 }
+
+// 目的: パスの要素として ".." や "." になる部分が潰され、警告が返ることを確認する（設計 3-7）。
+// SafeName は worktree の置き場所の1階層としてそのまま使われるため、".." を通すと
+// 置き場所の外を指せてしまう。git も refname に ".." を許さない。
+// 与える情報: "..", "../../etc/passwd", "a/../b", "." を含む入力。
+// 成功条件: 結果に ".." と "." の要素が1つも残らず、いずれの入力でも警告が1件返ること。
+func TestNormalize_パスの要素になるドットは潰されて警告が返る(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"親ディレクトリそのもの", "..", "__"},
+		{"親ディレクトリを重ねる", "../../etc/passwd", "__/__/etc/passwd"},
+		{"途中に親ディレクトリが混ざる", "a/../b", "a/__/b"},
+		{"カレントディレクトリ", ".", "_"},
+		{"branch 名に使う形は保つ", "continuo/acme/repo.js/12", "continuo/acme/repo.js/12"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, warnings := normalize.Normalize(c.raw)
+			if got.String() != c.want {
+				t.Fatalf("正規化の結果が一致しない: raw=%q got=%q want=%q", c.raw, got.String(), c.want)
+			}
+			for _, seg := range strings.Split(got.String(), "/") {
+				if seg == ".." || seg == "." {
+					t.Fatalf("パスの要素に %q が残っている: raw=%q got=%q", seg, c.raw, got.String())
+				}
+			}
+			if c.raw == c.want {
+				if len(warnings) != 0 {
+					t.Fatalf("何も落ちていないのに警告が返った: raw=%q warnings=%v", c.raw, warnings)
+				}
+				return
+			}
+			if len(warnings) != 1 {
+				t.Fatalf("情報が落ちたのに警告が1件返らなかった: raw=%q warnings=%v", c.raw, warnings)
+			}
+			if warnings[0].Original != c.raw || warnings[0].Result != got {
+				t.Fatalf("警告の中身が一致しない: got %+v", warnings[0])
+			}
+		})
+	}
+}

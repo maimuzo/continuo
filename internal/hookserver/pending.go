@@ -3,11 +3,14 @@ package hookserver
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // 逃がし先（設計 3-19）のディレクトリ構成である。
@@ -34,6 +37,29 @@ const (
 	// 上限である。書く側（internal/hookclient）が受信時刻をずらして名前の衝突を塞いでいるのに
 	// 隔離先だけ上書きすると、設計 3-19 が「消さずに残す」と決めたファイルが消える。
 	maxBrokenNameAttempts = 1000
+
+	// staleTmpAge は .json.tmp を「取り残された残骸」と見なすまでの経過時間である。
+	//
+	// **経過時間を見ずに一括で消してはならない。**逃がし先へ書くのは「socket へ繋がらないとき」
+	// ＝まさに continuo の再起動中なので、`continuo hook` が書いている最中
+	// （OpenFile → Write → Sync → **Rename の直前**）の .tmp と、起動時の掃除がぶつかりうる。
+	// 消すと書く側の os.Rename が ENOENT で失敗し、その hook はどこにも残らずに消える。
+	// 消えたのが Stop なら、その run は stall_timeout_ms（既定30分）まで誰も気づかない。
+	//
+	// 30秒にする根拠。書く側が1件を書き終えるまでの上限は
+	// hookclient.DefaultDialTimeout（2秒）+ hookclient.DefaultWriteTimeout（2秒）+ 書き込みで、
+	// その合計より十分に長い。読む側は .json しか読まないので、残しても害は無い
+	// （次の起動で消える）。
+	staleTmpAge = 30 * time.Second
+
+	// maxReplayEvents は1回の走査で読み戻す hook の最大件数である。
+	// 超えた分は読まずに残し、次の起動へ持ち越す（読んだファイルは消えるので必ず前へ進む）。
+	maxReplayEvents = 10000
+
+	// maxReplayBytes は1回の走査で読み込む合計バイト数の上限である。
+	// 逃がし先は同じ利用者が書ける場所なので、上限が無いと巨大なファイルを1つ置かれるだけで
+	// 起動のたびにメモリを使い切って落ちる輪ができる。
+	maxReplayBytes int64 = 256 << 20
 )
 
 // ReplayPending は逃がし先に溜まった hook を読み戻す（復元の段5e の1回目の走査。
@@ -163,9 +189,10 @@ type pendingFile struct {
 // 戻り値: 読み出せた HookEvent を、ファイル名（受信時刻）の昇順に並べたもの。
 // 読めたファイルは消し、解釈できなかったファイルは pending/broken/ へ移す。
 func (s *Server) scanPendingDirs(dirs []string) []HookEvent {
+	budget := &scanBudget{remainingFiles: maxReplayEvents, remainingBytes: maxReplayBytes}
 	var files []pendingFile
 	for _, dir := range dirs {
-		files = append(files, s.scanPendingDir(dir)...)
+		files = append(files, s.scanPendingDir(dir, budget)...)
 	}
 	// ファイル名の先頭はマイクロ秒の受信時刻なので、名前の昇順が受信順になる。
 	// 別の issue のファイルが同名になった場合に順序が揺れないよう、パスで決着させる。
@@ -183,14 +210,37 @@ func (s *Server) scanPendingDirs(dirs []string) []HookEvent {
 	return events
 }
 
+// scanBudget は1回の走査で読み込んでよい残りの量である。
+//
+// 逃がし先は同じ利用者が書ける場所なので、置かれたものを無条件に全部読むと
+// メモリを使い切って落ちる。落ちてもファイルは残るので、そのままだと起動のたびに
+// 落ちる輪になる。読む量を区切り、残りは次の起動へ持ち越す。
+type scanBudget struct {
+	// remainingFiles はこの走査で読んでよい残りの件数である。
+	remainingFiles int
+	// remainingBytes はこの走査で読んでよい残りのバイト数である。
+	remainingBytes int64
+	// exhausted は上限に達したことを既にログへ出したかどうかである（同じ警告を繰り返さない）。
+	exhausted bool
+}
+
 // scanPendingDir は1つの逃がし先を走査する。
 //
-// 走査するのは *.json にだけ一致するものである。.json.tmp は必ず飛ばす
+// 走査するのは *.json にだけ一致する**通常ファイル**である。.json.tmp は必ず飛ばす
 // （書き込み中である。設計 3-19）。broken/ などのディレクトリも飛ばす。
 //
+// **通常ファイルでないもの（名前付きパイプ・シンボリックリンクなど）は読まずに隔離する。**
+// 名前付きパイプを1つ置かれるだけで、読む側は書き手が現れるまで開いたまま止まり、
+// ReplayPending が無期限に返らなくなる（Close でも中断できない）。
+//
+// **大きさの上限は maxMessageBytes である**（socket の1行の上限と同じ）。
+// 書く側（internal/hookclient）が書けるのは高々 DefaultMaxInputBytes なので、
+// これを超えるものは continuo hook が書いたものではない。読まずに隔離する。
+//
 // dir: 走査する逃がし先ディレクトリ。
+// budget: 1回の走査で読んでよい残りの量。読んだ分だけ減る。
 // 戻り値: 読み出せた hook の一覧（並べ替えは呼び出し側が行う）。
-func (s *Server) scanPendingDir(dir string) []pendingFile {
+func (s *Server) scanPendingDir(dir string, budget *scanBudget) []pendingFile {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		s.logger.Warn("hook の逃がし先を読めませんでした", "dir", dir, "error", err)
@@ -209,12 +259,31 @@ func (s *Server) scanPendingDir(dir string) []pendingFile {
 		}
 		path := filepath.Join(dir, name)
 
-		data, err := os.ReadFile(path)
-		if err != nil {
-			s.logger.Warn("hook の逃がし先のファイルを読めませんでした（消さずに残します）",
-				"path", path, "error", err)
+		if !e.Type().IsRegular() {
+			s.moveToBroken(dir, path, fmt.Errorf("通常ファイルではありません（%s）", e.Type()))
 			continue
 		}
+		if budget.remainingFiles <= 0 || budget.remainingBytes <= 0 {
+			if !budget.exhausted {
+				budget.exhausted = true
+				s.logger.Warn("1回の走査で読み戻す量の上限に達しました（残りは次の起動で読み戻します）",
+					"dir", dir, "max_replay_events", maxReplayEvents, "max_replay_bytes", maxReplayBytes)
+			}
+			continue
+		}
+
+		data, err := s.readPendingFile(path)
+		if err != nil {
+			// 読めない理由がファイル自身にある（大きすぎる・通常ファイルでない）ものは
+			// 隔離済みである。ここに来るのは入出力の失敗なので、消さずに残す。
+			if !errors.Is(err, errPendingQuarantined) {
+				s.logger.Warn("hook の逃がし先のファイルを読めませんでした（消さずに残します）",
+					"path", path, "error", err)
+			}
+			continue
+		}
+		budget.remainingFiles--
+		budget.remainingBytes -= int64(len(data))
 
 		ev, err := decodeEvent(data)
 		if err != nil {
@@ -233,6 +302,51 @@ func (s *Server) scanPendingDir(dir string) []pendingFile {
 		files = append(files, pendingFile{path: path, name: name, event: ev})
 	}
 	return files
+}
+
+// errPendingQuarantined は readPendingFile が「読まずに隔離した」ことを表す印である。
+// 呼び出し側は、この印のときだけ追加のログを出さない（隔離のときに既に出しているため）。
+var errPendingQuarantined = errors.New("逃がし先のファイルを読まずに隔離しました")
+
+// readPendingFile は逃がし先のファイル1件を、大きさの上限つきで読む。
+//
+// **os.ReadFile を使わない。**開いてから中身を確かめるまでの間に、通常ファイルでないものへ
+// すり替えられる余地を消すためである。O_NONBLOCK を付けて開くので、名前付きパイプへ
+// すり替えられていても書き手を待って止まることが無い。開いたあとに fstat で
+// 通常ファイルかどうかと大きさを見る。
+//
+// path: 読むファイルの絶対パス。
+// 戻り値: 読めた中身と、失敗した場合のエラー。読まずに隔離した場合は
+// errPendingQuarantined を包んだエラーを返す。
+func (s *Server) readPendingFile(path string) ([]byte, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Dir(path)
+	if !st.Mode().IsRegular() {
+		s.moveToBroken(dir, path, fmt.Errorf("通常ファイルではありません（%s）", st.Mode()))
+		return nil, fmt.Errorf("%w: %s", errPendingQuarantined, path)
+	}
+	limit := int64(s.maxMessageBytes)
+	if st.Size() > limit {
+		s.moveToBroken(dir, path, fmt.Errorf(
+			"逃がし先のファイルが上限（%d バイト）より大きい（%d バイト）ので読みませんでした", limit, st.Size()))
+		return nil, fmt.Errorf("%w: %s", errPendingQuarantined, path)
+	}
+
+	// fstat のあとに書き足された場合に備えて、読む量も上限で止める。
+	data, err := io.ReadAll(io.LimitReader(f, limit))
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // moveToBroken は解釈できなかった逃がし先のファイルを pending/broken/ へ移す。
@@ -306,7 +420,12 @@ func (s *Server) moveToBroken(dir, path string, cause error) {
 // continuo hook が書いている途中で落ちた残骸であり、中身が不完全なので復元できない。
 // 消したことは必ずログに残す（hook を1件失っていることに人間が気づけるようにする）。
 //
-// 起動時（ReplayPending の1回目の走査）にだけ呼ぶ。2回目の走査で消さないのは、
+// **更新時刻が staleTmpAge より新しいものは消さない。**それは「いま continuo hook が
+// 書いている最中のもの」でありうる。消すと書く側の os.Rename が ENOENT で失敗し、
+// その hook はどこにも残らずに消える（消えたのが Stop なら30分誰も気づかない）。
+// 読む側は .json しか読まないので、残しても害は無い（次の起動で消える）。
+//
+// 起動時（ReplayPending の1回目の走査）にだけ呼ぶ。2回目の走査で呼ばないのは、
 // そのときの .tmp は「いま continuo hook が書いている最中のもの」でありうるためである。
 //
 // dir: 走査する逃がし先ディレクトリ。
@@ -316,11 +435,24 @@ func (s *Server) removeStaleTmpFiles(dir string) {
 		s.logger.Warn("hook の逃がし先を読めませんでした", "dir", dir, "error", err)
 		return
 	}
+	now := time.Now()
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), PendingTmpExt) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
+		info, err := e.Info()
+		if err != nil {
+			s.logger.Warn("書きかけの hook ファイルの更新時刻を調べられませんでした（消さずに残します）",
+				"path", path, "error", err)
+			continue
+		}
+		if age := now.Sub(info.ModTime()); age < staleTmpAge {
+			s.logger.Info("書きかけの hook ファイルがまだ新しいので消しませんでした"+
+				"（continuo hook が書いている最中の可能性があります。次の起動で消えます）",
+				"path", path, "age", age, "stale_tmp_age", staleTmpAge)
+			continue
+		}
 		if err := os.Remove(path); err != nil {
 			s.logger.Warn("取り残された書きかけの hook ファイルを消せませんでした", "path", path, "error", err)
 			continue

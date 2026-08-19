@@ -157,6 +157,8 @@ const (
 	failureRateLimit boardFailure = "rate_limit"
 	// failureNoProject は project が見つからない応答（null）を返す。
 	failureNoProject boardFailure = "no_project"
+	// failureBadCredentials は 401（トークンが無効・失効）を返す。
+	failureBadCredentials boardFailure = "bad_credentials"
 )
 
 // fakeGitHub は GitHub の GraphQL API の代わりに使う偽のサーバである。
@@ -175,6 +177,8 @@ type fakeGitHub struct {
 	statusOptions []string
 	// failure は落ち方である。
 	failure boardFailure
+	// delay は応答を返すまでにわざと待つ時間である（期限の検査に使う）。
+	delay time.Duration
 	// queries は受け取ったクエリの種別を受け取った順に記録したものである。
 	queries []string
 }
@@ -226,6 +230,17 @@ func (fg *fakeGitHub) SetFailure(failure boardFailure) {
 	fg.failure = failure
 }
 
+// SetDelay は応答を返すまでにわざと待つ時間を差し替える。
+//
+// **期限を過ぎても返らないサーバを再現するために使う。**
+//
+// d: 待つ時間。
+func (fg *fakeGitHub) SetDelay(d time.Duration) {
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	fg.delay = d
+}
+
 // Queries は受け取ったクエリの種別を受け取った順に返す。
 func (fg *fakeGitHub) Queries() []string {
 	fg.mu.Lock()
@@ -251,6 +266,7 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 
 	fg.mu.Lock()
 	failure := fg.failure
+	delay := fg.delay
 	kind := "unknown"
 	switch {
 	case strings.Contains(req.Query, "field(name: $statusField)"):
@@ -260,6 +276,23 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	fg.queries = append(fg.queries, kind)
 	fg.mu.Unlock()
+
+	if delay > 0 {
+		// **要求が取り消されたら、その時点でやめる。**期限を切ったテストが
+		// 待ち時間ぶん止まらないようにする。
+		select {
+		case <-time.After(delay):
+		case <-r.Context().Done():
+			return
+		}
+	}
+
+	if failure == failureBadCredentials {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"Bad credentials"}`))
+		return
+	}
 
 	if failure == failureRateLimit {
 		w.Header().Set("Retry-After", "60")

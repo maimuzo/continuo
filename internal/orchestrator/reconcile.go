@@ -19,7 +19,14 @@ import (
 //	BackoffUntil を過ぎている          … その run を再 dispatch する（段0 から入り直す）
 //
 // ctx: 呼び出しに適用するコンテキスト。
-func (o *Orchestrator) resumeBackoff(ctx context.Context) {
+// dispatchAllowed: この巡回で dispatch してよいか（偽なら再 dispatch も見送る）。
+func (o *Orchestrator) resumeBackoff(ctx context.Context, dispatchAllowed bool) {
+	if !dispatchAllowed {
+		// **この巡回は dispatch を見送ると決まっている**（Status の選択肢名か gh の認証が
+		// 検査に落ちた）。再 dispatch も着手の段0 から入り直す dispatch なので同じく見送る。
+		// **バックオフの印は残す**ので、次の巡回でまた拾える。
+		return
+	}
 	now := o.now()
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()

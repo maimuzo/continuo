@@ -281,3 +281,27 @@ func TestPrepare_cloneが無ければErrCloneNotFoundになる(t *testing.T) {
 		t.Fatalf("clone が無いのに ErrCloneNotFound にならない: %v", err)
 	}
 }
+
+// 目的: 人間が別の branch へ切り替えた worktree を、そのまま再利用しないことを確認する
+// （設計 3-22 の段2・段3。乗っ取らない）。
+//
+// **再利用の前に git へ現物を答えさせないと、**エージェントが意図しない branch の上で
+// 作業し、食い違いに気づくのは片付けのとき（成果が別 branch に積まれたあと）になる。
+//
+// 与える情報: 用意したあとに別の branch へ切り替えた worktree と、同じ issue の再用意。
+// 成功条件: ErrUnregisteredWorktree になり、worktree が消されずに残ること。
+func TestPrepare_別のbranchへ切り替えられたworktreeは再利用しない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	ctx := context.Background()
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	runGit(t, prepared.Path, "checkout", "--quiet", "-b", "人間が切り替えた")
+
+	_, err := fx.Manager.Prepare(ctx, sampleIssue(188))
+	if !errors.Is(err, workspace.ErrUnregisteredWorktree) {
+		t.Fatalf("別の branch を出している worktree を再利用している: %v", err)
+	}
+	if _, statErr := os.Stat(prepared.Path); statErr != nil {
+		t.Fatalf("再利用できない worktree を消している: %v", statErr)
+	}
+}

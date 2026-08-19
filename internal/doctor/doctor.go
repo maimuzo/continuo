@@ -29,15 +29,31 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
+)
+
+// 検査に与える期限である。
+//
+// **doctor は「前提を機械的に検査する」道具である。**どれか1つが返らないだけで
+// 人間の手が止まらないように、全体にも1項目にも上限を置く。
+const (
+	// DefaultTimeout は7項目の検査全体の上限である。
+	DefaultTimeout = 30 * time.Second
+
+	// DefaultCheckTimeout は外部に触る検査1つあたりの上限である。
+	//
+	// **1項目が固まっても残りの検査を捨てない**ために、全体とは別に切る。
+	DefaultCheckTimeout = 10 * time.Second
 )
 
 // Options は Run の入力である。
@@ -64,6 +80,11 @@ type Options struct {
 	// LookupEnv は環境変数を引く関数である。nil なら os.LookupEnv を使う。
 	// **資格情報の検査（rate_limit.token_source が env のとき）が使う。**
 	LookupEnv func(key string) (string, bool)
+	// Timeout は7項目の検査全体の上限である。**0 なら DefaultTimeout を使う。**
+	Timeout time.Duration
+	// CheckTimeout は外部に触る検査1つあたりの上限である。
+	// **0 なら DefaultCheckTimeout を使う。**
+	CheckTimeout time.Duration
 	// Logger は検査の途中経過の出力先である。
 	// **nil なら何も出力しない。**doctor の出力は Report だけで完結させる
 	// （tracker のアダプタが slog.Default() へ出す情報ログが報告に混ざらないようにする）。
@@ -110,6 +131,22 @@ func Run(ctx context.Context, opts Options) Report {
 	if opts.GhqList == nil {
 		opts.GhqList = workspace.RunGhqList
 	}
+	if opts.Timeout <= 0 {
+		opts.Timeout = DefaultTimeout
+	}
+	if opts.CheckTimeout <= 0 {
+		opts.CheckTimeout = DefaultCheckTimeout
+	}
+	if opts.HTTPClient == nil {
+		// **`http.DefaultClient`（`Timeout` 0）に落とさない。**応答ヘッダを返さない
+		// 相手に当たると、doctor がそのまま返らなくなる。
+		opts.HTTPClient = &http.Client{Timeout: opts.CheckTimeout}
+	}
+
+	// **検査全体にも期限を付ける。**外部プロセス（gh / ghq）と外部サービス（herdr /
+	// GitHub）に触るので、期限が無いと道具そのものが固まる。
+	ctx, cancelAll := context.WithTimeout(ctx, opts.Timeout)
+	defer cancelAll()
 
 	var report Report
 
@@ -118,18 +155,35 @@ func Run(ctx context.Context, opts Options) Report {
 	report.add(configResult)
 
 	// 段2: herdr。照合する protocol は設定から来るので、設定が読めなければ確かめられない。
-	report.add(checkHerdr(ctx, cfg, configResult.Symbol))
+	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
+		return checkHerdr(ctx, cfg, configResult.Symbol)
+	}))
 
 	// 段3: gh の認証。設定ファイルの下流である（設計 3-32 の依存の図）。
-	ghResult := checkGHAuth(ctx, opts, configResult.Symbol)
+	ghResult := withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
+		return checkGHAuth(ctx, opts, configResult.Symbol)
+	})
 	report.add(ghResult)
 
 	// 段4: ボード。設定と gh の認証の両方が通っていないと読めない。
-	boardResult, repos := checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
+	// **ここだけ期限を2倍にする。**Bootstrap と候補の取得で2リクエスト送るためである。
+	var boardResult Result
+	var repos []Repo
+	boardResult = withCheckTimeout(ctx, 2*opts.CheckTimeout, func(ctx context.Context) Result {
+		var res Result
+		res, repos = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
+		return res
+	})
 	report.add(boardResult)
 
 	// 段5: clone。対象リポジトリはボードを読んで決まる。
-	cloneResult, clonePaths := checkClone(ctx, opts, repos, boardResult.Symbol)
+	var cloneResult Result
+	var clonePaths map[string]string
+	cloneResult = withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
+		var res Result
+		res, clonePaths = checkClone(ctx, opts, repos, boardResult.Symbol)
+		return res
+	})
 	report.add(cloneResult)
 
 	// 段6: 信頼登録。**鍵にするのは clone の絶対パスである**（worktree のパスではない。3-32）。
@@ -139,6 +193,34 @@ func Run(ctx context.Context, opts Options) Report {
 	report.add(checkCredentials(opts, cfg, configResult.Symbol))
 
 	return report
+}
+
+// withCheckTimeout は検査1件に上限を切って走らせる。
+//
+// **1項目が固まっても残りの検査を捨てないためにある。**期限が来ると、その検査が
+// 呼んでいる外部の処理は `context.DeadlineExceeded` で返り、記号は `!`（確かめられ
+// なかった）になる（各検査が timedOut で判定する）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// timeout: この検査の上限。0 以下なら期限を足さない。
+// check: 走らせる検査。
+// 戻り値: 検査結果。
+func withCheckTimeout(ctx context.Context, timeout time.Duration, check func(context.Context) Result) Result {
+	if timeout <= 0 {
+		return check(ctx)
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return check(checkCtx)
+}
+
+// timedOut は「期限切れで返ってきた」かどうかを判定する。
+//
+// ctx: 検査に渡したコンテキスト。
+// err: 検査が返したエラー。
+// 戻り値: 期限切れが原因なら true。
+func timedOut(ctx context.Context, err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded)
 }
 
 // collectRepos はボードから返ってきた issue の nameWithOwner を重複なく集める（設計 3-32）。

@@ -2,6 +2,7 @@
 package lock_test
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -50,15 +51,43 @@ func TestAcquire_Release後は再度Acquireできる(t *testing.T) {
 	defer second.Release()
 }
 
-// 目的: 存在しないディレクトリの下のロックファイルを指定した場合にエラーになることを確認する
-// （open(2) が失敗する経路。人間が読めるエラーであることの確認を兼ねる）。
+// 目的: 存在しないディレクトリの下のロックファイルを指定した場合にエラーになり、
+// **それが「二重起動」とは区別できる**ことを確認する。
+// 両方を同じ文言で報告すると、runtime.lock_file を打ち間違えた運用者が、
+// 起動しているはずのない2つ目のプロセスを探すことになる。
 // 与える情報: 実在しないディレクトリを含むパス。
-// 成功条件: Acquire がエラーを返すこと。
-func TestAcquire_親ディレクトリが無いとエラーになる(t *testing.T) {
+// 成功条件: Acquire がエラーを返し、そのエラーが lock.ErrAlreadyRunning ではないこと。
+func TestAcquire_親ディレクトリが無いエラーは二重起動と区別できる(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "no-such-dir", "continuo.lock")
 
 	_, err := lock.Acquire(path)
 	if err == nil {
 		t.Fatal("親ディレクトリが無いのにエラーが返らなかった")
+	}
+	if errors.Is(err, lock.ErrAlreadyRunning) {
+		t.Fatalf("ファイルを開けないだけなのに二重起動として報告された: %v", err)
+	}
+}
+
+// 目的: 既に別のプロセスが掴んでいる場合のエラーが lock.ErrAlreadyRunning であることを
+// 確認する（設計 3-17）。呼び出し側はこれを見て「二重起動を検出した」と
+// 「ロックファイルを用意できない」を言い分ける。
+// 与える情報: 1回目の Acquire で掴んだままのロックファイルのパス。
+// 成功条件: 2回目の Acquire のエラーが errors.Is で lock.ErrAlreadyRunning と一致すること。
+func TestAcquire_二重起動のエラーはErrAlreadyRunningである(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "continuo.lock")
+
+	first, err := lock.Acquire(path)
+	if err != nil {
+		t.Fatalf("1回目の Acquire に失敗した: %v", err)
+	}
+	defer first.Release()
+
+	_, err = lock.Acquire(path)
+	if err == nil {
+		t.Fatal("2回目の Acquire が成功してしまった（二重起動を防げていない）")
+	}
+	if !errors.Is(err, lock.ErrAlreadyRunning) {
+		t.Fatalf("二重起動のエラーが lock.ErrAlreadyRunning ではない: %v", err)
 	}
 }

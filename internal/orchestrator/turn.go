@@ -33,15 +33,23 @@ const (
 // **巡回のループはこれでブロックしない。**`agent.prompt` を wait つきで呼ぶと turn の
 // 終わりまで返らない（既定1時間）ので、巡回のループの中で同期的に呼んではならない。
 //
-// **同じ run に2本目の goroutine を立てない。**既に走っていれば何もしない。
+// **同じ run に2本目の goroutine を立てない。**既に走っていれば起こさずに false を返す。
+//
+// **起こせなかったことを黙って捨ててはならない。**stall 検知が worker を止めても、古い
+// turn ループは `agent.prompt` の待ち受け（既定1時間）から戻るまで印を下ろさない。その間に
+// 再 dispatch が走ると、新しい Claude Code を起動したのに turn ループが1本も立たない。
+// **呼び出し側は false を受けたら `setNeedsPrompt` を立て、次の巡回で起こし直す。**
 //
 // ctx: turn ループへ渡すコンテキスト。
 // rs: 対象の run。
-func (o *Orchestrator) startTurnLoop(ctx context.Context, rs *runState) {
+// awaitFirst: 真なら、**最初の turn を送らずに、走っている turn の終わりを待つところから入る**
+// （復元で `agent_status` が `working` の run を引き継いだ場合。設計 3-4 の段5a2）。
+// 戻り値: goroutine を起こしたら true。既に走っていた・run が終わっていたら false。
+func (o *Orchestrator) startTurnLoop(ctx context.Context, rs *runState, awaitFirst bool) bool {
 	rs.mu.Lock()
 	if rs.turnLoopRunning || rs.Finished {
 		rs.mu.Unlock()
-		return
+		return false
 	}
 	rs.turnLoopRunning = true
 	rs.mu.Unlock()
@@ -58,8 +66,9 @@ func (o *Orchestrator) startTurnLoop(ctx context.Context, rs *runState) {
 			rs.turnLoopRunning = false
 			rs.mu.Unlock()
 		}()
-		o.turnLoop(ctx, rs, epoch)
+		o.turnLoop(ctx, rs, epoch, awaitFirst)
 	}()
+	return true
 }
 
 // turnLoop は1つの run の turn を、終わるまで送り続ける（設計 3-8）。
@@ -75,27 +84,41 @@ func (o *Orchestrator) startTurnLoop(ctx context.Context, rs *runState) {
 // rs: 対象の run。
 // epoch: この turn ループが回す worker の世代（設計 3-21）。**世代が変わっていたら
 // run を諦めずに黙って抜ける。**巡回の stall 検知が先に諦めた run を二重に諦めないためである。
-func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int) {
+// awaitFirst: 真なら、1周目は turn を送らずに turn の終わりを待つ（設計 3-4 の段5a2）。
+func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, awaitFirst bool) {
 	for {
 		if ctx.Err() != nil || !rs.currentWorker(epoch) {
 			return
 		}
 
 		snap := rs.snapshot()
-		if snap.TurnCount >= o.cfg.Agent.MaxTurns {
-			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
-				fmt.Sprintf("turn の上限（max_turns=%d）に達しました", o.cfg.Agent.MaxTurns))
-			return
-		}
 
-		text, err := o.buildTurnText(rs, snap)
-		if err != nil {
-			o.logger.Warn("プロンプトを組み立てられません", "identifier", snap.Identifier, "error", err)
-			o.failRun(ctx, rs, fmt.Sprintf("プロンプトを組み立てられません: %v", err))
-			return
-		}
+		var outcome turnOutcome
+		if awaitFirst {
+			// **引き継いだ run である。turn を送らずに、走っている turn の終わりを待つ**
+			// （設計 3-4 の段5a2「hook を待ち、来なければ stall 検知で拾う」の前半）。
+			// **送ると turn が混ざる。**待ち切れなければ turn の時間切れとして扱い、
+			// 巡回の stall 検知と同じ経路（abandonRun）へ落とす。
+			awaitFirst = false
+			o.logger.Info("引き継いだ run の turn の終わりを待ちます（turn は送りません）",
+				"identifier", snap.Identifier)
+			outcome = o.confirmTurnEnd(ctx, rs, o.turnDeadline(), false)
+		} else {
+			if snap.TurnCount >= o.cfg.Agent.MaxTurns {
+				o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
+					fmt.Sprintf("turn の上限（max_turns=%d）に達しました", o.cfg.Agent.MaxTurns))
+				return
+			}
 
-		outcome := o.sendTurn(ctx, rs, text)
+			text, err := o.buildTurnText(rs, snap)
+			if err != nil {
+				o.logger.Warn("プロンプトを組み立てられません", "identifier", snap.Identifier, "error", err)
+				o.failRun(ctx, rs, fmt.Sprintf("プロンプトを組み立てられません: %v", err))
+				return
+			}
+
+			outcome = o.sendTurn(ctx, rs, text)
+		}
 		if !rs.currentWorker(epoch) {
 			// **待っている間に、巡回の stall 検知などが先にこの run を諦めていた。**
 			// ここで諦め直すと RetryCount が2倍の速さで消費され、引き渡しのコメントも
@@ -189,7 +212,7 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 // 戻り値: turn の結果。
 func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) turnOutcome {
 	turnCount := rs.beginTurn(o.now())
-	deadline := o.now().Add(time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond)
+	deadline := o.turnDeadline()
 	o.logger.Info("turn を送ります",
 		"identifier", rs.issue().Identifier, "turn", turnCount, "max_turns", o.cfg.Agent.MaxTurns)
 
@@ -242,10 +265,17 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState, deadl
 	o.logger.Info("枠待ちと判定しました（stall の時計と turn の時計を止めます）",
 		"identifier", rs.issue().Identifier, "resets_at", resetAt)
 
+	// **1周あたり必ず poll_wait_ms は空ける**（下の待ち）。`agent.wait` は
+	// **いまの状態が until に含まれると 0.006 秒で即返る**（設計 3-2 の実測）。
+	// 枠を使い切って Claude Code が idle に落ちていると、`Stop` を取りこぼした場合に
+	// どの return にも当たらないまま resets_at まで RPC を投げ続けることになる。
+	pollWait := time.Duration(o.cfg.Claude.PollWaitMs) * time.Millisecond
+
 	for {
 		if ctx.Err() != nil {
 			return turnAborted
 		}
+		iterationStart := o.now()
 		// 枠待ちの間は agent.wait で待ち直す（設計 3-2 の段3）。
 		res, err := o.herdr.AgentWait(ctx, herdr.AgentWaitParams{
 			Target:    rs.agentName(),
@@ -282,6 +312,39 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState, deadl
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)
 		}
+
+		// **下限の待ち。**`agent.wait` が即返っても1周あたり poll_wait_ms は必ず空ける。
+		if rest := pollWait - o.now().Sub(iterationStart); rest > 0 {
+			if !sleepCtx(ctx, rest) {
+				return turnAborted
+			}
+		}
+	}
+}
+
+// turnDeadline はこの turn の期限を返す（`claude.turn_timeout_ms`）。
+//
+// 戻り値: 期限の時刻。
+func (o *Orchestrator) turnDeadline() time.Time {
+	return o.now().Add(time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond)
+}
+
+// sleepCtx は ctx を見張りながら d だけ待つ。
+//
+// ctx: 待ちを打ち切るコンテキスト。
+// d: 待つ長さ。0以下なら待たない。
+// 戻り値: 待ち切れたら true。ctx が終わったら false。
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -318,8 +381,7 @@ func (o *Orchestrator) afterQuotaReset(ctx context.Context, rs *runState) turnOu
 		// **その turn は continuo が送っていないので turn 数に入らない。**
 		o.logger.Info("枠が明けて Claude Code が自分で継続しました（継続の指示は送りません）",
 			"identifier", rs.issue().Identifier)
-		deadline := o.now().Add(time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond)
-		return o.confirmTurnEnd(ctx, rs, deadline, false)
+		return o.confirmTurnEnd(ctx, rs, o.turnDeadline(), false)
 	default:
 		o.logger.Info("枠が明けたので継続の指示を1回送ります（この送信は turn 数に数えます）",
 			"identifier", rs.issue().Identifier)

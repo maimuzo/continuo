@@ -7,8 +7,9 @@
 //     params は空でも {} が要る
 //   - 1コネクション = 1リクエスト。応答を1行返した直後にサーバがコネクションを閉じる。
 //     コネクションプールを作れない
-//   - socket のパスは環境変数 HERDR_SOCKET_PATH が最優先。無ければ設定の値、
-//     それも無ければ既定の ~/.config/herdr/herdr.sock
+//   - socket のパスは**設定ファイルの herdr.socket を使う。環境変数 HERDR_SOCKET_PATH は
+//     読まない**（読むと設定で切り替える手段が無くなる。2-1）。未指定なら既定の
+//     ~/.config/herdr/herdr.sock へ落ちる
 //
 // このパッケージは herdr サーバへ実際に接続せずにテストできるよう作られている。
 // テストでは net.Listen("unix", ...) で偽のサーバを立て、決まった JSON を返させる。
@@ -49,7 +50,8 @@ const (
 	DefaultReadTimeout = 5 * time.Second
 	// DefaultStartupTimeout は herdr の agent 起動を待つ上限である
 	// （claude.startup_timeout_ms = 60000）。agent.start は実測で検知まで既定30秒かかるため、
-	// read_timeout_ms では足りない。
+	// read_timeout_ms では足りない。**worktree 系の3つも同じ上限を使う**
+	// （worktree.go の冒頭コメントを参照）。
 	DefaultStartupTimeout = 60 * time.Second
 	// DefaultTurnTimeout は1つの turn の上限である（claude.turn_timeout_ms = 3600000）。
 	// agent.prompt を待機ありで呼ぶときに使う。
@@ -65,10 +67,12 @@ const (
 //
 // 0 以下のフィールドは New が既定値（DefaultReadTimeout 等）で埋める。
 type Timeouts struct {
-	// Read は herdr の socket API の応答を待つ上限である。agent.start と、
-	// 待機ありの agent.prompt を除くすべての呼び出しに適用する。
+	// Read は herdr の socket API の応答を待つ上限である。**即答する呼び出しにだけ
+	// 適用する。**待ちを伴う呼び出し（agent.start・待機ありの agent.prompt・
+	// worktree.create / worktree.open / worktree.remove）には適用しない。
 	Read time.Duration
-	// Startup は agent.start の応答を待つ上限である。
+	// Startup は待ちを伴う呼び出し（agent.start と worktree 系の3つ）の応答を待つ
+	// 上限である。
 	Startup time.Duration
 	// Turn は待機あり（Wait が真）の agent.prompt の応答を待つ上限である。
 	Turn time.Duration
@@ -230,6 +234,23 @@ func marshalParams(params any) (json.RawMessage, error) {
 	return b, nil
 }
 
+// canceledError は「呼び出し側が ctx を打ち切った」ことを表すエラーを作る。
+//
+// **herdr の障害と区別できる形にする。**打ち切りを herdr の障害として報告すると、
+// 停止処理の途中で run が「stall した」として捨てられる。
+//
+// method: 打ち切られた呼び出しのメソッド名（例: "agent.prompt"）。
+// cause: ctx.Err() の値（context.Canceled または context.DeadlineExceeded）。
+// 戻り値: Code が ErrCodeCanceled の *Error。cause を包むので
+// errors.Is(err, context.Canceled) で判定できる。
+func canceledError(method string, cause error) error {
+	return &Error{
+		Code:    ErrCodeCanceled,
+		Message: fmt.Sprintf("herdr の呼び出しが打ち切られました（method=%s）", method),
+		Err:     cause,
+	}
+}
+
 // call は herdr の socket API を1回呼び出す。すべてのメソッド呼び出し（pane.split・
 // agent.start 等）はこの関数を経由する。
 //
@@ -239,15 +260,20 @@ func marshalParams(params any) (json.RawMessage, error) {
 //
 // ctx: 呼び出し全体（接続・送信・応答待ち）に適用するコンテキスト。**ctx に期限が
 // あればその期限を使い、無ければ timeout を使う。**早いほうを採らないのは、呼び出し側が
-// 既定より長い待ち時間を与えられるようにするためである。
+// 既定より長い待ち時間を与えられるようにするためである。**ctx を cancel すると、応答待ちの
+// 途中でも即座に打ち切る**（context.AfterFunc で socket を閉じる。conn.SetDeadline だけでは
+// cancel が効かない）。
 // method: 呼び出すメソッド名（例: "pane.split"）。
 // params: リクエストの params に入れる値。nil を渡すと "{}" として送る
 // （marshalParams を参照）。
 // timeout: ctx に期限が無いときに使う待ち時間の上限。
-// 戻り値: 成功時は応答の result フィールドの生 JSON。herdr がエラー応答
-// （{"error":{"code":...,"message":...}}）を返した場合は *Error を返す
-// （errors.As で判定できる。IsCode を使うとより簡潔に判定できる）。
-// 接続・送信・応答読み取りに失敗した場合もエラーを返す。
+// 戻り値: 成功時は応答の result フィールドの生 JSON。**失敗はすべて *Error で返る**
+// （errors.As で判定できる。IsCode / IsTransient を使うとより簡潔に判定できる）。
+//   - herdr のエラー応答（{"error":{"code":...,"message":...}}）… herdr が返した Code
+//   - 接続・送信・応答読み取りの失敗 … ErrCodeTransport（Retryable が真）
+//   - 待ち時間が尽きた … ErrCodeReadTimeout（Retryable が真）
+//   - 呼び出し側が ctx を打ち切った … ErrCodeCanceled（Retryable は偽。
+//     errors.Is(err, context.Canceled) で辿れる）
 func (c *Client) call(
 	ctx context.Context,
 	method string,
@@ -275,9 +301,24 @@ func (c *Client) call(
 	var dialer net.Dialer
 	conn, err := dialer.DialContext(ctx, "unix", c.socketPath)
 	if err != nil {
-		return nil, fmt.Errorf("herdr の socket に接続できません: %s: %w", c.socketPath, err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, canceledError(method, ctxErr)
+		}
+		return nil, &Error{
+			Code:      ErrCodeTransport,
+			Message:   fmt.Sprintf("herdr の socket に接続できません: %s", c.socketPath),
+			Retryable: true,
+			Err:       err,
+		}
 	}
 	defer func() { _ = conn.Close() }()
+
+	// **ctx が終わったら conn を閉じる。**conn.SetDeadline は「期限が来たら」しか効かず、
+	// 呼び出し側の cancel では解けない。待機ありの agent.prompt は Turn（既定1時間）を
+	// 使うので、これが無いと SIGINT を受けても停止処理が最大1時間ブロックする。
+	// 閉じた結果の読み取りエラーは、下で ctx.Err() を先に見て「打ち切り」として返す。
+	stopOnDone := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopOnDone()
 
 	// ctx に期限があればそれを使う。無ければ呼び出しの種類ごとの timeout を使う。
 	deadline := time.Now().Add(timeout)
@@ -287,46 +328,83 @@ func (c *Client) call(
 	// エラーメッセージに出す「実際に待った上限」。
 	budget := time.Until(deadline)
 	if err := conn.SetDeadline(deadline); err != nil {
-		return nil, fmt.Errorf("herdr の socket にタイムアウトを設定できません: %w", err)
+		return nil, &Error{
+			Code:      ErrCodeTransport,
+			Message:   "herdr の socket にタイムアウトを設定できません",
+			Retryable: true,
+			Err:       err,
+		}
 	}
 
 	if _, err := conn.Write(reqBytes); err != nil {
-		return nil, fmt.Errorf("herdr へのリクエスト送信に失敗しました（method=%s）: %w", method, err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, canceledError(method, ctxErr)
+		}
+		return nil, &Error{
+			Code:      ErrCodeTransport,
+			Message:   fmt.Sprintf("herdr へのリクエスト送信に失敗しました（method=%s）", method),
+			Retryable: true,
+			Err:       err,
+		}
 	}
 
 	reader := bufio.NewReader(conn)
 	line, err := reader.ReadBytes('\n')
 	if err != nil {
+		// **ctx の打ち切りを先に見る。**上の context.AfterFunc が conn を閉じるので、
+		// 読み取りは「閉じた socket からの読み取り」という別の顔で失敗する。
+		// 先に ctx を見ないと、呼び出し側の cancel が herdr の障害として報告される。
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, canceledError(method, ctxErr)
+		}
 		// 時間切れは、途中まで読めていてもタイムアウトとして返す。読めたバイトの有無で
 		// 別種のエラー（JSON 解析の失敗）に化けると、リトライの可否を判断する層が
 		// 時間切れと壊れた応答を区別できなくなる。
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
-			return nil, fmt.Errorf(
-				"herdr からの応答がタイムアウトしました（method=%s, %s 待機, 受信済み %d バイト）: %w",
-				method, budget.Round(time.Millisecond), len(line), err,
-			)
+			return nil, &Error{
+				Code: ErrCodeReadTimeout,
+				Message: fmt.Sprintf(
+					"herdr からの応答がタイムアウトしました（method=%s, %s 待機, 受信済み %d バイト）",
+					method, budget.Round(time.Millisecond), len(line),
+				),
+				Retryable: true,
+				Err:       err,
+			}
 		}
 		if len(line) == 0 {
-			return nil, fmt.Errorf("herdr からの応答読み取りに失敗しました（method=%s）: %w", method, err)
+			return nil, &Error{
+				Code:      ErrCodeTransport,
+				Message:   fmt.Sprintf("herdr からの応答読み取りに失敗しました（method=%s）", method),
+				Retryable: true,
+				Err:       err,
+			}
 		}
 		// 改行の直前でサーバがコネクションを閉じる実装（EOF）でも、1行分の JSON が
 		// 揃っていれば応答として扱う。揃っていなければ「途中で切れた応答」として、
 		// 読み取りエラーを添えて返す。
 		if !json.Valid(bytes.TrimSpace(line)) {
-			return nil, fmt.Errorf(
-				"herdr の応答が途中で切れています（method=%s, body=%s）: %w",
-				method, string(line), err,
-			)
+			return nil, &Error{
+				Code: ErrCodeTransport,
+				Message: fmt.Sprintf(
+					"herdr の応答が途中で切れています（method=%s, body=%s）", method, string(line),
+				),
+				Retryable: true,
+				Err:       err,
+			}
 		}
 	}
 
 	var resp wireResponse
 	if err := json.Unmarshal(bytes.TrimSpace(line), &resp); err != nil {
-		return nil, fmt.Errorf(
-			"herdr の応答を JSON として解析できません（method=%s, body=%s）: %w",
-			method, string(line), err,
-		)
+		// **壊れた応答は一時的な失敗ではない。**同じものが返ってくるだけなので Retryable にしない。
+		return nil, &Error{
+			Code: ErrCodeTransport,
+			Message: fmt.Sprintf(
+				"herdr の応答を JSON として解析できません（method=%s, body=%s）", method, string(line),
+			),
+			Err: err,
+		}
 	}
 
 	// **応答の id は当てにしない**（2-1。2026-08-18 の実測）。

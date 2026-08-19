@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/doctor"
 )
@@ -512,21 +513,28 @@ func TestDoctor_資格情報_envは環境変数の有無で分ける(t *testing.
 	}
 }
 
-// TestDoctor_資格情報_token_envが空なら足りない は、設定の書き漏らしを検出する。
+// TestDoctor_token_envの書き漏らしは設定ファイルの検査で足りないと出る は、
+// 設定の書き漏らしがどこで捕まるかを固定する。
 //
-// 目的: `token_source` が `env` なのに `token_env` が空なら `✗` にすること
-// （どの環境変数を見ればよいか決まらない）。
+// 目的: `rate_limit.token_source` が `env` なのに `token_env` が空なら、continuo は
+// 起動できない。**その書き漏らしを doctor が見逃さないこと**を確かめる
+// （判定は `config.Load` が持ち、doctor はその結果を記号にする。設計 3-32）。
 // 与える情報: `token_env: ""` を明示した設定。
-// 成功条件: 資格情報が `✗` になること。
-func TestDoctor_資格情報_token_envが空なら足りない(t *testing.T) {
+// 成功条件: 設定ファイルが `✗` になり、説明が `rate_limit.token_env` を指すこと。
+// 下流の資格情報は `!`（設定を読めていないので確かめられない）で、終了コードは 1 であること。
+func TestDoctor_token_envの書き漏らしは設定ファイルの検査で足りないと出る(t *testing.T) {
 	fx := newFixture(t)
 	fx.WriteWorkflow(t, "rate_limit:\n  source: oauth_usage_api\n  token_source: env\n  token_env: \"\"\n")
 
 	report := fx.Run(t)
 
-	res := assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolMissing)
+	res := assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolMissing)
 	if !strings.Contains(res.Detail, "token_env") {
 		t.Fatalf("説明が token_env の未設定を指していない: %q", res.Detail)
+	}
+	assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolUnknown)
+	if report.ExitCode() != 1 {
+		t.Fatalf("✗ があるのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
 }
 
@@ -708,4 +716,83 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestDoctor_トークンが失効していれば認証の直し方を出す は、直す先の取り違えを防ぐ。
+//
+// 目的: 401（トークンが無効・失効）なのに「owner / project_number / status_field を
+// 確認してください」と案内すると、人間が直す先を取り違える（設計 3-32 は落ち方で
+// 分けることを求めている）。
+// 与える情報: 401 を返す偽ボード。ほかの前提は揃っている。
+// 成功条件: ボードが `✗` になり、直し方が `gh auth refresh` か token_env を指すこと。
+// **owner / project_number を確認せよという案内を出さないこと。**
+func TestDoctor_トークンが失効していれば認証の直し方を出す(t *testing.T) {
+	fx := newFixture(t)
+	fx.GitHub.SetFailure(failureBadCredentials)
+
+	report := fx.Run(t)
+
+	board := assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolMissing)
+	joined := strings.Join(board.Remedies, " / ")
+	if !strings.Contains(joined, "gh auth refresh") || !strings.Contains(joined, "token_env") {
+		t.Fatalf("直し方が認証の入れ直しを指していない: %q", joined)
+	}
+	if strings.Contains(joined, "project_number") {
+		t.Fatalf("認証の失効なのに tracker.provider を直せと案内している: %q", joined)
+	}
+}
+
+// TestDoctor_ボードが時間内に応答しなければ確かめられなかったとして残りを続ける は、
+// 検査に期限があることを確かめる。
+//
+// 目的: doctor は「使い始める前に前提を機械的に検査する」道具である。**1項目が返らない
+// だけで道具そのものが固まると、人間の手が止まる。**
+// 与える情報: 期限より長く待ってから応答する偽ボードと、1項目 200ms の期限。
+// 成功条件: ボードが `!`（確かめられなかった）になり、説明が「時間内に応答がありません
+// でした」であること。**7項目すべてが結果を持ち、終了コードが 1 にならないこと。**
+func TestDoctor_ボードが時間内に応答しなければ確かめられなかったとして残りを続ける(t *testing.T) {
+	fx := newFixture(t)
+	fx.GitHub.SetDelay(30 * time.Second)
+
+	opts := fx.Options()
+	opts.CheckTimeout = 200 * time.Millisecond
+
+	start := time.Now()
+	report := doctor.Run(context.Background(), opts)
+	elapsed := time.Since(start)
+
+	if elapsed > 20*time.Second {
+		t.Fatalf("期限を過ぎても待ち続けた: %v", elapsed)
+	}
+	if got := labelsOf(report); len(got) != len(wantLabels) {
+		t.Fatalf("1項目が固まっただけで残りの検査が落ちた: %v", got)
+	}
+	board := assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
+	if !strings.Contains(board.Detail, "時間内に応答がありませんでした") {
+		t.Fatalf("説明が期限切れを指していない: %q", board.Detail)
+	}
+	if report.ExitCode() != 0 {
+		t.Fatalf("確かめられなかっただけなのに終了コードが %d になった\n%s",
+			report.ExitCode(), renderReport(t, report))
+	}
+}
+
+// TestDoctor_接続先を差し替えているとボードの説明に出す は、繋ぎ先の秘匿を防ぐ。
+//
+// 目的: 接続先は環境変数1つで差し替わり、そこへ GitHub のトークンが送られる。
+// **本物の GitHub でない宛先に繋いだことが出力に出ないと、人間が気づけない。**
+// 与える情報: 偽ボード（httptest の 127.0.0.1）を接続先にした doctor。
+// 成功条件: ボードの説明に「接続先を差し替えています」と、その URL が出ること。
+func TestDoctor_接続先を差し替えているとボードの説明に出す(t *testing.T) {
+	fx := newFixture(t)
+
+	report := fx.Run(t)
+
+	board := assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolOK)
+	if !strings.Contains(board.Detail, "接続先を差し替えています") {
+		t.Fatalf("接続先を差し替えたことが説明に出ていない: %q", board.Detail)
+	}
+	if !strings.Contains(board.Detail, fx.GitHub.URL) {
+		t.Fatalf("差し替えた接続先の URL が説明に出ていない: %q", board.Detail)
+	}
 }

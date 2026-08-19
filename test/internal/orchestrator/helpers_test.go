@@ -797,7 +797,11 @@ type fixture struct {
 	// WorktreeRoot は worktree の置き場所である。
 	WorktreeRoot string
 	// Logs はログの出力先である。
-	Logs *strings.Builder
+	//
+	// **排他つきの syncLog を使う。**run ごとの goroutine（turn ループ・finishRunAsync・
+	// abandonRunAsync）がログを書いている最中にテスト本体が String() で読むので、
+	// 排他を持たない strings.Builder を渡すと `-race` が競合を報告する。
+	Logs *syncLog
 	// Sessions は採番したセッション UUID を採番した順に持つ。
 	Sessions []string
 	// Timeline は偽のトラッカーと偽の herdr の呼び出しを混ぜた1本の並びである。
@@ -819,6 +823,12 @@ type fixtureOptions struct {
 	GHAuthCheck func(ctx context.Context) error
 	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない。
 	RateLimit *ratelimit.Reader
+	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
+	// 空なら一時ディレクトリの根（tempRoot）を使う。
+	TranscriptRoot string
+	// ContinuoPath は hook のコマンド行に書く実行ファイルのパスである。
+	// 空なら `/opt/continuo/bin/continuo` を使う。
+	ContinuoPath string
 }
 
 // newFixture はテスト用の Orchestrator を組み立てる。
@@ -908,7 +918,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		promptTemplate = samplePromptTemplate
 	}
 
-	logs := &strings.Builder{}
+	logs := &syncLog{}
 	logger := slog.New(slog.NewTextHandler(io.Writer(logs), &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	settingsRoot := filepath.Join(runtimeDir, hookserver.IssuesDirName)
@@ -938,6 +948,15 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Timeline:     tl,
 	}
 
+	transcriptRoot := opts.TranscriptRoot
+	if transcriptRoot == "" {
+		transcriptRoot = tempRoot(t)
+	}
+	continuoPath := opts.ContinuoPath
+	if continuoPath == "" {
+		continuoPath = "/opt/continuo/bin/continuo"
+	}
+
 	var sessionMu sync.Mutex
 	orc, err := orchestrator.New(orchestrator.Options{
 		Config:         cfg,
@@ -947,7 +966,11 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Workspace:      mgr,
 		RateLimit:      opts.RateLimit,
 		HookSocketPath: fx.SocketPath,
-		ContinuoPath:   "/opt/continuo/bin/continuo",
+		ContinuoPath:   continuoPath,
+		// **テストの transcript は一時ディレクトリに置く。**hook が渡す
+		// transcript_path は許可された根の内側だけを受け入れるので、根をそこへ向ける
+		// （本番の既定は `~/.claude/projects`）。
+		TranscriptRoot: transcriptRoot,
 		Logger:         logger,
 		Now:            nowFunc,
 		GHAuthCheck:    opts.GHAuthCheck,
@@ -1128,4 +1151,20 @@ func appendLine(path, line string) error {
 	defer func() { _ = f.Close() }()
 	_, err = f.WriteString(line + "\n")
 	return err
+}
+
+// tempRoot は `t.TempDir()` が作られる根を、シンボリックリンクを解いた形で返す。
+//
+// **macOS では `/var/folders/...` が `/private/var/folders/...` の symlink である。**
+// 解いておかないと、`transcript_path` の突き合わせが一致しない。
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 解決した一時ディレクトリの根。
+func tempRoot(t *testing.T) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(os.TempDir())
+	if err != nil {
+		t.Fatalf("一時ディレクトリの根を解決できません: %v", err)
+	}
+	return resolved
 }

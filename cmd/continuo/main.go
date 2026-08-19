@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -123,10 +124,15 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 //
 // **1つ失敗しても残りを全部検査する。**そのため、この関数は途中で戻らない。
 //
+// **検査そのものに期限を付ける**（`doctor.DefaultTimeout`）。gh / ghq / herdr / GitHub を
+// 叩くので、期限が無いと「前提を機械的に検査する」道具が固まって人間の手が止まる。
+//
 // args: `continuo doctor` に続く引数（WORKFLOW.md のパスを0個か1個）。
 // stdout / stderr: 出力先。検査結果は stdout へ出す。
 // 戻り値: 終了コード。**`✗` が1つでもあれば 1、`!` だけなら 0**（設計 3-32）。
 // 引数の指定が誤っていれば 2（--help / -h なら 0）。
+// **検査結果を書き出せなかった場合と、接続先の環境変数が不正な場合は 3**
+// （`✗` があった場合の 1 と区別できるようにする）。
 func runDoctor(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -165,18 +171,37 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "設定ファイルの場所を決められません（残りの検査は続けます）: %v\n", err)
 	}
 
-	report := doctor.Run(context.Background(), doctor.Options{
-		ConfigPath: path,
-		// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（daemon.EnvGraphQLEndpoint）。
-		// 空なら本番の GitHub GraphQL API を読む（読み取りだけである）。
-		GraphQLEndpoint: os.Getenv(daemon.EnvGraphQLEndpoint),
+	// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（daemon.EnvGraphQLEndpoint）。
+	// 空なら本番の GitHub GraphQL API を読む（読み取りだけである）。
+	// **常駐プロセスと同じ検査を通す。**ここへ `gh auth token` のトークンが送られるので、
+	// 宛先を確かめずに使わない。
+	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)
+	if err := daemon.ValidateGraphQLEndpoint(endpoint); err != nil {
+		fmt.Fprintf(stderr, "エラー: %v\n", err)
+		return doctorInternalErrorExitCode
+	}
+
+	// **検査が返らないまま人間を待たせない。**全体にも1項目にも上限を置く（doctor 側の既定）。
+	ctx, cancel := context.WithTimeout(context.Background(), doctor.DefaultTimeout)
+	defer cancel()
+
+	report := doctor.Run(ctx, doctor.Options{
+		ConfigPath:      path,
+		GraphQLEndpoint: endpoint,
 	})
 	if err := report.Write(stdout); err != nil {
 		fmt.Fprintf(stderr, "エラー: 検査結果を書き出せません: %v\n", err)
-		return 1
+		return doctorInternalErrorExitCode
 	}
 	return report.ExitCode()
 }
+
+// doctorInternalErrorExitCode は `continuo doctor` が検査そのものを実施・報告できなかった
+// ときの終了コードである。
+//
+// **`✗` があったこと（1）と、引数の誤り（2）のどちらとも別の値にする。**
+// スクリプトから「前提が足りない」と「doctor 自体が動けなかった」を区別できるようにする。
+const doctorInternalErrorExitCode = 3
 
 // parseErrorExitCode は flag.FlagSet.Parse が返したエラーを終了コードに直す。
 //
@@ -201,7 +226,8 @@ func parseErrorExitCode(err error) int {
 // args: `continuo` に続く引数（--log-level / --port と、WORKFLOW.md のパスを0個か1個）。
 // stdout / stderr: 出力先。
 // 戻り値: 終了コード。0 は正常終了（SIGINT / SIGTERM での停止を含む）、
-// 1 は起動できなかった、2 は引数の指定が誤っている。
+// **1 は起動できなかったか、巡回中に落ちた**（ログの文言で言い分ける）、
+// 2 は引数の指定が誤っている。
 func runMain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -270,9 +296,19 @@ func runMain(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// **2回目の signal を効かせる。**1回目を受けたら登録を外し、既定の動作
+	// （プロセスの終了）へ戻す。理由は daemon.RestoreDefaultSignalsOnShutdown にある。
+	daemon.RestoreDefaultSignalsOnShutdown(ctx, stop)
+
 	fmt.Fprintf(stdout, "continuo を起動します（設定ファイル: %s）\n", path)
 	if err := daemon.Run(ctx, daemon.Options{ConfigPath: path, Logger: logger, Port: port}); err != nil {
-		logger.Error("continuo を起動できません", "error", err)
+		// **起動できなかったのか、動いていたものが落ちたのかを言い分ける。**
+		// 無人運用のログを後から読む人間が、起動失敗と実行中の異常終了を取り違えないようにする。
+		if errors.Is(err, daemon.ErrStartup) {
+			logger.Error("continuo を起動できません", "error", err)
+		} else {
+			logger.Error("continuo が異常終了しました（起動は済んでいました）", "error", err)
+		}
 		return 1
 	}
 	logger.Info("continuo を終了しました")
@@ -293,6 +329,11 @@ func runMain(args []string, stdout, stderr io.Writer) int {
 // args: `continuo hook` に続く引数（--socket / --pending-dir）。
 // stdin: hook の JSON の入力元。
 // stderr: 出力先。転送できなかった理由をここへ出す。
+// **`--socket` と `--pending-dir` は絶対パスでなければ受け付けない。**hook の cwd は
+// worktree なので（設計 1-5）、相対パスを受けると逃がし先が worktree の中に掘られ、
+// continuo は実行時ディレクトリの下しか走査しないので**永久に読まれない。**
+// 受け口の側（`hookserver.New`）も同じ理由で絶対パスを要求している。
+//
 // 戻り値: 終了コード。--help / -h なら 0、引数の指定が誤っていれば 1、それ以外は常に 0。
 func runHook(args []string, stdin io.Reader, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo hook", flag.ContinueOnError)
@@ -318,6 +359,14 @@ func runHook(args []string, stdin io.Reader, stderr io.Writer) int {
 	// 設定ファイルのテンプレートの書き間違いを、hook 側で黙って見逃さない。
 	if *pendingDirFlag == "" {
 		fmt.Fprintf(stderr, "エラー: continuo hook には --pending-dir が必要です（continuo が落ちている間の hook の逃がし先です。continuo が issue ごとの設定ファイルへ絶対パスを埋め込みます）\n")
+		return 1
+	}
+	if !filepath.IsAbs(*socketFlag) {
+		fmt.Fprintf(stderr, "エラー: --socket は絶対パスで指定してください（hook の cwd は worktree なので、相対パスでは繋ぎ先が定まりません）: %q\n", *socketFlag)
+		return 1
+	}
+	if !filepath.IsAbs(*pendingDirFlag) {
+		fmt.Fprintf(stderr, "エラー: --pending-dir は絶対パスで指定してください（hook の cwd は worktree なので、相対パスでは逃がし先が worktree の中に掘られ、continuo に読まれません）: %q\n", *pendingDirFlag)
 		return 1
 	}
 

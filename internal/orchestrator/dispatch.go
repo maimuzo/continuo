@@ -28,6 +28,15 @@ const agentStatusPollInterval = 500 * time.Millisecond
 // **返ってきた配列の順序をそのまま使う。**自前で並べ替えない（並び順を決めるのは人間である。
 // 設計 3-30）。
 //
+// **巡回のループはここでブロックしない**（設計 3-8）。同期で行うのは段-1（空きスロットの
+// 検査）・段0（dispatch 直前の検査）・段1（印を付ける）までである。**段2以降は別の
+// goroutine で回す。**段3〜段10 は git の worktree 作成・利用者が書いた workspace_hooks
+// （既定60秒）・起動の待ち（既定60秒）を順に通るので、既定値と max_concurrent_agents=2 では
+// 1回の巡回が数分返らず、その間 stall 検知も枠の読み取りも止まる。
+//
+// **同じ巡回で印を付けた run は、印を付けた順に1本の goroutine で処理する。**
+// 並行に走らせると、ボードの並び順どおりに着手したことを外から確かめられなくなる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // candidates: `active_states` で取った候補（ボードの並び順）。
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
@@ -37,12 +46,13 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		return
 	}
 
+	var claimed []claimedRun
 	for _, issue := range candidates {
 		if ctx.Err() != nil {
-			return
+			break
 		}
 		// 既に印を持っている issue は dispatch しない（設計 3-10 / 4-2）。
-		if _, claimed := o.lookupRunByID(issue.ID); claimed {
+		if _, taken := o.lookupRunByID(issue.ID); taken {
 			continue
 		}
 		if !issue.Dispatchable {
@@ -56,11 +66,35 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		if !o.hasFreeSlot() {
 			o.logger.Info("空きスロットが尽きたので、この巡回ではこれ以上 dispatch しません",
 				"max_concurrent_agents", o.cfg.Agent.MaxConcurrentAgents)
-			return
+			break
 		}
 
-		o.dispatchOne(ctx, issue)
+		if rs, ok := o.claimForDispatch(ctx, issue); ok {
+			claimed = append(claimed, claimedRun{rs: rs, issue: issue})
+		}
 	}
+	if len(claimed) == 0 {
+		return
+	}
+
+	o.wg.Add(1)
+	go func() {
+		defer o.wg.Done()
+		for _, c := range claimed {
+			if ctx.Err() != nil {
+				return
+			}
+			o.runStartOrFail(ctx, c.rs, c.issue, false)
+		}
+	}()
+}
+
+// claimedRun は印を付け終えて、着手の段2以降を待っている run である。
+type claimedRun struct {
+	// rs は印を付けた run である。
+	rs *runState
+	// issue は着手する issue のスナップショットである。
+	issue tracker.Issue
 }
 
 // hasFreeSlot は空きスロットがあるかを返す（設計 3-16 の段-1）。
@@ -165,19 +199,40 @@ func hasRequiredLabels(issue tracker.Issue, required []string) bool {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 着手する issue。
-func (o *Orchestrator) dispatchOne(ctx context.Context, issue tracker.Issue) {
+func (o *Orchestrator) claimForDispatch(ctx context.Context, issue tracker.Issue) (*runState, bool) {
 	// 段0: dispatch の直前の検査（設計 3-6 の「issue ごと」の表）。
 	if !o.preflight(ctx, issue) {
-		return
+		return nil, false
 	}
 
 	// 段1: 印を付け、実行中の一覧へ入れる。
-	rs, claimed := o.claim(issue.ID, issue)
-	if !claimed {
-		return
+	rs, ok := o.claim(issue.ID, issue)
+	if !ok {
+		return nil, false
 	}
+	// **状態ごとの上限は running_state のバケツで数える**（設計 3-16 の段-1）。
+	// **印を付けた時点で書き換える。**段2 は別の goroutine で走るので、そこまで待つと
+	// 同じ巡回の次の候補を数えるときに dispatch 前の Status（Ready）のまま数えてしまい、
+	// 上限を越えて dispatch できてしまう。
+	rs.setIssueState(o.cfg.Tracker.RunningState)
+	return rs, true
+}
 
-	if err := o.startRun(ctx, rs, issue, false); err != nil {
+// runStartOrFail は着手の段2〜11 を実行し、失敗したらその run を失敗として扱う。
+//
+// **巡回のループから同期で呼んではならない**（設計 3-8）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 印を付けた run。
+// issue: 着手する issue。
+// reuse: 再 dispatch かどうか。
+func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue tracker.Issue, reuse bool) {
+	if err := o.startRun(ctx, rs, issue, reuse); err != nil {
+		if reuse {
+			o.logger.Warn("再 dispatch に失敗しました", "identifier", issue.Identifier, "error", err)
+			o.failRun(ctx, rs, fmt.Sprintf("再 dispatch に失敗しました: %v", err))
+			return
+		}
 		o.logger.Warn("着手に失敗しました", "identifier", issue.Identifier, "error", err)
 		o.failRun(ctx, rs, fmt.Sprintf("着手に失敗しました: %v", err))
 	}
@@ -205,11 +260,14 @@ func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 		// 検査に落ちたら、この巡回では何もしない。次の巡回でまた見る。
 		return
 	}
+	// **印は同期で更新する。**次の巡回が同じ run をもう一度拾わないようにする。
 	rs.clearBackoff()
-	if err := o.startRun(ctx, rs, issue, true); err != nil {
-		o.logger.Warn("再 dispatch に失敗しました", "identifier", issue.Identifier, "error", err)
-		o.failRun(ctx, rs, fmt.Sprintf("再 dispatch に失敗しました: %v", err))
-	}
+	// **段2以降は別の goroutine で回す**（設計 3-8。巡回のループをブロックしない）。
+	o.wg.Add(1)
+	go func() {
+		defer o.wg.Done()
+		o.runStartOrFail(ctx, rs, issue, true)
+	}()
 }
 
 // preflight は dispatch の直前の検査を行う（着手の段0。設計 3-6 の「issue ごと」の表）。
@@ -432,7 +490,13 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 
 	// 段11: 1回目の turn を送る。**巡回のループはここでブロックしない。**
-	o.startTurnLoop(ctx, rs)
+	if !o.startTurnLoop(ctx, rs, false) {
+		// **黙って捨ててはならない。**古い turn ループが `agent.prompt` の待ち受けから
+		// 戻っていないと2本目は立てられない。印を立てて次の巡回で起こし直す（設計 3-8）。
+		o.logger.Warn("前の turn ループがまだ走っているので、次の巡回で turn を送り直します",
+			"identifier", issue.Identifier)
+		rs.setNeedsPrompt()
+	}
 	return nil
 }
 

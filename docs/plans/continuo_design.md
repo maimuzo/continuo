@@ -3252,8 +3252,10 @@ continuo /path/to/WORKFLOW.md               ← 位置引数で明示する
 （issue ごとの Claude Code の設定は continuo が自動で作る。3-12）。
 
 **相対パスは、このファイルが置かれているディレクトリを基準に解決する**（`SPEC.md` 5.3.3 / 6.1）。
-
-**相対パスは、このファイルが置かれているディレクトリを基準に解決する**（`SPEC.md` 5.3.3 / 6.1）。
+**解決の対象は `workspace.root` だけである。**`claude.hook_bridge.listen` と `runtime.lock_file` は
+絶対パスを要求する（相対だと身元ファイルとの一致検査（3-23 / 3-18）と flock の排他（3-17）が
+成立しない）。`herdr.socket` は continuo が作る場所ではなく herdr が待ち受けている場所なので、
+このファイルの置き場所を基準にしない。
 
 ### 5-2. front matter（設定）
 
@@ -3326,7 +3328,10 @@ claude:
       - "Write"
     deny: []                                # subagent を起動する Agent ツールは、許可リストが空でも動いた（3-11）
   env:
-    CLAUDE_CODE_RETRY_WATCHDOG: "1"         # 3-11。枠回復で自動再開する唯一の公式手段
+    CLAUDE_CODE_RETRY_WATCHDOG: "1"         # 3-11。turn の途中で 429/529 が返ったときリトライし続ける。
+                                            # 枠で止まったあとの継続は Claude Code 2.1.234 が
+                                            # 既定で行う（/config の Continue automatically at
+                                            # usage limit）。両方が効く（3-27）
   poll_wait_ms: 30000                       # agent.wait 1回あたりの待ち時間（3-2）。短く切って continuo 側で
                                             # 総経過時間を数えるためのもの。turn の上限そのものではない
   settle_ms: 2000                           # background_tasks が空の Stop を受けてから、<task-notification> が
@@ -3342,7 +3347,10 @@ claude:
   startup_timeout_ms: 60000                 # herdr の agent 起動の待ち時間
   hook_bridge:                              # turn 終了検知の実体（3-12）
     mode: settings_flag                     # settings_flag のみ。worktree_local は仕様を書いていないので受理しない（3-12）
-    listen: null                            # null なら 3-23 の探索順で決める。明示するなら絶対パス
+    listen: null                            # null なら 3-23 の探索順で決める。明示するなら絶対パス。
+                                            # 既にある共用のディレクトリ（ホーム直下など）を指さないこと。
+                                            # continuo は自分が作っていないディレクトリの権限を書き換えず、
+                                            # 権限が 0700 でなければ起動を止める（3-23）
     liveness_hooks: ["PreToolUse", "PostToolUse"]   # 生きていることの確認だけに使う（3-21）。
                                             # 判定に使う hook の一覧は 3-2 で固定しており、設定では変えられない
 

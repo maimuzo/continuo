@@ -1,9 +1,9 @@
 package workspace
 
 import (
-	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -13,6 +13,34 @@ import (
 // hookShell は workspace_hooks のコマンド文字列を実行するシェルである。
 // 設定にはコマンド行が1本の文字列で書かれるので、シェルに解釈させる。
 const hookShell = "sh"
+
+// hookWaitDelay は、時間切れでシェルを殺したあと、後始末を諦めるまでの猶予である。
+// **出力をファイルで受けているので通常は効かない**（下の hookOutputLimit の説明を見よ）。
+// 念のための上限として置く。
+const hookWaitDelay = 5 * time.Second
+
+// hookOutputLimit は hook の出力をログとエラー文に載せるときの上限（バイト）である。
+//
+// **上限が無いと、エージェントが作った大量の出力がそのまま常駐プロセスのメモリと
+// ログに載る**（面倒を見ている対象の作り出した状態で落ちる経路になる）。
+const hookOutputLimit = 64 * 1024
+
+// hookOutputFilePattern は hook の出力を受けとる一時ファイルの名前の型である。
+//
+// **出力を bytes.Buffer で受けてはならない。**os/exec は Writer を渡されると pipe と
+// 写し取りの goroutine を作り、**Cmd.Wait は pipe の書き込み側を握っている孫プロセスが
+// 全部終わるまで返らない。**hook が `sleep 30 &` のようにバックグラウンドプロセスを
+// 残すと、シェル自身が終わっていても Wait が返らず、workspace_hooks.timeout_ms が
+// 上限にならない（片付けと run の終了が止まる）。
+//
+// **os.File を渡すと os/exec はその fd をそのまま子へ渡す**ので、pipe も goroutine も
+// 作られず、**シェルが終わった時点で Wait が返る。**実測（2026-08-19、Go 1.26.2、
+// timeout_ms=500）: bytes.Buffer だと `sleep 30 & echo started` で 5.01 秒（WaitDelay
+// 待ち）、os.File だと 0.01 秒。`sleep 30`（前面）はどちらも 0.5 秒で殺される。
+//
+// **一時ファイルは worktree の外（OS の一時ディレクトリ）に作る。**worktree の中に
+// 作ると `git status --porcelain` に出て、片付けの判定を汚す。
+const hookOutputFilePattern = "continuo-hook-*.log"
 
 // HookPhase は workspace_hooks のどの段のコマンドかを表す。
 type HookPhase string
@@ -62,6 +90,15 @@ func (m *Manager) command(phase HookPhase) (string, bool) {
 // 実行時間の上限は workspace_hooks.timeout_ms である。
 // **未設定（null や空文字）のときは何もせず nil を返す。**
 //
+// **上限は「必ず戻ってくる」ことまで保証する。**時間切れになったらシェルを
+// プロセスグループごと落とし、それでも孫プロセスが出力の pipe を握っていた場合は
+// hookWaitDelay で読み取りを諦める。**この2つが無いと timeout_ms は上限にならない。**
+// **workspace_hooks.timeout_ms が 0 以下になることは無い**（internal/config の検証が
+// 「0より大きい整数（ミリ秒）にすること」として起動時に落とす）。
+//
+// **出力は先頭 hookOutputLimit バイトだけを読む。**それを超えた分は捨て、
+// 切り詰めたことをエラー文に書く。
+//
 // ctx: 実行に適用するコンテキスト。
 // phase: 実行する段。
 // dir: コマンドの作業ディレクトリ。
@@ -81,20 +118,33 @@ func (m *Manager) RunHook(ctx context.Context, phase HookPhase, dir string) erro
 		defer cancel()
 	}
 
+	outFile, err := os.CreateTemp("", hookOutputFilePattern)
+	if err != nil {
+		return fmt.Errorf("workspace_hooks.%s の出力を受けるファイルを作れません: %w", phase, err)
+	}
+	outPath := outFile.Name()
+	defer func() {
+		_ = outFile.Close()
+		_ = os.Remove(outPath)
+	}()
+
 	cmd := exec.CommandContext(runCtx, hookShell, "-c", command)
 	cmd.Dir = dir
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
+	cmd.Stdout = outFile
+	cmd.Stderr = outFile
+	// 時間切れのときに、シェルが残した子・孫までまとめて落とす。
+	setProcessGroup(cmd)
+	cmd.Cancel = func() error { return killProcessGroup(cmd) }
+	cmd.WaitDelay = hookWaitDelay
 
 	start := m.now()
-	err := cmd.Run()
+	runErr := cmd.Run()
 	m.logger.Info("workspace_hooks を実行しました",
 		"phase", string(phase), "dir", dir, "duration_ms", m.now().Sub(start).Milliseconds())
-	if err != nil {
+	if runErr != nil {
 		return fmt.Errorf(
 			"workspace_hooks.%s の実行に失敗しました（cwd=%s、出力: %s）: %w",
-			phase, dir, strings.TrimSpace(output.String()), err)
+			phase, dir, readCappedFile(outPath, hookOutputLimit), runErr)
 	}
 	return nil
 }
@@ -130,6 +180,9 @@ func (m *Manager) RunAfterRunOnce(ctx context.Context, worktreePath string) (boo
 // **Prepare が用意を終えたときに呼ぶ。**引き継ぎ（3-4）のように Prepare を通らずに
 // run を始める経路ができたときは、そこでも呼ぶこと。呼ばないと、2回目以降の run で
 // after_run が二度と実行されない。
+//
+// **片付けのあとにも呼ぶ**（Cleanup が worktree を消したとき）。消した worktree の印は
+// 二度と使われないので、残すと常駐プロセスの寿命のあいだ単調に増える。
 //
 // worktreePath: 新しい run を始める worktree の絶対パス。
 func (m *Manager) BeginRun(worktreePath string) {

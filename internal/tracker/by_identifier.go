@@ -11,7 +11,13 @@ import (
 // **Status で絞らない**（設計 3-25）。グループの他の issue は `Ice Box` に置かれるので、
 // `active_states` で絞ると表明が1件も反映されない。
 // `items(query:)` の検索構文で識別子だけを絞る書き方が確認できていないため、
-// ボードを1リクエスト（104件のボードなら cost 1〜4。設計 3-31）で読んで照合する。
+// ボードを丸ごと読んで照合する。
+//
+// **費用は「2リクエスト・計 8 point」である**（104件のボード。設計 3-31 の式
+// `cost = (1 + 親の件数 × ネストした connection の本数) ÷ 100`）。
+// このクエリは itemFieldsFragment を埋め込んでおり、その下に labels / assignees /
+// blockedBy / linkedBranches の**4本**のネストした connection を持つので
+// 1リクエスト 4 point、104件は `items(first: 100)` で切れて2ページ目が要る。
 const allItemsQueryTemplate = `
 query($login: String!, $number: Int!, $statusField: String!, $after: String) {
   repositoryOwner(login: $login) {
@@ -50,7 +56,17 @@ func (a *Adapter) FetchIssueByIdentifier(ctx context.Context, identifier string)
 	}
 
 	after := ""
-	for {
+	for page := 1; ; page++ {
+		if page > maxItemPages {
+			return Issue{}, false, &Error{
+				Category: CategoryPagination,
+				Message: fmt.Sprintf(
+					"ボードのページ数が上限 %d を超えました（1ページ100件。ボードが想定外に育っています。"+
+						"1件の表明ごとにこれだけ読むのは GitHub の API 枠に見合いません）",
+					maxItemPages,
+				),
+			}
+		}
 		var resp candidateQueryResponse
 		vars := map[string]any{
 			"login":       a.owner,
@@ -79,12 +95,21 @@ func (a *Adapter) FetchIssueByIdentifier(ctx context.Context, identifier string)
 		conn := resp.RepositoryOwner.ProjectV2.Items
 		for i := range conn.Nodes {
 			raw := &conn.Nodes[i]
-			mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+			// **信頼の判定関数をここでは渡さない。**判定は ghq と git を毎回起動して
+			// `~/.claude.json` を読み直すので（約56ミリ秒／件）、識別子が一致するか見る前に
+			// 全件へ掛けると、表明1行あたりボード104件ぶん・外部プロセス208回になる。
+			// 一致した1件にだけ掛け直す（下）。
+			mapped := mapRawItemToIssue(raw, a.statusField, nil)
 			if !mapped.Ok {
 				continue
 			}
 			if strings.EqualFold(mapped.Issue.Identifier, target) {
-				return mapped.Issue, true, nil
+				// 一致した1件だけ、信頼の判定を入れて作り直す（Dispatchable を正しく埋める）。
+				resolved := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+				if !resolved.Ok {
+					return mapped.Issue, true, nil
+				}
+				return resolved.Issue, true, nil
 			}
 		}
 

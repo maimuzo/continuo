@@ -28,7 +28,7 @@ type Config struct {
 	Naming NamingConfig `yaml:"naming"`
 	// Cleanup は worktree と branch の後始末の挙動を決める（3-9）。
 	Cleanup CleanupConfig `yaml:"cleanup"`
-	// RateLimit は Claude Code のレートリミット待機の挙動を決める（3-15。仕様の範囲外）。
+	// RateLimit は Claude Code のレートリミット待機の挙動を決める（3-27。仕様の範囲外）。
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
 	// Trust はリポジトリの信頼確認をどう扱うかを決める（3-11 / 4-3）。
 	Trust TrustConfig `yaml:"trust"`
@@ -144,6 +144,7 @@ type WorkspaceHooksConfig struct {
 	// BeforeRemove は worktree を消す直前に実行するコマンドである。失敗しても記録して続ける。
 	BeforeRemove *string `yaml:"before_remove"`
 	// TimeoutMs は各コマンドの実行時間の上限（ミリ秒）である。
+	// **0 以下は受理しない。**無人運用では、hook が固まったまま返らないことに誰も気づけない。
 	TimeoutMs int `yaml:"timeout_ms"`
 }
 
@@ -175,8 +176,10 @@ type ClaudePermissionsConfig struct {
 
 // ClaudeHookBridgeConfig は turn 終了検知の実体である hook の届け方を決める（3-12）。
 type ClaudeHookBridgeConfig struct {
-	// Mode は hook をどう届けるかである。"settings_flag"（--settings で外部ファイルを指す）か
-	// "worktree_local"（worktree に .claude/settings.local.json を置く）のどちらか。
+	// Mode は hook をどう届けるかである。受理するのは "settings_flag"（--settings で外部の
+	// 設定ファイルを指す）だけである（設計 3-12）。"worktree_local"（worktree に
+	// .claude/settings.local.json を置く）は、置き場所・.git/info/exclude への登録・
+	// 片付けの仕様がどこにも無いため受理しない。
 	Mode string `yaml:"mode"`
 	// Listen は hook を受ける socket の絶対パスである。null なら 3-23 の探索順で決める。
 	Listen *string `yaml:"listen"`
@@ -265,9 +268,11 @@ type CleanupConfig struct {
 	SweepOnStartup bool `yaml:"sweep_on_startup"`
 }
 
-// RateLimitConfig は Claude Code のレートリミット待機の挙動を決める（3-15。仕様の範囲外）。
+// RateLimitConfig は Claude Code のレートリミット待機の挙動を決める（3-27。仕様の範囲外）。
 type RateLimitConfig struct {
-	// Source はレートリミットの値をどこから取るかである。想定する値は "oauth_usage_api" のみ。
+	// Source はレートリミットの値をどこから取るかである。"oauth_usage_api" か "none" のどちらか。
+	// "none" なら usage API を1回も叩かず、枠の判定を行わない（stall 検知だけに頼る。3-27）。
+	// usage API がトークンを消費するかどうかを判別できていないため、"none" は必須の逃げ道である。
 	Source string `yaml:"source"`
 	// TokenSource はレートリミットを読むための認証情報の出所である（3-27）。
 	// 想定する値は "claude_credentials"（Claude Code が使っている資格情報を読む）か "env"。

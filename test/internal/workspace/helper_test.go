@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -134,6 +135,10 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	sideEffect := fh.onRequest[req.Method]
 	fh.mu.Unlock()
 
+	if req.Method == herdr.MethodWorktreeOpen {
+		result = withOpenedPath(result, req.Params)
+	}
+
 	if sideEffect != nil {
 		sideEffect(req.Params)
 	}
@@ -178,6 +183,40 @@ func (fh *fakeHerdr) Methods() []string {
 // Client は偽サーバを向いた本物の herdr クライアントを返す。
 func (fh *fakeHerdr) Client() *herdr.Client {
 	return herdr.New(fh.socketPath, herdr.Timeouts{Read: 5 * time.Second})
+}
+
+// withOpenedPath は worktree.open の応答に、**開いた worktree の絶対パスを載せる。**
+//
+// **本物の herdr は、開いた worktree のパスを応答に載せる**（`worktree.path`）。
+// continuo は消す直前に「この workspace はどのパスを開いているのか」を herdr に
+// 答えさせて検算する（設計 3-9 の段3）ので、偽サーバでも同じ形を返さないと
+// その検算を検証できない。
+//
+// result: 登録してある応答。
+// params: 受け取った params（path を読む）。
+// 戻り値: worktree.path を埋めた応答。
+func withOpenedPath(result any, params map[string]any) any {
+	base, ok := result.(map[string]any)
+	if !ok {
+		return result
+	}
+	// **登録済みの応答が path を持っていれば、そちらを優先する**
+	// （わざと食い違わせて検算を検証するテストのため）。
+	if existing, ok := base["worktree"].(map[string]any); ok {
+		if p, _ := existing["path"].(string); p != "" {
+			return result
+		}
+	}
+	path, _ := params["path"].(string)
+	if path == "" {
+		return result
+	}
+	copied := map[string]any{}
+	for key, value := range base {
+		copied[key] = value
+	}
+	copied["worktree"] = map[string]any{"path": path}
+	return copied
 }
 
 // worktreeOpenResult は worktree.open の成功応答（変種 worktree_opened）の写しである。
@@ -312,6 +351,10 @@ type fixtureOptions struct {
 	// **nil なら一時ディレクトリの下の issues を使う。**空文字を渡したい検査
 	// （置き場所が分からないときは消さない）のためにポインタで持つ。
 	SettingsRoot *string
+	// Logger は Manager に渡すロガーである。nil なら何も出力しない。
+	// **ログにしか現れない振る舞い**（孤児 branch を消す前に控えた SHA など）を
+	// 検証するテストが、出力を受け取るために使う。
+	Logger *slog.Logger
 }
 
 // newFixture はテスト用の Manager を組み立てる。
@@ -358,6 +401,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *managerFixture {
 		HomeDir:      home,
 		GhqList:      ghqList,
 		SettingsRoot: settingsRoot,
+		Logger:       opts.Logger,
 	})
 	if err != nil {
 		t.Fatalf("workspace.New に失敗した: %v", err)

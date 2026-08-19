@@ -1,7 +1,9 @@
 package workspace_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -108,5 +110,85 @@ func TestSweepOrphanBranches_走査で見つからなかったリポジトリに
 	branches := runGit(t, fx.Repo.Dir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
 	if !strings.Contains(branches, "continuo/orphan") {
 		t.Fatalf("対象でないリポジトリの branch を消してしまった: %s", branches)
+	}
+}
+
+// TestSweepOrphanBranches_worktreeのgitが書き換えられていたら別のリポジトリを掃除しない は、
+// 掃除の対象リポジトリを git の答えだけで決めないことを確かめる。
+//
+// 目的: worktree の `.git` は `gitdir: …` と書かれただけのファイルであり、
+// **その worktree で動くエージェントが書き換えられる。**書き換えを信じると、
+// 無関係のリポジトリの `continuo/` で始まる branch を `git branch -D`（強制削除）で消す。
+//
+// 与える情報: `.git` を別のリポジトリへ向けた worktree と、その別のリポジトリにある
+// `continuo/victim-branch` の branch。
+//
+// 成功条件: 1本も消さず、別のリポジトリの branch が残っていること。
+func TestSweepOrphanBranches_worktreeのgitが書き換えられていたら別のリポジトリを掃除しない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	ctx := context.Background()
+	prepared, err := fx.Manager.Prepare(ctx, sampleIssue(188))
+	if err != nil {
+		t.Fatalf("worktree を用意できません: %v", err)
+	}
+
+	victim := newTestRepo(t)
+	runGit(t, victim.Dir, "branch", "continuo/victim-branch")
+	tamperGitFile(t, prepared.Path, victim)
+
+	deleted, err := fx.Manager.SweepOrphanBranches(ctx, workspace.OrphanBranchSweepRequest{
+		Worktrees: []string{prepared.Path},
+	})
+	if err != nil {
+		t.Fatalf("SweepOrphanBranches がエラーを返した: %v", err)
+	}
+	if len(deleted) != 0 {
+		t.Fatalf("書き換えられた .git を信じて branch を消した: %v", deleted)
+	}
+	branches := runGit(t, victim.Dir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if !strings.Contains(branches, "continuo/victim-branch") {
+		t.Fatalf("無関係のリポジトリの branch を消した: %s", branches)
+	}
+}
+
+// TestSweepOrphanBranches_消す前にSHAをログへ残す は、強制削除から戻せる手掛かりを
+// 残すことを確かめる。
+//
+// 目的: 設計 3-9 の手順6b の削除は `git branch -D`（マージ状態を見ない強制削除）である。
+// **未 push の commit が載ったままの branch も消えるので、**戻すための SHA を
+// 消す前にログへ残す。残さないと復旧手段は reflog を掘ることしか無い。
+//
+// 与える情報: worktree を持たない `continuo/orphan` の branch と、出力を受け取るロガー。
+//
+// 成功条件: ログにその branch の SHA と、そのまま実行すれば戻せるコマンドが出ること。
+func TestSweepOrphanBranches_消す前にSHAをログへ残す(t *testing.T) {
+	var logged bytes.Buffer
+	fx := newFixture(t, fixtureOptions{
+		Logger: slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelInfo})),
+	})
+	ctx := context.Background()
+	prepared, err := fx.Manager.Prepare(ctx, sampleIssue(188))
+	if err != nil {
+		t.Fatalf("worktree を用意できません: %v", err)
+	}
+	runGit(t, fx.Repo.Dir, "branch", "continuo/orphan")
+	sha := runGit(t, fx.Repo.Dir, "rev-parse", "continuo/orphan")
+
+	deleted, err := fx.Manager.SweepOrphanBranches(ctx, workspace.OrphanBranchSweepRequest{
+		Worktrees: []string{prepared.Path},
+	})
+	if err != nil {
+		t.Fatalf("SweepOrphanBranches に失敗した: %v", err)
+	}
+	if len(deleted) != 1 {
+		t.Fatalf("孤児 branch を消していない: %v", deleted)
+	}
+
+	out := logged.String()
+	if !strings.Contains(out, sha) {
+		t.Fatalf("消した branch の SHA がログに残っていない（reflog を掘るしかなくなる）:\n%s", out)
+	}
+	if !strings.Contains(out, "branch continuo/orphan "+sha) {
+		t.Fatalf("戻すためのコマンドがログに残っていない:\n%s", out)
 	}
 }

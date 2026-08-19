@@ -41,6 +41,12 @@ type Identity struct {
 	ProjectItemID string `json:"project_item_id"`
 	// Branch は worktree が指す branch 名である。片付けで消す対象を確定するのに使う。
 	Branch string `json:"branch"`
+	// Base は worktree を作ったときの base である（PrepareResult.Base をそのまま書く）。
+	// **片付けの手順2b が、upstream が無い branch を判定するのに要る**（3-9）。
+	// **ここに書いておかないと、再起動をまたいだ片付け（巡回の手順7）が
+	// 「base が分からないので判定できない」で永久に見送る。**
+	// 呼び出し側が空で書いた場合は、その見送りの理由がそのまま人間に見える。
+	Base string `json:"base"`
 	// HerdrWorkspaceID は herdr の workspace の ID である。
 	// **worktree.remove がこの ID を要求する**（path でも branch でもない。3-9）。
 	// 再起動後に取り直す経路が他に無いので、必ずここに書く。
@@ -114,6 +120,28 @@ func (m *Manager) IdentityPath(worktreePath string) string {
 	return filepath.Join(worktreePath, m.cfg.Workspace.IdentityFile)
 }
 
+// identityLockKey は同じ worktree の身元ファイルの更新を直列化する鍵を作る。
+//
+// **シンボリックリンクを解決してから鍵にする**（呼び出し側が解決前のパスを渡しても
+// 同じ鍵に寄せる。after_run の印と同じ考え方）。
+//
+// worktreePath: worktree のパス。
+// 戻り値: 鍵に使う文字列。
+func identityLockKey(worktreePath string) string {
+	return "identity:" + resolveOrClean(worktreePath)
+}
+
+// excludeLockKey は同じリポジトリの `info/exclude` の更新を直列化する鍵を作る。
+//
+// **共通ディレクトリの1本のファイルを worktree ごとに触る**ので、
+// 読んで足す処理が並行に走ると行が重複する。
+//
+// excludePath: `info/exclude` のパス。
+// 戻り値: 鍵に使う文字列。
+func excludeLockKey(excludePath string) string {
+	return "exclude:" + filepath.Clean(excludePath)
+}
+
 // ReadIdentity は worktree の身元ファイルを読む（3-18）。
 //
 // worktreePath: worktree の絶対パス。
@@ -150,10 +178,28 @@ func (m *Manager) ReadIdentity(worktreePath string) (*Identity, error) {
 // ctx: git を実行するときに適用するコンテキスト。
 // worktreePath: worktree の絶対パス。
 // identity: 書き込む中身。
-// 戻り値: 書き込みに失敗した場合のエラー。**exclude への登録に失敗しても
-// エラーにはせず警告としてログに出す**（身元ファイルそのものは書けているので、
-// 復元も片付けも成立する）。
+// 戻り値: 書き込みに失敗した場合のエラー。**exclude への登録に失敗してもエラーにはせず
+// 警告としてログに出す。**登録は「利用者の `git status` を汚さないための親切」であって、
+// **片付けの正しさはこの成否に依存しない**（片付けの手順2 は身元ファイルとその一時ファイルを
+// pathspec で数から外す。cleanup.go の leftoverReasons と git.go の gitStatusPorcelain）。
+//
+// **同じ worktree に対する身元ファイルの更新は直列化する**（読んで書き戻すため）。
 func (m *Manager) WriteIdentity(ctx context.Context, worktreePath string, identity Identity) error {
+	unlock := m.identityMu.lock(identityLockKey(worktreePath))
+	defer unlock()
+	return m.writeIdentityLocked(ctx, worktreePath, identity)
+}
+
+// writeIdentityLocked は identityMu を取った状態で身元ファイルを書く。
+//
+// **既に鍵を取っている経路（SetAgentName / IncrementTakeover）から呼ぶ。**
+// 取り直すと同じ鍵で自分を待つ。
+//
+// ctx: git を実行するときに適用するコンテキスト。
+// worktreePath: worktree の絶対パス。
+// identity: 書き込む中身。
+// 戻り値: 書き込みに失敗した場合のエラー。
+func (m *Manager) writeIdentityLocked(ctx context.Context, worktreePath string, identity Identity) error {
 	path := m.IdentityPath(worktreePath)
 	data, err := json.MarshalIndent(identity, "", "  ")
 	if err != nil {
@@ -204,17 +250,39 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
+// excludeLines は `info/exclude` へ登録する行を返す（3-18）。
+//
+// **2行いる。**身元ファイル本体と、writeFileAtomic が同じディレクトリに作る一時ファイル
+// （`<身元ファイル名>.tmp<乱数>`）である。一時ファイルは通常なら消えるが、
+// **常駐プロセスが強制終了すると worktree に残る。**残った1つが未追跡ファイルとして
+// 数えられると、その worktree は二度と片付かない。
+//
+// 先頭のスラッシュは必須である（付けないと配下の全階層で無視される）。
+//
+// 戻り値: 登録する行（`/.continuo.json` と `/.continuo.json.tmp*`）。
+func (m *Manager) excludeLines() []string {
+	base := "/" + m.cfg.Workspace.IdentityFile
+	return []string{base, base + ".tmp*"}
+}
+
 // registerExclude は身元ファイルの名前を共通ディレクトリの `info/exclude` へ登録する（3-18）。
 //
-// 書く行は **`/<身元ファイル名>`**（先頭にスラッシュを付ける）。付けないと配下の
-// 全階層で無視される。**冪等にする。**共通ディレクトリの1本を issue ごとに触るので、
-// 同じ行が既にあれば書かない（そのままだと積み上がる）。
+// **冪等にする。**共通ディレクトリの1本を issue ごとに触るので、同じ行が既にあれば
+// 書かない（そのままだと積み上がる）。**同じリポジトリに対する更新は直列化する。**
+//
+// **書き足すだけで、書き直さない。**`info/exclude` は利用者のファイルであり、
+// 読み取り → 連結 → 全置換（os.WriteFile は O_TRUNC）で更新すると、**途中で落ちたときに
+// 利用者が自分で書いた除外規則が消える。**追記なら既存の内容にも権限にも触らない。
+//
+// **書き込む先のリポジトリは検算する。**worktree の `.git` はエージェントが書き換えられる
+// ファイルなので、検算しないと任意のリポジトリの `info/exclude` に行を足せる
+// （repo.go の verifiedRepo を見よ）。
 //
 // ctx: git を実行するときに適用するコンテキスト。
 // worktreePath: worktree の絶対パス。
-// 戻り値: 共通ディレクトリを引けない場合・ファイルを書けない場合のエラー。
+// 戻り値: 共通ディレクトリを引けない場合・検算に落ちた場合・ファイルを書けない場合のエラー。
 func (m *Manager) registerExclude(ctx context.Context, worktreePath string) error {
-	commonDir, err := gitCommonDir(ctx, worktreePath)
+	commonDir, _, err := m.verifiedRepo(ctx, worktreePath)
 	if err != nil {
 		return err
 	}
@@ -223,28 +291,44 @@ func (m *Manager) registerExclude(ctx context.Context, worktreePath string) erro
 		return fmt.Errorf("%s を作成できません: %w", infoDir, err)
 	}
 	excludePath := filepath.Join(infoDir, "exclude")
-	line := "/" + m.cfg.Workspace.IdentityFile
+
+	unlock := m.identityMu.lock(excludeLockKey(excludePath))
+	defer unlock()
 
 	existing, err := os.ReadFile(excludePath)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("%s を読めません: %w", excludePath, err)
 	}
+	registered := map[string]bool{}
 	scanner := bufio.NewScanner(strings.NewReader(string(existing)))
 	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == line {
-			return nil
-		}
+		registered[strings.TrimSpace(scanner.Text())] = true
 	}
 
-	var buf strings.Builder
-	buf.Write(existing)
+	var add strings.Builder
 	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
-		buf.WriteString("\n")
+		add.WriteString("\n")
 	}
-	buf.WriteString(line + "\n")
+	for _, line := range m.excludeLines() {
+		if registered[line] {
+			continue
+		}
+		add.WriteString(line + "\n")
+	}
+	if add.Len() == 0 {
+		return nil
+	}
 
-	if err := os.WriteFile(excludePath, []byte(buf.String()), excludeFilePerm); err != nil {
+	file, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, excludeFilePerm)
+	if err != nil {
+		return fmt.Errorf("%s を開けません: %w", excludePath, err)
+	}
+	if _, err := file.WriteString(add.String()); err != nil {
+		_ = file.Close()
 		return fmt.Errorf("%s へ書き込めません: %w", excludePath, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("%s を閉じられません: %w", excludePath, err)
 	}
 	return nil
 }
@@ -255,6 +339,7 @@ func (m *Manager) registerExclude(ctx context.Context, worktreePath string) erro
 // | takeover_count | 既存の値を1つ増やす。新規なら 0 |
 // | created_at | 既存の値を保つ。新規のときだけ fresh の値を使う |
 // | cleanup_deferred_at | 消す（ゼロ値にする） |
+// | base | fresh が空なら既存の値を保つ（再利用のとき Prepare は base を決めない） |
 // | それ以外 | 全部書き直す |
 //
 // **cleanup_deferred_at を消す理由。**再利用するということは、その issue が再び
@@ -274,6 +359,12 @@ func MergeForReuse(fresh Identity, existing *Identity) Identity {
 	if !existing.CreatedAt.IsZero() {
 		fresh.CreatedAt = existing.CreatedAt
 	}
+	if fresh.Base == "" {
+		// **再利用のときは base を作り直せない**（worktree は既にあるので、
+		// Prepare は base を決めずに戻る）。前の run が書いた値を落とすと、
+		// 片付けが「base が分からない」で永久に見送る（3-9 の手順2b）。
+		fresh.Base = existing.Base
+	}
 	return fresh
 }
 
@@ -287,12 +378,16 @@ func MergeForReuse(fresh Identity, existing *Identity) Identity {
 // agentName: herdr が実際に付けた agent 名。
 // 戻り値: 身元ファイルを読めない・書けない場合のエラー。
 func (m *Manager) SetAgentName(ctx context.Context, worktreePath, agentName string) error {
+	// **読んで書き戻すので、その間ほかの更新を入れない**（入れると片方が消える）。
+	unlock := m.identityMu.lock(identityLockKey(worktreePath))
+	defer unlock()
+
 	identity, err := m.ReadIdentity(worktreePath)
 	if err != nil {
 		return err
 	}
 	identity.AgentName = agentName
-	return m.WriteIdentity(ctx, worktreePath, *identity)
+	return m.writeIdentityLocked(ctx, worktreePath, *identity)
 }
 
 // IncrementTakeover は身元ファイルの takeover_count を1つ増やして書き戻す（3-4 の段5b）。
@@ -304,12 +399,16 @@ func (m *Manager) SetAgentName(ctx context.Context, worktreePath, agentName stri
 // 戻り値の1つ目: 増やしたあとの Identity。
 // 戻り値の2つ目: 身元ファイルを読めない・書けない場合のエラー。
 func (m *Manager) IncrementTakeover(ctx context.Context, worktreePath string) (*Identity, error) {
+	// **読んで書き戻すので、その間ほかの更新を入れない**（入れると数え落とす）。
+	unlock := m.identityMu.lock(identityLockKey(worktreePath))
+	defer unlock()
+
 	identity, err := m.ReadIdentity(worktreePath)
 	if err != nil {
 		return nil, err
 	}
 	identity.TakeoverCount++
-	if err := m.WriteIdentity(ctx, worktreePath, *identity); err != nil {
+	if err := m.writeIdentityLocked(ctx, worktreePath, *identity); err != nil {
 		return nil, err
 	}
 	return identity, nil
@@ -326,6 +425,10 @@ func (m *Manager) IncrementTakeover(ctx context.Context, worktreePath string) (*
 //
 // **この関数は git を呼ばない**（exclude は既に登録済みなので、書き込みだけで足りる）。
 func (m *Manager) MarkCleanupDeferred(worktreePath string, at time.Time) error {
+	// **読んで書き戻すので、その間ほかの更新を入れない。**
+	unlock := m.identityMu.lock(identityLockKey(worktreePath))
+	defer unlock()
+
 	identity, err := m.ReadIdentity(worktreePath)
 	if err != nil {
 		return err

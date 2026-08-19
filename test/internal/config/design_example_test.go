@@ -120,7 +120,7 @@ func TestLoad_設計5_2の設定例がそのまま読み込める(t *testing.T) 
 // default.go 自身が「既定値は 5-2 の設定例をそのまま Go の値にしたもの」と宣言しているので、
 // 片方だけを直したときにここで落とす。
 // 与える情報: 設計文書 5-2 の設定例をそのまま書き出したファイルと、config.DefaultConfig() の値。
-// 成功条件: 読み込んだ Config が、5-4 の展開（チルダ・環境変数）を反映した DefaultConfig() と
+// 成功条件: 読み込んだ Config が、5-5 の展開（チルダ・環境変数）を反映した DefaultConfig() と
 // 全区分で一致すること。
 func TestLoad_設計5_2の設定例と既定値が一致する(t *testing.T) {
 	front := readDesignFrontMatterExample(t)
@@ -146,7 +146,7 @@ func TestLoad_設計5_2の設定例と既定値が一致する(t *testing.T) {
 	want.Tracker.Provider.Owner = "maimuzo"
 	want.Tracker.Provider.ProjectNumber = 3
 	want.Tracker.Provider.StatusField = "Status"
-	// 5-4 の展開を通ったあとの値にそろえる。
+	// 5-5 の展開を通ったあとの値にそろえる。
 	// 設計 5-2 の socket は素の既定パス（~/.config/herdr/herdr.sock）なので、
 	// チルダの展開だけを当てる。環境変数は参照しない（設計 5-2 のコメント参照）。
 	want.Workspace.Root = home + "/worktrees"
@@ -194,4 +194,38 @@ func renderJSON(t *testing.T, v any) string {
 		t.Fatalf("テストの失敗メッセージを組み立てられません: %v", err)
 	}
 	return string(b)
+}
+
+// 目的: テストやコードの注釈が指している設計文書の節が、実在することを確かめる。
+// 節を並べ替えたり番号を振り直したりしたときに、注釈だけが古い番号を指したまま残るのを防ぐ。
+// 実例として、展開規則を指す注釈が 5-4（「2回目以降のプロンプト」）を指したまま残っていた。
+// 与える情報: internal/config と test/internal/config の注釈が参照している節の見出しの一覧。
+// 成功条件: 一覧のすべてが設計文書の中に見出しとして存在すること。
+func TestDesignDoc_注釈が参照している節が実在する(t *testing.T) {
+	raw, err := os.ReadFile(designDocPath)
+	if err != nil {
+		t.Fatalf("設計文書を読み込めません（%s）: %v", designDocPath, err)
+	}
+	doc := string(raw)
+
+	headings := []string{
+		"### 3-7.",  // 識別子の正規化
+		"### 3-9.",  // worktree と branch の後始末
+		"### 3-10.", // 実行中の Status も作業中に含める
+		"### 3-12.", // hook をどう届けるか
+		"### 3-17.", // 二重起動は flock で防ぐ
+		"### 3-21.", // stall の時計
+		"### 3-23.", // hook を受ける socket の置き場所
+		"### 3-27.", // レートリミット
+		"### 4-1.",  // Status の構成
+		"### 5-1.",  // ファイルの名前と探し方（相対パスの基準）
+		"### 5-2.",  // front matter（設定）
+		"### 5-5.",  // 設定値の展開規則
+		"### 8-1.",  // 意図的に外している仕様
+	}
+	for _, heading := range headings {
+		if !strings.Contains(doc, heading) {
+			t.Errorf("設計文書に %q が無い。節を並べ替えたなら、参照している注釈も直すこと", heading)
+		}
+	}
 }

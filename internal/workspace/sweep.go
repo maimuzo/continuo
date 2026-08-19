@@ -38,6 +38,10 @@ type OrphanBranchSweepRequest struct {
 //   - その branch をチェックアウトしている worktree が無いこと
 //   - KeepBranches に入っていないこと（＝実行中の issue が無いこと）
 //
+// **消す前に SHA をログへ残す。**削除は `git branch -D`（マージ状態を見ない強制削除）なので、
+// 未 push の commit が載ったままの branch も消える。ログの `restore` に、そのまま実行すれば
+// 戻せるコマンドを書く。
+//
 // ctx: 実行に適用するコンテキスト。
 // req: 対象の worktree と、消してはならない branch 名。
 // 戻り値の1つ目: 実際に消した branch 名（`<リポジトリ>: <branch>` の形）。
@@ -68,13 +72,19 @@ func (m *Manager) SweepOrphanBranches(ctx context.Context, req OrphanBranchSweep
 
 // repoDirsOf は worktree の一覧から、それらが属するリポジトリの作業ディレクトリを重複無く返す。
 //
+// **リポジトリは検算したものだけを返す**（repo.go の verifiedRepo）。worktree の `.git` は
+// エージェントが書き換えられるファイルなので、`git rev-parse --git-common-dir` の答えを
+// そのまま信じると、**無関係のリポジトリの `continuo/` で始まる branch を
+// `git branch -D` で消す。**
+//
 // ctx: 実行に適用するコンテキスト。
 // worktrees: worktree の絶対パス。
-// 戻り値: リポジトリの作業ディレクトリ（パスの昇順）。引けなかったものは警告を出して飛ばす。
+// 戻り値: リポジトリの作業ディレクトリ（パスの昇順）。引けなかった・検算に落ちたものは
+// 警告を出して飛ばす。
 func (m *Manager) repoDirsOf(ctx context.Context, worktrees []string) []string {
 	seen := map[string]bool{}
 	for _, path := range worktrees {
-		repoDir, err := m.repoDirOf(ctx, path)
+		_, repoDir, err := m.verifiedRepo(ctx, path)
 		if err != nil {
 			m.logger.Warn("worktree が属するリポジトリを引けないので孤児 branch の掃除から外します",
 				"worktree", path, "error", err)
@@ -125,11 +135,21 @@ func (m *Manager) sweepRepoBranches(ctx context.Context, repoDir, prefix string,
 				"repo", repoDir, "branch", raw, "normalized", name.String())
 			continue
 		}
+		// **消す前に SHA を控える。**`git branch -D` はマージ状態を見ないので、
+		// 未 push の commit が載ったままの branch も消える。控えがあれば
+		// `git branch <名前> <SHA>` で戻せる（無ければ reflog を掘るしかない）。
+		tip, tipErr := gitBranchTip(ctx, repoDir, name)
+		if tipErr != nil {
+			m.logger.Warn("孤児 branch の SHA を控えられませんでした（削除は続けます）",
+				"repo", repoDir, "branch", raw, "error", tipErr)
+		}
 		if err := gitBranchDelete(ctx, repoDir, name); err != nil {
 			m.logger.Warn("孤児 branch を消せませんでした", "repo", repoDir, "branch", raw, "error", err)
 			continue
 		}
-		m.logger.Info("孤児 branch を消しました", "repo", repoDir, "branch", raw)
+		m.logger.Info("孤児 branch を消しました",
+			"repo", repoDir, "branch", raw, "sha", tip,
+			"restore", "git -C "+repoDir+" branch "+raw+" "+tip)
 		deleted = append(deleted, repoDir+": "+raw)
 	}
 	return deleted

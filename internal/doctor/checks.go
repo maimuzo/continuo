@@ -73,6 +73,16 @@ func checkHerdr(ctx context.Context, cfg loadedConfig, configSymbol Symbol) Resu
 	})
 	ping, err := client.CheckProtocol(ctx, cfg.Config.Herdr.Protocol)
 	if err != nil {
+		if timedOut(ctx, err) {
+			// **期限切れは「足りない」ではない。**herdr が遅いだけかもしれないので、
+			// 終了コードを 1 にせず「確かめられなかった」として残りの検査へ進む。
+			return Result{
+				Label:    LabelHerdr,
+				Symbol:   SymbolUnknown,
+				Detail:   fmt.Sprintf("時間内に応答がありませんでした（socket %s）: %v", socketPath, err),
+				Remedies: []string{"herdr が応答しているかを確認してから、もう一度実行してください"},
+			}
+		}
 		detail := fmt.Sprintf("%v", err)
 		remedy := fmt.Sprintf("herdr が動いていて %s で待ち受けているかを確認してください", socketPath)
 		if ping != nil {
@@ -133,6 +143,14 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 		}
 	}
 	if err := tracker.CheckGHProjectScope(ctx, opts.GHAuthStatus); err != nil {
+		if timedOut(ctx, err) {
+			return Result{
+				Label:    LabelGHAuth,
+				Symbol:   SymbolUnknown,
+				Detail:   fmt.Sprintf("時間内に `gh auth status` の応答がありませんでした: %v", err),
+				Remedies: []string{"`gh auth status` が単体で返るかを確認してから、もう一度実行してください"},
+			}
+		}
 		return Result{
 			Label:  LabelGHAuth,
 			Symbol: SymbolMissing,
@@ -217,12 +235,12 @@ func checkBoard(
 	}
 
 	if err := adapter.Bootstrap(ctx, cfg.Config.Tracker); err != nil {
-		return boardFailure("ボードを読めません", err), nil
+		return boardFailure(ctx, "ボードを読めません", err, opts.GraphQLEndpoint), nil
 	}
 
 	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
 	if err != nil {
-		return boardFailure("active_states の issue を読めません", err), nil
+		return boardFailure(ctx, "active_states の issue を読めません", err, opts.GraphQLEndpoint), nil
 	}
 
 	repos := collectRepos(issues)
@@ -230,10 +248,25 @@ func checkBoard(
 		Label:  LabelBoard,
 		Symbol: SymbolOK,
 		Detail: fmt.Sprintf(
-			"%s の project #%d を読めました（Status の選択肢は設定と一致。active_states の issue %d件／対象リポジトリ %d件）",
+			"%s の project #%d を読めました（Status の選択肢は設定と一致。active_states の issue %d件／対象リポジトリ %d件）%s",
 			cfg.Config.Tracker.Provider.Owner, cfg.Config.Tracker.Provider.ProjectNumber,
-			len(issues), len(repos)),
+			len(issues), len(repos), endpointNote(opts.GraphQLEndpoint)),
 	}, repos
+}
+
+// endpointNote は接続先を差し替えているときに添える1行を作る。
+//
+// **どこへ繋いだのかを必ず出す。**接続先は環境変数1つで差し替わり、そこへ GitHub の
+// トークンが送られる。出力に出さないと、本物の GitHub でない宛先に繋いだことに
+// 人間が気づけない。
+//
+// endpoint: 差し替えた接続先（空なら本番の GitHub）。
+// 戻り値: 添える文字列（差し替えていなければ空）。
+func endpointNote(endpoint string) string {
+	if endpoint == "" {
+		return ""
+	}
+	return fmt.Sprintf("（接続先を差し替えています: %s。本番の GitHub ではありません）", endpoint)
 }
 
 // boardFailure はボードを読めなかったときの結果を組み立てる（設計 3-32 の「落ち方で分ける」）。
@@ -241,10 +274,26 @@ func checkBoard(
 // **レートリミットだけ `!` にする。**時間をおけば通るので、直すものが無い。
 // それ以外（project が見つからない・Status の選択肢名の不一致・通信の失敗）は `✗` である。
 //
+// **認証の失効も分ける。**トークンが無効・失効しているのに
+// 「owner / project_number / status_field を確認してください」と案内すると、
+// 人間が直す先を取り違える。
+//
+// **期限切れも `!` にする。**時間内に応答が無かっただけで、前提が欠けているとは限らない。
+//
+// ctx: 検査に渡したコンテキスト（期限切れの判定に使う）。
 // what: 何をしようとして落ちたかの説明。
 // err: 落ちた原因。
+// endpoint: 差し替えた接続先（空なら本番の GitHub）。
 // 戻り値: 検査結果。
-func boardFailure(what string, err error) Result {
+func boardFailure(ctx context.Context, what string, err error, endpoint string) Result {
+	if timedOut(ctx, err) {
+		return Result{
+			Label:    LabelBoard,
+			Symbol:   SymbolUnknown,
+			Detail:   fmt.Sprintf("%s（時間内に応答がありませんでした）: %v%s", what, err, endpointNote(endpoint)),
+			Remedies: []string{"接続を確かめてから `continuo doctor` をもう一度実行してください"},
+		}
+	}
 	if tracker.IsCategory(err, tracker.CategoryRateLimited) {
 		return Result{
 			Label:    LabelBoard,
@@ -254,14 +303,19 @@ func boardFailure(what string, err error) Result {
 		}
 	}
 	remedy := "WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください"
-	if tracker.IsCategory(err, tracker.CategoryInvalidConfig) {
+	switch {
+	case tracker.IsCategory(err, tracker.CategoryInvalidConfig):
 		remedy = "GitHub の画面で Status の選択肢名を確認し、WORKFLOW.md の Status 名と合わせてください" +
 			"（選択肢の追加・改名は人間が画面から行います）"
+	case tracker.IsCategory(err, tracker.CategoryMissingSecret):
+		remedy = "ボードを読むトークンが無効か失効しています。" +
+			"`gh auth refresh -h github.com -s project` を実行するか（token_source が gh_auth のとき）、" +
+			"token_env に指定した環境変数のトークンを入れ直してください"
 	}
 	return Result{
 		Label:    LabelBoard,
 		Symbol:   SymbolMissing,
-		Detail:   fmt.Sprintf("%s: %v", what, err),
+		Detail:   fmt.Sprintf("%s: %v%s", what, err, endpointNote(endpoint)),
 		Remedies: []string{remedy},
 	}
 }
@@ -481,6 +535,9 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 	}
 
 	if rl.TokenSource == ratelimit.TokenSourceEnv {
+		// **`config.Load` が先に弾く経路だが、判定はここにも残す。**この検査は
+		// 「設定を読めたあとに、資格情報が実際に取れるか」を見るものであり、
+		// 空の環境変数名で先へ進むと、下の LookupEnv が空文字を引いて意味の違う文言になる。
 		if rl.TokenEnv == "" {
 			return Result{
 				Label:    LabelCredentials,

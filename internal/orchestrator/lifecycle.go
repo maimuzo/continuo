@@ -143,6 +143,13 @@ func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
 // rs: 対象の run。
 // signals: 拾った表明。
 func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals map[string]string) {
+	// **ボードに載っていなかった対象は溜めて、1 turn につき1件のコメントにまとめる。**
+	// 対象ごとに投稿すると、表明の行数ぶんだけ issue へコメントを書くことになる。
+	var missing []string
+	defer func() {
+		o.noteSignalTargetsMissing(ctx, rs, missing)
+	}()
+
 	for target, value := range signals {
 		next, known := lookupSignalTarget(o.cfg.Tracker.StatusSignalMap, value)
 		if !known {
@@ -168,7 +175,9 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 				continue
 			}
 			if !ok {
-				o.noteSignalTargetMissing(ctx, rs, target)
+				o.logger.Warn("表明が指す issue がボードに載っていません（この行を捨てます）",
+					"identifier", rs.issue().Identifier, "対象", target)
+				missing = append(missing, target)
 				continue
 			}
 			itemID = found.ID
@@ -185,20 +194,25 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 	}
 }
 
-// noteSignalTargetMissing は、表明が指す issue がボードに載っていなかったことを
+// noteSignalTargetsMissing は、表明が指す issue がボードに載っていなかったことを
 // issue のコメントに残す（設計 3-25）。
+//
+// **1 turn につき1件にまとめる。**対象ごとに投稿すると、エージェントが印を並べた
+// 行数ぶんだけコメントが積まれる。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// target: 表明が指していた識別子。
-func (o *Orchestrator) noteSignalTargetMissing(ctx context.Context, rs *runState, target string) {
-	o.logger.Warn("表明が指す issue がボードに載っていません（この行を捨てます）",
-		"identifier", rs.issue().Identifier, "対象", target)
+// targets: 表明が指していた識別子の並び。空なら何もしない。
+func (o *Orchestrator) noteSignalTargetsMissing(ctx context.Context, rs *runState, targets []string) {
+	if len(targets) == 0 {
+		return
+	}
 	nodeID := issueNodeID(rs.issue())
 	if nodeID == "" {
 		return
 	}
-	body := fmt.Sprintf("表明に書かれた %s は、このボードに載っていないので Status を動かせませんでした。", target)
+	body := fmt.Sprintf("表明に書かれた %s は、このボードに載っていないので Status を動かせませんでした。",
+		strings.Join(targets, " / "))
 	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
 		o.logger.Warn("表明の取りこぼしを投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}
@@ -565,12 +579,21 @@ func (o *Orchestrator) cleanupPath(
 //
 // **成果の要約は書かない**（設計 3-29）。continuo が書くのは引き渡しの通知だけである。
 //
+// **1つの run について1件だけ投稿する。**2件目以降は理由をログに残して捨てる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // reason: 引き渡す理由。
 func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, reason string) {
 	nodeID := issueNodeID(rs.issue())
 	if nodeID == "" {
+		return
+	}
+	if !rs.takeHandoffPost() {
+		// **1つの run について1件だけにする。**failure_state へ落としたあとに
+		// コメントを書かせられなかった場合、理由の違う通知が2件並んでしまう。
+		o.logger.Info("引き渡しの通知は投稿済みなので重ねて書きません",
+			"identifier", rs.issue().Identifier, "理由", reason)
 		return
 	}
 	if _, err := o.tracker.PostComment(ctx, nodeID,

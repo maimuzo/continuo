@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -15,12 +17,24 @@ import (
 // defaultGraphQLEndpoint は GitHub の GraphQL API v4 のエンドポイントである。
 const defaultGraphQLEndpoint = "https://api.github.com/graphql"
 
+// defaultHTTPTimeout は httpClient を渡されなかったときに組み立てるクライアントの
+// 全体の待ち時間である。
+//
+// **無期限にしてはならない。**巡回ループは Tick を同期で呼ぶので、TCP は張れたが応答が
+// 返らない状態（不安定な回線・captive portal）になると、候補の取得・実行中の照合・
+// stall の判定が全部止まったまま復帰しない。internal/ratelimit と同じ値にしてある。
+const defaultHTTPTimeout = 30 * time.Second
+
+// defaultDialTimeout は httpClient を渡されなかったときに組み立てるクライアントの
+// 接続（TCP の確立）の待ち時間である。
+const defaultDialTimeout = 10 * time.Second
+
 // graphqlClient は GitHub の GraphQL API を呼び出す薄いクライアントである。
 // **GraphQL 専用のライブラリは使わない。**標準の net/http と encoding/json だけで組み立てる
 // （設計「その1」）。
 //
-// herdr.Client（internal/herdr/client.go）と同じく、呼び出しの待ち時間は ctx の期限に
-// 委ねる。固定の *http.Client タイムアウトを持たせない。
+// 呼び出しごとの待ち時間は ctx の期限に従うが、**ctx に期限が無い呼び出しに備えて
+// *http.Client 側にも上限を持たせる**（呼び出し側の規約だけに頼らない）。
 type graphqlClient struct {
 	// endpoint は GraphQL API の URL である。テストでは httptest.Server の URL に差し替える。
 	endpoint string
@@ -30,19 +44,97 @@ type graphqlClient struct {
 	httpClient *http.Client
 }
 
+// isLoopbackHost は URL のホスト部（ポートを含みうる）が loopback を指しているかを返す。
+//
+// **テストの httptest.Server は http の loopback である。**そこだけは https を要求しない。
+//
+// host: url.URL の Host（例 "127.0.0.1:8080"、"localhost"）。
+// 戻り値: 127.0.0.0/8・::1・localhost のいずれかなら true。
+func isLoopbackHost(host string) bool {
+	name := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		name = h
+	}
+	name = strings.Trim(name, "[]")
+	if strings.EqualFold(name, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(name); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// validateEndpoint は接続先の URL が、トークンを載せて送ってよい相手かを検査する。
+//
+// **検査しないと、環境変数（CONTINUO_GITHUB_GRAPHQL_ENDPOINT）に http:// の任意のホストを
+// 書くだけで、`gh auth token` で取った GitHub のトークンが平文で第三者へ渡る。**
+// herdr の socket は「環境変数を勝手に優先しない」と決めてあるのに（設計 2-1）、
+// 資格情報が付いてまわるこちらだけが無検査なのは非対称である。
+//
+// endpoint: 検査する URL。
+// 戻り値: URL として解析できない、scheme が https でも loopback の http でもない、
+// ホストが空、のいずれかなら CategoryInvalidConfig の *Error。
+func validateEndpoint(endpoint string) error {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return &Error{
+			Category: CategoryInvalidConfig,
+			Message:  fmt.Sprintf("GraphQL の接続先 %q を URL として解析できません", endpoint),
+			Err:      err,
+		}
+	}
+	if u.Host == "" {
+		return &Error{
+			Category: CategoryInvalidConfig,
+			Message:  fmt.Sprintf("GraphQL の接続先 %q にホスト名がありません", endpoint),
+		}
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackHost(u.Host) {
+			// httptest.Server（テストの偽サーバ）だけがここを通る。
+			return nil
+		}
+	}
+	return &Error{
+		Category: CategoryInvalidConfig,
+		Message: fmt.Sprintf(
+			"GraphQL の接続先 %q は https ではありません（GitHub のトークンを Authorization ヘッダに"+
+				"載せて送るため、平文の http は loopback 以外では受け付けません）",
+			endpoint,
+		),
+	}
+}
+
 // newGraphQLClient は graphqlClient を作る。
 //
 // endpoint: GraphQL API の URL。空文字なら defaultGraphQLEndpoint を使う。
+// **https 以外は拒否する**（loopback の http だけは例外。validateEndpoint を参照）。
 // token: Authorization ヘッダに載せる認証トークン（ResolveToken で取得した値）。
-// httpClient: リクエストを送るクライアント。nil なら http.DefaultClient を使う。
-func newGraphQLClient(endpoint, token string, httpClient *http.Client) *graphqlClient {
+// httpClient: リクエストを送るクライアント。**nil なら接続10秒・全体30秒のクライアントを
+// 組み立てて使う**（http.DefaultClient は待ち時間を持たないので使わない）。
+// 戻り値: 組み立てた graphqlClient。endpoint が受け付けられない場合は
+// CategoryInvalidConfig の *Error。
+func newGraphQLClient(endpoint, token string, httpClient *http.Client) (*graphqlClient, error) {
 	if endpoint == "" {
 		endpoint = defaultGraphQLEndpoint
 	}
-	if httpClient == nil {
-		httpClient = http.DefaultClient
+	if err := validateEndpoint(endpoint); err != nil {
+		return nil, err
 	}
-	return &graphqlClient{endpoint: endpoint, token: token, httpClient: httpClient}
+	if httpClient == nil {
+		httpClient = &http.Client{
+			Timeout: defaultHTTPTimeout,
+			Transport: &http.Transport{
+				DialContext:       (&net.Dialer{Timeout: defaultDialTimeout}).DialContext,
+				ForceAttemptHTTP2: true,
+			},
+		}
+	}
+	return &graphqlClient{endpoint: endpoint, token: token, httpClient: httpClient}, nil
 }
 
 // gqlRequestBody は GraphQL へ送るリクエストボディの wire format である。
@@ -70,8 +162,9 @@ const rateLimitedErrorType = "RATE_LIMITED"
 // do は GraphQL を1回呼び出す。query と variables を送り、成功すれば応答の data フィールドを
 // out へ解析する。
 //
-// ctx: 呼び出しに適用するコンテキスト。期限が無ければ待ち時間は無制限になる
-// （呼び出し側が必ず期限を設定すること）。
+// ctx: 呼び出しに適用するコンテキスト。**期限が無くても無期限にはならない**
+// （httpClient 側に全体30秒の上限がある。newGraphQLClient を参照）。ctx に期限を付ければ
+// そちらが先に効く。
 // query: 送る GraphQL のクエリ／ミューテーション文字列。
 // variables: クエリの変数。nil でもよい。
 // out: 成功したときに data フィールドを解析する先。nil なら解析しない
@@ -254,10 +347,17 @@ func joinGQLErrors(errs []gqlErrorEntry) string {
 
 // truncate はログ・エラーメッセージに埋め込む本文を一定の長さで切り詰める。
 // 巨大な応答本文をそのままエラーメッセージへ埋め込んでログを膨らませないためである。
+//
+// **バイトではなく文字（rune）で切る。**GitHub はエラー本文に日本語を含めうるので、
+// バイトで切ると末尾の多バイト文字が割れてログに壊れた文字が出る。
+//
+// b: 元の本文。
+// max: 残す文字数。
+// 戻り値: max 文字を超える場合は末尾に "...(truncated)" を付けた文字列。
 func truncate(b []byte, max int) string {
-	s := string(b)
-	if len(s) <= max {
-		return s
+	r := []rune(string(b))
+	if len(r) <= max {
+		return string(r)
 	}
-	return s[:max] + "...(truncated)"
+	return string(r[:max]) + "...(truncated)"
 }

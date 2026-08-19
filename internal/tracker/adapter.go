@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/maimuzo/continuo/internal/config"
 )
@@ -14,6 +15,15 @@ import (
 // KindGitHubProjectsV2 は tracker.kind が受け付ける唯一の値である
 // （SPEC.md 11.2 が要求する「exact supported tracker.kind value」の公表）。
 const KindGitHubProjectsV2 = "github_projects_v2"
+
+// maxItemPages はボードを読むときに辿るページ数の上限である（1ページ100件）。
+//
+// **上限が無いと、ボードが育つほど1回の呼び出しのコストが黙って増える。**
+// 巡回は30秒ごとに走り、表明の対象1件ごとにもボードを読むので、気づかないうちに
+// GitHub の API 枠（5,000 point/時。設計 3-31）を食い潰す。
+// 2,000件は本番のボード（104件）の約20倍であり、超えたときは無言で飲み込まず
+// CategoryPagination で落として人間に気づかせる。
+const maxItemPages = 20
 
 // Adapter は GitHub Projects v2 を SPEC.md 第11節の Issue Tracker Integration Contract に
 // 沿って読み書きするアダプタである。
@@ -30,6 +40,10 @@ const KindGitHubProjectsV2 = "github_projects_v2"
 // **Status の選択肢そのものを書き換える mutation（選択肢の指定が全件置き換えとして扱われ、
 // 設定済みの Status を全部消す）を呼ぶメソッドはこのパッケージのどこにも無い**
 // （CLAUDE.md の絶対制約。test/internal/tracker がこれをソースの grep で確かめている）。
+//
+// **複数の goroutine から同時に呼んでよい。**巡回ループ（VerifyStatusOptions）と turn ループ
+// （UpdateStatus）は別の goroutine で動き、turn は run が終わるまで生き続けるので、
+// 30秒ごとの巡回と重なるのが常態である。Bootstrap で解決した ID の一群は mu が守る。
 type Adapter struct {
 	gql           *graphqlClient
 	owner         string
@@ -42,6 +56,13 @@ type Adapter struct {
 	// nil なら全て信頼済みとして扱う。
 	repoTrusted RepoTrustFunc
 
+	// mu は Bootstrap / VerifyStatusOptions が解決した値
+	// （bootstrapped・projectID・statusFieldID・statusOptionIDs・statusOptionNamesFold）を守る。
+	//
+	// **2つの map を別々のロックで引いてはならない。**新しい正式名と古い選択肢 ID を
+	// 組み合わせると、誤った optionId を updateProjectV2ItemFieldValue へ渡す。
+	// 名前と ID の組は必ず同じ世代から取ること（writeTargets）。
+	mu sync.RWMutex
 	// bootstrapped は Bootstrap が成功したかどうかである。
 	bootstrapped bool
 	// projectID は project の GraphQL ノード ID である（Bootstrap で解決）。
@@ -61,15 +82,18 @@ type Adapter struct {
 // cfg: WORKFLOW.md の front matter の tracker セクション（設計 5-2）。
 // endpoint: GraphQL API の URL。空文字なら本番の GitHub GraphQL API を使う。
 // テストでは httptest.Server の URL を渡して本番のボードへ接続しないようにすること。
+// **https 以外は受け付けない**（loopback の http だけは例外。トークンを平文で第三者へ
+// 送らないため。newGraphQLClient を参照）。既定と違う接続先のときは警告を1行残す。
 // token: 認証トークン（ResolveToken で取得した値）。
-// httpClient: リクエストを送るクライアント。nil なら http.DefaultClient を使う。
+// httpClient: リクエストを送るクライアント。nil なら接続10秒・全体30秒のクライアントを
+// 組み立てて使う。
 // logger: ログの出力先。nil なら slog.Default() を使う。
 // repoTrusted: リポジトリが Claude Code に信頼登録されているかを判定する関数（設計 3-13）。
 // **nil を渡すと全てのリポジトリを信頼済みとして扱う。**信頼の判定を orchestrator 側へ
 // 出さないために、ここで受け取って Issue.Dispatchable に畳み込む。
 // 戻り値: cfg.Kind が KindGitHubProjectsV2 以外の場合は CategoryUnsupportedKind、
-// owner / project_number / status_field のいずれかが未設定の場合は CategoryInvalidConfig の
-// *Error を返す。
+// owner / project_number / status_field のいずれかが未設定の場合、および endpoint が
+// https でない（loopback の http でもない）場合は CategoryInvalidConfig の *Error を返す。
 func NewAdapter(
 	cfg config.TrackerConfig,
 	endpoint string,
@@ -104,8 +128,20 @@ func NewAdapter(
 		logger = slog.Default()
 	}
 
+	gql, err := newGraphQLClient(endpoint, token, httpClient)
+	if err != nil {
+		return nil, err
+	}
+	if gql.endpoint != defaultGraphQLEndpoint {
+		// **無人運用で「本物の GitHub ではない相手にトークンを送っている」ことに
+		// 気づけるようにする。**差し替えは環境変数1行でできてしまうため、必ず1行残す。
+		logger.Warn("GraphQL の接続先が既定と違います（本番の GitHub ではありません）",
+			"endpoint", gql.endpoint, "既定", defaultGraphQLEndpoint,
+		)
+	}
+
 	return &Adapter{
-		gql:           newGraphQLClient(endpoint, token, httpClient),
+		gql:           gql,
 		owner:         cfg.Provider.Owner,
 		projectNumber: cfg.Provider.ProjectNumber,
 		statusField:   cfg.Provider.StatusField,
@@ -164,7 +200,7 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 	a.logger.Info("tracker アダプタの起動時検査が完了しました",
 		"owner", a.owner,
 		"project_number", a.projectNumber,
-		"status_options", len(a.statusOptionIDs),
+		"status_options", a.statusOptionCount(),
 	)
 	return nil
 }
@@ -193,7 +229,7 @@ func (a *Adapter) VerifyStatusOptions(ctx context.Context, cfg config.TrackerCon
 	a.logger.Debug("Status の選択肢名がまだ設定と一致することを確認しました",
 		"owner", a.owner,
 		"project_number", a.projectNumber,
-		"status_options", len(a.statusOptionIDs),
+		"status_options", a.statusOptionCount(),
 	)
 	return nil
 }
@@ -264,12 +300,46 @@ func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerCo
 		}
 	}
 
+	// **5つをまとめて1回のロックで差し替える。**読み手（別 goroutine の UpdateStatus →
+	// lookupOptionID）が、新しい正式名と古い選択肢 ID を混ぜて読まないようにするためである。
+	a.mu.Lock()
 	a.projectID = project.ID
 	a.statusFieldID = project.Field.ID
 	a.statusOptionIDs = optionIDs
 	a.statusOptionNamesFold = optionNamesFold
 	a.bootstrapped = true
+	a.mu.Unlock()
 	return nil
+}
+
+// statusOptionCount は覚えている Status 選択肢の件数を返す（ログ用）。
+func (a *Adapter) statusOptionCount() int {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return len(a.statusOptionIDs)
+}
+
+// writeTargets は書き込み（updateProjectV2ItemFieldValue）に要る値を、
+// **1回のロックでまとめて**取り出す。
+//
+// targetState: 書き込む先の Status 名（大文字小文字は無視して照合する）。
+// 戻り値の1つ目: project の ID。
+// 戻り値の2つ目: Status フィールドの ID。
+// 戻り値の3つ目: targetState に対応する選択肢 ID。
+// 戻り値の4つ目: Bootstrap（または VerifyStatusOptions）を通っていれば true。
+// 戻り値の5つ目: targetState がボード側の選択肢に在れば true。
+func (a *Adapter) writeTargets(targetState string) (string, string, string, bool, bool) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if !a.bootstrapped {
+		return "", "", "", false, false
+	}
+	canonical, ok := a.statusOptionNamesFold[foldStatus(targetState)]
+	if !ok {
+		return a.projectID, a.statusFieldID, "", true, false
+	}
+	optionID, ok := a.statusOptionIDs[canonical]
+	return a.projectID, a.statusFieldID, optionID, true, ok
 }
 
 // verifyKnownStates は states がすべてボード側の Status 選択肢に存在するかを確かめる。
@@ -281,14 +351,20 @@ func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerCo
 // 戻り値: ボード側に無い名前が1つでもあれば CategoryInvalidConfig の *Error
 // （見つからなかった名前をすべて列挙する）。
 func (a *Adapter) verifyKnownStates(states []string) error {
-	if !a.bootstrapped {
-		return nil
-	}
+	a.mu.RLock()
+	bootstrapped := a.bootstrapped
 	var unknown []string
-	for _, s := range states {
-		if _, ok := a.statusOptionNamesFold[foldStatus(s)]; !ok {
-			unknown = append(unknown, s)
+	if bootstrapped {
+		for _, s := range states {
+			if _, ok := a.statusOptionNamesFold[foldStatus(s)]; !ok {
+				unknown = append(unknown, s)
+			}
 		}
+	}
+	a.mu.RUnlock()
+
+	if !bootstrapped {
+		return nil
 	}
 	if len(unknown) == 0 {
 		return nil
@@ -302,16 +378,6 @@ func (a *Adapter) verifyKnownStates(states []string) error {
 			strings.Join(unknown, ", "),
 		),
 	}
-}
-
-// lookupOptionID は Status 名（大文字小文字を無視）から選択肢 ID を引く。
-func (a *Adapter) lookupOptionID(name string) (string, bool) {
-	canonical, ok := a.statusOptionNamesFold[foldStatus(name)]
-	if !ok {
-		return "", false
-	}
-	id, ok := a.statusOptionIDs[canonical]
-	return id, ok
 }
 
 // FetchIssuesByStates は states に含まれる Status を持つ issue を、ボードの並び順のまま
@@ -351,7 +417,16 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 	q := buildStatusSearchQuery(states)
 	var result []Issue
 	after := ""
-	for {
+	for page := 1; ; page++ {
+		if page > maxItemPages {
+			return nil, &Error{
+				Category: CategoryPagination,
+				Message: fmt.Sprintf(
+					"ボードのページ数が上限 %d を超えました（1ページ100件。ボードが想定外に育っています）",
+					maxItemPages,
+				),
+			}
+		}
 		var resp candidateQueryResponse
 		vars := map[string]any{
 			"login":       a.owner,
@@ -512,13 +587,16 @@ func (a *Adapter) UpdateStatus(
 	targetState string,
 	blockedStates []string,
 ) (bool, error) {
-	if !a.bootstrapped {
+	// **project ID・フィールド ID・選択肢 ID を1回のロックでまとめて取る。**
+	// 巡回ループが VerifyStatusOptions で選択肢を差し替えている最中に別々に読むと、
+	// 新しい正式名と古い選択肢 ID の組み合わせを書き込みかねない。
+	projectID, statusFieldID, optionID, bootstrapped, ok := a.writeTargets(targetState)
+	if !bootstrapped {
 		return false, &Error{
 			Category: CategoryInvalidConfig,
 			Message:  "Bootstrap が呼ばれていません（project / Status フィールドの ID が未解決です）",
 		}
 	}
-	optionID, ok := a.lookupOptionID(targetState)
 	if !ok {
 		return false, &Error{
 			Category: CategoryInvalidConfig,
@@ -544,9 +622,9 @@ func (a *Adapter) UpdateStatus(
 
 	var resp updateStatusResponse
 	vars := map[string]any{
-		"projectId": a.projectID,
+		"projectId": projectID,
 		"itemId":    itemID,
-		"fieldId":   a.statusFieldID,
+		"fieldId":   statusFieldID,
 		"optionId":  optionID,
 	}
 	if err := a.gql.do(ctx, updateStatusMutation, vars, &resp); err != nil {

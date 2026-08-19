@@ -21,8 +21,9 @@
 // **orchestrator の内部状態には触らない。**`RunSource`（＝`orchestrator.RunViews`）が返す
 // 写しだけを読む。ダッシュボードの都合で run の状態が変わることはない。
 //
-// **設定を読み直しても待ち受け先は変わらない**（設計 3-24）。`New` はポート番号を
-// 値として写し取り、設定への参照を持たない。変えるには continuo の再起動が要る。
+// **待ち受け先を変えるには continuo の再起動が要る。**`New` はポート番号を値として
+// 写し取り、設定への参照を持たない。設定の読み直しは実装していないうえ、読み直しを
+// 入れるとしても `server.port` は反映しない（設計 3-24 の「読み直しても反映しないもの」）。
 package server
 
 import (
@@ -59,6 +60,22 @@ const (
 	// **無指定のまま放置しない。**接続だけ張って何も送らない相手に goroutine を
 	// 占有されるのを防ぐ。
 	DefaultReadHeaderTimeout = 5 * time.Second
+
+	// DefaultReadTimeout はリクエストを本文まで読み切るまでの上限である。
+	// **ヘッダの期限だけでは、本文をだらだら送り続ける接続を切れない。**
+	// 受けるのは GET だけなので短くてよい。
+	DefaultReadTimeout = 10 * time.Second
+
+	// DefaultWriteTimeout は応答を書き終えるまでの上限である。
+	// **応答を読まずに放置する相手に goroutine を占有させない。**
+	DefaultWriteTimeout = 10 * time.Second
+
+	// DefaultIdleTimeout は keep-alive の接続を次の要求まで待つ上限である。
+	DefaultIdleTimeout = 60 * time.Second
+
+	// DefaultMaxHeaderBytes はリクエストのヘッダの上限である。
+	// **`Host` と URL はログに流れる**ので、量そのものを抑える。
+	DefaultMaxHeaderBytes = 64 * 1024
 
 	// DefaultShutdownTimeout は Close が処理中の応答を待つ上限である。
 	DefaultShutdownTimeout = 5 * time.Second
@@ -99,7 +116,8 @@ type Options struct {
 // Server は HTTP ダッシュボードの listener と応答の組み立てを持つ。
 type Server struct {
 	// port は `New` の時点で写し取ったポート番号である。
-	// **設定への参照は持たない**（読み直しで変わらないことを型で保証する。設計 3-24）。
+	// **設定への参照は持たない**（起動後に `server.port` を書き換えても、
+	// ここの値は変わらないことを型で保証する。設計 3-24）。
 	port   int
 	source RunSource
 	logger *slog.Logger
@@ -145,9 +163,15 @@ func New(opts Options) (*Server, error) {
 	}
 
 	s := &Server{port: port, source: opts.Source, logger: logger, now: now}
+	// **期限を4つとも埋める。**このサーバは認証を持たないので、同じマシンの
+	// どのプロセスからでも接続できる。1本の接続で goroutine を握られ続けないようにする。
 	s.http = &http.Server{
 		Handler:           s.newMux(),
 		ReadHeaderTimeout: DefaultReadHeaderTimeout,
+		ReadTimeout:       DefaultReadTimeout,
+		WriteTimeout:      DefaultWriteTimeout,
+		IdleTimeout:       DefaultIdleTimeout,
+		MaxHeaderBytes:    DefaultMaxHeaderBytes,
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 	}
 	return s, nil
@@ -156,6 +180,10 @@ func New(opts Options) (*Server, error) {
 // Start は待ち受けを始める。**127.0.0.1 にしか bind しない**（`LoopbackHost`）。
 //
 // **この関数は待たない。**listen に成功したら応答の goroutine を起こして返る。
+//
+// **2回呼んではならない。**2本目は listen せずにエラーを返す。`server.port` が 0 のとき、
+// 2本目を素通しにすると別のポートで待ち受けてしまい、**ログに出した待ち受け先と
+// 実際に開いているポートが食い違う。**
 //
 // 戻り値: listen できなかった場合のエラー（ポートの重複など）。
 // **エラーを返した場合、goroutine は1つも残らない。**
@@ -172,6 +200,11 @@ func (s *Server) Start() error {
 		s.mu.Unlock()
 		_ = ln.Close()
 		return errors.New("ダッシュボードは既に閉じられています")
+	}
+	if s.ln != nil {
+		s.mu.Unlock()
+		_ = ln.Close()
+		return fmt.Errorf("ダッシュボードは既に %s で待ち受けています", s.Addr())
 	}
 	s.ln = ln
 	s.wg.Add(1)
@@ -192,7 +225,7 @@ func (s *Server) Start() error {
 //
 // **`server.port` に 0 を指定した場合、OS が選んだ番号はここでしか分からない。**
 //
-// 戻り値: `127.0.0.1:<ポート>`。まだ Start していなければ空文字。
+// 戻り値: `127.0.0.1:<ポート>`。**まだ Start していない場合と、Close したあとは空文字。**
 func (s *Server) Addr() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -220,6 +253,9 @@ func (s *Server) Close(ctx context.Context) error {
 	}
 	s.closed = true
 	listening := s.ln != nil
+	// **閉じたら Addr は待ち受け先を返さない。**閉じたあとも古いアドレスを返すと、
+	// もう繋がらない宛先を人間にもログにも見せることになる。
+	s.ln = nil
 	s.mu.Unlock()
 
 	if !listening {
@@ -233,6 +269,19 @@ func (s *Server) Close(ctx context.Context) error {
 	}
 	s.logger.Info("ダッシュボードを閉じました")
 	return nil
+}
+
+// ResponseTimeouts は応答に掛けている期限を返す。
+//
+// **`test/internal/server` から「期限が抜けていないか」を確かめるために公開している。**
+// 値は `New` が決めるもので、外から変えられない。
+//
+// 戻り値の1つ目: ヘッダを読み切るまでの上限。
+// 戻り値の2つ目: 本文まで読み切るまでの上限。
+// 戻り値の3つ目: 応答を書き終えるまでの上限。
+// 戻り値の4つ目: keep-alive の接続を次の要求まで待つ上限。
+func (s *Server) ResponseTimeouts() (readHeader, read, write, idle time.Duration) {
+	return s.http.ReadHeaderTimeout, s.http.ReadTimeout, s.http.WriteTimeout, s.http.IdleTimeout
 }
 
 // Handler は応答の組み立てだけを返す（listen を伴わない）。

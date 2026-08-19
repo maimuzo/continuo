@@ -91,7 +91,14 @@ type Options struct {
 //
 // **複数の goroutine から同時に呼んでよい。**turn ループは run ごとに goroutine を1つ持ち
 // （3-8）、agent.max_concurrent_agents の既定は 2 なので、**1つの Manager を複数の run が
-// 共有する。**内部で持つ可変の状態（after_run の実行済みの印）は afterRunMu で守る。
+// 共有する。**守り方は次の3つである。
+//
+//   - after_run の実行済みの印は afterRunMu で守る
+//   - **身元ファイルの読み書きは worktree ごとに直列化する**（identityMu）。
+//     SetAgentName / IncrementTakeover / MarkCleanupDeferred / WriteIdentity は
+//     読んで書き戻すので、守らないと、あとの書き込みが前の書き込みを消す
+//   - **`info/exclude` の更新は共通ディレクトリごとに直列化する**（identityMu の別の鍵）。
+//     1つのリポジトリの1本のファイルを、worktree ごとに触るためである
 type Manager struct {
 	cfg          config.Config
 	herdr        HerdrClient
@@ -100,6 +107,18 @@ type Manager struct {
 	homeDir      string
 	ghqList      GhqListFunc
 	settingsRoot string
+
+	// clonePaths は `ghq list -p -e <owner>/<repo>` の答えを短い間だけ覚える
+	// （clonePathCacheTTL）。信頼の判定と、破壊的な git コマンドの宛先の検算が
+	// issue ごとに ghq を起動するので、そのままではボードの件数ぶんプロセスが立つ。
+	clonePaths *ttlCache[string]
+	// trustResults は信頼の判定の結果を短い間だけ覚える（trustCacheTTL）。
+	// **判定1回につき ghq と git を1本ずつ起動し `~/.claude.json` を読み直す**ので、
+	// ボードの項目ごとに呼ばれると費用が跳ね上がる（3-6）。
+	trustResults *ttlCache[bool]
+	// identityMu は身元ファイルと `info/exclude` の読んで書き戻す処理を鍵ごとに直列化する。
+	// 鍵は identityLockKey / excludeLockKey が作る。
+	identityMu *keyedMutex
 
 	// resolvedRoot は workspace.root をシンボリックリンク解決した絶対パスである（3-20 の段2）。
 	// この機械の ~/ghq の下は全部シンボリックリンクなので、素朴な文字列比較では
@@ -175,6 +194,12 @@ func New(opts Options) (*Manager, error) {
 		settingsRoot = filepath.Clean(settingsRoot)
 	}
 
+	// **どのホームディレクトリの `~/.claude.json` で信頼を判定するかを1回だけ残す**
+	// （3-6）。HOME を差し替えた環境で起動すると判定の根拠ごと変わるので、
+	// あとから「どのファイルを見ていたのか」を追えるようにしておく。**中身は出さない。**
+	logger.Info("リポジトリの信頼はこのファイルで判定します",
+		"claude_config", filepath.Join(homeDir, ClaudeConfigFileName))
+
 	return &Manager{
 		cfg:          opts.Config,
 		herdr:        opts.Herdr,
@@ -183,6 +208,9 @@ func New(opts Options) (*Manager, error) {
 		homeDir:      homeDir,
 		ghqList:      ghqList,
 		settingsRoot: settingsRoot,
+		clonePaths:   newTTLCache[string](clonePathCacheTTL, nowFunc),
+		trustResults: newTTLCache[bool](trustCacheTTL, nowFunc),
+		identityMu:   newKeyedMutex(),
 		resolvedRoot: resolvedRoot,
 		afterRunDone: map[string]bool{},
 	}, nil

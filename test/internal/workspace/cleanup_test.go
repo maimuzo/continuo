@@ -578,3 +578,217 @@ func TestCleanup_置き場所を渡していなければsettings_pathを消さ�
 		t.Fatalf("置き場所が分からないのに設定ファイルを消している: %v", statErr)
 	}
 }
+
+// tamperGitFile は worktree の `.git` を書き換え、別のリポジトリを指させる。
+//
+// **worktree の `.git` はディレクトリではなく `gitdir: …` と書かれただけの 0644 の
+// ファイルである。**その worktree ではエージェントが `--permission-mode dontAsk` で
+// 動く（設計 3-16 の段9）ので、この書き換えは現実に起こりうる。
+//
+// t: 呼び出し元のテスト。
+// worktreePath: 書き換える worktree のパス。
+// victim: 代わりに指させるリポジトリ。
+func tamperGitFile(t *testing.T, worktreePath string, victim *testRepo) {
+	t.Helper()
+	gitFile := filepath.Join(worktreePath, ".git")
+	if err := os.WriteFile(gitFile, []byte("gitdir: "+filepath.Join(victim.Dir, ".git")+"\n"), 0o644); err != nil {
+		t.Fatalf("worktree の .git を書き換えられない: %v", err)
+	}
+}
+
+// 目的: 身元ファイルの herdr_workspace_id が書き換えられていても、**別の run の
+// worktree を消させられない**ことを確認する（設計 3-9 の段3。この値もエージェントが
+// 書き換えられるので、消す宛先は herdr に現物を答えさせる）。
+// 与える情報: herdr_workspace_id を別の workspace の ID に書き換えた身元ファイルと、
+// 開いている worktree のパスに対して "w9" を答える herdr。
+// 成功条件: worktree.remove に渡る workspace_id が、書き換えられた値ではなく
+// herdr が答えた "w9" であること。
+func TestCleanup_身元ファイルのherdr_workspace_idが書き換えられていても他のworkspaceを消さない(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	tamperIdentity(t, cf, func(identity *workspace.Identity) {
+		identity.HerdrWorkspaceID = "w-他の-run"
+	})
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("片付けてよい worktree なのに消していない: %+v", *result)
+	}
+
+	var removeParams map[string]any
+	for _, req := range cf.Herdr.Requests() {
+		if req.Method == herdr.MethodWorktreeRemove {
+			removeParams = req.Params
+		}
+	}
+	if removeParams == nil {
+		t.Fatalf("herdr へ worktree.remove を送っていない: %v", cf.Herdr.Methods())
+	}
+	if removeParams["workspace_id"] == "w-他の-run" {
+		t.Fatalf("身元ファイルに書かれた workspace_id をそのまま消しに行っている（別の run の worktree を消せる）: %v",
+			removeParams)
+	}
+	if removeParams["workspace_id"] != "w9" {
+		t.Fatalf("herdr が答えた workspace_id を消していない: %v", removeParams)
+	}
+}
+
+// 目的: herdr が別のパスを開いている workspace を答えたら、何も消さないことを確認する
+// （設計 3-9 の段3。検算の答えが食い違ったら止まる）。
+// 与える情報: 常に別のパスを worktree として答える偽 herdr。
+// 成功条件: Cleanup がエラーになり、worktree.remove を1度も送らず、worktree が残ること。
+func TestCleanup_herdrが別のパスを答えたら何も消さない(t *testing.T) {
+	other := filepath.Join(t.TempDir(), "別の-worktree")
+	if err := os.MkdirAll(other, 0o700); err != nil {
+		t.Fatalf("別のパスを作れない: %v", err)
+	}
+	open := worktreeOpenResult("w9", "w9:p1")
+	open["worktree"] = map[string]any{"path": other}
+	fake := newFakeHerdr(t, map[string]any{
+		herdr.MethodWorktreeOpen:   open,
+		herdr.MethodWorktreeRemove: worktreeRemoveResult("w9", ""),
+	})
+	cf := newCleanupFixtureWith(t, fixtureOptions{Herdr: fake})
+
+	_, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err == nil {
+		t.Fatal("herdr が別のパスを答えたのにエラーにならなかった")
+	}
+	if slices.Contains(cf.Herdr.Methods(), herdr.MethodWorktreeRemove) {
+		t.Fatalf("検算に落ちたのに worktree.remove を送っている: %v", cf.Herdr.Methods())
+	}
+	if _, statErr := os.Stat(cf.Prepared.Path); statErr != nil {
+		t.Fatalf("検算に落ちたのに worktree が消えている: %v", statErr)
+	}
+}
+
+// 目的: worktree の `.git` が別のリポジトリを指すよう書き換えられていたら、
+// **そのリポジトリに破壊的な git コマンドを撃たない**ことを確認する
+// （設計 3-9 の段4。`git branch -D` の宛先を git の答えだけで決めない）。
+// 与える情報: `.git` を別のリポジトリへ向けた worktree と、その別のリポジトリにある branch。
+// 成功条件: Cleanup がエラーになり、別のリポジトリの branch が残っていること。
+func TestCleanup_worktreeのgitが書き換えられていたら別のリポジトリに触らない(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	victim := newTestRepo(t)
+	runGit(t, victim.Dir, "branch", "continuo/victim-branch")
+
+	tamperGitFile(t, cf.Prepared.Path, victim)
+
+	if _, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf)); err == nil {
+		t.Fatal(".git が書き換えられているのにエラーにならなかった")
+	}
+	branches := runGit(t, victim.Dir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if !strings.Contains(branches, "continuo/victim-branch") {
+		t.Fatalf("無関係のリポジトリの branch を消した: %s", branches)
+	}
+	if slices.Contains(cf.Herdr.Methods(), herdr.MethodWorktreeRemove) {
+		t.Fatalf("検算に落ちたのに worktree.remove を送っている: %v", cf.Herdr.Methods())
+	}
+}
+
+// 目的: 身元ファイルが info/exclude に登録されていなくても、片付けが成立することを
+// 確認する（設計 3-9 の手順2。登録は利用者の `git status` を汚さないための親切であって、
+// 片付けの正しさをその成否に依存させない）。
+// 与える情報: 身元ファイルを置いたあとに info/exclude を消した worktree。
+// 成功条件: `git status --porcelain` に身元ファイルが出る状態でも Removed が真になること。
+func TestCleanup_身元ファイルが未追跡でも片付けを見送らない(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	excludePath := filepath.Join(cf.Repo.Dir, ".git", "info", "exclude")
+	if err := os.Remove(excludePath); err != nil {
+		t.Fatalf("info/exclude を消せない: %v", err)
+	}
+	// 一時ファイルの残骸も同じく数から外れること（強制終了で残りうる）。
+	leftover := cf.Manager.IdentityPath(cf.Prepared.Path) + ".tmp1234567"
+	if err := os.WriteFile(leftover, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("一時ファイルの残骸を置けない: %v", err)
+	}
+	status := runGit(t, cf.Prepared.Path, "status", "--porcelain")
+	if !strings.Contains(status, ".continuo.json") {
+		t.Fatalf("前提が崩れている（身元ファイルが未追跡として出ていない）: %q", status)
+	}
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("continuo 自身が置いたファイルを「利用者の成果」と数えて見送っている: %+v", *result)
+	}
+}
+
+// 目的: 呼び出し側が base を渡さなくても、身元ファイルに書かれた base で判定できることを
+// 確認する（設計 3-9 の手順2b。再起動をまたぐと呼び出し側は base を持っていない）。
+// 与える情報: base を "main" と書いた身元ファイルと、Base を空にした CleanupRequest。
+// 成功条件: 「base が分からない」で見送らず、Removed が真になること。
+func TestCleanup_baseは身元ファイルから補える(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	tamperIdentity(t, cf, func(identity *workspace.Identity) { identity.Base = "main" })
+
+	result, err := cf.Manager.Cleanup(context.Background(), workspace.CleanupRequest{
+		WorktreePath: cf.Prepared.Path,
+	})
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("身元ファイルの base で判定できるのに見送っている: %+v", *result)
+	}
+}
+
+// 目的: 片付けた worktree の after_run の印を落とすことを確認する
+// （常駐プロセスなので、消した worktree の印を残すとプロセスの寿命のあいだ増え続ける）。
+// 与える情報: after_run を1回実行したあとの片付け。
+// 成功条件: 片付けのあとに RunAfterRunOnce を呼ぶと「実行した」が返ること
+// （印が残っていれば偽が返る）。
+func TestCleanup_片付けたworktreeのafter_runの印を落とす(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	ctx := context.Background()
+
+	// workspace_hooks.after_run は未設定なので、印の付け外しだけが起こる。
+	if ran, err := cf.Manager.RunAfterRunOnce(ctx, cf.Prepared.Path); err != nil || !ran {
+		t.Fatalf("1回目の RunAfterRunOnce が実行されていない: ran=%v err=%v", ran, err)
+	}
+	if ran, err := cf.Manager.RunAfterRunOnce(ctx, cf.Prepared.Path); err != nil || ran {
+		t.Fatalf("2回目が実行されている（印が付いていない）: ran=%v err=%v", ran, err)
+	}
+
+	result, err := cf.Manager.Cleanup(ctx, cleanupRequest(cf))
+	if err != nil || !result.Removed {
+		t.Fatalf("片付けに失敗した: %+v err=%v", result, err)
+	}
+
+	if ran, err := cf.Manager.RunAfterRunOnce(ctx, cf.Prepared.Path); err != nil || !ran {
+		t.Fatalf("片付けたのに after_run の印が残っている: ran=%v err=%v", ran, err)
+	}
+}
+
+// 目的: 封じ込め検査を通したパスだけで以後の処理を行うことを確認する
+// （設計 3-20。検査したパスと操作したパスが違うと、検査の保証がそのまま切れる）。
+// 与える情報: 置き場所へのシンボリックリンクを経由した worktree のパス。
+// 成功条件: 片付けが成立し、worktree.remove まで届くこと。
+func TestCleanup_シンボリックリンク越しのパスでも片付けられる(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	link := filepath.Join(t.TempDir(), "リンク")
+	if err := os.Symlink(cf.Manager.ResolvedRoot(), link); err != nil {
+		t.Fatalf("置き場所へのシンボリックリンクを作れない: %v", err)
+	}
+	rel, err := filepath.Rel(cf.Manager.ResolvedRoot(), cf.Prepared.Path)
+	if err != nil {
+		t.Fatalf("置き場所からの相対パスを作れない: %v", err)
+	}
+
+	result, err := cf.Manager.Cleanup(context.Background(), workspace.CleanupRequest{
+		WorktreePath: filepath.Join(link, rel),
+		Base:         normalize.SafeName("main"),
+	})
+	if err != nil {
+		t.Fatalf("シンボリックリンク越しの Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("シンボリックリンク越しだと片付けられていない: %+v", *result)
+	}
+}

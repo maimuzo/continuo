@@ -459,3 +459,208 @@ func TestForward_上限を超えて項目を1つも拾えなければ捨てる(t
 		t.Fatalf("拾えなかった入力が逃がし先へ書かれました: %v", names)
 	}
 }
+
+// 目的: 標準入力が上限を超えた Stop でも、turn の終わりの判定に使う background_tasks /
+// stop_hook_active / prompt が値の形のまま届くことを確認する。文字列の項目だけを拾い直すと、
+// 上限を超えた Stop は background_tasks が欠けた形で届き、受け取る側は
+// 「欠けている（判定不能）」として扱うので turn の終わりにならない（設計 3-2）。
+// 与える情報: 上限を 120 バイトに縮めた Config と、background_tasks（空配列）と
+// stop_hook_active が先頭側にあり、そのあとに上限を大きく超える項目が続く Stop の JSON。
+// 成功条件: 受け口が受け取った1行に background_tasks が空配列として入っており、
+// stop_hook_active も入っていること。
+func TestForward_上限を超えてもbackground_tasksを落とさない(t *testing.T) {
+	sink := newFakeSink(t, false)
+
+	const limit = 120
+	input := `{"hook_event_name":"Stop","session_id":"s1","background_tasks":[],"stop_hook_active":false,` +
+		`"last_assistant_message":"` + strings.Repeat("x", 8192) + `"}`
+
+	result := hookclient.Forward(hookclient.Config{
+		SocketPath:    sink.socketPath,
+		PendingDir:    newPendingDir(t),
+		Stdin:         strings.NewReader(input),
+		MaxInputBytes: limit,
+	})
+	if result.Outcome != hookclient.OutcomeSent {
+		t.Fatalf("上限を超えた Stop も転送されるはずが %s でした: %v", result.Outcome, result.Err)
+	}
+	if !result.Truncated {
+		t.Fatalf("上限を超えたことが Result に出ていません: %+v", result)
+	}
+
+	line := sink.waitForLines(t, 1)[0]
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimSuffix(line, "\n")), &got); err != nil {
+		t.Fatalf("受け口が受け取った行を JSON として読めません: %q: %v", line, err)
+	}
+	raw, ok := got["background_tasks"]
+	if !ok {
+		t.Fatalf("background_tasks が落ちています（受け取る側は turn の終わりと判定できません）: %s", line)
+	}
+	var tasks []any
+	if err := json.Unmarshal(raw, &tasks); err != nil {
+		t.Fatalf("background_tasks が配列として読めません: %s: %v", raw, err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("background_tasks の中身が元のまま（空配列）ではありません: %s", raw)
+	}
+	if _, ok := got["stop_hook_active"]; !ok {
+		t.Fatalf("stop_hook_active が落ちています: %s", line)
+	}
+}
+
+// 目的: 上限を超えた UserPromptSubmit でも prompt が値の形のまま届くことを確認する。
+// prompt は <task-notification> の判定に使うので（設計 1-3）、落とすと判定できない。
+// 与える情報: 上限を 160 バイトに縮めた Config と、prompt が先頭側にある UserPromptSubmit。
+// 成功条件: 受け口が受け取った1行の prompt に <task-notification> が入っていること。
+func TestForward_上限を超えてもpromptを落とさない(t *testing.T) {
+	sink := newFakeSink(t, false)
+
+	const limit = 160
+	input := `{"hook_event_name":"UserPromptSubmit","session_id":"s1",` +
+		`"prompt":"<task-notification><task-id>a1</task-id></task-notification>",` +
+		`"cwd":"` + strings.Repeat("x", 8192) + `"}`
+
+	result := hookclient.Forward(hookclient.Config{
+		SocketPath:    sink.socketPath,
+		PendingDir:    newPendingDir(t),
+		Stdin:         strings.NewReader(input),
+		MaxInputBytes: limit,
+	})
+	if result.Outcome != hookclient.OutcomeSent {
+		t.Fatalf("上限を超えた UserPromptSubmit も転送されるはずが %s でした: %v", result.Outcome, result.Err)
+	}
+
+	line := sink.waitForLines(t, 1)[0]
+	var got struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSuffix(line, "\n")), &got); err != nil {
+		t.Fatalf("受け口が受け取った行を JSON として読めません: %q: %v", line, err)
+	}
+	if !strings.Contains(got.Prompt, "<task-notification>") {
+		t.Fatalf("prompt が落ちています（<task-notification> の判定ができません）: %s", line)
+	}
+}
+
+// 目的: hook_event_name が極端に長くても、逃がし先へ書けることを確認する。
+// 名前をそのままファイル名にすると os.OpenFile が ENAMETOOLONG で失敗し、
+// その hook は socket にも逃がし先にも残らずに消える。
+// 与える情報: 誰も listen していない socket のパスと、hook_event_name が 4096 文字の JSON。
+// 成功条件: 終了の理由が spilled になり、逃がし先にファイルが1件でき、
+// ファイル名の長さが 255 バイトに収まっていること。
+func TestForward_イベント名が長くても逃がし先へ書ける(t *testing.T) {
+	pendingDir := newPendingDir(t)
+	dir, err := os.MkdirTemp("", "hooknoone")
+	if err != nil {
+		t.Fatalf("一時ディレクトリを作成できません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	input := `{"hook_event_name":"` + strings.Repeat("A", 4096) + `","session_id":"s1"}`
+	result := hookclient.Forward(hookclient.Config{
+		SocketPath: filepath.Join(dir, "nobody.sock"),
+		PendingDir: pendingDir,
+		Stdin:      strings.NewReader(input),
+		Now:        fixedNow(1787057953362306),
+	})
+	if result.Outcome != hookclient.OutcomeSpilled {
+		t.Fatalf("逃がし先へ書けるはずが %s でした: %v", result.Outcome, result.Err)
+	}
+
+	names := entryNames(t, pendingDir)
+	if len(names) != 1 {
+		t.Fatalf("逃がし先のファイルが1件ではありません: %v", names)
+	}
+	if len(names[0]) > 255 {
+		t.Fatalf("逃がし先のファイル名が長すぎます（%d バイト）: %s", len(names[0]), names[0])
+	}
+}
+
+// 目的: 逃がし先が上限まで太ったとき、量の多い PostToolUse は書かなくなるが、
+// turn の終わりの判定に要る Stop は書き続けることを確認する。
+// Stop まで落とすと、その run は stall_timeout_ms（既定30分）まで誰も気づかない（設計 3-19）。
+// 与える情報: 逃がし先の上限を 1 件に縮めた Config（既に1件置いてある逃がし先）と、
+// PostToolUse 1件・Stop 1件。
+// 成功条件: PostToolUse が dropped になって理由が Result.Err に入り、Stop は spilled になること。
+func TestForward_逃がし先が上限でもStopは書き続ける(t *testing.T) {
+	pendingDir := newPendingDir(t)
+	if err := os.MkdirAll(pendingDir, 0o700); err != nil {
+		t.Fatalf("逃がし先を作れません: %v", err)
+	}
+	existing := filepath.Join(pendingDir, "1787057953362300-Stop.json")
+	if err := os.WriteFile(existing, []byte(`{"hook_event_name":"Stop"}`), 0o600); err != nil {
+		t.Fatalf("逃がし先へ既存のファイルを置けません: %v", err)
+	}
+
+	dir, err := os.MkdirTemp("", "hooknoone")
+	if err != nil {
+		t.Fatalf("一時ディレクトリを作成できません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	socketPath := filepath.Join(dir, "nobody.sock")
+
+	base := hookclient.Config{
+		SocketPath:      socketPath,
+		PendingDir:      pendingDir,
+		MaxPendingFiles: 1,
+		Now:             fixedNow(1787057953362306),
+	}
+
+	noisy := base
+	noisy.Stdin = strings.NewReader(`{"hook_event_name":"PostToolUse","session_id":"s1"}`)
+	if got := hookclient.Forward(noisy); got.Outcome != hookclient.OutcomeDropped {
+		t.Fatalf("上限を超えた逃がし先へ PostToolUse が書かれました: %s", got.Outcome)
+	} else if got.Err == nil || !strings.Contains(got.Err.Error(), "上限") {
+		t.Fatalf("上限で書かなかった理由が Result.Err に入っていません: %v", got.Err)
+	}
+
+	stop := base
+	stop.Stdin = strings.NewReader(`{"hook_event_name":"Stop","session_id":"s1","background_tasks":[]}`)
+	if got := hookclient.Forward(stop); got.Outcome != hookclient.OutcomeSpilled {
+		t.Fatalf("上限を超えても Stop は書くはずが %s でした: %v", got.Outcome, got.Err)
+	}
+	if names := entryNames(t, pendingDir); len(names) != 2 {
+		t.Fatalf("逃がし先のファイルが2件（既存 + Stop）ではありません: %v", names)
+	}
+}
+
+// 目的: 逃がし先（--pending-dir）が相対パスのとき、そこへは書かないことを確認する。
+// hook の cwd は worktree なので（設計 1-5）、相対パスだと逃がし先が worktree の中に掘られ、
+// continuo は <実行時ディレクトリ>/issues/*/pending しか走査しないので永久に読まれない。
+// 与える情報: 誰も listen していない socket のパスと、相対パスの逃がし先。
+// 成功条件: 終了の理由が dropped になり、絶対パスでないことが Result.Err に入り、
+// 相対パスのディレクトリが作られていないこと。
+func TestForward_逃がし先が相対パスなら書かない(t *testing.T) {
+	dir, err := os.MkdirTemp("", "hookrel")
+	if err != nil {
+		t.Fatalf("一時ディレクトリを作成できません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	// 相対パスが解決される先（＝いまの実行時ディレクトリ）を汚さないよう、
+	// このテストの間だけ一時ディレクトリへ移る。
+	before, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("いまのディレクトリを取れません: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("一時ディレクトリへ移れません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(before) })
+
+	result := hookclient.Forward(hookclient.Config{
+		SocketPath: filepath.Join(dir, "nobody.sock"),
+		PendingDir: filepath.Join("pending", "relative"),
+		Stdin:      strings.NewReader(`{"hook_event_name":"Stop","session_id":"s1"}`),
+	})
+	if result.Outcome != hookclient.OutcomeDropped {
+		t.Fatalf("相対パスの逃がし先へ書かれました: %s", result.Outcome)
+	}
+	if result.Err == nil || !strings.Contains(result.Err.Error(), "絶対パス") {
+		t.Fatalf("絶対パスでないことが Result.Err に入っていません: %v", result.Err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "pending")); !os.IsNotExist(err) {
+		t.Fatalf("相対パスの逃がし先が作られました: %v", err)
+	}
+}

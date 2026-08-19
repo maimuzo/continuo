@@ -1,9 +1,20 @@
 // Package normalize は、外部コマンド（git・gh・herdr の socket API 等）へ渡す識別子を
-// 安全な文字列へ正規化する処理を一元化する（docs/plans/continuo_design.md 3-7）。
+// 正規化する処理を一元化する（docs/plans/continuo_design.md 3-7）。
 //
 // herdr-symphony は正規化を迂回できる経路が残っており、コロンを含む識別子で失敗していた
 // （3-7）。continuo では「外部へ渡す名前を作る関数はここ1本だけ」とし、その戻り値の型
 // （SafeName）を通さない文字列は外部コマンドの引数として使えないようにする。
+//
+// **このパッケージが保証するのは次の4点だけである。**過大に信頼しないこと。
+//   - 英数字・アンダースコア・ハイフン・ドット・スラッシュ以外の文字を含まない
+//     （シェルのメタ文字・空白・引用符は残らない）
+//   - 空文字にならない
+//   - 先頭が "-" にならない（コマンドラインオプションと誤解釈されない）
+//   - スラッシュ区切りの要素として "." と ".." を含まない（置き場所の外へ出ない）
+//
+// **長さの上限は保証しない**（herdr の agent 名の長さは internal/herdr が別に検査する）。
+// **置き場所の中に収まっていることも、最終的にはパスを組み立てる側が確かめる**
+// （internal/workspace の CheckContainment）。
 package normalize
 
 import (
@@ -14,6 +25,8 @@ import (
 // SafeName は Normalize を通った文字列だけが持てる型である。
 // 外部コマンドの引数はこの型からしか組み立てられないようにすることで、
 // 正規化を迂回する経路が生まれるのを防ぐ（3-7）。
+//
+// この型が保証する内容はパッケージのコメントに列挙したものがすべてである。
 type SafeName string
 
 // String は SafeName の中身をそのまま返す。
@@ -58,11 +71,14 @@ func allowedRune(r rune) bool {
 	}
 }
 
-// Normalize は raw を外部コマンドへ渡しても安全な SafeName に変換する。
+// Normalize は raw を SafeName に変換する。保証する内容はパッケージのコメントを見ること。
 //
 // raw: 変換前の識別子（issue の URL・branch 名の材料など）。
 // 戻り値の1つ目: 変換後の SafeName。allowedRune が許可しない文字はすべて "_" に
-// 置き換える。結果が空文字になる場合は "_" 1文字にする。結果の先頭が "-" になる場合は
+// 置き換える。スラッシュ区切りの要素が "." または ".." になる場合は "_" / "__" へ潰す
+// （SafeName はそのまま置き場所の1階層として使われるため、潰さないと `../..` が
+// worktree の置き場所の外を指す。git も refname に ".." を許さない）。
+// 結果が空文字になる場合は "_" 1文字にする。結果の先頭が "-" になる場合は
 // コマンドラインオプションとして誤解釈されるのを防ぐため、先頭に "_" を1文字補う。
 // 戻り値の2つ目: 情報が落ちた場合の警告のスライス。1文字でも置換・補完が起きれば
 // 必ず1件積む。何も落ちていなければ nil を返す。黙って別名にせず、呼び出し側が
@@ -80,6 +96,10 @@ func Normalize(raw string) (SafeName, []Warning) {
 	}
 
 	result := b.String()
+	if collapsed, changed := collapseDotSegments(result); changed {
+		result = collapsed
+		lost = true
+	}
 	if result == "" {
 		result = "_"
 		lost = true
@@ -98,6 +118,37 @@ func Normalize(raw string) (SafeName, []Warning) {
 		Result:   SafeName(result),
 		Message:  fmt.Sprintf("識別子の正規化で情報が落ちました: 元の文字列 %q は %q に変換されました", raw, result),
 	}}
+}
+
+// collapseDotSegments はスラッシュ区切りの要素のうち "." と ".." を潰す。
+//
+// SafeName は worktree の置き場所の1階層（internal/workspace の pathComponent）や
+// branch 名（3-22）としてそのまま使われる。".." を残すと1階層上を指せてしまうため、
+// 文字の置換と同じ扱いでここで潰す。
+//
+// raw: 許可されない文字を置換したあとの文字列。
+// 戻り値の1つ目: "." を "_"、".." を "__" へ置き換えた文字列。
+// 戻り値の2つ目: 1箇所でも置き換えたかどうか（警告を積むかどうかの判断に使う）。
+func collapseDotSegments(raw string) (string, bool) {
+	if !strings.Contains(raw, ".") {
+		return raw, false
+	}
+	segments := strings.Split(raw, "/")
+	changed := false
+	for i, seg := range segments {
+		switch seg {
+		case ".":
+			segments[i] = "_"
+			changed = true
+		case "..":
+			segments[i] = "__"
+			changed = true
+		}
+	}
+	if !changed {
+		return raw, false
+	}
+	return strings.Join(segments, "/"), true
 }
 
 // CommandArgs は SafeName のスライスから、外部コマンドへ渡す引数の文字列スライスを作る。

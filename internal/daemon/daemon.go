@@ -28,6 +28,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -54,6 +57,39 @@ const EnvGraphQLEndpoint = "CONTINUO_GITHUB_GRAPHQL_ENDPOINT"
 // EnvRuntimeDir は実行時ディレクトリを差し替える環境変数である（設計 3-23 の探索順の1番目）。
 const EnvRuntimeDir = "CONTINUO_RUNTIME_DIR"
 
+// 外向きの呼び出しに与える期限である。
+//
+// **設定ファイルのキーにはしない**（設計 5-2 に無いキーを足さない）。
+// **`claude.read_timeout_ms` を流用しない。**あれは herdr の socket API の応答を待つ
+// 上限であり（設計 8-1）、相手が違うものを同じつまみで動かすと、herdr が遅い環境に
+// 合わせて値を上げたときに GitHub への待ちまで一緒に伸びる。
+const (
+	// DefaultTrackerTimeout は GitHub の GraphQL API への1リクエストの上限である。
+	//
+	// **これが無いと巡回ループごと無期限に止まる。**応答ヘッダを返さない相手に当たると、
+	// `http.DefaultClient`（`Timeout` 0）では待ち続けてしまう。
+	DefaultTrackerTimeout = 30 * time.Second
+
+	// DefaultStartupCheckTimeout は起動時検査（設計 3-6）全体の上限である。
+	//
+	// `gh` の起動・herdr の socket・GitHub の GraphQL を順に叩くので、
+	// **1つが返らないと復元にも巡回にも進めない。**
+	DefaultStartupCheckTimeout = 60 * time.Second
+
+	// DefaultTurnLoopWait は終了時に turn ループの終了を待つ上限である。
+	//
+	// **待ち切れなくても pane は閉じない。**次の起動で復元が引き継ぐ（設計 3-4 の段5）ので、
+	// ここで無期限に待つより、期限を切って抜けたほうが運用の妨げにならない。
+	DefaultTurnLoopWait = 30 * time.Second
+)
+
+// ErrStartup は「起動の段（設定の読み込みから巡回を始めるまで）で落ちた」ことを表す。
+//
+// **巡回が始まったあとの異常終了と言い分けるためにある。**両方を「起動できません」と
+// 記録すると、無人運用のログを後から読む人間が、起動失敗と実行中の異常終了を取り違える。
+// 呼び出し側は `errors.Is(err, daemon.ErrStartup)` で切り分けること。
+var ErrStartup = errors.New("起動できませんでした")
+
 // Options は Run の入力である。
 type Options struct {
 	// ConfigPath は読み込む WORKFLOW.md の絶対パスである。必須。
@@ -69,6 +105,12 @@ type Options struct {
 	// **`nil` なら `server.port` に従う。**`nil` でなければ `server.port` を上書きし、
 	// 設定に `server.port` が無くてもダッシュボードを開く。
 	Port *int
+	// StartupCheckTimeout は起動時検査（設計 3-6）全体の上限である。
+	// **0 なら DefaultStartupCheckTimeout を使う。**テストが短い期限を与えるための口である。
+	StartupCheckTimeout time.Duration
+	// TrackerTimeout は GitHub の GraphQL API への1リクエストの上限である。
+	// **0 なら DefaultTrackerTimeout を使う。**テストが短い期限を与えるための口である。
+	TrackerTimeout time.Duration
 }
 
 // Run は continuo の常駐ループを回す。ctx が終わるまで返らない。
@@ -83,15 +125,33 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// 段1: 設定を読んで検証する。**ここで落ちても pane には触らない**（まだ何も発見していない）。
+	//
+	// **設定ファイルは起動時に1回だけ読む。**読み直しは実装していない（設計 3-24 が求める
+	// 「最後に正常だった設定で動き続ける」仕組みはまだ無い）。編集を反映するには再起動が要る。
 	loaded, err := config.Load(opts.ConfigPath)
 	if err != nil {
-		return fmt.Errorf("設定ファイルの読み込みに失敗しました（%s）: %w", opts.ConfigPath, err)
+		return fmt.Errorf("%w: 設定ファイルの読み込みに失敗しました（%s）: %w", ErrStartup, opts.ConfigPath, err)
 	}
 	cfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
 
+	// **トークンを載せる前に接続先を確かめる**（設計 3-23 の環境変数）。
+	// ここを飛ばすと、環境変数に書かれたどんな宛先へも `Authorization: Bearer` が飛ぶ。
+	endpoint := os.Getenv(EnvGraphQLEndpoint)
+	if err := ValidateGraphQLEndpoint(endpoint); err != nil {
+		return fmt.Errorf("%w: %w", ErrStartup, err)
+	}
+	if endpoint != "" {
+		// **差し替えたことを必ず1行残す。**本番のボードへ繋いだのかどうかを、
+		// ログを読む人間が判断できるようにする。
+		logger.Warn("GitHub の GraphQL の接続先を差し替えています（本番の GitHub ではありません）",
+			"env", EnvGraphQLEndpoint, "endpoint", endpoint)
+	}
+
 	// **CLI の `--port` は `server.port` を上書きする**（`SPEC.md` 13.7）。
-	// 設定を読み直しても待ち受け先が変わらないのと同じ理由で、ここで1回だけ写し取る（設計 3-24）。
+	// **ここで1回だけ写し取る。**設定の読み直しは実装していないので、起動後に
+	// `server.port` を書き換えても待ち受け先は変わらない（設計 3-24 の「読み直しても
+	// 反映しないもの」に挙がっている3つのうちの1つである）。
 	if opts.Port != nil {
 		cfg.Server.Port = opts.Port
 		logger.Info("CLI の --port でダッシュボードのポートを上書きしました", "port", *opts.Port)
@@ -99,10 +159,10 @@ func Run(ctx context.Context, opts Options) error {
 
 	sockPath, err := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(EnvRuntimeDir))
 	if err != nil {
-		return fmt.Errorf("hook を受ける socket の場所を決められません: %w", err)
+		return fmt.Errorf("%w: hook を受ける socket の場所を決められません: %w", ErrStartup, err)
 	}
 	if err := socketpath.EnsureDir(filepath.Dir(sockPath)); err != nil {
-		return fmt.Errorf("hook を受ける socket のディレクトリを準備できません: %w", err)
+		return fmt.Errorf("%w: hook を受ける socket のディレクトリを準備できません: %w", ErrStartup, err)
 	}
 	runtimeDir := filepath.Dir(sockPath)
 	logger.Info("hook を受ける socket の場所を決めました", "socket", sockPath)
@@ -111,7 +171,15 @@ func Run(ctx context.Context, opts Options) error {
 	lockPath := ResolveLockFilePath(cfg, sockPath)
 	l, err := lock.Acquire(lockPath)
 	if err != nil {
-		return fmt.Errorf("二重起動を検出しました（ロックファイル %s）: %w", lockPath, err)
+		// **「二重起動」と「ロックファイルを開けない」を言い分ける。**
+		// 両方を二重起動と報告すると、`runtime.lock_file` のパスを打ち間違えた運用者が、
+		// 動いてもいない2つ目の continuo を探しに行くことになる。
+		if errors.Is(err, lock.ErrAlreadyRunning) {
+			return fmt.Errorf("%w: 二重起動を検出しました（ロックファイル %s）: %w", ErrStartup, lockPath, err)
+		}
+		return fmt.Errorf(
+			"%w: ロックファイルを用意できません（runtime.lock_file の指定と、その親ディレクトリの有無・権限を確認してください。%s）: %w",
+			ErrStartup, lockPath, err)
 	}
 	defer func() {
 		if err := l.Release(); err != nil {
@@ -120,24 +188,30 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 	logger.Info("二重起動防止のロックを獲得しました", "lock_file", lockPath)
 
-	deps, err := build(ctx, cfg, loaded.PromptTemplate, sockPath, runtimeDir, opts.ContinuoPath, logger)
+	deps, err := build(ctx, cfg, loaded.PromptTemplate, sockPath, runtimeDir, opts.ContinuoPath,
+		endpoint, opts.TrackerTimeout, logger)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrStartup, err)
 	}
+	// **組み立てたあとは、どの経路で抜けても同じ手順で閉じる。**早期 return で閉じ忘れると、
+	// hook の socket と応答の goroutine が掴まれたまま残る（`deps.close` は2回呼んでも安全である）。
+	shutdown := func() { deps.close(ctx, logger) }
 
 	// 段3: 3-6 の起動時検査を全部通す。
 	// **ここで落ちて起動を止めるとき、生きている pane は閉じずに放置する。**
 	// 落ちる原因は continuo 側の前提が揃っていないことであって、エージェントの側に
 	// 問題があるわけではない。**設定の誤りで、動いているエージェントの作業を殺さない。**
 	// 人間が直して起動し直せば、復元の段5 で引き継げる。
-	if err := runStartupChecks(ctx, cfg, deps, logger); err != nil {
-		return fmt.Errorf("起動時の検査に落ちました（生きている pane は閉じずに残します）: %w", err)
+	if err := runStartupChecks(ctx, cfg, deps, opts.StartupCheckTimeout, logger); err != nil {
+		shutdown()
+		return fmt.Errorf("%w: 起動時の検査に落ちました（生きている pane は閉じずに残します）: %w", ErrStartup, err)
 	}
 
 	// 段4: 復元（3-4 の段2〜段9）。**巡回より先に終える。**
 	restored, err := deps.Orchestrator.Restore(ctx, deps.HookServer)
 	if err != nil {
-		return fmt.Errorf("復元に失敗しました: %w", err)
+		shutdown()
+		return fmt.Errorf("%w: 復元に失敗しました: %w", ErrStartup, err)
 	}
 
 	// 段4b: 起動時の掃除。**復元が終わったあとに走らせる**（設計 3-9 の手順6 / 6b）。
@@ -146,8 +220,9 @@ func Run(ctx context.Context, opts Options) error {
 
 	// 段4c: ダッシュボードを開く（設計 5-2 / 8-2。**任意の機能である**）。
 	// **`server.port` が null なら deps.Dashboard は nil であり、socket を1つも作らない。**
-	// **ここで開いたポートは、設定を読み直しても変わらない**（設計 3-24。自前のリソースを
-	// 掴んでいるので、変えるには continuo の再起動が要る）。
+	// **ここで開いたポートは continuo の再起動でしか変わらない。**設定の読み直しは
+	// 実装していないうえ、読み直しを入れるとしても `server.port` は反映しない
+	// （自前のリソースを掴んでいる。設計 3-24 の「読み直しても反映しないもの」）。
 	//
 	// **listen に失敗しても起動は止めない。**ダッシュボードは run の面倒を見る仕事に
 	// 一切関わらない任意の機能であり（`SPEC.md` 13.7 の「MUST NOT become REQUIRED for
@@ -172,18 +247,7 @@ func Run(ctx context.Context, opts Options) error {
 	// **ダッシュボードを先に閉じる。**閉じかけの状態を人間に見せても意味が無く、
 	// 応答の goroutine が orchestrator の写しを取り続ける理由も無い。
 	logger.Info("巡回を止めました（hook の受け口を閉じて turn ループの終了を待ちます）")
-	// **期限を付ける。**応答を返しきらない相手が居ても、そこで終了が止まらないようにする。
-	shutdownCtx, cancelShutdown := context.WithTimeout(
-		context.WithoutCancel(ctx), server.DefaultShutdownTimeout)
-	if err := deps.Dashboard.Close(shutdownCtx); err != nil {
-		logger.Warn("ダッシュボードを閉じられませんでした", "error", err)
-	}
-	cancelShutdown()
-	if err := deps.HookServer.Close(); err != nil {
-		logger.Warn("hook の受け口を閉じられませんでした", "error", err)
-	}
-	deps.Orchestrator.Close()
-	logger.Info("走行中の turn ループが終わりました（pane は閉じていません）")
+	shutdown()
 
 	if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, context.DeadlineExceeded) {
 		return runErr
@@ -206,6 +270,146 @@ type deps struct {
 	Dashboard *server.Server
 }
 
+// close は組み立てたものを終了の作法どおりに閉じる（設計 3-4 の段5）。
+//
+// **順序が仕様である。**ダッシュボード → hook の受け口 → turn ループの終了待ち。
+// **ダッシュボードを先に閉じる。**閉じかけの状態を人間に見せても意味が無く、
+// 応答の goroutine が orchestrator の写しを取り続ける理由も無い。
+//
+// **pane は閉じない**（次の起動で引き継ぐ）。
+//
+// **どの待ちにも期限を付ける。**ダッシュボードだけに期限があって turn ループの待ちが
+// 無期限だと、turn ループが1本でも返らなくなった時点で `SIGKILL` でしか止められなくなる。
+//
+// **2回呼んでも安全である**（`hookserver.Close` と `server.Close` は閉じ済みを見ている）。
+//
+// ctx: 呼び出し元のコンテキスト。**キャンセル済みでもよい**（期限は付け直す）。
+// logger: ログの出力先。
+func (d *deps) close(ctx context.Context, logger *slog.Logger) {
+	shutdownCtx, cancelShutdown := context.WithTimeout(
+		context.WithoutCancel(ctx), server.DefaultShutdownTimeout)
+	if err := d.Dashboard.Close(shutdownCtx); err != nil {
+		logger.Warn("ダッシュボードを閉じられませんでした", "error", err)
+	}
+	cancelShutdown()
+
+	if err := d.HookServer.Close(); err != nil {
+		logger.Warn("hook の受け口を閉じられませんでした", "error", err)
+	}
+
+	if WaitWithTimeout(d.Orchestrator.Close, DefaultTurnLoopWait) {
+		logger.Info("走行中の turn ループが終わりました（pane は閉じていません）")
+		return
+	}
+	logger.Warn("走行中の turn ループが期限内に終わらないので待つのをやめます"+
+		"（pane は閉じていません。次の起動で引き継ぎます）",
+		"timeout", DefaultTurnLoopWait)
+}
+
+// WaitWithTimeout は wait が返るのを待ち、期限を過ぎたら待つのをやめる。
+//
+// **終了処理から無期限の待ちを無くすためにある**（設計 3-4 の終了の作法）。
+// 期限切れのときも wait の goroutine は残るが、**呼び出し側はプロセスを終える直前**なので、
+// そのまま抜けてよい。
+//
+// wait: 終わるのを待つ処理（`Orchestrator.Close` など）。
+// timeout: 待つ上限。**0 以下なら期限を付けずに待つ。**
+// 戻り値: 期限内に wait が返れば true、期限切れなら false。
+func WaitWithTimeout(wait func(), timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		wait()
+	}()
+	if timeout <= 0 {
+		<-done
+		return true
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+// RestoreDefaultSignalsOnShutdown は、ctx が終わったら stop を呼んで signal の登録を外す。
+//
+// **2回目の signal を効かせるためにある。**`signal.NotifyContext` は1回目の signal で
+// コンテキストを終わらせるが、**登録は残したまま**なので、そのままだと2回目以降の
+// `SIGTERM` / `SIGINT` が buffered channel に吸われて何も起きない。終了処理が長引いたとき、
+// 運用者の手段が `SIGKILL` だけになる。登録を外せば、2回目は既定の動作
+// （プロセスの終了）に戻る。
+//
+// **この関数は待たない。**別の goroutine で ctx の終了を待つ。
+//
+// ctx: `signal.NotifyContext` が返したコンテキスト。
+// stop: `signal.NotifyContext` が返した解除の関数。**何回呼んでも安全である。**
+func RestoreDefaultSignalsOnShutdown(ctx context.Context, stop func()) {
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+}
+
+// ValidateGraphQLEndpoint は EnvGraphQLEndpoint に書かれた接続先を検査する。
+//
+// **ここへ `gh auth token` で取ったトークンが `Authorization: Bearer` で送られる。**
+// 検査しないと、環境変数を1行足すだけでトークンの送り先を任意の宛先へ変えられる。
+//
+// 受け付けるのは次の2つだけである。
+//
+//	https の URL              … 本番の GitHub でも GitHub Enterprise Server でもよい
+//	ループバック宛の http     … `127.0.0.1` / `::1` / `localhost`。テストの偽サーバ向け
+//
+// **ループバック以外の http を拒む。**平文でトークンが流れるためである。
+// 設計 3-23 はこの環境変数を「テストの接続先でもある」と定めており、テストは
+// `httptest.Server`（`http://127.0.0.1:<ポート>`）を使うので、この2つで足りる。
+//
+// raw: 環境変数の値。**空なら検査しない**（本番の GitHub GraphQL API を使う）。
+// 戻り値: 受け付けられない値の場合のエラー。
+func ValidateGraphQLEndpoint(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%s の値を URL として解釈できません（%q）: %w", EnvGraphQLEndpoint, raw, err)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("%s の値にホスト名がありません（%q）", EnvGraphQLEndpoint, raw)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackHost(u.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf(
+			"%s には https の URL を書いてください（%q はループバック以外の http なので、"+
+				"GitHub のトークンが平文で流れます）", EnvGraphQLEndpoint, raw)
+	default:
+		return fmt.Errorf(
+			"%s の scheme が https ではありません（%q）。https か、ループバック宛の http だけを受け付けます",
+			EnvGraphQLEndpoint, raw)
+	}
+}
+
+// isLoopbackHost はホスト名が手元の機械を指すかどうかを判定する。
+//
+// host: `url.URL.Hostname()` が返す値（ポート番号を含まない）。
+// 戻り値: `localhost` か、ループバックの IP アドレスなら true。
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // build は依存を組み立てる。**この関数は検査を行わない**（検査は runStartupChecks）。
 //
 // ctx: トークンの取得に適用するコンテキスト。
@@ -214,12 +418,15 @@ type deps struct {
 // sockPath: 解決済みの hook の socket の絶対パス。
 // runtimeDir: 実行時ディレクトリ（`filepath.Dir(sockPath)`）。
 // continuoPath: `continuo hook` を起動する実行ファイルのパス。空なら os.Executable()。
+// graphqlEndpoint: GitHub の GraphQL API の接続先（検査済み）。空なら本番の GitHub。
+// trackerTimeout: GraphQL の1リクエストの上限。0 なら DefaultTrackerTimeout。
 // logger: ログの出力先。
 // 戻り値: 組み立てた依存と、組み立てに失敗した場合のエラー。
 func build(
 	ctx context.Context,
 	cfg config.Config,
-	promptTemplate, sockPath, runtimeDir, continuoPath string,
+	promptTemplate, sockPath, runtimeDir, continuoPath, graphqlEndpoint string,
+	trackerTimeout time.Duration,
 	logger *slog.Logger,
 ) (*deps, error) {
 	herdrSocket, err := herdr.ResolveSocketPath(cfg.Herdr.Socket)
@@ -243,12 +450,18 @@ func build(
 		return nil, fmt.Errorf("worktree の管理を組み立てられません: %w", err)
 	}
 
+	// **`gh` の有無は、`gh` を起動する前に見る。**`token_source` の既定は `gh_auth` なので、
+	// ここを飛ばすと `gh` が無い環境では「トークンを取得できません」で落ちてしまい、
+	// **直し方の書いてある起動時検査（設計 3-6）の文言に辿り着けない。**
+	if err := tracker.CheckGHAvailable(); err != nil {
+		return nil, err
+	}
 	token, err := tracker.ResolveToken(ctx, cfg.Tracker.Provider, nil)
 	if err != nil {
 		return nil, fmt.Errorf("ボードを読むためのトークンを取得できません: %w", err)
 	}
 	adapter, err := tracker.NewAdapter(
-		cfg.Tracker, os.Getenv(EnvGraphQLEndpoint), token, nil, logger, ws.TrustFunc())
+		cfg.Tracker, graphqlEndpoint, token, newTrackerHTTPClient(trackerTimeout), logger, ws.TrustFunc())
 	if err != nil {
 		return nil, fmt.Errorf("トラッカーのアダプタを組み立てられません: %w", err)
 	}
@@ -276,11 +489,13 @@ func build(
 		return nil, fmt.Errorf("orchestrator を組み立てられません: %w", err)
 	}
 
+	// **`claude.read_timeout_ms` をここへ流用しない**（設計 8-1）。あれは herdr の
+	// socket API の応答を待つ上限であり、hook の接続を掴んでいてよい時間ではない。
+	// **`ReadTimeout` を渡さず、hookserver の既定に任せる。**
 	hs, err := hookserver.New(hookserver.Options{
-		SocketPath:  sockPath,
-		Sink:        orc,
-		Logger:      logger,
-		ReadTimeout: time.Duration(cfg.Claude.ReadTimeoutMs) * time.Millisecond,
+		SocketPath: sockPath,
+		Sink:       orc,
+		Logger:     logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("hook の受け口を組み立てられません: %w", err)
@@ -297,6 +512,21 @@ func build(
 	}
 
 	return &deps{Herdr: hc, Tracker: adapter, Orchestrator: orc, HookServer: hs, Dashboard: dash}, nil
+}
+
+// newTrackerHTTPClient は GitHub の GraphQL API を叩くクライアントを作る。
+//
+// **`http.DefaultClient` を渡さない。**`Timeout` が 0 なので、応答ヘッダを返さない相手に
+// 当たると巡回ループごと無期限に止まる（`internal/tracker` の `do` は「呼び出し側が必ず
+// 期限を設定すること」と定めている）。
+//
+// timeout: 1リクエストの上限。0 以下なら DefaultTrackerTimeout を使う。
+// 戻り値: 期限を持つ HTTP クライアント。
+func newTrackerHTTPClient(timeout time.Duration) *http.Client {
+	if timeout <= 0 {
+		timeout = DefaultTrackerTimeout
+	}
+	return &http.Client{Timeout: timeout}
 }
 
 // ResolveLockFilePath は二重起動防止のロックファイルの絶対パスを決める（設計 3-17 / 3-23）。

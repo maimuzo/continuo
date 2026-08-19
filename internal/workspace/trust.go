@@ -7,11 +7,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // ClaudeConfigFileName は Claude Code が信頼済みフォルダを記録しているファイルの名前である。
 // ホームディレクトリの直下に置かれる。**読むだけで、絶対に書き換えない**（4-3）。
 const ClaudeConfigFileName = ".claude.json"
+
+// trustCheckTimeout は信頼の判定が外部コマンド（ghq / git）を待つ上限である。
+//
+// **上限が無いと、ghq か git が固まったときに巡回のループごと止まる。**この判定は
+// dispatch の直前に issue ごとに呼ばれる（3-6）ので、1件でも返らなければ無人運用が
+// そこで終わる（3-11 の「人間の入力を待つ箇所を全部潰す」と同じ理由）。
+const trustCheckTimeout = 10 * time.Second
+
+// trustCacheTTL は信頼の判定の結果を覚えておく時間である。
+//
+// **判定1回につき ghq と git を1本ずつ起動し、`~/.claude.json` を読み直す。**
+// ボードの項目ごとに呼ばれるので、覚えないと1巡回で数百回のプロセス起動になる。
+// **人間が信頼を承認してから、最大でこの時間だけ「未信頼」のままになる**
+// （巡回の間隔と同じ桁なので、次の巡回では効く）。
+const trustCacheTTL = 30 * time.Second
 
 // claudeConfigFile は `~/.claude.json` のうち、信頼の判定に使う部分だけを写した型である。
 // **書き戻す用途には使わない**（書き戻すと、写していないキーが全部消える）。
@@ -46,12 +62,14 @@ type claudeProjectEntry struct {
 // JSON として解析できない場合のエラー（判定できなかったことを表す）。
 //
 // **コンテキストを引数に取らない。**このシグネチャは 05_workspace.md が指定したもので、
-// 内部では context.Background() を使う。呼ぶのは同じ機械のローカルなコマンド
-// （ghq / git）と1つのファイルの読み取りだけである。
+// 呼ぶのは同じ機械のローカルなコマンド（ghq / git）と1つのファイルの読み取りだけである。
+// **ただし上限は必ず置く**（trustCheckTimeout）。ローカルのコマンドでも、
+// NFS 等で固まれば巡回全体が止まる。
 func (m *Manager) CheckTrust(owner, repo string) (bool, string, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), trustCheckTimeout)
+	defer cancel()
 
-	clonePath, err := m.ghqList(ctx, owner, repo)
+	clonePath, err := m.clonePath(ctx, owner, repo)
 	if err != nil {
 		return false, "", err
 	}
@@ -84,7 +102,9 @@ func (m *Manager) CheckTrust(owner, repo string) (bool, string, error) {
 // 戻り値の3つ目: git を実行できない・`~/.claude.json` を読めない・JSON として解析できない
 // 場合のエラー（判定できなかったことを表す）。
 func CheckTrustForClonePath(clonePath, homeDir string) (bool, string, error) {
-	ctx := context.Background()
+	// **上限を置く。**CheckTrust と同じ理由である（固まると呼び出し側ごと止まる）。
+	ctx, cancel := context.WithTimeout(context.Background(), trustCheckTimeout)
+	defer cancel()
 
 	key, err := gitToplevel(ctx, clonePath)
 	if err != nil {
@@ -129,15 +149,23 @@ func CheckTrustForClonePath(clonePath, homeDir string) (bool, string, error) {
 // どれも false になる。理由が要る場合（doctor）は CheckTrust を直接使うこと。
 // 判定できなかった場合は警告をログに出す（無言で false にしない）。
 //
+// **結果は trustCacheTTL のあいだ覚える。**この関数はボードの項目ごとに呼ばれるので、
+// 覚えないと1巡回で ghq と git を数百回起動する（判定できなかった場合は覚えない）。
+//
 // 戻り値: owner と repo を受け取り、信頼済みなら true を返す関数。
 func (m *Manager) TrustFunc() func(owner, repo string) bool {
 	return func(owner, repo string) bool {
+		key := owner + "/" + repo
+		if cached, ok := m.trustResults.get(key); ok {
+			return cached
+		}
 		trusted, reason, err := m.CheckTrust(owner, repo)
 		if err != nil {
 			m.logger.Warn("リポジトリの信頼を判定できませんでした",
 				"owner", owner, "repo", repo, "error", err)
 			return false
 		}
+		m.trustResults.put(key, trusted)
 		if !trusted {
 			m.logger.Info("リポジトリが Claude Code に信頼登録されていません",
 				"owner", owner, "repo", repo, "reason", reason)

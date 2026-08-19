@@ -6,10 +6,19 @@
 package lock
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"syscall"
 )
+
+// ErrAlreadyRunning は、別のプロセスが同じロックファイルを掴んでいることを表す。
+//
+// 「ロックファイルを開けない」（runtime.lock_file の親ディレクトリが無い・権限が足りない・
+// パスがディレクトリを指している）と区別するために置いてある。両方を同じ文言で報告すると、
+// パスを打ち間違えた運用者が「起動しているはずのない2つ目のプロセス」を探すことになる。
+// 呼び出し側は errors.Is(err, lock.ErrAlreadyRunning) で切り分けること。
+var ErrAlreadyRunning = errors.New("continuo は既に起動しています")
 
 // Lock は flock で獲得した単一プロセスロックを表す。
 type Lock struct {
@@ -21,8 +30,9 @@ type Lock struct {
 //
 // path: ロックファイルの絶対パス。親ディレクトリは呼び出し側が事前に作成しておくこと。
 // 戻り値: ロックを獲得できれば *Lock を返す。既に別プロセスが同じファイルを
-// ロックしている場合は、人間が読めるエラーメッセージ付きのエラーを返す
-// （「continuo は既に起動しています」）。ファイルを開けない場合もエラーを返す。
+// ロックしている場合は ErrAlreadyRunning を包んだエラーを返す。
+// ファイルを開けない場合もエラーを返すが、そちらは ErrAlreadyRunning を包まない
+// （設定の誤りと二重起動を呼び出し側が言い分けられるようにするため）。
 //
 // プロセスが（正常終了であれクラッシュであれ）終了すると OS がロックを自動的に
 // 解放するため、「このロックファイルは残骸か本当に使用中か」を判定する処理は
@@ -36,9 +46,8 @@ func Acquire(path string) (*Lock, error) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = f.Close()
 		return nil, fmt.Errorf(
-			"continuo は既に起動しています（ロックファイル %s を取得できませんでした）。"+
-				"二重起動を防ぐため終了します: %w",
-			path, err,
+			"%w（ロックファイル %s を取得できませんでした）。二重起動を防ぐため終了します: %w",
+			ErrAlreadyRunning, path, err,
 		)
 	}
 

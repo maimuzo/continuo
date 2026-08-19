@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/normalize"
 )
@@ -20,31 +20,86 @@ const gitBinary = "git"
 // ghqBinary は実行する ghq の名前である。PATH から解決する。
 const ghqBinary = "ghq"
 
+// gitOutputLimit は git の標準出力を読む上限（バイト）である。
+//
+// **上限が無いと、エージェントが worktree に作った大量のファイルの一覧が、
+// そのまま常駐プロセスのメモリに載る。**ここを超えた出力は「読み切れなかった」として
+// エラーにする（**切り詰めた出力を解析して、無いものを無いと判断しないため**）。
+const gitOutputLimit = 4 * 1024 * 1024
+
+// gitStderrLimit は git の標準エラー出力をエラー文に載せる上限（バイト）である。
+const gitStderrLimit = 8 * 1024
+
+// gitWaitDelay は、コンテキストが切れて git を殺したあと、出力の読み取りを諦めるまでの
+// 猶予である。**これが無いと、git が起こした子プロセスが pipe を握ったままのときに
+// Cmd.Wait が返らない**（workspace_hooks と同じ理由。hooks.go の hookWaitDelay を見よ）。
+const gitWaitDelay = 5 * time.Second
+
 // runGit は `git -C <dir> <args...>` を実行し、標準出力を返す。
 //
 // **引数に生の文字列を混ぜないこと。**branch 名など利用者の入力に由来する値は
 // normalize.SafeName を通してから渡す（3-7）。
 //
+// **標準出力は gitOutputLimit までしか読まない。**超えた場合はエラーにする
+// （切り詰めた出力を解析すると、branch や worktree の取りこぼしが起きる）。
+//
 // ctx: 実行に適用するコンテキスト。
 // dir: `-C` に渡す作業ディレクトリ。空文字なら `-C` を付けない。
 // args: git のサブコマンド以降の引数。
 // 戻り値の1つ目: 標準出力（前後の空白を落とす）。
-// 戻り値の2つ目: 実行に失敗した場合のエラー。標準エラー出力の内容を必ず含める。
+// 戻り値の2つ目: 実行に失敗した場合・出力が上限を超えた場合のエラー。
+// 標準エラー出力の内容を必ず含める。
 func runGit(ctx context.Context, dir string, args ...string) (string, error) {
+	out, truncated, err := runGitLimited(ctx, dir, gitOutputLimit, args...)
+	if err != nil {
+		return out, err
+	}
+	if truncated {
+		full := args
+		if dir != "" {
+			full = append([]string{"-C", dir}, args...)
+		}
+		return out, fmt.Errorf(
+			"`git %s` の出力が %d バイトを超えました（切り詰めた出力では判定できません）",
+			strings.Join(full, " "), gitOutputLimit)
+	}
+	return out, nil
+}
+
+// runGitLimited は標準出力の読み取り上限を指定して git を実行する。
+//
+// **「出力が空かどうか」しか要らない検査**（`git status --porcelain`）は、小さい上限で
+// 呼んで truncated を無視してよい。切り詰めても「空ではない」という答えは変わらない。
+//
+// ctx: 実行に適用するコンテキスト。
+// dir: `-C` に渡す作業ディレクトリ。空文字なら `-C` を付けない。
+// stdoutLimit: 標準出力を読む上限（バイト）。
+// args: git のサブコマンド以降の引数。
+// 戻り値の1つ目: 標準出力（前後の空白を落とす。上限までしか読んでいない）。
+// 戻り値の2つ目: 上限を超えて捨てた分があれば true。
+// 戻り値の3つ目: 実行に失敗した場合のエラー。標準エラー出力の内容を必ず含める。
+func runGitLimited(
+	ctx context.Context,
+	dir string,
+	stdoutLimit int,
+	args ...string,
+) (string, bool, error) {
 	full := args
 	if dir != "" {
 		full = append([]string{"-C", dir}, args...)
 	}
 	cmd := exec.CommandContext(ctx, gitBinary, full...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := newCappedBuffer(stdoutLimit)
+	stderr := newCappedBuffer(gitStderrLimit)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	cmd.WaitDelay = gitWaitDelay
 	if err := cmd.Run(); err != nil {
-		return strings.TrimSpace(stdout.String()), fmt.Errorf(
+		return strings.TrimSpace(stdout.String()), stdout.Truncated(), fmt.Errorf(
 			"`git %s` の実行に失敗しました（stderr: %s）: %w",
-			strings.Join(full, " "), strings.TrimSpace(stderr.String()), err)
+			strings.Join(full, " "), stderr.text(), err)
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return strings.TrimSpace(stdout.String()), stdout.Truncated(), nil
 }
 
 // gitExitCode は `git -C <dir> <args...>` を実行し、終了コードを返す。
@@ -62,6 +117,7 @@ func gitExitCode(ctx context.Context, dir string, args ...string) (int, error) {
 	cmd := exec.CommandContext(ctx, gitBinary, full...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	cmd.WaitDelay = gitWaitDelay
 	err := cmd.Run()
 	if err == nil {
 		return 0, nil
@@ -195,6 +251,22 @@ func gitCurrentBranch(ctx context.Context, worktreePath string) (string, error) 
 	return runGit(ctx, worktreePath, "rev-parse", "--abbrev-ref", "HEAD")
 }
 
+// gitBranchTip は branch が指している commit の SHA を返す。
+//
+// **強制削除の前に控えておくために使う**（3-9 の手順6b）。`git branch -D` は
+// マージ状態を見ないので、消したあと `git branch <名前> <SHA>` で戻せるように、
+// 消す前の SHA をログへ残す。控えを取れなくても削除は止めない（戻せる手掛かりが
+// 減るだけである）。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// branch: 対象の branch 名。
+// 戻り値の1つ目: branch が指す commit の SHA。
+// 戻り値の2つ目: 実行に失敗した場合のエラー。
+func gitBranchTip(ctx context.Context, repoDir string, branch normalize.SafeName) (string, error) {
+	return runGit(ctx, repoDir, "rev-parse", branch.String())
+}
+
 // gitBranchDelete は `git branch -D` で branch を消す（3-9 の段4）。
 // herdr の worktree.remove は branch を消さないので、continuo が自分で叩く。
 //
@@ -207,17 +279,40 @@ func gitBranchDelete(ctx context.Context, repoDir string, branch normalize.SafeN
 	return err
 }
 
+// gitStatusPorcelainLimit は `git status --porcelain` の出力を読む上限（バイト）である。
+//
+// **この検査は「空かどうか」しか見ない**ので、切り詰めても答えは変わらない
+// （切り詰められるほど出ているなら、それは空ではない）。エージェントが worktree に
+// 大量のファイルを作った状態でも、常駐プロセスのメモリに全量を載せない。
+const gitStatusPorcelainLimit = 8 * 1024
+
 // gitStatusPorcelain は `git status --porcelain` の出力を返す（3-9 の段2）。
 //
 // **未追跡のファイルも数に入れる**（既定で出力される）。エージェントが作った成果物が
 // 消えるのを防ぐため、出力が空でなければ「残っている」とする。
 //
+// **excludePaths に渡した名前は数に入れない。**continuo 自身が worktree の直下に置く
+// 身元ファイル（3-18）とその一時ファイルを「利用者の成果」と数えると、
+// **その worktree が永久に片付かない**（cleanup.require_clean_worktree が真のままになる）。
+// `info/exclude` への登録は利用者の `git status` を汚さないための親切であって、
+// **片付けの正しさをその成否に依存させない。**
+//
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 検査する worktree のパス。
-// 戻り値の1つ目: 標準出力（前後の空白を落としたもの）。
+// excludePaths: 数に入れない、worktree の直下のファイル名（`.continuo.json` など）。
+// 戻り値の1つ目: 標準出力（前後の空白を落としたもの。gitStatusPorcelainLimit まで）。
 // 戻り値の2つ目: 実行に失敗した場合のエラー。
-func gitStatusPorcelain(ctx context.Context, worktreePath string) (string, error) {
-	return runGit(ctx, worktreePath, "status", "--porcelain")
+func gitStatusPorcelain(ctx context.Context, worktreePath string, excludePaths ...string) (string, error) {
+	args := []string{"status", "--porcelain"}
+	if len(excludePaths) > 0 {
+		// pathspec は cwd（= worktree の直下）からの相対である。
+		args = append(args, "--", ".")
+		for _, name := range excludePaths {
+			args = append(args, ":(exclude)"+name)
+		}
+	}
+	out, _, err := runGitLimited(ctx, worktreePath, gitStatusPorcelainLimit, args...)
+	return out, err
 }
 
 // gitHasUpstream は現在の branch に upstream があるかを返す（3-9 の段2b）。
@@ -332,6 +427,10 @@ func gitWorktreeRemove(ctx context.Context, repoDir, worktreePath string) error 
 	return err
 }
 
+// ghqNotFoundExitCode は `ghq list -p -e` が「該当が無い」ときに返す終了コードである。
+// **これ以外の非 0 は本当の失敗として扱う**（clone が無いことに丸めない）。
+const ghqNotFoundExitCode = 1
+
 // RunGhqList は実際に `ghq list -p -e <owner>/<repo>` を実行し、clone の絶対パスを返す。
 //
 // **ghq に worktree を作る機能は無い**（サブコマンドは6つだけ。実測）。
@@ -342,28 +441,35 @@ func gitWorktreeRemove(ctx context.Context, repoDir, worktreePath string) error 
 // repo: リポジトリ名。
 // 戻り値の1つ目: clone の絶対パス。**clone が無ければ空文字を返す**（エラーにしない）。
 // 複数行返った場合は1行目を採る。
-// 戻り値の2つ目: ghq を起動できなかった場合のエラー。
+// 戻り値の2つ目: ghq を起動できなかった場合・**該当が無いこと以外の理由で非 0 で
+// 終わった場合**のエラー（標準エラー出力の内容を含める）。
 func RunGhqList(ctx context.Context, owner, repo string) (string, error) {
 	ownerName, _ := normalize.Normalize(owner)
 	repoName, _ := normalize.Normalize(repo)
 	target := ownerName.String() + "/" + repoName.String()
 
 	cmd := exec.CommandContext(ctx, ghqBinary, "list", "-p", "-e", target)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := newCappedBuffer(gitOutputLimit)
+	stderr := newCappedBuffer(gitStderrLimit)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	cmd.WaitDelay = gitWaitDelay
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			// 該当が無いときも非 0 で終わりうる。出力が空なら「clone が無い」として扱う。
-			if strings.TrimSpace(stdout.String()) == "" {
-				return "", nil
-			}
-		} else {
+		if !errors.As(err, &exitErr) {
 			return "", fmt.Errorf(
 				"`ghq list -p -e %s` を起動できません（stderr: %s）: %w",
-				target, strings.TrimSpace(stderr.String()), err)
+				target, stderr.text(), err)
 		}
+		// **「該当が無い」と「ghq が失敗した」を区別する。**該当が無いときの終了コードは
+		// 1 である。それ以外の非 0 を「clone が無い」に丸めると、設定の誤りや ghq 自身の
+		// 異常が「clone を作りに行け」という誤った案内になり、原因も残らない。
+		if exitErr.ExitCode() != ghqNotFoundExitCode || strings.TrimSpace(stdout.String()) != "" {
+			return "", fmt.Errorf(
+				"`ghq list -p -e %s` が終了コード %d で失敗しました（stderr: %s）",
+				target, exitErr.ExitCode(), stderr.text())
+		}
+		return "", nil
 	}
 
 	for line := range strings.SplitSeq(strings.TrimSpace(stdout.String()), "\n") {

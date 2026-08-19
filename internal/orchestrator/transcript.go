@@ -2,15 +2,29 @@ package orchestrator
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
-	"strings"
+	"syscall"
 )
 
 // transcriptMaxLineBytes は transcript の1行として読み切る上限である。
 // 1行が API 応答1件ぶんの JSON なので、大きめに取る。
+//
+// **超えた行は読み捨てて、残りの行の処理を続ける。**大きなファイルを読ませた turn の
+// tool 結果が1行に入ると超えうるが、その1行のために turn 全体の表明を落としてはならない。
 const transcriptMaxLineBytes = 16 << 20
+
+// transcriptMaxRequestIDs はトークンの重複排除に覚えておく `requestId` の件数の上限である。
+//
+// **上限を置く理由。**transcript のファイルサイズには上限が無い（Claude Code が書く）。
+// 件数ぶんの文字列を無条件に覚えると、長く走ったセッションや細工されたファイルで
+// メモリが際限なく増える。**上限に達したら以後は重複排除をやめる**（件数が多少多く
+// 出ることはあっても、ダッシュボードに出すだけの値であり判断には使わない。設計 3-15）。
+const transcriptMaxRequestIDs = 200000
 
 // transcriptLine は transcript の JSONL の1行である（設計 3-15 / 3-25）。
 //
@@ -108,7 +122,7 @@ type TranscriptReadResult struct {
 	Usage TokenUsage
 }
 
-// ReadTranscript は transcript の JSONL を1回読み、表明とトークンの両方を取る
+// ReadTranscript は transcript の JSONL を読み、表明とトークンの両方を取る
 // （設計 3-15 / 3-25）。
 //
 // 表明の拾い方は設計 3-25 のとおりである。
@@ -118,7 +132,7 @@ type TranscriptReadResult struct {
 //  3. 頭から後ろへ、次の "typed" の手前までをこの turn の範囲とする
 //  4. 範囲内の `type == "assistant"` かつ `isSidechain == false` の行から
 //     `message.content[]` の `type == "text"` を集める
-//  5. 集めた text を**行に割って** prefix を含む行を拾う（ブロックの一致では取れない）
+//  5. 集めた text を**行に割って** prefix の行を拾う（ブロックの一致では取れない）
 //
 // **`prompt_id` で区切ってはならない**（17件中3件で取り逃した）。1つの人間の指示が
 // transcript の中で複数の `prompt_id` に割れる。**`promptSource == "typed"` を起点に
@@ -127,88 +141,277 @@ type TranscriptReadResult struct {
 // トークンは設計 3-15 のとおり、**ファイル全体**の `type == "assistant"` の行を
 // `requestId` で重複排除してから足す。
 //
+// **全行をメモリに載せない。**2回走査する形にしてある。
+//
+//	1回目  … 行の位置だけを覚えながら turn の範囲（バイト位置）を決め、トークンを足す
+//	2回目  … 範囲の中の assistant 行だけを解いて text を集める
+//
+// 覚えるのは "typed" の user 行のバイト位置（turn ごとに1件）だけなので、**ファイルが
+// どれだけ大きくてもメモリはほぼ増えない。**turn の終わりごとに最大6回読み直す経路
+// （`readSignals`）があるため、ここでファイル全体を抱えると同時実行数ぶん掛け算になる。
+//
+// **開くのは通常のファイルだけである。**FIFO を渡されると `os.Open` が書き手の現れるまで
+// 永久に返らず、turn ループの goroutine ごと固まる（設計 3-2 の hook の値は外部入力である）。
+//
 // path: transcript の JSONL のパス。
 // promptID: Stop hook が渡した prompt_id。空なら最後の "typed" 起点の範囲を使う。
 // prefix: 表明の印（`tracker.status_signal_prefix`）。
 // currentIdentifier: いま作業している issue の識別子（対象を書かない行の対象になる）。
 // 戻り値の1つ目: 読み取った結果。
-// 戻り値の2つ目: ファイルを開けない・読めない場合のエラー。
+// 戻り値の2つ目: ファイルを開けない・通常のファイルでない・読めない場合のエラー。
 // **行の JSON が壊れていてもエラーにしない**（読める行だけを使う）。
+// **長すぎる行も読み捨てて続ける。**
 func ReadTranscript(path, promptID, prefix, currentIdentifier string) (*TranscriptReadResult, error) {
-	f, err := os.Open(path)
+	f, err := openRegularFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("transcript を開けません: %s: %w", path, err)
+		return nil, err
 	}
 	defer func() { _ = f.Close() }()
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), transcriptMaxLineBytes)
-
-	var lines []transcriptLine
-	for scanner.Scan() {
-		raw := scanner.Bytes()
-		if len(strings.TrimSpace(string(raw))) == 0 {
-			continue
-		}
-		var line transcriptLine
-		if err := json.Unmarshal(raw, &line); err != nil {
-			// 壊れた行は飛ばす。1行の障害で残り全部を落とさない。
-			continue
-		}
-		lines = append(lines, line)
-	}
-	if err := scanner.Err(); err != nil {
+	scan, err := scanTranscript(f, promptID)
+	if err != nil {
 		return nil, fmt.Errorf("transcript を読めません: %s: %w", path, err)
 	}
 
-	start, end := turnRange(lines, promptID)
-	texts := collectAssistantTexts(lines[start:end])
-	signals := ParseSignals(texts, prefix, currentIdentifier)
+	texts, err := collectTurnTexts(f, scan.start, scan.end)
+	if err != nil {
+		return nil, fmt.Errorf("transcript を読めません: %s: %w", path, err)
+	}
 
-	return &TranscriptReadResult{Signals: signals, Usage: sumUsage(lines)}, nil
+	return &TranscriptReadResult{
+		Signals: ParseSignals(texts, prefix, currentIdentifier),
+		Usage:   scan.usage,
+	}, nil
 }
 
-// turnRange は転写の中から、この turn に対応する範囲を切り出す（設計 3-25 の段2〜4）。
+// openRegularFile は通常のファイルだけを開く。
 //
-// lines: transcript の全行。
-// promptID: Stop hook が渡した prompt_id。空なら最後の "typed" 起点を使う。
-// 戻り値の1つ目: 範囲の開始位置（含む）。
-// 戻り値の2つ目: 範囲の終了位置（含まない）。
-func turnRange(lines []transcriptLine, promptID string) (int, int) {
-	anchor := -1
-	if promptID != "" {
-		for i := len(lines) - 1; i >= 0; i-- {
-			if lines[i].Type == "user" && lines[i].PromptID == promptID {
-				anchor = i
-				break
+// **`O_NONBLOCK` を付けて開き、開いたあとに種別を確かめる。**先に `os.Lstat` で見るだけ
+// では、見てから開くまでの間に差し替えられる。FIFO は `O_NONBLOCK` があれば即座に返り、
+// そのあとの検査で弾ける。**通常のファイルには `O_NONBLOCK` は影響しない。**
+//
+// path: 開くパス。
+// 戻り値の1つ目: 開いたファイル。
+// 戻り値の2つ目: 開けない・通常のファイルでない場合のエラー。
+func openRegularFile(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, fmt.Errorf("transcript を開けません: %s: %w", path, err)
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("transcript の種別を読めません: %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, fmt.Errorf("transcript が通常のファイルではありません: %s: mode=%s", path, info.Mode())
+	}
+	return f, nil
+}
+
+// transcriptScan は1回目の走査の結果である。
+type transcriptScan struct {
+	// start は turn の範囲の開始位置（バイト。含む）である。
+	start int64
+	// end は turn の範囲の終了位置（バイト。含まない）である。
+	end int64
+	// usage はファイル全体のトークンの集計である。
+	usage TokenUsage
+}
+
+// scanTranscript は1回目の走査を行い、turn の範囲とトークンの集計を求める。
+//
+// **覚えるのは "typed" の user 行のバイト位置だけである**（turn ごとに1件）。
+//
+// f: 読むファイル（先頭から読み直す）。
+// promptID: Stop hook が渡した prompt_id。空なら最後の行を起点にする。
+// 戻り値の1つ目: 範囲とトークン。
+// 戻り値の2つ目: 読めない場合のエラー。
+func scanTranscript(f *os.File, promptID string) (transcriptScan, error) {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return transcriptScan{}, err
+	}
+	r := bufio.NewReaderSize(f, 64*1024)
+
+	var (
+		out          transcriptScan
+		typedOffsets []int64
+		anchor       int64 = -1
+		lastOffset   int64 = -1
+		offset       int64
+		seen         = map[string]bool{}
+	)
+
+	for {
+		raw, consumed, truncated, err := readTranscriptLine(r)
+		lineStart := offset
+		offset += consumed
+		if len(raw) > 0 && !truncated {
+			var line transcriptLine
+			// 壊れた行は飛ばす。1行の障害で残り全部を落とさない。
+			if json.Unmarshal(raw, &line) == nil {
+				lastOffset = lineStart
+				if isTypedUser(line) {
+					typedOffsets = append(typedOffsets, lineStart)
+				}
+				if promptID != "" && line.Type == "user" && line.PromptID == promptID {
+					anchor = lineStart
+				}
+				addUsage(&out.usage, line, seen)
 			}
 		}
-	}
-	if anchor < 0 {
-		anchor = len(lines) - 1
-	}
-	if anchor < 0 {
-		return 0, 0
-	}
-
-	// 段3: そこから前へ遡り、最初の "typed" の user 行を turn の頭とする。
-	start := 0
-	for i := anchor; i >= 0; i-- {
-		if isTypedUser(lines[i]) {
-			start = i
-			break
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return transcriptScan{}, err
 		}
 	}
 
+	out.end = offset
+	if anchor < 0 {
+		anchor = lastOffset
+	}
+	if anchor < 0 {
+		// 読める行が1つも無い。
+		return transcriptScan{start: 0, end: 0, usage: out.usage}, nil
+	}
+
+	// 段3: anchor から前へ遡り、最初の "typed" の user 行を turn の頭とする。
+	out.start = 0
+	for i := len(typedOffsets) - 1; i >= 0; i-- {
+		if typedOffsets[i] <= anchor {
+			out.start = typedOffsets[i]
+			break
+		}
+	}
 	// 段4: 頭から後ろへ、次の "typed" の手前までをこの turn の範囲とする。
-	end := len(lines)
-	for i := start + 1; i < len(lines); i++ {
-		if isTypedUser(lines[i]) {
-			end = i
+	for _, off := range typedOffsets {
+		if off > out.start {
+			out.end = off
 			break
 		}
 	}
-	return start, end
+	return out, nil
+}
+
+// addUsage は1行ぶんのトークンを集計へ足す（設計 3-15）。
+//
+// **`requestId` で必ず重複排除する。**assistant の行が API 呼び出しと1対1である保証は
+// 取れていない。重複排除しておけば、どちらでも正しい値になる。
+//
+// usage: 足し込む先。
+// line: 1行。
+// seen: これまでに数えた `requestId`（`transcriptMaxRequestIDs` を上限に覚える）。
+func addUsage(usage *TokenUsage, line transcriptLine, seen map[string]bool) {
+	if line.Type != "assistant" || line.Message == nil || line.Message.Usage == nil {
+		return
+	}
+	if line.RequestID != "" {
+		if seen[line.RequestID] {
+			return
+		}
+		if len(seen) < transcriptMaxRequestIDs {
+			seen[line.RequestID] = true
+		}
+	}
+	u := line.Message.Usage
+	usage.APICalls++
+	usage.Input += u.InputTokens
+	usage.CacheCreation += u.CacheCreationInputTokens
+	usage.CacheRead += u.CacheReadInputTokens
+	usage.Output += u.OutputTokens
+}
+
+// collectTurnTexts は2回目の走査で、turn の範囲の assistant の text を集める
+// （設計 3-25 の段5）。
+//
+// **`isSidechain == false` に絞る。**subagent の発言を印として拾わないためである。
+//
+// f: 読むファイル。
+// start: 範囲の開始位置（バイト。含む）。
+// end: 範囲の終了位置（バイト。含まない）。
+// 戻り値の1つ目: 集めた text の並び。
+// 戻り値の2つ目: 読めない場合のエラー。
+func collectTurnTexts(f *os.File, start, end int64) ([]string, error) {
+	if end <= start {
+		return nil, nil
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return nil, err
+	}
+	r := bufio.NewReaderSize(f, 64*1024)
+
+	var texts []string
+	offset := start
+	for offset < end {
+		raw, consumed, truncated, err := readTranscriptLine(r)
+		offset += consumed
+		if len(raw) > 0 && !truncated {
+			var line transcriptLine
+			if json.Unmarshal(raw, &line) == nil &&
+				line.Type == "assistant" && !line.IsSidechain && line.Message != nil {
+				texts = append(texts, contentTexts(line.Message.Content)...)
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
+		}
+	}
+	return texts, nil
+}
+
+// readTranscriptLine は JSONL の1行を読む。
+//
+// **`bufio.Scanner` を使わない。**上限を超えた行で `bufio.ErrTooLong` を返して以降を
+// 読めなくなるため、**長すぎる行はその1行だけを読み捨てて続ける。**
+//
+// r: 読み元。
+// 戻り値の1つ目: 行の中身（改行を含まない）。読み捨てた場合は nil。
+// 戻り値の2つ目: 消費したバイト数（改行を含む）。**呼び出し側の位置の計算に使う。**
+// 戻り値の3つ目: 上限を超えて読み捨てたなら true。
+// 戻り値の4つ目: ファイルの終わりなら io.EOF。それ以外は読み取りの失敗。
+func readTranscriptLine(r *bufio.Reader) ([]byte, int64, bool, error) {
+	var (
+		line      []byte
+		consumed  int64
+		truncated bool
+	)
+	for {
+		chunk, err := r.ReadSlice('\n')
+		consumed += int64(len(chunk))
+		if !truncated {
+			if len(line)+len(chunk) > transcriptMaxLineBytes {
+				truncated = true
+				line = nil
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if err != nil {
+			return trimLineEnd(line), consumed, truncated, err
+		}
+		return trimLineEnd(line), consumed, truncated, nil
+	}
+}
+
+// trimLineEnd は行末の改行を落とす。
+//
+// line: 1行。
+// 戻り値: 前後の空白と改行を落とした行。空白だけの行は nil を返す。
+func trimLineEnd(line []byte) []byte {
+	trimmed := bytes.TrimSpace(line)
+	if len(trimmed) == 0 {
+		return nil
+	}
+	return trimmed
 }
 
 // isTypedUser は「turn の頭」の行かを判定する（設計 3-25）。
@@ -221,23 +424,6 @@ func turnRange(lines []transcriptLine, promptID string) (int, int) {
 // 戻り値: turn の頭なら true。
 func isTypedUser(line transcriptLine) bool {
 	return line.Type == "user" && line.PromptSource == "typed"
-}
-
-// collectAssistantTexts は範囲内の assistant の text ブロックを順に集める（設計 3-25 の段5）。
-//
-// **`isSidechain == false` に絞る。**subagent の発言を印として拾わないためである。
-//
-// lines: turn の範囲の行。
-// 戻り値: 集めた text の並び。
-func collectAssistantTexts(lines []transcriptLine) []string {
-	var texts []string
-	for _, line := range lines {
-		if line.Type != "assistant" || line.IsSidechain || line.Message == nil {
-			continue
-		}
-		texts = append(texts, contentTexts(line.Message.Content)...)
-	}
-	return texts
 }
 
 // contentTexts は message.content から text ブロックの本文を取り出す。
@@ -265,34 +451,4 @@ func contentTexts(content json.RawMessage) []string {
 		return []string{s}
 	}
 	return nil
-}
-
-// sumUsage は transcript 全体のトークンを集計する（設計 3-15）。
-//
-// **`requestId` で必ず重複排除する。**assistant の行が API 呼び出しと1対1である保証は
-// 取れていない。重複排除しておけば、どちらでも正しい値になる。
-//
-// lines: transcript の全行。
-// 戻り値: 集計したトークン。
-func sumUsage(lines []transcriptLine) TokenUsage {
-	var usage TokenUsage
-	seen := map[string]bool{}
-	for _, line := range lines {
-		if line.Type != "assistant" || line.Message == nil || line.Message.Usage == nil {
-			continue
-		}
-		if line.RequestID != "" {
-			if seen[line.RequestID] {
-				continue
-			}
-			seen[line.RequestID] = true
-		}
-		u := line.Message.Usage
-		usage.APICalls++
-		usage.Input += u.InputTokens
-		usage.CacheCreation += u.CacheCreationInputTokens
-		usage.CacheRead += u.CacheReadInputTokens
-		usage.Output += u.OutputTokens
-	}
-	return usage
 }

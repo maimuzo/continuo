@@ -203,3 +203,49 @@ func TestTrustFunc_tracker_RepoTrustFuncへ代入できる(t *testing.T) {
 		t.Fatal("tracker.RepoTrustFunc として呼ぶと偽になった")
 	}
 }
+
+// 目的: 信頼の判定が外部コマンドに時間の上限を渡すことを確認する（設計 3-6 / 3-11）。
+//
+// **上限が無いと、ghq か git が固まったときに巡回のループごと止まる。**この判定は
+// dispatch の直前に issue ごとに呼ばれるので、1件でも返らなければ無人運用がそこで終わる。
+//
+// 与える情報: 受け取ったコンテキストに期限があるかを記録する ghq の差し替え。
+// 成功条件: 期限つきのコンテキストが渡っていること。
+func TestCheckTrust_外部コマンドに時間の上限を渡す(t *testing.T) {
+	var hasDeadline bool
+	fx := newFixture(t, fixtureOptions{
+		GhqList: func(ctx context.Context, _, _ string) (string, error) {
+			_, hasDeadline = ctx.Deadline()
+			return "", nil
+		},
+	})
+
+	if _, _, err := fx.Manager.CheckTrust("maimuzo", "koetsumugi"); err != nil {
+		t.Fatalf("CheckTrust に失敗した: %v", err)
+	}
+	if !hasDeadline {
+		t.Fatal("外部コマンドに期限の無いコンテキストを渡している（固まると巡回ごと止まる）")
+	}
+}
+
+// 目的: 信頼の判定の結果を短い間だけ覚え、ボードの項目ごとに ghq と git を起動し直さない
+// ことを確認する（設計 3-6。判定1回につき外部プロセス2本と `~/.claude.json` の読み直しが要る）。
+// 与える情報: 1回目の判定のあとに `~/.claude.json` を消してから行う2回目の判定。
+// 成功条件: 2回目も真のままであること（覚えていなければ、ファイルが無いので偽になる）。
+func TestTrustFunc_判定を覚えて外部コマンドを繰り返し起動しない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	toplevel := runGit(t, fx.Repo.Dir, "rev-parse", "--path-format=absolute", "--show-toplevel")
+	writeClaudeConfig(t, fx.Home, map[string]bool{toplevel: true})
+
+	trusted := fx.Manager.TrustFunc()
+	if !trusted("maimuzo", "koetsumugi") {
+		t.Fatal("1回目の判定が偽になった")
+	}
+
+	if err := os.Remove(filepath.Join(fx.Home, workspace.ClaudeConfigFileName)); err != nil {
+		t.Fatalf("~/.claude.json を消せない: %v", err)
+	}
+	if !trusted("maimuzo", "koetsumugi") {
+		t.Fatal("2回目の判定で `~/.claude.json` を読み直している（1件ごとに外部プロセスが立つ）")
+	}
+}

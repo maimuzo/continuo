@@ -553,13 +553,18 @@ func (o *Orchestrator) decideOne(
 
 	// 段5a2: **Status だけで決めてはならない。**herdr の agent_status も見る。
 	needsPrompt := false
+	awaitTurnEnd := false
 	switch agent.AgentStatus {
 	case herdr.AgentStatusIdle, herdr.AgentStatusDone:
 		needsPrompt = true
 	case herdr.AgentStatusWorking:
 		// **引き継ぐが NeedsPrompt を立てない。**走っている最中に投げると turn が混ざる。
 		// 前の turn の Stop は逃がし先か socket から届く。届かなければ stall 検知で拾う。
+		// **代わりに「turn の終わりを待つ」を立てる。**立てないと turn ループの goroutine が
+		// 1本も起きず、届いた Stop を誰も読まないまま stall_timeout_ms まで放置される
+		// （表明もその turn ぶんは一度も読まれない）。
 		needsPrompt = false
+		awaitTurnEnd = true
 	case herdr.AgentStatusBlocked:
 		// **引き継がない。**このまま turn を送ると、保留中の権限要求が承認されて実行される
 		// （3-11 で実測。3/3）。**esc は送らない**（pane ごと閉じるので要求も消える）。
@@ -604,6 +609,7 @@ func (o *Orchestrator) decideOne(
 			Base:             base,
 			SettingsPath:     c.Identity.SettingsPath,
 			HerdrWorkspaceID: c.Identity.HerdrWorkspaceID,
+			AwaitTurnEnd:     awaitTurnEnd,
 		},
 		NeedsPrompt: needsPrompt,
 		Branch:      c.Identity.Branch,

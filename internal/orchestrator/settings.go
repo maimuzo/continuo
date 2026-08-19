@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // settingsFileName は issue ごとの Claude Code の設定ファイルの名前である（設計 3-12）。
@@ -91,7 +92,7 @@ var hookEventNames = []struct {
 //
 //	{
 //	  "hooks": { "Stop": [{"hooks":[{"type":"command",
-//	              "command":"/usr/local/bin/continuo hook --socket /…/hooks.sock --pending-dir /…/pending"}]}], … },
+//	              "command":"'/usr/local/bin/continuo' hook --socket '/…/hooks.sock' --pending-dir '/…/pending'"}]}], … },
 //	  "permissions": { "allow": ["Bash","Read","Glob","Grep","Edit","Write"], "deny": [] },
 //	  "env": { "CLAUDE_CODE_RETRY_WATCHDOG": "1" }
 //	}
@@ -113,7 +114,11 @@ func (o *Orchestrator) writeSettingsFile(identifier string) (string, error) {
 		return "", fmt.Errorf("hook の逃がし先を作れません: %s: %w", pending, err)
 	}
 
-	command := fmt.Sprintf("%s hook --socket %s --pending-dir %s", o.continuoPath, o.socketPath, pending)
+	// **shell の引用を通す。**この文字列は Claude Code が shell で実行する。
+	// 引用せずに繋ぐと、パスに空白が1つ入るだけでコマンド行が別の引数へ割れ、
+	// **7種の hook が1つも届かなくなる**（turn の終わりを永久に検知できない）。
+	command := fmt.Sprintf("%s hook --socket %s --pending-dir %s",
+		shellQuote(o.continuoPath), shellQuote(o.socketPath), shellQuote(pending))
 	hooks := make(map[string][]hookMatcher, len(hookEventNames))
 	for _, ev := range hookEventNames {
 		hooks[ev.Name] = []hookMatcher{{
@@ -166,4 +171,16 @@ func (o *Orchestrator) claudeStartArgs(settingsPath, sessionUUID, resumeUUID str
 		args = append(args, "--permission-mode", mode)
 	}
 	return args
+}
+
+// shellQuote は shell のコマンド行へ埋め込む1語を単一引用符で包む。
+//
+// **単一引用符の中では展開が一切起きない**ので、空白・`$`・バッククォート・`;` を
+// そのまま渡せる。語の中に単一引用符があれば、「引用を閉じる・逃がした単一引用符を置く・
+// 引用を開き直す」の3つを並べた形へ置き換える。
+//
+// s: 埋め込む1語。
+// 戻り値: 引用した文字列。
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

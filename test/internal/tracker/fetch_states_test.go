@@ -294,3 +294,33 @@ func TestFetchIssuesByStates_並び順をPOSITIONで明示する(t *testing.T) {
 		t.Fatalf("候補取得のクエリが並び順を明示していない（サーバの既定値任せになっている）: %s", reqs[0].Query)
 	}
 }
+
+// 目的: 候補の取得でもボードのページ数に上限があることを確認する
+// （レビュー指摘「FetchIssuesByStates のページングにも上限が無い」の回帰テスト）。
+//
+// **巡回は30秒ごとに走る。**ページが尽きない応答（provider 側の異常や、想定外に育った
+// ボード）に当たると、1回の巡回が終わらなくなり GitHub の API 枠を食い潰す。
+//
+// 与える情報: 常に hasNextPage が真の応答を返す偽サーバ。
+// 成功条件: CategoryPagination のエラーで止まること。読み続けないこと。
+func TestFetchIssuesByStates_ページ数の上限を超えたら落とす(t *testing.T) {
+	item := issueItemJSON(testIssueItemOpts{
+		ItemID: "item-1", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 1,
+		Title: "候補", URL: "https://github.com/maimuzo/koetsumugi/issues/1",
+	})
+	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
+		return dataResponse(candidateItemsPayload([]map[string]any{item}, true, "cursor"))
+	})
+	a := newAdapterForFetch(t, fs)
+
+	_, err := a.FetchIssuesByStates(t.Context(), []string{"Ready"})
+	if err == nil {
+		t.Fatalf("ページが尽きないのに止まらなかった（上限が効いていない）")
+	}
+	if !tracker.IsCategory(err, tracker.CategoryPagination) {
+		t.Fatalf("エラーの分類が想定と違う: %v", err)
+	}
+	if fs.RequestCount() > 25 {
+		t.Fatalf("上限を超えて読み続けている: %d リクエスト", fs.RequestCount())
+	}
+}

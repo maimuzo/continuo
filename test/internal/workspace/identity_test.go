@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -113,12 +114,19 @@ func TestWriteIdentity_JSONのキー名が設計どおりである(t *testing.T)
 	}
 }
 
-// 目的: 身元ファイルが共通ディレクトリの info/exclude に登録され、何度書いても行が積み上がらず、
-// .gitignore は触られないことを確認する（設計 3-18）。
+// 目的: 身元ファイルと**その一時ファイル**が共通ディレクトリの info/exclude に登録され、
+// 何度書いても行が積み上がらず、.gitignore は触られないことを確認する（設計 3-18）。
+//
+// **一時ファイルの行がなぜ要るか。**writeFileAtomic は同じディレクトリに
+// `.continuo.json.tmp<乱数>` を作る。通常は消えるが、**常駐プロセスが強制終了すると
+// worktree に残る。**残った1つが未追跡ファイルとして数えられると、
+// その worktree は二度と片付かない。
+//
 // 与える情報: 同じ worktree への2回の書き込み。
-// 成功条件: `<共通ディレクトリ>/info/exclude` に `/.continuo.json` がちょうど1行あり、
+// 成功条件: `<共通ディレクトリ>/info/exclude` に `/.continuo.json` と
+// `/.continuo.json.tmp*` がそれぞれちょうど1行あり、
 // worktree にもリポジトリにも .gitignore が作られていないこと。
-func TestWriteIdentity_info_excludeに1行だけ登録する(t *testing.T) {
+func TestWriteIdentity_info_excludeに身元ファイルと一時ファイルを1行ずつ登録する(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	prepared := prepareWorktree(t, fx, sampleIssue(188))
 
@@ -135,14 +143,16 @@ func TestWriteIdentity_info_excludeに1行だけ登録する(t *testing.T) {
 	if err != nil {
 		t.Fatalf("info/exclude を読めない: %v", err)
 	}
-	count := 0
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.TrimSpace(line) == "/.continuo.json" {
-			count++
+	for _, want := range []string{"/.continuo.json", "/.continuo.json.tmp*"} {
+		count := 0
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.TrimSpace(line) == want {
+				count++
+			}
 		}
-	}
-	if count != 1 {
-		t.Fatalf("info/exclude の登録行数が1でない: got %d\n%s", count, data)
+		if count != 1 {
+			t.Fatalf("info/exclude の %q の行数が1でない: got %d\n%s", want, count, data)
+		}
 	}
 
 	for _, path := range []string{
@@ -326,5 +336,138 @@ func TestMarkCleanupDeferred_見送った時刻を書く(t *testing.T) {
 	}
 	if got.ProjectItemID == "" {
 		t.Fatalf("他の項目が壊れている: %+v", *got)
+	}
+}
+
+// 目的: `info/exclude` は利用者のファイルなので、**書き足すだけで書き直さない**ことを
+// 確認する（設計 3-18）。読み取り → 連結 → 全置換（os.WriteFile は O_TRUNC）で更新すると、
+// 途中で落ちたときに利用者が自分で書いた除外規則が消える。
+// 与える情報: 利用者が先に書いた除外規則を持つ `info/exclude`。
+// 成功条件: 利用者の行がそのまま残り、continuo の行がそのあとに足されていること。
+func TestWriteIdentity_利用者のinfo_excludeを消さずに書き足す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	excludePath := filepath.Join(fx.Repo.Dir, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		t.Fatalf("info ディレクトリを作れない: %v", err)
+	}
+	existing := "# 利用者が書いた除外規則\n/私の下書き.md\n"
+	if err := os.WriteFile(excludePath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("利用者の info/exclude を書けない: %v", err)
+	}
+
+	if err := fx.Manager.WriteIdentity(
+		context.Background(), prepared.Path, fullIdentity(time.Now()),
+	); err != nil {
+		t.Fatalf("WriteIdentity に失敗した: %v", err)
+	}
+
+	data, err := os.ReadFile(excludePath)
+	if err != nil {
+		t.Fatalf("info/exclude を読めない: %v", err)
+	}
+	if !strings.HasPrefix(string(data), existing) {
+		t.Fatalf("利用者が書いた除外規則を消している:\n%s", data)
+	}
+	if !strings.Contains(string(data), "/.continuo.json\n") {
+		t.Fatalf("身元ファイルの行が足されていない:\n%s", data)
+	}
+}
+
+// 目的: 同じ worktree の身元ファイルを複数の goroutine から同時に更新しても、
+// 更新を取りこぼさないことを確認する（Manager は複数の run から共有される）。
+//
+// **読んで書き戻す処理を直列化していないと、あとの書き込みが前の書き込みを消す。**
+//
+// 与える情報: 同時に走らせる8回の IncrementTakeover。
+// 成功条件: ファイルに書かれた takeover_count が 8 になること。
+func TestIncrementTakeover_同時に呼んでも数え落とさない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	base := fullIdentity(time.Now())
+	base.TakeoverCount = 0
+	if err := fx.Manager.WriteIdentity(context.Background(), prepared.Path, base); err != nil {
+		t.Fatalf("WriteIdentity に失敗した: %v", err)
+	}
+
+	const times = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, times)
+	for range times {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := fx.Manager.IncrementTakeover(context.Background(), prepared.Path); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("IncrementTakeover に失敗した: %v", err)
+	}
+
+	got, err := fx.Manager.ReadIdentity(prepared.Path)
+	if err != nil {
+		t.Fatalf("ReadIdentity に失敗した: %v", err)
+	}
+	if got.TakeoverCount != times {
+		t.Fatalf("同時に更新すると数え落とす: got %d, want %d", got.TakeoverCount, times)
+	}
+}
+
+// 目的: 身元ファイルの base を書いて読み戻せることを確認する（設計 3-18 / 3-9 の手順2b）。
+// **これが無いと、再起動をまたいだ片付けが base を復元できない。**
+// 与える情報: base を埋めた Identity。
+// 成功条件: JSON に base のキーがあり、読み戻せること。
+func TestWriteIdentity_baseを書いて読み戻せる(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	want := fullIdentity(time.Now())
+	want.Base = "main"
+	if err := fx.Manager.WriteIdentity(context.Background(), prepared.Path, want); err != nil {
+		t.Fatalf("WriteIdentity に失敗した: %v", err)
+	}
+
+	data, err := os.ReadFile(fx.Manager.IdentityPath(prepared.Path))
+	if err != nil {
+		t.Fatalf("身元ファイルを読めない: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("身元ファイルを JSON として読めない: %v", err)
+	}
+	if raw["base"] != "main" {
+		t.Fatalf("身元ファイルに base が書かれていない: %v", raw)
+	}
+
+	got, err := fx.Manager.ReadIdentity(prepared.Path)
+	if err != nil {
+		t.Fatalf("ReadIdentity に失敗した: %v", err)
+	}
+	if got.Base != "main" {
+		t.Fatalf("base を読み戻せない: got %q", got.Base)
+	}
+}
+
+// 目的: 再利用のときに base を落とさないことを確認する（設計 3-18）。
+// **再利用の経路では Prepare が base を決めないので、既存の値を保たないと
+// 片付けが「base が分からない」で永久に見送る。**
+// 与える情報: base を持つ既存の身元ファイルと、base が空の新しい Identity。
+// 成功条件: 既存の base が保たれること。
+func TestMergeForReuse_baseは既存の値を保つ(t *testing.T) {
+	existing := fullIdentity(time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
+	existing.Base = "main"
+
+	fresh := fullIdentity(time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
+	fresh.Base = ""
+
+	got := workspace.MergeForReuse(fresh, &existing)
+	if got.Base != "main" {
+		t.Fatalf("再利用で base を落としている: got %q", got.Base)
 	}
 }

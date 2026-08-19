@@ -17,24 +17,15 @@ import (
 // tracker.provider.owner / project_number / status_field はデフォルト値を持たない
 // 必須項目なので、テストのたびにここへ書き足す形にする。
 //
-// herdr.socket は既定値が "${HERDR_SOCKET_PATH}"（環境変数展開が必要）なので、
-// TestMain で環境変数 HERDR_SOCKET_PATH を設定しておく。ここで herdr: ブロックを
-// 書いてしまうと、herdr.worktree.branch_template を上書きしたいテストが
-// "herdr:" という同じ YAML トップレベルキーを2重に書くことになり
+// ここに herdr: ブロックを書かないのは、herdr.worktree.branch_template を上書きしたい
+// テストが "herdr:" という同じ YAML トップレベルキーを2重に書くことになり
 // （front matter の YAML としてキー重複エラーになる）、テストが書きにくくなるためである。
+// herdr.socket は既定値（~/.config/herdr/herdr.sock）がそのまま使われる。
 const validFrontMatter = "tracker:\n" +
 	"  provider:\n" +
 	"    owner: acme\n" +
 	"    project_number: 1\n" +
 	"    status_field: Status\n"
-
-// TestMain は、herdr.socket の既定値が参照する環境変数 HERDR_SOCKET_PATH を
-// テスト全体に対してあらかじめ設定する。個々のテストが herdr.socket を明示的に
-// 上書きしない限り、この値が使われる。
-func TestMain(m *testing.M) {
-	os.Setenv("HERDR_SOCKET_PATH", "/tmp/continuo-test-herdr-default.sock")
-	os.Exit(m.Run())
-}
 
 // writeWorkflow は front matter と本文を結合して WORKFLOW.md 相当のファイルを
 // 一時ディレクトリに書き、そのパスを返す。
@@ -119,7 +110,7 @@ func TestLoad_本文が空でも読める(t *testing.T) {
 	}
 }
 
-// 目的: 未定義の環境変数を参照すると設定エラーになり、空文字に落ちないことを確認する（設計 5-4）。
+// 目的: 未定義の環境変数を参照すると設定エラーになり、空文字に落ちないことを確認する（設計 5-5）。
 // 与える情報: workspace.root に、定義していない環境変数名 $CONTINUO_TEST_UNDEFINED_XYZ を書いた front matter。
 // 成功条件: config.Load がエラーを返し、エラーメッセージに設定キー名（workspace.root）と
 // 環境変数名（CONTINUO_TEST_UNDEFINED_XYZ）の両方が含まれること。
@@ -140,7 +131,7 @@ func TestLoad_未定義の環境変数はエラーになる(t *testing.T) {
 	}
 }
 
-// 目的: 環境変数は定義されていても値が空文字ならエラーになることを確認する（5-4 の
+// 目的: 環境変数は定義されていても値が空文字ならエラーになることを確認する（5-5 の
 // 「設定されているが空」もエラーにする、という規則）。
 // 与える情報: workspace.root に、値を空文字にした環境変数 $CONTINUO_TEST_EMPTY を書いた front matter。
 // 成功条件: config.Load がエラーを返すこと。
@@ -157,7 +148,7 @@ func TestLoad_定義されているが空の環境変数もエラーになる(t 
 
 // 目的: $NAME / ${NAME} / $$ 以外の "$" の使い方は設定エラーになることを確認する。
 // os.Expand であれば "price is $100" は "price is 00" に化けてしまうため、
-// それを許さないことを検証する（5-4 が明示的に禁止している例そのもの）。
+// それを許さないことを検証する（5-5 が明示的に禁止している例そのもの）。
 // 与える情報: workspace.root に "price is $100" を書いた front matter。
 // 成功条件: config.Load がエラーを返すこと。
 func TestLoad_ドル記号のあとが変数名として不正だとエラーになる(t *testing.T) {
@@ -181,7 +172,9 @@ func TestLoad_ドル記号が2つ続くとリテラルのドル記号になる(t
 	if err != nil {
 		t.Fatalf("読み込みに失敗した: %v", err)
 	}
-	want := "literal $ dollar"
+	// workspace.root は相対パスなので、展開のあとに WORKFLOW.md の置き場所を基準に
+	// 絶対パスへ解決される（設計 5-1）。ここで見たいのは "$$" が "$" になることである。
+	want := filepath.Join(filepath.Dir(path), "literal $ dollar")
 	if loaded.Config.Workspace.Root != want {
 		t.Fatalf("展開結果が一致しない: got %q, want %q", loaded.Config.Workspace.Root, want)
 	}
@@ -238,7 +231,7 @@ func TestLoad_チルダユーザー形式はエラーになる(t *testing.T) {
 }
 
 // 目的: 展開を適用しないキー（herdr.worktree.branch_template）には $ や ~ があっても
-// 一切手を加えないことを確認する（5-4 の「適用しないキー」の一覧）。
+// 一切手を加えないことを確認する（5-5 の「適用しないキー」の一覧）。
 // 与える情報: herdr.worktree.branch_template にテンプレート変数 "{{.issue.owner}}" と
 // 展開対象になりうる文字列を含む front matter。
 // 成功条件: config.Load が成功し、branch_template の値がまったく変化していないこと

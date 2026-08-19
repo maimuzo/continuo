@@ -54,6 +54,10 @@ const (
 	// pendingTmpSuffix は書き込み中のファイルに付ける接尾辞である。
 	// 書き切ってから os.Rename でこの接尾辞を外す（設計 3-19）。
 	pendingTmpSuffix = ".tmp"
+	// brokenDirName は読む側が壊れた JSON を隔離するディレクトリの名前である
+	// （internal/hookserver.BrokenDirName と同じ値）。書く側はここへ書かないが、
+	// 逃がし先の太り具合を数えるときに合算する。
+	brokenDirName = "broken"
 
 	// unknownEventName は hook_event_name が空だったときにファイル名へ使う語である。
 	// JSON として解釈できている以上は捨てずに逃がすが、名前が無いと保存できないため。
@@ -63,7 +67,45 @@ const (
 	// 1マイクロ秒ずつずらして試す回数の上限である。同じマイクロ秒に同じイベントが
 	// 複数届いても、上書きで失わないようにする。
 	maxSpillNameAttempts = 1000
+
+	// maxEventNameLen は逃がし先のファイル名に使う hook_event_name の最大バイト数である。
+	//
+	// hook_event_name は外から来る文字列で、標準入力の上限まで長くなりうる。長いまま
+	// ファイル名にすると os.OpenFile が ENAMETOOLONG で失敗し、その hook は socket にも
+	// 逃がし先にも残らずに消える。実測で出ている名前は最長でも SubagentStop の12バイトなので、
+	// 64 バイトは実在するイベント名を1つも切らない。
+	maxEventNameLen = 64
+
+	// DefaultMaxPendingBytes は逃がし先に溜めてよい合計バイト数の目安である。
+	//
+	// PreToolUse / PostToolUse は matcher が "*" なのでツールを叩くたびに発火する。
+	// continuo が落ちている間もエージェントは走り続けるので、上限が無いと逃がし先は
+	// いくらでも太る。ディスクが埋まれば worktree の git 操作も continuo の再起動も巻き添えで失敗する。
+	DefaultMaxPendingBytes int64 = 256 << 20
+
+	// DefaultMaxPendingFiles は逃がし先に溜めてよいファイル数の目安である。
+	DefaultMaxPendingFiles = 10000
+
+	// pendingHardLimitFactor は「turn の終わりに要るイベントも書かなくなる」までの倍率である。
+	//
+	// 上限に達しても、いきなり全部を捨てない。turn の終わりの判定に要るイベント
+	// （spillEssentialEvents）だけは書き続け、量の多い PreToolUse / PostToolUse から止める。
+	// Stop は turn に1回しか出ないので、これで太り方は桁で落ちる。
+	// それでもこの倍率まで太ったら、ディスクを守るためにすべて書かない。
+	pendingHardLimitFactor = 4
 )
+
+// spillEssentialEvents は逃がし先が上限に達しても書き続けるイベント名である。
+//
+// **turn の終わりの通知を落とさないことを最優先にする。**落とすと、その run は
+// stall_timeout_ms（既定30分）まで誰も気づかない（設計 3-19）。
+// UserPromptSubmit を入れるのは、<task-notification> の判定に prompt が要るためである（設計 1-3）。
+var spillEssentialEvents = map[string]bool{
+	"Stop":             true,
+	"SubagentStop":     true,
+	"Notification":     true,
+	"UserPromptSubmit": true,
+}
 
 // Outcome は `continuo hook` の1回の実行がどの経路で終わったかを表す。
 type Outcome int
@@ -109,6 +151,12 @@ type Config struct {
 	WriteTimeout time.Duration
 	// MaxInputBytes は標準入力から読む上限である。0 以下なら DefaultMaxInputBytes。
 	MaxInputBytes int64
+	// MaxPendingBytes は逃がし先に溜めてよい合計バイト数である。
+	// 0 以下なら DefaultMaxPendingBytes。
+	MaxPendingBytes int64
+	// MaxPendingFiles は逃がし先に溜めてよいファイル数である。
+	// 0 以下なら DefaultMaxPendingFiles。
+	MaxPendingFiles int
 }
 
 // Result は Forward の結果である。呼び出し側はこれをログや標準エラーに出すだけで、
@@ -211,6 +259,12 @@ func (c Config) withDefaults() Config {
 	if c.MaxInputBytes <= 0 {
 		c.MaxInputBytes = DefaultMaxInputBytes
 	}
+	if c.MaxPendingBytes <= 0 {
+		c.MaxPendingBytes = DefaultMaxPendingBytes
+	}
+	if c.MaxPendingFiles <= 0 {
+		c.MaxPendingFiles = DefaultMaxPendingFiles
+	}
 	return c
 }
 
@@ -236,14 +290,14 @@ func readInput(cfg Config) ([]byte, bool, error) {
 	return data, false, nil
 }
 
-// truncatedFields は上限を超えた入力から拾い直す項目である。
+// truncatedStringFields は上限を超えた入力から拾い直す、値が文字列の項目である。
 //
-// **どれも値が文字列であり、どのイベントでも JSON の先頭側に並ぶ。**
+// **どのイベントでも JSON の先頭側に並ぶ。**
 // docs/evidence/hooks_probe_20260817.jsonl の実測では、7種すべてで
 // session_id / transcript_path / cwd / prompt_id / hook_event_name が
 // tool_input・tool_response より前にある。大きくなるのは後者だけなので、
 // 先頭 MaxInputBytes バイトの中にこれらは収まる。
-var truncatedFields = map[string]bool{
+var truncatedStringFields = map[string]bool{
 	"hook_event_name":   true,
 	"session_id":        true,
 	"transcript_path":   true,
@@ -254,12 +308,28 @@ var truncatedFields = map[string]bool{
 	"agent_type":        true,
 }
 
+// truncatedRawFields は上限を超えた入力から、**値の形を変えずに**拾い直す項目である。
+//
+// **turn の終わりの判定に要るのはこちらである。**文字列の項目だけを拾い直すと、
+// 上限を超えた Stop は background_tasks が欠けた形で届く。受け取る側の判定は
+// 「欠けている（判定不能）」と「空配列（settle_ms 待って turn の終わりとする）」を
+// 別扱いにしているので（設計 3-2。hookserver.HookEvent.BackgroundTasks の GoDoc）、
+// 欠けたまま届いた Stop は turn の終わりとして扱われない。
+//
+// encoding/json の Decoder は「値が完全に読めたとき」だけ成功するので、
+// 拾えた時点でその値は元のままである。そのまま詰め直せばよい。
+var truncatedRawFields = map[string]bool{
+	"background_tasks": true,
+	"stop_hook_active": true,
+	"prompt":           true,
+}
+
 // truncatedLine は上限を超えた hook の入力から、判定に要る項目だけを拾って1行の JSON を作る。
 //
 // 上限を超えた入力はそのままでは JSON として閉じていないので解釈できない。だが巨大になるのは
 // PostToolUse の tool_response のような後ろ側の項目であり、turn の終わりの判定に使う項目
-// （truncatedFields）は先頭側にある。encoding/json の Decoder でトップレベルのオブジェクトを
-// 先頭から読み進め、拾えたものだけを詰め直す。**捨てないためである**
+// （truncatedStringFields と truncatedRawFields）は先頭側にある。encoding/json の Decoder で
+// トップレベルのオブジェクトを先頭から読み進め、拾えたものだけを詰め直す。**捨てないためである**
 // （04_hook.md の受け入れの基準「どのイベントも捨てずに HookSink.OnHook へ渡す」）。
 //
 // 組み立てた JSON には continuo_truncated と continuo_truncated_limit_bytes を入れ、
@@ -283,7 +353,8 @@ func truncatedLine(data []byte, limit int64) ([]byte, string, error) {
 			"標準入力が上限（%d バイト）を超えており、しかも JSON のオブジェクトで始まっていません", limit)
 	}
 
-	picked := map[string]string{}
+	picked := map[string]any{}
+	eventName := ""
 	// 値が途中で切れているところで Decode が失敗する。そこまでに拾えた分を使う。
 	for dec.More() {
 		keyTok, err := dec.Token()
@@ -298,14 +369,21 @@ func truncatedLine(data []byte, limit int64) ([]byte, string, error) {
 		if err := dec.Decode(&raw); err != nil {
 			break
 		}
-		if !truncatedFields[key] {
-			continue
+		switch {
+		case truncatedStringFields[key]:
+			var v string
+			if err := json.Unmarshal(raw, &v); err != nil {
+				continue
+			}
+			picked[key] = v
+			if key == "hook_event_name" {
+				eventName = v
+			}
+		case truncatedRawFields[key]:
+			// json.RawMessage は Marshal で元のバイト列がそのまま出る。
+			// 中身を作り直さないので、background_tasks の要素の項目も欠けない。
+			picked[key] = raw
 		}
-		var v string
-		if err := json.Unmarshal(raw, &v); err != nil {
-			continue
-		}
-		picked[key] = v
 	}
 
 	if len(picked) == 0 {
@@ -325,7 +403,7 @@ func truncatedLine(data []byte, limit int64) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("上限を超えた hook の項目を1行の JSON に組み立てられません: %w", err)
 	}
-	return append(encoded, '\n'), picked["hook_event_name"], nil
+	return append(encoded, '\n'), eventName, nil
 }
 
 // compactLine は hook の JSON を1行へ詰め、hook_event_name を取り出す。
@@ -411,8 +489,22 @@ func sendToSocket(cfg Config, line []byte) error {
 // （中身は hook の JSON をそのまま入れる。封筒を付けない）。
 // 戻り値: 書いたファイルの絶対パスと、書けなかった場合のエラー。
 func spill(cfg Config, eventName string, line []byte) (string, error) {
+	// **相対パスでは書かない。**hook の cwd は worktree なので（設計 1-5）、相対パスだと
+	// 逃がし先が worktree の中に掘られる。continuo は <実行時ディレクトリ>/issues/*/pending しか
+	// 走査しないので、そこへ書いたものは永久に読まれない（worktree も汚れる）。
+	// 受け口の側（hookserver.New）も同じ理由で絶対パスを要求している。
+	if !filepath.IsAbs(cfg.PendingDir) {
+		return "", fmt.Errorf(
+			"hook の逃がし先（--pending-dir）%q が絶対パスではありません"+
+				"（hook の cwd は worktree なので、相対パスでは worktree の中に書いてしまい、continuo は読めません）",
+			cfg.PendingDir,
+		)
+	}
 	if err := os.MkdirAll(cfg.PendingDir, 0o700); err != nil {
 		return "", fmt.Errorf("hook の逃がし先を作れません: %s: %w", cfg.PendingDir, err)
+	}
+	if err := checkPendingCapacity(cfg, eventName); err != nil {
+		return "", err
 	}
 
 	payload := []byte(strings.TrimSuffix(string(line), "\n"))
@@ -452,6 +544,74 @@ func spill(cfg Config, eventName string, line []byte) (string, error) {
 	)
 }
 
+// checkPendingCapacity は逃がし先が太りすぎていないかを確かめる。
+//
+// 数えるのは逃がし先の直下と、その下の隔離先（pending/broken/）である。隔離先を数に入れるのは、
+// 設計 3-19 が「壊れた JSON は消さずに残す」と決めていて自動では減らないためである
+// （消す代わりに、溜まったら書き込みを止めて人間に気づかせる）。
+//
+// 上限に達したときも、いきなり全部は止めない。turn の終わりの判定に要るイベント
+// （spillEssentialEvents）は書き続け、量の多い PreToolUse / PostToolUse から止める。
+// pendingHardLimitFactor 倍まで太ったら、ディスクを守るためにすべて止める。
+//
+// cfg: 既定値を埋めた Config。
+// eventName: これから書こうとしている hook のイベント名。
+// 戻り値: 書いてはいけない場合のエラー（呼び出し側はこれを Result.Err に入れる）。
+// 数えられなかった場合は nil を返す（数えられないことを理由に hook を落とさない）。
+func checkPendingCapacity(cfg Config, eventName string) error {
+	total, count, ok := measurePendingDir(cfg.PendingDir)
+	if !ok {
+		return nil
+	}
+	if total < cfg.MaxPendingBytes && count < cfg.MaxPendingFiles {
+		return nil
+	}
+
+	hardBytes := cfg.MaxPendingBytes * pendingHardLimitFactor
+	hardFiles := cfg.MaxPendingFiles * pendingHardLimitFactor
+	if total < hardBytes && count < hardFiles && spillEssentialEvents[eventName] {
+		return nil
+	}
+	return fmt.Errorf(
+		"hook の逃がし先が上限に達しています（%d バイト / %d 件。上限 %d バイト / %d 件）: %s",
+		total, count, cfg.MaxPendingBytes, cfg.MaxPendingFiles, cfg.PendingDir,
+	)
+}
+
+// measurePendingDir は逃がし先に溜まっている合計バイト数とファイル数を数える。
+//
+// dir: 逃がし先のディレクトリ。
+// 戻り値: 合計バイト数、ファイル数、数えられたかどうか。
+func measurePendingDir(dir string) (int64, int, bool) {
+	var (
+		total int64
+		count int
+	)
+	for _, d := range []string{dir, filepath.Join(dir, brokenDirName)} {
+		entries, err := os.ReadDir(d)
+		if err != nil {
+			// 逃がし先そのものを読めないときだけ「数えられなかった」とする。
+			// 隔離先はまだ無いのが普通なので、無いことを失敗にしない。
+			if d == dir {
+				return 0, 0, false
+			}
+			continue
+		}
+		for _, e := range entries {
+			if !e.Type().IsRegular() {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			total += info.Size()
+			count++
+		}
+	}
+	return total, count, true
+}
+
 // writeAndSync は中身を書き切り、ディスクへ流し込んでから閉じる。
 //
 // f: 書き込み先の（作成済みの）ファイル。この関数が閉じる。
@@ -475,11 +635,18 @@ func writeAndSync(f *os.File, payload []byte) error {
 // スラッシュや ".." が入ったときに逃がし先の外へ書けてしまう。英数字・アンダースコア・
 // ハイフン以外はすべて "_" に置き換える。
 //
+// **長さも maxEventNameLen で切る。**hook_event_name は標準入力の上限まで長くなりうるので、
+// 切らないと os.OpenFile が ENAMETOOLONG で失敗し、その hook が socket にも逃がし先にも
+// 残らずに消える。置き換え先はすべて1バイトの文字なので、途中で切っても壊れない。
+//
 // name: hook_event_name の値。
 // 戻り値: ファイル名に使える文字列。空になる場合は "unknown" を返す。
 func sanitizeEventName(name string) string {
 	var b strings.Builder
 	for _, r := range name {
+		if b.Len() >= maxEventNameLen {
+			break
+		}
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
 			b.WriteRune(r)

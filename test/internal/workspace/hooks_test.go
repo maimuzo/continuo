@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -190,5 +191,83 @@ func TestRunAfterRunOnce_複数のrunから同時に呼んでも1回だけ実行
 	}
 	if executed != 1 {
 		t.Fatalf("同時に呼んだときの実行回数が1でない: got %d", executed)
+	}
+}
+
+// 目的: hook がバックグラウンドプロセスを残しても、シェルが終わった時点で RunHook が
+// 戻ることを確認する（設計 3-9 の段2d / 3-16 の段7）。
+//
+// **なぜこの形か。**出力を bytes.Buffer で受けると os/exec が pipe と写し取りの
+// goroutine を作り、**Cmd.Wait は pipe の書き込み側を握っている孫プロセスが終わるまで
+// 返らない。**そうなると片付け（before_remove）と run の終了（after_run）が止まる。
+// 実測（2026-08-19、Go 1.26.2）: bytes.Buffer だと 5.01 秒、os.File だと 0.01 秒。
+//
+// 与える情報: `sleep 30 &` を残してすぐ終わる before_remove。
+// 成功条件: 3 秒以内に戻り、シェル自身は成功しているのでエラーにならないこと。
+func TestRunHook_バックグラウンドプロセスを残してもすぐ戻る(t *testing.T) {
+	command := "sleep 30 & echo 起動した"
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.WorkspaceHooks.BeforeRemove = &command
+		cfg.WorkspaceHooks.TimeoutMs = 500
+	}})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	start := time.Now()
+	err := fx.Manager.RunHook(context.Background(), workspace.HookBeforeRemove, prepared.Path)
+	elapsed := time.Since(start)
+
+	if elapsed > 3*time.Second {
+		t.Fatalf("孫プロセスが終わるまで待っている: %v かかった（err=%v）", elapsed, err)
+	}
+	if err != nil {
+		t.Fatalf("シェル自身は成功しているのにエラーになった（%v）: %v", elapsed, err)
+	}
+}
+
+// 目的: workspace_hooks.timeout_ms が、**戻らない hook の上限として効く**ことを確認する
+// （設計 3-9 の段2d。効かないと片付けと run の終了が無期限に止まる）。
+// 与える情報: timeout_ms を 500 にした設定と、30 秒眠る before_remove。
+// 成功条件: RunHook が 10 秒以内にエラーを返すこと（上限が効いていなければ 30 秒かかる）。
+func TestRunHook_timeout_msを超えた_hook_は打ち切る(t *testing.T) {
+	command := "sleep 30"
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.WorkspaceHooks.BeforeRemove = &command
+		cfg.WorkspaceHooks.TimeoutMs = 500
+	}})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	start := time.Now()
+	err := fx.Manager.RunHook(context.Background(), workspace.HookBeforeRemove, prepared.Path)
+	elapsed := time.Since(start)
+
+	if elapsed > 10*time.Second {
+		t.Fatalf("timeout_ms が上限になっていない: %v かかった（err=%v）", elapsed, err)
+	}
+	if err == nil {
+		t.Fatalf("時間切れなのにエラーが返っていない（%v で戻った）", elapsed)
+	}
+}
+
+// 目的: hook の出力が大量でも、全量をメモリとエラー文に載せないことを確認する
+// （無人の常駐プロセスが、面倒を見ている対象の作り出した状態で落ちないため）。
+// 与える情報: 1メガバイトを超える出力を出してから失敗する before_run。
+// 成功条件: エラー文が切り詰められていること（断り書きが入り、長さが上限の2倍未満）。
+func TestRunHook_出力が大量でも切り詰めて返す(t *testing.T) {
+	command := "yes 出力がとても長い行 | head -n 200000; exit 1"
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.WorkspaceHooks.BeforeRun = &command
+	}})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	err := fx.Manager.RunHook(context.Background(), workspace.HookBeforeRun, prepared.Path)
+	if err == nil {
+		t.Fatal("失敗する hook なのにエラーが返っていない")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "切り詰めました") {
+		t.Fatalf("出力を切り詰めた形跡が無い（全量をエラー文に載せている）: %d バイト", len(message))
+	}
+	if len(message) > 256*1024 {
+		t.Fatalf("エラー文が大きすぎる: %d バイト", len(message))
 	}
 }

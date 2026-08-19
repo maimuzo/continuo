@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -55,6 +56,10 @@ const betaHeaderValue = "oauth-2025-04-20"
 const defaultUserAgent = "claude-code/2.0.0"
 
 // 接続と全体のタイムアウトである（設計 3-15）。
+//
+// **dialTimeout は TCP の接続確立の上限である。**http.Transport.DialContext に渡す。
+// ResponseHeaderTimeout に入れてはならない（そちらは応答ヘッダを待つ上限であり、
+// 接続には上限が掛からない）。
 const (
 	dialTimeout    = 10 * time.Second
 	overallTimeout = 30 * time.Second
@@ -183,8 +188,9 @@ type Reader struct {
 
 	// mu は disabled と warned を守る。
 	mu sync.Mutex
-	// disabled は資格情報を取れなかったために枠の判定を諦めたことを表す。
-	// **一度立てたら戻さない。**取れないものを毎回読みに行かない。
+	// disabled は枠の判定を諦めたことを表す（資格情報を取れなかった、または
+	// usage API が 401 / 403 を返した）。
+	// **一度立てたら戻さない。**読めないものを毎回読みに行かない。
 	disabled bool
 	// warned は資格情報が取れないことを既に警告したかどうかである（警告は1回だけ。3-15）。
 	warned bool
@@ -206,8 +212,12 @@ func NewReader(opts Options) (*Reader, error) {
 	client := opts.HTTPClient
 	if client == nil {
 		client = &http.Client{
-			Timeout:   overallTimeout,
-			Transport: &http.Transport{ResponseHeaderTimeout: dialTimeout},
+			Timeout: overallTimeout,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{Timeout: dialTimeout}).DialContext,
+				// 自前の Transport を組み立てると HTTP/2 が既定で無効になるので明示する。
+				ForceAttemptHTTP2: true,
+			},
 		}
 	}
 	homeDir := opts.HomeDir
@@ -254,9 +264,14 @@ func (r *Reader) Enabled() bool {
 // 資格情報を取れなかったときは警告を1回だけ出して以後 Enabled を偽にし、
 // (nil, nil) を返す（**起動を止めない**。設計 3-27）。
 //
+// **401 / 403 を受けたときも諦める。**そのトークンでは以後も読めないので、
+// 資格情報が取れなかった場合と同じく警告を1回出して以後 Enabled を偽にし、(nil, nil) を返す。
+// それ以外の非 200（5xx 等）は一時的な失敗としてエラーで返す。
+//
 // ctx: 呼び出しに適用するコンテキスト。
-// 戻り値の1つ目: 読み取った枠の一覧。読まなかった場合と資格情報が無い場合は nil。
-// 戻り値の2つ目: HTTP の失敗・応答の解析の失敗のときのエラー。
+// 戻り値の1つ目: 読み取った枠の一覧。読まなかった場合・資格情報が無い場合・
+// 401 / 403 を受けた場合は nil。
+// 戻り値の2つ目: HTTP の失敗・応答の解析の失敗・401 / 403 以外の非 200 のときのエラー。
 func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 	if !r.Enabled() {
 		return nil, nil
@@ -287,7 +302,16 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 		return nil, fmt.Errorf("usage API の応答を読めません: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("usage API が HTTP %d を返しました: %s", resp.StatusCode, truncate(body, 200))
+		statusErr := fmt.Errorf("usage API が HTTP %d を返しました: %s", resp.StatusCode, truncate(body, 200))
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			// **401 / 403 は、このトークンでは以後も読めない。**諦めないと、失効した
+			// accessToken を抱えた無人のプロセスが巡回のたび（既定30秒）に叩き直し、
+			// ログが同じ頻度で汚れ続ける。資格情報が取れなかった場合と同じ扱いにする
+			// （**起動は止めない**。設計 3-27）。
+			r.disable(statusErr)
+			return nil, nil
+		}
+		return nil, statusErr
 	}
 
 	var parsed struct {
@@ -325,13 +349,37 @@ func (r *Reader) token() (string, error) {
 //
 // **Keychain は読まない**（設計 3-15）。macOS ではこのファイルが無いのが普通である。
 //
+// **通常のファイルであることを確かめてから読む。**symlink は辿らない。
+// 権限が group / other に開いている場合は警告を1行残す（読むこと自体は止めない）。
+//
 // 戻り値の1つ目: `.claudeAiOauth.accessToken` の値。
-// 戻り値の2つ目: ファイルが無い・読めない・トークンが空の場合は ErrNoCredentials を包んだエラー。
+// 戻り値の2つ目: ファイルが無い・通常のファイルでない・読めない・トークンが空の場合は
+// ErrNoCredentials を包んだエラー。
 func (r *Reader) tokenFromCredentialsFile() (string, error) {
 	if r.homeDir == "" {
 		return "", fmt.Errorf("%w: ホームディレクトリが分かりません", ErrNoCredentials)
 	}
 	path := filepath.Join(r.homeDir, CredentialsRelPath)
+	// **開く前にファイルの種別を確かめる。**中身は Claude の OAuth アクセストークンであり、
+	// 無人の常駐プロセスがこれを読んで HTTP ヘッダに載せる。symlink を辿ると、
+	// 別の場所に置き換えられたファイルを黙って読むことになる（os.Lstat は辿らない）。
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s を読めません（macOS では Keychain にあるのが普通です）: %w",
+			ErrNoCredentials, path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%w: %s が通常のファイルではありません（symlink は辿りません）: mode=%s",
+			ErrNoCredentials, path, info.Mode())
+	}
+	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+		// **読むのは止めないが、必ず1行残す。**権限が緩んだことに誰も気づかないまま、
+		// 他ユーザーから読める資格情報を使い続けるのを避ける。
+		r.logger.Warn(
+			"資格情報のファイルが自分以外からも読める権限になっています（chmod 600 を推奨します）",
+			"path", path, "mode", fmt.Sprintf("%04o", perm),
+		)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("%w: %s を読めません（macOS では Keychain にあるのが普通です）: %w",
@@ -370,12 +418,16 @@ func (r *Reader) disable(cause error) {
 
 // truncate はエラーメッセージへ載せる本文を切り詰める。
 //
+// **バイトではなく文字（rune）で切る。**usage API のエラー本文に非 ASCII が混ざると、
+// バイトで切った末尾の多バイト文字が割れてログに壊れた文字が出る。
+//
 // b: 元の本文。
-// max: 残すバイト数。
-// 戻り値: max バイトを超える場合は末尾に "…" を付けた文字列。
+// max: 残す文字数。
+// 戻り値: max 文字を超える場合は末尾に "…" を付けた文字列。
 func truncate(b []byte, max int) string {
-	if len(b) <= max {
-		return string(b)
+	r := []rune(string(b))
+	if len(r) <= max {
+		return string(r)
 	}
-	return string(b[:max]) + "…"
+	return string(r[:max]) + "…"
 }

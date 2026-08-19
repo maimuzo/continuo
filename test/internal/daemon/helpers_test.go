@@ -236,6 +236,19 @@ func (fh *fakeHerdr) dispatch(
 		}, nil
 	case "pane.close":
 		return map[string]any{"type": "pane_closed"}, nil
+	case "worktree.open":
+		// **本物の herdr と同じく、開いた worktree のパスと workspace を答える。**
+		// 片付けは消す直前にこれを呼び、返ってきた workspace の ID だけを
+		// `worktree.remove` の宛先にする（設計 3-9 の段3）。
+		path := fmt.Sprint(params["path"])
+		id := fh.workspaceIDForPath(path)
+		return map[string]any{
+			"type":      "worktree_opened",
+			"workspace": map[string]any{"workspace_id": id},
+			"tab":       map[string]any{"tab_id": id + ":t1"},
+			"root_pane": map[string]any{"pane_id": "p-" + id, "workspace_id": id},
+			"worktree":  map[string]any{"path": path},
+		}, nil
 	case "worktree.remove":
 		id := fmt.Sprint(params["workspace_id"])
 		fh.mu.Lock()
@@ -260,6 +273,26 @@ func (fh *fakeHerdr) dispatch(
 	default:
 		return nil, &rpcErr{Code: "unknown_method", Message: method}
 	}
+}
+
+// workspaceIDForPath は worktree のパスから herdr workspace の ID を引く。
+//
+// **登録が無ければその場で1つ作って覚える。**本物の herdr の `worktree.open` は、
+// 既に開いていればその workspace を返し、開いていなければ開いて返すためである。
+//
+// path: worktree の絶対パス。
+// 戻り値: herdr workspace の ID。
+func (fh *fakeHerdr) workspaceIDForPath(path string) string {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	for id, registered := range fh.workspaces {
+		if registered == path {
+			return id
+		}
+	}
+	id := fmt.Sprintf("ws%d", len(fh.workspaces)+1)
+	fh.workspaces[id] = path
+	return id
 }
 
 // Requests は受け取ったリクエストを受け取った順に返す。
