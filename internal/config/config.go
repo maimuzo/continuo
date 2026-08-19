@@ -105,9 +105,16 @@ func Load(path string) (*Loaded, error) {
 // 戻り値: パース・検証済みの Config。未知のキーがあれば起動を止める
 // （yaml.Strict()。goccy/go-yaml が行・桁・ソース抜粋つきのエラーを返す）。
 // 型は正しいが値が不正な場合は validate が起動を止める。
+//
+// 検査の順序は「プレースホルダ → 値の妥当性」に固定してある（設計 3-32）。
+// `continuo init` の雛形が置く project_number: 0 は validate の値域の検査でも落ちるため、
+// 逆順にすると「まだ埋めていない」ではなく「0より大きい整数にすること」が出てしまう。
 func parseFrontMatter(frontMatter string) (*Config, error) {
 	cfg := DefaultConfig()
 	if err := yaml.UnmarshalWithOptions([]byte(frontMatter), cfg, yaml.Strict()); err != nil {
+		return nil, err
+	}
+	if err := validatePlaceholders(cfg); err != nil {
 		return nil, err
 	}
 	if err := validate(cfg); err != nil {

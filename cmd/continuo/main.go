@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/logging"
+	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/socketpath"
 )
 
@@ -28,10 +30,98 @@ func main() {
 // stdout / stderr: 出力先。テストでは bytes.Buffer を渡して出力内容を検証できる。
 // 戻り値: プロセスの終了コード（0 は正常終了）。
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] == "hook" {
-		return runHook(args[1:], stdout, stderr)
+	if len(args) > 0 {
+		switch args[0] {
+		case "hook":
+			return runHook(args[1:], stdout, stderr)
+		case "init":
+			return runInit(args[1:], stdout, stderr)
+		}
 	}
 	return runMain(args, stdout, stderr)
+}
+
+// runInit は `continuo init` サブコマンドである。WORKFLOW.md の雛形を1つだけ置く（設計 3-32）。
+//
+// 雛形を書き出す実体は internal/scaffold にある。ここが決めるのは、引数の受け取り方と、
+// 失敗の種類ごとの文言・終了コードだけである。
+//
+// args: `continuo init` に続く引数。位置引数は書き出す先のディレクトリを0個か1個。
+// 省略したら、いまいるディレクトリに書く。--force で既存の WORKFLOW.md を上書きする。
+// stdout / stderr: 出力先。
+// 戻り値: 終了コード。0 は書き出せた（--help / -h で使い方を出した場合も 0）、
+// 1 は書き出せなかった（既にある・ディレクトリが無いなど）、2 は引数の指定が誤っている。
+func runInit(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("continuo init", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	forceFlag := fs.Bool("force", false, "既に WORKFLOW.md があっても上書きする")
+	if err := fs.Parse(args); err != nil {
+		return parseErrorExitCode(err)
+	}
+
+	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
+	// flag パッケージは最初の位置引数で解釈をやめるため、--force が効かないまま
+	// 「既にあります」で止まる、という分かりにくい失敗になる。
+	positional := fs.Args()
+	for _, a := range positional {
+		if strings.HasPrefix(a, "-") {
+			fmt.Fprintf(stderr, "エラー: 位置引数のあとにフラグらしき引数 %q があります。フラグは位置引数より前に書いてください\n", a)
+			return 2
+		}
+	}
+	if len(positional) > 1 {
+		fmt.Fprintf(stderr, "エラー: continuo init の位置引数は、WORKFLOW.md を置くディレクトリを1つだけ受け付けます（%d 個指定されました: %v）\n", len(positional), positional)
+		return 2
+	}
+
+	var dir string
+	if len(positional) == 1 {
+		dir = positional[0]
+	}
+
+	result, err := scaffold.WriteTemplate(dir, *forceFlag)
+	switch {
+	case err == nil:
+		if result.Overwritten {
+			fmt.Fprintf(stdout, "WORKFLOW.md を上書きしました: %s\n", result.Path)
+		} else {
+			fmt.Fprintf(stdout, "WORKFLOW.md を作成しました: %s\n", result.Path)
+		}
+		return 0
+	case errors.Is(err, scaffold.ErrAlreadyExists):
+		fmt.Fprintf(stderr, "%s は既にあります。上書きするなら --force を付けてください\n", result.Path)
+		return 1
+	case errors.Is(err, scaffold.ErrDirNotFound):
+		// ディレクトリは作らない（--force でも作らない）。打ち間違えたパスに
+		// WORKFLOW.md が生まれると、利用者は作ったはずのファイルを見失う。
+		fmt.Fprintf(stderr, "エラー: %v。先にディレクトリを作ってください\n", err)
+		return 1
+	case errors.Is(err, scaffold.ErrNotADirectory):
+		fmt.Fprintf(stderr, "エラー: %v。continuo init が受け取るのは WORKFLOW.md を置くディレクトリです\n", err)
+		return 1
+	case errors.Is(err, scaffold.ErrSymlink):
+		// symlink は --force でも辿らない。辿ると指定されたディレクトリの外にある
+		// リンク先を雛形で潰すため、--force を勧めてはならない。
+		fmt.Fprintf(stderr, "エラー: %v。symlink を消すか、別のディレクトリを指定してください\n", err)
+		return 1
+	default:
+		fmt.Fprintf(stderr, "エラー: WORKFLOW.md の雛形を書き出せません: %v\n", err)
+		return 1
+	}
+}
+
+// parseErrorExitCode は flag.FlagSet.Parse が返したエラーを終了コードに直す。
+//
+// flag パッケージは `--help` / `-h` を受け取ると、使い方を出したうえで flag.ErrHelp を返す。
+// これは利用者が意図して求めたものなので、引数の指定の誤り（終了コード 2）と同じ扱いにしない。
+//
+// err: fs.Parse が返した非 nil のエラー。
+// 戻り値: flag.ErrHelp なら 0、それ以外（未知のフラグ、値の形式違いなど）は 2。
+func parseErrorExitCode(err error) int {
+	if errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
+	return 2
 }
 
 // runMain は継続監視の本体である。第1段階では「設定を読み込み、検証し、
@@ -42,7 +132,7 @@ func runMain(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	logLevelFlag := fs.String("log-level", "info", "ログレベル（debug|info|warn|error）")
 	if err := fs.Parse(args); err != nil {
-		return 2
+		return parseErrorExitCode(err)
 	}
 
 	// flag パッケージは「位置引数のあとに書かれたフラグ」を黙って無視する
@@ -149,13 +239,14 @@ func resolveLockFilePath(cfg config.Config, sockPath string) string {
 //
 // args: `continuo hook` に続く引数（--socket など）。
 // stdout / stderr: 出力先。
-// 戻り値: 終了コード。第1段階では常に1（未実装）を返す。
+// 戻り値: 終了コード。--help / -h なら 0、引数の指定が誤っていれば 2、
+// それ以外は第1段階では常に1（未実装）を返す。
 func runHook(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo hook", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	socketFlag := fs.String("socket", "", "hook を受ける socket のパス")
 	if err := fs.Parse(args); err != nil {
-		return 2
+		return parseErrorExitCode(err)
 	}
 	if len(fs.Args()) > 0 {
 		fmt.Fprintf(stderr, "エラー: continuo hook は位置引数を受け付けません（%v が指定されました）\n", fs.Args())
