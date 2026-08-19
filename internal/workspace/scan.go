@@ -1,0 +1,91 @@
+package workspace
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// scanDepth は置き場所を掘る深さである。
+// `<root>/<host>/<owner>/<repo>/<スラグ>` の**固定の4階層**で、それより深くは掘らない
+// （3-4 の段2）。
+const scanDepth = 4
+
+// ScannedWorktree は置き場所の走査で見つかった worktree 1件である。
+type ScannedWorktree struct {
+	// Path は worktree の絶対パスである。
+	Path string
+	// Identity は読めた身元ファイルの中身である。読めなければ nil。
+	Identity *Identity
+	// Err は身元ファイルを読めなかった理由である（ErrIdentityBroken など）。
+	// **Err が付いていても worktree を消してはならない**（3-4 の段2）。ログに出して残す。
+	Err error
+}
+
+// Scan は置き場所を走査し、身元ファイルを持つ worktree の一覧を返す（3-4 の段2）。
+//
+// **深さは固定の4階層である**（`<root>/<host>/<owner>/<repo>/<スラグ>`）。
+// それより深くは掘らない。**身元ファイルが無いディレクトリは結果に含めない**
+// （人間が置いた worktree かもしれない）。**JSON が壊れていたものは Err を付けて含める**
+// （呼び出し側がログに出す。消さない）。
+//
+// 戻り値の1つ目: 見つかった worktree の一覧（パスの昇順）。
+// 戻り値の2つ目: 置き場所そのものを読めない場合のエラー。
+// 途中の階層が読めない場合はその階層を飛ばし、エラーにはしない。
+func (m *Manager) Scan() ([]ScannedWorktree, error) {
+	dirs, err := m.scanLevel(m.resolvedRoot, scanDepth)
+	if err != nil {
+		return nil, err
+	}
+
+	found := make([]ScannedWorktree, 0, len(dirs))
+	for _, dir := range dirs {
+		identity, readErr := m.ReadIdentity(dir)
+		if readErr != nil {
+			if errors.Is(readErr, ErrIdentityNotFound) {
+				// 人間が置いた worktree かもしれないので、結果に含めない。
+				continue
+			}
+			found = append(found, ScannedWorktree{Path: dir, Err: readErr})
+			continue
+		}
+		found = append(found, ScannedWorktree{Path: dir, Identity: identity})
+	}
+	return found, nil
+}
+
+// scanLevel は dir の下を depth 階層だけ掘り、その深さのディレクトリの一覧を返す。
+//
+// dir: 掘り始めるディレクトリ。
+// depth: 残りの階層数。0 になったら dir 自身を返す。
+// 戻り値の1つ目: depth 階層下のディレクトリの絶対パス（各階層で名前の昇順）。
+// 戻り値の2つ目: 最上位の dir を読めない場合のエラー。
+// 途中の階層が読めない場合はその階層を飛ばして続ける。
+func (m *Manager) scanLevel(dir string, depth int) ([]string, error) {
+	if depth == 0 {
+		return []string{dir}, nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if depth == scanDepth {
+			return nil, fmt.Errorf("置き場所 %s を読めません: %w", dir, err)
+		}
+		m.logger.Warn("置き場所の走査で読めないディレクトリを飛ばしました", "dir", dir, "error", err)
+		return nil, nil
+	}
+
+	var result []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		child := filepath.Join(dir, entry.Name())
+		deeper, err := m.scanLevel(child, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, deeper...)
+	}
+	return result, nil
+}
