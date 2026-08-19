@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/hookclient"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/logging"
 	"github.com/maimuzo/continuo/internal/scaffold"
@@ -20,20 +21,21 @@ import (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 // run は continuo の CLI 全体のエントリポイントである。os.Exit を直接呼ばないので
 // テストから終了コードを検証できる。
 //
 // args: os.Args[1:] に相当するコマンドライン引数。
+// stdin: 標準入力。`continuo hook` が hook の JSON を読む先である。
 // stdout / stderr: 出力先。テストでは bytes.Buffer を渡して出力内容を検証できる。
 // 戻り値: プロセスの終了コード（0 は正常終了）。
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		switch args[0] {
 		case "hook":
-			return runHook(args[1:], stdout, stderr)
+			return runHook(args[1:], stdin, stderr)
 		case "init":
 			return runInit(args[1:], stdout, stderr)
 		}
@@ -230,29 +232,63 @@ func resolveLockFilePath(cfg config.Config, sockPath string) string {
 	return filepath.Join(filepath.Dir(sockPath), socketpath.LockFileName)
 }
 
-// runHook は `continuo hook` サブコマンドの骨組みである。
+// runHook は `continuo hook` サブコマンドである（設計 3-2）。
 //
-// 設計 3-2 のとおり、最終的には「標準入力の JSON をそのまま hook 受け口の socket へ
-// 転送して終了するだけ」の薄い処理になる。socket 経由の通信は後続の段階
-// （docs/plans/continuo_design.md 7節の段階4）で実装するため、第1段階では
-// サブコマンドとして受理できることと、未実装であることを明示するところまでを行う。
+// 標準入力の hook の JSON を hook 受け口の socket へ1行で転送し、応答を待たずに終わる。
+// socket へ繋がらなければ --pending-dir の下へ逃がす（設計 3-19）。実体は
+// internal/hookclient にあり、ここが決めるのは引数の受け取り方と、標準エラーへ出す文言だけである。
 //
-// args: `continuo hook` に続く引数（--socket など）。
-// stdout / stderr: 出力先。
-// 戻り値: 終了コード。--help / -h なら 0、引数の指定が誤っていれば 2、
-// それ以外は第1段階では常に1（未実装）を返す。
-func runHook(args []string, stdout, stderr io.Writer) int {
+// **どの経路でも終了コードは 0 にする。**continuo が落ちていても、逃がし先へ書けなくても、
+// エージェントを止めないためである。引数の指定が誤っている場合だけ 1 を返す。
+// **2 を返してはならない。**Claude Code は hook の終了コード 2 を「その操作を止めろ」の
+// 合図として扱うため、Stop hook で 2 を返すとエージェントが止まれなくなる。
+//
+// args: `continuo hook` に続く引数（--socket / --pending-dir）。
+// stdin: hook の JSON の入力元。
+// stderr: 出力先。転送できなかった理由をここへ出す。
+// 戻り値: 終了コード。--help / -h なら 0、引数の指定が誤っていれば 1、それ以外は常に 0。
+func runHook(args []string, stdin io.Reader, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo hook", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	socketFlag := fs.String("socket", "", "hook を受ける socket のパス")
+	socketFlag := fs.String("socket", "", "hook を受ける socket の絶対パス")
+	pendingDirFlag := fs.String("pending-dir", "", "socket へ繋がらなかったときの逃がし先の絶対パス")
 	if err := fs.Parse(args); err != nil {
-		return parseErrorExitCode(err)
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
 	}
 	if len(fs.Args()) > 0 {
 		fmt.Fprintf(stderr, "エラー: continuo hook は位置引数を受け付けません（%v が指定されました）\n", fs.Args())
-		return 2
+		return 1
+	}
+	if *socketFlag == "" {
+		fmt.Fprintf(stderr, "エラー: continuo hook には --socket が必要です（continuo が issue ごとの設定ファイルへ絶対パスを埋め込みます）\n")
+		return 1
+	}
+	// --pending-dir も必須にする。指定が落ちていると continuo が落ちている間の hook が
+	// socket にも逃がし先にも残らず、設計 3-19 の逃がし先が丸ごと無効になる。
+	// 設定ファイルのテンプレートの書き間違いを、hook 側で黙って見逃さない。
+	if *pendingDirFlag == "" {
+		fmt.Fprintf(stderr, "エラー: continuo hook には --pending-dir が必要です（continuo が落ちている間の hook の逃がし先です。continuo が issue ごとの設定ファイルへ絶対パスを埋め込みます）\n")
+		return 1
 	}
 
-	fmt.Fprintf(stderr, "continuo hook は未実装です（--socket=%q）。標準入力を socket へ転送する処理は後続の段階で実装します\n", *socketFlag)
-	return 1
+	result := hookclient.Forward(hookclient.Config{
+		SocketPath: *socketFlag,
+		PendingDir: *pendingDirFlag,
+		Stdin:      stdin,
+	})
+
+	if result.Truncated {
+		fmt.Fprintf(stderr, "continuo hook: 標準入力が上限を超えたので、判定に要る項目だけを拾って転送しました（tool_input / tool_response は落ちています）\n")
+	}
+	switch result.Outcome {
+	case hookclient.OutcomeSpilled:
+		fmt.Fprintf(stderr, "continuo hook: socket へ転送できなかったので逃がし先へ書きました（%s）: %v\n",
+			result.PendingPath, result.Err)
+	case hookclient.OutcomeDropped:
+		fmt.Fprintf(stderr, "continuo hook: この hook はどこにも記録できませんでした: %v\n", result.Err)
+	}
+	return 0
 }
