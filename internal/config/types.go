@@ -87,10 +87,18 @@ type TrackerConfig struct {
 	ActiveStates []string `yaml:"active_states"`
 	// TerminalStates は「完了」を意味する状態である。In Review を含めてはならない（3-9 / 3-10）。
 	TerminalStates []string `yaml:"terminal_states"`
+	// RunningState は dispatch したときに書き込む先の状態である（設計 3-16 の段2）。
+	// active_states に含まれている必要がある。含まれていないと、dispatch した直後に
+	// 自分の worker を候補から外してしまう（設計 3-10）。
+	RunningState string `yaml:"running_state"`
 	// DispatchState は取り残された issue を戻す先の状態である。
 	DispatchState string `yaml:"dispatch_state"`
 	// FailureState は打ち切り・失敗のときに落とす先の状態である（4-1）。
 	FailureState string `yaml:"failure_state"`
+	// VerifyStatesEvery は Status の選択肢名を照合する間隔（巡回の回数）である（設計 3-6）。
+	// 毎巡回では行わない。選択肢名が変わるのは人間がボードを触ったときだけなので、
+	// 20 巡回に1回で足りる。0 なら起動時の1回だけ行う。
+	VerifyStatesEvery int `yaml:"verify_states_every"`
 	// WriteIntervalMs は、トラッカーへの書き込みどうしの最小の間隔である（3-31）。
 	// GitHub が変更を伴うリクエストの間を1秒以上あけることを推奨しているため、既定は 1000 とする。
 	WriteIntervalMs int `yaml:"write_interval_ms"`
@@ -175,10 +183,6 @@ type ClaudeHookBridgeConfig struct {
 	// LivenessHooks は生きていることの確認だけに使う hook 名の一覧である（3-21）。
 	// turn の終わりの判定には使わない。
 	LivenessHooks []string `yaml:"liveness_hooks"`
-	// HookResponseTimeoutMs は continuo hook が本体の応答（turn を差し戻すか否か）を待つ上限（ミリ秒）である（3-2）。
-	// Claude Code 側の hook のタイムアウトより短くする。長くすると hook が先に打ち切られ、
-	// 標準出力に書いた差し戻しの指示が読まれない。応答が返らなければ何も書かずに終わる。
-	HookResponseTimeoutMs int `yaml:"hook_response_timeout_ms"`
 }
 
 // ClaudeConfig は Claude Code の起動方法を決める。
@@ -191,6 +195,11 @@ type ClaudeConfig struct {
 	Permissions ClaudePermissionsConfig `yaml:"permissions"`
 	// Env は Claude Code の起動時に渡す環境変数である。値は展開しない（5-4）。
 	Env map[string]string `yaml:"env"`
+	// PollWaitMs は agent.wait 1回あたりの待ち時間（ミリ秒）である（3-2）。
+	// turn の待ち受けを短く切り、経過時間を continuo 側で数えるためのもの。
+	// herdr に「待ちの時計を止める」手段が無いので、枠待ちの間を数えないためにこの形にする。
+	// turn 全体の上限は TurnTimeoutMs のほうである。
+	PollWaitMs int `yaml:"poll_wait_ms"`
 	// SettleMs は、background_tasks が空の Stop を受けてから turn の終わりと確定するまでの
 	// 猶予（ミリ秒）である（1-3 / 3-2）。空配列の Stop は turn の途中にも発火するため、
 	// この時間のあいだ <task-notification> で始まる UserPromptSubmit が来ないことを確かめる。
@@ -264,6 +273,9 @@ type RateLimitConfig struct {
 	// 想定する値は "claude_credentials"（Claude Code が使っている資格情報を読む）か "env"。
 	// **読み取りだけで、書き換えない**（`~/.claude.json` を書き換えないという絶対制約に従う）。
 	TokenSource string `yaml:"token_source"`
+	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。
+	// "env" のとき必須。空だとどこからトークンを取ればよいか決まらない。
+	TokenEnv string `yaml:"token_env"`
 	// PauseAbovePercent はこの割合を超えたら新規の dispatch を止める閾値（0〜100）である。
 	PauseAbovePercent int `yaml:"pause_above_percent"`
 	// PollIntervalMs はレートリミットの値を確認する間隔（ミリ秒）である。

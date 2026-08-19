@@ -649,3 +649,73 @@ func TestAgentRename_新しい名前が不正なら接続せずに弾かれる(t
 		t.Fatalf("接続していないはずなのに接続回数が %d だった", got)
 	}
 }
+
+// TestAgentSendKeys_権限の確認を取り消すキーを送れる は、blocked の agent へ esc を送る経路を検証する。
+// 目的: 設計 3-11 が要求する「次を投げる前に必ず esc を送る」を実装できることを確かめる。
+// 与える情報: agent 名 "continuo-test" と keys ["esc"]。
+// 成功条件: agent.send_keys が呼ばれ、params に target と keys がそのまま載ること。
+func TestAgentSendKeys_権限の確認を取り消すキーを送れる(t *testing.T) {
+	var gotMethod string
+	var gotParams struct {
+		Target string   `json:"target"`
+		Keys   []string `json:"keys"`
+	}
+	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
+		var req struct {
+			ID     string `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				Target string   `json:"target"`
+				Keys   []string `json:"keys"`
+			} `json:"params"`
+		}
+		if err := json.Unmarshal(line, &req); err != nil {
+			t.Errorf("偽サーバがリクエストを解析できませんでした: %v", err)
+			return
+		}
+		gotMethod = req.Method
+		gotParams.Target = req.Params.Target
+		gotParams.Keys = req.Params.Keys
+		writeResult(t, conn, req.ID, map[string]any{"type": "ok"})
+	})
+
+	client := herdr.New(fs.SocketPath(), herdr.Timeouts{Read: time.Second})
+	if err := client.AgentSendKeys(context.Background(), herdr.AgentSendKeysParams{
+		Target: normalize.SafeName("continuo-test"),
+		Keys:   []string{"esc"},
+	}); err != nil {
+		t.Fatalf("AgentSendKeys が失敗した: %v", err)
+	}
+
+	if gotMethod != herdr.MethodAgentSendKeys {
+		t.Errorf("メソッド名が違う: got=%q want=%q", gotMethod, herdr.MethodAgentSendKeys)
+	}
+	if gotParams.Target != "continuo-test" {
+		t.Errorf("target が違う: got=%q want=continuo-test", gotParams.Target)
+	}
+	if len(gotParams.Keys) != 1 || gotParams.Keys[0] != "esc" {
+		t.Errorf("keys が違う: got=%v want=[esc]", gotParams.Keys)
+	}
+}
+
+// TestAgentSendKeys_キーが空なら呼び出す前に落ちる は、空の keys を弾くことを検証する。
+// 目的: 意味のない要求を socket へ送らないことを確かめる。
+// 与える情報: keys を指定しない AgentSendKeysParams。
+// 成功条件: エラーが返り、偽サーバが1度も呼ばれないこと。
+func TestAgentSendKeys_キーが空なら呼び出す前に落ちる(t *testing.T) {
+	called := false
+	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
+		called = true
+	})
+
+	client := herdr.New(fs.SocketPath(), herdr.Timeouts{Read: time.Second})
+	err := client.AgentSendKeys(context.Background(), herdr.AgentSendKeysParams{
+		Target: normalize.SafeName("continuo-test"),
+	})
+	if err == nil {
+		t.Fatal("keys が空でもエラーにならなかった")
+	}
+	if called {
+		t.Error("キーが空なのに socket を呼んだ")
+	}
+}

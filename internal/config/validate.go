@@ -66,11 +66,19 @@ func validate(cfg *Config) error {
 	if len(cfg.Tracker.TerminalStates) == 0 {
 		return requiredValueError("tracker.terminal_states")
 	}
+	if cfg.Tracker.RunningState == "" {
+		return requiredValueError("tracker.running_state")
+	}
 	if cfg.Tracker.DispatchState == "" {
 		return requiredValueError("tracker.dispatch_state")
 	}
 	if cfg.Tracker.FailureState == "" {
 		return requiredValueError("tracker.failure_state")
+	}
+	// dispatch したときに書く先が active_states に無いと、書いた直後に自分の worker を
+	// 候補から外してしまう（設計 3-10）。
+	if !containsString(cfg.Tracker.ActiveStates, cfg.Tracker.RunningState) {
+		return invalidValueError("tracker.running_state", cfg.Tracker.RunningState, "tracker.active_states に含まれる値にすること")
 	}
 	if !containsString(cfg.Tracker.ActiveStates, cfg.Tracker.DispatchState) {
 		return invalidValueError("tracker.dispatch_state", cfg.Tracker.DispatchState, "tracker.active_states に含まれる値にすること")
@@ -146,8 +154,13 @@ func validate(cfg *Config) error {
 		return requiredValueError("cleanup.on_states（cleanup.enabled が true のとき必須）")
 	}
 
-	if cfg.RateLimit.Source != "oauth_usage_api" {
-		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" のみサポートする`)
+	// none を受理する。usage API がトークンを消費するかどうかを判別できていないため、
+	// この経路を切って運用できる必要がある（設計 3-27 / 第6節）。
+	// none のときは枠の判定を行わず、stall 検知だけに頼る。
+	switch cfg.RateLimit.Source {
+	case "oauth_usage_api", "none":
+	default:
+		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" か "none" のどちらか（設計 3-27）`)
 	}
 	switch cfg.RateLimit.TokenSource {
 	case "claude_credentials", "env":

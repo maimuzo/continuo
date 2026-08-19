@@ -30,6 +30,9 @@ const (
 	MethodAgentWait = "agent.wait"
 	// MethodAgentRename は agent の名前を変えるメソッド名である。
 	MethodAgentRename = "agent.rename"
+	// MethodAgentSendKeys は agent にキーを送るメソッド名である。
+	// 権限の確認で止まった agent を取り消すのに使う（設計 3-11）。
+	MethodAgentSendKeys = "agent.send_keys"
 )
 
 // agentNamePattern は herdr が受け付ける agent 名のパターンである
@@ -502,4 +505,33 @@ func (c *Client) AgentRename(ctx context.Context, params AgentRenameParams) (*Ag
 		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodAgentRename, err)
 	}
 	return &result, nil
+}
+
+// AgentSendKeysParams は agent.send_keys に渡す引数である。
+// target: agent 名。keys: 送るキーの並び。Escape は "esc"（"escape" も受理される）。
+type AgentSendKeysParams struct {
+	Target normalize.SafeName `json:"target"`
+	Keys   []string           `json:"keys"`
+}
+
+// AgentSendKeys は agent にキーを送る。
+//
+// 使いどころは、権限の確認で止まった agent を取り消すことである（設計 3-11）。
+// blocked のまま次のプロンプトを投げると、保留中の権限要求が承認されて実行されるため、
+// 次を投げる前に必ず ["esc"] を送る。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// params: 宛先の agent 名と、送るキーの並び。
+// 戻り値: 送出に失敗したときのエラー。agent 名が規則に合わなければ呼び出す前に落とす。
+func (c *Client) AgentSendKeys(ctx context.Context, params AgentSendKeysParams) error {
+	if err := ValidateAgentName(params.Target); err != nil {
+		return err
+	}
+	if len(params.Keys) == 0 {
+		return fmt.Errorf("%s には少なくとも1つのキーが要ります", MethodAgentSendKeys)
+	}
+	if _, err := c.call(ctx, MethodAgentSendKeys, params, c.timeouts.Read); err != nil {
+		return err
+	}
+	return nil
 }

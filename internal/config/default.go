@@ -26,10 +26,12 @@ func DefaultConfig() *Config {
 			// In Progress を必ず含める（3-10）。ここで欠かすと dispatch 直後に自分の worker を殺す。
 			ActiveStates:   []string{"Ready", "In Progress"},
 			TerminalStates: []string{"Done"},
+			RunningState:   "In Progress",
 			DispatchState:  "Ready",
 			FailureState:   "Blocked",
 			// GitHub が変更を伴うリクエストの間を1秒以上あけることを推奨している（設計 3-31）。
-			WriteIntervalMs: 1000,
+			VerifyStatesEvery: 20,
+			WriteIntervalMs:   1000,
 			// エージェントが最終応答に書く表明の印と、その値から Status への対応（3-25）。
 			// "working" は null（＝Status を動かさない）である。
 			StatusSignalPrefix: "CONTINUO-STATUS:",
@@ -83,6 +85,7 @@ func DefaultConfig() *Config {
 			Env: map[string]string{
 				"CLAUDE_CODE_RETRY_WATCHDOG": "1",
 			},
+			PollWaitMs:       30000,
 			SettleMs:         2000,
 			WaitUntil:        []string{"idle", "done", "blocked"},
 			TurnTimeoutMs:    3600000,
@@ -90,10 +93,9 @@ func DefaultConfig() *Config {
 			StallTimeoutMs:   1800000,
 			StartupTimeoutMs: 60000,
 			HookBridge: ClaudeHookBridgeConfig{
-				Mode:                  "settings_flag",
-				Listen:                nil,
-				LivenessHooks:         []string{"PreToolUse", "PostToolUse"},
-				HookResponseTimeoutMs: 3000,
+				Mode:          "settings_flag",
+				Listen:        nil,
+				LivenessHooks: []string{"PreToolUse", "PostToolUse"},
 			},
 		},
 		Herdr: HerdrConfig{
@@ -122,6 +124,7 @@ func DefaultConfig() *Config {
 		RateLimit: RateLimitConfig{
 			Source:            "oauth_usage_api",
 			TokenSource:       "claude_credentials",
+			TokenEnv:          "CLAUDE_CODE_OAUTH_TOKEN",
 			PauseAbovePercent: 95,
 			PollIntervalMs:    300000,
 		},

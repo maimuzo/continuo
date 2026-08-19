@@ -489,16 +489,17 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 // 1件の Status 値だけを書く `updateProjectV2ItemFieldValue` を使う。
 //
 // **書き込む前に、必ず ID 指定でその item を取り直す。**取り直した結果の State が
-// activeStates に含まれていなければ書かない（設計 3-25: 「continuo は書く前に必ず
-// ボードを取り直すので、既に動いていれば書かない」。エージェントが自分で `gh` を叩いて
-// 先に Status を動かしていた場合に、それを上書き・巻き戻ししないためである）。
+// blockedStates に含まれていたら書かない（設計 3-4）。エージェントが自分で `gh` を叩いて
+// 先に Status を動かしていた場合に、それを上書き・巻き戻ししないためである。
+//
+// **許可リストではなく拒否リストである。**グループの issue は Ice Box に置かれるので
+// （設計 3-26）、active_states で絞ると表明が1件も反映されない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // itemID: 書き込む対象の project item ID（Issue.ID）。
 // targetState: 書き込む先の Status 名。Bootstrap で解決した選択肢名と大文字小文字を
 // 無視して照合する。
-// activeStates: 「まだ作業中」とみなす Status の一覧。取り直した結果の State がこれに
-// 含まれる場合だけ書き込む。
+// blockedStates: 「この状態なら書かない」Status の一覧。呼び出し側は terminal_states を渡す。
 // 戻り値の1つ目: 実際に書き込んだかどうか。false はエラーではなく、「item がもう見えない」
 // または「取り直した結果、既に別の Status へ動いていたので書かなかった」のいずれかを意味する
 // （呼び出し側はログに残すだけでよい）。
@@ -509,7 +510,7 @@ func (a *Adapter) UpdateStatus(
 	ctx context.Context,
 	itemID string,
 	targetState string,
-	activeStates []string,
+	blockedStates []string,
 ) (bool, error) {
 	if !a.bootstrapped {
 		return false, &Error{
@@ -534,8 +535,8 @@ func (a *Adapter) UpdateStatus(
 		a.logger.Warn("Status を書きませんでした（item がもう見えません）", "item_id", itemID, "target_state", targetState)
 		return false, nil
 	}
-	if !containsFoldedStatus(activeStates, current[0].State) {
-		a.logger.Info("Status を書きませんでした（取り直した結果、既に作業中の状態から動いていました）",
+	if containsFoldedStatus(blockedStates, current[0].State) {
+		a.logger.Info("Status を書きませんでした（取り直した結果、書いてはいけない状態に入っていました）",
 			"item_id", itemID, "target_state", targetState, "現在の状態", current[0].State,
 		)
 		return false, nil
