@@ -110,8 +110,9 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 // reconcileWorktrees は worktree を走査して身元ファイルを読み、Status を ID 指定で
 // 取り直して照合する（巡回の GraphQL リクエストの3本目。設計 3-9 の手順7）。
 //
-//	cleanup.on_states に入っている  … worktree と branch を片付ける
-//	印に入っていない worktree に pane がある … その pane を閉じる（手順7b）
+//	cleanup.on_states に入っている            … worktree と branch を片付ける
+//	active_states に戻っていて pane が生きている … その pane を閉じる（手順7b）
+//	それ以外（引き渡し・見えない）             … 何もしない。**pane も worktree も残す**
 //
 // **印に入っている worktree はここでは触らない。**実行中の照合（reconcileRunning）が見る。
 //
@@ -159,21 +160,29 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 			// もう見えない issue の worktree。**勝手に消さない**（設計 3-4）。
 			continue
 		}
-		// 手順7b: 印に入っていない worktree の pane を閉じる（2つ目が立つのを防ぐ）。
-		o.closeOrphanPane(ctx, orph.identity)
-
-		if !o.ws.ShouldCleanup(issue.State) {
+		if o.ws.ShouldCleanup(issue.State) {
+			// 手順7: `cleanup.on_states` に入っていれば片付ける。
+			// **ここで pane を閉じない。**`worktree.remove` の応答は workspace ごと
+			// 閉じるので、その中の pane も一緒に消える（設計 3-9 の手順3）。
+			result, err := o.ws.Cleanup(ctx, workspace.CleanupRequest{WorktreePath: orph.path})
+			if err != nil {
+				o.logger.Warn("取り残された worktree を片付けられません",
+					"identifier", issue.Identifier, "path", orph.path, "error", err)
+				continue
+			}
+			if result.Removed {
+				o.logger.Info("取り残された worktree を片付けました",
+					"identifier", issue.Identifier, "path", orph.path)
+			}
 			continue
 		}
-		result, err := o.ws.Cleanup(ctx, workspace.CleanupRequest{WorktreePath: orph.path})
-		if err != nil {
-			o.logger.Warn("取り残された worktree を片付けられません",
-				"identifier", issue.Identifier, "path", orph.path, "error", err)
-			continue
-		}
-		if result.Removed {
-			o.logger.Info("取り残された worktree を片付けました",
-				"identifier", issue.Identifier, "path", orph.path)
+		// 手順7b: **Status が `active_states` に戻ったときだけ** pane を閉じる。
+		// この条件を外してはならない。**`In Review` / `Blocked` の run は、復元が
+		// 「pane も worktree も残す」と決めて印に入れていない**（設計 3-4 の段5a）。
+		// 条件なしに閉じると、復元の直後の巡回が、人間のレビュー待ちで正常に
+		// 止まっている Claude Code を毎巡回で落とす。
+		if containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
+			o.closeOrphanPane(ctx, orph.identity)
 		}
 	}
 }

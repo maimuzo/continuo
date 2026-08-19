@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -505,39 +506,57 @@ func (o *Orchestrator) cleanupWorktree(ctx context.Context, rs *runState) {
 	if snap.WorktreePath == "" {
 		return
 	}
+	o.cleanupPath(ctx, snap.Identifier, snap.WorktreePath, snap.Base, issueNodeID(rs.issue()))
+}
+
+// cleanupPath は worktree と branch と設定ファイルを、パスを指定して片付ける（設計 3-9）。
+//
+// **印を持っていない worktree も片付けられるようにするために、runState から切り離してある**
+// （復元の段5a と段8 が、印に入っていない worktree をここへ渡す。設計 3-4）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// identifier: ログとコメントに出す issue の識別子。
+// worktreePath: 片付ける worktree の絶対パス。
+// base: worktree を作ったときの base（3-9 の手順2b）。**分からなければ空でよい。**
+// その場合、upstream が無い branch は「判定できない」として見送られる（消さない側に倒す）。
+// nodeID: 下敷きの GitHub issue のノード ID。空ならコメントは書かない。
+// 戻り値: worktree と branch を実際に消したら true。
+func (o *Orchestrator) cleanupPath(
+	ctx context.Context,
+	identifier, worktreePath string,
+	base normalize.SafeName,
+	nodeID string,
+) bool {
 	result, err := o.ws.Cleanup(ctx, workspace.CleanupRequest{
-		WorktreePath: snap.WorktreePath,
-		Base:         snap.Base,
+		WorktreePath: worktreePath,
+		Base:         base,
 	})
 	if err != nil {
-		o.logger.Warn("worktree を片付けられません", "identifier", snap.Identifier, "error", err)
-		return
+		o.logger.Warn("worktree を片付けられません", "identifier", identifier, "error", err)
+		return false
 	}
 	if result.Removed {
-		o.logger.Info("worktree と branch を片付けました", "identifier", snap.Identifier, "path", snap.WorktreePath)
-		return
+		o.logger.Info("worktree と branch を片付けました", "identifier", identifier, "path", worktreePath)
+		return true
 	}
 	o.logger.Warn("worktree を片付けずに残しました",
-		"identifier", snap.Identifier, "path", snap.WorktreePath, "理由", strings.Join(result.Reasons, " / "))
+		"identifier", identifier, "path", worktreePath, "理由", strings.Join(result.Reasons, " / "))
 
-	if !result.ShouldComment {
-		return
-	}
-	nodeID := issueNodeID(rs.issue())
-	if nodeID == "" {
-		return
+	if !result.ShouldComment || nodeID == "" {
+		return false
 	}
 	body := fmt.Sprintf("worktree を片付けずに残しました（%s）。\n\n理由:\n- %s",
-		snap.WorktreePath, strings.Join(result.Reasons, "\n- "))
+		worktreePath, strings.Join(result.Reasons, "\n- "))
 	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
-		o.logger.Warn("片付けを見送った通知を投稿できませんでした", "identifier", snap.Identifier, "error", err)
-		return
+		o.logger.Warn("片付けを見送った通知を投稿できませんでした", "identifier", identifier, "error", err)
+		return false
 	}
 	// **投稿に成功したあとで印を書く。**投稿の前に書くと、投稿が失敗したときに
 	// コメントが永久に出なくなる（設計 3-9 の手順2c）。
-	if err := o.ws.MarkCleanupDeferred(snap.WorktreePath, o.now()); err != nil {
-		o.logger.Warn("片付けを見送った印を書けませんでした", "identifier", snap.Identifier, "error", err)
+	if err := o.ws.MarkCleanupDeferred(worktreePath, o.now()); err != nil {
+		o.logger.Warn("片付けを見送った印を書けませんでした", "identifier", identifier, "error", err)
 	}
+	return false
 }
 
 // postHandoffComment は人間へ引き渡すときの通知を issue へ書く。

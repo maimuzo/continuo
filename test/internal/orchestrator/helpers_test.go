@@ -466,6 +466,8 @@ type fakeTracker struct {
 	verifyErr error
 	// statesErr は FetchIssuesByStates が返すエラーである。
 	statesErr error
+	// idsErr は FetchIssuesByIDs が返すエラーである（復元の段3 の失敗の再現）。
+	idsErr error
 	// now は CreatedAt に入れる時刻を返す関数である。
 	now func() time.Time
 	// timeline は偽の herdr と共有する呼び出しの並びである（nil なら記録しない）。
@@ -530,6 +532,16 @@ func (ft *fakeTracker) SetVerifyError(err error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.verifyErr = err
+}
+
+// SetIDsError は FetchIssuesByIDs が返すエラーを差し替える
+// （復元の取り直しが認証切れ・レートリミットで落ちる状況の再現。設計 3-4 の段3）。
+//
+// err: 返すエラー。nil なら成功にする。
+func (ft *fakeTracker) SetIDsError(err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.idsErr = err
 }
 
 // AddIssue はボードの末尾に issue を足す。
@@ -618,6 +630,9 @@ func (ft *fakeTracker) FetchIssuesByIDs(_ context.Context, ids []string) ([]trac
 		return nil, nil
 	}
 	ft.record("FetchIssuesByIDs")
+	if ft.idsErr != nil {
+		return nil, ft.idsErr
+	}
 	var out []tracker.Issue
 	for _, id := range ids {
 		for _, issue := range ft.board {

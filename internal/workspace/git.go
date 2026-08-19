@@ -374,3 +374,65 @@ func RunGhqList(ctx context.Context, owner, repo string) (string, error) {
 	}
 	return "", nil
 }
+
+// gitLocalBranches はリポジトリの local branch 名の一覧を返す（3-9 の手順6b）。
+//
+// **`git branch` ではなく `git for-each-ref` を使う。**`git branch` の出力は
+// チェックアウト中の branch に `*` や `+` の印を付け、worktree のパスを添えるため、
+// 名前だけを取り出すのに文字列の削り取りが要る。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// 戻り値の1つ目: local branch 名の一覧（git が返した順）。
+// 戻り値の2つ目: 実行に失敗した場合のエラー。
+func gitLocalBranches(ctx context.Context, repoDir string) ([]string, error) {
+	out, err := runGit(ctx, repoDir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	for scanner.Scan() {
+		name := strings.TrimSpace(scanner.Text())
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("`git for-each-ref` の出力を読めません: %w", err)
+	}
+	return names, nil
+}
+
+// gitWorktreeBranches は、いずれかの worktree がチェックアウトしている branch 名の集合を返す
+// （3-9 の手順6b の「対応する worktree も無く」の判定に使う）。
+//
+// `git worktree list --porcelain` の `branch refs/heads/<名前>` の行を読む。
+// detached HEAD の worktree にはこの行が無いので、集合に入らない。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// 戻り値の1つ目: チェックアウト中の branch 名の集合。
+// 戻り値の2つ目: 実行に失敗した場合のエラー。
+func gitWorktreeBranches(ctx context.Context, repoDir string) (map[string]bool, error) {
+	out, err := runGit(ctx, repoDir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	branches := map[string]bool{}
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	for scanner.Scan() {
+		rest, ok := strings.CutPrefix(scanner.Text(), "branch ")
+		if !ok {
+			continue
+		}
+		name := strings.TrimPrefix(strings.TrimSpace(rest), "refs/heads/")
+		if name != "" {
+			branches[name] = true
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("`git worktree list --porcelain` の出力を読めません: %w", err)
+	}
+	return branches, nil
+}

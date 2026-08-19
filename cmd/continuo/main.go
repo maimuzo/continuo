@@ -4,20 +4,21 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/daemon"
 	"github.com/maimuzo/continuo/internal/hookclient"
-	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/logging"
 	"github.com/maimuzo/continuo/internal/scaffold"
-	"github.com/maimuzo/continuo/internal/socketpath"
 )
 
 func main() {
@@ -126,9 +127,16 @@ func parseErrorExitCode(err error) int {
 	return 2
 }
 
-// runMain は継続監視の本体である。第1段階では「設定を読み込み、検証し、
-// 二重起動でないことを確認して終了する」ところまでを実装する。巡回・dispatch・
-// turn ループなどは後続の段階（docs/plans/continuo_design.md 7節）で実装する。
+// runMain は継続監視の本体である（設計 3-4 の「起動から復元までの順序」）。
+//
+// **結線の実体は internal/daemon にある。**ここが決めるのは、引数の受け取り方・
+// ログの出力先・`SIGINT` / `SIGTERM` を受けるコンテキストの作り方・終了コードだけである
+// （`package main` の非公開関数は test/ から呼べないため、実体を internal へ置く）。
+//
+// args: `continuo` に続く引数（--log-level と、WORKFLOW.md のパスを0個か1個）。
+// stdout / stderr: 出力先。
+// 戻り値: 終了コード。0 は正常終了（SIGINT / SIGTERM での停止を含む）、
+// 1 は起動できなかった、2 は引数の指定が誤っている。
 func runMain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -181,55 +189,18 @@ func runMain(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	loaded, err := config.Load(path)
-	if err != nil {
-		logger.Error("設定ファイルの読み込みに失敗しました", "path", path, "error", err)
-		return 1
-	}
-	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
+	// **SIGINT / SIGTERM で巡回を止める。**受けたあとの作法（巡回を止め・hook の受け口を
+	// 閉じ・turn ループの終了を待つ・**pane は閉じない**）は internal/daemon が持つ。
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	sockPath, err := socketpath.ResolveHookSocketPath(loaded.Config.Claude.HookBridge.Listen, os.Getenv("CONTINUO_RUNTIME_DIR"))
-	if err != nil {
-		logger.Error("hook を受ける socket の場所を決められません", "error", err)
+	fmt.Fprintf(stdout, "continuo を起動します（設定ファイル: %s）\n", path)
+	if err := daemon.Run(ctx, daemon.Options{ConfigPath: path, Logger: logger}); err != nil {
+		logger.Error("continuo を起動できません", "error", err)
 		return 1
 	}
-	if err := socketpath.EnsureDir(filepath.Dir(sockPath)); err != nil {
-		logger.Error("hook を受ける socket のディレクトリを準備できません", "error", err)
-		return 1
-	}
-	logger.Info("hook を受ける socket の場所を決めました", "socket", sockPath)
-
-	lockPath := resolveLockFilePath(loaded.Config, sockPath)
-	l, err := lock.Acquire(lockPath)
-	if err != nil {
-		logger.Error("二重起動を検出しました", "lock_file", lockPath, "error", err)
-		return 1
-	}
-	defer func() {
-		if err := l.Release(); err != nil {
-			logger.Warn("ロックの解放に失敗しました", "error", err)
-		}
-	}()
-	logger.Info("二重起動防止のロックを獲得しました", "lock_file", lockPath)
-
-	// 巡回・dispatch・turn ループ以降は後続の段階（docs/plans/continuo_design.md 7節の
-	// 段階6以降）で実装する。第1段階ではここまでで正常終了とする。
-	logger.Info("continuo の第1段階（設定読み込み・二重起動防止）の起動処理が完了しました")
+	logger.Info("continuo を終了しました")
 	return 0
-}
-
-// resolveLockFilePath は二重起動防止のロックファイルの絶対パスを決める。
-// cfg.Runtime.LockFile が明示されていればそれを使い、無ければ hook socket と
-// 同じディレクトリに置く（設計 5-2 の runtime.lock_file の既定値の説明）。
-//
-// cfg: 読み込み済みの設定（5-4 の展開を通した後のもの）。
-// sockPath: 解決済みの hook socket の絶対パス。
-// 戻り値: ロックファイルの絶対パス。
-func resolveLockFilePath(cfg config.Config, sockPath string) string {
-	if cfg.Runtime.LockFile != nil && *cfg.Runtime.LockFile != "" {
-		return *cfg.Runtime.LockFile
-	}
-	return filepath.Join(filepath.Dir(sockPath), socketpath.LockFileName)
 }
 
 // runHook は `continuo hook` サブコマンドである（設計 3-2）。
