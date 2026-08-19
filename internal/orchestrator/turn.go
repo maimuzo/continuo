@@ -312,8 +312,10 @@ func (o *Orchestrator) afterQuotaReset(ctx context.Context, rs *runState) turnOu
 	case herdr.AgentStatusBlocked:
 		return turnBlocked
 	case herdr.AgentStatusWorking:
-		// **Claude Code が自分で継続している。**送らずに hook を待つ。
-		// **その turn は continuo が送っていないので turn 数に入らない**（設計 3-14）。
+		// **Claude Code が自分で継続している。**送らずに hook を待つ（設計 3-27）。
+		// Claude Code 2.1.234 以降、枠のリセット時にセッションを自動継続する機能が
+		// 既定で有効である。そのまま送ると二重投入になり、投げた本文が消えて turn が混ざる。
+		// **その turn は continuo が送っていないので turn 数に入らない。**
 		o.logger.Info("枠が明けて Claude Code が自分で継続しました（継続の指示は送りません）",
 			"identifier", rs.issue().Identifier)
 		deadline := o.now().Add(time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond)

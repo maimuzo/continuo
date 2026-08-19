@@ -106,6 +106,12 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 - [x] **`runState.PromptID` は `UserPromptSubmit` を受けた時点で入れる**（投入時には取れない。設計 3-25）
 - [x] **枠待ちの run についてだけ、stall の時計と `turn_timeout_ms` を止める**
 - [x] **枠が明けたときに送る継続の指示を、turn 数に数える**（設計 3-27）
+- [x] **枠が明けたとき、継続の指示を送る前に `agent_status` を見る**（設計 3-27）
+  - **Claude Code 2.1.234 以降、枠のリセット時にセッションを自動継続する機能が既定で有効である**
+    （`/config` の `Continue automatically at usage limit`）。**そのまま送ると二重投入になる**
+  - `working` → **送らない。**Claude Code が自分で継続している。hook を待つ
+  - `blocked` → 送らない（`esc` を送ってから人間へ渡す）
+  - `idle` / `done` → 送る。**取れなかったら送る**（枠明けに止まったままにしない）
   - **数えないと、枠待ちと復帰を繰り返す間に `max_turns` が一度も発火しない**
 - [x] **run が終わるときにコメントを確かめ、無ければ 3-25 の9段で書かせる**（毎 turn ではない）
   - **「この run が書いたもの」だけを数える**（marker があり、`runState.StartedAt` より新しいもの）
