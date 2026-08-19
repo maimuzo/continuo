@@ -32,8 +32,12 @@ import (
 // DefaultSocketPath は herdr の socket API の既定の置き場所である（2-1）。
 const DefaultSocketPath = "~/.config/herdr/herdr.sock"
 
-// EnvSocketPath は herdr の socket のパスを最優先で指定する環境変数名である（2-1）。
-// herdr が pane 内のプロセスにこの環境変数を注入する。
+// EnvSocketPath は herdr が pane 内のプロセスへ注入する環境変数の名前である（2-1）。
+//
+// **continuo はこの環境変数を自分で読まない。**読むと、設定ファイルに書いたパスが
+// 黙って無視される（2-1 の理由を参照）。この定数を残しているのは、WORKFLOW.md の雛形が
+// 「環境変数で切り替えたいなら ${HERDR_SOCKET_PATH} と書く」と案内しており、
+// その名前を1箇所で持つためである。展開は 5-5 の規則で internal/config が行う。
 const EnvSocketPath = "HERDR_SOCKET_PATH"
 
 // 待ち時間の既定値である。設定ファイルの claude セクションの既定値
@@ -108,32 +112,22 @@ func checkAbsSocketPath(path, source string) error {
 // ResolveSocketPath は herdr の socket API に接続する Unix domain socket の絶対パスを、
 // 次の優先順位で決める（2-1）。
 //
-//  1. 環境変数 HERDR_SOCKET_PATH
-//  2. configured（設定ファイルの herdr.socket の値。5-4 の展開を済ませた後の値を渡すこと）
-//  3. 既定値 ~/.config/herdr/herdr.sock
+//  1. configured（設定ファイルの herdr.socket の値。5-5 の展開を済ませた後の値を渡すこと）
+//  2. 既定値 ~/.config/herdr/herdr.sock
 //
-// 決まった値が絶対パスでなければエラーにする（checkAbsSocketPath）。また、環境変数が
-// 「設定されているが空」の場合もエラーにする。設計 5-5 の展開規則が「未定義の環境変数」も
-// 「設定されているが空」もエラーと定めており、無人運用では原因の分からないエラーで落ちるより、
-// 設定を読んだ時点で名指しで落ちるほうがよいためである。
+// **環境変数 HERDR_SOCKET_PATH をここで読んではならない。**設定に書いたパスが黙って
+// 無視されると、continuo は利用者が指定した先とは別の herdr で pane を作り worktree を消す。
+// herdr の pane の中で動かす環境ではこの環境変数が常に入っているので、優先すると
+// 設定ファイルで切り替える手段が一切なくなる（テストでも切り替えられない）。
+// 環境変数で切り替えたい利用者は設定に ${HERDR_SOCKET_PATH} と書く。展開は 5-5 の規則で
+// internal/config が行い、未定義ならそこで落ちる（既定値へは落ちない）。
+//
+// 決まった値が絶対パスでなければエラーにする（checkAbsSocketPath）。
 //
 // configured: 設定ファイルの herdr.socket の値。空文字なら未指定として扱う。
 // 戻り値: 決定した socket の絶対パス。既定値へ落ちるときにホームディレクトリの取得に
 // 失敗した場合はエラーを返す。
 func ResolveSocketPath(configured string) (string, error) {
-	if v, ok := os.LookupEnv(EnvSocketPath); ok {
-		if v == "" {
-			return "", fmt.Errorf(
-				"環境変数 %s が設定されていますが空です（5-5 の展開規則により、"+
-					"設定されているが空の値はエラーとして扱う。使わないなら環境変数ごと外すこと）",
-				EnvSocketPath,
-			)
-		}
-		if err := checkAbsSocketPath(v, "環境変数 "+EnvSocketPath); err != nil {
-			return "", err
-		}
-		return v, nil
-	}
 	if configured != "" {
 		if err := checkAbsSocketPath(configured, "設定ファイルの herdr.socket"); err != nil {
 			return "", err

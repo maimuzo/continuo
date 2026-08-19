@@ -13,7 +13,7 @@ import (
 // 行・桁・ソース抜粋つきのエラーを返す。この関数はその後、goccy では検出できない
 // 「値として妥当かどうか」（enum に収まっているか・必須値が空でないか）だけを見る。
 //
-// cfg: unmarshal 済みの Config（5-4 の展開はまだ行っていない状態でよい）。
+// cfg: unmarshal 済みの Config（5-5 の展開はまだ行っていない状態でよい）。
 // 戻り値: 最初に見つかった不正な値についてのエラー。複数箇所が不正でも1つずつ直せるよう、
 // エラーメッセージには必ず設定キーの名前と、実際に入っていた値を含める。
 func validate(cfg *Config) error {
@@ -190,7 +190,7 @@ func validate(cfg *Config) error {
 	return nil
 }
 
-// validateExpanded は 5-4 の展開（環境変数・チルダ）を通したあとの Config を検査する。
+// validateExpanded は 5-5 の展開（環境変数・チルダ）を通したあとの Config を検査する。
 //
 // 展開の前に検査すると "~/run/continuo.lock" のような値を「絶対パスでない」と誤って
 // 弾いてしまうため、絶対パスの検査だけはここに分けてある。
@@ -204,7 +204,7 @@ func validate(cfg *Config) error {
 //
 // cfg: expandConfig を通したあとの Config。
 // 戻り値: 最初に見つかった不正な値についてのエラー。エラーメッセージには設定キーの名前と
-// 実際に入っていた値（展開後の文字列）を含める（5-4）。
+// 実際に入っていた値（展開後の文字列）を含める（5-5）。
 func validateExpanded(cfg *Config) error {
 	if cfg.Claude.HookBridge.Listen != nil && *cfg.Claude.HookBridge.Listen != "" {
 		if !filepath.IsAbs(*cfg.Claude.HookBridge.Listen) {

@@ -153,19 +153,46 @@ func TestCall_応答タイムアウトが効く(t *testing.T) {
 	}
 }
 
-// 目的: 環境変数 HERDR_SOCKET_PATH が設定されていれば、設定ファイルの値より
-// 最優先で使われることを確認する（設計 2-1）。
+// 目的: 環境変数 HERDR_SOCKET_PATH が設定されていても、設定ファイルの値が使われることを
+// 確認する（設計 2-1）。
+//
+// **これは実際に起きた事故の再発防止である。**環境変数を優先していたため、設定ファイルに
+// 別の socket を書いても無視され、herdr の pane の中で動かす環境（この環境変数が常に入る）
+// では設定ファイルで切り替える手段が一切なくなっていた。continuo は herdr で pane を作り
+// worktree を消すので、利用者が指定した先とは別の herdr を操作しうる。
+//
+// 環境変数で切り替えたい利用者は、設定に ${HERDR_SOCKET_PATH} と書く（展開は 5-5 の規則で
+// internal/config が行う）。
+//
 // 与える情報: HERDR_SOCKET_PATH を明示的に設定し、configured にも別の値を渡す。
-// 成功条件: ResolveSocketPath が HERDR_SOCKET_PATH の値をそのまま返すこと。
-func TestResolveSocketPath_環境変数が最優先される(t *testing.T) {
+// 成功条件: ResolveSocketPath が configured の値を返すこと（環境変数の値ではない）。
+func TestResolveSocketPath_環境変数が設定されていても設定値を使う(t *testing.T) {
 	t.Setenv(herdr.EnvSocketPath, "/from/env/herdr.sock")
 
 	got, err := herdr.ResolveSocketPath("/from/config/herdr.sock")
 	if err != nil {
 		t.Fatalf("ResolveSocketPath が失敗した: %v", err)
 	}
-	if got != "/from/env/herdr.sock" {
-		t.Fatalf("環境変数が優先されていない: got %q", got)
+	if got != "/from/config/herdr.sock" {
+		t.Fatalf("環境変数が設定値を上書きしている: got %q（設定に書いたパスが無視されている）", got)
+	}
+}
+
+// 目的: 環境変数 HERDR_SOCKET_PATH が設定されていても、設定値が空なら既定値へ落ちることを
+// 確認する（環境変数を読まないので、環境変数の値は既定値の決定にも影響しない）。
+// 与える情報: HERDR_SOCKET_PATH に絶対パスを設定し、configured は空文字。HOME を明示する。
+// 成功条件: 既定値 "<HOME>/.config/herdr/herdr.sock" が返ること。
+func TestResolveSocketPath_設定値が空なら環境変数を無視して既定値へ落ちる(t *testing.T) {
+	t.Setenv(herdr.EnvSocketPath, "/from/env/herdr.sock")
+	t.Setenv("HOME", "/home/tester")
+
+	got, err := herdr.ResolveSocketPath("")
+	if err != nil {
+		t.Fatalf("ResolveSocketPath が失敗した: %v", err)
+	}
+	want := "/home/tester/.config/herdr/herdr.sock"
+	if got != want {
+		t.Fatalf("既定値へ落ちていない: got %q, want %q", got, want)
 	}
 }
 
@@ -214,43 +241,6 @@ func TestResolveSocketPath_どちらも無ければ既定値を使う(t *testing
 	want := "/home/tester/.config/herdr/herdr.sock"
 	if got != want {
 		t.Fatalf("既定値が想定と違う: got %q, want %q", got, want)
-	}
-}
-
-// 目的: 環境変数 HERDR_SOCKET_PATH が相対パスのとき、値の出どころを名指ししてエラーに
-// なることを確認する（設計 5-5 の展開規則と、internal/socketpath の絶対パス検査に合わせる）。
-// 与える情報: 相対パス "relative/herdr.sock" を HERDR_SOCKET_PATH に設定する。
-// 成功条件: ResolveSocketPath がエラーを返し、そのメッセージに環境変数名と元の値の
-// 両方が含まれること（無人運用で原因が分かるようにするため）。
-func TestResolveSocketPath_相対パスの環境変数はエラーになる(t *testing.T) {
-	t.Setenv(herdr.EnvSocketPath, "relative/herdr.sock")
-
-	_, err := herdr.ResolveSocketPath("/from/config/herdr.sock")
-	if err == nil {
-		t.Fatalf("相対パスなのにエラーが返らなかった")
-	}
-	if !strings.Contains(err.Error(), herdr.EnvSocketPath) {
-		t.Fatalf("エラーメッセージに環境変数名が含まれていない: %v", err)
-	}
-	if !strings.Contains(err.Error(), "relative/herdr.sock") {
-		t.Fatalf("エラーメッセージに元の値が含まれていない: %v", err)
-	}
-}
-
-// 目的: 環境変数 HERDR_SOCKET_PATH が「設定されているが空」のときエラーになることを
-// 確認する（設計 5-5:「設定されているが空」はエラー）。
-// 与える情報: HERDR_SOCKET_PATH に空文字を設定し、configured には正しい絶対パスを渡す。
-// 成功条件: 設定値へ黙って落ちるのではなくエラーになり、メッセージに環境変数名が
-// 含まれること。
-func TestResolveSocketPath_環境変数が空文字ならエラーになる(t *testing.T) {
-	t.Setenv(herdr.EnvSocketPath, "")
-
-	_, err := herdr.ResolveSocketPath("/from/config/herdr.sock")
-	if err == nil {
-		t.Fatalf("空文字なのにエラーが返らなかった（設定値へ黙って落ちている）")
-	}
-	if !strings.Contains(err.Error(), herdr.EnvSocketPath) {
-		t.Fatalf("エラーメッセージに環境変数名が含まれていない: %v", err)
 	}
 }
 

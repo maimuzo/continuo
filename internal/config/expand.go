@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// expandKeys は 5-4 の表が「適用するキー」として挙げている4つのキーの一覧である。
+// expandKeys は 5-5 の表が「適用するキー」として挙げている4つのキーの一覧である。
 // パスと接続先を表すものだけに展開を適用し、テンプレート文字列（branch_template）や
 // Claude Code へ渡す環境変数（claude.env）、workspace_hooks の各コマンドには適用しない。
 const (
@@ -16,12 +16,12 @@ const (
 	keyRuntimeLockFile  = "runtime.lock_file"
 )
 
-// expandConfig は Config のうち、5-4 が展開対象と定めた4つのキーだけへ
+// expandConfig は Config のうち、5-5 が展開対象と定めた4つのキーだけへ
 // 環境変数展開・チルダ展開を適用する。他のキーは一切変更しない。
 //
 // cfg: front matter をパースした直後の Config（展開前）。呼び出し後、対象キーの値が
 // 展開済みの値へ書き換わる。
-// 戻り値: 展開に失敗した場合のエラー。設定キーの名前と元の文字列を必ず含む（5-4）。
+// 戻り値: 展開に失敗した場合のエラー。設定キーの名前と元の文字列を必ず含む（5-5）。
 func expandConfig(cfg *Config) error {
 	expanded, err := expandValue(cfg.Herdr.Socket, keyHerdrSocket)
 	if err != nil {
@@ -71,7 +71,7 @@ func expandValue(raw, key string) (string, error) {
 // expandDollar は `$NAME` / `${NAME}` / `$$`（リテラルのドル記号）の3つの書き方だけを
 // 受け付けて展開する自前の小さなパーサである。
 //
-// os.ExpandEnv / os.Expand を使わない理由（設計 5-4 で実測済み）:
+// os.ExpandEnv / os.Expand を使わない理由（設計 5-5 で実測済み）:
 //   - 未定義の変数を黙って空文字に変換してしまい、設定の誤りに気づけない
 //   - `price is $100` を `price is 00` に変えてしまう（`$1`, `$0`, `$0` を展開しようとするため）
 //   - `${UNCLOSED`（閉じ忘れ）を検出できない
@@ -164,7 +164,7 @@ func isEnvNameChar(c byte) bool {
 	return isEnvNameStart(c) || ('0' <= c && c <= '9')
 }
 
-// lookupEnv は環境変数を読み、未定義または空文字ならエラーにする（5-4）。
+// lookupEnv は環境変数を読み、未定義または空文字ならエラーにする（5-5）。
 // name: 環境変数名。
 // key: エラーメッセージに含める設定キーの名前。
 // original: エラーメッセージに含める、展開前の元の文字列。
@@ -187,7 +187,7 @@ func lookupEnv(name, key, original string) (string, error) {
 
 // expandTilde は先頭の `~` または `~/` だけをホームディレクトリへ展開する。
 // `~user` のような他ユーザーのホームを指す形式は、continuo が動くマシンの外の
-// ユーザー情報に依存してしまうためサポートせず、エラーにする（5-4）。
+// ユーザー情報に依存してしまうためサポートせず、エラーにする（5-5）。
 //
 // raw: 展開前の文字列（expandDollar を通した後の文字列を渡す想定）。
 // key: エラーメッセージに含める設定キーの名前。

@@ -121,7 +121,7 @@ func Resolve(dir string) (string, error) {
 // ResolveHookSocketPath は、front matter の claude.hook_bridge.listen（展開済み）と
 // 環境変数 CONTINUO_RUNTIME_DIR から、hook を受ける socket の絶対パスを1つに決める。
 //
-// explicitListen: front matter の claude.hook_bridge.listen（5-4 の展開を通した後の値）。
+// explicitListen: front matter の claude.hook_bridge.listen（5-5 の展開を通した後の値）。
 // nil または空文字なら未指定として扱い、3-23 の探索順に従う。
 // envRuntimeDir: 環境変数 CONTINUO_RUNTIME_DIR の値。RuntimeDir にそのまま渡す。
 // 戻り値: 絶対パス。次のいずれかの場合はエラーを返す。

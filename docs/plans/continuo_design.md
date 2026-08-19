@@ -438,7 +438,15 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | 分かったこと | 設計への影響 |
 | --- | --- |
 | **Unix domain socket + 改行区切り JSON。認証もハンドシェイクも無い。**JSON-RPC 2.0 ではない。リクエストは `{id, method, params}` の3つとも必須で、`id` は文字列必須、`params` は空でも `{}` が要る | Go の `net.Dial("unix")` + `encoding/json` で足りる。ライブラリ追加ゼロ |
-| socket のパスは環境変数 `HERDR_SOCKET_PATH` で pane 内のプロセスに注入される。既定は `~/.config/herdr/herdr.sock` | continuo は環境変数を最優先で読む。socket の探索ロジックを自前で持たない |
+| socket のパスは環境変数 `HERDR_SOCKET_PATH` で pane 内のプロセスに注入される。既定は `~/.config/herdr/herdr.sock` | **continuo は設定ファイルの `herdr.socket` を使う。環境変数を勝手に優先しない**（下記）。socket の探索ロジックを自前で持たない |
+
+> **環境変数を優先してはならない。**設定に書いたパスが黙って無視されると、
+> **continuo は利用者が指定した先とは別の herdr で pane を作り、worktree を消す。**
+> herdr の pane の中で動かす環境では `HERDR_SOCKET_PATH` が常に入っているので、
+> **優先すると設定ファイルで切り替える手段が一切なくなる**（テストでも切り替えられない）。
+>
+> **環境変数で切り替えたい利用者は、設定に `${HERDR_SOCKET_PATH}` と書く。**
+> 展開は 5-5 の規則で `internal/config` が行う。**未定義ならそこで落ちる**（既定値へは落ちない）。
 | **1コネクション = 1リクエスト。**応答を1行返した直後にサーバがコネクションを閉じる | コネクションプールを作れない。RPC は毎回 connect し直す |
 | **`events.subscribe` だけが長寿命ストリーム。**ただし接続時に過去の event を再生し、配信が毎秒 9〜10 件に律速される | **`pane.updated` と `pane.scroll_changed` を購読してはいけない**（追いつかない）。`session.snapshot` で現在状態を確定させてから、低頻度の event だけ購読する |
 | **`events.wait` は agent の状態変化しか受け付けない。**schema には19種の待機条件が定義されているが、他を投げると拒否される | schema を鵜呑みにしてコード生成すると実行時に落ちる |
@@ -2036,10 +2044,11 @@ ghq list -p -e <owner>/<repo>
 socket も、issue ごとの設定ファイル（3-12）も、hook の逃がし先（3-19）も、flock のファイル（3-17）も、
 **全部このディレクトリの下に置く。**
 
-> **既存の実装と一致している。**`cmd/continuo/main.go` は
+> **既存の実装と一致している。**`internal/daemon` の `Run` は
 > `socketpath.ResolveHookSocketPath(...)` で socket のパスを解決したあと、
 > `socketpath.EnsureDir(filepath.Dir(sockPath))` でそのディレクトリを作り、
-> `resolveLockFilePath` も `filepath.Join(filepath.Dir(sockPath), socketpath.LockFileName)` を返している。
+> `ResolveLockFilePath` も `filepath.Join(filepath.Dir(sockPath), socketpath.LockFileName)` を返している。
+> `cmd/continuo` はこれを呼ぶだけである。
 
 **採る規則。上から順に、最初に見つかったものを使う。**
 
@@ -2057,6 +2066,18 @@ Linux は107バイトまで。**両対応のため103バイトを上限にし、
 **権限は2段構え。**ディレクトリを `0700` にするのが本体で、socket ファイルの権限だけに頼らない。
 **Go が作る socket の権限は umask 次第で、既定の環境では `0755`（誰でも接続できる）になる**（実測）。
 ディレクトリを作ったあとに `Chmod` を必ず呼ぶ（`MkdirAll` は既存ディレクトリの権限を直さない）。
+
+**continuo が読む環境変数は2つだけである。**設定ファイルに置かないのは、
+**どちらも「その機械でどう動かすか」であって、issue の扱い方を決める値ではない**ためである。
+
+| 環境変数 | 何を決めるか | 空・未定義のとき |
+| --- | --- | --- |
+| `CONTINUO_RUNTIME_DIR` | 実行時ディレクトリ（上の探索順の1番目） | 探索順の2番目以降へ落ちる |
+| `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` | GitHub の GraphQL API の URL | 本番の `https://api.github.com/graphql` を使う |
+
+**`CONTINUO_GITHUB_GRAPHQL_ENDPOINT` は運用者の逃げ道であり、テストの接続先でもある。**
+**これが無いと、ビルドしたバイナリを本番のボードへ繋がずに動かす手段が1つも無い**
+（`test/internal/daemon` は偽の GraphQL サーバをここへ向けている）。
 
 **決めたパスは身元ファイルに書く**（3-18）。**探索順は環境に依存するので、別の起動方法で立て直すと別のパスに落ちる。**
 run 中の Claude Code は前回のパスを持ったままなので、引き継ぐときに一致を検査する。

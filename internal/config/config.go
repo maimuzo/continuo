@@ -65,7 +65,7 @@ func ResolvePath(argPath, workDir string) (string, error) {
 //     continuo は意図的に逆にしている。書いたつもりの設定が効いていないことに、
 //     無人運用では気づけないため）
 //   - front matter の値が型として不正、または値として不正である
-//   - 5-4 の展開規則に反する（未定義の環境変数・$ の誤用・~user 形式など）
+//   - 5-5 の展開規則に反する（未定義の環境変数・$ の誤用・~user 形式など）
 func Load(path string) (*Loaded, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

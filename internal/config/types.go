@@ -122,7 +122,7 @@ type PollingConfig struct {
 
 // WorkspaceConfig は worktree の置き場所と身元ファイルの名前を決める。
 type WorkspaceConfig struct {
-	// Root は worktree を置く置き場所である。チルダは展開する（5-4）。
+	// Root は worktree を置く置き場所である。チルダは展開する（5-5）。
 	Root string `yaml:"root"`
 	// Layout は置き場所の構成規則である。想定する値は "gwq" のみ（3-22）。
 	Layout string `yaml:"layout"`
@@ -193,7 +193,7 @@ type ClaudeConfig struct {
 	PermissionMode string `yaml:"permission_mode"`
 	// Permissions は dontAsk のときに参照される許可・拒否リストである。
 	Permissions ClaudePermissionsConfig `yaml:"permissions"`
-	// Env は Claude Code の起動時に渡す環境変数である。値は展開しない（5-4）。
+	// Env は Claude Code の起動時に渡す環境変数である。値は展開しない（5-5）。
 	Env map[string]string `yaml:"env"`
 	// PollWaitMs は agent.wait 1回あたりの待ち時間（ミリ秒）である（3-2）。
 	// turn の待ち受けを短く切り、経過時間を continuo 側で数えるためのもの。
@@ -225,7 +225,7 @@ type HerdrWorktreeConfig struct {
 	// CreateViaHerdr は herdr に worktree を workspace として開かせるかどうかである（3-22）。
 	CreateViaHerdr bool `yaml:"create_via_herdr"`
 	// BranchTemplate は branch 名のテンプレートである。区切りにスラッシュを使う（3-22）。
-	// このキーには 5-4 の展開規則を適用しない（テンプレート文字列であり、環境変数展開の対象ではない）。
+	// このキーには 5-5 の展開規則を適用しない（テンプレート文字列であり、環境変数展開の対象ではない）。
 	BranchTemplate string `yaml:"branch_template"`
 	// Base は派生元の branch 名である。null ならトラッカーが返す既定 branch を使う。
 	Base *string `yaml:"base"`
@@ -233,7 +233,7 @@ type HerdrWorktreeConfig struct {
 
 // HerdrConfig は herdr の socket API との接続方法と worktree の作り方を決める。
 type HerdrConfig struct {
-	// Socket は herdr の socket API のパスである。チルダ・環境変数を展開する（5-4）。
+	// Socket は herdr の socket API のパスである。チルダ・環境変数を展開する（5-5）。
 	Socket string `yaml:"socket"`
 	// Protocol は herdr の socket API の版である。起動時に照合して合わなければ止める。
 	Protocol int `yaml:"protocol"`
