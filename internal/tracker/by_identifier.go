@@ -1,0 +1,105 @@
+package tracker
+
+import (
+	"context"
+	"fmt"
+	"strings"
+)
+
+// allItemsQueryTemplate は FetchIssueByIdentifier が使うクエリである。
+//
+// **Status で絞らない**（設計 3-25）。グループの他の issue は `Ice Box` に置かれるので、
+// `active_states` で絞ると表明が1件も反映されない。
+// `items(query:)` の検索構文で識別子だけを絞る書き方が確認できていないため、
+// ボードを1リクエスト（104件のボードなら cost 1〜4。設計 3-31）で読んで照合する。
+const allItemsQueryTemplate = `
+query($login: String!, $number: Int!, $statusField: String!, $after: String) {
+  repositoryOwner(login: $login) {
+    ... on ProjectV2Owner {
+      projectV2(number: $number) {
+        items(first: 100, after: $after, orderBy: { field: POSITION, direction: ASC }) {
+          pageInfo { hasNextPage endCursor }
+          nodes {` + itemFieldsFragment + `
+          }
+        }
+      }
+    }
+  }
+}
+`
+
+// FetchIssueByIdentifier は `<owner>/<repo>#<番号>` の形の識別子で issue を1件引く
+// （設計 3-25 の「対象を書いた行は、識別子から project item の ID を引く」）。
+//
+// **エージェントの表明に対象付きの行（`CONTINUO-STATUS: #45 review`）があったときだけ
+// 呼ぶ。**巡回では呼ばない。その issue は `Ice Box` に置かれているので、巡回で読んだ
+// 候補（`active_states` で絞ってある）には入っていないためである。
+//
+// **「見つからない」をエラーで表さない。**エージェントが存在しない issue 番号を書くことは
+// ありうるので、それをエラーにしない。エラーは通信の失敗と権限の不足だけに使う。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// identifier: `<owner>/<repo>#<番号>` の形の識別子。大文字小文字は無視して照合する。
+// 戻り値の1つ目: 見つかった Issue。見つからなければゼロ値。
+// 戻り値の2つ目: ボードに載っていれば true。載っていなければ false。
+// 戻り値の3つ目: GraphQL 呼び出しが失敗した場合、または project が見つからない場合のエラー。
+func (a *Adapter) FetchIssueByIdentifier(ctx context.Context, identifier string) (Issue, bool, error) {
+	target := strings.TrimSpace(identifier)
+	if target == "" {
+		return Issue{}, false, nil
+	}
+
+	after := ""
+	for {
+		var resp candidateQueryResponse
+		vars := map[string]any{
+			"login":       a.owner,
+			"number":      a.projectNumber,
+			"statusField": a.statusField,
+		}
+		if after != "" {
+			vars["after"] = after
+		} else {
+			vars["after"] = nil
+		}
+
+		if err := a.gql.do(ctx, allItemsQueryTemplate, vars, &resp); err != nil {
+			return Issue{}, false, err
+		}
+		if resp.RepositoryOwner == nil || resp.RepositoryOwner.ProjectV2 == nil {
+			return Issue{}, false, &Error{
+				Category: CategoryInvalidConfig,
+				Message: fmt.Sprintf(
+					"project が見つかりません（tracker.provider.owner=%q, project_number=%d を確認してください）",
+					a.owner, a.projectNumber,
+				),
+			}
+		}
+
+		conn := resp.RepositoryOwner.ProjectV2.Items
+		for i := range conn.Nodes {
+			raw := &conn.Nodes[i]
+			mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+			if !mapped.Ok {
+				continue
+			}
+			if strings.EqualFold(mapped.Issue.Identifier, target) {
+				return mapped.Issue, true, nil
+			}
+		}
+
+		if !conn.PageInfo.HasNextPage {
+			break
+		}
+		if conn.PageInfo.EndCursor == "" {
+			return Issue{}, false, &Error{
+				Category: CategoryPagination,
+				Message:  "hasNextPage が真なのに endCursor が空です（provider 側の異常）",
+			}
+		}
+		after = conn.PageInfo.EndCursor
+	}
+
+	a.logger.Info("識別子で引いた issue はボードに載っていません", "identifier", target)
+	return Issue{}, false, nil
+}

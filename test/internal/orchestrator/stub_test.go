@@ -1,0 +1,264 @@
+package orchestrator_test
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"path/filepath"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/internal/tracker"
+	"github.com/maimuzo/continuo/internal/workspace"
+)
+
+// stubHerdr は **socket を使わない** herdr のクライアントである。
+//
+// **なぜ偽の socket サーバではなくこれを使うか。**時間に依存する処理（stall の時計・
+// バックオフ・枠待ち）は `testing/synctest` で実時間ゼロで検証する。synctest の中では、
+// **network I/O で止まった goroutine があると時計が進まない。**そこで、時間の検査だけは
+// 通信を1本も行わないこの stub を使う。
+//
+// **turn の終わりの判定と着手の13段は偽の socket サーバで検証している**（helpers_test.go）。
+type stubHerdr struct {
+	mu sync.Mutex
+	// status は AgentGet / AgentWait が返す agent の状態である。
+	status herdr.AgentStatus
+	// closedPanes は PaneClose に渡された pane の ID である。
+	closedPanes []string
+	// sentKeys は AgentSendKeys に渡されたキーである。
+	sentKeys [][]string
+}
+
+// newStubHerdr は stub を作る。
+//
+// status: AgentGet / AgentWait が返す状態。
+// 戻り値: 組み立てた stub。
+func newStubHerdr(status herdr.AgentStatus) *stubHerdr {
+	return &stubHerdr{status: status}
+}
+
+// SetStatus は AgentGet が返す状態を差し替える。
+func (s *stubHerdr) SetStatus(status herdr.AgentStatus) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = status
+}
+
+// ClosedPanes は閉じた pane の ID を返す。
+func (s *stubHerdr) ClosedPanes() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.closedPanes))
+	copy(out, s.closedPanes)
+	return out
+}
+
+// PaneList は pane を1つだけ返す。
+func (s *stubHerdr) PaneList(_ context.Context, params herdr.PaneListParams) (*herdr.PaneListResult, error) {
+	return &herdr.PaneListResult{
+		Type:  "pane_list",
+		Panes: []herdr.Pane{{PaneID: params.WorkspaceID + ":p1", WorkspaceID: params.WorkspaceID}},
+	}, nil
+}
+
+// WorktreeOpen は workspace を1つ返す。
+func (s *stubHerdr) WorktreeOpen(_ context.Context, _ herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error) {
+	return &herdr.WorktreeOpenResult{Type: "worktree_opened", Workspace: herdr.Workspace{WorkspaceID: "w1"}}, nil
+}
+
+// PaneRename は何もせずに成功を返す。
+func (s *stubHerdr) PaneRename(_ context.Context, params herdr.PaneRenameParams) (*herdr.PaneRenameResult, error) {
+	return &herdr.PaneRenameResult{Type: "pane_info", Pane: herdr.Pane{PaneID: params.PaneID, Label: params.Label}}, nil
+}
+
+// PaneClose は閉じた pane を記録する。
+func (s *stubHerdr) PaneClose(_ context.Context, params herdr.PaneCloseParams) (*herdr.PaneCloseResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closedPanes = append(s.closedPanes, params.PaneID)
+	return &herdr.PaneCloseResult{Type: "pane_closed"}, nil
+}
+
+// AgentStartWithRetry は起動できたことにする。
+func (s *stubHerdr) AgentStartWithRetry(
+	_ context.Context, params herdr.AgentStartParams, _ int, _ time.Duration,
+) (*herdr.AgentStartResult, error) {
+	return &herdr.AgentStartResult{
+		Type:  "agent_started",
+		Agent: herdr.Agent{Name: params.Name.String(), AgentStatus: herdr.AgentStatusIdle, PaneID: params.PaneID},
+	}, nil
+}
+
+// AgentPrompt は現在の状態のまま返る（turn を終わらせない）。
+func (s *stubHerdr) AgentPrompt(_ context.Context, params herdr.AgentPromptParams) (*herdr.AgentPromptResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &herdr.AgentPromptResult{
+		Type:  "agent_prompted",
+		Agent: herdr.Agent{Name: params.Target.String(), AgentStatus: s.status},
+	}, nil
+}
+
+// AgentWait は現在の状態を返す。
+func (s *stubHerdr) AgentWait(_ context.Context, params herdr.AgentWaitParams) (*herdr.AgentWaitResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &herdr.AgentWaitResult{
+		Type:  "agent_info",
+		Agent: herdr.Agent{Name: params.Target.String(), AgentStatus: s.status},
+	}, nil
+}
+
+// AgentGet は現在の状態を返す。
+func (s *stubHerdr) AgentGet(_ context.Context, params herdr.AgentGetParams) (*herdr.AgentGetResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &herdr.AgentGetResult{
+		Type:  "agent_info",
+		Agent: herdr.Agent{Name: params.Target.String(), AgentStatus: s.status},
+	}, nil
+}
+
+// AgentList は空の一覧を返す。
+func (s *stubHerdr) AgentList(_ context.Context) (*herdr.AgentListResult, error) {
+	return &herdr.AgentListResult{Type: "agent_list"}, nil
+}
+
+// AgentSendKeys は送られたキーを記録する。
+func (s *stubHerdr) AgentSendKeys(_ context.Context, params herdr.AgentSendKeysParams) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sentKeys = append(s.sentKeys, params.Keys)
+	return nil
+}
+
+// stubFixture は stubHerdr を使う軽い検査対象である（通信を1本も行わない）。
+type stubFixture struct {
+	// Orc は検査対象である。
+	Orc *orchestrator.Orchestrator
+	// Tracker は偽のトラッカーである。
+	Tracker *fakeTracker
+	// Herdr は通信しない stub である。
+	Herdr *stubHerdr
+	// Config は Orchestrator に渡した設定である。
+	Config config.Config
+}
+
+// stubFixtureOptions は newStubFixture の任意の入力である。
+type stubFixtureOptions struct {
+	// Mutate は設定を書き換える関数である。nil なら既定のまま。
+	Mutate func(cfg *config.Config)
+	// AgentStatus は stub が返す agent の状態である。空なら idle。
+	AgentStatus herdr.AgentStatus
+	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない。
+	RateLimit *ratelimit.Reader
+}
+
+// newStubFixture は通信を行わない検査対象を組み立てる。
+//
+// **`testing/synctest` の中から呼んでよい。**socket も外部プロセスも使わないので、
+// bubble の中の goroutine が network I/O で止まることがない。
+//
+// t: 呼び出し元のテスト。
+// opts: 任意の入力。
+// 戻り値: 組み立てた stubFixture。
+func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
+	t.Helper()
+
+	status := opts.AgentStatus
+	if status == "" {
+		status = herdr.AgentStatusIdle
+	}
+	stub := newStubHerdr(status)
+	ft := newFakeTracker(time.Now)
+
+	root := t.TempDir()
+	cfg := *config.DefaultConfig()
+	cfg.Workspace.Root = filepath.Join(root, "wt")
+	cfg.Claude.StallTimeoutMs = 60000
+	cfg.RateLimit.Source = "none"
+	if opts.Mutate != nil {
+		opts.Mutate(&cfg)
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mgr, err := workspace.New(workspace.Options{
+		Config:  cfg,
+		Logger:  logger,
+		HomeDir: root,
+		GhqList: func(context.Context, string, string) (string, error) { return "", nil },
+	})
+	if err != nil {
+		t.Fatalf("workspace.New に失敗した: %v", err)
+	}
+
+	orc, err := orchestrator.New(orchestrator.Options{
+		Config:         cfg,
+		PromptTemplate: samplePromptTemplate,
+		Tracker:        ft,
+		Herdr:          stub,
+		Workspace:      mgr,
+		RateLimit:      opts.RateLimit,
+		HookSocketPath: filepath.Join(root, "hooks.sock"),
+		ContinuoPath:   "/opt/continuo/bin/continuo",
+		Logger:         logger,
+	})
+	if err != nil {
+		t.Fatalf("orchestrator.New に失敗した: %v", err)
+	}
+	return &stubFixture{Orc: orc, Tracker: ft, Herdr: stub, Config: cfg}
+}
+
+// adoptRun は turn を送らずに run を印の集合へ入れる（設計 3-4 の段6 と同じ入口）。
+//
+// **時間に依存する処理（stall の時計・バックオフ・枠待ち）を、着手の13段を通さずに
+// 検査するために使う。**
+//
+// fx: 対象の stubFixture。
+// number: issue の番号。
+// 戻り値: 入れた issue。
+func adoptRun(fx *stubFixture, number int) tracker.Issue {
+	issue := sampleIssue(number, "In Progress")
+	fx.Tracker.AddIssue(issue)
+	fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
+		AgentName:        normalize.SafeName("continuo-koetsumugi-" + strconv.Itoa(number)),
+		PaneID:           "w1:p1",
+		SessionUUID:      "session-" + strconv.Itoa(number),
+		HerdrWorkspaceID: "w1",
+	}, false)
+	return issue
+}
+
+// viewOf は識別子で RunView を引く。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の stubFixture。
+// identifier: 探す issue の識別子。
+// 戻り値の1つ目: 見つかった写し。
+// 戻り値の2つ目: 印を持っていれば true。
+func viewOf(fx *stubFixture, identifier string) (orchestrator.RunView, bool) {
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == identifier {
+			return v, true
+		}
+	}
+	return orchestrator.RunView{}, false
+}
+
+// toolHook は「生きていることの確認」に使う hook を作る（設計 3-21）。
+//
+// sessionID: セッション UUID。
+// name: `PreToolUse` か `PostToolUse`。
+// 戻り値: hook のイベント。
+func toolHook(sessionID, name string) hookserver.HookEvent {
+	return hookserver.HookEvent{HookEventName: name, SessionID: sessionID, PromptID: "p1"}
+}

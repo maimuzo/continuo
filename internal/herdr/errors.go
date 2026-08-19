@@ -10,6 +10,13 @@ import (
 // 返ることがあるのでリトライする」の判定に使う。
 const ErrCodeAgentPaneBusy = "agent_pane_busy"
 
+// ErrCodeTimeout は、待ち受けつきの呼び出し（agent.prompt の wait / agent.wait）が
+// 期限までに落ち着かなかったときに返るエラーコードである（実測。設計 3-2）。
+//
+// **turn の時間切れと枠待ちを分ける起点である。**このコードで返ったら、枠待ちかどうかを
+// 判定し（設計 3-27 の2条件）、枠待ちなら agent.wait で待ち直す（agent.prompt は再送しない）。
+const ErrCodeTimeout = "timeout"
+
 // Error は herdr の socket API が返すエラー応答（{"error":{"code":...,"message":...}}）
 // を表す Go の error である。
 type Error struct {

@@ -1,0 +1,381 @@
+// Package ratelimit は Claude の OAuth usage API を読み、5時間枠と週次枠の使用率と
+// リセット時刻を取得する（docs/plans/continuo_design.md 3-15 / 3-27）。
+//
+// **この API はメッセージを送る API ではない。**枠の残量とリセット時刻を返すだけなので、
+// 「`claude -p` を使わない（従量課金にしない）」という絶対制約には触れない。
+//
+// **`rate_limit.source: none` のときは1回も叩かない。**Enabled が偽を返し、Fetch は
+// 常に nil を返す。
+//
+// **資格情報は `~/.claude/.credentials.json` からだけ読む。Keychain は読まない**（3-15）。
+// Keychain を読むと確認の画面が出ることがあり、無人のプロセスが固まる。
+// **macOS では `~/.claude/.credentials.json` が無いのが普通である。**取れなければ枠の判定を
+// 諦め、`none` と同じ動きにする。**起動は止めない。**
+package ratelimit
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/maimuzo/continuo/internal/config"
+)
+
+// SourceNone は rate_limit.source が「usage API を1回も叩かない」を意味する値である。
+const SourceNone = "none"
+
+// SourceOAuthUsageAPI は rate_limit.source が「OAuth の usage API を読む」を意味する値である。
+const SourceOAuthUsageAPI = "oauth_usage_api"
+
+// TokenSourceClaudeCredentials は資格情報を `~/.claude/.credentials.json` から読むことを表す。
+const TokenSourceClaudeCredentials = "claude_credentials"
+
+// TokenSourceEnv は資格情報を環境変数から読むことを表す。
+const TokenSourceEnv = "env"
+
+// DefaultEndpoint は Claude の OAuth usage API の URL である（設計 3-15）。
+//
+// **設定から差し替えられるようにしてある**（Options.Endpoint）。テストは httptest.Server の
+// URL を渡し、本番の API へは接続しない。
+const DefaultEndpoint = "https://api.anthropic.com/api/oauth/usage"
+
+// betaHeaderValue は usage API が要求する anthropic-beta ヘッダの値である（設計 3-15）。
+// **これを落とすと 401 になる。**
+const betaHeaderValue = "oauth-2025-04-20"
+
+// defaultUserAgent は claude のバージョンを取れなかったときに送る User-Agent である（設計 3-15）。
+const defaultUserAgent = "claude-code/2.0.0"
+
+// 接続と全体のタイムアウトである（設計 3-15）。
+const (
+	dialTimeout    = 10 * time.Second
+	overallTimeout = 30 * time.Second
+)
+
+// CredentialsRelPath はホームディレクトリからの資格情報ファイルの相対パスである。
+// **Keychain は読まない**（3-15）。
+var CredentialsRelPath = filepath.Join(".claude", ".credentials.json")
+
+// ErrNoCredentials は資格情報を取れなかったことを表す。
+//
+// **これはエラーとして扱うが、起動は止めない**（設計 3-27）。Reader は自分で握りつぶし、
+// 以後 Enabled が偽を返すようになる。
+var ErrNoCredentials = errors.New("枠の判定に使う資格情報を取得できません")
+
+// Limit は usage API が返す枠1件である（設計 3-15 の応答のサンプル）。
+type Limit struct {
+	// Kind は枠の種別である（"session" / "weekly_all" / "weekly_scoped"）。
+	Kind string `json:"kind"`
+	// Percent は使用率（整数の百分率）である。
+	Percent int `json:"percent"`
+	// ResetsAt は枠がリセットされる時刻である。**null のことがある**ので nil を許す。
+	ResetsAt *time.Time `json:"resets_at"`
+	// Severity は provider が付ける深刻さである。
+	//
+	// **continuo はこの値を見ない**（設計 3-27）。上限を示す値が何かを実測できていない。
+	// 記録とダッシュボードのためだけに保持する。
+	Severity string `json:"severity"`
+}
+
+// Snapshot は usage API を1回読んだ結果である。
+type Snapshot struct {
+	// Limits は返ってきた枠の一覧である。
+	Limits []Limit
+	// FetchedAt は読んだ時刻である。
+	FetchedAt time.Time
+}
+
+// MaxPercent は枠の中でいちばん高い使用率を返す。
+//
+// 戻り値: 使用率の最大値。枠が1件も無ければ 0。
+func (s *Snapshot) MaxPercent() int {
+	if s == nil {
+		return 0
+	}
+	max := 0
+	for _, l := range s.Limits {
+		if l.Percent > max {
+			max = l.Percent
+		}
+	}
+	return max
+}
+
+// AtFullPercent は、使い切っている（`percent` が 100 に達している）枠が1つでもあるかを返す
+// （設計 3-27 の「この run は枠待ちである」の条件その1）。
+//
+// 戻り値: 100 に達している枠があれば true。
+func (s *Snapshot) AtFullPercent() bool {
+	if s == nil {
+		return false
+	}
+	for _, l := range s.Limits {
+		if l.Percent >= 100 {
+			return true
+		}
+	}
+	return false
+}
+
+// LatestResetOfFullLimits は、使い切っている枠のうち `resets_at` がいちばん遅いものを返す
+// （設計 3-27 の「どの枠の時刻を見るか」）。
+//
+// **`resets_at` が null の枠は判定から外す。**`weekly_scoped` も、モデルを判別せず
+// そのまま見る（continuo は Claude Code が使うモデルを知らない）。
+//
+// 戻り値の1つ目: いちばん遅いリセット時刻。
+// 戻り値の2つ目: 該当する枠が1つでもあれば true。
+func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
+	if s == nil {
+		return time.Time{}, false
+	}
+	var latest time.Time
+	found := false
+	for _, l := range s.Limits {
+		if l.Percent < 100 || l.ResetsAt == nil {
+			continue
+		}
+		if !found || l.ResetsAt.After(latest) {
+			latest = *l.ResetsAt
+			found = true
+		}
+	}
+	return latest, found
+}
+
+// Options は Reader を組み立てるための入力である。
+type Options struct {
+	// Config は WORKFLOW.md の front matter の rate_limit セクションである。
+	Config config.RateLimitConfig
+	// Endpoint は usage API の URL である。空なら DefaultEndpoint を使う。
+	// **テストは httptest.Server の URL を渡すこと**（本番の API へ接続しない）。
+	Endpoint string
+	// HTTPClient はリクエストを送るクライアントである。nil なら接続10秒・全体30秒の
+	// クライアントを組み立てて使う（設計 3-15）。
+	HTTPClient *http.Client
+	// HomeDir は `~/.claude/.credentials.json` を探すホームディレクトリである。
+	// 空なら os.UserHomeDir() の結果を使う。
+	HomeDir string
+	// UserAgent は送る User-Agent である。空なら defaultUserAgent を使う。
+	UserAgent string
+	// Logger はログの出力先である。nil なら slog.Default() を使う。
+	Logger *slog.Logger
+}
+
+// Reader は usage API を読む。
+//
+// **複数の goroutine から同時に呼んでよい。**
+type Reader struct {
+	cfg       config.RateLimitConfig
+	endpoint  string
+	client    *http.Client
+	homeDir   string
+	userAgent string
+	logger    *slog.Logger
+
+	// mu は disabled と warned を守る。
+	mu sync.Mutex
+	// disabled は資格情報を取れなかったために枠の判定を諦めたことを表す。
+	// **一度立てたら戻さない。**取れないものを毎回読みに行かない。
+	disabled bool
+	// warned は資格情報が取れないことを既に警告したかどうかである（警告は1回だけ。3-15）。
+	warned bool
+}
+
+// NewReader は Reader を組み立てる。**この時点では資格情報を読まない。**
+//
+// opts: 設定・エンドポイント・HTTP クライアント・ホームディレクトリ・ログ。
+// 戻り値: 組み立てた Reader。ホームディレクトリを特定できない場合はエラーを返す。
+func NewReader(opts Options) (*Reader, error) {
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	endpoint := opts.Endpoint
+	if endpoint == "" {
+		endpoint = DefaultEndpoint
+	}
+	client := opts.HTTPClient
+	if client == nil {
+		client = &http.Client{
+			Timeout:   overallTimeout,
+			Transport: &http.Transport{ResponseHeaderTimeout: dialTimeout},
+		}
+	}
+	homeDir := opts.HomeDir
+	if homeDir == "" && opts.Config.Source != SourceNone && opts.Config.TokenSource == TokenSourceClaudeCredentials {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("ホームディレクトリを特定できません（%s を読めない）: %w", CredentialsRelPath, err)
+		}
+	}
+	userAgent := opts.UserAgent
+	if userAgent == "" {
+		userAgent = defaultUserAgent
+	}
+
+	return &Reader{
+		cfg:       opts.Config,
+		endpoint:  endpoint,
+		client:    client,
+		homeDir:   homeDir,
+		userAgent: userAgent,
+		logger:    logger,
+	}, nil
+}
+
+// Enabled は usage API を読む設定になっているかを返す。
+//
+// **`rate_limit.source: none` なら常に偽である**（1回も叩かない）。
+// 資格情報を取れずに諦めたあとも偽になる。
+//
+// 戻り値: 読む設定なら true。
+func (r *Reader) Enabled() bool {
+	if r == nil || r.cfg.Source == SourceNone {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return !r.disabled
+}
+
+// Fetch は usage API を1回読む。
+//
+// **Enabled が偽のときは HTTP リクエストを1本も出さず、(nil, nil) を返す。**
+// 資格情報を取れなかったときは警告を1回だけ出して以後 Enabled を偽にし、
+// (nil, nil) を返す（**起動を止めない**。設計 3-27）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// 戻り値の1つ目: 読み取った枠の一覧。読まなかった場合と資格情報が無い場合は nil。
+// 戻り値の2つ目: HTTP の失敗・応答の解析の失敗のときのエラー。
+func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
+	if !r.Enabled() {
+		return nil, nil
+	}
+
+	token, err := r.token()
+	if err != nil {
+		r.disable(err)
+		return nil, nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("usage API のリクエストを組み立てられません: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("anthropic-beta", betaHeaderValue)
+	req.Header.Set("User-Agent", r.userAgent)
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("usage API を読めません: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("usage API の応答を読めません: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("usage API が HTTP %d を返しました: %s", resp.StatusCode, truncate(body, 200))
+	}
+
+	var parsed struct {
+		Limits []Limit `json:"limits"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("usage API の応答を解析できません: %w", err)
+	}
+
+	return &Snapshot{Limits: parsed.Limits, FetchedAt: time.Now()}, nil
+}
+
+// token は設定に従って OAuth のトークンを取り出す。
+//
+// 戻り値の1つ目: トークン。
+// 戻り値の2つ目: 取れなかった場合は ErrNoCredentials を包んだエラー。
+func (r *Reader) token() (string, error) {
+	switch r.cfg.TokenSource {
+	case TokenSourceEnv:
+		name := r.cfg.TokenEnv
+		if name == "" {
+			return "", fmt.Errorf("%w: rate_limit.token_env が空です", ErrNoCredentials)
+		}
+		v := os.Getenv(name)
+		if v == "" {
+			return "", fmt.Errorf("%w: 環境変数 %s が空です", ErrNoCredentials, name)
+		}
+		return v, nil
+	default:
+		return r.tokenFromCredentialsFile()
+	}
+}
+
+// tokenFromCredentialsFile は `~/.claude/.credentials.json` から accessToken を読む。
+//
+// **Keychain は読まない**（設計 3-15）。macOS ではこのファイルが無いのが普通である。
+//
+// 戻り値の1つ目: `.claudeAiOauth.accessToken` の値。
+// 戻り値の2つ目: ファイルが無い・読めない・トークンが空の場合は ErrNoCredentials を包んだエラー。
+func (r *Reader) tokenFromCredentialsFile() (string, error) {
+	if r.homeDir == "" {
+		return "", fmt.Errorf("%w: ホームディレクトリが分かりません", ErrNoCredentials)
+	}
+	path := filepath.Join(r.homeDir, CredentialsRelPath)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s を読めません（macOS では Keychain にあるのが普通です）: %w",
+			ErrNoCredentials, path, err)
+	}
+	var parsed struct {
+		ClaudeAIOauth struct {
+			AccessToken string `json:"accessToken"`
+		} `json:"claudeAiOauth"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return "", fmt.Errorf("%w: %s を解析できません: %w", ErrNoCredentials, path, err)
+	}
+	if parsed.ClaudeAIOauth.AccessToken == "" {
+		return "", fmt.Errorf("%w: %s に claudeAiOauth.accessToken がありません", ErrNoCredentials, path)
+	}
+	return parsed.ClaudeAIOauth.AccessToken, nil
+}
+
+// disable は枠の判定を諦める。警告は1回だけ出す（設計 3-15）。
+//
+// cause: 諦めた理由。
+func (r *Reader) disable(cause error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.disabled = true
+	if r.warned {
+		return
+	}
+	r.warned = true
+	r.logger.Warn(
+		"枠の判定を諦めます（rate_limit.source: none と同じ動きになります。起動は止めません）",
+		"error", cause,
+	)
+}
+
+// truncate はエラーメッセージへ載せる本文を切り詰める。
+//
+// b: 元の本文。
+// max: 残すバイト数。
+// 戻り値: max バイトを超える場合は末尾に "…" を付けた文字列。
+func truncate(b []byte, max int) string {
+	if len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max]) + "…"
+}
