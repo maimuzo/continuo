@@ -546,7 +546,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 
 | 分かったこと | 設計への影響 |
 | --- | --- |
-| **信頼していないフォルダでは hook が保留される。**`~/.claude/settings.json` に置いたものも含む | **continuo の turn 終了検知が1つも動かない状態が起こりうる。**dispatch の直前に「そのリポジトリが信頼登録されているか」を検査する（3-6） |
+| **信頼していないフォルダでは、対話セッションで信頼のダイアログが出る。**settings ファイルの hook そのものは信頼前でも動く（下記の公式の表） | **ダイアログが出た時点で人間の入力を待って止まる**（3-11）。dispatch の直前に「そのリポジトリが信頼登録されているか」を検査する（3-6） |
 | hooks は settings の階層をまたいでマージされ、**実行中のセッションにもファイル監視で再読み込みされる** | worktree ごとに hook を書き換える運用が成立する |
 | hook の設定を外部から問い合わせる CLI は無い（`claude hooks` は存在しない） | continuo 自身が「書いた設定が効いているか」を確かめる手段は、**実際に hook が飛んでくるかどうかだけ**である |
 | **`background_tasks` は「タスクレジストリに到達できるとき」存在する。**到達できない場合に項目が無い可能性が原文に残されている | **`background_tasks` が欠けている `Stop` を「空配列」と同一視してはいけない。**欠けていたら判定不能として扱う |
@@ -2819,6 +2819,9 @@ README には「何が要るか」だけを書き、**「揃っているか」�
 ```bash
 continuo doctor        # 前提が揃っているかを検査する。足りないものと直し方を出す
 continuo init          # WORKFLOW.md の雛形を置く。既にあれば止める（--force で上書き）
+                       # owner と project_number は gh から引いて自動で埋める
+                       # --owner=<名前>   gh を叩かずにこの値を使う
+                       # --project=<番号> gh を叩かずにこの値を使う
 continuo               # 常駐する（WORKFLOW.md を読んで巡回を始める）
                        # --log-level=debug|info|warn|error（既定 info）
                        # --port=<番号>  ダッシュボードのポート。server.port を上書きする（仕様 13.7）。
@@ -2941,16 +2944,34 @@ $ continuo doctor
 
 **1つ失敗しても残りを全部検査する。**最初の失敗で止めない。
 
-**`continuo init` が置くもの。`WORKFLOW.md` 1つだけである**（5-1）。
-埋めないと動かない値にはプレースホルダを入れ、コメントで「ここを埋めること」と書く。
-**既にファイルがあれば上書きせずに止める。**
+#### `continuo init` は利用者に手で埋めさせない
 
-| キー | プレースホルダ | 型 |
+**言いたいこと。**置くのは `WORKFLOW.md` 1つだけ（5-1）で、**利用者が埋める値は gh から引いて自動で書く。**
+引けなかったときだけプレースホルダを残し、**何を埋めればよいかをその場に出す。失敗させない。**
+
+**どのキーを何から埋めるか。**
+
+| キー | 何から決めるか | 引けなかったとき |
 | --- | --- | --- |
-| `tracker.provider.owner` | `__FILL_ME__` | 文字列 |
-| `tracker.provider.project_number` | `0` | **数値。**文字列を入れると YAML の読み込みで落ちる |
-| `herdr.socket` | `~/.config/herdr/herdr.sock` | **既定のパスをそのまま置く。**プレースホルダにしない |
-| `workspace.root` | `~/worktrees` | **同じく既定のパス** |
+| `tracker.provider.owner` | `gh api user --jq .login` | `__FILL_ME__` を残す（文字列） |
+| `tracker.provider.project_number` | `gh project list --owner <owner> --format json` の**候補が1件のときだけ**その番号 | `0` を残す（**数値。**文字列を入れると YAML の読み込みで落ちる） |
+| `herdr.socket` | 既定のパス `~/.config/herdr/herdr.sock` をそのまま置く | — |
+| `workspace.root` | 既定のパス `~/worktrees` をそのまま置く | — |
+
+**引き方の規則。**
+
+| 場合 | どうするか |
+| --- | --- |
+| `--owner` / `--project` が渡された | **その値を使う。**gh を叩かない |
+| ボードの候補が**複数** | **選ばせない。**候補を番号・名前・URL で並べ、`--project <番号>` で再実行しろと出す |
+| ボードの候補が**0件** | プレースホルダのまま残し、ボードの作り方を出す（3-34） |
+| **gh が無い・認証が無い・scope が足りない** | プレースホルダのまま残し、`gh auth login -s project` を案内する |
+
+**対話で選ばせない。**標準入力を握ると、`continuo init` を自動で叩く経路（設定の作り直しなど）が止まる。
+
+**owner に受け付ける文字を絞る。**英数字で始まり、英数字とハイフンだけの39文字以内
+（GitHub の user / organization 名の規則）。**gh の出力をそのまま YAML へ書くため、
+引用符や改行を混ぜられない形に限る。**外れた値はプレースホルダのまま残す。
 
 **未記入のまま起動したら、名指しで落とす。**
 
@@ -2964,6 +2985,79 @@ WORKFLOW.md の tracker.provider.owner がプレースホルダ（__FILL_ME__）
 
 **README に書くこと。**「何が要るか」の一覧と、`continuo doctor` を実行しろという案内だけ。
 **個々の検査手順は書かない。**書くと doctor と二重管理になり、片方だけ古くなる。
+
+---
+
+### 3-33. 信頼の登録を自動化しない
+
+**言いたいこと。**技術的には自動化できる。**それでも採らない。**
+**信頼のダイアログは「リポジトリの中の設定が勝手に動かない」ための安全機構であり、
+continuo がそれを一括で外してよい理由が無い。**
+
+**採らない案。**`continuo doctor --trust-repos` のようなコマンドで、
+ボードから引いた対象リポジトリの `~/.claude.json` の
+`projects["<パス>"].hasTrustDialogAccepted` を一括で `true` にする。
+
+**技術的には可能である。**公式ドキュメントがその手順を案内している（4-3 に原文）。
+
+**それでも採らない理由。**
+
+| 何が起きるか | なぜ問題か |
+| --- | --- |
+| **ボードに載っているだけのリポジトリを、人間が中身を見ずに信頼する** | 信頼すると、そのリポジトリの `.claude/settings.json` の `permissions.allow` と `additionalDirectories` が効く。**リポジトリ側が権限を要求できる**（`permissions.md`）|
+| **ボードは他人が編集できる** | issue を足せる人は、対象リポジトリの集合を変えられる。**そこに任意のリポジトリを混ぜられる** |
+| continuo は無人で回る | **混ざったことに人間が気づく契機が無い** |
+
+**ダイアログは「1リポジトリずつ人間が見る」ための仕組みである。**
+**それを一括で外すのは、仕組みの目的そのものを壊す。**
+
+**採る形。人間が対象リポジトリごとに1度だけ承認する。**
+`continuo doctor` が未承認のものを名指しで出すので、何を承認すればよいかは分かる（3-32）。
+
+> **将来これを入れるなら、次を満たすこと。**
+> 人間が**リポジトリ名を明示的に列挙**して渡す形にする（ボードから自動で集めない）。
+> `--dry-run` を既定にする。`~/.claude.json` のバックアップを取る。
+> **そのうえで、利用者がその危うさを理解していることを前提にする。**
+
+### 3-34. ボードは専用フィールドで作る
+
+**言いたいこと。**既定の `Status` に選択肢を足すと**画面作業が必ず要る。**
+**continuo 専用の single-select フィールドを新しく1本作れば、コマンドだけで完結する。**
+
+**根拠。既存フィールドに選択肢を足す API は `updateProjectV2Field` しか無い。**
+GraphQL の ProjectV2 系 mutation 32個と Projects の REST API を全件確認した（2026-08-19）。
+**その API は禁止している**（選択肢の指定が全件置き換えになり、設定済みの値が全部消える。4-2）。
+GitHub 公式ドキュメントにも「既にある single-select フィールドに選択肢を足す」手順は無い。
+
+**採る形。**
+
+```bash
+gh project create --owner @me --title "continuo" --format json --jq .number
+gh project field-create <番号> --owner @me --name "continuo Status" \
+  --data-type SINGLE_SELECT --single-select-options "Ready,In Progress,In Review,Blocked,Done"
+```
+
+**`--single-select-options` は「フィールドを新しく作るとき」にだけ効く**（`gh` 2.97.0 で確認）。
+だから**足すのではなく、作る。**
+
+**設定は既存のキーで足りる。実装を変えなくてよい。**
+
+```yaml
+tracker:
+  provider:
+    status_field: continuo Status     # 既定は Status。作ったフィールド名を書く
+```
+
+**既定の `Status` を使いたい場合は、画面から選択肢を足す**（`⋯` → `Settings` → `Status` → `+ Add option`）。
+**その手順は GitHub 公式ドキュメントに無いので、こちらで書くしかない。**
+
+**採らなかった案。**
+
+| 案 | 否定の理由 |
+| --- | --- |
+| `updateProjectV2Field` に既存の option id を渡して安全に足す | **スキーマはそう主張しているが実測していない**（`ProjectV2SingleSelectFieldOptionInput.id` の説明）。使い捨てのボードで確かめるまで禁止を解かない |
+| project をテンプレート化して配る | **`markProjectV2AsTemplate` は organization 専用。**個人アカウントで使えない |
+| 雛形ボードを作って `gh project copy` で複製 | **使える。**ただし「最初の1枚をどう作るか」は結局この節の手順になる |
 
 ---
 
@@ -3117,15 +3211,50 @@ stateDiagram-v2
 **これは仕様から意図的に外している。**`SPEC.md` 8.2 は priority を第1のキーと定めている。**差分は第8節にまとめた。**
 
 
-### 4-3. `~/.claude.json` は書き換えない
+### 4-3. `~/.claude.json` を常駐ループから書き換えない
 
-**結論。continuo は `~/.claude.json` を書き換えない。**リポジトリごとに人間が1度だけ信頼を承認すれば、そこから切るすべての worktree で確認が出ない。
+**結論。巡回のループは読むだけにする。**リポジトリごとに1度だけ信頼を承認すれば、
+そこから切るすべての worktree で確認が出ない。
+
+**書き込み自体は公式に案内された手順である。**「非公開の内部ファイルだから触らない」のではない。
+
+> **公式ドキュメント**（`permissions.md` の "What runs before you trust a folder"）:
+>
+> For the rows that need this exact folder trusted and offer no dialog, trust it by hand:
+> set `projects["<path>"].hasTrustDialogAccepted` to `true` in `~/.claude.json`,
+> where `<path>` is the repository root, or the folder itself outside a repository.
+>
+> **訳:** このフォルダそのものの信頼が要り、ダイアログが出ない行については、**手で信頼させる。**
+> **`~/.claude.json` の `projects["<パス>"].hasTrustDialogAccepted` を `true` にする。**
+> `<パス>` はリポジトリの root（リポジトリの外ならそのフォルダ自身）。
+
+**それでも常駐ループから黙って書いてはならない理由。**
+
+| 何が起きるか | なぜ |
+| --- | --- |
+| **利用者の全設定を失いうる** | **起動中の Claude Code のセッションが全員この1ファイルを書き戻している。**read-modify-write が衝突すると、continuo が読んだ時点の内容で丸ごと上書きされる |
+| 巡回は30秒ごとに回る | 衝突の窓が繰り返し開く |
+
+**採る形。人間が明示的に叩く一発のコマンドにする**（3-33）。**巡回のループは読むだけのままにする。**
 
 #### なぜこれが論点になったか
 
 **Claude Code は、初めて開くディレクトリで「このフォルダを信頼するか」と聞いてくる。**キー入力を待つので、**無人運用ではそこで止まる。**
 
-さらに悪いことに、**信頼していないフォルダでは hook が保留される。**continuo は `Stop` hook で turn の終わりを検知する設計なので、**信頼されていないと完了検知が丸ごと働かない。**
+**止まるのはダイアログそのものである。**`--settings` で渡す hook は、信頼していなくても動く。
+
+> **公式ドキュメント**（`permissions.md` の "What runs before you trust a folder" の表）:
+>
+> | What the repository supplies | You trusted only a parent folder | `claude -p` or the SDK, folder never trusted |
+> | --- | --- | --- |
+> | Hooks in settings files, the `env` block and helper commands … | Used | Used |
+> | Frontmatter hooks in a project subagent … | Not used, and no dialog is offered | Not used |
+>
+> **訳:** **settings ファイルの hook と `env` ブロックは、信頼していなくても使われる。**
+> subagent の frontmatter に書いた hook は使われず、ダイアログも出ない。
+
+**したがって「hook が全滅する」わけではない。**止まる理由は**ダイアログが人間の入力を待つこと**である（3-11）。
+**subagent の frontmatter の hook とプラグインは、ダイアログも出さずに無効化される**ので、そちらは実際に失われる。
 
 **continuo は issue ごとに新しい worktree を作る。**もし信頼が worktree 単位で記録されるなら、**issue のたびに確認が出て止まる。**回避する公式手段は `~/.claude.json` の `projects["<パス>"].hasTrustDialogAccepted` に `true` を書き込むことだけで、CLI のサブコマンドも起動フラグも環境変数も存在しない。
 
@@ -3259,148 +3388,140 @@ continuo /path/to/WORKFLOW.md               ← 位置引数で明示する
 
 ### 5-2. front matter（設定）
 
+**言いたいこと。**この設定例は `continuo init` が置く雛形そのものである。
+**コメントは、この1枚だけを読む人が意味を判断できる文面にする。設計の節番号は書かない**
+（WORKFLOW.md を開く人は設計文書を持っていない）。値を決めた根拠は 3-x の各節にある。
+
+**`owner` と `project_number` は `continuo init` が gh から引いて埋める**（3-32）。
+引けなかったときだけプレースホルダ（`__FILL_ME__` / `0`）が残る。
+
 ```yaml
 ---
-# ===== 仕様に由来するキー（SPEC.md 5.3。名前を変えない）=====
+# ===== どの issue を見張り、どう進めるか =====
 tracker:
-  kind: github_projects_v2
-  provider:                                 # アダプタが所有する。仕様は中身を規定しない
-    owner: maimuzo
-    project_number: 3
-    status_field: Status
-    token_source: gh_auth                   # gh_auth | env。continuo 自身がボードを読むための認証（3-3 の表の外）
-    token_env: GITHUB_TOKEN                 # token_source が env のときだけ使う
-    comments:                               # **プロンプトには埋め込まない**（3-29）。誰が書いたコメントかの判別に使う
-      fetch: true                           # エージェントがコメントを書いたかを確かめるために読むかどうか
-      max: 50                               # 判別のために何件まで遡るか
-      order: oldest_first
-      marker: "<!-- continuo:agent -->"     # エージェントに、コメントの先頭へ必ず書かせる印（2-2）
-      self_marker: "<!-- continuo:self -->"  # continuo 自身が書くコメントの印（引き渡しの通知だけ。成果は書かない）
-  status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが最終応答に書く表明の印（3-25）
-  status_signal_map:                        # 表明の値と Status の対応
-    review: "In Review"
-    blocked: "Blocked"
-    working: null                           # null なら Status を動かさない
-  required_labels: []
-  active_states: ["Ready", "In Progress"]   # In Progress を必ず含める（3-10）
-  terminal_states: ["Done"]                 # In Review を入れない（3-9 / 3-10）
-  running_state: "In Progress"              # dispatch したときに書き込む先（3-16 の段2）
-  dispatch_state: "Ready"                   # 取り残された issue を戻す先
-  failure_state: "Blocked"                  # 打ち切り・失敗のときに落とす先（4-1）
-  write_interval_ms: 1000                   # 書き込みどうしの間隔。GitHub の推奨が1秒以上（3-31）
-  verify_states_every: 20                   # Status の選択肢名を照合する間隔（巡回の回数。3-6）。
-                                            # 毎巡回では行わない。0 なら起動時だけ
+  kind: github_projects_v2                  # 見張る先の種類。いまは GitHub Projects v2 だけ
+  provider:                                 # ここから下は GitHub Projects v2 に固有の設定
+    owner: maimuzo                          # 例: https://github.com/maimuzo なら maimuzo
+    project_number: 3                       # 例: https://github.com/users/maimuzo/projects/3 なら 3
+    status_field: Status                    # issue の進み方を読み書きする single-select フィールドの名前
+    token_source: gh_auth                   # gh_auth なら gh auth token コマンドで取る。env なら下の token_env から取る
+    token_env: GITHUB_TOKEN                 # token_source が env のときに読む環境変数の名前
+    comments:                               # issue のコメントは、誰が書いたかの判別にだけ使う。プロンプトには入れない
+      fetch: true                           # エージェントが作業内容のコメントを書いたかを確かめるために読むかどうか
+      max: 50                               # 判別のために何件まで遡って読むか
+      order: oldest_first                   # 読む順番。古いコメントから読む
+      marker: "<!-- continuo:agent -->"     # エージェントが書くコメントの先頭に必ず入れさせる目印
+      self_marker: "<!-- continuo:self -->" # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
+  status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが応答の最後に書く1行の先頭。continuo はこの行を読んで Status を動かす
+  status_signal_map:                        # その1行に書かれた値と、書き込む Status の対応
+    review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき
+    blocked: "Blocked"                      # 判断を仰ぎたいとき、または失敗したとき
+    working: null                           # まだ続きがあるとき。null なので Status は動かさない
+  required_labels: []                       # ここに書いたラベルが全部付いた issue だけを対象にする。空なら絞り込まない
+  active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
+  terminal_states: ["Done"]                 # 終わったとみなす Status。ここへ移った issue の worktree を片付ける
+  running_state: "In Progress"              # エージェントを起動したときに書き込む Status
+  dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
+  failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
+  write_interval_ms: 1000                   # Status を続けて書き込むときにあける間隔。GitHub が1秒以上を勧めている
+  verify_states_every: 20                   # 上に書いた Status 名がボードに実在するかを、何巡回ごとに照合するか。
+                                            # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
 
 polling:
-  interval_ms: 30000
+  interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと
 
 workspace:
-  root: ~/worktrees                         # gwq の既定に合わせる（3-22）。チルダは展開する（5-5）
-  layout: gwq                               # gwq なら <host>/<owner>/<repo>/<branch>
-  identity_file: .continuo.json             # worktree の身元を書くファイル（3-18）
+  root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する
+  layout: gwq                               # worktree の並べ方。gwq なら <root>/<ホスト>/<owner>/<repo>/<branch>
+  identity_file: .continuo.json             # どの issue の worktree かを worktree の中に書き残すファイルの名前
 
-workspace_hooks:                            # 仕様 9.4。Claude Code の hook とは別物なので名前を変えた（8-1）
-  after_create: null                        # 失敗したら致命。cwd は worktree
-  before_run: null                          # 失敗したら致命
-  after_run: null                           # 失敗しても記録して続ける
-  before_remove: null                       # 失敗しても記録して続ける
-  timeout_ms: 60000
+workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
+  after_create: null                        # worktree を作った直後に走る。失敗したらその issue は進めない
+  before_run: null                          # エージェントを起動する直前に走る。失敗したらその issue は進めない
+  after_run: null                           # エージェントが終わった直後に走る。失敗しても記録して先へ進む
+  before_remove: null                       # worktree を消す直前に走る。失敗しても記録して先へ進む
+  timeout_ms: 60000                         # 上の4つのコマンドの制限時間。どれも worktree の中で走る
 
 agent:
-  max_concurrent_agents: 2
-  max_concurrent_agents_by_state: {}        # 状態ごとの上限。空なら全体の上限にフォールバック
-  max_turns: 20
-  max_takeover: 5                           # 引き継いだ回数の上限（3-4 / 3-18）
-  max_retry_backoff_ms: 300000
-  max_retries: 3                            # stall や異常終了のリトライ回数の上限。尽きたら failure_state へ
+  max_concurrent_agents: 2                  # 同時に動かすエージェントの数の上限
+  max_concurrent_agents_by_state: {}        # Status ごとの上限。空なら上の全体の上限だけを見る
+  max_turns: 20                             # 1つの issue に continuo が送る turn の数の上限。尽きたら failure_state へ落とす
+  max_takeover: 5                           # continuo が落ちたあと、同じ worktree を引き継いだ回数の上限
+  max_retry_backoff_ms: 300000              # やり直しの前に待つ時間の上限。失敗のたびに待ち時間を伸ばしていく
+  max_retries: 3                            # 応答が止まった・異常終了したときにやり直す回数の上限。0 ならやり直さない
 
-# ===== 仕様の codex セクションの置き換え（SPEC.md 5.3.6 に対応。中身は全面差し替え）=====
+# ===== Claude Code をどう起動するか =====
 claude:
-  kind: claude                              # herdr に渡す agent の種別
-  permission_mode: dontAsk                  # 3-11。入力を待たない唯一のモード
-  permissions:                              # dontAsk は許可リストの外を全部拒否する（3-11）
+  kind: claude                              # herdr に起動させるエージェントの種別
+  permission_mode: dontAsk                  # 人間に確認を出さない唯一のモード。無人で回すので必ずこれにする
+  permissions:                              # dontAsk のとき、allow に書いていないツールは全部拒否される
     allow:
-      - "Bash"                              # ツール名だけ。引数を限定すると書き込み系が拒否される（3-11）
+      - "Bash"                              # ツール名だけを書く。引数まで絞ると書き込み系の操作が拒否される
       - "Read"
       - "Glob"
       - "Grep"
       - "Edit"
       - "Write"
-    deny: []                                # subagent を起動する Agent ツールは、許可リストが空でも動いた（3-11）
-  env:
-    CLAUDE_CODE_RETRY_WATCHDOG: "1"         # 3-11。turn の途中で 429/529 が返ったときリトライし続ける。
-                                            # 枠で止まったあとの継続は Claude Code 2.1.234 が
-                                            # 既定で行う（/config の Continue automatically at
-                                            # usage limit）。両方が効く（3-27）
-  poll_wait_ms: 30000                       # agent.wait 1回あたりの待ち時間（3-2）。短く切って continuo 側で
-                                            # 総経過時間を数えるためのもの。turn の上限そのものではない
-  settle_ms: 2000                           # background_tasks が空の Stop を受けてから、<task-notification> が
-                                            # 来ないことを確かめるまでの猶予（1-3 / 3-2）。観測できた8件は 0.037 秒以内。
-                                            # 上限は測れていないので暫定値。実際の間隔をログに出して決め直す（第6節）
-  wait_until: ["idle", "done", "blocked"]   # agent.wait に渡す状態。blocked を外すと
-                                            # 権限の確認で止まった turn を拾えず、時間切れまで待つことになる（3-2）
-  turn_timeout_ms: 3600000                  # 1つの turn の上限。continuo が turn を送ってから Stop を受けるまでを測る
-  read_timeout_ms: 5000                     # 仕様と同名だが相手が違う。対象は herdr の socket API の応答（8-1）。
-                                            # ただし待ちを伴う呼び出しには適用しない。
-                                            # agent.start は startup_timeout_ms、待機ありの agent.prompt は turn_timeout_ms を使う
-  stall_timeout_ms: 1800000                 # 30分。0 以下で無効。理由は 3-21
-  startup_timeout_ms: 60000                 # herdr の agent 起動の待ち時間
-  hook_bridge:                              # turn 終了検知の実体（3-12）
-    mode: settings_flag                     # settings_flag のみ。worktree_local は仕様を書いていないので受理しない（3-12）
-    listen: null                            # null なら 3-23 の探索順で決める。明示するなら絶対パス。
-                                            # 既にある共用のディレクトリ（ホーム直下など）を指さないこと。
-                                            # continuo は自分が作っていないディレクトリの権限を書き換えず、
-                                            # 権限が 0700 でなければ起動を止める（3-23）
-    liveness_hooks: ["PreToolUse", "PostToolUse"]   # 生きていることの確認だけに使う（3-21）。
-                                            # 判定に使う hook の一覧は 3-2 で固定しており、設定では変えられない
+    deny: []                                # 明示的に禁じるツール。subagent を起動するツールは allow に書かなくても動く
+  env:                                      # Claude Code に渡す環境変数
+    CLAUDE_CODE_RETRY_WATCHDOG: "1"         # turn の途中で 429 / 529 が返ってきたときに、リトライを続けさせる
+  poll_wait_ms: 30000                       # エージェントの状態を1回待つ時間。短く切って、経過時間は continuo 側で数える
+  settle_ms: 2000                           # 応答が終わったように見えてから、続きが来ないことを確かめるまでの猶予
+  wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。blocked を外すと、確認で止まった turn を時間切れまで拾えない
+  turn_timeout_ms: 3600000                  # 1つの turn の制限時間。turn を送ってから応答が終わるまでを測る
+  read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
+  stall_timeout_ms: 1800000                 # エージェントから何も届かない時間がこれを超えたら打ち切る。0 以下で無効
+  startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
+  hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る
+    mode: settings_flag                     # settings_flag のみ。issue ごとに作った設定ファイルを --settings で渡す
+    listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
+                                            # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
+    liveness_hooks: ["PreToolUse", "PostToolUse"]   # エージェントが生きていることの確認だけに使う hook
 
-# ===== herdr 連携（仕様に対応物が無い。全部独自）=====
+# ===== herdr（pane と worktree をまとめる常駐プロセス）との連携 =====
 herdr:
-  socket: ~/.config/herdr/herdr.sock        # herdr の socket。既定のパスをそのまま書く（2-1）。
-                                            # 環境変数で切り替えたいなら ${HERDR_SOCKET_PATH} と書く。
-                                            # その場合、未定義だと起動を止める（5-5。既定値へは落ちない）。
-                                            # 到達できなければ起動時の検査で止まる（3-6）
-  protocol: 19                              # herdr の socket API の版。起動時に照合して合わなければ止める。
-                                            # 2026-08-18 に herdr api schema で 19 であることを確認済み（2-1）
+  socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
+                                            # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
+  protocol: 19                              # herdr の socket API の版。起動時に照合して、合わなければ止める
   worktree:
-    create_via_herdr: true
+    create_via_herdr: true                  # 作った worktree を herdr の workspace として開くかどうか（worktree 自体は git で作る）
+    # issue ごとに作る branch の名前。二重の波括弧の部分は issue の値に置き換わる
     branch_template: "continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}"
-    base: null                              # null ならトラッカーが返す既定 branch を使う
+    base: null                              # 分岐元の branch。null ならリポジトリの既定 branch から分岐する
 
-# ===== continuo 独自の運用要件 =====
-naming:                                     # 3-7
-  warn_on_information_loss: true
+# ===== 後始末・使用量・二重起動の防止 =====
+naming:
+  warn_on_information_loss: true            # issue の識別子から branch 名を作るときに文字が落ちたら警告を出す
 
-cleanup:                                    # 3-9
-  enabled: true
-  on_states: ["Done"]                       # ここに入った時点で片付ける。active でなくなった時点ではない
-  require_clean_worktree: true              # 未コミットの変更があれば消さない
-  require_pushed: true                      # push していない commit があれば消さない（3-9）
-  delete_branch: true
-  sweep_on_startup: true                    # 起動時に、終了状態の worktree と孤児 branch を消す
+cleanup:
+  enabled: true                             # 終わった issue の worktree と branch を片付けるかどうか
+  on_states: ["Done"]                       # この Status へ移った時点で片付ける
+  require_clean_worktree: true              # commit していない変更が残っていたら消さない
+  require_pushed: true                      # push していない commit が残っていたら消さない
+  delete_branch: true                       # worktree と一緒に branch も消すかどうか
+  sweep_on_startup: true                    # 起動したときに、終わっている worktree と行き場の無い branch を消す
 
-rate_limit:                                 # 3-27。仕様の範囲外
-  source: oauth_usage_api                   # oauth_usage_api | none。none なら枠の判定をしない
-  token_source: claude_credentials          # claude_credentials | env。読み取りだけ
-  token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数。env のとき必須
-  pause_above_percent: 95                   # 超えたら新規の dispatch を止める。run中の turn は止めない
-  poll_interval_ms: 300000
+rate_limit:
+  source: oauth_usage_api                   # Claude の使用量 API から枠の残りを読む。none なら枠を見ない
+  token_source: claude_credentials          # ~/.claude/.credentials.json から読む。env なら下の token_env から読む
+  token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数の名前
+  pause_above_percent: 95                   # 枠の使用率がこれを超えたら新しい issue に着手しない。動いている turn は止めない
+  poll_interval_ms: 300000                  # 枠の残りを読み直す間隔
 
-trust:                                      # 3-11 / 4-3
-  require_repo_trusted: true
-  on_untrusted: skip_and_comment            # その issue だけ飛ばす。起動は止めない（3-6）
+trust:
+  require_repo_trusted: true                # 信頼していないリポジトリではエージェントを起動しない
+  on_untrusted: skip_and_comment            # 信頼していないときの扱い。その issue だけ飛ばし、issue にコメントを残す
 
-restart:                                    # 3-4 の段8。redispatch は worktree を再利用して再 dispatch、
-                                            # to_dispatch_state は Ready へ戻す、to_failure_state は Blocked へ落とす
-  orphan_running_action: redispatch         # redispatch | to_dispatch_state | to_failure_state
+restart:
+  orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
+                                            # もう一度起動する。to_dispatch_state は着手待ちへ戻し、to_failure_state は失敗として落とす
 
-runtime:                                    # 3-17
-  lock_file: null                           # null なら hook の socket と同じディレクトリに置く
+runtime:
+  lock_file: null                           # 二重起動を防ぐロックファイル。null なら hook の socket と同じディレクトリに置く
 
-server:                                     # SPEC 13.7 の任意拡張。キー名は仕様どおり
-  port: null                                # null ならサーバを起動しない。数値なら起動する。
-                                            # CLI の --port が渡されたらそちらが優先する（仕様 13.7）。
-                                            # **開けなくても continuo は起動を続ける**（任意の機能である）
+server:
+  port: null                                # 進み具合を見る HTTP ダッシュボードのポート。null なら起動しない。
+                                            # 0 なら空いているポートを OS に選ばせる。--port を渡すとそちらが優先される
 ---
 ```
 
@@ -3722,7 +3843,7 @@ URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く
 | **二重起動の防止** | `flock` によるロックファイル（3-17） | 仕様は単一プロセスを前提にしているが、**その前提を守らせる仕組みを持っていない。**2つ目が立つと同じ issue を掴む |
 | **worktree の身元ファイル** | worktree の中に、どの issue のものかを書く（3-18） | **ディレクトリ名から issue へは戻れない。**完了の見張りも、再起動後の片付けも、これが無いと実装できない |
 | **中間の hook で生存を測る** | `PreToolUse` と `PostToolUse` を張る（3-21） | 仕様は Codex から絶え間なくイベントが来る前提。**continuo には turn の終わりしか届かないので、そのままでは長い turn を stall と誤判定する** |
-| **リポジトリの信頼の検査** | dispatch の直前に検査する（3-6） | **信頼していないフォルダでは Claude Code の hook が1つも動かない。**turn の終わりの検知が全滅する |
+| **リポジトリの信頼の検査** | dispatch の直前に検査する（3-6） | **信頼していないと、対話セッションで信頼のダイアログが出て人間の入力を待つ**（3-11）。settings ファイルの hook 自体は信頼前でも動くが、ダイアログで止まる |
 | **レートリミットの待機** | 枠の回復を待って再開する（3-27） | 定額の枠で運用するので、上限に当たったら待つ必要がある。**仕様の指数バックオフではなくリセット時刻までの固定待ちにする**（この差し替えはレートリミットに起因する待機に限る。ほかのリトライは仕様どおり指数バックオフ） |
 | **落ちている間の通知の取り戻し** | 再起動直後にボードを1回取り直す（3-19） | turn の終わりの通知は投げっぱなしで一度きり。**落ちている間のものは再送されない** |
 | **使い始めるまでの検査と雛形** | `continuo doctor` / `continuo init`（3-32） | 仕様は設定ファイルの書式を定めるだけで、**前提が揃っているかを確かめる手段を持たない。**前提が6つあり、どれが欠けても静かに失敗する |

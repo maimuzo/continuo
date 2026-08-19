@@ -77,6 +77,19 @@ var (
 //
 // いずれの sentinel error も errors.Is で判定できる形で返す。
 func WriteTemplate(dir string, force bool) (Result, error) {
+	return WriteTemplateWithValues(dir, force, Values{})
+}
+
+// WriteTemplateWithValues は、雛形のプレースホルダを values で埋めてから dir の直下に書く。
+//
+// dir / force / 戻り値・エラーの扱いは WriteTemplate と同じである。違うのは中身だけで、
+// tracker.provider.owner と tracker.provider.project_number に values の値を書き込む。
+// values のゼロ値（Owner が空文字、ProjectNumber が 0）はプレースホルダのまま残す。
+//
+// dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリに書く。
+// force: 既に WORKFLOW.md がある場合に上書きするかどうか。
+// values: 埋める値。
+func WriteTemplateWithValues(dir string, force bool, values Values) (Result, error) {
 	absDir, err := resolveDir(dir)
 	if err != nil {
 		return Result{}, err
@@ -136,7 +149,7 @@ func WriteTemplate(dir string, force bool) (Result, error) {
 	if err != nil {
 		return Result{Path: path}, openError(path, err)
 	}
-	if _, err := f.WriteString(workflowTemplate); err != nil {
+	if _, err := f.WriteString(TemplateWithValues(values)); err != nil {
 		f.Close()
 		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を書き込めません: %s: %w", path, err)
 	}
@@ -169,7 +182,8 @@ func openError(path string, err error) error {
 	return fmt.Errorf("WORKFLOW.md を作成できません: %s: %w", path, err)
 }
 
-// Template は書き出す雛形の中身をそのまま返す。
+// Template は書き出す雛形の中身を、プレースホルダを埋めずにそのまま返す。
+// 埋めた全文が要る場合は TemplateWithValues を使う。
 //
 // 戻り値: WORKFLOW.md の雛形の全文（front matter と本文）。
 // テストが「プレースホルダが入っているか」「そのまま config.Load に通るか」を、

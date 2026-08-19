@@ -50,11 +50,16 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 // runInit は `continuo init` サブコマンドである。WORKFLOW.md の雛形を1つだけ置く（設計 3-32）。
 //
-// 雛形を書き出す実体は internal/scaffold にある。ここが決めるのは、引数の受け取り方と、
-// 失敗の種類ごとの文言・終了コードだけである。
+// **利用者に手で埋めさせない。**tracker.provider.owner と tracker.provider.project_number は
+// gh から引いて雛形に書き込む。引けなかったときはプレースホルダのまま残し、
+// 何を埋めればよいかを出す。**引けなくても失敗させない**（雛形そのものは書けるため）。
+//
+// 雛形を書き出す実体と gh から引く実体は internal/scaffold にある。ここが決めるのは、
+// 引数の受け取り方と、出力の文言・終了コードだけである。
 //
 // args: `continuo init` に続く引数。位置引数は書き出す先のディレクトリを0個か1個。
 // 省略したら、いまいるディレクトリに書く。--force で既存の WORKFLOW.md を上書きする。
+// --owner / --project を渡すと、その値を使って gh を叩かない。
 // stdout / stderr: 出力先。
 // 戻り値: 終了コード。0 は書き出せた（--help / -h で使い方を出した場合も 0）、
 // 1 は書き出せなかった（既にある・ディレクトリが無いなど）、2 は引数の指定が誤っている。
@@ -62,8 +67,30 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	forceFlag := fs.Bool("force", false, "既に WORKFLOW.md があっても上書きする")
+	ownerFlag := fs.String("owner", "",
+		"tracker.provider.owner に書く GitHub の user / organization 名（省略すると gh から引く）")
+	projectFlag := fs.Int("project", 0,
+		"tracker.provider.project_number に書くボードの番号（省略すると gh から引く）")
 	if err := fs.Parse(args); err != nil {
 		return parseErrorExitCode(err)
+	}
+
+	// gh から引いた値も同じ規則で弾く（internal/scaffold）。ここで弾くのは打ち間違いを
+	// その場で知らせるためで、雛形へ書く前に止めれば YAML を壊した状態で残らない。
+	if *ownerFlag != "" && !scaffold.ValidOwner(*ownerFlag) {
+		fmt.Fprintf(stderr, "エラー: --owner に指定された %q は GitHub の user / organization 名として"+
+			"受け付けられません（英数字で始まり、英数字とハイフンだけの39文字以内）\n", *ownerFlag)
+		return 2
+	}
+	projectGiven := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "project" {
+			projectGiven = true
+		}
+	})
+	if projectGiven && *projectFlag <= 0 {
+		fmt.Fprintf(stderr, "エラー: --project には0より大きい番号を指定してください（%d が指定されました）\n", *projectFlag)
+		return 2
 	}
 
 	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
@@ -86,7 +113,14 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		dir = positional[0]
 	}
 
-	result, err := scaffold.WriteTemplate(dir, *forceFlag)
+	// gh を叩くのは、--owner / --project で渡されなかったぶんだけである（設計 3-32）。
+	// 両方が渡されていれば Detect は1回も gh を起動しない。
+	detection := scaffold.Detect(context.Background(), scaffold.DetectOptions{
+		Owner:         *ownerFlag,
+		ProjectNumber: *projectFlag,
+	})
+
+	result, err := scaffold.WriteTemplateWithValues(dir, *forceFlag, detection.Values)
 	switch {
 	case err == nil:
 		if result.Overwritten {
@@ -94,6 +128,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		} else {
 			fmt.Fprintf(stdout, "WORKFLOW.md を作成しました: %s\n", result.Path)
 		}
+		printDetection(stdout, detection)
 		return 0
 	case errors.Is(err, scaffold.ErrAlreadyExists):
 		fmt.Fprintf(stderr, "%s は既にあります。上書きするなら --force を付けてください\n", result.Path)
@@ -114,6 +149,32 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	default:
 		fmt.Fprintf(stderr, "エラー: WORKFLOW.md の雛形を書き出せません: %v\n", err)
 		return 1
+	}
+}
+
+// printDetection は、雛形の値をどう決めたかを人が読める形で出す（設計 3-32）。
+//
+// 記号は `continuo doctor` と同じものを使う。埋まったものは ✓、埋まらなかったものは !
+// （雛形そのものは書けているので、✗ ではない）。
+//
+// w: 出力先。
+// d: Detect が返した結果。
+func printDetection(w io.Writer, d scaffold.Detection) {
+	for _, f := range d.Fields {
+		if f.Filled {
+			fmt.Fprintf(w, "✓ %s: %s（%s）\n", f.Key, f.Value, f.Reason)
+			continue
+		}
+		fmt.Fprintf(w, "! %s: 埋められませんでした（%s）\n", f.Key, f.Reason)
+		for _, c := range f.Candidates {
+			fmt.Fprintf(w, "    %d  %s  %s\n", c.Number, c.Title, c.URL)
+		}
+		for _, a := range f.Advice {
+			fmt.Fprintf(w, "  → %s\n", a)
+		}
+	}
+	if !d.AllFilled() {
+		fmt.Fprintf(w, "埋まらなかった値は WORKFLOW.md の中でプレースホルダのままです。上の案内どおりに書いてください\n")
 	}
 }
 

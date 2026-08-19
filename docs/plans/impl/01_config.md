@@ -44,6 +44,19 @@ var (
 // dir 自身やその親が symlink なら、辿った先（実体）のパスを基準に組み立てる。
 // 書き出す先の WORKFLOW.md が symlink なら、--force でも辿らずに ErrSymlink で止める。
 func WriteTemplate(dir string, force bool) (Result, error)
+
+// Values は雛形のプレースホルダに書き込む値である。ゼロ値は「決まらなかった」を表す。
+type Values struct {
+    Owner         string // tracker.provider.owner
+    ProjectNumber int    // tracker.provider.project_number
+}
+
+// WriteTemplateWithValues は values で埋めてから書く。それ以外は WriteTemplate と同じ。
+func WriteTemplateWithValues(dir string, force bool, values Values) (Result, error)
+
+// Detect は gh から owner と project_number を引く。失敗しても error を返さない
+// （雛形そのものは書けるため）。決まらなかった理由と直し方は Field に入れて返す。
+func Detect(ctx context.Context, opts DetectOptions) Detection
 ```
 
 > **`Result.Path` は symlink を解決した実体のパスにする。**`os.Stat` も `os.OpenFile` も
@@ -68,14 +81,17 @@ func WriteTemplate(dir string, force bool) (Result, error)
 **コメント付きの YAML をそのまま持つ必要があるので、Go の文字列リテラルとして埋め込む**
 （構造体から `yaml.Marshal` するとコメントが消える）。
 
-**プレースホルダ**（設計 3-32）。
+**利用者に手で埋めさせない**（設計 3-32）。**gh から引いて雛形に書き込む。**
 
-| キー | プレースホルダ | 型 |
+| キー | 何から決めるか | 引けなかったとき |
 | --- | --- | --- |
-| `tracker.provider.owner` | `__FILL_ME__` | 文字列 |
-| `tracker.provider.project_number` | `0` | **数値。**文字列を入れると YAML の読み込みで落ちる |
-| `herdr.socket` | `~/.config/herdr/herdr.sock` | 既定のパスをそのまま置く |
-| `workspace.root` | `~/worktrees` | 同じく既定のパス |
+| `tracker.provider.owner` | `gh api user --jq .login` | `__FILL_ME__` を残す（文字列） |
+| `tracker.provider.project_number` | `gh project list` の**候補が1件のときだけ** | `0` を残す（**数値。**文字列を入れると YAML の読み込みで落ちる） |
+| `herdr.socket` | 既定のパス `~/.config/herdr/herdr.sock` | — |
+| `workspace.root` | 既定のパス `~/worktrees` | — |
+
+**雛形のコメントに設計の節番号を書かない。**WORKFLOW.md を開く人は設計文書を持っていない。
+front matter のコメントは設計 5-2 の設定例と同じ文面にそろえる（違うのは上の2行の値だけである）。
 
 ## 受け入れの基準
 
@@ -96,7 +112,14 @@ func WriteTemplate(dir string, force bool) (Result, error)
 - [x] **既にファイルがあれば上書きせずに、終了コード 1 と
       「`<パス>` は既にあります。上書きするなら --force を付けてください」を標準エラーへ出す**
 - [x] **`--force` を付けたときだけ上書きする。**上書きしたことを標準出力に出す
-- [x] **雛形に `__FILL_ME__` と `# ここを埋めること` の両方が含まれる**
+- [x] **雛形に `__FILL_ME__` と `# ここを埋めること` の両方が含まれる**（gh から引けなかったときに残る形）
+- [x] **`continuo init` が gh から owner と project_number を引いて雛形に書き込む**
+  - **`--owner` / `--project` が渡されたら gh を1回も起動しない**
+  - **ボードの候補が複数なら選ばない。**候補を番号・名前・URL で並べ、`--project <番号>` を案内する
+  - **候補が0件・gh が無い・認証が無いときも失敗させない。**プレースホルダを残し、直し方を出す
+  - **対話で選ばせない**（標準入力を握らない）
+  - **埋めた行はコメントごと差し替える**（「ここを埋めること」を残さない）
+  - **owner は英数字で始まり英数字とハイフンだけの39文字以内に限る。**外れた値は書き込まない
 - [x] **プレースホルダが2つとも残っていたら、1つのエラーに2件とも並べて出す**
 - [x] **新規に作成できたら、書いたパスを標準出力に出す**（`WORKFLOW.md を作成しました: <パス>`）
 - [x] **位置引数のディレクトリが無ければ作らずにエラーにする**（`--force` でも作らない）
