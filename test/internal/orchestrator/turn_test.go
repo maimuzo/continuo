@@ -195,13 +195,17 @@ func TestTurn_max_turnsに達したらfailure_stateへ落とす(t *testing.T) {
 	waitFor(t, 20*time.Second, "Status が failure_state へ落ちる", func() bool {
 		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
 	})
+	// **pane.close は Status の書き込みと同時ではない。**finishRunClaimed は
+	// Status を書いたあと、引き渡しのコメント・エージェントのコメントの確認・after_run を
+	// 通してから stopWorker を呼ぶ（設計 3-25 の「worker を止める前にコメントを確かめる」）。
+	// Status だけを待って直後に検査すると、負荷が高いときに間に合わずに落ちる。
+	waitFor(t, 20*time.Second, "worker が止まる（pane.close）", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodPaneClose) > 0
+	})
 	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got > 2 {
 		// 段7（コメントを書かせ直す）で1回だけ余分に送ることがあるが、
 		// **turn として2回目を送ってはならない。**
 		t.Fatalf("max_turns を超えて turn を送っている: agent.prompt が %d 回", got)
-	}
-	if fx.Herdr.CountMethod(herdr.MethodPaneClose) == 0 {
-		t.Fatalf("打ち切ったのに worker を止めていない（pane.close が唯一の手段である）")
 	}
 }
 

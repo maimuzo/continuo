@@ -16,6 +16,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/daemon"
+	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/internal/hookclient"
 	"github.com/maimuzo/continuo/internal/logging"
 	"github.com/maimuzo/continuo/internal/scaffold"
@@ -39,6 +40,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return runHook(args[1:], stdin, stderr)
 		case "init":
 			return runInit(args[1:], stdout, stderr)
+		case "doctor":
+			return runDoctor(args[1:], stdout, stderr)
 		}
 	}
 	return runMain(args, stdout, stderr)
@@ -111,6 +114,68 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "エラー: WORKFLOW.md の雛形を書き出せません: %v\n", err)
 		return 1
 	}
+}
+
+// runDoctor は `continuo doctor` サブコマンドである（設計 3-32）。
+//
+// **前提の7項目を検査して、足りないものと直し方を出す。**検査の実体は internal/doctor に
+// あり、ここが決めるのは引数の受け取り方・出力先・終了コードだけである。
+//
+// **1つ失敗しても残りを全部検査する。**そのため、この関数は途中で戻らない。
+//
+// args: `continuo doctor` に続く引数（WORKFLOW.md のパスを0個か1個）。
+// stdout / stderr: 出力先。検査結果は stdout へ出す。
+// 戻り値: 終了コード。**`✗` が1つでもあれば 1、`!` だけなら 0**（設計 3-32）。
+// 引数の指定が誤っていれば 2（--help / -h なら 0）。
+func runDoctor(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("continuo doctor", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return parseErrorExitCode(err)
+	}
+
+	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
+	positional := fs.Args()
+	for _, a := range positional {
+		if strings.HasPrefix(a, "-") {
+			fmt.Fprintf(stderr, "エラー: 位置引数のあとにフラグらしき引数 %q があります。フラグは位置引数より前に書いてください\n", a)
+			return 2
+		}
+	}
+	if len(positional) > 1 {
+		fmt.Fprintf(stderr, "エラー: continuo doctor の位置引数は WORKFLOW.md のパスを1つだけ受け付けます（%d 個指定されました: %v）\n",
+			len(positional), positional)
+		return 2
+	}
+
+	var argPath string
+	if len(positional) == 1 {
+		argPath = positional[0]
+	}
+
+	workDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "エラー: 作業ディレクトリを取得できません: %v\n", err)
+		return 1
+	}
+	// **設定ファイルの場所が決まらなくても検査は続ける。**場所が決まらないことは
+	// 「設定ファイルを読めない」の一種であり、doctor はそれも記号で報告する対象である。
+	path, err := config.ResolvePath(argPath, workDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "設定ファイルの場所を決められません（残りの検査は続けます）: %v\n", err)
+	}
+
+	report := doctor.Run(context.Background(), doctor.Options{
+		ConfigPath: path,
+		// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（daemon.EnvGraphQLEndpoint）。
+		// 空なら本番の GitHub GraphQL API を読む（読み取りだけである）。
+		GraphQLEndpoint: os.Getenv(daemon.EnvGraphQLEndpoint),
+	})
+	if err := report.Write(stdout); err != nil {
+		fmt.Fprintf(stderr, "エラー: 検査結果を書き出せません: %v\n", err)
+		return 1
+	}
+	return report.ExitCode()
 }
 
 // parseErrorExitCode は flag.FlagSet.Parse が返したエラーを終了コードに直す。

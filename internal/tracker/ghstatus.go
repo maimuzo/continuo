@@ -126,7 +126,12 @@ func CheckGHProjectScope(ctx context.Context, run GHAuthStatusFunc) error {
 // 戻り値の2つ目: 有効なアカウントのブロックが見つかれば true。
 func activeAccountScopes(out string) ([]string, bool) {
 	type block struct {
+		// active は `Active account:` の行が true だったかどうかである。
 		active bool
+		// hasActiveLine は `Active account:` の行がそのブロックに在ったかどうかである。
+		// **「false と書いてあった」と「行そのものが無い」を区別するために持つ。**
+		hasActiveLine bool
+		// scopes は `Token scopes:` の行を分解したものである。
 		scopes []string
 	}
 	var blocks []block
@@ -147,6 +152,7 @@ func activeAccountScopes(out string) ([]string, bool) {
 			continue
 		}
 		if rest, ok := strings.CutPrefix(trimmed, "Active account:"); ok {
+			blocks[cur].hasActiveLine = true
 			blocks[cur].active = strings.EqualFold(strings.TrimSpace(rest), "true")
 			continue
 		}
@@ -160,9 +166,14 @@ func activeAccountScopes(out string) ([]string, bool) {
 			return b.scopes, true
 		}
 	}
-	// **`Active account:` の行が1つも無い版の gh もありうる。**その場合は
+	// **`Active account:` の行が1つも無い版の gh もありうる。**その場合に限り、
 	// ブロックが1つだけなら、それを有効なアカウントとして扱う。
-	if len(blocks) == 1 {
+	//
+	// **`Active account: false` と書いてあるブロックは、1つだけでも受理しない**
+	// （設計 3-32 の「読むのは `Active account: true` の行を持つブロックだけ」
+	// 「該当ブロックが1つも無ければ `✗`（未ログイン）」）。有効なアカウントが別のホストに
+	// ある場合、`gh auth status --hostname github.com` は false のブロックを1つだけ出しうる。
+	if len(blocks) == 1 && !blocks[0].hasActiveLine {
 		return blocks[0].scopes, true
 	}
 	return nil, false

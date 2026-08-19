@@ -80,4 +80,85 @@
 
 ## 実装の記録
 
-（着手したら書く）
+**言いたいこと。**`continuo doctor` は `internal/doctor` にあり、7項目を全部検査してから
+記号つきで並べる。**検査の中身は既存の関数を呼ぶだけで、判定を書き直していない。**
+
+### 置いたもの
+
+| ファイル | 何が入っているか |
+| --- | --- |
+| [internal/doctor/doctor.go](../../../internal/doctor/doctor.go) | `Options` / `Run`（7項目の呼び出し順と依存の適用）／ボードから対象リポジトリを集める処理 |
+| [internal/doctor/checks.go](../../../internal/doctor/checks.go) | 7項目それぞれの検査 |
+| [internal/doctor/report.go](../../../internal/doctor/report.go) | 見出し語の定数・3値の記号・出力の形・終了コード |
+| [cmd/continuo/main.go](../../../cmd/continuo/main.go) | `doctor` サブコマンド（引数の受け取りと終了コードだけ） |
+| [internal/workspace/trust.go](../../../internal/workspace/trust.go) | `CheckTrustForClonePath` を切り出した（下記） |
+| [README.md](../../../README.md) | 前提の表の下に `continuo doctor` の案内を置いた（**個々の検査手順は書かない。**3-32） |
+
+### 検査の実体は既にあるものを呼ぶ
+
+| 見出し語 | 呼ぶもの |
+| --- | --- |
+| 設定ファイル | `config.Load` |
+| herdr | `herdr.Client.CheckProtocol`（**`herdr status` の CLI は使わない**） |
+| gh の認証 | `tracker.CheckGHAvailable` / `tracker.CheckGHProjectScope` |
+| ボード | `tracker.ResolveToken` → `tracker.Adapter.Bootstrap` → `FetchIssuesByStates` |
+| clone | `workspace.RunGhqList`（`ghq list -p -e <owner>/<repo>`） |
+| 信頼登録 | `workspace.CheckTrustForClonePath` |
+| 資格情報 | `ratelimit` の定数（`SourceNone` / `TokenSourceEnv` / `CredentialsRelPath`） |
+
+**`internal/daemon` の起動時検査（3-6）と同じ関数を呼ぶ。**違うのは落ち方だけで、
+起動時検査は最初の失敗で起動を止め、doctor は全部調べて記号で並べる。
+
+### 信頼の検査を共有するために切り出したもの
+
+`Manager.CheckTrust` は「ghq で clone のパスを引く」と「そのパスを鍵に `~/.claude.json` を
+読む」の2つを続けて行う。**doctor は clone の検査で既にパスを持っている**ので、後半だけを
+`workspace.CheckTrustForClonePath(clonePath, homeDir)` として切り出し、`Manager.CheckTrust`
+はそれを呼ぶ形にした。**ghq を2回起動しないためであり、判定は1箇所にしかない。**
+**`~/.claude.json` のパスを組み立てるのもこの関数の1箇所だけである。**
+
+### 設計に無く、実装で決めたこと
+
+| 決めたこと | なぜ |
+| --- | --- |
+| **`ボード` の検査は Bootstrap と候補の取得の両方を含む** | 対象リポジトリはボードを読まないと決まらない（3-32）。どちらで落ちても「ボードを読めなかった」であり、下流は同じく `!` になる |
+| **`clone` と `信頼登録` は対象ごとの内訳を出し、記号は重いほうを採る**（`✗` > `!` > `✓`） | 1件でも欠けていれば「足りない」と報告する（3-32）。どのリポジトリが欠けたかは内訳の行で示す |
+| **記号が `!` のときは件数の見出しを出さない**（「0件が未承認です」と書かない） | 見出しの行だけを読むと「未承認は0件＝問題なし」に見える。記号と説明が食い違う |
+| **集計の行は `✗` が0件なら「問題があります」と書かない** | 対象リポジトリが0件（ボードが空）でも `!` が2件出る。**ボードが空なのは設定の誤りではない**（3-32）ので、最後の1行を読んで問題があると読めてはならない |
+| **doctor はアダプタに信頼の判定関数を渡さない** | 渡すと候補の取得のたびに issue ごとの ghq と git が走る。doctor はリポジトリ単位で1回ずつ検査する |
+| **出力の桁揃えは端末の表示幅で行う**（CJK を2桁と数える） | 文字数で揃えると `設定ファイル` と `clone` の説明の開始位置がずれる |
+
+### 依存の線は設計 3-32 の図のとおりに引く
+
+**言いたいこと。**`gh の認証` は**設定ファイルの下流**である。設定ファイルが `✗` か `!` なら
+`gh の認証` も `!` になる。読む値が設定に無くても、依存の図を実装で曲げない。
+
+```text
+設定ファイル ─┬─ herdr（設定の protocol と照合する）
+              └─ gh の認証 ── ボードを読める ─┬─ clone（対象リポジトリが決まる）
+                                              └─ 信頼登録（clone のパスが要る）
+資格情報（設定が読めたかどうかだけを見る。飛ばさない）
+```
+
+**`資格情報` だけが上流の失敗で飛ばされない。**設計 3-32 がそれだけを図の外に置き、
+「飛ばさない」と明記しているためである。
+
+### `gh auth status` の単独ブロックの読み方
+
+**言いたいこと。**`Active account: false` と**書いてあるブロック**は、1つだけでも受理しない。
+受理するのは **`Active account:` の行そのものが無い**版の gh で、ブロックが1つだけのときに限る。
+
+`gh` の有効なアカウントが別のホストにあると、`gh auth status --hostname github.com` は
+`Active account: false` のブロックを1つだけ出しうる。**これを受理すると、Status を書けない
+認証に `✓` を出す。**判定は
+[internal/tracker/ghstatus.go](../../../internal/tracker/ghstatus.go) の `activeAccountScopes`
+にあり、`hasActiveLine`（`Active account:` の行が在ったか）と `active`（`true` だったか）を
+分けて持つ。
+
+### テスト
+
+[test/internal/doctor/](../../../test/internal/doctor/) に置いた。
+**本番のボードへは1リクエストも送らない**（`httptest.Server` の偽 GraphQL）。
+**実 herdr にも繋がない**（Unix domain socket の偽サーバ）。
+**本物の `gh` / `ghq` / ホームディレクトリも使わない**（PATH の先頭へ偽物、`HOME` は一時ディレクトリ）。
+`cli_test.go` は**ビルドしたバイナリを起動して**出力と終了コードを確かめる。

@@ -26,11 +26,6 @@ type claudeProjectEntry struct {
 	HasTrustDialogAccepted bool `json:"hasTrustDialogAccepted"`
 }
 
-// ClaudeConfigPath は読み取り対象の `~/.claude.json` の絶対パスを返す。
-func (m *Manager) ClaudeConfigPath() string {
-	return filepath.Join(m.homeDir, ClaudeConfigFileName)
-}
-
 // CheckTrust は、リポジトリが Claude Code に信頼登録されているかを、理由つきで返す
 // （3-6 の「信頼を引く鍵の作り方」の3段）。
 //
@@ -66,13 +61,38 @@ func (m *Manager) CheckTrust(owner, repo string) (bool, string, error) {
 			owner, repo, owner, repo), nil
 	}
 
+	return CheckTrustForClonePath(clonePath, m.homeDir)
+}
+
+// CheckTrustForClonePath は clone の絶対パスを鍵にして、信頼登録を理由つきで判定する
+// （3-6 の「信頼を引く鍵の作り方」の2段と3段）。
+//
+//  1. git -C <clonePath> rev-parse --path-format=absolute --show-toplevel で鍵を解決する
+//  2. その出力を鍵にして ~/.claude.json の projects[<鍵>].hasTrustDialogAccepted を読む
+//
+// **clone のパスを引く1段（ghq）は含まない。**呼び出し側が既にパスを持っている場合に
+// ghq を2回起動しないためである（doctor は clone の検査で先に引いている。3-32）。
+// **`~/.claude.json` は読むだけである。**
+//
+// **worktree のパスを渡してはならない。**信頼はリポジトリ単位で記録されるので、
+// worktree のパスでは必ず「未承認」になる（1-2 の実測）。
+//
+// clonePath: clone の絶対パス（`ghq list -p -e` が返した値）。
+// homeDir: `~/.claude.json` を探すホームディレクトリ。
+// 戻り値の1つ目: 信頼登録されていれば true。
+// 戻り値の2つ目: 人間に見せる理由。信頼済みのときは鍵に使ったパスを書く。
+// 戻り値の3つ目: git を実行できない・`~/.claude.json` を読めない・JSON として解析できない
+// 場合のエラー（判定できなかったことを表す）。
+func CheckTrustForClonePath(clonePath, homeDir string) (bool, string, error) {
+	ctx := context.Background()
+
 	key, err := gitToplevel(ctx, clonePath)
 	if err != nil {
 		return false, "", fmt.Errorf(
 			"clone のパス %s を `git rev-parse --show-toplevel` で解決できません: %w", clonePath, err)
 	}
 
-	configPath := m.ClaudeConfigPath()
+	configPath := filepath.Join(homeDir, ClaudeConfigFileName)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

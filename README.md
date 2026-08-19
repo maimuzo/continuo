@@ -46,6 +46,15 @@ Where the spec assumes a Codex app-server subprocess speaking a structured proto
 | `gh` | 2.97.0 or later — the Status update form used in prompts needs it |
 | Platform | macOS and Linux (including Ubuntu on WSL2) |
 
+Do not check these by hand. `continuo doctor` inspects every prerequisite — the config file, herdr, the `gh` login and its scopes, the board, the local clones, the folder trust, and the credentials — then prints what is missing and how to fix it. It exits `1` when something is missing and `0` when nothing is.
+
+```bash
+continuo doctor            # reads ./WORKFLOW.md
+continuo doctor path/to/WORKFLOW.md
+```
+
+**揃っているかは手で確かめないでください。**`continuo doctor` が前提を全部検査し、足りないものと直し方を出します。足りないものがあれば終了コードは 1、無ければ 0 です。
+
 ## Documents / 資料
 
 | Path | Contents |
