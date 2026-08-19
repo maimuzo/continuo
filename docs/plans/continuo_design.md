@@ -2229,7 +2229,14 @@ type runState struct {
     StartedAt    time.Time // この run が最初の turn を送った時刻。
                            // 「この run が書いたコメント」を前の run のものと区別するのに使う（3-25）。
                            // 再起動して引き継いだ run では、引き継いだ時刻を入れる
-    LastSeenAt   time.Time // 最後に hook を受けた時刻（stall の時計）
+    LastSeenAt   time.Time // stall の時計（3-21）。hook のほか、turn を送った・枠待ちを外した・
+                           // 猶予を与えた時点でも進む。**「最後に hook を受けた時刻」ではない**
+    LastHookAt   time.Time // 最後に hook を実際に受けた時刻。進めるのは hook の受信だけ。
+                           // ゼロ値なら1件も受けていない。**人間が生死を判断する値である**（5-2 のダッシュボード）
+    Tokens       TokenUsage // この run の累計のトークン（3-15）。requestId で重複排除済み。
+                           // 再 dispatch でセッションが変わったら、それまでの累計へ足していく
+                           // （transcript のファイル名はセッション UUID なので、対象ファイルが別物になる）
+    TokensAt     time.Time // Tokens を集計した時刻。ゼロ値なら一度も集計していない
 }
 
 **バックオフ中の issue も印に残す。**外すと30秒後の巡回で即座に拾い直され、バックオフが効かない。
@@ -2813,6 +2820,9 @@ README には「何が要るか」だけを書き、**「揃っているか」�
 continuo doctor        # 前提が揃っているかを検査する。足りないものと直し方を出す
 continuo init          # WORKFLOW.md の雛形を置く。既にあれば止める（--force で上書き）
 continuo               # 常駐する（WORKFLOW.md を読んで巡回を始める）
+                       # --log-level=debug|info|warn|error（既定 info）
+                       # --port=<番号>  ダッシュボードのポート。server.port を上書きする（仕様 13.7）。
+                       #                0 なら OS が空きポートを選ぶ。渡さなければ server.port に従う
 continuo hook          # Claude Code の hook から呼ばれる。標準入力を socket へ1行で送って即終了する。
                        # 応答は待たない（3-2）。socket へ繋がらなければ --pending-dir へ逃がす（3-19）
 ```
@@ -3380,7 +3390,9 @@ runtime:                                    # 3-17
   lock_file: null                           # null なら hook の socket と同じディレクトリに置く
 
 server:                                     # SPEC 13.7 の任意拡張。キー名は仕様どおり
-  port: null                                # null ならサーバを起動しない。数値なら起動する
+  port: null                                # null ならサーバを起動しない。数値なら起動する。
+                                            # CLI の --port が渡されたらそちらが優先する（仕様 13.7）。
+                                            # **開けなくても continuo は起動を続ける**（任意の機能である）
 ---
 ```
 

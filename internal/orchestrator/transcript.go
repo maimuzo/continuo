@@ -63,8 +63,9 @@ type transcriptUsage struct {
 
 // TokenUsage は transcript から集計したトークンの合計である（設計 3-15）。
 //
-// **`runState` には持たない。**その場でログに出して捨てる（設計 3-15 の受け入れの基準）。
-// ダッシュボード（第9段階）が使うなら、そのとき置き場所を決める。
+// **1回の集計が見ているのは transcript 1ファイルである。**セッションをまたいだ累計は
+// `runState` が `Add` で足して持つ（transcript のファイル名はセッション UUID なので、
+// 再 dispatch で UUID を採り直すと別のファイルになる）。
 type TokenUsage struct {
 	// APICalls は数えた API 応答の件数（`requestId` で重複排除したあと）である。
 	APICalls int
@@ -76,6 +77,23 @@ type TokenUsage struct {
 	CacheRead int
 	// Output は出力のトークンの合計である。
 	Output int
+}
+
+// Add は2つの集計を足した新しい値を返す（レシーバは書き換えない）。
+//
+// **セッションをまたいだ累計を作るためのものである。**同じ transcript を2回足しては
+// ならない（`requestId` の重複排除はファイル単位でしか効かない）。
+//
+// other: 足す集計。
+// 戻り値: 項目ごとに足し合わせた集計。
+func (u TokenUsage) Add(other TokenUsage) TokenUsage {
+	return TokenUsage{
+		APICalls:      u.APICalls + other.APICalls,
+		Input:         u.Input + other.Input,
+		CacheCreation: u.CacheCreation + other.CacheCreation,
+		CacheRead:     u.CacheRead + other.CacheRead,
+		Output:        u.Output + other.Output,
+	}
 }
 
 // TranscriptReadResult は transcript を1回読んだ結果である。

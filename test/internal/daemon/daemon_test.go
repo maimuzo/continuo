@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -39,6 +43,9 @@ type daemonEnv struct {
 	Home string
 	// WorkflowPath は WORKFLOW.md の絶対パスである。
 	WorkflowPath string
+	// ServerPort は WORKFLOW.md に書く `server.port` である。
+	// **nil なら書かない**（既定どおりダッシュボードを開かない）。
+	ServerPort *int
 	// Timeline は偽 herdr と偽 GitHub の呼び出しを混ぜた1本の並びである。
 	Timeline *timeline
 }
@@ -145,14 +152,14 @@ cleanup:
   require_pushed: false
 rate_limit:
   source: none
----
+%s---
 
 {{.issue.identifier}} を実装してください。
 
     gh issue view {{.issue.url}} --comments
 
 作業の区切りがついたら CONTINUO-STATUS: の行を1行書いてください。
-`, e.WorktreeRoot, e.Herdr.SocketPath)
+`, e.WorktreeRoot, e.Herdr.SocketPath, serverSection(e.ServerPort))
 
 	if err := os.WriteFile(e.WorkflowPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
@@ -212,9 +219,21 @@ func (e *daemonEnv) prepareRun(t *testing.T, number int, workspaceID, sessionUUI
 // 戻り値の2つ目: 標準出力と標準エラーを溜める先（失敗したときに中身を出す）。
 func (e *daemonEnv) start(t *testing.T) (*exec.Cmd, *syncBuffer) {
 	t.Helper()
+	return e.startWithArgs(t)
+}
+
+// startWithArgs は追加の引数を渡して continuo のバイナリを起動する。
+//
+// t: 呼び出し元のテスト。
+// extra: `--log-level` と WORKFLOW.md のパスの前に置く追加の引数（`--port` など）。
+// 戻り値の1つ目: 起動したプロセス。
+// 戻り値の2つ目: 標準出力と標準エラーを溜める先。
+func (e *daemonEnv) startWithArgs(t *testing.T, extra ...string) (*exec.Cmd, *syncBuffer) {
+	t.Helper()
 
 	logs := &syncBuffer{}
-	cmd := exec.Command(e.Binary, "--log-level=debug", e.WorkflowPath)
+	args := append(append([]string{}, extra...), "--log-level=debug", e.WorkflowPath)
+	cmd := exec.Command(e.Binary, args...)
 	cmd.Dir = e.Root
 	cmd.Env = []string{
 		"PATH=" + e.BinDir + string(os.PathListSeparator) + os.Getenv("PATH"),
@@ -561,5 +580,205 @@ func writeTranscript(t *testing.T, path string) {
 	}
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
 		t.Errorf("transcript を書けません: %v", err)
+	}
+}
+
+// serverSection は WORKFLOW.md に書く `server` 節を作る。
+//
+// port: 書く `server.port`。nil なら節そのものを書かない。
+// 戻り値: front matter へ挿し込む文字列（nil なら空文字）。
+func serverSection(port *int) string {
+	if port == nil {
+		return ""
+	}
+	return fmt.Sprintf("server:\n  port: %d\n", *port)
+}
+
+// dashboardAddr はログに出た「ダッシュボードを開きました」の待ち受け先を取り出す。
+//
+// **ポート番号をテストに書かないためである**（`--port=0` は OS に空きポートを選ばせる）。
+//
+// logs: continuo の出力。
+// 戻り値の1つ目: `127.0.0.1:<ポート>`。
+// 戻り値の2つ目: 見つかれば true。
+func dashboardAddr(logs *syncBuffer) (string, bool) {
+	for _, line := range strings.Split(logs.String(), "\n") {
+		if !strings.Contains(line, "ダッシュボードを開きました") {
+			continue
+		}
+		_, rest, ok := strings.Cut(line, "addr=")
+		if !ok {
+			continue
+		}
+		return strings.TrimSpace(strings.Fields(rest)[0]), true
+	}
+	return "", false
+}
+
+// TestDaemon_ダッシュボードが開けなくても起動を止めない は、
+// 任意の機能の失敗が本体を止めないことを確かめる。
+//
+// 目的: 設計 5-2 / 8-2 と `SPEC.md` 13.7 の「ダッシュボードは orchestrator の正しさに
+// 必要ではない」を守っていることを示す。**ここで起動を止めると、直前の復元で引き継いだ
+// pane の Claude Code が誰にも見張られないまま残る。**
+//
+// 与える情報: 別のプロセスが既に掴んでいるポートを `server.port` に書いた WORKFLOW.md と、
+// 引き継ぐ対象の worktree が1件。
+//
+// 成功条件: 起動が止まらず巡回まで進むこと。開けなかったことが警告としてログに出ること。
+// `SIGTERM` で終了コード 0 で終わること。
+func TestDaemon_ダッシュボードが開けなくても起動を止めない(t *testing.T) {
+	// **先にポートを塞ぐ。**別のアプリが同じ番号を掴んでいる状況そのものである。
+	blocker, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("ポートを塞げません: %v", err)
+	}
+	defer func() { _ = blocker.Close() }()
+	_, portStr, err := net.SplitHostPort(blocker.Addr().String())
+	if err != nil {
+		t.Fatalf("塞いだポートを解釈できません: %v", err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("塞いだポートを数値にできません: %v", err)
+	}
+
+	env := newDaemonEnv(t)
+	env.ServerPort = &port
+	env.writeWorkflow(t)
+	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline,
+		&boardItem{ItemID: "PVTI_item188", NodeID: "I_node188", Number: 188, State: "In Review"},
+	)
+	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "pane_list", "panes": []any{}}, nil
+	})
+	env.Herdr.Handle("agent.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "agent_list", "agents": []any{}}, nil
+	})
+
+	cmd, logs := env.start(t)
+	t.Cleanup(func() {
+		if t.Failed() || testing.Verbose() {
+			t.Logf("continuo の出力:\n%s", logs.String())
+		}
+	})
+
+	waitFor(t, 30*time.Second, "ダッシュボードが開けなくても巡回まで進む", func() bool {
+		return strings.Contains(logs.String(), "巡回を始めます")
+	})
+	if !strings.Contains(logs.String(), "ダッシュボードを開けないので、ダッシュボード無しで続けます") {
+		t.Fatalf("開けなかったことが警告として出ていない:\n%s", logs.String())
+	}
+
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("SIGTERM を送れません: %v", err)
+	}
+	code, finished := waitProcess(context.Background(), cmd, 20*time.Second)
+	if !finished {
+		t.Fatalf("SIGTERM を受けても 20 秒以内に終了しなかった\n%s", logs.String())
+	}
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではない: got %d\n%s", code, logs.String())
+	}
+}
+
+// TestDaemon_CLIのportでダッシュボードを開いて実行中のrunを出す は、
+// ダッシュボードが本物の orchestrator に繋がっていることを確かめる。
+//
+// 目的: `SPEC.md` 13.7 の「CLI `--port` overrides `server.port`」（訳: 両方あるときは
+// CLI の `--port` が `server.port` を上書きする）と、13.7.2 の `GET /api/v1/state` を
+// 満たしていることを示す。**引き継いだ run が JSON に出ることまで確かめる**
+// （偽の供給元では、この結線が切れていても気づけない）。
+//
+// 与える情報: `server.port` を書いていない WORKFLOW.md と、`--port=0`（OS に空きポートを
+// 選ばせる）。引き継ぐ対象の worktree が1件あり、その pane は `working` である
+// （turn を送らないので、run は印に残ったままになる）。
+//
+// 成功条件: 待ち受け先がログに出ること。`GET /api/v1/state` が 200 を返し、
+// 引き継いだ issue の識別子が入っていること。**ループバック以外の宛先は 421 で断ること。**
+func TestDaemon_CLIのportでダッシュボードを開いて実行中のrunを出す(t *testing.T) {
+	env := newDaemonEnv(t)
+	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline,
+		&boardItem{ItemID: "PVTI_item189", NodeID: "I_node189", Number: 189, State: "In Progress"},
+	)
+	path189 := env.prepareRun(t, 189, "w189", "sess-189")
+	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "pane_list", "panes": []any{
+			map[string]any{
+				"pane_id": "p-189", "workspace_id": "w189", "cwd": path189,
+				"agent_status": "working", "agent": "claude",
+				"agent_session": map[string]any{
+					"source": "herdr:claude", "agent": "claude", "kind": "id", "value": "sess-189",
+				},
+			},
+		}}, nil
+	})
+	env.Herdr.Handle("agent.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "agent_list", "agents": []any{
+			map[string]any{
+				"name": "continuo-koetsumugi-189", "agent": "claude", "agent_status": "working",
+				"pane_id": "p-189", "tab_id": "t1", "workspace_id": "w189",
+				"terminal_id": "term1", "focused": false, "revision": 1,
+			},
+		}}, nil
+	})
+
+	cmd, logs := env.startWithArgs(t, "--port=0")
+	t.Cleanup(func() {
+		if t.Failed() || testing.Verbose() {
+			t.Logf("continuo の出力:\n%s", logs.String())
+		}
+	})
+
+	var addr string
+	waitFor(t, 30*time.Second, "ダッシュボードが開く", func() bool {
+		var ok bool
+		addr, ok = dashboardAddr(logs)
+		return ok
+	})
+	if !strings.HasPrefix(addr, "127.0.0.1:") {
+		t.Fatalf("ループバック以外で待ち受けている: %q", addr)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	var body string
+	waitFor(t, 30*time.Second, "引き継いだ run が JSON に出る", func() bool {
+		res, err := client.Get("http://" + addr + "/api/v1/state")
+		if err != nil {
+			return false
+		}
+		defer func() { _ = res.Body.Close() }()
+		b, err := io.ReadAll(res.Body)
+		if err != nil || res.StatusCode != http.StatusOK {
+			return false
+		}
+		body = string(b)
+		return strings.Contains(body, "maimuzo/koetsumugi#189")
+	})
+
+	// **ループバック以外の宛先は断る**（DNS rebinding で中身を読み出させない）。
+	req, err := http.NewRequest(http.MethodGet, "http://"+addr+"/api/v1/state", nil)
+	if err != nil {
+		t.Fatalf("リクエストを組み立てられません: %v", err)
+	}
+	req.Host = "attacker.example.com"
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("取得できません: %v", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusMisdirectedRequest {
+		t.Fatalf("ループバック以外の宛先を受け入れた: got %d, want %d",
+			res.StatusCode, http.StatusMisdirectedRequest)
+	}
+
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("SIGTERM を送れません: %v", err)
+	}
+	if _, ok := waitProcess(context.Background(), cmd, 20*time.Second); !ok {
+		t.Fatalf("SIGTERM を受けても 20 秒以内に終了しなかった\n%s", logs.String())
+	}
+	if _, err := client.Get("http://" + addr + "/api/v1/state"); err == nil {
+		t.Fatal("終了したのにダッシュボードへ接続できた")
 	}
 }

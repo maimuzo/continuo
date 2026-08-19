@@ -62,8 +62,20 @@ type runState struct {
 	// StartedAt はこの run が最初の turn を送った時刻である。
 	// 「この run が書いたコメント」を前の run のものと区別するのに使う（設計 3-25）。
 	StartedAt time.Time
-	// LastSeenAt は最後に hook を受けた時刻である（stall の時計）。
+	// LastSeenAt は stall の時計である（設計 3-21）。
+	//
+	// **これは「最後に hook を受けた時刻」ではない。**hook を1件も受けていなくても、
+	// turn を送った時点（beginTurn）・枠待ちを外した時点（clearWaitingQuota）・
+	// 猶予を与えた時点（grantGrace）に現在時刻へ進む。**stall の判定にだけ使う。**
+	// 「最後に hook を受けた時刻」は LastHookAt が持つ。
 	LastSeenAt time.Time
+	// LastHookAt は最後に hook を実際に受けた時刻である。
+	//
+	// **進めるのは noteHook だけである。**1件も受けていなければゼロ値のままである。
+	// **人間が「エージェントが生きているか」を見る欄はこちらである**（ダッシュボード）。
+	// stall の時計（LastSeenAt）と混ぜると、固まったエージェントでも
+	// continuo が次の turn を送った瞬間に「0秒前」と表示されてしまう。
+	LastHookAt time.Time
 
 	// ===== 設計 3-25 の型に無いが、実装に要る項目 =====
 
@@ -82,6 +94,20 @@ type runState struct {
 	TranscriptPath string
 	// QuotaResetAt は枠待ちを外す時刻である（設計 3-27）。
 	QuotaResetAt time.Time
+	// Tokens はこの run が始めてからの累計のトークンである（設計 3-15）。
+	//
+	// **中身は「いまのセッションの transcript を `requestId` で重複排除して足した値」＋
+	// 「それより前のセッションの分（tokensBase）」である。**
+	// transcript のファイル名はセッション UUID なので（設計 3-15 の実測）、
+	// 再 dispatch で UUID を採り直すと集計の対象ファイルが別物になる。
+	// **足しておかないと、ダッシュボードの累計が再 dispatch のたびに巻き戻る。**
+	// **ダッシュボード（第9段階）だけが読む。**判断には使わない。
+	Tokens TokenUsage
+	// tokensBase は前のセッションまでの累計である（再 dispatch の時点で畳み込む）。
+	// **beginAttempt が Tokens をここへ移し、setTokens がこれに足して Tokens を作る。**
+	tokensBase TokenUsage
+	// TokensAt は Tokens を集計した時刻である。ゼロ値なら一度も集計していない。
+	TokensAt time.Time
 	// GraceGiven は stall の猶予を1回与えたことを表す（設計 3-21 / 3-27）。
 	// **2回目は与えない。**`working` のまま固まる場合があるためである。
 	GraceGiven bool
@@ -190,6 +216,7 @@ func (rs *runState) snapshot() runSnapshot {
 		QuotaResetAt:     rs.QuotaResetAt,
 		GraceGiven:       rs.GraceGiven,
 		LastSeenAt:       rs.LastSeenAt,
+		LastHookAt:       rs.LastHookAt,
 		StartedAt:        rs.StartedAt,
 		WorktreePath:     rs.WorktreePath,
 		Base:             rs.Base,
@@ -198,6 +225,10 @@ func (rs *runState) snapshot() runSnapshot {
 		Finished:         rs.Finished,
 		FreshSession:     rs.FreshSession,
 		State:            rs.Issue.State,
+		Title:            rs.Issue.Title,
+		URL:              issueURL(rs.Issue),
+		Tokens:           rs.Tokens,
+		TokensAt:         rs.TokensAt,
 		hookSeenThisTurn: rs.hookSeenThisTurn,
 	}
 }
@@ -216,6 +247,7 @@ type runSnapshot struct {
 	QuotaResetAt     time.Time
 	GraceGiven       bool
 	LastSeenAt       time.Time
+	LastHookAt       time.Time
 	StartedAt        time.Time
 	WorktreePath     string
 	Base             normalize.SafeName
@@ -224,6 +256,10 @@ type runSnapshot struct {
 	Finished         bool
 	FreshSession     bool
 	State            string
+	Title            string
+	URL              string
+	Tokens           TokenUsage
+	TokensAt         time.Time
 	hookSeenThisTurn bool
 }
 
@@ -262,12 +298,16 @@ func (rs *runState) beginTurn(now time.Time) int {
 //
 // **turn の終わりの判定には使わない。**判定は hookCh を読む側が行う。
 //
+// **`LastHookAt` を進めるのはこの関数だけである。**枠待ちの間は stall の時計
+// （`LastSeenAt`）を止めるが、**受けた事実そのものは必ず記録する。**
+//
 // ev: 受けた hook。
 // now: 受けた時刻。
 func (rs *runState) noteHook(ev hookserver.HookEvent, now time.Time) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.hookSeenThisTurn = true
+	rs.LastHookAt = now
 	if !rs.WaitingQuota {
 		// 枠待ちの間は時計を止める（LastSeenAt を進めない。設計 3-27）。
 		// **枠待ち中は hook が来ないので、ここに来ること自体がまれである。**
@@ -293,6 +333,23 @@ func (rs *runState) stopSeen() (time.Time, bool) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	return rs.stopSeenAt, !rs.stopSeenAt.IsZero()
+}
+
+// setTokens は transcript から集計したトークンを記録する（設計 3-15）。
+//
+// **判断には使わない。**ダッシュボード（第9段階）が読むためだけに持つ。
+// 集計は turn の終わりに1回だけ行うので、**HTTP の要求ごとに transcript を開き直さない。**
+//
+// **前のセッションの分（tokensBase）を足してから入れる。**usage は「いまのセッションの
+// transcript 1ファイルの合計」であり、そのまま入れると再 dispatch のたびに累計が巻き戻る。
+//
+// usage: いまのセッションの transcript から集計したトークン。
+// now: 集計した時刻。
+func (rs *runState) setTokens(usage TokenUsage, now time.Time) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.Tokens = rs.tokensBase.Add(usage)
+	rs.TokensAt = now
 }
 
 // setWaitingQuota は枠待ちの印を立てる（設計 3-27）。
@@ -509,10 +566,15 @@ func (rs *runState) agentName() normalize.SafeName {
 // 再 dispatch でも UUID は新しく採番するので（設計 3-3）、継続の指示（5-4）だけを送ると
 // **どの issue を何のためにやるのかが1文字も伝わらない。**
 //
+// **ここまでの累計トークンを tokensBase へ畳み込む。**次のセッションの transcript は
+// 別のファイル（ファイル名はセッション UUID）になり、そこから集計した値には
+// 前のセッションの分が入っていないためである。
+//
 // 戻り値: 新しい worker の世代。turn ループはこれを覚えて `currentWorker` に渡す。
 func (rs *runState) beginAttempt() int {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
+	rs.tokensBase = rs.Tokens
 	rs.workerEpoch++
 	rs.workerStopped = false
 	rs.terminating = false

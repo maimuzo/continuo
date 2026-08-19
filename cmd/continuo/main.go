@@ -198,7 +198,7 @@ func parseErrorExitCode(err error) int {
 // ログの出力先・`SIGINT` / `SIGTERM` を受けるコンテキストの作り方・終了コードだけである
 // （`package main` の非公開関数は test/ から呼べないため、実体を internal へ置く）。
 //
-// args: `continuo` に続く引数（--log-level と、WORKFLOW.md のパスを0個か1個）。
+// args: `continuo` に続く引数（--log-level / --port と、WORKFLOW.md のパスを0個か1個）。
 // stdout / stderr: 出力先。
 // 戻り値: 終了コード。0 は正常終了（SIGINT / SIGTERM での停止を含む）、
 // 1 は起動できなかった、2 は引数の指定が誤っている。
@@ -206,9 +206,20 @@ func runMain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	logLevelFlag := fs.String("log-level", "info", "ログレベル（debug|info|warn|error）")
+	// **`SPEC.md` 13.7 の「CLI `--port` overrides `server.port`」である。**
+	// 既定値では区別が付かないので、渡されたかどうかは fs.Visit で見る
+	// （`--port=0` は「OS に空きポートを選ばせる」という意味を持つ指定であり、
+	// 「指定しなかった」と同じ扱いにしてはならない）。
+	portFlag := fs.Int("port", 0, "ダッシュボードのポート番号（server.port を上書きする。0 は空きポートを OS に選ばせる）")
 	if err := fs.Parse(args); err != nil {
 		return parseErrorExitCode(err)
 	}
+	var port *int
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "port" {
+			port = portFlag
+		}
+	})
 
 	// flag パッケージは「位置引数のあとに書かれたフラグ」を黙って無視する
 	// （例: `continuo WORKFLOW.md --log-level=debug` を渡すと、--log-level=debug は
@@ -260,7 +271,7 @@ func runMain(args []string, stdout, stderr io.Writer) int {
 	defer stop()
 
 	fmt.Fprintf(stdout, "continuo を起動します（設定ファイル: %s）\n", path)
-	if err := daemon.Run(ctx, daemon.Options{ConfigPath: path, Logger: logger}); err != nil {
+	if err := daemon.Run(ctx, daemon.Options{ConfigPath: path, Logger: logger, Port: port}); err != nil {
 		logger.Error("continuo を起動できません", "error", err)
 		return 1
 	}

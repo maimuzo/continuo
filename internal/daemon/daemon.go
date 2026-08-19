@@ -8,6 +8,9 @@
 //	3 3-6 の起動時検査を全部通す … **起動を止める。生きている pane は閉じずに放置する**
 //	4 復元（3-4 の段2〜段9）    … 段ごとの規則に従う
 //	4b 起動時の掃除（3-9 の手順6 / 6b）… **復元のあとに走らせる**
+//	4c ダッシュボードを開く      … **`server.port` が null なら開かない**（設計 5-2。任意）。
+//	                              **開けなくても起動は止めない**（任意の機能の失敗で
+//	                              引き継いだ pane を放置しない）
 //	5 巡回を始める              … poll_interval_ms ごとに Tick を回す
 //
 // **巡回より先に復元を終える。**先に巡回を始めると、これから引き継ぐ run の worktree に
@@ -35,6 +38,7 @@ import (
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/internal/server"
 	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -59,6 +63,12 @@ type Options struct {
 	// ContinuoPath は `continuo hook` を起動する実行ファイルの絶対パスである。
 	// 空なら os.Executable() の結果を使う。
 	ContinuoPath string
+	// Port は CLI の `--port` で指定されたダッシュボードのポート番号である
+	// （`SPEC.md` 13.7 の「CLI `--port` overrides `server.port`」）。
+	//
+	// **`nil` なら `server.port` に従う。**`nil` でなければ `server.port` を上書きし、
+	// 設定に `server.port` が無くてもダッシュボードを開く。
+	Port *int
 }
 
 // Run は continuo の常駐ループを回す。ctx が終わるまで返らない。
@@ -79,6 +89,13 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	cfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
+
+	// **CLI の `--port` は `server.port` を上書きする**（`SPEC.md` 13.7）。
+	// 設定を読み直しても待ち受け先が変わらないのと同じ理由で、ここで1回だけ写し取る（設計 3-24）。
+	if opts.Port != nil {
+		cfg.Server.Port = opts.Port
+		logger.Info("CLI の --port でダッシュボードのポートを上書きしました", "port", *opts.Port)
+	}
 
 	sockPath, err := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(EnvRuntimeDir))
 	if err != nil {
@@ -127,13 +144,41 @@ func Run(ctx context.Context, opts Options) error {
 	// 先に走らせると、これから引き継ぐ run の branch を孤児と判定して消す。
 	deps.Orchestrator.SweepOnStartup(ctx, restored)
 
+	// 段4c: ダッシュボードを開く（設計 5-2 / 8-2。**任意の機能である**）。
+	// **`server.port` が null なら deps.Dashboard は nil であり、socket を1つも作らない。**
+	// **ここで開いたポートは、設定を読み直しても変わらない**（設計 3-24。自前のリソースを
+	// 掴んでいるので、変えるには continuo の再起動が要る）。
+	//
+	// **listen に失敗しても起動は止めない。**ダッシュボードは run の面倒を見る仕事に
+	// 一切関わらない任意の機能であり（`SPEC.md` 13.7 の「MUST NOT become REQUIRED for
+	// orchestrator correctness」）、ここで返ると、**直前の復元で引き継いだ pane の
+	// Claude Code が誰にも見張られないまま残る**（hook の受け口も開いたままになる）。
+	// 別のアプリが同じポートを掴んでいるだけで、そうなってはならない。
+	if deps.Dashboard != nil {
+		if err := deps.Dashboard.Start(); err != nil {
+			// 待ち受け先はエラーの文言に入っている（`server.Start` が付ける）。
+			logger.Warn("ダッシュボードを開けないので、ダッシュボード無しで続けます", "error", err)
+		}
+	} else {
+		logger.Info("ダッシュボードは開きません（server.port が未設定）")
+	}
+
 	// 段5: 巡回を始める。
 	logger.Info("巡回を始めます", "poll_interval_ms", cfg.Polling.IntervalMs)
 	runErr := deps.Orchestrator.Run(ctx)
 
-	// 終了の作法。**巡回を止め → hook の受け口を閉じ → turn ループの終了を待つ。**
+	// 終了の作法。**ダッシュボードを閉じ → hook の受け口を閉じ → turn ループの終了を待つ。**
 	// **pane は閉じない**（次の起動で引き継ぐ。設計 3-4 の段5）。
+	// **ダッシュボードを先に閉じる。**閉じかけの状態を人間に見せても意味が無く、
+	// 応答の goroutine が orchestrator の写しを取り続ける理由も無い。
 	logger.Info("巡回を止めました（hook の受け口を閉じて turn ループの終了を待ちます）")
+	// **期限を付ける。**応答を返しきらない相手が居ても、そこで終了が止まらないようにする。
+	shutdownCtx, cancelShutdown := context.WithTimeout(
+		context.WithoutCancel(ctx), server.DefaultShutdownTimeout)
+	if err := deps.Dashboard.Close(shutdownCtx); err != nil {
+		logger.Warn("ダッシュボードを閉じられませんでした", "error", err)
+	}
+	cancelShutdown()
 	if err := deps.HookServer.Close(); err != nil {
 		logger.Warn("hook の受け口を閉じられませんでした", "error", err)
 	}
@@ -156,6 +201,9 @@ type deps struct {
 	Orchestrator *orchestrator.Orchestrator
 	// HookServer は hook を受ける socket である。
 	HookServer *hookserver.Server
+	// Dashboard は任意の HTTP ダッシュボードである（設計 5-2）。
+	// **`server.port` が null なら nil である。**nil のまま Close を呼んでよい。
+	Dashboard *server.Server
 }
 
 // build は依存を組み立てる。**この関数は検査を行わない**（検査は runStartupChecks）。
@@ -238,7 +286,17 @@ func build(
 		return nil, fmt.Errorf("hook の受け口を組み立てられません: %w", err)
 	}
 
-	return &deps{Herdr: hc, Tracker: adapter, Orchestrator: orc, HookServer: hs}, nil
+	// **`server.port` が null なら dash は nil になる**（listen しない。設計 5-2）。
+	dash, err := server.New(server.Options{
+		Port:   cfg.Server.Port,
+		Source: orc,
+		Logger: logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ダッシュボードを組み立てられません: %w", err)
+	}
+
+	return &deps{Herdr: hc, Tracker: adapter, Orchestrator: orc, HookServer: hs, Dashboard: dash}, nil
 }
 
 // ResolveLockFilePath は二重起動防止のロックファイルの絶対パスを決める（設計 3-17 / 3-23）。

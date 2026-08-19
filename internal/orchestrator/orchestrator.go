@@ -769,6 +769,26 @@ type RunView struct {
 	WaitingQuota bool
 	// State は最後に取り直した Status である。
 	State string
+	// Title は issue のタイトルである。
+	// **外部から来る文字列である。**表示するときは必ずエスケープすること。
+	Title string
+	// URL は issue の URL である。draft issue は URL を持たないので空文字になる。
+	URL string
+	// StartedAt はこの run が最初の turn を送った時刻である。ゼロ値ならまだ送っていない。
+	StartedAt time.Time
+	// LastHookAt は最後に hook を実際に受けた時刻である。
+	// **ゼロ値なら、この run から hook を1件も受けていない。**
+	// 人間が「エージェントが生きているか」を判断するのはこの値である。
+	LastHookAt time.Time
+	// StallClockAt は stall の時計である（設計 3-21）。
+	// **hook 以外でも進む**（turn を送った・枠待ちを外した・猶予を与えた）。
+	// **「最後に hook を受けた時刻」ではない。**それは LastHookAt である。
+	StallClockAt time.Time
+	// Tokens はこの run が始めてからの累計のトークンである（設計 3-15）。
+	// **`requestId` で重複排除済みで、再 dispatch でセッションが変わった分も足してある。**
+	Tokens TokenUsage
+	// TokensAt は Tokens を集計した時刻である。ゼロ値なら一度も集計していない。
+	TokensAt time.Time
 }
 
 // RunViews は印の集合に入っている run の写しを返す。
@@ -787,6 +807,13 @@ func (o *Orchestrator) RunViews() []RunView {
 			BackoffUntil: snap.BackoffUntil,
 			WaitingQuota: snap.WaitingQuota,
 			State:        snap.State,
+			Title:        snap.Title,
+			URL:          snap.URL,
+			StartedAt:    snap.StartedAt,
+			LastHookAt:   snap.LastHookAt,
+			StallClockAt: snap.LastSeenAt,
+			Tokens:       snap.Tokens,
+			TokensAt:     snap.TokensAt,
 		})
 	}
 	return out

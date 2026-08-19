@@ -59,7 +59,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 // （待つ合計は 0.5 + 0.5 = 1.0 秒）。それでも無ければ「表明なし」として扱い、次の turn で促す。
 //
 // **トークンも同じ1回の読み取りで取る**（設計 3-15。2回開かない）。
-// **結果は runState に持たず、その場でログに出す。**
+// **結果はログに出し、あわせて `runState` にも控える**（ダッシュボードが読む。3-15 / 5-2）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
@@ -97,27 +97,29 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 		}
 		last = result
 		if len(result.Signals) > 0 {
-			o.logTokens(snap.Identifier, result.Usage)
+			o.logTokens(rs, result.Usage)
 			return result.Signals
 		}
 	}
 
 	if last != nil {
-		o.logTokens(snap.Identifier, last.Usage)
+		o.logTokens(rs, last.Usage)
 	}
 	o.logger.Info("この turn には表明がありませんでした（次の turn で促します）", "identifier", snap.Identifier)
 	return nil
 }
 
-// logTokens は集計したトークンをログに出す（設計 3-15）。
+// logTokens は集計したトークンをログに出し、`runState` に控える（設計 3-15）。
 //
-// **`runState` には持たない。**ダッシュボード（第9段階）が使うなら、そのとき置き場所を決める。
+// **控えるのはダッシュボード（第9段階）が読むためだけである。**判断には使わない。
+// **HTTP の要求ごとに transcript を開き直さない**ので、turn の終わりに1回だけ書く。
 //
-// identifier: issue の識別子。
+// rs: 対象の run。
 // usage: 集計したトークン。
-func (o *Orchestrator) logTokens(identifier string, usage TokenUsage) {
+func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
+	rs.setTokens(usage, o.now())
 	o.logger.Info("トークンを集計しました",
-		"identifier", identifier,
+		"identifier", rs.issue().Identifier,
 		"api_calls", usage.APICalls,
 		"input", usage.Input,
 		"cache_creation", usage.CacheCreation,
