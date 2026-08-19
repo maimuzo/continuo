@@ -55,11 +55,23 @@ continuo doctor path/to/WORKFLOW.md
 
 **揃っているかは手で確かめないでください。**`continuo doctor` が前提を全部検査し、足りないものと直し方を出します。足りないものがあれば終了コードは 1、無ければ 0 です。
 
+## Trying it out / 試してみる
+
+Walk one issue from `Ready` to `Done` and watch it happen: [docs/trying_it_out.md](docs/trying_it_out.md).
+It covers building, preparing a throwaway board, the Status options you must add by hand, and how to
+stop and clean up. **Running it spends real Claude Code quota**, so read the steps first.
+
+**1件の issue が `Ready` から `Done` まで通るのを実際に見る手順は [docs/trying_it_out.md](docs/trying_it_out.md) にあります。**
+使い捨てのボードの作り方、**画面から足す必要がある Status の選択肢**、止め方と片付けまで書いてあります。
+**段7 から実際に Claude Code が動いて枠を消費する**ので、先に読んでください。
+
 ## Documents / 資料
 
 | Path | Contents |
 | --- | --- |
+| [docs/trying_it_out.md](docs/trying_it_out.md) | How to run it end to end / 実際に動かして確かめる手順 |
 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) | The design. Every decision and its evidence |
+| [docs/plans/review/README.md](docs/plans/review/README.md) | The code review and what was fixed / レビューの結果と対応 |
 | [docs/naming.md](docs/naming.md) | How the name was chosen |
 | [docs/spec/symphony/SPEC.md](docs/spec/symphony/SPEC.md) | The symphony service specification (Apache-2.0, upstream copy) |
 | [docs/evidence/](docs/evidence/) | Raw observations from the hook behaviour experiments |
