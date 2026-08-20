@@ -27,7 +27,14 @@ below says which steps were actually executed while writing this document and wh
 | 段4 Status の割り当てを合わせる | **叩いた** | `continuo setup` を本番のボードに対して実行した（読み取りのみ） |
 | 段5 clone して信頼を登録する | **叩いた** | `continuo trust --dry-run` は実物の `~/.claude.json` に対して（読むだけ）。書き込みは偽のホームディレクトリで確かめた |
 | 段6 前提を検査する | **叩いた** | 揃っているとき・フィールド名が違うとき・設定が未記入のときの3通り |
-| 段7〜段9 | **叩いていない** | **ここから先は実際に Claude Code が動き、枠を消費する** |
+| 段7 issue を1件用意する | **偽物一式で叩いた** | 偽の `gh` と偽の GitHub GraphQL に対して。**本番のボードには1リクエストも送っていない** |
+| 段8 動かす | **偽物一式で叩いた** | 偽の herdr・偽の Claude Code・本物の git で、1件を `Ready` から `Done` まで通した |
+| 段9 止める・片付ける | **偽物一式で叩いた** | `Ctrl+C` 相当の `SIGINT` を送り、終了コード 0 で終わることを確かめた |
+
+**段7〜段9 の「偽物一式」は [test/e2e](../test/e2e) にある。**偽の `gh` / 偽の GitHub GraphQL /
+偽の herdr / 偽の Claude Code / 隔離したホームディレクトリの5つと、本物の git を組み合わせてある。
+**実物の Claude Code は1回も起動していないので、枠は消費していない。**
+実際に人間が本物に対して叩くと、段8 から枠を消費する。
 
 > **出力例は実際に叩いた結果である。**ただし個人のパス・アカウント名・リポジトリ名・ボードの名前だけを
 > `~` と `<ACCOUNT>` / `<PROJECT>` / `<REPO-1>` / `<ボードの名前>` に置き換えてある。
@@ -83,16 +90,16 @@ Usage of continuo init:
     	tracker.provider.project_number に書くボードの番号（省略すると gh から引く）
 ```
 
-`setup --help` の出力。
+`setup --help` の出力。**`--force` は無い**（段4 で説明する）。
 
 ```text
 Usage of continuo setup:
-  -force
-    	既に WORKFLOW.md があっても上書きする
   -owner string
-    	tracker.provider.owner に書く GitHub の user / organization 名（省略すると gh から引く）
+    	Status の選択肢を読むボードの GitHub の user / organization 名（省略すると gh から引く）
   -project int
-    	tracker.provider.project_number に書くボードの番号（省略すると gh から引く）
+    	Status の選択肢を読むボードの番号（省略すると gh から引く）
+  -status-field string
+    	Status を読み書きする single-select フィールドの名前（既定 Status） (default "Status")
 ```
 
 `trust --help` の出力。
@@ -238,9 +245,10 @@ cd ~/continuo-try
 ```
 
 `--owner` と `--project` を渡すと**`gh` を叩かずにその値を書く。**実際に叩いた出力。
+**`--force` で上書きしたときは1行目が「上書きしました」に変わる。**
 
 ```text
-WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
+WORKFLOW.md を上書きしました: ~/continuo-try/WORKFLOW.md
 ✓ tracker.provider.owner: <ACCOUNT>（--owner で指定された値です）
 ✓ tracker.provider.project_number: <PROJECT>（--project で指定された値です）
 ✓ trust.repositories: …（ボード #<PROJECT> に載っている 5 個のリポジトリを並べました）
@@ -249,13 +257,14 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 **`gh` が無い・認証が無いときも `WORKFLOW.md` は作られ、終了コードは 0 である。**
 その場合だけプレースホルダ（`__FILL_ME__` と `0`）が残るので、案内どおりに手で埋める。
 実際に `gh` を PATH から外して叩いた出力。
+**`maimuzo` は文言に埋め込んである固定の例であり、あなたのアカウント名ではない。**
 
 ```text
 WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 ! tracker.provider.owner: 埋められませんでした（gh コマンドが見つかりませんでした）
   → gh を入れて `gh auth login -s project` でログインしてください
   → または `continuo init --owner <名前>` でもう一度実行してください
-  → https://github.com/<ACCOUNT> なら <ACCOUNT> の位置が owner です
+  → https://github.com/maimuzo なら maimuzo の位置が owner です
 ! tracker.provider.project_number: 埋められませんでした（owner が決まらないので、ボードの候補を引けませんでした）
   → 先に owner を決めてから、もう一度 `continuo init` を実行してください
   → または `continuo init --project <番号>` でボードの番号を直接指定してください
@@ -279,6 +288,15 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 
 **言いたいこと。**`continuo setup` が、ボードの選択肢を continuo の5つの役割へ割り当てる。
 **役割の説明が出るので、それを読んで番号で選ぶ。**
+**書き換わるのは `Status` に関する7行だけで、段3 で手を入れた行はそのまま残る。**
+
+**段3 で作った `WORKFLOW.md` に対して実行する。**`continuo setup` は雛形を作らないので、
+`WORKFLOW.md` が無いときは段3 をやり直すよう案内して止まる（終了コード 1）。
+
+```text
+~/continuo-try/WORKFLOW.md がありません。continuo setup は既にある WORKFLOW.md の Status の割り当てだけを書き換えます（役割の割り当ては1つも尋ねていません）
+→ 先に continuo init を実行して WORKFLOW.md を作ってください
+```
 
 **実行する場所: `~/continuo-try`**
 
@@ -300,7 +318,7 @@ cd ~/continuo-try
 
 これから 5 個の役割について、それぞれどの選択肢を使うかを尋ねます。番号で答えてください。
 その役割に使える選択肢がボードに無い場合は 0 を入力してください。
-Ctrl+C で中断できます。中断したときは WORKFLOW.md を書きません。
+Ctrl+C で中断できます。中断したときは WORKFLOW.md を書き換えません。
 
 [1/5] continuo はここから issue を取ります。どれを使いますか
 番号> 2
@@ -329,17 +347,45 @@ Ctrl+C で中断できます。中断したときは WORKFLOW.md を書きませ
   保留: "Blocked"
   完了: "Done"
 
-WORKFLOW.md を上書きしました: ~/continuo-try/WORKFLOW.md
+WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/WORKFLOW.md
+書き換えたのは次のキーだけです。ほかの行は1文字も変えていません。
+  tracker.status_signal_map.review
+  tracker.status_signal_map.blocked
+  tracker.active_states
+  tracker.terminal_states
+  tracker.running_state
+  tracker.dispatch_state
+  tracker.failure_state
 ```
 
-**既に `WORKFLOW.md` があるときは `--force` を付ける。**
+### 段3 で手を入れた内容は消えない
+
+**`continuo setup` に `--force` は無い。**書き換えるのが上の7行だけなので、
+**上書きから守るものが無くなった。**段3 で `trust.repositories` から消した行も、
+`workspace.root` や `agent.max_concurrent_agents` を書き換えた値も、そのまま残る。
+**行の右側のコメント・空行・並び順・インデントも変わらない。**
+
+段3 で `workspace.root` と `agent.max_concurrent_agents` を書き換え、
+`trust.repositories` を1行だけ残してから段4 を叩いて、`diff` を取った結果。
+**変わったのは `Status` の行だけである**（この例では着手待ちに `Ice Box` を選んだ）。
+
+```diff
+-  active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
++  active_states: ["Ice Box", "In Progress"] # 対象にする Status。下の running_state と dispatch_state を必ず含めること
+   terminal_states: ["Done"]                 # 終わったとみなす Status。ここへ移った issue の worktree を片付ける
+   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
+-  dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
++  dispatch_state: "Ice Box"                 # 着手待ちの Status。取り残された issue はここへ戻す
+```
 
 | 起きること | どうなるか |
 | --- | --- |
+| **`WORKFLOW.md` が無い** | **止める。**`continuo init` を先に実行するよう案内する（雛形は作らない） |
+| **7つのキーのどれかが `WORKFLOW.md` から消されている** | **止める。**書き換えずに、消したキーを名指しする |
 | 同じ選択肢を2つの役割に選ぶ | **拒否して同じ役割をもう一度尋ねる**（打ち切らない） |
-| **番号 `0`**（その役割に使える選択肢が無い） | **打ち切る。**`WORKFLOW.md` は書かない |
+| **番号 `0`**（その役割に使える選択肢が無い） | **打ち切る。**`WORKFLOW.md` は書き換えない |
 | 選択肢が5個未満のボード | **尋ねる前に止める。**足す手順を出す |
-| `Ctrl+C` | 中断する。`WORKFLOW.md` は書かない |
+| `Ctrl+C` | 中断する。`WORKFLOW.md` は書き換えない |
 
 ### 手で書き換えることもできる
 
@@ -450,8 +496,13 @@ cd ~/continuo-try
 **登録の対象が残っていると終了コードは 1 である**（`--dry-run` のとき）。
 
 **全部が信頼済みのときの出力。**実物の `~/.claude.json` に対して叩いたものである。
+**登録するものが無いときも、先頭の3行は必ず出る。**
 
 ```text
+信頼を登録すると、次の設定が Claude Code に効くようになります。
+**そのリポジトリで動くエージェントが、ここに書かれた操作を確認なしで実行できます。**
+書き込む先: ~/.claude.json
+
 ✓ <ACCOUNT>/<REPO-1>（既に信頼済み。触りません）
     信頼の鍵: ~/Sources/github/<REPO-1>
     .claude/settings.json:
@@ -550,15 +601,24 @@ cd ~/continuo-try
 /tmp/continuo doctor ~/continuo-try/WORKFLOW.md
 ```
 
-### ここで詰まりやすいところ
+### ここで詰まりやすいところ（`continuo doctor` が出すもの）
 
 | 症状 | 直し方 |
 | --- | --- |
 | `Could not resolve to a Unions::ProjectV2FieldConfiguration with the name …` | `status_field` に書いた名前のフィールドがボードに無い。段2 で確かめた綴りに合わせる |
 | `ボードの Status の選択肢名が設定と一致しません` | 段4 の書き換えが足りない。**放置すると、巡回が無言で「対象0件」を返し続ける** |
-| `hook を受ける socket のパスが長すぎます（… バイト。上限は 103 バイト）` | **macOS の Unix domain socket は絶対パス103バイトまで。**`CONTINUO_RUNTIME_DIR=/tmp/continuo-run /tmp/continuo doctor` のように短い場所を指定する |
-| `実行時ディレクトリ … の権限が 755 です` | continuo は**自分が作っていないディレクトリの権限を書き換えない。**`chmod 700 <その場所>` してから起動する |
 | `gh の scope に "project" がありません` | `gh auth refresh -h github.com -s project` を実行する |
+
+### `doctor` を通っても段8 の起動で落ちるもの
+
+**次の2つは `continuo doctor` が検査していない。**`doctor` が「前提はすべて揃っています」と
+言っても、段8 で `continuo` を起動した瞬間にこの2つで落ちることがある。
+**どちらも hook を受ける socket の置き場所の話で、置き場所は `CONTINUO_RUNTIME_DIR` で変えられる。**
+
+| 起動時に出るエラー | 直し方 |
+| --- | --- |
+| `hook を受ける socket のパスが長すぎます（… バイト。上限は 103 バイト）` | **macOS の Unix domain socket は絶対パス103バイトまで。**`CONTINUO_RUNTIME_DIR=/tmp/continuo-run /tmp/continuo` のように短い場所を指定して起動する |
+| `既にある hook を受ける socket のディレクトリ … の権限が 0755 です` | continuo は**自分が作っていないディレクトリの権限を書き換えない。**`chmod 700 <その場所>` してから起動する |
 
 **`status_field` に実在しない名前を書いたときの出力**（実際に `continuo Status` と書いて叩いた）。
 
@@ -598,7 +658,8 @@ cd ~/continuo-try
 
 ## 段7. issue を1件用意する
 
-**ここから先は叩いていない。段8 で実際に Claude Code が動き、枠を消費する。**
+**ここから先は偽物一式（[test/e2e](../test/e2e)）で通してある。**
+本物に対して叩くと、段8 で実際に Claude Code が動き、枠を消費する。
 
 **実行する場所: どこでもよい**
 
@@ -664,9 +725,30 @@ cd ~/continuo-try
 **実行する場所: どこでもよい**
 
 ```bash
-ls ~/worktrees                                  # worktree ができたか（workspace.root）
+find ~/worktrees -name .continuo.json           # worktree ができたか（workspace.root）
 gh project item-list <PROJECT> --owner <ACCOUNT> --format json | jq -r '.items[] | "\(.status)\t\(.title)"'
 herdr workspace list                            # pane が立ったか
+```
+
+**`ls ~/worktrees` では何も見えない。**`workspace.layout` が `gwq` なので、worktree は
+`~/worktrees/<ホスト>/<owner>/<repo>/<branch の / を - にしたもの>` に掘られる。
+その中の `.continuo.json` に、どの issue の worktree かが書いてある。
+
+```json
+{
+  "issue_url": "https://github.com/<REPO>/issues/12",
+  "issue_identifier": "<REPO>#12",
+  "project_item_id": "PVTI_...",
+  "branch": "continuo/<REPO>/12",
+  "base": "",
+  "herdr_workspace_id": "w1",
+  "socket_path": "/tmp/continuo-run/hooks.sock",
+  "settings_path": "/tmp/continuo-run/issues/<owner>-<repo>-12/settings.json",
+  "agent_name": "continuo-<repo>-12",
+  "session_uuid": "550a5f08-a837-4e00-aed2-7ed2f9ca9ecf",
+  "created_at": "2026-08-20T17:01:43.775528+09:00",
+  "takeover_count": 0
+}
 ```
 
 ### ダッシュボードを見る
@@ -702,6 +784,7 @@ curl -s http://127.0.0.1:8787/api/v1/state | jq .
 | 何を | どうするか |
 | --- | --- |
 | worktree と branch | **Status を `Done` にすれば continuo が片付ける。**残っていれば `~/worktrees` の下を見て `git worktree remove` と `git branch -D` |
+| push した branch | **GitHub には残る。**continuo が消すのは手元の branch だけである（`cleanup.require_pushed` で push を確かめてから消しているので、成果は GitHub 側に残る）。要らなければ GitHub の画面か `git push origin --delete <branch>` で消す |
 | ボードの item | **ボードは消さない。**試した issue だけを画面から外すか、`Done` に置いたままにする |
 | 信頼の登録 | `~/.claude.json.continuo-backup-<日時>` から戻すか、`projects` の該当キーを消す。**バックアップを消すのは人間である** |
 | 作業ディレクトリ | `~/continuo-try` を消す |

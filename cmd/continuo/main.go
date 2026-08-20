@@ -164,7 +164,17 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 // runSetup は `continuo setup` サブコマンドである（設計 3-32 / RUCM
 // docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
 //
-// **既にあるボードの Status の選択肢を、continuo の5つの役割へ割り当てて WORKFLOW.md を書く。**
+// **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**ボードの Status の選択肢を
+// continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す7つのキーの行を差し替える。
+// **他の行には触れない。**利用者が `continuo init` のあとに手で直した行
+// （`workspace.root`、`trust.repositories` から消した行など）を消さないためである。
+//
+// **WORKFLOW.md が無ければ止める。**雛形を置くのは `continuo init` の仕事であり、
+// 2つのコマンドが同じファイルを作れると、どちらが正かが決まらない。
+//
+// **`--force` は無い。**書き換えるのが7行だけになったので、上書きから守るものが無くなった。
+// 何も守らないフラグを残すと、まだ何かを守っているように読める。
+//
 // **標準入力を握るのはこのサブコマンドだけである。**`continuo init` を対話にしないのは、
 // 設定を作り直す自動化の経路を止めないためである。
 //
@@ -172,21 +182,21 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 // **API で足させない**（`updateProjectV2Field` は選択肢の指定を全件の置き換えとして扱うので、
 // 設定済みの Status が全部消える）。
 //
-// **検証はファイルが先、ボードがあとである。**上書きできずにどうせ止まる実行で、
-// 先に gh を叩いてレートリミットを使う理由が無い。
+// **検証はファイルが先、ボードがあとである。**どうせ止まる実行で、先に gh を叩いて
+// レートリミットを使う理由が無い。
 //
-// args: `continuo setup` に続く引数。位置引数は書き出す先のディレクトリを0個か1個。
-// --force で既存の WORKFLOW.md を上書きする。--owner / --project は gh を叩かずにその値を使う。
+// args: `continuo setup` に続く引数。位置引数は WORKFLOW.md があるディレクトリを0個か1個。
+// --owner / --project は gh を叩かずにその値を使う（**どのボードを読むかの指定であり、
+// WORKFLOW.md には書かない**）。
 // --status-field は Status を読み書きする single-select フィールドの名前を渡す。
 // stdin: 番号を読む先。
 // stdout / stderr: 出力先。対話は stdout へ出す。
-// 戻り値: 終了コード。0 は書き出せた（--help / -h も 0）、
-// 1 は書き出さずに終わった（既にある・ボードを読めない・選択肢が足りない・中断した）、
+// 戻り値: 終了コード。0 は書き換えられた（--help / -h も 0）、
+// 1 は書き換えずに終わった（WORKFLOW.md が無い・ボードを読めない・選択肢が足りない・中断した）、
 // 2 は引数の指定が誤っている。
 func runSetup(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	forceFlag := fs.Bool("force", false, i18n.T(i18n.KeyCLISetupFlagForce))
 	ownerFlag := fs.String("owner", "", i18n.T(i18n.KeyCLISetupFlagOwner))
 	projectFlag := fs.Int("project", 0, i18n.T(i18n.KeyCLISetupFlagProject))
 	statusFieldFlag := fs.String("status-field", setup.DefaultStatusFieldName, i18n.T(i18n.KeyCLISetupFlagStatusField))
@@ -231,14 +241,15 @@ func runSetup(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		dir = positional[0]
 	}
 
-	// **まず書き出せるかを確かめる**（RUCM の基本フロー2）。ここで止まる実行では、
-	// 役割の割り当てを1つも尋ねない。
-	if check, err := scaffold.CheckWritable(dir, *forceFlag); err != nil {
+	// **まず書き換える WORKFLOW.md があるかを確かめる**（RUCM の基本フロー2）。
+	// ここで止まる実行では、役割の割り当てを1つも尋ねない。
+	if check, err := scaffold.CheckUpdatable(dir); err != nil {
 		return printScaffoldError(stderr, check, err)
 	}
 
 	// **owner とボードの番号は `continuo init` と同じ経路で引く**（internal/scaffold）。
-	// 同じ検出を2箇所に持たない。
+	// 同じ検出を2箇所に持たない。**引いた値は WORKFLOW.md へ書かない。**
+	// どのボードの Status の選択肢を読むかを決めるためだけに使う。
 	detection := scaffold.Detect(context.Background(), scaffold.DetectOptions{
 		Owner:         *ownerFlag,
 		ProjectNumber: *projectFlag,
@@ -284,19 +295,18 @@ func runSetup(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	values := detection.Values
-	values.Statuses = assignment.Statuses()
-	result, err := scaffold.WriteTemplateWithValues(dir, *forceFlag, values)
+	// **書き換えるのは Status の7行だけである。**owner / project_number / trust.repositories は
+	// `continuo init` が書いた値のまま残す。**Detect が引き直した値で上書きしない。**
+	result, err := scaffold.UpdateStatuses(dir, assignment.Statuses())
 	if err != nil {
 		return printScaffoldError(stderr, result, err)
 	}
 	fmt.Fprintln(stdout)
-	if result.Overwritten {
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupOverwritten, result.Path))
-	} else {
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupCreated, result.Path))
+	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdated, result.Path))
+	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKeysNote))
+	for _, k := range scaffold.StatusKeyNames() {
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKey, k))
 	}
-	printDetection(stdout, detection)
 	return 0
 }
 
@@ -353,7 +363,7 @@ func candidatesOf(d scaffold.Detection, key string) []scaffold.Project {
 	return nil
 }
 
-// printScaffoldError は WORKFLOW.md を書けない理由を出し、終了コードを決める。
+// printScaffoldError は WORKFLOW.md を書き換えられない理由を出し、終了コードを決める。
 //
 // **`continuo setup` 専用の文言を使う。**`continuo init` の文言をそのまま出すと、
 // 叩いていないコマンドの名前が案内に出る。
@@ -364,15 +374,18 @@ func candidatesOf(d scaffold.Detection, key string) []scaffold.Project {
 // 戻り値: 終了コード 1。
 func printScaffoldError(w io.Writer, result scaffold.Result, err error) int {
 	switch {
-	case errors.Is(err, scaffold.ErrAlreadyExists):
-		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrAlreadyExists, pathOf(result, err)))
+	case errors.Is(err, scaffold.ErrNotFound):
+		// **雛形を作るのは `continuo init` の仕事である。**setup は作らずに案内して止まる。
+		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrNotFound, pathOf(result, err)))
+		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrNotFoundRemedy))
+	case errors.Is(err, scaffold.ErrKeysNotFound):
+		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrKeysNotFound, err))
 	case errors.Is(err, scaffold.ErrDirNotFound):
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrDirNotFound, err))
 	case errors.Is(err, scaffold.ErrNotADirectory):
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrNotADirectory, err))
 	case errors.Is(err, scaffold.ErrSymlink):
-		// symlink は --force でも辿らない。辿ると指定されたディレクトリの外にある
-		// リンク先を雛形で潰すため、--force を勧めてはならない。
+		// symlink は辿らない。辿ると指定されたディレクトリの外にあるリンク先を書き換える。
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrSymlink, err))
 	default:
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrWriteFailed, err))
@@ -380,7 +393,7 @@ func printScaffoldError(w io.Writer, result scaffold.Result, err error) int {
 	return 1
 }
 
-// pathOf は「既にあります」の文言に出すパスを決める。
+// pathOf は「WORKFLOW.md がありません」の文言に出すパスを決める。
 //
 // result: scaffold が返した結果。
 // err: scaffold が返したエラー（パスを含む文言を持つ）。

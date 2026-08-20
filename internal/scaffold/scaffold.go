@@ -1,4 +1,7 @@
-// Package scaffold は `continuo init` の実体である。WORKFLOW.md の雛形を書き出す。
+// Package scaffold は WORKFLOW.md を置くコマンドの実体である。
+//
+// **`continuo init` は雛形を書き出し、`continuo setup` は既にある WORKFLOW.md の
+// Status の割り当てだけを書き換える**（update.go）。**setup は雛形を書き直さない。**
 //
 // 置くのは WORKFLOW.md の1ファイルだけである（設計 3-32 / 5-1）。
 // CLI（cmd/continuo）はこのパッケージを呼ぶだけにする。エラーの文言と終了コードの
@@ -29,14 +32,16 @@ const fileName = config.DefaultFileName
 // 読み取りを所有者に限定する必要は無い。
 const filePerm fs.FileMode = 0o644
 
-// Result は WriteTemplate が何をしたかを返す。
+// Result は WriteTemplate / UpdateStatuses が何をしたかを返す。
 type Result struct {
 	// Path は書いたファイルの絶対パスである。symlink は辿った先（実体）のパスで返す。
 	// 渡されたディレクトリが symlink のとき、書き込みはリンク先へ落ちるので、
 	// リンク側のパスを報告すると「壊した場所」と食い違うためである。
 	// エラーを返す場合も、どのパスで失敗したかを CLI がメッセージに出せるよう、決まっていれば埋める。
 	Path string
-	// Overwritten は既存のファイルを上書きしたかどうかである（force が真のときだけ真になりうる）。
+	// Overwritten は既にあったファイルを書き換えたかどうかである。
+	// WriteTemplateWithValues では force が真のときだけ真になりうる。
+	// UpdateStatuses は既にあるファイルしか対象にしないので常に真である。
 	Overwritten bool
 }
 
@@ -132,44 +137,6 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を閉じられません: %s: %w", path, err)
 	}
 	return Result{Path: path, Overwritten: overwritten}, nil
-}
-
-// CheckWritable は、雛形を書き出す前に「書き出せるか」だけを確かめる。
-//
-// **`continuo setup` が対話を始める前に呼ぶためにある**（RUCM の基本フロー2）。
-// 上書きできずにどうせ止まる実行で、先に gh を叩いてボードを読む理由が無い。
-//
-// **これは事前の見立てであり、保証ではない。**実際の書き込みは
-// WriteTemplateWithValues が `O_EXCL` / `O_NOFOLLOW` で1回の操作として行う
-// （ここで見てから書くまでの隙間に別のプロセスが作ったファイルを壊さないため）。
-//
-// dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリ。
-// force: 既に WORKFLOW.md がある場合に上書きしてよいかどうか。
-// 戻り値: 書き出す先のパスと、上書きになるかどうか。
-// エラー: WriteTemplate と同じ sentinel error（ErrDirNotFound / ErrNotADirectory /
-// ErrSymlink / ErrAlreadyExists）を errors.Is で判定できる形で返す。
-func CheckWritable(dir string, force bool) (Result, error) {
-	path, err := resolveTarget(dir)
-	if err != nil {
-		return Result{}, err
-	}
-
-	// symlink そのものの有無を見たいので os.Stat ではなく os.Lstat を使う。
-	info, err := os.Lstat(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return Result{Path: path}, nil
-		}
-		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を確認できません: %s: %w", path, err)
-	}
-	if info.Mode()&fs.ModeSymlink != 0 {
-		// --force でも辿らない（書き込み側と同じ判断）。
-		return Result{Path: path}, fmt.Errorf("%w: %s: 辿るとこのディレクトリの外にあるリンク先を壊すため書き込みません", ErrSymlink, path)
-	}
-	if !force {
-		return Result{Path: path}, fmt.Errorf("%w: %s", ErrAlreadyExists, path)
-	}
-	return Result{Path: path, Overwritten: true}, nil
 }
 
 // resolveTarget は受け取ったディレクトリから、書き出す WORKFLOW.md の絶対パスを決める。

@@ -2837,15 +2837,17 @@ continuo init          # WORKFLOW.md の雛形を置く。既にあれば止め�
                        # trust.repositories はボードに載っているリポジトリを並べる（3-33）
                        # --owner=<名前>   gh を叩かずにこの値を使う
                        # --project=<番号> gh を叩かずにこの値を使う
-continuo setup         # 既にあるボードの Status の選択肢を、continuo の5つの役割へ割り当てて
-                       # WORKFLOW.md を書く。**標準入力を握るのはこのサブコマンドだけである**
+continuo setup         # 既にあるボードの Status の選択肢を、continuo の5つの役割へ割り当て、
+                       # **既にある WORKFLOW.md の Status に関する7行だけを書き換える**
+                       # 雛形は作らない。WORKFLOW.md が無ければ continuo init を案内して止まる
+                       # **標準入力を握るのはこのサブコマンドだけである**
                        # 役割の説明を先に出し、選択肢を番号付きで並べて番号で選ばせる
                        # 番号 0 は「この役割に使える選択肢がボードに無い」の入力。入ったら打ち切る
                        # 選択肢が5個未満なら、尋ねる前に止める。Ctrl+C で中断できる
                        # ボードは読むだけである（gh project field-list）。選択肢は足さない
-                       # --force          既に WORKFLOW.md があっても上書きする
-                       # --owner=<名前>   gh を叩かずにこの値を使う
-                       # --project=<番号> gh を叩かずにこの値を使う
+                       # **--force は無い**（上書きしないので、守るものが無い）
+                       # --owner=<名前>   どのボードを読むか。gh を叩かずにこの値を使う
+                       # --project=<番号> どのボードを読むか。gh を叩かずにこの値を使う
                        # --status-field=<名前> Status の single-select フィールドの名前（既定 Status）
 continuo trust         # trust.repositories に列挙されたリポジトリの信頼を ~/.claude.json へ登録する（3-33）
                        # --dry-run  何が要求されているかを出すだけで、書き換えない
@@ -3030,9 +3032,19 @@ WORKFLOW.md の tracker.provider.owner がプレースホルダ（__FILL_ME__）
 | 保留 | エージェントが判断を仰ぐとき、打ち切ったときにここへ動かします | `failure_state`、`status_signal_map.blocked` |
 | 完了 | 人間がここへ動かすと continuo が worktree と branch を片付けます | `terminal_states` の1つめ |
 
-**書き出す先は `<ディレクトリ>/WORKFLOW.md` の1ファイルだけである。**書き出すのは
-`scaffold.WriteTemplateWithValues`（`continuo init` と同じ関数）で、割り当てを渡すと
-front matter の7行が次の形になる。
+#### `continuo setup` は既にある WORKFLOW.md の7行だけを書き換える
+
+**言いたいこと。**setup は雛形を書き直さない。**`scaffold.UpdateStatuses`（`internal/scaffold/update.go`）が
+下の7つのキーの行だけを差し替え、他の行には触れない。**だから `--force` が要らない。
+
+**なぜ雛形で書き直さないか。**手順書は段3 で `continuo init` に `WORKFLOW.md` を作らせ、
+**「要らない行は消してください」と人間に編集させてから**段4 で `continuo setup` を叩かせる
+（[docs/trying_it_out.md](../trying_it_out.md)）。雛形で丸ごと書き直すと、
+**その編集（`workspace.root`、`agent.max_concurrent_agents`、`trust.repositories` から消した行）が全部消える。**
+
+**書き換えるのは次の7行だけである**（`scaffold.StatusKeyNames()` がこの並びで
+`tracker.status_signal_map.review` のようなドット区切りの名前を返し、画面にもそのまま出す）。
+**値だけが変わり、行の右側のコメントは原文のまま残る。**
 
 ```yaml
   status_signal_map:                        # その1行に書かれた値と、書き込む Status の対応
@@ -3045,15 +3057,29 @@ front matter の7行が次の形になる。
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
 ```
 
+**どう書き換えるか。**
+
+| 何を | どうするか | なぜ |
+| --- | --- | --- |
+| 対象の行の探し方 | **front matter の中だけを、キーのパスを行頭のインデントで辿って探す** | 本文には `CONTINUO-STATUS: review` のような似た形の行がある。範囲を切らないと本文を書き換える |
+| 行の組み立て | **値の部分だけを作り直し、`#` から行末までは原文のまま付け直す** | 利用者が書き換えたコメントを消さない |
+| YAML の扱い | **再生成しない。**該当行だけを差し替える | `yaml.Marshal` はコメントを全部落とし、並び順も変える |
+| 書き込み | **同じディレクトリの一時ファイルへ全文を書き、`fsync` して `os.Rename` する** | 途中で落ちても、半分書かれた `WORKFLOW.md` を残さない |
+| owner / project_number / trust.repositories | **書かない。**`continuo init` が書いた値のまま残す | setup が引き直した値で人間の編集を上書きしないため |
+
+**`--force` は持たない。**上書きしないので、**守るものが無い。**
+何も守らないフラグを残すと、まだ何かを守っているように読める。
+
 **止まる場所と、そのときの直し方。**
 
 | 何が起きたか | どうするか |
 | --- | --- |
-| WORKFLOW.md が既にある | `--force` を案内して打ち切る。**役割を1つも尋ねない**（gh も叩かない） |
+| **WORKFLOW.md が無い** | **雛形を作らずに打ち切り、`continuo init` を先に実行しろと案内する。**役割を1つも尋ねない（gh も叩かない）。雛形を置くのは init の仕事であり、2つのコマンドが同じファイルを作れると、どちらが正かが決まらない |
+| **7つのキーのどれかが消されている** | **書き換えずに打ち切り、消えたキーを名指しする。**黙って何もしないと、巡回が無言で「対象0件」を返し続ける |
 | 選択肢が5個未満 | **尋ねる前に**止め、GitHub の画面から足す手順を出す |
 | 番号 `0` が入った | その役割へ渡せる選択肢が無いという表明。打ち切る。途中まで選んだ番号は保存しない |
 | 同じ選択肢を2つの役割へ | **打ち切らない。**衝突した役割の名前を出して、同じ役割を尋ね直す |
-| Ctrl+C | 割り当てを保存しないことを応答して終わる。WORKFLOW.md は書かない |
+| Ctrl+C | 割り当てを保存しないことを応答して終わる。WORKFLOW.md は書き換えない |
 
 **選択肢は足さない。**足りないときは GitHub の画面から足すよう案内する。
 **`updateProjectV2Field` を呼ばない**（選択肢の指定は全件の置き換えとして扱われ、

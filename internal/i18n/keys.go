@@ -333,8 +333,6 @@ const (
 
 // `continuo setup` の CLI の文言（対話の中身は setup.* にある）。
 const (
-	// KeyCLISetupFlagForce は--force の説明に出る。
-	KeyCLISetupFlagForce Key = "cli.setup.flag_force"
 	// KeyCLISetupFlagOwner は--owner の説明に出る。
 	KeyCLISetupFlagOwner Key = "cli.setup.flag_owner"
 	// KeyCLISetupFlagProject は--project の説明に出る。
@@ -349,8 +347,12 @@ const (
 	KeyCLISetupErrStatusFieldEmpty Key = "cli.setup.err_status_field_empty"
 	// KeyCLISetupErrTooManyPositional は位置引数が2つ以上あるときに出る。
 	KeyCLISetupErrTooManyPositional Key = "cli.setup.err_too_many_positional"
-	// KeyCLISetupErrAlreadyExists は既に WORKFLOW.md があるときに出る。
-	KeyCLISetupErrAlreadyExists Key = "cli.setup.err_already_exists"
+	// KeyCLISetupErrNotFound は書き換える WORKFLOW.md が無いときに出る。
+	KeyCLISetupErrNotFound Key = "cli.setup.err_not_found"
+	// KeyCLISetupErrNotFoundRemedy は同じときの直し方に出る。
+	KeyCLISetupErrNotFoundRemedy Key = "cli.setup.err_not_found_remedy"
+	// KeyCLISetupErrKeysNotFound は書き換える対象のキーが WORKFLOW.md に無いときに出る。
+	KeyCLISetupErrKeysNotFound Key = "cli.setup.err_keys_not_found"
 	// KeyCLISetupErrDirNotFound は置き場所のディレクトリが無いときに出る。
 	KeyCLISetupErrDirNotFound Key = "cli.setup.err_dir_not_found"
 	// KeyCLISetupErrNotADirectory は置き場所がディレクトリでないときに出る。
@@ -359,10 +361,12 @@ const (
 	KeyCLISetupErrSymlink Key = "cli.setup.err_symlink"
 	// KeyCLISetupErrWriteFailed はそのほかの理由で書き出せないときに出る。
 	KeyCLISetupErrWriteFailed Key = "cli.setup.err_write_failed"
-	// KeyCLISetupCreated は新しく書き出したときに出る。
-	KeyCLISetupCreated Key = "cli.setup.created"
-	// KeyCLISetupOverwritten は--force で上書きしたときに出る。
-	KeyCLISetupOverwritten Key = "cli.setup.overwritten"
+	// KeyCLISetupUpdated はStatus の割り当てを書き換えたときに出る。
+	KeyCLISetupUpdated Key = "cli.setup.updated"
+	// KeyCLISetupUpdatedKeysNote は書き換えたのがどのキーだけかの説明に出る。
+	KeyCLISetupUpdatedKeysNote Key = "cli.setup.updated_keys_note"
+	// KeyCLISetupUpdatedKey は書き換えたキーを1つずつ並べる行に出る。
+	KeyCLISetupUpdatedKey Key = "cli.setup.updated_key"
 	// KeyCLISetupBoardErrOwner はowner を引けなかったときに出る。
 	KeyCLISetupBoardErrOwner Key = "cli.setup.board_err_owner"
 	// KeyCLISetupBoardRemedyOwner は同じときの直し方に出る。
@@ -649,7 +653,6 @@ var allKeys = []Key{
 	KeySetupAbortRemedyNoAPI,
 	KeySetupAbortInterrupted,
 	KeySetupAbortInputClosed,
-	KeyCLISetupFlagForce,
 	KeyCLISetupFlagOwner,
 	KeyCLISetupFlagProject,
 	KeyCLISetupFlagStatusField,
@@ -657,13 +660,16 @@ var allKeys = []Key{
 	KeyCLISetupErrProjectPositive,
 	KeyCLISetupErrStatusFieldEmpty,
 	KeyCLISetupErrTooManyPositional,
-	KeyCLISetupErrAlreadyExists,
+	KeyCLISetupErrNotFound,
+	KeyCLISetupErrNotFoundRemedy,
+	KeyCLISetupErrKeysNotFound,
 	KeyCLISetupErrDirNotFound,
 	KeyCLISetupErrNotADirectory,
 	KeyCLISetupErrSymlink,
 	KeyCLISetupErrWriteFailed,
-	KeyCLISetupCreated,
-	KeyCLISetupOverwritten,
+	KeyCLISetupUpdated,
+	KeyCLISetupUpdatedKeysNote,
+	KeyCLISetupUpdatedKey,
 	KeyCLISetupBoardErrOwner,
 	KeyCLISetupBoardRemedyOwner,
 	KeyCLISetupBoardErrProject,

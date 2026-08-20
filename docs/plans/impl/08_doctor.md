@@ -162,3 +162,31 @@
 **実 herdr にも繋がない**（Unix domain socket の偽サーバ）。
 **本物の `gh` / `ghq` / ホームディレクトリも使わない**（PATH の先頭へ偽物、`HOME` は一時ディレクトリ）。
 `cli_test.go` は**ビルドしたバイナリを起動して**出力と終了コードを確かめる。
+
+### `doctor` が検査していない前提が2つある
+
+**言いたいこと。**`doctor` は hook を受ける socket の**置き場所**を1つも検査しない。
+そのため `前提はすべて揃っています（✓ 7件）` の直後に、常駐プロセスの起動が落ちることがある。
+**設計 3-32 が検査の項目を7つに固定しているため、増やすかどうかは設計の判断である。**
+
+| 起動時だけ落ちる条件 | 出るエラー（原文） | 実装の場所 |
+| --- | --- | --- |
+| socket の絶対パスが 103 バイトを超える | `hook を受ける socket のパスが長すぎます（… バイト。上限は 103 バイト）` | [internal/socketpath/socketpath.go:104](../../../internal/socketpath/socketpath.go#L104) |
+| 置き場所のディレクトリが group / other に開いている | `既にある hook を受ける socket のディレクトリ … の権限が 0755 です` | [internal/socketpath/socketpath.go:214](../../../internal/socketpath/socketpath.go#L214) |
+
+**なぜ `doctor` に無いか。**どちらも
+[internal/daemon/daemon.go:160-164](../../../internal/daemon/daemon.go#L160-L164) が
+`socketpath.ResolveHookSocketPath` と `socketpath.EnsureDir` を呼ぶところにしか無く、
+`internal/doctor` はこの2つを1回も呼んでいない。
+
+**実測**（2026-08-20、[test/e2e](../../../test/e2e) の一式に対して）。
+`CONTINUO_RUNTIME_DIR` に 215 バイトのパスと権限 0755 のディレクトリをそれぞれ渡すと、
+**`continuo doctor` は両方とも終了コード 0 で `✓ 7件` を返し**、
+同じ環境変数で `continuo <WORKFLOW.md>` を起動すると**終了コード 1 で上の文面を出して落ちる。**
+
+**足すなら何を足すか。**8つ目の項目（見出し語の候補: `socket の置き場所`）として、
+`ResolveHookSocketPath` の結果の長さと、その親ディレクトリの権限だけを見る。
+**`EnsureDir` を呼んではならない。**`doctor` は検査の道具であり、ディレクトリを作らない。
+
+**いまの扱い。**[docs/trying_it_out.md](../../trying_it_out.md) の段6 で、この2つを
+「`doctor` を通っても段8 の起動で落ちるもの」として `doctor` が出すものと分けて書いてある。

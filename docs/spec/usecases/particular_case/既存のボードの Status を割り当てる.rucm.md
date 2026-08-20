@@ -13,6 +13,8 @@
 - docs/plans/continuo_design.md#5-2
 - docs/trying_it_out.md
 - internal/scaffold/scaffold.go
+- internal/scaffold/update.go
+- internal/scaffold/fill.go
 - internal/scaffold/detect.go
 - internal/scaffold/template.go
 - internal/doctor/checks.go
@@ -22,8 +24,8 @@
 
 ```rucm
 USE CASE NAME: 既存のボードの Status を割り当てる
-BRIEF DESCRIPTION: 利用者が continuo setup を実行する。システムはボードの Status フィールドの選択肢を番号付きで並べる。システムは continuo の5つの役割を1つずつ説明して選択肢を選ばせる。システムは決まった割り当てを WORKFLOW.md へ書く。
-PRECONDITION: 利用者は gh auth login -s project を実行済みである。利用者は GitHub Projects v2 のボードを1枚持っている。ボードは single-select の Status フィールドを持つ。
+BRIEF DESCRIPTION: 利用者が continuo setup を実行する。システムはボードの Status フィールドの選択肢を番号付きで並べる。システムは continuo の5つの役割を1つずつ説明して選択肢を選ばせる。システムは既にある WORKFLOW.md の Status に関する7つのキーの行だけを書き換える。
+PRECONDITION: 利用者は gh auth login -s project を実行済みである。利用者は GitHub Projects v2 のボードを1枚持っている。ボードは single-select の Status フィールドを持つ。利用者は continuo init を実行済みであり、WORKFLOW.md がある。
 PRIMARY ACTOR: 利用者
 SECONDARY ACTORS: GitHub Projects v2
 DEPENDENCY: なし
@@ -31,7 +33,7 @@ GENERALIZATION: なし
 
 BASIC FLOW:
 1. 利用者はシステムに continuo setup の実行を要求する。
-2. システムは VALIDATES THAT WORKFLOW.md が無いか --force が渡されている。
+2. システムは VALIDATES THAT WORKFLOW.md がある。
 3. システムは gh からボードの owner とボードの番号を引く。
 4. システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。
 5. システムは VALIDATES THAT 読み取った選択肢が5個以上ある。
@@ -45,23 +47,24 @@ BASIC FLOW:
 13.   システムは番号の選択肢をいま割り当てる役割へ割り当てる。
 14. UNTIL 5つの役割すべてに選択肢が割り当てられている
 15. システムは利用者に5つの役割の割り当ての一覧を応答する。
-16. システムは割り当てを WORKFLOW.md へ書き出す。
-17. システムは利用者に WORKFLOW.md のパスを応答する。
-POSTCONDITION: WORKFLOW.md がある。5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
+16. システムは VALIDATES THAT WORKFLOW.md に書き換える対象の7つのキーがある。
+17. システムは WORKFLOW.md の Status に関する7つのキーの行を書き換える。
+18. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する。
+POSTCONDITION: 5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の7つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
 
-SPECIFIC ALTERNATIVE FLOW 上書きの許可が無い:
+SPECIFIC ALTERNATIVE FLOW WORKFLOW.mdが無い:
 RFS BASIC FLOW 2
-1. システムは利用者に WORKFLOW.md が既にあることを応答する。
-2. システムは利用者に --force を付けて実行し直す案内を応答する。
+1. システムは利用者に WORKFLOW.md が無いことを応答する。
+2. システムは利用者に continuo init を先に実行する案内を応答する。
 3. ABORT
-POSTCONDITION: WORKFLOW.md の中身は変わっていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。
+POSTCONDITION: WORKFLOW.md は作られていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。
 
 SPECIFIC ALTERNATIVE FLOW ボードを読めない:
 RFS BASIC FLOW 4
 1. システムは利用者にボードを読めない理由を応答する。
 2. システムは利用者に理由に対応する直し方を応答する。
 3. ABORT
-POSTCONDITION: WORKFLOW.md は作られていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。
+POSTCONDITION: WORKFLOW.md は変わっていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。
 
 SPECIFIC ALTERNATIVE FLOW 選択肢が足りない:
 RFS BASIC FLOW 5
@@ -69,7 +72,7 @@ RFS BASIC FLOW 5
 2. システムは利用者に GitHub の画面から選択肢を足す手順を応答する。
 3. システムは利用者に API で選択肢を足すと設定済みの Status が全部消えることを応答する。
 4. ABORT
-POSTCONDITION: WORKFLOW.md は作られていない。ボードの選択肢は変わっていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。
+POSTCONDITION: WORKFLOW.md は変わっていない。ボードの選択肢は変わっていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。
 
 SPECIFIC ALTERNATIVE FLOW 番号が範囲外:
 RFS BASIC FLOW 10
@@ -84,7 +87,7 @@ RFS BASIC FLOW 11
 2. システムは利用者に GitHub の画面から選択肢を足す手順を応答する。
 3. システムは利用者に API で選択肢を足すと設定済みの Status が全部消えることを応答する。
 4. ABORT
-POSTCONDITION: WORKFLOW.md は作られていない。ボードの選択肢は変わっていない。それまでに選んだ番号は保存されていない。終了コードは 1 である。
+POSTCONDITION: WORKFLOW.md は変わっていない。ボードの選択肢は変わっていない。それまでに選んだ番号は保存されていない。終了コードは 1 である。
 
 SPECIFIC ALTERNATIVE FLOW 二重割り当て:
 RFS BASIC FLOW 12
@@ -93,12 +96,19 @@ RFS BASIC FLOW 12
 3. RESUME STEP 8
 POSTCONDITION: 役割への割り当ては増えていない。1つの選択肢は1つの役割だけに割り当てられている。システムは同じ役割の番号をもう一度待っている。
 
+SPECIFIC ALTERNATIVE FLOW 書き換える対象のキーが無い:
+RFS BASIC FLOW 16
+1. システムは利用者に WORKFLOW.md から消えているキーの名前を応答する。
+2. システムは利用者にキーを書き戻すか continuo init で作り直す案内を応答する。
+3. ABORT
+POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 である。
+
 GLOBAL ALTERNATIVE FLOW 中断:
 BRANCH FROM BASIC FLOW 15
 WHEN 利用者が Ctrl+C を入力した場合
 1. システムは利用者に割り当てを保存しないことを応答する。
 2. ABORT
-POSTCONDITION: WORKFLOW.md は作られていない。5つの役割の割り当ては保存されていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
+POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
 ```
 
 ## 割り当てる5つの役割
@@ -131,7 +141,7 @@ POSTCONDITION: WORKFLOW.md は作られていない。5つの役割の割り当�
 ```mermaid
 flowchart TD
     B1["1. 利用者はシステムに continuo setup の実行を要求する"]
-    B2{"2. VALIDATES THAT WORKFLOW.md が無いか --force が渡されている"}
+    B2{"2. VALIDATES THAT WORKFLOW.md がある"}
     B3["3. システムは gh からボードの owner とボードの番号を引く"]
     B4{"4. VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる"}
     B5{"5. VALIDATES THAT 読み取った選択肢が5個以上ある"}
@@ -145,9 +155,10 @@ flowchart TD
     B13["13. システムは番号の選択肢をいま割り当てる役割へ割り当てる"]
     B14{"14. UNTIL 5つの役割すべてに選択肢が割り当てられている"}
     B15["15. システムは利用者に5つの役割の割り当ての一覧を応答する"]
-    B16["16. システムは割り当てを WORKFLOW.md へ書き出す"]
-    B17["17. システムは利用者に WORKFLOW.md のパスを応答する"]
-    BPOST(["POSTCONDITION 5つの役割それぞれに1つの選択肢が書かれている"])
+    B16{"16. VALIDATES THAT WORKFLOW.md に書き換える対象の7つのキーがある"}
+    B17["17. システムは WORKFLOW.md の Status に関する7つのキーの行を書き換える"]
+    B18["18. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する"]
+    BPOST(["POSTCONDITION WORKFLOW.md の7つのキー以外の行は変わっていない"])
 
     B1 --> B2
     B2 -- 真 --> B3
@@ -171,13 +182,15 @@ flowchart TD
     B14 -- 偽 --> B8
     B14 -- 真 --> B15
     B15 --> B16
-    B16 --> B17
-    B17 --> BPOST
-    B15 -- "WHEN 利用者が Ctrl+C を入力した場合" --> F7S1
+    B16 -- 真 --> B17
+    B16 -- 偽 --> F7S1
+    B17 --> B18
+    B18 --> BPOST
+    B15 -- "WHEN 利用者が Ctrl+C を入力した場合" --> F8S1
 
-    subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 上書きの許可が無い / RFS BASIC FLOW 2"]
-        F1S1["1. システムは利用者に WORKFLOW.md が既にあることを応答する"]
-        F1S2["2. システムは利用者に --force を付けて実行し直す案内を応答する"]
+    subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW WORKFLOW.mdが無い / RFS BASIC FLOW 2"]
+        F1S1["1. システムは利用者に WORKFLOW.md が無いことを応答する"]
+        F1S2["2. システムは利用者に continuo init を先に実行する案内を応答する"]
         F1S3["3. ABORT"]
         F1S1 --> F1S2 --> F1S3
     end
@@ -219,10 +232,17 @@ flowchart TD
         F6S1 --> F6S2 --> F6S3
     end
 
+    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW 書き換える対象のキーが無い / RFS BASIC FLOW 16"]
+        F7S1["1. システムは利用者に WORKFLOW.md から消えているキーの名前を応答する"]
+        F7S2["2. システムは利用者にキーを書き戻すか continuo init で作り直す案内を応答する"]
+        F7S3["3. ABORT"]
+        F7S1 --> F7S2 --> F7S3
+    end
+
     subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 中断 / BRANCH FROM BASIC FLOW 15"]
-        F7S1["1. システムは利用者に割り当てを保存しないことを応答する"]
-        F7S2["2. ABORT"]
-        F7S1 --> F7S2
+        F8S1["1. システムは利用者に割り当てを保存しないことを応答する"]
+        F8S2["2. ABORT"]
+        F8S1 --> F8S2
     end
 
     F4S3 --> B8
@@ -238,11 +258,11 @@ sequenceDiagram
     participant GH as GitHub Projects v2
 
     User->>Sys: continuo setup の実行を要求する
-    Sys->>Sys: WORKFLOW.md が無いか --force が渡されているかを検証する
-    alt WORKFLOW.md があり --force が無い
-        Sys-->>User: WORKFLOW.md が既にあることと --force の案内を応答する
+    Sys->>Sys: WORKFLOW.md があるかを検証する
+    alt WORKFLOW.md が無い
+        Sys-->>User: WORKFLOW.md が無いことと continuo init の案内を応答する
         Note over Sys: ABORT 終了コード 1
-    else 上書きしてよい
+    else WORKFLOW.md がある
         Sys->>GH: gh からボードの owner とボードの番号を引く
         GH-->>Sys: owner とボードの番号を返す
         Sys->>GH: Status フィールドの選択肢を要求する
@@ -276,10 +296,13 @@ sequenceDiagram
                 Sys-->>User: 5つの役割の割り当ての一覧を応答する
                 alt 利用者が Ctrl+C を入力する
                     Sys-->>User: 割り当てを保存しないことを応答する
-                    Note over Sys: ABORT WORKFLOW.md は作られていない
-                else 割り当てを書き出す
-                    Sys->>Sys: 割り当てを WORKFLOW.md へ書き出す
-                    Sys-->>User: WORKFLOW.md のパスを応答する
+                    Note over Sys: ABORT WORKFLOW.md は変わっていない
+                else 書き換える対象の7つのキーが WORKFLOW.md に無い
+                    Sys-->>User: 消えているキーの名前と書き戻す案内を応答する
+                    Note over Sys: ABORT WORKFLOW.md は変わっていない
+                else 割り当てを書き換える
+                    Sys->>Sys: WORKFLOW.md の Status に関する7つのキーの行を書き換える
+                    Sys-->>User: WORKFLOW.md のパスと書き換えたキーの一覧を応答する
                 end
             end
         end

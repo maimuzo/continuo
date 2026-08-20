@@ -58,7 +58,7 @@ func (a Assignment) Name(r Role) string {
 
 // Statuses は割り当てを WORKFLOW.md へ書き込む形へ直す。
 //
-// 戻り値: scaffold.WriteTemplateWithValues の Values.Statuses に渡す値。
+// 戻り値: scaffold.UpdateStatuses に渡す値。
 func (a Assignment) Statuses() scaffold.Statuses {
 	return scaffold.Statuses{
 		Dispatch: a.names[RoleDispatch],

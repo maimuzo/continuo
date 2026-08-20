@@ -95,7 +95,9 @@ func TemplateWithValues(values Values) string {
 		out = replaceLineWithBlock(out, repositoriesPlaceholderCode, repositoriesBlock(values.Repositories))
 	}
 	if values.Statuses.Complete() {
-		out = applyStatuses(out, values.Statuses)
+		// **雛形には7つのキーが必ずあるので、見つからないことは起こらない。**
+		// 雛形を壊したときは test/internal/scaffold/statuses_test.go が落とす。
+		out, _ = applyStatuses(out, values.Statuses)
 	}
 	return out
 }
@@ -178,11 +180,24 @@ func replaceLineWithBlock(s, oldCode string, newLines []string) string {
 // 戻り値: code とコメントの間を空白で埋め、`#` が commentColumn 桁に来るようにした1行。
 // code が長すぎて桁に収まらない場合は、空白3つで区切る（雛形の中の長い行と同じ書き方）。
 func alignComment(code, comment string) string {
+	return joinComment(code, "# "+comment)
+}
+
+// joinComment は「値の部分」と「`#` から始まるコメントの原文」を、桁をそろえた1行にする。
+//
+// **原文のまま受け取るのは、既にある WORKFLOW.md のコメントを消さないためである。**
+// `continuo setup` は利用者が書き換えたコメントもそのまま残す。
+//
+// code: コメントより前の部分。
+// rawComment: `#` から始まるコメントの原文。
+// 戻り値: code とコメントの間を空白で埋め、`#` が commentColumn 桁に来るようにした1行。
+// code が長すぎて桁に収まらない場合は、空白3つで区切る（雛形の中の長い行と同じ書き方）。
+func joinComment(code, rawComment string) string {
 	pad := commentColumn - displayWidth(code)
 	if pad < 1 {
 		pad = 3
 	}
-	return code + strings.Repeat(" ", pad) + "# " + comment
+	return code + strings.Repeat(" ", pad) + rawComment
 }
 
 // displayWidth は等幅の端末で code が占める桁数を返す。
@@ -235,38 +250,68 @@ func isWideRune(r rune) bool {
 	return false
 }
 
-// activeStatesPlaceholderCode は雛形の active_states の行の、コメントより前の部分である。
-const activeStatesPlaceholderCode = `  active_states: ["Ready", "In Progress"]`
+// frontMatterDelimiter は front matter の開始・終了を示す行である。
+//
+// **internal/config の splitFrontMatter と同じ規則で判定する。**判定がずれると、
+// `continuo setup` が本文の中の行を書き換えたり、front matter の中の行を見落としたりする。
+const frontMatterDelimiter = "---"
 
-// terminalStatesPlaceholderCode は雛形の terminal_states の行の、コメントより前の部分である。
-const terminalStatesPlaceholderCode = `  terminal_states: ["Done"]`
+// statusKey は `continuo setup` が書き換える front matter のキー1つを表す。
+type statusKey struct {
+	// path は front matter のルートから辿るキーの並びである。
+	path []string
+	// value は割り当てから、そのキーへ書く YAML の値を組み立てる。
+	value func(Statuses) string
+}
 
-// runningStatePlaceholderCode は雛形の running_state の行の、コメントより前の部分である。
-const runningStatePlaceholderCode = `  running_state: "In Progress"`
+// statusKeys は `continuo setup` が書き換える7つのキーである。**ここに無いキーは触らない。**
+//
+// **値は %q で囲む。**選択肢名は空白を含みうる（`In Progress`）し、`Done` のような
+// 素の語でも YAML の別の型として読まれうるので、必ず引用符を付ける。
+var statusKeys = []statusKey{
+	{
+		path:  []string{"tracker", "status_signal_map", "review"},
+		value: func(st Statuses) string { return fmt.Sprintf("%q", st.Review) },
+	},
+	{
+		path:  []string{"tracker", "status_signal_map", "blocked"},
+		value: func(st Statuses) string { return fmt.Sprintf("%q", st.Blocked) },
+	},
+	{
+		path:  []string{"tracker", "active_states"},
+		value: func(st Statuses) string { return fmt.Sprintf("[%q, %q]", st.Dispatch, st.Running) },
+	},
+	{
+		path:  []string{"tracker", "terminal_states"},
+		value: func(st Statuses) string { return fmt.Sprintf("[%q]", st.Done) },
+	},
+	{
+		path:  []string{"tracker", "running_state"},
+		value: func(st Statuses) string { return fmt.Sprintf("%q", st.Running) },
+	},
+	{
+		path:  []string{"tracker", "dispatch_state"},
+		value: func(st Statuses) string { return fmt.Sprintf("%q", st.Dispatch) },
+	},
+	{
+		path:  []string{"tracker", "failure_state"},
+		value: func(st Statuses) string { return fmt.Sprintf("%q", st.Blocked) },
+	},
+}
 
-// dispatchStatePlaceholderCode は雛形の dispatch_state の行の、コメントより前の部分である。
-const dispatchStatePlaceholderCode = `  dispatch_state: "Ready"`
-
-// failureStatePlaceholderCode は雛形の failure_state の行の、コメントより前の部分である。
-const failureStatePlaceholderCode = `  failure_state: "Blocked"`
-
-// signalReviewPlaceholderCode は雛形の status_signal_map.review の行の、コメントより前の部分である。
-const signalReviewPlaceholderCode = `    review: "In Review"`
-
-// signalBlockedPlaceholderCode は雛形の status_signal_map.blocked の行の、コメントより前の部分である。
-const signalBlockedPlaceholderCode = `    blocked: "Blocked"`
-
-// 割り当てた Status を書き込んだあとに残すコメント。**雛形の文面をそのまま使う。**
-// 値だけが変わって説明が変わらないので、別の文面にすると同じキーの説明が2通りになる。
-const (
-	activeStatesComment   = "対象にする Status。下の running_state と dispatch_state を必ず含めること"
-	terminalStatesComment = "終わったとみなす Status。ここへ移った issue の worktree を片付ける"
-	runningStateComment   = "エージェントを起動したときに書き込む Status"
-	dispatchStateComment  = "着手待ちの Status。取り残された issue はここへ戻す"
-	failureStateComment   = "打ち切ったとき・失敗したときに落とす Status"
-	signalReviewComment   = "作業が終わり、人間のレビューに回してよいとき"
-	signalBlockedComment  = "判断を仰ぎたいとき、または失敗したとき"
-)
+// StatusKeyNames は `continuo setup` が書き換えるキーの名前を、ドット区切りで返す。
+//
+// **`continuo setup` は、ここに並んだキー以外の行を1文字も変えない。**画面に
+// 「何を書き換えたか」を出すために公開している。
+//
+// 戻り値: `tracker.dispatch_state` のような名前の並び（呼び出し側が書き換えても内部には影響しない）。
+func StatusKeyNames() []string {
+	out := make([]string, 0, len(statusKeys))
+	for _, k := range statusKeys {
+		out = append(out, strings.Join(k.path, "."))
+	}
+	return out
+}
 
 // Statuses は continuo の5つの役割へ割り当てたボードの Status の選択肢名である。
 //
@@ -296,28 +341,139 @@ func (s Statuses) Complete() bool {
 	return s.Dispatch != "" && s.Running != "" && s.Review != "" && s.Blocked != "" && s.Done != ""
 }
 
-// applyStatuses は雛形の Status に関する7行を、割り当てた選択肢名で置き換える。
+// applyStatuses は front matter の Status に関する7行を、割り当てた選択肢名で置き換える。
 //
-// **値は %q で囲む。**選択肢名は空白を含みうる（`In Progress`）し、`Done` のような
-// 素の語でも YAML の別の型として読まれうるので、必ず引用符を付ける。
+// **値の部分だけを組み立て直す。**行の右側のコメントは原文のまま残し、他の行・空行・
+// 並び順・インデントは1文字も変えない。**`continuo setup` は既にある WORKFLOW.md へ
+// これを当てるので、利用者が手で書き換えた行を消してはならない。**
 //
-// s: 差し替える対象の全文。
+// **探すのは front matter の中だけである。**本文には `CONTINUO-STATUS: review` のように
+// 似た形の行があるので、範囲を切らないと本文を書き換えうる。
+//
+// s: 差し替える対象の全文（front matter と本文）。
 // st: 割り当てた選択肢名（Complete が真であること）。
-// 戻り値: 差し替えた全文。
-func applyStatuses(s string, st Statuses) string {
-	s = replaceLine(s, activeStatesPlaceholderCode,
-		fmt.Sprintf("  active_states: [%q, %q]", st.Dispatch, st.Running), activeStatesComment)
-	s = replaceLine(s, terminalStatesPlaceholderCode,
-		fmt.Sprintf("  terminal_states: [%q]", st.Done), terminalStatesComment)
-	s = replaceLine(s, runningStatePlaceholderCode,
-		fmt.Sprintf("  running_state: %q", st.Running), runningStateComment)
-	s = replaceLine(s, dispatchStatePlaceholderCode,
-		fmt.Sprintf("  dispatch_state: %q", st.Dispatch), dispatchStateComment)
-	s = replaceLine(s, failureStatePlaceholderCode,
-		fmt.Sprintf("  failure_state: %q", st.Blocked), failureStateComment)
-	s = replaceLine(s, signalReviewPlaceholderCode,
-		fmt.Sprintf("    review: %q", st.Review), signalReviewComment)
-	s = replaceLine(s, signalBlockedPlaceholderCode,
-		fmt.Sprintf("    blocked: %q", st.Blocked), signalBlockedComment)
-	return s
+// 戻り値: 差し替えた全文と、見つからなかったキーの名前（ドット区切り）。
+// front matter を切り出せない場合は、全文をそのまま返し、7つ全部を見つからなかったものとして返す。
+func applyStatuses(s string, st Statuses) (string, []string) {
+	lines := strings.Split(s, "\n")
+	start, end, ok := frontMatterRange(lines)
+	if !ok {
+		return s, StatusKeyNames()
+	}
+
+	var missing []string
+	for _, k := range statusKeys {
+		i, found := findKeyLine(lines, start, end, k.path)
+		if !found {
+			missing = append(missing, strings.Join(k.path, "."))
+			continue
+		}
+		lines[i] = rewriteValue(lines[i], k.path[len(k.path)-1], k.value(st))
+	}
+	return strings.Join(lines, "\n"), missing
+}
+
+// frontMatterRange は行の並びの中で front matter が占める範囲を返す。
+//
+// lines: WORKFLOW.md を改行で分けた行の並び。
+// 戻り値: front matter の最初の行の添字（開始の区切り行の次）、終端の区切り行の添字、
+// front matter を切り出せたかどうか。
+func frontMatterRange(lines []string) (start, end int, ok bool) {
+	if len(lines) == 0 || strings.TrimRight(lines[0], " \t") != frontMatterDelimiter {
+		return 0, 0, false
+	}
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimRight(lines[i], " \t") == frontMatterDelimiter {
+			return 1, i, true
+		}
+	}
+	return 0, 0, false
+}
+
+// findKeyLine は、キーのパスで指した行を front matter の中から探す。
+//
+// **入れ子は行頭のインデントで辿る。**`status_signal_map` の下の `review` を、
+// 別の場所にある同じ名前のキーと取り違えないためである。親のキーより浅い行に
+// 当たった時点でその親のブロックは終わりなので、そこで探すのをやめる。
+//
+// lines: WORKFLOW.md を改行で分けた行の並び。
+// start, end: 探す範囲（front matter の中。end は含まない）。
+// path: ルートから辿るキーの並び（`["tracker", "status_signal_map", "review"]` など）。
+// 戻り値: 見つかった行の添字と、見つかったかどうか。
+func findKeyLine(lines []string, start, end int, path []string) (int, bool) {
+	lo, hi := start, end
+	parentIndent := -1
+	found := -1
+
+	for _, key := range path {
+		idx := -1
+		for i := lo; i < hi; i++ {
+			trimmed := strings.TrimLeft(lines[i], " \t")
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			indent := len(lines[i]) - len(trimmed)
+			if indent <= parentIndent {
+				// 親のブロックが終わった。これより先に子のキーは無い。
+				break
+			}
+			if !strings.HasPrefix(trimmed, key+":") {
+				continue
+			}
+			idx = i
+			break
+		}
+		if idx < 0 {
+			return 0, false
+		}
+		found = idx
+		parentIndent = len(lines[idx]) - len(strings.TrimLeft(lines[idx], " \t"))
+		lo = idx + 1
+	}
+	return found, true
+}
+
+// rewriteValue は「<インデント><キー>: <値>  # <コメント>」の1行を、値だけ入れ替えて組み立て直す。
+//
+// line: 元の行。
+// key: その行のキー（元の行から取り直さず、探すのに使った名前をそのまま書く）。
+// value: 書き込む YAML の値。
+// 戻り値: 組み立て直した1行。元の行にコメントが無ければコメントを付けない。
+func rewriteValue(line, key, value string) string {
+	indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+	code := indent + key + ": " + value
+	comment := inlineComment(line)
+	if comment == "" {
+		return code
+	}
+	return joinComment(code, comment)
+}
+
+// inlineComment は行の右側にあるコメントを、`#` から行末まで原文のまま返す。
+//
+// **引用符の中の `#` はコメントの始まりではない。**Status の選択肢名に `#` が入っていても、
+// 値の途中で切らないようにする。**`#` の直前は空白かタブか行頭でなければならない**
+// （YAML の規則。`a#b` はコメントではなく値の一部である）。
+//
+// line: 調べる1行。
+// 戻り値: `#` から行末までの原文。コメントが無ければ空文字。
+func inlineComment(line string) string {
+	inSingle, inDouble := false, false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case inDouble && c == '\\':
+			// 次の1バイトはエスケープされた文字なので、引用符の判定に使わない。
+			i++
+		case c == '\'' && !inDouble:
+			inSingle = !inSingle
+		case c == '"' && !inSingle:
+			inDouble = !inDouble
+		case c == '#' && !inSingle && !inDouble:
+			if i == 0 || line[i-1] == ' ' || line[i-1] == '\t' {
+				return line[i:]
+			}
+		}
+	}
+	return ""
 }

@@ -10,8 +10,8 @@
 // Status が全部消える）。選択肢が足りないときは、GitHub の画面から足すよう案内して打ち切る。
 //
 // **WORKFLOW.md は書かない。**割り当てが決まったら Assignment.Statuses() を
-// `scaffold.WriteTemplateWithValues` へ渡すのは呼び出し側（cmd/continuo）である。
-// 書き出しの実体を2箇所に持たないためである。
+// `scaffold.UpdateStatuses` へ渡すのは呼び出し側（cmd/continuo）である。
+// 書き込みの実体を2箇所に持たないためである。
 package setup
 
 import "github.com/maimuzo/continuo/internal/i18n"
