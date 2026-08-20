@@ -1259,6 +1259,14 @@ func Normalize(raw string) (SafeName, []Warning)
 
 **`<base>` は worktree を作ったときの base である**（`herdr.worktree.base`、または既定 branch。3-22 の段4）。
 
+> **base は着手の段6 で身元ファイルへ書く**（`.continuo.json` の `base`）。
+> **同じプロセスの中では run の状態が base を持っているので、書かなくても片付く。**
+> **壊れるのは continuo を再起動したあとである。**復元と取り残しの経路は run の状態を
+> 持たないので、身元ファイルから読むしかない。空だと手順2b が「判定できない」に倒れ、
+> upstream の無い branch が**永久に見送られる。**
+> **`test/e2e` の `assertIdentityHasBase` が、実際に書かれることを検査している**
+> （実測: `"base": "main"`）。
+
 > **commit が1つも無いことを条件にしてはならない。**commit していなくても、
 > **編集したファイルが残っていれば成果はある。**それは手順2（`git status --porcelain`）で拾う。
 > **手順2 と 2b は両方通す。**片方だけでは失うものを見落とす。
@@ -2867,6 +2875,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | `gh` の認証と scope | **`gh auth status` の `Token scopes:` の行に `'project'` が単独の scope として並んでいるか**（下記） | **`--show-scopes` というフラグは存在しない**（gh 2.97.0 で確認）。既定の出力に scope が入っている |
 | リポジトリの信頼登録 | `~/.claude.json` の `projects["<clone の絶対パス>"].hasTrustDialogAccepted` が `true` か | **非公開の内部ファイルである。**将来キー名が変わりうる前提で扱う |
 | ローカルの clone | `ghq list --exact <owner>/<repo>` の**出力が空でないか** | **exit code は存在の有無にかかわらず 0 を返す**（実測）。出力の有無で判定する |
+| **`ghq` と `git` が PATH にあるか** | **clone を調べる前に `exec.LookPath` で見る。**無ければ `✗` にして、その先を調べない | **「確かめられなかった」で通してはならない。**巡回は worktree を作るときにこの2つを起動するので、無ければ**必ず落ちる。**`!` にすると終了コードが 0 になり「足りないものはありません」と出てしまう |
 | 設定ファイル | `WORKFLOW.md` が読めて、front matter が検証を通るか | — |
 | Claude の資格情報 | `~/.claude/.credentials.json` があるか。**無ければ、その先は確かめない** | **Keychain を読まない**（下記） |
 | **ボードを読めるか** | **`Bootstrap` を呼んで project と Status フィールドを解決し、`active_states` の選択肢名が全部あるかを照合する** | **`gh` の認証が通っても、ここで落ちることがある**（project が見つからない・トークンの取り出しに失敗・レートリミット）。**選択肢名の不一致は `✗` にする。**巡回が無言で0件を返す原因になる（3-6） |
@@ -3014,6 +3023,13 @@ WORKFLOW.md の tracker.provider.owner がプレースホルダ（__FILL_ME__）
 
 **README に書くこと。**「何が要るか」の一覧と、`continuo doctor` を実行しろという案内だけ。
 **個々の検査手順は書かない。**書くと doctor と二重管理になり、片方だけ古くなる。
+**一覧には `ghq` と `git` も入れる。**巡回が PATH から起動するので、実行時の依存である。
+
+**リポジトリに `mise.toml` を置き、`go = "1.26.2"` を指定する。**
+
+**`go.mod` の `go 1.26` では足りない。**[mise](https://mise.jdx.dev/) はこれを読まないので、
+clone した直後に `go build` を叩くと `No version is set for shim: go` で止まる（実測: 2026-08-20）。
+**mise は新しい設定ファイルを信頼しない**ので、`mise trust` を1回だけ叩く手順も手順書に書く。
 
 #### `continuo setup` は既にあるボードの Status を5つの役割へ割り当てる
 
@@ -3041,6 +3057,11 @@ WORKFLOW.md の tracker.provider.owner がプレースホルダ（__FILL_ME__）
 **「要らない行は消してください」と人間に編集させてから**段4 で `continuo setup` を叩かせる
 （[docs/trying_it_out.md](../trying_it_out.md)）。雛形で丸ごと書き直すと、
 **その編集（`workspace.root`、`agent.max_concurrent_agents`、`trust.repositories` から消した行）が全部消える。**
+
+**尋ねる前に、その7行が `WORKFLOW.md` に在ることを検査する**（`scaffold.CheckUpdatable`）。
+**5問すべて答えさせたあとで「キーが無い」と落とすと、人間の入力が全部捨てられる。**
+検査は置き換える値を使わないので、`Complete()` を満たすだけのダミーを `applyStatuses` に渡し、
+返る `missing` だけを見る。
 
 **書き換えるのは次の7行だけである**（`scaffold.StatusKeyNames()` がこの並びで
 `tracker.status_signal_map.review` のようなドット区切りの名前を返し、画面にもそのまま出す）。
@@ -3136,6 +3157,27 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 集合を変えられる。**そこから自動で登録すると、issue を足せる人が「continuo に信頼させる
 リポジトリ」を増やせてしまう。**`continuo init` はボードから拾った一覧を `WORKFLOW.md` に
 **並べるだけ**で、**要らない行を消すのは人間である。**
+
+> **拾えるのは「そのときボードに載っていたリポジトリ」だけである。**
+> **これから issue を作るリポジトリは、まだボードに無いので1件も入らない。**
+> 使い始めるとき、人はまず設定を作り（`continuo init`）、そのあとで issue を作る。
+> **その順番では、試すリポジトリが必ず抜ける。**
+> 抜けたまま起動すると、continuo はその issue を取らない。**worktree も pane も作らず、
+> issue にコメントも残さない**（`claimForDispatch` の前で捨てるため）。
+> 気づけるのは `continuo doctor` の `信頼登録` が `✗` になることだけである。
+>
+> **だから雛形のコメントで伝える。**`continuo init` が `trust.repositories` を埋めたとき、
+> 3行目に次を残す（`internal/scaffold/fill.go` の `repositoriesFilledComment3`）。
+>
+> ```yaml
+>   repositories:                             # continuo trust が信頼を登録してよいリポジトリ。ボードから拾って並べた。
+>                                             # **要らない行は消すこと。**ここに残ったものだけが登録の対象になる
+>                                             # **これから issue を作るリポジトリは、まだボードに無いので入っていない。**手で足すこと
+> ```
+>
+> **`continuo doctor` の直し方も `continuo trust` を案内する。**
+> 「Claude Code で一度開いて承認してください」では、
+> **手順書が否定している手作業へ人を誘導してしまう。**
 
 **なぜ `--dry-run` が要るか。**信頼すると、そのリポジトリの `.claude/settings.json` の
 `permissions.allow` と `permissions.additionalDirectories` が効き、`.mcp.json` の
