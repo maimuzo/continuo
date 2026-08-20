@@ -604,7 +604,7 @@ cd ~/continuo-try
 書き込む先: ~/.claude.json
 
 ! demo/sample-a（未信頼。登録の対象）
-    信頼の鍵: ~/ghq/github.com/demo/sample-a
+    対象リポジトリ: ~/ghq/github.com/demo/sample-a
     .claude/settings.json:
       permissions.allow:
         - Bash(rm -rf:*)
@@ -618,7 +618,7 @@ cd ~/continuo-try
       - payments  （node server.js --live）
 
 ! demo/sample-b（未信頼。登録の対象）
-    信頼の鍵: ~/ghq/github.com/demo/sample-b
+    対象リポジトリ: ~/ghq/github.com/demo/sample-b
     .claude/settings.json: ありません
     .mcp.json: ありません
 
@@ -638,7 +638,7 @@ cd ~/continuo-try
 書き込む先: ~/.claude.json
 
 ✓ <ACCOUNT>/<REPO-1>（既に信頼済み。触りません）
-    信頼の鍵: ~/Sources/github/<REPO-1>
+    対象リポジトリ: ~/Sources/github/<REPO-1>
     .claude/settings.json:
       permissions.allow: なし
       permissions.additionalDirectories: なし
@@ -649,9 +649,9 @@ cd ~/continuo-try
 --dry-run なので何も書き換えていません。登録するなら --dry-run を外して実行してください。
 ```
 
-> **`信頼の鍵` は `ghq list -p -e` が返したパスそのものとは限らない。**
-> `git rev-parse --show-toplevel` の出力を鍵にするので、`ghq` の置き場所が symlink なら
-> 実体側のパスが出る。**登録されるのはこの鍵である。**
+> **`対象リポジトリ` に出るパスは、`ghq list -p -e` が返したものとは限らない。**
+> `git rev-parse --show-toplevel` の出力を使うので、`ghq` の置き場所が symlink なら
+> 実体側のパスが出る。**`~/.claude.json` に登録されるのはこのパスである。**
 
 ### 登録する
 

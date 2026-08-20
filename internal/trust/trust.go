@@ -249,7 +249,7 @@ func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolv
 	key, err := resolveKey(keyCtx, clonePath)
 	cancel()
 	if err != nil {
-		e.Problem = fmt.Sprintf("clone %s の信頼の鍵を求められませんでした（%v）", clonePath, err)
+		e.Problem = fmt.Sprintf("clone %s のパスを git で確定できませんでした（%v）", clonePath, err)
 		return e
 	}
 	e.TrustKey = key
