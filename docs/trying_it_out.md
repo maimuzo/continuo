@@ -365,19 +365,19 @@ Ctrl+C で中断できます。中断したときは WORKFLOW.md を書き換え
 番号> 2
   → dispatch_state に "Ready" を割り当てました
 
-[2/5] running_state: continuo が処理を開始したときに書き込む State は何番ですか?
+[2/5] running_state: continuo が処理を開始したときに移動する State は何番ですか?
 番号> 3
   → running_state に "In Progress" を割り当てました
 
-[3/5] status_signal_map.review: エージェントが作業を終えたと表明したときに書き込む State は何番ですか?
+[3/5] status_signal_map.review: エージェントが作業を完了したときに移動する State は何番ですか?
 番号> 5
   → status_signal_map.review に "In Review" を割り当てました
 
-[4/5] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに書き込む State は何番ですか?
+[4/5] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する State は何番ですか?
 番号> 4
   → status_signal_map.blocked / failure_state に "Blocked" を割り当てました
 
-[5/5] terminal_states: 人間がここへ動かすと continuo が worktree と branch を片付ける State は何番ですか?
+[5/5] terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する State は何番ですか?
 番号> 6
   → terminal_states に "Done" を割り当てました
 

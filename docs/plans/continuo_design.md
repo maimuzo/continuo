@@ -3048,6 +3048,21 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 | 保留 | エージェントが判断を仰ぐとき、打ち切ったときにここへ動かします | `failure_state`、`status_signal_map.blocked` |
 | 完了 | 人間がここへ動かすと continuo が worktree と branch を片付けます | `terminal_states` の1つめ |
 
+#### 選択は番号の入力にする。上下キーで選ばせない
+
+**言いたいこと。**上下キーの選択には端末を raw mode にする必要があり、**パイプで動かなくなる。**
+テストも手順書の出力例も `printf '2\n3\n5\n4\n6\n' | continuo setup` の形に依っている。
+
+**採らない理由。**
+
+| 何が起きるか | 影響 |
+| --- | --- |
+| **標準入力が端末でないと使えない** | パイプ・ファイル入力が動かなくなる。**両対応を書けば避けられるが、経路が2本になる** |
+| **外部依存が1つ増える**（`golang.org/x/term`） | raw mode は標準ライブラリだけでは実用的に書けない（OS ごとの `ioctl` の定数を自前で持つことになる） |
+| **端末を戻し損ねると壊れたまま残る** | panic・`Ctrl+C`・強制終了のどれでも復元する必要がある |
+
+**尋ねる回数は5回だけである。**番号を5つ打つ手間より、上の3つを抱える損のほうが大きい。
+
 #### `continuo setup` は既にある WORKFLOW.md の7行だけを書き換える
 
 **言いたいこと。**setup は雛形を書き直さない。**`scaffold.UpdateStatuses`（`internal/scaffold/update.go`）が

@@ -77,7 +77,7 @@ func TestAssign_5つの役割それぞれに選択肢が1つ割り当てられ�
 	if !strings.Contains(out, "dispatch_state: continuo が自動的に処理を開始する State は何番ですか?") {
 		t.Errorf("dispatch_state の質問が画面に出ていない:\n%s", out)
 	}
-	if !strings.Contains(out, "terminal_states: 人間がここへ動かすと continuo が worktree と branch を片付ける State は何番ですか?") {
+	if !strings.Contains(out, "terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する State は何番ですか?") {
 		t.Errorf("terminal_states の質問が画面に出ていない:\n%s", out)
 	}
 }
@@ -122,7 +122,7 @@ func TestAssign_同じ選択肢を2つの役割へ割り当てようとしたら
 		t.Errorf("衝突した相手のキー名が画面に出ていない:\n%s", out)
 	}
 	// **同じ役割を尋ね直す。**running_state の質問が2回出ていることで確かめる。
-	askedRunning := strings.Count(out, "running_state: continuo が処理を開始したときに書き込む State は何番ですか?")
+	askedRunning := strings.Count(out, "running_state: continuo が処理を開始したときに移動する State は何番ですか?")
 	if askedRunning != 2 {
 		t.Errorf("作業中を尋ねた回数が %d 回だった（期待 2 回）:\n%s", askedRunning, out)
 	}
