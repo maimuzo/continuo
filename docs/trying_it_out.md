@@ -78,6 +78,25 @@ go build -o /tmp/continuo ./cmd/continuo
 **リポジトリの中にビルドの生成物を置かない**ため、実行ファイルは `/tmp/continuo` へ出している。
 **以降はこの絶対パスで叩く**ので、どのディレクトリからでも実行できる。
 
+**[mise](https://mise.jdx.dev/) で Go を入れているなら、clone した直後に1回だけ次を実行すること。**
+
+```bash
+cd ~/Sources/github/continuo
+mise trust                       # 1回だけ。リポジトリの mise.toml を信頼する
+```
+
+**これを飛ばすと `go build` が次のエラーで止まる**（実測: 2026-08-20）。
+
+```text
+mise ERROR Config files in ~/Sources/github/continuo/mise.toml are not trusted.
+Trust them with `mise trust`. See https://mise.jdx.dev/cli/trust.html for more information.
+zsh: command not found: go
+```
+
+リポジトリの [mise.toml](../mise.toml) が `go = "1.26.2"` を指定している。
+**`go.mod` の `go 1.26` は mise が読まないため、この指定が別に要る。**
+mise を使っていない場合は、[go.dev/dl](https://go.dev/dl/) で入れた Go に PATH が通っていればよい。
+
 `init --help` の出力。
 
 ```text

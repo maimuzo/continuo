@@ -1,0 +1,6 @@
+# Go のバージョンを固定する。
+# go.mod は "go 1.26" としか書けず、mise はこれを読まない。
+# この指定が無いと `go build` が
+# 「No version is set for shim: go」で失敗する（実測: 2026-08-20）。
+[tools]
+go = "1.26.2"
