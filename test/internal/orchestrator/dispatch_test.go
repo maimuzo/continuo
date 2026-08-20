@@ -460,3 +460,57 @@ func TestHandoff_引き渡しの通知に調べるところが出る(t *testing.
 		t.Errorf("worktree のパスが出ていない:\n%s", body)
 	}
 }
+
+// TestHandoff_ログには理由の1行目だけを出す は、
+// 巡回のたびに数行の案内がログへ流れないことを確かめる。
+//
+// 目的: 設計 3-34b の「ログは原因まで。対処は主要なものだけ」を守っていることを示す。
+// **issue のコメントには【確かめ方】まで載せるが、同じ文字列をログへ流すと他の行が埋もれる。**
+// 与える情報: max_turns を1にして、1回目の turn の終わりで人間へ引き渡す run。
+// 成功条件: ログに【確かめ方】が出ないこと。コメントには出ること。
+func TestHandoff_ログには理由の1行目だけを出す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Agent.MaxTurns = 1
+	}})
+	fx.Tracker.AddIssue(sampleIssue(194, "Ready"))
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "まだ途中です", false),
+	})
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 15*time.Second, "引き渡しの通知が投稿される", func() bool {
+		for _, c := range fx.Tracker.CommentsOf("I_node194") {
+			if strings.Contains(c.Body, "人間へ引き渡しました") {
+				return true
+			}
+		}
+		return false
+	})
+
+	// **コメントには案内が入る。**
+	var body string
+	for _, c := range fx.Tracker.CommentsOf("I_node194") {
+		if strings.Contains(c.Body, "人間へ引き渡しました") {
+			body = c.Body
+		}
+	}
+	if !strings.Contains(body, "【対処】") {
+		t.Fatalf("コメントに直し方が入っていない:\n%s", body)
+	}
+
+	// **ログには入らない。**1行目だけを出す（summaryLine）。
+	if strings.Contains(fx.Logs.String(), "【確かめ方】") || strings.Contains(fx.Logs.String(), "【対処】") {
+		t.Errorf("ログに案内の行まで流れている（1行目だけであるべき）:\n%s", fx.Logs.String())
+	}
+}

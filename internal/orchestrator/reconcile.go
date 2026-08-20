@@ -287,7 +287,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		// 通り、`agent.prompt` の待ち受けで既定1時間返らない。
 		o.abandonRunAsync(ctx, rs, fmt.Sprintf(
 			"Claude Code が %d ミリ秒のあいだ何も進めませんでした"+
-				"（herdr が返した状態: %s）。**continuo は止まったものと判断して打ち切りました。**"+
+				"（continuo が最後に見た状態: %s）。**continuo は止まったものと判断して打ち切りました。**"+
 				"\n【確かめ方】下記の「Claude Code の会話の記録」を開き、末尾で何をしていたかを見てください。"+
 				"\n【よくある原因】確認の画面が出て人間の入力を待っていた / 応答を待ち続けていた。"+
 				"\n【対処】原因を直してから Status を着手待ちへ戻してください。"+

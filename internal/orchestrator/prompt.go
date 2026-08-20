@@ -196,3 +196,17 @@ type handoffContext struct {
 	// **worktree の中ではない**（設計 3-12）。
 	SettingsPath string
 }
+
+// summaryLine は、人間へ見せる理由の1行目だけを返す（ログ用）。
+//
+// **issue のコメントには【確かめ方】まで全部載せるが、ログには1行目だけを出す**（設計 3-34b）。
+// 巡回のたびに数行の案内が流れると、他の行が埋もれて読めなくなる。
+//
+// reason: 人間へ見せる理由（改行を含みうる）。
+// 戻り値: 最初の改行までの部分。改行が無ければそのまま返す。
+func summaryLine(reason string) string {
+	if i := strings.IndexByte(reason, '\n'); i >= 0 {
+		return reason[:i]
+	}
+	return reason
+}

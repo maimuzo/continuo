@@ -33,7 +33,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
 		o.abandonRun(ctx, rs, "この issue がボードから見えなくなりました。"+
-			"**continuo は30秒ごとにボードを読み直しますが、そこにこの issue が現れなくなりました。**"+
+			"**turn が終わったので issue を ID 指定で取り直したところ、ボードから返ってきませんでした。**"+
 			"\n【確かめ方】ボードでこの issue を探してください。archive されているか、"+
 			"ボードから外されているはずです。"+
 			"\n【よくある原因】人間がボードから外した / issue を archive した。"+
@@ -310,7 +310,7 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 // failureState: 落とす先の Status。空なら落とさない。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failureState, reason string) {
-	o.logger.Info("run を終えます", "identifier", rs.issue().Identifier, "理由", reason)
+	o.logger.Info("run を終えます", "identifier", rs.issue().Identifier, "理由", summaryLine(reason))
 
 	if failureState != "" {
 		if _, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.cfg.Tracker.TerminalStates); err != nil {
@@ -407,7 +407,7 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 	snap := rs.snapshot()
 	if snap.RetryCount >= o.cfg.Agent.MaxRetries {
 		o.logger.Warn("リトライの回数を使い切りました（人間へ渡します）",
-			"identifier", snap.Identifier, "retry_count", snap.RetryCount, "理由", reason)
+			"identifier", snap.Identifier, "retry_count", snap.RetryCount, "理由", summaryLine(reason))
 		// **打ち切りである。worker を止める前にコメントを確かめる**（設計 3-25）。
 		o.ensureAgentComment(ctx, rs)
 		o.runAfterRun(ctx, rs)
@@ -426,7 +426,7 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 	backoff := retryBackoff(snap.RetryCount, time.Duration(o.cfg.Agent.MaxRetryBackoffMs)*time.Millisecond)
 	count := rs.addRetry(o.now(), backoff)
 	o.logger.Warn("run を諦めてリトライを積みました（バックオフの間も印には残します）",
-		"identifier", snap.Identifier, "retry_count", count, "backoff", backoff, "理由", reason)
+		"identifier", snap.Identifier, "retry_count", count, "backoff", backoff, "理由", summaryLine(reason))
 	// **run はまだ続く。**印を外しておかないと、次の stall の閾値でリトライが1つも
 	// 積まれず、人間へ渡されないまま止まる。
 	rs.endTerminal()
@@ -599,7 +599,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 		// **1つの run について1件だけにする。**failure_state へ落としたあとに
 		// コメントを書かせられなかった場合、理由の違う通知が2件並んでしまう。
 		o.logger.Info("引き渡しの通知は投稿済みなので重ねて書きません",
-			"identifier", rs.issue().Identifier, "理由", reason)
+			"identifier", rs.issue().Identifier, "理由", summaryLine(reason))
 		return
 	}
 	snap := rs.snapshot()

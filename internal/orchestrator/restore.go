@@ -730,6 +730,7 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
 // reason: 人間へ見せる理由。
+// hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
 func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, reason string, hc handoffContext) {
 	if _, err := o.tracker.UpdateStatus(
 		ctx, issue.ID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {

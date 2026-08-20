@@ -348,7 +348,7 @@ func (o *Orchestrator) noteUntrusted(ctx context.Context, issue tracker.Issue, r
 	}
 
 	o.logger.Warn("リポジトリが Claude Code に信頼登録されていません（この issue を飛ばします）",
-		"identifier", issue.Identifier, "repo", key, "理由", reason)
+		"identifier", issue.Identifier, "repo", key, "理由", summaryLine(reason))
 
 	if o.cfg.Trust.OnUntrusted != "skip_and_comment" {
 		return
