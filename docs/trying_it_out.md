@@ -28,8 +28,11 @@ below says which steps were actually executed while writing this document and wh
 | 段5 clone して信頼を登録する | **叩いた** | `continuo trust --dry-run` は実物の `~/.claude.json` に対して（読むだけ）。書き込みは偽のホームディレクトリで確かめた |
 | 段6 前提を検査する | **叩いた** | 揃っているとき・フィールド名が違うとき・設定が未記入のときの3通り |
 | 段7 issue を1件用意する | **偽物一式で叩いた** | 偽の `gh` と偽の GitHub GraphQL に対して。**本番のボードには1リクエストも送っていない** |
-| 段8 動かす | **偽物一式で叩いた** | 偽の herdr・偽の Claude Code・本物の git で、1件を `Ready` から `Done` まで通した |
-| 段9 止める・片付ける | **偽物一式で叩いた** | `Ctrl+C` 相当の `SIGINT` を送り、終了コード 0 で終わることを確かめた |
+| 段8 動かす | **両方叩いた** | **本物で起動し、巡回が始まるところまで確かめた**（`Ready` が0件なので Claude Code は起動していない）。1件を `Ready` から `Done` まで通したのは偽物一式のほう |
+| 段9 止める・片付ける | **両方叩いた** | 本物にも偽物にも `Ctrl+C` 相当の `SIGINT` を送り、終了コード 0 で終わることを確かめた |
+
+**本物に対して確かめていないのは「実際に issue を1件通すこと」だけである**（段7 の issue 作成と、
+段8 で Claude Code が動く部分）。**そこから枠を消費するので、人間が判断すること。**
 
 **段7〜段9 の「偽物一式」は [test/e2e](../test/e2e) にある。**偽の `gh` / 偽の GitHub GraphQL /
 偽の herdr / 偽の Claude Code / 隔離したホームディレクトリの5つと、本物の git を組み合わせてある。
@@ -466,7 +469,13 @@ tracker:
 ```
 
 **書き換えたら段6 の `continuo doctor` で照合する。**綴りが1文字でも違うと、
-**巡回が無言で「対象0件」を返し続ける。**
+**段8 の起動時検査が起動を止める**（終了コード 1。実測した出力）。
+
+```text
+level=ERROR msg="continuo を起動できません" error="起動できませんでした: 起動時の検査に落ちました（生きている pane は閉じずに残します）: ボードの Status の選択肢名が設定と一致しません（対象0件が無言で続くのを防ぎます）: … : Readyyy"
+```
+
+**無言で回り続けることはない。**ただし段6 の `doctor` なら起動する前に気づける。
 
 ---
 
@@ -706,8 +715,9 @@ cd ~/continuo-try
 | 症状 | 直し方 |
 | --- | --- |
 | `Could not resolve to a Unions::ProjectV2FieldConfiguration with the name …` | `status_field` に書いた名前のフィールドがボードに無い。段2 で確かめた綴りに合わせる |
-| `ボードの Status の選択肢名が設定と一致しません` | 段4 の書き換えが足りない。**放置すると、巡回が無言で「対象0件」を返し続ける** |
+| `ボードの Status の選択肢名が設定と一致しません` | 段4 の書き換えが足りない。**この状態では段8 の起動時検査が止めるので、無言で進むことはない** |
 | `gh の scope に "project" がありません` | `gh auth refresh -h github.com -s project` を実行する |
+| `✗ clone  ghq が PATH にありません` | `ghq` か `git` が入っていない。**この2つは巡回が worktree を作るときに起動する**ので、無いと段8 で必ず落ちる。入れて PATH を通す |
 
 ### `doctor` を通っても段8 の起動で落ちるもの
 
@@ -823,6 +833,32 @@ cd ~/continuo-try
 
 **巡回の間隔は既定30秒である。**すぐには動かない。
 
+**起動に成功したときのログ**（`Ready` が0件の状態で実際に叩いたもの。
+**この状態では Claude Code は起動しないので、枠を消費しない**）。
+
+```text
+continuo を起動します（設定ファイル: ~/continuo-try/WORKFLOW.md）
+level=INFO msg=設定ファイルを読み込みました path=~/continuo-try/WORKFLOW.md
+level=INFO msg="hook を受ける socket の場所を決めました" socket=/tmp/cnt-run/hooks.sock
+level=INFO msg=二重起動防止のロックを獲得しました lock_file=/tmp/cnt-run/continuo.lock
+level=INFO msg=リポジトリの信頼はこのファイルで判定します claude_config=~/.claude.json
+level=INFO msg="gh の認証と scope を確かめました" scope=project
+level=INFO msg="herdr の socket に到達しました" protocol=19
+level=INFO msg="tracker アダプタの起動時検査が完了しました" owner=<ACCOUNT> project_number=<PROJECT> status_options=6
+level=INFO msg="hook を受ける socket の listen を始めました" socket=/tmp/cnt-run/hooks.sock
+level=INFO msg="hook の配送を始めました"
+level=INFO msg=復元を終えました worktrees=0 adopted=0 closed_panes=0 cleaned=0
+level=INFO msg="ダッシュボードは開きません（server.port が未設定）"
+level=INFO msg=巡回を始めます poll_interval_ms=30000
+level=WARN msg="枠の判定を諦めます（rate_limit.source: none と同じ動きになります。起動は止めません）" error="枠の判定に使う資格情報を取得できません: ~/.claude/.credentials.json を読めません（macOS では Keychain にあるのが普通です）: …"
+```
+
+> **最後の `WARN` は macOS では必ず出る。**段6 の `資格情報` が `!` になるのと同じ理由で、
+> **Keychain を読まない**ためである。**起動は止まらない。**
+
+**`Ready` の issue が0件なら、ここで止まったまま何も起きない。**
+**Claude Code が起動するのは、`Ready` の issue を見つけたときだけである。**
+
 ### 別の端末から様子を見る
 
 **実行する場所: どこでもよい**
@@ -887,6 +923,14 @@ curl -s http://127.0.0.1:8787/api/v1/state | jq .
 
 **巡回を止め、hook の受け口を閉じ、走行中の turn の終わりを待ってから抜ける。**
 **pane は閉じない。**次に起動したとき、その pane を引き継ぐ。
+
+実際に叩いた出力（終了コードは 0）。
+
+```text
+level=INFO msg="巡回を止めました（hook の受け口を閉じて turn ループの終了を待ちます）"
+level=INFO msg="走行中の turn ループが終わりました（pane は閉じていません）"
+level=INFO msg=continuo を終了しました
+```
 
 ### 試したあとの片付け
 
