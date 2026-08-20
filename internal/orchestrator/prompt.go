@@ -140,7 +140,7 @@ func buildUntrustedComment(owner, repo, reason string) string {
 			"`continuo trust` を実行してください。\n"+
 			"何を許すことになるかは `continuo trust --dry-run` で先に見られます。\n\n"+
 			"検査の結果: %s\n\n"+
-			"このリポジトリについての通知は1回だけです（同じリポジトリの他の issue では出しません）。",
+			"この通知は continuo を起動するたびに1回だけです（同じリポジトリの他の issue では出しません）。",
 		owner, repo, owner, repo, reason)
 }
 

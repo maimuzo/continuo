@@ -460,8 +460,16 @@ func build(
 	if err != nil {
 		return nil, fmt.Errorf("ボードを読むためのトークンを取得できません: %w", err)
 	}
+	// **`trust.require_repo_trusted` が偽なら、アダプタにも判定を渡さない。**
+	// 渡したままだと、アダプタが `Dispatchable` を偽にして返す一方で
+	// `preflight` は検査を飛ばすので、**検査を切ったのに issue が取られず、
+	// 理由も issue に残らない**という食い違いになる（設計 3-33）。
+	var repoTrusted func(owner, repo string) bool
+	if cfg.Trust.RequireRepoTrusted {
+		repoTrusted = ws.TrustFunc()
+	}
 	adapter, err := tracker.NewAdapter(
-		cfg.Tracker, graphqlEndpoint, token, newTrackerHTTPClient(trackerTimeout), logger, ws.TrustFunc())
+		cfg.Tracker, graphqlEndpoint, token, newTrackerHTTPClient(trackerTimeout), logger, repoTrusted)
 	if err != nil {
 		return nil, fmt.Errorf("トラッカーのアダプタを組み立てられません: %w", err)
 	}

@@ -3181,6 +3181,18 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 > （`test/internal/orchestrator/dispatch_test.go` の
 > `TestDispatch_アダプタが未信頼と判定した_issue_にもコメントを1回残す`）。
 >
+> **通知を出したあとは信頼を検査し直さない。**`CheckTrust` は毎回 `git rev-parse` を
+> 1プロセス起こし、`~/.claude.json` を読む（`TrustFunc` のキャッシュを通らない）。
+> 巡回のたびに未信頼の issue の数だけ起こすことになるので、`o.notified` に鍵があれば飛ばす。
+> **信頼が付けば `Dispatchable` が真になって関門へ来なくなる**ので、取りこぼさない。
+>
+> **`trust.require_repo_trusted` が偽なら、アダプタにも判定関数を渡さない。**
+> 渡したままだと、アダプタが `Dispatchable` を偽にする一方で `preflight` は検査を飛ばすので、
+> **検査を切ったのに issue が取られず、理由も残らない。**
+>
+> **通知はメモリにしか残らない**（`o.notified`）。continuo を再起動して未信頼のままなら
+> もう1件付く。**コメントの本文は「continuo を起動するたびに1回だけです」と書くこと。**
+>
 > **信頼の門番は `~/.claude.json` であって `trust.repositories` ではない。**
 > 巡回のループは `trust.repositories` を1バイトも読まない（読むのは `continuo trust` だけ）。
 > **だから「書いていないから取らない」と書くのは因果が逆である。**

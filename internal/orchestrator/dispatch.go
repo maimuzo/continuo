@@ -59,7 +59,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			// **ここで捨てると preflight を通らないので、直し方が人間へ届かない**（設計 3-33）。
 			// preflight が自分で信頼を検査し、未信頼なら issue へコメントを1回だけ残す。
 			// **draft issue は owner も repo も持たない**ので、信頼の検査には掛けない。
-			if issue.Owner != "" {
+			// **通知を出したあとは検査し直さない。**呼ぶたびに git を1プロセス起こす。
+			// 信頼が付けば Dispatchable が真になってここへ来なくなるので、取りこぼさない。
+			if issue.Owner != "" && !o.alreadyNotified(issue.Owner, issue.Repo) {
 				o.preflight(ctx, issue)
 			}
 			continue
@@ -370,6 +372,21 @@ func (o *Orchestrator) noteUntrusted(ctx context.Context, issue tracker.Issue, r
 //
 // owner: リポジトリの所有者名。
 // repo: リポジトリ名。
+// alreadyNotified は、そのリポジトリへ未信頼の通知を既に出したかを返す。
+//
+// **巡回のたびに信頼を検査し直すのを避けるために使う。**`CheckTrust` は
+// `git rev-parse` を1プロセス起こし、`~/.claude.json` を読む。どちらもキャッシュを通らない。
+//
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// 戻り値: 既に通知を出していれば真。
+func (o *Orchestrator) alreadyNotified(owner, repo string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	_, ok := o.notified[owner+"/"+repo]
+	return ok
+}
+
 func (o *Orchestrator) clearUntrusted(owner, repo string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
