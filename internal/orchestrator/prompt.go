@@ -152,6 +152,39 @@ func buildUntrustedComment(owner, repo, reason string) string {
 // identifier: issue の識別子。
 // reason: 引き渡す理由。
 // 戻り値: コメント本文。
-func buildHandoffComment(identifier, reason string) string {
-	return fmt.Sprintf("continuo が %s の作業を人間へ引き渡しました。\n\n理由: %s", identifier, reason)
+func buildHandoffComment(identifier, reason string, ctx handoffContext) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "continuo が %s の作業を人間へ引き渡しました。\n\n理由: %s\n", identifier, reason)
+
+	// **どこを見に行けばよいかを必ず添える。**理由だけを読んでも、人間は
+	// 作業の跡がどこに残っているのかを知る手立てがない。
+	lines := make([]string, 0, 3)
+	if ctx.WorktreePath != "" {
+		lines = append(lines, fmt.Sprintf("- 作業していた場所: `%s`", ctx.WorktreePath))
+	}
+	if ctx.AgentName != "" {
+		lines = append(lines, fmt.Sprintf("- Claude Code の画面を見る: `herdr agent read %s --source recent-unwrapped --lines 40`", ctx.AgentName))
+	}
+	if ctx.PaneID != "" {
+		lines = append(lines, fmt.Sprintf("- herdr の pane: `%s`", ctx.PaneID))
+	}
+	if len(lines) > 0 {
+		b.WriteString("\n【調べるところ】\n")
+		b.WriteString(strings.Join(lines, "\n"))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// handoffContext は引き渡しの通知に添える「調べるところ」である。
+//
+// **空の項目は行ごと出さない。**着手の途中で落ちた run は worktree も pane も
+// 持っていないことがあり、空の値を出すと存在しない場所を見に行かせてしまう。
+type handoffContext struct {
+	// WorktreePath は worktree の絶対パスである。
+	WorktreePath string
+	// AgentName は herdr に登録した agent 名である。
+	AgentName string
+	// PaneID は herdr の pane ID である。
+	PaneID string
 }

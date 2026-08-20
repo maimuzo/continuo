@@ -415,7 +415,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// 段3: worktree を用意し、herdr workspace として開く。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(issue))
 	if err != nil {
-		return fmt.Errorf("worktree を用意できません: %w", err)
+		return fmt.Errorf("作業用の worktree を用意できませんでした。\n%w", err)
 	}
 	rs.setWorkspaceInfo(prepared.Path, prepared.Base, prepared.HerdrWorkspaceID)
 
@@ -566,20 +566,48 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState) error {
 	for {
 		got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})
 		if err != nil {
-			return fmt.Errorf("agent の状態を読めません: %w", err)
+			return fmt.Errorf(
+				"Claude Code の状態を herdr に聞けませんでした（agent 名: %s）。"+
+					"\n【確かめ方】`herdr agent get %s` を実行してください。"+
+					"\n【よくある原因】herdr が落ちている / agent の登録が消えた。"+
+					"\n元のエラー: %w",
+				rs.agentName(), rs.agentName(), err)
 		}
 		switch got.Agent.AgentStatus {
 		case herdr.AgentStatusIdle, herdr.AgentStatusDone:
 			return nil
 		case herdr.AgentStatusBlocked:
 			o.sendEscape(ctx, rs)
-			return errors.New("起動直後に権限の確認で止まっています（esc を送りました。人間の判断が要ります）")
+			return fmt.Errorf(
+				"Claude Code が起動直後に確認の画面で止まりました（agent 名: %s）。"+
+					"continuo は esc を送って画面を閉じましたが、"+
+					"**この issue は人間が見ないと進みません。**"+
+					"\n【確かめ方】`herdr agent read %s --source recent-unwrapped --lines 40` で画面を見てください。"+
+					"\n【よくある原因】そのフォルダが Claude Code に信頼登録されていない / "+
+					"許可されていないコマンドを実行しようとした。"+
+					"\n【対処】許可が要るなら WORKFLOW.md の `claude.permissions.allow` に足してください。",
+				rs.agentName(), rs.agentName())
 		case herdr.AgentStatusWorking:
 			if o.now().After(deadline) {
-				return fmt.Errorf("起動が %d ms 以内に落ち着きませんでした", o.cfg.Claude.StartupTimeoutMs)
+				return fmt.Errorf(
+					"Claude Code の起動が %d ミリ秒たっても落ち着きませんでした（agent 名: %s）。"+
+						"起動はしていますが、待っている間ずっと `working` のままでした。"+
+						"\n【確かめ方】`herdr agent read %s --source recent-unwrapped --lines 40` で画面を見てください。"+
+						"\n【よくある原因】起動時の処理が重い / ネットワークが遅い。"+
+						"\n【対処】WORKFLOW.md の `claude.startup_timeout_ms` を増やしてください（いまは %d）。",
+					o.cfg.Claude.StartupTimeoutMs, rs.agentName(), rs.agentName(), o.cfg.Claude.StartupTimeoutMs)
 			}
 		default:
-			return fmt.Errorf("agent の状態が %q です（起動失敗として扱います）", got.Agent.AgentStatus)
+			return fmt.Errorf(
+				"Claude Code が起動しませんでした（agent 名: %s、herdr が返した状態: %q）。"+
+					"herdr は pane を作りましたが、そこで動いている Claude Code を見つけられませんでした。"+
+					"\n【確かめ方】`herdr agent explain %s` で herdr が何を見て判断したかを、"+
+					"`herdr agent read %s --source recent-unwrapped --lines 40` で画面に何が出ているかを見てください。"+
+					"\n【よくある原因】claude コマンドが PATH に無い / "+
+					"claude の起動が途中で失敗した / そのフォルダが Claude Code に信頼登録されていない。"+
+					"\n【対処】`continuo doctor` で前提を検査してください。"+
+					"信頼登録が足りないなら `continuo trust` を実行してください。",
+				rs.agentName(), got.Agent.AgentStatus, rs.agentName(), rs.agentName())
 		}
 
 		select {

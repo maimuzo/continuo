@@ -185,5 +185,9 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState) {
 	if _, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {
 		o.logger.Warn("Status を落とせません", "identifier", rs.issue().Identifier, "error", err)
 	}
-	o.postHandoffComment(ctx, rs, "作業の内容を書いたコメントが残らなかったため、人間の判断が要ります")
+	o.postHandoffComment(ctx, rs, "Claude Code は作業を終えたと表明しましたが、**何をしたのかを issue に書き残しませんでした。**"+
+		"continuo は成果の要約を代筆しないので、このままでは何が行われたか誰にも分かりません。"+
+		"\n【確かめ方】worktree の中身（下記）と `git log` を見て、実際に何が変わったかを確かめてください。"+
+		"\n【よくある原因】エージェントがコメントの投稿に失敗した / 指示の文面にコメントを書く手順が無い。"+
+		"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。")
 }

@@ -285,6 +285,11 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		// 3. worker を止め、リトライを積む。
 		// **同期で呼んではならない**（設計 3-8）。打ち切りになった場合は 3-25 の9段を
 		// 通り、`agent.prompt` の待ち受けで既定1時間返らない。
-		o.abandonRunAsync(ctx, rs, fmt.Sprintf("stall を検知しました（agent_status=%s）", status))
+		o.abandonRunAsync(ctx, rs, fmt.Sprintf("Claude Code が動いているのに、長い間なにも進んでいません"+
+			"（herdr が返した状態: %s）。**continuo は止まったものと判断して打ち切りました。**"+
+			"\n【確かめ方】Claude Code の画面（下記のコマンド）で、どこで止まっていたかを見てください。"+
+			"\n【よくある原因】確認の画面が出て人間の入力を待っていた / 応答を待ち続けていた。"+
+			"\n【対処】画面を見て原因を直してから、Status を着手待ちへ戻してください。"+
+			"止まったとみなすまでの時間は WORKFLOW.md の `agent.stall_timeout_ms` で変えられます。", status))
 	}
 }

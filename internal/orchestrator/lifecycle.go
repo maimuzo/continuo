@@ -32,7 +32,13 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	current, ok := o.refreshIssue(ctx, rs)
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
-		o.abandonRun(ctx, rs, "ボードから見えなくなりました")
+		o.abandonRun(ctx, rs, "この issue がボードから見えなくなりました。"+
+			"**continuo は30秒ごとにボードを読み直しますが、そこにこの issue が現れなくなりました。**"+
+			"\n【確かめ方】ボードでこの issue を探してください。archive されているか、"+
+			"ボードから外されているはずです。"+
+			"\n【よくある原因】人間がボードから外した / issue を archive した。"+
+			"\n【対処】続きを進めたいならボードへ戻し、Status を着手待ちにしてください。"+
+			"worktree は残してあります（下記）。")
 		return true
 	}
 	rs.setIssue(current)
@@ -596,8 +602,13 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			"identifier", rs.issue().Identifier, "理由", reason)
 		return
 	}
+	snap := rs.snapshot()
 	if _, err := o.tracker.PostComment(ctx, nodeID,
-		buildHandoffComment(rs.issue().Identifier, reason),
+		buildHandoffComment(rs.issue().Identifier, reason, handoffContext{
+			WorktreePath: snap.WorktreePath,
+			AgentName:    snap.AgentName.String(),
+			PaneID:       snap.PaneID,
+		}),
 		o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}

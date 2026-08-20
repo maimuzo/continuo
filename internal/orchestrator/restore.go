@@ -570,7 +570,16 @@ func (o *Orchestrator) decideOne(
 		// （3-11 で実測。3/3）。**esc は送らない**（pane ごと閉じるので要求も消える）。
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
-		o.moveToFailure(ctx, issue, "再起動の時点で権限の確認で止まっていました（agent_status=blocked）")
+		o.moveToFailure(ctx, issue,
+			"再起動したとき、Claude Code が確認の画面で止まっていました（herdr が返した状態: blocked）。"+
+				"**このまま turn を送ると、保留中の権限の要求が承認されて実行されます**"+
+				"（実測で3回中3回）。だから引き継がずに人間へ渡しました。"+
+				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
+				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
+				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
+				"\n【対処】許可が要るなら WORKFLOW.md の `claude.permissions.allow` に足してから、"+
+				"Status を着手待ちへ戻してください。",
+			handoffContext{WorktreePath: c.Path, PaneID: pane.PaneID})
 		o.closePaneInto(ctx, pane.PaneID, result)
 		return adoption{}, false
 	default:
@@ -587,7 +596,14 @@ func (o *Orchestrator) decideOne(
 			"identifier", identifier,
 			"takeover_count", c.Identity.TakeoverCount, "max_takeover", o.cfg.Agent.MaxTakeover)
 		o.moveToFailure(ctx, issue, fmt.Sprintf(
-			"引き継いだ回数が上限（%d 回）に達しました", o.cfg.Agent.MaxTakeover))
+			"continuo を再起動して同じ issue を引き継いだ回数が、上限の %d 回に達しました。"+
+				"**これ以上引き継いでも同じところで落ちる可能性が高い**ので、人間へ渡します。"+
+				"\n【確かめ方】worktree の中身（下記）を見て、作業がどこまで進んだかを確かめてください。"+
+				"\n【よくある原因】continuo が繰り返し落ちている / Claude Code が起動のたびに失敗している。"+
+				"\n【対処】原因を直してから Status を着手待ちへ戻してください。"+
+				"引き継ぎの上限は WORKFLOW.md の `agent.max_takeover` で変えられます（いまは %d）。",
+			o.cfg.Agent.MaxTakeover, o.cfg.Agent.MaxTakeover),
+			handoffContext{WorktreePath: c.Path, PaneID: pane.PaneID})
 		o.closePaneInto(ctx, pane.PaneID, result)
 		return adoption{}, false
 	}
@@ -688,7 +704,16 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 	case "to_failure_state":
 		o.logger.Info("pane の無い実行中の run を人間へ渡します（worktree は残します）",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.FailureState)
-		o.moveToFailure(ctx, issue, "再起動したときに pane が残っていませんでした")
+		o.moveToFailure(ctx, issue,
+			"continuo を再起動したとき、この issue の Claude Code の pane が残っていませんでした。"+
+				"**作業の途中で pane だけが閉じられた**か、herdr ごと落ちたと考えられます。"+
+				"\n【確かめ方】worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
+				"commit が残っていれば作業は無駄になっていません。"+
+				"\n【よくある原因】herdr の再起動 / 人間が pane を閉じた。"+
+				"\n【対処】続きから進めてよければ Status を着手待ちへ戻してください。"+
+				"この振る舞いは WORKFLOW.md の `restart.orphan_running_action` で変えられます"+
+				"（いまは to_failure_state。redispatch にすると同じ worktree で自動的に再開します）。",
+			handoffContext{WorktreePath: c.Path})
 	default:
 		// redispatch（既定）。**復元の中では何もしない。**
 		o.logger.Info("pane の無い実行中の run は次の巡回に委ねます（復元の中では dispatch しません）",
@@ -705,7 +730,7 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
 // reason: 人間へ見せる理由。
-func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, reason string) {
+func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, reason string, hc handoffContext) {
 	if _, err := o.tracker.UpdateStatus(
 		ctx, issue.ID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {
 		o.logger.Warn("Status を落とせません",
@@ -717,7 +742,7 @@ func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, r
 		return
 	}
 	if _, err := o.tracker.PostComment(ctx, nodeID,
-		buildHandoffComment(issue.Identifier, reason),
+		buildHandoffComment(issue.Identifier, reason, hc),
 		o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", issue.Identifier, "error", err)
 	}

@@ -106,14 +106,27 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		} else {
 			if snap.TurnCount >= o.cfg.Agent.MaxTurns {
 				o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
-					fmt.Sprintf("turn の上限（max_turns=%d）に達しました", o.cfg.Agent.MaxTurns))
+					fmt.Sprintf(
+						"continuo がこの issue へ送った指示の回数が、上限の %d 回に達しました。"+
+							"**Claude Code は動いていましたが、作業が終わったという表明を出しませんでした。**"+
+							"\n【確かめ方】worktree の中身（下記）と、この issue に残っているエージェントのコメントを見てください。"+
+							"\n【よくある原因】issue の内容が大きすぎる / 指示が曖昧で終わりが判断できない。"+
+							"\n【対処】issue を分けるか、内容を具体的にしてから Status を着手待ちへ戻してください。"+
+							"上限は WORKFLOW.md の `agent.max_turns` で変えられます（いまは %d）。",
+						o.cfg.Agent.MaxTurns, o.cfg.Agent.MaxTurns))
 				return
 			}
 
 			text, err := o.buildTurnText(rs, snap)
 			if err != nil {
 				o.logger.Warn("プロンプトを組み立てられません", "identifier", snap.Identifier, "error", err)
-				o.failRun(ctx, rs, fmt.Sprintf("プロンプトを組み立てられません: %v", err))
+				o.failRun(ctx, rs, fmt.Sprintf(
+					"Claude Code へ送る指示の文面を組み立てられませんでした。"+
+						"**この issue には1回も指示を送っていません。**"+
+						"\n【確かめ方】WORKFLOW.md の `claude.prompt_template`（または `continuation_prompt_template`）を見てください。"+
+						"\n【よくある原因】テンプレートに、一覧に無い変数を書いた。"+
+						"\n【対処】テンプレートを直してから Status を着手待ちへ戻してください。"+
+						"\n元のエラー: %v", err))
 				return
 			}
 
@@ -138,11 +151,25 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"権限の確認で止まりました（esc を送りました。人間の判断が要ります）")
 			return
 		case turnStalled:
-			o.abandonRun(ctx, rs, "待ち受けが返ったのに Stop が来ませんでした")
+			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
+				"herdr は「agent が待機状態になった」と答えましたが、"+
+				"**Claude Code の Stop hook から continuo へ通知が届きませんでした。**"+
+				"\n【確かめ方】worktree の中の `.claude/settings.json` に continuo の hook が書かれているか、"+
+				"Claude Code の画面（下記のコマンド）に hook のエラーが出ていないかを見てください。"+
+				"\n【よくある原因】hook を受ける socket のパスが変わった / "+
+				"エージェントが settings.json を書き換えた。"+
+				"\n【対処】`continuo doctor` で前提を検査し、Status を着手待ちへ戻してください。")
 			return
 		case turnTimedOut:
 			o.abandonRun(ctx, rs,
-				fmt.Sprintf("turn が時間切れになりました（turn_timeout_ms=%d）", o.cfg.Claude.TurnTimeoutMs))
+				fmt.Sprintf(
+					"Claude Code へ指示を送ってから %d ミリ秒たっても、turn が終わりませんでした。"+
+						"**動いている途中で打ち切りました。**"+
+						"\n【確かめ方】Claude Code の画面（下記のコマンド）で、どこで止まっていたかを見てください。"+
+						"\n【よくある原因】1回の指示に対する作業が大きい / 確認の画面が出て止まっていた / "+
+						"レートリミットの待ちに入っていた。"+
+						"\n【対処】WORKFLOW.md の `claude.turn_timeout_ms` を増やすか、issue を分けてください（いまは %d）。",
+					o.cfg.Claude.TurnTimeoutMs, o.cfg.Claude.TurnTimeoutMs))
 			return
 		case turnQuotaRecovered:
 			// 枠が明けた。**次の turn を送る（この送信は turn 数に数える。設計 3-27）。**
