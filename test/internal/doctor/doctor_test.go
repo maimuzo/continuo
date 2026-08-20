@@ -10,10 +10,13 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/doctor"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
-// wantLabels は出力に出る見出し語である（設計 3-32。**この語と順序で固定する**）。
-var wantLabels = []string{
+// wantLabels は出力に出る見出し語のキーである（設計 3-32。**この語と順序で固定する**）。
+//
+// **画面に出る語そのものではなくキーで比べる**（設計 3-35）。語は言語で変わる。
+var wantLabels = []i18n.Key{
 	doctor.LabelConfig,
 	doctor.LabelHerdr,
 	doctor.LabelGHAuth,
@@ -34,7 +37,7 @@ func TestDoctor_前提が揃っていれば7項目すべて通る(t *testing.T) 
 
 	report := fx.Run(t)
 
-	if got := labelsOf(report); !equalStrings(got, wantLabels) {
+	if got := labelsOf(report); !equalKeys(got, wantLabels) {
 		t.Fatalf("見出し語が設計 3-32 と違う: %v（期待: %v）", got, wantLabels)
 	}
 	for _, label := range wantLabels {
@@ -596,7 +599,7 @@ func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 
 	report := fx.Run(t)
 
-	if got := labelsOf(report); !equalStrings(got, wantLabels) {
+	if got := labelsOf(report); !equalKeys(got, wantLabels) {
 		t.Fatalf("7項目すべてを検査していない: %v", got)
 	}
 	assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolOK)
@@ -699,6 +702,23 @@ func TestDoctor_対象が0件のときの集計は問題ありと読ませない
 	if report.ExitCode() != 0 {
 		t.Fatalf("! だけなのに終了コードが %d だった:\n%s", report.ExitCode(), out)
 	}
+}
+
+// equalKeys は見出し語のキーの並びが等しいかを返す。
+//
+// a: 比べる並び。
+// b: 比べる並び。
+// 戻り値: 長さも中身も等しければ true。
+func equalKeys(a, b []i18n.Key) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // equalStrings は文字列の並びが等しいかを返す。

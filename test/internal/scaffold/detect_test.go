@@ -17,7 +17,9 @@ import (
 // 検査したいのは「返ってきた内容をどう解釈するか」なので、コマンドの実行は差し替える。
 //
 // t: テストコンテキスト。
-// responses: 先頭の引数（"api" / "project"）から、返す標準出力とエラーへの対応。
+// responses: 先頭の2語（"api user" / "project list" / "project item-list"）から、
+// 返す標準出力とエラーへの対応。**2語で引くのは、`project list` と `project item-list` が
+// 別の応答を返す必要があるからである。**
 // 戻り値: 差し替え用の実行関数と、呼ばれた引数を順に記録するスライスへのポインタ。
 func fakeGH(t *testing.T, responses map[string]struct {
 	out []byte
@@ -27,7 +29,11 @@ func fakeGH(t *testing.T, responses map[string]struct {
 	var calls []string
 	run := func(_ context.Context, args ...string) ([]byte, error) {
 		calls = append(calls, strings.Join(args, " "))
-		r, ok := responses[args[0]]
+		key := args[0]
+		if len(args) > 1 {
+			key = args[0] + " " + args[1]
+		}
+		r, ok := responses[key]
 		if !ok {
 			t.Errorf("想定していない gh の呼び出し: gh %s", strings.Join(args, " "))
 			return nil, errors.New("想定外の呼び出し")
@@ -62,17 +68,28 @@ const twoProjectsJSON = `{"projects":[` +
 	`{"closed":false,"number":3,"title":"AI自動進行管理","url":"https://github.com/users/maimuzo/projects/3"},` +
 	`{"closed":false,"number":7,"title":"試作","url":"https://github.com/users/maimuzo/projects/7"}],"totalCount":2}`
 
+// twoRepoItemsJSON は `gh project item-list --format json` が、2つのリポジトリの issue と
+// draft issue を1件ずつ返したときの出力である。
+// 2026-08-20 に `gh project item-list 3 --owner @me --format json`（gh 2.97.0）で
+// 実際に得た形から、判定に使う項目だけを写した。
+const twoRepoItemsJSON = `{"items":[` +
+	`{"content":{"number":188,"repository":"maimuzo/koetsumugi","type":"Issue"}},` +
+	`{"content":{"number":1,"repository":"maimuzo/continuo","type":"Issue"}},` +
+	`{"content":{"number":2,"repository":"maimuzo/continuo","type":"Issue"}},` +
+	`{"content":{"title":"下書き","type":"DraftIssue"}}],"totalCount":4}`
+
 // 目的: gh から owner とボードの番号を引いて、雛形の2つのプレースホルダが埋まることを確認する。
 // 与える情報: `gh api user` が maimuzo を返し、`gh project list` が候補1件を返す差し替え。
 // 成功条件: Values に maimuzo と 3 が入り、どちらの Field も Filled であること。
-// あわせて、gh の呼び出しが api user と project list の2件だけであること。
+// あわせて、gh の呼び出しが api user / project list / project item-list の3件であること。
 func TestDetect_ghから引いた値でownerとproject_numberが埋まる(t *testing.T) {
 	run, calls := fakeGH(t, map[string]struct {
 		out []byte
 		err error
 	}{
-		"api":     ghResponse("maimuzo\n", nil),
-		"project": ghResponse(oneProjectJSON, nil),
+		"api user":          ghResponse("maimuzo\n", nil),
+		"project list":      ghResponse(oneProjectJSON, nil),
+		"project item-list": ghResponse(twoRepoItemsJSON, nil),
 	})
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
@@ -86,23 +103,29 @@ func TestDetect_ghから引いた値でownerとproject_numberが埋まる(t *tes
 	if !got.AllFilled() {
 		t.Errorf("両方埋まったのに AllFilled が偽である: %+v", got.Fields)
 	}
-	if len(*calls) != 2 {
-		t.Errorf("gh の呼び出しは api user と project list の2件であるべき: %v", *calls)
+	if len(*calls) != 3 {
+		t.Errorf("gh の呼び出しは api user / project list / project item-list の3件であるべき: %v", *calls)
 	}
 	if !strings.HasPrefix((*calls)[1], "project list --owner maimuzo ") {
 		t.Errorf("ボードの候補を引くとき、引いた owner を渡していない: %q", (*calls)[1])
 	}
 }
 
-// 目的: --owner と --project が渡されたら gh を1回も起動しないことを確認する。
-// 与える情報: 呼ばれたら失敗する差し替えと、両方のフラグ相当の値。
-// 成功条件: gh が1回も呼ばれず、渡した値がそのまま Values に入ること。
-func TestDetect_フラグで渡されたらghを叩かない(t *testing.T) {
-	var calls []string
-	run := func(_ context.Context, args ...string) ([]byte, error) {
-		calls = append(calls, strings.Join(args, " "))
-		return nil, errors.New("呼ばれてはならない")
-	}
+// 目的: --owner と --project が渡されたら、その2つを引くために gh を起動しないことを確認する。
+//
+// **ボードに載っているリポジトリの一覧だけは、フラグで渡されていても引く。**
+// これはフラグが決めるのは「どのボードか」であって「そのボードを読むかどうか」ではないからである
+// （trust.repositories はボードの中身を読まないと並べられない。設計 3-33）。
+//
+// 与える情報: 両方のフラグ相当の値と、item-list にだけ答える差し替え。
+// 成功条件: gh の呼び出しが project item-list の1件だけで、渡した値がそのまま Values に入ること。
+func TestDetect_フラグで渡されたらownerとボードの番号はghに聞かない(t *testing.T) {
+	run, calls := fakeGH(t, map[string]struct {
+		out []byte
+		err error
+	}{
+		"project item-list": ghResponse(twoRepoItemsJSON, nil),
+	})
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{
 		Owner:         "acme",
@@ -110,8 +133,8 @@ func TestDetect_フラグで渡されたらghを叩かない(t *testing.T) {
 		RunGH:         run,
 	})
 
-	if len(calls) != 0 {
-		t.Errorf("フラグで値が渡されているのに gh を叩いている: %v", calls)
+	if len(*calls) != 1 || !strings.HasPrefix((*calls)[0], "project item-list 12 --owner acme ") {
+		t.Errorf("フラグで渡された値を引き直している、または item-list を叩いていない: %v", *calls)
 	}
 	if got.Values.Owner != "acme" || got.Values.ProjectNumber != 12 {
 		t.Errorf("渡した値がそのまま使われていない: %+v", got.Values)
@@ -127,8 +150,8 @@ func TestDetect_ボードの候補が複数なら選ばずに一覧を返す(t *
 		out []byte
 		err error
 	}{
-		"api":     ghResponse("maimuzo\n", nil),
-		"project": ghResponse(twoProjectsJSON, nil),
+		"api user":     ghResponse("maimuzo\n", nil),
+		"project list": ghResponse(twoProjectsJSON, nil),
 	})
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
@@ -159,8 +182,8 @@ func TestDetect_ボードが0件ならプレースホルダを残して作り方
 		out []byte
 		err error
 	}{
-		"api":     ghResponse("maimuzo\n", nil),
-		"project": ghResponse(`{"projects":[],"totalCount":0}`, nil),
+		"api user":     ghResponse("maimuzo\n", nil),
+		"project list": ghResponse(`{"projects":[],"totalCount":0}`, nil),
 	})
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
@@ -185,8 +208,9 @@ func TestDetect_閉じたボードは候補に数えない(t *testing.T) {
 		out []byte
 		err error
 	}{
-		"api":     ghResponse("maimuzo\n", nil),
-		"project": ghResponse(closedAndOpen, nil),
+		"api user":          ghResponse("maimuzo\n", nil),
+		"project list":      ghResponse(closedAndOpen, nil),
+		"project item-list": ghResponse(twoRepoItemsJSON, nil),
 	})
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})

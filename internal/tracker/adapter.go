@@ -194,7 +194,7 @@ func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
 // 1つでも cfg と一致しない場合は CategoryInvalidConfig の *Error（一致しない名前をすべて
 // メッセージに列挙する）。GraphQL 呼び出し自体が失敗した場合はそのエラーをそのまま返す。
 func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error {
-	if err := a.resolveStatusOptions(ctx, cfg); err != nil {
+	if err := a.resolveStatusOptions(ctx, cfg, true); err != nil {
 		return err
 	}
 	a.logger.Info("tracker アダプタの起動時検査が完了しました",
@@ -223,7 +223,10 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 // 戻り値: 選択肢名が1つでも一致しない場合は CategoryInvalidConfig の *Error。
 // GraphQL 呼び出し自体が失敗した場合はそのエラーをそのまま返す。
 func (a *Adapter) VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error {
-	if err := a.resolveStatusOptions(ctx, cfg); err != nil {
+	// **絞り込みキーの検査は起動時（Bootstrap）だけで行う。**設定の status_field は
+	// 実行中に変わらず、フィールドがボード側で改名されれば下の field(name:) が
+	// 見つからずエラーになるため、巡回のたびに数え直す必要が無い。
+	if err := a.resolveStatusOptions(ctx, cfg, false); err != nil {
 		return err
 	}
 	a.logger.Debug("Status の選択肢名がまだ設定と一致することを確認しました",
@@ -240,15 +243,20 @@ func (a *Adapter) VerifyStatusOptions(ctx context.Context, cfg config.TrackerCon
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // cfg: WORKFLOW.md の front matter の tracker セクション。
-// 戻り値: project / Status フィールドが見つからない、または選択肢名が一致しない場合は
-// CategoryInvalidConfig の *Error。GraphQL 呼び出しが失敗した場合はそのエラー。
+// checkFilterKey: true なら「status_field を `items(query:)` のキーとして使えているか」も
+// 検査する（Bootstrap だけが true を渡す）。
+// 戻り値: project / Status フィールドが見つからない、選択肢名が一致しない、または
+// status_field を絞り込みのキーとして使えない場合は CategoryInvalidConfig の *Error。
+// GraphQL 呼び出しが失敗した場合はそのエラー。
 // **エラーを返す場合、Adapter が覚えている値は一切書き換えない。**
-func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerConfig) error {
+func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerConfig, checkFilterKey bool) error {
 	var resp bootstrapQueryResponse
 	vars := map[string]any{
-		"login":       a.owner,
-		"number":      a.projectNumber,
-		"statusField": a.statusField,
+		"login":              a.owner,
+		"number":             a.projectNumber,
+		"statusField":        a.statusField,
+		"withStatusQuery":    buildHasFieldQuery(a.statusField),
+		"withoutStatusQuery": buildNoFieldQuery(a.statusField),
 	}
 	if err := a.gql.do(ctx, bootstrapQueryTemplate, vars, &resp); err != nil {
 		return err
@@ -300,6 +308,12 @@ func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerCo
 		}
 	}
 
+	if checkFilterKey {
+		if err := a.checkStatusFieldIsFilterKey(project); err != nil {
+			return err
+		}
+	}
+
 	// **5つをまとめて1回のロックで差し替える。**読み手（別 goroutine の UpdateStatus →
 	// lookupOptionID）が、新しい正式名と古い選択肢 ID を混ぜて読まないようにするためである。
 	a.mu.Lock()
@@ -310,6 +324,46 @@ func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerCo
 	a.bootstrapped = true
 	a.mu.Unlock()
 	return nil
+}
+
+// checkStatusFieldIsFilterKey は status_field を `items(query:)` の絞り込みキーとして
+// 使えているかを、Bootstrap の応答に載せた3つの件数から検査する。
+//
+// **フィールドが在ることと、絞り込みのキーにできることは別である。**
+// `field(name: $statusField)` が返っても、`items(query:)` のキーとして解決できるとは
+// 限らない。しかも解決できないとき GraphQL はエラーを出さず、値付きの条件なら0件を返す
+// （`nosuchfield:"Ready"` が0件。2026-08-20 に project #3 で実測）。**そのまま動かすと
+// 「対象が無い」と見分けがつかず、キューが無言で永久に止まる**（設計 2-2 / 3-34）。
+//
+// project: Bootstrap の応答（件数が載っていない場合は検査しない）。
+// 戻り値: 絞り込みのキーとして使えていない場合は CategoryInvalidConfig の *Error。
+func (a *Adapter) checkStatusFieldIsFilterKey(project *rawProjectForBootstrap) error {
+	if project.TotalItems == nil || project.ItemsWithStatus == nil || project.ItemsWithoutStatus == nil {
+		// 件数が返っていない（古い偽サーバなど）。検査できないので何もしない。
+		return nil
+	}
+	total := project.TotalItems.TotalCount
+	withValue := project.ItemsWithStatus.TotalCount
+	withoutValue := project.ItemsWithoutStatus.TotalCount
+
+	if judgeFilterKeyUsable(total, withValue, withoutValue) {
+		a.logger.Debug("status_field を絞り込みのキーとして使えることを確認しました",
+			"status_field", a.statusField,
+			"全件", total, "値あり", withValue, "値なし", withoutValue,
+		)
+		return nil
+	}
+	return &Error{
+		Category: CategoryInvalidConfig,
+		Message: fmt.Sprintf(
+			"tracker.provider.status_field %q を候補の絞り込みのキーとして使えません"+
+				"（フィールド自体はボードにありますが、items(query:) が名前を解決できていません。"+
+				"GitHub はこの場合エラーを出さずに0件を返すため、ここで起動を止めます。"+
+				"フィールド名の綴り・空白の数を画面の表示と揃えてください）"+
+				": 全件=%d, 値あり=%d, 値なし=%d",
+			a.statusField, total, withValue, withoutValue,
+		),
+	}
 }
 
 // statusOptionCount は覚えている Status 選択肢の件数を返す（ログ用）。
@@ -414,7 +468,9 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 		return nil, err
 	}
 
-	q := buildStatusSearchQuery(states)
+	// **キーは status_field の値を使う。**`status:` の決め打ちにすると、専用フィールドを
+	// 設定していても組み込みの `Status` を絞り込んでしまう（設計 3-34）。
+	q := buildStatusSearchQuery(a.statusField, states)
 	var result []Issue
 	after := ""
 	for page := 1; ; page++ {
@@ -483,6 +539,26 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 			}
 		}
 		after = conn.PageInfo.EndCursor
+	}
+
+	// **返ってきた item の Status が、頼んだ states に本当に入っているかを検算する。**
+	// 絞り込みのキーが別のフィールドに解決されていた場合、GraphQL はエラーを出さずに
+	// 「頼んでいない Status の item」を返す。ここで気づかないと、Ice Box に置いた issue を
+	// 着手可能とみなして走らせてしまう（設計 3-34）。
+	for i := range result {
+		if containsFoldedStatus(states, result[i].State) {
+			continue
+		}
+		return nil, &Error{
+			Category: CategoryResponse,
+			Message: fmt.Sprintf(
+				"絞り込みが効いていません（頼んだ Status に無い item が返りました）: "+
+					"item=%s, 返ってきた Status=%q, 頼んだ Status=%s, 送ったクエリ=%s。"+
+					"tracker.provider.status_field %q が候補の絞り込みのキーとして"+
+					"正しく解決されているか確認してください",
+				result[i].ID, result[i].State, strings.Join(states, ", "), q, a.statusField,
+			),
+		}
 	}
 
 	return result, nil

@@ -1,5 +1,7 @@
 package config
 
+import "github.com/maimuzo/continuo/internal/i18n"
+
 // DefaultConfig は front matter に書かれなかったキーへ入る既定値を返す。
 // front matter のパースはこの構造体へ上書きする形で行う（yaml.UnmarshalWithOptions は
 // 与えられた値へフィールド単位で上書きするため、front matter に書かれなかったキーは
@@ -131,6 +133,9 @@ func DefaultConfig() *Config {
 		Trust: TrustConfig{
 			RequireRepoTrusted: true,
 			OnUntrusted:        "skip_and_comment",
+			// **既定は空である。**`continuo trust` は列挙されたものしか登録しないので、
+			// 何も書かなければ何も登録しない（3-33）。
+			Repositories: []string{},
 		},
 		Restart: RestartConfig{
 			OrphanRunningAction: "redispatch",
@@ -141,6 +146,8 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			Port: nil,
 		},
+		// **既定は "auto" である。**環境変数 LANG から決め、決まらなければ日本語にする（3-35）。
+		Language: i18n.LangConfigAuto,
 	}
 }
 

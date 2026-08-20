@@ -108,8 +108,21 @@ query($statusField: String!, $ids: [ID!]!) {
 // bootstrapQueryTemplate は起動時の検査（Bootstrap）が使うクエリである。
 // project の ID・Status フィールドの ID・各選択肢の ID と名前を1リクエストで取る
 // （設計 3-6 / 2-2: 「選択肢名の照合と同じリクエストで取れる」）。
+//
+// **同じリクエストで「status_field を絞り込みのキーとして使えるか」も測る。**
+// `field(name:)` が返ることは「フィールドが在る」ことしか示さない。`items(query:)` の
+// キーとして解決できるかは別問題であり、解決できなくても GraphQL はエラーを出さない
+// （3-34）。そこで item の件数を3つ取り、下の対応で判定する（judgeFilterKeyUsable）。
+//
+//	totalItems         全件
+//	itemsWithStatus    `-no:"<status_field>"`（値が入っている件数）
+//	itemsWithoutStatus `no:"<status_field>"`（値が空の件数）
+//
+// **`first: 0` を渡して node を1件も要求しない。**件数だけが要るので、
+// GraphQL の点数計算（設計 3-31）にほとんど乗らない
+// （2026-08-20 に project #3 への読み取り専用クエリで `first: 0` が通ることを実測）。
 const bootstrapQueryTemplate = `
-query($login: String!, $number: Int!, $statusField: String!) {
+query($login: String!, $number: Int!, $statusField: String!, $withStatusQuery: String!, $withoutStatusQuery: String!) {
   repositoryOwner(login: $login) {
     ... on ProjectV2Owner {
       projectV2(number: $number) {
@@ -121,6 +134,9 @@ query($login: String!, $number: Int!, $statusField: String!) {
             options { id name }
           }
         }
+        totalItems: items(first: 0) { totalCount }
+        itemsWithStatus: items(first: 0, query: $withStatusQuery) { totalCount }
+        itemsWithoutStatus: items(first: 0, query: $withoutStatusQuery) { totalCount }
       }
     }
   }
@@ -327,9 +343,19 @@ type rawStatusField struct {
 	Options  []rawOption `json:"options"`
 }
 
+// rawItemCount は件数だけを取る items 接続の応答である。
+type rawItemCount struct {
+	TotalCount int `json:"totalCount"`
+}
+
 type rawProjectForBootstrap struct {
 	ID    string          `json:"id"`
 	Field *rawStatusField `json:"field"`
+	// 以下の3つは絞り込みキーの検査に使う（judgeFilterKeyUsable）。
+	// **ポインタにしてある。**応答に含まれていなければ nil になり、検査を飛ばせる。
+	TotalItems         *rawItemCount `json:"totalItems"`
+	ItemsWithStatus    *rawItemCount `json:"itemsWithStatus"`
+	ItemsWithoutStatus *rawItemCount `json:"itemsWithoutStatus"`
 }
 
 type rawRepositoryOwnerForBootstrap struct {
@@ -382,15 +408,33 @@ type addCommentResponse struct {
 // buildStatusSearchQuery は active_states / terminal_states の一覧から、
 // `items(query:)` に渡す検索クエリ文字列を組み立てる。
 //
-// GitHub Projects の検索構文は、同じキーの複数の値を1つの `status:` に
-// カンマ区切りで並べると OR として扱う（`status:"A","B"` で A または B。
-// `status:"A" status:"B"` と別々に書くと AND になり0件になる。
-// 2026-08-18 に project #3 への読み取り専用クエリで実測確認済み）。
+// **キーは `status:` 決め打ちではなく、tracker.provider.status_field の値を使う。**
+// 決め打ちにすると、専用フィールド（例: `continuo Status`）を設定していても
+// 組み込みの `Status` を絞り込んでしまう。しかも**その失敗は無言である**
+// （下記の実測。設計 3-34）。
 //
+// **キーはダブルクオートで囲む。空白を含むフィールド名はこれで使える。**
+// 2026-08-20 に project #3（105件）への読み取り専用クエリで実測した結果は次のとおり。
+//
+//	"status":"Ice Box"            → 93件（引用符付きのキーは値付きの絞り込みでも通る）
+//	'status':'Ice Box'            →  0件（**シングルクオートはキーには使えない**）
+//	-no:"parent issue" / no:…     →  0件 / 105件（**空白入りの名前は引用符付きなら通る**）
+//	no:parent issue               →  0件（引用符なしはクエリごと壊れる）
+//	-no:parentissue               → 105件（空白を詰めた綴りは別名として扱われず、無視される）
+//	-no:"parent  issue"           → 105件（空白の数まで一致していないと通らない）
+//	STATUS:"ice BOX"              → 93件（キーも値も大文字小文字を区別しない）
+//	nosuchfield:"Ready"           →  0件（**存在しないキーはエラーにならず0件を返す**）
+//
+// 同じキーの複数の値をカンマ区切りで並べると OR になる（`"status":"A","B"` で A または B）。
+// **キーを分けて書くと AND になり0件になる**（`status:"Done" status:"In Review"` → 0件）。
+// **カンマは引用符の中では区切りにならない**（`status:"Done,In Review"` → 0件）ので、
+// 選択肢名にカンマが含まれていても OR に化けない。
+//
+// statusField: 絞り込みのキーにするフィールド名（tracker.provider.status_field）。
 // states: 対象にする Status 名の一覧。
-// 戻り値: `status:"A","B",...` の形の検索クエリ文字列。states が空なら空文字を返す
+// 戻り値: `"<statusField>":"A","B",...` の形の検索クエリ文字列。states が空なら空文字を返す
 // （呼び出し側は states が空の時点でリクエストを送らないため、実際には呼ばれない）。
-func buildStatusSearchQuery(states []string) string {
+func buildStatusSearchQuery(statusField string, states []string) string {
 	if len(states) == 0 {
 		return ""
 	}
@@ -398,7 +442,57 @@ func buildStatusSearchQuery(states []string) string {
 	for i, s := range states {
 		quoted[i] = quoteSearchValue(s)
 	}
-	return "status:" + strings.Join(quoted, ",")
+	return quoteSearchKey(statusField) + ":" + strings.Join(quoted, ",")
+}
+
+// buildHasFieldQuery は「そのフィールドに値が入っている item」を選ぶ検索クエリを組み立てる
+// （`-no:"<field>"`）。絞り込みキーの検査にだけ使う（judgeFilterKeyUsable）。
+func buildHasFieldQuery(field string) string {
+	return "-no:" + quoteSearchKey(field)
+}
+
+// buildNoFieldQuery は「そのフィールドの値が空の item」を選ぶ検索クエリを組み立てる
+// （`no:"<field>"`）。絞り込みキーの検査にだけ使う（judgeFilterKeyUsable）。
+func buildNoFieldQuery(field string) string {
+	return "no:" + quoteSearchKey(field)
+}
+
+// judgeFilterKeyUsable は Bootstrap で数えた3つの件数から、status_field を
+// `items(query:)` のキーとして使えているかを判定する。
+//
+// **判定の理屈。**GitHub は知らないキーを見ると、その条件ごと無かったことにする。
+// `no:` と `-no:` は本来たがいに排他なので、キーを解決できていれば
+// 「値がある件数」＋「値が空の件数」＝「全件」になる。解決できていなければ
+// どちらも全件を返す。2026-08-20 に project #3（全105件）で実測した値は次のとおり。
+//
+//	-no:"status"        → 100件、no:"status"        →   5件（合計105。解決できている）
+//	-no:"nosuchfield"   → 105件、no:"nosuchfield"   → 105件（どちらも全件。解決できていない）
+//
+// **判定は「両方が全件と一致するか」だけで行い、合計との差では見ない。**
+// 数えている最中に人間がボードへ item を足すと合計が1件ずれることがあり、
+// 差で見ると誤検知する。両方が全件に一致するのは、解決できていない場合だけである
+// （解決できていて全件に値が入っているなら、空の件数は0になる）。
+//
+// total: ボード上の item の全件数。
+// withValue: `-no:"<status_field>"` の件数。
+// withoutValue: `no:"<status_field>"` の件数。
+// 戻り値: 絞り込みのキーとして使えていれば true。
+// **全件が0（item が1件も無いボード）のときは判定できないので true を返す。**
+func judgeFilterKeyUsable(total, withValue, withoutValue int) bool {
+	if total <= 0 {
+		return true
+	}
+	return !(withValue == total && withoutValue == total)
+}
+
+// quoteSearchKey は GitHub Projects の検索構文向けに、フィールド名を絞り込みのキーとして
+// 書ける形（ダブルクオート囲み）にする。
+//
+// **シングルクオートではなくダブルクオートを使う。**値はどちらでも通るが、
+// キーはダブルクオートでないと解決されない（`'status':'Ice Box'` は0件。
+// 2026-08-20 に project #3 で実測）。
+func quoteSearchKey(s string) string {
+	return quoteSearchValue(s)
 }
 
 // quoteSearchValue は GitHub Projects の検索構文向けに値をダブルクオートで囲む。

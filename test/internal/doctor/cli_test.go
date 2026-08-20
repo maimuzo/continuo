@@ -105,8 +105,10 @@ func TestDoctorCLI_前提が揃っていれば7項目を出して終了コード
 	out, code := runDoctorBinary(t, fx, bin)
 
 	for _, label := range wantLabels {
-		if !strings.Contains(out, label) {
-			t.Fatalf("見出し語 %q が出力に無い:\n%s", label, out)
+		// **キーではなく、実際に画面へ出る語を探す**（設計 3-35）。
+		text := doctor.LabelText(label)
+		if !strings.Contains(out, text) {
+			t.Fatalf("見出し語 %q が出力に無い:\n%s", text, out)
 		}
 	}
 	if strings.Contains(out, "✗") || strings.Contains(out, "!") {
@@ -202,7 +204,7 @@ func TestDoctorCLI_接続先がループバック以外のhttpなら検査せず
 	if !strings.Contains(out, "https") {
 		t.Fatalf("https を求める文言が出ていない:\n%s", out)
 	}
-	if strings.Contains(out, doctor.LabelBoard) {
+	if strings.Contains(out, doctor.LabelText(doctor.LabelBoard)) {
 		t.Fatalf("接続先が不正なのに検査を始めている:\n%s", out)
 	}
 }

@@ -162,12 +162,16 @@
 - 3-30 並び順は人間が決める。continuo は読むだけである
 - 3-31 GitHub の GraphQL のレートリミットに収める
 - 3-32 使い始めるまでの手順
+- 3-32b Windows ネイティブは対応しない
+- 3-33 信頼の登録は、人間が列挙したものだけを対象にする
+- 3-34 ボードは既存のものに合わせる
+- 3-35 画面に出す文言は資源から引く
 
 **4. 人間が決めたこと**
 
 - 4-1 Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す
 - 4-2 実行順序 — ボードの並び順は使えるが、ボードの設定変更が前提になる
-- 4-3 `~/.claude.json` は書き換えない
+- 4-3 `~/.claude.json` を常駐ループから書き換えない
 - 4-4 board view の並び順は人間がドラッグで決める
 
 **5. 設定ファイル**
@@ -554,7 +558,17 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 
 ### 2-5. Go の実装スタック
 
-**外部依存は YAML パーサ1本だけにできる。**残りは標準ライブラリで足りる。
+**外部依存を増やすことを禁じない。ただし、標準ライブラリで足りるものは標準ライブラリを使う。**
+
+**いまの依存は YAML パーサ1本だけである**（2026-08-20 時点）。これは結果であって上限ではない。
+**必要なら足してよい。**足すときは次を見て決める。
+
+| 見るところ | なぜ |
+| --- | --- |
+| **標準ライブラリで書けるか** | 書けるなら書く。15行で済むものにライブラリを足さない |
+| そのライブラリ自身の依存 | 推移的に増えるものまで数える |
+| 保守されているか | archive 済み・更新が止まっているものを避ける |
+| ライセンス | このリポジトリは MIT である |
 
 | 用途 | 決定 | 理由 |
 | --- | --- | --- |
@@ -1329,7 +1343,7 @@ terminal_states: ["Done"]
 | — **止まらないことと、人間に判断を仰ぐことは別である** | **権限で拒否されたり、判断に迷ったりしたら、エージェントは `CONTINUO-STATUS: blocked` を出す**（3-25）。continuo はそれを受けて Status を `Blocked` へ動かし、**人間に渡す。**「絶対に止まらない」とは「**キー入力を待って固まらない**」という意味であって、「人間の判断を仰がない」という意味ではない |
 | — なぜ `auto` では駄目か | **`auto` は「背後の安全確認つきで自動承認する」モードであって、拒否しないモードではない**（下記の原文）。**判定器がブロックすれば人間の承認待ちになり、無人運用が止まる。**起動フラグは設定ファイルより優先されるので、利用者の設定が `auto` でも上書きできる |
 | — `dontAsk` で実行できるもの | **3つだけ。**(1) `permissions.allow` に一致する操作、(2) 組み込みの読み取り専用 Bash コマンド、(3) `PreToolUse` hook が allow を返した呼び出し。**`AskUserQuestion` ツールも拒否される**ので、エージェント側から人間に質問して止まる経路が塞がれる |
-| **フォルダの信頼確認** | **リポジトリごとに人間が1度だけ承認しておく。**continuo は **dispatch の直前に issue ごとに**「承認済みか」を `~/.claude.json` から**読み取って**検査し、未承認ならその issue を飛ばす。**起動そのものは止めない**（3-6）。**書き換えはしない**（4-3 で実測により決着） |
+| **フォルダの信頼確認** | **リポジトリごとに人間が1度だけ承認しておく。**continuo は **dispatch の直前に issue ごとに**「承認済みか」を `~/.claude.json` から**読み取って**検査し、未承認ならその issue を飛ばす。**起動そのものは止めない**（3-6）。**巡回のループは書き換えない**（4-3）。**登録は `continuo trust` を人間が叩いたときだけ行う**（3-33） |
 | **レートリミット** | **`CLAUDE_CODE_RETRY_WATCHDOG=1` を環境変数で渡す。**公式ドキュメントが「リセット時刻まで待って自動的に再開する」と書いている（3-27 に原文）。**これは turn の途中で `429` が返ったときの API リクエストのリトライである** |
 | — **2.1.234 で入った別の仕組み** | **`Continue automatically at usage limit`（`/config` の項目名）。**枠でセッションが止まったあと、リセット時に**セッションを継続する。既定で有効である**（3-27）。**リトライとは別物なので、両方が効く** |
 | — その副作用 | **待っている間 pane は生きたままである。**continuo の stall 検知がこれを異常とみなして殺さないよう、レートリミットで待機中であることを別途判定する必要がある |
@@ -2820,8 +2834,21 @@ README には「何が要るか」だけを書き、**「揃っているか」�
 continuo doctor        # 前提が揃っているかを検査する。足りないものと直し方を出す
 continuo init          # WORKFLOW.md の雛形を置く。既にあれば止める（--force で上書き）
                        # owner と project_number は gh から引いて自動で埋める
+                       # trust.repositories はボードに載っているリポジトリを並べる（3-33）
                        # --owner=<名前>   gh を叩かずにこの値を使う
                        # --project=<番号> gh を叩かずにこの値を使う
+continuo setup         # 既にあるボードの Status の選択肢を、continuo の5つの役割へ割り当てて
+                       # WORKFLOW.md を書く。**標準入力を握るのはこのサブコマンドだけである**
+                       # 役割の説明を先に出し、選択肢を番号付きで並べて番号で選ばせる
+                       # 番号 0 は「この役割に使える選択肢がボードに無い」の入力。入ったら打ち切る
+                       # 選択肢が5個未満なら、尋ねる前に止める。Ctrl+C で中断できる
+                       # ボードは読むだけである（gh project field-list）。選択肢は足さない
+                       # --force          既に WORKFLOW.md があっても上書きする
+                       # --owner=<名前>   gh を叩かずにこの値を使う
+                       # --project=<番号> gh を叩かずにこの値を使う
+                       # --status-field=<名前> Status の single-select フィールドの名前（既定 Status）
+continuo trust         # trust.repositories に列挙されたリポジトリの信頼を ~/.claude.json へ登録する（3-33）
+                       # --dry-run  何が要求されているかを出すだけで、書き換えない
 continuo               # 常駐する（WORKFLOW.md を読んで巡回を始める）
                        # --log-level=debug|info|warn|error（既定 info）
                        # --port=<番号>  ダッシュボードのポート。server.port を上書きする（仕様 13.7）。
@@ -2986,80 +3013,314 @@ WORKFLOW.md の tracker.provider.owner がプレースホルダ（__FILL_ME__）
 **README に書くこと。**「何が要るか」の一覧と、`continuo doctor` を実行しろという案内だけ。
 **個々の検査手順は書かない。**書くと doctor と二重管理になり、片方だけ古くなる。
 
+#### `continuo setup` は既にあるボードの Status を5つの役割へ割り当てる
+
+**言いたいこと。****対話するコマンドはこれ1つだけである。**`continuo init` を対話にしないと決めた
+（標準入力を握ると自動で叩く経路が止まる）ので、対話を別のサブコマンドへ切り出した。
+仕様は [docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md](../spec/usecases/particular_case/既存のボードの%20Status%20を割り当てる.rucm.md) が正である。
+
+**尋ねる5つの役割。****役割の名前より先に「continuo がその Status で何をするか」を出す。**
+初見の利用者は、どの Status がどの役割かを知らない。
+
+| 役割 | 画面に出す説明 | WORKFLOW.md に書くキー |
+| --- | --- | --- |
+| 着手待ち | continuo はここから issue を取ります | `dispatch_state`、`active_states` の1つめ |
+| 作業中 | continuo は issue を取ったときにここへ動かします | `running_state`、`active_states` の2つめ |
+| レビュー待ち | エージェントが終わったと表明したらここへ動かします | `status_signal_map.review` |
+| 保留 | エージェントが判断を仰ぐとき、打ち切ったときにここへ動かします | `failure_state`、`status_signal_map.blocked` |
+| 完了 | 人間がここへ動かすと continuo が worktree と branch を片付けます | `terminal_states` の1つめ |
+
+**書き出す先は `<ディレクトリ>/WORKFLOW.md` の1ファイルだけである。**書き出すのは
+`scaffold.WriteTemplateWithValues`（`continuo init` と同じ関数）で、割り当てを渡すと
+front matter の7行が次の形になる。
+
+```yaml
+  status_signal_map:                        # その1行に書かれた値と、書き込む Status の対応
+    review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき
+    blocked: "Blocked"                      # 判断を仰ぎたいとき、または失敗したとき
+  active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
+  terminal_states: ["Done"]                 # 終わったとみなす Status。ここへ移った issue の worktree を片付ける
+  running_state: "In Progress"              # エージェントを起動したときに書き込む Status
+  dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
+  failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
+```
+
+**止まる場所と、そのときの直し方。**
+
+| 何が起きたか | どうするか |
+| --- | --- |
+| WORKFLOW.md が既にある | `--force` を案内して打ち切る。**役割を1つも尋ねない**（gh も叩かない） |
+| 選択肢が5個未満 | **尋ねる前に**止め、GitHub の画面から足す手順を出す |
+| 番号 `0` が入った | その役割へ渡せる選択肢が無いという表明。打ち切る。途中まで選んだ番号は保存しない |
+| 同じ選択肢を2つの役割へ | **打ち切らない。**衝突した役割の名前を出して、同じ役割を尋ね直す |
+| Ctrl+C | 割り当てを保存しないことを応答して終わる。WORKFLOW.md は書かない |
+
+**選択肢は足さない。**足りないときは GitHub の画面から足すよう案内する。
+**`updateProjectV2Field` を呼ばない**（選択肢の指定は全件の置き換えとして扱われ、
+設定済みの Status が全部消える）。この警告は案内の中に必ず出す。
+
 ---
 
-### 3-33. 信頼の登録を自動化しない
+### 3-32b. Windows ネイティブは対応しない
 
-**言いたいこと。**技術的には自動化できる。**それでも採らない。**
-**信頼のダイアログは「リポジトリの中の設定が勝手に動かない」ための安全機構であり、
-continuo がそれを一括で外してよい理由が無い。**
+**言いたいこと。**対応するのは **macOS と Linux（WSL2 上の Ubuntu を含む）**だけである。
+**Windows ネイティブは外す。**土台の herdr の Windows 版がベータで、continuo が使う前提を満たさない。
 
-**採らない案。**`continuo doctor --trust-repos` のようなコマンドで、
-ボードから引いた対象リポジトリの `~/.claude.json` の
-`projects["<パス>"].hasTrustDialogAccepted` を一括で `true` にする。
+**外す理由。**
 
-**技術的には可能である。**公式ドキュメントがその手順を案内している（4-3 に原文）。
-
-**それでも採らない理由。**
-
-| 何が起きるか | なぜ問題か |
+| 何が | どうなっているか |
 | --- | --- |
-| **ボードに載っているだけのリポジトリを、人間が中身を見ずに信頼する** | 信頼すると、そのリポジトリの `.claude/settings.json` の `permissions.allow` と `additionalDirectories` が効く。**リポジトリ側が権限を要求できる**（`permissions.md`）|
-| **ボードは他人が編集できる** | issue を足せる人は、対象リポジトリの集合を変えられる。**そこに任意のリポジトリを混ぜられる** |
-| continuo は無人で回る | **混ざったことに人間が気づく契機が無い** |
+| **herdr の Windows 版** | **ベータであり、「Unix の foreground process group」を非対応と明記している。**continuo は worktree の後始末でプロセスグループを使う |
+| **herdr との通信路** | **Windows では Unix domain socket ではなく named pipe である。**continuo は生の socket クライアント（`net.Dial("unix", …)`）なので、そのままでは繋がらない |
+| Go 標準ライブラリ | **named pipe の口が無い。**対応するには外部依存が要る（2-5 は依存を禁じていないが、herdr 側がベータである以上、依存を増やしてまで追う段階ではない） |
 
-**ダイアログは「1リポジトリずつ人間が見る」ための仕組みである。**
-**それを一括で外すのは、仕組みの目的そのものを壊す。**
+**ビルドも通らない。**2026-08-19 に実測した。
 
-**採る形。人間が対象リポジトリごとに1度だけ承認する。**
-`continuo doctor` が未承認のものを名指しで出すので、何を承認すればよいかは分かる（3-32）。
+```text
+$ GOOS=windows GOARCH=amd64 go build ./...
+internal/lock/lock.go:46:20:       undefined: syscall.Flock
+internal/scaffold/scaffold.go:114: undefined: syscall.O_NOFOLLOW
+internal/workspace/output.go:91:   cmd.SysProcAttr.Setpgid undefined
+internal/workspace/output.go:105:  undefined: syscall.Kill
+```
 
-> **将来これを入れるなら、次を満たすこと。**
-> 人間が**リポジトリ名を明示的に列挙**して渡す形にする（ボードから自動で集めない）。
-> `--dry-run` を既定にする。`~/.claude.json` のバックアップを取る。
-> **そのうえで、利用者がその危うさを理解していることを前提にする。**
+**`GOOS=linux GOARCH=arm64` は通る。**
 
-### 3-34. ボードは専用フィールドで作る
+**Windows で使いたい利用者は WSL2 を使う。**WSL2 の中では Linux と完全に同じ手順であり、
+**前段に「WSL2 を入れる」が1つ増えるだけ**である。手順書を OS ごとに分ける必要は無い。
 
-**言いたいこと。**既定の `Status` に選択肢を足すと**画面作業が必ず要る。**
-**continuo 専用の single-select フィールドを新しく1本作れば、コマンドだけで完結する。**
+**将来これを見直す条件。**herdr の Windows 版がベータを抜け、
+プロセスグループの扱いが Unix と揃うこと。**その前に continuo 側を直しても、土台が揺れている。**
 
-**根拠。既存フィールドに選択肢を足す API は `updateProjectV2Field` しか無い。**
-GraphQL の ProjectV2 系 mutation 32個と Projects の REST API を全件確認した（2026-08-19）。
-**その API は禁止している**（選択肢の指定が全件置き換えになり、設定済みの値が全部消える。4-2）。
-GitHub 公式ドキュメントにも「既にある single-select フィールドに選択肢を足す」手順は無い。
+### 3-33. 信頼の登録は、人間が列挙したものだけを対象にする
+
+**言いたいこと。**`continuo trust` が `~/.claude.json` に信頼を書き込む。
+**対象は `trust.repositories` に人間が書いたものだけである。ボードから自動で集めて登録しない。**
+書き込む前に、そのリポジトリが何を要求しているかを見せる。
+
+**採る形。次の3つをすべて満たすときだけ書き込む。**
+
+| 条件 | 何をするか |
+| --- | --- |
+| **列挙されたものだけを対象にする** | `WORKFLOW.md` の `trust.repositories` に書かれた `owner/repo` だけ。**ボードから拾った一覧をそのまま登録しない** |
+| **要求内容を見せる** | `continuo trust --dry-run` が、対象の `.claude/settings.json` の `permissions.allow` と `permissions.additionalDirectories`、`.mcp.json` の MCP サーバーを出す |
+| **元に戻せるようにする** | 書き込む前に `~/.claude.json.continuo-backup-<RFC3339>` へ写しを取る。**消さない** |
+
+**なぜ列挙が要るか。ボードは他人が編集できる。**issue を足せる人は、ボードに載るリポジトリの
+集合を変えられる。**そこから自動で登録すると、issue を足せる人が「continuo に信頼させる
+リポジトリ」を増やせてしまう。**`continuo init` はボードから拾った一覧を `WORKFLOW.md` に
+**並べるだけ**で、**要らない行を消すのは人間である。**
+
+**なぜ `--dry-run` が要るか。**信頼すると、そのリポジトリの `.claude/settings.json` の
+`permissions.allow` と `permissions.additionalDirectories` が効き、`.mcp.json` の
+MCP サーバーが使えるようになる（`permissions.md`）。**信頼のダイアログはこれを人間に
+見せるための仕組みである。**一括で登録するとその機会が消えるので、**`--dry-run` を
+ダイアログの代わりに置く。**登録するときも、同じ一覧を書き込みの前に出す。
+
+**巡回のループはこの経路を持たない**（4-3）。dispatch の直前の検査は読むだけのままである。
+
+**書き込みで守ること。**
+
+| 守ること | なぜ |
+| --- | --- |
+| **書き込みの直前にもう一度読み直す** | 起動中の Claude Code のセッションが同じファイルを書き戻している。表示のために読んだ内容で上書きすると、その間の変更が消える |
+| **形が想定と違ったら1バイトも書かない** | トップレベル・`projects`・その要素がオブジェクトでなく、`hasTrustDialogAccepted` が真偽値でなければ止める。**読めない形のまま書き戻すと全設定を失う** |
+| **既に `true` のものは触らない** | 変える項目が1つも無ければ、バックアップも書き込みもしない |
+| **他のリポジトリの記述を1つも変えない** | 値は生のバイト列のまま持ち回し、キーの並び順も保つ。触るのは対象の `hasTrustDialogAccepted` だけ |
+| **一時ファイルへ書いてから `os.Rename` で置き換える** | 途中で落ちても壊れた中身が残らない。**元のファイルの権限（0600）を引き継ぐ** |
+| **`~/.claude.json` が無ければ作らずに止める** | Claude Code を一度も起動していない機械で先にこれを作ると、初回の設定を済ませたものとして扱われうる |
+| **書いたあとに、巡回のループと同じ関数で読み直して確かめる** | 信頼の鍵の作り方がずれていると「登録したのに効かない」が静かに起きる |
+
+**採らなかった案。**`continuo doctor --trust-repos` で、ボードから引いた対象リポジトリを
+一括で登録する。**ボードに載っているだけのリポジトリを、人間が中身を見ずに信頼することになる。**
+上の3つの条件のうち、列挙も `--dry-run` も満たさない。
+
+#### `continuo trust` が読み書きするもの
+
+**読むもの。**対象1件につき3つ。
+
+| パス | 何を読むか |
+| --- | --- |
+| `<clone>/.claude/settings.json` | `permissions.allow` と `permissions.additionalDirectories` |
+| `<clone>/.mcp.json` | `mcpServers` の名前と、起動する `command` / `url` |
+| `~/.claude.json` | `projects["<鍵>"].hasTrustDialogAccepted`（いまの状態） |
+
+**`<clone>` は `ghq list -p -e <owner>/<repo>` が返したパスである。**鍵は
+`git -C <clone> rev-parse --path-format=absolute --show-toplevel` の出力である（3-6）。
+**設定ファイルが symlink なら中身を読まずに知らせる。**リポジトリの外にあるものを
+「このリポジトリの要求内容」として見せてはならない。
+
+**書くもの。**`~/.claude.json` の中の、対象の1キーだけ。実際に増える差分は次の形である。
+
+```json
+  "projects": {
+    "~/ghq/github.com/<owner>/<repo>": {   // 実際には ~ を展開した絶対パスが入る
+      "hasTrustDialogAccepted": true
+    }
+  }
+```
+
+**バックアップ。**`~/.claude.json.continuo-backup-2026-08-20T14:06:12+09:00` に、
+書き換える前の中身をそのまま置く（0600）。**continuo は作るだけで、消すのは人間である。**
+
+**誰がいつ書くか。**`continuo trust` を人間が叩いたときだけ。**巡回のループは一度も書かない。**
+
+### 3-34. ボードは既存のものに合わせる
+
+**言いたいこと。**ボードを新しく作る手順は、主たる道ではない。
+**continuo は「既にあるボード」に後から足して使うものである。**
+**`status_field` に書いた名前のフィールドを、絞り込み・読み取り・書き込みのすべてで使う。
+空白を含む名前（`continuo Status`）でもよい。**
+
+**実測（2026-08-19）。本番の project #3 は、既定の設定のままで動く。**
+
+```text
+$ gh project field-list 3 --owner maimuzo --format json
+Status: ['Ice Box', 'Ready', 'In Progress', 'Blocked', 'In Review', 'Done']
+```
+
+**既定の設定が実在を求める5つ**（`Ready` / `In Progress` / `Blocked` / `In Review` / `Done`）が**全部ある。**
+**ボードを作る手順も、選択肢を足す作業も要らない。**
+
+#### 専用フィールドを使ってよい — 絞り込みも `status_field` を見る
+
+**`items(query:)` のキーは `status_field` の値をダブルクオートで囲んで組み立てる。**
+
+```go
+// internal/tracker/query.go
+func buildStatusSearchQuery(statusField string, states []string) string {
+	…
+	return quoteSearchKey(statusField) + ":" + strings.Join(quoted, ",")
+}
+```
+
+| 処理 | 何を見るか |
+| --- | --- |
+| Bootstrap（選択肢の照合） | `field(name: $statusField)` |
+| 候補の絞り込み | **`items(query:)` のキーに `status_field` を引用符で囲んで置く** |
+| 候補の値の読み取り | `fieldValueByName(name: $statusField)` |
+
+**空白を含むフィールド名は、引用符で囲めばキーにできる。**
+2026-08-20 に project #3（全105件）への読み取り専用クエリで実測した。
+
+| 書き方 | 返った件数 | 意味 |
+| --- | --- | --- |
+| `"status":"Ice Box"` | 93 | 引用符付きのキーは値付きの絞り込みで通る |
+| `'status':'Ice Box'` | 0 | **シングルクオートはキーには使えない**（値なら通る） |
+| `-no:"parent issue"` | 0 | **空白入りの名前は引用符付きなら解決される** |
+| `no:parent issue` | 0 | 引用符なしはクエリごと壊れる |
+| `-no:parentissue` | 105 | 空白を詰めた綴りは別名にならず、条件ごと無視される |
+| `STATUS:"ice BOX"` | 93 | キーも値も大文字小文字を区別しない |
+| `nosuchfield:"Ready"` | 0 | **知らないキーはエラーにならず0件を返す** |
+
+#### 無言の失敗を検知する2段構え
+
+**フィールドが在ることと、絞り込みのキーにできることは別である。**
+`field(name:)` が返っても `items(query:)` が名前を解決できるとは限らず、
+解決できないとき GitHub はエラーを出さずに **0件**を返す。そのままでは
+「対象が無い」と見分けが付かず、キューが無言で永久に止まる。
+
+| 段 | いつ | 何を見るか | 落ちたときの扱い |
+| --- | --- | --- | --- |
+| **起動時の件数検査** | Bootstrap の同じ1リクエスト | `no:` と `-no:` の件数 | `CategoryInvalidConfig` で起動を止める |
+| **結果の検算** | 候補を取るたび | 返った item の Status | `CategoryResponse` でその巡回を落とす |
+
+**件数検査の理屈。**知らないキーは条件ごと無視されるので `no:` と `-no:` が
+**両方とも全件**を返す。解決できていれば両者は排他で、合計が全件になる。
+
+```text
+-no:"status"      → 100件   no:"status"      →   5件（合計105。解決できている）
+-no:"nosuchfield" → 105件   no:"nosuchfield" → 105件（両方が全件。解決できていない）
+```
+
+**判定は「両方が全件と一致するか」だけで行い、合計との差では見ない。**
+数えている最中に人間がボードへ item を足すと合計が1件ずれ、差で見ると誤検知する。
+**item が0件のボードでは判定できないので検査を飛ばす。**
+**巡回ごとの検査（`VerifyStatusOptions`）ではこの判定をしない。**設定は実行中に変わらず、
+フィールドの改名は `field(name:)` が見つからないことで捕まるためである。
+
+**件数は `items(first: 0)` で取る。**node を1件も要求しないので、
+GraphQL の点数計算（3-31）にほとんど乗らない。
+
+#### 使い方ごとの用意
+
+| 使い方 | ボード | 用意すること |
+| --- | --- | --- |
+| **複数リポジトリを1枚に束ねる**（project #3 がこれ） | **既存を使う** | **何も要らない** |
+| 運用中のボードに後から足す | 既存を使う | 足りない選択肢を画面で足す |
+| 1つのリポジトリだけを回す | 既存を使う（無ければ新規1枚） | 同上 |
+| organization のボード | 既存を使う | `--owner <org>` を指定する |
+| **使い捨ての検証** | 新規に作る | 下記 |
+
+#### 新規に作る場合
+
+**組み込みの `Status` は `Todo` / `In Progress` / `Done` の3つで始まる。**
+`Ready` / `Blocked` / `In Review` が足りない。**選択肢を足す API は `updateProjectV2Field` だけで、
+それは禁止している**（4-2）。したがって次の2つのどちらかを採る。
+
+| 道 | 何をするか | 画面の作業 |
+| --- | --- | --- |
+| **設定を縮める** | `active_states: ["Todo","In Progress"]` / `dispatch_state: "Todo"` にする | **無し** |
+| 選択肢を足す | `⋯` → `Settings` → `Status` → `+ Add option` を3回 | 毎回 |
+
+**`gh project copy` で雛形を複製する道もある。**ただし
+「組み込みの `Status` を編集した選択肢がコピーされるか」は確かめていない。
+
+### 3-35. 画面に出す文言は資源から引く
+
+**言いたいこと。**日本語を読めない人が使えるようにするため、**continuo 全体を多言語化する。**
+文言はコードに書かず `internal/i18n` の資源から引く。**日本語が正で、訳の無いキーは日本語へ落とす。**
+**外部ライブラリを入れず、書式は `fmt` のままにする。**
 
 **採る形。**
 
-```bash
-gh project create --owner @me --title "continuo" --format json --jq .number
-gh project field-create <番号> --owner @me --name "continuo Status" \
-  --data-type SINGLE_SELECT --single-select-options "Ready,In Progress,In Review,Blocked,Done"
-```
-
-**`--single-select-options` は「フィールドを新しく作るとき」にだけ効く**（`gh` 2.97.0 で確認）。
-だから**足すのではなく、作る。**
-
-**設定は既存のキーで足りる。実装を変えなくてよい。**
-
-```yaml
-tracker:
-  provider:
-    status_field: continuo Status     # 既定は Status。作ったフィールド名を書く
-```
-
-**既定の `Status` を使いたい場合は、画面から選択肢を足す**（`⋯` → `Settings` → `Status` → `+ Add option`）。
-**その手順は GitHub 公式ドキュメントに無いので、こちらで書くしかない。**
-
-**採らなかった案。**
-
-| 案 | 否定の理由 |
+| 何を | どうする |
 | --- | --- |
-| `updateProjectV2Field` に既存の option id を渡して安全に足す | **スキーマはそう主張しているが実測していない**（`ProjectV2SingleSelectFieldOptionInput.id` の説明）。使い捨てのボードで確かめるまで禁止を解かない |
-| project をテンプレート化して配る | **`markProjectV2AsTemplate` は organization 専用。**個人アカウントで使えない |
-| 雛形ボードを作って `gh project copy` で複製 | **使える。**ただし「最初の1枚をどう作るか」は結局この節の手順になる |
+| 資源の置き場所 | `internal/i18n/messages/ja.json`（正）と `messages/en.json`（**いまは空**）。`go:embed` で埋め込むのでバイナリ1つで配れる |
+| キーの宣言 | `internal/i18n/keys.go` の定数だけ。**呼ぶ側に文字列リテラルを書かない**（ダッシュボードの HTML だけは例外で、テンプレートにキーを書く） |
+| 引き方 | `i18n.T(key, args...)`（`fmt.Sprintf`）と `i18n.Errorf(key, args...)`（`fmt.Errorf`） |
+| 訳が無いとき | **日本語へ落とす。**生のキーは画面に出さない |
+| 日本語にも無いとき | 実装の誤りである。`i18n.Missing()` に控え、テストが落とす |
 
----
+**`golang.org/x/text/message` を採らない理由は3つある。**
+
+| 何が起きるか | なぜ困るか |
+| --- | --- |
+| `%d` を土地ごとの書式で出す（公式ドキュメント: "verb 'f', 'e', 'g', 'd' use localized formatting unless the '#' flag is specified" — 書式指定子 `f` `e` `g` `d` は `#` フラグを付けない限り土地ごとの書式になる） | `project #1234` が `project #1,234` になる |
+| `Errorf` が無い | `fmt.Errorf` の `%w` の連鎖が切れる。**continuo の `fmt.Errorf` は 301 箇所あり、`%w` は 240 箇所ある**（2026-08-20 に `grep -rn 'fmt\.Errorf(' internal cmd --include='*.go' \| wc -l` と `grep -ro '%w' internal cmd --include='*.go' \| wc -l` で計測） |
+| 訳が無いキーは生のキーが出る | 画面に `doctor.label.board` と出る |
+
+**言語の決め方は、設定が主・環境変数 `LANG` が従である。**
+
+| 順 | 何を見るか | 決まらなければ |
+| --- | --- | --- |
+| 1 | `WORKFLOW.md` の `language`（`ja` / `en`） | 次へ |
+| 2 | `language` が `auto` か未記入なら、環境変数 `LANG`（`ja_JP.UTF-8` → `ja`） | 日本語 |
+
+**`LC_ALL` と `LC_MESSAGES` は読まない。**設定で直接指定できるので、読む変数を増やすと
+どれが効いたのかを説明できなくなる。**資源の無い言語を `language` に書いたら起動を止める**
+（黙って日本語に落とすと、書いたつもりの設定が効いていないことに無人運用では気づけない）。
+
+**資源のサンプル**（`internal/i18n/messages/ja.json`。**AI が文言を足すときに書く**）。
+
+```json
+{
+  "doctor.label.board": "ボード",
+  "doctor.board.ok": "%s の project #%d を読めました（Status の選択肢は設定と一致。active_states の issue %d件／対象リポジトリ %d件）%s",
+  "cli.init.created": "WORKFLOW.md を作成しました: %s"
+}
+```
+
+**`messages/en.json` は `{}` である。**英語の訳文は**日本語版が固まってから**作る。
+それまで英語を選んでも、画面には日本語が出る。
+
+**言語を決める場所は `cmd/continuo` の2箇所である。**`run` が起動直後に環境変数から決め、
+設定を読めた時点で `useLanguageFromConfig` が設定の値で決め直す。**設定を読めなくても止めない**
+（読めないこと自体は各サブコマンドが自分の文言で報告する）。
+
+**いま資源へ移してあるのは画面に出す文言だけである。**`continuo doctor` の検査結果・CLI の
+案内とフラグの説明・ダッシュボードの HTML の3つで、合計 156 件（doctor 79 / CLI 50 /
+ダッシュボード 27）。**エラーとログは移していない。**同じ `T` / `Errorf` で移せる形にしてある。
 
 ## 4. 人間が決めたこと
 
@@ -3282,7 +3543,7 @@ stateDiagram-v2
 
 | 決定 | 内容 |
 | --- | --- |
-| **`~/.claude.json` を書き換えない** | 常駐プロセスが利用者のグローバル設定を触るリスクを負わない |
+| **巡回のループは `~/.claude.json` を書き換えない** | 常駐プロセスが利用者のグローバル設定を触るリスクを負わない。**登録は `continuo trust` を人間が叩いたときだけ行う**（3-33） |
 | **dispatch の直前に、issue ごとに「対象リポジトリが信頼済みか」を検査する** | `~/.claude.json` の `projects` を**読み取って**確認する。**対象リポジトリの集合はボードを読むまで確定しないので、起動時には検査できない**（3-6） |
 | **未承認のリポジトリは dispatch しない** | 起動しても hook が働かず、完了検知が沈黙するため。**人間に知らせる**（ログと、必要なら issue のコメント） |
 | 人間が1度だけやること | **そのリポジトリで Claude Code を1回起動して信頼を承認する。**リポジトリごとに1回だけでよい |
@@ -3511,6 +3772,9 @@ rate_limit:
 trust:
   require_repo_trusted: true                # 信頼していないリポジトリではエージェントを起動しない
   on_untrusted: skip_and_comment            # 信頼していないときの扱い。その issue だけ飛ばし、issue にコメントを残す
+  repositories: []                          # continuo trust が信頼を登録してよいリポジトリ。owner/repo を1行ずつ書く。
+                                            # continuo init がボードから拾って並べるので、要らない行は消すこと。
+                                            # 巡回のループはここを読まない。continuo trust だけが読む
 
 restart:
   orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
@@ -3522,6 +3786,10 @@ runtime:
 server:
   port: null                                # 進み具合を見る HTTP ダッシュボードのポート。null なら起動しない。
                                             # 0 なら空いているポートを OS に選ばせる。--port を渡すとそちらが優先される
+
+# ===== 画面に出す言語 =====
+language: auto                              # 画面に出す文言の言語。auto なら環境変数 LANG から決める。
+                                            # ja と en を直接書いてもよい。訳の無い文言は日本語で出る
 ---
 ```
 
@@ -3530,7 +3798,7 @@ server:
 | 落としたキー | 理由 |
 | --- | --- |
 | `priority_field` / `priority_map` | **Priority を使わない**（4-2）。並び順だけで順序を決める |
-| `write_trust_entry` | `~/.claude.json` を書き換えないことが決着済み（4-3）。**このキーがあると、絶対制約を破る経路を設定で有効にできてしまう** |
+| `write_trust_entry` | **巡回のループは `~/.claude.json` を書き換えない**（4-3）。**このキーがあると、巡回中の書き換えを設定1つで有効にできてしまう。**登録は `continuo trust` を人間が叩いたときだけ行う（3-33） |
 | `restart.recover_from_pane_labels` | 復元は身元ファイルを主にする（3-18）ので、pane の label に依存する切り替えが要らなくなった |
 
 ### 5-3. 本文（プロンプトのテンプレート）

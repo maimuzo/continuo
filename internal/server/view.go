@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
@@ -171,17 +172,18 @@ func optionalTime(t time.Time) *time.Time {
 	return &t
 }
 
-// humanizeSince は時刻からの経過を日本語で書く。
+// humanizeSince は時刻からの経過を人間向けに書く。
 //
 // **「最後に hook を受けてから何秒経ったか」を、人間が一目で判断できる形にする。**
 // 絶対時刻だけだと、止まっているのかどうかを頭の中で引き算しないと分からない。
 //
 // t: 起点の時刻。ゼロ値なら「まだ受けていない」とみなす。
 // now: いまの時刻。
-// 戻り値: 「12秒前」「3分12秒前」「1時間5分前」など。ゼロ値なら「—」。
+// 戻り値: 「12秒前」「3分12秒前」「1時間5分前」など（文言は internal/i18n から引く。設計 3-35）。
+// ゼロ値なら「まだ無い」ことを表す印。
 func humanizeSince(t, now time.Time) string {
 	if t.IsZero() {
-		return "—"
+		return i18n.T(i18n.KeyDashboardNone)
 	}
 	d := now.Sub(t)
 	if d < 0 {
@@ -190,21 +192,21 @@ func humanizeSince(t, now time.Time) string {
 	}
 	switch {
 	case d < time.Minute:
-		return fmt.Sprintf("%d秒前", int(d.Seconds()))
+		return i18n.T(i18n.KeyDashboardAgoSeconds, int(d.Seconds()))
 	case d < time.Hour:
-		return fmt.Sprintf("%d分%d秒前", int(d.Minutes()), int(d.Seconds())%60)
+		return i18n.T(i18n.KeyDashboardAgoMinutes, int(d.Minutes()), int(d.Seconds())%60)
 	default:
-		return fmt.Sprintf("%d時間%d分前", int(d.Hours()), int(d.Minutes())%60)
+		return i18n.T(i18n.KeyDashboardAgoHours, int(d.Hours()), int(d.Minutes())%60)
 	}
 }
 
 // formatTime は時刻を表示用の文字列にする。
 //
 // t: 対象の時刻。nil なら「まだ無い」とみなす。
-// 戻り値: RFC3339 の文字列。nil なら「—」。
+// 戻り値: RFC3339 の文字列。nil なら「まだ無い」ことを表す印（設計 3-35）。
 func formatTime(t *time.Time) string {
 	if t == nil {
-		return "—"
+		return i18n.T(i18n.KeyDashboardNone)
 	}
 	return t.Format(time.RFC3339)
 }

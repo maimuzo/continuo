@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go fmt:*)",
+      "Bash(go mod:*)",
+      "Bash(go run:*)",
+      "Bash(gofmt:*)",
+      "Bash(make build:*)",
+      "Bash(make lint:*)",
+      "Bash(make test:*)",
+      "Bash(git add:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git mv:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue comment:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh label list:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run watch:*)",
+      "Bash(gh search:*)",
+      "Bash(gh project item-list:*)",
+      "Bash(gh project field-list:*)",
+      "Bash(gh project list:*)",
+      "Bash(gh auth status)",
+      "Bash(herdr:*)",
+      "Bash(curl:*)",
+      "Bash(echo:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(python3:*)",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(gh api * updateProjectV2Field *)",
+      "Bash(gh api * mutation *)",
+      "Bash(gh project field-create:*)",
+      "Bash(gh project field-delete:*)",
+      "Bash(gh project item-delete:*)",
+      "Bash(gh project item-archive:*)",
+      "Bash(gh project delete:*)",
+      "Bash(gh project edit:*)",
+      "Bash(gh issue delete:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(find * -delete *)",
+      "Bash(find * -exec rm *)",
+      "Bash(git worktree remove:*)",
+      "Bash(rm:*)"
+    ]
+  },
+  "enabledPlugins": {
+    "maimuzo-go@maimuzo-marketplace": true,
+    "maimuzo-dev-core@maimuzo-marketplace": true,
+    "maimuzo-issue-manage@maimuzo-marketplace": true,
+    "maimuzo-from-ecc@maimuzo-marketplace": true,
+    "maimuzo-cosper-team@maimuzo-marketplace": true,
+    "mattpocock-skills@mattpocock": true,
+    "everything-claude-code@everything-claude-code": true,
+    "codex@openai-codex": true,
+    "maimuzo-auto-debug@maimuzo-marketplace": true,
+    "maimuzo-pencil@maimuzo-marketplace": true,
+    "maimuzo-rucm@maimuzo-marketplace": true,
+    "maimuzo-naming@maimuzo-marketplace": true
+  },
+  "extraKnownMarketplaces": {
+    "maimuzo-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "maimuzo/maimuzo-claude-plugins"
+      },
+      "autoUpdate": true
+    },
+    "mattpocock": {
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills"
+      },
+      "autoUpdate": true
+    },
+    "everything-claude-code": {
+      "source": {
+        "source": "github",
+        "repo": "affaan-m/everything-claude-code"
+      },
+      "autoUpdate": true
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      },
+      "autoUpdate": true
+    }
+  }
+}

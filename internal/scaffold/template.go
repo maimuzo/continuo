@@ -12,9 +12,13 @@ package scaffold
 // 構造体から yaml.Marshal して生成しないのは、YAML のコメントが全部消えるからである。
 // コメントが無いと雛形として役に立たないため、文字列リテラルとして持つ。
 //
-// tracker.provider.owner と tracker.provider.project_number の2つだけはプレースホルダにしてある。
+// tracker.provider.owner と tracker.provider.project_number の2つはプレースホルダにしてある。
 // continuo init は gh から引いた値でここを埋める（fill.go / detect.go）。引けなかったときは
 // プレースホルダのまま残り、config.Load が名指しで落とす。
+//
+// trust.repositories も continuo init が埋めるが、こちらは空のままでも起動する。
+// ボードから拾った owner/repo をここへ並べるだけで、**要らない行を消すのは人間である**
+// （並べたものをそのまま信頼させないため。設計 3-33）。
 const workflowTemplate = `---
 # ===== どの issue を見張り、どう進めるか =====
 tracker:
@@ -130,6 +134,9 @@ rate_limit:
 trust:
   require_repo_trusted: true                # 信頼していないリポジトリではエージェントを起動しない
   on_untrusted: skip_and_comment            # 信頼していないときの扱い。その issue だけ飛ばし、issue にコメントを残す
+  repositories: []                          # continuo trust が信頼を登録してよいリポジトリ。owner/repo を1行ずつ書く。
+                                            # continuo init がボードから拾って並べるので、要らない行は消すこと。
+                                            # 巡回のループはここを読まない。continuo trust だけが読む
 
 restart:
   orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
@@ -141,6 +148,10 @@ runtime:
 server:
   port: null                                # 進み具合を見る HTTP ダッシュボードのポート。null なら起動しない。
                                             # 0 なら空いているポートを OS に選ばせる。--port を渡すとそちらが優先される
+
+# ===== 画面に出す言語 =====
+language: auto                              # 画面に出す文言の言語。auto なら環境変数 LANG から決める。
+                                            # ja と en を直接書いてもよい。訳の無い文言は日本語で出る
 ---
 
 {{.issue.identifier}} を実装してください。

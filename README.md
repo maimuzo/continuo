@@ -44,7 +44,7 @@ Where the spec assumes a Codex app-server subprocess speaking a structured proto
 | [herdr](https://github.com/herdrdev/herdr) | 0.8.0 or later (Apache-2.0) |
 | [Claude Code](https://claude.com/claude-code) | 2.1.233 or later |
 | `gh` | 2.97.0 or later — the Status update form used in prompts needs it |
-| Platform | macOS and Linux (including Ubuntu on WSL2) |
+| Platform | macOS and Linux. **Windows is not supported natively — use WSL2** ([why](docs/plans/continuo_design.md)) |
 
 Do not check these by hand. `continuo doctor` inspects every prerequisite — the config file, herdr, the `gh` login and its scopes, the board, the local clones, the folder trust, and the credentials — then prints what is missing and how to fix it. It exits `1` when something is missing and `0` when nothing is.
 

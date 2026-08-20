@@ -9,6 +9,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -27,16 +28,16 @@ func checkConfig(path string) (Result, loadedConfig) {
 		return Result{
 			Label:  LabelConfig,
 			Symbol: SymbolMissing,
-			Detail: fmt.Sprintf("%s を読めません: %v", path, err),
+			Detail: i18n.T(i18n.KeyDoctorConfigUnreadable, path, err),
 			Remedies: []string{
-				"`continuo init` で雛形を置けます（既にある場合は front matter を直してください）",
+				i18n.T(i18n.KeyDoctorConfigRemedyInit),
 			},
 		}, loadedConfig{}
 	}
 	return Result{
 		Label:  LabelConfig,
 		Symbol: SymbolOK,
-		Detail: fmt.Sprintf("%s を読めました（front matter の検証も通りました）", loaded.Path),
+		Detail: i18n.T(i18n.KeyDoctorConfigOK, loaded.Path),
 	}, loadedConfig{OK: true, Config: loaded.Config}
 }
 
@@ -54,7 +55,7 @@ func checkHerdr(ctx context.Context, cfg loadedConfig, configSymbol Symbol) Resu
 		return Result{
 			Label:  LabelHerdr,
 			Symbol: SymbolUnknown,
-			Detail: "設定ファイルを読めなかったため、照合する herdr.protocol が決まりません",
+			Detail: i18n.T(i18n.KeyDoctorHerdrConfigUnreadable),
 		}
 	}
 
@@ -63,8 +64,8 @@ func checkHerdr(ctx context.Context, cfg loadedConfig, configSymbol Symbol) Resu
 		return Result{
 			Label:    LabelHerdr,
 			Symbol:   SymbolMissing,
-			Detail:   fmt.Sprintf("socket の場所を決められません: %v", err),
-			Remedies: []string{"WORKFLOW.md の herdr.socket に絶対パスを書いてください"},
+			Detail:   i18n.T(i18n.KeyDoctorHerdrSocketUnresolved, err),
+			Remedies: []string{i18n.T(i18n.KeyDoctorHerdrRemedySocketAbs)},
 		}
 	}
 
@@ -79,18 +80,16 @@ func checkHerdr(ctx context.Context, cfg loadedConfig, configSymbol Symbol) Resu
 			return Result{
 				Label:    LabelHerdr,
 				Symbol:   SymbolUnknown,
-				Detail:   fmt.Sprintf("時間内に応答がありませんでした（socket %s）: %v", socketPath, err),
-				Remedies: []string{"herdr が応答しているかを確認してから、もう一度実行してください"},
+				Detail:   i18n.T(i18n.KeyDoctorHerdrTimeout, socketPath, err),
+				Remedies: []string{i18n.T(i18n.KeyDoctorHerdrRemedyTimeout)},
 			}
 		}
 		detail := fmt.Sprintf("%v", err)
-		remedy := fmt.Sprintf("herdr が動いていて %s で待ち受けているかを確認してください", socketPath)
+		remedy := i18n.T(i18n.KeyDoctorHerdrRemedyNotListening, socketPath)
 		if ping != nil {
 			// **protocol が食い違っただけの場合は、socket には届いている。**
 			// 直すのは herdr の起動ではなく、continuo と herdr の版の組み合わせである。
-			remedy = fmt.Sprintf(
-				"WORKFLOW.md の herdr.protocol を %d にするか、herdr を設定に合う版へ更新してください",
-				ping.Protocol)
+			remedy = i18n.T(i18n.KeyDoctorHerdrRemedyProtocol, ping.Protocol)
 		}
 		return Result{
 			Label:    LabelHerdr,
@@ -102,8 +101,7 @@ func checkHerdr(ctx context.Context, cfg loadedConfig, configSymbol Symbol) Resu
 	return Result{
 		Label:  LabelHerdr,
 		Symbol: SymbolOK,
-		Detail: fmt.Sprintf("protocol %d（設定と一致）／herdr %s／socket %s",
-			ping.Protocol, ping.Version, socketPath),
+		Detail: i18n.T(i18n.KeyDoctorHerdrOK, ping.Protocol, ping.Version, socketPath),
 	}
 }
 
@@ -128,9 +126,9 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 		return Result{
 			Label:  LabelGHAuth,
 			Symbol: SymbolUnknown,
-			Detail: "設定ファイルを読めなかったため、gh の認証を検査しませんでした",
+			Detail: i18n.T(i18n.KeyDoctorGHAuthConfigUnreadable),
 			Remedies: []string{
-				"WORKFLOW.md を直してから `continuo doctor` をもう一度実行してください",
+				i18n.T(i18n.KeyDoctorGHAuthRemedyFixConfig),
 			},
 		}
 	}
@@ -139,7 +137,7 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 			Label:    LabelGHAuth,
 			Symbol:   SymbolMissing,
 			Detail:   fmt.Sprintf("%v", err),
-			Remedies: []string{"gh をインストールして PATH に入れてください"},
+			Remedies: []string{i18n.T(i18n.KeyDoctorGHAuthRemedyInstall)},
 		}
 	}
 	if err := tracker.CheckGHProjectScope(ctx, opts.GHAuthStatus); err != nil {
@@ -147,8 +145,8 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 			return Result{
 				Label:    LabelGHAuth,
 				Symbol:   SymbolUnknown,
-				Detail:   fmt.Sprintf("時間内に `gh auth status` の応答がありませんでした: %v", err),
-				Remedies: []string{"`gh auth status` が単体で返るかを確認してから、もう一度実行してください"},
+				Detail:   i18n.T(i18n.KeyDoctorGHAuthTimeout, err),
+				Remedies: []string{i18n.T(i18n.KeyDoctorGHAuthRemedyTimeout)},
 			}
 		}
 		return Result{
@@ -156,15 +154,14 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 			Symbol: SymbolMissing,
 			Detail: fmt.Sprintf("%v", err),
 			Remedies: []string{
-				"`gh auth login -s project` を実行してください" +
-					"（既にログイン済みなら `gh auth refresh -h github.com -s project`）",
+				i18n.T(i18n.KeyDoctorGHAuthRemedyLogin),
 			},
 		}
 	}
 	return Result{
 		Label:  LabelGHAuth,
 		Symbol: SymbolOK,
-		Detail: "scope に project が含まれる（github.com の有効なアカウント）",
+		Detail: i18n.T(i18n.KeyDoctorGHAuthOK),
 	}
 }
 
@@ -200,15 +197,15 @@ func checkBoard(
 		return Result{
 			Label:  LabelBoard,
 			Symbol: SymbolUnknown,
-			Detail: "設定ファイルを読めなかったため、どの project を見るか決まりません",
+			Detail: i18n.T(i18n.KeyDoctorBoardConfigUnreadable),
 		}, nil
 	}
 	if ghSymbol != SymbolOK {
 		// **上流の記号によって文言を分ける。**`✗`（足りない）を「確かめられなかった」と
 		// 書くと、人間が直す先を取り違える。
-		reason := "gh の認証が通らなかったため、ボードを読みませんでした"
+		reason := i18n.T(i18n.KeyDoctorBoardGHMissing)
 		if ghSymbol == SymbolUnknown {
-			reason = "gh の認証を確かめられなかったため、ボードを読みませんでした"
+			reason = i18n.T(i18n.KeyDoctorBoardGHUnknown)
 		}
 		return Result{Label: LabelBoard, Symbol: SymbolUnknown, Detail: reason}, nil
 	}
@@ -218,8 +215,8 @@ func checkBoard(
 		return Result{
 			Label:    LabelBoard,
 			Symbol:   SymbolMissing,
-			Detail:   fmt.Sprintf("ボードを読むトークンを取り出せません: %v", err),
-			Remedies: []string{"WORKFLOW.md の tracker.provider.token_source と token_env を確認してください"},
+			Detail:   i18n.T(i18n.KeyDoctorBoardTokenUnresolved, err),
+			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyTokenSource)},
 		}, nil
 	}
 
@@ -229,26 +226,25 @@ func checkBoard(
 		return Result{
 			Label:    LabelBoard,
 			Symbol:   SymbolMissing,
-			Detail:   fmt.Sprintf("トラッカーのアダプタを組み立てられません: %v", err),
-			Remedies: []string{"WORKFLOW.md の tracker の設定を確認してください"},
+			Detail:   i18n.T(i18n.KeyDoctorBoardAdapterFailed, err),
+			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyTracker)},
 		}, nil
 	}
 
 	if err := adapter.Bootstrap(ctx, cfg.Config.Tracker); err != nil {
-		return boardFailure(ctx, "ボードを読めません", err, opts.GraphQLEndpoint), nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil
 	}
 
 	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
 	if err != nil {
-		return boardFailure(ctx, "active_states の issue を読めません", err, opts.GraphQLEndpoint), nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil
 	}
 
 	repos := collectRepos(issues)
 	return Result{
 		Label:  LabelBoard,
 		Symbol: SymbolOK,
-		Detail: fmt.Sprintf(
-			"%s の project #%d を読めました（Status の選択肢は設定と一致。active_states の issue %d件／対象リポジトリ %d件）%s",
+		Detail: i18n.T(i18n.KeyDoctorBoardOK,
 			cfg.Config.Tracker.Provider.Owner, cfg.Config.Tracker.Provider.ProjectNumber,
 			len(issues), len(repos), endpointNote(opts.GraphQLEndpoint)),
 	}, repos
@@ -266,7 +262,7 @@ func endpointNote(endpoint string) string {
 	if endpoint == "" {
 		return ""
 	}
-	return fmt.Sprintf("（接続先を差し替えています: %s。本番の GitHub ではありません）", endpoint)
+	return i18n.T(i18n.KeyDoctorBoardEndpointNote, endpoint)
 }
 
 // boardFailure はボードを読めなかったときの結果を組み立てる（設計 3-32 の「落ち方で分ける」）。
@@ -290,32 +286,29 @@ func boardFailure(ctx context.Context, what string, err error, endpoint string) 
 		return Result{
 			Label:    LabelBoard,
 			Symbol:   SymbolUnknown,
-			Detail:   fmt.Sprintf("%s（時間内に応答がありませんでした）: %v%s", what, err, endpointNote(endpoint)),
-			Remedies: []string{"接続を確かめてから `continuo doctor` をもう一度実行してください"},
+			Detail:   i18n.T(i18n.KeyDoctorBoardTimeout, what, err, endpointNote(endpoint)),
+			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyRetryConnection)},
 		}
 	}
 	if tracker.IsCategory(err, tracker.CategoryRateLimited) {
 		return Result{
 			Label:    LabelBoard,
 			Symbol:   SymbolUnknown,
-			Detail:   fmt.Sprintf("%s（レートリミットに当たりました。一時的なものです）: %v", what, err),
-			Remedies: []string{"時間をおいてから `continuo doctor` をもう一度実行してください"},
+			Detail:   i18n.T(i18n.KeyDoctorBoardRateLimited, what, err),
+			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyWait)},
 		}
 	}
-	remedy := "WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください"
+	remedy := i18n.T(i18n.KeyDoctorBoardRemedyProvider)
 	switch {
 	case tracker.IsCategory(err, tracker.CategoryInvalidConfig):
-		remedy = "GitHub の画面で Status の選択肢名を確認し、WORKFLOW.md の Status 名と合わせてください" +
-			"（選択肢の追加・改名は人間が画面から行います）"
+		remedy = i18n.T(i18n.KeyDoctorBoardRemedyStatusOptions)
 	case tracker.IsCategory(err, tracker.CategoryMissingSecret):
-		remedy = "ボードを読むトークンが無効か失効しています。" +
-			"`gh auth refresh -h github.com -s project` を実行するか（token_source が gh_auth のとき）、" +
-			"token_env に指定した環境変数のトークンを入れ直してください"
+		remedy = i18n.T(i18n.KeyDoctorBoardRemedyTokenInvalid)
 	}
 	return Result{
 		Label:    LabelBoard,
 		Symbol:   SymbolMissing,
-		Detail:   fmt.Sprintf("%s: %v%s", what, err, endpointNote(endpoint)),
+		Detail:   i18n.T(i18n.KeyDoctorBoardFailed, what, err, endpointNote(endpoint)),
 		Remedies: []string{remedy},
 	}
 }
@@ -341,7 +334,7 @@ func checkClone(
 		return Result{
 			Label:  LabelClone,
 			Symbol: SymbolUnknown,
-			Detail: "ボードを読めなかったため、対象のリポジトリを特定できませんでした",
+			Detail: i18n.T(i18n.KeyDoctorCloneBoardUnreadable),
 		}, nil
 	}
 	if len(repos) == 0 {
@@ -349,7 +342,7 @@ func checkClone(
 		return Result{
 			Label:  LabelClone,
 			Symbol: SymbolUnknown,
-			Detail: "active_states の issue が0件なので、検査する対象がありません",
+			Detail: i18n.T(i18n.KeyDoctorCloneNoTargets),
 		}, nil
 	}
 
@@ -364,15 +357,15 @@ func checkClone(
 		case err != nil:
 			symbol = worse(symbol, SymbolUnknown)
 			unknown++
-			notes = append(notes, fmt.Sprintf("%s: ghq を実行できませんでした（%v）", repo, err))
+			notes = append(notes, i18n.T(i18n.KeyDoctorCloneNoteGhqFailed, repo, err))
 		case path == "":
 			symbol = worse(symbol, SymbolMissing)
 			missing++
-			notes = append(notes, fmt.Sprintf("%s が見つからない", repo))
-			remedies = append(remedies, fmt.Sprintf("ghq get %s を実行してください", repo))
+			notes = append(notes, i18n.T(i18n.KeyDoctorCloneNoteMissing, repo))
+			remedies = append(remedies, i18n.T(i18n.KeyDoctorCloneRemedyGhqGet, repo))
 		default:
 			paths[repo.String()] = path
-			notes = append(notes, fmt.Sprintf("%s: %s", repo, path))
+			notes = append(notes, i18n.T(i18n.KeyDoctorCloneNoteFound, repo, path))
 		}
 	}
 
@@ -380,9 +373,9 @@ func checkClone(
 		Label:  LabelClone,
 		Symbol: symbol,
 		Detail: countDetail(symbol,
-			fmt.Sprintf("対象 %d件がすべて手元にあります", len(repos)),
-			fmt.Sprintf("対象 %d件のうち %d件が見つかりません", len(repos), missing),
-			fmt.Sprintf("対象 %d件のうち %d件を確かめられませんでした", len(repos), unknown),
+			i18n.T(i18n.KeyDoctorCloneDetailOK, len(repos)),
+			i18n.T(i18n.KeyDoctorCloneDetailMissing, len(repos), missing),
+			i18n.T(i18n.KeyDoctorCloneDetailUnknown, len(repos), unknown),
 			unknown),
 		Notes:    notes,
 		Remedies: remedies,
@@ -405,7 +398,7 @@ func countDetail(symbol Symbol, ok, missing, unknown string, unknownCount int) s
 	switch symbol {
 	case SymbolMissing:
 		if unknownCount > 0 {
-			return missing + fmt.Sprintf("（ほかに %d件は確かめられませんでした）", unknownCount)
+			return missing + i18n.T(i18n.KeyDoctorCountUnknownSuffix, unknownCount)
 		}
 		return missing
 	case SymbolUnknown:
@@ -432,14 +425,14 @@ func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardS
 		return Result{
 			Label:  LabelTrust,
 			Symbol: SymbolUnknown,
-			Detail: "ボードを読めなかったため、対象のリポジトリを特定できませんでした",
+			Detail: i18n.T(i18n.KeyDoctorTrustBoardUnreadable),
 		}
 	}
 	if len(repos) == 0 {
 		return Result{
 			Label:  LabelTrust,
 			Symbol: SymbolUnknown,
-			Detail: "active_states の issue が0件なので、検査する対象がありません",
+			Detail: i18n.T(i18n.KeyDoctorTrustNoTargets),
 		}
 	}
 
@@ -448,7 +441,7 @@ func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardS
 		return Result{
 			Label:  LabelTrust,
 			Symbol: SymbolUnknown,
-			Detail: fmt.Sprintf("ホームディレクトリを特定できません（%s を読めない）: %v",
+			Detail: i18n.T(i18n.KeyDoctorTrustHomeUnresolved,
 				workspace.ClaudeConfigFileName, err),
 		}
 	}
@@ -462,7 +455,7 @@ func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardS
 		if !ok {
 			symbol = worse(symbol, SymbolUnknown)
 			unknown++
-			notes = append(notes, fmt.Sprintf("%s: clone が無いので信頼登録を確かめられません", repo))
+			notes = append(notes, i18n.T(i18n.KeyDoctorTrustNoteNoClone, repo))
 			continue
 		}
 		trusted, reason, err := workspace.CheckTrustForClonePath(path, home)
@@ -470,15 +463,14 @@ func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardS
 		case err != nil:
 			symbol = worse(symbol, SymbolUnknown)
 			unknown++
-			notes = append(notes, fmt.Sprintf("%s: 判定できませんでした（%v）", repo, err))
+			notes = append(notes, i18n.T(i18n.KeyDoctorTrustNoteUndecidable, repo, err))
 		case !trusted:
 			symbol = worse(symbol, SymbolMissing)
 			untrusted++
-			notes = append(notes, fmt.Sprintf("%s: %s", repo, reason))
-			remedies = append(remedies, fmt.Sprintf(
-				"%s を Claude Code で一度開き、信頼のダイアログを承認してください", path))
+			notes = append(notes, i18n.T(i18n.KeyDoctorTrustNoteReason, repo, reason))
+			remedies = append(remedies, i18n.T(i18n.KeyDoctorTrustRemedyOpenOnce, path))
 		default:
-			notes = append(notes, fmt.Sprintf("%s: %s", repo, reason))
+			notes = append(notes, i18n.T(i18n.KeyDoctorTrustNoteReason, repo, reason))
 		}
 	}
 
@@ -486,9 +478,9 @@ func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardS
 		Label:  LabelTrust,
 		Symbol: symbol,
 		Detail: countDetail(symbol,
-			fmt.Sprintf("対象 %d件がすべて承認済みです", len(repos)),
-			fmt.Sprintf("対象 %d件のうち %d件が未承認です", len(repos), untrusted),
-			fmt.Sprintf("対象 %d件のうち %d件を確かめられませんでした", len(repos), unknown),
+			i18n.T(i18n.KeyDoctorTrustDetailOK, len(repos)),
+			i18n.T(i18n.KeyDoctorTrustDetailMissing, len(repos), untrusted),
+			i18n.T(i18n.KeyDoctorTrustDetailUnknown, len(repos), unknown),
 			unknown),
 		Notes:    notes,
 		Remedies: remedies,
@@ -518,9 +510,9 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 		return Result{
 			Label:  LabelCredentials,
 			Symbol: SymbolUnknown,
-			Detail: "rate_limit の設定が読めないので、何を見るべきか決まりません",
+			Detail: i18n.T(i18n.KeyDoctorCredentialsConfigUnreadable),
 			Remedies: []string{
-				"設定を直してからもう一度実行してください",
+				i18n.T(i18n.KeyDoctorCredentialsRemedyFixConfig),
 			},
 		}
 	}
@@ -530,7 +522,7 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 		return Result{
 			Label:  LabelCredentials,
 			Symbol: SymbolOK,
-			Detail: "枠の判定を行わない設定です（rate_limit.source: none）。資格情報は要りません",
+			Detail: i18n.T(i18n.KeyDoctorCredentialsNone),
 		}
 	}
 
@@ -542,24 +534,22 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 			return Result{
 				Label:    LabelCredentials,
 				Symbol:   SymbolMissing,
-				Detail:   "rate_limit.token_source が env ですが、rate_limit.token_env が空です",
-				Remedies: []string{"WORKFLOW.md の rate_limit.token_env に環境変数名を書いてください"},
+				Detail:   i18n.T(i18n.KeyDoctorCredentialsTokenEnvEmpty),
+				Remedies: []string{i18n.T(i18n.KeyDoctorCredentialsRemedyTokenEnv)},
 			}
 		}
 		if value, ok := opts.LookupEnv(rl.TokenEnv); ok && value != "" {
 			return Result{
 				Label:  LabelCredentials,
 				Symbol: SymbolOK,
-				Detail: fmt.Sprintf("環境変数 %s から取れます（rate_limit.token_source: env）", rl.TokenEnv),
+				Detail: i18n.T(i18n.KeyDoctorCredentialsEnvOK, rl.TokenEnv),
 			}
 		}
 		return Result{
-			Label:  LabelCredentials,
-			Symbol: SymbolMissing,
-			Detail: fmt.Sprintf(
-				"環境変数 %s が未設定または空です（rate_limit.token_source が env なので枠の判定ができません）",
-				rl.TokenEnv),
-			Remedies: []string{fmt.Sprintf("環境変数 %s を設定してください", rl.TokenEnv)},
+			Label:    LabelCredentials,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorCredentialsEnvMissing, rl.TokenEnv),
+			Remedies: []string{i18n.T(i18n.KeyDoctorCredentialsRemedySetEnv, rl.TokenEnv)},
 		}
 	}
 
@@ -572,7 +562,7 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 		return Result{
 			Label:  LabelCredentials,
 			Symbol: SymbolUnknown,
-			Detail: fmt.Sprintf("ホームディレクトリを特定できません（%s を探せない）: %v",
+			Detail: i18n.T(i18n.KeyDoctorCredentialsHomeUnresolved,
 				ratelimit.CredentialsRelPath, err),
 		}
 	}
@@ -582,15 +572,15 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 		return Result{
 			Label:  LabelCredentials,
 			Symbol: SymbolOK,
-			Detail: fmt.Sprintf("%s があります", path),
+			Detail: i18n.T(i18n.KeyDoctorCredentialsFileFound, path),
 		}
 	}
 	return Result{
 		Label:  LabelCredentials,
 		Symbol: SymbolUnknown,
-		Detail: fmt.Sprintf("%s がありません（macOS では Keychain に入っています）", path),
+		Detail: i18n.T(i18n.KeyDoctorCredentialsFileMissing, path),
 		Remedies: []string{
-			"判定を飛ばしました。continuo の起動には影響しません（Keychain は読みません）",
+			i18n.T(i18n.KeyDoctorCredentialsRemedySkipped),
 		},
 	}
 }

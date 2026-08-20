@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +29,16 @@ const OwnerKey = "tracker.provider.owner"
 
 // ProjectKey は雛形の中で project_number を書くキーのパスである。報告の見出しに使う。
 const ProjectKey = "tracker.provider.project_number"
+
+// RepositoriesKey は雛形の中で信頼の対象を並べるキーのパスである。報告の見出しに使う。
+const RepositoriesKey = "trust.repositories"
+
+// ghProjectItemListLimit は `gh project item-list` に渡す取得件数の上限である。
+//
+// **拾うのは「どのリポジトリが載っているか」だけで、issue の中身は使わない。**
+// gh の既定は30件で、本番のボードは100件を超えるので明示する。
+// **この数で頭打ちになったら、その旨を人間に伝える**（拾い漏れたリポジトリがありうる）。
+const ghProjectItemListLimit = 500
 
 // GHRunner は gh コマンドを1回実行して標準出力を返す関数の型である。
 //
@@ -69,7 +81,7 @@ type Field struct {
 type Detection struct {
 	// Values は雛形へ書き込む値である。決まらなかったものはゼロ値のまま。
 	Values Values
-	// Fields はキーごとの決め方である。OwnerKey、ProjectKey の順に並ぶ。
+	// Fields はキーごとの決め方である。OwnerKey、ProjectKey、RepositoriesKey の順に並ぶ。
 	Fields []Field
 }
 
@@ -146,16 +158,145 @@ func Detect(ctx context.Context, opts DetectOptions) Detection {
 
 	owner := detectOwner(ctx, opts, run, timeout)
 	project, number := detectProject(ctx, opts, run, timeout, owner.Value)
+	repos, repoList := detectRepositories(ctx, run, timeout, owner.Value, number)
 
-	d := Detection{Fields: []Field{owner, project}}
+	d := Detection{Fields: []Field{owner, project, repos}}
 	if owner.Filled {
 		d.Values.Owner = owner.Value
 	}
 	if project.Filled {
 		d.Values.ProjectNumber = number
 	}
+	if repos.Filled {
+		d.Values.Repositories = repoList
+	}
 	return d
 }
+
+// detectRepositories は trust.repositories へ並べる owner/repo をボードから拾う（3-33）。
+//
+// **拾うだけである。信頼は登録しない。**登録するのは `continuo trust` であり、その対象は
+// 人間がこの一覧から要らない行を消したあとに残ったものである。**ボードは他人が編集できる**
+// ので、拾った一覧をそのまま信頼させてはならない。
+//
+// **draft issue は数えない。**リポジトリに属していないため、信頼させる対象が存在しない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// run: gh の実行関数。
+// timeout: gh の呼び出し1回あたりの制限時間。
+// owner: 決まった owner。空文字なら引かない。
+// number: 決まったボードの番号。0 以下なら引かない。
+// 戻り値の1つ目: trust.repositories についての Field。
+// 戻り値の2つ目: 拾った owner/repo（辞書順・重複なし）。拾えなかった場合は nil。
+func detectRepositories(ctx context.Context, run GHRunner, timeout time.Duration, owner string, number int) (Field, []string) {
+	f := Field{Key: RepositoriesKey}
+
+	if owner == "" || number <= 0 {
+		f.Reason = "owner とボードの番号が決まらないので、ボードに載っているリポジトリを引けませんでした"
+		f.Advice = []string{
+			"owner とボードの番号を決めてから、もう一度 `continuo init` を実行してください",
+			"`continuo trust` の対象は WORKFLOW.md の trust.repositories に手で書いても構いません",
+		}
+		return f, nil
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	out, err := run(callCtx, "project", "item-list", strconv.Itoa(number),
+		"--owner", owner, "--format", "json", "--limit", strconv.Itoa(ghProjectItemListLimit))
+	if err != nil {
+		if errors.Is(err, ErrGHNotFound) {
+			f.Reason = "gh コマンドが見つかりませんでした"
+		} else {
+			f.Reason = fmt.Sprintf("ボードの項目を引けませんでした（%v）", err)
+		}
+		f.Advice = []string{
+			"ボードを読むには project の scope が要ります。`gh auth login -s project` でログインし直してください",
+			"WORKFLOW.md の trust.repositories に owner/repo を手で書いても構いません",
+		}
+		return f, nil
+	}
+
+	repos, itemCount, err := parseItemRepositories(out)
+	if err != nil {
+		f.Reason = fmt.Sprintf("`gh project item-list` の出力を解釈できませんでした（%v）", err)
+		f.Advice = []string{"WORKFLOW.md の trust.repositories に owner/repo を手で書いてください"}
+		return f, nil
+	}
+
+	if len(repos) == 0 {
+		f.Reason = fmt.Sprintf("ボード #%d にリポジトリの issue が1件も載っていませんでした", number)
+		f.Advice = []string{"信頼させたいリポジトリを WORKFLOW.md の trust.repositories に手で書いてください"}
+		return f, nil
+	}
+
+	f.Value, f.Filled = strings.Join(repos, ", "), true
+	f.Reason = fmt.Sprintf("ボード #%d に載っている %d 個のリポジトリを並べました", number, len(repos))
+	f.Advice = []string{
+		"**要らない行は WORKFLOW.md から消してください。**残ったものだけが `continuo trust` の対象になります",
+		"何を許すことになるかは `continuo trust --dry-run` で確かめられます",
+	}
+	if itemCount >= ghProjectItemListLimit {
+		f.Advice = append(f.Advice,
+			fmt.Sprintf("ボードの項目を %d 件で打ち切って読みました。これより後ろにしか無いリポジトリは並んでいません", ghProjectItemListLimit))
+	}
+	return f, repos
+}
+
+// parseItemRepositories は `gh project item-list --format json` の出力から owner/repo を取り出す。
+//
+// out: gh の標準出力。
+// 戻り値の1つ目: 重複を除いて辞書順に並べた owner/repo。
+// 戻り値の2つ目: 読んだ項目の件数（打ち切りに達したかの判定に使う）。
+// 戻り値の3つ目: JSON として読めない場合のエラー。
+func parseItemRepositories(out []byte) ([]string, int, error) {
+	var payload struct {
+		Items []struct {
+			Content struct {
+				Repository string `json:"repository"`
+			} `json:"content"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(out, &payload); err != nil {
+		return nil, 0, err
+	}
+
+	seen := map[string]struct{}{}
+	repos := make([]string, 0, len(payload.Items))
+	for _, item := range payload.Items {
+		// draft issue には repository が無い。空のまま並べると config の検査で落ちる。
+		name := strings.TrimSpace(item.Content.Repository)
+		if name == "" || !validOwnerRepo(name) {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		repos = append(repos, name)
+	}
+	sort.Strings(repos)
+	return repos, len(payload.Items), nil
+}
+
+// validOwnerRepo は gh が返した文字列が "owner/repo" として受け付けられる形かを返す。
+//
+// **config の trust.repositories の検査と同じ形にそろえる**（internal/config の
+// trustRepositoryPattern）。ここを緩くすると、雛形へ書いた値を continuo が起動時に弾く。
+//
+// name: 検査する文字列。
+// 戻り値: 受け付けられる形なら真。
+func validOwnerRepo(name string) bool {
+	owner, repo, ok := strings.Cut(name, "/")
+	if !ok {
+		return false
+	}
+	return ValidOwner(owner) && repoPattern.MatchString(repo)
+}
+
+// repoPattern は owner/repo の repo の部分として受け付ける文字の範囲である。
+// GitHub のリポジトリ名は英数字・ハイフン・アンダースコア・ドットの100文字以内である。
+var repoPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,100}$`)
 
 // detectOwner は tracker.provider.owner に書く値を決める。
 //

@@ -390,7 +390,7 @@ func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(
 	entries := env.Timeline.Entries()
 	paneListAt := env.Timeline.IndexOfPrefix("herdr.pane.list")
 	byIDsAt := env.Timeline.IndexOfPrefix("gql.by_ids")
-	candidatesAt := env.Timeline.IndexOfPrefix(`gql.items(status:"Ready","In Progress")`)
+	candidatesAt := env.Timeline.IndexOfPrefix(`gql.items("Status":"Ready","In Progress")`)
 	if paneListAt < 0 || byIDsAt < 0 || candidatesAt < 0 {
 		t.Fatalf("復元と巡回の呼び出しが揃っていない: %v\n%s", entries, logs.String())
 	}

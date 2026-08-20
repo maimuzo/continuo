@@ -2,9 +2,11 @@ package server
 
 import (
 	"html/template"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
-// indexTemplate は実行中の run の一覧を出す HTML である。
+// templateText は実行中の run の一覧を出す HTML である。
 //
 // **`html/template` を使う。**issue のタイトルも Status も、continuo の外から来る文字列で
 // あり、そのまま HTML に混ぜると壊れる（あるいは仕込まれる）。**テンプレートの外で
@@ -12,12 +14,13 @@ import (
 // `javascript:` などの危ない scheme が落ちる。
 //
 // **JavaScript は1行も使わない。**更新は `<meta http-equiv="refresh">` で行う。
-var indexTemplate = template.Must(template.New("index").Funcs(template.FuncMap{
-	"formatTime":     formatTime,
-	"formatInt":      formatInt,
-	"refreshSeconds": func() int { return refreshSeconds },
-}).Parse(`<!doctype html>
-<html lang="ja">
+//
+// **画面に出る文言はこのファイルに書かない**（設計 3-35）。`t` に渡したキーで
+// internal/i18n の資源から引く。`lang` は `<html lang="...">` に入れる言語の名前である。
+// **キーの文字列はここにしか現れないので、test/internal/i18n がこのファイルを読んで
+// messages/ja.json との対応を確かめている。**
+const templateText = `<!doctype html>
+<html lang="{{ lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -41,18 +44,18 @@ section { margin-bottom: 2rem; }
 </head>
 <body>
 <h1>continuo</h1>
-<p class="meta">取得時刻 {{ .GeneratedAt.Format "2006-01-02 15:04:05 MST" }} ／ 実行中 {{ .Counts.Running }} 件 ／ バックオフ中 {{ .Counts.Retrying }} 件 ／ {{ refreshSeconds }} 秒ごとに再読み込み</p>
+<p class="meta">{{ t "dashboard.meta" (.GeneratedAt.Format "2006-01-02 15:04:05 MST") .Counts.Running .Counts.Retrying refreshSeconds }}</p>
 
 <section>
 <table>
-<caption>実行中の run</caption>
+<caption>{{ t "dashboard.caption_runs" }}</caption>
 <thead>
 <tr>
-<th>issue</th>
-<th>Status</th>
-<th class="num">turn</th>
-<th>最後に hook を受けた時刻</th>
-<th class="num">トークン合計</th>
+<th>{{ t "dashboard.col_issue" }}</th>
+<th>{{ t "dashboard.col_status" }}</th>
+<th class="num">{{ t "dashboard.col_turn" }}</th>
+<th>{{ t "dashboard.col_last_hook" }}</th>
+<th class="num">{{ t "dashboard.col_tokens_total" }}</th>
 </tr>
 </thead>
 <tbody>
@@ -66,34 +69,34 @@ section { margin-bottom: 2rem; }
 </td>
 <td>
 {{ .State }}
-{{- if .WaitingQuota }} <span class="badge">枠待ち</span>{{ end }}
-{{- if .RetryCount }} <span class="badge">リトライ {{ .RetryCount }}</span>{{ end }}
-{{- if .BackoffUntil }} <span class="badge">再開 {{ formatTime .BackoffUntil }}</span>{{ end }}
+{{- if .WaitingQuota }} <span class="badge">{{ t "dashboard.badge_waiting_quota" }}</span>{{ end }}
+{{- if .RetryCount }} <span class="badge">{{ t "dashboard.badge_retry" .RetryCount }}</span>{{ end }}
+{{- if .BackoffUntil }} <span class="badge">{{ t "dashboard.badge_resume" (formatTime .BackoffUntil) }}</span>{{ end }}
 </td>
 <td class="num">{{ .TurnCount }}</td>
-<td>{{ if .LastHookAt }}{{ formatTime .LastHookAt }}<span class="title">{{ .LastHookAgo }}</span>{{ else }}—<span class="title">まだ1件も受けていない</span>{{ end }}</td>
-<td class="num">{{ formatInt .Tokens.Total }}<span class="title">{{ if .TokensAt }}{{ formatTime .TokensAt }} 時点{{ else }}未集計{{ end }}</span></td>
+<td>{{ if .LastHookAt }}{{ formatTime .LastHookAt }}<span class="title">{{ .LastHookAgo }}</span>{{ else }}{{ t "dashboard.none" }}<span class="title">{{ t "dashboard.no_hook_yet" }}</span>{{ end }}</td>
+<td class="num">{{ formatInt .Tokens.Total }}<span class="title">{{ if .TokensAt }}{{ t "dashboard.tokens_at" (formatTime .TokensAt) }}{{ else }}{{ t "dashboard.tokens_not_counted" }}{{ end }}</span></td>
 </tr>
 {{- end }}
 {{- else }}
-<tr><td colspan="5" class="empty">実行中の run はありません。</td></tr>
+<tr><td colspan="5" class="empty">{{ t "dashboard.no_runs" }}</td></tr>
 {{- end }}
 </tbody>
 </table>
-<p class="meta">「最後に hook を受けた時刻」は、その run から実際に hook が届いた時刻である。届いていなければ「—」になる。stall の判定に使う時計はこれとは別に進む（JSON の stall_clock_at）。</p>
+<p class="meta">{{ t "dashboard.note_last_hook" }}</p>
 </section>
 
 <section>
 <table>
-<caption>トークンの集計（requestId で重複排除済み。再 dispatch より前のセッションの分も含む）</caption>
+<caption>{{ t "dashboard.caption_tokens" }}</caption>
 <thead>
 <tr>
-<th>issue</th>
-<th class="num">API 応答</th>
-<th class="num">input</th>
-<th class="num">cache_creation</th>
-<th class="num">cache_read</th>
-<th class="num">output</th>
+<th>{{ t "dashboard.col_issue" }}</th>
+<th class="num">{{ t "dashboard.col_api_calls" }}</th>
+<th class="num">{{ t "dashboard.col_input" }}</th>
+<th class="num">{{ t "dashboard.col_cache_creation" }}</th>
+<th class="num">{{ t "dashboard.col_cache_read" }}</th>
+<th class="num">{{ t "dashboard.col_output" }}</th>
 </tr>
 </thead>
 <tbody>
@@ -108,7 +111,7 @@ section { margin-bottom: 2rem; }
 </tr>
 {{- end }}
 <tr>
-<td><strong>合計</strong></td>
+<td><strong>{{ t "dashboard.total" }}</strong></td>
 <td class="num"><strong>{{ formatInt .Totals.APICalls }}</strong></td>
 <td class="num"><strong>{{ formatInt .Totals.Input }}</strong></td>
 <td class="num"><strong>{{ formatInt .Totals.CacheCreation }}</strong></td>
@@ -117,9 +120,42 @@ section { margin-bottom: 2rem; }
 </tr>
 </tbody>
 </table>
-<p class="meta">トークンは turn の終わりに transcript を読んで集計する（設計 3-15）。走行中の turn の分はまだ入っていない。</p>
+<p class="meta">{{ t "dashboard.note_tokens" }}</p>
 </section>
 
 </body>
 </html>
-`))
+`
+
+// indexTemplate は templateText を解釈したものである。
+//
+// **`t` と `lang` は要求のたびに呼ばれる。**言語を決めるのは起動時だが、
+// テンプレートを解釈するのは init の1回きりなので、文言を解釈の時点で焼き付けない。
+var indexTemplate = template.Must(template.New("index").Funcs(template.FuncMap{
+	"formatTime":     formatTime,
+	"formatInt":      formatInt,
+	"refreshSeconds": func() int { return refreshSeconds },
+	"t":              translate,
+	"lang":           func() string { return string(i18n.Current()) },
+}).Parse(templateText))
+
+// translate はテンプレートから文言を引く。
+//
+// **テンプレートに書けるのはキーだけである**（設計 3-35）。文言そのものを
+// テンプレートに書くと、訳文を差し替える口が無くなる。
+//
+// key: 引くキー（internal/i18n の keys.go に宣言があるもの）。
+// args: 書式に当てる値。
+// 戻り値: 組み立てた文言。**html/template が出力時にエスケープする。**
+func translate(key string, args ...any) string {
+	return i18n.T(i18n.Key(key), args...)
+}
+
+// TemplateSource は解釈する前のテンプレートの文字列を返す。
+//
+// **テストが `t "..."` に書かれたキーを拾って、資源との対応を確かめるために使う**
+// （設計 3-35）。テンプレートに書いたキーは Go の定数ではないので、
+// このファイルを読まないと打ち間違いを見つけられない。
+//
+// 戻り値: テンプレートの原文。
+func TemplateSource() string { return templateText }

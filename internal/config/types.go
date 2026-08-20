@@ -38,6 +38,10 @@ type Config struct {
 	Runtime RuntimeConfig `yaml:"runtime"`
 	// Server は任意の HTTP ダッシュボードの起動を決める（SPEC.md 13.7 の任意拡張）。
 	Server ServerConfig `yaml:"server"`
+	// Language は画面に出す文言の言語である（3-35）。
+	// "auto" なら環境変数 LANG から決める。"ja" / "en" を直接書いてもよい。
+	// **設定が主、環境変数が従である。**ここに書いた値は環境変数より優先する。
+	Language string `yaml:"language"`
 }
 
 // TrackerCommentsConfig は issue のコメントの読み方を決める。
@@ -287,12 +291,22 @@ type RateLimitConfig struct {
 	PollIntervalMs int `yaml:"poll_interval_ms"`
 }
 
-// TrustConfig はリポジトリの信頼確認をどう扱うかを決める（3-11 / 4-3）。
+// TrustConfig はリポジトリの信頼確認をどう扱うかを決める（3-11 / 3-33 / 4-3）。
 type TrustConfig struct {
 	// RequireRepoTrusted は dispatch の前にリポジトリの信頼登録を検査するかどうかである。
 	RequireRepoTrusted bool `yaml:"require_repo_trusted"`
 	// OnUntrusted は未信頼のリポジトリを見つけたときの扱いである。想定する値は "skip_and_comment" のみ。
 	OnUntrusted string `yaml:"on_untrusted"`
+	// Repositories は `continuo trust` が信頼を登録してよいリポジトリの列挙である（3-33）。
+	// 要素は "owner/repo" の形で書く。
+	//
+	// **人間が書いたものだけを対象にする。**`continuo init` はボードから拾った一覧をここへ
+	// 並べるが、**要らない行を消すのは人間である。**ボードは他人が編集できるので、
+	// 拾った一覧をそのまま登録すると、issue を足せる人が信頼させるリポジトリを増やせてしまう。
+	//
+	// **巡回のループはここを読まない。**dispatch の直前の検査は `~/.claude.json` を
+	// 読むだけであり（4-3）、この列挙を参照する経路を持たない。
+	Repositories []string `yaml:"repositories"`
 }
 
 // RestartConfig は再起動時に孤児となった実行中 issue をどう扱うかを決める（3-4）。

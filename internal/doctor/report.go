@@ -4,28 +4,40 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
-// 検査の見出し語である（設計 3-32）。**この語で固定する。**
+// 検査の見出し語のキーである（設計 3-32 / 3-35）。**この7つで固定する。**
 //
-// 出力に出る語をここ以外で組み立ててはならない。人間はこの語で「どの前提が欠けたか」を
+// **持つのは画面に出る語そのものではなく、文言を引くキーである**（設計 3-35）。
+// 語は internal/i18n の資源にあり、表示するのは Report.Write だけである。
+// 見出し語をここ以外で組み立ててはならない。人間はこの語で「どの前提が欠けたか」を
 // 覚えるので、揺れると同じものが2つの名前で呼ばれることになる。
 const (
 	// LabelConfig は WORKFLOW.md が読めて front matter が検証を通るかの検査である。
-	LabelConfig = "設定ファイル"
+	LabelConfig = i18n.KeyDoctorLabelConfig
 	// LabelHerdr は herdr の socket の ping の protocol が設定と一致するかの検査である。
-	LabelHerdr = "herdr"
+	LabelHerdr = i18n.KeyDoctorLabelHerdr
 	// LabelGHAuth は `gh auth status` の scope に project が単独で並んでいるかの検査である。
-	LabelGHAuth = "gh の認証"
+	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。
-	LabelBoard = "ボード"
+	LabelBoard = i18n.KeyDoctorLabelBoard
 	// LabelClone は対象リポジトリが `ghq list -p -e` で見つかるかの検査である。
-	LabelClone = "clone"
+	LabelClone = i18n.KeyDoctorLabelClone
 	// LabelTrust は対象リポジトリの clone のパスが `~/.claude.json` で承認済みかの検査である。
-	LabelTrust = "信頼登録"
+	LabelTrust = i18n.KeyDoctorLabelTrust
 	// LabelCredentials は rate_limit の設定に応じて環境変数かファイルがあるかの検査である。
-	LabelCredentials = "資格情報"
+	LabelCredentials = i18n.KeyDoctorLabelCredentials
 )
+
+// LabelText は見出し語のキーを、いま使っている言語の語に直す。
+//
+// **表示するときだけ呼ぶ。**Result が持つのはキーであって語ではない。
+//
+// label: 見出し語のキー。
+// 戻り値: 画面に出す語。
+func LabelText(label i18n.Key) string { return i18n.T(label) }
 
 // Symbol は検査1件の結果である（設計 3-32 の3値）。
 type Symbol string
@@ -66,8 +78,9 @@ func worse(a, b Symbol) Symbol {
 
 // Result は検査1件の結果である。
 type Result struct {
-	// Label は見出し語である（LabelConfig などの定数のいずれか）。
-	Label string
+	// Label は見出し語のキーである（LabelConfig などの定数のいずれか）。
+	// **画面に出る語そのものではない。**語に直すのは Write だけである（設計 3-35）。
+	Label i18n.Key
 	// Symbol は3値の結果である。
 	Symbol Symbol
 	// Detail は記号の右に出す1行の説明である。**なぜその記号になったか**を書く。
@@ -144,7 +157,8 @@ func (r Report) Write(w io.Writer) error {
 	indent := strings.Repeat(" ", 2+labelColumn)
 
 	for _, res := range r.Results {
-		b.WriteString(fmt.Sprintf("%s %s%s%s\n", res.Symbol, res.Label, padding(res.Label), res.Detail))
+		label := LabelText(res.Label)
+		b.WriteString(fmt.Sprintf("%s %s%s%s\n", res.Symbol, label, padding(label), res.Detail))
 		for _, note := range res.Notes {
 			b.WriteString(indent + note + "\n")
 		}
@@ -157,16 +171,13 @@ func (r Report) Write(w io.Writer) error {
 	b.WriteString("\n")
 	switch {
 	case missing+unknown == 0:
-		b.WriteString(fmt.Sprintf("前提はすべて揃っています（✓ %d件）\n", len(r.Results)))
+		b.WriteString(i18n.T(i18n.KeyDoctorSummaryAllOK, len(r.Results)) + "\n")
 	case missing == 0:
 		// **`!` だけのときを「問題があります」と書かない。**対象リポジトリが0件のとき
 		// （ボードが空）もここへ来る。**ボードが空なのは設定の誤りではない**（設計 3-32）。
-		b.WriteString(fmt.Sprintf(
-			"%d件を確かめられませんでした（✗ 0件 / ! %d件）。足りないものはありません\n",
-			unknown, unknown))
+		b.WriteString(i18n.T(i18n.KeyDoctorSummaryUnknownOnly, unknown, unknown) + "\n")
 	default:
-		b.WriteString(fmt.Sprintf("%d件に問題があります（✗ %d件 / ! %d件）\n",
-			missing+unknown, missing, unknown))
+		b.WriteString(i18n.T(i18n.KeyDoctorSummaryProblems, missing+unknown, missing, unknown) + "\n")
 	}
 
 	_, err := io.WriteString(w, b.String())

@@ -41,11 +41,11 @@ func TestReport_出力の形と終了コードが設計どおりである(t *tes
 	if len(lines) != 8 {
 		t.Fatalf("出力の行数が想定と違う（%d行）:\n%s", len(lines), b.String())
 	}
-	if !strings.HasPrefix(lines[0], "✓ "+doctor.LabelHerdr+" ") ||
+	if !strings.HasPrefix(lines[0], "✓ "+doctor.LabelText(doctor.LabelHerdr)+" ") ||
 		!strings.HasSuffix(lines[0], "protocol 19（設定と一致）") {
 		t.Fatalf("1行目が「記号 見出し語 説明」になっていない: %q", lines[0])
 	}
-	if !strings.HasPrefix(lines[1], "✗ "+doctor.LabelClone+" ") {
+	if !strings.HasPrefix(lines[1], "✗ "+doctor.LabelText(doctor.LabelClone)+" ") {
 		t.Fatalf("2行目が ✗ の行になっていない: %q", lines[1])
 	}
 	if !strings.HasPrefix(lines[2], "  ") || !strings.Contains(lines[2], "maimuzo/koetsumugi が見つからない") {
@@ -54,7 +54,7 @@ func TestReport_出力の形と終了コードが設計どおりである(t *tes
 	if !strings.Contains(lines[3], "→ ghq get maimuzo/koetsumugi を実行してください") {
 		t.Fatalf("直し方の行が `→ ` で続いていない: %q", lines[3])
 	}
-	if !strings.HasPrefix(lines[4], "! "+doctor.LabelCredentials+" ") {
+	if !strings.HasPrefix(lines[4], "! "+doctor.LabelText(doctor.LabelCredentials)+" ") {
 		t.Fatalf("5行目が ! の行になっていない: %q", lines[4])
 	}
 	if lines[6] != "" {

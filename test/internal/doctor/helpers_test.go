@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/doctor"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // ===== 偽の herdr socket サーバ =====
@@ -691,23 +692,25 @@ func runGit(t *testing.T, dir string, args ...string) string {
 // report: 検査結果。
 // label: 見出し語。
 // 戻り値: その見出し語の検査結果。
-func resultOf(t *testing.T, report doctor.Report, label string) doctor.Result {
+func resultOf(t *testing.T, report doctor.Report, label i18n.Key) doctor.Result {
 	t.Helper()
 	for _, res := range report.Results {
 		if res.Label == label {
 			return res
 		}
 	}
-	t.Fatalf("見出し語 %q の検査結果がありません（あるのは %v）", label, labelsOf(report))
+	t.Fatalf("見出し語 %q の検査結果がありません（あるのは %v）", doctor.LabelText(label), labelsOf(report))
 	return doctor.Result{}
 }
 
-// labelsOf は検査結果の見出し語を並んだ順に返す。
+// labelsOf は検査結果の見出し語のキーを並んだ順に返す。
+//
+// **Result が持つのはキーであって、画面に出る語ではない**（設計 3-35）。
 //
 // report: 検査結果。
-// 戻り値: 見出し語の並び。
-func labelsOf(report doctor.Report) []string {
-	out := make([]string, 0, len(report.Results))
+// 戻り値: 見出し語のキーの並び。
+func labelsOf(report doctor.Report) []i18n.Key {
+	out := make([]i18n.Key, 0, len(report.Results))
 	for _, res := range report.Results {
 		out = append(out, res.Label)
 	}
@@ -721,12 +724,12 @@ func labelsOf(report doctor.Report) []string {
 // label: 見出し語。
 // want: 期待する記号。
 // 戻り値: その見出し語の検査結果。
-func assertSymbol(t *testing.T, report doctor.Report, label string, want doctor.Symbol) doctor.Result {
+func assertSymbol(t *testing.T, report doctor.Report, label i18n.Key, want doctor.Symbol) doctor.Result {
 	t.Helper()
 	res := resultOf(t, report, label)
 	if res.Symbol != want {
 		t.Fatalf("%s の記号が %s ではなく %s だった（説明: %s / 内訳: %v）",
-			label, want, res.Symbol, res.Detail, res.Notes)
+			doctor.LabelText(label), want, res.Symbol, res.Detail, res.Notes)
 	}
 	return res
 }

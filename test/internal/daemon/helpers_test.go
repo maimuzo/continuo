@@ -41,7 +41,7 @@ type timeline struct {
 
 // note は呼び出しを1件積む。
 //
-// name: 積む名前（`herdr.pane.list` / `gql.items(status:"Ready","In Progress")` など）。
+// name: 積む名前（`herdr.pane.list` / `gql.items("Status":"Ready","In Progress")` など）。
 func (tl *timeline) note(name string) {
 	tl.mu.Lock()
 	defer tl.mu.Unlock()

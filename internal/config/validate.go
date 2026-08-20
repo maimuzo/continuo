@@ -3,6 +3,10 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // validate は front matter をパースした直後の Config に対して、YAML としては正しいが
@@ -263,6 +267,12 @@ func validate(cfg *Config) error {
 	default:
 		return invalidValueError("trust.on_untrusted", cfg.Trust.OnUntrusted, `"skip_and_comment" のみサポートする（設計 4-3）`)
 	}
+	// **ここに書かれた文字列は `~/.claude.json` へ書き込む鍵の元になる**（3-33）。
+	// 形を検査せずに `ghq` や `git` へ渡すと、打ち間違いが「clone が無い」として
+	// 静かに握り潰される。**起動時に名指しで落とす。**
+	if err := validateTrustRepositories(cfg.Trust.Repositories); err != nil {
+		return err
+	}
 
 	switch cfg.Restart.OrphanRunningAction {
 	case "redispatch", "to_dispatch_state", "to_failure_state":
@@ -274,7 +284,35 @@ func validate(cfg *Config) error {
 		return invalidValueError("server.port", *cfg.Server.Port, "0以上65535以下にすること")
 	}
 
+	// **資源の無い言語を黙って日本語に落とさない**（3-35）。書いたつもりの設定が
+	// 効いていないことに、無人運用では誰も気づけない。
+	if err := validateLanguage(cfg.Language); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// validateLanguage は language の値を検査する（3-35）。
+//
+// 受け付けるのは、空文字（＝書かれていない）・"auto"・資源のある言語（"ja" / "en"）だけである。
+//
+// value: language に書かれた値。
+// 戻り値: 受け付けられない値だったときのエラー。受け付けられるなら nil。
+func validateLanguage(value string) error {
+	if value == "" || value == i18n.LangConfigAuto {
+		return nil
+	}
+	if i18n.Supported(i18n.Lang(value)) {
+		return nil
+	}
+	names := make([]string, 0, len(i18n.Available()))
+	for _, l := range i18n.Available() {
+		names = append(names, fmt.Sprintf("%q", string(l)))
+	}
+	return invalidValueError("language", value,
+		fmt.Sprintf("%q（環境変数 LANG から決める）か、%s のいずれかにすること",
+			i18n.LangConfigAuto, strings.Join(names, " / ")))
 }
 
 // validateExpanded は 5-5 の展開（環境変数・チルダ）を通したあとの Config を検査する。
@@ -348,4 +386,40 @@ func invalidValueError(key string, value any, requirement string) error {
 // key: 設定キーの名前（ドット区切り）。
 func requiredValueError(key string) error {
 	return fmt.Errorf("設定キー %s は必須ですが空です", key)
+}
+
+// trustRepositoryPattern は trust.repositories の要素として受け付ける形である（3-33）。
+//
+// **owner は英数字で始まり、英数字とハイフンだけの39文字以内**（GitHub の user /
+// organization 名の規則）。**repo は英数字・ハイフン・アンダースコア・ドットの100文字以内**
+// （GitHub のリポジトリ名の規則）。
+//
+// **ここで弾く目的は2つある。**1つは打ち間違いをその場で知らせること、もう1つは
+// `ghq list -p -e` と `git -C` へ渡す文字列に、パスの区切りや空白を混ぜられないようにすること
+// である（`continuo trust` はこの値を鍵にして `~/.claude.json` を書き換える）。
+var trustRepositoryPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$`)
+
+// validateTrustRepositories は trust.repositories の列挙を検査する。
+//
+// **重複も弾く。**この一覧は人間が手で削る前提のもの（3-33）であり、同じ行が2つあるのは
+// 消し損ねか貼り付けの誤りである。黙って読み飛ばすと、消したつもりの行が残る。
+//
+// repos: trust.repositories に書かれた文字列の並び。
+// 戻り値: 最初に見つかった不正な要素についてのエラー。すべて正しければ nil。
+func validateTrustRepositories(repos []string) error {
+	seen := make(map[string]struct{}, len(repos))
+	for i, r := range repos {
+		if !trustRepositoryPattern.MatchString(r) {
+			return invalidValueError(
+				fmt.Sprintf("trust.repositories[%d]", i), r,
+				`"owner/repo" の形で書くこと（例 maimuzo/continuo）`)
+		}
+		if _, dup := seen[r]; dup {
+			return invalidValueError(
+				fmt.Sprintf("trust.repositories[%d]", i), r,
+				"同じリポジトリが2回書かれている（重複した行を消すこと）")
+		}
+		seen[r] = struct{}{}
+	}
+	return nil
 }

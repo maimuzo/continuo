@@ -90,35 +90,10 @@ func WriteTemplate(dir string, force bool) (Result, error) {
 // force: 既に WORKFLOW.md がある場合に上書きするかどうか。
 // values: 埋める値。
 func WriteTemplateWithValues(dir string, force bool, values Values) (Result, error) {
-	absDir, err := resolveDir(dir)
+	path, err := resolveTarget(dir)
 	if err != nil {
 		return Result{}, err
 	}
-
-	info, err := os.Stat(absDir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			// ディレクトリは作らない。打ち間違えたパスに WORKFLOW.md が生まれると、
-			// 利用者は「作ったはずのファイルが見つからない」状態になる。
-			return Result{}, fmt.Errorf("%w: %s", ErrDirNotFound, absDir)
-		}
-		return Result{}, fmt.Errorf("ディレクトリを確認できません: %s: %w", absDir, err)
-	}
-	if !info.IsDir() {
-		return Result{}, fmt.Errorf("%w: %s", ErrNotADirectory, absDir)
-	}
-
-	// dir 自身（またはその親）が symlink だと、os.Stat も os.OpenFile も辿るので、
-	// 書き込みはリンク先へ落ちるのに Result.Path はリンク側のパスを返す。
-	// 「壊した場所と、報告した場所が食い違う」ことになるため、実体のパスに直してから
-	// Result.Path を組み立てる。filepath.EvalSymlinks は対象が存在しないとエラーになるので、
-	// 上の存在の検査より後に呼ぶ。
-	realDir, err := filepath.EvalSymlinks(absDir)
-	if err != nil {
-		return Result{}, fmt.Errorf("ディレクトリの実体を辿れません: %s: %w", absDir, err)
-	}
-
-	path := filepath.Join(realDir, fileName)
 
 	// syscall.O_NOFOLLOW は「最後の要素が symlink なら開かずに ELOOP で失敗する」フラグである。
 	// これが無いと os.WriteFile / os.OpenFile は symlink を辿るため、<dir>/WORKFLOW.md が
@@ -157,6 +132,80 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を閉じられません: %s: %w", path, err)
 	}
 	return Result{Path: path, Overwritten: overwritten}, nil
+}
+
+// CheckWritable は、雛形を書き出す前に「書き出せるか」だけを確かめる。
+//
+// **`continuo setup` が対話を始める前に呼ぶためにある**（RUCM の基本フロー2）。
+// 上書きできずにどうせ止まる実行で、先に gh を叩いてボードを読む理由が無い。
+//
+// **これは事前の見立てであり、保証ではない。**実際の書き込みは
+// WriteTemplateWithValues が `O_EXCL` / `O_NOFOLLOW` で1回の操作として行う
+// （ここで見てから書くまでの隙間に別のプロセスが作ったファイルを壊さないため）。
+//
+// dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリ。
+// force: 既に WORKFLOW.md がある場合に上書きしてよいかどうか。
+// 戻り値: 書き出す先のパスと、上書きになるかどうか。
+// エラー: WriteTemplate と同じ sentinel error（ErrDirNotFound / ErrNotADirectory /
+// ErrSymlink / ErrAlreadyExists）を errors.Is で判定できる形で返す。
+func CheckWritable(dir string, force bool) (Result, error) {
+	path, err := resolveTarget(dir)
+	if err != nil {
+		return Result{}, err
+	}
+
+	// symlink そのものの有無を見たいので os.Stat ではなく os.Lstat を使う。
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return Result{Path: path}, nil
+		}
+		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を確認できません: %s: %w", path, err)
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		// --force でも辿らない（書き込み側と同じ判断）。
+		return Result{Path: path}, fmt.Errorf("%w: %s: 辿るとこのディレクトリの外にあるリンク先を壊すため書き込みません", ErrSymlink, path)
+	}
+	if !force {
+		return Result{Path: path}, fmt.Errorf("%w: %s", ErrAlreadyExists, path)
+	}
+	return Result{Path: path, Overwritten: true}, nil
+}
+
+// resolveTarget は受け取ったディレクトリから、書き出す WORKFLOW.md の絶対パスを決める。
+//
+// dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリ。
+// 戻り値: 書き出す WORKFLOW.md の絶対パス（ディレクトリの symlink は辿った先で組み立てる）。
+// エラー: ErrDirNotFound / ErrNotADirectory を包んだエラー、または実体を辿れなかった理由。
+func resolveTarget(dir string) (string, error) {
+	absDir, err := resolveDir(dir)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Stat(absDir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// ディレクトリは作らない。打ち間違えたパスに WORKFLOW.md が生まれると、
+			// 利用者は「作ったはずのファイルが見つからない」状態になる。
+			return "", fmt.Errorf("%w: %s", ErrDirNotFound, absDir)
+		}
+		return "", fmt.Errorf("ディレクトリを確認できません: %s: %w", absDir, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%w: %s", ErrNotADirectory, absDir)
+	}
+
+	// dir 自身（またはその親）が symlink だと、os.Stat も os.OpenFile も辿るので、
+	// 書き込みはリンク先へ落ちるのに Result.Path はリンク側のパスを返す。
+	// 「壊した場所と、報告した場所が食い違う」ことになるため、実体のパスに直してから
+	// Result.Path を組み立てる。filepath.EvalSymlinks は対象が存在しないとエラーになるので、
+	// 上の存在の検査より後に呼ぶ。
+	realDir, err := filepath.EvalSymlinks(absDir)
+	if err != nil {
+		return "", fmt.Errorf("ディレクトリの実体を辿れません: %s: %w", absDir, err)
+	}
+	return filepath.Join(realDir, fileName), nil
 }
 
 // openError は書き出し先を開けなかったときのエラーを、CLI が文言と終了コードを決められる形に直す。
