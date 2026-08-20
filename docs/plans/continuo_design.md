@@ -3162,9 +3162,18 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 > **これから issue を作るリポジトリは、まだボードに無いので1件も入らない。**
 > 使い始めるとき、人はまず設定を作り（`continuo init`）、そのあとで issue を作る。
 > **その順番では、試すリポジトリが必ず抜ける。**
-> 抜けたまま起動すると、continuo はその issue を取らない。**worktree も pane も作らず、
-> issue にコメントも残さない**（`claimForDispatch` の前で捨てるため）。
-> 気づけるのは `continuo doctor` の `信頼登録` が `✗` になることだけである。
+> 抜けたまま起動すると、continuo はその issue を取らない。**worktree も pane も作らない。**
+> **そのリポジトリにつき1回、issue にコメントを投稿する**（`trust.on_untrusted` は
+> `skip_and_comment` のみ。他の値は設定として受け付けない）。
+> **そのコメントの本文に直し方を書く。**`continuo trust` を案内すること。
+> 「Claude Code で一度開いて承認しろ」と書いてはならない — **人間が実際に読むのは
+> doctor の画面ではなくこのコメントである。**
+>
+> **信頼の門番は `~/.claude.json` であって `trust.repositories` ではない。**
+> 巡回のループは `trust.repositories` を1バイトも読まない（読むのは `continuo trust` だけ）。
+> **だから「書いていないから取らない」と書くのは因果が逆である。**
+> その clone で以前 Claude Code を起動していれば、書かなくても取る。
+> 逆に書いてあっても `continuo trust` を実行していなければ取らない。
 >
 > **だから雛形のコメントで伝える。**`continuo init` が `trust.repositories` を埋めたとき、
 > 3行目に次を残す（`internal/scaffold/fill.go` の `repositoriesFilledComment3`）。

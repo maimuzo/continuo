@@ -135,11 +135,13 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 func buildUntrustedComment(owner, repo, reason string) string {
 	return fmt.Sprintf(
 		"このリポジトリ（%s/%s）は Claude Code に信頼登録されていないため、continuo は着手できません。\n\n"+
-			"信頼していないフォルダでは Claude Code の hook が1つも動かず、turn の終わりを検知できません。\n"+
-			"人間が一度だけ、このリポジトリの clone で Claude Code を起動して信頼を承認してください。\n\n"+
+			"信頼していないフォルダでは Claude Code の hook が1つも動かず、turn の終わりを検知できません。\n\n"+
+			"直し方。WORKFLOW.md の `trust.repositories` に `%s/%s` を書き足してから、"+
+			"`continuo trust` を実行してください。\n"+
+			"何を許すことになるかは `continuo trust --dry-run` で先に見られます。\n\n"+
 			"検査の結果: %s\n\n"+
 			"このリポジトリについての通知は1回だけです（同じリポジトリの他の issue では出しません）。",
-		owner, repo, reason)
+		owner, repo, owner, repo, reason)
 }
 
 // buildHandoffComment は人間へ引き渡すときの通知のコメント本文を作る。

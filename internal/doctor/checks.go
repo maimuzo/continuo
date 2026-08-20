@@ -338,18 +338,10 @@ func checkClone(
 			Detail: i18n.T(i18n.KeyDoctorCloneBoardUnreadable),
 		}, nil
 	}
-	if len(repos) == 0 {
-		// **ボードが空なのは設定の誤りではない**（設計 3-32）。終了コードに影響させない。
-		return Result{
-			Label:  LabelClone,
-			Symbol: SymbolUnknown,
-			Detail: i18n.T(i18n.KeyDoctorCloneNoTargets),
-		}, nil
-	}
-
 	// **ghq と git が PATH に無ければ、この先を調べても意味が無い。**
 	// continuo は worktree を用意するときにこの2つを起動するので、
-	// 無いまま段8 へ進むと必ず落ちる。ここで足りないものとして止める。
+	// 無いまま段8 へ進むと必ず落ちる。**対象が0件でも先に見る。**段6 の時点ではボードに issue が無いので、
+	// ここを後回しにすると段7 まで気づけない。
 	for _, bin := range []string{"ghq", "git"} {
 		if _, err := exec.LookPath(bin); err != nil {
 			return Result{
@@ -359,6 +351,15 @@ func checkClone(
 				Remedies: []string{i18n.T(i18n.KeyDoctorCloneRemedyInstallBin, bin)},
 			}, nil
 		}
+	}
+
+	if len(repos) == 0 {
+		// **ボードが空なのは設定の誤りではない**（設計 3-32）。終了コードに影響させない。
+		return Result{
+			Label:  LabelClone,
+			Symbol: SymbolUnknown,
+			Detail: i18n.T(i18n.KeyDoctorCloneNoTargets),
+		}, nil
 	}
 
 	paths := make(map[string]string, len(repos))
