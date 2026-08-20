@@ -92,7 +92,7 @@ POSTCONDITION: WORKFLOW.md は変わっていない。ボードの選択肢は�
 SPECIFIC ALTERNATIVE FLOW 二重割り当て:
 RFS BASIC FLOW 12
 1. システムは利用者に選んだ選択肢が別の役割に割り当て済みであることを応答する。
-2. システムは利用者に割り当て済みの役割の名前を応答する。
+2. システムは利用者に割り当て済みの設定のキー名を応答する。
 3. RESUME STEP 8
 POSTCONDITION: 役割への割り当ては増えていない。1つの選択肢は1つの役割だけに割り当てられている。システムは同じ役割の番号をもう一度待っている。
 
@@ -113,15 +113,16 @@ POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当�
 
 ## 割り当てる5つの役割
 
-**尋ねる順序はこの表の上から下である。**システムは役割の名前を先に出さず、**continuo がその Status で何をするかの説明を先に出してから番号を待つ。**
+**尋ねる順序はこの表の上から下である。**システムは**設定のキー名を先に出してから**、
+何をするかの説明を続けて番号を待つ。**役割の呼び名（着手待ちなど）は画面に出さない。**
 
-| 役割 | 画面に出す説明 | WORKFLOW.md に書くキー |
+| 順 | 画面に出す文言 | WORKFLOW.md に書くキー |
 | --- | --- | --- |
-| 着手待ち | continuo はここから issue を取ります | `dispatch_state`、`active_states` の1つめ |
-| 作業中 | continuo は issue を取ったときにここへ動かします | `running_state`、`active_states` の2つめ |
-| レビュー待ち | エージェントが終わったと表明したらここへ動かします。人間が見ます | `status_signal_map.review` |
-| 保留 | エージェントが判断を仰ぐとき、打ち切ったときにここへ動かします | `failure_state`、`status_signal_map.blocked` |
-| 完了 | 人間がここへ動かすと continuo が worktree と branch を片付けます | `terminal_states` の1つめ |
+| 1 | `dispatch_state: continuo が自動的に処理を開始する State は何番ですか?` | `dispatch_state`、`active_states` の1つめ |
+| 2 | `running_state: continuo が処理を開始したときに移動する State は何番ですか?` | `running_state`、`active_states` の2つめ |
+| 3 | `status_signal_map.review: エージェントが作業を完了したときに移動する State は何番ですか?` | `status_signal_map.review` |
+| 4 | `status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する State は何番ですか?` | `failure_state`、`status_signal_map.blocked` |
+| 5 | `terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する State は何番ですか?` | `terminal_states` の1つめ |
 
 **番号 `0` は「この役割に使える選択肢がボードに無い」を表す。**5つの役割は continuo の動作に全部必要なので、
 `0` が入ったら割り当てを打ち切る（`該当する選択肢が無い` のフロー）。
@@ -227,7 +228,7 @@ flowchart TD
 
     subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW 二重割り当て / RFS BASIC FLOW 12"]
         F6S1["1. システムは利用者に選んだ選択肢が別の役割に割り当て済みであることを応答する"]
-        F6S2["2. システムは利用者に割り当て済みの役割の名前を応答する"]
+        F6S2["2. システムは利用者に割り当て済みの設定のキー名を応答する"]
         F6S3["3. RESUME STEP 8"]
         F6S1 --> F6S2 --> F6S3
     end
@@ -277,7 +278,7 @@ sequenceDiagram
                 Note over Sys: ABORT 終了コード 1
             else 選択肢が5個以上ある
                 Sys-->>User: 選択肢の一覧を番号付きで応答する
-                loop 着手待ち 作業中 レビュー待ち 保留 完了 の順に5回
+                loop dispatch_state running_state review blocked terminal_states の順に5回
                     Sys-->>User: いま割り当てる役割の説明を応答する
                     User->>Sys: 番号を送信する
                     alt 番号が一覧の範囲外である
@@ -287,7 +288,7 @@ sequenceDiagram
                         Sys-->>User: 選択肢を GitHub の画面から足す手順を応答する
                         Note over Sys: ABORT 終了コード 1
                     else 番号の選択肢が他の役割に割り当て済みである
-                        Sys-->>User: 割り当て済みの役割の名前を応答する
+                        Sys-->>User: 割り当て済みの設定のキー名を応答する
                         Note over Sys: RESUME STEP 8 同じ役割を尋ね直す
                     else 番号を受け付ける
                         Sys->>Sys: 番号の選択肢を役割へ割り当てる

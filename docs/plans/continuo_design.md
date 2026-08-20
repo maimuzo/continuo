@@ -2106,7 +2106,7 @@ Linux は107バイトまで。**両対応のため103バイトを上限にし、
 
 **`CONTINUO_GITHUB_GRAPHQL_ENDPOINT` は運用者の逃げ道であり、テストの接続先でもある。**
 **これが無いと、ビルドしたバイナリを本番のボードへ繋がずに動かす手段が1つも無い**
-（`test/internal/daemon` は偽の GraphQL サーバをここへ向けている）。
+（`test/internal/daemon` はテスト用GraphQL mockをここへ向けている）。
 
 **決めたパスは身元ファイルに書く**（3-18）。**探索順は環境に依存するので、別の起動方法で立て直すと別のパスに落ちる。**
 run 中の Claude Code は前回のパスを持ったままなので、引き継ぐときに一致を検査する。
@@ -3044,16 +3044,15 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 （標準入力を握ると自動で叩く経路が止まる）ので、対話を別のサブコマンドへ切り出した。
 仕様は [docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md](../spec/usecases/particular_case/既存のボードの%20Status%20を割り当てる.rucm.md) が正である。
 
-**尋ねる5つの役割。****役割の名前より先に「continuo がその Status で何をするか」を出す。**
-初見の利用者は、どの Status がどの役割かを知らない。
+**尋ねる5つ。**画面には設定のキー名を出す（次の節）。**役割の呼び名は使わない。**
 
-| 役割 | 画面に出す説明 | WORKFLOW.md に書くキー |
+| 順 | 画面に出す文言 | WORKFLOW.md に書くキー |
 | --- | --- | --- |
-| 着手待ち | continuo はここから issue を取ります | `dispatch_state`、`active_states` の1つめ |
-| 作業中 | continuo は issue を取ったときにここへ動かします | `running_state`、`active_states` の2つめ |
-| レビュー待ち | エージェントが終わったと表明したらここへ動かします | `status_signal_map.review` |
-| 保留 | エージェントが判断を仰ぐとき、打ち切ったときにここへ動かします | `failure_state`、`status_signal_map.blocked` |
-| 完了 | 人間がここへ動かすと continuo が worktree と branch を片付けます | `terminal_states` の1つめ |
+| 1 | `dispatch_state: continuo が自動的に処理を開始する State は何番ですか?` | `dispatch_state`、`active_states` の1つめ |
+| 2 | `running_state: continuo が処理を開始したときに移動する State は何番ですか?` | `running_state`、`active_states` の2つめ |
+| 3 | `status_signal_map.review: エージェントが作業を完了したときに移動する State は何番ですか?` | `status_signal_map.review` |
+| 4 | `status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する State は何番ですか?` | `failure_state`、`status_signal_map.blocked` |
+| 5 | `terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する State は何番ですか?` | `terminal_states` の1つめ |
 
 #### 尋ねるときは設定のキー名を出す。役割の呼び名を使わない
 
@@ -3146,7 +3145,7 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 | **7つのキーのどれかが消されている** | **書き換えずに打ち切り、消えたキーを名指しする。**黙って何もしないと、巡回が無言で「対象0件」を返し続ける |
 | 選択肢が5個未満 | **尋ねる前に**止め、GitHub の画面から足す手順を出す |
 | 番号 `0` が入った | その役割へ渡せる選択肢が無いという表明。打ち切る。途中まで選んだ番号は保存しない |
-| 同じ選択肢を2つの役割へ | **打ち切らない。**衝突した役割の名前を出して、同じ役割を尋ね直す |
+| 同じ選択肢を2つの役割へ | **打ち切らない。**衝突した相手のキー名を出して、同じものを尋ね直す |
 | Ctrl+C | 割り当てを保存しないことを応答して終わる。WORKFLOW.md は書き換えない |
 
 **選択肢は足さない。**足りないときは GitHub の画面から足すよう案内する。

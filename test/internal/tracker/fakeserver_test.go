@@ -1,6 +1,6 @@
 // Package tracker_test は internal/tracker の GitHub Projects v2 アダプタを検証する。
 //
-// **本番のボード（project #3）へは絶対に接続しない。**httptest.Server で偽の GraphQL
+// **本番のボード（project #3）へは絶対に接続しない。**httptest.Server でテスト用GraphQL mock
 // サーバを立て、決まった JSON を返させることでアダプタの挙動を検証する
 // （タスクの絶対制約。CLAUDE.md も同じ制約を課している）。
 package tracker_test
@@ -42,7 +42,7 @@ type fakeGraphQLServer struct {
 	requests []capturedRequest
 }
 
-// newFakeGraphQLServer は httptest.Server を1本立てた偽の GraphQL サーバを起動する。
+// newFakeGraphQLServer は httptest.Server を1本立てたテスト用GraphQL mockを起動する。
 //
 // t: 呼び出し元のテスト。サーバの後始末を t.Cleanup に登録する。
 // responder: リクエストのたびに呼ばれ、返す応答を決める関数。n はこの呼び出しが

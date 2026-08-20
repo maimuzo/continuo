@@ -1,6 +1,6 @@
 // Package herdr_test は internal/herdr の socket クライアントを検証する。
 //
-// 実際の herdr には接続しない。net.Listen("unix", ...) で偽の herdr サーバを立て、
+// 実際の herdr には接続しない。net.Listen("unix", ...) でテスト用herdr mock サーバを立て、
 // 決まった JSON を返させることで、herdr の socket API の性質
 // （改行区切り JSON・1コネクション=1リクエスト・エラー応答の形）をテストする
 // （docs/plans/continuo_design.md 2-1）。

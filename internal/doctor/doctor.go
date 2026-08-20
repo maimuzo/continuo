@@ -23,7 +23,7 @@
 // 起動時検査は最初の失敗で起動を止め、doctor は全部調べて記号で並べる。
 //
 // **本番のボードへ書き込む経路は1つも無い。**このパッケージが呼ぶのは読み取りだけである
-// （Bootstrap と FetchIssuesByStates）。テストは httptest.Server で立てた偽の GraphQL
+// （Bootstrap と FetchIssuesByStates）。テストは httptest.Server で立てたテスト用GraphQL mock
 // サーバに向けること。
 package doctor
 

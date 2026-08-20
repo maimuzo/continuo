@@ -158,9 +158,9 @@
 ### テスト
 
 [test/internal/doctor/](../../../test/internal/doctor/) に置いた。
-**本番のボードへは1リクエストも送らない**（`httptest.Server` の偽 GraphQL）。
+**本番のボードへは1リクエストも送らない**（`httptest.Server` のテスト用GraphQL mock）。
 **実 herdr にも繋がない**（Unix domain socket の偽サーバ）。
-**本物の `gh` / `ghq` / ホームディレクトリも使わない**（PATH の先頭へ偽物、`HOME` は一時ディレクトリ）。
+**本物の `gh` / `ghq` / ホームディレクトリも使わない**（PATH の先頭へmock、`HOME` は一時ディレクトリ）。
 `cli_test.go` は**ビルドしたバイナリを起動して**出力と終了コードを確かめる。
 
 ### `doctor` が検査していない前提が2つある

@@ -28,7 +28,7 @@ type cleanupFixture struct {
 
 // newCleanupFixture は worktree を1つ用意し、身元ファイルと設定ファイルを置く。
 //
-// 偽 herdr の worktree.remove には「実体を本当に消す」副作用を登録する
+// テスト用herdr mock の worktree.remove には「実体を本当に消す」副作用を登録する
 // （本物の herdr は worktree を消す。消さないと `git branch -D` が必ず失敗し、
 // 片付けの段4 を検証できない）。
 //
@@ -637,7 +637,7 @@ func TestCleanup_身元ファイルのherdr_workspace_idが書き換えられて
 
 // 目的: herdr が別のパスを開いている workspace を答えたら、何も消さないことを確認する
 // （設計 3-9 の段3。検算の答えが食い違ったら止まる）。
-// 与える情報: 常に別のパスを worktree として答える偽 herdr。
+// 与える情報: 常に別のパスを worktree として答えるテスト用herdr mock。
 // 成功条件: Cleanup がエラーになり、worktree.remove を1度も送らず、worktree が残ること。
 func TestCleanup_herdrが別のパスを答えたら何も消さない(t *testing.T) {
 	other := filepath.Join(t.TempDir(), "別の-worktree")

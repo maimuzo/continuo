@@ -2,8 +2,8 @@
 //
 // **本番のボード（project #3）へは1リクエストも送らない。**`httptest.Server` で偽の
 // GraphQL サーバを立て、その URL を doctor へ渡す。
-// **実 herdr には繋がない。**`net.Listen("unix", ...)` で偽の socket サーバを立てる。
-// **本物の `gh` と `ghq` も使わない。**PATH の先頭へ偽物を置き、本物の認証情報を読ませない。
+// **実 herdr には繋がない。**`net.Listen("unix", ...)` でテスト用socket mockを立てる。
+// **本物の `gh` と `ghq` も使わない。**PATH の先頭へmockを置き、本物の認証情報を読ませない。
 // **本物のホームディレクトリも読まない。**`~/.claude.json` と `~/.claude/.credentials.json`
 // は一時ディレクトリの下に作る。
 package doctor_test
@@ -28,7 +28,7 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
-// ===== 偽の herdr socket サーバ =====
+// ===== テスト用herdr mock socket サーバ =====
 
 // fakeHerdr は herdr の socket API の代わりに使う偽のサーバである。
 //
@@ -44,19 +44,19 @@ type fakeHerdr struct {
 	pings int
 }
 
-// newFakeHerdr は偽 herdr を1本立てる。
+// newFakeHerdr はテスト用herdr mock を1本立てる。
 //
 // t: 呼び出し元のテスト。socket の後始末を t.Cleanup に登録する。
 // dir: socket を置くディレクトリ（**短く保つこと。**macOS の上限は103バイト）。
 // protocol: ping が返す protocol 版。
-// 戻り値: 起動した偽 herdr。
+// 戻り値: 起動したテスト用herdr mock。
 func newFakeHerdr(t *testing.T, dir string, protocol int) *fakeHerdr {
 	t.Helper()
 
 	socketPath := filepath.Join(dir, "h.sock")
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		t.Fatalf("偽 herdr の socket を bind できません（%s）: %v", socketPath, err)
+		t.Fatalf("テスト用herdr mock の socket を bind できません（%s）: %v", socketPath, err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
@@ -134,7 +134,7 @@ func (fh *fakeHerdr) serve(conn net.Conn) {
 	_, _ = conn.Write(append(encoded, '\n'))
 }
 
-// ===== 偽の GitHub GraphQL サーバ =====
+// ===== テスト用GitHub GraphQL mock サーバ =====
 
 // boardItem は偽ボードの project item 1件である。
 type boardItem struct {
@@ -184,7 +184,7 @@ type fakeGitHub struct {
 	queries []string
 }
 
-// newFakeGitHub は偽の GraphQL サーバを1本立てる。
+// newFakeGitHub はテスト用GraphQL mockを1本立てる。
 //
 // t: 呼び出し元のテスト。後始末を t.Cleanup に登録する。
 // owner: ボードの所有者名。
@@ -417,7 +417,7 @@ func (fg *fakeGitHub) itemPayload(it boardItem) map[string]any {
 	}
 }
 
-// ===== 偽の gh / ghq =====
+// ===== テスト用gh / ghq mock =====
 
 // ghAuthStatusWithProject は `gh auth status` の合格する出力である
 // （`Active account: true` のブロックに `project` が単独の scope として並ぶ）。
@@ -438,7 +438,7 @@ const ghAuthStatusWithProject = `github.com
 func writeFakeGH(t *testing.T, dir, authStatus string, exitCode int) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatalf("偽の gh を置くディレクトリを作れません: %v", err)
+		t.Fatalf("テスト用gh mock を置くディレクトリを作れません: %v", err)
 	}
 	script := fmt.Sprintf(`#!/bin/sh
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
@@ -450,7 +450,7 @@ fi
 exit 0
 `, strings.TrimRight(authStatus, "\n"), exitCode)
 	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o755); err != nil {
-		t.Fatalf("偽の gh を書けません: %v", err)
+		t.Fatalf("テスト用gh mock を書けません: %v", err)
 	}
 }
 
@@ -466,7 +466,7 @@ exit 0
 func writeFakeGhq(t *testing.T, dir, output, argsFile string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatalf("偽の ghq を置くディレクトリを作れません: %v", err)
+		t.Fatalf("テスト用ghq mock を置くディレクトリを作れません: %v", err)
 	}
 	script := fmt.Sprintf(`#!/bin/sh
 echo "$@" >> %q
@@ -476,7 +476,7 @@ fi
 exit 0
 `, argsFile, output, output)
 	if err := os.WriteFile(filepath.Join(dir, "ghq"), []byte(script), 0o755); err != nil {
-		t.Fatalf("偽の ghq を書けません: %v", err)
+		t.Fatalf("テスト用ghq mock を書けません: %v", err)
 	}
 }
 
@@ -488,26 +488,26 @@ type fixture struct {
 	Root string
 	// Home は `~/.claude.json` と `~/.claude/.credentials.json` を置くホームディレクトリである。
 	Home string
-	// BinDir は偽の gh / ghq を置いたディレクトリである。
+	// BinDir はテスト用gh / ghq mock を置いたディレクトリである。
 	BinDir string
-	// GhqArgsFile は偽の ghq が受け取った引数を書き出すファイルである。
+	// GhqArgsFile はテスト用ghq mock が受け取った引数を書き出すファイルである。
 	GhqArgsFile string
 	// RepoDir は本物の git の clone である（信頼の鍵を `git rev-parse` で引くため）。
 	RepoDir string
 	// WorkflowPath は WORKFLOW.md の絶対パスである。
 	WorkflowPath string
-	// Herdr は偽 herdr である。
+	// Herdr はテスト用herdr mock である。
 	Herdr *fakeHerdr
-	// GitHub は偽 GitHub である。
+	// GitHub はテスト用GitHub mock である。
 	GitHub *fakeGitHub
 	// Env は doctor が引く環境変数である（Options.LookupEnv がこれを引く）。
 	Env map[string]string
 	// GhqPaths は注入する `ghq list` の結果である（鍵は `<owner>/<repo>`）。
-	// **nil なら本物の RunGhqList を使う**（PATH の偽の ghq が答える）。
+	// **nil なら本物の RunGhqList を使う**（PATH のテスト用ghq mock が答える）。
 	GhqPaths map[string]string
 }
 
-// newFixture は偽 herdr・偽 GitHub・本物の git のリポジトリ・WORKFLOW.md を用意する。
+// newFixture はテスト用herdr mock・テスト用GitHub mock・本物の git のリポジトリ・WORKFLOW.md を用意する。
 //
 // **前提がすべて揃った状態を作る。**個々のテストは、そこから1つだけ壊して検査する。
 //
@@ -564,7 +564,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	fx.WriteWorkflow(t, "")
 
-	// **PATH の先頭を偽の gh / ghq にする。**本物の認証情報を読ませない。
+	// **PATH の先頭をテスト用gh / ghq mock にする。**本物の認証情報を読ませない。
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	// ボードを読むトークンは環境変数から取る設定にしてある（偽サーバは値を見ない）。
 	t.Setenv("CONTINUO_TEST_TOKEN", "dummy-token-for-the-fake-server")

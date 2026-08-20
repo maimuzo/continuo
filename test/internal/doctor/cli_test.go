@@ -93,12 +93,12 @@ func runDoctorBinaryWithEndpoint(t *testing.T, fx *fixture, bin, endpoint string
 // **ビルドしたバイナリを実際に起動して**出力と終了コードを確かめる。
 //
 // 目的: `continuo doctor` が7項目を固定の見出し語で出し、すべて通れば 0 で終わること。
-// 与える情報: 偽 herdr・偽ボード・偽の gh / ghq・一時ディレクトリのホーム
+// 与える情報: テスト用herdr mock・偽ボード・テスト用gh / ghq mock・一時ディレクトリのホーム
 // （**本番のボードにも実 herdr にも繋がない**）。
 // 成功条件: 出力に7つの見出し語と `✓` が並び、終了コードが 0 であること。
 func TestDoctorCLI_前提が揃っていれば7項目を出して終了コードは0(t *testing.T) {
 	fx := newFixture(t)
-	// **信頼の検査は PATH の偽の ghq が返すパスで行う**（注入は使わない経路を通す）。
+	// **信頼の検査は PATH のテスト用ghq mock が返すパスで行う**（注入は使わない経路を通す）。
 	fx.GhqPaths = nil
 	bin := buildBinary(t, fx.Root)
 

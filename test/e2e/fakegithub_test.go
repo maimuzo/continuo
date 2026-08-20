@@ -13,7 +13,7 @@ import (
 // **本番のボード（project #3）へは1リクエストも送らない。**continuo は環境変数
 // `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` でここへ向く。
 //
-// **状態は偽の gh と共有する。**返す中身も書き込む先も board.json であり、
+// **状態はテスト用gh mock と共有する。**返す中身も書き込む先も board.json であり、
 // `gh project item-add` で足した issue はここから見えるし、
 // ここで書き換えた Status は次の `gh project item-list` に出る。
 type fakeGitHub struct {
@@ -25,7 +25,7 @@ type fakeGitHub struct {
 	Queries *queryLog
 }
 
-// newFakeGitHub は偽の GraphQL サーバを1本立てる。
+// newFakeGitHub はテスト用GraphQL mockを1本立てる。
 //
 // t: 呼び出し元のテスト。後始末を t.Cleanup に登録する。
 // boardPath: 読み書きするボードの JSON の絶対パス。
@@ -41,7 +41,7 @@ func newFakeGitHub(t *testing.T, boardPath string) *fakeGitHub {
 
 // handle は1件の GraphQL リクエストに答える。
 //
-// **応答の組み立てはボードのロックを取ったまま行う。**偽の gh（別プロセス）が
+// **応答の組み立てはボードのロックを取ったまま行う。**テスト用gh mock（別プロセス）が
 // 同時に書き換えていても、途中の状態を返さないようにするためである。
 //
 // w: 応答の書き出し先。

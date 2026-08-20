@@ -27,5 +27,5 @@
 - **枠を使い切ると HTTP 200 のままエラーメッセージが返る。**応答の `errors` を必ず見る
 - **巡回のクエリはネストが4本あるので 1リクエスト 4 point。**毎時 480 point になる（3-31）
 
-**テスト。**`test/internal/tracker/fakeserver_test.go` に偽の GraphQL サーバを持っている。
+**テスト。**`test/internal/tracker/fakeserver_test.go` にテスト用GraphQL mockを持っている。
 **本番のボード（project #3）には一切アクセスしない。**

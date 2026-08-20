@@ -30,7 +30,7 @@ func fieldListJSON(options []string) []byte {
 }
 
 // 目的: ボードの Status フィールドの選択肢を、ボードの並び順のまま読めることを確認する。
-// 与える情報: 本番と同じ6個の選択肢を返す偽の gh。
+// 与える情報: 本番と同じ6個の選択肢を返すテスト用gh mock。
 // 成功条件: 選択肢が並び順のまま返ること。**呼んだ gh のサブコマンドが field-list だけであること**
 // （ボードを書き換える field-create / item-edit を呼んでいないこと）。
 func TestFetchStatusField_選択肢をボードの並び順のまま読む(t *testing.T) {
@@ -100,7 +100,7 @@ func TestFetchStatusField_singleSelectでないフィールドは受け付けな
 }
 
 // 目的: gh の落ち方を「直し方が決まる形」へ分類できることを確認する。
-// 与える情報: scope 不足とレートリミットのそれぞれの文言を返す偽の gh。
+// 与える情報: scope 不足とレートリミットのそれぞれの文言を返すテスト用gh mock。
 // 成功条件: setup.ErrScopeMissing / setup.ErrRateLimited をそれぞれ返すこと。
 func TestFetchStatusField_ghの落ち方を直し方が決まる形へ分類する(t *testing.T) {
 	cases := []struct {

@@ -127,7 +127,7 @@ func TestResumeBackoff_バックオフが明けたrunを巡回の先頭で拾い
 			Mutate: func(cfg *config.Config) {
 				cfg.Claude.StallTimeoutMs = int(stallTimeout / time.Millisecond)
 				cfg.Agent.MaxRetryBackoffMs = 10000
-				// 信頼の検査は helpers_test.go の偽 socket サーバ側で確かめている。
+				// 信頼の検査は helpers_test.go のテスト用socket mock側で確かめている。
 				// ここで見たいのは「バックオフが明けたら段0 から入り直す」ことだけである。
 				cfg.Trust.RequireRepoTrusted = false
 				cfg.Tracker.VerifyStatesEvery = 0

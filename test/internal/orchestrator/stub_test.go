@@ -22,12 +22,12 @@ import (
 
 // stubHerdr は **socket を使わない** herdr のクライアントである。
 //
-// **なぜ偽の socket サーバではなくこれを使うか。**時間に依存する処理（stall の時計・
+// **なぜテスト用socket mockではなくこれを使うか。**時間に依存する処理（stall の時計・
 // バックオフ・枠待ち）は `testing/synctest` で実時間ゼロで検証する。synctest の中では、
 // **network I/O で止まった goroutine があると時計が進まない。**そこで、時間の検査だけは
 // 通信を1本も行わないこの stub を使う。
 //
-// **turn の終わりの判定と着手の13段は偽の socket サーバで検証している**（helpers_test.go）。
+// **turn の終わりの判定と着手の13段はテスト用socket mockで検証している**（helpers_test.go）。
 type stubHerdr struct {
 	mu sync.Mutex
 	// status は AgentGet / AgentWait が返す agent の状態である。
@@ -145,7 +145,7 @@ func (s *stubHerdr) AgentSendKeys(_ context.Context, params herdr.AgentSendKeysP
 type stubFixture struct {
 	// Orc は検査対象である。
 	Orc *orchestrator.Orchestrator
-	// Tracker は偽のトラッカーである。
+	// Tracker はテスト用トラッカー mockである。
 	Tracker *fakeTracker
 	// Herdr は通信しない stub である。
 	Herdr *stubHerdr

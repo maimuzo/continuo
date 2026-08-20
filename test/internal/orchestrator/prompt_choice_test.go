@@ -150,7 +150,7 @@ func TestResumeBackoff_再dispatchはUUIDを採り直して1回目の本文を�
 	}
 }
 
-// viewOfFixture は識別子で RunView を引く（偽の socket サーバを使う fixture 用）。
+// viewOfFixture は識別子で RunView を引く（テスト用socket mockを使う fixture 用）。
 //
 // fx: 対象の fixture。
 // identifier: 探す issue の識別子。

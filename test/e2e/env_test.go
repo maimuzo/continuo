@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// ===== 試用の一式（偽物5つと本物の git） =====
+// ===== 試用の一式（mock5つと本物の git） =====
 
 // e2eEnv は docs/trying_it_out.md の段1から段9までを通すための一式である。
 //
@@ -25,7 +25,7 @@ type e2eEnv struct {
 	Root string
 	// Home は子プロセスへ渡す HOME である（`.claude.json` と `.claude/` を置く）。
 	Home string
-	// BinDir は偽の gh / ghq を置いたディレクトリである（PATH の先頭に入れる）。
+	// BinDir はテスト用gh / ghq mock を置いたディレクトリである（PATH の先頭に入れる）。
 	BinDir string
 	// TryDir は `WORKFLOW.md` を置いて continuo を動かす作業ディレクトリである
 	// （手順書の `~/continuo-try` にあたる）。
@@ -38,7 +38,7 @@ type e2eEnv struct {
 	WorktreeRoot string
 	// OriginDir は本物の git の bare リポジトリ（push 先）である。
 	OriginDir string
-	// RepoDir は本物の git の clone である（偽の ghq がこのパスを返す）。
+	// RepoDir は本物の git の clone である（テスト用ghq mock がこのパスを返す）。
 	RepoDir string
 	// Owner はボードの所有者名である。
 	Owner string
@@ -48,11 +48,11 @@ type e2eEnv struct {
 	Binary string
 	// Board は偽のボードの持ち手である。
 	Board *board
-	// GitHub は偽の GitHub GraphQL サーバである。
+	// GitHub はテスト用GitHub GraphQL mock サーバである。
 	GitHub *fakeGitHub
-	// Herdr は偽の herdr の socket サーバである。
+	// Herdr はテスト用herdr mock の socket サーバである。
 	Herdr *fakeHerdr
-	// Claude は偽の Claude Code である。
+	// Claude はテスト用Claude Code mock である。
 	Claude *fakeClaude
 }
 
@@ -61,7 +61,7 @@ func (e *e2eEnv) FullName() string {
 	return e.Owner + "/" + e.Repo
 }
 
-// newE2EEnv は偽物5つ（gh / GraphQL / herdr / ホームディレクトリ / Claude Code）と
+// newE2EEnv はmock5つ（gh / GraphQL / herdr / ホームディレクトリ / Claude Code）と
 // 本物の git を用意し、continuo をビルドする（手順書の段1 にあたる）。
 //
 // t: 呼び出し元のテスト。後始末を t.Cleanup に登録する。
@@ -102,15 +102,15 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 	env.prepareHome(t)
 	env.prepareGitRepos(t)
 
-	// 偽の gh と偽の ghq を PATH の先頭へ置く。
+	// テスト用gh mock とテスト用ghq mock を PATH の先頭へ置く。
 	buildFakeGH(t, filepath.Join(root, "ghsrc"), env.BinDir)
 	writeFakeGhq(t, env.BinDir, env.FullName(), env.RepoDir)
 
-	// 偽のボードと、それを読み書きする偽の GraphQL サーバ。
+	// 偽のボードと、それを読み書きするテスト用GraphQL mock。
 	env.Board = newBoardFile(t, boardPathIn(root), env.Owner, env.Repo)
 	env.GitHub = newFakeGitHub(t, env.Board.Path)
 
-	// 偽の herdr と、その上で `agent.prompt` を受けたときに動く偽の Claude Code。
+	// テスト用herdr mock と、その上で `agent.prompt` を受けたときに動くテスト用Claude Code mock。
 	env.Herdr = newFakeHerdr(t, root)
 	env.Herdr.SetRepoDir(env.RepoDir)
 	env.Claude = newFakeClaude(t, env.Home, env.BinDir, env.Board.Path)
@@ -130,7 +130,7 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 func (e *e2eEnv) prepareHome(t *testing.T) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(e.Home, ".claude", "projects"), 0o700); err != nil {
-		t.Fatalf("偽のホームディレクトリの .claude を作れません: %v", err)
+		t.Fatalf("テスト用ホームディレクトリの .claude を作れません: %v", err)
 	}
 	doc := map[string]any{"projects": map[string]any{}}
 	encoded, err := json.MarshalIndent(doc, "", "  ")
@@ -144,7 +144,7 @@ func (e *e2eEnv) prepareHome(t *testing.T) {
 
 // prepareGitRepos は本物の git の bare リポジトリと clone を作る。
 //
-// **git だけは本物を使う。**worktree の作成・削除・push の有無の判定は偽物では確かめられない。
+// **git だけは本物を使う。**worktree の作成・削除・push の有無の判定はmockでは確かめられない。
 //
 // t: 呼び出し元のテスト。
 func (e *e2eEnv) prepareGitRepos(t *testing.T) {
@@ -165,7 +165,7 @@ func (e *e2eEnv) prepareGitRepos(t *testing.T) {
 
 // RunGit はテストの中で git を実行し、標準出力を返す。
 //
-// **HOME は偽のホームディレクトリにする。**実物の `~/.gitconfig` を読ませない。
+// **HOME はテスト用ホームディレクトリにする。**実物の `~/.gitconfig` を読ませない。
 //
 // t: 呼び出し元のテスト。失敗したらテストを止める。
 // dir: `-C` に渡す作業ディレクトリ。空文字なら付けない。
@@ -186,12 +186,12 @@ func (e *e2eEnv) RunGit(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// ChildEnv は continuo と偽の gh へ渡す環境変数を組み立てる。
+// ChildEnv は continuo とテスト用gh mock へ渡す環境変数を組み立てる。
 //
 // **環境変数は明示的に組み立てる。**実物の `HERDR_SOCKET_PATH` や `GH_TOKEN` を
 // 継承させないためである。
 //
-// **偽のボードと偽の GraphQL サーバがまだ無い時期にも呼べる**
+// **偽のボードとテスト用GraphQL mockがまだ無い時期にも呼べる**
 // （newE2EEnv が git のリポジトリを作るときに使う）。その場合は空文字を渡す。
 //
 // 戻り値: 環境変数の並び。
@@ -281,7 +281,7 @@ func (e *e2eEnv) Start(t *testing.T, args ...string) (*exec.Cmd, *syncBuffer) {
 
 // PatchWorkflow は `WORKFLOW.md` の front matter の行を差し替える。
 //
-// **手順書の「手で書き換えることもできる」にあたる。**試用の一式は偽の herdr と
+// **手順書の「手で書き換えることもできる」にあたる。**試用の一式はテスト用herdr mock と
 // 一時ディレクトリを向いている必要があるので、雛形の既定値のままでは動かせない。
 //
 // **1行も見つからない差し替えは失敗にする。**雛形が変わったのに気づかずに、

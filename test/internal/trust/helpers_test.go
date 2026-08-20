@@ -15,15 +15,15 @@ import (
 
 // claudeConfigName は Claude Code が信頼済みフォルダを記録しているファイルの名前である。
 //
-// **テストは必ず t.TempDir() の下に作った偽のホームディレクトリを使う。**
+// **テストは必ず t.TempDir() の下に作ったテスト用ホームディレクトリを使う。**
 // 実物の `~/.claude.json` には認証情報を含む全設定が入っており、テストが触ってはならない。
 const claudeConfigName = ".claude.json"
 
-// fakeHome は t.TempDir() の下に偽のホームディレクトリを作り、`.claude.json` を置く。
+// fakeHome は t.TempDir() の下にテスト用ホームディレクトリを作り、`.claude.json` を置く。
 //
 // t: テストコンテキスト。
 // contents: 置く `.claude.json` の中身。**空文字ならファイルを作らない。**
-// 戻り値の1つ目: 偽のホームディレクトリの絶対パス。
+// 戻り値の1つ目: テスト用ホームディレクトリの絶対パス。
 // 戻り値の2つ目: 置いた `.claude.json` の絶対パス。
 func fakeHome(t *testing.T, contents string) (string, string) {
 	t.Helper()

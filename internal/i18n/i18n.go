@@ -320,7 +320,7 @@ func Errorf(key Key, args ...any) error { return currentCatalog().Errorf(key, ar
 // `ja_JP.UTF-8` / `ja-JP` / `ja` のいずれも `ja` になる。`C` と `POSIX`、
 // 資源の無い言語、空のときは既定の言語（日本語）にする。
 //
-// getenv: 環境変数を引く関数（os.Getenv を渡す。テストは偽物を渡す）。
+// getenv: 環境変数を引く関数（os.Getenv を渡す。テストはmockを渡す）。
 // 戻り値: 決まった言語。
 func FromEnv(getenv func(string) string) Lang {
 	if getenv == nil {

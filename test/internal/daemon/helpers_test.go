@@ -1,12 +1,12 @@
 // Package daemon_test は、**ビルドした `continuo` のバイナリを実際に起動して**
 // 復元 → 巡回 → 終了までを確かめる。
 //
-// **実 herdr には繋がない。**`net.Listen("unix", ...)` で偽の socket サーバを立てる。
-// **本番のボード（project #3）へは接続しない。**`httptest.Server` で偽の GraphQL サーバを
+// **実 herdr には繋がない。**`net.Listen("unix", ...)` でテスト用socket mockを立てる。
+// **本番のボード（project #3）へは接続しない。**`httptest.Server` でテスト用GraphQL mockを
 // 立て、環境変数 `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` でバイナリの接続先をそこへ向ける。
-// **Claude Code は起動しない。**turn の終わりは、偽 herdr の `agent.prompt` の応答と、
+// **Claude Code は起動しない。**turn の終わりは、テスト用herdr mock の `agent.prompt` の応答と、
 // テストが hook の socket へ直接書き込む `Stop` で再現する。
-// **`gh` と `ghq` も偽物を PATH の先頭へ置く。**本物の認証情報を読ませない。
+// **`gh` と `ghq` もmockを PATH の先頭へ置く。**本物の認証情報を読ませない。
 package daemon_test
 
 import (
@@ -29,7 +29,7 @@ import (
 
 // ===== 呼び出しの並びを1本にまとめる記録 =====
 
-// timeline は偽 herdr と偽 GitHub の呼び出しを1本の並びに混ぜて記録する。
+// timeline はテスト用herdr mock とテスト用GitHub mock の呼び出しを1本の並びに混ぜて記録する。
 //
 // **これが無いと「復元を終えてから巡回が始まる」ことを確かめられない。**
 // 復元の `pane.list` と巡回の候補の取得は別のサーバへ届くので、
@@ -70,7 +70,7 @@ func (tl *timeline) IndexOfPrefix(prefix string) int {
 	return -1
 }
 
-// ===== 偽の herdr socket サーバ =====
+// ===== テスト用herdr mock socket サーバ =====
 
 // rpcErr は herdr の socket API のエラー応答である。
 type rpcErr struct {
@@ -78,7 +78,7 @@ type rpcErr struct {
 	Message string `json:"message"`
 }
 
-// herdrRequest は偽 herdr が受け取ったリクエスト1件である。
+// herdrRequest はテスト用herdr mock が受け取ったリクエスト1件である。
 type herdrRequest struct {
 	// Method は呼ばれたメソッド名である。
 	Method string
@@ -104,19 +104,19 @@ type fakeHerdr struct {
 	repoDir string
 }
 
-// newFakeHerdr は偽 herdr を1本立てる。
+// newFakeHerdr はテスト用herdr mock を1本立てる。
 //
 // t: 呼び出し元のテスト。socket の後始末を t.Cleanup に登録する。
 // dir: socket を置くディレクトリ（**短く保つこと。**macOS の上限は103バイト）。
 // tl: 呼び出しの並びの記録。
-// 戻り値: 起動した偽 herdr。
+// 戻り値: 起動したテスト用herdr mock。
 func newFakeHerdr(t *testing.T, dir string, tl *timeline) *fakeHerdr {
 	t.Helper()
 
 	socketPath := filepath.Join(dir, "h.sock")
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		t.Fatalf("偽 herdr の socket を bind できません（%s）: %v", socketPath, err)
+		t.Fatalf("テスト用herdr mock の socket を bind できません（%s）: %v", socketPath, err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
@@ -186,7 +186,7 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 		Params map[string]any `json:"params"`
 	}
 	if err := json.Unmarshal(line, &req); err != nil {
-		t.Errorf("偽 herdr がリクエストを解析できません: %v", err)
+		t.Errorf("テスト用herdr mock がリクエストを解析できません: %v", err)
 		return
 	}
 
@@ -206,11 +206,11 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	}
 	encoded, err := json.Marshal(resp)
 	if err != nil {
-		t.Errorf("偽 herdr が応答を JSON 化できません: %v", err)
+		t.Errorf("テスト用herdr mock が応答を JSON 化できません: %v", err)
 		return
 	}
 	if _, err := conn.Write(append(encoded, '\n')); err != nil {
-		t.Logf("偽 herdr が応答を書けません（無視する）: %v", err)
+		t.Logf("テスト用herdr mock が応答を書けません（無視する）: %v", err)
 	}
 }
 
@@ -237,6 +237,12 @@ func (fh *fakeHerdr) dispatch(
 	case "pane.close":
 		return map[string]any{"type": "pane_closed"}, nil
 	case "worktree.open":
+		// **本物と同じく、path と branch は片方だけ受け付ける**（実測: 2026-08-20）。
+		openPath, _ := params["path"].(string)
+		openBranch, _ := params["branch"].(string)
+		if (openPath == "") == (openBranch == "") {
+			return nil, &rpcErr{Code: "invalid_request", Message: "exactly one of path or branch is required"}
+		}
 		// **本物の herdr と同じく、開いた worktree のパスと workspace を答える。**
 		// 片付けは消す直前にこれを呼び、返ってきた workspace の ID だけを
 		// `worktree.remove` の宛先にする（設計 3-9 の段3）。
@@ -330,7 +336,7 @@ func (fh *fakeHerdr) CountMethod(method string) int {
 	return n
 }
 
-// ===== 偽の GitHub GraphQL サーバ =====
+// ===== テスト用GitHub GraphQL mock サーバ =====
 
 // boardItem は偽ボードの project item 1件である。
 type boardItem struct {
@@ -372,7 +378,7 @@ type fakeGitHub struct {
 // statusOptions は偽ボードの Status の選択肢である（設定と一致させる）。
 var statusOptions = []string{"Ready", "In Progress", "In Review", "Blocked", "Done"}
 
-// newFakeGitHub は偽の GraphQL サーバを1本立てる。
+// newFakeGitHub はテスト用GraphQL mockを1本立てる。
 //
 // t: 呼び出し元のテスト。後始末を t.Cleanup に登録する。
 // owner: ボードの所有者名。
@@ -708,7 +714,7 @@ func buildBinary(t *testing.T, outDir string) string {
 func writeFakeGH(t *testing.T, dir, repoDir string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatalf("偽の gh を置くディレクトリを作れません: %v", err)
+		t.Fatalf("テスト用gh mock を置くディレクトリを作れません: %v", err)
 	}
 	gh := `#!/bin/sh
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
@@ -723,11 +729,11 @@ fi
 exit 0
 `
 	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(gh), 0o755); err != nil {
-		t.Fatalf("偽の gh を書けません: %v", err)
+		t.Fatalf("テスト用gh mock を書けません: %v", err)
 	}
 	ghq := "#!/bin/sh\necho " + repoDir + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "ghq"), []byte(ghq), 0o755); err != nil {
-		t.Fatalf("偽の ghq を書けません: %v", err)
+		t.Fatalf("テスト用ghq mock を書けません: %v", err)
 	}
 }
 
@@ -886,7 +892,7 @@ func (b *syncBuffer) String() string {
 
 // stringBox は排他つきの文字列の置き場である。
 //
-// **偽 herdr の台本（接続ごとの goroutine）が書き、テスト本体が読む**ので、
+// **テスト用herdr mock の台本（接続ごとの goroutine）が書き、テスト本体が読む**ので、
 // 素の変数だと `-race` が競合を報告する。
 type stringBox struct {
 	mu sync.Mutex

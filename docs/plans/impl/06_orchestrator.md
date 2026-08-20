@@ -53,14 +53,14 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 
 **1件の issue が最初から最後まで通ることを、Claude Code を起動せずに確かめる。**
 
-**使うのは第2段階と同じ偽の socket サーバである。実 herdr は使わない。**
+**使うのは第2段階と同じテスト用socket mockである。実 herdr は使わない。**
 `pane.report_agent` で「agent が居る」と登録できることは第2段階で確かめてあるが、
 **実 herdr を使うと、テストが落ちたときに workspace と pane が残る。**
 **偽サーバなら、応答を台本として書けるので `blocked` や `working` も再現できる。**
 
 **git は本物を使う。**テスト用の一時ディレクトリに `git init` した bare リポジトリを置き、
 そこから worktree を作る。**worktree の作成と削除、`git branch -D`、
-`git status --porcelain` と `git diff --quiet` の判定は、偽物では確かめられない。**
+`git status --porcelain` と `git diff --quiet` の判定は、mockでは確かめられない。**
 
 - [x] **着手の13段を、設計の順番どおりに実行する**
 - [x] **pane を新しく作らない。**`worktree.open` が作った workspace の pane を `pane.list` で引く（設計 3-16 の段8）
@@ -175,7 +175,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 
 | 何を | どう決めたか | なぜ |
 | --- | --- | --- |
-| **`Tracker` / `HerdrClient` をインタフェースで受ける** | `*tracker.Adapter` と `*herdr.Client` が満たすことを `var _ Tracker = (*tracker.Adapter)(nil)` でコンパイル時に表明する | **巡回1回のリクエスト本数（3本）をテストから数えるため。**テストは偽物しか渡さないので、表明が無いとシグネチャがずれても第7段階まで誰も気づかない |
+| **`Tracker` / `HerdrClient` をインタフェースで受ける** | `*tracker.Adapter` と `*herdr.Client` が満たすことを `var _ Tracker = (*tracker.Adapter)(nil)` でコンパイル時に表明する | **巡回1回のリクエスト本数（3本）をテストから数えるため。**テストはmockしか渡さないので、表明が無いとシグネチャがずれても第7段階まで誰も気づかない |
 | **送る本文は turn 数ではなく `runState.FreshSession` で決める** | 新しいセッション UUID で起動した直後（着手・再 dispatch）だけ真にし、真なら1回目の本文（5-3）、偽なら継続の指示（5-4）を送る | **turn 数では分けられない。**復元で引き継いだ run は turn 数を 1 から数え直すが**セッションは引き継いでいる**ので継続の指示である（3-4 の段5c）。逆に再 dispatch は turn 数を引き継ぐが**セッションは新しい**ので、継続の指示だけでは何をすべきか伝わらない |
 | **run を終わらせる処理を1本に絞る（`beginTerminal`）** | 終わらせ始めた印を立て、リトライを積んでバックオフに入るときだけ外す | 終わらせる処理は 3-25 の9段（待ち受けつきの `agent.prompt`）を通り**既定で最大1時間返らない。**印が無いと、次の巡回が同じ run をもう一度終わらせにかかり、`failure_state` の書き込みと引き渡しコメントが二重になる |
 | **turn ループは worker の世代（`workerEpoch`）を持つ** | 起こされたときの世代を覚え、変わっていたら run を諦めずに抜ける | **1回の stall で abandon が2回走るのを防ぐ**（3-21）。巡回の stall 検知が pane を閉じた直後、まだ待ち受けにいた turn ループが同じ run を諦めると RetryCount が2倍の速さで消費される |
@@ -193,8 +193,8 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 | --- | --- |
 | **`agent.wait` は現在の状態が `until` に含まれると即返る** | 待ち直しのループを `agent.wait` の戻りだけで回すと、`idle` のまま空回りする。**hook（`Stop` と `<task-notification>`）の到着を待ち合わせの主にした** |
 | **`blocked` のあとにコメントを書かせ直すと `agent.prompt` が2回になる** | 安全の要件は「**保留中の権限要求が残ったまま**次を投げないこと」である。`esc` と `pane.close` を挟んだあとの送信は別のセッションなので安全である。テストの検査もその順序で書いた |
-| **偽の herdr で `worktree.remove` を成功させるだけでは `git branch -D` が通らない** | 本物の herdr と同じ結果になるよう、偽サーバに**実体の削除と `git worktree prune`** をさせた。これをしないと片付けの段4 を検証できない |
-| **`testing/synctest` の中では network I/O があると時計が進まない** | 時間に依存する検査（stall の猶予・時計のリセット・バックオフの明け）だけは、**通信を1本も行わない stub** を使って bubble の中で回した（実時間ゼロ）。turn の終わりの判定と着手の13段は偽の socket サーバで検証している |
+| **テスト用herdr mock で `worktree.remove` を成功させるだけでは `git branch -D` が通らない** | 本物の herdr と同じ結果になるよう、偽サーバに**実体の削除と `git worktree prune`** をさせた。これをしないと片付けの段4 を検証できない |
+| **`testing/synctest` の中では network I/O があると時計が進まない** | 時間に依存する検査（stall の猶予・時計のリセット・バックオフの明け）だけは、**通信を1本も行わない stub** を使って bubble の中で回した（実時間ゼロ）。turn の終わりの判定と着手の13段はテスト用socket mockで検証している |
 
 ### テスト
 
@@ -228,8 +228,8 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 | **二重の打ち切り** | 1回の stall に対して、巡回の stall 検知と turn ループの両方が run を諦めていた | `runState.workerEpoch` と `beginTerminal` を足した。turn ループは世代が変わっていたら諦めない |
 | **agent 名の直接参照** | `sendEscape` が `rs.AgentName` を排他なしで読んでいた | `rs.agentName()` に直した |
 | **連番の未検証** | agent 名の段4（重複したら末尾に連番）を通すテストが無かった | `agent.list` が素の名前を返す状態で dispatch し、`continuo-koetsumugi-188-2` になることを検査する |
-| **段2 の順番の未検査** | Status の書き込みが `worktree.open` より前かを比べていなかった（記録が別々の並びだった） | 偽のトラッカーと偽の herdr が**1本の並び**（`timeline`）へ積むようにし、位置を比べる |
-| **UUID の未検査** | バックオフ明けにセッション UUID を採り直すことを誰も見ていなかった | 偽の socket サーバと手で進める時計を使うテストを足し、`agent.start` の `--session-id` を比べる |
+| **段2 の順番の未検査** | Status の書き込みが `worktree.open` より前かを比べていなかった（記録が別々の並びだった） | テスト用トラッカー mockとテスト用herdr mock が**1本の並び**（`timeline`）へ積むようにし、位置を比べる |
+| **UUID の未検査** | バックオフ明けにセッション UUID を採り直すことを誰も見ていなかった | テスト用socket mockと手で進める時計を使うテストを足し、`agent.start` の `--session-id` を比べる |
 | **表明の GoDoc** | `ParseSignals` の GoDoc が実装と食い違っていた（「解決できなかった行はそのまま識別子として持つ」） | 実装どおりに書き直した。**対象を解決できなかった行は、対象なしの行として扱う** |
 | **インタフェースの表明** | `*tracker.Adapter` と `*herdr.Client` がインタフェースを満たすことを、コンパイル時に確かめていなかった | `var _ Tracker = (*tracker.Adapter)(nil)` と `var _ HerdrClient = (*herdr.Client)(nil)` を足した |
 

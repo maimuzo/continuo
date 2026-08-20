@@ -16,12 +16,12 @@ import (
 	"github.com/maimuzo/continuo/internal/normalize"
 )
 
-// TestE2E_偽のherdrが着手から片付けまでのメソッドに応答する は、偽 herdr 単体を
+// TestE2E_偽のherdrが着手から片付けまでのメソッドに応答する は、テスト用herdr mock 単体を
 // **本物の herdr クライアント**（internal/herdr）から叩いて、応答の形を確かめる。
 //
 // 目的: 手順書を通すのに要る8つのメソッドが揃っていること。
 // **`pane.split` は continuo が着手では呼ばない**（設計 4-5）が、本物の herdr は答えるので、
-// 偽物でも答えられることをここで確かめる。
+// mockでも答えられることをここで確かめる。
 //
 // 与える情報: 一時ディレクトリに作った worktree のふりをしたディレクトリ1つ。
 //
@@ -114,7 +114,7 @@ func TestE2E_偽のherdrが着手から片付けまでのメソッドに応答�
 		t.Fatalf("agent.prompt が idle を返していません: %q", prompted.Agent.AgentStatus)
 	}
 	if got := fh.Prompts(); len(got) != 1 || got[0] != "テストの本文" {
-		t.Fatalf("偽 herdr が受け取った本文が違います: %v", got)
+		t.Fatalf("テスト用herdr mock が受け取った本文が違います: %v", got)
 	}
 
 	if _, err := client.AgentWait(ctx, herdr.AgentWaitParams{
@@ -136,17 +136,17 @@ func TestE2E_偽のherdrが着手から片付けまでのメソッドに応答�
 	}
 }
 
-// TestE2E_偽のghと偽のGraphQLが1枚のボードを共有する は、2つの偽物が同じ状態を
+// TestE2E_偽のghと偽のGraphQLが1枚のボードを共有する は、2つのmockが同じ状態を
 // 読み書きしていることを確かめる。
 //
-// 目的: 手順書を通すのに要る「状態を持つ偽の gh」であること。
+// 目的: 手順書を通すのに要る「状態を持つテスト用gh mock」であること。
 //   - `gh project item-add` で足した issue が `gh project item-list` に出る
 //   - **GraphQL で Status を書き換えると、次の `gh project item-list` に反映される**
 //     （continuo は GraphQL でしか Status を書かないので、これが繋がっていないと
 //     手順書の段8 を確かめられない）
 //   - `gh issue comment` で書いたコメントが GraphQL のコメント取得から見える
 //
-// 与える情報: 既に issue が1件載っている偽のボードと、そこを向いた偽の gh・偽の GraphQL。
+// 与える情報: 既に issue が1件載っている偽のボードと、そこを向いたテスト用gh mock・テスト用GraphQL mock。
 //
 // 成功条件: 上の3つがすべて成り立つこと。
 func TestE2E_偽のghと偽のGraphQLが1枚のボードを共有する(t *testing.T) {
@@ -224,7 +224,7 @@ func TestE2E_偽のghと偽のGraphQLが1枚のボードを共有する(t *testi
 	}
 }
 
-// postGraphQL は偽の GraphQL サーバへ1件のリクエストを送り、応答の本文を返す。
+// postGraphQL はテスト用GraphQL mockへ1件のリクエストを送り、応答の本文を返す。
 //
 // **クエリ本文は種別の判別にだけ使われる**（偽サーバは本物のパーサを持たない）ので、
 // 判別に要る断片さえ含んでいればよい。
@@ -241,12 +241,12 @@ func postGraphQL(t *testing.T, url string, body map[string]any) string {
 	}
 	resp, err := http.Post(url, "application/json", bytes.NewReader(encoded))
 	if err != nil {
-		t.Fatalf("偽の GraphQL サーバへ送れません: %v", err)
+		t.Fatalf("テスト用GraphQL mockへ送れません: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var out bytes.Buffer
 	if _, err := out.ReadFrom(resp.Body); err != nil {
-		t.Fatalf("偽の GraphQL サーバの応答を読めません: %v", err)
+		t.Fatalf("テスト用GraphQL mockの応答を読めません: %v", err)
 	}
 	return out.String()
 }

@@ -10,7 +10,7 @@
 //
 // このパッケージは本番のボード（project #3）へ絶対に書き込まない設計にはなっていない
 // （UpdateStatus / PostComment は書き込みそのものである）。**書き込みを検証するテストは
-// 必ず httptest.Server で立てた偽の GraphQL サーバに対して行い、本番のボードへは
+// 必ず httptest.Server で立てたテスト用GraphQL mockに対して行い、本番のボードへは
 // 接続しないこと。**
 package tracker
 

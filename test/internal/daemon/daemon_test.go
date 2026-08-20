@@ -32,13 +32,13 @@ type daemonEnv struct {
 	WorktreeRoot string
 	// RepoDir は本物の git の clone である。
 	RepoDir string
-	// Herdr は偽 herdr である。
+	// Herdr はテスト用herdr mock である。
 	Herdr *fakeHerdr
-	// GitHub は偽 GitHub である。
+	// GitHub はテスト用GitHub mock である。
 	GitHub *fakeGitHub
 	// Binary はビルドした continuo の絶対パスである。
 	Binary string
-	// BinDir は偽の gh / ghq を置いたディレクトリである。
+	// BinDir はテスト用gh / ghq mock を置いたディレクトリである。
 	BinDir string
 	// Home は子プロセスへ渡す HOME である。
 	Home string
@@ -50,11 +50,11 @@ type daemonEnv struct {
 	// ClaudeReadTimeoutMs は WORKFLOW.md に書く `claude.read_timeout_ms` である。
 	// **0 なら 3000 を書く。**相手は herdr の socket API の応答である（設計 8-1）。
 	ClaudeReadTimeoutMs int
-	// Timeline は偽 herdr と偽 GitHub の呼び出しを混ぜた1本の並びである。
+	// Timeline はテスト用herdr mock とテスト用GitHub mock の呼び出しを混ぜた1本の並びである。
 	Timeline *timeline
 }
 
-// newDaemonEnv は偽 herdr・偽 GitHub・本物の git のリポジトリ・WORKFLOW.md を用意し、
+// newDaemonEnv はテスト用herdr mock・テスト用GitHub mock・本物の git のリポジトリ・WORKFLOW.md を用意し、
 // continuo のバイナリをビルドする。
 //
 // t: 呼び出し元のテスト。
@@ -86,7 +86,7 @@ func newDaemonEnv(t *testing.T) *daemonEnv {
 	tl := &timeline{}
 	fh := newFakeHerdr(t, root, tl)
 
-	// 本物の git のリポジトリ（worktree の作成と削除は偽物では確かめられない）。
+	// 本物の git のリポジトリ（worktree の作成と削除はmockでは確かめられない）。
 	origin := filepath.Join(root, "origin.git")
 	runGit(t, "", "init", "--quiet", "--bare", "--initial-branch=main", origin)
 	repoDir := filepath.Join(root, "repo")
@@ -282,7 +282,7 @@ func (e *daemonEnv) startWithArgs(t *testing.T, extra ...string) (*exec.Cmd, *sy
 //   - **終了時に pane を閉じないこと**（次の起動で引き継ぐ）
 //
 // 与える情報:
-//   - 偽 herdr（実 herdr には繋がない）と偽 GitHub（本番のボードへは接続しない）
+//   - テスト用herdr mock（実 herdr には繋がない）とテスト用GitHub mock（本番のボードへは接続しない）
 //   - `In Progress` の issue が2件。どちらも worktree と身元ファイルがディスクにある
 //   - issue #188 の pane は `idle`、issue #189 の pane は `working`
 //   - `agent.prompt` を受けたら、エージェントが実装して push しコメントを書き、
@@ -512,7 +512,7 @@ func TestDaemon_flockが取れなければ即座に終了する(t *testing.T) {
 // continuo 側の前提が揃っていないことであって、エージェントの側の問題ではない。
 // 人間が直して起動し直せば、復元の段5 で引き継げる。
 //
-// 与える情報: `herdr.protocol` が設定と一致しない偽 herdr と、生きている pane。
+// 与える情報: `herdr.protocol` が設定と一致しないテスト用herdr mock と、生きている pane。
 //
 // 成功条件: 終了コード 1 で起動を止め、**`pane.close` を1回も呼ばない。**
 // **復元（`pane.list`）にも進まない。**

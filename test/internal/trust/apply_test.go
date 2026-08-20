@@ -299,7 +299,7 @@ func TestApply_調べた時点で形が読めなければ対象から外す(t *t
 // **Claude Code を一度も起動していない状態でこのファイルを先に作ると、
 // Claude Code が初回の設定を済ませたものとして扱う可能性がある。**
 //
-// 与える情報: `.claude.json` を置いていない偽のホームディレクトリ。
+// 与える情報: `.claude.json` を置いていないテスト用ホームディレクトリ。
 // 成功条件: ErrNoClaudeConfig が返り、ファイルが作られないこと。
 func TestApply_claudejsonが無ければ作らずに止める(t *testing.T) {
 	repo := initRepo(t, "continuo")
@@ -394,7 +394,7 @@ func TestApply_バックアップの名前は時刻つきで残る(t *testing.T)
 // planFor はテスト用に Plan を1回呼ぶ。
 //
 // t: テストコンテキスト。
-// home: 偽のホームディレクトリ。
+// home: テスト用ホームディレクトリ。
 // clones: "owner/repo" から clone の絶対パスへの対応。
 // repositories: trust.repositories に書かれているとみなす値。
 // 戻り値: 調べた結果。
@@ -411,17 +411,17 @@ func planFor(t *testing.T, home string, clones map[string]string, repositories .
 
 // optionsFor はテスト用の Options を組み立てる。
 //
-// home: 偽のホームディレクトリ。
+// home: テスト用ホームディレクトリ。
 // clones: "owner/repo" から clone の絶対パスへの対応。
 // 戻り値: Options。
 func optionsFor(home string, clones map[string]string) trust.Options {
 	return trust.Options{HomeDir: home, ResolveClone: staticClones(clones)}
 }
 
-// backupNames は偽のホームディレクトリにあるバックアップのファイル名を返す。
+// backupNames はテスト用ホームディレクトリにあるバックアップのファイル名を返す。
 //
 // t: テストコンテキスト。
-// home: 偽のホームディレクトリ。
+// home: テスト用ホームディレクトリ。
 // 戻り値: バックアップのファイル名の並び。
 func backupNames(t *testing.T, home string) []string {
 	t.Helper()

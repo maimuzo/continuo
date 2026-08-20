@@ -110,8 +110,11 @@ func (c *Client) WorktreeCreate(ctx context.Context, params WorktreeCreateParams
 // base が引数に無いのはそのためである。
 type WorktreeOpenParams struct {
 	// Path は herdr の workspace として開く、既にある worktree の絶対パスである。
+	//
+	// **Path と Branch は片方だけ埋める。**両方渡すと herdr が
+	// `invalid_request: exactly one of path or branch is required` で弾く（実測: 2026-08-20）。
 	Path string `json:"path,omitempty"`
-	// Branch は worktree が指す branch 名である。
+	// Branch は worktree が指す branch 名である。**Path を埋めたなら空にする。**
 	Branch string `json:"branch,omitempty"`
 	// Cwd は元のリポジトリの作業ディレクトリである。
 	Cwd string `json:"cwd,omitempty"`

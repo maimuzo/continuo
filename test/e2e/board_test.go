@@ -1,12 +1,12 @@
-// Package e2e_test は docs/trying_it_out.md の段1から段9までを、**偽物だけを相手に**
+// Package e2e_test は docs/trying_it_out.md の段1から段9までを、**mockだけを相手に**
 // 最初から最後まで通す。
 //
-// **本番の GitHub には1リクエストも送らない。**ボードは JSON ファイル1枚で作った偽物で、
-// `gh`（PATH の先頭に置いた偽の実行ファイル）と偽の GraphQL サーバ（httptest）が
+// **本番の GitHub には1リクエストも送らない。**ボードは JSON ファイル1枚で作ったmockで、
+// `gh`（PATH の先頭に置いた偽の実行ファイル）とテスト用GraphQL mock（httptest）が
 // 同じファイルを読み書きする。**project #3 には読み取りも行わない。**
 //
-// **実 herdr には繋がない。**`net.Listen("unix", ...)` で偽の socket サーバを立てる。
-// **Claude Code は起動しない。**`agent.prompt` を受けた偽 herdr が、エージェントの役
+// **実 herdr には繋がない。**`net.Listen("unix", ...)` でテスト用socket mockを立てる。
+// **Claude Code は起動しない。**`agent.prompt` を受けたテスト用herdr mock が、エージェントの役
 // （worktree で commit して push し、transcript を書き、`continuo hook` で Stop を送る）を演じる。
 // **枠は1トークンも消費しない。**
 //
@@ -14,7 +14,7 @@
 // その中に `.claude.json`（projects が空）と `.claude/` を置く。
 // **実物の ghq の置き場所も触らない。**偽の `ghq` が一時ディレクトリの clone を返す。
 //
-// **git だけは本物を使う。**worktree の作成・削除・branch の判定は偽物では確かめられないので、
+// **git だけは本物を使う。**worktree の作成・削除・branch の判定はmockでは確かめられないので、
 // 一時ディレクトリに bare リポジトリを作り、そこから clone して worktree を切る。
 package e2e_test
 
@@ -30,7 +30,7 @@ import (
 	"time"
 )
 
-// ===== 偽のボードの状態（偽の gh と偽の GraphQL サーバが共有する1枚の JSON） =====
+// ===== 偽のボードの状態（テスト用gh mock とテスト用GraphQL mockが共有する1枚の JSON） =====
 
 // ghComment は issue に付いたコメント1件である。
 type ghComment struct {
@@ -75,7 +75,7 @@ type ghIssue struct {
 
 // ghBoard は偽のボード1枚ぶんの状態である。
 //
-// **このファイルが唯一の正である。**偽の gh（別プロセス）と偽の GraphQL サーバ（テストの
+// **このファイルが唯一の正である。**テスト用gh mock（別プロセス）とテスト用GraphQL mock（テストの
 // プロセス）が同じファイルを flock で排他しながら読み書きするので、
 // `gh project item-add` で足した issue が次の GraphQL の取得に出るし、
 // GraphQL で書き換えた Status が次の `gh project item-list` に出る。
@@ -100,7 +100,7 @@ type ghBoard struct {
 	Issues []*ghIssue `json:"issues"`
 	// Comments は issue のノード ID から、そこに付いたコメントを引く写像である。
 	Comments map[string][]ghComment `json:"comments"`
-	// Calls は偽の gh が受け取ったサブコマンドを受け取った順に並べたものである
+	// Calls はテスト用gh mock が受け取ったサブコマンドを受け取った順に並べたものである
 	// （どの経路を実際に通ったかをテストが確かめるために使う）。
 	Calls []string `json:"calls"`
 	// NextNumber は次に採番する issue 番号である。
@@ -165,7 +165,7 @@ func (b *ghBoard) optionIndex(name string) int {
 
 // lockBoardFile はボードのファイルに排他ロックを掛ける。
 //
-// **偽の gh は別プロセスである。**Go の Mutex では守れないので、ファイルロックを使う。
+// **テスト用gh mock は別プロセスである。**Go の Mutex では守れないので、ファイルロックを使う。
 //
 // path: ボードの JSON のパス（ロックは `<path>.lock` に取る）。
 // 戻り値の1つ目: ロックを保持しているファイル（unlockBoardFile へ渡すこと）。
@@ -338,7 +338,7 @@ func (bd *board) CommentBodies(t *testing.T, nodeID string) []string {
 	return out
 }
 
-// GHCalls は偽の gh が受け取ったサブコマンドを受け取った順に返す。
+// GHCalls はテスト用gh mock が受け取ったサブコマンドを受け取った順に返す。
 //
 // t: 呼び出し元のテスト。
 // 戻り値: `project item-add` のような文字列の並び。
@@ -395,7 +395,7 @@ func newBoardFile(t *testing.T, path, owner, repo string) *board {
 	return &board{Path: path}
 }
 
-// ===== 偽の GitHub GraphQL サーバが返す payload の組み立て =====
+// ===== テスト用GitHub GraphQL mock サーバが返す payload の組み立て =====
 
 // itemPayload は project item 1件の GraphQL 応答を組み立てる。
 //
@@ -619,7 +619,7 @@ func addCommentPayload(b *ghBoard, vars map[string]any) map[string]any {
 
 // ===== 受け取ったクエリの記録 =====
 
-// queryLog は偽の GraphQL サーバが受け取ったクエリの種別を記録する。
+// queryLog はテスト用GraphQL mockが受け取ったクエリの種別を記録する。
 type queryLog struct {
 	mu   sync.Mutex
 	list []string

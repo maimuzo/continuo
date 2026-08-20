@@ -13,12 +13,12 @@ import (
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
-// fakeClaude は「偽の Claude Code」である。**実プロセスは1つも起動しない。**
+// fakeClaude は「テスト用Claude Code mock」である。**実プロセスは1つも起動しない。**
 //
 // **枠を1トークンも使わずに、エージェントが1つの turn でやることを全部やる。**
-// 偽 herdr が `agent.prompt` を受けたときに Act が呼ばれ、次の順で本物と同じ足跡を残す。
+// テスト用herdr mock が `agent.prompt` を受けたときに Act が呼ばれ、次の順で本物と同じ足跡を残す。
 //
-//	1  `gh issue view <URL> --comments` で issue を読む（偽の gh が答える）
+//	1  `gh issue view <URL> --comments` で issue を読む（テスト用gh mock が答える）
 //	2  worktree の中でファイルを1つ作り、commit して push する
 //	3  `gh issue comment` で作業の内容を書く（marker 付き。代筆の判定に使われる）
 //	4  transcript の JSONL を書く（`CONTINUO-STATUS: review` の行を含む）
@@ -31,11 +31,11 @@ type fakeClaude struct {
 	// T は呼び出し元のテストである。**Act は接続ごとの goroutine から呼ばれるので
 	// t.Errorf だけを使うこと。**
 	T *testing.T
-	// Home は偽のホームディレクトリである（transcript の置き場所の根になる）。
+	// Home はテスト用ホームディレクトリである（transcript の置き場所の根になる）。
 	Home string
-	// BinDir は偽の gh / ghq を置いたディレクトリである。
+	// BinDir はテスト用gh / ghq mock を置いたディレクトリである。
 	BinDir string
-	// BoardPath は偽のボードの JSON の絶対パスである（偽の gh へ環境変数で渡す）。
+	// BoardPath は偽のボードの JSON の絶対パスである（テスト用gh mock へ環境変数で渡す）。
 	BoardPath string
 
 	mu sync.Mutex
@@ -52,13 +52,13 @@ type fakeClaude struct {
 	commits int
 }
 
-// newFakeClaude は偽の Claude Code を1つ作る。
+// newFakeClaude はテスト用Claude Code mock を1つ作る。
 //
 // t: 呼び出し元のテスト。
-// home: 偽のホームディレクトリ。
-// binDir: 偽の gh / ghq を置いたディレクトリ。
+// home: テスト用ホームディレクトリ。
+// binDir: テスト用gh / ghq mock を置いたディレクトリ。
 // boardPath: 偽のボードの JSON の絶対パス。
-// 戻り値: 偽の Claude Code。
+// 戻り値: テスト用Claude Code mock。
 func newFakeClaude(t *testing.T, home, binDir, boardPath string) *fakeClaude {
 	t.Helper()
 	return &fakeClaude{
@@ -77,7 +77,7 @@ func (fc *fakeClaude) Turns(name string) int {
 	return fc.turns[name]
 }
 
-// Commits は偽の Claude Code が作った commit の件数を返す。
+// Commits はテスト用Claude Code mock が作った commit の件数を返す。
 func (fc *fakeClaude) Commits() int {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
@@ -109,7 +109,7 @@ func (fc *fakeClaude) Transcripts() []string {
 //
 // **接続ごとの goroutine から呼ばれるので t.Fatalf を使ってはならない。**
 //
-// sess: 偽 herdr が覚えている agent（worktree・設定ファイル・セッション UUID）。
+// sess: テスト用herdr mock が覚えている agent（worktree・設定ファイル・セッション UUID）。
 // text: 送られたプロンプトの本文。
 func (fc *fakeClaude) Act(sess *agentSession, text string) {
 	fc.mu.Lock()
@@ -154,11 +154,11 @@ func (fc *fakeClaude) readIdentity(worktreePath string) (workspace.Identity, boo
 	var identity workspace.Identity
 	raw, err := os.ReadFile(filepath.Join(worktreePath, ".continuo.json"))
 	if err != nil {
-		fc.T.Errorf("偽の Claude Code が身元ファイルを読めません（%s）: %v", worktreePath, err)
+		fc.T.Errorf("テスト用Claude Code mock が身元ファイルを読めません（%s）: %v", worktreePath, err)
 		return identity, false
 	}
 	if err := json.Unmarshal(raw, &identity); err != nil {
-		fc.T.Errorf("偽の Claude Code が身元ファイルを解釈できません: %v", err)
+		fc.T.Errorf("テスト用Claude Code mock が身元ファイルを解釈できません: %v", err)
 		return identity, false
 	}
 	return identity, true
@@ -176,7 +176,7 @@ func (fc *fakeClaude) work(sess *agentSession, identity workspace.Identity, turn
 	note := filepath.Join(sess.WorktreePath, "AGENT_NOTE.md")
 	body := fmt.Sprintf("# %s\n\n%d 回目の turn で書いた。\n", identity.IssueIdentifier, turn)
 	if err := os.WriteFile(note, []byte(body), 0o600); err != nil {
-		fc.T.Errorf("偽の Claude Code が作業のファイルを書けません: %v", err)
+		fc.T.Errorf("テスト用Claude Code mock が作業のファイルを書けません: %v", err)
 		return
 	}
 	fc.runGit(sess.WorktreePath, "add", "-A")
@@ -205,7 +205,7 @@ func (fc *fakeClaude) writeTranscript(sess *agentSession, text, signal string) (
 	slug := strings.ReplaceAll(strings.TrimPrefix(sess.WorktreePath, "/"), "/", "-")
 	dir := filepath.Join(fc.Home, ".claude", "projects", slug)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		fc.T.Errorf("偽の Claude Code が transcript の置き場所を作れません: %v", err)
+		fc.T.Errorf("テスト用Claude Code mock が transcript の置き場所を作れません: %v", err)
 		return "", false
 	}
 	path := filepath.Join(dir, sess.SessionUUID+".jsonl")
@@ -239,7 +239,7 @@ func (fc *fakeClaude) writeTranscript(sess *agentSession, text, signal string) (
 	for _, line := range lines {
 		encoded, err := json.Marshal(line)
 		if err != nil {
-			fc.T.Errorf("偽の Claude Code が transcript の行を JSON 化できません: %v", err)
+			fc.T.Errorf("テスト用Claude Code mock が transcript の行を JSON 化できません: %v", err)
 			return "", false
 		}
 		b.Write(encoded)
@@ -248,12 +248,12 @@ func (fc *fakeClaude) writeTranscript(sess *agentSession, text, signal string) (
 	// **追記する。**同じセッションで2回目の turn が来ても、前の turn の行を消さない。
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
-		fc.T.Errorf("偽の Claude Code が transcript を開けません: %v", err)
+		fc.T.Errorf("テスト用Claude Code mock が transcript を開けません: %v", err)
 		return "", false
 	}
 	defer func() { _ = f.Close() }()
 	if _, err := f.WriteString(b.String()); err != nil {
-		fc.T.Errorf("偽の Claude Code が transcript を書けません: %v", err)
+		fc.T.Errorf("テスト用Claude Code mock が transcript を書けません: %v", err)
 		return "", false
 	}
 
@@ -286,7 +286,7 @@ func (fc *fakeClaude) sendStop(sess *agentSession, identity workspace.Identity, 
 	}
 	encoded, err := json.Marshal(event)
 	if err != nil {
-		fc.T.Errorf("偽の Claude Code が hook を JSON 化できません: %v", err)
+		fc.T.Errorf("テスト用Claude Code mock が hook を JSON 化できません: %v", err)
 		return
 	}
 
@@ -299,7 +299,7 @@ func (fc *fakeClaude) sendStop(sess *agentSession, identity workspace.Identity, 
 	cmd.Stdin = strings.NewReader(string(encoded) + "\n")
 	cmd.Env = fc.childEnv()
 	if out, err := cmd.CombinedOutput(); err != nil {
-		fc.T.Errorf("偽の Claude Code が hook を実行できません（%s）: %v\n%s", command, err, out)
+		fc.T.Errorf("テスト用Claude Code mock が hook を実行できません（%s）: %v\n%s", command, err, out)
 		return
 	}
 	_ = identity
@@ -313,7 +313,7 @@ func (fc *fakeClaude) sendStop(sess *agentSession, identity workspace.Identity, 
 func (fc *fakeClaude) stopHookCommand(settingsPath string) (string, bool) {
 	raw, err := os.ReadFile(settingsPath)
 	if err != nil {
-		fc.T.Errorf("偽の Claude Code が設定ファイルを読めません（%s）: %v", settingsPath, err)
+		fc.T.Errorf("テスト用Claude Code mock が設定ファイルを読めません（%s）: %v", settingsPath, err)
 		return "", false
 	}
 	var settings struct {
@@ -325,7 +325,7 @@ func (fc *fakeClaude) stopHookCommand(settingsPath string) (string, bool) {
 		} `json:"hooks"`
 	}
 	if err := json.Unmarshal(raw, &settings); err != nil {
-		fc.T.Errorf("偽の Claude Code が設定ファイルを解釈できません: %v", err)
+		fc.T.Errorf("テスト用Claude Code mock が設定ファイルを解釈できません: %v", err)
 		return "", false
 	}
 	for _, matcher := range settings.Hooks["Stop"] {
@@ -341,7 +341,7 @@ func (fc *fakeClaude) stopHookCommand(settingsPath string) (string, bool) {
 
 // runGit は worktree の中で git を実行する。
 //
-// **HOME は偽のホームディレクトリにする。**実物の `~/.gitconfig` を読ませない
+// **HOME はテスト用ホームディレクトリにする。**実物の `~/.gitconfig` を読ませない
 // （署名の設定などが混ざると commit が失敗する）。
 //
 // dir: 実行する作業ディレクトリ。
@@ -351,12 +351,12 @@ func (fc *fakeClaude) runGit(dir string, args ...string) {
 	cmd.Dir = dir
 	cmd.Env = fc.childEnv()
 	if out, err := cmd.CombinedOutput(); err != nil {
-		fc.T.Errorf("偽の Claude Code が `git %s` に失敗しました: %v\n%s",
+		fc.T.Errorf("テスト用Claude Code mock が `git %s` に失敗しました: %v\n%s",
 			strings.Join(args, " "), err, out)
 	}
 }
 
-// runGH は偽の gh を実行する。
+// runGH はテスト用gh mock を実行する。
 //
 // dir: 実行する作業ディレクトリ。
 // args: gh の引数。
@@ -365,12 +365,12 @@ func (fc *fakeClaude) runGH(dir string, args ...string) {
 	cmd.Dir = dir
 	cmd.Env = fc.childEnv()
 	if out, err := cmd.CombinedOutput(); err != nil {
-		fc.T.Errorf("偽の Claude Code が `gh %s` に失敗しました: %v\n%s",
+		fc.T.Errorf("テスト用Claude Code mock が `gh %s` に失敗しました: %v\n%s",
 			strings.Join(args, " "), err, out)
 	}
 }
 
-// childEnv は偽の Claude Code が起動する子プロセスへ渡す環境変数を組み立てる。
+// childEnv はテスト用Claude Code mock が起動する子プロセスへ渡す環境変数を組み立てる。
 //
 // **実物のホームディレクトリと実物の gh を見せない。**
 //

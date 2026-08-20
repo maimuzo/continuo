@@ -199,12 +199,14 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 				"herdr.worktree.create_via_herdr が真ですが herdr のクライアントが設定されていません")
 		}
 		focus := false
+		// **`path` と `branch` は片方だけ渡す。**両方渡すと herdr が
+		// `invalid_request: exactly one of path or branch is required` で弾く（実測: 2026-08-20）。
+		// **worktree は直前に git で作ってあるので、パスで開く。**
 		opened, err := m.herdr.WorktreeOpen(ctx, herdr.WorktreeOpenParams{
-			Path:   resolvedPath,
-			Branch: loc.Branch.String(),
-			Cwd:    repoPath,
-			Focus:  &focus,
-			Label:  issue.URL,
+			Path:  resolvedPath,
+			Cwd:   repoPath,
+			Focus: &focus,
+			Label: issue.URL,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("herdr の worktree.open に失敗しました（%s）: %w", resolvedPath, err)

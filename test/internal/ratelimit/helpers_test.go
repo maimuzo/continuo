@@ -4,7 +4,7 @@
 // **本番の usage API へは接続しない。**httptest.Server で偽の usage API を立て、
 // Options.Endpoint にその URL を渡す（docs/plans/continuo_design.md 3-15）。
 // 資格情報も本物（~/.claude/.credentials.json）は読まない。t.TempDir() に作った
-// 偽のホームディレクトリを Options.HomeDir に渡す。
+// テスト用ホームディレクトリを Options.HomeDir に渡す。
 package ratelimit_test
 
 import (
@@ -29,10 +29,10 @@ func newTestLogger() (*bytes.Buffer, *slog.Logger) {
 	return buf, logger
 }
 
-// writeCredentials は偽のホームディレクトリに `.claude/.credentials.json` を書く。
+// writeCredentials はテスト用ホームディレクトリに `.claude/.credentials.json` を書く。
 //
 // t: 呼び出し元のテスト。
-// home: 偽のホームディレクトリ（t.TempDir() の値）。
+// home: テスト用ホームディレクトリ（t.TempDir() の値）。
 // body: 書き込む JSON の中身（壊れた JSON も渡せるように文字列で受ける）。
 // 戻り値: 書いたファイルの絶対パス。
 func writeCredentials(t *testing.T, home, body string) string {

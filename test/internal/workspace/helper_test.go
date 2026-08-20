@@ -3,9 +3,9 @@
 //
 // **git は本物を使う。**一時ディレクトリに bare リポジトリと clone を作り、そこから
 // worktree を切る。worktree の作成と削除・`git branch -D`・`git status --porcelain` と
-// `git diff --quiet` の判定は、偽物では確かめられない。
+// `git diff --quiet` の判定は、mockでは確かめられない。
 //
-// **herdr は偽の socket サーバで通す。**実 herdr を使うとテストが落ちたときに pane が残る。
+// **herdr はテスト用socket mockで通す。**実 herdr を使うとテストが落ちたときに pane が残る。
 package workspace_test
 
 import (
@@ -28,7 +28,7 @@ import (
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
-// ===== 偽の herdr socket サーバ =====
+// ===== テスト用herdr mock socket サーバ =====
 
 // recordedRequest は偽サーバが受け取ったリクエスト1件である。
 type recordedRequest struct {
@@ -68,7 +68,7 @@ func (fh *fakeHerdr) SetOnRequest(method string, fn func(params map[string]any))
 	fh.onRequest[method] = fn
 }
 
-// newFakeHerdr は偽の herdr サーバを1本立てる。
+// newFakeHerdr はテスト用herdr mock サーバを1本立てる。
 //
 // t: 呼び出し元のテスト。socket とリスナーの後始末を t.Cleanup に登録する。
 // results: メソッド名から返す result への対応。未登録のメソッドはエラー応答になる。
@@ -80,14 +80,14 @@ func newFakeHerdr(t *testing.T, results map[string]any) *fakeHerdr {
 
 	dir, err := os.MkdirTemp("", "wsherdr")
 	if err != nil {
-		t.Fatalf("偽 herdr 用の一時ディレクトリを作成できません: %v", err)
+		t.Fatalf("テスト用herdr mock 用の一時ディレクトリを作成できません: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	socketPath := filepath.Join(dir, "s.sock")
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		t.Fatalf("偽 herdr の socket を bind できません（%s）: %v", socketPath, err)
+		t.Fatalf("テスト用herdr mock の socket を bind できません（%s）: %v", socketPath, err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
@@ -125,7 +125,7 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 		Params map[string]any `json:"params"`
 	}
 	if err := json.Unmarshal(line, &req); err != nil {
-		t.Errorf("偽 herdr がリクエストを解析できません: %v", err)
+		t.Errorf("テスト用herdr mock がリクエストを解析できません: %v", err)
 		return
 	}
 
@@ -154,11 +154,11 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	}
 	encoded, err := json.Marshal(resp)
 	if err != nil {
-		t.Errorf("偽 herdr が応答を JSON 化できません: %v", err)
+		t.Errorf("テスト用herdr mock が応答を JSON 化できません: %v", err)
 		return
 	}
 	if _, err := conn.Write(append(encoded, '\n')); err != nil {
-		t.Errorf("偽 herdr が応答を書けません: %v", err)
+		t.Errorf("テスト用herdr mock が応答を書けません: %v", err)
 	}
 }
 
@@ -329,7 +329,7 @@ type managerFixture struct {
 	Home string
 	// Repo は本物の git のリポジトリである（nil のこともある）。
 	Repo *testRepo
-	// Herdr は偽の herdr サーバである（nil のこともある）。
+	// Herdr はテスト用herdr mock サーバである（nil のこともある）。
 	Herdr *fakeHerdr
 	// SettingsRoot は issue ごとの設定ファイルの置き場所として Manager に渡した値である
 	// （設計 3-12 の `<実行時ディレクトリ>/issues`）。
@@ -340,7 +340,7 @@ type managerFixture struct {
 type fixtureOptions struct {
 	// Repo は worktree を切る元のリポジトリである。nil なら新しく作る。
 	Repo *testRepo
-	// Herdr は偽の herdr サーバである。nil なら worktree.open / worktree.remove に
+	// Herdr はテスト用herdr mock サーバである。nil なら worktree.open / worktree.remove に
 	// 成功応答を返すものを新しく作る。
 	Herdr *fakeHerdr
 	// Mutate は設定を書き換える関数である。nil なら既定のまま。

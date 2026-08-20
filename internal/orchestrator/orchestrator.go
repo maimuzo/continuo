@@ -128,7 +128,7 @@ type HerdrClient interface {
 
 // **本番の実装がこの2つのインタフェースを満たすことを、コンパイル時に確かめる。**
 //
-// **テストは偽のトラッカーと stub しか渡さない。**`cmd/continuo` から本物の型を渡す
+// **テストはテスト用トラッカー mockと stub しか渡さない。**`cmd/continuo` から本物の型を渡す
 // 経路は第7段階で作るので、この表明が無いと、それまでシグネチャがずれても誰も気づかない。
 var (
 	_ Tracker     = (*tracker.Adapter)(nil)

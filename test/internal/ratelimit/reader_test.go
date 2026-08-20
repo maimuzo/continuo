@@ -17,7 +17,7 @@ import (
 
 // 目的: 本番の既定である token_source: claude_credentials の**成功**経路を確認する
 // （レビュー指摘「成功経路が1件もテストされていない」の回帰テスト）。
-// 与える情報: 偽のホームディレクトリに正しい `.claude/.credentials.json` を書き、
+// 与える情報: テスト用ホームディレクトリに正しい `.claude/.credentials.json` を書き、
 // 偽の usage API を立てる。
 // 成功条件: Fetch が枠を読み取れること。ファイルから読んだ accessToken が
 // Authorization: Bearer ヘッダに載り、anthropic-beta と User-Agent も一緒に送られること

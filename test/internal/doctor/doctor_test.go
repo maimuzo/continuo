@@ -29,8 +29,8 @@ var wantLabels = []i18n.Key{
 // TestDoctor_前提が揃っていれば7項目すべて通る は、揃っている状態の基準線を作る。
 //
 // 目的: 7項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
-// 与える情報: 偽 herdr（protocol 19）・偽ボード（Ready の issue が1件）・
-// 偽の gh（project の scope あり）・信頼登録済みの `~/.claude.json`・`rate_limit.source: none`。
+// 与える情報: テスト用herdr mock（protocol 19）・偽ボード（Ready の issue が1件）・
+// テスト用gh mock（project の scope あり）・信頼登録済みの `~/.claude.json`・`rate_limit.source: none`。
 // 成功条件: 見出し語が7つ設計どおりの順序で並び、全部 `✓` で、終了コードが 0 であること。
 func TestDoctor_前提が揃っていれば7項目すべて通る(t *testing.T) {
 	fx := newFixture(t)
@@ -181,7 +181,7 @@ func TestDoctor_ghを起動できなければ足りない(t *testing.T) {
 // TestDoctor_herdrのprotocolが設定と一致しなければ足りない は、herdr の検査を確かめる。
 //
 // 目的: socket の ping の応答の protocol が `herdr.protocol` と一致しなければ `✗` にすること。
-// 与える情報: 偽 herdr が protocol 18 を返す（設定は 19）。
+// 与える情報: テスト用herdr mock が protocol 18 を返す（設定は 19）。
 // 成功条件: `herdr` が `✗` になり、説明に両方の版が入り、終了コードが 1 になること。
 func TestDoctor_herdrのprotocolが設定と一致しなければ足りない(t *testing.T) {
 	fx := newFixture(t)
@@ -414,7 +414,7 @@ func TestDoctor_cloneが無ければ足りないと直し方を出す(t *testing
 // 成功条件: 記録された引数が `list -p -e maimuzo/koetsumugi` であること。
 func TestDoctor_cloneの検査はghq_list_p_eで行う(t *testing.T) {
 	fx := newFixture(t)
-	// **注入をやめて、PATH の偽の ghq を実際に起動させる。**
+	// **注入をやめて、PATH のテスト用ghq mock を実際に起動させる。**
 	fx.GhqPaths = nil
 
 	report := fx.Run(t)
@@ -422,7 +422,7 @@ func TestDoctor_cloneの検査はghq_list_p_eで行う(t *testing.T) {
 	assertSymbol(t, report, doctor.LabelClone, doctor.SymbolOK)
 	recorded, err := os.ReadFile(fx.GhqArgsFile)
 	if err != nil {
-		t.Fatalf("偽の ghq が受け取った引数を読めません: %v", err)
+		t.Fatalf("テスト用ghq mock が受け取った引数を読めません: %v", err)
 	}
 	if got := strings.TrimSpace(string(recorded)); got != "list -p -e maimuzo/koetsumugi" {
 		t.Fatalf("ghq の呼び方が違う: %q", got)

@@ -1,7 +1,7 @@
 // Package trust_test のうち、このファイルは `continuo trust` を実際に起動して、
 // 端から端まで通ることを確かめる（設計 3-33）。
 //
-// **偽のホームディレクトリと偽の ghq の置き場所を環境変数で渡す。**
+// **テスト用ホームディレクトリとテスト用ghq mock の置き場所を環境変数で渡す。**
 // 実物の `~/.claude.json` には認証情報を含む全設定が入っており、テストが触ってはならない。
 package trust_test
 
@@ -49,7 +49,7 @@ func buildBinary(t *testing.T, outDir string) string {
 // **`--dry-run` は信頼のダイアログの代わりである**（設計 3-33）。
 // ここが書き換えてしまうと、確かめてから決めるという手順そのものが成立しない。
 //
-// 与える情報: 偽のホームディレクトリ・偽の ghq の置き場所・
+// 与える情報: テスト用ホームディレクトリ・テスト用ghq mock の置き場所・
 // trust.repositories に2件を書いた WORKFLOW.md。
 // 成功条件: 出力に要求内容が出て、終了コードが 1（登録の対象が残っている）で、
 // `~/.claude.json` が変わらず、バックアップも作られないこと。
@@ -125,9 +125,9 @@ func TestCLI_列挙した2件だけを登録し2回目は何も書かない(t *t
 type cliEnv struct {
 	// bin はビルドした continuo の絶対パス。
 	bin string
-	// home は偽のホームディレクトリ。
+	// home はテスト用ホームディレクトリ。
 	home string
-	// ghqRoot は偽の ghq の置き場所。
+	// ghqRoot はテスト用ghq mock の置き場所。
 	ghqRoot string
 	// workDir は WORKFLOW.md を置いた作業ディレクトリ。
 	workDir string
@@ -137,7 +137,7 @@ type cliEnv struct {
 	before string
 }
 
-// setUpCLI は CLI のテスト用に、偽のホーム・偽の ghq・WORKFLOW.md を組み立てる。
+// setUpCLI は CLI のテスト用に、偽のホーム・テスト用ghq mock・WORKFLOW.md を組み立てる。
 //
 // t: テストコンテキスト。
 // 戻り値: 組み立てた環境。

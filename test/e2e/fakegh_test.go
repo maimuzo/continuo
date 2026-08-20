@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// backquoteToken は偽の gh のソースの中で、バッククオートの代わりに書く印である。
+// backquoteToken はテスト用gh mock のソースの中で、バッククオートの代わりに書く印である。
 //
 // **Go の raw string literal の中にはバッククオートを書けない。**構造体タグを書くために
 // この印を置き、書き出す直前にバッククオートへ置き換える。
@@ -35,7 +35,7 @@ const backquoteToken = "@BQ@"
 //	gh issue comment <URL> --body B
 const fakeGHSource = `package main
 
-// 偽の gh である。board.json 1枚を唯一の状態として、実際の gh の出力の形で答える。
+// テスト用gh mock である。board.json 1枚を唯一の状態として、実際の gh の出力の形で答える。
 // **本物の GitHub へは1バイトも送らない。**
 
 import (
@@ -217,19 +217,19 @@ func saveBoard(path string, b *ghBoard) {
 func main() {
 	args := os.Args[1:]
 	if len(args) < 2 {
-		fail("偽の gh: サブコマンドが足りません: %v", args)
+		fail("テスト用gh mock: サブコマンドが足りません: %v", args)
 	}
 	path := os.Getenv("CONTINUO_E2E_BOARD")
 	if path == "" {
-		fail("偽の gh: 環境変数 CONTINUO_E2E_BOARD が空です")
+		fail("テスト用gh mock: 環境変数 CONTINUO_E2E_BOARD が空です")
 	}
 
 	lock, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		fail("偽の gh: ロックを開けません: %v", err)
+		fail("テスト用gh mock: ロックを開けません: %v", err)
 	}
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		fail("偽の gh: ロックを取れません: %v", err)
+		fail("テスト用gh mock: ロックを取れません: %v", err)
 	}
 	defer func() {
 		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
@@ -270,7 +270,7 @@ func dispatch(b *ghBoard, args []string) {
 	case "issue comment":
 		issueComment(b, rest)
 	default:
-		fail("偽の gh: 知らないサブコマンドです: %v", args)
+		fail("テスト用gh mock: 知らないサブコマンドです: %v", args)
 	}
 }
 
@@ -374,7 +374,7 @@ func projectItemList(b *ghBoard, args []string) {
 func projectItemAdd(b *ghBoard, args []string) {
 	url, ok := flagValue(args, "--url")
 	if !ok {
-		fail("偽の gh: project item-add には --url が要ります")
+		fail("テスト用gh mock: project item-add には --url が要ります")
 	}
 	for _, is := range b.Issues {
 		if is.URL != url {
@@ -392,7 +392,7 @@ func projectItemAdd(b *ghBoard, args []string) {
 		fmt.Println("Added item")
 		return
 	}
-	fail("偽の gh: %s という issue がありません", url)
+	fail("テスト用gh mock: %s という issue がありません", url)
 }
 
 // issueCreate は @BQ@gh issue create@BQ@ を処理する（**ボードには載せない**）。
@@ -402,7 +402,7 @@ func projectItemAdd(b *ghBoard, args []string) {
 func issueCreate(b *ghBoard, args []string) {
 	repo, ok := flagValue(args, "--repo")
 	if !ok {
-		fail("偽の gh: issue create には --repo が要ります")
+		fail("テスト用gh mock: issue create には --repo が要ります")
 	}
 	title, _ := flagValue(args, "--title")
 	body, _ := flagValue(args, "--body")
@@ -430,7 +430,7 @@ func issueView(b *ghBoard, args []string) {
 	target := firstPositional(args)
 	is := findByURLOrNumber(b, target, args)
 	if is == nil {
-		fail("偽の gh: %s という issue がありません", target)
+		fail("テスト用gh mock: %s という issue がありません", target)
 	}
 	fmt.Println("title:\t" + is.Title)
 	fmt.Println("state:\tOPEN")
@@ -455,11 +455,11 @@ func issueComment(b *ghBoard, args []string) {
 	target := firstPositional(args)
 	is := findByURLOrNumber(b, target, args)
 	if is == nil {
-		fail("偽の gh: %s という issue がありません", target)
+		fail("テスト用gh mock: %s という issue がありません", target)
 	}
 	body, ok := flagValue(args, "--body")
 	if !ok {
-		fail("偽の gh: issue comment には --body が要ります")
+		fail("テスト用gh mock: issue comment には --body が要ります")
 	}
 	id := "IC_" + strconv.Itoa(b.NextComment)
 	b.NextComment++
@@ -512,7 +512,7 @@ func onBoard(b *ghBoard) []*ghIssue {
 }
 `
 
-// fakeGHModule は偽の gh を単独でビルドするための go.mod である。
+// fakeGHModule はテスト用gh mock を単独でビルドするための go.mod である。
 //
 // **continuo のモジュールには足さない。**リポジトリの中に検証専用のパッケージを
 // 増やさないため、一時ディレクトリの中だけで完結させる。
@@ -528,24 +528,24 @@ const fakeGHModule = "module continuoe2efakegh\n\ngo 1.26\n"
 func buildFakeGH(t *testing.T, srcDir, binDir string) {
 	t.Helper()
 	if err := os.MkdirAll(srcDir, 0o700); err != nil {
-		t.Fatalf("偽の gh のソースを置く場所を作れません: %v", err)
+		t.Fatalf("テスト用gh mock のソースを置く場所を作れません: %v", err)
 	}
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
-		t.Fatalf("偽の gh を置く場所を作れません: %v", err)
+		t.Fatalf("テスト用gh mock を置く場所を作れません: %v", err)
 	}
 	source := strings.ReplaceAll(fakeGHSource, backquoteToken, "`")
 	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte(source), 0o600); err != nil {
-		t.Fatalf("偽の gh のソースを書けません: %v", err)
+		t.Fatalf("テスト用gh mock のソースを書けません: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte(fakeGHModule), 0o600); err != nil {
-		t.Fatalf("偽の gh の go.mod を書けません: %v", err)
+		t.Fatalf("テスト用gh mock の go.mod を書けません: %v", err)
 	}
 
 	cmd := exec.Command(goBinary(t), "build", "-o", filepath.Join(binDir, "gh"), ".")
 	cmd.Dir = srcDir
 	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("偽の gh をビルドできません: %v\n%s", err, out)
+		t.Fatalf("テスト用gh mock をビルドできません: %v\n%s", err, out)
 	}
 }
 
@@ -562,10 +562,10 @@ func buildFakeGH(t *testing.T, srcDir, binDir string) {
 func writeFakeGhq(t *testing.T, binDir, fullName, repoDir string) {
 	t.Helper()
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
-		t.Fatalf("偽の ghq を置く場所を作れません: %v", err)
+		t.Fatalf("テスト用ghq mock を置く場所を作れません: %v", err)
 	}
 	script := "#!/bin/sh\n" +
-		"# 偽の ghq。`ghq list -p -e <owner>/<repo>` にだけ答える。\n" +
+		"# テスト用ghq mock。`ghq list -p -e <owner>/<repo>` にだけ答える。\n" +
 		"for a in \"$@\"; do\n" +
 		"  if [ \"$a\" = \"" + fullName + "\" ]; then\n" +
 		"    echo \"" + repoDir + "\"\n" +
@@ -574,6 +574,6 @@ func writeFakeGhq(t *testing.T, binDir, fullName, repoDir string) {
 		"done\n" +
 		"exit 0\n"
 	if err := os.WriteFile(filepath.Join(binDir, "ghq"), []byte(script), 0o755); err != nil {
-		t.Fatalf("偽の ghq を書けません: %v", err)
+		t.Fatalf("テスト用ghq mock を書けません: %v", err)
 	}
 }

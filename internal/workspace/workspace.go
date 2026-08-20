@@ -6,7 +6,7 @@
 //
 //   - **トラッカーを知らない。**issue へのコメントは投稿せず、
 //     「コメントすべきこと」を CleanupResult.ShouldComment で返して orchestrator に投げさせる。
-//     トラッカーへの投稿口を注入すると、この層のテストのたびに偽のトラッカーが要る
+//     トラッカーへの投稿口を注入すると、この層のテストのたびにテスト用トラッカー mockが要る
 //   - **git は自分で叩き、herdr には「開く」と「消す」だけを任せる**（3-22）。
 //     prune・worktree add・孤児 branch の始末・branch -D は herdr の API に無い
 //   - **`~/.claude.json` は読むだけである。**信頼の登録は人間が Claude Code の画面で行う

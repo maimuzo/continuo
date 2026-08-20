@@ -25,30 +25,30 @@ import (
 //	[5/5] 完了        → 6（Done）
 const setupAnswers = "2\n3\n5\n4\n6\n"
 
-// TestE2E_手順書の段1から段9までを偽物だけで通す は、docs/trying_it_out.md の全段を
+// TestE2E_手順書の段1から段9までをmockだけで通す は、docs/trying_it_out.md の全段を
 // **被害ゼロで**最初から最後まで通す。
 //
 // 目的:
 //   - **段7〜段9（issue を実際に処理する部分）を初めて通す。**
 //     ここは実物を使うと枠を消費し、リポジトリが変更され、ボードが書き換わるため、
 //     これまで一度も動かせていなかった
-//   - 偽物どうし（偽の gh・偽の GraphQL・偽の herdr・隔離したホームディレクトリ・
-//     偽の Claude Code）が繋がって、1件の issue が `Ready` から `Done` まで通ること
+//   - mockどうし（テスト用gh mock・テスト用GraphQL mock・テスト用herdr mock・隔離したホームディレクトリ・
+//     テスト用Claude Code mock）が繋がって、1件の issue が `Ready` から `Done` まで通ること
 //
 // 与える情報:
 //   - 既に issue が1件（`Ice Box`）載っている偽のボード
 //   - 本物の git の bare リポジトリと clone（worktree の作成・削除・push の判定に要る）
-//   - `agent.prompt` を受けたら、偽の Claude Code が commit して push し、
+//   - `agent.prompt` を受けたら、テスト用Claude Code mock が commit して push し、
 //     issue にコメントを書き、transcript に `CONTINUO-STATUS: review` を書いて、
 //     **`continuo hook` で Stop を送る**
 //
 // 成功条件:
 //   - 段1〜段6 が手順書どおりの終了コードと出力になる
 //   - 段8 で Status が `Ready` → `In Progress` → `In Review` と動く
-//   - worktree が本物の git で作られ、偽の Claude Code の commit が push される
+//   - worktree が本物の git で作られ、テスト用Claude Code mock の commit が push される
 //   - 人間が `Done` へ動かすと worktree と branch が消える
 //   - 段9 の `SIGINT`（`Ctrl+C` 相当）で終了コード 0 で終わる
-func TestE2E_手順書の段1から段9までを偽物だけで通す(t *testing.T) {
+func TestE2E_手順書の段1から段9までをmockだけで通す(t *testing.T) {
 	env := newE2EEnv(t)
 
 	// ===== 段1. ビルドする =====
@@ -66,7 +66,7 @@ func TestE2E_手順書の段1から段9までを偽物だけで通す(t *testing
 	// ===== 段4. Status の割り当てを合わせる =====
 	stage4Setup(t, env)
 
-	// **試用の一式（偽の herdr と一時ディレクトリ）を向くように書き換える。**
+	// **試用の一式（テスト用herdr mock と一時ディレクトリ）を向くように書き換える。**
 	// 手順書の「手で書き換えることもできる」にあたる。
 	env.TestSettings(t)
 
@@ -94,7 +94,7 @@ func TestE2E_手順書の段1から段9までを偽物だけで通す(t *testing
 
 // stage2ReadBoard は段2（使うボードを確かめる）を叩く。
 //
-// **偽の gh を直接叩く。**手順書がここで案内しているのは continuo ではなく gh である。
+// **テスト用gh mock を直接叩く。**手順書がここで案内しているのは continuo ではなく gh である。
 //
 // t: 呼び出し元のテスト。
 // env: 試用の一式。
@@ -272,7 +272,7 @@ func stage7PrepareIssue(t *testing.T, env *e2eEnv) string {
 	}
 	env.Board.SetStateByURL(t, issueURL, "Ready")
 
-	// 足した issue が `gh project item-list` にも出る（**偽の gh が状態を持っている**）。
+	// 足した issue が `gh project item-list` にも出る（**テスト用gh mock が状態を持っている**）。
 	list := runTool(t, env, gh, "project", "item-list", "7", "--owner", env.Owner, "--format", "json")
 	mustContain(t, "段7 の `gh project item-list`", list, issueURL, `"status": "Ready"`)
 
@@ -320,7 +320,7 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 		return env.Board.StateOfURL(t, issueURL) == "In Review"
 	})
 
-	// **continuo が GraphQL で書いた Status が、偽の gh からも見える。**
+	// **continuo が GraphQL で書いた Status が、テスト用gh mock からも見える。**
 	// 別の端末から `gh project item-list` で様子を見る、という手順書の案内にあたる。
 	list := runTool(t, env, filepath.Join(env.BinDir, "gh"),
 		"project", "item-list", "7", "--owner", env.Owner, "--format", "json")
@@ -330,13 +330,13 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 	// コマンド行をそのまま実行した記録を見る（socket へ直接書いてはいない）。
 	hooks := env.Claude.HookCommands()
 	if len(hooks) == 0 {
-		t.Fatalf("段8: 偽の Claude Code が hook を1回も実行していません")
+		t.Fatalf("段8: テスト用Claude Code mock が hook を1回も実行していません")
 	}
 	mustContain(t, "段8 の hook のコマンド行", hooks[0], "hook --socket", "--pending-dir")
 
-	// **偽の Claude Code の成果が本物の git に残っている。**
+	// **テスト用Claude Code mock の成果が本物の git に残っている。**
 	if n := env.Claude.Commits(); n == 0 {
-		t.Fatalf("段8: 偽の Claude Code が commit を1つも作っていません")
+		t.Fatalf("段8: テスト用Claude Code mock が commit を1つも作っていません")
 	}
 	pushed := env.RunGit(t, env.RepoDir, "ls-remote", "--heads", "origin", branch)
 	if !strings.Contains(pushed, branch) {
@@ -356,20 +356,20 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 		t.Fatalf("段8: エージェントのコメントが issue にありません: %v", bodies)
 	}
 
-	// **偽物どうしが繋がっている証拠を確かめる。**
+	// **mockどうしが繋がっている証拠を確かめる。**
 	if env.Herdr.CountMethod("worktree.open") == 0 {
-		t.Fatalf("段8: 偽 herdr が worktree.open を受けていません: %v", env.Herdr.Methods())
+		t.Fatalf("段8: テスト用herdr mock が worktree.open を受けていません: %v", env.Herdr.Methods())
 	}
 	if env.Herdr.CountMethod("agent.start") == 0 {
-		t.Fatalf("段8: 偽 herdr が agent.start を受けていません: %v", env.Herdr.Methods())
+		t.Fatalf("段8: テスト用herdr mock が agent.start を受けていません: %v", env.Herdr.Methods())
 	}
 	if prompts := env.Herdr.Prompts(); len(prompts) == 0 {
-		t.Fatalf("段8: 偽 herdr が agent.prompt を受けていません")
+		t.Fatalf("段8: テスト用herdr mock が agent.prompt を受けていません")
 	} else if !strings.Contains(prompts[0], fmt.Sprintf("%s#%d", env.FullName(), number)) {
 		t.Fatalf("段8: 1回目の本文に issue の識別子がありません: %q", prompts[0])
 	}
 	if n := env.GitHub.Queries.Count("update_status"); n == 0 {
-		t.Fatalf("段8: 偽の GraphQL サーバが Status の書き込みを受けていません: %v",
+		t.Fatalf("段8: テスト用GraphQL mockが Status の書き込みを受けていません: %v",
 			env.GitHub.Queries.Entries())
 	}
 
@@ -428,15 +428,15 @@ func stage9Stop(t *testing.T, env *e2eEnv, cmd *exec.Cmd, logs *syncBuffer, work
 		t.Fatalf("段9: pane が残っています: %v", panes)
 	}
 
-	// **偽の gh が手順書のとおりに叩かれている。**
+	// **テスト用gh mock が手順書のとおりに叩かれている。**
 	calls := strings.Join(env.Board.GHCalls(t), "\n")
-	mustContain(t, "段9 の偽の gh の呼び出し記録", calls,
+	mustContain(t, "段9 のテスト用gh mock の呼び出し記録", calls,
 		"api user", "project list", "project field-list", "project item-list",
 		"project item-add", "issue create", "issue view", "issue comment",
 		"auth status", "auth token")
 }
 
-// runTool は偽の gh のような外部コマンドを1回実行して標準出力を返す。
+// runTool はテスト用gh mock のような外部コマンドを1回実行して標準出力を返す。
 //
 // t: 呼び出し元のテスト。
 // env: 試用の一式（環境変数を借りる）。
@@ -470,7 +470,7 @@ func readFileString(t *testing.T, path string) string {
 }
 
 // TestE2E_status_fieldの綴りが違うとボードを読めない は、手順書の段2 と段6 が載せている
-// **`✗ ボード` の出力**を、偽の GitHub GraphQL サーバに対して実際に出す。
+// **`✗ ボード` の出力**を、テスト用GitHub GraphQL mock サーバに対して実際に出す。
 //
 // 目的: 「綴りが1文字でも違うとボードを読めない」という手順書の記述が、
 // **文面まで含めて本当かどうか**を確かめる。以前は偽のサーバが `statusField` を

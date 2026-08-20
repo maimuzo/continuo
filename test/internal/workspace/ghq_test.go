@@ -23,7 +23,7 @@ func fakeGhq(t *testing.T, script string) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ghq")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script+"\n"), 0o700); err != nil {
-		t.Fatalf("偽の ghq を書けない: %v", err)
+		t.Fatalf("テスト用ghq mock を書けない: %v", err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

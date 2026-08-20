@@ -21,7 +21,7 @@ import (
 //
 // 与える情報:
 //   - ボードに `Ready` の issue が1件（本物の git の clone がある）
-//   - 偽の herdr（実 herdr は使わない）
+//   - テスト用herdr mock（実 herdr は使わない）
 //   - `agent.prompt` を受けたら、Claude Code が「実装して push し、コメントを書き、
 //     自分で `gh` を叩いて Status を `Done` へ動かし、`CONTINUO-STATUS: review` を書いて
 //     turn を終えた」状態を作り、`Stop` hook を continuo へ流す

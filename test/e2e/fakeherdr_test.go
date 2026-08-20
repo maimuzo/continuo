@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// ===== 偽の herdr の socket サーバ =====
+// ===== テスト用herdr mock の socket サーバ =====
 
 // rpcErr は herdr の socket API のエラー応答である。
 type rpcErr struct {
@@ -23,7 +23,7 @@ type rpcErr struct {
 	Message string `json:"message"`
 }
 
-// recordedRequest は偽 herdr が受け取ったリクエスト1件である。
+// recordedRequest はテスト用herdr mock が受け取ったリクエスト1件である。
 type recordedRequest struct {
 	// Method は呼ばれたメソッド名である。
 	Method string
@@ -42,9 +42,9 @@ type recordedRequest struct {
 // 戻り値の2つ目: エラー応答を返したい場合のエラー。nil なら成功応答になる。
 type herdrHandler func(params map[string]any) (any, *rpcErr)
 
-// agentSession は偽 herdr が覚えている「起動済みの Claude Code」1件である。
+// agentSession はテスト用herdr mock が覚えている「起動済みの Claude Code」1件である。
 //
-// **実プロセスは無い。**agent.start で渡された引数から、偽の Claude Code が
+// **実プロセスは無い。**agent.start で渡された引数から、テスト用Claude Code mock が
 // エージェントの役を演じるのに要る値（設定ファイルとセッション UUID）を控えておく。
 type agentSession struct {
 	// Name は agent 名である（`agent.prompt` の target になる）。
@@ -91,24 +91,24 @@ type fakeHerdr struct {
 	nextPane int
 	// repoDir は worktree.remove のあとに `git worktree prune` を叩くリポジトリである。
 	repoDir string
-	// onPrompt は `agent.prompt` を受けたときに呼ぶ「偽の Claude Code」である。
+	// onPrompt は `agent.prompt` を受けたときに呼ぶ「テスト用Claude Code mock」である。
 	onPrompt func(sess *agentSession, text string)
 	// prompts は `agent.prompt` で送られた本文を送られた順に並べたものである。
 	prompts []string
 }
 
-// newFakeHerdr は偽 herdr を1本立て、着手が最後まで通るだけの既定の台本を入れる。
+// newFakeHerdr はテスト用herdr mock を1本立て、着手が最後まで通るだけの既定の台本を入れる。
 //
 // t: 呼び出し元のテスト。socket の後始末を t.Cleanup に登録する。
 // dir: socket を置くディレクトリ（**短く保つこと。**macOS の上限は103バイト）。
-// 戻り値: 起動した偽 herdr。
+// 戻り値: 起動したテスト用herdr mock。
 func newFakeHerdr(t *testing.T, dir string) *fakeHerdr {
 	t.Helper()
 
 	socketPath := filepath.Join(dir, "h.sock")
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		t.Fatalf("偽 herdr の socket を bind できません（%s）: %v", socketPath, err)
+		t.Fatalf("テスト用herdr mock の socket を bind できません（%s）: %v", socketPath, err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
@@ -142,7 +142,7 @@ func (fh *fakeHerdr) SetRepoDir(dir string) {
 	fh.repoDir = dir
 }
 
-// SetOnPrompt は `agent.prompt` を受けたときに演じる「偽の Claude Code」を差し替える。
+// SetOnPrompt は `agent.prompt` を受けたときに演じる「テスト用Claude Code mock」を差し替える。
 //
 // fn: エージェントの役。**接続ごとの goroutine から呼ばれるので t.Fatalf を使ってはならない。**
 func (fh *fakeHerdr) SetOnPrompt(fn func(sess *agentSession, text string)) {
@@ -262,6 +262,14 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 
 	fh.Handle("worktree.open", func(params map[string]any) (any, *rpcErr) {
 		path, _ := params["path"].(string)
+		branch, _ := params["branch"].(string)
+		// **本物と同じく、path と branch は片方だけ受け付ける。**
+		// 両方渡しても通すmockにしていたせいで、本物で
+		// `invalid_request: exactly one of path or branch is required` が出るまで
+		// 誰も気づけなかった（実測: 2026-08-20）。
+		if (path == "") == (branch == "") {
+			return nil, &rpcErr{Code: "invalid_request", Message: "exactly one of path or branch is required"}
+		}
 		id, paneID := fh.workspaceFor(path)
 		return map[string]any{
 			"type":      "worktree_opened",
@@ -439,7 +447,7 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 		if sess == nil {
 			return nil, &rpcErr{Code: "agent_not_found", Message: target}
 		}
-		// **ここで「偽の Claude Code」がエージェントの役を演じる。**
+		// **ここで「テスト用Claude Code mock」がエージェントの役を演じる。**
 		// 本物と同じく、応答を返す前に turn の中身（作業と Stop hook）が終わる。
 		if onPrompt != nil {
 			onPrompt(sess, text)
@@ -471,7 +479,7 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 		Params map[string]any `json:"params"`
 	}
 	if err := json.Unmarshal(line, &req); err != nil {
-		t.Errorf("偽 herdr がリクエストを解析できません: %v", err)
+		t.Errorf("テスト用herdr mock がリクエストを解析できません: %v", err)
 		return
 	}
 
@@ -495,11 +503,11 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	}
 	encoded, err := json.Marshal(resp)
 	if err != nil {
-		t.Errorf("偽 herdr が応答を JSON 化できません: %v", err)
+		t.Errorf("テスト用herdr mock が応答を JSON 化できません: %v", err)
 		return
 	}
 	if _, err := conn.Write(append(encoded, '\n')); err != nil {
-		t.Logf("偽 herdr が応答を書けません（無視する）: %v", err)
+		t.Logf("テスト用herdr mock が応答を書けません（無視する）: %v", err)
 	}
 }
 

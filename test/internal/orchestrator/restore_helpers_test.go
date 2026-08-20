@@ -173,7 +173,7 @@ type livePane struct {
 	SessionUUID string
 }
 
-// installPanes は偽 herdr の `pane.list` と `agent.list` を、生きている pane の台本で置き換える。
+// installPanes はテスト用herdr mock の `pane.list` と `agent.list` を、生きている pane の台本で置き換える。
 //
 // **`pane.list` は workspace_id を指定しない呼び出し（復元の段4）にも答える。**
 //
@@ -236,7 +236,7 @@ func restore(t *testing.T, fx *fixture) (*orchestrator.RestoreResult, *fakeHookS
 	return result, hs
 }
 
-// closedPaneIDs は偽 herdr が受け取った `pane.close` の pane_id を、受け取った順に返す。
+// closedPaneIDs はテスト用herdr mock が受け取った `pane.close` の pane_id を、受け取った順に返す。
 //
 // fx: fixture。
 // 戻り値: 閉じられた pane の ID。
@@ -302,7 +302,7 @@ func (l *syncLog) String() string {
 
 // stringBox は排他つきの文字列の置き場である。
 //
-// **偽 herdr の台本（接続ごとの goroutine）が書き、テスト本体が読む**ので、
+// **テスト用herdr mock の台本（接続ごとの goroutine）が書き、テスト本体が読む**ので、
 // 素の変数だと `-race` が競合を報告する。
 type stringBox struct {
 	mu sync.Mutex

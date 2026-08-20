@@ -1,18 +1,18 @@
 // Package orchestrator_test は internal/orchestrator の巡回・dispatch・turn ループ・
 // 照合・リトライ・stall 検知を検証する。
 //
-// **実 herdr は使わない。**第2段階と同じく net.Listen("unix", ...) で偽の socket サーバを
+// **実 herdr は使わない。**第2段階と同じく net.Listen("unix", ...) でテスト用socket mockを
 // 立て、台本として応答を書く（実 herdr を使うとテストが落ちたときに workspace と pane が
 // 残る。偽サーバなら blocked や working も再現できる）。
 //
 // **git は本物を使う。**一時ディレクトリに bare リポジトリと clone を作り、そこから
 // worktree を切る。worktree の作成と削除・`git branch -D`・`git status --porcelain` と
-// `git diff --quiet` の判定は、偽物では確かめられない。
+// `git diff --quiet` の判定は、mockでは確かめられない。
 //
 // **Claude Code は起動しない。**turn の終わりは、偽サーバの `agent.prompt` の応答と、
 // テストが Orchestrator.OnHook へ直接流す hook で再現する。
 //
-// **本番のボード（project #3）へは接続しない。**トラッカーは in-memory の偽物である。
+// **本番のボード（project #3）へは接続しない。**トラッカーは in-memory のmockである。
 package orchestrator_test
 
 import (
@@ -42,7 +42,7 @@ import (
 
 // ===== 呼び出しの並びを1本にまとめる記録 =====
 
-// timeline は偽のトラッカーと偽の herdr の呼び出しを、**1本の並び**に混ぜて記録する。
+// timeline はテスト用トラッカー mockとテスト用herdr mock の呼び出しを、**1本の並び**に混ぜて記録する。
 //
 // **これが無いと、着手の段2（Status の書き込み）と段3（`worktree.open`）の前後関係を
 // 比べられない。**それぞれが自分の記録しか持たないと、2つの並びを突き合わせる手段が無い。
@@ -92,7 +92,7 @@ func (tl *timeline) IndexOf(name string) int {
 // testClock は手で進められる時計である。
 //
 // **バックオフが明けるまでの待ちを実時間ゼロで作る。**`testing/synctest` を使わないのは、
-// このファイルの fixture が偽の socket サーバ（network I/O）と本物の git を使うためである。
+// このファイルの fixture がテスト用socket mock（network I/O）と本物の git を使うためである。
 type testClock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -119,7 +119,7 @@ func (c *testClock) Advance(d time.Duration) {
 	c.now = c.now.Add(d)
 }
 
-// ===== 偽の herdr socket サーバ =====
+// ===== テスト用herdr mock socket サーバ =====
 
 // rpcErr は herdr の socket API のエラー応答である。
 type rpcErr struct {
@@ -158,7 +158,7 @@ type fakeHerdr struct {
 	mu       sync.Mutex
 	requests []recordedRequest
 	handlers map[string]herdrHandler
-	// timeline は偽のトラッカーと共有する呼び出しの並びである（nil なら記録しない）。
+	// timeline はテスト用トラッカー mockと共有する呼び出しの並びである（nil なら記録しない）。
 	timeline *timeline
 	// gitRepoDir は worktree.remove のあとに `git worktree prune` を叩くリポジトリである。
 	gitRepoDir string
@@ -212,7 +212,7 @@ func (fh *fakeHerdr) repoDir() string {
 	return fh.gitRepoDir
 }
 
-// newFakeHerdr は偽の herdr サーバを1本立て、着手の13段が通るだけの既定の台本を入れる。
+// newFakeHerdr はテスト用herdr mock サーバを1本立て、着手の13段が通るだけの既定の台本を入れる。
 //
 // t: 呼び出し元のテスト。socket とリスナーの後始末を t.Cleanup に登録する。
 // 戻り値: 起動した *fakeHerdr。
@@ -223,14 +223,14 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 
 	dir, err := os.MkdirTemp("", "orcherdr")
 	if err != nil {
-		t.Fatalf("偽 herdr 用の一時ディレクトリを作成できません: %v", err)
+		t.Fatalf("テスト用herdr mock 用の一時ディレクトリを作成できません: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	socketPath := filepath.Join(dir, "s.sock")
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		t.Fatalf("偽 herdr の socket を bind できません（%s）: %v", socketPath, err)
+		t.Fatalf("テスト用herdr mock の socket を bind できません（%s）: %v", socketPath, err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
@@ -364,7 +364,7 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 		Params map[string]any `json:"params"`
 	}
 	if err := json.Unmarshal(line, &req); err != nil {
-		t.Errorf("偽 herdr がリクエストを解析できません: %v", err)
+		t.Errorf("テスト用herdr mock がリクエストを解析できません: %v", err)
 		return
 	}
 
@@ -389,11 +389,11 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	}
 	encoded, err := json.Marshal(resp)
 	if err != nil {
-		t.Errorf("偽 herdr が応答を JSON 化できません: %v", err)
+		t.Errorf("テスト用herdr mock が応答を JSON 化できません: %v", err)
 		return
 	}
 	if _, err := conn.Write(append(encoded, '\n')); err != nil {
-		t.Logf("偽 herdr が応答を書けません（無視する）: %v", err)
+		t.Logf("テスト用herdr mock が応答を書けません（無視する）: %v", err)
 	}
 }
 
@@ -438,7 +438,7 @@ func (fh *fakeHerdr) ParamsOf(t *testing.T, method string) map[string]any {
 			return r.Params
 		}
 	}
-	t.Fatalf("偽 herdr は %s を受け取っていません（受け取ったのは %v）", method, fh.Methods())
+	t.Fatalf("テスト用herdr mock は %s を受け取っていません（受け取ったのは %v）", method, fh.Methods())
 	return nil
 }
 
@@ -451,7 +451,7 @@ func (fh *fakeHerdr) Client() *herdr.Client {
 	})
 }
 
-// ===== 偽のトラッカー =====
+// ===== テスト用トラッカー mock =====
 
 // fakeTracker は in-memory のボードである。**本番のボードへは接続しない。**
 type fakeTracker struct {
@@ -470,14 +470,14 @@ type fakeTracker struct {
 	idsErr error
 	// now は CreatedAt に入れる時刻を返す関数である。
 	now func() time.Time
-	// timeline は偽の herdr と共有する呼び出しの並びである（nil なら記録しない）。
+	// timeline はテスト用herdr mock と共有する呼び出しの並びである（nil なら記録しない）。
 	timeline *timeline
 }
 
-// newFakeTracker は偽のトラッカーを作る。
+// newFakeTracker はテスト用トラッカー mockを作る。
 //
 // now: 現在時刻を返す関数。nil なら time.Now を使う。
-// 戻り値: 空のボードを持つ偽のトラッカー。
+// 戻り値: 空のボードを持つテスト用トラッカー mock。
 func newFakeTracker(now func() time.Time) *fakeTracker {
 	if now == nil {
 		now = time.Now
@@ -487,7 +487,7 @@ func newFakeTracker(now func() time.Time) *fakeTracker {
 
 // record は呼ばれたメソッドを記録する。
 //
-// **偽の herdr と共有する並びにも同時に積む。**着手の段2（Status の書き込み）が
+// **テスト用herdr mock と共有する並びにも同時に積む。**着手の段2（Status の書き込み）が
 // 段3（`worktree.open`）より前に起きたことは、1本の並びでしか比べられない。
 //
 // **呼び出し側が ft.mu を保持したまま呼ぶ。**timeline は別の排他を持つので、
@@ -780,9 +780,9 @@ func newTestRepo(t *testing.T) *testRepo {
 type fixture struct {
 	// Orc は検査対象である。
 	Orc *orchestrator.Orchestrator
-	// Tracker は偽のトラッカーである。
+	// Tracker はテスト用トラッカー mockである。
 	Tracker *fakeTracker
-	// Herdr は偽の herdr サーバである。
+	// Herdr はテスト用herdr mock サーバである。
 	Herdr *fakeHerdr
 	// Workspace は本物の git を触る worktree の管理である。
 	Workspace *workspace.Manager
@@ -804,7 +804,7 @@ type fixture struct {
 	Logs *syncLog
 	// Sessions は採番したセッション UUID を採番した順に持つ。
 	Sessions []string
-	// Timeline は偽のトラッカーと偽の herdr の呼び出しを混ぜた1本の並びである。
+	// Timeline はテスト用トラッカー mockとテスト用herdr mock の呼び出しを混ぜた1本の並びである。
 	Timeline *timeline
 }
 
@@ -835,9 +835,9 @@ type fixtureOptions struct {
 //
 // 組み立てるのは次の4つである。
 //
-//	偽の herdr socket サーバ  … 実 herdr は使わない
-//	偽のトラッカー            … 本番のボードへは接続しない
-//	本物の git のリポジトリ    … worktree の作成と削除は偽物では確かめられない
+//	テスト用herdr mock socket サーバ  … 実 herdr は使わない
+//	テスト用トラッカー mock            … 本番のボードへは接続しない
+//	本物の git のリポジトリ    … worktree の作成と削除はmockでは確かめられない
 //	`~/.claude.json`         … 信頼の検査が読む（読むだけ。書き換えない）
 //
 // t: 呼び出し元のテスト。
