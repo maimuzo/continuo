@@ -59,9 +59,22 @@
       "Bash(gh repo delete:*)",
       "Bash(find * -delete *)",
       "Bash(find * -exec rm *)",
-      "Bash(git push:*)",
       "Bash(git worktree remove:*)",
       "Bash(rm:*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-reply-structure.py\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
@@ -69,10 +82,14 @@
     "maimuzo-dev-core@maimuzo-marketplace": true,
     "maimuzo-issue-manage@maimuzo-marketplace": true,
     "maimuzo-from-ecc@maimuzo-marketplace": true,
-    "maimuzo-cosper-team@maimuzo-marketplace": false,
+    "maimuzo-cosper-team@maimuzo-marketplace": true,
     "mattpocock-skills@mattpocock": true,
     "everything-claude-code@everything-claude-code": true,
-    "codex@openai-codex": true
+    "codex@openai-codex": true,
+    "maimuzo-auto-debug@maimuzo-marketplace": true,
+    "maimuzo-pencil@maimuzo-marketplace": true,
+    "maimuzo-rucm@maimuzo-marketplace": true,
+    "maimuzo-naming@maimuzo-marketplace": true
   },
   "extraKnownMarketplaces": {
     "maimuzo-marketplace": {
