@@ -22,8 +22,6 @@ const (
 	// turnStalled は待ち受けが返ったのに `Stop` が来なかったことを表す（設計 3-2）。
 	// 権限の確認が esc で取り消された場合などである。
 	turnStalled
-	// turnTimedOut は turn の時間切れである（枠待ちではない）。
-	turnTimedOut
 	// turnAborted は ctx が終わったことを表す。
 	turnAborted
 )
@@ -66,7 +64,13 @@ func (o *Orchestrator) startTurnLoop(ctx context.Context, rs *runState, awaitFir
 			rs.turnLoopRunning = false
 			rs.mu.Unlock()
 		}()
-		o.turnLoop(ctx, rs, epoch, awaitFirst)
+		// **Close でも終われるようにする。**turn ループの待ちには期限が無い
+		// （`claude.turn_timeout_ms` は turn の総実行時間の上限ではない。設計 3-21）ので、
+		// 呼び出し側の ctx が終わらないまま Close だけを呼ばれると永久に返らない。
+		turnCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		defer context.AfterFunc(o.shutdown, cancel)()
+		o.turnLoop(turnCtx, rs, epoch, awaitFirst)
 	}()
 	return true
 }
@@ -97,12 +101,12 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		if awaitFirst {
 			// **引き継いだ run である。turn を送らずに、走っている turn の終わりを待つ**
 			// （設計 3-4 の段5a2「hook を待ち、来なければ stall 検知で拾う」の前半）。
-			// **送ると turn が混ざる。**待ち切れなければ turn の時間切れとして扱い、
-			// 巡回の stall 検知と同じ経路（abandonRun）へ落とす。
+			// **送ると turn が混ざる。**待ち切れないことはここでは判定しない。
+			// **画面が止まったかどうかは巡回の stall 検知（checkStalls）だけが決める。**
 			awaitFirst = false
 			o.logger.Info("引き継いだ run の turn の終わりを待ちます（turn は送りません）",
 				"identifier", snap.Identifier)
-			outcome = o.confirmTurnEnd(ctx, rs, o.turnDeadline(), false)
+			outcome = o.confirmTurnEnd(ctx, rs, false)
 		} else {
 			if snap.TurnCount >= o.cfg.Agent.MaxTurns {
 				o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
@@ -169,17 +173,6 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"エージェントが `/hooks` などで設定を上書きした。"+
 				"\n【対処】Status を着手待ちへ戻してください。次の着手で設定を書き直します。")
 			return
-		case turnTimedOut:
-			o.abandonRun(ctx, rs,
-				fmt.Sprintf(
-					"Claude Code へ指示を送ってから %d ミリ秒たっても、turn が終わりませんでした。"+
-						"**動いている途中で打ち切りました。**"+
-						"\n【確かめ方】Claude Code の画面（下記のコマンド）で、どこで止まっていたかを見てください。"+
-						"\n【よくある原因】1回の指示に対する作業が大きい / 確認の画面が出て止まっていた / "+
-						"レートリミットの待ちに入っていた。"+
-						"\n【対処】WORKFLOW.md の `claude.turn_timeout_ms` を増やすか、issue を分けてください（いまは %d）。",
-					o.cfg.Claude.TurnTimeoutMs, o.cfg.Claude.TurnTimeoutMs))
-			return
 		case turnQuotaRecovered:
 			// 枠が明けた。**次の turn を送る（この送信は turn 数に数える。設計 3-27）。**
 			continue
@@ -238,7 +231,8 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 //     **agent.wait を単独で使わない。**いまの状態が until に含まれると 0.006 秒で即返るため、
 //     投入直後の idle を turn の終わりと取り違える
 //  2. timeout で返ったら枠待ちかを判定する。枠待ちなら agent.wait で待ち直す
-//     （**agent.prompt は再送しない。**二重に投入される）
+//     （**agent.prompt は再送しない。**二重に投入される）。
+//     **枠待ちでなくても打ち切らない。**待ち直す（turn の総実行時間に上限は無い）
 //  3. blocked で返ったら turnBlocked
 //  4. idle / done で返ったら、Stop hook を受けているかを確かめる
 //
@@ -248,7 +242,6 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 // 戻り値: turn の結果。
 func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) turnOutcome {
 	turnCount := rs.beginTurn(o.now())
-	deadline := o.turnDeadline()
 	o.logger.Info("turn を送ります",
 		"identifier", rs.issue().Identifier, "turn", turnCount, "max_turns", o.cfg.Agent.MaxTurns)
 
@@ -265,7 +258,12 @@ func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) 
 			return turnAborted
 		}
 		if herdr.IsCode(err, herdr.ErrCodeTimeout) {
-			return o.afterWaitTimeout(ctx, rs, deadline)
+			if outcome := o.afterWaitTimeout(ctx, rs); outcome != turnWaitAgain {
+				return outcome
+			}
+			// **打ち切らずに待ち直す。**`agent.prompt` は再送しない（二重に投入される）。
+			// 画面が止まったかどうかは巡回の stall 検知（checkStalls）だけが決める。
+			return o.confirmTurnEnd(ctx, rs, false)
 		}
 		o.logger.Warn("turn を送れませんでした", "identifier", rs.issue().Identifier, "error", err)
 		return turnStalled
@@ -275,25 +273,26 @@ func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) 
 	case herdr.AgentStatusBlocked:
 		return turnBlocked
 	case herdr.AgentStatusIdle, herdr.AgentStatusDone:
-		return o.confirmTurnEnd(ctx, rs, deadline, true)
+		return o.confirmTurnEnd(ctx, rs, true)
 	default:
 		// working / unknown のまま返るのは想定外である。Stop を確かめてから判断する。
-		return o.confirmTurnEnd(ctx, rs, deadline, true)
+		return o.confirmTurnEnd(ctx, rs, true)
 	}
 }
 
 // afterWaitTimeout は待ち受けが timeout で返ったときの分岐である（設計 3-2 の段3 / 3-27）。
 //
 // **枠待ちなら agent.wait で待ち直す。**`agent.prompt` は再送しない（二重に投入される）。
-// **枠待ちでなければ turn の時間切れとして打ち切る。**
+// **枠待ちでなければ `turnWaitAgain` を返す。**呼び出し側が待ち直す。
+// **ここで turn を打ち切ってはならない。**`claude.turn_timeout_ms` は turn の総実行時間の
+// 上限ではなく「画面が変わらないまま待てる時間」であり、その判定は巡回の checkStalls が持つ。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// deadline: この turn の期限。
-// 戻り値: turn の結果。
-func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState, deadline time.Time) turnOutcome {
+// 戻り値: turn の結果。枠待ちでなければ `turnWaitAgain`。
+func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) turnOutcome {
 	if !o.isQuotaWaiting(rs) {
-		return turnTimedOut
+		return turnWaitAgain
 	}
 
 	resetAt, ok := o.quotaResetAt()
@@ -326,7 +325,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState, deadl
 			case herdr.AgentStatusIdle, herdr.AgentStatusDone:
 				if _, seen := rs.stopSeen(); seen {
 					rs.clearWaitingQuota(o.now())
-					return o.confirmTurnEnd(ctx, rs, deadline, true)
+					return o.confirmTurnEnd(ctx, rs, true)
 				}
 			}
 		} else if !herdr.IsCode(err, herdr.ErrCodeTimeout) {
@@ -356,13 +355,6 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState, deadl
 			}
 		}
 	}
-}
-
-// turnDeadline はこの turn の期限を返す（`claude.turn_timeout_ms`）。
-//
-// 戻り値: 期限の時刻。
-func (o *Orchestrator) turnDeadline() time.Time {
-	return o.now().Add(time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond)
 }
 
 // sleepCtx は ctx を見張りながら d だけ待つ。
@@ -417,7 +409,7 @@ func (o *Orchestrator) afterQuotaReset(ctx context.Context, rs *runState) turnOu
 		// **その turn は continuo が送っていないので turn 数に入らない。**
 		o.logger.Info("枠が明けて Claude Code が自分で継続しました（継続の指示は送りません）",
 			"identifier", rs.issue().Identifier)
-		return o.confirmTurnEnd(ctx, rs, o.turnDeadline(), false)
+		return o.confirmTurnEnd(ctx, rs, false)
 	default:
 		o.logger.Info("枠が明けたので継続の指示を1回送ります（この送信は turn 数に数えます）",
 			"identifier", rs.issue().Identifier)
@@ -430,12 +422,18 @@ func (o *Orchestrator) afterQuotaReset(ctx context.Context, rs *runState) turnOu
 // **turnLoop はこれを受けると次の turn を送る**（TurnCount が1つ増える。設計 3-27）。
 const turnQuotaRecovered turnOutcome = 100
 
+// turnWaitAgain は「待ち受けが timeout で返ったが、打ち切らずに待ち直す」ことを表す。
+//
+// **`afterWaitTimeout` だけが返し、その呼び出し元だけが受け取る。**turnLoop まで
+// 届くことはない（届いたら turn を二重に送ることになるので、呼び出し元は必ず消費すること）。
+const turnWaitAgain turnOutcome = 101
+
 // isQuotaWaiting は「この run は枠待ちである」を判定する（設計 3-27）。
 //
 // **2条件の連言である。**
 //
 //	条件その1  percent が 100 に達している
-//	条件その2  その run から stall_timeout_ms のあいだ hook が1件も来ていない
+//	条件その2  その run から claude.turn_timeout_ms のあいだ hook が1件も来ていない
 //
 // **`severity` は見ない。**上限を示す値が何かを実測できていない。
 // **`pause_above_percent`（既定95%）を超えただけでは枠待ちとみなさない**（95%は枠がまだ
@@ -451,8 +449,8 @@ func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
 	if snap.hookSeenThisTurn {
 		// **条件その2 を入れる理由。**枠を使い切っていても、別の run は動いていることがある。
 		// 枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。
-		stall := time.Duration(o.cfg.Claude.StallTimeoutMs) * time.Millisecond
-		if stall <= 0 || o.now().Sub(snap.LastSeenAt) < stall {
+		silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
+		if silence <= 0 || o.now().Sub(snap.LastSeenAt) < silence {
 			return false
 		}
 	}
@@ -487,9 +485,11 @@ func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
 // **`Stop` が1件も来ていなければ、settle_ms 待ってから stall として扱う**
 // （権限の確認が esc で取り消された場合など。設計 3-11）。
 //
+// **`Stop` が来るまで何時間でも待つ。**turn の総実行時間に上限は無い（`SPEC.md` 10.6）。
+// 画面が止まったかどうかは巡回の stall 検知（checkStalls）だけが決める。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// deadline: この turn の期限。
 // strictFirstWait: 「待ち受けが返った直後」なら真。真のときは、settle_ms のあいだに
 // `Stop` が来なければ stall として扱う。**枠明けに Claude Code が自分で継続した場合は
 // 偽を渡す**（まだ走り出したばかりで `Stop` は来ないため。設計 3-27）。
@@ -497,7 +497,6 @@ func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
 func (o *Orchestrator) confirmTurnEnd(
 	ctx context.Context,
 	rs *runState,
-	deadline time.Time,
 	strictFirstWait bool,
 ) turnOutcome {
 	settle := time.Duration(o.cfg.Claude.SettleMs) * time.Millisecond
@@ -522,8 +521,10 @@ func (o *Orchestrator) confirmTurnEnd(
 				if firstWait {
 					return turnStalled
 				}
-				if o.now().After(deadline) {
-					return o.afterWaitTimeout(ctx, rs, deadline)
+				// **枠待ちなら時計を止めて待ち直す**（設計 3-27）。
+				// **総時間では打ち切らない。**打ち切るかどうかは checkStalls が決める。
+				if o.isQuotaWaiting(rs) {
+					return o.afterWaitTimeout(ctx, rs)
 				}
 				if st, err := o.agentStatus(ctx, rs); err == nil && st == herdr.AgentStatusBlocked {
 					return turnBlocked
@@ -596,6 +597,23 @@ func isTaskNotification(ev hookserver.HookEvent) bool {
 		strings.HasPrefix(strings.TrimSpace(ev.Prompt), taskNotificationPrefix)
 }
 
+// agentInfo は agent.get を1回呼び、agent の情報をまるごと返す。
+//
+// **状態と画面の版（`revision`）を1回の呼び出しで取るためにある。**stall の判定は
+// 両方を要る（設計 3-21）ので、2回に分けて呼ぶと別の時点の値を突き合わせることになる。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値の1つ目: agent の情報（状態は AgentStatus、画面の版は Revision）。
+// 戻り値の2つ目: 読めなかった場合のエラー。
+func (o *Orchestrator) agentInfo(ctx context.Context, rs *runState) (herdr.Agent, error) {
+	got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})
+	if err != nil {
+		return herdr.Agent{AgentStatus: herdr.AgentStatusUnknown}, err
+	}
+	return got.Agent, nil
+}
+
 // agentStatus は agent の状態を1回読む。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -603,11 +621,8 @@ func isTaskNotification(ev hookserver.HookEvent) bool {
 // 戻り値の1つ目: agent の状態。
 // 戻り値の2つ目: 読めなかった場合のエラー。
 func (o *Orchestrator) agentStatus(ctx context.Context, rs *runState) (herdr.AgentStatus, error) {
-	got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})
-	if err != nil {
-		return herdr.AgentStatusUnknown, err
-	}
-	return got.Agent.AgentStatus, nil
+	agent, err := o.agentInfo(ctx, rs)
+	return agent.AgentStatus, err
 }
 
 // waitUntilStatuses は設定の文字列を herdr の状態の並びへ直す。

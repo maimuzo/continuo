@@ -32,6 +32,9 @@ type stubHerdr struct {
 	mu sync.Mutex
 	// status は AgentGet / AgentWait が返す agent の状態である。
 	status herdr.AgentStatus
+	// revision は AgentGet が返す画面の版である（herdr の pane の revision）。
+	// **stall の判定はこの値が増えるかどうかで決まる**（設計 3-21）。
+	revision uint64
 	// closedPanes は PaneClose に渡された pane の ID である。
 	closedPanes []string
 	// sentKeys は AgentSendKeys に渡されたキーである。
@@ -51,6 +54,15 @@ func (s *stubHerdr) SetStatus(status herdr.AgentStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.status = status
+}
+
+// BumpRevision は AgentGet が返す画面の版を1つ増やす。
+//
+// **「エージェントの画面が変わった」ことの再現である。**
+func (s *stubHerdr) BumpRevision() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.revision++
 }
 
 // ClosedPanes は閉じた pane の ID を返す。
@@ -123,8 +135,12 @@ func (s *stubHerdr) AgentGet(_ context.Context, params herdr.AgentGetParams) (*h
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return &herdr.AgentGetResult{
-		Type:  "agent_info",
-		Agent: herdr.Agent{Name: params.Target.String(), AgentStatus: s.status},
+		Type: "agent_info",
+		Agent: herdr.Agent{
+			Name:        params.Target.String(),
+			AgentStatus: s.status,
+			Revision:    s.revision,
+		},
 	}, nil
 }
 
@@ -186,7 +202,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 	root := t.TempDir()
 	cfg := *config.DefaultConfig()
 	cfg.Workspace.Root = filepath.Join(root, "wt")
-	cfg.Claude.StallTimeoutMs = 60000
+	cfg.Claude.TurnTimeoutMs = 60000
 	cfg.RateLimit.Source = "none"
 	if opts.Mutate != nil {
 		opts.Mutate(&cfg)

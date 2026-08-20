@@ -145,10 +145,9 @@ workspace:
 claude:
   poll_wait_ms: 300
   settle_ms: 200
-  turn_timeout_ms: 20000
+  turn_timeout_ms: 600000
   read_timeout_ms: %d
   startup_timeout_ms: 3000
-  stall_timeout_ms: 600000
 herdr:
   socket: %s
   protocol: 19

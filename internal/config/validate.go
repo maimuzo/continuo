@@ -188,9 +188,10 @@ func validate(cfg *Config) error {
 
 	// 時間を表す値をまとめて検査する。**ここを検査しないと待ちが成立しない。**
 	// たとえば claude.poll_wait_ms: 0 は turn の待ち受けの待ち時間を 0 にするため、
-	// herdr の socket を無停止で叩き続けるループになり、それが turn_timeout_ms
-	// （既定1時間）続く。settle_ms: 0 なら逆に、正常な turn が最初の確認で必ず stall と
-	// 判定される。claude.stall_timeout_ms だけは「0 以下で無効」と決めてある（3-21）ので
+	// herdr の socket を無停止で叩き続けるループになる。settle_ms: 0 なら逆に、
+	// 正常な turn が最初の確認で必ず stall と判定される。
+	// claude.turn_timeout_ms だけは「0 以下で打ち切りを行わない」と決めてある（3-21。
+	// `SPEC.md` 8.4 の "If stall_timeout_ms <= 0, skip stall detection entirely"）ので
 	// この一覧に入れない。
 	for _, item := range []struct {
 		key   string
@@ -198,7 +199,6 @@ func validate(cfg *Config) error {
 	}{
 		{"claude.poll_wait_ms", cfg.Claude.PollWaitMs},
 		{"claude.settle_ms", cfg.Claude.SettleMs},
-		{"claude.turn_timeout_ms", cfg.Claude.TurnTimeoutMs},
 		{"claude.read_timeout_ms", cfg.Claude.ReadTimeoutMs},
 		{"claude.startup_timeout_ms", cfg.Claude.StartupTimeoutMs},
 		{"agent.max_retry_backoff_ms", cfg.Agent.MaxRetryBackoffMs},
@@ -209,12 +209,15 @@ func validate(cfg *Config) error {
 			return invalidValueError(item.key, item.value, "0より大きい整数（ミリ秒）にすること")
 		}
 	}
-	// 待ちの大小関係も見る。turn 全体の上限より1回の待ちが長い、1回の待ちより猶予が長い、
+	// 待ちの大小関係も見る。打ち切りまでの時間より1回の待ちが長い、1回の待ちより猶予が長い、
 	// といった書き間違いは、起動時に落としたほうが原因が分かる。
-	if cfg.Claude.PollWaitMs > cfg.Claude.TurnTimeoutMs {
+	// **turn_timeout_ms が 0 以下のときは比べない**（打ち切りを行わない設定であり、
+	// 「上限」として意味を持たない）。
+	if cfg.Claude.TurnTimeoutMs > 0 && cfg.Claude.PollWaitMs > cfg.Claude.TurnTimeoutMs {
 		return invalidValueError(
 			"claude.poll_wait_ms", cfg.Claude.PollWaitMs,
-			"claude.turn_timeout_ms 以下にすること（1回の待ちが turn 全体の上限より長いと、上限が効かない）",
+			"claude.turn_timeout_ms 以下にすること"+
+				"（1回の待ちが「画面が止まったとみなす時間」より長いと、打ち切りの判定より待ちのほうが粗くなる）",
 		)
 	}
 	if cfg.Claude.SettleMs > cfg.Claude.PollWaitMs {

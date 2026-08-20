@@ -219,6 +219,15 @@ type Orchestrator struct {
 
 	// wg は run ごとの turn ループの goroutine を数える。Close が待ち合わせる。
 	wg sync.WaitGroup
+	// shutdown は Close が閉じるコンテキストである。
+	//
+	// **turn ループの待ちには期限が無い**（`claude.turn_timeout_ms` は turn の総実行時間の
+	// 上限ではない。設計 3-21）。呼び出し側の ctx が終わらないまま Close だけを呼ばれると、
+	// `Stop` hook を待っている goroutine が永久に返らず、Close も返らない。
+	// **turn ループの ctx はこれと呼び出し側の ctx の両方で終わる。**
+	shutdown context.Context
+	// shutdownCancel は shutdown を終わらせる。Close が呼ぶ。
+	shutdownCancel context.CancelFunc
 }
 
 // New は Orchestrator を組み立てる。
@@ -275,6 +284,7 @@ func New(opts Options) (*Orchestrator, error) {
 	if newUUID == nil {
 		newUUID = NewSessionUUID
 	}
+	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
 		cfg:            opts.Config,
@@ -294,6 +304,8 @@ func New(opts Options) (*Orchestrator, error) {
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
 		notified:       map[string]time.Time{},
+		shutdown:       shutdown,
+		shutdownCancel: shutdownCancel,
 	}, nil
 }
 
@@ -322,11 +334,16 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	}
 }
 
-// Close は run ごとの turn ループが終わるのを待つ。
+// Close は turn ループへ終わるように伝え、終わるのを待つ。
+//
+// **待つ前に必ず伝える。**turn ループは `Stop` hook が来るまで期限なしで待つので
+// （`claude.turn_timeout_ms` は turn の総実行時間の上限ではない。設計 3-21）、
+// 伝えずに待つと永久に返らない。
 //
 // **pane は閉じない。**巡回を止めるだけでは run を諦めたことにならない（設計 3-4 の
 // 「起動時の検査で落ちたとき、pane を閉じてはならない」と同じ考え方）。
 func (o *Orchestrator) Close() {
+	o.shutdownCancel()
 	o.wg.Wait()
 }
 
@@ -626,6 +643,10 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	rs.Base = state.Base
 	rs.SettingsPath = state.SettingsPath
 	rs.HerdrWorkspaceID = state.HerdrWorkspaceID
+	// **引き継いだ pane の画面の版を種にする**（設計 3-21）。種を入れないと、
+	// 最初の stall の判定が必ず「版が変わった」になり、打ち切りまでに
+	// `claude.turn_timeout_ms` を2回またぐことになる。
+	rs.LastRevision = state.Revision
 	// 引き継いだ時刻を入れる（「この run が書いたコメント」の判別に使う。設計 3-25）。
 	rs.StartedAt = now
 	rs.NeedsPrompt = needsPrompt
@@ -663,11 +684,16 @@ type AdoptedRun struct {
 	SettingsPath string
 	// HerdrWorkspaceID は herdr の workspace の ID である。
 	HerdrWorkspaceID string
+	// Revision は引き継いだ pane の画面の版である（`pane.list` が返す `revision`）。
+	//
+	// **stall の判定の種になる**（設計 3-21）。0 のままでも判定は動くが、
+	// 最初の判定が必ず「版が変わった」になるぶん、打ち切りが1周期ぶん遅れる。
+	Revision uint64
 	// AwaitTurnEnd は「turn を送らずに、走っている turn の終わりを待つ」ことを表す。
 	//
 	// **`agent_status` が `working` の run を引き継ぐときに真にする**（設計 3-4 の段5a2）。
 	// **`NeedsPrompt` とは同時に立てない。**立てないと turn ループの goroutine が1本も
-	// 起きず、その run の `Stop` hook を誰も読まないまま stall_timeout_ms まで放置される。
+	// 起きず、その run の `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	AwaitTurnEnd bool
 }
 

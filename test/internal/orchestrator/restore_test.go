@@ -86,12 +86,12 @@ func TestRestore_生きているpaneを引き継いで印と実行中の一覧�
 // 目的: ゼロ値のままだと、引き継いだ直後の巡回で即座に stall と判定されて worker が
 // 止められる（設計 3-4 の段5c）。
 //
-// 与える情報: 引き継げる run を1件と、`stall_timeout_ms` が 60 秒の設定。
+// 与える情報: 引き継げる run を1件と、`claude.turn_timeout_ms` が 60 秒の設定。
 //
 // 成功条件: 引き継いだ直後に巡回を1回回しても、pane が閉じられず印に残っている。
 func TestRestore_引き継いだrunにはstallの時計が引き継いだ時刻から始まる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
-		cfg.Claude.StallTimeoutMs = 60000
+		cfg.Claude.TurnTimeoutMs = 60000
 	}})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)

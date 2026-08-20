@@ -91,15 +91,14 @@ claude:
   poll_wait_ms: 30000                       # エージェントの状態を1回待つ時間。短く切って、経過時間は continuo 側で数える
   settle_ms: 2000                           # 応答が終わったように見えてから、続きが来ないことを確かめるまでの猶予
   wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。blocked を外すと、確認で止まった turn を時間切れまで拾えない
-  turn_timeout_ms: 3600000                  # 1つの turn の制限時間。turn を送ってから応答が終わるまでを測る
+  turn_timeout_ms: 3600000                  # エージェントの画面が変わらない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
+                                            # turn の総実行時間の上限ではない。画面が変わり続けている限り何時間でも待つ
   read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
-  stall_timeout_ms: 1800000                 # エージェントから何も届かない時間がこれを超えたら打ち切る。0 以下で無効
   startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る
     mode: settings_flag                     # settings_flag のみ。issue ごとに作った設定ファイルを --settings で渡す
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
                                             # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
-    liveness_hooks: ["PreToolUse", "PostToolUse"]   # エージェントが生きていることの確認だけに使う hook
 
 # ===== herdr（pane と worktree をまとめる常駐プロセス）との連携 =====
 herdr:

@@ -44,7 +44,7 @@ const (
 	// ＝まさに continuo の再起動中なので、`continuo hook` が書いている最中
 	// （OpenFile → Write → Sync → **Rename の直前**）の .tmp と、起動時の掃除がぶつかりうる。
 	// 消すと書く側の os.Rename が ENOENT で失敗し、その hook はどこにも残らずに消える。
-	// 消えたのが Stop なら、その run は stall_timeout_ms（既定30分）まで誰も気づかない。
+	// 消えたのが Stop なら、その run は claude.turn_timeout_ms（既定1時間）まで誰も気づかない。
 	//
 	// 30秒にする根拠。書く側が1件を書き終えるまでの上限は
 	// hookclient.DefaultDialTimeout（2秒）+ hookclient.DefaultWriteTimeout（2秒）+ 書き込みで、

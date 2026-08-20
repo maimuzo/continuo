@@ -264,7 +264,7 @@ func TestReplayPending_大きすぎるファイルは読まずに隔離する(t 
 
 // 目的: 起動時の .json.tmp の掃除が、いま `continuo hook` が書いている最中のものを
 // 消さないことを確認する。消すと書く側の os.Rename が ENOENT で失敗し、その hook は
-// socket にも逃がし先にも残らずに消える（消えたのが Stop なら stall_timeout_ms、
+// socket にも逃がし先にも残らずに消える（消えたのが Stop なら claude.turn_timeout_ms、
 // 既定30分まで誰も気づかない。設計 3-19）。
 // 与える情報: 更新時刻がいまの .json.tmp 1件と、更新時刻を1時間前にした .json.tmp 1件。
 // 成功条件: 新しいほうが残り、古いほうだけが消えていること。

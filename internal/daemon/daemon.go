@@ -433,6 +433,9 @@ func build(
 	if err != nil {
 		return nil, fmt.Errorf("herdr の socket の場所を決められません: %w", err)
 	}
+	// **Turn は「待ちを伴う1回の呼び出しをどれだけ待つか」である。**
+	// `claude.turn_timeout_ms`（画面が変わらないまま待てる時間）をそのまま使う。
+	// これより長く待っても、画面が止まっていれば巡回の stall 検知が run を打ち切る。
 	hc := herdr.New(herdrSocket, herdr.Timeouts{
 		Read:    time.Duration(cfg.Claude.ReadTimeoutMs) * time.Millisecond,
 		Startup: time.Duration(cfg.Claude.StartupTimeoutMs) * time.Millisecond,

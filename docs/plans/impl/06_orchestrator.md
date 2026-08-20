@@ -94,17 +94,17 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 - [x] **worker を止めるのは `pane.close` である**（設計 3-5）。agent だけを止めるメソッドは herdr に無い
 - [x] **表明が無かった turn の次に、それを促す1文を継続の指示へ差し込む**（設計 3-8 / 3-25）
   - **hook から差し戻す仕組みは採らない**（設計 3-25）
-- [x] **stall の時計が `PreToolUse` / `PostToolUse` でリセットされる**
-- [x] **閾値を超えたら `agent_status` を1回見て、`working` なら猶予を1回だけ与える**
-  - **猶予＝`LastSeenAt` を現在時刻にして、もう一度 `stall_timeout_ms` だけ待つ**（設計 3-14）
-  - **与えたことを `runState` に記録し、2回目は与えない。**`working` のまま固まる場合があるため
+- [x] **打ち切りの時計が `PreToolUse` / `PostToolUse` でリセットされる**
+- [x] **閾値を超えたら `agent.get` を1回呼び、状態と `revision`（画面の版）を1回で取る**（設計 3-21）
+  - **版が増えていれば `LastSeenAt` を現在時刻にして待ち続ける。**1つの turn に何時間かかっても打ち切らない
+  - **版が増えていなければ pane を閉じ、リトライを積む。**`agent_status` は根拠にしない（`working` のまま固まる場合があるため）
 - [x] **枠待ちの判定が2条件の連言になっている**（`percent` が 100、かつその run から hook が来ていない）
   - **`severity` は見ない。**上限を示す値が何かを実測できていない（設計 3-27）
 - [x] **`rate_limit.source: none` なら usage API を1回も叩かない**（設定の検証は対応済み）
 - [x] **資格情報が取れなかったら、枠の判定を諦めて `none` と同じ動きにする。起動は止めない**（設計 3-27）
   - **macOS では `~/.claude/.credentials.json` が無いのが普通である**（Keychain にある）
 - [x] **`runState.PromptID` は `UserPromptSubmit` を受けた時点で入れる**（投入時には取れない。設計 3-25）
-- [x] **枠待ちの run についてだけ、stall の時計と `turn_timeout_ms` を止める**
+- [x] **枠待ちの run についてだけ、打ち切りの時計を止める**（`claude.turn_timeout_ms` の判定を飛ばす）
 - [x] **枠が明けたときに送る継続の指示を、turn 数に数える**（設計 3-27）
 - [x] **枠が明けたとき、継続の指示を送る前に `agent_status` を見る**（設計 3-27）
   - **Claude Code 2.1.234 以降、枠のリセット時にセッションを自動継続する機能が既定で有効である**
@@ -194,7 +194,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 | **`agent.wait` は現在の状態が `until` に含まれると即返る** | 待ち直しのループを `agent.wait` の戻りだけで回すと、`idle` のまま空回りする。**hook（`Stop` と `<task-notification>`）の到着を待ち合わせの主にした** |
 | **`blocked` のあとにコメントを書かせ直すと `agent.prompt` が2回になる** | 安全の要件は「**保留中の権限要求が残ったまま**次を投げないこと」である。`esc` と `pane.close` を挟んだあとの送信は別のセッションなので安全である。テストの検査もその順序で書いた |
 | **テスト用herdr mock で `worktree.remove` を成功させるだけでは `git branch -D` が通らない** | 本物の herdr と同じ結果になるよう、偽サーバに**実体の削除と `git worktree prune`** をさせた。これをしないと片付けの段4 を検証できない |
-| **`testing/synctest` の中では network I/O があると時計が進まない** | 時間に依存する検査（stall の猶予・時計のリセット・バックオフの明け）だけは、**通信を1本も行わない stub** を使って bubble の中で回した（実時間ゼロ）。turn の終わりの判定と着手の13段はテスト用socket mockで検証している |
+| **`testing/synctest` の中では network I/O があると時計が進まない** | 時間に依存する検査（画面の版の見比べ・時計のリセット・バックオフの明け）だけは、**通信を1本も行わない stub** を使って bubble の中で回した（実時間ゼロ）。turn の終わりの判定と着手の13段はテスト用socket mockで検証している |
 
 ### テスト
 
@@ -207,7 +207,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 | `dispatch_test.go` | 候補の取り方・空きスロット・印・巡回のリクエスト本数・検査の頻度・未信頼の通知・描画の失敗・段8 と段10 |
 | `turn_test.go` | 空の `Stop` だけで終わりと判定しない／項目が欠けていたら判定不能／表明の促し／`max_turns`／`blocked` の `esc`／wait の掛け方 |
 | `group_test.go` | グループの表明（`Ice Box` の issue も動かす）／ボードに無い対象／コメントを書かせ直す9段 |
-| `stall_test.go` | **`testing/synctest` で実時間ゼロ。**猶予は1回だけ／`PreToolUse` で時計がリセットされる／バックオフの明け |
+| `stall_test.go` | **`testing/synctest` で実時間ゼロ。**画面の版が増えている間は打ち切らない／版が止まったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
 | `quota_test.go` | 枠待ちの2条件／`pause_above_percent` は新規だけ止める／`none` なら1回も叩かない／資格情報が無くても起動は続く／**枠明けに `working` なら継続の指示を送らない** |
 | `prompt_choice_test.go` | **復元で引き継いだ run には継続の指示（5-4）を送る**／**再 dispatch は UUID を採り直して1回目の本文（5-3）を `.attempt` 付きで送る** |
 | `terminal_test.go` | **巡回のループがコメントの確認でブロックしない**／1回の stall で abandon が2回走らない／打ち切りの前にコメントを確かめる |

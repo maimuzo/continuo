@@ -187,9 +187,6 @@ type ClaudeHookBridgeConfig struct {
 	Mode string `yaml:"mode"`
 	// Listen は hook を受ける socket の絶対パスである。null なら 3-23 の探索順で決める。
 	Listen *string `yaml:"listen"`
-	// LivenessHooks は生きていることの確認だけに使う hook 名の一覧である（3-21）。
-	// turn の終わりの判定には使わない。
-	LivenessHooks []string `yaml:"liveness_hooks"`
 }
 
 // ClaudeConfig は Claude Code の起動方法を決める。
@@ -205,7 +202,6 @@ type ClaudeConfig struct {
 	// PollWaitMs は agent.wait 1回あたりの待ち時間（ミリ秒）である（3-2）。
 	// turn の待ち受けを短く切り、経過時間を continuo 側で数えるためのもの。
 	// herdr に「待ちの時計を止める」手段が無いので、枠待ちの間を数えないためにこの形にする。
-	// turn 全体の上限は TurnTimeoutMs のほうである。
 	PollWaitMs int `yaml:"poll_wait_ms"`
 	// SettleMs は、background_tasks が空の Stop を受けてから turn の終わりと確定するまでの
 	// 猶予（ミリ秒）である（1-3 / 3-2）。空配列の Stop は turn の途中にも発火するため、
@@ -215,12 +211,23 @@ type ClaudeConfig struct {
 	// WaitUntil は herdr agent prompt --wait に渡す状態の一覧である（3-2）。
 	// blocked を外すと、権限の確認で止まった turn を拾えず時間切れまで待つことになる。
 	WaitUntil []string `yaml:"wait_until"`
-	// TurnTimeoutMs は1つの turn の上限（ミリ秒）である。continuo が turn を送ってから Stop を受けるまでを測る。
+	// TurnTimeoutMs は turn が動いている間に許す「無音の間隔」の上限（ミリ秒）である。
+	//
+	// **turn の総実行時間の上限ではない。**`SPEC.md` 10.6 が
+	// *"maximum silence interval while a turn stream is active; each app-server output
+	// resets it, so it is not a total turn runtime cap"*（turn の流れが動いている間の
+	// 最大の沈黙の間隔。app-server の出力ごとにリセットされる。総実行時間の上限ではない）
+	// と定めている。1回の指示に数時間かかることは普通にあるので、総時間で測ってはならない。
+	//
+	// **continuo には app-server が無い。**「app-server の出力」に相当するのは
+	// 「端末の画面が変わったこと」であり、herdr はそれを pane の revision（画面の版）で表す。
+	// **版が増えていれば何時間かかっても待ち続け、版がこの時間だけ増えなければ打ち切る**（3-21）。
+	//
+	// **0 以下で打ち切りを行わない**（`SPEC.md` 8.4 の
+	// *"If stall_timeout_ms <= 0, skip stall detection entirely"* に合わせる）。
 	TurnTimeoutMs int `yaml:"turn_timeout_ms"`
 	// ReadTimeoutMs は herdr の socket API の応答を待つ上限（ミリ秒）である（8-1。仕様と同名だが相手が違う）。
 	ReadTimeoutMs int `yaml:"read_timeout_ms"`
-	// StallTimeoutMs は無反応とみなすまでの時間（ミリ秒）である。0 以下で無効（3-21）。
-	StallTimeoutMs int `yaml:"stall_timeout_ms"`
 	// StartupTimeoutMs は herdr の agent 起動を待つ時間の上限（ミリ秒）である。
 	StartupTimeoutMs int `yaml:"startup_timeout_ms"`
 	// HookBridge は turn 終了検知の実体である hook の届け方を決める。

@@ -98,7 +98,7 @@ const (
 // spillEssentialEvents は逃がし先が上限に達しても書き続けるイベント名である。
 //
 // **turn の終わりの通知を落とさないことを最優先にする。**落とすと、その run は
-// stall_timeout_ms（既定30分）まで誰も気づかない（設計 3-19）。
+// claude.turn_timeout_ms（既定1時間）まで誰も気づかない（設計 3-19）。
 // UserPromptSubmit を入れるのは、<task-notification> の判定に prompt が要るためである（設計 1-3）。
 var spillEssentialEvents = map[string]bool{
 	"Stop":             true,

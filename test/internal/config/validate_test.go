@@ -49,7 +49,7 @@ func assertLoadFailsWith(t *testing.T, frontMatter, wantKey string) {
 
 // 目的: claude.poll_wait_ms に 0 を書くと起動が止まることを確認する。
 // 0 だと turn の待ち受けが待ち時間ゼロになり、herdr の socket を無停止で叩き続ける
-// ループになる（それが turn_timeout_ms＝既定1時間続く）。
+// ループになる。
 // 与える情報: claude.poll_wait_ms に 0 を書いた front matter。
 // 成功条件: config.Load がエラーを返し、その文に "claude.poll_wait_ms" が含まれること。
 func TestLoad_poll_wait_msが0だとビジーループになるので落ちる(t *testing.T) {
@@ -67,7 +67,6 @@ func TestLoad_時間の設定値が0以下ならキーを名指しして落ち�
 		key   string
 	}{
 		{"claude.settle_msが0", validFrontMatter + "claude:\n  settle_ms: 0\n", "claude.settle_ms"},
-		{"claude.turn_timeout_msが0", validFrontMatter + "claude:\n  turn_timeout_ms: 0\n", "claude.turn_timeout_ms"},
 		{"claude.read_timeout_msが負", validFrontMatter + "claude:\n  read_timeout_ms: -5\n", "claude.read_timeout_ms"},
 		{"claude.startup_timeout_msが0", validFrontMatter + "claude:\n  startup_timeout_ms: 0\n", "claude.startup_timeout_ms"},
 		{"agent.max_retry_backoff_msが負", validFrontMatter + "agent:\n  max_retry_backoff_ms: -1\n", "agent.max_retry_backoff_ms"},
@@ -85,22 +84,24 @@ func TestLoad_時間の設定値が0以下ならキーを名指しして落ち�
 }
 
 // 目的: 「0 に意味がある」設定値は 0 でも起動が通ることを確認する。
-// claude.stall_timeout_ms は「0 以下で無効」と設計 3-21 が定めており、
+// claude.turn_timeout_ms は「0 以下なら打ち切りを行わない」と設計 3-21 が定めており
+// （`SPEC.md` 8.4 の "If stall_timeout_ms <= 0, skip stall detection entirely"）、
 // tracker.write_interval_ms の 0 は「間隔をあけない」、tracker.verify_states_every の 0 は
 // 「起動時だけ照合する」である。上の一律の検査に巻き込んで落としてはならない。
+// **poll_wait_ms との大小関係の検査にも巻き込んではならない**（0 は「上限」ではない）。
 // 与える情報: この3つのキーに 0 を書いた front matter。
 // 成功条件: config.Load が成功し、値が 0 のまま保たれていること。
 func TestLoad_0に意味がある設定値は0でも通る(t *testing.T) {
 	front := trackerFrontMatter("  write_interval_ms: 0\n  verify_states_every: 0\n") +
-		"claude:\n  stall_timeout_ms: 0\n"
+		"claude:\n  turn_timeout_ms: 0\n"
 	path := writeWorkflow(t, front, "")
 
 	loaded, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("0 に意味がある設定値なのに起動が止まった: %v", err)
 	}
-	if loaded.Config.Claude.StallTimeoutMs != 0 {
-		t.Errorf("claude.stall_timeout_ms が 0 のまま保たれていない: got %d", loaded.Config.Claude.StallTimeoutMs)
+	if loaded.Config.Claude.TurnTimeoutMs != 0 {
+		t.Errorf("claude.turn_timeout_ms が 0 のまま保たれていない: got %d", loaded.Config.Claude.TurnTimeoutMs)
 	}
 	if loaded.Config.Tracker.WriteIntervalMs != 0 {
 		t.Errorf("tracker.write_interval_ms が 0 のまま保たれていない: got %d", loaded.Config.Tracker.WriteIntervalMs)
@@ -111,8 +112,9 @@ func TestLoad_0に意味がある設定値は0でも通る(t *testing.T) {
 }
 
 // 目的: 待ちの大小関係が逆転した設定で起動が止まることを確認する。
-// 1回の待ち（poll_wait_ms）が turn 全体の上限（turn_timeout_ms）より長いと上限が効かず、
-// turn の終わりを確かめる猶予（settle_ms）が1回の待ちより長いと猶予が待ちに収まらない。
+// 1回の待ち（poll_wait_ms）が「画面が止まったとみなす時間」（turn_timeout_ms）より長いと
+// 打ち切りの判定より待ちのほうが粗くなり、turn の終わりを確かめる猶予（settle_ms）が
+// 1回の待ちより長いと猶予が待ちに収まらない。
 // 与える情報: poll_wait_ms > turn_timeout_ms、settle_ms > poll_wait_ms の2つの front matter。
 // 成功条件: どちらも config.Load がエラーを返し、その文に対象のキー名が含まれること。
 func TestLoad_待ちの大小関係が逆転していると落ちる(t *testing.T) {

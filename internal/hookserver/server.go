@@ -54,7 +54,7 @@ const (
 	//
 	// **上限に達したら、その接続の読み取りをそこで打ち切り、そこまでに読めた分は必ずキューへ積む。**
 	// 読めた分を捨てる形にすると、turn の終わりを知らせる Stop を落としかねない
-	// （落とすと stall_timeout_ms（既定30分）まで誰も気づかない。設計 3-19）。
+	// （落とすと claude.turn_timeout_ms（既定1時間）まで誰も気づかない。設計 3-19）。
 	DefaultMaxEventsPerConn = 16
 
 	// DefaultMaxConnBytes は1つの接続から読む累計バイト数の上限である。
@@ -455,7 +455,7 @@ func (s *Server) unregisterConn(conn net.Conn) {
 // **1接続あたりの件数（maxEventsPerConn）と累計バイト数（maxConnBytes）に上限がある。**
 // 上限に達したらそこで読み取りを打ち切り、**そこまでに読めた分は必ずキューへ積む。**
 // 打ち切ったことは警告としてログに残す。読めた分ごと捨てる形にすると、turn の終わりを
-// 知らせる Stop を落としかねない（落とすと stall_timeout_ms まで誰も気づかない）。
+// 知らせる Stop を落としかねない（落とすと claude.turn_timeout_ms まで誰も気づかない）。
 //
 // conn: 受け付けた接続。この関数が閉じる。
 // seq: accept の順に振られた通し番号。

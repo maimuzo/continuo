@@ -770,7 +770,8 @@ flowchart TB
      枠待ちかどうかを判定する（3-27 の2条件）
      → 枠待ちなら agent.wait を until=[idle,done,blocked] / timeout_ms=poll_wait_ms で呼び直し、
        枠が明けるまで繰り返す（agent.prompt は再送しない。二重に投入される）
-     → 枠待ちでなければ turn の時間切れとして打ち切る
+     → 枠待ちでなくても打ち切らない。同じく待ち直す（agent.prompt は再送しない）
+       **turn の総実行時間に上限は無い。**画面が止まったかどうかは巡回の判定だけが決める（3-21）
   4. idle か done で返ったら、Stop hook が来ているかを確かめる
      → 来ていなければ settle_ms のあいだ待つ。それでも来なければ stall として扱う
        （権限の確認が esc で取り消された場合など。3-11）
@@ -1868,7 +1869,7 @@ turn の終わりの検知を hook だけに依存させない。
 
 **書き込みを不可分にする。**`continuo hook` が書いている最中のファイルを continuo が読むと、
 **途中まで書かれた JSON を「壊れている」と判定して隔離してしまい、その `Stop` が失われる。**
-失うと、その run は `stall_timeout_ms`（既定30分）まで誰も気づかない。
+失うと、その run は `claude.turn_timeout_ms`（既定1時間）まで誰も気づかない。
 
 | 誰が | 何をするか |
 | --- | --- |
@@ -1932,22 +1933,46 @@ turn の終わりの検知を hook だけに依存させない。
      ログと issue のコメントに、解決前後の両方のパスを出して人間に見せる
 ```
 
-### 3-21. stall の時計は中間の hook でリセットする
+### 3-21. 打ち切りは「画面の版」で測る
 
-**原理。**stall 検知は「**最後にイベントを見てからの経過時間**」で測る。
-準拠元の symphony は Codex から絶え間なくイベントが流れてくる前提だが、**continuo にはそれが無い。**
+**言いたいこと。**打ち切りの物差しは **turn の総実行時間ではない。**
+**Claude Code の画面が変わらないまま経った時間**である。設定キーは `claude.turn_timeout_ms`（既定1時間）。
+**画面が変わり続けている限り、1つの指示に何時間かかっても打ち切らない。**
 
-**`Stop` だけを張ると、1つの turn が閾値を超えただけで殺される。**
-実際のコーディング作業で5分を超える turn はまれではない。
+**仕様の定義。**`SPEC.md` 10.6 は `turn_timeout_ms` をこう定めている。
+
+> `codex.turn_timeout_ms`: maximum silence interval while a turn stream is active; each
+> app-server output resets it, so it is not a total turn runtime cap
+
+**訳。**turn の流れが動いている間の最大の沈黙の間隔。app-server の出力ごとにリセットされる。
+**総実行時間の上限ではない。**
+
+**continuo には app-server が無い。**Claude Code を herdr の pane で対話モードのまま動かす。
+**「app-server の出力」に相当するのは「端末の画面が変わったこと」であり、
+herdr はそれを pane の `revision`（画面の版）で表す。**
 
 **採る形。**
 
 | 何を | どうするか |
 | --- | --- |
-| **張る hook を増やす** | `Stop` と `SessionStart` に加えて、**`PreToolUse` と `PostToolUse` を全ツールに張る**（実測で発火を確認済み。1-4）。届くたびに時計をリセットする。**turn の終わりの判定には使わない。生きていることの確認だけに使う** |
-| **閾値を上げる** | 既定を30分にする。**中間の hook が届かない状況**（1つのコマンドが長時間かかっている等）**でも殺さないため。turn の長さの分布は測っていない。安全側に大きく取った暫定値であり、6-1 のログ（`agent.prompt` の待ちが返るまでの時間）で決め直す** |
-| **殺す前にもう1段見る** | 閾値を超えたら、herdr の `agent_status` を読む。`working` なら猶予を1回だけ与える。`unknown` や pane が消えていれば止める |
+| **時計を進めるもの** | 中間の hook（`PreToolUse` / `PostToolUse` を全ツールに張る。1-4 で発火を実測済み）と、**画面の版が増えたこと。** どちらも「生きていることの確認」であり、turn の終わりの判定には使わない |
+| **打ち切りの条件** | どちらも `claude.turn_timeout_ms` のあいだ観測できなかったこと。閾値に達したら `agent.get` を1回呼び、**状態と `revision` を1回で取る。版が増えていれば時計を起こし直して待ち続ける** |
+| **0 以下の扱い** | **打ち切りを行わない。**`SPEC.md` 8.5 Part A が「0 以下なら打ち切りの検知そのものを行わない」と定めているので、その流儀に合わせる |
 | **止めたあとどうするか** | **リトライを積む**（`SPEC.md` 8.5 のとおり）。`max_retry_backoff_ms` の指数バックオフで待ってから再 dispatch する。**リトライの回数が尽きたら `failure_state` へ落として人間へ渡す** |
+
+**`runState` が持つもの。**
+
+```go
+LastRevision uint64    // 最後に見た画面の版。agent.start と引き継いだ pane の値を種にする
+RevisionAt   time.Time // 版が最後に増えたのを確かめた時刻。人間へ見せる経過時間に使う
+```
+
+**種を入れる理由。**種が無いと最初の判定が必ず「版が変わった」になり、
+**打ち切りまでに閾値を2回またぐ。**
+
+**採らなかった案: `agent_status` が `working` なら猶予を1回だけ与える。**
+`working` のまま固まる場合があり、**猶予は「もう1周ぶん遅らせる」以上の意味を持たなかった。**
+画面の版は「本当に動いているか」を直接示すので、猶予という当て推量が要らなくなった。
 
 **レートリミットで待っている間も pane は生きたままである**（3-11）。
 この状態は中間の hook が届かないので stall に見える。**枠待ちの判定は 3-27 の2条件で行い、
@@ -2250,7 +2275,7 @@ type runState struct {
     TurnCount    int       // continuo が送ったプロンプトの回数
     RetryCount   int       // stall や起動失敗で積んだリトライの回数（3-21）。max_retries に達したら failure_state へ
     BackoffUntil time.Time // この時刻まで再 dispatch しない。ゼロ値なら待たない
-    WaitingQuota bool      // 枠待ちと判定した（3-27）。真の間は stall と turn_timeout の判定を飛ばす。
+    WaitingQuota bool      // 枠待ちと判定した（3-27）。真の間は打ち切りの判定を飛ばす。
                            // 外す契機は「枠の resets_at を過ぎたこと」だけである
     NeedsPrompt  bool      // 次の turn を送るべき状態である。復元の段5b で立てる（3-4）。
                            // turn ループが拾って agent.prompt を送り、送ったら false へ戻す。
@@ -2258,8 +2283,8 @@ type runState struct {
     StartedAt    time.Time // この run が最初の turn を送った時刻。
                            // 「この run が書いたコメント」を前の run のものと区別するのに使う（3-25）。
                            // 再起動して引き継いだ run では、引き継いだ時刻を入れる
-    LastSeenAt   time.Time // stall の時計（3-21）。hook のほか、turn を送った・枠待ちを外した・
-                           // 猶予を与えた時点でも進む。**「最後に hook を受けた時刻」ではない**
+    LastSeenAt   time.Time // 打ち切りの時計（3-21）。hook のほか、turn を送った・枠待ちを外した・
+                           // 画面の版が増えていたのを見た時点でも進む。**「最後に hook を受けた時刻」ではない**
     LastHookAt   time.Time // 最後に hook を実際に受けた時刻。進めるのは hook の受信だけ。
                            // ゼロ値なら1件も受けていない。**人間が生死を判断する値である**（5-2 のダッシュボード）
     Tokens       TokenUsage // この run の累計のトークン（3-15）。requestId で重複排除済み。
@@ -2616,7 +2641,6 @@ CONTINUO-STATUS: #47 blocked         issue ごとに違う結果を書ける
 | 読む間隔 | `rate_limit.poll_interval_ms`（既定5分） |
 | **新規の dispatch を止める閾値** | `rate_limit.pause_above_percent`（既定95%）。**走行中の turn は止めない** |
 | **stall の時計** | **枠待ちと判定した run についてだけ止める**（下記）。止めないと、待っているだけの worker を stall とみなして殺す |
-| **`turn_timeout_ms` の時計** | **同じく枠待ちと判定した run についてだけ止める。**この値は turn の総時間を測る（8-1）ので、**枠のリセットが1時間より先だと、待ち切る前に時間切れになる** |
 | 再開の契機 | **枠待ちの原因になった枠の `resets_at` を過ぎたら**、その run へ継続の指示を1回送ってみる。応答が返れば継続、返らなければ worker を止めて再 dispatch |
 | **どの枠の時刻を見るか** | **条件その1 を満たした枠のうち、`resets_at` がいちばん遅いもの。`resets_at` が `null` の枠は判定から外す**（3-15 のサンプル参照）。**`weekly_scoped` も、モデルを判別せずそのまま見る。**continuo は Claude Code が使うモデルを知らない（設定に持たない）ためである |
 
@@ -2629,24 +2653,24 @@ CONTINUO-STATUS: #47 blocked         issue ごとに違う結果を書ける
 | 何を判定するか | 条件 | 何が起きるか |
 | --- | --- | --- |
 | **新規の dispatch を止める** | どれかの枠の `percent` が `pause_above_percent` を超えた | 新しい issue を取らない。**走行中の turn は止めない。時計も止めない** |
-| **この run は枠待ちである** | **次の2つが同時に成り立つ** | **stall の時計と `turn_timeout_ms` を止める** |
+| **この run は枠待ちである** | **次の2つが同時に成り立つ** | **stall の時計を止める** |
 | — 条件その1 | **`percent` が 100 に達している** | |
-| — 条件その2 | **その run から `stall_timeout_ms` のあいだ hook が1件も来ていない** | |
+| — 条件その2 | **その run から `claude.turn_timeout_ms` のあいだ hook が1件も来ていない** | |
 
 **stall の閾値に達したときの評価順。枠待ちを先に見る。**
 
 ```text
-stall_timeout_ms に達した run について、上から順に見る
+claude.turn_timeout_ms のあいだ何も観測できなかった run について、上から順に見る
   1. 枠待ちか（percent が 100 かつ この run から hook が来ていない）
      → 枠待ちなら、その run に「時計を止めている」印を付けて終わり。殺さない
-  2. herdr の agent_status が working か
-     → working なら猶予を1回だけ与える（3-21）。2回目は殺す
-  3. どちらでもない
+  2. agent.get の revision（画面の版）が増えているか
+     → 増えていれば時計を起こし直す。1つの turn に何時間かかっていても殺さない（3-21）
+  3. 版が増えていない
      → worker を止め、リトライを積む
 ```
 
 **「時計を止める」の実装。**`LastSeenAt` を進めない。**代わりに `runState` に「枠待ち中」の印を持ち、
-その印が立っている間は stall の判定と `turn_timeout_ms` の判定をどちらも飛ばす。**
+その印が立っている間は stall の判定を飛ばす。**
 `LastSeenAt` を進めてしまうと、枠が明けたあとに「最後に動いていた時刻」が分からなくなる。
 
 **枠待ち中は hook が来ないので、印を外す契機は「枠の `resets_at` を過ぎたこと」だけである。**
@@ -2654,9 +2678,6 @@ stall_timeout_ms に達した run について、上から順に見る
 
 **この継続の指示は turn 数に数える。**`max_turns` は「continuo が送った回数」で数えると決めている（3-8）。
 **数えないと、枠待ちと復帰を繰り返す間に打ち切りが一度も発火せず、同じ issue に無限に turn を消費する。**
-
-**「猶予を1回だけ与える」の中身。**`LastSeenAt` を現在時刻にして、**もう一度 `stall_timeout_ms` だけ待つ。**
-**猶予を与えたことを `runState` に記録し、2回目は与えない**（`working` のまま固まっている場合があるため）。
 
 **条件その2 を入れる理由。**枠を使い切っていても、**別の run は動いている**ことがある。
 **枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。**
@@ -2703,7 +2724,8 @@ flowchart TB
 ```
 
 **時計を止めるのが要点である。**止めないと、待っているだけの worker を stall とみなして殺す。
-**`turn_timeout_ms` も止める。**枠のリセットが1時間より先だと、待ち切る前に時間切れになるためである。
+**枠のリセットを待つ間は打ち切りの判定も飛ばす。**画面が変わらないのは枠を待っているからであって、
+固まっているからではない。
 
 **再開の質は、原典の3段階のうち最良を狙う。**平常時は同じセッションへ継続の指示を送るので、
 **それまでの調査や試行錯誤がそのまま残る。**worker を止めた場合は文脈が切れるので、
@@ -3440,13 +3462,12 @@ Claude Code の会話の記録（transcript）・continuo が渡した設定フ�
 > `pane.close` を呼ぶ。**人間がコメントを読むのは数十分後で、そのとき agent は消えている。**
 
 **案内する設定キーとファイルは、実在を確かめてから書く。**
-2026-08-20 のレビューで、存在しないキー（`agent.stall_timeout_ms` / `claude.prompt_template`）と
-continuo が作らないファイル（worktree の中の `.claude/settings.json`）を案内している箇所が見つかった。
 **「書いてあるとおりにやったのに動かない」は、何も書かないより悪い。**
+下の表は、実際に人間向けの文面へ紛れ込んだことのある間違いである。
 
 | 間違えやすいもの | 正しくは |
 | --- | --- |
-| `agent.stall_timeout_ms` | **`claude.stall_timeout_ms`**（`ClaudeConfig` の下） |
+| `agent.turn_timeout_ms` | **`claude.turn_timeout_ms`**（`ClaudeConfig` の下。`agent` セクションには無い） |
 | `claude.prompt_template` | **YAML のキーではない。**WORKFLOW.md の front matter より下の本文 |
 | worktree の中の `.claude/settings.json` | **`<実行時ディレクトリ>/issues/<スラグ>/settings.json`**（3-12） |
 | `continuo doctor` で claude の有無を検査 | **doctor は claude も hook も検査しない。**`command -v claude` を案内する |
@@ -3929,15 +3950,14 @@ claude:
   poll_wait_ms: 30000                       # エージェントの状態を1回待つ時間。短く切って、経過時間は continuo 側で数える
   settle_ms: 2000                           # 応答が終わったように見えてから、続きが来ないことを確かめるまでの猶予
   wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。blocked を外すと、確認で止まった turn を時間切れまで拾えない
-  turn_timeout_ms: 3600000                  # 1つの turn の制限時間。turn を送ってから応答が終わるまでを測る
+  turn_timeout_ms: 3600000                  # エージェントの画面が変わらない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
+                                            # turn の総実行時間の上限ではない。画面が変わり続けている限り何時間でも待つ
   read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
-  stall_timeout_ms: 1800000                 # エージェントから何も届かない時間がこれを超えたら打ち切る。0 以下で無効
   startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る
     mode: settings_flag                     # settings_flag のみ。issue ごとに作った設定ファイルを --settings で渡す
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
                                             # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
-    liveness_hooks: ["PreToolUse", "PostToolUse"]   # エージェントが生きていることの確認だけに使う hook
 
 # ===== herdr（pane と worktree をまとめる常駐プロセス）との連携 =====
 herdr:
@@ -4118,7 +4138,7 @@ push していない作業は、この worktree が片付くときに失われ�
 | **枠回復で自動再開するか** | **レートリミットを使い切った状態でないと観測できない。**枠を意図的に使い切るのは「定額運用」の趣旨に反する | continuo が枠の回復を待って再 dispatch する。**3-27 に既に書いてある経路を使うだけ** |
 | **`settle_ms` を何秒にするか** | **上限を決める仕組みが分からない。**観測できた8件はいずれも 0.037 秒以内だったが、**何が上限を決めているのかを特定できていない。**運用のログで分布を取るしかない | **設定を伸ばすだけ。**実際の間隔を毎回ログに出すので、実データで決め直せる（3-2） |
 | **usage API がトークンを消費するか・課金されるか** | **`percent` が整数の百分率なので、少量の消費を判別できない。**課金の有無を突き合わせる手段（利用量の明細）を持っていない | **`rate_limit.source: none` にして、この API を叩かずに運用する。**枠待ちと固まりを区別できなくなるので、stall 検知だけに頼る（3-27） |
-| **Bash 以外の確認で herdr が `blocked` を返すか** | **`--permission-mode dontAsk` では権限の確認が出ない**（許可リストの外は確認せずに拒否される）。**確認を出すには権限モードを変える必要があり、それは continuo の運用と違う条件になる** | **`blocked` を拾えない確認があれば、その turn は `turn_timeout_ms` で時間切れになり `failure_state` へ落ちる。**止まったまま残ることはない |
+| **Bash 以外の確認で herdr が `blocked` を返すか** | **`--permission-mode dontAsk` では権限の確認が出ない**（許可リストの外は確認せずに拒否される）。**確認を出すには権限モードを変える必要があり、それは continuo の運用と違う条件になる** | **`blocked` を拾えない確認があれば、確認の画面で画面が止まるので `claude.turn_timeout_ms` の打ち切りが拾い、`failure_state` へ落ちる**（3-21）。**止まったまま残ることはない** |
 
 **確かめた3件は、この節から外して本文へ移した。**
 
@@ -4195,7 +4215,7 @@ push していない作業は、この worktree が片付くときに失われ�
 | **`read_timeout_ms` の相手が違う** | herdr の socket API の応答を測る |
 | **Status を動かすのは continuo のコード** | エージェントは1行書くだけ |
 | **issue の中身をプロンプトに埋め込まない** | URL を渡してエージェントに直接読ませる |
-| **turn の時間切れの測り方** | 無音の間隔ではなく turn の総時間を測る |
+| **無音の測り方** | app-server の出力ではなく、pane の `revision`（画面の版）で測る |
 | **`tracker` に仕様外のキーを足す** | `dispatch_state` / `failure_state` / `status_signal_prefix` / `status_signal_map` |
 | **再起動後は引き渡し状態の worker を止めない** | pane を残して人間に見せる |
 
@@ -4253,7 +4273,9 @@ push していない作業は、この worktree が片付くときに失われ�
 
 **continuo。**herdr の socket API の応答を待つ上限にする（5-2）。
 **ただし待ちを伴う呼び出しには適用しない。**`agent.start` は `startup_timeout_ms`、
-**待機ありの `agent.prompt` は `turn_timeout_ms`**（最大1時間）を使う。
+**待機ありの `agent.prompt` は `turn_timeout_ms`**（既定1時間）を使う。
+**`agent.prompt` の `turn_timeout_ms` は1回の待ちの上限であって turn の上限ではない。**
+timeout で返っても turn は打ち切らず、`agent.prompt` を再送せずに待ち直す（3-2 の段3）。
 **`read_timeout_ms` 一本ですべてを打ち切ってはならない。**
 
 **なぜ。**Codex app-server を使わないので、同名のキーを別の相手に流用した。
@@ -4275,15 +4297,16 @@ push していない作業は、この worktree が片付くときに失われ�
 **なぜ。コメントを何件まで渡すかを continuo が決めると、切り捨てた分が読まれない。**
 URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く。プロンプトも短くなる。
 
-#### turn の時間切れの測り方
+#### 無音の測り方
 
 **仕様（10.6）。**`turn_timeout_ms` は *"maximum silence interval while a turn stream is active; each app-server output resets it, so it is not a total turn runtime cap"*
 （**訳:** turn のストリームが動いている間の無音の最大間隔。出力のたびに戻るので、turn の総実行時間の上限ではない）。
 
-**continuo。**turn を送ってから `Stop` を受けるまでの**総時間**の上限にする（5-2）。
+**continuo。**仕様どおり**無音の間隔**の上限として使う。**総実行時間の上限としては使わない。**
 
-**なぜ。continuo には Codex のようなストリームが無い。**届くのは hook だけである。
-**無音を測る役目は `stall_timeout_ms` が中間の hook で担う**（3-21）ので、`turn_timeout_ms` は総時間の上限として使い分ける。
+**なぜ。continuo には Codex のような app-server のストリームが無い。**代わりに、
+**「端末の画面が変わったこと」を herdr の pane の `revision`（画面の版）で測る**（3-21）。
+版が増えていれば時計を起こし直すので、1つの指示に何時間かかっても打ち切らない。
 
 #### `tracker` に仕様外のキーを足す
 
@@ -4322,6 +4345,7 @@ URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く
 | --- | --- |
 | 第10節（Codex app-server のプロトコル） | **continuo が動かすのは Claude Code であって Codex ではない。**受け入れ基準の 17.5 もほぼ全部が対象外になる |
 | 5.3.6 の `codex` セクション | `claude` セクションへ全面差し替え（5-2） |
+| **`stall_timeout_ms`**（5.3.6 / 8.5 Part A / 10.6） | **設定キーとして作らない。`claude.turn_timeout_ms` に1本化する**（3-21）。仕様がこのキーを `turn_timeout_ms` と分けて持つのは、**Codex には観測点が2つある**からである。app-server が turn のストリームを流し（`turn_timeout_ms` はその無音を測る）、orchestrator はそれとは別に受け取ったイベントの間隔を測る（`stall_timeout_ms`）。**continuo の観測点は herdr の pane の `revision`（画面の版）1つしかない。**同じ1つの時計に閾値を2つ置くと、**必ず小さいほうだけが効き、もう一方は設定できるのに何も起きない死んだキーになる** |
 | Appendix A（SSH の worker 拡張） | OPTIONAL。continuo は1台のマシンで herdr の pane を使う |
 
 **第10節を落とす代わりに受け入れ基準へ足すものは、第7節の末尾にまとめた。**

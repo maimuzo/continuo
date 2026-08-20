@@ -53,8 +53,9 @@ const (
 	// read_timeout_ms では足りない。**worktree 系の3つも同じ上限を使う**
 	// （worktree.go の冒頭コメントを参照）。
 	DefaultStartupTimeout = 60 * time.Second
-	// DefaultTurnTimeout は1つの turn の上限である（claude.turn_timeout_ms = 3600000）。
-	// agent.prompt を待機ありで呼ぶときに使う。
+	// DefaultTurnTimeout は待ちを伴う1回の呼び出しの上限である
+	// （claude.turn_timeout_ms = 3600000）。agent.prompt を待機ありで呼ぶときに使う。
+	// **turn の総実行時間の上限ではない**（画面が変わり続けている限り、呼び出し側が待ち直す）。
 	DefaultTurnTimeout = time.Hour
 )
 

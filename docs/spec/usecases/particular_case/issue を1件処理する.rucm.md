@@ -10,7 +10,7 @@
 - `docs/plans/continuo_design.md#3-8`（turn ループ。1回目の本文と継続の指示、max_turns）
 - `docs/plans/continuo_design.md#3-16`（着手の手順の順番。段-1 から段11）
 - `docs/plans/continuo_design.md#3-18`（worktree の身元ファイル）
-- `docs/plans/continuo_design.md#3-21`（stall の時計）
+- `docs/plans/continuo_design.md#3-21`（打ち切りは「画面の版」で測る）
 - `docs/plans/continuo_design.md#3-25`（表明を transcript から読む。コメントが無かったらセッションを復元して書かせる）
 - `docs/plans/continuo_design.md#4-1`（誰がどの遷移を起こすか）
 - `internal/orchestrator/dispatch.go` の `dispatchCandidates`、`claimForDispatch`、`preflight`、`startRun`、`confirmStartup`
@@ -130,8 +130,8 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。保留
 
 GLOBAL ALTERNATIVE FLOW 無音の打ち切り:
 BRANCH FROM BASIC FLOW 18
-WHEN stall_timeout_ms のあいだ hook が1件も届かない場合
-1. システムは herdr に agent_status を要求する。
+WHEN turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合
+1. システムは herdr に agent_status と pane の画面の版を要求する。
 2. システムは herdr の pane を閉じる。
 3. システムはリトライの回数を1つ増やす。
 4. システムはバックオフの期限を印に書く。
@@ -208,7 +208,7 @@ flowchart TD
     B25 -- 偽 --> F6S1
     B25 -- 真 --> B26 --> B27 --> B28 --> BPOST
     B17 -. "権限の確認: WHEN blocked が返った場合" .-> G1S1
-    B18 -. "無音の打ち切り: WHEN hook が届かない場合" .-> G2S1
+    B18 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> G2S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 空きスロット不足 / RFS BASIC FLOW 3"]
         F1S1["1. この巡回で1件も dispatch しない"] --> F1S2["2. ABORT"]
@@ -244,7 +244,7 @@ flowchart TD
     end
 
     subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 無音の打ち切り / BRANCH FROM BASIC FLOW 18"]
-        G2S1["1. agent_status を要求する"] --> G2S2["2. pane を閉じる"] --> G2S3["3. リトライの回数を1つ増やす"] --> G2S4["4. バックオフの期限を印に書く"] --> G2S5["5. ABORT"]
+        G2S1["1. agent_status と画面の版を要求する"] --> G2S2["2. pane を閉じる"] --> G2S3["3. リトライの回数を1つ増やす"] --> G2S4["4. バックオフの期限を印に書く"] --> G2S5["5. ABORT"]
     end
 
     F5S2 --> B18

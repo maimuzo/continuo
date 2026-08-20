@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/herdr"
@@ -223,22 +224,32 @@ func (o *Orchestrator) closeOrphanPane(ctx context.Context, identity *workspace.
 
 // checkStalls は stall を判定する（設計 3-21 / 3-27 の評価順）。
 //
-// **stall の閾値に達した run について、上から順に見る。**
+// **測るのは「画面が変わらない時間」であって、turn の総実行時間ではない。**
+// `SPEC.md` 10.6 は `turn_timeout_ms` を *"maximum silence interval while a turn stream is
+// active; each app-server output resets it, so it is not a total turn runtime cap"*
+// （turn の流れが動いている間の最大の沈黙の間隔。app-server の出力ごとにリセットされる。
+// 総実行時間の上限ではない）と定めている。continuo には app-server が無いので、
+// **「app-server の出力」に相当するものを herdr の pane の `revision`（画面の版）で測る。**
+//
+// **時計が動いていない run について、上から順に見る。**
 //
 //  1. 枠待ちか（percent が 100 かつ この run から hook が来ていない）
 //     → 枠待ちなら「時計を止めている」印を付けて終わり。**殺さない**
-//  2. herdr の agent_status が working か
-//     → working なら猶予を1回だけ与える（LastSeenAt を現在時刻にして、もう一度待つ）。**2回目は殺す**
-//  3. どちらでもない
+//  2. 画面の版が増えているか（agent.get の `revision`）
+//     → 増えていれば時計を起こし直す。**1つの turn に何時間かかっていても打ち切らない**
+//  3. 版が増えていない
 //     → worker を止め、リトライを積む
 //
 // **枠待ちの run は判定そのものを飛ばす**（`WaitingQuota` が立っている間は時計が止まっている）。
 // **`LastSeenAt` は進めない**（進めると、枠が明けたあとに「最後に動いていた時刻」が分からなくなる）。
 //
+// **`claude.turn_timeout_ms` が 0 以下なら判定そのものを行わない**（`SPEC.md` 8.4 の
+// *"If stall_timeout_ms <= 0, skip stall detection entirely"*）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) checkStalls(ctx context.Context) {
-	stall := time.Duration(o.cfg.Claude.StallTimeoutMs) * time.Millisecond
-	if stall <= 0 {
+	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
+	if silence <= 0 {
 		return
 	}
 	now := o.now()
@@ -258,7 +269,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		if snap.AgentName == "" || snap.LastSeenAt.IsZero() {
 			continue
 		}
-		if now.Sub(snap.LastSeenAt) < stall {
+		if now.Sub(snap.LastSeenAt) < silence {
 			continue
 		}
 
@@ -271,27 +282,99 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 			continue
 		}
 
-		// 2. agent_status を1回だけ見る。working なら猶予を1回。
-		status, err := o.agentStatus(ctx, rs)
-		if err == nil && status == herdr.AgentStatusWorking {
-			if rs.grantGrace(now) {
-				o.logger.Info("agent_status が working なので猶予を1回だけ与えます",
-					"identifier", snap.Identifier, "stall_timeout_ms", o.cfg.Claude.StallTimeoutMs)
-				continue
-			}
-			o.logger.Warn("working のまま2度目の閾値に達したので止めます", "identifier", snap.Identifier)
+		// 2. agent.get で状態と画面の版を1回で取る。
+		// **版が増えていれば、何時間かかっていても待ち続ける。**
+		agent, err := o.agentInfo(ctx, rs)
+		if err == nil && rs.noteRevision(agent.Revision, now) {
+			o.logger.Info("画面が変わっているので待ち続けます（turn の総実行時間では打ち切りません）",
+				"identifier", snap.Identifier,
+				"revision", agent.Revision,
+				"agent_status", string(agent.AgentStatus))
+			continue
+		}
+		if err != nil {
+			o.logger.Warn("画面の版を読めませんでした（止まったものとして扱います）",
+				"identifier", snap.Identifier, "error", err)
 		}
 
-		// 3. worker を止め、リトライを積む。
+		// 3. 版が止まったまま閾値を超えた。worker を止め、リトライを積む。
 		// **同期で呼んではならない**（設計 3-8）。打ち切りになった場合は 3-25 の9段を
 		// 通り、`agent.prompt` の待ち受けで既定1時間返らない。
-		o.abandonRunAsync(ctx, rs, fmt.Sprintf(
-			"Claude Code が %d ミリ秒のあいだ何も進めませんでした"+
-				"（continuo が最後に見た状態: %s）。**continuo は止まったものと判断して打ち切りました。**"+
-				"\n【確かめ方】下記の「Claude Code の会話の記録」を開き、末尾で何をしていたかを見てください。"+
-				"\n【よくある原因】確認の画面が出て人間の入力を待っていた / 応答を待ち続けていた。"+
-				"\n【対処】原因を直してから Status を着手待ちへ戻してください。"+
-				"止まったとみなすまでの時間は WORKFLOW.md の `claude.stall_timeout_ms` で変えられます（いまは %d）。",
-			o.cfg.Claude.StallTimeoutMs, status, o.cfg.Claude.StallTimeoutMs))
+		o.abandonRunAsync(ctx, rs, o.stalledScreenReason(snap, agent, now))
 	}
+}
+
+// stalledScreenReason は「画面が止まったまま閾値を超えた」ときに人間へ見せる文面を作る
+// （設計 3-34b の形。何が起きたか →【確かめ方】→【よくある原因】→【対処】）。
+//
+// **`herdr agent read` を案内してはならない**（設計 3-34b）。この文面を載せたコメントの
+// 直後に `pane.close` を呼ぶので、人間が読むときには agent が消えている。
+//
+// snap: 対象の run の写し。
+// agent: agent.get が返した情報（読めなかった場合はゼロ値に近い）。
+// now: いまの時刻。
+// 戻り値: issue のコメントとログに載せる理由の文字列。
+func (o *Orchestrator) stalledScreenReason(snap runSnapshot, agent herdr.Agent, now time.Time) string {
+	status := string(agent.AgentStatus)
+	if status == "" {
+		status = string(herdr.AgentStatusUnknown)
+	}
+	// **そのままコピーして叩けるコマンドにする。**worktree のパスを埋め込まないと、
+	// 読んだ人はまず「どこで叩くのか」を探すところから始めることになる。
+	// **持っていないものは案内しない。**着手の途中で落ちた run は worktree も
+	// 会話の記録も持っておらず、その行は【調べるところ】にも出ない（3-34b）。
+	var parts []string
+	if snap.WorktreePath != "" {
+		parts = append(parts, fmt.Sprintf(
+			"次のコマンドで、作業がどこまで進んでいたかを見てください。\n"+
+				"```sh\ngit -C %q status\ngit -C %q log --oneline -5\n```",
+			snap.WorktreePath, snap.WorktreePath))
+	}
+	if snap.TranscriptPath != "" {
+		parts = append(parts,
+			"下記の「Claude Code の会話の記録」を開き、末尾で何をしていたかを見てください。")
+	}
+	check := strings.Join(parts, "\n")
+	if check == "" {
+		// **worktree も会話の記録もまだ無い**（着手の途中で画面が止まった）。
+		// 見に行ける場所が1つも無いので、次の巡回で何が起きるかだけを伝える。
+		check = "この run は worktree も会話の記録もまだ持っていません。" +
+			"continuo は pane を閉じ、リトライの回数が残っていれば着手からやり直します。"
+	}
+	return fmt.Sprintf(
+		"continuo は herdr へ `agent.get` を投げて Claude Code の画面の版（pane の revision）を"+
+			"見比べています。その版が %s のあいだ、1回も増えませんでした"+
+			"（最後に見た状態: %s、画面の版: %d）。**止まったものと判断して打ち切りました。**"+
+			"\n【確かめ方】%s"+
+			"\n【よくある原因】確認の画面が出て人間の入力を待っていた / "+
+			"応答の来ない相手を待ち続けていた / 画面を書き換えないコマンドが終わらなかった。"+
+			"\n【対処】原因を直してから Status を着手待ちへ戻してください。"+
+			"画面が変わらないまま待つ時間は WORKFLOW.md の `claude.turn_timeout_ms` で変えられます"+
+			"（いまは %d ミリ秒）。**この値は turn の総実行時間の上限ではありません。**"+
+			"画面が変わり続けている限り、1つの指示に何時間かかっても打ち切りません。",
+		formatDuration(now.Sub(snap.RevisionAt)), status, agent.Revision,
+		check, o.cfg.Claude.TurnTimeoutMs)
+}
+
+// formatDuration は経過時間を人間が読める日本語にする（`1時間3分` の形）。
+//
+// **`time.Duration.String()` を人間に見せない。**`1h3m0.5s` は読み手に伝わらない。
+//
+// d: 表す長さ。負なら 0 として扱う。
+// 戻り値: 日本語の長さ（1分未満は「1分未満」）。
+func formatDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	total := int(d / time.Minute)
+	if total < 1 {
+		return "1分未満"
+	}
+	if total < 60 {
+		return fmt.Sprintf("%d分", total)
+	}
+	if total%60 == 0 {
+		return fmt.Sprintf("%d時間", total/60)
+	}
+	return fmt.Sprintf("%d時間%d分", total/60, total%60)
 }

@@ -495,15 +495,20 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	if err != nil {
 		return err
 	}
-	if _, err := o.herdr.AgentStartWithRetry(ctx, herdr.AgentStartParams{
+	started, err := o.herdr.AgentStartWithRetry(ctx, herdr.AgentStartParams{
 		Name:   agentName,
 		Kind:   o.cfg.Claude.Kind,
 		PaneID: paneID,
 		Args:   o.claudeStartArgs(settingsPath, sessionUUID, ""),
-	}, agentStartRetries, agentStartRetryDelay); err != nil {
+	}, agentStartRetries, agentStartRetryDelay)
+	if err != nil {
 		return fmt.Errorf("Claude Code を起動できません: %w", err)
 	}
 	rs.setAgentName(agentName)
+	// **起動直後の画面の版を stall の判定の種にする**（設計 3-21）。種を入れないと、
+	// 最初の判定が必ず「版が変わった」になり、打ち切りまでに
+	// `claude.turn_timeout_ms` を2回またぐことになる。
+	rs.noteRevision(started.Agent.Revision, o.now())
 	if err := o.ws.SetAgentName(ctx, prepared.Path, agentName.String()); err != nil {
 		o.logger.Warn("身元ファイルへ agent 名を書けませんでした", "identifier", issue.Identifier, "error", err)
 	}

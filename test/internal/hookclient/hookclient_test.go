@@ -579,7 +579,7 @@ func TestForward_イベント名が長くても逃がし先へ書ける(t *testi
 
 // 目的: 逃がし先が上限まで太ったとき、量の多い PostToolUse は書かなくなるが、
 // turn の終わりの判定に要る Stop は書き続けることを確認する。
-// Stop まで落とすと、その run は stall_timeout_ms（既定30分）まで誰も気づかない（設計 3-19）。
+// Stop まで落とすと、その run は claude.turn_timeout_ms（既定1時間）まで誰も気づかない（設計 3-19）。
 // 与える情報: 逃がし先の上限を 1 件に縮めた Config（既に1件置いてある逃がし先）と、
 // PostToolUse 1件・Stop 1件。
 // 成功条件: PostToolUse が dropped になって理由が Result.Err に入り、Stop は spilled になること。

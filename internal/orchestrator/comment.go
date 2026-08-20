@@ -122,6 +122,10 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	}
 
 	// 段7: 「コメントに書いてください」とだけ送る。**turn 数に数えない。**
+	//
+	// **待ちの上限には `claude.turn_timeout_ms` を使う**（画面が変わらないまま待てる時間）。
+	// **この run はもう印から外れる途中なので、巡回の stall 検知は見ていない。**
+	// 返らなければこの上限で切り上げて段8（コメントの読み直し）へ進む。
 	if _, err := o.herdr.AgentPrompt(ctx, herdr.AgentPromptParams{
 		Target: name,
 		Text:   buildCommentRequestPrompt(issueURL(rs.issue()), o.cfg.Tracker.Provider.Comments.Marker),

@@ -902,10 +902,12 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	// テストが実時間で待つ長さを短くする（判定の意味は変えない）。
 	cfg.Claude.SettleMs = 50
 	cfg.Claude.PollWaitMs = 200
-	cfg.Claude.TurnTimeoutMs = 5000
+	// **画面が止まったとみなすまでの時間。**短くすると、待たせるだけのテストが
+	// 軒並み stall と判定されてしまうので長めに取る。stall を見たいテストは
+	// Mutate で短くすること。
+	cfg.Claude.TurnTimeoutMs = 600000
 	cfg.Claude.ReadTimeoutMs = 2000
 	cfg.Claude.StartupTimeoutMs = 2000
-	cfg.Claude.StallTimeoutMs = 600000
 	cfg.Polling.IntervalMs = 3600000
 	// 枠の判定は既定で行わない（usage API を1回も叩かない）。
 	cfg.RateLimit.Source = "none"

@@ -66,9 +66,20 @@ type runState struct {
 	//
 	// **これは「最後に hook を受けた時刻」ではない。**hook を1件も受けていなくても、
 	// turn を送った時点（beginTurn）・枠待ちを外した時点（clearWaitingQuota）・
-	// 猶予を与えた時点（grantGrace）に現在時刻へ進む。**stall の判定にだけ使う。**
-	// 「最後に hook を受けた時刻」は LastHookAt が持つ。
+	// 画面の版が増えたのを確かめた時点（noteRevision）に現在時刻へ進む。
+	// **stall の判定にだけ使う。**「最後に hook を受けた時刻」は LastHookAt が持つ。
 	LastSeenAt time.Time
+	// LastRevision は最後に見た画面の版である（herdr の pane の revision）。
+	//
+	// **agent.start / 引き継いだ pane の値を種にし、以後は checkStalls が見るたびに更新する。**
+	// 種を入れないと、最初の判定が必ず「版が変わった」になり、打ち切りまでに閾値を2回
+	// またぐことになる。
+	LastRevision uint64
+	// RevisionAt は画面の版が最後に増えたのを確かめた時刻である。
+	//
+	// **人間へ見せる文面に「画面が最後に変わってからどれだけ経ったか」を書くために持つ。**
+	// run を作った時点で現在時刻を入れる（ゼロ値のままだと 1970 年からの経過を表示してしまう）。
+	RevisionAt time.Time
 	// LastHookAt は最後に hook を実際に受けた時刻である。
 	//
 	// **進めるのは noteHook だけである。**1件も受けていなければゼロ値のままである。
@@ -108,11 +119,6 @@ type runState struct {
 	tokensBase TokenUsage
 	// TokensAt は Tokens を集計した時刻である。ゼロ値なら一度も集計していない。
 	TokensAt time.Time
-	// GraceGiven は stall の猶予を1回与えたことを表す（設計 3-21 / 3-27）。
-	// **その turn の2回目は与えない。**`working` のまま固まる場合があるためである。
-	// **turn を送るたびに偽へ戻す**（beginTurn）。猶予は1つの stall の局面につき1回であり、
-	// run の生涯に1回ではない。
-	GraceGiven bool
 	// MissingSignal は前回の turn に表明が無かったことを表す（設計 3-25 の第3層）。
 	// 真なら次の継続の指示に、表明を促す1文を差し込む。
 	MissingSignal bool
@@ -173,7 +179,7 @@ type runState struct {
 	//
 	// **復元で `agent_status` が `working` の run を引き継いだときに立てる**
 	// （設計 3-4 の段5a2）。立てないと、その run の turn ループが1本も起きず、
-	// `Stop` hook を誰も読まないまま stall_timeout_ms まで放置される。
+	// `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
 	awaitTurnEnd bool
 	// handoffPosted は引き渡しの通知を投稿済みであることを表す。
@@ -198,13 +204,15 @@ func (rs *runState) clearStopSeen() {
 //
 // issueID: project item の ID。
 // issue: dispatch する時点の issue のスナップショット。
-// now: いまの時刻（LastSeenAt の初期値。ゼロ値のままだと即座に stall と判定される）。
+// now: いまの時刻（LastSeenAt と RevisionAt の初期値。ゼロ値のままだと即座に stall と
+// 判定され、人間へ見せる経過時間も 1970 年起点になる）。
 // 戻り値: 組み立てた runState。
 func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
 	return &runState{
 		IssueID:    issueID,
 		Issue:      issue,
 		LastSeenAt: now,
+		RevisionAt: now,
 		hookCh:     make(chan hookserver.HookEvent, hookChanSize),
 	}
 }
@@ -229,7 +237,8 @@ func (rs *runState) snapshot() runSnapshot {
 		BackoffUntil:     rs.BackoffUntil,
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
-		GraceGiven:       rs.GraceGiven,
+		LastRevision:     rs.LastRevision,
+		RevisionAt:       rs.RevisionAt,
 		LastSeenAt:       rs.LastSeenAt,
 		LastHookAt:       rs.LastHookAt,
 		StartedAt:        rs.StartedAt,
@@ -261,7 +270,8 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
-	GraceGiven       bool
+	LastRevision     uint64
+	RevisionAt       time.Time
 	LastSeenAt       time.Time
 	LastHookAt       time.Time
 	StartedAt        time.Time
@@ -297,10 +307,6 @@ func (rs *runState) beginTurn(now time.Time) int {
 	rs.FreshSession = false
 	rs.stopSeenAt = time.Time{}
 	rs.hookSeenThisTurn = false
-	// **stall の猶予は turn ごとに1回である**（設計 3-21）。ここで戻さないと
-	// 「run の生涯に1回」になり、3 turn 目に長いコマンドで猶予を使うと、
-	// 10 turn 目の正当な長い道具呼び出しでは猶予なしで worker を殺すことになる。
-	rs.GraceGiven = false
 	rs.LastSeenAt = now
 	if rs.StartedAt.IsZero() {
 		rs.StartedAt = now
@@ -397,22 +403,26 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	rs.LastSeenAt = now
 }
 
-// grantGrace は stall の猶予を1回だけ与える（設計 3-21 / 3-27）。
+// noteRevision は画面の版を見た結果を記録する（設計 3-21）。
 //
-// **`LastSeenAt` を現在時刻にして、もう一度 `stall_timeout_ms` だけ待つ。**
-// 与えたことを記録し、**その turn の2回目は与えない**（`working` のまま固まって
-// いる場合があるため）。**記録は次の turn を送る時点（beginTurn）で戻す。**
-// 「1回」の単位は1つの stall の局面であって、run の生涯ではない。
+// **版が変わっていれば時計を起こし直す。**`LastSeenAt` を現在時刻にして、
+// もう一度 `claude.turn_timeout_ms` だけ待つ。**画面が変わり続けている限り、
+// 1つの turn に何時間かかっても打ち切らない。**
 //
+// **減る向きの変化も「変わった」として扱う。**版が減るのは pane を作り直したときだけで、
+// そのときも画面が別物になっているので待ち直すのが正しい。
+//
+// rev: agent.get が返した pane の版。
 // now: いまの時刻。
-// 戻り値: 与えたら true。既に与えていたら false。
-func (rs *runState) grantGrace(now time.Time) bool {
+// 戻り値: 版が変わっていたら true（＝画面が動いている）。同じなら false。
+func (rs *runState) noteRevision(rev uint64, now time.Time) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if rs.GraceGiven {
+	if rs.LastRevision == rev {
 		return false
 	}
-	rs.GraceGiven = true
+	rs.LastRevision = rev
+	rs.RevisionAt = now
 	rs.LastSeenAt = now
 	return true
 }

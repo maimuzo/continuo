@@ -98,7 +98,7 @@ func TestCheckStalls_1回のstallでabandonが2回走らない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Now: clock.Now,
 		Mutate: func(cfg *config.Config) {
-			cfg.Claude.StallTimeoutMs = 1000
+			cfg.Claude.TurnTimeoutMs = 1000
 			cfg.Tracker.VerifyStatesEvery = 0
 		},
 	})
@@ -156,7 +156,7 @@ func TestAbandon_打ち切るときはworkerを止める前にコメントを確
 	fx := newFixture(t, fixtureOptions{
 		Now: clock.Now,
 		Mutate: func(cfg *config.Config) {
-			cfg.Claude.StallTimeoutMs = 1000
+			cfg.Claude.TurnTimeoutMs = 1000
 			cfg.Agent.MaxRetries = 0
 			cfg.Tracker.VerifyStatesEvery = 0
 		},

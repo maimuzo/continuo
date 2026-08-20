@@ -561,7 +561,7 @@ func (o *Orchestrator) decideOne(
 		// **引き継ぐが NeedsPrompt を立てない。**走っている最中に投げると turn が混ざる。
 		// 前の turn の Stop は逃がし先か socket から届く。届かなければ stall 検知で拾う。
 		// **代わりに「turn の終わりを待つ」を立てる。**立てないと turn ループの goroutine が
-		// 1本も起きず、届いた Stop を誰も読まないまま stall_timeout_ms まで放置される
+		// 1本も起きず、届いた Stop を誰も読まないまま claude.turn_timeout_ms まで放置される
 		// （表明もその turn ぶんは一度も読まれない）。
 		needsPrompt = false
 		awaitTurnEnd = true
@@ -625,6 +625,7 @@ func (o *Orchestrator) decideOne(
 			Base:             base,
 			SettingsPath:     c.Identity.SettingsPath,
 			HerdrWorkspaceID: c.Identity.HerdrWorkspaceID,
+			Revision:         pane.Revision,
 			AwaitTurnEnd:     awaitTurnEnd,
 		},
 		NeedsPrompt: needsPrompt,

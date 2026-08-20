@@ -328,10 +328,9 @@ func (e *e2eEnv) TestSettings(t *testing.T) {
 		{"  interval_ms: ", "  interval_ms: 500"},
 		{"  poll_wait_ms: ", "  poll_wait_ms: 300"},
 		{"  settle_ms: ", "  settle_ms: 200"},
-		{"  turn_timeout_ms: ", "  turn_timeout_ms: 30000"},
+		{"  turn_timeout_ms: ", "  turn_timeout_ms: 120000"},
 		{"  read_timeout_ms: ", "  read_timeout_ms: 5000"},
 		{"  startup_timeout_ms: ", "  startup_timeout_ms: 10000"},
-		{"  stall_timeout_ms: ", "  stall_timeout_ms: 120000"},
 		// 枠は読まない（実物の資格情報を読ませない。判定の対象でもない）。
 		{"  source: ", "  source: none"},
 	})

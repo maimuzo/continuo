@@ -87,17 +87,16 @@ func DefaultConfig() *Config {
 			Env: map[string]string{
 				"CLAUDE_CODE_RETRY_WATCHDOG": "1",
 			},
-			PollWaitMs:       30000,
-			SettleMs:         2000,
-			WaitUntil:        []string{"idle", "done", "blocked"},
+			PollWaitMs: 30000,
+			SettleMs:   2000,
+			WaitUntil:  []string{"idle", "done", "blocked"},
+			// 画面の版が増えないまま待てる上限。`SPEC.md` 10.6 の既定値と同じ 1 時間である。
 			TurnTimeoutMs:    3600000,
 			ReadTimeoutMs:    5000,
-			StallTimeoutMs:   1800000,
 			StartupTimeoutMs: 60000,
 			HookBridge: ClaudeHookBridgeConfig{
-				Mode:          "settings_flag",
-				Listen:        nil,
-				LivenessHooks: []string{"PreToolUse", "PostToolUse"},
+				Mode:   "settings_flag",
+				Listen: nil,
 			},
 		},
 		Herdr: HerdrConfig{

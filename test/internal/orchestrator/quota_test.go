@@ -65,7 +65,7 @@ func newUsageReader(t *testing.T, endpoint, tokenEnv string) *ratelimit.Reader {
 // 枠待ちの判定が2条件の連言であることを確かめる。
 //
 // 目的: 設計 3-27 の「**この run は枠待ちである**は次の2つが同時に成り立つとき。
-// 条件その1: `percent` が 100 に達している。条件その2: その run から `stall_timeout_ms` の
+// 条件その1: `percent` が 100 に達している。条件その2: その run から `claude.turn_timeout_ms` の
 // あいだ hook が1件も来ていない」と、「**`severity` は見ない**」を守っていることを示す。
 //
 // **条件その2 を入れる理由。**枠を使い切っていても、別の run は動いていることがある。
@@ -84,7 +84,7 @@ func TestQuota_100パーセントかつhookが来ていないrunだけを枠待�
 		AgentStatus: herdr.AgentStatusUnknown,
 		RateLimit:   reader,
 		Mutate: func(cfg *config.Config) {
-			cfg.Claude.StallTimeoutMs = 50
+			cfg.Claude.TurnTimeoutMs = 50
 			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
 			cfg.RateLimit.PollIntervalMs = 1
 		},

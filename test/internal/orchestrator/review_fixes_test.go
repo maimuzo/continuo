@@ -224,7 +224,7 @@ func TestParseSignals_長すぎる語は表明として扱わない(t *testing.T
 //
 // 目的: `agent_status` が `working` の run を引き継いだとき、turn は送らないが
 // **turn の終わりを待つ goroutine は起こす**ことを示す。起こさないと、届いた `Stop` を
-// 誰も読まないまま stall_timeout_ms（既定30分）まで放置され、その turn の表明も
+// 誰も読まないまま claude.turn_timeout_ms（既定1時間）まで放置され、その turn の表明も
 // 一度も読まれない。
 // 与える情報: `AwaitTurnEnd` を立てて引き継いだ run と、あとから届く `Stop` hook。
 // 成功条件: turn を1回も送らずに表明が適用され、Status が In Review へ動く。
@@ -347,7 +347,7 @@ func TestTick_検査に落ちた巡回ではバックオフ明けの再dispatch�
 		fx := newStubFixture(t, stubFixtureOptions{
 			AgentStatus: herdr.AgentStatusUnknown,
 			Mutate: func(cfg *config.Config) {
-				cfg.Claude.StallTimeoutMs = int(stallTimeout / time.Millisecond)
+				cfg.Claude.TurnTimeoutMs = int(stallTimeout / time.Millisecond)
 				cfg.Tracker.VerifyStatesEvery = 1
 			},
 			GHAuthCheck: func(context.Context) error {
@@ -387,119 +387,6 @@ func TestTick_検査に落ちた巡回ではバックオフ明けの再dispatch�
 
 // errGHAuth は認証の検査が失敗したことを表す検査用のエラーである。
 var errGHAuth = errors.New("gh の認証が有効ではありません（検査用）")
-
-// TestCheckStalls_猶予はturnごとに戻る は、設計 3-21 の猶予の単位を確かめる。
-//
-// 目的: 「猶予を1回だけ与える」の単位は**1つの stall の局面**であって run の生涯ではない、
-// と示す。生涯に1回にすると、3 turn 目に30分超のコマンドで猶予を使っただけで、
-// 10 turn 目の正当な長い道具呼び出しでは猶予なしで worker を殺してリトライを積む。
-// 与える情報: 1回目の turn で猶予を使い、そのあと turn の終わりを受けて2回目の turn へ
-// 進んだ run。2回目の turn でもう一度 stall の閾値をまたぐ。
-// 成功条件: 2回目の turn でも猶予が与えられる（リトライが積まれない）。
-func TestCheckStalls_猶予はturnごとに戻る(t *testing.T) {
-	const stall = 60 * time.Second
-
-	var clockMu sync.Mutex
-	now := time.Now()
-	advance := func(d time.Duration) {
-		clockMu.Lock()
-		now = now.Add(d)
-		clockMu.Unlock()
-	}
-	fx := newFixture(t, fixtureOptions{
-		Now: func() time.Time {
-			clockMu.Lock()
-			defer clockMu.Unlock()
-			return now
-		},
-		Mutate: func(cfg *config.Config) {
-			cfg.Claude.StallTimeoutMs = int(stall / time.Millisecond)
-		},
-	})
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-
-	var promptMu sync.Mutex
-	prompts := 0
-
-	// stall の判定は agent_status を見る。**`working` なら猶予を与える。**
-	// **起動の確認（着手の段10）は `idle` を返す。**そこで `working` を返すと起動に
-	// 失敗したことになり、turn が1回も送られない。
-	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
-		promptMu.Lock()
-		started := prompts > 0
-		promptMu.Unlock()
-		status := "idle"
-		if started {
-			status = "working"
-		}
-		return map[string]any{
-			"type":  "agent_info",
-			"agent": map[string]any{"name": params["target"], "agent_status": status},
-		}, nil
-	})
-
-	transcriptDir := t.TempDir()
-	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
-		typedUserLine("p1", "実装してください"),
-		assistantLine("req1", "まだ途中です。", false),
-	})
-
-	release := make(chan struct{})
-	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
-		promptMu.Lock()
-		prompts++
-		n := prompts
-		promptMu.Unlock()
-		if n == 1 {
-			// **1回目の turn は走らせたままにする**（猶予を与える局面を作る）。
-			<-release
-			fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
-		}
-		if n >= 2 {
-			// 2回目の turn も走らせたままにする（2つ目の局面）。
-			<-time.After(5 * time.Second)
-		}
-		return map[string]any{
-			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
-		}, nil
-	})
-
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 20*time.Second, "1回目の turn が送られる", func() bool {
-		promptMu.Lock()
-		defer promptMu.Unlock()
-		return prompts >= 1
-	})
-
-	// 1回目の局面: 閾値をまたぐ。`working` なので猶予を1回与える。
-	advance(stall + time.Second)
-	fx.Orc.Tick(context.Background())
-	v, ok := viewOf2(t, fx, "maimuzo/koetsumugi#188")
-	if !ok || v.RetryCount != 0 {
-		t.Fatalf("1回目の局面で猶予を与えていない: ok=%v, retry=%d", ok, v.RetryCount)
-	}
-
-	// turn を終わらせて2回目の turn へ進める。
-	close(release)
-	waitFor(t, 20*time.Second, "2回目の turn が送られる", func() bool {
-		promptMu.Lock()
-		defer promptMu.Unlock()
-		return prompts >= 2
-	})
-
-	// 2回目の局面: **turn が変わったので猶予はまた1回使える。**
-	advance(stall + time.Second)
-	fx.Orc.Tick(context.Background())
-
-	after, ok := viewOf2(t, fx, "maimuzo/koetsumugi#188")
-	if !ok {
-		t.Fatalf("run が印から外れている（猶予を与えずに諦めた）")
-	}
-	if after.RetryCount != 0 {
-		t.Fatalf("2回目の turn で猶予が戻っていない（run の生涯に1回になっている）: retry=%d", after.RetryCount)
-	}
-}
 
 // viewOf2 は識別子で RunView を引く（このファイルの検査で使う）。
 //

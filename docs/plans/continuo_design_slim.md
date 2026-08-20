@@ -238,11 +238,12 @@ stateDiagram-v2
 // run ごとの実行時状態。プロセスが落ちると消える。
 // orchestrator が map[string]*runState で持つ（キーは project item の ID）。
 type runState struct {
-    IssueID     string    // project item の ID
-    SessionUUID string    // Claude Code のセッション UUID
-    PromptID    string    // 直前に投げたプロンプトの ID（Stop hook の prompt_id と突き合わせる）
-    TurnCount   int       // continuo が送ったプロンプトの回数
-    LastSeenAt  time.Time // 最後に hook を受けた時刻（stall の時計）
+    IssueID      string    // project item の ID
+    SessionUUID  string    // Claude Code のセッション UUID
+    PromptID     string    // 直前に投げたプロンプトの ID（Stop hook の prompt_id と突き合わせる）
+    TurnCount    int       // continuo が送ったプロンプトの回数
+    LastSeenAt   time.Time // 最後に「動いている」のを見た時刻（打ち切りの時計）
+    LastRevision uint64    // 最後に見た pane の revision（画面の版）
 }
 ```
 
@@ -393,7 +394,7 @@ flowchart TB
     over -->|"超えた"| stop["新規の dispatch を止める<br/>走行中の turn は止めない"]
     over -->|"超えていない"| normal["ふつうに dispatch する"]
 
-    stop --> waiting["枠待ちとして記録する<br/>stall の時計と turn の時計を止める"]
+    stop --> waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
     waiting --> reset{"resets_at を過ぎたか"}
     reset -->|"まだ"| waiting
     reset -->|"過ぎた"| probe["走行中の run へ<br/>継続の指示を1回送る"]
@@ -426,8 +427,8 @@ flowchart TB
 | 読む間隔 | 既定5分 |
 | 止める閾値 | 既定95%。**走行中の turn は止めない** |
 
-**時計を止めるのが要点である。**`turn_timeout_ms` も止める。
-**枠のリセットが1時間より先だと、待ち切る前に必ず時間切れになる**ためである。
+**時計を止めるのが要点である。**枠のリセットを待つ間は打ち切りの判定を飛ばす。
+**画面が変わらないのは枠を待っているからであって、固まっているからではない。**
 
 **worker を止めた場合は文脈が切れるので、issue のコメントに残した成果を次のセッションが読む**（第5節）。
 
@@ -527,7 +528,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | `read_timeout_ms` の相手が違う | herdr の socket API の応答を測る |
 | **Status を動かすのは continuo のコード** | エージェントは1行書くだけ |
 | **issue の中身をプロンプトに埋め込まない** | URL を渡して直接読ませる |
-| turn の時間切れの測り方 | 無音の間隔ではなく turn の総時間を測る |
+| 無音の測り方 | app-server の出力ではなく、pane の `revision`（画面の版）で測る |
 | `tracker` に仕様外のキーを足す | `dispatch_state` / `failure_state` / `status_signal_prefix` / `status_signal_map` |
 | 再起動後は引き渡し状態の worker を止めない | pane を残して人間に見せる |
 
