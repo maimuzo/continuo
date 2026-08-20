@@ -56,6 +56,11 @@ below says which steps were actually executed while writing this document and wh
 
 > **`<REPO>` は使い捨てにできるものを選ぶ。**エージェントがそのリポジトリを実際に編集し、
 > commit して push する。**本業のリポジトリを指定しない。**
+>
+> **`<REPO>` が既にボードに載っていれば、段5 の手作業は無くなる。**
+> 段3 の `continuo init` が `trust.repositories` をボードから拾って埋めるので、
+> **そこに `<REPO>` が入っていれば、段5 は `continuo trust` を1回叩くだけである。**
+> 新しいリポジトリを使うなら、段5 で1行足す。
 
 ## 先に知っておくこと
 
@@ -481,15 +486,18 @@ level=ERROR msg="continuo を起動できません" error="起動できません
 
 ## 段5. 対象リポジトリを信頼に登録する
 
-**言いたいこと。****`continuo trust` が全部やる。**clone が無ければ `ghq get` で取ってきて、
-`~/.claude.json` に信頼を書き込む。**手で `ghq get` を叩く必要も、`claude` を起動して
-承認する必要も無い。**人間がやるのは `trust.repositories` に対象を書くことだけである。
+**言いたいこと。****`continuo trust` を1回叩くだけである。**clone が無ければ `ghq get` で
+取ってきて、`~/.claude.json` に信頼を書き込む。**手で `ghq get` を叩く必要も、`claude` を
+起動して承認する必要も無い。**
 
-### `<REPO>` を信頼の対象に書き足す
+**`trust.repositories` は段3 の `continuo init` がボードから拾って埋めている。**
+**`<REPO>` がそこに入っていれば、この段でファイルを編集する必要は無い。**
 
-**言いたいこと。**段3 の `continuo init` が `trust.repositories` に並べたのは、
-**そのときボードに載っていたリポジトリだけ**である。
-**`<REPO>` は段7 で初めてボードに載るので、ここには入っていない。**手で書き足す。
+### `<REPO>` が一覧に無ければ書き足す
+
+**言いたいこと。****まず見る。入っていれば何もしなくてよい。**
+段3 の `continuo init` が `trust.repositories` をボードから拾って埋めている。
+**入っていないのは「そのときボードに載っていなかったリポジトリ」だけ**である。
 
 **実行する場所: `~/continuo-try`**
 
@@ -498,7 +506,17 @@ cd ~/continuo-try
 grep -n -A 9 "^  repositories:" WORKFLOW.md    # いま並んでいるものを見る
 ```
 
-`<REPO>` の行が無ければ、`${EDITOR:-vi} WORKFLOW.md` で足す。
+**`<REPO>` の行があれば、この節は飛ばして「何を許すことになるかを先に見る」へ進む。**
+
+無いのは次の場合である。
+
+| いつ無いか | どうするか |
+| --- | --- |
+| **これから issue を作るリポジトリで試す** | 段7 で初めてボードに載るので、いま手で足す |
+| 段3 で自分で消した | 消した行を書き戻す |
+| `gh` の認証が無い状態で `init` を叩いた | `continuo init --force` で埋め直す |
+
+足すときは `${EDITOR:-vi} WORKFLOW.md` を開く。
 
 ```yaml
 trust:
