@@ -63,20 +63,6 @@
       "Bash(rm:*)"
     ]
   },
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-reply-structure.py\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ]
-  },
   "enabledPlugins": {
     "maimuzo-go@maimuzo-marketplace": true,
     "maimuzo-dev-core@maimuzo-marketplace": true,
@@ -89,7 +75,8 @@
     "maimuzo-auto-debug@maimuzo-marketplace": true,
     "maimuzo-pencil@maimuzo-marketplace": true,
     "maimuzo-rucm@maimuzo-marketplace": true,
-    "maimuzo-naming@maimuzo-marketplace": true
+    "maimuzo-naming@maimuzo-marketplace": true,
+    "maimuzo-chat-response@maimuzo-marketplace": true
   },
   "extraKnownMarketplaces": {
     "maimuzo-marketplace": {
