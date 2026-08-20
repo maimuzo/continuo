@@ -312,6 +312,20 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 **段3 で作った `WORKFLOW.md` に対して実行する。**`continuo setup` は雛形を作らないので、
 `WORKFLOW.md` が無いときは段3 をやり直すよう案内して止まる（終了コード 1）。
 
+> **`continuo setup` は、どのボードを読むかを `WORKFLOW.md` から決めない。**
+> `gh` に聞き直す。だから次の3つの場合はフラグで指定する。
+>
+> ```bash
+> cd ~/continuo-try
+> /tmp/continuo setup --owner <ACCOUNT> --project <PROJECT> --status-field Status
+> ```
+>
+> | いつフラグが要るか | 指定しないとどうなるか |
+> | --- | --- |
+> | **ボードが2枚以上ある** | ボードを決められず、終了コード 1 で止まる（段3 と同じ） |
+> | **organization のボードを使う** | `gh api user` が返す個人のログイン名で探すので、**別のボードの選択肢を読む** |
+> | **`Status` 以外のフィールドを使う**（段2 の「専用のフィールド」） | 既定の `Status` を読む。`--status-field` に段2 で決めた名前を渡す |
+
 ```text
 ~/continuo-try/WORKFLOW.md がありません。continuo setup は既にある WORKFLOW.md の Status の割り当てだけを書き換えます（役割の割り当ては1つも尋ねていません）
 → 先に continuo init を実行して WORKFLOW.md を作ってください
@@ -463,6 +477,37 @@ tracker:
 ```bash
 ghq get <REPO>                   # continuo は ghq で clone の場所を引く
 ghq list -p -e <REPO>            # clone の絶対パスが出る。0行なら失敗している
+```
+
+### `<REPO>` を信頼の対象に書き足す
+
+**言いたいこと。**段3 の `continuo init` が `trust.repositories` に並べたのは、
+**そのときボードに載っていたリポジトリだけ**である。
+**`<REPO>` は段7 で初めてボードに載るので、ここには入っていない。**手で書き足す。
+
+**実行する場所: `~/continuo-try`**
+
+```bash
+cd ~/continuo-try
+grep -n -A 9 "^  repositories:" WORKFLOW.md    # いま並んでいるものを見る
+```
+
+`<REPO>` の行が無ければ、`${EDITOR:-vi} WORKFLOW.md` で足す。
+
+```yaml
+trust:
+  repositories:                             # continuo trust が信頼を登録してよいリポジトリ。ボードから拾って並べた。
+                                            # **要らない行は消すこと。**ここに残ったものだけが登録の対象になる
+                                            # **これから issue を作るリポジトリは、まだボードに無いので入っていない。**手で足すこと
+    - "<ACCOUNT>/<REPO の名前>"              # ← 段7 で issue を置くリポジトリ。手で足す
+```
+
+**書き足さないと段8 で何が起きるか。**continuo はその issue を取らない。
+**worktree も pane も作らず**、ログに1行だけ出して次の巡回へ進む。
+issue にコメントも残らない。
+
+```text
+リポジトリが Claude Code に信頼登録されていません
 ```
 
 ### 何を許すことになるかを先に見る
@@ -702,9 +747,11 @@ gh project item-add <PROJECT> --owner <ACCOUNT> --url <issue の URL>
 > **最初に試す issue は小さいものにする。**エージェントは実際にコードを書き、commit して push する。
 
 **issue の載っているリポジトリが `trust.repositories` に入っているかを確かめる。**
-段3 で消してしまっていたら書き足して、段5 の `continuo trust` をもう一度叩く。
+**段5 で書き足していなければ、ここが `✗` になる。**書き足して `continuo trust` をもう一度叩く。
 
-**ここでもう一度 `doctor` を叩くと、`clone` と `信頼登録` が `✓` になる**（対象リポジトリが決まるため）。
+**ここでもう一度 `doctor` を叩くと、`clone` と `信頼登録` の判定が出る**（対象リポジトリが決まるため）。
+段5 まで済んでいれば両方 `✓` になる。`✗ 信頼登録` が出たら、出てくる直し方のとおりに
+`trust.repositories` へ書き足してから `continuo trust` を実行する。
 
 **実行する場所: `~/continuo-try`**
 
@@ -749,8 +796,14 @@ gh project item-list <PROJECT> --owner <ACCOUNT> --format json | jq -r '.items[]
 herdr workspace list                            # pane が立ったか
 ```
 
-**`ls ~/worktrees` では何も見えない。**`workspace.layout` が `gwq` なので、worktree は
-`~/worktrees/<ホスト>/<owner>/<repo>/<branch の / を - にしたもの>` に掘られる。
+> **2つ目の `jq` は `.status` を決め打ちで見ている。**これは `gh project item-list` が
+> **組み込みの `Status` フィールドだけ**を `status` というキーで返すためである。
+> 段2 の「専用のフィールド」を使っている場合、この行は空を返す。
+> そのときは `--format json` の生の出力を見て、フィールド名に合わせて `jq` を書き換えること。
+
+**`ls ~/worktrees` に出るのは `github.com` の1行だけである。**`workspace.layout` が `gwq` なので、
+worktree はその下の `~/worktrees/<ホスト>/<owner>/<repo>/<branch の / を - にしたもの>` に掘られる。
+**どの issue のものかは、この階層を辿っても分からない。**
 その中の `.continuo.json` に、どの issue の worktree かが書いてある。
 
 ```json
@@ -759,7 +812,7 @@ herdr workspace list                            # pane が立ったか
   "issue_identifier": "<REPO>#12",
   "project_item_id": "PVTI_...",
   "branch": "continuo/<REPO>/12",
-  "base": "",
+  "base": "main",
   "herdr_workspace_id": "w1",
   "socket_path": "/tmp/continuo-run/hooks.sock",
   "settings_path": "/tmp/continuo-run/issues/<owner>-<repo>-12/settings.json",
@@ -808,7 +861,7 @@ curl -s http://127.0.0.1:8787/api/v1/state | jq .
 | 信頼の登録 | `~/.claude.json.continuo-backup-<日時>` から戻すか、`projects` の該当キーを消す。**バックアップを消すのは人間である** |
 | 作業ディレクトリ | `~/continuo-try` を消す |
 | 実行ファイル | `/tmp/continuo` を消す |
-| 実行時ディレクトリ | `CONTINUO_RUNTIME_DIR` を指定した場合、その場所を消す |
+| 実行時ディレクトリ | **指定しなかった場合は macOS なら `$TMPDIR/continuo`、Linux なら `$XDG_RUNTIME_DIR/continuo`、どちらも無ければ `~/.continuo/run`。**`CONTINUO_RUNTIME_DIR` を指定したならその場所。中に socket が残っていれば消す |
 
 ---
 
@@ -816,9 +869,9 @@ curl -s http://127.0.0.1:8787/api/v1/state | jq .
 
 | 症状 | 見るところ |
 | --- | --- |
-| **issue を取ってくれない** | Status が `Ready` か。`doctor` の `ボード` が `✓` か。**選択肢名が1文字でも違うと0件になる** |
+| **issue を取ってくれない** | Status が `Ready` か。`doctor` の `ボード` と `信頼登録` が `✓` か。**`trust.repositories` に書いていないリポジトリの issue は取らない**（段5） |
 | **別のフィールドを書き換えている** | `status_field` が段2 で確かめた名前になっているか。continuo は `status_field` に書いた名前のフィールドしか読み書きしない |
-| **pane は立つが進まない** | 段5 の `continuo trust --dry-run` が `✓`（既に信頼済み）になるか。**信頼していないと hook が1つも動かない** |
+| **信頼していないリポジトリの issue を飛ばしている** | `doctor` の `信頼登録` が `✓` か。**未信頼だと worktree も pane も作られない。**ログに `リポジトリが Claude Code に信頼登録されていません` が1行出る |
 | **`In Review` にならない** | エージェントが `CONTINUO-STATUS: review` を出しているか。herdr の pane で応答を見る |
 | **片付かない** | **未コミットの変更が残っている**か、**push していない commit がある**と消さない（成果を失わないため）。ログに理由が出る |
 | 枠を使い切った | continuo は待って再開する。Claude Code 2.1.234 以降は Claude Code 自身も継続するので、continuo は `agent_status` を見て二重投入を避ける |

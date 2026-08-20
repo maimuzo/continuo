@@ -136,6 +136,7 @@ trust:
   on_untrusted: skip_and_comment            # 信頼していないときの扱い。その issue だけ飛ばし、issue にコメントを残す
   repositories: []                          # continuo trust が信頼を登録してよいリポジトリ。owner/repo を1行ずつ書く。
                                             # continuo init がボードから拾って並べるので、要らない行は消すこと。
+                                            # **これから issue を作るリポジトリは、まだボードに無いので拾えない。**手で足すこと。
                                             # 巡回のループはここを読まない。continuo trust だけが読む
 
 restart:

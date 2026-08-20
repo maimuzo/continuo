@@ -130,6 +130,10 @@ const (
 
 // doctor の検査「clone」。
 const (
+	// KeyDoctorCloneBinNotFound は ghq / git が PATH に無いときの説明に出る。
+	KeyDoctorCloneBinNotFound Key = "doctor.clone.bin_not_found"
+	// KeyDoctorCloneRemedyInstallBin は同じときの直し方に出る。
+	KeyDoctorCloneRemedyInstallBin Key = "doctor.clone.remedy_install_bin"
 	// KeyDoctorCloneBoardUnreadable は上流のボードが落ちたときの説明に出る。
 	KeyDoctorCloneBoardUnreadable Key = "doctor.clone.board_unreadable"
 	// KeyDoctorCloneNoTargets はボードが空のときの説明に出る。
@@ -170,8 +174,8 @@ const (
 	KeyDoctorTrustNoteUndecidable Key = "doctor.trust.note_undecidable"
 	// KeyDoctorTrustNoteReason は判定できたリポジトリの内訳に出る。
 	KeyDoctorTrustNoteReason Key = "doctor.trust.note_reason"
-	// KeyDoctorTrustRemedyOpenOnce は未承認のときの直し方に出る。
-	KeyDoctorTrustRemedyOpenOnce Key = "doctor.trust.remedy_open_once"
+	// KeyDoctorTrustRemedyRunTrust は未承認のときの直し方に出る。
+	KeyDoctorTrustRemedyRunTrust Key = "doctor.trust.remedy_run_trust"
 	// KeyDoctorTrustDetailOK はすべて承認済みのときの説明に出る。
 	KeyDoctorTrustDetailOK Key = "doctor.trust.detail_ok"
 	// KeyDoctorTrustDetailMissing は未承認があるときの説明に出る。
@@ -569,6 +573,8 @@ var allKeys = []Key{
 	KeyDoctorBoardRemedyStatusOptions,
 	KeyDoctorBoardRemedyTokenInvalid,
 	KeyDoctorBoardFailed,
+	KeyDoctorCloneBinNotFound,
+	KeyDoctorCloneRemedyInstallBin,
 	KeyDoctorCloneBoardUnreadable,
 	KeyDoctorCloneNoTargets,
 	KeyDoctorCloneNoteGhqFailed,
@@ -585,7 +591,7 @@ var allKeys = []Key{
 	KeyDoctorTrustNoteNoClone,
 	KeyDoctorTrustNoteUndecidable,
 	KeyDoctorTrustNoteReason,
-	KeyDoctorTrustRemedyOpenOnce,
+	KeyDoctorTrustRemedyRunTrust,
 	KeyDoctorTrustDetailOK,
 	KeyDoctorTrustDetailMissing,
 	KeyDoctorTrustDetailUnknown,

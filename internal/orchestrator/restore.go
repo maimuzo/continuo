@@ -730,8 +730,9 @@ func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, r
 // issue: 取り直した issue（コメントの投稿先を引く）。
 // result: 復元の記録。
 func (o *Orchestrator) cleanupInto(ctx context.Context, c restoreCandidate, issue tracker.Issue, result *RestoreResult) {
-	// **base は身元ファイルに無い。**空のまま渡すので、`cleanup.require_pushed` が真で
-	// upstream が無い branch は「判定できない」として見送られる（消さない側に倒す）。
+	// **base はここでは渡さない。**空で渡すと `Manager.effectiveBase` が
+	// 身元ファイルの `base` を読んで補う（着手の段6 で書いてある）。
+	// 身元ファイルが古くて `base` が空のときだけ「判定できない」として見送られる。
 	var base normalize.SafeName
 	if o.cleanupPath(ctx, issue.Identifier, c.Path, base, issueNodeID(issue)) {
 		result.Cleaned = append(result.Cleaned, c.Path)

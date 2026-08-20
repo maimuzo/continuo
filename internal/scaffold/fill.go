@@ -39,6 +39,12 @@ const repositoriesFilledComment = "continuo trust が信頼を登録してよい
 // repositoriesFilledComment2 は trust.repositories を埋めたあとに残すコメントの2行目である。
 const repositoriesFilledComment2 = "**要らない行は消すこと。**ここに残ったものだけが登録の対象になる"
 
+// repositoriesFilledComment3 は trust.repositories を埋めたあとに残すコメントの3行目である。
+//
+// **ボードに載っていないリポジトリは自動では入らない。**これから issue を作る
+// リポジトリは、この時点ではボードに無いので拾えない。手で足す必要がある。
+const repositoriesFilledComment3 = "**これから issue を作るリポジトリは、まだボードに無いので入っていない。**手で足すこと"
+
 // ownerPattern は tracker.provider.owner として受け付ける文字の範囲である。
 //
 // GitHub の user / organization 名は英数字とハイフンだけで、39文字以内である。
@@ -114,6 +120,7 @@ func repositoriesBlock(repos []string) []string {
 	lines := []string{
 		alignComment("  repositories:", repositoriesFilledComment),
 		strings.Repeat(" ", commentColumn) + "# " + repositoriesFilledComment2,
+		strings.Repeat(" ", commentColumn) + "# " + repositoriesFilledComment3,
 	}
 	for _, r := range repos {
 		lines = append(lines, fmt.Sprintf("    - %q", r))

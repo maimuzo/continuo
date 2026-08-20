@@ -429,6 +429,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		IssueIdentifier:  issue.Identifier,
 		ProjectItemID:    issue.ID,
 		Branch:           prepared.Branch.String(),
+		Base:             prepared.Base.String(),
 		HerdrWorkspaceID: prepared.HerdrWorkspaceID,
 		SocketPath:       o.socketPath,
 		SettingsPath:     settingsPath,

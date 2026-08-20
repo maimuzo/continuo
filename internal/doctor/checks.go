@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -346,6 +347,20 @@ func checkClone(
 		}, nil
 	}
 
+	// **ghq と git が PATH に無ければ、この先を調べても意味が無い。**
+	// continuo は worktree を用意するときにこの2つを起動するので、
+	// 無いまま段8 へ進むと必ず落ちる。ここで足りないものとして止める。
+	for _, bin := range []string{"ghq", "git"} {
+		if _, err := exec.LookPath(bin); err != nil {
+			return Result{
+				Label:    LabelClone,
+				Symbol:   SymbolMissing,
+				Detail:   i18n.T(i18n.KeyDoctorCloneBinNotFound, bin),
+				Remedies: []string{i18n.T(i18n.KeyDoctorCloneRemedyInstallBin, bin)},
+			}, nil
+		}
+	}
+
 	paths := make(map[string]string, len(repos))
 	symbol := SymbolOK
 	var notes, remedies []string
@@ -468,7 +483,7 @@ func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardS
 			symbol = worse(symbol, SymbolMissing)
 			untrusted++
 			notes = append(notes, i18n.T(i18n.KeyDoctorTrustNoteReason, repo, reason))
-			remedies = append(remedies, i18n.T(i18n.KeyDoctorTrustRemedyOpenOnce, path))
+			remedies = append(remedies, i18n.T(i18n.KeyDoctorTrustRemedyRunTrust, path))
 		default:
 			notes = append(notes, i18n.T(i18n.KeyDoctorTrustNoteReason, repo, reason))
 		}

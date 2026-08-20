@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -309,6 +310,11 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 		return err == nil
 	})
 
+	// **身元ファイルに base が入っていること。**空のまま書くと、continuo を再起動した
+	// あとの片付けが「base が分からないので判定できない」で永久に見送る（設計 3-9）。
+	// 同じプロセスの中では run の状態が base を持っているので、この検査でしか気づけない。
+	assertIdentityHasBase(t, worktreePath)
+
 	// 5〜6: エージェントが表明を出し、continuo が Status を `In Review` へ動かす。
 	waitFor(t, 60*time.Second, "段8: Status が In Review になる", func() bool {
 		return env.Board.StateOfURL(t, issueURL) == "In Review"
@@ -511,4 +517,28 @@ func TestE2E_status_fieldの綴りが違うとボードを読めない(t *testin
 		"✗ ボード",
 		"Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status",
 		"→ WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください")
+}
+
+// assertIdentityHasBase は worktree の身元ファイルに base が書かれていることを確かめる。
+//
+// t: テスト。
+// worktreePath: worktree の絶対パス。
+func assertIdentityHasBase(t *testing.T, worktreePath string) {
+	t.Helper()
+
+	path := filepath.Join(worktreePath, ".continuo.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("段8: 身元ファイルを読めません: %s: %v", path, err)
+	}
+
+	var identity struct {
+		Base string `json:"base"`
+	}
+	if err := json.Unmarshal(raw, &identity); err != nil {
+		t.Fatalf("段8: 身元ファイルを解釈できません: %s: %v\n%s", path, err, raw)
+	}
+	if identity.Base == "" {
+		t.Fatalf("段8: 身元ファイルの base が空です。再起動をまたぐと片付けが見送られます:\n%s", raw)
+	}
 }

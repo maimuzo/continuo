@@ -21,7 +21,7 @@ GitHub Projects v2 のボードを見張り、issue ごとに git worktree を�
 | **Runs** | Claude Code in interactive mode inside a herdr pane (**never `claude -p`**) |
 | **Continues** | sends follow-up prompts to the same session while the issue stays active, up to `max_turns` |
 | **Detects completion** | via Claude Code's `Stop` hook — a turn has ended only when `background_tasks` is empty |
-| **Trusts** | the tracker, not the agent's self-report. The agent moves the Status itself with `gh`; continuo only reads |
+| **Trusts** | the tracker, not the agent's self-report. The agent only prints a one-line marker (`CONTINUO-STATUS: review`); **continuo is what moves the Status**, and it re-reads the board before acting on it |
 | **Cleans up** | the worktree and the branch once the issue reaches a terminal state |
 
 ## Why the name / 名前の由来
@@ -48,7 +48,10 @@ Where the spec assumes a Codex app-server subprocess speaking a structured proto
 | Go | 1.26 or later |
 | [herdr](https://github.com/herdrdev/herdr) | 0.8.0 or later (Apache-2.0) |
 | [Claude Code](https://claude.com/claude-code) | 2.1.233 or later |
-| `gh` | 2.97.0 or later — the Status update form used in prompts needs it |
+| `gh` | 2.97.0 or later — `continuo doctor` reads the scopes from the default `gh auth status` output (there is no `--show-scopes` flag in 2.97.0) |
+| `git` | any recent version — continuo runs it to create and remove worktrees |
+| `ghq` | any recent version — continuo runs `ghq list -p -e` to locate the clone of each repository |
+| `jq` | only for the commands in [docs/trying_it_out.md](docs/trying_it_out.md) — continuo itself does not use it |
 | Platform | macOS and Linux. **Windows is not supported natively — use WSL2** ([why](docs/plans/continuo_design.md)) |
 
 Do not check these by hand. `continuo doctor` inspects every prerequisite — the config file, herdr, the `gh` login and its scopes, the board, the local clones, the folder trust, and the credentials — then prints what is missing and how to fix it. It exits `1` when something is missing and `0` when nothing is.

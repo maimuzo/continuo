@@ -53,6 +53,20 @@ func CheckUpdatable(dir string) (Result, error) {
 	if err != nil {
 		return Result{Path: path}, err
 	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を読み込めません: %s: %w", path, err)
+	}
+
+	// **尋ねる前にキーの有無を見る。**
+	// 5問すべて答えさせたあとで「キーが無い」と落とすと、入力が全部捨てられる。
+	// 置き換える値はここでは使わないので、Complete() を満たすだけのダミーを渡す。
+	probe := Statuses{Dispatch: "x", Running: "x", Review: "x", Blocked: "x", Done: "x"}
+	if _, missing := applyStatuses(string(raw), probe); len(missing) > 0 {
+		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotFound, path, strings.Join(missing, " / "))
+	}
+
 	return Result{Path: path, Overwritten: true}, nil
 }
 
