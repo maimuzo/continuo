@@ -3169,6 +3169,18 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 > 「Claude Code で一度開いて承認しろ」と書いてはならない — **人間が実際に読むのは
 > doctor の画面ではなくこのコメントである。**
 >
+> **コメントを出す経路は、巡回の関門より前に置く。**アダプタは信頼の判定を
+> `Issue.Dispatchable` へ畳み込んで返すので、`dispatchCandidates` が
+> `if !issue.Dispatchable { continue }` で捨てると `preflight` を通らず、
+> **通知そのものが消える。**捨てる前に `preflight` を呼ぶこと。
+> **draft issue も `Dispatchable` が偽で届く**が、owner も repo も持たないので
+> 信頼の検査に掛けてはならない（`issue.Owner != ""` で分ける）。
+>
+> **この経路は `Dispatchable: false` で入るテストでしか守れない。**
+> `sampleIssue` は `Dispatchable: true` を返すので、それを使ったテストは関門を再現しない
+> （`test/internal/orchestrator/dispatch_test.go` の
+> `TestDispatch_アダプタが未信頼と判定した_issue_にもコメントを1回残す`）。
+>
 > **信頼の門番は `~/.claude.json` であって `trust.repositories` ではない。**
 > 巡回のループは `trust.repositories` を1バイトも読まない（読むのは `continuo trust` だけ）。
 > **だから「書いていないから取らない」と書くのは因果が逆である。**

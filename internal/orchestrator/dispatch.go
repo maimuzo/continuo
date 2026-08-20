@@ -56,6 +56,12 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			continue
 		}
 		if !issue.Dispatchable {
+			// **ここで捨てると preflight を通らないので、直し方が人間へ届かない**（設計 3-33）。
+			// preflight が自分で信頼を検査し、未信頼なら issue へコメントを1回だけ残す。
+			// **draft issue は owner も repo も持たない**ので、信頼の検査には掛けない。
+			if issue.Owner != "" {
+				o.preflight(ctx, issue)
+			}
 			continue
 		}
 		if !hasRequiredLabels(issue, o.cfg.Tracker.RequiredLabels) {

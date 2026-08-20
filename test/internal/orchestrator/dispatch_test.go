@@ -208,6 +208,56 @@ func TestDispatch_未信頼のリポジトリへのコメントはリポジト�
 	}
 }
 
+// TestDispatch_アダプタが未信頼と判定した_issue_にもコメントを1回残す は、
+// 本物のアダプタと同じ形（Dispatchable が偽）で届いた issue にも通知が届くことを確かめる。
+//
+// 目的: 設計 3-33 の「そのコメントの本文に直し方を書く。**人間が実際に読むのは
+// doctor の画面ではなくこのコメントである**」を守っていることを示す。
+// **本物のアダプタは信頼が無いと Issue.Dispatchable を偽にして返す**ので、
+// dispatchCandidates が印を付ける前に弾く。**そこで捨てると通知の経路が無くなる。**
+// 与える情報: Dispatchable が偽の issue が1件、巡回を3回。
+// 成功条件: コメントが1件だけ残り、dispatch は起きない。
+func TestDispatch_アダプタが未信頼と判定した_issue_にもコメントを1回残す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Untrusted: true})
+	issue := sampleIssue(190, "Ready")
+	// **本物のアダプタが信頼の判定結果をここに畳み込む**（internal/tracker/query.go）。
+	issue.Dispatchable = false
+	fx.Tracker.AddIssue(issue)
+
+	for i := 0; i < 3; i++ {
+		fx.Orc.Tick(context.Background())
+	}
+
+	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
+		t.Fatalf("未信頼のリポジトリの issue を dispatch している: %v", fx.Orc.RunningIdentifiers())
+	}
+	if got := len(fx.Tracker.CommentsOf("I_node190")); got != 1 {
+		t.Fatalf("未信頼の通知が %d 件ある（リポジトリにつき1回であるべき）", got)
+	}
+}
+
+// TestDispatch_draft_issue_は信頼の検査に掛けない は、
+// owner も repo も持たない issue で信頼を検査しにいかないことを確かめる。
+//
+// 目的: draft issue は Dispatchable が偽で届くが、**リポジトリを持たない**ので
+// 「信頼登録されていません」という通知は誤りである（設計 3-13）。
+// 与える情報: owner と repo が空で Dispatchable が偽の issue が1件、巡回を1回。
+// 成功条件: コメントが1件も出ず、落ちない。
+func TestDispatch_draft_issue_は信頼の検査に掛けない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Untrusted: true})
+	issue := sampleIssue(191, "Ready")
+	issue.Dispatchable = false
+	issue.Owner = ""
+	issue.Repo = ""
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+
+	if got := len(fx.Tracker.CommentsOf("I_node191")); got != 0 {
+		t.Fatalf("draft issue に信頼の通知を %d 件出している", got)
+	}
+}
+
 // TestDispatch_テンプレートに一覧に無い変数を書いたらその issue を失敗にする は、
 // 描画の失敗の扱いを確かめる。
 //
