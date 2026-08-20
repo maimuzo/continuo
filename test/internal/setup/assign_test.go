@@ -71,13 +71,14 @@ func TestAssign_5つの役割それぞれに選択肢が1つ割り当てられ�
 		t.Errorf("完了の割り当てが違う: %q（期待 %q）", st.Done, "Done")
 	}
 
-	// **役割の説明が先に出ていること。**Status 名で尋ねると、初見の利用者は
-	// 名前の似た選択肢を役割の意味と無関係に選ぶ。
-	if !strings.Contains(out, "continuo はここから issue を取ります") {
-		t.Errorf("着手待ちの役割の説明が画面に出ていない:\n%s", out)
+	// **設定のキー名と説明が両方出ていること。**Status 名で尋ねると、初見の利用者は
+	// 名前の似た選択肢を役割の意味と無関係に選ぶ。**キー名を出すのは、答えたあとに
+	// WORKFLOW.md のどの行が変わったかを自分で確かめられるようにするためである。**
+	if !strings.Contains(out, "dispatch_state: continuo が自動的に処理を開始する State は何番ですか?") {
+		t.Errorf("dispatch_state の質問が画面に出ていない:\n%s", out)
 	}
-	if !strings.Contains(out, "人間がここへ動かすと continuo が worktree と branch を片付けます") {
-		t.Errorf("完了の役割の説明が画面に出ていない:\n%s", out)
+	if !strings.Contains(out, "terminal_states: 人間がここへ動かすと continuo が worktree と branch を片付ける State は何番ですか?") {
+		t.Errorf("terminal_states の質問が画面に出ていない:\n%s", out)
 	}
 }
 
@@ -117,11 +118,11 @@ func TestAssign_同じ選択肢を2つの役割へ割り当てようとしたら
 	}
 
 	// **どの役割と衝突したかを出す。**出さないと、利用者はどれを選び直せばよいか分からない。
-	if !strings.Contains(out, "既に 着手待ち に割り当て済みです") {
-		t.Errorf("衝突した役割の名前が画面に出ていない:\n%s", out)
+	if !strings.Contains(out, "既に dispatch_state に割り当て済みです") {
+		t.Errorf("衝突した相手のキー名が画面に出ていない:\n%s", out)
 	}
-	// **同じ役割を尋ね直す。**作業中の説明が2回出ていることで確かめる。
-	askedRunning := strings.Count(out, "continuo は issue を取ったときにここへ動かします")
+	// **同じ役割を尋ね直す。**running_state の質問が2回出ていることで確かめる。
+	askedRunning := strings.Count(out, "running_state: continuo が処理を開始したときに書き込む State は何番ですか?")
 	if askedRunning != 2 {
 		t.Errorf("作業中を尋ねた回数が %d 回だった（期待 2 回）:\n%s", askedRunning, out)
 	}

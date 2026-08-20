@@ -271,24 +271,14 @@ const (
 // **役割の名前より説明が先に出る。**初見の利用者は「どの Status がどの役割か」を
 // 知らないので、Status の名前で尋ねても選べない（RUCM の判断11）。
 const (
-	// KeySetupRoleDispatchName は着手待ちの役割の名前に出る。
-	KeySetupRoleDispatchName Key = "setup.role.dispatch_name"
 	// KeySetupRoleDispatchDesc は着手待ちの役割の説明に出る。
 	KeySetupRoleDispatchDesc Key = "setup.role.dispatch_desc"
-	// KeySetupRoleRunningName は作業中の役割の名前に出る。
-	KeySetupRoleRunningName Key = "setup.role.running_name"
 	// KeySetupRoleRunningDesc は作業中の役割の説明に出る。
 	KeySetupRoleRunningDesc Key = "setup.role.running_desc"
-	// KeySetupRoleReviewName はレビュー待ちの役割の名前に出る。
-	KeySetupRoleReviewName Key = "setup.role.review_name"
 	// KeySetupRoleReviewDesc はレビュー待ちの役割の説明に出る。
 	KeySetupRoleReviewDesc Key = "setup.role.review_desc"
-	// KeySetupRoleBlockedName は保留の役割の名前に出る。
-	KeySetupRoleBlockedName Key = "setup.role.blocked_name"
 	// KeySetupRoleBlockedDesc は保留の役割の説明に出る。
 	KeySetupRoleBlockedDesc Key = "setup.role.blocked_desc"
-	// KeySetupRoleDoneName は完了の役割の名前に出る。
-	KeySetupRoleDoneName Key = "setup.role.done_name"
 	// KeySetupRoleDoneDesc は完了の役割の説明に出る。
 	KeySetupRoleDoneDesc Key = "setup.role.done_desc"
 )
@@ -630,15 +620,10 @@ var allKeys = []Key{
 	KeyCLIInitDetectCandidate,
 	KeyCLIInitDetectAdvice,
 	KeyCLIInitDetectPlaceholderNote,
-	KeySetupRoleDispatchName,
 	KeySetupRoleDispatchDesc,
-	KeySetupRoleRunningName,
 	KeySetupRoleRunningDesc,
-	KeySetupRoleReviewName,
 	KeySetupRoleReviewDesc,
-	KeySetupRoleBlockedName,
 	KeySetupRoleBlockedDesc,
-	KeySetupRoleDoneName,
 	KeySetupRoleDoneDesc,
 	KeySetupPromptOptionsHeader,
 	KeySetupPromptOptionLine,

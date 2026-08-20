@@ -134,7 +134,7 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 	for turn, role := range roleOrder {
 		for {
 			fmt.Fprintln(out)
-			fmt.Fprintln(out, i18n.T(i18n.KeySetupPromptAsk, turn+1, RoleCount, role.Description()))
+			fmt.Fprintln(out, i18n.T(i18n.KeySetupPromptAsk, turn+1, RoleCount, role.ConfigKey(), role.Description()))
 			fmt.Fprint(out, i18n.T(i18n.KeySetupPromptInput))
 
 			line, err := reader.read(ctx)
@@ -162,20 +162,20 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 			}
 			if n == noOptionInput {
 				fmt.Fprintln(out)
-				fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortNoOption, role.Name(), RoleCount))
+				fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortNoOption, role.ConfigKey(), RoleCount))
 				writeAddOptionRemedy(out)
 				return Assignment{}, ErrNoSuitableOption
 			}
 
 			idx := n - 1
 			if other := takenBy[idx]; other >= 0 {
-				fmt.Fprintln(out, i18n.T(i18n.KeySetupErrDuplicate, opts.Options[idx], Role(other).Name()))
+				fmt.Fprintln(out, i18n.T(i18n.KeySetupErrDuplicate, opts.Options[idx], Role(other).ConfigKey()))
 				continue
 			}
 
 			a.names[role] = opts.Options[idx]
 			takenBy[idx] = int(role)
-			fmt.Fprintln(out, i18n.T(i18n.KeySetupPromptAssigned, role.Name(), opts.Options[idx]))
+			fmt.Fprintln(out, i18n.T(i18n.KeySetupPromptAssigned, role.ConfigKey(), opts.Options[idx]))
 			break
 		}
 	}
@@ -208,7 +208,7 @@ func writeSummary(out io.Writer, a Assignment) {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryHeader, RoleCount))
 	for _, role := range roleOrder {
-		fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryLine, role.Name(), a.names[role]))
+		fmt.Fprintln(out, i18n.T(i18n.KeySetupSummaryLine, role.ConfigKey(), a.names[role]))
 	}
 }
 

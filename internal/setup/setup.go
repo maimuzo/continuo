@@ -45,13 +45,19 @@ const RoleCount = 5
 // ボード上の並びと同じ順に尋ねると、利用者は一覧を上から順に消化できる。
 var roleOrder = [RoleCount]Role{RoleDispatch, RoleRunning, RoleReview, RoleBlocked, RoleDone}
 
-// roleNameKeys は役割の名前の文言のキーである。添字は Role の値。
-var roleNameKeys = [RoleCount]i18n.Key{
-	RoleDispatch: i18n.KeySetupRoleDispatchName,
-	RoleRunning:  i18n.KeySetupRoleRunningName,
-	RoleReview:   i18n.KeySetupRoleReviewName,
-	RoleBlocked:  i18n.KeySetupRoleBlockedName,
-	RoleDone:     i18n.KeySetupRoleDoneName,
+// roleConfigKeys は、その役割が WORKFLOW.md のどのキーに書かれるかである。添字は Role の値。
+//
+// **画面には役割の呼び名ではなくこれを出す。**「着手待ち」と言われても、利用者は
+// WORKFLOW.md のどの行が変わるのかを知らない。**キー名なら、答えたあとに自分で確かめられる。**
+// **翻訳しない。**設定ファイルに書かれる文字列そのものなので、言語で変わってはならない。
+var roleConfigKeys = [RoleCount]string{
+	RoleDispatch: "dispatch_state",
+	RoleRunning:  "running_state",
+	RoleReview:   "status_signal_map.review",
+	// **保留だけは2つのキーに同じ値が入る。**両方書かないと、答えたあとに
+	// WORKFLOW.md を見た利用者が「もう1つはどこから来たのか」を追えない。
+	RoleBlocked: "status_signal_map.blocked / failure_state",
+	RoleDone:    "terminal_states",
 }
 
 // roleDescKeys は役割の説明の文言のキーである。添字は Role の値。
@@ -69,7 +75,8 @@ var roleDescKeys = [RoleCount]i18n.Key{
 
 // Roles は割り当てる役割を、尋ねる順に返す。
 //
-// 戻り値: 着手待ち・作業中・レビュー待ち・保留・完了の順に並んだ役割
+// 戻り値: dispatch_state・running_state・status_signal_map.review・
+// status_signal_map.blocked / failure_state・terminal_states の順に並んだ役割
 // （呼び出し側が書き換えても内部には影響しない）。
 func Roles() []Role {
 	out := make([]Role, RoleCount)
@@ -77,14 +84,16 @@ func Roles() []Role {
 	return out
 }
 
-// Name は役割の名前を、いま選ばれている言語で返す。
+// ConfigKey は、その役割が WORKFLOW.md のどのキーに書かれるかを返す。
 //
-// 戻り値: 「着手待ち」などの短い名前。範囲外の値なら空文字。
-func (r Role) Name() string {
+// **翻訳しない。**設定ファイルに書かれる文字列そのものである。
+//
+// 戻り値: `dispatch_state` などのキー名。範囲外の値なら空文字。
+func (r Role) ConfigKey() string {
 	if r < 0 || int(r) >= RoleCount {
 		return ""
 	}
-	return i18n.T(roleNameKeys[r])
+	return roleConfigKeys[r]
 }
 
 // Description は「continuo がその Status で何をするか」を、いま選ばれている言語で返す。

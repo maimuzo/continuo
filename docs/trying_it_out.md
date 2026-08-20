@@ -361,35 +361,35 @@ cd ~/continuo-try
 その役割に使える選択肢がボードに無い場合は 0 を入力してください。
 Ctrl+C で中断できます。中断したときは WORKFLOW.md を書き換えません。
 
-[1/5] continuo はここから issue を取ります。どれを使いますか
+[1/5] dispatch_state: continuo が自動的に処理を開始する State は何番ですか?
 番号> 2
-      → 着手待ち に "Ready" を割り当てました
+  → dispatch_state に "Ready" を割り当てました
 
-[2/5] continuo は issue を取ったときにここへ動かします。どれを使いますか
+[2/5] running_state: continuo が処理を開始したときに書き込む State は何番ですか?
 番号> 3
-      → 作業中 に "In Progress" を割り当てました
+  → running_state に "In Progress" を割り当てました
 
-[3/5] エージェントが終わったと表明したらここへ動かします。人間が見ます。どれを使いますか
+[3/5] status_signal_map.review: エージェントが作業を終えたと表明したときに書き込む State は何番ですか?
 番号> 5
-      → レビュー待ち に "In Review" を割り当てました
+  → status_signal_map.review に "In Review" を割り当てました
 
-[4/5] エージェントが判断を仰ぐとき、打ち切ったときにここへ動かします。どれを使いますか
+[4/5] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに書き込む State は何番ですか?
 番号> 4
-      → 保留 に "Blocked" を割り当てました
+  → status_signal_map.blocked / failure_state に "Blocked" を割り当てました
 
-[5/5] 人間がここへ動かすと continuo が worktree と branch を片付けます。どれを使いますか
+[5/5] terminal_states: 人間がここへ動かすと continuo が worktree と branch を片付ける State は何番ですか?
 番号> 6
-      → 完了 に "Done" を割り当てました
+  → terminal_states に "Done" を割り当てました
 
 5 個の役割の割り当ては次のとおりです。
-  着手待ち: "Ready"
-  作業中: "In Progress"
-  レビュー待ち: "In Review"
-  保留: "Blocked"
-  完了: "Done"
+  dispatch_state: "Ready"
+  running_state: "In Progress"
+  status_signal_map.review: "In Review"
+  status_signal_map.blocked / failure_state: "Blocked"
+  terminal_states: "Done"
 
 WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/WORKFLOW.md
-書き換えたのは次のキーだけです。ほかの行は1文字も変えていません。
+書き換えたキー:
   tracker.status_signal_map.review
   tracker.status_signal_map.blocked
   tracker.active_states
@@ -408,7 +408,7 @@ WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/W
 
 段3 で `workspace.root` と `agent.max_concurrent_agents` を書き換え、
 `trust.repositories` を1行だけ残してから段4 を叩いて、`diff` を取った結果。
-**変わったのは `Status` の行だけである**（この例では着手待ちに `Ice Box` を選んだ）。
+**変わったのは `Status` の行だけである**（この例では `dispatch_state` に `Ice Box` を選んだ）。
 
 ```diff
 -  active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
