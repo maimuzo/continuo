@@ -68,12 +68,14 @@ continuo doctor path/to/WORKFLOW.md
 Walk one issue from `Ready` to `Done` and watch it happen: [docs/trying_it_out.md](docs/trying_it_out.md).
 **No new board is created** — `continuo` attaches to the board you already have. It covers building,
 checking that the existing `Status` field carries the five options, assigning them with
-`continuo setup`, registering folder trust with `continuo trust`, and how to stop and clean up.
+`continuo setup`, registering folder trust with `continuo trust` (**which clones any repository
+that is missing locally**), and how to stop and clean up.
 **Step 8 spends real Claude Code quota**, so read the steps first.
 
 **1件の issue が `Ready` から `Done` まで通るのを実際に見る手順は [docs/trying_it_out.md](docs/trying_it_out.md) にあります。**
 **ボードは新しく作りません。**いま使っているボードにそのまま足して使います。
-ビルド・`Status` の確認・`continuo setup` での割り当て・`continuo trust` での信頼登録・止め方まで書いてあります。
+ビルド・`Status` の確認・`continuo setup` での割り当て・`continuo trust` での信頼登録（**手元に無いリポジトリは
+`ghq get` で取ってきます**）・止め方まで書いてあります。
 **段8 から実際に Claude Code が動いて枠を消費する**ので、先に読んでください。
 
 ## Documents / 資料
