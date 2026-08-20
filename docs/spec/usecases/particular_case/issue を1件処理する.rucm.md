@@ -38,7 +38,7 @@ BASIC FLOW:
 5. システムは先頭の issue に印を付ける。
 6. システムはボードの issue の Status に running_state の選択肢を書く。
 7. システムは workspace.root の下に issue の worktree を作る。
-8. システムは worktree を herdr の workspace として開く。
+8. システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。
 9. システムは Claude Code の設定ファイルを worktree の外に書く。
 10. システムは worktree の中に身元ファイルを書く。
 11. システムは herdr に workspace の pane の一覧を要求する。
@@ -169,7 +169,7 @@ flowchart TD
     B5["5. 先頭の issue に印を付ける"]
     B6["6. Status に running_state を書く"]
     B7["7. worktree を作る"]
-    B8["8. worktree を herdr の workspace として開く"]
+    B8["8. worktree の絶対パスを渡して herdr の workspace として開く"]
     B9["9. 設定ファイルを worktree の外に書く"]
     B10["10. 身元ファイルを書く"]
     B11["11. workspace の pane の一覧を要求する"]

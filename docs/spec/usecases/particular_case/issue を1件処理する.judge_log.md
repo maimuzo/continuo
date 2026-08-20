@@ -50,3 +50,4 @@
 | 38 | `無音の打ち切り` で worktree を残すこと | pane を閉じ、印とバックオフを残す | バックオフ中の issue を印から外すと30秒後の巡回で即座に拾い直され、バックオフが効かない | `docs/plans/continuo_design.md#3-25`（バックオフ中の issue も印に残す） | 95% |
 | 39 | 代替フローの POSTCONDITION の書き方 | 「Status」「pane」「worktree」「印」の4つの状態を毎回書く | この4つが、次の巡回の振る舞いを決める全部である。**どれかを書き落とすと、次に何が起きるかがテストから決められない** | `docs/plans/continuo_design.md#3-16`（落ちた段ごとに外側へ残るもの） | 85% |
 | 40 | 巡回の3本のリクエストを書かなかったこと | 候補の取得だけを書き、実行中の照合と worktree の照合は書かない | 実行中の照合と worktree の照合は「issue を1件処理する」の外側にある巡回の仕事である。**別のユースケース（`worktree と branch を片付ける`）が受け持つ** | `docs/plans/continuo_design.md#3-9` の手順7 | 80% |
+| 41 | ステップ8 で worktree の絶対パスを渡すと明記したこと | `worktree.open` には path だけを渡す。branch は渡さない | herdr は path と branch の**片方だけ**を受け付け、両方来ると `invalid_request: exactly one of path or branch is required` で弾く。**実機で全ての着手が落ちた**（2026-08-20）。テスト用herdr mock が branch を無視していたので、本物で叩くまで気づけなかった | `herdr worktree open` の実測、internal/workspace/prepare.go | 100% |

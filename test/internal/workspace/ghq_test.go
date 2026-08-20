@@ -79,3 +79,57 @@ func TestRunGhqList_cloneのパスを返す(t *testing.T) {
 		t.Fatalf("clone のパスが返っていない: %q", path)
 	}
 }
+
+// 目的: `ghq get` を実際に起動し、引数がそのまま渡ることを確認する（設計 3-22）。
+// 与える情報: 引数をファイルへ書き出すテスト用ghq mock。
+// 成功条件: エラーにならず、`get <owner>/<repo>` の形で呼ばれていること。
+func TestRunGhqGet_引数をそのまま渡して起動する(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "args.txt")
+	fakeGhq(t, "echo \"$@\" > "+out+"\nexit 0")
+
+	if err := workspace.RunGhqGet(context.Background(), "maimuzo", "koetsumugi"); err != nil {
+		t.Fatalf("取得に失敗した: %v", err)
+	}
+
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("テスト用ghq mock が引数を書き出していない: %v", err)
+	}
+	if got := strings.TrimSpace(string(raw)); got != "get maimuzo/koetsumugi" {
+		t.Fatalf("ghq へ渡した引数が違う: got %q, want %q", got, "get maimuzo/koetsumugi")
+	}
+}
+
+// 目的: `ghq get` が失敗したとき、標準エラー出力をエラー文に含めることを確認する。
+// **失敗の理由が消えると、人間は「取れませんでした」だけを見て原因を探せない。**
+// 与える情報: 標準エラーへ理由を出して終了コード 1 で終わるテスト用ghq mock。
+// 成功条件: エラーが返り、その文面に終了コードと標準エラーの内容が入っていること。
+func TestRunGhqGet_失敗したら理由をエラー文に含める(t *testing.T) {
+	fakeGhq(t, "echo 'repository not found' >&2\nexit 1")
+
+	err := workspace.RunGhqGet(context.Background(), "maimuzo", "no-such-repo")
+	if err == nil {
+		t.Fatal("失敗したのにエラーが返っていない")
+	}
+	if !strings.Contains(err.Error(), "repository not found") {
+		t.Errorf("標準エラーの内容がエラー文に入っていない: %v", err)
+	}
+	if !strings.Contains(err.Error(), "終了コード 1") {
+		t.Errorf("終了コードがエラー文に入っていない: %v", err)
+	}
+}
+
+// 目的: `ghq` が PATH に無いとき、起動できなかったと分かる文面になることを確認する。
+// 与える情報: PATH を空にした状態。
+// 成功条件: エラーが返り、「起動できません」を含むこと。
+func TestRunGhqGet_ghqが無ければ起動できないと言う(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	err := workspace.RunGhqGet(context.Background(), "maimuzo", "koetsumugi")
+	if err == nil {
+		t.Fatal("ghq が無いのにエラーが返っていない")
+	}
+	if !strings.Contains(err.Error(), "起動できません") {
+		t.Errorf("起動できなかったことが分かる文面になっていない: %v", err)
+	}
+}

@@ -56,6 +56,12 @@ func TestPrepare_新規に作りherdrにはworktree_openを呼ぶ(t *testing.T) 
 	if params["path"] != result.Path {
 		t.Fatalf("worktree.open に渡した path が違う: got %v, want %q", params["path"], result.Path)
 	}
+	// **branch は渡してはならない。**herdr は path と branch の片方だけを受け付け、
+	// 両方来ると `invalid_request: exactly one of path or branch is required` で弾く
+	// （実測: 2026-08-20。実機で着手が全部落ちた）。
+	if _, ok := params["branch"]; ok {
+		t.Fatalf("worktree.open に branch を送っている（path と片方だけにすること）: %v", params["branch"])
+	}
 	if params["focus"] != false {
 		t.Fatalf("worktree.open に focus=false を送っていない: got %v", params["focus"])
 	}
