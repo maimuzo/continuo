@@ -366,23 +366,23 @@ cd ~/continuo-try
 その役割に使える選択肢がボードに無い場合は 0 を入力してください。
 Ctrl+C で中断できます。中断したときは WORKFLOW.md を書き換えません。
 
-[1/5] dispatch_state: continuo が自動的に処理を開始する State は何番ですか?
+[1/5] dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?
 番号> 2
   → dispatch_state に "Ready" を割り当てました
 
-[2/5] running_state: continuo が処理を開始したときに移動する State は何番ですか?
+[2/5] running_state: continuo が処理を開始したときに移動する Status は何番ですか?
 番号> 3
   → running_state に "In Progress" を割り当てました
 
-[3/5] status_signal_map.review: エージェントが作業を完了したときに移動する State は何番ですか?
+[3/5] status_signal_map.review: エージェントが作業を完了したときに移動する Status は何番ですか?
 番号> 5
   → status_signal_map.review に "In Review" を割り当てました
 
-[4/5] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する State は何番ですか?
+[4/5] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する Status は何番ですか?
 番号> 4
   → status_signal_map.blocked / failure_state に "Blocked" を割り当てました
 
-[5/5] terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する State は何番ですか?
+[5/5] terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?
 番号> 6
   → terminal_states に "Done" を割り当てました
 
@@ -609,7 +609,7 @@ cd ~/continuo-try
 書き込む先: ~/.claude.json
 
 ! demo/sample-a（未信頼。登録の対象）
-    対象リポジトリ: ~/ghq/github.com/demo/sample-a
+    登録するパス: ~/ghq/github.com/demo/sample-a
     .claude/settings.json:
       permissions.allow:
         - Bash(rm -rf:*)
@@ -623,7 +623,7 @@ cd ~/continuo-try
       - payments  （node server.js --live）
 
 ! demo/sample-b（未信頼。登録の対象）
-    対象リポジトリ: ~/ghq/github.com/demo/sample-b
+    登録するパス: ~/ghq/github.com/demo/sample-b
     .claude/settings.json: ありません
     .mcp.json: ありません
 
@@ -643,7 +643,7 @@ cd ~/continuo-try
 書き込む先: ~/.claude.json
 
 ✓ <ACCOUNT>/<REPO-1>（既に信頼済み。触りません）
-    対象リポジトリ: ~/Sources/github/<REPO-1>
+    登録するパス: ~/Sources/github/<REPO-1>
     .claude/settings.json:
       permissions.allow: なし
       permissions.additionalDirectories: なし
@@ -654,7 +654,7 @@ cd ~/continuo-try
 --dry-run なので何も書き換えていません。登録するなら --dry-run を外して実行してください。
 ```
 
-> **`対象リポジトリ` に出るパスは、`ghq list -p -e` が返したものとは限らない。**
+> **`登録するパス` は、`ghq list -p -e` が返したものとは限らない。**
 > `git rev-parse --show-toplevel` の出力を使うので、`ghq` の置き場所が symlink なら
 > 実体側のパスが出る。**`~/.claude.json` に登録されるのはこのパスである。**
 

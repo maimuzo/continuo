@@ -551,6 +551,9 @@ func runTrust(args []string, stdout, stderr io.Writer) int {
 		opts.OnFetch = func(repository string) {
 			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLITrustFetchingClone, repository))
 		}
+		opts.OnFetched = func(clonePath string) {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLITrustFetchedClone, clonePath))
+		}
 	}
 	report, err := trust.Plan(context.Background(), opts)
 	if err != nil {

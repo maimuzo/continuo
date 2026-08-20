@@ -72,7 +72,7 @@ func writeEntry(b *strings.Builder, e Entry) {
 	default:
 		b.WriteString(fmt.Sprintf("! %s（未信頼。登録の対象）\n", e.Repository))
 	}
-	b.WriteString(fmt.Sprintf("    対象リポジトリ: %s\n", e.TrustKey))
+	b.WriteString(fmt.Sprintf("    登録するパス: %s\n", e.TrustKey))
 
 	req := e.Requirements
 	if !req.SettingsFound {

@@ -391,6 +391,8 @@ const (
 	KeyCLITrustErrTooManyPositional Key = "cli.trust.err_too_many_positional"
 	// KeyCLITrustFetchingClone は clone を取りに行く直前に出る。
 	KeyCLITrustFetchingClone Key = "cli.trust.fetching_clone"
+	// KeyCLITrustFetchedClone は clone を取り終えた直後に出る。
+	KeyCLITrustFetchedClone Key = "cli.trust.fetched_clone"
 	// KeyCLITrustErrHomeDir はホームディレクトリを引けなかったときに出る。
 	KeyCLITrustErrHomeDir Key = "cli.trust.err_home_dir"
 	// KeyCLITrustErrPlan は登録の対象を調べられなかったときに出る。
@@ -676,6 +678,7 @@ var allKeys = []Key{
 	KeyCLITrustFlagDryRun,
 	KeyCLITrustErrTooManyPositional,
 	KeyCLITrustFetchingClone,
+	KeyCLITrustFetchedClone,
 	KeyCLITrustErrHomeDir,
 	KeyCLITrustErrPlan,
 	KeyCLITrustErrWriteRequirements,

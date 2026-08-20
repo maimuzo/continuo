@@ -3048,15 +3048,15 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 
 | 順 | 画面に出す文言 | WORKFLOW.md に書くキー |
 | --- | --- | --- |
-| 1 | `dispatch_state: continuo が自動的に処理を開始する State は何番ですか?` | `dispatch_state`、`active_states` の1つめ |
-| 2 | `running_state: continuo が処理を開始したときに移動する State は何番ですか?` | `running_state`、`active_states` の2つめ |
-| 3 | `status_signal_map.review: エージェントが作業を完了したときに移動する State は何番ですか?` | `status_signal_map.review` |
-| 4 | `status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する State は何番ですか?` | `failure_state`、`status_signal_map.blocked` |
-| 5 | `terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する State は何番ですか?` | `terminal_states` の1つめ |
+| 1 | `dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?` | `dispatch_state`、`active_states` の1つめ |
+| 2 | `running_state: continuo が処理を開始したときに移動する Status は何番ですか?` | `running_state`、`active_states` の2つめ |
+| 3 | `status_signal_map.review: エージェントが作業を完了したときに移動する Status は何番ですか?` | `status_signal_map.review` |
+| 4 | `status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する Status は何番ですか?` | `failure_state`、`status_signal_map.blocked` |
+| 5 | `terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?` | `terminal_states` の1つめ |
 
 #### 尋ねるときは設定のキー名を出す。役割の呼び名を使わない
 
-**言いたいこと。**`[1/5] dispatch_state: continuo が自動的に処理を開始する State は何番ですか?`
+**言いたいこと。**`[1/5] dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?`
 の形で尋ねる。**「着手待ち」のような呼び名は使わない。**
 
 **なぜキー名か。**答えたあとに `WORKFLOW.md` を開いて、**どの行が変わったのかを自分で確かめられる。**

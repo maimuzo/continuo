@@ -118,11 +118,11 @@ POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当�
 
 | 順 | 画面に出す文言 | WORKFLOW.md に書くキー |
 | --- | --- | --- |
-| 1 | `dispatch_state: continuo が自動的に処理を開始する State は何番ですか?` | `dispatch_state`、`active_states` の1つめ |
-| 2 | `running_state: continuo が処理を開始したときに移動する State は何番ですか?` | `running_state`、`active_states` の2つめ |
-| 3 | `status_signal_map.review: エージェントが作業を完了したときに移動する State は何番ですか?` | `status_signal_map.review` |
-| 4 | `status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する State は何番ですか?` | `failure_state`、`status_signal_map.blocked` |
-| 5 | `terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する State は何番ですか?` | `terminal_states` の1つめ |
+| 1 | `dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?` | `dispatch_state`、`active_states` の1つめ |
+| 2 | `running_state: continuo が処理を開始したときに移動する Status は何番ですか?` | `running_state`、`active_states` の2つめ |
+| 3 | `status_signal_map.review: エージェントが作業を完了したときに移動する Status は何番ですか?` | `status_signal_map.review` |
+| 4 | `status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する Status は何番ですか?` | `failure_state`、`status_signal_map.blocked` |
+| 5 | `terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?` | `terminal_states` の1つめ |
 
 **番号 `0` は「この役割に使える選択肢がボードに無い」を表す。**5つの役割は continuo の動作に全部必要なので、
 `0` が入ったら割り当てを打ち切る（`該当する選択肢が無い` のフロー）。

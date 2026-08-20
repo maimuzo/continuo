@@ -90,6 +90,11 @@ type Options struct {
 	FetchClone CloneFetcher
 	// OnFetch は clone を取りに行く直前に呼ばれる（画面へ知らせるため）。nil なら何もしない。
 	OnFetch func(repository string)
+	// OnFetched は clone を取り終えた直後に呼ばれる。nil なら何もしない。
+	//
+	// **取得は最長10分かかる。**始めたことだけを知らせて終わりを知らせないと、
+	// 利用者は固まったのか進んでいるのかを判断できない。
+	OnFetched func(clonePath string)
 }
 
 // CloneFetcher は clone が無いときに取ってくる関数である。
@@ -184,7 +189,7 @@ func Plan(ctx context.Context, opts Options) (*Report, error) {
 	}
 	for _, name := range opts.Repositories {
 		report.Entries = append(report.Entries,
-			inspect(ctx, name, opts.HomeDir, resolveClone, resolveKey, timeout, opts.FetchClone, opts.OnFetch))
+			inspect(ctx, name, opts.HomeDir, resolveClone, resolveKey, timeout, opts.FetchClone, opts.OnFetch, opts.OnFetched))
 	}
 	return report, nil
 }
@@ -199,8 +204,9 @@ func Plan(ctx context.Context, opts Options) (*Report, error) {
 // timeout: 外部コマンド1回あたりの制限時間。
 // fetchClone: clone が無いときに取ってくる関数。nil なら取りに行かない。
 // onFetch: 取りに行く直前に呼ぶ関数。nil なら何もしない。
+// onFetched: 取り終えた直後に呼ぶ関数。nil なら何もしない。
 // 戻り値: 調べた結果。
-func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolver, resolveKey KeyResolver, timeout time.Duration, fetchClone CloneFetcher, onFetch func(string)) Entry {
+func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolver, resolveKey KeyResolver, timeout time.Duration, fetchClone CloneFetcher, onFetch func(string), onFetched func(string)) Entry {
 	e := Entry{Repository: name}
 
 	owner, repo, ok := strings.Cut(name, "/")
@@ -241,6 +247,9 @@ func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolv
 			e.Problem = fmt.Sprintf(
 				"clone を取ったのにパスを引けませんでした（`ghq list -p -e %s` の出力が空）", name)
 			return e
+		}
+		if onFetched != nil {
+			onFetched(clonePath)
 		}
 	}
 	e.ClonePath = clonePath

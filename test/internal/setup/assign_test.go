@@ -74,10 +74,10 @@ func TestAssign_5つの役割それぞれに選択肢が1つ割り当てられ�
 	// **設定のキー名と説明が両方出ていること。**Status 名で尋ねると、初見の利用者は
 	// 名前の似た選択肢を役割の意味と無関係に選ぶ。**キー名を出すのは、答えたあとに
 	// WORKFLOW.md のどの行が変わったかを自分で確かめられるようにするためである。**
-	if !strings.Contains(out, "dispatch_state: continuo が自動的に処理を開始する State は何番ですか?") {
+	if !strings.Contains(out, "dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?") {
 		t.Errorf("dispatch_state の質問が画面に出ていない:\n%s", out)
 	}
-	if !strings.Contains(out, "terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する State は何番ですか?") {
+	if !strings.Contains(out, "terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?") {
 		t.Errorf("terminal_states の質問が画面に出ていない:\n%s", out)
 	}
 }
@@ -122,7 +122,7 @@ func TestAssign_同じ選択肢を2つの役割へ割り当てようとしたら
 		t.Errorf("衝突した相手のキー名が画面に出ていない:\n%s", out)
 	}
 	// **同じ役割を尋ね直す。**running_state の質問が2回出ていることで確かめる。
-	askedRunning := strings.Count(out, "running_state: continuo が処理を開始したときに移動する State は何番ですか?")
+	askedRunning := strings.Count(out, "running_state: continuo が処理を開始したときに移動する Status は何番ですか?")
 	if askedRunning != 2 {
 		t.Errorf("作業中を尋ねた回数が %d 回だった（期待 2 回）:\n%s", askedRunning, out)
 	}
