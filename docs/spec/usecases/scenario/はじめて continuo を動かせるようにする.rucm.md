@@ -41,40 +41,34 @@ BASIC FLOW:
 4. IF 利用者が continuo に見張らせるボードを持っていない THEN
 5.   INCLUDE USE CASE ボードを新規に用意する
 6.   INCLUDE USE CASE 設定ファイルを作る
-7.   利用者はシステムに WORKFLOW.md の status_field の書き換えを要求する。
-8.   システムは WORKFLOW.md の status_field の値に continuo Status を書く。
-9. ELSE
-10.   INCLUDE USE CASE 既存のボードの Status を割り当てる
-11. ENDIF
-12. 利用者はシステムに対象リポジトリの clone の取得を要求する。
-13. システムは ghq の置き場所に対象リポジトリの clone を作る。
-14. 利用者はシステムに対象リポジトリへの issue の作成を要求する。
-15. システムは対象リポジトリに issue を作る。
-16. システムは利用者に issue の URL を応答する。
-17. 利用者はシステムに issue のボードへの追加を要求する。
-18. システムはボードに issue の item を作る。
-19. 利用者はシステムに issue の Status の dispatch_state への変更を要求する。
-20. システムはボードの issue の Status に dispatch_state の選択肢を書く。
-21. INCLUDE USE CASE 対象リポジトリを信頼登録する
-22. INCLUDE USE CASE 前提が揃っているかを検査する
-23. システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。
-24. 利用者はシステムに continuo の常駐の開始を要求する。
-25. システムは WORKFLOW.md を読む。
-26. システムは実行時ディレクトリのロックファイルに flock を取る。
-27. システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。
-28. システムはボードから dispatch_state の issue の一覧を取る。
-29. システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。
-30. システムは最初の issue を実行中の一覧に入れる。
-31. システムはボードの最初の issue の Status に running_state の選択肢を書く。
-32. システムは workspace.root の下に最初の issue の worktree を作る。
-33. システムは worktree を herdr の workspace として開く。
-34. システムは worktree の中に身元ファイルを書く。
-35. システムは herdr に workspace の pane の一覧を要求する。
-36. システムは pane の label に最初の issue の URL を書く。
-37. システムは pane で Claude Code を起動する。
-38. システムは VALIDATES THAT Claude Code の agent_status が idle または done である。
-39. システムは Claude Code に1回目の turn の本文を送る。
-40. システムは利用者に最初の issue の run の開始をログに応答する。
+7.   利用者は WORKFLOW.md の status_field に continuo Status を書く。
+8. ELSE
+9.   INCLUDE USE CASE 既存のボードの Status を割り当てる
+10. ENDIF
+11. 利用者は ghq の置き場所に対象リポジトリの clone を作る。
+12. 利用者は対象リポジトリに issue を作る。
+13. 利用者はボードに issue の item を作る。
+14. 利用者はボードの issue の Status に dispatch_state の選択肢を書く。
+15. INCLUDE USE CASE 対象リポジトリを信頼登録する
+16. INCLUDE USE CASE 前提が揃っているかを検査する
+17. システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。
+18. 利用者はシステムに continuo の常駐の開始を要求する。
+19. システムは WORKFLOW.md を読む。
+20. システムは実行時ディレクトリのロックファイルに flock を取る。
+21. システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。
+22. システムはボードから dispatch_state の issue の一覧を取る。
+23. システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。
+24. システムは最初の issue を実行中の一覧に入れる。
+25. システムはボードの最初の issue の Status に running_state の選択肢を書く。
+26. システムは workspace.root の下に最初の issue の worktree を作る。
+27. システムは worktree を herdr の workspace として開く。
+28. システムは worktree の中に身元ファイルを書く。
+29. システムは herdr に workspace の pane の一覧を要求する。
+30. システムは pane の label に最初の issue の URL を書く。
+31. システムは pane で Claude Code を起動する。
+32. システムは VALIDATES THAT Claude Code の agent_status が idle または done である。
+33. システムは Claude Code に1回目の turn の本文を送る。
+34. システムは利用者に最初の issue の run の開始をログに応答する。
 POSTCONDITION: continuo が常駐している。最初の issue の Status は running_state の選択肢である。最初の issue の worktree が workspace.root の下にある。worktree の中に身元ファイルがある。herdr の pane で Claude Code が動いている。1回目の turn の本文が Claude Code に届いている。
 
 SPECIFIC ALTERNATIVE FLOW Goの版が古い:
@@ -85,21 +79,21 @@ RFS BASIC FLOW 2
 POSTCONDITION: continuo の実行ファイルは書き出されていない。Go の版の要件が利用者に表示されている。
 
 SPECIFIC ALTERNATIVE FLOW 前提の不足:
-RFS BASIC FLOW 23
+RFS BASIC FLOW 17
 1. システムは利用者に ✗ が付いた見出し語と直し方を応答する。
 2. 利用者は ✗ が付いた見出し語の直し方に従って前提を揃える。
-3. RESUME STEP 22
+3. RESUME STEP 16
 POSTCONDITION: continuo は常駐していない。✗ が付いた見出し語と直し方が利用者に表示されている。最初の issue の Status は dispatch_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 選択肢名の不一致:
-RFS BASIC FLOW 27
+RFS BASIC FLOW 21
 1. システムは利用者に設定の選択肢名とボードの選択肢名の食い違いを応答する。
 2. システムは常駐を始めずに終了する。
 3. ABORT
 POSTCONDITION: continuo は常駐していない。最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。
 
 SPECIFIC ALTERNATIVE FLOW 未信頼のリポジトリ:
-RFS BASIC FLOW 29
+RFS BASIC FLOW 23
 1. システムは最初の issue を dispatch の対象から外す。
 2. システムは最初の issue に信頼登録の承認を促すコメントを1件書く。
 3. システムは最初の issue の対象リポジトリを通知済みとして記録する。
@@ -107,14 +101,14 @@ RFS BASIC FLOW 29
 POSTCONDITION: 最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。最初の issue に信頼登録の承認を促すコメントが1件ある。
 
 SPECIFIC ALTERNATIVE FLOW 確認の画面が出ている:
-RFS BASIC FLOW 38
+RFS BASIC FLOW 32
 1. システムは pane に esc のキー入力を送る。
 2. システムはボードの最初の issue の Status に failure_state の選択肢を書く。
 3. ABORT
 POSTCONDITION: 最初の issue の Status は failure_state の選択肢である。1回目の turn の本文は Claude Code に届いていない。worktree は workspace.root の下に残っている。
 
 GLOBAL ALTERNATIVE FLOW 常駐の中断:
-BRANCH FROM BASIC FLOW 34
+BRANCH FROM BASIC FLOW 28
 WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合
 1. システムはボードの巡回を止める。
 2. システムは hook を受ける socket を閉じる。
@@ -134,51 +128,45 @@ flowchart TD
     S3 --> S4{"4. IF 見張らせるボードを持っていない"}
     S4 -- 真 --> S5[["5. INCLUDE ボードを新規に用意する"]]
     S5 --> S6[["6. INCLUDE 設定ファイルを作る"]]
-    S6 --> S7["7. 利用者: status_field の書き換えを要求"]
-    S7 --> S8["8. status_field に continuo Status を書く"]
-    S4 -- 偽 --> S10[["10. INCLUDE 既存のボードの Status を割り当てる"]]
-    S8 --> S11["11. ENDIF"]
-    S10 --> S11
-    S11 --> S12["12. 利用者: clone の取得を要求"]
-    S12 --> S13["13. ghq の置き場所に clone を作る"]
-    S13 --> S14["14. 利用者: issue の作成を要求"]
-    S14 --> S15["15. 対象リポジトリに issue を作る"]
-    S15 --> S16["16. issue の URL を応答する"]
-    S16 --> S17["17. 利用者: issue のボードへの追加を要求"]
-    S17 --> S18["18. ボードに issue の item を作る"]
-    S18 --> S19["19. 利用者: Status の dispatch_state への変更を要求"]
-    S19 --> S20["20. Status に dispatch_state を書く"]
-    S20 --> S21[["21. INCLUDE 対象リポジトリを信頼登録する"]]
-    S21 --> S22[["22. INCLUDE 前提が揃っているかを検査する"]]
-    S22 --> S23{"23. VALIDATES THAT 7件の見出し語に ✗ が1件もない"}
-    S23 -- 偽 --> A2["前提の不足: ✗ の見出し語と直し方を応答"]
+    S6 --> S7["7. 利用者: WORKFLOW.md の status_field に continuo Status を書く"]
+    S4 -- 偽 --> S9[["9. INCLUDE 既存のボードの Status を割り当てる"]]
+    S7 --> S10["10. ENDIF"]
+    S9 --> S10
+    S10 --> S11["11. 利用者: ghq の置き場所に対象リポジトリの clone を作る"]
+    S11 --> S12["12. 利用者: 対象リポジトリに issue を作る"]
+    S12 --> S13["13. 利用者: ボードに issue の item を作る"]
+    S13 --> S14["14. 利用者: ボードの issue の Status に dispatch_state を書く"]
+    S14 --> S15[["15. INCLUDE 対象リポジトリを信頼登録する"]]
+    S15 --> S16[["16. INCLUDE 前提が揃っているかを検査する"]]
+    S16 --> S17{"17. VALIDATES THAT 7件の見出し語に ✗ が1件もない"}
+    S17 -- 偽 --> A2["前提の不足: ✗ の見出し語と直し方を応答"]
     A2 --> A2b["利用者が前提を揃える"]
-    A2b --> S22
-    S23 -- 真 --> S24["24. 利用者: 常駐の開始を要求"]
-    S24 --> S25["25. WORKFLOW.md を読む"]
-    S25 --> S26["26. ロックファイルに flock を取る"]
-    S26 --> S27{"27. VALIDATES THAT active_states の選択肢名がボードにある"}
-    S27 -- 偽 --> A3["選択肢名の不一致: 食い違いを応答"]
+    A2b --> S16
+    S17 -- 真 --> S18["18. 利用者: 常駐の開始を要求"]
+    S18 --> S19["19. WORKFLOW.md を読む"]
+    S19 --> S20["20. ロックファイルに flock を取る"]
+    S20 --> S21{"21. VALIDATES THAT active_states の選択肢名がボードにある"}
+    S21 -- 偽 --> A3["選択肢名の不一致: 食い違いを応答"]
     A3 --> A3E(["ABORT"])
-    S27 -- 真 --> S28["28. dispatch_state の issue の一覧を取る"]
-    S28 --> S29{"29. VALIDATES THAT 対象リポジトリが信頼登録されている"}
-    S29 -- 偽 --> A4["未信頼のリポジトリ: dispatch から外しコメントを1件書く"]
+    S21 -- 真 --> S22["22. dispatch_state の issue の一覧を取る"]
+    S22 --> S23{"23. VALIDATES THAT 対象リポジトリが信頼登録されている"}
+    S23 -- 偽 --> A4["未信頼のリポジトリ: dispatch から外しコメントを1件書く"]
     A4 --> A4E(["ABORT"])
-    S29 -- 真 --> S30["30. 実行中の一覧に入れる"]
-    S30 --> S31["31. Status に running_state を書く"]
-    S31 --> S32["32. worktree を作る"]
-    S32 --> S33["33. herdr の workspace として開く"]
-    S33 --> S34["34. 身元ファイルを書く"]
-    S34 --> S35["35. workspace の pane の一覧を要求する"]
-    S35 --> S36["36. pane の label に issue の URL を書く"]
-    S36 --> S37["37. pane で Claude Code を起動する"]
-    S37 --> S38{"38. VALIDATES THAT agent_status が idle または done"}
-    S38 -- 偽 --> A5["確認の画面が出ている: esc を送り failure_state を書く"]
+    S23 -- 真 --> S24["24. 実行中の一覧に入れる"]
+    S24 --> S25["25. Status に running_state を書く"]
+    S25 --> S26["26. worktree を作る"]
+    S26 --> S27["27. herdr の workspace として開く"]
+    S27 --> S28["28. 身元ファイルを書く"]
+    S28 --> S29["29. workspace の pane の一覧を要求する"]
+    S29 --> S30["30. pane の label に issue の URL を書く"]
+    S30 --> S31["31. pane で Claude Code を起動する"]
+    S31 --> S32{"32. VALIDATES THAT agent_status が idle または done"}
+    S32 -- 偽 --> A5["確認の画面が出ている: esc を送り failure_state を書く"]
     A5 --> A5E(["ABORT"])
-    S38 -- 真 --> S39["39. 1回目の turn の本文を送る"]
-    S39 --> S40["40. run の開始をログに応答する"]
-    S40 --> END(["POSTCONDITION: 最初の issue が動いている"])
-    S34 -. "常駐の中断: WHEN Ctrl+C を入力する場合" .-> G1["巡回を止め socket を閉じ pane を閉じずに終了"]
+    S32 -- 真 --> S33["33. 1回目の turn の本文を送る"]
+    S33 --> S34["34. run の開始をログに応答する"]
+    S34 --> END(["POSTCONDITION: 最初の issue が動いている"])
+    S28 -. "常駐の中断: WHEN Ctrl+C を入力する場合" .-> G1["巡回を止め socket を閉じ pane を閉じずに終了"]
     G1 --> G1E(["ABORT"])
 ```
 
@@ -193,60 +181,55 @@ sequenceDiagram
     participant H as herdr
     participant CC as Claude Code
 
-    U->>S: continuo の実行ファイルのビルドを要求する
-    S->>S: Go の版が 1.26 以上であることを検証する
-    S-->>U: continuo の実行ファイルを書き出す
+    U->>S: 1. continuo の実行ファイルのビルドを要求する
+    S->>S: 2. Go の版が 1.26 以上であることを検証する
+    S-->>U: 3. continuo の実行ファイルを書き出す
 
-    alt 見張らせるボードを持っていない
-        U->>S: ボードを新規に用意する（INCLUDE）
+    alt 4. 見張らせるボードを持っていない
+        U->>S: 5. ボードを新規に用意する（INCLUDE）
         S->>GH: 新しいボードと continuo Status フィールドの作成を要求する
         GH-->>S: 新しいボードの番号を応答する
-        U->>S: 設定ファイルを作る（INCLUDE）
+        U->>S: 6. 設定ファイルを作る（INCLUDE）
         S-->>U: WORKFLOW.md の絶対パスを応答する
-        U->>S: status_field の書き換えを要求する
-        S->>S: status_field に continuo Status を書く
-    else 既にボードを持っている
-        U->>S: 既存のボードの Status を割り当てる（INCLUDE）
+        U->>U: 7. WORKFLOW.md の status_field に continuo Status を書く
+    else 8. 既にボードを持っている
+        U->>S: 9. 既存のボードの Status を割り当てる（INCLUDE）
         S->>GH: Status フィールドの選択肢の一覧を要求する
         GH-->>S: 選択肢の一覧を応答する
         S-->>U: 5つの役割の割り当ての一覧を応答する
     end
 
-    U->>S: 対象リポジトリの clone の取得を要求する
-    S->>Q: clone の作成を要求する
-    Q-->>S: clone の絶対パスを応答する
-    U->>S: 対象リポジトリへの issue の作成を要求する
-    S->>GH: issue の作成を要求する
-    GH-->>S: issue の URL を応答する
-    S-->>U: issue の URL を応答する
-    U->>S: issue のボードへの追加を要求する
-    S->>GH: ボードへの item の作成を要求する
-    U->>S: Status の dispatch_state への変更を要求する
-    S->>GH: Status への dispatch_state の書き込みを要求する
+    U->>Q: 11. ghq の置き場所に対象リポジトリの clone を作る
+    U->>GH: 12. 対象リポジトリに issue を作る
+    U->>GH: 13. ボードに issue の item を作る
+    U->>GH: 14. ボードの issue の Status に dispatch_state の選択肢を書く
 
-    U->>S: 対象リポジトリを信頼登録する（INCLUDE）
+    U->>S: 15. 対象リポジトリを信頼登録する（INCLUDE）
     U->>CC: clone のディレクトリで信頼確認を承認する
-    U->>S: 前提が揃っているかを検査する（INCLUDE）
+    U->>S: 16. 前提が揃っているかを検査する（INCLUDE）
     S-->>U: 7件の見出し語と記号と直し方を応答する
-    S->>S: 7件の見出し語に ✗ が1件もないことを検証する
+    S->>S: 17. 7件の見出し語に ✗ が1件もないことを検証する
 
-    U->>S: continuo の常駐の開始を要求する
-    S->>S: WORKFLOW.md を読み flock を取る
-    S->>GH: active_states の選択肢名の照合を要求する
+    U->>S: 18. continuo の常駐の開始を要求する
+    S->>S: 19. WORKFLOW.md を読む
+    S->>S: 20. ロックファイルに flock を取る
+    S->>GH: 21. active_states の選択肢名の照合を要求する
     GH-->>S: Status フィールドの選択肢を応答する
-    S->>GH: dispatch_state の issue の一覧を要求する
+    S->>GH: 22. dispatch_state の issue の一覧を要求する
     GH-->>S: 最初の issue を応答する
-    S->>S: 対象リポジトリが信頼登録されていることを検証する
-    S->>S: 最初の issue を実行中の一覧に入れる
-    S->>GH: Status への running_state の書き込みを要求する
-    S->>S: worktree を作り身元ファイルを書く
-    S->>H: worktree の workspace としての open を要求する
-    H-->>S: workspace の pane を応答する
-    S->>H: pane の label への issue の URL の書き込みを要求する
-    S->>H: pane での Claude Code の起動を要求する
+    S->>S: 23. 対象リポジトリが信頼登録されていることを検証する
+    S->>S: 24. 最初の issue を実行中の一覧に入れる
+    S->>GH: 25. Status への running_state の書き込みを要求する
+    S->>S: 26. workspace.root の下に worktree を作る
+    S->>H: 27. worktree の workspace としての open を要求する
+    S->>S: 28. worktree の中に身元ファイルを書く
+    S->>H: 29. workspace の pane の一覧を要求する
+    H-->>S: pane の一覧を応答する
+    S->>H: 30. pane の label への issue の URL の書き込みを要求する
+    S->>H: 31. pane での Claude Code の起動を要求する
     H->>CC: Claude Code を起動する
     H-->>S: agent_status を応答する
-    S->>S: agent_status が idle または done であることを検証する
-    S->>CC: 1回目の turn の本文を送る
-    S-->>U: 最初の issue の run の開始をログに応答する
+    S->>S: 32. agent_status が idle または done であることを検証する
+    S->>CC: 33. 1回目の turn の本文を送る
+    S-->>U: 34. 最初の issue の run の開始をログに応答する
 ```

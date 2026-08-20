@@ -21,10 +21,10 @@ below says which steps were actually executed while writing this document and wh
 
 | 段 | 叩いたか | 補足 |
 | --- | --- | --- |
-| 段1 ビルドする | **叩いた** | `go build` と、4つのサブコマンドの `--help` |
+| 段1 ビルドする | **叩いた** | `go build` と、5つのサブコマンドの `--help` |
 | 段2 使うボードを確かめる | **叩いた（読むだけ）** | `gh project list` と `gh project field-list`。**本番のボードには読み取りしか行っていない** |
 | 段3 設定を置く | **叩いた** | 自動で埋まるとき・`--owner` / `--project` を渡すとき・`gh` が無いとき・既にあるときの4通り |
-| 段4 Status の割り当てを合わせる | **叩けない** | **`continuo setup` はまだ実装されていない。**手で書き換える道だけを載せてある |
+| 段4 Status の割り当てを合わせる | **叩いた** | `continuo setup` を本番のボードに対して実行した（読み取りのみ） |
 | 段5 clone して信頼を登録する | **叩いた** | `continuo trust --dry-run` は実物の `~/.claude.json` に対して（読むだけ）。書き込みは偽のホームディレクトリで確かめた |
 | 段6 前提を検査する | **叩いた** | 揃っているとき・フィールド名が違うとき・設定が未記入のときの3通り |
 | 段7〜段9 | **叩いていない** | **ここから先は実際に Claude Code が動き、枠を消費する** |
@@ -83,6 +83,18 @@ Usage of continuo init:
     	tracker.provider.project_number に書くボードの番号（省略すると gh から引く）
 ```
 
+`setup --help` の出力。
+
+```text
+Usage of continuo setup:
+  -force
+    	既に WORKFLOW.md があっても上書きする
+  -owner string
+    	tracker.provider.owner に書く GitHub の user / organization 名（省略すると gh から引く）
+  -project int
+    	tracker.provider.project_number に書くボードの番号（省略すると gh から引く）
+```
+
 `trust --help` の出力。
 
 ```text
@@ -91,8 +103,13 @@ Usage of continuo trust:
     	何が要求されているかを表示するだけで、~/.claude.json を書き換えない
 ```
 
-**サブコマンドは4つある。**`init` / `trust` / `doctor` / `hook` で、引数に何も渡さなければ常駐する。
-**`continuo setup` はまだ無い**（段4）。
+**サブコマンドは5つある。**`init` / `setup` / `trust` / `doctor` / `hook` で、
+引数に何も渡さなければ常駐する。
+
+> **実装を更新したら、必ずここへ戻ってビルドし直すこと。**
+> `/tmp/continuo` は前に建てたものが残る。**新しいサブコマンドを叩くと
+> 「設定ファイルが見つからない」という分かりにくいエラーになる**
+> （知らない引数は設定ファイルのパスとして扱われるため）。
 
 ---
 
@@ -260,24 +277,71 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 
 ## 段4. Status の割り当てを合わせる
 
-**言いたいこと。**段2 で5つの選択肢が揃っていたなら、**この段は何もしなくてよい。**
-足りなかった場合だけ、`WORKFLOW.md` の Status 関係のキーを実在する名前に書き換える。
+**言いたいこと。**`continuo setup` が、ボードの選択肢を continuo の5つの役割へ割り当てる。
+**役割の説明が出るので、それを読んで番号で選ぶ。**
 
-### `continuo setup` はまだ無い
+**実行する場所: `~/continuo-try`**
 
-**Status の割り当てを対話で決める `continuo setup` は、独立したサブコマンドとして作ると決めてある。
-まだ実装されていない。**この文書を書いた時点で `continuo setup` と叩くと、`setup` を
-`WORKFLOW.md` のパスとして読もうとして落ちる。
-
-```text
-$ /tmp/continuo setup
-continuo を起動します（設定ファイル: ~/continuo-try/setup）
-time=… level=ERROR msg="continuo を起動できません" error="… open ~/continuo-try/setup: no such file or directory"
+```bash
+cd ~/continuo-try
+/tmp/continuo setup
 ```
 
-**できるまでは、下のとおり手で書き換える。**
+**実際の出力**（このボードの選択肢は段2 で確かめた6つ）。
 
-### 手で書き換える
+```text
+ボードの Status フィールドには次の選択肢があります。
+  1  Ice Box
+  2  Ready
+  3  In Progress
+  4  Blocked
+  5  In Review
+  6  Done
+
+これから 5 個の役割について、それぞれどの選択肢を使うかを尋ねます。番号で答えてください。
+その役割に使える選択肢がボードに無い場合は 0 を入力してください。
+Ctrl+C で中断できます。中断したときは WORKFLOW.md を書きません。
+
+[1/5] continuo はここから issue を取ります。どれを使いますか
+番号> 2
+      → 着手待ち に "Ready" を割り当てました
+
+[2/5] continuo は issue を取ったときにここへ動かします。どれを使いますか
+番号> 3
+      → 作業中 に "In Progress" を割り当てました
+
+[3/5] エージェントが終わったと表明したらここへ動かします。人間が見ます。どれを使いますか
+番号> 5
+      → レビュー待ち に "In Review" を割り当てました
+
+[4/5] エージェントが判断を仰ぐとき、打ち切ったときにここへ動かします。どれを使いますか
+番号> 4
+      → 保留 に "Blocked" を割り当てました
+
+[5/5] 人間がここへ動かすと continuo が worktree と branch を片付けます。どれを使いますか
+番号> 6
+      → 完了 に "Done" を割り当てました
+
+5 個の役割の割り当ては次のとおりです。
+  着手待ち: "Ready"
+  作業中: "In Progress"
+  レビュー待ち: "In Review"
+  保留: "Blocked"
+  完了: "Done"
+
+WORKFLOW.md を上書きしました: ~/continuo-try/WORKFLOW.md
+```
+
+**既に `WORKFLOW.md` があるときは `--force` を付ける。**
+
+| 起きること | どうなるか |
+| --- | --- |
+| 同じ選択肢を2つの役割に選ぶ | **拒否して同じ役割をもう一度尋ねる**（打ち切らない） |
+| **番号 `0`**（その役割に使える選択肢が無い） | **打ち切る。**`WORKFLOW.md` は書かない |
+| 選択肢が5個未満のボード | **尋ねる前に止める。**足す手順を出す |
+| `Ctrl+C` | 中断する。`WORKFLOW.md` は書かない |
+
+### 手で書き換えることもできる
 
 **実行する場所: `~/continuo-try`**
 
@@ -661,9 +725,6 @@ curl -s http://127.0.0.1:8787/api/v1/state | jq .
 ---
 
 ## いま無いもの
-
-**`continuo setup` が実装されていない。**Status の割り当てを対話で決めるコマンドである。
-**できるまでは段4 のとおり `WORKFLOW.md` を手で書き換える。**
 
 **設定の読み直しが実装されていない**（`SPEC.md` 6.2）。
 `WORKFLOW.md` を書き換えても、**continuo を再起動するまで反映されない。**

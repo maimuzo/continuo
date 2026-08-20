@@ -4,8 +4,13 @@
 
 GitHub Projects v2 のボードを見張り、issue ごとに git worktree を用意して、herdr の pane で Claude Code を対話モードで起動し、完了までを面倒見る常駐プロセスです。
 
-> **Status: designing.** No implementation yet — see [docs/plans/continuo_design.md](docs/plans/continuo_design.md).
-> **状態: 設計中。**実装はまだありません。
+> **Status: implemented, not yet run against a live issue.** Every stage builds and passes tests,
+> and the setup commands were exercised against a real board (read-only). **Driving one issue from
+> `Ready` to `Done` has not been done yet.** See [docs/trying_it_out.md](docs/trying_it_out.md).
+>
+> **状態: 実装済み。ただし issue を1件通すところまでは未実行。**
+> 全段がビルドとテストを通り、セットアップのコマンドは実在のボードに対して（読み取りのみで）叩いてあります。
+> **`Ready` から `Done` まで通す確認はこれからです。**
 
 ## What it does / 何をするか
 
@@ -58,12 +63,15 @@ continuo doctor path/to/WORKFLOW.md
 ## Trying it out / 試してみる
 
 Walk one issue from `Ready` to `Done` and watch it happen: [docs/trying_it_out.md](docs/trying_it_out.md).
-It covers building, preparing a throwaway board, the Status options you must add by hand, and how to
-stop and clean up. **Running it spends real Claude Code quota**, so read the steps first.
+**No new board is created** — `continuo` attaches to the board you already have. It covers building,
+checking that the existing `Status` field carries the five options, assigning them with
+`continuo setup`, registering folder trust with `continuo trust`, and how to stop and clean up.
+**Step 8 spends real Claude Code quota**, so read the steps first.
 
 **1件の issue が `Ready` から `Done` まで通るのを実際に見る手順は [docs/trying_it_out.md](docs/trying_it_out.md) にあります。**
-使い捨てのボードの作り方、**画面から足す必要がある Status の選択肢**、止め方と片付けまで書いてあります。
-**段7 から実際に Claude Code が動いて枠を消費する**ので、先に読んでください。
+**ボードは新しく作りません。**いま使っているボードにそのまま足して使います。
+ビルド・`Status` の確認・`continuo setup` での割り当て・`continuo trust` での信頼登録・止め方まで書いてあります。
+**段8 から実際に Claude Code が動いて枠を消費する**ので、先に読んでください。
 
 ## Documents / 資料
 
