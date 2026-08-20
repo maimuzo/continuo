@@ -605,7 +605,8 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState) error {
 					"`herdr agent read %s --source recent-unwrapped --lines 40` で画面に何が出ているかを見てください。"+
 					"\n【よくある原因】claude コマンドが PATH に無い / "+
 					"claude の起動が途中で失敗した / そのフォルダが Claude Code に信頼登録されていない。"+
-					"\n【対処】`continuo doctor` で前提を検査してください。"+
+					"\n【対処】`command -v claude` で claude が PATH にあるかを確かめてください"+
+					"（**`continuo doctor` は claude の有無を検査しません**）。"+
 					"信頼登録が足りないなら `continuo trust` を実行してください。",
 				rs.agentName(), got.Agent.AgentStatus, rs.agentName(), rs.agentName())
 		}

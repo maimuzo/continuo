@@ -122,9 +122,10 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				o.logger.Warn("プロンプトを組み立てられません", "identifier", snap.Identifier, "error", err)
 				o.failRun(ctx, rs, fmt.Sprintf(
 					"Claude Code へ送る指示の文面を組み立てられませんでした。"+
-						"**この issue には1回も指示を送っていません。**"+
-						"\n【確かめ方】WORKFLOW.md の `claude.prompt_template`（または `continuation_prompt_template`）を見てください。"+
-						"\n【よくある原因】テンプレートに、一覧に無い変数を書いた。"+
+						"**この turn の指示は送れていません。**"+
+						"\n【確かめ方】WORKFLOW.md の front matter（先頭の `---` で挟まれた部分）より**下の本文**を見てください。"+
+						"ここが1回目の指示のテンプレートです（YAML のキーではありません）。"+
+						"\n【よくある原因】テンプレートに、一覧に無い変数を `{{.名前}}` の形で書いた。"+
 						"\n【対処】テンプレートを直してから Status を着手待ちへ戻してください。"+
 						"\n元のエラー: %v", err))
 				return
@@ -148,17 +149,25 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// 権限要求が承認されて実行される。3/3 で再現）。
 			o.sendEscape(ctx, rs)
 			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
-				"権限の確認で止まりました（esc を送りました。人間の判断が要ります）")
+				"Claude Code が作業の途中で確認の画面に止まりました。"+
+					"continuo は esc を送って画面を閉じましたが、"+
+					"**この issue は人間が見ないと進みません。**"+
+					"\n【確かめ方】下記の「Claude Code の会話の記録」を開き、末尾で何を実行しようとしていたかを見てください。"+
+					"\n【よくある原因】許可されていないコマンドを実行しようとした / "+
+					"許可の一覧に無いツールを使おうとした。"+
+					"\n【対処】許してよい操作なら WORKFLOW.md の `claude.permissions.allow` に足してから、"+
+					"Status を着手待ちへ戻してください。")
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
 				"herdr は「agent が待機状態になった」と答えましたが、"+
 				"**Claude Code の Stop hook から continuo へ通知が届きませんでした。**"+
-				"\n【確かめ方】worktree の中の `.claude/settings.json` に continuo の hook が書かれているか、"+
-				"Claude Code の画面（下記のコマンド）に hook のエラーが出ていないかを見てください。"+
+				"\n【確かめ方】下記の「continuo が渡した設定」のファイルを開き、"+
+				"`hooks` の `Stop` に continuo の hook が書かれているかを見てください。"+
+				"**この設定は worktree の中ではなく、continuo の実行時ディレクトリにあります。**"+
 				"\n【よくある原因】hook を受ける socket のパスが変わった / "+
-				"エージェントが settings.json を書き換えた。"+
-				"\n【対処】`continuo doctor` で前提を検査し、Status を着手待ちへ戻してください。")
+				"エージェントが `/hooks` などで設定を上書きした。"+
+				"\n【対処】Status を着手待ちへ戻してください。次の着手で設定を書き直します。")
 			return
 		case turnTimedOut:
 			o.abandonRun(ctx, rs,

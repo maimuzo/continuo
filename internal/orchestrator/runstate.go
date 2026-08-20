@@ -236,6 +236,7 @@ func (rs *runState) snapshot() runSnapshot {
 		WorktreePath:     rs.WorktreePath,
 		Base:             rs.Base,
 		SettingsPath:     rs.SettingsPath,
+		TranscriptPath:   rs.TranscriptPath,
 		HerdrWorkspaceID: rs.HerdrWorkspaceID,
 		Finished:         rs.Finished,
 		FreshSession:     rs.FreshSession,
@@ -267,6 +268,7 @@ type runSnapshot struct {
 	WorktreePath     string
 	Base             normalize.SafeName
 	SettingsPath     string
+	TranscriptPath   string
 	HerdrWorkspaceID string
 	Finished         bool
 	FreshSession     bool

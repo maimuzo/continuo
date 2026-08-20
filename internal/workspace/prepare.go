@@ -21,30 +21,15 @@ const NativeRefDefaultBranch = "default_branch"
 //
 // **乗っ取らずエラーにする。**continuo が作ったものではない可能性があり、
 // 空ディレクトリは git が黙って乗っ取るためである。
-var ErrUnregisteredWorktree = errors.New(
-	"worktree を作ろうとした場所に、git の worktree ではない何かが既にあります。" +
-		"**continuo が作ったものではない可能性があるので、乗っ取らずに止めました。**" +
-		"\n【確かめ方】下記のパスを開いて、中に何があるかを見てください。" +
-		"\n【よくある原因】前に continuo が落ちて登録だけ消えた / 人間が手でディレクトリを作った。" +
-		"\n【対処】中身が要らなければそのディレクトリを消してください。次の巡回で作り直します")
+var ErrUnregisteredWorktree = errors.New("目的のパスに実体があるのに git の worktree として登録されていません")
 
 // ErrCloneNotFound は `ghq list -p -e <owner>/<repo>` で clone を引けなかったことを表す。
 // **continuo は勝手に clone しない**（3-22）。その issue を飛ばして人間に知らせる。
-var ErrCloneNotFound = errors.New(
-	"そのリポジトリの clone が手元にありません（`ghq list -p -e <owner>/<repo>` の出力が空）。" +
-		"**巡回のループは勝手に clone しません。**ボードに載っただけのリポジトリを無断で" +
-		"取ってこないためです。" +
-		"\n【確かめ方】`ghq list -p -e <owner>/<repo>` を実行してください。0行なら手元にありません。" +
-		"\n【対処】`continuo trust` を実行してください。`trust.repositories` に書かれていれば、" +
-		"clone の取得と信頼の登録をまとめて行います")
+var ErrCloneNotFound = errors.New("ghq に対象リポジトリの clone がありません")
 
 // ErrBaseUnknown は base を決められなかったことを表す（3-22 の段4）。
 // herdr.worktree.base が null で、Issue.NativeRef["default_branch"] も無い場合に返る。
-var ErrBaseUnknown = errors.New(
-	"worktree をどの branch から切ればよいかを決められませんでした。" +
-		"\n【確かめ方】WORKFLOW.md の `herdr.worktree.base` を見てください。" +
-		"\n【よくある原因】`base` が空で、ボードから引いた既定 branch も分からなかった。" +
-		"\n【対処】`herdr.worktree.base` に branch 名（例: main）を書いてください")
+var ErrBaseUnknown = errors.New("worktree を切る base を決められません")
 
 // PrepareResult は worktree を用意した結果である。
 type PrepareResult struct {
@@ -118,7 +103,14 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		return nil, err
 	}
 	if repoPath == "" {
-		return nil, fmt.Errorf("%w: %s/%s", ErrCloneNotFound, issue.Owner, issue.Repo)
+		// **コマンドは実値で組み立てる。**`<owner>/<repo>` のまま出すと、
+		// 人間がコピーしても叩けない（設計 3-34b）。
+		return nil, fmt.Errorf(
+			"%w。**巡回のループは勝手に clone しません**（ボードに載っただけのリポジトリを無断で取ってこないため）。"+
+				"\n【確かめ方】`ghq list -p -e %s/%s` を実行してください。0行なら手元にありません。"+
+				"\n【対処】WORKFLOW.md の `trust.repositories` に `%s/%s` があることを確かめてから、"+
+				"`continuo trust` を実行してください。clone の取得と信頼の登録をまとめて行います。",
+			ErrCloneNotFound, issue.Owner, issue.Repo, issue.Owner, issue.Repo)
 	}
 
 	// 段1: 「登録は残っているが実体が消えている」を先に解消する。
@@ -172,7 +164,12 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		}
 	case exists && !registered:
 		// 段3: 乗っ取らない。
-		return nil, fmt.Errorf("%w: %s", ErrUnregisteredWorktree, loc.Path)
+		return nil, fmt.Errorf(
+			"%w（%s）。**continuo が作ったものではない可能性があるので、乗っ取らずに止めました。**"+
+				"\n【確かめ方】`ls -la %s` で中に何があるかを見てください。"+
+				"\n【よくある原因】前に continuo が落ちて git の登録だけ消えた / 人間が手でディレクトリを作った。"+
+				"\n【対処】中身が要らなければ `rm -rf %s` で消してください。次の巡回で作り直します。",
+			ErrUnregisteredWorktree, loc.Path, loc.Path, loc.Path)
 	default:
 		// 段4・段5。
 		base, err := m.resolveBase(issue)
@@ -285,8 +282,12 @@ func (m *Manager) resolveBase(issue IssueRef) (normalize.SafeName, error) {
 	raw, ok := issue.NativeRef[NativeRefDefaultBranch]
 	if !ok {
 		return "", fmt.Errorf(
-			"%w: herdr.worktree.base が null で、issue の NativeRef[%q] もありません（%s）",
-			ErrBaseUnknown, NativeRefDefaultBranch, issue.Identifier)
+			"%w。WORKFLOW.md の `herdr.worktree.base` が空で、"+
+				"ボードから引いた issue（%s）にも既定 branch の情報がありませんでした。"+
+				"\n【確かめ方】WORKFLOW.md の `herdr.worktree.base` を見てください。"+
+				"\n【対処】`base: \"main\"` のように branch 名を書いてください。"+
+				"**書かない場合はボードが返す既定 branch を使いますが、いまはそれが取れていません。**",
+			ErrBaseUnknown, issue.Identifier)
 	}
 	s, ok := raw.(string)
 	if !ok || s == "" {

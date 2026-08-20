@@ -379,3 +379,84 @@ func TestDispatch_状態ごとの上限はrunning_stateのバケツで数える(
 		t.Fatalf("状態ごとの上限を越えて dispatch している: 印が %d 件 (%v)", got, fx.Orc.RunningIdentifiers())
 	}
 }
+
+// TestHandoff_worktreeを持たない_run_には調べるところを出さない は、
+// 着手の途中で落ちた run に、存在しない場所を見せないことを確かめる。
+//
+// 目的: 設計 3-34b の「空の項目は行ごと出さない」を守っていることを示す。
+// **worktree も会話の記録も無い run に空のパスを出すと、人間は存在しない場所を探しに行く。**
+// 与える情報: 信頼登録されていないリポジトリの issue（worktree を作る前に弾かれる）。
+// 成功条件: 投稿されたコメントに「調べるところ」の見出しが出ないこと。
+func TestHandoff_worktreeを持たない_run_には調べるところを出さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Untrusted: true})
+	issue := sampleIssue(192, "Ready")
+	issue.Dispatchable = false
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+
+	comments := fx.Tracker.CommentsOf("I_node192")
+	if len(comments) != 1 {
+		t.Fatalf("未信頼の通知が %d 件（1件であるべき）", len(comments))
+	}
+	// **未信頼の通知は引き渡しの通知とは別の経路だが、どちらも worktree を持たない。**
+	// 空のパスが本文に混ざっていないことを確かめる。
+	if strings.Contains(comments[0].Body, "作業していた場所: ``") {
+		t.Errorf("空のパスを見せている:\n%s", comments[0].Body)
+	}
+	if strings.Contains(comments[0].Body, "会話の記録: ``") {
+		t.Errorf("空の記録のパスを見せている:\n%s", comments[0].Body)
+	}
+}
+
+// TestHandoff_引き渡しの通知に調べるところが出る は、
+// worktree を持つ run では場所が示されることを確かめる。
+//
+// 目的: 設計 3-34b の「器には調べるところを必ず添える」を守っていることを示す。
+// **理由だけを読んでも、人間は作業の跡がどこに残っているのかを知る手立てがない。**
+// 与える情報: max_turns を1にして、1回目の turn の終わりで上限に達する run。
+// 成功条件: コメントに「【調べるところ】」と worktree のパスが入っていること。
+func TestHandoff_引き渡しの通知に調べるところが出る(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Agent.MaxTurns = 1
+	}})
+	fx.Tracker.AddIssue(sampleIssue(193, "Ready"))
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "まだ途中です", false),
+	})
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 15*time.Second, "引き渡しの通知が投稿される", func() bool {
+		for _, c := range fx.Tracker.CommentsOf("I_node193") {
+			if strings.Contains(c.Body, "人間へ引き渡しました") {
+				return true
+			}
+		}
+		return false
+	})
+
+	var body string
+	for _, c := range fx.Tracker.CommentsOf("I_node193") {
+		if strings.Contains(c.Body, "人間へ引き渡しました") {
+			body = c.Body
+		}
+	}
+	if !strings.Contains(body, "【調べるところ】") {
+		t.Fatalf("調べるところの見出しが無い:\n%s", body)
+	}
+	if !strings.Contains(body, "作業していた場所:") {
+		t.Errorf("worktree のパスが出ていない:\n%s", body)
+	}
+}

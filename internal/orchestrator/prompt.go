@@ -151,22 +151,26 @@ func buildUntrustedComment(owner, repo, reason string) string {
 //
 // identifier: issue の識別子。
 // reason: 引き渡す理由。
+// hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
 // 戻り値: コメント本文。
-func buildHandoffComment(identifier, reason string, ctx handoffContext) string {
+func buildHandoffComment(identifier, reason string, hc handoffContext) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "continuo が %s の作業を人間へ引き渡しました。\n\n理由: %s\n", identifier, reason)
 
 	// **どこを見に行けばよいかを必ず添える。**理由だけを読んでも、人間は
 	// 作業の跡がどこに残っているのかを知る手立てがない。
+	// **pane を閉じたあとも残るものだけを出す。**このコメントを人間が読むのは
+	// 数十分後であり、そのとき `herdr agent read` は agent_not_found で落ちる
+	// （引き渡しの経路はコメントの直後に pane.close を呼ぶ）。
 	lines := make([]string, 0, 3)
-	if ctx.WorktreePath != "" {
-		lines = append(lines, fmt.Sprintf("- 作業していた場所: `%s`", ctx.WorktreePath))
+	if hc.WorktreePath != "" {
+		lines = append(lines, fmt.Sprintf("- 作業していた場所: `%s`", hc.WorktreePath))
 	}
-	if ctx.AgentName != "" {
-		lines = append(lines, fmt.Sprintf("- Claude Code の画面を見る: `herdr agent read %s --source recent-unwrapped --lines 40`", ctx.AgentName))
+	if hc.TranscriptPath != "" {
+		lines = append(lines, fmt.Sprintf("- Claude Code の会話の記録: `%s`", hc.TranscriptPath))
 	}
-	if ctx.PaneID != "" {
-		lines = append(lines, fmt.Sprintf("- herdr の pane: `%s`", ctx.PaneID))
+	if hc.SettingsPath != "" {
+		lines = append(lines, fmt.Sprintf("- continuo が渡した設定: `%s`", hc.SettingsPath))
 	}
 	if len(lines) > 0 {
 		b.WriteString("\n【調べるところ】\n")
@@ -183,8 +187,12 @@ func buildHandoffComment(identifier, reason string, ctx handoffContext) string {
 type handoffContext struct {
 	// WorktreePath は worktree の絶対パスである。
 	WorktreePath string
-	// AgentName は herdr に登録した agent 名である。
-	AgentName string
-	// PaneID は herdr の pane ID である。
-	PaneID string
+	// TranscriptPath は Claude Code の会話の記録の絶対パスである。
+	//
+	// **pane を閉じても残るのはこれである。**hook が渡してくるので、
+	// turn を1回も終えていない run では空になる。
+	TranscriptPath string
+	// SettingsPath は continuo が書いた Claude Code の設定ファイルの絶対パスである。
+	// **worktree の中ではない**（設計 3-12）。
+	SettingsPath string
 }

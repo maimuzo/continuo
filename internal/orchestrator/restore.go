@@ -579,7 +579,7 @@ func (o *Orchestrator) decideOne(
 				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
 				"\n【対処】許可が要るなら WORKFLOW.md の `claude.permissions.allow` に足してから、"+
 				"Status を着手待ちへ戻してください。",
-			handoffContext{WorktreePath: c.Path, PaneID: pane.PaneID})
+			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)
 		return adoption{}, false
 	default:
@@ -603,7 +603,7 @@ func (o *Orchestrator) decideOne(
 				"\n【対処】原因を直してから Status を着手待ちへ戻してください。"+
 				"引き継ぎの上限は WORKFLOW.md の `agent.max_takeover` で変えられます（いまは %d）。",
 			o.cfg.Agent.MaxTakeover, o.cfg.Agent.MaxTakeover),
-			handoffContext{WorktreePath: c.Path, PaneID: pane.PaneID})
+			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)
 		return adoption{}, false
 	}

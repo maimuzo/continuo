@@ -3432,8 +3432,24 @@ GraphQL の点数計算（3-31）にほとんど乗らない。
 ```
 
 **器には「調べるところ」を必ず添える**（`buildHandoffComment`）。
-worktree のパス・agent 名・pane の ID を出す。**空の項目は行ごと出さない**
-（着手の途中で落ちた run は worktree も pane も持っていない）。
+**出すのは pane を閉じたあとも残るものだけである。**worktree のパス・
+Claude Code の会話の記録（transcript）・continuo が渡した設定ファイル。
+**空の項目は行ごと出さない**（着手の途中で落ちた run は worktree も記録も持っていない）。
+
+> **`herdr agent read` を出してはならない。**引き渡しの経路はコメントを投稿した直後に
+> `pane.close` を呼ぶ。**人間がコメントを読むのは数十分後で、そのとき agent は消えている。**
+
+**案内する設定キーとファイルは、実在を確かめてから書く。**
+2026-08-20 のレビューで、存在しないキー（`agent.stall_timeout_ms` / `claude.prompt_template`）と
+continuo が作らないファイル（worktree の中の `.claude/settings.json`）を案内している箇所が見つかった。
+**「書いてあるとおりにやったのに動かない」は、何も書かないより悪い。**
+
+| 間違えやすいもの | 正しくは |
+| --- | --- |
+| `agent.stall_timeout_ms` | **`claude.stall_timeout_ms`**（`ClaudeConfig` の下） |
+| `claude.prompt_template` | **YAML のキーではない。**WORKFLOW.md の front matter より下の本文 |
+| worktree の中の `.claude/settings.json` | **`<実行時ディレクトリ>/issues/<スラグ>/settings.json`**（3-12） |
+| `continuo doctor` で claude の有無を検査 | **doctor は claude も hook も検査しない。**`command -v claude` を案内する |
 
 **優先順位。**
 

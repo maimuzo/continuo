@@ -605,9 +605,9 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 	snap := rs.snapshot()
 	if _, err := o.tracker.PostComment(ctx, nodeID,
 		buildHandoffComment(rs.issue().Identifier, reason, handoffContext{
-			WorktreePath: snap.WorktreePath,
-			AgentName:    snap.AgentName.String(),
-			PaneID:       snap.PaneID,
+			WorktreePath:   snap.WorktreePath,
+			TranscriptPath: snap.TranscriptPath,
+			SettingsPath:   snap.SettingsPath,
 		}),
 		o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
