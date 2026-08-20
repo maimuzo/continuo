@@ -479,19 +479,11 @@ level=ERROR msg="continuo を起動できません" error="起動できません
 
 ---
 
-## 段5. 対象リポジトリを clone して信頼を登録する
+## 段5. 対象リポジトリを信頼に登録する
 
-**言いたいこと。**continuo は `ghq` で clone の場所を引く。**手元に無いリポジトリは動かせない。**
-**信頼の登録は `continuo trust` が行う。**手で `claude` を起動して承認する必要は無い。
-
-### clone を用意する
-
-**実行する場所: どこでもよい**（`ghq` が置き場所を決める）
-
-```bash
-ghq get <REPO>                   # continuo は ghq で clone の場所を引く
-ghq list -p -e <REPO>            # clone の絶対パスが出る。0行なら失敗している
-```
+**言いたいこと。****`continuo trust` が全部やる。**clone が無ければ `ghq get` で取ってきて、
+`~/.claude.json` に信頼を書き込む。**手で `ghq get` を叩く必要も、`claude` を起動して
+承認する必要も無い。**人間がやるのは `trust.repositories` に対象を書くことだけである。
 
 ### `<REPO>` を信頼の対象に書き足す
 
@@ -557,6 +549,16 @@ level=INFO msg="dispatch できない issue を候補に含めました" identif
 **直し方が書いてあるのは issue のコメントのほうである。**
 
 ### 何を許すことになるかを先に見る
+
+> **`--dry-run` は clone を取りに行かない。**読むだけのつもりで叩いた人のディスクを
+> 無断で使わないためである。clone が無ければ次のように出る。
+>
+> ```text
+> ✗ <REPO>
+>     clone がありません（`ghq list -p -e <REPO>` の出力が空。--dry-run では取りに行きません）
+> ```
+>
+> **これは失敗ではない。**次の「登録する」で `continuo trust` を叩けば取ってくる。
 
 > **`~/.claude.json` がまだ無い場合**（Claude Code を一度も起動していないマシン）、
 > `continuo trust` は**終了コード 3** で止まる。**先に Claude Code を1回起動して、
@@ -640,6 +642,13 @@ cd ~/continuo-try
 ```bash
 cd ~/continuo-try
 /tmp/continuo trust
+```
+
+**clone が無ければ、ここで `ghq get` が走る。**取ってきてから信頼を登録する。
+実際に叩いた出力の1行目（隔離したホームディレクトリに対して）。
+
+```text
+maimuzo/continuo の clone がないので `ghq get` で取ってきます（時間がかかることがあります）
 ```
 
 **書き込む前に、`--dry-run` と同じ要求内容をもう一度出す。**そのうえで書き込む。

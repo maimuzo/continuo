@@ -60,6 +60,12 @@ type CloneResolver func(ctx context.Context, owner, repo string) (string, error)
 // **鍵は `git rev-parse --path-format=absolute --show-toplevel` の出力である**（3-6）。
 type KeyResolver func(ctx context.Context, clonePath string) (string, error)
 
+// fetchCloneTimeout は `ghq get` にかける制限時間である。
+//
+// **他の外部コマンドより長い。**clone はネットワークとリポジトリの大きさに左右され、
+// DefaultTimeout（数十秒）では大きなリポジトリが必ず途中で切れる。
+const fetchCloneTimeout = 10 * time.Minute
+
 // Options は Plan と Apply の入力である。
 type Options struct {
 	// Repositories は `WORKFLOW.md` の `trust.repositories` の値である（"owner/repo" の並び）。
@@ -76,7 +82,23 @@ type Options struct {
 	Timeout time.Duration
 	// Now は現在時刻を返す関数である。nil なら time.Now を使う（バックアップの名前に使う）。
 	Now func() time.Time
+	// FetchClone は clone が無いときに取ってくる関数である。
+	//
+	// **nil なら取りに行かない。**`--dry-run` と、この関数を渡さない呼び出し元は
+	// 「clone がありません」のまま止まる（設計 3-22 / 3-33）。
+	// **無断でディスクを使わないため、既定では取らない側に倒してある。**
+	FetchClone CloneFetcher
+	// OnFetch は clone を取りに行く直前に呼ばれる（画面へ知らせるため）。nil なら何もしない。
+	OnFetch func(repository string)
 }
+
+// CloneFetcher は clone が無いときに取ってくる関数である。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// 戻り値: 取得に失敗した場合のエラー。
+type CloneFetcher func(ctx context.Context, owner, repo string) error
 
 // Entry は1つのリポジトリについて調べた結果である。
 type Entry struct {
@@ -161,7 +183,8 @@ func Plan(ctx context.Context, opts Options) (*Report, error) {
 		Entries:          make([]Entry, 0, len(opts.Repositories)),
 	}
 	for _, name := range opts.Repositories {
-		report.Entries = append(report.Entries, inspect(ctx, name, opts.HomeDir, resolveClone, resolveKey, timeout))
+		report.Entries = append(report.Entries,
+			inspect(ctx, name, opts.HomeDir, resolveClone, resolveKey, timeout, opts.FetchClone, opts.OnFetch))
 	}
 	return report, nil
 }
@@ -174,8 +197,10 @@ func Plan(ctx context.Context, opts Options) (*Report, error) {
 // resolveClone: clone のパスを引く関数。
 // resolveKey: 信頼を引く鍵を求める関数。
 // timeout: 外部コマンド1回あたりの制限時間。
+// fetchClone: clone が無いときに取ってくる関数。nil なら取りに行かない。
+// onFetch: 取りに行く直前に呼ぶ関数。nil なら何もしない。
 // 戻り値: 調べた結果。
-func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolver, resolveKey KeyResolver, timeout time.Duration) Entry {
+func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolver, resolveKey KeyResolver, timeout time.Duration, fetchClone CloneFetcher, onFetch func(string)) Entry {
 	e := Entry{Repository: name}
 
 	owner, repo, ok := strings.Cut(name, "/")
@@ -192,9 +217,31 @@ func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolv
 		return e
 	}
 	if clonePath == "" {
-		e.Problem = fmt.Sprintf(
-			"clone がありません（`ghq list -p -e %s` の出力が空。continuo は勝手に clone しません）", name)
-		return e
+		if fetchClone == nil {
+			e.Problem = fmt.Sprintf(
+				"clone がありません（`ghq list -p -e %s` の出力が空。--dry-run では取りに行きません）", name)
+			return e
+		}
+		// **ここが唯一、continuo がディスクへ書きに行く場所である。**
+		// 取ったあとに引き直す。取れても引けないなら、置き場所の設定が食い違っている。
+		if onFetch != nil {
+			onFetch(name)
+		}
+		fetchCtx, cancelFetch := context.WithTimeout(ctx, fetchCloneTimeout)
+		err := fetchClone(fetchCtx, owner, repo)
+		cancelFetch()
+		if err != nil {
+			e.Problem = fmt.Sprintf("clone を取れませんでした（%v）", err)
+			return e
+		}
+		reCtx, cancelRe := context.WithTimeout(ctx, timeout)
+		clonePath, err = resolveClone(reCtx, owner, repo)
+		cancelRe()
+		if err != nil || clonePath == "" {
+			e.Problem = fmt.Sprintf(
+				"clone を取ったのにパスを引けませんでした（`ghq list -p -e %s` の出力が空）", name)
+			return e
+		}
 	}
 	e.ClonePath = clonePath
 

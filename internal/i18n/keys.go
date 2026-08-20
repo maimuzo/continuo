@@ -389,6 +389,8 @@ const (
 	KeyCLITrustFlagDryRun Key = "cli.trust.flag_dry_run"
 	// KeyCLITrustErrTooManyPositional は位置引数が2つ以上あるときに出る。
 	KeyCLITrustErrTooManyPositional Key = "cli.trust.err_too_many_positional"
+	// KeyCLITrustFetchingClone は clone を取りに行く直前に出る。
+	KeyCLITrustFetchingClone Key = "cli.trust.fetching_clone"
 	// KeyCLITrustErrHomeDir はホームディレクトリを引けなかったときに出る。
 	KeyCLITrustErrHomeDir Key = "cli.trust.err_home_dir"
 	// KeyCLITrustErrPlan は登録の対象を調べられなかったときに出る。
@@ -673,6 +675,7 @@ var allKeys = []Key{
 	KeyCLISetupBoardRemedyGeneric,
 	KeyCLITrustFlagDryRun,
 	KeyCLITrustErrTooManyPositional,
+	KeyCLITrustFetchingClone,
 	KeyCLITrustErrHomeDir,
 	KeyCLITrustErrPlan,
 	KeyCLITrustErrWriteRequirements,

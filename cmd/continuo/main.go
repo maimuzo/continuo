@@ -24,6 +24,7 @@ import (
 	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/setup"
 	"github.com/maimuzo/continuo/internal/trust"
+	"github.com/maimuzo/continuo/internal/workspace"
 )
 
 func main() {
@@ -543,6 +544,14 @@ func runTrust(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := trust.Options{Repositories: loaded.Config.Trust.Repositories, HomeDir: homeDir}
+	// **`--dry-run` では clone を取りに行かない。**読むだけのつもりで叩いた人の
+	// ディスクを無断で使わないため（設計 3-22 / 3-33）。
+	if !*dryRunFlag {
+		opts.FetchClone = workspace.RunGhqGet
+		opts.OnFetch = func(repository string) {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLITrustFetchingClone, repository))
+		}
+	}
 	report, err := trust.Plan(context.Background(), opts)
 	if err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLITrustErrPlan, err))

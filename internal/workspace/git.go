@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -541,4 +542,39 @@ func gitWorktreeBranches(ctx context.Context, repoDir string) (map[string]bool, 
 		return nil, fmt.Errorf("`git worktree list --porcelain` の出力を読めません: %w", err)
 	}
 	return branches, nil
+}
+
+// RunGhqGet は `ghq get <owner>/<repo>` を実行して clone を取ってくる。
+//
+// **これは書き込みを伴う唯一の ghq の呼び出しである。**呼ぶのは `continuo trust` の
+// 本番実行だけで、`--dry-run` と巡回のループからは呼ばない（設計 3-22 / 3-33）。
+// **巡回から呼ぶと、ボードに載っただけのリポジトリを無断で clone することになる。**
+//
+// ctx: 呼び出しに適用するコンテキスト（タイムアウトを含める）。
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// 戻り値: ghq を起動できなかった場合・非 0 で終わった場合のエラー
+// （標準エラー出力の内容を含める）。成功したら nil。
+func RunGhqGet(ctx context.Context, owner, repo string) error {
+	ownerName, _ := normalize.Normalize(owner)
+	repoName, _ := normalize.Normalize(repo)
+	target := ownerName.String() + "/" + repoName.String()
+
+	cmd := exec.CommandContext(ctx, ghqBinary, "get", target)
+	stderr := newCappedBuffer(gitStderrLimit)
+	// **標準出力は捨てる。**ghq は進捗を出すが、continuo の画面に混ぜても読めない。
+	cmd.Stdout = io.Discard
+	cmd.Stderr = stderr
+	cmd.WaitDelay = gitWaitDelay
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			return fmt.Errorf(
+				"`ghq get %s` を起動できません（stderr: %s）: %w", target, stderr.text(), err)
+		}
+		return fmt.Errorf(
+			"`ghq get %s` が終了コード %d で失敗しました（stderr: %s）",
+			target, exitErr.ExitCode(), stderr.text())
+	}
+	return nil
 }

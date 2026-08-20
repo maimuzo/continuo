@@ -236,3 +236,78 @@ func containsSubstring(lines []string, sub string) bool {
 	}
 	return false
 }
+
+// TestPlan_cloneが無ければ取ってきて調べ直す は、
+// FetchClone を渡したときに clone を取りに行くことを確かめる。
+//
+// 目的: 設計 3-22 の「continuo が勝手に clone しない」を `continuo trust` の
+// 本番実行に限って解いたことを示す。**人間が ghq get を手で叩く手順を無くす。**
+// 与える情報: 最初は clone が引けず、取得のあとだけ引けるようになる resolver。
+// 成功条件: 取得が1回呼ばれ、調べられない理由が消え、信頼の鍵が求まる。
+func TestPlan_cloneが無ければ取ってきて調べ直す(t *testing.T) {
+	repo := initRepo(t, "koetsumugi")
+	home, _ := fakeHome(t, `{"projects":{}}`)
+
+	// **取得の前は空を返し、取得のあとだけパスを返す。**`ghq get` の前後を再現する。
+	fetched := 0
+	notified := ""
+	resolve := func(_ context.Context, owner, name string) (string, error) {
+		if fetched == 0 {
+			return "", nil
+		}
+		return repo, nil
+	}
+
+	report, err := trust.Plan(context.Background(), trust.Options{
+		Repositories: []string{"maimuzo/koetsumugi"},
+		HomeDir:      home,
+		ResolveClone: resolve,
+		FetchClone: func(_ context.Context, owner, name string) error {
+			fetched++
+			return nil
+		},
+		OnFetch: func(repository string) { notified = repository },
+	})
+	if err != nil {
+		t.Fatalf("調べられなかった: %v", err)
+	}
+	if fetched != 1 {
+		t.Fatalf("clone の取得が %d 回呼ばれた（1回であるべき）", fetched)
+	}
+	if notified != "maimuzo/koetsumugi" {
+		t.Errorf("取りに行くことを知らせていない: %q", notified)
+	}
+	got := report.Entries[0]
+	if got.Problem != "" {
+		t.Fatalf("取ってきたのに調べられない理由が出ている: %s", got.Problem)
+	}
+	if got.ClonePath != repo {
+		t.Errorf("取ったあとの clone のパスが違う: got %q, want %q", got.ClonePath, repo)
+	}
+}
+
+// TestPlan_FetchCloneを渡さなければ取りに行かない は、
+// `--dry-run` が読むだけであることを確かめる。
+//
+// 目的: 読むだけのつもりで叩いた人のディスクを無断で使わないこと（設計 3-33）。
+// 与える情報: clone を引けない resolver と、nil の FetchClone。
+// 成功条件: 「--dry-run では取りに行きません」が理由に出る。
+func TestPlan_FetchCloneを渡さなければ取りに行かない(t *testing.T) {
+	home, _ := fakeHome(t, `{"projects":{}}`)
+
+	report, err := trust.Plan(context.Background(), trust.Options{
+		Repositories: []string{"maimuzo/koetsumugi"},
+		HomeDir:      home,
+		ResolveClone: staticClones(map[string]string{}),
+	})
+	if err != nil {
+		t.Fatalf("調べられなかった: %v", err)
+	}
+	got := report.Entries[0]
+	if !strings.Contains(got.Problem, "--dry-run では取りに行きません") {
+		t.Errorf("取りに行かない理由が出ていない: %q", got.Problem)
+	}
+	if got.ClonePath != "" {
+		t.Errorf("clone を引けないのにパスが入っている: %q", got.ClonePath)
+	}
+}

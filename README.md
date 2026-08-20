@@ -50,7 +50,7 @@ Where the spec assumes a Codex app-server subprocess speaking a structured proto
 | [Claude Code](https://claude.com/claude-code) | 2.1.233 or later |
 | `gh` | 2.97.0 or later — `continuo doctor` reads the scopes from the default `gh auth status` output (there is no `--show-scopes` flag in 2.97.0) |
 | `git` | any recent version — continuo runs it to create and remove worktrees |
-| `ghq` | any recent version — continuo runs `ghq list -p -e` to locate the clone of each repository |
+| `ghq` | any recent version — continuo runs `ghq list -p -e` to locate each clone, and `ghq get` from `continuo trust` when one is missing |
 | `jq` | only for the commands in [docs/trying_it_out.md](docs/trying_it_out.md) — continuo itself does not use it |
 | Platform | macOS and Linux. **Windows is not supported natively — use WSL2** ([why](docs/plans/continuo_design.md)) |
 

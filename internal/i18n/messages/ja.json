@@ -73,6 +73,7 @@
   "cli.trust.err_too_many_positional": "エラー: continuo trust の位置引数は WORKFLOW.md のパスを1つだけ受け付けます（%d 個指定されました: %v）",
   "cli.trust.err_write_requirements": "エラー: 要求内容を書き出せません: %v",
   "cli.trust.err_write_result": "エラー: 結果を書き出せません: %v",
+  "cli.trust.fetching_clone": "%s の clone がないので `ghq get` で取ってきます（時間がかかることがあります）",
   "cli.trust.flag_dry_run": "何が要求されているかを表示するだけで、~/.claude.json を書き換えない",
   "cli.trust.warn_close_claude": "気になるなら Claude Code を全部終了してから、もう一度実行してください。",
   "cli.trust.warn_concurrent": "**Claude Code のセッションが動いていると、%s を取り合って書き換えが失われることがあります。**",
