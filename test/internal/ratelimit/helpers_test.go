@@ -9,6 +9,7 @@ package ratelimit_test
 
 import (
 	"bytes"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -55,4 +56,20 @@ func usageConfig() config.RateLimitConfig {
 		PauseAbovePercent: 90,
 		PollIntervalMs:    300000,
 	}
+}
+
+// isKeychainTimeout は、エラーが「`security` が期限内に返らなかった」に辿れるかを返す。
+//
+// err: 検査するエラー。
+// 戻り値: ratelimit.ErrKeychainTimeout へ辿れれば true。
+func isKeychainTimeout(err error) bool {
+	return errors.Is(err, ratelimit.ErrKeychainTimeout)
+}
+
+// isNoCredentials は、エラーが「資格情報を取得できない」に辿れるかを返す。
+//
+// err: 検査するエラー。
+// 戻り値: ratelimit.ErrNoCredentials へ辿れれば true。
+func isNoCredentials(err error) bool {
+	return errors.Is(err, ratelimit.ErrNoCredentials)
 }

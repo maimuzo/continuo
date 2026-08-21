@@ -2,10 +2,12 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
@@ -513,15 +515,24 @@ func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardS
 //	token_source が env で環境変数が無い         … `✗`
 //	token_source が claude_credentials でファイルがある … `✓`
 //	token_source が claude_credentials でファイルが無い … `!`
+//	token_source が keychain で読めた            … `✓`
+//	token_source が keychain で読めない          … `✗`
+//	token_source が keychain で期限内に返らない  … `!`
 //
-// **Keychain は読まない**（設計 3-32）。読むと確認の画面が出て、無人のプロセスが固まる。
-// macOS では `~/.claude/.credentials.json` が無いのが普通である。
+// **`token_source: keychain` のときは Keychain を実際に読む**（読めた項目の名前だけを取る。
+// **値は受け取らない**）。読まずに `!` を出すと、macOS の利用者はこの検査から何も得られない。
+// **doctor は人間が端末で叩く道具である**ので、確認のダイアログが出ても人間がその場で答えられる。
+// **固まらないことは仕組みで保証してある。**この検査には doctor の1項目あたりの期限が掛かり、
+// `security` は期限が来た時点で殺される（internal/ratelimit の runSecurity）。
+// 期限内に返らなければ `!` にして「ダイアログが出たままかもしれない」と案内する。
+// **無人の常駐プロセスでダイアログを出さないための手当ては `continuo allow-keychain-access` である。**
 //
+// ctx: 呼び出しに適用するコンテキスト（`security` の実行に渡す）。
 // opts: 環境変数を引く関数とホームディレクトリを含む入力。
 // cfg: 読めた場合の設定。
 // configSymbol: 上流（設定ファイル）の記号。
 // 戻り値: 検査結果。
-func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
+func checkCredentials(ctx context.Context, opts Options, cfg loadedConfig, configSymbol Symbol) Result {
 	if configSymbol != SymbolOK {
 		return Result{
 			Label:  LabelCredentials,
@@ -540,6 +551,10 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 			Symbol: SymbolOK,
 			Detail: i18n.T(i18n.KeyDoctorCredentialsNone),
 		}
+	}
+
+	if rl.TokenSource == ratelimit.TokenSourceKeychain {
+		return checkKeychainCredentials(ctx)
 	}
 
 	if rl.TokenSource == ratelimit.TokenSourceEnv {
@@ -571,8 +586,9 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 
 	// **ここへ来るのは `claude_credentials` のときだけである。**
 	// この関数が cfg を見るのは configSymbol が `✓` のとき、つまり config.Load の検証を
-	// 通ったときだけで、その検証は rate_limit.token_source を `claude_credentials` か `env` に
-	// 限っている（internal/config/validate.go）。**不正値の分岐は到達しないので置かない。**
+	// 通ったときだけで、その検証は rate_limit.token_source を `claude_credentials` /
+	// `keychain` / `env` に限っている（internal/config/validate.go）。
+	// **不正値の分岐は到達しないので置かない。**
 	home, err := resolveHomeDir(opts.HomeDir)
 	if err != nil {
 		return Result{
@@ -591,13 +607,62 @@ func checkCredentials(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 			Detail: i18n.T(i18n.KeyDoctorCredentialsFileFound, path),
 		}
 	}
+	// **macOS では、このファイルが無いのが普通である。**資格情報は Keychain に入っているので、
+	// 「飛ばした」で終わらせず、読める設定へ移る道を出す。
+	remedies := []string{i18n.T(i18n.KeyDoctorCredentialsRemedySkipped)}
+	if runtime.GOOS == "darwin" {
+		remedies = append(remedies, i18n.T(i18n.KeyDoctorCredentialsRemedyUseKeychain))
+	}
 	return Result{
-		Label:  LabelCredentials,
-		Symbol: SymbolUnknown,
-		Detail: i18n.T(i18n.KeyDoctorCredentialsFileMissing, path),
-		Remedies: []string{
-			i18n.T(i18n.KeyDoctorCredentialsRemedySkipped),
-		},
+		Label:    LabelCredentials,
+		Symbol:   SymbolUnknown,
+		Detail:   i18n.T(i18n.KeyDoctorCredentialsFileMissing, path),
+		Remedies: remedies,
+	}
+}
+
+// checkKeychainCredentials は macOS の Keychain から資格情報を読めるかを検査する。
+//
+// **読むのは項目の名前だけである。**値（トークン）は受け取らないし、画面にも出さない
+// （internal/ratelimit の ProbeKeychain）。
+//
+// **記号の分け方。**読めたら `✓`、読めたのに accessToken が無い・読めないなら `✗`、
+// 期限内に返らなかったら `!` である。`✗` にするのは、利用者が `keychain` を明示して選んだのに
+// 取れていない状態だからで、`token_source: env` の環境変数が無いときと同じ扱いにそろえてある。
+// **期限切れだけ `!` にする。**返らなかっただけで、資格情報が無いとは限らない。
+//
+// ctx: 呼び出しに適用するコンテキスト（doctor の1項目あたりの期限が掛かっている）。
+// 戻り値: 検査結果。
+func checkKeychainCredentials(ctx context.Context) Result {
+	probe, err := ratelimit.ProbeKeychain(ctx, 0)
+	switch {
+	case errors.Is(err, ratelimit.ErrKeychainTimeout):
+		return Result{
+			Label:    LabelCredentials,
+			Symbol:   SymbolUnknown,
+			Detail:   i18n.T(i18n.KeyDoctorCredentialsKeychainTimeout, ratelimit.KeychainService, err),
+			Remedies: []string{i18n.T(i18n.KeyDoctorCredentialsRemedyKeychainTimeout)},
+		}
+	case err != nil:
+		return Result{
+			Label:    LabelCredentials,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorCredentialsKeychainFailed, ratelimit.KeychainService, err),
+			Remedies: []string{i18n.T(i18n.KeyDoctorCredentialsRemedyKeychain)},
+		}
+	case !probe.HasAccessToken:
+		return Result{
+			Label:    LabelCredentials,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorCredentialsKeychainNoAccessToken, ratelimit.KeychainService),
+			Remedies: []string{i18n.T(i18n.KeyDoctorCredentialsRemedyKeychain)},
+		}
+	default:
+		return Result{
+			Label:  LabelCredentials,
+			Symbol: SymbolOK,
+			Detail: i18n.T(i18n.KeyDoctorCredentialsKeychainOK, ratelimit.KeychainService),
+		}
 	}
 }
 

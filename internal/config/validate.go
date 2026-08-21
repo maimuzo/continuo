@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/herdr"
@@ -260,16 +261,25 @@ func validate(cfg *Config) error {
 		return invalidValueError("rate_limit.source", cfg.RateLimit.Source, `"oauth_usage_api" か "none" のどちらか（設計 3-27）`)
 	}
 	switch cfg.RateLimit.TokenSource {
-	case "claude_credentials":
+	case RateLimitTokenSourceClaudeCredentials:
 		// ~/.claude/.credentials.json を読む。token_env は参照しない。
-	case "env":
+	case RateLimitTokenSourceKeychain:
+		// **macOS でだけ選べる。**Keychain を読む `security` は macOS の標準コマンドであり、
+		// ほかの OS には無い。ここで弾かないと、Linux の運用者は起動時ではなく5分ごとの
+		// 取得で毎回失敗し、枠の判定が黙って無効化される（5-5 と同じ理由）。
+		if runtime.GOOS != "darwin" {
+			return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
+				fmt.Sprintf(`"keychain" は macOS でだけ使える（いまの OS: %s）。"claude_credentials" か "env" にすること`, runtime.GOOS))
+		}
+	case RateLimitTokenSourceEnv:
 		// tracker.provider.token_env と同じ扱いにする。空のまま起動を通すと、
 		// 5分ごとの取得が毎回 ErrNoCredentials になり、枠の判定が黙って無効化される（5-5）。
 		if cfg.RateLimit.TokenEnv == "" {
 			return requiredValueError("rate_limit.token_env（rate_limit.token_source が env のとき必須）")
 		}
 	default:
-		return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource, `"claude_credentials" か "env" のどちらか（読み取りだけで書き換えない。3-27）`)
+		return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
+			`"claude_credentials" か "keychain"（macOS のみ）か "env" のいずれか（読み取りだけで書き換えない。3-27）`)
 	}
 	if cfg.RateLimit.PauseAbovePercent < 0 || cfg.RateLimit.PauseAbovePercent > 100 {
 		return invalidValueError("rate_limit.pause_above_percent", cfg.RateLimit.PauseAbovePercent, "0以上100以下にすること")

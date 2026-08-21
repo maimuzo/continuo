@@ -330,7 +330,16 @@ type RateLimitConfig struct {
 	// usage API がトークンを消費するかどうかを判別できていないため、"none" は必須の逃げ道である。
 	Source string `yaml:"source"`
 	// TokenSource はレートリミットを読むための認証情報の出所である（3-27）。
-	// 想定する値は "claude_credentials"（Claude Code が使っている資格情報を読む）か "env"。
+	//
+	// 想定する値は3つである。
+	//
+	//	claude_credentials … `~/.claude/.credentials.json` を読む
+	//	keychain           … macOS の Keychain を `security` で読む（**macOS でだけ選べる**）
+	//	env                … 下の TokenEnv に書いた環境変数を読む
+	//
+	// **既定は OS で分かれる**（macOS は keychain。default.go の defaultRateLimitTokenSource）。
+	// macOS の Claude Code は資格情報を Keychain に置き、ファイルは無いのが普通である。
+	//
 	// **読み取りだけで、書き換えない**（`~/.claude.json` を書き換えないという絶対制約に従う）。
 	TokenSource string `yaml:"token_source"`
 	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。

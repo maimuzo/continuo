@@ -505,6 +505,10 @@ type fixture struct {
 	// GhqPaths は注入する `ghq list` の結果である（鍵は `<owner>/<repo>`）。
 	// **nil なら本物の RunGhqList を使う**（PATH のテスト用ghq mock が答える）。
 	GhqPaths map[string]string
+	// CheckTimeout は外部に触る検査1つあたりの上限である。
+	// **0 なら doctor の既定（10秒）を使う。**返ってこない外部コマンドを待たずに
+	// 済ませたいテストだけが短い値を入れる。
+	CheckTimeout time.Duration
 }
 
 // newFixture はテスト用herdr mock・テスト用GitHub mock・本物の git のリポジトリ・WORKFLOW.md を用意する。
@@ -627,7 +631,28 @@ func (fx *fixture) Options() doctor.Options {
 			return paths[owner+"/"+repo], nil
 		}
 	}
+	if fx.CheckTimeout > 0 {
+		opts.CheckTimeout = fx.CheckTimeout
+	}
 	return opts
+}
+
+// writeFakeSecurity は PATH の先頭へ置く偽の `security` を作る。
+//
+// **本物の `security` を実行しない。**本物を叩くと、テストの実行中に Keychain の
+// 確認のダイアログが出て、答える人がいないまま止まる。
+//
+// t: 呼び出し元のテスト。
+// dir: 実行ファイルを置くディレクトリ（fixture の BinDir。PATH の先頭にある）。
+// script: `security` として実行させるシェルスクリプトの中身（`#!/bin/sh` の次の行から）。
+func writeFakeSecurity(t *testing.T, dir, script string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("テスト用security mock を置くディレクトリを作れません: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "security"), []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
+		t.Fatalf("テスト用security mock を書けません: %v", err)
+	}
 }
 
 // Run は doctor を1回走らせる。

@@ -71,8 +71,8 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
   - 段0 から入り直す。段1 は飛ばす。**セッション UUID は新しく採番する**
 - [x] **stall の閾値に達したら、枠待ちの判定を先に見る**（設計 3-27 の評価順）
   - 「時計を止める」は `runState.WaitingQuota` を立てて判定を飛ばすこと。`LastSeenAt` は進めない
-- [x] **枠のトークンは `~/.claude/.credentials.json` からだけ読む。Keychain は読まない**（設計 3-15）
-  - **macOS では取れないのが普通。**取れなければ枠の判定を諦め、起動は続ける
+- [x] **枠のトークンの出所は `rate_limit.token_source` で決まる**（`claude_credentials` / `keychain` / `env`。設計 3-15）
+  - **macOS の既定は `keychain`。**`security` に10秒の上限を掛け、取れなければ枠の判定を諦めて起動は続ける
 - [x] **段2 で書き込む先は `tracker.running_state`（既定 `In Progress`）である。**ハードコードしない
 - [x] **agent 名を設計 3-3 の4段で作る**（32文字に収める。重複したら末尾に連番）
 - [x] **空きスロットの検査が、印を付ける前に走る**（段-1）
@@ -102,7 +102,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
   - **`severity` は見ない。**上限を示す値が何かを実測できていない（設計 3-27）
 - [x] **`rate_limit.source: none` なら usage API を1回も叩かない**（設定の検証は対応済み）
 - [x] **資格情報が取れなかったら、枠の判定を諦めて `none` と同じ動きにする。起動は止めない**（設計 3-27）
-  - **macOS では `~/.claude/.credentials.json` が無いのが普通である**（Keychain にある）
+  - **macOS では `~/.claude/.credentials.json` が無いのが普通である。**既定の `keychain` なら Keychain から読める（設計 3-15）
 - [x] **`runState.PromptID` は `UserPromptSubmit` を受けた時点で入れる**（投入時には取れない。設計 3-25）
 - [x] **枠待ちの run についてだけ、打ち切りの時計を止める**（`claude.turn_timeout_ms` の判定を飛ばす）
 - [x] **枠が明けたときに送る継続の指示を、turn 数に数える**（設計 3-27）

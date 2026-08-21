@@ -1612,12 +1612,39 @@ jq -s '[.[] | select(.type=="assistant")] | unique_by(.requestId) | map(.message
 
 | 項目 | 内容 |
 | --- | --- |
-| **認証** | Claude Code の OAuth トークン（`.claudeAiOauth.accessToken`）。**`~/.claude/.credentials.json` からだけ読む。Keychain は読まない**（下記） |
+| **認証** | Claude Code の OAuth トークン（`.claudeAiOauth.accessToken`）。**どこから読むかは `rate_limit.token_source` で決める**（`claude_credentials` / `keychain` / `env`） |
 | **返るもの** | `limits` 配列。要素は `kind`（`session` / `weekly_all` / `weekly_scoped`）・`percent`・`resets_at`・`severity` |
 | **枠を消費するか** | **大量には消費しない。**3回続けて叩いて `percent` が動かなかった。**ただし `percent` は整数の百分率なので、これで「1トークンも消費しない」ことは判別できない**（第6節） |
 | **資格情報が取れなかったら** | **枠の判定を諦め、`rate_limit.source: none` と同じ動きにする。起動は止めない。警告を1回だけログに出す** |
-| **なぜ Keychain を読まないか** | **読むと確認の画面が出ることがあり、無人のプロセスが固まる**（3-32 の doctor と同じ判断）。**macOS では `~/.claude/.credentials.json` が無いのが普通なので、macOS では枠の判定が効かないことを受け入れる。**枠待ちと固まりを区別できなくなるが、stall 検知は動く |
+| **macOS はどこから読むか** | **Keychain から読む**（下記）。`~/.claude/.credentials.json` は macOS では無いのが普通で、ファイルだけを見ると枠の判定が黙って効かなくなる |
 | **既存の実装** | `maimuzo-dev-core` プラグインの `detect-usage-from-webapi` スキルが同じことをしている。**continuo は同じ経路を Go で実装する** |
+
+**macOS の資格情報は Keychain から読む。**
+
+**実測（2026-08-21、macOS）。**`security find-generic-password -s "Claude Code-credentials" -w` は
+**すぐ値を返し、確認のダイアログは出なかった。**返った JSON の `claudeAiOauth` に
+`accessToken` / `refreshToken` / `expiresAt` / `refreshTokenExpiresAt` / `scopes` /
+`subscriptionType` / `rateLimitTier` が入っていた。**中身の形は `~/.claude/.credentials.json` と同じである。**
+
+| 何を | どうするか |
+| --- | --- |
+| **読み方** | 上の `security` を1回起動し、標準出力の JSON から `claudeAiOauth.accessToken` を取る |
+| **`token_source` の既定** | **macOS は `keychain`、ほかの OS は `claude_credentials`。**`keychain` を macOS 以外で書いたら設定の検証で起動を止める（`security` が無い） |
+| **ダイアログ対策** | **人間が端末にいるうちに `continuo allow-keychain-access` を1回叩き、「常に許可」を選ばせる** |
+| **それでも返らなかったら** | **上限で `security` を殺し、枠の判定を捨てる。起動は止めない**（`rate_limit.source: none` と同じ動きになる。警告は1回だけログに出す） |
+| **値の扱い** | **読んだトークンをログにもエラー文にも載せない。**載せてよいのは `security` の標準エラー出力だけである |
+
+**なぜ `continuo allow-keychain-access` を先に叩いてもらうか。**macOS の Keychain は
+**初めて読む実行ファイルに確認のダイアログを出す。無人で走る continuo がそれに当たると、
+答える人がいないまま枠の判定の期限が切れる。**このコマンドは設定ファイルを読まず、Keychain を1回読んで
+**項目の名前だけ**を出す（値は1つも出さない）。
+
+**待つ上限は2つに分ける。**
+
+| どこで | 上限 | 何にそろえたか |
+| --- | --- | --- |
+| 巡回のループ・`continuo doctor` | **10秒** | 巡回のたびに `ghq` / `git` を待つ上限と同じ。**無人のプロセスが外部コマンドを待ってよい長さの上限である** |
+| `continuo allow-keychain-access` | **60秒** | 人間の手が要る準備を待つ上限と同じ。**10秒ではダイアログに気づく前に打ち切られる** |
 
 **リクエストの作り方。**ヘッダを1つ落とすと 401 になる。
 
@@ -2698,8 +2725,9 @@ claude.turn_timeout_ms のあいだ何も観測できなかった run につい�
 そのときは stall 検知の閾値まで待ってから worker を止め、リトライを積む（3-21）。
 **枠が回復していなければ、リトライも同じところで止まる。**リトライの回数を使い切ったら `failure_state` へ落として人間に渡す。
 
-**認証情報の出所。**`rate_limit.token_source` で指定する（`claude_credentials` か `env`）。
-**`claude_credentials` は、Claude Code が使っている資格情報を読むことを指す。**
+**認証情報の出所。**`rate_limit.token_source` で指定する（`claude_credentials` / `keychain` / `env`）。
+**既定は macOS が `keychain`、ほかの OS が `claude_credentials` である**（3-15）。
+**`claude_credentials` と `keychain` は、どちらも Claude Code が使っている資格情報を読むことを指す。**
 **読み取りだけで、書き換えない**（`~/.claude.json` を書き換えない、という絶対制約に従う）。
 
 **枠に当たってから復旧するまでの流れ。**
@@ -2890,6 +2918,12 @@ continuo setup         # 既にあるボードの Status の選択肢を、conti
                        # --status-field=<名前> Status の single-select フィールドの名前（既定 Status）
 continuo trust         # trust.repositories に列挙されたリポジトリの信頼を ~/.claude.json へ登録する（3-33）
                        # --dry-run  何が要求されているかを出すだけで、書き換えない
+continuo allow-keychain-access
+                       # macOS の Keychain を1回読み、確認のダイアログに人間が「常に許可」で答える機会を作る（3-15）
+                       # **macOS でだけ意味がある。**ほかの OS では何もせずに 0 で終わる
+                       # 設定ファイルを読まない。WORKFLOW.md がまだ無くても叩ける
+                       # 出すのは読めた項目の名前だけである。トークンの値は画面にもログにも出さない
+                       # 位置引数もフラグも取らない。待つ上限は60秒
 continuo               # 常駐する（WORKFLOW.md を読んで巡回を始める）
                        # --log-level=debug|info|warn|error（既定 info）
                        # --port=<番号>  ダッシュボードのポート。server.port を上書きする（仕様 13.7）。
@@ -2908,16 +2942,16 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | ローカルの clone | `ghq list --exact <owner>/<repo>` の**出力が空でないか** | **exit code は存在の有無にかかわらず 0 を返す**（実測）。出力の有無で判定する |
 | **`ghq` と `git` が PATH にあるか** | **clone を調べる前に `exec.LookPath` で見る。**無ければ `✗` にして、その先を調べない | **「確かめられなかった」で通してはならない。**巡回は worktree を作るときにこの2つを起動するので、無ければ**必ず落ちる。**`!` にすると終了コードが 0 になり「足りないものはありません」と出てしまう |
 | 設定ファイル | `WORKFLOW.md` が読めて、front matter が検証を通るか | — |
-| Claude の資格情報 | `~/.claude/.credentials.json` があるか。**無ければ、その先は確かめない** | **Keychain を読まない**（下記） |
+| Claude の資格情報 | **`rate_limit.token_source` が指す先から取れるか**（ファイル / Keychain / 環境変数） | **Keychain も読む。**上限を掛けて固まらないようにする（下記） |
 | **ボードを読めるか** | **`Bootstrap` を呼んで project と Status フィールドを解決し、`active_states` の選択肢名が全部あるかを照合する** | **`gh` の認証が通っても、ここで落ちることがある**（project が見つからない・トークンの取り出しに失敗・レートリミット）。**選択肢名の不一致は `✗` にする。**巡回が無言で0件を返す原因になる（3-6） |
 
-**doctor は Keychain を触らない。**
+**doctor は Keychain を読む。**
 
 | 何を | なぜ |
 | --- | --- |
-| **`~/.claude/.credentials.json` があれば `✓`** | Linux / WSL2 の標準の置き場所であり、読むだけで判定できる |
-| **無ければ `!`（確かめられなかった）** | **macOS では Keychain にあるが、読むと確認の画面が出ることがある。**人間が操作していないタイミングで固まる |
-| メッセージ | 「macOS では Keychain に入っています。`continuo` の起動には影響しません」と出す |
+| **読む** | **doctor は人間が端末で叩く道具である。**ダイアログが出ても、その場にいる人間が答えられる。**読まないと macOS の利用者はこの検査から何も得られない**（必ず `!` になるだけで、枠が読めるのか分からない） |
+| **固まらない仕組み** | **この項目に10秒の上限を掛け、期限が来たら `security` を殺す**（3-15）。無人の巡回のループと同じ上限である |
+| **読むのは名前だけ** | **`claudeAiOauth` の下にある項目の名前**と、`accessToken` が空でないかだけを見る。**トークンの値は画面にもログにも出さない** |
 
 **ボードを読めなかったときの記号。**
 
@@ -2949,7 +2983,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 設定ファイル ─┬─ herdr（設定の protocol と照合する）
               └─ gh の認証 ── ボードを読める ─┬─ clone（対象リポジトリが決まる）
                                               └─ 信頼登録（clone のパスが要る）
-資格情報（token_source が env なら「環境変数があるか」を見る。飛ばさない）
+資格情報（token_source が指す先だけを見る。ほかの検査に依存しないので飛ばさない）
 ```
 
 **`gh auth status` の読み方を1つに決める。**
@@ -2965,7 +2999,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 **資格情報の記号を、設定が読めたかどうかで分ける。**
 
 **設定で受け付ける値は `rate_limit.source` が `oauth_usage_api` / `none`、
-`rate_limit.token_source` が `claude_credentials` / `env` である**（`internal/config/validate.go`）。
+`rate_limit.token_source` が `claude_credentials` / `keychain`（macOS のみ）/ `env` である**（`internal/config/validate.go`）。
 
 | 状態 | 記号 | メッセージ |
 | --- | --- | --- |
@@ -2974,7 +3008,15 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | `token_source` が `env` で、`token_env` の環境変数がある | `✓` | — |
 | **`token_source` が `env` で、環境変数が無い** | **`✗`** | **枠の判定ができない設定になっている。**環境変数名を出す |
 | `token_source` が `claude_credentials` で `~/.claude/.credentials.json` がある | `✓` | — |
-| `token_source` が `claude_credentials` でファイルが無い | **`!`** | 「macOS では Keychain に入っています。`continuo` の起動には影響しません」 |
+| `token_source` が `claude_credentials` でファイルが無い | **`!`** | 「macOS では Keychain に入っているのが普通です」。**macOS なら、直し方に `token_source: keychain` へ移る道を足す** |
+
+**`token_source` が `keychain` のときの記号。**
+
+| 状態 | 記号 | なぜ |
+| --- | --- | --- |
+| **`accessToken` を読めた** | **`✓`** | 枠を読める |
+| **読めない / `accessToken` が無い** | **`✗`** | **利用者が `keychain` を明示して選んだのに取れていない。**`token_source: env` で環境変数が無いときと同じ扱いにそろえる。直し方は `continuo allow-keychain-access` |
+| **10秒待っても `security` が返らない** | **`!`** | **返らなかっただけで、資格情報が無いとは限らない。**「確認のダイアログが出たままかもしれません」と出す |
 
 **対象リポジトリが0件だったとき。**
 
@@ -2999,8 +3041,8 @@ $ continuo doctor
 ✓ gh の認証        scope に project が含まれる
 ✗ clone           octocat/hello-world が見つからない
                   → ghq get octocat/hello-world を実行してください
-! 資格情報         Keychain から取得できませんでした（確認の画面が出た可能性があります）
-                  → 判定を飛ばしました。continuo の起動には影響しません
+! 資格情報         Keychain の項目 "Claude Code-credentials" の読み取りが期限内に終わりませんでした: …
+                  → 画面に確認のダイアログが出ていないか確かめてから、`continuo allow-keychain-access` を実行して「常に許可」を選んでください
 
 2件に問題があります（✗ 1件 / ! 1件）
 ```
@@ -3989,7 +4031,10 @@ cleanup:
 
 rate_limit:
   source: oauth_usage_api                   # Claude の使用量 API から枠の残りを読む。none なら枠を見ない
-  token_source: claude_credentials          # ~/.claude/.credentials.json から読む。env なら下の token_env から読む
+  token_source: claude_credentials          # keychain なら macOS の Keychain から読む（先に continuo allow-keychain-access を1回実行すること）。
+                                            # claude_credentials なら ~/.claude/.credentials.json、env なら下の token_env から読む。
+                                            # 既定は macOS が keychain、ほかの OS が claude_credentials。
+                                            # この設定例は、どの OS でも読める claude_credentials を書いてある（3-15）
   token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数の名前
   pause_above_percent: 95                   # 枠の使用率がこれを超えたら新しい issue に着手しない。動いている turn は止めない
   poll_interval_ms: 300000                  # 枠の残りを読み直す間隔
@@ -4362,6 +4407,7 @@ URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く
 | 第10節（Codex app-server のプロトコル） | **continuo が動かすのは Claude Code であって Codex ではない。**受け入れ基準の 17.5 もほぼ全部が対象外になる |
 | 5.3.6 の `codex` セクション | `claude` セクションへ全面差し替え（5-2） |
 | Appendix A（SSH の worker 拡張） | OPTIONAL。continuo は1台のマシンで herdr の pane を使う |
+| **6.2 Dynamic Reload（REQUIRED）** | **実装しない。**`WORKFLOW.md` を変えたら continuo を再起動する。**再起動は安全に作ってある**（`restart.orphan_running_action` が実行中の run を引き継ぐか着手待ちへ戻す。worktree も pane も残る）。**動かしたまま設定を変える運用を想定していない。**実行中の run へ反映すると、turn の途中で判断の基準が変わる |
 
 **第10節を落とす代わりに受け入れ基準へ足すものは、第7節の末尾にまとめた。**
 

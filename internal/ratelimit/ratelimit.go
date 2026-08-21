@@ -7,10 +7,21 @@
 // **`rate_limit.source: none` のときは1回も叩かない。**Enabled が偽を返し、Fetch は
 // 常に nil を返す。
 //
-// **資格情報は `~/.claude/.credentials.json` からだけ読む。Keychain は読まない**（3-15）。
-// Keychain を読むと確認の画面が出ることがあり、無人のプロセスが固まる。
-// **macOS では `~/.claude/.credentials.json` が無いのが普通である。**取れなければ枠の判定を
-// 諦め、`none` と同じ動きにする。**起動は止めない。**
+// **資格情報の出所は `rate_limit.token_source` で決まる。**
+//
+//	claude_credentials … `~/.claude/.credentials.json` を読む
+//	keychain           … macOS の Keychain を `security` で読む（**macOS でだけ選べる**）
+//	env                … `rate_limit.token_env` に書かれた環境変数を読む
+//
+// **macOS では `~/.claude/.credentials.json` が無いのが普通で、資格情報は Keychain にある**
+// （2026-08-21 に実測）。そのため macOS の既定は `keychain` である（internal/config）。
+//
+// **Keychain を読むと確認のダイアログが出ることがある。**答えられないまま無人のプロセスが
+// 固まらないよう、`security` の呼び出しには必ず上限を置く（DefaultKeychainTimeout）。
+// **期限内に返らなければ枠の判定を諦める。**先に `continuo allow-keychain-access` を1回
+// 実行しておけば、以後ダイアログは出ない。
+//
+// **どの出所でも、取れなければ枠の判定を諦め、`none` と同じ動きにする。起動は止めない。**
 package ratelimit
 
 import (
@@ -67,7 +78,7 @@ const (
 )
 
 // CredentialsRelPath はホームディレクトリからの資格情報ファイルの相対パスである。
-// **Keychain は読まない**（3-15）。
+// **`token_source: claude_credentials` のときだけ読む。**
 var CredentialsRelPath = filepath.Join(".claude", ".credentials.json")
 
 // ErrNoCredentials は資格情報を取れなかったことを表す。
@@ -172,6 +183,10 @@ type Options struct {
 	HomeDir string
 	// UserAgent は送る User-Agent である。空なら defaultUserAgent を使う。
 	UserAgent string
+	// KeychainTimeout は `token_source: keychain` のときに `security` を待つ上限である。
+	// **0 以下なら DefaultKeychainTimeout を使う。**
+	// テストは短い値を渡して、返ってこない `security` を待たずに済ませられる。
+	KeychainTimeout time.Duration
 	// Logger はログの出力先である。nil なら slog.Default() を使う。
 	Logger *slog.Logger
 }
@@ -180,12 +195,13 @@ type Options struct {
 //
 // **複数の goroutine から同時に呼んでよい。**
 type Reader struct {
-	cfg       config.RateLimitConfig
-	endpoint  string
-	client    *http.Client
-	homeDir   string
-	userAgent string
-	logger    *slog.Logger
+	cfg             config.RateLimitConfig
+	endpoint        string
+	client          *http.Client
+	homeDir         string
+	userAgent       string
+	keychainTimeout time.Duration
+	logger          *slog.Logger
 
 	// mu は disabled と warned を守る。
 	mu sync.Mutex
@@ -233,14 +249,19 @@ func NewReader(opts Options) (*Reader, error) {
 	if userAgent == "" {
 		userAgent = defaultUserAgent
 	}
+	keychainTimeout := opts.KeychainTimeout
+	if keychainTimeout <= 0 {
+		keychainTimeout = DefaultKeychainTimeout
+	}
 
 	return &Reader{
-		cfg:       opts.Config,
-		endpoint:  endpoint,
-		client:    client,
-		homeDir:   homeDir,
-		userAgent: userAgent,
-		logger:    logger,
+		cfg:             opts.Config,
+		endpoint:        endpoint,
+		client:          client,
+		homeDir:         homeDir,
+		userAgent:       userAgent,
+		keychainTimeout: keychainTimeout,
+		logger:          logger,
 	}, nil
 }
 
@@ -278,7 +299,7 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 		return nil, nil
 	}
 
-	token, err := r.token()
+	token, err := r.token(ctx)
 	if err != nil {
 		r.disable(err)
 		return nil, nil
@@ -327,10 +348,13 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 
 // token は設定に従って OAuth のトークンを取り出す。
 //
+// ctx: 呼び出しに適用するコンテキスト（`keychain` のとき `security` の実行に渡す）。
 // 戻り値の1つ目: トークン。
 // 戻り値の2つ目: 取れなかった場合は ErrNoCredentials を包んだエラー。
-func (r *Reader) token() (string, error) {
+func (r *Reader) token(ctx context.Context) (string, error) {
 	switch r.cfg.TokenSource {
+	case TokenSourceKeychain:
+		return r.tokenFromKeychain(ctx)
 	case TokenSourceEnv:
 		name := r.cfg.TokenEnv
 		if name == "" {
@@ -348,7 +372,8 @@ func (r *Reader) token() (string, error) {
 
 // tokenFromCredentialsFile は `~/.claude/.credentials.json` から accessToken を読む。
 //
-// **Keychain は読まない**（設計 3-15）。macOS ではこのファイルが無いのが普通である。
+// **macOS ではこのファイルが無いのが普通である**（資格情報は Keychain に入っている）。
+// macOS で枠を読みたいなら `token_source: keychain` を使う。
 //
 // **通常のファイルであることを確かめてから読む。**symlink は辿らない。
 // 権限が group / other に開いている場合は警告を1行残す（読むこと自体は止めない）。
@@ -383,18 +408,16 @@ func (r *Reader) tokenFromCredentialsFile() (string, error) {
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileReadFailed, ErrNoCredentials, path, err)
 	}
-	var parsed struct {
-		ClaudeAIOauth struct {
-			AccessToken string `json:"accessToken"`
-		} `json:"claudeAiOauth"`
-	}
-	if err := json.Unmarshal(data, &parsed); err != nil {
+	// **中身の解釈は Keychain と共有する**（keychain.go の parseAccessToken）。
+	// 資格情報の JSON の形は出所によらず同じなので、写しを2つ持たない。
+	token, err := parseAccessToken(data)
+	if err != nil {
 		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileParseFailed, ErrNoCredentials, path, err)
 	}
-	if parsed.ClaudeAIOauth.AccessToken == "" {
+	if token == "" {
 		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileAccessTokenMissing, ErrNoCredentials, path)
 	}
-	return parsed.ClaudeAIOauth.AccessToken, nil
+	return token, nil
 }
 
 // disable は枠の判定を諦める。警告は1回だけ出す（設計 3-15）。

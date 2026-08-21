@@ -422,7 +422,7 @@ flowchart TB
 
 | 項目 | 内容 |
 | --- | --- |
-| 認証 | Claude Code の資格情報を**読み取るだけ**（`~/.claude/.credentials.json`、無ければ macOS の Keychain） |
+| 認証 | Claude Code の資格情報を**読み取るだけ。**どこから読むかは `rate_limit.token_source` で決める。**既定は macOS が Keychain、ほかの OS が `~/.claude/.credentials.json`** |
 | **枠を消費するか** | **大量には消費しない**（3回続けて叩いて使用率が動かなかった）。**ただし使用率は整数の百分率なので、「1トークンも消費しない」ことは判別できない。**必須にはせず、設定で切れるようにしてある |
 | 読む間隔 | 既定5分 |
 | 止める閾値 | 既定95%。**走行中の turn は止めない** |
@@ -500,13 +500,17 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | リポジトリの信頼登録 | `~/.claude.json` の `hasTrustDialogAccepted` が `true` か |
 | ローカルの clone | `ghq list --exact <owner>/<repo>` の**出力が空でないか**（exit code は常に 0 なので使えない） |
 | 設定ファイル | `WORKFLOW.md` が読めて、front matter が検証を通るか |
-| Claude の資格情報 | `~/.claude/.credentials.json`、無ければ macOS の Keychain |
+| Claude の資格情報 | `rate_limit.token_source` が指す先から取れるか（macOS の既定は Keychain） |
 
 **`init` が置くのは `WORKFLOW.md` 1つだけである。**埋めないと動かない値にはプレースホルダを入れ、
 コメントで「ここを埋めること」と書く。**既にあれば上書きせずに止める。**
 
-**`doctor` は Keychain で固まらないようにする。**環境によっては確認の画面が出るので、
-**「取得できなかった」を返すだけにして、許可待ちで止まらない。**
+**`doctor` は Keychain を読む。**人間が端末で叩く道具なので、確認のダイアログが出てもその場で答えられる。
+**固まらないように10秒の上限を掛け、期限が来たら `security` を殺して `!` にする。**
+
+**macOS の人は `continuo allow-keychain-access` を1回叩く。**Keychain は初めて読む実行ファイルに
+確認のダイアログを出すので、**無人で走る continuo が当たる前に、人間が「常に許可」で答えておく。**
+出るのは読めた項目の名前だけで、トークンの値は画面にもログにも出ない。
 
 ---
 

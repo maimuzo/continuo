@@ -210,6 +210,21 @@ const (
 	KeyDoctorCredentialsFileMissing Key = "doctor.credentials.file_missing"
 	// KeyDoctorCredentialsRemedySkipped は同じときの案内に出る。
 	KeyDoctorCredentialsRemedySkipped Key = "doctor.credentials.remedy_skipped"
+	// KeyDoctorCredentialsKeychainOK はKeychain から読めたときの説明に出る。
+	KeyDoctorCredentialsKeychainOK Key = "doctor.credentials.keychain_ok"
+	// KeyDoctorCredentialsKeychainFailed はKeychain を読めなかったときの説明に出る。
+	KeyDoctorCredentialsKeychainFailed Key = "doctor.credentials.keychain_failed"
+	// KeyDoctorCredentialsRemedyKeychain は同じときの直し方に出る。
+	KeyDoctorCredentialsRemedyKeychain Key = "doctor.credentials.remedy_keychain"
+	// KeyDoctorCredentialsKeychainTimeout はKeychain の読み取りが期限内に終わらなかったときの説明に出る。
+	KeyDoctorCredentialsKeychainTimeout Key = "doctor.credentials.keychain_timeout"
+	// KeyDoctorCredentialsKeychainNoAccessToken はKeychain は読めたが accessToken が無いときの説明に出る。
+	KeyDoctorCredentialsKeychainNoAccessToken Key = "doctor.credentials.keychain_no_access_token"
+	// KeyDoctorCredentialsRemedyKeychainTimeout は同じときの直し方に出る。
+	KeyDoctorCredentialsRemedyKeychainTimeout Key = "doctor.credentials.remedy_keychain_timeout"
+	// KeyDoctorCredentialsRemedyUseKeychain は資格情報のファイルが無い macOS で、
+	// Keychain へ切り替える案内に出る。
+	KeyDoctorCredentialsRemedyUseKeychain Key = "doctor.credentials.remedy_use_keychain"
 )
 
 // CLI の共通の文言（複数のサブコマンドが同じ文面を出す）。
@@ -419,6 +434,42 @@ const (
 	KeyCLIDoctorWarnPathUnresolved Key = "cli.doctor.warn_path_unresolved"
 	// KeyCLIDoctorErrWriteReport は検査結果を出せなかったときに出る。
 	KeyCLIDoctorErrWriteReport Key = "cli.doctor.err_write_report"
+)
+
+// `continuo allow-keychain-access` の文言（macOS の Keychain へのアクセスを1回許可させる）。
+//
+// **失敗の案内は「何が起きたか・確かめ方・よくある原因・対処」の4行で書く**（設計 3-34b）。
+const (
+	// KeyCLIAllowKeychainAccessErrTooManyPositional は位置引数が1つ以上あるときに出る。
+	KeyCLIAllowKeychainAccessErrTooManyPositional Key = "cli.allow_keychain_access.err_too_many_positional"
+	// KeyCLIAllowKeychainAccessNotDarwin はmacOS 以外で実行したときに出る。
+	KeyCLIAllowKeychainAccessNotDarwin Key = "cli.allow_keychain_access.not_darwin"
+	// KeyCLIAllowKeychainAccessBefore は読みに行く直前の案内に出る。
+	KeyCLIAllowKeychainAccessBefore Key = "cli.allow_keychain_access.before"
+	// KeyCLIAllowKeychainAccessBeforeDialog は同じ案内の2行目（ダイアログの答え方）に出る。
+	KeyCLIAllowKeychainAccessBeforeDialog Key = "cli.allow_keychain_access.before_dialog"
+	// KeyCLIAllowKeychainAccessOK は読めたときの1行目に出る。
+	KeyCLIAllowKeychainAccessOK Key = "cli.allow_keychain_access.ok"
+	// KeyCLIAllowKeychainAccessFields は読めた項目の名前を並べる行に出る。**値は出さない。**
+	KeyCLIAllowKeychainAccessFields Key = "cli.allow_keychain_access.fields"
+	// KeyCLIAllowKeychainAccessNoAccessToken は読めたが accessToken が無いときの1行目に出る。
+	KeyCLIAllowKeychainAccessNoAccessToken Key = "cli.allow_keychain_access.no_access_token"
+	// KeyCLIAllowKeychainAccessErrHeadline は読めなかったときの1行目に出る。
+	KeyCLIAllowKeychainAccessErrHeadline Key = "cli.allow_keychain_access.err_headline"
+	// KeyCLIAllowKeychainAccessErrHowTo は同じときの【確かめ方】に出る。
+	KeyCLIAllowKeychainAccessErrHowTo Key = "cli.allow_keychain_access.err_how_to"
+	// KeyCLIAllowKeychainAccessErrCauses は同じときの【よくある原因】に出る。
+	KeyCLIAllowKeychainAccessErrCauses Key = "cli.allow_keychain_access.err_causes"
+	// KeyCLIAllowKeychainAccessErrRemedy は同じときの【対処】に出る。
+	KeyCLIAllowKeychainAccessErrRemedy Key = "cli.allow_keychain_access.err_remedy"
+	// KeyCLIAllowKeychainAccessTimeoutHeadline は期限内に返らなかったときの1行目に出る。
+	KeyCLIAllowKeychainAccessTimeoutHeadline Key = "cli.allow_keychain_access.timeout_headline"
+	// KeyCLIAllowKeychainAccessTimeoutHowTo は同じときの【確かめ方】に出る。
+	KeyCLIAllowKeychainAccessTimeoutHowTo Key = "cli.allow_keychain_access.timeout_how_to"
+	// KeyCLIAllowKeychainAccessTimeoutCauses は同じときの【よくある原因】に出る。
+	KeyCLIAllowKeychainAccessTimeoutCauses Key = "cli.allow_keychain_access.timeout_causes"
+	// KeyCLIAllowKeychainAccessTimeoutRemedy は同じときの【対処】に出る。
+	KeyCLIAllowKeychainAccessTimeoutRemedy Key = "cli.allow_keychain_access.timeout_remedy"
 )
 
 // `continuo`（常駐プロセス本体）の文言。
@@ -846,6 +897,27 @@ const (
 	// KeyRatelimitCredentialsFileAccessTokenMissing は資格情報のファイルに
 	// claudeAiOauth.accessToken が無いときに出る。
 	KeyRatelimitCredentialsFileAccessTokenMissing Key = "ratelimit.credentials_file.access_token_missing"
+)
+
+// 枠の判定に使う資格情報を macOS の Keychain から読むとき（internal/ratelimit の
+// tokenFromKeychain / ProbeKeychain）の文言。
+//
+// **どれも先頭の %w に ErrNoCredentials を渡す**（errors.Is の切り分けを保つため）。
+// **どれにも読み取った値そのものを載せない。**
+const (
+	// KeyRatelimitKeychainBinaryNotFound はKeychain を読むコマンドが PATH に無いときに出る。
+	KeyRatelimitKeychainBinaryNotFound Key = "ratelimit.keychain.binary_not_found"
+	// KeyRatelimitKeychainTimeout は期限内にコマンドが返らなかったときに出る。
+	KeyRatelimitKeychainTimeout Key = "ratelimit.keychain.timeout"
+	// KeyRatelimitKeychainRunFailed はコマンドが異常終了したときに出る。
+	KeyRatelimitKeychainRunFailed Key = "ratelimit.keychain.run_failed"
+	// KeyRatelimitKeychainParseFailed はKeychain の中身を JSON として解析できなかったときに出る。
+	KeyRatelimitKeychainParseFailed Key = "ratelimit.keychain.parse_failed"
+	// KeyRatelimitKeychainOauthMissing はKeychain の中身に claudeAiOauth が無いときに出る。
+	KeyRatelimitKeychainOauthMissing Key = "ratelimit.keychain.oauth_missing"
+	// KeyRatelimitKeychainAccessTokenMissing はKeychain の中身に
+	// claudeAiOauth.accessToken が無いときに出る。
+	KeyRatelimitKeychainAccessTokenMissing Key = "ratelimit.keychain.access_token_missing"
 )
 
 // HTTP ダッシュボード（internal/server）の起動と停止のエラーの文言。
@@ -1357,6 +1429,13 @@ var allKeys = []Key{
 	KeyDoctorCredentialsFileFound,
 	KeyDoctorCredentialsFileMissing,
 	KeyDoctorCredentialsRemedySkipped,
+	KeyDoctorCredentialsKeychainOK,
+	KeyDoctorCredentialsKeychainFailed,
+	KeyDoctorCredentialsRemedyKeychain,
+	KeyDoctorCredentialsKeychainTimeout,
+	KeyDoctorCredentialsKeychainNoAccessToken,
+	KeyDoctorCredentialsRemedyKeychainTimeout,
+	KeyDoctorCredentialsRemedyUseKeychain,
 	KeyCLIErrFlagAfterPositional,
 	KeyCLIErrGetwd,
 	KeyCLIErrResolveConfigPath,
@@ -1446,6 +1525,21 @@ var allKeys = []Key{
 	KeyCLIDoctorErrTooManyPositional,
 	KeyCLIDoctorWarnPathUnresolved,
 	KeyCLIDoctorErrWriteReport,
+	KeyCLIAllowKeychainAccessErrTooManyPositional,
+	KeyCLIAllowKeychainAccessNotDarwin,
+	KeyCLIAllowKeychainAccessBefore,
+	KeyCLIAllowKeychainAccessBeforeDialog,
+	KeyCLIAllowKeychainAccessOK,
+	KeyCLIAllowKeychainAccessFields,
+	KeyCLIAllowKeychainAccessNoAccessToken,
+	KeyCLIAllowKeychainAccessErrHeadline,
+	KeyCLIAllowKeychainAccessErrHowTo,
+	KeyCLIAllowKeychainAccessErrCauses,
+	KeyCLIAllowKeychainAccessErrRemedy,
+	KeyCLIAllowKeychainAccessTimeoutHeadline,
+	KeyCLIAllowKeychainAccessTimeoutHowTo,
+	KeyCLIAllowKeychainAccessTimeoutCauses,
+	KeyCLIAllowKeychainAccessTimeoutRemedy,
 	KeyCLIMainFlagLogLevel,
 	KeyCLIMainFlagPort,
 	KeyCLIMainErrTooManyPositional,
@@ -1586,6 +1680,12 @@ var allKeys = []Key{
 	KeyRatelimitCredentialsFileNotRegularFile,
 	KeyRatelimitCredentialsFileParseFailed,
 	KeyRatelimitCredentialsFileAccessTokenMissing,
+	KeyRatelimitKeychainBinaryNotFound,
+	KeyRatelimitKeychainTimeout,
+	KeyRatelimitKeychainRunFailed,
+	KeyRatelimitKeychainParseFailed,
+	KeyRatelimitKeychainOauthMissing,
+	KeyRatelimitKeychainAccessTokenMissing,
 	KeyServerNewPortOutOfRange,
 	KeyServerStartListenFailed,
 	KeyServerCloseShutdownFailed,

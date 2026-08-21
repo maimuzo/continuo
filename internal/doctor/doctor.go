@@ -11,7 +11,7 @@
 //	ボード        … Bootstrap が通り、active_states の選択肢名が全部あるか
 //	clone        … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録      … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
-//	資格情報      … rate_limit の設定に応じて、環境変数かファイルがあるか
+//	資格情報      … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
 //
 // **1つ失敗しても残りを全部検査する。**最初の失敗で止めない。
 //
@@ -190,7 +190,11 @@ func Run(ctx context.Context, opts Options) Report {
 	report.add(checkTrust(opts, repos, clonePaths, boardResult.Symbol))
 
 	// 段7: 資格情報。**上流が落ちても飛ばさない。**設定が読めたかどうかだけで記号を分ける。
-	report.add(checkCredentials(opts, cfg, configResult.Symbol))
+	// **期限を切る。**`token_source: keychain` のときは外部コマンド（`security`）を起動し、
+	// 確認のダイアログが出たまま誰も答えないと返らないためである。
+	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
+		return checkCredentials(ctx, opts, cfg, configResult.Symbol)
+	}))
 
 	return report
 }

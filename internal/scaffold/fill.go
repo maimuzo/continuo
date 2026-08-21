@@ -30,6 +30,19 @@ const projectPlaceholderCode = "    project_number: 0"
 // repositoriesPlaceholderCode は雛形の trust.repositories の行の、コメントより前の部分である。
 const repositoriesPlaceholderCode = "  repositories: []"
 
+// tokenSourceCode は雛形の rate_limit.token_source の行の、コメントより前の部分である。
+//
+// **雛形が持つ値は `claude_credentials` である**（どの OS でも読める値）。
+// 書き出すときだけ、走っている OS の既定へ差し替える（tokenSourceLine）。
+const tokenSourceCode = "  token_source: " + config.RateLimitTokenSourceClaudeCredentials
+
+// tokenSourceKeychainComment は rate_limit.token_source を keychain にしたときのコメントである。
+//
+// **先に `continuo allow-keychain-access` を実行させる案内を必ず残す。**これが無いと、
+// 確認のダイアログが出たまま無人のプロセスが枠を読めずに終わる。
+const tokenSourceKeychainComment = "macOS の Keychain から読む。先に continuo allow-keychain-access を1回実行すること。" +
+	"claude_credentials なら ~/.claude/.credentials.json、env なら下の token_env から読む"
+
 // repositoriesFilledComment は trust.repositories を埋めたあとに残すコメントの1行目である。
 //
 // **「要らない行を消すこと」を必ず残す。**ボードから拾った一覧をそのまま信頼させないための
@@ -89,7 +102,7 @@ func ValidOwner(name string) bool {
 // Statuses は5つの役割が全部埋まっているときだけ書き込む（Statuses.Complete）。
 // 戻り値: WORKFLOW.md の全文。
 func TemplateWithValues(values Values) string {
-	out := workflowTemplate
+	out := applyRateLimitTokenSource(workflowTemplate)
 	if values.Owner != "" && ValidOwner(values.Owner) {
 		out = replaceLine(out, ownerPlaceholderCode, "    owner: "+values.Owner, ownerFilledComment)
 	}
@@ -106,6 +119,26 @@ func TemplateWithValues(values Values) string {
 		out, _ = applyStatuses(out, values.Statuses)
 	}
 	return out
+}
+
+// applyRateLimitTokenSource は rate_limit.token_source の行を、走っている OS の既定へ差し替える。
+//
+// **雛形は文字列を1つしか持てないので、書き出すときに差し替える。**
+// **`continuo init` が書いた値は、そのファイルを読むときの既定値より強い。**macOS で
+// `claude_credentials` と書き出すと、`~/.claude/.credentials.json` が無いのが普通の環境で
+// 枠の判定が黙って効かなくなる（config.DefaultConfig の既定を macOS で keychain にした意味が消える）。
+//
+// **差し替えるのは値とコメントだけである。**キーは動かないので、設計 5-2 とのキーの照合には
+// 影響しない。
+//
+// s: 差し替える対象の全文。
+// 戻り値: 走っている OS の既定を書いた全文。既定が雛形の値と同じ（macOS 以外）ならそのまま返す。
+func applyRateLimitTokenSource(s string) string {
+	want := config.DefaultConfig().RateLimit.TokenSource
+	if want == config.RateLimitTokenSourceClaudeCredentials {
+		return s
+	}
+	return replaceLine(s, tokenSourceCode, "  token_source: "+want, tokenSourceKeychainComment)
 }
 
 // repositoriesBlock は trust.repositories の行を、拾った一覧を並べた複数行に組み立てる。

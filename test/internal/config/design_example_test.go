@@ -142,6 +142,11 @@ func TestLoad_設計5_2の設定例と既定値が一致する(t *testing.T) {
 	}
 
 	want := config.DefaultConfig()
+	// **rate_limit.token_source の既定だけは OS で分かれる**（macOS は keychain）。
+	// 設計 5-2 の設定例は、どの OS でも読める claude_credentials を書いてあるので、
+	// 比較する側もその値へそろえる。**ここで既定値そのものを検査しているわけではない。**
+	// OS ごとの既定値は TestDefaultConfig_rate_limitのtoken_sourceの既定がOSで分かれる が見る。
+	want.RateLimit.TokenSource = config.RateLimitTokenSourceClaudeCredentials
 	// 既定値を持たない必須キー（設定例が値を与えているもの）を埋める。
 	want.Tracker.Provider.Owner = "maimuzo"
 	want.Tracker.Provider.ProjectNumber = 3

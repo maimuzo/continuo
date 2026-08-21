@@ -128,7 +128,7 @@ cleanup:
 
 rate_limit:
   source: oauth_usage_api                   # Claude の使用量 API から枠の残りを読む。none なら枠を見ない
-  token_source: claude_credentials          # ~/.claude/.credentials.json から読む。env なら下の token_env から読む
+  token_source: claude_credentials          # ~/.claude/.credentials.json から読む。macOS なら keychain（Keychain から読む）にできる。env なら下の token_env から読む
   token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数の名前
   pause_above_percent: 95                   # 枠の使用率がこれを超えたら新しい issue に着手しない。動いている turn は止めない
   poll_interval_ms: 300000                  # 枠の残りを読み直す間隔
