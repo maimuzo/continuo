@@ -36,6 +36,11 @@ go.work.sum
 .claude/local-guidelines.md
 .claude/worktrees/
 
+# 準拠する仕様（openai/symphony の SPEC.md）。**リポジトリに同梱しない。**
+# Apache-2.0 の再配布になり、ライセンスの扱いが増えるため。
+# 作業に使うときは各自が置く（置き方は CLAUDE.md を見よ）。
+docs/spec/symphony/
+
 # 作業用の一時ファイル
 tmp/
 

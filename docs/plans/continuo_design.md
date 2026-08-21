@@ -14,7 +14,7 @@
 
 **`continuo` とは何か。**GitHub Projects v2 のボード1枚を見張り、`Ready` の issue ごとに worktree を用意し、herdr の pane で Claude Code を対話モードで起動して作業させ、完了までを面倒見る**常駐プロセス**である。Go で書く。名前は**通奏低音**（basso continuo）に由来する（[docs/naming.md](../naming.md)）。
 
-**準拠する仕様は [openai/symphony](https://github.com/openai/symphony) の `SPEC.md`**（Apache-2.0、2312行。手元の写しは [docs/spec/symphony/SPEC.md](../spec/symphony/SPEC.md)）。
+**準拠する仕様は [openai/symphony](https://github.com/openai/symphony) の [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md)**（Apache-2.0、2312行）。**このリポジトリには同梱していない**（置き方は [CLAUDE.md](../../CLAUDE.md)）。
 
 
 ### continuo が満たすべき条件（これが目標である）
@@ -4257,7 +4257,7 @@ push していない作業は、この worktree が片付くときに失われ�
 
 ## 8. symphony の仕様と異なるところ
 
-**準拠先は [openai/symphony](https://github.com/openai/symphony) の `SPEC.md` である**（手元の写しは [docs/spec/symphony/SPEC.md](../spec/symphony/SPEC.md)）。
+**準拠先は [openai/symphony](https://github.com/openai/symphony) の [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md) である**（**このリポジトリには同梱していない**）。
 **ただし全部を踏襲するわけではない。**異なる部分と、その理由をここに集める。
 
 **実装するときは、この表に無い逸脱をしてはならない。**新しく外したくなったら、まずここに足す。
@@ -4454,5 +4454,5 @@ orchestrator はそれとは別に受け取ったイベントの間隔を測る�
 | `hooks.*`（5.3.4） | `workspace_hooks.*` | **continuo には Claude Code の hook もあるため。**`hooks` だけだとどちらの話か分からない |
 
 **`startup_timeout_ms` はこの表に入らない。**仕様に無い continuo 独自のキーであり
-（検索パターン `startup_timeout_ms`、対象パス [docs/spec/symphony/SPEC.md](../spec/symphony/SPEC.md)、該当0件）、
+（検索パターン `startup_timeout_ms`、対象パス `SPEC.md`、該当0件）、
 `herdr.startup_timeout_ms` への置き場所の移動として 5-2 に書いてある。

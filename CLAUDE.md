@@ -18,7 +18,17 @@
 
 **名前は通奏低音（basso continuo）に由来する。**バロック音楽で、曲の最初から最後まで途切れず鳴り続け、全体の和声を支える低音パート。経緯は [docs/naming.md](docs/naming.md)。
 
-**準拠する仕様は [openai/symphony](https://github.com/openai/symphony) の `SPEC.md`**（Apache-2.0）。手元の写しは [docs/spec/symphony/SPEC.md](docs/spec/symphony/SPEC.md)。
+**準拠する仕様は [openai/symphony](https://github.com/openai/symphony) の [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md)**（Apache-2.0）。
+
+> **仕様はこのリポジトリに同梱しない。**再配布になり、ライセンスの扱いが増えるためである。
+> **作業に使うときは各自が手元に置く**（`docs/spec/symphony/` は `.gitignore` 済み）。
+>
+> ```bash
+> mkdir -p docs/spec/symphony
+> curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/spec/symphony/SPEC.md
+> ```
+>
+> **文書から参照するときは節番号を使う**（例: `SPEC.md` 6.2）。**行番号は使わない**（upstream で動く）。
 
 **設計は [docs/plans/continuo_design.md](docs/plans/continuo_design.md) が正である。**設計の判断はすべてここに記録する。指示を待たない。
 

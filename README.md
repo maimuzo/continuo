@@ -35,7 +35,7 @@ GitHub Projects v2 のボードを見張り、issue ごとに git worktree を�
 
 ## Specification / 準拠する仕様
 
-continuo implements the [openai/symphony](https://github.com/openai/symphony) service specification (Apache-2.0). A copy of the spec is kept at [docs/spec/symphony/SPEC.md](docs/spec/symphony/SPEC.md).
+continuo implements the [openai/symphony](https://github.com/openai/symphony) service specification (Apache-2.0). The spec itself lives at [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md) — **it is not bundled in this repository**.
 
 Where the spec assumes a Codex app-server subprocess speaking a structured protocol over stdio, continuo substitutes an interactive Claude Code session driven through herdr, with turn completion delivered by Claude Code hooks. The full conformance mapping — including the `MUST` clauses that cannot be met and what replaces them — is in the design document.
 
@@ -86,11 +86,10 @@ that is missing locally**), and how to stop and clean up.
 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) | The design. Every decision and its evidence |
 | [docs/plans/review/README.md](docs/plans/review/README.md) | The code review and what was fixed / レビューの結果と対応 |
 | [docs/naming.md](docs/naming.md) | How the name was chosen |
-| [docs/spec/symphony/SPEC.md](docs/spec/symphony/SPEC.md) | The symphony service specification (Apache-2.0, upstream copy) |
 | [docs/evidence/](docs/evidence/) | Raw observations from the hook behaviour experiments |
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
-One exception: [docs/spec/symphony/SPEC.md](docs/spec/symphony/SPEC.md) is a redistributed copy of the [openai/symphony](https://github.com/openai/symphony) specification, licensed by its authors under **Apache-2.0**. Its full license text is at [LICENSE-APACHE-2.0.txt](LICENSE-APACHE-2.0.txt), and the attribution is recorded in [NOTICE](NOTICE) and in the file's own header.
+**Every file in this repository is MIT.** No files under other licenses are bundled.

@@ -102,7 +102,7 @@ agent:
 
 ## 準拠する仕様
 
-continuo は [openai/symphony](https://github.com/openai/symphony) のサービス仕様（Apache-2.0）を実装しています。仕様の写しは [docs/spec/symphony/SPEC.md](docs/spec/symphony/SPEC.md) にあります。
+continuo は [openai/symphony](https://github.com/openai/symphony) のサービス仕様（Apache-2.0）を実装しています。仕様の本文は [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md) にあります（**このリポジトリには同梱していません**）。
 
 **仕様は Codex の app-server と stdio で構造化メッセージをやり取りする前提ですが、continuo は herdr の pane で動く対話モードの Claude Code に読み替えています。** 守れない `MUST` と、その代わりに何をするかは設計文書に書いてあります。
 
@@ -110,4 +110,4 @@ continuo は [openai/symphony](https://github.com/openai/symphony) のサービ�
 
 **MIT** — [LICENSE](LICENSE) を見てください。
 
-**例外が1つあります。** [docs/spec/symphony/SPEC.md](docs/spec/symphony/SPEC.md) は [openai/symphony](https://github.com/openai/symphony) の仕様の再配布であり、**Apache-2.0** です（[LICENSE-APACHE-2.0.txt](LICENSE-APACHE-2.0.txt) / [NOTICE](NOTICE)）。**それ以外のファイルはすべて MIT です。**
+**このリポジトリのファイルはすべて MIT です。**他のライセンスのファイルは同梱していません。
