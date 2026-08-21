@@ -27,7 +27,7 @@
 | `herdr` | socket の `ping` の応答の `protocol` が `herdr.protocol` と一致するか |
 | `gh の認証` | `gh auth status` の `Token scopes:` に `project` が単独で並んでいるか |
 | `ボード` | `Bootstrap` が通り、`active_states` の選択肢名が全部あるか |
-| `clone` | 対象リポジトリが `ghq list --exact` で見つかるか |
+| `clone` | 対象リポジトリが `ghq list -p -e` で見つかるか |
 | `信頼登録` | 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか |
 | `資格情報` | `rate_limit` の設定に応じて、環境変数かファイルがあるか |
 
@@ -61,7 +61,7 @@
 - [ ] **対象リポジトリが0件のとき、`clone` と `信頼登録` は `!` にする。**終了コードには影響しない
   - **ボードが空なのは設定の誤りではない**（設計 3-32）
 - [ ] **リポジトリの信頼登録。**`~/.claude.json` の `hasTrustDialogAccepted` が `true` か（**読むだけ**）
-- [ ] **ローカルの clone。**`ghq list --exact <owner>/<repo>` の**出力が空でないか**
+- [ ] **ローカルの clone。**`ghq list -p -e <owner>/<repo>` の**出力が空でないか**
   - **exit code は存在の有無にかかわらず 0 を返す**（実測）。出力の有無で判定する
 - [ ] **設定ファイル。**`WORKFLOW.md` が読めて、front matter が検証を通るか
 - [ ] **ボードを読めるか。**`Bootstrap` を呼び、`active_states` の選択肢名が全部あるかを照合する

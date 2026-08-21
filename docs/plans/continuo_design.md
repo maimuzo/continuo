@@ -1824,8 +1824,8 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
   "project_item_id": "PVTI_lADOAb3c4M4Aq7EzgAR8Xyz",
   "branch": "continuo/octocat/hello-world/188",
   "herdr_workspace_id": "ws_01J8XK2M9P",
-  "socket_path": "/var/folders/5v/8995nvts4692rk0gtk122lkw0000gn/T/continuo/hooks.sock",
-  "settings_path": "/var/folders/5v/8995nvts4692rk0gtk122lkw0000gn/T/continuo/issues/octocat-hello-world-188/settings.json",
+  "socket_path": "/var/folders/.../T/continuo/hooks.sock",
+  "settings_path": "/var/folders/.../T/continuo/issues/octocat-hello-world-188/settings.json",
   "agent_name": "continuo-hello-world-188",
   "session_uuid": "8aebf7af-8b07-4f45-b037-59f457b38feb",
   "created_at": "2026-08-18T12:34:56+09:00",
@@ -2175,6 +2175,10 @@ run 中の Claude Code は前回のパスを持ったままなので、引き継
 | ログ | **不一致だったことと、両方のパスを出す。**運用の環境が変わったことに人間が気づけるようにする |
 
 ### 3-24. 設定を読み直して失敗しても落ちない
+
+> **この節は作らないと決めた。**下の「採る形」は、もし将来作るならこうする、という設計である。
+> **いまの continuo は設定を起動時に1回だけ読む。**`WORKFLOW.md` を書き換えたら再起動すること。
+> 決定と理由は仕様適合の表（8-3）にある。
 
 **仕様 6.2 の要求。**
 
@@ -2939,7 +2943,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | herdr が動いているか | **socket の `ping` を呼び、応答の `protocol` が設定の `herdr.protocol` と一致するか**（2-1）。**`herdr status` の CLI は使わない**（socket API で完結する） | — |
 | `gh` の認証と scope | **`gh auth status` の `Token scopes:` の行に `'project'` が単独の scope として並んでいるか**（下記） | **`--show-scopes` というフラグは存在しない**（gh 2.97.0 で確認）。既定の出力に scope が入っている |
 | リポジトリの信頼登録 | `~/.claude.json` の `projects["<clone の絶対パス>"].hasTrustDialogAccepted` が `true` か | **非公開の内部ファイルである。**将来キー名が変わりうる前提で扱う |
-| ローカルの clone | `ghq list --exact <owner>/<repo>` の**出力が空でないか** | **exit code は存在の有無にかかわらず 0 を返す**（実測）。出力の有無で判定する |
+| ローカルの clone | `ghq list -p -e <owner>/<repo>` の**出力が空でないか** | **exit code は存在の有無にかかわらず 0 を返す**（実測）。出力の有無で判定する |
 | **`ghq` と `git` が PATH にあるか** | **clone を調べる前に `exec.LookPath` で見る。**無ければ `✗` にして、その先を調べない | **「確かめられなかった」で通してはならない。**巡回は worktree を作るときにこの2つを起動するので、無ければ**必ず落ちる。**`!` にすると終了コードが 0 になり「足りないものはありません」と出てしまう |
 | 設定ファイル | `WORKFLOW.md` が読めて、front matter が検証を通るか | — |
 | Claude の資格情報 | **`rate_limit.token_source` が指す先から取れるか**（ファイル / Keychain / 環境変数） | **Keychain も読む。**上限を掛けて固まらないようにする（下記） |
@@ -2971,7 +2975,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | **どう集めるか** | **doctor がボードを1回読み**（`active_states` の候補）、返ってきた issue の `nameWithOwner` を重複なく集める |
 | **何件を検査するか** | **集まった全件。**1件でも欠けていれば「足りない」と報告する（起動は止めない。dispatch のときに issue ごとに飛ばす。3-6） |
 | **検査の順序** | **下の依存の表のとおり。上流が `✗` か `!` なら、下流は `!` にして飛ばす** |
-| **信頼の検査の対象パス** | **`ghq list --exact` が返した clone の絶対パス。**worktree のパスではない（信頼はリポジトリ単位で記録される。3-6） |
+| **信頼の検査の対象パス** | **`ghq list -p -e` が返した clone の絶対パス。**worktree のパスではない（信頼はリポジトリ単位で記録される。3-6） |
 
 > **これは 3-6 の「起動時には検査できない」と矛盾しない。**
 > 3-6 が言っているのは**常駐プロセスの起動時**の話で、ボードを読む前だから検査できない。

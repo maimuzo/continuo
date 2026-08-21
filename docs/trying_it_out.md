@@ -1011,7 +1011,7 @@ herdr workspace list                            # worktree が herdr の workspa
 ### ダッシュボードを見る
 
 `WORKFLOW.md` の `server.port` に番号を書いておくと、**実行中の run の一覧を HTTP で見られる。**
-**書き換えたら continuo を再起動する**（設定の読み直しは未実装。最後の節を見よ）。
+**書き換えたら continuo を再起動する**（設定の読み直しは作らないと決めてある。最後の節を見よ）。
 
 ```yaml
 server:
@@ -1066,15 +1066,21 @@ level=INFO msg=continuo を終了しました
 | **別のフィールドを書き換えている** | `status_field` が段2 で確かめた名前になっているか。continuo は `status_field` に書いた名前のフィールドしか読み書きしない |
 | **信頼していないリポジトリの issue を飛ばしている** | `doctor` の `信頼登録` が `✓` か。**未信頼だと worktree も pane も作られない。**そのリポジトリにつき1回、**issue にコメントが投稿される**（直し方もそこに書いてある） |
 | **`In Review` にならない** | エージェントが `CONTINUO-STATUS: review` を出しているか。herdr の pane で応答を見る |
+| **issue が急に `Blocked` になった** | **issue のコメントを開く。**そこに何が起きたか・どう確かめるか・どう直すかが書いてある。**画面が変わらないまま `claude.turn_timeout_ms` が過ぎると打ち切る**（既定1時間）。**これは turn の総実行時間の上限ではない。**画面が変わり続けている限り、1つの指示に何時間かかっても打ち切らない |
 | **片付かない** | **未コミットの変更が残っている**か、**push していない commit がある**と消さない（成果を失わないため）。ログに理由が出る |
 | 枠を使い切った | continuo は待って再開する。Claude Code 2.1.234 以降は Claude Code 自身も継続するので、continuo は `agent_status` を見て二重投入を避ける |
 | **同じ issue に Claude Code が2つ立った** | 起きてはならない。**再現手順を添えて issue を立ててほしい** |
 
 ---
 
-## いま無いもの
+## 作らないと決めたもの
 
-**設定の読み直しが実装されていない**（`SPEC.md` 6.2）。
-`WORKFLOW.md` を書き換えても、**continuo を再起動するまで反映されない。**
+**設定の読み直しは作らない**（`SPEC.md` 6.2 は REQUIRED としているが、実装しないと決めた）。
+`WORKFLOW.md` を書き換えたら、**continuo を再起動すること。**
 
-詳しくは [plans/impl/tasks.md](plans/impl/tasks.md) の「未実装として残っているもの」を見ること。
+**理由。**再起動は安全に作ってある（`restart.orphan_running_action` が実行中の run を
+引き継ぐか着手待ちへ戻す。**worktree も pane も残る**）。
+無人で回している最中に設定を書き換える運用を想定しておらず、
+実行中の run へ反映すると turn の途中で判断の基準が食い違う。
+
+詳しくは [plans/impl/tasks.md](plans/impl/tasks.md) の「仕様のうち、作らないと決めたもの」を見ること。

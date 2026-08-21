@@ -495,10 +495,10 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 
 | `doctor` が検査するもの | どう検査するか |
 | --- | --- |
-| herdr が動いているか | `herdr status` の `server.protocol` が設定の値と一致するか |
+| herdr が動いているか | **socket の `ping` を呼び、応答の `protocol` が設定の値と一致するか**（`herdr status` の CLI は使わない） |
 | `gh` の認証と scope | `gh auth status` の出力に `project` が含まれるか |
 | リポジトリの信頼登録 | `~/.claude.json` の `hasTrustDialogAccepted` が `true` か |
-| ローカルの clone | `ghq list --exact <owner>/<repo>` の**出力が空でないか**（exit code は常に 0 なので使えない） |
+| ローカルの clone | `ghq list -p -e <owner>/<repo>` の**出力が空でないか**（exit code は常に 0 なので使えない） |
 | 設定ファイル | `WORKFLOW.md` が読めて、front matter が検証を通るか |
 | Claude の資格情報 | `rate_limit.token_source` が指す先から取れるか（macOS の既定は Keychain） |
 
@@ -541,6 +541,10 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 リポジトリの信頼の検査／レートリミットの待機／落ちている間の通知の取り戻し／**使い始めるまでの検査と雛形**。
 
 **そもそも適用外。**第10節（Codex のプロトコル）／5.3.6 の `codex` セクション／Appendix A（SSH の worker 拡張）。
+
+**REQUIRED だが作らないと決めたもの。**6.2 の設定の読み直し。**`WORKFLOW.md` を書き換えたら再起動する。**
+再起動は安全に作ってあり（`restart.orphan_running_action`。worktree も pane も残る）、
+実行中の run へ反映すると turn の途中で判断の基準が食い違うため。
 
 **設定キーとして持たないもの。**書けば未知のキーとして起動を止める（詳細は [continuo_design.md](continuo_design.md) の 8-4）。
 
