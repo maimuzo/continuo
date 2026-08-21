@@ -1,49 +1,62 @@
 # continuo
 
-[English](README.md) | 日本語
-
-**GitHub Projects v2 のボードを見張り、issue ごとに git worktree を用意して、Claude Code を対話モードで起動し、完了まで面倒を見る常駐プロセスです。**
-
-名前は通奏低音（basso continuo）に由来します。曲の最初から最後まで途切れず鳴り続け、全体の和声を支える低音パート — [名前の由来](docs/naming.md)。
-
-> **状態: 実装済み。ただし issue を1件通すところまでは未実行です。**
-> 全段がビルドとテストを通り、セットアップのコマンドは実在のボードに対して（読み取りのみで）叩いてあります。
+GitHub Project v2 をカンバンとして使い、複数リポジトリ上の issue をカンバン上の Ready state に配置することで、continuo がそれを herdr 上で実行し、処理結果をカンバンにフィードバックするオーケストレーターです。OpenAI の Symphony をベースに claude と go 言語と herdr を使って処理内容を確認しながら実行することができます。
 
 ---
 
-## 何をするか
+## カンバンの上で何が起きるか
 
-| | |
-| --- | --- |
-| **見張る** | GitHub Projects v2 のボード1枚。**複数のリポジトリの issue が1枚に載っていてよい** |
-| **用意する** | issue ごとに git worktree を、その issue のリポジトリに作る |
-| **動かす** | **herdr の pane で Claude Code を対話モードで起動する**（`claude -p` は使いません） |
-| **続ける** | issue が作業中の状態にある間、同じセッションへ指示を送り続ける |
-| **終わりを知る** | **Claude Code の `Stop` hook で turn の終わりを検知する** |
-| **信じる** | **ボードの Status だけ。**エージェントの自己申告は信じない |
-| **片付ける** | issue が完了状態になったら worktree と branch を消す |
+**issue を `Ready` に置くだけです。**あとは continuo と Claude Code が Status を動かします。
 
-## こんなときに使う
+| Status | 誰が動かすか | そのとき何が起きているか |
+| --- | --- | --- |
+| `Ready` | **あなた** | continuo が30秒ごとに見ている。見つけたら取る |
+| `In Progress` | continuo | worktree を作り、herdr の pane で Claude Code を起動した |
+| `In Review` | continuo | エージェントが `CONTINUO-STATUS: review` を出した。**作業は終わっている** |
+| `Blocked` | continuo | エージェントが判断を仰いだ、または失敗した。**issue のコメントに理由が書かれる** |
+| `Done` | **あなた** | 成果を確認して移す。continuo が worktree と branch を消す |
 
-- **溜まった issue を、寝ている間に1件ずつ片付けたい**
-- **1件ずつ手で Claude Code を起動して、終わったか見に行くのをやめたい**
-- **複数のリポジトリの作業を1枚のボードで管理したい**
-- **どこまで進んだかを、ボードの Status で把握したい**
+**Status の名前はボードに合わせられます。**`Ready` でも `Todo` でも、`continuo setup` で対応づけます。
 
-**向いていないもの。** 1回の指示で終わる小さな作業（手で叩いたほうが速い）。人間の判断が何度も要る設計作業。
+## 処理内容を目で見られる
+
+**Claude Code は herdr の pane で対話モードのまま動きます。**バックグラウンドで見えないところで動くのではありません。
+
+- **herdr の画面を開けば、いま何をしているかがそのまま見えます**
+- 途中で人間が同じ pane に割り込んで指示を足せます
+- **`claude -p` は使いません。**対話セッションを維持したまま、続きの指示を送ります
+
+**issue が `Blocked` に落ちたときは、コメントに次の3つが書かれます。**
+
+```
+【確かめ方】そのままコピーして叩けるコマンド
+【よくある原因】/ で区切った候補
+【対処】直し方。設定キーなら現在値も出る
+```
+
+## 複数リポジトリを1枚で回せる
+
+**カンバン1枚に、複数のリポジトリの issue を載せられます。**continuo は issue ごとに、そのリポジトリの worktree を作ります。
+
+```
+~/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188/
+~/worktrees/github.com/octocat/sample-app/continuo-octocat-sample-app-42/
+```
+
+**同時に動かす数は設定で決めます**（既定2件）。
 
 ## 前提
 
 | | |
 | --- | --- |
-| OS | **macOS / Linux。**Windows ネイティブは対応しません（WSL2 を使ってください） |
-| [Go](https://go.dev/dl/) | 1.26 以上（ビルドに必要。`testing/synctest` を使っています） |
-| [herdr](https://github.com/herdrdev/herdr) | 0.8.0 以上。**pane と worktree をまとめる常駐プロセス** |
-| [Claude Code](https://claude.com/claude-code) | 2.1.233 以上 |
-| [`gh`](https://cli.github.com/) | 2.97.0 以上。`gh auth login -s project` でログイン済みであること |
-| [`git`](https://git-scm.com/) / [`ghq`](https://github.com/x-motemen/ghq) | continuo が worktree の作成と clone の解決に使います |
+| OS | macOS / Linux。**Windows ネイティブは非対応**（WSL2 を使う） |
+| [herdr](https://github.com/herdrdev/herdr) 0.8.0+ | **pane と worktree を束ねる常駐プロセス。**continuo はこれ越しに Claude Code を動かす |
+| [Claude Code](https://claude.com/claude-code) 2.1.233+ | **定額プランで使う。**従量課金の API は使わない |
+| [`gh`](https://cli.github.com/) 2.97.0+ | `gh auth login -s project` でログイン済みであること |
+| [`git`](https://git-scm.com/) / [`ghq`](https://github.com/x-motemen/ghq) | worktree の作成と clone の場所の解決に使う |
+| [Go](https://go.dev/dl/) 1.26+ | ビルドにだけ必要 |
 
-**揃っているかは手で確かめないでください。** `continuo doctor` が全部検査して、足りないものと直し方を出します。
+**揃っているかは `continuo doctor` が全部調べます。**足りないものと直し方を出すので、手で確かめる必要はありません。
 
 ## 入れる
 
@@ -53,61 +66,70 @@ cd continuo
 go build -o /usr/local/bin/continuo ./cmd/continuo
 ```
 
-[mise](https://mise.jdx.dev/) で Go を入れている場合は、先に1回だけ `mise trust` を実行してください。
-
 ## 使う
 
-**ボードは新しく作りません。** いま使っているボードにそのまま足して使います。
+**ボードは新しく作りません。**いま使っているカンバンにそのまま足します。
 
 ```bash
 mkdir -p ~/continuo-work && cd ~/continuo-work
 
-continuo init                     # WORKFLOW.md を置く（owner とボード番号は gh から引く）
-continuo setup                    # ボードの Status を continuo の5つの役割へ割り当てる
-continuo trust                    # 対象リポジトリを Claude Code に信頼登録する（clone も取ってくる）
-continuo allow-keychain-access    # macOS だけ。枠の残りを読むために1回だけ実行する
-continuo doctor                   # 前提が揃っているか検査する
+continuo init                     # WORKFLOW.md を置く。owner とボード番号は gh から引く
+continuo setup                    # カンバンの Status を continuo の5つの役割に対応づける（対話）
+continuo trust                    # 対象リポジトリを Claude Code に信頼登録する。clone も取ってくる
+continuo allow-keychain-access    # macOS だけ。枠の残りを読むために1回
+continuo doctor                   # 前提が揃っているか調べる
 
-continuo                          # 常駐を始める。Ctrl+C で止める
+continuo                          # 常駐を始める
 ```
 
-**あとはボードで issue を着手待ちの Status に置くだけです。** continuo が拾って worktree を作り、Claude Code を起動します。
+**あとは issue を `Ready` に置くだけです。**
 
-**止めるのは `Ctrl+C`。** 巡回を止め、走行中の turn の終わりを待ってから抜けます。**pane は閉じません**（次の起動で引き継ぎます）。
+**止めるときは `Ctrl+C`。**巡回を止め、走行中の turn が終わるのを待ってから抜けます。**pane は閉じません。**次に起動したとき、その pane を引き継いで続きから進めます。
 
 ### 設定
 
-`WORKFLOW.md` の front matter に書きます。`continuo init` が雛形を置くので、必要な行だけ直してください。
+`continuo init` が `WORKFLOW.md` を置きます。よく触るのは次の4つです。
 
 ```yaml
 tracker:
   provider:
-    owner: octocat                # あなたの GitHub アカウント名
-    project_number: 3             # ボードの番号
-  dispatch_state: "Ready"         # ここに置いた issue を continuo が取る
-  running_state: "In Progress"    # 取ったときに書き込む Status
-  terminal_states: ["Done"]       # ここへ移すと worktree と branch を片付ける
+    owner: octocat                # GitHub のアカウント名
+    project_number: 3             # カンバンの番号
 agent:
-  max_concurrent_agents: 3        # 同時に動かす issue の数
+  max_concurrent_agents: 2        # 同時に動かす issue の数
+claude:
+  turn_timeout_ms: 3600000        # 画面が変わらないまま何ミリ秒たったら打ち切るか
 ```
+
+**`turn_timeout_ms` は turn の総時間ではありません。**herdr が見ている画面の版が変わり続けている限り、1つの指示に何時間かかっても打ち切りません。
+
+## 動く仕組み
+
+**turn の終わりは Claude Code の `Stop` hook で検知します。**画面の文字を読んで判定するのではありません。
+
+1. continuo が issue を取り、worktree を作る
+2. herdr の pane で Claude Code を起動し、指示を送る
+3. **`Stop` hook が continuo へ届く。**`background_tasks` が空なら turn が終わっている
+4. transcript を読み、`CONTINUO-STATUS:` の行があれば Status を動かす
+5. issue がまだ作業中の状態なら、続きの指示を送る（上限あり）
+
+**信じるのはカンバンの Status だけです。**エージェントが「終わった」と言っても、Status が動いていなければ終わっていません。
 
 ## もっと詳しく
 
-| 何 | どこ |
+| | |
 | --- | --- |
-| **1件の issue を最初から最後まで通す手順** | [docs/trying_it_out.md](docs/trying_it_out.md) |
-| 設計と、その判断の根拠 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) |
+| **issue を1件通す手順**（段1〜9） | [docs/trying_it_out.md](docs/trying_it_out.md) |
+| 設計と判断の根拠 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) |
 | ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
 | 名前の由来 | [docs/naming.md](docs/naming.md) |
 
 ## 準拠する仕様
 
-continuo は [openai/symphony](https://github.com/openai/symphony) のサービス仕様（Apache-2.0）を実装しています。仕様の本文は [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md) にあります（**このリポジトリには同梱していません**）。
+[openai/symphony](https://github.com/openai/symphony) のサービス仕様（Apache-2.0）を実装しています。仕様の本文は [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md) にあります（**このリポジトリには同梱していません**）。
 
-**仕様は Codex の app-server と stdio で構造化メッセージをやり取りする前提ですが、continuo は herdr の pane で動く対話モードの Claude Code に読み替えています。** 守れない `MUST` と、その代わりに何をするかは設計文書に書いてあります。
+**仕様は Codex の app-server と stdio でやり取りする前提です。**continuo はそこを herdr の pane で動く Claude Code に読み替えました。守れない `MUST` と代わりに何をするかは、設計文書の適合の表にあります。
 
 ## ライセンス
 
-**MIT** — [LICENSE](LICENSE) を見てください。
-
-**このリポジトリのファイルはすべて MIT です。**他のライセンスのファイルは同梱していません。
+**MIT** — [LICENSE](LICENSE)
