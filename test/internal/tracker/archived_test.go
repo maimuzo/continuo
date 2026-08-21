@@ -14,11 +14,11 @@ import (
 func TestFetchIssuesByIDs_archive済みのitemは省く(t *testing.T) {
 	alive := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
 		ItemID: "item-alive", Status: "In Progress",
-		Owner: "maimuzo", Repo: "koetsumugi", Number: 10, Title: "生きている",
+		Owner: "octocat", Repo: "hello-world", Number: 10, Title: "生きている",
 	}))
 	archived := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
 		ItemID: "item-archived", Status: "In Progress", Archived: true,
-		Owner: "maimuzo", Repo: "koetsumugi", Number: 11, Title: "archive 済み",
+		Owner: "octocat", Repo: "hello-world", Number: 11, Title: "archive 済み",
 	}))
 	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{alive, archived}))))
 	a := newAdapterForFetch(t, fs)
@@ -43,11 +43,11 @@ func TestFetchIssuesByStates_archive済みのitemは省く(t *testing.T) {
 	nodes := []map[string]any{
 		issueItemJSON(testIssueItemOpts{
 			ItemID: "item-alive", Status: "Ready",
-			Owner: "maimuzo", Repo: "koetsumugi", Number: 1, Title: "生きている",
+			Owner: "octocat", Repo: "hello-world", Number: 1, Title: "生きている",
 		}),
 		issueItemJSON(testIssueItemOpts{
 			ItemID: "item-archived", Status: "Ready", Archived: true,
-			Owner: "maimuzo", Repo: "koetsumugi", Number: 2, Title: "archive 済み",
+			Owner: "octocat", Repo: "hello-world", Number: 2, Title: "archive 済み",
 		}),
 	}
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nodes, false, ""))))
@@ -70,7 +70,7 @@ func TestFetchIssuesByStates_archive済みのitemは省く(t *testing.T) {
 func TestUpdateStatus_archive済みのitemには書き込まない(t *testing.T) {
 	archived := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
 		ItemID: "item-archived", Status: "In Progress", Archived: true,
-		Owner: "maimuzo", Repo: "koetsumugi", Number: 11, Title: "archive 済み",
+		Owner: "octocat", Repo: "hello-world", Number: 11, Title: "archive 済み",
 	}))
 	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
 		if n == 1 {

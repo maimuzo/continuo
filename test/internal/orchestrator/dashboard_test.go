@@ -58,11 +58,11 @@ func TestRunViews_turnの終わりの集計がダッシュボードへ届く(t *
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 30*time.Second, "turn の終わりの集計が写しに載る", func() bool {
-		v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 		return ok && !v.TokensAt.IsZero()
 	})
 
-	v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+	v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 	if !ok {
 		t.Fatalf("run が印から外れている")
 	}
@@ -75,7 +75,7 @@ func TestRunViews_turnの終わりの集計がダッシュボードへ届く(t *
 	if v.Title != "テスト用の issue 188" {
 		t.Errorf("issue のタイトルが写しに入っていない: got %q", v.Title)
 	}
-	if v.URL != "https://github.com/maimuzo/koetsumugi/issues/188" {
+	if v.URL != "https://github.com/octocat/hello-world/issues/188" {
 		t.Errorf("issue の URL が写しに入っていない: got %q", v.URL)
 	}
 	if v.StartedAt.IsZero() {
@@ -150,11 +150,11 @@ func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t 
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 30*time.Second, "1回目のセッションの集計が載る", func() bool {
-		v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 		return ok && v.Tokens.APICalls == 1
 	})
 	waitFor(t, 30*time.Second, "2回目の turn が stall で打ち切られる", func() bool {
-		v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 		return ok && v.RetryCount == 1
 	})
 
@@ -163,11 +163,11 @@ func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t 
 	fx.Orc.Tick(context.Background())
 
 	waitFor(t, 30*time.Second, "再 dispatch のあとの集計が2つのセッションの合計になる", func() bool {
-		v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 		return ok && v.Tokens.APICalls == 2
 	})
 
-	v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+	v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 	if !ok {
 		t.Fatalf("run が印から外れている")
 	}
@@ -193,7 +193,7 @@ func TestRunViews_最後にhookを受けた時刻はhookでしか進まない(t 
 	fx := newStubFixture(t, stubFixtureOptions{})
 	adoptRun(fx, 188)
 
-	v, ok := viewOf(fx, "maimuzo/koetsumugi#188")
+	v, ok := viewOf(fx, "octocat/hello-world#188")
 	if !ok {
 		t.Fatalf("引き継いだ run が印に入っていない")
 	}
@@ -208,7 +208,7 @@ func TestRunViews_最後にhookを受けた時刻はhookでしか進まない(t 
 		t.Fatalf("hook を知らない run のものとして捨てた")
 	}
 
-	v, ok = viewOf(fx, "maimuzo/koetsumugi#188")
+	v, ok = viewOf(fx, "octocat/hello-world#188")
 	if !ok {
 		t.Fatalf("run が印から外れている")
 	}

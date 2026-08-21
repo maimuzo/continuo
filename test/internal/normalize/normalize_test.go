@@ -11,10 +11,10 @@ import (
 // 目的: 許可されていない文字（ここでは "#" と "@"）を含む識別子を正規化すると、
 // その文字が "_" に置き換わり、かつ「情報が落ちた」警告が1件以上返ることを確認する
 // （3-7 の「正規化で情報が落ちる場合は警告として記録する。黙って別名にしない」という要求）。
-// 与える情報: GitHub issue の識別子の実例 "maimuzo/koetsumugi#188"。
+// 与える情報: GitHub issue の識別子の実例 "octocat/hello-world#188"。
 // 成功条件: 戻り値の SafeName に "#" が含まれないこと、かつ warnings が空でないこと。
 func TestNormalize_許可されない文字があると警告が返る(t *testing.T) {
-	raw := "maimuzo/koetsumugi#188"
+	raw := "octocat/hello-world#188"
 
 	name, warnings := normalize.Normalize(raw)
 
@@ -37,7 +37,7 @@ func TestNormalize_許可されない文字があると警告が返る(t *testin
 // 与える情報: 英数字・ハイフン・アンダースコア・ドット・スラッシュだけで構成された文字列。
 // 成功条件: 戻り値の SafeName が入力と完全一致し、warnings が nil または空であること。
 func TestNormalize_許可された文字だけなら変化せず警告も出ない(t *testing.T) {
-	raw := "continuo/maimuzo/koetsumugi/188.retry-1_v2"
+	raw := "continuo/octocat/hello-world/188.retry-1_v2"
 
 	name, warnings := normalize.Normalize(raw)
 

@@ -143,7 +143,7 @@ func newPendingDir(t *testing.T) string {
 		t.Fatalf("逃がし先の一時ディレクトリを作成できません: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return filepath.Join(dir, "issues", "maimuzo-koetsumugi-188", "pending")
+	return filepath.Join(dir, "issues", "octocat-hello-world-188", "pending")
 }
 
 // fixedNow は受信時刻を固定する Now を返す（逃がし先のファイル名を検査するため）。

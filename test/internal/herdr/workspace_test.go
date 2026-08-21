@@ -22,7 +22,7 @@ var workspaceRenameSchemaKeys = []string{"workspace_id", "label"}
 // そのまま届くこと。実スキーマに無いキー（name / title など）を送っていないこと。
 func TestWorkspaceRename_必須の2つを送る(t *testing.T) {
 	const workspaceID = "w9"
-	const issueURL = "https://github.com/maimuzo/koetsumugi/issues/188"
+	const issueURL = "https://github.com/octocat/hello-world/issues/188"
 
 	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
 		var req rpcRequest

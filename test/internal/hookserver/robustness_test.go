@@ -84,7 +84,7 @@ func TestServer_Closeは宙ぶらりんの接続を待たない(t *testing.T) {
 func TestReplayPending_配送を始めたあとは拒否する(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	ts.start(t)
 	ts.server.StartDelivery()
@@ -110,7 +110,7 @@ func TestReplayPending_配送を始めたあとは拒否する(t *testing.T) {
 func TestReplayPending_隔離先の同名ファイルを上書きしない(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	brokenDir := filepath.Join(dir, "broken")
 	if err := os.MkdirAll(brokenDir, 0o700); err != nil {
@@ -158,7 +158,7 @@ func TestReplayPending_隔離先の同名ファイルを上書きしない(t *te
 func TestStartDelivery_ReplayPendingが返ったあとに書かれた分も拾う(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 	writePendingFile(t, dir, "1787057953362306-Stop.json", stopEventJSON("before-replay", "[]"))
 
 	ts.start(t)

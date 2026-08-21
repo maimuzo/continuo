@@ -13,7 +13,7 @@ import (
 // スラッシュをハイフンに置き換えたものになることを確認する（設計 3-22）。
 // 与える情報: 既定の branch_template（continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}）と、
 // github.com の issue の URL。
-// 成功条件: Path が `<root>/github.com/maimuzo/koetsumugi/continuo-maimuzo-koetsumugi-188` になること。
+// 成功条件: Path が `<root>/github.com/octocat/hello-world/continuo-octocat-hello-world-188` になること。
 func TestLocate_置き場所がgwqの規則になる(t *testing.T) {
 	root := t.TempDir()
 	loc, warnings, err := workspace.Locate(
@@ -28,11 +28,11 @@ func TestLocate_置き場所がgwqの規則になる(t *testing.T) {
 		t.Fatalf("正規化の警告が出るはずがないのに出た: %v", warnings)
 	}
 
-	want := filepath.Join(root, "github.com", "maimuzo", "koetsumugi", "continuo-maimuzo-koetsumugi-188")
+	want := filepath.Join(root, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
 	if loc.Path != want {
 		t.Fatalf("置き場所が一致しない: got %q, want %q", loc.Path, want)
 	}
-	if loc.Branch.String() != "continuo/maimuzo/koetsumugi/188" {
+	if loc.Branch.String() != "continuo/octocat/hello-world/188" {
 		t.Fatalf("branch 名が一致しない: got %q", loc.Branch.String())
 	}
 }
@@ -44,7 +44,7 @@ func TestLocate_置き場所がgwqの規則になる(t *testing.T) {
 func TestLocate_hostはissueのURLのホスト部から取る(t *testing.T) {
 	root := t.TempDir()
 	issue := sampleIssue(7)
-	issue.URL = "https://github.example.com/maimuzo/koetsumugi/issues/7"
+	issue.URL = "https://github.example.com/octocat/hello-world/issues/7"
 
 	loc, _, err := workspace.Locate(root, "continuo/{{.issue.number}}", issue)
 	if err != nil {
@@ -145,7 +145,7 @@ func TestCheckContainment_置き場所の外側を弾く(t *testing.T) {
 		t.Fatalf("root を解決できない: %v", err)
 	}
 
-	inside := filepath.Join(resolved, "github.com", "maimuzo", "koetsumugi", "continuo-1")
+	inside := filepath.Join(resolved, "github.com", "octocat", "hello-world", "continuo-1")
 	if err := workspace.CheckContainment(resolved, inside); err != nil {
 		t.Fatalf("内側のパスが弾かれた: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestCheckContainment_rootのシンボリックリンクを解決して比�
 	if err != nil {
 		t.Fatalf("実体を解決できない: %v", err)
 	}
-	actual := filepath.Join(realResolved, "worktrees", "github.com", "maimuzo", "koetsumugi", "continuo-1")
+	actual := filepath.Join(realResolved, "worktrees", "github.com", "octocat", "hello-world", "continuo-1")
 	if err := workspace.CheckContainment(resolved, actual); err != nil {
 		t.Fatalf("実体のパスが内側と判定されなかった: %v", err)
 	}

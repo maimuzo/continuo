@@ -39,7 +39,7 @@ func TestRestore_生きているpaneを引き継いで印と実行中の一覧�
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -97,7 +97,7 @@ func TestRestore_引き継いだrunにはstallの時計が引き継いだ時刻�
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusWorking, SessionUUID: "sess-188",
 	})
 
@@ -126,7 +126,7 @@ func TestRestore_agent_statusがworkingならNeedsPromptを立てない(t *testi
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusWorking, SessionUUID: "sess-188",
 	})
 
@@ -157,7 +157,7 @@ func TestRestore_idleなら継続の指示を送る(t *testing.T) {
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -201,7 +201,7 @@ func TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落�
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusBlocked, SessionUUID: "sess-188",
 	})
 
@@ -235,7 +235,7 @@ func TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeと
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusUnknown, SessionUUID: "sess-188",
 	})
 
@@ -304,7 +304,7 @@ func TestRestore_socketのパスが前回と違えば引き継がずpaneを閉�
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{SocketPath: "/tmp/前回の場所/hooks.sock"})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -343,7 +343,7 @@ func TestRestore_引き継いだ回数が上限ならturnを1回も送らずfail
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{TakeoverCount: 2})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -394,9 +394,9 @@ func TestRestore_同じissueのworktreeが2つあるとき新しいほうを採�
 	rewriteIdentityItemID(t, fx, older.Path, issue.ID, issue.Identifier)
 
 	installPanes(fx,
-		livePane{PaneID: "p-new", Cwd: newer.Path, AgentName: "continuo-koetsumugi-188",
+		livePane{PaneID: "p-new", Cwd: newer.Path, AgentName: "continuo-hello-world-188",
 			AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-new"},
-		livePane{PaneID: "p-old", Cwd: older.Path, AgentName: "continuo-koetsumugi-999",
+		livePane{PaneID: "p-old", Cwd: older.Path, AgentName: "continuo-hello-world-999",
 			AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-old"},
 	)
 
@@ -432,7 +432,7 @@ func TestRestore_In_Reviewのrunはpaneもworktreeも残して何もしない(t 
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -472,7 +472,7 @@ func TestRestore_cleanup_on_statesならpaneを閉じて片付ける(t *testing.
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -509,7 +509,7 @@ func TestRestore_Doneでもcleanup_on_statesに入っていなければ片付け
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -534,7 +534,7 @@ func TestRestore_取り直しで見つからないrunはpaneもworktreeも残し
 	// **ボードには足さない。**
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -568,7 +568,7 @@ func TestRestore_取り直しに失敗しても起動を続けpaneを閉じる(t
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 	fx.Tracker.SetIDsError(errors.New("レートリミットに達しました"))
@@ -701,7 +701,7 @@ func TestRestore_身元ファイルの無いworktreeのpaneは閉じずにログ
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{SkipIdentity: true})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -762,7 +762,7 @@ func TestSweepOnStartup_復元のあとに走り引き継いだbranchを消さ�
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 	runGit(t, fx.Repo.Dir, "branch", "continuo/orphan/1")
@@ -832,7 +832,7 @@ func TestRestore_逃がし先に溜まったhookは索引ができてから配�
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -903,7 +903,7 @@ func TestRestore_In_Reviewで残したpaneを直後の巡回が閉じない(t *t
 	// **手順7b は workspace_id を指定して pane を引く**ので、その workspace の pane にする。
 	paneID := wt.WorkspaceID + ":p1"
 	installPanes(fx, livePane{
-		PaneID: paneID, Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: paneID, Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -937,7 +937,7 @@ func TestReconcile_active_statesに戻ったらdispatchの前にpaneを閉じる
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	paneID := wt.WorkspaceID + ":p1"
 	installPanes(fx, livePane{
-		PaneID: paneID, Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: paneID, Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 
@@ -976,9 +976,9 @@ func TestRestore_同じworktreeにpaneが2つあるとき1つだけ引き継ぎ�
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx,
-		livePane{PaneID: "p-500b", Cwd: wt.Path, AgentName: "continuo-koetsumugi-500-dup",
+		livePane{PaneID: "p-500b", Cwd: wt.Path, AgentName: "continuo-hello-world-500-dup",
 			AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-500b"},
-		livePane{PaneID: "p-500a", Cwd: wt.Path, AgentName: "continuo-koetsumugi-500",
+		livePane{PaneID: "p-500a", Cwd: wt.Path, AgentName: "continuo-hello-world-500",
 			AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-500a"},
 	)
 
@@ -1014,7 +1014,7 @@ func TestRestore_agentの一覧を取れなくてもpaneを1つも閉じない(t
 	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
-		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-koetsumugi-188",
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
 	fx.Herdr.Handle(herdr.MethodAgentList, func(map[string]any) (any, *rpcErr) {

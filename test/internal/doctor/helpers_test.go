@@ -557,10 +557,10 @@ func newFixture(t *testing.T) *fixture {
 		RepoDir:      repoDir,
 		WorkflowPath: filepath.Join(root, "WORKFLOW.md"),
 		Herdr:        newFakeHerdr(t, root, 19),
-		GitHub: newFakeGitHub(t, "maimuzo",
-			boardItem{ItemID: "PVTI_1", NameWithOwner: "maimuzo/koetsumugi", Number: 188, State: "Ready"}),
+		GitHub: newFakeGitHub(t, "octocat",
+			boardItem{ItemID: "PVTI_1", NameWithOwner: "octocat/hello-world", Number: 188, State: "Ready"}),
 		Env:      map[string]string{},
-		GhqPaths: map[string]string{"maimuzo/koetsumugi": repoDir},
+		GhqPaths: map[string]string{"octocat/hello-world": repoDir},
 	}
 	fx.WriteWorkflow(t, "")
 
@@ -587,7 +587,7 @@ func (fx *fixture) WriteWorkflow(t *testing.T, rateLimit string) {
 	content := fmt.Sprintf(`---
 tracker:
   provider:
-    owner: maimuzo
+    owner: octocat
     project_number: 3
     status_field: Status
     token_source: env

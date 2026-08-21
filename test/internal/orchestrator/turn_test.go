@@ -94,7 +94,7 @@ func TestTurn_background_tasksの項目が欠けていたらturnの終わりと�
 
 	waitFor(t, 10*time.Second, "stall としてリトライが積まれる", func() bool {
 		for _, v := range fx.Orc.RunViews() {
-			if v.Identifier == "maimuzo/koetsumugi#188" && v.RetryCount == 1 {
+			if v.Identifier == "octocat/hello-world#188" && v.RetryCount == 1 {
 				return true
 			}
 		}

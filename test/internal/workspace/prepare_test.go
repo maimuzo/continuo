@@ -30,14 +30,14 @@ func TestPrepare_新規に作りherdrにはworktree_openを呼ぶ(t *testing.T) 
 	if !result.Created {
 		t.Fatal("新規に作ったのに Created が偽になっている")
 	}
-	wantSuffix := filepath.Join("github.com", "maimuzo", "koetsumugi", "continuo-maimuzo-koetsumugi-188")
+	wantSuffix := filepath.Join("github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
 	if !strings.HasSuffix(result.Path, wantSuffix) {
 		t.Fatalf("worktree のパスが置き場所の規則に合わない: got %q, want の末尾 %q", result.Path, wantSuffix)
 	}
 	if _, err := os.Stat(filepath.Join(result.Path, "README.md")); err != nil {
 		t.Fatalf("worktree の中身が checkout されていない: %v", err)
 	}
-	if got := runGit(t, result.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != "continuo/maimuzo/koetsumugi/188" {
+	if got := runGit(t, result.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != "continuo/octocat/hello-world/188" {
 		t.Fatalf("worktree が想定の branch を指していない: got %q", got)
 	}
 
@@ -161,7 +161,7 @@ func TestPrepare_登録の無い実体は乗っ取らずエラーにする(t *te
 	fx := newFixture(t, fixtureOptions{})
 
 	path := filepath.Join(
-		fx.Manager.ResolvedRoot(), "github.com", "maimuzo", "koetsumugi", "continuo-maimuzo-koetsumugi-188")
+		fx.Manager.ResolvedRoot(), "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		t.Fatalf("人間が作ったディレクトリを用意できない: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestPrepare_worktree_addの失敗時に孤児branchを消す(t *testing.T) 
 	fx := newFixture(t, fixtureOptions{})
 
 	// worktree を作る先の親ディレクトリを、書き込めない状態で先に用意する。
-	parent := filepath.Join(fx.Manager.ResolvedRoot(), "github.com", "maimuzo", "koetsumugi")
+	parent := filepath.Join(fx.Manager.ResolvedRoot(), "github.com", "octocat", "hello-world")
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		t.Fatalf("親ディレクトリを作れない: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestPrepare_worktree_addの失敗時に孤児branchを消す(t *testing.T) 
 		t.Fatal("worktree を作れないのに Prepare が成功した")
 	}
 
-	branches := runGit(t, fx.Repo.Dir, "branch", "--list", "continuo/maimuzo/koetsumugi/188")
+	branches := runGit(t, fx.Repo.Dir, "branch", "--list", "continuo/octocat/hello-world/188")
 	if strings.TrimSpace(branches) != "" {
 		t.Fatalf("孤児 branch が残っている: %q", branches)
 	}
@@ -224,7 +224,7 @@ func TestPrepare_branchが作られる前の失敗を孤児branchの削除失敗
 		t.Fatalf("孤児 branch が無いのに削除の話がエラー文に出ている: %v", err)
 	}
 
-	branches := runGit(t, fx.Repo.Dir, "branch", "--list", "continuo/maimuzo/koetsumugi/188")
+	branches := runGit(t, fx.Repo.Dir, "branch", "--list", "continuo/octocat/hello-world/188")
 	if strings.TrimSpace(branches) != "" {
 		t.Fatalf("branch が作られている: %q", branches)
 	}

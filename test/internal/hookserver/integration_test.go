@@ -22,7 +22,7 @@ func TestHookClientとHookServer_socket経由で1件が届く(t *testing.T) {
 	input := `{"hook_event_name":"Stop","session_id":"s1","background_tasks":[{"id":"bmr1ksf9i","type":"shell","status":"running","command":"sleep 45"}]}`
 	result := hookclient.Forward(hookclient.Config{
 		SocketPath: ts.socketPath,
-		PendingDir: ts.pendingDir(t, "maimuzo-koetsumugi-188"),
+		PendingDir: ts.pendingDir(t, "octocat-hello-world-188"),
 		Stdin:      strings.NewReader(input),
 	})
 	if result.Outcome != hookclient.OutcomeSent {
@@ -51,7 +51,7 @@ func TestHookClientとHookServer_socket経由で1件が届く(t *testing.T) {
 func TestHookClientとHookServer_逃がし先に書いたものを読み戻せる(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	pendingDir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	pendingDir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	// この時点では hookserver はまだ listen していない（continuo が落ちている状態）。
 	input := `{"hook_event_name":"Stop","session_id":"s1","background_tasks":[]}`
@@ -98,7 +98,7 @@ func TestHookClientとHookServer_上限を超えた入力でも捨てずに届�
 
 	result := hookclient.Forward(hookclient.Config{
 		SocketPath:    ts.socketPath,
-		PendingDir:    ts.pendingDir(t, "maimuzo-koetsumugi-188"),
+		PendingDir:    ts.pendingDir(t, "octocat-hello-world-188"),
 		Stdin:         strings.NewReader(input),
 		MaxInputBytes: limit,
 	})

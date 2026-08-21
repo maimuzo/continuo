@@ -27,8 +27,8 @@ import "time"
 // （設計 4-3 で決着済み）。tracker パッケージはその読み取り方法を知らないので、
 // 関数として外から受け取る。
 //
-// owner: リポジトリの所有者名（例 "maimuzo"）。
-// repo: リポジトリ名（例 "koetsumugi"）。
+// owner: リポジトリの所有者名（例 "octocat"）。
+// repo: リポジトリ名（例 "hello-world"）。
 // 戻り値: 信頼登録されていれば true。
 type RepoTrustFunc func(owner, repo string) bool
 

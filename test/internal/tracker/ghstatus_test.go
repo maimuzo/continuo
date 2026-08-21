@@ -12,7 +12,7 @@ import (
 // ghAuthStatusOutput は `gh auth status --hostname github.com` の実際の出力の形である
 // （設計 3-32 の「`gh auth status` の読み方」。**`--show-scopes` というフラグは存在しない**）。
 const ghAuthStatusOutput = `github.com
-  ✓ Logged in to github.com account maimuzo (keyring)
+  ✓ Logged in to github.com account octocat (keyring)
   - Active account: true
   - Git operations protocol: https
   - Token: gho_************************************
@@ -74,7 +74,7 @@ func TestCheckGHProjectScope_有効でないアカウントのscopeは読まな�
   - Active account: false
   - Token scopes: 'project', 'repo'
 
-  ✓ Logged in to github.com account maimuzo (keyring)
+  ✓ Logged in to github.com account octocat (keyring)
   - Active account: true
   - Token scopes: 'repo'
 `

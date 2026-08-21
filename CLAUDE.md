@@ -53,23 +53,41 @@ herdr agent read <名前> --source recent-unwrapped --lines 50
 
 調査を subagent に依頼するときは「調査結果の書き込み以外、変更・削除を一切禁止」と明示すること。パスの許可リスト／禁止リストは必ず穴が開く。
 
-### 4. 認証情報をコミットしない
+### 4. 公開してよい情報かを常に判断する
 
-**このリポジトリは PUBLIC である。**API キー・トークン・tailnet のホスト名・個人の絶対パスを含むファイルを追加しないこと。`.claude/settings.local.json` は `.gitignore` 済みである。
+**このリポジトリは PUBLIC であり、OSS として公開する予定である。**
+**何かを書く前に「これは公開してよいか」を判断すること。**判断せずに書かない。
+
+**絶対にコミットしないもの。**
+
+| 何 | 例 |
+| --- | --- |
+| API キー・トークン | `ghp_…` / `sk-ant-…` / `github_pat_…` |
+| tailnet のホスト名 | `*.ts.net` |
+| 個人の絶対パス | `/Users/<名前>/…`（`~/` に直すこと） |
+| 個人の環境に依存する設定 | プラグインの有効化・マーケットプレイスの登録（`.claude/settings.local.json` へ。`.gitignore` 済み） |
+
+**例を書くときは架空の名前を使う。**
+
+- **リポジトリ名**: `<owner>/<repo>` か `octocat/hello-world`。**自分の実在のリポジトリ名を書かない**
+- **アカウント名**: `<ACCOUNT>` か `octocat`
+- **そもそも特定の名前を書かずに済む書き方を先に探す**
+
+> **実在のリポジトリ名やプラグイン名は、漏れても実害は無い**（公開情報である）。
+> **だが読む人には「なぜこの人の名前が?」と映る。**架空の名前にしておけば、その疑問が生じない。
+>
+> **既に履歴へ入ってしまったものは、そのままでよい。**書き換えのために履歴を作り直さない。
 
 ---
 
-## 共通ガイドライン（プラグイン経由）
+## 共通ガイドライン
 
-**セッション開始時・Context compaction 後に必ず以下のスキルを読むこと。**
+**コーディングとテストの共通ルールは、このリポジトリの外で管理している。**
+**どこから読むかは [.claude/local-guidelines.md](.claude/local-guidelines.md) に書いてある**
+（`.gitignore` 済み。環境ごとに違うため共有しない）。
 
-- `maimuzo-dev-core:general-claude-md` — 言語非依存の共通ルール全文
-- `maimuzo-go:coding-guide-go` — Go のコーディング・テスト固有ルール
-
-汎用スキルは [maimuzo/maimuzo-claude-plugins](https://github.com/maimuzo/maimuzo-claude-plugins) で管理し、`maimuzo-marketplace` として GitHub リポジトリを直接参照する。
-
-- 更新は通常自動。手動なら `/plugin marketplace update maimuzo-marketplace`
-- **スキルを編集するときはこのプロジェクト内で編集しない。**専用 clone `~/Sources/github/maimuzo-claude-plugins` で編集して PR を出す
+**そのファイルが無い環境では、この節は読み飛ばしてよい。**
+このリポジトリの規則は、この CLAUDE.md と [.claude/rules/](.claude/rules/) だけで完結している。
 
 ---
 

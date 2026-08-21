@@ -21,7 +21,7 @@ import (
 func TestReplayPending_受信時刻順に読んでキューの先頭へ積む(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	// わざと時刻の昇順とは違う順で置く。読む側が名前で並べ替えることを確かめる。
 	writePendingFile(t, dir, "1787057953362308-Stop.json", stopEventJSON("pending-3", "[]"))
@@ -77,7 +77,7 @@ func sessionIDs(evs []hookserver.HookEvent) []string {
 func TestReplayPending_tmpは読まずに起動時に消す(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	writePendingFile(t, dir, "1787057953362306-Stop.json", stopEventJSON("from-json", "[]"))
 	tmpPath := writePendingFile(t, dir, "1787057953362307-Stop.json.tmp", `{"hook_event_name":"Stop","sess`)
@@ -121,7 +121,7 @@ func TestReplayPending_tmpは読まずに起動時に消す(t *testing.T) {
 func TestReplayPending_壊れたJSONはbrokenへ移す(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	brokenName := "1787057953362306-Stop.json"
 	brokenPath := writePendingFile(t, dir, brokenName, `{"hook_event_name":"Stop"`)
@@ -157,7 +157,7 @@ func TestReplayPending_複数のissueの逃がし先を全部走査する(t *tes
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
 
-	dirA := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dirA := ts.pendingDir(t, "octocat-hello-world-188")
 	dirB := ts.pendingDir(t, "maimuzo-continuo-7")
 	writePendingFile(t, dirA, "1787057953362307-Stop.json", stopEventJSON("issue-a", "[]"))
 	writePendingFile(t, dirB, "1787057953362306-Stop.json", stopEventJSON("issue-b", "[]"))
@@ -184,7 +184,7 @@ func TestReplayPending_複数のissueの逃がし先を全部走査する(t *tes
 func TestReplayPending_通常ファイルでないものは読まずに隔離する(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	fifoName := "1787057953362306-Stop.json"
 	fifoPath := filepath.Join(dir, fifoName)
@@ -233,7 +233,7 @@ func TestReplayPending_大きすぎるファイルは読まずに隔離する(t 
 	ts := newTestServerWith(t, sink, func(o *hookserver.Options) {
 		o.MaxMessageBytes = 256
 	})
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	hugeName := "1787057953362306-Stop.json"
 	huge := `{"hook_event_name":"Stop","session_id":"` + strings.Repeat("x", 1024) + `"}`
@@ -271,7 +271,7 @@ func TestReplayPending_大きすぎるファイルは読まずに隔離する(t 
 func TestReplayPending_書き込み中のtmpは消さない(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	fresh := writePendingFile(t, dir, "1787057953362306-Stop.json.tmp", `{"hook_event_name":"Stop","sess`)
 	stale := writePendingFile(t, dir, "1787057953362307-Stop.json.tmp", `{"hook_event_name":"Stop","sess`)
@@ -301,7 +301,7 @@ func TestReplayPending_書き込み中のtmpは消さない(t *testing.T) {
 func TestReplayPending_書き込み中のhookをrenameできる(t *testing.T) {
 	sink := newRecordingSink()
 	ts := newTestServer(t, sink)
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 
 	// internal/hookclient の spill と同じ順序で、rename の直前の状態を作る。
 	finalPath := filepath.Join(dir, "1787057953362306-Stop.json")

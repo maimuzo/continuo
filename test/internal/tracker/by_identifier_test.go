@@ -16,14 +16,14 @@ import (
 // 入っていないこと。
 func TestFetchIssueByIdentifier_IceBoxのissueもStatusで絞らずに引ける(t *testing.T) {
 	item := issueItemJSON(testIssueItemOpts{
-		ItemID: "item-45", Status: "Ice Box", Owner: "maimuzo", Repo: "koetsumugi", Number: 45,
-		Title: "グループの別の issue", URL: "https://github.com/maimuzo/koetsumugi/issues/45",
+		ItemID: "item-45", Status: "Ice Box", Owner: "octocat", Repo: "hello-world", Number: 45,
+		Title: "グループの別の issue", URL: "https://github.com/octocat/hello-world/issues/45",
 	})
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		candidateItemsPayload([]map[string]any{item}, false, ""))))
 	a := newAdapterForFetch(t, fs)
 
-	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#45")
+	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "octocat/hello-world#45")
 	if err != nil {
 		t.Fatalf("識別子で引くのに失敗した: %v", err)
 	}
@@ -54,14 +54,14 @@ func TestFetchIssueByIdentifier_IceBoxのissueもStatusで絞らずに引ける(
 // 成功条件: エラーが nil、bool が false、Issue がゼロ値であること。
 func TestFetchIssueByIdentifier_載っていなければエラーにせずfalseを返す(t *testing.T) {
 	item := issueItemJSON(testIssueItemOpts{
-		ItemID: "item-10", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 10,
-		Title: "別の issue", URL: "https://github.com/maimuzo/koetsumugi/issues/10",
+		ItemID: "item-10", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 10,
+		Title: "別の issue", URL: "https://github.com/octocat/hello-world/issues/10",
 	})
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		candidateItemsPayload([]map[string]any{item}, false, ""))))
 	a := newAdapterForFetch(t, fs)
 
-	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#999")
+	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "octocat/hello-world#999")
 	if err != nil {
 		t.Fatalf("載っていない識別子でエラーになった（エラーは通信の失敗と権限の不足だけに使う）: %v", err)
 	}
@@ -79,10 +79,10 @@ func TestFetchIssueByIdentifier_載っていなければエラーにせずfalse�
 // 成功条件: 2ページ目の issue を引けること。
 func TestFetchIssueByIdentifier_ページをまたいでも引ける(t *testing.T) {
 	first := issueItemJSON(testIssueItemOpts{
-		ItemID: "item-10", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 10, Title: "1ページ目",
+		ItemID: "item-10", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 10, Title: "1ページ目",
 	})
 	second := issueItemJSON(testIssueItemOpts{
-		ItemID: "item-47", Status: "Ice Box", Owner: "maimuzo", Repo: "koetsumugi", Number: 47, Title: "2ページ目",
+		ItemID: "item-47", Status: "Ice Box", Owner: "octocat", Repo: "hello-world", Number: 47, Title: "2ページ目",
 	})
 	fs := newFakeGraphQLServer(t, func(n int, _ capturedRequest) fakeGraphQLResponse {
 		if n == 1 {
@@ -92,7 +92,7 @@ func TestFetchIssueByIdentifier_ページをまたいでも引ける(t *testing.
 	})
 	a := newAdapterForFetch(t, fs)
 
-	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#47")
+	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "octocat/hello-world#47")
 	if err != nil {
 		t.Fatalf("識別子で引くのに失敗した: %v", err)
 	}
@@ -113,16 +113,16 @@ func TestFetchIssueByIdentifier_ページをまたいでも引ける(t *testing.
 func TestFetchIssueByIdentifier_一致した1件にだけ信頼判定を掛ける(t *testing.T) {
 	items := []map[string]any{
 		issueItemJSON(testIssueItemOpts{
-			ItemID: "item-10", Status: "Ready", Owner: "maimuzo", Repo: "other-a", Number: 10,
-			Title: "別のリポジトリ", URL: "https://github.com/maimuzo/other-a/issues/10",
+			ItemID: "item-10", Status: "Ready", Owner: "octocat", Repo: "other-a", Number: 10,
+			Title: "別のリポジトリ", URL: "https://github.com/octocat/other-a/issues/10",
 		}),
 		issueItemJSON(testIssueItemOpts{
-			ItemID: "item-45", Status: "Ice Box", Owner: "maimuzo", Repo: "koetsumugi", Number: 45,
-			Title: "引きたい issue", URL: "https://github.com/maimuzo/koetsumugi/issues/45",
+			ItemID: "item-45", Status: "Ice Box", Owner: "octocat", Repo: "hello-world", Number: 45,
+			Title: "引きたい issue", URL: "https://github.com/octocat/hello-world/issues/45",
 		}),
 		issueItemJSON(testIssueItemOpts{
-			ItemID: "item-99", Status: "Ready", Owner: "maimuzo", Repo: "other-b", Number: 99,
-			Title: "さらに別のリポジトリ", URL: "https://github.com/maimuzo/other-b/issues/99",
+			ItemID: "item-99", Status: "Ready", Owner: "octocat", Repo: "other-b", Number: 99,
+			Title: "さらに別のリポジトリ", URL: "https://github.com/octocat/other-b/issues/99",
 		}),
 	}
 
@@ -139,7 +139,7 @@ func TestFetchIssueByIdentifier_一致した1件にだけ信頼判定を掛け�
 		candidateItemsPayload(items, false, ""))))
 	a := newAdapterWithTrust(t, fs, trust)
 
-	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#45")
+	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "octocat/hello-world#45")
 	if err != nil {
 		t.Fatalf("識別子で引くのに失敗した: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestFetchIssueByIdentifier_一致した1件にだけ信頼判定を掛け�
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(asked) != 1 || asked[0] != "maimuzo/koetsumugi" {
+	if len(asked) != 1 || asked[0] != "octocat/hello-world" {
 		t.Fatalf("一致しない item にも信頼の判定を掛けている（外部プロセスが件数ぶん起動する）: %v", asked)
 	}
 }
@@ -163,14 +163,14 @@ func TestFetchIssueByIdentifier_一致した1件にだけ信頼判定を掛け�
 // 成功条件: 引いた Issue の Dispatchable が false であること。
 func TestFetchIssueByIdentifier_信頼されていなければDispatchableが偽になる(t *testing.T) {
 	item := issueItemJSON(testIssueItemOpts{
-		ItemID: "item-45", Status: "Ice Box", Owner: "maimuzo", Repo: "koetsumugi", Number: 45,
-		Title: "引きたい issue", URL: "https://github.com/maimuzo/koetsumugi/issues/45",
+		ItemID: "item-45", Status: "Ice Box", Owner: "octocat", Repo: "hello-world", Number: 45,
+		Title: "引きたい issue", URL: "https://github.com/octocat/hello-world/issues/45",
 	})
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		candidateItemsPayload([]map[string]any{item}, false, ""))))
 	a := newAdapterWithTrust(t, fs, func(owner, repo string) bool { return false })
 
-	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#45")
+	issue, ok, err := a.FetchIssueByIdentifier(t.Context(), "octocat/hello-world#45")
 	if err != nil {
 		t.Fatalf("識別子で引くのに失敗した: %v", err)
 	}
@@ -193,15 +193,15 @@ func TestFetchIssueByIdentifier_信頼されていなければDispatchableが偽
 // 成功条件: 無限に読み続けず、CategoryPagination のエラーで止まること。
 func TestFetchIssueByIdentifier_ページ数の上限を超えたら落とす(t *testing.T) {
 	item := issueItemJSON(testIssueItemOpts{
-		ItemID: "item-10", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 10,
-		Title: "別の issue", URL: "https://github.com/maimuzo/koetsumugi/issues/10",
+		ItemID: "item-10", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 10,
+		Title: "別の issue", URL: "https://github.com/octocat/hello-world/issues/10",
 	})
 	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
 		return dataResponse(candidateItemsPayload([]map[string]any{item}, true, "cursor"))
 	})
 	a := newAdapterForFetch(t, fs)
 
-	_, _, err := a.FetchIssueByIdentifier(t.Context(), "maimuzo/koetsumugi#45")
+	_, _, err := a.FetchIssueByIdentifier(t.Context(), "octocat/hello-world#45")
 	if err == nil {
 		t.Fatalf("ページが尽きないのに止まらなかった（上限が効いていない）")
 	}

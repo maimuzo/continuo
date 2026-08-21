@@ -231,13 +231,13 @@ func writeWorkflow(t *testing.T, path string) {
 	const contents = `---
 tracker:
   provider:
-    owner: maimuzo
+    owner: octocat
     project_number: 3
     status_field: Status
 trust:
   repositories:
-    - "maimuzo/demo-a"
-    - "maimuzo/demo-b"
+    - "octocat/demo-a"
+    - "octocat/demo-b"
 ---
 
 {{.issue.identifier}} を実装してください。

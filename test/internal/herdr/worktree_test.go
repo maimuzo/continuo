@@ -35,7 +35,7 @@ var worktreeRemoveSchemaKeys = []string{"workspace_id", "force"}
 // 応答の workspace_id / path / forced を読み取れること。
 func TestWorktreeRemove_workspaceIDを渡す(t *testing.T) {
 	const wantWorkspaceID = "w9"
-	const wantPath = "/home/tester/worktrees/github.com/maimuzo/koetsumugi/continuo-maimuzo-koetsumugi-188"
+	const wantPath = "/home/tester/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188"
 
 	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
 		var req rpcRequest
@@ -87,7 +87,7 @@ func TestWorktreeRemove_workspaceIDを渡す(t *testing.T) {
 // workspace.workspace_id と worktree.path を読み取れること。実スキーマに無いキーを
 // 送っていないこと。
 func TestWorktreeCreate_pathを指定できる(t *testing.T) {
-	const wantPath = "/home/tester/worktrees/github.com/maimuzo/koetsumugi/continuo-maimuzo-koetsumugi-188"
+	const wantPath = "/home/tester/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188"
 
 	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
 		var req rpcRequest
@@ -97,10 +97,10 @@ func TestWorktreeCreate_pathを指定できる(t *testing.T) {
 		}
 		writeResult(t, conn, req.ID, herdr.WorktreeCreateResult{
 			Type:      "worktree_created",
-			Workspace: herdr.Workspace{WorkspaceID: "w9", Label: "continuo-maimuzo-koetsumugi-188"},
+			Workspace: herdr.Workspace{WorkspaceID: "w9", Label: "continuo-octocat-hello-world-188"},
 			Tab:       herdr.Tab{TabID: "w9:t1"},
 			RootPane:  herdr.Pane{PaneID: "w9:p1", Cwd: wantPath},
-			Worktree:  herdr.Worktree{Path: wantPath, Branch: "continuo/maimuzo/koetsumugi/188"},
+			Worktree:  herdr.Worktree{Path: wantPath, Branch: "continuo/octocat/hello-world/188"},
 		})
 	})
 
@@ -134,8 +134,8 @@ func TestWorktreeCreate_pathを指定できる(t *testing.T) {
 // worktree.open に無い引数（base）を送っていないこと。応答の workspace の ID と
 // already_open を読み取れること。
 func TestWorktreeOpen_pathを送れる(t *testing.T) {
-	const wantPath = "/home/tester/worktrees/github.com/maimuzo/koetsumugi/continuo-maimuzo-koetsumugi-188"
-	const wantLabel = "https://github.com/maimuzo/koetsumugi/issues/188"
+	const wantPath = "/home/tester/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188"
+	const wantLabel = "https://github.com/octocat/hello-world/issues/188"
 
 	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
 		var req rpcRequest

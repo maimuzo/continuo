@@ -58,7 +58,7 @@ func TestAdopt_復元で引き継いだrunには継続の指示を送る(t *test
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
 	if !fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
-		AgentName:        normalize.SafeName("continuo-koetsumugi-188"),
+		AgentName:        normalize.SafeName("continuo-hello-world-188"),
 		PaneID:           "w1:p1",
 		SessionUUID:      "session-restored",
 		HerdrWorkspaceID: "w1",
@@ -114,7 +114,7 @@ func TestResumeBackoff_再dispatchはUUIDを採り直して1回目の本文を�
 	// 1回目: 待ち受けは返るが `Stop` が来ないので stall として打ち切られ、リトライが1つ積まれる。
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 10*time.Second, "1回目の turn のあとリトライが積まれる", func() bool {
-		v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 		return ok && v.RetryCount == 1
 	})
 
@@ -139,7 +139,7 @@ func TestResumeBackoff_再dispatchはUUIDを採り直して1回目の本文を�
 
 	// **新しいセッションなので1回目の本文（5-3）を送り直す。**
 	got := prompts()[1]
-	if !strings.Contains(got, "gh issue view") || !strings.Contains(got, "maimuzo/koetsumugi#188") {
+	if !strings.Contains(got, "gh issue view") || !strings.Contains(got, "octocat/hello-world#188") {
 		t.Fatalf("再 dispatch で1回目の本文（5-3）を送っていない: %q", got)
 	}
 	if !strings.Contains(got, "2 回目の試行") {

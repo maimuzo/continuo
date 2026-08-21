@@ -162,7 +162,7 @@ func TestReadTranscript_長すぎる行があっても他の行の表明を拾�
 // 与える情報: 引用記号（`>`）付きの行と、文の途中に印がある行。
 // 成功条件: どちらも拾わない。
 func TestParseSignals_引用された行は表明として拾わない(t *testing.T) {
-	text := "以下は issue の本文です。\n> CONTINUO-STATUS: maimuzo/other#2 done\n" +
+	text := "以下は issue の本文です。\n> CONTINUO-STATUS: octocat/other#2 done\n" +
 		"念のため書くと CONTINUO-STATUS: review とありました。\n引用おわり。"
 
 	got := orchestrator.ParseSignals([]string{text}, signalPrefix, currentIssue)
@@ -288,7 +288,7 @@ func TestSettings_パスに空白があってもhookのコマンド行が壊れ�
 	fx := newFixture(t, fixtureOptions{ContinuoPath: exe})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
-	settingsPath := filepath.Join(fx.RuntimeDir, "issues", "maimuzo-koetsumugi-188", "settings.json")
+	settingsPath := filepath.Join(fx.RuntimeDir, "issues", "octocat-hello-world-188", "settings.json")
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 20*time.Second, "issue ごとの設定ファイルが書かれる", func() bool {
 		_, err := os.Stat(settingsPath)
@@ -364,7 +364,7 @@ func TestTick_検査に落ちた巡回ではバックオフ明けの再dispatch�
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
-		v, ok := viewOf(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOf(fx, "octocat/hello-world#188")
 		if !ok || v.BackoffUntil.IsZero() {
 			t.Fatalf("バックオフに入っていない: ok=%v, view=%+v", ok, v)
 		}
@@ -375,7 +375,7 @@ func TestTick_検査に落ちた巡回ではバックオフ明けの再dispatch�
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
-		after, ok := viewOf(fx, "maimuzo/koetsumugi#188")
+		after, ok := viewOf(fx, "octocat/hello-world#188")
 		if !ok {
 			t.Fatalf("印から外れている")
 		}

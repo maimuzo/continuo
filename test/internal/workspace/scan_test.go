@@ -32,8 +32,8 @@ func TestScan_固定の4階層だけを走査する(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	root := fx.Manager.ResolvedRoot()
 
-	correct := filepath.Join(root, "github.com", "maimuzo", "koetsumugi", "continuo-maimuzo-koetsumugi-188")
-	putIdentityFile(t, correct, `{"issue_identifier":"maimuzo/koetsumugi#188"}`)
+	correct := filepath.Join(root, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	putIdentityFile(t, correct, `{"issue_identifier":"octocat/hello-world#188"}`)
 
 	tooDeep := filepath.Join(correct, "さらに下")
 	putIdentityFile(t, tooDeep, `{"issue_identifier":"深すぎる"}`)
@@ -48,7 +48,7 @@ func TestScan_固定の4階層だけを走査する(t *testing.T) {
 	if found[0].Path != correct {
 		t.Fatalf("拾ったパスが違う: got %q, want %q", found[0].Path, correct)
 	}
-	if found[0].Identity == nil || found[0].Identity.IssueIdentifier != "maimuzo/koetsumugi#188" {
+	if found[0].Identity == nil || found[0].Identity.IssueIdentifier != "octocat/hello-world#188" {
 		t.Fatalf("身元ファイルの中身が読めていない: %+v", found[0])
 	}
 }
@@ -61,7 +61,7 @@ func TestScan_身元ファイルが無いディレクトリは無視する(t *te
 	fx := newFixture(t, fixtureOptions{})
 	root := fx.Manager.ResolvedRoot()
 
-	human := filepath.Join(root, "github.com", "maimuzo", "koetsumugi", "人間の作業場")
+	human := filepath.Join(root, "github.com", "octocat", "hello-world", "人間の作業場")
 	if err := os.MkdirAll(human, 0o700); err != nil {
 		t.Fatalf("ディレクトリを作れない: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestScan_壊れた身元ファイルはエラー付きで返す(t *testing.
 	fx := newFixture(t, fixtureOptions{})
 	root := fx.Manager.ResolvedRoot()
 
-	broken := filepath.Join(root, "github.com", "maimuzo", "koetsumugi", "continuo-1")
+	broken := filepath.Join(root, "github.com", "octocat", "hello-world", "continuo-1")
 	putIdentityFile(t, broken, `{"issue_url": "https://exa`)
 
 	found, err := fx.Manager.Scan()

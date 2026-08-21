@@ -249,7 +249,7 @@ func adoptRun(fx *stubFixture, number int) tracker.Issue {
 	issue := sampleIssue(number, "In Progress")
 	fx.Tracker.AddIssue(issue)
 	fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
-		AgentName:        normalize.SafeName("continuo-koetsumugi-" + strconv.Itoa(number)),
+		AgentName:        normalize.SafeName("continuo-hello-world-" + strconv.Itoa(number)),
 		PaneID:           "w1:p1",
 		SessionUUID:      "session-" + strconv.Itoa(number),
 		HerdrWorkspaceID: "w1",

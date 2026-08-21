@@ -774,7 +774,7 @@ func isTurnBoundaryHook(ev hookserver.HookEvent) bool {
 // （設計 3-2 の「`<issue のスラグ>` の作り方を1つに決める」）。
 //
 // **英数字とハイフン以外を全部ハイフンに置き換え、連続するハイフンを1つにまとめ、
-// 小文字にする。**例: `maimuzo/koetsumugi#188` → `maimuzo-koetsumugi-188`。
+// 小文字にする。**例: `Octocat/Hello_World#188` → `octocat-hello-world-188`。
 //
 // identifier: `<owner>/<repo>#<番号>` の形の識別子。
 // 戻り値: スラグ。前後のハイフンは落とす。空になる場合は "issue" を返す。

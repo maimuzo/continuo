@@ -218,7 +218,7 @@ func TestServer_実行時ディレクトリはsocketのディレクトリであ�
 			ts.server.RuntimeDir(), filepath.Dir(ts.socketPath))
 	}
 
-	dir := ts.pendingDir(t, "maimuzo-koetsumugi-188")
+	dir := ts.pendingDir(t, "octocat-hello-world-188")
 	writePendingFile(t, dir, "1787057953362306-Stop.json", stopEventJSON("session-1", "[]"))
 
 	ts.start(t)

@@ -35,14 +35,14 @@ func prepareWorktree(t *testing.T, fx *managerFixture, issue workspace.IssueRef)
 // 戻り値: 検査に使う Identity。
 func fullIdentity(created time.Time) workspace.Identity {
 	return workspace.Identity{
-		IssueURL:         "https://github.com/maimuzo/koetsumugi/issues/188",
-		IssueIdentifier:  "maimuzo/koetsumugi#188",
+		IssueURL:         "https://github.com/octocat/hello-world/issues/188",
+		IssueIdentifier:  "octocat/hello-world#188",
 		ProjectItemID:    "PVTI_lADOAb3c4M4Aq7EzgAR8Xyz",
-		Branch:           "continuo/maimuzo/koetsumugi/188",
+		Branch:           "continuo/octocat/hello-world/188",
 		HerdrWorkspaceID: "w9",
 		SocketPath:       "/tmp/continuo/hooks.sock",
-		SettingsPath:     "/tmp/continuo/issues/maimuzo-koetsumugi-188/settings.json",
-		AgentName:        "continuo-koetsumugi-188",
+		SettingsPath:     "/tmp/continuo/issues/octocat-hello-world-188/settings.json",
+		AgentName:        "continuo-hello-world-188",
 		SessionUUID:      "8aebf7af-8b07-4f45-b037-59f457b38feb",
 		CreatedAt:        created,
 		TakeoverCount:    0,
@@ -264,7 +264,7 @@ func TestSetAgentName_agent名だけを追記する(t *testing.T) {
 		t.Fatalf("WriteIdentity に失敗した: %v", err)
 	}
 
-	if err := fx.Manager.SetAgentName(context.Background(), prepared.Path, "continuo-koetsumugi-188-2"); err != nil {
+	if err := fx.Manager.SetAgentName(context.Background(), prepared.Path, "continuo-hello-world-188-2"); err != nil {
 		t.Fatalf("SetAgentName に失敗した: %v", err)
 	}
 
@@ -272,7 +272,7 @@ func TestSetAgentName_agent名だけを追記する(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadIdentity に失敗した: %v", err)
 	}
-	if got.AgentName != "continuo-koetsumugi-188-2" {
+	if got.AgentName != "continuo-hello-world-188-2" {
 		t.Fatalf("agent_name が追記されていない: got %q", got.AgentName)
 	}
 	if got.ProjectItemID != base.ProjectItemID || got.HerdrWorkspaceID != base.HerdrWorkspaceID {

@@ -53,8 +53,8 @@ func TestAdapter_巡回とturnから同時に呼んでも競合しない(t *test
 		case strings.Contains(req.Query, "nodes(ids:"):
 			// UpdateStatus が書き込み前に行う取り直し。
 			item := issueItemJSON(testIssueItemOpts{
-				ItemID: itemID, Status: "In Progress", Owner: "maimuzo", Repo: "koetsumugi",
-				Number: 188, Title: "同時実行の検査", URL: "https://github.com/maimuzo/koetsumugi/issues/188",
+				ItemID: itemID, Status: "In Progress", Owner: "octocat", Repo: "hello-world",
+				Number: 188, Title: "同時実行の検査", URL: "https://github.com/octocat/hello-world/issues/188",
 			})
 			return dataResponse(byIDsPayload([]any{asProjectV2ItemNode(item)}))
 		default:

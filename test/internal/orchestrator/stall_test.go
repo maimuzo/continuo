@@ -49,7 +49,7 @@ func TestCheckStalls_画面の版が増えている間は何時間かかって�
 			fx.Orc.Tick(context.Background())
 			synctest.Wait()
 
-			v, ok := viewOf(fx, "maimuzo/koetsumugi#188")
+			v, ok := viewOf(fx, "octocat/hello-world#188")
 			if !ok {
 				t.Fatalf("画面が変わり続けている run を印から外した（%d 周目）", i+1)
 			}
@@ -87,7 +87,7 @@ func TestCheckStalls_画面の版が止まったまま閾値を超えたら打�
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
-		v, ok := viewOf(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOf(fx, "octocat/hello-world#188")
 		if !ok {
 			t.Fatalf("閾値の手前で run を印から外している")
 		}
@@ -100,7 +100,7 @@ func TestCheckStalls_画面の版が止まったまま閾値を超えたら打�
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
-		v, ok = viewOf(fx, "maimuzo/koetsumugi#188")
+		v, ok = viewOf(fx, "octocat/hello-world#188")
 		if !ok {
 			t.Fatalf("バックオフ中の run を印から外している（30秒後の巡回で即座に拾い直される）")
 		}
@@ -146,7 +146,7 @@ func TestCheckStalls_PreToolUseで時計がリセットされる(t *testing.T) {
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
-		v, ok := viewOf(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOf(fx, "octocat/hello-world#188")
 		if !ok {
 			t.Fatalf("時計がリセットされていれば止まらないはずの run が印から外れている")
 		}
@@ -188,7 +188,7 @@ func TestResumeBackoff_バックオフが明けたrunを巡回の先頭で拾い
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
-		v, ok := viewOf(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOf(fx, "octocat/hello-world#188")
 		if !ok || v.RetryCount != 1 {
 			t.Fatalf("stall でリトライが積まれていない: %+v (ok=%v)", v, ok)
 		}
@@ -226,11 +226,11 @@ func TestCheckStalls_打ち切りの文面は原因と対処を必ず書く(t *t
 				cfg.Agent.MaxRetries = 0
 			},
 		})
-		const worktreePath = "/tmp/continuo-test/koetsumugi/188"
+		const worktreePath = "/tmp/continuo-test/hello-world/188"
 		issue := sampleIssue(188, "In Progress")
 		fx.Tracker.AddIssue(issue)
 		fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
-			AgentName:        normalize.SafeName("continuo-koetsumugi-188"),
+			AgentName:        normalize.SafeName("continuo-hello-world-188"),
 			PaneID:           "w1:p1",
 			SessionUUID:      "session-188",
 			HerdrWorkspaceID: "w1",

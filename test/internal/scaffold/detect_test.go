@@ -60,42 +60,42 @@ func ghResponse(out string, err error) struct {
 
 // oneProjectJSON は `gh project list --format json` が候補1件を返したときの出力である。
 // 2026-08-19 に `gh project list --owner @me --format json`（gh 2.97.0）で実際に得た形を写した。
-const oneProjectJSON = `{"projects":[{"closed":false,"number":3,"owner":{"login":"maimuzo","type":"User"},` +
-	`"title":"AI自動進行管理","url":"https://github.com/users/maimuzo/projects/3"}],"totalCount":1}`
+const oneProjectJSON = `{"projects":[{"closed":false,"number":3,"owner":{"login":"octocat","type":"User"},` +
+	`"title":"AI自動進行管理","url":"https://github.com/users/octocat/projects/3"}],"totalCount":1}`
 
 // twoProjectsJSON は候補が2件あるときの出力である。
 const twoProjectsJSON = `{"projects":[` +
-	`{"closed":false,"number":3,"title":"AI自動進行管理","url":"https://github.com/users/maimuzo/projects/3"},` +
-	`{"closed":false,"number":7,"title":"試作","url":"https://github.com/users/maimuzo/projects/7"}],"totalCount":2}`
+	`{"closed":false,"number":3,"title":"AI自動進行管理","url":"https://github.com/users/octocat/projects/3"},` +
+	`{"closed":false,"number":7,"title":"試作","url":"https://github.com/users/octocat/projects/7"}],"totalCount":2}`
 
 // twoRepoItemsJSON は `gh project item-list --format json` が、2つのリポジトリの issue と
 // draft issue を1件ずつ返したときの出力である。
 // 2026-08-20 に `gh project item-list 3 --owner @me --format json`（gh 2.97.0）で
 // 実際に得た形から、判定に使う項目だけを写した。
 const twoRepoItemsJSON = `{"items":[` +
-	`{"content":{"number":188,"repository":"maimuzo/koetsumugi","type":"Issue"}},` +
+	`{"content":{"number":188,"repository":"octocat/hello-world","type":"Issue"}},` +
 	`{"content":{"number":1,"repository":"maimuzo/continuo","type":"Issue"}},` +
 	`{"content":{"number":2,"repository":"maimuzo/continuo","type":"Issue"}},` +
 	`{"content":{"title":"下書き","type":"DraftIssue"}}],"totalCount":4}`
 
 // 目的: gh から owner とボードの番号を引いて、雛形の2つのプレースホルダが埋まることを確認する。
-// 与える情報: `gh api user` が maimuzo を返し、`gh project list` が候補1件を返す差し替え。
-// 成功条件: Values に maimuzo と 3 が入り、どちらの Field も Filled であること。
+// 与える情報: `gh api user` が octocat を返し、`gh project list` が候補1件を返す差し替え。
+// 成功条件: Values に octocat と 3 が入り、どちらの Field も Filled であること。
 // あわせて、gh の呼び出しが api user / project list / project item-list の3件であること。
 func TestDetect_ghから引いた値でownerとproject_numberが埋まる(t *testing.T) {
 	run, calls := fakeGH(t, map[string]struct {
 		out []byte
 		err error
 	}{
-		"api user":          ghResponse("maimuzo\n", nil),
+		"api user":          ghResponse("octocat\n", nil),
 		"project list":      ghResponse(oneProjectJSON, nil),
 		"project item-list": ghResponse(twoRepoItemsJSON, nil),
 	})
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
 
-	if got.Values.Owner != "maimuzo" {
-		t.Errorf("owner が引けていない: got %q, want %q", got.Values.Owner, "maimuzo")
+	if got.Values.Owner != "octocat" {
+		t.Errorf("owner が引けていない: got %q, want %q", got.Values.Owner, "octocat")
 	}
 	if got.Values.ProjectNumber != 3 {
 		t.Errorf("project_number が引けていない: got %d, want %d", got.Values.ProjectNumber, 3)
@@ -106,7 +106,7 @@ func TestDetect_ghから引いた値でownerとproject_numberが埋まる(t *tes
 	if len(*calls) != 3 {
 		t.Errorf("gh の呼び出しは api user / project list / project item-list の3件であるべき: %v", *calls)
 	}
-	if !strings.HasPrefix((*calls)[1], "project list --owner maimuzo ") {
+	if !strings.HasPrefix((*calls)[1], "project list --owner octocat ") {
 		t.Errorf("ボードの候補を引くとき、引いた owner を渡していない: %q", (*calls)[1])
 	}
 }
@@ -150,7 +150,7 @@ func TestDetect_ボードの候補が複数なら選ばずに一覧を返す(t *
 		out []byte
 		err error
 	}{
-		"api user":     ghResponse("maimuzo\n", nil),
+		"api user":     ghResponse("octocat\n", nil),
 		"project list": ghResponse(twoProjectsJSON, nil),
 	})
 
@@ -159,7 +159,7 @@ func TestDetect_ボードの候補が複数なら選ばずに一覧を返す(t *
 	if got.Values.ProjectNumber != 0 {
 		t.Errorf("候補が複数なのに番号を選んでいる: %d", got.Values.ProjectNumber)
 	}
-	if got.Values.Owner != "maimuzo" {
+	if got.Values.Owner != "octocat" {
 		t.Errorf("owner まで埋まらなくなっている: %q", got.Values.Owner)
 	}
 	project := fieldOf(t, got, scaffold.ProjectKey)
@@ -182,7 +182,7 @@ func TestDetect_ボードが0件ならプレースホルダを残して作り方
 		out []byte
 		err error
 	}{
-		"api user":     ghResponse("maimuzo\n", nil),
+		"api user":     ghResponse("octocat\n", nil),
 		"project list": ghResponse(`{"projects":[],"totalCount":0}`, nil),
 	})
 
@@ -208,7 +208,7 @@ func TestDetect_閉じたボードは候補に数えない(t *testing.T) {
 		out []byte
 		err error
 	}{
-		"api user":          ghResponse("maimuzo\n", nil),
+		"api user":          ghResponse("octocat\n", nil),
 		"project list":      ghResponse(closedAndOpen, nil),
 		"project item-list": ghResponse(twoRepoItemsJSON, nil),
 	})
@@ -270,7 +270,7 @@ func TestDetect_ownerに使えない文字列は書き込まない(t *testing.T)
 	var calls []string
 	run := func(_ context.Context, args ...string) ([]byte, error) {
 		calls = append(calls, strings.Join(args, " "))
-		return []byte("mai\"muzo\nowner: attacker"), nil
+		return []byte("oct\"ocat\nowner: attacker"), nil
 	}
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
@@ -288,7 +288,7 @@ func TestDetect_ownerに使えない文字列は書き込まない(t *testing.T)
 // 成功条件: プレースホルダが1つも残らず、埋めた行のコメントから
 // 「ここを埋めること」が消え、コメントの桁がそろっていること。
 func TestTemplateWithValues_埋めた行はコメントごと置き換わる(t *testing.T) {
-	filled := scaffold.TemplateWithValues(scaffold.Values{Owner: "maimuzo", ProjectNumber: 3})
+	filled := scaffold.TemplateWithValues(scaffold.Values{Owner: "octocat", ProjectNumber: 3})
 
 	if strings.Contains(filled, config.Placeholder) {
 		t.Error("owner のプレースホルダが残っている")
@@ -297,7 +297,7 @@ func TestTemplateWithValues_埋めた行はコメントごと置き換わる(t *
 		t.Error("project_number のプレースホルダが残っている")
 	}
 	for _, want := range []string{
-		"    owner: maimuzo                          # 例: https://github.com/maimuzo なら maimuzo",
+		"    owner: octocat                          # 例: https://github.com/maimuzo なら maimuzo",
 		"    project_number: 3                       # 例: https://github.com/users/maimuzo/projects/3 なら 3",
 	} {
 		if !strings.Contains(filled, want) {
@@ -313,7 +313,7 @@ func TestTemplateWithValues_埋めた行はコメントごと置き換わる(t *
 // 与える情報: owner だけを持つ Values。
 // 成功条件: owner が埋まり、project_number は 0 のまま残ること。
 func TestTemplateWithValues_引けた値だけを埋める(t *testing.T) {
-	filled := scaffold.TemplateWithValues(scaffold.Values{Owner: "maimuzo"})
+	filled := scaffold.TemplateWithValues(scaffold.Values{Owner: "octocat"})
 
 	if strings.Contains(filled, config.Placeholder) {
 		t.Error("owner が埋まっていない")
@@ -330,7 +330,7 @@ func TestTemplateWithValues_引けた値だけを埋める(t *testing.T) {
 func TestWriteTemplateWithValues_埋めたファイルはそのまま読み込める(t *testing.T) {
 	dir := t.TempDir()
 
-	result, err := scaffold.WriteTemplateWithValues(dir, false, scaffold.Values{Owner: "maimuzo", ProjectNumber: 3})
+	result, err := scaffold.WriteTemplateWithValues(dir, false, scaffold.Values{Owner: "octocat", ProjectNumber: 3})
 	if err != nil {
 		t.Fatalf("雛形を書き出せなかった: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestWriteTemplateWithValues_埋めたファイルはそのまま読み込�
 	if err != nil {
 		t.Fatalf("自動で埋めた雛形を読み込めなかった: %v", err)
 	}
-	if loaded.Config.Tracker.Provider.Owner != "maimuzo" {
+	if loaded.Config.Tracker.Provider.Owner != "octocat" {
 		t.Errorf("owner が反映されていない: got %q", loaded.Config.Tracker.Provider.Owner)
 	}
 	if loaded.Config.Tracker.Provider.ProjectNumber != 3 {
@@ -357,7 +357,7 @@ func TestWriteTemplateWithValues_埋めたファイルはそのまま読み込�
 // 与える情報: 通る名前と通らない名前。
 // 成功条件: 英数字で始まり英数字とハイフンだけの39文字以内だけが通ること。
 func TestValidOwner_受け付ける文字を絞る(t *testing.T) {
-	for _, name := range []string{"maimuzo", "a", "my-org", "A1-b2", strings.Repeat("a", 39)} {
+	for _, name := range []string{"octocat", "a", "my-org", "A1-b2", strings.Repeat("a", 39)} {
 		if !scaffold.ValidOwner(name) {
 			t.Errorf("受け付けるべき名前が弾かれた: %q", name)
 		}

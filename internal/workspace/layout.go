@@ -124,7 +124,7 @@ func CheckContainmentResolved(resolvedRoot, path string) (string, error) {
 
 // HostFromIssueURL は issue の URL のホスト部を返す（3-22）。
 //
-// rawURL: issue の URL（例 "https://github.com/maimuzo/koetsumugi/issues/188"）。
+// rawURL: issue の URL（例 "https://github.com/octocat/hello-world/issues/188"）。
 // 戻り値: ホスト名。**rawURL が空・解析できない・ホスト部が空のときは DefaultHost を返す。**
 // GitHub Enterprise では別のホスト名になるので、URL から取ることに意味がある。
 func HostFromIssueURL(rawURL string) string {

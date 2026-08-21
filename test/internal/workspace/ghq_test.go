@@ -34,7 +34,7 @@ func fakeGhq(t *testing.T, script string) {
 func TestRunGhqList_該当が無ければ空文字を返す(t *testing.T) {
 	fakeGhq(t, "exit 1")
 
-	path, err := workspace.RunGhqList(context.Background(), "maimuzo", "koetsumugi")
+	path, err := workspace.RunGhqList(context.Background(), "octocat", "hello-world")
 	if err != nil {
 		t.Fatalf("該当が無いだけでエラーになった: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestRunGhqList_該当が無ければ空文字を返す(t *testing.T) {
 func TestRunGhqList_該当なし以外の失敗はエラーにする(t *testing.T) {
 	fakeGhq(t, "echo '設定ファイルが壊れています' >&2; exit 2")
 
-	path, err := workspace.RunGhqList(context.Background(), "maimuzo", "koetsumugi")
+	path, err := workspace.RunGhqList(context.Background(), "octocat", "hello-world")
 	if err == nil {
 		t.Fatalf("ghq が異常終了したのにエラーにならなかった（clone が無いことに丸めている）: %q", path)
 	}
@@ -69,13 +69,13 @@ func TestRunGhqList_該当なし以外の失敗はエラーにする(t *testing.
 // 与える情報: パスを1行出力して 0 で終わる ghq。
 // 成功条件: そのパスが返ること。
 func TestRunGhqList_cloneのパスを返す(t *testing.T) {
-	fakeGhq(t, "echo /tmp/ghq/github.com/maimuzo/koetsumugi")
+	fakeGhq(t, "echo /tmp/ghq/github.com/octocat/hello-world")
 
-	path, err := workspace.RunGhqList(context.Background(), "maimuzo", "koetsumugi")
+	path, err := workspace.RunGhqList(context.Background(), "octocat", "hello-world")
 	if err != nil {
 		t.Fatalf("RunGhqList に失敗した: %v", err)
 	}
-	if path != "/tmp/ghq/github.com/maimuzo/koetsumugi" {
+	if path != "/tmp/ghq/github.com/octocat/hello-world" {
 		t.Fatalf("clone のパスが返っていない: %q", path)
 	}
 }
@@ -87,7 +87,7 @@ func TestRunGhqGet_引数をそのまま渡して起動する(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "args.txt")
 	fakeGhq(t, "echo \"$@\" > "+out+"\nexit 0")
 
-	if err := workspace.RunGhqGet(context.Background(), "maimuzo", "koetsumugi"); err != nil {
+	if err := workspace.RunGhqGet(context.Background(), "octocat", "hello-world"); err != nil {
 		t.Fatalf("取得に失敗した: %v", err)
 	}
 
@@ -95,8 +95,8 @@ func TestRunGhqGet_引数をそのまま渡して起動する(t *testing.T) {
 	if err != nil {
 		t.Fatalf("テスト用ghq mock が引数を書き出していない: %v", err)
 	}
-	if got := strings.TrimSpace(string(raw)); got != "get maimuzo/koetsumugi" {
-		t.Fatalf("ghq へ渡した引数が違う: got %q, want %q", got, "get maimuzo/koetsumugi")
+	if got := strings.TrimSpace(string(raw)); got != "get octocat/hello-world" {
+		t.Fatalf("ghq へ渡した引数が違う: got %q, want %q", got, "get octocat/hello-world")
 	}
 }
 
@@ -107,7 +107,7 @@ func TestRunGhqGet_引数をそのまま渡して起動する(t *testing.T) {
 func TestRunGhqGet_失敗したら理由をエラー文に含める(t *testing.T) {
 	fakeGhq(t, "echo 'repository not found' >&2\nexit 1")
 
-	err := workspace.RunGhqGet(context.Background(), "maimuzo", "no-such-repo")
+	err := workspace.RunGhqGet(context.Background(), "octocat", "no-such-repo")
 	if err == nil {
 		t.Fatal("失敗したのにエラーが返っていない")
 	}
@@ -125,7 +125,7 @@ func TestRunGhqGet_失敗したら理由をエラー文に含める(t *testing.T
 func TestRunGhqGet_ghqが無ければ起動できないと言う(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	err := workspace.RunGhqGet(context.Background(), "maimuzo", "koetsumugi")
+	err := workspace.RunGhqGet(context.Background(), "octocat", "hello-world")
 	if err == nil {
 		t.Fatal("ghq が無いのにエラーが返っていない")
 	}

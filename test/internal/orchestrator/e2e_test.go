@@ -102,17 +102,17 @@ func TestTick_1件のissueが候補に上がってからDoneで片付くまで�
 	}
 
 	// 段11: 1回目のプロンプトはテンプレートの描画結果である（**issue の本文は入れない**）。
-	if !strings.Contains(promptedText, "maimuzo/koetsumugi#188") ||
+	if !strings.Contains(promptedText, "octocat/hello-world#188") ||
 		!strings.Contains(promptedText, "gh issue view") {
 		t.Fatalf("1回目のプロンプトがテンプレートの描画結果になっていない: %q", promptedText)
 	}
 
 	// worktree と branch が本当に消えている（本物の git で確かめる）。
-	worktreePath := filepath.Join(fx.WorktreeRoot, "github.com", "maimuzo", "koetsumugi", "continuo-maimuzo-koetsumugi-188")
+	worktreePath := filepath.Join(fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
 	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
 		t.Fatalf("worktree が残っている: %s (err=%v)", worktreePath, err)
 	}
-	branches := runGit(t, fx.Repo.Dir, "branch", "--list", "continuo/maimuzo/koetsumugi/188")
+	branches := runGit(t, fx.Repo.Dir, "branch", "--list", "continuo/octocat/hello-world/188")
 	if branches != "" {
 		t.Fatalf("branch が残っている: %q", branches)
 	}
@@ -136,8 +136,8 @@ func TestTick_着手の13段が設計の順番どおりに進む(t *testing.T) {
 
 	settingsSeen := make(chan struct{}, 1)
 	identitySeen := make(chan struct{}, 1)
-	worktreePath := filepath.Join(fx.WorktreeRoot, "github.com", "maimuzo", "koetsumugi", "continuo-maimuzo-koetsumugi-188")
-	settingsPath := filepath.Join(fx.RuntimeDir, "issues", "maimuzo-koetsumugi-188", "settings.json")
+	worktreePath := filepath.Join(fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	settingsPath := filepath.Join(fx.RuntimeDir, "issues", "octocat-hello-world-188", "settings.json")
 
 	fx.Herdr.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
 		// 段9 の時点で、段5 の設定ファイルと段6 の身元ファイルが置かれているはずである。
@@ -224,7 +224,7 @@ func TestTick_設定ファイルに8つのhookと環境変数を書く(t *testin
 		return fx.Herdr.CountMethod(herdr.MethodAgentStart) > 0
 	})
 
-	settingsPath := filepath.Join(fx.RuntimeDir, "issues", "maimuzo-koetsumugi-188", "settings.json")
+	settingsPath := filepath.Join(fx.RuntimeDir, "issues", "octocat-hello-world-188", "settings.json")
 	raw, err := os.ReadFile(settingsPath)
 	if err != nil {
 		t.Fatalf("設定ファイルを読めない: %v", err)
@@ -262,7 +262,7 @@ func TestTick_設定ファイルに8つのhookと環境変数を書く(t *testin
 		if !strings.Contains(cmd, "--socket '"+fx.SocketPath+"'") {
 			t.Fatalf("hook %s のコマンド行に、引用した socket の絶対パスが無い: %q", name, cmd)
 		}
-		wantPending := filepath.Join(fx.RuntimeDir, "issues", "maimuzo-koetsumugi-188", "pending")
+		wantPending := filepath.Join(fx.RuntimeDir, "issues", "octocat-hello-world-188", "pending")
 		if !strings.Contains(cmd, "--pending-dir '"+wantPending+"'") {
 			t.Fatalf("hook %s のコマンド行に、引用した逃がし先の絶対パスが無い: %q", name, cmd)
 		}

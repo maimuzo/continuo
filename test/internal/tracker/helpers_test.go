@@ -25,7 +25,7 @@ func testTrackerConfig() config.TrackerConfig {
 	return config.TrackerConfig{
 		Kind: tracker.KindGitHubProjectsV2,
 		Provider: config.TrackerProviderConfig{
-			Owner:         "maimuzo",
+			Owner:         "octocat",
 			ProjectNumber: 3,
 			StatusField:   "Status",
 			TokenSource:   "gh_auth",

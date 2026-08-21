@@ -28,18 +28,18 @@ func TestDetect_ボードに載っているリポジトリを重複なく並べ�
 		out []byte
 		err error
 	}{
-		"api user":          ghResponse("maimuzo\n", nil),
+		"api user":          ghResponse("octocat\n", nil),
 		"project list":      ghResponse(oneProjectJSON, nil),
 		"project item-list": ghResponse(twoRepoItemsJSON, nil),
 	})
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
 
-	want := []string{"maimuzo/continuo", "maimuzo/koetsumugi"}
+	want := []string{"maimuzo/continuo", "octocat/hello-world"}
 	if strings.Join(got.Values.Repositories, ",") != strings.Join(want, ",") {
 		t.Errorf("拾ったリポジトリが想定と違う: got %v, want %v", got.Values.Repositories, want)
 	}
-	if !strings.Contains((*calls)[2], "project item-list 3 --owner maimuzo ") {
+	if !strings.Contains((*calls)[2], "project item-list 3 --owner octocat ") {
 		t.Errorf("決まったボードの番号と owner で項目を引いていない: %q", (*calls)[2])
 	}
 }
@@ -56,7 +56,7 @@ func TestDetect_拾ったあとに要らない行を消せと案内する(t *tes
 		out []byte
 		err error
 	}{
-		"api user":          ghResponse("maimuzo\n", nil),
+		"api user":          ghResponse("octocat\n", nil),
 		"project list":      ghResponse(oneProjectJSON, nil),
 		"project item-list": ghResponse(twoRepoItemsJSON, nil),
 	})
@@ -86,7 +86,7 @@ func TestDetect_ボードの項目を引けなくても失敗しない(t *testin
 		out []byte
 		err error
 	}{
-		"api user":          ghResponse("maimuzo\n", nil),
+		"api user":          ghResponse("octocat\n", nil),
 		"project list":      ghResponse(oneProjectJSON, nil),
 		"project item-list": ghResponse("", scaffold.ErrGHNotFound),
 	})
@@ -115,9 +115,9 @@ func TestDetect_ボードの項目を引けなくても失敗しない(t *testin
 // 「要らない行は消すこと」が残ること。
 func TestTemplateWithValues_repositoriesを埋めても消せという案内が残る(t *testing.T) {
 	filled := scaffold.TemplateWithValues(scaffold.Values{
-		Owner:         "maimuzo",
+		Owner:         "octocat",
 		ProjectNumber: 3,
-		Repositories:  []string{"maimuzo/continuo", "maimuzo/koetsumugi"},
+		Repositories:  []string{"maimuzo/continuo", "octocat/hello-world"},
 	})
 
 	if strings.Contains(filled, "repositories: []") {
@@ -125,7 +125,7 @@ func TestTemplateWithValues_repositoriesを埋めても消せという案内が�
 	}
 	for _, want := range []string{
 		`    - "maimuzo/continuo"`,
-		`    - "maimuzo/koetsumugi"`,
+		`    - "octocat/hello-world"`,
 		"要らない行は消すこと",
 	} {
 		if !strings.Contains(filled, want) {
@@ -150,9 +150,9 @@ func TestWriteTemplateWithValues_repositoriesを埋めたファイルはその�
 	dir := t.TempDir()
 
 	result, err := scaffold.WriteTemplateWithValues(dir, false, scaffold.Values{
-		Owner:         "maimuzo",
+		Owner:         "octocat",
 		ProjectNumber: 3,
-		Repositories:  []string{"maimuzo/continuo", "maimuzo/koetsumugi"},
+		Repositories:  []string{"maimuzo/continuo", "octocat/hello-world"},
 	})
 	if err != nil {
 		t.Fatalf("雛形を書き出せなかった: %v", err)
@@ -168,7 +168,7 @@ func TestWriteTemplateWithValues_repositoriesを埋めたファイルはその�
 	if err != nil {
 		t.Fatalf("埋めた雛形を読み込めなかった: %v", err)
 	}
-	want := []string{"maimuzo/continuo", "maimuzo/koetsumugi"}
+	want := []string{"maimuzo/continuo", "octocat/hello-world"}
 	got := loaded.Config.Trust.Repositories
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("trust.repositories が反映されていない: got %v, want %v", got, want)

@@ -10,7 +10,7 @@ import (
 const signalPrefix = "CONTINUO-STATUS:"
 
 // currentIssue はテストで「いま作業している issue」として使う識別子である。
-const currentIssue = "maimuzo/koetsumugi#188"
+const currentIssue = "octocat/hello-world#188"
 
 // TestParseSignals_対象を書かない行はいま作業しているissueを指す は、
 // 表明の既定の対象がその run の issue になることを確かめる。
@@ -67,17 +67,17 @@ func TestParseSignals_印が複数あればissueごとに最後のものを採�
 // TestParseSignals_グループの別issueを番号で指せる は、グループの表明の書式を確かめる。
 //
 // 目的: 設計 3-26 の「`#<番号>` は代表の issue と同じリポジトリを指す」を示す。
-// 与える情報: 対象なし・`#45`・`maimuzo/other#47` の3行。
+// 与える情報: 対象なし・`#45`・`octocat/other#47` の3行。
 // 成功条件: 3件が別々のキーに入り、`#45` は代表と同じリポジトリの識別子になる。
 func TestParseSignals_グループの別issueを番号で指せる(t *testing.T) {
-	text := "CONTINUO-STATUS: review\nCONTINUO-STATUS: #45 review\nCONTINUO-STATUS: maimuzo/other#47 blocked"
+	text := "CONTINUO-STATUS: review\nCONTINUO-STATUS: #45 review\nCONTINUO-STATUS: octocat/other#47 blocked"
 
 	got := orchestrator.ParseSignals([]string{text}, signalPrefix, currentIssue)
 
 	want := map[string]string{
-		currentIssue:            "review",
-		"maimuzo/koetsumugi#45": "review",
-		"maimuzo/other#47":      "blocked",
+		currentIssue:             "review",
+		"octocat/hello-world#45": "review",
+		"octocat/other#47":       "blocked",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("拾った表明の件数が想定と違う: got %d, want %d (%v)", len(got), len(want), got)

@@ -1005,12 +1005,12 @@ const samplePromptTemplate = `{{.issue.identifier}} を実装してください�
 //
 // number: issue 番号。
 // state: ボード上の Status。
-// 戻り値: `maimuzo/koetsumugi#<number>` の issue。
+// 戻り値: `octocat/hello-world#<number>` の issue。
 func sampleIssue(number int, state string) tracker.Issue {
-	url := fmt.Sprintf("https://github.com/maimuzo/koetsumugi/issues/%d", number)
+	url := fmt.Sprintf("https://github.com/octocat/hello-world/issues/%d", number)
 	return tracker.Issue{
 		ID:         fmt.Sprintf("PVTI_item%d", number),
-		Identifier: fmt.Sprintf("maimuzo/koetsumugi#%d", number),
+		Identifier: fmt.Sprintf("octocat/hello-world#%d", number),
 		Title:      fmt.Sprintf("テスト用の issue %d", number),
 		State:      state,
 		URL:        &url,
@@ -1021,8 +1021,8 @@ func sampleIssue(number int, state string) tracker.Issue {
 			"default_branch": "main",
 		},
 		Dispatchable: true,
-		Owner:        "maimuzo",
-		Repo:         "koetsumugi",
+		Owner:        "octocat",
+		Repo:         "hello-world",
 		Number:       number,
 	}
 }

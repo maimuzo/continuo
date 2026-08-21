@@ -21,8 +21,8 @@ func TestReport_出力の形と終了コードが設計どおりである(t *tes
 			Label:    doctor.LabelClone,
 			Symbol:   doctor.SymbolMissing,
 			Detail:   "対象 1件のうち 1件が見つかりません",
-			Notes:    []string{"maimuzo/koetsumugi が見つからない"},
-			Remedies: []string{"ghq get maimuzo/koetsumugi を実行してください"},
+			Notes:    []string{"octocat/hello-world が見つからない"},
+			Remedies: []string{"ghq get octocat/hello-world を実行してください"},
 		},
 		{
 			Label:    doctor.LabelCredentials,
@@ -48,10 +48,10 @@ func TestReport_出力の形と終了コードが設計どおりである(t *tes
 	if !strings.HasPrefix(lines[1], "✗ "+doctor.LabelText(doctor.LabelClone)+" ") {
 		t.Fatalf("2行目が ✗ の行になっていない: %q", lines[1])
 	}
-	if !strings.HasPrefix(lines[2], "  ") || !strings.Contains(lines[2], "maimuzo/koetsumugi が見つからない") {
+	if !strings.HasPrefix(lines[2], "  ") || !strings.Contains(lines[2], "octocat/hello-world が見つからない") {
 		t.Fatalf("内訳の行が説明の桁位置に揃っていない: %q", lines[2])
 	}
-	if !strings.Contains(lines[3], "→ ghq get maimuzo/koetsumugi を実行してください") {
+	if !strings.Contains(lines[3], "→ ghq get octocat/hello-world を実行してください") {
 		t.Fatalf("直し方の行が `→ ` で続いていない: %q", lines[3])
 	}
 	if !strings.HasPrefix(lines[4], "! "+doctor.LabelText(doctor.LabelCredentials)+" ") {

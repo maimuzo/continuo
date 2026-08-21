@@ -18,10 +18,10 @@ import (
 // 与える情報: 大文字とアンダースコアを含む repo 名と issue 番号。
 // 成功条件: 小文字のハイフン区切りになり、herdr のパターンを満たす。
 func TestBuildAgentName_repoと番号からcontinuo接頭辞の名前を作る(t *testing.T) {
-	got := orchestrator.BuildAgentName("Koe_Tsumugi", 188)
+	got := orchestrator.BuildAgentName("Hello_World", 188)
 
-	if got != "continuo-koe-tsumugi-188" {
-		t.Fatalf("agent 名が想定と違う: got %q, want %q", got, "continuo-koe-tsumugi-188")
+	if got != "continuo-hello-world-188" {
+		t.Fatalf("agent 名が想定と違う: got %q, want %q", got, "continuo-hello-world-188")
 	}
 	if err := herdr.ValidateAgentName(normalize.SafeName(got)); err != nil {
 		t.Fatalf("作った agent 名が herdr のパターンを満たさない: %v", err)
@@ -56,13 +56,13 @@ func TestBuildAgentName_32文字を超えるときは番号を残してrepoを�
 // 目的: 設計 3-2 の「英数字とハイフン以外を全部ハイフンに置き換え、連続するハイフンを
 // 1つにまとめ、小文字にする」を守っていることを示す。**設定ファイルの置き場所（3-12）と
 // 逃がし先（3-19）の両方で使う同じ規則である。**
-// 与える情報: `maimuzo/koetsumugi#188`。
-// 成功条件: `maimuzo-koetsumugi-188` になる。
+// 与える情報: `octocat/hello-world#188`。
+// 成功条件: `octocat-hello-world-188` になる。
 func TestIssueSlug_識別子から設定ファイルの置き場所のスラグを作る(t *testing.T) {
-	got := orchestrator.IssueSlug("maimuzo/koetsumugi#188")
+	got := orchestrator.IssueSlug("octocat/hello-world#188")
 
-	if got != "maimuzo-koetsumugi-188" {
-		t.Fatalf("スラグが想定と違う: got %q, want %q", got, "maimuzo-koetsumugi-188")
+	if got != "octocat-hello-world-188" {
+		t.Fatalf("スラグが想定と違う: got %q, want %q", got, "octocat-hello-world-188")
 	}
 }
 
@@ -112,9 +112,9 @@ func TestBuildContinuationPrompt_表明が無かった次のturnで促す(t *tes
 // 空くまで試す（上限10回）」を示す。**起動を試みる前に `agent.list` で使用中の名前を
 // 調べる**（起動してから拒否されると pane に半端な状態が残りうるため）。
 //
-// 与える情報: `agent.list` が `continuo-koetsumugi-188` を使用中として返す状態で、
-// `maimuzo/koetsumugi#188` を dispatch する。
-// 成功条件: `agent.start` に渡す名前が `continuo-koetsumugi-188-2` になる。
+// 与える情報: `agent.list` が `continuo-hello-world-188` を使用中として返す状態で、
+// `octocat/hello-world#188` を dispatch する。
+// 成功条件: `agent.start` に渡す名前が `continuo-hello-world-188-2` になる。
 func TestDispatch_agent名が重複したら末尾に連番を付ける(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
@@ -125,7 +125,7 @@ func TestDispatch_agent名が重複したら末尾に連番を付ける(t *testi
 		return map[string]any{
 			"type": "agent_list",
 			"agents": []any{
-				map[string]any{"name": "continuo-koetsumugi-188", "agent_status": "working"},
+				map[string]any{"name": "continuo-hello-world-188", "agent_status": "working"},
 			},
 		}, nil
 	})
@@ -136,7 +136,7 @@ func TestDispatch_agent名が重複したら末尾に連番を付ける(t *testi
 	})
 
 	params := fx.Herdr.ParamsOf(t, herdr.MethodAgentStart)
-	if got, want := params["name"], "continuo-koetsumugi-188-2"; got != want {
+	if got, want := params["name"], "continuo-hello-world-188-2"; got != want {
 		t.Fatalf("重複した agent 名に連番を付けていない: got %v, want %q", got, want)
 	}
 }

@@ -589,10 +589,10 @@ func (fg *fakeGitHub) itemPayload(it *boardItem, withTypename bool) map[string]a
 			"number":     it.Number,
 			"title":      fmt.Sprintf("テスト用の issue %d", it.Number),
 			"body":       "本文",
-			"url":        fmt.Sprintf("https://github.com/%s/koetsumugi/issues/%d", fg.Owner, it.Number),
+			"url":        fmt.Sprintf("https://github.com/%s/hello-world/issues/%d", fg.Owner, it.Number),
 			"state":      "OPEN",
 			"repository": map[string]any{
-				"nameWithOwner":    fg.Owner + "/koetsumugi",
+				"nameWithOwner":    fg.Owner + "/hello-world",
 				"defaultBranchRef": map[string]any{"name": "main"},
 			},
 			"labels":         map[string]any{"nodes": []any{}},

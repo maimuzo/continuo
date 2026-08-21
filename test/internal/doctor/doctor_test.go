@@ -361,12 +361,12 @@ func TestDoctor_draft_issueは対象から外す(t *testing.T) {
 func TestDoctor_ボードに載る全リポジトリを重複なく検査する(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetItems(
-		boardItem{ItemID: "PVTI_1", NameWithOwner: "maimuzo/koetsumugi", Number: 188, State: "Ready"},
-		boardItem{ItemID: "PVTI_2", NameWithOwner: "maimuzo/koetsumugi", Number: 189, State: "Ready"},
+		boardItem{ItemID: "PVTI_1", NameWithOwner: "octocat/hello-world", Number: 188, State: "Ready"},
+		boardItem{ItemID: "PVTI_2", NameWithOwner: "octocat/hello-world", Number: 189, State: "Ready"},
 		boardItem{ItemID: "PVTI_3", NameWithOwner: "maimuzo/continuo", Number: 3, State: "Ready"},
 	)
 	// **もう1つのリポジトリには clone を用意しない**（検査の対象になったことを記号で示す）。
-	fx.GhqPaths = map[string]string{"maimuzo/koetsumugi": fx.RepoDir}
+	fx.GhqPaths = map[string]string{"octocat/hello-world": fx.RepoDir}
 
 	report := fx.Run(t)
 
@@ -375,7 +375,7 @@ func TestDoctor_ボードに載る全リポジトリを重複なく検査する(
 		t.Fatalf("対象リポジトリの内訳が2件ではなく %d件だった: %v", len(clone.Notes), clone.Notes)
 	}
 	joined := strings.Join(clone.Notes, "\n")
-	if !strings.Contains(joined, "maimuzo/koetsumugi") || !strings.Contains(joined, "maimuzo/continuo") {
+	if !strings.Contains(joined, "octocat/hello-world") || !strings.Contains(joined, "maimuzo/continuo") {
 		t.Fatalf("内訳に両方のリポジトリが出ていない: %v", clone.Notes)
 	}
 }
@@ -385,7 +385,7 @@ func TestDoctor_ボードに載る全リポジトリを重複なく検査する(
 // 目的: `ghq list -p -e` の出力が空なら `✗` にし、`ghq get <owner>/<repo>` を案内すること。
 // **その場合、信頼登録は `!`**（鍵にする clone のパスが無い）。
 // 与える情報: `ghq list` が空文字を返す状態。
-// 成功条件: clone が `✗` で直し方に `ghq get maimuzo/koetsumugi` が入り、信頼登録が `!` であること。
+// 成功条件: clone が `✗` で直し方に `ghq get octocat/hello-world` が入り、信頼登録が `!` であること。
 func TestDoctor_cloneが無ければ足りないと直し方を出す(t *testing.T) {
 	fx := newFixture(t)
 	fx.GhqPaths = map[string]string{}
@@ -393,7 +393,7 @@ func TestDoctor_cloneが無ければ足りないと直し方を出す(t *testing
 	report := fx.Run(t)
 
 	clone := assertSymbol(t, report, doctor.LabelClone, doctor.SymbolMissing)
-	if !strings.Contains(strings.Join(clone.Remedies, "\n"), "ghq get maimuzo/koetsumugi") {
+	if !strings.Contains(strings.Join(clone.Remedies, "\n"), "ghq get octocat/hello-world") {
 		t.Fatalf("直し方に `ghq get` が無い: %v", clone.Remedies)
 	}
 	trust := assertSymbol(t, report, doctor.LabelTrust, doctor.SymbolUnknown)
@@ -411,7 +411,7 @@ func TestDoctor_cloneが無ければ足りないと直し方を出す(t *testing
 // **exit code は存在の有無にかかわらず 0 を返す**ので、出力の有無で判定する。
 // 与える情報: 受け取った引数を記録する偽の `ghq` を PATH の先頭へ置いた状態
 // （`ghq list` の差し替えを注入せず、本物の呼び出し経路を通す）。
-// 成功条件: 記録された引数が `list -p -e maimuzo/koetsumugi` であること。
+// 成功条件: 記録された引数が `list -p -e octocat/hello-world` であること。
 func TestDoctor_cloneの検査はghq_list_p_eで行う(t *testing.T) {
 	fx := newFixture(t)
 	// **注入をやめて、PATH のテスト用ghq mock を実際に起動させる。**
@@ -424,7 +424,7 @@ func TestDoctor_cloneの検査はghq_list_p_eで行う(t *testing.T) {
 	if err != nil {
 		t.Fatalf("テスト用ghq mock が受け取った引数を読めません: %v", err)
 	}
-	if got := strings.TrimSpace(string(recorded)); got != "list -p -e maimuzo/koetsumugi" {
+	if got := strings.TrimSpace(string(recorded)); got != "list -p -e octocat/hello-world" {
 		t.Fatalf("ghq の呼び方が違う: %q", got)
 	}
 }
@@ -459,7 +459,7 @@ func TestDoctor_信頼登録されていなければ足りない(t *testing.T) {
 // 成功条件: 信頼登録が `✗` になること（worktree のパスでは信頼済みにならない）。
 func TestDoctor_信頼の鍵はcloneのパスでありworktreeのパスではない(t *testing.T) {
 	fx := newFixture(t)
-	worktreePath := filepath.Join(fx.Root, "wt", "koetsumugi-188")
+	worktreePath := filepath.Join(fx.Root, "wt", "hello-world-188")
 	if err := os.MkdirAll(worktreePath, 0o700); err != nil {
 		t.Fatalf("worktree の置き場所を作れません: %v", err)
 	}

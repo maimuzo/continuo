@@ -282,18 +282,18 @@ stateDiagram-v2
 
 ```text
 <worktree のパス>/.continuo.json
-例: ~/worktrees/github.com/maimuzo/koetsumugi/continuo-maimuzo-koetsumugi-188/.continuo.json
+例: ~/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188/.continuo.json
 ```
 
 ```json
 {
-  "issue_url": "https://github.com/maimuzo/koetsumugi/issues/188",
-  "issue_identifier": "maimuzo/koetsumugi#188",
+  "issue_url": "https://github.com/octocat/hello-world/issues/188",
+  "issue_identifier": "octocat/hello-world#188",
   "project_item_id": "PVTI_lADOAb3c4M4Aq7EzgAR8Xyz",
-  "branch": "continuo/maimuzo/koetsumugi/188",
+  "branch": "continuo/octocat/hello-world/188",
   "herdr_workspace_id": "ws_01J8XK2M9P",
   "socket_path": "/var/folders/.../continuo/hooks.sock",
-  "settings_path": "/var/folders/.../continuo/issues/maimuzo-koetsumugi-188/settings.json",
+  "settings_path": "/var/folders/.../continuo/issues/octocat-hello-world-188/settings.json",
   "session_uuid": "8aebf7af-8b07-4f45-b037-59f457b38feb",
   "created_at": "2026-08-18T12:34:56+09:00",
   "takeover_count": 0
@@ -320,7 +320,7 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 
 **branch 名の区切りをスラッシュにするのは、設定を書く人間への制約である。**
 ハイフンにすると owner と repo の境目が曖昧になる
-（`maimuzo/ai-shako#1` と `maimuzo-ai/shako#1` が同じ名前になる）。
+（`octocat/ai-shako#1` と `octocat-ai/shako#1` が同じ名前になる）。
 **既定値がスラッシュ区切りなので、書き換えなければ自動的に守られる。**
 
 **用意する手順**（3-22）。

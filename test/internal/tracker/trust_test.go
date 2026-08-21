@@ -8,14 +8,14 @@ import (
 // Dispatchable=false で残ることを確認する（設計 3-13: 「dispatchable という1つの真偽値に
 // 集約する。draft issue でない・Status が設定済み・リポジトリが信頼済み、をすべてここで
 // 判定する」／「取得の段では落とさず、dispatch の判定で落とす」）。
-// 与える情報: 信頼済みの maimuzo/koetsumugi と、未信頼の someone/untrusted の2件。
-// 信頼の判定関数は maimuzo/koetsumugi だけを true にする。
+// 与える情報: 信頼済みの octocat/hello-world と、未信頼の someone/untrusted の2件。
+// 信頼の判定関数は octocat/hello-world だけを true にする。
 // 成功条件: 2件とも一覧に残り、信頼済みの方だけ Dispatchable=true であること。
 func TestFetchIssuesByStates_未信頼のリポジトリはdispatchableがfalseで残る(t *testing.T) {
 	nodes := []map[string]any{
 		issueItemJSON(testIssueItemOpts{
 			ItemID: "item-trusted", Status: "Ready",
-			Owner: "maimuzo", Repo: "koetsumugi", Number: 1, Title: "信頼済みのリポジトリ",
+			Owner: "octocat", Repo: "hello-world", Number: 1, Title: "信頼済みのリポジトリ",
 		}),
 		issueItemJSON(testIssueItemOpts{
 			ItemID: "item-untrusted", Status: "Ready",
@@ -24,7 +24,7 @@ func TestFetchIssuesByStates_未信頼のリポジトリはdispatchableがfalse�
 	}
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nodes, false, ""))))
 	a := newAdapterWithTrust(t, fs, func(owner, repo string) bool {
-		return owner == "maimuzo" && repo == "koetsumugi"
+		return owner == "octocat" && repo == "hello-world"
 	})
 
 	issues, err := a.FetchIssuesByStates(t.Context(), []string{"Ready"})

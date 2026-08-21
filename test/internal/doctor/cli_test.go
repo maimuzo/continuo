@@ -127,7 +127,7 @@ func TestDoctorCLI_前提が揃っていれば7項目を出して終了コード
 //
 // 目的: `✗` が1つでもあれば終了コードが 1 になり、直し方が `→ ` 付きで出ること。
 // 与える情報: clone が見つからない偽の `ghq`（出力が空）。ほかは揃っている。
-// 成功条件: 出力に `✗ clone` と `→ ghq get maimuzo/koetsumugi` が出て、
+// 成功条件: 出力に `✗ clone` と `→ ghq get octocat/hello-world` が出て、
 // 信頼登録が `!` になり、終了コードが 1 であること。
 func TestDoctorCLI_足りないものがあれば直し方を出して終了コードは1(t *testing.T) {
 	fx := newFixture(t)
@@ -141,7 +141,7 @@ func TestDoctorCLI_足りないものがあれば直し方を出して終了コ�
 	if !strings.Contains(out, "✗ clone") {
 		t.Fatalf("clone が ✗ になっていない:\n%s", out)
 	}
-	if !strings.Contains(out, "→ ghq get maimuzo/koetsumugi を実行してください") {
+	if !strings.Contains(out, "→ ghq get octocat/hello-world を実行してください") {
 		t.Fatalf("直し方が出ていない:\n%s", out)
 	}
 	if !strings.Contains(out, "! 信頼登録") {

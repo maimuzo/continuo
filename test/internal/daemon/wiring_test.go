@@ -34,7 +34,7 @@ func writeWiringWorkflow(t *testing.T, root, providerExtra, extra string) string
 	content := fmt.Sprintf(`---
 tracker:
   provider:
-    owner: maimuzo
+    owner: octocat
     project_number: 3
     status_field: Status
 %sworkspace:

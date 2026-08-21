@@ -709,7 +709,7 @@ flowchart TB
 
 > **`<issue のスラグ>` の作り方を1つに決める。**`<owner>/<repo>#<番号>` を、
 > **英数字とハイフン以外を全部ハイフンに置き換え、連続するハイフンを1つにまとめ、小文字にする。**
-> 例: `maimuzo/koetsumugi#188` → `maimuzo-koetsumugi-188`。
+> 例: `octocat/hello-world#188` → `octocat-hello-world-188`。
 > **これは設定ファイルの置き場所（3-12）と逃がし先（3-19）の両方で使う同じ規則である。**
 
 > **`PreToolUse` / `PostToolUse` の matcher を絞ってはならない。**`Agent|Task` に絞った実測では、
@@ -866,7 +866,7 @@ Stop hook を受け取ったとき:
 
 **名前から元の issue を復元しない。**復元の主キーは身元ファイルである（3-18）。
 
-**agent 名は「人間が端末で見分けるためのもの」に役割を限定する。**`^[a-z][a-z0-9_-]{0,31}$` に収まる派生名（例: `continuo-yukikaki-87`）を使い、**名前から元の issue を復元しようとしない。**
+**agent 名は「人間が端末で見分けるためのもの」に役割を限定する。**`^[a-z][a-z0-9_-]{0,31}$` に収まる派生名（例: `continuo-sample-app-87`）を使い、**名前から元の issue を復元しようとしない。**
 
 > **「agent 名を issue の URL にし、turn 数も書き足す」案は採らない。**agent 名に URL は入らず（32文字の制限）、
 > turn 数を書き足す先（metadata の tokens）は再起動で消えるためである（いずれも実測）。**turn 数の復元は諦める**（`SPEC.md` 14.3 も *"It does not mean retry timers, running sessions, or live worker state survive process restart."* — **訳:** リトライのタイマー、実行中のセッション、稼働中の worker の状態がプロセスの再起動を生き延びることを意味しない — と明記している）。
@@ -1527,7 +1527,7 @@ sequenceDiagram
 
 | 項目 | 決定 | 理由 |
 | --- | --- | --- |
-| **issue の一意な名前** | **`<owner>/<repo>#<番号>`**（例 `maimuzo/koetsumugi#188`） | 1枚のボードに5リポジトリが載るので `#188` だけでは一意でない。`SPEC.md` 4.1.1 は名前空間をまたぐ場合の曖昧さ解消を MUST としている |
+| **issue の一意な名前** | **`<owner>/<repo>#<番号>`**（例 `octocat/hello-world#188`） | 1枚のボードに5リポジトリが載るので `#188` だけでは一意でない。`SPEC.md` 4.1.1 は名前空間をまたぐ場合の曖昧さ解消を MUST としている |
 | **dispatch に使う ID** | **project item の ID** | `SPEC.md` 4.1.1 が *"It MAY be a project-item or board-entry ID instead of the provider's underlying ticket ID."*（**訳:** プロバイダ本来のチケット ID ではなく、project item や board entry の ID であってもよい）と明示的に許している |
 | **draft issue** | **`dispatchable` を false にしてログに残す。**取得の段では落とさず、dispatch の判定で落とす | リポジトリを持たないので作業ディレクトリを決められない。**仕様 11.1 が「候補の巡回では `dispatchable=false` の issue も含めて返し、最後の絞り込みは scheduler が持つ」と定めているため、アダプタの側で消さない** |
 | **Status 未設定の item**（実測で4件ある） | **一覧の取得では省略してログに残す。ID 指定の取り直しではエラーにする** | `SPEC.md` 11.1 が「**一覧は省いてよく（MAY）、省いたことを記録すべき（SHOULD）。ID 指定は黙って省かずに失敗しなければならない（MUST）**」と分けている。**勝手に既定値へ読み替えてはならない**（`SPEC.md` 11.3） |
@@ -1784,7 +1784,7 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
 
 ```text
 <worktree のパス>/.continuo.json
-例: ~/worktrees/github.com/maimuzo/koetsumugi/continuo-maimuzo-koetsumugi-188/.continuo.json
+例: ~/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188/.continuo.json
 （ファイル名は設定の workspace.identity_file で変えられる）
 ```
 
@@ -1792,14 +1792,14 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
 
 ```json
 {
-  "issue_url": "https://github.com/maimuzo/koetsumugi/issues/188",
-  "issue_identifier": "maimuzo/koetsumugi#188",
+  "issue_url": "https://github.com/octocat/hello-world/issues/188",
+  "issue_identifier": "octocat/hello-world#188",
   "project_item_id": "PVTI_lADOAb3c4M4Aq7EzgAR8Xyz",
-  "branch": "continuo/maimuzo/koetsumugi/188",
+  "branch": "continuo/octocat/hello-world/188",
   "herdr_workspace_id": "ws_01J8XK2M9P",
   "socket_path": "/var/folders/5v/8995nvts4692rk0gtk122lkw0000gn/T/continuo/hooks.sock",
-  "settings_path": "/var/folders/5v/8995nvts4692rk0gtk122lkw0000gn/T/continuo/issues/maimuzo-koetsumugi-188/settings.json",
-  "agent_name": "continuo-koetsumugi-188",
+  "settings_path": "/var/folders/5v/8995nvts4692rk0gtk122lkw0000gn/T/continuo/issues/octocat-hello-world-188/settings.json",
+  "agent_name": "continuo-hello-world-188",
   "session_uuid": "8aebf7af-8b07-4f45-b037-59f457b38feb",
   "created_at": "2026-08-18T12:34:56+09:00",
   "takeover_count": 0,
@@ -1854,7 +1854,7 @@ turn の終わりの検知を hook だけに依存させない。
 
 ```text
 <実行時ディレクトリ>/issues/<issue のスラグ>/pending/<受信時刻>-<hook_event_name>.json
-例: /var/folders/.../continuo/issues/maimuzo-koetsumugi-188/pending/1787057953362306-Stop.json
+例: /var/folders/.../continuo/issues/octocat-hello-world-188/pending/1787057953362306-Stop.json
 ```
 
 **1件1ファイルにする。**追記にすると、書き込みが競合したときに読めなくなる。
@@ -1997,7 +1997,7 @@ RevisionAt   time.Time // 版が最後に増えたのを確かめた時刻。人
 ```text
 <workspace.root>/<host>/<owner>/<repo>/<branch 名のスラグ>
 （スラグ＝branch 名のスラッシュをハイフンに置き換えたもの。gwq の naming.sanitize_chars と同じ規則）
-例: ~/worktrees/github.com/maimuzo/koetsumugi/continuo-maimuzo-koetsumugi-188
+例: ~/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188
 ```
 
 **なぜ symphony の規則（`<置き場所>/<識別子をサニタイズした名前>`）を採らないか。**
@@ -2026,7 +2026,7 @@ continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 ```
 
 **ハイフン区切りにしてはならない。**owner や repo の名前にハイフンが入ると曖昧になる
-（`maimuzo/ai-shako#1` と `maimuzo-ai/shako#1` がどちらも `continuo-maimuzo-ai-shako-1` になる）。
+（`octocat/ai-shako#1` と `octocat-ai/shako#1` がどちらも `continuo-octocat-ai-shako-1` になる）。
 
 **置き場所は、シンボリックリンクを解決した実体のパスにする。**
 この機械の `~/ghq` の下は全部シンボリックリンクで、**git はそれを実体に解決して返す。**
@@ -2324,9 +2324,9 @@ type runState struct {
 ```go
 // transcript から拾った表明。キーは対象の issue の識別子、値は review / blocked / working
 map[string]string{
-    "maimuzo/koetsumugi#188": "review",   // 対象を書かない行は、いま作業している issue
-    "maimuzo/koetsumugi#45":  "review",
-    "maimuzo/koetsumugi#47":  "blocked",
+    "octocat/hello-world#188": "review",   // 対象を書かない行は、いま作業している issue
+    "octocat/hello-world#45":  "review",
+    "octocat/hello-world#47":  "blocked",
 }
 ```
 
@@ -2349,7 +2349,7 @@ CONTINUO-STATUS: #47 blocked
 **引き方。トラッカーのアダプタに「識別子で1件引く」を足す。**
 
 ```text
-FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
+FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
   → ボードの item を Status で絞らずに取り、identifier が一致する1件を返す。
     見つからなければ (Issue{}, false, nil) を返す。エラーにしない
 ```
@@ -2997,8 +2997,8 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 $ continuo doctor
 ✓ herdr           protocol 19（設定と一致）
 ✓ gh の認証        scope に project が含まれる
-✗ clone           maimuzo/koetsumugi が見つからない
-                  → ghq get maimuzo/koetsumugi を実行してください
+✗ clone           octocat/hello-world が見つからない
+                  → ghq get octocat/hello-world を実行してください
 ! 資格情報         Keychain から取得できませんでした（確認の画面が出た可能性があります）
                   → 判定を飛ばしました。continuo の起動には影響しません
 
@@ -3805,9 +3805,9 @@ API が返す順序に一切反映されない（4-2）。**したがって、�
 
 ```text
 space: continuo                     人間が使うメインのチェックアウト
-space: continuo-maimuzo-koetsumugi-188   issue #188 の worktree
+space: continuo-octocat-hello-world-188   issue #188 の worktree
   └ pane 1  Claude Code
-space: continuo-maimuzo-koetsumugi-190   issue #190 の worktree
+space: continuo-octocat-hello-world-190   issue #190 の worktree
   └ pane 1  Claude Code
 ```
 

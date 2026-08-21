@@ -37,7 +37,7 @@
 **第3段階のアダプタに1つ足す。**
 
 ```text
-FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
+FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
   → グループの表明（CONTINUO-STATUS: #45 review）から item を引くのに要る（設計 3-25）。
     その issue は Ice Box にあるので、巡回で読んだ候補には入っていない
   → bool は「ボードに載っているか」である。載っていなければ (ゼロ値, false, nil) を返す。
@@ -227,7 +227,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 | **打ち切りのコメント** | stall や時間切れで打ち切ったときに、コメントの確認を1度も走らせていなかった | `abandonRun` の「リトライを使い切った」分岐と `failRun` で、worker を止める前に走らせる。**1回も turn を送っていない run では何もしない** |
 | **二重の打ち切り** | 1回の stall に対して、巡回の stall 検知と turn ループの両方が run を諦めていた | `runState.workerEpoch` と `beginTerminal` を足した。turn ループは世代が変わっていたら諦めない |
 | **agent 名の直接参照** | `sendEscape` が `rs.AgentName` を排他なしで読んでいた | `rs.agentName()` に直した |
-| **連番の未検証** | agent 名の段4（重複したら末尾に連番）を通すテストが無かった | `agent.list` が素の名前を返す状態で dispatch し、`continuo-koetsumugi-188-2` になることを検査する |
+| **連番の未検証** | agent 名の段4（重複したら末尾に連番）を通すテストが無かった | `agent.list` が素の名前を返す状態で dispatch し、`continuo-hello-world-188-2` になることを検査する |
 | **段2 の順番の未検査** | Status の書き込みが `worktree.open` より前かを比べていなかった（記録が別々の並びだった） | テスト用トラッカー mockとテスト用herdr mock が**1本の並び**（`timeline`）へ積むようにし、位置を比べる |
 | **UUID の未検査** | バックオフ明けにセッション UUID を採り直すことを誰も見ていなかった | テスト用socket mockと手で進める時計を使うテストを足し、`agent.start` の `--session-id` を比べる |
 | **表明の GoDoc** | `ParseSignals` の GoDoc が実装と食い違っていた（「解決できなかった行はそのまま識別子として持つ」） | 実装どおりに書き直した。**対象を解決できなかった行は、対象なしの行として扱う** |

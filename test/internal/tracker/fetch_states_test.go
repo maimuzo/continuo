@@ -74,9 +74,9 @@ func TestFetchIssuesByStates_Priorityを読まない(t *testing.T) {
 // （ソートされていたら 099 → 205 → 301 になってしまうので、それとの違いで検出できる）。
 func TestFetchIssuesByStates_並び順を保つ(t *testing.T) {
 	nodes := []map[string]any{
-		issueItemJSON(testIssueItemOpts{ItemID: "item-301", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 301, Title: "3番目に大きい番号"}),
-		issueItemJSON(testIssueItemOpts{ItemID: "item-099", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 99, Title: "一番小さい番号"}),
-		issueItemJSON(testIssueItemOpts{ItemID: "item-205", Status: "In Progress", Owner: "maimuzo", Repo: "koetsumugi", Number: 205, Title: "真ん中の番号"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-301", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 301, Title: "3番目に大きい番号"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-099", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 99, Title: "一番小さい番号"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-205", Status: "In Progress", Owner: "octocat", Repo: "hello-world", Number: 205, Title: "真ん中の番号"}),
 	}
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nodes, false, ""))))
 	a := newAdapterForFetch(t, fs)
@@ -89,9 +89,9 @@ func TestFetchIssuesByStates_並び順を保つ(t *testing.T) {
 		t.Fatalf("件数が想定と違う: got %d, want 3", len(issues))
 	}
 	wantOrder := []string{
-		"maimuzo/koetsumugi#301",
-		"maimuzo/koetsumugi#99",
-		"maimuzo/koetsumugi#205",
+		"octocat/hello-world#301",
+		"octocat/hello-world#99",
+		"octocat/hello-world#205",
 	}
 	for i, want := range wantOrder {
 		if issues[i].Identifier != want {
@@ -114,10 +114,10 @@ func identifiersOf(issues []tracker.Issue) []string {
 // 成功条件: 2リクエスト発生し、返る Issue が2件・順序どおりであること。
 func TestFetchIssuesByStates_ページングを跨いで順序を保つ(t *testing.T) {
 	page1 := []map[string]any{
-		issueItemJSON(testIssueItemOpts{ItemID: "item-1", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 1, Title: "1ページ目"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-1", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "1ページ目"}),
 	}
 	page2 := []map[string]any{
-		issueItemJSON(testIssueItemOpts{ItemID: "item-2", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 2, Title: "2ページ目"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-2", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 2, Title: "2ページ目"}),
 	}
 
 	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
@@ -138,7 +138,7 @@ func TestFetchIssuesByStates_ページングを跨いで順序を保つ(t *testi
 	if fs.RequestCount() != 2 {
 		t.Fatalf("リクエスト件数が想定と違う: got %d, want 2", fs.RequestCount())
 	}
-	want := []string{"maimuzo/koetsumugi#1", "maimuzo/koetsumugi#2"}
+	want := []string{"octocat/hello-world#1", "octocat/hello-world#2"}
 	got := identifiersOf(issues)
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("並び順が保たれていない: got %v, want %v", got, want)
@@ -178,8 +178,8 @@ func TestFetchIssuesByStates_draftIssueはdispatchableがfalseで残る(t *testi
 // 成功条件: 返ってきた Issue が1件だけであり、それが Status 設定済みの item であること
 // （エラーにはならないこと）。
 func TestFetchIssuesByStates_Status未設定のitemは省く(t *testing.T) {
-	withStatus := issueItemJSON(testIssueItemOpts{ItemID: "item-ok", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 1, Title: "Status あり"})
-	withoutStatus := issueItemJSON(testIssueItemOpts{ItemID: "item-nostatus", Status: "", Owner: "maimuzo", Repo: "koetsumugi", Number: 2, Title: "Status 未設定"})
+	withStatus := issueItemJSON(testIssueItemOpts{ItemID: "item-ok", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "Status あり"})
+	withoutStatus := issueItemJSON(testIssueItemOpts{ItemID: "item-nostatus", Status: "", Owner: "octocat", Repo: "hello-world", Number: 2, Title: "Status 未設定"})
 
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload([]map[string]any{withStatus, withoutStatus}, false, ""))))
 	a := newAdapterForFetch(t, fs)
@@ -191,7 +191,7 @@ func TestFetchIssuesByStates_Status未設定のitemは省く(t *testing.T) {
 	if len(issues) != 1 {
 		t.Fatalf("件数が想定と違う: got %d, want 1（Status 未設定の item は省かれるはず）", len(issues))
 	}
-	if issues[0].Identifier != "maimuzo/koetsumugi#1" {
+	if issues[0].Identifier != "octocat/hello-world#1" {
 		t.Fatalf("残った item が想定と違う: %q", issues[0].Identifier)
 	}
 }
@@ -204,7 +204,7 @@ func TestFetchIssuesByStates_Status未設定のitemは省く(t *testing.T) {
 func TestFetchIssuesByStates_ラベルを正規化する(t *testing.T) {
 	nodes := []map[string]any{
 		issueItemJSON(testIssueItemOpts{
-			ItemID: "item-labels", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 1,
+			ItemID: "item-labels", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 1,
 			Title:  "ラベルのテスト",
 			Labels: []string{" Bug ", "bug", "URGENT", "", "  "},
 		}),
@@ -238,7 +238,7 @@ func TestFetchIssuesByStates_ラベルを正規化する(t *testing.T) {
 // 成功条件: 返ってきた Issue の Priority が nil であること。
 func TestFetchIssuesByStates_Priorityフィールドは常にnil(t *testing.T) {
 	nodes := []map[string]any{
-		issueItemJSON(testIssueItemOpts{ItemID: "item-1", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 1, Title: "t"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-1", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "t"}),
 	}
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nodes, false, ""))))
 	a := newAdapterForFetch(t, fs)
@@ -305,8 +305,8 @@ func TestFetchIssuesByStates_並び順をPOSITIONで明示する(t *testing.T) {
 // 成功条件: CategoryPagination のエラーで止まること。読み続けないこと。
 func TestFetchIssuesByStates_ページ数の上限を超えたら落とす(t *testing.T) {
 	item := issueItemJSON(testIssueItemOpts{
-		ItemID: "item-1", Status: "Ready", Owner: "maimuzo", Repo: "koetsumugi", Number: 1,
-		Title: "候補", URL: "https://github.com/maimuzo/koetsumugi/issues/1",
+		ItemID: "item-1", Status: "Ready", Owner: "octocat", Repo: "hello-world", Number: 1,
+		Title: "候補", URL: "https://github.com/octocat/hello-world/issues/1",
 	})
 	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
 		return dataResponse(candidateItemsPayload([]map[string]any{item}, true, "cursor"))

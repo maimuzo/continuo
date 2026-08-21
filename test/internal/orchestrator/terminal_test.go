@@ -123,7 +123,7 @@ func TestCheckStalls_1回のstallでabandonが2回走らない(t *testing.T) {
 	clock.Advance(5 * time.Second)
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 5*time.Second, "巡回の stall 検知がリトライを1つ積む", func() bool {
-		v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 		return ok && v.RetryCount == 1
 	})
 
@@ -131,7 +131,7 @@ func TestCheckStalls_1回のstallでabandonが2回走らない(t *testing.T) {
 	once.Do(func() { close(release) })
 	time.Sleep(500 * time.Millisecond)
 
-	v, ok := viewOfFixture(fx, "maimuzo/koetsumugi#188")
+	v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 	if !ok {
 		t.Fatalf("バックオフ中の run が印から外れている")
 	}

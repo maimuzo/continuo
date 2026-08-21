@@ -98,7 +98,7 @@ func TestQuota_100パーセントかつhookが来ていないrunだけを枠待�
 
 	fx.Orc.Tick(context.Background())
 
-	v188, ok := viewOf(fx, "maimuzo/koetsumugi#188")
+	v188, ok := viewOf(fx, "octocat/hello-world#188")
 	if !ok {
 		t.Fatalf("枠待ちにすべき run が印から外れている")
 	}
@@ -109,7 +109,7 @@ func TestQuota_100パーセントかつhookが来ていないrunだけを枠待�
 		t.Fatalf("枠待ちの run を stall として殺している: retry_count = %d", v188.RetryCount)
 	}
 
-	v189, ok := viewOf(fx, "maimuzo/koetsumugi#189")
+	v189, ok := viewOf(fx, "octocat/hello-world#189")
 	if !ok {
 		t.Fatalf("hook を受けている run が印から外れている")
 	}
@@ -147,7 +147,7 @@ func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止�
 	fx.Orc.Tick(context.Background())
 
 	for _, v := range fx.Orc.RunViews() {
-		if v.Identifier == "maimuzo/koetsumugi#190" {
+		if v.Identifier == "octocat/hello-world#190" {
 			t.Fatalf("閾値を超えているのに新規を dispatch している: %+v", v)
 		}
 		if v.Identifier == running.Identifier && v.WaitingQuota {

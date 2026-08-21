@@ -20,7 +20,7 @@ import (
 // MCP サーバーを2つ宣言する .mcp.json を持つリポジトリ。
 // 成功条件: Requirements にその全部が入り、出力にも全部が現れること。
 func TestPlan_信頼すると何が効くようになるかを読み取る(t *testing.T) {
-	repo := initRepo(t, "koetsumugi")
+	repo := initRepo(t, "hello-world")
 	writeJSON(t, filepath.Join(repo, ".claude", "settings.json"), `{
 	  "permissions": {
 	    "allow": ["Bash(rm:*)", "Read", "WebFetch"],
@@ -37,9 +37,9 @@ func TestPlan_信頼すると何が効くようになるかを読み取る(t *te
 	home, _ := fakeHome(t, `{"projects":{}}`)
 
 	report, err := trust.Plan(context.Background(), trust.Options{
-		Repositories: []string{"maimuzo/koetsumugi"},
+		Repositories: []string{"octocat/hello-world"},
 		HomeDir:      home,
-		ResolveClone: staticClones(map[string]string{"maimuzo/koetsumugi": repo}),
+		ResolveClone: staticClones(map[string]string{"octocat/hello-world": repo}),
 	})
 	if err != nil {
 		t.Fatalf("調べられなかった: %v", err)
@@ -78,7 +78,7 @@ func TestPlan_信頼すると何が効くようになるかを読み取る(t *te
 		t.Fatalf("要求内容を書き出せなかった: %v", err)
 	}
 	for _, want := range []string{
-		"maimuzo/koetsumugi", "Bash(rm:*)", "WebFetch", "/etc", "~/secrets", "docs", "payments",
+		"octocat/hello-world", "Bash(rm:*)", "WebFetch", "/etc", "~/secrets", "docs", "payments",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("要求内容の出力に %q が出ていない:\n%s", want, out.String())
@@ -99,17 +99,17 @@ func TestPlan_列挙されていないリポジトリは対象にしない(t *te
 	home, _ := fakeHome(t, `{"projects":{}}`)
 
 	report, err := trust.Plan(context.Background(), trust.Options{
-		Repositories: []string{"maimuzo/listed"},
+		Repositories: []string{"octocat/listed"},
 		HomeDir:      home,
 		ResolveClone: staticClones(map[string]string{
-			"maimuzo/listed":   listed,
-			"maimuzo/unlisted": unlisted,
+			"octocat/listed":   listed,
+			"octocat/unlisted": unlisted,
 		}),
 	})
 	if err != nil {
 		t.Fatalf("調べられなかった: %v", err)
 	}
-	if len(report.Entries) != 1 || report.Entries[0].Repository != "maimuzo/listed" {
+	if len(report.Entries) != 1 || report.Entries[0].Repository != "octocat/listed" {
 		t.Fatalf("列挙していないリポジトリまで対象になっている: %+v", report.Entries)
 	}
 }
@@ -124,7 +124,7 @@ func TestPlan_cloneが無ければ登録の対象から外す(t *testing.T) {
 	home, _ := fakeHome(t, `{"projects":{}}`)
 
 	report, err := trust.Plan(context.Background(), trust.Options{
-		Repositories: []string{"maimuzo/nowhere"},
+		Repositories: []string{"octocat/nowhere"},
 		HomeDir:      home,
 		ResolveClone: staticClones(map[string]string{}),
 	})
@@ -135,7 +135,7 @@ func TestPlan_cloneが無ければ登録の対象から外す(t *testing.T) {
 	if got.Actionable() {
 		t.Fatalf("clone が無いのに登録の対象になっている: %+v", got)
 	}
-	if !strings.Contains(got.Problem, "ghq list -p -e maimuzo/nowhere") {
+	if !strings.Contains(got.Problem, "ghq list -p -e octocat/nowhere") {
 		t.Errorf("clone が無いことを引いたコマンドつきで説明していない: %q", got.Problem)
 	}
 	if len(report.Pending()) != 0 {
@@ -155,9 +155,9 @@ func TestPlan_設定ファイルが無ければ何も要求していないと分
 	home, _ := fakeHome(t, `{"projects":{}}`)
 
 	report, err := trust.Plan(context.Background(), trust.Options{
-		Repositories: []string{"maimuzo/plain"},
+		Repositories: []string{"octocat/plain"},
 		HomeDir:      home,
-		ResolveClone: staticClones(map[string]string{"maimuzo/plain": repo}),
+		ResolveClone: staticClones(map[string]string{"octocat/plain": repo}),
 	})
 	if err != nil {
 		t.Fatalf("調べられなかった: %v", err)
@@ -194,9 +194,9 @@ func TestPlan_設定ファイルがsymlinkなら読まずに知らせる(t *test
 	home, _ := fakeHome(t, `{"projects":{}}`)
 
 	report, err := trust.Plan(context.Background(), trust.Options{
-		Repositories: []string{"maimuzo/linked"},
+		Repositories: []string{"octocat/linked"},
 		HomeDir:      home,
-		ResolveClone: staticClones(map[string]string{"maimuzo/linked": repo}),
+		ResolveClone: staticClones(map[string]string{"octocat/linked": repo}),
 	})
 	if err != nil {
 		t.Fatalf("調べられなかった: %v", err)
@@ -245,7 +245,7 @@ func containsSubstring(lines []string, sub string) bool {
 // 与える情報: 最初は clone が引けず、取得のあとだけ引けるようになる resolver。
 // 成功条件: 取得が1回呼ばれ、調べられない理由が消え、信頼の鍵が求まる。
 func TestPlan_cloneが無ければ取ってきて調べ直す(t *testing.T) {
-	repo := initRepo(t, "koetsumugi")
+	repo := initRepo(t, "hello-world")
 	home, _ := fakeHome(t, `{"projects":{}}`)
 
 	// **取得の前は空を返し、取得のあとだけパスを返す。**`ghq get` の前後を再現する。
@@ -259,7 +259,7 @@ func TestPlan_cloneが無ければ取ってきて調べ直す(t *testing.T) {
 	}
 
 	report, err := trust.Plan(context.Background(), trust.Options{
-		Repositories: []string{"maimuzo/koetsumugi"},
+		Repositories: []string{"octocat/hello-world"},
 		HomeDir:      home,
 		ResolveClone: resolve,
 		FetchClone: func(_ context.Context, owner, name string) error {
@@ -274,7 +274,7 @@ func TestPlan_cloneが無ければ取ってきて調べ直す(t *testing.T) {
 	if fetched != 1 {
 		t.Fatalf("clone の取得が %d 回呼ばれた（1回であるべき）", fetched)
 	}
-	if notified != "maimuzo/koetsumugi" {
+	if notified != "octocat/hello-world" {
 		t.Errorf("取りに行くことを知らせていない: %q", notified)
 	}
 	got := report.Entries[0]
@@ -296,7 +296,7 @@ func TestPlan_FetchCloneを渡さなければ取りに行かない(t *testing.T)
 	home, _ := fakeHome(t, `{"projects":{}}`)
 
 	report, err := trust.Plan(context.Background(), trust.Options{
-		Repositories: []string{"maimuzo/koetsumugi"},
+		Repositories: []string{"octocat/hello-world"},
 		HomeDir:      home,
 		ResolveClone: staticClones(map[string]string{}),
 	})

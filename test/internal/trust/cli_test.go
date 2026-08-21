@@ -63,7 +63,7 @@ func TestCLI_dryrunは要求内容を出すだけで書き換えない(t *testin
 		t.Errorf("登録の対象が残っているのに終了コードが 1 でない: %d\n%s", code, stdout)
 	}
 	for _, want := range []string{
-		"maimuzo/demo-a", "Bash(rm -rf:*)", "/etc", "payments", "docs",
+		"octocat/demo-a", "Bash(rm -rf:*)", "/etc", "payments", "docs",
 		"--dry-run なので何も書き換えていません",
 	} {
 		if !strings.Contains(stdout, want) {
@@ -95,7 +95,7 @@ func TestCLI_列挙した2件だけを登録し2回目は何も書かない(t *t
 	}
 	after := readFile(t, env.configPath)
 	for _, repo := range []string{"demo-a", "demo-b"} {
-		key := trustKeyOf(t, filepath.Join(env.ghqRoot, "github.com", "maimuzo", repo))
+		key := trustKeyOf(t, filepath.Join(env.ghqRoot, "github.com", "octocat", repo))
 		entry, ok := projectEntry(t, after, key)
 		if !ok || entry["hasTrustDialogAccepted"] != true {
 			t.Errorf("%s が登録されていない:\n%s", repo, after)
@@ -159,7 +159,7 @@ func setUpCLI(t *testing.T) cliEnv {
 
 	// 対象になる2つと、列挙しない1つ。
 	for _, name := range []string{"demo-a", "demo-b", "demo-unlisted"} {
-		dir := filepath.Join(env.ghqRoot, "github.com", "maimuzo", name)
+		dir := filepath.Join(env.ghqRoot, "github.com", "octocat", name)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("%s を作れなかった: %v", dir, err)
 		}
@@ -169,9 +169,9 @@ func setUpCLI(t *testing.T) cliEnv {
 			t.Fatalf("git init に失敗した: %v: %s", err, out)
 		}
 	}
-	writeJSON(t, filepath.Join(env.ghqRoot, "github.com", "maimuzo", "demo-a", ".claude", "settings.json"),
+	writeJSON(t, filepath.Join(env.ghqRoot, "github.com", "octocat", "demo-a", ".claude", "settings.json"),
 		`{"permissions":{"allow":["Bash(rm -rf:*)","Read"],"additionalDirectories":["/etc"]}}`)
-	writeJSON(t, filepath.Join(env.ghqRoot, "github.com", "maimuzo", "demo-a", ".mcp.json"),
+	writeJSON(t, filepath.Join(env.ghqRoot, "github.com", "octocat", "demo-a", ".mcp.json"),
 		`{"mcpServers":{"payments":{"command":"node","args":["server.js"]},"docs":{"url":"https://example.invalid/mcp"}}}`)
 
 	env.before = `{

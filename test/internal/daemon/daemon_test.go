@@ -133,7 +133,7 @@ func (e *daemonEnv) writeWorkflow(t *testing.T) {
 	content := fmt.Sprintf(`---
 tracker:
   provider:
-    owner: maimuzo
+    owner: octocat
     project_number: 3
     status_field: Status
     token_source: env
@@ -193,23 +193,23 @@ func readTimeoutMs(value int) int {
 func (e *daemonEnv) prepareRun(t *testing.T, number int, workspaceID, sessionUUID string) string {
 	t.Helper()
 
-	branch := fmt.Sprintf("continuo/maimuzo/koetsumugi/%d", number)
+	branch := fmt.Sprintf("continuo/octocat/hello-world/%d", number)
 	slug := strings.ReplaceAll(branch, "/", "-")
-	path := filepath.Join(e.WorktreeRoot, "github.com", "maimuzo", "koetsumugi", slug)
+	path := filepath.Join(e.WorktreeRoot, "github.com", "octocat", "hello-world", slug)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("worktree の置き場所を作れません: %v", err)
 	}
 	runGit(t, e.RepoDir, "worktree", "add", "--quiet", "-b", branch, path, "main")
 
 	identity := workspace.Identity{
-		IssueURL:         fmt.Sprintf("https://github.com/maimuzo/koetsumugi/issues/%d", number),
-		IssueIdentifier:  fmt.Sprintf("maimuzo/koetsumugi#%d", number),
+		IssueURL:         fmt.Sprintf("https://github.com/octocat/hello-world/issues/%d", number),
+		IssueIdentifier:  fmt.Sprintf("octocat/hello-world#%d", number),
 		ProjectItemID:    fmt.Sprintf("PVTI_item%d", number),
 		Branch:           branch,
 		HerdrWorkspaceID: workspaceID,
 		SocketPath:       e.SocketPath,
 		SettingsPath:     "",
-		AgentName:        fmt.Sprintf("continuo-koetsumugi-%d", number),
+		AgentName:        fmt.Sprintf("continuo-hello-world-%d", number),
 		SessionUUID:      sessionUUID,
 		CreatedAt:        time.Now(),
 	}
@@ -295,7 +295,7 @@ func (e *daemonEnv) startWithArgs(t *testing.T, extra ...string) (*exec.Cmd, *sy
 //   - `SIGTERM` を送ると 20 秒以内に終了コード 0 で終わる
 func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(t *testing.T) {
 	env := newDaemonEnv(t)
-	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline,
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline,
 		&boardItem{ItemID: "PVTI_item188", NodeID: "I_node188", Number: 188, State: "In Progress"},
 		&boardItem{ItemID: "PVTI_item189", NodeID: "I_node189", Number: 189, State: "In Progress"},
 	)
@@ -326,12 +326,12 @@ func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(
 	env.Herdr.Handle("agent.list", func(map[string]any) (any, *rpcErr) {
 		return map[string]any{"type": "agent_list", "agents": []any{
 			map[string]any{
-				"name": "continuo-koetsumugi-188", "agent": "claude", "agent_status": "idle",
+				"name": "continuo-hello-world-188", "agent": "claude", "agent_status": "idle",
 				"pane_id": "p-188", "tab_id": "t1", "workspace_id": "w188",
 				"terminal_id": "term1", "focused": false, "revision": 1,
 			},
 			map[string]any{
-				"name": "continuo-koetsumugi-189", "agent": "claude", "agent_status": "working",
+				"name": "continuo-hello-world-189", "agent": "claude", "agent_status": "working",
 				"pane_id": "p-189", "tab_id": "t2", "workspace_id": "w189",
 				"terminal_id": "term1", "focused": false, "revision": 1,
 			},
@@ -347,7 +347,7 @@ func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(
 	promptedText := &stringBox{}
 	env.Herdr.Handle("agent.prompt", func(params map[string]any) (any, *rpcErr) {
 		target, _ := params["target"].(string)
-		if target != "continuo-koetsumugi-188" {
+		if target != "continuo-hello-world-188" {
 			t.Errorf("引き継いだあと turn を送ってはならない相手へ送った: %q", target)
 		}
 		text, _ := params["text"].(string)
@@ -408,7 +408,7 @@ func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(
 	// branch も片付いている（**worktree の削除の直後に消すので、少し待つ**）。
 	waitFor(t, 20*time.Second, "片付けで branch が消える", func() bool {
 		branches := runGit(t, env.RepoDir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
-		return !strings.Contains(branches, "continuo/maimuzo/koetsumugi/188")
+		return !strings.Contains(branches, "continuo/octocat/hello-world/188")
 	})
 
 	// **working の run へは turn を送らない。**
@@ -468,7 +468,7 @@ func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(
 // **2つ目は pane を1つも閉じない。**
 func TestDaemon_flockが取れなければ即座に終了する(t *testing.T) {
 	env := newDaemonEnv(t)
-	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline,
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline,
 		&boardItem{ItemID: "PVTI_item188", NodeID: "I_node188", Number: 188, State: "In Review"},
 	)
 	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
@@ -517,7 +517,7 @@ func TestDaemon_flockが取れなければ即座に終了する(t *testing.T) {
 // **復元（`pane.list`）にも進まない。**
 func TestDaemon_起動時の検査に落ちたら生きているpaneを閉じずに起動を止める(t *testing.T) {
 	env := newDaemonEnv(t)
-	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline,
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline,
 		&boardItem{ItemID: "PVTI_item188", NodeID: "I_node188", Number: 188, State: "In Progress"},
 	)
 	path188 := env.prepareRun(t, 188, "w188", "sess-188")
@@ -661,7 +661,7 @@ func TestDaemon_ダッシュボードが開けなくても起動を止めない(
 	env := newDaemonEnv(t)
 	env.ServerPort = &port
 	env.writeWorkflow(t)
-	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline,
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline,
 		&boardItem{ItemID: "PVTI_item188", NodeID: "I_node188", Number: 188, State: "In Review"},
 	)
 	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
@@ -713,7 +713,7 @@ func TestDaemon_ダッシュボードが開けなくても起動を止めない(
 // 引き継いだ issue の識別子が入っていること。**ループバック以外の宛先は 421 で断ること。**
 func TestDaemon_CLIのportでダッシュボードを開いて実行中のrunを出す(t *testing.T) {
 	env := newDaemonEnv(t)
-	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline,
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline,
 		&boardItem{ItemID: "PVTI_item189", NodeID: "I_node189", Number: 189, State: "In Progress"},
 	)
 	path189 := env.prepareRun(t, 189, "w189", "sess-189")
@@ -731,7 +731,7 @@ func TestDaemon_CLIのportでダッシュボードを開いて実行中のrunを
 	env.Herdr.Handle("agent.list", func(map[string]any) (any, *rpcErr) {
 		return map[string]any{"type": "agent_list", "agents": []any{
 			map[string]any{
-				"name": "continuo-koetsumugi-189", "agent": "claude", "agent_status": "working",
+				"name": "continuo-hello-world-189", "agent": "claude", "agent_status": "working",
 				"pane_id": "p-189", "tab_id": "t1", "workspace_id": "w189",
 				"terminal_id": "term1", "focused": false, "revision": 1,
 			},
@@ -768,7 +768,7 @@ func TestDaemon_CLIのportでダッシュボードを開いて実行中のrunを
 			return false
 		}
 		body = string(b)
-		return strings.Contains(body, "maimuzo/koetsumugi#189")
+		return strings.Contains(body, "octocat/hello-world#189")
 	})
 
 	// **ループバック以外の宛先は断る**（DNS rebinding で中身を読み出させない）。
@@ -815,7 +815,7 @@ func TestDaemon_hookの受け口はherdrのread_timeout_msで接続を切らな�
 	env := newDaemonEnv(t)
 	env.HerdrReadTimeoutMs = 200
 	env.writeWorkflow(t)
-	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline)
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
 	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
 		return map[string]any{"type": "pane_list", "panes": []any{}}, nil
 	})

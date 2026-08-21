@@ -101,7 +101,7 @@ func TestPaneSplit_実スキーマの引数で送られる(t *testing.T) {
 // 実スキーマに無いキー（name / title など）を送っていないこと。
 func TestPaneRename_pane_idとlabelを送る(t *testing.T) {
 	const paneID = "w1:p2"
-	const issueURL = "https://github.com/maimuzo/koetsumugi/issues/188"
+	const issueURL = "https://github.com/octocat/hello-world/issues/188"
 
 	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
 		var req rpcRequest

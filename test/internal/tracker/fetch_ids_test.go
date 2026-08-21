@@ -14,7 +14,7 @@ import (
 // 成功条件: エラーが無く、結果が1件だけ（見つかった方だけ）であること。
 func TestFetchIssuesByIDs_見つからないIDは省く(t *testing.T) {
 	found := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
-		ItemID: "item-found", Status: "In Progress", Owner: "maimuzo", Repo: "koetsumugi", Number: 10, Title: "見つかる方",
+		ItemID: "item-found", Status: "In Progress", Owner: "octocat", Repo: "hello-world", Number: 10, Title: "見つかる方",
 	}))
 	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{found, nil}))))
 	a := newAdapterForFetch(t, fs)
@@ -38,7 +38,7 @@ func TestFetchIssuesByIDs_見つからないIDは省く(t *testing.T) {
 // 成功条件: FetchIssuesByIDs がエラーを返すこと。
 func TestFetchIssuesByIDs_Status未設定はエラーになる(t *testing.T) {
 	noStatus := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
-		ItemID: "item-nostatus", Status: "", Owner: "maimuzo", Repo: "koetsumugi", Number: 4, Title: "Status 未設定",
+		ItemID: "item-nostatus", Status: "", Owner: "octocat", Repo: "hello-world", Number: 4, Title: "Status 未設定",
 	}))
 	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{noStatus}))))
 	a := newAdapterForFetch(t, fs)

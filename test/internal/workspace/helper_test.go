@@ -421,14 +421,14 @@ func newFixture(t *testing.T, opts fixtureOptions) *managerFixture {
 // sampleIssue はテストで使う issue の情報である。
 //
 // number: issue 番号。
-// 戻り値: owner が "maimuzo"、repo が "koetsumugi"、既定 branch が "main" の issue。
+// 戻り値: owner が "octocat"、repo が "hello-world"、既定 branch が "main" の issue。
 func sampleIssue(number int) workspace.IssueRef {
 	return workspace.IssueRef{
-		URL:           fmt.Sprintf("https://github.com/maimuzo/koetsumugi/issues/%d", number),
-		Identifier:    fmt.Sprintf("maimuzo/koetsumugi#%d", number),
+		URL:           fmt.Sprintf("https://github.com/octocat/hello-world/issues/%d", number),
+		Identifier:    fmt.Sprintf("octocat/hello-world#%d", number),
 		ProjectItemID: "PVTI_test",
-		Owner:         "maimuzo",
-		Repo:          "koetsumugi",
+		Owner:         "octocat",
+		Repo:          "hello-world",
 		Number:        number,
 		NativeRef:     map[string]any{"default_branch": "main"},
 	}

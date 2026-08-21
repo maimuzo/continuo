@@ -16,7 +16,7 @@ import (
 // UpdateStatus が (true, nil) を返すこと。
 func TestUpdateStatus_取り直してから書き込む(t *testing.T) {
 	refetched := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
-		ItemID: "item-1", Status: "In Progress", Owner: "maimuzo", Repo: "koetsumugi", Number: 1, Title: "t",
+		ItemID: "item-1", Status: "In Progress", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "t",
 	}))
 
 	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
@@ -65,7 +65,7 @@ func TestUpdateStatus_取り直してから書き込む(t *testing.T) {
 // 2リクエストだけで終わること）。UpdateStatus が (false, nil) を返すこと（エラーではない）。
 func TestUpdateStatus_終了状態なら書かない(t *testing.T) {
 	refetched := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
-		ItemID: "item-1", Status: "Done", Owner: "maimuzo", Repo: "koetsumugi", Number: 1, Title: "t",
+		ItemID: "item-1", Status: "Done", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "t",
 	}))
 
 	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {

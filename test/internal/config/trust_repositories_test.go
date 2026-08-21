@@ -20,12 +20,12 @@ import (
 func TestLoad_trust_repositoriesの形が違うと落ちる(t *testing.T) {
 	for _, bad := range []string{
 		"continuo",           // owner が無い
-		"maimuzo/",           // repo が空
+		"octocat/",           // repo が空
 		"/continuo",          // owner が空
-		"maimuzo/con tinuo",  // 空白が混ざっている
-		"maimuzo/../../etc",  // パスを遡ろうとしている
-		"-maimuzo/continuo",  // owner がハイフンで始まっている
-		"maimuzo/continuo/x", // スラッシュが2つある
+		"octocat/con tinuo",  // 空白が混ざっている
+		"octocat/../../etc",  // パスを遡ろうとしている
+		"-octocat/continuo",  // owner がハイフンで始まっている
+		"octocat/continuo/x", // スラッシュが2つある
 	} {
 		front := validFrontMatter + "trust:\n  repositories: [" + quote(bad) + "]\n"
 		assertLoadFailsWith(t, front, "trust.repositories[0]")
@@ -65,14 +65,14 @@ func TestLoad_trust_repositoriesに同じものを2回書くと落ちる(t *test
 // 成功条件: 書いた順のまま3件が読み出せること。
 func TestLoad_trust_repositoriesは書いた順のまま読み出せる(t *testing.T) {
 	front := validFrontMatter +
-		"trust:\n  repositories:\n    - \"maimuzo/koetsumugi\"\n    - \"maimuzo/continuo\"\n    - \"acme/tool_kit.v2\"\n"
+		"trust:\n  repositories:\n    - \"octocat/hello-world\"\n    - \"maimuzo/continuo\"\n    - \"acme/tool_kit.v2\"\n"
 	path := writeWorkflow(t, front, "")
 
 	loaded, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("正しい設定なのに読み込めなかった: %v", err)
 	}
-	want := []string{"maimuzo/koetsumugi", "maimuzo/continuo", "acme/tool_kit.v2"}
+	want := []string{"octocat/hello-world", "maimuzo/continuo", "acme/tool_kit.v2"}
 	got := loaded.Config.Trust.Repositories
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("読み出した値が想定と違う: got %v, want %v", got, want)

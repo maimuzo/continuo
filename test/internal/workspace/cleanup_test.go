@@ -64,7 +64,7 @@ func newCleanupFixtureWith(t *testing.T, opts fixtureOptions) *cleanupFixture {
 	if settingsBase == "" {
 		settingsBase = filepath.Join(t.TempDir(), "issues")
 	}
-	settingsDir := filepath.Join(settingsBase, "maimuzo-koetsumugi-188")
+	settingsDir := filepath.Join(settingsBase, "octocat-hello-world-188")
 	if err := os.MkdirAll(settingsDir, 0o700); err != nil {
 		t.Fatalf("issue ごとの設定ファイルの置き場所を作れない: %v", err)
 	}
@@ -499,15 +499,15 @@ func TestCleanup_身元ファイルのbranchが書き換えられていても他
 // 成功条件: その branch が残っていること。
 func TestCleanup_worktreeの現物と一致しないbranchは消さない(t *testing.T) {
 	cf := newCleanupFixture(t, nil)
-	runGit(t, cf.Repo.Dir, "branch", "continuo/maimuzo/koetsumugi/999")
+	runGit(t, cf.Repo.Dir, "branch", "continuo/octocat/hello-world/999")
 	tamperIdentity(t, cf, func(identity *workspace.Identity) {
-		identity.Branch = "continuo/maimuzo/koetsumugi/999"
+		identity.Branch = "continuo/octocat/hello-world/999"
 	})
 
 	if _, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf)); err != nil {
 		t.Fatalf("Cleanup に失敗した: %v", err)
 	}
-	branches := runGit(t, cf.Repo.Dir, "branch", "--list", "continuo/maimuzo/koetsumugi/999")
+	branches := runGit(t, cf.Repo.Dir, "branch", "--list", "continuo/octocat/hello-world/999")
 	if strings.TrimSpace(branches) == "" {
 		t.Fatal("worktree がチェックアウトしていない branch を消している")
 	}

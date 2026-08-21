@@ -247,7 +247,7 @@ func (ts *testServer) send(t *testing.T, line string) {
 // pendingDir は issue のスラグに対応する逃がし先のパスを返し、作る。
 //
 // t: 呼び出し元のテスト。
-// slug: issue のスラグ（例 maimuzo-koetsumugi-188）。
+// slug: issue のスラグ（例 octocat-hello-world-188）。
 // 戻り値: <実行時ディレクトリ>/issues/<スラグ>/pending の絶対パス。
 func (ts *testServer) pendingDir(t *testing.T, slug string) string {
 	t.Helper()

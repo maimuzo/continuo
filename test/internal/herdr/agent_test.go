@@ -601,19 +601,19 @@ func TestAgentRename_targetとnameを送る(t *testing.T) {
 		}
 		writeResult(t, conn, req.ID, herdr.AgentRenameResult{
 			Type:  "agent_info",
-			Agent: herdr.Agent{Name: "continuo-koetsumugi-188"},
+			Agent: herdr.Agent{Name: "continuo-hello-world-188"},
 		})
 	})
 
 	client := herdr.New(fs.SocketPath(), herdr.Timeouts{Read: time.Second})
 	result, err := client.AgentRename(context.Background(), herdr.AgentRenameParams{
 		Target: normalize.SafeName("continuo-test"),
-		Name:   normalize.SafeName("continuo-koetsumugi-188"),
+		Name:   normalize.SafeName("continuo-hello-world-188"),
 	})
 	if err != nil {
 		t.Fatalf("AgentRename が失敗した: %v", err)
 	}
-	if result.Agent.Name != "continuo-koetsumugi-188" {
+	if result.Agent.Name != "continuo-hello-world-188" {
 		t.Fatalf("応答の name を読み取れていない: got %q", result.Agent.Name)
 	}
 
@@ -621,7 +621,7 @@ func TestAgentRename_targetとnameを送る(t *testing.T) {
 	if got := params["target"]; got != "continuo-test" {
 		t.Fatalf("target が想定と違う: got %v", got)
 	}
-	if got := params["name"]; got != "continuo-koetsumugi-188" {
+	if got := params["name"]; got != "continuo-hello-world-188" {
 		t.Fatalf("name が想定と違う: got %v", got)
 	}
 	assertSchemaKeys(t, params, herdr.MethodAgentRename, agentRenameSchemaKeys)

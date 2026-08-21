@@ -48,7 +48,7 @@ func TestCheckTrust_鍵はcloneのtoplevelである(t *testing.T) {
 	toplevel := runGit(t, fx.Repo.Dir, "rev-parse", "--path-format=absolute", "--show-toplevel")
 	writeClaudeConfig(t, fx.Home, map[string]bool{toplevel: true})
 
-	trusted, reason, err := fx.Manager.CheckTrust("maimuzo", "koetsumugi")
+	trusted, reason, err := fx.Manager.CheckTrust("octocat", "hello-world")
 	if err != nil {
 		t.Fatalf("CheckTrust に失敗した: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestCheckTrust_worktreeのパスでは信頼済みにならない(t *testin
 
 	writeClaudeConfig(t, fx.Home, map[string]bool{prepared.Path: true})
 
-	trusted, reason, err := fx.Manager.CheckTrust("maimuzo", "koetsumugi")
+	trusted, reason, err := fx.Manager.CheckTrust("octocat", "hello-world")
 	if err != nil {
 		t.Fatalf("CheckTrust に失敗した: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestCheckTrust_cloneが無いことと未信頼を理由で区別する(t *
 	noClone := newFixture(t, fixtureOptions{
 		GhqList: func(_ context.Context, _, _ string) (string, error) { return "", nil },
 	})
-	trusted, cloneReason, err := noClone.Manager.CheckTrust("maimuzo", "koetsumugi")
+	trusted, cloneReason, err := noClone.Manager.CheckTrust("octocat", "hello-world")
 	if err != nil {
 		t.Fatalf("clone が無い場合の CheckTrust がエラーになった: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestCheckTrust_cloneが無いことと未信頼を理由で区別する(t *
 	toplevel := runGit(t, fx.Repo.Dir, "rev-parse", "--path-format=absolute", "--show-toplevel")
 	writeClaudeConfig(t, fx.Home, map[string]bool{toplevel: false})
 
-	trusted, untrustedReason, err := fx.Manager.CheckTrust("maimuzo", "koetsumugi")
+	trusted, untrustedReason, err := fx.Manager.CheckTrust("octocat", "hello-world")
 	if err != nil {
 		t.Fatalf("未信頼の場合の CheckTrust がエラーになった: %v", err)
 	}
@@ -132,10 +132,10 @@ func TestCheckTrust_claude_jsonを書き換えない(t *testing.T) {
 		t.Fatalf("検査前の ~/.claude.json を読めない: %v", err)
 	}
 
-	if _, _, err := fx.Manager.CheckTrust("maimuzo", "koetsumugi"); err != nil {
+	if _, _, err := fx.Manager.CheckTrust("octocat", "hello-world"); err != nil {
 		t.Fatalf("CheckTrust に失敗した: %v", err)
 	}
-	if !fx.Manager.TrustFunc()("maimuzo", "koetsumugi") {
+	if !fx.Manager.TrustFunc()("octocat", "hello-world") {
 		t.Fatal("TrustFunc が偽を返した")
 	}
 
@@ -156,14 +156,14 @@ func TestTrustFunc_cloneが無くても未信頼でも偽になる(t *testing.T)
 	noClone := newFixture(t, fixtureOptions{
 		GhqList: func(_ context.Context, _, _ string) (string, error) { return "", nil },
 	})
-	if noClone.Manager.TrustFunc()("maimuzo", "koetsumugi") {
+	if noClone.Manager.TrustFunc()("octocat", "hello-world") {
 		t.Fatal("clone が無いのに真を返した")
 	}
 
 	fx := newFixture(t, fixtureOptions{})
 	toplevel := runGit(t, fx.Repo.Dir, "rev-parse", "--path-format=absolute", "--show-toplevel")
 	writeClaudeConfig(t, fx.Home, map[string]bool{toplevel: false})
-	if fx.Manager.TrustFunc()("maimuzo", "koetsumugi") {
+	if fx.Manager.TrustFunc()("octocat", "hello-world") {
 		t.Fatal("未信頼なのに真を返した")
 	}
 }
@@ -175,7 +175,7 @@ func TestTrustFunc_cloneが無くても未信頼でも偽になる(t *testing.T)
 func TestCheckTrust_claude_jsonが無ければ未信頼として扱う(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 
-	trusted, reason, err := fx.Manager.CheckTrust("maimuzo", "koetsumugi")
+	trusted, reason, err := fx.Manager.CheckTrust("octocat", "hello-world")
 	if err != nil {
 		t.Fatalf("~/.claude.json が無いだけでエラーになった: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestTrustFunc_tracker_RepoTrustFuncへ代入できる(t *testing.T) {
 	writeClaudeConfig(t, fx.Home, map[string]bool{toplevel: true})
 
 	var trusted tracker.RepoTrustFunc = fx.Manager.TrustFunc()
-	if !trusted("maimuzo", "koetsumugi") {
+	if !trusted("octocat", "hello-world") {
 		t.Fatal("tracker.RepoTrustFunc として呼ぶと偽になった")
 	}
 }
@@ -220,7 +220,7 @@ func TestCheckTrust_外部コマンドに時間の上限を渡す(t *testing.T) 
 		},
 	})
 
-	if _, _, err := fx.Manager.CheckTrust("maimuzo", "koetsumugi"); err != nil {
+	if _, _, err := fx.Manager.CheckTrust("octocat", "hello-world"); err != nil {
 		t.Fatalf("CheckTrust に失敗した: %v", err)
 	}
 	if !hasDeadline {
@@ -238,14 +238,14 @@ func TestTrustFunc_判定を覚えて外部コマンドを繰り返し起動し�
 	writeClaudeConfig(t, fx.Home, map[string]bool{toplevel: true})
 
 	trusted := fx.Manager.TrustFunc()
-	if !trusted("maimuzo", "koetsumugi") {
+	if !trusted("octocat", "hello-world") {
 		t.Fatal("1回目の判定が偽になった")
 	}
 
 	if err := os.Remove(filepath.Join(fx.Home, workspace.ClaudeConfigFileName)); err != nil {
 		t.Fatalf("~/.claude.json を消せない: %v", err)
 	}
-	if !trusted("maimuzo", "koetsumugi") {
+	if !trusted("octocat", "hello-world") {
 		t.Fatal("2回目の判定で `~/.claude.json` を読み直している（1件ごとに外部プロセスが立つ）")
 	}
 }

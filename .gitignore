@@ -33,6 +33,7 @@ go.work.sum
 
 # Claude Code per-user 設定（permission allowlist 等）。共有用は .claude/settings.json に。
 .claude/settings.local.json
+.claude/local-guidelines.md
 .claude/worktrees/
 
 # 作業用の一時ファイル
