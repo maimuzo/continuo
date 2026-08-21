@@ -62,50 +62,5 @@
       "Bash(git worktree remove:*)",
       "Bash(rm:*)"
     ]
-  },
-  "enabledPlugins": {
-    "maimuzo-go@maimuzo-marketplace": true,
-    "maimuzo-dev-core@maimuzo-marketplace": true,
-    "maimuzo-issue-manage@maimuzo-marketplace": true,
-    "maimuzo-from-ecc@maimuzo-marketplace": true,
-    "maimuzo-cosper-team@maimuzo-marketplace": true,
-    "mattpocock-skills@mattpocock": true,
-    "everything-claude-code@everything-claude-code": true,
-    "codex@openai-codex": true,
-    "maimuzo-auto-debug@maimuzo-marketplace": true,
-    "maimuzo-pencil@maimuzo-marketplace": true,
-    "maimuzo-rucm@maimuzo-marketplace": true,
-    "maimuzo-naming@maimuzo-marketplace": true,
-    "maimuzo-chat-response@maimuzo-marketplace": true
-  },
-  "extraKnownMarketplaces": {
-    "maimuzo-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "maimuzo/maimuzo-claude-plugins"
-      },
-      "autoUpdate": true
-    },
-    "mattpocock": {
-      "source": {
-        "source": "github",
-        "repo": "mattpocock/skills"
-      },
-      "autoUpdate": true
-    },
-    "everything-claude-code": {
-      "source": {
-        "source": "github",
-        "repo": "affaan-m/everything-claude-code"
-      },
-      "autoUpdate": true
-    },
-    "openai-codex": {
-      "source": {
-        "source": "github",
-        "repo": "openai/codex-plugin-cc"
-      },
-      "autoUpdate": true
-    }
   }
 }
