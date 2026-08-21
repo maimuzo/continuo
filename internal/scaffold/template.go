@@ -29,12 +29,12 @@ tracker:
     status_field: Status                    # issue の進み方を読み書きする single-select フィールドの名前
     token_source: gh_auth                   # gh_auth なら gh auth token コマンドで取る。env なら下の token_env から取る
     token_env: GITHUB_TOKEN                 # token_source が env のときに読む環境変数の名前
-    comments:                               # issue のコメントは、誰が書いたかの判別にだけ使う。プロンプトには入れない
-      fetch: true                           # エージェントが作業内容のコメントを書いたかを確かめるために読むかどうか
-      max: 50                               # 判別のために何件まで遡って読むか
+    comments:                               # GitHub からコメントを何件どの順で取るか。GitHub の上限に縛られる項目だけを置く
+      max: 50                               # 判別のために何件まで遡って読むか。GitHub は一度に100件までしか返さない
       order: oldest_first                   # 読む順番。古いコメントから読む
-      marker: "<!-- continuo:agent -->"     # エージェントが書くコメントの先頭に必ず入れさせる目印
-      self_marker: "<!-- continuo:self -->" # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
+  comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
+    marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
+    self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
   status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが応答の最後に書く1行の先頭。continuo はこの行を読んで Status を動かす
   status_signal_map:                        # その1行に書かれた値と、書き込む Status の対応
     review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき
@@ -46,7 +46,6 @@ tracker:
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
-  write_interval_ms: 1000                   # Status を続けて書き込むときにあける間隔。GitHub が1秒以上を勧めている
   verify_states_every: 20                   # 上に書いた Status 名がボードに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
 
@@ -54,8 +53,8 @@ polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと
 
 workspace:
-  root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する
-  layout: gwq                               # worktree の並べ方。gwq なら <root>/<ホスト>/<owner>/<repo>/<branch>
+  root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する。
+                                            # 中の並べ方は <root>/<ホスト>/<owner>/<repo>/<branch> に固定で、選べない
   identity_file: .continuo.json             # どの issue の worktree かを worktree の中に書き残すファイルの名前
 
 workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
@@ -67,8 +66,11 @@ workspace_hooks:                            # worktree の節目に走らせる�
 
 agent:
   max_concurrent_agents: 2                  # 同時に動かすエージェントの数の上限
-  max_concurrent_agents_by_state: {}        # Status ごとの上限。空なら上の全体の上限だけを見る
-  max_turns: 20                             # 1つの issue に continuo が送る turn の数の上限。尽きたら failure_state へ落とす
+  max_concurrent_agents_by_state: {}        # Status ごとの上限。空なら上の全体の上限だけを見る。
+                                            # 引かれるのは running_state（下の "In Progress"）だけで、
+                                            # 他の Status 名を書いても参照されない。0 以下は書けない
+  max_dispatch_turns: 20                    # 1つの issue に continuo が指示を送る回数の上限。尽きたら failure_state へ落とす。
+                                            # エージェントが自分で続けた turn は数えない
   max_takeover: 5                           # continuo が落ちたあと、同じ worktree を引き継いだ回数の上限
   max_retry_backoff_ms: 300000              # やり直しの前に待つ時間の上限。失敗のたびに待ち時間を伸ばしていく
   max_retries: 3                            # 応答が止まった・異常終了したときにやり直す回数の上限。0 ならやり直さない
@@ -90,13 +92,12 @@ claude:
     CLAUDE_CODE_RETRY_WATCHDOG: "1"         # turn の途中で 429 / 529 が返ってきたときに、リトライを続けさせる
   poll_wait_ms: 30000                       # エージェントの状態を1回待つ時間。短く切って、経過時間は continuo 側で数える
   settle_ms: 2000                           # 応答が終わったように見えてから、続きが来ないことを確かめるまでの猶予
-  wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。blocked を外すと、確認で止まった turn を時間切れまで拾えない
+  wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。書けるのは idle / working / blocked / done / unknown。
+                                            # blocked を外すと、確認で止まった turn を時間切れまで拾えない
   turn_timeout_ms: 3600000                  # エージェントの画面が変わらない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
                                             # turn の総実行時間の上限ではない。画面が変わり続けている限り何時間でも待つ
-  read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
-  startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
-  hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る
-    mode: settings_flag                     # settings_flag のみ。issue ごとに作った設定ファイルを --settings で渡す
+  hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る。
+                                            # 届け方は「issue ごとに作った設定ファイルを --settings で渡す」に固定で、選べない
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
                                             # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
 
@@ -105,6 +106,8 @@ herdr:
   socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
                                             # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
   protocol: 19                              # herdr の socket API の版。起動時に照合して、合わなければ止める
+  read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
+  startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   worktree:
     create_via_herdr: true                  # 作った worktree を herdr の workspace として開くかどうか（worktree 自体は git で作る）
     # issue ごとに作る branch の名前。二重の波括弧の部分は issue の値に置き換わる

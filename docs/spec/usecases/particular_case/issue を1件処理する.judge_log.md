@@ -27,7 +27,7 @@
 | 15 | ステップ11 と12 | pane を新しく作らず、`worktree.open` が作った pane を引いて label を書く | 1 worktree を1 herdr workspace にすると決めており、`pane.split` も `tab.create` も呼ばない。label は復元の第2の経路である | `docs/plans/continuo_design.md#3-3`、`#4-5`、`internal/orchestrator/dispatch.go` の `resolvePane` | 95% |
 | 16 | ステップ14（VALIDATES THAT） | agent_status が idle または done である | 着手の段10 である。**done も合格**（continuo は tab をフォーカスしないので実運用ではほぼ常に done 側になる） | `docs/plans/continuo_design.md#3-16`、`internal/orchestrator/dispatch.go` の `confirmStartup` | 95% |
 | 17 | turn ループを DO-UNTIL にしたこと | ステップ15 から23 を DO-UNTIL で囲む | turn は「表明が working でなくなるまで」繰り返す。**IF で書くと繰り返しが表現できない** | `docs/plans/continuo_design.md#3-8`、`internal/orchestrator/turn.go` の `turnLoop` | 90% |
-| 18 | ステップ16（VALIDATES THAT） | turn 数が max_turns に達していない | 打ち切りの判定は turn ループの先頭で行う。**送る前に判定しないと、上限を1回超えて送る** | `internal/orchestrator/turn.go` の `turnLoop` | 95% |
+| 18 | ステップ16（VALIDATES THAT） | turn 数が max_dispatch_turns に達していない | 打ち切りの判定は turn ループの先頭で行う。**送る前に判定しないと、上限を1回超えて送る** | `internal/orchestrator/turn.go` の `turnLoop` | 95% |
 | 19 | ステップ17 | turn の本文を送る（1回目と2回目以降を1ステップにまとめた） | 送る本文の違い（1回目の本文か継続の指示か）は「いまのセッションに会話履歴があるか」で決まる内部の分岐であり、外から見た相互作用は同じ1回の送信である | `docs/plans/continuo_design.md#3-8`、`internal/orchestrator/turn.go` の `buildTurnText` | 75% |
 | 20 | ステップ18 と19 を分けたこと | 「Stop hook を受ける」と「settle_ms のあいだ待つ」を別ステップにした | R4（1文1動作）。**待ちは判定の一部であり、受信とは別の動作である** | `docs/plans/continuo_design.md#3-2` | 90% |
 | 21 | ステップ20（VALIDATES THAT） | settle_ms のあいだに `task-notification` で始まる UserPromptSubmit が届かない | turn の終わりの分かれ目がここである。途中の Stop では 0.033〜0.037 秒後に届き、最終 Stop の後に来るのは `SubagentStop` である | `docs/plans/continuo_design.md#3-2`（実測8/8） | 95% |

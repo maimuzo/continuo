@@ -38,6 +38,23 @@ const (
 	AgentStatusUnknown AgentStatus = "unknown"
 )
 
+// AgentStatuses は AgentStatus の取りうる値をすべて返す。
+//
+// **設定の綴りの検査（`claude.wait_until`）が引く。**検査する側が自前で一覧を持つと、
+// herdr の enum が増えたときにそちらだけが古いまま残る。定数の一覧はここ1箇所に置く。
+//
+// 戻り値: 実スキーマの enum と同じ並び（idle / working / blocked / done / unknown）の
+// 新しいスライス。呼び出し側が書き換えても他の呼び出しに影響しない。
+func AgentStatuses() []AgentStatus {
+	return []AgentStatus{
+		AgentStatusIdle,
+		AgentStatusWorking,
+		AgentStatusBlocked,
+		AgentStatusDone,
+		AgentStatusUnknown,
+	}
+}
+
 // PaneAgentState は pane.report_agent に渡す agent の状態である
 // （`schemas.request.$defs.PaneAgentState`）。
 //

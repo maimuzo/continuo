@@ -165,15 +165,15 @@ func TestTurn_表明が無かった次のturnで促す(t *testing.T) {
 	}
 }
 
-// TestTurn_max_turnsに達したらfailure_stateへ落とす は、打ち切りを確かめる。
+// TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす は、打ち切りを確かめる。
 //
-// 目的: 設計 3-8 の「打ち切り: max_turns に達したら failure_state へ落とす」と、
+// 目的: 設計 3-8 の「打ち切り: max_dispatch_turns に達したら failure_state へ落とす」と、
 // 設計 3-14 の「turn は continuo が送った回数だけで数える」を守っていることを示す。
-// 与える情報: `max_turns` が1。1回目の turn で表明を書かず、Status は `In Progress` のまま。
+// 与える情報: `max_dispatch_turns` が1。1回目の turn で表明を書かず、Status は `In Progress` のまま。
 // 成功条件: 2回目の turn を送らずに Status が `Blocked` へ落ちる。
-func TestTurn_max_turnsに達したらfailure_stateへ落とす(t *testing.T) {
+func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
-		cfg.Agent.MaxTurns = 1
+		cfg.Agent.MaxDispatchTurns = 1
 	}})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
@@ -205,7 +205,7 @@ func TestTurn_max_turnsに達したらfailure_stateへ落とす(t *testing.T) {
 	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got > 2 {
 		// 段7（コメントを書かせ直す）で1回だけ余分に送ることがあるが、
 		// **turn として2回目を送ってはならない。**
-		t.Fatalf("max_turns を超えて turn を送っている: agent.prompt が %d 回", got)
+		t.Fatalf("max_dispatch_turns を超えて turn を送っている: agent.prompt が %d 回", got)
 	}
 }
 

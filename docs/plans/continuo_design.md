@@ -193,6 +193,8 @@
 - 8-1 意図的に外している仕様
 - 8-2 仕様に無いものを足している
 - 8-3 そもそも適用外
+- 8-4 設定キーとして持たないもの
+- 8-5 名前を変えた設定キー
 </details>
 
 ---
@@ -1054,7 +1056,7 @@ stateDiagram-v2
     end note
 ```
 
-**turn 数が復元できない点は受け入れる。ただし引き継いだ回数は数える。**数えないと、`max_turns` に達する前にクラッシュし続ける状況で**打ち切りが一度も発火せず、エージェントが同じ issue に無限に turn を消費する。**引き継いだ回数は身元ファイルに書き（3-18）、上限に達したら `failure_state` へ落とす。`SPEC.md` 14.3 が *"It does not mean retry timers, running sessions, or live worker state survive process restart."*（**訳:** リトライのタイマー、実行中のセッション、稼働中の worker の状態がプロセスの再起動を生き延びることを意味しない）と明記している。
+**turn 数が復元できない点は受け入れる。ただし引き継いだ回数は数える。**数えないと、`max_dispatch_turns` に達する前にクラッシュし続ける状況で**打ち切りが一度も発火せず、エージェントが同じ issue に無限に turn を消費する。**引き継いだ回数は身元ファイルに書き（3-18）、上限に達したら `failure_state` へ落とす。`SPEC.md` 14.3 が *"It does not mean retry timers, running sessions, or live worker state survive process restart."*（**訳:** リトライのタイマー、実行中のセッション、稼働中の worker の状態がプロセスの再起動を生き延びることを意味しない）と明記している。
 
 ### 3-5. 完了検知の3層（完了検知の3層を分ける）
 
@@ -1125,9 +1127,9 @@ sequenceDiagram
             alt terminal_states（Done）
                 Note over ORC: worktree と branch を片付ける
             else active_states（Ready / In Progress）
-                alt max_turns に未到達
+                alt max_dispatch_turns に未到達
                     ORC->>CC: 次の turn（継続の指示と残り回数）
-                else max_turns に到達
+                else max_dispatch_turns に到達
                     Note over ORC: エージェントは応答していないので continuo が書く
                     ORC->>BOARD: 書く：failure_state へ落とす
                 end
@@ -1218,7 +1220,7 @@ func Normalize(raw string) (SafeName, []Warning)
 2 回目以降    : 継続の指示のみ（5-4）。1回目の本文は送り直さない
                 「この確認は n 回目です。あと m 回で打ち切ります」を必ず入れる
                 前回の turn に表明が無かったら、それを促す1文を差し込む（3-25）
-打ち切り      : max_turns（既定 20）に達したら failure_state へ落とす。
+打ち切り      : max_dispatch_turns（既定 20）に達したら failure_state へ落とす。
                 時間切れ（turn timeout）とは別の終了理由として記録する
 正常終了後    : 約1秒おいて issue がまだ active かを再確認する
 ```
@@ -1539,7 +1541,7 @@ sequenceDiagram
 
 **continuo 自身がプロンプトを送った回数だけを数える。**
 
-**理由。**Claude Code は subagent やバックグラウンドの処理が終わると、**自分自身に `<task-notification>` を投入する**（第1節 1-7 の実測）。これは新しい turn として現れるが、**continuo が送ったものではない。**hook が渡す turn の識別子で数えると、`max_turns` に不当に早く到達する。
+**理由。**Claude Code は subagent やバックグラウンドの処理が終わると、**自分自身に `<task-notification>` を投入する**（第1節 1-7 の実測）。これは新しい turn として現れるが、**continuo が送ったものではない。**hook が渡す turn の識別子で数えると、`max_dispatch_turns` に不当に早く到達する。
 
 **したがって `SPEC.md` 4.1.6 の `turn_count` は、continuo の送信回数で数える。**hook が渡す識別子はログの相関づけにのみ使う。
 
@@ -2392,7 +2394,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 | --- | --- |
 | `CONTINUO-STATUS: working`（まだ続きがある） | **走らせない。**次の turn を送る（3-8） |
 | `CONTINUO-STATUS: review` / `blocked` を受けた | **走らせる。**run はここで終わる |
-| `max_turns` に達した / stall で打ち切った | **走らせる。**worker を止める前に確認する |
+| `max_dispatch_turns` に達した / stall で打ち切った | **走らせる。**worker を止める前に確認する |
 | ボードが `terminal_states` になっていた | **走らせる。**片付ける前に確認する |
 
 **どう走らせるか。9段ある。**
@@ -2413,7 +2415,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 6. agent_status が idle または done になるのを待つ
 7. agent.prompt で「作業の内容を issue のコメントに書いてください」とだけ送る
    → --wait --until idle --until done --until blocked を付ける（3-2）
-   → この送信は turn 数に数えない。max_turns の判定に影響させない
+   → この送信は turn 数に数えない。max_dispatch_turns の判定に影響させない
 8. コメントを読み直す。書かれていれば worker を止めて終わり
 9. それでも書かれなければ failure_state へ落として人間に渡す
    → 復元そのものに失敗した場合（No conversation found など）も同じ扱いにする
@@ -2456,7 +2458,7 @@ turn が終わって表明が無かった → 次の turn を送るときに、�
   「前回の応答に CONTINUO-STATUS の行がありませんでした。
    作業の状態を、応答の中に1行で書いてください。」
 
-→ max_turns の範囲で繰り返す。それでも書かれなければ failure_state へ落とす
+→ max_dispatch_turns の範囲で繰り返す。それでも書かれなければ failure_state へ落とす
 ```
 
 **turn ループが既にあるので、新しい仕組みが要らない**（3-8）。
@@ -2613,7 +2615,7 @@ CONTINUO-STATUS: #47 blocked         issue ごとに違う結果を書ける
 **なぜ二重投入を避けるのか。**`blocked` で実測した現象（3-11）と同じ構造である。
 **走っている最中に投げると、投げた本文が消え、turn が混ざる。**
 
-**turn 数の数え方への影響。**`max_turns` は continuo が送った回数だけで数える（3-8）。
+**turn 数の数え方への影響。**`max_dispatch_turns` は continuo が送った回数だけで数える（3-8）。
 **Claude Code が自分で継続した turn は continuo には見えないので、数に入らない。**
 **これは受け入れる。**打ち切りは「continuo が何回投げたか」の上限であって、
 エージェントが何回考えたかの上限ではない。
@@ -2676,7 +2678,7 @@ claude.turn_timeout_ms のあいだ何も観測できなかった run につい�
 **枠待ち中は hook が来ないので、印を外す契機は「枠の `resets_at` を過ぎたこと」だけである。**
 過ぎたら印を外し、`LastSeenAt` を現在時刻にしてから継続の指示を1回送る（下記）。
 
-**この継続の指示は turn 数に数える。**`max_turns` は「continuo が送った回数」で数えると決めている（3-8）。
+**この継続の指示は turn 数に数える。**`max_dispatch_turns` は「continuo が送った回数」で数えると決めている（3-8）。
 **数えないと、枠待ちと復帰を繰り返す間に打ち切りが一度も発火せず、同じ issue に無限に turn を消費する。**
 
 **条件その2 を入れる理由。**枠を使い切っていても、**別の run は動いている**ことがある。
@@ -3571,7 +3573,7 @@ stateDiagram-v2
     Ready --> InProgress: continuo｜dispatch の段2 で書く
     InProgress --> InReview: continuo｜エージェントの表明を読んで動かす
     InProgress --> Blocked: continuo｜エージェントの表明を読んで動かす
-    InProgress --> Blocked: continuo｜max_turns 到達・stall 検知・引き継ぎ上限
+    InProgress --> Blocked: continuo｜max_dispatch_turns 到達・stall 検知・引き継ぎ上限
     InProgress --> Ready: continuo｜再起動して実体が見つからないとき
     Blocked --> Ready: 人間｜コメントで回答して戻す
     InReview --> Done: 人間｜レビューして完了させる
@@ -3600,7 +3602,7 @@ stateDiagram-v2
 | `In Progress` → `In Review` | **continuo**（きっかけはエージェント） | **その turn の transcript に `CONTINUO-STATUS: review` の行があったとき** | GraphQL（3-25） |
 | `In Progress` → `Blocked` | **continuo**（きっかけはエージェント） | **その turn の transcript に `CONTINUO-STATUS: blocked` の行があったとき** | GraphQL（3-25） |
 | 同上 | エージェント自身 | エージェントが自分で `gh` を叩いた場合 | `gh`。**continuo は書く前に取り直すので、既に動いていれば上書きしない** |
-| `In Progress` → `Blocked` | **continuo** | `max_turns` 到達・**stall 検知でリトライを使い切ったとき**・引き継ぎ回数の上限 | GraphQL |
+| `In Progress` → `Blocked` | **continuo** | `max_dispatch_turns` 到達・**stall 検知でリトライを使い切ったとき**・引き継ぎ回数の上限 | GraphQL |
 | `In Progress` → `Ready` | **continuo** | 再起動して worktree も pane も見つからず、**設定の `orphan_running_action` が `to_dispatch_state` のとき**（既定は `redispatch` なので既定では起きない） | GraphQL |
 | `Blocked` → `Ready` | 人間 | コメントで回答したとき | GitHub の画面 |
 | `In Review` → `Done` | 人間 | レビューを終えたとき | GitHub の画面 |
@@ -3614,7 +3616,7 @@ stateDiagram-v2
 | --- | --- |
 | dispatch のとき（`In Progress` へ） | continuo 自身の判断 |
 | **エージェントの表明を受けたとき**（`In Review` / `Blocked` へ） | **その turn の transcript にある1行**（3-25） |
-| エージェントが応答しないまま終わったとき（`failure_state` へ） | `max_turns` 到達・stall 検知・引き継ぎ回数の上限 |
+| エージェントが応答しないまま終わったとき（`failure_state` へ） | `max_dispatch_turns` 到達・stall 検知・引き継ぎ回数の上限 |
 | 再起動して実体が見つからないとき | 設定の `orphan_running_action` |
 
 **書く前には必ず ID 指定で Status を取り直す。取り直した結果が `terminal_states` に入っていたら書かない**（3-4）。
@@ -3888,12 +3890,12 @@ tracker:
     status_field: Status                    # issue の進み方を読み書きする single-select フィールドの名前
     token_source: gh_auth                   # gh_auth なら gh auth token コマンドで取る。env なら下の token_env から取る
     token_env: GITHUB_TOKEN                 # token_source が env のときに読む環境変数の名前
-    comments:                               # issue のコメントは、誰が書いたかの判別にだけ使う。プロンプトには入れない
-      fetch: true                           # エージェントが作業内容のコメントを書いたかを確かめるために読むかどうか
-      max: 50                               # 判別のために何件まで遡って読むか
+    comments:                               # GitHub からコメントを何件どの順で取るか。GitHub の上限に縛られる項目だけを置く
+      max: 50                               # 判別のために何件まで遡って読むか。GitHub は一度に100件までしか返さない
       order: oldest_first                   # 読む順番。古いコメントから読む
-      marker: "<!-- continuo:agent -->"     # エージェントが書くコメントの先頭に必ず入れさせる目印
-      self_marker: "<!-- continuo:self -->" # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
+  comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
+    marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
+    self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
   status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが応答の最後に書く1行の先頭。continuo はこの行を読んで Status を動かす
   status_signal_map:                        # その1行に書かれた値と、書き込む Status の対応
     review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき
@@ -3905,7 +3907,6 @@ tracker:
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
-  write_interval_ms: 1000                   # Status を続けて書き込むときにあける間隔。GitHub が1秒以上を勧めている
   verify_states_every: 20                   # 上に書いた Status 名がボードに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
 
@@ -3913,8 +3914,8 @@ polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと
 
 workspace:
-  root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する
-  layout: gwq                               # worktree の並べ方。gwq なら <root>/<ホスト>/<owner>/<repo>/<branch>
+  root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する。
+                                            # 中の並べ方は <root>/<ホスト>/<owner>/<repo>/<branch> に固定で、選べない
   identity_file: .continuo.json             # どの issue の worktree かを worktree の中に書き残すファイルの名前
 
 workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
@@ -3926,8 +3927,11 @@ workspace_hooks:                            # worktree の節目に走らせる�
 
 agent:
   max_concurrent_agents: 2                  # 同時に動かすエージェントの数の上限
-  max_concurrent_agents_by_state: {}        # Status ごとの上限。空なら上の全体の上限だけを見る
-  max_turns: 20                             # 1つの issue に continuo が送る turn の数の上限。尽きたら failure_state へ落とす
+  max_concurrent_agents_by_state: {}        # Status ごとの上限。空なら上の全体の上限だけを見る。
+                                            # 引かれるのは running_state（下の "In Progress"）だけで、
+                                            # 他の Status 名を書いても参照されない。0 以下は書けない
+  max_dispatch_turns: 20                    # 1つの issue に continuo が指示を送る回数の上限。尽きたら failure_state へ落とす。
+                                            # エージェントが自分で続けた turn は数えない
   max_takeover: 5                           # continuo が落ちたあと、同じ worktree を引き継いだ回数の上限
   max_retry_backoff_ms: 300000              # やり直しの前に待つ時間の上限。失敗のたびに待ち時間を伸ばしていく
   max_retries: 3                            # 応答が止まった・異常終了したときにやり直す回数の上限。0 ならやり直さない
@@ -3949,13 +3953,12 @@ claude:
     CLAUDE_CODE_RETRY_WATCHDOG: "1"         # turn の途中で 429 / 529 が返ってきたときに、リトライを続けさせる
   poll_wait_ms: 30000                       # エージェントの状態を1回待つ時間。短く切って、経過時間は continuo 側で数える
   settle_ms: 2000                           # 応答が終わったように見えてから、続きが来ないことを確かめるまでの猶予
-  wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。blocked を外すと、確認で止まった turn を時間切れまで拾えない
+  wait_until: ["idle", "done", "blocked"]   # 待つのをやめる状態。書けるのは idle / working / blocked / done / unknown。
+                                            # blocked を外すと、確認で止まった turn を時間切れまで拾えない
   turn_timeout_ms: 3600000                  # エージェントの画面が変わらない時間がこれを超えたら打ち切る。0 以下なら打ち切らない。
                                             # turn の総実行時間の上限ではない。画面が変わり続けている限り何時間でも待つ
-  read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
-  startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
-  hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る
-    mode: settings_flag                     # settings_flag のみ。issue ごとに作った設定ファイルを --settings で渡す
+  hook_bridge:                              # Claude Code の hook を continuo へ届ける仕掛け。turn の終わりはこれで知る。
+                                            # 届け方は「issue ごとに作った設定ファイルを --settings で渡す」に固定で、選べない
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
                                             # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
 
@@ -3964,6 +3967,8 @@ herdr:
   socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
                                             # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
   protocol: 19                              # herdr の socket API の版。起動時に照合して、合わなければ止める
+  read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
+  startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   worktree:
     create_via_herdr: true                  # 作った worktree を herdr の workspace として開くかどうか（worktree 自体は git で作る）
     # issue ごとに作る branch の名前。二重の波括弧の部分は issue の値に置き換わる
@@ -4020,6 +4025,17 @@ language: auto                              # 画面に出す文言の言語。a
 | `priority_field` / `priority_map` | **Priority を使わない**（4-2）。並び順だけで順序を決める |
 | `write_trust_entry` | **巡回のループは `~/.claude.json` を書き換えない**（4-3）。**このキーがあると、巡回中の書き換えを設定1つで有効にできてしまう。**登録は `continuo trust` を人間が叩いたときだけ行う（3-33） |
 | `restart.recover_from_pane_labels` | 復元は身元ファイルを主にする（3-18）ので、pane の label に依存する切り替えが要らなくなった |
+
+> **設定ファイルに書くと起動を止めるキーの一覧は 8-4 にある**（`tracker.write_interval_ms` / `workspace.layout` /
+> `claude.hook_bridge.mode` / `tracker.provider.comments.fetch` ほか）。
+> **仕様と名前が違うキーの対応表は 8-5 にある**（`agent.max_turns` → `agent.max_dispatch_turns` ほか）。
+
+**置き場所を変えたキー。**
+
+| 旧 | 新 | 理由 |
+| --- | --- | --- |
+| `tracker.provider.comments.marker` / `.self_marker` | `tracker.comments.marker` / `.self_marker` | **マーカーは GitHub 固有ではない。**continuo とエージェントのあいだの取り決めである。`provider.comments` に残すのは GitHub の GraphQL の100件制限に縛られる `max` / `order` だけにする |
+| `claude.read_timeout_ms` / `claude.startup_timeout_ms` | `herdr.read_timeout_ms` / `herdr.startup_timeout_ms` | **どちらも Claude Code に渡す設定ではない。**continuo が herdr と話すときの待ち時間であり、herdr のクライアントへ渡している（8-1） |
 
 ### 5-3. 本文（プロンプトのテンプレート）
 
@@ -4237,7 +4253,7 @@ push していない作業は、この worktree が片付くときに失われ�
 
 #### 打ち切りを失敗として扱う
 
-**仕様（7.3）。**`max_turns` を使い切った worker の終了は**正常終了**であり、1秒後に継続を予約する。
+**仕様（7.3）。**`max_turns`（continuo では `max_dispatch_turns`）を使い切った worker の終了は**正常終了**であり、1秒後に継続を予約する。
 
 **continuo。**`failure_state`（`Blocked`）へ落とし、継続を予約しない（3-8）。
 
@@ -4345,7 +4361,48 @@ URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く
 | --- | --- |
 | 第10節（Codex app-server のプロトコル） | **continuo が動かすのは Claude Code であって Codex ではない。**受け入れ基準の 17.5 もほぼ全部が対象外になる |
 | 5.3.6 の `codex` セクション | `claude` セクションへ全面差し替え（5-2） |
-| **`stall_timeout_ms`**（5.3.6 / 8.5 Part A / 10.6） | **設定キーとして作らない。`claude.turn_timeout_ms` に1本化する**（3-21）。仕様がこのキーを `turn_timeout_ms` と分けて持つのは、**Codex には観測点が2つある**からである。app-server が turn のストリームを流し（`turn_timeout_ms` はその無音を測る）、orchestrator はそれとは別に受け取ったイベントの間隔を測る（`stall_timeout_ms`）。**continuo の観測点は herdr の pane の `revision`（画面の版）1つしかない。**同じ1つの時計に閾値を2つ置くと、**必ず小さいほうだけが効き、もう一方は設定できるのに何も起きない死んだキーになる** |
 | Appendix A（SSH の worker 拡張） | OPTIONAL。continuo は1台のマシンで herdr の pane を使う |
 
 **第10節を落とす代わりに受け入れ基準へ足すものは、第7節の末尾にまとめた。**
+
+### 8-4. 設定キーとして持たないもの
+
+**言いたいこと。**下の6つは**設定ファイルに書けない。**書けば未知のキーとして起動を止める（8-1「未知の設定キーを弾く」）。
+**仕様にあるものも、仕様に無い continuo 独自のものも、この1つの表にまとめる。**
+
+| キー | 仕様のどこ | なぜ continuo では持たないか |
+| --- | --- | --- |
+| `codex.stall_timeout_ms` | 5.3.6 | continuo の観測点は herdr の pane の `revision`（画面の版）1つしかない。同じ時計に閾値を2つ置くと、小さいほうだけが効いて片方が死ぬ（3-21） |
+| `claude.liveness_hooks` | 仕様に無い（continuo 独自） | 設定にあるだけで読むコードが1行も無かった |
+| `tracker.write_interval_ms` | 仕様に無い（continuo 独自） | 読むコードが無い。3-31 が「continuo が書くのは Status と引き渡しの通知だけで、もともと間隔が空く」と結論している |
+| `workspace.layout` | 仕様に無い（continuo 独自） | 検証で `gwq` 以外を弾くだけで、値を見て処理を変える場所が無い（3-22） |
+| `claude.hook_bridge.mode` | 仕様に無い（continuo 独自） | 同上（`settings_flag` 以外を弾くだけ。3-12） |
+| `tracker.provider.comments.fetch` | 仕様に無い（continuo 独自） | `false` にすると全 run が `failure_state` に落ちる。選べる意味が無い |
+
+**`stall_timeout_ms` だけ補足する。**仕様がこのキーを `turn_timeout_ms` と分けて持つのは、
+**Codex には観測点が2つある**からである。app-server が turn のストリームを流し（`turn_timeout_ms` はその無音を測る）、
+orchestrator はそれとは別に受け取ったイベントの間隔を測る（`stall_timeout_ms`）。**continuo にはその2つ目が無い。**
+
+**`hook_bridge` の入れ子は保つ。**`mode` を消しても `claude.hook_bridge.listen` はそのままである。
+**`claude.hook_listen` のように平坦化しない。**`hook_bridge` という文字列は11ファイルに入っており
+（検索パターン `hook_bridge`、対象パス `internal/` `test/` `cmd/`）、
+[internal/config/expand.go:16](../../internal/config/expand.go#L16) の展開のキー名、
+[internal/socketpath/socketpath.go:114-147](../../internal/socketpath/socketpath.go#L114-L147) の探索順の説明、
+[internal/i18n/messages/ja.json:380](../../internal/i18n/messages/ja.json#L380) の画面に出す文言まで書き換えることになる。
+**入れ子のままなら、そのどれも触らずに済む。**
+
+### 8-5. 名前を変えた設定キー
+
+**言いたいこと。**仕様と同じ働きだが名前が違うキーの対応表である。**理由の詳細は 8-1 にある**（`max_dispatch_turns` だけは 3-8）。
+**仕様の名前で書いても通らない。**未知のキーとして起動を止める。
+
+| 仕様の名前 | continuo の名前 | なぜ変えたか |
+| --- | --- | --- |
+| `agent.max_turns`（5.3.5） | `agent.max_dispatch_turns` | 仕様は「エージェントの turn 数」、continuo は「continuo が指示を送った回数」。herdr 経由では前者を数えられない |
+| `codex.turn_timeout_ms`（5.3.6） | `claude.turn_timeout_ms` | 相手が Codex ではなく Claude Code。**意味は仕様どおり（無音の間隔）に直した**（3-21） |
+| `codex.read_timeout_ms`（5.3.6） | `herdr.read_timeout_ms` | 相手は app-server ではなく herdr |
+| `hooks.*`（5.3.4） | `workspace_hooks.*` | **continuo には Claude Code の hook もあるため。**`hooks` だけだとどちらの話か分からない |
+
+**`startup_timeout_ms` はこの表に入らない。**仕様に無い continuo 独自のキーであり
+（検索パターン `startup_timeout_ms`、対象パス [docs/spec/symphony/SPEC.md](../spec/symphony/SPEC.md)、該当0件）、
+`herdr.startup_timeout_ms` への置き場所の移動として 5-2 に書いてある。

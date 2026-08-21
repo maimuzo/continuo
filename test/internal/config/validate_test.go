@@ -8,10 +8,12 @@
 package config_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/herdr"
 )
 
 // trackerFrontMatter は tracker ブロックへ追加の行を差し込んだ front matter を組み立てる。
@@ -67,12 +69,11 @@ func TestLoad_時間の設定値が0以下ならキーを名指しして落ち�
 		key   string
 	}{
 		{"claude.settle_msが0", validFrontMatter + "claude:\n  settle_ms: 0\n", "claude.settle_ms"},
-		{"claude.read_timeout_msが負", validFrontMatter + "claude:\n  read_timeout_ms: -5\n", "claude.read_timeout_ms"},
-		{"claude.startup_timeout_msが0", validFrontMatter + "claude:\n  startup_timeout_ms: 0\n", "claude.startup_timeout_ms"},
+		{"herdr.read_timeout_msが負", validFrontMatter + "herdr:\n  read_timeout_ms: -5\n", "herdr.read_timeout_ms"},
+		{"herdr.startup_timeout_msが0", validFrontMatter + "herdr:\n  startup_timeout_ms: 0\n", "herdr.startup_timeout_ms"},
 		{"agent.max_retry_backoff_msが負", validFrontMatter + "agent:\n  max_retry_backoff_ms: -1\n", "agent.max_retry_backoff_ms"},
 		{"rate_limit.poll_interval_msが負", validFrontMatter + "rate_limit:\n  poll_interval_ms: -1\n", "rate_limit.poll_interval_ms"},
 		{"workspace_hooks.timeout_msが負", validFrontMatter + "workspace_hooks:\n  timeout_ms: -1\n", "workspace_hooks.timeout_ms"},
-		{"tracker.write_interval_msが負", trackerFrontMatter("  write_interval_ms: -1\n"), "tracker.write_interval_ms"},
 		{"tracker.verify_states_everyが負", trackerFrontMatter("  verify_states_every: -1\n"), "tracker.verify_states_every"},
 	}
 
@@ -86,13 +87,13 @@ func TestLoad_時間の設定値が0以下ならキーを名指しして落ち�
 // 目的: 「0 に意味がある」設定値は 0 でも起動が通ることを確認する。
 // claude.turn_timeout_ms は「0 以下なら打ち切りを行わない」と設計 3-21 が定めており
 // （`SPEC.md` 8.4 の "If stall_timeout_ms <= 0, skip stall detection entirely"）、
-// tracker.write_interval_ms の 0 は「間隔をあけない」、tracker.verify_states_every の 0 は
-// 「起動時だけ照合する」である。上の一律の検査に巻き込んで落としてはならない。
+// tracker.verify_states_every の 0 は「起動時だけ照合する」である。
+// 上の一律の検査に巻き込んで落としてはならない。
 // **poll_wait_ms との大小関係の検査にも巻き込んではならない**（0 は「上限」ではない）。
-// 与える情報: この3つのキーに 0 を書いた front matter。
+// 与える情報: この2つのキーに 0 を書いた front matter。
 // 成功条件: config.Load が成功し、値が 0 のまま保たれていること。
 func TestLoad_0に意味がある設定値は0でも通る(t *testing.T) {
-	front := trackerFrontMatter("  write_interval_ms: 0\n  verify_states_every: 0\n") +
+	front := trackerFrontMatter("  verify_states_every: 0\n") +
 		"claude:\n  turn_timeout_ms: 0\n"
 	path := writeWorkflow(t, front, "")
 
@@ -103,12 +104,155 @@ func TestLoad_0に意味がある設定値は0でも通る(t *testing.T) {
 	if loaded.Config.Claude.TurnTimeoutMs != 0 {
 		t.Errorf("claude.turn_timeout_ms が 0 のまま保たれていない: got %d", loaded.Config.Claude.TurnTimeoutMs)
 	}
-	if loaded.Config.Tracker.WriteIntervalMs != 0 {
-		t.Errorf("tracker.write_interval_ms が 0 のまま保たれていない: got %d", loaded.Config.Tracker.WriteIntervalMs)
-	}
 	if loaded.Config.Tracker.VerifyStatesEvery != 0 {
 		t.Errorf("tracker.verify_states_every が 0 のまま保たれていない: got %d", loaded.Config.Tracker.VerifyStatesEvery)
 	}
+}
+
+// 目的: agent.max_concurrent_agents_by_state に 0 以下を書くと起動が止まることを確認する。
+//
+// 0 を書くと internal/orchestrator の hasFreeSlot が `inRunningState < limit` で常に偽を返し、
+// ボード全体の dispatch が永久に止まる。**ログにも何も出ないので、無人運用では
+// 止まっていることに誰も気づけない。**`SPEC.md` 5.3.5 は非正の値を黙って無視すると
+// 定めるが、continuo は起動時に名指しで落とす。
+//
+// 与える情報: `In Progress: 0` と `In Progress: -1` を書いた front matter。
+// 成功条件: どちらも config.Load がエラーを返し、その文にキー名と Status 名が含まれること。
+func TestLoad_状態ごとの上限が0以下だとdispatchが永久に止まるので落ちる(t *testing.T) {
+	for _, limit := range []string{"0", "-1"} {
+		t.Run("上限が"+limit, func(t *testing.T) {
+			front := validFrontMatter +
+				"agent:\n  max_concurrent_agents_by_state:\n    \"In Progress\": " + limit + "\n"
+			assertLoadFailsWith(t, front, "agent.max_concurrent_agents_by_state.In Progress")
+		})
+	}
+}
+
+// 目的: agent.max_concurrent_agents_by_state に 1 以上を書けば起動が通ることを確認する。
+// 上の検査が正しい値まで巻き込んで落としていないことを固定する。
+// 与える情報: `In Progress: 1` を書いた front matter。
+// 成功条件: config.Load が成功し、値が 1 のまま読めること。
+func TestLoad_状態ごとの上限が1以上なら通る(t *testing.T) {
+	front := validFrontMatter + "agent:\n  max_concurrent_agents_by_state:\n    \"In Progress\": 1\n"
+	path := writeWorkflow(t, front, "")
+
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("正しい上限なのに起動が止まった: %v", err)
+	}
+	if got := loaded.Config.Agent.MaxConcurrentAgentsByState["In Progress"]; got != 1 {
+		t.Errorf("agent.max_concurrent_agents_by_state.In Progress が読めていない: got %d, want 1", got)
+	}
+}
+
+// 目的: claude.wait_until に herdr が知らない状態名を書くと起動が止まることを確認する。
+//
+// internal/orchestrator の waitUntilStatuses は文字列をそのまま herdr へ渡す。
+// 綴りを間違えても起動は通ってしまい、turn の終わりを拾えないまま時間切れまで待つ。
+//
+// 与える情報: "idle" を "idel" と綴り間違えた front matter と、同じ状態を2回書いた front matter。
+// 成功条件: どちらも config.Load がエラーを返し、その文に claude.wait_until が含まれること。
+func TestLoad_wait_untilの綴りが違うと落ちる(t *testing.T) {
+	t.Run("herdrが知らない状態名", func(t *testing.T) {
+		front := validFrontMatter + "claude:\n  wait_until: [\"idel\", \"done\"]\n"
+		assertLoadFailsWith(t, front, "claude.wait_until[0]")
+	})
+	t.Run("同じ状態を2回書いた", func(t *testing.T) {
+		front := validFrontMatter + "claude:\n  wait_until: [\"idle\", \"idle\"]\n"
+		assertLoadFailsWith(t, front, "claude.wait_until[1]")
+	})
+}
+
+// 目的: claude.wait_until に herdr の AgentStatus の値だけを書けば起動が通ることを確認する。
+// 上の検査が正しい綴りまで巻き込んで落としていないことを、herdr の定数そのものを使って固定する。
+// 与える情報: herdr.AgentStatuses() の全件を書いた front matter。
+// 成功条件: config.Load が成功し、書いた並びがそのまま読めること。
+func TestLoad_wait_untilにherdrの状態名を全部書いても通る(t *testing.T) {
+	all := herdr.AgentStatuses()
+	quoted := make([]string, 0, len(all))
+	want := make([]string, 0, len(all))
+	for _, s := range all {
+		quoted = append(quoted, "\""+string(s)+"\"")
+		want = append(want, string(s))
+	}
+	front := validFrontMatter + "claude:\n  wait_until: [" + strings.Join(quoted, ", ") + "]\n"
+	path := writeWorkflow(t, front, "")
+
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("herdr が受け付ける状態名だけを書いたのに起動が止まった: %v", err)
+	}
+	if !slices.Equal(loaded.Config.Claude.WaitUntil, want) {
+		t.Errorf("claude.wait_until が読めていない: got %v, want %v", loaded.Config.Claude.WaitUntil, want)
+	}
+}
+
+// 目的: tracker.comments のマーカーが tracker の直下から読めることを確認する。
+// provider（GitHub 固有の箱）の下ではなく tracker の直下に置いたことを固定する。
+// 与える情報: tracker.comments.marker / self_marker を書いた front matter。
+// 成功条件: config.Load が成功し、書いた値がそのまま読めること。
+func TestLoad_マーカーはtrackerの直下から読む(t *testing.T) {
+	front := trackerFrontMatter("  comments:\n" +
+		"    marker: \"<!-- x:agent -->\"\n" +
+		"    self_marker: \"<!-- x:self -->\"\n")
+	path := writeWorkflow(t, front, "")
+
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("tracker.comments を読み込めませんでした: %v", err)
+	}
+	if got := loaded.Config.Tracker.Comments.Marker; got != "<!-- x:agent -->" {
+		t.Errorf("tracker.comments.marker が読めていない: got %q", got)
+	}
+	if got := loaded.Config.Tracker.Comments.SelfMarker; got != "<!-- x:self -->" {
+		t.Errorf("tracker.comments.self_marker が読めていない: got %q", got)
+	}
+}
+
+// 目的: 消した設定キーを書いたままの WORKFLOW.md が、起動時に未知のキーとして落ちることを確認する。
+//
+// front matter は yaml.Strict() で読んでいる（設計 8-1）。**消したキーを黙って読み飛ばすと、
+// 「書いたつもりの設定が効いていない」ことに無人運用では誰も気づけない。**
+//
+// 与える情報: 消した3つのキーと、名前を変える前の agent.max_turns を1つずつ書いた front matter
+// （tracker.provider.comments.fetch は下の専用のテストで見る）。
+// 成功条件: すべての場合で config.Load がエラーを返し、その文にキー名が含まれること。
+func TestLoad_消したキーを書いたままだと落ちる(t *testing.T) {
+	cases := []struct {
+		name  string
+		front string
+		key   string
+	}{
+		{"tracker.write_interval_ms", trackerFrontMatter("  write_interval_ms: 1000\n"), "write_interval_ms"},
+		{"workspace.layout", validFrontMatter + "workspace:\n  layout: gwq\n", "layout"},
+		{"claude.hook_bridge.mode", validFrontMatter + "claude:\n  hook_bridge:\n    mode: settings_flag\n", "mode"},
+		{"agent.max_turns", validFrontMatter + "agent:\n  max_turns: 20\n", "max_turns"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assertLoadFailsWith(t, c.front, c.key)
+		})
+	}
+}
+
+// 目的: tracker.provider.comments.fetch を書いたままだと起動が止まることを確認する。
+//
+// **`fetch: false` にすると、成功した run も含めて全件が failure_state へ落ちる。**
+// コメントを取らない → エージェントのコメントが見つからない、という経路になる。
+// キーごと消したので、書いてあれば未知のキーとして落ちる。
+//
+// 与える情報: tracker.provider.comments.fetch を書いた front matter。
+// 成功条件: config.Load がエラーを返し、その文に fetch が含まれること。
+func TestLoad_comments_fetchを書いたままだと落ちる(t *testing.T) {
+	front := "tracker:\n" +
+		"  provider:\n" +
+		"    owner: acme\n" +
+		"    project_number: 1\n" +
+		"    status_field: Status\n" +
+		"    comments:\n" +
+		"      fetch: false\n"
+	assertLoadFailsWith(t, front, "fetch")
 }
 
 // 目的: 待ちの大小関係が逆転した設定で起動が止まることを確認する。

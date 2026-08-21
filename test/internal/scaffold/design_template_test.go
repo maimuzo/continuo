@@ -147,7 +147,7 @@ func assertTemplateFollowsDesign(t *testing.T, label, raw string) {
 	values := flattenYAMLValues(t, label, front)
 	for _, key := range []string{
 		"tracker.status_signal_prefix",
-		"tracker.provider.comments.marker",
+		"tracker.comments.marker",
 	} {
 		v, ok := values[key]
 		if !ok || v == "" {
@@ -299,7 +299,7 @@ func bodyOf(t *testing.T, label, raw string) string {
 // t: テストコンテキスト。
 // label: 失敗メッセージに出す、検査対象の呼び名。
 // front: front matter の YAML 本体。
-// 戻り値: 例 ["agent.max_turns", "tracker.provider.owner", ...]。
+// 戻り値: 例 ["agent.max_dispatch_turns", "tracker.provider.owner", ...]。
 func flattenYAMLKeys(t *testing.T, label, front string) []string {
 	t.Helper()
 

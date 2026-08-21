@@ -22,7 +22,8 @@ type Config struct {
 	Agent AgentConfig `yaml:"agent"`
 	// Claude は Claude Code の起動方法を決める（仕様の codex セクションの全面差し替え。設計 8-1）。
 	Claude ClaudeConfig `yaml:"claude"`
-	// Herdr は herdr の socket API との接続方法と worktree の作り方を決める（仕様に対応物が無い独自区分）。
+	// Herdr は herdr の socket API との接続方法・待ち時間と、worktree の作り方を決める
+	// （仕様に対応物が無い独自区分）。
 	Herdr HerdrConfig `yaml:"herdr"`
 	// Naming は識別子の正規化の挙動を決める（3-7）。
 	Naming NamingConfig `yaml:"naming"`
@@ -44,18 +45,31 @@ type Config struct {
 	Language string `yaml:"language"`
 }
 
-// TrackerCommentsConfig は issue のコメントの読み方を決める。
+// TrackerProviderCommentsConfig は GitHub からコメントをどう取ってくるかを決める。
+//
+// **ここに置くのは GitHub 固有の制約に縛られる項目だけである。**取得の件数と並び順は
+// GitHub の GraphQL の connection（first の上限が 100）に縛られる。
+// マーカーは GitHub 固有ではないので TrackerCommentsConfig（tracker.comments）に置く。
 //
 // 読むのは「エージェントがコメントを書いたかどうかを判別するため」であって、
 // プロンプトへ渡すためではない（設計 3-29）。issue の中身はプロンプトに埋め込まず、
 // エージェントが gh issue view --comments で自分で読む。
-type TrackerCommentsConfig struct {
-	// Fetch は既存コメントを取得するかどうかである。
-	Fetch bool `yaml:"fetch"`
+//
+// **取得そのものを止める設定は持たない。**取得しないと、成功した run も
+// 「エージェントがコメントを書いていない」と判定されて failure_state へ落ちる。
+type TrackerProviderCommentsConfig struct {
 	// Max は取得する件数の上限である。
 	Max int `yaml:"max"`
 	// Order は並び順である。想定する値は "oldest_first" のみ。
 	Order string `yaml:"order"`
+}
+
+// TrackerCommentsConfig は continuo とエージェントのあいだのコメントの取り決めである。
+//
+// **GitHub 固有ではない。**どのトラッカーを相手にしても、continuo は「先頭に印がある
+// コメント」でエージェントの発言と自分の発言を見分ける。だから provider の下ではなく
+// tracker の直下に置く。
+type TrackerCommentsConfig struct {
 	// Marker はエージェントが書くコメントの先頭に必ず書かせる固定の印である（2-2）。
 	Marker string `yaml:"marker"`
 	// SelfMarker は continuo 自身が書くコメントの印である。次の turn の入力からはこの印のコメントを外す。
@@ -75,8 +89,8 @@ type TrackerProviderConfig struct {
 	TokenSource string `yaml:"token_source"`
 	// TokenEnv は TokenSource が "env" のときだけ使う、トークンを格納した環境変数名である。
 	TokenEnv string `yaml:"token_env"`
-	// Comments は着手時に渡す既存コメントの取得方法である。
-	Comments TrackerCommentsConfig `yaml:"comments"`
+	// Comments は GitHub からコメントを取ってくるときの件数と並び順である。
+	Comments TrackerProviderCommentsConfig `yaml:"comments"`
 }
 
 // TrackerConfig は GitHub Projects v2 のボードをどう見るかを決める。
@@ -85,6 +99,8 @@ type TrackerConfig struct {
 	Kind string `yaml:"kind"`
 	// Provider は GitHub Projects v2 アダプタ固有の設定である。
 	Provider TrackerProviderConfig `yaml:"provider"`
+	// Comments は continuo とエージェントのあいだのコメントの取り決めである（マーカー）。
+	Comments TrackerCommentsConfig `yaml:"comments"`
 	// RequiredLabels は dispatch の条件になる必須ラベルである。空なら制約なし。
 	RequiredLabels []string `yaml:"required_labels"`
 	// ActiveStates は「作業中の状態」である。In Progress を必ず含めること（3-10）。
@@ -103,9 +119,6 @@ type TrackerConfig struct {
 	// 毎巡回では行わない。選択肢名が変わるのは人間がボードを触ったときだけなので、
 	// 20 巡回に1回で足りる。0 なら起動時の1回だけ行う。
 	VerifyStatesEvery int `yaml:"verify_states_every"`
-	// WriteIntervalMs は、トラッカーへの書き込みどうしの最小の間隔である（3-31）。
-	// GitHub が変更を伴うリクエストの間を1秒以上あけることを推奨しているため、既定は 1000 とする。
-	WriteIntervalMs int `yaml:"write_interval_ms"`
 	// StatusSignalPrefix は、エージェントが応答に書く表明の印である（3-25）。
 	// continuo は turn が終わったと判定したあと transcript を読み、
 	// この印で始まる行を探して、続く値を StatusSignalMap で引いて Status を動かす。
@@ -125,11 +138,13 @@ type PollingConfig struct {
 }
 
 // WorkspaceConfig は worktree の置き場所と身元ファイルの名前を決める。
+//
+// **置き場所の中の並べ方は gwq の4階層に固定である**（`<root>/<ホスト>/<owner>/<repo>/<branch>`。3-22）。
+// 並べ方を選ぶ設定キーは持たない。値を見て処理を変える経路が無いので、
+// 設定として置いても「書いた値と違う並べ方になる」ことしか起こらない。
 type WorkspaceConfig struct {
 	// Root は worktree を置く置き場所である。チルダは展開する（5-5）。
 	Root string `yaml:"root"`
-	// Layout は置き場所の構成規則である。想定する値は "gwq" のみ（3-22）。
-	Layout string `yaml:"layout"`
 	// IdentityFile は worktree の身元を書くファイルの名前である（3-18）。
 	IdentityFile string `yaml:"identity_file"`
 }
@@ -157,9 +172,21 @@ type AgentConfig struct {
 	// MaxConcurrentAgents は同時に走らせる Claude Code の数の上限である。
 	MaxConcurrentAgents int `yaml:"max_concurrent_agents"`
 	// MaxConcurrentAgentsByState は状態ごとの上限である。空なら MaxConcurrentAgents にフォールバックする。
+	//
+	// **引かれるのは tracker.running_state（既定 "In Progress"）ただ1つである。**
+	// これから dispatch する候補は running_state の枠を消費するものとして数えるため、
+	// それ以外の Status 名を書いても参照されない（設計 3-16 の段-1）。
+	//
+	// **0 以下の値は起動時に弾く。**`In Progress: 0` と書くと空きスロットの判定が常に偽になり、
+	// ボード全体の dispatch が永久に止まる。無人運用では、止まっていることに誰も気づけない。
 	MaxConcurrentAgentsByState map[string]int `yaml:"max_concurrent_agents_by_state"`
-	// MaxTurns は continuo からの送信回数の上限である（3-14。エージェント自身が投入する turn は数えない）。
-	MaxTurns int `yaml:"max_turns"`
+	// MaxDispatchTurns は continuo が指示を送った回数の上限である（3-14）。
+	//
+	// **`SPEC.md` 5.3.5 の `max_turns` とは数えるものが違うので、同じ名前を使わない。**
+	// 仕様の `max_turns` は「1つの worker セッション内でのコーディングエージェントの turn 数」だが、
+	// continuo が数えるのは「continuo が指示を送った回数」である。Claude Code が
+	// subagent の完了通知などで自分に投入した turn は数えない。
+	MaxDispatchTurns int `yaml:"max_dispatch_turns"`
 	// MaxTakeover は再起動をまたいで引き継いだ回数の上限である（3-4 / 3-18）。
 	MaxTakeover int `yaml:"max_takeover"`
 	// MaxRetryBackoffMs は指数バックオフの上限（ミリ秒）である。
@@ -179,12 +206,12 @@ type ClaudePermissionsConfig struct {
 }
 
 // ClaudeHookBridgeConfig は turn 終了検知の実体である hook の届け方を決める（3-12）。
+//
+// **届け方は `--settings` で外部の設定ファイルを指す経路に固定である**（設計 3-12）。
+// 届け方を選ぶ設定キーは持たない。"worktree_local"（worktree に
+// .claude/settings.local.json を置く）は、置き場所・.git/info/exclude への登録・
+// 片付けの仕様がどこにも無いので実装していない。
 type ClaudeHookBridgeConfig struct {
-	// Mode は hook をどう届けるかである。受理するのは "settings_flag"（--settings で外部の
-	// 設定ファイルを指す）だけである（設計 3-12）。"worktree_local"（worktree に
-	// .claude/settings.local.json を置く）は、置き場所・.git/info/exclude への登録・
-	// 片付けの仕様がどこにも無いため受理しない。
-	Mode string `yaml:"mode"`
 	// Listen は hook を受ける socket の絶対パスである。null なら 3-23 の探索順で決める。
 	Listen *string `yaml:"listen"`
 }
@@ -210,6 +237,11 @@ type ClaudeConfig struct {
 	SettleMs int `yaml:"settle_ms"`
 	// WaitUntil は herdr agent prompt --wait に渡す状態の一覧である（3-2）。
 	// blocked を外すと、権限の確認で止まった turn を拾えず時間切れまで待つことになる。
+	//
+	// **綴りは起動時に検査する。**受け付けるのは herdr の AgentStatus の値
+	// （idle / working / blocked / done / unknown）だけである。herdr はこの文字列を
+	// そのまま受け取るので、綴りを間違えても起動は通り、turn の終わりを拾えないまま
+	// 時間切れまで待つことになる。
 	WaitUntil []string `yaml:"wait_until"`
 	// TurnTimeoutMs は turn が動いている間に許す「無音の間隔」の上限（ミリ秒）である。
 	//
@@ -226,10 +258,6 @@ type ClaudeConfig struct {
 	// **0 以下で打ち切りを行わない**（`SPEC.md` 8.4 の
 	// *"If stall_timeout_ms <= 0, skip stall detection entirely"* に合わせる）。
 	TurnTimeoutMs int `yaml:"turn_timeout_ms"`
-	// ReadTimeoutMs は herdr の socket API の応答を待つ上限（ミリ秒）である（8-1。仕様と同名だが相手が違う）。
-	ReadTimeoutMs int `yaml:"read_timeout_ms"`
-	// StartupTimeoutMs は herdr の agent 起動を待つ時間の上限（ミリ秒）である。
-	StartupTimeoutMs int `yaml:"startup_timeout_ms"`
 	// HookBridge は turn 終了検知の実体である hook の届け方を決める。
 	HookBridge ClaudeHookBridgeConfig `yaml:"hook_bridge"`
 }
@@ -251,6 +279,22 @@ type HerdrConfig struct {
 	Socket string `yaml:"socket"`
 	// Protocol は herdr の socket API の版である。起動時に照合して合わなければ止める。
 	Protocol int `yaml:"protocol"`
+	// ReadTimeoutMs は herdr の socket API の応答を待つ上限（ミリ秒）である。
+	//
+	// **`SPEC.md` 5.3.5 の `codex.read_timeout_ms` に相当するが、相手は app-server ではなく
+	// herdr である**（設計 8-1）。continuo は app-server を持たないので、この時間で測るのは
+	// 「herdr の socket が JSON を返してくるまで」だけである。
+	//
+	// **待ちを伴う呼び出しには適用しない**（agent の起動は StartupTimeoutMs、
+	// turn の待ち受けは claude.turn_timeout_ms。「read_timeout_ms 一本ですべてを
+	// 打ち切ってはならない」。設計 8-1）。
+	ReadTimeoutMs int `yaml:"read_timeout_ms"`
+	// StartupTimeoutMs は herdr の agent 起動を待つ時間の上限（ミリ秒）である。
+	//
+	// **`SPEC.md` 5.3.5 の `codex.startup_timeout_ms` に相当するが、相手は app-server ではなく
+	// herdr である**（設計 8-1）。agent.start は実測で検知まで既定30秒かかるため、
+	// ReadTimeoutMs（既定5秒）では必ず足りない。
+	StartupTimeoutMs int `yaml:"startup_timeout_ms"`
 	// Worktree は herdr を介した worktree の作り方である。
 	Worktree HerdrWorktreeConfig `yaml:"worktree"`
 }

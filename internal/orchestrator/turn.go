@@ -79,7 +79,7 @@ func (o *Orchestrator) startTurnLoop(ctx context.Context, rs *runState, awaitFir
 //
 //	1回目   … 設定の本文（5-3）を text/template で描画したもの
 //	2回目〜 … 継続の指示のみ（5-4）。1回目の本文は送り直さない
-//	打ち切り … max_turns（既定20）に達したら failure_state へ落とす
+//	打ち切り … max_dispatch_turns（既定20）に達したら failure_state へ落とす
 //
 // **turn 数は continuo が送った回数だけで数える**（設計 3-14）。Claude Code 自身が投入する
 // `<task-notification>` は数えない。**枠が明けたときに送る継続の指示は数える**（設計 3-27）。
@@ -108,7 +108,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"identifier", snap.Identifier)
 			outcome = o.confirmTurnEnd(ctx, rs, false)
 		} else {
-			if snap.TurnCount >= o.cfg.Agent.MaxTurns {
+			if snap.TurnCount >= o.cfg.Agent.MaxDispatchTurns {
 				o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
 					fmt.Sprintf(
 						"continuo がこの issue へ送った指示の回数が、上限の %d 回に達しました。"+
@@ -116,8 +116,8 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 							"\n【確かめ方】worktree の中身（下記）と、この issue に残っているエージェントのコメントを見てください。"+
 							"\n【よくある原因】issue の内容が大きすぎる / 指示が曖昧で終わりが判断できない。"+
 							"\n【対処】issue を分けるか、内容を具体的にしてから Status を着手待ちへ戻してください。"+
-							"上限は WORKFLOW.md の `agent.max_turns` で変えられます（いまは %d）。",
-						o.cfg.Agent.MaxTurns, o.cfg.Agent.MaxTurns))
+							"上限は WORKFLOW.md の `agent.max_dispatch_turns` で変えられます（いまは %d）。",
+						o.cfg.Agent.MaxDispatchTurns, o.cfg.Agent.MaxDispatchTurns))
 				return
 			}
 
@@ -210,7 +210,7 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 	if !snap.FreshSession {
 		return BuildContinuationPrompt(
 			snap.TurnCount+1,
-			o.cfg.Agent.MaxTurns,
+			o.cfg.Agent.MaxDispatchTurns,
 			rs.missingSignal(),
 			o.cfg.Tracker.RunningState,
 			o.cfg.Tracker.StatusSignalPrefix,
@@ -243,7 +243,7 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) turnOutcome {
 	turnCount := rs.beginTurn(o.now())
 	o.logger.Info("turn を送ります",
-		"identifier", rs.issue().Identifier, "turn", turnCount, "max_turns", o.cfg.Agent.MaxTurns)
+		"identifier", rs.issue().Identifier, "turn", turnCount, "max_dispatch_turns", o.cfg.Agent.MaxDispatchTurns)
 
 	res, err := o.herdr.AgentPrompt(ctx, herdr.AgentPromptParams{
 		Target: rs.agentName(),
@@ -390,7 +390,7 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 // rs: 対象の run。
 // 戻り値: turn の結果。`turnQuotaRecovered` なら turn ループが次の turn を送る
 // （**この送信は turn 数に数える。**設計 3-27。数えないと、枠待ちと復帰を繰り返す間に
-// max_turns が一度も発火しない）。
+// max_dispatch_turns が一度も発火しない）。
 func (o *Orchestrator) afterQuotaReset(ctx context.Context, rs *runState) turnOutcome {
 	status, err := o.agentStatus(ctx, rs)
 	if err != nil {

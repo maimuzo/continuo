@@ -414,11 +414,11 @@ func TestHandoff_worktreeを持たない_run_には調べるところを出さ�
 //
 // 目的: 設計 3-34b の「器には調べるところを必ず添える」を守っていることを示す。
 // **理由だけを読んでも、人間は作業の跡がどこに残っているのかを知る手立てがない。**
-// 与える情報: max_turns を1にして、1回目の turn の終わりで上限に達する run。
+// 与える情報: max_dispatch_turns を1にして、1回目の turn の終わりで上限に達する run。
 // 成功条件: コメントに「【調べるところ】」と worktree のパスが入っていること。
 func TestHandoff_引き渡しの通知に調べるところが出る(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
-		cfg.Agent.MaxTurns = 1
+		cfg.Agent.MaxDispatchTurns = 1
 	}})
 	fx.Tracker.AddIssue(sampleIssue(193, "Ready"))
 
@@ -466,11 +466,11 @@ func TestHandoff_引き渡しの通知に調べるところが出る(t *testing.
 //
 // 目的: 設計 3-34b の「ログは原因まで。対処は主要なものだけ」を守っていることを示す。
 // **issue のコメントには【確かめ方】まで載せるが、同じ文字列をログへ流すと他の行が埋もれる。**
-// 与える情報: max_turns を1にして、1回目の turn の終わりで人間へ引き渡す run。
+// 与える情報: max_dispatch_turns を1にして、1回目の turn の終わりで人間へ引き渡す run。
 // 成功条件: ログに【確かめ方】が出ないこと。コメントには出ること。
 func TestHandoff_ログには理由の1行目だけを出す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
-		cfg.Agent.MaxTurns = 1
+		cfg.Agent.MaxDispatchTurns = 1
 	}})
 	fx.Tracker.AddIssue(sampleIssue(194, "Ready"))
 

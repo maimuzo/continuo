@@ -514,6 +514,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 
 **言いたいこと。**準拠先は [openai/symphony](https://github.com/openai/symphony) の `SPEC.md` だが、**12件を意図的に外し、7件を足している。**
 **実装するとき、この一覧に無い逸脱をしてはならない。**理由は [continuo_design.md](continuo_design.md) の第8節にある。
+**設定キーの差（持たないもの・名前を変えたもの）はこの節の後半に表で置いた。**
 
 **外しているもの。**
 
@@ -536,6 +537,26 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 リポジトリの信頼の検査／レートリミットの待機／落ちている間の通知の取り戻し／**使い始めるまでの検査と雛形**。
 
 **そもそも適用外。**第10節（Codex のプロトコル）／5.3.6 の `codex` セクション／Appendix A（SSH の worker 拡張）。
+
+**設定キーとして持たないもの。**書けば未知のキーとして起動を止める（詳細は [continuo_design.md](continuo_design.md) の 8-4）。
+
+| キー | 仕様のどこ | なぜ持たないか |
+| --- | --- | --- |
+| `codex.stall_timeout_ms` | 5.3.6 | 観測点は pane の `revision`（画面の版）1つ。同じ時計に閾値を2つ置くと片方が死ぬ |
+| `claude.liveness_hooks` | 仕様に無い | 読むコードが1行も無かった |
+| `tracker.write_interval_ms` | 仕様に無い | 読むコードが無い。書き込みはもともと間隔が空く |
+| `workspace.layout` | 仕様に無い | `gwq` 以外を弾くだけで、値を見て処理を変える場所が無い |
+| `claude.hook_bridge.mode` | 仕様に無い | `settings_flag` 以外を弾くだけ |
+| `tracker.provider.comments.fetch` | 仕様に無い | `false` にすると全 run が `Blocked` に落ちる |
+
+**名前を変えたもの。仕様の名前で書いても通らない**（詳細は [continuo_design.md](continuo_design.md) の 8-5）。
+
+| 仕様の名前 | continuo の名前 | なぜ変えたか |
+| --- | --- | --- |
+| `agent.max_turns` | `agent.max_dispatch_turns` | 仕様はエージェントの turn 数、continuo は指示を送った回数。herdr 経由では前者を数えられない |
+| `codex.turn_timeout_ms` | `claude.turn_timeout_ms` | 相手が Codex ではなく Claude Code。意味は仕様どおり（無音の間隔） |
+| `codex.read_timeout_ms` | `herdr.read_timeout_ms` | 相手は app-server ではなく herdr |
+| `hooks.*` | `workspace_hooks.*` | continuo には Claude Code の hook もある。`hooks` だけではどちらか分からない |
 
 ---
 
@@ -602,3 +623,4 @@ ok  github.com/maimuzo/continuo/test/internal/tracker    1.194s
 | Status の構成・実行順序・`~/.claude.json` の扱い | 第4節 |
 | 設定ファイルの全キーとプロンプトのテンプレート | 第5節 |
 | **symphony との差分の理由** | **第8節** |
+| 設定キーとして持たないもの・名前を変えた設定キー | **8-4 / 8-5** |

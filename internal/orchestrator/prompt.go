@@ -77,19 +77,19 @@ func attemptValue(attempt *int) any {
 // その状態を渡すための変数を追加で公開することになる。
 //
 // turnCount: この turn が continuo にとって何回目か（1始まり）。
-// maxTurns: 打ち切りまでの上限（`agent.max_turns`）。
+// maxDispatchTurns: 打ち切りまでの上限（`agent.max_dispatch_turns`）。
 // missingSignal: 前回の turn に表明が無かったかどうか（設計 3-25 の第3層）。
 // runningState: いま書き込まれている作業中の Status 名（`tracker.running_state`）。
 // signalPrefix: 表明の印（`tracker.status_signal_prefix`）。
 // 戻り値: 送る本文。
 func BuildContinuationPrompt(
 	turnCount int,
-	maxTurns int,
+	maxDispatchTurns int,
 	missingSignal bool,
 	runningState string,
 	signalPrefix string,
 ) string {
-	remaining := maxTurns - turnCount
+	remaining := maxDispatchTurns - turnCount
 	if remaining < 0 {
 		remaining = 0
 	}
@@ -111,10 +111,10 @@ func BuildContinuationPrompt(
 // buildCommentRequestPrompt は「作業の内容を issue のコメントに書いてください」だけを送る
 // 本文を組み立てる（設計 3-25 の9段の段7）。
 //
-// **この送信は turn 数に数えない。**`max_turns` の判定に影響させない。
+// **この送信は turn 数に数えない。**`max_dispatch_turns` の判定に影響させない。
 //
 // issueURL: コメントを書く先の issue の URL。
-// marker: コメントの先頭に書かせる印（`tracker.provider.comments.marker`）。
+// marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
 // 戻り値: 送る本文。
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder

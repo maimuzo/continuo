@@ -16,24 +16,23 @@ func DefaultConfig() *Config {
 			Provider: TrackerProviderConfig{
 				TokenSource: "gh_auth",
 				TokenEnv:    "GITHUB_TOKEN",
-				Comments: TrackerCommentsConfig{
-					Fetch:      true,
-					Max:        50,
-					Order:      "oldest_first",
-					Marker:     "<!-- continuo:agent -->",
-					SelfMarker: "<!-- continuo:self -->",
+				Comments: TrackerProviderCommentsConfig{
+					Max:   50,
+					Order: "oldest_first",
 				},
+			},
+			Comments: TrackerCommentsConfig{
+				Marker:     "<!-- continuo:agent -->",
+				SelfMarker: "<!-- continuo:self -->",
 			},
 			RequiredLabels: []string{},
 			// In Progress を必ず含める（3-10）。ここで欠かすと dispatch 直後に自分の worker を殺す。
-			ActiveStates:   []string{"Ready", "In Progress"},
-			TerminalStates: []string{"Done"},
-			RunningState:   "In Progress",
-			DispatchState:  "Ready",
-			FailureState:   "Blocked",
-			// GitHub が変更を伴うリクエストの間を1秒以上あけることを推奨している（設計 3-31）。
+			ActiveStates:      []string{"Ready", "In Progress"},
+			TerminalStates:    []string{"Done"},
+			RunningState:      "In Progress",
+			DispatchState:     "Ready",
+			FailureState:      "Blocked",
 			VerifyStatesEvery: 20,
-			WriteIntervalMs:   1000,
 			// エージェントが最終応答に書く表明の印と、その値から Status への対応（3-25）。
 			// "working" は null（＝Status を動かさない）である。
 			StatusSignalPrefix: "CONTINUO-STATUS:",
@@ -48,7 +47,6 @@ func DefaultConfig() *Config {
 		},
 		Workspace: WorkspaceConfig{
 			Root:         "~/worktrees",
-			Layout:       "gwq",
 			IdentityFile: ".continuo.json",
 		},
 		WorkspaceHooks: WorkspaceHooksConfig{
@@ -61,7 +59,7 @@ func DefaultConfig() *Config {
 		Agent: AgentConfig{
 			MaxConcurrentAgents:        2,
 			MaxConcurrentAgentsByState: map[string]int{},
-			MaxTurns:                   20,
+			MaxDispatchTurns:           20,
 			MaxTakeover:                5,
 			MaxRetryBackoffMs:          300000,
 			MaxRetries:                 3,
@@ -91,11 +89,8 @@ func DefaultConfig() *Config {
 			SettleMs:   2000,
 			WaitUntil:  []string{"idle", "done", "blocked"},
 			// 画面の版が増えないまま待てる上限。`SPEC.md` 10.6 の既定値と同じ 1 時間である。
-			TurnTimeoutMs:    3600000,
-			ReadTimeoutMs:    5000,
-			StartupTimeoutMs: 60000,
+			TurnTimeoutMs: 3600000,
 			HookBridge: ClaudeHookBridgeConfig{
-				Mode:   "settings_flag",
 				Listen: nil,
 			},
 		},
@@ -103,8 +98,10 @@ func DefaultConfig() *Config {
 			// herdr の socket の既定のパス（設計 2-1 / 5-2）。
 			// 環境変数で切り替えたい利用者は WORKFLOW.md に ${HERDR_SOCKET_PATH} と書く。
 			// その場合、未定義なら起動を止める（既定値へは落ちない。設計 5-5）。
-			Socket:   "~/.config/herdr/herdr.sock",
-			Protocol: 19,
+			Socket:           "~/.config/herdr/herdr.sock",
+			Protocol:         19,
+			ReadTimeoutMs:    5000,
+			StartupTimeoutMs: 60000,
 			Worktree: HerdrWorktreeConfig{
 				CreateViaHerdr: true,
 				BranchTemplate: "continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}",

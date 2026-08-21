@@ -18,7 +18,7 @@ import (
 //  2. 表明どおりに Status を動かす（グループの他の issue も動かす。設計 3-26）
 //  3. Status を ID 指定で取り直し、その値で分岐する
 //     terminal_states           … コメントを確かめてから worktree と branch を片付ける
-//     active_states             … max_turns に未到達なら次の turn、到達なら failure_state
+//     active_states             … max_dispatch_turns に未到達なら次の turn、到達なら failure_state
 //     どちらでもない（引き渡し） … コメントを確かめてから worker を止める。**worktree は消さない**
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -219,7 +219,7 @@ func (o *Orchestrator) noteSignalTargetsMissing(ctx context.Context, rs *runStat
 	}
 	body := fmt.Sprintf("表明に書かれた %s は、このボードに載っていないので Status を動かせませんでした。",
 		strings.Join(targets, " / "))
-	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
+	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("表明の取りこぼしを投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}
 }
@@ -364,7 +364,7 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 // **バックオフ中も印には残す**（外すと30秒後の巡回で即座に拾い直され、バックオフが効かない）。
 //
 // **リトライを使い切って人間へ渡すときは、worker を止める前にコメントを確かめる**
-// （設計 3-25 の「いつ走らせるか」の表。`max_turns` に達した / stall で打ち切った、は
+// （設計 3-25 の「いつ走らせるか」の表。`max_dispatch_turns` に達した / stall で打ち切った、は
 // 「走らせる」である）。**確かめないと、その run の成果が issue に何も残らない。**
 // **リトライがまだ残っている場合は走らせない。**run はこのあと再 dispatch されて続くので、
 // 打ち切りではないためである。
@@ -569,7 +569,7 @@ func (o *Orchestrator) cleanupPath(
 	}
 	body := fmt.Sprintf("worktree を片付けずに残しました（%s）。\n\n理由:\n- %s",
 		worktreePath, strings.Join(result.Reasons, "\n- "))
-	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
+	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("片付けを見送った通知を投稿できませんでした", "identifier", identifier, "error", err)
 		return false
 	}
@@ -609,7 +609,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			TranscriptPath: snap.TranscriptPath,
 			SettingsPath:   snap.SettingsPath,
 		}),
-		o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
+		o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}
 }

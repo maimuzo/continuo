@@ -127,7 +127,7 @@ func TestCall_1リクエストごとに接続し直す(t *testing.T) {
 	}
 }
 
-// 目的: herdr からの応答が読み取りタイムアウト（claude.read_timeout_ms 相当）を
+// 目的: herdr からの応答が読み取りタイムアウト（herdr.read_timeout_ms 相当）を
 // 超えたとき、Client がハングせずにエラーを返すことを確認する。
 // 与える情報: リクエストを受け取っても一切応答を書かない偽サーバと、短い読み取り
 // タイムアウト（50ミリ秒）を設定した Client。
@@ -338,9 +338,9 @@ func TestCall_エラー応答のidが空でもエラーとして扱える(t *tes
 	}
 }
 
-// 目的: ctx に期限があれば、read_timeout_ms より長くても呼び出し側の期限が使われる
+// 目的: ctx に期限があれば、herdr.read_timeout_ms より長くても呼び出し側の期限が使われる
 // ことを確認する（早いほうを採ると呼び出し側から延長できない）。
-// 与える情報: read_timeout_ms 相当を 100 ミリ秒にした Client と、400 ミリ秒待ってから
+// 与える情報: herdr.read_timeout_ms 相当を 100 ミリ秒にした Client と、400 ミリ秒待ってから
 // 応答する偽サーバ。ctx には 5 秒の期限を与える。
 // 成功条件: AgentList が成功すること（100 ミリ秒で打ち切られないこと）。
 func TestCall_ctxの期限が既定より長ければ延長できる(t *testing.T) {

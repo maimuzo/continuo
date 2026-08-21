@@ -912,8 +912,8 @@ herdr workspace list                            # worktree が herdr の workspa
 > 段2 の「専用のフィールド」を使っている場合、この行は空を返す。
 > そのときは `--format json` の生の出力を見て、フィールド名に合わせて `jq` を書き換えること。
 
-**`ls ~/worktrees` に出るのは `github.com` の1行だけである。**`workspace.layout` が `gwq` なので、
-worktree はその下の `~/worktrees/<ホスト>/<owner>/<repo>/<branch の / を - にしたもの>` に掘られる。
+**`ls ~/worktrees` に出るのは `github.com` の1行だけである。**worktree の並べ方は gwq の規則に固定してあり
+（設定では変えられない）、`~/worktrees/<ホスト>/<owner>/<repo>/<branch の / を - にしたもの>` に掘られる。
 **どの issue のものかは、この階層を辿っても分からない。**
 その中の `.continuo.json` に、どの issue の worktree かが書いてある。
 

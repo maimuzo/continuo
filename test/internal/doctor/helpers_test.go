@@ -594,11 +594,10 @@ tracker:
     token_env: CONTINUO_TEST_TOKEN
 workspace:
   root: %s
-claude:
-  read_timeout_ms: 3000
 herdr:
   socket: %s
   protocol: 19
+  read_timeout_ms: 3000
 %s---
 
 {{.issue.identifier}} を実装してください。

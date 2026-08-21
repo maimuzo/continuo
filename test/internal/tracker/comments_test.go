@@ -18,10 +18,11 @@ import (
 func TestFetchComments_selfMarkerのコメントは除外しmarkerは判別する(t *testing.T) {
 	cfg := testTrackerConfig()
 	commentsCfg := cfg.Provider.Comments
+	markers := cfg.Comments
 
 	human := map[string]any{"id": "c1", "url": "https://example.com/c1", "body": "人間が書いたコメント", "createdAt": "2026-08-01T00:00:00Z", "author": map[string]any{"login": "human-user"}}
-	agent := map[string]any{"id": "c2", "url": "https://example.com/c2", "body": commentsCfg.Marker + "\nエージェントが書いた", "createdAt": "2026-08-02T00:00:00Z", "author": map[string]any{"login": "human-user"}}
-	self := map[string]any{"id": "c3", "url": "https://example.com/c3", "body": commentsCfg.SelfMarker + "\ncontinuo が代筆した", "createdAt": "2026-08-03T00:00:00Z", "author": map[string]any{"login": "continuo-bot"}}
+	agent := map[string]any{"id": "c2", "url": "https://example.com/c2", "body": markers.Marker + "\nエージェントが書いた", "createdAt": "2026-08-02T00:00:00Z", "author": map[string]any{"login": "human-user"}}
+	self := map[string]any{"id": "c3", "url": "https://example.com/c3", "body": markers.SelfMarker + "\ncontinuo が代筆した", "createdAt": "2026-08-03T00:00:00Z", "author": map[string]any{"login": "continuo-bot"}}
 
 	// **偽サーバは新しい順（DESC）で返す。**FetchComments は「新しい方から max 件」を
 	// 要求するので、GitHub もこの順で返す。FetchComments が古い順へ並べ替えて返す。
@@ -33,7 +34,7 @@ func TestFetchComments_selfMarkerのコメントは除外しmarkerは判別す�
 	})))
 	a := newAdapterForFetch(t, fs)
 
-	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", commentsCfg)
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", commentsCfg, markers)
 	if err != nil {
 		t.Fatalf("FetchComments が失敗した: %v", err)
 	}
@@ -53,23 +54,27 @@ func TestFetchComments_selfMarkerのコメントは除外しmarkerは判別す�
 	}
 }
 
-// 目的: cfg.Fetch が false のときは GraphQL へリクエストを送らないことを確認する。
-// 与える情報: Fetch=false の設定。
-// 成功条件: エラーが無く、結果が nil であり、偽サーバへのリクエストが0件であること。
-func TestFetchComments_fetchがfalseならリクエストを送らない(t *testing.T) {
-	fs := newFakeGraphQLServer(t, single(dataResponse(nil)))
+// 目的: 設定が既定値（ゼロ値）でも、コメントの取得を止める経路が無いことを確認する。
+//
+// **取得を止められると、成功した run も含めて全件が failure_state へ落ちる。**
+// FetchComments が nil を返す → internal/orchestrator の hasRunComment が常に false →
+// failCommentRecovery が failure_state を書く、という経路になるためである。
+// 取得を止める設定キーは消してあるので、ゼロ値の設定でも必ず GraphQL を叩く。
+//
+// 与える情報: 何も書いていない（ゼロ値の）tracker.provider.comments の設定。
+// 成功条件: 偽サーバへのリクエストが1件送られること。
+func TestFetchComments_設定がゼロ値でも取得を止めない(t *testing.T) {
+	fs := newFakeGraphQLServer(t, single(dataResponse(map[string]any{
+		"node": map[string]any{"__typename": "Issue", "comments": map[string]any{"nodes": []map[string]any{}}},
+	})))
 	a := newAdapterForFetch(t, fs)
 
-	cfg := config.TrackerCommentsConfig{Fetch: false}
-	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg)
-	if err != nil {
-		t.Fatalf("Fetch=false なのにエラーになった: %v", err)
+	if _, err := a.FetchComments(t.Context(), "ISSUENODE_1",
+		config.TrackerProviderCommentsConfig{}, config.TrackerCommentsConfig{}); err != nil {
+		t.Fatalf("ゼロ値の設定なのにエラーになった: %v", err)
 	}
-	if comments != nil {
-		t.Fatalf("Fetch=false なのに結果が返った: %v", comments)
-	}
-	if fs.RequestCount() != 0 {
-		t.Fatalf("Fetch=false なのにリクエストが送られた: %d件", fs.RequestCount())
+	if fs.RequestCount() != 1 {
+		t.Fatalf("取得が止まっている: リクエストが %d 件（1件送られるはず）", fs.RequestCount())
 	}
 }
 
@@ -130,7 +135,7 @@ func TestFetchComments_maxが100を超えても送るfirstは100以下(t *testin
 
 	cfg := testTrackerConfig().Provider.Comments
 	cfg.Max = 200
-	if _, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg); err != nil {
+	if _, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments); err != nil {
 		t.Fatalf("FetchComments が失敗した: %v", err)
 	}
 
@@ -186,7 +191,7 @@ func TestFetchComments_max件を超えるとき最新のコメントが残る(t 
 
 	cfg := testTrackerConfig().Provider.Comments
 	cfg.Max = 2
-	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg)
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments)
 	if err != nil {
 		t.Fatalf("FetchComments が失敗した: %v", err)
 	}
@@ -208,7 +213,7 @@ func TestFetchComments_想定外のorderはエラーにする(t *testing.T) {
 
 	cfg := testTrackerConfig().Provider.Comments
 	cfg.Order = "newest_first"
-	_, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg)
+	_, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments)
 	if err == nil {
 		t.Fatalf("想定外の order を渡したのにエラーにならなかった")
 	}

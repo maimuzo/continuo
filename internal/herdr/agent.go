@@ -107,9 +107,9 @@ type AgentStartResult struct {
 // AgentStart は agent.start を1回だけ呼ぶ（リトライしない）。
 // pane を作った直後の agent_pane_busy に対処したい場合は AgentStartWithRetry を使うこと。
 //
-// 待ち時間は Startup（claude.startup_timeout_ms。既定60秒）を使う。agent の起動は
+// 待ち時間は Startup（herdr.startup_timeout_ms。既定60秒）を使う。agent の起動は
 // 実測で検知まで既定30秒かかるため、herdr の socket API の応答用の
-// Read（claude.read_timeout_ms。既定5秒）では必ず足りない。
+// Read（herdr.read_timeout_ms。既定5秒）では必ず足りない。
 // ctx に期限があればそちらを使う。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -233,7 +233,7 @@ type AgentPromptResult struct {
 //
 // 待ち時間は params.Wait で変わる。Wait が nil でないときは turn の完了まで待つので
 // Turn（claude.turn_timeout_ms。既定1時間）を使い、nil のときは herdr の socket API の
-// 応答を待つだけなので Read（claude.read_timeout_ms。既定5秒）を使う。
+// 応答を待つだけなので Read（herdr.read_timeout_ms。既定5秒）を使う。
 // ctx に期限があればそちらを使う。
 //
 // ctx: 呼び出しに適用するコンテキスト。

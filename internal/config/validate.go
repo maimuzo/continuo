@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
@@ -122,10 +123,7 @@ func validate(cfg *Config) error {
 	if cfg.Tracker.StatusSignalPrefix == "" {
 		return requiredValueError("tracker.status_signal_prefix")
 	}
-	// 0 は「間隔をあけない」「起動時だけ照合する」という意味を持つので許す。負の値は意味を持たない。
-	if cfg.Tracker.WriteIntervalMs < 0 {
-		return invalidValueError("tracker.write_interval_ms", cfg.Tracker.WriteIntervalMs, "0以上の整数（ミリ秒）にすること（0 なら間隔をあけない）")
-	}
+	// 0 は「起動時だけ照合する」という意味を持つので許す。負の値は意味を持たない。
 	if cfg.Tracker.VerifyStatesEvery < 0 {
 		return invalidValueError("tracker.verify_states_every", cfg.Tracker.VerifyStatesEvery, "0以上の整数にすること（0 なら起動時だけ照合する）")
 	}
@@ -152,9 +150,6 @@ func validate(cfg *Config) error {
 	if cfg.Workspace.Root == "" {
 		return requiredValueError("workspace.root")
 	}
-	if cfg.Workspace.Layout != "gwq" {
-		return invalidValueError("workspace.layout", cfg.Workspace.Layout, `"gwq" のみサポートする`)
-	}
 	if cfg.Workspace.IdentityFile == "" {
 		return requiredValueError("workspace.identity_file")
 	}
@@ -162,8 +157,24 @@ func validate(cfg *Config) error {
 	if cfg.Agent.MaxConcurrentAgents <= 0 {
 		return invalidValueError("agent.max_concurrent_agents", cfg.Agent.MaxConcurrentAgents, "0より大きい整数にすること")
 	}
-	if cfg.Agent.MaxTurns <= 0 {
-		return invalidValueError("agent.max_turns", cfg.Agent.MaxTurns, "0より大きい整数にすること")
+	if cfg.Agent.MaxDispatchTurns <= 0 {
+		return invalidValueError("agent.max_dispatch_turns", cfg.Agent.MaxDispatchTurns, "0より大きい整数にすること")
+	}
+	// **状態ごとの上限に 0 以下を書かせない。**`In Progress: 0` と書くと空きスロットの
+	// 判定（hasFreeSlot）が常に偽になり、ボード全体の dispatch が永久に止まる。
+	// ログにも何も出ないので、無人運用では止まっていることに誰も気づけない。
+	// `SPEC.md` 5.3.5 は "Invalid entries (non-positive or non-numeric) are ignored"
+	// （**訳:** 不正な項目（非正の値・数値でない値）は無視する）と定めるが、
+	// **黙って無視すると「書いたつもりの設定が効いていない」ことに気づけない。**弾く。
+	for state, limit := range cfg.Agent.MaxConcurrentAgentsByState {
+		if state == "" {
+			return requiredValueError("agent.max_concurrent_agents_by_state のキー（Status 名）")
+		}
+		if limit <= 0 {
+			return invalidValueError(
+				fmt.Sprintf("agent.max_concurrent_agents_by_state.%s", state), limit,
+				"0より大きい整数にすること（0 を書くとその Status の dispatch が永久に止まり、ログにも何も出ない）")
+		}
 	}
 	if cfg.Agent.MaxTakeover <= 0 {
 		return invalidValueError("agent.max_takeover", cfg.Agent.MaxTakeover, "0より大きい整数にすること")
@@ -177,13 +188,6 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Claude.PermissionMode != "dontAsk" {
 		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode, `無人運用で入力を待たない唯一のモードである "dontAsk" のみサポートする（設計 3-11）`)
-	}
-	// worktree_local（worktree の中に .claude/settings.local.json を置く経路）は受理しない。
-	// 設計 3-12 が --settings の経路に決めており、worktree_local を選んだときの仕様
-	// （置き場所・.git/info/exclude への登録・片付け）がどこにも無いためである。
-	// 起動は通るのに実装が無い経路へ入るのを防ぐ。
-	if cfg.Claude.HookBridge.Mode != "settings_flag" {
-		return invalidValueError("claude.hook_bridge.mode", cfg.Claude.HookBridge.Mode, `"settings_flag" のみサポートする（設計 3-12）`)
 	}
 
 	// 時間を表す値をまとめて検査する。**ここを検査しないと待ちが成立しない。**
@@ -199,8 +203,8 @@ func validate(cfg *Config) error {
 	}{
 		{"claude.poll_wait_ms", cfg.Claude.PollWaitMs},
 		{"claude.settle_ms", cfg.Claude.SettleMs},
-		{"claude.read_timeout_ms", cfg.Claude.ReadTimeoutMs},
-		{"claude.startup_timeout_ms", cfg.Claude.StartupTimeoutMs},
+		{"herdr.read_timeout_ms", cfg.Herdr.ReadTimeoutMs},
+		{"herdr.startup_timeout_ms", cfg.Herdr.StartupTimeoutMs},
 		{"agent.max_retry_backoff_ms", cfg.Agent.MaxRetryBackoffMs},
 		{"rate_limit.poll_interval_ms", cfg.RateLimit.PollIntervalMs},
 		{"workspace_hooks.timeout_ms", cfg.WorkspaceHooks.TimeoutMs},
@@ -225,6 +229,12 @@ func validate(cfg *Config) error {
 			"claude.settle_ms", cfg.Claude.SettleMs,
 			"claude.poll_wait_ms 以下にすること（turn の終わりを確かめる猶予が、1回の待ちより長い）",
 		)
+	}
+
+	// **綴りを検査する。**herdr は wait_until の文字列をそのまま受け取るので、
+	// 綴りを間違えても起動は通り、turn の終わりを拾えないまま時間切れまで待つことになる。
+	if err := validateWaitUntil(cfg.Claude.WaitUntil); err != nil {
+		return err
 	}
 
 	if cfg.Herdr.Socket == "" {
@@ -294,6 +304,51 @@ func validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+// validateWaitUntil は claude.wait_until の綴りを検査する（3-2）。
+//
+// **受け付ける値は internal/herdr の AgentStatus の定数だけである。**ここに一覧を
+// 書き写さず herdr.AgentStatuses() を引くのは、herdr の enum が増えたときに
+// この検査だけが古い一覧のまま残るのを防ぐためである。
+//
+// **重複も弾く。**同じ状態を2回書いても効果は変わらないので、書き間違いである。
+//
+// names: claude.wait_until に書かれた値の並び。
+// 戻り値: 受け付けられない値・重複があったときのエラー。すべて正しければ nil。
+func validateWaitUntil(names []string) error {
+	allowed := herdr.AgentStatuses()
+	labels := make([]string, 0, len(allowed))
+	for _, s := range allowed {
+		labels = append(labels, fmt.Sprintf("%q", string(s)))
+	}
+	requirement := fmt.Sprintf("herdr が受け付ける状態名（%s）のいずれかにすること", strings.Join(labels, " / "))
+
+	seen := make(map[string]struct{}, len(names))
+	for i, n := range names {
+		key := fmt.Sprintf("claude.wait_until[%d]", i)
+		if !containsStatus(allowed, herdr.AgentStatus(n)) {
+			return invalidValueError(key, n, requirement)
+		}
+		if _, dup := seen[n]; dup {
+			return invalidValueError(key, n, "同じ状態が2回書かれている（重複した行を消すこと）")
+		}
+		seen[n] = struct{}{}
+	}
+	return nil
+}
+
+// containsStatus は ss の中に target と完全一致する要素があるかどうかを返す。
+//
+// **前後の空白を落としたり大文字小文字を無視したりしない。**herdr へはこの文字列が
+// そのまま渡るので、検査で通した綴りと herdr が受け取る綴りを一致させる。
+func containsStatus(ss []herdr.AgentStatus, target herdr.AgentStatus) bool {
+	for _, s := range ss {
+		if s == target {
+			return true
+		}
+	}
+	return false
 }
 
 // validateLanguage は language の値を検査する（3-35）。

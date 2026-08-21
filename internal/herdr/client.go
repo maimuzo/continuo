@@ -47,11 +47,11 @@ const EnvSocketPath = "HERDR_SOCKET_PATH"
 // （docs/plans/continuo_design.md 5-3 の設定例）に合わせてある。
 const (
 	// DefaultReadTimeout は herdr の socket API の応答を待つ上限である
-	// （claude.read_timeout_ms = 5000）。**対象は herdr の socket API の応答だけ**であり、
+	// （herdr.read_timeout_ms = 5000）。**対象は herdr の socket API の応答だけ**であり、
 	// agent の起動待ちや turn の待機には使わない。
 	DefaultReadTimeout = 5 * time.Second
 	// DefaultStartupTimeout は herdr の agent 起動を待つ上限である
-	// （claude.startup_timeout_ms = 60000）。agent.start は実測で検知まで既定30秒かかるため、
+	// （herdr.startup_timeout_ms = 60000）。agent.start は実測で検知まで既定30秒かかるため、
 	// read_timeout_ms では足りない。**worktree 系の3つも同じ上限を使う**
 	// （worktree.go の冒頭コメントを参照）。
 	DefaultStartupTimeout = 60 * time.Second
@@ -64,8 +64,8 @@ const (
 // Timeouts は呼び出しの種類ごとの待ち時間の上限である。
 //
 // 設計は3つの別々の上限を定めている（5-3 の設定例）。1つに束ねてはならない。
-//   - Read    … herdr の socket API の応答（claude.read_timeout_ms）
-//   - Startup … herdr の agent 起動（claude.startup_timeout_ms）
+//   - Read    … herdr の socket API の応答（herdr.read_timeout_ms）
+//   - Startup … herdr の agent 起動（herdr.startup_timeout_ms）
 //   - Turn    … 1つの turn（claude.turn_timeout_ms）
 //
 // 0 以下のフィールドは New が既定値（DefaultReadTimeout 等）で埋める。

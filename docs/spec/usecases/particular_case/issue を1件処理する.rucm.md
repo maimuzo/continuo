@@ -7,7 +7,7 @@
 - `docs/plans/continuo_design.md#3-2`（turn の終わりの判定の規則。settle_ms と task-notification）
 - `docs/plans/continuo_design.md#3-5`（完了検知の3層と、1つの turn で何が起きるか）
 - `docs/plans/continuo_design.md#3-6`（dispatch の直前に issue ごとに検査するもの）
-- `docs/plans/continuo_design.md#3-8`（turn ループ。1回目の本文と継続の指示、max_turns）
+- `docs/plans/continuo_design.md#3-8`（turn ループ。1回目の本文と継続の指示、max_dispatch_turns）
 - `docs/plans/continuo_design.md#3-16`（着手の手順の順番。段-1 から段11）
 - `docs/plans/continuo_design.md#3-18`（worktree の身元ファイル）
 - `docs/plans/continuo_design.md#3-21`（打ち切りは「画面の版」で測る）
@@ -46,7 +46,7 @@ BASIC FLOW:
 13. システムは pane で Claude Code を起動する。
 14. システムは VALIDATES THAT Claude Code の agent_status が idle または done である。
 15. DO
-16.   システムは VALIDATES THAT turn 数が max_turns に達していない。
+16.   システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。
 17.   システムは Claude Code に turn の本文を送る。
 18.   システムは Claude Code の Stop hook を受ける。
 19.   システムは settle_ms のあいだ待つ。
@@ -91,7 +91,7 @@ RFS BASIC FLOW 16
 3. システムは herdr の pane を閉じる。
 4. システムは印を外す。
 5. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。turn 数は max_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。
+POSTCONDITION: issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。
 
 SPECIFIC ALTERNATIVE FLOW turnの継続:
 RFS BASIC FLOW 20
@@ -177,7 +177,7 @@ flowchart TD
     B13["13. pane で Claude Code を起動する"]
     B14{"14. VALIDATES THAT agent_status が idle または done"}
     B15["15. DO"]
-    B16{"16. VALIDATES THAT turn 数が max_turns に達していない"}
+    B16{"16. VALIDATES THAT turn 数が max_dispatch_turns に達していない"}
     B17["17. turn の本文を送る"]
     B18["18. Stop hook を受ける"]
     B19["19. settle_ms のあいだ待つ"]
@@ -285,7 +285,7 @@ sequenceDiagram
             H-->>S: agent_status を応答する
             S->>S: agent_status が idle または done であることを検証する
             loop 表明の値が working でなくなるまで
-                S->>S: turn 数が max_turns に達していないことを検証する
+                S->>S: turn 数が max_dispatch_turns に達していないことを検証する
                 S->>CC: turn の本文を送る
                 CC-->>S: Stop hook を届ける
                 S->>S: settle_ms のあいだ待つ

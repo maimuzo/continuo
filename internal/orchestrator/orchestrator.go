@@ -90,7 +90,7 @@ type Tracker interface {
 	// UpdateStatus は Status を書き換える。**書く前に必ず ID 指定で取り直す**（設計 3-4）。
 	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (bool, error)
 	// FetchComments は issue のコメントを取る（エージェントが書いたかの判別に使う）。
-	FetchComments(ctx context.Context, issueNodeID string, cfg config.TrackerCommentsConfig) ([]tracker.Comment, error)
+	FetchComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig, markers config.TrackerCommentsConfig) ([]tracker.Comment, error)
 	// PostComment は continuo 自身が人間への引き渡しの通知を書く。
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
 	// VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6）。

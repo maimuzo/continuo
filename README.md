@@ -19,7 +19,7 @@ GitHub Projects v2 のボードを見張り、issue ごとに git worktree を�
 | **Watches** | one GitHub Projects v2 board — issues from multiple repositories live on it |
 | **Prepares** | a git worktree per issue, in the repository that issue belongs to |
 | **Runs** | Claude Code in interactive mode inside a herdr pane (**never `claude -p`**) |
-| **Continues** | sends follow-up prompts to the same session while the issue stays active, up to `max_turns` |
+| **Continues** | sends follow-up prompts to the same session while the issue stays active, up to `max_dispatch_turns` |
 | **Detects completion** | via Claude Code's `Stop` hook — a turn has ended only when `background_tasks` is empty |
 | **Trusts** | the tracker, not the agent's self-report. The agent only prints a one-line marker (`CONTINUO-STATUS: review`); **continuo is what moves the Status**, and it re-reads the board before acting on it |
 | **Cleans up** | the worktree and the branch once the issue reaches a terminal state |

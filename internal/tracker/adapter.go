@@ -717,10 +717,13 @@ func (a *Adapter) UpdateStatus(
 // 取得した本文をプロンプトへ渡してはならない。issue の中身はエージェントが
 // gh issue view --comments で自分で読む。
 //
-// **エージェントが書いたコメントは cfg.Marker の印で判別する**（Comment.IsAgent）。
-// **continuo 自身が代筆したコメント（cfg.SelfMarker の印）は、次の turn の入力から
+// **エージェントが書いたコメントは markers.Marker の印で判別する**（Comment.IsAgent）。
+// **continuo 自身が代筆したコメント（markers.SelfMarker の印）は、次の turn の入力から
 // 外すため結果に含めない**（設計 5-2 の comments.self_marker の説明: 「次の turn の入力
 // からは外す」）。
+//
+// **取得を止める経路は持たない。**取得しないと「エージェントがコメントを書いていない」と
+// 判定され、成功した run も含めて全件が failure_state へ落ちる。
 //
 // **cfg.Max は「新しい方から何件まで遡るか」である**（設計 5-2: 「判別のために何件まで
 // 遡るか」）。GraphQL には降順で要求し、受け取ってから古い順へ並べ替えて返す。
@@ -729,11 +732,12 @@ func (a *Adapter) UpdateStatus(
 // ctx: 呼び出しに適用するコンテキスト。
 // issueNodeID: 下敷きの GitHub issue のノード ID（Issue.NativeRef["issue_node_id"]）。
 // project item の ID ではないことに注意。
-// cfg: tracker.provider.comments の設定。cfg.Fetch が false の場合は取得せず nil を返す。
+// cfg: tracker.provider.comments の設定（GitHub から何件どの順で取るか）。
 // cfg.Max が0以下なら50件、100件を超える場合は100件に丸める（警告をログに残す。
 // **GitHub の connection は first の上限が100で、101を要求すると
 // EXCESSIVE_PAGINATION のエラーになる**。設定の検査でも同じ上限を弾いている）。
 // cfg.Order は "oldest_first"（または未設定）だけを受け付ける。
+// markers: tracker.comments の設定（マーカー）。空文字のマーカーは判別に使わない。
 // 戻り値: 正規化したコメントの一覧（**古い順**。ただし件数が上限を超える場合は、
 // 新しい方から max 件を取ったうえでその中を古い順に並べたもの）。self_marker の付いた
 // コメントは除外済み。cfg.Order が想定外の値の場合は CategoryInvalidConfig の *Error。
@@ -741,11 +745,9 @@ func (a *Adapter) UpdateStatus(
 func (a *Adapter) FetchComments(
 	ctx context.Context,
 	issueNodeID string,
-	cfg config.TrackerCommentsConfig,
+	cfg config.TrackerProviderCommentsConfig,
+	markers config.TrackerCommentsConfig,
 ) ([]Comment, error) {
-	if !cfg.Fetch {
-		return nil, nil
-	}
 	// 想定外の order を黙って無視すると、書いたつもりの設定が効いていないことに気づけない。
 	if cfg.Order != "" && cfg.Order != commentsOrderOldestFirst {
 		return nil, &Error{
@@ -788,11 +790,11 @@ func (a *Adapter) FetchComments(
 	for _, c := range oldestFirst {
 		comment := rawCommentToComment(c)
 		trimmed := strings.TrimSpace(comment.Body)
-		if cfg.SelfMarker != "" && strings.HasPrefix(trimmed, cfg.SelfMarker) {
+		if markers.SelfMarker != "" && strings.HasPrefix(trimmed, markers.SelfMarker) {
 			// continuo 自身が代筆したコメント。次の turn の入力からは外す。
 			continue
 		}
-		if cfg.Marker != "" && strings.HasPrefix(trimmed, cfg.Marker) {
+		if markers.Marker != "" && strings.HasPrefix(trimmed, markers.Marker) {
 			comment.IsAgent = true
 		}
 		result = append(result, comment)
@@ -810,7 +812,7 @@ func (a *Adapter) FetchComments(
 // ctx: 呼び出しに適用するコンテキスト。
 // issueNodeID: 下敷きの GitHub issue のノード ID（Issue.NativeRef["issue_node_id"]）。
 // body: コメント本文（マーカーを含まない、素の本文）。
-// selfMarker: 本文の先頭に付ける印（tracker.provider.comments.self_marker）。空文字なら
+// selfMarker: 本文の先頭に付ける印（tracker.comments.self_marker）。空文字なら
 // 印を付けずに投稿する。
 // 戻り値: 投稿したコメント（IsSelf は常に true）。GraphQL 呼び出しが失敗した場合、または
 // 応答にコメントが含まれていない場合はエラーを返す。

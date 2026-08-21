@@ -177,9 +177,9 @@ func TestAgentStartWithRetry_pane_busy以外はリトライしない(t *testing.
 	}
 }
 
-// 目的: agent.start の待ち時間が read_timeout_ms ではなく startup_timeout_ms で
+// 目的: agent.start の待ち時間が herdr.read_timeout_ms ではなく herdr.startup_timeout_ms で
 // 決まることを確認する（設計 5-3 の設定例。agent の起動は実測で検知まで既定30秒かかるので、
-// read_timeout_ms（既定5秒）で打ち切ってはならない）。
+// herdr.read_timeout_ms（既定5秒）で打ち切ってはならない）。
 // 与える情報: Read を 100 ミリ秒、Startup を 5 秒にした Client と、400 ミリ秒待ってから
 // 応答する偽サーバ。
 // 成功条件: AgentStart が成功すること（Read の 100 ミリ秒で打ち切られないこと）。
@@ -209,7 +209,7 @@ func TestAgentStart_起動の待ち時間はstartup_timeout_msで決まる(t *te
 		PaneID: "w1:p2",
 	})
 	if err != nil {
-		t.Fatalf("startup_timeout_ms まで待つはずが read_timeout_ms で打ち切られた: %v", err)
+		t.Fatalf("herdr.startup_timeout_ms まで待つはずが herdr.read_timeout_ms で打ち切られた: %v", err)
 	}
 	if result.Agent.Name != "continuo-test" {
 		t.Fatalf("結果の agent.name が想定と違う: got %q", result.Agent.Name)
@@ -217,7 +217,7 @@ func TestAgentStart_起動の待ち時間はstartup_timeout_msで決まる(t *te
 }
 
 // 目的: 待機ありの agent.prompt が turn_timeout_ms まで待つことを確認する
-// （設計 5-3: turn_timeout_ms は1つの turn の上限。read_timeout_ms で打ち切ってはならない）。
+// （設計 5-3: turn_timeout_ms は1つの turn の上限。herdr.read_timeout_ms で打ち切ってはならない）。
 // 与える情報: Read を 100 ミリ秒、Turn を 5 秒にした Client と、400 ミリ秒待ってから
 // 応答する偽サーバ。Wait に待機条件のオブジェクトを設定した AgentPromptParams。
 // 成功条件: AgentPrompt が成功し、応答の agent_status を読み取れること。
@@ -247,7 +247,7 @@ func TestAgentPrompt_待機ありのときはturn_timeout_msで決まる(t *test
 		Wait:   &herdr.AgentWaitOptions{},
 	})
 	if err != nil {
-		t.Fatalf("turn_timeout_ms まで待つはずが read_timeout_ms で打ち切られた: %v", err)
+		t.Fatalf("turn_timeout_ms まで待つはずが herdr.read_timeout_ms で打ち切られた: %v", err)
 	}
 	if result.Agent.AgentStatus != herdr.AgentStatusDone {
 		t.Fatalf("結果の agent_status が想定と違う: got %q", result.Agent.AgentStatus)

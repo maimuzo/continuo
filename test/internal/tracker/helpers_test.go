@@ -29,13 +29,14 @@ func testTrackerConfig() config.TrackerConfig {
 			ProjectNumber: 3,
 			StatusField:   "Status",
 			TokenSource:   "gh_auth",
-			Comments: config.TrackerCommentsConfig{
-				Fetch:      true,
-				Max:        50,
-				Order:      "oldest_first",
-				Marker:     "<!-- continuo:agent -->",
-				SelfMarker: "<!-- continuo:self -->",
+			Comments: config.TrackerProviderCommentsConfig{
+				Max:   50,
+				Order: "oldest_first",
 			},
+		},
+		Comments: config.TrackerCommentsConfig{
+			Marker:     "<!-- continuo:agent -->",
+			SelfMarker: "<!-- continuo:self -->",
 		},
 		RequiredLabels: nil,
 		ActiveStates:   []string{"Ready", "In Progress"},

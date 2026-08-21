@@ -104,7 +104,7 @@ type Options struct {
 	Logger *slog.Logger
 	// ReadTimeout は1接続から1行を読み切るまでの上限である。0 なら DefaultReadTimeout。
 	//
-	// **`claude.read_timeout_ms` を流用してはならない。**あちらは herdr の socket API の
+	// **`herdr.read_timeout_ms` を流用してはならない。**あちらは herdr の socket API の
 	// 応答を待つ上限であり（設計 8-1「read_timeout_ms 一本ですべてを打ち切ってはならない」）、
 	// 相手が違う。herdr が遅い環境に合わせてあちらを伸ばすと、hook の接続を掴んだままにする
 	// 時間まで一緒に伸びる。設定から変えたくなったら専用のキーを立てること。

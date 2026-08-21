@@ -61,7 +61,7 @@ const EnvRuntimeDir = "CONTINUO_RUNTIME_DIR"
 // 外向きの呼び出しに与える期限である。
 //
 // **設定ファイルのキーにはしない**（設計 5-2 に無いキーを足さない）。
-// **`claude.read_timeout_ms` を流用しない。**あれは herdr の socket API の応答を待つ
+// **`herdr.read_timeout_ms` を流用しない。**あれは herdr の socket API の応答を待つ
 // 上限であり（設計 8-1）、相手が違うものを同じつまみで動かすと、herdr が遅い環境に
 // 合わせて値を上げたときに GitHub への待ちまで一緒に伸びる。
 const (
@@ -436,8 +436,8 @@ func build(
 	// `claude.turn_timeout_ms`（画面が変わらないまま待てる時間）をそのまま使う。
 	// これより長く待っても、画面が止まっていれば巡回の stall 検知が run を打ち切る。
 	hc := herdr.New(herdrSocket, herdr.Timeouts{
-		Read:    time.Duration(cfg.Claude.ReadTimeoutMs) * time.Millisecond,
-		Startup: time.Duration(cfg.Claude.StartupTimeoutMs) * time.Millisecond,
+		Read:    time.Duration(cfg.Herdr.ReadTimeoutMs) * time.Millisecond,
+		Startup: time.Duration(cfg.Herdr.StartupTimeoutMs) * time.Millisecond,
 		Turn:    time.Duration(cfg.Claude.TurnTimeoutMs) * time.Millisecond,
 	})
 
@@ -499,7 +499,7 @@ func build(
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildOrchestratorFailed, err)
 	}
 
-	// **`claude.read_timeout_ms` をここへ流用しない**（設計 8-1）。あれは herdr の
+	// **`herdr.read_timeout_ms` をここへ流用しない**（設計 8-1）。あれは herdr の
 	// socket API の応答を待つ上限であり、hook の接続を掴んでいてよい時間ではない。
 	// **`ReadTimeout` を渡さず、hookserver の既定に任せる。**
 	hs, err := hookserver.New(hookserver.Options{

@@ -14,7 +14,7 @@ const commentRecheckWait = 2 * time.Second
 // セッションを復元してエージェントに書かせる（設計 3-25 の9段）。
 //
 // **走らせるのは run が終わるときだけである。**毎 turn ではない（設計 3-25 の
-// 「いつ走らせるか」）。**`max_turns` に達したとき・stall で打ち切ったとき・
+// 「いつ走らせるか」）。**`max_dispatch_turns` に達したとき・stall で打ち切ったとき・
 // リトライを使い切って人間へ渡すときも走らせる。**`working` の表明を受けて次の turn へ
 // 進むときは走らせない。
 //
@@ -32,7 +32,7 @@ const commentRecheckWait = 2 * time.Second
 //  5. その pane で agent.start を呼ぶ（--resume <UUID> --settings <設定ファイル> --permission-mode dontAsk）
 //  6. agent_status が idle または done になるのを待つ
 //  7. agent.prompt で「作業の内容を issue のコメントに書いてください」とだけ送る
-//     → **この送信は turn 数に数えない**（max_turns の判定に影響させない）
+//     → **この送信は turn 数に数えない**（max_dispatch_turns の判定に影響させない）
 //  8. コメントを読み直し、書かれていれば終わり
 //  9. それでも書かれなければ failure_state へ落として人間に渡す
 //
@@ -128,7 +128,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 返らなければこの上限で切り上げて段8（コメントの読み直し）へ進む。
 	if _, err := o.herdr.AgentPrompt(ctx, herdr.AgentPromptParams{
 		Target: name,
-		Text:   buildCommentRequestPrompt(issueURL(rs.issue()), o.cfg.Tracker.Provider.Comments.Marker),
+		Text:   buildCommentRequestPrompt(issueURL(rs.issue()), o.cfg.Tracker.Comments.Marker),
 		Wait: &herdr.AgentWaitOptions{
 			TimeoutMs: o.cfg.Claude.TurnTimeoutMs,
 			Until:     waitUntilStatuses(o.cfg.Claude.WaitUntil),
@@ -163,7 +163,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 // snap: 対象の run の写し。
 // 戻り値: この run が書いたコメントがあれば true。
 func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap runSnapshot) bool {
-	comments, err := o.tracker.FetchComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
+	comments, err := o.tracker.FetchComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments, o.cfg.Tracker.Comments)
 	if err != nil {
 		o.logger.Warn("コメントを読めません（書かれていないものとして扱います）",
 			"identifier", snap.Identifier, "error", err)

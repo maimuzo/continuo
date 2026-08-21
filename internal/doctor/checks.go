@@ -71,7 +71,7 @@ func checkHerdr(ctx context.Context, cfg loadedConfig, configSymbol Symbol) Resu
 	}
 
 	client := herdr.New(socketPath, herdr.Timeouts{
-		Read: time.Duration(cfg.Config.Claude.ReadTimeoutMs) * time.Millisecond,
+		Read: time.Duration(cfg.Config.Herdr.ReadTimeoutMs) * time.Millisecond,
 	})
 	ping, err := client.CheckProtocol(ctx, cfg.Config.Herdr.Protocol)
 	if err != nil {

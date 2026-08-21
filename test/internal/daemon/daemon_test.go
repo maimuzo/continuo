@@ -47,9 +47,9 @@ type daemonEnv struct {
 	// ServerPort は WORKFLOW.md に書く `server.port` である。
 	// **nil なら書かない**（既定どおりダッシュボードを開かない）。
 	ServerPort *int
-	// ClaudeReadTimeoutMs は WORKFLOW.md に書く `claude.read_timeout_ms` である。
+	// HerdrReadTimeoutMs は WORKFLOW.md に書く `herdr.read_timeout_ms` である。
 	// **0 なら 3000 を書く。**相手は herdr の socket API の応答である（設計 8-1）。
-	ClaudeReadTimeoutMs int
+	HerdrReadTimeoutMs int
 	// Timeline はテスト用herdr mock とテスト用GitHub mock の呼び出しを混ぜた1本の並びである。
 	Timeline *timeline
 }
@@ -146,11 +146,11 @@ claude:
   poll_wait_ms: 300
   settle_ms: 200
   turn_timeout_ms: 600000
-  read_timeout_ms: %d
-  startup_timeout_ms: 3000
 herdr:
   socket: %s
   protocol: 19
+  read_timeout_ms: %d
+  startup_timeout_ms: 3000
 cleanup:
   require_clean_worktree: false
   require_pushed: false
@@ -163,14 +163,14 @@ rate_limit:
     gh issue view {{.issue.url}} --comments
 
 作業の区切りがついたら CONTINUO-STATUS: の行を1行書いてください。
-`, e.WorktreeRoot, readTimeoutMs(e.ClaudeReadTimeoutMs), e.Herdr.SocketPath, serverSection(e.ServerPort))
+`, e.WorktreeRoot, e.Herdr.SocketPath, readTimeoutMs(e.HerdrReadTimeoutMs), serverSection(e.ServerPort))
 
 	if err := os.WriteFile(e.WorkflowPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}
 }
 
-// readTimeoutMs は WORKFLOW.md に書く `claude.read_timeout_ms` を決める。
+// readTimeoutMs は WORKFLOW.md に書く `herdr.read_timeout_ms` を決める。
 //
 // value: daemonEnv に設定された値（0 なら既定を使う）。
 // 戻り値: 書き出す値。
@@ -798,22 +798,22 @@ func TestDaemon_CLIのportでダッシュボードを開いて実行中のrunを
 	}
 }
 
-// TestDaemon_hookの受け口はclaudeのread_timeout_msで接続を切らない は、
+// TestDaemon_hookの受け口はherdrのread_timeout_msで接続を切らない は、
 // 期限のつまみが相手ごとに分かれていることを確かめる。
 //
-// 目的: `claude.read_timeout_ms` は **herdr の socket API の応答を待つ上限**である
+// 目的: `herdr.read_timeout_ms` は **herdr の socket API の応答を待つ上限**である
 // （設計 8-1。「`read_timeout_ms` 一本ですべてを打ち切ってはならない」）。これを hook の
 // 受け口へ流用すると、herdr が遅い環境に合わせて値を上げたときに、hook の接続を
 // 掴んだままにする時間まで一緒に動く。
 //
-// 与える情報: `claude.read_timeout_ms: 200`（hookserver の既定 10 秒よりずっと短い）で
+// 与える情報: `herdr.read_timeout_ms: 200`（hookserver の既定 10 秒よりずっと短い）で
 // 起動した continuo と、繋いだだけで何も送らない接続。
 //
 // 成功条件: 繋いでから 1 秒たっても受け口が接続を閉じないこと（読み出しが EOF ではなく
 // 待ちで返ること）。そのあとに送った hook が受け付けられること。
-func TestDaemon_hookの受け口はclaudeのread_timeout_msで接続を切らない(t *testing.T) {
+func TestDaemon_hookの受け口はherdrのread_timeout_msで接続を切らない(t *testing.T) {
 	env := newDaemonEnv(t)
-	env.ClaudeReadTimeoutMs = 200
+	env.HerdrReadTimeoutMs = 200
 	env.writeWorkflow(t)
 	env.GitHub = newFakeGitHub(t, "maimuzo", env.Timeline)
 	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
@@ -839,7 +839,7 @@ func TestDaemon_hookの受け口はclaudeのread_timeout_msで接続を切らな
 	}
 	defer func() { _ = conn.Close() }()
 
-	// **`claude.read_timeout_ms` の5倍待つ。**流用されていれば、ここで閉じられている。
+	// **`herdr.read_timeout_ms` の5倍待つ。**流用されていれば、ここで閉じられている。
 	time.Sleep(time.Second)
 
 	if err := conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
@@ -854,8 +854,8 @@ func TestDaemon_hookの受け口はclaudeのread_timeout_msで接続を切らな
 	case errors.As(readErr, &netErr) && netErr.Timeout():
 		// **こちらの読み出しが待ちで返った＝受け口はまだ接続を持っている。**期待どおり。
 	default:
-		t.Fatalf("claude.read_timeout_ms（%dms）で hook の接続が切られた: %v",
-			env.ClaudeReadTimeoutMs, readErr)
+		t.Fatalf("herdr.read_timeout_ms（%dms）で hook の接続が切られた: %v",
+			env.HerdrReadTimeoutMs, readErr)
 	}
 
 	// 切られていないことの裏取りとして、この接続でそのまま hook を1件送れることを見る。

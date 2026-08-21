@@ -143,7 +143,7 @@ func TestCheckStalls_1回のstallでabandonが2回走らない(t *testing.T) {
 // TestAbandon_打ち切るときはworkerを止める前にコメントを確かめる は、
 // 設計 3-25 の「いつ走らせるか」の表を確かめる。
 //
-// 目的: 「`max_turns` に達した / stall で打ち切った → **走らせる。worker を止める前に
+// 目的: 「`max_dispatch_turns` に達した / stall で打ち切った → **走らせる。worker を止める前に
 // 確認する**」を示す。**確かめないと、その run の成果が issue に何も残らない。**
 //
 // 与える情報: `agent.max_retries` が 0 の設定で stall した run（1回目の stall で

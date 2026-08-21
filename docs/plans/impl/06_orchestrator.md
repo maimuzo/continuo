@@ -12,7 +12,7 @@
 | 3-16 | **着手の手順13段（段-1 から段11）。**なぜその順番かの根拠つき |
 | 3-4 | 状態は in-memory。`runState` の型 |
 | 3-5 | 完了検知の3層（turn が終わったか / 完了したか / 何をしたか） |
-| 3-8 | turn ループと `max_turns` |
+| 3-8 | turn ループと `max_dispatch_turns` |
 | 3-14 | **turn の数え方。**continuo が送った回数だけ数える |
 | 3-10 | **`In Progress` も「作業中」に含める。**入れ忘れると自分の worker を殺す |
 | 3-25 | **表明の読み取り（transcript を `promptSource == "typed"` 起点で区切る）**と、コメントを書かせ直す9段 |
@@ -89,7 +89,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 - [x] **表明を `promptSource == "typed"` 起点で区切って拾う。`prompt_id` では区切らない**
 - [x] **印が複数あれば、issue ごとに最後に現れたものを採る**
 - [x] **`isSidechain == false` に絞る**（subagent の発言を拾わない）
-- [x] **`max_turns` を、continuo が送った回数だけで数える**（`<task-notification>` は数えない）
+- [x] **`max_dispatch_turns` を、continuo が送った回数だけで数える**（`<task-notification>` は数えない）
 - [x] **`blocked` が返ったら、次を投げる前に `agent.send_keys` で `["esc"]` を送る**
 - [x] **worker を止めるのは `pane.close` である**（設計 3-5）。agent だけを止めるメソッドは herdr に無い
 - [x] **表明が無かった turn の次に、それを促す1文を継続の指示へ差し込む**（設計 3-8 / 3-25）
@@ -112,7 +112,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
   - `working` → **送らない。**Claude Code が自分で継続している。hook を待つ
   - `blocked` → 送らない（`esc` を送ってから人間へ渡す）
   - `idle` / `done` → 送る。**取れなかったら送る**（枠明けに止まったままにしない）
-  - **数えないと、枠待ちと復帰を繰り返す間に `max_turns` が一度も発火しない**
+  - **数えないと、枠待ちと復帰を繰り返す間に `max_dispatch_turns` が一度も発火しない**
 - [x] **run が終わるときにコメントを確かめ、無ければ 3-25 の9段で書かせる**（毎 turn ではない）
   - **「この run が書いたもの」だけを数える**（marker があり、`runState.StartedAt` より新しいもの）
   - **worktree を再利用すると前の run のコメントが残っている**（設計 3-25）
@@ -205,7 +205,7 @@ FetchIssueByIdentifier(ctx, "maimuzo/koetsumugi#45") → (Issue, bool, error)
 | --- | --- |
 | `e2e_test.go` | **1件の issue が候補に上がってから `Done` で片付くまで**／着手の13段の順番／設定ファイルの中身 |
 | `dispatch_test.go` | 候補の取り方・空きスロット・印・巡回のリクエスト本数・検査の頻度・未信頼の通知・描画の失敗・段8 と段10 |
-| `turn_test.go` | 空の `Stop` だけで終わりと判定しない／項目が欠けていたら判定不能／表明の促し／`max_turns`／`blocked` の `esc`／wait の掛け方 |
+| `turn_test.go` | 空の `Stop` だけで終わりと判定しない／項目が欠けていたら判定不能／表明の促し／`max_dispatch_turns`／`blocked` の `esc`／wait の掛け方 |
 | `group_test.go` | グループの表明（`Ice Box` の issue も動かす）／ボードに無い対象／コメントを書かせ直す9段 |
 | `stall_test.go` | **`testing/synctest` で実時間ゼロ。**画面の版が増えている間は打ち切らない／版が止まったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
 | `quota_test.go` | 枠待ちの2条件／`pause_above_percent` は新規だけ止める／`none` なら1回も叩かない／資格情報が無くても起動は続く／**枠明けに `working` なら継続の指示を送らない** |

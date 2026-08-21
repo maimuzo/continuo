@@ -746,7 +746,7 @@ func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, r
 	}
 	if _, err := o.tracker.PostComment(ctx, nodeID,
 		buildHandoffComment(issue.Identifier, reason, hc),
-		o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
+		o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", issue.Identifier, "error", err)
 	}
 }

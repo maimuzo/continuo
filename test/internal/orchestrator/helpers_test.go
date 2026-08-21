@@ -678,7 +678,7 @@ func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState strin
 }
 
 // FetchComments は issue のコメントを返す。
-func (ft *fakeTracker) FetchComments(_ context.Context, issueNodeID string, _ config.TrackerCommentsConfig) ([]tracker.Comment, error) {
+func (ft *fakeTracker) FetchComments(_ context.Context, issueNodeID string, _ config.TrackerProviderCommentsConfig, _ config.TrackerCommentsConfig) ([]tracker.Comment, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchComments")
@@ -906,8 +906,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	// 軒並み stall と判定されてしまうので長めに取る。stall を見たいテストは
 	// Mutate で短くすること。
 	cfg.Claude.TurnTimeoutMs = 600000
-	cfg.Claude.ReadTimeoutMs = 2000
-	cfg.Claude.StartupTimeoutMs = 2000
+	cfg.Herdr.ReadTimeoutMs = 2000
+	cfg.Herdr.StartupTimeoutMs = 2000
 	cfg.Polling.IntervalMs = 3600000
 	// 枠の判定は既定で行わない（usage API を1回も叩かない）。
 	cfg.RateLimit.Source = "none"

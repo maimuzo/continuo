@@ -360,7 +360,7 @@ func (o *Orchestrator) noteUntrusted(ctx context.Context, issue tracker.Issue, r
 	}
 	if _, err := o.tracker.PostComment(ctx, nodeID,
 		buildUntrustedComment(issue.Owner, issue.Repo, reason),
-		o.cfg.Tracker.Provider.Comments.SelfMarker); err != nil {
+		o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("未信頼のリポジトリの通知を投稿できませんでした",
 			"identifier", issue.Identifier, "error", err)
 	}
@@ -560,14 +560,14 @@ func (o *Orchestrator) resolvePane(ctx context.Context, prepared *workspace.Prep
 //	               実運用ではほぼ常に done 側になる）
 //	blocked      … 確認の画面が出ている。**このまま turn を送ると本文が画面に食われて消える**ので、
 //	               agent.send_keys で ["esc"] を送ってから失敗として扱う（設計 3-11）
-//	working      … startup_timeout_ms まで待つ。超えたら起動失敗
+//	working      … herdr.startup_timeout_ms まで待つ。超えたら起動失敗
 //	unknown      … 判断できないので起動失敗として扱う
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 起動した run。
 // 戻り値: 合格なら nil。それ以外はエラー。
 func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState) error {
-	deadline := o.now().Add(time.Duration(o.cfg.Claude.StartupTimeoutMs) * time.Millisecond)
+	deadline := o.now().Add(time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond)
 	for {
 		got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})
 		if err != nil {
@@ -587,7 +587,7 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState) error {
 			if o.now().After(deadline) {
 				return i18n.Errorf(
 					i18n.KeyOrchestratorConfirmStartupWorkingTimeout,
-					o.cfg.Claude.StartupTimeoutMs, rs.agentName(), rs.agentName(), o.cfg.Claude.StartupTimeoutMs)
+					o.cfg.Herdr.StartupTimeoutMs, rs.agentName(), rs.agentName(), o.cfg.Herdr.StartupTimeoutMs)
 			}
 		default:
 			return i18n.Errorf(

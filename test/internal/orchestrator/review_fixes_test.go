@@ -441,11 +441,11 @@ func TestTurn_turnループを起こせなかったらNeedsPromptを立て直す
 //
 // 目的: `failure_state` へ落とす経路（打ち切り）とコメントを書かせられなかった経路が
 // 続けて走ると、理由の違う引き渡し通知が2件並ぶ。**1件に絞る**ことを示す。
-// 与える情報: `max_turns` が1で、エージェントが issue に1件もコメントを残さない run。
+// 与える情報: `max_dispatch_turns` が1で、エージェントが issue に1件もコメントを残さない run。
 // 成功条件: continuo 自身が書いたコメントが1件だけになる。
 func TestComment_引き渡しの通知は1つのrunにつき1件だけ書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
-		cfg.Agent.MaxTurns = 1
+		cfg.Agent.MaxDispatchTurns = 1
 	}})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
