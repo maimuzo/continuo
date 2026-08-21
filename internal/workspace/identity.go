@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // identityFilePerm は身元ファイルのパーミッションである。
@@ -92,20 +94,16 @@ type Identity struct {
 // 場合のエラー。問題なければ nil。
 func ValidateIdentityFileName(name string) error {
 	if name == "" {
-		return fmt.Errorf("workspace.identity_file が空です（身元ファイルの名前を決められません）")
+		return i18n.Errorf(i18n.KeyWorkspaceValidateIdentityFileNameEmpty)
 	}
 	if strings.TrimSpace(name) != name {
-		return fmt.Errorf("workspace.identity_file %q の前後に空白があります（ファイルの名前にすること）", name)
+		return i18n.Errorf(i18n.KeyWorkspaceValidateIdentityFileNameHasSpaces, name)
 	}
 	if strings.ContainsRune(name, '/') || strings.ContainsRune(name, os.PathSeparator) {
-		return fmt.Errorf(
-			"workspace.identity_file %q にパスの区切りが入っています"+
-				"（worktree の直下に置くファイルの名前だけを書くこと。3-18）", name)
+		return i18n.Errorf(i18n.KeyWorkspaceValidateIdentityFileNameHasSeparator, name)
 	}
 	if name == "." || name == ".." || filepath.Base(name) != name {
-		return fmt.Errorf(
-			"workspace.identity_file %q はファイルの名前ではありません"+
-				"（worktree の外側を指しうる値は使えない。3-18）", name)
+		return i18n.Errorf(i18n.KeyWorkspaceValidateIdentityFileNameNotAFileName, name)
 	}
 	return nil
 }
@@ -156,7 +154,7 @@ func (m *Manager) ReadIdentity(worktreePath string) (*Identity, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("%w: %s", ErrIdentityNotFound, path)
 		}
-		return nil, fmt.Errorf("身元ファイル %s を読めません: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyWorkspaceReadIdentityReadFailed, path, err)
 	}
 	var identity Identity
 	if err := json.Unmarshal(data, &identity); err != nil {
@@ -203,7 +201,7 @@ func (m *Manager) writeIdentityLocked(ctx context.Context, worktreePath string, 
 	path := m.IdentityPath(worktreePath)
 	data, err := json.MarshalIndent(identity, "", "  ")
 	if err != nil {
-		return fmt.Errorf("身元ファイルの内容を JSON 化できません: %w", err)
+		return i18n.Errorf(i18n.KeyWorkspaceWriteIdentityMarshalFailed, err)
 	}
 	data = append(data, '\n')
 
@@ -228,24 +226,24 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp")
 	if err != nil {
-		return fmt.Errorf("%s の一時ファイルを作成できません: %w", path, err)
+		return i18n.Errorf(i18n.KeyWorkspaceWriteFileAtomicTempCreateFailed, path, err)
 	}
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }()
 
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("%s へ書き込めません: %w", tmpName, err)
+		return i18n.Errorf(i18n.KeyWorkspaceWriteFileAtomicWriteFailed, tmpName, err)
 	}
 	if err := tmp.Chmod(perm); err != nil {
 		_ = tmp.Close()
-		return fmt.Errorf("%s のパーミッションを設定できません: %w", tmpName, err)
+		return i18n.Errorf(i18n.KeyWorkspaceWriteFileAtomicChmodFailed, tmpName, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("%s を閉じられません: %w", tmpName, err)
+		return i18n.Errorf(i18n.KeyWorkspaceWriteFileAtomicCloseFailed, tmpName, err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("%s を %s へ置き換えられません: %w", tmpName, path, err)
+		return i18n.Errorf(i18n.KeyWorkspaceWriteFileAtomicRenameFailed, tmpName, path, err)
 	}
 	return nil
 }
@@ -288,7 +286,7 @@ func (m *Manager) registerExclude(ctx context.Context, worktreePath string) erro
 	}
 	infoDir := filepath.Join(commonDir, "info")
 	if err := os.MkdirAll(infoDir, 0o755); err != nil {
-		return fmt.Errorf("%s を作成できません: %w", infoDir, err)
+		return i18n.Errorf(i18n.KeyWorkspaceRegisterExcludeInfoDirCreateFailed, infoDir, err)
 	}
 	excludePath := filepath.Join(infoDir, "exclude")
 
@@ -297,7 +295,7 @@ func (m *Manager) registerExclude(ctx context.Context, worktreePath string) erro
 
 	existing, err := os.ReadFile(excludePath)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%s を読めません: %w", excludePath, err)
+		return i18n.Errorf(i18n.KeyWorkspaceRegisterExcludeReadFailed, excludePath, err)
 	}
 	registered := map[string]bool{}
 	scanner := bufio.NewScanner(strings.NewReader(string(existing)))
@@ -321,14 +319,14 @@ func (m *Manager) registerExclude(ctx context.Context, worktreePath string) erro
 
 	file, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, excludeFilePerm)
 	if err != nil {
-		return fmt.Errorf("%s を開けません: %w", excludePath, err)
+		return i18n.Errorf(i18n.KeyWorkspaceRegisterExcludeOpenFailed, excludePath, err)
 	}
 	if _, err := file.WriteString(add.String()); err != nil {
 		_ = file.Close()
-		return fmt.Errorf("%s へ書き込めません: %w", excludePath, err)
+		return i18n.Errorf(i18n.KeyWorkspaceRegisterExcludeWriteFailed, excludePath, err)
 	}
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("%s を閉じられません: %w", excludePath, err)
+		return i18n.Errorf(i18n.KeyWorkspaceRegisterExcludeCloseFailed, excludePath, err)
 	}
 	return nil
 }
@@ -437,7 +435,7 @@ func (m *Manager) MarkCleanupDeferred(worktreePath string, at time.Time) error {
 
 	data, err := json.MarshalIndent(*identity, "", "  ")
 	if err != nil {
-		return fmt.Errorf("身元ファイルの内容を JSON 化できません: %w", err)
+		return i18n.Errorf(i18n.KeyWorkspaceWriteIdentityMarshalFailed, err)
 	}
 	data = append(data, '\n')
 	return writeFileAtomic(m.IdentityPath(worktreePath), data, identityFilePerm)

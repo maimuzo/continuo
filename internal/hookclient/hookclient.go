@@ -27,6 +27,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // 既定値である。呼び出し側は Config で上書きできる。
@@ -217,10 +219,7 @@ func Forward(cfg Config) Result {
 			Outcome:   OutcomeDropped,
 			EventName: eventName,
 			Truncated: truncated,
-			Err: fmt.Errorf(
-				"socket へ転送できず、逃がし先（--pending-dir）も指定されていないので捨てました: %w",
-				sendErr,
-			),
+			Err:       i18n.Errorf(i18n.KeyHookclientForwardNoPendingDir, sendErr),
 		}
 	}
 
@@ -230,7 +229,7 @@ func Forward(cfg Config) Result {
 			Outcome:   OutcomeDropped,
 			EventName: eventName,
 			Truncated: truncated,
-			Err:       fmt.Errorf("socket へ転送できず（%v）、逃がし先へも書けませんでした: %w", sendErr, spillErr),
+			Err:       i18n.Errorf(i18n.KeyHookclientForwardSpillFailed, sendErr, spillErr),
 		}
 	}
 	return Result{
@@ -282,7 +281,7 @@ func (c Config) withDefaults() Config {
 func readInput(cfg Config) ([]byte, bool, error) {
 	data, err := io.ReadAll(io.LimitReader(cfg.Stdin, cfg.MaxInputBytes+1))
 	if err != nil {
-		return nil, false, fmt.Errorf("標準入力を読めません: %w", err)
+		return nil, false, i18n.Errorf(i18n.KeyHookclientReadInputReadFailed, err)
 	}
 	if int64(len(data)) > cfg.MaxInputBytes {
 		return data[:cfg.MaxInputBytes], true, nil
@@ -345,12 +344,10 @@ func truncatedLine(data []byte, limit int64) ([]byte, string, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, "", fmt.Errorf(
-			"標準入力が上限（%d バイト）を超えており、先頭も hook の JSON として読めませんでした: %w", limit, err)
+		return nil, "", i18n.Errorf(i18n.KeyHookclientTruncatedLineHeadUnreadable, limit, err)
 	}
 	if delim, ok := tok.(json.Delim); !ok || delim != '{' {
-		return nil, "", fmt.Errorf(
-			"標準入力が上限（%d バイト）を超えており、しかも JSON のオブジェクトで始まっていません", limit)
+		return nil, "", i18n.Errorf(i18n.KeyHookclientTruncatedLineNotObject, limit)
 	}
 
 	picked := map[string]any{}
@@ -387,8 +384,7 @@ func truncatedLine(data []byte, limit int64) ([]byte, string, error) {
 	}
 
 	if len(picked) == 0 {
-		return nil, "", fmt.Errorf(
-			"標準入力が上限（%d バイト）を超えており、先頭からは hook の項目を1つも拾えませんでした", limit)
+		return nil, "", i18n.Errorf(i18n.KeyHookclientTruncatedLineNoFields, limit)
 	}
 
 	out := make(map[string]any, len(picked)+2)
@@ -401,7 +397,7 @@ func truncatedLine(data []byte, limit int64) ([]byte, string, error) {
 	// encoding/json はキーを名前の昇順に並べるので、出来上がる1行は毎回同じ形になる。
 	encoded, err := json.Marshal(out)
 	if err != nil {
-		return nil, "", fmt.Errorf("上限を超えた hook の項目を1行の JSON に組み立てられません: %w", err)
+		return nil, "", i18n.Errorf(i18n.KeyHookclientTruncatedLineMarshalFailed, err)
 	}
 	return append(encoded, '\n'), eventName, nil
 }
@@ -416,10 +412,10 @@ func truncatedLine(data []byte, limit int64) ([]byte, string, error) {
 func compactLine(data []byte) ([]byte, string, error) {
 	var probe map[string]json.RawMessage
 	if err := json.Unmarshal(data, &probe); err != nil {
-		return nil, "", fmt.Errorf("標準入力を hook の JSON として解釈できません: %w", err)
+		return nil, "", i18n.Errorf(i18n.KeyHookclientCompactLineUnmarshalFailed, err)
 	}
 	if probe == nil {
-		return nil, "", errors.New("標準入力が JSON のオブジェクトではありません（null でした）")
+		return nil, "", i18n.Errorf(i18n.KeyHookclientCompactLineNotObject)
 	}
 
 	var named struct {
@@ -432,7 +428,7 @@ func compactLine(data []byte) ([]byte, string, error) {
 	// 改行区切りの約束（設計 3-2）を守るため、整形された JSON が来ても1行に詰める。
 	compact, err := jsonCompact(data)
 	if err != nil {
-		return nil, "", fmt.Errorf("標準入力の JSON を1行に詰められません: %w", err)
+		return nil, "", i18n.Errorf(i18n.KeyHookclientCompactLineCompactFailed, err)
 	}
 	return append(compact, '\n'), named.HookEventName, nil
 }
@@ -459,19 +455,19 @@ func jsonCompact(data []byte) ([]byte, error) {
 // 戻り値: 接続または書き込みに失敗した場合のエラー。
 func sendToSocket(cfg Config, line []byte) error {
 	if cfg.SocketPath == "" {
-		return errors.New("hook を受ける socket のパス（--socket）が指定されていません")
+		return i18n.Errorf(i18n.KeyHookclientSendToSocketPathEmpty)
 	}
 	conn, err := net.DialTimeout("unix", cfg.SocketPath, cfg.DialTimeout)
 	if err != nil {
-		return fmt.Errorf("hook を受ける socket へ接続できません: %s: %w", cfg.SocketPath, err)
+		return i18n.Errorf(i18n.KeyHookclientSendToSocketDialFailed, cfg.SocketPath, err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	if err := conn.SetWriteDeadline(time.Now().Add(cfg.WriteTimeout)); err != nil {
-		return fmt.Errorf("hook を受ける socket に書き込みの期限を設定できません: %w", err)
+		return i18n.Errorf(i18n.KeyHookclientSendToSocketDeadlineFailed, err)
 	}
 	if _, err := conn.Write(line); err != nil {
-		return fmt.Errorf("hook を受ける socket へ書き込めません: %s: %w", cfg.SocketPath, err)
+		return i18n.Errorf(i18n.KeyHookclientSendToSocketWriteFailed, cfg.SocketPath, err)
 	}
 	return nil
 }
@@ -494,14 +490,10 @@ func spill(cfg Config, eventName string, line []byte) (string, error) {
 	// 走査しないので、そこへ書いたものは永久に読まれない（worktree も汚れる）。
 	// 受け口の側（hookserver.New）も同じ理由で絶対パスを要求している。
 	if !filepath.IsAbs(cfg.PendingDir) {
-		return "", fmt.Errorf(
-			"hook の逃がし先（--pending-dir）%q が絶対パスではありません"+
-				"（hook の cwd は worktree なので、相対パスでは worktree の中に書いてしまい、continuo は読めません）",
-			cfg.PendingDir,
-		)
+		return "", i18n.Errorf(i18n.KeyHookclientSpillDirNotAbsolute, cfg.PendingDir)
 	}
 	if err := os.MkdirAll(cfg.PendingDir, 0o700); err != nil {
-		return "", fmt.Errorf("hook の逃がし先を作れません: %s: %w", cfg.PendingDir, err)
+		return "", i18n.Errorf(i18n.KeyHookclientSpillMkdirFailed, cfg.PendingDir, err)
 	}
 	if err := checkPendingCapacity(cfg, eventName); err != nil {
 		return "", err
@@ -525,23 +517,20 @@ func spill(cfg Config, eventName string, line []byte) (string, error) {
 			continue
 		}
 		if err != nil {
-			return "", fmt.Errorf("hook の逃がし先のファイルを作れません: %s: %w", tmpPath, err)
+			return "", i18n.Errorf(i18n.KeyHookclientSpillCreateFailed, tmpPath, err)
 		}
 
 		if err := writeAndSync(f, payload); err != nil {
 			_ = os.Remove(tmpPath)
-			return "", fmt.Errorf("hook の逃がし先のファイルへ書けません: %s: %w", tmpPath, err)
+			return "", i18n.Errorf(i18n.KeyHookclientSpillWriteFailed, tmpPath, err)
 		}
 		if err := os.Rename(tmpPath, finalPath); err != nil {
 			_ = os.Remove(tmpPath)
-			return "", fmt.Errorf("hook の逃がし先のファイル名を確定できません: %s: %w", tmpPath, err)
+			return "", i18n.Errorf(i18n.KeyHookclientSpillRenameFailed, tmpPath, err)
 		}
 		return finalPath, nil
 	}
-	return "", fmt.Errorf(
-		"hook の逃がし先のファイル名が %d 回続けてぶつかりました: %s",
-		maxSpillNameAttempts, cfg.PendingDir,
-	)
+	return "", i18n.Errorf(i18n.KeyHookclientSpillNameConflict, maxSpillNameAttempts, cfg.PendingDir)
 }
 
 // checkPendingCapacity は逃がし先が太りすぎていないかを確かめる。
@@ -572,8 +561,8 @@ func checkPendingCapacity(cfg Config, eventName string) error {
 	if total < hardBytes && count < hardFiles && spillEssentialEvents[eventName] {
 		return nil
 	}
-	return fmt.Errorf(
-		"hook の逃がし先が上限に達しています（%d バイト / %d 件。上限 %d バイト / %d 件）: %s",
+	return i18n.Errorf(
+		i18n.KeyHookclientCheckPendingCapacityLimitReached,
 		total, count, cfg.MaxPendingBytes, cfg.MaxPendingFiles, cfg.PendingDir,
 	)
 }

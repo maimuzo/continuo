@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // SourceNone は rate_limit.source が「usage API を1回も叩かない」を意味する値である。
@@ -225,7 +226,7 @@ func NewReader(opts Options) (*Reader, error) {
 		var err error
 		homeDir, err = os.UserHomeDir()
 		if err != nil {
-			return nil, fmt.Errorf("ホームディレクトリを特定できません（%s を読めない）: %w", CredentialsRelPath, err)
+			return nil, i18n.Errorf(i18n.KeyRatelimitNewReaderHomeDirFailed, CredentialsRelPath, err)
 		}
 	}
 	userAgent := opts.UserAgent
@@ -285,7 +286,7 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("usage API のリクエストを組み立てられません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyRatelimitFetchRequestBuildFailed, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("anthropic-beta", betaHeaderValue)
@@ -293,16 +294,16 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 
 	resp, err := r.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("usage API を読めません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyRatelimitFetchRequestFailed, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, fmt.Errorf("usage API の応答を読めません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyRatelimitFetchBodyReadFailed, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		statusErr := fmt.Errorf("usage API が HTTP %d を返しました: %s", resp.StatusCode, truncate(body, 200))
+		statusErr := i18n.Errorf(i18n.KeyRatelimitFetchUnexpectedStatus, resp.StatusCode, truncate(body, 200))
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			// **401 / 403 は、このトークンでは以後も読めない。**諦めないと、失効した
 			// accessToken を抱えた無人のプロセスが巡回のたび（既定30秒）に叩き直し、
@@ -318,7 +319,7 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 		Limits []Limit `json:"limits"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("usage API の応答を解析できません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyRatelimitFetchParseFailed, err)
 	}
 
 	return &Snapshot{Limits: parsed.Limits, FetchedAt: time.Now()}, nil
@@ -333,11 +334,11 @@ func (r *Reader) token() (string, error) {
 	case TokenSourceEnv:
 		name := r.cfg.TokenEnv
 		if name == "" {
-			return "", fmt.Errorf("%w: rate_limit.token_env が空です", ErrNoCredentials)
+			return "", i18n.Errorf(i18n.KeyRatelimitTokenEnvNameEmpty, ErrNoCredentials)
 		}
 		v := os.Getenv(name)
 		if v == "" {
-			return "", fmt.Errorf("%w: 環境変数 %s が空です", ErrNoCredentials, name)
+			return "", i18n.Errorf(i18n.KeyRatelimitTokenEnvValueEmpty, ErrNoCredentials, name)
 		}
 		return v, nil
 	default:
@@ -357,7 +358,7 @@ func (r *Reader) token() (string, error) {
 // ErrNoCredentials を包んだエラー。
 func (r *Reader) tokenFromCredentialsFile() (string, error) {
 	if r.homeDir == "" {
-		return "", fmt.Errorf("%w: ホームディレクトリが分かりません", ErrNoCredentials)
+		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileHomeDirUnknown, ErrNoCredentials)
 	}
 	path := filepath.Join(r.homeDir, CredentialsRelPath)
 	// **開く前にファイルの種別を確かめる。**中身は Claude の OAuth アクセストークンであり、
@@ -365,12 +366,10 @@ func (r *Reader) tokenFromCredentialsFile() (string, error) {
 	// 別の場所に置き換えられたファイルを黙って読むことになる（os.Lstat は辿らない）。
 	info, err := os.Lstat(path)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s を読めません（macOS では Keychain にあるのが普通です）: %w",
-			ErrNoCredentials, path, err)
+		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileReadFailed, ErrNoCredentials, path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%w: %s が通常のファイルではありません（symlink は辿りません）: mode=%s",
-			ErrNoCredentials, path, info.Mode())
+		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileNotRegularFile, ErrNoCredentials, path, info.Mode())
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
 		// **読むのは止めないが、必ず1行残す。**権限が緩んだことに誰も気づかないまま、
@@ -382,8 +381,7 @@ func (r *Reader) tokenFromCredentialsFile() (string, error) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s を読めません（macOS では Keychain にあるのが普通です）: %w",
-			ErrNoCredentials, path, err)
+		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileReadFailed, ErrNoCredentials, path, err)
 	}
 	var parsed struct {
 		ClaudeAIOauth struct {
@@ -391,10 +389,10 @@ func (r *Reader) tokenFromCredentialsFile() (string, error) {
 		} `json:"claudeAiOauth"`
 	}
 	if err := json.Unmarshal(data, &parsed); err != nil {
-		return "", fmt.Errorf("%w: %s を解析できません: %w", ErrNoCredentials, path, err)
+		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileParseFailed, ErrNoCredentials, path, err)
 	}
 	if parsed.ClaudeAIOauth.AccessToken == "" {
-		return "", fmt.Errorf("%w: %s に claudeAiOauth.accessToken がありません", ErrNoCredentials, path)
+		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileAccessTokenMissing, ErrNoCredentials, path)
 	}
 	return parsed.ClaudeAIOauth.AccessToken, nil
 }

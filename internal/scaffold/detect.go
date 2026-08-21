@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // DefaultDetectTimeout は gh の呼び出し1回あたりの制限時間である。
@@ -131,9 +133,9 @@ func RunGH(ctx context.Context, args ...string) ([]byte, error) {
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
-			return nil, fmt.Errorf("`gh %s` の実行に失敗しました: %w", strings.Join(args, " "), err)
+			return nil, i18n.Errorf(i18n.KeyScaffoldGHRunFailed, strings.Join(args, " "), err)
 		}
-		return nil, fmt.Errorf("`gh %s` の実行に失敗しました: %w: %s", strings.Join(args, " "), err, firstLine(msg))
+		return nil, i18n.Errorf(i18n.KeyScaffoldGHRunFailedWithStderr, strings.Join(args, " "), err, firstLine(msg))
 	}
 	return out, nil
 }

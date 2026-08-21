@@ -3,7 +3,8 @@ package herdr
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // メソッド名・params の引数名・result の形は 2026-08-18 に `herdr api schema --json` で
@@ -84,7 +85,7 @@ func (c *Client) PaneSplit(ctx context.Context, params PaneSplitParams) (*PaneSp
 	}
 	var result PaneSplitResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodPaneSplit, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodPaneSplit, err)
 	}
 	return &result, nil
 }
@@ -130,7 +131,7 @@ func (c *Client) PaneRename(ctx context.Context, params PaneRenameParams) (*Pane
 	}
 	var result PaneRenameResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodPaneRename, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodPaneRename, err)
 	}
 	return &result, nil
 }
@@ -165,7 +166,7 @@ func (c *Client) PaneClose(ctx context.Context, params PaneCloseParams) (*PaneCl
 	}
 	var result PaneCloseResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodPaneClose, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodPaneClose, err)
 	}
 	return &result, nil
 }
@@ -200,7 +201,7 @@ func (c *Client) PaneList(ctx context.Context, params PaneListParams) (*PaneList
 	}
 	var result PaneListResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodPaneList, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodPaneList, err)
 	}
 	return &result, nil
 }
@@ -261,7 +262,7 @@ func (c *Client) PaneReportAgent(
 	}
 	var result PaneReportAgentResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodPaneReportAgent, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodPaneReportAgent, err)
 	}
 	return &result, nil
 }

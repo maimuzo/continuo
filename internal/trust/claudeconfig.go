@@ -3,8 +3,9 @@ package trust
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // indentUnit は `~/.claude.json` を書き戻すときの字下げ1段分である。
@@ -57,25 +58,25 @@ func parseOrderedObject(raw []byte) (*orderedObject, error) {
 
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, fmt.Errorf("JSON として読めません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyTrustParseOrderedObjectInvalidJSON, err)
 	}
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
-		return nil, fmt.Errorf("JSON のオブジェクト（`{` で始まる形）ではありません")
+		return nil, i18n.Errorf(i18n.KeyTrustParseOrderedObjectNotObject)
 	}
 
 	o := newOrderedObject()
 	for dec.More() {
 		keyTok, err := dec.Token()
 		if err != nil {
-			return nil, fmt.Errorf("JSON のキーを読めません: %w", err)
+			return nil, i18n.Errorf(i18n.KeyTrustParseOrderedObjectKeyUnreadable, err)
 		}
 		key, ok := keyTok.(string)
 		if !ok {
-			return nil, fmt.Errorf("JSON のキーが文字列ではありません: %v", keyTok)
+			return nil, i18n.Errorf(i18n.KeyTrustParseOrderedObjectKeyNotString, keyTok)
 		}
 		var v json.RawMessage
 		if err := dec.Decode(&v); err != nil {
-			return nil, fmt.Errorf("キー %q の値を読めません: %w", key, err)
+			return nil, i18n.Errorf(i18n.KeyTrustParseOrderedObjectValueUnreadable, key, err)
 		}
 		if _, dup := o.vals[key]; !dup {
 			o.keys = append(o.keys, key)
@@ -83,7 +84,7 @@ func parseOrderedObject(raw []byte) (*orderedObject, error) {
 		o.vals[key] = v
 	}
 	if _, err := dec.Token(); err != nil {
-		return nil, fmt.Errorf("JSON のオブジェクトが閉じていません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyTrustParseOrderedObjectObjectNotClosed, err)
 	}
 	return o, nil
 }
@@ -133,13 +134,13 @@ func (o *orderedObject) marshalIndent(depth int) ([]byte, error) {
 		buf.WriteString(inner)
 		encoded, err := encodeJSONString(k)
 		if err != nil {
-			return nil, fmt.Errorf("キー %q を JSON の文字列にできません: %w", k, err)
+			return nil, i18n.Errorf(i18n.KeyTrustMarshalIndentKeyEncodeFailed, k, err)
 		}
 		buf.Write(encoded)
 		buf.WriteString(": ")
 		var indented bytes.Buffer
 		if err := json.Indent(&indented, o.vals[k], inner, indentUnit); err != nil {
-			return nil, fmt.Errorf("キー %q の値を並べ直せません: %w", k, err)
+			return nil, i18n.Errorf(i18n.KeyTrustMarshalIndentValueIndentFailed, k, err)
 		}
 		buf.Write(indented.Bytes())
 	}

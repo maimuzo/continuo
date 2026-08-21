@@ -33,6 +33,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -256,7 +257,7 @@ func New(opts Options) (*Orchestrator, error) {
 	if continuoPath == "" {
 		exe, err := os.Executable()
 		if err != nil {
-			return nil, fmt.Errorf("continuo の実行ファイルの場所を決められません（hook のコマンド行に書けない）: %w", err)
+			return nil, i18n.Errorf(i18n.KeyOrchestratorNewExecutablePathUnknown, err)
 		}
 		continuoPath = exe
 	}

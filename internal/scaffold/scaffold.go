@@ -17,6 +17,7 @@ import (
 	"syscall"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // fileName は init が書き出すファイルの名前である（設計 5-1 / SPEC.md 5.1）。
@@ -113,7 +114,7 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 		// ここで見た結果と実際の書き込みがずれても、報告する文言が変わるだけで害は無い。
 		_, statErr := os.Lstat(path)
 		if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
-			return Result{Path: path}, fmt.Errorf("WORKFLOW.md を確認できません: %s: %w", path, statErr)
+			return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, path, statErr)
 		}
 		overwritten = statErr == nil
 		flags |= os.O_TRUNC
@@ -131,10 +132,10 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 	}
 	if _, err := f.WriteString(TemplateWithValues(values)); err != nil {
 		f.Close()
-		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を書き込めません: %s: %w", path, err)
+		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, path, err)
 	}
 	if err := f.Close(); err != nil {
-		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を閉じられません: %s: %w", path, err)
+		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, path, err)
 	}
 	return Result{Path: path, Overwritten: overwritten}, nil
 }
@@ -157,7 +158,7 @@ func resolveTarget(dir string) (string, error) {
 			// 利用者は「作ったはずのファイルが見つからない」状態になる。
 			return "", fmt.Errorf("%w: %s", ErrDirNotFound, absDir)
 		}
-		return "", fmt.Errorf("ディレクトリを確認できません: %s: %w", absDir, err)
+		return "", i18n.Errorf(i18n.KeyScaffoldDirStatFailed, absDir, err)
 	}
 	if !info.IsDir() {
 		return "", fmt.Errorf("%w: %s", ErrNotADirectory, absDir)
@@ -170,7 +171,7 @@ func resolveTarget(dir string) (string, error) {
 	// 上の存在の検査より後に呼ぶ。
 	realDir, err := filepath.EvalSymlinks(absDir)
 	if err != nil {
-		return "", fmt.Errorf("ディレクトリの実体を辿れません: %s: %w", absDir, err)
+		return "", i18n.Errorf(i18n.KeyScaffoldDirEvalSymlinksFailed, absDir, err)
 	}
 	return filepath.Join(realDir, fileName), nil
 }
@@ -185,17 +186,17 @@ func openError(path string, err error) error {
 	// 「シンボリックリンクが多すぎます」という OS の文言のままでは何が起きたか分からないので、
 	// symlink であることを名指しした文言に直す。
 	if errors.Is(err, syscall.ELOOP) {
-		return fmt.Errorf("%w: %s: 辿るとこのディレクトリの外にあるリンク先を壊すため書き込みません", ErrSymlink, path)
+		return i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
 	}
 	if errors.Is(err, fs.ErrExist) {
 		// O_EXCL は既存の symlink でも EEXIST を返す。--force を勧めても
 		// そちらは ErrSymlink で止まるので、symlink のときは symlink だと言う。
 		if info, lerr := os.Lstat(path); lerr == nil && info.Mode()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("%w: %s: 辿るとこのディレクトリの外にあるリンク先を壊すため書き込みません", ErrSymlink, path)
+			return i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
 		}
 		return fmt.Errorf("%w: %s", ErrAlreadyExists, path)
 	}
-	return fmt.Errorf("WORKFLOW.md を作成できません: %s: %w", path, err)
+	return i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, path, err)
 }
 
 // Template は書き出す雛形の中身を、プレースホルダを埋めずにそのまま返す。
@@ -217,13 +218,13 @@ func resolveDir(dir string) (string, error) {
 	if dir == "" {
 		wd, err := os.Getwd()
 		if err != nil {
-			return "", fmt.Errorf("いまいるディレクトリを取得できません: %w", err)
+			return "", i18n.Errorf(i18n.KeyScaffoldDirGetwdFailed, err)
 		}
 		return wd, nil
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
-		return "", fmt.Errorf("ディレクトリのパスを絶対パスに直せません: %s: %w", dir, err)
+		return "", i18n.Errorf(i18n.KeyScaffoldDirAbsFailed, dir, err)
 	}
 	return abs, nil
 }

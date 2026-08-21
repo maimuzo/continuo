@@ -5,10 +5,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"syscall"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // transcriptMaxLineBytes は transcript の1行として読み切る上限である。
@@ -170,12 +171,12 @@ func ReadTranscript(path, promptID, prefix, currentIdentifier string) (*Transcri
 
 	scan, err := scanTranscript(f, promptID)
 	if err != nil {
-		return nil, fmt.Errorf("transcript を読めません: %s: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyOrchestratorReadTranscriptReadFailed, path, err)
 	}
 
 	texts, err := collectTurnTexts(f, scan.start, scan.end)
 	if err != nil {
-		return nil, fmt.Errorf("transcript を読めません: %s: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyOrchestratorReadTranscriptReadFailed, path, err)
 	}
 
 	return &TranscriptReadResult{
@@ -196,16 +197,16 @@ func ReadTranscript(path, promptID, prefix, currentIdentifier string) (*Transcri
 func openRegularFile(path string) (*os.File, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, fmt.Errorf("transcript を開けません: %s: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyOrchestratorOpenRegularFileOpenFailed, path, err)
 	}
 	info, err := f.Stat()
 	if err != nil {
 		_ = f.Close()
-		return nil, fmt.Errorf("transcript の種別を読めません: %s: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyOrchestratorOpenRegularFileStatFailed, path, err)
 	}
 	if !info.Mode().IsRegular() {
 		_ = f.Close()
-		return nil, fmt.Errorf("transcript が通常のファイルではありません: %s: mode=%s", path, info.Mode())
+		return nil, i18n.Errorf(i18n.KeyOrchestratorOpenRegularFileNotRegularFile, path, info.Mode())
 	}
 	return f, nil
 }

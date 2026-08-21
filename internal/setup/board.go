@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
@@ -76,10 +77,10 @@ func FetchStatusField(ctx context.Context, opts FetchOptions) (StatusField, erro
 		name = DefaultStatusFieldName
 	}
 	if opts.Owner == "" {
-		return StatusField{}, fmt.Errorf("ボードの owner が決まっていません")
+		return StatusField{}, i18n.Errorf(i18n.KeySetupBoardOwnerMissing)
 	}
 	if opts.ProjectNumber <= 0 {
-		return StatusField{}, fmt.Errorf("ボードの番号が決まっていません")
+		return StatusField{}, i18n.Errorf(i18n.KeySetupBoardProjectNumberMissing)
 	}
 
 	run := opts.RunGH
@@ -101,7 +102,7 @@ func FetchStatusField(ctx context.Context, opts FetchOptions) (StatusField, erro
 
 	fields, err := parseFieldList(out)
 	if err != nil {
-		return StatusField{}, fmt.Errorf("`gh project field-list` の出力を解釈できません: %w", err)
+		return StatusField{}, i18n.Errorf(i18n.KeySetupBoardFieldListUnparsable, err)
 	}
 
 	for _, f := range fields {
@@ -109,8 +110,7 @@ func FetchStatusField(ctx context.Context, opts FetchOptions) (StatusField, erro
 			continue
 		}
 		if f.Type != singleSelectFieldType {
-			return StatusField{}, fmt.Errorf("%w: %q は single-select ではありません（型は %s です）",
-				ErrStatusFieldNotFound, name, f.Type)
+			return StatusField{}, i18n.Errorf(i18n.KeySetupBoardFieldNotSingleSelect, ErrStatusFieldNotFound, name, f.Type)
 		}
 		options := make([]string, 0, len(f.Options))
 		for _, o := range f.Options {
@@ -118,8 +118,7 @@ func FetchStatusField(ctx context.Context, opts FetchOptions) (StatusField, erro
 		}
 		return StatusField{Name: name, Options: options}, nil
 	}
-	return StatusField{}, fmt.Errorf("%w: ボード #%d に %q という名前のフィールドがありません",
-		ErrStatusFieldNotFound, opts.ProjectNumber, name)
+	return StatusField{}, i18n.Errorf(i18n.KeySetupBoardFieldNotFound, ErrStatusFieldNotFound, opts.ProjectNumber, name)
 }
 
 // classifyGHError は gh が返したエラーを、直し方が決まる形へ分類する。

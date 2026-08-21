@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // GHAuthTokenFunc は `gh auth token` 相当の処理を行う関数の型である。
@@ -25,11 +26,11 @@ func RunGHAuthToken(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "gh", "auth", "token")
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("`gh auth token` の実行に失敗しました: %w", err)
+		return "", i18n.Errorf(i18n.KeyTrackerGHAuthTokenRunFailed, err)
 	}
 	token := strings.TrimSpace(string(out))
 	if token == "" {
-		return "", fmt.Errorf("`gh auth token` の出力が空でした")
+		return "", i18n.Errorf(i18n.KeyTrackerGHAuthTokenEmptyOutput)
 	}
 	return token, nil
 }

@@ -3,7 +3,8 @@ package herdr
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // メソッド名・params の引数名・result の形は 2026-08-18 に `herdr api schema --json` で
@@ -58,7 +59,7 @@ func (c *Client) WorkspaceRename(
 	}
 	var result WorkspaceRenameResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodWorkspaceRename, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodWorkspaceRename, err)
 	}
 	return &result, nil
 }

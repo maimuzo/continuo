@@ -2,12 +2,12 @@ package orchestrator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -405,7 +405,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **書く前に必ず ID 指定で取り直す**（UpdateStatus が内部で行う）。
 	// **terminal_states に入っていたら書かない。**
 	if _, err := o.tracker.UpdateStatus(ctx, issue.ID, o.cfg.Tracker.RunningState, o.cfg.Tracker.TerminalStates); err != nil {
-		return fmt.Errorf("Status を %s へ書けません: %w", o.cfg.Tracker.RunningState, err)
+		return i18n.Errorf(i18n.KeyOrchestratorStartRunStatusUpdateFailed, o.cfg.Tracker.RunningState, err)
 	}
 	// **段-1 の状態ごとの上限は running_state のバケツで数える**（設計 3-16）。
 	// 手元のスナップショットを書き換えておかないと、次の巡回で取り直すまで
@@ -415,14 +415,14 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// 段3: worktree を用意し、herdr workspace として開く。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(issue))
 	if err != nil {
-		return fmt.Errorf("作業用の worktree を用意できませんでした。\n%w", err)
+		return i18n.Errorf(i18n.KeyOrchestratorStartRunWorktreePrepareFailed, err)
 	}
 	rs.setWorkspaceInfo(prepared.Path, prepared.Base, prepared.HerdrWorkspaceID)
 
 	// 段4: worktree を新しく作ったときだけ after_create を走らせる（仕様 5.3.4）。
 	if prepared.Created {
 		if err := o.ws.RunHook(ctx, workspace.HookAfterCreate, prepared.Path); err != nil {
-			return fmt.Errorf("workspace_hooks.after_create に失敗しました: %w", err)
+			return i18n.Errorf(i18n.KeyOrchestratorStartRunAfterCreateHookFailed, err)
 		}
 	}
 
@@ -461,7 +461,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 	identity = workspace.MergeForReuse(identity, prepared.ExistingIdentity)
 	if err := o.ws.WriteIdentity(ctx, prepared.Path, identity); err != nil {
-		return fmt.Errorf("身元ファイルを書けません: %w", err)
+		return i18n.Errorf(i18n.KeyOrchestratorStartRunIdentityWriteFailed, err)
 	}
 	if reuse {
 		// 再 dispatch のときも引き継いだ回数を数える（設計 3-18）。
@@ -472,7 +472,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 
 	// 段7: before_run（失敗したら致命）。
 	if err := o.ws.RunHook(ctx, workspace.HookBeforeRun, prepared.Path); err != nil {
-		return fmt.Errorf("workspace_hooks.before_run に失敗しました: %w", err)
+		return i18n.Errorf(i18n.KeyOrchestratorStartRunBeforeRunHookFailed, err)
 	}
 
 	// 段8: worktree.open が開いた workspace の pane を pane.list で引く。
@@ -486,7 +486,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		PaneID: paneID,
 		Label:  issueURL(issue),
 	}); err != nil {
-		return fmt.Errorf("pane の label に issue の URL を書けません: %w", err)
+		return i18n.Errorf(i18n.KeyOrchestratorStartRunPaneRenameFailed, err)
 	}
 
 	// 段9: その pane で Claude Code を起動する。
@@ -502,7 +502,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		Args:   o.claudeStartArgs(settingsPath, sessionUUID, ""),
 	}, agentStartRetries, agentStartRetryDelay)
 	if err != nil {
-		return fmt.Errorf("Claude Code を起動できません: %w", err)
+		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
 	}
 	rs.setAgentName(agentName)
 	// **起動直後の画面の版を stall の判定の種にする**（設計 3-21）。種を入れないと、
@@ -539,15 +539,15 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 // 戻り値の2つ目: pane.list に失敗した場合、または pane が1つでない場合のエラー。
 func (o *Orchestrator) resolvePane(ctx context.Context, prepared *workspace.PrepareResult) (string, error) {
 	if prepared.HerdrWorkspaceID == "" {
-		return "", errors.New("herdr の workspace の ID が空です（herdr.worktree.create_via_herdr が false かもしれません）")
+		return "", i18n.Errorf(i18n.KeyOrchestratorResolvePaneWorkspaceIDEmpty)
 	}
 	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{WorkspaceID: prepared.HerdrWorkspaceID})
 	if err != nil {
-		return "", fmt.Errorf("workspace の pane を引けません: %w", err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorResolvePanePaneListFailed, err)
 	}
 	if len(list.Panes) != 1 {
-		return "", fmt.Errorf(
-			"workspace %s の pane が %d 個あります（1つであるべきです。人間が触った workspace かもしれません）",
+		return "", i18n.Errorf(
+			i18n.KeyOrchestratorResolvePanePaneCountUnexpected,
 			prepared.HerdrWorkspaceID, len(list.Panes))
 	}
 	return list.Panes[0].PaneID, nil
@@ -571,11 +571,8 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState) error {
 	for {
 		got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})
 		if err != nil {
-			return fmt.Errorf(
-				"Claude Code の状態を herdr に聞けませんでした（agent 名: %s）。"+
-					"\n【確かめ方】`herdr agent get %s` を実行してください。"+
-					"\n【よくある原因】herdr が落ちている / agent の登録が消えた。"+
-					"\n元のエラー: %w",
+			return i18n.Errorf(
+				i18n.KeyOrchestratorConfirmStartupAgentGetFailed,
 				rs.agentName(), rs.agentName(), err)
 		}
 		switch got.Agent.AgentStatus {
@@ -583,36 +580,18 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState) error {
 			return nil
 		case herdr.AgentStatusBlocked:
 			o.sendEscape(ctx, rs)
-			return fmt.Errorf(
-				"Claude Code が起動直後に確認の画面で止まりました（agent 名: %s）。"+
-					"continuo は esc を送って画面を閉じましたが、"+
-					"**この issue は人間が見ないと進みません。**"+
-					"\n【確かめ方】`herdr agent read %s --source recent-unwrapped --lines 40` で画面を見てください。"+
-					"\n【よくある原因】そのフォルダが Claude Code に信頼登録されていない / "+
-					"許可されていないコマンドを実行しようとした。"+
-					"\n【対処】許可が要るなら WORKFLOW.md の `claude.permissions.allow` に足してください。",
+			return i18n.Errorf(
+				i18n.KeyOrchestratorConfirmStartupBlocked,
 				rs.agentName(), rs.agentName())
 		case herdr.AgentStatusWorking:
 			if o.now().After(deadline) {
-				return fmt.Errorf(
-					"Claude Code の起動が %d ミリ秒たっても落ち着きませんでした（agent 名: %s）。"+
-						"起動はしていますが、待っている間ずっと `working` のままでした。"+
-						"\n【確かめ方】`herdr agent read %s --source recent-unwrapped --lines 40` で画面を見てください。"+
-						"\n【よくある原因】起動時の処理が重い / ネットワークが遅い。"+
-						"\n【対処】WORKFLOW.md の `claude.startup_timeout_ms` を増やしてください（いまは %d）。",
+				return i18n.Errorf(
+					i18n.KeyOrchestratorConfirmStartupWorkingTimeout,
 					o.cfg.Claude.StartupTimeoutMs, rs.agentName(), rs.agentName(), o.cfg.Claude.StartupTimeoutMs)
 			}
 		default:
-			return fmt.Errorf(
-				"Claude Code が起動しませんでした（agent 名: %s、herdr が返した状態: %q）。"+
-					"herdr は pane を作りましたが、そこで動いている Claude Code を見つけられませんでした。"+
-					"\n【確かめ方】`herdr agent explain %s` で herdr が何を見て判断したかを、"+
-					"`herdr agent read %s --source recent-unwrapped --lines 40` で画面に何が出ているかを見てください。"+
-					"\n【よくある原因】claude コマンドが PATH に無い / "+
-					"claude の起動が途中で失敗した / そのフォルダが Claude Code に信頼登録されていない。"+
-					"\n【対処】`command -v claude` で claude が PATH にあるかを確かめてください"+
-					"（**`continuo doctor` は claude の有無を検査しません**）。"+
-					"信頼登録が足りないなら `continuo trust` を実行してください。",
+			return i18n.Errorf(
+				i18n.KeyOrchestratorConfirmStartupUnknownStatus,
 				rs.agentName(), got.Agent.AgentStatus, rs.agentName(), rs.agentName())
 		}
 

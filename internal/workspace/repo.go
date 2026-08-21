@@ -2,11 +2,12 @@ package workspace
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // clonePathCacheTTL は `ghq list -p -e <owner>/<repo>` の答えを覚えておく時間である。
@@ -55,14 +56,13 @@ func resolveOrClean(path string) string {
 func ownerRepoFromWorktreePath(resolvedRoot, worktreePath string) (string, string, error) {
 	rel, err := filepath.Rel(filepath.Clean(resolvedRoot), filepath.Clean(worktreePath))
 	if err != nil {
-		return "", "", fmt.Errorf(
-			"worktree のパス %q が置き場所 %q からの相対パスになりません: %w", worktreePath, resolvedRoot, err)
+		return "", "", i18n.Errorf(
+			i18n.KeyWorkspaceOwnerRepoFromWorktreePathRelFailed, worktreePath, resolvedRoot, err)
 	}
 	parts := strings.Split(rel, string(os.PathSeparator))
 	if len(parts) != scanDepth || parts[0] == ".." {
-		return "", "", fmt.Errorf(
-			"worktree のパス %q が置き場所の規則 <root>/<host>/<owner>/<repo>/<スラグ> に合いません（3-22）",
-			worktreePath)
+		return "", "", i18n.Errorf(
+			i18n.KeyWorkspaceOwnerRepoFromWorktreePathLayoutMismatch, worktreePath)
 	}
 	return parts[1], parts[2], nil
 }
@@ -123,14 +123,13 @@ func (m *Manager) verifiedRepo(ctx context.Context, worktreePath string) (string
 		return "", "", err
 	}
 	if clone == "" {
-		return "", "", fmt.Errorf(
-			"%w: %s/%s（worktree %s が属するリポジトリを検算できません）",
+		return "", "", i18n.Errorf(
+			i18n.KeyWorkspaceVerifiedRepoCloneNotFound,
 			ErrCloneNotFound, owner, repo, worktreePath)
 	}
 	if !samePath(repoDir, clone) {
-		return "", "", fmt.Errorf(
-			"worktree %s が指すリポジトリ %q が、%s/%s の clone %q と一致しません"+
-				"（worktree の .git が書き換えられた可能性があるので、破壊的な git コマンドを撃ちません）",
+		return "", "", i18n.Errorf(
+			i18n.KeyWorkspaceVerifiedRepoRepoMismatch,
 			worktreePath, repoDir, owner, repo, clone)
 	}
 	return commonDir, repoDir, nil

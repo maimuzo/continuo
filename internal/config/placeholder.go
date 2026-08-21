@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // Placeholder は `continuo init` が置く雛形で、埋めないと動かない文字列のキーに入れる値である
@@ -38,10 +40,7 @@ func validatePlaceholders(cfg *Config) error {
 	if len(remaining) == 0 {
 		return nil
 	}
-	return fmt.Errorf(
-		"埋めていない設定が %d 件あります。値を埋めてください: %s",
-		len(remaining), strings.Join(remaining, " / "),
-	)
+	return i18n.Errorf(i18n.KeyConfigPlaceholderRemaining, len(remaining), strings.Join(remaining, " / "))
 }
 
 // placeholderItem はプレースホルダが1件残っていることを表す文言を作る。

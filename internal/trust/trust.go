@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
@@ -179,7 +180,7 @@ func (r *Report) Problems() []Entry {
 // 戻り値の2つ目: 入力が不正な場合のエラー（1件ごとの失敗は Entry.Problem に入れて返す）。
 func Plan(ctx context.Context, opts Options) (*Report, error) {
 	if !filepath.IsAbs(opts.HomeDir) {
-		return nil, fmt.Errorf("ホームディレクトリは絶対パスで渡してください: %q", opts.HomeDir)
+		return nil, i18n.Errorf(i18n.KeyTrustOptionsHomeDirNotAbsolute, opts.HomeDir)
 	}
 	resolveClone, resolveKey, timeout := opts.resolvers()
 
@@ -320,7 +321,7 @@ type ApplyResult struct {
 // 戻り値の2つ目: 読み書きに失敗した場合のエラー（ErrNoClaudeConfig / ErrUnexpectedShape を含む）。
 func Apply(ctx context.Context, opts Options, report *Report) (*ApplyResult, error) {
 	if !filepath.IsAbs(opts.HomeDir) {
-		return nil, fmt.Errorf("ホームディレクトリは絶対パスで渡してください: %q", opts.HomeDir)
+		return nil, i18n.Errorf(i18n.KeyTrustOptionsHomeDirNotAbsolute, opts.HomeDir)
 	}
 	path := claudeConfigPath(opts.HomeDir)
 	result := &ApplyResult{ClaudeConfigPath: path}
@@ -369,12 +370,12 @@ func Apply(ctx context.Context, opts Options, report *Report) (*ApplyResult, err
 
 	projectsRaw, err := projects.marshalIndent(1)
 	if err != nil {
-		return result, fmt.Errorf("%s の projects を組み立て直せません: %w", path, err)
+		return result, i18n.Errorf(i18n.KeyTrustApplyProjectsMarshalFailed, path, err)
 	}
 	root.set(projectsKey, projectsRaw)
 	updated, err := root.marshalIndent(0)
 	if err != nil {
-		return result, fmt.Errorf("%s を組み立て直せません: %w", path, err)
+		return result, i18n.Errorf(i18n.KeyTrustApplyRootMarshalFailed, path, err)
 	}
 	// 元のファイルが改行で終わっていたなら、そろえる（差分の最終行が動かないようにする）。
 	if len(original) > 0 && original[len(original)-1] == '\n' {
@@ -388,8 +389,7 @@ func Apply(ctx context.Context, opts Options, report *Report) (*ApplyResult, err
 	result.BackupPath = backupPath
 
 	if err := replaceFile(path, updated, info.Mode().Perm()); err != nil {
-		return result, fmt.Errorf(
-			"%s を置き換えられません（バックアップは %s に残っています）: %w", path, backupPath, err)
+		return result, i18n.Errorf(i18n.KeyTrustApplyReplaceFailed, path, backupPath, err)
 	}
 
 	// **書いたものが、巡回のループから信頼済みに見えるかを確かめる。**
@@ -448,7 +448,7 @@ func projectsObject(root *orderedObject, path string) (*orderedObject, error) {
 	}
 	projects, err := parseOrderedObject(raw)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s の %s: %v", ErrUnexpectedShape, path, projectsKey, err)
+		return nil, i18n.Errorf(i18n.KeyTrustProjectsObjectUnparsable, ErrUnexpectedShape, path, projectsKey, err)
 	}
 	return projects, nil
 }
@@ -467,7 +467,7 @@ func markTrusted(projects *orderedObject, key, path string) (bool, error) {
 		entry.set(trustedKey, json.RawMessage("true"))
 		encoded, err := entry.marshalIndent(2)
 		if err != nil {
-			return false, fmt.Errorf("%s へ %s の記述を組み立てられません: %w", path, key, err)
+			return false, i18n.Errorf(i18n.KeyTrustMarkTrustedEntryMarshalFailed, path, key, err)
 		}
 		projects.set(key, encoded)
 		return true, nil
@@ -475,12 +475,12 @@ func markTrusted(projects *orderedObject, key, path string) (bool, error) {
 
 	entry, err := parseOrderedObject(raw)
 	if err != nil {
-		return false, fmt.Errorf("%w: %s の %s[%q]: %v", ErrUnexpectedShape, path, projectsKey, key, err)
+		return false, i18n.Errorf(i18n.KeyTrustMarkTrustedEntryUnparsable, ErrUnexpectedShape, path, projectsKey, key, err)
 	}
 	if current, ok := entry.get(trustedKey); ok {
 		var accepted bool
 		if err := json.Unmarshal(current, &accepted); err != nil {
-			return false, fmt.Errorf("%w: %s の %s[%q].%s が真偽値ではありません: %s",
+			return false, i18n.Errorf(i18n.KeyTrustMarkTrustedFlagNotBool,
 				ErrUnexpectedShape, path, projectsKey, key, trustedKey, string(current))
 		}
 		if accepted {
@@ -491,7 +491,7 @@ func markTrusted(projects *orderedObject, key, path string) (bool, error) {
 	entry.set(trustedKey, json.RawMessage("true"))
 	encoded, err := entry.marshalIndent(2)
 	if err != nil {
-		return false, fmt.Errorf("%s の %s の記述を組み立て直せません: %w", path, key, err)
+		return false, i18n.Errorf(i18n.KeyTrustMarkTrustedEntryRemarshalFailed, path, key, err)
 	}
 	projects.set(key, encoded)
 	return true, nil
@@ -509,22 +509,19 @@ func readClaudeConfig(path string) ([]byte, fs.FileInfo, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil, fmt.Errorf(
-				"%w: %s（Claude Code を1度起動して、この機械での初回の設定を済ませてください。"+
-					"continuo はこのファイルを作りません）", ErrNoClaudeConfig, path)
+			return nil, nil, i18n.Errorf(i18n.KeyTrustReadClaudeConfigNotFound, ErrNoClaudeConfig, path)
 		}
-		return nil, nil, fmt.Errorf("%s を確かめられません: %w", path, err)
+		return nil, nil, i18n.Errorf(i18n.KeyTrustReadClaudeConfigStatFailed, path, err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return nil, nil, fmt.Errorf(
-			"%w: %s は symlink です（辿った先を置き換えることになるので書き込みません）", ErrUnexpectedShape, path)
+		return nil, nil, i18n.Errorf(i18n.KeyTrustReadClaudeConfigSymlink, ErrUnexpectedShape, path)
 	}
 	if !info.Mode().IsRegular() {
-		return nil, nil, fmt.Errorf("%w: %s が通常のファイルではありません", ErrUnexpectedShape, path)
+		return nil, nil, i18n.Errorf(i18n.KeyTrustReadClaudeConfigNotRegularFile, ErrUnexpectedShape, path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s を読めません: %w", path, err)
+		return nil, nil, i18n.Errorf(i18n.KeyTrustReadClaudeConfigReadFailed, path, err)
 	}
 	return data, info, nil
 }
@@ -546,20 +543,18 @@ func writeBackup(homeDir, path string, original []byte, perm fs.FileMode, now ti
 	// O_EXCL で「無いときだけ作る」。同じ名前のバックアップを黙って潰さない。
 	f, err := os.OpenFile(backupPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
 	if err != nil {
-		return "", fmt.Errorf(
-			"%s のバックアップを %s へ作れません（バックアップを取れないので %s は書き換えません）: %w",
-			path, backupPath, path, err)
+		return "", i18n.Errorf(i18n.KeyTrustWriteBackupCreateFailed, path, backupPath, path, err)
 	}
 	if _, err := f.Write(original); err != nil {
 		f.Close()
-		return "", fmt.Errorf("バックアップ %s を書けません: %w", backupPath, err)
+		return "", i18n.Errorf(i18n.KeyTrustWriteBackupWriteFailed, backupPath, err)
 	}
 	if err := f.Sync(); err != nil {
 		f.Close()
-		return "", fmt.Errorf("バックアップ %s を書き出せません: %w", backupPath, err)
+		return "", i18n.Errorf(i18n.KeyTrustWriteBackupSyncFailed, backupPath, err)
 	}
 	if err := f.Close(); err != nil {
-		return "", fmt.Errorf("バックアップ %s を閉じられません: %w", backupPath, err)
+		return "", i18n.Errorf(i18n.KeyTrustWriteBackupCloseFailed, backupPath, err)
 	}
 	return backupPath, nil
 }
@@ -577,7 +572,7 @@ func replaceFile(path string, data []byte, perm fs.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".continuo-tmp-*")
 	if err != nil {
-		return fmt.Errorf("一時ファイルを %s に作れません: %w", dir, err)
+		return i18n.Errorf(i18n.KeyTrustReplaceFileTempCreateFailed, dir, err)
 	}
 	tmpPath := tmp.Name()
 	// 失敗して抜けたときに一時ファイルを残さない（成功時は rename 済みなので何も起きない）。
@@ -587,21 +582,21 @@ func replaceFile(path string, data []byte, perm fs.FileMode) error {
 	// 別の権限だった場合に rename でそれが失われる。
 	if err := tmp.Chmod(perm); err != nil {
 		tmp.Close()
-		return fmt.Errorf("一時ファイル %s の権限を %o にできません: %w", tmpPath, perm, err)
+		return i18n.Errorf(i18n.KeyTrustReplaceFileChmodFailed, tmpPath, perm, err)
 	}
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		return fmt.Errorf("一時ファイル %s を書けません: %w", tmpPath, err)
+		return i18n.Errorf(i18n.KeyTrustReplaceFileWriteFailed, tmpPath, err)
 	}
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
-		return fmt.Errorf("一時ファイル %s を書き出せません: %w", tmpPath, err)
+		return i18n.Errorf(i18n.KeyTrustReplaceFileSyncFailed, tmpPath, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("一時ファイル %s を閉じられません: %w", tmpPath, err)
+		return i18n.Errorf(i18n.KeyTrustReplaceFileCloseFailed, tmpPath, err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("一時ファイル %s を %s へ置き換えられません: %w", tmpPath, path, err)
+		return i18n.Errorf(i18n.KeyTrustReplaceFileRenameFailed, tmpPath, path, err)
 	}
 	return nil
 }

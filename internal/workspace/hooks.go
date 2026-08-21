@@ -2,12 +2,13 @@ package workspace
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // hookShell は workspace_hooks のコマンド文字列を実行するシェルである。
@@ -120,7 +121,7 @@ func (m *Manager) RunHook(ctx context.Context, phase HookPhase, dir string) erro
 
 	outFile, err := os.CreateTemp("", hookOutputFilePattern)
 	if err != nil {
-		return fmt.Errorf("workspace_hooks.%s の出力を受けるファイルを作れません: %w", phase, err)
+		return i18n.Errorf(i18n.KeyWorkspaceRunHookOutputFileCreateFailed, phase, err)
 	}
 	outPath := outFile.Name()
 	defer func() {
@@ -142,8 +143,8 @@ func (m *Manager) RunHook(ctx context.Context, phase HookPhase, dir string) erro
 	m.logger.Info("workspace_hooks を実行しました",
 		"phase", string(phase), "dir", dir, "duration_ms", m.now().Sub(start).Milliseconds())
 	if runErr != nil {
-		return fmt.Errorf(
-			"workspace_hooks.%s の実行に失敗しました（cwd=%s、出力: %s）: %w",
+		return i18n.Errorf(
+			i18n.KeyWorkspaceRunHookRunFailed,
 			phase, dir, readCappedFile(outPath, hookOutputLimit), runErr)
 	}
 	return nil

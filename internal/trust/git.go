@@ -3,10 +3,11 @@ package trust
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // gitOutputLimit は git の標準エラー出力をエラー文に載せる上限（バイト）である。
@@ -39,13 +40,13 @@ func RunGitToplevel(ctx context.Context, clonePath string) (string, error) {
 			msg = msg[:gitStderrLimit]
 		}
 		if msg == "" {
-			return "", fmt.Errorf("`git -C %s rev-parse --show-toplevel` の実行に失敗しました: %w", clonePath, err)
+			return "", i18n.Errorf(i18n.KeyTrustRunGitToplevelRunFailed, clonePath, err)
 		}
-		return "", fmt.Errorf("`git -C %s rev-parse --show-toplevel` の実行に失敗しました: %w: %s", clonePath, err, msg)
+		return "", i18n.Errorf(i18n.KeyTrustRunGitToplevelRunFailedWithStderr, clonePath, err, msg)
 	}
 	out := strings.TrimSpace(stdout.String())
 	if out == "" {
-		return "", fmt.Errorf("`git -C %s rev-parse --show-toplevel` が空を返しました", clonePath)
+		return "", i18n.Errorf(i18n.KeyTrustRunGitToplevelEmptyOutput, clonePath)
 	}
 	return filepath.Clean(out), nil
 }

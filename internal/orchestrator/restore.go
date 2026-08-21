@@ -9,6 +9,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -112,7 +113,7 @@ func (o *Orchestrator) Restore(ctx context.Context, hs HookServer) (*RestoreResu
 
 	// 段5d: listen を始める。**ただし配送はまだ始めない。**
 	if err := hs.Start(); err != nil {
-		return result, fmt.Errorf("hook を受ける socket の listen を始められません: %w", err)
+		return result, i18n.Errorf(i18n.KeyOrchestratorRestoreHookListenFailed, err)
 	}
 	// 段5e: 逃がし先を読み戻す（2回目の走査は StartDelivery が行う）。
 	if err := hs.ReplayPending(); err != nil {

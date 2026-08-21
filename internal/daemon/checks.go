@@ -2,11 +2,11 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -61,12 +61,12 @@ func runStartupChecks(
 
 	ping, err := d.Herdr.CheckProtocol(ctx, cfg.Herdr.Protocol)
 	if err != nil {
-		return fmt.Errorf("herdr の socket に到達できないか protocol が想定外です: %w", err)
+		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksHerdrUnreachable, err)
 	}
 	logger.Info("herdr の socket に到達しました", "protocol", ping.Protocol)
 
 	if err := d.Tracker.Bootstrap(ctx, cfg.Tracker); err != nil {
-		return fmt.Errorf("ボードの Status の選択肢名が設定と一致しません（対象0件が無言で続くのを防ぎます）: %w", err)
+		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksStatusOptionMismatch, err)
 	}
 	return nil
 }

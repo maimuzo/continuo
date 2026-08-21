@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // ClaudeConfigFileName は Claude Code が信頼済みフォルダを記録しているファイルの名前である。
@@ -108,8 +110,8 @@ func CheckTrustForClonePath(clonePath, homeDir string) (bool, string, error) {
 
 	key, err := gitToplevel(ctx, clonePath)
 	if err != nil {
-		return false, "", fmt.Errorf(
-			"clone のパス %s を `git rev-parse --show-toplevel` で解決できません: %w", clonePath, err)
+		return false, "", i18n.Errorf(
+			i18n.KeyWorkspaceCheckTrustForClonePathToplevelFailed, clonePath, err)
 	}
 
 	configPath := filepath.Join(homeDir, ClaudeConfigFileName)
@@ -119,11 +121,11 @@ func CheckTrustForClonePath(clonePath, homeDir string) (bool, string, error) {
 			return false, fmt.Sprintf(
 				"%s がありません（Claude Code をまだ一度も使っていない可能性がある）", configPath), nil
 		}
-		return false, "", fmt.Errorf("%s を読めません: %w", configPath, err)
+		return false, "", i18n.Errorf(i18n.KeyWorkspaceCheckTrustForClonePathConfigUnreadable, configPath, err)
 	}
 	var parsed claudeConfigFile
 	if err := json.Unmarshal(data, &parsed); err != nil {
-		return false, "", fmt.Errorf("%s を JSON として解析できません: %w", configPath, err)
+		return false, "", i18n.Errorf(i18n.KeyWorkspaceCheckTrustForClonePathConfigUnparsable, configPath, err)
 	}
 
 	entry, ok := parsed.Projects[key]

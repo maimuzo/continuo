@@ -1,9 +1,10 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // expandKeys は 5-5 の表が「適用するキー」として挙げている4つのキーの一覧である。
@@ -95,10 +96,7 @@ func expandDollar(raw, key string) (string, error) {
 		}
 
 		if i+1 >= len(raw) {
-			return "", fmt.Errorf(
-				"設定キー %s の値 %q が末尾が \"$\" で終わっています。$NAME / ${NAME} / $$ のいずれかの形式で書いてください",
-				key, raw,
-			)
+			return "", i18n.Errorf(i18n.KeyConfigExpandTrailingDollar, key, raw)
 		}
 
 		next := raw[i+1]
@@ -111,17 +109,11 @@ func expandDollar(raw, key string) (string, error) {
 		case next == '{':
 			closeIdx := strings.IndexByte(raw[i+2:], '}')
 			if closeIdx < 0 {
-				return "", fmt.Errorf(
-					"設定キー %s の値 %q の \"${\" が \"}\" で閉じられていません",
-					key, raw,
-				)
+				return "", i18n.Errorf(i18n.KeyConfigExpandUnclosedBrace, key, raw)
 			}
 			name := raw[i+2 : i+2+closeIdx]
 			if name == "" {
-				return "", fmt.Errorf(
-					"設定キー %s の値 %q に空の変数名 \"${}\" があります",
-					key, raw,
-				)
+				return "", i18n.Errorf(i18n.KeyConfigExpandEmptyEnvName, key, raw)
 			}
 			val, err := lookupEnv(name, key, raw)
 			if err != nil {
@@ -144,10 +136,7 @@ func expandDollar(raw, key string) (string, error) {
 			i = j
 
 		default:
-			return "", fmt.Errorf(
-				"設定キー %s の値 %q の %d 文字目にある \"$\" が $NAME / ${NAME} / $$ のいずれの形式でもありません",
-				key, raw, i+1,
-			)
+			return "", i18n.Errorf(i18n.KeyConfigExpandInvalidDollarForm, key, raw, i+1)
 		}
 	}
 	return b.String(), nil
@@ -171,16 +160,10 @@ func isEnvNameChar(c byte) bool {
 func lookupEnv(name, key, original string) (string, error) {
 	val, ok := os.LookupEnv(name)
 	if !ok {
-		return "", fmt.Errorf(
-			"設定キー %s の値 %q が参照する環境変数 %s が定義されていません",
-			key, original, name,
-		)
+		return "", i18n.Errorf(i18n.KeyConfigExpandEnvUndefined, key, original, name)
 	}
 	if val == "" {
-		return "", fmt.Errorf(
-			"設定キー %s の値 %q が参照する環境変数 %s は定義されていますが空文字です",
-			key, original, name,
-		)
+		return "", i18n.Errorf(i18n.KeyConfigExpandEnvEmpty, key, original, name)
 	}
 	return val, nil
 }
@@ -196,7 +179,7 @@ func expandTilde(raw, key string) (string, error) {
 	if raw == "~" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("設定キー %s の値 %q のチルダを展開できません（ホームディレクトリを取得できない）: %w", key, raw, err)
+			return "", i18n.Errorf(i18n.KeyConfigExpandHomeDirFailed, key, raw, err)
 		}
 		return home, nil
 	}
@@ -204,7 +187,7 @@ func expandTilde(raw, key string) (string, error) {
 	if strings.HasPrefix(raw, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("設定キー %s の値 %q のチルダを展開できません（ホームディレクトリを取得できない）: %w", key, raw, err)
+			return "", i18n.Errorf(i18n.KeyConfigExpandHomeDirFailed, key, raw, err)
 		}
 		// パス結合は文字列連結で行う。filepath.Join は "~/" の直後にスラッシュが
 		// 連続する場合などを正規化してしまい、意図が分かりにくくなるため使わない。
@@ -212,10 +195,7 @@ func expandTilde(raw, key string) (string, error) {
 	}
 
 	if strings.HasPrefix(raw, "~") {
-		return "", fmt.Errorf(
-			"設定キー %s の値 %q は \"~user\" 形式のチルダ展開です。continuo がサポートするのは \"~\" または \"~/\" で始まる形式だけです",
-			key, raw,
-		)
+		return "", i18n.Errorf(i18n.KeyConfigExpandTildeUserUnsupported, key, raw)
 	}
 
 	return raw, nil

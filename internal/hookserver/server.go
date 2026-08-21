@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/socketpath"
 )
 
@@ -304,7 +305,7 @@ func (s *Server) Start() error {
 
 	ln, err := net.Listen("unix", s.socketPath)
 	if err != nil {
-		return fmt.Errorf("hook を受ける socket を listen できません: %s: %w", s.socketPath, err)
+		return i18n.Errorf(i18n.KeyHookserverStartListenFailed, s.socketPath, err)
 	}
 	// ディレクトリの 0700 が本体の防御だが（設計 3-23）、Go が作る socket の権限は
 	// umask 次第で 0755 になるので、socket 側も 0600 に落としておく（二重の防御）。
@@ -349,20 +350,17 @@ func (s *Server) removeStaleSocketFile() error {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
-		return fmt.Errorf("hook を受ける socket のパスを調べられません: %s: %w", s.socketPath, err)
+		return i18n.Errorf(i18n.KeyHookserverRemoveStaleSocketLstatFailed, s.socketPath, err)
 	}
 
 	conn, err := net.DialTimeout("unix", s.socketPath, s.readTimeout)
 	if err == nil {
 		_ = conn.Close()
-		return fmt.Errorf(
-			"hook を受ける socket %s には既に別のプロセスが listen しています（continuo の二重起動の可能性があります）",
-			s.socketPath,
-		)
+		return i18n.Errorf(i18n.KeyHookserverRemoveStaleSocketAlreadyListening, s.socketPath)
 	}
 
 	if err := os.Remove(s.socketPath); err != nil {
-		return fmt.Errorf("前回の実行が残した socket ファイルを消せません: %s: %w", s.socketPath, err)
+		return i18n.Errorf(i18n.KeyHookserverRemoveStaleSocketRemoveFailed, s.socketPath, err)
 	}
 	s.logger.Info("前回の実行が残した socket ファイルを消しました（誰も listen していませんでした）",
 		"socket", s.socketPath)
@@ -534,7 +532,7 @@ func decodeEvent(data []byte) (HookEvent, error) {
 		return HookEvent{}, err
 	}
 	if probe == nil {
-		return HookEvent{}, errors.New("JSON のオブジェクトではありません（null でした）")
+		return HookEvent{}, i18n.Errorf(i18n.KeyHookserverDecodeEventNotObject)
 	}
 	var ev HookEvent
 	if err := json.Unmarshal(data, &ev); err != nil {
@@ -744,7 +742,7 @@ func (s *Server) Close() error {
 	var closeErr error
 	if ln != nil {
 		if err := ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			closeErr = fmt.Errorf("hook を受ける socket を閉じられません: %s: %w", s.socketPath, err)
+			closeErr = i18n.Errorf(i18n.KeyHookserverCloseListenerCloseFailed, s.socketPath, err)
 		}
 	}
 	for _, c := range conns {

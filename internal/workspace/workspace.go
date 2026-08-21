@@ -14,7 +14,6 @@ package workspace
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // HerdrClient は internal/workspace が使う herdr の socket API の部分集合である。
@@ -159,9 +159,7 @@ func New(opts Options) (*Manager, error) {
 		return nil, err
 	}
 	if opts.SettingsRoot != "" && !filepath.IsAbs(opts.SettingsRoot) {
-		return nil, fmt.Errorf(
-			"issue ごとの設定ファイルの置き場所 %q が絶対パスではありません"+
-				"（片付けで settings_path がその内側かを判定できない）", opts.SettingsRoot)
+		return nil, i18n.Errorf(i18n.KeyWorkspaceNewSettingsRootNotAbsolute, opts.SettingsRoot)
 	}
 
 	resolvedRoot, err := EnsureRoot(opts.Config.Workspace.Root)
@@ -185,7 +183,7 @@ func New(opts Options) (*Manager, error) {
 	if homeDir == "" {
 		homeDir, err = os.UserHomeDir()
 		if err != nil {
-			return nil, fmt.Errorf("ホームディレクトリを特定できません（~/.claude.json を読めない）: %w", err)
+			return nil, i18n.Errorf(i18n.KeyWorkspaceNewHomeDirUnknown, err)
 		}
 	}
 

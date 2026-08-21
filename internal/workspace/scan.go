@@ -2,9 +2,10 @@ package workspace
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // scanDepth は置き場所を掘る深さである。
@@ -69,7 +70,7 @@ func (m *Manager) scanLevel(dir string, depth int) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if depth == scanDepth {
-			return nil, fmt.Errorf("置き場所 %s を読めません: %w", dir, err)
+			return nil, i18n.Errorf(i18n.KeyWorkspaceScanLevelRootUnreadable, dir, err)
 		}
 		m.logger.Warn("置き場所の走査で読めないディレクトリを飛ばしました", "dir", dir, "error", err)
 		return nil, nil

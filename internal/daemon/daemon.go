@@ -38,6 +38,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -130,7 +131,7 @@ func Run(ctx context.Context, opts Options) error {
 	// 「最後に正常だった設定で動き続ける」仕組みはまだ無い）。編集を反映するには再起動が要る。
 	loaded, err := config.Load(opts.ConfigPath)
 	if err != nil {
-		return fmt.Errorf("%w: 設定ファイルの読み込みに失敗しました（%s）: %w", ErrStartup, opts.ConfigPath, err)
+		return i18n.Errorf(i18n.KeyDaemonRunConfigLoadFailed, ErrStartup, opts.ConfigPath, err)
 	}
 	cfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
@@ -159,10 +160,10 @@ func Run(ctx context.Context, opts Options) error {
 
 	sockPath, err := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(EnvRuntimeDir))
 	if err != nil {
-		return fmt.Errorf("%w: hook を受ける socket の場所を決められません: %w", ErrStartup, err)
+		return i18n.Errorf(i18n.KeyDaemonRunSocketPathUnresolved, ErrStartup, err)
 	}
 	if err := socketpath.EnsureDir(filepath.Dir(sockPath)); err != nil {
-		return fmt.Errorf("%w: hook を受ける socket のディレクトリを準備できません: %w", ErrStartup, err)
+		return i18n.Errorf(i18n.KeyDaemonRunSocketDirFailed, ErrStartup, err)
 	}
 	runtimeDir := filepath.Dir(sockPath)
 	logger.Info("hook を受ける socket の場所を決めました", "socket", sockPath)
@@ -175,10 +176,10 @@ func Run(ctx context.Context, opts Options) error {
 		// 両方を二重起動と報告すると、`runtime.lock_file` のパスを打ち間違えた運用者が、
 		// 動いてもいない2つ目の continuo を探しに行くことになる。
 		if errors.Is(err, lock.ErrAlreadyRunning) {
-			return fmt.Errorf("%w: 二重起動を検出しました（ロックファイル %s）: %w", ErrStartup, lockPath, err)
+			return i18n.Errorf(i18n.KeyDaemonRunAlreadyRunning, ErrStartup, lockPath, err)
 		}
-		return fmt.Errorf(
-			"%w: ロックファイルを用意できません（runtime.lock_file の指定と、その親ディレクトリの有無・権限を確認してください。%s）: %w",
+		return i18n.Errorf(
+			i18n.KeyDaemonRunLockFileFailed,
 			ErrStartup, lockPath, err)
 	}
 	defer func() {
@@ -204,14 +205,14 @@ func Run(ctx context.Context, opts Options) error {
 	// 人間が直して起動し直せば、復元の段5 で引き継げる。
 	if err := runStartupChecks(ctx, cfg, deps, opts.StartupCheckTimeout, logger); err != nil {
 		shutdown()
-		return fmt.Errorf("%w: 起動時の検査に落ちました（生きている pane は閉じずに残します）: %w", ErrStartup, err)
+		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksFailed, ErrStartup, err)
 	}
 
 	// 段4: 復元（3-4 の段2〜段9）。**巡回より先に終える。**
 	restored, err := deps.Orchestrator.Restore(ctx, deps.HookServer)
 	if err != nil {
 		shutdown()
-		return fmt.Errorf("%w: 復元に失敗しました: %w", ErrStartup, err)
+		return i18n.Errorf(i18n.KeyDaemonRunRestoreFailed, ErrStartup, err)
 	}
 
 	// 段4b: 起動時の掃除。**復元が終わったあとに走らせる**（設計 3-9 の手順6 / 6b）。
@@ -376,10 +377,10 @@ func ValidateGraphQLEndpoint(raw string) error {
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("%s の値を URL として解釈できません（%q）: %w", EnvGraphQLEndpoint, raw, err)
+		return i18n.Errorf(i18n.KeyDaemonValidateGraphQLEndpointURLUnparsable, EnvGraphQLEndpoint, raw, err)
 	}
 	if u.Host == "" {
-		return fmt.Errorf("%s の値にホスト名がありません（%q）", EnvGraphQLEndpoint, raw)
+		return i18n.Errorf(i18n.KeyDaemonValidateGraphQLEndpointHostMissing, EnvGraphQLEndpoint, raw)
 	}
 	switch u.Scheme {
 	case "https":
@@ -388,13 +389,11 @@ func ValidateGraphQLEndpoint(raw string) error {
 		if isLoopbackHost(u.Hostname()) {
 			return nil
 		}
-		return fmt.Errorf(
-			"%s には https の URL を書いてください（%q はループバック以外の http なので、"+
-				"GitHub のトークンが平文で流れます）", EnvGraphQLEndpoint, raw)
+		return i18n.Errorf(
+			i18n.KeyDaemonValidateGraphQLEndpointPlainHTTP, EnvGraphQLEndpoint, raw)
 	default:
-		return fmt.Errorf(
-			"%s の scheme が https ではありません（%q）。https か、ループバック宛の http だけを受け付けます",
-			EnvGraphQLEndpoint, raw)
+		return i18n.Errorf(
+			i18n.KeyDaemonValidateGraphQLEndpointSchemeNotHTTPS, EnvGraphQLEndpoint, raw)
 	}
 }
 
@@ -431,7 +430,7 @@ func build(
 ) (*deps, error) {
 	herdrSocket, err := herdr.ResolveSocketPath(cfg.Herdr.Socket)
 	if err != nil {
-		return nil, fmt.Errorf("herdr の socket の場所を決められません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildHerdrSocketUnresolved, err)
 	}
 	// **Turn は「待ちを伴う1回の呼び出しをどれだけ待つか」である。**
 	// `claude.turn_timeout_ms`（画面が変わらないまま待てる時間）をそのまま使う。
@@ -450,7 +449,7 @@ func build(
 		SettingsRoot: settingsRoot,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("worktree の管理を組み立てられません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildWorkspaceFailed, err)
 	}
 
 	// **`gh` の有無は、`gh` を起動する前に見る。**`token_source` の既定は `gh_auth` なので、
@@ -461,7 +460,7 @@ func build(
 	}
 	token, err := tracker.ResolveToken(ctx, cfg.Tracker.Provider, nil)
 	if err != nil {
-		return nil, fmt.Errorf("ボードを読むためのトークンを取得できません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildTokenFailed, err)
 	}
 	// **`trust.require_repo_trusted` が偽なら、アダプタにも判定を渡さない。**
 	// 渡したままだと、アダプタが `Dispatchable` を偽にして返す一方で
@@ -474,12 +473,12 @@ func build(
 	adapter, err := tracker.NewAdapter(
 		cfg.Tracker, graphqlEndpoint, token, newTrackerHTTPClient(trackerTimeout), logger, repoTrusted)
 	if err != nil {
-		return nil, fmt.Errorf("トラッカーのアダプタを組み立てられません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildTrackerFailed, err)
 	}
 
 	rl, err := ratelimit.NewReader(ratelimit.Options{Config: cfg.RateLimit, Logger: logger})
 	if err != nil {
-		return nil, fmt.Errorf("枠の読み取りを組み立てられません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildRateLimitFailed, err)
 	}
 
 	orc, err := orchestrator.New(orchestrator.Options{
@@ -497,7 +496,7 @@ func build(
 		GHAuthCheck: func(ctx context.Context) error { return tracker.CheckGHProjectScope(ctx, nil) },
 	})
 	if err != nil {
-		return nil, fmt.Errorf("orchestrator を組み立てられません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildOrchestratorFailed, err)
 	}
 
 	// **`claude.read_timeout_ms` をここへ流用しない**（設計 8-1）。あれは herdr の
@@ -509,7 +508,7 @@ func build(
 		Logger:     logger,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("hook の受け口を組み立てられません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildHookServerFailed, err)
 	}
 
 	// **`server.port` が null なら dash は nil になる**（listen しない。設計 5-2）。
@@ -519,7 +518,7 @@ func build(
 		Logger: logger,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ダッシュボードを組み立てられません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyDaemonBuildDashboardFailed, err)
 	}
 
 	return &deps{Herdr: hc, Tracker: adapter, Orchestrator: orc, HookServer: hs, Dashboard: dash}, nil

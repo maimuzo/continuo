@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 )
 
@@ -60,8 +60,8 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 		if dir != "" {
 			full = append([]string{"-C", dir}, args...)
 		}
-		return out, fmt.Errorf(
-			"`git %s` の出力が %d バイトを超えました（切り詰めた出力では判定できません）",
+		return out, i18n.Errorf(
+			i18n.KeyWorkspaceRunGitOutputTooLarge,
 			strings.Join(full, " "), gitOutputLimit)
 	}
 	return out, nil
@@ -96,8 +96,8 @@ func runGitLimited(
 	cmd.Stderr = stderr
 	cmd.WaitDelay = gitWaitDelay
 	if err := cmd.Run(); err != nil {
-		return strings.TrimSpace(stdout.String()), stdout.Truncated(), fmt.Errorf(
-			"`git %s` の実行に失敗しました（stderr: %s）: %w",
+		return strings.TrimSpace(stdout.String()), stdout.Truncated(), i18n.Errorf(
+			i18n.KeyWorkspaceRunGitRunFailed,
 			strings.Join(full, " "), stderr.text(), err)
 	}
 	return strings.TrimSpace(stdout.String()), stdout.Truncated(), nil
@@ -127,7 +127,7 @@ func gitExitCode(ctx context.Context, dir string, args ...string) (int, error) {
 	if errors.As(err, &exitErr) {
 		return exitErr.ExitCode(), nil
 	}
-	return -1, fmt.Errorf("`git %s` を起動できません: %w", strings.Join(full, " "), err)
+	return -1, i18n.Errorf(i18n.KeyWorkspaceGitExitCodeStartFailed, strings.Join(full, " "), err)
 }
 
 // gitWorktreePrune は `git worktree prune` を実行する（3-22 の段1）。
@@ -165,7 +165,7 @@ func gitWorktreePaths(ctx context.Context, repoDir string) ([]string, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("`git worktree list --porcelain` の出力を読めません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyWorkspaceGitWorktreeListOutputUnreadable, err)
 	}
 	return paths, nil
 }
@@ -223,16 +223,16 @@ func gitWorktreeAdd(
 		// 段5 が求めているのは「先に作られた孤児 branch を消す」ことだけである。
 		orphan, existsErr := gitBranchExists(ctx, repoDir, branch)
 		if existsErr != nil {
-			return fmt.Errorf(
-				"%w（孤児 branch %q が残っているかを確かめられませんでした: %v）", err, branch.String(), existsErr)
+			return i18n.Errorf(
+				i18n.KeyWorkspaceGitWorktreeAddOrphanCheckFailed, err, branch.String(), existsErr)
 		}
 		if !orphan {
 			return err
 		}
 		if _, delErr := runGit(ctx, repoDir, "branch", "-D", branch.String()); delErr != nil {
-			return fmt.Errorf("%w（孤児 branch %q の削除も失敗しました: %v）", err, branch.String(), delErr)
+			return i18n.Errorf(i18n.KeyWorkspaceGitWorktreeAddOrphanDeleteFailed, err, branch.String(), delErr)
 		}
-		return fmt.Errorf("%w（先に作られた孤児 branch %q は削除しました）", err, branch.String())
+		return i18n.Errorf(i18n.KeyWorkspaceGitWorktreeAddOrphanDeleted, err, branch.String())
 	}
 	return nil
 }
@@ -344,7 +344,7 @@ func gitAheadOfUpstream(ctx context.Context, worktreePath string) (int, error) {
 	}
 	n, convErr := strconv.Atoi(strings.TrimSpace(out))
 	if convErr != nil {
-		return 0, fmt.Errorf("`git rev-list --count @{u}..HEAD` の出力 %q を数値として読めません: %w", out, convErr)
+		return 0, i18n.Errorf(i18n.KeyWorkspaceGitAheadOfUpstreamCountUnreadable, out, convErr)
 	}
 	return n, nil
 }
@@ -372,9 +372,8 @@ func gitNoDiffFromBase(ctx context.Context, worktreePath string, base normalize.
 	case 1:
 		return false, nil
 	default:
-		return false, fmt.Errorf(
-			"`git diff --quiet %s...HEAD` が想定外の終了コード %d を返しました（base を解決できていない可能性がある）",
-			base.String(), code)
+		return false, i18n.Errorf(
+			i18n.KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode, base.String(), code)
 	}
 }
 
@@ -458,17 +457,15 @@ func RunGhqList(ctx context.Context, owner, repo string) (string, error) {
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) {
-			return "", fmt.Errorf(
-				"`ghq list -p -e %s` を起動できません（stderr: %s）: %w",
-				target, stderr.text(), err)
+			return "", i18n.Errorf(
+				i18n.KeyWorkspaceRunGhqListStartFailed, target, stderr.text(), err)
 		}
 		// **「該当が無い」と「ghq が失敗した」を区別する。**該当が無いときの終了コードは
 		// 1 である。それ以外の非 0 を「clone が無い」に丸めると、設定の誤りや ghq 自身の
 		// 異常が「clone を作りに行け」という誤った案内になり、原因も残らない。
 		if exitErr.ExitCode() != ghqNotFoundExitCode || strings.TrimSpace(stdout.String()) != "" {
-			return "", fmt.Errorf(
-				"`ghq list -p -e %s` が終了コード %d で失敗しました（stderr: %s）",
-				target, exitErr.ExitCode(), stderr.text())
+			return "", i18n.Errorf(
+				i18n.KeyWorkspaceRunGhqListExitFailed, target, exitErr.ExitCode(), stderr.text())
 		}
 		return "", nil
 	}
@@ -506,7 +503,7 @@ func gitLocalBranches(ctx context.Context, repoDir string) ([]string, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("`git for-each-ref` の出力を読めません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyWorkspaceGitLocalBranchesOutputUnreadable, err)
 	}
 	return names, nil
 }
@@ -539,7 +536,7 @@ func gitWorktreeBranches(ctx context.Context, repoDir string) (map[string]bool, 
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("`git worktree list --porcelain` の出力を読めません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyWorkspaceGitWorktreeListOutputUnreadable, err)
 	}
 	return branches, nil
 }
@@ -569,12 +566,11 @@ func RunGhqGet(ctx context.Context, owner, repo string) error {
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) {
-			return fmt.Errorf(
-				"`ghq get %s` を起動できません（stderr: %s）: %w", target, stderr.text(), err)
+			return i18n.Errorf(
+				i18n.KeyWorkspaceRunGhqGetStartFailed, target, stderr.text(), err)
 		}
-		return fmt.Errorf(
-			"`ghq get %s` が終了コード %d で失敗しました（stderr: %s）",
-			target, exitErr.ExitCode(), stderr.text())
+		return i18n.Errorf(
+			i18n.KeyWorkspaceRunGhqGetExitFailed, target, exitErr.ExitCode(), stderr.text())
 	}
 	return nil
 }

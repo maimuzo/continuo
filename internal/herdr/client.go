@@ -28,6 +28,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // DefaultSocketPath は herdr の socket API の既定の置き場所である（2-1）。
@@ -105,11 +107,7 @@ func (t Timeouts) withDefaults() Timeouts {
 // 戻り値: 絶対パスでない場合にエラーを返す。
 func checkAbsSocketPath(path, source string) error {
 	if !filepath.IsAbs(path) {
-		return fmt.Errorf(
-			"%s の値 %q が絶対パスではありません（相対パスだと continuo を起動したディレクトリによって"+
-				"herdr の socket の場所が変わる）",
-			source, path,
-		)
+		return i18n.Errorf(i18n.KeyHerdrSocketPathNotAbsolute, source, path)
 	}
 	return nil
 }
@@ -134,18 +132,14 @@ func checkAbsSocketPath(path, source string) error {
 // 失敗した場合はエラーを返す。
 func ResolveSocketPath(configured string) (string, error) {
 	if configured != "" {
-		if err := checkAbsSocketPath(configured, "設定ファイルの herdr.socket"); err != nil {
+		if err := checkAbsSocketPath(configured, i18n.T(i18n.KeyHerdrSocketPathSourceConfig)); err != nil {
 			return "", err
 		}
 		return configured, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf(
-			"herdr の socket の場所を決められません（既定の %s のためホームディレクトリの"+
-				"取得が必要ですが失敗しました）: %w",
-			DefaultSocketPath, err,
-		)
+		return "", i18n.Errorf(i18n.KeyHerdrSocketPathHomeDirFailed, DefaultSocketPath, err)
 	}
 	return filepath.Join(home, ".config", "herdr", "herdr.sock"), nil
 }
@@ -213,7 +207,7 @@ type wireResponse struct {
 func newRequestID() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("リクエスト id の生成に失敗しました: %w", err)
+		return "", i18n.Errorf(i18n.KeyHerdrCallRequestIDFailed, err)
 	}
 	return hex.EncodeToString(buf), nil
 }
@@ -227,7 +221,7 @@ func marshalParams(params any) (json.RawMessage, error) {
 	}
 	b, err := json.Marshal(params)
 	if err != nil {
-		return nil, fmt.Errorf("params の JSON 変換に失敗しました: %w", err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallMarshalParamsFailed, err)
 	}
 	if bytes.Equal(bytes.TrimSpace(b), []byte("null")) {
 		return json.RawMessage("{}"), nil
@@ -293,7 +287,7 @@ func (c *Client) call(
 
 	reqBytes, err := json.Marshal(wireRequest{ID: id, Method: method, Params: paramsJSON})
 	if err != nil {
-		return nil, fmt.Errorf("herdr へのリクエストの組み立てに失敗しました: %w", err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallMarshalRequestFailed, err)
 	}
 	// 改行区切り JSON なので、1行として送る（2-1）。
 	reqBytes = append(reqBytes, '\n')

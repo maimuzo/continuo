@@ -5,9 +5,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // ghBinary は実行する gh の名前である。PATH から解決する。
@@ -55,7 +56,7 @@ func RunGHAuthStatus(ctx context.Context) (string, error) {
 		// その判定は出力の中身（Active account の有無）で行う。
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) {
-			return out, fmt.Errorf("`gh auth status --hostname %s` を起動できません: %w", ghAuthHost, err)
+			return out, i18n.Errorf(i18n.KeyTrackerGHAuthStatusStartFailed, ghAuthHost, err)
 		}
 	}
 	return out, nil
@@ -69,7 +70,7 @@ func RunGHAuthStatus(ctx context.Context) (string, error) {
 // 戻り値: PATH に gh が無い場合のエラー。
 func CheckGHAvailable() error {
 	if _, err := exec.LookPath(ghBinary); err != nil {
-		return fmt.Errorf("`%s` が PATH にありません（エージェントが issue へコメントを書けません）: %w", ghBinary, err)
+		return i18n.Errorf(i18n.KeyTrackerGHAvailableNotInPath, ghBinary, err)
 	}
 	return nil
 }
@@ -100,18 +101,15 @@ func CheckGHProjectScope(ctx context.Context, run GHAuthStatusFunc) error {
 	}
 	scopes, found := activeAccountScopes(out)
 	if !found {
-		return fmt.Errorf(
-			"gh に %s の有効なアカウントがありません（`gh auth login -s %s` を実行してください）",
-			ghAuthHost, requiredGHScope)
+		return i18n.Errorf(i18n.KeyTrackerGHScopeNoActiveAccount, ghAuthHost, requiredGHScope)
 	}
 	for _, s := range scopes {
 		if s == requiredGHScope {
 			return nil
 		}
 	}
-	return fmt.Errorf(
-		"gh の scope に %q がありません（あるのは %v。`read:project` では Status を書けません。"+
-			"`gh auth refresh -h %s -s %s` を実行してください）",
+	return i18n.Errorf(
+		i18n.KeyTrackerGHScopeMissingScope,
 		requiredGHScope, scopes, ghAuthHost, requiredGHScope)
 }
 

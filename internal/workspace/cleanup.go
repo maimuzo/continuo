@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 )
 
@@ -258,19 +259,17 @@ func (m *Manager) resolveWorkspaceID(
 		Focus: &focus,
 	})
 	if err != nil {
-		return "", fmt.Errorf(
-			"消す前に herdr の worktree.open で workspace を確かめられませんでした（%s）: %w",
-			worktreePath, err)
+		return "", i18n.Errorf(
+			i18n.KeyWorkspaceResolveWorkspaceIDWorktreeOpenFailed, worktreePath, err)
 	}
 	if opened.Worktree.Path != "" && !samePath(opened.Worktree.Path, worktreePath) {
-		return "", fmt.Errorf(
-			"herdr が答えた worktree のパス %q が、消そうとしている %q と一致しません（何も消しません）",
-			opened.Worktree.Path, worktreePath)
+		return "", i18n.Errorf(
+			i18n.KeyWorkspaceResolveWorkspaceIDPathMismatch, opened.Worktree.Path, worktreePath)
 	}
 	workspaceID := opened.Workspace.WorkspaceID
 	if workspaceID == "" {
-		return "", fmt.Errorf(
-			"herdr の worktree.open が workspace の ID を返しませんでした（%s）", worktreePath)
+		return "", i18n.Errorf(
+			i18n.KeyWorkspaceResolveWorkspaceIDWorkspaceIDMissing, worktreePath)
 	}
 	if identity.HerdrWorkspaceID != "" && identity.HerdrWorkspaceID != workspaceID {
 		m.logger.Warn("身元ファイルの herdr_workspace_id が herdr の現物と一致しないので、現物のほうを消します",
@@ -370,7 +369,7 @@ func (m *Manager) removeSettingsFile(settingsPath string) {
 			"（workspace.Options.SettingsRoot が空）", "settings_path", settingsPath)
 		return
 	}
-	if err := checkUnder(m.settingsRoot, settingsPath, "issue ごとの設定ファイル"); err != nil {
+	if err := checkUnder(m.settingsRoot, settingsPath, i18n.T(i18n.KeyWorkspaceLabelIssueSettingsFile)); err != nil {
 		m.logger.Warn("身元ファイルの settings_path が置き場所の外側なので消しません",
 			"settings_path", settingsPath, "settings_root", m.settingsRoot, "error", err)
 		return
@@ -493,17 +492,15 @@ func (m *Manager) removeWorktree(
 		return fmt.Errorf("herdr.worktree.create_via_herdr が真ですが herdr のクライアントが設定されていません")
 	}
 	if workspaceID == "" {
-		return fmt.Errorf(
-			"消す herdr workspace の ID を確かめられませんでした（%s）。"+
-				"herdr workspace として開いていない worktree は worktree.remove では消せません",
-			worktreePath)
+		return i18n.Errorf(
+			i18n.KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown, worktreePath)
 	}
 	if _, err := m.herdr.WorktreeRemove(ctx, herdr.WorktreeRemoveParams{
 		WorkspaceID: workspaceID,
 		Force:       true,
 	}); err != nil {
-		return fmt.Errorf(
-			"herdr の worktree.remove に失敗しました（workspace_id=%s）: %w", workspaceID, err)
+		return i18n.Errorf(
+			i18n.KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed, workspaceID, err)
 	}
 	return nil
 }

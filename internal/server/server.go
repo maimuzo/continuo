@@ -38,6 +38,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
@@ -147,7 +148,7 @@ func New(opts Options) (*Server, error) {
 	}
 	port := *opts.Port
 	if port < 0 || port > 65535 {
-		return nil, fmt.Errorf("server.port が範囲外です（0以上65535以下にすること）: %d", port)
+		return nil, i18n.Errorf(i18n.KeyServerNewPortOutOfRange, port)
 	}
 	if opts.Source == nil {
 		return nil, errors.New("ダッシュボードに run の供給元が渡されていません")
@@ -192,7 +193,7 @@ func (s *Server) Start() error {
 	// **`tcp` + 127.0.0.1 なので IPv4 のループバックだけに bind する。**
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("ダッシュボードの待ち受けを開始できません（%s）: %w", addr, err)
+		return i18n.Errorf(i18n.KeyServerStartListenFailed, addr, err)
 	}
 
 	s.mu.Lock()
@@ -265,7 +266,7 @@ func (s *Server) Close(ctx context.Context) error {
 	err := s.http.Shutdown(ctx)
 	s.wg.Wait()
 	if err != nil {
-		return fmt.Errorf("ダッシュボードを閉じられません: %w", err)
+		return i18n.Errorf(i18n.KeyServerCloseShutdownFailed, err)
 	}
 	s.logger.Info("ダッシュボードを閉じました")
 	return nil

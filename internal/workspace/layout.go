@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 )
 
@@ -35,19 +36,17 @@ const rootDirPerm os.FileMode = 0o700
 // ディレクトリを作れない場合、解決に失敗した場合はエラーを返す。
 func EnsureRoot(root string) (string, error) {
 	if strings.TrimSpace(root) == "" {
-		return "", fmt.Errorf("workspace.root が空です（worktree の置き場所を決められません）")
+		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootRootEmpty)
 	}
 	if !filepath.IsAbs(root) {
-		return "", fmt.Errorf(
-			"workspace.root %q が絶対パスではありません（相対パスだと continuo を起動した"+
-				"ディレクトリによって worktree の置き場所が変わる）", root)
+		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootRootNotAbsolute, root)
 	}
 	if err := os.MkdirAll(root, rootDirPerm); err != nil {
-		return "", fmt.Errorf("workspace.root %q を作成できません: %w", root, err)
+		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootMkdirFailed, root, err)
 	}
 	resolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return "", fmt.Errorf("workspace.root %q のシンボリックリンクを解決できません: %w", root, err)
+		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootSymlinkUnresolvable, root, err)
 	}
 	return filepath.Clean(resolved), nil
 }
@@ -64,7 +63,7 @@ func EnsureRoot(root string) (string, error) {
 // 戻り値: 内側に無い場合・path が絶対パスでない場合・root と完全に同じ場合にエラーを返す
 // （root そのものを worktree にはできない）。
 func CheckContainment(resolvedRoot, path string) error {
-	if err := checkUnder(resolvedRoot, path, "worktree のパス"); err != nil {
+	if err := checkUnder(resolvedRoot, path, i18n.T(i18n.KeyWorkspaceLabelWorktreePath)); err != nil {
 		return fmt.Errorf("%w（SPEC.md 9.5 Invariant 2）", err)
 	}
 	return nil
@@ -82,19 +81,19 @@ func CheckContainment(resolvedRoot, path string) error {
 // 戻り値: path が絶対パスでない場合・root と完全に同じ場合・root の外側にある場合のエラー。
 func checkUnder(root, path, label string) error {
 	if !filepath.IsAbs(path) {
-		return fmt.Errorf("%s %q が絶対パスではありません（置き場所の内側か判定できない）", label, path)
+		return i18n.Errorf(i18n.KeyWorkspaceCheckUnderNotAbsolute, label, path)
 	}
 	cleaned := filepath.Clean(path)
 	cleanRoot := filepath.Clean(root)
 	if cleaned == cleanRoot {
-		return fmt.Errorf("%s %q が置き場所 %q そのものです", label, cleaned, cleanRoot)
+		return i18n.Errorf(i18n.KeyWorkspaceCheckUnderSameAsRoot, label, cleaned, cleanRoot)
 	}
 	prefix := cleanRoot
 	if !strings.HasSuffix(prefix, string(os.PathSeparator)) {
 		prefix += string(os.PathSeparator)
 	}
 	if !strings.HasPrefix(cleaned, prefix) {
-		return fmt.Errorf("%s %q が置き場所 %q の外側にあります", label, cleaned, cleanRoot)
+		return i18n.Errorf(i18n.KeyWorkspaceCheckUnderOutsideRoot, label, cleaned, cleanRoot)
 	}
 	return nil
 }
@@ -113,12 +112,12 @@ func checkUnder(root, path, label string) error {
 func CheckContainmentResolved(resolvedRoot, path string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return "", fmt.Errorf("worktree のパス %q のシンボリックリンクを解決できません: %w", path, err)
+		return "", i18n.Errorf(i18n.KeyWorkspaceCheckContainmentResolvedSymlinkUnresolvable, path, err)
 	}
 	resolved = filepath.Clean(resolved)
 	if err := CheckContainment(resolvedRoot, resolved); err != nil {
-		return resolved, fmt.Errorf(
-			"worktree の実体が置き場所の外側にあります（解決前 %q / 解決後 %q）: %w", path, resolved, err)
+		return resolved, i18n.Errorf(
+			i18n.KeyWorkspaceCheckContainmentResolvedOutsideRoot, path, resolved, err)
 	}
 	return resolved, nil
 }
@@ -155,7 +154,7 @@ func HostFromIssueURL(rawURL string) string {
 func RenderBranch(tmpl string, issue IssueRef) (normalize.SafeName, []normalize.Warning, error) {
 	parsed, err := template.New("branch").Option("missingkey=error").Parse(tmpl)
 	if err != nil {
-		return "", nil, fmt.Errorf("herdr.worktree.branch_template を解析できません（%q）: %w", tmpl, err)
+		return "", nil, i18n.Errorf(i18n.KeyWorkspaceRenderBranchTemplateUnparsable, tmpl, err)
 	}
 	data := map[string]any{
 		"issue": map[string]any{
@@ -166,11 +165,11 @@ func RenderBranch(tmpl string, issue IssueRef) (normalize.SafeName, []normalize.
 	}
 	var buf bytes.Buffer
 	if err := parsed.Execute(&buf, data); err != nil {
-		return "", nil, fmt.Errorf("herdr.worktree.branch_template を描画できません（%q）: %w", tmpl, err)
+		return "", nil, i18n.Errorf(i18n.KeyWorkspaceRenderBranchTemplateRenderFailed, tmpl, err)
 	}
 	rendered := strings.TrimSpace(buf.String())
 	if rendered == "" {
-		return "", nil, fmt.Errorf("herdr.worktree.branch_template の描画結果が空です（%q）", tmpl)
+		return "", nil, i18n.Errorf(i18n.KeyWorkspaceRenderBranchRenderedEmpty, tmpl)
 	}
 	name, warnings := normalize.Normalize(rendered)
 	return name, warnings, nil

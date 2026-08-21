@@ -1,11 +1,11 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/goccy/go-yaml"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // DefaultFileName は WORKFLOW.md の既定のファイル名である（設計 5-1 / SPEC.md 5.1）。
@@ -42,10 +42,7 @@ func ResolvePath(argPath, workDir string) (string, error) {
 		return argPath, nil
 	}
 	if !filepath.IsAbs(workDir) {
-		return "", fmt.Errorf(
-			"WORKFLOW.md の場所を絶対パスで決められません: 基準にする作業ディレクトリ %q が絶対パスではありません",
-			workDir,
-		)
+		return "", i18n.Errorf(i18n.KeyConfigResolvePathWorkDirNotAbsolute, workDir)
 	}
 	if argPath != "" {
 		return filepath.Join(workDir, argPath), nil
@@ -69,30 +66,26 @@ func ResolvePath(argPath, workDir string) (string, error) {
 //   - path が絶対パスでない（相対パスの解決の基準を決められないため。5-1）
 func Load(path string) (*Loaded, error) {
 	if !filepath.IsAbs(path) {
-		return nil, fmt.Errorf(
-			"WORKFLOW.md のパス %q が絶対パスではありません（設定に書いた相対パスの解決の基準に"+
-				"なるため、絶対パスで渡すこと。config.ResolvePath が絶対パスへ直す）",
-			path,
-		)
+		return nil, i18n.Errorf(i18n.KeyConfigLoadPathNotAbsolute, path)
 	}
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("WORKFLOW.md を読み込めません: %s: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyConfigLoadReadFailed, path, err)
 	}
 
 	frontMatter, body, err := splitFrontMatter(string(raw))
 	if err != nil {
-		return nil, fmt.Errorf("%s の front matter を切り出せません: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyConfigLoadFrontMatterSplitFailed, path, err)
 	}
 
 	cfg, err := parseFrontMatter(frontMatter)
 	if err != nil {
-		return nil, fmt.Errorf("%s の front matter が不正です: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyConfigLoadFrontMatterInvalid, path, err)
 	}
 
 	if err := expandConfig(cfg); err != nil {
-		return nil, fmt.Errorf("%s の設定値の展開に失敗しました: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyConfigLoadExpandFailed, path, err)
 	}
 
 	// 相対パスの解決は展開のあとに行う（"~/worktrees" は展開前には相対パスに見えるため）。
@@ -101,7 +94,7 @@ func Load(path string) (*Loaded, error) {
 	// 絶対パスの検査は展開・相対パスの解決のあとでなければ成立しない
 	// （"~/run/continuo.lock" は展開前には絶対パスに見えないため）。
 	if err := validateExpanded(cfg); err != nil {
-		return nil, fmt.Errorf("%s の front matter が不正です: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyConfigLoadFrontMatterInvalid, path, err)
 	}
 
 	return &Loaded{

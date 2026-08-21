@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // settingsFileName は issue ごとの Claude Code の設定ファイルの名前である（設計 3-12）。
@@ -107,11 +109,11 @@ var hookEventNames = []struct {
 func (o *Orchestrator) writeSettingsFile(identifier string) (string, error) {
 	dir := o.issueDir(identifier)
 	if err := os.MkdirAll(dir, settingsDirPerm); err != nil {
-		return "", fmt.Errorf("issue ごとの設定ファイルの置き場所を作れません: %s: %w", dir, err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorWriteSettingsFileDirCreateFailed, dir, err)
 	}
 	pending := o.pendingDir(identifier)
 	if err := os.MkdirAll(pending, settingsDirPerm); err != nil {
-		return "", fmt.Errorf("hook の逃がし先を作れません: %s: %w", pending, err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorWriteSettingsFilePendingDirCreateFailed, pending, err)
 	}
 
 	// **shell の引用を通す。**この文字列は Claude Code が shell で実行する。
@@ -138,13 +140,13 @@ func (o *Orchestrator) writeSettingsFile(identifier string) (string, error) {
 
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("Claude Code の設定ファイルを JSON 化できません: %w", err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorWriteSettingsFileMarshalFailed, err)
 	}
 	data = append(data, '\n')
 
 	path := filepath.Join(dir, settingsFileName)
 	if err := os.WriteFile(path, data, settingsFilePerm); err != nil {
-		return "", fmt.Errorf("Claude Code の設定ファイルを書けません: %s: %w", path, err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorWriteSettingsFileWriteFailed, path, err)
 	}
 	return path, nil
 }

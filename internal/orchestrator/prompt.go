@@ -5,6 +5,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -26,7 +27,7 @@ import (
 func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (string, error) {
 	tmpl, err := template.New("prompt").Option("missingkey=error").Parse(o.promptTemplate)
 	if err != nil {
-		return "", fmt.Errorf("プロンプトのテンプレートを解析できません: %w", err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptTemplateUnparsable, err)
 	}
 
 	url := ""
@@ -49,7 +50,7 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 
 	var b strings.Builder
 	if err := tmpl.Execute(&b, data); err != nil {
-		return "", fmt.Errorf("プロンプトのテンプレートを描画できません（5-3 の一覧に無い変数を書いていませんか）: %w", err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptRenderFailed, err)
 	}
 	return b.String(), nil
 }

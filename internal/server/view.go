@@ -244,7 +244,7 @@ func writeJSON(w io.Writer, snap Snapshot) error {
 	// **`SetEscapeHTML` は既定の true のままにする。**JSON を HTML に貼られても
 	// script が閉じないようにするためである。
 	if err := enc.Encode(snap); err != nil {
-		return fmt.Errorf("JSON を書き出せません: %w", err)
+		return i18n.Errorf(i18n.KeyServerWriteJSONEncodeFailed, err)
 	}
 	return nil
 }

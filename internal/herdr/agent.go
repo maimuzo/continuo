@@ -3,10 +3,10 @@ package herdr
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 )
 
@@ -52,11 +52,7 @@ var agentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 func ValidateAgentName(name normalize.SafeName) error {
 	s := name.String()
 	if !agentNamePattern.MatchString(s) {
-		return fmt.Errorf(
-			"agent 名が herdr の許容パターンに収まりません（`^[a-z][a-z0-9_-]{0,31}$`、"+
-				"小文字始まり・32文字以内である必要があります）: %q",
-			s,
-		)
+		return i18n.Errorf(i18n.KeyHerdrAgentInvalidName, s)
 	}
 	return nil
 }
@@ -131,7 +127,7 @@ func (c *Client) AgentStart(ctx context.Context, params AgentStartParams) (*Agen
 	}
 	var result AgentStartResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodAgentStart, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodAgentStart, err)
 	}
 	return &result, nil
 }
@@ -260,7 +256,7 @@ func (c *Client) AgentPrompt(ctx context.Context, params AgentPromptParams) (*Ag
 	}
 	var result AgentPromptResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodAgentPrompt, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodAgentPrompt, err)
 	}
 	return &result, nil
 }
@@ -321,7 +317,7 @@ func (c *Client) AgentRead(ctx context.Context, params AgentReadParams) (*AgentR
 	}
 	var result AgentReadResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodAgentRead, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodAgentRead, err)
 	}
 	return &result, nil
 }
@@ -364,7 +360,7 @@ func (c *Client) AgentGet(ctx context.Context, params AgentGetParams) (*AgentGet
 	}
 	var result AgentGetResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodAgentGet, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodAgentGet, err)
 	}
 	return &result, nil
 }
@@ -394,7 +390,7 @@ func (c *Client) AgentList(ctx context.Context) (*AgentListResult, error) {
 	}
 	var result AgentListResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodAgentList, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodAgentList, err)
 	}
 	return &result, nil
 }
@@ -450,7 +446,7 @@ func (c *Client) AgentWait(ctx context.Context, params AgentWaitParams) (*AgentW
 	}
 	var result AgentWaitResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodAgentWait, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodAgentWait, err)
 	}
 	return &result, nil
 }
@@ -502,7 +498,7 @@ func (c *Client) AgentRename(ctx context.Context, params AgentRenameParams) (*Ag
 	}
 	var result AgentRenameResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodAgentRename, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodAgentRename, err)
 	}
 	return &result, nil
 }
@@ -528,7 +524,7 @@ func (c *Client) AgentSendKeys(ctx context.Context, params AgentSendKeysParams) 
 		return err
 	}
 	if len(params.Keys) == 0 {
-		return fmt.Errorf("%s には少なくとも1つのキーが要ります", MethodAgentSendKeys)
+		return i18n.Errorf(i18n.KeyHerdrAgentSendKeysEmpty, MethodAgentSendKeys)
 	}
 	if _, err := c.call(ctx, MethodAgentSendKeys, params, c.timeouts.Read); err != nil {
 		return err

@@ -3,7 +3,8 @@ package herdr
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // MethodPing は herdr の socket API の版と機能を取得するメソッド名である。
@@ -48,12 +49,12 @@ type PingResult struct {
 func (c *Client) Ping(ctx context.Context) (*PingResult, error) {
 	raw, err := c.call(ctx, MethodPing, nil, c.timeouts.Read)
 	if err != nil {
-		return nil, fmt.Errorf("herdr の %s を呼べません: %w", MethodPing, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrPingCallFailed, MethodPing, err)
 	}
 
 	var result PingResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("herdr の %s の応答を解析できません: %w", MethodPing, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrPingUnmarshalFailed, MethodPing, err)
 	}
 	return &result, nil
 }
@@ -71,14 +72,12 @@ func (c *Client) Ping(ctx context.Context) (*PingResult, error) {
 func (c *Client) CheckProtocol(ctx context.Context, expected int) (*PingResult, error) {
 	result, err := c.Ping(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("herdr の protocol 版を取得できません: %w", err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCheckProtocolPingFailed, err)
 	}
 
 	if result.Protocol != expected {
-		return result, fmt.Errorf(
-			"herdr の protocol 版が設定と一致しません（herdr が返した版=%d, "+
-				"設定ファイルの herdr.protocol=%d, herdr のバージョン=%s）。continuo と herdr の"+
-				"バージョンの組み合わせを確認してください",
+		return result, i18n.Errorf(
+			i18n.KeyHerdrCheckProtocolVersionMismatch,
 			result.Protocol, expected, result.Version,
 		)
 	}

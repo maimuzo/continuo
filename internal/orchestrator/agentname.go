@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 )
 
@@ -96,7 +97,7 @@ func (o *Orchestrator) resolveAgentName(ctx context.Context, repo string, number
 	used := map[string]bool{}
 	list, err := o.herdr.AgentList(ctx)
 	if err != nil {
-		return "", fmt.Errorf("agent の一覧を読めません（agent 名の重複を検査できない）: %w", err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorResolveAgentNameAgentListFailed, err)
 	}
 	for _, a := range list.Agents {
 		if a.Name != "" {
@@ -117,11 +118,11 @@ func (o *Orchestrator) resolveAgentName(ctx context.Context, repo string, number
 			o.logger.Warn("agent 名の正規化で情報が落ちました", "message", w.Message)
 		}
 		if err := herdr.ValidateAgentName(name); err != nil {
-			return "", fmt.Errorf("組み立てた agent 名 %q が使えません: %w", candidate, err)
+			return "", i18n.Errorf(i18n.KeyOrchestratorResolveAgentNameInvalidName, candidate, err)
 		}
 		return name, nil
 	}
-	return "", fmt.Errorf("agent 名 %q の空きが %d 回試しても見つかりません", base, agentNameSuffixAttempts)
+	return "", i18n.Errorf(i18n.KeyOrchestratorResolveAgentNameNoFreeName, base, agentNameSuffixAttempts)
 }
 
 // withNumericSuffix は名前の末尾に `-<n>` を付ける。32文字を超える場合は
@@ -153,7 +154,7 @@ func withNumericSuffix(base string, n int) string {
 func NewSessionUUID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("セッション UUID の乱数を取得できません: %w", err)
+		return "", i18n.Errorf(i18n.KeyOrchestratorNewSessionUUIDRandFailed, err)
 	}
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // variant 10

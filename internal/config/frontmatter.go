@@ -1,8 +1,9 @@
 package config
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // frontMatterDelimiter は front matter の開始・終了を示す行である（設計 5-2 の例に合わせる）。
@@ -35,10 +36,7 @@ func splitFrontMatter(content string) (frontMatter string, body string, err erro
 		if len(lines) > 0 {
 			got = lines[0]
 		}
-		return "", "", fmt.Errorf(
-			"1行目が front matter の開始行 %q ではありません（1行目: %q）",
-			frontMatterDelimiter, got,
-		)
+		return "", "", i18n.Errorf(i18n.KeyConfigFrontMatterNoStartDelimiter, frontMatterDelimiter, got)
 	}
 
 	endLineIndex := -1
@@ -49,10 +47,7 @@ func splitFrontMatter(content string) (frontMatter string, body string, err erro
 		}
 	}
 	if endLineIndex == -1 {
-		return "", "", fmt.Errorf(
-			"front matter の終端行 %q が見つかりません（1行目（%q）に対応する終端が無い）",
-			frontMatterDelimiter, frontMatterDelimiter,
-		)
+		return "", "", i18n.Errorf(i18n.KeyConfigFrontMatterNoEndDelimiter, frontMatterDelimiter, frontMatterDelimiter)
 	}
 
 	frontMatter = strings.Join(lines[1:endLineIndex], "\n")

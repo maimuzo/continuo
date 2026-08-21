@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 )
 
@@ -105,11 +106,8 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 	if repoPath == "" {
 		// **コマンドは実値で組み立てる。**`<owner>/<repo>` のまま出すと、
 		// 人間がコピーしても叩けない（設計 3-34b）。
-		return nil, fmt.Errorf(
-			"%w。**巡回のループは勝手に clone しません**（ボードに載っただけのリポジトリを無断で取ってこないため）。"+
-				"\n【確かめ方】`ghq list -p -e %s/%s` を実行してください。0行なら手元にありません。"+
-				"\n【対処】WORKFLOW.md の `trust.repositories` に `%s/%s` があることを確かめてから、"+
-				"`continuo trust` を実行してください。clone の取得と信頼の登録をまとめて行います。",
+		return nil, i18n.Errorf(
+			i18n.KeyWorkspacePrepareCloneNotFound,
 			ErrCloneNotFound, issue.Owner, issue.Repo, issue.Owner, issue.Repo)
 	}
 
@@ -132,7 +130,7 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 	_, statErr := os.Stat(loc.Path)
 	exists := statErr == nil
 	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-		return nil, fmt.Errorf("worktree のパス %s を確認できません: %w", loc.Path, statErr)
+		return nil, i18n.Errorf(i18n.KeyWorkspacePrepareStatFailed, loc.Path, statErr)
 	}
 
 	switch {
@@ -149,8 +147,8 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		}
 		if head != loc.Branch.String() {
 			// 段3 と同じ判断である。**乗っ取らない。**
-			return nil, fmt.Errorf(
-				"%w: %s は %q をチェックアウトしています（期待は %q）",
+			return nil, i18n.Errorf(
+				i18n.KeyWorkspacePrepareBranchMismatch,
 				ErrUnregisteredWorktree, loc.Path, head, loc.Branch.String())
 		}
 		// 既存の身元ファイルを先に読む（3-18）。
@@ -164,11 +162,8 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		}
 	case exists && !registered:
 		// 段3: 乗っ取らない。
-		return nil, fmt.Errorf(
-			"%w（%s）。**continuo が作ったものではない可能性があるので、乗っ取らずに止めました。**"+
-				"\n【確かめ方】`ls -la %s` で中に何があるかを見てください。"+
-				"\n【よくある原因】前に continuo が落ちて git の登録だけ消えた / 人間が手でディレクトリを作った。"+
-				"\n【対処】中身が要らなければ `rm -rf %s` で消してください。次の巡回で作り直します。",
+		return nil, i18n.Errorf(
+			i18n.KeyWorkspacePrepareUnregisteredWorktree,
 			ErrUnregisteredWorktree, loc.Path, loc.Path, loc.Path)
 	default:
 		// 段4・段5。
@@ -178,7 +173,7 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		}
 		result.Base = base
 		if err := os.MkdirAll(filepath.Dir(loc.Path), rootDirPerm); err != nil {
-			return nil, fmt.Errorf("worktree の親ディレクトリ %s を作成できません: %w", filepath.Dir(loc.Path), err)
+			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareParentDirCreateFailed, filepath.Dir(loc.Path), err)
 		}
 		if err := gitWorktreeAdd(ctx, repoPath, loc.Path, loc.Branch, base); err != nil {
 			return nil, err
@@ -221,7 +216,7 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 			Label: issue.URL,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("herdr の worktree.open に失敗しました（%s）: %w", resolvedPath, err)
+			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareWorktreeOpenFailed, resolvedPath, err)
 		}
 		result.HerdrWorkspaceID = opened.Workspace.WorkspaceID
 		result.HerdrPaneID = opened.RootPane.PaneID
@@ -281,18 +276,13 @@ func (m *Manager) resolveBase(issue IssueRef) (normalize.SafeName, error) {
 	}
 	raw, ok := issue.NativeRef[NativeRefDefaultBranch]
 	if !ok {
-		return "", fmt.Errorf(
-			"%w。WORKFLOW.md の `herdr.worktree.base` が空で、"+
-				"ボードから引いた issue（%s）にも既定 branch の情報がありませんでした。"+
-				"\n【確かめ方】WORKFLOW.md の `herdr.worktree.base` を見てください。"+
-				"\n【対処】`base: \"main\"` のように branch 名を書いてください。"+
-				"**書かない場合はボードが返す既定 branch を使いますが、いまはそれが取れていません。**",
-			ErrBaseUnknown, issue.Identifier)
+		return "", i18n.Errorf(
+			i18n.KeyWorkspaceResolveBaseDefaultBranchMissing, ErrBaseUnknown, issue.Identifier)
 	}
 	s, ok := raw.(string)
 	if !ok || s == "" {
-		return "", fmt.Errorf(
-			"%w: issue の NativeRef[%q] が文字列ではありません（%s、値 %v）",
+		return "", i18n.Errorf(
+			i18n.KeyWorkspaceResolveBaseDefaultBranchNotString,
 			ErrBaseUnknown, NativeRefDefaultBranch, issue.Identifier, raw)
 	}
 	name, warnings := normalize.Normalize(s)

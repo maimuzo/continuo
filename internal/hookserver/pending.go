@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // 逃がし先（設計 3-19）のディレクトリ構成である。
@@ -155,7 +157,7 @@ func (s *Server) pendingDirs() ([]string, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("hook の逃がし先の親ディレクトリを読めません: %s: %w", issuesDir, err)
+		return nil, i18n.Errorf(i18n.KeyHookserverPendingDirsIssuesDirUnreadable, issuesDir, err)
 	}
 
 	var dirs []string
@@ -260,7 +262,7 @@ func (s *Server) scanPendingDir(dir string, budget *scanBudget) []pendingFile {
 		path := filepath.Join(dir, name)
 
 		if !e.Type().IsRegular() {
-			s.moveToBroken(dir, path, fmt.Errorf("通常ファイルではありません（%s）", e.Type()))
+			s.moveToBroken(dir, path, i18n.Errorf(i18n.KeyHookserverPendingNotRegularFile, e.Type()))
 			continue
 		}
 		if budget.remainingFiles <= 0 || budget.remainingBytes <= 0 {
@@ -331,13 +333,13 @@ func (s *Server) readPendingFile(path string) ([]byte, error) {
 	}
 	dir := filepath.Dir(path)
 	if !st.Mode().IsRegular() {
-		s.moveToBroken(dir, path, fmt.Errorf("通常ファイルではありません（%s）", st.Mode()))
+		s.moveToBroken(dir, path, i18n.Errorf(i18n.KeyHookserverPendingNotRegularFile, st.Mode()))
 		return nil, fmt.Errorf("%w: %s", errPendingQuarantined, path)
 	}
 	limit := int64(s.maxMessageBytes)
 	if st.Size() > limit {
-		s.moveToBroken(dir, path, fmt.Errorf(
-			"逃がし先のファイルが上限（%d バイト）より大きい（%d バイト）ので読みませんでした", limit, st.Size()))
+		s.moveToBroken(dir, path, i18n.Errorf(
+			i18n.KeyHookserverReadPendingFileTooLarge, limit, st.Size()))
 		return nil, fmt.Errorf("%w: %s", errPendingQuarantined, path)
 	}
 

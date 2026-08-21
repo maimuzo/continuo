@@ -515,6 +515,762 @@ const (
 	KeyDashboardNone Key = "dashboard.none"
 )
 
+// 二重起動を防ぐロック（internal/lock）のエラーの文言。
+const (
+	// KeyLockAcquireOpenFailed はロックファイルを開けなかったときに出る。
+	KeyLockAcquireOpenFailed Key = "lock.acquire.open_failed"
+	// KeyLockAcquireAlreadyRunning は別のプロセスが同じロックファイルを掴んでいるときに出る。
+	// 先頭の %w には ErrAlreadyRunning を渡す（errors.Is の切り分けを保つため）。
+	KeyLockAcquireAlreadyRunning Key = "lock.acquire.already_running"
+	// KeyLockReleaseUnlockFailed はflock の解放に失敗したときに出る。
+	KeyLockReleaseUnlockFailed Key = "lock.release.unlock_failed"
+	// KeyLockReleaseCloseFailed はロックファイルのクローズに失敗したときに出る。
+	KeyLockReleaseCloseFailed Key = "lock.release.close_failed"
+)
+
+// hook を受ける socket の置き場所（internal/socketpath）のエラーの文言。
+const (
+	// KeySocketpathRuntimeDirHomeDirFailed は既定の ~/.continuo/run を組み立てるための
+	// ホームディレクトリを取得できなかったときに出る。
+	KeySocketpathRuntimeDirHomeDirFailed Key = "socketpath.runtime_dir.home_dir_failed"
+	// KeySocketpathCheckAbsNotAbsolute は置き場所として渡された値が絶対パスでないときに出る。
+	// 最初の %s には socketpath.source.* の文言が入る。
+	KeySocketpathCheckAbsNotAbsolute Key = "socketpath.check_abs.not_absolute"
+	// KeySocketpathCheckPathLenTooLong はsocket のパスが MaxPathLen を超えたときに出る。
+	KeySocketpathCheckPathLenTooLong Key = "socketpath.check_path_len.too_long"
+	// KeySocketpathEnsureDirParentMkdirFailed は置き場所の親ディレクトリを作れなかったときに出る。
+	KeySocketpathEnsureDirParentMkdirFailed Key = "socketpath.ensure_dir.parent_mkdir_failed"
+	// KeySocketpathEnsureDirChmodFailed は自分で作ったディレクトリを 0700 にできなかったときに出る。
+	KeySocketpathEnsureDirChmodFailed Key = "socketpath.ensure_dir.chmod_failed"
+	// KeySocketpathEnsureDirMkdirFailed は置き場所のディレクトリを作れなかったときに出る。
+	KeySocketpathEnsureDirMkdirFailed Key = "socketpath.ensure_dir.mkdir_failed"
+	// KeySocketpathCheckExistingDirLstatFailed は既にあるディレクトリを Lstat できなかったときに出る。
+	KeySocketpathCheckExistingDirLstatFailed Key = "socketpath.check_existing_dir.lstat_failed"
+	// KeySocketpathCheckExistingDirSymlink は既にあるものが symlink だったときに出る。
+	KeySocketpathCheckExistingDirSymlink Key = "socketpath.check_existing_dir.symlink"
+	// KeySocketpathCheckExistingDirNotADirectory は既にあるものがディレクトリでなかったときに出る。
+	KeySocketpathCheckExistingDirNotADirectory Key = "socketpath.check_existing_dir.not_a_directory"
+	// KeySocketpathCheckExistingDirPermTooOpen は既にあるディレクトリの権限が group / other に
+	// 開いていたときに出る。
+	KeySocketpathCheckExistingDirPermTooOpen Key = "socketpath.check_existing_dir.perm_too_open"
+)
+
+// hook を受ける socket の置き場所を、どこから読んだかを表す語。
+//
+// **socketpath.check_abs.not_absolute の最初の %s に埋まる。**
+// ここを文言にしておかないと、エラーの一文だけが日本語のまま残る。
+const (
+	// KeySocketpathSourceEnvRuntimeDir は環境変数 CONTINUO_RUNTIME_DIR から読んだことを表す。
+	KeySocketpathSourceEnvRuntimeDir Key = "socketpath.source.env_continuo_runtime_dir"
+	// KeySocketpathSourceEnvXDGRuntimeDir は環境変数 XDG_RUNTIME_DIR から読んだことを表す。
+	KeySocketpathSourceEnvXDGRuntimeDir Key = "socketpath.source.env_xdg_runtime_dir"
+	// KeySocketpathSourceEnvTMPDir は環境変数 TMPDIR から読んだことを表す。
+	KeySocketpathSourceEnvTMPDir Key = "socketpath.source.env_tmpdir"
+	// KeySocketpathSourceConfigListen は設定キー claude.hook_bridge.listen から読んだことを表す。
+	KeySocketpathSourceConfigListen Key = "socketpath.source.config_hook_bridge_listen"
+)
+
+// WORKFLOW.md の読み込み（internal/config）のエラーの文言。
+const (
+	// KeyConfigResolvePathWorkDirNotAbsolute は WORKFLOW.md の場所を決める基準に渡された
+	// 作業ディレクトリが絶対パスでないときに出る。
+	KeyConfigResolvePathWorkDirNotAbsolute Key = "config.resolve_path.work_dir_not_absolute"
+	// KeyConfigLoadPathNotAbsolute は読み込む WORKFLOW.md のパスが絶対パスでないときに出る。
+	KeyConfigLoadPathNotAbsolute Key = "config.load.path_not_absolute"
+	// KeyConfigLoadReadFailed は WORKFLOW.md をファイルとして読めなかったときに出る。
+	KeyConfigLoadReadFailed Key = "config.load.read_failed"
+	// KeyConfigLoadFrontMatterSplitFailed は front matter と本文に切り分けられなかったときに出る。
+	KeyConfigLoadFrontMatterSplitFailed Key = "config.load.front_matter_split_failed"
+	// KeyConfigLoadFrontMatterInvalid は front matter の中身が不正だったときに出る。
+	KeyConfigLoadFrontMatterInvalid Key = "config.load.front_matter_invalid"
+	// KeyConfigLoadExpandFailed は設定値の環境変数展開・チルダ展開に失敗したときに出る。
+	KeyConfigLoadExpandFailed Key = "config.load.expand_failed"
+)
+
+// front matter の切り出し（internal/config の splitFrontMatter）のエラーの文言。
+const (
+	// KeyConfigFrontMatterNoStartDelimiter は1行目が開始の区切り行でないときに出る。
+	KeyConfigFrontMatterNoStartDelimiter Key = "config.front_matter.no_start_delimiter"
+	// KeyConfigFrontMatterNoEndDelimiter は終端の区切り行が見つからないときに出る。
+	KeyConfigFrontMatterNoEndDelimiter Key = "config.front_matter.no_end_delimiter"
+)
+
+// 雛形のプレースホルダが残っていることを知らせる文言。
+const (
+	// KeyConfigPlaceholderRemaining は `continuo init` の雛形の値が埋められないまま
+	// 残っているときに出る。
+	KeyConfigPlaceholderRemaining Key = "config.placeholder.remaining"
+)
+
+// front matter の値の検査（internal/config の validate）のエラーの文言。
+const (
+	// KeyConfigValidateInvalidValue は値は入っているが不正であるときに出る。
+	KeyConfigValidateInvalidValue Key = "config.validate.invalid_value"
+	// KeyConfigValidateRequired は必須のキーが空・未設定であるときに出る。
+	KeyConfigValidateRequired Key = "config.validate.required"
+)
+
+// 設定値の環境変数展開・チルダ展開（internal/config の expand）のエラーの文言。
+const (
+	// KeyConfigExpandTrailingDollar は値が "$" で終わっているときに出る。
+	KeyConfigExpandTrailingDollar Key = "config.expand.trailing_dollar"
+	// KeyConfigExpandUnclosedBrace は "${" が "}" で閉じられていないときに出る。
+	KeyConfigExpandUnclosedBrace Key = "config.expand.unclosed_brace"
+	// KeyConfigExpandEmptyEnvName は "${}" のように環境変数名が空のときに出る。
+	KeyConfigExpandEmptyEnvName Key = "config.expand.empty_env_name"
+	// KeyConfigExpandInvalidDollarForm は "$" が受け付ける3つの形式のいずれでもないときに出る。
+	KeyConfigExpandInvalidDollarForm Key = "config.expand.invalid_dollar_form"
+	// KeyConfigExpandEnvUndefined は参照した環境変数が定義されていないときに出る。
+	KeyConfigExpandEnvUndefined Key = "config.expand.env_undefined"
+	// KeyConfigExpandEnvEmpty は参照した環境変数が定義されているが空文字のときに出る。
+	KeyConfigExpandEnvEmpty Key = "config.expand.env_empty"
+	// KeyConfigExpandHomeDirFailed はチルダ展開のためのホームディレクトリを取得できないときに出る。
+	KeyConfigExpandHomeDirFailed Key = "config.expand.home_dir_failed"
+	// KeyConfigExpandTildeUserUnsupported は "~user" 形式のチルダ展開が書かれているときに出る。
+	KeyConfigExpandTildeUserUnsupported Key = "config.expand.tilde_user_unsupported"
+)
+
+// herdr の ping・protocol 版の照合（internal/herdr の Ping / CheckProtocol）のエラーの文言。
+const (
+	// KeyHerdrPingCallFailed は ping そのものを呼べなかったときに出る。
+	KeyHerdrPingCallFailed Key = "herdr.ping.call_failed"
+	// KeyHerdrPingUnmarshalFailed は ping の応答を JSON として読めなかったときに出る。
+	KeyHerdrPingUnmarshalFailed Key = "herdr.ping.unmarshal_failed"
+	// KeyHerdrCheckProtocolPingFailed は照合の前段の ping が失敗したときに出る。
+	KeyHerdrCheckProtocolPingFailed Key = "herdr.check_protocol.ping_failed"
+	// KeyHerdrCheckProtocolVersionMismatch は herdr の protocol 版が設定と食い違うときに出る。
+	KeyHerdrCheckProtocolVersionMismatch Key = "herdr.check_protocol.version_mismatch"
+)
+
+// herdr の socket API を1回呼ぶ処理（internal/herdr の call）のエラーの文言。
+const (
+	// KeyHerdrCallUnmarshalFailed は応答の result を JSON として読めなかったときに出る。
+	// pane・agent・worktree・workspace のすべてのメソッドが共有する。
+	KeyHerdrCallUnmarshalFailed Key = "herdr.call.unmarshal_failed"
+	// KeyHerdrCallRequestIDFailed はリクエスト id 用の乱数を取れなかったときに出る。
+	KeyHerdrCallRequestIDFailed Key = "herdr.call.request_id_failed"
+	// KeyHerdrCallMarshalParamsFailed は params を JSON へ変換できなかったときに出る。
+	KeyHerdrCallMarshalParamsFailed Key = "herdr.call.marshal_params_failed"
+	// KeyHerdrCallMarshalRequestFailed はリクエスト全体を JSON へ変換できなかったときに出る。
+	KeyHerdrCallMarshalRequestFailed Key = "herdr.call.marshal_request_failed"
+)
+
+// herdr の socket のパスを決める処理（internal/herdr の ResolveSocketPath）の文言。
+const (
+	// KeyHerdrSocketPathNotAbsolute は決まったパスが絶対パスでないときに出る。
+	KeyHerdrSocketPathNotAbsolute Key = "herdr.socket_path.not_absolute"
+	// KeyHerdrSocketPathHomeDirFailed は既定値へ落ちる際にホームディレクトリを取れないときに出る。
+	KeyHerdrSocketPathHomeDirFailed Key = "herdr.socket_path.home_dir_failed"
+	// KeyHerdrSocketPathSourceConfig は上の not_absolute の %s に入る、値の出どころの説明である。
+	KeyHerdrSocketPathSourceConfig Key = "herdr.socket_path.source_config"
+)
+
+// herdr の agent を扱う処理（internal/herdr の ValidateAgentName / AgentSendKeys）の文言。
+const (
+	// KeyHerdrAgentInvalidName は agent 名が herdr の許容パターンに収まらないときに出る。
+	KeyHerdrAgentInvalidName Key = "herdr.agent.invalid_name"
+	// KeyHerdrAgentSendKeysEmpty は agent.send_keys に送るキーが1つも無いときに出る。
+	KeyHerdrAgentSendKeysEmpty Key = "herdr.agent.send_keys_empty"
+)
+
+// ボードを読み書きするためのトークンの取得（internal/tracker の RunGHAuthToken）の文言。
+const (
+	// KeyTrackerGHAuthTokenRunFailed は `gh auth token` の実行そのものが失敗したときに出る。
+	KeyTrackerGHAuthTokenRunFailed Key = "tracker.gh_auth_token.run_failed"
+	// KeyTrackerGHAuthTokenEmptyOutput は `gh auth token` が空文字を返したときに出る。
+	KeyTrackerGHAuthTokenEmptyOutput Key = "tracker.gh_auth_token.empty_output"
+)
+
+// gh の有無と scope の検査（internal/tracker の RunGHAuthStatus / CheckGHAvailable /
+// CheckGHProjectScope）の文言。
+const (
+	// KeyTrackerGHAuthStatusStartFailed は `gh auth status` を起動できなかったときに出る。
+	// 終了コードが非 0 なだけの場合はここに来ない（未ログインの判定は出力の中身で行う）。
+	KeyTrackerGHAuthStatusStartFailed Key = "tracker.gh_auth_status.start_failed"
+	// KeyTrackerGHAvailableNotInPath は gh そのものが PATH に無いときに出る。
+	KeyTrackerGHAvailableNotInPath Key = "tracker.gh_available.not_in_path"
+	// KeyTrackerGHScopeNoActiveAccount は github.com の有効なアカウントが1つも無いときに出る。
+	KeyTrackerGHScopeNoActiveAccount Key = "tracker.gh_scope.no_active_account"
+	// KeyTrackerGHScopeMissingScope は有効なアカウントの scope に project が無いときに出る。
+	KeyTrackerGHScopeMissingScope Key = "tracker.gh_scope.missing_scope"
+)
+
+// hook を受ける socket の listen と後片付け（internal/hookserver の Start /
+// removeStaleSocketFile / Close）の文言。
+const (
+	// KeyHookserverStartListenFailed はsocket を listen できなかったときに出る。
+	KeyHookserverStartListenFailed Key = "hookserver.start.listen_failed"
+	// KeyHookserverRemoveStaleSocketLstatFailed は残骸かどうかを見るための Lstat が
+	// 失敗したときに出る。
+	KeyHookserverRemoveStaleSocketLstatFailed Key = "hookserver.remove_stale_socket.lstat_failed"
+	// KeyHookserverRemoveStaleSocketAlreadyListening は同じパスで別のプロセスが
+	// 既に listen していたときに出る（continuo の二重起動）。
+	KeyHookserverRemoveStaleSocketAlreadyListening Key = "hookserver.remove_stale_socket.already_listening"
+	// KeyHookserverRemoveStaleSocketRemoveFailed は前回の実行が残した socket ファイルを
+	// 消せなかったときに出る。
+	KeyHookserverRemoveStaleSocketRemoveFailed Key = "hookserver.remove_stale_socket.remove_failed"
+	// KeyHookserverCloseListenerCloseFailed はsocket を閉じられなかったときに出る。
+	KeyHookserverCloseListenerCloseFailed Key = "hookserver.close.listener_close_failed"
+)
+
+// 受け取った hook の JSON の解釈（internal/hookserver の decodeEvent）の文言。
+const (
+	// KeyHookserverDecodeEventNotObject はトップレベルが JSON のオブジェクトで
+	// なかったときに出る。
+	KeyHookserverDecodeEventNotObject Key = "hookserver.decode_event.not_object"
+)
+
+// 逃がし先の読み戻し（internal/hookserver の pendingDirs / scanPendingDir /
+// readPendingFile）の文言。
+//
+// **not_regular_file と too_large は隔離の理由として broken へ記録される。**
+const (
+	// KeyHookserverPendingDirsIssuesDirUnreadable は逃がし先の親ディレクトリ（issues）を
+	// 読めなかったときに出る。
+	KeyHookserverPendingDirsIssuesDirUnreadable Key = "hookserver.pending_dirs.issues_dir_unreadable"
+	// KeyHookserverPendingNotRegularFile は逃がし先に通常ファイルでないものがあったときに出る。
+	KeyHookserverPendingNotRegularFile Key = "hookserver.pending.not_regular_file"
+	// KeyHookserverReadPendingFileTooLarge は逃がし先のファイルが1件の上限より大きく、
+	// 読まずに隔離したときに出る。
+	KeyHookserverReadPendingFileTooLarge Key = "hookserver.read_pending_file.too_large"
+)
+
+// `continuo hook` が hook を転送しきれなかったときの文言（internal/hookclient の Forward）。
+const (
+	// KeyHookclientForwardNoPendingDir はsocket へ転送できず、逃がし先も
+	// 指定されていなかったときに出る。
+	KeyHookclientForwardNoPendingDir Key = "hookclient.forward.no_pending_dir"
+	// KeyHookclientForwardSpillFailed はsocket へ転送できず、逃がし先へも書けなかったときに出る。
+	KeyHookclientForwardSpillFailed Key = "hookclient.forward.spill_failed"
+)
+
+// `continuo hook` の標準入力の読み取りと1行への組み立て（internal/hookclient の
+// readInput / truncatedLine / compactLine）の文言。
+const (
+	// KeyHookclientReadInputReadFailed は標準入力そのものを読めなかったときに出る。
+	KeyHookclientReadInputReadFailed Key = "hookclient.read_input.read_failed"
+	// KeyHookclientTruncatedLineHeadUnreadable は上限を超えた入力の先頭も
+	// JSON として読めなかったときに出る。
+	KeyHookclientTruncatedLineHeadUnreadable Key = "hookclient.truncated_line.head_unreadable"
+	// KeyHookclientTruncatedLineNotObject は上限を超えた入力が JSON のオブジェクトで
+	// 始まっていなかったときに出る。
+	KeyHookclientTruncatedLineNotObject Key = "hookclient.truncated_line.not_object"
+	// KeyHookclientTruncatedLineNoFields は上限を超えた入力の先頭から hook の項目を
+	// 1つも拾えなかったときに出る。
+	KeyHookclientTruncatedLineNoFields Key = "hookclient.truncated_line.no_fields"
+	// KeyHookclientTruncatedLineMarshalFailed は拾い直した項目を1行の JSON へ
+	// 組み立てられなかったときに出る。
+	KeyHookclientTruncatedLineMarshalFailed Key = "hookclient.truncated_line.marshal_failed"
+	// KeyHookclientCompactLineUnmarshalFailed は標準入力を hook の JSON として
+	// 解釈できなかったときに出る。
+	KeyHookclientCompactLineUnmarshalFailed Key = "hookclient.compact_line.unmarshal_failed"
+	// KeyHookclientCompactLineNotObject は標準入力のトップレベルが JSON の
+	// オブジェクトでなかったときに出る。
+	KeyHookclientCompactLineNotObject Key = "hookclient.compact_line.not_object"
+	// KeyHookclientCompactLineCompactFailed は標準入力の JSON を1行に詰められなかったときに出る。
+	KeyHookclientCompactLineCompactFailed Key = "hookclient.compact_line.compact_failed"
+)
+
+// `continuo hook` から hook 受け口の socket への転送（internal/hookclient の sendToSocket）の文言。
+const (
+	// KeyHookclientSendToSocketPathEmpty は --socket が指定されていないときに出る。
+	KeyHookclientSendToSocketPathEmpty Key = "hookclient.send_to_socket.path_empty"
+	// KeyHookclientSendToSocketDialFailed はsocket へ接続できなかったときに出る。
+	KeyHookclientSendToSocketDialFailed Key = "hookclient.send_to_socket.dial_failed"
+	// KeyHookclientSendToSocketDeadlineFailed は書き込みの期限を設定できなかったときに出る。
+	KeyHookclientSendToSocketDeadlineFailed Key = "hookclient.send_to_socket.deadline_failed"
+	// KeyHookclientSendToSocketWriteFailed はsocket へ書き込めなかったときに出る。
+	KeyHookclientSendToSocketWriteFailed Key = "hookclient.send_to_socket.write_failed"
+)
+
+// `continuo hook` の逃がし先への書き出し（internal/hookclient の spill /
+// checkPendingCapacity）の文言。
+const (
+	// KeyHookclientSpillDirNotAbsolute は --pending-dir が絶対パスでないときに出る。
+	KeyHookclientSpillDirNotAbsolute Key = "hookclient.spill.dir_not_absolute"
+	// KeyHookclientSpillMkdirFailed は逃がし先のディレクトリを作れなかったときに出る。
+	KeyHookclientSpillMkdirFailed Key = "hookclient.spill.mkdir_failed"
+	// KeyHookclientSpillCreateFailed は書き込み中のファイル（.json.tmp）を
+	// 作れなかったときに出る。
+	KeyHookclientSpillCreateFailed Key = "hookclient.spill.create_failed"
+	// KeyHookclientSpillWriteFailed は書き込み中のファイルへ書けなかったときに出る。
+	KeyHookclientSpillWriteFailed Key = "hookclient.spill.write_failed"
+	// KeyHookclientSpillRenameFailed は書き込み中のファイルを最終的な名前へ
+	// 変えられなかったときに出る。
+	KeyHookclientSpillRenameFailed Key = "hookclient.spill.rename_failed"
+	// KeyHookclientSpillNameConflict はファイル名が続けてぶつかり、
+	// 空きを見つけられなかったときに出る。
+	KeyHookclientSpillNameConflict Key = "hookclient.spill.name_conflict"
+	// KeyHookclientCheckPendingCapacityLimitReached は逃がし先が上限に達していて
+	// これ以上書かないときに出る。
+	KeyHookclientCheckPendingCapacityLimitReached Key = "hookclient.check_pending_capacity.limit_reached"
+)
+
+// 枠の判定に使う usage API の読み取り（internal/ratelimit）のエラーの文言。
+const (
+	// KeyRatelimitNewReaderHomeDirFailed は資格情報のファイルを探すための
+	// ホームディレクトリを取得できなかったときに出る。
+	KeyRatelimitNewReaderHomeDirFailed Key = "ratelimit.new_reader.home_dir_failed"
+	// KeyRatelimitFetchRequestBuildFailed はusage API のリクエストを組み立てられなかったときに出る。
+	KeyRatelimitFetchRequestBuildFailed Key = "ratelimit.fetch.request_build_failed"
+	// KeyRatelimitFetchRequestFailed はusage API へ接続できなかったときに出る。
+	KeyRatelimitFetchRequestFailed Key = "ratelimit.fetch.request_failed"
+	// KeyRatelimitFetchBodyReadFailed はusage API の応答の本文を読めなかったときに出る。
+	KeyRatelimitFetchBodyReadFailed Key = "ratelimit.fetch.body_read_failed"
+	// KeyRatelimitFetchUnexpectedStatus はusage API が 200 以外を返したときに出る。
+	KeyRatelimitFetchUnexpectedStatus Key = "ratelimit.fetch.unexpected_status"
+	// KeyRatelimitFetchParseFailed はusage API の応答を JSON として解析できなかったときに出る。
+	KeyRatelimitFetchParseFailed Key = "ratelimit.fetch.parse_failed"
+)
+
+// 枠の判定に使う資格情報の取り出し（internal/ratelimit の token /
+// tokenFromCredentialsFile）の文言。
+//
+// **どれも先頭の %w に ErrNoCredentials を渡す**（errors.Is の切り分けを保つため）。
+const (
+	// KeyRatelimitTokenEnvNameEmpty はrate_limit.token_env が空のときに出る。
+	KeyRatelimitTokenEnvNameEmpty Key = "ratelimit.token.env_name_empty"
+	// KeyRatelimitTokenEnvValueEmpty は資格情報を読む環境変数が空のときに出る。
+	KeyRatelimitTokenEnvValueEmpty Key = "ratelimit.token.env_value_empty"
+	// KeyRatelimitCredentialsFileHomeDirUnknown は資格情報のファイルの置き場所を
+	// 決められないときに出る。
+	KeyRatelimitCredentialsFileHomeDirUnknown Key = "ratelimit.credentials_file.home_dir_unknown"
+	// KeyRatelimitCredentialsFileReadFailed は資格情報のファイルを読めなかったときに出る。
+	KeyRatelimitCredentialsFileReadFailed Key = "ratelimit.credentials_file.read_failed"
+	// KeyRatelimitCredentialsFileNotRegularFile は資格情報のファイルが通常のファイルで
+	// なかったときに出る（symlink は辿らない）。
+	KeyRatelimitCredentialsFileNotRegularFile Key = "ratelimit.credentials_file.not_regular_file"
+	// KeyRatelimitCredentialsFileParseFailed は資格情報のファイルを JSON として
+	// 解析できなかったときに出る。
+	KeyRatelimitCredentialsFileParseFailed Key = "ratelimit.credentials_file.parse_failed"
+	// KeyRatelimitCredentialsFileAccessTokenMissing は資格情報のファイルに
+	// claudeAiOauth.accessToken が無いときに出る。
+	KeyRatelimitCredentialsFileAccessTokenMissing Key = "ratelimit.credentials_file.access_token_missing"
+)
+
+// HTTP ダッシュボード（internal/server）の起動と停止のエラーの文言。
+//
+// **画面に並べる語は dashboard.* にある。**ここにあるのは、待ち受けの開始と停止、
+// および応答の書き出しが失敗したときのものである。
+const (
+	// KeyServerNewPortOutOfRange はserver.port が 0〜65535 の外だったときに出る。
+	KeyServerNewPortOutOfRange Key = "server.new.port_out_of_range"
+	// KeyServerStartListenFailed は待ち受けを開始できなかったときに出る（ポートの重複など）。
+	KeyServerStartListenFailed Key = "server.start.listen_failed"
+	// KeyServerCloseShutdownFailed は待ち受けを閉じられなかったときに出る。
+	KeyServerCloseShutdownFailed Key = "server.close.shutdown_failed"
+	// KeyServerWriteJSONEncodeFailed は写しを JSON で書き出せなかったときに出る。
+	KeyServerWriteJSONEncodeFailed Key = "server.write_json.encode_failed"
+)
+
+// WORKFLOW.md の読み書きそのもの（internal/scaffold）の失敗の文言。
+//
+// **`continuo init` と `continuo setup` の両方が同じ文言を使う。**
+// 読む・確かめる・書く・閉じる・作るの5つは、どちらの経路でも同じ失敗である。
+const (
+	// KeyScaffoldFileReadFailed はWORKFLOW.md を読み込めなかったときに出る。
+	KeyScaffoldFileReadFailed Key = "scaffold.file.read_failed"
+	// KeyScaffoldFileStatFailed はWORKFLOW.md の有無を確かめられなかったときに出る。
+	KeyScaffoldFileStatFailed Key = "scaffold.file.stat_failed"
+	// KeyScaffoldFileWriteFailed はWORKFLOW.md へ書き込めなかったときに出る。
+	KeyScaffoldFileWriteFailed Key = "scaffold.file.write_failed"
+	// KeyScaffoldFileCloseFailed はWORKFLOW.md を閉じられなかったときに出る。
+	KeyScaffoldFileCloseFailed Key = "scaffold.file.close_failed"
+	// KeyScaffoldFileCreateFailed はWORKFLOW.md を作成できなかったときに出る。
+	KeyScaffoldFileCreateFailed Key = "scaffold.file.create_failed"
+)
+
+// 書き出す先のディレクトリを決める処理（internal/scaffold の resolveTarget / resolveDir）の文言。
+const (
+	// KeyScaffoldDirStatFailed は指定されたディレクトリの有無を確かめられなかったときに出る。
+	KeyScaffoldDirStatFailed Key = "scaffold.dir.stat_failed"
+	// KeyScaffoldDirEvalSymlinksFailed はディレクトリの symlink を辿れなかったときに出る。
+	KeyScaffoldDirEvalSymlinksFailed Key = "scaffold.dir.eval_symlinks_failed"
+	// KeyScaffoldDirGetwdFailed はいまいるディレクトリを取得できなかったときに出る。
+	KeyScaffoldDirGetwdFailed Key = "scaffold.dir.getwd_failed"
+	// KeyScaffoldDirAbsFailed は渡されたパスを絶対パスへ直せなかったときに出る。
+	KeyScaffoldDirAbsFailed Key = "scaffold.dir.abs_failed"
+)
+
+// `continuo init` が雛形を書き出すとき（internal/scaffold の openError）の文言。
+//
+// **先頭の %w に ErrSymlink を渡す**（errors.Is の切り分けを保つため）。
+const (
+	// KeyScaffoldWriteSymlinkNotFollowed は書き出す先が symlink で、辿らずに止めたときに出る。
+	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
+)
+
+// `continuo setup` が既にある WORKFLOW.md を書き換えるとき（internal/scaffold の
+// statTarget / writeAtomically）の文言。
+//
+// **symlink_not_followed と not_regular_file は先頭の %w に ErrSymlink / ErrNotFound を渡す**
+// （errors.Is の切り分けを保つため）。
+const (
+	// KeyScaffoldUpdateSymlinkNotFollowed は書き換える先が symlink で、辿らずに止めたときに出る。
+	KeyScaffoldUpdateSymlinkNotFollowed Key = "scaffold.update.symlink_not_followed"
+	// KeyScaffoldUpdateNotRegularFile は書き換える先が通常のファイルではなかったときに出る。
+	KeyScaffoldUpdateNotRegularFile Key = "scaffold.update.not_regular_file"
+	// KeyScaffoldUpdateTempCreateFailed は不可分に書き換えるための一時ファイルを作れなかったときに出る。
+	KeyScaffoldUpdateTempCreateFailed Key = "scaffold.update.temp_create_failed"
+	// KeyScaffoldUpdateChmodFailed は一時ファイルに元の権限を設定できなかったときに出る。
+	KeyScaffoldUpdateChmodFailed Key = "scaffold.update.chmod_failed"
+	// KeyScaffoldUpdateSyncFailed は一時ファイルをディスクへ書き出せなかったときに出る。
+	KeyScaffoldUpdateSyncFailed Key = "scaffold.update.sync_failed"
+	// KeyScaffoldUpdateRenameFailed は一時ファイルで WORKFLOW.md を置き換えられなかったときに出る。
+	KeyScaffoldUpdateRenameFailed Key = "scaffold.update.rename_failed"
+)
+
+// gh コマンドの実行（internal/scaffold の RunGH）の文言。
+const (
+	// KeyScaffoldGHRunFailed はgh の実行に失敗し、標準エラー出力が空だったときに出る。
+	KeyScaffoldGHRunFailed Key = "scaffold.gh.run_failed"
+	// KeyScaffoldGHRunFailedWithStderr はgh の実行に失敗し、標準エラー出力があったときに出る。
+	KeyScaffoldGHRunFailedWithStderr Key = "scaffold.gh.run_failed_with_stderr"
+)
+
+// ボードの Status フィールドを読む処理（internal/setup の FetchStatusField）の文言。
+//
+// **field_not_single_select と field_not_found は先頭の %w に ErrStatusFieldNotFound を渡す**
+// （errors.Is の切り分けを保つため）。
+const (
+	// KeySetupBoardOwnerMissing はボードの owner が決まっていないときに出る。
+	KeySetupBoardOwnerMissing Key = "setup.board.owner_missing"
+	// KeySetupBoardProjectNumberMissing はボードの番号が決まっていないときに出る。
+	KeySetupBoardProjectNumberMissing Key = "setup.board.project_number_missing"
+	// KeySetupBoardFieldListUnparsable は`gh project field-list` の出力を解釈できなかったときに出る。
+	KeySetupBoardFieldListUnparsable Key = "setup.board.field_list_unparsable"
+	// KeySetupBoardFieldNotSingleSelect は名前は合っていても single-select でなかったときに出る。
+	KeySetupBoardFieldNotSingleSelect Key = "setup.board.field_not_single_select"
+	// KeySetupBoardFieldNotFound はその名前のフィールドがボードに無かったときに出る。
+	KeySetupBoardFieldNotFound Key = "setup.board.field_not_found"
+)
+
+// `continuo trust` が `~/.claude.json` を読み書きするときの文言（internal/trust）。
+const (
+	// KeyTrustParseOrderedObjectInvalidJSON は `~/.claude.json` を JSON として読めなかったときに出る。
+	KeyTrustParseOrderedObjectInvalidJSON Key = "trust.parse_ordered_object.invalid_json"
+	// KeyTrustParseOrderedObjectNotObject はトップレベルが JSON のオブジェクトでなかったときに出る。
+	KeyTrustParseOrderedObjectNotObject Key = "trust.parse_ordered_object.not_object"
+	// KeyTrustParseOrderedObjectKeyUnreadable はオブジェクトのキーを読み取れなかったときに出る。
+	KeyTrustParseOrderedObjectKeyUnreadable Key = "trust.parse_ordered_object.key_unreadable"
+	// KeyTrustParseOrderedObjectKeyNotString はオブジェクトのキーが文字列でなかったときに出る。
+	KeyTrustParseOrderedObjectKeyNotString Key = "trust.parse_ordered_object.key_not_string"
+	// KeyTrustParseOrderedObjectValueUnreadable はキーに対応する値を読み取れなかったときに出る。
+	KeyTrustParseOrderedObjectValueUnreadable Key = "trust.parse_ordered_object.value_unreadable"
+	// KeyTrustParseOrderedObjectObjectNotClosed はオブジェクトの閉じ括弧まで読み切れなかったときに出る。
+	KeyTrustParseOrderedObjectObjectNotClosed Key = "trust.parse_ordered_object.object_not_closed"
+	// KeyTrustMarshalIndentKeyEncodeFailed は書き戻すときにキーを JSON の文字列へ直せなかったときに出る。
+	KeyTrustMarshalIndentKeyEncodeFailed Key = "trust.marshal_indent.key_encode_failed"
+	// KeyTrustMarshalIndentValueIndentFailed は書き戻すときに値を字下げつきで並べ直せなかったときに出る。
+	KeyTrustMarshalIndentValueIndentFailed Key = "trust.marshal_indent.value_indent_failed"
+	// KeyTrustRunGitToplevelRunFailed は git を実行できなかった・非 0 で終わったときに出る（標準エラー出力が空の場合）。
+	KeyTrustRunGitToplevelRunFailed Key = "trust.run_git_toplevel.run_failed"
+	// KeyTrustRunGitToplevelRunFailedWithStderr は同じときに、git の標準エラー出力を添えて出る。
+	KeyTrustRunGitToplevelRunFailedWithStderr Key = "trust.run_git_toplevel.run_failed_with_stderr"
+	// KeyTrustRunGitToplevelEmptyOutput は git が 0 で終わったのに何も返さなかったときに出る。
+	KeyTrustRunGitToplevelEmptyOutput Key = "trust.run_git_toplevel.empty_output"
+	// KeyTrustOptionsHomeDirNotAbsolute は Plan / Apply に渡されたホームディレクトリが絶対パスでないときに出る。
+	KeyTrustOptionsHomeDirNotAbsolute Key = "trust.options.home_dir_not_absolute"
+	// KeyTrustApplyProjectsMarshalFailed は projects を JSON へ組み立て直せなかったときに出る。
+	KeyTrustApplyProjectsMarshalFailed Key = "trust.apply.projects_marshal_failed"
+	// KeyTrustApplyRootMarshalFailed はトップレベル全体を JSON へ組み立て直せなかったときに出る。
+	KeyTrustApplyRootMarshalFailed Key = "trust.apply.root_marshal_failed"
+	// KeyTrustApplyReplaceFailed は書き換えた中身でファイルを置き換えられなかったときに出る（バックアップの場所を添える）。
+	KeyTrustApplyReplaceFailed Key = "trust.apply.replace_failed"
+	// KeyTrustProjectsObjectUnparsable は projects がオブジェクトとして読めなかったときに出る。
+	KeyTrustProjectsObjectUnparsable Key = "trust.projects_object.unparsable"
+	// KeyTrustMarkTrustedEntryMarshalFailed は新しく足す1件の記述を組み立てられなかったときに出る。
+	KeyTrustMarkTrustedEntryMarshalFailed Key = "trust.mark_trusted.entry_marshal_failed"
+	// KeyTrustMarkTrustedEntryUnparsable は既にある1件の記述がオブジェクトとして読めなかったときに出る。
+	KeyTrustMarkTrustedEntryUnparsable Key = "trust.mark_trusted.entry_unparsable"
+	// KeyTrustMarkTrustedFlagNotBool は信頼の承認を表すキーの値が真偽値でなかったときに出る。
+	KeyTrustMarkTrustedFlagNotBool Key = "trust.mark_trusted.flag_not_bool"
+	// KeyTrustMarkTrustedEntryRemarshalFailed は既にある1件の記述を組み立て直せなかったときに出る。
+	KeyTrustMarkTrustedEntryRemarshalFailed Key = "trust.mark_trusted.entry_remarshal_failed"
+	// KeyTrustReadClaudeConfigNotFound は `~/.claude.json` が無いときに出る（continuo はこのファイルを作らない）。
+	KeyTrustReadClaudeConfigNotFound Key = "trust.read_claude_config.not_found"
+	// KeyTrustReadClaudeConfigStatFailed は `~/.claude.json` の有無を確かめられなかったときに出る。
+	KeyTrustReadClaudeConfigStatFailed Key = "trust.read_claude_config.stat_failed"
+	// KeyTrustReadClaudeConfigSymlink は `~/.claude.json` が symlink だったときに出る（辿った先を置き換えないため書かない）。
+	KeyTrustReadClaudeConfigSymlink Key = "trust.read_claude_config.symlink"
+	// KeyTrustReadClaudeConfigNotRegularFile は `~/.claude.json` が通常のファイルでなかったときに出る。
+	KeyTrustReadClaudeConfigNotRegularFile Key = "trust.read_claude_config.not_regular_file"
+	// KeyTrustReadClaudeConfigReadFailed は `~/.claude.json` を読めなかったときに出る。
+	KeyTrustReadClaudeConfigReadFailed Key = "trust.read_claude_config.read_failed"
+	// KeyTrustWriteBackupCreateFailed はバックアップのファイルを作れなかったときに出る（このとき元のファイルは書き換えない）。
+	KeyTrustWriteBackupCreateFailed Key = "trust.write_backup.create_failed"
+	// KeyTrustWriteBackupWriteFailed はバックアップへ書き込めなかったときに出る。
+	KeyTrustWriteBackupWriteFailed Key = "trust.write_backup.write_failed"
+	// KeyTrustWriteBackupSyncFailed はバックアップをディスクへ書き出せなかったときに出る。
+	KeyTrustWriteBackupSyncFailed Key = "trust.write_backup.sync_failed"
+	// KeyTrustWriteBackupCloseFailed はバックアップを閉じられなかったときに出る。
+	KeyTrustWriteBackupCloseFailed Key = "trust.write_backup.close_failed"
+	// KeyTrustReplaceFileTempCreateFailed は置き換えに使う一時ファイルを作れなかったときに出る。
+	KeyTrustReplaceFileTempCreateFailed Key = "trust.replace_file.temp_create_failed"
+	// KeyTrustReplaceFileChmodFailed は一時ファイルの権限を元のファイルにそろえられなかったときに出る。
+	KeyTrustReplaceFileChmodFailed Key = "trust.replace_file.chmod_failed"
+	// KeyTrustReplaceFileWriteFailed は一時ファイルへ書き込めなかったときに出る。
+	KeyTrustReplaceFileWriteFailed Key = "trust.replace_file.write_failed"
+	// KeyTrustReplaceFileSyncFailed は一時ファイルをディスクへ書き出せなかったときに出る。
+	KeyTrustReplaceFileSyncFailed Key = "trust.replace_file.sync_failed"
+	// KeyTrustReplaceFileCloseFailed は一時ファイルを閉じられなかったときに出る。
+	KeyTrustReplaceFileCloseFailed Key = "trust.replace_file.close_failed"
+	// KeyTrustReplaceFileRenameFailed は一時ファイルで元のファイルを置き換えられなかったときに出る。
+	KeyTrustReplaceFileRenameFailed Key = "trust.replace_file.rename_failed"
+)
+
+// internal/workspace のエラー文（worktree の用意・片付け・身元ファイル・git / ghq の実行）。
+const (
+	// KeyWorkspaceRunHookOutputFileCreateFailed は workspace_hooks の出力を受け取る一時ファイルを作れなかったときに出る。
+	KeyWorkspaceRunHookOutputFileCreateFailed Key = "workspace.run_hook.output_file_create_failed"
+	// KeyWorkspaceRunHookRunFailed は workspace_hooks のコマンドが非 0 で終わった・起動できなかった・時間切れになったときに出る。
+	KeyWorkspaceRunHookRunFailed Key = "workspace.run_hook.run_failed"
+	// KeyWorkspaceResolveWorkspaceIDWorktreeOpenFailed は消す前の確認で herdr の worktree.open に失敗したときに出る。
+	KeyWorkspaceResolveWorkspaceIDWorktreeOpenFailed Key = "workspace.resolve_workspace_id.worktree_open_failed"
+	// KeyWorkspaceResolveWorkspaceIDPathMismatch は herdr が答えた worktree のパスが、消そうとしているパスと違ったときに出る。
+	KeyWorkspaceResolveWorkspaceIDPathMismatch Key = "workspace.resolve_workspace_id.path_mismatch"
+	// KeyWorkspaceResolveWorkspaceIDWorkspaceIDMissing は herdr の worktree.open が workspace の ID を返さなかったときに出る。
+	KeyWorkspaceResolveWorkspaceIDWorkspaceIDMissing Key = "workspace.resolve_workspace_id.workspace_id_missing"
+	// KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown は消す herdr workspace の ID を確かめられなかったときに出る。
+	KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown Key = "workspace.remove_worktree.workspace_id_unknown"
+	// KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed は herdr の worktree.remove に失敗したときに出る。
+	KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed Key = "workspace.remove_worktree.worktree_remove_failed"
+	// KeyWorkspaceRunGitOutputTooLarge は git の標準出力が上限を超えて読み切れなかったときに出る。
+	KeyWorkspaceRunGitOutputTooLarge Key = "workspace.run_git.output_too_large"
+	// KeyWorkspaceRunGitRunFailed は git が非 0 で終わった・起動できなかったときに出る。
+	KeyWorkspaceRunGitRunFailed Key = "workspace.run_git.run_failed"
+	// KeyWorkspaceGitExitCodeStartFailed は終了コードだけを見る検査で git を起動できなかったときに出る。
+	KeyWorkspaceGitExitCodeStartFailed Key = "workspace.git_exit_code.start_failed"
+	// KeyWorkspaceGitWorktreeListOutputUnreadable は `git worktree list --porcelain` の出力を読み切れなかったときに出る。
+	KeyWorkspaceGitWorktreeListOutputUnreadable Key = "workspace.git_worktree_list.output_unreadable"
+	// KeyWorkspaceGitWorktreeAddOrphanCheckFailed は worktree の作成に失敗したあと、孤児 branch が残っているかを確かめられなかったときに出る。
+	KeyWorkspaceGitWorktreeAddOrphanCheckFailed Key = "workspace.git_worktree_add.orphan_check_failed"
+	// KeyWorkspaceGitWorktreeAddOrphanDeleteFailed は孤児 branch を消せなかったときに出る。
+	KeyWorkspaceGitWorktreeAddOrphanDeleteFailed Key = "workspace.git_worktree_add.orphan_delete_failed"
+	// KeyWorkspaceGitWorktreeAddOrphanDeleted は孤児 branch を消せたときに、元の失敗へ添えて出る。
+	KeyWorkspaceGitWorktreeAddOrphanDeleted Key = "workspace.git_worktree_add.orphan_deleted"
+	// KeyWorkspaceGitAheadOfUpstreamCountUnreadable は upstream より先にある commit の数を数値として読めなかったときに出る。
+	KeyWorkspaceGitAheadOfUpstreamCountUnreadable Key = "workspace.git_ahead_of_upstream.count_unreadable"
+	// KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode は `git diff --quiet` が 0 でも 1 でもない終了コードを返したときに出る。
+	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode Key = "workspace.git_no_diff_from_base.unexpected_exit_code"
+	// KeyWorkspaceRunGhqListStartFailed は `ghq list` を起動できなかったときに出る。
+	KeyWorkspaceRunGhqListStartFailed Key = "workspace.run_ghq_list.start_failed"
+	// KeyWorkspaceRunGhqListExitFailed は `ghq list` が「該当が無い」以外の理由で非 0 で終わったときに出る。
+	KeyWorkspaceRunGhqListExitFailed Key = "workspace.run_ghq_list.exit_failed"
+	// KeyWorkspaceGitLocalBranchesOutputUnreadable は `git for-each-ref` の出力を読み切れなかったときに出る。
+	KeyWorkspaceGitLocalBranchesOutputUnreadable Key = "workspace.git_local_branches.output_unreadable"
+	// KeyWorkspaceRunGhqGetStartFailed は `ghq get` を起動できなかったときに出る。
+	KeyWorkspaceRunGhqGetStartFailed Key = "workspace.run_ghq_get.start_failed"
+	// KeyWorkspaceRunGhqGetExitFailed は `ghq get` が非 0 で終わったときに出る。
+	KeyWorkspaceRunGhqGetExitFailed Key = "workspace.run_ghq_get.exit_failed"
+	// KeyWorkspaceOwnerRepoFromWorktreePathRelFailed は worktree のパスを置き場所からの相対パスにできなかったときに出る。
+	KeyWorkspaceOwnerRepoFromWorktreePathRelFailed Key = "workspace.owner_repo_from_worktree_path.rel_failed"
+	// KeyWorkspaceOwnerRepoFromWorktreePathLayoutMismatch は worktree のパスが置き場所の4階層の規則に合わなかったときに出る。
+	KeyWorkspaceOwnerRepoFromWorktreePathLayoutMismatch Key = "workspace.owner_repo_from_worktree_path.layout_mismatch"
+	// KeyWorkspaceVerifiedRepoCloneNotFound は worktree が属するリポジトリの clone が手元に無く、検算できなかったときに出る。
+	KeyWorkspaceVerifiedRepoCloneNotFound Key = "workspace.verified_repo.clone_not_found"
+	// KeyWorkspaceVerifiedRepoRepoMismatch は git が答えたリポジトリと ghq が答えた clone が食い違ったときに出る。
+	KeyWorkspaceVerifiedRepoRepoMismatch Key = "workspace.verified_repo.repo_mismatch"
+	// KeyWorkspaceEnsureRootRootEmpty は workspace.root が空だったときに出る。
+	KeyWorkspaceEnsureRootRootEmpty Key = "workspace.ensure_root.root_empty"
+	// KeyWorkspaceEnsureRootRootNotAbsolute は workspace.root が絶対パスでなかったときに出る。
+	KeyWorkspaceEnsureRootRootNotAbsolute Key = "workspace.ensure_root.root_not_absolute"
+	// KeyWorkspaceEnsureRootMkdirFailed は workspace.root を作れなかったときに出る。
+	KeyWorkspaceEnsureRootMkdirFailed Key = "workspace.ensure_root.mkdir_failed"
+	// KeyWorkspaceEnsureRootSymlinkUnresolvable は workspace.root のシンボリックリンクを解決できなかったときに出る。
+	KeyWorkspaceEnsureRootSymlinkUnresolvable Key = "workspace.ensure_root.symlink_unresolvable"
+	// KeyWorkspaceLabelWorktreePath は封じ込め検査のエラー文で worktree のパスを指す呼び名である。
+	KeyWorkspaceLabelWorktreePath Key = "workspace.label.worktree_path"
+	// KeyWorkspaceLabelIssueSettingsFile は封じ込め検査のエラー文で issue ごとの設定ファイルを指す呼び名である。
+	KeyWorkspaceLabelIssueSettingsFile Key = "workspace.label.issue_settings_file"
+	// KeyWorkspaceCheckUnderNotAbsolute は封じ込め検査の対象が絶対パスでなかったときに出る。
+	KeyWorkspaceCheckUnderNotAbsolute Key = "workspace.check_under.not_absolute"
+	// KeyWorkspaceCheckUnderSameAsRoot は封じ込め検査の対象が置き場所そのものだったときに出る。
+	KeyWorkspaceCheckUnderSameAsRoot Key = "workspace.check_under.same_as_root"
+	// KeyWorkspaceCheckUnderOutsideRoot は封じ込め検査の対象が置き場所の外側にあったときに出る。
+	KeyWorkspaceCheckUnderOutsideRoot Key = "workspace.check_under.outside_root"
+	// KeyWorkspaceCheckContainmentResolvedSymlinkUnresolvable は作ったあとの worktree のシンボリックリンクを解決できなかったときに出る。
+	KeyWorkspaceCheckContainmentResolvedSymlinkUnresolvable Key = "workspace.check_containment_resolved.symlink_unresolvable"
+	// KeyWorkspaceCheckContainmentResolvedOutsideRoot は解決したあとの worktree の実体が置き場所の外側にあったときに出る。
+	KeyWorkspaceCheckContainmentResolvedOutsideRoot Key = "workspace.check_containment_resolved.outside_root"
+	// KeyWorkspaceRenderBranchTemplateUnparsable は branch 名のテンプレートを解析できなかったときに出る。
+	KeyWorkspaceRenderBranchTemplateUnparsable Key = "workspace.render_branch.template_unparsable"
+	// KeyWorkspaceRenderBranchTemplateRenderFailed は branch 名のテンプレートを描画できなかったときに出る（未知の変数を含む）。
+	KeyWorkspaceRenderBranchTemplateRenderFailed Key = "workspace.render_branch.template_render_failed"
+	// KeyWorkspaceRenderBranchRenderedEmpty は branch 名のテンプレートの描画結果が空だったときに出る。
+	KeyWorkspaceRenderBranchRenderedEmpty Key = "workspace.render_branch.rendered_empty"
+	// KeyWorkspaceScanLevelRootUnreadable は置き場所の最上位を読めなかったときに出る。
+	KeyWorkspaceScanLevelRootUnreadable Key = "workspace.scan_level.root_unreadable"
+	// KeyWorkspaceCheckTrustForClonePathToplevelFailed は clone のパスから信頼を引く鍵を求められなかったときに出る。
+	KeyWorkspaceCheckTrustForClonePathToplevelFailed Key = "workspace.check_trust_for_clone_path.toplevel_failed"
+	// KeyWorkspaceCheckTrustForClonePathConfigUnreadable は `~/.claude.json` を読めなかったときに出る（存在しない場合は除く）。
+	KeyWorkspaceCheckTrustForClonePathConfigUnreadable Key = "workspace.check_trust_for_clone_path.config_unreadable"
+	// KeyWorkspaceCheckTrustForClonePathConfigUnparsable は `~/.claude.json` を JSON として解析できなかったときに出る。
+	KeyWorkspaceCheckTrustForClonePathConfigUnparsable Key = "workspace.check_trust_for_clone_path.config_unparsable"
+	// KeyWorkspaceValidateIdentityFileNameEmpty は workspace.identity_file が空だったときに出る。
+	KeyWorkspaceValidateIdentityFileNameEmpty Key = "workspace.validate_identity_file_name.empty"
+	// KeyWorkspaceValidateIdentityFileNameHasSpaces は workspace.identity_file の前後に空白があったときに出る。
+	KeyWorkspaceValidateIdentityFileNameHasSpaces Key = "workspace.validate_identity_file_name.has_spaces"
+	// KeyWorkspaceValidateIdentityFileNameHasSeparator は workspace.identity_file にパスの区切りが入っていたときに出る。
+	KeyWorkspaceValidateIdentityFileNameHasSeparator Key = "workspace.validate_identity_file_name.has_separator"
+	// KeyWorkspaceValidateIdentityFileNameNotAFileName は workspace.identity_file が `.` や `..` などファイルの名前でなかったときに出る。
+	KeyWorkspaceValidateIdentityFileNameNotAFileName Key = "workspace.validate_identity_file_name.not_a_file_name"
+	// KeyWorkspaceReadIdentityReadFailed は身元ファイルを読めなかったときに出る（存在しない場合は除く）。
+	KeyWorkspaceReadIdentityReadFailed Key = "workspace.read_identity.read_failed"
+	// KeyWorkspaceWriteIdentityMarshalFailed は身元ファイルの中身を JSON にできなかったときに出る。
+	KeyWorkspaceWriteIdentityMarshalFailed Key = "workspace.write_identity.marshal_failed"
+	// KeyWorkspaceWriteFileAtomicTempCreateFailed は置き換え用の一時ファイルを作れなかったときに出る。
+	KeyWorkspaceWriteFileAtomicTempCreateFailed Key = "workspace.write_file_atomic.temp_create_failed"
+	// KeyWorkspaceWriteFileAtomicWriteFailed は置き換え用の一時ファイルへ書き込めなかったときに出る。
+	KeyWorkspaceWriteFileAtomicWriteFailed Key = "workspace.write_file_atomic.write_failed"
+	// KeyWorkspaceWriteFileAtomicChmodFailed は置き換え用の一時ファイルの権限を設定できなかったときに出る。
+	KeyWorkspaceWriteFileAtomicChmodFailed Key = "workspace.write_file_atomic.chmod_failed"
+	// KeyWorkspaceWriteFileAtomicCloseFailed は置き換え用の一時ファイルを閉じられなかったときに出る。
+	KeyWorkspaceWriteFileAtomicCloseFailed Key = "workspace.write_file_atomic.close_failed"
+	// KeyWorkspaceWriteFileAtomicRenameFailed は一時ファイルで元のファイルを置き換えられなかったときに出る。
+	KeyWorkspaceWriteFileAtomicRenameFailed Key = "workspace.write_file_atomic.rename_failed"
+	// KeyWorkspaceRegisterExcludeInfoDirCreateFailed は共通ディレクトリの info ディレクトリを作れなかったときに出る。
+	KeyWorkspaceRegisterExcludeInfoDirCreateFailed Key = "workspace.register_exclude.info_dir_create_failed"
+	// KeyWorkspaceRegisterExcludeReadFailed は `info/exclude` を読めなかったときに出る（存在しない場合は除く）。
+	KeyWorkspaceRegisterExcludeReadFailed Key = "workspace.register_exclude.read_failed"
+	// KeyWorkspaceRegisterExcludeOpenFailed は `info/exclude` を追記のために開けなかったときに出る。
+	KeyWorkspaceRegisterExcludeOpenFailed Key = "workspace.register_exclude.open_failed"
+	// KeyWorkspaceRegisterExcludeWriteFailed は `info/exclude` へ書き込めなかったときに出る。
+	KeyWorkspaceRegisterExcludeWriteFailed Key = "workspace.register_exclude.write_failed"
+	// KeyWorkspaceRegisterExcludeCloseFailed は `info/exclude` を閉じられなかったときに出る。
+	KeyWorkspaceRegisterExcludeCloseFailed Key = "workspace.register_exclude.close_failed"
+	// KeyWorkspaceNewSettingsRootNotAbsolute は issue ごとの設定ファイルの置き場所が絶対パスでなかったときに出る。
+	KeyWorkspaceNewSettingsRootNotAbsolute Key = "workspace.new.settings_root_not_absolute"
+	// KeyWorkspaceNewHomeDirUnknown はホームディレクトリを特定できなかったときに出る。
+	KeyWorkspaceNewHomeDirUnknown Key = "workspace.new.home_dir_unknown"
+	// KeyWorkspacePrepareCloneNotFound は対象リポジトリの clone が手元に無いときに出る。
+	KeyWorkspacePrepareCloneNotFound Key = "workspace.prepare.clone_not_found"
+	// KeyWorkspacePrepareStatFailed は worktree のパスの存在を確かめられなかったときに出る。
+	KeyWorkspacePrepareStatFailed Key = "workspace.prepare.stat_failed"
+	// KeyWorkspacePrepareBranchMismatch は再利用しようとした worktree が別の branch をチェックアウトしていたときに出る。
+	KeyWorkspacePrepareBranchMismatch Key = "workspace.prepare.branch_mismatch"
+	// KeyWorkspacePrepareUnregisteredWorktree は目的のパスに実体があるのに git の worktree として登録されていなかったときに出る。
+	KeyWorkspacePrepareUnregisteredWorktree Key = "workspace.prepare.unregistered_worktree"
+	// KeyWorkspacePrepareParentDirCreateFailed は worktree の親ディレクトリを作れなかったときに出る。
+	KeyWorkspacePrepareParentDirCreateFailed Key = "workspace.prepare.parent_dir_create_failed"
+	// KeyWorkspacePrepareWorktreeOpenFailed は herdr の worktree.open に失敗したときに出る。
+	KeyWorkspacePrepareWorktreeOpenFailed Key = "workspace.prepare.worktree_open_failed"
+	// KeyWorkspaceResolveBaseDefaultBranchMissing は base を決める手掛かりが設定にもボードの応答にも無かったときに出る。
+	KeyWorkspaceResolveBaseDefaultBranchMissing Key = "workspace.resolve_base.default_branch_missing"
+	// KeyWorkspaceResolveBaseDefaultBranchNotString はボードが返した既定 branch が文字列でなかったときに出る。
+	KeyWorkspaceResolveBaseDefaultBranchNotString Key = "workspace.resolve_base.default_branch_not_string"
+)
+
+// orchestrator のエラー（着手・pane の解決・起動の確認・transcript の読み取り）。
+const (
+	// KeyOrchestratorNewExecutablePathUnknown はcontinuo 自身の実行ファイルの場所を決められなかったときに出る（hook のコマンド行に書けない）。
+	KeyOrchestratorNewExecutablePathUnknown Key = "orchestrator.new.executable_path_unknown"
+	// KeyOrchestratorResolveAgentNameAgentListFailed はherdr の agent の一覧を読めず、agent 名の重複を検査できなかったときに出る。
+	KeyOrchestratorResolveAgentNameAgentListFailed Key = "orchestrator.resolve_agent_name.agent_list_failed"
+	// KeyOrchestratorResolveAgentNameInvalidName は組み立てた agent 名が herdr の許容パターンに収まらなかったときに出る。
+	KeyOrchestratorResolveAgentNameInvalidName Key = "orchestrator.resolve_agent_name.invalid_name"
+	// KeyOrchestratorResolveAgentNameNoFreeName は連番を試し尽くしても空いている agent 名が見つからなかったときに出る。
+	KeyOrchestratorResolveAgentNameNoFreeName Key = "orchestrator.resolve_agent_name.no_free_name"
+	// KeyOrchestratorNewSessionUUIDRandFailed はセッション UUID を作るための乱数を取得できなかったときに出る。
+	KeyOrchestratorNewSessionUUIDRandFailed Key = "orchestrator.new_session_uuid.rand_failed"
+	// KeyOrchestratorRenderFirstPromptTemplateUnparsable は1回目のプロンプトのテンプレートの構文が誤っていたときに出る。
+	KeyOrchestratorRenderFirstPromptTemplateUnparsable Key = "orchestrator.render_first_prompt.template_unparsable"
+	// KeyOrchestratorRenderFirstPromptRenderFailed は1回目のプロンプトの描画に失敗したときに出る（一覧に無い変数を参照している場合を含む）。
+	KeyOrchestratorRenderFirstPromptRenderFailed Key = "orchestrator.render_first_prompt.render_failed"
+	// KeyOrchestratorWriteSettingsFileDirCreateFailed はissue ごとの設定ファイルの置き場所を作れなかったときに出る。
+	KeyOrchestratorWriteSettingsFileDirCreateFailed Key = "orchestrator.write_settings_file.dir_create_failed"
+	// KeyOrchestratorWriteSettingsFilePendingDirCreateFailed はhook の逃がし先のディレクトリを作れなかったときに出る。
+	KeyOrchestratorWriteSettingsFilePendingDirCreateFailed Key = "orchestrator.write_settings_file.pending_dir_create_failed"
+	// KeyOrchestratorWriteSettingsFileMarshalFailed はClaude Code の設定ファイルを JSON へ変換できなかったときに出る。
+	KeyOrchestratorWriteSettingsFileMarshalFailed Key = "orchestrator.write_settings_file.marshal_failed"
+	// KeyOrchestratorWriteSettingsFileWriteFailed はClaude Code の設定ファイルを書き出せなかったときに出る。
+	KeyOrchestratorWriteSettingsFileWriteFailed Key = "orchestrator.write_settings_file.write_failed"
+	// KeyOrchestratorReadTranscriptReadFailed はtranscript の走査または turn の本文の取り出しに失敗したときに出る。
+	KeyOrchestratorReadTranscriptReadFailed Key = "orchestrator.read_transcript.read_failed"
+	// KeyOrchestratorOpenRegularFileOpenFailed はtranscript を開けなかったときに出る。
+	KeyOrchestratorOpenRegularFileOpenFailed Key = "orchestrator.open_regular_file.open_failed"
+	// KeyOrchestratorOpenRegularFileStatFailed は開いた transcript の種別を読めなかったときに出る。
+	KeyOrchestratorOpenRegularFileStatFailed Key = "orchestrator.open_regular_file.stat_failed"
+	// KeyOrchestratorOpenRegularFileNotRegularFile はtranscript が通常のファイルでなかったときに出る（FIFO などを弾く）。
+	KeyOrchestratorOpenRegularFileNotRegularFile Key = "orchestrator.open_regular_file.not_regular_file"
+	// KeyOrchestratorStartRunStatusUpdateFailed は着手のときにボードの Status を running_state へ書けなかったときに出る。
+	KeyOrchestratorStartRunStatusUpdateFailed Key = "orchestrator.start_run.status_update_failed"
+	// KeyOrchestratorStartRunWorktreePrepareFailed は作業用の worktree を用意できなかったときに出る。
+	KeyOrchestratorStartRunWorktreePrepareFailed Key = "orchestrator.start_run.worktree_prepare_failed"
+	// KeyOrchestratorStartRunAfterCreateHookFailed はworkspace_hooks.after_create が失敗したときに出る。
+	KeyOrchestratorStartRunAfterCreateHookFailed Key = "orchestrator.start_run.after_create_hook_failed"
+	// KeyOrchestratorStartRunIdentityWriteFailed はworktree の中の身元ファイルを書けなかったときに出る。
+	KeyOrchestratorStartRunIdentityWriteFailed Key = "orchestrator.start_run.identity_write_failed"
+	// KeyOrchestratorStartRunBeforeRunHookFailed はworkspace_hooks.before_run が失敗したときに出る。
+	KeyOrchestratorStartRunBeforeRunHookFailed Key = "orchestrator.start_run.before_run_hook_failed"
+	// KeyOrchestratorStartRunPaneRenameFailed はpane の label に issue の URL を書けなかったときに出る。
+	KeyOrchestratorStartRunPaneRenameFailed Key = "orchestrator.start_run.pane_rename_failed"
+	// KeyOrchestratorStartRunAgentStartFailed はpane の中で Claude Code を起動できなかったときに出る。
+	KeyOrchestratorStartRunAgentStartFailed Key = "orchestrator.start_run.agent_start_failed"
+	// KeyOrchestratorResolvePaneWorkspaceIDEmpty はherdr の workspace の ID が空で pane を引けないときに出る。
+	KeyOrchestratorResolvePaneWorkspaceIDEmpty Key = "orchestrator.resolve_pane.workspace_id_empty"
+	// KeyOrchestratorResolvePanePaneListFailed はherdr の pane.list に失敗したときに出る。
+	KeyOrchestratorResolvePanePaneListFailed Key = "orchestrator.resolve_pane.pane_list_failed"
+	// KeyOrchestratorResolvePanePaneCountUnexpected はworkspace の中の pane が1つでなかったときに出る。
+	KeyOrchestratorResolvePanePaneCountUnexpected Key = "orchestrator.resolve_pane.pane_count_unexpected"
+	// KeyOrchestratorConfirmStartupAgentGetFailed は起動直後の agent の状態を herdr に問い合わせられなかったときに出る。
+	KeyOrchestratorConfirmStartupAgentGetFailed Key = "orchestrator.confirm_startup.agent_get_failed"
+	// KeyOrchestratorConfirmStartupBlocked は起動直後に確認の画面（blocked）で止まったときに出る。
+	KeyOrchestratorConfirmStartupBlocked Key = "orchestrator.confirm_startup.blocked"
+	// KeyOrchestratorConfirmStartupWorkingTimeout はstartup_timeout_ms を過ぎても working のままだったときに出る。
+	KeyOrchestratorConfirmStartupWorkingTimeout Key = "orchestrator.confirm_startup.working_timeout"
+	// KeyOrchestratorConfirmStartupUnknownStatus はherdr が idle / done / blocked / working 以外の状態を返したときに出る。
+	KeyOrchestratorConfirmStartupUnknownStatus Key = "orchestrator.confirm_startup.unknown_status"
+	// KeyOrchestratorRestoreHookListenFailed は復元の途中で hook を受ける socket の listen を始められなかったときに出る。
+	KeyOrchestratorRestoreHookListenFailed Key = "orchestrator.restore.hook_listen_failed"
+)
+
+// daemon のエラー（起動の段・起動時の検査・依存の組み立て）。
+const (
+	// KeyDaemonRunConfigLoadFailed は起動の段1で WORKFLOW.md を読めなかったときに出る。
+	KeyDaemonRunConfigLoadFailed Key = "daemon.run.config_load_failed"
+	// KeyDaemonRunSocketPathUnresolved はhook を受ける socket の場所を決められなかったときに出る。
+	KeyDaemonRunSocketPathUnresolved Key = "daemon.run.socket_path_unresolved"
+	// KeyDaemonRunSocketDirFailed はhook を受ける socket を置くディレクトリを準備できなかったときに出る。
+	KeyDaemonRunSocketDirFailed Key = "daemon.run.socket_dir_failed"
+	// KeyDaemonRunAlreadyRunning はflock が取れず二重起動と判定したときに出る。
+	KeyDaemonRunAlreadyRunning Key = "daemon.run.already_running"
+	// KeyDaemonRunLockFileFailed は二重起動ではなく、ロックファイルそのものを用意できなかったときに出る。
+	KeyDaemonRunLockFileFailed Key = "daemon.run.lock_file_failed"
+	// KeyDaemonRunStartupChecksFailed は起動時の検査に落ちたときに出る（生きている pane は閉じない）。
+	KeyDaemonRunStartupChecksFailed Key = "daemon.run.startup_checks_failed"
+	// KeyDaemonRunRestoreFailed は起動の段4の復元に失敗したときに出る。
+	KeyDaemonRunRestoreFailed Key = "daemon.run.restore_failed"
+	// KeyDaemonRunStartupChecksHerdrUnreachable は起動時の検査で herdr の socket に到達できないか protocol が想定外だったときに出る。
+	KeyDaemonRunStartupChecksHerdrUnreachable Key = "daemon.run_startup_checks.herdr_unreachable"
+	// KeyDaemonRunStartupChecksStatusOptionMismatch は起動時の検査でボードの Status の選択肢名が設定と一致しなかったときに出る。
+	KeyDaemonRunStartupChecksStatusOptionMismatch Key = "daemon.run_startup_checks.status_option_mismatch"
+	// KeyDaemonValidateGraphQLEndpointURLUnparsable はGraphQL の接続先を差し替える環境変数の値が URL として読めなかったときに出る。
+	KeyDaemonValidateGraphQLEndpointURLUnparsable Key = "daemon.validate_graphql_endpoint.url_unparsable"
+	// KeyDaemonValidateGraphQLEndpointHostMissing は同じ環境変数の値にホスト名が無かったときに出る。
+	KeyDaemonValidateGraphQLEndpointHostMissing Key = "daemon.validate_graphql_endpoint.host_missing"
+	// KeyDaemonValidateGraphQLEndpointPlainHTTP は同じ環境変数にループバック以外の http を書いたときに出る。
+	KeyDaemonValidateGraphQLEndpointPlainHTTP Key = "daemon.validate_graphql_endpoint.plain_http"
+	// KeyDaemonValidateGraphQLEndpointSchemeNotHTTPS は同じ環境変数の scheme が https でもループバック宛の http でもなかったときに出る。
+	KeyDaemonValidateGraphQLEndpointSchemeNotHTTPS Key = "daemon.validate_graphql_endpoint.scheme_not_https"
+	// KeyDaemonBuildHerdrSocketUnresolved は依存の組み立てで herdr の socket の場所を決められなかったときに出る。
+	KeyDaemonBuildHerdrSocketUnresolved Key = "daemon.build.herdr_socket_unresolved"
+	// KeyDaemonBuildWorkspaceFailed は依存の組み立てで worktree の管理を作れなかったときに出る。
+	KeyDaemonBuildWorkspaceFailed Key = "daemon.build.workspace_failed"
+	// KeyDaemonBuildTokenFailed は依存の組み立てでボードを読むためのトークンを取れなかったときに出る。
+	KeyDaemonBuildTokenFailed Key = "daemon.build.token_failed"
+	// KeyDaemonBuildTrackerFailed は依存の組み立てでトラッカーのアダプタを作れなかったときに出る。
+	KeyDaemonBuildTrackerFailed Key = "daemon.build.tracker_failed"
+	// KeyDaemonBuildRateLimitFailed は依存の組み立てで枠の読み取りを作れなかったときに出る。
+	KeyDaemonBuildRateLimitFailed Key = "daemon.build.ratelimit_failed"
+	// KeyDaemonBuildOrchestratorFailed は依存の組み立てで orchestrator を作れなかったときに出る。
+	KeyDaemonBuildOrchestratorFailed Key = "daemon.build.orchestrator_failed"
+	// KeyDaemonBuildHookServerFailed は依存の組み立てで hook の受け口を作れなかったときに出る。
+	KeyDaemonBuildHookServerFailed Key = "daemon.build.hookserver_failed"
+	// KeyDaemonBuildDashboardFailed は依存の組み立てでダッシュボードを作れなかったときに出る。
+	KeyDaemonBuildDashboardFailed Key = "daemon.build.dashboard_failed"
+)
+
 // allKeys は宣言済みのキーを全部並べたものである。
 //
 // **新しいキーを足したらここにも足すこと。**test/internal/i18n がこの一覧と
@@ -731,6 +1487,287 @@ var allKeys = []Key{
 	KeyDashboardAgoMinutes,
 	KeyDashboardAgoHours,
 	KeyDashboardNone,
+	KeyLockAcquireOpenFailed,
+	KeyLockAcquireAlreadyRunning,
+	KeyLockReleaseUnlockFailed,
+	KeyLockReleaseCloseFailed,
+	KeySocketpathRuntimeDirHomeDirFailed,
+	KeySocketpathCheckAbsNotAbsolute,
+	KeySocketpathCheckPathLenTooLong,
+	KeySocketpathEnsureDirParentMkdirFailed,
+	KeySocketpathEnsureDirChmodFailed,
+	KeySocketpathEnsureDirMkdirFailed,
+	KeySocketpathCheckExistingDirLstatFailed,
+	KeySocketpathCheckExistingDirSymlink,
+	KeySocketpathCheckExistingDirNotADirectory,
+	KeySocketpathCheckExistingDirPermTooOpen,
+	KeySocketpathSourceEnvRuntimeDir,
+	KeySocketpathSourceEnvXDGRuntimeDir,
+	KeySocketpathSourceEnvTMPDir,
+	KeySocketpathSourceConfigListen,
+	KeyConfigResolvePathWorkDirNotAbsolute,
+	KeyConfigLoadPathNotAbsolute,
+	KeyConfigLoadReadFailed,
+	KeyConfigLoadFrontMatterSplitFailed,
+	KeyConfigLoadFrontMatterInvalid,
+	KeyConfigLoadExpandFailed,
+	KeyConfigFrontMatterNoStartDelimiter,
+	KeyConfigFrontMatterNoEndDelimiter,
+	KeyConfigPlaceholderRemaining,
+	KeyConfigValidateInvalidValue,
+	KeyConfigValidateRequired,
+	KeyConfigExpandTrailingDollar,
+	KeyConfigExpandUnclosedBrace,
+	KeyConfigExpandEmptyEnvName,
+	KeyConfigExpandInvalidDollarForm,
+	KeyConfigExpandEnvUndefined,
+	KeyConfigExpandEnvEmpty,
+	KeyConfigExpandHomeDirFailed,
+	KeyConfigExpandTildeUserUnsupported,
+	KeyHerdrPingCallFailed,
+	KeyHerdrPingUnmarshalFailed,
+	KeyHerdrCheckProtocolPingFailed,
+	KeyHerdrCheckProtocolVersionMismatch,
+	KeyHerdrCallUnmarshalFailed,
+	KeyHerdrCallRequestIDFailed,
+	KeyHerdrCallMarshalParamsFailed,
+	KeyHerdrCallMarshalRequestFailed,
+	KeyHerdrSocketPathNotAbsolute,
+	KeyHerdrSocketPathHomeDirFailed,
+	KeyHerdrSocketPathSourceConfig,
+	KeyHerdrAgentInvalidName,
+	KeyHerdrAgentSendKeysEmpty,
+	KeyTrackerGHAuthTokenRunFailed,
+	KeyTrackerGHAuthTokenEmptyOutput,
+	KeyTrackerGHAuthStatusStartFailed,
+	KeyTrackerGHAvailableNotInPath,
+	KeyTrackerGHScopeNoActiveAccount,
+	KeyTrackerGHScopeMissingScope,
+	KeyHookserverStartListenFailed,
+	KeyHookserverRemoveStaleSocketLstatFailed,
+	KeyHookserverRemoveStaleSocketAlreadyListening,
+	KeyHookserverRemoveStaleSocketRemoveFailed,
+	KeyHookserverCloseListenerCloseFailed,
+	KeyHookserverDecodeEventNotObject,
+	KeyHookserverPendingDirsIssuesDirUnreadable,
+	KeyHookserverPendingNotRegularFile,
+	KeyHookserverReadPendingFileTooLarge,
+	KeyHookclientForwardNoPendingDir,
+	KeyHookclientForwardSpillFailed,
+	KeyHookclientReadInputReadFailed,
+	KeyHookclientTruncatedLineHeadUnreadable,
+	KeyHookclientTruncatedLineNotObject,
+	KeyHookclientTruncatedLineNoFields,
+	KeyHookclientTruncatedLineMarshalFailed,
+	KeyHookclientCompactLineUnmarshalFailed,
+	KeyHookclientCompactLineNotObject,
+	KeyHookclientCompactLineCompactFailed,
+	KeyHookclientSendToSocketPathEmpty,
+	KeyHookclientSendToSocketDialFailed,
+	KeyHookclientSendToSocketDeadlineFailed,
+	KeyHookclientSendToSocketWriteFailed,
+	KeyHookclientSpillDirNotAbsolute,
+	KeyHookclientSpillMkdirFailed,
+	KeyHookclientSpillCreateFailed,
+	KeyHookclientSpillWriteFailed,
+	KeyHookclientSpillRenameFailed,
+	KeyHookclientSpillNameConflict,
+	KeyHookclientCheckPendingCapacityLimitReached,
+	KeyRatelimitNewReaderHomeDirFailed,
+	KeyRatelimitFetchRequestBuildFailed,
+	KeyRatelimitFetchRequestFailed,
+	KeyRatelimitFetchBodyReadFailed,
+	KeyRatelimitFetchUnexpectedStatus,
+	KeyRatelimitFetchParseFailed,
+	KeyRatelimitTokenEnvNameEmpty,
+	KeyRatelimitTokenEnvValueEmpty,
+	KeyRatelimitCredentialsFileHomeDirUnknown,
+	KeyRatelimitCredentialsFileReadFailed,
+	KeyRatelimitCredentialsFileNotRegularFile,
+	KeyRatelimitCredentialsFileParseFailed,
+	KeyRatelimitCredentialsFileAccessTokenMissing,
+	KeyServerNewPortOutOfRange,
+	KeyServerStartListenFailed,
+	KeyServerCloseShutdownFailed,
+	KeyServerWriteJSONEncodeFailed,
+	KeyScaffoldFileReadFailed,
+	KeyScaffoldFileStatFailed,
+	KeyScaffoldFileWriteFailed,
+	KeyScaffoldFileCloseFailed,
+	KeyScaffoldFileCreateFailed,
+	KeyScaffoldDirStatFailed,
+	KeyScaffoldDirEvalSymlinksFailed,
+	KeyScaffoldDirGetwdFailed,
+	KeyScaffoldDirAbsFailed,
+	KeyScaffoldWriteSymlinkNotFollowed,
+	KeyScaffoldUpdateSymlinkNotFollowed,
+	KeyScaffoldUpdateNotRegularFile,
+	KeyScaffoldUpdateTempCreateFailed,
+	KeyScaffoldUpdateChmodFailed,
+	KeyScaffoldUpdateSyncFailed,
+	KeyScaffoldUpdateRenameFailed,
+	KeyScaffoldGHRunFailed,
+	KeyScaffoldGHRunFailedWithStderr,
+	KeySetupBoardOwnerMissing,
+	KeySetupBoardProjectNumberMissing,
+	KeySetupBoardFieldListUnparsable,
+	KeySetupBoardFieldNotSingleSelect,
+	KeySetupBoardFieldNotFound,
+	KeyTrustParseOrderedObjectInvalidJSON,
+	KeyTrustParseOrderedObjectNotObject,
+	KeyTrustParseOrderedObjectKeyUnreadable,
+	KeyTrustParseOrderedObjectKeyNotString,
+	KeyTrustParseOrderedObjectValueUnreadable,
+	KeyTrustParseOrderedObjectObjectNotClosed,
+	KeyTrustMarshalIndentKeyEncodeFailed,
+	KeyTrustMarshalIndentValueIndentFailed,
+	KeyTrustRunGitToplevelRunFailed,
+	KeyTrustRunGitToplevelRunFailedWithStderr,
+	KeyTrustRunGitToplevelEmptyOutput,
+	KeyTrustOptionsHomeDirNotAbsolute,
+	KeyTrustApplyProjectsMarshalFailed,
+	KeyTrustApplyRootMarshalFailed,
+	KeyTrustApplyReplaceFailed,
+	KeyTrustProjectsObjectUnparsable,
+	KeyTrustMarkTrustedEntryMarshalFailed,
+	KeyTrustMarkTrustedEntryUnparsable,
+	KeyTrustMarkTrustedFlagNotBool,
+	KeyTrustMarkTrustedEntryRemarshalFailed,
+	KeyTrustReadClaudeConfigNotFound,
+	KeyTrustReadClaudeConfigStatFailed,
+	KeyTrustReadClaudeConfigSymlink,
+	KeyTrustReadClaudeConfigNotRegularFile,
+	KeyTrustReadClaudeConfigReadFailed,
+	KeyTrustWriteBackupCreateFailed,
+	KeyTrustWriteBackupWriteFailed,
+	KeyTrustWriteBackupSyncFailed,
+	KeyTrustWriteBackupCloseFailed,
+	KeyTrustReplaceFileTempCreateFailed,
+	KeyTrustReplaceFileChmodFailed,
+	KeyTrustReplaceFileWriteFailed,
+	KeyTrustReplaceFileSyncFailed,
+	KeyTrustReplaceFileCloseFailed,
+	KeyTrustReplaceFileRenameFailed,
+	KeyWorkspaceRunHookOutputFileCreateFailed,
+	KeyWorkspaceRunHookRunFailed,
+	KeyWorkspaceResolveWorkspaceIDWorktreeOpenFailed,
+	KeyWorkspaceResolveWorkspaceIDPathMismatch,
+	KeyWorkspaceResolveWorkspaceIDWorkspaceIDMissing,
+	KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown,
+	KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed,
+	KeyWorkspaceRunGitOutputTooLarge,
+	KeyWorkspaceRunGitRunFailed,
+	KeyWorkspaceGitExitCodeStartFailed,
+	KeyWorkspaceGitWorktreeListOutputUnreadable,
+	KeyWorkspaceGitWorktreeAddOrphanCheckFailed,
+	KeyWorkspaceGitWorktreeAddOrphanDeleteFailed,
+	KeyWorkspaceGitWorktreeAddOrphanDeleted,
+	KeyWorkspaceGitAheadOfUpstreamCountUnreadable,
+	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode,
+	KeyWorkspaceRunGhqListStartFailed,
+	KeyWorkspaceRunGhqListExitFailed,
+	KeyWorkspaceGitLocalBranchesOutputUnreadable,
+	KeyWorkspaceRunGhqGetStartFailed,
+	KeyWorkspaceRunGhqGetExitFailed,
+	KeyWorkspaceOwnerRepoFromWorktreePathRelFailed,
+	KeyWorkspaceOwnerRepoFromWorktreePathLayoutMismatch,
+	KeyWorkspaceVerifiedRepoCloneNotFound,
+	KeyWorkspaceVerifiedRepoRepoMismatch,
+	KeyWorkspaceEnsureRootRootEmpty,
+	KeyWorkspaceEnsureRootRootNotAbsolute,
+	KeyWorkspaceEnsureRootMkdirFailed,
+	KeyWorkspaceEnsureRootSymlinkUnresolvable,
+	KeyWorkspaceLabelWorktreePath,
+	KeyWorkspaceLabelIssueSettingsFile,
+	KeyWorkspaceCheckUnderNotAbsolute,
+	KeyWorkspaceCheckUnderSameAsRoot,
+	KeyWorkspaceCheckUnderOutsideRoot,
+	KeyWorkspaceCheckContainmentResolvedSymlinkUnresolvable,
+	KeyWorkspaceCheckContainmentResolvedOutsideRoot,
+	KeyWorkspaceRenderBranchTemplateUnparsable,
+	KeyWorkspaceRenderBranchTemplateRenderFailed,
+	KeyWorkspaceRenderBranchRenderedEmpty,
+	KeyWorkspaceScanLevelRootUnreadable,
+	KeyWorkspaceCheckTrustForClonePathToplevelFailed,
+	KeyWorkspaceCheckTrustForClonePathConfigUnreadable,
+	KeyWorkspaceCheckTrustForClonePathConfigUnparsable,
+	KeyWorkspaceValidateIdentityFileNameEmpty,
+	KeyWorkspaceValidateIdentityFileNameHasSpaces,
+	KeyWorkspaceValidateIdentityFileNameHasSeparator,
+	KeyWorkspaceValidateIdentityFileNameNotAFileName,
+	KeyWorkspaceReadIdentityReadFailed,
+	KeyWorkspaceWriteIdentityMarshalFailed,
+	KeyWorkspaceWriteFileAtomicTempCreateFailed,
+	KeyWorkspaceWriteFileAtomicWriteFailed,
+	KeyWorkspaceWriteFileAtomicChmodFailed,
+	KeyWorkspaceWriteFileAtomicCloseFailed,
+	KeyWorkspaceWriteFileAtomicRenameFailed,
+	KeyWorkspaceRegisterExcludeInfoDirCreateFailed,
+	KeyWorkspaceRegisterExcludeReadFailed,
+	KeyWorkspaceRegisterExcludeOpenFailed,
+	KeyWorkspaceRegisterExcludeWriteFailed,
+	KeyWorkspaceRegisterExcludeCloseFailed,
+	KeyWorkspaceNewSettingsRootNotAbsolute,
+	KeyWorkspaceNewHomeDirUnknown,
+	KeyWorkspacePrepareCloneNotFound,
+	KeyWorkspacePrepareStatFailed,
+	KeyWorkspacePrepareBranchMismatch,
+	KeyWorkspacePrepareUnregisteredWorktree,
+	KeyWorkspacePrepareParentDirCreateFailed,
+	KeyWorkspacePrepareWorktreeOpenFailed,
+	KeyWorkspaceResolveBaseDefaultBranchMissing,
+	KeyWorkspaceResolveBaseDefaultBranchNotString,
+	KeyOrchestratorNewExecutablePathUnknown,
+	KeyOrchestratorResolveAgentNameAgentListFailed,
+	KeyOrchestratorResolveAgentNameInvalidName,
+	KeyOrchestratorResolveAgentNameNoFreeName,
+	KeyOrchestratorNewSessionUUIDRandFailed,
+	KeyOrchestratorRenderFirstPromptTemplateUnparsable,
+	KeyOrchestratorRenderFirstPromptRenderFailed,
+	KeyOrchestratorWriteSettingsFileDirCreateFailed,
+	KeyOrchestratorWriteSettingsFilePendingDirCreateFailed,
+	KeyOrchestratorWriteSettingsFileMarshalFailed,
+	KeyOrchestratorWriteSettingsFileWriteFailed,
+	KeyOrchestratorReadTranscriptReadFailed,
+	KeyOrchestratorOpenRegularFileOpenFailed,
+	KeyOrchestratorOpenRegularFileStatFailed,
+	KeyOrchestratorOpenRegularFileNotRegularFile,
+	KeyOrchestratorStartRunStatusUpdateFailed,
+	KeyOrchestratorStartRunWorktreePrepareFailed,
+	KeyOrchestratorStartRunAfterCreateHookFailed,
+	KeyOrchestratorStartRunIdentityWriteFailed,
+	KeyOrchestratorStartRunBeforeRunHookFailed,
+	KeyOrchestratorStartRunPaneRenameFailed,
+	KeyOrchestratorStartRunAgentStartFailed,
+	KeyOrchestratorResolvePaneWorkspaceIDEmpty,
+	KeyOrchestratorResolvePanePaneListFailed,
+	KeyOrchestratorResolvePanePaneCountUnexpected,
+	KeyOrchestratorConfirmStartupAgentGetFailed,
+	KeyOrchestratorConfirmStartupBlocked,
+	KeyOrchestratorConfirmStartupWorkingTimeout,
+	KeyOrchestratorConfirmStartupUnknownStatus,
+	KeyOrchestratorRestoreHookListenFailed,
+	KeyDaemonRunConfigLoadFailed,
+	KeyDaemonRunSocketPathUnresolved,
+	KeyDaemonRunSocketDirFailed,
+	KeyDaemonRunAlreadyRunning,
+	KeyDaemonRunLockFileFailed,
+	KeyDaemonRunStartupChecksFailed,
+	KeyDaemonRunRestoreFailed,
+	KeyDaemonRunStartupChecksHerdrUnreachable,
+	KeyDaemonRunStartupChecksStatusOptionMismatch,
+	KeyDaemonValidateGraphQLEndpointURLUnparsable,
+	KeyDaemonValidateGraphQLEndpointHostMissing,
+	KeyDaemonValidateGraphQLEndpointPlainHTTP,
+	KeyDaemonValidateGraphQLEndpointSchemeNotHTTPS,
+	KeyDaemonBuildHerdrSocketUnresolved,
+	KeyDaemonBuildWorkspaceFailed,
+	KeyDaemonBuildTokenFailed,
+	KeyDaemonBuildTrackerFailed,
+	KeyDaemonBuildRateLimitFailed,
+	KeyDaemonBuildOrchestratorFailed,
+	KeyDaemonBuildHookServerFailed,
+	KeyDaemonBuildDashboardFailed,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

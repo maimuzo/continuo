@@ -7,9 +7,10 @@ package lock
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"syscall"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // ErrAlreadyRunning は、別のプロセスが同じロックファイルを掴んでいることを表す。
@@ -40,15 +41,12 @@ type Lock struct {
 func Acquire(path string) (*Lock, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("ロックファイルを開けません: %s: %w", path, err)
+		return nil, i18n.Errorf(i18n.KeyLockAcquireOpenFailed, path, err)
 	}
 
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = f.Close()
-		return nil, fmt.Errorf(
-			"%w（ロックファイル %s を取得できませんでした）。二重起動を防ぐため終了します: %w",
-			ErrAlreadyRunning, path, err,
-		)
+		return nil, i18n.Errorf(i18n.KeyLockAcquireAlreadyRunning, ErrAlreadyRunning, path, err)
 	}
 
 	return &Lock{file: f}, nil
@@ -71,10 +69,10 @@ func (l *Lock) Release() error {
 
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("ロックの解放に失敗しました: %w", err)
+		return i18n.Errorf(i18n.KeyLockReleaseUnlockFailed, err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("ロックファイルのクローズに失敗しました: %w", err)
+		return i18n.Errorf(i18n.KeyLockReleaseCloseFailed, err)
 	}
 	return nil
 }

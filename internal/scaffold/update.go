@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // 区別が要る失敗は sentinel error で返す。cmd/continuo はこれを見て終了コードと文言を決める。
@@ -56,7 +58,7 @@ func CheckUpdatable(dir string) (Result, error) {
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を読み込めません: %s: %w", path, err)
+		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileReadFailed, path, err)
 	}
 
 	// **尋ねる前にキーの有無を見る。**
@@ -105,7 +107,7 @@ func UpdateStatuses(dir string, st Statuses) (Result, error) {
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return Result{Path: path}, fmt.Errorf("WORKFLOW.md を読み込めません: %s: %w", path, err)
+		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileReadFailed, path, err)
 	}
 
 	updated, missing := applyStatuses(string(raw), st)
@@ -137,14 +139,14 @@ func statTarget(dir string) (string, fs.FileInfo, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return path, nil, fmt.Errorf("%w: %s", ErrNotFound, path)
 		}
-		return path, nil, fmt.Errorf("WORKFLOW.md を確認できません: %s: %w", path, err)
+		return path, nil, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, path, err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
 		// WriteTemplateWithValues と同じ判断で、辿らずに止める。
-		return path, nil, fmt.Errorf("%w: %s: 辿るとこのディレクトリの外にあるリンク先を壊すため書き換えません", ErrSymlink, path)
+		return path, nil, i18n.Errorf(i18n.KeyScaffoldUpdateSymlinkNotFollowed, ErrSymlink, path)
 	}
 	if !info.Mode().IsRegular() {
-		return path, nil, fmt.Errorf("%w: %s: 通常のファイルではありません", ErrNotFound, path)
+		return path, nil, i18n.Errorf(i18n.KeyScaffoldUpdateNotRegularFile, ErrNotFound, path)
 	}
 	return path, info, nil
 }
@@ -163,35 +165,35 @@ func writeAtomically(path, content string, perm fs.FileMode) error {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*")
 	if err != nil {
-		return fmt.Errorf("WORKFLOW.md を書き換える一時ファイルを作れません: %s: %w", dir, err)
+		return i18n.Errorf(i18n.KeyScaffoldUpdateTempCreateFailed, dir, err)
 	}
 	tmp := f.Name()
 
 	if _, err := f.WriteString(content); err != nil {
 		f.Close()
 		os.Remove(tmp)
-		return fmt.Errorf("WORKFLOW.md を書き込めません: %s: %w", tmp, err)
+		return i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, tmp, err)
 	}
 	// os.CreateTemp は 0600 で作るので、元のファイルの権限に戻す。
 	if err := f.Chmod(perm); err != nil {
 		f.Close()
 		os.Remove(tmp)
-		return fmt.Errorf("WORKFLOW.md の権限を設定できません: %s: %w", tmp, err)
+		return i18n.Errorf(i18n.KeyScaffoldUpdateChmodFailed, tmp, err)
 	}
 	// **rename の前に fsync する。**書き込んだ内容がディスクに届く前に rename が
 	// 先に届くと、電源が落ちたときに中身の無いファイルが残りうる。
 	if err := f.Sync(); err != nil {
 		f.Close()
 		os.Remove(tmp)
-		return fmt.Errorf("WORKFLOW.md を書き出せません: %s: %w", tmp, err)
+		return i18n.Errorf(i18n.KeyScaffoldUpdateSyncFailed, tmp, err)
 	}
 	if err := f.Close(); err != nil {
 		os.Remove(tmp)
-		return fmt.Errorf("WORKFLOW.md を閉じられません: %s: %w", tmp, err)
+		return i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, tmp, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
-		return fmt.Errorf("WORKFLOW.md を置き換えられません: %s: %w", path, err)
+		return i18n.Errorf(i18n.KeyScaffoldUpdateRenameFailed, path, err)
 	}
 	return nil
 }

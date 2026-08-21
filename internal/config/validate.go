@@ -382,13 +382,13 @@ func containsString(ss []string, target string) bool {
 // value: 実際に入っていた値（そのまま %v で埋め込む＝元の文字列を含める）。
 // requirement: 期待する値の説明。
 func invalidValueError(key string, value any, requirement string) error {
-	return fmt.Errorf("設定キー %s の値 %v が不正です: %s", key, value, requirement)
+	return i18n.Errorf(i18n.KeyConfigValidateInvalidValue, key, value, requirement)
 }
 
 // requiredValueError は「値が空・未設定である」ことを表すエラーを作る。
 // key: 設定キーの名前（ドット区切り）。
 func requiredValueError(key string) error {
-	return fmt.Errorf("設定キー %s は必須ですが空です", key)
+	return i18n.Errorf(i18n.KeyConfigValidateRequired, key)
 }
 
 // trustRepositoryPattern は trust.repositories の要素として受け付ける形である（3-33）。

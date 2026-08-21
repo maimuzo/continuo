@@ -8,11 +8,12 @@ package socketpath
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // MaxPathLen は continuo が許容する Unix domain socket のパス長の上限（バイト数）である。
@@ -46,14 +47,14 @@ const LockFileName = "continuo.lock"
 //   - os.UserHomeDir が失敗した（既定4 に落ちたときだけ起きうる）
 func RuntimeDir(envRuntimeDir string) (string, error) {
 	if envRuntimeDir != "" {
-		if err := checkAbs(envRuntimeDir, "環境変数 CONTINUO_RUNTIME_DIR"); err != nil {
+		if err := checkAbs(envRuntimeDir, i18n.T(i18n.KeySocketpathSourceEnvRuntimeDir)); err != nil {
 			return "", err
 		}
 		return envRuntimeDir, nil
 	}
 
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
-		if err := checkAbs(xdg, "環境変数 XDG_RUNTIME_DIR"); err != nil {
+		if err := checkAbs(xdg, i18n.T(i18n.KeySocketpathSourceEnvXDGRuntimeDir)); err != nil {
 			return "", err
 		}
 		return filepath.Join(xdg, "continuo"), nil
@@ -61,7 +62,7 @@ func RuntimeDir(envRuntimeDir string) (string, error) {
 
 	if runtime.GOOS == "darwin" {
 		if tmp := os.Getenv("TMPDIR"); tmp != "" {
-			if err := checkAbs(tmp, "環境変数 TMPDIR"); err != nil {
+			if err := checkAbs(tmp, i18n.T(i18n.KeySocketpathSourceEnvTMPDir)); err != nil {
 				return "", err
 			}
 			return filepath.Join(tmp, "continuo"), nil
@@ -70,11 +71,7 @@ func RuntimeDir(envRuntimeDir string) (string, error) {
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf(
-			"hook を受ける socket の置き場所を決められません（既定の ~/.continuo/run のため"+
-				"ホームディレクトリの取得が必要ですが失敗しました）: %w",
-			err,
-		)
+		return "", i18n.Errorf(i18n.KeySocketpathRuntimeDirHomeDirFailed, err)
 	}
 	return filepath.Join(home, ".continuo", "run"), nil
 }
@@ -82,15 +79,13 @@ func RuntimeDir(envRuntimeDir string) (string, error) {
 // checkAbs は socket の置き場所として渡されたパスが絶対パスかどうかを検査する。
 //
 // path: 検査対象のパス。
-// source: エラーメッセージに出す、その値の出どころの説明（例: "環境変数 CONTINUO_RUNTIME_DIR"）。
+// source: エラーメッセージに出す、その値の出どころの説明。
+// **呼ぶ側は i18n.T(i18n.KeySocketpathSource*) で引いた文言を渡すこと。**
+// 文字列リテラルを直接渡すと、その一文だけが訳されないまま残る。
 // 戻り値: 絶対パスでない場合にエラーを返す。
 func checkAbs(path, source string) error {
 	if !filepath.IsAbs(path) {
-		return fmt.Errorf(
-			"%s の値 %q が絶対パスではありません（相対パスだと continuo を起動したディレクトリによって"+
-				"hook を受ける socket の場所が変わり、走行中の Claude Code が持つパスと一致しなくなる）",
-			source, path,
-		)
+		return i18n.Errorf(i18n.KeySocketpathCheckAbsNotAbsolute, source, path)
 	}
 	return nil
 }
@@ -100,11 +95,7 @@ func checkAbs(path, source string) error {
 // 戻り値: MaxPathLen を超えている場合にエラーを返す。
 func checkPathLen(path string) error {
 	if len(path) > MaxPathLen {
-		return fmt.Errorf(
-			"hook を受ける socket のパスが長すぎます（%d バイト。上限は %d バイト）: %s"+
-				"（macOS の Unix domain socket は104バイト以上で bind に失敗するため、設定を読んだ時点で止める）",
-			len(path), MaxPathLen, path,
-		)
+		return i18n.Errorf(i18n.KeySocketpathCheckPathLenTooLong, len(path), MaxPathLen, path)
 	}
 	return nil
 }
@@ -133,7 +124,7 @@ func Resolve(dir string) (string, error) {
 func ResolveHookSocketPath(explicitListen *string, envRuntimeDir string) (string, error) {
 	if explicitListen != nil && *explicitListen != "" {
 		p := *explicitListen
-		if err := checkAbs(p, "設定キー claude.hook_bridge.listen"); err != nil {
+		if err := checkAbs(p, i18n.T(i18n.KeySocketpathSourceConfigListen)); err != nil {
 			return "", err
 		}
 		if err := checkPathLen(p); err != nil {
@@ -173,7 +164,7 @@ func ResolveHookSocketPath(explicitListen *string, envRuntimeDir string) (string
 func EnsureDir(dir string) error {
 	if parent := filepath.Dir(dir); parent != dir {
 		if err := os.MkdirAll(parent, 0o700); err != nil {
-			return fmt.Errorf("hook を受ける socket のディレクトリの親を作成できません: %s: %w", parent, err)
+			return i18n.Errorf(i18n.KeySocketpathEnsureDirParentMkdirFailed, parent, err)
 		}
 	}
 
@@ -181,13 +172,13 @@ func EnsureDir(dir string) error {
 	case err == nil:
 		// 自分で作った。umask で削られた分を打ち消して 0700 に固定する。
 		if err := os.Chmod(dir, 0o700); err != nil {
-			return fmt.Errorf("hook を受ける socket のディレクトリの権限を 0700 に設定できません: %s: %w", dir, err)
+			return i18n.Errorf(i18n.KeySocketpathEnsureDirChmodFailed, dir, err)
 		}
 		return nil
 	case errors.Is(err, fs.ErrExist):
 		return checkExistingDir(dir)
 	default:
-		return fmt.Errorf("hook を受ける socket のディレクトリを作成できません: %s: %w", dir, err)
+		return i18n.Errorf(i18n.KeySocketpathEnsureDirMkdirFailed, dir, err)
 	}
 }
 
@@ -199,22 +190,16 @@ func EnsureDir(dir string) error {
 func checkExistingDir(dir string) error {
 	info, err := os.Lstat(dir)
 	if err != nil {
-		return fmt.Errorf("既にある hook を受ける socket のディレクトリを確認できません: %s: %w", dir, err)
+		return i18n.Errorf(i18n.KeySocketpathCheckExistingDirLstatFailed, dir, err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return fmt.Errorf(
-			"hook を受ける socket のディレクトリ %s が symlink です"+
-				"（辿った先へ socket とロックファイルが落ちるため受け付けません）", dir)
+		return i18n.Errorf(i18n.KeySocketpathCheckExistingDirSymlink, dir)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("hook を受ける socket のディレクトリ %s がディレクトリではありません", dir)
+		return i18n.Errorf(i18n.KeySocketpathCheckExistingDirNotADirectory, dir)
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		return fmt.Errorf(
-			"既にある hook を受ける socket のディレクトリ %s の権限が %04o です。"+
-				"0700 にしてから起動してください"+
-				"（continuo は自分が作っていないディレクトリの権限を書き換えません）",
-			dir, perm)
+		return i18n.Errorf(i18n.KeySocketpathCheckExistingDirPermTooOpen, dir, perm)
 	}
 	return nil
 }

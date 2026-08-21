@@ -3,7 +3,8 @@ package herdr
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // メソッド名・params の引数名・result の形は 2026-08-18 に `herdr api schema --json` で
@@ -95,7 +96,7 @@ func (c *Client) WorktreeCreate(ctx context.Context, params WorktreeCreateParams
 	}
 	var result WorktreeCreateResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodWorktreeCreate, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodWorktreeCreate, err)
 	}
 	return &result, nil
 }
@@ -163,7 +164,7 @@ func (c *Client) WorktreeOpen(ctx context.Context, params WorktreeOpenParams) (*
 	}
 	var result WorktreeOpenResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodWorktreeOpen, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodWorktreeOpen, err)
 	}
 	return &result, nil
 }
@@ -218,7 +219,7 @@ func (c *Client) WorktreeRemove(ctx context.Context, params WorktreeRemoveParams
 	}
 	var result WorktreeRemoveResult
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("%s の応答を解析できません: %w", MethodWorktreeRemove, err)
+		return nil, i18n.Errorf(i18n.KeyHerdrCallUnmarshalFailed, MethodWorktreeRemove, err)
 	}
 	return &result, nil
 }
