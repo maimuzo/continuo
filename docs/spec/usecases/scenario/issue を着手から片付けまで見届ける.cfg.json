@@ -1,0 +1,397 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "issue を着手から片付けまで見届ける",
+  "source": {
+    "file": "docs/spec/usecases/scenario/issue を着手から片付けまで見届ける.rucm.md",
+    "rucm_block_sha256": "c22c657b0571a9e778080c574b401aa106cb6a7c56ea690661102824418bd1ce"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "issue の Status は terminal_states の選択肢である。issue にエージェントが書いたコメントが1件以上ある。worktree は置き場所に無い。branch は無い。印は外れている。herdr の pane は閉じている。"
+    },
+    "判断の依頼": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に利用者の回答のコメントがある。worktree と branch は残っている。前の run の herdr の pane は閉じている。"
+    },
+    "枠の上限": {
+      "when": "走行中の run が枠を使い切った場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "run は続いている。issue の Status は running_state の選択肢のままである。worktree は残っている。turn 数は1つ増えている。"
+    },
+    "常駐の再起動": {
+      "when": "continuo のプロセスが落ちて利用者が continuo を起動し直す場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            5
+          ]
+        }
+      ],
+      "postcondition": "引き継いだ issue は印の集合に入っている。issue の Status は running_state の選択肢のままである。worktree は残っている。身元ファイルの引き継いだ回数は1つ増えている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者は対象リポジトリに issue を作る。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "利用者はボードに issue の item を作る。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "利用者はボードの issue の Status に Ice Box の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "INCLUDE USE CASE issue を1件処理する",
+      "include": "issue を1件処理する"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT issue の Status が review の遷移先の選択肢である。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "利用者はボードの issue のコメントで作業の内容を読む。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "利用者は branch の変更をレビューする。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "利用者はボードの issue の Status に terminal_states の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "INCLUDE USE CASE worktree と branch を片付ける",
+      "include": "worktree と branch を片付ける"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは利用者に片付けの完了をログで応答する。"
+    },
+    {
+      "id": "判断の依頼-1",
+      "type": "include",
+      "flow": "判断の依頼",
+      "step": 1,
+      "statement": "INCLUDE USE CASE 人間に判断を渡す",
+      "include": "人間に判断を渡す"
+    },
+    {
+      "id": "判断の依頼-2",
+      "type": "resume",
+      "flow": "判断の依頼",
+      "step": 2,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "枠の上限-1",
+      "type": "include",
+      "flow": "枠の上限",
+      "step": 1,
+      "statement": "INCLUDE USE CASE レートリミットで待って再開する",
+      "include": "レートリミットで待って再開する"
+    },
+    {
+      "id": "枠の上限-2",
+      "type": "resume",
+      "flow": "枠の上限",
+      "step": 2,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "常駐の再起動-1",
+      "type": "include",
+      "flow": "常駐の再起動",
+      "step": 1,
+      "statement": "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
+      "include": "再起動して実行中の issue を引き継ぐ"
+    },
+    {
+      "id": "常駐の再起動-2",
+      "type": "resume",
+      "flow": "常駐の再起動",
+      "step": 2,
+      "statement": "RESUME STEP 5"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "枠の上限-1",
+      "kind": "global",
+      "condition": "走行中の run が枠を使い切った場合"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "常駐の再起動-1",
+      "kind": "global",
+      "condition": "continuo のプロセスが落ちて利用者が continuo を起動し直す場合"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "issue の Status が review の遷移先の選択肢である"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "判断の依頼-1",
+      "kind": "false",
+      "condition": "NOT issue の Status が review の遷移先の選択肢である"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "判断の依頼-1",
+      "to": "判断の依頼-2",
+      "kind": "seq"
+    },
+    {
+      "from": "判断の依頼-2",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "枠の上限-1",
+      "to": "枠の上限-2",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の上限-2",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    },
+    {
+      "from": "常駐の再起動-1",
+      "to": "常駐の再起動-2",
+      "kind": "seq"
+    },
+    {
+      "from": "常駐の再起動-2",
+      "to": "BASIC FLOW-5",
+      "kind": "resume"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue の Status は terminal_states の選択肢である。issue にエージェントが書いたコメントが1件以上ある。worktree は置き場所に無い。branch は無い。印は外れている。herdr の pane は閉じている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issue を1件処理する",
+        "システムは VALIDATES THAT issue の Status が review の遷移先の選択肢である。",
+        "利用者はボードの issue のコメントで作業の内容を読む。",
+        "利用者は branch の変更をレビューする。",
+        "利用者はボードの issue の Status に terminal_states の選択肢を書く。",
+        "INCLUDE USE CASE worktree と branch を片付ける",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "cycle",
+      "terminal_flow": "判断の依頼",
+      "postcondition": "issue の Status は dispatch_state の選択肢である。issue に利用者の回答のコメントがある。worktree と branch は残っている。前の run の herdr の pane は閉じている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "判断の依頼-1",
+        "判断の依頼-2",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issue を1件処理する",
+        "システムは VALIDATES THAT issue の Status が review の遷移先の選択肢である。",
+        "CONDITION: NOT issue の Status が review の遷移先の選択肢である",
+        "INCLUDE USE CASE 人間に判断を渡す",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issue を1件処理する"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "cycle",
+      "terminal_flow": "枠の上限",
+      "postcondition": "run は続いている。issue の Status は running_state の選択肢のままである。worktree は残っている。turn 数は1つ増えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "枠の上限-1",
+        "枠の上限-2",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issue を1件処理する",
+        "CONDITION: 走行中の run が枠を使い切った場合",
+        "INCLUDE USE CASE レートリミットで待って再開する",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issue を1件処理する"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "cycle",
+      "terminal_flow": "常駐の再起動",
+      "postcondition": "引き継いだ issue は印の集合に入っている。issue の Status は running_state の選択肢のままである。worktree は残っている。身元ファイルの引き継いだ回数は1つ増えている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "常駐の再起動-1",
+        "常駐の再起動-2",
+        "BASIC FLOW-5"
+      ],
+      "steps": [
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に Ice Box の選択肢を書く。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE issue を1件処理する",
+        "CONDITION: continuo のプロセスが落ちて利用者が continuo を起動し直す場合",
+        "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
+        "RESUME STEP 5",
+        "INCLUDE USE CASE issue を1件処理する"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 17,
+    "nodes_covered": 17,
+    "edges_total": 19,
+    "edges_covered": 19
+  }
+}

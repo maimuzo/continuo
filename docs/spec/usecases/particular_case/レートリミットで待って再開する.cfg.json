@@ -1,0 +1,1166 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "レートリミットで待って再開する",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
+    "rucm_block_sha256": "3bc4fd7becc782829840a4b7e7ed19c5c372f074c41021ccff290ff5da72e4bb"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "run の枠待ちの印は外れている。run の打ち切りの判定は再び効いている。run の turn 数は1つ増えている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。"
+    },
+    "枠を読めない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。"
+    },
+    "応答のあるrun": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。run の turn は続いている。"
+    },
+    "枠の残り": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "run の枠待ちの印は立っていない。画面の版が変わっていた run は動いている。画面の版が止まっていた run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。"
+    },
+    "自動継続": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          17
+        ]
+      },
+      "postcondition": "run の turn 数は増えていない。Claude Code は自分で継続している。投げた本文が消える二重投入は起きていない。"
+    },
+    "応答の途絶": {
+      "when": "継続の指示を送っても turn_timeout_ms のあいだ画面の版も hook も動かない場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            18
+          ]
+        }
+      ],
+      "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。印は残っている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "巡回タイマーはシステムに巡回の開始を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "IF どれかの枠の使用率が pause_above_percent を超えている THEN"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムはこの巡回で新規の dispatch を止める。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT 使用率が 100 に達している枠がある。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは run に枠待ちの印を立てる。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは run の打ち切りの判定を飛ばす。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは run の最後に動いていた時刻を進めない。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "UNTIL 枠のリセット時刻を過ぎている"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "システムは run から枠待ちの印を外す。"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 15,
+      "statement": "システムは run の打ち切りの時計を現在時刻に進める。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "システムは herdr に run の agent_status を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-17",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 17,
+      "statement": "システムは VALIDATES THAT agent_status が idle または done である。"
+    },
+    {
+      "id": "BASIC FLOW-18",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 18,
+      "statement": "システムは Claude Code に継続の指示を送る。"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
+      "statement": "システムは run の turn 数を1つ増やす。"
+    },
+    {
+      "id": "BASIC FLOW-20",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 20,
+      "statement": "システムは Claude Code の Stop hook を受ける。"
+    },
+    {
+      "id": "枠を読めない-1",
+      "type": "action",
+      "flow": "枠を読めない",
+      "step": 1,
+      "statement": "システムは枠待ちと無音を区別しない。"
+    },
+    {
+      "id": "枠を読めない-2",
+      "type": "action",
+      "flow": "枠を読めない",
+      "step": 2,
+      "statement": "システムは turn_timeout_ms のあいだ待つ。"
+    },
+    {
+      "id": "枠を読めない-3",
+      "type": "action",
+      "flow": "枠を読めない",
+      "step": 3,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "枠を読めない-4",
+      "type": "action",
+      "flow": "枠を読めない",
+      "step": 4,
+      "statement": "システムはリトライの回数を1つ増やす。"
+    },
+    {
+      "id": "枠を読めない-5",
+      "type": "action",
+      "flow": "枠を読めない",
+      "step": 5,
+      "statement": "システムはバックオフの期限を印に書く。"
+    },
+    {
+      "id": "枠を読めない-6",
+      "type": "abort",
+      "flow": "枠を読めない",
+      "step": 6,
+      "statement": "ABORT"
+    },
+    {
+      "id": "応答のあるrun-1",
+      "type": "action",
+      "flow": "応答のあるrun",
+      "step": 1,
+      "statement": "システムは run の時計を止めない。"
+    },
+    {
+      "id": "応答のあるrun-2",
+      "type": "action",
+      "flow": "応答のあるrun",
+      "step": 2,
+      "statement": "システムは run を枠待ちとみなさない。"
+    },
+    {
+      "id": "応答のあるrun-3",
+      "type": "abort",
+      "flow": "応答のあるrun",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "枠の残り-1",
+      "type": "action",
+      "flow": "枠の残り",
+      "step": 1,
+      "statement": "システムは herdr に run の agent_status と pane の画面の版を要求する。"
+    },
+    {
+      "id": "枠の残り-2",
+      "type": "condition",
+      "flow": "枠の残り",
+      "step": 2,
+      "statement": "IF 画面の版が前に見た値から変わっている THEN"
+    },
+    {
+      "id": "枠の残り-3",
+      "type": "action",
+      "flow": "枠の残り",
+      "step": 3,
+      "statement": "システムは run の打ち切りの時計を現在時刻に進める。"
+    },
+    {
+      "id": "枠の残り-4",
+      "type": "action",
+      "flow": "枠の残り",
+      "step": 4,
+      "statement": "システムは run の画面の版を新しい値に書き換える。"
+    },
+    {
+      "id": "枠の残り-6",
+      "type": "action",
+      "flow": "枠の残り",
+      "step": 6,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "枠の残り-7",
+      "type": "action",
+      "flow": "枠の残り",
+      "step": 7,
+      "statement": "システムはリトライの回数を1つ増やす。"
+    },
+    {
+      "id": "枠の残り-8",
+      "type": "action",
+      "flow": "枠の残り",
+      "step": 8,
+      "statement": "システムはバックオフの期限を印に書く。"
+    },
+    {
+      "id": "枠の残り-10",
+      "type": "abort",
+      "flow": "枠の残り",
+      "step": 10,
+      "statement": "ABORT"
+    },
+    {
+      "id": "自動継続-1",
+      "type": "action",
+      "flow": "自動継続",
+      "step": 1,
+      "statement": "システムは継続の指示を送らない。"
+    },
+    {
+      "id": "自動継続-2",
+      "type": "resume",
+      "flow": "自動継続",
+      "step": 2,
+      "statement": "RESUME STEP 20"
+    },
+    {
+      "id": "応答の途絶-1",
+      "type": "action",
+      "flow": "応答の途絶",
+      "step": 1,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "応答の途絶-2",
+      "type": "action",
+      "flow": "応答の途絶",
+      "step": 2,
+      "statement": "システムは worktree を残す。"
+    },
+    {
+      "id": "応答の途絶-3",
+      "type": "action",
+      "flow": "応答の途絶",
+      "step": 3,
+      "statement": "システムは issue を再 dispatch の対象にする。"
+    },
+    {
+      "id": "応答の途絶-4",
+      "type": "abort",
+      "flow": "応答の途絶",
+      "step": 4,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "Claude の usage API から枠の使用率とリセット時刻を読み取れる"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "枠を読めない-1",
+      "kind": "false",
+      "condition": "NOT Claude の usage API から枠の使用率とリセット時刻を読み取れる"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "どれかの枠の使用率が pause_above_percent を超えている"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-6",
+      "kind": "false",
+      "condition": "NOT どれかの枠の使用率が pause_above_percent を超えている"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "応答のあるrun-1",
+      "kind": "false",
+      "condition": "NOT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "使用率が 100 に達している枠がある"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "枠の残り-1",
+      "kind": "false",
+      "condition": "NOT 使用率が 100 に達している枠がある"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "true",
+      "condition": "枠のリセット時刻を過ぎている"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-12",
+      "kind": "loop",
+      "condition": "NOT 枠のリセット時刻を過ぎている"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "BASIC FLOW-17",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
+      "kind": "true",
+      "condition": "agent_status が idle または done である"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "自動継続-1",
+      "kind": "false",
+      "condition": "NOT agent_status が idle または done である"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "応答の途絶-1",
+      "kind": "global",
+      "condition": "継続の指示を送っても turn_timeout_ms のあいだ画面の版も hook も動かない場合"
+    },
+    {
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
+      "kind": "seq"
+    },
+    {
+      "from": "枠を読めない-1",
+      "to": "枠を読めない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "枠を読めない-2",
+      "to": "枠を読めない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "枠を読めない-3",
+      "to": "枠を読めない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "枠を読めない-4",
+      "to": "枠を読めない-5",
+      "kind": "seq"
+    },
+    {
+      "from": "枠を読めない-5",
+      "to": "枠を読めない-6",
+      "kind": "seq"
+    },
+    {
+      "from": "応答のあるrun-1",
+      "to": "応答のあるrun-2",
+      "kind": "seq"
+    },
+    {
+      "from": "応答のあるrun-2",
+      "to": "応答のあるrun-3",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の残り-1",
+      "to": "枠の残り-2",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の残り-2",
+      "to": "枠の残り-3",
+      "kind": "true",
+      "condition": "画面の版が前に見た値から変わっている"
+    },
+    {
+      "from": "枠の残り-2",
+      "to": "枠の残り-6",
+      "kind": "false",
+      "condition": "NOT 画面の版が前に見た値から変わっている"
+    },
+    {
+      "from": "枠の残り-3",
+      "to": "枠の残り-4",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の残り-4",
+      "to": "枠の残り-10",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の残り-6",
+      "to": "枠の残り-7",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の残り-7",
+      "to": "枠の残り-8",
+      "kind": "seq"
+    },
+    {
+      "from": "枠の残り-8",
+      "to": "枠の残り-10",
+      "kind": "seq"
+    },
+    {
+      "from": "自動継続-1",
+      "to": "自動継続-2",
+      "kind": "seq"
+    },
+    {
+      "from": "自動継続-2",
+      "to": "BASIC FLOW-20",
+      "kind": "resume"
+    },
+    {
+      "from": "応答の途絶-1",
+      "to": "応答の途絶-2",
+      "kind": "seq"
+    },
+    {
+      "from": "応答の途絶-2",
+      "to": "応答の途絶-3",
+      "kind": "seq"
+    },
+    {
+      "from": "応答の途絶-3",
+      "to": "応答の途絶-4",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "run の枠待ちの印は外れている。run の打ち切りの判定は再び効いている。run の turn 数は1つ増えている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "システムはこの巡回で新規の dispatch を止める。",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "システムは run に枠待ちの印を立てる。",
+        "システムは run の打ち切りの判定を飛ばす。",
+        "システムは run の最後に動いていた時刻を進めない。",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
+        "UNTIL 枠のリセット時刻を過ぎている",
+        "システムは run から枠待ちの印を外す。",
+        "システムは run の打ち切りの時計を現在時刻に進める。",
+        "システムは herdr に run の agent_status を要求する。",
+        "システムは VALIDATES THAT agent_status が idle または done である。",
+        "システムは Claude Code に継続の指示を送る。",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは Claude Code の Stop hook を受ける。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "応答の途絶",
+      "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。印は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "応答の途絶-1",
+        "応答の途絶-2",
+        "応答の途絶-3",
+        "応答の途絶-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "システムはこの巡回で新規の dispatch を止める。",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "システムは run に枠待ちの印を立てる。",
+        "システムは run の打ち切りの判定を飛ばす。",
+        "システムは run の最後に動いていた時刻を進めない。",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
+        "UNTIL 枠のリセット時刻を過ぎている",
+        "システムは run から枠待ちの印を外す。",
+        "システムは run の打ち切りの時計を現在時刻に進める。",
+        "システムは herdr に run の agent_status を要求する。",
+        "システムは VALIDATES THAT agent_status が idle または done である。",
+        "システムは Claude Code に継続の指示を送る。",
+        "CONDITION: 継続の指示を送っても turn_timeout_ms のあいだ画面の版も hook も動かない場合",
+        "システムは herdr の pane を閉じる。",
+        "システムは worktree を残す。",
+        "システムは issue を再 dispatch の対象にする。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "run の枠待ちの印は外れている。run の打ち切りの判定は再び効いている。run の turn 数は1つ増えている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "自動継続-1",
+        "自動継続-2",
+        "BASIC FLOW-20"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "システムはこの巡回で新規の dispatch を止める。",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "システムは run に枠待ちの印を立てる。",
+        "システムは run の打ち切りの判定を飛ばす。",
+        "システムは run の最後に動いていた時刻を進めない。",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
+        "UNTIL 枠のリセット時刻を過ぎている",
+        "システムは run から枠待ちの印を外す。",
+        "システムは run の打ち切りの時計を現在時刻に進める。",
+        "システムは herdr に run の agent_status を要求する。",
+        "システムは VALIDATES THAT agent_status が idle または done である。",
+        "CONDITION: NOT agent_status が idle または done である",
+        "システムは継続の指示を送らない。",
+        "RESUME STEP 20",
+        "システムは Claude Code の Stop hook を受ける。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "cycle",
+      "terminal_flow": "",
+      "postcondition": "",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "システムはこの巡回で新規の dispatch を止める。",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "システムは run に枠待ちの印を立てる。",
+        "システムは run の打ち切りの判定を飛ばす。",
+        "システムは run の最後に動いていた時刻を進めない。",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
+        "UNTIL 枠のリセット時刻を過ぎている",
+        "CONDITION: NOT 枠のリセット時刻を過ぎている",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "枠の残り",
+      "postcondition": "run の枠待ちの印は立っていない。画面の版が変わっていた run は動いている。画面の版が止まっていた run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "枠の残り-1",
+        "枠の残り-2",
+        "枠の残り-3",
+        "枠の残り-4",
+        "枠の残り-10"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "システムはこの巡回で新規の dispatch を止める。",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "CONDITION: NOT 使用率が 100 に達している枠がある",
+        "システムは herdr に run の agent_status と pane の画面の版を要求する。",
+        "IF 画面の版が前に見た値から変わっている THEN",
+        "システムは run の打ち切りの時計を現在時刻に進める。",
+        "システムは run の画面の版を新しい値に書き換える。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "枠の残り",
+      "postcondition": "run の枠待ちの印は立っていない。画面の版が変わっていた run は動いている。画面の版が止まっていた run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "枠の残り-1",
+        "枠の残り-2",
+        "枠の残り-6",
+        "枠の残り-7",
+        "枠の残り-8",
+        "枠の残り-10"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "システムはこの巡回で新規の dispatch を止める。",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "CONDITION: NOT 使用率が 100 に達している枠がある",
+        "システムは herdr に run の agent_status と pane の画面の版を要求する。",
+        "IF 画面の版が前に見た値から変わっている THEN",
+        "CONDITION: NOT 画面の版が前に見た値から変わっている",
+        "システムは herdr の pane を閉じる。",
+        "システムはリトライの回数を1つ増やす。",
+        "システムはバックオフの期限を印に書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "応答のあるrun",
+      "postcondition": "run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。run の turn は続いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-6",
+        "応答のあるrun-1",
+        "応答のあるrun-2",
+        "応答のあるrun-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "システムはこの巡回で新規の dispatch を止める。",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "CONDITION: NOT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない",
+        "システムは run の時計を止めない。",
+        "システムは run を枠待ちとみなさない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "run の枠待ちの印は外れている。run の打ち切りの判定は再び効いている。run の turn 数は1つ増えている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "システムは run に枠待ちの印を立てる。",
+        "システムは run の打ち切りの判定を飛ばす。",
+        "システムは run の最後に動いていた時刻を進めない。",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
+        "UNTIL 枠のリセット時刻を過ぎている",
+        "システムは run から枠待ちの印を外す。",
+        "システムは run の打ち切りの時計を現在時刻に進める。",
+        "システムは herdr に run の agent_status を要求する。",
+        "システムは VALIDATES THAT agent_status が idle または done である。",
+        "システムは Claude Code に継続の指示を送る。",
+        "システムは run の turn 数を1つ増やす。",
+        "システムは Claude Code の Stop hook を受ける。"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "応答の途絶",
+      "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。印は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "応答の途絶-1",
+        "応答の途絶-2",
+        "応答の途絶-3",
+        "応答の途絶-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "システムは run に枠待ちの印を立てる。",
+        "システムは run の打ち切りの判定を飛ばす。",
+        "システムは run の最後に動いていた時刻を進めない。",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
+        "UNTIL 枠のリセット時刻を過ぎている",
+        "システムは run から枠待ちの印を外す。",
+        "システムは run の打ち切りの時計を現在時刻に進める。",
+        "システムは herdr に run の agent_status を要求する。",
+        "システムは VALIDATES THAT agent_status が idle または done である。",
+        "システムは Claude Code に継続の指示を送る。",
+        "CONDITION: 継続の指示を送っても turn_timeout_ms のあいだ画面の版も hook も動かない場合",
+        "システムは herdr の pane を閉じる。",
+        "システムは worktree を残す。",
+        "システムは issue を再 dispatch の対象にする。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "run の枠待ちの印は外れている。run の打ち切りの判定は再び効いている。run の turn 数は1つ増えている。issue の Status は running_state の選択肢のままである。herdr の pane は閉じていない。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "自動継続-1",
+        "自動継続-2",
+        "BASIC FLOW-20"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "システムは run に枠待ちの印を立てる。",
+        "システムは run の打ち切りの判定を飛ばす。",
+        "システムは run の最後に動いていた時刻を進めない。",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
+        "UNTIL 枠のリセット時刻を過ぎている",
+        "システムは run から枠待ちの印を外す。",
+        "システムは run の打ち切りの時計を現在時刻に進める。",
+        "システムは herdr に run の agent_status を要求する。",
+        "システムは VALIDATES THAT agent_status が idle または done である。",
+        "CONDITION: NOT agent_status が idle または done である",
+        "システムは継続の指示を送らない。",
+        "RESUME STEP 20",
+        "システムは Claude Code の Stop hook を受ける。"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "cycle",
+      "terminal_flow": "",
+      "postcondition": "",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-12"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "システムは run に枠待ちの印を立てる。",
+        "システムは run の打ち切りの判定を飛ばす。",
+        "システムは run の最後に動いていた時刻を進めない。",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
+        "UNTIL 枠のリセット時刻を過ぎている",
+        "CONDITION: NOT 枠のリセット時刻を過ぎている",
+        "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "abort",
+      "terminal_flow": "枠の残り",
+      "postcondition": "run の枠待ちの印は立っていない。画面の版が変わっていた run は動いている。画面の版が止まっていた run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "枠の残り-1",
+        "枠の残り-2",
+        "枠の残り-3",
+        "枠の残り-4",
+        "枠の残り-10"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "CONDITION: NOT 使用率が 100 に達している枠がある",
+        "システムは herdr に run の agent_status と pane の画面の版を要求する。",
+        "IF 画面の版が前に見た値から変わっている THEN",
+        "システムは run の打ち切りの時計を現在時刻に進める。",
+        "システムは run の画面の版を新しい値に書き換える。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "abort",
+      "terminal_flow": "枠の残り",
+      "postcondition": "run の枠待ちの印は立っていない。画面の版が変わっていた run は動いている。画面の版が止まっていた run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "枠の残り-1",
+        "枠の残り-2",
+        "枠の残り-6",
+        "枠の残り-7",
+        "枠の残り-8",
+        "枠の残り-10"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "システムは VALIDATES THAT 使用率が 100 に達している枠がある。",
+        "CONDITION: NOT 使用率が 100 に達している枠がある",
+        "システムは herdr に run の agent_status と pane の画面の版を要求する。",
+        "IF 画面の版が前に見た値から変わっている THEN",
+        "CONDITION: NOT 画面の版が前に見た値から変わっている",
+        "システムは herdr の pane を閉じる。",
+        "システムはリトライの回数を1つ増やす。",
+        "システムはバックオフの期限を印に書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "abort",
+      "terminal_flow": "応答のあるrun",
+      "postcondition": "run の枠待ちの印は立っていない。run の打ち切りの判定は効いている。run の turn は続いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-6",
+        "応答のあるrun-1",
+        "応答のあるrun-2",
+        "応答のあるrun-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "IF どれかの枠の使用率が pause_above_percent を超えている THEN",
+        "CONDITION: NOT どれかの枠の使用率が pause_above_percent を超えている",
+        "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
+        "CONDITION: NOT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない",
+        "システムは run の時計を止めない。",
+        "システムは run を枠待ちとみなさない。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "abort",
+      "terminal_flow": "枠を読めない",
+      "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "枠を読めない-1",
+        "枠を読めない-2",
+        "枠を読めない-3",
+        "枠を読めない-4",
+        "枠を読めない-5",
+        "枠を読めない-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
+        "CONDITION: NOT Claude の usage API から枠の使用率とリセット時刻を読み取れる",
+        "システムは枠待ちと無音を区別しない。",
+        "システムは turn_timeout_ms のあいだ待つ。",
+        "システムは herdr の pane を閉じる。",
+        "システムはリトライの回数を1つ増やす。",
+        "システムはバックオフの期限を印に書く。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 41,
+    "nodes_covered": 41,
+    "edges_total": 44,
+    "edges_covered": 44
+  }
+}

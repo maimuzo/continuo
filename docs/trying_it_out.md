@@ -70,7 +70,8 @@ below says which steps were actually executed while writing this document and wh
 | --- | --- |
 | **ボードは作らない** | continuo は**既にあるボードに後から足して使う。**足りない選択肢があるときだけ画面で足す（段2） |
 | **段8 から枠を消費する** | 実際に Claude Code が起動し、issue を実装しようとする |
-| **止めるのは `Ctrl+C`** | 巡回を止め、hook の受け口を閉じ、turn の終わりを待ってから抜ける。**pane は閉じない**（次の起動で引き継ぐ） |
+| **draft item は動かない** | ボードの draft item は**リポジトリを持たないので作業場所を決められない。**continuo は着手せず飛ばす。**リポジトリの issue を載せること** |
+| **止めるのは `Ctrl+C`** | 巡回を止め、hook の受け口を閉じ、turn ループを畳んで抜ける。**Claude Code はそのまま動き続ける。pane は閉じない**（次の起動で引き継ぐ） |
 
 ---
 
@@ -193,7 +194,7 @@ Size: XS, S, M, L, XL
 | 選択肢 | 何に使うか | `WORKFLOW.md` のどのキーか |
 | --- | --- | --- |
 | `Ready` | **ここに置いた issue を continuo が取る** | `dispatch_state` |
-| `In Progress` | 取ったときに continuo が書き込む | `running_state` |
+| `In Progress` | 処理開始したときに continuo が書き込む | `running_state` |
 | `In Review` | エージェントが `CONTINUO-STATUS: review` を出すと入る | `status_signal_map.review` |
 | `Blocked` | 判断を仰ぐとき、または打ち切ったときに入る | `failure_state` |
 | `Done` | **人間がここへ動かすと、continuo が worktree と branch を片付ける** | `terminal_states` |
@@ -558,7 +559,7 @@ trust:
 
 #### 信頼が無いまま段8 へ進むとどうなるか
 
-**continuo はその issue を取らない。worktree も pane も作らない。**
+**continuo はその issue の処理を開始しない。worktree も pane も作らない。**
 **そのリポジトリにつき1回、issue にコメントを投稿する**（`trust.on_untrusted` は
 `skip_and_comment` のみ。他の値は設定として受け付けない）。
 
@@ -929,7 +930,7 @@ cd ~/continuo-try
 | --- | --- | --- |
 | 1 | 設定を読み、`flock` を取り、前提を検査する | 標準エラーのログ |
 | 2 | 置き場所を走査して、引き継ぐ run を探す（初回は0件） | 同上 |
-| 3 | `Ready` の issue を取り、**Status を `In Progress` へ書く** | **ボードで見える** |
+| 3 | `Ready` の issue の処理を開始し、**Status を `In Progress` へ書く** | **ボードで見える** |
 | 4 | worktree を作り、herdr の pane で Claude Code を起動する | **herdr の画面で見える** |
 | 5 | エージェントが作業し、`CONTINUO-STATUS:` の行を出す | herdr の pane |
 | 6 | continuo がその行を読み、**Status を `In Review` へ動かす** | **ボードで見える** |
@@ -1062,7 +1063,7 @@ level=INFO msg=continuo を終了しました
 
 | 症状 | 見るところ |
 | --- | --- |
-| **issue を取ってくれない** | Status が `Ready` か。`doctor` の `ボード` と `信頼登録` が `✓` か。**信頼の門番は `~/.claude.json` である**（`trust.repositories` に書くだけでは足りない。`continuo trust` の実行が要る。段5） |
+| **issue の処理が始まらない** | Status が `Ready` か。`doctor` の `ボード` と `信頼登録` が `✓` か。**信頼の門番は `~/.claude.json` である**（`trust.repositories` に書くだけでは足りない。`continuo trust` の実行が要る。段5） |
 | **別のフィールドを書き換えている** | `status_field` が段2 で確かめた名前になっているか。continuo は `status_field` に書いた名前のフィールドしか読み書きしない |
 | **信頼していないリポジトリの issue を飛ばしている** | `doctor` の `信頼登録` が `✓` か。**未信頼だと worktree も pane も作られない。**そのリポジトリにつき1回、**issue にコメントが投稿される**（直し方もそこに書いてある） |
 | **`In Review` にならない** | エージェントが `CONTINUO-STATUS: review` を出しているか。herdr の pane で応答を見る |

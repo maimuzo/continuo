@@ -344,6 +344,7 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 				}
 				pane["agent"] = "claude"
 				pane["agent_status"] = "idle"
+				pane["interactive_ready"] = true
 				pane["agent_session"] = map[string]any{
 					"source": "herdr:claude", "agent": "claude",
 					"kind": "id", "value": sess.SessionUUID,
@@ -379,7 +380,7 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 		agents := []any{}
 		for _, sess := range fh.agents {
 			agents = append(agents, map[string]any{
-				"name": sess.Name, "agent": "claude", "agent_status": "idle",
+				"name": sess.Name, "agent": "claude", "agent_status": "idle", "interactive_ready": true,
 				"pane_id": sess.PaneID, "tab_id": "t1",
 				"workspace_id": fh.panes[sess.PaneID], "terminal_id": "term1",
 				"focused": false, "revision": 1,
@@ -419,7 +420,7 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 		return map[string]any{
 			"type": "agent_started",
 			"agent": map[string]any{
-				"name": name, "agent_status": "idle", "pane_id": paneID,
+				"name": name, "agent_status": "idle", "interactive_ready": true, "pane_id": paneID,
 			},
 		}, nil
 	})
@@ -427,7 +428,7 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 	agentInfo := func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
 			"type":  "agent_info",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	}
 	fh.Handle("agent.get", agentInfo)
@@ -454,7 +455,7 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 		}
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": target, "agent_status": "idle"},
+			"agent": map[string]any{"name": target, "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 }

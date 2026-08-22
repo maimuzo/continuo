@@ -1,0 +1,1011 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "ボードを新規に用意する",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/ボードを新規に用意する.rucm.md",
+    "rucm_block_sha256": "a622b1a24858dedff3507374d2f376bbf3b98aa8db985d868e45ab282b1dd27c"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "新しいボードが GitHub にある。continuo Status フィールドが新しいボードにある。continuo Status フィールドの選択肢は Ready と In Progress と In Review と Blocked と Done の5つである。GitHub が組み込みで作る Status フィールドの選択肢は Todo と In Progress と Done の3つのままである。新しいボードの番号と continuo Status フィールドの名前が利用者に表示されている。"
+    },
+    "gh未導入": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "新しいボードは作成されていない。gh の導入手順が利用者に表示されている。"
+    },
+    "認証不足": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "新しいボードは作成されていない。gh の認証をやり直すコマンドが利用者に表示されている。"
+    },
+    "ボード名重複": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          6
+        ]
+      },
+      "postcondition": "新しいボードは作成されていない。同じ名前のボードの番号が利用者に表示されている。"
+    },
+    "作成失敗": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          8,
+          11
+        ]
+      },
+      "postcondition": "continuo Status フィールドは作成されていない。GitHub が返したエラーの内容が利用者に表示されている。"
+    },
+    "選択肢不足": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          13
+        ]
+      },
+      "postcondition": "新しいボードが GitHub にある。continuo Status フィールドに足りない選択肢がある。足りない選択肢の名前と2通りの直し方が利用者に表示されている。"
+    },
+    "中断": {
+      "when": "利用者がボードの作成の途中で中断を要求した場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            10
+          ]
+        }
+      ],
+      "postcondition": "新しいボードが GitHub にある。continuo Status フィールドは作成されていない。新しいボードの番号と新しいボードを消すコマンドが利用者に表示されている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに新しいボードの名前を送信する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "利用者はシステムにボードの新規作成を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT gh コマンドを実行できる。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは GitHub に owner が持つボードの一覧を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは GitHub に新しいボードの作成を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは VALIDATES THAT GitHub が新しいボードの番号を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは利用者に新しいボードの番号を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは GitHub に continuo Status フィールドの作成を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは VALIDATES THAT GitHub が continuo Status フィールドの作成の完了を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは GitHub に continuo Status フィールドの選択肢の一覧を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "システムは VALIDATES THAT continuo が推奨する5つの選択肢が continuo Status フィールドに全部ある。"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "システムは利用者に新しいボードの番号と continuo Status フィールドの名前を応答する。"
+    },
+    {
+      "id": "gh未導入-1",
+      "type": "action",
+      "flow": "gh未導入",
+      "step": 1,
+      "statement": "システムは利用者に gh コマンドが見つからないことを応答する。"
+    },
+    {
+      "id": "gh未導入-2",
+      "type": "action",
+      "flow": "gh未導入",
+      "step": 2,
+      "statement": "システムは利用者に gh の導入手順を応答する。"
+    },
+    {
+      "id": "gh未導入-3",
+      "type": "abort",
+      "flow": "gh未導入",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "認証不足-1",
+      "type": "condition",
+      "flow": "認証不足",
+      "step": 1,
+      "statement": "IF gh が github.com の有効なアカウントを持っている THEN"
+    },
+    {
+      "id": "認証不足-2",
+      "type": "action",
+      "flow": "認証不足",
+      "step": 2,
+      "statement": "システムは利用者にトークンの scope に project がないことを応答する。"
+    },
+    {
+      "id": "認証不足-3",
+      "type": "action",
+      "flow": "認証不足",
+      "step": 3,
+      "statement": "システムは利用者に scope を足すコマンドを応答する。"
+    },
+    {
+      "id": "認証不足-5",
+      "type": "action",
+      "flow": "認証不足",
+      "step": 5,
+      "statement": "システムは利用者に gh が github.com のアカウントを持っていないことを応答する。"
+    },
+    {
+      "id": "認証不足-6",
+      "type": "action",
+      "flow": "認証不足",
+      "step": 6,
+      "statement": "システムは利用者に scope を指定してログインするコマンドを応答する。"
+    },
+    {
+      "id": "認証不足-8",
+      "type": "abort",
+      "flow": "認証不足",
+      "step": 8,
+      "statement": "ABORT"
+    },
+    {
+      "id": "ボード名重複-1",
+      "type": "action",
+      "flow": "ボード名重複",
+      "step": 1,
+      "statement": "システムは利用者に同じ名前のボードが既にあることを応答する。"
+    },
+    {
+      "id": "ボード名重複-2",
+      "type": "action",
+      "flow": "ボード名重複",
+      "step": 2,
+      "statement": "システムは利用者に同じ名前のボードの番号を応答する。"
+    },
+    {
+      "id": "ボード名重複-3",
+      "type": "action",
+      "flow": "ボード名重複",
+      "step": 3,
+      "statement": "システムは利用者に別の名前を送信するよう要求する。"
+    },
+    {
+      "id": "ボード名重複-4",
+      "type": "resume",
+      "flow": "ボード名重複",
+      "step": 4,
+      "statement": "RESUME STEP 1"
+    },
+    {
+      "id": "作成失敗-1",
+      "type": "action",
+      "flow": "作成失敗",
+      "step": 1,
+      "statement": "システムは利用者に GitHub が返したエラーの内容を応答する。"
+    },
+    {
+      "id": "作成失敗-2",
+      "type": "condition",
+      "flow": "作成失敗",
+      "step": 2,
+      "statement": "IF 新しいボードが GitHub にある THEN"
+    },
+    {
+      "id": "作成失敗-3",
+      "type": "action",
+      "flow": "作成失敗",
+      "step": 3,
+      "statement": "システムは利用者に新しいボードの番号を応答する。"
+    },
+    {
+      "id": "作成失敗-4",
+      "type": "action",
+      "flow": "作成失敗",
+      "step": 4,
+      "statement": "システムは利用者に新しいボードを消すコマンドを応答する。"
+    },
+    {
+      "id": "作成失敗-6",
+      "type": "abort",
+      "flow": "作成失敗",
+      "step": 6,
+      "statement": "ABORT"
+    },
+    {
+      "id": "選択肢不足-1",
+      "type": "action",
+      "flow": "選択肢不足",
+      "step": 1,
+      "statement": "システムは利用者に continuo Status フィールドに足りない選択肢の名前を応答する。"
+    },
+    {
+      "id": "選択肢不足-2",
+      "type": "action",
+      "flow": "選択肢不足",
+      "step": 2,
+      "statement": "システムは利用者に GitHub の画面から選択肢を足す手順を応答する。"
+    },
+    {
+      "id": "選択肢不足-3",
+      "type": "action",
+      "flow": "選択肢不足",
+      "step": 3,
+      "statement": "システムは利用者に選択肢を足す API を使わないことを応答する。"
+    },
+    {
+      "id": "選択肢不足-4",
+      "type": "action",
+      "flow": "選択肢不足",
+      "step": 4,
+      "statement": "システムは利用者に対象にする Status を Todo と In Progress に縮める設定の書き方を応答する。"
+    },
+    {
+      "id": "選択肢不足-5",
+      "type": "abort",
+      "flow": "選択肢不足",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "中断-1",
+      "type": "action",
+      "flow": "中断",
+      "step": 1,
+      "statement": "システムは GitHub への要求を打ち切る。"
+    },
+    {
+      "id": "中断-2",
+      "type": "action",
+      "flow": "中断",
+      "step": 2,
+      "statement": "システムは利用者に新しいボードの番号を応答する。"
+    },
+    {
+      "id": "中断-3",
+      "type": "action",
+      "flow": "中断",
+      "step": 3,
+      "statement": "システムは利用者に continuo Status フィールドがないことを応答する。"
+    },
+    {
+      "id": "中断-4",
+      "type": "action",
+      "flow": "中断",
+      "step": 4,
+      "statement": "システムは利用者に新しいボードを消すコマンドを応答する。"
+    },
+    {
+      "id": "中断-5",
+      "type": "abort",
+      "flow": "中断",
+      "step": 5,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "gh コマンドを実行できる"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "gh未導入-1",
+      "kind": "false",
+      "condition": "NOT gh コマンドを実行できる"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "認証不足-1",
+      "kind": "false",
+      "condition": "NOT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "新しいボードの名前が既存のボードの名前と重複していない"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "ボード名重複-1",
+      "kind": "false",
+      "condition": "NOT 新しいボードの名前が既存のボードの名前と重複していない"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "true",
+      "condition": "GitHub が新しいボードの番号を応答する"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "作成失敗-1",
+      "kind": "false",
+      "condition": "NOT GitHub が新しいボードの番号を応答する"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "中断-1",
+      "kind": "global",
+      "condition": "利用者がボードの作成の途中で中断を要求した場合"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "true",
+      "condition": "GitHub が continuo Status フィールドの作成の完了を応答する"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "作成失敗-1",
+      "kind": "false",
+      "condition": "NOT GitHub が continuo Status フィールドの作成の完了を応答する"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "true",
+      "condition": "continuo が推奨する5つの選択肢が continuo Status フィールドに全部ある"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "選択肢不足-1",
+      "kind": "false",
+      "condition": "NOT continuo が推奨する5つの選択肢が continuo Status フィールドに全部ある"
+    },
+    {
+      "from": "gh未導入-1",
+      "to": "gh未導入-2",
+      "kind": "seq"
+    },
+    {
+      "from": "gh未導入-2",
+      "to": "gh未導入-3",
+      "kind": "seq"
+    },
+    {
+      "from": "認証不足-1",
+      "to": "認証不足-2",
+      "kind": "true",
+      "condition": "gh が github.com の有効なアカウントを持っている"
+    },
+    {
+      "from": "認証不足-1",
+      "to": "認証不足-5",
+      "kind": "false",
+      "condition": "NOT gh が github.com の有効なアカウントを持っている"
+    },
+    {
+      "from": "認証不足-2",
+      "to": "認証不足-3",
+      "kind": "seq"
+    },
+    {
+      "from": "認証不足-3",
+      "to": "認証不足-8",
+      "kind": "seq"
+    },
+    {
+      "from": "認証不足-5",
+      "to": "認証不足-6",
+      "kind": "seq"
+    },
+    {
+      "from": "認証不足-6",
+      "to": "認証不足-8",
+      "kind": "seq"
+    },
+    {
+      "from": "ボード名重複-1",
+      "to": "ボード名重複-2",
+      "kind": "seq"
+    },
+    {
+      "from": "ボード名重複-2",
+      "to": "ボード名重複-3",
+      "kind": "seq"
+    },
+    {
+      "from": "ボード名重複-3",
+      "to": "ボード名重複-4",
+      "kind": "seq"
+    },
+    {
+      "from": "ボード名重複-4",
+      "to": "BASIC FLOW-1",
+      "kind": "resume"
+    },
+    {
+      "from": "作成失敗-1",
+      "to": "作成失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "作成失敗-2",
+      "to": "作成失敗-3",
+      "kind": "true",
+      "condition": "新しいボードが GitHub にある"
+    },
+    {
+      "from": "作成失敗-2",
+      "to": "作成失敗-6",
+      "kind": "false",
+      "condition": "NOT 新しいボードが GitHub にある"
+    },
+    {
+      "from": "作成失敗-3",
+      "to": "作成失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "作成失敗-4",
+      "to": "作成失敗-6",
+      "kind": "seq"
+    },
+    {
+      "from": "選択肢不足-1",
+      "to": "選択肢不足-2",
+      "kind": "seq"
+    },
+    {
+      "from": "選択肢不足-2",
+      "to": "選択肢不足-3",
+      "kind": "seq"
+    },
+    {
+      "from": "選択肢不足-3",
+      "to": "選択肢不足-4",
+      "kind": "seq"
+    },
+    {
+      "from": "選択肢不足-4",
+      "to": "選択肢不足-5",
+      "kind": "seq"
+    },
+    {
+      "from": "中断-1",
+      "to": "中断-2",
+      "kind": "seq"
+    },
+    {
+      "from": "中断-2",
+      "to": "中断-3",
+      "kind": "seq"
+    },
+    {
+      "from": "中断-3",
+      "to": "中断-4",
+      "kind": "seq"
+    },
+    {
+      "from": "中断-4",
+      "to": "中断-5",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "新しいボードが GitHub にある。continuo Status フィールドが新しいボードにある。continuo Status フィールドの選択肢は Ready と In Progress と In Review と Blocked と Done の5つである。GitHub が組み込みで作る Status フィールドの選択肢は Todo と In Progress と Done の3つのままである。新しいボードの番号と continuo Status フィールドの名前が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "システムは GitHub に owner が持つボードの一覧を要求する。",
+        "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。",
+        "システムは GitHub に新しいボードの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が新しいボードの番号を応答する。",
+        "システムは利用者に新しいボードの番号を応答する。",
+        "システムは GitHub に continuo Status フィールドの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が continuo Status フィールドの作成の完了を応答する。",
+        "システムは GitHub に continuo Status フィールドの選択肢の一覧を要求する。",
+        "システムは VALIDATES THAT continuo が推奨する5つの選択肢が continuo Status フィールドに全部ある。",
+        "システムは利用者に新しいボードの番号と continuo Status フィールドの名前を応答する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "選択肢不足",
+      "postcondition": "新しいボードが GitHub にある。continuo Status フィールドに足りない選択肢がある。足りない選択肢の名前と2通りの直し方が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "選択肢不足-1",
+        "選択肢不足-2",
+        "選択肢不足-3",
+        "選択肢不足-4",
+        "選択肢不足-5"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "システムは GitHub に owner が持つボードの一覧を要求する。",
+        "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。",
+        "システムは GitHub に新しいボードの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が新しいボードの番号を応答する。",
+        "システムは利用者に新しいボードの番号を応答する。",
+        "システムは GitHub に continuo Status フィールドの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が continuo Status フィールドの作成の完了を応答する。",
+        "システムは GitHub に continuo Status フィールドの選択肢の一覧を要求する。",
+        "システムは VALIDATES THAT continuo が推奨する5つの選択肢が continuo Status フィールドに全部ある。",
+        "CONDITION: NOT continuo が推奨する5つの選択肢が continuo Status フィールドに全部ある",
+        "システムは利用者に continuo Status フィールドに足りない選択肢の名前を応答する。",
+        "システムは利用者に GitHub の画面から選択肢を足す手順を応答する。",
+        "システムは利用者に選択肢を足す API を使わないことを応答する。",
+        "システムは利用者に対象にする Status を Todo と In Progress に縮める設定の書き方を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "作成失敗",
+      "postcondition": "continuo Status フィールドは作成されていない。GitHub が返したエラーの内容が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "作成失敗-1",
+        "作成失敗-2",
+        "作成失敗-3",
+        "作成失敗-4",
+        "作成失敗-6"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "システムは GitHub に owner が持つボードの一覧を要求する。",
+        "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。",
+        "システムは GitHub に新しいボードの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が新しいボードの番号を応答する。",
+        "システムは利用者に新しいボードの番号を応答する。",
+        "システムは GitHub に continuo Status フィールドの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が continuo Status フィールドの作成の完了を応答する。",
+        "CONDITION: NOT GitHub が continuo Status フィールドの作成の完了を応答する",
+        "システムは利用者に GitHub が返したエラーの内容を応答する。",
+        "IF 新しいボードが GitHub にある THEN",
+        "システムは利用者に新しいボードの番号を応答する。",
+        "システムは利用者に新しいボードを消すコマンドを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "作成失敗",
+      "postcondition": "continuo Status フィールドは作成されていない。GitHub が返したエラーの内容が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "作成失敗-1",
+        "作成失敗-2",
+        "作成失敗-6"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "システムは GitHub に owner が持つボードの一覧を要求する。",
+        "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。",
+        "システムは GitHub に新しいボードの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が新しいボードの番号を応答する。",
+        "システムは利用者に新しいボードの番号を応答する。",
+        "システムは GitHub に continuo Status フィールドの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が continuo Status フィールドの作成の完了を応答する。",
+        "CONDITION: NOT GitHub が continuo Status フィールドの作成の完了を応答する",
+        "システムは利用者に GitHub が返したエラーの内容を応答する。",
+        "IF 新しいボードが GitHub にある THEN",
+        "CONDITION: NOT 新しいボードが GitHub にある",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "中断",
+      "postcondition": "新しいボードが GitHub にある。continuo Status フィールドは作成されていない。新しいボードの番号と新しいボードを消すコマンドが利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "中断-1",
+        "中断-2",
+        "中断-3",
+        "中断-4",
+        "中断-5"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "システムは GitHub に owner が持つボードの一覧を要求する。",
+        "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。",
+        "システムは GitHub に新しいボードの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が新しいボードの番号を応答する。",
+        "システムは利用者に新しいボードの番号を応答する。",
+        "システムは GitHub に continuo Status フィールドの作成を要求する。",
+        "CONDITION: 利用者がボードの作成の途中で中断を要求した場合",
+        "システムは GitHub への要求を打ち切る。",
+        "システムは利用者に新しいボードの番号を応答する。",
+        "システムは利用者に continuo Status フィールドがないことを応答する。",
+        "システムは利用者に新しいボードを消すコマンドを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "作成失敗",
+      "postcondition": "continuo Status フィールドは作成されていない。GitHub が返したエラーの内容が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "作成失敗-1",
+        "作成失敗-2",
+        "作成失敗-3",
+        "作成失敗-4",
+        "作成失敗-6"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "システムは GitHub に owner が持つボードの一覧を要求する。",
+        "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。",
+        "システムは GitHub に新しいボードの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が新しいボードの番号を応答する。",
+        "CONDITION: NOT GitHub が新しいボードの番号を応答する",
+        "システムは利用者に GitHub が返したエラーの内容を応答する。",
+        "IF 新しいボードが GitHub にある THEN",
+        "システムは利用者に新しいボードの番号を応答する。",
+        "システムは利用者に新しいボードを消すコマンドを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "作成失敗",
+      "postcondition": "continuo Status フィールドは作成されていない。GitHub が返したエラーの内容が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "作成失敗-1",
+        "作成失敗-2",
+        "作成失敗-6"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "システムは GitHub に owner が持つボードの一覧を要求する。",
+        "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。",
+        "システムは GitHub に新しいボードの作成を要求する。",
+        "システムは VALIDATES THAT GitHub が新しいボードの番号を応答する。",
+        "CONDITION: NOT GitHub が新しいボードの番号を応答する",
+        "システムは利用者に GitHub が返したエラーの内容を応答する。",
+        "IF 新しいボードが GitHub にある THEN",
+        "CONDITION: NOT 新しいボードが GitHub にある",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "cycle",
+      "terminal_flow": "ボード名重複",
+      "postcondition": "新しいボードは作成されていない。同じ名前のボードの番号が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "ボード名重複-1",
+        "ボード名重複-2",
+        "ボード名重複-3",
+        "ボード名重複-4",
+        "BASIC FLOW-1"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "システムは GitHub に owner が持つボードの一覧を要求する。",
+        "システムは VALIDATES THAT 新しいボードの名前が既存のボードの名前と重複していない。",
+        "CONDITION: NOT 新しいボードの名前が既存のボードの名前と重複していない",
+        "システムは利用者に同じ名前のボードが既にあることを応答する。",
+        "システムは利用者に同じ名前のボードの番号を応答する。",
+        "システムは利用者に別の名前を送信するよう要求する。",
+        "RESUME STEP 1",
+        "利用者はシステムに新しいボードの名前を送信する。"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "認証不足",
+      "postcondition": "新しいボードは作成されていない。gh の認証をやり直すコマンドが利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "認証不足-1",
+        "認証不足-2",
+        "認証不足-3",
+        "認証不足-8"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "CONDITION: NOT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている",
+        "IF gh が github.com の有効なアカウントを持っている THEN",
+        "システムは利用者にトークンの scope に project がないことを応答する。",
+        "システムは利用者に scope を足すコマンドを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "認証不足",
+      "postcondition": "新しいボードは作成されていない。gh の認証をやり直すコマンドが利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "認証不足-1",
+        "認証不足-5",
+        "認証不足-6",
+        "認証不足-8"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "システムは VALIDATES THAT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている。",
+        "CONDITION: NOT gh の有効なアカウントのトークンの scope に project が単独の要素として含まれている",
+        "IF gh が github.com の有効なアカウントを持っている THEN",
+        "CONDITION: NOT gh が github.com の有効なアカウントを持っている",
+        "システムは利用者に gh が github.com のアカウントを持っていないことを応答する。",
+        "システムは利用者に scope を指定してログインするコマンドを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "abort",
+      "terminal_flow": "gh未導入",
+      "postcondition": "新しいボードは作成されていない。gh の導入手順が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "gh未導入-1",
+        "gh未導入-2",
+        "gh未導入-3"
+      ],
+      "steps": [
+        "利用者はシステムに新しいボードの名前を送信する。",
+        "利用者はシステムにボードの新規作成を要求する。",
+        "システムは VALIDATES THAT gh コマンドを実行できる。",
+        "CONDITION: NOT gh コマンドを実行できる",
+        "システムは利用者に gh コマンドが見つからないことを応答する。",
+        "システムは利用者に gh の導入手順を応答する。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 42,
+    "nodes_covered": 42,
+    "edges_total": 45,
+    "edges_covered": 45
+  }
+}

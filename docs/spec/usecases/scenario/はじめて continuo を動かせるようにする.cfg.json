@@ -1,0 +1,1508 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "はじめて continuo を動かせるようにする",
+  "source": {
+    "file": "docs/spec/usecases/scenario/はじめて continuo を動かせるようにする.rucm.md",
+    "rucm_block_sha256": "f4436c0eea3160a9063629acf737d56e3812942e9c2c5f0c2194133802795b7f"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "continuo が常駐している。最初の issue の Status は running_state の選択肢である。最初の issue の worktree が workspace.root の下にある。worktree の中に身元ファイルがある。herdr の pane で Claude Code が動いている。1回目の turn の本文が Claude Code に届いている。"
+    },
+    "Goの版が古い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "continuo の実行ファイルは書き出されていない。Go の版の要件が利用者に表示されている。"
+    },
+    "前提の不足": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          18
+        ]
+      },
+      "postcondition": "continuo は常駐していない。✗ が付いた見出し語と直し方が利用者に表示されている。最初の issue の Status は dispatch_state の選択肢のままである。"
+    },
+    "選択肢名の不一致": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          22
+        ]
+      },
+      "postcondition": "continuo は常駐していない。最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。"
+    },
+    "未信頼のリポジトリ": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          24
+        ]
+      },
+      "postcondition": "最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。最初の issue に信頼登録の承認を促すコメントが1件ある。"
+    },
+    "確認の画面が出ている": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          33
+        ]
+      },
+      "postcondition": "最初の issue の Status は failure_state の選択肢である。1回目の turn の本文は Claude Code に届いていない。worktree は workspace.root の下に残っている。"
+    },
+    "常駐の中断": {
+      "when": "利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            29
+          ]
+        }
+      ],
+      "postcondition": "continuo は常駐していない。最初の issue の Status は running_state の選択肢である。worktree は workspace.root の下に残っている。worktree の中に身元ファイルがない。herdr の workspace が残っている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに continuo の実行ファイルのビルドを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT Go の版が 1.26 以上である。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "IF 利用者が continuo に見張らせるボードを持っていない THEN"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "INCLUDE USE CASE ボードを新規に用意する",
+      "include": "ボードを新規に用意する"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "INCLUDE USE CASE 設定ファイルを作る",
+      "include": "設定ファイルを作る"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "利用者は WORKFLOW.md の status_field に continuo Status を書く。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "INCLUDE USE CASE 設定ファイルを作る",
+      "include": "設定ファイルを作る"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "INCLUDE USE CASE 既存のボードの Status を割り当てる",
+      "include": "既存のボードの Status を割り当てる"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "利用者は ghq の置き場所に対象リポジトリの clone を作る。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "利用者は対象リポジトリに issue を作る。"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "利用者はボードに issue の item を作る。"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 15,
+      "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+      "include": "対象リポジトリを信頼登録する"
+    },
+    {
+      "id": "BASIC FLOW-17",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 17,
+      "statement": "INCLUDE USE CASE 前提が揃っているかを検査する",
+      "include": "前提が揃っているかを検査する"
+    },
+    {
+      "id": "BASIC FLOW-18",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 18,
+      "statement": "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
+      "statement": "利用者はシステムに continuo の常駐の開始を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-20",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 20,
+      "statement": "システムは WORKFLOW.md を読む。"
+    },
+    {
+      "id": "BASIC FLOW-21",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 21,
+      "statement": "システムは実行時ディレクトリのロックファイルに flock を取る。"
+    },
+    {
+      "id": "BASIC FLOW-22",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 22,
+      "statement": "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。"
+    },
+    {
+      "id": "BASIC FLOW-23",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 23,
+      "statement": "システムはボードから dispatch_state の issue の一覧を取る。"
+    },
+    {
+      "id": "BASIC FLOW-24",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 24,
+      "statement": "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。"
+    },
+    {
+      "id": "BASIC FLOW-25",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 25,
+      "statement": "システムは最初の issue を実行中の一覧に入れる。"
+    },
+    {
+      "id": "BASIC FLOW-26",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 26,
+      "statement": "システムはボードの最初の issue の Status に running_state の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-27",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 27,
+      "statement": "システムは workspace.root の下に最初の issue の worktree を作る。"
+    },
+    {
+      "id": "BASIC FLOW-28",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 28,
+      "statement": "システムは worktree を herdr の workspace として開く。"
+    },
+    {
+      "id": "BASIC FLOW-29",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 29,
+      "statement": "システムは worktree の中に身元ファイルを書く。"
+    },
+    {
+      "id": "BASIC FLOW-30",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 30,
+      "statement": "システムは herdr に workspace の pane の一覧を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-31",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 31,
+      "statement": "システムは pane の label に最初の issue の URL を書く。"
+    },
+    {
+      "id": "BASIC FLOW-32",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 32,
+      "statement": "システムは pane で Claude Code を起動する。"
+    },
+    {
+      "id": "BASIC FLOW-33",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 33,
+      "statement": "システムは VALIDATES THAT Claude Code の agent_status が idle または done である。"
+    },
+    {
+      "id": "BASIC FLOW-34",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 34,
+      "statement": "システムは Claude Code に1回目の turn の本文を送る。"
+    },
+    {
+      "id": "BASIC FLOW-35",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 35,
+      "statement": "システムは利用者に最初の issue の run の開始をログに応答する。"
+    },
+    {
+      "id": "Goの版が古い-1",
+      "type": "action",
+      "flow": "Goの版が古い",
+      "step": 1,
+      "statement": "システムは利用者に Go の版が 1.26 に満たないことを応答する。"
+    },
+    {
+      "id": "Goの版が古い-2",
+      "type": "action",
+      "flow": "Goの版が古い",
+      "step": 2,
+      "statement": "システムは利用者に Go 1.26 以上の導入を直し方として応答する。"
+    },
+    {
+      "id": "Goの版が古い-3",
+      "type": "abort",
+      "flow": "Goの版が古い",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "前提の不足-1",
+      "type": "action",
+      "flow": "前提の不足",
+      "step": 1,
+      "statement": "システムは利用者に ✗ が付いた見出し語と直し方を応答する。"
+    },
+    {
+      "id": "前提の不足-2",
+      "type": "action",
+      "flow": "前提の不足",
+      "step": 2,
+      "statement": "利用者は ✗ が付いた見出し語の直し方に従って前提を揃える。"
+    },
+    {
+      "id": "前提の不足-3",
+      "type": "resume",
+      "flow": "前提の不足",
+      "step": 3,
+      "statement": "RESUME STEP 17"
+    },
+    {
+      "id": "選択肢名の不一致-1",
+      "type": "action",
+      "flow": "選択肢名の不一致",
+      "step": 1,
+      "statement": "システムは利用者に設定の選択肢名とボードの選択肢名の食い違いを応答する。"
+    },
+    {
+      "id": "選択肢名の不一致-2",
+      "type": "action",
+      "flow": "選択肢名の不一致",
+      "step": 2,
+      "statement": "システムは常駐を始めずに終了する。"
+    },
+    {
+      "id": "選択肢名の不一致-3",
+      "type": "abort",
+      "flow": "選択肢名の不一致",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "未信頼のリポジトリ-1",
+      "type": "action",
+      "flow": "未信頼のリポジトリ",
+      "step": 1,
+      "statement": "システムは最初の issue を dispatch の対象から外す。"
+    },
+    {
+      "id": "未信頼のリポジトリ-2",
+      "type": "action",
+      "flow": "未信頼のリポジトリ",
+      "step": 2,
+      "statement": "システムは最初の issue に信頼登録の承認を促すコメントを1件書く。"
+    },
+    {
+      "id": "未信頼のリポジトリ-3",
+      "type": "action",
+      "flow": "未信頼のリポジトリ",
+      "step": 3,
+      "statement": "システムは最初の issue の対象リポジトリを通知済みとして記録する。"
+    },
+    {
+      "id": "未信頼のリポジトリ-4",
+      "type": "abort",
+      "flow": "未信頼のリポジトリ",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "確認の画面が出ている-1",
+      "type": "action",
+      "flow": "確認の画面が出ている",
+      "step": 1,
+      "statement": "システムは pane に esc のキー入力を送る。"
+    },
+    {
+      "id": "確認の画面が出ている-2",
+      "type": "action",
+      "flow": "確認の画面が出ている",
+      "step": 2,
+      "statement": "システムはボードの最初の issue の Status に failure_state の選択肢を書く。"
+    },
+    {
+      "id": "確認の画面が出ている-3",
+      "type": "abort",
+      "flow": "確認の画面が出ている",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "常駐の中断-1",
+      "type": "action",
+      "flow": "常駐の中断",
+      "step": 1,
+      "statement": "システムはボードの巡回を止める。"
+    },
+    {
+      "id": "常駐の中断-2",
+      "type": "action",
+      "flow": "常駐の中断",
+      "step": 2,
+      "statement": "システムは hook を受ける socket を閉じる。"
+    },
+    {
+      "id": "常駐の中断-3",
+      "type": "action",
+      "flow": "常駐の中断",
+      "step": 3,
+      "statement": "システムは herdr の pane を閉じずに終了する。"
+    },
+    {
+      "id": "常駐の中断-4",
+      "type": "abort",
+      "flow": "常駐の中断",
+      "step": 4,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "Go の版が 1.26 以上である"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "Goの版が古い-1",
+      "kind": "false",
+      "condition": "NOT Go の版が 1.26 以上である"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "true",
+      "condition": "利用者が continuo に見張らせるボードを持っていない"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-9",
+      "kind": "false",
+      "condition": "NOT 利用者が continuo に見張らせるボードを持っていない"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "BASIC FLOW-17",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
+      "kind": "true",
+      "condition": "検査結果の7件の見出し語に ✗ が1件もない"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "前提の不足-1",
+      "kind": "false",
+      "condition": "NOT 検査結果の7件の見出し語に ✗ が1件もない"
+    },
+    {
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-20",
+      "to": "BASIC FLOW-21",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-21",
+      "to": "BASIC FLOW-22",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-22",
+      "to": "BASIC FLOW-23",
+      "kind": "true",
+      "condition": "設定の active_states の選択肢名がボードにすべてある"
+    },
+    {
+      "from": "BASIC FLOW-22",
+      "to": "選択肢名の不一致-1",
+      "kind": "false",
+      "condition": "NOT 設定の active_states の選択肢名がボードにすべてある"
+    },
+    {
+      "from": "BASIC FLOW-23",
+      "to": "BASIC FLOW-24",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-24",
+      "to": "BASIC FLOW-25",
+      "kind": "true",
+      "condition": "最初の issue の対象リポジトリが Claude Code に信頼登録されている"
+    },
+    {
+      "from": "BASIC FLOW-24",
+      "to": "未信頼のリポジトリ-1",
+      "kind": "false",
+      "condition": "NOT 最初の issue の対象リポジトリが Claude Code に信頼登録されている"
+    },
+    {
+      "from": "BASIC FLOW-25",
+      "to": "BASIC FLOW-26",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-26",
+      "to": "BASIC FLOW-27",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-27",
+      "to": "BASIC FLOW-28",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-28",
+      "to": "BASIC FLOW-29",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-29",
+      "to": "BASIC FLOW-30",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-29",
+      "to": "常駐の中断-1",
+      "kind": "global",
+      "condition": "利用者が continuo を動かしている端末で Ctrl+C を入力する場合"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "BASIC FLOW-31",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-31",
+      "to": "BASIC FLOW-32",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-32",
+      "to": "BASIC FLOW-33",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-33",
+      "to": "BASIC FLOW-34",
+      "kind": "true",
+      "condition": "Claude Code の agent_status が idle または done である"
+    },
+    {
+      "from": "BASIC FLOW-33",
+      "to": "確認の画面が出ている-1",
+      "kind": "false",
+      "condition": "NOT Claude Code の agent_status が idle または done である"
+    },
+    {
+      "from": "BASIC FLOW-34",
+      "to": "BASIC FLOW-35",
+      "kind": "seq"
+    },
+    {
+      "from": "Goの版が古い-1",
+      "to": "Goの版が古い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "Goの版が古い-2",
+      "to": "Goの版が古い-3",
+      "kind": "seq"
+    },
+    {
+      "from": "前提の不足-1",
+      "to": "前提の不足-2",
+      "kind": "seq"
+    },
+    {
+      "from": "前提の不足-2",
+      "to": "前提の不足-3",
+      "kind": "seq"
+    },
+    {
+      "from": "前提の不足-3",
+      "to": "BASIC FLOW-17",
+      "kind": "resume"
+    },
+    {
+      "from": "選択肢名の不一致-1",
+      "to": "選択肢名の不一致-2",
+      "kind": "seq"
+    },
+    {
+      "from": "選択肢名の不一致-2",
+      "to": "選択肢名の不一致-3",
+      "kind": "seq"
+    },
+    {
+      "from": "未信頼のリポジトリ-1",
+      "to": "未信頼のリポジトリ-2",
+      "kind": "seq"
+    },
+    {
+      "from": "未信頼のリポジトリ-2",
+      "to": "未信頼のリポジトリ-3",
+      "kind": "seq"
+    },
+    {
+      "from": "未信頼のリポジトリ-3",
+      "to": "未信頼のリポジトリ-4",
+      "kind": "seq"
+    },
+    {
+      "from": "確認の画面が出ている-1",
+      "to": "確認の画面が出ている-2",
+      "kind": "seq"
+    },
+    {
+      "from": "確認の画面が出ている-2",
+      "to": "確認の画面が出ている-3",
+      "kind": "seq"
+    },
+    {
+      "from": "常駐の中断-1",
+      "to": "常駐の中断-2",
+      "kind": "seq"
+    },
+    {
+      "from": "常駐の中断-2",
+      "to": "常駐の中断-3",
+      "kind": "seq"
+    },
+    {
+      "from": "常駐の中断-3",
+      "to": "常駐の中断-4",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "continuo が常駐している。最初の issue の Status は running_state の選択肢である。最初の issue の worktree が workspace.root の下にある。worktree の中に身元ファイルがある。herdr の pane で Claude Code が動いている。1回目の turn の本文が Claude Code に届いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "INCLUDE USE CASE ボードを新規に用意する",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "利用者は WORKFLOW.md の status_field に continuo Status を書く。",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "システムはボードから dispatch_state の issue の一覧を取る。",
+        "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは最初の issue を実行中の一覧に入れる。",
+        "システムはボードの最初の issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に最初の issue の worktree を作る。",
+        "システムは worktree を herdr の workspace として開く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に最初の issue の URL を書く。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done である。",
+        "システムは Claude Code に1回目の turn の本文を送る。",
+        "システムは利用者に最初の issue の run の開始をログに応答する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "確認の画面が出ている",
+      "postcondition": "最初の issue の Status は failure_state の選択肢である。1回目の turn の本文は Claude Code に届いていない。worktree は workspace.root の下に残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "確認の画面が出ている-1",
+        "確認の画面が出ている-2",
+        "確認の画面が出ている-3"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "INCLUDE USE CASE ボードを新規に用意する",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "利用者は WORKFLOW.md の status_field に continuo Status を書く。",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "システムはボードから dispatch_state の issue の一覧を取る。",
+        "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは最初の issue を実行中の一覧に入れる。",
+        "システムはボードの最初の issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に最初の issue の worktree を作る。",
+        "システムは worktree を herdr の workspace として開く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に最初の issue の URL を書く。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done である。",
+        "CONDITION: NOT Claude Code の agent_status が idle または done である",
+        "システムは pane に esc のキー入力を送る。",
+        "システムはボードの最初の issue の Status に failure_state の選択肢を書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "常駐の中断",
+      "postcondition": "continuo は常駐していない。最初の issue の Status は running_state の選択肢である。worktree は workspace.root の下に残っている。worktree の中に身元ファイルがない。herdr の workspace が残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "常駐の中断-1",
+        "常駐の中断-2",
+        "常駐の中断-3",
+        "常駐の中断-4"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "INCLUDE USE CASE ボードを新規に用意する",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "利用者は WORKFLOW.md の status_field に continuo Status を書く。",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "システムはボードから dispatch_state の issue の一覧を取る。",
+        "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは最初の issue を実行中の一覧に入れる。",
+        "システムはボードの最初の issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に最初の issue の worktree を作る。",
+        "システムは worktree を herdr の workspace として開く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
+        "システムはボードの巡回を止める。",
+        "システムは hook を受ける socket を閉じる。",
+        "システムは herdr の pane を閉じずに終了する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "未信頼のリポジトリ",
+      "postcondition": "最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。最初の issue に信頼登録の承認を促すコメントが1件ある。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "未信頼のリポジトリ-1",
+        "未信頼のリポジトリ-2",
+        "未信頼のリポジトリ-3",
+        "未信頼のリポジトリ-4"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "INCLUDE USE CASE ボードを新規に用意する",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "利用者は WORKFLOW.md の status_field に continuo Status を書く。",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "システムはボードから dispatch_state の issue の一覧を取る。",
+        "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "CONDITION: NOT 最初の issue の対象リポジトリが Claude Code に信頼登録されている",
+        "システムは最初の issue を dispatch の対象から外す。",
+        "システムは最初の issue に信頼登録の承認を促すコメントを1件書く。",
+        "システムは最初の issue の対象リポジトリを通知済みとして記録する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "選択肢名の不一致",
+      "postcondition": "continuo は常駐していない。最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "選択肢名の不一致-1",
+        "選択肢名の不一致-2",
+        "選択肢名の不一致-3"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "INCLUDE USE CASE ボードを新規に用意する",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "利用者は WORKFLOW.md の status_field に continuo Status を書く。",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "CONDITION: NOT 設定の active_states の選択肢名がボードにすべてある",
+        "システムは利用者に設定の選択肢名とボードの選択肢名の食い違いを応答する。",
+        "システムは常駐を始めずに終了する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "cycle",
+      "terminal_flow": "前提の不足",
+      "postcondition": "continuo は常駐していない。✗ が付いた見出し語と直し方が利用者に表示されている。最初の issue の Status は dispatch_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "前提の不足-1",
+        "前提の不足-2",
+        "前提の不足-3",
+        "BASIC FLOW-17"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "INCLUDE USE CASE ボードを新規に用意する",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "利用者は WORKFLOW.md の status_field に continuo Status を書く。",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "CONDITION: NOT 検査結果の7件の見出し語に ✗ が1件もない",
+        "システムは利用者に ✗ が付いた見出し語と直し方を応答する。",
+        "利用者は ✗ が付いた見出し語の直し方に従って前提を揃える。",
+        "RESUME STEP 17",
+        "INCLUDE USE CASE 前提が揃っているかを検査する"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "continuo が常駐している。最初の issue の Status は running_state の選択肢である。最初の issue の worktree が workspace.root の下にある。worktree の中に身元ファイルがある。herdr の pane で Claude Code が動いている。1回目の turn の本文が Claude Code に届いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "CONDITION: NOT 利用者が continuo に見張らせるボードを持っていない",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "INCLUDE USE CASE 既存のボードの Status を割り当てる",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "システムはボードから dispatch_state の issue の一覧を取る。",
+        "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは最初の issue を実行中の一覧に入れる。",
+        "システムはボードの最初の issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に最初の issue の worktree を作る。",
+        "システムは worktree を herdr の workspace として開く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に最初の issue の URL を書く。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done である。",
+        "システムは Claude Code に1回目の turn の本文を送る。",
+        "システムは利用者に最初の issue の run の開始をログに応答する。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "確認の画面が出ている",
+      "postcondition": "最初の issue の Status は failure_state の選択肢である。1回目の turn の本文は Claude Code に届いていない。worktree は workspace.root の下に残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "確認の画面が出ている-1",
+        "確認の画面が出ている-2",
+        "確認の画面が出ている-3"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "CONDITION: NOT 利用者が continuo に見張らせるボードを持っていない",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "INCLUDE USE CASE 既存のボードの Status を割り当てる",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "システムはボードから dispatch_state の issue の一覧を取る。",
+        "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは最初の issue を実行中の一覧に入れる。",
+        "システムはボードの最初の issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に最初の issue の worktree を作る。",
+        "システムは worktree を herdr の workspace として開く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に最初の issue の URL を書く。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done である。",
+        "CONDITION: NOT Claude Code の agent_status が idle または done である",
+        "システムは pane に esc のキー入力を送る。",
+        "システムはボードの最初の issue の Status に failure_state の選択肢を書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "常駐の中断",
+      "postcondition": "continuo は常駐していない。最初の issue の Status は running_state の選択肢である。worktree は workspace.root の下に残っている。worktree の中に身元ファイルがない。herdr の workspace が残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "常駐の中断-1",
+        "常駐の中断-2",
+        "常駐の中断-3",
+        "常駐の中断-4"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "CONDITION: NOT 利用者が continuo に見張らせるボードを持っていない",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "INCLUDE USE CASE 既存のボードの Status を割り当てる",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "システムはボードから dispatch_state の issue の一覧を取る。",
+        "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは最初の issue を実行中の一覧に入れる。",
+        "システムはボードの最初の issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に最初の issue の worktree を作る。",
+        "システムは worktree を herdr の workspace として開く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
+        "システムはボードの巡回を止める。",
+        "システムは hook を受ける socket を閉じる。",
+        "システムは herdr の pane を閉じずに終了する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "未信頼のリポジトリ",
+      "postcondition": "最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。最初の issue に信頼登録の承認を促すコメントが1件ある。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "未信頼のリポジトリ-1",
+        "未信頼のリポジトリ-2",
+        "未信頼のリポジトリ-3",
+        "未信頼のリポジトリ-4"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "CONDITION: NOT 利用者が continuo に見張らせるボードを持っていない",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "INCLUDE USE CASE 既存のボードの Status を割り当てる",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "システムはボードから dispatch_state の issue の一覧を取る。",
+        "システムは VALIDATES THAT 最初の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "CONDITION: NOT 最初の issue の対象リポジトリが Claude Code に信頼登録されている",
+        "システムは最初の issue を dispatch の対象から外す。",
+        "システムは最初の issue に信頼登録の承認を促すコメントを1件書く。",
+        "システムは最初の issue の対象リポジトリを通知済みとして記録する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "abort",
+      "terminal_flow": "選択肢名の不一致",
+      "postcondition": "continuo は常駐していない。最初の issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "選択肢名の不一致-1",
+        "選択肢名の不一致-2",
+        "選択肢名の不一致-3"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "CONDITION: NOT 利用者が continuo に見張らせるボードを持っていない",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "INCLUDE USE CASE 既存のボードの Status を割り当てる",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは WORKFLOW.md を読む。",
+        "システムは実行時ディレクトリのロックファイルに flock を取る。",
+        "システムは VALIDATES THAT 設定の active_states の選択肢名がボードにすべてある。",
+        "CONDITION: NOT 設定の active_states の選択肢名がボードにすべてある",
+        "システムは利用者に設定の選択肢名とボードの選択肢名の食い違いを応答する。",
+        "システムは常駐を始めずに終了する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "cycle",
+      "terminal_flow": "前提の不足",
+      "postcondition": "continuo は常駐していない。✗ が付いた見出し語と直し方が利用者に表示されている。最初の issue の Status は dispatch_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "前提の不足-1",
+        "前提の不足-2",
+        "前提の不足-3",
+        "BASIC FLOW-17"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "システムは continuo の実行ファイルを利用者が指定した書き出し先に書き出す。",
+        "IF 利用者が continuo に見張らせるボードを持っていない THEN",
+        "CONDITION: NOT 利用者が continuo に見張らせるボードを持っていない",
+        "INCLUDE USE CASE 設定ファイルを作る",
+        "INCLUDE USE CASE 既存のボードの Status を割り当てる",
+        "利用者は ghq の置き場所に対象リポジトリの clone を作る。",
+        "利用者は対象リポジトリに issue を作る。",
+        "利用者はボードに issue の item を作る。",
+        "利用者はボードの issue の Status に dispatch_state の選択肢を書く。",
+        "INCLUDE USE CASE 対象リポジトリを信頼登録する",
+        "INCLUDE USE CASE 前提が揃っているかを検査する",
+        "システムは VALIDATES THAT 検査結果の7件の見出し語に ✗ が1件もない。",
+        "CONDITION: NOT 検査結果の7件の見出し語に ✗ が1件もない",
+        "システムは利用者に ✗ が付いた見出し語と直し方を応答する。",
+        "利用者は ✗ が付いた見出し語の直し方に従って前提を揃える。",
+        "RESUME STEP 17",
+        "INCLUDE USE CASE 前提が揃っているかを検査する"
+      ]
+    },
+    {
+      "id": "P013",
+      "terminal": "abort",
+      "terminal_flow": "Goの版が古い",
+      "postcondition": "continuo の実行ファイルは書き出されていない。Go の版の要件が利用者に表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "Goの版が古い-1",
+        "Goの版が古い-2",
+        "Goの版が古い-3"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の実行ファイルのビルドを要求する。",
+        "システムは VALIDATES THAT Go の版が 1.26 以上である。",
+        "CONDITION: NOT Go の版が 1.26 以上である",
+        "システムは利用者に Go の版が 1.26 に満たないことを応答する。",
+        "システムは利用者に Go 1.26 以上の導入を直し方として応答する。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 53,
+    "nodes_covered": 53,
+    "edges_total": 54,
+    "edges_covered": 54
+  }
+}
