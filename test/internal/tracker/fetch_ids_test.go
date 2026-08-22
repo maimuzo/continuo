@@ -90,3 +90,66 @@ func TestFetchIssuesByIDs_draftIssueも取り直せる(t *testing.T) {
 		t.Fatalf("draft issue の取り直し結果が想定と違う: %+v", issues)
 	}
 }
+
+// TestFetchIssuesByIDs_NOT_FOUNDが混ざっても残りを読める は、部分的な成功の扱いを確かめる。
+//
+// **GitHub の GraphQL は `nodes(ids:)` に消えた ID が混ざると、
+// `data.nodes` にその位置だけ `null` を入れたうえで、`errors` にも `NOT_FOUND` を返す。**
+// **これは部分的な成功である。**
+//
+// **`errors` があるからと `data` を捨てると、生き残っている issue まで読めなくなる。**
+// 実運用で、ボードごと消したあとに毎巡回でこのエラーが出続けた（2026-08-21。設計 6-2）。
+//
+// 目的: `NOT_FOUND` だけが返ったとき、`data` を使って残りを返すこと。
+// 与える情報: 1件が正常・1件が null の `data` と、`NOT_FOUND` の `errors` を同時に返す偽サーバ。
+// 成功条件: エラーにならず、見つかった1件だけが返ること。
+func TestFetchIssuesByIDs_NOT_FOUNDが混ざっても残りを読める(t *testing.T) {
+	found := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-found", Status: "In Progress", Owner: "octocat", Repo: "hello-world", Number: 10, Title: "生き残った方",
+	}))
+	fs := newFakeGraphQLServer(t, single(fakeGraphQLResponse{Body: map[string]any{
+		"data": byIDsPayload([]any{found, nil}),
+		"errors": []any{map[string]any{
+			"type":    "NOT_FOUND",
+			"message": "Could not resolve to a node with the global id of 'item-gone'.",
+		}},
+	}}))
+	a := newAdapterForFetch(t, fs)
+
+	issues, err := a.FetchIssuesByIDs(t.Context(), []string{"item-found", "item-gone"})
+	if err != nil {
+		t.Fatalf("NOT_FOUND が混ざっただけでエラーになった: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("件数が想定と違う: got %d, want 1", len(issues))
+	}
+	if issues[0].ID != "item-found" {
+		t.Fatalf("残った item が想定と違う: %q", issues[0].ID)
+	}
+}
+
+// TestFetchIssuesByIDs_NOT_FOUND以外が混ざればエラーにする は、握りつぶさないことを確かめる。
+//
+// **部分的な成功として扱ってよいのは、「消えた ID があった」だけのときに限る。**
+// 権限不足や構文の誤りまで握りつぶすと、**設定の誤りに永久に気づけない。**
+//
+// 目的: `NOT_FOUND` 以外のエラーが1件でも混ざれば、エラーとして返すこと。
+// 与える情報: `NOT_FOUND` と `FORBIDDEN` を同時に返す偽サーバ。
+// 成功条件: エラーが返ること。
+func TestFetchIssuesByIDs_NOT_FOUND以外が混ざればエラーにする(t *testing.T) {
+	found := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-found", Status: "In Progress", Owner: "octocat", Repo: "hello-world", Number: 10, Title: "見つかる方",
+	}))
+	fs := newFakeGraphQLServer(t, single(fakeGraphQLResponse{Body: map[string]any{
+		"data": byIDsPayload([]any{found, nil}),
+		"errors": []any{
+			map[string]any{"type": "NOT_FOUND", "message": "消えた ID があります"},
+			map[string]any{"type": "FORBIDDEN", "message": "このボードを読む権限がありません"},
+		},
+	}}))
+	a := newAdapterForFetch(t, fs)
+
+	if _, err := a.FetchIssuesByIDs(t.Context(), []string{"item-found", "item-gone"}); err == nil {
+		t.Fatal("FORBIDDEN が混ざっているのにエラーにならなかった")
+	}
+}

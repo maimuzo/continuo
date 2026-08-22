@@ -448,8 +448,19 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		o.runAfterRun(ctx, rs)
-		o.stopWorker(ctx, rs)
+		// **後片付けは「止めろ」と言われても最後までやる。**
+		//
+		// この run は既に終わったものとして扱われている（Status は動かした、
+		// コメントも投稿した）。**そこで pane だけ閉じ損ねると、ボード上は終わった issue の
+		// pane が残り続ける。**`Close` は `wg.Wait()` でここを待つので、
+		// 終わるまで待たせてよい。
+		//
+		// **期限は付ける。**herdr が応答しないときに、停止が永久に返らなくなるのを防ぐ。
+		cleanupCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
+		defer cancel()
+		o.runAfterRun(cleanupCtx, rs)
+		o.stopWorker(cleanupCtx, rs)
 		o.release(rs)
 	}()
 }
@@ -490,6 +501,19 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	rs.mu.Unlock()
 	if paneID == "" {
 		return
+	}
+	// **止められていても pane は閉じる。**
+	//
+	// ここへ来た run は既に終わったものとして扱われている（Status を動かし、
+	// コメントも投稿した）。**そこで閉じ損ねると、ボード上は終わった issue の pane が
+	// 残り続ける。**`Close` は `wg.Wait()` でここを待つので、終わるまで待たせてよい。
+	//
+	// **期限は付ける。**herdr が応答しないときに停止が永久に返らなくなるのを防ぐ。
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx),
+			time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
+		defer cancel()
 	}
 	if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: paneID}); err != nil {
 		o.logger.Warn("pane を閉じられませんでした", "identifier", rs.issue().Identifier, "pane_id", paneID, "error", err)

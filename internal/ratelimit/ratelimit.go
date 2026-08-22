@@ -35,6 +35,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -391,6 +392,16 @@ func (r *Reader) tokenFromCredentialsFile() (string, error) {
 	// 別の場所に置き換えられたファイルを黙って読むことになる（os.Lstat は辿らない）。
 	info, err := os.Lstat(path)
 	if err != nil {
+		// **「無い」と「読めない」を分ける。**
+		//
+		// **macOS では、このファイルが無いのが普通である**（資格情報は Keychain にある。
+		// 2026-08-21 に実測）。`continuo init` が作った古い設定ファイルが
+		// `claude_credentials` のまま残っていると、ここに落ちて毎回失敗し続ける。
+		// **どう直せばよいかを添えないと、警告が流れるだけで誰も気づけない。**
+		if errors.Is(err, os.ErrNotExist) {
+			return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileNotExist,
+				ErrNoCredentials, path, remedyForMissingCredentialsFile())
+		}
 		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileReadFailed, ErrNoCredentials, path, err)
 	}
 	if !info.Mode().IsRegular() {
@@ -451,4 +462,18 @@ func truncate(b []byte, max int) string {
 		return string(r)
 	}
 	return string(r[:max]) + "…"
+}
+
+// remedyForMissingCredentialsFile は、`claude_credentials` を選んだのにファイルが
+// 無いときの直し方を返す。
+//
+// **OS で答えが変わる。**macOS は Keychain に資格情報があるのが普通なので
+// `keychain` へ変えるのが正解であり、ほかの OS に `keychain` は無い。
+//
+// 戻り値: 設定ファイルに何と書けばよいかを示す1行。
+func remedyForMissingCredentialsFile() string {
+	if runtime.GOOS == "darwin" {
+		return i18n.T(i18n.KeyRatelimitCredentialsRemedyKeychain)
+	}
+	return i18n.T(i18n.KeyRatelimitCredentialsRemedyEnv)
 }

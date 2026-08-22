@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "aa1cf432a64c82dfe67a546da4d8ee8565a21c043f21222f98da8a2b99b39cf7", "SOURCE": "docs/spec/usecases/particular_case/対象リポジトリを信頼登録する.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
 // Package trust_test のうち、このファイルは `continuo trust` を実際に起動して、
 // 端から端まで通ることを確かめる（設計 3-33）。
 //
@@ -43,6 +46,8 @@ func buildBinary(t *testing.T, outDir string) string {
 	return bin
 }
 
+// {"RUCM-PATH": "P005"}
+//
 // 目的: `continuo trust --dry-run` が要求内容を出すだけで、`~/.claude.json` を
 // 1バイトも書き換えないことを、実際にコマンドを起動して確認する。
 //

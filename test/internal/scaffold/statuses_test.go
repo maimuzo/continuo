@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "1bf01241889b9e6e9759b0792ea55c34364edc6c75fbd389fc68bffe349f4adb", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
 package scaffold_test
 
 import (
@@ -307,6 +310,8 @@ func TestUpdateStatuses_WORKFLOWが無ければ作らずに止まる(t *testing.
 	}
 }
 
+// {"RUCM-PATH": "P002"}
+//
 // 目的: 書き換える対象のキーが消されていたら ErrKeysNotFound で止まり、ファイルを変えないことを確認する。
 //
 // **黙って何もしないより落とす。**書き込んだつもりで進むと、巡回が無言で「対象0件」を返し続ける。

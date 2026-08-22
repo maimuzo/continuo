@@ -221,6 +221,15 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		result.HerdrWorkspaceID = opened.Workspace.WorkspaceID
 		result.HerdrPaneID = opened.RootPane.PaneID
 		result.AlreadyOpen = opened.AlreadyOpen
+		// **herdr が開いたものが、いま作った worktree と同じかを必ず確かめる。**
+		//
+		// **実運用で、clone のほうを開いた workspace が返ってきた**（2026-08-21、設計 6-2）。
+		// そうなると pane の cwd が clone を指し、そこで Claude Code が起動する。
+		// 気づかないまま進むと、**別の issue の作業を同じ場所で始めることになる。**
+		if opened.Worktree.Path != "" && !samePath(opened.Worktree.Path, resolvedPath) {
+			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareWorktreePathMismatch,
+				resolvedPath, opened.Worktree.Path, opened.Workspace.WorkspaceID)
+		}
 	}
 
 	// **ここから先は新しい run である**（3-18）。after_run の「1回だけ」の印を消す。

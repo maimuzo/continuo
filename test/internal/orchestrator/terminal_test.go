@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "69ea1c58fdd8fbba6827e396c21be8741a9e43731031018d69632a8fe4fb98e5", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
 
 import (
@@ -38,7 +41,7 @@ func blockFirstPrompt(t *testing.T, fx *fixture) {
 		}
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 }
@@ -109,7 +112,7 @@ func TestCheckStalls_1回のstallでabandonが2回走らない(t *testing.T) {
 		<-release
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
@@ -140,6 +143,8 @@ func TestCheckStalls_1回のstallでabandonが2回走らない(t *testing.T) {
 	}
 }
 
+// {"RUCM-PATH": "P002"}
+//
 // TestAbandon_打ち切るときはworkerを止める前にコメントを確かめる は、
 // 設計 3-25 の「いつ走らせるか」の表を確かめる。
 //

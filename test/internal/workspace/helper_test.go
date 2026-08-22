@@ -68,6 +68,20 @@ func (fh *fakeHerdr) SetOnRequest(method string, fn func(params map[string]any))
 	fh.onRequest[method] = fn
 }
 
+// SetResult は、既に立っているテスト用herdr mock の応答を後から差し替える。
+//
+// **Prepare と Cleanup で違う応答を返させるために要る。**`Prepare` は
+// 「herdr が別の場所を開いたら止める」検査を持つので（設計 6-2）、
+// Cleanup の検算だけを試したいテストは、Prepare を通してから差し替える。
+//
+// method: 対象のメソッド名。
+// result: 返す result。
+func (fh *fakeHerdr) SetResult(method string, result any) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	fh.results[method] = result
+}
+
 // newFakeHerdr はテスト用herdr mock サーバを1本立てる。
 //
 // t: 呼び出し元のテスト。socket とリスナーの後始末を t.Cleanup に登録する。

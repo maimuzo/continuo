@@ -102,7 +102,7 @@ func (s *stubHerdr) PaneClose(_ context.Context, params herdr.PaneCloseParams) (
 
 // AgentStartWithRetry は起動できたことにする。
 func (s *stubHerdr) AgentStartWithRetry(
-	_ context.Context, params herdr.AgentStartParams, _ int, _ time.Duration,
+	_ context.Context, params herdr.AgentStartParams, _, _ time.Duration,
 ) (*herdr.AgentStartResult, error) {
 	return &herdr.AgentStartResult{
 		Type:  "agent_started",

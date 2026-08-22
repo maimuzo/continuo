@@ -59,7 +59,7 @@ func TestTick_1件のissueが候補に上がってからDoneで片付くまで�
 		}
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -149,7 +149,7 @@ func TestTick_着手の13段が設計の順番どおりに進む(t *testing.T) {
 		}
 		return map[string]any{
 			"type":  "agent_started",
-			"agent": map[string]any{"name": params["name"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 	// turn を終わらせない（このテストは着手の順番だけを見る）。

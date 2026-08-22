@@ -36,7 +36,7 @@ func TestSignal_グループの別issueもIceBoxのまま動かせる(t *testing
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -80,7 +80,7 @@ func TestSignal_ボードに載っていない対象はコメントに残して�
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -132,7 +132,7 @@ func TestComment_runが終わるときにコメントが無ければセッショ
 		}
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -211,7 +211,7 @@ func TestComment_このrunが書いたコメントだけを数える(t *testing.
 		}
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 

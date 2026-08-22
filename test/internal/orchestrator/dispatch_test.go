@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -432,7 +433,7 @@ func TestHandoff_引き渡しの通知に調べるところが出る(t *testing.
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -483,7 +484,7 @@ func TestHandoff_ログには理由の1行目だけを出す(t *testing.T) {
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -512,5 +513,77 @@ func TestHandoff_ログには理由の1行目だけを出す(t *testing.T) {
 	// **ログには入らない。**1行目だけを出す（summaryLine）。
 	if strings.Contains(fx.Logs.String(), "【確かめ方】") || strings.Contains(fx.Logs.String(), "【対処】") {
 		t.Errorf("ログに案内の行まで流れている（1行目だけであるべき）:\n%s", fx.Logs.String())
+	}
+}
+
+// TestDispatch_起動直後のunknownは待って通す は、設計 3-16 の段10 を確かめる。
+//
+// **これが実運用で issue を止めていた**（2026-08-21、設計 6-2）。
+// **herdr の socket API の `agent.start` は起動が終わるのを待たずに返る**ので、
+// 返った直後の `agent_status` は必ず `unknown` である。Claude Code はそのあと数秒かけて
+// 立ち上がり `idle` になる。**そこで即座に諦めると、正常な起動を毎回「失敗」と呼ぶ。**
+//
+// 目的: 最初に `unknown` を返しても、そのあと `idle` になれば turn を送ること。
+// 与える情報: 1回目だけ `unknown`、2回目以降は `idle` を返す `agent.get` の台本。
+// 成功条件: **プロンプトが送られること**（諦めていない）。
+func TestDispatch_起動直後のunknownは待って通す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	var calls atomic.Int32
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
+		status := "idle"
+		if calls.Add(1) == 1 {
+			// **`agent.start` が返った直後は必ずこれである。**
+			status = "unknown"
+		}
+		return map[string]any{
+			"type": "agent_info",
+			// **`interactive_ready` は本物の herdr が `idle` と一緒に返す**（設計 6-2）。
+			// 台本でこれを落とすと、continuo は「まだ入力を受け付けられない」と判定する。
+			"agent": map[string]any{
+				"name": params["target"], "agent_status": status,
+				"interactive_ready": status == "idle" || status == "done",
+			},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 10*time.Second, "turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	if got := fx.Tracker.StateOf("PVTI_item188"); got == "Blocked" {
+		t.Fatalf("起動直後の unknown で諦めている: state=%s", got)
+	}
+}
+
+// TestDispatch_unknownのまま期限を過ぎたら人間へ渡さず試し直す は、打ち切りの側を確かめる。
+//
+// 目的: `herdr.startup_timeout_ms` を過ぎても `unknown` のままなら諦めること。
+// **ただし人間へは渡さない**（`ErrStartupRetryable` を包むので、バックオフして試し直す）。
+// 与える情報: `agent.get` が常に `unknown` を返す台本。`agent.max_retries` は既定（3回）。
+// 成功条件: worker は止まるが、**Status が `failure_state` へ落ちない**（リトライが残っている）。
+func TestDispatch_unknownのまま期限を過ぎたら人間へ渡さず試し直す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
+		return map[string]any{
+			"type":  "agent_info",
+			"agent": map[string]any{"name": params["target"], "agent_status": "unknown"},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	// **worker を止めるところまでは進む**（バックオフに入るため。stopWorker は pane を閉じる）。
+	waitFor(t, 5*time.Second, "worker が止まる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodPaneClose) > 0
+	})
+	// **ここが本題である。**リトライが残っているうちは人間へ渡さない。
+	if got := fx.Tracker.StateOf("PVTI_item188"); got == "Blocked" {
+		t.Fatalf("unknown を1回受けただけで人間へ渡している（設計 3-16 の段10 は「試し直す」）: state=%s", got)
+	}
+	if fx.Herdr.CountMethod(herdr.MethodAgentPrompt) != 0 {
+		t.Fatalf("unknown のままプロンプトを投げている: %v", fx.Herdr.Methods())
 	}
 }

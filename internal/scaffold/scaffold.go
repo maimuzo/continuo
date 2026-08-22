@@ -44,6 +44,16 @@ type Result struct {
 	// WriteTemplateWithValues では force が真のときだけ真になりうる。
 	// UpdateStatuses は既にあるファイルしか対象にしないので常に真である。
 	Overwritten bool
+	// Owner は、既にある WORKFLOW.md に書かれていた `tracker.provider.owner` である。
+	//
+	// **CheckUpdatable だけが埋める。**`continuo setup` が「どのボードを読むか」を
+	// 決めるために使う。**プレースホルダのままなら空文字である。**
+	Owner string
+	// ProjectNumber は、既にある WORKFLOW.md に書かれていた
+	// `tracker.provider.project_number` である。
+	//
+	// **CheckUpdatable だけが埋める。**プレースホルダ（0）のままなら 0 である。
+	ProjectNumber int
 }
 
 // 区別が要る失敗は sentinel error で返す。cmd/continuo はこれを見て終了コードと文言を決める。

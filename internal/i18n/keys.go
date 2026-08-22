@@ -16,6 +16,21 @@ const (
 	KeyDoctorLabelConfig Key = "doctor.label.config"
 	// KeyDoctorLabelHerdr はherdr の protocol を照合する検査の見出し語に出る。
 	KeyDoctorLabelHerdr Key = "doctor.label.herdr"
+
+	// KeyDoctorLabelClaude は doctor の「claude」の見出し語である。
+	KeyDoctorLabelClaude Key = "doctor.label.claude"
+
+	// KeyDoctorClaudeConfigUnreadable は設定を読めず claude を探せないときの文言である。
+	KeyDoctorClaudeConfigUnreadable Key = "doctor.claude.config_unreadable"
+
+	// KeyDoctorClaudeNotFound は claude が PATH に無いときの文言である。
+	KeyDoctorClaudeNotFound Key = "doctor.claude.not_found"
+
+	// KeyDoctorClaudeFound は claude が見つかったときに、その場所を出す文言である。
+	KeyDoctorClaudeFound Key = "doctor.claude.found"
+
+	// KeyDoctorClaudeRemedyInstall は claude が無いときの直し方である。
+	KeyDoctorClaudeRemedyInstall Key = "doctor.claude.remedy_install"
 	// KeyDoctorLabelGHAuth はgh の scope を見る検査の見出し語に出る。
 	KeyDoctorLabelGHAuth Key = "doctor.label.gh_auth"
 	// KeyDoctorLabelBoard はボードを読む検査の見出し語に出る。
@@ -478,6 +493,9 @@ const (
 	KeyCLIMainFlagLogLevel Key = "cli.main.flag_log_level"
 	// KeyCLIMainFlagPort は--port の説明に出る。
 	KeyCLIMainFlagPort Key = "cli.main.flag_port"
+
+	// KeyCLIMainErrPortRange は --port の値が 0〜65535 の外だったことを表す。
+	KeyCLIMainErrPortRange Key = "cli.main.err_port_range"
 	// KeyCLIMainErrTooManyPositional は位置引数が2つ以上あるときに出る。
 	KeyCLIMainErrTooManyPositional Key = "cli.main.err_too_many_positional"
 	// KeyCLIMainStarting は起動したときの1行に出る。
@@ -862,6 +880,19 @@ const (
 	// KeyRatelimitNewReaderHomeDirFailed は資格情報のファイルを探すための
 	// ホームディレクトリを取得できなかったときに出る。
 	KeyRatelimitNewReaderHomeDirFailed Key = "ratelimit.new_reader.home_dir_failed"
+
+	// KeyRatelimitCredentialsFileNotExist は `token_source: claude_credentials` を
+	// 選んだのに資格情報のファイルが無いときの警告である。
+	// **起動は止めない**（設計 3-27）。代わりに、どう直せばよいかを必ず添える。
+	KeyRatelimitCredentialsFileNotExist Key = "ratelimit.credentials_file.not_exist"
+
+	// KeyRatelimitCredentialsRemedyKeychain は macOS での直し方である
+	// （資格情報は Keychain にあるので `token_source: keychain` へ変える）。
+	KeyRatelimitCredentialsRemedyKeychain Key = "ratelimit.credentials.remedy_keychain"
+
+	// KeyRatelimitCredentialsRemedyEnv は macOS 以外での直し方である
+	// （`token_source: env` にして環境変数から読む）。
+	KeyRatelimitCredentialsRemedyEnv Key = "ratelimit.credentials.remedy_env"
 	// KeyRatelimitFetchRequestBuildFailed はusage API のリクエストを組み立てられなかったときに出る。
 	KeyRatelimitFetchRequestBuildFailed Key = "ratelimit.fetch.request_build_failed"
 	// KeyRatelimitFetchRequestFailed はusage API へ接続できなかったときに出る。
@@ -1227,6 +1258,9 @@ const (
 	KeyWorkspacePrepareParentDirCreateFailed Key = "workspace.prepare.parent_dir_create_failed"
 	// KeyWorkspacePrepareWorktreeOpenFailed は herdr の worktree.open に失敗したときに出る。
 	KeyWorkspacePrepareWorktreeOpenFailed Key = "workspace.prepare.worktree_open_failed"
+
+	// KeyWorkspacePrepareWorktreePathMismatch は、herdr が別の場所を開いたことを表す。
+	KeyWorkspacePrepareWorktreePathMismatch Key = "workspace.prepare.worktree_path_mismatch"
 	// KeyWorkspaceResolveBaseDefaultBranchMissing は base を決める手掛かりが設定にもボードの応答にも無かったときに出る。
 	KeyWorkspaceResolveBaseDefaultBranchMissing Key = "workspace.resolve_base.default_branch_missing"
 	// KeyWorkspaceResolveBaseDefaultBranchNotString はボードが返した既定 branch が文字列でなかったときに出る。
@@ -1293,6 +1327,10 @@ const (
 	KeyOrchestratorConfirmStartupWorkingTimeout Key = "orchestrator.confirm_startup.working_timeout"
 	// KeyOrchestratorConfirmStartupUnknownStatus はherdr が idle / done / blocked / working 以外の状態を返したときに出る。
 	KeyOrchestratorConfirmStartupUnknownStatus Key = "orchestrator.confirm_startup.unknown_status"
+
+	// KeyOrchestratorConfirmStartupNotInteractive は、agent は居るが入力を受け付けられない
+	// ことを表す（`interactive_ready` が偽）。
+	KeyOrchestratorConfirmStartupNotInteractive Key = "orchestrator.confirm_startup.not_interactive"
 	// KeyOrchestratorRestoreHookListenFailed は復元の途中で hook を受ける socket の listen を始められなかったときに出る。
 	KeyOrchestratorRestoreHookListenFailed Key = "orchestrator.restore.hook_listen_failed"
 )
@@ -1350,6 +1388,11 @@ const (
 var allKeys = []Key{
 	KeyDoctorLabelConfig,
 	KeyDoctorLabelHerdr,
+	KeyDoctorLabelClaude,
+	KeyDoctorClaudeConfigUnreadable,
+	KeyDoctorClaudeNotFound,
+	KeyDoctorClaudeFound,
+	KeyDoctorClaudeRemedyInstall,
 	KeyDoctorLabelGHAuth,
 	KeyDoctorLabelBoard,
 	KeyDoctorLabelClone,
@@ -1542,6 +1585,7 @@ var allKeys = []Key{
 	KeyCLIAllowKeychainAccessTimeoutRemedy,
 	KeyCLIMainFlagLogLevel,
 	KeyCLIMainFlagPort,
+	KeyCLIMainErrPortRange,
 	KeyCLIMainErrTooManyPositional,
 	KeyCLIMainStarting,
 	KeyCLIHookFlagSocket,
@@ -1668,6 +1712,9 @@ var allKeys = []Key{
 	KeyHookclientSpillNameConflict,
 	KeyHookclientCheckPendingCapacityLimitReached,
 	KeyRatelimitNewReaderHomeDirFailed,
+	KeyRatelimitCredentialsFileNotExist,
+	KeyRatelimitCredentialsRemedyKeychain,
+	KeyRatelimitCredentialsRemedyEnv,
 	KeyRatelimitFetchRequestBuildFailed,
 	KeyRatelimitFetchRequestFailed,
 	KeyRatelimitFetchBodyReadFailed,
@@ -1815,6 +1862,7 @@ var allKeys = []Key{
 	KeyWorkspacePrepareUnregisteredWorktree,
 	KeyWorkspacePrepareParentDirCreateFailed,
 	KeyWorkspacePrepareWorktreeOpenFailed,
+	KeyWorkspacePrepareWorktreePathMismatch,
 	KeyWorkspaceResolveBaseDefaultBranchMissing,
 	KeyWorkspaceResolveBaseDefaultBranchNotString,
 	KeyOrchestratorNewExecutablePathUnknown,
@@ -1846,6 +1894,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupBlocked,
 	KeyOrchestratorConfirmStartupWorkingTimeout,
 	KeyOrchestratorConfirmStartupUnknownStatus,
+	KeyOrchestratorConfirmStartupNotInteractive,
 	KeyOrchestratorRestoreHookListenFailed,
 	KeyDaemonRunConfigLoadFailed,
 	KeyDaemonRunSocketPathUnresolved,

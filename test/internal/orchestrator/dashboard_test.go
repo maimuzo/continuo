@@ -52,7 +52,7 @@ func TestRunViews_turnの終わりの集計がダッシュボードへ届く(t *
 		// turn ループは stall で止まる（テストが turn を延々と回さないようにする）。
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -144,7 +144,7 @@ func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t 
 		}
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 

@@ -1,3 +1,9 @@
+// {"RUCM-CFG-SHA256": "3694d01e97e7ad5e0aa6e13acf8682062d9f9eaa7e533ecf5303f16021130229", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
+// **249本のパスは、8つの検査それぞれの成否の組み合わせで爆発したものである。**
+// **結末は7通りしかない**ので、終端フローごとに代表を1本ずつ対応づける。
+// 組み合わせを全部書いても、同じ検査を何度も通るだけで新しく守れるものが増えない。
 package doctor_test
 
 import (
@@ -18,6 +24,7 @@ import (
 // **画面に出る語そのものではなくキーで比べる**（設計 3-35）。語は言語で変わる。
 var wantLabels = []i18n.Key{
 	doctor.LabelConfig,
+	doctor.LabelClaude,
 	doctor.LabelHerdr,
 	doctor.LabelGHAuth,
 	doctor.LabelBoard,
@@ -26,13 +33,15 @@ var wantLabels = []i18n.Key{
 	doctor.LabelCredentials,
 }
 
-// TestDoctor_前提が揃っていれば7項目すべて通る は、揃っている状態の基準線を作る。
+// {"RUCM-PATH": "P001"}
 //
-// 目的: 7項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
+// TestDoctor_前提が揃っていれば8項目すべて通る は、揃っている状態の基準線を作る。
+//
+// 目的: 8項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
 // 与える情報: テスト用herdr mock（protocol 19）・偽ボード（Ready の issue が1件）・
 // テスト用gh mock（project の scope あり）・信頼登録済みの `~/.claude.json`・`rate_limit.source: none`。
 // 成功条件: 見出し語が7つ設計どおりの順序で並び、全部 `✓` で、終了コードが 0 であること。
-func TestDoctor_前提が揃っていれば7項目すべて通る(t *testing.T) {
+func TestDoctor_前提が揃っていれば8項目すべて通る(t *testing.T) {
 	fx := newFixture(t)
 
 	report := fx.Run(t)
@@ -61,7 +70,7 @@ func TestDoctor_前提が揃っていれば7項目すべて通る(t *testing.T) 
 // 目的: 設定ファイルが `✗` のとき、**下流の6項目がすべて `!` になる**こと
 // （設計 3-32 の依存の図。`gh の認証` も設定ファイルの下流である）。
 // 与える情報: WORKFLOW.md を消した状態。ほかは揃っている。
-// 成功条件: 7項目すべてが結果を持ち、記号が上のとおりで、終了コードが 1 であること。
+// 成功条件: 8項目すべてが結果を持ち、記号が上のとおりで、終了コードが 1 であること。
 func TestDoctor_設定ファイルを読めなければ設定に依存する検査は確かめられなかったになる(t *testing.T) {
 	fx := newFixture(t)
 	if err := os.Remove(fx.WorkflowPath); err != nil {
@@ -92,6 +101,8 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 	}
 }
 
+// {"RUCM-PATH": "P002"}
+//
 // TestDoctor_ghが未ログインなら足りないと出しログインの手順を出す は、
 // 未ログインの検出と直し方の提示を確かめる。
 //
@@ -201,6 +212,8 @@ func TestDoctor_herdrのprotocolが設定と一致しなければ足りない(t 
 	assertSymbol(t, report, doctor.LabelClone, doctor.SymbolOK)
 }
 
+// {"RUCM-PATH": "P121"}
+//
 // TestDoctor_herdrへ繋がらなければ足りない は、socket が無い場合を確かめる。
 //
 // 目的: socket へ到達できないときに `✗` にし、herdr の起動を促すこと。
@@ -263,6 +276,8 @@ func TestDoctor_projectが見つからなければ足りない(t *testing.T) {
 	}
 }
 
+// {"RUCM-PATH": "P007"}
+//
 // TestDoctor_トークンを取り出せなければ足りない は、認証の取り出しの失敗を検出する。
 //
 // 目的: ボードを読むトークンを取り出せないときに `✗` にすること（設計 3-32）。
@@ -305,6 +320,8 @@ func TestDoctor_レートリミットは確かめられなかったにする(t *
 	}
 }
 
+// {"RUCM-PATH": "P023"}
+//
 // TestDoctor_対象リポジトリが0件ならcloneと信頼登録は確かめられなかったになる は、
 // ボードが空の場合の扱いを確かめる。
 //
@@ -380,6 +397,8 @@ func TestDoctor_ボードに載る全リポジトリを重複なく検査する(
 	}
 }
 
+// {"RUCM-PATH": "P024"}
+//
 // TestDoctor_cloneが無ければ足りないと直し方を出す は、clone の検査を確かめる。
 //
 // 目的: `ghq list -p -e` の出力が空なら `✗` にし、`ghq get <owner>/<repo>` を案内すること。
@@ -583,9 +602,9 @@ func TestDoctor_資格情報_claude_credentialsはファイルの有無で分け
 
 // TestDoctor_1つ失敗しても残りを全部検査する は、打ち切らないことを確かめる。
 //
-// 目的: 複数の前提が同時に欠けても、7項目すべてを検査して結果を並べること。
+// 目的: 複数の前提が同時に欠けても、8項目すべてを検査して結果を並べること。
 // 与える情報: herdr の protocol が食い違い、clone が無く、gh の scope も足りない状態。
-// 成功条件: 7項目すべてに結果があり、`herdr` / `gh の認証` が `✗`、
+// 成功条件: 8項目すべてに結果があり、`herdr` / `gh の認証` が `✗`、
 // ボードと clone と信頼登録が `!`、終了コードが 1 であること。
 func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 	fx := newFixture(t)
@@ -600,7 +619,7 @@ func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 	report := fx.Run(t)
 
 	if got := labelsOf(report); !equalKeys(got, wantLabels) {
-		t.Fatalf("7項目すべてを検査していない: %v", got)
+		t.Fatalf("8項目すべてを検査していない: %v", got)
 	}
 	assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolOK)
 	assertSymbol(t, report, doctor.LabelHerdr, doctor.SymbolMissing)
@@ -769,13 +788,17 @@ func TestDoctor_トークンが失効していれば認証の直し方を出す(
 // だけで道具そのものが固まると、人間の手が止まる。**
 // 与える情報: 期限より長く待ってから応答する偽ボードと、1項目 200ms の期限。
 // 成功条件: ボードが `!`（確かめられなかった）になり、説明が「時間内に応答がありません
-// でした」であること。**7項目すべてが結果を持ち、終了コードが 1 にならないこと。**
+// でした」であること。**8項目すべてが結果を持ち、終了コードが 1 にならないこと。**
 func TestDoctor_ボードが時間内に応答しなければ確かめられなかったとして残りを続ける(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetDelay(30 * time.Second)
 
 	opts := fx.Options()
-	opts.CheckTimeout = 200 * time.Millisecond
+	// **固定 200ms にしてはならない。**`go test -coverpkg=./...` は全パッケージを
+	// instrument するので実行が遅くなり、**期限切れにしたい「ボード」より先に
+	// 「gh の認証」が期限切れになる**（2026-08-21 に実際に起きた）。
+	// ここで見たいのは「1項目が固まっても残りを続けること」であって、期限の短さではない。
+	opts.CheckTimeout = 2 * time.Second
 
 	start := time.Now()
 	report := doctor.Run(context.Background(), opts)
@@ -814,5 +837,34 @@ func TestDoctor_接続先を差し替えているとボードの説明に出す(
 	}
 	if !strings.Contains(board.Detail, fx.GitHub.URL) {
 		t.Fatalf("差し替えた接続先の URL が説明に出ていない: %q", board.Detail)
+	}
+}
+
+// TestDoctor_claude が PATH に無ければ落とす は、着手する前に気づけることを確かめる。
+//
+// **この検査が無かったために、実運用で issue が1件無駄に止まった**（2026-08-21、設計 6-2）。
+// claude が無くても herdr は pane を作れるので、着手は段9 まで進み、段10 の
+// `agent_status: unknown` で初めて分かる。**そこまで行くと worktree も pane も作ったあとである。**
+//
+// 目的: `claude.kind` の実行ファイルが PATH に無いとき、`claude` の行が `✗` になり、
+// 直し方が出て、終了コードが 1 になること。
+// 与える情報: claude 以外の前提はすべて揃った状態。`LookPath` が必ず失敗する。
+// 成功条件: `claude` が `✗`、直し方が1件以上、**残りの検査も全部走っていること**。
+func TestDoctor_claudeがPATHに無ければ落とす(t *testing.T) {
+	fx := newFixture(t)
+	fx.ClaudePath = "" // PATH に無い状態にする
+
+	report := doctor.Run(context.Background(), fx.Options())
+
+	res := assertSymbol(t, report, doctor.LabelClaude, doctor.SymbolMissing)
+	if len(res.Remedies) == 0 {
+		t.Errorf("claude が無いのに直し方が出ていない: %+v", res)
+	}
+	// **1つ落ちても残りを全部検査する**（設計 3-32）。
+	if got := labelsOf(report); len(got) != len(wantLabels) {
+		t.Errorf("claude が落ちたら残りを検査していない: %v", got)
+	}
+	if report.ExitCode() != 1 {
+		t.Errorf("終了コードが 1 でない: %d", report.ExitCode())
 	}
 }

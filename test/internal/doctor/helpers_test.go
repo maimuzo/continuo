@@ -509,6 +509,11 @@ type fixture struct {
 	// **0 なら doctor の既定（10秒）を使う。**返ってこない外部コマンドを待たずに
 	// 済ませたいテストだけが短い値を入れる。
 	CheckTimeout time.Duration
+	// ClaudePath は claude が PATH にあるとしたときの場所である。
+	//
+	// **newFixture は「入っている」状態で初期化する。**無い状態を試す test は、
+	// これを空文字にしてから doctor.Run を呼ぶこと。
+	ClaudePath string
 }
 
 // newFixture はテスト用herdr mock・テスト用GitHub mock・本物の git のリポジトリ・WORKFLOW.md を用意する。
@@ -554,8 +559,10 @@ func newFixture(t *testing.T) *fixture {
 	writeTrustFile(t, home, repoDir, true)
 
 	fx := &fixture{
-		Root:         root,
-		Home:         home,
+		Root: root,
+		Home: home,
+		// **既定は「claude が入っている」である。**個々の test はここから1つだけ壊す。
+		ClaudePath:   filepath.Join(binDir, "claude"),
 		BinDir:       binDir,
 		GhqArgsFile:  ghqArgsFile,
 		RepoDir:      repoDir,
@@ -623,6 +630,15 @@ func (fx *fixture) Options() doctor.Options {
 		LookupEnv: func(key string) (string, bool) {
 			v, ok := fx.Env[key]
 			return v, ok
+		},
+		// **本物の PATH を見ない。**見ると、検査の結果が
+		// 「テストを走らせたマシンに claude が入っているか」で変わる。
+		// **無い状態を試す test は fx.ClaudePath を空にすること。**
+		LookPath: func(file string) (string, error) {
+			if fx.ClaudePath == "" {
+				return "", exec.ErrNotFound
+			}
+			return fx.ClaudePath, nil
 		},
 	}
 	if fx.GhqPaths != nil {

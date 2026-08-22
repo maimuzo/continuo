@@ -23,6 +23,14 @@ import (
 // keychainTestToken はテスト用security mock が返すトークンである。
 //
 // **エラー文やログにこの文字列が現れないことを検査する**ので、ほかの文字列と紛れない形にしてある。
+// keychainTestTimeout は偽の `security` を待つ上限である。
+//
+// **固定 1 秒にしてはならない。**`go test -coverpkg=./...` は全パッケージを instrument
+// するので実行が遅くなり、1 秒では偽の `security` の起動が間に合わずに落ちる
+// （2026-08-21 に実際に起きた）。**ここで検査しているのは「値を返さないこと」であって
+// 速さではない。**
+const keychainTestTimeout = 10 * time.Second
+
 const keychainTestToken = "sk-ant-oat01-テスト用のキーチェーンのトークン"
 
 // fakeSecurity は PATH の先頭に置くテスト用security mock を作る。
@@ -294,7 +302,7 @@ func TestProbeKeychain_項目の名前だけを返す(t *testing.T) {
 		`"expiresAt":1,"refreshTokenExpiresAt":2,`+
 		`"scopes":["a"],"subscriptionType":"max","rateLimitTier":"tier"}}'`)
 
-	probe, err := ratelimit.ProbeKeychain(context.Background(), time.Second)
+	probe, err := ratelimit.ProbeKeychain(context.Background(), keychainTestTimeout)
 	if err != nil {
 		t.Fatalf("ProbeKeychain が失敗した: %v", err)
 	}

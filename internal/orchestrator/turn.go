@@ -145,6 +145,20 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"identifier", snap.Identifier)
 			return
 		}
+		// **止められただけなら、run を諦めない。**
+		//
+		// `Close` は `shutdownCancel()` を呼んでから待つ。turn の待ち受けはそこで
+		// 中断され、`turnStalled` として返る。**そのまま諦めると pane を閉じにいき、
+		// ctx が死んでいるので失敗して「pane を閉じられませんでした」が出る。**
+		// `Close` 自身は「pane は閉じない」と決めているので、食い違っていた。
+		//
+		// **走行中の run は、次の起動で引き継ぐ**（設計 3-4 / 第7段階の復元）。
+		// ここで諦めると RetryCount を無駄に消費し、引き渡しのコメントまで投稿される。
+		if ctx.Err() != nil {
+			o.logger.Debug("止められたので、この run はそのままにします（次の起動で引き継ぎます）",
+				"identifier", snap.Identifier)
+			return
+		}
 		switch outcome {
 		case turnAborted:
 			return

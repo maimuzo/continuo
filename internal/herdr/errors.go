@@ -10,6 +10,14 @@ import (
 // 返ることがあるのでリトライする」の判定に使う。
 const ErrCodeAgentPaneBusy = "agent_pane_busy"
 
+// ErrCodeAgentNotFound は、その名前の agent が herdr に登録されていないことを表す
+// エラーコードである（実測: 2026-08-21）。
+//
+// **`agent.start` が成功したのにこれが返ることがある。**pane のシェルが準備できて
+// いないまま `agent.start` を受け付けると、Claude Code は1文字も起動せず、
+// agent も登録されない。**起動できていない証拠として使う**（設計 3-16 の段10）。
+const ErrCodeAgentNotFound = "agent_not_found"
+
 // ErrCodeTimeout は、待ち受けつきの呼び出し（agent.prompt の wait / agent.wait）が
 // 期限までに落ち着かなかったときに返るエラーコードである（実測。設計 3-2）。
 //

@@ -241,7 +241,7 @@ func TestRestore_引き継いだworkingのrunもturnの終わりを拾って次�
 		promptMu.Unlock()
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -467,7 +467,7 @@ func TestComment_引き渡しの通知は1つのrunにつき1件だけ書く(t *
 		}
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 

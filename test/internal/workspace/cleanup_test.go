@@ -1,3 +1,7 @@
+// {"RUCM-CFG-SHA256": "25c5d301d9d216c4c6eb9d9d74ea9fb4e53e0eb445eb836956e025ca8e464358", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
+// 7本のパスに、それぞれ対応するテストがある。
 package workspace_test
 
 import (
@@ -100,6 +104,8 @@ func cleanupRequest(cf *cleanupFixture) workspace.CleanupRequest {
 	}
 }
 
+// {"RUCM-PATH": "P003"}
+//
 // 目的: 未コミットの変更（未追跡のファイル）が残っていれば worktree を消さないことを確認する
 // （設計 3-9 の手順2。エージェントが作った成果物が消えるのを防ぐ）。
 // 与える情報: worktree の中に置いた、commit も add もしていないファイル。
@@ -168,6 +174,8 @@ func TestCleanup_見送りのコメントは1回だけになる(t *testing.T) {
 	}
 }
 
+// {"RUCM-PATH": "P001"}
+//
 // 目的: upstream があり push 済みなら片付け、そのとき worktree.remove に渡すのが
 // **身元ファイルの herdr workspace の ID** であることを確認する（設計 3-9 の手順2b・3）。
 // 与える情報: worktree の中で commit して push し、upstream を持たせた状態。
@@ -222,6 +230,8 @@ func TestCleanup_push済みなら消してbranchと設定ファイルも消す(t
 	}
 }
 
+// {"RUCM-PATH": "P002"}
+//
 // 目的: upstream があり push されていない commit が残っていれば消さないことを確認する
 // （設計 3-9 の手順2b の upstream がある側）。
 // 与える情報: push したあとにもう1つ commit を積んだ worktree。
@@ -296,6 +306,8 @@ func TestCleanup_upstreamが無くbaseと差分が無ければ消す(t *testing.
 	}
 }
 
+// {"RUCM-PATH": "P006"}
+//
 // 目的: upstream が無く base も分からないときは、判定できないので消さないことを確認する
 // （設計 3-9 の手順2b。base を推測して消すと成果を失う）。
 // 与える情報: Base を空にした CleanupRequest。
@@ -370,6 +382,8 @@ func TestCleanup_before_removeが失敗しても片付けを続ける(t *testing
 	}
 }
 
+// {"RUCM-PATH": "P004"}
+//
 // 目的: 消す直前の封じ込め検査に落ちたら、何も消さずに失敗することを確認する
 // （設計 3-20。「消す直前」がいちばん危ない検査点である）。
 // 与える情報: 置き場所の外側にある worktree のパス。
@@ -397,6 +411,8 @@ func TestCleanup_置き場所の外側は消さずに失敗する(t *testing.T) 
 	}
 }
 
+// {"RUCM-PATH": "P007"}
+//
 // 目的: cleanup.enabled が偽なら何も消さず、かつ「見送った」と分かる戻り値になることを
 // 確認する（設計 3-9 の手順5。デバッグ時に中身を見たい場合がある）。
 // 与える情報: cleanup.enabled を偽にした設定。
@@ -431,6 +447,8 @@ func TestCleanup_無効なら何もしない(t *testing.T) {
 	}
 }
 
+// {"RUCM-PATH": "P005"}
+//
 // 目的: 片付けを始める判定が cleanup.on_states に入った時点であり、
 // active でなくなった時点ではないことを確認する（設計 3-9 の手順1）。
 // 与える情報: on_states が Done だけの設定と、Done / done / In Review / Blocked の各 Status。
@@ -644,13 +662,18 @@ func TestCleanup_herdrが別のパスを答えたら何も消さない(t *testin
 	if err := os.MkdirAll(other, 0o700); err != nil {
 		t.Fatalf("別のパスを作れない: %v", err)
 	}
-	open := worktreeOpenResult("w9", "w9:p1")
-	open["worktree"] = map[string]any{"path": other}
 	fake := newFakeHerdr(t, map[string]any{
-		herdr.MethodWorktreeOpen:   open,
+		herdr.MethodWorktreeOpen:   worktreeOpenResult("w9", "w9:p1"),
 		herdr.MethodWorktreeRemove: worktreeRemoveResult("w9", ""),
 	})
 	cf := newCleanupFixtureWith(t, fixtureOptions{Herdr: fake})
+
+	// **Prepare を通してから差し替える。**Prepare 自身も「herdr が別の場所を開いたら
+	// 止める」検査を持つので（設計 6-2）、最初から別のパスを返すと Prepare で落ちて
+	// Cleanup の検算に辿り着けない。
+	open := worktreeOpenResult("w9", "w9:p1")
+	open["worktree"] = map[string]any{"path": other}
+	fake.SetResult(herdr.MethodWorktreeOpen, open)
 
 	_, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
 	if err == nil {

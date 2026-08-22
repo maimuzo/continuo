@@ -106,7 +106,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		Kind:   o.cfg.Claude.Kind,
 		PaneID: paneID,
 		Args:   o.claudeStartArgs(identity.SettingsPath, "", identity.SessionUUID),
-	}, agentStartRetries, agentStartRetryDelay); err != nil {
+	}, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 		o.logger.Warn("セッションを復元できません（No conversation found など）",
 			"identifier", snap.Identifier, "error", err)
 		o.failCommentRecovery(ctx, rs)

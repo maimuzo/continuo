@@ -1,3 +1,7 @@
+// {"RUCM-CFG-SHA256": "84fe18b373fccaaaa45abd54d35647770fded53bfa246c36c3e7178accdb62d7", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
+// 15本のパスは、6通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
 package orchestrator_test
 
 import (
@@ -61,6 +65,8 @@ func newUsageReader(t *testing.T, endpoint, tokenEnv string) *ratelimit.Reader {
 	return reader
 }
 
+// {"RUCM-PATH": "P001"}
+//
 // TestQuota_100パーセントかつhookが来ていない run だけを枠待ちにする は、
 // 枠待ちの判定が2条件の連言であることを確かめる。
 //
@@ -118,6 +124,8 @@ func TestQuota_100パーセントかつhookが来ていないrunだけを枠待�
 	}
 }
 
+// {"RUCM-PATH": "P004"}
+//
 // TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める は、
 // 「新規を止める閾値」と「この run は枠待ちである」を分けていることを確かめる。
 //
@@ -232,6 +240,8 @@ func TestQuota_資格情報が取れなければ枠の判定を諦めて起動�
 	}
 }
 
+// {"RUCM-PATH": "P002"}
+//
 // TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の指示を送らない は、
 // 二重投入の防止を確かめる。
 //
@@ -296,8 +306,11 @@ func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の�
 			status = "idle"
 		}
 		return map[string]any{
-			"type":  "agent_info",
-			"agent": map[string]any{"name": params["target"], "agent_status": status},
+			"type": "agent_info",
+			"agent": map[string]any{
+				"name": params["target"], "agent_status": status,
+				"interactive_ready": status == "idle" || status == "done",
+			},
 		}, nil
 	})
 
@@ -327,4 +340,75 @@ func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の�
 	waitFor(t, 20*time.Second, "hook を受けて turn が終わる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
+}
+
+// {"RUCM-PATH": "P005"}
+//
+// TestQuota_枠を使い切っていなければ待ち直さない は、枠待ちの条件その1 を確かめる。
+//
+// **枠待ちの判定は2つの条件をどちらも満たすときだけ立つ**（設計 3-27）。
+// **1つ目は「使い切っている枠が1つでもあること」。**
+// 使い切っていないのに待ち直すと、動いていない run を永久に抱える。
+//
+// 目的: 枠に余裕があるとき、枠待ちにしないこと。
+// 与える情報: 使用率 50% を返す usage API と、hook を1件も受けていない run。
+// 成功条件: 枠待ちの印が立たないこと。
+func TestQuota_枠を使い切っていなければ待ち直さない(t *testing.T) {
+	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	endpoint, _ := newUsageServer(t, []map[string]any{
+		{"kind": "session", "percent": 50, "resets_at": resetsAt, "severity": "normal"},
+	})
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_A")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		AgentStatus: herdr.AgentStatusUnknown,
+		RateLimit:   reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.Claude.TurnTimeoutMs = 50
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+		},
+	})
+	adoptRun(fx, 188)
+
+	time.Sleep(120 * time.Millisecond)
+	fx.Orc.Tick(context.Background())
+
+	v, ok := viewOf(fx, "octocat/hello-world#188")
+	if !ok {
+		t.Fatal("run が印から外れている")
+	}
+	if v.WaitingQuota {
+		t.Errorf("枠に余裕があるのに枠待ちにしている: %+v", v)
+	}
+}
+
+// TestQuota_resets_atがnullの枠は待ち時間を決められない は、リセット時刻の扱いを確かめる。
+//
+// **`resets_at` が null の枠がある**（設計 3-27）。
+// **いつ明けるか分からないものを「待つ」と決めると、永久に待つ run ができる。**
+//
+// 目的: 使い切っている枠の `resets_at` が null のとき、その時刻を待ち時間にしないこと。
+// 与える情報: `percent: 100` かつ `resets_at: null` の枠。
+// 成功条件: 落ちずに巡回が回りきること（**時刻を決められないまま先へ進まない**）。
+func TestQuota_resets_atがnullの枠は待ち時間を決められない(t *testing.T) {
+	endpoint, _ := newUsageServer(t, []map[string]any{
+		{"kind": "session", "percent": 100, "resets_at": nil, "severity": "normal"},
+	})
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_A")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		AgentStatus: herdr.AgentStatusUnknown,
+		RateLimit:   reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.Claude.TurnTimeoutMs = 50
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+		},
+	})
+	adoptRun(fx, 188)
+
+	time.Sleep(120 * time.Millisecond)
+	// **落ちないことを確かめる。**時刻を決められないまま進むと、ここで panic するか固まる。
+	fx.Orc.Tick(context.Background())
 }

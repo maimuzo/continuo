@@ -136,23 +136,28 @@ func (c *Client) AgentStart(ctx context.Context, params AgentStartParams) (*Agen
 // リトライする（設計 2-1: 「herdr pane split の直後に herdr agent start を呼ぶと
 // agent_pane_busy が返ることがある（実測で1回発生）。リトライを入れる」）。
 //
+// **`agent_pane_busy` は「pane がまだシェルのプロンプトに来ていない」という意味である。**
+// `worktree.open` が pane を作った直後は、シェルの起動（プロファイルの読み込みなど）が
+// 終わっておらず、herdr は `agent target pane <id> is not an available shell` を返す
+// （2026-08-21 に E2E で再現）。**待てば必ず使えるようになるので、時間で粘る。**
+//
 // ctx: 呼び出しに適用するコンテキスト。リトライの待機中も尊重する
 // （ctx が終わればその時点で打ち切る）。
 // params: AgentStart と同じ。
-// maxRetries: agent_pane_busy を受けたときに再試行する回数の上限（初回呼び出しは含まない。
-// 例えば 3 を渡すと、最大で 1 + 3 = 4 回呼ぶ）。
+// budget: `agent_pane_busy` を受けたときに粘る時間の上限。**0 以下なら1回だけ呼ぶ。**
 // delay: 各リトライの前に待つ時間。
 // 戻り値: いずれかの試行が成功すればその結果を返す。agent_pane_busy 以外のエラーを
-// 受けた場合は即座にそのエラーを返す（リトライしない）。maxRetries を使い切っても
+// 受けた場合は即座にそのエラーを返す（リトライしない）。budget を使い切っても
 // なお agent_pane_busy の場合は、最後に受け取ったエラーを返す。
 func (c *Client) AgentStartWithRetry(
 	ctx context.Context,
 	params AgentStartParams,
-	maxRetries int,
+	budget time.Duration,
 	delay time.Duration,
 ) (*AgentStartResult, error) {
+	deadline := time.Now().Add(budget)
 	var lastErr error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
 			timer := time.NewTimer(delay)
 			select {
@@ -171,8 +176,11 @@ func (c *Client) AgentStartWithRetry(
 		if !IsCode(err, ErrCodeAgentPaneBusy) {
 			return nil, err
 		}
+		// **時間で打ち切る。**回数で打ち切ると、シェルの起動が遅いマシンで足りなくなる。
+		if !time.Now().Before(deadline) {
+			return nil, lastErr
+		}
 	}
-	return nil, lastErr
 }
 
 // AgentWaitOptions は「agent の状態が落ち着くまで待つ」ときの条件である

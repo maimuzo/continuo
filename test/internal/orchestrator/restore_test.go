@@ -1,3 +1,7 @@
+// {"RUCM-CFG-SHA256": "25950180a96d4e019a8fb16abb8febaefc2a2a31fa04b3ead6c5321ea7fc3414", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**「再起動して実行中の issue を引き継ぐ」の
+// 11本のパスに、それぞれ対応するテストがある（既存のテストへマーカーを付けた）。
 package orchestrator_test
 
 import (
@@ -112,6 +116,8 @@ func TestRestore_引き継いだrunにはstallの時計が引き継いだ時刻�
 	}
 }
 
+// {"RUCM-PATH": "P001"}
+//
 // TestRestore_agent_statusがworkingならNeedsPromptを立てない は、
 // 走っている turn に別の turn を投げないことを確かめる。
 //
@@ -142,6 +148,8 @@ func TestRestore_agent_statusがworkingならNeedsPromptを立てない(t *testi
 	}
 }
 
+// {"RUCM-PATH": "P002"}
+//
 // TestRestore_idleなら継続の指示を送る は、引き継いだ run へ送る本文を確かめる。
 //
 // 目的: 設計 3-4 の段5c。**送るのは継続の指示（5-4）であり、1回目の本文（5-3）ではない。**
@@ -167,7 +175,7 @@ func TestRestore_idleなら継続の指示を送る(t *testing.T) {
 		prompted.Set(text)
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -185,6 +193,8 @@ func TestRestore_idleなら継続の指示を送る(t *testing.T) {
 	}
 }
 
+// {"RUCM-PATH": "P005"}
+//
 // TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる は、
 // 保留中の権限要求が承認されて実行されるのを防ぐ。
 //
@@ -221,6 +231,8 @@ func TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落�
 	}
 }
 
+// {"RUCM-PATH": "P006"}
+//
 // TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す は、
 // 判断できない run を引き継がないことを確かめる。
 //
@@ -325,6 +337,8 @@ func TestRestore_socketのパスが前回と違えば引き継がずpaneを閉�
 	}
 }
 
+// {"RUCM-PATH": "P004"}
+//
 // TestRestore_引き継いだ回数が上限ならturnを1回も送らずfailure_stateへ落とす は、
 // 設計 3-4 の段5b を確かめる。
 //
@@ -417,6 +431,8 @@ func TestRestore_同じissueのworktreeが2つあるとき新しいほうを採�
 	}
 }
 
+// {"RUCM-PATH": "P007"}
+//
 // TestRestore_In_Reviewのrunはpaneもworktreeも残して何もしない は、
 // 設計 3-4 の段5a の「引き渡し」を確かめる。
 //
@@ -554,6 +570,8 @@ func TestRestore_取り直しで見つからないrunはpaneもworktreeも残し
 	}
 }
 
+// {"RUCM-PATH": "P009"}
+//
 // TestRestore_取り直しに失敗しても起動を続けpaneを閉じる は、設計 3-4 の段3 を確かめる。
 //
 // 目的: 認証切れ・ネットワーク断・レートリミットで取り直せなくても起動は続ける。
@@ -586,6 +604,8 @@ func TestRestore_取り直しに失敗しても起動を続けpaneを閉じる(t
 	}
 }
 
+// {"RUCM-PATH": "P008"}
+//
 // TestRestore_paneが無い実行中のrunは既定では次の巡回に委ねる は、
 // `restart.orphan_running_action` の既定（`redispatch`）を確かめる。
 //

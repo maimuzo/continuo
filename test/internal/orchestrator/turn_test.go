@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "69ea1c58fdd8fbba6827e396c21be8741a9e43731031018d69632a8fe4fb98e5", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
 
 import (
@@ -12,6 +15,8 @@ import (
 	"github.com/maimuzo/continuo/internal/hookserver"
 )
 
+// {"RUCM-PATH": "P005"}
+//
 // TestTurn_background_tasksが空のStopだけでturnの終わりと判定しない は、
 // turn の終わりの判定の要を確かめる。
 //
@@ -40,7 +45,7 @@ func TestTurn_background_tasksが空のStopだけでturnの終わりと判定し
 		fx.Orc.OnHook(taskNotificationEvent("session-1", "t1"))
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -86,7 +91,7 @@ func TestTurn_background_tasksの項目が欠けていたらturnの終わりと�
 		})
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -143,7 +148,7 @@ func TestTurn_表明が無かった次のturnで促す(t *testing.T) {
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -165,6 +170,8 @@ func TestTurn_表明が無かった次のturnで促す(t *testing.T) {
 	}
 }
 
+// {"RUCM-PATH": "P007"}
+//
 // TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす は、打ち切りを確かめる。
 //
 // 目的: 設計 3-8 の「打ち切り: max_dispatch_turns に達したら failure_state へ落とす」と、
@@ -186,7 +193,7 @@ func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *test
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 
@@ -209,6 +216,8 @@ func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *test
 	}
 }
 
+// {"RUCM-PATH": "P008"}
+//
 // TestTurn_blockedが返ったらescを送ってから人間へ渡す は、安全に関わる分岐を確かめる。
 //
 // 目的: 設計 3-11 の「`blocked` が返ったとき、そのまま次のプロンプトを投げると、保留中の

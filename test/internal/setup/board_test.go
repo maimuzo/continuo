@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "1bf01241889b9e6e9759b0792ea55c34364edc6c75fbd389fc68bffe349f4adb", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
 package setup_test
 
 import (
@@ -99,6 +102,8 @@ func TestFetchStatusField_singleSelectでないフィールドは受け付けな
 	}
 }
 
+// {"RUCM-PATH": "P009"}
+//
 // 目的: gh の落ち方を「直し方が決まる形」へ分類できることを確認する。
 // 与える情報: scope 不足とレートリミットのそれぞれの文言を返すテスト用gh mock。
 // 成功条件: setup.ErrScopeMissing / setup.ErrRateLimited をそれぞれ返すこと。

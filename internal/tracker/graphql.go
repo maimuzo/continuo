@@ -174,6 +174,29 @@ const rateLimitedErrorType = "RATE_LIMITED"
 // それ以外の非2xxは CategoryStatus、応答の解析失敗や GraphQL の errors は
 // CategoryResponse に分類する。
 func (c *graphqlClient) do(ctx context.Context, query string, variables map[string]any, out any) error {
+	return c.doWith(ctx, query, variables, out, false)
+}
+
+// doAllowingNotFound は `NOT_FOUND` を部分的な成功として扱う `do` である。
+//
+// **`nodes(ids:)` で ID を指定して引く呼び出しだけが使う。**
+// GitHub は消えた ID が混ざると、`data.nodes` にその位置だけ `null` を入れたうえで、
+// `errors` にも `NOT_FOUND` を返す。**そこで `data` を捨てると、生き残っている issue まで
+// 読めなくなる**（2026-08-21 に実運用で発生。設計 6-2）。
+//
+// **ほかの呼び出しでは使ってはならない。**フィールド名やボードの解決に失敗したときも
+// `NOT_FOUND` が返るので、握りつぶすと**設定の綴り違いに永久に気づけない。**
+//
+// ctx / query / variables / out: do と同じ。
+// 戻り値: do と同じ。ただしエラーが `NOT_FOUND` だけなら、`data` を書き出して nil を返す。
+func (c *graphqlClient) doAllowingNotFound(ctx context.Context, query string, variables map[string]any, out any) error {
+	return c.doWith(ctx, query, variables, out, true)
+}
+
+// doWith は do と doAllowingNotFound の実体である。
+//
+// allowNotFound: `NOT_FOUND` だけのエラーを部分的な成功として扱うかどうか。
+func (c *graphqlClient) doWith(ctx context.Context, query string, variables map[string]any, out any, allowNotFound bool) error {
 	reqBody, err := json.Marshal(gqlRequestBody{Query: query, Variables: variables})
 	if err != nil {
 		return &Error{Category: CategoryResponse, Message: "GraphQL リクエストの組み立てに失敗しました", Err: err}
@@ -227,9 +250,21 @@ func (c *graphqlClient) do(ctx context.Context, query string, variables map[stri
 				RetryAfter: rateLimitRetryAfter(resp),
 			}
 		}
-		return &Error{
-			Category: CategoryResponse,
-			Message:  fmt.Sprintf("GraphQL がエラーを返しました: %s", joinGQLErrors(envelope.Errors)),
+		// **`NOT_FOUND` だけなら、`data` を捨てずに先へ進む。**
+		//
+		// **GitHub の GraphQL は `nodes(ids:)` に消えた ID が混ざると、
+		// `data.nodes` にその位置だけ `null` を入れたうえで `errors` にも `NOT_FOUND` を返す。**
+		// **これは部分的な成功である。**ここで捨てると、生き残っている issue まで読めなくなる。
+		//
+		// **消えた ID の扱いは呼び出し側が決める**（FetchIssuesByIDs は `null` を
+		// 「もう見えない」として省く。SPEC.md 11.1）。
+		//
+		// 実運用で、ボードごと消したあとに毎巡回でこのエラーが出続けた（2026-08-21。設計 6-2）。
+		if !allowNotFound || !onlyNotFound(envelope.Errors) {
+			return &Error{
+				Category: CategoryResponse,
+				Message:  fmt.Sprintf("GraphQL がエラーを返しました: %s", joinGQLErrors(envelope.Errors)),
+			}
 		}
 	}
 
@@ -310,6 +345,31 @@ func findRateLimitedError(errs []gqlErrorEntry) (gqlErrorEntry, bool) {
 		}
 	}
 	return gqlErrorEntry{}, false
+}
+
+// notFoundErrorType は「その ID のノードが見つからない」ことを表す GraphQL のエラー種別である。
+//
+// **GitHub は `nodes(ids:)` に消えた ID が混ざると、`data` を返したうえでこれも返す。**
+const notFoundErrorType = "NOT_FOUND"
+
+// onlyNotFound は、返ってきたエラーが `NOT_FOUND` だけかどうかを返す。
+//
+// **1件でも別の種別が混ざっていれば偽である。**部分的な成功として扱ってよいのは、
+// 「消えた ID があった」だけのときに限る。
+//
+// errs: GraphQL が返したエラーの一覧。**空なら偽を返す**（呼び出し側が
+// `len(errs) > 0` を確かめてから呼ぶ）。
+// 戻り値: すべて NOT_FOUND なら true。
+func onlyNotFound(errs []gqlErrorEntry) bool {
+	if len(errs) == 0 {
+		return false
+	}
+	for _, e := range errs {
+		if e.Type != notFoundErrorType {
+			return false
+		}
+	}
+	return true
 }
 
 // rateLimitRetryAfter は応答ヘッダからレートリミットの推奨待機時間を読み取る。

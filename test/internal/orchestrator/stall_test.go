@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "69ea1c58fdd8fbba6827e396c21be8741a9e43731031018d69632a8fe4fb98e5", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
 
 import (
@@ -63,6 +66,8 @@ func TestCheckStalls_画面の版が増えている間は何時間かかって�
 	})
 }
 
+// {"RUCM-PATH": "P006"}
+//
 // TestCheckStalls_画面の版が止まったまま閾値を超えたら打ち切る は、打ち切りの条件を確かめる。
 //
 // 目的: 設計 3-21 の「版が `claude.turn_timeout_ms` のあいだ増えなければ打ち切る」を示す。

@@ -596,7 +596,9 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 		"statusField": a.statusField,
 		"ids":         ids,
 	}
-	if err := a.gql.do(ctx, byIDsQueryTemplate, vars, &resp); err != nil {
+	// **`NOT_FOUND` は「その ID がもう見えない」ことを意味するので、部分的な成功として扱う。**
+	// 消えた ID は `data.nodes` に `null` で入るので、下のループが省く。
+	if err := a.gql.doAllowingNotFound(ctx, byIDsQueryTemplate, vars, &resp); err != nil {
 		return nil, err
 	}
 

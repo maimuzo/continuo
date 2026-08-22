@@ -14,6 +14,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -69,7 +71,12 @@ func CheckUpdatable(dir string) (Result, error) {
 		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotFound, path, strings.Join(missing, " / "))
 	}
 
-	return Result{Path: path, Overwritten: true}, nil
+	// **既に書かれている owner とボードの番号を拾って返す。**
+	//
+	// `continuo init` で埋めたのに `continuo setup` でもう一度 `--project` を
+	// 指定させるのは筋が通らない（2026-08-21 に実際に詰まった。設計 6-2）。
+	owner, number := readProviderValues(string(raw))
+	return Result{Path: path, Overwritten: true, Owner: owner, ProjectNumber: number}, nil
 }
 
 // UpdateStatuses は、既にある WORKFLOW.md の Status に関する7行だけを書き換える。
@@ -196,4 +203,37 @@ func writeAtomically(path, content string, perm fs.FileMode) error {
 		return i18n.Errorf(i18n.KeyScaffoldUpdateRenameFailed, path, err)
 	}
 	return nil
+}
+
+// providerOwnerRe と providerProjectRe は front matter に書かれた値を拾う。
+//
+// **YAML として解釈し直さない。**この時点の WORKFLOW.md は、ほかのキーが
+// プレースホルダのままでも構わない（`continuo setup` は Status を割り当てる前に呼ばれる）。
+// 全体の検証を通そうとすると、埋めていないキーで落ちて先へ進めなくなる。
+var (
+	providerOwnerRe   = regexp.MustCompile(`(?m)^[ \t]*owner:[ \t]*([^\s#]+)`)
+	providerProjectRe = regexp.MustCompile(`(?m)^[ \t]*project_number:[ \t]*([0-9]+)`)
+)
+
+// readProviderValues は front matter から owner とボードの番号を拾う。
+//
+// raw: WORKFLOW.md の全文。
+// 戻り値の1つ目: owner。プレースホルダ（`<` で始まる形）なら空文字。
+// 戻り値の2つ目: ボードの番号。プレースホルダ（0）なら 0。
+func readProviderValues(raw string) (string, int) {
+	owner := ""
+	if m := providerOwnerRe.FindStringSubmatch(raw); len(m) == 2 {
+		v := strings.TrimSpace(m[1])
+		// **雛形のプレースホルダは採らない。**`<GitHubのアカウント名>` の形で入っている。
+		if !strings.HasPrefix(v, "<") && ValidOwner(v) {
+			owner = v
+		}
+	}
+	number := 0
+	if m := providerProjectRe.FindStringSubmatch(raw); len(m) == 2 {
+		if n, err := strconv.Atoi(strings.TrimSpace(m[1])); err == nil && n > 0 {
+			number = n
+		}
+	}
+	return owner, number
 }

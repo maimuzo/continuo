@@ -1,11 +1,12 @@
 // Package doctor は `continuo doctor` の実体である（docs/plans/continuo_design.md 3-32）。
 //
-// **前提が7つあり、どれが欠けても continuo は静かに失敗する。**機械的に検査して、
+// **前提が8つあり、どれが欠けても continuo は静かに失敗する。**機械的に検査して、
 // 足りないものと直し方を人間に出すのがこのパッケージの仕事である。
 //
-// 検査するものと見出し語は次の7つで固定する（report.go の Label 定数）。
+// 検査するものと見出し語は次の8つで固定する（report.go の Label 定数）。
 //
 //	設定ファイル … WORKFLOW.md が読めて、front matter が検証を通るか
+//	claude       … `claude.kind` の実行ファイルが PATH にあるか
 //	herdr        … socket の ping の応答の protocol が herdr.protocol と一致するか
 //	gh の認証     … `gh auth status` の Token scopes に project が単独で並んでいるか
 //	ボード        … Bootstrap が通り、active_states の選択肢名が全部あるか
@@ -80,7 +81,12 @@ type Options struct {
 	// LookupEnv は環境変数を引く関数である。nil なら os.LookupEnv を使う。
 	// **資格情報の検査（rate_limit.token_source が env のとき）が使う。**
 	LookupEnv func(key string) (string, bool)
-	// Timeout は7項目の検査全体の上限である。**0 なら DefaultTimeout を使う。**
+	// LookPath は実行ファイルを PATH から探す関数である。nil なら exec.LookPath を使う。
+	//
+	// **テストは必ずこれを渡すこと。**本物を呼ぶと、検査結果が
+	// 「テストを走らせたマシンに claude が入っているか」で変わってしまう。
+	LookPath func(file string) (string, error)
+	// Timeout は8項目の検査全体の上限である。**0 なら DefaultTimeout を使う。**
 	Timeout time.Duration
 	// CheckTimeout は外部に触る検査1つあたりの上限である。
 	// **0 なら DefaultCheckTimeout を使う。**
@@ -154,18 +160,22 @@ func Run(ctx context.Context, opts Options) Report {
 	configResult, cfg := checkConfig(opts.ConfigPath)
 	report.add(configResult)
 
-	// 段2: herdr。照合する protocol は設定から来るので、設定が読めなければ確かめられない。
+	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
+	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。
+	report.add(checkClaude(opts, cfg, configResult.Symbol))
+
+	// 段3: herdr。照合する protocol は設定から来るので、設定が読めなければ確かめられない。
 	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
 		return checkHerdr(ctx, cfg, configResult.Symbol)
 	}))
 
-	// 段3: gh の認証。設定ファイルの下流である（設計 3-32 の依存の図）。
+	// 段4: gh の認証。設定ファイルの下流である（設計 3-32 の依存の図）。
 	ghResult := withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
 		return checkGHAuth(ctx, opts, configResult.Symbol)
 	})
 	report.add(ghResult)
 
-	// 段4: ボード。設定と gh の認証の両方が通っていないと読めない。
+	// 段5: ボード。設定と gh の認証の両方が通っていないと読めない。
 	// **ここだけ期限を2倍にする。**Bootstrap と候補の取得で2リクエスト送るためである。
 	var boardResult Result
 	var repos []Repo
@@ -176,7 +186,7 @@ func Run(ctx context.Context, opts Options) Report {
 	})
 	report.add(boardResult)
 
-	// 段5: clone。対象リポジトリはボードを読んで決まる。
+	// 段6: clone。対象リポジトリはボードを読んで決まる。
 	var cloneResult Result
 	var clonePaths map[string]string
 	cloneResult = withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
@@ -186,10 +196,10 @@ func Run(ctx context.Context, opts Options) Report {
 	})
 	report.add(cloneResult)
 
-	// 段6: 信頼登録。**鍵にするのは clone の絶対パスである**（worktree のパスではない。3-32）。
+	// 段7: 信頼登録。**鍵にするのは clone の絶対パスである**（worktree のパスではない。3-32）。
 	report.add(checkTrust(opts, repos, clonePaths, boardResult.Symbol))
 
-	// 段7: 資格情報。**上流が落ちても飛ばさない。**設定が読めたかどうかだけで記号を分ける。
+	// 段8: 資格情報。**上流が落ちても飛ばさない。**設定が読めたかどうかだけで記号を分ける。
 	// **期限を切る。**`token_source: keychain` のときは外部コマンド（`security`）を起動し、
 	// 確認のダイアログが出たまま誰も答えないと返らないためである。
 	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {

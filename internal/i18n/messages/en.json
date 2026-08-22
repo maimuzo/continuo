@@ -1,1 +1,14 @@
-{}
+{
+  "cli.main.err_port_range": "error: --port is out of range (%d). Use a value between 0 and 65535 (0 lets the OS pick a free port)",
+  "doctor.claude.config_unreadable": "cannot read the config file, so there is no way to know which executable to look for",
+  "doctor.claude.found": "%s",
+  "doctor.claude.not_found": "%s is not on PATH",
+  "doctor.claude.remedy_install": "Install Claude Code and put %s somewhere on PATH (https://claude.com/claude-code). Without it, dispatch always fails after creating the worktree and the pane.",
+  "doctor.label.claude": "claude",
+  "orchestrator.confirm_startup.not_interactive": "Claude Code started but is not ready for input yet (agent: %s, status: %s, interactive_ready: false). Sending a prompt now would be rejected by herdr with agent_not_ready. Check the screen with `herdr agent read %s --source recent-unwrapped --lines 40`.",
+  "ratelimit.credentials.remedy_env": "Set rate_limit.token_source to env in WORKFLOW.md and put the name of the environment variable holding the token in token_env (or set rate_limit.source to none to skip the rate limit).",
+  "ratelimit.credentials.remedy_keychain": "On macOS the credentials live in the Keychain. Set rate_limit.token_source to keychain in WORKFLOW.md and run continuo allow-keychain-access once (or set rate_limit.source to none to skip the rate limit).",
+  "ratelimit.credentials_file.not_exist": "%w: %s does not exist. %s",
+  "ratelimit.credentials_file.read_failed": "%w: cannot read %s: %w",
+  "workspace.prepare.worktree_path_mismatch": "the worktree was prepared but herdr opened a different location (prepared: %s / opened by herdr: %s / workspace: %s). Working in this workspace would touch the same place as another issue."
+}

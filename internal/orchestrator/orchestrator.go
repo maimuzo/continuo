@@ -114,7 +114,7 @@ type HerdrClient interface {
 	// PaneClose は pane を閉じる。**worker を止める唯一の手段である**（設計 3-5）。
 	PaneClose(ctx context.Context, params herdr.PaneCloseParams) (*herdr.PaneCloseResult, error)
 	// AgentStartWithRetry は agent を起動する（agent_pane_busy をリトライする。設計 2-1）。
-	AgentStartWithRetry(ctx context.Context, params herdr.AgentStartParams, maxRetries int, delay time.Duration) (*herdr.AgentStartResult, error)
+	AgentStartWithRetry(ctx context.Context, params herdr.AgentStartParams, budget, delay time.Duration) (*herdr.AgentStartResult, error)
 	// AgentPrompt はプロンプトを送る。**wait つきで送る**（設計 3-2）。
 	AgentPrompt(ctx context.Context, params herdr.AgentPromptParams) (*herdr.AgentPromptResult, error)
 	// AgentWait は agent の状態が落ち着くまで待つ。**単独では turn の終わりを待てない**（設計 3-2）。

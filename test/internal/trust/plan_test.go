@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "aa1cf432a64c82dfe67a546da4d8ee8565a21c043f21222f98da8a2b99b39cf7", "SOURCE": "docs/spec/usecases/particular_case/対象リポジトリを信頼登録する.cfg.json"}
+//
+// **RUCM のテストパスに対応づけたテストである。**
 package trust_test
 
 import (
@@ -114,6 +117,8 @@ func TestPlan_列挙されていないリポジトリは対象にしない(t *te
 	}
 }
 
+// {"RUCM-PATH": "P006"}
+//
 // 目的: clone が無いリポジトリを、登録の対象から外して理由つきで返すことを確認する。
 //
 // **continuo は勝手に clone しない。**手元に無いものを信頼させることもしない。

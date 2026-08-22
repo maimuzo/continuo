@@ -61,9 +61,10 @@ const repositoriesFilledComment3 = "**これから issue を作るリポジト�
 // ownerPattern は tracker.provider.owner として受け付ける文字の範囲である。
 //
 // GitHub の user / organization 名は英数字とハイフンだけで、39文字以内である。
+// **ハイフンで始めることも終わることもできない**（GitHub 側で弾かれる）。
 // ここで弾く目的は2つある。1つは打ち間違いをその場で知らせること、もう1つは
 // gh の出力をそのまま YAML へ書くときに、引用符や改行を混ぜられないようにすることである。
-var ownerPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$`)
+var ownerPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$`)
 
 // Values は雛形のプレースホルダに書き込む値である。
 //

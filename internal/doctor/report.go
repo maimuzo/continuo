@@ -19,6 +19,11 @@ const (
 	LabelConfig = i18n.KeyDoctorLabelConfig
 	// LabelHerdr は herdr の socket の ping の protocol が設定と一致するかの検査である。
 	LabelHerdr = i18n.KeyDoctorLabelHerdr
+	// LabelClaude は `claude.kind` の実行ファイルが PATH にあるかの検査である。
+	//
+	// **これが無いと、着手は段9 まで進んでから必ず失敗する。**herdr は pane を作れるが、
+	// そこで起動するはずの Claude Code が見つからず `unknown` を返す（2026-08-21 に実際に起きた）。
+	LabelClaude = i18n.KeyDoctorLabelClaude
 	// LabelGHAuth は `gh auth status` の scope に project が単独で並んでいるかの検査である。
 	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。

@@ -30,7 +30,7 @@ func recordPrompts(fx *fixture) func() []string {
 		mu.Unlock()
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 	return func() []string {

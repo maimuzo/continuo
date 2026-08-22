@@ -103,7 +103,7 @@ func TestAgentStart_agent名が不正なら接続せずに弾かれる(t *testin
 // 確認する（設計 2-1: 「herdr pane split の直後に herdr agent start を呼ぶと
 // agent_pane_busy が返ることがある。リトライを入れる」）。
 // 与える情報: 偽サーバは1・2回目の接続で agent_pane_busy エラーを返し、3回目で成功する。
-// 成功条件: AgentStartWithRetry(maxRetries=3) が最終的に成功結果を返し、
+// 成功条件: AgentStartWithRetry（時間で粘る） が最終的に成功結果を返し、
 // 偽サーバへの接続回数がちょうど3であること（無駄なリトライをしていないこと）。
 func TestAgentStartWithRetry_agent_pane_busyから成功に転じる(t *testing.T) {
 	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
@@ -132,7 +132,7 @@ func TestAgentStartWithRetry_agent_pane_busyから成功に転じる(t *testing.
 		Name:   normalize.SafeName("continuo-test"),
 		Kind:   "claude",
 		PaneID: "w1:p2",
-	}, 3, 10*time.Millisecond)
+	}, 2*time.Second, 10*time.Millisecond)
 
 	if err != nil {
 		t.Fatalf("リトライの末に成功するはずが失敗した: %v", err)
@@ -164,7 +164,7 @@ func TestAgentStartWithRetry_pane_busy以外はリトライしない(t *testing.
 		Name:   normalize.SafeName("continuo-test"),
 		Kind:   "claude",
 		PaneID: "w1:p2",
-	}, 3, 10*time.Millisecond)
+	}, 2*time.Second, 10*time.Millisecond)
 
 	if err == nil {
 		t.Fatalf("エラーになるはずが成功した")

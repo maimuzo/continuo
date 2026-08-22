@@ -292,7 +292,7 @@ func (fh *fakeHerdr) installDefaults() {
 		return map[string]any{
 			"type": "pane_list",
 			"panes": []any{
-				map[string]any{"pane_id": id + ":p1", "workspace_id": id, "agent_status": "idle"},
+				map[string]any{"pane_id": id + ":p1", "workspace_id": id, "agent_status": "idle", "interactive_ready": true},
 			},
 		}, nil
 	})
@@ -311,19 +311,19 @@ func (fh *fakeHerdr) installDefaults() {
 	fh.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
 			"type":  "agent_started",
-			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "pane_id": params["pane_id"]},
+			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true, "pane_id": params["pane_id"]},
 		}, nil
 	})
 	fh.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
 			"type":  "agent_info",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 	fh.Handle(herdr.MethodAgentWait, func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
 			"type":  "agent_info",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 	fh.Handle(herdr.MethodAgentSendKeys, func(map[string]any) (any, *rpcErr) {
@@ -332,7 +332,7 @@ func (fh *fakeHerdr) installDefaults() {
 	fh.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
 			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle"},
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
 }
@@ -466,8 +466,21 @@ type fakeTracker struct {
 	verifyErr error
 	// statesErr は FetchIssuesByStates が返すエラーである。
 	statesErr error
+	// updateErr は UpdateStatus が返すエラーである。
+	//
+	// **GitHub へ書けない状況の再現に使う**（認証切れ・レートリミット・ネットワークの断）。
+	updateErr error
 	// idsErr は FetchIssuesByIDs が返すエラーである（復元の段3 の失敗の再現）。
 	idsErr error
+	// commentsErr は FetchComments が返すエラーである。
+	//
+	// **issue のコメントを読めない状況の再現に使う**（設計 3-25 の段1。
+	// 読めなかったときは「書かれていないもの」として扱う）。
+	commentsErr error
+	// postErr は PostComment が返すエラーである。
+	//
+	// **issue へ書けない状況の再現に使う**（片付けを見送った通知・引き渡しの通知）。
+	postErr error
 	// now は CreatedAt に入れる時刻を返す関数である。
 	now func() time.Time
 	// timeline はテスト用herdr mock と共有する呼び出しの並びである（nil なら記録しない）。
@@ -524,6 +537,26 @@ func (ft *fakeTracker) CountCall(name string) int {
 	return n
 }
 
+// SetStatesError は FetchIssuesByStates が返すエラーを差し替える
+// （ボードを読めない状況の再現）。
+//
+// err: 返すエラー。nil なら成功にする。
+func (ft *fakeTracker) SetStatesError(err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.statesErr = err
+}
+
+// SetUpdateError は UpdateStatus が返すエラーを差し替える
+// （Status を書けない状況の再現）。
+//
+// err: 返すエラー。nil なら成功にする。
+func (ft *fakeTracker) SetUpdateError(err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.updateErr = err
+}
+
 // SetVerifyError は VerifyStatusOptions が返すエラーを差し替える
 // （Status の選択肢名が人間の改名で食い違った状況の再現）。
 //
@@ -544,11 +577,50 @@ func (ft *fakeTracker) SetIDsError(err error) {
 	ft.idsErr = err
 }
 
+// SetCommentsError は FetchComments が返すエラーを差し替える
+// （issue のコメントを読めない状況の再現。設計 3-25 の段1）。
+//
+// err: 返すエラー。nil なら成功にする。
+func (ft *fakeTracker) SetCommentsError(err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.commentsErr = err
+}
+
+// SetPostError は PostComment が返すエラーを差し替える
+// （issue へコメントを書けない状況の再現）。
+//
+// err: 返すエラー。nil なら成功にする。
+func (ft *fakeTracker) SetPostError(err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.postErr = err
+}
+
 // AddIssue はボードの末尾に issue を足す。
 func (ft *fakeTracker) AddIssue(issue tracker.Issue) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.board = append(ft.board, issue)
+}
+
+// RemoveIssue はボードから issue を落とす
+// （人間がボードから外した・archive した状況の再現。設計 3-10）。
+//
+// **`FetchIssuesByIDs` からも返らなくなる。**continuo はこれを「もう見えない」として
+// 面倒を見るのをやめる。
+//
+// id: 落とす project item ID。
+func (ft *fakeTracker) RemoveIssue(id string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	out := make([]tracker.Issue, 0, len(ft.board))
+	for _, issue := range ft.board {
+		if issue.ID != id {
+			out = append(out, issue)
+		}
+	}
+	ft.board = out
 }
 
 // SetState は issue の Status を直接書き換える（エージェントが gh で動かした状況の再現）。
@@ -662,6 +734,9 @@ func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState strin
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("UpdateStatus")
+	if ft.updateErr != nil {
+		return false, ft.updateErr
+	}
 	for i := range ft.board {
 		if ft.board[i].ID != itemID {
 			continue
@@ -682,6 +757,9 @@ func (ft *fakeTracker) FetchComments(_ context.Context, issueNodeID string, _ co
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchComments")
+	if ft.commentsErr != nil {
+		return nil, ft.commentsErr
+	}
 	out := make([]tracker.Comment, len(ft.comments[issueNodeID]))
 	copy(out, ft.comments[issueNodeID])
 	return out, nil
@@ -692,6 +770,9 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("PostComment")
+	if ft.postErr != nil {
+		return nil, ft.postErr
+	}
 	c := tracker.Comment{
 		ID: fmt.Sprintf("C_self_%d", len(ft.comments[issueNodeID])+1),
 		// PostComment は self_marker を本文の先頭に付けて投稿する。
@@ -806,6 +887,54 @@ type fixture struct {
 	Sessions []string
 	// Timeline はテスト用トラッカー mockとテスト用herdr mock の呼び出しを混ぜた1本の並びである。
 	Timeline *timeline
+
+	// logMu は allowedLogs を守る。**テスト本体と run の goroutine が同時に触る。**
+	logMu sync.Mutex
+	// allowedLogs は、そのテストで出てよい WARN / ERROR の目印である。
+	//
+	// **continuo が動いている間のログは、テストの一部である。**実運用で出た欠陥
+	// （消えた issue1件で取り直しが丸ごと落ちる）は、**テストのログにも出ていたのに
+	// 誰も見ていなかった。**宣言していない WARN / ERROR が1行でも出たら、そのテストは落ちる。
+	allowedLogs []string
+}
+
+// AllowLog は、このテストで出てよい WARN / ERROR を宣言する。
+//
+// **想定して起こしている失敗だけを通すためのものである。**部分一致で照合する。
+// 引数は、そのログの msg か、添えられた値のうち特徴のある文字列を渡す。
+//
+// substrings: 出てよいログに必ず含まれる文字列。1つでも当たれば、その行は許される。
+func (fx *fixture) AllowLog(substrings ...string) {
+	fx.logMu.Lock()
+	defer fx.logMu.Unlock()
+	fx.allowedLogs = append(fx.allowedLogs, substrings...)
+}
+
+// unexpectedLogLines は、宣言されていない WARN / ERROR の行を返す。
+//
+// 戻り値: 想定外だった行。1件も無ければ長さ0。
+func (fx *fixture) unexpectedLogLines() []string {
+	fx.logMu.Lock()
+	allowed := append([]string(nil), fx.allowedLogs...)
+	fx.logMu.Unlock()
+
+	var bad []string
+	for _, line := range strings.Split(fx.Logs.String(), "\n") {
+		if !strings.Contains(line, "level=WARN") && !strings.Contains(line, "level=ERROR") {
+			continue
+		}
+		ok := false
+		for _, a := range allowed {
+			if a != "" && strings.Contains(line, a) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			bad = append(bad, line)
+		}
+	}
+	return bad
 }
 
 // fixtureOptions は newFixture の任意の入力である。
@@ -988,6 +1117,40 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		t.Fatalf("orchestrator.New に失敗した: %v", err)
 	}
 	fx.Orc = orc
+
+	// **そのテストが意図して起こす失敗を、expected_warnings_test.go の表から読む。**
+	// サブテストは親の名前で引く（`t.Run` の中でも同じ状況を作るため）。
+	// **サブテストは、自分の名前と親の名前の両方で引く。**
+	// 親の名前だけで引くと、1つのサブテストのための宣言が、
+	// **同じ関数の全サブテストで有効になってしまう。**
+	name := t.Name()
+	fx.AllowLog(expectedWarnings[name]...)
+	if i := strings.Index(name, "/"); i >= 0 {
+		fx.AllowLog(expectedWarnings[name[:i]]...)
+	}
+	// **打ち切りの連鎖は既定で許す。**どれが出るかはテストが終わる時点の段で変わり、
+	// 1件ずつ宣言しても収束しない。**この連鎖はログではなく、回数と Status で守る**
+	// （expected_warnings_test.go の abandonChain の説明を見よ）。
+	fx.AllowLog(abandonChain...)
+
+	// **continuo が動いている間のログを、テストの一部として検査する。**
+	//
+	// **`orc.Close` より先に登録する。**t.Cleanup は後入れ先出しなので、
+	// 先に登録したこれは**あとから**走る。つまり `Close` が `wg.Wait()` で
+	// 走行中の goroutine を待ち終えたあとのログまで見られる。
+	//
+	// 逆にすると、**片付け・撤退・pane を閉じる経路のログを1行も見ない。**
+	// そこはいちばん欠陥が出やすいところである。
+	t.Cleanup(func() {
+		bad := fx.unexpectedLogLines()
+		if len(bad) == 0 {
+			return
+		}
+		t.Errorf("宣言していない WARN / ERROR が %d 行出ました。"+
+			"想定して起こしている失敗なら fx.AllowLog(\"目印\") で宣言してください。"+
+			"想定していないなら、それは実装の欠陥です。\n%s",
+			len(bad), strings.Join(bad, "\n"))
+	})
 	t.Cleanup(orc.Close)
 	return fx
 }

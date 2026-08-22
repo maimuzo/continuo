@@ -676,3 +676,51 @@ func resolveHomeDir(configured string) (string, error) {
 	}
 	return os.UserHomeDir()
 }
+
+// checkClaude は `claude.kind` に対応する実行ファイルが PATH にあるかを調べる（設計 3-32）。
+//
+// **この検査が無かったために、実運用で issue が1件無駄に止まった**（2026-08-21）。
+// claude が PATH に無くても herdr は pane を作れてしまうので、着手は段9 まで進み、
+// 段10 で `agent_status: unknown` になって初めて分かる。**そこまで行くと worktree も
+// pane も作ったあとであり、人間には「Claude Code が起動しませんでした」としか見えない。**
+//
+// **調べるのは PATH にあるかどうかだけである。**バージョンは見ない（continuo は
+// どの版でも動く前提で作ってあり、下限を実測していない）。
+//
+// opts: `LookPath` を使う（テストは差し替えること）。
+// cfg: 読み込んだ設定（`claude.kind` を使う）。
+// configSymbol: 設定ファイルの検査の結果。読めていなければ判定しない。
+// 戻り値: 検査の結果。
+func checkClaude(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
+	if configSymbol != SymbolOK {
+		return Result{
+			Label:  LabelClaude,
+			Symbol: SymbolUnknown,
+			Detail: i18n.T(i18n.KeyDoctorClaudeConfigUnreadable),
+		}
+	}
+	// **`claude.kind` は herdr に渡す agent の種別であり、実行ファイル名でもある**
+	// （herdr の `--kind` の説明が「Supported agent kind and canonical executable」）。
+	kind := cfg.Config.Claude.Kind
+	if kind == "" {
+		kind = "claude"
+	}
+	lookPath := opts.LookPath
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+	path, err := lookPath(kind)
+	if err != nil {
+		return Result{
+			Label:    LabelClaude,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorClaudeNotFound, kind),
+			Remedies: []string{i18n.T(i18n.KeyDoctorClaudeRemedyInstall, kind)},
+		}
+	}
+	return Result{
+		Label:  LabelClaude,
+		Symbol: SymbolOK,
+		Detail: i18n.T(i18n.KeyDoctorClaudeFound, path),
+	}
+}
