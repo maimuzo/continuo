@@ -1,5 +1,7 @@
 # continuo
 
+[![ci](https://github.com/maimuzo/continuo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/maimuzo/continuo/actions/workflows/ci.yml)
+
 **[English](README.md)**
 
 GitHub Project v2をカンバンとして使い、複数リポジトリ上のissueをカンバン上のReady stateに配置することで、continuoがそれをherdr上で実行し、処理結果をカンバンにフィードバックするオーケストレーターです。OpenAIのSymphonyをベースにclaudeとgo言語とherdrを使って処理内容を確認しながら実行することができます。
