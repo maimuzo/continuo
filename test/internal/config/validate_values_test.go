@@ -166,3 +166,72 @@ func TestValidate_知らない選択肢を弾く(t *testing.T) {
 		})
 	}
 }
+
+// TestResolvePath_ディレクトリを渡したら中の設定ファイルを見る は、パスの解決を確かめる。
+//
+// **`continuo init <ディレクトリ>` がディレクトリを取るので、他のサブコマンドも揃える。**
+// 揃っていなかった版では、`continuo doctor <ディレクトリ>` が
+// 「is a directory」で落ち、**設定を読まないまま検査が進んでいた。**
+// そのとき言語の設定も効かず、環境変数の言語で結果が出ていた
+// （手元は英語、CI は未設定だったので、CI でだけ落ちて見つかった）。
+//
+// 目的: ディレクトリを渡したら、その中の WORKFLOW.md を指すこと。
+// 与える情報: WORKFLOW.md を1つ置いたディレクトリ。
+// 成功条件: 解決したパスがそのファイルを指すこと。
+func TestResolvePath_ディレクトリを渡したら中の設定ファイルを見る(t *testing.T) {
+	dir := t.TempDir()
+	want := filepath.Join(dir, "WORKFLOW.md")
+	if err := os.WriteFile(want, []byte("---\n---\n"), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を置けません: %v", err)
+	}
+
+	got, err := config.ResolvePath(dir, dir)
+	if err != nil {
+		t.Fatalf("解決できません: %v", err)
+	}
+	if got != want {
+		t.Errorf("ディレクトリの中の設定ファイルを指していません: %s（期待 %s）", got, want)
+	}
+}
+
+// TestResolvePath_ファイルを渡したらそのまま使う は、既存の使い方が壊れていないことを確かめる。
+//
+// 目的: ファイルのパスを渡したら、そのまま返すこと。
+// 与える情報: 実在するファイルのパス。
+// 成功条件: 渡したパスがそのまま返ること。
+func TestResolvePath_ファイルを渡したらそのまま使う(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "別の名前.md")
+	if err := os.WriteFile(p, []byte("---\n---\n"), 0o600); err != nil {
+		t.Fatalf("ファイルを置けません: %v", err)
+	}
+
+	got, err := config.ResolvePath(p, dir)
+	if err != nil {
+		t.Fatalf("解決できません: %v", err)
+	}
+	if got != p {
+		t.Errorf("渡したパスをそのまま使っていません: %s（期待 %s）", got, p)
+	}
+}
+
+// TestResolvePath_存在しないパスはそのまま返す は、「無い」ことの扱いを確かめる。
+//
+// **存在しないことを、ここでエラーにしてはならない。**
+// `continuo doctor` は「設定ファイルが無い」ことも検査結果の1件として報告する。
+//
+// 目的: 存在しないパスを、そのまま返すこと。
+// 与える情報: 実在しないパス。
+// 成功条件: エラーにならず、渡したパスが返ること。
+func TestResolvePath_存在しないパスはそのまま返す(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "無い.md")
+
+	got, err := config.ResolvePath(p, dir)
+	if err != nil {
+		t.Fatalf("存在しないことをエラーにしています: %v", err)
+	}
+	if got != p {
+		t.Errorf("渡したパスをそのまま返していません: %s", got)
+	}
+}

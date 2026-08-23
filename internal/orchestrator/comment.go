@@ -107,6 +107,14 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		PaneID: paneID,
 		Args:   o.claudeStartArgs(identity.SettingsPath, "", identity.SessionUUID),
 	}, agentStartBusyBudget, agentStartRetryDelay); err != nil {
+		// **止められただけなら、失敗として扱わない。**
+		// continuo を止めるたびに「セッションを復元できません」が出ると、
+		// 本当に復元できなかったときと見分けがつかなくなる。
+		if ctx.Err() != nil {
+			o.logger.Debug("止められたので、コメントの依頼は次の起動に回します",
+				"identifier", snap.Identifier)
+			return
+		}
 		o.logger.Warn("セッションを復元できません（No conversation found など）",
 			"identifier", snap.Identifier, "error", err)
 		o.failCommentRecovery(ctx, rs)
@@ -116,6 +124,12 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 
 	// 段6: idle か done になるのを待つ。
 	if err := o.confirmStartup(ctx, rs); err != nil {
+		// 上と同じ理由。止められただけなら失敗として扱わない。
+		if ctx.Err() != nil {
+			o.logger.Debug("止められたので、コメントの依頼は次の起動に回します",
+				"identifier", snap.Identifier)
+			return
+		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)
 		o.failCommentRecovery(ctx, rs)
 		return

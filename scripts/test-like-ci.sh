@@ -15,9 +15,13 @@
 # | `/bin/sh` | bash 3.2 | dash |
 # | `claude` / `herdr` | 入っている | **無い** |
 # | `gh` | ログイン済み | 未認証 |
+# | `LANG` | `en_US.UTF-8` など | **未設定** |
 #
-# **PATH から claude と herdr を隠して走らせる。**
+# **PATH から claude と herdr を隠し、LANG も外して走らせる。**
 # シェルの違いは `test/install` が自分で両方を試すので、ここでは扱わない。
+#
+# LANG の違いでも1度落ちた。`continuo doctor <ディレクトリ>` が設定を読めておらず、
+# **環境変数の言語で結果が出ていた。**手元が英語だったので、たまたま期待どおりに見えていた。
 
 set -eu
 
@@ -46,4 +50,6 @@ for tool in claude herdr gh; do
 done
 echo ""
 
-exec env PATH="$clean_path" go test -p 1 -count=1 "$@" ./...
+# **LANG と LC_ALL を外す。**CI の ubuntu-latest では設定されていない。
+exec env -u LANG -u LC_ALL -u LC_MESSAGES PATH="$clean_path" \
+	go test -p 1 -count=1 "$@" ./...

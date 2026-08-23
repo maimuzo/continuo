@@ -39,15 +39,32 @@ type Loaded struct {
 // したがって workDir を基準にする必要があるのに workDir が絶対パスでない場合はエラーを返す。
 func ResolvePath(argPath, workDir string) (string, error) {
 	if argPath != "" && filepath.IsAbs(argPath) {
-		return argPath, nil
+		return withFileName(argPath), nil
 	}
 	if !filepath.IsAbs(workDir) {
 		return "", i18n.Errorf(i18n.KeyConfigResolvePathWorkDirNotAbsolute, workDir)
 	}
 	if argPath != "" {
-		return filepath.Join(workDir, argPath), nil
+		return withFileName(filepath.Join(workDir, argPath)), nil
 	}
 	return filepath.Join(workDir, DefaultFileName), nil
+}
+
+// withFileName は、渡されたパスがディレクトリなら、その中の設定ファイルを指す。
+//
+// **`continuo init <ディレクトリ>` がディレクトリを取るので、他のサブコマンドも揃える。**
+// 揃えないと、`continuo doctor <ディレクトリ>` が
+// 「`<ディレクトリ>` を読めません: is a directory」で落ち、**設定を読まないまま検査が進む。**
+// そのとき言語の設定も効かないので、環境変数の言語で結果が出る（2026-08-23 に実測）。
+//
+// p: 絶対パス。
+// 戻り値: p がディレクトリなら `p/WORKFLOW.md`、そうでなければ p のまま。
+// **存在しないパスはそのまま返す**（「無い」ことは呼び出し側が報告する）。
+func withFileName(p string) string {
+	if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+		return filepath.Join(p, DefaultFileName)
+	}
+	return p
 }
 
 // Load は path にある WORKFLOW.md を読み込み、front matter と本文に分けたうえで
