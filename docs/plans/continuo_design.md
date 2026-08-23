@@ -12,7 +12,7 @@
 > この文書は AI が読むためのもので、判断の根拠・実測値・比較した案を全部持っている。
 > **設計を変えたらこの文書を直し、人間のレビューが要るときに要約版を再生成する。**
 
-**`continuo` とは何か。**GitHub Projects v2 のボード1枚を見張り、`Ready` の issue ごとに worktree を用意し、herdr の pane で Claude Code を対話モードで起動して作業させ、完了までを面倒見る**常駐プロセス**である。Go で書く。名前は**通奏低音**（basso continuo）に由来する（[docs/naming.md](../naming.md)）。
+**`continuo` とは何か。**GitHub Projects v2 のボード1枚を見張り、`Ready` の issue ごとに worktree を用意し、herdr の pane で Claude Code を対話モードで起動して作業させ、完了までを面倒見る**常駐プロセス**である。Go で書く。名前は**通奏低音**（basso continuo）に由来する。
 
 **準拠する仕様は [openai/symphony](https://github.com/openai/symphony) の [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md)**（Apache-2.0、2312行）。**このリポジトリには同梱していない**（置き方は [CLAUDE.md](../../CLAUDE.md)）。
 

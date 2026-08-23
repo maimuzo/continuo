@@ -160,7 +160,6 @@ claude:
 | --- | --- |
 | 設計と判断の根拠 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) |
 | ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
-| 名前の由来 | [docs/naming.md](docs/naming.md) |
 
 ## 準拠する仕様
 

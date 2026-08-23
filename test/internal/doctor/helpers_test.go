@@ -558,6 +558,16 @@ func newFixture(t *testing.T) *fixture {
 	writeFakeGhq(t, binDir, repoDir, ghqArgsFile)
 	writeTrustFile(t, home, repoDir, true)
 
+	// **偽の `claude` を PATH に実ファイルとして置く。**
+	//
+	// `LookPath` の差し替えは、この process の中でしか効かない。
+	// **`TestDoctorCLI_*` は実行ファイルを起動する**ので、サブプロセスからは本物の PATH が見える。
+	// 開発者の手元には claude があるので通り、**CI には無いので落ちた**（2026-08-23 に実測）。
+	if err := os.WriteFile(filepath.Join(binDir, "claude"),
+		[]byte("#!/bin/sh\n# doctor は在ることだけを見る。実行はされない。\n"), 0o755); err != nil {
+		t.Fatalf("テスト用の claude を置けません: %v", err)
+	}
+
 	fx := &fixture{
 		Root: root,
 		Home: home,

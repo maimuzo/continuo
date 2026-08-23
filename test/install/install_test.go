@@ -94,6 +94,28 @@ type stringWriter struct{ b *strings.Builder }
 
 func (w *stringWriter) Write(p []byte) (int, error) { return w.b.Write(p) }
 
+// installShell は、いま試しているシェルである。
+//
+// **TestMain がシェルごとに全テストを走らせる。**`sh` と `dash` で落ちる条件が違うので、
+// 片方だけでは足りない。
+var installShell = "sh"
+
+// TestMain は、使えるシェルそれぞれで全テストを走らせる。
+func TestMain(m *testing.M) {
+	list := []string{"sh"}
+	if p, err := exec.LookPath("dash"); err == nil {
+		list = append(list, p)
+	}
+	for _, sh := range list {
+		installShell = sh
+		if code := m.Run(); code != 0 {
+			fmt.Fprintf(os.Stderr, "シェル %s で落ちました\n", sh)
+			os.Exit(code)
+		}
+	}
+	os.Exit(0)
+}
+
 // fakeRelease は偽の release サーバである。
 type fakeRelease struct {
 	// Server は立てた HTTP サーバである。
@@ -192,7 +214,7 @@ func runInstaller(t *testing.T, fr *fakeRelease, dir string, args ...string) (in
 		)
 	}
 	full = append(full, args...)
-	cmd := exec.Command("sh", full...)
+	cmd := exec.Command(installShell, full...)
 	// **端末を与えない。**`curl … | sh` と同じく、対話できない状況を作る。
 	cmd.Stdin = nil
 	detachTerminal(cmd)
@@ -425,7 +447,7 @@ func TestInstall_端末が無ければ道具を1つも入れない(t *testing.T)
 
 	// **PATH を絞って、すべての道具を「無い」ことにする。**
 	// それでも1つも入れずに終わることを確かめる。
-	cmd := exec.Command("/bin/sh", scriptPath(t),
+	cmd := exec.Command(installShell, scriptPath(t),
 		"--api-url", fr.Server.URL+"/api/latest",
 		"--base-url", fr.Server.URL+"/dl")
 	cmd.Stdin = nil
@@ -470,7 +492,7 @@ func TestInstall_helpはパイプ経由でも出る(t *testing.T) {
 	if err != nil {
 		t.Fatalf("install.sh を読めません: %v", err)
 	}
-	cmd := exec.Command("sh", "-s", "--", "--help")
+	cmd := exec.Command(installShell, "-s", "--", "--help")
 	cmd.Stdin = strings.NewReader(string(body))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -586,7 +608,7 @@ esac
 func runWithFakeUname(t *testing.T, osName, machine, dir string) (int, string) {
 	t.Helper()
 	fakeDir := fakeUname(t, osName, machine)
-	cmd := exec.Command("/bin/sh", scriptPath(t), "--no-deps")
+	cmd := exec.Command(installShell, scriptPath(t), "--no-deps")
 	cmd.Stdin = nil
 	detachTerminal(cmd)
 	cmd.Env = []string{
@@ -661,7 +683,7 @@ func TestInstall_照合できず端末も無ければ置くだけで終わる(t 
 	dir := t.TempDir()
 
 	// **PATH を絞ってすべての道具を「無い」ことにする。**それでも1つも入れない。
-	cmd := exec.Command("/bin/sh", scriptPath(t),
+	cmd := exec.Command(installShell, scriptPath(t),
 		"--api-url", fr.Server.URL+"/api/latest",
 		"--base-url", fr.Server.URL+"/dl",
 		"--insecure-no-checksum")
