@@ -1132,6 +1132,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	// 1件ずつ宣言しても収束しない。**この連鎖はログではなく、回数と Status で守る**
 	// （expected_warnings_test.go の abandonChain の説明を見よ）。
 	fx.AllowLog(abandonChain...)
+	// **テストが終わったあとの片付けで出るものも許す**（shutdownNoise の説明を見よ）。
+	fx.AllowLog(shutdownNoise...)
 
 	// **continuo が動いている間のログを、テストの一部として検査する。**
 	//

@@ -51,5 +51,19 @@ done
 echo ""
 
 # **LANG と LC_ALL を外す。**CI の ubuntu-latest では設定されていない。
-exec env -u LANG -u LC_ALL -u LC_MESSAGES PATH="$clean_path" \
-	go test -p 1 -count=1 "$@" ./...
+run() {
+	env -u LANG -u LC_ALL -u LC_MESSAGES PATH="$clean_path" "$@"
+}
+
+run go test -p 1 -count=1 ./...
+
+# **競合の検査も掛ける。**CI が掛けているので、手元でも同じものを通す。
+# **時間はかかる**（素の実行の2倍ほど）。飛ばしたいときは --no-race を渡す。
+if [ "${1:-}" = "--no-race" ]; then
+	echo ""
+	echo "競合の検査（-race）は飛ばしました"
+	exit 0
+fi
+echo ""
+echo "競合の検査（-race）を掛けます。飛ばすには --no-race を渡してください。"
+run go test -race -p 1 -count=1 ./...

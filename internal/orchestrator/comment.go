@@ -98,6 +98,12 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// （復元されないので、渡し直さないと hook が1つも効かない。設計 3-25）。
 	name, err := o.resolveAgentName(ctx, rs.issue().Repo, rs.issue().Number)
 	if err != nil {
+		// 上と同じ理由。止められただけなら失敗として扱わない。
+		if ctx.Err() != nil {
+			o.logger.Debug("止められたので、コメントの依頼は次の起動に回します",
+				"identifier", snap.Identifier)
+			return
+		}
 		o.logger.Warn("復元のための agent 名を決められません", "identifier", snap.Identifier, "error", err)
 		return
 	}
