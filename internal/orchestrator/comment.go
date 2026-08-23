@@ -40,6 +40,25 @@ const commentRecheckWait = 2 * time.Second
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
+// stoppedWhileRecovering は、止められたことが原因の失敗かを判定する。
+//
+// **`Ctrl+C` のたびに「〜できません」が並ぶと、本当に壊れたときと見分けがつかない。**
+// この経路は「終わった run にコメントを書かせる」ための後追いなので、
+// **止められたなら、次の起動でやり直せばよい。**
+//
+// **1箇所ずつ書くと必ず漏れる。**実際、`agent.start` → `agent.prompt` → `agent.list` →
+// `worktree.open` と、CI に4回見つけさせてから、ここへまとめた。
+//
+// ctx: 呼び出しに使ったコンテキスト。
+// 戻り値: 止められたことが原因なら true。**そのときログは Debug で1行だけ出す。**
+func (o *Orchestrator) stoppedWhileRecovering(ctx context.Context) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	o.logger.Debug("止められたので、コメントの依頼は次の起動に回します")
+	return true
+}
+
 func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	nodeID := issueNodeID(rs.issue())
 	if nodeID == "" {
@@ -83,11 +102,17 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 段4: worktree.open で workspace を開き、その中の pane を引く。
 	opened, err := o.herdr.WorktreeOpen(ctx, herdr.WorktreeOpenParams{Path: snap.WorktreePath})
 	if err != nil {
+		if o.stoppedWhileRecovering(ctx) {
+			return
+		}
 		o.logger.Warn("復元のための workspace を開けません", "identifier", snap.Identifier, "error", err)
 		return
 	}
 	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{WorkspaceID: opened.Workspace.WorkspaceID})
 	if err != nil || len(list.Panes) != 1 {
+		if o.stoppedWhileRecovering(ctx) {
+			return
+		}
 		o.logger.Warn("復元のための pane を引けません", "identifier", snap.Identifier, "error", err)
 		return
 	}
@@ -98,10 +123,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// （復元されないので、渡し直さないと hook が1つも効かない。設計 3-25）。
 	name, err := o.resolveAgentName(ctx, rs.issue().Repo, rs.issue().Number)
 	if err != nil {
-		// 上と同じ理由。止められただけなら失敗として扱わない。
-		if ctx.Err() != nil {
-			o.logger.Debug("止められたので、コメントの依頼は次の起動に回します",
-				"identifier", snap.Identifier)
+		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
 		o.logger.Warn("復元のための agent 名を決められません", "identifier", snap.Identifier, "error", err)
@@ -113,12 +135,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		PaneID: paneID,
 		Args:   o.claudeStartArgs(identity.SettingsPath, "", identity.SessionUUID),
 	}, agentStartBusyBudget, agentStartRetryDelay); err != nil {
-		// **止められただけなら、失敗として扱わない。**
-		// continuo を止めるたびに「セッションを復元できません」が出ると、
-		// 本当に復元できなかったときと見分けがつかなくなる。
-		if ctx.Err() != nil {
-			o.logger.Debug("止められたので、コメントの依頼は次の起動に回します",
-				"identifier", snap.Identifier)
+		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
 		o.logger.Warn("セッションを復元できません（No conversation found など）",
@@ -130,10 +147,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 
 	// 段6: idle か done になるのを待つ。
 	if err := o.confirmStartup(ctx, rs); err != nil {
-		// 上と同じ理由。止められただけなら失敗として扱わない。
-		if ctx.Err() != nil {
-			o.logger.Debug("止められたので、コメントの依頼は次の起動に回します",
-				"identifier", snap.Identifier)
+		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)
@@ -154,10 +168,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 			Until:     waitUntilStatuses(o.cfg.Claude.WaitUntil),
 		},
 	}); err != nil {
-		// 上と同じ理由。止められただけなら失敗として扱わない。
-		if ctx.Err() != nil {
-			o.logger.Debug("止められたので、コメントの依頼は次の起動に回します",
-				"identifier", snap.Identifier)
+		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
 		o.logger.Warn("コメントを書かせるプロンプトを送れません", "identifier", snap.Identifier, "error", err)
@@ -191,6 +202,11 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap runSnapshot) bool {
 	comments, err := o.tracker.FetchComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments, o.cfg.Tracker.Comments)
 	if err != nil {
+		if o.stoppedWhileRecovering(ctx) {
+			// **止められただけである。**「書かれていない」と答えて抜ける
+			// （呼び出し側はそのまま復元へ進むが、その先も止められる）。
+			return false
+		}
 		o.logger.Warn("コメントを読めません（書かれていないものとして扱います）",
 			"identifier", snap.Identifier, "error", err)
 		return false
@@ -213,6 +229,9 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState) {
 	o.stopWorker(ctx, rs)
 	if _, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {
+		if o.stoppedWhileRecovering(ctx) {
+			return
+		}
 		o.logger.Warn("Status を落とせません", "identifier", rs.issue().Identifier, "error", err)
 	}
 	o.postHandoffComment(ctx, rs, "Claude Code は作業を終えたと表明しましたが、**何をしたのかを issue に書き残しませんでした。**"+
