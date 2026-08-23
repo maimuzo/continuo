@@ -33,7 +33,17 @@ go.work.sum
 
 # Claude Code per-user 設定（permission allowlist 等）。共有用は .claude/settings.json に。
 .claude/settings.local.json
+.claude/local-guidelines.md
 .claude/worktrees/
+
+# 準拠する仕様（openai/symphony の SPEC.md）。**リポジトリに同梱しない。**
+# Apache-2.0 の再配布になり、ライセンスの扱いが増えるため。
+# 作業に使うときは各自が置く（置き方は CLAUDE.md を見よ）。
+docs/spec/symphony/
 
 # 作業用の一時ファイル
 tmp/
+
+# go build ./cmd/... がリポジトリ直下に作る実行ファイル。
+# このリポジトリは PUBLIC なので、5MB を超えるバイナリを取り込まない。
+/continuo

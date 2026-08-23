@@ -1,0 +1,666 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "対象リポジトリを信頼登録する",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/対象リポジトリを信頼登録する.rucm.md",
+    "rucm_block_sha256": "35cfb84b1c060452ab49f203ca96bbcfa62bfae1282bd160a6da92d77c52c678"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "対象リポジトリのすべてが Claude Code に信頼登録されている。ホームディレクトリに .claude.json の写しがある。continuo doctor の信頼登録の項目は ✓ である。"
+    },
+    "clone不在": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "対象リポジトリの clone がローカルにある。clone が無かった検査では clone の項目が ✗ である。同じ検査では信頼登録の項目が ! である。"
+    },
+    "変えるものが無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。"
+    },
+    "想定と違う形": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          10
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。利用者は何が想定と違ったかを読める。"
+    },
+    "読み直しで確認できない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          14
+        ]
+      },
+      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。確認できなかった項目が表示されている。"
+    },
+    "実行せずに確かめる": {
+      "when": "利用者が dry-run を指定した場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            7
+          ]
+        }
+      ],
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。利用者は何を許すことになるかを読める。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに信頼登録を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは設定ファイルから対象リポジトリの一覧を読む。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは clone の絶対パスをリポジトリの root へ解決する。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは利用者に信頼を登録すると効くようになる設定を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムはホームディレクトリの .claude.json の写しを取る。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムはホームディレクトリの .claude.json をもう一度読み直す。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは一時ファイルに登録済みの記録を書く。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "システムはホームディレクトリの .claude.json を読み直す。"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 15,
+      "statement": "システムは利用者に写しの置き場所と登録した項目を応答する。"
+    },
+    {
+      "id": "clone不在-1",
+      "type": "action",
+      "flow": "clone不在",
+      "step": 1,
+      "statement": "システムは利用者に clone が無いリポジトリの名前を応答する。"
+    },
+    {
+      "id": "clone不在-2",
+      "type": "action",
+      "flow": "clone不在",
+      "step": 2,
+      "statement": "システムは利用者に clone を置くコマンドを応答する。"
+    },
+    {
+      "id": "clone不在-3",
+      "type": "action",
+      "flow": "clone不在",
+      "step": 3,
+      "statement": "利用者は対象リポジトリの clone をローカルに置く。"
+    },
+    {
+      "id": "clone不在-4",
+      "type": "resume",
+      "flow": "clone不在",
+      "step": 4,
+      "statement": "RESUME STEP 3"
+    },
+    {
+      "id": "変えるものが無い-1",
+      "type": "action",
+      "flow": "変えるものが無い",
+      "step": 1,
+      "statement": "システムはホームディレクトリの .claude.json を書き換えない。"
+    },
+    {
+      "id": "変えるものが無い-2",
+      "type": "action",
+      "flow": "変えるものが無い",
+      "step": 2,
+      "statement": "システムはホームディレクトリの .claude.json の写しを取らない。"
+    },
+    {
+      "id": "変えるものが無い-3",
+      "type": "action",
+      "flow": "変えるものが無い",
+      "step": 3,
+      "statement": "システムは利用者に既に信頼済みだったリポジトリの名前を応答する。"
+    },
+    {
+      "id": "変えるものが無い-4",
+      "type": "abort",
+      "flow": "変えるものが無い",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "想定と違う形-1",
+      "type": "action",
+      "flow": "想定と違う形",
+      "step": 1,
+      "statement": "システムはホームディレクトリの .claude.json を書き換えない。"
+    },
+    {
+      "id": "想定と違う形-2",
+      "type": "action",
+      "flow": "想定と違う形",
+      "step": 2,
+      "statement": "システムは利用者に形が想定と違うことを応答する。"
+    },
+    {
+      "id": "想定と違う形-3",
+      "type": "abort",
+      "flow": "想定と違う形",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "読み直しで確認できない-1",
+      "type": "action",
+      "flow": "読み直しで確認できない",
+      "step": 1,
+      "statement": "システムは利用者に書き込んだのに確認できなかった項目を応答する。"
+    },
+    {
+      "id": "読み直しで確認できない-2",
+      "type": "abort",
+      "flow": "読み直しで確認できない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "実行せずに確かめる-1",
+      "type": "action",
+      "flow": "実行せずに確かめる",
+      "step": 1,
+      "statement": "システムはホームディレクトリの .claude.json を書き換えない。"
+    },
+    {
+      "id": "実行せずに確かめる-2",
+      "type": "action",
+      "flow": "実行せずに確かめる",
+      "step": 2,
+      "statement": "システムは利用者に何も書き換えていないことを応答する。"
+    },
+    {
+      "id": "実行せずに確かめる-3",
+      "type": "abort",
+      "flow": "実行せずに確かめる",
+      "step": 3,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "対象リポジトリのすべての clone がローカルにある"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "clone不在-1",
+      "kind": "false",
+      "condition": "NOT 対象リポジトリのすべての clone がローカルにある"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "登録の対象にできる項目が1つ以上ある"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "変えるものが無い-1",
+      "kind": "false",
+      "condition": "NOT 登録の対象にできる項目が1つ以上ある"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "実行せずに確かめる-1",
+      "kind": "global",
+      "condition": "利用者が dry-run を指定した場合"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "true",
+      "condition": "読み直した .claude.json の形が想定どおりである"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "想定と違う形-1",
+      "kind": "false",
+      "condition": "NOT 読み直した .claude.json の形が想定どおりである"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "true",
+      "condition": "書き込んだ項目のすべてが信頼済みになっている"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "読み直しで確認できない-1",
+      "kind": "false",
+      "condition": "NOT 書き込んだ項目のすべてが信頼済みになっている"
+    },
+    {
+      "from": "clone不在-1",
+      "to": "clone不在-2",
+      "kind": "seq"
+    },
+    {
+      "from": "clone不在-2",
+      "to": "clone不在-3",
+      "kind": "seq"
+    },
+    {
+      "from": "clone不在-3",
+      "to": "clone不在-4",
+      "kind": "seq"
+    },
+    {
+      "from": "clone不在-4",
+      "to": "BASIC FLOW-3",
+      "kind": "resume"
+    },
+    {
+      "from": "変えるものが無い-1",
+      "to": "変えるものが無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "変えるものが無い-2",
+      "to": "変えるものが無い-3",
+      "kind": "seq"
+    },
+    {
+      "from": "変えるものが無い-3",
+      "to": "変えるものが無い-4",
+      "kind": "seq"
+    },
+    {
+      "from": "想定と違う形-1",
+      "to": "想定と違う形-2",
+      "kind": "seq"
+    },
+    {
+      "from": "想定と違う形-2",
+      "to": "想定と違う形-3",
+      "kind": "seq"
+    },
+    {
+      "from": "読み直しで確認できない-1",
+      "to": "読み直しで確認できない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "実行せずに確かめる-1",
+      "to": "実行せずに確かめる-2",
+      "kind": "seq"
+    },
+    {
+      "from": "実行せずに確かめる-2",
+      "to": "実行せずに確かめる-3",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "対象リポジトリのすべてが Claude Code に信頼登録されている。ホームディレクトリに .claude.json の写しがある。continuo doctor の信頼登録の項目は ✓ である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録を要求する。",
+        "システムは設定ファイルから対象リポジトリの一覧を読む。",
+        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
+        "システムは clone の絶対パスをリポジトリの root へ解決する。",
+        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
+        "システムはホームディレクトリの .claude.json の写しを取る。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは一時ファイルに登録済みの記録を書く。",
+        "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。",
+        "システムはホームディレクトリの .claude.json を読み直す。",
+        "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。",
+        "システムは利用者に写しの置き場所と登録した項目を応答する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "読み直しで確認できない",
+      "postcondition": "ホームディレクトリの .claude.json は書き換わっている。確認できなかった項目が表示されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "読み直しで確認できない-1",
+        "読み直しで確認できない-2"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録を要求する。",
+        "システムは設定ファイルから対象リポジトリの一覧を読む。",
+        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
+        "システムは clone の絶対パスをリポジトリの root へ解決する。",
+        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
+        "システムはホームディレクトリの .claude.json の写しを取る。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "システムは一時ファイルに登録済みの記録を書く。",
+        "システムは一時ファイルをホームディレクトリの .claude.json へ差し替える。",
+        "システムはホームディレクトリの .claude.json を読み直す。",
+        "システムは VALIDATES THAT 書き込んだ項目のすべてが信頼済みになっている。",
+        "CONDITION: NOT 書き込んだ項目のすべてが信頼済みになっている",
+        "システムは利用者に書き込んだのに確認できなかった項目を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "想定と違う形",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。利用者は何が想定と違ったかを読める。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "想定と違う形-1",
+        "想定と違う形-2",
+        "想定と違う形-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録を要求する。",
+        "システムは設定ファイルから対象リポジトリの一覧を読む。",
+        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
+        "システムは clone の絶対パスをリポジトリの root へ解決する。",
+        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
+        "システムはホームディレクトリの .claude.json の写しを取る。",
+        "システムはホームディレクトリの .claude.json をもう一度読み直す。",
+        "システムは VALIDATES THAT 読み直した .claude.json の形が想定どおりである。",
+        "CONDITION: NOT 読み直した .claude.json の形が想定どおりである",
+        "システムはホームディレクトリの .claude.json を書き換えない。",
+        "システムは利用者に形が想定と違うことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "変えるものが無い",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。写しは作られていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "変えるものが無い-1",
+        "変えるものが無い-2",
+        "変えるものが無い-3",
+        "変えるものが無い-4"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録を要求する。",
+        "システムは設定ファイルから対象リポジトリの一覧を読む。",
+        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
+        "システムは clone の絶対パスをリポジトリの root へ解決する。",
+        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
+        "CONDITION: NOT 登録の対象にできる項目が1つ以上ある",
+        "システムはホームディレクトリの .claude.json を書き換えない。",
+        "システムはホームディレクトリの .claude.json の写しを取らない。",
+        "システムは利用者に既に信頼済みだったリポジトリの名前を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "実行せずに確かめる",
+      "postcondition": "ホームディレクトリの .claude.json は1バイトも変わっていない。利用者は何を許すことになるかを読める。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "実行せずに確かめる-1",
+        "実行せずに確かめる-2",
+        "実行せずに確かめる-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録を要求する。",
+        "システムは設定ファイルから対象リポジトリの一覧を読む。",
+        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
+        "システムは clone の絶対パスをリポジトリの root へ解決する。",
+        "システムはホームディレクトリの .claude.json から信頼登録の記録を読む。",
+        "システムは利用者に信頼を登録すると効くようになる設定を応答する。",
+        "システムは VALIDATES THAT 登録の対象にできる項目が1つ以上ある。",
+        "CONDITION: 利用者が dry-run を指定した場合",
+        "システムはホームディレクトリの .claude.json を書き換えない。",
+        "システムは利用者に何も書き換えていないことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "cycle",
+      "terminal_flow": "clone不在",
+      "postcondition": "対象リポジトリの clone がローカルにある。clone が無かった検査では clone の項目が ✗ である。同じ検査では信頼登録の項目が ! である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "clone不在-1",
+        "clone不在-2",
+        "clone不在-3",
+        "clone不在-4",
+        "BASIC FLOW-3"
+      ],
+      "steps": [
+        "利用者はシステムに信頼登録を要求する。",
+        "システムは設定ファイルから対象リポジトリの一覧を読む。",
+        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。",
+        "CONDITION: NOT 対象リポジトリのすべての clone がローカルにある",
+        "システムは利用者に clone が無いリポジトリの名前を応答する。",
+        "システムは利用者に clone を置くコマンドを応答する。",
+        "利用者は対象リポジトリの clone をローカルに置く。",
+        "RESUME STEP 3",
+        "システムは VALIDATES THAT 対象リポジトリのすべての clone がローカルにある。"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 31,
+    "nodes_covered": 31,
+    "edges_total": 31,
+    "edges_covered": 31
+  }
+}

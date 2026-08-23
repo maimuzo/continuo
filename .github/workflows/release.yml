@@ -1,0 +1,190 @@
+# タグを打つと実行ファイルを作り、release に載せる（設計 3-36）。
+#
+# **人間がタグを打つまで、この workflow は1度も動かない。**
+# continuo を配布してよいと判断できるまで、release は1つも作られない。
+#
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#
+# **できるもの。**
+#   continuo_darwin_arm64.tar.gz   （macOS / Apple Silicon）
+#   continuo_darwin_amd64.tar.gz   （macOS / Intel）
+#   continuo_linux_amd64.tar.gz    （Linux / x86-64）
+#   continuo_linux_arm64.tar.gz    （Linux / arm64）
+#   checksums.txt                  （install.sh が照合する）
+#   provenance                     （どの workflow のどの commit から作られたかの証明）
+#
+# **Windows は作らない**（設計 3-32b。herdr の Windows 版が安定していないため）。
+#
+# **action は commit で固定する。**タグは上書きできるので、action 側が乗っ取られると
+# 書き込み権限を持つ job で任意のコードが動く。
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# **既定は読み取りだけにする。**書き込みが要るのは publish だけである。
+# workflow レベルに write を置くと、`go test` が任意のコードを実行する test job まで
+# 書き込みトークンを持つことになる。
+permissions:
+  contents: read
+
+jobs:
+  # まずテストを通す。**通らないものを配布しない。**
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # **トークンを .git/config に残さない。**残すと、この後に走る `go test` が
+          # リポジトリの任意のコードを実行できるため、そこから読み出せてしまう。
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: テスト
+        # **-p 1 を外さないこと。**並行に走らせるとカバレッジのプロファイルが
+        # 互いを上書きし、値が再現しなくなる（設計 6-4）。
+        run: go test -p 1 -count=1 ./...
+
+      - name: インストーラーの検査
+        # **利用者が最初に叩くのが install.sh である。**壊れたものを配布しない。
+        #
+        # **`-n` は構文しか見ない。**bash 依存（`[[ ]]` など）は素通りするので、
+        # shellcheck も掛ける。`-s sh` で POSIX sh として見る。
+        run: |
+          set -eu
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          sh -n install.sh
+          dash -n install.sh
+          shellcheck -s sh install.sh
+          # **変数の直後に全角文字が続く書き方を弾く。**
+          # `set -u` の下で unbound variable になるが、dash では起きないので
+          # 上の検査では見つからない（実測で2度踏んだ）。
+          sh scripts/check-install-sh.sh install.sh
+
+      - name: 配布物に同梱するファイルがあるか
+        # **build job で `cp` するファイルを、ここで確かめる。**
+        # 追跡されていないファイルを `cp` すると、タグを打った後で初めて落ちる。
+        run: |
+          set -eu
+          for f in LICENSE README.md README.ja.md; do
+            git ls-files --error-unmatch "$f" > /dev/null \
+              || { echo "配布物に入れる $f が git に入っていません" >&2; exit 1; }
+          done
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: ビルド
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          set -eu
+          # -trimpath でビルドしたマシンの絶対パスを実行ファイルへ入れない。
+          # -s -w で記号表を落とし、配布物を小さくする。
+          # **-X の左辺は、値を受け取る変数の完全な位置である。**
+          # 存在しない名前を指定しても Go は警告を出さないので、
+          # `continuo version` が版を答えることをテストで守る。
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/maimuzo/continuo/internal/cli.version=${GITHUB_REF_NAME}" \
+            -o dist/continuo ./cmd/continuo
+
+      - name: 書庫にする
+        run: |
+          set -eu
+          name="continuo_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
+          # LICENSE と README を同梱する（配布物だけを受け取った人が読めるように）。
+          cp LICENSE README.md README.ja.md dist/
+          tar -czf "$name" -C dist continuo LICENSE README.md README.ja.md
+          echo "ASSET=$name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.ASSET }}
+          path: ${{ env.ASSET }}
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # release を作るために要る。
+      contents: write
+      # provenance を作るために要る。
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: チェックサムを作る
+        run: |
+          set -eu
+          cd assets
+          # install.sh は `<sha256>  <ファイル名>` の形（空白2つ区切り）を読む。
+          sha256sum ./*.tar.gz | sed 's| \./| |' > checksums.txt
+          cat checksums.txt
+
+      - name: provenance を作る
+        # **checksums.txt は書庫と同じ場所から配るので、改竄の検知には効かない。**
+        # どちらも差し替えられるためである。**どの workflow のどの commit から作られたかを
+        # GitHub に証明させる。**利用者は `gh attestation verify` で確かめられる。
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: assets/*.tar.gz
+
+      - name: release を作る
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # **既にあれば作り直さず、資産だけ載せ直す。**
+          # workflow をやり直したときに、必ず落ちるのを避ける。
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" --clobber \
+              assets/*.tar.gz assets/checksums.txt
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${GITHUB_REF_NAME}" \
+              --verify-tag \
+              --generate-notes \
+              assets/*.tar.gz assets/checksums.txt
+          fi

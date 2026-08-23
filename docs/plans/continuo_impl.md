@@ -1,0 +1,170 @@
+<!-- 目的: continuo の実装の進行状況・レートリミット記録・中断再開の手順を保持する -->
+
+# continuo の実装
+
+## この文書は何か
+
+**実装がいまどこまで進んだかを記録する。**設計の判断は
+[continuo_design.md](continuo_design.md) が正であり、こちらには**進行・実装の記録・消費**を書く。
+
+| 文書 | 何を書くか | 誰が読むか |
+| --- | --- | --- |
+| [continuo_design.md](continuo_design.md) | **設計の正。**何をどう作るかの判断と根拠 | AI |
+| [continuo_design_slim.md](continuo_design_slim.md) | 上の要約。**レビューのたびに再生成する** | 人間 |
+| この文書 | **実装の進行。**どこまで進んだか、次に何をするか、いくら消費したか | 両方 |
+
+---
+
+## 現在の状態
+
+**設計は確定した。実装は第3段階まで進み、積み残しは `continuo init` の1つだけである。**
+
+| 項目 | 状態 |
+| --- | --- |
+| 設計 | **確定。**人間のレビューを通過（2026-08-19） |
+| 実装 | **第2段階（herdr）と第3段階（トラッカー）は完了。第1段階は `continuo init` だけ残っている** |
+| テスト | **全パッケージ通過** |
+| コミット | `design/turn-detection-and-foundation` の `1c6472e` |
+| 未確認事項 | **4件。**いずれも実装を止めない（[continuo_design.md](continuo_design.md) の第6節にブロッカーを書いた） |
+
+---
+
+## 次のアクション
+
+**第4段階（hook の受け口）から続ける。**
+
+1. **`continuo hook` を仕上げる。**いまは骨組みだけである。標準入力を socket へ送り、
+   **本体の応答を待って標準出力へ書いてから終わる**形にする（設計 3-2）
+2. **hook の受け口（Unix socket）を作る。**7種の hook を受け、`session_id` で run に対応づける
+3. **turn の終わりの判定を組む。**herdr の待ち受けを主、`<task-notification>` の検出を従にする（設計 1-3 / 3-2）
+4. **`continuo init` を作る**（第1段階の積み残し。設計 3-32）
+
+---
+
+## 実装したもの
+
+**`continuo init` はまだ無い。`continuo hook` は骨組みだけである。**
+
+| 段階 | 作ったもの | パッケージ |
+| --- | --- | --- |
+| **1** | 設定の読み込み（front matter + 本文）・展開規則・正規化・構造化ログ・CLI・二重起動の防止 | `internal/config` `internal/normalize` `internal/logging` `internal/lock` `internal/socketpath` `cmd/continuo` |
+| **2** | herdr の socket クライアント（pane / agent / worktree / workspace） | `internal/herdr` |
+| **3** | トラッカーのアダプタ（GraphQL 直叩き） | `internal/tracker` |
+
+```text
+$ go test -count=1 ./...
+ok  github.com/maimuzo/continuo/test/internal/config     0.599s
+ok  github.com/maimuzo/continuo/test/internal/herdr      1.701s
+ok  github.com/maimuzo/continuo/test/internal/lock       0.752s
+ok  github.com/maimuzo/continuo/test/internal/logging    0.910s
+ok  github.com/maimuzo/continuo/test/internal/normalize  1.250s
+ok  github.com/maimuzo/continuo/test/internal/socketpath 1.102s
+ok  github.com/maimuzo/continuo/test/internal/tracker    1.431s
+```
+
+**設計文書の設定例をそのまま読み込めるかを検証するテストを持っている**
+（`test/internal/config/design_example_test.go`）。**設計に足したキーが実装に無いと、その場で落ちる。**
+
+---
+
+## 実測で分かったこと
+
+**生の記録は残していない。**結論は [continuo_design.md](continuo_design.md) に転記済みで、そちらが正である。
+**測り直すときは、下の「どこに書いたか」から条件を読むこと。**
+
+| 何を測ったか | 結論 | どこに書いたか |
+| --- | --- | --- |
+| turn の終わりをどう判定するか | **hook 単独でも静止の長さでも判定できない。**herdr の待ち受けを主、`<task-notification>` の検出を従にする | 1-3 / 3-2 |
+| 表明の1行をどこから読むか | **`last_assistant_message` は使えない**（0/17）。transcript を `promptSource == "typed"` 起点で読む（17/17） | 3-25 |
+| `dontAsk` と subagent の関係 | **subagent だから拒否されるのではない**（18対すべて一致）。許可リストは `Bash` とツール名だけで書く | 3-11 |
+| `blocked` のときの扱い | **次を投げると保留中の権限要求が承認されて実行される**（3/3）。`agent.send_keys` で `esc` を送る | 3-11 |
+| トークンの計上 | statusline は取りこぼす。**transcript の `.message.usage` を `requestId` で重複排除して集計する** | 3-15 |
+| 道具の実行時間の上限 | 環境変数2つを同じ値にすればかかる（3/3）。**ただし `git` を壊すので短くしない** | 1-3 |
+| セッションの復帰 | `--resume` で戻れる。**`--settings` は復元されないので毎回渡し直す** | 3-25 |
+| GraphQL のコスト | 巡回の合計は**約770 / 5,000（15%）** | 3-31 |
+
+**すべて Claude Code 2.1.234 / herdr 0.8.0 での観測である。**バージョンが上がったら測り直す。
+
+---
+
+## AI レビューの指摘と対応（2026-08-18。43件すべて修正）
+
+**設計文書と実装コードを4つの観点でレビューし、各指摘を別コンテキストの検証役に通した。**
+**下に載せたのは、検証で「成立する」と判定された43件だけである。**保留した指摘は無い。
+
+| 度合 | 何が問題だったか | どう直したか |
+| --- | --- | --- |
+| critical | **判定に要る hook が設定に登録されていなかった**（`UserPromptSubmit` / `SubagentStop` / `Notification` / `SubagentStart`）。登録していない hook は届かないので、**待ち合わせが必ず「来なかった」に倒れる** | 7種の一覧と役目の表を 3-2 に置き、3-16 の段5 と 5-2 がそれを参照する形にした |
+| critical | 観測件数が「4件・0.035秒」と「8件・0.037秒」で二重になっていた | **8件・0.037秒に統一**し、`settle_ms` の導出も書き直した |
+| critical | usage API が枠を消費しない根拠が「3回叩いて `percent` が動かない」だけだった。**`percent` は整数の百分率なので判別できない** | 断定を外して第6節へ移し、`rate_limit.source: none` で切れることを書いた |
+| high | `continuo hook` が「転送して即終了」では turn を差し戻せない | **本体の応答を待って標準出力へ書く形**に直し、`hook_response_timeout_ms` を足した |
+| high | `--resume` の起動経路が無く、直接実行すると定額運用に抵触しうる | **herdr 経由の9段**に書き直し、いつ走らせるか・turn 数に数えるかまで決めた |
+| high | `esc` の送出手段が socket API の一覧に無かった | **`agent.send_keys` が protocol 19 に実在する**ことを確かめて表に追加した |
+| high | `max_concurrent_agents` を守る場所が無かった | 着手の**段-1 に「空きスロットの検査」**を足した |
+| high | 「枠待ち」の判定基準が無く、95%超えで時計を止める書き方だった。**固まった worker も見逃す** | 「新規を止める閾値」と「この run は枠待ち」を分け、後者を**2条件の連言**で定義した |
+| high | 起動後の状態確認が `idle` だけだった。**実運用ではほぼ常に `done` 側になる** | `done` も合格にし、`working` / `unknown` の扱いも書いた |
+| high | 表明の読み取りが「最終応答から」と3箇所に残っていた | 「その turn の transcript から」に統一した |
+| high | `read_timeout_ms` を socket API 全体に適用すると、待ちを伴う呼び出しが5秒で切れる | `agent.start` と待機ありの `agent.prompt` を除外すると明記した |
+| high | 第6節と第7節が正反対のことを書いていた | 第7節の冒頭を第6節に合わせた |
+| high | 「第1〜3段階は実装済み」が事実と違った（`continuo init` が無い） | 実装済みの単位を実物で書き、テストの出力を添えた |
+| high | 観測記録の README が、否定済みの判定基準を掲げたままだった | 注意書きを足して最新の節へ誘導した |
+| high/medium | 実装の GoDoc が古い設計を書いていた（代筆する／コメントをプロンプトへ渡す／`after_run` は turn ごと） | 現行の設計に合わせた |
+| medium | 設定が `worktree_local` を受理するのに仕様がどこにも無い | **`settings_flag` のみ受理**に変えた |
+| medium | 巡回のコストの見積り（3 point）が実装のクエリ（ネスト4本）と合わない | **4 point・毎時770（15%）**に直した |
+| medium/low | `require_pushed` に対応する手順が 3-9 に無かった | upstream への到達の検査と、upstream が無い branch の扱いを足した |
+| medium | `HERDR_SOCKET_PATH` が未定義だと起動できない既定値だった | 素の既定パスに変え、実装とテストも合わせた |
+| medium | hook の逃がし先の形式が書かれていなかった | パス・1件1ファイル・読む順序・削除・壊れた JSON の扱いを書いた |
+| medium | issue がボードに載る経路と、`Ice Box` へ落とす担い手が無かった | 4-1 の遷移表に2行足した |
+| medium | 要約版に、詳細版に無い遷移と機能が書かれていた | 詳細版に合わせた |
+| medium | 観測が 2.1.233 と 2.1.234 の2回に分かれているのに1つの表にまとめていた | 分けて書き、**2026-08-18 の生ログが残っていない**ことも明記した |
+| medium | `dontAsk` / `auto` / `CLAUDE_CODE_RETRY_WATCHDOG` の根拠に原文の引用が無かった | 公式ドキュメントの原文と訳を足した。**「唯一の公式手段」という断定は外した** |
+| medium | 「sort があるとドラッグできない」に出典が無かった | **未確認と明記した**（現在の board に sort は無いので運用に影響しない） |
+| low | stall の閾値30分に根拠が無かった | 暫定値であることと、運用のログで決め直すことを書いた |
+| medium/low | 節の一覧が 3-29 で止まり、3-15 の見出しが古かった | 3-30 〜 3-32 を足し、見出しを直した |
+| low | 状態ごとの上限の数え方が書かれていなかった | 段-1 に3行足した |
+
+---
+
+## レートリミット記録
+
+| 時点 | 5時間枠 | 週次・全モデル | 週次・Fable | 判定 |
+| --- | --- | --- | --- | --- |
+| 着手時 2026-08-18 | 2% | 0% | 0% | go |
+| 材料集めの workflow のあと | 6% | 2% | 0% | go |
+| **設計の確定と実装のあと 2026-08-19** | **2%** | **14%** | **0%** | **go** |
+
+- **リセット時刻。**5時間枠は 2026-08-19T01:59:59Z、週次・全モデルは 2026-08-24T18:59:59Z
+- **中断の条件。**いずれかの枠が 80% に達したら安全な区切りで停止し、人間に「停止したままにするか、
+  100% まで続けるか」を確認する。継続の指示を得るまでは停止のままにする
+
+**実測（次回の見積りの参照値）。**
+
+| 何をしたか | 5時間枠 | 週次・全モデル | 週次・Fable |
+| --- | --- | --- | --- |
+| 材料集めの workflow（worker 5つ・subagent 51.9万トークン・18分） | +4pt | +2pt | 0pt |
+| **実測の workflow 4本 + レビューの workflow 1本**（worker 72・subagent 505万トークン） | **2% のまま** | **+12pt** | **0pt** |
+
+**worker を opus と sonnet に寄せると、5時間枠はほとんど伸びず週次だけが伸びる。**
+**枠の消費は「どれだけ長く回したか」より「どのモデルで回したか」で決まる。**
+
+---
+
+## 中断・再開の手順
+
+- **中断するとき。**この文書の「現在の状態」「次のアクション」「レートリミット記録」を更新してから止める。
+  **実行中の workflow があれば、run 識別子とスクリプトのパスも書く**
+- **再開するとき。**この文書の冒頭を読む → レートリミットを取り直す（全枠 80% 未満に戻っていること。
+  ただし人間が「100% まで続ける」を選んでいる場合はこの条件を適用しない）→「次のアクション」から続ける
+
+---
+
+## 絶対に守る制約（実装中も変わらない）
+
+**[CLAUDE.md](../../CLAUDE.md) の再掲。**worker への指示にも必ず含める。
+
+- **`claude -p` は使わない。**提案もしない。Claude Agent SDK と API の直叩きも同じ理由で対象外
+- **GitHub Projects v2 の project #3 は本番のボードである。**読み取りだけ。検証でも書き込まない
+- **`updateProjectV2Field` を呼ばない。**選択肢の指定は全件置き換えとして扱われ、設定済みの Status が全部消える
+- **`~/.claude/projects/` 配下を消さない**
+- **`~/.claude.json` を書き換えない。**読み取るだけ
+- **このリポジトリは公開である。**認証情報・内部のホスト名・個人の絶対パスをコミットしない

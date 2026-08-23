@@ -1,0 +1,156 @@
+package workspace
+
+import (
+	"context"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/maimuzo/continuo/internal/normalize"
+)
+
+// OrphanBranchSweepRequest は孤児 branch の掃除の入力である（3-9 の手順6b）。
+//
+// **対象のリポジトリはボードを読まずに決まる。**置き場所の走査（3-4 の段2）で見つかった
+// worktree が属するリポジトリだけを見る。ボードに載っていないリポジトリの branch を
+// 消さないためである。
+type OrphanBranchSweepRequest struct {
+	// Worktrees は置き場所の走査で見つかった worktree の絶対パスである。
+	// ここから `git rev-parse --git-common-dir` でリポジトリを引く。
+	// **消したあとの worktree のパスを渡してはならない**（リポジトリを引けない）。
+	Worktrees []string
+	// KeepBranches は消してはならない branch 名である。
+	// **復元後の印の集合（実行中の一覧）から作る。**引き継いだ run の branch を
+	// 「実行中の issue が無い」と誤判定して消さないためである。
+	KeepBranches []string
+}
+
+// SweepOrphanBranches は孤児 branch を消す（3-9 の手順6b）。
+//
+// **起動時の掃除の一部であり、復元の手順が終わったあとに呼ぶこと**（3-4 の段9 のあと）。
+// 先に呼ぶと、これから引き継ぐ run の branch を孤児と判定して消す。
+//
+// 消す条件は次の3つを全部満たすことである。
+//
+//   - `herdr.worktree.branch_template` の接頭辞（既定 `continuo/`）で始まること。
+//     **テンプレートに変数が1つも無ければ接頭辞を決められないので、掃除を1件も行わない**
+//     （全部の branch が対象になってしまう）
+//   - その branch をチェックアウトしている worktree が無いこと
+//   - KeepBranches に入っていないこと（＝実行中の issue が無いこと）
+//
+// **消す前に SHA をログへ残す。**削除は `git branch -D`（マージ状態を見ない強制削除）なので、
+// 未 push の commit が載ったままの branch も消える。ログの `restore` に、そのまま実行すれば
+// 戻せるコマンドを書く。
+//
+// ctx: 実行に適用するコンテキスト。
+// req: 対象の worktree と、消してはならない branch 名。
+// 戻り値の1つ目: 実際に消した branch 名（`<リポジトリ>: <branch>` の形）。
+// 戻り値の2つ目: 接頭辞を決められない場合は nil を返し、エラーにはしない
+// （掃除を行わないだけである）。リポジトリごとの失敗はログに残して次のリポジトリへ進むので、
+// **この関数がエラーを返すことは無い。**戻り値の型は将来の拡張のために残してある。
+func (m *Manager) SweepOrphanBranches(ctx context.Context, req OrphanBranchSweepRequest) ([]string, error) {
+	prefix := BranchPrefix(m.cfg.Herdr.Worktree.BranchTemplate)
+	if prefix == "" {
+		m.logger.Warn("herdr.worktree.branch_template に変数が無いので孤児 branch の掃除を行いません",
+			"branch_template", m.cfg.Herdr.Worktree.BranchTemplate)
+		return nil, nil
+	}
+
+	keep := map[string]bool{}
+	for _, b := range req.KeepBranches {
+		if b != "" {
+			keep[b] = true
+		}
+	}
+
+	var deleted []string
+	for _, repoDir := range m.repoDirsOf(ctx, req.Worktrees) {
+		deleted = append(deleted, m.sweepRepoBranches(ctx, repoDir, prefix, keep)...)
+	}
+	return deleted, nil
+}
+
+// repoDirsOf は worktree の一覧から、それらが属するリポジトリの作業ディレクトリを重複無く返す。
+//
+// **リポジトリは検算したものだけを返す**（repo.go の verifiedRepo）。worktree の `.git` は
+// エージェントが書き換えられるファイルなので、`git rev-parse --git-common-dir` の答えを
+// そのまま信じると、**無関係のリポジトリの `continuo/` で始まる branch を
+// `git branch -D` で消す。**
+//
+// ctx: 実行に適用するコンテキスト。
+// worktrees: worktree の絶対パス。
+// 戻り値: リポジトリの作業ディレクトリ（パスの昇順）。引けなかった・検算に落ちたものは
+// 警告を出して飛ばす。
+func (m *Manager) repoDirsOf(ctx context.Context, worktrees []string) []string {
+	seen := map[string]bool{}
+	for _, path := range worktrees {
+		_, repoDir, err := m.verifiedRepo(ctx, path)
+		if err != nil {
+			m.logger.Warn("worktree が属するリポジトリを引けないので孤児 branch の掃除から外します",
+				"worktree", path, "error", err)
+			continue
+		}
+		seen[filepath.Clean(repoDir)] = true
+	}
+	dirs := make([]string, 0, len(seen))
+	for dir := range seen {
+		dirs = append(dirs, dir)
+	}
+	sort.Strings(dirs)
+	return dirs
+}
+
+// sweepRepoBranches は1つのリポジトリの孤児 branch を消す。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// prefix: continuo が作った branch の接頭辞（空文字ではないこと）。
+// keep: 消してはならない branch 名の集合。
+// 戻り値: 消した branch を `<リポジトリ>: <branch>` の形で並べたもの。
+func (m *Manager) sweepRepoBranches(ctx context.Context, repoDir, prefix string, keep map[string]bool) []string {
+	branches, err := gitLocalBranches(ctx, repoDir)
+	if err != nil {
+		m.logger.Warn("branch の一覧を引けないので、このリポジトリの孤児 branch は消しません",
+			"repo", repoDir, "error", err)
+		return nil
+	}
+	inWorktree, err := gitWorktreeBranches(ctx, repoDir)
+	if err != nil {
+		m.logger.Warn("worktree の一覧を引けないので、このリポジトリの孤児 branch は消しません",
+			"repo", repoDir, "error", err)
+		return nil
+	}
+
+	var deleted []string
+	for _, raw := range branches {
+		if !strings.HasPrefix(raw, prefix) || inWorktree[raw] || keep[raw] {
+			continue
+		}
+		// **正規化で変わる名前は消さない。**continuo が書いた値なら正規化を通しても
+		// そのままである（cleanup.go の deletableBranch と同じ判断）。
+		name, warnings := normalize.Normalize(raw)
+		m.logWarnings(warnings)
+		if name.String() != raw {
+			m.logger.Warn("branch 名が正規化で変わるので孤児 branch として消しません",
+				"repo", repoDir, "branch", raw, "normalized", name.String())
+			continue
+		}
+		// **消す前に SHA を控える。**`git branch -D` はマージ状態を見ないので、
+		// 未 push の commit が載ったままの branch も消える。控えがあれば
+		// `git branch <名前> <SHA>` で戻せる（無ければ reflog を掘るしかない）。
+		tip, tipErr := gitBranchTip(ctx, repoDir, name)
+		if tipErr != nil {
+			m.logger.Warn("孤児 branch の SHA を控えられませんでした（削除は続けます）",
+				"repo", repoDir, "branch", raw, "error", tipErr)
+		}
+		if err := gitBranchDelete(ctx, repoDir, name); err != nil {
+			m.logger.Warn("孤児 branch を消せませんでした", "repo", repoDir, "branch", raw, "error", err)
+			continue
+		}
+		m.logger.Info("孤児 branch を消しました",
+			"repo", repoDir, "branch", raw, "sha", tip,
+			"restore", "git -C "+repoDir+" branch "+raw+" "+tip)
+		deleted = append(deleted, repoDir+": "+raw)
+	}
+	return deleted
+}
