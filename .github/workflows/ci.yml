@@ -23,11 +23,12 @@ on:
 permissions:
   contents: read
 
-# **同じ branch で走っている古い実行は打ち切る。**
-# 連続で push したときに、古い結果を待つ意味がない。
+# **PR のときだけ、古い実行を打ち切る。**
+# 連続で push したときに古い結果を待つ意味はないが、**main では打ち切ってはならない。**
+# 短時間に2つ merge すると、先の commit の結果が残らなくなる。
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -59,6 +60,14 @@ jobs:
         # **-p 1 を外さないこと。**並行に走らせるとカバレッジのプロファイルが
         # 互いを上書きし、値が再現しなくなる（設計 6-4）。
         run: go test -p 1 -count=1 ./...
+
+      - name: 競合の検査
+        # **continuo は goroutine を3系統持つ常駐プロセスである。**
+        # `-race` を掛けないと、走行中の run と巡回の競合を見つけられない。
+        # 実際、テスト側の偽サーバに競合が2件あった（2026-08-23 に実測）。
+        #
+        # **時間はかかるが、落ちたときの原因が分かりにくい種類の欠陥なので掛ける。**
+        run: go test -race -p 1 -count=1 ./...
 
       - name: インストーラーの検査
         # **利用者が最初に叩くのが install.sh である。**
@@ -124,6 +133,19 @@ jobs:
           go build -trimpath \
             -ldflags "-s -w -X github.com/maimuzo/continuo/internal/cli.version=ci-${GITHUB_SHA}" \
             -o dist/continuo ./cmd/continuo
+
+      - name: 書庫を組み立てて中身を確かめる
+        # **release.yml と同じ手順で書庫を作り、展開して数を数える。**
+        # 同梱するファイルを増やしたのに `cp` を直し忘れると、**タグを打つまで気づけない。**
+        run: |
+          set -eu
+          cp LICENSE THIRD_PARTY_NOTICES.md README.md README.ja.md dist/
+          tar -czf check.tar.gz -C dist continuo LICENSE THIRD_PARTY_NOTICES.md README.md README.ja.md
+          mkdir -p unpacked && tar -xzf check.tar.gz -C unpacked
+          for f in continuo LICENSE THIRD_PARTY_NOTICES.md README.md README.ja.md; do
+            [ -f "unpacked/$f" ] || { echo "書庫に $f が入っていません" >&2; exit 1; }
+          done
+          echo "書庫の中身: $(ls unpacked | tr '\n' ' ')"
 
       - name: 版を名乗れるか
         # **手元で動く組み合わせでだけ確かめる。**

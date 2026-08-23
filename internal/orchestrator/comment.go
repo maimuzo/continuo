@@ -148,6 +148,12 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 			Until:     waitUntilStatuses(o.cfg.Claude.WaitUntil),
 		},
 	}); err != nil {
+		// 上と同じ理由。止められただけなら失敗として扱わない。
+		if ctx.Err() != nil {
+			o.logger.Debug("止められたので、コメントの依頼は次の起動に回します",
+				"identifier", snap.Identifier)
+			return
+		}
 		o.logger.Warn("コメントを書かせるプロンプトを送れません", "identifier", snap.Identifier, "error", err)
 	}
 

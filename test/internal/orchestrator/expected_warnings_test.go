@@ -39,6 +39,7 @@ var abandonChain = []string{
 }
 
 var expectedWarnings = map[string][]string{
+	"TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす":                 {"hook の transcript_path を解決できないので捨てました"},
 	"TestDispatch_workspaceのpaneが1つでなければそのissueを失敗にする":                  {"TestDispatch_workspaceのpaneが1つでなければそのissueを失敗にする", "run を諦めてリトライを積みました", "着手に失敗しました"},
 	"TestExternalFailure_Statusを書けなければworktreeを作らない":                    {"Status を落とせません", "TestExternalFailure_Statusを書けなければworktreeを作らない", "着手に失敗しました"},
 	"TestAbandon_打ち切るときはworkerを止める前にコメントを確かめる":                          {"run を諦めてリトライを積みました"},

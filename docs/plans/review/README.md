@@ -4,6 +4,7 @@
 
 **言いたいこと。**第1〜9段階の実装全部を `code-reviewer` と `security-reviewer` にかけ、**96件の指摘**を受けた。
 **うち critical 2件は、どちらもエージェントが書き換えられる値を検証せずに使う経路である。**
+**2件とも修正済みである**（各項の末尾に、直した場所を書いた）。
 生の指摘は [2026-08-19_code_review.json](2026-08-19_code_review.json) にそのまま置いた。
 
 ## 対象と分担
@@ -50,9 +51,17 @@
 
 **直し方。**transcript_path を使う前に、(1) filepath.IsAbs、(2) 既に用意されている resolvePath + isUnder（internal/orchestrator/restore.go:768-793）で「~/.claude/projects 配下（または設定で決めた許可の根）に入っているか」、(3) os.Lstat で Mode().IsRegular() が真か、の3点を確かめ、外れたら読まずに警告して抜けること。とくに (3) が無いと FIFO・デバイスファイル・ディレクトリで固まる／壊れる。あわせて os.OpenFile に O_NONBLOCK を付けるか、読み取り自体を別 goroutine に出して ctx で打ち切れるようにする。
 
+**直した。**`internal/orchestrator/hookinput.go` が `resolvePath` と `isUnder` で置き場所を確かめ、
+`os.Lstat` の `Mode().IsRegular()` で種別を確かめる。`internal/orchestrator/transcript.go` は
+`O_NONBLOCK` を付けて開き、**開いたあとにもう一度種別を確かめる**（先に `os.Lstat` で見るだけでは、
+見てから開くまでの間に差し替えられる）。
+
 ### internal/workspace/cleanup.go:389-392（判定は cleanup.go:109）
 
 **問題。**worktree を消す直前の封じ込め検査は req.WorktreePath に対して行うのに、実際の削除は身元ファイルに書かれた herdr_workspace_id を宛先にしている。身元ファイルは worktree の直下にあり、その worktree ではエージェントが --permission-mode dontAsk で動く。つまり削除の宛先はエージェントが書き換えられる。同じコードが Branch と SettingsPath については「エージェントが書き換えられるので検算する」と明記しているのに、この値だけ素通りしている。エージェントは同じマシンの herdr に届くので workspace の ID を列挙でき、他の run の worktree を Force: true で消させられる。3-20 の封じ込め検査も 3-9 の未コミット検査も、消される側の worktree に対しては1つも走らない。
 
 **直し方。**deletableBranch と同じく「herdr に現物を答えさせて突き合わせる」検算を入れる。worktree.remove の直前に workspace.list ないし worktree.open の応答から、その workspace_id が指す path を引き、CheckContainmentResolved が返した resolvedPath と一致することを確かめる。一致しなければ消さず、警告を出して見送る。あるいは、身元ファイルの値ではなく runState が in-memory に持つ HerdrWorkspaceID（dispatch.go:339 で入れた値）を優先し、身元ファイルは再起動後の復元でのみ使い、そのときも path 一致を確かめる。
+
+**直した。**`internal/workspace/cleanup.go` の `resolveWorkspaceID` が herdr に答えさせ、
+`CheckContainmentResolved` が返した `resolvedPath` と突き合わせる。一致しなければ消さない。
 

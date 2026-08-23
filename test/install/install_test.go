@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -122,15 +123,57 @@ type fakeRelease struct {
 	Server *httptest.Server
 	// Tag は最新として返す版である。
 	Tag string
-	// Asset は配る書庫の中身である。
-	Asset []byte
+	// asset は配る書庫の中身である。**mu が守る**（サーバを立てたあとに差し替えるテストがある）。
+	asset []byte
 	// Checksums は checksums.txt の中身である。空なら 404 を返す。
 	Checksums string
-	// Available は実際に配っている版である。
+	// mu は Available を守る。
+	//
+	// **handler は別の goroutine で走る。**テスト本体が配る版を足すのと同時に読むので、
+	// 排他が無いと `-race` が競合を報告する（実測で2件出た）。
+	mu sync.Mutex
+	// available は実際に配っている版である。
 	//
 	// **これを持たないと、どの版を要求しても同じ書庫を返してしまう。**
 	// 「指定した版が無い」を試せなくなる（実際、最初の版では試せていなかった）。
-	Available map[string]bool
+	available map[string]bool
+}
+
+// Allow は、その版を配ることにする。
+//
+// tag: 配る版。
+func (fr *fakeRelease) Allow(tag string) {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	fr.available[tag] = true
+}
+
+// SetAsset は配る書庫を差し替える。
+//
+// **サーバを立てたあとに呼べる。**チェックサムが合わない状況を作るのに使う。
+//
+// body: 新しい書庫の中身。
+func (fr *fakeRelease) SetAsset(body []byte) {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	fr.asset = body
+}
+
+// assetBody は、いま配っている書庫を返す。
+func (fr *fakeRelease) assetBody() []byte {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	return fr.asset
+}
+
+// serves は、その版を配っているかを返す。
+//
+// tag: 問い合わせる版。
+// 戻り値: 配っていれば true。
+func (fr *fakeRelease) serves(tag string) bool {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	return fr.available[tag]
 }
 
 // newFakeRelease は偽の release サーバを立てる。
@@ -143,7 +186,7 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 	t.Helper()
 	asset := makeTarGz(t, "continuo", body)
 
-	fr := &fakeRelease{Tag: tag, Asset: asset, Available: map[string]bool{tag: true}}
+	fr := &fakeRelease{Tag: tag, asset: asset, available: map[string]bool{tag: true}}
 	if withSums {
 		sum := sha256.Sum256(asset)
 		fr.Checksums = fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), assetName())
@@ -158,14 +201,14 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 		// パスは /dl/<版>/<ファイル名> である。**版を見て、配っていなければ 404 を返す。**
 		rest := strings.TrimPrefix(r.URL.Path, "/dl/")
 		ver, file, ok := strings.Cut(rest, "/")
-		if !ok || !fr.Available[ver] {
+		if !ok || !fr.serves(ver) {
 			http.NotFound(w, r)
 			return
 		}
 		switch file {
 		case assetName():
 			w.Header().Set("Content-Type", "application/gzip")
-			_, _ = w.Write(fr.Asset)
+			_, _ = w.Write(fr.assetBody())
 		case "checksums.txt":
 			if fr.Checksums == "" {
 				http.NotFound(w, r)
@@ -278,7 +321,7 @@ func TestInstall_releaseから実行ファイルを取って置く(t *testing.T)
 func TestInstall_チェックサムが合わなければ置かない(t *testing.T) {
 	fr := newFakeRelease(t, "v1.2.3", "#!/bin/sh\necho ok\n", true)
 	// **中身だけを差し替える。**checksums.txt は元のままなので照合が外れる。
-	fr.Asset = makeTarGz(t, "continuo", "#!/bin/sh\necho 差し替えられた\n")
+	fr.SetAsset(makeTarGz(t, "continuo", "#!/bin/sh\necho 差し替えられた\n"))
 	dir := t.TempDir()
 
 	code, out := runInstaller(t, fr, dir, "--no-deps")
@@ -386,7 +429,7 @@ func TestInstall_版に使えない文字があれば取得の前に弾く(t *te
 func TestInstall_版を指定できる(t *testing.T) {
 	fr := newFakeRelease(t, "v9.9.9", "#!/bin/sh\necho ok\n", true)
 	// **v1.0.0 も配っていることにする。**「最新を引かずに指定を使う」ことだけを確かめる。
-	fr.Available["v1.0.0"] = true
+	fr.Allow("v1.0.0")
 	dir := t.TempDir()
 
 	code, out := runInstaller(t, fr, dir, "--no-deps", "--version", "v1.0.0")

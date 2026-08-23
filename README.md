@@ -51,6 +51,16 @@ How many issues run at once is a setting (two by default).
 
 **The agent edits your repository, commits, and pushes.** continuo starts Claude Code with permission prompts turned off and allows `Bash` without argument restrictions. Nothing will stop and ask you.
 
+**Issue text is agent instructions.** The default brief tells the agent to run `gh issue view <URL> --comments` and read everything — body and comments alike. **Whatever is written there can execute on your machine, with no prompt.**
+
+**On a public repository, that text is written by other people.** Anyone can open an issue or leave a comment. **If it says "delete this repository", that is what runs.**
+
+| Mitigation | What to do |
+| --- | --- |
+| **Only advance issues you wrote** | A human moves things into `Ready`. Do not move an issue you did not read |
+| **Filter by label** | Set `tracker.required_labels` so only issues carrying your marker are eligible |
+| **Isolate it** | Run it under a dedicated account, or on a machine or container you can discard |
+
 **Try it on a repository you can throw away.** Do not point it at production work on day one.
 
 ## Requirements
@@ -70,6 +80,10 @@ How many issues run at once is a setting (two by default).
 
 ## Install
 
+> **There are no releases yet.** The installer below will tell you so and stop.
+> **Build from source for now** (end of this section). Once the author has verified it on real
+> hardware and decided it is fit to ship, a tag goes up and the binaries land in releases.
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh
 ```
@@ -82,13 +96,24 @@ The installer detects your OS and architecture, pulls the matching binary from [
 | `--no-deps` | Install nothing but continuo; just list what is missing |
 | `--dir DIR` | Install somewhere else (default `~/.local/bin`) |
 | `--version V` | Install a specific release instead of the latest |
+| `--repo O/R` | Install from a fork. **Using it prints a warning** |
+
+**It stops if it cannot verify the checksum.** Pass `--insecure-no-checksum` to go ahead anyway.
+
+**A checksum alone does not detect tampering** — it ships from the same release as the archive, so anyone who can replace one can replace both. **GitHub's signed build provenance is the stronger check**, and the installer runs it automatically when `gh` is available. To check it yourself:
+
+```bash
+gh attestation verify continuo_darwin_arm64.tar.gz --repo maimuzo/continuo
+```
 
 Prefer to build it yourself? You need Go 1.26:
 
 ```bash
 git clone https://github.com/maimuzo/continuo.git
 cd continuo
+mise trust && mise install                       # if you manage Go with mise
 go build -o ~/.local/bin/continuo ./cmd/continuo
+sh scripts/test-like-ci.sh                       # run the tests (~3 min, optional)
 ```
 
 ## Use
@@ -157,14 +182,21 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 
 The implementation and its tests pass, but **no issue has yet been driven end to end on real hardware.** The walkthrough for trying it is in [docs/trying_it_out.md](docs/trying_it_out.md).
 
-Documentation is in Japanese, apart from this file.
+**There are no releases yet either**, so `install.sh` currently just tells you so and stops.
+
+**While it is on v0.x, the configuration format may change.** The front matter in `WORKFLOW.md` rejects unknown keys, so **removing or renaming one will stop older config files from starting.** Any such change goes in the release notes.
+
+**Everything except this file is in Japanese** — the installer, the CLI output, `continuo doctor`, the error messages, and all documentation. There is no English UI yet, and a half-translated one would be worse than none: you would get English and Japanese in the same screen. If you do not read Japanese, this is not usable for you today.
 
 ## Learn more
 
 | | |
 | --- | --- |
-| Design decisions and the reasoning behind them | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) |
+| **Why it is built this way** (start here) | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md) (634 lines) |
+| The full record: reasoning, measurements, rejected alternatives | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) (nearly 4,800 lines) |
 | Use case specifications (RUCM) | [docs/spec/usecases/](docs/spec/usecases/) |
+| **Development and testing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Third-party software in the binary | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
 
 ## The specification it follows
 

@@ -1,0 +1,113 @@
+# 開発と貢献について / Contributing
+
+> **Docs, code comments and test names are in Japanese.** Issues and pull requests are welcome in English or Japanese — write in whichever you are comfortable with.
+
+---
+
+## 手元で動かすまで
+
+```bash
+git clone https://github.com/maimuzo/continuo.git
+cd continuo
+
+mise trust && mise install     # mise で Go を入れている場合。これが無いと go build が
+                               # 「No version is set for shim: go」で止まります
+go build -o /tmp/continuo ./cmd/continuo
+```
+
+**Go 1.26 以上が要ります。**[mise.toml](mise.toml) が版を固定しています。
+
+## テストの走らせ方
+
+**`sh scripts/test-like-ci.sh` を使ってください。**素の `go test ./...` は使わないでください。
+
+```bash
+sh scripts/test-like-ci.sh     # 約3分
+```
+
+**なぜ。**素の `go test` は、あなたの機械にある `claude` や `herdr` を見てしまいます。
+**手元で通って CI で落ちます。**このスクリプトは PATH からそれらを隠し、`LANG` も外します。
+実際にそれで3件の欠陥を見つけました（[docs/plans/continuo_design.md](docs/plans/continuo_design.md) の 6-7）。
+
+**個別に走らせるとき。**
+
+```bash
+go test -p 1 -count=1 ./test/internal/orchestrator/
+```
+
+**`-p 1` を外さないでください。**並行に走らせるとカバレッジのプロファイルが互いを上書きし、
+値が再現しません（同じコードが 83% にも 65% にも見えます）。
+
+## コードの置き場所
+
+| 何 | どこ | なぜ |
+| --- | --- | --- |
+| **テスト** | `test/internal/<パッケージ名>/` | **`internal/` の隣ではありません。**現在 `internal/` と `cmd/` の下にテストは0本、`test/` の下に134本あります |
+| CLI の実体 | `internal/cli/` | `cmd/continuo/main.go` は `os.Exit(cli.Run(...))` の1行だけです |
+| 画面に出す文言 | `internal/i18n/messages/ja.json` | **日本語が正です** |
+
+**`cmd/continuo` に実装を書かないでください。**`package main` の関数は `test/` から呼べず、
+引数の受け取り方も終了コードも検査できません。
+
+## 書き方
+
+- **コメントとテスト名は日本語で書いてください。**既存のコードに合わせてください
+- **テストの doc コメントに「目的 / 与える情報 / 成功条件」の3つを書いてください。**
+  見本: [test/internal/config/validate_values_test.go](test/internal/config/validate_values_test.go)
+- **画面に出す文言を足したら、`internal/i18n/messages/ja.json` にキーを足し、
+  `internal/i18n/keys.go` の定数と `allKeys` の両方に足してください。**
+  どれか1つでも欠けるとテストが落ちます（実際に落としました）
+- **`internal/i18n/messages/en.json` は空です。**中途半端に訳すと1つの画面に英語と日本語が
+  混ざるので、いまは日本語で一貫させています
+
+## 触らないもの
+
+**テストの先頭と各テストの上にある、この形のコメントを書き換えないでください。**
+
+```go
+// {"RUCM-CFG-SHA256": "8b8ade…", "SOURCE": "docs/spec/usecases/particular_case/…cfg.json"}
+// {"RUCM-PATH": "P003"}
+```
+
+**仕様（RUCM）とテストの対応を機械で照合するための印です。**手で書き換えると照合が壊れます。
+
+**この照合は、外部からの PR では CI が飛ばします**（検査のスクリプトが非公開のプラグインに
+同梱されているため）。**テストパスが増える変更なら、PR の本文にその旨を書いてください。**
+仕様の再生成はメンテナが行います。
+
+## 出す前に
+
+```bash
+gofmt -l ./cmd ./internal ./test    # 何も出ないこと
+go vet ./...
+sh scripts/test-like-ci.sh
+```
+
+**commit メッセージは `{何を実装したか} {作業内容を簡潔に表現}` の形にしてください。**
+
+## 設計を読む
+
+| 何を知りたいか | どこ |
+| --- | --- |
+| **なぜそう作ったか**（人間が読む用） | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md)（634行） |
+| 判断の根拠・実測値・比較した案 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md)（4800行近い） |
+| ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
+| 実機で試す手順 | [docs/trying_it_out.md](docs/trying_it_out.md) |
+
+**準拠する仕様（openai/symphony の SPEC.md）は同梱していません。**必要なら各自で置いてください。
+
+```bash
+mkdir -p docs/spec/symphony
+curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/spec/symphony/SPEC.md
+```
+
+## 最初の一歩に向く仕事
+
+**英語の文言**（`internal/i18n/messages/en.json`）。いまは空で、全部日本語に落ちています。
+`ja.json` を見ながらキーを足すだけで、設計を読む必要も RUCM に触る必要もありません。
+
+**足すときの約束。**`ja.json` からキーを消さないこと。`%d` や `%s` の並び順を訳文でも保つこと。
+
+## 脆弱性を見つけたら
+
+**公開の issue に書かないでください。**[SECURITY.md](SECURITY.md) を読んでください。

@@ -914,6 +914,15 @@ func parseErrorExitCode(err error) int {
 func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	// **サブコマンドの一覧を出す。**
+	//
+	// flag は自分が知っているフラグしか出さないので、既定のままだと
+	// `continuo --help` に `init` も `doctor` も載らない。**利用者は、何が使えるかを
+	// 引数の一覧からしか知れない。**
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIMainUsage))
+		fs.PrintDefaults()
+	}
 	logLevelFlag := fs.String("log-level", "info", i18n.T(i18n.KeyCLIMainFlagLogLevel))
 	// **`SPEC.md` 13.7 の「CLI `--port` overrides `server.port`」である。**
 	// 既定値では区別が付かないので、渡されたかどうかは fs.Visit で見る

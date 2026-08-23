@@ -1,0 +1,9 @@
+# blank issue は許可したままにする（型に嵌らない報告を弾かないため）。
+blank_issues_enabled: true
+contact_links:
+  - name: 脆弱性の報告
+    url: https://github.com/maimuzo/continuo/security/advisories/new
+    about: 公開の issue には書かないでください。ここから非公開で報告できます。
+  - name: 設計の判断について
+    url: https://github.com/maimuzo/continuo/blob/main/docs/plans/continuo_design_slim.md
+    about: なぜそう作ったかは、ここに根拠つきで書いてあります。提案の前に一度お読みください。

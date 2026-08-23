@@ -25,3 +25,13 @@ if [ -n "$bad" ]; then
 fi
 
 echo "OK: $target に、変数名として読み違える書き方はありません"
+
+# **shellcheck も掛ける。**構文検査（`sh -n`）は通るのに問題があるものを拾う。
+# CI では必ず走る。**手元に無いと、CI で初めて落ちる**ので、ここでも掛ける。
+if command -v shellcheck > /dev/null 2>&1; then
+	shellcheck -s sh "$target"
+	echo "OK: shellcheck も通りました"
+else
+	echo "shellcheck が無いので飛ばします（CI では必ず走ります）"
+	echo "  入れ方: brew install shellcheck / apt-get install shellcheck"
+fi
