@@ -489,6 +489,12 @@ const (
 
 // `continuo`（常駐プロセス本体）の文言。
 const (
+	// KeyCLIMainUsage は `continuo --help` の冒頭に出る。
+	//
+	// **サブコマンドの一覧をここに書く。**flag は自分が知っているフラグしか出さないので、
+	// これが無いと `init` も `doctor` も一覧に載らない。
+	KeyCLIMainUsage Key = "cli.main.usage"
+
 	// KeyCLIMainFlagLogLevel は--log-level の説明に出る。
 	KeyCLIMainFlagLogLevel Key = "cli.main.flag_log_level"
 	// KeyCLIMainFlagPort は--port の説明に出る。
@@ -1583,6 +1589,7 @@ var allKeys = []Key{
 	KeyCLIAllowKeychainAccessTimeoutHowTo,
 	KeyCLIAllowKeychainAccessTimeoutCauses,
 	KeyCLIAllowKeychainAccessTimeoutRemedy,
+	KeyCLIMainUsage,
 	KeyCLIMainFlagLogLevel,
 	KeyCLIMainFlagPort,
 	KeyCLIMainErrPortRange,

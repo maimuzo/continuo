@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -94,21 +95,85 @@ type stringWriter struct{ b *strings.Builder }
 
 func (w *stringWriter) Write(p []byte) (int, error) { return w.b.Write(p) }
 
+// installShell は、いま試しているシェルである。
+//
+// **TestMain がシェルごとに全テストを走らせる。**`sh` と `dash` で落ちる条件が違うので、
+// 片方だけでは足りない。
+var installShell = "sh"
+
+// TestMain は、使えるシェルそれぞれで全テストを走らせる。
+func TestMain(m *testing.M) {
+	list := []string{"sh"}
+	if p, err := exec.LookPath("dash"); err == nil {
+		list = append(list, p)
+	}
+	for _, sh := range list {
+		installShell = sh
+		if code := m.Run(); code != 0 {
+			fmt.Fprintf(os.Stderr, "シェル %s で落ちました\n", sh)
+			os.Exit(code)
+		}
+	}
+	os.Exit(0)
+}
+
 // fakeRelease は偽の release サーバである。
 type fakeRelease struct {
 	// Server は立てた HTTP サーバである。
 	Server *httptest.Server
 	// Tag は最新として返す版である。
 	Tag string
-	// Asset は配る書庫の中身である。
-	Asset []byte
+	// asset は配る書庫の中身である。**mu が守る**（サーバを立てたあとに差し替えるテストがある）。
+	asset []byte
 	// Checksums は checksums.txt の中身である。空なら 404 を返す。
 	Checksums string
-	// Available は実際に配っている版である。
+	// mu は Available を守る。
+	//
+	// **handler は別の goroutine で走る。**テスト本体が配る版を足すのと同時に読むので、
+	// 排他が無いと `-race` が競合を報告する（実測で2件出た）。
+	mu sync.Mutex
+	// available は実際に配っている版である。
 	//
 	// **これを持たないと、どの版を要求しても同じ書庫を返してしまう。**
 	// 「指定した版が無い」を試せなくなる（実際、最初の版では試せていなかった）。
-	Available map[string]bool
+	available map[string]bool
+}
+
+// Allow は、その版を配ることにする。
+//
+// tag: 配る版。
+func (fr *fakeRelease) Allow(tag string) {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	fr.available[tag] = true
+}
+
+// SetAsset は配る書庫を差し替える。
+//
+// **サーバを立てたあとに呼べる。**チェックサムが合わない状況を作るのに使う。
+//
+// body: 新しい書庫の中身。
+func (fr *fakeRelease) SetAsset(body []byte) {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	fr.asset = body
+}
+
+// assetBody は、いま配っている書庫を返す。
+func (fr *fakeRelease) assetBody() []byte {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	return fr.asset
+}
+
+// serves は、その版を配っているかを返す。
+//
+// tag: 問い合わせる版。
+// 戻り値: 配っていれば true。
+func (fr *fakeRelease) serves(tag string) bool {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	return fr.available[tag]
 }
 
 // newFakeRelease は偽の release サーバを立てる。
@@ -121,7 +186,7 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 	t.Helper()
 	asset := makeTarGz(t, "continuo", body)
 
-	fr := &fakeRelease{Tag: tag, Asset: asset, Available: map[string]bool{tag: true}}
+	fr := &fakeRelease{Tag: tag, asset: asset, available: map[string]bool{tag: true}}
 	if withSums {
 		sum := sha256.Sum256(asset)
 		fr.Checksums = fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), assetName())
@@ -136,14 +201,14 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 		// パスは /dl/<版>/<ファイル名> である。**版を見て、配っていなければ 404 を返す。**
 		rest := strings.TrimPrefix(r.URL.Path, "/dl/")
 		ver, file, ok := strings.Cut(rest, "/")
-		if !ok || !fr.Available[ver] {
+		if !ok || !fr.serves(ver) {
 			http.NotFound(w, r)
 			return
 		}
 		switch file {
 		case assetName():
 			w.Header().Set("Content-Type", "application/gzip")
-			_, _ = w.Write(fr.Asset)
+			_, _ = w.Write(fr.assetBody())
 		case "checksums.txt":
 			if fr.Checksums == "" {
 				http.NotFound(w, r)
@@ -192,7 +257,7 @@ func runInstaller(t *testing.T, fr *fakeRelease, dir string, args ...string) (in
 		)
 	}
 	full = append(full, args...)
-	cmd := exec.Command("sh", full...)
+	cmd := exec.Command(installShell, full...)
 	// **端末を与えない。**`curl … | sh` と同じく、対話できない状況を作る。
 	cmd.Stdin = nil
 	detachTerminal(cmd)
@@ -256,7 +321,7 @@ func TestInstall_releaseから実行ファイルを取って置く(t *testing.T)
 func TestInstall_チェックサムが合わなければ置かない(t *testing.T) {
 	fr := newFakeRelease(t, "v1.2.3", "#!/bin/sh\necho ok\n", true)
 	// **中身だけを差し替える。**checksums.txt は元のままなので照合が外れる。
-	fr.Asset = makeTarGz(t, "continuo", "#!/bin/sh\necho 差し替えられた\n")
+	fr.SetAsset(makeTarGz(t, "continuo", "#!/bin/sh\necho 差し替えられた\n"))
 	dir := t.TempDir()
 
 	code, out := runInstaller(t, fr, dir, "--no-deps")
@@ -364,7 +429,7 @@ func TestInstall_版に使えない文字があれば取得の前に弾く(t *te
 func TestInstall_版を指定できる(t *testing.T) {
 	fr := newFakeRelease(t, "v9.9.9", "#!/bin/sh\necho ok\n", true)
 	// **v1.0.0 も配っていることにする。**「最新を引かずに指定を使う」ことだけを確かめる。
-	fr.Available["v1.0.0"] = true
+	fr.Allow("v1.0.0")
 	dir := t.TempDir()
 
 	code, out := runInstaller(t, fr, dir, "--no-deps", "--version", "v1.0.0")
@@ -425,7 +490,7 @@ func TestInstall_端末が無ければ道具を1つも入れない(t *testing.T)
 
 	// **PATH を絞って、すべての道具を「無い」ことにする。**
 	// それでも1つも入れずに終わることを確かめる。
-	cmd := exec.Command("/bin/sh", scriptPath(t),
+	cmd := exec.Command(installShell, scriptPath(t),
 		"--api-url", fr.Server.URL+"/api/latest",
 		"--base-url", fr.Server.URL+"/dl")
 	cmd.Stdin = nil
@@ -470,7 +535,7 @@ func TestInstall_helpはパイプ経由でも出る(t *testing.T) {
 	if err != nil {
 		t.Fatalf("install.sh を読めません: %v", err)
 	}
-	cmd := exec.Command("sh", "-s", "--", "--help")
+	cmd := exec.Command(installShell, "-s", "--", "--help")
 	cmd.Stdin = strings.NewReader(string(body))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -586,7 +651,7 @@ esac
 func runWithFakeUname(t *testing.T, osName, machine, dir string) (int, string) {
 	t.Helper()
 	fakeDir := fakeUname(t, osName, machine)
-	cmd := exec.Command("/bin/sh", scriptPath(t), "--no-deps")
+	cmd := exec.Command(installShell, scriptPath(t), "--no-deps")
 	cmd.Stdin = nil
 	detachTerminal(cmd)
 	cmd.Env = []string{
@@ -661,7 +726,7 @@ func TestInstall_照合できず端末も無ければ置くだけで終わる(t 
 	dir := t.TempDir()
 
 	// **PATH を絞ってすべての道具を「無い」ことにする。**それでも1つも入れない。
-	cmd := exec.Command("/bin/sh", scriptPath(t),
+	cmd := exec.Command(installShell, scriptPath(t),
 		"--api-url", fr.Server.URL+"/api/latest",
 		"--base-url", fr.Server.URL+"/dl",
 		"--insecure-no-checksum")

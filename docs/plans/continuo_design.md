@@ -12,7 +12,7 @@
 > この文書は AI が読むためのもので、判断の根拠・実測値・比較した案を全部持っている。
 > **設計を変えたらこの文書を直し、人間のレビューが要るときに要約版を再生成する。**
 
-**`continuo` とは何か。**GitHub Projects v2 のボード1枚を見張り、`Ready` の issue ごとに worktree を用意し、herdr の pane で Claude Code を対話モードで起動して作業させ、完了までを面倒見る**常駐プロセス**である。Go で書く。名前は**通奏低音**（basso continuo）に由来する（[docs/naming.md](../naming.md)）。
+**`continuo` とは何か。**GitHub Projects v2 のボード1枚を見張り、`Ready` の issue ごとに worktree を用意し、herdr の pane で Claude Code を対話モードで起動して作業させ、完了までを面倒見る**常駐プロセス**である。Go で書く。名前は**通奏低音**（basso continuo）に由来する。
 
 **準拠する仕様は [openai/symphony](https://github.com/openai/symphony) の [SPEC.md](https://github.com/openai/symphony/blob/main/SPEC.md)**（Apache-2.0、2312行）。**このリポジトリには同梱していない**（置き方は [CLAUDE.md](../../CLAUDE.md)）。
 
@@ -4522,6 +4522,41 @@ var abandonChain = []string{
 | **権限の過剰** | `contents: write` が全 job に降り、**`go test` が任意のコードを実行できる job がトークンを持っていた** | 既定を `read` にし、publish だけに `write`。`persist-credentials: false` |
 | **action の可変タグ** | タグは上書きできるので、action 側が乗っ取られると任意のコードが動く | **commit で固定した** |
 | **checksums が同一発信元** | 書庫と同じ場所から配るので、改竄には効かない | `actions/attest-build-provenance` を足した |
+
+---
+
+### 6-7. 手元で通るのに CI で落ちるもの
+
+**言いたいこと。**CI を入れた初日に、**手元では全部通るのに CI で落ちる欠陥が4つ**出た。
+どれも環境の違いによる。**`scripts/test-like-ci.sh` で同じ状況を作れる。**
+
+**何が違うか。**
+
+| 何 | 手元（macOS） | CI（ubuntu-latest） |
+| --- | --- | --- |
+| `/bin/sh` | **bash 3.2** | **dash** |
+| `claude` / `herdr` | 入っている | **無い** |
+| `LANG` | `en_US.UTF-8` など | **未設定** |
+
+**出た4つ。**
+
+| 短縮名 | 何が起きたか | どちらの違いか |
+| --- | --- | --- |
+| **特殊ビルトインでシェルが死ぬ** | `{ : < /dev/tty; }` のリダイレクト失敗が、**POSIX では非対話シェルを終了させる**（`:` は特殊ビルトイン）。dash で exit 2 | シェル |
+| **mock が本物の PATH を見ていた** | `doctor` は `claude` を PATH で探す。**mock だけで通すはずの E2E が、開発者の手元の claude を見ていた** | 道具の有無 |
+| **doctor の項目数が古い** | テスト名が「7項目」のまま。`claude` を足して8つになっていた | （名前だけ） |
+| **ディレクトリを設定ファイルとして読んでいた** | `continuo doctor <ディレクトリ>` が `is a directory` で落ち、**設定を読まないまま検査が進んでいた。**そのとき言語の設定も効かず、環境変数の言語で出ていた | `LANG` |
+
+**4つ目は、CI が無ければ永久に見つからなかった。**手元の `LANG` が英語だったので、
+**設定を読めていないのに、期待どおりの言語で出ていた。**
+
+**対策は3つ。**
+
+| 何 | どこ |
+| --- | --- |
+| **CI と同じ状況を手元で作る** | `sh scripts/test-like-ci.sh`（PATH から claude と herdr を隠し、LANG も外す） |
+| **シェルは両方で試す** | `test/install` が `sh` と `dash` の両方で全テストを走らせる |
+| **`init` と `doctor` で引数の扱いを揃える** | どちらもディレクトリを受け付け、その中の `WORKFLOW.md` を見る |
 
 ---
 

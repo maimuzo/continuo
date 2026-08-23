@@ -32,8 +32,15 @@ set -eu
 # 設定
 # ---------------------------------------------------------------------------
 
-# REPO は取得先である。fork した人が使えるよう環境変数で上書きできる。
-REPO="${CONTINUO_REPO:-maimuzo/continuo}"
+# REPO は取得先である。
+#
+# **環境変数からは読まない。**`curl … | CONTINUO_REPO=… sh` の1行を貼らせるだけで、
+# **警告も出ないまま別のリポジトリの実行ファイルを置けてしまう**（実測で確かめた）。
+# fork した人は `--repo` フラグを使う。**使うと警告が出る。**
+REPO="maimuzo/continuo"
+
+# DEFAULT_REPO は既定の取得先である。**これと違えば「差し替えられている」と判断する。**
+DEFAULT_REPO="$REPO"
 
 # INSTALL_DIR は実行ファイルの置き先である。
 INSTALL_DIR="${CONTINUO_INSTALL_DIR:-$HOME/.local/bin}"
@@ -54,8 +61,9 @@ VERSION=""
 # 環境変数で差し替えられるようにしていた版では、`curl … | CONTINUO_BASE_URL=http://… sh`
 # の1行を貼らせるだけで、偽の実行ファイルを置けることが実測で確かめられた。
 # **貼られた1行の先頭は公式のままなので、利用者からは正規に見える。**
-BASE_URL="https://github.com/$REPO/releases/download"
-API_URL="https://api.github.com/repos/$REPO/releases/latest"
+# **引数を解釈したあとに組み立てる**（`--repo` を反映するため）。set_urls が行う。
+BASE_URL=""
+API_URL=""
 
 # INSECURE_SOURCE が 1 なら、取得先が差し替えられている（テスト専用）。
 INSECURE_SOURCE=0
@@ -101,15 +109,24 @@ ask() {
 	# **存在ではなく「開けるか」で判定する。**Linux では /dev/tty のデバイスノードが
 	# 常にあるので、`[ -e /dev/tty ]` は制御端末が無くても真になる（実測）。
 	# 判定しないと、生のエラー（cannot open /dev/tty）が利用者の画面に出る。
-	if ! : < /dev/tty 2> /dev/null; then
+	# **`{ } 2> /dev/null` で囲む。**コマンドに `2> /dev/null` を付けるだけでは、
+	# **リダイレクト自体の失敗を消せない**（シェルがリダイレクトを評価した時点で
+	# `/dev/tty: Device not configured` を出す。macOS で実測）。
+	#
+	# **`:` を使ってはならない。**POSIX では、特殊ビルトイン（`:` はその1つ）への
+	# リダイレクトが失敗すると、**非対話シェルはそこで終了する。**
+	# dash では実際に exit 2 で落ちた（bash は落ちないので手元では見つからない）。
+	# `true` は特殊ビルトインではないので、失敗しても続く。
+	if ! { true < /dev/tty; } 2> /dev/null; then
 		return 1
 	fi
-	# **書き込みでも失敗しうる。**読めるかどうかだけを見ていた版では、
-	# `/dev/tty: Device not configured` が利用者の画面に出た（macOS で実測）。
-	printf '%s [y/N]: ' "$1" > /dev/tty 2> /dev/null || return 1
+	# 読めても書けないことがあるので、書き込みも同じ形で試す。
+	if ! { printf '%s [y/N]: ' "$1" > /dev/tty; } 2> /dev/null; then
+		return 1
+	fi
 	# read が失敗する（端末が閉じている）場合も「いいえ」にする。
 	answer=""
-	read -r answer < /dev/tty || return 1
+	{ read -r answer < /dev/tty; } 2> /dev/null || return 1
 	case "$answer" in
 		y | Y | yes | YES) return 0 ;;
 		*) return 1 ;;
@@ -146,6 +163,19 @@ while [ $# -gt 0 ]; do
 					;;
 			esac
 			VERSION="$2"
+			shift 2
+			;;
+		--repo)
+			# **fork した人のための入口である。**既定と違えば、下で警告して尋ねる。
+			[ $# -ge 2 ] || die "--repo には <owner>/<repo> を続けてください"
+			case "$2" in
+				*/*) ;;
+				*) die "--repo は <owner>/<repo> の形で渡してください: $2" ;;
+			esac
+			case "$2" in
+				*[!A-Za-z0-9._/-]*) die "--repo に使える文字は英数字と . _ - / だけです: $2" ;;
+			esac
+			REPO="$2"
 			shift 2
 			;;
 		--base-url)
@@ -194,14 +224,17 @@ herdr と claude は入れません。どちらも独自の配布経路と認証
                 チェックサムを照合できなくても続ける（既定では止まります）
   -h, --help    この案内を出す
 
+  --repo O/R    fork から入れる（既定 maimuzo/continuo）。使うと警告が出ます
+
 テスト用（ふだんは使いません）:
   --base-url U  実行ファイルの取得先を差し替える
   --api-url U   版の問い合わせ先を差し替える
                 どちらも HTTPS の強制が外れます。使うと警告が出ます。
 
 環境変数:
-  CONTINUO_REPO         取得先のリポジトリ（既定 maimuzo/continuo）
   CONTINUO_INSTALL_DIR  置き先（既定 ~/.local/bin）
+
+取得先は環境変数からは変えられません。`--repo` を使ってください。
 USAGE
 			exit 0
 			;;
@@ -210,6 +243,23 @@ USAGE
 			;;
 	esac
 done
+
+# set_urls は取得先を組み立てる。
+#
+# **`--base-url` / `--api-url` で明示されていれば、それを残す。**
+# そうでなければ REPO から組み立てる。
+set_urls() {
+	if [ -z "$BASE_URL" ]; then
+		BASE_URL="https://github.com/$REPO/releases/download"
+	fi
+	if [ -z "$API_URL" ]; then
+		API_URL="https://api.github.com/repos/$REPO/releases/latest"
+	fi
+	# **既定と違うリポジトリなら、差し替えられているものとして扱う。**
+	if [ "$REPO" != "$DEFAULT_REPO" ]; then
+		INSECURE_SOURCE=1
+	fi
+}
 
 # ---------------------------------------------------------------------------
 # OS と命令セットを見分ける
@@ -246,33 +296,30 @@ detect_platform() {
 # fetch は URL の中身を標準出力へ出す。
 #
 # $1: URL。
+# fetch は URL の中身を標準出力へ出す。
+#
+# **平文 HTTP へ降格させない。**`-L` はリダイレクトを追うので、
+# https から http への転送も追ってしまう。取得先を差し替えているとき（テスト）だけ制限を外す。
+#
+# **オプションを変数に入れて展開しない。**POSIX sh に配列が無いので、
+# 変数を無引用で展開して単語分割に頼ることになる。**それは事故の元である**
+# （shellcheck も SC2046 / SC2086 で警告する）。**分岐して書き下すほうが安全である。**
 fetch() {
 	if have curl; then
-		curl $(curl_proto_opts) --max-time 60 -fsSL "$1"
+		if [ "$INSECURE_SOURCE" = "1" ]; then
+			curl --max-time 60 -fsSL "$1"
+		else
+			curl --proto '=https' --proto-redir '=https' --tlsv1.2 --max-time 60 -fsSL "$1"
+		fi
 	elif have wget; then
-		wget $(wget_proto_opts) --timeout=60 -qO- "$1"
+		if [ "$INSECURE_SOURCE" = "1" ]; then
+			wget --timeout=60 -qO- "$1"
+		else
+			wget --https-only --timeout=60 -qO- "$1"
+		fi
 	else
 		die "curl も wget もありません。どちらかを入れてください"
 	fi
-}
-
-# curl_proto_opts は、平文 HTTP へ降格させないための指定を返す。
-#
-# **`-L` はリダイレクトを追うので、https から http への転送も追ってしまう。**
-# 取得先を差し替えているとき（テスト）だけ、この制限を外す。
-curl_proto_opts() {
-	if [ "$INSECURE_SOURCE" = "1" ]; then
-		return 0
-	fi
-	printf -- "--proto =https --proto-redir =https --tlsv1.2"
-}
-
-# wget_proto_opts は curl_proto_opts の wget 版である。
-wget_proto_opts() {
-	if [ "$INSECURE_SOURCE" = "1" ]; then
-		return 0
-	fi
-	printf -- "--https-only"
 }
 
 # download はファイルを落とす。
@@ -280,9 +327,17 @@ wget_proto_opts() {
 # $1: URL。$2: 置き先。
 download() {
 	if have curl; then
-		curl $(curl_proto_opts) --max-time 300 -fsSL -o "$2" "$1"
+		if [ "$INSECURE_SOURCE" = "1" ]; then
+			curl --max-time 300 -fsSL -o "$2" "$1"
+		else
+			curl --proto '=https' --proto-redir '=https' --tlsv1.2 --max-time 300 -fsSL -o "$2" "$1"
+		fi
 	elif have wget; then
-		wget $(wget_proto_opts) --timeout=300 -qO "$2" "$1"
+		if [ "$INSECURE_SOURCE" = "1" ]; then
+			wget --timeout=300 -qO "$2" "$1"
+		else
+			wget --https-only --timeout=300 -qO "$2" "$1"
+		fi
 	else
 		die "curl も wget もありません。どちらかを入れてください"
 	fi
@@ -307,7 +362,12 @@ resolve_version() {
 	body=""
 	if have curl; then
 		# `-w` で状態コードを最終行に足し、あとで切り離す。
-		body="$(curl $(curl_proto_opts) --max-time 60 -sSL -w '\n%{http_code}' "$API_URL" 2> /dev/null || true)"
+		if [ "$INSECURE_SOURCE" = "1" ]; then
+			body="$(curl --max-time 60 -sSL -w '\n%{http_code}' "$API_URL" 2> /dev/null || true)"
+		else
+			body="$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
+				--max-time 60 -sSL -w '\n%{http_code}' "$API_URL" 2> /dev/null || true)"
+		fi
 		http_code="$(printf '%s' "$body" | tail -1)"
 		body="$(printf '%s' "$body" | sed '$d')"
 	else
@@ -338,10 +398,13 @@ resolve_version() {
 		say "continuo はまだ配布していません。作者が実機で確かめ、出してよいと判断した時点で"
 		say "タグが打たれ、release に実行ファイルが載ります。"
 		say ""
+		# **ここだけ英語も添える。**英語の README から来た人が最初に当たるのがこの画面である。
+		say "(No release yet. Build from source with the commands below.)"
+		say ""
 		say "いま試したい場合は、ソースから作ってください。"
 		say ""
-		say "    git clone https://github.com/$REPO.git"
-		say "    cd continuo"
+		say "    git clone https://github.com/${REPO}.git"
+		say "    cd $(basename "$REPO")"
 		say "    go build -o \"$INSTALL_DIR/continuo\" ./cmd/continuo"
 		say ""
 		exit 1
@@ -406,6 +469,36 @@ verify_checksum() {
 	say "チェックサムを照合しました。"
 }
 
+# verify_provenance は、配布物が「どの workflow のどの commit から作られたか」を確かめる。
+#
+# **checksums.txt では改竄を検知できない。**書庫と同じ release から配るので、
+# release ごと差し替えられれば、checksums.txt も一緒に差し替わる。
+# **GitHub が署名した provenance のほうが強い。**
+#
+# **`gh` が無ければ飛ばす。**インストーラーは `gh` を要求しない（あとで `continuo doctor` が言う）。
+# **取得先を差し替えているときも飛ばす**（テストの偽サーバには provenance が無い）。
+#
+# $1: 書庫を置いた一時ディレクトリ。$2: 書庫のファイル名。
+verify_provenance() {
+	if [ "$INSECURE_SOURCE" = "1" ]; then
+		return 0
+	fi
+	if ! have gh; then
+		say "gh が無いので、配布物の出所（provenance）は確かめませんでした。"
+		say "  あとで確かめるなら: gh attestation verify <書庫> --repo ${REPO}"
+		return 0
+	fi
+	if gh attestation verify "$1/$2" --repo "$REPO" > /dev/null 2>&1; then
+		say "配布物の出所を確かめました（GitHub の provenance）。"
+		return 0
+	fi
+	# **失敗しても止めない。**gh が未認証、古い版、または provenance を付ける前の
+	# release ということがある。**確かめられなかったことを、そのまま伝える。**
+	say "配布物の出所を確かめられませんでした。"
+	say "  gh が未認証か、その release に provenance が付いていない可能性があります。"
+	say "  自分で確かめるなら: gh attestation verify <書庫> --repo ${REPO}"
+}
+
 # install_binary は実行ファイルを取って置く。
 install_binary() {
 	asset="continuo_${GOOS}_${GOARCH}.tar.gz"
@@ -439,6 +532,7 @@ install_binary() {
 	# **「照合しました」と言ってよいのは、本当に比較が成立したときだけである。**
 	# 対象の行が無いのに成功と表示していた版では、**利用者に検証が通ったように見えていた。**
 	verify_checksum "$tmp" "$asset"
+	verify_provenance "$tmp" "$asset"
 
 	# **`--no-same-owner` を付ける。**書庫が持ち主を指定していても従わない。
 	tar -xzf "$tmp/$asset" -C "$tmp" --no-same-owner || die "展開に失敗しました"
@@ -590,6 +684,8 @@ main() {
 	say "continuo のインストーラー"
 	say ""
 
+	set_urls
+
 	# **取得先を差し替えているなら、必ず知らせる。**
 	# 黙って差し替わると、公式から取ってきたつもりの利用者に偽の実行ファイルが渡る。
 	if [ "$INSECURE_SOURCE" = "1" ]; then
@@ -604,7 +700,7 @@ main() {
 		say ""
 		# **端末があるなら、続けてよいかを尋ねる。**無ければそのまま進む（テストの実行）。
 		if ! ask "この取得先で続けますか"; then
-			if [ -e /dev/tty ] && : < /dev/tty 2> /dev/null; then
+			if { true < /dev/tty; } 2> /dev/null; then
 				die "取得先が既定ではないので中止しました"
 			fi
 		fi
@@ -637,7 +733,12 @@ main() {
 
 	say "次にやること:"
 	say ""
+	say "    mkdir -p ~/continuo-work && cd ~/continuo-work"
+	say "    continuo init      # WORKFLOW.md の雛形を置く"
+	say "    continuo setup     # ボードの Status を5つの役割に対応づける"
 	say "    continuo doctor    # 前提が揃っているかを調べる"
+	say ""
+	say "詳しくは https://github.com/${REPO}#使う を見てください。"
 	say ""
 }
 

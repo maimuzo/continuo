@@ -29,6 +29,18 @@ package orchestrator_test
 //
 // **この連鎖を検証したいテストは、ログではなく Status・pane・コメントで確かめること。**
 // 「人間へ渡した」ことをログの有無で確かめると、他のテストの巻き添えで壊れる。
+// shutdownNoise は、**テストが終わったあとの片付けで出るログ**である。
+//
+// **検査は `orc.Close` のあとに走る**（そこでしか見えない欠陥があるため）。
+// そのとき `t.TempDir()` は既に消えているので、走行中の goroutine が
+// transcript を開こうとして「解決できない」と言う。**実装の欠陥ではない。**
+//
+// **どのテストで出るかはタイミングで変わる**ので、1件ずつ宣言しても収束しない。
+// newFixture が既定で許す。
+var shutdownNoise = []string{
+	"hook の transcript_path を解決できないので捨てました",
+}
+
 var abandonChain = []string{
 	"run を諦めてリトライを積みました",
 	"リトライの回数を使い切りました",
@@ -39,6 +51,7 @@ var abandonChain = []string{
 }
 
 var expectedWarnings = map[string][]string{
+	"TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす":                 {"hook の transcript_path を解決できないので捨てました"},
 	"TestDispatch_workspaceのpaneが1つでなければそのissueを失敗にする":                  {"TestDispatch_workspaceのpaneが1つでなければそのissueを失敗にする", "run を諦めてリトライを積みました", "着手に失敗しました"},
 	"TestExternalFailure_Statusを書けなければworktreeを作らない":                    {"Status を落とせません", "TestExternalFailure_Statusを書けなければworktreeを作らない", "着手に失敗しました"},
 	"TestAbandon_打ち切るときはworkerを止める前にコメントを確かめる":                          {"run を諦めてリトライを積みました"},

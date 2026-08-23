@@ -1,0 +1,161 @@
+# PR と main への push で、テストとビルドを通す。
+#
+# **これが無いと、誰も CI を通さないまま main へ入る。**
+# `release.yml` はタグを打ったときにしか動かないので、**タグを打って初めて壊れていると分かる**。
+# そこまで行くと、直すにはタグを打ち直すことになる。
+#
+# **ビルドもここで確かめる。**手元が macOS でも、Linux 向けのビルドが通るとは限らない。
+# 4つの組み合わせを実際に作ってみる（クロスコンパイルなので速い）。
+#
+# **RUCM → CFG → テストの連鎖も見る。ただし飛ばせるようにする。**
+# 検査のスクリプトは非公開のプラグインに同梱されており、このリポジトリは公開である。
+# **持っていない環境では飛ばす**（落とさない）。手元では `--strict` を付けて必ず回す。
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# 読み取りだけでよい。**この workflow は何も書かない。**
+permissions:
+  contents: read
+
+# **PR のときだけ、古い実行を打ち切る。**
+# 連続で push したときに古い結果を待つ意味はないが、**main では打ち切ってはならない。**
+# 短時間に2つ merge すると、先の commit の結果が残らなくなる。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # **トークンを .git/config に残さない。**この後に走る `go test` は
+          # リポジトリの任意のコードを実行する。
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: 整形されているか
+        run: |
+          set -eu
+          unformatted="$(gofmt -l ./cmd ./internal ./test)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt が要るファイルがあります:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: テスト
+        # **-p 1 を外さないこと。**並行に走らせるとカバレッジのプロファイルが
+        # 互いを上書きし、値が再現しなくなる（設計 6-4）。
+        run: go test -p 1 -count=1 ./...
+
+      - name: 競合の検査
+        # **continuo は goroutine を3系統持つ常駐プロセスである。**
+        # `-race` を掛けないと、走行中の run と巡回の競合を見つけられない。
+        # 実際、テスト側の偽サーバに競合が2件あった（2026-08-23 に実測）。
+        #
+        # **時間はかかるが、落ちたときの原因が分かりにくい種類の欠陥なので掛ける。**
+        run: go test -race -p 1 -count=1 ./...
+
+      - name: インストーラーの検査
+        # **利用者が最初に叩くのが install.sh である。**
+        # `-n` は構文しか見ないので、shellcheck と全角の検査も掛ける。
+        run: |
+          set -eu
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          sh -n install.sh
+          dash -n install.sh
+          shellcheck -s sh install.sh
+          sh scripts/check-install-sh.sh install.sh
+
+      - name: 配布物に同梱するファイルがあるか
+        # **`release.yml` の build job が `cp` するファイルを、ここで確かめる。**
+        # 追跡されていないファイルを `cp` すると、タグを打った後で初めて落ちる。
+        run: |
+          set -eu
+          for f in LICENSE README.md README.ja.md; do
+            git ls-files --error-unmatch "$f" > /dev/null \
+              || { echo "配布物に入れる $f が git に入っていません" >&2; exit 1; }
+          done
+
+      - name: RUCM と CFG とテストの連鎖
+        # **RUCM を直したら CFG を作り直し、テストのハッシュを貼り直すところまでが1つの作業である。**
+        # ずれたまま入ると、仕様書とテストの対応が静かに壊れる。
+        #
+        # **スクリプトが無ければ飛ばす**（非公開のプラグインに同梱されているため、
+        # 外部からの PR では持っていない）。手元では `--strict` を付けて必ず回す。
+        run: sh scripts/check-rucm.sh
+
+
+  build:
+    # **配布物を作れることを、タグを打つ前に確かめる。**
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: ビルド
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        # **`release.yml` と同じ ldflags を使う。**版の埋め込み先が違っていれば、ここで分かる。
+        run: |
+          set -eu
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/maimuzo/continuo/internal/cli.version=ci-${GITHUB_SHA}" \
+            -o dist/continuo ./cmd/continuo
+
+      - name: 書庫を組み立てて中身を確かめる
+        # **release.yml と同じ手順で書庫を作り、展開して数を数える。**
+        # 同梱するファイルを増やしたのに `cp` を直し忘れると、**タグを打つまで気づけない。**
+        run: |
+          set -eu
+          cp LICENSE THIRD_PARTY_NOTICES.md README.md README.ja.md dist/
+          tar -czf check.tar.gz -C dist continuo LICENSE THIRD_PARTY_NOTICES.md README.md README.ja.md
+          mkdir -p unpacked && tar -xzf check.tar.gz -C unpacked
+          for f in continuo LICENSE THIRD_PARTY_NOTICES.md README.md README.ja.md; do
+            [ -f "unpacked/$f" ] || { echo "書庫に $f が入っていません" >&2; exit 1; }
+          done
+          echo "書庫の中身: $(ls unpacked | tr '\n' ' ')"
+
+      - name: 版を名乗れるか
+        # **手元で動く組み合わせでだけ確かめる。**
+        # `-X` の左辺が誤っていても Go は警告を出さないので、実際に聞いてみる。
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          set -eu
+          got="$(./dist/continuo version)"
+          echo "版: $got"
+          case "$got" in
+            ci-*) ;;
+            *) echo "版が埋め込まれていません（-X の左辺を確かめてください）" >&2; exit 1 ;;
+          esac

@@ -1,0 +1,69 @@
+#!/bin/sh
+# CI と同じ状況で、手元のテストを走らせる。
+#
+# **「手元では通るのに CI で落ちる」を繰り返さないためのものである。**
+# 実際に2度踏んだ（2026-08-23）:
+#
+#   - `continuo doctor` の検査が、開発者の PATH にある本物の `claude` を見ていた。
+#     CI には無いので落ちた。**mock だけで通すはずのテストだった**
+#   - install.sh が dash で exit 2 になった。macOS の /bin/sh は bash なので手元では出ない
+#
+# **何が違うのか。**
+#
+# | 何 | 手元（macOS） | CI（ubuntu-latest） |
+# | --- | --- | --- |
+# | `/bin/sh` | bash 3.2 | dash |
+# | `claude` / `herdr` | 入っている | **無い** |
+# | `gh` | ログイン済み | 未認証 |
+# | `LANG` | `en_US.UTF-8` など | **未設定** |
+#
+# **PATH から claude と herdr を隠し、LANG も外して走らせる。**
+# シェルの違いは `test/install` が自分で両方を試すので、ここでは扱わない。
+#
+# LANG の違いでも1度落ちた。`continuo doctor <ディレクトリ>` が設定を読めておらず、
+# **環境変数の言語で結果が出ていた。**手元が英語だったので、たまたま期待どおりに見えていた。
+
+set -eu
+
+# mise の shim を残す（go を引くため）。それ以外は最小限にする。
+clean_path="/usr/bin:/bin:/usr/sbin:/sbin"
+for extra in "${HOME}/.local/share/mise/shims" "${HOME}/go/bin"; do
+	if [ -d "$extra" ]; then
+		clean_path="${clean_path}:${extra}"
+	fi
+done
+
+# go が引けなければ、いまの PATH から場所だけ借りる。
+if ! PATH="$clean_path" command -v go > /dev/null 2>&1; then
+	go_dir="$(dirname "$(command -v go)")"
+	clean_path="${clean_path}:${go_dir}"
+fi
+
+echo "PATH: $clean_path"
+echo ""
+for tool in claude herdr gh; do
+	if PATH="$clean_path" command -v "$tool" > /dev/null 2>&1; then
+		echo "  注意: $tool がまだ見えています（CI には無いので、隠せていません）"
+	else
+		echo "  $tool は見えません（CI と同じ）"
+	fi
+done
+echo ""
+
+# **LANG と LC_ALL を外す。**CI の ubuntu-latest では設定されていない。
+run() {
+	env -u LANG -u LC_ALL -u LC_MESSAGES PATH="$clean_path" "$@"
+}
+
+run go test -p 1 -count=1 ./...
+
+# **競合の検査も掛ける。**CI が掛けているので、手元でも同じものを通す。
+# **時間はかかる**（素の実行の2倍ほど）。飛ばしたいときは --no-race を渡す。
+if [ "${1:-}" = "--no-race" ]; then
+	echo ""
+	echo "競合の検査（-race）は飛ばしました"
+	exit 0
+fi
+echo ""
+echo "競合の検査（-race）を掛けます。飛ばすには --no-race を渡してください。"
+run go test -race -p 1 -count=1 ./...

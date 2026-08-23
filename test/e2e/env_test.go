@@ -105,6 +105,7 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 	// テスト用gh mock とテスト用ghq mock を PATH の先頭へ置く。
 	buildFakeGH(t, filepath.Join(root, "ghsrc"), env.BinDir)
 	writeFakeGhq(t, env.BinDir, env.FullName(), env.RepoDir)
+	writeFakeClaudeBinary(t, env.BinDir)
 
 	// 偽のボードと、それを読み書きするテスト用GraphQL mock。
 	env.Board = newBoardFile(t, boardPathIn(root), env.Owner, env.Repo)
@@ -184,6 +185,24 @@ func (e *e2eEnv) RunGit(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("`git %s` に失敗しました: %v\n%s", strings.Join(full, " "), err, out)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// writeFakeClaudeBinary は、PATH に置くだけの偽の `claude` を作る。
+//
+// **`continuo doctor` は `claude` が PATH にあるかを調べる**（設計 6-2）。
+// **mock だけで通すはずの E2E が、本物の PATH を見ていた。**
+// 開発者の手元には claude があるので通り、**CI には無いので落ちた**（2026-08-23 に実測）。
+//
+// **中身は何でもよい。**doctor は `exec.LookPath` で在ることだけを見て、実行はしない。
+//
+// binDir: PATH の先頭に入るディレクトリ。
+func writeFakeClaudeBinary(t *testing.T, binDir string) {
+	t.Helper()
+	p := filepath.Join(binDir, "claude")
+	body := "#!/bin/sh\n# doctor は在ることだけを見る。実行はされない。\necho 'fake claude'\n"
+	if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
+		t.Fatalf("テスト用の claude を置けません: %v", err)
+	}
 }
 
 // ChildEnv は continuo とテスト用gh mock へ渡す環境変数を組み立てる。

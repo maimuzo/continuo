@@ -1,0 +1,66 @@
+name: 不具合の報告 / Bug report
+description: 動かない・想定と違う挙動を報告する
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **脆弱性は、ここではなく [Security タブ](https://github.com/maimuzo/continuo/security/advisories/new) から報告してください。**
+
+        continuo が動くかどうかは、herdr / Claude Code / gh / ボードの Status 名という
+        **外部の組み合わせ**でほぼ決まります。どれが崩れても、症状は「issue が拾われない」に見えます。
+        **下の5つが揃っていないと、切り分けられません。**
+
+  - type: input
+    id: version
+    attributes:
+      label: continuo の版
+      description: "`continuo version` の出力（`--version` ではありません）"
+      placeholder: v0.1.0 / dev
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: continuo doctor の出力
+      description: |
+        **全文をそのまま貼ってください。**8項目の検査結果で、ほとんどの原因が分かります。
+        トークンや資格情報の中身は出力されません。
+      placeholder: |
+        $ continuo doctor
+        ✓ 設定ファイル    ...
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS と命令セット
+      placeholder: macOS 15 / arm64、Ubuntu 24.04 / amd64、WSL2 の Ubuntu など
+    validations:
+      required: true
+
+  - type: input
+    id: tools
+    attributes:
+      label: 道具の版
+      description: "`herdr --version` / `claude --version` / `gh --version` の3つ"
+      placeholder: herdr 0.8.0 / claude 2.1.233 / gh 2.97.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 何をしたら、何が起きたか
+      description: |
+        **期待した動きと、実際の動きを両方書いてください。**
+        ログがあれば添えてください（`continuo` の標準出力）。
+      placeholder: |
+        1. issue を Ready に置いた
+        2. 期待: In Progress に移って worktree ができる
+        3. 実際: 30分たっても Ready のまま。ログには ... と出ている
+    validations:
+      required: true

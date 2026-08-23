@@ -49,6 +49,19 @@ herdr agent read continuo-hello-world-188 --source recent-unwrapped --lines 40
 
 **エージェントは、あなたのリポジトリを実際に編集し、commit して push します。**continuo は Claude Code を「人間に確認を出さないモード」で起動し、`Bash` を引数の制限なしに許可します。**確認のダイアログは出ません。**
 
+**issue の本文とコメントは、そのままエージェントへの指示になります。**既定の指示書は
+`gh issue view <URL> --comments` で本文とコメントを全部読ませます。**そこに書かれた文が、
+確認なしにあなたの機械でコマンドとして実行されえます。**
+
+**public なリポジトリを載せるときは、これが他人の書いた文であることを忘れないでください。**
+issue もコメントも第三者が書けます。**「このリポジトリを消せ」と書かれていたら、そのとおりに動きます。**
+
+| 抑え方 | どうするか |
+| --- | --- |
+| **自分が書いた issue だけを進める** | `Ready` へ動かすのは人間である。**知らない issue を動かさない** |
+| **ラベルで絞る** | `tracker.required_labels` に印を入れ、**それが付いた issue だけ**を対象にする |
+| **隔離して動かす** | 専用のアカウントか、捨ててよい機械・コンテナで動かす |
+
 **最初は使い捨てにできるリポジトリで試してください。**本業のリポジトリをいきなり指定しないこと。
 
 ## 前提
@@ -68,24 +81,42 @@ herdr agent read continuo-hello-world-188 --source recent-unwrapped --lines 40
 
 ## 入れる
 
+> **release はまだ1つもありません。**下のインストーラーは「まだ配布していません」と答えて止まります。
+> **いまはソースから作ってください**（この節の末尾）。作者が実機で確かめ、出してよいと判断した時点で
+> タグが打たれ、release に実行ファイルが載ります。
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh
 ```
 
-**やること。**OS と命令セットを見分け、[release](https://github.com/maimuzo/continuo/releases) から実行ファイルを取り、`~/.local/bin/continuo` へ置きます。**足りない道具があれば1つずつ尋ねます**（`git` / `gh` / `ghq`）。**`herdr` と `claude` は入れません** — どちらも独自の配布経路と認証があるため、案内するだけです。
+**やること。**OS と命令セットを見分け、[release](https://github.com/maimuzo/continuo/releases) から実行ファイルを取り、**チェックサムを照合してから** `~/.local/bin/continuo` へ置きます。**足りない道具があれば1つずつ尋ねます**（`git` / `gh` / `ghq`）。**`herdr` と `claude` は入れません** — どちらも独自の配布経路と認証があるため、案内するだけです。
 
 | オプション | 何をするか |
 | --- | --- |
-| `--yes` | すべての確認に「はい」と答える |
+| `--yes` | すべての確認に「はい」と答える（**パッケージの導入も含む**） |
 | `--no-deps` | 道具を1つも入れず、足りないものを並べるだけ |
 | `--dir DIR` | 置き先を変える（既定 `~/.local/bin`） |
+| `--version V` | 版を指定する（既定は最新の release） |
+| `--repo O/R` | fork から入れる。**使うと警告が出ます** |
+
+**チェックサムを照合できなければ止まります。**承知のうえで続けるなら `--insecure-no-checksum` を付けてください。
+
+**チェックサムだけでは改竄を検知できません。**書庫と同じ release から配るので、release ごと
+差し替えられれば一緒に差し替わります。**GitHub が署名した出所の証明（provenance）のほうが強く**、
+`gh` が入っていればインストーラーが自動で確かめます。手で確かめるなら次を叩いてください。
+
+```bash
+gh attestation verify continuo_darwin_arm64.tar.gz --repo maimuzo/continuo
+```
 
 **ソースから作ることもできます。**Go 1.26 が要ります。
 
 ```bash
 git clone https://github.com/maimuzo/continuo.git
 cd continuo
+mise trust && mise install                       # mise で Go を入れているなら1回だけ
 go build -o ~/.local/bin/continuo ./cmd/continuo
+sh scripts/test-like-ci.sh                       # テストを走らせる（約3分。任意）
 ```
 
 ## 使う
@@ -154,13 +185,20 @@ claude:
 
 **実装とテストは通っていますが、実機で issue を1件通しきった実績はまだありません。**手順は [docs/trying_it_out.md](docs/trying_it_out.md) にあります。
 
+**release もまだ1つもありません。**そのため `install.sh` はいまのところ「まだ配布していません」と答えます。
+
+**v0.x のうちは、設定の形を変えることがあります。**`WORKFLOW.md` の front matter は未知のキーを弾くので、
+**キーを消したり改名したりすると、古い設定ファイルは起動しなくなります。**その変更は release notes に書きます。
+
 ## もっと詳しく
 
 | | |
 | --- | --- |
-| 設計と判断の根拠 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) |
+| **なぜそう作ったか**（読むならこちら） | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md)（634行） |
+| 判断の根拠・実測値・比較した案 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md)（4800行近い） |
 | ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
-| 名前の由来 | [docs/naming.md](docs/naming.md) |
+| **開発とテスト** | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| 実行ファイルに含まれる第三者 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
 
 ## 準拠する仕様
 
