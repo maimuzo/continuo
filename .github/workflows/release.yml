@@ -25,6 +25,9 @@ on:
   push:
     tags:
       - "v*"
+  # **タグを打たずに、ここまでが通るかを試せるようにする。**
+  # 手で走らせたときは release を作らない（下の publish の if を見よ）。
+  workflow_dispatch:
 
 # **既定は読み取りだけにする。**書き込みが要るのは publish だけである。
 # workflow レベルに write を置くと、`go test` が任意のコードを実行する test job まで
@@ -136,6 +139,9 @@ jobs:
 
   publish:
     needs: build
+    # **タグを打ったときだけ release を作る。**
+    # 手で走らせたとき（workflow_dispatch）は、ここまでの test と build で終わる。
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       # release を作るために要る。

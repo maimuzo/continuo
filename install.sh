@@ -101,15 +101,19 @@ ask() {
 	# **存在ではなく「開けるか」で判定する。**Linux では /dev/tty のデバイスノードが
 	# 常にあるので、`[ -e /dev/tty ]` は制御端末が無くても真になる（実測）。
 	# 判定しないと、生のエラー（cannot open /dev/tty）が利用者の画面に出る。
-	if ! : < /dev/tty 2> /dev/null; then
+	# **`{ } 2> /dev/null` で囲む。**コマンドに `2> /dev/null` を付けるだけでは、
+	# **リダイレクト自体の失敗を消せない**（シェルがリダイレクトを評価した時点で
+	# `/dev/tty: Device not configured` を出す。macOS で実測）。
+	if ! { : < /dev/tty; } 2> /dev/null; then
 		return 1
 	fi
-	# **書き込みでも失敗しうる。**読めるかどうかだけを見ていた版では、
-	# `/dev/tty: Device not configured` が利用者の画面に出た（macOS で実測）。
-	printf '%s [y/N]: ' "$1" > /dev/tty 2> /dev/null || return 1
+	# 読めても書けないことがあるので、書き込みも同じ形で試す。
+	if ! { printf '%s [y/N]: ' "$1" > /dev/tty; } 2> /dev/null; then
+		return 1
+	fi
 	# read が失敗する（端末が閉じている）場合も「いいえ」にする。
 	answer=""
-	read -r answer < /dev/tty || return 1
+	{ read -r answer < /dev/tty; } 2> /dev/null || return 1
 	case "$answer" in
 		y | Y | yes | YES) return 0 ;;
 		*) return 1 ;;
@@ -604,7 +608,7 @@ main() {
 		say ""
 		# **端末があるなら、続けてよいかを尋ねる。**無ければそのまま進む（テストの実行）。
 		if ! ask "この取得先で続けますか"; then
-			if [ -e /dev/tty ] && : < /dev/tty 2> /dev/null; then
+			if { : < /dev/tty; } 2> /dev/null; then
 				die "取得先が既定ではないので中止しました"
 			fi
 		fi
