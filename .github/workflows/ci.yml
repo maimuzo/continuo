@@ -32,7 +32,20 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # **macOS でも回す。**
+    #
+    # continuo の主たる本番環境は macOS である（herdr と Claude Code をそこで動かす）。
+    # それなのに CI が ubuntu だけだと、**`runtime.GOOS != "darwin"` で飛ばすテストが
+    # 1度も走らない。**`TMPDIR` の実在の検査がまさにそれで、
+    # **issue #9 と同じ形の欠陥が macOS の本番経路に残っていた。**
+    #
+    # あわせて、`/bin/sh` の実体も違う（macOS は bash 3.2、ubuntu は dash）。
+    # 落ちる条件が違うので、両方で回さないと片方の罠を見逃す。
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -62,6 +75,8 @@ jobs:
         run: go test -p 1 -count=1 ./...
 
       - name: 競合の検査
+        # **ubuntu だけで掛ける。**`-race` は遅く、競合は OS に依らない。
+        if: runner.os == 'Linux' 
         # **continuo は goroutine を3系統持つ常駐プロセスである。**
         # `-race` を掛けないと、走行中の run と巡回の競合を見つけられない。
         # 実際、テスト側の偽サーバに競合が2件あった（2026-08-23 に実測）。
@@ -74,8 +89,12 @@ jobs:
         # `-n` は構文しか見ないので、shellcheck と全角の検査も掛ける。
         run: |
           set -eu
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            brew install shellcheck dash
+          else
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq shellcheck
+          fi
           sh -n install.sh
           dash -n install.sh
           shellcheck -s sh install.sh
