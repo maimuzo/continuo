@@ -58,6 +58,17 @@ type fakeHerdr struct {
 	paneListCalls int
 	// methods は受け取ったメソッド名を受け取った順に記録したものである。
 	methods []string
+	// removeErr は `worktree.remove` にエラーを返させるための応答である。
+	// nil なら消す（成功を返す）。
+	removeErr *rpcError
+}
+
+// rpcError は herdr が返すエラー応答である。
+type rpcError struct {
+	// Code は herdr のエラーコードである。
+	Code string
+	// Message は人間に見せる理由である。
+	Message string
 }
 
 // newFakeHerdr はテスト用herdr mock を1本立てる。
@@ -155,13 +166,13 @@ func (fh *fakeHerdr) serve(conn net.Conn) {
 		return
 	}
 
-	result, ok := fh.respond(req.Method, req.Params)
+	result, failure := fh.respond(req.Method, req.Params)
 	var resp map[string]any
-	if ok {
+	if failure == nil {
 		resp = map[string]any{"id": req.ID, "result": result}
 	} else {
 		resp = map[string]any{"id": req.ID,
-			"error": map[string]any{"code": "unknown_method", "message": req.Method}}
+			"error": map[string]any{"code": failure.Code, "message": failure.Message}}
 	}
 	encoded, err := json.Marshal(resp)
 	if err != nil {
@@ -170,26 +181,43 @@ func (fh *fakeHerdr) serve(conn net.Conn) {
 	_, _ = conn.Write(append(encoded, '\n'))
 }
 
+// SetWorktreeRemoveError は `worktree.remove` にエラーを返させる。
+//
+// **片付けそのものに失敗したときの経路を作るために要る。**herdr が消せなければ
+// worktree は残るので、そのあとで Status を動かしてはならない。
+//
+// code: 返すエラーコード。
+// message: 返す理由。
+func (fh *fakeHerdr) SetWorktreeRemoveError(code, message string) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	fh.removeErr = &rpcError{Code: code, Message: message}
+}
+
 // respond はメソッド名に応じた result を組み立てる。
 //
 // method: 呼ばれたメソッド名。
 // params: 受け取った params。
 // 戻り値の1つ目: 返す result。
-// 戻り値の2つ目: 答えられるメソッドなら true。
-func (fh *fakeHerdr) respond(method string, params map[string]any) (map[string]any, bool) {
+// 戻り値の2つ目: エラーを返す場合のエラー応答（成功なら nil）。
+func (fh *fakeHerdr) respond(method string, params map[string]any) (map[string]any, *rpcError) {
 	fh.mu.Lock()
 	fh.methods = append(fh.methods, method)
+	removeErr := fh.removeErr
 	fh.mu.Unlock()
 
 	switch method {
 	case herdr.MethodPaneList:
-		return fh.paneList(), true
+		return fh.paneList(), nil
 	case herdr.MethodWorktreeOpen:
-		return fh.worktreeOpen(params), true
+		return fh.worktreeOpen(params), nil
 	case herdr.MethodWorktreeRemove:
-		return fh.worktreeRemove(params), true
+		if removeErr != nil {
+			return nil, removeErr
+		}
+		return fh.worktreeRemove(params), nil
 	default:
-		return nil, false
+		return nil, &rpcError{Code: "unknown_method", Message: method}
 	}
 }
 
@@ -301,6 +329,34 @@ type fakeTracker struct {
 // 戻り値: 偽のボード。
 func newFakeTracker(state string) *fakeTracker {
 	return &fakeTracker{state: state, itemID: "PVTI_test", found: true, written: true}
+}
+
+// SetState は FetchIssueByIdentifier が返す現在の Status を差し替える。
+//
+// state: 返す Status の値。
+func (ft *fakeTracker) SetState(state string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.state = state
+}
+
+// SetNotListed は「その issue はボードに載っていない」状態にする。
+//
+// **Status を確かめられない状態を作るために要る。**
+func (ft *fakeTracker) SetNotListed() {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.found = false
+}
+
+// SetWriteRejected は UpdateStatus が「書けなかった」を返す状態にする。
+//
+// **エラーではなく「書かれなかった」である。**ボードから item が見えないときに
+// トラッカーがこれを返す。
+func (ft *fakeTracker) SetWriteRejected() {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.written = false
 }
 
 // Bootstrap は project と Status フィールドの ID の解決を受けたことだけを記録する。
@@ -666,6 +722,29 @@ func (fx *fixture) WriteIdentity(
 		CreatedAt:        time.Now(),
 	}
 	if err := fx.Manager.WriteIdentity(context.Background(), prepared.Path, identity); err != nil {
+		t.Fatalf("身元ファイルを書けません: %v", err)
+	}
+}
+
+// SetIdentityBranch は身元ファイルの branch だけを別の名前へ書き換える。
+//
+// **worktree が現に checkout している branch と食い違う身元ファイルを作る。**
+// 身元ファイルは worktree の中にあってエージェントが書き換えられるので、
+// 片付けは「現物と一致する branch」しか消さない。
+//
+// t: 呼び出し元のテスト。
+// prepared: 対象の worktree。
+// branch: 身元ファイルへ書く branch 名。
+func (fx *fixture) SetIdentityBranch(
+	t *testing.T, prepared *workspace.PrepareResult, branch string,
+) {
+	t.Helper()
+	identity, err := fx.Manager.ReadIdentity(prepared.Path)
+	if err != nil {
+		t.Fatalf("身元ファイルを読めません: %v", err)
+	}
+	identity.Branch = branch
+	if err := fx.Manager.WriteIdentity(context.Background(), prepared.Path, *identity); err != nil {
 		t.Fatalf("身元ファイルを書けません: %v", err)
 	}
 }
