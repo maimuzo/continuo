@@ -38,11 +38,42 @@ go test -p 1 -count=1 ./test/internal/orchestrator/
 **`-p 1` を外さないでください。**並行に走らせるとカバレッジのプロファイルが互いを上書きし、
 値が再現しません（同じコードが 83% にも 65% にも見えます）。
 
+## 本物の herdr を叩くテスト
+
+```bash
+sh scripts/test-live.sh        # 数秒。herdr が無ければ静かに skip します
+```
+
+**これは何か。**[test/live/](test/live/) は、**本物の herdr の socket を叩く**テストです。
+偽の herdr は「continuo が正しいと思っている振る舞い」しか返しません。そのため
+`worktree.open` に `path` と `branch` を両方渡していたずれがテストを素通りし、
+**実機の着手が全件落ちました**（2026-08-20）。ここはその手のずれを捕まえる唯一の経路です。
+
+**いつ回すか。**
+
+| きっかけ | なぜ |
+| --- | --- |
+| `internal/herdr` の引数や応答の形を変えたとき | 名前のずれは本物にしか分かりません |
+| [test/e2e/fakeherdr_test.go](test/e2e/fakeherdr_test.go) の台本を変えたとき | 偽と本物が離れていないかを確かめます |
+| herdr 本体を更新したとき | protocol 版と応答の形が変わることがあります |
+| pull request を出す前 | `scripts/test-like-ci.sh` は herdr を隠すので、これは走りません |
+
+**叩くのは herdr だけです。**Claude Code は起動しません（枠を消費するため）。
+GitHub の GraphQL も `gh` も叩きません（認証と本番のボードが要るため）。
+
+**herdr が居なければ静かに skip します。**PATH に `herdr` が無い・socket が無い・
+socket へ繋がらないのいずれかで飛びます。CI では必ず飛びます（runner に herdr は居ません）。
+
+**後始末はテストが自分で行います。**worktree は `t.TempDir()` の下に作り、
+`worktree.remove` と `workspace.close` で必ず閉じます。**後始末に失敗したらテストが落ちます。**
+既に開いている pane / workspace には触りません（`t.TempDir()` の下を指すものだけを閉じます）。
+
 ## コードの置き場所
 
 | 何 | どこ | なぜ |
 | --- | --- | --- |
-| **テスト** | `test/internal/<パッケージ名>/` | **`internal/` の隣ではありません。**現在 `internal/` と `cmd/` の下にテストは0本、`test/` の下に134本あります |
+| **テスト** | `test/internal/<パッケージ名>/` | **`internal/` の隣ではありません。**`internal/` と `cmd/` の下にテストのファイルは1つも置きません |
+| **本物の herdr を叩くテスト** | `test/live/` | 手元でだけ走ります。CI では skip します |
 | CLI の実体 | `internal/cli/` | `cmd/continuo/main.go` は `os.Exit(cli.Run(...))` の1行だけです |
 | 画面に出す文言 | `internal/i18n/messages/ja.json` | **日本語が正です** |
 
