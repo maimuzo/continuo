@@ -33,12 +33,15 @@ package orchestrator_test
 //
 // **検査は `orc.Close` のあとに走る**（そこでしか見えない欠陥があるため）。
 // そのとき `t.TempDir()` は既に消えているので、走行中の goroutine が
-// transcript を開こうとして「解決できない」と言う。**実装の欠陥ではない。**
+// transcript を読もうとして失敗する。**実装の欠陥ではない。**
+//
+// **「まだ無い」は WARN では出ない**（Debug に落としてある。issue #14）。
+// ここに残すのは、消えかけのディレクトリを読みに行ったときに出うるものだけである。
 //
 // **どのテストで出るかはタイミングで変わる**ので、1件ずつ宣言しても収束しない。
 // newFixture が既定で許す。
 var shutdownNoise = []string{
-	"hook の transcript_path を解決できないので捨てました",
+	"hook の transcript_path を読めないので捨てました",
 }
 
 var abandonChain = []string{
@@ -51,7 +54,7 @@ var abandonChain = []string{
 }
 
 var expectedWarnings = map[string][]string{
-	"TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす":                 {"hook の transcript_path を解決できないので捨てました"},
+	"TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす":                 {"hook の transcript_path を読めないので捨てました"},
 	"TestDispatch_workspaceのpaneが1つでなければそのissueを失敗にする":                  {"TestDispatch_workspaceのpaneが1つでなければそのissueを失敗にする", "run を諦めてリトライを積みました", "着手に失敗しました"},
 	"TestExternalFailure_Statusを書けなければworktreeを作らない":                    {"Status を落とせません", "TestExternalFailure_Statusを書けなければworktreeを作らない", "着手に失敗しました"},
 	"TestAbandon_打ち切るときはworkerを止める前にコメントを確かめる":                          {"run を諦めてリトライを積みました"},
@@ -79,12 +82,13 @@ var expectedWarnings = map[string][]string{
 	"TestDispatch_アダプタが未信頼と判定した_issue_にもコメントを1回残す":                      {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestDispatch_未信頼のリポジトリへのコメントはリポジトリにつき1回だけ":                         {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestExternalFailure_Statusの選択肢が食い違ったら着手しない":                        {"Status の選択肢名が設定と一致しません"},
-	"TestExternalFailure_transcriptを読めなくてもturnを終えられる":                   {"hook の transcript_path を解決できないので捨てました", "transcript のパスが分からないので表明を読めません"},
+	"TestExternalFailure_transcriptを読めなくてもturnを終えられる":                   {"transcript のパスが分からないので表明を読めません"},
 	"TestExternalFailure_ボードを読めなくても巡回は止まらない":                            {"候補の取得に失敗しました"},
 	"TestHandoff_worktreeを持たない_run_には調べるところを出さない":                       {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestOnHook_worktreeの外のcwdを名乗るhookは捨てる":                             {"hook の cwd がその run の worktree の外なので捨てました"},
 	"TestOnHook_許可された置き場所の外のtranscript_pathは覚えない":                       {"hook の transcript_path が許可された置き場所の外なので捨てました"},
 	"TestOnHook_通常のファイルでないtranscript_pathは覚えない":                         {"hook の transcript_path が通常のファイルではないので捨てました"},
+	"TestPreflight_登録の無い実体があるならStatusを1バイトも書かずに飛ばす":                     {"目的の worktree をそのまま使えません"},
 	"TestPreflight_未信頼なら着手せず承認を促すコメントを1件書く":                             {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestPreflight_未信頼の通知は巡回のたびに繰り返さない":                                 {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestRUCMHandoff_P012_知らない表明ではStatusを動かさない":                         {"表明の値が status_signal_map にありません"},

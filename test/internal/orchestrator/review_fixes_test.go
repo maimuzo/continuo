@@ -15,6 +15,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
@@ -97,6 +98,48 @@ func TestOnHook_許可された置き場所の外のtranscript_pathは覚えな�
 	fx.Orc.OnHook(stopEvent("session-1", outside, "p1"))
 	if !strings.Contains(fx.Logs.String(), "許可された置き場所の外") {
 		t.Fatalf("根の外の transcript_path を落とした警告が出ていない: %s", fx.Logs.String())
+	}
+}
+
+// TestOnHook_まだ書かれていないtranscript_pathで警告を出さない は、
+// 「まだ無い」と「不正」の切り分けを確かめる。
+//
+// **Claude Code は transcript を非同期に書く。**SessionStart と UserPromptSubmit は
+// その前に発火するので、hook が渡すパスは実在しないことがある。**これは正常な並びであり、
+// 警告ではない。**警告にすると、セッションごとに必ず2行の WARN が積まれる。
+//
+// 目的: 許可された置き場所の内側にあって、まだ作られていないパスで WARN を出さないこと。
+// 与える情報: 許可された根の内側の、まだ存在しないファイルを指す transcript_path。
+// 成功条件: WARN が1行も出ず、hook そのものは捨てられないこと。
+func TestOnHook_まだ書かれていないtranscript_pathで警告を出さない(t *testing.T) {
+	allowed := t.TempDir()
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: allowed})
+	issue := sampleIssue(188, "In Progress")
+	fx.Tracker.AddIssue(issue)
+	if !fx.Orc.Adopt(issue, orchestrator.AdoptedRun{SessionUUID: "session-1"}, false) {
+		t.Fatalf("検査用の run を印の集合へ入れられません")
+	}
+
+	// **まだ1バイトも書かれていない transcript。**Claude Code が書き始める前の状態である。
+	notYet := filepath.Join(allowed, "session-1.jsonl")
+	if !fx.Orc.OnHook(sessionStartEvent("session-1", notYet)) {
+		t.Fatalf("transcript がまだ無いだけで hook ごと捨てている")
+	}
+	if strings.Contains(fx.Logs.String(), "level=WARN") {
+		t.Fatalf("まだ書かれていないだけなのに警告を出している: %s", fx.Logs.String())
+	}
+}
+
+// sessionStartEvent は `SessionStart` の hook を作る（transcript がまだ無い時点の再現）。
+//
+// sessionID: セッション UUID。
+// transcriptPath: hook が名乗る transcript のパス。
+// 戻り値: hook のイベント。
+func sessionStartEvent(sessionID, transcriptPath string) hookserver.HookEvent {
+	return hookserver.HookEvent{
+		HookEventName:  "SessionStart",
+		SessionID:      sessionID,
+		TranscriptPath: transcriptPath,
 	}
 }
 

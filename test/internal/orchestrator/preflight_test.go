@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "69ea1c58fdd8fbba6827e396c21be8741a9e43731031018d69632a8fe4fb98e5", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "bebb24af1222bffaebe633b64bdcd42d011883d0e32157325376627ac7393cd5", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // dispatch 直前の検査（段0）の検査である。
@@ -10,6 +10,8 @@ package orchestrator_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +20,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P014"}
+// {"RUCM-PATH": "P016"}
 //
 // TestPreflight_未信頼なら着手せず承認を促すコメントを1件書く は、段0 の信頼の検査を確かめる。
 //
@@ -97,4 +99,46 @@ func TestPreflight_信頼の検査を切れば未信頼でも着手する(t *tes
 	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
+}
+
+// {"RUCM-PATH": "P015"}
+//
+// TestPreflight_登録の無い実体があるならStatusを1バイトも書かずに飛ばす は、
+// 段0 の worktree の検査を確かめる。
+//
+// **この検査が段3（worktree の用意）にあると、必ず失敗する着手でも先に running_state を
+// 書いてしまう。**running_state は active_states なので次の巡回でまた候補に上がり、
+// running_state と failure_state の往復が永久に続く。
+//
+// 目的: 目的のパスに実体があるのに git の worktree として登録されていないとき、
+// **Status を1バイトも書かずに** その issue を飛ばすこと。
+// 与える情報: 目的のパスに、git に登録されていないディレクトリを先に置く。
+// 成功条件: UpdateStatus が1回も呼ばれず、Status が Ready のままで、
+// worktree も開かれず、印も残らないこと。
+func TestPreflight_登録の無い実体があるならStatusを1バイトも書かずに飛ばす(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	// **git の登録を持たない実体を、目的のパスへ先に置く。**
+	// 人間が手で作ったディレクトリや、消し損ねた残骸がこの形になる。
+	unregistered := filepath.Join(
+		fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	if err := os.MkdirAll(unregistered, 0o700); err != nil {
+		t.Fatalf("登録の無い実体を置けません: %v", err)
+	}
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.Tracker.ResetCalls()
+
+	fx.Orc.Tick(context.Background())
+
+	if got := fx.Tracker.CountCall("UpdateStatus"); got != 0 {
+		t.Errorf("着手できないと分かっているのに Status を書いている: UpdateStatus を %d 回呼んだ", got)
+	}
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "Ready" {
+		t.Errorf("Status が動いている: got %q, want Ready", got)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodWorktreeOpen); got != 0 {
+		t.Errorf("着手できないのに worktree を開いている: %d 回", got)
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
+		t.Errorf("印が残っている: %d 件", got)
+	}
 }

@@ -97,30 +97,66 @@ func TestFetchIssuesByStates_既定以外なら組み込みのstatusキーを使
 	}
 }
 
-// 目的: 頼んだ Status に無い item が返ってきたら、黙って受け入れずエラーにすることを
+// 目的: 頼んだ Status に無い item が**大半を占めた**ら、設定の誤りとしてエラーにすることを
 // 確認する（設計 3-34 の「無言の失敗を無くす」）。
-// **絞り込みのキーが別のフィールドに解決されると、GraphQL はエラーを出さずに
-// 頼んでいない item を返す。**気づかないと Ice Box の issue を着手可能とみなして走らせる。
-// 与える情報: Ready / In Progress を頼んだのに、Status が "Ice Box" の item を返す偽サーバ。
+// **絞り込みのキーが別のフィールドに解決されると、GraphQL は条件ごと無かったことにして
+// ボードのほぼ全件を返す。**気づかないと Ice Box の issue を着手可能とみなして走らせる。
+// 与える情報: Ready / In Progress を頼んだのに、4件のうち3件が "Ice Box" の item を返す偽サーバ。
 // 成功条件: FetchIssuesByStates がエラーを返し、カテゴリが CategoryResponse であり、
 // メッセージに返ってきた Status 名（"Ice Box"）が含まれること。
-func TestFetchIssuesByStates_頼んでいないStatusが返ったらエラーにする(t *testing.T) {
+func TestFetchIssuesByStates_頼んでいないStatusが大半なら設定の誤りとしてエラーにする(t *testing.T) {
 	nodes := []map[string]any{
 		issueItemJSON(testIssueItemOpts{ItemID: "item-1", Status: "Ready", Owner: "maimuzo", Repo: "continuo", Number: 1, Title: "頼んだとおりの item"}),
 		issueItemJSON(testIssueItemOpts{ItemID: "item-2", Status: "Ice Box", Owner: "maimuzo", Repo: "continuo", Number: 2, Title: "頼んでいない Status の item"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-3", Status: "Ice Box", Owner: "maimuzo", Repo: "continuo", Number: 3, Title: "頼んでいない Status の item"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-4", Status: "Ice Box", Owner: "maimuzo", Repo: "continuo", Number: 4, Title: "頼んでいない Status の item"}),
 	}
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nodes, false, ""))))
 	a := newAdapterForFetch(t, fs)
 
 	_, err := a.FetchIssuesByStates(t.Context(), []string{"Ready", "In Progress"})
 	if err == nil {
-		t.Fatalf("頼んでいない Status の item が返ったのに FetchIssuesByStates が成功した")
+		t.Fatalf("頼んでいない Status の item が大半なのに FetchIssuesByStates が成功した")
 	}
 	if !tracker.IsCategory(err, tracker.CategoryResponse) {
 		t.Fatalf("エラーのカテゴリが CategoryResponse ではない: %v", err)
 	}
 	if !strings.Contains(err.Error(), "Ice Box") {
 		t.Fatalf("エラーメッセージに返ってきた Status 名が含まれていない: %v", err)
+	}
+}
+
+// 目的: 頼んだ Status に無い item が**少数**なら、その item だけを落として続けることを
+// 確認する（設計 3-34）。
+//
+// **これは continuo 自身の書き込みが原因で起きる。**`items(query:)` の絞り込みは
+// サーバ側の検索であり、Status を書いた直後に同じ巡回で取り直すと、索引は古い値で当たり、
+// フィールドの読み出しは新しい値を返す。**1件の食い違いで一覧ごとエラーにすると、
+// 正しく絞り込めていた他の issue の dispatch までその巡回で止まる。**
+//
+// 与える情報: Ready / In Progress を頼んだのに、4件のうち1件だけ "Blocked" の item を返す偽サーバ。
+// 成功条件: エラーにならず、"Blocked" の item だけが結果から落ち、残り3件がそのまま返ること。
+func TestFetchIssuesByStates_頼んでいないStatusが少数なら落として続ける(t *testing.T) {
+	nodes := []map[string]any{
+		issueItemJSON(testIssueItemOpts{ItemID: "item-1", Status: "Ready", Owner: "maimuzo", Repo: "continuo", Number: 1, Title: "頼んだとおりの item"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-2", Status: "Blocked", Owner: "maimuzo", Repo: "continuo", Number: 2, Title: "直前に Blocked へ落とした item"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-3", Status: "In Progress", Owner: "maimuzo", Repo: "continuo", Number: 3, Title: "走行中の item"}),
+		issueItemJSON(testIssueItemOpts{ItemID: "item-4", Status: "Ready", Owner: "maimuzo", Repo: "continuo", Number: 4, Title: "次に着手する item"}),
+	}
+	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nodes, false, ""))))
+	a := newAdapterForFetch(t, fs)
+
+	issues, err := a.FetchIssuesByStates(t.Context(), []string{"Ready", "In Progress"})
+	if err != nil {
+		t.Fatalf("1件の食い違いで一覧ごとエラーになった（他の issue の dispatch が止まる）: %v", err)
+	}
+	if len(issues) != 3 {
+		t.Fatalf("件数が想定と違う: got %d, want 3", len(issues))
+	}
+	for _, issue := range issues {
+		if issue.ID == "item-2" {
+			t.Fatalf("頼んだ Status に無い item を候補に残している: %s（Status=%q）", issue.ID, issue.State)
+		}
 	}
 }
 

@@ -558,27 +558,74 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 		after = conn.PageInfo.EndCursor
 	}
 
-	// **返ってきた item の Status が、頼んだ states に本当に入っているかを検算する。**
-	// 絞り込みのキーが別のフィールドに解決されていた場合、GraphQL はエラーを出さずに
-	// 「頼んでいない Status の item」を返す。ここで気づかないと、Ice Box に置いた issue を
-	// 着手可能とみなして走らせてしまう（設計 3-34）。
+	return a.dropUnrequestedStates(result, states, q)
+}
+
+// filterMismatchMinSample は「絞り込みのキーの解決に失敗した」と判断してよい最小の件数である。
+//
+// **これより少ない件数では、設定の誤りと反映待ちを見分けられない。**見分けられないなら
+// 外れた item を落として続けるほうが安全である（落とせば着手はされないし、
+// 他の issue の dispatch も止まらない）。
+const filterMismatchMinSample = 4
+
+// dropUnrequestedStates は、頼んだ Status に入っていない item を結果から落とす（設計 3-34）。
+//
+// **なぜ落として続けるのか。**GitHub の `items(query:)` はサーバ側の検索であり、
+// 絞り込みに使われる索引と、同じ応答の `fieldValueByName` が返す値は一致するとは限らない。
+// continuo が Status を書いた直後に同じ巡回で候補を取り直すと、**自分が書いた値が原因で
+// 1件だけ食い違う。**これで一覧ごとエラーにすると、正しく絞り込めていた他の issue の
+// dispatch までその巡回で止まる。
+//
+// **「設定の誤り」との見分け方。**絞り込みのキーを解決できていない場合、GitHub は
+// 条件ごと無かったことにして**ボードのほぼ全件**を返す。つまり外れる item は多数派になる。
+// 反映待ちで外れるのは continuo 自身が直前に書いた item だけで、必ず少数派である。
+// そこで、**外れた item が過半数を占め、かつ見分けがつく件数がある場合に限って**
+// 設定の誤りとしてエラーにする。
+//
+// **キーを解決できているかは、そもそも起動時（Bootstrap）に直接測っている**
+// （checkStatusFieldIsFilterKey）。ここは推測でしかないので、直接の測定を上書きしない。
+//
+// result: 正規化済みの item の一覧。
+// states: 頼んだ Status の一覧。
+// q: 送った検索クエリ（エラー文に載せる）。
+// 戻り値の1つ目: 頼んだ Status に入っている item だけの一覧。
+// 戻り値の2つ目: 外れた item が多数派で、件数も足りている場合の CategoryResponse の *Error。
+func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q string) ([]Issue, error) {
+	kept := make([]Issue, 0, len(result))
+	var dropped []Issue
 	for i := range result {
 		if containsFoldedStatus(states, result[i].State) {
+			kept = append(kept, result[i])
 			continue
 		}
+		dropped = append(dropped, result[i])
+	}
+	if len(dropped) == 0 {
+		return kept, nil
+	}
+
+	if len(result) >= filterMismatchMinSample && len(dropped)*2 > len(result) {
 		return nil, &Error{
 			Category: CategoryResponse,
 			Message: fmt.Sprintf(
-				"絞り込みが効いていません（頼んだ Status に無い item が返りました）: "+
-					"item=%s, 返ってきた Status=%q, 頼んだ Status=%s, 送ったクエリ=%s。"+
-					"tracker.provider.status_field %q が候補の絞り込みのキーとして"+
+				"絞り込みが効いていません（頼んだ Status に無い item が大半を占めています）: "+
+					"外れた件数=%d/%d, 最初の item=%s, 返ってきた Status=%q, 頼んだ Status=%s, "+
+					"送ったクエリ=%s。tracker.provider.status_field %q が候補の絞り込みのキーとして"+
 					"正しく解決されているか確認してください",
-				result[i].ID, result[i].State, strings.Join(states, ", "), q, a.statusField,
+				len(dropped), len(result), dropped[0].ID, dropped[0].State,
+				strings.Join(states, ", "), q, a.statusField,
 			),
 		}
 	}
 
-	return result, nil
+	for i := range dropped {
+		a.logger.Warn("頼んだ Status に無い item を候補から落としました"+
+			"（絞り込みの索引がまだ追いついていない可能性があります）",
+			"item_id", dropped[i].ID, "identifier", dropped[i].Identifier,
+			"返ってきた Status", dropped[i].State, "頼んだ Status", strings.Join(states, ", "),
+		)
+	}
+	return kept, nil
 }
 
 // FetchIssuesByIDs は指定した project item ID の現在のスナップショットを取り直す
