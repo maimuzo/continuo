@@ -79,7 +79,7 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 
 **ボードには Status の選択肢が5つ要ります。**GitHub の既定は `Todo` / `In Progress` / `Done` の3つなので、**足りない2つは GitHub の画面から足してください** — ボードの `Settings` を開き、左の `Custom fields` の `Status` を選び、`Options` の下の `Add option...` に名前を入れて `Add`。名前は何でも構いません。役割との対応は `continuo setup` で決めます。
 
-**`continuo doctor` が8つの検査を通します** — 設定 / Claude Code / herdr / gh 認証 / ボード / clone / 信頼 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
+**`continuo doctor` が9つの検査を通します** — 設定 / Claude Code / **hook の置き場所** / herdr / gh 認証 / ボード / clone / 信頼 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
 
 ## 入れる
 

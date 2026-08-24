@@ -24,6 +24,14 @@ const (
 	// **これが無いと、着手は段9 まで進んでから必ず失敗する。**herdr は pane を作れるが、
 	// そこで起動するはずの Claude Code が見つからず `unknown` を返す（2026-08-21 に実際に起きた）。
 	LabelClaude = i18n.KeyDoctorLabelClaude
+	// LabelRuntimeDir は hook を受ける socket を実際に置けるかの検査である。
+	//
+	// **文字列を組み立てるだけでは足りない。**実際にディレクトリを作り、
+	// unix socket を listen して、すぐ閉じるところまで通す。
+	//
+	// **これが無かったとき、8項目すべてが ✓ で「足りないものはありません」と出たのに、
+	// 起動だけが `mkdir /run/user/1000: permission denied` で落ちた**（issue #9）。
+	LabelRuntimeDir = i18n.KeyDoctorLabelRuntimeDir
 	// LabelGHAuth は `gh auth status` の scope に project が単独で並んでいるかの検査である。
 	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。

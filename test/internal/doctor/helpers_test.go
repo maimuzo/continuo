@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/maimuzo/continuo/internal/config"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -577,7 +578,7 @@ func newFixture(t *testing.T) *fixture {
 		GhqArgsFile:  ghqArgsFile,
 		RepoDir:      repoDir,
 		WorkflowPath: filepath.Join(root, "WORKFLOW.md"),
-		Herdr:        newFakeHerdr(t, root, 19),
+		Herdr:        newFakeHerdr(t, root, config.DefaultConfig().Herdr.Protocol),
 		GitHub: newFakeGitHub(t, "octocat",
 			boardItem{ItemID: "PVTI_1", NameWithOwner: "octocat/hello-world", Number: 188, State: "Ready"}),
 		Env:      map[string]string{},
@@ -617,7 +618,7 @@ workspace:
   root: %s
 herdr:
   socket: %s
-  protocol: 19
+  protocol: 20
   read_timeout_ms: 3000
 %s---
 

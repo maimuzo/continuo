@@ -78,7 +78,7 @@ How many issues run at once is a setting (two by default).
 
 **Your board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
 
-`continuo doctor` runs eight checks: config, Claude Code, herdr, `gh` auth, board, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
+`continuo doctor` runs nine checks: config, Claude Code, **the hook socket location**, herdr, `gh` auth, board, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
 
 ## Install
 

@@ -184,6 +184,7 @@ func TestResolveSocketPath_環境変数が設定されていても設定値を�
 // 成功条件: 既定値 "<HOME>/.config/herdr/herdr.sock" が返ること。
 func TestResolveSocketPath_設定値が空なら環境変数を無視して既定値へ落ちる(t *testing.T) {
 	t.Setenv(herdr.EnvSocketPath, "/from/env/herdr.sock")
+	// test-design:allow-fake-path
 	t.Setenv("HOME", "/home/tester")
 
 	got, err := herdr.ResolveSocketPath("")
@@ -232,6 +233,7 @@ func TestResolveSocketPath_環境変数が無ければ設定値を使う(t *test
 // 成功条件: ResolveSocketPath が "<HOME>/.config/herdr/herdr.sock" を返すこと。
 func TestResolveSocketPath_どちらも無ければ既定値を使う(t *testing.T) {
 	unsetSocketPathEnv(t)
+	// test-design:allow-fake-path
 	t.Setenv("HOME", "/home/tester")
 
 	got, err := herdr.ResolveSocketPath("")

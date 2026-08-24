@@ -158,11 +158,11 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Info("CLI の --port でダッシュボードのポートを上書きしました", "port", *opts.Port)
 	}
 
-	sockPath, err := socketpath.ResolveHookSocketPath(cfg.Claude.HookBridge.Listen, os.Getenv(EnvRuntimeDir))
+	// **`Prepare` に1本化してある。**
+	// 「決める」と「用意する」を別々に呼んでいたときは、その継ぎ目を通すテストが
+	// 1本も無く、実在しない `XDG_RUNTIME_DIR` がそのまま通り抜けた（issue #9）。
+	sockPath, err := socketpath.Prepare(os.Getenv(EnvRuntimeDir), cfg.Claude.HookBridge.Listen)
 	if err != nil {
-		return i18n.Errorf(i18n.KeyDaemonRunSocketPathUnresolved, ErrStartup, err)
-	}
-	if err := socketpath.EnsureDir(filepath.Dir(sockPath)); err != nil {
 		return i18n.Errorf(i18n.KeyDaemonRunSocketDirFailed, ErrStartup, err)
 	}
 	runtimeDir := filepath.Dir(sockPath)
