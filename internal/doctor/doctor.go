@@ -1,18 +1,21 @@
 // Package doctor は `continuo doctor` の実体である（docs/plans/continuo_design.md 3-32）。
 //
-// **前提が8つあり、どれが欠けても continuo は静かに失敗する。**機械的に検査して、
+// **前提が多くあり、どれが欠けても continuo は静かに失敗する。**機械的に検査して、
 // 足りないものと直し方を人間に出すのがこのパッケージの仕事である。
 //
-// 検査するものと見出し語は次の8つで固定する（report.go の Label 定数）。
+// 検査するものと見出し語は report.go の Label 定数で固定する。
+// **検査がいくつあるかを、この doc コメントにも文言にも書かない。**
+// 数を2箇所に書けば必ずずれる。数えられる場所は Label 定数の一覧だけにする。
 //
-//	設定ファイル … WORKFLOW.md が読めて、front matter が検証を通るか
-//	claude       … `claude.kind` の実行ファイルが PATH にあるか
-//	herdr        … socket の ping の応答の protocol が herdr.protocol と一致するか
-//	gh の認証     … `gh auth status` の Token scopes に project が単独で並んでいるか
-//	ボード        … Bootstrap が通り、active_states の選択肢名が全部あるか
-//	clone        … 対象リポジトリが `ghq list -p -e` で見つかるか
-//	信頼登録      … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
-//	資格情報      … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
+//	設定ファイル    … WORKFLOW.md が読めて、front matter が検証を通るか
+//	claude         … `claude.kind` の実行ファイルが PATH にあるか
+//	hook の置き場所 … hook を受ける socket を実際に置いて listen できるか
+//	herdr          … socket の ping の応答の protocol が herdr.protocol と一致するか
+//	gh の認証      … `gh auth status` の Token scopes に project が単独で並んでいるか
+//	ボード         … Bootstrap が通り、active_states の選択肢名が全部あるか
+//	clone          … 対象リポジトリが `ghq list -p -e` で見つかるか
+//	信頼登録       … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
+//	資格情報       … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
 //
 // **1つ失敗しても残りを全部検査する。**最初の失敗で止めない。
 //
@@ -48,7 +51,7 @@ import (
 // **doctor は「前提を機械的に検査する」道具である。**どれか1つが返らないだけで
 // 人間の手が止まらないように、全体にも1項目にも上限を置く。
 const (
-	// DefaultTimeout は7項目の検査全体の上限である。
+	// DefaultTimeout は検査全体の上限である。
 	DefaultTimeout = 30 * time.Second
 
 	// DefaultCheckTimeout は外部に触る検査1つあたりの上限である。
@@ -86,7 +89,7 @@ type Options struct {
 	// **テストは必ずこれを渡すこと。**本物を呼ぶと、検査結果が
 	// 「テストを走らせたマシンに claude が入っているか」で変わってしまう。
 	LookPath func(file string) (string, error)
-	// Timeout は8項目の検査全体の上限である。**0 なら DefaultTimeout を使う。**
+	// Timeout は検査全体の上限である。**0 なら DefaultTimeout を使う。**
 	Timeout time.Duration
 	// CheckTimeout は外部に触る検査1つあたりの上限である。
 	// **0 なら DefaultCheckTimeout を使う。**
@@ -110,7 +113,7 @@ type Repo struct {
 // String は `<owner>/<repo>` の形の文字列を返す。
 func (r Repo) String() string { return r.Owner + "/" + r.Name }
 
-// Run は7項目を全部検査して結果を返す（設計 3-32）。
+// Run は report.go の Label 定数の項目を全部検査して結果を返す（設計 3-32）。
 //
 // **1つ失敗しても残りを全部検査する。**上流が `✗` か `!` になった検査の下流は、
 // 検査せずに `!` にして「なぜ確かめられなかったか」を出す（3-32 の依存の表）。
@@ -126,7 +129,7 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // opts: 設定ファイルのパスと、外部に触る口の差し替え。
-// 戻り値: 7件の検査結果。**エラーは返さない。**検査に失敗したこと自体が結果である。
+// 戻り値: Label 定数と同じ順・同じ数の検査結果。**エラーは返さない。**検査に失敗したこと自体が結果である。
 func Run(ctx context.Context, opts Options) Report {
 	if opts.Logger == nil {
 		opts.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
