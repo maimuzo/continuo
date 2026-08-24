@@ -16,20 +16,29 @@
 
 | パッケージ | 何を |
 | --- | --- |
-| `cmd/continuo`（`doctor` サブコマンド） | **7項目**を検査して結果を出す（下記の見出し語で出す） |
+| `cmd/continuo`（`doctor` サブコマンド） | 見出し語ごとに検査して結果を出す（下記の見出し語で出す） |
 | `internal/doctor` | 各検査の実装 |
+| `internal/fsprobe` | 「その場所に本当に書けるか」を実際に書いて確かめる（doctor と起動時検査の両方が呼ぶ） |
 
-**検査する7項目と、出力に出す見出し語。**この語で固定する（設計 3-32）。
+**検査する見出し語と、その中身。**この語で固定する（設計 3-32）。
+**並びの正は `internal/doctor/report.go` の `Label` 定数である。**
 
 | 見出し語 | 何を検査するか |
 | --- | --- |
 | `設定ファイル` | `WORKFLOW.md` が読めて、front matter が検証を通るか |
+| `claude` | `claude.kind` の実行ファイルが PATH にあるか |
+| `hook の置き場所` | 決めた場所にディレクトリを作り、unix socket を listen できるか |
+| `Claude の設定` | `~/.claude/session-env` に使い捨てのディレクトリを作って消せるか |
+| `worktree の場所` | `workspace.root` に使い捨てのディレクトリを作って消せるか |
 | `herdr` | socket の `ping` の応答の `protocol` が `herdr.protocol` と一致するか |
 | `gh の認証` | `gh auth status` の `Token scopes:` に `project` が単独で並んでいるか |
 | `ボード` | `Bootstrap` が通り、`active_states` の選択肢名が全部あるか |
 | `clone` | 対象リポジトリが `ghq list -p -e` で見つかるか |
 | `信頼登録` | 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか |
 | `資格情報` | `rate_limit` の設定に応じて、環境変数かファイルがあるか |
+
+**`claude` と `hook の置き場所` と `Claude の設定` は、設定ファイルが `✗` でも走る**（設計 6-10）。
+前の2つは既定値で成立し、`Claude の設定` は設定を1バイトも読まない。
 
 ## 対象のリポジトリはボードを読んで決める
 
@@ -82,15 +91,15 @@
 
 ## 実装の記録
 
-**言いたいこと。**`continuo doctor` は `internal/doctor` にあり、7項目を全部検査してから
+**言いたいこと。**`continuo doctor` は `internal/doctor` にあり、見出し語を全部検査してから
 記号つきで並べる。**検査の中身は既存の関数を呼ぶだけで、判定を書き直していない。**
 
 ### 置いたもの
 
 | ファイル | 何が入っているか |
 | --- | --- |
-| [internal/doctor/doctor.go](../../../internal/doctor/doctor.go) | `Options` / `Run`（7項目の呼び出し順と依存の適用）／ボードから対象リポジトリを集める処理 |
-| [internal/doctor/checks.go](../../../internal/doctor/checks.go) | 7項目それぞれの検査 |
+| [internal/doctor/doctor.go](../../../internal/doctor/doctor.go) | `Options` / `Run`（見出し語の呼び出し順と依存の適用）／ボードから対象リポジトリを集める処理 |
+| [internal/doctor/checks.go](../../../internal/doctor/checks.go) | 見出し語それぞれの検査 |
 | [internal/doctor/report.go](../../../internal/doctor/report.go) | 見出し語の定数・3値の記号・出力の形・終了コード |
 | [cmd/continuo/main.go](../../../cmd/continuo/main.go) | `doctor` サブコマンド（引数の受け取りと終了コードだけ） |
 | [internal/workspace/trust.go](../../../internal/workspace/trust.go) | `CheckTrustForClonePath` を切り出した（下記） |

@@ -781,15 +781,21 @@ cd ~/continuo-try
 /tmp/continuo doctor
 ```
 
-7項目を検査して、足りないものと直し方を出す。**`✗` が1つでもあれば終了コードは 1。**
+見出し語ごとに検査して、足りないものと直し方を出す。**`✗` が1つでもあれば終了コードは 1。**
 **既存のボードを既定の設定のまま使って**実際に叩いた出力。
 
-> **`資格情報` の行だけは、段5b を通した macOS で `rate_limit.token_source: keychain` にして
-> 取り直したものである**（2026-08-21）。**件数の行はそれに合わせて数え直してある。**
+> **`資格情報` の行は、段5b を通した macOS で `rate_limit.token_source: keychain` にして
+> 取り直したものである**（2026-08-21）。**`claude` から `worktree の場所` までの4行は、
+> 同じ macOS で別に叩いて取ったものである**（2026-08-24）。**件数の行はそれに合わせて数え直してある。**
+> **hook の socket の場所は、機械ごとに変わる文字列を `$TMPDIR` に置き換えてある。**
 
 ```text
 ✓ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めました（front matter の検証も通りました）
-✓ herdr           protocol 19（設定と一致）／herdr 0.8.0／socket ~/.config/herdr/herdr.sock
+✓ claude          ~/.local/bin/claude
+✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
+✓ Claude の設定   ~/.claude/session-env に書けます
+✓ worktree の場所 ~/worktrees に書けます（workspace.root）
+✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
 ✓ ボード          <ACCOUNT> の project #<PROJECT> を読めました（Status の選択肢は設定と一致。active_states の issue 0件／対象リポジトリ 0件）
 ! clone           active_states の issue が0件なので、検査する対象がありません
@@ -798,6 +804,11 @@ cd ~/continuo-try
 
 2件を確かめられませんでした（✗ 0件 / ! 2件）。足りないものはありません
 ```
+
+**`Claude の設定` と `worktree の場所` は、その場所へ実際にディレクトリを作って消している。**
+読めるだけで書けない場所（read-only で再マウントされたファイルシステムなど）は、
+`os.Stat` で見ても分からない。**`Claude の設定` が `✗` なら、issue は1件も始まらない。**
+Claude Code は SessionStart hook を走らせる前にそこへ書き、continuo はその hook を必ず張る。
 
 **`!` は「確かめられなかった」であって、足りないという意味ではない。**
 `clone` と `信頼登録` は、段7 で issue を `Ready` に置くと `✓` か `✗` に変わる。
@@ -824,6 +835,36 @@ cd ~/continuo-try
 | `gh の scope に "project" がありません` | `gh auth refresh -h github.com -s project` を実行する |
 | `front matter が不正です: unknown field "…"` | **設定のキーが増減したときに出る。**`continuo` を更新したら雛形も変わっている。出たキーの行を `WORKFLOW.md` から消す（**`continuo init --force` は使わない。**段4 の割り当てが消える） |
 | `✗ clone  ghq が PATH にありません` | `ghq` か `git` が入っていない。**この2つは巡回が worktree を作るときに起動する**ので、無いと段8 で必ず落ちる。入れて PATH を通す |
+| `read-only file system` / `input/output error` | **設定ではなくファイルシステムが壊れている。**下の「WSL でファイルシステムが壊れたとき」を見る |
+| `✗ Claude の設定  … に書けません` | **ここが書けないと issue は1件も始まらない。**権限か、下の「WSL でファイルシステムが壊れたとき」を見る |
+
+### WSL でファイルシステムが壊れたとき
+
+**言いたいこと。**`EROFS: read-only file system` や `EIO` が出たら、**設定は壊れていない。**
+**ファイルシステムが壊れている。**設定を作り直しても直らない。
+
+**どう見えるか。**Claude Code が起動直後に止まる。
+
+```text
+EROFS: read-only file system, mkdir '/home/<ACCOUNT>/.claude/session-env/<session id>'
+```
+
+**なぜ continuo に関係するか。**continuo は issue ごとに SessionStart hook を張る。
+**Claude Code は SessionStart hook を走らせる前に `~/.claude/session-env/<session id>/` を作る。**
+だからホームが書けないと、**issue は1件も始まらない。**
+`continuo doctor` は見出し語 `Claude の設定` でこの場所へ実際に書いてみるので、
+**起動する前に気づける。**
+
+**確かめる順番。**上から順に叩く。
+
+| 何を | どう確かめるか |
+| --- | --- |
+| ルートが読み取り専用で再マウントされていないか | `mount \| grep ' / '` の出力に `ro` が無いか見る |
+| カーネルが I/O エラーを出していないか | `dmesg \| grep -i ext4` |
+| Windows 側のディスクに空きがあるか | エクスプローラで C ドライブの空き容量を見る（仮想ディスクを伸ばせないと書き込みが落ちる） |
+| **再起動で直るか** | PowerShell で `wsl --shutdown` を実行し、**Windows を再起動してから開き直す** |
+
+**この症状は再起動で直った実例がある。**先に設定やインストールを触らないこと。
 
 ### `doctor` を通っても段8 の起動で落ちるもの
 
@@ -837,11 +878,15 @@ cd ~/continuo-try
 | `既にある hook を受ける socket のディレクトリ … の権限が 0755 です` | continuo は**自分が作っていないディレクトリの権限を書き換えない。**`chmod 700 <その場所>` してから起動する |
 
 **`status_field` に実在しない名前を書いたときの出力**（実際に `continuo Status` と書いて叩いた。
-`資格情報` の行と件数の行は、上と同じ理由で取り直してある）。
+hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
 
 ```text
 ✓ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めました（front matter の検証も通りました）
-✓ herdr           protocol 19（設定と一致）／herdr 0.8.0／socket ~/.config/herdr/herdr.sock
+✓ claude          ~/.local/bin/claude
+✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
+✓ Claude の設定   ~/.claude/session-env に書けます
+✓ worktree の場所 ~/worktrees に書けます（workspace.root）
+✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
 ✗ ボード          ボードを読めません: tracker エラー [tracker_response]: GraphQL がエラーを返しました: [NOT_FOUND] Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status
                   → WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください
@@ -852,12 +897,21 @@ cd ~/continuo-try
 3件に問題があります（✗ 1件 / ! 2件）
 ```
 
-**設定が未記入のままだと、設定ファイルが `✗` になり、他の項目はすべて `!` になる。**
-実際にプレースホルダを残したまま叩いた出力。
+**設定が未記入のままだと、設定ファイルが `✗` になる。**
+**それでも、既定値だけで確かめられるものは確かめる。**
+`claude` と `hook の置き場所` は既定値で、`Claude の設定` は設定を読まずに走る。
+**設定が読めないという理由で全部を `!` にすると、本当の原因を1つも指摘できない。**
+実際にプレースホルダを残したまま叩いた出力（hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
 
 ```text
-✗ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めません: … 埋めていない設定が 2 件あります。値を埋めてください: tracker.provider.owner がプレースホルダ（__FILL_ME__）のままです / tracker.provider.project_number がプレースホルダ（0）のままです
-                  → `continuo init` で雛形を置けます（既にある場合は front matter を直してください）
+✗ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めません: ~/continuo-try/WORKFLOW.md の front matter が不正です: 埋めていない設定が 2 件あります。値を埋めてください: tracker.provider.owner がプレースホルダ（__FILL_ME__）のままです / tracker.provider.project_number がプレースホルダ（0）のままです
+                  → ファイルは読めています。front matter を直してください（`continuo init --force` は使わないでください。設定を雛形で潰します）
+✓ claude          ~/.local/bin/claude
+                  設定ファイルを読めなかったので、既定値で確かめました
+✓ hook の置き場所 $TMPDIR/continuo/hooks.sock に socket を作れます
+                  設定ファイルを読めなかったので、既定値で確かめました
+✓ Claude の設定   ~/.claude/session-env に書けます
+! worktree の場所 設定ファイルを読めないので、worktree の置き場所を決められません
 ! herdr           設定ファイルを読めなかったため、照合する herdr.protocol が決まりません
 ! gh の認証       設定ファイルを読めなかったため、gh の認証を検査しませんでした
                   → WORKFLOW.md を直してから `continuo doctor` をもう一度実行してください
@@ -867,8 +921,12 @@ cd ~/continuo-try
 ! 資格情報        rate_limit の設定が読めないので、何を見るべきか決まりません
                   → 設定を直してからもう一度実行してください
 
-7件に問題があります（✗ 1件 / ! 6件）
+8件に問題があります（✗ 1件 / ! 7件）
 ```
+
+**`continuo init` を勧めるのは、設定ファイルが「無い」ときだけである。**
+上の出力のようにファイルは読めていて中身が悪いだけなら、勧めるのは front matter の修正である。
+**`continuo init --force` を使ってはならない。**段4 で書いた Status の割り当てが雛形で潰れる。
 
 ---
 

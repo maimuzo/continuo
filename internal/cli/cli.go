@@ -800,7 +800,7 @@ func printKeychainFailure(w io.Writer, headline string) {
 
 // runDoctor は `continuo doctor` サブコマンドである（設計 3-32）。
 //
-// **前提の7項目を検査して、足りないものと直し方を出す。**検査の実体は internal/doctor に
+// **前提を見出し語ごとに検査して、足りないものと直し方を出す。**検査の実体は internal/doctor に
 // あり、ここが決めるのは引数の受け取り方・出力先・終了コードだけである。
 //
 // **1つ失敗しても残りを全部検査する。**そのため、この関数は途中で戻らない。
