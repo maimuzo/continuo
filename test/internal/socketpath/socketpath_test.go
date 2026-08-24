@@ -510,9 +510,15 @@ func TestPrepare_実在しないTMPDIRからも落ちる(t *testing.T) {
 // 比べているだけで、そのパスに socket を1度も開いていなかった。
 // **定数が実際の境界とずれていても、全テストが緑になる。**
 //
-// 目的: 上限ちょうどのパスで listen でき、1バイト超えると失敗すること。
+// **OS が実際に断る長さは OS ごとに違う。**macOS は 103 バイトまで（`sun_path[104]`）、
+// Linux は 107 バイトまで（`sun_path[108]`）通る。**`MaxPathLen` は両対応のために
+// 小さい方へ揃えた方針の値**なので、「1バイト超えたら失敗する」は macOS でだけ成り立つ。
+// **だから境界そのものを測り、`MaxPathLen` がその内側にあることを確かめる。**
+//
+// 目的: 上限ちょうどのパスで listen できること。あわせて OS の境界を実測し、
+// `MaxPathLen` がその内側にあること。
 // 与える情報: 長い名前のディレクトリを掘って作った、境界の長さのパス。
-// 成功条件: 上限では成功し、超えると失敗すること。
+// 成功条件: `MaxPathLen` で listen でき、実測した境界が `MaxPathLen` 以上であること。
 func TestResolve_上限ちょうどのパスで実際にlistenできる(t *testing.T) {
 	// **`t.TempDir()` は使えない。**テスト名を含むので、日本語名だと接頭辞だけで
 	// 上限に近づく。短い接頭辞で自分で掘る。
@@ -548,15 +554,31 @@ func TestResolve_上限ちょうどのパスで実際にlistenできる(t *testi
 	_ = ln.Close()
 	_ = os.Remove(sock)
 
-	// **1バイト超えたら、OS が受け付けないこと。**
-	// ここが通ってしまうなら、MaxPathLen は厳しすぎる。
-	over := filepath.Join(base, strings.Repeat("d", pad), socketpath.HookSocketFileName)
-	if err := os.MkdirAll(filepath.Dir(over), 0o700); err != nil {
-		t.Fatalf("超過のディレクトリを作れません: %v", err)
-	}
-	if ln, err := net.Listen("unix", over); err == nil {
+	// **この OS がどこで断るかを、1バイトずつ伸ばして測る。**
+	//
+	// **定数を持たない。**`MaxPathLen` の根拠は実測なので、テストも実測で確かめる。
+	// 測った値をログに残すので、OS を変えたときに何バイトだったかが分かる。
+	limit := len(sock)
+	for extra := 1; extra <= 40; extra++ {
+		over := filepath.Join(base, strings.Repeat("d", pad-1+extra), socketpath.HookSocketFileName)
+		if err := os.MkdirAll(filepath.Dir(over), 0o700); err != nil {
+			t.Fatalf("超過のディレクトリを作れません（%d バイト）: %v", len(over), err)
+		}
+		ln, err := net.Listen("unix", over)
+		if err != nil {
+			t.Logf("この OS の上限は %d バイトでした（%d バイトで断られました: %v）",
+				limit, len(over), err)
+			break
+		}
 		_ = ln.Close()
 		_ = os.Remove(over)
-		t.Errorf("上限を1バイト超えても listen できました（MaxPathLen が厳しすぎます）: %d バイト", len(over))
+		limit = len(over)
+	}
+
+	// **測った境界が MaxPathLen より短いなら、方針の値が甘すぎる。**
+	// **長いのは構わない**（両対応のためにわざと小さく採っている）。
+	if limit < socketpath.MaxPathLen {
+		t.Errorf("この OS は %d バイトで断りますが、MaxPathLen は %d です（甘すぎます）",
+			limit, socketpath.MaxPathLen)
 	}
 }
