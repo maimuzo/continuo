@@ -42,8 +42,10 @@ func (r IssueRef) Identifier() string {
 // 大文字小文字が揺れうる。GitHub は owner とリポジトリ名の大文字小文字を区別しないので、
 // **ホスト・owner・リポジトリ名は大文字小文字を無視して比べ、番号は数として比べる。**
 //
-// **解釈できない URL は、文字列がそのまま一致したときだけ同じとみなす。**
-// 解釈できないものを推測で一致させると、別の issue の worktree を消しかねない。
+// **解釈できない URL は、どれにも一致しない。**解釈できないものを推測で一致させると、
+// 別の issue の worktree を消しかねない。**文字列の一致で拾い直すこともしない。**
+// この型は `ParseIssueURL` が作るので `URL` は必ず解釈できる形であり、
+// **それと同じ文字列なら相手も解釈できる。**拾い直す先が無い。
 //
 // other: 比べる相手の URL（身元ファイルの issue_url）。
 // 戻り値: 同じ issue を指していれば true。
@@ -54,7 +56,7 @@ func (r IssueRef) SameIssue(other string) bool {
 	}
 	parsed, err := ParseIssueURL(trimmed)
 	if err != nil {
-		return strings.TrimRight(trimmed, "/") == strings.TrimRight(r.URL, "/")
+		return false
 	}
 	return strings.EqualFold(parsed.Host, r.Host) &&
 		strings.EqualFold(parsed.Owner, r.Owner) &&
@@ -99,6 +101,12 @@ func ParseIssueURL(raw string) (IssueRef, error) {
 	if owner == "" || repo == "" {
 		return IssueRef{}, i18n.Errorf(i18n.KeyAbandonIssueURLBadShape, trimmed)
 	}
+	// **`strconv.Atoi` だけでは足りない。**`+42` も `042` も 42 として通ってしまい、
+	// **同じ issue を指す URL が何通りもできる。**消す相手を決める鍵なので、
+	// **10進の数字だけ・先頭が 0 でない**ことを確かめて1通りに固定する。
+	if !isPlainNumber(parts[3]) {
+		return IssueRef{}, i18n.Errorf(i18n.KeyAbandonIssueURLBadNumber, trimmed, parts[3])
+	}
 	number, convErr := strconv.Atoi(parts[3])
 	if convErr != nil || number <= 0 {
 		return IssueRef{}, i18n.Errorf(i18n.KeyAbandonIssueURLBadNumber, trimmed, parts[3])
@@ -111,4 +119,24 @@ func ParseIssueURL(raw string) (IssueRef, error) {
 		Repo:   repo,
 		Number: number,
 	}, nil
+}
+
+// isPlainNumber は、10進の数字だけで書かれていて先頭が 0 でないかを返す。
+//
+// **符号も前置ゼロも受け付けない。**`+42` と `042` と `42` を同じ issue として
+// 受け付けると、**同じ相手を指す URL が何通りもできる。**消す相手を決める鍵は
+// 1通りに固定しておくこと。
+//
+// s: 調べる文字列。
+// 戻り値: `1` 以上の10進整数が前置ゼロ無しで書かれていれば true。
+func isPlainNumber(s string) bool {
+	if s == "" || s[0] == '0' {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }

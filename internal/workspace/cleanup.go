@@ -216,8 +216,17 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 	m.BeginRun(resolvedPath)
 
 	result.Removed = true
-	m.logger.Info("worktree と branch を片付けました",
-		"worktree", resolvedPath, "branch", identity.Branch, "issue", identity.IssueIdentifier)
+	// **消えていない branch を「片付けた」と書かない**（CleanupResult.BranchDeleted の規則）。
+	// `cleanup.delete_branch` が偽のとき・branch の検算に落ちたとき・`git branch -D` が
+	// 失敗したときは branch が残る。ログだけを見て「もう無い」と判断されると、
+	// **残った branch を探す人がログを疑うところから始めることになる。**
+	if result.BranchDeleted {
+		m.logger.Info("worktree と branch を片付けました",
+			"worktree", resolvedPath, "branch", identity.Branch, "issue", identity.IssueIdentifier)
+	} else {
+		m.logger.Info("worktree を片付けました（branch は残しました）",
+			"worktree", resolvedPath, "branch", identity.Branch, "issue", identity.IssueIdentifier)
+	}
 	return result, nil
 }
 
@@ -427,7 +436,9 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) ([]st
 		// **continuo 自身が置いた身元ファイルとその一時ファイルは数から外す**（3-18）。
 		// 外さないと、`info/exclude` への登録に失敗した worktree が永久に片付かず、
 		// しかも issue へ「コミットされていない変更が残っている」という誤った理由が投稿される。
-		status, err := gitStatusPorcelain(ctx, req.WorktreePath, m.identityStatusExcludes()...)
+		// **打ち切りの有無は見ない。**この判定は「空かどうか」しか見ないので、
+		// 打ち切られるほど出ているなら、それは空ではない。
+		status, _, err := gitStatusPorcelain(ctx, req.WorktreePath, m.identityStatusExcludes()...)
 		if err != nil {
 			return nil, err
 		}

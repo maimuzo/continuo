@@ -21,8 +21,9 @@ import (
 
 // Unlocker は獲得した二重起動防止のロックを手放す口である。
 //
-// **`*lock.Lock` がこれを満たす。**abandon はロックを「取れたかどうか」を知りたいだけで、
-// 取れたらすぐ手放す（continuo が動いていないことが分かればよい）。
+// **`*lock.Lock` がこれを満たす。**abandon はロックを「取れたかどうか」を知るために取り、
+// **取れたら実行が終わるまで握り続ける。**その場で手放すと、直後に起動した継続監視の
+// 足元から worktree を消してしまう（abandon は git と RPC を何度も叩くので窓は秒単位で開く）。
 type Unlocker interface {
 	// Release はロックを解放する。
 	Release() error
@@ -39,6 +40,9 @@ type Tracker interface {
 	FetchIssueByIdentifier(ctx context.Context, identifier string) (tracker.Issue, bool, error)
 	// UpdateStatus は project item の Status を書き換える。
 	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (bool, error)
+	// VerifyKnownStates は、渡した Status 名がすべてボードの選択肢にあるかを確かめる。
+	// **Bootstrap を通してから呼ぶこと。**
+	VerifyKnownStates(states []string) error
 }
 
 // PaneLister は herdr の pane の一覧を取る部分集合である。
@@ -62,6 +66,9 @@ type Workspace interface {
 	Cleanup(ctx context.Context, req workspace.CleanupRequest) (*workspace.CleanupResult, error)
 	// IdentityPath は worktree の身元ファイルの絶対パスを返す。
 	IdentityPath(worktreePath string) string
+	// OwnerRepoOf は worktree のパスから owner とリポジトリ名を取り出す。
+	// **身元ファイルを読まない**（エージェントが書き換えられるため）。
+	OwnerRepoOf(worktreePath string) (string, string, error)
 }
 
 // Deps は abandon が外部へ繋ぐ処理である。
@@ -77,6 +84,9 @@ type Deps struct {
 	//
 	// **取れたら continuo は動いていない。**`lock.ErrAlreadyRunning` を包んだエラーが
 	// 返れば動いている。それ以外のエラーはロックファイルそのものを開けないことを表す。
+	//
+	// **取れたロックは実行の最後まで握る。**握っている間に起動しようとした継続監視は
+	// 「既に起動しています」で止まる。消されるより望ましい。
 	AcquireLock func(path string) (Unlocker, error)
 	// Herdr は pane の一覧を取る口である。nil なら設定から本物を組み立てる。
 	Herdr PaneLister

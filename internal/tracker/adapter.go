@@ -396,6 +396,23 @@ func (a *Adapter) writeTargets(targetState string) (string, string, string, bool
 	return a.projectID, a.statusFieldID, optionID, true, ok
 }
 
+// VerifyKnownStates は states がすべてボード側の Status 選択肢に存在するかを確かめる。
+//
+// **書き込む前に、書き込む先の名前を確かめるために公開してある。**`UpdateStatus` は
+// 選択肢に無い名前を渡されると失敗するが、**それを知るのは書きにいったときである。**
+// `continuo abandon` は worktree と branch を消したあとに Status を動かすので、
+// **消す前にここで確かめないと、綴り違いのときに worktree だけを失う。**
+//
+// **Bootstrap（または VerifyStatusOptions）を通してから呼ぶこと。**通っていなければ
+// 照合に使う選択肢の一覧をまだ持っていないので、何も検査せずに nil を返す。
+//
+// states: 検査する Status 名の一覧（大文字小文字は無視して照合する）。
+// 戻り値: ボード側に無い名前が1つでもあれば CategoryInvalidConfig の *Error
+// （見つからなかった名前をすべて列挙する）。
+func (a *Adapter) VerifyKnownStates(states []string) error {
+	return a.verifyKnownStates(states)
+}
+
 // verifyKnownStates は states がすべてボード側の Status 選択肢に存在するかを確かめる。
 //
 // **Bootstrap（または VerifyStatusOptions）を通っていないときは何も検査しない。**

@@ -321,6 +321,10 @@ type fakeTracker struct {
 	fetches []string
 	// updates は UpdateStatus で書き込んだ内容である。
 	updates []statusUpdate
+	// options は VerifyKnownStates が「ボードにある」と答える Status の選択肢である。
+	options []string
+	// verifies は VerifyKnownStates が受け取った値を受け取った順に並べたものである。
+	verifies [][]string
 }
 
 // newFakeTracker は「ボードに載っていて、Status を書ける」偽のボードを作る。
@@ -328,7 +332,62 @@ type fakeTracker struct {
 // state: FetchIssueByIdentifier が返す現在の Status。
 // 戻り値: 偽のボード。
 func newFakeTracker(state string) *fakeTracker {
-	return &fakeTracker{state: state, itemID: "PVTI_test", found: true, written: true}
+	return &fakeTracker{
+		state:   state,
+		itemID:  "PVTI_test",
+		found:   true,
+		written: true,
+		// **本物のボードと同じく、選択肢に無い値は断る。**ここを「何でも通す」に
+		// しておくと、`--to` の綴り違いを消す前に弾く検査が空振りする。
+		options: []string{"Ice Box", "Ready", "In Progress", "Blocked", "Done"},
+	}
+}
+
+// SetStatusOptions は VerifyKnownStates が「ボードにある」と答える選択肢を差し替える。
+//
+// options: ボードにある Status の選択肢。
+func (ft *fakeTracker) SetStatusOptions(options ...string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.options = options
+}
+
+// VerifyKnownStates は、渡された値がすべて選択肢にあるかを大文字小文字を無視して調べる。
+//
+// states: 検査する Status 名の一覧。
+// 戻り値: 選択肢に無い名前が1つでもあればエラー。
+func (ft *fakeTracker) VerifyKnownStates(states []string) error {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.verifies = append(ft.verifies, append([]string(nil), states...))
+	var unknown []string
+	for _, s := range states {
+		known := false
+		for _, o := range ft.options {
+			if strings.EqualFold(strings.TrimSpace(o), strings.TrimSpace(s)) {
+				known = true
+				break
+			}
+		}
+		if !known {
+			unknown = append(unknown, s)
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	return fmt.Errorf("ボードに無い Status 名です: %s", strings.Join(unknown, ", "))
+}
+
+// Verifies は VerifyKnownStates が受け取った値を受け取った順に返す。
+//
+// 戻り値: 検査を求められた値の並び。
+func (ft *fakeTracker) Verifies() [][]string {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	out := make([][]string, len(ft.verifies))
+	copy(out, ft.verifies)
+	return out
 }
 
 // SetState は FetchIssueByIdentifier が返す現在の Status を差し替える。
@@ -649,7 +708,21 @@ rate_limit:
 // number: issue 番号。
 // 戻り値: `https://github.com/octocat/hello-world/issues/<番号>`。
 func issueURL(number int) string {
-	return fmt.Sprintf("https://github.com/octocat/hello-world/issues/%d", number)
+	return issueURLFor("octocat", "hello-world", number)
+}
+
+// issueURLFor は owner とリポジトリ名を指定して issue の URL を組み立てる。
+//
+// **置き場所のパスと身元ファイルの issue_url を食い違わせるために要る。**
+// 置き場所は `<root>/<host>/<owner>/<repo>/<スラグ>` なので、別のリポジトリで
+// worktree を用意すれば、パスから読める owner とリポジトリ名が変わる。
+//
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// number: issue 番号。
+// 戻り値: `https://github.com/<owner>/<repo>/issues/<番号>`。
+func issueURLFor(owner, repo string, number int) string {
+	return fmt.Sprintf("https://github.com/%s/%s/issues/%d", owner, repo, number)
 }
 
 // issueRef は worktree を用意するための issue の情報を作る。
@@ -657,12 +730,22 @@ func issueURL(number int) string {
 // number: issue 番号。
 // 戻り値: owner が octocat、リポジトリが hello-world、既定 branch が main の issue。
 func issueRef(number int) workspace.IssueRef {
+	return issueRefFor("octocat", "hello-world", number)
+}
+
+// issueRefFor は owner とリポジトリ名を指定して issue の情報を作る。
+//
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// number: issue 番号。
+// 戻り値: 指定した owner とリポジトリ名を持ち、既定 branch が main の issue。
+func issueRefFor(owner, repo string, number int) workspace.IssueRef {
 	return workspace.IssueRef{
-		URL:           issueURL(number),
-		Identifier:    fmt.Sprintf("octocat/hello-world#%d", number),
+		URL:           issueURLFor(owner, repo, number),
+		Identifier:    fmt.Sprintf("%s/%s#%d", owner, repo, number),
 		ProjectItemID: "PVTI_test",
-		Owner:         "octocat",
-		Repo:          "hello-world",
+		Owner:         owner,
+		Repo:          repo,
 		Number:        number,
 		NativeRef:     map[string]any{"default_branch": "main"},
 	}
@@ -694,6 +777,32 @@ func (fx *fixture) Prepare(t *testing.T, number int) *workspace.PrepareResult {
 	}
 
 	fx.WriteIdentity(t, prepared, issueURL(number), number, settingsPath)
+	return prepared
+}
+
+// PrepareIn は別のリポジトリの下に worktree を1つ作り、身元ファイルを置く。
+//
+// **身元ファイルの issue_url を、置き場所のパスと食い違う値にできる。**
+// worktree の中でエージェントが issue_url を書き換えた状態を、これで作る。
+//
+// t: 呼び出し元のテスト。
+// owner: 置き場所の2階層目になる所有者名。
+// repo: 置き場所の3階層目になるリポジトリ名。
+// number: issue 番号。
+// identityURL: 身元ファイルへ書く issue の URL。
+// 戻り値: 作った worktree。
+func (fx *fixture) PrepareIn(
+	t *testing.T, owner, repo string, number int, identityURL string,
+) *workspace.PrepareResult {
+	t.Helper()
+
+	prepared, err := fx.Manager.Prepare(context.Background(), issueRefFor(owner, repo, number))
+	if err != nil {
+		t.Fatalf("worktree を用意できません: %v", err)
+	}
+	settingsPath := filepath.Join(fx.SettingsRoot,
+		fmt.Sprintf("%s-%s-%d", owner, repo, number), "settings.json")
+	fx.WriteIdentity(t, prepared, identityURL, number, settingsPath)
 	return prepared
 }
 

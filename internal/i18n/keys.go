@@ -553,6 +553,15 @@ const (
 	KeyAbandonErrScan Key = "abandon.err_scan"
 	// KeyAbandonNotFound はその issue の worktree が無いときに出る。
 	KeyAbandonNotFound Key = "abandon.not_found"
+	// KeyAbandonOwnerRepoMismatch は身元ファイルの issue_url が
+	// worktree のパスから取り出した owner とリポジトリ名と食い違うときに出る。
+	KeyAbandonOwnerRepoMismatch Key = "abandon.owner_repo_mismatch"
+	// KeyAbandonOwnerRepoUnreadable はworktree のパスから owner とリポジトリ名を
+	// 取り出せないときに出る。
+	KeyAbandonOwnerRepoUnreadable Key = "abandon.owner_repo_unreadable"
+	// KeyAbandonToSkipped は片付ける worktree が無く、`--to` の指定を使わずに
+	// 終わるときに出る。**指定を黙って捨てない。**
+	KeyAbandonToSkipped Key = "abandon.to_skipped"
 	// KeyAbandonErrMultiple はその issue の worktree が2つ以上あるときに出る。
 	KeyAbandonErrMultiple Key = "abandon.err_multiple"
 	// KeyAbandonMultipleItem は同じときに候補を1つずつ並べる行に出る。
@@ -568,6 +577,12 @@ const (
 	KeyAbandonParkNotActive Key = "abandon.park_not_active"
 	// KeyAbandonParkMoved は手を離させるために Status を動かしたときに出る。
 	KeyAbandonParkMoved Key = "abandon.park_moved"
+	// KeyAbandonErrParkActive は `--park` に作業中の状態（tracker.active_states の値）が
+	// 指定されたときに出る。**そこへ動かしても継続監視は手を離さない。**
+	KeyAbandonErrParkActive Key = "abandon.err_park_active"
+	// KeyAbandonErrUnknownState は `--to` や `--park` の値がボードの Status の
+	// 選択肢に無いときに出る。**worktree を消す前に出す。**
+	KeyAbandonErrUnknownState Key = "abandon.err_unknown_state"
 	// KeyAbandonErrParkFailed は手を離させる書き込みに失敗したときに出る。
 	KeyAbandonErrParkFailed Key = "abandon.err_park_failed"
 	// KeyAbandonParkNotWritten は手を離させる書き込みが行われなかったときに出る。
@@ -581,6 +596,11 @@ const (
 	KeyAbandonPaneGone Key = "abandon.pane_gone"
 	// KeyAbandonErrPaneRemains は上限までに pane が閉じなかったときに出る。
 	KeyAbandonErrPaneRemains Key = "abandon.err_pane_remains"
+	// KeyAbandonErrPaneAlive は継続監視が動いていないのに pane が生きているときに出る。
+	KeyAbandonErrPaneAlive Key = "abandon.err_pane_alive"
+	// KeyAbandonErrPaneWaitInterrupted は pane が閉じるのを待っている途中で
+	// `SIGINT` / `SIGTERM` を受けたときに出る。**時間切れとは言い分ける。**
+	KeyAbandonErrPaneWaitInterrupted Key = "abandon.err_pane_wait_interrupted"
 
 	// KeyAbandonErrInspect は失われるものを調べられないときに出る。
 	KeyAbandonErrInspect Key = "abandon.err_inspect"
@@ -606,6 +626,9 @@ const (
 	KeyAbandonPlanPaneUnknown Key = "abandon.plan_pane_unknown"
 	// KeyAbandonPlanDirty はコミットされていない変更のファイル数の行に出る。
 	KeyAbandonPlanDirty Key = "abandon.plan_dirty"
+	// KeyAbandonPlanDirtyAtLeast は変更のファイル数を数え切れなかったときの行に出る
+	// （`git status --porcelain` の読み取りが上限で打ち切られた場合）。
+	KeyAbandonPlanDirtyAtLeast Key = "abandon.plan_dirty_at_least"
 	// KeyAbandonPlanUnpushed はpush されていない commit の件数の行に出る。
 	KeyAbandonPlanUnpushed Key = "abandon.plan_unpushed"
 	// KeyAbandonPlanBaseUnknown はupstream も base も無く判定できないときの行に出る。
@@ -614,6 +637,9 @@ const (
 	KeyAbandonPlanDiffFromBase Key = "abandon.plan_diff_from_base"
 	// KeyAbandonPlanNoDiffFromBase はupstream が無く base との差分も無いときの行に出る。
 	KeyAbandonPlanNoDiffFromBase Key = "abandon.plan_no_diff_from_base"
+	// KeyAbandonPlanParkPending は`--dry-run` で継続監視が動いているとき、
+	// 実行したら Status をどこへ動かすかを予告する行に出る。
+	KeyAbandonPlanParkPending Key = "abandon.plan_park_pending"
 
 	// KeyAbandonDryRunNote は--dry-run の締めの1行に出る。
 	KeyAbandonDryRunNote Key = "abandon.dry_run_note"
@@ -1772,19 +1798,26 @@ var allKeys = []Key{
 	KeyAbandonNotRunning,
 	KeyAbandonErrScan,
 	KeyAbandonNotFound,
+	KeyAbandonOwnerRepoMismatch,
+	KeyAbandonOwnerRepoUnreadable,
 	KeyAbandonErrMultiple,
+	KeyAbandonErrUnknownState,
+	KeyAbandonToSkipped,
 	KeyAbandonMultipleItem,
 	KeyAbandonErrTracker,
 	KeyAbandonBoardNotListed,
 	KeyAbandonErrParkStateUnknown,
 	KeyAbandonParkNotActive,
 	KeyAbandonParkMoved,
+	KeyAbandonErrParkActive,
 	KeyAbandonErrParkFailed,
 	KeyAbandonParkNotWritten,
 	KeyAbandonErrPaneList,
 	KeyAbandonWaitingPane,
 	KeyAbandonPaneGone,
 	KeyAbandonErrPaneRemains,
+	KeyAbandonErrPaneAlive,
+	KeyAbandonErrPaneWaitInterrupted,
 	KeyAbandonErrInspect,
 	KeyAbandonPlanHeader,
 	KeyAbandonPlanIssue,
@@ -1797,10 +1830,12 @@ var allKeys = []Key{
 	KeyAbandonPlanPaneNone,
 	KeyAbandonPlanPaneUnknown,
 	KeyAbandonPlanDirty,
+	KeyAbandonPlanDirtyAtLeast,
 	KeyAbandonPlanUnpushed,
 	KeyAbandonPlanBaseUnknown,
 	KeyAbandonPlanDiffFromBase,
 	KeyAbandonPlanNoDiffFromBase,
+	KeyAbandonPlanParkPending,
 	KeyAbandonDryRunNote,
 	KeyAbandonErrLossWithoutForce,
 	KeyAbandonErrCleanup,

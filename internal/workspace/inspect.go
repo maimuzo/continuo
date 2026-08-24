@@ -21,6 +21,10 @@ type Leftover struct {
 	// DirtyFiles はコミットされていない変更のファイル数である（未追跡のファイルを含む）。
 	// **身元ファイルとその一時ファイルは数から外す**（Cleanup の判定と同じ扱い）。
 	DirtyFiles int
+	// DirtyFilesTruncated は `git status --porcelain` の読み取りが上限で打ち切られた
+	// ことを表す。**真なら DirtyFiles は「これ以上ある」という下限である。**
+	// 人間に見せるときは数だけを出さず、「以上」と分かる形にすること。
+	DirtyFilesTruncated bool
 	// HasUpstream は現在の branch に upstream があるかどうかである。
 	HasUpstream bool
 	// UnpushedCommits は upstream より先にある commit の件数である。
@@ -101,11 +105,14 @@ func (m *Manager) Inspect(ctx context.Context, req CleanupRequest) (*Leftover, e
 
 	// **件数は設定に関係なく数える。**人間に見せるための数であり、
 	// 「検査を切ってあるから数えない」では、何を失うのかを判断できない。
-	status, err := gitStatusPorcelain(ctx, resolvedPath, m.identityStatusExcludes()...)
+	status, truncated, err := gitStatusPorcelain(ctx, resolvedPath, m.identityStatusExcludes()...)
 	if err != nil {
 		return nil, err
 	}
 	result.DirtyFiles = countPorcelainLines(status)
+	// **打ち切られたことを落とさない。**落とすと、数千ファイルを失う worktree が
+	// 「200 ファイル」に見える。**見せた数より多く失う**のが、いちばん困る誤りである。
+	result.DirtyFilesTruncated = truncated
 
 	hasUpstream, err := gitHasUpstream(ctx, resolvedPath)
 	if err != nil {

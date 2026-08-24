@@ -282,9 +282,12 @@ func gitBranchDelete(ctx context.Context, repoDir string, branch normalize.SafeN
 
 // gitStatusPorcelainLimit は `git status --porcelain` の出力を読む上限（バイト）である。
 //
-// **この検査は「空かどうか」しか見ない**ので、切り詰めても答えは変わらない
+// **片付けの判定は「空かどうか」しか見ない**ので、切り詰めても答えは変わらない
 // （切り詰められるほど出ているなら、それは空ではない）。エージェントが worktree に
 // 大量のファイルを作った状態でも、常駐プロセスのメモリに全量を載せない。
+//
+// **件数を数える側は、切り詰めたかどうかを一緒に運ぶこと**（Inspect）。
+// 打ち切った出力の行数をそのまま見せると、**失う量を実際より少なく見せる。**
 const gitStatusPorcelainLimit = 8 * 1024
 
 // gitStatusPorcelain は `git status --porcelain` の出力を返す（3-9 の段2）。
@@ -302,8 +305,11 @@ const gitStatusPorcelainLimit = 8 * 1024
 // worktreePath: 検査する worktree のパス。
 // excludePaths: 数に入れない、worktree の直下のファイル名（`.continuo.json` など）。
 // 戻り値の1つ目: 標準出力（前後の空白を落としたもの。gitStatusPorcelainLimit まで）。
-// 戻り値の2つ目: 実行に失敗した場合のエラー。
-func gitStatusPorcelain(ctx context.Context, worktreePath string, excludePaths ...string) (string, error) {
+// 戻り値の2つ目: 上限で打ち切ったかどうか（**真なら、この出力の先にまだファイルがある**）。
+// 戻り値の3つ目: 実行に失敗した場合のエラー。
+func gitStatusPorcelain(
+	ctx context.Context, worktreePath string, excludePaths ...string,
+) (string, bool, error) {
 	args := []string{"status", "--porcelain"}
 	if len(excludePaths) > 0 {
 		// pathspec は cwd（= worktree の直下）からの相対である。
@@ -312,8 +318,8 @@ func gitStatusPorcelain(ctx context.Context, worktreePath string, excludePaths .
 			args = append(args, ":(exclude)"+name)
 		}
 	}
-	out, _, err := runGitLimited(ctx, worktreePath, gitStatusPorcelainLimit, args...)
-	return out, err
+	out, truncated, err := runGitLimited(ctx, worktreePath, gitStatusPorcelainLimit, args...)
+	return out, truncated, err
 }
 
 // gitHasUpstream は現在の branch に upstream があるかを返す（3-9 の段2b）。

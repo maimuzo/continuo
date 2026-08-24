@@ -67,6 +67,23 @@ func ownerRepoFromWorktreePath(resolvedRoot, worktreePath string) (string, strin
 	return parts[1], parts[2], nil
 }
 
+// OwnerRepoOf は worktree の絶対パスから owner とリポジトリ名を取り出す（3-22）。
+//
+// **身元ファイルを読まない。**身元ファイルは worktree の直下にあり、その worktree では
+// エージェントが `--permission-mode dontAsk` で動くので中身を書き換えられる。
+// **パスは封じ込め検査（3-20）を通ったものなので、書き換えられない。**
+//
+// **`continuo abandon` が「消す相手を取り違えていないか」を検算するのに使う。**
+// 消す相手は身元ファイルの `issue_url` だけで決まるので、その値の裏を取る手立てが要る。
+//
+// worktreePath: worktree の絶対パス（置き場所の内側であること）。
+// 戻り値の1つ目: 所有者名（置き場所の2階層目）。
+// 戻り値の2つ目: リポジトリ名（置き場所の3階層目）。
+// 戻り値の3つ目: 置き場所の規則に合わない場合のエラー。
+func (m *Manager) OwnerRepoOf(worktreePath string) (string, string, error) {
+	return ownerRepoFromWorktreePath(m.resolvedRoot, worktreePath)
+}
+
 // clonePath は `ghq list -p -e <owner>/<repo>` の答えを、短い間だけ覚えながら返す。
 //
 // ctx: 実行に適用するコンテキスト。

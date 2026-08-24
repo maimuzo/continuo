@@ -6,6 +6,7 @@ package workspace_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -813,5 +814,64 @@ func TestCleanup_シンボリックリンク越しのパスでも片付けられ
 	}
 	if !result.Removed {
 		t.Fatalf("シンボリックリンク越しだと片付けられていない: %+v", *result)
+	}
+}
+
+// 目的: `git status --porcelain` の読み取りが上限で打ち切られたとき、
+// **打ち切ったことを Inspect が持ち帰る**ことを確認する（設計 3-9 の手順2）。
+// **打ち切りを落とすと、数千ファイルを失う worktree が「200 ファイル」に見える。**
+// 見せた数より多く失うのが、いちばん困る誤りである。
+// 与える情報: 8KB の上限を超えるだけの未追跡のファイルを置いた worktree。
+// 成功条件: DirtyFilesTruncated が真、DirtyFiles が1以上、HasLoss が真であること。
+func TestInspect_数え切れないほど変更があれば打ち切ったと分かる(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	// 1件あたり40バイトほどの行になるので、400件で8KBの上限を必ず超える。
+	for i := 0; i < 400; i++ {
+		name := fmt.Sprintf("未追跡のファイル-%04d.md", i)
+		if err := os.WriteFile(filepath.Join(cf.Prepared.Path, name), []byte("途中\n"), 0o600); err != nil {
+			t.Fatalf("未追跡のファイルを書けない: %v", err)
+		}
+	}
+
+	leftover, err := cf.Manager.Inspect(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Inspect に失敗した: %v", err)
+	}
+	if !leftover.DirtyFilesTruncated {
+		t.Fatalf("上限を超えているのに打ち切りが伝わっていない（数えた件数: %d）", leftover.DirtyFiles)
+	}
+	if leftover.DirtyFiles < 1 {
+		t.Fatalf("打ち切った出力から1件も数えていない: %d", leftover.DirtyFiles)
+	}
+	if !leftover.HasLoss() {
+		t.Fatal("未コミットの変更があるのに失うものが無いと言っている")
+	}
+}
+
+// 目的: 変更が上限に収まる件数なら、打ち切りが偽のまま実数が入ることを確認する
+// （設計 3-9 の手順2）。
+// **常に「以上」と出しては、何ファイル失うのかが分からない。**
+// 与える情報: 未追跡のファイルを3件だけ置いた worktree。
+// 成功条件: DirtyFilesTruncated が偽、DirtyFiles が 3 であること。
+func TestInspect_収まる件数なら実数を数える(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	for i := 0; i < 3; i++ {
+		name := fmt.Sprintf("作りかけ-%d.md", i)
+		if err := os.WriteFile(filepath.Join(cf.Prepared.Path, name), []byte("途中\n"), 0o600); err != nil {
+			t.Fatalf("未追跡のファイルを書けない: %v", err)
+		}
+	}
+
+	leftover, err := cf.Manager.Inspect(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Inspect に失敗した: %v", err)
+	}
+	if leftover.DirtyFilesTruncated {
+		t.Fatal("上限に収まっているのに打ち切ったことになっている")
+	}
+	if leftover.DirtyFiles != 3 {
+		t.Fatalf("コミットしていない変更の件数が 3 ではなく %d だった", leftover.DirtyFiles)
 	}
 }

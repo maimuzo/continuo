@@ -151,9 +151,15 @@ continuo abandon https://github.com/octocat/hello-world/issues/42              #
 
 **Run `--dry-run` first.** Before deleting anything it prints the issue's Status, the worktree path, the branch, the herdr pane, **how many files have uncommitted changes**, and **how many commits are not pushed**.
 
+**`--dry-run` writes nothing at all.** It does not touch the board and it does not make continuo let go of the issue — it only tells you which Status the real run would park it at.
+
+**A Status it cannot write is caught before anything is deleted.** `--to` and the park target are checked against the board's own Status options first, and `--park` is refused outright if it names a working state — parking there would not make continuo let go, and the pane would never close. **If no worktree matches, `--to` is not applied**: the command says so instead of dropping it silently, because a URL with a typo would otherwise move some other issue's Status.
+
 **If there is anything to lose, it deletes nothing and stops.** Add `--force` if you want it gone anyway.
 
 **You can run it while continuo is running.** It makes continuo let go of the issue first: if the issue is still in a working state, it parks the Status at `tracker.failure_state` (`Blocked` by default; use `--park` to send it somewhere else), then waits for the pane to close before deleting anything. **If the pane does not close, nothing is deleted.**
+
+**If continuo is not running, it still checks the panes before deleting.** The lock file's location depends on your environment (`CONTINUO_RUNTIME_DIR`, `XDG_RUNTIME_DIR`, `TMPDIR`), so a daemon started by launchd and an `abandon` typed into a terminal can disagree about it. **A live pane on that worktree stops the deletion**, whatever the lock file says.
 
 **It leaves the Status where it is.** continuo cannot tell whether you are dropping the issue for good or rewriting it and filing it again, so **that call is yours to make on the board.** If you already know, pass it: `--to "Ice Box"`.
 

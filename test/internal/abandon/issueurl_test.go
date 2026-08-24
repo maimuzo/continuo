@@ -10,6 +10,8 @@ import (
 // issue の URL になっていないものを受け付けないことを確認する（設計 3-4 の段2）。
 // **pull request の URL は受け付けない。**continuo が worktree を用意した単位は issue で
 // あり、pull request の番号では身元ファイルの issue_url と照合できない。
+// **番号の書き方も1通りに固定する。**`+42` や `042` を 42 として受け付けると、
+// 同じ相手を指す URL が何通りもできる。消す相手を決める鍵にそれを許してはならない。
 // 与える情報: 受け付けるべき URL と、受け付けてはならない URL。
 // 成功条件: 受け付ける URL では `<owner>/<repo>#<番号>` の形の名前が取れること、
 // 受け付けない URL ではエラーになること。
@@ -38,6 +40,10 @@ func TestParseIssueURL_受け付ける形と受け付けない形(t *testing.T) 
 		"https://github.com/octocat/hello-world/issues/0",
 		"https://github.com/octocat/hello-world/issues/abc",
 		"https://github.com/octocat/issues/42",
+		"https://github.com/octocat/hello-world/issues/+42",
+		"https://github.com/octocat/hello-world/issues/042",
+		"https://github.com/octocat/hello-world/issues/-42",
+		"https://github.com/octocat/hello-world/issues/4 2",
 	}
 	for _, raw := range rejected {
 		if ref, err := abandon.ParseIssueURL(raw); err == nil {

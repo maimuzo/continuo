@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/abandon"
 	"github.com/maimuzo/continuo/internal/cli"
 	"github.com/maimuzo/continuo/internal/daemon"
 	"github.com/maimuzo/continuo/internal/doctor"
@@ -947,5 +948,142 @@ func TestRunVersion_版を答える(t *testing.T) {
 	// 解釈していた版では、`open …/version: no such file or directory` で落ちていた。
 	if strings.Contains(stderr, "continuo を起動できません") {
 		t.Errorf("version を設定ファイルのパスとして扱っています:\n%s", stderr)
+	}
+}
+
+// TestRunAbandon_フラグを取り違えずに渡す は、引数の結線を確かめる。
+//
+// **`runAbandon` はフラグを `abandon.Options` へ結線する唯一の場所である。**
+// `DryRun: *forceFlag` のような取り違えは、ここを通す検査が無ければ誰も気づかない。
+// **本物の `abandon.Run` は worktree と branch と pane を消す**ので、差し替えて
+// 渡ってきた値だけを見る。
+//
+// 目的: `--dry-run` / `--force` / `--to` / `--park` と issue の URL と
+// WORKFLOW.md の場所が、それぞれ対応するフィールドへ入ること。
+// 与える情報: すべてのフラグを立てた `continuo abandon <URL> <ディレクトリ>`。
+// 成功条件: 終了コードが差し替えた戻り値のまま、Options の6つの値が渡した通りであること。
+func TestRunAbandon_フラグを取り違えずに渡す(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	var got abandon.Options
+	deps := cli.Deps{AbandonRun: func(_ context.Context, opts abandon.Options) int {
+		got = opts
+		return 1
+	}}
+
+	url := "https://github.com/octocat/hello-world/issues/42"
+	code, _, stderr := runCLIWith(deps,
+		[]string{"abandon", "--dry-run", "--force", "--to", "Ice Box", "--park", "Blocked", url, dir}, "")
+
+	if code != 1 {
+		t.Fatalf("差し替えた戻り値がそのまま返っていない: %d（stderr: %s）", code, stderr)
+	}
+	if got.IssueURL != url {
+		t.Errorf("issue の URL が %q ではなく %q で渡っている", url, got.IssueURL)
+	}
+	if want := filepath.Join(dir, "WORKFLOW.md"); got.ConfigPath != want {
+		t.Errorf("設定ファイルのパスが %q ではなく %q で渡っている", want, got.ConfigPath)
+	}
+	if !got.DryRun {
+		t.Error("--dry-run が DryRun へ渡っていない")
+	}
+	if !got.Force {
+		t.Error("--force が Force へ渡っていない")
+	}
+	if got.ToState != "Ice Box" {
+		t.Errorf("--to が ToState へ %q ではなく %q で渡っている", "Ice Box", got.ToState)
+	}
+	if got.ParkState != "Blocked" {
+		t.Errorf("--park が ParkState へ %q ではなく %q で渡っている", "Blocked", got.ParkState)
+	}
+}
+
+// TestRunAbandon_フラグを立てなければ偽と空で渡る は、既定値の結線を確かめる。
+//
+// **立てていないフラグが真で渡ると、`--force` を付けていないのに失うものごと消す。**
+//
+// 目的: フラグを1つも書かないとき、DryRun と Force が偽、ToState と ParkState が空で渡ること。
+// 与える情報: `continuo abandon <URL> <ディレクトリ>` だけ。
+// 成功条件: 4つとも既定値のまま渡ること。
+func TestRunAbandon_フラグを立てなければ偽と空で渡る(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	var got abandon.Options
+	deps := cli.Deps{AbandonRun: func(_ context.Context, opts abandon.Options) int {
+		got = opts
+		return 0
+	}}
+
+	code, _, stderr := runCLIWith(deps,
+		[]string{"abandon", "https://github.com/octocat/hello-world/issues/42", dir}, "")
+
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if got.DryRun || got.Force {
+		t.Errorf("立てていないフラグが真で渡っている（DryRun=%v / Force=%v）", got.DryRun, got.Force)
+	}
+	if got.ToState != "" || got.ParkState != "" {
+		t.Errorf("指定していない値が空で渡っていない（ToState=%q / ParkState=%q）", got.ToState, got.ParkState)
+	}
+}
+
+// TestRunAbandon_引数の誤りは本体を呼ばずに2で止まる は、消す処理へ進ませないことを確かめる。
+//
+// **引数を取り違えたまま進むと、消す相手を間違える。**位置引数のあとのフラグは
+// Go の flag では黙って無視されるので、`--dry-run` のつもりで本当に消すことになる。
+//
+// 目的: issue の URL が無い・位置引数が3つ以上・位置引数のあとにフラグを書いた場合に、
+// 終了コード 2 で止まり、abandon の本体を1度も呼ばないこと。
+// 与える情報: 誤った並びの3通り。
+// 成功条件: すべて終了コードが 2、本体の呼び出しが0回、stderr に理由が出ていること。
+func TestRunAbandon_引数の誤りは本体を呼ばずに2で止まる(t *testing.T) {
+	url := "https://github.com/octocat/hello-world/issues/42"
+	cases := map[string][]string{
+		"URLが無い":      {"abandon"},
+		"位置引数が3つ":     {"abandon", url, "a", "b"},
+		"位置引数のあとのフラグ": {"abandon", url, "--dry-run"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			deps := cli.Deps{AbandonRun: func(_ context.Context, _ abandon.Options) int {
+				calls++
+				return 0
+			}}
+			code, _, stderr := runCLIWith(deps, args, "")
+			if code != 2 {
+				t.Errorf("終了コードが 2 でない: %d（stderr: %s）", code, stderr)
+			}
+			if calls != 0 {
+				t.Errorf("引数が誤っているのに abandon の本体を %d 回呼んでいる", calls)
+			}
+			if stderr == "" {
+				t.Error("何が誤りかを stderr へ出していない")
+			}
+		})
+	}
+}
+
+// TestRunAbandon_helpは0で返して本体を呼ばない は、使い方の表示を確かめる。
+//
+// 目的: `continuo abandon --help` が 0 で返り、消す処理へ進まないこと。
+// 与える情報: `abandon --help`。
+// 成功条件: 終了コードが 0、本体の呼び出しが0回、使い方が stderr に出ていること。
+func TestRunAbandon_helpは0で返して本体を呼ばない(t *testing.T) {
+	calls := 0
+	deps := cli.Deps{AbandonRun: func(_ context.Context, _ abandon.Options) int {
+		calls++
+		return 0
+	}}
+
+	code, _, stderr := runCLIWith(deps, []string{"abandon", "--help"}, "")
+
+	if code != 0 {
+		t.Fatalf("--help の終了コードが 0 でない: %d", code)
+	}
+	if calls != 0 {
+		t.Errorf("--help なのに abandon の本体を %d 回呼んでいる", calls)
+	}
+	if !strings.Contains(stderr, "-dry-run") {
+		t.Errorf("使い方にフラグの説明が出ていない: %s", stderr)
 	}
 }

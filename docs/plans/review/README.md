@@ -65,3 +65,31 @@
 **直した。**`internal/workspace/cleanup.go` の `resolveWorkspaceID` が herdr に答えさせ、
 `CheckContainmentResolved` が返した `resolvedPath` と突き合わせる。一致しなければ消さない。
 
+
+---
+
+# コードレビュー 2026-08-24（`continuo abandon`）
+
+**言いたいこと。**`continuo abandon` の実装を `code-reviewer` にかけ、**14件の指摘**を受けた。
+**critical 1件と high 4件は前の回で直した。**この節は残りの medium 6件と low 3件の対応である。
+**9件のうち8件を直し、1件（worktree が無いときに `--to` を通す案）は形を変えて直した。**
+生の指摘は [2026-08-24_abandon_code_review.json](2026-08-24_abandon_code_review.json) にそのまま置いた。
+
+## medium の指摘と対応
+
+| 短縮名 | 何が問題か | どうしたか |
+| --- | --- | --- |
+| **--to の後出し検査** | `--to` がボードの選択肢にあるかを確かめるのが `UpdateStatus` の中で、呼ぶのは worktree を消したあと | **直した。**段2 の直後に `verifyTargets` を置いた（設計 3-37-5） |
+| **park が作業中の値** | `--park` に `tracker.active_states` の値を渡せる。動かしても手を離さず pane も閉じない | **直した。**同じ `verifyTargets` で、書く前に止める |
+| **--to の握り潰し** | worktree が0件だと `--to` を使わずに終了コード 0 で返る | **直した。**「指定した値へは動かしていません」と1行出す。**Status だけを動かすことはしない**（URL の打ち間違いだと別の issue を動かす） |
+| **失う数の頭打ち** | `git status --porcelain` の8KBの打ち切りを捨てていて、失う量を実際より少なく見せる | **直した。**`Leftover.DirtyFilesTruncated` で運び、「%d ファイル以上」と出す |
+| **branch の消し忘れの記録** | 片付けのログが `BranchDeleted` を見ずに「worktree と branch を片付けました」と書く | **直した。**`internal/workspace/cleanup.go` と `internal/orchestrator/lifecycle.go` の2箇所を書き分けた |
+| **CLI の結線の無検査** | `runAbandon` はフラグを `Options` へ結線する唯一の場所なのに、通すテストが1本も無い | **直した。**`test/internal/cli` に4本足した（結線・既定値・引数の誤り・`--help`） |
+
+## low の指摘と対応
+
+| 短縮名 | 何が問題か | どうしたか |
+| --- | --- | --- |
+| **中断と時間切れの同文** | `SIGINT` / `SIGTERM` で止めたときに「%v 以内に閉じませんでした」と出る | **直した。**中断専用の文言を足した（上限が短すぎたのかと読み違える） |
+| **届かない照合** | `SameIssue` の「解釈できない URL は文字列で照合する」経路は、真を返しようがない | **直した。**経路を消し、GoDoc を実態（どれにも一致しない）に直した |
+| **綴りで崩れる保証** | 設定の検証は完全一致、実行時は大文字小文字を無視。`failure_state` が綴り違いで `active_states` に入る | **直した。**設定の検証も大文字小文字を無視する（`containsStateFold`） |

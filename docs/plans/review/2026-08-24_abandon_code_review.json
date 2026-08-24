@@ -1,0 +1,91 @@
+{
+ "critical": [
+  {
+   "name": "空撃ちがボードを書き換える",
+   "what": "--dry-run が段1（park + pane 待ち）を通るため、継続監視が動いていると Status を failure_state へ実際に書き込み、pane が閉じるまで最大50秒待つ。閉じなければ一覧を1行も出さずに終了コード 1 で終わる。README は「先に --dry-run を叩け」と勧めている",
+   "where": "internal/abandon/abandon.go:206-227（park と waitPaneGone が DryRun の判定より前）。DryRun の参照は abandon.go:224 の1箇所だけ",
+   "fix": "段1 の後半を `if running && !r.opts.DryRun` にする。そのうえで printPlan に「実行すると Status を <park の値> へ動かします」の1行を足す（文言は i18n を通す）。テストも足す（継続監視が動いている状態での --dry-run が Status を1件も書かないこと）"
+  }
+ ],
+ "high": [
+  {
+   "name": "ロックを即座に手放す",
+   "what": "判定のために取ったロックをその場で解放するので、直後に継続監視が起動でき、その足元から worktree を消す。abandon は git と RPC を何度も叩くので窓は秒単位で開く",
+   "where": "internal/abandon/abandon.go:250-262 の isRunning が l.Release() を呼ぶ",
+   "fix": "取れたロックは実行の最後まで握る。isRunning が Unlocker も返し、呼び出し側が defer で解放する。握っている間に起動しようとした継続監視は「既に起動しています」で止まる（消されるより望ましい）"
+  },
+  {
+   "name": "pane が生きていても止めない",
+   "what": "「動いていない」と判定したとき pane を1度も待たない。段3 は pane の一覧を画面に出しているのに止まる条件に使っていない。ロックファイルの場所は環境変数（CONTINUO_RUNTIME_DIR / XDG_RUNTIME_DIR / TMPDIR）で決まるので、launchd から起動した継続監視と端末から叩いた abandon で食い違うと、生きた pane ごと消す",
+   "where": "internal/abandon/abandon.go:206-214 と 653-660（printPlan が pane を出している）",
+   "fix": "段3 と段4 の間に、!running のとき pane を引いて1件でもあれば止める段を置く。herdr の socket は環境変数で場所が変わらないので、ロックより信用できる"
+  },
+  {
+   "name": "pane の照合が完全一致だけ",
+   "what": "pane を worktree に結びつける条件がパスの完全一致。継続監視側は「一致、または内側」で判定している。pane の作業ディレクトリが worktree の下の階層に降りると「pane はもう無い」と判定して消しにいく。GoDoc は foreground_cwd で降りた先も拾うと書いているが実装が噛み合っていない",
+   "where": "internal/abandon/abandon.go:443-448 の samePath 2つ。既存の書き方は internal/orchestrator/hookinput.go:71 の `resolved == resolvedRoot || isUnder(resolvedRoot, resolved)`",
+   "fix": "「一致、または内側」に揃える。待つ側は広く取るほうが安全（多めに待つと止まるだけ、少なく取ると消してしまう）"
+  },
+  {
+   "name": "issue_url を無検算で信じる",
+   "what": "消す対象は身元ファイルの issue_url だけで決まる。このファイルは worktree の直下にあり、そこでエージェントが --permission-mode dontAsk で動く。同じファイルの branch は git の現物と、herdr_workspace_id は herdr の現物と、project_item_id はボードと突き合わせているのに、「どれを消すか」を決めるこの値だけが無検算。worktree A のエージェントが自分の issue_url を issue B に書き換えると、人間が B を取り消したとき A が消える",
+   "where": "internal/abandon/abandon.go:281-294 の SameIssue",
+   "fix": "パスから取り出した owner/repo と突き合わせる。置き場所は <root>/<host>/<owner>/<repo>/<スラグ> の固定4階層で、パスは封じ込め検査を通っているので書き換えられない。internal/workspace/repo.go:56 の ownerRepoFromWorktreePath が既にこの取り出しを持っている（公開が要る）。あわせて ParseIssueURL が +42 や 042 を 42 として受け付けるので、数字だけかつ先頭が 0 でないことを確かめる"
+  }
+ ],
+ "medium": [
+  {
+   "name": "--to を消す前に確かめない",
+   "what": "--to の値がボードの選択肢にあるかを確かめるのは UpdateStatus の中で、それが呼ばれるのは worktree を消したあと。綴り違いで worktree と branch を失ったうえ Status が動かない",
+   "where": "internal/abandon/abandon.go:502-533",
+   "fix": "段2 の直後（--dry-run でも通る位置）で --to と --park が選択肢にあるかを確かめる。updateProjectV2Field は絶対に呼ばない"
+  },
+  {
+   "name": "--park が作業中の値でも通る",
+   "what": "--park に active_states の値を渡せる。渡すと継続監視は手を離さず pane も閉じない。pane の一覧を引いた瞬間だけ空だった場合、手を離していない issue の worktree を消す",
+   "where": "internal/abandon/abandon.go:340-343",
+   "fix": "containsFold(ActiveStates, target) が真なら書き込む前に止める"
+  },
+  {
+   "name": "worktree が無いと --to を捨てる",
+   "what": "worktree が0件のとき段5 へ行かず終了コード 0 で返る。--to を渡した人間は動いたと受け取るが1文字も書かれていない",
+   "where": "internal/abandon/abandon.go:200-205",
+   "fix": "0件でも --to があれば段5 を通すか、文言に「--to は動かしていません」を足す。黙って捨てない"
+  },
+  {
+   "name": "失うファイル数が頭打ちになる",
+   "what": "git status --porcelain の出力は8KBで切られ、切られたかどうかの戻り値は捨てられている。Inspect はその行数を数えて見せるので、200ファイルほどを超えると失う量を実際より少なく表示する",
+   "where": "internal/workspace/git.go:288 と 315-316、internal/workspace/inspect.go:104-108",
+   "fix": "切り詰めの有無を Leftover まで運び「%d ファイル以上」と出す。HasLoss の真偽は変わらない"
+  },
+  {
+   "name": "branch を消していなくても消したと記録する",
+   "what": "この commit が BranchDeleted を足して「worktree を消した＝branch も消えた と書いてはならない」と GoDoc に明記したのに、既存の呼び出し側2箇所がその規則を破ったまま",
+   "where": "internal/workspace/cleanup.go:218-220 と internal/orchestrator/lifecycle.go:584-586",
+   "fix": "result.BranchDeleted で文言を分ける。abandon.go:487-491 が既に正しく書き分けているので同じ形にする"
+  },
+  {
+   "name": "CLI の引数処理にテストが無い",
+   "what": "runAbandon はフラグを Options へ結線する唯一の場所で、Deps.AbandonRun の GoDoc は「検査では必ず差し替える」と書いているのに、差し替えて呼ぶテストが1本も無い。DryRun: *forceFlag のような取り違えを検出できない",
+   "where": "test/internal/cli/ に abandon のテストが0件",
+   "fix": "Deps.AbandonRun を記録するだけの差し替えに置き換え、渡った Options の中身を検査する。位置引数の後ろのフラグ・位置引数3つ以上・URL 未指定・--help の終了コードも"
+  }
+ ],
+ "low": [
+  {
+   "name": "中断と時間切れを同じ文言で出す",
+   "where": "internal/abandon/abandon.go:402-406",
+   "fix": "Sleep が偽（SIGINT/SIGTERM）のときの文言を分ける。止まること自体は正しい"
+  },
+  {
+   "name": "読めない URL の照合が到達しない",
+   "where": "internal/abandon/issueurl.go:55-58",
+   "fix": "消すか、GoDoc の説明を実態に直す"
+  },
+  {
+   "name": "failure_state の保証が綴りで崩れる",
+   "where": "internal/abandon/abandon.go:320-323 と internal/config/validate.go:103",
+   "fix": "設定の検証は containsString（大文字小文字を区別）、abandon は containsFold（無視）。どちらかに揃える"
+  }
+ ]
+}

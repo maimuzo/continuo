@@ -6,14 +6,23 @@
 // **段の順番が仕様である。**
 //
 //	段1 continuo が動いているかを調べ、動いていれば手を離させる
-//	段2 issue の URL から worktree を探す（**身元ファイルの issue_url で照合する**）
+//	段2 issue の URL から worktree を探す（**身元ファイルの issue_url で照合し、パスで検算する**）
+//	段2の後 これから書きうる Status の値を確かめる（**消す前に確かめる。--dry-run でも通る**）
 //	段3 失われるものを調べて見せる（--dry-run はここで終わる）
-//	段4 消す
+//	段4 消す（**その前に、動いていないのに pane が生きていないかを確かめる**）
 //	段5 Status を動かす（--to があるときだけ）
 //
 // **実行の順は段2 が段1 の後半より先である。**段1 の後半は「その worktree を cwd に
 // 持つ pane が消えるまで待つ」ので、**待つ相手が決まっていなければ始められない。**
 // worktree が1つも見つからなければ、消すものも待つものも無いので、そこで終わる。
+//
+// **`--dry-run` は段1 の後半を通らない。**段1 の後半はボードへ書き込み、エージェントに
+// 手を離させる。**見せるだけの実行が副作用を起こしてはならない。**代わりに段3 で
+// 「実行したら Status をどこへ動かすか」を1行で予告する。
+//
+// **書きうる Status の値は、消す前に確かめる**（段2 の直後の verifyTargets）。
+// `--to` の綴り違いが分かるのが `UpdateStatus` を呼ぶ段5 だと、**worktree と branch を
+// 失ったうえに Status も動かない。**確かめるのは読み取りだけで、ボードへは1文字も書かない。
 //
 // **判断を書き直さない。**未コミット・未 push の判定は internal/workspace の
 // Inspect（Cleanup と同じ関数を呼ぶ）、片付けは Cleanup、Status は internal/tracker、
@@ -128,6 +137,10 @@ type runner struct {
 	boardErr error
 	// boardRead はボードを1度でも読んだかどうかである（読み直しを避ける）。
 	boardRead bool
+
+	// parkDeferred は「継続監視は動いているが、`--dry-run` なので手を離させなかった」
+	// ことを表す。**段3 で予告の1行を出すのに使う。**
+	parkDeferred bool
 }
 
 // Run は `continuo abandon` の段1〜段5 を通す。
@@ -186,10 +199,19 @@ func Run(ctx context.Context, opts Options) int {
 // 戻り値: 終了コード。
 func (r *runner) run(ctx context.Context) int {
 	// 段1 の前半: continuo が動いているかを調べる。
-	running, err := r.isRunning()
+	running, unlocker, err := r.isRunning()
 	if err != nil {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrLockFile, r.deps.LockPath, err))
 		return ExitStopped
+	}
+	// **取れたロックは最後まで握る。**手放すと、その隙に起動した継続監視の足元から
+	// worktree を消す。握っている間に起動しようとした継続監視は起動を諦めて止まる。
+	if unlocker != nil {
+		defer func() {
+			if err := unlocker.Release(); err != nil {
+				r.logger.Warn("ロックの解放に失敗しました", "lock_file", r.deps.LockPath, "error", err)
+			}
+		}()
 	}
 	if running {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRunning, r.deps.LockPath))
@@ -203,8 +225,17 @@ func (r *runner) run(ctx context.Context) int {
 		return code
 	}
 
+	// 段2 の直後: これから書きうる Status の値を確かめる。**消す前に確かめる。**
+	if code := r.verifyTargets(ctx, running); code != ExitOK {
+		return code
+	}
+
 	// 段1 の後半: 動いているなら手を離させ、pane が消えるまで待つ。
-	if running {
+	// **`--dry-run` では通らない。**ボードへ書き込み、エージェントに手を離させるからである。
+	switch {
+	case running && r.opts.DryRun:
+		r.parkDeferred = true
+	case running:
 		if code := r.park(ctx, found); code != ExitOK {
 			return code
 		}
@@ -229,6 +260,15 @@ func (r *runner) run(ctx context.Context) int {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrLossWithoutForce))
 		return ExitStopped
 	}
+	// **動いていないと判定したときこそ pane を確かめる。**ロックファイルの場所は
+	// 環境変数（CONTINUO_RUNTIME_DIR / XDG_RUNTIME_DIR / TMPDIR）で決まるので、
+	// launchd から起動した継続監視と端末から叩いた abandon で食い違いうる。
+	// **herdr の socket は設定で決まって環境変数では動かないので、ロックより信用できる。**
+	if !running {
+		if code := r.stopIfPaneAlive(ctx, found.Path); code != ExitOK {
+			return code
+		}
+	}
 
 	// 段4: 消す。
 	if code := r.remove(ctx, found.Path, leftover); code != ExitOK {
@@ -241,30 +281,36 @@ func (r *runner) run(ctx context.Context) int {
 
 // isRunning は continuo が動いているかを、二重起動防止のロックで調べる（3-17）。
 //
-// **ロックを取れたら動いていない。**取れたぶんはすぐ手放す。掴んだままでいると、
-// abandon が走っているあいだ continuo を起動できなくなる。
+// **ロックを取れたら動いていない。取れたロックは返す。**呼び出し側が実行の最後まで
+// 握り続けること。**その場で手放してはならない。**手放すと直後に継続監視が起動でき、
+// その足元から worktree を消す。abandon は git と RPC を何度も叩くので窓は秒単位で開く。
+// 握っているあいだに起動しようとした継続監視は「既に起動しています」で止まる。
 //
 // 戻り値の1つ目: 動いていれば true。
-// 戻り値の2つ目: **ロックファイルそのものを開けなかった場合のエラー**
+// 戻り値の2つ目: 取れたロック（**動いていたときと開けなかったときは nil**）。
+// 戻り値の3つ目: **ロックファイルそのものを開けなかった場合のエラー**
 // （二重起動とは言い分ける。設定の `runtime.lock_file` の打ち間違いがこれである）。
-func (r *runner) isRunning() (bool, error) {
+func (r *runner) isRunning() (bool, Unlocker, error) {
 	l, err := r.deps.AcquireLock(r.deps.LockPath)
 	if err != nil {
 		if errors.Is(err, lock.ErrAlreadyRunning) {
-			return true, nil
+			return true, nil, nil
 		}
-		return false, err
+		return false, nil, err
 	}
-	if err := l.Release(); err != nil {
-		r.logger.Warn("ロックの解放に失敗しました", "lock_file", r.deps.LockPath, "error", err)
-	}
-	return false, nil
+	return false, l, nil
 }
 
 // find は issue の URL から worktree を1つに絞る（段2）。
 //
 // **身元ファイルの `issue_url` で照合する。**パスを owner / repo / 番号 から
 // 組み立ててはならない（`workspace.root` や `branch_template` を変えている環境で空振りする）。
+//
+// **照合した結果はパスで検算する。**身元ファイルは worktree の直下にあり、そこで
+// エージェントが `--permission-mode dontAsk` で動くので、`issue_url` は書き換えられる。
+// 検算しなければ、worktree A のエージェントが自分の `issue_url` を issue B に書き換えるだけで、
+// **人間が B を取り消したとき A が消える。**置き場所は `<root>/<host>/<owner>/<repo>/<スラグ>`
+// の固定4階層で、パスは封じ込め検査（3-20）を通っているので書き換えられない（3-22）。
 //
 // **身元ファイルが壊れていた worktree は候補にしない。**照合する鍵が読めないためである。
 // **消しもしない**（3-4 の段2）。何があったかは1行残す。
@@ -288,14 +334,25 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 		if w.Identity == nil {
 			continue
 		}
-		if r.issue.SameIssue(w.Identity.IssueURL) {
-			matched = append(matched, w)
+		if !r.issue.SameIssue(w.Identity.IssueURL) {
+			continue
 		}
+		if !r.pathAgrees(w) {
+			continue
+		}
+		matched = append(matched, w)
 	}
 
 	switch len(matched) {
 	case 0:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonNotFound, r.issue.URL))
+		// **`--to` を黙って捨てない。**指定した人間は「動いた」と受け取るが、
+		// ここで終わるとボードには1文字も書かれない。
+		// **代わりに段5 を通すことはしない。**worktree が無い理由は「もう片付けた」とは
+		// 限らず、**URL の打ち間違い**でもある。打ち間違えた相手の Status を動かすほうが害が大きい。
+		if target := strings.TrimSpace(r.opts.ToState); target != "" {
+			fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonToSkipped, target))
+		}
 		return nil, ExitOK
 	case 1:
 		return &matched[0], ExitOK
@@ -311,6 +368,126 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 	}
 }
 
+// pathAgrees は、身元ファイルの `issue_url` が worktree の置き場所と辻褄が合うかを返す。
+//
+// **消す相手を決める値の裏を取るための検算である。**置き場所から取り出した
+// owner とリポジトリ名は**エージェントが書き換えられない**ので、書き換えられる
+// `issue_url` の側がそれと食い違えば、その worktree は候補にしない。
+//
+// **候補から外すだけで、消しはしない。**食い違いの原因は書き換えとは限らず、
+// 人間が置き場所を移した跡かもしれない。どちらであれ何があったかは1行残す。
+//
+// w: 身元ファイルの `issue_url` が一致した worktree。
+// 戻り値: 置き場所の owner とリポジトリ名が渡された issue と一致すれば true。
+func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
+	owner, repo, err := r.deps.Workspace.OwnerRepoOf(w.Path)
+	if err != nil {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOwnerRepoUnreadable, w.Path, err))
+		r.logger.Warn("worktree のパスから owner とリポジトリ名を読めません（消しません）",
+			"worktree", w.Path, "error", err)
+		return false
+	}
+	// **GitHub は owner とリポジトリ名の大文字小文字を区別しない**ので、無視して比べる。
+	if strings.EqualFold(owner, r.issue.Owner) && strings.EqualFold(repo, r.issue.Repo) {
+		return true
+	}
+	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOwnerRepoMismatch,
+		w.Path, owner, repo, w.Identity.IssueURL))
+	r.logger.Warn("身元ファイルの issue_url が置き場所と食い違います（消しません）",
+		"worktree", w.Path, "path_owner", owner, "path_repo", repo,
+		"issue_url", w.Identity.IssueURL)
+	return false
+}
+
+// verifyTargets は、これから書きうる Status の値を消す前に確かめる（段2 の直後）。
+//
+// **確かめるのは2つである。**
+//
+//	その値がボードの Status の選択肢にあるか（`--to` と park の先）
+//	park の先が `tracker.active_states` に入っていないか
+//
+// **選択肢の照合を段5 まで遅らせてはならない。**`UpdateStatus` は選択肢に無い名前を
+// 断るが、それを呼ぶのは worktree と branch を消したあとである。`--to Dnoe` のような
+// 綴り違いで、**worktree を失ったうえに Status も動かない**という結果になる。
+//
+// **park の先が作業中の状態なら書く前に止める。**そこへ動かしても継続監視は手を離さず、
+// pane も閉じない。`pane.list` がたまたま空を返した瞬間に、**手を離していない issue の
+// worktree を消す。**`tracker.failure_state` が作業中の状態でないことは設定の検証が
+// 保証しているが、**`--park` はその検証を通らない。**
+//
+// **ボードへは1文字も書かない。**読むだけなので `--dry-run` でも通す。
+//
+// ctx: 実行に適用するコンテキスト。
+// running: 継続監視が動いているか（park の先を確かめるかどうかがこれで決まる）。
+// 戻り値: 続けてよければ ExitOK、確かめられなかった場合・値が誤っている場合は ExitStopped。
+func (r *runner) verifyTargets(ctx context.Context, running bool) int {
+	var targets []string
+	if target := strings.TrimSpace(r.opts.ToState); target != "" {
+		targets = append(targets, target)
+	}
+	if running {
+		park := r.parkTarget()
+		if containsFold(r.cfg.Tracker.ActiveStates, park) {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkActive, park))
+			return ExitStopped
+		}
+		targets = append(targets, park)
+	}
+	if len(targets) == 0 {
+		return ExitOK
+	}
+
+	tr, err := r.tracker(ctx)
+	if err != nil {
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrTracker, err))
+		return ExitStopped
+	}
+	if err := r.bootstrap(ctx, tr); err != nil {
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrTracker, err))
+		return ExitStopped
+	}
+	if err := tr.VerifyKnownStates(targets); err != nil {
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrUnknownState, err))
+		return ExitStopped
+	}
+	return ExitOK
+}
+
+// stopIfPaneAlive は、継続監視が動いていないと判定したときに pane の生死を確かめる（段4 の前）。
+//
+// **ロックだけを根拠に消しにいかない。**ロックファイルの場所は環境変数で決まるので、
+// launchd から起動した継続監視と端末から叩いた abandon で食い違いうる。食い違えば
+// 「動いていない」と判定したまま、生きた pane ごと worktree を消す。
+//
+// **待たずに止める。**手を離させていない以上、待っても pane は閉じない。
+//
+// ctx: 実行に適用するコンテキスト。
+// worktreePath: 対象の worktree の絶対パス。
+// 戻り値: pane が無ければ ExitOK、1件でもあれば・herdr に問い合わせられなければ ExitStopped。
+func (r *runner) stopIfPaneAlive(ctx context.Context, worktreePath string) int {
+	panes, err := r.panesOf(ctx, worktreePath)
+	if err != nil {
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneList, err))
+		return ExitStopped
+	}
+	if len(panes) == 0 {
+		return ExitOK
+	}
+	fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneAlive,
+		strings.Join(paneIDs(panes), " "), r.deps.LockPath))
+	return ExitStopped
+}
+
+// parkTarget は、手を離させるために Status を動かす先を決める。
+//
+// 戻り値: `--park` の値、指定が無ければ `tracker.failure_state`。
+func (r *runner) parkTarget() string {
+	if target := strings.TrimSpace(r.opts.ParkState); target != "" {
+		return target
+	}
+	return r.cfg.Tracker.FailureState
+}
+
 // park は、動いている continuo にその issue から手を離させる（段1 の後半）。
 //
 // **ボードから現在の Status を取り直してから決める。**身元ファイルには Status が
@@ -318,8 +495,8 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 // continuo はもうその issue を持っていないので何もしない。
 //
 // 動かす先は `--park`、指定が無ければ `tracker.failure_state` である。
-// **`failure_state` が `active_states` に入らないことは設定の検証が保証している**
-// （internal/config/validate.go:103）ので、動かせば必ず active から外れる。
+// **その先が `active_states` に入っていないことは段2 の直後で確かめてある**（verifyTargets）
+// ので、動かせば必ず active から外れる。
 //
 // ctx: 実行に適用するコンテキスト。
 // found: 対象の worktree。
@@ -337,10 +514,7 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 		return ExitOK
 	}
 
-	target := strings.TrimSpace(r.opts.ParkState)
-	if target == "" {
-		target = r.cfg.Tracker.FailureState
-	}
+	target := r.parkTarget()
 
 	tr, err := r.tracker(ctx)
 	if err != nil {
@@ -400,8 +574,11 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonWaitingPane,
 			strings.Join(paneIDs(panes), " "), worktreePath))
 		if !r.deps.Sleep(ctx, interval) {
-			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneRemains,
-				timeout, strings.Join(paneIDs(panes), " ")))
+			// **中断と時間切れを同じ文言で出さない。**「%v 以内に閉じませんでした」は
+			// 待ち切った場合の文であり、`SIGINT` / `SIGTERM` で人間が止めたときに出すと、
+			// **上限が短すぎたのかと読み違える。**止めた本人に何が起きたかを言う。
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneWaitInterrupted,
+				strings.Join(paneIDs(panes), " ")))
 			return ExitStopped
 		}
 	}
@@ -425,6 +602,10 @@ func (r *runner) paneWaitTimeout() time.Duration {
 // **`foreground_cwd` も見る。**Claude Code が別のディレクトリへ降りていても、
 // pane そのものはその worktree に属している。
 //
+// **一致だけでなく「worktree の内側」も拾う**（継続監視の hook の判定と同じ形。
+// internal/orchestrator/hookinput.go の acceptHookCwd）。**待つ側は広く取るほうが安全である。**
+// 多めに拾えば待つか止まるだけだが、少なく拾うと生きている pane ごと消す。
+//
 // **herdr の口が無ければ「pane は無い」として返す**（`Deps.Herdr` が nil のとき）。
 // 差し替えを渡さない検査で、本物の herdr へ接続しにいかないためである。
 //
@@ -442,7 +623,7 @@ func (r *runner) panesOf(ctx context.Context, worktreePath string) ([]herdr.Pane
 	}
 	var matched []herdr.Pane
 	for _, p := range list.Panes {
-		if samePath(p.Cwd, worktreePath) || samePath(p.ForegroundCwd, worktreePath) {
+		if sameOrUnder(worktreePath, p.Cwd) || sameOrUnder(worktreePath, p.ForegroundCwd) {
 			matched = append(matched, p)
 		}
 	}
@@ -628,6 +809,10 @@ func (r *runner) boardReason() string {
 //
 // **消す前に必ず全部出す。**`--dry-run` でも `--force` でも同じものを出す。
 //
+// **`--dry-run` で継続監視が動いているときは、実行したら Status をどこへ動かすかも予告する。**
+// `--dry-run` はボードへ1文字も書かないので、書かれる値をここで見せなければ、
+// 人間は実行して初めてそれを知ることになる。
+//
 // ctx: 実行に適用するコンテキスト（Status の読み取りに使う）。
 // leftover: Inspect が返した内訳。
 func (r *runner) printPlan(ctx context.Context, leftover *workspace.Leftover) {
@@ -659,7 +844,14 @@ func (r *runner) printPlan(ctx context.Context, leftover *workspace.Leftover) {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanPane, strings.Join(paneIDs(panes), " ")))
 	}
 
-	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanDirty, leftover.DirtyFiles))
+	// **数え切れなかったことを黙らない。**`git status --porcelain` の読み取りは
+	// 上限で打ち切られるので、その先に何ファイルあるかは分からない。
+	// 打ち切られた数をそのまま出すと、**失う量を実際より少なく見せる。**
+	if leftover.DirtyFilesTruncated {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanDirtyAtLeast, leftover.DirtyFiles))
+	} else {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanDirty, leftover.DirtyFiles))
+	}
 	switch {
 	case leftover.HasUpstream:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanUnpushed, leftover.UnpushedCommits))
@@ -669,6 +861,10 @@ func (r *runner) printPlan(ctx context.Context, leftover *workspace.Leftover) {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanDiffFromBase, leftover.Base))
 	default:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanNoDiffFromBase, leftover.Base))
+	}
+
+	if r.parkDeferred {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanParkPending, r.parkTarget()))
 	}
 }
 
@@ -701,19 +897,33 @@ func containsFold(list []string, value string) bool {
 	return false
 }
 
-// samePath は2つのパスが同じ場所を指すかを判定する。
+// sameOrUnder は path が root と同じ場所か、その内側かを判定する。
 //
 // **シンボリックリンクを解決してから比べる。**worktree の置き場所の下は
 // シンボリックリンクであることがあり、素朴な文字列比較では一致しない（3-22）。
 // 解決できないほう（消えたパスなど）は、Clean しただけの値で比べる。
 //
-// a / b: 比べるパス。空文字はどれにも一致しない。
-// 戻り値: 同じ場所を指していれば true。
-func samePath(a, b string) bool {
-	if a == "" || b == "" {
+// **内側も同じ扱いにする。**Claude Code が worktree の下の階層へ降りていても、
+// その pane はその worktree に属している。**降りた先を取りこぼすと、生きている pane を
+// 「もう無い」と判定して worktree ごと消す。**
+//
+// root: 基準にする worktree のパス。空文字はどれにも一致しない。
+// path: 判定するパス。空文字はどれにも一致しない。
+// 戻り値: 同じ場所か内側なら true。
+func sameOrUnder(root, path string) bool {
+	if root == "" || path == "" {
 		return false
 	}
-	return resolveOrClean(a) == resolveOrClean(b)
+	resolvedRoot := resolveOrClean(root)
+	resolved := resolveOrClean(path)
+	if resolved == resolvedRoot {
+		return true
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolved)
+	if err != nil {
+		return false
+	}
+	return rel != "." && !strings.HasPrefix(rel, "..")
 }
 
 // resolveOrClean はシンボリックリンクを解決する。解決できなければ Clean した値を返す。

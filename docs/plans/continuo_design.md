@@ -168,6 +168,11 @@
 - 3-35 画面に出す文言は資源から引く
 - 3-36 入れ方は、ネットワークインストーラーの1行にする
 - 3-37 間違えて着手した issue は `continuo abandon` で戻す
+- 3-37-1 `--dry-run` は段1 の後半を通らない
+- 3-37-2 取れたロックは実行の最後まで握る
+- 3-37-3 動いていないと判定したときこそ pane を確かめる
+- 3-37-4 消す相手は身元ファイルだけで決めない
+- 3-37-5 書き込む先の Status は消す前に確かめる
 
 **4. 人間が決めたこと**
 
@@ -3727,11 +3732,15 @@ CI から呼ぶときに使う。
 
 | 段 | 何をするか |
 | --- | --- |
-| 1 | `lock.Acquire` で continuo が動いているかを調べる（3-17）。動いていて、かつボードの Status が `tracker.active_states` に入っていれば、`--park`（既定 `tracker.failure_state`）へ動かして手を離させる。そのうえで**その worktree を cwd に持つ pane が消えるまで待つ。**上限は `herdr.read_timeout_ms` の10倍（既定50秒）で、**超えたら何も消さずに止まる** |
-| 2 | `workspace.Scan` で走査し、**身元ファイルの `issue_url` で照合する。**パスを owner / repo / 番号から組み立てない（`workspace.root` や `branch_template` を変えている環境で空振りする）。**0件は終了コード 0**（消すものが無い）、**2件以上は止める**（どれを消すかは人間が中身を見て決める） |
-| 3 | 失われるもの（issue と Status・worktree・branch と base・herdr の workspace と pane・コミットされていない変更のファイル数・push されていない commit の件数）を見せる。`--dry-run` はここで終わる。**失うものがあって `--force` が無ければ、何も消さずに終了コード 1** |
-| 4 | `workspace.Cleanup` を呼ぶ。worktree・pane・herdr の workspace・branch がまとめて消える（3-9） |
+| 1 | `lock.Acquire` で continuo が動いているかを調べる（3-17）。**取れたロックは実行の最後まで握る。**動いていて、**かつ `--dry-run` でなければ**、ボードの Status が `tracker.active_states` に入っているときに `--park`（既定 `tracker.failure_state`）へ動かして手を離させる。そのうえで**その worktree を cwd に持つ pane が消えるまで待つ。**上限は `herdr.read_timeout_ms` の10倍（既定50秒）で、**超えたら何も消さずに止まる** |
+| 2 | `workspace.Scan` で走査し、**身元ファイルの `issue_url` で照合する。**パスを owner / repo / 番号から組み立てない（`workspace.root` や `branch_template` を変えている環境で空振りする）。**照合できたものは置き場所のパスで検算する**（3-37-4）。**0件は終了コード 0**（消すものが無い。`--to` を指定していたら、動かしていないことを1行出す。3-37-5）、**2件以上は止める**（どれを消すかは人間が中身を見て決める） |
+| 2 の後 | **これから書きうる Status の値を確かめる**（3-37-5）。`--to` と park の先がボードの選択肢にあるか、park の先が `tracker.active_states` に入っていないか。**読むだけなので `--dry-run` でも通す** |
+| 3 | 失われるもの（issue と Status・worktree・branch と base・herdr の workspace と pane・コミットされていない変更のファイル数・push されていない commit の件数）を見せる。**ファイル数は `git status --porcelain` の読み取りが上限で打ち切られたら「%d ファイル以上」と出す**（`Leftover.DirtyFilesTruncated`。打ち切った行数をそのまま出すと、失う量を実際より少なく見せる）。**`--dry-run` で継続監視が動いているときは、実行したら Status をどこへ動かすかも予告する。**`--dry-run` はここで終わる。**失うものがあって `--force` が無ければ、何も消さずに終了コード 1** |
+| 4 | **継続監視が動いていないと判定したときは、消す前に pane の生死を確かめる**（3-37-3）。そのうえで `workspace.Cleanup` を呼ぶ。worktree・pane・herdr の workspace・branch がまとめて消える（3-9） |
 | 5 | `--to` があれば Status をその値へ動かす。**無ければ動かさない** |
+
+**仕様は [docs/spec/usecases/particular_case/着手を取り消す.rucm.md](../spec/usecases/particular_case/着手を取り消す.rucm.md) が持つ。**
+段と RUCM のステップ番号の対応も、そこの表にある。
 
 **なぜ Status を既定で動かさないのか。**
 
@@ -3746,12 +3755,109 @@ CI から呼ぶときに使う。
 | `terminal_states`（`Done`） | **やっていないものが完了として残る。**しかも 3-9 の片付けの経路がもう一度走る |
 
 だから既定では「Status は動かしていません。ボードで決めてください。」と1行出して終わる
-（[internal/abandon/abandon.go:502-506](../../internal/abandon/abandon.go#L502-L506)）。
+（[internal/abandon/abandon.go:683-688](../../internal/abandon/abandon.go#L683-L688)）。
 **動かす先を知っているのは人間だけなので、`--to` で明示させる。**
 
 **判断は書き直さない。**コミットされていない変更と push されていない commit の判定は
-[internal/workspace/inspect.go:76-137](../../internal/workspace/inspect.go#L76-L137) の `Inspect` が
+[internal/workspace/inspect.go:80-144](../../internal/workspace/inspect.go#L80-L144) の `Inspect` が
 **Cleanup と同じ `leftoverReasons` を呼んで**出す。Inspect が足すのは、人間に見せるための件数だけである。
+
+### 3-37-1. `--dry-run` は段1 の後半を通らない
+
+**言いたいこと。**通ると、**見せるだけのはずの実行がボードを書き換え、エージェントに手を離させる。**
+README は「先に `--dry-run` を叩け」と勧めているので、**勧めた手順が副作用を起こす。**
+
+**採るやり方。**段1 の後半（手を離させる書き込みと pane 待ち）を
+**「継続監視が動いている**かつ**`--dry-run` でない」ときだけ通す。**
+`--dry-run` のときは、代わりに段3 で**実行したら動かす先の Status を1行で予告する。**
+
+```
+  実行したら       : Status を "Blocked" へ動かして continuo に手を離させ、pane が閉じるのを待ちます（Status が tracker.active_states に入っているときだけ動かします）
+```
+
+**予告が要る理由。**`--dry-run` はボードへ1文字も書かないので、
+**書かれる値をここで見せなければ、人間は実行して初めてそれを知る。**
+
+**通していたときに起きたこと。**継続監視が動いていると Status が `failure_state` へ実際に書き込まれ、
+pane が閉じるまで最大50秒待ち、**閉じなければ一覧を1行も出さずに終了コード 1 で終わっていた。**
+
+### 3-37-2. 取れたロックは実行の最後まで握る
+
+**言いたいこと。**判定のために取ったロックをその場で手放すと、
+**直後に継続監視が起動でき、その足元から worktree を消す。**
+
+**採るやり方。**`isRunning` が獲得した `Unlocker` を返し、`run` が `defer` で最後に解放する。
+
+| 握らないと | 握ると |
+| --- | --- |
+| abandon が git と herdr の RPC を叩いているあいだ（秒単位）に継続監視が起動し、**その worktree を消しにいく** | 起動しようとした継続監視は「既に起動しています」で止まる。**消されるより望ましい** |
+
+### 3-37-3. 動いていないと判定したときこそ pane を確かめる
+
+**言いたいこと。**ロックだけを根拠に消しにいってはならない。
+**ロックファイルの場所は環境変数で決まるので、食い違うことがある。**
+
+| 何で場所が決まるか | 食い違う場面 |
+| --- | --- |
+| ロックファイル: `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` | launchd から起動した継続監視と、端末から叩いた `continuo abandon` |
+| herdr の socket: 設定の `herdr.socket`（**環境変数では動かない**） | 食い違わない |
+
+**採るやり方。**段3 と段4 のあいだに、**継続監視が動いていないと判定したときだけ** pane を引き、
+**1件でもあれば待たずに止まる**（手を離させていない以上、待っても閉じない）。
+
+**pane の照合は「一致、または内側」である。**Claude Code が worktree の下の階層へ降りると、
+完全一致だけでは「pane はもう無い」と判定して**生きている pane ごと worktree を消す。**
+継続監視の hook の判定も同じ形である
+（[internal/orchestrator/hookinput.go:55-71](../../internal/orchestrator/hookinput.go#L55-L71) の `acceptHookCwd`）。
+**待つ側は広く取るほうが安全である。**多めに拾えば待つか止まるだけだが、少なく拾うと消してしまう。
+
+### 3-37-4. 消す相手は身元ファイルだけで決めない
+
+**言いたいこと。**消す相手を決める `issue_url` は、**その worktree のエージェントが書き換えられる。**
+検算しなければ、**worktree A のエージェントが自分の `issue_url` を issue B に書き換えるだけで、
+人間が B を取り消したとき A が消える。**
+
+**採るやり方。**身元ファイルの他の値と同じく、**現物と突き合わせる。**
+
+| 身元ファイルの値 | 何と突き合わせるか |
+| --- | --- |
+| `branch` | git の現物 |
+| `herdr_workspace_id` | herdr の現物 |
+| `project_item_id` | ボード |
+| **`issue_url`** | **置き場所のパスの owner（2階層目）とリポジトリ名（3階層目）**（3-22 の固定4階層。パスは 3-20 の封じ込め検査を通っているので書き換えられない） |
+
+取り出しは `workspace.Manager.OwnerRepoOf` が持つ
+（[internal/workspace/repo.go:70-85](../../internal/workspace/repo.go#L70-L85)）。
+**食い違ったら候補から外すだけで、消しはしない。**原因が書き換えとは限らず、
+人間が置き場所を移した跡かもしれない。何があったかは1行残す。
+
+**あわせて issue の番号の書き方を1通りに固定する。**`ParseIssueURL` が `+42` と `042` を 42 として
+受け付けていた。**同じ相手を指す URL が何通りもできる。**10進の数字だけ・先頭が 0 でないものだけを通す。
+
+### 3-37-5. 書き込む先の Status は消す前に確かめる
+
+**言いたいこと。**`--to` の綴り違いが分かるのが段5 だと、
+**worktree と branch を失ったうえに Status も動かない。**戻す手段は無い。
+
+**採るやり方。**段2 の直後に、**書きうる値だけ**を確かめる段を1つ置く（`verifyTargets`）。
+
+| 確かめること | 確かめないと何が起きるか |
+| --- | --- |
+| `--to` と park の先がボードの Status の選択肢にあるか | `updateProjectV2ItemFieldValue` は選択肢に無い名前を断るが、**それを呼ぶのは worktree を消したあとである** |
+| park の先が `tracker.active_states` に入っていないか | そこへ動かしても**継続監視は手を離さず、pane も閉じない。**pane の一覧がたまたま空を返した瞬間に、**手を離していない issue の worktree を消す** |
+
+**`tracker.failure_state` が作業中の状態でないことは設定の検証が保証しているが、
+`--park` はその検証を通らない。**だから実行のたびに確かめる。
+
+**照合はボードを読むだけで、1文字も書かない**ので `--dry-run` でも通す。
+確かめるのは**書きうる値がある実行だけ**である（`--to` があるか、継続監視が動いているか）。
+worktree が1つも見つからなかった実行では、そもそもここへ来ない（`gh` を起動して API 枠を使わない）。
+
+**`--to` を黙って捨てない。**worktree が0件のときは Status を動かさずに終わるが、
+**指定した人間は「動いた」と受け取る。**「`--to` に指定した値へは動かしていません」と1行出す。
+
+**0件のときに Status だけを動かすことはしない。**worktree が無い理由は「もう片付けた」とは限らず、
+**URL の打ち間違い**でもある。**打ち間違えた相手の Status を動かすほうが害が大きい。**
 
 ---
 
