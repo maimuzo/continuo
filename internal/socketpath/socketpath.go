@@ -35,7 +35,8 @@ const LockFileName = "continuo.lock"
 // 探索順（上から順に、最初に見つかったものを使う）:
 //  1. envRuntimeDir（環境変数 CONTINUO_RUNTIME_DIR。運用者の逃げ道）
 //  2. 環境変数 XDG_RUNTIME_DIR/continuo（Linux の本番。コンテナ内では設定されないことが
-//     あるので必須にはしない）
+//     あるので必須にはしない。**設定されていても、そのディレクトリが実在しなければ使わない** —
+//     `/run/user/<uid>` を作るのは systemd であり、アプリが作ってよい場所ではない）
 //  3. macOS なら $TMPDIR/continuo（既にユーザー専用で drwx------）
 //  4. どれも無ければ ~/.continuo/run
 //
@@ -57,7 +58,19 @@ func RuntimeDir(envRuntimeDir string) (string, error) {
 		if err := checkAbs(xdg, i18n.T(i18n.KeySocketpathSourceEnvXDGRuntimeDir)); err != nil {
 			return "", err
 		}
-		return filepath.Join(xdg, "continuo"), nil
+		// **そのディレクトリが実在するときだけ使う。**
+		//
+		// `/run/user/<uid>` を作るのは systemd であって、アプリではない。
+		// **systemd が動いていない環境（WSL など）では、環境変数だけが設定されていて
+		// ディレクトリが無い。**そこへ `MkdirAll` すると `permission denied` で落ちる。
+		// 実際、`continuo doctor` が8項目すべて通るのに起動だけが落ちた（issue #9）。
+		//
+		//	mkdir /run/user/1000: permission denied
+		//
+		// **無ければ次の候補（~/.continuo/run）へ落とす。**
+		if fi, err := os.Stat(xdg); err == nil && fi.IsDir() {
+			return filepath.Join(xdg, "continuo"), nil
+		}
 	}
 
 	if runtime.GOOS == "darwin" {
@@ -65,7 +78,13 @@ func RuntimeDir(envRuntimeDir string) (string, error) {
 			if err := checkAbs(tmp, i18n.T(i18n.KeySocketpathSourceEnvTMPDir)); err != nil {
 				return "", err
 			}
-			return filepath.Join(tmp, "continuo"), nil
+			// **XDG と同じく、実在するときだけ使う。**
+			// **これが macOS の本番経路である。**手で `TMPDIR` を export している、
+			// per-user の一時ディレクトリが掃除された、launchd から起動した、といった場合に
+			// 実在しないことがある。**実在を見ないと、起動してから初めて落ちる。**
+			if fi, err := os.Stat(tmp); err == nil && fi.IsDir() {
+				return filepath.Join(tmp, "continuo"), nil
+			}
 		}
 	}
 
@@ -74,6 +93,35 @@ func RuntimeDir(envRuntimeDir string) (string, error) {
 		return "", i18n.Errorf(i18n.KeySocketpathRuntimeDirHomeDirFailed, err)
 	}
 	return filepath.Join(home, ".continuo", "run"), nil
+}
+
+// Prepare は、hook を受ける socket を実際に使える状態にして、そのパスを返す。
+//
+// **「決める」「用意する」「長さを確かめる」を1つの入口にまとめたものである。**
+//
+// 分かれていたときは、`RuntimeDir` が返した値を `EnsureDir` へ食わせるテストが
+// リポジトリに1本も無かった。**その継ぎ目を、実在しない `XDG_RUNTIME_DIR` が通り抜けて
+// 利用者に届いた**（issue #9。`continuo doctor` は8項目すべて通るのに起動だけが
+// `mkdir /run/user/1000: permission denied` で落ちた）。
+//
+// **本番もテストも、この1つの入口を通す。**そうすれば、決めた値が外の世界で
+// 通用するかを、必ず誰かが確かめることになる。
+//
+// envRuntimeDir: 環境変数 CONTINUO_RUNTIME_DIR の値。空文字なら未指定として扱う。
+// explicitListen: front matter の claude.hook_bridge.listen。空文字なら既定を使う。
+// 戻り値: 実際に listen できる socket の絶対パスと、失敗したときのエラー。
+// **ディレクトリは作られている**（socket そのものはまだ作らない）。
+func Prepare(envRuntimeDir string, explicitListen *string) (string, error) {
+	// **明示されていれば、その置き場所の親を用意する。**
+	// 明示されていなければ、探索順で決めた置き場所を用意する。
+	sock, err := ResolveHookSocketPath(explicitListen, envRuntimeDir)
+	if err != nil {
+		return "", err
+	}
+	if err := EnsureDir(filepath.Dir(sock)); err != nil {
+		return "", err
+	}
+	return sock, nil
 }
 
 // checkAbs は socket の置き場所として渡されたパスが絶対パスかどうかを検査する。

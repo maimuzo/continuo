@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/maimuzo/continuo/internal/config"
 	"net"
 	"os"
 	"os/exec"
@@ -60,6 +61,12 @@ type agentSession struct {
 	SessionUUID string
 	// ResumeUUID は `--resume` で渡されたセッション UUID である（復帰のときだけ）。
 	ResumeUUID string
+	// GetCount は `agent.get` がこの agent について呼ばれた回数である。
+	//
+	// **本物の herdr は `agent.start` の直後に `unknown` / `interactive_ready: false` を返す**
+	// （socket API は起動完了を待たない。2026-08-21 に実測）。
+	// **数えているのは、その並びを再現するためである**（設計 6-8）。
+	GetCount int
 }
 
 // fakeHerdr は herdr の socket API の代わりに使う偽のサーバである。
@@ -95,6 +102,14 @@ type fakeHerdr struct {
 	onPrompt func(sess *agentSession, text string)
 	// prompts は `agent.prompt` で送られた本文を送られた順に並べたものである。
 	prompts []string
+	// readyAfterGets は、`agent.get` が何回呼ばれたら `idle` / `interactive_ready: true`
+	// を返すかである。
+	//
+	// **既定は1。**つまり最初の1回は必ず `unknown` / `false` を返す。
+	// **これが0だと、continuo が「起動を待つ」経路を1度も通らない。**
+	// 実際、本物は `agent.start` の直後は必ず `unknown` なのに、
+	// **テスト用herdr mock だけが最初から `true` を返していた**（設計 6-8）。
+	readyAfterGets int
 }
 
 // newFakeHerdr はテスト用herdr mock を1本立て、着手が最後まで通るだけの既定の台本を入れる。
@@ -115,9 +130,12 @@ func newFakeHerdr(t *testing.T, dir string) *fakeHerdr {
 	fh := &fakeHerdr{
 		SocketPath: socketPath,
 		handlers:   map[string]herdrHandler{},
-		workspaces: map[string]string{},
-		panes:      map[string]string{},
-		agents:     map[string]*agentSession{},
+		// **最初の1回は `unknown` / `interactive_ready: false` を返す。**
+		// 本物の並びに合わせ、continuo の「待って再度尋ねる」経路を必ず通す（設計 6-8）。
+		readyAfterGets: 1,
+		workspaces:     map[string]string{},
+		panes:          map[string]string{},
+		agents:         map[string]*agentSession{},
 	}
 	fh.installDefaults(t)
 
@@ -255,7 +273,9 @@ func (fh *fakeHerdr) workspaceFor(path string) (string, string) {
 func (fh *fakeHerdr) installDefaults(t *testing.T) {
 	fh.Handle("ping", func(map[string]any) (any, *rpcErr) {
 		return map[string]any{
-			"type": "pong", "version": "0.8.0-fake", "protocol": 19,
+			// **直書きしない。**既定値から引く。
+			// 直書きしていたときは、既定値を上げた瞬間に E2E だけが落ちた。
+			"type": "pong", "version": "0.8.0-fake", "protocol": config.DefaultConfig().Herdr.Protocol,
 			"capabilities": map[string]any{"live_handoff": true},
 		}, nil
 	})
@@ -417,22 +437,54 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 		if sess.SessionUUID == "" {
 			t.Errorf("agent.start に --session-id も --resume も渡っていません: %v", args)
 		}
+		// **本物と同じく `unknown` / `interactive_ready: false` を返す。**
+		// socket API の `agent.start` は起動完了を待たずに返る（2026-08-21 に実測）。
 		return map[string]any{
 			"type": "agent_started",
 			"agent": map[string]any{
-				"name": name, "agent_status": "idle", "interactive_ready": true, "pane_id": paneID,
+				"name": name, "agent_status": "unknown", "interactive_ready": false, "pane_id": paneID,
 			},
 		}, nil
 	})
 
-	agentInfo := func(params map[string]any) (any, *rpcErr) {
+	// agent.get は、呼ばれた回数が readyAfterGets に届くまで `unknown` / `false` を返す。
+	//
+	// **本物の Claude Code は 2.5〜3秒かけて立ち上がる**（2026-08-21 に実測）。
+	// その間 herdr は `unknown` / `false` を返し続ける。
+	// **continuo 側の「待って再度尋ねる」経路は、ここが偽を返さないと1度も走らない。**
+	fh.Handle("agent.get", func(params map[string]any) (any, *rpcErr) {
+		target, _ := params["target"].(string)
+		fh.mu.Lock()
+		sess := fh.agents[target]
+		threshold := fh.readyAfterGets
+		ready := true
+		if sess != nil {
+			sess.GetCount++
+			ready = sess.GetCount > threshold
+		}
+		fh.mu.Unlock()
+		if sess == nil {
+			return nil, &rpcErr{Code: "agent_not_found", Message: target}
+		}
+		if !ready {
+			return map[string]any{
+				"type":  "agent_info",
+				"agent": map[string]any{"name": target, "agent_status": "unknown", "interactive_ready": false},
+			}, nil
+		}
+		return map[string]any{
+			"type":  "agent_info",
+			"agent": map[string]any{"name": target, "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	// agent.wait は「その状態になるまで待つ」ものなので、待ち終わった姿を返す。
+	fh.Handle("agent.wait", func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
 			"type":  "agent_info",
 			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
-	}
-	fh.Handle("agent.get", agentInfo)
-	fh.Handle("agent.wait", agentInfo)
+	})
 	fh.Handle("agent.send_keys", func(map[string]any) (any, *rpcErr) {
 		return map[string]any{"type": "keys_sent"}, nil
 	})

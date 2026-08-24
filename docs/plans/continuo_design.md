@@ -4128,7 +4128,7 @@ claude:
 herdr:
   socket: ~/.config/herdr/herdr.sock        # herdr が待ち受けている socket。既定の場所をそのまま書いてある。
                                             # 環境変数で切り替えるなら ${HERDR_SOCKET_PATH} と書く。未定義なら起動を止める
-  protocol: 19                              # herdr の socket API の版。起動時に照合して、合わなければ止める
+  protocol: 20                              # herdr の socket API の版。起動時に照合して、合わなければ止める（herdr 0.8.2 が 20）
   read_timeout_ms: 5000                     # herdr の socket が応答を返すまでの制限時間。待ちを伴う呼び出しには使わない
   startup_timeout_ms: 60000                 # herdr がエージェントを起動し終えるまで待つ時間
   worktree:
@@ -4417,6 +4417,25 @@ CFG を作り直し、ハッシュを貼り直すところまでを1つの作業
 **この順序を守る。**欠陥を見つけたら、**まず RUCM を直す。**そのあと CFG を作り直し、
 テストコードを書く。**逆順にすると、テストは通るのに仕様書は嘘のまま残る。**
 
+**次に手を付けるところ。**`doctor` の RUCM が持たない構造のせいで、**CFG が倍々に膨らむ。**
+
+| いつ | 検査の項目 | テストパス | cfg.json |
+| --- | --- | --- | --- |
+| 8項目のとき | 8 | 249本 | 約1.4MB |
+| **9項目にしたら** | 9 | **496本** | **2.8MB** |
+
+**原因。**`doctor` の RUCM は**項目ごとに独立した代替フローを持ち（16本ある）、
+どれも基本フローへ RESUME する。**そのため「どれが落ちたか」の組み合わせが全部パスになる。
+**項目を1つ足すと、パスはおよそ倍になる**（8項目 249本 → 9項目 496本。実測）。
+**10項目目を足せば 1000本・5MB を超える。**
+
+**直し方。****項目の並びを DO-UNTIL の1周として書く**（「次の項目を検査する」を繰り返し、
+落ちたものを集める）。**そうすればパスは項目数に比例する。**
+**この書き換えは、10項目目を足す前に済ませる。**それまでは 2.8MB を抱える。
+
+**書き換えると全テストのハッシュを貼り直すことになる**（`RUCM-CFG-SHA256` が変わる）。
+だから項目を足すのと同時にはやらない。**独立した1回の作業にする。**
+
 ### 6-4. テストの範囲をどこで止めるか
 
 **言いたいこと。**未実行の行を全部消そうとすると、テストのための小細工が本体を歪める。
@@ -4602,6 +4621,158 @@ var abandonChain = []string{
 | **CI と同じ状況を手元で作る** | `sh scripts/test-like-ci.sh`（PATH から claude と herdr を隠し、LANG も外す） |
 | **シェルは両方で試す** | `test/install` が `sh` と `dash` の両方で全テストを走らせる |
 | **`init` と `doctor` で引数の扱いを揃える** | どちらもディレクトリを受け付け、その中の `WORKFLOW.md` を見る |
+
+**逆向きもある。手元（macOS）で通って CI（ubuntu）で落ちた。**
+
+| 何が違うか | macOS | Linux |
+| --- | --- | --- |
+| Unix domain socket のパス長 | **103 バイトまで**（`sun_path[104]`） | **107 バイトまで**（`sun_path[108]`） |
+
+**`MaxPathLen = 103` は両対応のために小さい方へ揃えた方針の値である。**
+それを「1バイト超えたら OS が断る」と読み替えたテストを書いたら、**Linux で 104 バイトが通って落ちた。**
+
+**直し方。**OS ごとの定数を持たず、**1バイトずつ伸ばして境界そのものを測る。**
+測った境界が `MaxPathLen` 以上であることだけを確かめる（**短いなら方針が甘い。長いのは構わない**）。
+測った値はログに残すので、OS を変えたときに何バイトだったかが分かる。
+
+**教訓。****「方針として決めた値」と「OS が実際に断る値」を、同じものとして検査してはならない。**
+
+---
+
+### 6-8. 決めた値を、外の世界に食わせる
+
+**言いたいこと。**テストが「値を決める関数」の戻り値を、**一度も OS に食わせていなかった。**
+そのため「文字列の組み立てが合っている」ことしか確かめられず、**実在しない値が通り抜けた。**
+
+**何が起きたか**（issue #9）。
+
+```go
+// 直す前のテスト
+t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")   // ← 実在しない
+got, _ := socketpath.RuntimeDir("")
+want := filepath.Join("/run/user/1000", "continuo")
+```
+
+**このテストが確かめているのは `filepath.Join` の結果だけである。**
+**期待値の出どころがテストの中にあるので、OS は一票も持っていない。**
+
+**その結果。**`RuntimeDir` は実在しない値をそのまま返し、呼び出し側の `EnsureDir` が
+`/run/user/<uid>` を作ろうとして落ちた。**`continuo doctor` は8項目すべて通るのに、
+起動だけが `permission denied` で落ちた。**
+
+**同じ穴に7つ残っていた。**
+
+| 短縮名 | 何を確かめていなかったか |
+| --- | --- |
+| **TMPDIR の実在** | **macOS の本番経路。**XDG の枝だけ直して、隣の枝が残っていた |
+| **置き場所の継ぎ目** | `RuntimeDir`（決める）→ `EnsureDir`（作る）を繋いだテストが**1本も無かった** |
+| **パス長の上限** | `MaxPathLen = 103` は実測由来なのに、**bind を1度もしていなかった** |
+| **protocol の期待値** | 5箇所に直書きされ、**実物の herdr に1度も尋ねていなかった** |
+| **branch 名** | 「git の branch 名に使える」と保証しながら、**git に1度も通していなかった** |
+| **起動の並び** | 偽 herdr が `agent.start` の直後から `interactive_ready: true` を返していた。**本物は `unknown` / `false` である**（実測）。待つ経路が1度も走らなかった |
+| **逃げ道の環境変数** | E2E が全部 `CONTINUO_RUNTIME_DIR` を渡していた。**探索順の2番目以降が1度も走らなかった** |
+
+**どう直したか。**
+
+| 何 | どうしたか |
+| --- | --- |
+| **入口を1本にする** | `socketpath.Prepare` が「決める」「作る」「長さを見る」をまとめる。**`daemon` もこれを通る** |
+| **外の世界に食わせる** | 探索順の各段で、実際に `net.Listen("unix", …)` するテストを書いた |
+| **期待値を1箇所から引く** | 偽 herdr の protocol を `config.DefaultConfig()` から引く |
+| **doctor が起動を保証する** | 「hook の置き場所」の検査を足し、**実際に listen して閉じる**（9項目になった） |
+| **git に判定させる** | `Normalize` の結果を `git check-ref-format --branch` に食わせるテストを書いた |
+| **偽物を本物の並びに合わせる** | `agent.start` は `unknown` / `false` を返す。`agent.get` は最初の1回だけ `false` を返す（`readyAfterGets`。既定1） |
+| **逃げ道を渡さない E2E を1本置く** | `OmitRuntimeDirEnv` を真にして `TMPDIR` だけを渡し、**本番の探索順で決めさせて1件通す** |
+
+**git が4件を拒んだ。**文字の置換だけでは通らない形が残っていた。
+
+| 通らなかった形 | 例 | どう潰したか |
+| --- | --- | --- |
+| 要素の先頭のドット | `feature/.github` | 先頭だけ `_` にする（`feature/_github`） |
+| `.lock` で終わる要素 | `feature/docs.lock` | `_lock` にする（`feature/docs_lock`） |
+| 連続するドット | `a..b` | `__` にする（`a__b`） |
+| 空の要素・末尾のスラッシュ | `a//b` / `a/` | 要素を落とす（`a/b`） |
+
+**潰したら警告を1件積む。**`internal/normalize/normalize.go` の `collapseDotSegments` と
+`collapseRefSegments` が担う。**issue の題名は自由な文字列なので、この4つは実際に来る。**
+
+**次から機械で弾く。**
+
+`test/internal/testdesign/no_fake_paths_test.go` が、`t.Setenv` の第2引数に
+**絶対パスのリテラル**が渡っていないかを、134ファイル分 `go/parser` で走査する。
+対象は `XDG_RUNTIME_DIR` / `TMPDIR` / `HOME` / `CONTINUO_RUNTIME_DIR`。
+
+**そのパスを continuo が作らない場合だけ、マーカーで許す。**
+
+```go
+// test-design:allow-fake-path
+t.Setenv("HOME", "/home/tester")   // herdr の socket のパスを組み立てるだけ
+```
+
+**この検査は、置いた直後に2件見つけた。**
+
+**「テストが通った」を根拠にしない。**上の2つは、**わざと壊して落ちることを確かめた。**
+
+| 何を壊したか | 期待どおり落ちたか |
+| --- | --- |
+| `readyAfterGets` を 0 に戻す（＝以前の偽の並び） | `agent.get が 1 回しか呼ばれていません` で落ちた |
+| `Normalize` に git の規則を潰す段を入れる前 | `git が branch 名として受け付けません` で4件落ちた |
+
+**負のテストを通していないものは、「検査を置いた」と言わない。**
+検査が効いていないのに置いてあるほうが、無いより悪い（守られていると誤解する）。
+
+---
+
+### 6-9. 待つ条件が、確かめたいものより手前にある
+
+**言いたいこと。**テストが「Status が変わったこと」を待って、**そのあとの後始末を観測していた。**
+Status は後始末より前に書かれるので、**間に合うかどうかは運である。**
+
+**なぜ競合するか。**
+
+| 誰が | 何をする |
+| --- | --- |
+| `Tick` | `dispatchCandidates` を**goroutine で起こして即座に返る** |
+| その goroutine | Status を書く → コメント → after_run → **worker を止める** → worktree を片付ける → run を外す |
+| テスト | **Status を待って**、`Methods()` に `pane.close` があるかを見る |
+
+**Status を検知した時点で、`pane.close` はまだ来ていないことがある。**
+
+**どう出たか。**手元では通り、**CI の `-race`（ubuntu）で落ちた。**
+
+```
+--- FAIL: TestTurn_blockedが返ったらescを送ってから人間へ渡す (0.07s)
+    人間へ渡すときに worker を止めていない:
+    [worktree.open pane.list pane.rename agent.list agent.start agent.get agent.prompt agent.send_keys]
+```
+
+**手元では再現しなかった。**`-race -count=100` を2度回しても200回すべて通った（2026-08-24 実測）。
+**根拠は再現ではなくコードの順序である**（`finishRunClaimed` が Status → `stopWorker` の順で呼ぶ）。
+
+**どう直したか。****run が `o.runs` から外れるのを待つ。**
+`release` は後始末の最後なので、ここが空になれば `pane.close` も片付けも済んでいる。
+
+```go
+func (fx *fixture) WaitRunsDrained(t *testing.T, d time.Duration) {
+	t.Helper()
+	waitFor(t, d, "走行中の run が無くなる（後始末まで終わる）", func() bool {
+		return len(fx.Orc.RunViews()) == 0
+	})
+}
+```
+
+**同じ形が7件あった。**「`waitFor` で Status を待ち、そのあと `Methods()` / `CountMethod` /
+`Prompts()` を読む」テストを機械で洗い出して、全部に入れた。
+
+| ファイル | 件数 |
+| --- | --- |
+| `dispatch_test.go` | 2 |
+| `rucm_startup_test.go` | 2 |
+| `turn_test.go` | 2 |
+| `group_test.go` | 1 |
+
+**この形は今後も生える。**新しいテストを書くときは、**待つ条件に「確かめたいものが揃ったこと」を含める。**
+Status は「始まった合図」であって「終わった合図」ではない。
 
 ---
 

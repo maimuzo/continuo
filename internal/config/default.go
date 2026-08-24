@@ -103,7 +103,7 @@ func DefaultConfig() *Config {
 			// 環境変数で切り替えたい利用者は WORKFLOW.md に ${HERDR_SOCKET_PATH} と書く。
 			// その場合、未定義なら起動を止める（既定値へは落ちない。設計 5-5）。
 			Socket:           "~/.config/herdr/herdr.sock",
-			Protocol:         19,
+			Protocol:         20,
 			ReadTimeoutMs:    5000,
 			StartupTimeoutMs: 60000,
 			Worktree: HerdrWorktreeConfig{

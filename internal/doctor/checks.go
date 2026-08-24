@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/maimuzo/continuo/internal/socketpath"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
@@ -42,6 +45,81 @@ func checkConfig(path string) (Result, loadedConfig) {
 		Symbol: SymbolOK,
 		Detail: i18n.T(i18n.KeyDoctorConfigOK, loaded.Path),
 	}, loadedConfig{OK: true, Config: loaded.Config}
+}
+
+// checkRuntimeDir は、hook を受ける socket を実際に置けるかを検査する。
+//
+// **文字列を組み立てるだけでは足りない。**決めた場所にディレクトリを作り、
+// unix socket を listen して、すぐ閉じるところまで通す。
+//
+// **これが無かったとき、8項目すべてが ✓ で「足りないものはありません」と出たのに、
+// 起動だけが落ちた**（issue #9）。
+//
+//	mkdir /run/user/1000: permission denied
+//
+// `XDG_RUNTIME_DIR` が設定されているのにディレクトリが無い環境（systemd が
+// 動いていない WSL など）で起きる。**doctor は「起動できるか」を答えるべきである。**
+//
+// cfg: 設定。読めていなければ検査できない。
+// configSymbol: 設定ファイルの検査の結果。
+// 戻り値: 検査の結果。
+// daemonEnvRuntimeDir は実行時ディレクトリを差し替える環境変数である。
+//
+// **`internal/daemon` の定数と同じ値でなければならない。**
+// doctor が daemon を import すると循環するので、ここに置く。
+// **食い違うと、doctor が見る場所と起動が使う場所がずれる。**
+const daemonEnvRuntimeDir = "CONTINUO_RUNTIME_DIR"
+
+func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol) Result {
+	if configSymbol != SymbolOK {
+		return Result{
+			Label:  LabelRuntimeDir,
+			Symbol: SymbolUnknown,
+			Detail: i18n.T(i18n.KeyDoctorRuntimeDirConfigUnreadable),
+		}
+	}
+
+	sock, err := socketpath.Prepare(os.Getenv(daemonEnvRuntimeDir), cfg.Config.Claude.HookBridge.Listen)
+	if err != nil {
+		return Result{
+			Label:    LabelRuntimeDir,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorRuntimeDirFailed, err),
+			Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
+		}
+	}
+
+	// **本当に listen できるかまで確かめる。**
+	// パス長の上限、権限、既に使われている、のどれでもここで分かる。
+	//
+	// **既に continuo が動いていれば、その socket は使われている。**
+	// それは「用意できない」ではないので、その場合だけは通す。
+	ln, lerr := net.Listen("unix", sock)
+	if lerr != nil {
+		if errors.Is(lerr, syscall.EADDRINUSE) {
+			return Result{
+				Label:  LabelRuntimeDir,
+				Symbol: SymbolOK,
+				Detail: i18n.T(i18n.KeyDoctorRuntimeDirOK, sock),
+			}
+		}
+		return Result{
+			Label:    LabelRuntimeDir,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorRuntimeDirFailed, lerr),
+			Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
+		}
+	}
+	_ = ln.Close()
+	// **作った socket は消す。**残すと、次に起動する continuo が
+	// 「既に動いている」と誤解しかねない。
+	_ = os.Remove(sock)
+
+	return Result{
+		Label:  LabelRuntimeDir,
+		Symbol: SymbolOK,
+		Detail: i18n.T(i18n.KeyDoctorRuntimeDirOK, sock),
+	}
 }
 
 // checkHerdr は herdr の socket の ping を呼び、protocol が設定と一致するかを検査する

@@ -100,6 +100,11 @@ func Normalize(raw string) (SafeName, []Warning) {
 		result = collapsed
 		lost = true
 	}
+	// **空の要素と末尾のスラッシュを潰す。**git が拒む（`a//b` と `a/`）。
+	if collapsed, changed := collapseRefSegments(result); changed {
+		result = collapsed
+		lost = true
+	}
 	if result == "" {
 		result = "_"
 		lost = true
@@ -133,6 +138,7 @@ func collapseDotSegments(raw string) (string, bool) {
 	if !strings.Contains(raw, ".") {
 		return raw, false
 	}
+	// 以下、要素ごとに git の refname の規則へ寄せる。
 	segments := strings.Split(raw, "/")
 	changed := false
 	for i, seg := range segments {
@@ -140,8 +146,32 @@ func collapseDotSegments(raw string) (string, bool) {
 		case ".":
 			segments[i] = "_"
 			changed = true
+			continue
 		case "..":
 			segments[i] = "__"
+			changed = true
+			continue
+		}
+		// **git の refname の規則を潰す**（`git check-ref-format --branch` で実測）。
+		//
+		// 文字の置換だけでは通らない形が4つある。
+		// **「git の branch 名に使える」と保証しているのに、git に1度も通していなかった**
+		// （設計 6-8）。
+		if strings.HasPrefix(seg, ".") {
+			// 要素の先頭のドットは拒まれる（`.github` など）。
+			segments[i] = "_" + seg[1:]
+			seg = segments[i]
+			changed = true
+		}
+		if strings.HasSuffix(seg, ".lock") {
+			// `.lock` で終わる要素は拒まれる（git が使う拡張子である）。
+			segments[i] = seg[:len(seg)-len(".lock")] + "_lock"
+			seg = segments[i]
+			changed = true
+		}
+		if strings.Contains(seg, "..") {
+			// 連続するドットは、要素の途中にあっても拒まれる（`a..b`）。
+			segments[i] = strings.ReplaceAll(seg, "..", "__")
 			changed = true
 		}
 	}
@@ -149,6 +179,38 @@ func collapseDotSegments(raw string) (string, bool) {
 		return raw, false
 	}
 	return strings.Join(segments, "/"), true
+}
+
+// collapseRefSegments は、git の refname として通らない要素の並びを潰す。
+//
+// **空の要素と末尾のスラッシュは、git が拒む**（`a//b` と `a/` の両方）。
+// 文字の置換では消えないので、ここで潰す。
+//
+// raw: 置換を済ませた文字列。
+// 戻り値の1つ目: 潰したあとの文字列。
+// 戻り値の2つ目: 1箇所でも潰したかどうか。
+func collapseRefSegments(raw string) (string, bool) {
+	if !strings.Contains(raw, "/") {
+		return raw, false
+	}
+	segments := strings.Split(raw, "/")
+	out := make([]string, 0, len(segments))
+	changed := false
+	for _, seg := range segments {
+		if seg == "" {
+			// 空の要素（`a//b` の間、`a/` の末尾）を落とす。
+			changed = true
+			continue
+		}
+		out = append(out, seg)
+	}
+	if !changed {
+		return raw, false
+	}
+	if len(out) == 0 {
+		return "_", true
+	}
+	return strings.Join(out, "/"), true
 }
 
 // CommandArgs は SafeName のスライスから、外部コマンドへ渡す引数の文字列スライスを作る。

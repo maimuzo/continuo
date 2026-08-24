@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3694d01e97e7ad5e0aa6e13acf8682062d9f9eaa7e533ecf5303f16021130229", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "25edff938113927b1caedf77f7f44d7f13254d2e85515d2a2c4691dfc0499907", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // **249本のパスは、8つの検査それぞれの成否の組み合わせで爆発したものである。**
@@ -9,8 +9,10 @@ package doctor_test
 import (
 	"context"
 	"errors"
+	"github.com/maimuzo/continuo/internal/config"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,7 @@ import (
 var wantLabels = []i18n.Key{
 	doctor.LabelConfig,
 	doctor.LabelClaude,
+	doctor.LabelRuntimeDir,
 	doctor.LabelHerdr,
 	doctor.LabelGHAuth,
 	doctor.LabelBoard,
@@ -35,13 +38,13 @@ var wantLabels = []i18n.Key{
 
 // {"RUCM-PATH": "P001"}
 //
-// TestDoctor_前提が揃っていれば8項目すべて通る は、揃っている状態の基準線を作る。
+// TestDoctor_前提が揃っていれば9項目すべて通る は、揃っている状態の基準線を作る。
 //
-// 目的: 8項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
+// 目的: 9項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
 // 与える情報: テスト用herdr mock（protocol 19）・偽ボード（Ready の issue が1件）・
 // テスト用gh mock（project の scope あり）・信頼登録済みの `~/.claude.json`・`rate_limit.source: none`。
 // 成功条件: 見出し語が7つ設計どおりの順序で並び、全部 `✓` で、終了コードが 0 であること。
-func TestDoctor_前提が揃っていれば8項目すべて通る(t *testing.T) {
+func TestDoctor_前提が揃っていれば9項目すべて通る(t *testing.T) {
 	fx := newFixture(t)
 
 	report := fx.Run(t)
@@ -70,7 +73,7 @@ func TestDoctor_前提が揃っていれば8項目すべて通る(t *testing.T) 
 // 目的: 設定ファイルが `✗` のとき、**下流の6項目がすべて `!` になる**こと
 // （設計 3-32 の依存の図。`gh の認証` も設定ファイルの下流である）。
 // 与える情報: WORKFLOW.md を消した状態。ほかは揃っている。
-// 成功条件: 8項目すべてが結果を持ち、記号が上のとおりで、終了コードが 1 であること。
+// 成功条件: 9項目すべてが結果を持ち、記号が上のとおりで、終了コードが 1 であること。
 func TestDoctor_設定ファイルを読めなければ設定に依存する検査は確かめられなかったになる(t *testing.T) {
 	fx := newFixture(t)
 	if err := os.Remove(fx.WorkflowPath); err != nil {
@@ -192,16 +195,21 @@ func TestDoctor_ghを起動できなければ足りない(t *testing.T) {
 // TestDoctor_herdrのprotocolが設定と一致しなければ足りない は、herdr の検査を確かめる。
 //
 // 目的: socket の ping の応答の protocol が `herdr.protocol` と一致しなければ `✗` にすること。
-// 与える情報: テスト用herdr mock が protocol 18 を返す（設定は 19）。
+// 与える情報: テスト用herdr mock が、設定より1つ古い protocol を返す。
 // 成功条件: `herdr` が `✗` になり、説明に両方の版が入り、終了コードが 1 になること。
 func TestDoctor_herdrのprotocolが設定と一致しなければ足りない(t *testing.T) {
+	// **期待値を直書きしない。**既定値から引く（監査の指摘。5箇所に散っていた）。
+	want := config.DefaultConfig().Herdr.Protocol
+	older := want - 1
+
 	fx := newFixture(t)
-	fx.Herdr.SetProtocol(18)
+	fx.Herdr.SetProtocol(older)
 
 	report := fx.Run(t)
 
 	herdr := assertSymbol(t, report, doctor.LabelHerdr, doctor.SymbolMissing)
-	if !strings.Contains(herdr.Detail, "18") || !strings.Contains(herdr.Detail, "19") {
+	if !strings.Contains(herdr.Detail, strconv.Itoa(older)) ||
+		!strings.Contains(herdr.Detail, strconv.Itoa(want)) {
 		t.Fatalf("説明に herdr 側の版と設定の期待値の両方が入っていない: %q", herdr.Detail)
 	}
 	if report.ExitCode() != 1 {
@@ -602,9 +610,9 @@ func TestDoctor_資格情報_claude_credentialsはファイルの有無で分け
 
 // TestDoctor_1つ失敗しても残りを全部検査する は、打ち切らないことを確かめる。
 //
-// 目的: 複数の前提が同時に欠けても、8項目すべてを検査して結果を並べること。
+// 目的: 複数の前提が同時に欠けても、9項目すべてを検査して結果を並べること。
 // 与える情報: herdr の protocol が食い違い、clone が無く、gh の scope も足りない状態。
-// 成功条件: 8項目すべてに結果があり、`herdr` / `gh の認証` が `✗`、
+// 成功条件: 9項目すべてに結果があり、`herdr` / `gh の認証` が `✗`、
 // ボードと clone と信頼登録が `!`、終了コードが 1 であること。
 func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 	fx := newFixture(t)
@@ -619,7 +627,7 @@ func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 	report := fx.Run(t)
 
 	if got := labelsOf(report); !equalKeys(got, wantLabels) {
-		t.Fatalf("8項目すべてを検査していない: %v", got)
+		t.Fatalf("9項目すべてを検査していない: %v", got)
 	}
 	assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolOK)
 	assertSymbol(t, report, doctor.LabelHerdr, doctor.SymbolMissing)
@@ -788,7 +796,7 @@ func TestDoctor_トークンが失効していれば認証の直し方を出す(
 // だけで道具そのものが固まると、人間の手が止まる。**
 // 与える情報: 期限より長く待ってから応答する偽ボードと、1項目 200ms の期限。
 // 成功条件: ボードが `!`（確かめられなかった）になり、説明が「時間内に応答がありません
-// でした」であること。**8項目すべてが結果を持ち、終了コードが 1 にならないこと。**
+// でした」であること。**9項目すべてが結果を持ち、終了コードが 1 にならないこと。**
 func TestDoctor_ボードが時間内に応答しなければ確かめられなかったとして残りを続ける(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetDelay(30 * time.Second)

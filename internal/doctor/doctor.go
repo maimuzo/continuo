@@ -163,6 +163,9 @@ func Run(ctx context.Context, opts Options) Report {
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。
 	report.add(checkClaude(opts, cfg, configResult.Symbol))
+	// **hook を受ける socket を置けるかを、herdr より先に確かめる。**
+	// **これが無かったとき、8項目すべてが ✓ なのに起動だけが落ちた**（issue #9）。
+	report.add(checkRuntimeDir(cfg, configResult.Symbol))
 
 	// 段3: herdr。照合する protocol は設定から来るので、設定が読めなければ確かめられない。
 	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {

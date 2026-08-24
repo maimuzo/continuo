@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/maimuzo/continuo/internal/config"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -122,7 +123,8 @@ func newFakeHerdr(t *testing.T, dir string, tl *timeline) *fakeHerdr {
 
 	fh := &fakeHerdr{
 		SocketPath: socketPath,
-		Protocol:   19,
+		// **直書きしない。**既定値から引く（監査の指摘。5箇所に散っていた）。
+		Protocol:   config.DefaultConfig().Herdr.Protocol,
 		handlers:   map[string]func(map[string]any) (any, *rpcErr){},
 		workspaces: map[string]string{},
 		timeline:   tl,

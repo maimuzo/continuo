@@ -275,6 +275,8 @@ func TestDispatch_テンプレートに一覧に無い変数を書いたらそ�
 	waitFor(t, 5*time.Second, "issue が失敗として扱われる", func() bool {
 		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
 	})
+	// **後始末まで待つ。**Status は worker を止める前に書かれる（helpers_test.go の WaitRunsDrained）。
+	fx.WaitRunsDrained(t, 10*time.Second)
 	waitFor(t, 5*time.Second, "印から外れる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
@@ -343,6 +345,8 @@ func TestDispatch_workspaceのpaneが1つでなければそのissueを失敗に�
 	waitFor(t, 5*time.Second, "Status が failure_state へ落ちる", func() bool {
 		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
 	})
+	// **後始末まで待つ。**Status は worker を止める前に書かれる（helpers_test.go の WaitRunsDrained）。
+	fx.WaitRunsDrained(t, 10*time.Second)
 	if fx.Herdr.CountMethod(herdr.MethodAgentStart) != 0 {
 		t.Fatalf("pane が2つあるのに agent を起動している: %v", fx.Herdr.Methods())
 	}

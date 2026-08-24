@@ -20,6 +20,17 @@ const (
 	// KeyDoctorLabelClaude は doctor の「claude」の見出し語である。
 	KeyDoctorLabelClaude Key = "doctor.label.claude"
 
+	// KeyDoctorLabelRuntimeDir は doctor の「hook の置き場所」の見出し語である。
+	KeyDoctorLabelRuntimeDir Key = "doctor.label.runtime_dir"
+	// KeyDoctorRuntimeDirOK は hook の socket を用意できたときに出る。
+	KeyDoctorRuntimeDirOK Key = "doctor.runtime_dir.ok"
+	// KeyDoctorRuntimeDirFailed は hook の socket を用意できなかったときに出る。
+	KeyDoctorRuntimeDirFailed Key = "doctor.runtime_dir.failed"
+	// KeyDoctorRuntimeDirRemedy は hook の socket を用意できなかったときの直し方である。
+	KeyDoctorRuntimeDirRemedy Key = "doctor.runtime_dir.remedy"
+	// KeyDoctorRuntimeDirConfigUnreadable は設定を読めないので置き場所を決められないときに出る。
+	KeyDoctorRuntimeDirConfigUnreadable Key = "doctor.runtime_dir.config_unreadable"
+
 	// KeyDoctorClaudeConfigUnreadable は設定を読めず claude を探せないときの文言である。
 	KeyDoctorClaudeConfigUnreadable Key = "doctor.claude.config_unreadable"
 
@@ -1395,6 +1406,11 @@ var allKeys = []Key{
 	KeyDoctorLabelConfig,
 	KeyDoctorLabelHerdr,
 	KeyDoctorLabelClaude,
+	KeyDoctorLabelRuntimeDir,
+	KeyDoctorRuntimeDirOK,
+	KeyDoctorRuntimeDirFailed,
+	KeyDoctorRuntimeDirRemedy,
+	KeyDoctorRuntimeDirConfigUnreadable,
 	KeyDoctorClaudeConfigUnreadable,
 	KeyDoctorClaudeNotFound,
 	KeyDoctorClaudeFound,

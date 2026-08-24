@@ -88,6 +88,8 @@ func TestRUCM_P013_paneが使えないまま期限を過ぎたら人間へ渡す
 	waitFor(t, 60*time.Second, "Status が failure_state へ落ちる", func() bool {
 		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
 	})
+	// **後始末まで待つ。**Status は worker を止める前に書かれる（helpers_test.go の WaitRunsDrained）。
+	fx.WaitRunsDrained(t, 10*time.Second)
 	if fx.Herdr.CountMethod(herdr.MethodAgentPrompt) != 0 {
 		t.Errorf("起動していないのに turn を送っている: %v", fx.Herdr.Methods())
 	}
@@ -175,6 +177,8 @@ func TestRUCM_P011_入力を受け付けないまま期限を過ぎたら人間�
 	waitFor(t, 60*time.Second, "Status が failure_state へ落ちる", func() bool {
 		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
 	})
+	// **後始末まで待つ。**Status は worker を止める前に書かれる（helpers_test.go の WaitRunsDrained）。
+	fx.WaitRunsDrained(t, 10*time.Second)
 	if fx.Herdr.CountMethod(herdr.MethodAgentPrompt) != 0 {
 		t.Errorf("入力を受け付けないのに turn を送っている: %v", fx.Herdr.Methods())
 	}

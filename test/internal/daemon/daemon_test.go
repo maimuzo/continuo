@@ -152,7 +152,7 @@ claude:
   turn_timeout_ms: 600000
 herdr:
   socket: %s
-  protocol: 19
+  protocol: 20
   read_timeout_ms: %d
   startup_timeout_ms: 3000
 cleanup:

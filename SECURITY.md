@@ -14,9 +14,10 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 
 ## 対応している版
 
-**release はまだありません。**いまは `main` の先頭だけが対象です。
+**いちばん新しい release と、`main` の先頭が対象です。**
 
-release を出したあとは、この節に対応している版を書きます。
+**それより古い release には手を入れません。**v0.x のうちは、直したものを次の release として出します
+（[docs/releasing.md](docs/releasing.md)）。**古い版に留まる必要がある場合は、issue で相談してください。**
 
 ## この道具が持つ、生まれつきの危険
 
@@ -61,7 +62,9 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 
 ## Supported versions
 
-**There are no releases yet.** Only the tip of `main` is in scope.
+**The latest release and the tip of `main` are in scope.**
+
+**Older releases do not get fixes.** While this is on v0.x, a fix ships as the next release. **If you need to stay on an older version, open an issue and let's talk.**
 
 ## Risks that are by design
 

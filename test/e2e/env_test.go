@@ -34,6 +34,16 @@ type e2eEnv struct {
 	WorkflowPath string
 	// RuntimeDir は実行時ディレクトリである（hook の socket・逃がし先・ロックの置き場所）。
 	RuntimeDir string
+	// TmpDir は OmitRuntimeDirEnv のときに TMPDIR として渡すディレクトリである。
+	//
+	// **macOS の探索順3（`$TMPDIR/continuo`）がここを使う。**
+	TmpDir string
+	// OmitRuntimeDirEnv は、子プロセスへ CONTINUO_RUNTIME_DIR を渡さないかどうかである。
+	//
+	// **既定は偽**（テストの一時ディレクトリを直に指す。socket のパスを短く保てる）。
+	// **真にすると、本番の探索順（設計 3-23）に決めさせる。**
+	// **これが1本も無いと、既定の経路が1度も走らない**（設計 6-8）。
+	OmitRuntimeDirEnv bool
 	// WorktreeRoot は worktree の置き場所である（`workspace.root`）。
 	WorktreeRoot string
 	// OriginDir は本物の git の bare リポジトリ（push 先）である。
@@ -87,13 +97,14 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 		TryDir:       filepath.Join(root, "try"),
 		WorkflowPath: filepath.Join(root, "try", "WORKFLOW.md"),
 		RuntimeDir:   filepath.Join(root, "rt"),
+		TmpDir:       filepath.Join(root, "tmp"),
 		WorktreeRoot: filepath.Join(root, "wt"),
 		OriginDir:    filepath.Join(root, "origin.git"),
 		RepoDir:      filepath.Join(root, "repo"),
 		Owner:        "octofake",
 		Repo:         "sandbox",
 	}
-	for _, dir := range []string{env.Home, env.BinDir, env.TryDir, env.RuntimeDir} {
+	for _, dir := range []string{env.Home, env.BinDir, env.TryDir, env.RuntimeDir, env.TmpDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatalf("%s を作れません: %v", dir, err)
 		}
@@ -223,15 +234,23 @@ func (e *e2eEnv) ChildEnv() []string {
 	if e.Board != nil {
 		boardPath = e.Board.Path
 	}
-	return []string{
+	env := []string{
 		"PATH=" + e.BinDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"HOME=" + e.Home,
 		"LANG=ja_JP.UTF-8",
-		"CONTINUO_RUNTIME_DIR=" + e.RuntimeDir,
 		"CONTINUO_GITHUB_GRAPHQL_ENDPOINT=" + graphQL,
 		"CONTINUO_E2E_BOARD=" + boardPath,
 		"GIT_TERMINAL_PROMPT=0",
 	}
+	if e.OmitRuntimeDirEnv {
+		// **逃げ道を渡さず、本番の探索順に決めさせる**（設計 3-23 / 6-8）。
+		//
+		// **TMPDIR を短いディレクトリへ向ける。**macOS の枝（`$TMPDIR/continuo`）が
+		// ここを使う。Linux は `$HOME/.continuo/run` に落ちるので HOME だけで足りる。
+		// **どちらもテストの一時ディレクトリの中に収まるので、実機を汚さない。**
+		return append(env, "TMPDIR="+e.TmpDir)
+	}
+	return append(env, "CONTINUO_RUNTIME_DIR="+e.RuntimeDir)
 }
 
 // ===== continuo の起動 =====
