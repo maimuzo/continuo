@@ -965,8 +965,12 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 	useLanguageFromConfig(path)
 
 	// **トークンを載せる前に接続先を確かめる。**abandon はボードの Status を読み書きするので、
-	// 常駐プロセスと同じ検査を通す（環境変数に書かれたどんな宛先へも
-	// `Authorization: Bearer` が飛ばないようにする）。
+	// 常駐プロセスと同じ検査を通す。
+	//
+	// **この検査が拒むのは平文の http だけである**（ループバック宛は通す。
+	// daemon.ValidateGraphQLEndpoint を見よ）。**https ならどのホストでも通る**ので、
+	// 「宛先が GitHub であること」の保証ではない。**環境変数を書き換えられる人は、
+	// この検査を通る別の宛先へトークンを送れる。**それを防ぐのは環境変数の側の管理である。
 	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)
 	if err := daemon.ValidateGraphQLEndpoint(endpoint); err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGeneric, err))

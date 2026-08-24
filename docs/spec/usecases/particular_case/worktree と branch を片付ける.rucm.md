@@ -37,10 +37,16 @@ BASIC FLOW:
 8. システムは VALIDATES THAT branch に push されていない成果がない。
 9. システムは workspace_hooks の before_remove を実行する。
 10. システムは herdr に workspace の ID を渡して worktree の削除を要求する。
-11. システムは git に branch の削除を要求する。
-12. システムは issue ごとの Claude Code の設定ファイルを消す。
-13. システムは利用者に片付けの完了をログで応答する。
-POSTCONDITION: worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
+11. IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN
+12.   システムは herdr に workspace の一覧を要求する。
+13.   IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN
+14.     システムは herdr にリポジトリの親 workspace を閉じることを要求する。
+15.   ENDIF
+16. ENDIF
+17. システムは git に branch の削除を要求する。
+18. システムは issue ごとの Claude Code の設定ファイルを消す。
+19. システムは利用者に片付けの完了をログで応答する。
+POSTCONDITION: worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW 片付けの対象外:
 RFS BASIC FLOW 5
@@ -95,6 +101,28 @@ POSTCONDITION: worktree は残っている。branch は残っている。issue �
 | push されていない成果（upstream がある） | `git rev-list --count @{u}..HEAD` | 出力が 0 である |
 | push されていない成果（upstream が無い） | base からの差分 | 差分が無い |
 
+## リポジトリの親 workspace を閉じる条件
+
+**`worktree.open` は herdr の workspace を2つ開く**（issue #19）。worktree のぶんと、
+`cwd` に渡したリポジトリのぶん（**リポジトリの親 workspace**）である。
+**`worktree.remove` は後者を閉じない**ので、閉じるのは continuo の仕事になる。
+
+**`cwd` を外す案は採れない。**herdr が `worktree_not_found` で断る（実測: 2026-08-25、
+[test/live/herdr_test.go](test/live/herdr_test.go)）。`cwd` に worktree のパスを渡す案も
+`linked_worktree_source` で断られる。**親は herdr の必須の親である。**
+
+**閉じてよい条件は2つあり、両方満たすときだけ閉じる**（ステップ11〜16）。
+
+| 条件 | 落とすと何が起きるか |
+| --- | --- |
+| continuo がその親を開かせたこと | 人間が自分で開いた workspace を閉じ、その人の pane が消える |
+| 同じリポジトリの worktree の workspace が1つも残っていないこと | 別の issue が使っている pane が消える |
+
+**2つ目が要るのは、親を閉じると配下の worktree の workspace と pane も一緒に消えるからである**
+（実測: 2026-08-25）。1つ目の判定は身元ファイルの `herdr_repo_workspace_id` で持つ。
+**その値は herdr の現物と突き合わせてから使う**（worktree の直下にあり、エージェントが
+書き換えられるため）。
+
 ## 片付けが始まる契機は3つある
 
 | 契機 | 誰が起こすか | 参照 |
@@ -117,9 +145,13 @@ flowchart TD
     B8{"8. VALIDATES THAT push されていない成果がない"}
     B9["9. workspace_hooks の before_remove を実行する"]
     B10["10. workspace の ID を渡して worktree の削除を要求する"]
-    B11["11. git に branch の削除を要求する"]
-    B12["12. issue ごとの設定ファイルを消す"]
-    B13["13. 片付けの完了をログで応答する"]
+    B11{"11. IF 開かせた親 workspace を控えてある"}
+    B12["12. workspace の一覧を要求する"]
+    B13{"13. IF 控えた ID が現物と一致し、同じリポジトリの worktree が残っていない"}
+    B14["14. リポジトリの親 workspace を閉じることを要求する"]
+    B17["17. git に branch の削除を要求する"]
+    B18["18. issue ごとの設定ファイルを消す"]
+    B19["19. 片付けの完了をログで応答する"]
     BPOST(["POSTCONDITION worktree と branch が無い"])
 
     B1 --> B2 --> B3 --> B4 --> B5
@@ -130,7 +162,12 @@ flowchart TD
     B7 -- 偽 --> F3S1
     B7 -- 真 --> B8
     B8 -- 偽 --> F4S1
-    B8 -- 真 --> B9 --> B10 --> B11 --> B12 --> B13 --> BPOST
+    B8 -- 真 --> B9 --> B10 --> B11
+    B11 -- 偽 --> B17
+    B11 -- 真 --> B12 --> B13
+    B13 -- 偽 --> B17
+    B13 -- 真 --> B14 --> B17
+    B17 --> B18 --> B19 --> BPOST
     B5 -. "片付けの無効: WHEN cleanup.enabled が false の場合" .-> G1S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 片付けの対象外 / RFS BASIC FLOW 5"]
@@ -192,6 +229,13 @@ sequenceDiagram
             S->>S: workspace_hooks の before_remove を実行する
             S->>H: workspace の ID を渡して worktree の削除を要求する
             H-->>S: workspace を閉じたことを応答する
+            opt システムが開かせたリポジトリの親 workspace を控えてある
+                S->>H: workspace の一覧を要求する
+                H-->>S: 開いている workspace を応答する
+                opt 控えた ID が現物と一致し、同じリポジトリの worktree が残っていない
+                    S->>H: リポジトリの親 workspace の close を要求する
+                end
+            end
             S->>G: branch の削除を要求する
             S->>S: issue ごとの設定ファイルを消す
             S-->>T: 片付けの完了をログで応答する

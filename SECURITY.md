@@ -33,6 +33,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 | **`curl … \| sh` で配る** | インストーラーはネットワークから取ってきて実行されます |
 | **資格情報を読む** | 定額プランの枠を読むために、`~/.claude/.credentials.json` か macOS の Keychain を読みます |
 | **`continuo abandon` は消す** | worktree と branch と herdr の workspace を消します。**`--force` を付けると、コミットしていない変更と push していない commit ごと消えます**（`--dry-run` で何が消えるかを先に見られます） |
+| **`continuo abandon` はボードも書き換える** | continuo が動いていれば、手を離させるために Status を `--park`（既定は `tracker.failure_state`）へ動かします。`--to` を付ければ片付けたあとにも動かします。**`--dry-run` はどちらも書かず、書く値を予告するだけです** |
 
 **これらを踏まえたうえで、想定を超える挙動があれば報告してください。**たとえば次のようなものです。
 
@@ -80,6 +81,7 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 | **It is installed via `curl … \| sh`** | The installer is fetched from the network and executed |
 | **It reads credentials** | To read your plan's usage window, it reads `~/.claude/.credentials.json` or the macOS Keychain |
 | **`continuo abandon` deletes** | It removes the worktree, the branch, and the herdr workspace. **With `--force` it takes uncommitted changes and unpushed commits with them** (`--dry-run` shows what would go first) |
+| **`continuo abandon` also writes to the board** | If continuo is running, it moves the Status to `--park` (default: `tracker.failure_state`) to make continuo let go of the issue. With `--to` it moves the Status again after cleanup. **`--dry-run` writes neither; it only announces the values it would write** |
 
 **With that understood, please report anything beyond it** — for example:
 

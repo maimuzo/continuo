@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "7d4f46f994df245a902936252426cd1229b70db00e06998f2a7b1395f089a50f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "2dbd33b194b2eb4e723e0e6aef78af67ba342d54327396b060a9ab73175c0551", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // 空きスロットの数え方（`agent.max_concurrent_agents` と

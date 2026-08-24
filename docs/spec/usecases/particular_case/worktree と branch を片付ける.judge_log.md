@@ -27,9 +27,14 @@
 | 15 | ステップ8（VALIDATES THAT） | branch に push されていない成果がない | **commit の有無では判定しない。「失うものがあるか」を見る。**upstream があれば `@{u}..HEAD` の件数、無ければ base からの差分で判定する | `docs/plans/continuo_design.md#3-9` の手順2b、`internal/workspace/cleanup.go` の `effectiveBase` | 95% |
 | 16 | ステップ9 | `workspace_hooks.before_remove` を消す前の worktree で実行する | 手順2d である。**失敗しても記録して続ける**（片付けを止めない） | `docs/plans/continuo_design.md#3-9` の手順2d | 95% |
 | 17 | ステップ10 | herdr に workspace の ID を渡して worktree の削除を要求する | 引数は path でも branch でもなく herdr workspace の ID である（実測）。**この ID は身元ファイルから読む** | `docs/plans/continuo_design.md#3-9` の手順3、`internal/workspace/cleanup.go` の `resolveWorkspaceID` | 100% |
-| 18 | `workspace.close` を書かなかったこと | `worktree.remove` の応答に workspace が入るので、続けて閉じない | 設計が「workspace は別途閉じない」と明記している | `docs/plans/continuo_design.md#3-9` の手順3 | 95% |
-| 19 | ステップ11 | git に branch の削除を要求する | herdr は branch を消さない（実測）。**消さないと単調増加する** | `docs/plans/continuo_design.md#3-9` の手順4、`#8-1` | 100% |
-| 20 | ステップ12 | issue ごとの Claude Code の設定ファイルを消す | 設定ファイルは worktree の外にあるので、worktree を消しても残る | `docs/plans/continuo_design.md#3-12`、`internal/workspace/cleanup.go` の `Cleanup` | 90% |
+| 18 | worktree の workspace に `workspace.close` を呼ばないこと | `worktree.remove` の応答に workspace が入るので、続けて閉じない | 設計が「workspace は別途閉じない」と明記している | `docs/plans/continuo_design.md#3-9` の手順3 | 95% |
+| 18b | ステップ11〜16 を足したこと | リポジトリの親 workspace を、条件を満たすときだけ閉じる | **`worktree.open` は workspace を2つ開くのに `worktree.remove` は1つしか閉じない。**放置すると issue 1件につき1つ溜まる | `docs/plans/continuo_design.md#3-9b`、issue #19、`test/live/herdr_test.go` | 95% |
+| 18c | `cwd` を渡すのをやめる案を採らなかったこと | `cwd` は外せないと判断した | 本物の herdr で確かめた。`cwd` を省くと `worktree_not_found`、`cwd` に worktree のパスを渡すと `linked_worktree_source` で断られる。**リポジトリの親 workspace は herdr の必須の親である** | 実測 2026-08-25（`test/live/herdr_test.go` の `TestLive_WorktreeOpen_cwdはリポジトリ本体しか受け付けない`） | 100% |
+| 18d | 親を開いた直後に閉じる案を採らなかったこと | 閉じるのは片付けの最後にした | **親を閉じると配下の worktree の workspace と pane も一緒に消える。**開いた直後に閉じると、いま開いた pane が消える | 実測 2026-08-25（`test/live/herdr_test.go` の `TestLive_WorkspaceClose_親を閉じると配下のworktreeも消える`） | 100% |
+| 18e | 閉じる条件を2つにしたこと | 「continuo が開かせた」と「配下に worktree が残っていない」の両方 | 1つ目を落とすと**人間が自分で開いた workspace**を閉じてその人の pane が消える。2つ目を落とすと**別の issue が使っている pane**が消える | `docs/plans/continuo_design.md#3-9b` | 95% |
+| 18f | 閉じられなくても片付けを失敗にしないこと | 警告としてログに出して続ける | worktree はもう消えている。ここで失敗を返すと「消えたのに失敗」という、呼び出し側が扱えない結果になる | `internal/workspace/repoworkspace.go` の `closeRepoWorkspace` | 90% |
+| 19 | ステップ17 | git に branch の削除を要求する | herdr は branch を消さない（実測）。**消さないと単調増加する** | `docs/plans/continuo_design.md#3-9` の手順4、`#8-1` | 100% |
+| 20 | ステップ18 | issue ごとの Claude Code の設定ファイルを消す | 設定ファイルは worktree の外にあるので、worktree を消しても残る | `docs/plans/continuo_design.md#3-12`、`internal/workspace/cleanup.go` の `Cleanup` | 90% |
 | 21 | 手順0（`after_run`）を書かなかったこと | このユースケースに含めない | `after_run` は run が終わったとき（worker を止める直前）に1回だけ走らせるものであり、片付けとは契機が違う。**`issue を1件処理する` と `人間に判断を渡す` が受け持つ** | `docs/plans/continuo_design.md#3-9` の手順0 | 85% |
 | 22 | 基本フローの POSTCONDITION | worktree が無い。branch が無い。workspace が閉じている。設定ファイルが無い。Status が変わっていない。印が変わっていない | **片付けは Status を動かさない。**動かすと、人間が付けた `Done` を continuo が書き換えることになる | `docs/plans/continuo_design.md#3-9`、`#4-1` | 95% |
 | 23 | フロー `片付けの対象外` | RFS BASIC FLOW 5。worktree を残し、`active_states` に戻っていて pane が生きていれば pane を閉じる | 手順7b である。**この条件を外してはならない。**条件なしに閉じると、人間のレビュー待ちで正常に止まっている Claude Code を毎巡回で落とす | `docs/plans/continuo_design.md#3-9` の手順7b、`internal/orchestrator/reconcile.go` の `reconcileWorktrees` | 100% |

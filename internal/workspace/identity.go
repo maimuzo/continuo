@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -20,6 +22,18 @@ const identityFilePerm os.FileMode = 0o600
 
 // excludeFilePerm は `.git/info/exclude` を新しく作るときのパーミッションである。
 const excludeFilePerm os.FileMode = 0o644
+
+// identityFileLimit は身元ファイルを読む上限（バイト）である。
+//
+// **上限が無いと、エージェントが書いた任意の大きさのファイルが常駐プロセスのメモリに載る。**
+// 身元ファイルは worktree の直下にあり、そこでエージェントが `--permission-mode dontAsk` で
+// 動く（3-16 の段9）。git の出力に gitOutputLimit を掛けているのとまったく同じ理由である
+// （git.go の gitOutputLimit を見よ）。
+//
+// **64 KiB にする理由。**continuo が書く身元ファイルは実測で 1 KiB 未満（フィールドは13個で、
+// いちばん長いのが worktree の絶対パスと issue の URL）であり、桁が2つ違う余裕がある。
+// これを超えるものは continuo が書いたものではない。
+const identityFileLimit = 64 * 1024
 
 // ErrIdentityNotFound は worktree に身元ファイルが無いことを表す。
 // **復元の走査（3-4 の段2）では「人間が置いた worktree かもしれない」ので無視する。**
@@ -53,6 +67,19 @@ type Identity struct {
 	// **worktree.remove がこの ID を要求する**（path でも branch でもない。3-9）。
 	// 再起動後に取り直す経路が他に無いので、必ずここに書く。
 	HerdrWorkspaceID string `json:"herdr_workspace_id"`
+	// HerdrRepoWorkspaceID は、**continuo が開かせてしまったリポジトリの親 workspace の
+	// ID** である（issue #19）。
+	//
+	// **`worktree.open` は workspace を2つ開く。**worktree のぶんと、`cwd` に渡した
+	// リポジトリのぶんである（実測: 2026-08-24）。後者が**リポジトリの親 workspace**であり、
+	// herdr はこれを必須の親として扱う（`cwd` に worktree を渡すと
+	// `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`
+	// で断られる）。`worktree.remove` は前者しか閉じないので、閉じるのは continuo の仕事である。
+	//
+	// **continuo が開かせたときだけ埋める。**`worktree.open` を呼ぶ前から同じリポジトリの
+	// 親 workspace があったなら、それは**人間が自分で開いたもの**である。閉じると
+	// その人の pane ごと消えるので、**空文字のまま残して二度と触らない。**
+	HerdrRepoWorkspaceID string `json:"herdr_repo_workspace_id,omitempty"`
 	// SocketPath は hook を受ける socket の絶対パスである。
 	// 探索順が環境に依存するので、再起動で別のパスに落ちうる。一致の検査に使う。
 	SocketPath string `json:"socket_path"`
@@ -142,25 +169,84 @@ func excludeLockKey(excludePath string) string {
 
 // ReadIdentity は worktree の身元ファイルを読む（3-18）。
 //
+// **上限を掛け、symlink は辿らない。**readIdentityFile を見よ。
+//
 // worktreePath: worktree の絶対パス。
 // 戻り値の1つ目: 読めた身元ファイルの中身。
 // 戻り値の2つ目: ファイルが無ければ ErrIdentityNotFound、JSON が壊れていれば
 // ErrIdentityBroken を包んだエラー（errors.Is で判別できる）。
+// **通常のファイルでない場合と上限を超えた場合も ErrIdentityBroken である**
+// （continuo が書いたものではないが、消してよいとも言えない）。
 // **どちらの場合も呼び出し側は worktree を消してはならない**（3-4 の段2）。
 func (m *Manager) ReadIdentity(worktreePath string) (*Identity, error) {
 	path := m.IdentityPath(worktreePath)
-	data, err := os.ReadFile(path)
+	data, err := readIdentityFile(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("%w: %s", ErrIdentityNotFound, path)
-		}
-		return nil, i18n.Errorf(i18n.KeyWorkspaceReadIdentityReadFailed, path, err)
+		return nil, err
 	}
 	var identity Identity
 	if err := json.Unmarshal(data, &identity); err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrIdentityBroken, path, err)
 	}
 	return &identity, nil
+}
+
+// readIdentityFile は身元ファイルの中身を、上限を掛けて読む。
+//
+// **os.ReadFile をそのまま呼んではならない。**上限が無く、symlink も辿るためである。
+// この2つが要る理由は同じで、**身元ファイルは worktree の直下にあり、そこで
+// エージェントが `--permission-mode dontAsk` で動く**（3-16 の段9）。
+//
+//	上限     … 67 MiB の身元ファイルを置かれても読み切ってしまう（実測: 2026-08-24）
+//	O_NOFOLLOW … 置き場所の外を指す symlink に差し替えられると、その中身が
+//	             「この worktree の身元」として照合され、削除の対象になる
+//
+// **上限を超えたことを「読み切れた」に丸めない。**切り詰めた JSON は必ず壊れているので
+// ErrIdentityBroken でも同じ結果になるが、**理由が「JSON が壊れている」に化けると、
+// 人間が中身を疑って調べ始める。**何バイトで打ち切ったかを言う。
+//
+// path: 身元ファイルの絶対パス。
+// 戻り値の1つ目: ファイルの中身（identityFileLimit バイトまで）。
+// 戻り値の2つ目: ファイルが無ければ ErrIdentityNotFound、symlink やディレクトリだった場合と
+// 上限を超えた場合は ErrIdentityBroken を包んだエラー。それ以外は読み取りの失敗。
+func readIdentityFile(path string) ([]byte, error) {
+	// syscall.O_NOFOLLOW は「最後の要素が symlink なら開かずに ELOOP で失敗する」フラグである
+	// （internal/scaffold の WriteTemplateWithValues と同じ使い方）。
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %s", ErrIdentityNotFound, path)
+		}
+		if errors.Is(err, syscall.ELOOP) {
+			return nil, fmt.Errorf("%w: %s: %v", ErrIdentityBroken,
+				i18n.T(i18n.KeyWorkspaceReadIdentityNotRegular, path, "symlink"), err)
+		}
+		return nil, i18n.Errorf(i18n.KeyWorkspaceReadIdentityReadFailed, path, err)
+	}
+	defer func() { _ = file.Close() }()
+
+	// **開いた実体そのものを見る。**os.Lstat では、見た相手と開いた相手が
+	// 入れ替わりうる（見てから開くまでの間に差し替えられる）。
+	info, err := file.Stat()
+	if err != nil {
+		return nil, i18n.Errorf(i18n.KeyWorkspaceReadIdentityReadFailed, path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s", ErrIdentityBroken,
+			i18n.T(i18n.KeyWorkspaceReadIdentityNotRegular, path, info.Mode().String()))
+	}
+
+	// **上限より1バイト多く読む。**ちょうど上限のファイルと、上限を超えたファイルを
+	// 読み終わりだけで区別するためである。
+	data, err := io.ReadAll(io.LimitReader(file, identityFileLimit+1))
+	if err != nil {
+		return nil, i18n.Errorf(i18n.KeyWorkspaceReadIdentityReadFailed, path, err)
+	}
+	if len(data) > identityFileLimit {
+		return nil, fmt.Errorf("%w: %s", ErrIdentityBroken,
+			i18n.T(i18n.KeyWorkspaceReadIdentityTooLarge, path, identityFileLimit))
+	}
+	return data, nil
 }
 
 // WriteIdentity は worktree の身元ファイルを書き、共通ディレクトリの `info/exclude` へ
@@ -338,7 +424,13 @@ func (m *Manager) registerExclude(ctx context.Context, worktreePath string) erro
 // | created_at | 既存の値を保つ。新規のときだけ fresh の値を使う |
 // | cleanup_deferred_at | 消す（ゼロ値にする） |
 // | base | fresh が空なら既存の値を保つ（再利用のとき Prepare は base を決めない） |
+// | herdr_repo_workspace_id | fresh が空なら既存の値を保つ（下の理由） |
 // | それ以外 | 全部書き直す |
+//
+// **herdr_repo_workspace_id を落とさない理由。**再利用のとき、リポジトリの親 workspace は
+// 前の run で既に開いている。`Prepare` はそれを「自分より前からあった」と見て空を返すので、
+// 上書きすると **continuo が開かせた親 workspace を、continuo が自分で忘れる**
+// （閉じる相手が消え、issue #19 の溜まりがそのまま戻る）。
 //
 // **cleanup_deferred_at を消す理由。**再利用するということは、その issue が再び
 // dispatch されたということであり、そこから先は別の run である。前の run の記録を
@@ -362,6 +454,11 @@ func MergeForReuse(fresh Identity, existing *Identity) Identity {
 		// Prepare は base を決めずに戻る）。前の run が書いた値を落とすと、
 		// 片付けが「base が分からない」で永久に見送る（3-9 の手順2b）。
 		fresh.Base = existing.Base
+	}
+	if fresh.HerdrRepoWorkspaceID == "" {
+		// **再利用のときは親 workspace が既に開いている**ので、Prepare は
+		// 「自分より前からあった」と見て空を返す。落とすと閉じる相手を忘れる（issue #19）。
+		fresh.HerdrRepoWorkspaceID = existing.HerdrRepoWorkspaceID
 	}
 	return fresh
 }

@@ -50,6 +50,11 @@ type PrepareResult struct {
 	// **worktree.remove がこの ID を要求する**（3-9）。身元ファイルへ必ず書くこと。
 	// herdr.worktree.create_via_herdr が false のときは空文字になる。
 	HerdrWorkspaceID string
+	// HerdrRepoWorkspaceID は、**この呼び出しが開かせてしまったリポジトリの親 workspace の
+	// ID** である（issue #19。Identity.HerdrRepoWorkspaceID を見よ）。
+	// **`worktree.open` を呼ぶ前から親 workspace があった場合は空文字である**
+	// （人間が開いたものなので閉じてはならない）。身元ファイルへ必ず書くこと。
+	HerdrRepoWorkspaceID string
 	// HerdrPaneID は worktree.open が作った workspace の中の pane の ID である。
 	// **pane.split も tab.create も呼ばない**（4-5）。この pane をそのまま使う。
 	HerdrPaneID string
@@ -206,9 +211,19 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 				"herdr.worktree.create_via_herdr が真ですが herdr のクライアントが設定されていません")
 		}
 		focus := false
+		// **開く前に、リポジトリの親 workspace が既にあるかを見ておく**（issue #19）。
+		// 無かったのに開いたあとにあれば、それは**この呼び出しが開かせたもの**であり、
+		// 片付けで閉じる責任が continuo にある。**先にあったなら人間のものなので触らない。**
+		repoWorkspaceExisted := m.repoWorkspaceOpen(ctx, repoPath)
 		// **`path` と `branch` は片方だけ渡す。**両方渡すと herdr が
 		// `invalid_request: exactly one of path or branch is required` で弾く（実測: 2026-08-20）。
 		// **worktree は直前に git で作ってあるので、パスで開く。**
+		//
+		// **`cwd` はリポジトリ本体を渡す。外せない。**worktree のパスを渡すと herdr は
+		// `linked_worktree_source: New and open worktree actions start from the repo parent workspace.`
+		// で断り、`cwd` を省くと `worktree_not_found: worktree path not found` で断る
+		// （実測: 2026-08-25、test/live）。**リポジトリの親 workspace は herdr の必須の親である。**
+		//
 		// **label は `owner/repo/issues/N` の形である**（設計 3-3）。
 		// 組み立ては herdr.IssueLabel に寄せてある（orchestrator 側と形がずれないため）。
 		label := herdr.IssueLabel(issue.Owner, issue.Repo, issue.Number)
@@ -222,6 +237,9 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareWorktreeOpenFailed, resolvedPath, err)
 		}
 		result.HerdrWorkspaceID = opened.Workspace.WorkspaceID
+		if !repoWorkspaceExisted {
+			result.HerdrRepoWorkspaceID = m.repoWorkspaceID(ctx, repoPath)
+		}
 		result.HerdrPaneID = opened.RootPane.PaneID
 		result.AlreadyOpen = opened.AlreadyOpen
 		// **herdr が開いたものが、いま作った worktree と同じかを必ず確かめる。**

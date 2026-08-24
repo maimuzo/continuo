@@ -653,6 +653,9 @@ const (
 	KeyAbandonErrParkFailed Key = "abandon.err_park_failed"
 	// KeyAbandonParkNotWritten は手を離させる書き込みが行われなかったときに出る。
 	KeyAbandonParkNotWritten Key = "abandon.park_not_written"
+	// KeyAbandonParkLeftBehind は、手を離させる書き込みを済ませたあとに何も消さずに
+	// 止まったときに出る。**Status は park の値のままであり、continuo は戻さない。**
+	KeyAbandonParkLeftBehind Key = "abandon.park_left_behind"
 
 	// KeyAbandonErrPaneList はherdr へ pane の一覧を問い合わせられないときに出る。
 	KeyAbandonErrPaneList Key = "abandon.err_pane_list"
@@ -1473,6 +1476,11 @@ const (
 	KeyWorkspaceValidateIdentityFileNameNotAFileName Key = "workspace.validate_identity_file_name.not_a_file_name"
 	// KeyWorkspaceReadIdentityReadFailed は身元ファイルを読めなかったときに出る（存在しない場合は除く）。
 	KeyWorkspaceReadIdentityReadFailed Key = "workspace.read_identity.read_failed"
+	// KeyWorkspaceReadIdentityNotRegular は身元ファイルが通常のファイルでなかったときに出る
+	// （symlink やディレクトリ）。
+	KeyWorkspaceReadIdentityNotRegular Key = "workspace.read_identity.not_regular"
+	// KeyWorkspaceReadIdentityTooLarge は身元ファイルが上限を超えていたときに出る。
+	KeyWorkspaceReadIdentityTooLarge Key = "workspace.read_identity.too_large"
 	// KeyWorkspaceWriteIdentityMarshalFailed は身元ファイルの中身を JSON にできなかったときに出る。
 	KeyWorkspaceWriteIdentityMarshalFailed Key = "workspace.write_identity.marshal_failed"
 	// KeyWorkspaceWriteFileAtomicTempCreateFailed は置き換え用の一時ファイルを作れなかったときに出る。
@@ -1904,6 +1912,7 @@ var allKeys = []Key{
 	KeyAbandonErrParkActive,
 	KeyAbandonErrParkFailed,
 	KeyAbandonParkNotWritten,
+	KeyAbandonParkLeftBehind,
 	KeyAbandonErrPaneList,
 	KeyAbandonWaitingPane,
 	KeyAbandonPaneGone,
@@ -2201,6 +2210,8 @@ var allKeys = []Key{
 	KeyWorkspaceValidateIdentityFileNameHasSeparator,
 	KeyWorkspaceValidateIdentityFileNameNotAFileName,
 	KeyWorkspaceReadIdentityReadFailed,
+	KeyWorkspaceReadIdentityNotRegular,
+	KeyWorkspaceReadIdentityTooLarge,
 	KeyWorkspaceWriteIdentityMarshalFailed,
 	KeyWorkspaceWriteFileAtomicTempCreateFailed,
 	KeyWorkspaceWriteFileAtomicWriteFailed,
