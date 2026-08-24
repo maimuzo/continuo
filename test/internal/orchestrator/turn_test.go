@@ -202,6 +202,8 @@ func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *test
 	waitFor(t, 20*time.Second, "Status が failure_state へ落ちる", func() bool {
 		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
 	})
+	// **後始末まで待つ。**Status は worker を止める前に書かれる（helpers_test.go の WaitRunsDrained）。
+	fx.WaitRunsDrained(t, 10*time.Second)
 	// **pane.close は Status の書き込みと同時ではない。**finishRunClaimed は
 	// Status を書いたあと、引き渡しのコメント・エージェントのコメントの確認・after_run を
 	// 通してから stopWorker を呼ぶ（設計 3-25 の「worker を止める前にコメントを確かめる」）。
@@ -241,6 +243,8 @@ func TestTurn_blockedが返ったらescを送ってから人間へ渡す(t *test
 	waitFor(t, 10*time.Second, "Status が failure_state へ落ちる", func() bool {
 		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
 	})
+	// **後始末まで待つ。**Status は worker を止める前に書かれる（helpers_test.go の WaitRunsDrained）。
+	fx.WaitRunsDrained(t, 10*time.Second)
 
 	methods := fx.Herdr.Methods()
 	escIdx, closeIdx, firstPrompt, secondPrompt := -1, -1, -1, -1

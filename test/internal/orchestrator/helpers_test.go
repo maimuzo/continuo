@@ -1306,6 +1306,29 @@ func assistantLine(requestID, text string, sidechain bool) any {
 // d: 待つ長さの上限。
 // message: 失敗したときに出す説明。
 // cond: 判定する関数。
+// WaitRunsDrained は、走行中の run が無くなるまで待つ。
+//
+// **Status が変わったことだけを待ってはならない。**
+// orchestrator は Status を書いてから、コメントを確かめ、worker を止め、worktree を片付ける
+// （`finishRunClaimed` / `failRun` の順序）。**Status で待つと、その後始末が起きる前に
+// `Methods()` を読んでしまう。**
+//
+// 手元では間に合っていたが、**CI の `-race` で隙間が開いて落ちた**
+// （`TestTurn_blockedが返ったらescを送ってから人間へ渡す` が
+// 「人間へ渡すときに worker を止めていない」で落ちた。設計 6-9）。
+//
+// **run が `o.runs` から外れるのは最後である**（`release`）。だからここが空になれば、
+// 後始末は全部済んでいる。
+//
+// t: 呼び出し元のテスト。
+// d: 待つ上限。
+func (fx *fixture) WaitRunsDrained(t *testing.T, d time.Duration) {
+	t.Helper()
+	waitFor(t, d, "走行中の run が無くなる（後始末まで終わる）", func() bool {
+		return len(fx.Orc.RunViews()) == 0
+	})
+}
+
 func waitFor(t *testing.T, d time.Duration, message string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(d)

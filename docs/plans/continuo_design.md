@@ -4723,6 +4723,59 @@ t.Setenv("HOME", "/home/tester")   // herdr の socket のパスを組み立て�
 
 ---
 
+### 6-9. 待つ条件が、確かめたいものより手前にある
+
+**言いたいこと。**テストが「Status が変わったこと」を待って、**そのあとの後始末を観測していた。**
+Status は後始末より前に書かれるので、**間に合うかどうかは運である。**
+
+**なぜ競合するか。**
+
+| 誰が | 何をする |
+| --- | --- |
+| `Tick` | `dispatchCandidates` を**goroutine で起こして即座に返る** |
+| その goroutine | Status を書く → コメント → after_run → **worker を止める** → worktree を片付ける → run を外す |
+| テスト | **Status を待って**、`Methods()` に `pane.close` があるかを見る |
+
+**Status を検知した時点で、`pane.close` はまだ来ていないことがある。**
+
+**どう出たか。**手元では通り、**CI の `-race`（ubuntu）で落ちた。**
+
+```
+--- FAIL: TestTurn_blockedが返ったらescを送ってから人間へ渡す (0.07s)
+    人間へ渡すときに worker を止めていない:
+    [worktree.open pane.list pane.rename agent.list agent.start agent.get agent.prompt agent.send_keys]
+```
+
+**手元では再現しなかった。**`-race -count=100` を2度回しても200回すべて通った（2026-08-24 実測）。
+**根拠は再現ではなくコードの順序である**（`finishRunClaimed` が Status → `stopWorker` の順で呼ぶ）。
+
+**どう直したか。****run が `o.runs` から外れるのを待つ。**
+`release` は後始末の最後なので、ここが空になれば `pane.close` も片付けも済んでいる。
+
+```go
+func (fx *fixture) WaitRunsDrained(t *testing.T, d time.Duration) {
+	t.Helper()
+	waitFor(t, d, "走行中の run が無くなる（後始末まで終わる）", func() bool {
+		return len(fx.Orc.RunViews()) == 0
+	})
+}
+```
+
+**同じ形が7件あった。**「`waitFor` で Status を待ち、そのあと `Methods()` / `CountMethod` /
+`Prompts()` を読む」テストを機械で洗い出して、全部に入れた。
+
+| ファイル | 件数 |
+| --- | --- |
+| `dispatch_test.go` | 2 |
+| `rucm_startup_test.go` | 2 |
+| `turn_test.go` | 2 |
+| `group_test.go` | 1 |
+
+**この形は今後も生える。**新しいテストを書くときは、**待つ条件に「確かめたいものが揃ったこと」を含める。**
+Status は「始まった合図」であって「終わった合図」ではない。
+
+---
+
 ## 7. 実装の順序
 
 **第6節に残る4件は実装を止めない。**運用に入ったら 6-1 のとおり記録を残す。

@@ -140,6 +140,8 @@ func TestComment_runが終わるときにコメントが無ければセッショ
 	waitFor(t, 30*time.Second, "Status が failure_state へ落ちる", func() bool {
 		return fx.Tracker.StateOf("PVTI_item188") == "Blocked"
 	})
+	// **後始末まで待つ。**Status は worker を止める前に書かれる（helpers_test.go の WaitRunsDrained）。
+	fx.WaitRunsDrained(t, 10*time.Second)
 
 	methods := fx.Herdr.Methods()
 	closeIdx := indexOf(methods, herdr.MethodPaneClose)
