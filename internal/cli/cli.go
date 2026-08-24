@@ -439,7 +439,7 @@ func checkDetectionForSetup(w io.Writer, d scaffold.Detection) int {
 	if d.Values.ProjectNumber <= 0 {
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupBoardErrProject, fieldReason(d, scaffold.ProjectKey)))
 		for _, c := range candidatesOf(d, scaffold.ProjectKey) {
-			fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupBoardCandidate, c.Number, c.Title, c.URL))
+			fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupBoardCandidate, c.Owner, c.Number, c.Title, c.URL))
 		}
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupBoardRemedyProject))
 		return 1
@@ -562,7 +562,7 @@ func printDetection(w io.Writer, d scaffold.Detection) {
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIInitDetectUnfilled, f.Key, f.Reason))
 		}
 		for _, c := range f.Candidates {
-			fmt.Fprintln(w, i18n.T(i18n.KeyCLIInitDetectCandidate, c.Number, c.Title, c.URL))
+			fmt.Fprintln(w, i18n.T(i18n.KeyCLIInitDetectCandidate, c.Owner, c.Number, c.Title, c.URL))
 		}
 		// **埋まったときも案内を出す。**trust.repositories は埋めて終わりではなく、
 		// **人間が要らない行を消して初めて意味を持つ**（設計 3-33）。

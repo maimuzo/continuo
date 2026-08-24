@@ -83,10 +83,6 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 
 ## 入れる
 
-> **release はまだ1つもありません。**下のインストーラーは「まだ配布していません」と答えて止まります。
-> **いまはソースから作ってください**（この節の末尾）。作者が実機で確かめ、出してよいと判断した時点で
-> タグが打たれ、release に実行ファイルが載ります。
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh
 ```
@@ -185,9 +181,7 @@ claude:
 
 ## いまの状態
 
-**実装とテストは通っていますが、実機で issue を1件通しきった実績はまだありません。**手順は [docs/trying_it_out.md](docs/trying_it_out.md) にあります。
-
-**release もまだ1つもありません。**そのため `install.sh` はいまのところ「まだ配布していません」と答えます。
+**実機で issue を1件、着手から片付けまで通しました。**`Ready` から拾い、herdr の pane で作業し、`Done` へ動き、worktree と branch も消えました。自分で試す手順は [docs/trying_it_out.md](docs/trying_it_out.md) にあります。
 
 **v0.x のうちは、設定の形を変えることがあります。**`WORKFLOW.md` の front matter は未知のキーを弾くので、
 **キーを消したり改名したりすると、古い設定ファイルは起動しなくなります。**その変更は release notes に書きます。

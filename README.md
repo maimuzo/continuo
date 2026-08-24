@@ -82,10 +82,6 @@ How many issues run at once is a setting (two by default).
 
 ## Install
 
-> **There are no releases yet.** The installer below will tell you so and stop.
-> **Build from source for now** (end of this section). Once the author has verified it on real
-> hardware and decided it is fit to ship, a tag goes up and the binaries land in releases.
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maimuzo/continuo/main/install.sh | sh
 ```
@@ -182,9 +178,7 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 
 ## Project status
 
-The implementation and its tests pass, but **no issue has yet been driven end to end on real hardware.** The walkthrough for trying it is in [docs/trying_it_out.md](docs/trying_it_out.md).
-
-**There are no releases yet either**, so `install.sh` currently just tells you so and stops.
+**One issue has now been driven end to end on real hardware** — picked up from `Ready`, worked on in a herdr pane, moved to `Done`, and the worktree and branch cleaned up. The walkthrough for trying it yourself is in [docs/trying_it_out.md](docs/trying_it_out.md).
 
 **While it is on v0.x, the configuration format may change.** The front matter in `WORKFLOW.md` rejects unknown keys, so **removing or renaming one will stop older config files from starting.** Any such change goes in the release notes.
 

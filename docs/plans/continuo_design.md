@@ -3227,6 +3227,51 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 
 ---
 
+### 3-32c. ボードは organization にもある
+
+**言いたいこと。**`gh api user` はログイン名しか返さない。**organization に置いたボードは、
+それだけでは1件も見つからない。**ログイン名で0件なら、所属する organization も探す。
+
+**なぜ要るか。**GitHub Enterprise で organization にボードを置いていた利用者が、
+**`continuo setup` で1歩も進めなかった**（issue #7）。
+
+```
+$ continuo setup
+使うボードの番号が決まりませんでした（yusuke-omichi-ctc のボードが1件も見つかりませんでした）
+→ --project <番号> を付けて、使うボードを指定して実行し直してください
+
+$ continuo setup --project 6
+ボードの Status フィールドを読めませんでした: … Could not resolve to a ProjectV2 with the number 6. (user.projectV2)
+```
+
+**`--project` を付けても直らない。**owner がログイン名のままなので、`user.projectV2` を引き続ける。
+**利用者に必要だったのは `--owner TS3-SE4` だったが、案内のどこにも書かれていなかった。**
+
+**どう探すか。**
+
+| 順 | 何をするか |
+| --- | --- |
+| 1 | `gh api user` でログイン名を引き、そのボードを探す |
+| 2 | **0件なら** `gh api user/orgs` で所属する organization を引く |
+| 3 | organization ごとに `gh project list` を試す（**1つ失敗しても残りを探す**） |
+| 4 | 候補が1件に決まったら、**owner をそのボードの持ち主に決め直す** |
+
+**owner を決め直さないと、どこにも存在しない組み合わせが書かれる。**
+`project_number` は organization のボードを指すのに、`owner` はログイン名のまま、という状態になる。
+
+**見つからないときは、探した owner を全部見せる。**
+
+```
+ボードが1件も見つかりませんでした（探した owner: yusuke-omichi-ctc, TS3-SE4, another-org）
+→ ボードが別の user / organization にあるなら、`continuo init --owner <名前> --project <番号>` を実行してください
+```
+
+**「見つかりません」だけでは、どこを探したのかが分からない。**利用者は `--owner` に何を渡せばよいかを判断できない。
+
+**ログイン名で見つかったら、所属は引かない。**見つかっているのに引くと、無駄にレートリミットを使う。
+
+---
+
 ### 3-32b. Windows ネイティブは対応しない
 
 **言いたいこと。**対応するのは **macOS と Linux（WSL2 上の Ubuntu を含む）**だけである。

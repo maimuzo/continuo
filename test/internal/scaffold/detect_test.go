@@ -182,8 +182,11 @@ func TestDetect_ボードが0件ならプレースホルダを残して作り方
 		out []byte
 		err error
 	}{
-		"api user":     ghResponse("octocat\n", nil),
-		"project list": ghResponse(`{"projects":[],"totalCount":0}`, nil),
+		"api user": ghResponse("octocat\n", nil),
+		// **ログイン名で0件なら、所属する organization も探す**（issue #7）。
+		// ここでは所属が1つも無い状況にする。
+		"api user/orgs": ghResponse("", nil),
+		"project list":  ghResponse(`{"projects":[],"totalCount":0}`, nil),
 	})
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
@@ -398,4 +401,145 @@ func containsSubstring(lines []string, sub string) bool {
 		}
 	}
 	return false
+}
+
+// emptyProjectJSON は候補が1件も無いときの出力である。
+const emptyProjectJSON = `{"projects":[],"totalCount":0}`
+
+// orgProjectJSON は organization が持つボード1件の出力である。
+const orgProjectJSON = `{"projects":[{"closed":false,"number":6,"owner":{"login":"TS3-SE4","type":"Organization"},` +
+	`"title":"チームの看板","url":"https://github.com/orgs/TS3-SE4/projects/6"}],"totalCount":1}`
+
+// ownerAwareGH は、`project list` の応答を owner ごとに変えられる差し替えである。
+//
+// **既定の fakeGH は `project list` を1つの応答にしか結び付けられない。**
+// ログイン名では0件、organization では1件、という状況を作れない。
+//
+// login: `gh api user` が返すログイン名。
+// orgs: `gh api user/orgs` が返す organization の名前（改行区切りで返す）。
+// byOwner: owner ごとの `gh project list` の出力。無い owner には空を返す。
+// items: `gh project item-list` の出力。
+// 戻り値: 差し替えの関数と、呼び出しの記録。
+func ownerAwareGH(t *testing.T, login string, orgs []string, byOwner map[string]string, items string) (scaffold.GHRunner, *[]string) {
+	t.Helper()
+	var calls []string
+	run := func(_ context.Context, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		switch {
+		case len(args) >= 2 && args[0] == "api" && args[1] == "user":
+			return []byte(login + "\n"), nil
+		case len(args) >= 2 && args[0] == "api" && args[1] == "user/orgs":
+			return []byte(strings.Join(orgs, "\n") + "\n"), nil
+		case len(args) >= 1 && args[0] == "project" && args[1] == "list":
+			owner := ""
+			for i, a := range args {
+				if a == "--owner" && i+1 < len(args) {
+					owner = args[i+1]
+				}
+			}
+			if out, ok := byOwner[owner]; ok {
+				return []byte(out), nil
+			}
+			return []byte(emptyProjectJSON), nil
+		case len(args) >= 1 && args[0] == "project" && args[1] == "item-list":
+			return []byte(items), nil
+		}
+		t.Errorf("想定していない gh の呼び出し: gh %s", strings.Join(args, " "))
+		return nil, errors.New("想定外の呼び出し")
+	}
+	return run, &calls
+}
+
+// TestDetect_ログイン名にボードが無ければorganizationも探す は、issue #7 の状況を確かめる。
+//
+// **`gh api user` はログイン名しか返さない。**organization に置いたボードは、
+// ログイン名で探しても1件も出ない。**GitHub Enterprise で organization にボードを
+// 置いていた利用者が、`continuo setup` で1歩も進めなかった。**
+//
+// 目的: ログイン名のボードが0件なら、所属する organization のボードも探すこと。
+// 与える情報: ログイン名では0件、organization `TS3-SE4` では1件を返す gh。
+// 成功条件: ボードの番号が埋まり、**owner も organization に決め直される**こと。
+func TestDetect_ログイン名にボードが無ければorganizationも探す(t *testing.T) {
+	run, calls := ownerAwareGH(t, "yusuke-omichi-ctc", []string{"TS3-SE4"},
+		map[string]string{"TS3-SE4": orgProjectJSON}, twoRepoItemsJSON)
+
+	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
+
+	if got.Values.ProjectNumber != 6 {
+		t.Errorf("organization のボードを拾えていない: got %d, want 6", got.Values.ProjectNumber)
+	}
+	// **owner を決め直さないと、どこにも存在しない組み合わせが書かれる。**
+	// `project_number` は organization のボードを指すのに、`owner` はログイン名のまま、という状態。
+	if got.Values.Owner != "TS3-SE4" {
+		t.Errorf("owner をボードの持ち主に合わせていない: got %q, want %q", got.Values.Owner, "TS3-SE4")
+	}
+	if !got.AllFilled() {
+		t.Errorf("両方埋まったのに AllFilled が偽である: %+v", got.Fields)
+	}
+
+	// **所属を引いていること。**引かなければ organization にはたどり着けない。
+	found := false
+	for _, c := range *calls {
+		if strings.HasPrefix(c, "api user/orgs") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("所属する organization を引いていない: %v", *calls)
+	}
+}
+
+// TestDetect_ログイン名にボードがあればorganizationを探さない は、余計な呼び出しをしないことを確かめる。
+//
+// **見つかっているのに所属を引くと、無駄にレートリミットを使う。**
+//
+// 目的: ログイン名のボードが1件あれば、`api user/orgs` を呼ばないこと。
+// 与える情報: ログイン名で1件を返す gh。
+// 成功条件: `api user/orgs` を1度も呼ばないこと。
+func TestDetect_ログイン名にボードがあればorganizationを探さない(t *testing.T) {
+	run, calls := ownerAwareGH(t, "octocat", []string{"some-org"},
+		map[string]string{"octocat": oneProjectJSON}, twoRepoItemsJSON)
+
+	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
+
+	if got.Values.Owner != "octocat" || got.Values.ProjectNumber != 3 {
+		t.Errorf("ログイン名のボードを使っていない: owner=%q number=%d", got.Values.Owner, got.Values.ProjectNumber)
+	}
+	for _, c := range *calls {
+		if strings.HasPrefix(c, "api user/orgs") {
+			t.Errorf("ログイン名で見つかったのに所属を引いている: %v", *calls)
+		}
+	}
+}
+
+// TestDetect_どこにもボードが無ければ探した先を全部出す は、案内の中身を確かめる。
+//
+// **「見つかりません」だけでは、どこを探したのかが分からない。**
+// 利用者は `--owner` に何を渡せばよいかを判断できない。
+//
+// 目的: ログイン名でも organization でも0件のとき、探した owner を全部示すこと。
+// 与える情報: どの owner でも0件を返す gh。
+// 成功条件: 理由にログイン名と organization の両方が出て、`--owner` の案内があること。
+func TestDetect_どこにもボードが無ければ探した先を全部出す(t *testing.T) {
+	run, _ := ownerAwareGH(t, "yusuke-omichi-ctc", []string{"TS3-SE4", "another-org"},
+		map[string]string{}, twoRepoItemsJSON)
+
+	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
+
+	var reason string
+	var advice []string
+	for _, f := range got.Fields {
+		if f.Key == scaffold.ProjectKey {
+			reason, advice = f.Reason, f.Advice
+		}
+	}
+	for _, want := range []string{"yusuke-omichi-ctc", "TS3-SE4", "another-org"} {
+		if !strings.Contains(reason, want) {
+			t.Errorf("探した owner %q が理由に出ていない: %q", want, reason)
+		}
+	}
+	joined := strings.Join(advice, "\n")
+	if !strings.Contains(joined, "--owner") {
+		t.Errorf("--owner を案内していない: %q", joined)
+	}
 }
