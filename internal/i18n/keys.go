@@ -1496,7 +1496,7 @@ const (
 	KeyOrchestratorStartRunIdentityWriteFailed Key = "orchestrator.start_run.identity_write_failed"
 	// KeyOrchestratorStartRunBeforeRunHookFailed はworkspace_hooks.before_run が失敗したときに出る。
 	KeyOrchestratorStartRunBeforeRunHookFailed Key = "orchestrator.start_run.before_run_hook_failed"
-	// KeyOrchestratorStartRunPaneRenameFailed はpane の label に issue の URL を書けなかったときに出る。
+	// KeyOrchestratorStartRunPaneRenameFailed はpane の label に owner/repo/issues/N を書けなかったときに出る。
 	KeyOrchestratorStartRunPaneRenameFailed Key = "orchestrator.start_run.pane_rename_failed"
 	// KeyOrchestratorStartRunAgentStartFailed はpane の中で Claude Code を起動できなかったときに出る。
 	KeyOrchestratorStartRunAgentStartFailed Key = "orchestrator.start_run.agent_start_failed"

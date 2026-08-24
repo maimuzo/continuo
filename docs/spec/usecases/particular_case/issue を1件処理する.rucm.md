@@ -46,11 +46,11 @@ BASIC FLOW:
 9. システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。
 10. システムはボードの issue の Status に running_state の選択肢を書く。
 11. システムは workspace.root の下に issue の worktree を作る。
-12. システムは worktree の絶対パスを渡して workspace として開く。
+12. システムは worktree の絶対パスを渡して workspace として開き、その label に owner/repo/issues/N を書く。
 13. システムは Claude Code の設定ファイルを worktree の外に書く。
 14. システムは worktree の中に身元ファイルを書く。
 15. システムは herdr に workspace の pane の一覧を要求する。
-16. システムは pane の label に issue の URL を書く。
+16. システムは pane の label に owner/repo/issues/N を書く。
 17. システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。
 18. システムは pane で Claude Code を起動する。
 19. システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。
@@ -254,11 +254,11 @@ flowchart TD
     B9{"9. VALIDATES THAT Status が terminal_states にも failure_state にも入っていない"}
     B10["10. Status に running_state を書く"]
     B11["11. worktree を作る"]
-    B12["12. worktree の絶対パスを渡して herdr の workspace として開く"]
+    B12["12. workspace として開き label に owner/repo/issues/N を書く"]
     B13["13. 設定ファイルを worktree の外に書く"]
     B14["14. 身元ファイルを書く"]
     B15["15. workspace の pane の一覧を要求する"]
-    B16["16. pane の label に issue の URL を書く"]
+    B16["16. pane の label に owner/repo/issues/N を書く"]
     B17{"17. VALIDATES THAT pane が起動を受け付ける"}
     B18["18. pane で Claude Code を起動する"]
     B19{"19. VALIDATES THAT agent_status が idle か done で interactive_ready が真"}
@@ -422,9 +422,9 @@ sequenceDiagram
                     Note over S: ABORT worktree は作らない
                 else 書いた
                     S->>S: worktree を作り設定ファイルと身元ファイルを書く
-                    S->>H: worktree の workspace としての open を要求する
+                    S->>H: worktree の workspace としての open と label の書き込みを要求する
                     H-->>S: workspace と pane を応答する
-                    S->>H: pane の label への issue の URL の書き込みを要求する
+                    S->>H: pane の label への owner/repo/issues/N の書き込みを要求する
                     S->>H: pane での Claude Code の起動を要求する
                     H->>CC: Claude Code を起動する
                     H-->>S: agent_status を応答する

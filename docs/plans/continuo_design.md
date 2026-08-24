@@ -132,7 +132,7 @@
 
 - 3-1 全体構成
 - 3-2 turn の終わりは hooks から continuo へ直接通知させる
-- 3-3 run を指す識別子を、消えない3箇所に書く
+- 3-3 run を指す識別子を、消えない2箇所に書く
 - 3-4 状態は in-memory。永続化層を作らない
 - 3-5 完了検知の3層（完了検知の3層を分ける）
 - 3-6 起動時の検査を厚くする
@@ -830,7 +830,7 @@ Stop hook を受け取ったとき:
 
 > **画面の内容で判定する案は採らない。**herdr の判定ルール（manifest）を差し替える案も要らない。
 
-### 3-3. run を指す識別子を、消えない3箇所に書く
+### 3-3. run を指す識別子を、消えない2箇所に書く
 
 **herdr-symphony の失敗の根は「run 中のエージェントを指す唯一の識別子が RAM 上の pane ID だけ」だったことである。**そこから多重起動の防止・再起動時の復元・キャンセル・後片付けが**同時に**成立しなくなっていた。
 
@@ -846,13 +846,29 @@ Stop hook を受け取ったとき:
 | pane を作るときに渡した環境変数 | **消える** | — | **そもそも herdr の API から読み戻せない** |
 | agent 名 | **残らない**（再起動後に生きている agent へ自動では戻らない） | 重複は拒否される | **32文字**（`^[a-z][a-z0-9_-]{0,31}$`） |
 
-**したがって continuo は、次の3本立てで run を識別する。**
+**したがって continuo は、次の2本立てで run を識別する。**
+**pane の label は識別に使わない**（下の表のあとで説明する）。
 
 | 短縮名 | 何を | どこに | 何のために |
 | --- | --- | --- | --- |
-| **pane の label** | **issue の URL** | **pane の label**（`pane.rename` で書く） | **復元の第2の経路。**長さ制限が無く、herdr の再起動をまたいで残る唯一の自由文字列である。**主キーは worktree の中の身元ファイルである**（3-18）。label は、身元ファイルが読めないときの手掛かりとして残す |
-| **worktree のパス** | **worktree のパスに issue 番号を含める** | **pane の cwd** | **label と独立した第2の経路。**path の指定が効くことを実測で確認したので、continuo が置き場所を決め打ちできる |
+| **worktree のパス** | **worktree のパスに issue 番号を含める** | **pane の cwd** | **復元の照合はこの1本だけである。**path の指定が効くことを実測で確認したので、continuo が置き場所を決め打ちできる。**主キーは worktree の中の身元ファイルである**（3-18） |
 | **セッション UUID** | **Claude Code のセッション UUID を continuo が先に決める**（`--session-id`） | 起動引数と、worktree の身元ファイル（3-18） | **hook から届く通知がどの run のものかを、hook 側に何も書かせずに判別できる。2026-08-18 に実測で確認済み**（3回とも一致。`transcript_path` のファイル名も同じ UUID になる。herdr の `agent_session` からも同じ値が引ける） |
+
+**pane と herdr workspace の label は `owner/repo/issues/N` を書く**（例: `octocat/hello-world/issues/188`）。
+**これは人間が herdr の画面で pane を見分けるためのものであり、continuo は読み戻さない。**
+復元の照合は上の表のとおり pane の cwd と worktree のパスで行うので、label の形を変えても引き継ぎは壊れない。
+
+**issue の URL をそのまま貼らない。**herdr の一覧では先頭が全部 `https://github.com/` になり、
+見分けたい部分（リポジトリ名と issue 番号）が右へ押し出されて読めなくなる。
+
+**組み立ては `herdr.IssueLabel(owner, repo, number)` の1本に寄せる。**
+pane（`pane.rename`）と herdr workspace（`worktree.open` の `label` と `workspace.rename`）の
+2箇所が別々に組み立てていると、形を変えたとき片方だけが直る。
+**owner か repo が空、または番号が0以下なら空文字を返し、label を書かない**（draft issue のため）。
+
+**`worktree.open` の `label` は、既に開かれている workspace には効かない。**作成時の label が残る。
+そのため continuo は `worktree.open` の直後に `workspace.rename` を1回掛けて書き直す。
+**失敗しても致命にしない。**label は表示名であり、復元の照合には使わないためである。
 
 > **セッション UUID は起動のたびに新しく作る。使い回してはならない。**
 > 一度使った UUID をもう一度渡すと、Claude Code が `Error: Session ID ... is already in use.` を出して起動に失敗する（実測）。
@@ -1513,7 +1529,7 @@ sequenceDiagram
     Note over ORC: 段8
     ORC->>HERDR: worktree.open（path = worktree）→ 中の pane を pane.list で引く
     HERDR-->>ORC: pane_id
-    ORC->>HERDR: pane.rename（label = issue の URL）
+    ORC->>HERDR: pane.rename（label = owner/repo/issues/N）
 
     Note over ORC: 段9
     ORC->>HERDR: agent.start（args に起動フラグ）
@@ -1734,7 +1750,7 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
 8. 段7 で開いた workspace の pane を引く（pane.list に workspace_id を渡す）
    → **pane を新しく作らない。**worktree.open が workspace を作った時点で、その中に pane が1つある
    → 返る pane が1つでなければ、その issue を失敗として扱う（人間が触った workspace かもしれない）
-   → pane.rename を呼び、label に issue の URL を書く（3-3）
+   → pane.rename を呼び、label に `owner/repo/issues/N` を書く（3-3）
 9. その pane で Claude Code を起動する（agent.start）
    → 起動フラグは args に載せる（2-1）。
      --settings <設定ファイル> / --session-id <UUID> / --permission-mode dontAsk

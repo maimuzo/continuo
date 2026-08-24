@@ -184,7 +184,8 @@ type Pane struct {
 	ForegroundCwd string `json:"foreground_cwd,omitempty"`
 	// DisplayAgent は herdr の UI に表示する agent 名である。
 	DisplayAgent string `json:"display_agent,omitempty"`
-	// Label は pane に貼られたラベルである。**issue の URL を書く**（3-3 の復元の第2の経路）。
+	// Label は pane に貼られたラベルである。**`owner/repo/issues/N` を書く**（3-3）。
+	// **人間が herdr の画面で pane を見分けるための表示名である。**continuo は読み戻さない。
 	// **書き込みは pane.split ではできない。**pane を作った直後に PaneRename を呼ぶこと。
 	Label string `json:"label,omitempty"`
 	// Scroll は pane のスクロール位置である。
@@ -313,7 +314,8 @@ type Workspace struct {
 	WorkspaceID string `json:"workspace_id"`
 	// Number は workspace の通し番号である。
 	Number uint `json:"number"`
-	// Label は workspace に貼られたラベルである。**issue の URL を書く**（3-3）。
+	// Label は workspace に貼られたラベルである。**`owner/repo/issues/N` を書く**（3-3）。
+	// **人間が herdr の画面で workspace を見分けるための表示名である。**continuo は読み戻さない。
 	// 書き込みは WorkspaceRename で行う。
 	Label string `json:"label"`
 	// Focused は workspace がフォーカスされているかどうかである。

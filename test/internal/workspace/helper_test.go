@@ -248,6 +248,17 @@ func worktreeOpenResult(workspaceID, paneID string) map[string]any {
 	}
 }
 
+// workspaceRenameResult は workspace.rename の成功応答（変種 workspace_info）の写しである。
+//
+// workspaceID: label を書いた workspace の ID。
+// 戻り値: JSON 化して result に載せる値。
+func workspaceRenameResult(workspaceID string) map[string]any {
+	return map[string]any{
+		"type":      "workspace_info",
+		"workspace": map[string]any{"workspace_id": workspaceID},
+	}
+}
+
 // worktreeRemoveResult は worktree.remove の成功応答（変種 worktree_removed）の写しである。
 //
 // workspaceID: 消した workspace の ID。
@@ -386,8 +397,9 @@ func newFixture(t *testing.T, opts fixtureOptions) *managerFixture {
 	fake := opts.Herdr
 	if fake == nil {
 		fake = newFakeHerdr(t, map[string]any{
-			herdr.MethodWorktreeOpen:   worktreeOpenResult("w9", "w9:p1"),
-			herdr.MethodWorktreeRemove: worktreeRemoveResult("w9", ""),
+			herdr.MethodWorktreeOpen:    worktreeOpenResult("w9", "w9:p1"),
+			herdr.MethodWorktreeRemove:  worktreeRemoveResult("w9", ""),
+			herdr.MethodWorkspaceRename: workspaceRenameResult("w9"),
 		})
 	}
 

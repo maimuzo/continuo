@@ -302,6 +302,14 @@ func (fh *fakeHerdr) installDefaults() {
 			"pane": map[string]any{"pane_id": fmt.Sprint(params["pane_id"]), "label": fmt.Sprint(params["label"])},
 		}, nil
 	})
+	fh.Handle(herdr.MethodWorkspaceRename, func(params map[string]any) (any, *rpcErr) {
+		return map[string]any{
+			"type": "workspace_info",
+			"workspace": map[string]any{
+				"workspace_id": fmt.Sprint(params["workspace_id"]), "label": fmt.Sprint(params["label"]),
+			},
+		}, nil
+	})
 	fh.Handle(herdr.MethodPaneClose, func(map[string]any) (any, *rpcErr) {
 		return map[string]any{"type": "pane_closed"}, nil
 	})

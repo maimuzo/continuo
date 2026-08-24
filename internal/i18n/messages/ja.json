@@ -404,7 +404,7 @@
   "orchestrator.start_run.agent_start_failed": "Claude Code を起動できません: %w",
   "orchestrator.start_run.before_run_hook_failed": "workspace_hooks.before_run に失敗しました: %w",
   "orchestrator.start_run.identity_write_failed": "身元ファイルを書けません: %w",
-  "orchestrator.start_run.pane_rename_failed": "pane の label に issue の URL を書けません: %w",
+  "orchestrator.start_run.pane_rename_failed": "pane の label に owner/repo/issues/N を書けません: %w",
   "orchestrator.start_run.status_update_failed": "Status を %s へ書けません: %w",
   "orchestrator.start_run.worktree_prepare_failed": "作業用の worktree を用意できませんでした。\n%w",
   "orchestrator.write_settings_file.dir_create_failed": "issue ごとの設定ファイルの置き場所を作れません: %s: %w",
