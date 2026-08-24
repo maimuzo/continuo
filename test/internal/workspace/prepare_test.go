@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -41,12 +42,24 @@ func TestPrepare_新規に作りherdrにはworktree_openを呼ぶ(t *testing.T) 
 		t.Fatalf("worktree が想定の branch を指していない: got %q", got)
 	}
 
+	// **worktree を開く呼び出しは worktree.open ちょうど1件である**（設計 4-5）。
+	// pane.split も tab.create も呼ばない。worktree.create でもない。
+	//
+	// **その前後に workspace.list が読み取りとして入る**（issue #19）。
+	// 前の1回は「リポジトリの親 workspace が、この呼び出しより前からあったか」を見る。
+	// 無かったので、後ろの1回で「continuo が開かせた親」の ID を控える。
+	// **前からあった場合、後ろの1回は呼ばない**（閉じる責任を負わないため）。
 	methods := fx.Herdr.Methods()
 	// **worktree.open のあとに workspace.rename が続く。**worktree.open の label は
 	// 既に開かれている workspace には効かないので、開き直すたびに書き直す（設計 3-3）。
-	if len(methods) != 2 ||
-		methods[0] != herdr.MethodWorktreeOpen || methods[1] != herdr.MethodWorkspaceRename {
-		t.Fatalf("herdr へ送ったメソッドが worktree.open → workspace.rename の2件でない: %v", methods)
+	want := []string{
+		herdr.MethodWorkspaceList,
+		herdr.MethodWorktreeOpen,
+		herdr.MethodWorkspaceList,
+		herdr.MethodWorkspaceRename,
+	}
+	if !slices.Equal(methods, want) {
+		t.Fatalf("herdr へ送ったメソッドが想定と違う: got %v, want %v", methods, want)
 	}
 	if result.HerdrWorkspaceID != "w9" {
 		t.Fatalf("herdr workspace の ID を受け取れていない: got %q", result.HerdrWorkspaceID)
@@ -55,7 +68,8 @@ func TestPrepare_新規に作りherdrにはworktree_openを呼ぶ(t *testing.T) 
 		t.Fatalf("worktree.open が作った pane の ID を受け取れていない: got %q", result.HerdrPaneID)
 	}
 
-	params := fx.Herdr.Requests()[0].Params
+	// 上の並びのとおり、worktree.open は2件目である（1件目は workspace.list の読み取り）。
+	params := fx.Herdr.Requests()[1].Params
 	if params["path"] != result.Path {
 		t.Fatalf("worktree.open に渡した path が違う: got %v, want %q", params["path"], result.Path)
 	}
@@ -76,7 +90,8 @@ func TestPrepare_新規に作りherdrにはworktree_openを呼ぶ(t *testing.T) 
 	}
 
 	// **既に開かれていた workspace のために label を書き直す。**
-	renameParams := fx.Herdr.Requests()[1].Params
+	// 上の並びのとおり、workspace.rename は4件目である。
+	renameParams := fx.Herdr.Requests()[3].Params
 	if renameParams["workspace_id"] != "w9" {
 		t.Fatalf("workspace.rename の宛先が worktree.open の返した workspace でない: got %v",
 			renameParams["workspace_id"])

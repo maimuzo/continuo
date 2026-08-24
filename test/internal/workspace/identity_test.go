@@ -236,6 +236,74 @@ func TestReadIdentity_壊れたJSONはErrIdentityBrokenになる(t *testing.T) {
 	}
 }
 
+// 目的: 身元ファイルが大きすぎるときに、読み切らずに止まることを確認する。
+// 与える情報: 上限（64 KiB）を1バイト超える身元ファイル。
+// 成功条件: ReadIdentity が ErrIdentityBroken を返し、文言に上限のバイト数が入り、
+// ファイルは残っていること。
+//
+// **なぜ上限が要るか。**身元ファイルは worktree の直下にあり、そこでエージェントが
+// `--permission-mode dontAsk` で動く。上限が無いと、書かれただけの大きさが
+// 常駐プロセスのメモリに載る（実測で 67,109,391 バイトを読み切った）。
+// git の出力に gitOutputLimit を掛けているのとまったく同じ理由である。
+func TestReadIdentity_大きすぎる身元ファイルは読まない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	path := fx.Manager.IdentityPath(prepared.Path)
+	// 上限は 64 KiB である。**その1バイト上を試す**（境界を跨いだことを確かめる）。
+	oversized := append([]byte(`{"issue_url": "`), make([]byte, 64*1024+1)...)
+	for i := range oversized[len(`{"issue_url": "`):] {
+		oversized[len(`{"issue_url": "`)+i] = 'a'
+	}
+	if err := os.WriteFile(path, oversized, 0o600); err != nil {
+		t.Fatalf("大きすぎる身元ファイルを書けない: %v", err)
+	}
+
+	_, err := fx.Manager.ReadIdentity(prepared.Path)
+	if !errors.Is(err, workspace.ErrIdentityBroken) {
+		t.Fatalf("上限を超えているのに ErrIdentityBroken にならない: %v", err)
+	}
+	// **「JSON が壊れている」に化けさせない。**理由が化けると、人間が中身を疑って調べ始める。
+	if !strings.Contains(err.Error(), "65536") {
+		t.Fatalf("上限のバイト数が文言に入っていない: %v", err)
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Fatalf("大きすぎる身元ファイルが消されている: %v", statErr)
+	}
+}
+
+// 目的: 身元ファイルが symlink に差し替えられていたら、リンク先を読まないことを確認する。
+// 与える情報: worktree の外にある JSON を指す symlink に差し替えた身元ファイル。
+// 成功条件: ReadIdentity が ErrIdentityBroken を返し、**リンク先の issue_url を
+// 読み取っていない**こと。
+//
+// **辿ると何が起きるか。**身元ファイルの issue_url は「この worktree を消してよいか」を
+// 決める鍵である。リンク先の内容が照合に通ると、**置き場所の外の1ファイルの中身で
+// 削除の対象が決まる。**
+func TestReadIdentity_symlinkは辿らない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	outside := filepath.Join(t.TempDir(), "他人の身元.json")
+	if err := os.WriteFile(outside, []byte(`{"issue_url":"https://example.invalid/o/r/issues/1"}`), 0o600); err != nil {
+		t.Fatalf("worktree の外のファイルを書けない: %v", err)
+	}
+
+	// Prepare は身元ファイルを書かない（書くのは呼び出し側の段6）ので、消す必要は無い。
+	path := fx.Manager.IdentityPath(prepared.Path)
+	if err := os.Symlink(outside, path); err != nil {
+		t.Fatalf("身元ファイルを symlink に差し替えられない: %v", err)
+	}
+
+	got, err := fx.Manager.ReadIdentity(prepared.Path)
+	if !errors.Is(err, workspace.ErrIdentityBroken) {
+		t.Fatalf("symlink なのに ErrIdentityBroken にならない: %v (%+v)", err, got)
+	}
+	if got != nil {
+		t.Fatalf("symlink の先を読み取ってしまっている: %+v", *got)
+	}
+}
+
 // 目的: 身元ファイルが無いときに、それと分かるエラーになることを確認する
 // （設計 3-4 の段2。人間が置いた worktree かもしれないので無視する）。
 // 与える情報: 身元ファイルを置いていない worktree のパス。

@@ -3,12 +3,12 @@
   "usecase_name": "worktree と branch を片付ける",
   "source": {
     "file": "docs/spec/usecases/particular_case/worktree と branch を片付ける.rucm.md",
-    "rucm_block_sha256": "ffc88fa9d61f1e20be213ea5d4aa904f8faf404f7190e9dbd991721535282ac4"
+    "rucm_block_sha256": "58a760abf98b99b037682a6db475e0b922cf025ca18073daccef8de3430c142a"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。"
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。"
     },
     "片付けの対象外": {
       "rfs": {
@@ -132,23 +132,51 @@
     },
     {
       "id": "BASIC FLOW-11",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは git に branch の削除を要求する。"
+      "statement": "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN"
     },
     {
       "id": "BASIC FLOW-12",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは issue ごとの Claude Code の設定ファイルを消す。"
+      "statement": "システムは herdr に workspace の一覧を要求する。"
     },
     {
       "id": "BASIC FLOW-13",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 13,
+      "statement": "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "システムは herdr にリポジトリの親 workspace を閉じることを要求する。"
+    },
+    {
+      "id": "BASIC FLOW-17",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 17,
+      "statement": "システムは git に branch の削除を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-18",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 18,
+      "statement": "システムは issue ごとの Claude Code の設定ファイルを消す。"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
       "statement": "システムは利用者に片付けの完了をログで応答する。"
     },
     {
@@ -380,11 +408,45 @@
     {
       "from": "BASIC FLOW-11",
       "to": "BASIC FLOW-12",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-17",
+      "kind": "false",
+      "condition": "NOT システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある"
     },
     {
       "from": "BASIC FLOW-12",
       "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "true",
+      "condition": "控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-17",
+      "kind": "false",
+      "condition": "NOT 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-17",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
       "kind": "seq"
     },
     {
@@ -475,7 +537,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -489,7 +551,11 @@
         "BASIC FLOW-10",
         "BASIC FLOW-11",
         "BASIC FLOW-12",
-        "BASIC FLOW-13"
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -502,6 +568,10 @@
         "システムは VALIDATES THAT branch に push されていない成果がない。",
         "システムは workspace_hooks の before_remove を実行する。",
         "システムは herdr に workspace の ID を渡して worktree の削除を要求する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "システムは herdr にリポジトリの親 workspace を閉じることを要求する。",
         "システムは git に branch の削除を要求する。",
         "システムは issue ごとの Claude Code の設定ファイルを消す。",
         "システムは利用者に片付けの完了をログで応答する。"
@@ -509,6 +579,88 @@
     },
     {
       "id": "P002",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がない。",
+        "システムは VALIDATES THAT branch に push されていない成果がない。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "CONDITION: NOT 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない",
+        "システムは git に branch の削除を要求する。",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がない。",
+        "システムは VALIDATES THAT branch に push されていない成果がない。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "CONDITION: NOT システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある",
+        "システムは git に branch の削除を要求する。",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P004",
       "terminal": "abort",
       "terminal_flow": "未pushの成果",
       "postcondition": "worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。次の巡回では同じ理由のコメントが増えない。",
@@ -543,7 +695,7 @@
       ]
     },
     {
-      "id": "P003",
+      "id": "P005",
       "terminal": "abort",
       "terminal_flow": "未コミットの変更",
       "postcondition": "worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。身元ファイルに片付けを見送った時刻がある。",
@@ -576,7 +728,7 @@
       ]
     },
     {
-      "id": "P004",
+      "id": "P006",
       "terminal": "abort",
       "terminal_flow": "置き場所の外",
       "postcondition": "worktree は残っている。branch は残っている。置き場所の外のディレクトリは1つも消えていない。",
@@ -605,7 +757,7 @@
       ]
     },
     {
-      "id": "P005",
+      "id": "P007",
       "terminal": "abort",
       "terminal_flow": "片付けの対象外",
       "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。",
@@ -636,7 +788,7 @@
       ]
     },
     {
-      "id": "P006",
+      "id": "P008",
       "terminal": "abort",
       "terminal_flow": "片付けの対象外",
       "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。",
@@ -666,7 +818,7 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P009",
       "terminal": "abort",
       "terminal_flow": "片付けの無効",
       "postcondition": "worktree は残っている。branch は残っている。issue にコメントは増えていない。",
@@ -696,9 +848,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 33,
-    "nodes_covered": 33,
-    "edges_total": 33,
-    "edges_covered": 33
+    "nodes_total": 37,
+    "nodes_covered": 37,
+    "edges_total": 39,
+    "edges_covered": 39
   }
 }
