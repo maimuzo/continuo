@@ -141,6 +141,15 @@ type runner struct {
 	// parkDeferred は「継続監視は動いているが、`--dry-run` なので手を離させなかった」
 	// ことを表す。**段3 で予告の1行を出すのに使う。**
 	parkDeferred bool
+	// parkedTo は手を離させるために実際に書き込んだ Status の値である。空なら書いていない。
+	//
+	// **書いたあとに何も消さずに止まったとき、Status がその値のまま残ることを
+	// 人間へ言うのに使う。**continuo は元へ戻さない（戻すと、書いた瞬間に継続監視が
+	// 拾い直しうる。戻す先は `tracker.active_states` の値である）。
+	parkedTo string
+	// removed は worktree を実際に消したかどうかである。
+	// **消せたなら段5 が Status について応答するので、park の言い添えは出さない。**
+	removed bool
 }
 
 // Run は `continuo abandon` の段1〜段5 を通す。
@@ -213,6 +222,10 @@ func (r *runner) run(ctx context.Context) int {
 			}
 		}()
 	}
+	// **手を離させる書き込みを済ませたあとで止まったら、そのことを必ず言う。**
+	// どの段で止まっても Status は park の値のまま残る。**どこで止まっても同じ1行が
+	// 出るように、段ごとに書かず、ここで1度だけ仕掛ける**（書き漏らす段が出ない）。
+	defer r.reportParkLeftBehind()
 	if running {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRunning, r.deps.LockPath))
 	} else {
@@ -536,6 +549,11 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonParkNotWritten, target))
 		return ExitStopped
 	}
+	// **持ち回っている Status を書いた値へ更新する。**ボードは1回しか読まないので、
+	// 更新しないと段3 の計画表示が park の**前**の値を出す（人間には、これから消す
+	// worktree の issue がまだ作業中に見える）。
+	r.board.State = target
+	r.parkedTo = target
 	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonParkMoved, state, target, found.Path))
 	return ExitOK
 }
@@ -582,6 +600,23 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 			return ExitStopped
 		}
 	}
+}
+
+// reportParkLeftBehind は、手を離させる書き込みを済ませたあとに何も消さずに止まったとき、
+// Status がその値のまま残ることを人間へ言う。
+//
+// **「何も消していません」だけでは足りない。**ボードは既に書き換わっており、
+// **消さなかったのだから元のままだろう**と読まれると、その issue はそこに置き去りになる。
+//
+// **continuo は元へ戻さない。**戻した瞬間に、動いている継続監視がその issue を
+// 拾い直しうる（戻す先は `tracker.active_states` の値である）。戻すかどうかは人間が決める。
+//
+// **消せたときは出さない。**そのときは段5 が Status について応答する。
+func (r *runner) reportParkLeftBehind() {
+	if r.parkedTo == "" || r.removed {
+		return
+	}
+	fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonParkLeftBehind, r.parkedTo))
 }
 
 // paneWaitTimeout は pane が閉じるのを待つ上限を決める。
@@ -647,6 +682,9 @@ func (r *runner) remove(ctx context.Context, worktreePath string, leftover *work
 		WorktreePath: worktreePath,
 		Force:        true,
 	})
+	if err == nil && result.Removed {
+		r.removed = true
+	}
 	if err != nil {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrCleanup, worktreePath, err))
 		return ExitStopped

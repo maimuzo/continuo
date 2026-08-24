@@ -101,10 +101,12 @@ func (m *Manager) ShouldCleanup(state string) bool {
 //	2d workspace_hooks.before_remove を、消す前の worktree を cwd にして実行する
 //	   （失敗しても記録して続ける）
 //	3  herdr の worktree.remove を workspace の ID で呼ぶ（path でも branch でもない）
+//	3b continuo が開かせたリポジトリの親 workspace を、条件を満たすときだけ閉じる
 //	4  branch は herdr が消さないので git branch -D を自分で叩く
 //
-// **worktree.remove のあとに workspace.close を呼ばない。**応答に workspace が入り、
-// workspace ごと閉じられる。
+// **worktree の workspace に対して workspace.close を呼ばない。**worktree.remove の
+// 応答に workspace が入り、workspace ごと閉じられる。
+// **閉じるのはリポジトリの親 workspace だけである**（段3b。issue #19）。
 //
 // **`req.Force` が真なら、手順2 と 2b と cleanup.enabled を飛ばす**
 // （`continuo abandon --force` だけが渡す。CleanupRequest.Force を見よ）。
@@ -197,6 +199,11 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 	if err := m.removeWorktree(ctx, workspaceID, repoDir, resolvedPath); err != nil {
 		return nil, err
 	}
+
+	// 3b: continuo が開かせたリポジトリの親 workspace を閉じる（issue #19）。
+	// **worktree.remove はこれを閉じない**ので、放っておくと issue 1件につき1つ溜まる。
+	// **閉じてよい条件は internal/workspace/repoworkspace.go に書いてある。**
+	m.closeRepoWorkspace(ctx, repoDir, identity)
 
 	// 4: branch は herdr が消さないので自分で叩く。
 	if m.cfg.Cleanup.DeleteBranch && branchDeletable {

@@ -552,10 +552,13 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		Branch:           prepared.Branch.String(),
 		Base:             prepared.Base.String(),
 		HerdrWorkspaceID: prepared.HerdrWorkspaceID,
-		SocketPath:       o.socketPath,
-		SettingsPath:     settingsPath,
-		SessionUUID:      sessionUUID,
-		CreatedAt:        o.now(),
+		// **continuo が開かせたリポジトリの親 workspace を控える**（issue #19）。
+		// ここに書かないと、片付けが閉じる相手を知らないまま終わる。
+		HerdrRepoWorkspaceID: prepared.HerdrRepoWorkspaceID,
+		SocketPath:           o.socketPath,
+		SettingsPath:         settingsPath,
+		SessionUUID:          sessionUUID,
+		CreatedAt:            o.now(),
 	}
 	identity = workspace.MergeForReuse(identity, prepared.ExistingIdentity)
 	if err := o.ws.WriteIdentity(ctx, prepared.Path, identity); err != nil {

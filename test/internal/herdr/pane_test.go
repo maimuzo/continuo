@@ -36,7 +36,7 @@ var paneReportAgentSchemaKeys = []string{
 // focus が **偽として明示的に送られている**こと（bool の既定値が落ちていないこと）。
 // 実スキーマに無いキーを1つも送っていないこと。
 func TestPaneSplit_実スキーマの引数で送られる(t *testing.T) {
-	const worktreePath = "/Users/tester/.continuo/worktrees/maimuzo-continuo-87"
+	const worktreePath = "/Users/tester/.continuo/worktrees/octocat-hello-world-87"
 
 	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
 		var req rpcRequest

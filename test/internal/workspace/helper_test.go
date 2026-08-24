@@ -248,6 +248,41 @@ func worktreeOpenResult(workspaceID, paneID string) map[string]any {
 	}
 }
 
+// workspaceListResult は workspace.list の成功応答（変種 workspace_list）の写しである。
+//
+// entries: 載せる workspace（workspaceEntry で作る）。空なら1件も開いていない応答になる。
+// 戻り値: JSON 化して result に載せる値。
+func workspaceListResult(entries ...map[string]any) map[string]any {
+	list := make([]any, 0, len(entries))
+	for _, e := range entries {
+		list = append(list, e)
+	}
+	return map[string]any{"type": "workspace_list", "workspaces": list}
+}
+
+// workspaceEntry は workspace.list の1件を作る。
+//
+// workspaceID: workspace の ID。
+// checkoutPath: その workspace が開いている作業ディレクトリ。
+// repoRoot: そのリポジトリ本体のパス（**リポジトリの親 workspace は checkoutPath と同じ値**）。
+// 戻り値: workspaceListResult に渡す1件。
+func workspaceEntry(workspaceID, checkoutPath, repoRoot string) map[string]any {
+	return map[string]any{
+		"workspace_id": workspaceID,
+		"worktree": map[string]any{
+			"checkout_path": checkoutPath,
+			"repo_root":     repoRoot,
+		},
+	}
+}
+
+// workspaceCloseResult は workspace.close の成功応答（変種 ok）の写しである。
+//
+// 戻り値: JSON 化して result に載せる値。
+func workspaceCloseResult() map[string]any {
+	return map[string]any{"type": "ok"}
+}
+
 // worktreeRemoveResult は worktree.remove の成功応答（変種 worktree_removed）の写しである。
 //
 // workspaceID: 消した workspace の ID。
@@ -388,6 +423,11 @@ func newFixture(t *testing.T, opts fixtureOptions) *managerFixture {
 		fake = newFakeHerdr(t, map[string]any{
 			herdr.MethodWorktreeOpen:   worktreeOpenResult("w9", "w9:p1"),
 			herdr.MethodWorktreeRemove: worktreeRemoveResult("w9", ""),
+			// **既定は「1件も開いていない」応答にする。**リポジトリの親 workspace を
+			// 閉じるかどうかの判定（issue #19）がここを引く。閉じる側を確かめるテストは
+			// SetResult で中身を差し替える。
+			herdr.MethodWorkspaceList:  workspaceListResult(),
+			herdr.MethodWorkspaceClose: workspaceCloseResult(),
 		})
 	}
 

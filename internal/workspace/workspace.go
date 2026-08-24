@@ -30,8 +30,11 @@ import (
 //
 // **worktree を作る worktree.create は含めない。**worktree の実体は git が作り終えて
 // いるので、herdr には既にあるものを開かせる（3-22 の段7）。
-// **workspace.close も含めない。**worktree.remove の応答に workspace が入り、
-// workspace ごと閉じられるため、続けて呼ぶと余計に閉じてしまう（3-9）。
+//
+// **workspace.list と workspace.close は含める。**`worktree.open` は cwd に渡した
+// リポジトリの workspace（**リポジトリの親 workspace**）も一緒に開き、`worktree.remove` は
+// そちらを閉じない。放っておくと issue 1件につき1つ溜まる（issue #19）。
+// **閉じてよいかの判定に workspace.list が要る**（3-9 の段3b。closeRepoWorkspace を見よ）。
 //
 // *herdr.Client がこのインタフェースを満たす。
 type HerdrClient interface {
@@ -39,6 +42,10 @@ type HerdrClient interface {
 	WorktreeOpen(ctx context.Context, params herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error)
 	// WorktreeRemove は herdr workspace の ID を指定して worktree を消す。
 	WorktreeRemove(ctx context.Context, params herdr.WorktreeRemoveParams) (*herdr.WorktreeRemoveResult, error)
+	// WorkspaceList は herdr が開いている workspace の一覧を取る。
+	WorkspaceList(ctx context.Context) (*herdr.WorkspaceListResult, error)
+	// WorkspaceClose は herdr workspace を閉じる（worktree の実体は消さない）。
+	WorkspaceClose(ctx context.Context, params herdr.WorkspaceCloseParams) (*herdr.WorkspaceCloseResult, error)
 }
 
 // GhqListFunc は `ghq list -p -e <owner>/<repo>` 相当の処理を行う関数の型である。

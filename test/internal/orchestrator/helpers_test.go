@@ -162,10 +162,22 @@ type fakeHerdr struct {
 	timeline *timeline
 	// gitRepoDir は worktree.remove のあとに `git worktree prune` を叩くリポジトリである。
 	gitRepoDir string
-	// workspaces は workspace の ID から worktree のパスを引く写像である。
-	workspaces map[string]string
+	// workspaces は workspace の ID から、その workspace が開いているものを引く写像である。
+	workspaces map[string]fakeWorkspace
 	// nextWS は次に払い出す workspace の通し番号である。
 	nextWS int
+}
+
+// fakeWorkspace はテスト用herdr mock が持つ workspace 1件である。
+//
+// **本物と同じく、リポジトリの親 workspace も持つ**（issue #19）。`worktree.open` に
+// `cwd` を渡すと、herdr は worktree のぶんに加えて `cwd` のリポジトリのぶんも開く。
+// 親は `Checkout` と `RepoRoot` が同じ値になる。
+type fakeWorkspace struct {
+	// Checkout はその workspace が開いている作業ディレクトリである。
+	Checkout string
+	// RepoRoot はそのリポジトリ本体のパスである。
+	RepoRoot string
 }
 
 // SetGitRepoDir は worktree.remove のあとに prune を叩くリポジトリを設定する。
@@ -179,30 +191,53 @@ func (fh *fakeHerdr) SetGitRepoDir(dir string) {
 
 // workspaceFor はパスに対応する workspace の ID を返す（無ければ払い出す）。
 //
-// path: worktree の絶対パス。
+// path: その workspace が開く作業ディレクトリ。
+// repoRoot: そのリポジトリ本体のパス。**path と同じなら親 workspace である。**
 // 戻り値: workspace の ID。
-func (fh *fakeHerdr) workspaceFor(path string) string {
+func (fh *fakeHerdr) workspaceFor(path, repoRoot string) string {
 	fh.mu.Lock()
 	defer fh.mu.Unlock()
-	for id, p := range fh.workspaces {
-		if p == path {
+	for id, ws := range fh.workspaces {
+		if ws.Checkout == path {
 			return id
 		}
 	}
 	fh.nextWS++
 	id := fmt.Sprintf("w%d", fh.nextWS)
-	fh.workspaces[id] = path
+	fh.workspaces[id] = fakeWorkspace{Checkout: path, RepoRoot: repoRoot}
 	return id
 }
 
 // pathOf は workspace の ID からパスを引く。
 //
 // id: workspace の ID。
-// 戻り値: worktree の絶対パス。分からなければ空文字。
+// 戻り値: 作業ディレクトリの絶対パス。分からなければ空文字。
 func (fh *fakeHerdr) pathOf(id string) string {
 	fh.mu.Lock()
 	defer fh.mu.Unlock()
-	return fh.workspaces[id]
+	return fh.workspaces[id].Checkout
+}
+
+// forgetWorkspace は workspace を一覧から落とす（worktree.remove と workspace.close）。
+//
+// id: 落とす workspace の ID。
+func (fh *fakeHerdr) forgetWorkspace(id string) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	delete(fh.workspaces, id)
+}
+
+// OpenWorkspaces は、いま開いている workspace を ID 順に返す（検査から使う）。
+//
+// 戻り値: workspace の ID から中身への写像の写し。
+func (fh *fakeHerdr) OpenWorkspaces() map[string]fakeWorkspace {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	out := make(map[string]fakeWorkspace, len(fh.workspaces))
+	for id, ws := range fh.workspaces {
+		out[id] = ws
+	}
+	return out
 }
 
 // repoDir は prune を叩くリポジトリを返す。
@@ -237,7 +272,7 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 	fh := &fakeHerdr{
 		socketPath: socketPath,
 		handlers:   map[string]herdrHandler{},
-		workspaces: map[string]string{},
+		workspaces: map[string]fakeWorkspace{},
 	}
 	fh.installDefaults()
 
@@ -257,7 +292,14 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 func (fh *fakeHerdr) installDefaults() {
 	fh.Handle(herdr.MethodWorktreeOpen, func(params map[string]any) (any, *rpcErr) {
 		path, _ := params["path"].(string)
-		id := fh.workspaceFor(path)
+		cwd, _ := params["cwd"].(string)
+		// **本物と同じく workspace を2つ開く**（実測: 2026-08-24。issue #19）。
+		// worktree のぶんと、cwd のリポジトリのぶん（＝リポジトリの親 workspace）である。
+		// 親を作らないと、片付けが閉じる相手が現れず、閉じ残しの検査が素通りする。
+		if cwd != "" {
+			fh.workspaceFor(cwd, cwd)
+		}
+		id := fh.workspaceFor(path, cwd)
 		pane := id + ":p1"
 		return map[string]any{
 			"type":      "worktree_opened",
@@ -277,12 +319,31 @@ func (fh *fakeHerdr) installDefaults() {
 				_ = exec.Command("git", "-C", repo, "worktree", "prune").Run()
 			}
 		}
+		// **リポジトリの親 workspace は落とさない。**本物の worktree.remove も閉じない。
+		fh.forgetWorkspace(id)
 		return map[string]any{
 			"type":         "worktree_removed",
 			"workspace_id": id,
 			"path":         path,
 			"forced":       true,
 		}, nil
+	})
+	fh.Handle(herdr.MethodWorkspaceList, func(map[string]any) (any, *rpcErr) {
+		list := []any{}
+		for id, ws := range fh.OpenWorkspaces() {
+			list = append(list, map[string]any{
+				"workspace_id": id,
+				"worktree": map[string]any{
+					"checkout_path": ws.Checkout,
+					"repo_root":     ws.RepoRoot,
+				},
+			})
+		}
+		return map[string]any{"type": "workspace_list", "workspaces": list}, nil
+	})
+	fh.Handle(herdr.MethodWorkspaceClose, func(params map[string]any) (any, *rpcErr) {
+		fh.forgetWorkspace(fmt.Sprint(params["workspace_id"]))
+		return map[string]any{"type": "ok"}, nil
 	})
 	fh.Handle(herdr.MethodPaneList, func(params map[string]any) (any, *rpcErr) {
 		id, _ := params["workspace_id"].(string)

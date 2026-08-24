@@ -46,7 +46,7 @@ BASIC FLOW:
 9. システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。
 10. システムはボードの issue の Status に running_state の選択肢を書く。
 11. システムは workspace.root の下に issue の worktree を作る。
-12. システムは worktree の絶対パスを渡して workspace として開く。
+12. システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開く。
 13. システムは Claude Code の設定ファイルを worktree の外に書く。
 14. システムは worktree の中に身元ファイルを書く。
 15. システムは herdr に workspace の pane の一覧を要求する。
@@ -221,6 +221,22 @@ POSTCONDITION: herdr の pane は閉じている。印は残っている。issue
 | ステップ11 から17 の途中 | Status と作りかけの worktree | worktree を再利用して着手をやり直す |
 | ステップ14 の直後 | 身元ファイル | 再起動したときに身元が分かる |
 
+## ステップ12 がリポジトリ本体も渡す理由
+
+**`worktree.open` の `cwd` は外せない。**省くと herdr が `worktree_not_found` で断り、
+worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026-08-25、
+[test/live/herdr_test.go](test/live/herdr_test.go)）。
+
+**その代わり、herdr は workspace を2つ開く。**worktree のぶんと、リポジトリ本体のぶん
+（**リポジトリの親 workspace**）である。**`worktree.remove` は後者を閉じない**ので、
+閉じるのは continuo の仕事になる（片付け側の条件は
+[worktree と branch を片付ける.rucm.md](worktree%20と%20branch%20を片付ける.rucm.md) にある）。
+
+**そのためステップ12 の前後で `workspace.list` を読む。**前は「この呼び出しより前から
+親があったか」を見るため、後ろは「無かったなら、いま開いた親の ID」を控えるためである。
+**控えた ID はステップ14 の身元ファイルへ書く**（`herdr_repo_workspace_id`）。
+**前からあったなら人間が開いたものなので、控えず、二度と触らない。**
+
 ## 候補を飛ばす3つの検査
 
 **候補の一覧は GitHub のサーバ側の検索結果であり、そのまま信じてはならない**（設計 3-34）。
@@ -254,7 +270,7 @@ flowchart TD
     B9{"9. VALIDATES THAT Status が terminal_states にも failure_state にも入っていない"}
     B10["10. Status に running_state を書く"]
     B11["11. worktree を作る"]
-    B12["12. worktree の絶対パスを渡して herdr の workspace として開く"]
+    B12["12. worktree の絶対パスとリポジトリ本体を渡して herdr の workspace として開く"]
     B13["13. 設定ファイルを worktree の外に書く"]
     B14["14. 身元ファイルを書く"]
     B15["15. workspace の pane の一覧を要求する"]

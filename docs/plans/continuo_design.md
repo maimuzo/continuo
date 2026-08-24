@@ -1287,6 +1287,7 @@ func Normalize(raw string) (SafeName, []Warning)
 | 3 | `worktree.remove` を herdr の socket API 経由で呼ぶ。**引数は path でも branch でもなく herdr workspace の ID である**（実測）。**この ID は身元ファイルから読む**（3-18） |
 | — その制約 | **herdr workspace として開いていない worktree は、この API では消せない。**continuo が worktree だけ作って herdr workspace を閉じてしまうと片付けられなくなる |
 | — **workspace は別途閉じない** | **`worktree.remove` を呼ぶと、その worktree の pane も一緒に消える**（実測 2026-08-24。捨てリポジトリの worktree で `sleep 600` を走らせていた pane が、`worktree.remove` のあと消えた）。**だから `workspace.close` を続けて呼ばない。**呼ぶ手段も第2段階のクライアントに持たせない。**RPC の応答に `workspace` は入らない** — herdr 0.8.2（protocol 20）の `worktree_removed` は、RPC の成功応答では `type` / `workspace_id` / `path` / `forced` の4つだけで、`workspace` を持つのは同名のイベントのほうである（`herdr api schema --output <ファイル>` で確認。2026-08-24） |
+| 3b | **continuo が開かせたリポジトリの親 workspace を閉じる**（下の節）。`worktree.remove` はこれを閉じないので、放置すると issue 1件につき1つ溜まる |
 | 4 | **branch は herdr が消さないので、continuo が `git branch -D` を自分で叩く**（実測） |
 | 5 | 設定で片付け全体を無効にできるようにする（デバッグ時に中身を見たい場合がある） |
 | 6 | **起動時に掃除する。**トラッカーから `cleanup.on_states` の issue を取得し、対応する worktree と branch を消す。**取得に失敗したら警告を出して起動を続ける**（`SPEC.md` 8.6）。**この掃除は復元の手順が終わったあとに走らせる**（3-4 の段9 のあと。**先に走らせると、これから引き継ぐ run の branch を孤児と判定して消しかねない**） |
@@ -1305,6 +1306,29 @@ func Normalize(raw string) (SafeName, []Warning)
 毎巡回で見る必要が無い。**その1回は候補の取得に追加のリクエストとして乗る（cost 1）。
 
 **削除に失敗しても turn ループや dispatch を止めない。**
+
+#### 3-9b. リポジトリの親 workspace を閉じる条件（段3b）
+
+**言いたいこと。**`worktree.open` は workspace を2つ開くのに `worktree.remove` は1つしか
+閉じない。**閉じる相手は「continuo が開かせた」「配下に worktree が残っていない」の
+両方を満たすものだけである。**片方でも落とすと、人の pane を消す。
+
+**実測の根拠は 6-10 の表にある**（[test/live/herdr_test.go](test/live/herdr_test.go)）。
+`cwd` は外せない。**リポジトリの親 workspace は herdr の必須の親である。**
+
+| 条件 | どう確かめるか | 落とすと何が起きるか |
+| --- | --- | --- |
+| continuo が開かせたこと | `worktree.open` の**前**に `workspace.list` を引き、そのリポジトリの workspace が無かったことを見る。無ければ開いた**あと**にその ID を身元ファイルの `herdr_repo_workspace_id` へ書く（3-18） | 人間が自分で開いた workspace を閉じ、その人の pane が消える |
+| 配下に worktree が残っていないこと | 段3 のあとに `workspace.list` を引き、`worktree.repo_root` がそのリポジトリを指す workspace が親のほかに無いことを見る | **親を閉じると配下も一緒に消える**ので、別の issue の Claude Code の pane が落ちる |
+
+**身元ファイルの値は現物と突き合わせてから使う。**そこはエージェントが書き換えられるので
+（3-18）、`herdr_repo_workspace_id` が指す workspace が**いま片付けたリポジトリ本体を
+開いている**ことを `workspace.list` で確かめる。合わなければ閉じない。
+
+**閉じられなくても片付けは失敗させない。**worktree はもう消えており、ここで失敗を返すと
+呼び出し側が扱えない結果（消えたのに失敗）になる。**閉じ残しは警告としてログに出す。**
+
+実装は [internal/workspace/repoworkspace.go](internal/workspace/repoworkspace.go)。
 
 ### 3-10. 実行中の Status も「作業中の状態」に含める
 
@@ -1856,6 +1880,7 @@ type failureNote struct {
 | project item の ID | ボードを ID 指定で取り直すため（1リクエスト 1 point） |
 | branch 名 | 片付けのとき消す対象を確定するため |
 | **herdr の workspace の ID** | **worktree を消す API がこの ID を要求する。**再起動後に取り直す経路が他に無い |
+| **リポジトリの親 workspace の ID** | **`worktree.open` が一緒に開かせてしまった workspace を、片付けで閉じるため**（3-9b）。**continuo が開かせたときだけ書く。**先からあったなら人間のものなので、空のままにして触らない |
 | **hook を受ける socket のパス** | **探索順が環境に依存するので、再起動で別のパスに落ちうる。**run 中の Claude Code は前回のパスを持ったままなので、一致を検査する必要がある |
 | **Claude Code の設定ファイルのパス** | 片付けのときに一緒に消すため（3-12） |
 | Claude Code のセッション UUID | hook の対応づけの復元に使う（pane の agent_session からも取れるが、pane が消えた場合に備える） |
@@ -1890,6 +1915,7 @@ type failureNote struct {
   "project_item_id": "PVTI_lADOAb3c4M4Aq7EzgAR8Xyz",
   "branch": "continuo/octocat/hello-world/188",
   "herdr_workspace_id": "ws_01J8XK2M9P",
+  "herdr_repo_workspace_id": "w1",
   "socket_path": "/var/folders/.../T/continuo/hooks.sock",
   "settings_path": "/var/folders/.../T/continuo/issues/octocat-hello-world-188/settings.json",
   "agent_name": "continuo-hello-world-188",
@@ -1911,6 +1937,7 @@ type failureNote struct {
 | `takeover_count` | **既存の値を1つ増やす。**新規なら 0 |
 | `created_at` | **既存の値を保つ。**新規のときだけ現在時刻を入れる |
 | **`cleanup_deferred_at`** | **消す**（ゼロ値にする）。下記 |
+| **`herdr_repo_workspace_id`** | **今回ぶんが空なら既存の値を保つ。**再利用のとき親 workspace は前の run で既に開いているので、`Prepare` は「自分より前からあった」と見て空を返す。**上書きすると、閉じる相手を continuo が自分で忘れる**（3-9b） |
 | それ以外 | **全部書き直す。**socket のパスも設定ファイルのパスも、起動のたびに変わりうる |
 
 > **`cleanup_deferred_at` を消す理由。**再利用するということは、その issue が再び dispatch されたということである。
@@ -1927,6 +1954,18 @@ herdr workspace の ID は段3で、設定ファイルのパスは段5で手に�
 
 **このファイルは「メモリの状態を永続化するもの」ではない。**continuo の実行時状態は in-memory のままである（3-4）。
 これは**worktree という外部の副作用に、それが誰のものかという札を付けるもの**である。
+
+**読むときは上限を掛け、symlink は辿らない。**このファイルは worktree の直下にあり、
+そこでエージェントが `--permission-mode dontAsk` で動く（3-16 の段9）。
+**つまり中身も、ファイルそのものも書き換えられる。**
+
+| 何を | どうするか | 掛けないと何が起きるか |
+| --- | --- | --- |
+| 大きさ | **64 KiB を超えたら `ErrIdentityBroken`。**continuo が書く実物は 1 KiB 未満である | 実測で 67,109,391 バイトを読み切った。**書かれただけの大きさが常駐プロセスのメモリに載る**（git の出力に上限を掛けているのと同じ理由） |
+| 開き方 | **`O_NOFOLLOW` を付け、開いた実体が通常のファイルであることを確かめる** | 置き場所の外を指す symlink に差し替えると、**その中身が「この worktree の身元」として照合され、削除の対象になる** |
+
+**上限を超えたことを「JSON が壊れている」に丸めない。**理由が化けると、人間が中身を疑って
+調べ始める。**何バイトで打ち切ったかを言う。**
 
 ### 3-19. 落ちている間に届かなかった通知を取り戻す
 
@@ -3830,6 +3869,7 @@ CI から呼ぶときに使う。
 | 段 | 何をするか |
 | --- | --- |
 | 1 | `lock.Acquire` で continuo が動いているかを調べる（3-17）。**取れたロックは実行の最後まで握る。**動いていて、**かつ `--dry-run` でなければ**、ボードの Status が `tracker.active_states` に入っているときに `--park`（既定 `tracker.failure_state`）へ動かして手を離させる。そのうえで**その worktree を cwd に持つ pane が消えるまで待つ。**上限は `herdr.read_timeout_ms` の10倍（既定50秒）で、**超えたら何も消さずに止まる** |
+| 1 の後 | **書き込みが通ったら、持ち回っている Status もその値に更新する。**ボードは1回しか読まないので、更新しないと段3 の計画表示に park の**前**の値が出る（これから消す worktree の issue が「まだ作業中」に見える） |
 | 2 | `workspace.Scan` で走査し、**身元ファイルの `issue_url` で照合する。**パスを owner / repo / 番号から組み立てない（`workspace.root` や `branch_template` を変えている環境で空振りする）。**照合できたものは置き場所のパスで検算する**（3-37-4）。**0件は終了コード 0**（消すものが無い。`--to` を指定していたら、動かしていないことを1行出す。3-37-5）、**2件以上は止める**（どれを消すかは人間が中身を見て決める） |
 | 2 の後 | **これから書きうる Status の値を確かめる**（3-37-5）。`--to` と park の先がボードの選択肢にあるか、park の先が `tracker.active_states` に入っていないか。**読むだけなので `--dry-run` でも通す** |
 | 3 | 失われるもの（issue と Status・worktree・branch と base・herdr の workspace と pane・コミットされていない変更のファイル数・push されていない commit の件数）を見せる。**ファイル数は `git status --porcelain` の読み取りが上限で打ち切られたら「%d ファイル以上」と出す**（`Leftover.DirtyFilesTruncated`。打ち切った行数をそのまま出すと、失う量を実際より少なく見せる）。**`--dry-run` で継続監視が動いているときは、実行したら Status をどこへ動かすかも予告する。**`--dry-run` はここで終わる。**失うものがあって `--force` が無ければ、何も消さずに終了コード 1** |
@@ -3838,6 +3878,12 @@ CI から呼ぶときに使う。
 
 **仕様は [docs/spec/usecases/particular_case/着手を取り消す.rucm.md](../spec/usecases/particular_case/着手を取り消す.rucm.md) が持つ。**
 段と RUCM のステップ番号の対応も、そこの表にある。
+
+**手を離させたあとで止まったら、Status がその値のまま残ることを1行で言う。**
+「何も消していません」だけだと、**ボードも元のままだ**と読まれ、その issue が置き去りになる。
+**continuo は元へ戻さない。**戻す先は `tracker.active_states` の値なので、**戻した瞬間に
+動いている継続監視がその issue を拾い直しうる。**戻すかどうかは人間がボードで決める。
+**消せたときは言わない**（そのときは段5 が Status について応答する）。
 
 **なぜ Status を既定で動かさないのか。**
 
@@ -5071,16 +5117,53 @@ socket へ繋がらない、のいずれかで `t.Skip` する。タグにする
 **触ってよいのは `t.TempDir()` の下を指す workspace だけである。**既に開いている
 pane / workspace には手を出さない。
 
-**本物でしか分からなかったこと**（2026-08-24 実測）。**`worktree.open` に `cwd` を渡すと
-workspace が2つ開く。**worktree のぶんと、`cwd` のリポジトリのぶんである。
-**`worktree.remove` は前者しか閉じない。**後者は `workspace.close` でしか閉じられない。
-偽の herdr は workspace を1つしか作らないので、この取りこぼしは mock では見つからない。
+**本物でしか分からなかったこと**（2026-08-24 / 2026-08-25 実測。
+[test/live/herdr_test.go](test/live/herdr_test.go)）。偽の herdr は workspace を1つしか
+作らないので、これは mock では1つも見つからない。**片付けの決着は 3-9 の段3b にある。**
 
-**そのため [internal/workspace/prepare.go](internal/workspace/prepare.go) が `cwd` を渡し、
-[internal/workspace/cleanup.go](internal/workspace/cleanup.go) が `worktree.remove` しか
-呼ばない現状では、issue 1件につき herdr workspace が1つ残る。**
-[test/live/herdr_test.go](test/live/herdr_test.go) がこの事実を固定している。
-片付け側で `workspace.close` を呼ぶかどうかは別途決める。
+| 実測したこと | 応答 |
+| --- | --- |
+| `worktree.open` に `cwd` を渡すと workspace が2つ開く | worktree のぶんと、`cwd` のリポジトリのぶん（**リポジトリの親 workspace**） |
+| `cwd` を省く | `worktree_not_found: worktree path not found` |
+| `cwd` に worktree のパスを渡す | `linked_worktree_source: New and open worktree actions start from the repo parent workspace.` |
+| `worktree.remove` | 親は閉じない（**放置すると issue 1件につき1つ溜まる**） |
+| 親を `workspace.close` する | **配下の worktree の workspace と pane も一緒に消える** |
+
+---
+
+### 6-11. `continuo abandon` のレビューで直したこと
+
+**言いたいこと。**`continuo abandon` の code / security の指摘のうち、**まだ直っていなかった
+ものを全部片付けた。**あわせて issue #19（herdr workspace の閉じ残し）を直した。
+**直さないと決めたものは1件だけで、理由も下にある。**
+
+**直したもの。**
+
+| 短縮名 | 何が起きるか | どう直したか |
+| --- | --- | --- |
+| **身元ファイルの読み取りが無制限** | 上限が無く、実測で 67,109,391 バイトを読み切った。symlink も辿り、置き場所の外の中身が「この worktree の身元」として照合された | 64 KiB の上限と `O_NOFOLLOW` を付け、超えたら `ErrIdentityBroken`（3-18） |
+| **workspace の閉じ残し** | `worktree.open` が開く**リポジトリの親 workspace**を誰も閉じず、issue 1件につき1つ溜まる | 片付けの段3b で、条件を2つとも満たすときだけ閉じる（3-9b） |
+| **park のあと止まると板が戻らない** | ボードは書き換わったのに「何も消していません」としか出ず、issue が置き去りになる | Status がその値のまま残ることを1行で言う。**戻しはしない**（3-37） |
+| **計画表示の Status が古い** | ボードを1回しか読まないので、park の**前**の値が出る | 書き込みが通ったら持ち回っている値も更新する |
+| **接続先の注釈が実態より強い** | 「どんな宛先へも Bearer が飛ばない」と書いてあるが、拒むのは平文の http だけである | 注釈を実態に直した（**https ならどのホストでも通る**） |
+| **実在の名前** | `test/internal/herdr/pane_test.go` に実在のアカウント名とリポジトリ名が残っていた | 架空の名前へ直した |
+
+**既に直っていたもの**（この作業では触っていない）。`--to` を消す前に確かめる・`--park` が
+作業中の値なら止まる・worktree が無いとき `--to` を捨てたと言う・失うファイル数が
+「◯◯以上」と出る・branch を消していなければそう書く・中断と時間切れを言い分ける・
+読めない URL の照合・`failure_state` の綴りの照合（設定の検証も `containsStateFold` である）。
+
+**直さないと決めたもの。**
+
+| 短縮名 | なぜ直さないか |
+| --- | --- |
+| **テストに残る実在の名前**（`test/internal/herdr/pane_test.go` 以外の75箇所） | **`test/internal/config/design_example_test.go` は、この設計文書に載っている設定例と一致することを検査している。**一括で置き換えるとそこが落ちる。**まとめて直すなら、設定例のほうから直す別の作業になる** |
+
+**塞がっていたもの。****`Inspect` と削除の間が再検査されない**という指摘は、いま塞がっている。
+継続監視が動いていれば段1 が pane の消滅を待ってから段3 へ進み、そこへ戻ってくる経路は無い
+（park の先が `tracker.active_states` に入らないことは段2 の直後で確かめるので、
+継続監視がその issue を拾い直せない）。動いていなければ段3 と段4 の間で pane を数え、
+1件でもあれば消さずに止まる。**どちらの経路でも、消す時点で生きた pane は無い。**
 
 ---
 
