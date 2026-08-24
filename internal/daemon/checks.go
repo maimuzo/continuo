@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/fsprobe"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
@@ -14,6 +15,7 @@ import (
 //
 // **1つでも失敗したら起動を止める。**無言で止まる経路が多いので、ここで全部潰す。
 //
+//	書ける場所があるか              … **ホームが read-only なら着手のたびに落ちる**（issue #11）
 //	gh が使えるか                  … エージェントが `gh issue comment` でコメントを書く（5-3）
 //	gh auth status の scope        … `project` が無いとボードを読めない
 //	herdr の socket と protocol     … 通信できない
@@ -50,6 +52,16 @@ func runStartupChecks(
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+
+	// **書けなければならない場所に、実際に書いて確かめる**（issue #11）。
+	//
+	// **doctor と同じ関数（fsprobe）を呼び、落ち方だけを変える。**doctor は記号で並べ、
+	// 起動はここで止める。**外へ出る検査より先に置く。**ホームが read-only なら、
+	// gh も herdr もボードも全部通ったうえで、着手のたびに落ち続けることになる。
+	if err := fsprobe.CheckWritablePlaces("", cfg.Workspace.Root); err != nil {
+		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksNotWritable, err)
+	}
+	logger.Info("書けなければならない場所に書けることを確かめました", "workspace_root", cfg.Workspace.Root)
 
 	if err := tracker.CheckGHAvailable(); err != nil {
 		return err

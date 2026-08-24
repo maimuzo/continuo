@@ -7,17 +7,23 @@
 // **検査がいくつあるかを、この doc コメントにも文言にも書かない。**
 // 数を2箇所に書けば必ずずれる。数えられる場所は Label 定数の一覧だけにする。
 //
-//	設定ファイル    … WORKFLOW.md が読めて、front matter が検証を通るか
-//	claude         … `claude.kind` の実行ファイルが PATH にあるか
-//	hook の置き場所 … hook を受ける socket を実際に置いて listen できるか
-//	herdr          … socket の ping の応答の protocol が herdr.protocol と一致するか
-//	gh の認証      … `gh auth status` の Token scopes に project が単独で並んでいるか
-//	ボード         … Bootstrap が通り、active_states の選択肢名が全部あるか
-//	clone          … 対象リポジトリが `ghq list -p -e` で見つかるか
-//	信頼登録       … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
-//	資格情報       … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
+//	設定ファイル      … WORKFLOW.md が読めて、front matter が検証を通るか
+//	claude           … `claude.kind` の実行ファイルが PATH にあるか
+//	hook の置き場所    … hook を受ける socket を実際に置けるか
+//	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか
+//	worktree の場所    … `workspace.root` に実際に書けるか
+//	herdr            … socket の ping の応答の protocol が herdr.protocol と一致するか
+//	gh の認証         … `gh auth status` の Token scopes に project が単独で並んでいるか
+//	ボード            … Bootstrap が通り、active_states の選択肢名が全部あるか
+//	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
+//	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
+//	資格情報          … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
 //
 // **1つ失敗しても残りを全部検査する。**最初の失敗で止めない。
+//
+// **設定が読めなくても、既定値だけで成立する検査は走らせる**（issue #11）。
+// claude の PATH・hook の置き場所・Claude Code の設定ディレクトリの3つがそれである。
+// **設定が読めないという理由で全部を `!` にすると、本当の原因を1つも指摘できない。**
 //
 // **検査の実体は既にあるものを呼ぶ。**gh は internal/tracker の CheckGHAvailable /
 // CheckGHProjectScope、herdr は internal/herdr の CheckProtocol、ボードは
@@ -71,7 +77,10 @@ type Options struct {
 	// **空なら本番の GitHub GraphQL API を使う。**テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
 	// HomeDir は `~/.claude.json` と `~/.claude/.credentials.json` を探すホームディレクトリである。
+	// **`~/.claude/session-env` に書けるかの検査もここを基準にする。**
 	// 空なら os.UserHomeDir() の結果を使う。
+	//
+	// **テストは必ずこれを渡すこと。**本物のホームディレクトリへ書き込みを試すことになる。
 	HomeDir string
 	// HTTPClient は GraphQL のリクエストを送るクライアントである。nil なら http.DefaultClient。
 	HTTPClient *http.Client
@@ -169,6 +178,14 @@ func Run(ctx context.Context, opts Options) Report {
 	// **hook を受ける socket を置けるかを、herdr より先に確かめる。**
 	// **これが無かったとき、8項目すべてが ✓ なのに起動だけが落ちた**（issue #9）。
 	report.add(checkRuntimeDir(cfg, configResult.Symbol))
+	// **Claude Code の設定ディレクトリに書けるかを、設定が読めていなくても確かめる。**
+	// Claude Code は SessionStart hook を走らせる前に `~/.claude/session-env/<session_id>/`
+	// を作り、continuo はその hook を必ず張る。**ここが書けないと issue は1件も始まらない**
+	// のに、doctor はこの場所を一度も見ていなかった（issue #11）。
+	report.add(checkClaudeHome(opts))
+	// **worktree の置き場所に書けるかも確かめる。**書けないと着手は段3 で必ず落ちる。
+	// **置き場所は `workspace.root` にしか書いていないので、設定が読めているときだけ走る。**
+	report.add(checkWorkspaceRoot(cfg, configResult.Symbol))
 
 	// 段3: herdr。照合する protocol は設定から来るので、設定が読めなければ確かめられない。
 	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
