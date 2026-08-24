@@ -53,6 +53,13 @@ var ErrGHNotFound = errors.New("gh コマンドが見つかりません")
 
 // Project は `gh project list` が返したボードの候補である。
 type Project struct {
+	// Owner はそのボードを持つ user / organization の名前である。
+	//
+	// **`gh api user` はログイン名しか返さない。**organization に置いたボードは
+	// ログイン名で探しても1件も出ない。実際、GitHub Enterprise で organization に
+	// ボードを置いていた利用者が `continuo setup` で1歩も進めなかった（issue #7）。
+	// **候補ごとに、どの owner のものかを持つ。**
+	Owner string
 	// Number はボードの番号である（tracker.provider.project_number に書く値）。
 	Number int
 	// Title はボードの表示名である。人が候補を選ぶために出す。
@@ -159,7 +166,19 @@ func Detect(ctx context.Context, opts DetectOptions) Detection {
 	}
 
 	owner := detectOwner(ctx, opts, run, timeout)
-	project, number := detectProject(ctx, opts, run, timeout, owner.Value)
+	project, number, boardOwner := detectProject(ctx, opts, run, timeout, owner.Value)
+
+	// **ボードが別の owner のものだったら、owner を決め直す**（設計 3-32）。
+	//
+	// ログイン名でボードが見つからず、organization で見つかったときに起こる。
+	// **決め直さないと、`project_number` は organization のボードを指すのに
+	// `owner` はログイン名のまま**という、どこにも存在しない組み合わせが書かれる。
+	if boardOwner != "" && boardOwner != owner.Value {
+		owner.Value, owner.Filled = boardOwner, true
+		owner.Reason = fmt.Sprintf("ボード #%d を持つ %s に合わせました", number, boardOwner)
+		owner.Advice = nil
+	}
+
 	repos, repoList := detectRepositories(ctx, run, timeout, owner.Value, number)
 
 	d := Detection{Fields: []Field{owner, project, repos}}
@@ -370,13 +389,15 @@ func ownerAdvice() []string {
 // timeout: gh の呼び出し1回あたりの制限時間。
 // owner: 決まった owner。空文字なら候補を引かない。
 // 戻り値: project_number についての Field と、埋めたボードの番号（埋まらなかった場合は 0）。
-func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeout time.Duration, owner string) (Field, int) {
+func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeout time.Duration, owner string) (Field, int, string) {
 	f := Field{Key: ProjectKey}
 
 	if opts.ProjectNumber > 0 {
 		f.Value, f.Filled = strconv.Itoa(opts.ProjectNumber), true
 		f.Reason = "--project で指定された値です"
-		return f, opts.ProjectNumber
+		// **`--project` を渡されたら owner は決め直さない。**
+		// 利用者が `--owner` と一緒に指定していることも、していないこともある。
+		return f, opts.ProjectNumber, ""
 	}
 	if owner == "" {
 		f.Reason = "owner が決まらないので、ボードの候補を引けませんでした"
@@ -384,12 +405,10 @@ func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeou
 			"先に owner を決めてから、もう一度 `continuo init` を実行してください",
 			"または `continuo init --project <番号>` でボードの番号を直接指定してください",
 		}
-		return f, 0
+		return f, 0, ""
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	out, err := run(callCtx, "project", "list", "--owner", owner, "--format", "json", "--limit", ghProjectListLimit)
+	projects, err := listProjects(ctx, run, timeout, owner)
 	if err != nil {
 		if errors.Is(err, ErrGHNotFound) {
 			f.Reason = "gh コマンドが見つかりませんでした"
@@ -400,41 +419,121 @@ func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeou
 			"ボードを読むには project の scope が要ります。`gh auth login -s project` でログインし直してください",
 			"または `continuo init --project <番号>` でボードの番号を直接指定してください",
 		}
-		return f, 0
+		return f, 0, ""
 	}
 
-	projects, err := parseProjectList(out)
-	if err != nil {
-		f.Reason = fmt.Sprintf("`gh project list` の出力を解釈できませんでした（%v）", err)
-		f.Advice = []string{"`continuo init --project <番号>` でボードの番号を直接指定してください"}
-		return f, 0
+	// **ログイン名のボードが1件も無ければ、所属する organization も探す**（設計 3-32）。
+	//
+	// `gh api user` はログイン名しか返さないので、**organization に置いたボードは
+	// ログイン名で探しても1件も出ない。**実際、GitHub Enterprise で organization に
+	// ボードを置いていた利用者が、`continuo setup` で1歩も進めなかった（issue #7）。
+	searched := []string{owner}
+	if len(projects) == 0 {
+		for _, org := range listOrgs(ctx, run, timeout) {
+			if org == owner {
+				continue
+			}
+			searched = append(searched, org)
+			found, err := listProjects(ctx, run, timeout, org)
+			if err != nil {
+				// **1つの organization で失敗しても、残りを探す。**
+				// 権限が無い organization に所属していることは珍しくない。
+				continue
+			}
+			projects = append(projects, found...)
+		}
 	}
 
 	number := 0
+	boardOwner := ""
 	switch len(projects) {
 	case 0:
-		f.Reason = fmt.Sprintf("%s のボードが1件も見つかりませんでした", owner)
+		// **探した owner を全部見せる。**「見つからない」だけでは、
+		// どこを探したのかが分からず、利用者は次の手を打てない。
+		f.Reason = fmt.Sprintf("ボードが1件も見つかりませんでした（探した owner: %s）",
+			strings.Join(searched, ", "))
 		f.Advice = []string{
 			"GitHub の画面でボードを1つ作るか、`gh project create --owner @me --title \"continuo\"` を実行してください",
+			"ボードが別の user / organization にあるなら、`continuo init --owner <名前> --project <番号>` を実行してください",
 			"作ったら `continuo init --project <番号>` でもう一度実行してください",
 		}
 	case 1:
 		number = projects[0].Number
+		boardOwner = projects[0].Owner
 		f.Value, f.Filled = strconv.Itoa(number), true
-		f.Reason = fmt.Sprintf("`gh project list` の候補が1件だけでした: #%d %s", projects[0].Number, projects[0].Title)
+		f.Reason = fmt.Sprintf("`gh project list` の候補が1件だけでした: %s #%d %s",
+			projects[0].Owner, projects[0].Number, projects[0].Title)
 	default:
-		f.Reason = fmt.Sprintf("%s のボードの候補が %d 件あります", owner, len(projects))
+		f.Reason = fmt.Sprintf("ボードの候補が %d 件あります（探した owner: %s）",
+			len(projects), strings.Join(searched, ", "))
 		f.Candidates = projects
-		f.Advice = []string{"`continuo init --project <番号>` で、使うボードを指定してもう一度実行してください"}
+		f.Advice = []string{
+			"`continuo init --project <番号>` で、使うボードを指定してもう一度実行してください",
+			"候補が別の owner のものなら、`--owner <名前>` も一緒に指定してください",
+		}
 	}
-	return f, number
+	return f, number, boardOwner
 }
 
 // parseProjectList は `gh project list --format json` の出力からボードの候補を取り出す。
 //
 // out: gh の標準出力。
 // 戻り値: 閉じていないボードの一覧（gh が返した並び順のまま）。JSON として読めない場合はエラー。
-func parseProjectList(out []byte) ([]Project, error) {
+// listProjects は、その owner のボードの候補を引く。
+//
+// ctx: 実行に適用するコンテキスト。
+// run: gh を起動する関数。
+// timeout: 1回の呼び出しの上限。
+// owner: user / organization の名前。
+// 戻り値: 閉じていないボードの候補と、失敗したときのエラー。
+func listProjects(ctx context.Context, run GHRunner, timeout time.Duration, owner string) ([]Project, error) {
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	out, err := run(callCtx, "project", "list", "--owner", owner, "--format", "json", "--limit", ghProjectListLimit)
+	if err != nil {
+		return nil, err
+	}
+	return parseProjectList(out, owner)
+}
+
+// listOrgs は、利用者が所属する organization の名前を引く。
+//
+// **`gh api user` はログイン名しか返さない。**organization に置いたボードを見つけるには、
+// 所属を別に引く必要がある。
+//
+// **失敗しても空を返す。**organization に所属していないことも、
+// 認証の scope が足りないことも、どちらも「探せなかった」だけである。
+// **ここで止めると、ログイン名のボードだけで足りる人まで巻き添えになる。**
+//
+// ctx: 実行に適用するコンテキスト。
+// run: gh を起動する関数。
+// timeout: 呼び出しの上限。
+// 戻り値: organization の名前。引けなければ空。
+func listOrgs(ctx context.Context, run GHRunner, timeout time.Duration) []string {
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	out, err := run(callCtx, "api", "user/orgs", "--jq", ".[].login")
+	if err != nil {
+		return nil
+	}
+	var orgs []string
+	for _, line := range strings.Split(string(out), "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" || !ValidOwner(name) {
+			continue
+		}
+		orgs = append(orgs, name)
+	}
+	return orgs
+}
+
+// parseProjectList は `gh project list` の出力を候補の並びに直す。
+//
+// out: `gh project list --format json` の出力。
+// owner: そのボードを持つ user / organization の名前。**候補ごとに持たせる**
+// （ログイン名と organization の候補が混ざりうるため）。
+// 戻り値: 閉じていないボードの候補。
+func parseProjectList(out []byte, owner string) ([]Project, error) {
 	var payload struct {
 		Projects []struct {
 			Number int    `json:"number"`
@@ -454,7 +553,7 @@ func parseProjectList(out []byte) ([]Project, error) {
 		if p.Closed {
 			continue
 		}
-		projects = append(projects, Project{Number: p.Number, Title: p.Title, URL: p.URL})
+		projects = append(projects, Project{Owner: owner, Number: p.Number, Title: p.Title, URL: p.URL})
 	}
 	return projects, nil
 }
