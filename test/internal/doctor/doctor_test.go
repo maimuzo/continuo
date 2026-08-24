@@ -1,9 +1,11 @@
-// {"RUCM-CFG-SHA256": "25edff938113927b1caedf77f7f44d7f13254d2e85515d2a2c4691dfc0499907", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3d863250157ac1b1ab2b30cf082365e732a370436d66b0eeb4ac171005345b60", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
-// **テストパスは、各検査の成否の組み合わせで爆発したものである。**
-// **結末は7通りしかない**ので、終端フローごとに代表を1本ずつ対応づける。
-// 組み合わせを全部書いても、同じ検査を何度も通るだけで新しく守れるものが増えない。
+// **RUCM は見出し語の並びを `DO`〜`UNTIL` の1周として書いてある**ので、
+// パスは見出し語の数ではなく分岐の数に比例する。
+// **1周の中では「どの見出し語か」を区別しない**ので、
+// 「その見出し語の前提が揃っていない」という同じ形に複数のテストが対応づく。
+// 対応づけるのは、分岐の形が違うものと、結末が違うものだけである。
 package doctor_test
 
 import (
@@ -28,6 +30,8 @@ var wantLabels = []i18n.Key{
 	doctor.LabelConfig,
 	doctor.LabelClaude,
 	doctor.LabelRuntimeDir,
+	doctor.LabelClaudeHome,
+	doctor.LabelWorkspaceRoot,
 	doctor.LabelHerdr,
 	doctor.LabelGHAuth,
 	doctor.LabelBoard,
@@ -38,13 +42,13 @@ var wantLabels = []i18n.Key{
 
 // {"RUCM-PATH": "P001"}
 //
-// TestDoctor_前提が揃っていれば9項目すべて通る は、揃っている状態の基準線を作る。
+// TestDoctor_前提が揃っていれば全項目すべて通る は、揃っている状態の基準線を作る。
 //
-// 目的: 9項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
+// 目的: 全項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
 // 与える情報: テスト用herdr mock（protocol 19）・偽ボード（Ready の issue が1件）・
 // テスト用gh mock（project の scope あり）・信頼登録済みの `~/.claude.json`・`rate_limit.source: none`。
-// 成功条件: 見出し語が7つ設計どおりの順序で並び、全部 `✓` で、終了コードが 0 であること。
-func TestDoctor_前提が揃っていれば9項目すべて通る(t *testing.T) {
+// 成功条件: 見出し語が設計どおりの順序で並び、全部 `✓` で、終了コードが 0 であること。
+func TestDoctor_前提が揃っていれば全項目すべて通る(t *testing.T) {
 	fx := newFixture(t)
 
 	report := fx.Run(t)
@@ -67,13 +71,15 @@ func TestDoctor_前提が揃っていれば9項目すべて通る(t *testing.T) 
 	}
 }
 
+// {"RUCM-PATH": "P032"}
+//
 // TestDoctor_設定ファイルを読めなければ設定に依存する検査は確かめられなかったになる は、
 // 設定が壊れていても打ち切らないことを確かめる。
 //
-// 目的: 設定ファイルが `✗` のとき、**下流の6項目がすべて `!` になる**こと
+// 目的: 設定ファイルが `✗` のとき、**設定を読まないと決まらない検査がすべて `!` になる**こと
 // （設計 3-32 の依存の図。`gh の認証` も設定ファイルの下流である）。
 // 与える情報: WORKFLOW.md を消した状態。ほかは揃っている。
-// 成功条件: 9項目すべてが結果を持ち、記号が上のとおりで、終了コードが 1 であること。
+// 成功条件: 全項目が結果を持ち、記号が上のとおりで、終了コードが 1 であること。
 func TestDoctor_設定ファイルを読めなければ設定に依存する検査は確かめられなかったになる(t *testing.T) {
 	fx := newFixture(t)
 	if err := os.Remove(fx.WorkflowPath); err != nil {
@@ -83,6 +89,19 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 	report := fx.Run(t)
 
 	assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolMissing)
+	// **既定値だけで成立する検査は、設定が読めなくても走る**（issue #11）。
+	// **設定が読めないという理由で全部を `!` にすると、本当の原因を1つも指摘できない。**
+	claude := assertSymbol(t, report, doctor.LabelClaude, doctor.SymbolOK)
+	if !strings.Contains(strings.Join(claude.Notes, "\n"), "既定値で確かめました") {
+		t.Fatalf("既定値で確かめたことが出ていない: %+v", claude)
+	}
+	runtimeDir := assertSymbol(t, report, doctor.LabelRuntimeDir, doctor.SymbolOK)
+	if !strings.Contains(strings.Join(runtimeDir.Notes, "\n"), "既定値で確かめました") {
+		t.Fatalf("既定値で確かめたことが出ていない: %+v", runtimeDir)
+	}
+	assertSymbol(t, report, doctor.LabelClaudeHome, doctor.SymbolOK)
+	// **worktree の置き場所は `workspace.root` にしか書いていない。**設定が読めなければ決まらない。
+	assertSymbol(t, report, doctor.LabelWorkspaceRoot, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelHerdr, doctor.SymbolUnknown)
 	// **gh の認証は設定ファイルの下流である**（設計 3-32 の依存の図）。
 	gh := assertSymbol(t, report, doctor.LabelGHAuth, doctor.SymbolUnknown)
@@ -104,7 +123,7 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P007"}
 //
 // TestDoctor_ghが未ログインなら足りないと出しログインの手順を出す は、
 // 未ログインの検出と直し方の提示を確かめる。
@@ -220,7 +239,7 @@ func TestDoctor_herdrのprotocolが設定と一致しなければ足りない(t 
 	assertSymbol(t, report, doctor.LabelClone, doctor.SymbolOK)
 }
 
-// {"RUCM-PATH": "P121"}
+// {"RUCM-PATH": "P009"}
 //
 // TestDoctor_herdrへ繋がらなければ足りない は、socket が無い場合を確かめる。
 //
@@ -284,7 +303,7 @@ func TestDoctor_projectが見つからなければ足りない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P008"}
 //
 // TestDoctor_トークンを取り出せなければ足りない は、認証の取り出しの失敗を検出する。
 //
@@ -328,7 +347,7 @@ func TestDoctor_レートリミットは確かめられなかったにする(t *
 	}
 }
 
-// {"RUCM-PATH": "P023"}
+// {"RUCM-PATH": "P016"}
 //
 // TestDoctor_対象リポジトリが0件ならcloneと信頼登録は確かめられなかったになる は、
 // ボードが空の場合の扱いを確かめる。
@@ -405,7 +424,7 @@ func TestDoctor_ボードに載る全リポジトリを重複なく検査する(
 	}
 }
 
-// {"RUCM-PATH": "P024"}
+// {"RUCM-PATH": "P017"}
 //
 // TestDoctor_cloneが無ければ足りないと直し方を出す は、clone の検査を確かめる。
 //
@@ -543,6 +562,8 @@ func TestDoctor_資格情報_envは環境変数の有無で分ける(t *testing.
 	}
 }
 
+// {"RUCM-PATH": "P074"}
+//
 // TestDoctor_token_envの書き漏らしは設定ファイルの検査で足りないと出る は、
 // 設定の書き漏らしがどこで捕まるかを固定する。
 //
@@ -608,11 +629,13 @@ func TestDoctor_資格情報_claude_credentialsはファイルの有無で分け
 	}
 }
 
+// {"RUCM-PATH": "P009"}
+//
 // TestDoctor_1つ失敗しても残りを全部検査する は、打ち切らないことを確かめる。
 //
-// 目的: 複数の前提が同時に欠けても、9項目すべてを検査して結果を並べること。
+// 目的: 複数の前提が同時に欠けても、全項目を検査して結果を並べること。
 // 与える情報: herdr の protocol が食い違い、clone が無く、gh の scope も足りない状態。
-// 成功条件: 9項目すべてに結果があり、`herdr` / `gh の認証` が `✗`、
+// 成功条件: 全項目に結果があり、`herdr` / `gh の認証` が `✗`、
 // ボードと clone と信頼登録が `!`、終了コードが 1 であること。
 func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 	fx := newFixture(t)
@@ -627,7 +650,7 @@ func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 	report := fx.Run(t)
 
 	if got := labelsOf(report); !equalKeys(got, wantLabels) {
-		t.Fatalf("9項目すべてを検査していない: %v", got)
+		t.Fatalf("全項目を検査していない: %v", got)
 	}
 	assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolOK)
 	assertSymbol(t, report, doctor.LabelHerdr, doctor.SymbolMissing)
@@ -789,6 +812,8 @@ func TestDoctor_トークンが失効していれば認証の直し方を出す(
 	}
 }
 
+// {"RUCM-PATH": "P010"}
+//
 // TestDoctor_ボードが時間内に応答しなければ確かめられなかったとして残りを続ける は、
 // 検査に期限があることを確かめる。
 //
@@ -796,7 +821,7 @@ func TestDoctor_トークンが失効していれば認証の直し方を出す(
 // だけで道具そのものが固まると、人間の手が止まる。**
 // 与える情報: 期限より長く待ってから応答する偽ボードと、1項目 200ms の期限。
 // 成功条件: ボードが `!`（確かめられなかった）になり、説明が「時間内に応答がありません
-// でした」であること。**9項目すべてが結果を持ち、終了コードが 1 にならないこと。**
+// でした」であること。**全項目が結果を持ち、終了コードが 1 にならないこと。**
 func TestDoctor_ボードが時間内に応答しなければ確かめられなかったとして残りを続ける(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetDelay(30 * time.Second)
@@ -874,5 +899,150 @@ func TestDoctor_claudeがPATHに無ければ落とす(t *testing.T) {
 	}
 	if report.ExitCode() != 1 {
 		t.Errorf("終了コードが 1 でない: %d", report.ExitCode())
+	}
+}
+
+// {"RUCM-PATH": "P020"}
+//
+// TestDoctor_設定ファイルが無ければ雛形の作成を勧める は、直し方を理由で分けたことを確かめる。
+//
+// 目的: 設定ファイルが**無い**（ENOENT）ときだけ `continuo init` を勧めること。
+// 与える情報: WORKFLOW.md を消した状態。
+// 成功条件: 直し方に `continuo init` が入り、ファイルシステムの案内が混ざらないこと。
+func TestDoctor_設定ファイルが無ければ雛形の作成を勧める(t *testing.T) {
+	fx := newFixture(t)
+	if err := os.Remove(fx.WorkflowPath); err != nil {
+		t.Fatalf("WORKFLOW.md を消せません: %v", err)
+	}
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolMissing)
+	remedies := strings.Join(res.Remedies, "\n")
+	if !strings.Contains(remedies, "continuo init") {
+		t.Fatalf("設定ファイルが無いのに雛形の作成を勧めていない: %v", res.Remedies)
+	}
+	if strings.Contains(remedies, "wsl --shutdown") {
+		t.Fatalf("ただ無いだけなのにファイルシステムの案内を出している: %v", res.Remedies)
+	}
+}
+
+// {"RUCM-PATH": "P038"}
+//
+// TestDoctor_設定ファイルを読めないだけなら雛形の作成を勧めない は、
+// **`continuo init` の案内で本物の設定を潰させないこと**を確かめる（issue #11）。
+//
+// 目的: ファイルは在るが読めない（EACCES）とき、`continuo init` を勧めないこと。
+// その案内に従うと `continuo init` は「既にあります」で止まり、
+// **`--force` を足すと本物の設定を雛形で潰す。**
+// 与える情報: WORKFLOW.md の権限を 0 にした状態。
+// 成功条件: 直し方が所有者と権限の確認になり、`continuo init` を含まないこと。
+func TestDoctor_設定ファイルを読めないだけなら雛形の作成を勧めない(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root は権限に関係なく読めるので、この検査は成立しない")
+	}
+	fx := newFixture(t)
+	if err := os.Chmod(fx.WorkflowPath, 0o000); err != nil {
+		t.Fatalf("WORKFLOW.md の権限を変えられません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(fx.WorkflowPath, 0o600) })
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelConfig, doctor.SymbolMissing)
+	remedies := strings.Join(res.Remedies, "\n")
+	if strings.Contains(remedies, "continuo init") {
+		t.Fatalf("読めないだけなのに雛形の作成を勧めている: %v", res.Remedies)
+	}
+	if !strings.Contains(remedies, "所有者と権限") {
+		t.Fatalf("所有者と権限の確認を勧めていない: %v", res.Remedies)
+	}
+}
+
+// {"RUCM-PATH": "P008"}
+//
+// TestDoctor_ClaudeCodeの設定ディレクトリに書けなければ落とす は、
+// **今回の `EROFS` を先に捕まえる検査**があることを確かめる（issue #11）。
+//
+// Claude Code は SessionStart hook を走らせる前に `~/.claude/session-env/<session_id>/` を作る。
+// continuo はその hook を必ず張るので、**ここが書けないと issue は1件も始まらない。**
+//
+// 目的: `~/.claude` に書けないとき、`Claude の設定` が `✗` になり、
+// なぜ困るのかと直し方が出ること。**設定が読めていても読めていなくても走ること。**
+// 与える情報: ホームディレクトリの権限を読み取りと実行だけにした状態。
+// 成功条件: `Claude の設定` が `✗`、内訳に SessionStart hook の説明が入り、終了コードが 1 であること。
+func TestDoctor_ClaudeCodeの設定ディレクトリに書けなければ落とす(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root は権限に関係なく書けるので、この検査は成立しない")
+	}
+	fx := newFixture(t)
+	if err := os.Chmod(fx.Home, 0o500); err != nil {
+		t.Fatalf("ホームディレクトリの権限を変えられません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(fx.Home, 0o700) })
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelClaudeHome, doctor.SymbolMissing)
+	if !strings.Contains(strings.Join(res.Notes, "\n"), "SessionStart hook") {
+		t.Fatalf("なぜここが書けないと困るのかが出ていない: %+v", res)
+	}
+	if len(res.Remedies) == 0 {
+		t.Fatalf("書けないのに直し方が出ていない: %+v", res)
+	}
+	if report.ExitCode() != 1 {
+		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
+	}
+}
+
+// TestDoctor_ClaudeCodeの設定ディレクトリは検査のあとに残らない は、
+// 検査が使い捨てのディレクトリを片付けることを確かめる。
+//
+// 目的: `~/.claude/session-env` の下に、検査に使ったディレクトリを残さないこと。
+// 与える情報: 何も壊していない状態。
+// 成功条件: `Claude の設定` が `✓` で、`session-env` の中身が0件であること。
+func TestDoctor_ClaudeCodeの設定ディレクトリは検査のあとに残らない(t *testing.T) {
+	fx := newFixture(t)
+
+	report := fx.Run(t)
+
+	assertSymbol(t, report, doctor.LabelClaudeHome, doctor.SymbolOK)
+	entries, err := os.ReadDir(filepath.Join(fx.Home, ".claude", "session-env"))
+	if err != nil {
+		t.Fatalf("session-env を読めません: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("検査に使ったディレクトリが残っている: %v", entries)
+	}
+}
+
+// TestDoctor_worktreeの置き場所に書けなければ落とす は、
+// 着手してから初めて落ちる経路を、doctor が先に指摘することを確かめる（issue #11）。
+//
+// 目的: `workspace.root` に書けないとき `worktree の場所` が `✗` になること。
+// 与える情報: `workspace.root` の親を書けない権限にした状態。
+// 成功条件: `worktree の場所` が `✗`、直し方が1件以上、終了コードが 1 であること。
+func TestDoctor_worktreeの置き場所に書けなければ落とす(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root は権限に関係なく書けるので、この検査は成立しない")
+	}
+	fx := newFixture(t)
+	// `workspace.root` は `<root>/wt` である（fixture の WriteWorkflow）。
+	// **その親を書けなくする。**root そのものを 0500 にすると他の検査まで巻き添えになるので、
+	// 先に `wt` を作ってから、その中を書けなくする。
+	wt := filepath.Join(fx.Root, "wt")
+	if err := os.MkdirAll(wt, 0o500); err != nil {
+		t.Fatalf("worktree の置き場所を作れません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(wt, 0o700) })
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelWorkspaceRoot, doctor.SymbolMissing)
+	if len(res.Remedies) == 0 {
+		t.Fatalf("書けないのに直し方が出ていない: %+v", res)
+	}
+	if report.ExitCode() != 1 {
+		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
 	}
 }

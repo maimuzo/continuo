@@ -28,11 +28,6 @@ const (
 	KeyDoctorRuntimeDirFailed Key = "doctor.runtime_dir.failed"
 	// KeyDoctorRuntimeDirRemedy は hook の socket を用意できなかったときの直し方である。
 	KeyDoctorRuntimeDirRemedy Key = "doctor.runtime_dir.remedy"
-	// KeyDoctorRuntimeDirConfigUnreadable は設定を読めないので置き場所を決められないときに出る。
-	KeyDoctorRuntimeDirConfigUnreadable Key = "doctor.runtime_dir.config_unreadable"
-
-	// KeyDoctorClaudeConfigUnreadable は設定を読めず claude を探せないときの文言である。
-	KeyDoctorClaudeConfigUnreadable Key = "doctor.claude.config_unreadable"
 
 	// KeyDoctorClaudeNotFound は claude が PATH に無いときの文言である。
 	KeyDoctorClaudeNotFound Key = "doctor.claude.not_found"
@@ -52,6 +47,10 @@ const (
 	KeyDoctorLabelTrust Key = "doctor.label.trust"
 	// KeyDoctorLabelCredentials は枠の判定に使う資格情報の検査の見出し語に出る。
 	KeyDoctorLabelCredentials Key = "doctor.label.credentials"
+	// KeyDoctorLabelClaudeHome は Claude Code の設定ディレクトリに書けるかの検査の見出し語である。
+	KeyDoctorLabelClaudeHome Key = "doctor.label.claude_home"
+	// KeyDoctorLabelWorkspaceRoot は worktree の置き場所に書けるかの検査の見出し語である。
+	KeyDoctorLabelWorkspaceRoot Key = "doctor.label.workspace_root"
 )
 
 // doctor の集計の行（検査結果の末尾に出る1行）。
@@ -68,10 +67,77 @@ const (
 const (
 	// KeyDoctorConfigUnreadable はWORKFLOW.md を読めなかったときの説明に出る。
 	KeyDoctorConfigUnreadable Key = "doctor.config.unreadable"
-	// KeyDoctorConfigRemedyInit は同じときの直し方に出る。
+	// KeyDoctorConfigRemedyInit は設定ファイルが無かったときの直し方に出る。
 	KeyDoctorConfigRemedyInit Key = "doctor.config.remedy_init"
+	// KeyDoctorConfigRemedyPermission は権限が足りなくて読めなかったときの直し方に出る。
+	KeyDoctorConfigRemedyPermission Key = "doctor.config.remedy_permission"
+	// KeyDoctorConfigRemedyFrontMatter は読めたが front matter が通らなかったときの直し方に出る。
+	KeyDoctorConfigRemedyFrontMatter Key = "doctor.config.remedy_front_matter"
 	// KeyDoctorConfigOK は読めたときの説明に出る。
 	KeyDoctorConfigOK Key = "doctor.config.ok"
+)
+
+// doctor の「ファイルシステムが壊れている」ときの案内（issue #11）。
+//
+// **EIO と EROFS を掴んだときだけ出す。**設定を作り直させる案内をしてはならない。
+// 直る見込みのない作業を利用者にさせることになる。
+const (
+	// KeyDoctorFilesystemFault はファイルシステムの異常を掴んだときの理由に出る。
+	KeyDoctorFilesystemFault Key = "doctor.filesystem.fault"
+	// KeyDoctorFilesystemRemedyMount はマウントの状態を確かめる直し方に出る。
+	KeyDoctorFilesystemRemedyMount Key = "doctor.filesystem.remedy_mount"
+	// KeyDoctorFilesystemRemedyDmesg はカーネルログを確かめる直し方に出る。
+	KeyDoctorFilesystemRemedyDmesg Key = "doctor.filesystem.remedy_dmesg"
+	// KeyDoctorFilesystemRemedyDisk は Windows 側の空き容量を確かめる直し方に出る。
+	KeyDoctorFilesystemRemedyDisk Key = "doctor.filesystem.remedy_disk"
+	// KeyDoctorFilesystemRemedyRestart は WSL を止めて再起動する直し方に出る。
+	KeyDoctorFilesystemRemedyRestart Key = "doctor.filesystem.remedy_restart"
+	// KeyDoctorWriteRemedyPermission は書けなかった場所の所有者と権限を確かめる直し方に出る。
+	KeyDoctorWriteRemedyPermission Key = "doctor.write.remedy_permission"
+	// KeyDoctorDefaultUsed は設定を読めないまま既定値で確かめたときの理由に出る。
+	KeyDoctorDefaultUsed Key = "doctor.default_used"
+)
+
+// doctor の検査「Claude の設定」（Claude Code の設定ディレクトリに書けるか）。
+const (
+	// KeyDoctorClaudeHomeOK は書けたときの説明に出る。
+	KeyDoctorClaudeHomeOK Key = "doctor.claude_home.ok"
+	// KeyDoctorClaudeHomeFailed は書けなかったときの説明に出る。
+	KeyDoctorClaudeHomeFailed Key = "doctor.claude_home.failed"
+	// KeyDoctorClaudeHomeReason は、なぜここが書けないと困るのかの説明に出る。
+	KeyDoctorClaudeHomeReason Key = "doctor.claude_home.reason"
+)
+
+// doctor の検査「worktree の場所」（workspace.root に書けるか）。
+const (
+	// KeyDoctorWorkspaceRootOK は書けたときの説明に出る。
+	KeyDoctorWorkspaceRootOK Key = "doctor.workspace_root.ok"
+	// KeyDoctorWorkspaceRootFailed は書けなかったときの説明に出る。
+	KeyDoctorWorkspaceRootFailed Key = "doctor.workspace_root.failed"
+	// KeyDoctorWorkspaceRootConfigUnreadable は設定を読めず置き場所が決まらないときの説明に出る。
+	KeyDoctorWorkspaceRootConfigUnreadable Key = "doctor.workspace_root.config_unreadable"
+	// KeyDoctorWorkspaceRootReason は、なぜここが書けないと困るのかの説明に出る。
+	KeyDoctorWorkspaceRootReason Key = "doctor.workspace_root.reason"
+)
+
+// internal/fsprobe（その場所に本当に書けるかを実際に書いて確かめる）。
+const (
+	// KeyFsprobeDirEmpty は確かめる場所が空文字だったときのエラーに出る。
+	KeyFsprobeDirEmpty Key = "fsprobe.dir_empty"
+	// KeyFsprobeDirNotAbsolute は確かめる場所が絶対パスでなかったときのエラーに出る。
+	KeyFsprobeDirNotAbsolute Key = "fsprobe.dir_not_absolute"
+	// KeyFsprobeMkdirFailed は場所そのものを用意できなかったときのエラーに出る。
+	KeyFsprobeMkdirFailed Key = "fsprobe.mkdir_failed"
+	// KeyFsprobeWriteFailed は使い捨てのディレクトリを作れなかったときのエラーに出る。
+	KeyFsprobeWriteFailed Key = "fsprobe.write_failed"
+	// KeyFsprobeCleanupFailed は使い捨てのディレクトリを消せなかったときのエラーに出る。
+	KeyFsprobeCleanupFailed Key = "fsprobe.cleanup_failed"
+	// KeyFsprobeHomeDirFailed はホームディレクトリを特定できなかったときのエラーに出る。
+	KeyFsprobeHomeDirFailed Key = "fsprobe.home_dir_failed"
+	// KeyFsprobeClaudeHomeFailed は Claude Code の設定ディレクトリに書けなかったときのエラーに出る。
+	KeyFsprobeClaudeHomeFailed Key = "fsprobe.claude_home_failed"
+	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
+	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
 )
 
 // doctor の検査「herdr」。
@@ -1542,6 +1608,8 @@ const (
 	KeyDaemonRunStartupChecksHerdrUnreachable Key = "daemon.run_startup_checks.herdr_unreachable"
 	// KeyDaemonRunStartupChecksStatusOptionMismatch は起動時の検査でボードの Status の選択肢名が設定と一致しなかったときに出る。
 	KeyDaemonRunStartupChecksStatusOptionMismatch Key = "daemon.run_startup_checks.status_option_mismatch"
+	// KeyDaemonRunStartupChecksNotWritable は起動時の検査で書けなければならない場所に書けなかったときに出る。
+	KeyDaemonRunStartupChecksNotWritable Key = "daemon.run_startup_checks.not_writable"
 	// KeyDaemonValidateGraphQLEndpointURLUnparsable はGraphQL の接続先を差し替える環境変数の値が URL として読めなかったときに出る。
 	KeyDaemonValidateGraphQLEndpointURLUnparsable Key = "daemon.validate_graphql_endpoint.url_unparsable"
 	// KeyDaemonValidateGraphQLEndpointHostMissing は同じ環境変数の値にホスト名が無かったときに出る。
@@ -1580,8 +1648,6 @@ var allKeys = []Key{
 	KeyDoctorRuntimeDirOK,
 	KeyDoctorRuntimeDirFailed,
 	KeyDoctorRuntimeDirRemedy,
-	KeyDoctorRuntimeDirConfigUnreadable,
-	KeyDoctorClaudeConfigUnreadable,
 	KeyDoctorClaudeNotFound,
 	KeyDoctorClaudeFound,
 	KeyDoctorClaudeRemedyInstall,
@@ -1595,7 +1661,33 @@ var allKeys = []Key{
 	KeyDoctorSummaryProblems,
 	KeyDoctorConfigUnreadable,
 	KeyDoctorConfigRemedyInit,
+	KeyDoctorConfigRemedyPermission,
+	KeyDoctorConfigRemedyFrontMatter,
 	KeyDoctorConfigOK,
+	KeyDoctorLabelClaudeHome,
+	KeyDoctorLabelWorkspaceRoot,
+	KeyDoctorFilesystemFault,
+	KeyDoctorFilesystemRemedyMount,
+	KeyDoctorFilesystemRemedyDmesg,
+	KeyDoctorFilesystemRemedyDisk,
+	KeyDoctorFilesystemRemedyRestart,
+	KeyDoctorWriteRemedyPermission,
+	KeyDoctorDefaultUsed,
+	KeyDoctorClaudeHomeOK,
+	KeyDoctorClaudeHomeFailed,
+	KeyDoctorClaudeHomeReason,
+	KeyDoctorWorkspaceRootOK,
+	KeyDoctorWorkspaceRootFailed,
+	KeyDoctorWorkspaceRootConfigUnreadable,
+	KeyDoctorWorkspaceRootReason,
+	KeyFsprobeDirEmpty,
+	KeyFsprobeDirNotAbsolute,
+	KeyFsprobeMkdirFailed,
+	KeyFsprobeWriteFailed,
+	KeyFsprobeCleanupFailed,
+	KeyFsprobeHomeDirFailed,
+	KeyFsprobeClaudeHomeFailed,
+	KeyFsprobeWorkspaceRootFailed,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
 	KeyDoctorHerdrRemedySocketAbs,
@@ -2171,6 +2263,7 @@ var allKeys = []Key{
 	KeyDaemonRunRestoreFailed,
 	KeyDaemonRunStartupChecksHerdrUnreachable,
 	KeyDaemonRunStartupChecksStatusOptionMismatch,
+	KeyDaemonRunStartupChecksNotWritable,
 	KeyDaemonValidateGraphQLEndpointURLUnparsable,
 	KeyDaemonValidateGraphQLEndpointHostMissing,
 	KeyDaemonValidateGraphQLEndpointPlainHTTP,

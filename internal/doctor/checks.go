@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/fsprobe"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -25,20 +26,27 @@ import (
 //
 // **`config.Load` をそのまま呼ぶ。**未知キーと不正値の検出はそこに入っている。
 //
+// **落ちた理由で直し方を変える。**理由を問わず `continuo init` を勧めていたとき、
+// ファイルシステムが壊れて読めなくなった利用者を「設定を作り直す」方向へ誘導した
+// （issue #11）。その案内に従うと `continuo init` は「既にあります」で止まり、
+// **`--force` を足すと本物の設定を雛形で潰す。**
+//
 // path: 読み込む WORKFLOW.md の絶対パス。
 // 戻り値の1つ目: 検査結果。
 // 戻り値の2つ目: 読めた場合の設定（読めなければ OK が偽）。
 func checkConfig(path string) (Result, loadedConfig) {
 	loaded, err := config.Load(path)
 	if err != nil {
-		return Result{
-			Label:  LabelConfig,
-			Symbol: SymbolMissing,
-			Detail: i18n.T(i18n.KeyDoctorConfigUnreadable, path, err),
-			Remedies: []string{
-				i18n.T(i18n.KeyDoctorConfigRemedyInit),
-			},
-		}, loadedConfig{}
+		res := Result{
+			Label:    LabelConfig,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorConfigUnreadable, path, err),
+			Remedies: configRemedies(path, err),
+		}
+		if fsprobe.Classify(err) == fsprobe.FaultFilesystem {
+			res.Notes = []string{i18n.T(i18n.KeyDoctorFilesystemFault)}
+		}
+		return res, loadedConfig{}
 	}
 	return Result{
 		Label:  LabelConfig,
@@ -47,22 +55,131 @@ func checkConfig(path string) (Result, loadedConfig) {
 	}, loadedConfig{OK: true, Config: loaded.Config}
 }
 
-// checkRuntimeDir は、hook を受ける socket を実際に置けるかを検査する。
+// configRemedies は設定ファイルを読めなかった理由ごとの直し方を返す（issue #11）。
 //
-// **文字列を組み立てるだけでは足りない。**決めた場所にディレクトリを作り、
-// unix socket を listen して、すぐ閉じるところまで通す。
+// **`errors.Is` で読み分ける**（fsprobe.Classify がそれを行う）。文言の中身では判定しない。
 //
-// **これが無かったとき、8項目すべてが ✓ で「足りないものはありません」と出たのに、
-// 起動だけが落ちた**（issue #9）。
+//	無い（ENOENT）             … `continuo init` で雛形を置く
+//	権限が足りない（EACCES）    … 所有者と権限を確かめる
+//	ファイルシステムの異常      … マウント・カーネルログ・空き容量・WSL の再起動
+//	それ以外                  … ファイルは読めているので front matter を直す
 //
-//	mkdir /run/user/1000: permission denied
+// path: 読もうとした WORKFLOW.md の絶対パス。
+// err: config.Load が返したエラー。
+// 戻り値: 画面に出す直し方の並び。
+func configRemedies(path string, err error) []string {
+	switch fsprobe.Classify(err) {
+	case fsprobe.FaultNotExist:
+		return []string{i18n.T(i18n.KeyDoctorConfigRemedyInit)}
+	case fsprobe.FaultPermission:
+		return []string{i18n.T(i18n.KeyDoctorConfigRemedyPermission, path)}
+	case fsprobe.FaultFilesystem:
+		return filesystemRemedies()
+	default:
+		return []string{i18n.T(i18n.KeyDoctorConfigRemedyFrontMatter)}
+	}
+}
+
+// filesystemRemedies はファイルシステムが壊れているときの直し方を返す（issue #11）。
 //
-// `XDG_RUNTIME_DIR` が設定されているのにディレクトリが無い環境（systemd が
-// 動いていない WSL など）で起きる。**doctor は「起動できるか」を答えるべきである。**
+// **利用者の WSL で `EIO` と `EROFS` が同時に出た。**カーネルが ext4 を read-only へ
+// 落とし、そのうえで I/O エラーも返していた。**OS を再起動して直った。**
 //
-// cfg: 設定。読めていなければ検査できない。
+// 戻り値: 画面に出す直し方の並び（確かめる順に並べる）。
+func filesystemRemedies() []string {
+	return []string{
+		i18n.T(i18n.KeyDoctorFilesystemRemedyMount),
+		i18n.T(i18n.KeyDoctorFilesystemRemedyDmesg),
+		i18n.T(i18n.KeyDoctorFilesystemRemedyDisk),
+		i18n.T(i18n.KeyDoctorFilesystemRemedyRestart),
+	}
+}
+
+// writeRemedies は「そこへ書けなかった」ときの直し方を返す。
+//
+// dir: 書けなかった場所の絶対パス。
+// err: 書き込みが返したエラー。
+// 戻り値: 画面に出す直し方の並び。
+func writeRemedies(dir string, err error) []string {
+	if fsprobe.Classify(err) == fsprobe.FaultFilesystem {
+		return filesystemRemedies()
+	}
+	return []string{i18n.T(i18n.KeyDoctorWriteRemedyPermission, dir)}
+}
+
+// checkClaudeHome は Claude Code の設定ディレクトリに本当に書けるかを検査する
+// （見出し語 `Claude の設定`。issue #11）。
+//
+// **文字列を組み立てるだけでは足りない。**`~/.claude/session-env/<使い捨ての名前>` を
+// 実際に作って消す（hook の置き場所の検査と同じ流儀）。
+//
+// **設定ファイルが読めなくても走らせる。**この検査は設定を1バイトも読まないので、
+// 設定が `✗` でも成立する。**今回の `EROFS` を先に捕まえるのはこの検査である。**
+//
+// opts: `HomeDir` を使う（テストは一時ディレクトリを渡すこと）。
+// 戻り値: 検査の結果。
+func checkClaudeHome(opts Options) Result {
+	dir, err := fsprobe.ProbeClaudeSessionEnv(opts.HomeDir)
+	if err != nil {
+		res := Result{
+			Label:    LabelClaudeHome,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorClaudeHomeFailed, dir, err),
+			Notes:    []string{i18n.T(i18n.KeyDoctorClaudeHomeReason)},
+			Remedies: writeRemedies(dir, err),
+		}
+		if fsprobe.Classify(err) == fsprobe.FaultFilesystem {
+			res.Notes = append(res.Notes, i18n.T(i18n.KeyDoctorFilesystemFault))
+		}
+		return res
+	}
+	return Result{
+		Label:  LabelClaudeHome,
+		Symbol: SymbolOK,
+		Detail: i18n.T(i18n.KeyDoctorClaudeHomeOK, dir),
+	}
+}
+
+// checkWorkspaceRoot は worktree の置き場所に本当に書けるかを検査する
+// （見出し語 `worktree の場所`。issue #11）。
+//
+// **設定が読めているときだけ走る。**置き場所は `workspace.root` にしか書いていない。
+//
+// **ここが書けないと、着手は段3（ws.Prepare）で必ず落ちる。**doctor がそれを
+// 事前に何も言わなかったので、利用者は起動してから初めて気づくことになっていた。
+//
+// cfg: 読めた場合の設定。
 // configSymbol: 設定ファイルの検査の結果。
 // 戻り値: 検査の結果。
+func checkWorkspaceRoot(cfg loadedConfig, configSymbol Symbol) Result {
+	if configSymbol != SymbolOK {
+		return Result{
+			Label:  LabelWorkspaceRoot,
+			Symbol: SymbolUnknown,
+			Detail: i18n.T(i18n.KeyDoctorWorkspaceRootConfigUnreadable),
+		}
+	}
+	root := cfg.Config.Workspace.Root
+	if err := fsprobe.ProbeWritable(root); err != nil {
+		res := Result{
+			Label:    LabelWorkspaceRoot,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorWorkspaceRootFailed, root, err),
+			Notes:    []string{i18n.T(i18n.KeyDoctorWorkspaceRootReason)},
+			Remedies: writeRemedies(root, err),
+		}
+		if fsprobe.Classify(err) == fsprobe.FaultFilesystem {
+			res.Notes = append(res.Notes, i18n.T(i18n.KeyDoctorFilesystemFault))
+		}
+		return res
+	}
+	return Result{
+		Label:  LabelWorkspaceRoot,
+		Symbol: SymbolOK,
+		Detail: i18n.T(i18n.KeyDoctorWorkspaceRootOK, root),
+	}
+}
+
 // daemonEnvRuntimeDir は実行時ディレクトリを差し替える環境変数である。
 //
 // **`internal/daemon` の定数と同じ値でなければならない。**
@@ -70,21 +187,45 @@ func checkConfig(path string) (Result, loadedConfig) {
 // **食い違うと、doctor が見る場所と起動が使う場所がずれる。**
 const daemonEnvRuntimeDir = "CONTINUO_RUNTIME_DIR"
 
+// checkRuntimeDir は、hook を受ける socket を実際に置けるかを検査する。
+//
+// **文字列を組み立てるだけでは足りない。**決めた場所にディレクトリを作り、
+// unix socket を listen して、すぐ閉じるところまで通す。
+//
+// **これが無かったとき、当時の項目すべてが ✓ で「足りないものはありません」と出たのに、
+// 起動だけが落ちた**（issue #9）。
+//
+//	mkdir /run/user/1000: permission denied
+//
+// `XDG_RUNTIME_DIR` が設定されているのにディレクトリが無い環境（systemd が
+// 動いていない WSL など）で起きる。**doctor は「起動できるか」を答えるべきである。**
+//
+// **設定が読めなくても走る**（issue #11）。`claude.hook_bridge.listen` が無指定の
+// ときと同じ探索順で置き場所が決まるので、既定値だけで「書けるか」は分かる。
+//
+// cfg: 設定。読めていれば `claude.hook_bridge.listen` を使う。
+// configSymbol: 設定ファイルの検査の結果。`✓` でなければ既定値で確かめる。
+// 戻り値: 検査の結果。
 func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol) Result {
-	if configSymbol != SymbolOK {
-		return Result{
-			Label:  LabelRuntimeDir,
-			Symbol: SymbolUnknown,
-			Detail: i18n.T(i18n.KeyDoctorRuntimeDirConfigUnreadable),
-		}
+	// **設定が読めなくても、既定値で成立するところまでは確かめる**（issue #11）。
+	// `claude.hook_bridge.listen` が無指定のときと同じ探索順で置き場所が決まるので、
+	// 設定を読めていなくても「書けるかどうか」は分かる。**設定が読めないという理由だけで
+	// すべての見出し語を `!` にしてしまうと、本当の原因を1つも指摘できない。**
+	var listen *string
+	var notes []string
+	if configSymbol == SymbolOK {
+		listen = cfg.Config.Claude.HookBridge.Listen
+	} else {
+		notes = []string{i18n.T(i18n.KeyDoctorDefaultUsed)}
 	}
 
-	sock, err := socketpath.Prepare(os.Getenv(daemonEnvRuntimeDir), cfg.Config.Claude.HookBridge.Listen)
+	sock, err := socketpath.Prepare(os.Getenv(daemonEnvRuntimeDir), listen)
 	if err != nil {
 		return Result{
 			Label:    LabelRuntimeDir,
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorRuntimeDirFailed, err),
+			Notes:    runtimeDirNotes(notes, err),
 			Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
 		}
 	}
@@ -107,6 +248,7 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol) Result {
 			Label:    LabelRuntimeDir,
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorRuntimeDirFailed, lerr),
+			Notes:    runtimeDirNotes(notes, lerr),
 			Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
 		}
 	}
@@ -119,7 +261,20 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol) Result {
 		Label:  LabelRuntimeDir,
 		Symbol: SymbolOK,
 		Detail: i18n.T(i18n.KeyDoctorRuntimeDirOK, sock),
+		Notes:  notes,
 	}
+}
+
+// runtimeDirNotes は hook の置き場所の検査で、記号の下に添える内訳を組み立てる。
+//
+// notes: 既に決まっている内訳（既定値で確かめたことなど）。
+// err: 検査が返したエラー。
+// 戻り値: ファイルシステムの異常なら、その旨を足した内訳。
+func runtimeDirNotes(notes []string, err error) []string {
+	if fsprobe.Classify(err) != fsprobe.FaultFilesystem {
+		return notes
+	}
+	return append(append([]string{}, notes...), i18n.T(i18n.KeyDoctorFilesystemFault))
 }
 
 // checkHerdr は herdr の socket の ping を呼び、protocol が設定と一致するかを検査する
@@ -770,18 +925,20 @@ func resolveHomeDir(configured string) (string, error) {
 // configSymbol: 設定ファイルの検査の結果。読めていなければ判定しない。
 // 戻り値: 検査の結果。
 func checkClaude(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
-	if configSymbol != SymbolOK {
-		return Result{
-			Label:  LabelClaude,
-			Symbol: SymbolUnknown,
-			Detail: i18n.T(i18n.KeyDoctorClaudeConfigUnreadable),
-		}
-	}
 	// **`claude.kind` は herdr に渡す agent の種別であり、実行ファイル名でもある**
 	// （herdr の `--kind` の説明が「Supported agent kind and canonical executable」）。
-	kind := cfg.Config.Claude.Kind
-	if kind == "" {
-		kind = "claude"
+	//
+	// **設定が読めなくても既定値で探す**（issue #11）。設定が読めないという理由だけで
+	// この検査を `!` にしていたため、すべての見出し語が `!` か `✗` になり、
+	// **本当の原因を1つも指摘しないまま利用者を突き放していた。**
+	kind := "claude"
+	var notes []string
+	if configSymbol == SymbolOK {
+		if cfg.Config.Claude.Kind != "" {
+			kind = cfg.Config.Claude.Kind
+		}
+	} else {
+		notes = []string{i18n.T(i18n.KeyDoctorDefaultUsed)}
 	}
 	lookPath := opts.LookPath
 	if lookPath == nil {
@@ -793,6 +950,7 @@ func checkClaude(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
 			Label:    LabelClaude,
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorClaudeNotFound, kind),
+			Notes:    notes,
 			Remedies: []string{i18n.T(i18n.KeyDoctorClaudeRemedyInstall, kind)},
 		}
 	}
@@ -800,5 +958,6 @@ func checkClaude(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
 		Label:  LabelClaude,
 		Symbol: SymbolOK,
 		Detail: i18n.T(i18n.KeyDoctorClaudeFound, path),
+		Notes:  notes,
 	}
 }

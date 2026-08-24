@@ -8,7 +8,7 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
-// 検査の見出し語のキーである（設計 3-32 / 3-35）。**この一覧で固定する。**
+// 検査の見出し語のキーである（設計 3-32 / 3-35）。**見出し語はここでしか宣言しない。**
 //
 // **検査がいくつあるかは、この一覧を数えて得る。**
 // 数を別の場所に書き写さない。書き写せば、検査を足したときに必ず片方だけが残る。
@@ -45,6 +45,19 @@ const (
 	LabelTrust = i18n.KeyDoctorLabelTrust
 	// LabelCredentials は rate_limit の設定に応じて環境変数かファイルがあるかの検査である。
 	LabelCredentials = i18n.KeyDoctorLabelCredentials
+	// LabelClaudeHome は Claude Code の設定ディレクトリに実際に書けるかの検査である。
+	//
+	// **文字列を組み立てるだけでは足りない。**`~/.claude/session-env/<使い捨ての名前>` を
+	// 実際に作って消す。Claude Code は SessionStart hook を走らせる前にここへ書き、
+	// continuo はその hook を必ず張るので、**ここが書けないと issue は1件も始まらない。**
+	//
+	// **これが無かったとき、利用者のホームが read-only になった環境で、
+	// doctor は9項目すべてを `✗` か `!` にして本当の原因を1つも指摘しなかった**（issue #11）。
+	LabelClaudeHome = i18n.KeyDoctorLabelClaudeHome
+	// LabelWorkspaceRoot は worktree の置き場所（`workspace.root`）に実際に書けるかの検査である。
+	//
+	// **ここが書けないと、着手は worktree を用意する段で必ず落ちる。**
+	LabelWorkspaceRoot = i18n.KeyDoctorLabelWorkspaceRoot
 )
 
 // LabelText は見出し語のキーを、いま使っている言語の語に直す。
@@ -155,7 +168,7 @@ func (r Report) ExitCode() int {
 
 // labelColumn は見出し語を並べる桁数（端末の表示幅）である。
 //
-// いちばん長い見出し語（`設定ファイル` = 12 桁）が収まり、説明との間に余白が残る幅にしてある。
+// いちばん長い見出し語（`hook の置き場所` と `worktree の場所` = 15 桁）が収まる幅にしてある。
 const labelColumn = 16
 
 // Write は検査結果を人間が読む形で書き出す（設計 3-32 の出力の形）。
