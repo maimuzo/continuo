@@ -1,3 +1,9 @@
+// {"RUCM-CFG-SHA256": "bebb24af1222bffaebe633b64bdcd42d011883d0e32157325376627ac7393cd5", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
+// **候補の取り方と、着手を取りやめる経路の検査である。**
+//
+// **候補の一覧は GitHub のサーバ側の検索結果であり、そのまま信じてはならない**（設計 3-34）。
+// 直前に書いた Status が索引へ反映される前に取り直すと、頼んだ Status に無い item が返る。
 package orchestrator_test
 
 import (
@@ -589,5 +595,120 @@ func TestDispatch_unknownのまま期限を過ぎたら人間へ渡さず試し�
 	}
 	if fx.Herdr.CountMethod(herdr.MethodAgentPrompt) != 0 {
 		t.Fatalf("unknown のままプロンプトを投げている: %v", fx.Herdr.Methods())
+	}
+}
+
+// {"RUCM-PATH": "P014"}
+//
+// TestDispatch_failure_stateのissueをrunning_stateへ上書きしない は、段2 の拒否リストを確かめる。
+//
+// **候補の一覧は GitHub のサーバ側の検索結果である。**continuo が直前に書いた Status が
+// 索引へ反映される前に取り直すと、failure_state へ落としたばかりの issue が
+// そのまま候補として返る。段2 の拒否リストが terminal_states だけだと、
+// **人間が Blocked に置いた issue を continuo が In Progress へ上書きしてしまう。**
+//
+// 目的: ボードの Status が failure_state にある issue へ running_state を書かないこと。
+// また、書かなかったときに段3 へ進まず、印を静かに外すこと。
+// 与える情報: ボードでは Blocked にあるのに、候補の写しでは Ready を名乗る issue。
+// 成功条件: Status が Blocked のままで、worktree が開かれず、印が残らないこと。
+func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	holdPrompt(fx)
+	// ボードの実体は Blocked である（人間が置いた、あるいは直前に落とした）。
+	fx.Tracker.AddIssue(sampleIssue(188, "Blocked"))
+	// 候補の一覧にだけ、反映が追いついていない Ready の写しが載る。
+	fx.Tracker.SetExtraCandidates(sampleIssue(188, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 10*time.Second, "着手の試みが終わる", func() bool {
+		return fx.Tracker.CountCall("UpdateStatus") > 0
+	})
+	time.Sleep(500 * time.Millisecond)
+
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "Blocked" {
+		t.Errorf("failure_state の issue を上書きしている: got %q, want Blocked", got)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodWorktreeOpen); got != 0 {
+		t.Errorf("Status を書かなかったのに段3 へ進んでいる: worktree.open を %d 回呼んだ", got)
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
+		t.Errorf("印が残っている: %d 件", got)
+	}
+	if got := len(fx.Tracker.CommentsOf("I_node188")); got != 0 {
+		t.Errorf("何も起きていないのに issue へコメントしている: %d 件", got)
+	}
+}
+
+// {"RUCM-PATH": "P018"}
+//
+// TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら拾わない は、
+// issue 単位の失敗の記録を確かめる。
+//
+// **印（run）は失敗のたびに消えるので、印の中のリトライの回数では止まらない。**
+// 次の巡回が0回目として拾い直し、同じ失敗を30秒ごとに繰り返す。
+//
+// 目的: 同じ issue が `agent.max_retries` を超えて失敗したら、それ以上拾わないこと。
+// 与える情報: ボードへ1バイトも書けない状況（failure_state へも落とせないので、
+// issue は Ready のまま候補に上がり続ける）と、`agent.max_retries: 1`。
+// 成功条件: 3回目以降の巡回で着手を試みなくなり、そのことが人間へ1度だけ知らされること。
+func TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら拾わない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Agent.MaxRetries = 1
+	}})
+	fx.AllowLog("Status を落とせません", "着手に失敗しました", "これ以上は拾いません")
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.Tracker.SetUpdateError(errors.New("テストが起こしたボードへの書き込みの失敗"))
+
+	tick := func() {
+		fx.Orc.Tick(context.Background())
+		fx.WaitRunsDrained(t, 15*time.Second)
+	}
+	tick()
+	tick()
+	tick()
+	before := fx.Tracker.CountCall("UpdateStatus")
+	tick()
+	after := fx.Tracker.CountCall("UpdateStatus")
+
+	if after != before {
+		t.Errorf("上限を超えても着手をやり直している: UpdateStatus の回数が %d から %d へ増えた", before, after)
+	}
+	if !strings.Contains(fx.Logs.String(), "これ以上は拾いません") {
+		t.Errorf("拾わなくなったことを人間へ知らせていない")
+	}
+}
+
+// {"RUCM-PATH": "P019"}
+//
+// TestDispatch_絞り込みの食い違いが1件あっても他のissueのdispatchは続く は、
+// 巡回全体を止めないことを確かめる。
+//
+// **1件の食い違いで巡回の dispatch を丸ごと止めると、無関係の issue まで着手されなくなる。**
+// 食い違った item だけを候補から外して続けること。
+//
+// 目的: 頼んだ Status に無い候補が混ざっても、他の issue の着手が進むこと。
+// 与える情報: Ready の issue が1件と、候補の一覧にだけ載る Blocked の写しが1件。
+// 成功条件: Ready の issue に turn が送られ、Blocked の issue の Status は動かないこと。
+func TestDispatch_絞り込みの食い違いが1件あっても他のissueのdispatchは続く(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.AllowLog("頼んだ Status に無い候補が返ったので飛ばします")
+	holdPrompt(fx)
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.Tracker.AddIssue(sampleIssue(189, "Blocked"))
+	// **候補の先頭に食い違いを置く。**先頭で巡回が止まると、後続が着手されない。
+	fx.Tracker.SetExtraCandidates(sampleIssue(189, "Blocked"))
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 15*time.Second, "食い違っていない issue に turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	if got := fx.Tracker.StateOf("PVTI_item189"); got != "Blocked" {
+		t.Errorf("頼んだ Status に無い候補を着手している: got %q, want Blocked", got)
+	}
+	ids := fx.Orc.RunningIdentifiers()
+	if len(ids) != 1 || !strings.Contains(ids[0], "#188") {
+		t.Errorf("着手した issue が想定と違う: %v", ids)
 	}
 }

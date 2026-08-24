@@ -1164,6 +1164,7 @@ sequenceDiagram
 | --- | --- |
 | **対象リポジトリが Claude Code に信頼登録されているか** | **その issue を飛ばす**（`trust.on_untrusted` に従う）。**信頼していないフォルダでは hook が1つも動かず、turn 終了検知が全滅するため。**ログに残す。**issue へのコメントは、そのリポジトリにつき1回だけ**（下記）。**引く鍵の作り方はさらに下記** |
 | **worktree の置き場所が設定の内側に収まるか** | **その issue を失敗として扱う**（3-20。仕様が「最も重要な移植性の制約」と呼ぶ検査である） |
+| **目的のパスの worktree をそのまま使えるか** | **その issue を飛ばす**（3-16b）。**Status を1バイトも書かない。**判定できない事情（clone を引けない等）はここでは落とさず、段3 に任せて人間へ渡す |
 
 **同じコメントを積まないようにする。**未信頼の issue は `Ready` のまま候補に残り続けるので、
 **素朴に実装すると30秒ごとに永久にコメントが積まれる。**
@@ -1699,7 +1700,8 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
        Ready のバケツで数えると、In Progress の上限を越えて dispatch できてしまう
      この検査は「自分が取った」印を付ける前に行う（印を付けてから弾くと、印が残る）
 0. dispatch の直前の検査を通す（3-6 の「issue ごと」の表）
-   → 対象リポジトリが信頼済みか / worktree の置き場所が設定の内側に収まるか。
+   → 対象リポジトリが信頼済みか / worktree の置き場所が設定の内側に収まるか /
+     **目的のパスの worktree をそのまま使えるか**（3-16b）。
      落ちたらこの issue を飛ばす。まだ何も書かない
 1. 「自分が取った」印を付け、実行中の一覧へ入れる   ← メモリの上での最初の段
    → 仕様 7.4 が「worker を起動する前に取得済みかどうかを検査する」ことを REQUIRED としている。
@@ -1707,6 +1709,8 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
      agent の起動待ちは 60 秒、巡回は 30 秒間隔なので、実際に起こりうる
 2. ボードの Status を tracker.running_state（既定 In Progress）へ書く   ← 外部に残る最初の段
    → 印はメモリなので落ちると消える。Status は残るので、再起動後の識別に使う
+   → **書く前に ID 指定で取り直し、terminal_states と failure_state に入っていたら書かない**（3-16b）。
+     **書かなかったら段3 へ進まず、印を静かに外す**（人間が Blocked に置いた issue を上書きしない）
 3. worktree を用意し、herdr workspace として開く（3-22 の手順を最後まで実行する）
    → 片付けに要る herdr workspace の ID はここで手に入る
 4. workspace_hooks の after_create を実行する
@@ -1757,6 +1761,56 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
 | 逆に、pane を先に作って落ちたら | **pane と Claude Code が生きたまま、Status は `Ready` のまま** | **`Ready` は新規の候補なので、同じ worktree でもう1つ Claude Code が起動する。**入力を待たない権限モードなので、2つが同じファイルを同時に書く |
 
 **つまり Status を先に書くことが、「この issue は自分が取った」という唯一の外部に残る印になる。**
+
+### 3-16b. 失敗が確定している着手は、Status を書く前に落とす
+
+**言いたいこと。**「必ず失敗する着手」でも段2 で `In Progress` を書くと、
+`In Progress` は active_states なので次の巡回でまた候補に上がり、
+**`In Progress` と `Blocked` の往復が永久に続く。**判定は全部 Status を書く前へ置く。
+
+**候補1件につき、Status を書く前に4つを見る。**
+
+| 短縮名 | 何を見るか | 落ちたらどうするか |
+| --- | --- | --- |
+| 頼んだ Status | issue の Status が `active_states` に入っているか | その issue だけ飛ばす。**他の候補の dispatch は続ける** |
+| 失敗の回数 | 同じ issue の失敗が `agent.max_retries` を超えていないか | 記録が消えるまで拾わない |
+| 使える worktree | 目的のパスに実体があるのに git の登録が無いか（別の branch を出していないか） | Status を1バイトも書かずに飛ばす |
+| 書いてよい Status | 取り直した Status が `terminal_states` / `failure_state` に入っていないか | 印を外して静かにやめる |
+
+**「使える worktree」は `internal/workspace` の読み取り専用の判定である。**
+
+```go
+// internal/workspace/prepare.go
+func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
+```
+
+`git worktree list` と `git rev-parse --abbrev-ref HEAD` を読むだけで、
+`prune` も `worktree add` も呼ばない。`Prepare`（段3）の同じ検査は保険として残す。
+
+**「失敗の回数」はメモリ上の記録である。永続化層は作らない。**
+
+```go
+// internal/orchestrator/failure.go
+type failureNote struct {
+	Count          int       // 続けて失敗した回数
+	LastAt         time.Time // 最後に失敗した時刻
+	Reason         string    // 最後の失敗の理由の要約
+	MovedToFailure bool      // その失敗で failure_state を書けたか
+	Notified       bool      // 「もう拾わない」ことを人間へ知らせたか
+}
+```
+
+`o.failures map[string]*failureNote`（キーは project item の ID）に持ち、
+`failRun` と打ち切りが1つ増やし、run が最後まで通ったら消す。
+**印（`o.runs`）の中の `RetryCount` では止まらない。**印は run が終わると消えるので、
+次の巡回が0回目として拾い直す。
+
+**記録をいつ消すか。**
+
+| 失敗のときに `failure_state` を書けたか | 消す条件 |
+| --- | --- |
+| 書けた | ボードは `failure_state` にある。それが候補（active_states）に見えたら人間が動かしたということである。**索引の遅れを踏むので60秒は信じない** |
+| 書けなかった | Status が動いていないので人間の操作を見分けられない。**`agent.max_retry_backoff_ms` の間隔で、時間だけで緩める** |
 
 ### 3-17. 二重起動は flock で防ぐ。`ps` は使わない
 
@@ -2270,6 +2324,31 @@ subagent が終わるたびに `promptSource == "system"` の `<task-notificatio
 > **`promptSource` は `"typed"` に一致するかだけを見る。**
 > 観測できた値は `typed` / `system` / 項目なし の3通りだが、**他の値が出ないことは確認できていない。**
 > **一致しない値はすべて「turn の頭ではない」として扱う。**
+
+#### 「まだ無い」と「不正」を分ける
+
+**hook が名乗る `transcript_path` は、実在しないことがある。**Claude Code は transcript を
+非同期に書くので、`SessionStart` と `UserPromptSubmit` はその前に発火する（1-4 に原文と訳）。
+**これは正常な並びであり、警告ではない。**警告にすると、セッションごとに必ず2行の WARN が積まれる。
+
+**検査の順番を、実在するかどうかで分岐しない形に決める**（`acceptTranscriptPath`）。
+
+| 順 | 何をするか | 落ちたときの記録 |
+| --- | --- | --- |
+| 1 | 絶対パスであることを見る | WARN |
+| 2 | `filepath.EvalSymlinks` を掛ける。**通らなければ字句のままにする** | — |
+| 3 | `os.Lstat` で有無を決める | **`os.ErrNotExist` は Debug。**それ以外の失敗は WARN |
+| 4 | 許可された根の内側かを見る | WARN |
+| 5 | 通常のファイルかを見る（FIFO を弾く） | WARN |
+
+**根の検査を `Lstat` の後ろへ置いてよい理由。**無いパスは1バイトも読まないので、
+そこを通しても読ませる先が無い。**実在するパスは必ず解決してから根と比べる**ので、
+シンボリックリンクで外へ出る経路は塞がったままである。
+
+**turn の終わりの検知には影響しない。**判定は `Stop` hook と `background_tasks` で行い、
+transcript を読まない（3-2）。**この項目を落として困るのは、その run で1度も有効な
+`transcript_path` を受け取っていない状態で turn が終わったときだけである**
+（`noteHook` が空でないパスだけを上書きするので、直近に受け入れた有効なパスは残る）。
 
 #### いつ読むか
 
@@ -3488,7 +3567,23 @@ func buildStatusSearchQuery(statusField string, states []string) string {
 | 段 | いつ | 何を見るか | 落ちたときの扱い |
 | --- | --- | --- | --- |
 | **起動時の件数検査** | Bootstrap の同じ1リクエスト | `no:` と `-no:` の件数 | `CategoryInvalidConfig` で起動を止める |
-| **結果の検算** | 候補を取るたび | 返った item の Status | `CategoryResponse` でその巡回を落とす |
+| **結果の検算** | 候補を取るたび | 返った item の Status | **外れた item を候補から落とす。大半が外れたときだけ `CategoryResponse`** |
+
+**結果の検算で巡回全体を止めない。**`items(query:)` の絞り込みはサーバ側の検索であり、
+**continuo 自身が直前に書いた Status が索引へ反映されるまで遅れる。**
+同じ巡回で候補を取り直すと、絞り込みは古い値で当たり、`fieldValueByName` は新しい値を返す。
+**この1件で一覧ごとエラーにすると、正しく絞り込めていた他の issue の dispatch まで止まる。**
+
+| どちらか | 外れる item の割合 | 扱い |
+| --- | --- | --- |
+| 反映待ち | **少数**（continuo が直前に書いた件数まで） | その item だけ落として WARN を1行出す |
+| 絞り込みのキーの解決に失敗 | **大半**（条件ごと無視されるので、ボードのほぼ全件が返る） | `CategoryResponse` で巡回を落とす |
+
+**判定は「外れた item が過半数を占め、かつ4件以上返っている」ことで行う**
+（`filterMismatchMinSample`）。4件に満たない一覧では2つを見分けられないので、
+**見分けられないなら落として続ける。**キーを解決できるかは Bootstrap が直接測っており
+（起動を止める）、ここは推測でしかないので、直接の測定を上書きしない。
+**落とした item は `dispatchCandidates` 側でも `active_states` と照合して弾く**（3-16b）。
 
 **件数検査の理屈。**知らないキーは条件ごと無視されるので `no:` と `-no:` が
 **両方とも全件**を返す。解決できていれば両者は排他で、合計が全件になる。

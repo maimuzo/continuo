@@ -39,6 +39,33 @@ const agentStatusPollInterval = 500 * time.Millisecond
 // **errors.Is の比較対象なので、この値の identity を変えてはならない**（i18n の対象外）。
 var ErrStartupRetryable = errors.New("起動に失敗しましたが、待てば通るかもしれません")
 
+// ErrStatusNotWritten は、着手の段2 でボードの Status を書かなかったことを表す。
+//
+// **これは失敗ではない。**item がもう見えないか、取り直した結果 `terminal_states` か
+// `failure_state` に入っていたということであり、いずれも「いま着手してはいけない」を
+// 意味する。**人間へ渡さず、印だけ静かに外す**（`failure_state` へ落とすと、
+// 人間が `Blocked` に置いた issue に continuo が上書きしたことになる）。
+//
+// **errors.Is の比較対象なので、この値の identity を変えてはならない**（i18n の対象外）。
+var ErrStatusNotWritten = errors.New("ボードの Status を書かなかったので着手しません")
+
+// dispatchBlockedStates は着手の段2 で「この状態なら Status を書かない」一覧を返す。
+//
+// **`terminal_states` に `failure_state` を足す。**足さないと、人間が `Blocked` に
+// 置いた issue を continuo が `In Progress` へ上書きできてしまう。候補の一覧は
+// GitHub のサーバ側の検索結果であり、直前に書いた値がまだ反映されていないことがあるので
+// （設計 3-34）、**候補に載っていること自体は「いま着手してよい」の根拠にならない。**
+//
+// 戻り値: 拒否する Status の一覧（**設定のスライスは書き換えない。**新しい配列を返す）。
+func (o *Orchestrator) dispatchBlockedStates() []string {
+	out := make([]string, 0, len(o.cfg.Tracker.TerminalStates)+1)
+	out = append(out, o.cfg.Tracker.TerminalStates...)
+	if o.cfg.Tracker.FailureState != "" {
+		out = append(out, o.cfg.Tracker.FailureState)
+	}
+	return out
+}
+
 // dispatchCandidates は候補を並び順のまま、空きスロットが尽きるまで dispatch する
 // （設計 4-2 / 3-16 の段-1）。
 //
@@ -70,6 +97,20 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		}
 		// 既に印を持っている issue は dispatch しない（設計 3-10 / 4-2）。
 		if _, taken := o.lookupRunByID(issue.ID); taken {
+			continue
+		}
+		// **候補の Status が active_states に入っていることを自分で確かめる。**
+		// 一覧は GitHub のサーバ側の検索結果であり、直前に書いた値が索引へ反映される
+		// 前に取り直すと、`Blocked` にした issue がそのまま返ってくる（設計 3-34）。
+		// **候補に載っていること自体は「いま着手してよい」の根拠にならない。**
+		if !containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
+			o.logger.Warn("頼んだ Status に無い候補が返ったので飛ばします（絞り込みの反映待ちの可能性があります）",
+				"identifier", issue.Identifier, "返ってきた Status", issue.State,
+				"頼んだ Status", strings.Join(o.cfg.Tracker.ActiveStates, ", "))
+			continue
+		}
+		// 同じ理由で失敗し続けている issue は、人間が Status を動かすまで拾わない。
+		if o.skipByFailure(issue) {
 			continue
 		}
 		if !issue.Dispatchable {
@@ -260,6 +301,18 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 	if reuse {
 		label = "再 dispatch"
 	}
+	// **Status を書かなかったときは、人間へ渡さず静かに印を外す。**
+	// ボードは continuo が触る前の状態のままなので、伝えるべきことが1つも無い。
+	// **ここで failure_state へ落とすと、人間が Blocked に置いた issue を上書きする。**
+	if errors.Is(err, ErrStatusNotWritten) {
+		o.logger.Info(label+"を取りやめました（ボードの Status を書かなかったため）",
+			"identifier", issue.Identifier, "理由", summaryLine(err.Error()))
+		if rs.beginTerminal() {
+			o.stopWorker(ctx, rs)
+			o.release(rs)
+		}
+		return
+	}
 	// **待てば通るかもしれない失敗は、人間へ渡さずバックオフして試し直す**（設計 3-16 の段10）。
 	// **リトライを使い切ったら abandonRun が自分で failure_state へ落とす**ので、
 	// 直らない失敗が永久に回り続けることはない。
@@ -310,6 +363,12 @@ func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 //
 //	対象リポジトリが Claude Code に信頼登録されているか  → 飛ばす（trust.on_untrusted に従う）
 //	worktree の置き場所が設定の内側に収まるか            → その issue を失敗として扱う（3-20）
+//	目的のパスの worktree をそのまま使えるか            → 飛ばす（3-16b。判断は 3-22 の段2・段3 と同じ）
+//
+// **3つ目をここで見るのは、Status を書く前に落とすためである。**着手が確定して
+// 失敗する issue でも段2 で `In Progress` を書いてしまうと、`In Progress` は
+// active_states なので次の巡回でまた候補に上がり、`In Progress` と `Blocked` の
+// 往復が永久に続く。**この検査は1バイトも書かない**（CheckWorktreeUsable）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 検査する issue。
@@ -340,6 +399,12 @@ func (o *Orchestrator) preflight(ctx context.Context, issue tracker.Issue) bool 
 	}
 	if err := workspace.CheckContainment(o.ws.ResolvedRoot(), loc.Path); err != nil {
 		o.logger.Warn("worktree の置き場所が設定の内側に収まりません（この issue を飛ばします）",
+			"identifier", issue.Identifier, "error", err)
+		return false
+	}
+	if err := o.ws.CheckWorktreeUsable(ctx, toIssueRef(issue)); err != nil {
+		// **Status を1バイトも書かずに飛ばす。**直し方はエラー文が持っている。
+		o.logger.Warn("目的の worktree をそのまま使えません（Status を書かずにこの issue を飛ばします）",
 			"identifier", issue.Identifier, "error", err)
 		return false
 	}
@@ -429,9 +494,16 @@ func (o *Orchestrator) clearUntrusted(owner, repo string) {
 func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker.Issue, reuse bool) error {
 	// 段2: ボードの Status を tracker.running_state へ書く。**ハードコードしない。**
 	// **書く前に必ず ID 指定で取り直す**（UpdateStatus が内部で行う）。
-	// **terminal_states に入っていたら書かない。**
-	if _, err := o.tracker.UpdateStatus(ctx, issue.ID, o.cfg.Tracker.RunningState, o.cfg.Tracker.TerminalStates); err != nil {
+	// **terminal_states と failure_state に入っていたら書かない。**
+	written, err := o.tracker.UpdateStatus(ctx, issue.ID, o.cfg.Tracker.RunningState, o.dispatchBlockedStates())
+	if err != nil {
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunStatusUpdateFailed, o.cfg.Tracker.RunningState, err)
+	}
+	if !written {
+		// **書かなかったのに段3 へ進んではならない。**item がもう見えないか、
+		// 取り直した結果 terminal_states / failure_state に入っていたということである。
+		// どちらも「いま着手してはいけない」を意味する。
+		return ErrStatusNotWritten
 	}
 	// **段-1 の状態ごとの上限は running_state のバケツで数える**（設計 3-16）。
 	// 手元のスナップショットを書き換えておかないと、次の巡回で取り直すまで

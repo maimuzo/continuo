@@ -324,6 +324,9 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	o.runAfterRun(ctx, rs)
 	o.stopWorker(ctx, rs)
 
+	// **最後まで通った run は、過去の失敗の記録を消す。**次に失敗したら0から数え直す。
+	o.forgetFailure(rs.IssueID)
+
 	current, ok := o.refreshIssue(ctx, rs)
 	if ok && o.ws.ShouldCleanup(current.State) {
 		o.cleanupWorktree(ctx, rs)
@@ -346,10 +349,14 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 	if !rs.beginTerminal() {
 		return
 	}
-	if _, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	if err != nil {
 		o.logger.Warn("Status を落とせません",
 			"identifier", rs.issue().Identifier, "遷移先", o.cfg.Tracker.FailureState, "error", err)
 	}
+	// **失敗は issue 単位で数える**（設計 3-16）。印はこのあと release で消えるので、
+	// 印の中の RetryCount では次の巡回が0回目として拾い直してしまう。
+	o.noteFailure(rs.IssueID, reason, moved && err == nil)
 	o.postHandoffComment(ctx, rs, reason)
 	o.ensureAgentComment(ctx, rs)
 	o.runAfterRun(ctx, rs)
@@ -412,9 +419,12 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 		o.ensureAgentComment(ctx, rs)
 		o.runAfterRun(ctx, rs)
 		o.stopWorker(ctx, rs)
-		if _, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {
+		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+		if err != nil {
 			o.logger.Warn("Status を落とせません", "identifier", snap.Identifier, "error", err)
 		}
+		// **打ち切りも issue 単位で数える**（failRun と同じ器に積む）。
+		o.noteFailure(rs.IssueID, reason, moved && err == nil)
 		o.postHandoffComment(ctx, rs, reason)
 		o.release(rs)
 		return

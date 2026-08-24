@@ -3,18 +3,36 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "481a5a5627fc5b508b9ebe91e645b421b26de2d64ad531bf5317edd09e1f7c66"
+    "rucm_block_sha256": "340a619a60bd0be1c6ef93765d7b1e98815eb3ab64bd5b9a59d057e0675f7acb"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
       "postcondition": "issue の Status は表明の値の遷移先の選択肢である。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。"
     },
-    "空きスロット不足": {
+    "頼んでいないStatus": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
           3
+        ]
+      },
+      "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。"
+    },
+    "失敗の繰り返し": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。"
+    },
+    "空きスロット不足": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          5
         ]
       },
       "postcondition": "印の件数は変わっていない。issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。"
@@ -23,16 +41,34 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          4
+          6
         ]
       },
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。issue に信頼登録の承認を促すコメントが1件ある。"
+    },
+    "使えないworktree": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。"
+    },
+    "書かずに取りやめる": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          9
+        ]
+      },
+      "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。issue にコメントは付いていない。"
     },
     "起動直後の確認画面": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          15
+          19
         ]
       },
       "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。"
@@ -41,7 +77,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          15
+          19
         ]
       },
       "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。"
@@ -59,7 +95,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          13
+          17
         ]
       },
       "postcondition": "pane が起動を受け付けるまで待ち続けている。Claude Code はまだ起動していない。"
@@ -77,7 +113,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          17
+          21
         ]
       },
       "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。"
@@ -86,7 +122,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          21
+          25
         ]
       },
       "postcondition": "turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。"
@@ -95,7 +131,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          26
+          30
         ]
       },
       "postcondition": "issue にエージェントが書いたコメントが1件以上ある。turn 数は増えていない。issue の Status は表明の値の遷移先の選択肢である。"
@@ -115,7 +151,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            17
+            22
           ]
         }
       ],
@@ -127,7 +163,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            18
+            23
           ]
         }
       ],
@@ -154,182 +190,245 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "システムは VALIDATES THAT 空きスロットが1つ以上ある。"
+      "statement": "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。"
     },
     {
       "id": "BASIC FLOW-4",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。"
+      "statement": "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。"
     },
     {
       "id": "BASIC FLOW-5",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 5,
-      "statement": "システムは先頭の issue に印を付ける。"
+      "statement": "システムは VALIDATES THAT 空きスロットが1つ以上ある。"
     },
     {
       "id": "BASIC FLOW-6",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 6,
-      "statement": "システムはボードの issue の Status に running_state の選択肢を書く。"
+      "statement": "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。"
     },
     {
       "id": "BASIC FLOW-7",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは workspace.root の下に issue の worktree を作る。"
+      "statement": "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。"
     },
     {
       "id": "BASIC FLOW-8",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。"
+      "statement": "システムは先頭の issue に印を付ける。"
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムは Claude Code の設定ファイルを worktree の外に書く。"
+      "statement": "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。"
     },
     {
       "id": "BASIC FLOW-10",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは worktree の中に身元ファイルを書く。"
+      "statement": "システムはボードの issue の Status に running_state の選択肢を書く。"
     },
     {
       "id": "BASIC FLOW-11",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは herdr に workspace の pane の一覧を要求する。"
+      "statement": "システムは workspace.root の下に issue の worktree を作る。"
     },
     {
       "id": "BASIC FLOW-12",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは pane の label に issue の URL を書く。"
+      "statement": "システムは worktree の絶対パスを渡して workspace として開く。"
     },
     {
       "id": "BASIC FLOW-13",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
+      "statement": "システムは Claude Code の設定ファイルを worktree の外に書く。"
     },
     {
       "id": "BASIC FLOW-14",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "システムは pane で Claude Code を起動する。"
+      "statement": "システムは worktree の中に身元ファイルを書く。"
     },
     {
       "id": "BASIC FLOW-15",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。"
+      "statement": "システムは herdr に workspace の pane の一覧を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "システムは pane の label に issue の URL を書く。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。"
+      "statement": "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
     },
     {
       "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "システムは Claude Code に turn の本文を送る。"
+      "statement": "システムは pane で Claude Code を起動する。"
     },
     {
       "id": "BASIC FLOW-19",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 19,
-      "statement": "システムは Claude Code の Stop hook を受ける。"
-    },
-    {
-      "id": "BASIC FLOW-20",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 20,
-      "statement": "システムは settle_ms のあいだ待つ。"
+      "statement": "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。"
     },
     {
       "id": "BASIC FLOW-21",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。"
+      "statement": "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。"
     },
     {
       "id": "BASIC FLOW-22",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 22,
-      "statement": "システムは transcript から表明の行を読む。"
+      "statement": "システムは Claude Code に turn の本文を送る。"
     },
     {
       "id": "BASIC FLOW-23",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 23,
-      "statement": "システムはボードの issue の Status を ID 指定で取り直す。"
+      "statement": "システムは Claude Code の Stop hook を受ける。"
     },
     {
       "id": "BASIC FLOW-24",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "UNTIL 表明の値が working でない"
+      "statement": "システムは settle_ms のあいだ待つ。"
     },
     {
       "id": "BASIC FLOW-25",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 25,
-      "statement": "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。"
+      "statement": "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。"
     },
     {
       "id": "BASIC FLOW-26",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 26,
-      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+      "statement": "システムは transcript から表明の行を読む。"
     },
     {
       "id": "BASIC FLOW-27",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 27,
-      "statement": "システムは workspace_hooks の after_run を実行する。"
+      "statement": "システムはボードの issue の Status を ID 指定で取り直す。"
     },
     {
       "id": "BASIC FLOW-28",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 28,
-      "statement": "システムは herdr の pane を閉じる。"
+      "statement": "UNTIL 表明の値が working でない"
     },
     {
       "id": "BASIC FLOW-29",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 29,
+      "statement": "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。"
+    },
+    {
+      "id": "BASIC FLOW-30",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 30,
+      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+    },
+    {
+      "id": "BASIC FLOW-31",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 31,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "BASIC FLOW-32",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 32,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "BASIC FLOW-33",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 33,
       "statement": "システムは印を外す。"
+    },
+    {
+      "id": "頼んでいないStatus-1",
+      "type": "action",
+      "flow": "頼んでいないStatus",
+      "step": 1,
+      "statement": "システムはこの issue を dispatch の対象から外す。"
+    },
+    {
+      "id": "頼んでいないStatus-2",
+      "type": "action",
+      "flow": "頼んでいないStatus",
+      "step": 2,
+      "statement": "システムは頼んだ Status に無い候補が返ったことを記録に残す。"
+    },
+    {
+      "id": "頼んでいないStatus-3",
+      "type": "abort",
+      "flow": "頼んでいないStatus",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "失敗の繰り返し-1",
+      "type": "action",
+      "flow": "失敗の繰り返し",
+      "step": 1,
+      "statement": "システムはこの issue を dispatch の対象から外す。"
+    },
+    {
+      "id": "失敗の繰り返し-2",
+      "type": "abort",
+      "flow": "失敗の繰り返し",
+      "step": 2,
+      "statement": "ABORT"
     },
     {
       "id": "空きスロット不足-1",
@@ -371,6 +470,41 @@
       "type": "abort",
       "flow": "未信頼のリポジトリ",
       "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "使えないworktree-1",
+      "type": "action",
+      "flow": "使えないworktree",
+      "step": 1,
+      "statement": "システムはこの issue を dispatch の対象から外す。"
+    },
+    {
+      "id": "使えないworktree-2",
+      "type": "action",
+      "flow": "使えないworktree",
+      "step": 2,
+      "statement": "システムは置き場所をそのまま使えない理由を記録に残す。"
+    },
+    {
+      "id": "使えないworktree-3",
+      "type": "abort",
+      "flow": "使えないworktree",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "書かずに取りやめる-1",
+      "type": "action",
+      "flow": "書かずに取りやめる",
+      "step": 1,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "書かずに取りやめる-2",
+      "type": "abort",
+      "flow": "書かずに取りやめる",
+      "step": 2,
       "statement": "ABORT"
     },
     {
@@ -434,7 +568,7 @@
       "type": "resume",
       "flow": "起動の待ち直し",
       "step": 4,
-      "statement": "RESUME STEP 15"
+      "statement": "RESUME STEP 19"
     },
     {
       "id": "起動の断念-1",
@@ -497,7 +631,7 @@
       "type": "resume",
       "flow": "paneがまだ使えない",
       "step": 3,
-      "statement": "RESUME STEP 13"
+      "statement": "RESUME STEP 17"
     },
     {
       "id": "paneの断念-1",
@@ -581,7 +715,7 @@
       "type": "resume",
       "flow": "turnの継続",
       "step": 2,
-      "statement": "RESUME STEP 18"
+      "statement": "RESUME STEP 23"
     },
     {
       "id": "コメントの取り戻し-1",
@@ -630,7 +764,7 @@
       "type": "resume",
       "flow": "コメントの取り戻し",
       "step": 7,
-      "statement": "RESUME STEP 26"
+      "statement": "RESUME STEP 31"
     },
     {
       "id": "コメントの取り戻しの失敗-1",
@@ -746,40 +880,61 @@
       "from": "BASIC FLOW-3",
       "to": "BASIC FLOW-4",
       "kind": "true",
-      "condition": "空きスロットが1つ以上ある"
+      "condition": "先頭の issue の Status が active_states に入っている"
     },
     {
       "from": "BASIC FLOW-3",
-      "to": "空きスロット不足-1",
+      "to": "頼んでいないStatus-1",
       "kind": "false",
-      "condition": "NOT 空きスロットが1つ以上ある"
+      "condition": "NOT 先頭の issue の Status が active_states に入っている"
     },
     {
       "from": "BASIC FLOW-4",
       "to": "BASIC FLOW-5",
       "kind": "true",
-      "condition": "先頭の issue の対象リポジトリが Claude Code に信頼登録されている"
+      "condition": "先頭の issue の失敗の回数が max_retries を超えていない"
     },
     {
       "from": "BASIC FLOW-4",
+      "to": "失敗の繰り返し-1",
+      "kind": "false",
+      "condition": "NOT 先頭の issue の失敗の回数が max_retries を超えていない"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "空きスロットが1つ以上ある"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "空きスロット不足-1",
+      "kind": "false",
+      "condition": "NOT 空きスロットが1つ以上ある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "先頭の issue の対象リポジトリが Claude Code に信頼登録されている"
+    },
+    {
+      "from": "BASIC FLOW-6",
       "to": "未信頼のリポジトリ-1",
       "kind": "false",
       "condition": "NOT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている"
     },
     {
-      "from": "BASIC FLOW-5",
-      "to": "BASIC FLOW-6",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-6",
-      "to": "BASIC FLOW-7",
-      "kind": "seq"
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "先頭の issue の worktree の置き場所をそのまま使える"
     },
     {
       "from": "BASIC FLOW-7",
-      "to": "BASIC FLOW-8",
-      "kind": "seq"
+      "to": "使えないworktree-1",
+      "kind": "false",
+      "condition": "NOT 先頭の issue の worktree の置き場所をそのまま使える"
     },
     {
       "from": "BASIC FLOW-8",
@@ -789,7 +944,14 @@
     {
       "from": "BASIC FLOW-9",
       "to": "BASIC FLOW-10",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "ボードの issue の Status が terminal_states にも failure_state にも入っていない"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "書かずに取りやめる-1",
+      "kind": "false",
+      "condition": "NOT ボードの issue の Status が terminal_states にも failure_state にも入っていない"
     },
     {
       "from": "BASIC FLOW-10",
@@ -809,14 +971,7 @@
     {
       "from": "BASIC FLOW-13",
       "to": "BASIC FLOW-14",
-      "kind": "true",
-      "condition": "pane が Claude Code の起動を受け付ける"
-    },
-    {
-      "from": "BASIC FLOW-13",
-      "to": "paneがまだ使えない-1",
-      "kind": "false",
-      "condition": "NOT pane が Claude Code の起動を受け付ける"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-14",
@@ -825,39 +980,25 @@
     },
     {
       "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-16",
       "to": "BASIC FLOW-17",
-      "kind": "true",
-      "condition": "Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
-    },
-    {
-      "from": "BASIC FLOW-15",
-      "to": "起動直後の確認画面-1",
-      "kind": "false",
-      "condition": "NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
-    },
-    {
-      "from": "BASIC FLOW-15",
-      "to": "起動の待ち直し-1",
-      "kind": "false",
-      "condition": "NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-17",
       "to": "BASIC FLOW-18",
       "kind": "true",
-      "condition": "turn 数が max_dispatch_turns に達していない"
+      "condition": "pane が Claude Code の起動を受け付ける"
     },
     {
       "from": "BASIC FLOW-17",
-      "to": "上限での打ち切り-1",
+      "to": "paneがまだ使えない-1",
       "kind": "false",
-      "condition": "NOT turn 数が max_dispatch_turns に達していない"
-    },
-    {
-      "from": "BASIC FLOW-17",
-      "to": "権限の確認-1",
-      "kind": "global",
-      "condition": "herdr の待ち受けが blocked を返した場合"
+      "condition": "NOT pane が Claude Code の起動を受け付ける"
     },
     {
       "from": "BASIC FLOW-18",
@@ -865,32 +1006,34 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-18",
-      "to": "無音の打ち切り-1",
-      "kind": "global",
-      "condition": "turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合"
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-21",
+      "kind": "true",
+      "condition": "Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
     },
     {
       "from": "BASIC FLOW-19",
-      "to": "BASIC FLOW-20",
-      "kind": "seq"
+      "to": "起動直後の確認画面-1",
+      "kind": "false",
+      "condition": "NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
     },
     {
-      "from": "BASIC FLOW-20",
-      "to": "BASIC FLOW-21",
-      "kind": "seq"
+      "from": "BASIC FLOW-19",
+      "to": "起動の待ち直し-1",
+      "kind": "false",
+      "condition": "NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
     },
     {
       "from": "BASIC FLOW-21",
       "to": "BASIC FLOW-22",
       "kind": "true",
-      "condition": "settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない"
+      "condition": "turn 数が max_dispatch_turns に達していない"
     },
     {
       "from": "BASIC FLOW-21",
-      "to": "turnの継続-1",
+      "to": "上限での打ち切り-1",
       "kind": "false",
-      "condition": "NOT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない"
+      "condition": "NOT turn 数が max_dispatch_turns に達していない"
     },
     {
       "from": "BASIC FLOW-22",
@@ -898,38 +1041,43 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-22",
+      "to": "権限の確認-1",
+      "kind": "global",
+      "condition": "herdr の待ち受けが blocked を返した場合"
+    },
+    {
       "from": "BASIC FLOW-23",
       "to": "BASIC FLOW-24",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-24",
-      "to": "BASIC FLOW-25",
-      "kind": "true",
-      "condition": "表明の値が working でない"
+      "from": "BASIC FLOW-23",
+      "to": "無音の打ち切り-1",
+      "kind": "global",
+      "condition": "turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合"
     },
     {
       "from": "BASIC FLOW-24",
-      "to": "BASIC FLOW-17",
-      "kind": "loop",
-      "condition": "NOT 表明の値が working でない"
+      "to": "BASIC FLOW-25",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-25",
       "to": "BASIC FLOW-26",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない"
+    },
+    {
+      "from": "BASIC FLOW-25",
+      "to": "turnの継続-1",
+      "kind": "false",
+      "condition": "NOT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない"
     },
     {
       "from": "BASIC FLOW-26",
       "to": "BASIC FLOW-27",
-      "kind": "true",
-      "condition": "issue に今回の run が書いたコメントがある"
-    },
-    {
-      "from": "BASIC FLOW-26",
-      "to": "コメントの取り戻し-1",
-      "kind": "false",
-      "condition": "NOT issue に今回の run が書いたコメントがある"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-27",
@@ -939,6 +1087,55 @@
     {
       "from": "BASIC FLOW-28",
       "to": "BASIC FLOW-29",
+      "kind": "true",
+      "condition": "表明の値が working でない"
+    },
+    {
+      "from": "BASIC FLOW-28",
+      "to": "BASIC FLOW-21",
+      "kind": "loop",
+      "condition": "NOT 表明の値が working でない"
+    },
+    {
+      "from": "BASIC FLOW-29",
+      "to": "BASIC FLOW-30",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "BASIC FLOW-31",
+      "kind": "true",
+      "condition": "issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "コメントの取り戻し-1",
+      "kind": "false",
+      "condition": "NOT issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-31",
+      "to": "BASIC FLOW-32",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-32",
+      "to": "BASIC FLOW-33",
+      "kind": "seq"
+    },
+    {
+      "from": "頼んでいないStatus-1",
+      "to": "頼んでいないStatus-2",
+      "kind": "seq"
+    },
+    {
+      "from": "頼んでいないStatus-2",
+      "to": "頼んでいないStatus-3",
+      "kind": "seq"
+    },
+    {
+      "from": "失敗の繰り返し-1",
+      "to": "失敗の繰り返し-2",
       "kind": "seq"
     },
     {
@@ -959,6 +1156,21 @@
     {
       "from": "未信頼のリポジトリ-3",
       "to": "未信頼のリポジトリ-4",
+      "kind": "seq"
+    },
+    {
+      "from": "使えないworktree-1",
+      "to": "使えないworktree-2",
+      "kind": "seq"
+    },
+    {
+      "from": "使えないworktree-2",
+      "to": "使えないworktree-3",
+      "kind": "seq"
+    },
+    {
+      "from": "書かずに取りやめる-1",
+      "to": "書かずに取りやめる-2",
       "kind": "seq"
     },
     {
@@ -1005,7 +1217,7 @@
     },
     {
       "from": "起動の待ち直し-4",
-      "to": "BASIC FLOW-15",
+      "to": "BASIC FLOW-19",
       "kind": "resume"
     },
     {
@@ -1052,7 +1264,7 @@
     },
     {
       "from": "paneがまだ使えない-3",
-      "to": "BASIC FLOW-13",
+      "to": "BASIC FLOW-17",
       "kind": "resume"
     },
     {
@@ -1102,7 +1314,7 @@
     },
     {
       "from": "turnの継続-2",
-      "to": "BASIC FLOW-18",
+      "to": "BASIC FLOW-23",
       "kind": "resume"
     },
     {
@@ -1144,7 +1356,7 @@
     },
     {
       "from": "コメントの取り戻し-7",
-      "to": "BASIC FLOW-26",
+      "to": "BASIC FLOW-31",
       "kind": "resume"
     },
     {
@@ -1225,10 +1437,10 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
@@ -1237,17 +1449,25 @@
         "BASIC FLOW-26",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
-        "BASIC FLOW-29"
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1272,9 +1492,9 @@
     },
     {
       "id": "P002",
-      "terminal": "cycle",
-      "terminal_flow": "コメントの取り戻し",
-      "postcondition": "issue にエージェントが書いたコメントが1件以上ある。turn 数は増えていない。issue の Status は表明の値の遷移先の選択肢である。",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue の Status は表明の値の遷移先の選択肢である。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1291,16 +1511,20 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
         "BASIC FLOW-25",
         "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -1308,17 +1532,23 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
-        "BASIC FLOW-26"
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1343,8 +1573,10 @@
         "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 26",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+        "RESUME STEP 31",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。"
       ]
     },
     {
@@ -1368,16 +1600,20 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
         "BASIC FLOW-25",
         "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -1392,12 +1628,16 @@
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1450,25 +1690,33 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
-        "BASIC FLOW-17"
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-21"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1509,24 +1757,32 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
-        "BASIC FLOW-20",
         "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "turnの継続-1",
         "turnの継続-2",
-        "BASIC FLOW-18"
+        "BASIC FLOW-23"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1541,8 +1797,8 @@
         "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
         "CONDITION: NOT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない",
         "システムは turn がまだ続いているとみなす。",
-        "RESUME STEP 18",
-        "システムは Claude Code に turn の本文を送る。"
+        "RESUME STEP 23",
+        "システムは Claude Code の Stop hook を受ける。"
       ]
     },
     {
@@ -1566,8 +1822,13 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
         "無音の打ち切り-1",
         "無音の打ち切り-2",
         "無音の打ち切り-3",
@@ -1577,12 +1838,16 @@
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1592,6 +1857,7 @@
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
         "システムは Claude Code に turn の本文を送る。",
+        "システムは Claude Code の Stop hook を受ける。",
         "CONDITION: turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合",
         "システムは herdr に agent_status と pane の画面の版を要求する。",
         "システムは herdr の pane を閉じる。",
@@ -1602,59 +1868,6 @@
     },
     {
       "id": "P007",
-      "terminal": "abort",
-      "terminal_flow": "上限での打ち切り",
-      "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-17",
-        "上限での打ち切り-1",
-        "上限での打ち切り-2",
-        "上限での打ち切り-3",
-        "上限での打ち切り-4",
-        "上限での打ち切り-5"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから active_states の issue の一覧を取る。",
-        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
-        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
-        "システムは先頭の issue に印を付ける。",
-        "システムはボードの issue の Status に running_state の選択肢を書く。",
-        "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
-        "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
-        "システムは herdr に workspace の pane の一覧を要求する。",
-        "システムは pane の label に issue の URL を書く。",
-        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
-        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
-        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
-        "CONDITION: NOT turn 数が max_dispatch_turns に達していない",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは issue に打ち切りの理由を1件コメントする。",
-        "システムは herdr の pane を閉じる。",
-        "システムは印を外す。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P008",
       "terminal": "abort",
       "terminal_flow": "権限の確認",
       "postcondition": "issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。worktree は残っている。",
@@ -1674,7 +1887,12 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
         "権限の確認-1",
         "権限の確認-2",
         "権限の確認-3",
@@ -1684,12 +1902,16 @@
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1698,9 +1920,71 @@
         "システムは pane で Claude Code を起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは Claude Code に turn の本文を送る。",
         "CONDITION: herdr の待ち受けが blocked を返した場合",
         "システムは pane に esc のキー入力を送る。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "上限での打ち切り",
+      "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-21",
+        "上限での打ち切り-1",
+        "上限での打ち切り-2",
+        "上限での打ち切り-3",
+        "上限での打ち切り-4",
+        "上限での打ち切り-5"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に issue の URL を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "CONDITION: NOT turn 数が max_dispatch_turns に達していない",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは issue に打ち切りの理由を1件コメントする。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。",
         "ABORT"
@@ -1727,6 +2011,10 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
         "起動直後の確認画面-1",
         "起動直後の確認画面-2",
         "起動直後の確認画面-3",
@@ -1736,12 +2024,16 @@
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1778,21 +2070,29 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
         "起動の待ち直し-1",
         "起動の待ち直し-2",
         "起動の待ち直し-3",
         "起動の待ち直し-4",
-        "BASIC FLOW-15"
+        "BASIC FLOW-19"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1804,7 +2104,7 @@
         "システムは 500 ミリ秒待つ。",
         "システムは VALIDATES THAT 起動を待ち始めてから herdr.startup_timeout_ms が経っていない。",
         "システムは pane で Claude Code をもう一度起動する。",
-        "RESUME STEP 15",
+        "RESUME STEP 19",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。"
       ]
     },
@@ -1829,6 +2129,10 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
         "起動の待ち直し-1",
         "起動の待ち直し-2",
         "起動の断念-1",
@@ -1841,12 +2145,16 @@
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1885,20 +2193,28 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "paneがまだ使えない-1",
         "paneがまだ使えない-2",
         "paneがまだ使えない-3",
-        "BASIC FLOW-13"
+        "BASIC FLOW-17"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1907,7 +2223,7 @@
         "CONDITION: NOT pane が Claude Code の起動を受け付ける",
         "システムは 500 ミリ秒待つ。",
         "システムは VALIDATES THAT pane を待ち始めてから 30 秒が経っていない。",
-        "RESUME STEP 13",
+        "RESUME STEP 17",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
       ]
     },
@@ -1930,6 +2246,10 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
         "paneがまだ使えない-1",
         "paneがまだ使えない-2",
         "paneの断念-1",
@@ -1941,12 +2261,16 @@
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスを渡して、worktree の絶対パスを渡して workspace として開く。",
+        "システムは worktree の絶対パスを渡して workspace として開く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
         "システムは worktree の中に身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
@@ -1966,6 +2290,70 @@
     {
       "id": "P014",
       "terminal": "abort",
+      "terminal_flow": "書かずに取りやめる",
+      "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。issue にコメントは付いていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "書かずに取りやめる-1",
+        "書かずに取りやめる-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "CONDITION: NOT ボードの issue の Status が terminal_states にも failure_state にも入っていない",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "abort",
+      "terminal_flow": "使えないworktree",
+      "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "使えないworktree-1",
+        "使えないworktree-2",
+        "使えないworktree-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "CONDITION: NOT 先頭の issue の worktree の置き場所をそのまま使える",
+        "システムはこの issue を dispatch の対象から外す。",
+        "システムは置き場所をそのまま使えない理由を記録に残す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P016",
+      "terminal": "abort",
       "terminal_flow": "未信頼のリポジトリ",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。issue に信頼登録の承認を促すコメントが1件ある。",
       "node_ids": [
@@ -1973,6 +2361,8 @@
         "BASIC FLOW-2",
         "BASIC FLOW-3",
         "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
         "未信頼のリポジトリ-1",
         "未信頼のリポジトリ-2",
         "未信頼のリポジトリ-3",
@@ -1981,6 +2371,8 @@
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
         "CONDITION: NOT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている",
@@ -1991,7 +2383,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "空きスロット不足",
       "postcondition": "印の件数は変わっていない。issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。",
@@ -1999,23 +2391,73 @@
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
         "空きスロット不足-1",
         "空きスロット不足-2"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
         "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
         "CONDITION: NOT 空きスロットが1つ以上ある",
         "システムはこの巡回で issue を1件も dispatch しない。",
         "ABORT"
       ]
+    },
+    {
+      "id": "P018",
+      "terminal": "abort",
+      "terminal_flow": "失敗の繰り返し",
+      "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "失敗の繰り返し-1",
+        "失敗の繰り返し-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "CONDITION: NOT 先頭の issue の失敗の回数が max_retries を超えていない",
+        "システムはこの issue を dispatch の対象から外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P019",
+      "terminal": "abort",
+      "terminal_flow": "頼んでいないStatus",
+      "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "頼んでいないStatus-1",
+        "頼んでいないStatus-2",
+        "頼んでいないStatus-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "CONDITION: NOT 先頭の issue の Status が active_states に入っている",
+        "システムはこの issue を dispatch の対象から外す。",
+        "システムは頼んだ Status に無い候補が返ったことを記録に残す。",
+        "ABORT"
+      ]
     }
   ],
   "coverage": {
-    "nodes_total": 85,
-    "nodes_covered": 85,
-    "edges_total": 89,
-    "edges_covered": 89
+    "nodes_total": 99,
+    "nodes_covered": 99,
+    "edges_total": 103,
+    "edges_covered": 103
   }
 }

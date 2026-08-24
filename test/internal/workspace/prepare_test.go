@@ -311,3 +311,50 @@ func TestPrepare_別のbranchへ切り替えられたworktreeは再利用しな�
 		t.Fatalf("再利用できない worktree を消している: %v", statErr)
 	}
 }
+
+// 目的: CheckWorktreeUsable が、Prepare と同じ判断を**1バイトも書かずに**返すことを確認する
+// （着手の段0 でこれを呼び、失敗が確定している issue は Status を動かさずに飛ばす）。
+// 与える情報: 3つの状況（まだ何も無い / 登録の無い実体がある / 正しく再利用できる）。
+// 成功条件: それぞれ nil / ErrUnregisteredWorktree / nil を返し、
+// **どの場合も worktree を作らず、herdr を1回も呼ばないこと。**
+func TestCheckWorktreeUsable_書かずに着手できるかを判定する(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("まだ何も無いなら通す", func(t *testing.T) {
+		fx := newFixture(t, fixtureOptions{})
+		if err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188)); err != nil {
+			t.Fatalf("まだ何も無いのに落としている: %v", err)
+		}
+		if methods := fx.Herdr.Methods(); len(methods) != 0 {
+			t.Fatalf("検査だけのはずなのに herdr を呼んでいる: %v", methods)
+		}
+	})
+
+	t.Run("登録の無い実体があるなら落とす", func(t *testing.T) {
+		fx := newFixture(t, fixtureOptions{})
+		loc := filepath.Join(
+			fx.Root, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+		if err := os.MkdirAll(loc, 0o700); err != nil {
+			t.Fatalf("登録の無い実体を置けません: %v", err)
+		}
+		err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188))
+		if !errors.Is(err, workspace.ErrUnregisteredWorktree) {
+			t.Fatalf("登録の無い実体を通している: %v", err)
+		}
+		// **検査は消さない。**中身が要るかどうかを判断できない。
+		if _, statErr := os.Stat(loc); statErr != nil {
+			t.Fatalf("検査だけのはずなのに実体を消している: %v", statErr)
+		}
+	})
+
+	t.Run("正しく再利用できるなら通す", func(t *testing.T) {
+		fx := newFixture(t, fixtureOptions{})
+		prepared := prepareWorktree(t, fx, sampleIssue(188))
+		if err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188)); err != nil {
+			t.Fatalf("再利用できる worktree を落としている: %v", err)
+		}
+		if _, statErr := os.Stat(prepared.Path); statErr != nil {
+			t.Fatalf("検査だけのはずなのに worktree を消している: %v", statErr)
+		}
+	})
+}

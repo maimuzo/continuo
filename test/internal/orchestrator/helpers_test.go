@@ -485,6 +485,13 @@ type fakeTracker struct {
 	now func() time.Time
 	// timeline はテスト用herdr mock と共有する呼び出しの並びである（nil なら記録しない）。
 	timeline *timeline
+	// extraCandidates は FetchIssuesByStates が「頼んだ Status に無いのに返してくる」
+	// item である（設計 3-34 の read-after-write の食い違いの再現）。
+	//
+	// **GitHub の `items(query:)` はサーバ側の検索であり、continuo が直前に書いた値が
+	// 索引へ反映される前に取り直すと、古い絞り込みで当たった item がそのまま返る。**
+	// ボード（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
+	extraCandidates []tracker.Issue
 }
 
 // newFakeTracker はテスト用トラッカー mockを作る。
@@ -682,7 +689,9 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 	if ft.statesErr != nil {
 		return nil, ft.statesErr
 	}
-	var out []tracker.Issue
+	// **絞り込みの反映待ちの再現。**頼んだ Status に無い item を**先頭に**混ぜる。
+	// 先頭に置くのは、そこで巡回が止まると後続の issue が着手されなくなるためである。
+	out := append([]tracker.Issue(nil), ft.extraCandidates...)
 	for _, issue := range ft.board {
 		for _, s := range states {
 			if strings.EqualFold(s, issue.State) {
@@ -692,6 +701,18 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 		}
 	}
 	return out, nil
+}
+
+// SetExtraCandidates は「頼んだ Status に無いのに候補として返ってくる item」を差し替える。
+//
+// **ボードの Status は動かさない。**候補の一覧にだけ載る写しである
+// （GitHub の絞り込みの索引が古いまま当たった状況の再現。設計 3-34）。
+//
+// issues: 候補の一覧の末尾へ足す写し。
+func (ft *fakeTracker) SetExtraCandidates(issues ...tracker.Issue) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.extraCandidates = issues
 }
 
 // FetchIssuesByIDs は ID 指定で取り直す。見つからない ID は結果から省く。

@@ -211,6 +211,12 @@ type Orchestrator struct {
 	// **キーは `<owner>/<repo>` である。**issue ごとではない。
 	// 素朴に issue ごとにすると、30秒ごとに永久にコメントが積まれる。
 	notified map[string]time.Time
+	// failures は issue（project item の ID）ごとの失敗の記録である。
+	//
+	// **印（runs）の外に置く。**印は run が終わると消えるので、そこに数えていると
+	// 「同じ理由で必ず失敗する issue」を次の巡回が0回目として拾い直してしまう。
+	// **永続化はしない**（再起動したら数え直す。設計の方針）。
+	failures map[string]*failureNote
 	// tickCount は巡回した回数である（verify_states_every の判定に使う）。
 	tickCount int
 	// quota は最後に読んだ枠の状態である。nil なら読めていない。
@@ -305,6 +311,7 @@ func New(opts Options) (*Orchestrator, error) {
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
 		notified:       map[string]time.Time{},
+		failures:       map[string]*failureNote{},
 		shutdown:       shutdown,
 		shutdownCancel: shutdownCancel,
 	}, nil

@@ -311,3 +311,80 @@ func (m *Manager) logWarnings(warnings []normalize.Warning) {
 		m.logger.Warn(w.Message, "original", w.Original, "result", w.Result.String())
 	}
 }
+
+// CheckWorktreeUsable は「その issue に着手したら段2 と段3 で必ず落ちるか」を、
+// **1バイトも書かずに**判定する（3-22 の段2・段3 と同じ判断を、着手の段0 で行う）。
+//
+// **なぜ Prepare と同じ判断を2箇所に持つのか。**Prepare（着手の段3）は、
+// ボードの Status を running_state へ書いたあと（段2）に走る。目的のパスに
+// 実体があるのに git の worktree として登録されていない場合、着手は必ず失敗するのに
+// **その前に Status だけが書き換わる。**`In Progress` は active_states なので
+// 次の巡回でまた候補に上がり、`In Progress` と `Blocked` の往復が永久に続く。
+// **この判定を段0（preflight）へ置くことで、失敗が確定している issue は
+// Status を1バイトも動かさずに飛ばせる。**Prepare 側の検査は保険として残す。
+//
+// **読み取りだけを行う。**`git worktree prune` も `git worktree add` も呼ばない。
+// prune は「登録が残っているのに実体が消えている」を解消するものであり、
+// ここで見る「実体があるのに登録が無い」には効かない。
+//
+// **判定できない事情では落とさない。**clone を引けない・git を実行できないといった
+// 事情は、**段3 に任せて `failure_state` と issue のコメントで人間へ渡す**（3-34b）。
+// ここで落とすと、その issue は候補に残ったままログにしか出ず、人間へ届かない。
+// **この関数がエラーを返すのは「何度やっても必ず失敗する」と言い切れる2つだけである。**
+//
+// ctx: 実行に適用するコンテキスト。
+// issue: 検査する issue。
+// 戻り値: 目的のパスに実体があるのに git の登録が無い場合、または再利用できる worktree が
+// 別の branch を出している場合の ErrUnregisteredWorktree。置き場所を決められない場合と
+// 封じ込め検査に落ちた場合はそのエラー。**それ以外はすべて nil を返す**（まだ何も無い、
+// 正しく再利用できる、判定できない、のいずれか）。
+func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error {
+	loc, _, err := Locate(m.resolvedRoot, m.cfg.Herdr.Worktree.BranchTemplate, issue)
+	if err != nil {
+		return err
+	}
+	if err := CheckContainment(m.resolvedRoot, loc.Path); err != nil {
+		return err
+	}
+
+	if _, statErr := os.Stat(loc.Path); statErr != nil {
+		// まだ何も無い（あるいは見に行けない）。段4 が作るので、ここでは何も言わない。
+		return nil
+	}
+
+	// **clone の場所は短い間だけ覚える**（clonePath）。実体があるかどうかを見るたびに
+	// ghq のプロセスを起こすと、ボードの件数ぶん外部プロセスが立つ。
+	repoPath, err := m.clonePath(ctx, issue.Owner, issue.Repo)
+	if err != nil || repoPath == "" {
+		m.logger.Debug("着手できるかを段0 で判定できませんでした（段3 に任せます）",
+			"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
+		return nil
+	}
+
+	registered, err := m.isRegisteredWorktree(ctx, repoPath, loc.Path)
+	if err != nil {
+		m.logger.Debug("worktree の登録を段0 で確かめられませんでした（段3 に任せます）",
+			"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
+		return nil
+	}
+	if !registered {
+		// 3-22 の段3 と同じ判断である。**乗っ取らない。**
+		return i18n.Errorf(
+			i18n.KeyWorkspacePrepareUnregisteredWorktree,
+			ErrUnregisteredWorktree, loc.Path, loc.Path, loc.Path)
+	}
+
+	// 3-22 の段2 と同じ判断である。**人間が別の branch へ切り替えていたら再利用しない。**
+	head, err := gitCurrentBranch(ctx, loc.Path)
+	if err != nil {
+		m.logger.Debug("worktree の branch を段0 で確かめられませんでした（段3 に任せます）",
+			"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
+		return nil
+	}
+	if head != loc.Branch.String() {
+		return i18n.Errorf(
+			i18n.KeyWorkspacePrepareBranchMismatch,
+			ErrUnregisteredWorktree, loc.Path, head, loc.Branch.String())
+	}
+	return nil
+}

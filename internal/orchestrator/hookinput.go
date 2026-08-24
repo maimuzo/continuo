@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -83,6 +84,16 @@ func (o *Orchestrator) acceptHookCwd(rs *runState, cwd string) bool {
 // **根が決まっていなければ根の検査だけを飛ばす**（`os.UserHomeDir` に失敗した場合）。
 // 通常のファイルであることの検査は必ず行う。
 //
+// **「まだ無い」と「不正」を分ける。**Claude Code は transcript を非同期に書くので、
+// `SessionStart` と `UserPromptSubmit` が発火する時点ではファイルが1バイトも
+// 書かれていないことがある（設計 3-25）。**これは正常な並びであり、警告ではない。**
+// **まだ無いパスは Debug に落として、その項目だけを捨てる。**
+//
+// **検査の順番。**シンボリックリンクの解決（`filepath.EvalSymlinks`）は実在するときにしか
+// 通らないので、まず解決を試し、次に `os.Lstat` で「有るのか無いのか」を決め、
+// **有ると分かってから根の内側かを比べる。**無いパスは1バイトも読まないので、
+// 根の検査を飛ばしても抜け道にはならない。
+//
 // rs: `session_id` で引いた run。
 // path: hook の `transcript_path`。
 // 戻り値: 受け入れてよければ true。
@@ -93,21 +104,26 @@ func (o *Orchestrator) acceptTranscriptPath(rs *runState, path string) bool {
 			"identifier", identifier, "transcript_path", path)
 		return false
 	}
-	resolved, ok := resolvePath(path)
-	if !ok {
-		o.logger.Warn("hook の transcript_path を解決できないので捨てました",
+	// **実在するなら解決してから比べる。**実在しなければ字句のままにしておく。
+	resolved := filepath.Clean(path)
+	if r, ok := resolvePath(resolved); ok {
+		resolved = r
+	}
+	info, err := os.Lstat(resolved)
+	if errors.Is(err, os.ErrNotExist) {
+		// **まだ書かれていないだけである。**この項目だけ落とし、hook そのものは使う。
+		o.logger.Debug("hook の transcript_path はまだ作られていないので、この項目だけ落とします",
 			"identifier", identifier, "transcript_path", path)
+		return false
+	}
+	if err != nil {
+		o.logger.Warn("hook の transcript_path を読めないので捨てました",
+			"identifier", identifier, "transcript_path", path, "error", err)
 		return false
 	}
 	if o.transcriptRoot != "" && !isUnder(o.transcriptRoot, resolved) {
 		o.logger.Warn("hook の transcript_path が許可された置き場所の外なので捨てました",
 			"identifier", identifier, "transcript_path", path, "根", o.transcriptRoot)
-		return false
-	}
-	info, err := os.Lstat(resolved)
-	if err != nil {
-		o.logger.Warn("hook の transcript_path を読めないので捨てました",
-			"identifier", identifier, "transcript_path", path, "error", err)
 		return false
 	}
 	if !info.Mode().IsRegular() {
