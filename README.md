@@ -140,6 +140,30 @@ From here on, moving an issue to `Ready` is all it takes.
 
 **`Ctrl+C` stops it.** It stops polling and unwinds its turn loops, but **it does not close the panes** — Claude Code keeps running, and the next start picks those panes back up and continues.
 
+### Undoing a start
+
+Started the wrong issue? **`continuo abandon` puts it back the way it was before it started** — the worktree, the pane, the herdr workspace and the branch all go away together.
+
+```bash
+continuo abandon --dry-run https://github.com/octocat/hello-world/issues/42   # show what would be deleted
+continuo abandon https://github.com/octocat/hello-world/issues/42              # delete it
+```
+
+**Run `--dry-run` first.** Before deleting anything it prints the issue's Status, the worktree path, the branch, the herdr pane, **how many files have uncommitted changes**, and **how many commits are not pushed**.
+
+**If there is anything to lose, it deletes nothing and stops.** Add `--force` if you want it gone anyway.
+
+**You can run it while continuo is running.** It makes continuo let go of the issue first: if the issue is still in a working state, it parks the Status at `tracker.failure_state` (`Blocked` by default; use `--park` to send it somewhere else), then waits for the pane to close before deleting anything. **If the pane does not close, nothing is deleted.**
+
+**It leaves the Status where it is.** continuo cannot tell whether you are dropping the issue for good or rewriting it and filing it again, so **that call is yours to make on the board.** If you already know, pass it: `--to "Ice Box"`.
+
+**You cannot undo a start from the board alone** — which is why this command exists.
+
+| What you would reach for | What actually happens |
+| --- | --- |
+| Move it back to `Ready` | **Nothing stops.** `Ready` is one of the working states, so continuo carries right on — and since it is also the state issues are picked up from, **the issue can simply be started again** |
+| Move it to `Done` | **Claude Code gets restarted.** Before cleaning up, continuo checks that the run left a comment on the issue; if there is none, it resumes the session and asks the agent to write one. **An issue you started by mistake has no work to report** |
+
 ### Configuration
 
 `continuo init` writes `WORKFLOW.md`. That single file is both the config and the brief you send to the agent.

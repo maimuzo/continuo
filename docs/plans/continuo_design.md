@@ -166,6 +166,8 @@
 - 3-33 信頼の登録は、人間が列挙したものだけを対象にする
 - 3-34 ボードは既存のものに合わせる
 - 3-35 画面に出す文言は資源から引く
+- 3-36 入れ方は、ネットワークインストーラーの1行にする
+- 3-37 間違えて着手した issue は `continuo abandon` で戻す
 
 **4. 人間が決めたこと**
 
@@ -1276,7 +1278,7 @@ func Normalize(raw string) (SafeName, []Warning)
 | 2d | **`workspace_hooks.before_remove` を実行する。**cwd は消す前の worktree。**失敗しても記録して続ける**（片付けを止めない） |
 | 3 | `worktree.remove` を herdr の socket API 経由で呼ぶ。**引数は path でも branch でもなく herdr workspace の ID である**（実測）。**この ID は身元ファイルから読む**（3-18） |
 | — その制約 | **herdr workspace として開いていない worktree は、この API では消せない。**continuo が worktree だけ作って herdr workspace を閉じてしまうと片付けられなくなる |
-| — **workspace は別途閉じない** | **`worktree.remove` の応答に `workspace` が入る**（protocol 19 の `worktree_removed`）。**workspace ごと閉じられるので、`workspace.close` を続けて呼ばない。**呼ぶ手段も第2段階のクライアントに持たせない |
+| — **workspace は別途閉じない** | **`worktree.remove` を呼ぶと、その worktree の pane も一緒に消える**（実測 2026-08-24。捨てリポジトリの worktree で `sleep 600` を走らせていた pane が、`worktree.remove` のあと消えた）。**だから `workspace.close` を続けて呼ばない。**呼ぶ手段も第2段階のクライアントに持たせない。**RPC の応答に `workspace` は入らない** — herdr 0.8.2（protocol 20）の `worktree_removed` は、RPC の成功応答では `type` / `workspace_id` / `path` / `forced` の4つだけで、`workspace` を持つのは同名のイベントのほうである（`herdr api schema --output <ファイル>` で確認。2026-08-24） |
 | 4 | **branch は herdr が消さないので、continuo が `git branch -D` を自分で叩く**（実測） |
 | 5 | 設定で片付け全体を無効にできるようにする（デバッグ時に中身を見たい場合がある） |
 | 6 | **起動時に掃除する。**トラッカーから `cleanup.on_states` の issue を取得し、対応する worktree と branch を消す。**取得に失敗したら警告を出して起動を続ける**（`SPEC.md` 8.6）。**この掃除は復元の手順が終わったあとに走らせる**（3-4 の段9 のあと。**先に走らせると、これから引き継ぐ run の branch を孤児と判定して消しかねない**） |
@@ -3707,6 +3709,52 @@ CI から呼ぶときに使う。
 
 ---
 
+### 3-37. 間違えて着手した issue は `continuo abandon` で戻す
+
+**言いたいこと。**着手の取り消しは、ボードの操作だけでは作れない。
+**`Ready` へ戻しても止まらず、`Done` へ動かすと Claude Code が起動し直される。**
+だから専用のコマンドを1本置き、**片付けたあとの Status は既定で動かさない。**
+
+**ボードの操作では取り消せない。**
+
+| 人間がやりたくなること | 実際に起きること |
+| --- | --- |
+| `Ready` へ戻す | **止まらない。**`Ready` は `tracker.active_states` の1つであり（[internal/scaffold/template.go:44](../../internal/scaffold/template.go#L44)）、巡回は「まだ作業中で routable」としてスナップショットを更新するだけである（[internal/orchestrator/reconcile.go:99-100](../../internal/orchestrator/reconcile.go#L99-L100)）。しかも `Ready` は `dispatch_state` なので、印から外れていれば**もう一度着手される** |
+| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:62](../../internal/orchestrator/comment.go#L62)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:132-137](../../internal/orchestrator/comment.go#L132-L137)）。**間違えて着手した issue には、書かせる成果が無い** |
+
+**採るやり方。**`continuo abandon <issue の URL> [ディレクトリ]` を1本置く
+（[internal/abandon/abandon.go](../../internal/abandon/abandon.go)。`internal/cli` は引数を受けて渡すだけである）。
+
+| 段 | 何をするか |
+| --- | --- |
+| 1 | `lock.Acquire` で continuo が動いているかを調べる（3-17）。動いていて、かつボードの Status が `tracker.active_states` に入っていれば、`--park`（既定 `tracker.failure_state`）へ動かして手を離させる。そのうえで**その worktree を cwd に持つ pane が消えるまで待つ。**上限は `herdr.read_timeout_ms` の10倍（既定50秒）で、**超えたら何も消さずに止まる** |
+| 2 | `workspace.Scan` で走査し、**身元ファイルの `issue_url` で照合する。**パスを owner / repo / 番号から組み立てない（`workspace.root` や `branch_template` を変えている環境で空振りする）。**0件は終了コード 0**（消すものが無い）、**2件以上は止める**（どれを消すかは人間が中身を見て決める） |
+| 3 | 失われるもの（issue と Status・worktree・branch と base・herdr の workspace と pane・コミットされていない変更のファイル数・push されていない commit の件数）を見せる。`--dry-run` はここで終わる。**失うものがあって `--force` が無ければ、何も消さずに終了コード 1** |
+| 4 | `workspace.Cleanup` を呼ぶ。worktree・pane・herdr の workspace・branch がまとめて消える（3-9） |
+| 5 | `--to` があれば Status をその値へ動かす。**無ければ動かさない** |
+
+**なぜ Status を既定で動かさないのか。**
+
+**片付けたあとにその issue をどう扱うかは、ボードの外にある事情で決まる。**
+もう要らないのか、書き直してから出し直すのか、人に振るのか。**continuo にはその区別が付かない。**
+しかも、どれを既定に置いても事故になる。
+
+| 既定にしたら | 何が起きるか |
+| --- | --- |
+| `dispatch_state`（`Ready`） | **同じ issue にもう一度着手する。**取り消したいのに、戻した先が着手待ちである |
+| `failure_state`（`Blocked`） | **失敗していないものが失敗として残る。**人間が着手する相手を間違えただけである |
+| `terminal_states`（`Done`） | **やっていないものが完了として残る。**しかも 3-9 の片付けの経路がもう一度走る |
+
+だから既定では「Status は動かしていません。ボードで決めてください。」と1行出して終わる
+（[internal/abandon/abandon.go:502-506](../../internal/abandon/abandon.go#L502-L506)）。
+**動かす先を知っているのは人間だけなので、`--to` で明示させる。**
+
+**判断は書き直さない。**コミットされていない変更と push されていない commit の判定は
+[internal/workspace/inspect.go:76-137](../../internal/workspace/inspect.go#L76-L137) の `Inspect` が
+**Cleanup と同じ `leftoverReasons` を呼んで**出す。Inspect が足すのは、人間に見せるための件数だけである。
+
+---
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す
@@ -4969,7 +5017,7 @@ URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く
 | **リポジトリの信頼の検査** | dispatch の直前に検査する（3-6） | **信頼していないと、対話セッションで信頼のダイアログが出て人間の入力を待つ**（3-11）。settings ファイルの hook 自体は信頼前でも動くが、ダイアログで止まる |
 | **レートリミットの待機** | 枠の回復を待って再開する（3-27） | 定額の枠で運用するので、上限に当たったら待つ必要がある。**仕様の指数バックオフではなくリセット時刻までの固定待ちにする**（この差し替えはレートリミットに起因する待機に限る。ほかのリトライは仕様どおり指数バックオフ） |
 | **落ちている間の通知の取り戻し** | 再起動直後にボードを1回取り直す（3-19） | turn の終わりの通知は投げっぱなしで一度きり。**落ちている間のものは再送されない** |
-| **使い始めるまでの検査と雛形** | `continuo doctor` / `continuo init`（3-32） | 仕様は設定ファイルの書式を定めるだけで、**前提が揃っているかを確かめる手段を持たない。**前提が6つあり、どれが欠けても静かに失敗する |
+| **使い始めるまでの検査と雛形** | `continuo doctor` / `continuo init`（3-32） | 仕様は設定ファイルの書式を定めるだけで、**前提が揃っているかを確かめる手段を持たない。**前提は多く、どれが欠けても静かに失敗する |
 
 ### 8-3. そもそも適用外
 

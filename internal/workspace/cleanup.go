@@ -14,8 +14,15 @@ import (
 
 // CleanupResult は片付けを試みた結果である（3-9）。
 type CleanupResult struct {
-	// Removed は worktree と branch を消したかどうかである。
+	// Removed は worktree を消したかどうかである。
 	Removed bool
+	// BranchDeleted は branch も消したかどうかである。
+	//
+	// **Removed が真でも偽になりうる。**cleanup.delete_branch が偽のとき、
+	// branch の検算（deletableBranch）に落ちたとき、`git branch -D` が失敗したときである。
+	// **呼び出し側は「worktree を消した＝branch も消えた」と書いてはならない**
+	// （`continuo abandon` が人間に見せる1行がこれを読む）。
+	BranchDeleted bool
 	// Deferred は消さずに見送ったかどうかである。
 	//
 	// **cleanup.enabled が false のときも真になる**（3-9 の手順5）。
@@ -45,6 +52,19 @@ type CleanupRequest struct {
 	// 空文字だと upstream が無い branch の判定ができないので、
 	// cleanup.require_pushed が真なら「判定できないので消さない」として見送る。
 	Base normalize.SafeName
+	// Force は「人間が明示的に消せと言った」ことを表す（`continuo abandon --force`）。
+	//
+	// **真のとき、cleanup.enabled と、未コミット・未 push による見送りを飛ばす。**
+	// 飛ばしてよいのは、`continuo abandon` が消す前に Inspect の結果を人間へ見せ、
+	// **その人間が `--force` を付け直したときだけ**である。
+	//
+	// **巡回（orchestrator）からは渡さない。**渡すと、cleanup.enabled を偽にしてある
+	// 環境で worktree が黙って消える。**ゼロ値は偽なので、既存の呼び出しは何も変わらない。**
+	//
+	// **飛ばさないものもある。**封じ込め検査（3-20）・身元ファイルの読み取り・
+	// branch と herdr workspace の検算は、Force が真でもそのまま通す。
+	// あれは「消してよいか」ではなく「正しい対象を消しているか」の検査である。
+	Force bool
 }
 
 // ShouldCleanup は、その Status が cleanup.on_states に入っているかを返す（3-9 の手順1）。
@@ -86,6 +106,10 @@ func (m *Manager) ShouldCleanup(state string) bool {
 // **worktree.remove のあとに workspace.close を呼ばない。**応答に workspace が入り、
 // workspace ごと閉じられる。
 //
+// **`req.Force` が真なら、手順2 と 2b と cleanup.enabled を飛ばす**
+// （`continuo abandon --force` だけが渡す。CleanupRequest.Force を見よ）。
+// **封じ込め検査と、branch・herdr workspace の検算は飛ばさない。**
+//
 // ctx: 実行に適用するコンテキスト。
 // req: 片付ける worktree と、その worktree を作ったときの base。
 // 戻り値の1つ目: 片付けた／見送った結果。
@@ -95,7 +119,7 @@ func (m *Manager) ShouldCleanup(state string) bool {
 func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResult, error) {
 	result := &CleanupResult{}
 
-	if !m.cfg.Cleanup.Enabled {
+	if !m.cfg.Cleanup.Enabled && !req.Force {
 		// 「設定で無効」も見送りである。Reasons だけを埋めて Deferred を偽のままにすると、
 		// 呼び出し側が「消した」「見送った」「無効」を戻り値から区別できない。
 		// **issue へのコメントは出さない**（人間が自分で無効にしたのだから知っている）。
@@ -131,9 +155,14 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 	// base を持っていない**ので、渡されなかったときはそこから補う。
 	req.Base = m.effectiveBase(req.Base, identity)
 
-	reasons, err := m.leftoverReasons(ctx, req)
-	if err != nil {
-		return nil, err
+	// **`--force` のときは見送りの判定を通さない。**通すと、判定に使う git を
+	// 起動するだけ遅くなり、結果は使われない（下の分岐が Force で無効になる）。
+	var reasons []string
+	if !req.Force {
+		reasons, err = m.leftoverReasons(ctx, req)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if len(reasons) > 0 {
 		result.Deferred = true
@@ -173,6 +202,8 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 	if m.cfg.Cleanup.DeleteBranch && branchDeletable {
 		if err := gitBranchDelete(ctx, repoDir, branch); err != nil {
 			m.logger.Warn("branch を消せませんでした", "branch", branch.String(), "error", err)
+		} else {
+			result.BranchDeleted = true
 		}
 	}
 

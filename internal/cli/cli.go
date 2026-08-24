@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/abandon"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/daemon"
 	"github.com/maimuzo/continuo/internal/doctor"
@@ -84,6 +85,9 @@ type Deps struct {
 	ProbeKeychain func(ctx context.Context, timeout time.Duration) (ratelimit.KeychainProbe, error)
 	// ScaffoldDetect は owner とボードの番号を `gh` から引く。
 	ScaffoldDetect func(ctx context.Context, opts scaffold.DetectOptions) scaffold.Detection
+	// AbandonRun は着手した issue を着手する前の状態へ戻す。
+	// **worktree と branch と pane を消すので、検査では必ず差し替える。**
+	AbandonRun func(ctx context.Context, opts abandon.Options) int
 	// GOOS は動いている OS である。`continuo allow-keychain-access` は macOS 専用なので、
 	// **macOS 以外での応答を検査するために差し替えられるようにしてある。**空なら runtime.GOOS。
 	GOOS string
@@ -116,6 +120,9 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.ScaffoldDetect == nil {
 		d.ScaffoldDetect = scaffold.Detect
+	}
+	if d.AbandonRun == nil {
+		d.AbandonRun = abandon.Run
 	}
 	if d.GOOS == "" {
 		d.GOOS = runtime.GOOS
@@ -163,6 +170,8 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 			return runDoctor(d, args[1:], stdout, stderr)
 		case "trust":
 			return runTrust(d, args[1:], stdout, stderr)
+		case "abandon":
+			return runAbandon(d, args[1:], stdout, stderr)
 		case "allow-keychain-access":
 			return runAllowKeychainAccess(d, args[1:], stdout, stderr)
 		case "version":
@@ -800,7 +809,7 @@ func printKeychainFailure(w io.Writer, headline string) {
 
 // runDoctor は `continuo doctor` サブコマンドである（設計 3-32）。
 //
-// **前提の7項目を検査して、足りないものと直し方を出す。**検査の実体は internal/doctor に
+// **前提を検査して、足りないものと直し方を出す。**検査の実体は internal/doctor に
 // あり、ここが決めるのは引数の受け取り方・出力先・終了コードだけである。
 //
 // **1つ失敗しても残りを全部検査する。**そのため、この関数は途中で戻らない。
@@ -877,6 +886,108 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 		return doctorInternalErrorExitCode
 	}
 	return report.ExitCode()
+}
+
+// runAbandon は `continuo abandon` サブコマンドである。
+//
+// **間違えて着手した issue を、着手する前の状態へ戻す。**worktree・pane・
+// herdr の workspace・branch を消し、`--to` があれば Status をその値へ動かす。
+// 段の中身は internal/abandon にあり、ここが決めるのは引数の受け取り方と終了コードだけである。
+//
+// **位置引数は `init` / `doctor` / `trust` と揃える。**1つ目が issue の URL、
+// 2つ目が WORKFLOW.md のあるディレクトリ（省略すると、いまいるディレクトリ）である。
+//
+// **`--dry-run` を先に出せるようにしてある。**worktree と branch を消すコマンドで、
+// 何が消えるかを見る手段が無いのは危ない。
+//
+// **`SIGINT` / `SIGTERM` で止まれるようにする。**段1 は pane が閉じるのを最大で
+// `herdr.read_timeout_ms` の10倍だけ待つので、その間に人間が止められなければならない。
+//
+// args: `continuo abandon` に続く引数（--dry-run / --force / --to / --park と、
+// issue の URL、WORKFLOW.md のあるディレクトリ）。
+// stdout / stderr: 出力先。消すものの一覧は stdout へ出す。
+// 戻り値: 終了コード。**0 は消した・消すものが無かった・`--dry-run` で見せ終わった**、
+// **1 は何も消さずに止まったか、消す途中で失敗した**、
+// 2 は引数の指定が誤っている（--help / -h なら 0）。
+func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("continuo abandon", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	// **使い方を自分で出す。**flag は自分が知っているフラグしか出さないので、
+	// 既定のままだと `continuo abandon --help` に位置引数が1つも載らない。
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIAbandonUsage))
+		fs.PrintDefaults()
+	}
+	dryRunFlag := fs.Bool("dry-run", false, i18n.T(i18n.KeyCLIAbandonFlagDryRun))
+	forceFlag := fs.Bool("force", false, i18n.T(i18n.KeyCLIAbandonFlagForce))
+	toFlag := fs.String("to", "", i18n.T(i18n.KeyCLIAbandonFlagTo))
+	parkFlag := fs.String("park", "", i18n.T(i18n.KeyCLIAbandonFlagPark))
+	if err := fs.Parse(args); err != nil {
+		return parseErrorExitCode(err)
+	}
+
+	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
+	// ここで見逃すと、--dry-run のつもりで本当に消すことになる。
+	positional := fs.Args()
+	for _, a := range positional {
+		if strings.HasPrefix(a, "-") {
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrFlagAfterPositional, a))
+			return 2
+		}
+	}
+	if len(positional) == 0 {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIAbandonErrIssueURLRequired))
+		return 2
+	}
+	if len(positional) > 2 {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIAbandonErrTooManyPositional, len(positional), positional))
+		return 2
+	}
+
+	issueURL := positional[0]
+	var argPath string
+	if len(positional) == 2 {
+		argPath = positional[1]
+	}
+
+	workDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGetwd, err))
+		return 1
+	}
+	path, err := config.ResolvePath(argPath, workDir)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrResolveConfigPath, err))
+		return 1
+	}
+	// **設定を読めたら、その言語で出す**（設計 3-35）。読めなければ abandon 自身が
+	// 「WORKFLOW.md を読めません」を出すので、ここでは環境変数から決めた言語のまま進む。
+	useLanguageFromConfig(path)
+
+	// **トークンを載せる前に接続先を確かめる。**abandon はボードの Status を読み書きするので、
+	// 常駐プロセスと同じ検査を通す（環境変数に書かれたどんな宛先へも
+	// `Authorization: Bearer` が飛ばないようにする）。
+	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)
+	if err := daemon.ValidateGraphQLEndpoint(endpoint); err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGeneric, err))
+		return 1
+	}
+
+	// **人間が止められるようにする。**pane が閉じるのを待つあいだ、Ctrl+C で抜けられる。
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	return d.AbandonRun(ctx, abandon.Options{
+		ConfigPath:      path,
+		IssueURL:        issueURL,
+		DryRun:          *dryRunFlag,
+		Force:           *forceFlag,
+		ToState:         *toFlag,
+		ParkState:       *parkFlag,
+		GraphQLEndpoint: endpoint,
+		Out:             stdout,
+		Err:             stderr,
+	})
 }
 
 // doctorInternalErrorExitCode は `continuo doctor` が検査そのものを実施・報告できなかった
