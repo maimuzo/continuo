@@ -109,7 +109,8 @@ type HerdrClient interface {
 	// **コメントを書かせ直すときの復元でだけ使う**（設計 3-25 の9段の段4）。
 	// 着手のときは workspace の Manager が開く。
 	WorktreeOpen(ctx context.Context, params herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error)
-	// PaneRename は pane の label に issue の URL を書く（設計 3-3）。
+	// PaneRename は pane の label に `owner/repo/issues/N` を書く（設計 3-3）。
+	// **人間が herdr の画面で pane を見分けるための表示名である。**continuo は読み戻さない。
 	PaneRename(ctx context.Context, params herdr.PaneRenameParams) (*herdr.PaneRenameResult, error)
 	// PaneClose は pane を閉じる。**worker を止める唯一の手段である**（設計 3-5）。
 	PaneClose(ctx context.Context, params herdr.PaneCloseParams) (*herdr.PaneCloseResult, error)

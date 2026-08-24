@@ -42,8 +42,11 @@ func TestPrepare_新規に作りherdrにはworktree_openを呼ぶ(t *testing.T) 
 	}
 
 	methods := fx.Herdr.Methods()
-	if len(methods) != 1 || methods[0] != herdr.MethodWorktreeOpen {
-		t.Fatalf("herdr へ送ったメソッドが worktree.open 1件でない: %v", methods)
+	// **worktree.open のあとに workspace.rename が続く。**worktree.open の label は
+	// 既に開かれている workspace には効かないので、開き直すたびに書き直す（設計 3-3）。
+	if len(methods) != 2 ||
+		methods[0] != herdr.MethodWorktreeOpen || methods[1] != herdr.MethodWorkspaceRename {
+		t.Fatalf("herdr へ送ったメソッドが worktree.open → workspace.rename の2件でない: %v", methods)
 	}
 	if result.HerdrWorkspaceID != "w9" {
 		t.Fatalf("herdr workspace の ID を受け取れていない: got %q", result.HerdrWorkspaceID)
@@ -65,8 +68,22 @@ func TestPrepare_新規に作りherdrにはworktree_openを呼ぶ(t *testing.T) 
 	if params["focus"] != false {
 		t.Fatalf("worktree.open に focus=false を送っていない: got %v", params["focus"])
 	}
-	if params["label"] != sampleIssue(188).URL {
-		t.Fatalf("worktree.open の label が issue の URL でない: got %v", params["label"])
+	// **label は `owner/repo/issues/N` の形である**（設計 3-3。issue #12）。
+	wantLabel := herdr.IssueLabel("octocat", "hello-world", 188)
+	if params["label"] != wantLabel {
+		t.Fatalf("worktree.open の label が owner/repo/issues/N でない: got %v, want %q",
+			params["label"], wantLabel)
+	}
+
+	// **既に開かれていた workspace のために label を書き直す。**
+	renameParams := fx.Herdr.Requests()[1].Params
+	if renameParams["workspace_id"] != "w9" {
+		t.Fatalf("workspace.rename の宛先が worktree.open の返した workspace でない: got %v",
+			renameParams["workspace_id"])
+	}
+	if renameParams["label"] != wantLabel {
+		t.Fatalf("workspace.rename の label が owner/repo/issues/N でない: got %v, want %q",
+			renameParams["label"], wantLabel)
 	}
 }
 

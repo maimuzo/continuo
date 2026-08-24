@@ -209,11 +209,14 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		// **`path` と `branch` は片方だけ渡す。**両方渡すと herdr が
 		// `invalid_request: exactly one of path or branch is required` で弾く（実測: 2026-08-20）。
 		// **worktree は直前に git で作ってあるので、パスで開く。**
+		// **label は `owner/repo/issues/N` の形である**（設計 3-3）。
+		// 組み立ては herdr.IssueLabel に寄せてある（orchestrator 側と形がずれないため）。
+		label := herdr.IssueLabel(issue.Owner, issue.Repo, issue.Number)
 		opened, err := m.herdr.WorktreeOpen(ctx, herdr.WorktreeOpenParams{
 			Path:  resolvedPath,
 			Cwd:   repoPath,
 			Focus: &focus,
-			Label: issue.URL,
+			Label: label,
 		})
 		if err != nil {
 			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareWorktreeOpenFailed, resolvedPath, err)
@@ -229,6 +232,20 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		if opened.Worktree.Path != "" && !samePath(opened.Worktree.Path, resolvedPath) {
 			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareWorktreePathMismatch,
 				resolvedPath, opened.Worktree.Path, opened.Workspace.WorkspaceID)
+		}
+		// **label は worktree.open では上書きされない。**既に開かれていた workspace
+		// （already_open）には作成時の label が残るので、開き直すたびに書き直す。
+		// **IssueLabel が空文字を返したら呼ばない**（draft issue で壊れた label を書かない）。
+		if label != "" {
+			if _, err := m.herdr.WorkspaceRename(ctx, herdr.WorkspaceRenameParams{
+				WorkspaceID: opened.Workspace.WorkspaceID,
+				Label:       label,
+			}); err != nil {
+				// **致命にしない。**label は人間が herdr の画面で見分けるためのもので
+				// あり、復元の照合は pane の cwd で行う（設計 3-3）。
+				m.logger.Warn("herdr workspace の label を書き直せませんでした",
+					"workspace_id", opened.Workspace.WorkspaceID, "label", label, "error", err)
+			}
 		}
 	}
 

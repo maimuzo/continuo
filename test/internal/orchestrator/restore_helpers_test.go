@@ -171,6 +171,10 @@ type livePane struct {
 	// SessionUUID は pane の agent_session が返すセッション UUID である。
 	// 空なら agent_session を返さない（身元ファイル側へ落ちる経路の検査に使う）。
 	SessionUUID string
+	// Label は pane に貼られている label である。
+	// **引き継ぎの照合には使わない**（照合は Cwd で行う。設計 3-3）。
+	// 旧い形の label が付いた pane でも引き継げることを固定するために置いてある。
+	Label string
 }
 
 // installPanes はテスト用herdr mock の `pane.list` と `agent.list` を、生きている pane の台本で置き換える。
@@ -192,6 +196,9 @@ func installPanes(fx *fixture, panes ...livePane) {
 				"cwd":          p.Cwd,
 				"agent_status": string(p.AgentStatus),
 				"agent":        "claude",
+			}
+			if p.Label != "" {
+				pane["label"] = p.Label
 			}
 			if p.SessionUUID != "" {
 				pane["agent_session"] = map[string]any{

@@ -95,12 +95,14 @@ func (c *Client) PaneSplit(ctx context.Context, params PaneSplitParams) (*PaneSp
 // **必須は pane_id だけである**）。
 //
 // **これが pane に label を書く唯一の経路である**（`pane.split` に label は無い）。
-// 設計 3-3 は「pane の label に issue の URL を書く」を、再起動後の復元の第2の経路と
-// 定めている。pane を作った直後にこれを呼ぶこと。
+// 設計 3-3 は pane の label に `owner/repo/issues/N` を書くと定めている
+// （**人間が herdr の画面で pane を見分けるための表示名**であり、continuo は読み戻さない）。
+// pane を作った直後にこれを呼ぶこと。
 type PaneRenameParams struct {
 	// PaneID は label を書き込む pane の ID である。**必須の引数である。**
 	PaneID string `json:"pane_id"`
-	// Label は pane に書くラベルである。**issue の URL を書く**（3-3）。
+	// Label は pane に書くラベルである。**`owner/repo/issues/N` を書く**（3-3）。
+	// **IssueLabel で組み立てること。**
 	// 空なら送らず、herdr の既定に任せる（実スキーマ上は省略可能）。
 	Label string `json:"label,omitempty"`
 }
@@ -119,7 +121,8 @@ type PaneRenameResult struct {
 	Pane Pane `json:"pane"`
 }
 
-// PaneRename は pane.rename を呼び、pane に label を書く（3-3 の復元の第2の経路）。
+// PaneRename は pane.rename を呼び、pane に label を書く（3-3）。
+// **label は人間が herdr の画面で pane を見分けるための表示名である。**continuo は読み戻さない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // params: pane の ID（必須）と書き込む label。

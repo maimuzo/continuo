@@ -381,6 +381,12 @@ func (fh *fakeHerdr) installDefaults(t *testing.T) {
 		}}, nil
 	})
 
+	fh.Handle("workspace.rename", func(params map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "workspace_info", "workspace": map[string]any{
+			"workspace_id": params["workspace_id"], "label": params["label"],
+		}}, nil
+	})
+
 	fh.Handle("pane.close", func(params map[string]any) (any, *rpcErr) {
 		paneID, _ := params["pane_id"].(string)
 		fh.mu.Lock()

@@ -508,9 +508,11 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		return err
 	}
 	rs.setPaneID(paneID)
+	// **label は `owner/repo/issues/N` の形である**（設計 3-3）。
+	// 組み立ては herdr.IssueLabel に寄せてある（workspace 側と形がずれないため）。
 	if _, err := o.herdr.PaneRename(ctx, herdr.PaneRenameParams{
 		PaneID: paneID,
-		Label:  issueURL(issue),
+		Label:  herdr.IssueLabel(issue.Owner, issue.Repo, issue.Number),
 	}); err != nil {
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunPaneRenameFailed, err)
 	}

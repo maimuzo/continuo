@@ -11,7 +11,7 @@
 | --- | --- |
 | 2-1 | **socket API の実在するメソッドと引数**（protocol 19 で確認） |
 | 3-2 | **待ち受けの形**（`--until idle --until done --until blocked`） |
-| 3-3 | pane の label / cwd / セッション UUID の3本立て |
+| 3-3 | 復元の識別は pane の cwd とセッション UUID の2本立て（label は表示名） |
 
 ## 実装の記録
 

@@ -52,7 +52,8 @@ type WorktreeCreateParams struct {
 	// （実スキーマの default は false）に従う。
 	// **明示的に偽を送る必要があるのでポインタで持つ**（bool + omitempty だと偽を送れない）。
 	Focus *bool `json:"focus,omitempty"`
-	// Label は workspace に貼るラベルである。**issue の URL を書く**（3-3）。
+	// Label は workspace に貼るラベルである。**`owner/repo/issues/N` を書く**（3-3）。
+	// **IssueLabel で組み立てること。**
 	Label string `json:"label,omitempty"`
 	// WorkspaceID は開き先の workspace の ID である。
 	WorkspaceID string `json:"workspace_id,omitempty"`
@@ -122,7 +123,11 @@ type WorktreeOpenParams struct {
 	// Focus は開いた workspace へフォーカスを移すかどうかである
 	// （WorktreeCreateParams.Focus と同じ理由でポインタで持つ）。
 	Focus *bool `json:"focus,omitempty"`
-	// Label は workspace に貼るラベルである。**issue の URL を書く**（3-3）。
+	// Label は workspace に貼るラベルである。**`owner/repo/issues/N` を書く**（3-3）。
+	// **IssueLabel で組み立てること。**
+	//
+	// **既に開かれている workspace には効かない。**worktree.open は作成時の label を
+	// 残すので、開き直したあとに WorkspaceRename で書き直すこと。
 	Label string `json:"label,omitempty"`
 	// WorkspaceID は開き先の workspace の ID である。
 	WorkspaceID string `json:"workspace_id,omitempty"`

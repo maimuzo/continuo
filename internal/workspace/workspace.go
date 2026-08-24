@@ -39,6 +39,11 @@ type HerdrClient interface {
 	WorktreeOpen(ctx context.Context, params herdr.WorktreeOpenParams) (*herdr.WorktreeOpenResult, error)
 	// WorktreeRemove は herdr workspace の ID を指定して worktree を消す。
 	WorktreeRemove(ctx context.Context, params herdr.WorktreeRemoveParams) (*herdr.WorktreeRemoveResult, error)
+	// WorkspaceRename は開いたあとの herdr workspace に label を書き直す。
+	//
+	// **worktree.open の label は、既に開かれている workspace には効かない。**
+	// 開き直すたびにこれを呼ばないと、旧い label が残る（3-3）。
+	WorkspaceRename(ctx context.Context, params herdr.WorkspaceRenameParams) (*herdr.WorkspaceRenameResult, error)
 }
 
 // GhqListFunc は `ghq list -p -e <owner>/<repo>` 相当の処理を行う関数の型である。

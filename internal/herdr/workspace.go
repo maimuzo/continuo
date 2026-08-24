@@ -14,8 +14,8 @@ import (
 // MethodWorkspaceRename は herdr workspace に label を書くメソッド名である。
 //
 // worktree.create / worktree.open は label を引数で渡せるが、**開いたあとに label を
-// 書き換える経路はこれである。**設計 3-3 は workspace の label に issue の URL を書くと
-// 定めている（再起動後の復元の第1の経路）。
+// 書き換える経路はこれである。**設計 3-3 は workspace の label に `owner/repo/issues/N` を
+// 書くと定めている（人間が herdr の画面で見分けるための表示名）。
 const MethodWorkspaceRename = "workspace.rename"
 
 // WorkspaceRenameParams は workspace.rename の params である
@@ -24,7 +24,7 @@ const MethodWorkspaceRename = "workspace.rename"
 type WorkspaceRenameParams struct {
 	// WorkspaceID は label を書き込む herdr workspace の ID である。**必須の引数である。**
 	WorkspaceID string `json:"workspace_id"`
-	// Label は workspace に書くラベルである。**issue の URL を書く**（3-3）。
+	// Label は workspace に書くラベルである。**`owner/repo/issues/N` を書く**（3-3）。
 	// **必須の引数である**ので、空でも送る（omitempty を付けない）。
 	Label string `json:"label"`
 }
@@ -43,8 +43,9 @@ type WorkspaceRenameResult struct {
 	Workspace Workspace `json:"workspace"`
 }
 
-// WorkspaceRename は workspace.rename を呼び、herdr workspace に label を書く
-// （3-3 の復元の第1の経路）。
+// WorkspaceRename は workspace.rename を呼び、herdr workspace に label を書く（3-3）。
+// **label は人間が herdr の画面で workspace を見分けるための表示名である。**
+// continuo は読み戻さない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // params: workspace の ID と label（2つとも必須）。
