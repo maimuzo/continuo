@@ -95,10 +95,12 @@ func TestTick_1件のissueが候補に上がってからDoneで片付くまで�
 		}
 	}
 
-	// 段8: pane の label に issue の URL を書いた（設計 3-3）。
+	// 段8: pane の label に owner/repo/issues/N を書いた（設計 3-3）。
+	wantLabel := herdr.IssueLabel(issue.Owner, issue.Repo, issue.Number)
 	renameParams := fx.Herdr.ParamsOf(t, herdr.MethodPaneRename)
-	if renameParams["label"] != *issue.URL {
-		t.Fatalf("pane の label が issue の URL になっていない: got %v, want %q", renameParams["label"], *issue.URL)
+	if renameParams["label"] != wantLabel {
+		t.Fatalf("pane の label が owner/repo/issues/N になっていない: got %v, want %q",
+			renameParams["label"], wantLabel)
 	}
 
 	// 段11: 1回目のプロンプトはテンプレートの描画結果である（**issue の本文は入れない**）。

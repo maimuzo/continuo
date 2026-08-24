@@ -87,6 +87,9 @@ type Identity struct {
 - [x] **用意の手順を7段そのままの順で実行する**（3-22）。`git worktree prune` が最初
   - **段7 は `worktree.open`。**`create` ではない（実体は git が作り終えている）
   - **その workspace の中に pane が1つできる。`pane.split` も `tab.create` も呼ばない**（設計 4-5）
+- [x] **herdr workspace の label に `owner/repo/issues/N` を書く**（設計 3-3。組み立ては `herdr.IssueLabel`）
+  - **`worktree.open` の `label` は、既に開かれている workspace には効かない。**直後に `workspace.rename` で書き直す
+  - **失敗しても致命にしない。**label は表示名であり、復元の照合には使わない
 - [x] **実体はあるが登録が無い worktree は、乗っ取らずエラーにする**
 - [x] **`git worktree add -b` の失敗時に、先に作られた孤児 branch を消す**
 - [x] **`workspace.root` を起動時に作る**（`os.MkdirAll` / `0700`）。**検査より前に行う**

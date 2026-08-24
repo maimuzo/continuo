@@ -11,7 +11,7 @@
 | --- | --- |
 | 2-1 | **socket API の実在するメソッドと引数**（protocol 19 で確認） |
 | 3-2 | **待ち受けの形**（`--until idle --until done --until blocked`） |
-| 3-3 | pane の label / cwd / セッション UUID の3本立て |
+| 3-3 | 復元の識別は pane の cwd とセッション UUID の2本立て（label は表示名） |
 
 ## 実装の記録
 
@@ -41,6 +41,11 @@
 `pane.list` で引いて、そこで `agent.start` する。**`PaneList` は実装済み。**
 
 **`workspace.close` は要らない。**`worktree.remove` の応答に `workspace` が入り、workspace ごと閉じる。
+
+**pane と herdr workspace に貼る label は `herdr.IssueLabel(owner, repo, number)` で組み立てる**
+（`internal/herdr/label.go`）。**形は `owner/repo/issues/N`**（設計 3-3）。
+2箇所（`pane.rename` と `worktree.open` / `workspace.rename`）が別々に組み立てると形がずれるため、
+1本に寄せてある。**owner か repo が空、または番号が0以下なら空文字を返す**（draft issue のため）。
 
 **テストの書き方。**herdr は `pane.report_agent` で実プロセスを起動せずに
 「agent が居る」と登録できる。**Claude Code を起動しない統合テストが書ける。**

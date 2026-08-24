@@ -238,6 +238,13 @@ func (fh *fakeHerdr) dispatch(
 		}, nil
 	case "pane.close":
 		return map[string]any{"type": "pane_closed"}, nil
+	case "workspace.rename":
+		return map[string]any{
+			"type": "workspace_info",
+			"workspace": map[string]any{
+				"workspace_id": params["workspace_id"], "label": params["label"],
+			},
+		}, nil
 	case "worktree.open":
 		// **本物と同じく、path と branch は片方だけ受け付ける**（実測: 2026-08-20）。
 		openPath, _ := params["path"].(string)

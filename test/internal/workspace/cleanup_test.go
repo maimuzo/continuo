@@ -664,8 +664,9 @@ func TestCleanup_herdrが別のパスを答えたら何も消さない(t *testin
 		t.Fatalf("別のパスを作れない: %v", err)
 	}
 	fake := newFakeHerdr(t, map[string]any{
-		herdr.MethodWorktreeOpen:   worktreeOpenResult("w9", "w9:p1"),
-		herdr.MethodWorktreeRemove: worktreeRemoveResult("w9", ""),
+		herdr.MethodWorktreeOpen:    worktreeOpenResult("w9", "w9:p1"),
+		herdr.MethodWorktreeRemove:  worktreeRemoveResult("w9", ""),
+		herdr.MethodWorkspaceRename: workspaceRenameResult("w9"),
 	})
 	cf := newCleanupFixtureWith(t, fixtureOptions{Herdr: fake})
 
