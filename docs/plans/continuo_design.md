@@ -489,6 +489,8 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | `worktree.remove` | **`workspace_id`** / `force` | worktree を消す。**path でも branch でもない** |
 | `worktree.list` | `cwd` / `workspace_id` | worktree の一覧 |
 | `workspace.rename` | **`workspace_id`** / **`label`** | herdr workspace に label を書く |
+| `workspace.list` | （なし） | herdr workspace の一覧 |
+| `workspace.close` | **`workspace_id`** | **herdr workspace を閉じる。**worktree の実体は消さない。**`worktree.remove` では閉じない workspace を閉じる唯一の経路である**（6-10） |
 | `agent.rename` | **`target`** / `name` | agent の名前を変える |
 | `session.snapshot` | （なし） | 現在の状態をまとめて取る |
 | `pane.report_agent` | **`pane_id`** / **`source`** / **`agent`** / **`state`** / `agent_session_id` ほか | **実プロセスを起動せずに「agent が居る pane」として登録する。**統合テストで使う。**`state` は4値で `done` を含まない** |
@@ -4773,6 +4775,49 @@ func (fx *fixture) WaitRunsDrained(t *testing.T, d time.Duration) {
 
 **この形は今後も生える。**新しいテストを書くときは、**待つ条件に「確かめたいものが揃ったこと」を含める。**
 Status は「始まった合図」であって「終わった合図」ではない。
+
+---
+
+### 6-10. 本物を叩くのは herdr だけにする
+
+**言いたいこと。**mock は「continuo が正しいと思っている振る舞い」しか返さない。
+**本物で叩くのは herdr だけと決める。**置き場所は [test/live/](test/live/)、入口は
+[scripts/test-live.sh](scripts/test-live.sh)、CI では skip する。
+
+**相手ごとの決定。**
+
+| 相手 | どうするか | なぜ |
+| --- | --- | --- |
+| **herdr** | **本物で叩く** | 常駐していれば無料で速い。**ずれが実機を壊した実績がある** |
+| Claude Code | 叩かない | **枠を消費する。**自動テストからは起動しない |
+| GitHub の GraphQL / `gh` | 叩かない | 認証と本番のボードが要る。`httptest` で形は固定できる |
+| git / ghq | 既に本物を使う | [test/internal/workspace](test/internal/workspace) が担当済み |
+
+**skip の条件は3つで、build タグは使わない。**`herdr` が PATH に無い・socket が無い・
+socket へ繋がらない、のいずれかで `t.Skip` する。タグにすると「付け忘れて一度も走らない」が
+起きるが、skip なら `go test` の出力に理由が残る。
+[scripts/test-like-ci.sh](scripts/test-like-ci.sh) は PATH から `herdr` を隠すので、そちらでも飛ぶ。
+
+**後始末の規則は3つである。**
+
+1. worktree は `t.TempDir()` の下に作る。**置き場所（`workspace.root`）の外に出す**（巡回に拾わせない）
+2. **workspace を作った時点で後始末に登録する。**アサーションより先に登録する
+3. **後始末に失敗したらテストを落とす。**成功の応答だけを根拠にせず、`workspace.list` と
+   `pane.list` で消えたことを聞き直す
+
+**触ってよいのは `t.TempDir()` の下を指す workspace だけである。**既に開いている
+pane / workspace には手を出さない。
+
+**本物でしか分からなかったこと**（2026-08-24 実測）。**`worktree.open` に `cwd` を渡すと
+workspace が2つ開く。**worktree のぶんと、`cwd` のリポジトリのぶんである。
+**`worktree.remove` は前者しか閉じない。**後者は `workspace.close` でしか閉じられない。
+偽の herdr は workspace を1つしか作らないので、この取りこぼしは mock では見つからない。
+
+**そのため [internal/workspace/prepare.go](internal/workspace/prepare.go) が `cwd` を渡し、
+[internal/workspace/cleanup.go](internal/workspace/cleanup.go) が `worktree.remove` しか
+呼ばない現状では、issue 1件につき herdr workspace が1つ残る。**
+[test/live/herdr_test.go](test/live/herdr_test.go) がこの事実を固定している。
+片付け側で `workspace.close` を呼ぶかどうかは別途決める。
 
 ---
 
