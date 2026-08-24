@@ -2,6 +2,7 @@
 package normalize_test
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -149,6 +150,49 @@ func TestNormalize_パスの要素になるドットは潰されて警告が返�
 			}
 			if warnings[0].Original != c.raw || warnings[0].Result != got {
 				t.Fatalf("警告の中身が一致しない: got %+v", warnings[0])
+			}
+		})
+	}
+}
+
+// TestNormalize_結果がgitのbranch名として通る は、決めた名前を git に食わせる。
+//
+// **`Normalize` は「git の branch 名に使える」ことを保証している。**
+// それなのに、これまでのテストは全部が文字列の比較で、**git を1度も起動していなかった。**
+//
+// **期待値の出どころがテストの中にあると、git は一票も持てない**（設計 6-8）。
+// issue #9 と同じ形である。
+//
+// 目的: `Normalize` が返した名前が、`git check-ref-format --branch` を通ること。
+// 与える情報: git が嫌う形を含む入力。
+// 成功条件: どれも git が受け付ける名前になること。
+func TestNormalize_結果がgitのbranch名として通る(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git が無いので確かめられません")
+	}
+
+	for _, raw := range []string{
+		"continuo/octocat/hello-world/188",
+		"feature/.github",        // 要素の先頭のドット
+		"feature/docs.lock",      // .lock で終わる要素
+		"feature//空の要素",          // 空の要素
+		"feature/末尾スラッシュ/",       // 末尾スラッシュ
+		"~^:?*[\\",               // git が拒む記号
+		"@",                      // 単独の @
+		"a..b",                   // 連続するドット
+		"",                       // 空
+		strings.Repeat("あ", 200), // 長い
+	} {
+		t.Run(raw, func(t *testing.T) {
+			got, _ := normalize.Normalize(raw)
+			name := got.String()
+
+			cmd := exec.Command("git", "check-ref-format", "--branch", name)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Errorf("git が branch 名として受け付けません: %q\n"+
+					"  入力: %q\n  git: %s",
+					name, raw, strings.TrimSpace(string(out)))
 			}
 		})
 	}

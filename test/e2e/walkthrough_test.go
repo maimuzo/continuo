@@ -363,6 +363,16 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 	if env.Herdr.CountMethod("agent.start") == 0 {
 		t.Fatalf("段8: テスト用herdr mock が agent.start を受けていません: %v", env.Herdr.Methods())
 	}
+	// **起動を待つ経路を、実際に通ったことを確かめる。**
+	//
+	// テスト用herdr mock は最初の `agent.get` に `unknown` / `interactive_ready: false` を返す
+	// （本物と同じ並び。設計 6-8）。**continuo が待たずに進む実装だと、ここで
+	// `agent.prompt` が `agent_not_ready` で弾かれて上の検査が落ちる。**
+	// それとは別に、**2回以上尋ねたこと自体**をここで確かめる。
+	// 1回で通っていたら、待つ経路が消えている。
+	if n := env.Herdr.CountMethod("agent.get"); n < 2 {
+		t.Fatalf("段8: agent.get が %d 回しか呼ばれていません。起動を待つ経路を通っていません", n)
+	}
 	if prompts := env.Herdr.Prompts(); len(prompts) == 0 {
 		t.Fatalf("段8: テスト用herdr mock が agent.prompt を受けていません")
 	} else if !strings.Contains(prompts[0], fmt.Sprintf("%s#%d", env.FullName(), number)) {
@@ -541,4 +551,106 @@ func assertIdentityHasBase(t *testing.T, worktreePath string) {
 	if identity.Base == "" {
 		t.Fatalf("段8: 身元ファイルの base が空です。再起動をまたぐと片付けが見送られます:\n%s", raw)
 	}
+}
+
+// TestE2E_逃げ道の環境変数を渡さなくても起動して1件通る は、
+// 本番の探索順（設計 3-23）で hook の socket の場所を決めさせる。
+//
+// **目的。**他の E2E テストは全部 `CONTINUO_RUNTIME_DIR` を渡している。
+// **それは運用者の逃げ道であって、本番の経路ではない。**渡している限り、
+// 探索順の2番目以降（XDG_RUNTIME_DIR / $TMPDIR / ~/.continuo/run）は**1度も走らない。**
+// 実際、その隙間を実在しない `XDG_RUNTIME_DIR` が通り抜けて利用者に届いた（issue #9）。
+//
+// **与える情報。**`CONTINUO_RUNTIME_DIR` を渡さず、`TMPDIR` をテストの一時ディレクトリへ向ける
+// （macOS の枝がここを使う。Linux は `$HOME/.continuo/run` に落ち、HOME もテスト用である）。
+//
+// **成功条件。**issue が1件 `In Review` まで進むこと。
+// あわせて、決まった socket の場所がテストの一時ディレクトリの中にあること
+// （**実機の `/run/user/<uid>` などを触っていないこと**）。
+func TestE2E_逃げ道の環境変数を渡さなくても起動して1件通る(t *testing.T) {
+	env := newE2EEnv(t)
+	// **これが本題である。**逃げ道を渡さない。
+	env.OmitRuntimeDirEnv = true
+
+	stage2ReadBoard(t, env)
+	stage3Init(t, env)
+	stage4Setup(t, env)
+	env.TestSettings(t)
+	stage5Trust(t, env)
+
+	issueURL := stage7PrepareIssue(t, env)
+
+	cmd, logs := env.Start(t)
+	t.Cleanup(func() {
+		if t.Failed() || testing.Verbose() {
+			t.Logf("continuo の出力:\n%s", logs.String())
+		}
+	})
+
+	// **本番の探索順で決めた場所に、実際に socket を立てられたこと。**
+	waitFor(t, 30*time.Second, "hook の socket を listen する", func() bool {
+		return strings.Contains(logs.String(), "hook を受ける socket の listen を始めました")
+	})
+	sock := socketFromLogs(t, logs.String())
+	if !strings.HasPrefix(sock, env.Root) {
+		t.Fatalf("テストの一時ディレクトリの外に socket を作りました（実機を触っています）: %s\n  一時ディレクトリ: %s",
+			sock, env.Root)
+	}
+	if strings.Contains(sock, env.RuntimeDir) {
+		t.Fatalf("逃げ道を渡していないのに、逃げ道の場所を使っています: %s", sock)
+	}
+
+	// **issue が1件進むこと。**探索順で決めた socket で hook を受け取れなければ、
+	// turn の終わりが分からず `In Review` まで進まない。
+	number := env.Board.Read(t).findIssueByURL(issueURL).Number
+	waitFor(t, 90*time.Second, "issue が In Review になる", func() bool {
+		return env.Board.Read(t).findIssueByURL(issueURL).State == "In Review"
+	})
+	if n := env.Herdr.CountMethod("agent.start") - 0; n == 0 {
+		t.Fatalf("テスト用herdr mock が agent.start を受けていません（issue %d）", number)
+	}
+
+	// 止める。**探索順で決めた socket を、終了時に片付けられること。**
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatalf("SIGINT を送れません: %v", err)
+	}
+	code, finished := waitProcess(context.Background(), cmd, 30*time.Second)
+	if !finished {
+		t.Fatalf("SIGINT を受けても 30 秒以内に終了しませんでした\n%s", logs.String())
+	}
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, logs.String())
+	}
+	if _, err := os.Stat(sock); !os.IsNotExist(err) {
+		t.Fatalf("終了しても socket のファイルが残っています: %s", sock)
+	}
+}
+
+// socketFromLogs は continuo のログから、listen した socket の絶対パスを取り出す。
+//
+// t: 呼び出し元のテスト。
+// out: continuo の標準出力と標準エラーを混ぜたもの。
+// 戻り値: socket の絶対パス。見つからなければテストを落とす。
+func socketFromLogs(t *testing.T, out string) string {
+	t.Helper()
+	// **行を探してから `socket=` を読む。**ログは
+	// `msg="hook を受ける socket の listen を始めました" socket=/…` の形なので、
+	// 文言のうしろに引用符が挟まる。文言と `socket=` を続けて探すと必ず外れる。
+	const marker = "hook を受ける socket の listen を始めました"
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, marker) {
+			continue
+		}
+		idx := strings.Index(line, "socket=")
+		if idx < 0 {
+			continue
+		}
+		rest := line[idx+len("socket="):]
+		if end := strings.IndexAny(rest, " \t"); end >= 0 {
+			rest = rest[:end]
+		}
+		return strings.TrimSpace(rest)
+	}
+	t.Fatalf("ログに socket の場所がありません:\n%s", out)
+	return ""
 }

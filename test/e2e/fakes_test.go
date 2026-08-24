@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/maimuzo/continuo/internal/config"
 	"net/http"
 	"os"
 	"os/exec"
@@ -47,8 +48,9 @@ func TestE2E_偽のherdrが着手から片付けまでのメソッドに応答�
 	if err != nil {
 		t.Fatalf("ping に失敗しました: %v", err)
 	}
-	if pong.Protocol != 19 {
-		t.Fatalf("ping が返した protocol が 19 ではありません: %d", pong.Protocol)
+	// **直書きしない。**既定値から引く（監査の指摘。5箇所に散っていた）。
+	if want := config.DefaultConfig().Herdr.Protocol; pong.Protocol != want {
+		t.Fatalf("ping が返した protocol が %d ではありません: %d", want, pong.Protocol)
 	}
 
 	worktreePath := filepath.Join(root, "wt")
