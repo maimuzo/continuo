@@ -83,24 +83,24 @@ func validate(cfg *Config) error {
 	}
 	// dispatch したときに書く先が active_states に無いと、書いた直後に自分の worker を
 	// 候補から外してしまう（設計 3-10）。
-	if !containsString(cfg.Tracker.ActiveStates, cfg.Tracker.RunningState) {
+	if !containsStateFold(cfg.Tracker.ActiveStates, cfg.Tracker.RunningState) {
 		return invalidValueError("tracker.running_state", cfg.Tracker.RunningState, "tracker.active_states に含まれる値にすること")
 	}
-	if !containsString(cfg.Tracker.ActiveStates, cfg.Tracker.DispatchState) {
+	if !containsStateFold(cfg.Tracker.ActiveStates, cfg.Tracker.DispatchState) {
 		return invalidValueError("tracker.dispatch_state", cfg.Tracker.DispatchState, "tracker.active_states に含まれる値にすること")
 	}
 	// 状態の集合どうしが互いに素であることを見る（設計 3-9 / 3-10 / 4-1）。
 	// ここを検査しないと、完了として片付けた issue を次の巡回で作業中として拾い直す、
 	// 打ち切った issue が永久に再 dispatch される、といった無限の往復が起動を通ってしまう。
 	for _, state := range cfg.Tracker.ActiveStates {
-		if containsString(cfg.Tracker.TerminalStates, state) {
+		if containsStateFold(cfg.Tracker.TerminalStates, state) {
 			return invalidValueError(
 				"tracker.active_states", state,
 				"tracker.terminal_states と同じ値を含めないこと（完了として片付けた issue を、次の巡回で作業中として拾い直す。3-9 / 3-10）",
 			)
 		}
 	}
-	if containsString(cfg.Tracker.ActiveStates, cfg.Tracker.FailureState) {
+	if containsStateFold(cfg.Tracker.ActiveStates, cfg.Tracker.FailureState) {
 		return invalidValueError(
 			"tracker.failure_state", cfg.Tracker.FailureState,
 			"tracker.active_states に含まれない値にすること（打ち切った issue が永久に再 dispatch される。4-1）",
@@ -113,7 +113,7 @@ func validate(cfg *Config) error {
 	// cleanup.on_states は「片付けを始める状態」である。作業中の状態を書くと、
 	// 走っている worktree を消してしまう（設計 3-9）。
 	for _, state := range cfg.Cleanup.OnStates {
-		if containsString(cfg.Tracker.ActiveStates, state) {
+		if containsStateFold(cfg.Tracker.ActiveStates, state) {
 			return invalidValueError(
 				"cleanup.on_states", state,
 				"tracker.active_states と同じ値を含めないこと（作業中の worktree を片付けてしまう。3-9）",
@@ -432,10 +432,24 @@ func validateExpanded(cfg *Config) error {
 	return nil
 }
 
-// containsString は ss の中に target と完全一致する要素があるかどうかを返す。
-func containsString(ss []string, target string) bool {
+// containsStateFold は ss の中に target と同じ状態名があるかどうかを返す。
+//
+// **大文字小文字を無視し、前後の空白を落として比べる。**トラッカーの Status を
+// 照合する側（internal/tracker の foldStatus、internal/orchestrator の containsFold、
+// internal/abandon の containsFold）が全部そうしているので、**ここだけ完全一致で
+// 比べると、検証を通った設定が実行時には別の意味になる。**
+//
+// **具体的には `failure_state` の保証が崩れる。**`active_states` に `In Progress`、
+// `failure_state` に `in progress` と書いた設定は完全一致では通ってしまうが、
+// 実行時は同じ状態として扱われ、**打ち切った issue が永久に再 dispatch される。**
+//
+// ss: 調べる状態名の一覧。
+// target: 探す状態名。
+// 戻り値: 同じ状態名があれば true。
+func containsStateFold(ss []string, target string) bool {
+	t := strings.TrimSpace(target)
 	for _, s := range ss {
-		if s == target {
+		if strings.EqualFold(strings.TrimSpace(s), t) {
 			return true
 		}
 	}

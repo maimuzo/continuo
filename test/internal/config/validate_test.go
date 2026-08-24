@@ -331,6 +331,21 @@ func TestLoad_状態の集合が重なっていると落ちる(t *testing.T) {
 	})
 }
 
+// 目的: 状態の集合の重なりを、**大文字小文字を無視して**見ることを確認する
+// （設計 3-13 / SPEC.md 11.3）。
+// **照合する側（トラッカー・巡回・abandon）は全部そうしている。**ここだけ完全一致で
+// 比べると、検証を通った設定が実行時には別の意味になる。とくに `failure_state` が
+// 綴り違いで `active_states` に入ると、**打ち切った issue が永久に再 dispatch される。**
+// 与える情報: `active_states` に `In Progress`、`failure_state` に `in progress` と
+// 書いた front matter（完全一致では重ならない）。
+// 成功条件: config.Load がエラーを返し、その文に "tracker.failure_state" が含まれること。
+func TestLoad_状態の重なりは大文字小文字を無視して見る(t *testing.T) {
+	front := trackerFrontMatter(
+		"  active_states: [\"Ready\", \"In Progress\"]\n" +
+			"  failure_state: in progress\n")
+	assertLoadFailsWith(t, front, "tracker.failure_state")
+}
+
 // 目的: rate_limit.token_source が env なのに token_env が空だと起動が止まることを確認する。
 // 空のまま通すと、枠の取得が毎回 ErrNoCredentials になり、枠の判定が黙って無効化される。
 // tracker.provider.token_env は同じ条件を検査しているので、片側だけ抜けている状態を防ぐ。

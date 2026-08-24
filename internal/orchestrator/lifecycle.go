@@ -582,7 +582,13 @@ func (o *Orchestrator) cleanupPath(
 		return false
 	}
 	if result.Removed {
-		o.logger.Info("worktree と branch を片付けました", "identifier", identifier, "path", worktreePath)
+		// **消えていない branch を「片付けた」と書かない**（CleanupResult.BranchDeleted の規則）。
+		if result.BranchDeleted {
+			o.logger.Info("worktree と branch を片付けました", "identifier", identifier, "path", worktreePath)
+		} else {
+			o.logger.Info("worktree を片付けました（branch は残しました）",
+				"identifier", identifier, "path", worktreePath)
+		}
 		return true
 	}
 	o.logger.Warn("worktree を片付けずに残しました",

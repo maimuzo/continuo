@@ -498,6 +498,176 @@ const (
 	KeyCLIAllowKeychainAccessTimeoutRemedy Key = "cli.allow_keychain_access.timeout_remedy"
 )
 
+// `continuo abandon` の引数とフラグの文言（internal/cli が出す分）。
+const (
+	// KeyCLIAbandonFlagDryRun は--dry-run の説明に出る。
+	KeyCLIAbandonFlagDryRun Key = "cli.abandon.flag_dry_run"
+	// KeyCLIAbandonFlagForce は--force の説明に出る。
+	KeyCLIAbandonFlagForce Key = "cli.abandon.flag_force"
+	// KeyCLIAbandonFlagTo は--to の説明に出る。
+	KeyCLIAbandonFlagTo Key = "cli.abandon.flag_to"
+	// KeyCLIAbandonFlagPark は--park の説明に出る。
+	KeyCLIAbandonFlagPark Key = "cli.abandon.flag_park"
+	// KeyCLIAbandonUsage は `continuo abandon --help` の冒頭に出る。
+	KeyCLIAbandonUsage Key = "cli.abandon.usage"
+	// KeyCLIAbandonErrIssueURLRequired はissue の URL が渡されなかったときに出る。
+	KeyCLIAbandonErrIssueURLRequired Key = "cli.abandon.err_issue_url_required"
+	// KeyCLIAbandonErrTooManyPositional は位置引数が3つ以上あるときに出る。
+	KeyCLIAbandonErrTooManyPositional Key = "cli.abandon.err_too_many_positional"
+)
+
+// `continuo abandon` の本体（internal/abandon）が出す文言。
+const (
+	// KeyAbandonIssueURLEmpty はissue の URL が空のときに出る。
+	KeyAbandonIssueURLEmpty Key = "abandon.issue_url.empty"
+	// KeyAbandonIssueURLUnparsable はURL として読めないときに出る。
+	KeyAbandonIssueURLUnparsable Key = "abandon.issue_url.unparsable"
+	// KeyAbandonIssueURLBadScheme はhttp / https でないときに出る。
+	KeyAbandonIssueURLBadScheme Key = "abandon.issue_url.bad_scheme"
+	// KeyAbandonIssueURLNoHost はホスト名が無いときに出る。
+	KeyAbandonIssueURLNoHost Key = "abandon.issue_url.no_host"
+	// KeyAbandonIssueURLBadShape はissue の URL の形になっていないときに出る。
+	KeyAbandonIssueURLBadShape Key = "abandon.issue_url.bad_shape"
+	// KeyAbandonIssueURLBadNumber はissue の番号が正の整数でないときに出る。
+	KeyAbandonIssueURLBadNumber Key = "abandon.issue_url.bad_number"
+
+	// KeyAbandonHerdrSocketUnresolved はherdr の socket の場所を決められないときに出る。
+	KeyAbandonHerdrSocketUnresolved Key = "abandon.herdr_socket_unresolved"
+	// KeyAbandonRuntimeDirFailed は実行時ディレクトリを用意できないときに出る。
+	KeyAbandonRuntimeDirFailed Key = "abandon.runtime_dir_failed"
+	// KeyAbandonWorkspaceFailed は worktree の置き場所を用意できないときに出る。
+	KeyAbandonWorkspaceFailed Key = "abandon.workspace_failed"
+
+	// KeyAbandonErrConfigLoad はWORKFLOW.md を読めないときに出る。
+	KeyAbandonErrConfigLoad Key = "abandon.err_config_load"
+	// KeyAbandonErrBuild は部品を組み立てられないときに出る。
+	KeyAbandonErrBuild Key = "abandon.err_build"
+	// KeyAbandonErrLockFile はロックファイルそのものを開けないときに出る。
+	KeyAbandonErrLockFile Key = "abandon.err_lock_file"
+	// KeyAbandonRunning はcontinuo が動いているときの1行に出る。
+	KeyAbandonRunning Key = "abandon.running"
+	// KeyAbandonNotRunning はcontinuo が動いていないときの1行に出る。
+	KeyAbandonNotRunning Key = "abandon.not_running"
+
+	// KeyAbandonErrScan は置き場所を走査できないときに出る。
+	KeyAbandonErrScan Key = "abandon.err_scan"
+	// KeyAbandonNotFound はその issue の worktree が無いときに出る。
+	KeyAbandonNotFound Key = "abandon.not_found"
+	// KeyAbandonOwnerRepoMismatch は身元ファイルの issue_url が
+	// worktree のパスから取り出した owner とリポジトリ名と食い違うときに出る。
+	KeyAbandonOwnerRepoMismatch Key = "abandon.owner_repo_mismatch"
+	// KeyAbandonOwnerRepoUnreadable はworktree のパスから owner とリポジトリ名を
+	// 取り出せないときに出る。
+	KeyAbandonOwnerRepoUnreadable Key = "abandon.owner_repo_unreadable"
+	// KeyAbandonToSkipped は片付ける worktree が無く、`--to` の指定を使わずに
+	// 終わるときに出る。**指定を黙って捨てない。**
+	KeyAbandonToSkipped Key = "abandon.to_skipped"
+	// KeyAbandonErrMultiple はその issue の worktree が2つ以上あるときに出る。
+	KeyAbandonErrMultiple Key = "abandon.err_multiple"
+	// KeyAbandonMultipleItem は同じときに候補を1つずつ並べる行に出る。
+	KeyAbandonMultipleItem Key = "abandon.multiple_item"
+
+	// KeyAbandonErrTracker はボードのアダプタを作れない・Bootstrap を通せないときに出る。
+	KeyAbandonErrTracker Key = "abandon.err_tracker"
+	// KeyAbandonBoardNotListed はその issue がボードに載っていないときに出る。
+	KeyAbandonBoardNotListed Key = "abandon.board_not_listed"
+	// KeyAbandonErrParkStateUnknown はcontinuo が動いているのに Status を確かめられないときに出る。
+	KeyAbandonErrParkStateUnknown Key = "abandon.err_park_state_unknown"
+	// KeyAbandonParkNotActive はStatus が作業中の状態ではないので動かさないときに出る。
+	KeyAbandonParkNotActive Key = "abandon.park_not_active"
+	// KeyAbandonParkMoved は手を離させるために Status を動かしたときに出る。
+	KeyAbandonParkMoved Key = "abandon.park_moved"
+	// KeyAbandonErrParkActive は `--park` に作業中の状態（tracker.active_states の値）が
+	// 指定されたときに出る。**そこへ動かしても継続監視は手を離さない。**
+	KeyAbandonErrParkActive Key = "abandon.err_park_active"
+	// KeyAbandonErrUnknownState は `--to` や `--park` の値がボードの Status の
+	// 選択肢に無いときに出る。**worktree を消す前に出す。**
+	KeyAbandonErrUnknownState Key = "abandon.err_unknown_state"
+	// KeyAbandonErrParkFailed は手を離させる書き込みに失敗したときに出る。
+	KeyAbandonErrParkFailed Key = "abandon.err_park_failed"
+	// KeyAbandonParkNotWritten は手を離させる書き込みが行われなかったときに出る。
+	KeyAbandonParkNotWritten Key = "abandon.park_not_written"
+
+	// KeyAbandonErrPaneList はherdr へ pane の一覧を問い合わせられないときに出る。
+	KeyAbandonErrPaneList Key = "abandon.err_pane_list"
+	// KeyAbandonWaitingPane はpane が閉じるのを待っているあいだに出る。
+	KeyAbandonWaitingPane Key = "abandon.waiting_pane"
+	// KeyAbandonPaneGone はpane が閉じたときに出る。
+	KeyAbandonPaneGone Key = "abandon.pane_gone"
+	// KeyAbandonErrPaneRemains は上限までに pane が閉じなかったときに出る。
+	KeyAbandonErrPaneRemains Key = "abandon.err_pane_remains"
+	// KeyAbandonErrPaneAlive は継続監視が動いていないのに pane が生きているときに出る。
+	KeyAbandonErrPaneAlive Key = "abandon.err_pane_alive"
+	// KeyAbandonErrPaneWaitInterrupted は pane が閉じるのを待っている途中で
+	// `SIGINT` / `SIGTERM` を受けたときに出る。**時間切れとは言い分ける。**
+	KeyAbandonErrPaneWaitInterrupted Key = "abandon.err_pane_wait_interrupted"
+
+	// KeyAbandonErrInspect は失われるものを調べられないときに出る。
+	KeyAbandonErrInspect Key = "abandon.err_inspect"
+	// KeyAbandonPlanHeader は消すものの一覧の見出しに出る。
+	KeyAbandonPlanHeader Key = "abandon.plan_header"
+	// KeyAbandonPlanIssue は対象の issue の行に出る。
+	KeyAbandonPlanIssue Key = "abandon.plan_issue"
+	// KeyAbandonPlanStatus は現在の Status の行に出る。
+	KeyAbandonPlanStatus Key = "abandon.plan_status"
+	// KeyAbandonPlanStatusUnknown はStatus を読めなかったときの行に出る。
+	KeyAbandonPlanStatusUnknown Key = "abandon.plan_status_unknown"
+	// KeyAbandonPlanWorktree はworktree のパスの行に出る。
+	KeyAbandonPlanWorktree Key = "abandon.plan_worktree"
+	// KeyAbandonPlanBranch はbranch と base の行に出る。
+	KeyAbandonPlanBranch Key = "abandon.plan_branch"
+	// KeyAbandonPlanHerdrWorkspace はherdr の workspace の行に出る。
+	KeyAbandonPlanHerdrWorkspace Key = "abandon.plan_herdr_workspace"
+	// KeyAbandonPlanPane はherdr の pane の行に出る。
+	KeyAbandonPlanPane Key = "abandon.plan_pane"
+	// KeyAbandonPlanPaneNone は該当する pane が無いときの行に出る。
+	KeyAbandonPlanPaneNone Key = "abandon.plan_pane_none"
+	// KeyAbandonPlanPaneUnknown はherdr に問い合わせられなかったときの行に出る。
+	KeyAbandonPlanPaneUnknown Key = "abandon.plan_pane_unknown"
+	// KeyAbandonPlanDirty はコミットされていない変更のファイル数の行に出る。
+	KeyAbandonPlanDirty Key = "abandon.plan_dirty"
+	// KeyAbandonPlanDirtyAtLeast は変更のファイル数を数え切れなかったときの行に出る
+	// （`git status --porcelain` の読み取りが上限で打ち切られた場合）。
+	KeyAbandonPlanDirtyAtLeast Key = "abandon.plan_dirty_at_least"
+	// KeyAbandonPlanUnpushed はpush されていない commit の件数の行に出る。
+	KeyAbandonPlanUnpushed Key = "abandon.plan_unpushed"
+	// KeyAbandonPlanBaseUnknown はupstream も base も無く判定できないときの行に出る。
+	KeyAbandonPlanBaseUnknown Key = "abandon.plan_base_unknown"
+	// KeyAbandonPlanDiffFromBase はupstream が無いまま base との差分が残っているときの行に出る。
+	KeyAbandonPlanDiffFromBase Key = "abandon.plan_diff_from_base"
+	// KeyAbandonPlanNoDiffFromBase はupstream が無く base との差分も無いときの行に出る。
+	KeyAbandonPlanNoDiffFromBase Key = "abandon.plan_no_diff_from_base"
+	// KeyAbandonPlanParkPending は`--dry-run` で継続監視が動いているとき、
+	// 実行したら Status をどこへ動かすかを予告する行に出る。
+	KeyAbandonPlanParkPending Key = "abandon.plan_park_pending"
+
+	// KeyAbandonDryRunNote は--dry-run の締めの1行に出る。
+	KeyAbandonDryRunNote Key = "abandon.dry_run_note"
+	// KeyAbandonErrLossWithoutForce は失うものがあるのに --force が無いときに出る。
+	KeyAbandonErrLossWithoutForce Key = "abandon.err_loss_without_force"
+	// KeyAbandonErrCleanup は片付けに失敗したときに出る。
+	KeyAbandonErrCleanup Key = "abandon.err_cleanup"
+	// KeyAbandonErrDeferred は片付けが見送られたときに出る。
+	KeyAbandonErrDeferred Key = "abandon.err_deferred"
+	// KeyAbandonDeferredReason は同じときに理由を1つずつ並べる行に出る。
+	KeyAbandonDeferredReason Key = "abandon.deferred_reason"
+	// KeyAbandonRemoved は worktree と branch を消し終えたときに出る。
+	KeyAbandonRemoved Key = "abandon.removed"
+	// KeyAbandonRemovedBranchKept は worktree だけを消し、branch が残ったときに出る。
+	KeyAbandonRemovedBranchKept Key = "abandon.removed_branch_kept"
+
+	// KeyAbandonStatusLeftAlone は--to が無いのでStatus を動かさないときに出る。
+	KeyAbandonStatusLeftAlone Key = "abandon.status_left_alone"
+	// KeyAbandonErrStatusTargetUnknown は--to があるのに issue をボードから引けないときに出る。
+	KeyAbandonErrStatusTargetUnknown Key = "abandon.err_status_target_unknown"
+	// KeyAbandonStatusMoved はStatus を動かしたときに出る。
+	KeyAbandonStatusMoved Key = "abandon.status_moved"
+	// KeyAbandonErrStatusFailed はStatus の書き込みに失敗したときに出る。
+	KeyAbandonErrStatusFailed Key = "abandon.err_status_failed"
+	// KeyAbandonStatusNotWritten はStatus の書き込みが行われなかったときに出る。
+	KeyAbandonStatusNotWritten Key = "abandon.status_not_written"
+)
+
 // `continuo`（常駐プロセス本体）の文言。
 const (
 	// KeyCLIMainUsage は `continuo --help` の冒頭に出る。
@@ -1605,6 +1775,79 @@ var allKeys = []Key{
 	KeyCLIAllowKeychainAccessTimeoutHowTo,
 	KeyCLIAllowKeychainAccessTimeoutCauses,
 	KeyCLIAllowKeychainAccessTimeoutRemedy,
+	KeyCLIAbandonFlagDryRun,
+	KeyCLIAbandonFlagForce,
+	KeyCLIAbandonFlagTo,
+	KeyCLIAbandonFlagPark,
+	KeyCLIAbandonUsage,
+	KeyCLIAbandonErrIssueURLRequired,
+	KeyCLIAbandonErrTooManyPositional,
+	KeyAbandonIssueURLEmpty,
+	KeyAbandonIssueURLUnparsable,
+	KeyAbandonIssueURLBadScheme,
+	KeyAbandonIssueURLNoHost,
+	KeyAbandonIssueURLBadShape,
+	KeyAbandonIssueURLBadNumber,
+	KeyAbandonHerdrSocketUnresolved,
+	KeyAbandonRuntimeDirFailed,
+	KeyAbandonWorkspaceFailed,
+	KeyAbandonErrConfigLoad,
+	KeyAbandonErrBuild,
+	KeyAbandonErrLockFile,
+	KeyAbandonRunning,
+	KeyAbandonNotRunning,
+	KeyAbandonErrScan,
+	KeyAbandonNotFound,
+	KeyAbandonOwnerRepoMismatch,
+	KeyAbandonOwnerRepoUnreadable,
+	KeyAbandonErrMultiple,
+	KeyAbandonErrUnknownState,
+	KeyAbandonToSkipped,
+	KeyAbandonMultipleItem,
+	KeyAbandonErrTracker,
+	KeyAbandonBoardNotListed,
+	KeyAbandonErrParkStateUnknown,
+	KeyAbandonParkNotActive,
+	KeyAbandonParkMoved,
+	KeyAbandonErrParkActive,
+	KeyAbandonErrParkFailed,
+	KeyAbandonParkNotWritten,
+	KeyAbandonErrPaneList,
+	KeyAbandonWaitingPane,
+	KeyAbandonPaneGone,
+	KeyAbandonErrPaneRemains,
+	KeyAbandonErrPaneAlive,
+	KeyAbandonErrPaneWaitInterrupted,
+	KeyAbandonErrInspect,
+	KeyAbandonPlanHeader,
+	KeyAbandonPlanIssue,
+	KeyAbandonPlanStatus,
+	KeyAbandonPlanStatusUnknown,
+	KeyAbandonPlanWorktree,
+	KeyAbandonPlanBranch,
+	KeyAbandonPlanHerdrWorkspace,
+	KeyAbandonPlanPane,
+	KeyAbandonPlanPaneNone,
+	KeyAbandonPlanPaneUnknown,
+	KeyAbandonPlanDirty,
+	KeyAbandonPlanDirtyAtLeast,
+	KeyAbandonPlanUnpushed,
+	KeyAbandonPlanBaseUnknown,
+	KeyAbandonPlanDiffFromBase,
+	KeyAbandonPlanNoDiffFromBase,
+	KeyAbandonPlanParkPending,
+	KeyAbandonDryRunNote,
+	KeyAbandonErrLossWithoutForce,
+	KeyAbandonErrCleanup,
+	KeyAbandonErrDeferred,
+	KeyAbandonDeferredReason,
+	KeyAbandonRemoved,
+	KeyAbandonRemovedBranchKept,
+	KeyAbandonStatusLeftAlone,
+	KeyAbandonErrStatusTargetUnknown,
+	KeyAbandonStatusMoved,
+	KeyAbandonErrStatusFailed,
+	KeyAbandonStatusNotWritten,
 	KeyCLIMainUsage,
 	KeyCLIMainFlagLogLevel,
 	KeyCLIMainFlagPort,

@@ -32,6 +32,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 | **信頼の登録を書き換える** | `continuo trust` は `~/.claude.json` を書き換え、対象リポジトリを Claude Code に信頼登録します |
 | **`curl … \| sh` で配る** | インストーラーはネットワークから取ってきて実行されます |
 | **資格情報を読む** | 定額プランの枠を読むために、`~/.claude/.credentials.json` か macOS の Keychain を読みます |
+| **`continuo abandon` は消す** | worktree と branch と herdr の workspace を消します。**`--force` を付けると、コミットしていない変更と push していない commit ごと消えます**（`--dry-run` で何が消えるかを先に見られます） |
 
 **これらを踏まえたうえで、想定を超える挙動があれば報告してください。**たとえば次のようなものです。
 
@@ -78,6 +79,7 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 | **It edits your trust settings** | `continuo trust` rewrites `~/.claude.json` to trust the target repositories |
 | **It is installed via `curl … \| sh`** | The installer is fetched from the network and executed |
 | **It reads credentials** | To read your plan's usage window, it reads `~/.claude/.credentials.json` or the macOS Keychain |
+| **`continuo abandon` deletes** | It removes the worktree, the branch, and the herdr workspace. **With `--force` it takes uncommitted changes and unpushed commits with them** (`--dry-run` shows what would go first) |
 
 **With that understood, please report anything beyond it** — for example:
 

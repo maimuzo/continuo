@@ -22,7 +22,7 @@ below says which steps were actually executed while writing this document and wh
 
 | 段 | 叩いたか | 補足 |
 | --- | --- | --- |
-| 段1 ビルドする | **叩いた** | `go build` と、6つのサブコマンドの `--help` |
+| 段1 ビルドする | **叩いた** | `go build` と、各サブコマンドの `--help` |
 | 段2 使うボードを確かめる | **叩いた（読むだけ）** | `gh project list` と `gh project field-list`。**本番のボードには読み取りしか行っていない** |
 | 段3 設定を置く | **叩いた** | 自動で埋まるとき・`--owner` / `--project` を渡すとき・`gh` が無いとき・既にあるときの4通り |
 | 段4 Status の割り当てを合わせる | **叩いた** | `continuo setup` を本番のボードに対して実行した（読み取りのみ） |
@@ -31,6 +31,7 @@ below says which steps were actually executed while writing this document and wh
 | 段6 前提を検査する | **叩いた** | 揃っているとき・フィールド名が違うとき・設定が未記入のときの3通り |
 | 段7 issue を1件用意する | **テスト用mock一式で叩いた** | 偽の `gh` とテスト用GitHub GraphQL mock に対して。**本番のボードには1リクエストも送っていない** |
 | 段8 動かす | **両方叩いた** | **本物で起動し、巡回が始まるところまで確かめた**（`Ready` が0件なので Claude Code は起動していない）。1件を `Ready` から `Done` まで通したのはテスト用mock一式のほう |
+| 段8b 着手を取り消す | **`--help` だけ叩いた** | 貼ってある `abandon --help` の出力は実際に叩いたものである（2026-08-24）。**消す実行は、本物にもテスト用mock一式にも叩いていない。**出力例は文言の資源（[internal/i18n/messages/ja.json](../internal/i18n/messages/ja.json)）から組み立てたものである |
 | 段9 止める・片付ける | **両方叩いた** | 本物にもmockにも `Ctrl+C` 相当の `SIGINT` を送り、終了コード 0 で終わることを確かめた |
 
 **本物に対して確かめていないのは「実際に issue を1件通すこと」だけである**（段7 の issue 作成と、
@@ -41,7 +42,8 @@ below says which steps were actually executed while writing this document and wh
 **実物の Claude Code は1回も起動していないので、枠は消費していない。**
 実際に人間が本物に対して叩くと、段8 から枠を消費する。
 
-> **出力例は実際に叩いた結果である。**ただし個人のパス・アカウント名・リポジトリ名・ボードの名前だけを
+> **出力例は実際に叩いた結果である**（例外は段8b の消す実行だけで、上の表にそう書いてある）。
+> ただし個人のパス・アカウント名・リポジトリ名・ボードの名前だけを
 > `~` と `<ACCOUNT>` / `<PROJECT>` / `<REPO-1>` / `<ボードの名前>` に置き換えてある。
 
 ---
@@ -140,7 +142,31 @@ Usage of continuo trust:
     	何が要求されているかを表示するだけで、~/.claude.json を書き換えない
 ```
 
-**サブコマンドは6つある。**`init` / `setup` / `trust` / `allow-keychain-access` / `doctor` / `hook` で、
+`abandon --help` の出力。**位置引数を自分で出している**（段8b で使う）。
+
+```text
+continuo abandon — 間違えて着手した issue を、着手する前の状態へ戻します。
+
+使い方:
+  continuo abandon <issue の URL> [ディレクトリ]
+
+位置引数:
+  <issue の URL>                 例 https://github.com/octocat/hello-world/issues/42
+  [ディレクトリ]                 WORKFLOW.md のあるディレクトリ（省略すると、いまいるディレクトリ）
+
+フラグ:
+  -dry-run
+    	何を消すかを見せるだけで、消さない
+  -force
+    	コミットされていない変更や push されていない commit があっても消す
+  -park string
+    	continuo が動いているときに、手を離させるため一時的に動かす先（省略すると tracker.failure_state）
+  -to string
+    	片付けたあとに Status をこの値へ動かす（省略すると動かさない）
+```
+
+**サブコマンドは次のとおりである。**`init` / `setup` / `trust` / `abandon` /
+`allow-keychain-access` / `doctor` / `version` / `hook` で、
 引数に何も渡さなければ常駐する。
 
 `allow-keychain-access --help` の出力。**フラグは1つも無い**（段5b で使う。macOS 専用）。
@@ -781,7 +807,7 @@ cd ~/continuo-try
 /tmp/continuo doctor
 ```
 
-7項目を検査して、足りないものと直し方を出す。**`✗` が1つでもあれば終了コードは 1。**
+前提を検査して、足りないものと直し方を出す。**`✗` が1つでもあれば終了コードは 1。**
 **既存のボードを既定の設定のまま使って**実際に叩いた出力。
 
 > **`資格情報` の行だけは、段5b を通した macOS で `rate_limit.token_source: keychain` にして
@@ -1030,6 +1056,60 @@ curl -s http://127.0.0.1:8787/api/v1/state | jq .
 
 ---
 
+## 段8b. 着手を取り消す（間違えて `Ready` に置いたとき）
+
+**実行する場所: `~/continuo-try`**（`WORKFLOW.md` があるディレクトリ）
+
+**`Ready` に置く issue を間違えたら、`continuo abandon` で着手する前の状態へ戻す。**
+worktree・pane・herdr の workspace・branch がまとめて消える。
+
+**先に `--dry-run` で下見する。**この段では何も消さない。
+
+```bash
+cd ~/continuo-try
+/tmp/continuo abandon --dry-run <issue の URL>
+```
+
+**出るもの。**issue と Status、worktree のパス、branch と base、herdr の workspace と pane、
+コミットされていない変更のファイル数、push されていない commit の件数。
+
+```text
+continuo は動いていません。
+消すもの:
+  issue          : <REPO>#<番号>（<issue の URL>）
+  Status         : In Progress
+  worktree       : <worktree の絶対パス>
+  branch         : <branch 名>（base: main）
+  herdr workspace: <herdr workspace の ID>
+  herdr pane     : <pane の ID>
+  コミットされていない変更: 0 ファイル
+  push されていない commit: 0 件
+--dry-run なので何も消していません。
+```
+
+**消すときは `--dry-run` を外す。**
+
+```bash
+cd ~/continuo-try
+/tmp/continuo abandon <issue の URL>
+```
+
+| 何が起きるか | 補足 |
+| --- | --- |
+| **continuo が動いていれば、先に手を離させる** | **まだ作業中の Status なら**、`tracker.failure_state`（既定 `Blocked`）へ一時的に動かし、**その worktree の pane が閉じるのを待つ。**`--park <Status 名>` で動かす先を変えられる |
+| **pane が閉じなければ、何も消さずに止まる** | 上限は `herdr.read_timeout_ms` の10倍（既定50秒）。**終了コードは 1** |
+| **失うものがあれば、何も消さずに止まる** | コミットされていない変更・push されていない commit のこと。**それでも消すなら `--force`。**終了コードは 1 |
+| **片付けたあとの Status は動かさない** | 「Status は動かしていません。ボードで決めてください。」と出る。**動かす先が決まっているなら `--to "<Status 名>"`** |
+| **その issue の worktree が無ければ、何もせずに終わる** | 「この issue の worktree はありません」と出る。**終了コードは 0** |
+
+> **ボードの操作だけでは取り消せない。**`Ready` へ戻しても continuo は止まらない（`Ready` は
+> 作業中の Status の1つであり、着手待ちの Status でもあるので**もう一度着手されうる**）。
+> `Done` へ動かすと、片付けの前に「この作業のコメントが issue にあるか」を確かめ、
+> **無ければセッションを復元して Claude Code を起動し直す。**
+> 詳しくは [plans/continuo_design.md](plans/continuo_design.md) の 3-37 を見ること。
+
+---
+
 ## 段9. 止める・片付ける
 
 **continuo を動かしている端末で** `Ctrl+C` を押す。
@@ -1049,7 +1129,7 @@ level=INFO msg=continuo を終了しました
 
 | 何を | どうするか |
 | --- | --- |
-| worktree と branch | **Status を `Done` にすれば continuo が片付ける。**残っていれば `~/worktrees` の下を見て `git worktree remove` と `git branch -D` |
+| worktree と branch | **Status を `Done` にすれば continuo が片付ける。**着手そのものを取り消したいなら段8b の `continuo abandon` を使う。それでも残っていれば `~/worktrees` の下を見て `git worktree remove` と `git branch -D` |
 | push した branch | **GitHub には残る。**continuo が消すのは手元の branch だけである（`cleanup.require_pushed` で push を確かめてから消しているので、成果は GitHub 側に残る）。要らなければ GitHub の画面か `git push origin --delete <branch>` で消す |
 | ボードの item | **ボードは消さない。**試した issue だけを画面から外すか、`Done` に置いたままにする |
 | 信頼の登録 | `~/.claude.json.continuo-backup-<日時>` から戻すか、`projects` の該当キーを消す。**バックアップを消すのは人間である** |
@@ -1068,6 +1148,7 @@ level=INFO msg=continuo を終了しました
 | **信頼していないリポジトリの issue を飛ばしている** | `doctor` の `信頼登録` が `✓` か。**未信頼だと worktree も pane も作られない。**そのリポジトリにつき1回、**issue にコメントが投稿される**（直し方もそこに書いてある） |
 | **`In Review` にならない** | エージェントが `CONTINUO-STATUS: review` を出しているか。herdr の pane で応答を見る |
 | **issue が急に `Blocked` になった** | **issue のコメントを開く。**そこに何が起きたか・どう確かめるか・どう直すかが書いてある。**画面が変わらないまま `claude.turn_timeout_ms` が過ぎると打ち切る**（既定1時間）。**これは turn の総実行時間の上限ではない。**画面が変わり続けている限り、1つの指示に何時間かかっても打ち切らない |
+| **着手する issue を間違えた** | **段8b の `continuo abandon` で着手する前へ戻す。**ボードで `Ready` へ戻しても止まらず、`Done` へ動かすと Claude Code が起動し直される |
 | **片付かない** | **未コミットの変更が残っている**か、**push していない commit がある**と消さない（成果を失わないため）。ログに理由が出る |
 | 枠を使い切った | continuo は待って再開する。Claude Code 2.1.234 以降は Claude Code 自身も継続するので、continuo は `agent_status` を見て二重投入を避ける |
 | **同じ issue に Claude Code が2つ立った** | 起きてはならない。**再現手順を添えて issue を立ててほしい** |

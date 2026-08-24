@@ -143,6 +143,36 @@ continuo                          # 常駐を始める
 
 **止めるときは `Ctrl+C`。**巡回を止め、turn ループを畳んで抜けます。**pane は閉じません。**Claude Code はそのまま動き続けるので、次に起動したとき、その pane を引き継いで続きから進めます。
 
+### 間違えて着手したとき
+
+**`Ready` に置く issue を間違えたら、`continuo abandon` で着手する前の状態へ戻します。**worktree・pane・herdr の workspace・branch をまとめて消します。
+
+```bash
+continuo abandon --dry-run https://github.com/octocat/hello-world/issues/42   # 何が消えるかだけ見る
+continuo abandon https://github.com/octocat/hello-world/issues/42              # 消す
+```
+
+**先に `--dry-run` を叩いてください。**消す前に、その issue の Status・worktree のパス・branch・herdr の pane・**コミットされていない変更のファイル数**・**push されていない commit の件数**を並べます。
+
+**`--dry-run` はボードに1文字も書きません。**Status を書き換えず、continuo に手を離させることもしません。実行したらどの Status へ動かすかを、その場で1行お知らせするだけです。
+
+**書けない Status は、何かを消す前に弾きます。**`--to` と手を離させる先（`--park`）は、先にボードの Status の選択肢と突き合わせます。**`--park` に作業中の Status を渡すと、その場で止まります**（そこへ動かしても continuo は手を離さず、pane も閉じないためです）。**一致する worktree が無いときは `--to` を使いません。**黙って捨てず、動かしていないことをお知らせします（URL の打ち間違いだと、別の issue の Status を動かすことになるためです）。
+
+**失うものがあると、何も消さずに止まります。**それでも消すなら `--force` を付けてください。
+
+**continuo が動いていても、そのまま叩けます。**その issue から手を離させてから消します。**まだ作業中の Status なら**、一時的に `tracker.failure_state`（既定では `Blocked`）へ動かし、pane が閉じるのを待ちます。**動かす先は `--park` で変えられます。閉じなければ、何も消さずに止まります。**
+
+**continuo が動いていないと判定したときも、消す前に pane を確かめます。**ロックファイルの置き場所は環境変数（`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR`）で決まるので、launchd から起動した continuo と端末で叩いた `abandon` で食い違うことがあります。**その worktree の pane が生きていれば、ロックが何と言っていても消しません。**
+
+**片付けたあとの Status は動かしません。**「もう要らない」のか「書き直して出し直す」のかは continuo には分からないので、**ボードで決めてください。**決まっているなら `--to "Ice Box"` のように渡せます。
+
+**ボードの操作だけでは取り消せません。**これが `continuo abandon` を作った理由です。
+
+| やりたくなること | 実際に起きること |
+| --- | --- |
+| `Ready` へ戻す | **止まりません。**`Ready` は作業中の Status の1つなので、continuo はそのまま続けます。むしろ着手待ちの Status でもあるので、**もう一度着手されることがあります** |
+| `Done` へ動かす | **Claude Code が起動し直されます。**continuo は片付ける前に「この作業のコメントが issue にあるか」を確かめ、無ければセッションを復元して書かせようとします。**間違えて着手した issue には、書かせる成果がありません** |
+
 ### 設定
 
 `continuo init` が `WORKFLOW.md` を置きます。**この1枚が設定ファイルであり、エージェントへ送る指示書でもあります。**
