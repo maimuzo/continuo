@@ -3991,6 +3991,17 @@ pane が閉じるまで最大50秒待ち、**閉じなければ一覧を1行も�
 
 **採るやり方。**段3 と段4 のあいだに、**継続監視が動いていないと判定したときだけ** pane を引き、
 **1件でもあれば待たずに止まる**（手を離させていない以上、待っても閉じない）。
+**ただし `--force` は越えられる。**越えたことを1行で言ってから進む。
+
+**なぜ `--force` で越えさせるか。****continuo が worktree のために開いた herdr workspace には、
+その worktree を作業ディレクトリに持つ pane が必ず1枚ある**（`worktree.open` が root pane を
+作る。実測: 2026-08-25）。**つまり workspace が開いているかぎり、この検査は必ず引っかかる。**
+無条件に止めると、**`abandon` が消すはずの workspace が `abandon` を止める。**
+利用者には手が無くなり、herdr workspace を手で閉じてから叩き直すしかなくなる（issue #23 の再報告）。
+
+**「herdr が答えられない」より「pane がある」を厳しくしない。**前者で消せて後者で消せないのは
+筋が通らない。**止まる文言には `--force` で越えられることを書く**（越え方が分からなければ、
+止まったことと詰まったことは同じである）。
 
 **pane の照合は「一致、または内側」である。**Claude Code が worktree の下の階層へ降りると、
 完全一致だけでは「pane はもう無い」と判定して**生きている pane ごと worktree を消す。**
@@ -4072,6 +4083,7 @@ worktree が1つも見つからなかった実行では、そもそもここへ�
 | `git worktree remove` | ディレクトリを自分で消し、`git worktree prune` で登録を落とす |
 | herdr の workspace の ID | `workspace.list` の `checkout_path` で探し直す。駄目なら実体だけ片付ける |
 | herdr の pane の生死 | `--force` があれば、確かめずに消したことを言ってから進む |
+| herdr の pane が生きている | `--force` があれば、pane ごと消すことを言ってから進む（3-37-3） |
 | ghq の clone（リポジトリの検算） | branch には触らず、worktree と herdr workspace だけ片付ける |
 
 **消えたかは必ず自分で確かめる。**herdr も git も「消した」と答えて消えていないことがある。
@@ -4080,6 +4092,33 @@ worktree が1つも見つからなかった実行では、そもそもここへ�
 **「調べられない」と「食い違っている」は分ける。**worktree の `.git` が**別のリポジトリを
 指していた**ときだけは1バイトも消さない（`ErrRepoMismatch`）。壊れているのではなく
 **書き換えの痕跡**であり、消す相手を取り違えている可能性がある（3-20 / 3-22）。
+
+### 3-37-7. 片付け切れなかったものは、ログではなく画面へ出す
+
+**言いたいこと。**`continuo abandon` は `abandon.Options.Logger` を渡さない。
+**渡さなければログは `io.Discard` へ落ちる。**「ログを見てください」と書いたものは誰にも届かない。
+
+**採るやり方。**`workspace.CleanupResult.Leftovers`（人間が読む文の並び）に積み、
+`abandon` が段4 のあとで**1行ずつ画面へ出す。**残ったものが1件も無いときだけ
+「worktree と branch を消しました」と言う。
+
+**積むもの。**
+
+| 何が残ったか | 添える情報 |
+| --- | --- |
+| branch（設定で無効・検算に落ちた・`git branch -D` が失敗） | branch 名と、残した理由 |
+| git の worktree の登録（`prune` が失敗・リポジトリを名指しできない） | 叩き直すコマンド（`git -C <clone> worktree prune`） |
+| herdr の workspace（一覧を引けない・`workspace.close` が失敗） | workspace の ID と `herdr workspace close <ID>` |
+
+**画面に出る形（実測: 2026-08-25）。**
+
+```
+worktree を消しました（<worktree>）。片付け切れずに残ったものがあります。
+  残ったもの: branch continuo/<owner>/<repo>/1303 は残っています（消してよい branch だと検算できませんでした: …）
+```
+
+**`Reasons` とは別物である。**`Reasons` は「消さなかった」理由、`Leftovers` は
+「消したが、これだけ残った」ものである。**混ぜると、消えたのか残ったのかが読めなくなる。**
 
 ---
 
