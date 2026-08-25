@@ -7,14 +7,19 @@ package orchestrator_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
 // TestDispatch_active_statesに無いStatusのissueを着手が上書きしない は、
@@ -405,5 +410,146 @@ func TestRestore_paneの一覧を取れないだけでStatusを人間へ渡さ�
 	}
 	if _, err := os.Stat(wt.Path); err != nil {
 		t.Errorf("worktree を消してしまった: %v", err)
+	}
+}
+
+// TestTurn_herdrが一瞬落ちただけでrunを捨てない は、
+// 一時的な失敗の判定（`herdr.IsTransient`）が turn の失敗の経路で実際に使われていることを
+// 確かめる。
+//
+// 目的: `internal/herdr/errors.go` は「**呼び出し側はこれが真のとき run を捨ててはならない。**
+// herdr の再起動・socket の一時的な不通・応答の遅れがこれに当たる。次の巡回へ持ち越すこと」
+// と約束している。**その約束を守る分岐が1つも無いと、herdr を再起動しただけで走行中の run が
+// 諦められる。**リトライを消費し、使い切ると issue が failure_state へ落ち、
+// **herdr が何も答えていないのに「herdr は agent が待機状態になったと答えました」という
+// 文面がボードへ投稿される。**
+//
+// 与える情報: `agent.prompt` を受け取ったところで応答を書かずに接続を切るテスト用herdr mock
+// （herdr の再起動そのものである。エラー応答では再現できない）。リトライは 0 回にしてあるので、
+// **run を捨てる実装なら1回で打ち切りまで到達する。**
+// 成功条件: Status が `In Progress` のままで、issue にコメントが1件も残らず、印も残り、
+// **さらに次の巡回で `agent.prompt` を送り直さないこと**（届いていたかどうかは分からず、
+// 送り直せば turn が二重に投入される）。
+func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Agent.MaxRetries = 0
+			cfg.Tracker.VerifyStatesEvery = 0
+		},
+	})
+	// **herdr が再起動した場面である。**応答を書かずに接続を切ると、
+	// continuo 側は ErrCodeTransport（Retryable が真）を受け取る。
+	fx.Herdr.DropConnection(herdr.MethodAgentPrompt)
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.AllowLog("herdr へ届かなかったので", "herdr との通信が一時的に失敗した")
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 20*time.Second, "turn の送信が herdr へ届く", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	// 捨てる実装なら、ここで打ち切りまで走り切る。走り切らせてから見る。
+	time.Sleep(2 * time.Second)
+
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
+		t.Errorf("herdr が一瞬落ちただけで Status を落とした: got %q, want In Progress", got)
+	}
+	if got := fx.Tracker.CommentsOf("I_node188"); len(got) != 0 {
+		t.Errorf("run を捨てて issue へ引き渡しを書いた: %d 件\n%s", len(got), got[0].Body)
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Errorf("走行中の run を手放した: %d 件（1 件のはず）", got)
+	}
+
+	// **次の巡回で turn を送り直さない。**届いていたかどうかは分からないので、
+	// 送り直すと turn が二重に投入される。待ち直すだけでよい。
+	before := fx.Herdr.CountMethod(herdr.MethodAgentPrompt)
+	fx.Orc.Tick(context.Background())
+	time.Sleep(2 * time.Second)
+	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got != before {
+		t.Errorf("次の巡回で agent.prompt を送り直した: %d 回 → %d 回", before, got)
+	}
+}
+
+// TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨てない は、
+// 一時的な失敗の判定が**枠待ちの待ち直しの経路でも**使われていることを確かめる。
+//
+// 目的: 枠を使い切ると、continuo は `agent.prompt` を再送せずに `agent.wait` で待ち直す
+// （設計 3-27）。**その待ち直しの最中に herdr が再起動すると、run を捨ててはならない。**
+// 捨てると、枠が明けるのを待っていただけの issue が failure_state へ落ちる。
+//
+// 与える情報: 着手のときは枠が空いていて（`pause_above_percent` に掛からない）、
+// turn を送った瞬間に 100% になる偽の usage API。`agent.prompt` は herdr の `timeout` を返し、
+// `agent.wait` は応答を書かずに接続を切る。リトライは 0 回。
+// 成功条件: Status が `In Progress` のままで、issue にコメントが1件も残らず、
+// **枠待ちの印も残ったままであること**（外すと stall の時計が動き出し、枠が明けるより
+// 先に stall として諦めることになる）。
+func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨てない(t *testing.T) {
+	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	// **着手が済むまでは枠を空けておく。**100% のままだと `pause_above_percent` で
+	// dispatch が止まり、turn の経路に1度も入れない。
+	var full atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		percent := 0
+		if full.Load() {
+			percent = 100
+		}
+		w.Header().Set("Content-Type", "application/json")
+		limit := map[string]any{"kind": "session", "percent": percent, "severity": "normal"}
+		if percent == 100 {
+			limit["resets_at"] = resetsAt
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{"limits": []map[string]any{limit}}); err != nil {
+			t.Errorf("偽の usage API が応答を書けません: %v", err)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_TRANSIENT")
+
+	fx := newFixture(t, fixtureOptions{
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.Agent.MaxRetries = 0
+			cfg.Tracker.VerifyStatesEvery = 0
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+		},
+	})
+	// **turn を送った瞬間に枠を使い切る。**herdr の待ち受けは期限までに落ち着かなかった
+	// （＝枠待ちの入口。設計 3-27）。
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(map[string]any) (any, *rpcErr) {
+		full.Store(true)
+		return nil, &rpcErr{Code: herdr.ErrCodeTimeout, Message: "待ち受けが期限までに落ち着きませんでした"}
+	})
+	// **待ち直しの最中に herdr が再起動した。**
+	fx.Herdr.DropConnection(herdr.MethodAgentWait)
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.AllowLog("枠待ちの待ち直しが herdr へ届かないので", "herdr との通信が一時的に失敗した")
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "turn の送信が herdr へ届く", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+
+	// 枠の写しを取り直させる（`pollQuota` は巡回と枠待ちの待ち直しでしか走らない）。
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "枠待ちの待ち直しが herdr へ届く", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentWait) > 0
+	})
+	// 捨てる実装なら、ここで打ち切りまで走り切る。走り切らせてから見る。
+	time.Sleep(2 * time.Second)
+
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
+		t.Errorf("待ち直しが届かなかっただけで Status を落とした: got %q, want In Progress", got)
+	}
+	if got := fx.Tracker.CommentsOf("I_node188"); len(got) != 0 {
+		t.Errorf("run を捨てて issue へ引き渡しを書いた: %d 件\n%s", len(got), got[0].Body)
+	}
+	v, ok := viewOfFixture(fx, "octocat/hello-world#188")
+	if !ok {
+		t.Fatalf("走行中の run を手放した")
+	}
+	if !v.WaitingQuota {
+		t.Errorf("枠待ちの印を外した（stall の時計が動き出し、枠が明ける前に諦めることになる）: %+v", v)
 	}
 }

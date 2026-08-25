@@ -4853,6 +4853,36 @@ pane は実際には生きていて誰も閉じないので、continuo の管理
 そもそもネットワークが戻れば何もしなくてよい。**`gh auth login` を案内すると、
 原因はネットワーク側なので直らないまま、運用者に無駄な再認証をさせることになる。**
 
+
+### 3-48. herdr との通信が一時的に失敗しただけでは run を捨てない
+
+**言いたいこと。**herdr の再起動・socket の一瞬の不通・応答の遅れで turn の送信が失敗しても、
+**Claude Code は pane の中でそのまま動いている。**捨てると、issue は失敗の Status へ落ち、
+**herdr が何も答えていないのに「herdr は agent が待機状態になったと答えた」という文面**が残る。
+
+**どう切り分けるか。**[internal/herdr/errors.go](../../internal/herdr/errors.go) の `IsTransient` が真かどうかで分ける。
+真になるのは `ErrCodeTransport`（socket へ届かなかった・送れなかった・応答を読めなかった）と
+`ErrCodeReadTimeout`（continuo 側の読み取り期限が尽きた）である。
+
+| 失敗 | 判定 | turn ループがすること |
+| --- | --- | --- |
+| `agent_not_found` / `agent_not_ready` | 恒久的 | `turnSendFailed`。打ち切って人間へ渡す |
+| `transport` / `read_timeout` | **一時的** | **`turnTransient`。捨てずに次の巡回へ持ち越す** |
+| herdr の `timeout` | 待ち受けの時間切れ | 枠待ちを判定し、そうでなければ待ち直す（3-2 / 3-27） |
+
+**持ち越し方は「送り直す」ではなく「待ち直す」である。**[internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の
+`turnLoop` は `turnTransient` を受けると `awaitTurnEnd` を立てて抜ける。次の巡回は
+**turn を送らずに turn の終わりを待つ**ところから入る（3-4 の段5a2 と同じ入口）。
+
+**なぜ `NeedsPrompt` ではないのか。**`agent.prompt` が herdr へ届いていたかどうかは分からない。
+届いていた場合に送り直すと **turn が二重に投入され、投げた本文が消えて turn が混ざる。**
+待ち直すだけなら、届いていた場合は Stop hook が来て正常に終わり、届いていなかった場合は
+巡回の stall 検知（`checkStalls`）が `claude.turn_timeout_ms` の沈黙で拾う。**黙って止まることはない。**
+
+**枠待ちの待ち直し（`afterWaitTimeout`）でも同じ判定を行う。**そこでは**枠待ちの印を外さない。**
+外すと stall の時計が動き出し、**枠が明けるより先に stall として諦める。**印を外す契機は
+「枠の `resets_at` を過ぎたこと」だけである（3-27）。
+
 ---
 
 ## 4. 人間が決めたこと

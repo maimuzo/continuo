@@ -209,6 +209,21 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 					"\n【対処】herdr が動いていることを確かめてから、Status を着手待ちへ戻してください。"+
 					"\n元のエラー: %v", sendErr))
 			return
+		case turnTransient:
+			// **run を諦めない**（設計 3-48）。herdr の再起動・socket の一瞬の不通・
+			// 応答の遅れである。Claude Code は pane の中でそのまま動いている。
+			//
+			// **`agent.prompt` を送り直さない。**届いていたかどうかは分からず、
+			// 届いていた場合に送り直すと turn が二重に投入される。だから
+			// `NeedsPrompt` ではなく `awaitTurnEnd` を立てる。次の巡回は
+			// 「turn を送らずに turn の終わりを待つ」ところから入る（設計 3-4 の段5a2）。
+			//
+			// **黙って止まりはしない。**画面が動かないままなら、巡回の stall 検知
+			// （checkStalls）が `claude.turn_timeout_ms` の沈黙で拾う。
+			o.logger.Info("herdr との通信が一時的に失敗したので、次の巡回で turn の終わりを待ち直します",
+				"identifier", snap.Identifier, "error", sendErr)
+			rs.setAwaitTurnEnd()
+			return
 		case turnQuotaRecovered:
 			// 枠が明けた。**次の turn を送る（この送信は turn 数に数える。設計 3-27）。**
 			continue
@@ -276,8 +291,8 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 // rs: 対象の run。
 // text: 送る本文。
 // 戻り値の1つ目: turn の結果。
-// 戻り値の2つ目: **`turnSendFailed` のときだけ入る** herdr が返した元のエラー。
-// **これを捨ててはならない。**捨てると、issue に残す理由から本当の原因
+// 戻り値の2つ目: **`turnSendFailed` と `turnTransient` のときだけ入る** herdr が返した
+// 元のエラー。**これを捨ててはならない。**捨てると、issue に残す理由から本当の原因
 // （`agent_not_found` / `agent_not_ready` / socket 断）が消える。
 func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) (turnOutcome, error) {
 	turnCount := rs.beginTurn(o.now())
@@ -303,6 +318,15 @@ func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) 
 			// **打ち切らずに待ち直す。**`agent.prompt` は再送しない（二重に投入される）。
 			// 画面が止まったかどうかは巡回の stall 検知（checkStalls）だけが決める。
 			return o.confirmTurnEnd(ctx, rs, false)
+		}
+		// **一時的な失敗なら run を捨てない**（herdr/errors.go の IsTransient の約束）。
+		// herdr の再起動・socket の一瞬の不通・応答の遅れがこれに当たる。
+		// **ここで諦めると、herdr を再起動しただけで走行中の run がリトライを消費し、
+		// 使い切ると issue が failure_state へ落ちる。**
+		if herdr.IsTransient(err) {
+			o.logger.Warn("herdr へ届かなかったので、この turn は次の巡回で待ち直します（run は諦めません）",
+				"identifier", rs.issue().Identifier, "error", err)
+			return turnTransient, err
 		}
 		// **`turnStalled` を返してはならない。**turn は1文字も届いていない。
 		// 「Stop hook が届かなかった」は、待ち受けが返ったあとにだけ言えることである。
@@ -331,7 +355,8 @@ func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) 
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // 戻り値の1つ目: turn の結果。枠待ちでなければ `turnWaitAgain`。
-// 戻り値の2つ目: **`turnSendFailed` のときだけ入る** herdr が返した元のエラー。
+// 戻り値の2つ目: **`turnSendFailed` と `turnTransient` のときだけ入る** herdr が返した
+// 元のエラー。
 func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turnOutcome, error) {
 	if !o.isQuotaWaiting(rs) {
 		return turnWaitAgain, nil
@@ -373,6 +398,16 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 		} else if !herdr.IsCode(err, herdr.ErrCodeTimeout) {
 			if ctx.Err() != nil {
 				return turnAborted, nil
+			}
+			// **一時的な失敗なら run を捨てない**（sendTurn と同じ判断）。
+			//
+			// **枠待ちの印は外さない。**枠が明けたかどうかは分かっていない。外すと
+			// stall の時計が動き出し、枠が明けるより先に stall として諦めることになる。
+			// 印は checkStalls が `resets_at` を過ぎた時点で外す（設計 3-27）。
+			if herdr.IsTransient(err) {
+				o.logger.Warn("枠待ちの待ち直しが herdr へ届かないので、次の巡回で待ち直します（run は諦めません）",
+					"identifier", rs.issue().Identifier, "error", err)
+				return turnTransient, err
 			}
 			// **これも「送れなかった」側である。**`agent.wait` が答えないことと、
 			// Stop hook が届かないことは別の話なので、`turnStalled` に混ぜない。
@@ -473,6 +508,18 @@ const turnQuotaRecovered turnOutcome = 100
 // 届くことはない（届いたら turn を二重に送ることになるので、呼び出し元は必ず消費すること）。
 const turnWaitAgain turnOutcome = 101
 
+// turnTransient は herdr の呼び出しが**一時的な理由で**失敗したことを表す
+// （`herdr.IsTransient` が真。herdr の再起動・socket の一瞬の不通・応答の遅れ）。
+//
+// **`turnSendFailed` と混ぜてはならない。**混ぜると、herdr を再起動しただけで
+// 走行中の run が諦められ、リトライを消費し、使い切ると issue が failure_state へ落ちる。
+// herdr は何も答えていないのに「herdr は agent が待機状態になったと答えました」という
+// 文面がボードへ投稿される。
+//
+// **turnLoop はこれを受けても run を諦めない。**`awaitTurnEnd` を立てて抜け、
+// 次の巡回で「turn を送らずに turn の終わりを待つ」ところから入り直す（設計 3-48）。
+const turnTransient turnOutcome = 102
+
 // isQuotaWaiting は「この run は枠待ちである」を判定する（設計 3-27）。
 //
 // **2条件の連言である。**
@@ -539,8 +586,8 @@ func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
 // `Stop` が来なければ stall として扱う。**枠明けに Claude Code が自分で継続した場合は
 // 偽を渡す**（まだ走り出したばかりで `Stop` は来ないため。設計 3-27）。
 // 戻り値の1つ目: turn の結果。
-// 戻り値の2つ目: **`turnSendFailed` のときだけ入る** herdr が返した元のエラー
-// （枠待ちの待ち直しが答えなかった場合。それ以外では nil）。
+// 戻り値の2つ目: **`turnSendFailed` と `turnTransient` のときだけ入る** herdr が返した
+// 元のエラー（枠待ちの待ち直しが答えなかった場合。それ以外では nil）。
 func (o *Orchestrator) confirmTurnEnd(
 	ctx context.Context,
 	rs *runState,
