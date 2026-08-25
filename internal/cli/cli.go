@@ -202,7 +202,7 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 	forceFlag := fs.Bool("force", false, i18n.T(i18n.KeyCLIInitFlagForce))
 	ownerFlag := fs.String("owner", "", i18n.T(i18n.KeyCLIInitFlagOwner))
 	projectFlag := fs.Int("project", 0, i18n.T(i18n.KeyCLIInitFlagProject))
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 
@@ -223,16 +223,9 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
-	// flag パッケージは最初の位置引数で解釈をやめるため、--force が効かないまま
-	// 「既にあります」で止まる、という分かりにくい失敗になる。
+	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
+	// `-` で始まるものが残っていれば、それは `--` のあとに書かれた位置引数である。
 	positional := fs.Args()
-	for _, a := range positional {
-		if strings.HasPrefix(a, "-") {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrFlagAfterPositional, a))
-			return 2
-		}
-	}
 	if len(positional) > 1 {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrTooManyPositional, len(positional), positional))
 		return 2
@@ -321,7 +314,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	ownerFlag := fs.String("owner", "", i18n.T(i18n.KeyCLISetupFlagOwner))
 	projectFlag := fs.Int("project", 0, i18n.T(i18n.KeyCLISetupFlagProject))
 	statusFieldFlag := fs.String("status-field", setup.DefaultStatusFieldName, i18n.T(i18n.KeyCLISetupFlagStatusField))
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 
@@ -344,14 +337,9 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		return 2
 	}
 
-	// runInit と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
+	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
+	// `-` で始まるものが残っていれば、それは `--` のあとに書かれた位置引数である。
 	positional := fs.Args()
-	for _, a := range positional {
-		if strings.HasPrefix(a, "-") {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrFlagAfterPositional, a))
-			return 2
-		}
-	}
 	if len(positional) > 1 {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLISetupErrTooManyPositional, len(positional), positional))
 		return 2
@@ -614,19 +602,13 @@ func runTrust(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo trust", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	dryRunFlag := fs.Bool("dry-run", false, i18n.T(i18n.KeyCLITrustFlagDryRun))
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 
-	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
-	// ここで見逃すと、--dry-run のつもりで本当に書き込むことになる。
+	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
+	// `-` で始まるものが残っていれば、それは `--` のあとに書かれた位置引数である。
 	positional := fs.Args()
-	for _, a := range positional {
-		if strings.HasPrefix(a, "-") {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrFlagAfterPositional, a))
-			return 2
-		}
-	}
 	if len(positional) > 1 {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLITrustErrTooManyPositional, len(positional), positional))
 		return 2
@@ -739,18 +721,13 @@ func runTrust(d Deps, args []string, stdout, stderr io.Writer) int {
 func runAllowKeychainAccess(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo allow-keychain-access", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 
-	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
+	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
+	// `-` で始まるものが残っていれば、それは `--` のあとに書かれた位置引数である。
 	positional := fs.Args()
-	for _, a := range positional {
-		if strings.HasPrefix(a, "-") {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrFlagAfterPositional, a))
-			return 2
-		}
-	}
 	if len(positional) > 0 {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIAllowKeychainAccessErrTooManyPositional, len(positional), positional))
 		return 2
@@ -826,18 +803,13 @@ func printKeychainFailure(w io.Writer, headline string) {
 func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 
-	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
+	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
+	// `-` で始まるものが残っていれば、それは `--` のあとに書かれた位置引数である。
 	positional := fs.Args()
-	for _, a := range positional {
-		if strings.HasPrefix(a, "-") {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrFlagAfterPositional, a))
-			return 2
-		}
-	}
 	if len(positional) > 1 {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrTooManyPositional, len(positional), positional))
 		return 2
@@ -922,19 +894,13 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 	forceFlag := fs.Bool("force", false, i18n.T(i18n.KeyCLIAbandonFlagForce))
 	toFlag := fs.String("to", "", i18n.T(i18n.KeyCLIAbandonFlagTo))
 	parkFlag := fs.String("park", "", i18n.T(i18n.KeyCLIAbandonFlagPark))
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 
-	// runMain と同じ理由で、位置引数のあとに書かれたフラグを黙って無視しない。
-	// ここで見逃すと、--dry-run のつもりで本当に消すことになる。
+	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
+	// `-` で始まるものが残っていれば、それは `--` のあとに書かれた位置引数である。
 	positional := fs.Args()
-	for _, a := range positional {
-		if strings.HasPrefix(a, "-") {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrFlagAfterPositional, a))
-			return 2
-		}
-	}
 	if len(positional) == 0 {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIAbandonErrIssueURLRequired))
 		return 2
@@ -1001,6 +967,73 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 // スクリプトから「前提が足りない」と「doctor 自体が動けなかった」を区別できるようにする。
 const doctorInternalErrorExitCode = 3
 
+// reorderArgs は、位置引数のあとに書かれたフラグを前へ寄せてから flag へ渡すための並べ替えである。
+//
+// **`git` も `docker` も `gh` も、フラグを後ろに書ける。**利用者はそちらに慣れているので、
+// `continuo abandon <URL> --dry-run` を弾かずに受け付ける。Go の標準 flag は最初の
+// 位置引数で解釈をやめてしまうため、**渡す前にこちらで並べ替える。**
+//
+// **並べ替えの規則は3つだけである。**
+//
+//  1. `-` で始まる引数はフラグ側へ、それ以外は位置引数側へ寄せる（`-` 単体は位置引数）
+//  2. **`--` が現れたら、それ以降は全部位置引数として扱う**（一般的な作法）
+//  3. **値を取るフラグの次の引数は、フラグの値として一緒に連れて行く**
+//     （`--to "Ice Box"` の `Ice Box` を位置引数と取り違えない）
+//
+// **値を取るかどうかは fs に登録済みのフラグから引く**（flagTakesValue）。
+// 「値を取るフラグの名前」の一覧を別に持たない。**知らないフラグはそのままフラグ側へ置く。**
+// 「定義されていない」と落とすのは fs.Parse の仕事であり、ここで握り潰さない。
+//
+// fs: 並べ替えの対象。**フラグを登録し終えてから呼ぶこと**（登録前だと値を取るかを引けない）。
+// args: サブコマンド名を除いた引数。
+// 戻り値: フラグ・`--`・位置引数 の順に並べ替えた引数。
+func reorderArgs(fs *flag.FlagSet, args []string) []string {
+	flags := make([]string, 0, len(args)+1)
+	positional := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		// `-` 単体は「標準入力」を指す引数として使われる慣習があり、フラグではない。
+		if len(a) < 2 || !strings.HasPrefix(a, "-") {
+			positional = append(positional, a)
+			continue
+		}
+		flags = append(flags, a)
+		if flagTakesValue(fs, a) && i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	// **`--` を必ず挟む。**挟まないと、`--` のあとに書かれた `-` で始まる位置引数が、
+	// 並べ替えたあとの fs.Parse でフラグとして解釈し直される。
+	return append(append(flags, "--"), positional...)
+}
+
+// flagTakesValue は、そのフラグが次の引数を値として取るかを返す。
+//
+// **bool のフラグだけが値を取らない。**flag パッケージは bool を
+// `IsBoolFlag() bool` を持つ値として登録するので、それで見分ける。
+//
+// fs: フラグを登録し終えた FlagSet。
+// arg: `-force` や `--to` のような、`-` で始まる引数そのもの。
+// 戻り値: 次の引数を値として取るなら真。`--to=Ice Box` のように値が同じ引数に入っている場合と、
+// fs が知らないフラグの場合は偽（後者は fs.Parse が「定義されていない」と落とす）。
+func flagTakesValue(fs *flag.FlagSet, arg string) bool {
+	name := strings.TrimLeft(arg, "-")
+	if strings.ContainsRune(name, '=') {
+		return false
+	}
+	f := fs.Lookup(name)
+	if f == nil {
+		return false
+	}
+	b, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return !(ok && b.IsBoolFlag())
+}
+
 // parseErrorExitCode は flag.FlagSet.Parse が返したエラーを終了コードに直す。
 //
 // flag パッケージは `--help` / `-h` を受け取ると、使い方を出したうえで flag.ErrHelp を返す。
@@ -1044,7 +1077,7 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	// （`--port=0` は「OS に空きポートを選ばせる」という意味を持つ指定であり、
 	// 「指定しなかった」と同じ扱いにしてはならない）。
 	portFlag := fs.Int("port", 0, i18n.T(i18n.KeyCLIMainFlagPort))
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 	var port *int
@@ -1063,18 +1096,9 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	// flag パッケージは「位置引数のあとに書かれたフラグ」を黙って無視する
-	// （例: `continuo WORKFLOW.md --log-level=debug` を渡すと、--log-level=debug は
-	// フラグとして解釈されず、そのまま2つ目の位置引数として fs.Args() に残る）。
-	// 気づかずに無視されるとオペレータが設定したつもりのフラグが効かないので、
-	// 残った位置引数の中に "-" で始まるものが無いかを自前で検査して起動を止める。
+	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
+	// `-` で始まるものが残っていれば、それは `--` のあとに書かれた位置引数である。
 	positional := fs.Args()
-	for _, a := range positional {
-		if strings.HasPrefix(a, "-") {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrFlagAfterPositional, a))
-			return 2
-		}
-	}
 	if len(positional) > 1 {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIMainErrTooManyPositional, len(positional), positional))
 		return 2
@@ -1160,7 +1184,7 @@ func runHook(args []string, stdin io.Reader, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	socketFlag := fs.String("socket", "", i18n.T(i18n.KeyCLIHookFlagSocket))
 	pendingDirFlag := fs.String("pending-dir", "", i18n.T(i18n.KeyCLIHookFlagPendingDir))
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}

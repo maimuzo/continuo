@@ -140,6 +140,8 @@ From here on, moving an issue to `Ready` is all it takes.
 
 **`Ctrl+C` stops it.** It stops polling and unwinds its turn loops, but **it does not close the panes** — Claude Code keeps running, and the next start picks those panes back up and continues.
 
+**Flags go before or after the positional arguments**, the way `git` and `gh` take them: `continuo trust ~/continuo-work --dry-run` and `continuo trust --dry-run ~/continuo-work` do the same thing. **Everything after `--` is a positional argument**, even when it starts with `-`. A flag it does not know is still an error, wherever you put it.
+
 ### Undoing a start
 
 Started the wrong issue? **`continuo abandon` puts it back the way it was before it started** — the worktree, the pane, the herdr workspace and the branch all go away together.
