@@ -23,10 +23,17 @@ const clonePathCacheTTL = 60 * time.Second
 // シンボリックリンクなので、素朴な文字列比較では必ず食い違う（3-22）。
 // 解決できない側は Clean しただけの値で比べる。
 //
+// **空文字はどれとも一致しない。**Clean すると `.` になるので、素朴に比べると
+// **空文字どうしや、値の入らなかったフィールドが「同じ場所」に見える。**
+// 消す宛先の照合に使う関数なので、そこは必ず外す。
+//
 // a: 比べるパス。
 // b: 比べるパス。
 // 戻り値: 同じ場所を指していれば true。
 func samePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
 	return resolveOrClean(a) == resolveOrClean(b)
 }
 
@@ -115,22 +122,20 @@ func (m *Manager) clonePath(ctx context.Context, owner, repo string) (string, er
 // 書き換えられない）を `ghq list -p -e` に通した clone のパスと、git が答えた共通
 // ディレクトリが同じリポジトリを指すことを確かめる。一致しなければ何もしない。
 //
+// **worktree の `.git` が壊れていても答えを出す**（issue #23）。壊れていると
+// `git -C <worktree> rev-parse --git-common-dir` は `invalid gitfile format` で断るが、
+// **検算の根拠は元から worktree の外側にある**（置き場所のパスと ghq の答え）。
+// そこで、断られたときは clone のほうに共通ディレクトリを答えさせる。
+// **これは検算を緩めていない。**むしろ、書き換えられる `.git` を1つも読まない。
+//
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 対象の worktree の絶対パス（**置き場所の内側であること。**まだ消していないこと）。
 // 戻り値の1つ目: 共通ディレクトリの絶対パス（`info/exclude` を書く先）。
 // 戻り値の2つ目: `git -C` に渡せるリポジトリのディレクトリ（`git branch -D` の宛先）。
-// 戻り値の3つ目: 共通ディレクトリを引けない・置き場所の規則に合わない・clone を引けない・
-// **git の答えと ghq の答えが食い違う**場合のエラー。
+// 戻り値の3つ目: 置き場所の規則に合わない・clone を引けない・**git の答えと ghq の答えが
+// 食い違う**場合・**worktree と clone のどちらからも共通ディレクトリを引けない**場合のエラー。
 func (m *Manager) verifiedRepo(ctx context.Context, worktreePath string) (string, string, error) {
-	commonDir, err := gitCommonDir(ctx, worktreePath)
-	if err != nil {
-		return "", "", err
-	}
-	repoDir := commonDir
-	if filepath.Base(commonDir) == ".git" {
-		repoDir = filepath.Dir(commonDir)
-	}
-
+	// **先に置き場所と ghq で相手を決める。**worktree の `.git` はここでは読まない。
 	owner, repo, err := ownerRepoFromWorktreePath(m.resolvedRoot, worktreePath)
 	if err != nil {
 		return "", "", err
@@ -144,10 +149,29 @@ func (m *Manager) verifiedRepo(ctx context.Context, worktreePath string) (string
 			i18n.KeyWorkspaceVerifiedRepoCloneNotFound,
 			ErrCloneNotFound, owner, repo, worktreePath)
 	}
+
+	commonDir, gitErr := gitCommonDir(ctx, worktreePath)
+	if gitErr != nil {
+		// worktree の `.git` が壊れている。**clone のほうに答えさせる。**
+		cloneCommonDir, cloneErr := gitCommonDir(ctx, clone)
+		if cloneErr != nil {
+			return "", "", i18n.Errorf(
+				i18n.KeyWorkspaceVerifiedRepoCommonDirUnreadable,
+				worktreePath, gitErr, clone, cloneErr)
+		}
+		m.logger.Warn("worktree の .git を読めないので、clone のほうからリポジトリを決めました",
+			"worktree", worktreePath, "clone", clone, "error", gitErr)
+		return cloneCommonDir, clone, nil
+	}
+
+	repoDir := commonDir
+	if filepath.Base(commonDir) == ".git" {
+		repoDir = filepath.Dir(commonDir)
+	}
 	if !samePath(repoDir, clone) {
 		return "", "", i18n.Errorf(
 			i18n.KeyWorkspaceVerifiedRepoRepoMismatch,
-			worktreePath, repoDir, owner, repo, clone)
+			ErrRepoMismatch, worktreePath, repoDir, owner, repo, clone)
 	}
 	return commonDir, repoDir, nil
 }

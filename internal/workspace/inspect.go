@@ -3,6 +3,8 @@ package workspace
 import (
 	"context"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // Leftover は「この worktree を消したら何が失われるか」の内訳である（3-9 の手順2 と 2b）。
@@ -25,6 +27,15 @@ type Leftover struct {
 	// ことを表す。**真なら DirtyFiles は「これ以上ある」という下限である。**
 	// 人間に見せるときは数だけを出さず、「以上」と分かる形にすること。
 	DirtyFilesTruncated bool
+	// DirtyFilesUnknown は git が答えられず、コミットされていない変更を1件も数えられなかった
+	// ことを表す（worktree の `.git` が壊れている場合など。issue #23）。
+	// **真なら DirtyFiles は 0 のままだが、それは「変更が無い」という意味ではない。**
+	// 人間に見せるときは数を出さず、「数えられなかった」と書くこと。
+	DirtyFilesUnknown bool
+	// UnpushedUnknown は git が答えられず、push されていない成果があるかを
+	// 1つも判定できなかったことを表す。
+	// **HasUpstream / UnpushedCommits / DiffFromBase は真ならどれも当てにならない。**
+	UnpushedUnknown bool
 	// HasUpstream は現在の branch に upstream があるかどうかである。
 	HasUpstream bool
 	// UnpushedCommits は upstream より先にある commit の件数である。
@@ -40,6 +51,16 @@ type Leftover struct {
 	// **設定（cleanup.require_clean_worktree / require_pushed）に従う**ので、
 	// 検査を切ってあれば空になる。
 	Reasons []string
+	// Undetermined は git が答えられずに調べ切れなかったことである（人間が読む文）。
+	//
+	// **空でなければ、この Leftover の数と真偽値は当てにならない。**
+	// `continuo abandon` が「失うものはありません」と偽らないために、
+	// **これが1件でもあれば HasLoss が真になる**（消すには `--force` が要る）。
+	//
+	// **調べられないことを理由に止まってはならない。**abandon は壊れた状態を
+	// 片付ける道具であり、git が答えられない worktree こそ片付けたい相手である
+	// （issue #23）。だから Inspect はエラーを返さず、ここへ理由を積んで返す。
+	Undetermined []string
 }
 
 // HasLoss は、消すと失われるものがあるかどうかを返す。
@@ -54,6 +75,11 @@ type Leftover struct {
 func (l *Leftover) HasLoss() bool {
 	if l == nil {
 		return false
+	}
+	// **調べ切れなかったものは「失うものがある」側に倒す。**中身が分からないものを
+	// 黙って消してはならない（issue #23）。
+	if len(l.Undetermined) > 0 {
+		return true
 	}
 	if l.DirtyFiles > 0 {
 		return true
@@ -72,11 +98,17 @@ func (l *Leftover) HasLoss() bool {
 // **cleanup.enabled は見ない。**「continuo が自動で片付けるか」の設定であって、
 // 「いま何が失われるか」とは別の話である。
 //
+// **git が答えられなくても止まらない**（issue #23）。worktree の `.git` は
+// `gitdir: …` と書かれただけのファイルであり、壊れると `git -C <worktree> …` が
+// 1つも通らない。**そこで止まると、まさに片付けたい相手を片付けられなくなる。**
+// 調べられなかったことは Leftover.Undetermined に積んで返し、**「失うものが無い」とは
+// 決して答えない**（HasLoss が真になる）。
+//
 // ctx: 実行に適用するコンテキスト。
 // req: 調べる worktree と、その worktree を作ったときの base（空なら身元ファイルから補う）。
 // 戻り値の1つ目: 失われるものの内訳。
-// 戻り値の2つ目: 封じ込め検査（3-20）に落ちた場合・身元ファイルを読めない場合・
-// git を実行できない場合のエラー。
+// 戻り値の2つ目: 封じ込め検査（3-20）に落ちた場合・身元ファイルを読めない場合のエラー。
+// **git を実行できないことはエラーにしない**（Undetermined に入る）。
 func (m *Manager) Inspect(ctx context.Context, req CleanupRequest) (*Leftover, error) {
 	resolvedPath, err := CheckContainmentResolved(m.resolvedRoot, req.WorktreePath)
 	if err != nil {
@@ -90,24 +122,26 @@ func (m *Manager) Inspect(ctx context.Context, req CleanupRequest) (*Leftover, e
 	}
 	req.Base = m.effectiveBase(req.Base, identity)
 
-	// **見送りの理由は Cleanup と同じ関数に出させる。**
-	reasons, err := m.leftoverReasons(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
 	result := &Leftover{
 		Identity:     identity,
 		WorktreePath: resolvedPath,
 		Base:         req.Base.String(),
-		Reasons:      reasons,
+		// **見送りの理由は Cleanup と同じ関数に出させる。**
+		Reasons: m.leftoverReasons(ctx, req),
 	}
 
 	// **件数は設定に関係なく数える。**人間に見せるための数であり、
 	// 「検査を切ってあるから数えない」では、何を失うのかを判断できない。
 	status, truncated, err := gitStatusPorcelain(ctx, resolvedPath, m.identityStatusExcludes()...)
 	if err != nil {
-		return nil, err
+		// **0 ファイルに丸めない。**丸めると、成果の残った worktree が
+		// 「コミットされていない変更: 0 ファイル」と表示されたまま消える。
+		result.DirtyFilesUnknown = true
+		result.UnpushedUnknown = true
+		result.Undetermined = append(result.Undetermined,
+			i18n.T(i18n.KeyWorkspaceUndeterminedDirty, err),
+			i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err))
+		return result, nil
 	}
 	result.DirtyFiles = countPorcelainLines(status)
 	// **打ち切られたことを落とさない。**落とすと、数千ファイルを失う worktree が
@@ -116,13 +150,20 @@ func (m *Manager) Inspect(ctx context.Context, req CleanupRequest) (*Leftover, e
 
 	hasUpstream, err := gitHasUpstream(ctx, resolvedPath)
 	if err != nil {
-		return nil, err
+		result.UnpushedUnknown = true
+		result.Undetermined = append(result.Undetermined,
+			i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err))
+		return result, nil
 	}
 	result.HasUpstream = hasUpstream
 	if hasUpstream {
 		ahead, err := gitAheadOfUpstream(ctx, resolvedPath)
 		if err != nil {
-			return nil, err
+			result.HasUpstream = false
+			result.UnpushedUnknown = true
+			result.Undetermined = append(result.Undetermined,
+				i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err))
+			return result, nil
 		}
 		result.UnpushedCommits = ahead
 		return result, nil

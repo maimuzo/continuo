@@ -33,17 +33,17 @@ BASIC FLOW:
 4. システムはボードを project item の ID 指定でまとめて取り直す。
 5. システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。
 6. システムは VALIDATES THAT worktree が workspace.root の内側にある。
-7. システムは VALIDATES THAT worktree にコミットされていない変更がない。
-8. システムは VALIDATES THAT branch に push されていない成果がない。
+7. システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。
+8. システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。
 9. システムは workspace_hooks の before_remove を実行する。
-10. システムは herdr に workspace の ID を渡して worktree の削除を要求する。
+10. システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。
 11. IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN
 12.   システムは herdr に workspace の一覧を要求する。
 13.   IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN
 14.     システムは herdr にリポジトリの親 workspace を閉じることを要求する。
 15.   ENDIF
 16. ENDIF
-17. システムは git に branch の削除を要求する。
+17. システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。
 18. システムは issue ごとの Claude Code の設定ファイルを消す。
 19. システムは利用者に片付けの完了をログで応答する。
 POSTCONDITION: worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
@@ -101,6 +101,26 @@ POSTCONDITION: worktree は残っている。branch は残っている。issue �
 | push されていない成果（upstream がある） | `git rev-list --count @{u}..HEAD` | 出力が 0 である |
 | push されていない成果（upstream が無い） | base からの差分 | 差分が無い |
 
+**git が答えられないときは「消してよい」に丸めない。**worktree の `.git` が壊れていると
+`git -C <worktree> …` は1つも通らない（issue #23）。**そのときは判定できなかったことを
+見送りの理由に積む。**エラーとして投げ返すと、`continuo abandon` が worktree の中身を
+1行も見せられなくなる。
+
+## 消せなかったときに、消せる分まで諦めない
+
+**言いたいこと。**`git worktree remove` は、worktree の `.git` が壊れていると
+`validation failed, cannot remove working tree` で必ず断る（実測: 2026-08-25）。
+**断られたまま終わると、その worktree だけが永久に残る。**
+
+**採る扱い。**要求が断られたときと、**断られていないのに実体が残っているとき**は、
+worktree のディレクトリを自分で消し、`git worktree prune` で登録を落とし、
+残った herdr workspace を `workspace.close` で閉じる（ステップ10）。
+**消えたかどうかは必ず自分で確かめる。**herdr も git も「消した」と答えて消えていないことがある。
+
+**リポジトリを検算できないときは branch に触らない。**clone を人間が移した・消した環境では、
+どの branch を消してよいかを確かめる手立てが無い。**worktree のディレクトリと
+herdr workspace はリポジトリを知らなくても消せる**ので、そこまではやって、残したものを言う。
+
 ## リポジトリの親 workspace を閉じる条件
 
 **`worktree.open` は herdr の workspace を2つ開く**（issue #19）。worktree のぶんと、
@@ -141,15 +161,15 @@ flowchart TD
     B4["4. ボードを ID 指定でまとめて取り直す"]
     B5{"5. VALIDATES THAT Status が cleanup.on_states に入っている"}
     B6{"6. VALIDATES THAT worktree が workspace.root の内側にある"}
-    B7{"7. VALIDATES THAT コミットされていない変更がない"}
-    B8{"8. VALIDATES THAT push されていない成果がない"}
+    B7{"7. VALIDATES THAT コミットされていない変更がなく判定ができている"}
+    B8{"8. VALIDATES THAT push されていない成果がなく判定ができている"}
     B9["9. workspace_hooks の before_remove を実行する"]
-    B10["10. workspace の ID を渡して worktree の削除を要求する"]
+    B10["10. worktree の削除を要求し残っていれば自分で消して登録を掃除する"]
     B11{"11. IF 開かせた親 workspace を控えてある"}
     B12["12. workspace の一覧を要求する"]
     B13{"13. IF 控えた ID が現物と一致し、同じリポジトリの worktree が残っていない"}
     B14["14. リポジトリの親 workspace を閉じることを要求する"]
-    B17["17. git に branch の削除を要求する"]
+    B17["17. リポジトリ側で branch の現物を確かめて削除を要求する"]
     B18["18. issue ごとの設定ファイルを消す"]
     B19["19. 片付けの完了をログで応答する"]
     BPOST(["POSTCONDITION worktree と branch が無い"])

@@ -28,6 +28,14 @@
 // Inspect（Cleanup と同じ関数を呼ぶ）、片付けは Cleanup、Status は internal/tracker、
 // 二重起動の判定は internal/lock である。
 //
+// **外の道具が答えられないことを理由に止まらない**（issue #23）。worktree の `.git` が
+// 壊れていれば git は1つも通らず、herdr が落ちていれば pane の生死も引けない。
+// **そこで止まると、まさに片付けたい状態で片付けられなくなる。**調べられなかったことは
+// 段3 で1件ずつ見せ、**「失うものが無い」とは決して言わない。**消す実行では
+// `--force` を要求する（中身の分からないものを黙って消さないため）。
+// **例外は、worktree の `.git` が別のリポジトリを指していたときだけである**
+// （書き換えの痕跡なので1バイトも消さない。3-20 / 3-22）。
+//
 // **本番のボードへ書き込む経路は2つだけである**（段1 の手を離させる書き込みと、
 // 段5 の `--to`）。どちらも人間が明示した実行でしか通らない。テストは
 // httptest.Server で立てたテスト用GraphQL mock サーバに向けること。
@@ -270,7 +278,14 @@ func (r *runner) run(ctx context.Context) int {
 		return ExitOK
 	}
 	if leftover.HasLoss() && !r.opts.Force {
-		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrLossWithoutForce))
+		// **「失うものがある」と「調べられなかった」を言い分ける。**前者は中身を見て
+		// 決められるが、後者は見る手立てが無い。同じ文言で出すと、利用者は
+		// 「何が残っているのか」を探しに行ってしまう（issue #23）。
+		if len(leftover.Undetermined) > 0 {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrUndeterminedWithoutForce))
+		} else {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrLossWithoutForce))
+		}
 		return ExitStopped
 	}
 	// **動いていないと判定したときこそ pane を確かめる。**ロックファイルの場所は
@@ -340,6 +355,11 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 	var matched []workspace.ScannedWorktree
 	for _, w := range scanned {
 		if w.Err != nil {
+			// **黙って飛ばさない。**飛ばしたことを言わないと、その worktree を消しに来た
+			// 人間には「worktree はありません」としか見えず、**目の前にあるものが
+			// 無いことにされる。**消せない理由まで見せて、手で片付けられるようにする。
+			fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonIdentityUnreadable,
+				w.Path, r.deps.Workspace.IdentityPath(w.Path), w.Err))
 			r.logger.Warn("身元ファイルを読めない worktree があります（消しません）",
 				"worktree", w.Path, "error", w.Err)
 			continue
@@ -474,14 +494,24 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 //
 // **待たずに止める。**手を離させていない以上、待っても pane は閉じない。
 //
+// **herdr に問い合わせられないときは `--force` を要求する**（issue #23）。
+// herdr が落ちていると、この確かめ方そのものが成り立たない。**そこで無条件に止まると、
+// herdr ごと壊れた状況で worktree を1つも片付けられない。**`--force` は
+// 「調べられなくても消せ」という人間の明示であり、Inspect の扱いと同じにする。
+//
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 対象の worktree の絶対パス。
-// 戻り値: pane が無ければ ExitOK、1件でもあれば・herdr に問い合わせられなければ ExitStopped。
+// 戻り値: pane が無ければ ExitOK、1件でもあれば ExitStopped。
+// herdr に問い合わせられない場合は、`--force` があれば ExitOK、無ければ ExitStopped。
 func (r *runner) stopIfPaneAlive(ctx context.Context, worktreePath string) int {
 	panes, err := r.panesOf(ctx, worktreePath)
 	if err != nil {
-		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneList, err))
-		return ExitStopped
+		if !r.opts.Force {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneList, err))
+			return ExitStopped
+		}
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPaneCheckSkipped, err))
+		return ExitOK
 	}
 	if len(panes) == 0 {
 		return ExitOK
@@ -885,12 +915,20 @@ func (r *runner) printPlan(ctx context.Context, leftover *workspace.Leftover) {
 	// **数え切れなかったことを黙らない。**`git status --porcelain` の読み取りは
 	// 上限で打ち切られるので、その先に何ファイルあるかは分からない。
 	// 打ち切られた数をそのまま出すと、**失う量を実際より少なく見せる。**
-	if leftover.DirtyFilesTruncated {
+	//
+	// **git が答えられなかったときは数を出さない。**そこで `0 ファイル` と出すと、
+	// **成果の残った worktree が「失うものはありません」に見える**（issue #23）。
+	switch {
+	case leftover.DirtyFilesUnknown:
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanDirtyUnknown))
+	case leftover.DirtyFilesTruncated:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanDirtyAtLeast, leftover.DirtyFiles))
-	} else {
+	default:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanDirty, leftover.DirtyFiles))
 	}
 	switch {
+	case leftover.UnpushedUnknown:
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanUnpushedUnknown))
 	case leftover.HasUpstream:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanUnpushed, leftover.UnpushedCommits))
 	case leftover.BaseUnknown:
@@ -899,6 +937,12 @@ func (r *runner) printPlan(ctx context.Context, leftover *workspace.Leftover) {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanDiffFromBase, leftover.Base))
 	default:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanNoDiffFromBase, leftover.Base))
+	}
+
+	// **調べられなかった理由を必ず1行ずつ出す。**「失うものが無い」と読まれないように、
+	// 何を調べられなかったのかと、git が何と言ったのかをそのまま見せる。
+	for _, reason := range leftover.Undetermined {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPlanUndetermined, reason))
 	}
 
 	if r.parkDeferred {

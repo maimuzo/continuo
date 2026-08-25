@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f5354a5f2baf08d61d38315cc5f85289dd27bcc576b1f473a898f2d3488a2fe0", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "f24874fbff00aee7616714e70fda518342dfabf8b07d40101b83bb0c98468cc1", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
 // 7本のパスに、それぞれ対応するテストがある。

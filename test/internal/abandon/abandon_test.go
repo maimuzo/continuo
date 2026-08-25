@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "8306f1d31afb6787f59b1c6b7caadf3423a1d2ee48ab9669c7c3c19660cc541d", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
+// {"RUCM-CFG-SHA256": "e71f78b0dbdf74fd534caa8547349902b0b3942e58095d01643b887b28e8a003", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「着手を取り消す」のテストパスのうち、
 // **判断が分かれるところ**を通るものに、それぞれ1本以上のテストがある。
@@ -104,6 +104,105 @@ func TestAbandon_dryRunは何も消さない(t *testing.T) {
 	}
 }
 
+// {"RUCM-PATH": "P510"}
+//
+// 目的: worktree の `.git` が壊れていても、`--dry-run` が**何が消えるかを見せられる
+// 範囲で見せて終わる**ことを確認する（設計 3-4 の段3。issue #23）。
+// **これができないと、`abandon` が要るまさにその状況で `abandon` を使えない。**
+// 利用者は `fatal: invalid gitfile format` の1行だけを渡されて終わっていた。
+// **「失うものはありません」と偽ってはならない。**数えられなかったことは数えられなかったと出す。
+// 与える情報: `.git` を空・でたらめ・不在の3通りに壊した issue 188 の worktree と `--dry-run`。
+// 成功条件: 終了コードが 0、worktree のパスと branch が出ている、
+// 調べられなかったことと git の理由が出ている、**「0 ファイル」と出していない**、
+// worktree が残っている、herdr へ worktree.remove を送っていないこと。
+func TestAbandon_gitファイルが壊れていてもdryRunで消えるものを見せる(t *testing.T) {
+	for _, how := range []gitFileBreakage{gitFileEmpty, gitFileGarbage, gitFileMissing} {
+		t.Run(string(how), func(t *testing.T) {
+			fx := newFixture(t)
+			prepared := fx.Prepare(t, 188)
+			fx.BreakGitFile(t, prepared, how)
+
+			code := fx.Run(t, 188, func(opts *abandon.Options) { opts.DryRun = true })
+
+			assertExit(t, fx, code, abandon.ExitOK)
+			assertContains(t, fx, i18n.T(i18n.KeyAbandonPlanWorktree, prepared.Path))
+			assertContains(t, fx, i18n.T(i18n.KeyAbandonPlanBranch,
+				prepared.Branch.String(), prepared.Base.String()))
+			assertContains(t, fx, i18n.T(i18n.KeyAbandonPlanDirtyUnknown))
+			assertContains(t, fx, i18n.T(i18n.KeyAbandonPlanUnpushedUnknown))
+			// **git が何と言ったのかをそのまま見せる。**理由を隠すと、利用者は
+			// 何を直せばよいのかを判断できない。
+			assertContains(t, fx, ".git")
+			assertContains(t, fx, i18n.T(i18n.KeyAbandonDryRunNote))
+			if strings.Contains(fx.Output(), i18n.T(i18n.KeyAbandonPlanDirty, 0)) {
+				t.Fatalf("調べられていないのに「0 ファイル」と出している\n出力:\n%s", fx.Output())
+			}
+			assertWorktreeExists(t, fx, prepared.Path)
+			assertNoRemoval(t, fx)
+		})
+	}
+}
+
+// {"RUCM-PATH": "P485"}
+//
+// 目的: worktree の `.git` が壊れていて失うものを調べられないとき、`--force` が
+// 無ければ何も消さずに終了コード 1 で止まることを確認する（設計 3-4 の段3。issue #23）。
+// **中身が分からないものを黙って消してはならない。**
+// **「失うものがある」とは別の文言で言う。**同じ文言だと、利用者は「何が残っているのか」を
+// 探しに行ってしまうが、探す手立ては無い。
+// 与える情報: `.git` を空にした issue 188 の worktree と、`--force` を付けない実行。
+// 成功条件: 終了コードが 1、調べ切れなかったことを理由に止まった1行が出ている、
+// worktree が残っている、branch も残っている、herdr へ worktree.remove を送っていないこと。
+func TestAbandon_gitファイルが壊れていればforceなしでは消さない(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+	fx.BreakGitFile(t, prepared, gitFileEmpty)
+
+	code := fx.Run(t, 188, nil)
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrUndeterminedWithoutForce))
+	if strings.Contains(fx.Output(), i18n.T(i18n.KeyAbandonErrLossWithoutForce)) {
+		t.Fatalf("調べ切れなかったことを「失うものがある」の文言で出している\n出力:\n%s", fx.Output())
+	}
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	if !branchExists(t, fx, prepared.Branch.String()) {
+		t.Fatalf("何も消さないはずなのに branch %s が消えている", prepared.Branch.String())
+	}
+}
+
+// {"RUCM-PATH": "P466"}
+//
+// 目的: worktree の `.git` が壊れていても、`--force` を付ければ
+// **worktree のディレクトリと branch と herdr の workspace を消し切れる**ことを
+// 確認する（設計 3-4 の段4。issue #23）。
+// **`git worktree remove` はこの状態を必ず断る**（`validation failed, cannot remove
+// working tree`。実測: 2026-08-25）。**断られたまま終わると、利用者には手が無くなる。**
+// 与える情報: `.git` を空・でたらめ・不在の3通りに壊した issue 188 の worktree と `--force`。
+// 成功条件: 終了コードが 0、worktree のディレクトリが消えている、branch が消えている、
+// herdr の workspace が1つも残っていないこと。
+func TestAbandon_gitファイルが壊れていてもforceで消し切る(t *testing.T) {
+	for _, how := range []gitFileBreakage{gitFileEmpty, gitFileGarbage, gitFileMissing} {
+		t.Run(string(how), func(t *testing.T) {
+			fx := newFixture(t)
+			prepared := fx.Prepare(t, 188)
+			fx.BreakGitFile(t, prepared, how)
+
+			code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+			assertExit(t, fx, code, abandon.ExitOK)
+			assertWorktreeGone(t, fx, prepared.Path)
+			if branchExists(t, fx, prepared.Branch.String()) {
+				t.Fatalf("worktree を消したのに branch %s が残っている", prepared.Branch.String())
+			}
+			if ids := fx.Herdr.OpenWorkspaceIDs(); len(ids) != 0 {
+				t.Fatalf("herdr の workspace が閉じていない: %v\n出力:\n%s", ids, fx.Output())
+			}
+		})
+	}
+}
+
 // {"RUCM-PATH": "P485"}
 //
 // 目的: 未コミットの変更が残っているとき、`--force` が無ければ何も消さずに
@@ -149,6 +248,77 @@ func TestAbandon_forceを付ければ未コミットの変更があっても消�
 	if branchExists(t, fx, prepared.Branch.String()) {
 		t.Fatalf("worktree を消したのに branch %s が残っている", prepared.Branch.String())
 	}
+}
+
+// {"RUCM-PATH": "P466"}
+//
+// 目的: herdr へ pane の一覧を問い合わせられなくても、`--force` があれば
+// 片付けを最後まで通すことを確認する（設計 3-4 の段4 の前。issue #23）。
+// **herdr ごと落ちている状況で worktree を1つも片付けられないのでは、
+// 壊れた状態を片付ける道具として成り立たない。**
+// **確かめずに消したことは必ず言う。**黙って消すと、利用者は pane の生死が
+// 確認済みだと思い込む。
+// 与える情報: 誰も掴んでいないロックファイル、繋がらない herdr の socket、`--force`。
+// 成功条件: 終了コードが 0、確かめずに消したことを伝える1行が出ている、
+// worktree が消えていること。
+func TestAbandon_herdrに繋げなくてもforceがあれば片付ける(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+	// **worktree を用意したあとで socket を落とす。**用意の段階では herdr が要る。
+	unreachable := fx.CloseHerdr(t)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitOK)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonPaneCheckSkipped, unreachable))
+	assertWorktreeGone(t, fx, prepared.Path)
+}
+
+// {"RUCM-PATH": "P473"}
+//
+// 目的: herdr へ pane の一覧を問い合わせられず、`--force` も無いときは、
+// **これまでどおり何も消さずに止まる**ことを確認する（設計 3-4 の段4 の前）。
+// **確かめられないまま消してよいと決めるのは人間である。**
+// 与える情報: 誰も掴んでいないロックファイル、繋がらない herdr の socket、
+// `--force` を付けない実行。
+// 成功条件: 終了コードが 1、問い合わせられない理由が出ている、worktree が残っていること。
+func TestAbandon_herdrに繋げずforceも無ければ消さない(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+	unreachable := fx.CloseHerdr(t)
+
+	code := fx.Run(t, 188, nil)
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneList, unreachable))
+	assertWorktreeExists(t, fx, prepared.Path)
+}
+
+// {"RUCM-PATH": "P617"}
+//
+// 目的: 身元ファイルを読めない worktree を候補から外したことを、**人間に見せる**ことを
+// 確認する（設計 3-4 の段2。issue #23）。
+// **黙って飛ばすと「worktree はありません」としか見えない。**目の前にあるものが
+// 無いことにされ、利用者は次に何をすればよいかを判断できない。
+// 与える情報: 身元ファイルの JSON を壊した issue 188 の worktree。
+// 成功条件: 終了コードが 0、飛ばした worktree のパスと身元ファイルのパスが出ている、
+// worktree が残っている、herdr へ worktree.remove を送っていないこと。
+func TestAbandon_身元ファイルを読めないworktreeを飛ばしたことを言う(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+	identityPath := fx.Manager.IdentityPath(prepared.Path)
+	if err := os.WriteFile(identityPath, []byte("{壊れた JSON"), 0o600); err != nil {
+		t.Fatalf("身元ファイルを壊せません: %v", err)
+	}
+
+	code := fx.Run(t, 188, nil)
+
+	assertExit(t, fx, code, abandon.ExitOK)
+	assertContains(t, fx, prepared.Path)
+	assertContains(t, fx, identityPath)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonNotFound, issueURL(188)))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
 }
 
 // {"RUCM-PATH": "P466"}
@@ -533,14 +703,20 @@ func TestAbandon_pane待ちを中断されたら何も消さない(t *testing.T)
 // 止まることを確認する（設計 3-4 の段4 と段5）。
 // **段5 は段4 が済んだときだけ走る。**worktree が残っているのに「片付けたあとの
 // Status」へ動かすと、ボードの上では終わったことになって人間の目から消える。
+//
+// **herdr にエラーを返させるだけでは足りない。**herdr が断ったときは、continuo が
+// worktree の実体を自分で消しにいく（issue #23）。**その手も塞いで初めて
+// 「本当に片付けられなかった」状態になる。**ここでは worktree のディレクトリから
+// 書き込みの権限を落として、実体を1つも消せなくする。
 // 与える情報: issue 188 の worktree、`worktree.remove` にエラーを返す
-// テスト用herdr mock、`--to Ice Box`。
+// テスト用herdr mock、書き込みできない worktree のディレクトリ、`--to Ice Box`。
 // 成功条件: 終了コードが 1、worktree が残っている、ボードへの書き込みが0件、
 // 片付けに失敗した理由が出ていること。
 func TestAbandon_片付けに失敗したらStatusを動かさない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
 	fx.Herdr.SetWorktreeRemoveError("internal_error", "worktree を消せません")
+	freezeDir(t, prepared.Path)
 
 	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.ToState = "Ice Box" })
 
