@@ -60,6 +60,10 @@ type PaneLister interface {
 type Workspace interface {
 	// Scan は置き場所を走査し、身元ファイルを持つ worktree の一覧を返す。
 	Scan() ([]workspace.ScannedWorktree, error)
+	// ScanUnidentified は置き場所を走査し、**身元ファイルが無いディレクトリ**を返す。
+	// **Scan の結果には入らないものである。**着手の途中で落ちるとこの状態ができるので、
+	// 「判断できないもの」として数える（issue #27）。
+	ScanUnidentified() ([]string, error)
 	// Inspect は消さずに、失われるものだけを調べる。
 	Inspect(ctx context.Context, req workspace.CleanupRequest) (*workspace.Leftover, error)
 	// Cleanup は worktree・pane・herdr workspace・branch を片付ける。
@@ -69,6 +73,11 @@ type Workspace interface {
 	// OwnerRepoOf は worktree のパスから owner とリポジトリ名を取り出す。
 	// **身元ファイルを読まない**（エージェントが書き換えられるため）。
 	OwnerRepoOf(worktreePath string) (string, string, error)
+	// FindIssueBranch は、issue に対応する branch が clone に残っていないかを調べる。
+	// **worktree が1つも無いときに使う**（issue #27）。1文字も書き換えない。
+	FindIssueBranch(ctx context.Context, issue workspace.IssueRef) (workspace.IssueBranch, error)
+	// DeleteIssueBranch は FindIssueBranch が実在すると答えた branch を消す。
+	DeleteIssueBranch(ctx context.Context, branch workspace.IssueBranch) error
 }
 
 // Deps は abandon が外部へ繋ぐ処理である。

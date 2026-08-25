@@ -159,6 +159,22 @@ continuo abandon https://github.com/octocat/hello-world/issues/42              #
 
 **If there is anything to lose, it deletes nothing and stops.** Add `--force` if you want it gone anyway.
 
+**A leftover branch is cleaned up even when the worktree is gone.** If starting the issue failed part-way,
+**the branch can be all that is left**. `abandon` builds the branch name from `herdr.worktree.branch_template`
+and the URL you gave it, and reports the name, the repository, the tip commit and **how many of its
+commits are on no remote** if it is still there.
+**Deleting it needs `--force`** — with no worktree there is no way to tell whether uncommitted edits were left behind.
+When it is deleted you get the command to bring it back (`git -C <clone> branch <name> <sha>`).
+
+**If git refuses because a worktree is using the branch, it stops there.** continuo never runs
+`git worktree prune` on your behalf: **the directory that registration points at may have been moved,
+not deleted.** You are told where the registration points and how to clean it up
+(`git -C <clone> worktree prune`) before trying again.
+
+**A branch that never existed is never reported as "left behind".** If the branch was never created,
+you are told there was nothing to delete. **Only when the repository cannot be named** — so existence
+cannot be checked — is it reported as a leftover, as before.
+
 **A broken worktree is still cleanable.** A worktree's `.git` is a one-line file, and if it is emptied, overwritten or removed, every `git` command inside that worktree fails. **`abandon` does not stop there** — that is exactly the state you wanted it for. It shows what it *can* see, lists what it could not work out and why, and **never claims there is nothing to lose**. Since it cannot see inside, **the real run asks for `--force`**, and with it the worktree directory, the branch and the herdr workspace all go away without git's help.
 
 **The same applies when herdr does not answer.** Without `--force` it still refuses to delete while it cannot check for a live pane; with `--force` it says out loud that it skipped the check. **The one thing it never degrades on is a worktree whose `.git` points at a *different* repository** — that is a sign of tampering, not of breakage, so it deletes nothing at all.

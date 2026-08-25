@@ -10,7 +10,8 @@
 - `docs/plans/continuo_design.md#3-22`（worktree の置き場所は gwq の規則に合わせる）
 - `docs/plans/continuo_design.md#4-1`（worktree を消す契機は Done だけにする）
 - `docs/plans/continuo_design.md#8-1`（branch を消す。仕様は workspace のディレクトリだけを消す）
-- `internal/workspace/cleanup.go` の `ShouldCleanup`、`Cleanup`、`effectiveBase`、`resolveWorkspaceID`
+- `internal/workspace/cleanup.go` の `ShouldCleanup`、`Cleanup`、`effectiveBase`、`resolveWorkspaceID`、`deletableBranch`
+- `internal/workspace/git.go` の `gitBranchExists`
 - `internal/workspace/sweep.go` と `internal/workspace/scan.go`
 - `internal/orchestrator/reconcile.go` の `reconcileWorktrees`、`closeOrphanPane`
 - `internal/orchestrator/lifecycle.go` の `cleanupWorktree`、`cleanupPath`
@@ -36,17 +37,21 @@ BASIC FLOW:
 7. システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。
 8. システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。
 9. システムは workspace_hooks の before_remove を実行する。
-10. システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。
+10. システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消し、実体の無い登録がその1件だけであれば git の worktree の登録を掃除する。
 11. IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN
 12.   システムは herdr に workspace の一覧を要求する。
 13.   IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN
 14.     システムは herdr にリポジトリの親 workspace を閉じることを要求する。
 15.   ENDIF
 16. ENDIF
-17. システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。
-18. システムは issue ごとの Claude Code の設定ファイルを消す。
-19. システムは利用者に片付けの完了をログで応答する。
-POSTCONDITION: worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
+17. IF 身元ファイルに書かれた branch がリポジトリに実在する THEN
+18.   システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。
+19. ELSE
+20.   システムは branch を消す対象が無かったものとして扱い、残ったものに数えない。
+21. ENDIF
+22. システムは issue ごとの Claude Code の設定ファイルを消す。
+23. システムは利用者に片付けの完了をログで応答する。
+POSTCONDITION: worktree は置き場所に無い。branch は無い（元から無かった場合を含む）。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW 片付けの対象外:
 RFS BASIC FLOW 5
@@ -83,13 +88,13 @@ POSTCONDITION: worktree は残っている。branch は残っている。issue �
 
 GLOBAL ALTERNATIVE FLOW 壊れたref:
 BRANCH FROM BASIC FLOW 17
-WHEN branch の ref が読めず git が branch を消せない場合
+WHEN branch の ref が読めず git が branch の実在にも削除にも答えられない場合
 1. システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。
 2. システムは壊れた ref のファイルを1つ消す。
 3. システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。
 4. システムは VALIDATES THAT 消したあとに branch が残っていない。
 5. システムは branch の始末の結果を利用者に応答する。
-6. RESUME STEP 18
+6. RESUME STEP 22
 POSTCONDITION: branch は無い。壊れた ref のファイルは消えている。packed-refs は書き換えていない。
 
 SPECIFIC ALTERNATIVE FLOW 消さないref:
@@ -137,9 +142,14 @@ POSTCONDITION: worktree は残っている。branch は残っている。issue �
 **断られたまま終わると、その worktree だけが永久に残る。**
 
 **採る扱い。**要求が断られたときと、**断られていないのに実体が残っているとき**は、
-worktree のディレクトリを自分で消し、`git worktree prune` で登録を落とし、
-残った herdr workspace を `workspace.close` で閉じる（ステップ10）。
+worktree のディレクトリを自分で消し、残った herdr workspace を `workspace.close` で閉じる
+（ステップ10）。
 **消えたかどうかは必ず自分で確かめる。**herdr も git も「消した」と答えて消えていないことがある。
+
+**`git worktree prune` は、実体の無い登録がその1件だけのときにしか撃たない。**
+prune はリポジトリ全体に効くので、**利用者がディレクトリごと移した worktree の登録も
+一緒に落とす。**落とされた側の branch は git に守られなくなり、あとの `git branch -D` が
+通ってしまう。ほかにもあるなら撃たず、**登録が残ったことと、掃除するコマンドを画面へ出す。**
 
 **リポジトリを検算できないときは branch に触らない。**clone を人間が移した・消した環境では、
 どの branch を消してよいかを確かめる手立てが無い。**worktree のディレクトリと
@@ -149,11 +159,17 @@ herdr workspace はリポジトリを知らなくても消せる**ので、そ�
 
 **言いたいこと。**`refs/heads/<branch>` のファイルが読めない状態になっていると、
 `git branch -D` は `error: branch '<名前>' not found` で断る。**その branch は誰にも消せない。**
-そこでステップ17 は、ファイルとして消す経路を持つ（設計 [3-22b](../../../plans/continuo_design.md)）。
+そこでステップ18 は、ファイルとして消す経路を持つ（設計 [3-22b](../../../plans/continuo_design.md)）。
 
 **消してよい条件は設計 3-22b にある5つで、全部を満たすときだけ消す。**
 とくに `herdr.worktree.branch_template` から作った接頭辞で始まる名前だけを対象にし、
 **packed-refs は1バイトも触らない。**
+
+**壊れた ref を「実在しない」と読み替えてはならない。**ステップ17 の実在の検査
+（`git show-ref --verify --quiet refs/heads/<名前>`）は、**壊れた ref にも
+終了コード 1 を返す**（実測: 2026-08-25、git 2.50.1）。**そこを「元から無かった」に
+丸めると、壊れた ref のファイルが誰にも消されないまま残る。**そこで実在の検査が
+「無い」と答えたときは、**壊れた ref かどうかを先に見てから**答えを決める。
 
 **ref が壊れていると、branch の検算そのものが答えを出せない。**
 `git worktree list --porcelain` はその worktree について
@@ -193,6 +209,25 @@ detached でもない」ときに限り、壊れた ref の判定を検算の答
 **その値は herdr の現物と突き合わせてから使う**（worktree の直下にあり、エージェントが
 書き換えられるため）。
 
+## 実在しない branch を「残っている」と言わない
+
+**言いたいこと。**着手が `git worktree add` で失敗し続けると、**ディレクトリだけが残って
+branch は1度も作られない。**そこを片付けたとき「branch が残っています」と出すと、
+**利用者は存在しないものを探して消しに行く**（issue #27）。
+
+**採る扱い。**`git branch -D` に渡す前に `git show-ref --verify refs/heads/<名前>` で
+**実在するかを見る**（ステップ17）。
+
+| 実在するか | どうするか |
+| --- | --- |
+| 実在しない | **残ったものに数えない。**画面にも出さない（消す対象が無かっただけである） |
+| 実在する | いままでどおり現物と突き合わせ、消せなければ理由を出す |
+| **確かめられない**（リポジトリを名指しできない・git が答えない） | **「無い」とは言わない。**いままでどおり残ったものとして出す |
+| **ref が壊れている** | **「無い」とは言わない。**壊れた ref のファイルとして片付ける（上の節） |
+
+**`cleanup.delete_branch` が false でも同じである。**設定で消さないことにしていても、
+**元から無いものを「残っています」と言う理由は無い。**
+
 ## 片付けが始まる契機は3つある
 
 | 契機 | 誰が起こすか | 参照 |
@@ -214,14 +249,17 @@ flowchart TD
     B7{"7. VALIDATES THAT コミットされていない変更がなく判定ができている"}
     B8{"8. VALIDATES THAT push されていない成果がなく判定ができている"}
     B9["9. workspace_hooks の before_remove を実行する"]
-    B10["10. worktree の削除を要求し残っていれば自分で消して登録を掃除する"]
+    B10["10. worktree の削除を要求し残っていれば自分で消し登録がその1件だけなら掃除する"]
     B11{"11. IF 開かせた親 workspace を控えてある"}
     B12["12. workspace の一覧を要求する"]
     B13{"13. IF 控えた ID が現物と一致し、同じリポジトリの worktree が残っていない"}
     B14["14. リポジトリの親 workspace を閉じることを要求する"]
-    B17["17. リポジトリ側で branch の現物を確かめて削除を要求する"]
-    B18["18. issue ごとの設定ファイルを消す"]
-    B19["19. 片付けの完了をログで応答する"]
+    B17{"17. IF 身元ファイルの branch がリポジトリに実在する"}
+    B18["18. リポジトリ側で branch の現物を確かめて削除を要求する"]
+    B20["20. 消す対象が無かったものとして扱い残ったものに数えない"]
+    B21["21. ENDIF"]
+    B22["22. issue ごとの設定ファイルを消す"]
+    B23["23. 片付けの完了をログで応答する"]
     BPOST(["POSTCONDITION worktree と branch が無い"])
 
     B1 --> B2 --> B3 --> B4 --> B5
@@ -237,9 +275,11 @@ flowchart TD
     B11 -- 真 --> B12 --> B13
     B13 -- 偽 --> B17
     B13 -- 真 --> B14 --> B17
-    B17 --> B18 --> B19 --> BPOST
+    B17 -- 真 --> B18 --> B21
+    B17 -- 偽 --> B20 --> B21
+    B21 --> B22 --> B23 --> BPOST
     B5 -. "片付けの無効: WHEN cleanup.enabled が false の場合" .-> G1S1
-    B17 -. "壊れたref: WHEN ref が読めず branch を消せない場合" .-> G2S1
+    B17 -. "壊れたref: WHEN ref が読めず branch の実在にも削除にも答えられない場合" .-> G2S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 片付けの対象外 / RFS BASIC FLOW 5"]
         F1S1["1. worktree を残す"] --> F1S2["2. workspace の pane の一覧を要求する"] --> F1S3{"3. IF active_states に戻っていて pane に agent がいる"}
@@ -267,7 +307,7 @@ flowchart TD
     subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 17"]
         G2S1{"1. VALIDATES THAT continuo の接頭辞で始まる refs/heads の下の通常のファイルで中身が読めない"}
         G2S1 -- 真 --> G2S2["2. 壊れた ref のファイルを1つ消す"] --> G2S3["3. 消したパスと消す前の commit と理由を応答する"] --> G2S4{"4. VALIDATES THAT 消したあとに branch が残っていない"}
-        G2S4 -- 真 --> G2S5["5. branch の始末の結果を応答する"] --> G2S6["6. RESUME STEP 18"]
+        G2S4 -- 真 --> G2S5["5. branch の始末の結果を応答する"] --> G2S6["6. RESUME STEP 22"]
     end
 
     subgraph SAF5 ["SPECIFIC ALTERNATIVE FLOW 消さないref / RFS 壊れたref 1"]
@@ -282,7 +322,7 @@ flowchart TD
     F5S2 --> G2S5
     G2S4 -- 偽 --> F6S1
     F6S3 --> G2S6
-    G2S6 --> B18
+    G2S6 --> B22
 ```
 
 ## シーケンス図
@@ -327,8 +367,12 @@ sequenceDiagram
                     S->>H: リポジトリの親 workspace の close を要求する
                 end
             end
-            S->>G: branch の削除を要求する
-            opt branch の ref が読めず git が消せない
+            S->>G: branch がリポジトリに実在するかを要求する
+            G-->>S: 実在するかどうかを応答する
+            opt branch が実在する
+                S->>G: branch の削除を要求する
+            end
+            opt branch の ref が読めず git が実在にも削除にも答えられない
                 S->>S: 消す前の commit を reflog から控え、壊れた ref のファイルを1つ消す
                 S->>G: branch がまだ残っていないかの確認を要求する
                 S-->>T: 消したパスと消す前の commit と、残った branch を応答する

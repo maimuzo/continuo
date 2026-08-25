@@ -7,6 +7,7 @@
 //
 //	段1 continuo が動いているかを調べ、動いていれば手を離させる
 //	段2 issue の URL から worktree を探す（**身元ファイルの issue_url で照合し、パスで検算する**）
+//	段2b worktree が0件なら、規則から組み立てた branch が残っていないかを見て片付ける
 //	段2の後 これから書きうる Status の値を確かめる（**消す前に確かめる。--dry-run でも通る**）
 //	段3 失われるものを調べて見せる（--dry-run はここで終わる）
 //	段4 消す（**その前に、動いていないのに pane が生きていないかを確かめる**）
@@ -158,6 +159,9 @@ type runner struct {
 	// removed は worktree を実際に消したかどうかである。
 	// **消せたなら段5 が Status について応答するので、park の言い添えは出さない。**
 	removed bool
+	// noWorktree は、この issue に一致する worktree が1つも無かったことを表す。
+	// **段2b（残った branch の片付け）へ進む合図である**（issue #27）。
+	noWorktree bool
 }
 
 // Run は `continuo abandon` の段1〜段5 を通す。
@@ -243,6 +247,10 @@ func (r *runner) run(ctx context.Context) int {
 	// 段2: worktree を探す。**待つ相手も消す相手も、ここで決まる。**
 	found, code := r.find()
 	if found == nil {
+		// 段2b: worktree が無くても、残った branch は片付ける（issue #27）。
+		if r.noWorktree {
+			return r.abandonOrphanBranch(ctx)
+		}
 		return code
 	}
 
@@ -342,9 +350,11 @@ func (r *runner) isRunning() (bool, Unlocker, error) {
 //
 // **身元ファイルが壊れていた worktree は候補にしない。**照合する鍵が読めないためである。
 // **消しもしない**（3-4 の段2）。何があったかは1行残す。
+// **身元ファイルが1つも無いディレクトリも同じ扱いである**（ScanUnidentified）。
 //
 // 戻り値の1つ目: 見つかった worktree。見つからなかった場合と2つ以上あった場合は nil。
 // 戻り値の2つ目: nil を返すときの終了コード。**0件は ExitOK である**（消すものが無い）。
+// **0件のときは runner.noWorktree を真にする**（呼び出し側が段2b へ進む）。
 func (r *runner) find() (*workspace.ScannedWorktree, int) {
 	scanned, err := r.deps.Workspace.Scan()
 	if err != nil {
@@ -353,6 +363,30 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 	}
 
 	var matched []workspace.ScannedWorktree
+	// **判断を保留した worktree があったかどうかを数える。**あったなら、この issue の
+	// branch はその worktree のものかもしれない。**段2b（残った branch の片付け）へ
+	// 進んではならない**（issue #27）。
+	undecided := 0
+
+	// **身元ファイルが1つも無いディレクトリも、判断できないものとして数える。**
+	// 着手は worktree を作ってから身元ファイルを書くので（3-16 の段6〜段9）、
+	// **その間で落ちるとこの状態ができる。**Scan はこれを結果に含めない
+	// （人間が置いた worktree かもしれないため）ので、別の口で数えなければ
+	// 「保留したものは1つも無い」と見えてしまう。
+	unidentified, err := r.deps.Workspace.ScanUnidentified()
+	if err != nil {
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrScan, err))
+		return nil, ExitStopped
+	}
+	for _, path := range unidentified {
+		// **黙って飛ばさない。**身元ファイルを読めない worktree と同じ扱いである。
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonIdentityMissing,
+			path, r.deps.Workspace.IdentityPath(path)))
+		r.logger.Warn("身元ファイルが無いディレクトリがあります（消しません）",
+			"worktree", path, "identity_path", r.deps.Workspace.IdentityPath(path))
+		undecided++
+	}
+
 	for _, w := range scanned {
 		if w.Err != nil {
 			// **黙って飛ばさない。**飛ばしたことを言わないと、その worktree を消しに来た
@@ -362,15 +396,18 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 				w.Path, r.deps.Workspace.IdentityPath(w.Path), w.Err))
 			r.logger.Warn("身元ファイルを読めない worktree があります（消しません）",
 				"worktree", w.Path, "error", w.Err)
+			undecided++
 			continue
 		}
 		if w.Identity == nil {
+			undecided++
 			continue
 		}
 		if !r.issue.SameIssue(w.Identity.IssueURL) {
 			continue
 		}
 		if !r.pathAgrees(w) {
+			undecided++
 			continue
 		}
 		matched = append(matched, w)
@@ -379,12 +416,17 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 	switch len(matched) {
 	case 0:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonNotFound, r.issue.URL))
-		// **`--to` を黙って捨てない。**指定した人間は「動いた」と受け取るが、
-		// ここで終わるとボードには1文字も書かれない。
-		// **代わりに段5 を通すことはしない。**worktree が無い理由は「もう片付けた」とは
-		// 限らず、**URL の打ち間違い**でもある。打ち間違えた相手の Status を動かすほうが害が大きい。
-		if target := strings.TrimSpace(r.opts.ToState); target != "" {
-			fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonToSkipped, target))
+		// **worktree が無くても、まだ終わりではない**（issue #27）。**片付けの途中で
+		// 失敗すると branch だけが残る。**worktree を起点にしか探さないと、
+		// そのあと何度叩いてもここで終わり、利用者は手で消すしかなくなる。
+		//
+		// **ただし、判断を保留した worktree が1つでもあれば進まない。**身元ファイルを
+		// 読めなかった worktree は、この issue のものかもしれない。**その branch は
+		// 孤児ではなく、生きている worktree のものである。**
+		if undecided == 0 {
+			r.noWorktree = true
+		} else {
+			r.reportToSkipped()
 		}
 		return nil, ExitOK
 	case 1:
@@ -430,6 +472,112 @@ func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
 		"worktree", w.Path, "path_owner", owner, "path_repo", repo,
 		"issue_url", w.Identity.IssueURL)
 	return false
+}
+
+// abandonOrphanBranch は、worktree が1つも無いときに残った branch を片付ける（段2b。issue #27）。
+//
+// **なぜ要るか。**`abandon` は worktree を起点に対象を探す。**片付けの途中で失敗して
+// branch だけが残ると、もう一度叩いても「この issue の worktree はありません」で終わる。**
+// 利用者には手で `git branch -D` を叩く以外の手が無くなる。
+//
+// **消す相手は、身元ファイルではなく規則から決める。**読む worktree がもう無いので、
+// 利用者が打った issue の URL と設定の `branch_template` から名前を組み立て、
+// `ghq` が答えた clone を宛先にする（workspace.FindIssueBranch）。
+// **どれもエージェントが書き換えられない値である。**
+//
+// **消すには `--force` が要る。**worktree が無いので、コミットしていない編集が
+// 残っていたかどうかは調べようがない。**調べられないものを黙って消さない**という
+// 段3 と同じ扱いにする。消したときは戻すためのコマンド（`git branch <名前> <SHA>`）を
+// 1行で出す。
+//
+// **未 push の commit は数えて見せる。**worktree が無くても
+// `git rev-list --count <branch> --not --remotes` は答える（3-37-9）。
+// **`--force` を求める前に出す**ので、`--dry-run` でも見える。
+//
+// **Status は動かさない。**worktree が無い実行で `--to` を通さないのは、
+// **URL の打ち間違いと区別できないから**である（find を見よ）。branch を1本消しても、
+// その issue をボードでどこへ置くべきかは決まらない。
+//
+// ctx: 実行に適用するコンテキスト。
+// 戻り値: 終了コード。**消した・消すものが無かった・`--dry-run` は ExitOK である。**
+// **`--force` が無くて消さなかった場合と、消せなかった場合は ExitStopped である。**
+func (r *runner) abandonOrphanBranch(ctx context.Context) int {
+	branch, err := r.deps.Workspace.FindIssueBranch(ctx, workspace.IssueRef{
+		URL:        r.issue.URL,
+		Identifier: r.issue.Identifier(),
+		Owner:      r.issue.Owner,
+		Repo:       r.issue.Repo,
+		Number:     r.issue.Number,
+	})
+	if err != nil {
+		// **「残っている」とも「無い」とも言わない。**調べられなかっただけである。
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchUnknown, err))
+		r.reportToSkipped()
+		return ExitOK
+	}
+	if !branch.Exists {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchNone, branch.Name.String()))
+		r.reportToSkipped()
+		return ExitOK
+	}
+
+	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchFound,
+		branch.Name.String(), branch.RepoDir, branch.Tip))
+	// **失うものを、`--force` を求める前に見せる**（3-37-9）。
+	// **数えられなかったことを 0 件として見せない。**
+	switch {
+	case branch.UnpushedErr != nil:
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchUnpushedUnknown, branch.UnpushedErr))
+	case branch.Unpushed > 0:
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchUnpushed, branch.Unpushed))
+	}
+
+	switch {
+	case r.opts.DryRun:
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonDryRunNote))
+		r.reportToSkipped()
+		return ExitOK
+	case !r.cfg.Cleanup.DeleteBranch:
+		// **`abandon --force` でも `cleanup.delete_branch` は越えない。**
+		// worktree がある経路（workspace.Cleanup）が越えないので、ここだけ越えると
+		// 「worktree があると残るが、無いと消える」という筋の通らない差が生まれる。
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchDisabled,
+			branch.Name.String(), branch.RepoDir, branch.Name.String()))
+		r.reportToSkipped()
+		return ExitOK
+	case !r.opts.Force:
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrOrphanBranchWithoutForce, branch.Name.String()))
+		return ExitStopped
+	}
+
+	if err := r.deps.Workspace.DeleteIssueBranch(ctx, branch); err != nil {
+		// **git が「worktree が使っている」と断ったときは、そのまま見せる**（3-37-9b）。
+		// **一般の案内を添えてはならない。**手で `git branch -D` を叩いても同じ理由で
+		// 断られる。叩くべきコマンド（`git worktree prune`）はエラーの中に入っている。
+		if errors.Is(err, workspace.ErrBranchUsedByWorktree) {
+			fmt.Fprintln(r.errOut, err)
+			return ExitStopped
+		}
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrOrphanBranchDeleteFailed,
+			branch.Name.String(), err, branch.RepoDir, branch.Name.String()))
+		return ExitStopped
+	}
+	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchRemoved,
+		branch.Name.String(), branch.RepoDir, branch.RepoDir, branch.Name.String(), branch.Tip))
+	r.reportToSkipped()
+	return ExitOK
+}
+
+// reportToSkipped は、`--to` を指定されたのに Status を動かさなかったことを言う。
+//
+// **`--to` を黙って捨てない。**指定した人間は「動いた」と受け取るが、
+// worktree が無い経路ではボードに1文字も書かれない。
+// **代わりに段5 を通すことはしない。**worktree が無い理由は「もう片付けた」とは限らず、
+// **URL の打ち間違い**でもある。打ち間違えた相手の Status を動かすほうが害が大きい。
+func (r *runner) reportToSkipped() {
+	if target := strings.TrimSpace(r.opts.ToState); target != "" {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonToSkipped, target))
+	}
 }
 
 // verifyTargets は、これから書きうる Status の値を消す前に確かめる（段2 の直後）。
@@ -758,6 +906,10 @@ func (r *runner) remove(ctx context.Context, worktreePath string, leftover *work
 	//
 	// **残ったものが1件も無ければ branch も消えている。**branch が残る経路は
 	// 3つ（設定で無効・検算に落ちた・`git branch -D` が失敗）あり、**どれも Leftovers を積む。**
+	//
+	// **例外は「branch がリポジトリに実在しなかった」場合である**（issue #27）。
+	// 消す対象が無かっただけなので残ったものには積まないが、**「消しました」とも言わない。**
+	//
 	// **continuo が自分で行ったことは、残ったものと別に必ず出す**（issue #28）。
 	// 壊れた ref のファイルを1つ消したことがここに入る。**`.git` の中のファイルを
 	// continuo が消したという事実を、人間が知る手立てを画面に残す。**
@@ -765,6 +917,10 @@ func (r *runner) remove(ctx context.Context, worktreePath string, leftover *work
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonNotice, notice))
 	}
 	if len(result.Leftovers) == 0 {
+		if result.BranchAbsent {
+			fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRemovedBranchAbsent, worktreePath, branch))
+			return ExitOK
+		}
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRemoved, worktreePath, branch))
 		return ExitOK
 	}

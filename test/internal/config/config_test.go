@@ -237,14 +237,14 @@ func TestLoad_チルダユーザー形式はエラーになる(t *testing.T) {
 // 成功条件: config.Load が成功し、branch_template の値がまったく変化していないこと
 // （$ を含んでいてもエラーにならないことも含めて確認する）。
 func TestLoad_branch_templateには展開を適用しない(t *testing.T) {
-	front := validFrontMatter + "herdr:\n  worktree:\n    branch_template: \"continuo/{{.issue.owner}}/$literal/not-expanded\"\n"
+	front := validFrontMatter + "herdr:\n  worktree:\n    branch_template: \"continuo/{{.issue.owner}}/$literal/not-expanded/{{.issue.number}}\"\n"
 	path := writeWorkflow(t, front, "")
 
 	loaded, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("展開対象外のキーなのにエラーになった: %v", err)
 	}
-	want := "continuo/{{.issue.owner}}/$literal/not-expanded"
+	want := "continuo/{{.issue.owner}}/$literal/not-expanded/{{.issue.number}}"
 	if loaded.Config.Herdr.Worktree.BranchTemplate != want {
 		t.Fatalf("branch_template が変化してしまった: got %q, want %q", loaded.Config.Herdr.Worktree.BranchTemplate, want)
 	}

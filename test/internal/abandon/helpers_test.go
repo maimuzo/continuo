@@ -609,6 +609,15 @@ type testRepo struct {
 	Base string
 }
 
+// ghqAnswer は `ghq list -p -e <owner>/<repo>` の代わりに返す答えである。
+//
+// **テストの途中で差し替えられるようにポインタで持つ。**worktree を用意したあとで
+// 「clone が手元から無くなった」状態を作るのに要る（残った branch を調べられない経路）。
+type ghqAnswer struct {
+	// Path は答えるパスである。**空文字は「clone が無い」を表す。**
+	Path string
+}
+
 // newTestRepo は bare リポジトリと、初期コミットを1つ持つ clone を作る。
 //
 // t: 呼び出し元のテスト。
@@ -678,6 +687,9 @@ type fixture struct {
 	LockPath string
 	// SettingsRoot は issue ごとの設定ファイルの置き場所である（設計 3-12）。
 	SettingsRoot string
+	// Ghq は `ghq list -p -e` の代わりに返す答えである。
+	// **空文字にすると「clone が手元に無い」状態になる**（残った branch を調べられない）。
+	Ghq *ghqAnswer
 	// Out は abandon が人間に見せた出力である。
 	Out bytes.Buffer
 	// Err は abandon が止まった理由の出力である。
@@ -697,6 +709,19 @@ type fixture struct {
 // 戻り値: abandon を走らせるための一式。
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return newFixtureWithConfig(t, "")
+}
+
+// newFixtureWithConfig は WORKFLOW.md に設定を1ブロック足した一式を用意する。
+//
+// **既定の設定では通らない分岐を確かめるために要る**（`cleanup.delete_branch` を
+// 偽にした環境など）。
+//
+// t: 呼び出し元のテスト。
+// extra: WORKFLOW.md の front matter へ足す YAML（最上位のキーから書くこと）。
+// 戻り値: abandon を走らせるための一式。
+func newFixtureWithConfig(t *testing.T, extra string) *fixture {
+	t.Helper()
 
 	// **socket のパスを短く保つ**（macOS の Unix domain socket の上限は103バイト）。
 	root, err := os.MkdirTemp("", "cabd")
@@ -713,18 +738,19 @@ func newFixture(t *testing.T) *fixture {
 	fake := newFakeHerdr(t, root, repo.Dir)
 
 	workflowPath := filepath.Join(root, "WORKFLOW.md")
-	writeWorkflow(t, workflowPath, filepath.Join(root, "wt"), fake.SocketPath)
+	writeWorkflow(t, workflowPath, filepath.Join(root, "wt"), fake.SocketPath, extra)
 	loaded, err := config.Load(workflowPath)
 	if err != nil {
 		t.Fatalf("WORKFLOW.md を読めません: %v", err)
 	}
 
 	settingsRoot := filepath.Join(root, "issues")
+	ghq := &ghqAnswer{Path: repo.Dir}
 	mgr, err := workspace.New(workspace.Options{
 		Config:       loaded.Config,
 		Herdr:        fake.Client(),
 		HomeDir:      filepath.Join(root, "home"),
-		GhqList:      func(_ context.Context, _, _ string) (string, error) { return repo.Dir, nil },
+		GhqList:      func(_ context.Context, _, _ string) (string, error) { return ghq.Path, nil },
 		SettingsRoot: settingsRoot,
 	})
 	if err != nil {
@@ -742,6 +768,7 @@ func newFixture(t *testing.T) *fixture {
 		Clock:        &fakeClock{now: time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)},
 		LockPath:     filepath.Join(root, "continuo.lock"),
 		SettingsRoot: settingsRoot,
+		Ghq:          ghq,
 	}
 }
 
@@ -754,7 +781,8 @@ func newFixture(t *testing.T) *fixture {
 // path: 書き出す WORKFLOW.md の絶対パス。
 // worktreeRoot: worktree の置き場所。
 // socketPath: テスト用herdr mock の socket のパス。
-func writeWorkflow(t *testing.T, path, worktreeRoot, socketPath string) {
+// extra: front matter へ足す YAML（空文字なら何も足さない）。
+func writeWorkflow(t *testing.T, path, worktreeRoot, socketPath, extra string) {
 	t.Helper()
 	content := fmt.Sprintf(`---
 tracker:
@@ -772,10 +800,10 @@ herdr:
   read_timeout_ms: 3000
 rate_limit:
   source: none
----
+%s---
 
 {{.issue.identifier}} を実装してください。
-`, worktreeRoot, socketPath)
+`, worktreeRoot, socketPath, extra)
 
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
@@ -934,6 +962,64 @@ func (fx *fixture) SetIdentityBranch(
 	identity.Branch = branch
 	if err := fx.Manager.WriteIdentity(context.Background(), prepared.Path, *identity); err != nil {
 		t.Fatalf("身元ファイルを書けません: %v", err)
+	}
+}
+
+// orphanBranch は、worktree を作らずに issue の branch だけをリポジトリに残す。
+//
+// **片付けの途中で失敗して branch だけが残った状態を作る**（issue #27）。
+// 名前は continuo が着手のときに使うのと同じ規則（`herdr.worktree.branch_template`）で
+// 組み立てる。**手で書いた文字列を使わない。**規則を変えたときに空振りする。
+//
+// t: 呼び出し元のテスト。
+// fx: 走らせる一式。
+// number: issue 番号。
+// 戻り値の1つ目: 作った branch 名。
+// 戻り値の2つ目: その branch が指す commit の SHA（消したことの応答に出る）。
+func orphanBranch(t *testing.T, fx *fixture, number int) (string, string) {
+	t.Helper()
+	name, _, err := workspace.RenderBranch(fx.Config.Herdr.Worktree.BranchTemplate, issueRef(number))
+	if err != nil {
+		t.Fatalf("branch 名を組み立てられません: %v", err)
+	}
+	runGit(t, fx.Repo.Dir, "branch", name.String(), "main")
+	return name.String(), runGit(t, fx.Repo.Dir, "rev-parse", name.String())
+}
+
+// orphanBranchWithUnpushedCommit は、worktree を作らずに issue の branch だけを残し、
+// そこへ**どの remote にも載っていない commit** を1つ積む（issue #27）。
+//
+// **checkout せずに積む。**clone の作業ディレクトリは main のままにしておきたい
+// （worktree が1つも無い状態を作るのが目的である）。
+//
+// t: 呼び出し元のテスト。
+// fx: 走らせる一式。
+// number: issue 番号。
+// 戻り値: 作った branch 名。
+func orphanBranchWithUnpushedCommit(t *testing.T, fx *fixture, number int) string {
+	t.Helper()
+	name, _, err := workspace.RenderBranch(fx.Config.Herdr.Worktree.BranchTemplate, issueRef(number))
+	if err != nil {
+		t.Fatalf("branch 名を組み立てられません: %v", err)
+	}
+	tree := runGit(t, fx.Repo.Dir, "rev-parse", "main^{tree}")
+	commit := runGit(t, fx.Repo.Dir, "commit-tree", tree, "-p", "main", "-m", "push していない成果")
+	runGit(t, fx.Repo.Dir, "branch", name.String(), commit)
+	return name.String()
+}
+
+// RemoveIdentity は worktree の身元ファイルだけを消す。
+//
+// **着手が worktree を作った直後に止まった状態を作る**（3-16 の段6〜段9）。
+// **Scan はこの worktree を結果に含めない**ので、数える口が別に要る。
+//
+// t: 呼び出し元のテスト。
+// prepared: 対象の worktree。
+func (fx *fixture) RemoveIdentity(t *testing.T, prepared *workspace.PrepareResult) {
+	t.Helper()
+	path := fx.Manager.IdentityPath(prepared.Path)
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("身元ファイルを消せません（%s）: %v", path, err)
 	}
 }
 
@@ -1121,6 +1207,18 @@ func assertContains(t *testing.T, fx *fixture, want string) {
 	t.Helper()
 	if !strings.Contains(fx.Output(), want) {
 		t.Fatalf("出力に %q が含まれていない\n出力:\n%s", want, fx.Output())
+	}
+}
+
+// assertNotContains は出力に文言が含まれないことを確かめる。
+//
+// t: 呼び出し元のテスト。
+// fx: 走らせた一式。
+// unwanted: 含まれてはならない文言。
+func assertNotContains(t *testing.T, fx *fixture, unwanted string) {
+	t.Helper()
+	if strings.Contains(fx.Output(), unwanted) {
+		t.Fatalf("出力に %q が含まれている\n出力:\n%s", unwanted, fx.Output())
 	}
 }
 

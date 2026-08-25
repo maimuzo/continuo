@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "dbc17f7f26b75ca6d10123f3a441badd870052ea412883d087d848c047405a24", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "54dc06b119d3e1e980437bd6588804cf010cf5b6d7eb3b716b56ba5fa5988a81", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
 // 7本のパスに、それぞれ対応するテストがある。
@@ -17,6 +17,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -94,6 +95,27 @@ func newCleanupFixtureWith(t *testing.T, opts fixtureOptions) *cleanupFixture {
 	return &cleanupFixture{managerFixture: fx, Prepared: prepared, SettingsPath: settingsPath}
 }
 
+// setIdentityBranch は身元ファイルの branch だけを別の名前へ書き換える。
+//
+// **worktree が現に checkout している branch と食い違う身元ファイルを作る。**
+// 身元ファイルは worktree の中にあってエージェントが書き換えられるので、
+// 片付けは「実在して現物と一致する branch」しか消さない。
+//
+// t: 呼び出し元のテスト。
+// cf: 片付けの検査に使う状態。
+// branch: 身元ファイルへ書く branch 名。
+func setIdentityBranch(t *testing.T, cf *cleanupFixture, branch string) {
+	t.Helper()
+	identity, err := cf.Manager.ReadIdentity(cf.Prepared.Path)
+	if err != nil {
+		t.Fatalf("身元ファイルを読めない: %v", err)
+	}
+	identity.Branch = branch
+	if err := cf.Manager.WriteIdentity(context.Background(), cf.Prepared.Path, *identity); err != nil {
+		t.Fatalf("身元ファイルを書けない: %v", err)
+	}
+}
+
 // cleanupRequest は用意した worktree に対する片付けの入力を作る。
 //
 // cf: 片付けの検査に使う状態。
@@ -105,7 +127,7 @@ func cleanupRequest(cf *cleanupFixture) workspace.CleanupRequest {
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P017"}
 //
 // 目的: 未コミットの変更（未追跡のファイル）が残っていれば worktree を消さないことを確認する
 // （設計 3-9 の手順2。エージェントが作った成果物が消えるのを防ぐ）。
@@ -231,7 +253,46 @@ func TestCleanup_push済みなら消してbranchと設定ファイルも消す(t
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P001"}
+//
+// 目的: `cleanup.delete_branch` が偽なら、worktree を消しても branch は残し、
+// **残ったものとして画面へ出す**ことを確認する（設計 3-9 の段4）。
+// **「worktree を消した」と「branch も消えた」を同じ意味に読ませない。**
+// 残っているのに消えたことにされると、残骸を探す人はログを疑うところから始める。
+// 与える情報: `cleanup.delete_branch` を偽にした設定と、push 済みの worktree。
+// 成功条件: Removed が真、BranchDeleted が偽、branch が clone に残っている、
+// 残ったものに「設定で消さない」ことが積まれていること。
+func TestCleanup_deleteBranchが偽ならbranchを残して残ったものに積む(t *testing.T) {
+	cf := newCleanupFixture(t, func(cfg *config.Config) { cfg.Cleanup.DeleteBranch = false })
+
+	if err := os.WriteFile(filepath.Join(cf.Prepared.Path, "成果.md"), []byte("できた\n"), 0o600); err != nil {
+		t.Fatalf("成果のファイルを書けない: %v", err)
+	}
+	runGit(t, cf.Prepared.Path, "add", ".")
+	runGit(t, cf.Prepared.Path, "commit", "--quiet", "-m", "成果")
+	runGit(t, cf.Prepared.Path, "push", "--quiet", "-u", "origin", "HEAD:"+cf.Prepared.Branch.String())
+	runGit(t, cf.Prepared.Path, "branch", "--set-upstream-to=origin/"+cf.Prepared.Branch.String())
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("worktree を片付けていない: %+v", *result)
+	}
+	if result.BranchDeleted {
+		t.Fatal("cleanup.delete_branch が false なのに branch を消したと答えている")
+	}
+	if branches := runGit(t, cf.Repo.Dir, "branch", "--list", cf.Prepared.Branch.String()); strings.TrimSpace(branches) == "" {
+		t.Fatalf("cleanup.delete_branch が false なのに branch %s を消している", cf.Prepared.Branch.String())
+	}
+	want := i18n.T(i18n.KeyWorkspaceLeftoverBranchDisabled, cf.Prepared.Branch.String())
+	if !slices.Contains(result.Leftovers, want) {
+		t.Fatalf("残ったものに %q が積まれていない: %v", want, result.Leftovers)
+	}
+}
+
+// {"RUCM-PATH": "P016"}
 //
 // 目的: upstream があり push されていない commit が残っていれば消さないことを確認する
 // （設計 3-9 の手順2b の upstream がある側）。
@@ -307,7 +368,7 @@ func TestCleanup_upstreamが無くbaseと差分が無ければ消す(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P014"}
+// {"RUCM-PATH": "P020"}
 //
 // 目的: upstream が無く base も分からないときは、判定できないので消さないことを確認する
 // （設計 3-9 の手順2b。base を推測して消すと成果を失う）。
@@ -383,7 +444,7 @@ func TestCleanup_before_removeが失敗しても片付けを続ける(t *testing
 	}
 }
 
-// {"RUCM-PATH": "P012"}
+// {"RUCM-PATH": "P018"}
 //
 // 目的: 消す直前の封じ込め検査に落ちたら、何も消さずに失敗することを確認する
 // （設計 3-20。「消す直前」がいちばん危ない検査点である）。
@@ -412,7 +473,7 @@ func TestCleanup_置き場所の外側は消さずに失敗する(t *testing.T) 
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P021"}
 //
 // 目的: cleanup.enabled が偽なら何も消さず、かつ「見送った」と分かる戻り値になることを
 // 確認する（設計 3-9 の手順5。デバッグ時に中身を見たい場合がある）。
@@ -448,7 +509,7 @@ func TestCleanup_無効なら何もしない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P013"}
+// {"RUCM-PATH": "P019"}
 //
 // 目的: 片付けを始める判定が cleanup.on_states に入った時点であり、
 // active でなくなった時点ではないことを確認する（設計 3-9 の手順1）。
@@ -874,5 +935,83 @@ func TestInspect_収まる件数なら実数を数える(t *testing.T) {
 	}
 	if leftover.DirtyFiles != 3 {
 		t.Fatalf("コミットしていない変更の件数が 3 ではなく %d だった", leftover.DirtyFiles)
+	}
+}
+
+// {"RUCM-PATH": "P002"}
+//
+// 目的: 身元ファイルに書かれた branch が**リポジトリに実在しない**とき、
+// 残ったものとして数えないことを確認する（issue #27）。
+// **着手が `git worktree add` で失敗し続けると、ディレクトリだけが残って
+// branch は1度も作られない。**そこで「消せませんでした」と積むと、
+// **利用者は存在しないものを探して消しに行く。**
+// 与える情報: 失うものが無い worktree と、リポジトリに1度も作られていない branch 名を
+// 書いた身元ファイル。
+// 成功条件: Removed が真、BranchAbsent が真、BranchDeleted が偽、
+// **Leftovers が空**であること。
+func TestCleanup_実在しないbranchを残ったものとして数えない(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	// **接頭辞は continuo のままにする。**接頭辞で弾かれたのではなく、
+	// 「リポジトリに実在しない」経路を通すためである。
+	missing := cf.Prepared.Branch.String() + "-missing"
+	setIdentityBranch(t, cf, missing)
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("失うものが無いのに片付けていない: %+v", *result)
+	}
+	if !result.BranchAbsent {
+		t.Fatalf("実在しない branch なのに BranchAbsent が偽になっている: %+v", *result)
+	}
+	if result.BranchDeleted {
+		t.Fatalf("消していない branch を「消した」と返している: %+v", *result)
+	}
+	if len(result.Leftovers) != 0 {
+		t.Fatalf("実在しない branch を残ったものとして数えている: %v", result.Leftovers)
+	}
+}
+
+// {"RUCM-PATH": "P001"}
+//
+// 目的: branch が**実在して**現物と食い違うときは、いままでどおり残ったものとして
+// 理由を返すことを確認する（設計 3-9 の段4。issue #27 で消さなくなったのは
+// 「実在しない」場合だけである）。
+// 与える情報: 失うものが無い worktree と、リポジトリに実在するが worktree が
+// チェックアウトしていない branch 名を書いた身元ファイル。
+// 成功条件: Removed が真、BranchAbsent が偽、BranchDeleted が偽、
+// Leftovers にその branch 名と理由が入っていること、その branch が残っていること。
+func TestCleanup_実在するbranchを消せなければ理由を返す(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+	stale := cf.Prepared.Branch.String() + "-old"
+	runGit(t, cf.Repo.Dir, "branch", stale, "main")
+	setIdentityBranch(t, cf, stale)
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("失うものが無いのに片付けていない: %+v", *result)
+	}
+	if result.BranchAbsent {
+		t.Fatalf("実在する branch なのに BranchAbsent が真になっている: %+v", *result)
+	}
+	if result.BranchDeleted {
+		t.Fatalf("現物と食い違う branch を消している: %+v", *result)
+	}
+	found := false
+	for _, left := range result.Leftovers {
+		if strings.Contains(left, stale) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("消せなかった branch %s が残ったものとして返っていない: %v", stale, result.Leftovers)
+	}
+	if strings.TrimSpace(runGit(t, cf.Repo.Dir, "branch", "--list", stale)) == "" {
+		t.Fatalf("現物と食い違う branch %s を消している", stale)
 	}
 }

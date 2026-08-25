@@ -145,6 +145,35 @@ func gitWorktreePrune(ctx context.Context, repoDir string) error {
 	return err
 }
 
+// gitStaleWorktreesExcept は、**実体の無い worktree の登録**のうち、except 以外のものを返す
+// （3-37-9b）。
+//
+// **`git worktree prune` を撃ってよいかを決めるためにある。**prune はリポジトリ全体に効くので、
+// **利用者がディレクトリごと移した worktree の登録も一緒に落とす。**落とされると git は
+// その branch を守らなくなり、**あとの `git branch -D` が通ってしまう。**
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// except: 数に入れない worktree の絶対パス（**continuo が自分で消したもの**）。
+// 戻り値の1つ目: 実体の無い登録のパス（except を除く）。
+// 戻り値の2つ目: 一覧を引けない場合のエラー。
+func gitStaleWorktreesExcept(ctx context.Context, repoDir, except string) ([]string, error) {
+	entries, err := gitWorktreeEntries(ctx, repoDir)
+	if err != nil {
+		return nil, err
+	}
+	var stale []string
+	for _, entry := range entries {
+		if samePath(entry.Path, except) {
+			continue
+		}
+		if _, statErr := os.Stat(entry.Path); errors.Is(statErr, os.ErrNotExist) {
+			stale = append(stale, entry.Path)
+		}
+	}
+	return stale, nil
+}
+
 // worktreeEntry は `git worktree list --porcelain` が返す worktree 1件である。
 type worktreeEntry struct {
 	// Path は worktree の絶対パスである（filepath.Clean 済み）。
@@ -220,19 +249,40 @@ func gitWorktreePaths(ctx context.Context, repoDir string) ([]string, error) {
 	return paths, nil
 }
 
+// gitShowRefMissingExitCode は `git show-ref --verify --quiet` が
+// 「その ref を解決できなかった」ときに返す終了コードである（実測: 2026-08-25）。
+//
+// **これ以外の非 0 を「無い」に丸めてはならない。**リポジトリ側の異常
+// （`fatal: not a git repository` など）の終了コードは 128 であり、それを「無い」と
+// 答えると、**調べられなかっただけの branch が「もう無い」ものとして扱われる。**
+// RunGhqList が ghq の終了コードでしているのと同じ区別である。
+const gitShowRefMissingExitCode = 1
+
 // gitBranchExists は branch が既にあるかを返す。
+//
+// **「無い」と答えるのは終了コードが 1 のときだけである。**それ以外の非 0 はエラーにして、
+// 呼び出し側に「調べられなかった」ことを伝える（「無い」と「調べられない」は別である）。
 //
 // ctx: 実行に適用するコンテキスト。
 // repoDir: リポジトリの作業ディレクトリ。
 // branch: 検査する branch 名。
 // 戻り値の1つ目: 存在すれば true。
-// 戻り値の2つ目: git を起動できなかった場合のエラー。
+// 戻り値の2つ目: git を起動できなかった場合・**終了コードが 0 でも 1 でもない場合**の
+// エラー（判定できないので、呼び出し側は「無い」と言ってはならない）。
 func gitBranchExists(ctx context.Context, repoDir string, branch normalize.SafeName) (bool, error) {
 	code, err := gitExitCode(ctx, repoDir, "show-ref", "--verify", "--quiet", "refs/heads/"+branch.String())
 	if err != nil {
 		return false, err
 	}
-	return code == 0, nil
+	switch code {
+	case 0:
+		return true, nil
+	case gitShowRefMissingExitCode:
+		return false, nil
+	default:
+		return false, i18n.Errorf(
+			i18n.KeyWorkspaceGitBranchExistsUnexpectedExitCode, branch.String(), repoDir, code)
+	}
 }
 
 // gitWorktreeAdd は worktree を作る（3-22 の段4・段5・段5b）。
@@ -446,6 +496,60 @@ func worktreeHeadRefs(commonDir string) (map[string]string, error) {
 // 戻り値の2つ目: 実行に失敗した場合のエラー。
 func gitBranchTip(ctx context.Context, repoDir string, branch normalize.SafeName) (string, error) {
 	return runGit(ctx, repoDir, "rev-parse", branch.String())
+}
+
+// gitUnpushedCommits は、どの remote にも載っていない commit の数を返す（3-37-9）。
+//
+// **worktree が1つも無くても答えが出る。**`git rev-list --count <branch> --not --remotes`
+// はリポジトリの中だけで完結し、worktree の作業ディレクトリを1つも要らない
+// （実測: 2026-08-25）。**「worktree が無いので未 push の commit は調べられない」は誤りである。**
+//
+// **upstream の設定は要らない。**`--not --remotes` は remote-tracking ref の全部を除くので、
+// upstream を設定していない branch でも「どこにも push されていない commit」を数えられる。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// branch: 数える branch 名（**実在すること。**無ければ git は 128 で終わる）。
+// 戻り値の1つ目: どの remote にも載っていない commit の数。**0 なら失うものは無い。**
+// 戻り値の2つ目: 実行に失敗した場合・出力を数値として読めない場合のエラー。
+func gitUnpushedCommits(ctx context.Context, repoDir string, branch normalize.SafeName) (int, error) {
+	out, err := runGit(ctx, repoDir, "rev-list", "--count", branch.String(), "--not", "--remotes")
+	if err != nil {
+		return 0, err
+	}
+	n, convErr := strconv.Atoi(strings.TrimSpace(out))
+	if convErr != nil {
+		return 0, i18n.Errorf(i18n.KeyWorkspaceGitUnpushedCountUnreadable, branch.String(), out, convErr)
+	}
+	return n, nil
+}
+
+// gitWorktreesUsingBranch は、その branch を使っていることになっている worktree の
+// 登録のパスを返す（3-37-9b）。
+//
+// **`git branch -D` が `used by worktree` で断ったときに、断った相手を人間へ見せるためにある。**
+// 実体が消えている登録（`prunable` の行が付くもの）もそのまま返す。**git はそれでも
+// branch を守る**ので、利用者にはその登録の在りかこそが要る情報である（実測: 2026-08-25）。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// branch: 調べる branch 名。
+// 戻り値の1つ目: その branch をチェックアウトしていることになっている worktree のパス。
+// 戻り値の2つ目: 一覧を引けない場合のエラー。
+func gitWorktreesUsingBranch(
+	ctx context.Context, repoDir string, branch normalize.SafeName,
+) ([]string, error) {
+	entries, err := gitWorktreeEntries(ctx, repoDir)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range entries {
+		if entry.Branch == branch.String() {
+			paths = append(paths, entry.Path)
+		}
+	}
+	return paths, nil
 }
 
 // gitBranchDelete は `git branch -D` で branch を消す（3-9 の段4）。

@@ -629,6 +629,9 @@ const (
 	// KeyAbandonIdentityUnreadable は身元ファイルを読めない worktree を候補から
 	// 外したときに出る。**黙って飛ばすと「worktree はありません」としか見えない。**
 	KeyAbandonIdentityUnreadable Key = "abandon.identity_unreadable"
+	// KeyAbandonIdentityMissing は身元ファイルが1つも無いディレクトリを候補から
+	// 外したときに出る（issue #27）。**着手が worktree を作った直後に落ちるとこれができる。**
+	KeyAbandonIdentityMissing Key = "abandon.identity_missing"
 	// KeyAbandonErrMultiple はその issue の worktree が2つ以上あるときに出る。
 	KeyAbandonErrMultiple Key = "abandon.err_multiple"
 	// KeyAbandonMultipleItem は同じときに候補を1つずつ並べる行に出る。
@@ -740,6 +743,10 @@ const (
 	KeyAbandonDeferredReason Key = "abandon.deferred_reason"
 	// KeyAbandonRemoved は worktree と branch を消し終えたときに出る。
 	KeyAbandonRemoved Key = "abandon.removed"
+	// KeyAbandonRemovedBranchAbsent は worktree を消し終えたが、身元ファイルに書かれた
+	// branch がリポジトリに実在しなかったときに出る。
+	// **「消しました」と言わない。**消す対象が元から無かった（issue #27）。
+	KeyAbandonRemovedBranchAbsent Key = "abandon.removed_branch_absent"
 	// KeyAbandonRemovedWithLeftovers は worktree は消えたが、branch や herdr の workspace が
 	// 片付け切れずに残ったときに出る。**残ったものは KeyAbandonLeftover で1件ずつ並べる。**
 	KeyAbandonRemovedWithLeftovers Key = "abandon.removed_with_leftovers"
@@ -748,6 +755,30 @@ const (
 	// KeyAbandonNotice は continuo が片付けの途中で自分で行ったことを1件ずつ並べる行に出る
 	// （壊れた ref のファイルを消した、など。issue #28）。
 	KeyAbandonNotice Key = "abandon.notice"
+
+	// KeyAbandonOrphanBranchUnknown は worktree が無いときに、残った branch があるかを
+	// 調べられなかったときに出る（issue #27）。
+	KeyAbandonOrphanBranchUnknown Key = "abandon.orphan_branch.unknown"
+	// KeyAbandonOrphanBranchNone は worktree も branch も残っていなかったときに出る。
+	KeyAbandonOrphanBranchNone Key = "abandon.orphan_branch.none"
+	// KeyAbandonOrphanBranchFound は worktree は無いが branch が残っていたときに出る。
+	KeyAbandonOrphanBranchFound Key = "abandon.orphan_branch.found"
+	// KeyAbandonOrphanBranchUnpushed は、残った branch にどの remote にも載っていない
+	// commit があるときに出る。**`--force` を求める前に出す**（3-37-9）。
+	KeyAbandonOrphanBranchUnpushed Key = "abandon.orphan_branch.unpushed"
+	// KeyAbandonOrphanBranchUnpushedUnknown は未 push の commit を数えられなかったときに出る。
+	// **数えられなかったことを 0 件として見せない。**
+	KeyAbandonOrphanBranchUnpushedUnknown Key = "abandon.orphan_branch.unpushed_unknown"
+	// KeyAbandonOrphanBranchDisabled は cleanup.delete_branch が偽なので、
+	// 残った branch を消さずに終えるときに出る。
+	KeyAbandonOrphanBranchDisabled Key = "abandon.orphan_branch.disabled"
+	// KeyAbandonErrOrphanBranchWithoutForce は残った branch があるのに --force が無いときに出る。
+	KeyAbandonErrOrphanBranchWithoutForce Key = "abandon.orphan_branch.err_without_force"
+	// KeyAbandonErrOrphanBranchDeleteFailed は残った branch を消せなかったときに出る。
+	KeyAbandonErrOrphanBranchDeleteFailed Key = "abandon.orphan_branch.err_delete_failed"
+	// KeyAbandonOrphanBranchRemoved は残った branch を消したときに出る。
+	// **戻すためのコマンドを添える**（`git branch -D` はマージ状態を見ない）。
+	KeyAbandonOrphanBranchRemoved Key = "abandon.orphan_branch.removed"
 
 	// KeyAbandonStatusLeftAlone は--to が無いのでStatus を動かさないときに出る。
 	KeyAbandonStatusLeftAlone Key = "abandon.status_left_alone"
@@ -957,6 +988,10 @@ const (
 	KeyConfigValidateInvalidValue Key = "config.validate.invalid_value"
 	// KeyConfigValidateRequired は必須のキーが空・未設定であるときに出る。
 	KeyConfigValidateRequired Key = "config.validate.required"
+	// KeyConfigValidateBranchTemplateNeedsIssueNumber は
+	// herdr.worktree.branch_template に issue の番号が入っていないときに出る。
+	// **既に設定している利用者が居るので、なぜ要るのかを書く。**
+	KeyConfigValidateBranchTemplateNeedsIssueNumber Key = "config.validate.branch_template_needs_issue_number"
 )
 
 // 設定値の環境変数展開・チルダ展開（internal/config の expand）のエラーの文言。
@@ -1427,6 +1462,16 @@ const (
 	// ここから下は CleanupResult.Leftovers に積む文である。
 	// **ログではなく、人間の画面に1行ずつ出る**（issue #23）。
 
+	// KeyWorkspaceIssueBranchCloneNotFound は、残った branch を調べようとしたが
+	// ghq に対象リポジトリの clone が無かったときに出る。
+	KeyWorkspaceIssueBranchCloneNotFound Key = "workspace.issue_branch.clone_not_found"
+	// KeyWorkspaceLeftoverPruneSkipped は、実体の無い worktree の登録がほかにもあるので
+	// `git worktree prune` を撃たなかったときに出る（3-37-9b）。
+	KeyWorkspaceLeftoverPruneSkipped Key = "workspace.leftover.prune_skipped"
+	// KeyWorkspaceIssueBranchUsedByWorktree は、残った branch を消そうとしたが
+	// git が「worktree が使っている」と断ったときに出る（3-37-9b）。
+	// **continuo は `git worktree prune` を代行しない。**叩くコマンドを案内するだけである。
+	KeyWorkspaceIssueBranchUsedByWorktree Key = "workspace.issue_branch.used_by_worktree"
 	// KeyWorkspaceLeftoverBranchDisabled は cleanup.delete_branch が偽で branch を残したときに出る。
 	KeyWorkspaceLeftoverBranchDisabled Key = "workspace.leftover.branch_disabled"
 	// KeyWorkspaceLeftoverBranchUndeletable は、消してよい branch だと検算できずに残したときに出る。
@@ -1502,6 +1547,12 @@ const (
 	KeyWorkspaceGitAheadOfUpstreamCountUnreadable Key = "workspace.git_ahead_of_upstream.count_unreadable"
 	// KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode は `git diff --quiet` が 0 でも 1 でもない終了コードを返したときに出る。
 	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode Key = "workspace.git_no_diff_from_base.unexpected_exit_code"
+	// KeyWorkspaceGitBranchExistsUnexpectedExitCode は `git show-ref --verify` が
+	// 0 でも 1 でもない終了コードを返したときに出る。**「無い」に丸めないためのものである。**
+	KeyWorkspaceGitBranchExistsUnexpectedExitCode Key = "workspace.git_branch_exists.unexpected_exit_code"
+	// KeyWorkspaceGitUnpushedCountUnreadable は、どの remote にも載っていない commit の数を
+	// 数値として読めなかったときに出る。
+	KeyWorkspaceGitUnpushedCountUnreadable Key = "workspace.git_unpushed_commits.count_unreadable"
 	// KeyWorkspaceRunGhqListStartFailed は `ghq list` を起動できなかったときに出る。
 	KeyWorkspaceRunGhqListStartFailed Key = "workspace.run_ghq_list.start_failed"
 	// KeyWorkspaceRunGhqListExitFailed は `ghq list` が「該当が無い」以外の理由で非 0 で終わったときに出る。
@@ -1992,6 +2043,7 @@ var allKeys = []Key{
 	KeyAbandonOwnerRepoMismatch,
 	KeyAbandonOwnerRepoUnreadable,
 	KeyAbandonIdentityUnreadable,
+	KeyAbandonIdentityMissing,
 	KeyAbandonErrMultiple,
 	KeyAbandonErrUnknownState,
 	KeyAbandonToSkipped,
@@ -2041,9 +2093,19 @@ var allKeys = []Key{
 	KeyAbandonErrDeferred,
 	KeyAbandonDeferredReason,
 	KeyAbandonRemoved,
+	KeyAbandonRemovedBranchAbsent,
 	KeyAbandonRemovedWithLeftovers,
 	KeyAbandonLeftover,
 	KeyAbandonNotice,
+	KeyAbandonOrphanBranchUnknown,
+	KeyAbandonOrphanBranchNone,
+	KeyAbandonOrphanBranchFound,
+	KeyAbandonOrphanBranchUnpushed,
+	KeyAbandonOrphanBranchUnpushedUnknown,
+	KeyAbandonOrphanBranchDisabled,
+	KeyAbandonErrOrphanBranchWithoutForce,
+	KeyAbandonErrOrphanBranchDeleteFailed,
+	KeyAbandonOrphanBranchRemoved,
 	KeyAbandonStatusLeftAlone,
 	KeyAbandonErrStatusTargetUnknown,
 	KeyAbandonStatusMoved,
@@ -2121,6 +2183,7 @@ var allKeys = []Key{
 	KeyConfigPlaceholderRemaining,
 	KeyConfigValidateInvalidValue,
 	KeyConfigValidateRequired,
+	KeyConfigValidateBranchTemplateNeedsIssueNumber,
 	KeyConfigExpandTrailingDollar,
 	KeyConfigExpandUnclosedBrace,
 	KeyConfigExpandEmptyEnvName,
@@ -2270,6 +2333,9 @@ var allKeys = []Key{
 	KeyWorkspaceRemoveWorktreeByHandFailed,
 	KeyWorkspaceRemoveWorktreeStillThere,
 	KeyWorkspaceRemoveWorktreeRepoUnknown,
+	KeyWorkspaceIssueBranchCloneNotFound,
+	KeyWorkspaceIssueBranchUsedByWorktree,
+	KeyWorkspaceLeftoverPruneSkipped,
 	KeyWorkspaceLeftoverBranchDisabled,
 	KeyWorkspaceLeftoverBranchUndeletable,
 	KeyWorkspaceLeftoverBranchDeleteFailed,
@@ -2305,6 +2371,8 @@ var allKeys = []Key{
 	KeyWorkspaceWorktreeHeadRefsUnreadable,
 	KeyWorkspaceGitAheadOfUpstreamCountUnreadable,
 	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode,
+	KeyWorkspaceGitBranchExistsUnexpectedExitCode,
+	KeyWorkspaceGitUnpushedCountUnreadable,
 	KeyWorkspaceRunGhqListStartFailed,
 	KeyWorkspaceRunGhqListExitFailed,
 	KeyWorkspaceGitLocalBranchesOutputUnreadable,
