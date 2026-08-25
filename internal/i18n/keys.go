@@ -671,6 +671,9 @@ const (
 	// KeyAbandonPaneCheckSkipped は、herdr へ問い合わせられないまま `--force` が
 	// 指定されていて、pane の生死を確かめずに消すときに出る。
 	KeyAbandonPaneCheckSkipped Key = "abandon.pane_check_skipped"
+	// KeyAbandonPaneAliveForced は、pane が生きているのに `--force` が指定されていて、
+	// pane ごと消すときに出る。**err_pane_alive と言い分ける**（あちらは止まる）。
+	KeyAbandonPaneAliveForced Key = "abandon.pane_alive_forced"
 	// KeyAbandonErrPaneWaitInterrupted は pane が閉じるのを待っている途中で
 	// `SIGINT` / `SIGTERM` を受けたときに出る。**時間切れとは言い分ける。**
 	KeyAbandonErrPaneWaitInterrupted Key = "abandon.err_pane_wait_interrupted"
@@ -737,8 +740,11 @@ const (
 	KeyAbandonDeferredReason Key = "abandon.deferred_reason"
 	// KeyAbandonRemoved は worktree と branch を消し終えたときに出る。
 	KeyAbandonRemoved Key = "abandon.removed"
-	// KeyAbandonRemovedBranchKept は worktree だけを消し、branch が残ったときに出る。
-	KeyAbandonRemovedBranchKept Key = "abandon.removed_branch_kept"
+	// KeyAbandonRemovedWithLeftovers は worktree は消えたが、branch や herdr の workspace が
+	// 片付け切れずに残ったときに出る。**残ったものは KeyAbandonLeftover で1件ずつ並べる。**
+	KeyAbandonRemovedWithLeftovers Key = "abandon.removed_with_leftovers"
+	// KeyAbandonLeftover は片付け切れずに残ったものを1件ずつ並べる行に出る。
+	KeyAbandonLeftover Key = "abandon.leftover"
 
 	// KeyAbandonStatusLeftAlone は--to が無いのでStatus を動かさないときに出る。
 	KeyAbandonStatusLeftAlone Key = "abandon.status_left_alone"
@@ -1414,6 +1420,39 @@ const (
 	// KeyWorkspaceRemoveWorktreeRepoUnknown は、worktree が属するリポジトリを名指しできず、
 	// `git worktree remove` を撃てなかったときに出る。
 	KeyWorkspaceRemoveWorktreeRepoUnknown Key = "workspace.remove_worktree.repo_unknown"
+
+	// ここから下は CleanupResult.Leftovers に積む文である。
+	// **ログではなく、人間の画面に1行ずつ出る**（issue #23）。
+
+	// KeyWorkspaceLeftoverBranchDisabled は cleanup.delete_branch が偽で branch を残したときに出る。
+	KeyWorkspaceLeftoverBranchDisabled Key = "workspace.leftover.branch_disabled"
+	// KeyWorkspaceLeftoverBranchUndeletable は、消してよい branch だと検算できずに残したときに出る。
+	KeyWorkspaceLeftoverBranchUndeletable Key = "workspace.leftover.branch_undeletable"
+	// KeyWorkspaceLeftoverBranchDeleteFailed は `git branch -D` が失敗して branch が残ったときに出る。
+	KeyWorkspaceLeftoverBranchDeleteFailed Key = "workspace.leftover.branch_delete_failed"
+	// KeyWorkspaceLeftoverPruneFailed は、実体は消したのに git の worktree の登録を掃除できなかったときに出る。
+	KeyWorkspaceLeftoverPruneFailed Key = "workspace.leftover.prune_failed"
+	// KeyWorkspaceLeftoverPruneRepoUnknown は、リポジトリを名指しできず git の worktree の登録が残ったときに出る。
+	KeyWorkspaceLeftoverPruneRepoUnknown Key = "workspace.leftover.prune_repo_unknown"
+	// KeyWorkspaceLeftoverWorkspaceListFailed は、herdr の workspace の一覧を引けず、
+	// 閉じるべき workspace を名指しできなかったときに出る。
+	KeyWorkspaceLeftoverWorkspaceListFailed Key = "workspace.leftover.workspace_list_failed"
+	// KeyWorkspaceLeftoverWorkspaceCloseFailed は、herdr の workspace を閉じられなかったときに出る。
+	KeyWorkspaceLeftoverWorkspaceCloseFailed Key = "workspace.leftover.workspace_close_failed"
+	// KeyWorkspaceLeftoverBranchReasonNoIdentity は、身元ファイルに branch が書いていないことを表す。
+	KeyWorkspaceLeftoverBranchReasonNoIdentity Key = "workspace.leftover.branch_reason.no_identity"
+	// KeyWorkspaceLeftoverBranchReasonRepoUnknown は、リポジトリを名指しできないことを表す。
+	KeyWorkspaceLeftoverBranchReasonRepoUnknown Key = "workspace.leftover.branch_reason.repo_unknown"
+	// KeyWorkspaceLeftoverBranchReasonNormalized は、branch 名が正規化で変わることを表す。
+	KeyWorkspaceLeftoverBranchReasonNormalized Key = "workspace.leftover.branch_reason.normalized"
+	// KeyWorkspaceLeftoverBranchReasonNoPrefix は、branch_template に変数が無く接頭辞を決められないことを表す。
+	KeyWorkspaceLeftoverBranchReasonNoPrefix Key = "workspace.leftover.branch_reason.no_prefix"
+	// KeyWorkspaceLeftoverBranchReasonPrefixMismatch は、branch が continuo の接頭辞で始まらないことを表す。
+	KeyWorkspaceLeftoverBranchReasonPrefixMismatch Key = "workspace.leftover.branch_reason.prefix_mismatch"
+	// KeyWorkspaceLeftoverBranchReasonHeadUnreadable は、worktree がチェックアウトしている branch を引けないことを表す。
+	KeyWorkspaceLeftoverBranchReasonHeadUnreadable Key = "workspace.leftover.branch_reason.head_unreadable"
+	// KeyWorkspaceLeftoverBranchReasonHeadMismatch は、身元ファイルの branch が現物と一致しないことを表す。
+	KeyWorkspaceLeftoverBranchReasonHeadMismatch Key = "workspace.leftover.branch_reason.head_mismatch"
 	// KeyWorkspaceGitWorktreeBranchAtNotRegistered は、リポジトリ側の worktree の一覧に
 	// その worktree が載っていなかったときに出る。
 	KeyWorkspaceGitWorktreeBranchAtNotRegistered Key = "workspace.git_worktree_branch_at.not_registered"
@@ -1951,6 +1990,7 @@ var allKeys = []Key{
 	KeyAbandonErrPaneRemains,
 	KeyAbandonErrPaneAlive,
 	KeyAbandonPaneCheckSkipped,
+	KeyAbandonPaneAliveForced,
 	KeyAbandonErrPaneWaitInterrupted,
 	KeyAbandonErrInspect,
 	KeyAbandonPlanHeader,
@@ -1980,7 +2020,8 @@ var allKeys = []Key{
 	KeyAbandonErrDeferred,
 	KeyAbandonDeferredReason,
 	KeyAbandonRemoved,
-	KeyAbandonRemovedBranchKept,
+	KeyAbandonRemovedWithLeftovers,
+	KeyAbandonLeftover,
 	KeyAbandonStatusLeftAlone,
 	KeyAbandonErrStatusTargetUnknown,
 	KeyAbandonStatusMoved,
@@ -2207,6 +2248,20 @@ var allKeys = []Key{
 	KeyWorkspaceRemoveWorktreeByHandFailed,
 	KeyWorkspaceRemoveWorktreeStillThere,
 	KeyWorkspaceRemoveWorktreeRepoUnknown,
+	KeyWorkspaceLeftoverBranchDisabled,
+	KeyWorkspaceLeftoverBranchUndeletable,
+	KeyWorkspaceLeftoverBranchDeleteFailed,
+	KeyWorkspaceLeftoverPruneFailed,
+	KeyWorkspaceLeftoverPruneRepoUnknown,
+	KeyWorkspaceLeftoverWorkspaceListFailed,
+	KeyWorkspaceLeftoverWorkspaceCloseFailed,
+	KeyWorkspaceLeftoverBranchReasonNoIdentity,
+	KeyWorkspaceLeftoverBranchReasonRepoUnknown,
+	KeyWorkspaceLeftoverBranchReasonNormalized,
+	KeyWorkspaceLeftoverBranchReasonNoPrefix,
+	KeyWorkspaceLeftoverBranchReasonPrefixMismatch,
+	KeyWorkspaceLeftoverBranchReasonHeadUnreadable,
+	KeyWorkspaceLeftoverBranchReasonHeadMismatch,
 	KeyWorkspaceGitWorktreeBranchAtNotRegistered,
 	KeyWorkspaceVerifiedRepoCommonDirUnreadable,
 	KeyWorkspaceUndeterminedDirty,

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "e71f78b0dbdf74fd534caa8547349902b0b3942e58095d01643b887b28e8a003", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
+// {"RUCM-CFG-SHA256": "a8f622fa57a04d542d3eae708b15be7b4fac4c6094bfd01c571c9a0e3b107dfc", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「着手を取り消す」のテストパスのうち、
 // **判断が分かれるところ**を通るものに、それぞれ1本以上のテストがある。
@@ -737,7 +737,7 @@ func TestAbandon_片付けに失敗したらStatusを動かさない(t *testing.
 // 与える情報: issue 188 の worktree と、checkout している branch と違う名前を書いた
 // 身元ファイル。
 // 成功条件: 終了コードが 0、worktree が消えている、**現物の branch が残っている**、
-// branch が残ったことを伝える1行が出ていること。
+// branch が残ったことと、その理由を伝える行が出ていること。
 func TestAbandon_branchを消さなかったら消したと言わない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -749,7 +749,11 @@ func TestAbandon_branchを消さなかったら消したと言わない(t *testi
 	code := fx.Run(t, 188, nil)
 
 	assertExit(t, fx, code, abandon.ExitOK)
-	assertContains(t, fx, i18n.T(i18n.KeyAbandonRemovedBranchKept, prepared.Path, stale))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonRemovedWithLeftovers, prepared.Path))
+	// **理由まで画面に出ること。**ログにだけ書くと、abandon は Logger を渡さないので
+	// 誰にも届かない（issue #23）。
+	assertContains(t, fx, i18n.T(i18n.KeyWorkspaceLeftoverBranchUndeletable, stale,
+		i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonHeadMismatch, prepared.Branch.String())))
 	assertWorktreeGone(t, fx, prepared.Path)
 	if !branchExists(t, fx, prepared.Branch.String()) {
 		t.Fatalf("身元ファイルと食い違う branch %s を消している", prepared.Branch.String())
@@ -958,6 +962,70 @@ func TestAbandon_動いていなくてもpaneが生きていれば消さない(t
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneAlive, "w1:p1", fx.LockPath))
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
+}
+
+// {"RUCM-PATH": "P466"}
+//
+// 目的: **herdr の workspace が開いたままで `.git` が壊れている**worktree を、
+// `--force` で片付け切れることを確認する（設計 3-4 の段4。issue #23）。
+//
+// **これが issue #23 の再報告そのものである。**continuo が worktree のために開いた
+// herdr workspace には、その worktree を作業ディレクトリに持つ pane が必ず1枚ある
+// （`worktree.open` が root pane を作る。実測: 2026-08-25）。
+// **つまり workspace が開いているかぎり pane の検査は必ず引っかかり、
+// `--force` を付けても何ひとつ消せなかった。****abandon が消すはずの workspace が
+// abandon を止めていた。**
+//
+// 与える情報: `.git` を壊した issue 188 の worktree、その worktree を作業ディレクトリに
+// 持つ pane を返し続けるテスト用herdr mock、`--force`。
+// 成功条件: 終了コードが 0、worktree のディレクトリが消えている、branch が消えている、
+// herdr の workspace が1つも残っていない、**pane ごと消すことを言う1行が出ている**こと。
+func TestAbandon_herdrのworkspaceがあってgitが壊れていてもforceで消し切る(t *testing.T) {
+	for _, how := range []gitFileBreakage{gitFileEmpty, gitFileGarbage, gitFileMissing} {
+		t.Run(string(how), func(t *testing.T) {
+			fx := newFixture(t)
+			prepared := fx.Prepare(t, 188)
+			fx.BreakGitFile(t, prepared, how)
+			// **workspace が開いている状態を pane で表す。**herdr は workspace を開くと
+			// root pane を1枚作り、その cwd は worktree である。
+			fx.Herdr.SetPaneListScript(func(_ int) []map[string]any { return panesAt(prepared.Path) })
+
+			code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+			assertExit(t, fx, code, abandon.ExitOK)
+			assertContains(t, fx, i18n.T(i18n.KeyAbandonPaneAliveForced, "w1:p1"))
+			assertWorktreeGone(t, fx, prepared.Path)
+			if branchExists(t, fx, prepared.Branch.String()) {
+				t.Fatalf("worktree を消したのに branch %s が残っている", prepared.Branch.String())
+			}
+			if ids := fx.Herdr.OpenWorkspaceIDs(); len(ids) != 0 {
+				t.Fatalf("herdr の workspace が閉じていない: %v\n出力:\n%s", ids, fx.Output())
+			}
+		})
+	}
+}
+
+// {"RUCM-PATH": "P473"}
+//
+// 目的: pane が生きていて `--force` が無いときの文言に、**越え方が書いてある**ことを
+// 確認する（設計 3-4 の段4 の前。issue #23）。
+// **止まったことだけを伝えて越え方を伝えないのは、詰まらせるのと同じである。**
+// 与える情報: 誰も掴んでいないロックファイルと、その worktree を作業ディレクトリに持つ pane。
+// 成功条件: 終了コードが 1、`--force` という語が同じ行に入っていること。
+func TestAbandon_paneが生きて止まるときはforceの越え方を言う(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	fx.Herdr.SetPaneListScript(func(_ int) []map[string]any { return panesAt(prepared.Path) })
+
+	code := fx.Run(t, 188, nil)
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	line := i18n.T(i18n.KeyAbandonErrPaneAlive, "w1:p1", fx.LockPath)
+	if !strings.Contains(line, "--force") {
+		t.Fatalf("pane が生きて止まる文言に越え方（--force）が書かれていない: %s", line)
+	}
+	assertContains(t, fx, line)
 }
 
 // {"RUCM-PATH": "P473"}

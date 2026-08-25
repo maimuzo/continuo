@@ -499,10 +499,23 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 // herdr ごと壊れた状況で worktree を1つも片付けられない。**`--force` は
 // 「調べられなくても消せ」という人間の明示であり、Inspect の扱いと同じにする。
 //
+// **pane が生きていても `--force` なら消す**（issue #23）。
+// **continuo が worktree のために開いた herdr workspace には、その worktree を cwd に持つ
+// pane が必ず1枚ある**（`worktree.open` が root pane を作る。実測: 2026-08-25）。
+// **つまり workspace が開いているかぎり、この検査は必ず引っかかる。**
+// そこで無条件に止めると、**`abandon` が消すはずの workspace が、`abandon` を止める。**
+// 人間には手が無くなり、herdr workspace を手で閉じてから叩き直すしかなくなる。
+//
+// **`--force` が無いときは今までどおり止まる。**止まる文言には `--force` で越えられることを
+// 書く（越え方が分からなければ、止まったことと詰まったことは同じである）。
+//
+// **「herdr が答えられない」より「pane がある」のほうを厳しくしない。**
+// 前者で消せて後者で消せないのは筋が通らない。どちらも `--force` で越える。
+//
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 対象の worktree の絶対パス。
-// 戻り値: pane が無ければ ExitOK、1件でもあれば ExitStopped。
-// herdr に問い合わせられない場合は、`--force` があれば ExitOK、無ければ ExitStopped。
+// 戻り値: pane が無ければ ExitOK、1件でもあれば `--force` の有無で ExitOK / ExitStopped。
+// herdr に問い合わせられない場合も、`--force` があれば ExitOK、無ければ ExitStopped。
 func (r *runner) stopIfPaneAlive(ctx context.Context, worktreePath string) int {
 	panes, err := r.panesOf(ctx, worktreePath)
 	if err != nil {
@@ -516,8 +529,12 @@ func (r *runner) stopIfPaneAlive(ctx context.Context, worktreePath string) int {
 	if len(panes) == 0 {
 		return ExitOK
 	}
-	fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneAlive,
-		strings.Join(paneIDs(panes), " "), r.deps.LockPath))
+	ids := strings.Join(paneIDs(panes), " ")
+	if r.opts.Force {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPaneAliveForced, ids))
+		return ExitOK
+	}
+	fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneAlive, ids, r.deps.LockPath))
 	return ExitStopped
 }
 
@@ -733,10 +750,21 @@ func (r *runner) remove(ctx context.Context, worktreePath string, leftover *work
 	}
 	// **消えていない branch を「消しました」と書かない。**cleanup.delete_branch が偽のとき、
 	// branch の検算に落ちたとき、`git branch -D` が失敗したときは branch が残る。
-	if result.BranchDeleted {
+	//
+	// **残ったものは1行ずつ画面へ出す**（issue #23）。`continuo abandon` は
+	// `Options.Logger` を渡さないので、**ログに書いたものは誰にも届かない。**
+	// 「ログを見てください」で済ませると、branch も herdr の workspace も
+	// 黙って残ったまま「消しました」だけが見える。
+	//
+	// **残ったものが1件も無ければ branch も消えている。**branch が残る経路は
+	// 3つ（設定で無効・検算に落ちた・`git branch -D` が失敗）あり、**どれも Leftovers を積む。**
+	if len(result.Leftovers) == 0 {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRemoved, worktreePath, branch))
-	} else {
-		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRemovedBranchKept, worktreePath, branch))
+		return ExitOK
+	}
+	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRemovedWithLeftovers, worktreePath))
+	for _, left := range result.Leftovers {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonLeftover, left))
 	}
 	return ExitOK
 }
