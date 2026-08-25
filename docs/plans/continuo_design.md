@@ -4354,6 +4354,85 @@ text/template は受け付けるためである。
 
 ---
 
+### 3-38. 待ちを伴う herdr の呼び出しは、herdr の待ち受けより長く待つ
+
+**言いたいこと。**socket の読み取り期限と herdr へ渡す待ち受けの上限が同じ値だと、
+**herdr が答えるより必ず先に continuo 側が切れる。**その1点で、枠待ちの判定も
+「打ち切らずに待ち直す」経路も、既定の設定では一度も通らない。
+
+**採る式。**`max(claude.turn_timeout_ms, その呼び出しで herdr へ渡す待ち受け) + herdr.read_timeout_ms`。
+[internal/herdr/client.go](../../internal/herdr/client.go) の `waitReadBudget` が計算し、
+待機ありの `AgentPrompt` と `AgentWait` が使う。
+
+**なぜ余裕を足すのか。**herdr の待ち受けは**リクエストが届いてから**数え始める。
+接続・送信・応答の書き出しに掛かる時間のぶん、herdr の応答は必ず continuo 側の期限より後になる。
+**同値では、どれだけ短い往復でも continuo が先に切れる。**
+
+**切れると何が起きるか。**`sendTurn`（[internal/orchestrator/turn.go](../../internal/orchestrator/turn.go)）が
+受け取るのは herdr の `timeout` ではなく continuo 側の `read_timeout` になる。
+`herdr.ErrCodeTimeout` の分岐に入らないので、run は `turnStalled` として諦められ、
+**herdr が一言も言っていない「agent が待機状態になった」というコメントが本番のボードへ投稿される。**
+
+**ミリ秒から `time.Duration` への変換は溢れを潰す。**溢れると符号が反転し、
+**期限が「もう過ぎている」ことになって即座に切れる**（`millisToDuration`）。
+
+---
+
+### 3-39. 外部の失敗は「もう見えない」「一時的」「恒久的」で切り分ける
+
+**言いたいこと。**外から返ってきた失敗をひとまとめに扱うと、**1件の巻き添えで全件が落ちる**か、
+**1回の遅れで機能が永久に止まる。**3つに分けて、それぞれ違う扱いをする。
+
+| 種類 | 何をするか |
+| --- | --- |
+| もう見えない | 結果から省く。合成した状態を作らない。**エラーにしない** |
+| 一時的 | エラーで返し、機能は生かしたまま次の巡回でやり直す |
+| 恒久的 | 諦める。警告は1回だけ出し、**起動は止めない** |
+
+**ID 指定の取り直し**（[internal/tracker/adapter.go](../../internal/tracker/adapter.go) の `FetchIssuesByIDs`）。
+「もう見えない」は `nodes(ids:)` が `null` を返した item に加えて、
+**archive 済み・Status 未設定・Issue でも DraftIssue でもない content** の3つである。
+どれも候補の取得（`items(...)`）が最初から返さないもので、ボードとしては正常である
+（本番のボードは104件中4件が Status 未設定）。
+**provider 側の異常（content が空・repository が空・`nameWithOwner` の形が不正）だけがエラーである**
+（`SPEC.md` 11.1 の malformed）。1件をエラーにすると、同じ呼び出しに乗った他の run の照合・
+取り残された worktree の照合・再起動時の復元が丸ごと飛ぶ。
+
+**枠の判定**（[internal/ratelimit/ratelimit.go](../../internal/ratelimit/ratelimit.go) の `Fetch`）。
+`security` が期限内に返らないのは一時的である。連続 `MaxTemporaryCredentialFailures`（5回）で
+初めて諦める。**打ち切り（ctx の cancel）は回数にも数えない。**恒久的なのは
+「`security` が PATH に無い・Keychain に項目が無い・ファイルが無い・環境変数が空・
+中身が壊れている・usage API が 401 / 403」である。
+**1回で諦めると、枠を使い切って黙っただけのエージェントを stall と誤認して pane を閉じる**（3-27）。
+
+---
+
+### 3-40. 外部プロセスを起こす段には、必ず期限を掛ける
+
+**言いたいこと。**`gh` は返らないことがある（Keychain がロックされて確認のダイアログが出る）。
+**期限が無いと、無人の continuo は何のログも出さずに永久に止まる。**flock は握ったままなので、
+別の端末から起動すると「二重起動」と言われる。
+
+**掛ける場所。**起動の段2b（依存の組み立て。[internal/daemon/daemon.go](../../internal/daemon/daemon.go) の `build`）で
+`gh auth token` を起こす。ここに `StartupCheckTimeout`（既定60秒）と同じ期限を掛ける。
+**起動時検査（段3）の期限はこの手前には届かない。**
+
+**殺したあとの後始末にも上限を置く**（`cmd.WaitDelay`）。置かないと、`gh` が孫プロセスへ
+標準出力を渡していた場合に `Output` が返らず、**期限を掛けた意味が無くなる。**
+
+**落ちた理由は gh 自身の言葉で見せる。**`CheckGHProjectScope` は `gh auth status` の出力を
+エラー文へ添える。添えないと、gh が書いた本当の理由（`The token in keyring is invalid.`）が
+1文字も画面に出ない。
+
+**「gh が非 0 で終わった」を「未ログイン」と同一視しない。**ログイン済みでも一時的に GitHub へ
+届かなければ、gh は `Failed to log in to <host> account <name>` と書いて非 0 で終わる
+（実測: gh 2.97.0、プロキシで塞いだ状態、終了コード 1。**`Logged in to ` という文字列を含まない**）。
+このとき案内するのは `gh auth login` ではなく `gh auth refresh -h github.com` であり、
+そもそもネットワークが戻れば何もしなくてよい。**`gh auth login` を案内すると、
+原因はネットワーク側なので直らないまま、運用者に無駄な再認証をさせることになる。**
+
+---
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す

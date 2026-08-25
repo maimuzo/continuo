@@ -57,8 +57,18 @@ const keychainStderrMax = 200
 //
 // **「読めなかった」と「返ってこなかった」を言い分けるためにある。**返ってこなかった場合は
 // 確認のダイアログが出たままである可能性が高く、人間に見せる案内が変わる（設計 3-34b）。
-// **この場合も枠の判定は諦める**ので、ErrNoCredentials と一緒に包んで返す。
+// **この1回では枠を読めない**ので、ErrNoCredentials と一緒に包んで返す。
+// **ただし1回で諦めてはならない。**確認のダイアログも子プロセスの起動の遅れも一時的なもので、
+// 次の巡回では読める。`Fetch` はこれを一時的な失敗として数え、
+// MaxTemporaryCredentialFailures 回続いて初めて枠の判定を諦める。
 var ErrKeychainTimeout = errors.New("Keychain の読み取りが期限内に終わりませんでした")
+
+// ErrKeychainCanceled は呼び出し側が `security` の実行を打ち切ったことを表す。
+//
+// **「読めなかった」と「打ち切った」を言い分けるためにある。**打ち切りは資格情報の問題では
+// ないので、**これを受けても枠の判定を諦めてはならない**（終了処理の途中で ctx を切ると
+// 必ずこれになる。設計 3-15）。
+var ErrKeychainCanceled = errors.New("Keychain の読み取りを打ち切りました")
 
 // KeychainProbe は Keychain から読めた資格情報の「項目の名前」だけを持つ。
 //
@@ -168,9 +178,19 @@ func runSecurity(ctx context.Context, timeout time.Duration) ([]byte, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
+		// **期限切れを先に見る。**`ctx` 自身の期限で切れた場合も「返ってこなかった」であり、
+		// 呼び出し側（`continuo doctor` の検査の期限・巡回の枠の読み取り）はどちらも
+		// やり直せば通るかもしれないものとして扱う。
 		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			return nil, i18n.Errorf(i18n.KeyRatelimitKeychainTimeout,
 				ErrNoCredentials, ErrKeychainTimeout, timeout, securityBinary)
+		}
+		// **呼び出し側が打ち切ったことを、`security` の失敗と混ぜない。**
+		// 混ぜると、終了処理で ctx を切っただけの1回が「資格情報が読めない」と記録され、
+		// **次に起動するまで枠の判定が戻らなくなる。**
+		if ctx.Err() != nil {
+			return nil, i18n.Errorf(i18n.KeyRatelimitKeychainCanceled,
+				ErrNoCredentials, ErrKeychainCanceled, securityBinary, ctx.Err())
 		}
 		return nil, i18n.Errorf(i18n.KeyRatelimitKeychainRunFailed,
 			ErrNoCredentials, securityBinary, KeychainService, err, securityStderr(err))

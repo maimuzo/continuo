@@ -297,6 +297,79 @@ func TestRun_ghがPATHに無ければ起動時検査の文言で落ちる(t *tes
 	}
 }
 
+// writeHangingGHAuthToken は、`gh auth token` が返ってこない偽の `gh` を PATH の先頭へ置く。
+//
+// **`gh auth status` には答える。**止まるのはトークンの取得だけにして、
+// どの段で止まったのかを言い分けられるようにする。
+//
+// t: 呼び出し元のテスト。
+// dir: 実行ファイルを置くディレクトリ。
+func writeHangingGHAuthToken(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("テスト用gh mock を置くディレクトリを作れません: %v", err)
+	}
+	// **`exec` で置き換える。**シェルを残すと、殺したあともシェルが標準出力の書き手として
+	// 残り、後始末を待つぶんテストが遅くなる。
+	gh := `#!/bin/sh
+if [ "$1" = "auth" ] && [ "$2" = "token" ]; then
+  exec sleep 300
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(gh), 0o755); err != nil {
+		t.Fatalf("テスト用gh mock を書けません: %v", err)
+	}
+}
+
+// TestRun_ghauthtokenが返らなければ起動を止める は、
+// 依存を組み立てる段の期限を固定する。
+//
+// 目的: `tracker.provider.token_source` の既定は `gh_auth` なので、依存の組み立ての中で
+// `gh auth token` が走る。**そこに期限が無いと、gh が返らないとき continuo は何のログも
+// 出さずに永久に止まる**（起動時検査にも復元にも巡回にも進まない）。Keychain がロックされて
+// 確認のダイアログが出ると、無人で起動した continuo には答える人がいない。
+// flock は握ったままなので、別の端末から起動すると「二重起動」と言われる。
+//
+// 与える情報: `gh auth token` が返ってこない偽の `gh` と、500 ミリ秒の起動時検査の期限。
+//
+// 成功条件: 30 秒以内に起動の段のエラーで返り、文言がトークンの取得の失敗を指すこと。
+func TestRun_ghauthtokenが返らなければ起動を止める(t *testing.T) {
+	root := wiringRoot(t)
+	runtimeDir := filepath.Join(root, "rt")
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		t.Fatalf("実行時ディレクトリを作れません: %v", err)
+	}
+	writeHangingGHAuthToken(t, binDir)
+	path := writeWiringWorkflow(t, root, "", "")
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
+	t.Setenv(daemon.EnvGraphQLEndpoint, "")
+
+	start := time.Now()
+	err := daemon.Run(context.Background(), daemon.Options{
+		ConfigPath:          path,
+		Logger:              slog.New(slog.DiscardHandler),
+		StartupCheckTimeout: 500 * time.Millisecond,
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("gh auth token が返らないのに起動できてしまった")
+	}
+	if elapsed > 30*time.Second {
+		t.Fatalf("期限を掛けずに待ち続けた: %v", elapsed)
+	}
+	if !errors.Is(err, daemon.ErrStartup) {
+		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+	}
+	if !strings.Contains(err.Error(), "トークンを取得できません") {
+		t.Fatalf("トークンの取得で止まったことが文言に出ていない: %v", err)
+	}
+}
+
 // TestRestoreDefaultSignalsOnShutdown_1回目を受けたら登録を外す は、
 // 2回目の signal が効くことを支える結線を確かめる。
 //

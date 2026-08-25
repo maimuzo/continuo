@@ -239,9 +239,15 @@ type AgentPromptResult struct {
 
 // AgentPrompt は agent.prompt を呼び、agent へプロンプトを送る。
 //
-// 待ち時間は params.Wait で変わる。Wait が nil でないときは turn の完了まで待つので
-// Turn（claude.turn_timeout_ms。既定1時間）を使い、nil のときは herdr の socket API の
-// 応答を待つだけなので Read（herdr.read_timeout_ms。既定5秒）を使う。
+// 待ち時間は params.Wait で変わる。Wait が nil のときは herdr の socket API の応答を
+// 待つだけなので Read（herdr.read_timeout_ms。既定5秒）を使う。
+//
+// **Wait が nil でないときは、herdr 側の待ち受けより必ず長い上限を使う**
+// （waitReadBudget。Turn と params.Wait.TimeoutMs の大きいほうに Read ぶんの余裕を足す）。
+// **Turn をそのまま使ってはならない。**herdr の待ち受けはリクエストが届いてから数え始めるので、
+// 同じ値だと continuo 側の socket が必ず先に切れ、呼び出し側は herdr の timeout
+// （ErrCodeTimeout）を一度も受け取れない。
+//
 // ctx に期限があればそちらを使う。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -255,7 +261,7 @@ func (c *Client) AgentPrompt(ctx context.Context, params AgentPromptParams) (*Ag
 
 	timeout := c.timeouts.Read
 	if params.Wait != nil {
-		timeout = c.timeouts.Turn
+		timeout = waitReadBudget(c.timeouts.Turn, params.Wait.TimeoutMs, c.timeouts.Read)
 	}
 
 	raw, err := c.call(ctx, MethodAgentPrompt, params, timeout)
@@ -435,8 +441,12 @@ type AgentWaitResult struct {
 
 // AgentWait は agent.wait を呼び、agent の状態が変わるまで待つ。
 //
-// 待ち時間は Turn（claude.turn_timeout_ms。既定1時間）を使う。状態変化を待つ呼び出しは
-// herdr の socket API の応答用の Read（既定5秒）では足りないためである。
+// 待ち時間は waitReadBudget が決める（Turn と params.TimeoutMs の大きいほうに Read ぶんの
+// 余裕を足した値）。状態変化を待つ呼び出しは herdr の socket API の応答用の Read（既定5秒）
+// では足りず、かつ **herdr 側の待ち受けと同じ値では continuo 側が必ず先に切れる**ためである
+// （AgentPrompt と同じ理由。`claude.poll_wait_ms` に `claude.turn_timeout_ms` と同じ値を
+// 書く設定を config の検証は許している）。
+//
 // ctx に期限があればそちらを使う。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -448,7 +458,9 @@ func (c *Client) AgentWait(ctx context.Context, params AgentWaitParams) (*AgentW
 		return nil, err
 	}
 
-	raw, err := c.call(ctx, MethodAgentWait, params, c.timeouts.Turn)
+	raw, err := c.call(
+		ctx, MethodAgentWait, params,
+		waitReadBudget(c.timeouts.Turn, params.TimeoutMs, c.timeouts.Read))
 	if err != nil {
 		return nil, err
 	}
