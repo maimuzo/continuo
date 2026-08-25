@@ -91,7 +91,6 @@
   "cli.doctor.err_too_many_positional": "エラー: continuo doctor の位置引数は WORKFLOW.md のパスを1つだけ受け付けます（%d 個指定されました: %v）",
   "cli.doctor.err_write_report": "エラー: 検査結果を書き出せません: %v",
   "cli.doctor.warn_path_unresolved": "設定ファイルの場所を決められません（残りの検査は続けます）: %v",
-  "cli.err_flag_after_positional": "エラー: 位置引数のあとにフラグらしき引数 %q があります。フラグは位置引数より前に書いてください",
   "cli.err_generic": "エラー: %v",
   "cli.err_getwd": "エラー: 作業ディレクトリを取得できません: %v",
   "cli.err_load_config": "エラー: 設定ファイルを読めません（%s）: %v",

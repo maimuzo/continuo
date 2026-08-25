@@ -169,6 +169,11 @@ continuo abandon — 間違えて着手した issue を、着手する前の状�
 `allow-keychain-access` / `doctor` / `version` / `hook` で、
 引数に何も渡さなければ常駐する。
 
+**フラグは位置引数の前でも後ろでも書ける。**`git` / `docker` / `gh` と同じである。
+`continuo abandon <issue の URL> --dry-run` と `continuo abandon --dry-run <issue の URL>` は
+同じ意味になる。**`--` より後ろは、`-` で始まっていても
+位置引数として扱う。**知らないフラグは、どこに書いてもエラーのままである。
+
 `allow-keychain-access --help` の出力。**フラグは1つも無い**（段5b で使う。macOS 専用）。
 
 ```text

@@ -104,23 +104,232 @@ func TestRun_知らないフラグは終了コード2で返す(t *testing.T) {
 	}
 }
 
-// TestRun_位置引数のあとに書いたフラグを黙って無視しない は、設計 3-32 の約束を確かめる。
+// TestRunAbandon_フラグは位置引数の前でも後ろでも同じに効く は、フラグの置き場所を問わないことを確かめる。
 //
-// **`continuo init ./dir --force` のような並びは、Go の flag では `--force` が
-// 位置引数として扱われ、黙って効かない。**気づかないまま「上書きされなかった」と
-// 悩むことになるので、誤りとして落とす。
+// **`git` も `docker` も `gh` もフラグを後ろに書ける。**利用者はそちらに慣れているので、
+// `continuo abandon <URL> --dry-run` を弾かない。**弾いていた版では、この道具を作った本人が
+// 実際に間違えた。**
 //
-// 目的: 位置引数のあとにフラグを書いたら 2 で止まること。
-// 与える情報: `init <ディレクトリ> --force`。
-// 成功条件: 終了コードが 2 で、そのフラグの名前が stderr に出ていること。
-func TestRun_位置引数のあとに書いたフラグを黙って無視しない(t *testing.T) {
-	dir := t.TempDir()
-	code, _, stderr := runCLI([]string{"init", dir, "--force"}, "")
-	if code != 2 {
-		t.Fatalf("終了コードが 2 でない: %d（stderr: %s）", code, stderr)
+// 目的: `--dry-run` を issue の URL の前に書いても後ろに書いても、同じ値が渡ること。
+// 与える情報: フラグが前の並びと、フラグが後ろの並び。
+// 成功条件: どちらも DryRun が真で、issue の URL が位置引数として渡ること。
+func TestRunAbandon_フラグは位置引数の前でも後ろでも同じに効く(t *testing.T) {
+	url := "https://github.com/octocat/hello-world/issues/42"
+	cases := map[string][]string{
+		"フラグが前":  {"abandon", "--dry-run", url},
+		"フラグが後ろ": {"abandon", url, "--dry-run"},
 	}
-	if !strings.Contains(stderr, "--force") {
-		t.Errorf("どのフラグが問題かを示していない: %s", stderr)
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			var got abandon.Options
+			deps := cli.Deps{AbandonRun: func(_ context.Context, opts abandon.Options) int {
+				got = opts
+				return 0
+			}}
+
+			code, _, stderr := runCLIWith(deps, args, "")
+
+			if code != 0 {
+				t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+			}
+			if !got.DryRun {
+				t.Error("--dry-run が DryRun へ渡っていない")
+			}
+			if got.IssueURL != url {
+				t.Errorf("issue の URL が %q ではなく %q で渡っている", url, got.IssueURL)
+			}
+		})
+	}
+}
+
+// TestRunAbandon_後ろに書いた値を取るフラグは次の引数を巻き込まない は、並べ替えの要点を確かめる。
+//
+// **`--to "Ice Box"` の `Ice Box` はフラグの値であって位置引数ではない。**
+// 取り違えると、位置引数が3つあるとして落ちるか、WORKFLOW.md の場所として扱われる。
+//
+// 目的: `abandon <URL> <ディレクトリ> --to "Ice Box"` で、ToState と設定ファイルの場所が
+// どちらも正しく渡ること。
+// 与える情報: 値を取るフラグを末尾に書いた並び。
+// 成功条件: ToState が "Ice Box"、ConfigPath が渡したディレクトリの WORKFLOW.md であること。
+func TestRunAbandon_後ろに書いた値を取るフラグは次の引数を巻き込まない(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	url := "https://github.com/octocat/hello-world/issues/42"
+	var got abandon.Options
+	deps := cli.Deps{AbandonRun: func(_ context.Context, opts abandon.Options) int {
+		got = opts
+		return 0
+	}}
+
+	code, _, stderr := runCLIWith(deps, []string{"abandon", url, dir, "--to", "Ice Box"}, "")
+
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if got.ToState != "Ice Box" {
+		t.Errorf("--to が ToState へ %q ではなく %q で渡っている", "Ice Box", got.ToState)
+	}
+	if want := filepath.Join(dir, "WORKFLOW.md"); got.ConfigPath != want {
+		t.Errorf("設定ファイルのパスが %q ではなく %q で渡っている", want, got.ConfigPath)
+	}
+	if got.IssueURL != url {
+		t.Errorf("issue の URL が %q ではなく %q で渡っている", url, got.IssueURL)
+	}
+}
+
+// TestRunAbandon_二重ダッシュのあとは位置引数として扱う は、`--` の作法を確かめる。
+//
+// **`--` より後ろは、`-` で始まっていてもフラグではない。**この作法が無いと、
+// `-` で始まる文字列を位置引数として渡す手段が消える。
+//
+// 目的: `abandon -- --dry-run` の `--dry-run` が issue の URL として渡り、
+// DryRun が立たないこと。
+// 与える情報: `--` のあとにフラグらしき文字列を1つ置いた並び。
+// 成功条件: IssueURL が "--dry-run"、DryRun が偽であること。
+func TestRunAbandon_二重ダッシュのあとは位置引数として扱う(t *testing.T) {
+	var got abandon.Options
+	deps := cli.Deps{AbandonRun: func(_ context.Context, opts abandon.Options) int {
+		got = opts
+		return 0
+	}}
+
+	code, _, stderr := runCLIWith(deps, []string{"abandon", "--", "--dry-run"}, "")
+
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if got.IssueURL != "--dry-run" {
+		t.Errorf("`--` のあとが位置引数になっていない: IssueURL=%q", got.IssueURL)
+	}
+	if got.DryRun {
+		t.Error("`--` のあとの文字列がフラグとして解釈されている")
+	}
+}
+
+// TestRun_知らないフラグは後ろに書いてもエラーのまま は、打ち間違いを通さないことを確かめる。
+//
+// **後ろのフラグを受け付けるようにしても、知らないフラグまで通してはならない。**
+// `--dryrun` のような打ち間違いを黙って位置引数として飲み込むと、
+// `--dry-run` のつもりで本当に消すことになる。
+//
+// 目的: 位置引数のあとに知らないフラグを書いたら 2 で止まること。
+// 与える情報: `init <ディレクトリ> --dryrun` と `abandon <URL> --dryrun`。
+// 成功条件: どちらも終了コードが 2 で、stderr に理由が出ていること。
+func TestRun_知らないフラグは後ろに書いてもエラーのまま(t *testing.T) {
+	url := "https://github.com/octocat/hello-world/issues/42"
+	cases := map[string][]string{
+		"init":    {"init", t.TempDir(), "--dryrun"},
+		"abandon": {"abandon", url, "--dryrun"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			deps := cli.Deps{
+				ScaffoldDetect: fixedDetection,
+				AbandonRun: func(_ context.Context, _ abandon.Options) int {
+					t.Error("知らないフラグなのに本体を呼んでいる")
+					return 0
+				},
+			}
+
+			code, _, stderr := runCLIWith(deps, args, "")
+
+			if code != 2 {
+				t.Errorf("終了コードが 2 でない: %d（stderr: %s）", code, stderr)
+			}
+			if stderr == "" {
+				t.Error("何が誤りかを stderr へ出していない")
+			}
+		})
+	}
+}
+
+// TestRunInit_後ろに書いたforceが効く は、`continuo init` でも並べ替えが効くことを確かめる。
+//
+// **1つのサブコマンドだけ違う挙動にしない。**`init <ディレクトリ> --force` が効かないと、
+// 「上書きされなかった」と悩むことになる。
+//
+// 目的: 既に WORKFLOW.md があるディレクトリで `init <ディレクトリ> --force` が上書きすること。
+// 与える情報: 人間が足した行を含む WORKFLOW.md があるディレクトリ。
+// 成功条件: 終了コードが 0 で、足した行が消えている（＝上書きされた）こと。
+func TestRunInit_後ろに書いたforceが効く(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "WORKFLOW.md")
+	const mark = "# 人間が手で足した行\n"
+	if err := os.WriteFile(path, []byte(scaffold.Template()+mark), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+	deps := cli.Deps{ScaffoldDetect: fixedDetection}
+
+	code, _, stderr := runCLIWith(deps, []string{"init", dir, "--force"}, "")
+
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	if strings.HasSuffix(string(got), mark) {
+		t.Error("--force を後ろに書いたのに上書きされていない")
+	}
+}
+
+// TestRunTrust_後ろに書いたdryRunが効く は、`continuo trust` でも並べ替えが効くことを確かめる。
+//
+// **ここで効かないと、下見のつもりで叩いた `trust <パス> --dry-run` が本当に書き込む。**
+//
+// 目的: `trust <パス> --dry-run` で Apply を1度も呼ばないこと。
+// 与える情報: 未登録の項目を1件返す Plan と、末尾に置いた `--dry-run`。
+// 成功条件: Apply が呼ばれず、引数の誤り（2）でも終わらないこと。
+func TestRunTrust_後ろに書いたdryRunが効く(t *testing.T) {
+	deps, _ := fakeHome(t)
+	var applied bool
+	deps.TrustPlan = func(_ context.Context, _ trust.Options) (*trust.Report, error) {
+		return &trust.Report{
+			ClaudeConfigPath: "/tmp/.claude.json",
+			Entries: []trust.Entry{
+				{Repository: "octocat/hello-world", ClonePath: "/repos/hello-world",
+					TrustKey: "/repos/hello-world", Trusted: false},
+			},
+		}, nil
+	}
+	deps.TrustApply = func(_ context.Context, _ trust.Options, _ *trust.Report) (*trust.ApplyResult, error) {
+		applied = true
+		return &trust.ApplyResult{}, nil
+	}
+
+	code, _, stderr := runCLIWith(deps,
+		[]string{"trust", filepath.Join(writeWorkflowFor(t), "WORKFLOW.md"), "--dry-run"}, "")
+
+	if code == 2 {
+		t.Fatalf("引数の誤りとして落ちている: stderr=%s", stderr)
+	}
+	if applied {
+		t.Error("後ろに書いた --dry-run が効かず Apply を呼んでいる")
+	}
+}
+
+// TestRunDoctor_後ろに書いたhelpが効く は、`continuo doctor` でも並べ替えが効くことを確かめる。
+//
+// **doctor が持つフラグは `--help` だけである。**それが後ろで効くかを見れば、
+// 並べ替えを通していることを確かめられる。
+//
+// 目的: `doctor <ディレクトリ> --help` が使い方を出して 0 で終わり、検査を始めないこと。
+// 与える情報: 位置引数のあとに置いた `--help`。
+// 成功条件: 終了コードが 0 で、検査を1度も呼ばないこと。
+func TestRunDoctor_後ろに書いたhelpが効く(t *testing.T) {
+	var ran bool
+	deps := cli.Deps{DoctorRun: func(_ context.Context, _ doctor.Options) doctor.Report {
+		ran = true
+		return doctor.Report{}
+	}}
+
+	code, _, stderr := runCLIWith(deps, []string{"doctor", t.TempDir(), "--help"}, "")
+
+	if code != 0 {
+		t.Fatalf("--help の終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if ran {
+		t.Error("--help なのに検査を始めている")
 	}
 }
 
@@ -1028,19 +1237,19 @@ func TestRunAbandon_フラグを立てなければ偽と空で渡る(t *testing.
 
 // TestRunAbandon_引数の誤りは本体を呼ばずに2で止まる は、消す処理へ進ませないことを確かめる。
 //
-// **引数を取り違えたまま進むと、消す相手を間違える。**位置引数のあとのフラグは
-// Go の flag では黙って無視されるので、`--dry-run` のつもりで本当に消すことになる。
+// **引数を取り違えたまま進むと、消す相手を間違える。**打ち間違えたフラグを位置引数として
+// 飲み込むと、`--dry-run` のつもりで本当に消すことになる。
 //
-// 目的: issue の URL が無い・位置引数が3つ以上・位置引数のあとにフラグを書いた場合に、
+// 目的: issue の URL が無い・位置引数が3つ以上・知らないフラグを書いた場合に、
 // 終了コード 2 で止まり、abandon の本体を1度も呼ばないこと。
 // 与える情報: 誤った並びの3通り。
 // 成功条件: すべて終了コードが 2、本体の呼び出しが0回、stderr に理由が出ていること。
 func TestRunAbandon_引数の誤りは本体を呼ばずに2で止まる(t *testing.T) {
 	url := "https://github.com/octocat/hello-world/issues/42"
 	cases := map[string][]string{
-		"URLが無い":      {"abandon"},
-		"位置引数が3つ":     {"abandon", url, "a", "b"},
-		"位置引数のあとのフラグ": {"abandon", url, "--dry-run"},
+		"URLが無い":  {"abandon"},
+		"位置引数が3つ": {"abandon", url, "a", "b"},
+		"知らないフラグ": {"abandon", url, "--dryrun"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {

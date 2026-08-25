@@ -143,6 +143,8 @@ continuo                          # 常駐を始める
 
 **止めるときは `Ctrl+C`。**巡回を止め、turn ループを畳んで抜けます。**pane は閉じません。**Claude Code はそのまま動き続けるので、次に起動したとき、その pane を引き継いで続きから進めます。
 
+**フラグは位置引数の前でも後ろでも構いません。**`git` や `gh` と同じで、`continuo trust ~/continuo-work --dry-run` と `continuo trust --dry-run ~/continuo-work` は同じ意味です。**`--` より後ろは、`-` で始まっていても位置引数として扱います。**知らないフラグは、どこに書いてもエラーのままです。
+
 ### 間違えて着手したとき
 
 **`Ready` に置く issue を間違えたら、`continuo abandon` で着手する前の状態へ戻します。**worktree・pane・herdr の workspace・branch をまとめて消します。

@@ -321,8 +321,6 @@ const (
 
 // CLI の共通の文言（複数のサブコマンドが同じ文面を出す）。
 const (
-	// KeyCLIErrFlagAfterPositional は位置引数のあとにフラグが書かれたときに出る。
-	KeyCLIErrFlagAfterPositional Key = "cli.err_flag_after_positional"
 	// KeyCLIErrGetwd は作業ディレクトリを引けなかったときに出る。
 	KeyCLIErrGetwd Key = "cli.err_getwd"
 	// KeyCLIErrResolveConfigPath はWORKFLOW.md の場所を決められなかったときに出る。
@@ -1773,7 +1771,6 @@ var allKeys = []Key{
 	KeyDoctorCredentialsKeychainNoAccessToken,
 	KeyDoctorCredentialsRemedyKeychainTimeout,
 	KeyDoctorCredentialsRemedyUseKeychain,
-	KeyCLIErrFlagAfterPositional,
 	KeyCLIErrGetwd,
 	KeyCLIErrResolveConfigPath,
 	KeyCLIErrLoadConfig,
