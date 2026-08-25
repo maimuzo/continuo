@@ -40,18 +40,22 @@ BASIC FLOW:
 10. システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消し、実体の無い登録がその1件だけであれば git の worktree の登録を掃除する。
 11. IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN
 12.   システムは herdr に workspace の一覧を要求する。
-13.   IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN
-14.     システムは herdr にリポジトリの親 workspace を閉じることを要求する。
-15.   ENDIF
-16. ENDIF
-17. IF 身元ファイルに書かれた branch がリポジトリに実在する THEN
-18.   システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。
-19. ELSE
-20.   システムは branch を消す対象が無かったものとして扱い、残ったものに数えない。
-21. ENDIF
-22. システムは issue ごとの Claude Code の設定ファイルを消す。
-23. システムは利用者に片付けの完了をログで応答する。
-POSTCONDITION: worktree は置き場所に無い。branch は無い（元から無かった場合を含む）。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
+13.   IF 控えた ID の workspace がそのリポジトリ本体を開いている THEN
+14.     IF 同じリポジトリの worktree の workspace が1つも残っていない THEN
+15.       システムは herdr にリポジトリの親 workspace を閉じることを要求する。
+16.     ELSE
+17.       システムは同じリポジトリの残っている worktree のうち、置き場所の内側にあって身元ファイルを読めて親 workspace の ID をまだ持っていないものすべてへ、その ID を書き移す。
+18.     ENDIF
+19.   ENDIF
+20. ENDIF
+21. IF 身元ファイルに書かれた branch がリポジトリに実在する THEN
+22.   システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。
+23. ELSE
+24.   システムは branch を消す対象が無かったものとして扱い、残ったものに数えない。
+25. ENDIF
+26. システムは issue ごとの Claude Code の設定ファイルを消す。
+27. システムは利用者に片付けの完了をログで応答する。
+POSTCONDITION: worktree は置き場所に無い。branch は無い（元から無かった場合を含む）。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。残っていた場合は、その worktree の身元ファイルが親 workspace の ID を持っている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW 片付けの対象外:
 RFS BASIC FLOW 5
@@ -87,14 +91,14 @@ RFS BASIC FLOW 8
 POSTCONDITION: worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。次の巡回では同じ理由のコメントが増えない。
 
 GLOBAL ALTERNATIVE FLOW 壊れたref:
-BRANCH FROM BASIC FLOW 17
+BRANCH FROM BASIC FLOW 21
 WHEN branch の ref が読めず git が branch の実在にも削除にも答えられない場合
 1. システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。
 2. システムは壊れた ref のファイルを1つ消す。
 3. システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。
 4. システムは VALIDATES THAT 消したあとに branch が残っていない。
 5. システムは branch の始末の結果を利用者に応答する。
-6. RESUME STEP 22
+6. RESUME STEP 26
 POSTCONDITION: branch は無い。壊れた ref のファイルは消えている。packed-refs は書き換えていない。
 
 SPECIFIC ALTERNATIVE FLOW 消さないref:
@@ -159,13 +163,13 @@ herdr workspace はリポジトリを知らなくても消せる**ので、そ�
 
 **言いたいこと。**`refs/heads/<branch>` のファイルが読めない状態になっていると、
 `git branch -D` は `error: branch '<名前>' not found` で断る。**その branch は誰にも消せない。**
-そこでステップ18 は、ファイルとして消す経路を持つ（設計 [3-22b](../../../plans/continuo_design.md)）。
+そこでステップ22 は、ファイルとして消す経路を持つ（設計 [3-22b](../../../plans/continuo_design.md)）。
 
 **消してよい条件は設計 3-22b にある5つで、全部を満たすときだけ消す。**
 とくに `herdr.worktree.branch_template` から作った接頭辞で始まる名前だけを対象にし、
 **packed-refs は1バイトも触らない。**
 
-**壊れた ref を「実在しない」と読み替えてはならない。**ステップ17 の実在の検査
+**壊れた ref を「実在しない」と読み替えてはならない。**ステップ21 の実在の検査
 （`git show-ref --verify --quiet refs/heads/<名前>`）は、**壊れた ref にも
 終了コード 1 を返す**（実測: 2026-08-25、git 2.50.1）。**そこを「元から無かった」に
 丸めると、壊れた ref のファイルが誰にも消されないまま残る。**そこで実在の検査が
@@ -197,7 +201,7 @@ detached でもない」ときに限り、壊れた ref の判定を検算の答
 [test/live/herdr_test.go](test/live/herdr_test.go)）。`cwd` に worktree のパスを渡す案も
 `linked_worktree_source` で断られる。**親は herdr の必須の親である。**
 
-**閉じてよい条件は2つあり、両方満たすときだけ閉じる**（ステップ11〜16）。
+**閉じてよい条件は2つあり、両方満たすときだけ閉じる**（ステップ11〜20）。
 
 | 条件 | 落とすと何が起きるか |
 | --- | --- |
@@ -209,6 +213,29 @@ detached でもない」ときに限り、壊れた ref の判定を検算の答
 **その値は herdr の現物と突き合わせてから使う**（worktree の直下にあり、エージェントが
 書き換えられるため）。
 
+## 閉じずに残したら、閉じる責任を残った worktree へ渡す
+
+**言いたいこと。**閉じずに残したまま自分の身元ファイルを消すと、**その親 workspace は
+誰にも閉じられない。**残っている worktree の身元ファイルへ ID を書き移す（ステップ17）。
+
+**何が問題だったか。**リポジトリの親を控えるのは、**それを最初に開かせた1つの issue だけ**
+である（2件目以降は「自分より先からあった」と見て空文字を書く）。その1件が先に片付くと、
+ID はどこにも残らない。`agent.max_concurrent_agents` の既定は2なので、
+**同じリポジトリの issue を2件並行して走らせれば、ふつうに起きる。**
+issue #19 で直したはずの「issue 1件につき1つ溜まる」が、並行実行のときだけ元に戻る。
+
+**採る扱い。**
+
+| 何を | どうするか |
+| --- | --- |
+| 渡す相手 | 同じリポジトリに属し、**置き場所の内側にあって身元ファイルを読める** worktree の**全部** |
+| 既に ID を持っている worktree | **上書きしない**（別のリポジトリの親を閉じにいく身元ファイルを作らないため） |
+| 1件も渡せなかったとき | 手で閉じてほしいことをログに残す |
+
+**1つだけに渡さない。**渡した先の片付けが途中で落ちれば、そこで責任が消える。
+**全部が持っていれば、最後に片付いた1つが閉じる**（それより前の片付けは
+「まだ他の worktree がある」ので閉じずに書き直すだけである）。
+
 ## 実在しない branch を「残っている」と言わない
 
 **言いたいこと。**着手が `git worktree add` で失敗し続けると、**ディレクトリだけが残って
@@ -216,7 +243,7 @@ branch は1度も作られない。**そこを片付けたとき「branch が残
 **利用者は存在しないものを探して消しに行く**（issue #27）。
 
 **採る扱い。**`git branch -D` に渡す前に `git show-ref --verify refs/heads/<名前>` で
-**実在するかを見る**（ステップ17）。
+**実在するかを見る**（ステップ21）。
 
 | 実在するか | どうするか |
 | --- | --- |
@@ -252,14 +279,20 @@ flowchart TD
     B10["10. worktree の削除を要求し残っていれば自分で消し登録がその1件だけなら掃除する"]
     B11{"11. IF 開かせた親 workspace を控えてある"}
     B12["12. workspace の一覧を要求する"]
-    B13{"13. IF 控えた ID が現物と一致し、同じリポジトリの worktree が残っていない"}
-    B14["14. リポジトリの親 workspace を閉じることを要求する"]
-    B17{"17. IF 身元ファイルの branch がリポジトリに実在する"}
-    B18["18. リポジトリ側で branch の現物を確かめて削除を要求する"]
-    B20["20. 消す対象が無かったものとして扱い残ったものに数えない"]
-    B21["21. ENDIF"]
-    B22["22. issue ごとの設定ファイルを消す"]
-    B23["23. 片付けの完了をログで応答する"]
+    B13{"13. IF 控えた ID が現物と一致する"}
+    B14{"14. IF 同じリポジトリの worktree が残っていない"}
+    B15["15. リポジトリの親 workspace を閉じることを要求する"]
+    B16["16. ELSE"]
+    B17["17. 残っている worktree の身元ファイルへ親 workspace の ID を書き移す"]
+    B18["18. ENDIF"]
+    B19["19. ENDIF"]
+    B20["20. ENDIF"]
+    B21{"21. IF 身元ファイルの branch がリポジトリに実在する"}
+    B22["22. リポジトリ側で branch の現物を確かめて削除を要求する"]
+    B24["24. 消す対象が無かったものとして扱い残ったものに数えない"]
+    B25["25. ENDIF"]
+    B26["26. issue ごとの設定ファイルを消す"]
+    B27["27. 片付けの完了をログで応答する"]
     BPOST(["POSTCONDITION worktree と branch が無い"])
 
     B1 --> B2 --> B3 --> B4 --> B5
@@ -271,15 +304,20 @@ flowchart TD
     B7 -- 真 --> B8
     B8 -- 偽 --> F4S1
     B8 -- 真 --> B9 --> B10 --> B11
-    B11 -- 偽 --> B17
+    B11 -- 偽 --> B20
     B11 -- 真 --> B12 --> B13
-    B13 -- 偽 --> B17
-    B13 -- 真 --> B14 --> B17
-    B17 -- 真 --> B18 --> B21
-    B17 -- 偽 --> B20 --> B21
-    B21 --> B22 --> B23 --> BPOST
+    B13 -- 偽 --> B19
+    B13 -- 真 --> B14
+    B14 -- 真 --> B15 --> B18
+    B14 -- 偽 --> B16 --> B17 --> B18
+    B18 --> B19
+    B19 --> B20
+    B20 --> B21
+    B21 -- 真 --> B22 --> B25
+    B21 -- 偽 --> B24 --> B25
+    B25 --> B26 --> B27 --> BPOST
     B5 -. "片付けの無効: WHEN cleanup.enabled が false の場合" .-> G1S1
-    B17 -. "壊れたref: WHEN ref が読めず branch の実在にも削除にも答えられない場合" .-> G2S1
+    B21 -. "壊れたref: WHEN ref が読めず branch の実在にも削除にも答えられない場合" .-> G2S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 片付けの対象外 / RFS BASIC FLOW 5"]
         F1S1["1. worktree を残す"] --> F1S2["2. workspace の pane の一覧を要求する"] --> F1S3{"3. IF active_states に戻っていて pane に agent がいる"}
@@ -304,10 +342,10 @@ flowchart TD
         G1S1["1. 片付けを1つも行わない"] --> G1S2["2. issue にコメントを書かない"] --> G1S3["3. 片付けを行わないことをログで応答する"] --> G1S4["4. ABORT"]
     end
 
-    subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 17"]
+    subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 21"]
         G2S1{"1. VALIDATES THAT continuo の接頭辞で始まる refs/heads の下の通常のファイルで中身が読めない"}
         G2S1 -- 真 --> G2S2["2. 壊れた ref のファイルを1つ消す"] --> G2S3["3. 消したパスと消す前の commit と理由を応答する"] --> G2S4{"4. VALIDATES THAT 消したあとに branch が残っていない"}
-        G2S4 -- 真 --> G2S5["5. branch の始末の結果を応答する"] --> G2S6["6. RESUME STEP 22"]
+        G2S4 -- 真 --> G2S5["5. branch の始末の結果を応答する"] --> G2S6["6. RESUME STEP 26"]
     end
 
     subgraph SAF5 ["SPECIFIC ALTERNATIVE FLOW 消さないref / RFS 壊れたref 1"]
@@ -363,8 +401,10 @@ sequenceDiagram
             opt システムが開かせたリポジトリの親 workspace を控えてある
                 S->>H: workspace の一覧を要求する
                 H-->>S: 開いている workspace を応答する
-                opt 控えた ID が現物と一致し、同じリポジトリの worktree が残っていない
+                alt 控えた ID が現物と一致し、同じリポジトリの worktree が残っていない
                     S->>H: リポジトリの親 workspace の close を要求する
+                else 同じリポジトリの worktree が残っている
+                    S->>S: 残っている worktree の身元ファイルへ親 workspace の ID を書き移す
                 end
             end
             S->>G: branch がリポジトリに実在するかを要求する

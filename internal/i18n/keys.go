@@ -623,6 +623,15 @@ const (
 	// KeyAbandonOwnerRepoUnreadable はworktree のパスから owner とリポジトリ名を
 	// 取り出せないときに出る。
 	KeyAbandonOwnerRepoUnreadable Key = "abandon.owner_repo_unreadable"
+	// KeyAbandonSlugMismatch は身元ファイルの issue_url が、置き場所の最下層の
+	// ディレクトリ名（既定の branch_template では issue 番号を含む）と食い違うときに出る。
+	KeyAbandonSlugMismatch Key = "abandon.slug_mismatch"
+	// KeyAbandonSlugUnknown は、その issue に期待するディレクトリ名を組み立てられない
+	// ときに出る（`herdr.worktree.branch_template` を描画できない場合）。
+	KeyAbandonSlugUnknown Key = "abandon.slug_unknown"
+	// KeyAbandonErrUndecided は、候補にできなかった worktree があるために
+	// 「この issue の worktree はありません」と断言できないときに出る。
+	KeyAbandonErrUndecided Key = "abandon.err_undecided"
 	// KeyAbandonToSkipped は片付ける worktree が無く、`--to` の指定を使わずに
 	// 終わるときに出る。**指定を黙って捨てない。**
 	KeyAbandonToSkipped Key = "abandon.to_skipped"
@@ -1553,6 +1562,9 @@ const (
 	// KeyWorkspaceGitUnpushedCountUnreadable は、どの remote にも載っていない commit の数を
 	// 数値として読めなかったときに出る。
 	KeyWorkspaceGitUnpushedCountUnreadable Key = "workspace.git_unpushed_commits.count_unreadable"
+	// KeyWorkspaceGhqNameInvalid は ghq へ渡す owner 名またはリポジトリ名が
+	// GitHub の名前として通らない形だったときに出る。**別名に直さずに断る**ためのものである。
+	KeyWorkspaceGhqNameInvalid Key = "workspace.ghq_target.name_invalid"
 	// KeyWorkspaceRunGhqListStartFailed は `ghq list` を起動できなかったときに出る。
 	KeyWorkspaceRunGhqListStartFailed Key = "workspace.run_ghq_list.start_failed"
 	// KeyWorkspaceRunGhqListExitFailed は `ghq list` が「該当が無い」以外の理由で非 0 で終わったときに出る。
@@ -2042,6 +2054,9 @@ var allKeys = []Key{
 	KeyAbandonNotFound,
 	KeyAbandonOwnerRepoMismatch,
 	KeyAbandonOwnerRepoUnreadable,
+	KeyAbandonSlugMismatch,
+	KeyAbandonSlugUnknown,
+	KeyAbandonErrUndecided,
 	KeyAbandonIdentityUnreadable,
 	KeyAbandonIdentityMissing,
 	KeyAbandonErrMultiple,
@@ -2373,6 +2388,7 @@ var allKeys = []Key{
 	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode,
 	KeyWorkspaceGitBranchExistsUnexpectedExitCode,
 	KeyWorkspaceGitUnpushedCountUnreadable,
+	KeyWorkspaceGhqNameInvalid,
 	KeyWorkspaceRunGhqListStartFailed,
 	KeyWorkspaceRunGhqListExitFailed,
 	KeyWorkspaceGitLocalBranchesOutputUnreadable,

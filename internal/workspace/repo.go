@@ -91,6 +91,31 @@ func (m *Manager) OwnerRepoOf(worktreePath string) (string, string, error) {
 	return ownerRepoFromWorktreePath(m.resolvedRoot, worktreePath)
 }
 
+// ExpectedSlugFor は、その issue の worktree が置かれるはずの**最下層のディレクトリ名**
+// （置き場所 `<root>/<host>/<owner>/<repo>/<スラグ>` の4階層目）を返す（3-22）。
+//
+// **探すためではなく、拾った候補の裏を取るために使う**（`continuo abandon` の段2）。
+// 消す相手は身元ファイルの `issue_url` で決まるが、その値は worktree の直下にあって
+// エージェントが書き換えられる。**置き場所の owner とリポジトリ名だけを比べても、
+// 同じリポジトリの中では別の issue の worktree を消せてしまう**（issue 42 の worktree で
+// `issue_url` を issue 99 に書き換えるだけでよい）。**スラグは branch 名から作られ、
+// 既定の `branch_template` では issue 番号を含む**ので、これを比べれば取り違えを弾ける。
+//
+// **パスから組み立てて探す道具ではない**（設計 3-4 の『パスから組み立てて探しては
+// ならない』とは矛盾しない）。走査で拾った候補が、その issue のものだと言えるかを
+// 確かめるだけである。
+//
+// issue: 確かめたい issue。
+// 戻り値の1つ目: 期待するディレクトリ名。
+// 戻り値の2つ目: `branch_template` を描画できない場合のエラー。
+func (m *Manager) ExpectedSlugFor(issue IssueRef) (string, error) {
+	branch, _, err := RenderBranch(m.cfg.Herdr.Worktree.BranchTemplate, issue)
+	if err != nil {
+		return "", err
+	}
+	return Slug(branch), nil
+}
+
 // clonePath は `ghq list -p -e <owner>/<repo>` の答えを、短い間だけ覚えながら返す。
 //
 // ctx: 実行に適用するコンテキスト。

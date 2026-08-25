@@ -485,6 +485,37 @@ func (m *Manager) SetAgentName(ctx context.Context, worktreePath, agentName stri
 	return m.writeIdentityLocked(ctx, worktreePath, *identity)
 }
 
+// errRepoWorkspaceIDTaken は、その worktree が既にリポジトリの親 workspace を
+// 閉じる責任を持っていることを表す（**上書きしない**という判断の合図である）。
+var errRepoWorkspaceIDTaken = errors.New("この worktree は既に親 workspace の ID を持っています")
+
+// SetRepoWorkspaceID は身元ファイルの herdr_repo_workspace_id だけを書き換える
+// （issue #19。片付けが「他の worktree がまだ開いている」と決めたときの引き継ぎ）。
+//
+// **空のときだけ書く。**既に値が入っているなら、その worktree が閉じる責任を持っている。
+// 上書きすると、**別のリポジトリの親を閉じにいく身元ファイルを continuo 自身が作る。**
+//
+// ctx: git を実行するときに適用するコンテキスト（`info/exclude` の登録に使う）。
+// worktreePath: 引き継がせる worktree の絶対パス（置き場所の内側であること）。
+// id: 親 workspace の ID。
+// 戻り値: 身元ファイルを読めない・書けない場合のエラー。既に値が入っている場合は
+// errRepoWorkspaceIDTaken を包んだエラー（**失敗ではない**）。
+func (m *Manager) SetRepoWorkspaceID(ctx context.Context, worktreePath, id string) error {
+	// **読んで書き戻すので、その間ほかの更新を入れない**（入れると片方が消える）。
+	unlock := m.identityMu.lock(identityLockKey(worktreePath))
+	defer unlock()
+
+	identity, err := m.ReadIdentity(worktreePath)
+	if err != nil {
+		return err
+	}
+	if identity.HerdrRepoWorkspaceID != "" {
+		return fmt.Errorf("%w: %s", errRepoWorkspaceIDTaken, identity.HerdrRepoWorkspaceID)
+	}
+	identity.HerdrRepoWorkspaceID = id
+	return m.writeIdentityLocked(ctx, worktreePath, *identity)
+}
+
 // IncrementTakeover は身元ファイルの takeover_count を1つ増やして書き戻す（3-4 の段5b）。
 //
 // **引き継いだときと再 dispatch したときの両方で増やす**（3-18）。

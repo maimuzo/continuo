@@ -261,6 +261,12 @@ func (r *runner) run(ctx context.Context) int {
 
 	// 段1 の後半: 動いているなら手を離させ、pane が消えるまで待つ。
 	// **`--dry-run` では通らない。**ボードへ書き込み、エージェントに手を離させるからである。
+	//
+	// **手を離させる書き込みが入らなかったときは待たない。**Status が
+	// `tracker.active_states` に入っていなければ park は何も書かずに戻り、
+	// **継続監視は active に戻った pane しか閉じない**（3-37-3）。
+	// つまり誰もその pane を閉じないので、**待てば必ず時間切れになる。**
+	// そのときは「動いていない」ときと同じ検査（stopIfPaneAlive）へ落とす。
 	switch {
 	case running && r.opts.DryRun:
 		r.parkDeferred = true
@@ -268,8 +274,10 @@ func (r *runner) run(ctx context.Context) int {
 		if code := r.park(ctx, found); code != ExitOK {
 			return code
 		}
-		if code := r.waitPaneGone(ctx, found.Path); code != ExitOK {
-			return code
+		if r.parkedTo != "" {
+			if code := r.waitPaneGone(ctx, found.Path); code != ExitOK {
+				return code
+			}
 		}
 	}
 
@@ -300,7 +308,10 @@ func (r *runner) run(ctx context.Context) int {
 	// 環境変数（CONTINUO_RUNTIME_DIR / XDG_RUNTIME_DIR / TMPDIR）で決まるので、
 	// launchd から起動した継続監視と端末から叩いた abandon で食い違いうる。
 	// **herdr の socket は設定で決まって環境変数では動かないので、ロックより信用できる。**
-	if !running {
+	//
+	// **手を離させる書き込みが入らなかったときも、ここを通す。**pane 待ちを飛ばして
+	// いるので、確かめる口がここしか無い。
+	if r.parkedTo == "" {
 		if code := r.stopIfPaneAlive(ctx, found.Path); code != ExitOK {
 			return code
 		}
@@ -353,8 +364,9 @@ func (r *runner) isRunning() (bool, Unlocker, error) {
 // **身元ファイルが1つも無いディレクトリも同じ扱いである**（ScanUnidentified）。
 //
 // 戻り値の1つ目: 見つかった worktree。見つからなかった場合と2つ以上あった場合は nil。
-// 戻り値の2つ目: nil を返すときの終了コード。**0件は ExitOK である**（消すものが無い）。
-// **0件のときは runner.noWorktree を真にする**（呼び出し側が段2b へ進む）。
+// 戻り値の2つ目: nil を返すときの終了コード。**0件かつ保留も0件なら ExitOK である**
+// （消すものが本当に無い。runner.noWorktree を真にして、呼び出し側が段2b へ進む）。
+// **0件でも保留が1件以上あれば ExitStopped である**（有無を確かめられていない）。
 func (r *runner) find() (*workspace.ScannedWorktree, int) {
 	scanned, err := r.deps.Workspace.Scan()
 	if err != nil {
@@ -415,19 +427,23 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 
 	switch len(matched) {
 	case 0:
+		// **判断を保留した worktree が1件でもあれば「ありません」と断言しない。**
+		// 断言すると、目の前に worktree・branch・herdr workspace が残っているのに
+		// 「もう無い」と読める1行が出て、しかも終了コード 0 で後続の手順が進む。
+		// **飛ばした1行は出るが、その直後に正反対の断定が並ぶので、どちらが本当かを
+		// 人間が判断できない。**確かめられなかったことを、確かめられなかったと言う。
+		if undecided > 0 {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrUndecided, undecided, r.issue.URL))
+			r.logger.Warn("候補にできなかった worktree があるので、この issue の worktree の有無を確かめられませんでした",
+				"issue", r.issue.URL, "undecided", undecided)
+			r.reportToSkipped()
+			return nil, ExitStopped
+		}
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonNotFound, r.issue.URL))
 		// **worktree が無くても、まだ終わりではない**（issue #27）。**片付けの途中で
 		// 失敗すると branch だけが残る。**worktree を起点にしか探さないと、
 		// そのあと何度叩いてもここで終わり、利用者は手で消すしかなくなる。
-		//
-		// **ただし、判断を保留した worktree が1つでもあれば進まない。**身元ファイルを
-		// 読めなかった worktree は、この issue のものかもしれない。**その branch は
-		// 孤児ではなく、生きている worktree のものである。**
-		if undecided == 0 {
-			r.noWorktree = true
-		} else {
-			r.reportToSkipped()
-		}
+		r.noWorktree = true
 		return nil, ExitOK
 	case 1:
 		return &matched[0], ExitOK
@@ -443,17 +459,48 @@ func (r *runner) find() (*workspace.ScannedWorktree, int) {
 	}
 }
 
+// issueRef は internal/workspace へ渡す issue の情報を組み立てる。
+//
+// **人間が打った URL だけから作る。**身元ファイルの値は1つも混ぜない
+// （混ぜると、裏を取るための値がエージェントの書き換えの影響を受ける）。
+//
+// 戻り値: 置き場所と branch 名の組み立てに要る項目を埋めた issue。
+func (r *runner) issueRef() workspace.IssueRef {
+	return workspace.IssueRef{
+		URL:        r.issue.URL,
+		Identifier: r.issue.Identifier(),
+		Owner:      r.issue.Owner,
+		Repo:       r.issue.Repo,
+		Number:     r.issue.Number,
+	}
+}
+
 // pathAgrees は、身元ファイルの `issue_url` が worktree の置き場所と辻褄が合うかを返す。
 //
 // **消す相手を決める値の裏を取るための検算である。**置き場所から取り出した
-// owner とリポジトリ名は**エージェントが書き換えられない**ので、書き換えられる
-// `issue_url` の側がそれと食い違えば、その worktree は候補にしない。
+// owner・リポジトリ名・スラグ（最下層のディレクトリ名）は**エージェントが
+// 書き換えられない**ので、書き換えられる `issue_url` の側がそれと食い違えば、
+// その worktree は候補にしない。
+//
+// **スラグまで比べる。**owner とリポジトリ名だけを比べていたときは、
+// **同じリポジトリの中なら別の issue の worktree を消せた。**issue 42 の worktree で
+// 動くエージェントが自分の `issue_url` を issue 99 に書き換え、issue 99 の worktree が
+// まだ無ければ、`continuo abandon <issue 99 の URL>` は候補1件として 42 の worktree と
+// branch を消す。**スラグは `branch_template` から作られ、既定では issue 番号を含む。**
+//
+// **ホストは比べない。**置き場所の1階層目は issue の URL のホスト部だが、
+// 同じ issue が GitHub Enterprise のホスト名と `github.com` の両方で書かれうる
+// （`HostFromIssueURL` は URL が空なら `github.com` に倒す）。ホストまで比べると、
+// **表記が違うだけの正当な worktree を候補から外す。**owner・リポジトリ名・スラグが
+// 全部一致してホストだけが違う worktree が2つあるなら、それは人間が中身を見て
+// 決めることであり、段2 の「候補が2件なら止まる」がそのまま効く。
 //
 // **候補から外すだけで、消しはしない。**食い違いの原因は書き換えとは限らず、
-// 人間が置き場所を移した跡かもしれない。どちらであれ何があったかは1行残す。
+// 人間が置き場所を移した跡や、`branch_template` を後から変えた跡かもしれない。
+// どちらであれ何があったかは1行残す。
 //
 // w: 身元ファイルの `issue_url` が一致した worktree。
-// 戻り値: 置き場所の owner とリポジトリ名が渡された issue と一致すれば true。
+// 戻り値: 置き場所の owner・リポジトリ名・スラグが渡された issue と一致すれば true。
 func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
 	owner, repo, err := r.deps.Workspace.OwnerRepoOf(w.Path)
 	if err != nil {
@@ -463,13 +510,31 @@ func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
 		return false
 	}
 	// **GitHub は owner とリポジトリ名の大文字小文字を区別しない**ので、無視して比べる。
-	if strings.EqualFold(owner, r.issue.Owner) && strings.EqualFold(repo, r.issue.Repo) {
+	if !strings.EqualFold(owner, r.issue.Owner) || !strings.EqualFold(repo, r.issue.Repo) {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOwnerRepoMismatch,
+			w.Path, owner, repo, w.Identity.IssueURL))
+		r.logger.Warn("身元ファイルの issue_url が置き場所と食い違います（消しません）",
+			"worktree", w.Path, "path_owner", owner, "path_repo", repo,
+			"issue_url", w.Identity.IssueURL)
+		return false
+	}
+
+	want, err := r.deps.Workspace.ExpectedSlugFor(r.issueRef())
+	if err != nil {
+		// **組み立てられないなら、裏を取れない。**取れないものを消しにいかない。
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonSlugUnknown, w.Path, err))
+		r.logger.Warn("この issue のディレクトリ名を組み立てられません（消しません）",
+			"worktree", w.Path, "error", err)
+		return false
+	}
+	got := filepath.Base(filepath.Clean(w.Path))
+	if strings.EqualFold(got, want) {
 		return true
 	}
-	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOwnerRepoMismatch,
-		w.Path, owner, repo, w.Identity.IssueURL))
-	r.logger.Warn("身元ファイルの issue_url が置き場所と食い違います（消しません）",
-		"worktree", w.Path, "path_owner", owner, "path_repo", repo,
+	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonSlugMismatch,
+		w.Path, got, want, w.Identity.IssueURL, r.cfg.Herdr.Worktree.BranchTemplate))
+	r.logger.Warn("身元ファイルの issue_url が置き場所のディレクトリ名と食い違います（消しません）",
+		"worktree", w.Path, "path_slug", got, "expected_slug", want,
 		"issue_url", w.Identity.IssueURL)
 	return false
 }
@@ -502,13 +567,7 @@ func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
 // 戻り値: 終了コード。**消した・消すものが無かった・`--dry-run` は ExitOK である。**
 // **`--force` が無くて消さなかった場合と、消せなかった場合は ExitStopped である。**
 func (r *runner) abandonOrphanBranch(ctx context.Context) int {
-	branch, err := r.deps.Workspace.FindIssueBranch(ctx, workspace.IssueRef{
-		URL:        r.issue.URL,
-		Identifier: r.issue.Identifier(),
-		Owner:      r.issue.Owner,
-		Repo:       r.issue.Repo,
-		Number:     r.issue.Number,
-	})
+	branch, err := r.deps.Workspace.FindIssueBranch(ctx, r.issueRef())
 	if err != nil {
 		// **「残っている」とも「無い」とも言わない。**調べられなかっただけである。
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchUnknown, err))
@@ -756,11 +815,15 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 // waitPaneGone は、その worktree を cwd に持つ pane が無くなるまで待つ（段1 の後半）。
 //
 // **消えるまで待たないと、消した worktree の中で Claude Code が動き続ける。**
-// 上限を超えたら**何も消さずに止まる。**
+// 上限を超えたら**何も消さずに止まる。ただし `--force` があれば pane ごと消す。**
+//
+// **呼ぶのは、手を離させる書き込みが実際に入ったときだけである。**書き込みが入って
+// いなければ継続監視はその pane を閉じないので、待っても必ず時間切れになる。
 //
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 対象の worktree の絶対パス。
-// 戻り値: pane が消えたら ExitOK、上限を超えた場合・herdr に問い合わせられない場合は ExitStopped。
+// 戻り値: pane が消えたら ExitOK、上限を超えた場合は `--force` の有無で
+// ExitOK / ExitStopped、herdr に問い合わせられない場合は ExitStopped。
 func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 	timeout := r.paneWaitTimeout()
 	interval := r.opts.PaneWaitInterval
@@ -780,8 +843,16 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 			return ExitOK
 		}
 		if !r.deps.Now().Before(deadline) {
-			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneRemains,
-				timeout, strings.Join(paneIDs(panes), " ")))
+			ids := strings.Join(paneIDs(panes), " ")
+			// **`--force` なら pane ごと消す。**止まったままにすると、
+			// **herdr workspace を手で閉じるまでその issue を取り消せない。**
+			// 動いていない側の同じ検査（stopIfPaneAlive）には元から逃げ道があり、
+			// **こちらだけ越えられないのは筋が通らない。**
+			if r.opts.Force {
+				fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPaneAliveForced, ids))
+				return ExitOK
+			}
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneRemains, timeout, ids))
 			return ExitStopped
 		}
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonWaitingPane,

@@ -73,6 +73,9 @@ type Workspace interface {
 	// OwnerRepoOf は worktree のパスから owner とリポジトリ名を取り出す。
 	// **身元ファイルを読まない**（エージェントが書き換えられるため）。
 	OwnerRepoOf(worktreePath string) (string, string, error)
+	// ExpectedSlugFor は、その issue の worktree が置かれるはずの最下層のディレクトリ名を返す。
+	// **拾った候補の裏を取るために使う**（既定の branch_template ではここに issue 番号が入る）。
+	ExpectedSlugFor(issue workspace.IssueRef) (string, error)
 	// FindIssueBranch は、issue に対応する branch が clone に残っていないかを調べる。
 	// **worktree が1つも無いときに使う**（issue #27）。1文字も書き換えない。
 	FindIssueBranch(ctx context.Context, issue workspace.IssueRef) (workspace.IssueBranch, error)
