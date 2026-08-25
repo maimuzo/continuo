@@ -745,6 +745,9 @@ const (
 	KeyAbandonRemovedWithLeftovers Key = "abandon.removed_with_leftovers"
 	// KeyAbandonLeftover は片付け切れずに残ったものを1件ずつ並べる行に出る。
 	KeyAbandonLeftover Key = "abandon.leftover"
+	// KeyAbandonNotice は continuo が片付けの途中で自分で行ったことを1件ずつ並べる行に出る
+	// （壊れた ref のファイルを消した、など。issue #28）。
+	KeyAbandonNotice Key = "abandon.notice"
 
 	// KeyAbandonStatusLeftAlone は--to が無いのでStatus を動かさないときに出る。
 	KeyAbandonStatusLeftAlone Key = "abandon.status_left_alone"
@@ -1477,6 +1480,24 @@ const (
 	KeyWorkspaceGitWorktreeAddOrphanDeleteFailed Key = "workspace.git_worktree_add.orphan_delete_failed"
 	// KeyWorkspaceGitWorktreeAddOrphanDeleted は孤児 branch を消せたときに、元の失敗へ添えて出る。
 	KeyWorkspaceGitWorktreeAddOrphanDeleted Key = "workspace.git_worktree_add.orphan_deleted"
+	// KeyWorkspaceBrokenRefStatFailed は壊れた ref のファイルの状態を見に行けなかったときに出る。
+	KeyWorkspaceBrokenRefStatFailed Key = "workspace.broken_ref.stat_failed"
+	// KeyWorkspaceBrokenRefRemoveFailed は壊れた ref のファイルを消せなかったときに出る。
+	KeyWorkspaceBrokenRefRemoveFailed Key = "workspace.broken_ref.remove_failed"
+	// KeyWorkspaceBrokenRefResolveFailed は ref のパスのシンボリックリンクを解決できなかったときに出る。
+	KeyWorkspaceBrokenRefResolveFailed Key = "workspace.broken_ref.resolve_failed"
+	// KeyWorkspaceBrokenRefRemoved は壊れた ref のファイルを消したことを人間の画面へ出す。
+	KeyWorkspaceBrokenRefRemoved Key = "workspace.broken_ref.removed"
+	// KeyWorkspaceBrokenRefRemovedWithTip は壊れた ref のファイルを消したことを、
+	// 消す前に指していた commit と戻し方を添えて人間の画面へ出す。
+	KeyWorkspaceBrokenRefRemovedWithTip Key = "workspace.broken_ref.removed_with_tip"
+	// KeyWorkspaceBrokenRefBranchCheckFailed は壊れた ref を消したあとに branch の有無を確かめられなかったときに出る。
+	KeyWorkspaceBrokenRefBranchCheckFailed Key = "workspace.broken_ref.branch_check_failed"
+	// KeyWorkspaceBrokenRefBranchSurvived は壊れた ref を消しても branch が残っているときに出る
+	// （packed-refs 側の同名の ref が生き返った場合）。
+	KeyWorkspaceBrokenRefBranchSurvived Key = "workspace.broken_ref.branch_survived"
+	// KeyWorkspaceWorktreeHeadRefsUnreadable は worktree の HEAD の一覧を読めなかったときに出る。
+	KeyWorkspaceWorktreeHeadRefsUnreadable Key = "workspace.worktree_head_refs.unreadable"
 	// KeyWorkspaceGitAheadOfUpstreamCountUnreadable は upstream より先にある commit の数を数値として読めなかったときに出る。
 	KeyWorkspaceGitAheadOfUpstreamCountUnreadable Key = "workspace.git_ahead_of_upstream.count_unreadable"
 	// KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode は `git diff --quiet` が 0 でも 1 でもない終了コードを返したときに出る。
@@ -2022,6 +2043,7 @@ var allKeys = []Key{
 	KeyAbandonRemoved,
 	KeyAbandonRemovedWithLeftovers,
 	KeyAbandonLeftover,
+	KeyAbandonNotice,
 	KeyAbandonStatusLeftAlone,
 	KeyAbandonErrStatusTargetUnknown,
 	KeyAbandonStatusMoved,
@@ -2273,6 +2295,14 @@ var allKeys = []Key{
 	KeyWorkspaceGitWorktreeAddOrphanCheckFailed,
 	KeyWorkspaceGitWorktreeAddOrphanDeleteFailed,
 	KeyWorkspaceGitWorktreeAddOrphanDeleted,
+	KeyWorkspaceBrokenRefStatFailed,
+	KeyWorkspaceBrokenRefRemoveFailed,
+	KeyWorkspaceBrokenRefResolveFailed,
+	KeyWorkspaceBrokenRefRemoved,
+	KeyWorkspaceBrokenRefRemovedWithTip,
+	KeyWorkspaceBrokenRefBranchCheckFailed,
+	KeyWorkspaceBrokenRefBranchSurvived,
+	KeyWorkspaceWorktreeHeadRefsUnreadable,
 	KeyWorkspaceGitAheadOfUpstreamCountUnreadable,
 	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode,
 	KeyWorkspaceRunGhqListStartFailed,

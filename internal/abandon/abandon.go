@@ -758,6 +758,12 @@ func (r *runner) remove(ctx context.Context, worktreePath string, leftover *work
 	//
 	// **残ったものが1件も無ければ branch も消えている。**branch が残る経路は
 	// 3つ（設定で無効・検算に落ちた・`git branch -D` が失敗）あり、**どれも Leftovers を積む。**
+	// **continuo が自分で行ったことは、残ったものと別に必ず出す**（issue #28）。
+	// 壊れた ref のファイルを1つ消したことがここに入る。**`.git` の中のファイルを
+	// continuo が消したという事実を、人間が知る手立てを画面に残す。**
+	for _, notice := range result.Notices {
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonNotice, notice))
+	}
 	if len(result.Leftovers) == 0 {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRemoved, worktreePath, branch))
 		return ExitOK

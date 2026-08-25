@@ -46,6 +46,17 @@ type CleanupResult struct {
 	// **Removed が真でも空とは限らない。**worktree は消えたが branch と
 	// herdr の workspace が残る、という結果はふつうに起こる。
 	Leftovers []string
+	// Notices は**片付けの途中で continuo が自分で行った、人間へ知らせるべきこと**である
+	// （人間が読む文。issue #28）。
+	//
+	// **Leftovers とは別物である。**Leftovers は「消したが、これだけ残った」もの、
+	// Notices は「頼まれていないが、continuo が自分でこれを行った」ものである。
+	// 壊れた ref のファイルを1つ消したことが入る。
+	//
+	// **ログではなく、呼び出し側が人間の画面へ1行ずつ出すためにある。**
+	// `continuo abandon` は Logger を渡さないので、**ログに書いても誰も読めない。**
+	// **continuo が `.git` の中のファイルを1つ消したことを、人間が知る手立てを残す。**
+	Notices []string
 	// ShouldComment は、この見送りを issue へコメントすべきかどうかである。
 	// **身元ファイルの CleanupDeferredAt がゼロ値のときだけ true になる**（3-9 の手順2c）。
 	// 真のときだけ orchestrator がコメントし、**投稿に成功したあとで**
@@ -245,7 +256,7 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 		result.Leftovers = append(result.Leftovers,
 			i18n.T(i18n.KeyWorkspaceLeftoverBranchUndeletable, identity.Branch, branchReason))
 	default:
-		if err := gitBranchDelete(ctx, repoDir, branch); err != nil {
+		if err := gitBranchDelete(ctx, repoDir, branch, m.brokenRefPolicyFor(result)); err != nil {
 			m.logger.Warn("branch を消せませんでした", "branch", branch.String(), "error", err)
 			result.Leftovers = append(result.Leftovers, i18n.T(
 				i18n.KeyWorkspaceLeftoverBranchDeleteFailed, branch.String(), err, repoDir, branch.String()))
@@ -500,11 +511,25 @@ func (m *Manager) deletableBranch(
 		return "", false, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonPrefixMismatch, prefix)
 	}
 
-	head, err := gitWorktreeBranchAt(ctx, repoDir, worktreePath)
+	head, detached, err := gitWorktreeHeadAt(ctx, repoDir, worktreePath)
 	if err != nil {
 		m.logger.Warn("worktree がチェックアウトしている branch を引けないので branch を消しません",
 			"repo", repoDir, "worktree", worktreePath, "error", err)
 		return "", false, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonHeadUnreadable, err)
+	}
+	if head == "" && !detached {
+		// **git が branch を1つも答えず、detached でもないのは、その ref が壊れているときである**
+		// （実測: 2026-08-25。`worktree list --porcelain` は
+		// `HEAD 0000000000000000000000000000000000000000` の行だけを出し、
+		// `branch` の行も `detached` の行も出さない）。
+		//
+		// **detached HEAD を混ぜてはならない。**rebase 中・`git checkout <SHA>` のあと・
+		// `git bisect` 中の worktree でも branch 名は空になる。**そこまでこの分岐に入れると、
+		// 身元ファイルの branch が git の現物と1度も突き合わされないまま削除の対象になる。**
+		// detached は `detached` の行で見分けられるので、その場合は下の一致検査で落とす。
+		if m.brokenRefBranchAt(ctx, repoDir, worktreePath, branch) {
+			return branch, true, ""
+		}
 	}
 	if head != branch.String() {
 		m.logger.Warn("身元ファイルの branch が worktree の現物と一致しないので消しません",
@@ -514,6 +539,60 @@ func (m *Manager) deletableBranch(
 	}
 
 	return branch, true, ""
+}
+
+// brokenRefBranchAt は、その worktree の branch の ref が壊れていて、continuo が
+// ref のファイルとして片付けてよいかを返す（設計 3-22b）。
+//
+// **git の現物との突き合わせを、別の手立てで1本入れる。**ref が壊れていると
+// `worktree list --porcelain` は branch を答えないので、身元ファイルの値だけが残る。
+// そこで **`<共通ディレクトリ>/worktrees/<名前>/HEAD` の symref を直接読み**、
+// その worktree が本当にその branch を指していることを確かめる。
+// **HEAD のファイルは symref の1行なので、ref が壊れていても読める。**
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: 検算済みのリポジトリの作業ディレクトリ。
+// worktreePath: 対象の worktree のパス。
+// branch: 身元ファイルの branch 名（接頭辞と正規化の検査は通っていること）。
+// 戻り値: ref のファイルとして片付けてよければ true。
+func (m *Manager) brokenRefBranchAt(
+	ctx context.Context,
+	repoDir, worktreePath string,
+	branch normalize.SafeName,
+) bool {
+	commonDir, err := gitCommonDir(ctx, repoDir)
+	if err != nil {
+		m.logger.Warn("共通ディレクトリを引けないので壊れた ref として扱いません",
+			"repo", repoDir, "worktree", worktreePath, "branch", branch.String(), "error", err)
+		return false
+	}
+	heads, err := worktreeHeadRefs(commonDir)
+	if err != nil {
+		m.logger.Warn("worktree の HEAD を読めないので壊れた ref として扱いません",
+			"repo", repoDir, "worktree", worktreePath, "branch", branch.String(), "error", err)
+		return false
+	}
+	found := ""
+	for path, name := range heads {
+		if samePath(path, worktreePath) {
+			found = name
+			break
+		}
+	}
+	if found != branch.String() {
+		m.logger.Warn("worktree の HEAD が身元ファイルの branch を指していないので壊れた ref として扱いません",
+			"repo", repoDir, "worktree", worktreePath,
+			"identity_branch", branch.String(), "head_ref", found)
+		return false
+	}
+	target, brokenErr := brokenBranchRef(ctx, repoDir, branch, m.brokenRefPolicy())
+	if brokenErr != nil || target == nil {
+		return false
+	}
+	m.logger.Warn("branch の ref が壊れているので、ref のファイルとして片付けます",
+		"repo", repoDir, "worktree", worktreePath,
+		"branch", branch.String(), "ref_path", target.path, "sha", target.tip)
+	return true
 }
 
 // removeSettingsFile は issue ごとの設定ファイル（3-12）を消す。

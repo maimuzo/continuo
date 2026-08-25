@@ -81,6 +81,30 @@ RFS BASIC FLOW 8
 4. ABORT
 POSTCONDITION: worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。次の巡回では同じ理由のコメントが増えない。
 
+GLOBAL ALTERNATIVE FLOW 壊れたref:
+BRANCH FROM BASIC FLOW 17
+WHEN branch の ref が読めず git が branch を消せない場合
+1. システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。
+2. システムは壊れた ref のファイルを1つ消す。
+3. システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。
+4. システムは VALIDATES THAT 消したあとに branch が残っていない。
+5. システムは branch の始末の結果を利用者に応答する。
+6. RESUME STEP 18
+POSTCONDITION: branch は無い。壊れた ref のファイルは消えている。packed-refs は書き換えていない。
+
+SPECIFIC ALTERNATIVE FLOW 消さないref:
+RFS 壊れたref 1
+1. システムは branch を残す。
+2. RESUME STEP 5
+POSTCONDITION: branch は残っている。ref のファイルは1バイトも消えていない。worktree は置き場所に無い。
+
+SPECIFIC ALTERNATIVE FLOW 生き返ったref:
+RFS 壊れたref 4
+1. システムは branch をもう一度消すことを要求する。
+2. システムは残った branch を利用者に応答する。
+3. RESUME STEP 6
+POSTCONDITION: 壊れた ref のファイルは消えている。branch が残ったなら、残ったものとして利用者に伝えている。
+
 GLOBAL ALTERNATIVE FLOW 片付けの無効:
 BRANCH FROM BASIC FLOW 5
 WHEN 設定の cleanup.enabled が false である場合
@@ -120,6 +144,32 @@ worktree のディレクトリを自分で消し、`git worktree prune` で登�
 **リポジトリを検算できないときは branch に触らない。**clone を人間が移した・消した環境では、
 どの branch を消してよいかを確かめる手立てが無い。**worktree のディレクトリと
 herdr workspace はリポジトリを知らなくても消せる**ので、そこまではやって、残したものを言う。
+
+## 壊れた ref は branch の削除では消えない
+
+**言いたいこと。**`refs/heads/<branch>` のファイルが読めない状態になっていると、
+`git branch -D` は `error: branch '<名前>' not found` で断る。**その branch は誰にも消せない。**
+そこでステップ17 は、ファイルとして消す経路を持つ（設計 [3-22b](../../../plans/continuo_design.md)）。
+
+**消してよい条件は設計 3-22b にある5つで、全部を満たすときだけ消す。**
+とくに `herdr.worktree.branch_template` から作った接頭辞で始まる名前だけを対象にし、
+**packed-refs は1バイトも触らない。**
+
+**ref が壊れていると、branch の検算そのものが答えを出せない。**
+`git worktree list --porcelain` はその worktree について
+`HEAD 0000000000000000000000000000000000000000` の行だけを出し、`branch` の行も
+`detached` の行も出さない（実測: 2026-08-25）。**そこで「git が branch を1つも答えず、
+detached でもない」ときに限り、壊れた ref の判定を検算の答えの代わりに使う。**
+**detached HEAD の worktree でも branch 名は空になる**ので、そこを混ぜない。
+**そのうえで `<共通ディレクトリ>/worktrees/<名前>/HEAD` の symref を直接読み**、
+その worktree が本当にその branch を指していることを確かめる。
+
+**消す前に、指していた commit を控える。**`<共通ディレクトリ>/logs/refs/heads/<branch>` の
+最後の行に、最後の SHA がそのまま残っている。**読めたら、戻せるコマンドを利用者に伝える。**
+
+**ファイルを消しただけでは branch が消えたことにならない。**その branch が packed-refs にも
+載っていると、loose を消した瞬間に packed 側が生き返る。**消したあとに存在を確かめ直し、
+生き返っていたら消し直す。**消し切れなければ「片付けた」とは言わず、残ったものとして伝える。
 
 ## リポジトリの親 workspace を閉じる条件
 
@@ -189,6 +239,7 @@ flowchart TD
     B13 -- 真 --> B14 --> B17
     B17 --> B18 --> B19 --> BPOST
     B5 -. "片付けの無効: WHEN cleanup.enabled が false の場合" .-> G1S1
+    B17 -. "壊れたref: WHEN ref が読めず branch を消せない場合" .-> G2S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 片付けの対象外 / RFS BASIC FLOW 5"]
         F1S1["1. worktree を残す"] --> F1S2["2. workspace の pane の一覧を要求する"] --> F1S3{"3. IF active_states に戻っていて pane に agent がいる"}
@@ -212,6 +263,26 @@ flowchart TD
     subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 片付けの無効 / BRANCH FROM BASIC FLOW 5"]
         G1S1["1. 片付けを1つも行わない"] --> G1S2["2. issue にコメントを書かない"] --> G1S3["3. 片付けを行わないことをログで応答する"] --> G1S4["4. ABORT"]
     end
+
+    subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 17"]
+        G2S1{"1. VALIDATES THAT continuo の接頭辞で始まる refs/heads の下の通常のファイルで中身が読めない"}
+        G2S1 -- 真 --> G2S2["2. 壊れた ref のファイルを1つ消す"] --> G2S3["3. 消したパスと消す前の commit と理由を応答する"] --> G2S4{"4. VALIDATES THAT 消したあとに branch が残っていない"}
+        G2S4 -- 真 --> G2S5["5. branch の始末の結果を応答する"] --> G2S6["6. RESUME STEP 18"]
+    end
+
+    subgraph SAF5 ["SPECIFIC ALTERNATIVE FLOW 消さないref / RFS 壊れたref 1"]
+        F5S1["1. branch を残す"] --> F5S2["2. RESUME STEP 5"]
+    end
+
+    subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW 生き返ったref / RFS 壊れたref 4"]
+        F6S1["1. branch をもう一度消すことを要求する"] --> F6S2["2. 残った branch を応答する"] --> F6S3["3. RESUME STEP 6"]
+    end
+
+    G2S1 -- 偽 --> F5S1
+    F5S2 --> G2S5
+    G2S4 -- 偽 --> F6S1
+    F6S3 --> G2S6
+    G2S6 --> B18
 ```
 
 ## シーケンス図
@@ -257,6 +328,11 @@ sequenceDiagram
                 end
             end
             S->>G: branch の削除を要求する
+            opt branch の ref が読めず git が消せない
+                S->>S: 消す前の commit を reflog から控え、壊れた ref のファイルを1つ消す
+                S->>G: branch がまだ残っていないかの確認を要求する
+                S-->>T: 消したパスと消す前の commit と、残った branch を応答する
+            end
             S->>S: issue ごとの設定ファイルを消す
             S-->>T: 片付けの完了をログで応答する
         end

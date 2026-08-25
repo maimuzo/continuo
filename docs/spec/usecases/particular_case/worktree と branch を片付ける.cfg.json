@@ -3,7 +3,7 @@
   "usecase_name": "worktree と branch を片付ける",
   "source": {
     "file": "docs/spec/usecases/particular_case/worktree と branch を片付ける.rucm.md",
-    "rucm_block_sha256": "49fc2aa8d36bbc828d3669c39650973fc6b66d44512b6164e373980a671dec4d"
+    "rucm_block_sha256": "750969feb99d6c52e31f9cd896bee39c181947da5b4c5d0720eccb96946a7cc5"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -45,6 +45,36 @@
         ]
       },
       "postcondition": "worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。次の巡回では同じ理由のコメントが増えない。"
+    },
+    "壊れたref": {
+      "when": "branch の ref が読めず git が branch を消せない場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            17
+          ]
+        }
+      ],
+      "postcondition": "branch は無い。壊れた ref のファイルは消えている。packed-refs は書き換えていない。"
+    },
+    "消さないref": {
+      "rfs": {
+        "flow": "壊れたref",
+        "steps": [
+          1
+        ]
+      },
+      "postcondition": "branch は残っている。ref のファイルは1バイトも消えていない。worktree は置き場所に無い。"
+    },
+    "生き返ったref": {
+      "rfs": {
+        "flow": "壊れたref",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "壊れた ref のファイルは消えている。branch が残ったなら、残ったものとして利用者に伝えている。"
     },
     "片付けの無効": {
       "when": "設定の cleanup.enabled が false である場合",
@@ -292,6 +322,83 @@
       "statement": "ABORT"
     },
     {
+      "id": "壊れたref-1",
+      "type": "condition",
+      "flow": "壊れたref",
+      "step": 1,
+      "statement": "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。"
+    },
+    {
+      "id": "壊れたref-2",
+      "type": "action",
+      "flow": "壊れたref",
+      "step": 2,
+      "statement": "システムは壊れた ref のファイルを1つ消す。"
+    },
+    {
+      "id": "壊れたref-3",
+      "type": "action",
+      "flow": "壊れたref",
+      "step": 3,
+      "statement": "システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。"
+    },
+    {
+      "id": "壊れたref-4",
+      "type": "condition",
+      "flow": "壊れたref",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 消したあとに branch が残っていない。"
+    },
+    {
+      "id": "壊れたref-5",
+      "type": "action",
+      "flow": "壊れたref",
+      "step": 5,
+      "statement": "システムは branch の始末の結果を利用者に応答する。"
+    },
+    {
+      "id": "壊れたref-6",
+      "type": "resume",
+      "flow": "壊れたref",
+      "step": 6,
+      "statement": "RESUME STEP 18"
+    },
+    {
+      "id": "消さないref-1",
+      "type": "action",
+      "flow": "消さないref",
+      "step": 1,
+      "statement": "システムは branch を残す。"
+    },
+    {
+      "id": "消さないref-2",
+      "type": "resume",
+      "flow": "消さないref",
+      "step": 2,
+      "statement": "RESUME STEP 5"
+    },
+    {
+      "id": "生き返ったref-1",
+      "type": "action",
+      "flow": "生き返ったref",
+      "step": 1,
+      "statement": "システムは branch をもう一度消すことを要求する。"
+    },
+    {
+      "id": "生き返ったref-2",
+      "type": "action",
+      "flow": "生き返ったref",
+      "step": 2,
+      "statement": "システムは残った branch を利用者に応答する。"
+    },
+    {
+      "id": "生き返ったref-3",
+      "type": "resume",
+      "flow": "生き返ったref",
+      "step": 3,
+      "statement": "RESUME STEP 6"
+    },
+    {
       "id": "片付けの無効-1",
       "type": "action",
       "flow": "片付けの無効",
@@ -445,6 +552,12 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-17",
+      "to": "壊れたref-1",
+      "kind": "global",
+      "condition": "branch の ref が読めず git が branch を消せない場合"
+    },
+    {
       "from": "BASIC FLOW-18",
       "to": "BASIC FLOW-19",
       "kind": "seq"
@@ -515,6 +628,75 @@
       "from": "未pushの成果-3",
       "to": "未pushの成果-4",
       "kind": "seq"
+    },
+    {
+      "from": "壊れたref-1",
+      "to": "壊れたref-2",
+      "kind": "true",
+      "condition": "壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない"
+    },
+    {
+      "from": "壊れたref-1",
+      "to": "消さないref-1",
+      "kind": "false",
+      "condition": "NOT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない"
+    },
+    {
+      "from": "壊れたref-2",
+      "to": "壊れたref-3",
+      "kind": "seq"
+    },
+    {
+      "from": "壊れたref-3",
+      "to": "壊れたref-4",
+      "kind": "seq"
+    },
+    {
+      "from": "壊れたref-4",
+      "to": "壊れたref-5",
+      "kind": "true",
+      "condition": "消したあとに branch が残っていない"
+    },
+    {
+      "from": "壊れたref-4",
+      "to": "生き返ったref-1",
+      "kind": "false",
+      "condition": "NOT 消したあとに branch が残っていない"
+    },
+    {
+      "from": "壊れたref-5",
+      "to": "壊れたref-6",
+      "kind": "seq"
+    },
+    {
+      "from": "壊れたref-6",
+      "to": "BASIC FLOW-18",
+      "kind": "resume"
+    },
+    {
+      "from": "消さないref-1",
+      "to": "消さないref-2",
+      "kind": "seq"
+    },
+    {
+      "from": "消さないref-2",
+      "to": "壊れたref-5",
+      "kind": "resume"
+    },
+    {
+      "from": "生き返ったref-1",
+      "to": "生き返ったref-2",
+      "kind": "seq"
+    },
+    {
+      "from": "生き返ったref-2",
+      "to": "生き返ったref-3",
+      "kind": "seq"
+    },
+    {
+      "from": "生き返ったref-3",
+      "to": "壊れたref-6",
+      "kind": "resume"
     },
     {
       "from": "片付けの無効-1",
@@ -596,6 +778,181 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "壊れたref-5",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "システムは herdr にリポジトリの親 workspace を閉じることを要求する。",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。",
+        "システムは VALIDATES THAT 消したあとに branch が残っていない。",
+        "システムは branch の始末の結果を利用者に応答する。",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "生き返ったref-1",
+        "生き返ったref-2",
+        "生き返ったref-3",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "システムは herdr にリポジトリの親 workspace を閉じることを要求する。",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。",
+        "システムは VALIDATES THAT 消したあとに branch が残っていない。",
+        "CONDITION: NOT 消したあとに branch が残っていない",
+        "システムは branch をもう一度消すことを要求する。",
+        "システムは残った branch を利用者に応答する。",
+        "RESUME STEP 6",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "消さないref-1",
+        "消さないref-2",
+        "壊れたref-5",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "システムは herdr にリポジトリの親 workspace を閉じることを要求する。",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "CONDITION: NOT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない",
+        "システムは branch を残す。",
+        "RESUME STEP 5",
+        "システムは branch の始末の結果を利用者に応答する。",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19"
@@ -621,7 +978,179 @@
       ]
     },
     {
-      "id": "P003",
+      "id": "P006",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "壊れたref-5",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "CONDITION: NOT 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。",
+        "システムは VALIDATES THAT 消したあとに branch が残っていない。",
+        "システムは branch の始末の結果を利用者に応答する。",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "生き返ったref-1",
+        "生き返ったref-2",
+        "生き返ったref-3",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "CONDITION: NOT 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。",
+        "システムは VALIDATES THAT 消したあとに branch が残っていない。",
+        "CONDITION: NOT 消したあとに branch が残っていない",
+        "システムは branch をもう一度消すことを要求する。",
+        "システムは残った branch を利用者に応答する。",
+        "RESUME STEP 6",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "消さないref-1",
+        "消さないref-2",
+        "壊れたref-5",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "システムは herdr に workspace の一覧を要求する。",
+        "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
+        "CONDITION: NOT 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "CONDITION: NOT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない",
+        "システムは branch を残す。",
+        "RESUME STEP 5",
+        "システムは branch の始末の結果を利用者に応答する。",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P009",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
@@ -660,7 +1189,167 @@
       ]
     },
     {
-      "id": "P004",
+      "id": "P010",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "壊れたref-5",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "CONDITION: NOT システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。",
+        "システムは VALIDATES THAT 消したあとに branch が残っていない。",
+        "システムは branch の始末の結果を利用者に応答する。",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P011",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "壊れたref-2",
+        "壊れたref-3",
+        "壊れたref-4",
+        "生き返ったref-1",
+        "生き返ったref-2",
+        "生き返ったref-3",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "CONDITION: NOT システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "システムは壊れた ref のファイルを1つ消す。",
+        "システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。",
+        "システムは VALIDATES THAT 消したあとに branch が残っていない。",
+        "CONDITION: NOT 消したあとに branch が残っていない",
+        "システムは branch をもう一度消すことを要求する。",
+        "システムは残った branch を利用者に応答する。",
+        "RESUME STEP 6",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P012",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所に無い。branch は無い。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-17",
+        "壊れたref-1",
+        "消さないref-1",
+        "消さないref-2",
+        "壊れたref-5",
+        "壊れたref-6",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムは worktree の置き場所を走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムはボードを project item の ID 指定でまとめて取り直す。",
+        "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
+        "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "システムは workspace_hooks の before_remove を実行する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
+        "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
+        "CONDITION: NOT システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
+        "CONDITION: branch の ref が読めず git が branch を消せない場合",
+        "システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。",
+        "CONDITION: NOT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない",
+        "システムは branch を残す。",
+        "RESUME STEP 5",
+        "システムは branch の始末の結果を利用者に応答する。",
+        "RESUME STEP 18",
+        "システムは issue ごとの Claude Code の設定ファイルを消す。",
+        "システムは利用者に片付けの完了をログで応答する。"
+      ]
+    },
+    {
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "未pushの成果",
       "postcondition": "worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。次の巡回では同じ理由のコメントが増えない。",
@@ -695,7 +1384,7 @@
       ]
     },
     {
-      "id": "P005",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "未コミットの変更",
       "postcondition": "worktree は残っている。branch は残っている。issue に片付けを見送った理由のコメントが1件ある。身元ファイルに片付けを見送った時刻がある。",
@@ -728,7 +1417,7 @@
       ]
     },
     {
-      "id": "P006",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "置き場所の外",
       "postcondition": "worktree は残っている。branch は残っている。置き場所の外のディレクトリは1つも消えていない。",
@@ -757,7 +1446,7 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P016",
       "terminal": "abort",
       "terminal_flow": "片付けの対象外",
       "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。",
@@ -788,7 +1477,7 @@
       ]
     },
     {
-      "id": "P008",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "片付けの対象外",
       "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。active_states に戻った worktree の pane は閉じている。",
@@ -818,7 +1507,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "片付けの無効",
       "postcondition": "worktree は残っている。branch は残っている。issue にコメントは増えていない。",
@@ -848,9 +1537,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 37,
-    "nodes_covered": 37,
-    "edges_total": 39,
-    "edges_covered": 39
+    "nodes_total": 48,
+    "nodes_covered": 48,
+    "edges_total": 53,
+    "edges_covered": 53
   }
 }

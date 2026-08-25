@@ -195,6 +195,23 @@ RFS コメントの取り戻し 6
 4. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。worktree は残っている。
 
+GLOBAL ALTERNATIVE FLOW 壊れたref:
+BRANCH FROM BASIC FLOW 12
+WHEN branch の ref が読めず git が worktree を作れず、まだその ref のファイルを消していない場合
+1. システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。
+2. システムは壊れた ref のファイルを1つ消す。
+3. システムは消したファイルのパスと消した理由を記録に残す。
+4. RESUME STEP 12
+POSTCONDITION: 壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。
+
+SPECIFIC ALTERNATIVE FLOW 消さないref:
+RFS 壊れたref 1
+1. システムはボードの issue の Status に failure_state の選択肢を書く。
+2. システムは issue に worktree を用意できなかった理由を1件コメントする。
+3. システムは印を外す。
+4. ABORT
+POSTCONDITION: ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。
+
 GLOBAL ALTERNATIVE FLOW 権限の確認:
 BRANCH FROM BASIC FLOW 23
 WHEN herdr の待ち受けが blocked を返した場合
@@ -261,6 +278,28 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 `git worktree add` が `fatal: '<branch>' is already used by worktree at '<別のパス>'` で
 必ず失敗する。**片付けは `continuo abandon <issue の URL>` の出番である**
 （[着手を取り消す.rucm.md](%E7%9D%80%E6%89%8B%E3%82%92%E5%8F%96%E3%82%8A%E6%B6%88%E3%81%99.rucm.md)）。
+
+## 壊れた ref に出会ったら、その1ファイルを消してやり直す
+
+**言いたいこと。**`refs/heads/<branch>` のファイルが読めない状態になると、
+ステップ12 は何度やり直しても `reference broken` で失敗し、その issue には二度と着手できない。
+**git のコマンドでは消せないので、continuo がファイルとして1つ消して、1回だけやり直す。**
+
+**消してよい条件は設計 [3-22b](../../../plans/continuo_design.md) にある7つで、全部を満たすときだけ消す。**
+とくに `herdr.worktree.branch_template` から作った接頭辞（既定は `continuo/`）で始まる名前だけを
+対象にし、`git show-ref --verify` が通る正常な branch には触らない。
+**中身が SHA や `ref: ` として読めるなら消さない。**読めるものを消せば、その情報が失われる。
+**途中のシンボリックリンクを解決したうえで** `refs/heads` の内側に収まっていることを確かめる。
+**packed-refs は1バイトも触らない。**
+
+**やり直しは1回だけである。**2回目も失敗したら、そのままの失敗として `failure_state` へ落とす。
+
+**packed-refs 側の ref が生き返ることがある。**その branch が packed-refs にも載っていると、
+loose を消した瞬間に packed 側が有効になり、**やり直しはその（古いかもしれない）commit の
+チェックアウトになる。**どちらだったのかを記録に残す。
+
+**別の branch 名へ逃げる案は採れない。**置き場所も branch 名も issue 番号から決まる（設計 3-22）ので、
+名前を変えると片付け・復元・`continuo abandon` がその issue の worktree を引けなくなる。
 
 ## turn の終わりの判定
 
@@ -337,6 +376,7 @@ flowchart TD
     B29 -- 真 --> B30 --> B31
     B31 -- 偽 --> F6S1
     B31 -- 真 --> B32 --> B33 --> B34 --> BPOST
+    B12 -. "壊れたref: WHEN ref が読めず worktree を作れない場合" .-> G3S1
     B23 -. "権限の確認: WHEN blocked が返った場合" .-> G1S1
     B24 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> G2S1
 
@@ -407,6 +447,15 @@ flowchart TD
         F7S1["1. Status に failure_state を書く"] --> F7S2["2. pane を閉じる"] --> F7S3["3. 印を外す"] --> F7S4["4. ABORT"]
     end
 
+    subgraph GAF3 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 12"]
+        G3S1{"1. VALIDATES THAT continuo の接頭辞で始まる refs/heads の下の通常のファイルで中身が読めない"}
+        G3S1 -- 真 --> G3S2["2. 壊れた ref のファイルを1つ消す"] --> G3S3["3. 消したパスと理由を記録に残す"] --> G3S4["4. RESUME STEP 12"]
+    end
+
+    subgraph SAF17 ["SPECIFIC ALTERNATIVE FLOW 消さないref / RFS 壊れたref 1"]
+        F17S1["1. Status に failure_state を書く"] --> F17S2["2. 用意できなかった理由をコメントする"] --> F17S3["3. 印を外す"] --> F17S4["4. ABORT"]
+    end
+
     subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 権限の確認 / BRANCH FROM BASIC FLOW 23"]
         G1S1["1. pane に esc を送る"] --> G1S2["2. Status に failure_state を書く"] --> G1S3["3. pane を閉じる"] --> G1S4["4. 印を外す"] --> G1S5["5. ABORT"]
     end
@@ -422,6 +471,8 @@ flowchart TD
     F5S2 --> B24
     F6S6 -- 偽 --> F7S1
     F6S7 --> B32
+    G3S1 -- 偽 --> F17S1
+    G3S4 --> B12
 ```
 
 ## シーケンス図
@@ -460,6 +511,9 @@ sequenceDiagram
                     S->>S: 印を外す
                     Note over S: ABORT worktree は作らない
                 else 書いた
+                    alt branch の ref が読めず worktree を作れない
+                        S->>S: 壊れた ref のファイルを1つ消して worktree の作成を1回だけやり直す
+                    end
                     S->>S: worktree を作り設定ファイルと身元ファイルを書く
                     S->>H: worktree の workspace としての open と label の書き込みを要求する
                     H-->>S: workspace と pane を応答する
