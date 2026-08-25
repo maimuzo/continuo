@@ -19,11 +19,16 @@ type GHAuthTokenFunc func(ctx context.Context) (string, error)
 
 // RunGHAuthToken は実際に `gh auth token` を実行し、標準出力をトークンとして返す。
 //
-// ctx: 実行に適用するコンテキスト。
+// **ctx の期限で殺したあとの後始末にも上限を置く**（`cmd.WaitDelay`）。置かないと、
+// `gh` が孫プロセスへ標準出力を渡していた場合に `Output` が返らず、**期限を掛けた意味が
+// 無くなる**（internal/ratelimit の runSecurity と同じ理由）。
+//
+// ctx: 実行に適用するコンテキスト。**期限を持たせて渡すこと。**
 // 戻り値: 前後の空白を落としたトークン文字列。コマンドの実行に失敗した場合、または
 // 出力が空文字だった場合はエラーを返す。
 func RunGHAuthToken(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "gh", "auth", "token")
+	cmd.WaitDelay = ghWaitDelay
 	out, err := cmd.Output()
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyTrackerGHAuthTokenRunFailed, err)

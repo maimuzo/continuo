@@ -1101,7 +1101,11 @@ const (
 	// KeyTrackerGHAvailableNotInPath は gh そのものが PATH に無いときに出る。
 	KeyTrackerGHAvailableNotInPath Key = "tracker.gh_available.not_in_path"
 	// KeyTrackerGHScopeNoActiveAccount は github.com の有効なアカウントが1つも無いときに出る。
+	// **gh の出力をそのまま添える**（gh が書いた本当の理由を隠さないため）。
 	KeyTrackerGHScopeNoActiveAccount Key = "tracker.gh_scope.no_active_account"
+	// KeyTrackerGHScopeTokenUnverified は、gh は届いているのにトークンを検証できていない
+	// ときに出る（`Failed to log in to …`）。**未ログインとは直し方が違う。**
+	KeyTrackerGHScopeTokenUnverified Key = "tracker.gh_scope.token_unverified"
 	// KeyTrackerGHScopeMissingScope は有効なアカウントの scope に project が無いときに出る。
 	KeyTrackerGHScopeMissingScope Key = "tracker.gh_scope.missing_scope"
 )
@@ -1235,6 +1239,10 @@ const (
 	// KeyRatelimitCredentialsRemedyEnv は macOS 以外での直し方である
 	// （`token_source: env` にして環境変数から読む）。
 	KeyRatelimitCredentialsRemedyEnv Key = "ratelimit.credentials.remedy_env"
+
+	// KeyRatelimitCredentialsTemporaryExhausted は資格情報の一時的な失敗が
+	// 連続の上限まで続いて、枠の判定を諦めるときに出る。
+	KeyRatelimitCredentialsTemporaryExhausted Key = "ratelimit.credentials.temporary_exhausted"
 	// KeyRatelimitFetchRequestBuildFailed はusage API のリクエストを組み立てられなかったときに出る。
 	KeyRatelimitFetchRequestBuildFailed Key = "ratelimit.fetch.request_build_failed"
 	// KeyRatelimitFetchRequestFailed はusage API へ接続できなかったときに出る。
@@ -1282,6 +1290,8 @@ const (
 	KeyRatelimitKeychainBinaryNotFound Key = "ratelimit.keychain.binary_not_found"
 	// KeyRatelimitKeychainTimeout は期限内にコマンドが返らなかったときに出る。
 	KeyRatelimitKeychainTimeout Key = "ratelimit.keychain.timeout"
+	// KeyRatelimitKeychainCanceled は呼び出し側がコマンドの実行を打ち切ったときに出る。
+	KeyRatelimitKeychainCanceled Key = "ratelimit.keychain.canceled"
 	// KeyRatelimitKeychainRunFailed はコマンドが異常終了したときに出る。
 	KeyRatelimitKeychainRunFailed Key = "ratelimit.keychain.run_failed"
 	// KeyRatelimitKeychainParseFailed はKeychain の中身を JSON として解析できなかったときに出る。
@@ -2252,6 +2262,7 @@ var allKeys = []Key{
 	KeyTrackerGHAuthStatusStartFailed,
 	KeyTrackerGHAvailableNotInPath,
 	KeyTrackerGHScopeNoActiveAccount,
+	KeyTrackerGHScopeTokenUnverified,
 	KeyTrackerGHScopeMissingScope,
 	KeyHookserverStartListenFailed,
 	KeyHookserverRemoveStaleSocketLstatFailed,
@@ -2287,6 +2298,7 @@ var allKeys = []Key{
 	KeyRatelimitCredentialsFileNotExist,
 	KeyRatelimitCredentialsRemedyKeychain,
 	KeyRatelimitCredentialsRemedyEnv,
+	KeyRatelimitCredentialsTemporaryExhausted,
 	KeyRatelimitFetchRequestBuildFailed,
 	KeyRatelimitFetchRequestFailed,
 	KeyRatelimitFetchBodyReadFailed,
@@ -2301,6 +2313,7 @@ var allKeys = []Key{
 	KeyRatelimitCredentialsFileAccessTokenMissing,
 	KeyRatelimitKeychainBinaryNotFound,
 	KeyRatelimitKeychainTimeout,
+	KeyRatelimitKeychainCanceled,
 	KeyRatelimitKeychainRunFailed,
 	KeyRatelimitKeychainParseFailed,
 	KeyRatelimitKeychainOauthMissing,

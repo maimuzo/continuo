@@ -5,6 +5,8 @@
 //
 //	1 設定を読んで検証する      … 起動を止める。**pane には触らない**
 //	2 flock を取る             … 二重起動なので即座に終了する
+//	2b 依存を組み立てる          … **ここで外部プロセスを1つ起こす**（`gh auth token`）。
+//	                             **必ず期限を掛ける**（掛けないと無言で永久に止まる）
 //	3 3-6 の起動時検査を全部通す … **起動を止める。生きている pane は閉じずに放置する**
 //	4 復元（3-4 の段2〜段9）    … 段ごとの規則に従う
 //	4b 起動時の掃除（3-9 の手順6 / 6b）… **復元のあとに走らせる**
@@ -189,8 +191,10 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 	logger.Info("二重起動防止のロックを獲得しました", "lock_file", lockPath)
 
+	// 段2b: 依存を組み立てる。**ここで `gh auth token` が走る**（`token_source` の既定は
+	// `gh_auth`）。外部プロセスを起こす段なので、起動時検査と同じ期限を掛ける。
 	deps, err := build(ctx, cfg, loaded.PromptTemplate, sockPath, runtimeDir, opts.ContinuoPath,
-		endpoint, opts.TrackerTimeout, logger)
+		endpoint, opts.TrackerTimeout, opts.StartupCheckTimeout, logger)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrStartup, err)
 	}
@@ -411,7 +415,14 @@ func isLoopbackHost(host string) bool {
 
 // build は依存を組み立てる。**この関数は検査を行わない**（検査は runStartupChecks）。
 //
-// ctx: トークンの取得に適用するコンテキスト。
+// **ただし外部プロセスは1つ起こす。**`token_source` の既定は `gh_auth` なので、
+// ここで `gh auth token` が走る。**その呼び出しには必ず期限を掛ける**
+// （tokenTimeout）。掛けないと、`gh` が返らないとき——たとえば Keychain がロックされていて
+// 確認のダイアログが出たまま答える人がいないとき——**continuo は何のログも出さずに永久に
+// 止まる**（起動時検査にも復元にも巡回にも進まない。flock は握ったままなので、
+// 別の端末から起動すると「二重起動」と言われる）。
+//
+// ctx: 組み立てに適用するコンテキスト。
 // cfg: 検証済みの設定。
 // promptTemplate: WORKFLOW.md の本文（1回目のプロンプトのテンプレート）。
 // sockPath: 解決済みの hook の socket の絶対パス。
@@ -419,13 +430,15 @@ func isLoopbackHost(host string) bool {
 // continuoPath: `continuo hook` を起動する実行ファイルのパス。空なら os.Executable()。
 // graphqlEndpoint: GitHub の GraphQL API の接続先（検査済み）。空なら本番の GitHub。
 // trackerTimeout: GraphQL の1リクエストの上限。0 なら DefaultTrackerTimeout。
+// tokenTimeout: トークンの取得（`gh auth token`）の上限。0 以下なら
+// DefaultStartupCheckTimeout。
 // logger: ログの出力先。
 // 戻り値: 組み立てた依存と、組み立てに失敗した場合のエラー。
 func build(
 	ctx context.Context,
 	cfg config.Config,
 	promptTemplate, sockPath, runtimeDir, continuoPath, graphqlEndpoint string,
-	trackerTimeout time.Duration,
+	trackerTimeout, tokenTimeout time.Duration,
 	logger *slog.Logger,
 ) (*deps, error) {
 	herdrSocket, err := herdr.ResolveSocketPath(cfg.Herdr.Socket)
@@ -458,7 +471,13 @@ func build(
 	if err := tracker.CheckGHAvailable(); err != nil {
 		return nil, err
 	}
-	token, err := tracker.ResolveToken(ctx, cfg.Tracker.Provider, nil)
+	// **`gh` が返らないまま無言で止まらないよう、必ず期限を掛ける。**
+	if tokenTimeout <= 0 {
+		tokenTimeout = DefaultStartupCheckTimeout
+	}
+	tokenCtx, cancelToken := context.WithTimeout(ctx, tokenTimeout)
+	token, err := tracker.ResolveToken(tokenCtx, cfg.Tracker.Provider, nil)
+	cancelToken()
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildTokenFailed, err)
 	}

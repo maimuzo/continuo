@@ -18,10 +18,12 @@
 //
 // **Keychain を読むと確認のダイアログが出ることがある。**答えられないまま無人のプロセスが
 // 固まらないよう、`security` の呼び出しには必ず上限を置く（DefaultKeychainTimeout）。
-// **期限内に返らなければ枠の判定を諦める。**先に `continuo allow-keychain-access` を1回
-// 実行しておけば、以後ダイアログは出ない。
+// **期限内に返らなくても1回では諦めない。**やり直せば通るかもしれない失敗なので、
+// 連続 MaxTemporaryCredentialFailures 回まで粘る。先に `continuo allow-keychain-access` を
+// 1回実行しておけば、以後ダイアログは出ない。
 //
-// **どの出所でも、取れなければ枠の判定を諦め、`none` と同じ動きにする。起動は止めない。**
+// **どの出所でも、恒久的に取れないと分かったら枠の判定を諦め、`none` と同じ動きにする。
+// 起動は止めない。**
 package ratelimit
 
 import (
@@ -204,14 +206,64 @@ type Reader struct {
 	keychainTimeout time.Duration
 	logger          *slog.Logger
 
-	// mu は disabled と warned を守る。
+	// mu は disabled と warned と tempFailures を守る。
 	mu sync.Mutex
-	// disabled は枠の判定を諦めたことを表す（資格情報を取れなかった、または
-	// usage API が 401 / 403 を返した）。
+	// disabled は枠の判定を諦めたことを表す。
 	// **一度立てたら戻さない。**読めないものを毎回読みに行かない。
+	//
+	// **立てるのは恒久的な失敗のときだけである。**
+	//
+	//	資格情報が恒久的に取れない … `security` が PATH に無い / Keychain に項目が無い /
+	//	                          ファイルが無い / 環境変数が空 / 中身が壊れている
+	//	usage API が 401 / 403     … そのトークンでは以後も読めない
+	//	一時的な失敗が連続した      … MaxTemporaryCredentialFailures 回
+	//
+	// **一時的な失敗（`security` が期限内に返らなかった）1回では立てない。**
+	// 立ててしまうと、枠を使い切って黙っただけのエージェントを stall と誤認して
+	// pane を閉じることになる（設計 3-27）。
 	disabled bool
 	// warned は資格情報が取れないことを既に警告したかどうかである（警告は1回だけ。3-15）。
 	warned bool
+	// tempFailures は資格情報の取得が「一時的な理由で」連続して失敗した回数である。
+	// **1回でも成功したら 0 に戻す。**MaxTemporaryCredentialFailures に達したら諦める。
+	tempFailures int
+}
+
+// MaxTemporaryCredentialFailures は、資格情報の取得が一時的な理由で連続して失敗しても
+// 諦めない回数である。
+//
+// **一時的な失敗で諦めてはならない。**`security` が1回だけ遅れた・確認のダイアログが
+// 1回出た・機材が重くて子プロセスの起動が遅れた、のどれでも枠の判定が永久に止まると、
+// **枠を使い切って黙っただけのエージェントの pane を continuo が閉じる**（設計 3-27 の
+// 枠待ちの判定が働かず、stall と誤認する）。
+//
+// **かといって永久に叩き続けてもいけない。**読めないものを毎回読みに行くと、
+// 巡回のたびに `security` を起こすことになる。5回で諦める（`rate_limit.poll_interval_ms`
+// の既定は5分なので、およそ25分ぶん粘る）。
+const MaxTemporaryCredentialFailures = 5
+
+// isTemporaryCredentialFailure は、資格情報を取れなかった原因が一時的なものかを判定する。
+//
+// **恒久的なものと言い分けるためにある。**`security` が PATH に無い・Keychain に項目が
+// 無い・資格情報のファイルが無い・環境変数が空、はどれもやり直しても結果が変わらないので
+// 一時的ではない。
+//
+// err: 資格情報の取得が返したエラー。
+// 戻り値: やり直せば取れるかもしれないなら true。
+func isTemporaryCredentialFailure(err error) bool {
+	return errors.Is(err, ErrKeychainTimeout)
+}
+
+// isCanceledCredentialFailure は、資格情報の取得が「打ち切られた」ことによる失敗かを判定する。
+//
+// **打ち切りは資格情報の問題ではない。**回数にも数えないし、諦める理由にもしない。
+//
+// err: 資格情報の取得が返したエラー。
+// 戻り値: 呼び出し側の打ち切りが原因なら true。
+func isCanceledCredentialFailure(err error) bool {
+	return errors.Is(err, ErrKeychainCanceled) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 // NewReader は Reader を組み立てる。**この時点では資格情報を読まない。**
@@ -284,17 +336,24 @@ func (r *Reader) Enabled() bool {
 // Fetch は usage API を1回読む。
 //
 // **Enabled が偽のときは HTTP リクエストを1本も出さず、(nil, nil) を返す。**
-// 資格情報を取れなかったときは警告を1回だけ出して以後 Enabled を偽にし、
-// (nil, nil) を返す（**起動を止めない**。設計 3-27）。
 //
-// **401 / 403 を受けたときも諦める。**そのトークンでは以後も読めないので、
-// 資格情報が取れなかった場合と同じく警告を1回出して以後 Enabled を偽にし、(nil, nil) を返す。
-// それ以外の非 200（5xx 等）は一時的な失敗としてエラーで返す。
+// **資格情報の失敗は、恒久的なものと一時的なものを言い分ける。**恒久的なもの
+// （`security` が PATH に無い・Keychain に項目が無い・資格情報のファイルが無い・
+// 環境変数が空・中身が壊れている）は警告を1回だけ出して以後 Enabled を偽にし、
+// (nil, nil) を返す（**起動を止めない**。設計 3-27）。一時的なもの
+// （`security` が期限内に返らなかった）は 5xx と同じくエラーで返し、**Enabled は真のまま
+// 残す。**連続 MaxTemporaryCredentialFailures 回でようやく諦める。
+// **打ち切り（ctx の cancel）は回数にも数えない。**
+//
+// **401 / 403 を受けたときは諦める。**そのトークンでは以後も読めないので、
+// 資格情報が恒久的に取れない場合と同じく警告を1回出して以後 Enabled を偽にし、
+// (nil, nil) を返す。それ以外の非 200（5xx 等）は一時的な失敗としてエラーで返す。
 //
 // ctx: 呼び出しに適用するコンテキスト。
-// 戻り値の1つ目: 読み取った枠の一覧。読まなかった場合・資格情報が無い場合・
+// 戻り値の1つ目: 読み取った枠の一覧。読まなかった場合・資格情報が恒久的に取れない場合・
 // 401 / 403 を受けた場合は nil。
-// 戻り値の2つ目: HTTP の失敗・応答の解析の失敗・401 / 403 以外の非 200 のときのエラー。
+// 戻り値の2つ目: HTTP の失敗・応答の解析の失敗・401 / 403 以外の非 200・
+// 資格情報の一時的な失敗のときのエラー。
 func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 	if !r.Enabled() {
 		return nil, nil
@@ -302,9 +361,24 @@ func (r *Reader) Fetch(ctx context.Context) (*Snapshot, error) {
 
 	token, err := r.token(ctx)
 	if err != nil {
-		r.disable(err)
-		return nil, nil
+		switch {
+		case isCanceledCredentialFailure(err):
+			// **打ち切りは資格情報の問題ではない。**数えないし、諦めない。
+			return nil, err
+		case isTemporaryCredentialFailure(err):
+			if n := r.noteTemporaryFailure(); n < MaxTemporaryCredentialFailures {
+				// **諦めない。**次の巡回で読み直す。枠の判定は生きたままである。
+				return nil, err
+			}
+			r.disable(i18n.Errorf(i18n.KeyRatelimitCredentialsTemporaryExhausted,
+				err, MaxTemporaryCredentialFailures))
+			return nil, nil
+		default:
+			r.disable(err)
+			return nil, nil
+		}
 	}
+	r.clearTemporaryFailures()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.endpoint, nil)
 	if err != nil {
@@ -429,6 +503,26 @@ func (r *Reader) tokenFromCredentialsFile() (string, error) {
 		return "", i18n.Errorf(i18n.KeyRatelimitCredentialsFileAccessTokenMissing, ErrNoCredentials, path)
 	}
 	return token, nil
+}
+
+// noteTemporaryFailure は資格情報の一時的な失敗を1回数え、連続した回数を返す。
+//
+// 戻り値: 直近で成功してから連続した一時的な失敗の回数（1始まり）。
+func (r *Reader) noteTemporaryFailure() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tempFailures++
+	return r.tempFailures
+}
+
+// clearTemporaryFailures は一時的な失敗の連続回数を 0 に戻す。
+//
+// **資格情報を取れたら必ず呼ぶ。**戻さないと、間隔を空けて起きた単発の失敗が積み上がり、
+// 一度も連続していないのに諦めることになる。
+func (r *Reader) clearTemporaryFailures() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tempFailures = 0
 }
 
 // disable は枠の判定を諦める。警告は1回だけ出す（設計 3-15）。
