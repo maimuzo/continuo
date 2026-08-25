@@ -1347,6 +1347,61 @@ func Normalize(raw string) (SafeName, []Warning)
 
 実装は [internal/workspace/repoworkspace.go](internal/workspace/repoworkspace.go)。
 
+### 3-9b. 親 workspace を閉じずに残したら、閉じる責任を残った worktree へ渡す
+
+**言いたいこと。**閉じずに残したまま自分の身元ファイルを消すと、**その親 workspace は
+誰にも閉じられない。**残っている worktree の身元ファイルへ ID を書き移す。
+
+**何が起きるか。**リポジトリの親を控えるのは、**それを最初に開かせた1つの issue だけ**である
+（2件目以降は「自分より先からあった」と見て空文字を書く。3-9 の表）。その1件が先に片付くと、
+ID はどこにも残らない。`agent.max_concurrent_agents` の既定は 2 なので、
+**同じリポジトリの issue を2件並行して走らせれば、ふつうに起きる。**
+issue #19 で直したはずの「issue 1件につき1つ溜まる」が、並行実行のときだけ元に戻る。
+
+**採る扱い**（[internal/workspace/repoworkspace.go](internal/workspace/repoworkspace.go) の
+`handOverRepoWorkspace` と [internal/workspace/identity.go](internal/workspace/identity.go) の
+`SetRepoWorkspaceID`）。「配下に worktree が残っている」ので閉じないと決めた、その場で書き移す。
+
+| 何を | どうするか |
+| --- | --- |
+| 渡す相手 | そのリポジトリに属し、**置き場所（`workspace.root`）の内側にあって身元ファイルを読める** worktree の**全部** |
+| 既に ID を持っている相手 | **上書きしない**（別のリポジトリの親を閉じにいく身元ファイルを continuo 自身が作らないため） |
+| 1件も渡せなかったとき | 手で閉じてほしいことを警告としてログに残す（片付けは失敗させない） |
+
+書き移したあとの `<worktree>/.continuo.json` はこうなる（他の項目は変わらない）。
+
+```json
+{
+  "issue_url": "https://github.com/octocat/hello-world/issues/189",
+  "herdr_workspace_id": "wOther",
+  "herdr_repo_workspace_id": "wRepo"
+}
+```
+
+**1つだけに渡さない。**渡した先の片付けが途中で落ちれば、そこで責任が消える。
+**全部が持っていれば、最後に片付いた1つが閉じる**（それより前の片付けは
+「まだ他の worktree がある」ので閉じずに書き直すだけである）。
+
+### 3-9c. 起動時の孤児 branch の掃除も `cleanup.delete_branch` に従う
+
+**言いたいこと。**片付けが設定を見て残した branch を、**次に起動しただけで
+`git branch -D`（強制削除）で消してはならない。**掃除の先頭で設定を見る。
+
+**何が起きるか。**`cleanup.delete_branch: false` を書くと、片付け（3-9 の段4）は branch を
+残して「branch は残しました」と人間へ言う。**その branch は掃除の3条件を全部満たす。**
+接頭辞 `continuo/` で始まり、どの worktree もチェックアウトしておらず、実行中の run も無い。
+そのリポジトリに別の issue の worktree が1つでも残っていれば、次の起動の
+`sweep_on_startup` がそのリポジトリを掃除対象に含め、**消す。**
+`continuo abandon --force` で片付けた worktree の branch には**未 push の commit が
+載っていることがあり**、消えれば reflog を掘る以外に戻す手立てが無い。
+
+**採る扱い**（[internal/workspace/sweep.go](internal/workspace/sweep.go) の `SweepOrphanBranches`）。
+`cleanup.delete_branch` が偽なら、**接頭辞を決められない場合と同じく1本も消さずに戻る**
+（掃除を行わないだけで、エラーにはしない）。行わなかったことはログに残す。
+
+**壊れた ref（3-22b）だけを例外にしない。**壊れているかどうかは利用者から見えず、
+**「消すなと言ったのに消えた」という結果だけが同じ**である。
+
 ### 3-10. 実行中の Status も「作業中の状態」に含める
 
 **これは設計の急所である。見落とすと、continuo は dispatch した直後に自分の worker を殺す。**
@@ -4351,6 +4406,85 @@ text/template は受け付けるためである。
 ```
 設定キー herdr.worktree.branch_template の値 continuo/{{.issue.repo}} が不正です: .issue.number を必ず含めること。issue の番号が入っていないと、別の issue でも同じ branch 名になり、worktree が無いときの片付けが、名指しした issue とは別の issue の branch を消す
 ```
+
+### 3-37-10. 消す相手の裏取りは、置き場所の最下層のディレクトリ名まで見る
+
+**言いたいこと。**owner とリポジトリ名だけを比べていては、**同じリポジトリの中なら
+別の issue の worktree を消せる。**スラグ（置き場所の4階層目）まで比べる。
+
+**何が起きるか。**issue 42 の worktree で動くエージェントが、自分の `.continuo.json` の
+`issue_url` を issue 99 に書き換える（worktree の直下にあり `--permission-mode dontAsk` で
+動くので書き換えられる）。issue 99 の worktree がまだ無ければ、
+`continuo abandon <issue 99 の URL>` は候補1件として **42 の worktree と branch を消す。**
+`--force` を付けた実行なら未コミットの成果ごと消える。
+
+**採る検算。**候補にした worktree のパスを、次の3つで比べる（[internal/abandon/abandon.go](../../internal/abandon/abandon.go) の `pathAgrees`）。
+
+| 比べるもの | 何と比べるか | 比べ方 |
+| --- | --- | --- |
+| owner（2階層目） | 利用者が打った URL の owner | 大文字小文字を無視 |
+| リポジトリ名（3階層目） | 同じく repo | 大文字小文字を無視 |
+| スラグ（4階層目） | `Manager.ExpectedSlugFor(issue)` が `branch_template` から組み立てた名前 | 大文字小文字を無視 |
+
+既定の `branch_template`（`continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}`）なら、
+スラグは `continuo-octocat-hello-world-42` になり、**issue の番号がここに入る**（3-37-9d）。
+
+**ホストは比べない。**同じ issue が GitHub Enterprise のホスト名と `github.com` の両方で
+書かれうる（`HostFromIssueURL` は URL が空なら `github.com` に倒す）。ホストまで比べると
+**表記が違うだけの正当な worktree を候補から外す。**owner・リポジトリ名・スラグが全部一致して
+ホストだけが違う worktree が2つあるなら、**それは人間が中身を見て決めることであり、
+段2 の「候補が2件なら止まる」がそのまま効く。**
+
+**組み立てるのは「探すため」ではなく「拾った候補の裏を取るため」である。**
+3-37-4 の『パスから組み立てて探してはならない』とは矛盾しない。
+**`branch_template` を後から変えた環境では正当な worktree も候補から外れる**が、
+そのときは owner / リポジトリ名の不一致とまったく同じ扱い（候補にしない・1行出す・消さない）に
+なるので、既存の扱いと揃う。出す1行にはいまの `branch_template` の値を添える。
+
+### 3-37-11. 候補にできなかったものがあるなら「ありません」と言わない
+
+**言いたいこと。**候補から外した worktree が1件でもあるなら、**その issue の worktree が
+あるかどうかは確かめられていない。**「ありません」と断言せず、終了コード 1 で止まる。
+
+**何が問題だったか。**身元ファイルを読めない worktree を飛ばした直後に
+「この issue の worktree はありません」を出し、**終了コード 0 で終わっていた。**
+目の前に worktree も branch も herdr の workspace も残っているのに「もう無い」と読める
+1行が出て、後続のスクリプトも成功として進む。**飛ばした1行の直後に正反対の断定が並ぶので、
+どちらが本当かを人間が判断できない。**
+
+**採る扱い**（[internal/abandon/abandon.go](../../internal/abandon/abandon.go) の `find`）。
+
+| 候補が0件のとき | 候補にできなかったもの | 出す文言と終了コード |
+| --- | --- | --- |
+| 本当に無い | 0件 | `abandon.not_found` を出し、残った branch の片付け（3-37-9）へ進む。0 |
+| 確かめられていない | 1件以上 | `abandon.err_undecided` を出し、**branch には触らない。**1 |
+
+**候補にできなかったもの**は次の3つを合わせて数える。身元ファイルを読めなかった worktree、
+身元ファイルが1つも無いディレクトリ（3-37-9c）、置き場所の検算に落ちた worktree（3-37-10）。
+
+### 3-37-12. pane が期限内に閉じないときも `--force` で越えられる
+
+**言いたいこと。**継続監視が動いているときの pane 待ちにも `--force` の逃げ道を置く。
+**手を離させる書き込みが入らなかったときは、そもそも待たない。**
+
+**何が問題だったか。**Status が `tracker.active_states` に入っていなければ、
+手を離させる書き込みは入らない（`abandon.park_not_active` を出して素通りする）。
+**継続監視は Status が `active_states` に戻ったときだけ pane を閉じる**（3-37-3）ので、
+`In Review` や `Blocked` の issue の pane は誰も閉じない。それでも待ちに入っていたため、
+**上限（`herdr.read_timeout_ms` の10倍。既定50秒）まで待って終了コード 1 で止まり、
+`--force` でも越えられなかった。**herdr の workspace を手で閉じるまで取り消せない。
+
+**採る扱い**（[internal/abandon/abandon.go](../../internal/abandon/abandon.go) の `run` と `waitPaneGone`）。
+
+| 手を離させる書き込み | pane の確かめ方 |
+| --- | --- |
+| 入った | 消えるまで待つ。**時間切れは `--force` で越え、越えたことを1行で言う** |
+| 入らなかった | **待たない。**動いていないときと同じ検査（`stopIfPaneAlive`）へ落とす |
+
+**`--force` を通す理由は 3-37-3 と同じである。**continuo が worktree のために開いた
+herdr workspace には、その worktree を cwd に持つ pane が必ず1枚ある。
+**片方の検査だけ越えられないのは筋が通らない。**止まる文言（`abandon.err_pane_remains`）にも
+`--force` で越えられることを書く。
 
 ---
 

@@ -32,6 +32,14 @@ type OrphanBranchSweepRequest struct {
 // **起動時の掃除の一部であり、復元の手順が終わったあとに呼ぶこと**（3-4 の段9 のあと）。
 // 先に呼ぶと、これから引き継ぐ run の branch を孤児と判定して消す。
 //
+// **`cleanup.delete_branch` が偽なら1本も消さない。**片付け（cleanup.go の段4）は
+// この設定を見て branch を残し、「branch は残しました」と人間へ言う。**その branch は
+// (1) 接頭辞に一致し (2) どの worktree もチェックアウトしておらず (3) 実行中の run も
+// 無いので、下の3条件を全部満たす。**設定を見ない掃除は、次に continuo を起動した
+// だけでその branch を `git branch -D`（強制削除）で消す。
+// **`continuo abandon --force` で片付けた worktree の branch には、未 push の commit が
+// 載っていることがある。**消えれば reflog を掘る以外に戻す手立ては無い。
+//
 // 消す条件は次の3つを全部満たすことである。
 //
 //   - `herdr.worktree.branch_template` の接頭辞（既定 `continuo/`）で始まること。
@@ -51,10 +59,20 @@ type OrphanBranchSweepRequest struct {
 // ctx: 実行に適用するコンテキスト。
 // req: 対象の worktree と、消してはならない branch 名。
 // 戻り値の1つ目: 実際に消した branch 名（`<リポジトリ>: <branch>` の形）。
-// 戻り値の2つ目: 接頭辞を決められない場合は nil を返し、エラーにはしない
-// （掃除を行わないだけである）。リポジトリごとの失敗はログに残して次のリポジトリへ進むので、
+// 戻り値の2つ目: 接頭辞を決められない場合と `cleanup.delete_branch` が偽の場合は
+// nil を返し、エラーにはしない（掃除を行わないだけである）。リポジトリごとの失敗はログに残して次のリポジトリへ進むので、
 // **この関数がエラーを返すことは無い。**戻り値の型は将来の拡張のために残してある。
 func (m *Manager) SweepOrphanBranches(ctx context.Context, req OrphanBranchSweepRequest) ([]string, error) {
+	// **設定で「branch は消すな」と言われているなら、壊れた ref も含めて1本も消さない。**
+	// 片付けが残した branch を、起動しただけで消してしまわないためである。
+	// **壊れた ref だけは掃除する、という例外を作らない。**壊れているかどうかは
+	// 利用者から見えず、「消すなと言ったのに消えた」という結果だけが同じである。
+	if !m.cfg.Cleanup.DeleteBranch {
+		m.logger.Info("cleanup.delete_branch が偽なので孤児 branch の掃除を行いません",
+			"branch_template", m.cfg.Herdr.Worktree.BranchTemplate)
+		return nil, nil
+	}
+
 	prefix := BranchPrefix(m.cfg.Herdr.Worktree.BranchTemplate)
 	if prefix == "" {
 		m.logger.Warn("herdr.worktree.branch_template に変数が無いので孤児 branch の掃除を行いません",

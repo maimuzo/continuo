@@ -100,6 +100,98 @@ func TestRunGhqGet_引数をそのまま渡して起動する(t *testing.T) {
 	}
 }
 
+// 目的: **正規化で名前が変わるリポジトリでも、ghq には実名をそのまま渡す**ことを
+// 確認する（設計 3-7 の正規化は置き場所のディレクトリ名を作るためのものであり、
+// ghq が要るのは GitHub に実在する名前そのものである）。
+//
+// **`<owner>/.github` は組織の community health 用リポジトリとして実在する。**
+// これを `_github` に書き換えて問い合わせると、手元に clone があっても
+// 永久に「ありません」になる。しかも人間へ出す案内は生の名前を埋めるので、
+// **案内どおりに `ghq list -p -e <owner>/.github` を叩くと1行返り、
+// continuo だけが「無い」と言い続ける。**
+//
+// 与える情報: 引数をファイルへ書き出すテスト用ghq mock と、リポジトリ名 `.github`。
+// 成功条件: `list -p -e octocat/.github` の形で呼ばれていること。
+func TestRunGhqList_正規化で変わる名前もそのまま渡す(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "args.txt")
+	fakeGhq(t, "echo \"$@\" > "+out+"\necho /tmp/ghq/github.com/octocat/.github")
+
+	path, err := workspace.RunGhqList(context.Background(), "octocat", ".github")
+	if err != nil {
+		t.Fatalf("RunGhqList に失敗した: %v", err)
+	}
+	if path != "/tmp/ghq/github.com/octocat/.github" {
+		t.Fatalf("clone のパスが返っていない: %q", path)
+	}
+
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("テスト用ghq mock が引数を書き出していない: %v", err)
+	}
+	if got := strings.TrimSpace(string(raw)); got != "list -p -e octocat/.github" {
+		t.Fatalf("ghq へ渡した引数が違う: got %q, want %q", got, "list -p -e octocat/.github")
+	}
+}
+
+// 目的: `ghq get` も同じく実名をそのまま渡すことを確認する。
+//
+// **`continuo trust` の案内が `ghq get` を叩く。**ここで書き換えると、
+// 案内された対処そのものが「存在しないリポジトリ」を取りに行って失敗する。
+//
+// 与える情報: 引数をファイルへ書き出すテスト用ghq mock と、リポジトリ名 `.github`。
+// 成功条件: `get octocat/.github` の形で呼ばれていること。
+func TestRunGhqGet_正規化で変わる名前もそのまま渡す(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "args.txt")
+	fakeGhq(t, "echo \"$@\" > "+out+"\nexit 0")
+
+	if err := workspace.RunGhqGet(context.Background(), "octocat", ".github"); err != nil {
+		t.Fatalf("取得に失敗した: %v", err)
+	}
+
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("テスト用ghq mock が引数を書き出していない: %v", err)
+	}
+	if got := strings.TrimSpace(string(raw)); got != "get octocat/.github" {
+		t.Fatalf("ghq へ渡した引数が違う: got %q, want %q", got, "get octocat/.github")
+	}
+}
+
+// 目的: ghq へ渡せない形の名前は、**別名に直さずに断る**ことを確認する。
+//
+// **正規化をやめた代わりの守りである。**先頭が `-` の値をそのまま渡すと
+// ghq のオプションとして解釈され、スラッシュや空白が入った値は
+// 別のリポジトリを指す。**黙って直すと、また「無い」と言い続ける側へ戻る。**
+//
+// 与える情報: 引数をファイルへ書き出すテスト用ghq mock と、通してはならない名前。
+// 成功条件: エラーになり、**ghq を1度も起動していない**こと。
+func TestRunGhqList_通せない名前は起動せずに断る(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		owner string
+		repo  string
+	}{
+		{name: "先頭がハイフン", owner: "octocat", repo: "-rf"},
+		{name: "スラッシュを含む", owner: "octocat", repo: "hello/world"},
+		{name: "空白を含む", owner: "octo cat", repo: "hello-world"},
+		{name: "空文字", owner: "octocat", repo: ""},
+		{name: "上の階層", owner: "octocat", repo: ".."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "args.txt")
+			fakeGhq(t, "echo \"$@\" > "+out+"\nexit 0")
+
+			if _, err := workspace.RunGhqList(context.Background(), tc.owner, tc.repo); err == nil {
+				t.Fatalf("通してはならない名前を通した: %q/%q", tc.owner, tc.repo)
+			}
+			if _, err := os.Stat(out); err == nil {
+				raw, _ := os.ReadFile(out)
+				t.Fatalf("断ったはずなのに ghq を起動している: %q", strings.TrimSpace(string(raw)))
+			}
+		})
+	}
+}
+
 // 目的: `ghq get` が失敗したとき、標準エラー出力をエラー文に含めることを確認する。
 // **失敗の理由が消えると、人間は「取れませんでした」だけを見て原因を探せない。**
 // 与える情報: 標準エラーへ理由を出して終了コード 1 で終わるテスト用ghq mock。

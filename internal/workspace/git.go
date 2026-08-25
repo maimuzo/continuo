@@ -645,10 +645,18 @@ func confirmBranchGone(
 // 打ち切った出力の行数をそのまま見せると、**失う量を実際より少なく見せる。**
 const gitStatusPorcelainLimit = 8 * 1024
 
-// gitStatusPorcelain は `git status --porcelain` の出力を返す（3-9 の段2）。
+// gitStatusPorcelain は `git status --porcelain -uall` の出力を返す（3-9 の段2）。
 //
 // **未追跡のファイルも数に入れる**（既定で出力される）。エージェントが作った成果物が
 // 消えるのを防ぐため、出力が空でなければ「残っている」とする。
+//
+// **`-uall` を外してはならない。**既定の `-unormal` は**未追跡のディレクトリを
+// 1行に畳む**（実測: 2026-08-25、git 2.50.1。5ファイル入りの `node_modules/a/b/` は
+// `?? node_modules/` の1行にしかならない）。行数を件数として見せる Inspect が
+// この畳んだ出力を数えると、**数千ファイルを失う worktree が「1 ファイル」に見える。**
+// 人間はその数を見て `--force` を付けるかどうかを決めるので、
+// **見せた数より多く失う**という、いちばん困る誤りになる。
+// 片付けの判定（空かどうか）は `-uall` の有無で変わらない。
 //
 // **excludePaths に渡した名前は数に入れない。**continuo 自身が worktree の直下に置く
 // 身元ファイル（3-18）とその一時ファイルを「利用者の成果」と数えると、
@@ -665,7 +673,7 @@ const gitStatusPorcelainLimit = 8 * 1024
 func gitStatusPorcelain(
 	ctx context.Context, worktreePath string, excludePaths ...string,
 ) (string, bool, error) {
-	args := []string{"status", "--porcelain"}
+	args := []string{"status", "--porcelain", "-uall"}
 	if len(excludePaths) > 0 {
 		// pathspec は cwd（= worktree の直下）からの相対である。
 		args = append(args, "--", ".")
@@ -792,6 +800,56 @@ func gitWorktreeRemove(ctx context.Context, repoDir, worktreePath string) error 
 // **これ以外の非 0 は本当の失敗として扱う**（clone が無いことに丸めない）。
 const ghqNotFoundExitCode = 1
 
+// ghqTarget は `ghq list` / `ghq get` へ渡す `<owner>/<repo>` を組み立てる。
+//
+// **正規化（3-7）を通してはならない。**normalize.Normalize は**置き場所の
+// ディレクトリ名を作るための変換**であり、要素の先頭のドットを `_` に、
+// 末尾の `.lock` を `_lock` に書き換える。ghq が要るのは
+// **GitHub に実在するリポジトリの名前そのもの**なので、書き換えると
+// `<owner>/.github`（組織の community health 用リポジトリ。実在する）が
+// `<owner>/_github` になり、**手元に clone があっても永久に「ありません」になる。**
+// しかも人間へ出す案内（workspace.prepare.clone_not_found）は生の名前を埋めるので、
+// **案内どおりに叩くと1行返り、continuo だけが「無い」と言い続ける。**
+//
+// **代わりに、外部コマンドの引数として通してよい形かを検査する。**GitHub の
+// owner 名とリポジトリ名は英数字・ハイフン・アンダースコア・ドットしか取らないので、
+// それ以外が混ざったら組み立てずにエラーにする（**別名に直さない**）。
+// **先頭の `-` は弾く。**そのまま渡すと ghq のオプションとして解釈される。
+//
+// owner: リポジトリの所有者名。
+// repo: リポジトリ名。
+// 戻り値の1つ目: `<owner>/<repo>`。
+// 戻り値の2つ目: どちらかが上の形に合わない場合のエラー。
+func ghqTarget(owner, repo string) (string, error) {
+	if err := checkGhqName(owner); err != nil {
+		return "", err
+	}
+	if err := checkGhqName(repo); err != nil {
+		return "", err
+	}
+	return owner + "/" + repo, nil
+}
+
+// checkGhqName は ghq へ渡す名前1つ分を検査する。
+//
+// name: owner 名またはリポジトリ名。
+// 戻り値: 空・`.` や `..` そのもの・先頭が `-`・英数字とハイフンとアンダースコアと
+// ドット以外を含む場合のエラー。
+func checkGhqName(name string) error {
+	if name == "" || name == "." || name == ".." || strings.HasPrefix(name, "-") {
+		return i18n.Errorf(i18n.KeyWorkspaceGhqNameInvalid, name)
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '-' || r == '_' || r == '.':
+		default:
+			return i18n.Errorf(i18n.KeyWorkspaceGhqNameInvalid, name)
+		}
+	}
+	return nil
+}
+
 // RunGhqList は実際に `ghq list -p -e <owner>/<repo>` を実行し、clone の絶対パスを返す。
 //
 // **ghq に worktree を作る機能は無い**（サブコマンドは6つだけ。実測）。
@@ -805,9 +863,10 @@ const ghqNotFoundExitCode = 1
 // 戻り値の2つ目: ghq を起動できなかった場合・**該当が無いこと以外の理由で非 0 で
 // 終わった場合**のエラー（標準エラー出力の内容を含める）。
 func RunGhqList(ctx context.Context, owner, repo string) (string, error) {
-	ownerName, _ := normalize.Normalize(owner)
-	repoName, _ := normalize.Normalize(repo)
-	target := ownerName.String() + "/" + repoName.String()
+	target, err := ghqTarget(owner, repo)
+	if err != nil {
+		return "", err
+	}
 
 	cmd := exec.CommandContext(ctx, ghqBinary, "list", "-p", "-e", target)
 	stdout := newCappedBuffer(gitOutputLimit)
@@ -905,9 +964,10 @@ func gitWorktreeBranches(ctx context.Context, repoDir string) (map[string]bool, 
 // 戻り値: ghq を起動できなかった場合・非 0 で終わった場合のエラー
 // （標準エラー出力の内容を含める）。成功したら nil。
 func RunGhqGet(ctx context.Context, owner, repo string) error {
-	ownerName, _ := normalize.Normalize(owner)
-	repoName, _ := normalize.Normalize(repo)
-	target := ownerName.String() + "/" + repoName.String()
+	target, err := ghqTarget(owner, repo)
+	if err != nil {
+		return err
+	}
 
 	cmd := exec.CommandContext(ctx, ghqBinary, "get", target)
 	stderr := newCappedBuffer(gitStderrLimit)

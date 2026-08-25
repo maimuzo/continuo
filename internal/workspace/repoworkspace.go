@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 
 	"github.com/maimuzo/continuo/internal/herdr"
 )
@@ -127,10 +128,17 @@ func (m *Manager) closeRepoWorkspace(ctx context.Context, repoDir string, identi
 
 	// **まだ使っている worktree があれば閉じない。**親を閉じると、その下の worktree の
 	// workspace と pane も一緒に消える（実測: 2026-08-25）。
+	//
+	// **代わりに、閉じる責任をその worktree へ渡す。**渡さないと、同じリポジトリの
+	// issue を2件並行して走らせたとき（agent.max_concurrent_agents の既定は2）、
+	// **親を開かせた側が先に片付いた時点で ID がどこにも残らない。**残った側の
+	// 身元ファイルは herdr_repo_workspace_id が空なので、その issue が終わっても
+	// 何もせず、**親 workspace は誰にも閉じられないまま溜まり続ける。**
 	if id, path := otherWorktreeOf(list.Workspaces, repoDir); id != "" {
 		m.logger.Info("同じリポジトリの worktree がまだ開いているので、リポジトリの親 workspace は残します",
 			"repo", repoDir, "repo_workspace_id", target,
 			"open_workspace_id", id, "open_worktree", path)
+		m.handOverRepoWorkspace(ctx, list.Workspaces, repoDir, target)
 		return
 	}
 
@@ -141,6 +149,68 @@ func (m *Manager) closeRepoWorkspace(ctx context.Context, repoDir string, identi
 	}
 	m.logger.Info("リポジトリの親 workspace を閉じました",
 		"repo", repoDir, "workspace_id", target)
+}
+
+// handOverRepoWorkspace は、リポジトリの親 workspace を閉じる責任を、まだ残っている
+// worktree の身元ファイルへ書き移す。
+//
+// **なぜ要るか。**親を開かせた issue が先に片付くと、その ID は身元ファイルごと消える。
+// 残った worktree は「自分より先に親があった」と見て空文字を書いているので
+// （prepare.go の repoWorkspaceExisted）、**親を閉じる責任を誰も持たなくなる。**
+//
+// **残っている worktree の全部へ書く。**1つだけに渡すと、その worktree の片付けが
+// 途中で落ちた時点で責任が消える。全部が持っていれば、**最後に片付いた1つが閉じる**
+// （それより前の片付けは「まだ他の worktree がある」ので閉じずに書き直すだけである）。
+//
+// **書いてよい相手は3つの条件を満たすものだけである。**
+//
+//	1 その workspace の checkout_path が置き場所（workspace.root）の内側にあること
+//	2 身元ファイルを読めること（continuo が作った worktree だという証拠である）
+//	3 その身元ファイルの herdr_repo_workspace_id が空であること（既に持っているなら触らない）
+//
+// 1 を落とすと、**人間が自分で開いた worktree のディレクトリへ continuo が書き込む。**
+//
+// **失敗してもエラーにしない。**片付けそのものは既に済んでおり、ここで止めると
+// 呼び出し側が扱えない結果になる。書けなかったことはログに残す。
+//
+// ctx: 実行に適用するコンテキスト（`info/exclude` の登録に使う）。
+// workspaces: `workspace.list` が返した一覧。
+// repoDir: 検算済みのリポジトリ本体の作業ディレクトリ。
+// target: 引き継がせる親 workspace の ID（空文字ではないこと）。
+func (m *Manager) handOverRepoWorkspace(
+	ctx context.Context, workspaces []herdr.Workspace, repoDir, target string,
+) {
+	handed := 0
+	for _, ws := range workspaces {
+		if ws.Worktree == nil {
+			continue
+		}
+		if !samePath(ws.Worktree.RepoRoot, repoDir) || samePath(ws.Worktree.CheckoutPath, repoDir) {
+			continue
+		}
+		path, err := CheckContainmentResolved(m.resolvedRoot, ws.Worktree.CheckoutPath)
+		if err != nil {
+			m.logger.Warn("置き場所の外側の worktree には親 workspace の引き継ぎを書きません",
+				"repo", repoDir, "worktree", ws.Worktree.CheckoutPath, "error", err)
+			continue
+		}
+		switch err := m.SetRepoWorkspaceID(ctx, path, target); {
+		case err == nil:
+			handed++
+			m.logger.Info("リポジトリの親 workspace を閉じる責任を、残っている worktree へ渡しました",
+				"repo", repoDir, "repo_workspace_id", target, "worktree", path)
+		case errors.Is(err, errRepoWorkspaceIDTaken):
+			// 既に誰かが持っている。**上書きしない。**
+			handed++
+		default:
+			m.logger.Warn("リポジトリの親 workspace の引き継ぎを書けませんでした",
+				"repo", repoDir, "repo_workspace_id", target, "worktree", path, "error", err)
+		}
+	}
+	if handed == 0 {
+		m.logger.Warn("リポジトリの親 workspace を閉じる相手が居なくなりました（herdr の画面から手で閉じてください）",
+			"repo", repoDir, "repo_workspace_id", target)
+	}
 }
 
 // otherWorktreeOf は、そのリポジトリに属する worktree の workspace を1つ探す。

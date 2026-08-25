@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "54dc06b119d3e1e980437bd6588804cf010cf5b6d7eb3b716b56ba5fa5988a81", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "943d20234f97e95ce8320c4f28b7d6b0dbc9f4bdde8ebd2e9198f9cfa1c01349", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
 // 7本のパスに、それぞれ対応するテストがある。
@@ -127,7 +127,7 @@ func cleanupRequest(cf *cleanupFixture) workspace.CleanupRequest {
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P022"}
 //
 // 目的: 未コミットの変更（未追跡のファイル）が残っていれば worktree を消さないことを確認する
 // （設計 3-9 の手順2。エージェントが作った成果物が消えるのを防ぐ）。
@@ -197,7 +197,7 @@ func TestCleanup_見送りのコメントは1回だけになる(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P001"}
+// {"RUCM-PATH": "P016"}
 //
 // 目的: upstream があり push 済みなら片付け、そのとき worktree.remove に渡すのが
 // **身元ファイルの herdr workspace の ID** であることを確認する（設計 3-9 の手順2b・3）。
@@ -253,7 +253,7 @@ func TestCleanup_push済みなら消してbranchと設定ファイルも消す(t
 	}
 }
 
-// {"RUCM-PATH": "P001"}
+// {"RUCM-PATH": "P016"}
 //
 // 目的: `cleanup.delete_branch` が偽なら、worktree を消しても branch は残し、
 // **残ったものとして画面へ出す**ことを確認する（設計 3-9 の段4）。
@@ -292,7 +292,7 @@ func TestCleanup_deleteBranchが偽ならbranchを残して残ったものに積
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P021"}
 //
 // 目的: upstream があり push されていない commit が残っていれば消さないことを確認する
 // （設計 3-9 の手順2b の upstream がある側）。
@@ -368,7 +368,7 @@ func TestCleanup_upstreamが無くbaseと差分が無ければ消す(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P020"}
+// {"RUCM-PATH": "P021"}
 //
 // 目的: upstream が無く base も分からないときは、判定できないので消さないことを確認する
 // （設計 3-9 の手順2b。base を推測して消すと成果を失う）。
@@ -444,7 +444,7 @@ func TestCleanup_before_removeが失敗しても片付けを続ける(t *testing
 	}
 }
 
-// {"RUCM-PATH": "P018"}
+// {"RUCM-PATH": "P023"}
 //
 // 目的: 消す直前の封じ込め検査に落ちたら、何も消さずに失敗することを確認する
 // （設計 3-20。「消す直前」がいちばん危ない検査点である）。
@@ -473,7 +473,7 @@ func TestCleanup_置き場所の外側は消さずに失敗する(t *testing.T) 
 	}
 }
 
-// {"RUCM-PATH": "P021"}
+// {"RUCM-PATH": "P026"}
 //
 // 目的: cleanup.enabled が偽なら何も消さず、かつ「見送った」と分かる戻り値になることを
 // 確認する（設計 3-9 の手順5。デバッグ時に中身を見たい場合がある）。
@@ -509,7 +509,7 @@ func TestCleanup_無効なら何もしない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P019"}
+// {"RUCM-PATH": "P024"}
 //
 // 目的: 片付けを始める判定が cleanup.on_states に入った時点であり、
 // active でなくなった時点ではないことを確認する（設計 3-9 の手順1）。
@@ -938,7 +938,44 @@ func TestInspect_収まる件数なら実数を数える(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// 目的: **未追跡のディレクトリの中身を1件に畳まずに数える**ことを確認する
+// （設計 3-9 の手順2）。
+// **`git status --porcelain` の既定（-unormal）は、未追跡のディレクトリを
+// `?? <ディレクトリ>/` の1行にまとめる**（実測: 2026-08-25、git 2.50.1）。
+// その行数をそのまま件数として見せると、**数千ファイルを失う worktree が
+// 「1 ファイル」に見える。**人間はその数を見て `--force` を付けるかどうかを決めるので、
+// **見せた数より多く失う**という、いちばん困る誤りになる。
+// 与える情報: `生成物/深い/場所/` の下に5ファイルを置いた worktree
+// （worktree の直下にはファイルを1つも置かない）。
+// 成功条件: DirtyFiles が 5、HasLoss が真であること。
+func TestInspect_未追跡ディレクトリの中身を1件に畳まない(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	dir := filepath.Join(cf.Prepared.Path, "生成物", "深い", "場所")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("未追跡のディレクトリを作れない: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		name := fmt.Sprintf("成果-%d.md", i)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("途中\n"), 0o600); err != nil {
+			t.Fatalf("未追跡のファイルを書けない: %v", err)
+		}
+	}
+
+	leftover, err := cf.Manager.Inspect(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Inspect に失敗した: %v", err)
+	}
+	if leftover.DirtyFiles != 5 {
+		t.Fatalf("未追跡のディレクトリの中身を数え落としている: got %d, want 5（失う量を実際より少なく見せている）",
+			leftover.DirtyFiles)
+	}
+	if !leftover.HasLoss() {
+		t.Fatal("未コミットの変更があるのに失うものが無いと言っている")
+	}
+}
+
+// {"RUCM-PATH": "P017"}
 //
 // 目的: 身元ファイルに書かれた branch が**リポジトリに実在しない**とき、
 // 残ったものとして数えないことを確認する（issue #27）。
@@ -974,7 +1011,7 @@ func TestCleanup_実在しないbranchを残ったものとして数えない(t 
 	}
 }
 
-// {"RUCM-PATH": "P001"}
+// {"RUCM-PATH": "P016"}
 //
 // 目的: branch が**実在して**現物と食い違うときは、いままでどおり残ったものとして
 // 理由を返すことを確認する（設計 3-9 の段4。issue #27 で消さなくなったのは
