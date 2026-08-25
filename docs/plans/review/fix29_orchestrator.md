@@ -101,3 +101,14 @@ mermaid の2ブロックは両ファイルとも作り直し、`mermaid-validate
 そこは指摘に挙がっておらず、**別の run へ害が及ぶ経路が無い**ためである。
 pane を閉じる宛先は cwd で決まるようになったし、片付けの宛先は走査で得た自分のパスである。
 書き換えられるのは「自分の worktree をいつ片付けるか」だけである。
+
+### 通した検査
+
+| コマンド | 結果 |
+| --- | --- |
+| `gofmt -l ./cmd ./internal ./test` | 出力なし |
+| `go vet ./...` | 出力なし |
+| `go test -count=1 ./...` | 全パッケージ ok |
+| `sh scripts/test-like-ci.sh` | exit=0、ok 52 件、FAIL 0 件 |
+| `sh scripts/check-rucm.sh --strict` | exit=0（RUCM → CFG → テストの連鎖は揃っています） |
+| `mermaid-validate validate-md`（RUCM 2ファイル） | 各2ブロック Valid |
