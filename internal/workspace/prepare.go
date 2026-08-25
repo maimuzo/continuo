@@ -24,6 +24,14 @@ const NativeRefDefaultBranch = "default_branch"
 // 空ディレクトリは git が黙って乗っ取るためである。
 var ErrUnregisteredWorktree = errors.New("目的のパスに実体があるのに git の worktree として登録されていません")
 
+// ErrBranchInUseElsewhere は、目的の branch を**目的のパス以外の worktree** が既に
+// チェックアウトしていることを表す（着手の段0。設計 3-16b）。
+//
+// **git は1つの branch を2つの worktree に出せない。**この状態で `git worktree add` を
+// 叩くと `fatal: '<branch>' is already used by worktree at '<別のパス>'` で必ず落ちる。
+// **目的のパスにはまだ何も無い**ので、ErrUnregisteredWorktree では拾えない。
+var ErrBranchInUseElsewhere = errors.New("目的の branch を別の場所の worktree が使っています")
+
 // ErrCloneNotFound は `ghq list -p -e <owner>/<repo>` で clone を引けなかったことを表す。
 // **continuo は勝手に clone しない**（3-22）。その issue を飛ばして人間に知らせる。
 var ErrCloneNotFound = errors.New("ghq に対象リポジトリの clone がありません")
@@ -365,14 +373,22 @@ func (m *Manager) logWarnings(warnings []normalize.Warning) {
 // **判定できない事情では落とさない。**clone を引けない・git を実行できないといった
 // 事情は、**段3 に任せて `failure_state` と issue のコメントで人間へ渡す**（3-34b）。
 // ここで落とすと、その issue は候補に残ったままログにしか出ず、人間へ届かない。
-// **この関数がエラーを返すのは「何度やっても必ず失敗する」と言い切れる2つだけである。**
+// **この関数がエラーを返すのは「何度やっても必ず失敗する」と言い切れる形だけである。**
+//
+// **見るのは3つである。**
+//
+//	目的のパスに実体があるのに git の登録が無い          → ErrUnregisteredWorktree
+//	目的のパスの worktree が別の branch を出している    → ErrUnregisteredWorktree
+//	目的の branch を目的のパス以外の worktree が使っている → ErrBranchInUseElsewhere
+//
+// **3つ目は目的のパスに何も無くても起きる**（実機で1件通して見つかった。設計 3-16b）。
 //
 // ctx: 実行に適用するコンテキスト。
 // issue: 検査する issue。
-// 戻り値: 目的のパスに実体があるのに git の登録が無い場合、または再利用できる worktree が
-// 別の branch を出している場合の ErrUnregisteredWorktree。置き場所を決められない場合と
-// 封じ込め検査に落ちた場合はそのエラー。**それ以外はすべて nil を返す**（まだ何も無い、
-// 正しく再利用できる、判定できない、のいずれか）。
+// 戻り値: 上の3つのいずれかに当たった場合の ErrUnregisteredWorktree または
+// ErrBranchInUseElsewhere。置き場所を決められない場合と封じ込め検査に落ちた場合は
+// そのエラー。**それ以外はすべて nil を返す**（まだ何も無い、正しく再利用できる、
+// 判定できない、のいずれか）。
 func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error {
 	loc, _, err := Locate(m.resolvedRoot, m.cfg.Herdr.Worktree.BranchTemplate, issue)
 	if err != nil {
@@ -382,17 +398,23 @@ func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
 		return err
 	}
 
-	if _, statErr := os.Stat(loc.Path); statErr != nil {
-		// まだ何も無い（あるいは見に行けない）。段4 が作るので、ここでは何も言わない。
-		return nil
-	}
-
-	// **clone の場所は短い間だけ覚える**（clonePath）。実体があるかどうかを見るたびに
-	// ghq のプロセスを起こすと、ボードの件数ぶん外部プロセスが立つ。
+	// **clone の場所は短い間だけ覚える**（clonePath）。判定のたびに ghq のプロセスを
+	// 起こすと、ボードの件数ぶん外部プロセスが立つ。
 	repoPath, err := m.clonePath(ctx, issue.Owner, issue.Repo)
 	if err != nil || repoPath == "" {
 		m.logger.Debug("着手できるかを段0 で判定できませんでした（段3 に任せます）",
 			"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
+		return nil
+	}
+
+	// **目的のパスに何も無くても落ちる経路がある。**branch を別の場所の worktree が
+	// 使っていると、段4 の `git worktree add` が必ず失敗する。**os.Stat より前に見る。**
+	if err := m.checkBranchFree(ctx, repoPath, loc, issue); err != nil {
+		return err
+	}
+
+	if _, statErr := os.Stat(loc.Path); statErr != nil {
+		// まだ何も無い（あるいは見に行けない）。段4 が作るので、ここでは何も言わない。
 		return nil
 	}
 
@@ -422,4 +444,68 @@ func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
 			ErrUnregisteredWorktree, loc.Path, head, loc.Branch.String())
 	}
 	return nil
+}
+
+// checkBranchFree は、目的の branch を**目的のパス以外の worktree** が使っていないかを
+// 見る（着手の段0。設計 3-16b）。
+//
+// **なぜ要るか。**git は1つの branch を2つの worktree に出せない。目的のパスに何も
+// 無くても、その branch を別の場所の worktree が出していれば、段4 の
+// `git worktree add <目的のパス> <branch>` は
+// `fatal: '<branch>' is already used by worktree at '<別のパス>'` で必ず落ちる。
+// **目的のパスしか見ない検査（ErrUnregisteredWorktree）ではこの経路を拾えない。**
+//
+// **目的のパス自身が出している場合は問題ない**（3-22 の段2 の再利用の経路）。除外する。
+//
+// **読み取りだけを行う。**`git worktree list --porcelain` を読むだけで、
+// `prune` も `add` も呼ばない。
+//
+// **判定できない事情では落とさない。**git を実行できない等は段3 に任せて、
+// `failure_state` と issue のコメントで人間へ渡す（3-34b）。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoPath: リポジトリの作業ディレクトリ。
+// loc: 目的の置き場所（パスと branch）。
+// issue: 検査する issue（対処の案内に URL を載せる）。
+// 戻り値: 目的のパス以外の worktree がその branch を使っている場合の
+// ErrBranchInUseElsewhere。それ以外は nil。
+func (m *Manager) checkBranchFree(
+	ctx context.Context, repoPath string, loc *Location, issue IssueRef,
+) error {
+	entries, err := gitWorktreeEntries(ctx, repoPath)
+	if err != nil {
+		m.logger.Debug("branch の使われ方を段0 で確かめられませんでした（段3 に任せます）",
+			"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
+		return nil
+	}
+	for _, entry := range entries {
+		if entry.Branch != loc.Branch.String() {
+			continue
+		}
+		if samePath(entry.Path, loc.Path) {
+			// 目的のパス自身である。**再利用の経路なので問題ない。**
+			continue
+		}
+		return i18n.Errorf(
+			i18n.KeyWorkspacePrepareBranchInUseElsewhere,
+			ErrBranchInUseElsewhere, loc.Branch.String(), entry.Path,
+			repoPath, IssueURLForHuman(issue), entry.Path)
+	}
+	return nil
+}
+
+// IssueURLForHuman は、人間が `continuo abandon` に貼れる issue の URL を返す。
+//
+// **IssueRef.URL は空のことがある**（トラッカーが URL を持たない場合）。
+// そのときは置き場所と同じ規則（`<scheme>://<ホスト>/<owner>/<repo>/issues/<番号>`）で
+// 組み立てる。**ホストは HostFromIssueURL が決める**（空なら DefaultHost）。
+//
+// issue: 対象の issue。
+// 戻り値: issue の URL。
+func IssueURLForHuman(issue IssueRef) string {
+	if issue.URL != "" {
+		return issue.URL
+	}
+	return fmt.Sprintf("https://%s/%s/%s/issues/%d",
+		HostFromIssueURL(issue.URL), issue.Owner, issue.Repo, issue.Number)
 }

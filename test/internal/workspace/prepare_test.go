@@ -390,3 +390,75 @@ func TestCheckWorktreeUsable_書かずに着手できるかを判定する(t *te
 		}
 	})
 }
+
+// 目的: 目的の branch を**別の場所の worktree** が使っているとき、CheckWorktreeUsable が
+// それを落とすことを確認する（設計 3-16b）。
+//
+// **目的のパスには何も無い。**それでも `git worktree add <目的のパス> <branch>` は
+// `fatal: '<branch>' is already used by worktree at '<別のパス>'` で必ず落ちる。
+// **目的のパスだけを見る検査（ErrUnregisteredWorktree）ではこの経路を拾えない。**
+//
+// 与える情報: 置き場所の外に、同じ branch を出す worktree を1つ作っておく。
+// 成功条件: ErrBranchInUseElsewhere を返し、**目的のパスを作らず、
+// 別の場所の worktree も消さないこと。**エラー文が `continuo abandon` を案内すること。
+func TestCheckWorktreeUsable_branchを別のworktreeが使っているなら落とす(t *testing.T) {
+	ctx := context.Background()
+	fx := newFixture(t, fixtureOptions{})
+	issue := sampleIssue(188)
+	branch := "continuo/octocat/hello-world/188"
+
+	// **置き場所の外**に、同じ branch を出す worktree を作る（人間が手で切った状態）。
+	elsewhere := filepath.Join(t.TempDir(), "別の場所")
+	runGit(t, fx.Repo.Dir, "worktree", "add", "-b", branch, elsewhere, fx.Repo.Base)
+
+	err := fx.Manager.CheckWorktreeUsable(ctx, issue)
+	if !errors.Is(err, workspace.ErrBranchInUseElsewhere) {
+		t.Fatalf("branch を別の worktree が使っているのに通している: %v", err)
+	}
+	// **直し方をエラー文が持っていること。**ログに出るだけなので、ここに無いと人間へ届かない。
+	for _, want := range []string{branch, elsewhere, "continuo abandon", issue.URL} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("エラー文に %q が無い: %s", want, err.Error())
+		}
+	}
+
+	// **検査は1バイトも書かない。**目的のパスは作られていないこと。
+	target := filepath.Join(
+		fx.Root, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Errorf("検査だけのはずなのに目的のパスを作っている: %v", statErr)
+	}
+	// **別の場所の worktree も消さない。**中身が要るかどうかを判断できない。
+	if _, statErr := os.Stat(elsewhere); statErr != nil {
+		t.Errorf("検査だけのはずなのに別の場所の worktree を消している: %v", statErr)
+	}
+	if methods := fx.Herdr.Methods(); len(methods) != 0 {
+		t.Errorf("検査だけのはずなのに herdr を呼んでいる: %v", methods)
+	}
+}
+
+// 目的: **目的のパス自身**がその branch を出しているときは落とさないことを確認する
+// （3-22 の段2 の再利用の経路）。
+//
+// **これを除外しないと、continuo が自分で作った worktree を再利用できなくなり、
+// 2回目以降の着手が全部落ちる。**
+//
+// 与える情報: 1度 Prepare を通して作った worktree（branch は目的のパスが出している）。
+// 成功条件: nil を返し、worktree が残っていること。
+func TestCheckWorktreeUsable_目的のパス自身がbranchを使っているなら通す(t *testing.T) {
+	ctx := context.Background()
+	fx := newFixture(t, fixtureOptions{})
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	// 目的のパスがその branch を出していることを、git に答えさせて確かめる。
+	if got := runGit(t, prepared.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != prepared.Branch.String() {
+		t.Fatalf("前提が崩れている: worktree が %q を出している", got)
+	}
+
+	if err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188)); err != nil {
+		t.Fatalf("再利用できる worktree を branch の重複として落としている: %v", err)
+	}
+	if _, statErr := os.Stat(prepared.Path); statErr != nil {
+		t.Fatalf("検査だけのはずなのに worktree を消している: %v", statErr)
+	}
+}

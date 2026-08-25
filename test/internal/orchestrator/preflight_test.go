@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "2dbd33b194b2eb4e723e0e6aef78af67ba342d54327396b060a9ab73175c0551", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "c96b31e6a813313f510190049bee3a6714535819c498b8ad41c086393627a0a6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // dispatch 直前の検査（段0）の検査である。
@@ -20,7 +20,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P017"}
 //
 // TestPreflight_未信頼なら着手せず承認を促すコメントを1件書く は、段0 の信頼の検査を確かめる。
 //
@@ -101,7 +101,7 @@ func TestPreflight_信頼の検査を切れば未信頼でも着手する(t *tes
 	})
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P016"}
 //
 // TestPreflight_登録の無い実体があるならStatusを1バイトも書かずに飛ばす は、
 // 段0 の worktree の検査を確かめる。
@@ -141,4 +141,82 @@ func TestPreflight_登録の無い実体があるならStatusを1バイトも書
 	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
 		t.Errorf("印が残っている: %d 件", got)
 	}
+}
+
+// {"RUCM-PATH": "P015"}
+//
+// TestPreflight_branchを別のworktreeが使っているならStatusを1バイトも書かずに飛ばす は、
+// 段0 の branch の検査を確かめる。
+//
+// **目的のパスには何も無い。**それでも `git worktree add <目的のパス> <branch>` は
+// `fatal: '<branch>' is already used by worktree at '<別のパス>'` で必ず落ちる。
+// **実機で1件通して初めて出た経路である**（設計 3-16b）。目的のパスだけを見る検査では
+// 拾えないので、running_state を書いてから着手が落ち、
+// running_state と failure_state の往復が始まっていた。
+//
+// 目的: 目的の branch を別の場所の worktree が使っているとき、
+// **UpdateStatus を1回も呼ばずに** その issue を飛ばすこと。
+// 与える情報: 置き場所の外に、同じ branch を出す worktree を1つ作っておく。
+// 成功条件: UpdateStatus が1回も呼ばれず、Status が Ready のままで、
+// 目的のパスも作られず、印も残らないこと。
+func TestPreflight_branchを別のworktreeが使っているならStatusを1バイトも書かずに飛ばす(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	// **置き場所の外**に、同じ branch を出す worktree を作る。
+	// 前の run の worktree が別の場所に残っている状態や、人間が手で切った状態がこれである。
+	elsewhere := filepath.Join(t.TempDir(), "別の場所")
+	runGit(t, fx.Repo.Dir, "worktree", "add", "-b", "continuo/octocat/hello-world/188",
+		elsewhere, fx.Repo.Base)
+
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.Tracker.ResetCalls()
+
+	fx.Orc.Tick(context.Background())
+
+	if got := fx.Tracker.CountCall("UpdateStatus"); got != 0 {
+		t.Errorf("着手できないと分かっているのに Status を書いている: UpdateStatus を %d 回呼んだ", got)
+	}
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "Ready" {
+		t.Errorf("Status が動いている: got %q, want Ready", got)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodWorktreeOpen); got != 0 {
+		t.Errorf("着手できないのに worktree を開いている: %d 回", got)
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
+		t.Errorf("印が残っている: %d 件", got)
+	}
+	target := filepath.Join(
+		fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Errorf("飛ばしたはずなのに目的のパスを作っている: %v", err)
+	}
+}
+
+// TestPreflight_目的のパス自身がbranchを使っているなら飛ばさない は、
+// 段0 の branch の検査が**再利用の経路を巻き込まない**ことを確かめる。
+//
+// **除外を忘れると、continuo が自分で作った worktree が「別の worktree が使っている」と
+// 判定され、2回目以降の着手が全部飛ぶ。**
+//
+// 目的: 目的のパスの worktree がその branch を出しているとき、そのまま着手すること。
+// 与える情報: 目的のパスに、目的の branch を出す worktree を先に作っておく。
+// 成功条件: turn が送られること（飛ばされていないこと）。
+func TestPreflight_目的のパス自身がbranchを使っているなら飛ばさない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	target := filepath.Join(
+		fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		t.Fatalf("置き場所の親を作れません: %v", err)
+	}
+	// **continuo が前の run で作った worktree と同じ形にする**（目的のパスが branch を出す）。
+	runGit(t, fx.Repo.Dir, "worktree", "add", "-b", "continuo/octocat/hello-world/188",
+		target, fx.Repo.Base)
+
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	holdPrompt(fx)
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
 }

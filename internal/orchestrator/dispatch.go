@@ -364,11 +364,12 @@ func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 //	対象リポジトリが Claude Code に信頼登録されているか  → 飛ばす（trust.on_untrusted に従う）
 //	worktree の置き場所が設定の内側に収まるか            → その issue を失敗として扱う（3-20）
 //	目的のパスの worktree をそのまま使えるか            → 飛ばす（3-16b。判断は 3-22 の段2・段3 と同じ）
+//	その branch を別の場所の worktree が使っていないか  → 飛ばす（3-16b。目的のパスが空でも落ちる）
 //
-// **3つ目をここで見るのは、Status を書く前に落とすためである。**着手が確定して
+// **後ろ2つをここで見るのは、Status を書く前に落とすためである。**着手が確定して
 // 失敗する issue でも段2 で `In Progress` を書いてしまうと、`In Progress` は
 // active_states なので次の巡回でまた候補に上がり、`In Progress` と `Blocked` の
-// 往復が永久に続く。**この検査は1バイトも書かない**（CheckWorktreeUsable）。
+// 往復が永久に続く。**この検査は1バイトも書かない**（CheckWorktreeUsable が両方を見る）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 検査する issue。

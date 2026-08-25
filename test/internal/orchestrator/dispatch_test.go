@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "2dbd33b194b2eb4e723e0e6aef78af67ba342d54327396b060a9ab73175c0551", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "c96b31e6a813313f510190049bee3a6714535819c498b8ad41c086393627a0a6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **候補の取り方と、着手を取りやめる経路の検査である。**
 //
@@ -640,7 +640,7 @@ func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *
 	}
 }
 
-// {"RUCM-PATH": "P018"}
+// {"RUCM-PATH": "P019"}
 //
 // TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら拾わない は、
 // issue 単位の失敗の記録を確かめる。
@@ -679,7 +679,7 @@ func TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら
 	}
 }
 
-// {"RUCM-PATH": "P019"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDispatch_絞り込みの食い違いが1件あっても他のissueのdispatchは続く は、
 // 巡回全体を止めないことを確かめる。
