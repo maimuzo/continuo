@@ -62,5 +62,18 @@
       "Bash(git worktree remove:*)",
       "Bash(rm:*)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-verified-commands.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }
