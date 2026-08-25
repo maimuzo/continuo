@@ -120,13 +120,23 @@ type Entry struct {
 	Requirements Requirements
 	// Problem は調べられなかった理由である（空なら問題なし）。
 	Problem string
+	// Unconfirmed は、要求内容を確かめられなかった理由である（空なら確かめられた）。
+	//
+	// **Problem と分けてある。**Problem はリポジトリに辿り着けなかった場合であり、
+	// こちらは辿り着けたが中身を読めなかった場合である。**読めなかったときも
+	// 要求内容の一覧は出す**（何を確かめられなかったのかが、そこにしか出ない）。
+	Unconfirmed string
 }
 
 // Actionable は、この項目を登録の対象にできるかを返す。
 //
-// 戻り値: 鍵まで求められていて、調べられなかった理由が無ければ true。
+// **確かめられていないものは対象にしない**（3-33）。`continuo trust` は要求内容を
+// 出したあと人間に問い返さずに書き込むので、**中身を見せられていないのに書き込むと、
+// 「中身を確かめてから決める」という手順がどこにも無いことになる。**
+//
+// 戻り値: 鍵まで求められていて、調べられなかった理由も、確かめられなかった理由も無ければ true。
 func (e Entry) Actionable() bool {
-	return e.Problem == "" && e.TrustKey != ""
+	return e.Problem == "" && e.Unconfirmed == "" && e.TrustKey != ""
 }
 
 // Report は Plan が調べた結果である。
@@ -274,6 +284,16 @@ func inspect(ctx context.Context, name, homeDir string, resolveClone CloneResolv
 	}
 	e.Trusted = trusted
 	e.Requirements = readRequirements(clonePath)
+	// **確かめられなかったものは登録の対象から外す**（3-33）。
+	//
+	// `continuo trust` は要求内容を出したあと、人間に問い返さずに書き込む。
+	// **中身を見せられていないのに書き込むと、「中身を確かめてから決める」という手順が
+	// どこにも無いことになる。**
+	if e.Requirements.Unconfirmed() {
+		e.Unconfirmed = fmt.Sprintf(
+			"要求内容を確かめられなかったので登録しません（%s）。原因を直してから実行し直してください",
+			strings.Join(e.Requirements.Notes, " / "))
+	}
 	return e
 }
 

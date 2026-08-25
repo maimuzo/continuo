@@ -415,10 +415,11 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 	if snap.RetryCount >= o.cfg.Agent.MaxRetries {
 		o.logger.Warn("リトライの回数を使い切りました（人間へ渡します）",
 			"identifier", snap.Identifier, "retry_count", snap.RetryCount, "理由", summaryLine(reason))
-		// **打ち切りである。worker を止める前にコメントを確かめる**（設計 3-25）。
-		o.ensureAgentComment(ctx, rs)
-		o.runAfterRun(ctx, rs)
-		o.stopWorker(ctx, rs)
+		// **順番は failRun と同じにする。**引き渡しの通知は1件だけ投稿できる
+		// （takeHandoffPost）ので、**本当の理由が先に投稿枠を取らなければならない。**
+		// 先に ensureAgentComment を呼ぶと、その中の failCommentRecovery が
+		// 「作業を終えたと表明したのに何も書き残さなかった」という別の文面で枠を使い切り、
+		// **stall で打ち切ったという本当の理由が issue に1文字も残らない。**
 		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
 		if err != nil {
 			o.logger.Warn("Status を落とせません", "identifier", snap.Identifier, "error", err)
@@ -426,6 +427,10 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 		// **打ち切りも issue 単位で数える**（failRun と同じ器に積む）。
 		o.noteFailure(rs.IssueID, reason, moved && err == nil)
 		o.postHandoffComment(ctx, rs, reason)
+		// **打ち切りである。worker を止める前にコメントを確かめる**（設計 3-25）。
+		o.ensureAgentComment(ctx, rs)
+		o.runAfterRun(ctx, rs)
+		o.stopWorker(ctx, rs)
 		o.release(rs)
 		return
 	}

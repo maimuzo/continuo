@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "58d7bb744413d8d9ebd6fcd50964cd3fbdc9dd479adff7a6bc5c48c84c02ae60", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "c432ba5c1bc2937054269562f29ad8d9d26e282720b1e9ad8c6bc379527f3a6e", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -218,7 +218,7 @@ func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *test
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P010"}
 //
 // TestTurn_blockedが返ったらescを送ってから人間へ渡す は、安全に関わる分岐を確かめる。
 //
@@ -318,5 +318,50 @@ func TestTurn_waitはuntilにblockedを含めてagent_promptに載せる(t *test
 	}
 	if fx.Herdr.CountMethod(herdr.MethodAgentWait) != 0 {
 		t.Fatalf("agent.wait を単独で使っている（投入直後の idle を turn の終わりと取り違える）")
+	}
+}
+
+// {"RUCM-PATH": "P009"}
+//
+// TestTurn_一時的な送信の失敗ではpaneを閉じない は、
+// **一時的な失敗と、送信そのものを断られたときとで、後始末が正反対である**ことを確かめる。
+//
+// 目的: 設計 3-48。`送信の失敗` は pane を閉じてリトライを積むが、`一時的な送信の失敗` は
+// **何も閉じず、何も積まない**（RUCM「issue を1件処理する」の事後条件
+// 「印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない」）。
+// **pane を閉じると、その中で動いている Claude Code が turn の途中で消える。**
+// herdr が一瞬落ちただけなのに、エージェントの作業がそこで失われる。
+//
+// 与える情報: `agent.prompt` を受けたところで応答を書かずに接続を切るテスト用herdr mock
+// （herdr の再起動そのものである）。リトライは 0 回。
+// 成功条件: `pane.close` が1度も呼ばれず、run が印に残り、Status が `In Progress` のまま
+// であること。
+func TestTurn_一時的な送信の失敗ではpaneを閉じない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Agent.MaxRetries = 0
+			cfg.Tracker.VerifyStatesEvery = 0
+		},
+	})
+	fx.Herdr.DropConnection(herdr.MethodAgentPrompt)
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.AllowLog("herdr へ届かなかったので", "herdr との通信が一時的に失敗した")
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 20*time.Second, "turn の送信が herdr へ届く", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	// **run を捨てる実装なら、ここで pane を閉じるところまで走り切る。**走り切らせてから見る。
+	time.Sleep(2 * time.Second)
+
+	if got := fx.Herdr.CountMethod(herdr.MethodPaneClose); got != 0 {
+		t.Errorf("herdr が一瞬落ちただけで pane を閉じた: pane.close が %d 回", got)
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Errorf("印から run が外れた: %d 件（1 件のはず）", got)
+	}
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
+		t.Errorf("Status を動かした: got %q, want In Progress", got)
 	}
 }

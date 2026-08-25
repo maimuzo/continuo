@@ -279,14 +279,14 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 // docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
 //
 // **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**ボードの Status の選択肢を
-// continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す7つのキーの行を差し替える。
+// continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す8つのキーの行を差し替える。
 // **他の行には触れない。**利用者が `continuo init` のあとに手で直した行
 // （`workspace.root`、`trust.repositories` から消した行など）を消さないためである。
 //
 // **WORKFLOW.md が無ければ止める。**雛形を置くのは `continuo init` の仕事であり、
 // 2つのコマンドが同じファイルを作れると、どちらが正かが決まらない。
 //
-// **`--force` は無い。**書き換えるのが7行だけになったので、上書きから守るものが無くなった。
+// **`--force` は無い。**書き換えるのが8行だけになったので、上書きから守るものが無くなった。
 // 何も守らないフラグを残すと、まだ何かを守っているように読める。
 //
 // **標準入力を握るのはこのサブコマンドだけである。**`continuo init` を対話にしないのは、
@@ -352,20 +352,34 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 
 	// **まず書き換える WORKFLOW.md があるかを確かめる**（RUCM の基本フロー2）。
 	// ここで止まる実行では、役割の割り当てを1つも尋ねない。
-	if check, err := scaffold.CheckUpdatable(dir); err != nil {
+	check, err := scaffold.CheckUpdatable(dir)
+	if err != nil {
 		return printScaffoldError(stderr, check, err)
 	}
 
-	// **owner とボードの番号は `continuo init` と同じ経路で引く**（internal/scaffold）。
-	// 同じ検出を2箇所に持たない。**引いた値は WORKFLOW.md へ書かない。**
-	// どのボードの Status の選択肢を読むかを決めるためだけに使う。
+	// **どのボードを読むかは、WORKFLOW.md に書かれた値を先に使う**（設計 6-2）。
+	// `continuo init` で埋めたのに `continuo setup` でもう一度 `--project` を要求するのは
+	// 筋が通らない。**フラグが明示されたときだけフラグを優先する。**
+	// ここで拾えなかったぶんだけ、`continuo init` と同じ経路で gh から引く。
+	// **引いた値は WORKFLOW.md へ書かない。**どのボードの Status の選択肢を読むかを
+	// 決めるためだけに使う。
+	owner, projectNumber := *ownerFlag, *projectFlag
+	if owner == "" {
+		owner = check.Owner
+	}
+	if projectNumber <= 0 {
+		projectNumber = check.ProjectNumber
+	}
 	detection := d.ScaffoldDetect(context.Background(), scaffold.DetectOptions{
-		Owner:         *ownerFlag,
-		ProjectNumber: *projectFlag,
+		Owner:         owner,
+		ProjectNumber: projectNumber,
 	})
 	if code := checkDetectionForSetup(stderr, detection); code != 0 {
 		return code
 	}
+	// **どのボードを読むかを画面に出す。**WORKFLOW.md に書かれた値と gh から引いた値が
+	// 食い違っていても、出しておけば利用者がその場で気づける。
+	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupBoardUsing, detection.Values.Owner, detection.Values.ProjectNumber))
 
 	field, err := d.SetupFetchStatusField(context.Background(), setup.FetchOptions{
 		Owner:         detection.Values.Owner,
@@ -404,7 +418,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		return 1
 	}
 
-	// **書き換えるのは Status の7行だけである。**owner / project_number / trust.repositories は
+	// **書き換えるのは Status の8行だけである。**owner / project_number / trust.repositories は
 	// `continuo init` が書いた値のまま残す。**Detect が引き直した値で上書きしない。**
 	result, err := scaffold.UpdateStatuses(dir, assignment.Statuses())
 	if err != nil {
@@ -489,6 +503,13 @@ func printScaffoldError(w io.Writer, result scaffold.Result, err error) int {
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrNotFoundRemedy))
 	case errors.Is(err, scaffold.ErrKeysNotFound):
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrKeysNotFound, err))
+	case errors.Is(err, scaffold.ErrKeysNotRewritable):
+		// **書き換えずに止めたことを言う。**ここで黙って書くと、YAML として読めない
+		// WORKFLOW.md ができあがったうえで「書き換えました」と出る。
+		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrKeysNotRewritable, err))
+		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrKeysNotRewritableRemedy))
+	case errors.Is(err, scaffold.ErrWouldBreakConfig):
+		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrWouldBreakConfig, err))
 	case errors.Is(err, scaffold.ErrDirNotFound):
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLISetupErrDirNotFound, err))
 	case errors.Is(err, scaffold.ErrNotADirectory):

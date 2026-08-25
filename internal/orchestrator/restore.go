@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -60,6 +61,14 @@ type restoreCandidate struct {
 	Path string
 	// Identity は読めた身元ファイルの中身である。
 	Identity *workspace.Identity
+	// Owner は**置き場所のパスから引いた**所有者名である（設計 3-22 の固定4階層）。
+	// Repo は同じくリポジトリ名である。
+	//
+	// **身元ファイルからは読まない。**身元ファイルは worktree の直下にあり、
+	// その worktree ではエージェントが `--permission-mode dontAsk` で動く（設計 3-16 の段9）。
+	// **パスは封じ込め検査（設計 3-20）を通ったものなので、エージェントには書き換えられない。**
+	Owner string
+	Repo  string
 }
 
 // adoption は引き継ぐと決めた run である（段5c で組み立て、段6 で印へ入れる）。
@@ -196,13 +205,21 @@ func (o *Orchestrator) scanIdentities() ([]restoreCandidate, []string) {
 				"path", w.Path, "issue", w.Identity.IssueIdentifier)
 			continue
 		}
+		// **`project_item_id` を鍵にする前に、置き場所と辻褄が合うかを検算する。**
+		// この値もエージェントが書き換えられるので、検算しないと**別の issue の
+		// 生きている run を乗っ取れる**（`continuo abandon` の pathAgrees と同じ判断）。
+		owner, repo, ok := o.pathAgrees(w.Path, w.Identity)
+		if !ok {
+			continue
+		}
+		cand := restoreCandidate{Path: w.Path, Identity: w.Identity, Owner: owner, Repo: repo}
 		cur, exists := byItem[w.Identity.ProjectItemID]
 		if !exists {
-			byItem[w.Identity.ProjectItemID] = restoreCandidate{Path: w.Path, Identity: w.Identity}
+			byItem[w.Identity.ProjectItemID] = cand
 			continue
 		}
 		// 重複したら created_at が新しいほうを採る。
-		newer, older := cur, restoreCandidate{Path: w.Path, Identity: w.Identity}
+		newer, older := cur, cand
 		if w.Identity.CreatedAt.After(cur.Identity.CreatedAt) {
 			newer, older = older, cur
 		}
@@ -220,6 +237,122 @@ func (o *Orchestrator) scanIdentities() ([]restoreCandidate, []string) {
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Path < candidates[j].Path })
 	sort.Strings(discarded)
 	return candidates, discarded
+}
+
+// pathAgrees は、身元ファイルの中身が worktree の置き場所と辻褄が合うかを検算する。
+//
+// **言いたいこと。**`project_item_id` はエージェントが書き換えられる。検算しないと、
+// **別の issue の生きている run を乗っ取れる。**
+//
+// **何が起きるか。**worktree の直下の身元ファイル（`<worktree>/.continuo.json`）で、
+// その worktree のエージェントは `--permission-mode dontAsk` で動く（設計 3-16 の段9）。
+// そこで `project_item_id` を走行中の別 issue のものに書き換え、`created_at` を新しくすると、
+// 復元の段2 は「同じ issue の worktree が2つある」と判定して**被害者の worktree を
+// 『捨てた身元』にし、段4 でその生きた pane を閉じる。**以後その issue の run は
+// 書き換えた側の worktree として印に入り、片付けの宛先まで入れ替わる。
+//
+// **検算の根拠は worktree のパスだけである。**置き場所は `<root>/<host>/<owner>/<repo>/<スラグ>` の
+// 固定4階層（設計 3-22）で、封じ込め検査（設計 3-20）を通っている。**エージェントには
+// 書き換えられない。**そこから引いた `<owner>/<repo>` と、身元ファイルが名乗る
+// `issue_identifier` / `issue_url` の `<owner>/<repo>` を、大文字小文字を無視して比べる。
+//
+// **食い違ったら候補から外す。消さない。**どちらが正しいか continuo には判断できない。
+//
+// worktreePath: worktree の絶対パス。
+// identity: 読めた身元ファイル。
+// 戻り値の1つ目: 置き場所から引いた所有者名。
+// 戻り値の2つ目: 置き場所から引いたリポジトリ名。
+// 戻り値の3つ目: 辻褄が合えば true。**引けなかった場合と名乗りが無い場合も false**
+// （分からないものを候補に採らない）。
+func (o *Orchestrator) pathAgrees(worktreePath string, identity *workspace.Identity) (string, string, bool) {
+	owner, repo, err := o.ws.OwnerRepoOf(worktreePath)
+	if err != nil {
+		o.logger.Warn("worktree の置き場所から owner/repo を引けないので候補にしません（消しません）",
+			"path", worktreePath, "error", err)
+		return "", "", false
+	}
+	claimedOwner, claimedRepo, ok := identityOwnerRepo(identity)
+	if !ok {
+		o.logger.Warn("身元ファイルが owner/repo を名乗っていないので候補にしません（消しません）",
+			"path", worktreePath, "issue_identifier", identity.IssueIdentifier, "issue_url", identity.IssueURL)
+		return "", "", false
+	}
+	if !strings.EqualFold(owner, claimedOwner) || !strings.EqualFold(repo, claimedRepo) {
+		o.logger.Warn("身元ファイルの名乗りが worktree の置き場所と食い違うので候補にしません（消しません）",
+			"path", worktreePath,
+			"置き場所", owner+"/"+repo,
+			"身元ファイルの名乗り", claimedOwner+"/"+claimedRepo,
+			"project_item_id", identity.ProjectItemID)
+		return "", "", false
+	}
+	return owner, repo, true
+}
+
+// issueAgreesWithPath は、取り直した issue が worktree の置き場所と同じリポジトリのものかを返す。
+//
+// **`project_item_id` で引いた結果も検算する。**身元ファイルの名乗りと置き場所が
+// 揃っていても、**`project_item_id` だけを別 issue のものに差し替えれば**（同じリポジトリの
+// 名前を名乗ったまま）取り直しは別 issue を返す。ここで止めないと、その別 issue の
+// Status を落としたり worktree を片付けたりしてしまう。
+//
+// c: 対象の worktree（`Owner` / `Repo` は置き場所から引いた値）。
+// issue: 段3 で取り直した issue。
+// 戻り値: 同じリポジトリのものなら true。**draft issue（owner が空）は false。**
+func (o *Orchestrator) issueAgreesWithPath(c restoreCandidate, issue tracker.Issue) bool {
+	if strings.EqualFold(issue.Owner, c.Owner) && strings.EqualFold(issue.Repo, c.Repo) {
+		return true
+	}
+	o.logger.Warn("取り直した issue が worktree の置き場所と違うリポジトリなので何もしません（pane も worktree も残します）",
+		"path", c.Path,
+		"置き場所", c.Owner+"/"+c.Repo,
+		"取り直した issue", issue.Identifier,
+		"project_item_id", c.Identity.ProjectItemID)
+	return false
+}
+
+// identityOwnerRepo は身元ファイルが名乗る `<owner>/<repo>` を取り出す。
+//
+// **`issue_identifier`（`<owner>/<repo>#<番号>`）を先に見て、無ければ `issue_url` の
+// パスから取る。**どちらも読めなければ「名乗っていない」として偽を返す。
+//
+// **ここで取れる値は信用しない。**呼び出し側（pathAgrees）が、置き場所から引いた値と
+// 突き合わせるための材料である。
+//
+// identity: 読めた身元ファイル。
+// 戻り値の1つ目: 名乗っている所有者名。
+// 戻り値の2つ目: 名乗っているリポジトリ名。
+// 戻り値の3つ目: どちらも取れたら true。
+func identityOwnerRepo(identity *workspace.Identity) (string, string, bool) {
+	if owner, repo, ok := splitOwnerRepo(strings.SplitN(identity.IssueIdentifier, "#", 2)[0]); ok {
+		return owner, repo, true
+	}
+	u, err := url.Parse(strings.TrimSpace(identity.IssueURL))
+	if err != nil || u.Path == "" {
+		return "", "", false
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	return splitOwnerRepo(parts[0] + "/" + parts[1])
+}
+
+// splitOwnerRepo は `<owner>/<repo>` を2つに割る。
+//
+// raw: 割る文字列。
+// 戻り値の1つ目: 所有者名。
+// 戻り値の2つ目: リポジトリ名。
+// 戻り値の3つ目: どちらも空でなければ true。
+func splitOwnerRepo(raw string) (string, string, bool) {
+	parts := strings.Split(strings.TrimSpace(raw), "/")
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	owner, repo := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if owner == "" || repo == "" {
+		return "", "", false
+	}
+	return owner, repo, true
 }
 
 // refetchByIdentities は身元ファイルの project item の ID で、ボードを ID 指定で
@@ -272,6 +405,14 @@ type paneMatch struct {
 	DuplicatePanes []herdr.Pane
 	// AgentByPane は pane の ID から agent を引く写像である（`agent.list` から作る）。
 	AgentByPane map[string]herdr.Agent
+	// Unknown は「突き合わせができなかった」ことを表す（`pane.list` か `agent.list` が失敗した）。
+	//
+	// **空の写像と区別が付かないと、生きている run を全件『pane が無い』として扱う。**
+	// 段8 は pane を閉じないだけで、**Status の書き換えも worktree の片付けも行う。**
+	// `restart.orphan_running_action` が `to_failure_state` なら、**herdr の一時的な失敗
+	// 1回で走っている全部の run が人間へ渡され、「pane が残っていませんでした」という
+	// 嘘の理由が issue に投稿される。**pane は実際には生きていて、誰も閉じない。
+	Unknown bool
 }
 
 // matchPanes は herdr から pane と agent の一覧を取り、pane の cwd と worktree のパスで
@@ -291,7 +432,8 @@ type paneMatch struct {
 // candidates: 段2 で採った worktree。
 // discarded: 段2 で採らなかった worktree のパス。
 // 戻り値: 突き合わせの結果。**`pane.list` と `agent.list` のどちらかを取れなかった場合は
-// 空の写像を返す**（引き継ぎを諦めて全件を段8 へ流す。**pane は1つも閉じない**）。
+// `Unknown` を真にした空の写像を返す**（引き継ぎも段8 も行わず、次の巡回に委ねる。
+// **pane は1つも閉じない**）。
 func (o *Orchestrator) matchPanes(
 	ctx context.Context,
 	candidates []restoreCandidate,
@@ -304,8 +446,9 @@ func (o *Orchestrator) matchPanes(
 
 	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
 	if err != nil {
-		o.logger.Warn("pane の一覧を取れません（生きている pane は引き継げません。pane は1つも閉じません）",
+		o.logger.Warn("pane の一覧を取れないので、この起動では pane の有無を判断しません（pane は1つも閉じません）",
 			"error", err)
+		m.Unknown = true
 		return m
 	}
 	agents, err := o.herdr.AgentList(ctx)
@@ -314,9 +457,10 @@ func (o *Orchestrator) matchPanes(
 		// 段8b の「pane はあるが agent 名が無い」が全件で真になり、**引き継げたはずの
 		// run の pane を全件閉じる。**herdr の一時的な失敗1回で、走っている全部の
 		// エージェントの作業を捨てることになる。
-		// **空の写像を返して全件を段8 へ流す。**pane は1つも閉じず、次の巡回に委ねる。
-		o.logger.Warn("agent の一覧を取れません（生きている pane は引き継げません。pane は1つも閉じません）",
+		// **「判断できなかった」印を付けて返す。**pane は1つも閉じず、段8 も呼ばない。
+		o.logger.Warn("agent の一覧を取れないので、この起動では pane の有無を判断しません（pane は1つも閉じません）",
 			"error", err)
+		m.Unknown = true
 		return m
 	}
 	for _, a := range agents.Agents {
@@ -438,6 +582,17 @@ func (o *Orchestrator) decideAdoptions(
 	var adoptions []adoption
 	var noPane []restoreCandidate
 
+	if m.Unknown {
+		// **「一覧を取れなかった」を「pane が無い」と読み替えてはならない。**
+		// 段8 は Status を書き換え、`cleanup.on_states` なら worktree まで消す。
+		// **pane が無いことを実際に確かめられたときだけ動かす。**
+		for _, c := range candidates {
+			o.logger.Warn("herdr の一覧を取れなかったので、この worktree は判断を保留します（次の巡回に委ねます）",
+				"identifier", c.Identity.IssueIdentifier, "path", c.Path)
+		}
+		return nil, nil
+	}
+
 	for _, c := range candidates {
 		pane, alive := m.ByWorktree[c.Path]
 		if !alive {
@@ -489,6 +644,12 @@ func (o *Orchestrator) decideOne(
 		// 段5a: 取り直しで見つからなかった → **pane も worktree も残す。**印にも入れない。
 		o.logger.Warn("取り直しで見つからなかったので何もしません（pane も worktree も残します）",
 			"identifier", identifier, "project_item_id", c.Identity.ProjectItemID)
+		return adoption{}, false
+	}
+	// **取り直した issue が置き場所と同じリポジトリのものかを確かめる**（設計 3-22）。
+	// 身元ファイルの `project_item_id` だけを別 issue のものへ差し替えられた場合、
+	// ここで止めないと**無関係の issue の pane を閉じ、Status を動かすことになる。**
+	if !o.issueAgreesWithPath(c, issue) {
 		return adoption{}, false
 	}
 
@@ -665,6 +826,10 @@ func (o *Orchestrator) restoreWithoutPane(
 	if !found {
 		o.logger.Warn("取り直しで見つからなかったので何もしません（worktree は残します。勝手に消しません）",
 			"identifier", identifier, "path", c.Path)
+		return
+	}
+	// **取り直した issue が置き場所と同じリポジトリのものかを確かめる**（設計 3-22）。
+	if !o.issueAgreesWithPath(c, issue) {
 		return
 	}
 

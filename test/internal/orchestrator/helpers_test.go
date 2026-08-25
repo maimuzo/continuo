@@ -166,6 +166,22 @@ type fakeHerdr struct {
 	workspaces map[string]fakeWorkspace
 	// nextWS は次に払い出す workspace の通し番号である。
 	nextWS int
+	// drops は「応答を返さずに接続を切る」メソッドの集合である（herdr の再起動の再現）。
+	drops map[string]bool
+}
+
+// DropConnection は、そのメソッドを受けたら応答を書かずに接続を切る台本を入れる。
+//
+// **herdr が再起動した・socket が一瞬切れた場面の再現である。**herdr は
+// `{"error":{"code":...}}` を返さない（そもそも答える側が居ない）ので、
+// `Handle` で作れるエラーでは再現できない。呼び出し側には continuo が付ける
+// `ErrCodeTransport`（`Retryable` が真）が返る。
+//
+// method: 対象のメソッド名。
+func (fh *fakeHerdr) DropConnection(method string) {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	fh.drops[method] = true
 }
 
 // fakeWorkspace はテスト用herdr mock が持つ workspace 1件である。
@@ -273,6 +289,7 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 		socketPath: socketPath,
 		handlers:   map[string]herdrHandler{},
 		workspaces: map[string]fakeWorkspace{},
+		drops:      map[string]bool{},
 	}
 	fh.installDefaults()
 
@@ -416,6 +433,19 @@ func (fh *fakeHerdr) Handle(method string, fn herdrHandler) {
 	fh.handlers[method] = fn
 }
 
+// HandlerOf はいま入っている台本を返す。
+//
+// **本物の herdr に近づける「包む」台本を書くために使う。**既定の台本を写し取らずに
+// 書き直すと、テストだけで通る挙動が2つに分かれる。
+//
+// method: 対象のメソッド名。
+// 戻り値: いまの台本（無ければ nil）。
+func (fh *fakeHerdr) HandlerOf(method string) herdrHandler {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	return fh.handlers[method]
+}
+
 // serve は1本の接続を処理する。
 //
 // **接続ごとの goroutine から呼ばれるので t.Fatalf を使ってはならない。**
@@ -440,10 +470,17 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	fh.mu.Lock()
 	fh.requests = append(fh.requests, recordedRequest{Method: req.Method, Params: req.Params})
 	handler := fh.handlers[req.Method]
+	drop := fh.drops[req.Method]
 	tl := fh.timeline
 	fh.mu.Unlock()
 	// **トラッカーと同じ1本の並びへ積む。**別々の記録では前後関係を比べられない。
 	tl.note("herdr." + req.Method)
+
+	// **答えずに切る**（DropConnection。herdr の再起動の再現）。
+	// 受け取ったことは上で記録済みなので、何回届いたかは検査できる。
+	if drop {
+		return
+	}
 
 	var resp map[string]any
 	if handler == nil {

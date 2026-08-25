@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -190,5 +191,54 @@ func TestSweepOrphanBranches_消す前にSHAをログへ残す(t *testing.T) {
 	}
 	if !strings.Contains(out, "branch continuo/orphan "+sha) {
 		t.Fatalf("戻すためのコマンドがログに残っていない:\n%s", out)
+	}
+}
+
+// TestSweepOrphanBranches_deleteBranchが偽なら1本も消さない は、起動時の掃除が
+// `cleanup.delete_branch` に従うことを確かめる。
+//
+// 目的: **片付けは設定を見て branch を残し、「branch は残しました」と人間へ言う。**
+// その branch は「接頭辞に一致し・worktree も無く・実行中の run も無い」の3条件を
+// 全部満たすので、設定を見ない掃除は**次に continuo を起動しただけで
+// `git branch -D`（強制削除）で消す。****`continuo abandon --force` で片付けた
+// worktree の branch には未 push の commit が載っていることがあり、消えれば
+// reflog を掘る以外に戻す手立てが無い。**
+//
+// 与える情報: `cleanup.delete_branch` を偽にした設定、worktree を1つ持つリポジトリ、
+// worktree を持たない `continuo/orphan` の branch、**壊れた ref にした
+// `continuo/broken` の branch**（壊れた ref だけを例外にしていないかも見る）。
+//
+// 成功条件: 1本も消さず、通常の branch も壊れた ref のファイルも残っていること。
+func TestSweepOrphanBranches_deleteBranchが偽なら1本も消さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Cleanup.DeleteBranch = false
+	}})
+	ctx := context.Background()
+
+	prepared, err := fx.Manager.Prepare(ctx, sampleIssue(188))
+	if err != nil {
+		t.Fatalf("worktree を用意できません: %v", err)
+	}
+	runGit(t, fx.Repo.Dir, "branch", "continuo/orphan")
+	runGit(t, fx.Repo.Dir, "branch", "continuo/broken")
+	brokenRef := breakBranchRef(t, fx.Repo.Dir, "continuo/broken")
+
+	deleted, err := fx.Manager.SweepOrphanBranches(ctx, workspace.OrphanBranchSweepRequest{
+		Worktrees: []string{prepared.Path},
+	})
+	if err != nil {
+		t.Fatalf("SweepOrphanBranches がエラーを返した: %v", err)
+	}
+	if len(deleted) != 0 {
+		t.Fatalf("cleanup.delete_branch が偽なのに branch を消した: %v", deleted)
+	}
+
+	branches := runGit(t, fx.Repo.Dir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if !strings.Contains(branches, "continuo/orphan") {
+		t.Fatalf("cleanup.delete_branch が偽なのに孤児 branch を消してしまった: %s", branches)
+	}
+	if _, err := os.Stat(brokenRef); err != nil {
+		t.Fatalf("cleanup.delete_branch が偽なのに壊れた ref のファイルを消してしまった（%s）: %v",
+			brokenRef, err)
 	}
 }

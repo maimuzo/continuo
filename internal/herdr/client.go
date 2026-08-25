@@ -95,6 +95,57 @@ func (t Timeouts) withDefaults() Timeouts {
 	return t
 }
 
+// maxDuration は time.Duration が表せる最大値である（約292年）。
+// 待ち時間の足し算で符号が反転しないようにするための番兵として使う。
+const maxDuration = time.Duration(1<<63 - 1)
+
+// millisToDuration はミリ秒数を time.Duration へ直す。
+//
+// **掛け算で溢れさせない。**設定から来る値なので、常識外れに大きい数が入りうる。
+// 溢れると符号が反転し、**期限が「もう過ぎている」ことになって即座に切れる。**
+//
+// ms: ミリ秒数。0 以下なら 0 を返す。
+// 戻り値: 対応する time.Duration。溢れる大きさなら maxDuration。
+func millisToDuration(ms int) time.Duration {
+	if ms <= 0 {
+		return 0
+	}
+	if int64(ms) > int64(maxDuration/time.Millisecond) {
+		return maxDuration
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+// waitReadBudget は、待ちを伴う呼び出し（待機ありの agent.prompt / agent.wait）で
+// socket の読み取りに与える上限を決める。
+//
+// **herdr 側の待ち受けより必ず長くする。**herdr の待ち受けはリクエストが届いてから
+// 数え始めるので、同じ値を両方に使うと **continuo 側の socket が必ず先に切れる。**
+// そうなると呼び出し側が受け取るのは herdr の timeout（ErrCodeTimeout）ではなく
+// continuo 側の読み取り期限（ErrCodeReadTimeout）になり、**枠待ちの判定にも
+// 「打ち切らずに待ち直す」経路にも入れないまま run を諦める**（設計 3-2 / 3-27）。
+//
+// turn: Timeouts.Turn（claude.turn_timeout_ms）。
+// herdrWaitMs: herdr へ渡す待ち受けの上限（ミリ秒）。0 なら herdr の既定に任せている。
+// margin: 往復ぶんの余裕。Timeouts.Read を渡す。0 以下なら DefaultReadTimeout。
+// 戻り値: socket の読み取りに与える上限。**必ず herdrWaitMs より長い。**
+func waitReadBudget(turn time.Duration, herdrWaitMs int, margin time.Duration) time.Duration {
+	budget := turn
+	if d := millisToDuration(herdrWaitMs); d > budget {
+		budget = d
+	}
+	if budget < 0 {
+		budget = 0
+	}
+	if margin <= 0 {
+		margin = DefaultReadTimeout
+	}
+	if budget > maxDuration-margin {
+		return maxDuration
+	}
+	return budget + margin
+}
+
 // checkAbsSocketPath は herdr の socket のパスが絶対パスかどうかを検査する。
 //
 // internal/socketpath の checkAbs と同じ理由で必要である。相対パスだと continuo を

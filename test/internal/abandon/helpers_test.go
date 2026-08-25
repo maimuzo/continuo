@@ -1008,6 +1008,50 @@ func orphanBranchWithUnpushedCommit(t *testing.T, fx *fixture, number int) strin
 	return name.String()
 }
 
+// CopyToHost は worktree のディレクトリを、置き場所の**別のホスト名の階層**へ複製する。
+//
+// **同じ issue の候補を2件にする、ただ1つの現実的な作り方である。**置き場所は
+// `<root>/<host>/<owner>/<repo>/<スラグ>` で、スラグは branch 名から作られる。
+// owner・リポジトリ名・スラグまで一致する worktree を git で2つ作ることはできない
+// （同じ branch を2つの worktree でチェックアウトできない）ので、**人間が手で
+// ディレクトリを複製した跡**を作る。GitHub Enterprise から github.com へ移した跡も
+// この形になる。
+//
+// **複製するのは身元ファイルだけである。**abandon は候補が2件あればそこで止まるので、
+// git の実体までは要らない。
+//
+// t: 呼び出し元のテスト。
+// prepared: 複製元の worktree。
+// host: 複製先のホスト名（置き場所の1階層目）。
+// 戻り値: 複製した worktree の絶対パス。
+func (fx *fixture) CopyToHost(
+	t *testing.T, prepared *workspace.PrepareResult, host string,
+) string {
+	t.Helper()
+
+	root := fx.Manager.ResolvedRoot()
+	rel, err := filepath.Rel(root, prepared.Path)
+	if err != nil {
+		t.Fatalf("置き場所からの相対パスを作れません: %v", err)
+	}
+	parts := strings.Split(rel, string(os.PathSeparator))
+	if len(parts) != 4 {
+		t.Fatalf("置き場所の4階層になっていません: %v", parts)
+	}
+	dest := filepath.Join(root, host, parts[1], parts[2], parts[3])
+	if err := os.MkdirAll(dest, 0o700); err != nil {
+		t.Fatalf("複製先のディレクトリを作れません（%s）: %v", dest, err)
+	}
+	raw, err := os.ReadFile(fx.Manager.IdentityPath(prepared.Path))
+	if err != nil {
+		t.Fatalf("複製元の身元ファイルを読めません: %v", err)
+	}
+	if err := os.WriteFile(fx.Manager.IdentityPath(dest), raw, 0o600); err != nil {
+		t.Fatalf("複製先へ身元ファイルを書けません: %v", err)
+	}
+	return dest
+}
+
 // RemoveIdentity は worktree の身元ファイルだけを消す。
 //
 // **着手が worktree を作った直後に止まった状態を作る**（3-16 の段6〜段9）。

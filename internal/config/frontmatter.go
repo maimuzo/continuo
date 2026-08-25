@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 
+	"github.com/goccy/go-yaml"
+
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
@@ -57,4 +59,26 @@ func splitFrontMatter(content string) (frontMatter string, body string, err erro
 	}
 
 	return frontMatter, body, nil
+}
+
+// CheckFrontMatterSyntax は、WORKFLOW.md の全文の front matter が YAML として読めるかだけを見る。
+//
+// **値の妥当性は見ない。**プレースホルダが残っていても、Status の名前がボードに無くても通る。
+// ここで答えるのは「この全文を continuo が読み始められるか」だけである。
+//
+// **`continuo setup` が書き込む前に自分の組み立てを確かめるためにある。**行を1本だけ
+// 組み立て直す書き換えは、値が複数行にまたがっている場合に下の行を残す。**そのまま書くと
+// 「書き換えました」と出たあとに continuo が一切起動しない**ので、書く前にここで止める。
+//
+// content: WORKFLOW.md の全文（front matter と本文）。
+// 戻り値: front matter を切り出せない、または YAML として読めない場合の理由。読めれば nil。
+func CheckFrontMatterSyntax(content string) error {
+	frontMatter, _, err := splitFrontMatter(content)
+	if err != nil {
+		return err
+	}
+	// **Strict にしない。**未知のキーを弾くのは Load の仕事であり、ここで見たいのは
+	// 「YAML として構文が通るか」だけである。
+	var probe map[string]any
+	return yaml.Unmarshal([]byte(frontMatter), &probe)
 }

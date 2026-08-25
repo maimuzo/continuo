@@ -28,6 +28,12 @@ const (
 	KeyDoctorRuntimeDirFailed Key = "doctor.runtime_dir.failed"
 	// KeyDoctorRuntimeDirRemedy は hook の socket を用意できなかったときの直し方である。
 	KeyDoctorRuntimeDirRemedy Key = "doctor.runtime_dir.remedy"
+	// KeyDoctorRuntimeDirInUse は置き場所で既に continuo が待ち受けているときに出る。
+	KeyDoctorRuntimeDirInUse Key = "doctor.runtime_dir.in_use"
+	// KeyDoctorRuntimeDirStale は置き場所に残骸があって起動できないときに出る。
+	KeyDoctorRuntimeDirStale Key = "doctor.runtime_dir.stale"
+	// KeyDoctorRuntimeDirRemedyStale は残骸を確かめて消す手順である。
+	KeyDoctorRuntimeDirRemedyStale Key = "doctor.runtime_dir.remedy_stale"
 
 	// KeyDoctorClaudeNotFound は claude が PATH に無いときの文言である。
 	KeyDoctorClaudeNotFound Key = "doctor.claude.not_found"
@@ -410,6 +416,10 @@ const (
 	KeySetupErrNotANumber Key = "setup.err.not_a_number"
 	// KeySetupErrOutOfRange は番号が一覧の範囲外だったときに出る。
 	KeySetupErrOutOfRange Key = "setup.err.out_of_range"
+	// KeySetupErrLineTooLong は1行が長すぎて読み捨てたときに出る。
+	KeySetupErrLineTooLong Key = "setup.err.line_too_long"
+	// KeySetupAbortReadFailed は入力を読めずに打ち切るときに出る。
+	KeySetupAbortReadFailed Key = "setup.abort.read_failed"
 	// KeySetupErrDuplicate は選んだ選択肢が別の役割に割り当て済みのときに出る。
 	KeySetupErrDuplicate Key = "setup.err.duplicate"
 	// KeySetupSummaryHeader は5つの割り当ての一覧の見出しに出る。
@@ -452,6 +462,14 @@ const (
 	KeyCLISetupErrNotFoundRemedy Key = "cli.setup.err_not_found_remedy"
 	// KeyCLISetupErrKeysNotFound は書き換える対象のキーが WORKFLOW.md に無いときに出る。
 	KeyCLISetupErrKeysNotFound Key = "cli.setup.err_keys_not_found"
+	// KeyCLISetupErrKeysNotRewritable はキーの値が下の行にぶら下がっていて書き換えられないときに出る。
+	KeyCLISetupErrKeysNotRewritable Key = "cli.setup.err_keys_not_rewritable"
+	// KeyCLISetupErrKeysNotRewritableRemedy は同じときの直し方に出る。
+	KeyCLISetupErrKeysNotRewritableRemedy Key = "cli.setup.err_keys_not_rewritable_remedy"
+	// KeyCLISetupErrWouldBreakConfig は書き換えると WORKFLOW.md を読めなくなるときに出る。
+	KeyCLISetupErrWouldBreakConfig Key = "cli.setup.err_would_break_config"
+	// KeyCLISetupBoardUsing はどのボードの Status の選択肢を読むかを出す。
+	KeyCLISetupBoardUsing Key = "cli.setup.board_using"
 	// KeyCLISetupErrDirNotFound は置き場所のディレクトリが無いときに出る。
 	KeyCLISetupErrDirNotFound Key = "cli.setup.err_dir_not_found"
 	// KeyCLISetupErrNotADirectory は置き場所がディレクトリでないときに出る。
@@ -623,6 +641,15 @@ const (
 	// KeyAbandonOwnerRepoUnreadable はworktree のパスから owner とリポジトリ名を
 	// 取り出せないときに出る。
 	KeyAbandonOwnerRepoUnreadable Key = "abandon.owner_repo_unreadable"
+	// KeyAbandonSlugMismatch は身元ファイルの issue_url が、置き場所の最下層の
+	// ディレクトリ名（既定の branch_template では issue 番号を含む）と食い違うときに出る。
+	KeyAbandonSlugMismatch Key = "abandon.slug_mismatch"
+	// KeyAbandonSlugUnknown は、その issue に期待するディレクトリ名を組み立てられない
+	// ときに出る（`herdr.worktree.branch_template` を描画できない場合）。
+	KeyAbandonSlugUnknown Key = "abandon.slug_unknown"
+	// KeyAbandonErrUndecided は、候補にできなかった worktree があるために
+	// 「この issue の worktree はありません」と断言できないときに出る。
+	KeyAbandonErrUndecided Key = "abandon.err_undecided"
 	// KeyAbandonToSkipped は片付ける worktree が無く、`--to` の指定を使わずに
 	// 終わるときに出る。**指定を黙って捨てない。**
 	KeyAbandonToSkipped Key = "abandon.to_skipped"
@@ -1074,7 +1101,11 @@ const (
 	// KeyTrackerGHAvailableNotInPath は gh そのものが PATH に無いときに出る。
 	KeyTrackerGHAvailableNotInPath Key = "tracker.gh_available.not_in_path"
 	// KeyTrackerGHScopeNoActiveAccount は github.com の有効なアカウントが1つも無いときに出る。
+	// **gh の出力をそのまま添える**（gh が書いた本当の理由を隠さないため）。
 	KeyTrackerGHScopeNoActiveAccount Key = "tracker.gh_scope.no_active_account"
+	// KeyTrackerGHScopeTokenUnverified は、gh は届いているのにトークンを検証できていない
+	// ときに出る（`Failed to log in to …`）。**未ログインとは直し方が違う。**
+	KeyTrackerGHScopeTokenUnverified Key = "tracker.gh_scope.token_unverified"
 	// KeyTrackerGHScopeMissingScope は有効なアカウントの scope に project が無いときに出る。
 	KeyTrackerGHScopeMissingScope Key = "tracker.gh_scope.missing_scope"
 )
@@ -1208,6 +1239,10 @@ const (
 	// KeyRatelimitCredentialsRemedyEnv は macOS 以外での直し方である
 	// （`token_source: env` にして環境変数から読む）。
 	KeyRatelimitCredentialsRemedyEnv Key = "ratelimit.credentials.remedy_env"
+
+	// KeyRatelimitCredentialsTemporaryExhausted は資格情報の一時的な失敗が
+	// 連続の上限まで続いて、枠の判定を諦めるときに出る。
+	KeyRatelimitCredentialsTemporaryExhausted Key = "ratelimit.credentials.temporary_exhausted"
 	// KeyRatelimitFetchRequestBuildFailed はusage API のリクエストを組み立てられなかったときに出る。
 	KeyRatelimitFetchRequestBuildFailed Key = "ratelimit.fetch.request_build_failed"
 	// KeyRatelimitFetchRequestFailed はusage API へ接続できなかったときに出る。
@@ -1255,6 +1290,8 @@ const (
 	KeyRatelimitKeychainBinaryNotFound Key = "ratelimit.keychain.binary_not_found"
 	// KeyRatelimitKeychainTimeout は期限内にコマンドが返らなかったときに出る。
 	KeyRatelimitKeychainTimeout Key = "ratelimit.keychain.timeout"
+	// KeyRatelimitKeychainCanceled は呼び出し側がコマンドの実行を打ち切ったときに出る。
+	KeyRatelimitKeychainCanceled Key = "ratelimit.keychain.canceled"
 	// KeyRatelimitKeychainRunFailed はコマンドが異常終了したときに出る。
 	KeyRatelimitKeychainRunFailed Key = "ratelimit.keychain.run_failed"
 	// KeyRatelimitKeychainParseFailed はKeychain の中身を JSON として解析できなかったときに出る。
@@ -1553,6 +1590,9 @@ const (
 	// KeyWorkspaceGitUnpushedCountUnreadable は、どの remote にも載っていない commit の数を
 	// 数値として読めなかったときに出る。
 	KeyWorkspaceGitUnpushedCountUnreadable Key = "workspace.git_unpushed_commits.count_unreadable"
+	// KeyWorkspaceGhqNameInvalid は ghq へ渡す owner 名またはリポジトリ名が
+	// GitHub の名前として通らない形だったときに出る。**別名に直さずに断る**ためのものである。
+	KeyWorkspaceGhqNameInvalid Key = "workspace.ghq_target.name_invalid"
 	// KeyWorkspaceRunGhqListStartFailed は `ghq list` を起動できなかったときに出る。
 	KeyWorkspaceRunGhqListStartFailed Key = "workspace.run_ghq_list.start_failed"
 	// KeyWorkspaceRunGhqListExitFailed は `ghq list` が「該当が無い」以外の理由で非 0 で終わったときに出る。
@@ -1799,6 +1839,9 @@ var allKeys = []Key{
 	KeyDoctorRuntimeDirOK,
 	KeyDoctorRuntimeDirFailed,
 	KeyDoctorRuntimeDirRemedy,
+	KeyDoctorRuntimeDirInUse,
+	KeyDoctorRuntimeDirStale,
+	KeyDoctorRuntimeDirRemedyStale,
 	KeyDoctorClaudeNotFound,
 	KeyDoctorClaudeFound,
 	KeyDoctorClaudeRemedyInstall,
@@ -1951,6 +1994,8 @@ var allKeys = []Key{
 	KeySetupPromptAssigned,
 	KeySetupErrNotANumber,
 	KeySetupErrOutOfRange,
+	KeySetupErrLineTooLong,
+	KeySetupAbortReadFailed,
 	KeySetupErrDuplicate,
 	KeySetupSummaryHeader,
 	KeySetupSummaryLine,
@@ -1970,6 +2015,10 @@ var allKeys = []Key{
 	KeyCLISetupErrNotFound,
 	KeyCLISetupErrNotFoundRemedy,
 	KeyCLISetupErrKeysNotFound,
+	KeyCLISetupErrKeysNotRewritable,
+	KeyCLISetupErrKeysNotRewritableRemedy,
+	KeyCLISetupErrWouldBreakConfig,
+	KeyCLISetupBoardUsing,
 	KeyCLISetupErrDirNotFound,
 	KeyCLISetupErrNotADirectory,
 	KeyCLISetupErrSymlink,
@@ -2042,6 +2091,9 @@ var allKeys = []Key{
 	KeyAbandonNotFound,
 	KeyAbandonOwnerRepoMismatch,
 	KeyAbandonOwnerRepoUnreadable,
+	KeyAbandonSlugMismatch,
+	KeyAbandonSlugUnknown,
+	KeyAbandonErrUndecided,
 	KeyAbandonIdentityUnreadable,
 	KeyAbandonIdentityMissing,
 	KeyAbandonErrMultiple,
@@ -2210,6 +2262,7 @@ var allKeys = []Key{
 	KeyTrackerGHAuthStatusStartFailed,
 	KeyTrackerGHAvailableNotInPath,
 	KeyTrackerGHScopeNoActiveAccount,
+	KeyTrackerGHScopeTokenUnverified,
 	KeyTrackerGHScopeMissingScope,
 	KeyHookserverStartListenFailed,
 	KeyHookserverRemoveStaleSocketLstatFailed,
@@ -2245,6 +2298,7 @@ var allKeys = []Key{
 	KeyRatelimitCredentialsFileNotExist,
 	KeyRatelimitCredentialsRemedyKeychain,
 	KeyRatelimitCredentialsRemedyEnv,
+	KeyRatelimitCredentialsTemporaryExhausted,
 	KeyRatelimitFetchRequestBuildFailed,
 	KeyRatelimitFetchRequestFailed,
 	KeyRatelimitFetchBodyReadFailed,
@@ -2259,6 +2313,7 @@ var allKeys = []Key{
 	KeyRatelimitCredentialsFileAccessTokenMissing,
 	KeyRatelimitKeychainBinaryNotFound,
 	KeyRatelimitKeychainTimeout,
+	KeyRatelimitKeychainCanceled,
 	KeyRatelimitKeychainRunFailed,
 	KeyRatelimitKeychainParseFailed,
 	KeyRatelimitKeychainOauthMissing,
@@ -2373,6 +2428,7 @@ var allKeys = []Key{
 	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode,
 	KeyWorkspaceGitBranchExistsUnexpectedExitCode,
 	KeyWorkspaceGitUnpushedCountUnreadable,
+	KeyWorkspaceGhqNameInvalid,
 	KeyWorkspaceRunGhqListStartFailed,
 	KeyWorkspaceRunGhqListExitFailed,
 	KeyWorkspaceGitLocalBranchesOutputUnreadable,

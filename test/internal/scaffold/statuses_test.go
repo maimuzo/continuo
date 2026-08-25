@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "1bf01241889b9e6e9759b0792ea55c34364edc6c75fbd389fc68bffe349f4adb", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package scaffold_test
@@ -310,7 +310,7 @@ func TestUpdateStatuses_WORKFLOWが無ければ作らずに止まる(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P003"}
 //
 // 目的: 書き換える対象のキーが消されていたら ErrKeysNotFound で止まり、ファイルを変えないことを確認する。
 //
@@ -372,17 +372,27 @@ func TestUpdateStatuses_役割が欠けていたら止まる(t *testing.T) {
 	}
 }
 
-// 目的: StatusKeyNames が7つのキーを返し、それが実際に書き換えられるキーであることを確認する。
+// 目的: StatusKeyNames が8つのキーを返し、それが実際に書き換えられるキーであることを確認する。
 //
 // **雛形からどれか1つでもキーが消えると UpdateStatuses が ErrKeysNotFound で落ちる。**
 // TemplateWithValues は見つからなかったキーを報告しないので、ここで雛形の側を押さえる。
 //
 // 与える情報: 雛形をそのまま書き出したファイル。
-// 成功条件: StatusKeyNames が7件返り、UpdateStatuses がエラー無しで通ること。
-func TestStatusKeyNames_雛形に7つのキーが全部ある(t *testing.T) {
+// 成功条件: StatusKeyNames が8件返り、そこに cleanup.on_states が入っていて、
+// UpdateStatuses がエラー無しで通ること。
+func TestStatusKeyNames_雛形に8つのキーが全部ある(t *testing.T) {
 	names := scaffold.StatusKeyNames()
-	if len(names) != 7 {
-		t.Fatalf("書き換えるキーが %d 件（期待 7 件）: %v", len(names), names)
+	if len(names) != 8 {
+		t.Fatalf("書き換えるキーが %d 件（期待 8 件）: %v", len(names), names)
+	}
+	found := false
+	for _, n := range names {
+		if n == "cleanup.on_states" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("cleanup.on_states が書き換えるキーに入っていない: %v", names)
 	}
 
 	dir := t.TempDir()
@@ -390,6 +400,6 @@ func TestStatusKeyNames_雛形に7つのキーが全部ある(t *testing.T) {
 		t.Fatalf("雛形を書き出せなかった: %v", err)
 	}
 	if _, err := scaffold.UpdateStatuses(dir, jaStatuses); err != nil {
-		t.Fatalf("雛形に7つのキーが揃っていない: %v", err)
+		t.Fatalf("雛形に8つのキーが揃っていない: %v", err)
 	}
 }

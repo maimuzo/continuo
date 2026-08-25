@@ -489,6 +489,8 @@ type fixture struct {
 	Root string
 	// Home は `~/.claude.json` と `~/.claude/.credentials.json` を置くホームディレクトリである。
 	Home string
+	// RunDir は hook の socket を置くディレクトリである（CONTINUO_RUNTIME_DIR に張る）。
+	RunDir string
 	// BinDir はテスト用gh / ghq mock を置いたディレクトリである。
 	BinDir string
 	// GhqArgsFile はテスト用ghq mock が受け取った引数を書き出すファイルである。
@@ -570,8 +572,9 @@ func newFixture(t *testing.T) *fixture {
 	}
 
 	fx := &fixture{
-		Root: root,
-		Home: home,
+		Root:   root,
+		Home:   home,
+		RunDir: filepath.Join(root, "run"),
 		// **既定は「claude が入っている」である。**個々の test はここから1つだけ壊す。
 		ClaudePath:   filepath.Join(binDir, "claude"),
 		BinDir:       binDir,
@@ -590,8 +593,45 @@ func newFixture(t *testing.T) *fixture {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	// ボードを読むトークンは環境変数から取る設定にしてある（偽サーバは値を見ない）。
 	t.Setenv("CONTINUO_TEST_TOKEN", "dummy-token-for-the-fake-server")
+	// **hook の置き場所をこのテストの一時ディレクトリに閉じる。**
+	//
+	// これを張らないと、hook の置き場所の検査は本番と同じ場所（$TMPDIR/continuo など）を
+	// 見る。**開発機で continuo が動いていれば「既に使われている」の近道で ✓ になり、
+	// listen も後始末も1行も実行されない。**逆に何も無ければ、テストが本番の置き場所に
+	// socket を作って消す。**どちらも、この検査を確かめたことにならない。**
+	t.Setenv(envRuntimeDir, fx.RunDir)
+	// **ホームディレクトリも本物を見せない。**置き場所の探索の最後の候補が
+	// `~/.continuo/run` なので、上の環境変数を消すテストが本物のホームへ落ちる。
+	t.Setenv("HOME", home)
 
 	return fx
+}
+
+// envRuntimeDir は hook の置き場所を差し替える環境変数である
+// （internal/doctor の daemonEnvRuntimeDir と同じ値。**変えるときは両方を直すこと**）。
+const envRuntimeDir = "CONTINUO_RUNTIME_DIR"
+
+// SocketPath は、この fixture で hook の socket が置かれるパスを返す。
+//
+// 戻り値: `<Root>/run/hooks.sock`。
+func (fx *fixture) SocketPath() string {
+	return filepath.Join(fx.RunDir, "hooks.sock")
+}
+
+// assertSocketUnderRoot は、決まった socket のパスがテストの一時ディレクトリの下にあることを見る。
+//
+// **これが無いと、実機の socket を触ったことに誰も気づけない**
+// （test/e2e/walkthrough_test.go に同じ番人がある）。
+//
+// t: 呼び出し元のテスト。
+// fx: 使っている fixture。
+// detail: hook の置き場所の検査が返した説明（socket のパスを含む）。
+func assertSocketUnderRoot(t *testing.T, fx *fixture, detail string) {
+	t.Helper()
+	if !strings.Contains(detail, fx.Root) {
+		t.Fatalf("テストの一時ディレクトリの外の socket を見ています（実機を触っています）: %s\n  一時ディレクトリ: %s",
+			detail, fx.Root)
+	}
 }
 
 // WriteWorkflow は WORKFLOW.md を書く。

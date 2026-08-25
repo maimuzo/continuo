@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "1bf01241889b9e6e9759b0792ea55c34364edc6c75fbd389fc68bffe349f4adb", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // Package setup_test は internal/setup の対話を、公開 API（setup.Assign）を通して検証する。
@@ -103,7 +103,7 @@ func TestAssign_選択肢を番号付きで並べる(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P006"}
 //
 // 目的: 同じ選択肢を2つの役割へ割り当てようとしたら拒否し、同じ役割を尋ね直すことを確認する
 // （代替フロー「二重割り当て」／RESUME STEP 8）。
@@ -135,7 +135,7 @@ func TestAssign_同じ選択肢を2つの役割へ割り当てようとしたら
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P007"}
 //
 // 目的: 番号 0 が入ったら打ち切ることを確認する（代替フロー「該当する選択肢が無い」）。
 // 与える情報: 着手待ちに 2 を入れたあと、作業中に 0 を入れる。
@@ -158,7 +158,7 @@ func TestAssign_番号0が入ったら打ち切る(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P008"}
 //
 // 目的: 一覧の範囲外の番号を拒否し、同じ役割を尋ね直すことを確認する（代替フロー「番号が範囲外」）。
 // 与える情報: 選択肢が6個のところへ 7、次に数値でない "abc"、最後に正しい番号を入れる。
@@ -180,7 +180,7 @@ func TestAssign_範囲外の番号と数値でない入力を拒否して尋ね�
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P009"}
 //
 // 目的: 選択肢が5個に満たないときは、尋ねる前に止まることを確認する（代替フロー「選択肢が足りない」）。
 // 与える情報: 選択肢を4個だけ渡す。入力は空にする。
@@ -202,7 +202,7 @@ func TestAssign_選択肢が5個未満なら尋ねる前に止まる(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P003"}
+// {"RUCM-PATH": "P004"}
 //
 // 目的: 中断すると、割り当てを保存しないことを応答して終わることを確認する
 // （GLOBAL ALTERNATIVE FLOW 中断）。
@@ -242,7 +242,7 @@ func TestAssign_中断したら割り当てを保存しないと応答して終�
 	}
 }
 
-// {"RUCM-PATH": "P004"}
+// {"RUCM-PATH": "P005"}
 //
 // 目的: 番号を待っている間に入力が終わったら、割り当てを保存せずに終わることを確認する。
 // 与える情報: 3つ分の番号しか無い入力。

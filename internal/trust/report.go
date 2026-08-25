@@ -67,6 +67,9 @@ func writeEntry(b *strings.Builder, e Entry) {
 		b.WriteString(fmt.Sprintf("✗ %s\n", e.Repository))
 		b.WriteString(fmt.Sprintf("    %s\n", e.Problem))
 		return
+	case e.Unconfirmed != "":
+		// **要求内容の一覧はそのまま出す。**何を確かめられなかったのかは、そこにしか出ない。
+		b.WriteString(fmt.Sprintf("✗ %s（要求内容を確かめられません。登録の対象から外します）\n", e.Repository))
 	case e.Trusted:
 		b.WriteString(fmt.Sprintf("✓ %s（既に信頼済み。触りません）\n", e.Repository))
 	default:
@@ -75,14 +78,22 @@ func writeEntry(b *strings.Builder, e Entry) {
 	b.WriteString(fmt.Sprintf("    登録するパス: %s\n", e.TrustKey))
 
 	req := e.Requirements
-	if !req.SettingsFound {
+	switch {
+	case req.SettingsUnreadable:
+		// **「ありません」と書かない。**実在するファイルについて無いと書くと、
+		// 読む人は「このリポジトリは何も要求していない」と読む。
+		b.WriteString(fmt.Sprintf("    %s: あるが読めませんでした（中身を確かめていません）\n", settingsRelPath))
+	case !req.SettingsFound:
 		b.WriteString(fmt.Sprintf("    %s: ありません\n", settingsRelPath))
-	} else {
+	default:
 		b.WriteString(fmt.Sprintf("    %s:\n", settingsRelPath))
 		writeList(b, "permissions.allow", req.Allow)
 		writeList(b, "permissions.additionalDirectories", req.AdditionalDirectories)
+		writeHooks(b, req.Hooks)
 	}
-	if !req.MCPFound {
+	if req.MCPUnreadable {
+		b.WriteString(fmt.Sprintf("    %s: あるが読めませんでした（中身を確かめていません）\n", mcpRelPath))
+	} else if !req.MCPFound {
 		b.WriteString(fmt.Sprintf("    %s: ありません\n", mcpRelPath))
 	} else if len(req.MCPServers) == 0 {
 		b.WriteString(fmt.Sprintf("    %s: MCP サーバーの記述がありません\n", mcpRelPath))
@@ -94,6 +105,27 @@ func writeEntry(b *strings.Builder, e Entry) {
 	}
 	for _, n := range req.Notes {
 		b.WriteString(fmt.Sprintf("    ! %s\n", n))
+	}
+	if e.Unconfirmed != "" {
+		b.WriteString(fmt.Sprintf("    ✗ %s\n", e.Unconfirmed))
+	}
+}
+
+// writeHooks は hooks に書かれたコマンドを、契機ごとに並べる。
+//
+// **`permissions` と同じ場所に、同じ形で並べる。**hooks は `permissions` を1つも持たない
+// リポジトリでも任意のコマンドを走らせられるので、**見せないと「何も要求していません」に見える。**
+//
+// b: 書き足す先。
+// hooks: 実行される文字列。
+func writeHooks(b *strings.Builder, hooks []HookCommand) {
+	if len(hooks) == 0 {
+		b.WriteString("      hooks: なし\n")
+		return
+	}
+	b.WriteString("      hooks（確認なしで実行されるコマンド）:\n")
+	for _, h := range hooks {
+		b.WriteString(fmt.Sprintf("        - %s: %s\n", h.Event, h.Command))
 	}
 }
 

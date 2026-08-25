@@ -163,42 +163,142 @@ func TestFetch_keychainの中身が壊れていたら枠の判定を捨てる(t 
 	}
 }
 
-// 目的: `security` が期限内に返らないとき、枠の判定を捨てて**起動を止めない**ことを確認する。
+// TestFetch_keychainが1回返ってこなくても諦めない は、
+// 一時的な失敗からの復帰を固定する。
 //
-// **確認のダイアログが出たまま誰も答えないと `security` は返らない。**
-// 上限が無いと、無人の常駐プロセスが巡回のループごとそこで止まる。
+// 目的: `security` が1回だけ遅れることはある（確認のダイアログが1回出た・機材が重くて
+// 子プロセスの起動が遅れた）。**そこで枠の判定を永久に止めると、枠を使い切って黙った
+// エージェントを stall と誤認し、その pane を閉じてリトライを積む**（設計 3-27）。
 //
-// 与える情報: 返ってこないテスト用security mock（長く眠る）と、短い KeychainTimeout。
-// 成功条件: Fetch が上限の付近で戻り、(nil, nil) を返し、以後 Enabled が偽になること。
-func TestFetch_keychainが返ってこなければ枠の判定を捨てる(t *testing.T) {
+// 与える情報: 目印のファイルが**在れば**資格情報を返し、無ければ返ってこないテスト用
+// security mock。1回目は目印を置かずに呼び、2回目はテストが目印を置いてから呼ぶ。
+//
+// **呼ばれた回数を偽の `security` 自身に数えさせてはならない。**期限を過ぎて殺されると
+// 数える前に死ぬので、1回目と2回目の区別が付かなくなる（実測: 期限 300ms では
+// 1回目の子プロセスの起動そのものが間に合わず、スクリプトが1行も走らなかった）。
+//
+// 成功条件: 1回目の Fetch はエラーを返すが **Enabled は真のまま**であり、
+// 2回目の Fetch で枠を読めること。
+func TestFetch_keychainが1回返ってこなくても諦めない(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"limits":[{"kind":"session","percent":42,"resets_at":null,"severity":"normal"}]}`))
+	}))
+	defer srv.Close()
+
+	// **目印が無いあいだは返ってこない `security`。**
 	// **`exec` で置き換える。**シェルを残すと、殺したあともシェルが標準出力の書き手として
 	// 残り、後始末を待つぶんテストが遅くなる。
-	fakeSecurity(t, "exec sleep 30")
+	markerFile := filepath.Join(t.TempDir(), "ready")
+	fakeSecurity(t, "if [ ! -f "+markerFile+" ]; then exec sleep 30; fi\n"+
+		`printf '%s' '{"claudeAiOauth":{"accessToken":"`+keychainTestToken+`"}}'`)
 
-	const timeout = 300 * time.Millisecond
+	// **`security` の起動そのものに秒単位かかることがある**（keychainTestTimeout の
+	// コメントを参照）。1回目は必ず期限切れにしたいので、起動ぶんの余裕を持たせる。
 	reader, err := ratelimit.NewReader(ratelimit.Options{
 		Config:          keychainConfig(),
-		KeychainTimeout: timeout,
+		Endpoint:        srv.URL,
+		KeychainTimeout: 3 * time.Second,
 	})
 	if err != nil {
 		t.Fatalf("NewReader が失敗した: %v", err)
 	}
 
-	start := time.Now()
 	snap, err := reader.Fetch(context.Background())
-	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("返ってこなかったのにエラーを返さなかった（呼び出し側が気づけない）")
+	}
+	if snap != nil {
+		t.Fatalf("返ってこないのに枠を読めたことになっている: %+v", snap)
+	}
+	if !reader.Enabled() {
+		t.Fatal("1回返ってこなかっただけで枠の判定を諦めた（復帰する経路が無い）")
+	}
 
+	if err := os.WriteFile(markerFile, []byte("ready\n"), 0o600); err != nil {
+		t.Fatalf("目印のファイルを置けない: %v", err)
+	}
+
+	snap, err = reader.Fetch(context.Background())
 	if err != nil {
-		t.Fatalf("返ってこないことをエラーとして上へ投げた（起動が止まる）: %v", err)
+		t.Fatalf("2回目の Fetch が失敗した: %v", err)
+	}
+	if snap == nil {
+		t.Fatal("2回目も枠を読めていない（一時的な失敗から戻れていない）")
+	}
+	if snap.MaxPercent() != 42 {
+		t.Errorf("読み取った使用率が違う: got %d, want %d", snap.MaxPercent(), 42)
+	}
+}
+
+// TestFetch_keychainが返らない状態が続けば最後には諦める は、
+// 粘る回数に上限があることを固定する。
+//
+// 目的: 一時的な失敗で諦めないことと、読めないものを毎回読みに行かないことの両立である。
+// **上限が無いと、巡回のたびに `security` を起こし続ける。**
+//
+// 与える情報: 一度も返ってこないテスト用security mock と、短い KeychainTimeout。
+// Fetch を ratelimit.MaxTemporaryCredentialFailures 回呼ぶ。
+//
+// 成功条件: 最後の1回の手前までは Enabled が真のままで、上限に達した回で偽になること。
+func TestFetch_keychainが返らない状態が続けば最後には諦める(t *testing.T) {
+	fakeSecurity(t, "exec sleep 30")
+
+	reader, err := ratelimit.NewReader(ratelimit.Options{
+		Config:          keychainConfig(),
+		KeychainTimeout: 200 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("NewReader が失敗した: %v", err)
+	}
+
+	for i := 1; i < ratelimit.MaxTemporaryCredentialFailures; i++ {
+		if _, err := reader.Fetch(context.Background()); err == nil {
+			t.Fatalf("%d 回目: 返ってこなかったのにエラーを返さなかった", i)
+		}
+		if !reader.Enabled() {
+			t.Fatalf("%d 回目で諦めた（上限は %d 回）", i, ratelimit.MaxTemporaryCredentialFailures)
+		}
+	}
+
+	snap, err := reader.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("諦めたときはエラーを上へ投げない約束なのに投げた（起動が止まる）: %v", err)
 	}
 	if snap != nil {
 		t.Fatalf("返ってこないのに枠を読めたことになっている: %+v", snap)
 	}
 	if reader.Enabled() {
-		t.Fatal("諦めたのに Enabled が真のまま")
+		t.Fatalf("上限の %d 回まで続いたのに諦めていない", ratelimit.MaxTemporaryCredentialFailures)
 	}
-	if elapsed > 10*time.Second {
-		t.Fatalf("上限を掛けずに待ち続けた: %v", elapsed)
+}
+
+// TestFetch_打ち切りでは枠の判定を諦めない は、終了処理の巻き添えを防ぐ。
+//
+// 目的: 停止のときに ctx を切ると `security` は失敗する。**それを「資格情報が読めない」と
+// 記録すると、次に起動するまで枠の判定が戻らない。**打ち切りは資格情報の問題ではない。
+//
+// 与える情報: 返ってこないテスト用security mock と、呼ぶ前に cancel 済みのコンテキスト。
+// 成功条件: Fetch がエラーを返し、**Enabled が真のまま**であること。
+func TestFetch_打ち切りでは枠の判定を諦めない(t *testing.T) {
+	fakeSecurity(t, "exec sleep 30")
+
+	reader, err := ratelimit.NewReader(ratelimit.Options{
+		Config:          keychainConfig(),
+		KeychainTimeout: keychainTestTimeout,
+	})
+	if err != nil {
+		t.Fatalf("NewReader が失敗した: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := reader.Fetch(ctx); err == nil {
+		t.Fatal("打ち切ったのにエラーを返さなかった")
+	}
+	if !reader.Enabled() {
+		t.Fatal("打ち切っただけで枠の判定を諦めた（次に起動するまで戻らない）")
 	}
 }
 

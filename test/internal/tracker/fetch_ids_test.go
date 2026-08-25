@@ -31,21 +31,115 @@ func TestFetchIssuesByIDs_見つからないIDは省く(t *testing.T) {
 	}
 }
 
-// 目的: 見つかったのに正規化できない item（Status 未設定）は、一覧取得と違ってエラーに
-// することを確認する（SPEC.md 11.1: "An ID-refresh call MUST fail instead of silently
-// omitting a malformed requested record, because omission is meaningful."）。
-// 与える情報: fieldValueByName が無い（Status 未設定の）item。
-// 成功条件: FetchIssuesByIDs がエラーを返すこと。
-func TestFetchIssuesByIDs_Status未設定はエラーになる(t *testing.T) {
-	noStatus := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
-		ItemID: "item-nostatus", Status: "", Owner: "octocat", Repo: "hello-world", Number: 4, Title: "Status 未設定",
+// TestFetchIssuesByIDs_Status未設定が混ざっても残りを返す は、
+// 「候補の集合に居ない item」で全件を落とさないことを固定する。
+//
+// 目的: 人間がボードの画面で Status を空にするのは異常な操作ではない（本番のボードでも
+// 104件中4件が未設定である）。**それをエラーにすると、同じ呼び出しに乗った他の run が
+// 全部巻き添えになる**（実行中 issue の照合・取り残された worktree の照合・
+// 再起動時の復元が、その1件のせいで丸ごと飛ぶ）。
+//
+// 与える情報: 正常な item 1件と、fieldValueByName が無い（Status 未設定の）item 1件を
+// 同時に返す偽サーバ応答。
+//
+// 成功条件: エラーにならず、正常な1件だけが返ること。
+func TestFetchIssuesByIDs_Status未設定が混ざっても残りを返す(t *testing.T) {
+	found := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-found", Status: "In Progress", Owner: "octocat", Repo: "hello-world",
+		Number: 10, Title: "作業中のまま",
 	}))
-	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{noStatus}))))
+	noStatus := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-nostatus", Status: "", Owner: "octocat", Repo: "hello-world",
+		Number: 4, Title: "Status 未設定",
+	}))
+	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{found, noStatus}))))
 	a := newAdapterForFetch(t, fs)
 
-	_, err := a.FetchIssuesByIDs(t.Context(), []string{"item-nostatus"})
+	issues, err := a.FetchIssuesByIDs(t.Context(), []string{"item-found", "item-nostatus"})
+	if err != nil {
+		t.Fatalf("Status 未設定が1件混ざっただけで全件が落ちた: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("件数が想定と違う: got %d, want 1", len(issues))
+	}
+	if issues[0].ID != "item-found" {
+		t.Fatalf("残った item が想定と違う: %q", issues[0].ID)
+	}
+}
+
+// TestFetchIssuesByIDs_Issueでもdraftでもないcontentが混ざっても残りを返す は、
+// content を差し替えられた item で全件を落とさないことを固定する。
+//
+// 目的: item の content が PullRequest 等に変わっても、候補の取得はその item を返さない。
+// **候補の集合に居ないだけであり、壊れているわけではない。**ID 指定の取り直しでエラーに
+// すると、同じ呼び出しに乗った他の run が巻き添えになる。
+//
+// 与える情報: 正常な item 1件と、content の `__typename` が PullRequest の item 1件。
+//
+// 成功条件: エラーにならず、正常な1件だけが返ること。
+func TestFetchIssuesByIDs_Issueでもdraftでもないcontentが混ざっても残りを返す(t *testing.T) {
+	found := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-found", Status: "In Progress", Owner: "octocat", Repo: "hello-world",
+		Number: 10, Title: "作業中のまま",
+	}))
+	pr := asProjectV2ItemNode(map[string]any{
+		"id":         "item-pr",
+		"isArchived": false,
+		"fieldValueByName": map[string]any{
+			"__typename": "ProjectV2ItemFieldSingleSelectValue",
+			"name":       "In Progress",
+			"optionId":   "opt-In Progress",
+		},
+		"content": map[string]any{
+			"__typename": "PullRequest",
+			"id":         "PRNODE_item-pr",
+			"title":      "pull request に差し替えられた",
+		},
+	})
+	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{found, pr}))))
+	a := newAdapterForFetch(t, fs)
+
+	issues, err := a.FetchIssuesByIDs(t.Context(), []string{"item-found", "item-pr"})
+	if err != nil {
+		t.Fatalf("Issue でも DraftIssue でもない content が1件混ざっただけで全件が落ちた: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("件数が想定と違う: got %d, want 1", len(issues))
+	}
+	if issues[0].ID != "item-found" {
+		t.Fatalf("残った item が想定と違う: %q", issues[0].ID)
+	}
+}
+
+// TestFetchIssuesByIDs_providerの異常はエラーにする は、
+// 省いてよいものと省いてはいけないものの境界を固定する。
+//
+// 目的: SPEC.md 11.1 は "An ID-refresh call MUST fail instead of silently omitting a
+// malformed requested record, because omission is meaningful."（訳: ID 指定の取り直しは、
+// 壊れた item を黙って省く代わりに失敗しなければならない。省くこと自体が意味を持つため）
+// と定めている。**候補の集合に居ないだけの item を省く扱いに変えても、
+// provider 側の異常まで省いてはならない。**
+//
+// 与える情報: content が null の item（provider 側の異常）。
+//
+// 成功条件: FetchIssuesByIDs が CategoryResponse のエラーを返すこと。
+func TestFetchIssuesByIDs_providerの異常はエラーにする(t *testing.T) {
+	broken := asProjectV2ItemNode(map[string]any{
+		"id":         "item-broken",
+		"isArchived": false,
+		"fieldValueByName": map[string]any{
+			"__typename": "ProjectV2ItemFieldSingleSelectValue",
+			"name":       "In Progress",
+			"optionId":   "opt-In Progress",
+		},
+		"content": nil,
+	})
+	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{broken}))))
+	a := newAdapterForFetch(t, fs)
+
+	_, err := a.FetchIssuesByIDs(t.Context(), []string{"item-broken"})
 	if err == nil {
-		t.Fatalf("Status 未設定の item を ID 指定で取り直したのにエラーにならなかった")
+		t.Fatal("content が空の item を ID 指定で取り直したのにエラーにならなかった")
 	}
 	if !tracker.IsCategory(err, tracker.CategoryResponse) {
 		t.Fatalf("エラーのカテゴリが CategoryResponse ではない: %v", err)

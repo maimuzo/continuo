@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "ebe597cc670a6be8f92c635004106edc3554ad4b86dca8378c9445758c653bec", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
+// {"RUCM-CFG-SHA256": "81e22fea029c465fdce543e6a6bdaab26441baf908de459b7258d18fa1e97519", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「着手を取り消す」のテストパスのうち、
 // **判断が分かれるところ**を通るものに、それぞれ1本以上のテストがある。
@@ -26,7 +26,7 @@ import (
 	"github.com/maimuzo/continuo/internal/lock"
 )
 
-// {"RUCM-PATH": "P815"}
+// {"RUCM-PATH": "P807"}
 //
 // 目的: 片付ける worktree が1つも見つからないとき、何も消さずに終了コード 0 で
 // 終わることを確認する（設計 3-4 の段2。消すものが無いのは失敗ではない）。
@@ -54,34 +54,33 @@ func TestAbandon_worktreeが無ければ何も消さずに終わる(t *testing.T
 	}
 }
 
-// {"RUCM-PATH": "P818"}
+// {"RUCM-PATH": "P810"}
 //
 // 目的: 同じ issue の worktree が2つあるときに、何も消さずに止まることを確認する
 // （設計 3-4 の段2。どちらを消すかは人間が中身を見て決めることであり、
 // continuo が選んではならない）。
-// 与える情報: issue 188 の worktree と、身元ファイルの issue_url を 188 に書き換えた
-// issue 189 の worktree。
+// 与える情報: issue 188 の worktree と、それを**別のホスト名の階層へ複製した**
+// ディレクトリ（GitHub Enterprise から github.com へ移した跡、または人間が手で
+// 複製した跡）。owner・リポジトリ名・スラグは一致し、ホストだけが違う。
 // 成功条件: 終了コードが 1、2つとも残っている、herdr へ worktree.remove を
 // 送っていない、候補の一覧が出ていること。
 func TestAbandon_同じissueのworktreeが2つあれば止まる(t *testing.T) {
 	fx := newFixture(t)
 	first := fx.Prepare(t, 188)
-	second := fx.Prepare(t, 189)
-	// **身元ファイルの issue_url だけを 188 に付け替える。**パスも branch も 189 のまま
-	// なので、「パスから組み立てて探す」実装ではこの状態を作れない。
-	fx.WriteIdentity(t, second, issueURL(188), 188,
-		filepath.Join(fx.SettingsRoot, "octocat-hello-world-189", "settings.json"))
+	// **身元ファイルごと複製する。**issue_url も置き場所の owner / リポジトリ名 /
+	// スラグも 188 のままなので、どちらも候補になる。
+	second := fx.CopyToHost(t, first, "ghe.example.test")
 
 	code := fx.Run(t, 188, nil)
 
 	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrMultiple, 2, issueURL(188)))
 	assertWorktreeExists(t, fx, first.Path)
-	assertWorktreeExists(t, fx, second.Path)
+	assertWorktreeExists(t, fx, second)
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P670"}
+// {"RUCM-PATH": "P798"}
 //
 // 目的: `--dry-run` が何も消さないことを確認する（設計 3-4 の段3 で終わる）。
 // **worktree と branch を消すコマンドなので、消す前に何が消えるかを見られなければならない。**
@@ -109,7 +108,7 @@ func TestAbandon_dryRunは何も消さない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P670"}
+// {"RUCM-PATH": "P798"}
 //
 // 目的: worktree の `.git` が壊れていても、`--dry-run` が**何が消えるかを見せられる
 // 範囲で見せて終わる**ことを確認する（設計 3-4 の段3。issue #23）。
@@ -148,7 +147,7 @@ func TestAbandon_gitファイルが壊れていてもdryRunで消えるものを
 	}
 }
 
-// {"RUCM-PATH": "P637"}
+// {"RUCM-PATH": "P797"}
 //
 // 目的: worktree の `.git` が壊れていて失うものを調べられないとき、`--force` が
 // 無ければ何も消さずに終了コード 1 で止まることを確認する（設計 3-4 の段3。issue #23）。
@@ -177,7 +176,7 @@ func TestAbandon_gitファイルが壊れていればforceなしでは消さな�
 	}
 }
 
-// {"RUCM-PATH": "P614"}
+// {"RUCM-PATH": "P774"}
 //
 // 目的: worktree の `.git` が壊れていても、`--force` を付ければ
 // **worktree のディレクトリと branch と herdr の workspace を消し切れる**ことを
@@ -208,7 +207,7 @@ func TestAbandon_gitファイルが壊れていてもforceで消し切る(t *tes
 	}
 }
 
-// {"RUCM-PATH": "P637"}
+// {"RUCM-PATH": "P797"}
 //
 // 目的: 未コミットの変更が残っているとき、`--force` が無ければ何も消さずに
 // 終了コード 1 で止まることを確認する（設計 3-4 の段3）。
@@ -231,7 +230,7 @@ func TestAbandon_未コミットの変更があればforceなしでは消さな�
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P614"}
+// {"RUCM-PATH": "P774"}
 //
 // 目的: `--force` を付ければ、未コミットの変更があっても worktree と branch を
 // 消すことを確認する（設計 3-4 の段4）。
@@ -255,7 +254,7 @@ func TestAbandon_forceを付ければ未コミットの変更があっても消�
 	}
 }
 
-// {"RUCM-PATH": "P614"}
+// {"RUCM-PATH": "P774"}
 //
 // 目的: herdr へ pane の一覧を問い合わせられなくても、`--force` があれば
 // 片付けを最後まで通すことを確認する（設計 3-4 の段4 の前。issue #23）。
@@ -279,7 +278,7 @@ func TestAbandon_herdrに繋げなくてもforceがあれば片付ける(t *test
 	assertWorktreeGone(t, fx, prepared.Path)
 }
 
-// {"RUCM-PATH": "P621"}
+// {"RUCM-PATH": "P781"}
 //
 // 目的: herdr へ pane の一覧を問い合わせられず、`--force` も無いときは、
 // **これまでどおり何も消さずに止まる**ことを確認する（設計 3-4 の段4 の前）。
@@ -299,7 +298,7 @@ func TestAbandon_herdrに繋げずforceも無ければ消さない(t *testing.T)
 	assertWorktreeExists(t, fx, prepared.Path)
 }
 
-// {"RUCM-PATH": "P817"}
+// {"RUCM-PATH": "P809"}
 //
 // 目的: 身元ファイルを読めない worktree を候補から外したことを、**人間に見せる**ことを
 // 確認する（設計 3-4 の段2。issue #23）。
@@ -309,9 +308,15 @@ func TestAbandon_herdrに繋げずforceも無ければ消さない(t *testing.T)
 // **その branch にも手を出さないこと**もあわせて確かめる（issue #27）。
 // 読めなかった worktree は、この issue のものかもしれない。**そのとき branch は
 // 孤児ではなく、生きている worktree のものである。**
-// 成功条件: 終了コードが 0、飛ばした worktree のパスと身元ファイルのパスが出ている、
-// worktree が残っている、**その branch も残っている**、
-// herdr へ worktree.remove を送っていないこと。
+//
+// **「ありません」と断言してはならない。**目の前に worktree も branch も herdr の
+// workspace も残っているのに「もう無い」と読める1行が出て、しかも終了コード 0 で
+// 後続の手順が進む。**飛ばした1行の直後に正反対の断定が並ぶので、どちらが本当かを
+// 人間が判断できない。**
+//
+// 成功条件: 終了コードが 1、飛ばした worktree のパスと身元ファイルのパスが出ている、
+// **「この issue の worktree はありません」が出ていない**、worktree が残っている、
+// **その branch も残っている**、herdr へ worktree.remove を送っていないこと。
 func TestAbandon_身元ファイルを読めないworktreeを飛ばしたことを言う(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -322,10 +327,11 @@ func TestAbandon_身元ファイルを読めないworktreeを飛ばしたこと�
 
 	code := fx.Run(t, 188, nil)
 
-	assertExit(t, fx, code, abandon.ExitOK)
+	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, prepared.Path)
 	assertContains(t, fx, identityPath)
-	assertContains(t, fx, i18n.T(i18n.KeyAbandonNotFound, issueURL(188)))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrUndecided, 1, issueURL(188)))
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonNotFound, issueURL(188)))
 	assertWorktreeExists(t, fx, prepared.Path)
 	if !branchExists(t, fx, prepared.Branch.String()) {
 		t.Fatalf("身元ファイルを読めない worktree の branch %s を消している", prepared.Branch.String())
@@ -333,7 +339,7 @@ func TestAbandon_身元ファイルを読めないworktreeを飛ばしたこと�
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P614"}
+// {"RUCM-PATH": "P774"}
 //
 // 目的: `--to` を付けなければ Status を1文字も動かさないことを確認する
 // （設計 3-4 の段5。片付けたあとの置き場所は、その issue をこれからどうするかで
@@ -355,7 +361,7 @@ func TestAbandon_toを付けなければStatusを動かさない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P409"}
+// {"RUCM-PATH": "P571"}
 //
 // 目的: `--to` を付けたときだけ Status がその値へ動くことを確認する（設計 3-4 の段5）。
 // 与える情報: 失うものが無い issue 188 の worktree と `--to Ice Box`。
@@ -492,7 +498,85 @@ func TestAbandon_paneが閉じなければ何も消さずに止まる(t *testing
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P822"}
+// {"RUCM-PATH": "P055"}
+//
+// 目的: 継続監視が動いていて pane が閉じないときでも、**`--force` なら pane ごと
+// 消し切る**ことを確認する（設計 3-4 の段1。issue #23 と同じ形の詰まりである）。
+//
+// **`--force` で越えられないと、herdr の workspace を手で閉じるまでその issue を
+// 取り消せない。**動いていない側の同じ検査（`stopIfPaneAlive`）には元から逃げ道が
+// あるので、こちらだけ越えられないのは筋が通らない。
+//
+// 与える情報: テストが先に掴んだロックファイル、いつまでも同じ pane を返し続ける
+// テスト用herdr mock、上限3秒・間隔1秒（時計は Sleep のたびに進める）、`--force`。
+// 成功条件: 終了コードが 0、worktree が消えている、**pane ごと消すことを言う1行が
+// 出ている**こと。
+func TestAbandon_動いていてpaneが閉じなくてもforceで消し切る(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	held, err := lock.Acquire(fx.LockPath)
+	if err != nil {
+		t.Fatalf("テストがロックを掴めません: %v", err)
+	}
+	defer func() { _ = held.Release() }()
+
+	fx.Herdr.SetPaneListScript(func(_ int) []map[string]any { return panesAt(prepared.Path) })
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitOK)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonPaneAliveForced, "w1:p1"))
+	assertWorktreeGone(t, fx, prepared.Path)
+}
+
+// {"RUCM-PATH": "P108"}
+//
+// 目的: 手を離させる書き込みが入らなかったときは、**pane が閉じるのを待たない**ことを
+// 確認する（設計 3-4 の段1）。
+//
+// **待っても誰も閉じない。**Status が `tracker.active_states` に入っていなければ
+// park は何も書かずに戻り、継続監視は active に戻った pane しか閉じない（3-37-3）。
+// そこで待つと必ず時間切れになり、`In Review` や `Blocked` の issue は
+// **`--force` の有無にかかわらず取り消せなくなる。**
+//
+// 与える情報: テストが先に掴んだロックファイル、Status が `In Review` のボード、
+// いつまでも同じ pane を返し続けるテスト用herdr mock、`--force`。
+// 成功条件: 終了コードが 0、worktree が消えている、ボードへの書き込みが0件、
+// **待っている最中の1行が出ておらず、時計も1秒も進んでいない**（＝1度も待っていない）こと。
+func TestAbandon_手を離させる書き込みが入らなければpaneを待たない(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+	fx.Tracker.SetState("In Review")
+
+	held, err := lock.Acquire(fx.LockPath)
+	if err != nil {
+		t.Fatalf("テストがロックを掴めません: %v", err)
+	}
+	defer func() { _ = held.Release() }()
+
+	fx.Herdr.SetPaneListScript(func(_ int) []map[string]any { return panesAt(prepared.Path) })
+	started := fx.Clock.Now()
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitOK)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonParkNotActive, "In Review"))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonPaneAliveForced, "w1:p1"))
+	// **待ちに入っていないこと自体を見る。**待てば必ず時間切れになるので、
+	// 「時間切れの文言が出ない」だけでは `--force` の逃げ道と区別できない。
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonWaitingPane, "w1:p1", prepared.Path))
+	if got := fx.Clock.Now(); !got.Equal(started) {
+		t.Fatalf("誰も閉じない pane を待っている（時計が %v 進んだ）\n出力:\n%s",
+			got.Sub(started), fx.Output())
+	}
+	assertWorktreeGone(t, fx, prepared.Path)
+	if len(fx.Tracker.Updates()) != 0 {
+		t.Fatalf("作業中の状態ではないのに Status を動かしている: %v", fx.Tracker.Updates())
+	}
+}
+
+// {"RUCM-PATH": "P814"}
 //
 // 目的: issue の URL として読めないものを渡されたとき、**置き場所を1度も走査せずに**
 // 終了コード 1 で止まることを確認する（設計 3-4 の段2）。
@@ -522,7 +606,7 @@ func TestAbandon_issueのURLとして読めなければ何も触らない(t *tes
 	}
 }
 
-// {"RUCM-PATH": "P821"}
+// {"RUCM-PATH": "P813"}
 //
 // 目的: WORKFLOW.md を読めないとき、何も触らずに終了コード 1 で止まることを確認する
 // （設計 3-4 の段1 より前）。**設定が読めなければ、worktree の置き場所も
@@ -548,7 +632,7 @@ func TestAbandon_設定ファイルを読めなければ何も触らない(t *te
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P820"}
+// {"RUCM-PATH": "P812"}
 //
 // 目的: ロックファイルそのものを開けないとき、**「continuo が動いている」と
 // 取り違えずに**終了コード 1 で止まることを確認する（設計 3-4 の段1）。
@@ -576,7 +660,7 @@ func TestAbandon_ロックファイルを開けなければ止まる(t *testing.
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P136"}
+// {"RUCM-PATH": "P134"}
 //
 // 目的: continuo が動いているのに issue がボードに載っていないとき、**何も消さずに**
 // 終了コード 1 で止まることを確認する（設計 3-4 の段1）。
@@ -637,7 +721,7 @@ func TestAbandon_手を離させる書き込みが入らなければ何も消さ
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P123"}
+// {"RUCM-PATH": "P108"}
 //
 // 目的: continuo が動いていても、Status が tracker.active_states に入っていなければ
 // **ボードへ1文字も書かずに**片付けへ進むことを確認する（設計 3-4 の段1）。
@@ -709,7 +793,7 @@ func TestAbandon_pane待ちを中断されたら何も消さない(t *testing.T)
 	}
 }
 
-// {"RUCM-PATH": "P620"}
+// {"RUCM-PATH": "P780"}
 //
 // 目的: 片付けそのものに失敗したとき、**Status を動かさずに**終了コード 1 で
 // 止まることを確認する（設計 3-4 の段4 と段5）。
@@ -740,7 +824,7 @@ func TestAbandon_片付けに失敗したらStatusを動かさない(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P618"}
+// {"RUCM-PATH": "P778"}
 //
 // 目的: branch を消さなかったとき、**「消しました」と言わない**ことを確認する
 // （設計 3-4 の段4）。
@@ -775,7 +859,7 @@ func TestAbandon_branchを消さなかったら消したと言わない(t *testi
 	}
 }
 
-// {"RUCM-PATH": "P411"}
+// {"RUCM-PATH": "P573"}
 //
 // 目的: `--to` があるのに issue をボードから引けないとき、**片付けは済ませたうえで**
 // 終了コード 1 で終わることを確認する（設計 3-4 の段5）。
@@ -800,7 +884,7 @@ func TestAbandon_片付けたあとにボードから引けなければ1で終�
 	}
 }
 
-// {"RUCM-PATH": "P410"}
+// {"RUCM-PATH": "P572"}
 //
 // 目的: `--to` の書き込みがボードに入らなかったとき、**片付けは済ませたうえで**
 // 終了コード 1 で終わることを確認する（設計 3-4 の段5）。
@@ -867,7 +951,7 @@ func TestAbandon_動いている状態でtoまで通せば書き込みは2件だ
 	}
 }
 
-// {"RUCM-PATH": "P168"}
+// {"RUCM-PATH": "P166"}
 //
 // 目的: 継続監視が動いている状態で `--dry-run` を叩いても、**ボードへ1文字も書かず、
 // エージェントに手を離させない**ことを確認する（設計 3-4 の段1。`--dry-run` は
@@ -906,7 +990,7 @@ func TestAbandon_動いていてもdryRunならボードへ書かない(t *testi
 	}
 }
 
-// {"RUCM-PATH": "P614"}
+// {"RUCM-PATH": "P774"}
 //
 // 目的: 判定のために取ったロックを、**実行が終わるまで握り続ける**ことを確認する
 // （設計 3-4 の段1）。
@@ -953,7 +1037,7 @@ func TestAbandon_取れたロックを実行の最後まで握る(t *testing.T) 
 	}
 }
 
-// {"RUCM-PATH": "P621"}
+// {"RUCM-PATH": "P781"}
 //
 // 目的: 継続監視が動いていないと判定したときでも、**その worktree の pane が
 // 生きていれば何も消さずに止まる**ことを確認する（設計 3-4 の段4 の前）。
@@ -979,7 +1063,7 @@ func TestAbandon_動いていなくてもpaneが生きていれば消さない(t
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P614"}
+// {"RUCM-PATH": "P774"}
 //
 // 目的: **herdr の workspace が開いたままで `.git` が壊れている**worktree を、
 // `--force` で片付け切れることを確認する（設計 3-4 の段4。issue #23）。
@@ -1020,7 +1104,7 @@ func TestAbandon_herdrのworkspaceがあってgitが壊れていてもforceで�
 	}
 }
 
-// {"RUCM-PATH": "P621"}
+// {"RUCM-PATH": "P781"}
 //
 // 目的: pane が生きていて `--force` が無いときの文言に、**越え方が書いてある**ことを
 // 確認する（設計 3-4 の段4 の前。issue #23）。
@@ -1043,7 +1127,7 @@ func TestAbandon_paneが生きて止まるときはforceの越え方を言う(t 
 	assertContains(t, fx, line)
 }
 
-// {"RUCM-PATH": "P621"}
+// {"RUCM-PATH": "P781"}
 //
 // 目的: pane の作業ディレクトリが worktree の**下の階層**であっても、その worktree の
 // pane として拾うことを確認する（設計 3-4 の段1 と段4 の前）。
@@ -1069,7 +1153,7 @@ func TestAbandon_paneの作業ディレクトリがworktreeの内側でも拾う
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P817"}
+// {"RUCM-PATH": "P809"}
 //
 // 目的: 身元ファイルの issue_url が**置き場所のパスと食い違う** worktree を、
 // 候補にしないことを確認する（設計 3-4 の段2）。
@@ -1078,8 +1162,9 @@ func TestAbandon_paneの作業ディレクトリがworktreeの内側でも拾う
 // 自分の issue_url を issue B に書き換えるだけで、**人間が B を取り消したとき A が消える。**
 // 与える情報: `octocat/another-repo` の下に用意した worktree に、
 // `octocat/hello-world#188` の issue_url を書いた身元ファイル。
-// 成功条件: 終了コードが 0、その worktree が残っている、herdr へ worktree.remove を
-// 送っていない、食い違いの1行と「worktree はありません」が出ていること。
+// 成功条件: 終了コードが 1、その worktree が残っている、herdr へ worktree.remove を
+// 送っていない、食い違いの1行が出ている、**「worktree はありません」は出ていない**こと
+// （候補から外した worktree があるのに「無い」と断言してはならない）。
 func TestAbandon_issueURLが置き場所と食い違えば候補にしない(t *testing.T) {
 	fx := newFixture(t)
 	// **パスは another-repo、身元ファイルは hello-world#188 を指している。**
@@ -1087,15 +1172,56 @@ func TestAbandon_issueURLが置き場所と食い違えば候補にしない(t *
 
 	code := fx.Run(t, 188, nil)
 
-	assertExit(t, fx, code, abandon.ExitOK)
+	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonOwnerRepoMismatch,
 		prepared.Path, "octocat", "another-repo", issueURL(188)))
-	assertContains(t, fx, i18n.T(i18n.KeyAbandonNotFound, issueURL(188)))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrUndecided, 1, issueURL(188)))
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonNotFound, issueURL(188)))
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 }
 
-// {"RUCM-PATH": "P606"}
+// {"RUCM-PATH": "P809"}
+//
+// 目的: **身元ファイルの issue_url を別の issue 番号へ書き換えても、その worktree を
+// その issue のものとして消さない**ことを確認する（設計 3-4 の段2）。
+//
+// **owner とリポジトリ名だけを比べていたときは、同じリポジトリの中なら別の issue の
+// worktree を消せた。**issue 42 の worktree で動くエージェントが自分の issue_url を
+// issue 99 に書き換え、issue 99 の worktree がまだ無ければ、候補は1件になって
+// 確認も出ずに 42 の worktree と branch が消える。`--force` を付けた実行なら、
+// 未コミットの成果ごと消える。
+//
+// 与える情報: issue 42 の worktree（置き場所も branch も 42 のまま）に、
+// issue 99 の issue_url を書いた身元ファイルと、issue 99 を対象にした `--force` 付きの実行。
+// 成功条件: 終了コードが 1、42 の worktree と branch が残っている、
+// herdr へ worktree.remove を送っていない、ディレクトリ名の食い違いを言う1行が出ている、
+// **「worktree はありません」は出ていない**こと。
+func TestAbandon_番号を書き換えた身元ファイルで別のissueのworktreeを消さない(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 42)
+	// **issue_url だけを 99 に付け替える。**パスも branch も 42 のままである。
+	fx.WriteIdentity(t, prepared, issueURL(99), 99,
+		filepath.Join(fx.SettingsRoot, "octocat-hello-world-42", "settings.json"))
+
+	code := fx.Run(t, 99, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonSlugMismatch,
+		prepared.Path,
+		filepath.Base(prepared.Path),
+		"continuo-octocat-hello-world-99",
+		issueURL(99),
+		fx.Config.Herdr.Worktree.BranchTemplate))
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonNotFound, issueURL(99)))
+	assertWorktreeExists(t, fx, prepared.Path)
+	if !branchExists(t, fx, prepared.Branch.String()) {
+		t.Fatalf("別の issue の branch %s を消している", prepared.Branch.String())
+	}
+	assertNoRemoval(t, fx)
+}
+
+// {"RUCM-PATH": "P600"}
 //
 // 目的: `--to` の値がボードの Status の選択肢に無いとき、**消す前に**止まることを
 // 確認する（設計 3-4 の段2 の直後）。
@@ -1121,7 +1247,7 @@ func TestAbandon_toがボードの選択肢に無ければ消す前に止まる(
 	}
 }
 
-// {"RUCM-PATH": "P404"}
+// {"RUCM-PATH": "P400"}
 //
 // 目的: `--park` に作業中の状態（tracker.active_states の値）を渡したとき、
 // **ボードへ1文字も書かずに**止まることを確認する（設計 3-4 の段2 の直後）。
@@ -1153,7 +1279,7 @@ func TestAbandon_parkが作業中の状態なら書く前に止まる(t *testing
 	}
 }
 
-// {"RUCM-PATH": "P814"}
+// {"RUCM-PATH": "P806"}
 //
 // 目的: 片付ける worktree が無いとき、`--to` の指定を黙って捨てないことを確認する
 // （設計 3-4 の段2）。
@@ -1243,7 +1369,7 @@ func TestAbandon_計画表示のStatusはpark後の値になる(t *testing.T) {
 	assertWorktreeGone(t, fx, prepared.Path)
 }
 
-// {"RUCM-PATH": "P610"}
+// {"RUCM-PATH": "P770"}
 //
 // 目的: 身元ファイルに書かれた branch が**リポジトリに実在しない**とき、
 // 「残っています」と報告しないことを確認する（issue #27）。
@@ -1272,7 +1398,7 @@ func TestAbandon_実在しないbranchを残ったものとして言わない(t 
 	assertWorktreeGone(t, fx, prepared.Path)
 }
 
-// {"RUCM-PATH": "P809"}
+// {"RUCM-PATH": "P801"}
 //
 // 目的: worktree が1つも無くても、規則から組み立てた branch が残っていれば
 // `--force` で片付けられることを確認する（issue #27）。
@@ -1307,7 +1433,7 @@ func TestAbandon_worktreeが無くても残ったbranchをforceで消す(t *test
 	}
 }
 
-// {"RUCM-PATH": "P811"}
+// {"RUCM-PATH": "P803"}
 //
 // 目的: worktree が無いときに残った branch を見つけても、`--force` が無ければ
 // 消さずに終了コード 1 で止まることを確認する（issue #27）。
@@ -1329,7 +1455,7 @@ func TestAbandon_worktreeが無いときforceが無ければbranchを消さな�
 	}
 }
 
-// {"RUCM-PATH": "P813"}
+// {"RUCM-PATH": "P805"}
 //
 // 目的: worktree が無いときに残った branch を見つけても、`--dry-run` なら
 // 何も消さないことを確認する（issue #27）。
@@ -1352,7 +1478,7 @@ func TestAbandon_worktreeが無いときdryRunならbranchを消さない(t *tes
 	}
 }
 
-// {"RUCM-PATH": "P810"}
+// {"RUCM-PATH": "P802"}
 //
 // 目的: 実体の無い worktree の登録が残っているとき、**その登録を掃除せずに** branch を
 // 残し、登録の在りかと掃除するコマンドを画面へ出すことを確認する（設計 3-37-9b）。
@@ -1379,7 +1505,7 @@ func TestAbandon_登録だけ残ったbranchを消さずに在りかを見せる
 	}
 }
 
-// {"RUCM-PATH": "P810"}
+// {"RUCM-PATH": "P802"}
 //
 // 目的: worktree のディレクトリを**移しただけ**のとき、branch も移した先も壊さないことを
 // 確認する（設計 3-37-9b）。**これが prune を撃っていた頃に起きていたことである。**
@@ -1409,7 +1535,7 @@ func TestAbandon_移されたworktreeのbranchを消さない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P813"}
+// {"RUCM-PATH": "P805"}
 //
 // 目的: `cleanup.delete_branch` が偽なら、`--force` を付けても残った branch を消さない
 // ことを確認する（設計 3-37-9）。**worktree がある経路が越えない設定を、ここだけ
@@ -1432,7 +1558,7 @@ func TestAbandon_deleteBranchが偽ならforceでも残ったbranchを消さな�
 	}
 }
 
-// {"RUCM-PATH": "P815"}
+// {"RUCM-PATH": "P807"}
 //
 // 目的: 残った branch があるかを調べられなかったとき、「無い」とも「ある」とも言わずに
 // 終わることを確認する（設計 3-37-9）。**調べられなかったことを「無い」に丸めると、
@@ -1458,7 +1584,7 @@ func TestAbandon_残ったbranchを調べられなければ無いと言わない
 	}
 }
 
-// {"RUCM-PATH": "P813"}
+// {"RUCM-PATH": "P805"}
 //
 // 目的: 残った branch に載っている未 push の commit の数を、**消す前に**見せることを
 // 確認する（設計 3-37-9）。**worktree が無くても数えられる。**数えずに `--force` を
@@ -1479,14 +1605,15 @@ func TestAbandon_残ったbranchの未pushのcommitを消す前に見せる(t *t
 	}
 }
 
-// {"RUCM-PATH": "P817"}
+// {"RUCM-PATH": "P809"}
 //
 // 目的: 身元ファイルが無いディレクトリが1つでもあれば、残った branch の片付けへ
 // 進まないことを確認する（設計 3-37-9c）。**着手は worktree を作ってから身元ファイルを
 // 書くので、その間で落ちるとこの状態ができる。**そのとき branch は孤児ではなく、
 // 目の前の worktree のものかもしれない。
 // 与える情報: 身元ファイルを消した worktree と、別の issue の残った branch と `--force`。
-// 成功条件: 終了コードが 0、branch が残っている、身元ファイルが無いことを言っていること。
+// 成功条件: 終了コードが 1、branch が残っている、身元ファイルが無いことを言っている、
+// **「worktree はありません」は出ていない**こと。
 func TestAbandon_身元ファイルが無いディレクトリがあればbranchを消さない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -1495,9 +1622,10 @@ func TestAbandon_身元ファイルが無いディレクトリがあればbranch
 
 	code := fx.Run(t, 999, func(opts *abandon.Options) { opts.Force = true })
 
-	assertExit(t, fx, code, abandon.ExitOK)
+	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonIdentityMissing,
 		prepared.Path, fx.Manager.IdentityPath(prepared.Path)))
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonNotFound, issueURL(999)))
 	if !branchExists(t, fx, branch) {
 		t.Fatalf("判断できない worktree があるのに branch %s を消している", branch)
 	}

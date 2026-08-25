@@ -3,12 +3,12 @@
   "usecase_name": "既存のボードの Status を割り当てる",
   "source": {
     "file": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md",
-    "rucm_block_sha256": "8a4bdd05b7ab19140aacdeb1418658f56b7cc115c99f18ea804db6728d4275e9"
+    "rucm_block_sha256": "077d22fa0b0308204249c9a0913017e90a652e85bcbc1531ed0051a03085d827"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の7つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。"
+      "postcondition": "5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の8つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。"
     },
     "WORKFLOW.mdが無い": {
       "rfs": {
@@ -73,6 +73,15 @@
       },
       "postcondition": "WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 である。"
     },
+    "書き換えると読めなくなる": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          18
+        ]
+      },
+      "postcondition": "WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 である。"
+    },
     "中断": {
       "when": "利用者が Ctrl+C を入力した場合",
       "branch_from": [
@@ -106,7 +115,7 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "システムは gh からボードの owner とボードの番号を引く。"
+      "statement": "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。"
     },
     {
       "id": "BASIC FLOW-4",
@@ -190,20 +199,34 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "システムは VALIDATES THAT WORKFLOW.md に書き換える対象の7つのキーがある。"
+      "statement": "システムは VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "システムは WORKFLOW.md の Status に関する7つのキーの行を書き換える。"
+      "statement": "システムは書き換えたあとの全文を組み立てる。"
     },
     {
       "id": "BASIC FLOW-18",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 18,
+      "statement": "システムは VALIDATES THAT 元の WORKFLOW.md の front matter が読めないか、組み立てた全文の front matter を読み直せる。"
+    },
+    {
+      "id": "BASIC FLOW-19",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 19,
+      "statement": "システムは組み立てた全文を WORKFLOW.md へ書き込む。"
+    },
+    {
+      "id": "BASIC FLOW-20",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 20,
       "statement": "システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する。"
     },
     {
@@ -281,7 +304,7 @@
       "type": "action",
       "flow": "番号が範囲外",
       "step": 1,
-      "statement": "システムは利用者に入力が一覧の番号でないことを応答する。"
+      "statement": "システムは利用者に入力を一覧の番号として読めなかったことを応答する。"
     },
     {
       "id": "番号が範囲外-2",
@@ -351,19 +374,40 @@
       "type": "action",
       "flow": "書き換える対象のキーが無い",
       "step": 1,
-      "statement": "システムは利用者に WORKFLOW.md から消えているキーの名前を応答する。"
+      "statement": "システムは利用者に WORKFLOW.md から消えているキーと、値がキーの行に無いキーの名前を応答する。"
     },
     {
       "id": "書き換える対象のキーが無い-2",
       "type": "action",
       "flow": "書き換える対象のキーが無い",
       "step": 2,
-      "statement": "システムは利用者にキーを書き戻すか continuo init で作り直す案内を応答する。"
+      "statement": "システムは利用者にキーを書き戻すか、値をキーの行に書くか、continuo init で作り直す案内を応答する。"
     },
     {
       "id": "書き換える対象のキーが無い-3",
       "type": "abort",
       "flow": "書き換える対象のキーが無い",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "書き換えると読めなくなる-1",
+      "type": "action",
+      "flow": "書き換えると読めなくなる",
+      "step": 1,
+      "statement": "システムは利用者に組み立てた全文の front matter を読み直せないことと理由を応答する。"
+    },
+    {
+      "id": "書き換えると読めなくなる-2",
+      "type": "action",
+      "flow": "書き換えると読めなくなる",
+      "step": 2,
+      "statement": "システムは利用者に WORKFLOW.md を手で直すか continuo init で作り直す案内を応答する。"
+    },
+    {
+      "id": "書き換えると読めなくなる-3",
+      "type": "abort",
+      "flow": "書き換えると読めなくなる",
       "step": 3,
       "statement": "ABORT"
     },
@@ -512,17 +556,34 @@
       "from": "BASIC FLOW-16",
       "to": "BASIC FLOW-17",
       "kind": "true",
-      "condition": "WORKFLOW.md に書き換える対象の7つのキーがある"
+      "condition": "WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている"
     },
     {
       "from": "BASIC FLOW-16",
       "to": "書き換える対象のキーが無い-1",
       "kind": "false",
-      "condition": "NOT WORKFLOW.md に書き換える対象の7つのキーがある"
+      "condition": "NOT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている"
     },
     {
       "from": "BASIC FLOW-17",
       "to": "BASIC FLOW-18",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-19",
+      "kind": "true",
+      "condition": "元の WORKFLOW.md の front matter が読めないか、組み立てた全文の front matter を読み直せる"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "書き換えると読めなくなる-1",
+      "kind": "false",
+      "condition": "NOT 元の WORKFLOW.md の front matter が読めないか、組み立てた全文の front matter を読み直せる"
+    },
+    {
+      "from": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
       "kind": "seq"
     },
     {
@@ -616,6 +677,16 @@
       "kind": "seq"
     },
     {
+      "from": "書き換えると読めなくなる-1",
+      "to": "書き換えると読めなくなる-2",
+      "kind": "seq"
+    },
+    {
+      "from": "書き換えると読めなくなる-2",
+      "to": "書き換えると読めなくなる-3",
+      "kind": "seq"
+    },
+    {
       "from": "中断-1",
       "to": "中断-2",
       "kind": "seq"
@@ -626,7 +697,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の7つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。",
+      "postcondition": "5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の8つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -644,12 +715,14 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
-        "BASIC FLOW-18"
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20"
       ],
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
         "システムは利用者に選択肢の一覧を番号付きで応答する。",
@@ -661,13 +734,66 @@
         "システムは番号の選択肢をいま割り当てる役割へ割り当てる。",
         "UNTIL 5つの役割すべてに選択肢が割り当てられている",
         "システムは利用者に5つの役割の割り当ての一覧を応答する。",
-        "システムは VALIDATES THAT WORKFLOW.md に書き換える対象の7つのキーがある。",
-        "システムは WORKFLOW.md の Status に関する7つのキーの行を書き換える。",
+        "システムは VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている。",
+        "システムは書き換えたあとの全文を組み立てる。",
+        "システムは VALIDATES THAT 元の WORKFLOW.md の front matter が読めないか、組み立てた全文の front matter を読み直せる。",
+        "システムは組み立てた全文を WORKFLOW.md へ書き込む。",
         "システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する。"
       ]
     },
     {
       "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "書き換えると読めなくなる",
+      "postcondition": "WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "書き換えると読めなくなる-1",
+        "書き換えると読めなくなる-2",
+        "書き換えると読めなくなる-3"
+      ],
+      "steps": [
+        "利用者はシステムに continuo setup の実行を要求する。",
+        "システムは VALIDATES THAT WORKFLOW.md がある。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
+        "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
+        "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
+        "システムは利用者に選択肢の一覧を番号付きで応答する。",
+        "システムは利用者にいま割り当てる役割の説明を応答する。",
+        "利用者はシステムに番号を送信する。",
+        "システムは VALIDATES THAT 番号が一覧の範囲内である。",
+        "システムは VALIDATES THAT 番号が 0 でない。",
+        "システムは VALIDATES THAT 番号の選択肢が他の役割に割り当てられていない。",
+        "システムは番号の選択肢をいま割り当てる役割へ割り当てる。",
+        "UNTIL 5つの役割すべてに選択肢が割り当てられている",
+        "システムは利用者に5つの役割の割り当ての一覧を応答する。",
+        "システムは VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている。",
+        "システムは書き換えたあとの全文を組み立てる。",
+        "システムは VALIDATES THAT 元の WORKFLOW.md の front matter が読めないか、組み立てた全文の front matter を読み直せる。",
+        "CONDITION: NOT 元の WORKFLOW.md の front matter が読めないか、組み立てた全文の front matter を読み直せる",
+        "システムは利用者に組み立てた全文の front matter を読み直せないことと理由を応答する。",
+        "システムは利用者に WORKFLOW.md を手で直すか continuo init で作り直す案内を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
       "terminal": "abort",
       "terminal_flow": "書き換える対象のキーが無い",
       "postcondition": "WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 である。",
@@ -694,7 +820,7 @@
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
         "システムは利用者に選択肢の一覧を番号付きで応答する。",
@@ -706,15 +832,15 @@
         "システムは番号の選択肢をいま割り当てる役割へ割り当てる。",
         "UNTIL 5つの役割すべてに選択肢が割り当てられている",
         "システムは利用者に5つの役割の割り当ての一覧を応答する。",
-        "システムは VALIDATES THAT WORKFLOW.md に書き換える対象の7つのキーがある。",
-        "CONDITION: NOT WORKFLOW.md に書き換える対象の7つのキーがある",
-        "システムは利用者に WORKFLOW.md から消えているキーの名前を応答する。",
-        "システムは利用者にキーを書き戻すか continuo init で作り直す案内を応答する。",
+        "システムは VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている。",
+        "CONDITION: NOT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている",
+        "システムは利用者に WORKFLOW.md から消えているキーと、値がキーの行に無いキーの名前を応答する。",
+        "システムは利用者にキーを書き戻すか、値をキーの行に書くか、continuo init で作り直す案内を応答する。",
         "ABORT"
       ]
     },
     {
-      "id": "P003",
+      "id": "P004",
       "terminal": "abort",
       "terminal_flow": "中断",
       "postcondition": "WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。",
@@ -739,7 +865,7 @@
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
         "システムは利用者に選択肢の一覧を番号付きで応答する。",
@@ -757,7 +883,7 @@
       ]
     },
     {
-      "id": "P004",
+      "id": "P005",
       "terminal": "cycle",
       "terminal_flow": "",
       "postcondition": "",
@@ -780,7 +906,7 @@
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
         "システムは利用者に選択肢の一覧を番号付きで応答する。",
@@ -796,7 +922,7 @@
       ]
     },
     {
-      "id": "P005",
+      "id": "P006",
       "terminal": "cycle",
       "terminal_flow": "二重割り当て",
       "postcondition": "役割への割り当ては増えていない。1つの選択肢は1つの役割だけに割り当てられている。システムは同じ役割の番号をもう一度待っている。",
@@ -820,7 +946,7 @@
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
         "システムは利用者に選択肢の一覧を番号付きで応答する。",
@@ -837,7 +963,7 @@
       ]
     },
     {
-      "id": "P006",
+      "id": "P007",
       "terminal": "abort",
       "terminal_flow": "該当する選択肢が無い",
       "postcondition": "WORKFLOW.md は変わっていない。ボードの選択肢は変わっていない。それまでに選んだ番号は保存されていない。終了コードは 1 である。",
@@ -860,7 +986,7 @@
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
         "システムは利用者に選択肢の一覧を番号付きで応答する。",
@@ -876,7 +1002,7 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P008",
       "terminal": "cycle",
       "terminal_flow": "番号が範囲外",
       "postcondition": "役割への割り当ては増えていない。システムは同じ役割の番号をもう一度待っている。",
@@ -898,7 +1024,7 @@
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
         "システムは利用者に選択肢の一覧を番号付きで応答する。",
@@ -906,14 +1032,14 @@
         "利用者はシステムに番号を送信する。",
         "システムは VALIDATES THAT 番号が一覧の範囲内である。",
         "CONDITION: NOT 番号が一覧の範囲内である",
-        "システムは利用者に入力が一覧の番号でないことを応答する。",
+        "システムは利用者に入力を一覧の番号として読めなかったことを応答する。",
         "システムは利用者に選べる番号の範囲を応答する。",
         "RESUME STEP 8",
         "システムは利用者にいま割り当てる役割の説明を応答する。"
       ]
     },
     {
-      "id": "P008",
+      "id": "P009",
       "terminal": "abort",
       "terminal_flow": "選択肢が足りない",
       "postcondition": "WORKFLOW.md は変わっていない。ボードの選択肢は変わっていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。",
@@ -931,7 +1057,7 @@
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "システムは VALIDATES THAT 読み取った選択肢が5個以上ある。",
         "CONDITION: NOT 読み取った選択肢が5個以上ある",
@@ -942,7 +1068,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P010",
       "terminal": "abort",
       "terminal_flow": "ボードを読めない",
       "postcondition": "WORKFLOW.md は変わっていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。",
@@ -958,7 +1084,7 @@
       "steps": [
         "利用者はシステムに continuo setup の実行を要求する。",
         "システムは VALIDATES THAT WORKFLOW.md がある。",
-        "システムは gh からボードの owner とボードの番号を引く。",
+        "システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。",
         "システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。",
         "CONDITION: NOT ボードの Status フィールドの選択肢を読み取れる",
         "システムは利用者にボードを読めない理由を応答する。",
@@ -967,7 +1093,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "WORKFLOW.mdが無い",
       "postcondition": "WORKFLOW.md は作られていない。システムは役割の割り当てを1つも尋ねていない。終了コードは 1 である。",
@@ -989,9 +1115,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 42,
-    "nodes_covered": 42,
-    "edges_total": 44,
-    "edges_covered": 44
+    "nodes_total": 47,
+    "nodes_covered": 47,
+    "edges_total": 49,
+    "edges_covered": 49
   }
 }

@@ -554,10 +554,19 @@ type mapItemResult struct {
 	// （SPEC.md 11.1 / 設計 3-13）。この使い分けは呼び出し側（adapter.go）が行う。
 	Ok bool
 	// Gone は「item は provider 側に存在するが、continuo から見える範囲にはもう無い」ことを
-	// 示す。いまのところ archive 済みの item だけがこれに当たる。
-	// **Ok が false でも Gone が true のものは、ID 指定の取り直しでもエラーにせず省く。**
+	// 示す。**Ok が false でも Gone が true のものは、ID 指定の取り直しでもエラーにせず省く。**
 	// 「もう見えない」と「壊れている」は意味が違い、前者の省略は SPEC.md 11.1 が
 	// 明示的に許している（"IDs no longer visible in the configured scope are omitted"）。
+	//
+	// これに当たるのは、**ボードとしては正常なのに continuo の候補の集合に入らない**3つである。
+	//
+	//	archive 済み            … 候補の取得（items）は最初から返さない
+	//	Status が未設定          … 候補の取得は Status で絞るので返らない（104件中4件が該当）
+	//	Issue でも DraftIssue でもない content … PullRequest 等。候補の取得でも省いている
+	//
+	// **provider 側の異常（content が空・Issue なのに repository が無い・
+	// nameWithOwner の形が壊れている）は Gone にしない。**そちらは SPEC.md 11.1 が
+	// エラーを要求する malformed である。
 	Gone bool
 	// Reason は Ok が false のときの理由（人間可読）である。
 	Reason string
@@ -576,12 +585,15 @@ type mapItemResult struct {
 // repoTrusted: `<owner>/<repo>` が Claude Code に信頼登録されているかを判定する関数
 // （設計 3-13 の「リポジトリが信頼済み」）。nil なら全て信頼済みとして扱う。
 // 戻り値: Ok が true なら Issue が有効。false なら Reason に理由（人間可読）が入る。
-//   - archive 済みの item（Gone も true になる。「壊れている」ではなく「もう見えない」）
-//   - content が無い、または Issue でも DraftIssue でもない型（PullRequest 等）
-//   - Status が未設定（fieldValueByName が nil、または name が空）
-//     （3-13: 「Status 未設定の item」。一覧では省き、ID 指定の取り直しでは呼び出し側が
-//     これをエラーとして扱う）
-//   - Issue 型なのに repository が無い（想定外。安全側に倒して弾く）
+// **Gone が true のものは「壊れている」ではなく「候補の集合にもう居ない」である**
+// （呼び出し側は ID 指定の取り直しでもエラーにせず省く）。
+//   - archive 済みの item（Gone）
+//   - Status が未設定（fieldValueByName が nil、または name が空。Gone）
+//     （3-13: 「Status 未設定の item」。候補の取得は Status で絞るので最初から返らない）
+//   - Issue でも DraftIssue でもない型（PullRequest 等。Gone）
+//   - content が無い（provider 側の異常。Gone にしない）
+//   - Issue 型なのに repository が無い、または nameWithOwner の形が不正
+//     （provider 側の異常。Gone にしない）
 func mapRawItemToIssue(raw *rawItem, statusFieldName string, repoTrusted RepoTrustFunc) mapItemResult {
 	if raw.IsArchived {
 		// archive 済みの item はボード上でもう見えない。候補の取得は `items(...)` の既定
@@ -597,7 +609,16 @@ func mapRawItemToIssue(raw *rawItem, statusFieldName string, repoTrusted RepoTru
 		return mapItemResult{Ok: false, Reason: "content が空です（provider 側の異常）"}
 	}
 	if raw.FieldValueByName == nil || strings.TrimSpace(raw.FieldValueByName.Name) == "" {
-		return mapItemResult{Ok: false, Reason: fmt.Sprintf("Status（%s）が未設定です", statusFieldName)}
+		// **Status 未設定は「壊れている」ではなく「候補の集合にもう居ない」である。**
+		// 候補の取得（`items(...)`）は Status で絞るので、この item は最初から返らない。
+		// 人間がボードの画面で Status を空にするのは異常な操作ではない（本番のボードでも
+		// 104件中4件が未設定）。ここをエラーにすると、**1件が未設定なだけで
+		// ID 指定の取り直しが丸ごと失敗し、同じ呼び出しに乗った他の run が全部巻き添えになる。**
+		return mapItemResult{
+			Ok:     false,
+			Gone:   true,
+			Reason: fmt.Sprintf("Status（%s）が未設定です（候補の一覧にも出てきません）", statusFieldName),
+		}
 	}
 
 	state := raw.FieldValueByName.Name
@@ -768,9 +789,16 @@ func mapRawItemToIssue(raw *rawItem, statusFieldName string, repoTrusted RepoTru
 		}
 
 	default:
+		// **PullRequest 等は「壊れている」ではなく「候補の集合に居ない」である。**
+		// 候補の取得でも同じ理由で省いている。ID 指定の取り直しでエラーにすると、
+		// 人間が item の content を差し替えただけで、同じ呼び出しに乗った他の run が
+		// 全部巻き添えになる。
 		return mapItemResult{
-			Ok:     false,
-			Reason: fmt.Sprintf("Issue でも DraftIssue でもない content です（%s）。dispatch できないため除外します", raw.Content.Typename),
+			Ok:   false,
+			Gone: true,
+			Reason: fmt.Sprintf(
+				"Issue でも DraftIssue でもない content です（%s）。dispatch できないため除外します",
+				raw.Content.Typename),
 		}
 	}
 }

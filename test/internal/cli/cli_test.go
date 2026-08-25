@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "1bf01241889b9e6e9759b0792ea55c34364edc6c75fbd389fc68bffe349f4adb", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // CLI の入口（`cli.Run`）の検査である。
@@ -400,7 +400,7 @@ func TestRunSetup_statusFieldが空なら落とす(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P011"}
 //
 // TestRunSetup_WORKFLOWmdが無ければ尋ねずに落とす は、RUCM の基本フロー2 を確かめる。
 //

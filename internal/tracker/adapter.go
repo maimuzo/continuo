@@ -635,14 +635,20 @@ func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q strin
 // **見つからない ID は「もう見えない」として扱い、結果から省く。**合成した状態を作らない
 // （SPEC.md: "IDs no longer visible in the configured scope are omitted; the orchestrator
 // treats omission as 'no longer visible' rather than inventing a synthetic state."）。
-// **archive 済みの item も同じく省く。**候補の取得（`items(...)`）は archive 済みを返さない
-// のに、こちらの `nodes(ids:)` はそのまま返すため、ここで弾かないと「まだ作業中の状態に
-// ある」と誤認し続ける。
 //
-// **一方、見つかったのに正規化できない item（Status 未設定・content が想定外の型）は
-// エラーにする。**一覧取得と違って黙って省いてはならない
+// **候補の集合に居ない item も同じく省く**（archive 済み・Status 未設定・Issue でも
+// DraftIssue でもない content）。どれも候補の取得（`items(...)`）は最初から返さないのに、
+// こちらの `nodes(ids:)` はそのまま返す。**ここで弾かないと「まだ作業中の状態にある」と
+// 誤認し続ける。**
+//
+// **一方、provider 側の異常（content が空・Issue なのに repository が無い・
+// nameWithOwner の形が壊れている）はエラーにする。**黙って省いてはならない
 // （SPEC.md 11.1: "An ID-refresh call MUST fail instead of silently omitting a malformed
 // requested record, because omission is meaningful."）。
+//
+// **1件を省くために全件を捨ててはならない。**この呼び出しには複数の run の item が同時に
+// 乗る。1件をエラーにすると、実行中 issue の照合・取り残された worktree の照合・
+// 再起動時の復元が丸ごと飛び、**残りの run が全部巻き添えになる。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // ids: 取り直す project item ID の一覧（Issue.ID）。空なら GraphQL へリクエストを送らず、
@@ -680,9 +686,11 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 		}
 		mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
 		if !mapped.Ok && mapped.Gone {
-			// archive 済み。**候補の取得（items）は archive 済みを返さないのに、
-			// nodes(ids:) はそのまま返す。**ここで省かないと、人間が archive した issue を
-			// 「まだ作業中の状態にある」と誤認し続ける。合成した状態は作らず、単に省く。
+			// 候補の集合に居ない（archive 済み・Status 未設定・Issue でも DraftIssue でも
+			// ない content）。**候補の取得（items）はどれも返さないのに、nodes(ids:) は
+			// そのまま返す。**ここで省かないと「まだ作業中の状態にある」と誤認し続ける。
+			// 合成した状態は作らず、単に省く。**エラーにもしない**（同じ呼び出しに乗った
+			// 他の run を巻き添えにする）。
 			a.logger.Warn("ID 指定の取り直しから除外しました（もう見えません）",
 				"item_id", raw.ID, "理由", mapped.Reason,
 			)
