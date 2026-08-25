@@ -143,6 +143,50 @@ func gitWorktreePrune(ctx context.Context, repoDir string) error {
 	return err
 }
 
+// worktreeEntry は `git worktree list --porcelain` が返す worktree 1件である。
+type worktreeEntry struct {
+	// Path は worktree の絶対パスである（filepath.Clean 済み）。
+	Path string
+	// Branch はその worktree がチェックアウトしている branch 名である。
+	// **detached HEAD の worktree では空文字になる**（`branch` の行が出ない）。
+	Branch string
+}
+
+// gitWorktreeEntries は `git worktree list --porcelain` の出力を1件ずつに切って返す。
+//
+// **出力は worktree ごとの塊であり、`worktree <パス>` の行で始まる。**
+// その塊の中に `branch refs/heads/<名前>` の行があれば、その worktree はその branch を
+// チェックアウトしている。detached HEAD の塊には `detached` の行が出て `branch` は無い。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// 戻り値の1つ目: 登録されている worktree の一覧（git が返した順）。
+// 戻り値の2つ目: 実行に失敗した場合のエラー。
+func gitWorktreeEntries(ctx context.Context, repoDir string) ([]worktreeEntry, error) {
+	out, err := runGit(ctx, repoDir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	var entries []worktreeEntry
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
+			entries = append(entries, worktreeEntry{Path: filepath.Clean(strings.TrimSpace(rest))})
+			continue
+		}
+		rest, ok := strings.CutPrefix(line, "branch ")
+		if !ok || len(entries) == 0 {
+			continue
+		}
+		entries[len(entries)-1].Branch = strings.TrimPrefix(strings.TrimSpace(rest), "refs/heads/")
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, i18n.Errorf(i18n.KeyWorkspaceGitWorktreeListOutputUnreadable, err)
+	}
+	return entries, nil
+}
+
 // gitWorktreePaths は `git worktree list --porcelain` が返す worktree のパスの一覧を返す。
 //
 // 「実体はあるが git の登録が無い」（3-22 の段3）の判定に使う。
@@ -152,20 +196,13 @@ func gitWorktreePrune(ctx context.Context, repoDir string) error {
 // 戻り値の1つ目: 登録されている worktree の絶対パスの一覧。
 // 戻り値の2つ目: 実行に失敗した場合のエラー。
 func gitWorktreePaths(ctx context.Context, repoDir string) ([]string, error) {
-	out, err := runGit(ctx, repoDir, "worktree", "list", "--porcelain")
+	entries, err := gitWorktreeEntries(ctx, repoDir)
 	if err != nil {
 		return nil, err
 	}
 	var paths []string
-	scanner := bufio.NewScanner(strings.NewReader(out))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
-			paths = append(paths, filepath.Clean(strings.TrimSpace(rest)))
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, i18n.Errorf(i18n.KeyWorkspaceGitWorktreeListOutputUnreadable, err)
+	for _, entry := range entries {
+		paths = append(paths, entry.Path)
 	}
 	return paths, nil
 }
@@ -525,24 +562,15 @@ func gitLocalBranches(ctx context.Context, repoDir string) ([]string, error) {
 // 戻り値の1つ目: チェックアウト中の branch 名の集合。
 // 戻り値の2つ目: 実行に失敗した場合のエラー。
 func gitWorktreeBranches(ctx context.Context, repoDir string) (map[string]bool, error) {
-	out, err := runGit(ctx, repoDir, "worktree", "list", "--porcelain")
+	entries, err := gitWorktreeEntries(ctx, repoDir)
 	if err != nil {
 		return nil, err
 	}
 	branches := map[string]bool{}
-	scanner := bufio.NewScanner(strings.NewReader(out))
-	for scanner.Scan() {
-		rest, ok := strings.CutPrefix(scanner.Text(), "branch ")
-		if !ok {
-			continue
+	for _, entry := range entries {
+		if entry.Branch != "" {
+			branches[entry.Branch] = true
 		}
-		name := strings.TrimPrefix(strings.TrimSpace(rest), "refs/heads/")
-		if name != "" {
-			branches[name] = true
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, i18n.Errorf(i18n.KeyWorkspaceGitWorktreeListOutputUnreadable, err)
 	}
 	return branches, nil
 }

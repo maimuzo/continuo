@@ -1511,6 +1511,8 @@ const (
 	KeyWorkspacePrepareCloneNotFound Key = "workspace.prepare.clone_not_found"
 	// KeyWorkspacePrepareStatFailed は worktree のパスの存在を確かめられなかったときに出る。
 	KeyWorkspacePrepareStatFailed Key = "workspace.prepare.stat_failed"
+	// KeyWorkspacePrepareBranchInUseElsewhere は目的の branch を、目的のパス以外の worktree が既に使っていたときに出る。
+	KeyWorkspacePrepareBranchInUseElsewhere Key = "workspace.prepare.branch_in_use_elsewhere"
 	// KeyWorkspacePrepareBranchMismatch は再利用しようとした worktree が別の branch をチェックアウトしていたときに出る。
 	KeyWorkspacePrepareBranchMismatch Key = "workspace.prepare.branch_mismatch"
 	// KeyWorkspacePrepareUnregisteredWorktree は目的のパスに実体があるのに git の worktree として登録されていなかったときに出る。
@@ -2227,6 +2229,7 @@ var allKeys = []Key{
 	KeyWorkspaceNewHomeDirUnknown,
 	KeyWorkspacePrepareCloneNotFound,
 	KeyWorkspacePrepareStatFailed,
+	KeyWorkspacePrepareBranchInUseElsewhere,
 	KeyWorkspacePrepareBranchMismatch,
 	KeyWorkspacePrepareUnregisteredWorktree,
 	KeyWorkspacePrepareParentDirCreateFailed,

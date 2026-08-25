@@ -1190,6 +1190,7 @@ sequenceDiagram
 | **対象リポジトリが Claude Code に信頼登録されているか** | **その issue を飛ばす**（`trust.on_untrusted` に従う）。**信頼していないフォルダでは hook が1つも動かず、turn 終了検知が全滅するため。**ログに残す。**issue へのコメントは、そのリポジトリにつき1回だけ**（下記）。**引く鍵の作り方はさらに下記** |
 | **worktree の置き場所が設定の内側に収まるか** | **その issue を失敗として扱う**（3-20。仕様が「最も重要な移植性の制約」と呼ぶ検査である） |
 | **目的のパスの worktree をそのまま使えるか** | **その issue を飛ばす**（3-16b）。**Status を1バイトも書かない。**判定できない事情（clone を引けない等）はここでは落とさず、段3 に任せて人間へ渡す |
+| **その branch を目的のパス以外の worktree が使っていないか** | **その issue を飛ばす**（3-16b）。**Status を1バイトも書かない。**目的のパスに何も無くても `git worktree add` が必ず落ちる経路である |
 
 **同じコメントを積まないようにする。**未信頼の issue は `Ready` のまま候補に残り続けるので、
 **素朴に実装すると30秒ごとに永久にコメントが積まれる。**
@@ -1750,7 +1751,7 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
      この検査は「自分が取った」印を付ける前に行う（印を付けてから弾くと、印が残る）
 0. dispatch の直前の検査を通す（3-6 の「issue ごと」の表）
    → 対象リポジトリが信頼済みか / worktree の置き場所が設定の内側に収まるか /
-     **目的のパスの worktree をそのまま使えるか**（3-16b）。
+     **目的のパスの worktree をそのまま使えるか** / **その branch が空いているか**（3-16b）。
      落ちたらこの issue を飛ばす。まだ何も書かない
 1. 「自分が取った」印を付け、実行中の一覧へ入れる   ← メモリの上での最初の段
    → 仕様 7.4 が「worker を起動する前に取得済みかどうかを検査する」ことを REQUIRED としている。
@@ -1817,24 +1818,47 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
 `In Progress` は active_states なので次の巡回でまた候補に上がり、
 **`In Progress` と `Blocked` の往復が永久に続く。**判定は全部 Status を書く前へ置く。
 
-**候補1件につき、Status を書く前に4つを見る。**
+**候補1件につき、Status を書く前に5つを見る。**
 
 | 短縮名 | 何を見るか | 落ちたらどうするか |
 | --- | --- | --- |
 | 頼んだ Status | issue の Status が `active_states` に入っているか | その issue だけ飛ばす。**他の候補の dispatch は続ける** |
 | 失敗の回数 | 同じ issue の失敗が `agent.max_retries` を超えていないか | 記録が消えるまで拾わない |
 | 使える worktree | 目的のパスに実体があるのに git の登録が無いか（別の branch を出していないか） | Status を1バイトも書かずに飛ばす |
+| 空いている branch | その branch を**目的のパス以外の** worktree が使っていないか | Status を1バイトも書かずに飛ばす |
 | 書いてよい Status | 取り直した Status が `terminal_states` / `failure_state` に入っていないか | 印を外して静かにやめる |
 
-**「使える worktree」は `internal/workspace` の読み取り専用の判定である。**
+**「空いている branch」は、目的のパスに何も無くても落ちる唯一の検査である。**
+git は1つの branch を2つの worktree に出せないので、別の場所の worktree がその branch を
+出していると、段4 の `git worktree add` が必ず落ちる。
+
+```
+fatal: 'continuo/<owner>/<repo>/1' is already used by worktree at '<別のパス>'
+```
+
+**これは mock では出ず、実機で1件通して初めて見つかった**（2026-08-25）。
+「使える worktree」は目的のパスしか見ないのでこの経路を拾えず、
+`In Progress` を書いてから着手が落ちていた。
+
+**対処は `continuo abandon <issue の URL>` である。**エラー文にそう書く
+（3-34b）。その issue の worktree と branch をまとめて片付けられる。
+
+**どちらも `internal/workspace` の読み取り専用の判定である。**
 
 ```go
 // internal/workspace/prepare.go
 func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
+func (m *Manager) checkBranchFree(
+	ctx context.Context, repoPath string, loc *Location, issue IssueRef,
+) error
 ```
 
-`git worktree list` と `git rev-parse --abbrev-ref HEAD` を読むだけで、
+`git worktree list --porcelain` と `git rev-parse --abbrev-ref HEAD` を読むだけで、
 `prune` も `worktree add` も呼ばない。`Prepare`（段3）の同じ検査は保険として残す。
+
+**`checkBranchFree` は目的のパス自身を除外する。**そこが出しているぶんには
+再利用の経路（3-22 の段2）であり、問題にならない。**除外を忘れると、continuo が
+自分で作った worktree の再利用が全部落ち、2回目以降の着手が1件も通らない。**
 
 **「失敗の回数」はメモリ上の記録である。永続化層は作らない。**
 

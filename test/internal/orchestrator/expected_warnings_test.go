@@ -88,6 +88,7 @@ var expectedWarnings = map[string][]string{
 	"TestOnHook_worktreeの外のcwdを名乗るhookは捨てる":                             {"hook の cwd がその run の worktree の外なので捨てました"},
 	"TestOnHook_許可された置き場所の外のtranscript_pathは覚えない":                       {"hook の transcript_path が許可された置き場所の外なので捨てました"},
 	"TestOnHook_通常のファイルでないtranscript_pathは覚えない":                         {"hook の transcript_path が通常のファイルではないので捨てました"},
+	"TestPreflight_branchを別のworktreeが使っているならStatusを1バイトも書かずに飛ばす":        {"目的の worktree をそのまま使えません"},
 	"TestPreflight_登録の無い実体があるならStatusを1バイトも書かずに飛ばす":                     {"目的の worktree をそのまま使えません"},
 	"TestPreflight_未信頼なら着手せず承認を促すコメントを1件書く":                             {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestPreflight_未信頼の通知は巡回のたびに繰り返さない":                                 {"リポジトリが Claude Code に信頼登録されていません"},
