@@ -2,6 +2,8 @@ package workspace
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -41,6 +43,10 @@ type OrphanBranchSweepRequest struct {
 // **消す前に SHA をログへ残す。**削除は `git branch -D`（マージ状態を見ない強制削除）なので、
 // 未 push の commit が載ったままの branch も消える。ログの `restore` に、そのまま実行すれば
 // 戻せるコマンドを書く。
+//
+// **壊れた ref も同じ条件で掃除する**（設計 3-22b）。`git for-each-ref refs/heads` は
+// 壊れた ref を一覧に出さないので、branch の一覧だけを見ていると1件も掃除できない。
+// `<共通ディレクトリ>/refs/heads` の下を歩いて名前を拾い、brokenBranchRef の条件で選別する。
 //
 // ctx: 実行に適用するコンテキスト。
 // req: 対象の worktree と、消してはならない branch 名。
@@ -120,6 +126,24 @@ func (m *Manager) sweepRepoBranches(ctx context.Context, repoDir, prefix string,
 			"repo", repoDir, "error", err)
 		return nil
 	}
+	commonDir, err := gitCommonDir(ctx, repoDir)
+	if err != nil {
+		m.logger.Warn("共通ディレクトリを引けないので、このリポジトリの孤児 branch は消しません",
+			"repo", repoDir, "error", err)
+		return nil
+	}
+	// **`worktree list --porcelain` は ref が壊れた worktree の branch を答えない**
+	// （実測: 2026-08-25）。それだけを見ると、**生きている worktree の branch を
+	// 孤児と誤判定する。**`<共通ディレクトリ>/worktrees/*/HEAD` の symref を直接読んで補う。
+	headRefs, err := worktreeHeadRefs(commonDir)
+	if err != nil {
+		m.logger.Warn("worktree の HEAD を読めないので、このリポジトリの孤児 branch は消しません",
+			"repo", repoDir, "error", err)
+		return nil
+	}
+	for _, name := range headRefs {
+		inWorktree[name] = true
+	}
 
 	var deleted []string
 	for _, raw := range branches {
@@ -143,13 +167,102 @@ func (m *Manager) sweepRepoBranches(ctx context.Context, repoDir, prefix string,
 			m.logger.Warn("孤児 branch の SHA を控えられませんでした（削除は続けます）",
 				"repo", repoDir, "branch", raw, "error", tipErr)
 		}
-		if err := gitBranchDelete(ctx, repoDir, name); err != nil {
+		if err := gitBranchDelete(ctx, repoDir, name, m.brokenRefPolicy()); err != nil {
 			m.logger.Warn("孤児 branch を消せませんでした", "repo", repoDir, "branch", raw, "error", err)
 			continue
 		}
 		m.logger.Info("孤児 branch を消しました",
 			"repo", repoDir, "branch", raw, "sha", tip,
 			"restore", "git -C "+repoDir+" branch "+raw+" "+tip)
+		deleted = append(deleted, repoDir+": "+raw)
+	}
+	deleted = append(deleted, m.sweepBrokenRefs(ctx, repoDir, commonDir, prefix, keep, inWorktree)...)
+	return deleted
+}
+
+// sweepBrokenRefs は、branch の一覧に出てこない**壊れた ref**を掃除する（設計 3-22b）。
+//
+// **`git for-each-ref refs/heads` は壊れた ref を一覧に出さない**
+// （`warning: ignoring broken ref …` を出して飛ばす。実測: 2026-08-25、git 2.50.1）。
+// そのため sweepRepoBranches の本体だけでは、**壊れた ref は起動のたびに素通りして
+// 溜まり続ける。**そこで `<共通ディレクトリ>/refs/heads` の下を実ファイルとして歩き、
+// 名前を拾ってから brokenBranchRef の条件で選別する。
+//
+// **歩くのは名前を拾うためだけである。**消してよいかの判定は brokenBranchRef が全部行い、
+// 削除は gitBranchDelete を通す（packed-refs 側が生き返っていないかの確認まで含む）。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// commonDir: そのリポジトリの共通ディレクトリ（`.git`）。
+// prefix: continuo が作った branch の接頭辞（空文字ではないこと）。
+// keep: 消してはならない branch 名の集合。
+// inWorktree: worktree が使っている branch 名の集合（HEAD のファイルから補ったもの）。
+// 戻り値: 消した branch を `<リポジトリ>: <branch>` の形で並べたもの。
+func (m *Manager) sweepBrokenRefs(
+	ctx context.Context,
+	repoDir, commonDir, prefix string,
+	keep, inWorktree map[string]bool,
+) []string {
+	headsDir := filepath.Join(commonDir, "refs", "heads")
+	var candidates []string
+	err := filepath.WalkDir(headsDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			// 読めないディレクトリは飛ばす。**掃除は最良努力である。**
+			if errors.Is(walkErr, fs.ErrNotExist) {
+				return nil
+			}
+			m.logger.Warn("refs/heads の下を歩けないので、その先は見ません",
+				"repo", repoDir, "path", path, "error", walkErr)
+			if entry != nil && entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		// **シンボリックリンクは1つも辿らない。**IsRegular でないものは名前も拾わない。
+		if entry.IsDir() || !entry.Type().IsRegular() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(headsDir, path)
+		if relErr != nil {
+			return nil
+		}
+		candidates = append(candidates, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		m.logger.Warn("refs/heads の下を歩けないので、壊れた ref の掃除は行いません",
+			"repo", repoDir, "heads_dir", headsDir, "error", err)
+		return nil
+	}
+
+	sort.Strings(candidates)
+	var deleted []string
+	for _, raw := range candidates {
+		if !strings.HasPrefix(raw, prefix) || inWorktree[raw] || keep[raw] {
+			continue
+		}
+		name, warnings := normalize.Normalize(raw)
+		m.logWarnings(warnings)
+		if name.String() != raw {
+			m.logger.Warn("branch 名が正規化で変わるので壊れた ref として消しません",
+				"repo", repoDir, "branch", raw, "normalized", name.String())
+			continue
+		}
+		target, brokenErr := brokenBranchRef(ctx, repoDir, name, m.brokenRefPolicy())
+		if brokenErr != nil {
+			m.logger.Warn("壊れた ref かどうかを判定できませんでした",
+				"repo", repoDir, "branch", raw, "error", brokenErr)
+			continue
+		}
+		if target == nil {
+			// 壊れていない（＝ for-each-ref が既に見ている）。
+			continue
+		}
+		if err := gitBranchDelete(ctx, repoDir, name, m.brokenRefPolicy()); err != nil {
+			m.logger.Warn("壊れた ref の branch を消せませんでした",
+				"repo", repoDir, "branch", raw, "error", err)
+			continue
+		}
 		deleted = append(deleted, repoDir+": "+raw)
 	}
 	return deleted

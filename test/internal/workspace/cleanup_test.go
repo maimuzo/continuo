@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f24874fbff00aee7616714e70fda518342dfabf8b07d40101b83bb0c98468cc1", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "dbc17f7f26b75ca6d10123f3a441badd870052ea412883d087d848c047405a24", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
 // 7本のパスに、それぞれ対応するテストがある。
@@ -105,7 +105,7 @@ func cleanupRequest(cf *cleanupFixture) workspace.CleanupRequest {
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P011"}
 //
 // 目的: 未コミットの変更（未追跡のファイル）が残っていれば worktree を消さないことを確認する
 // （設計 3-9 の手順2。エージェントが作った成果物が消えるのを防ぐ）。
@@ -231,7 +231,7 @@ func TestCleanup_push済みなら消してbranchと設定ファイルも消す(t
 	}
 }
 
-// {"RUCM-PATH": "P004"}
+// {"RUCM-PATH": "P010"}
 //
 // 目的: upstream があり push されていない commit が残っていれば消さないことを確認する
 // （設計 3-9 の手順2b の upstream がある側）。
@@ -307,7 +307,7 @@ func TestCleanup_upstreamが無くbaseと差分が無ければ消す(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P014"}
 //
 // 目的: upstream が無く base も分からないときは、判定できないので消さないことを確認する
 // （設計 3-9 の手順2b。base を推測して消すと成果を失う）。
@@ -383,7 +383,7 @@ func TestCleanup_before_removeが失敗しても片付けを続ける(t *testing
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P012"}
 //
 // 目的: 消す直前の封じ込め検査に落ちたら、何も消さずに失敗することを確認する
 // （設計 3-20。「消す直前」がいちばん危ない検査点である）。
@@ -412,7 +412,7 @@ func TestCleanup_置き場所の外側は消さずに失敗する(t *testing.T) 
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P015"}
 //
 // 目的: cleanup.enabled が偽なら何も消さず、かつ「見送った」と分かる戻り値になることを
 // 確認する（設計 3-9 の手順5。デバッグ時に中身を見たい場合がある）。
@@ -448,7 +448,7 @@ func TestCleanup_無効なら何もしない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P013"}
 //
 // 目的: 片付けを始める判定が cleanup.on_states に入った時点であり、
 // active でなくなった時点ではないことを確認する（設計 3-9 の手順1）。

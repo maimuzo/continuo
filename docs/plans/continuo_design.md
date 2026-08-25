@@ -2221,6 +2221,7 @@ continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 5. 作成に失敗したら、その場で孤児 branch を消す
    → git worktree add -b は branch を先に作ってからパスを検査するので、
      パスの検査で落ちても branch が残る（実測）
+5b. 壊れた ref（reference broken）だったら、その ref のファイルを消して、もう1回だけ試す（3-22b）
 6. 3-20 の検査を通す（絶対パスに直して、置き場所の内側にあることを確かめる）
 7. herdr の worktree.open を、いま作ったパスを path に指定して呼ぶ
    → **create ではない。**実体は段4で git が作り終えている。
@@ -2261,6 +2262,91 @@ issue を足せる人は、ボードに載るリポジトリの集合を変え�
 **この機械では `~/ghq` の下がシンボリックリンクで実体を指しているが、git が実体に解決して返すので問題にならない**（実測）。
 
 **人間が置き場所の下に手でディレクトリを作る場合は想定しない。**continuo が管理する領域である。
+
+### 3-22b. 壊れた ref を消してよい条件
+
+**言いたいこと。**`refs/heads/<branch>` のファイルが読めない状態になると、git のコマンドでは
+消せず、その issue には二度と着手できない。**continuo がそのファイルを1つ消して、1回だけやり直す。**
+消してよい相手は、continuo が作る branch の、本当に壊れている loose な ref だけである。
+
+**何が起きるか**（実測: 2026-08-25、git 2.50.1）。`<clone>/.git/refs/heads/continuo/octocat/hello-world/1303`
+を0バイトにすると、次のようになる。
+
+| 実行するもの | 返るもの |
+| --- | --- |
+| `git worktree add -b <branch> <path> develop` | `fatal: cannot lock ref '<名前>': … reference broken` / exit 255 |
+| `git update-ref -d refs/heads/<branch>` | `error: cannot lock ref '<名前>': … reference broken` / exit 1 |
+| `git branch -D <branch>` | `error: branch '<名前>' not found` / exit 1 |
+| `git for-each-ref refs/heads` | `warning: ignoring broken ref …`（一覧には出ない） |
+
+**消してよい条件は7つで、全部を満たすときだけ消す**（`internal/workspace/brokenref.go`）。
+
+| 何を見るか | 通す条件 |
+| --- | --- |
+| 名前の出どころ | `herdr.worktree.branch_template` の接頭辞（既定 `continuo/`）が空でなく、branch 名がそれで始まる |
+| refname の正しさ | `git check-ref-format refs/heads/<名前>` が通る |
+| 正常な branch か | `git show-ref --verify` が失敗し、`git rev-parse --verify` も失敗する |
+| 置き場所 | **途中のシンボリックリンクを解決したうえで** `<共通ディレクトリ>/refs/heads` の内側に収まる |
+| ファイルの種類 | 実在し、**通常のファイルである**（ディレクトリとシンボリックリンクは触らない） |
+| 中身 | **ref として読めない**（40桁／64桁の16進でも `ref: ` 始まりでもない） |
+| 割り込み | 判定した時点の大きさと最終更新時刻が、**消す直前にもう一度読んでも一致する** |
+
+**なぜ文字列の前方一致では足りないか。**`refs/heads/continuo/<何か>` を別のディレクトリへの
+シンボリックリンクにされると、前方一致は通るのに実体は `.git` の外にある。
+**`filepath.EvalSymlinks` で親を解決してから比べる**（3-20 の `CheckContainmentResolved` と同じ扱い）。
+
+**なぜ refname と中身まで見るか。**`<名前>.lock` は git が refname として拒むので show-ref も
+rev-parse も必ず落ちるが、そのファイルは**別の git プロセスが握っている lock** でありうる。
+また 64桁の16進を SHA-1 のリポジトリに置くと `reference broken` になるが、**指していた SHA は
+読める。**読める中身があるなら、消せばその情報が失われる。
+
+**なぜ「壊れた ref を無視して別の branch 名にする」を採らないか。**置き場所も branch 名も
+issue 番号から決まる（3-22）。名前を変えると、片付け・復元・`continuo abandon` が
+その issue の worktree を引けなくなる。**壊れているのは1ファイルなので、それを消すのが最小である。**
+
+### 3-22c. 壊れた ref を消したあとに確かめること
+
+**言いたいこと。**ファイルを1つ消しただけでは「branch が消えた」ことにならない。
+**packed-refs 側の同名の ref が生き返る。**消したあとに必ず確かめ直し、
+**消したことは人間の画面に出す。**
+
+**やり直しは1回だけである。**着手（`git worktree add`）も片付け（`git branch -D`）も、
+ref のファイルを消したら**もう一度だけ**同じ操作を撃つ。2回目も失敗したら、そのままの失敗を返す。
+
+**packed-refs 側が生き返る。**`git pack-refs --all` を受けた branch の loose な ref が壊れていると、
+loose を消した瞬間に packed 側の ref が有効になる（実測: 2026-08-25、git 2.50.1）。
+しかも packed 側は**古い commit**を指しうる。そこで次のようにする。
+
+| どの経路 | 消したあとにすること |
+| --- | --- |
+| 片付け（`git branch -D`） | `git show-ref` で存在を確かめ、生き返っていたら `git branch -D` を1回だけ撃ち直す。それでも残るならエラーを返し、**`BranchDeleted` を立てない** |
+| 着手（`git worktree add`） | 生き返っていたら、**その commit で worktree を作ることをログに残す**（base からの作り直しではない） |
+
+**片付けの検算では、detached HEAD と壊れた ref を混同しない**（3-9 の段4）。
+`git worktree list --porcelain` は、ref が壊れた worktree について
+`HEAD 0000000000000000000000000000000000000000` の行だけを出し、`branch` の行も `detached` の行も
+出さない（実測: 2026-08-25）。**detached HEAD の worktree でも branch 名は空になる**ので、
+`detached` の行が出ているかどうかで分ける。**壊れた ref の側に入るときは、
+`<共通ディレクトリ>/worktrees/<名前>/HEAD` の symref を直接読み、その worktree が
+本当にその branch を指していることを確かめる**（HEAD のファイルは ref が壊れていても読める）。
+
+**消す前に、指していた commit を控える。**「壊れた ref には読める情報が1バイトも無い」は事実ではない。
+`<共通ディレクトリ>/logs/refs/heads/<branch>` の最後の行に、最後の SHA がそのまま残っている
+（git のコマンドからは `warning: ignoring broken ref` で読めないが、ファイルとしては読める）。
+**読めたら、そのまま実行すれば戻せるコマンドを書く**（3-9 の手順6b の孤児 branch と同じ形）。
+
+```
+git -C <リポジトリ> branch continuo/octocat/hello-world/188 826bf68e8341e40d036d30702b6587f03975810f
+```
+
+**消したことは人間の画面に出す。**`continuo abandon` は Logger を渡さないので、ログにだけ書くと
+1文字も届かない。`CleanupResult.Notices` に1行積み、`continuo abandon` がそれを出す。
+
+**起動時の掃除でも壊れた ref を見る**（3-9 の手順6b）。`git for-each-ref refs/heads` は壊れた ref を
+一覧に出さないので、branch の一覧だけでは1件も掃除できない。`<共通ディレクトリ>/refs/heads` の下を
+**実ファイルとして歩いて**名前を拾い、上の7条件で選別する。**worktree が使っている branch は
+`<共通ディレクトリ>/worktrees/*/HEAD` から読んで除外する**（`worktree list` は壊れた ref の
+worktree の branch を答えないので、それだけを見ると生きている worktree の ref を消す）。
 
 ### 3-23. hook を受ける socket の置き場所
 

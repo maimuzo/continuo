@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -150,6 +152,13 @@ type worktreeEntry struct {
 	// Branch はその worktree がチェックアウトしている branch 名である。
 	// **detached HEAD の worktree では空文字になる**（`branch` の行が出ない）。
 	Branch string
+	// Detached はその worktree が detached HEAD かどうかである。
+	//
+	// **Branch が空になる理由は2つあり、この真偽値だけが両者を分ける。**
+	// 1つは detached HEAD（`detached` の行が出る）、もう1つは
+	// **その branch の ref が壊れていて git が答えを出せない**場合
+	// （`HEAD 000…0` の行だけが出て、`branch` も `detached` も出ない。実測: 2026-08-25）。
+	Detached bool
 }
 
 // gitWorktreeEntries は `git worktree list --porcelain` の出力を1件ずつに切って返す。
@@ -173,6 +182,10 @@ func gitWorktreeEntries(ctx context.Context, repoDir string) ([]worktreeEntry, e
 		line := scanner.Text()
 		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
 			entries = append(entries, worktreeEntry{Path: filepath.Clean(strings.TrimSpace(rest))})
+			continue
+		}
+		if strings.TrimSpace(line) == "detached" && len(entries) > 0 {
+			entries[len(entries)-1].Detached = true
 			continue
 		}
 		rest, ok := strings.CutPrefix(line, "branch ")
@@ -222,7 +235,60 @@ func gitBranchExists(ctx context.Context, repoDir string, branch normalize.SafeN
 	return code == 0, nil
 }
 
-// gitWorktreeAdd は worktree を作る（3-22 の段4・段5）。
+// gitWorktreeAdd は worktree を作る（3-22 の段4・段5・段5b）。
+//
+// **失敗したら壊れた ref を1回だけ始末して、もう一度だけ試す**（段5b。設計 3-22b）。
+// `<clone>/.git/refs/heads/<branch>` が読めない状態（`reference broken`）になっていると、
+// `git worktree add` は何度叩いても同じ失敗を返す。そのファイルは git のコマンドでは
+// 消せないので、continuo がファイルとして消してから作り直す。
+//
+// **やり直しは1回だけである。**2回目も失敗したら、そのままの失敗を返す。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// path: 作る worktree の絶対パス。
+// branch: worktree が指す branch 名。
+// base: branch を新しく作るときの派生元。branch が既にある場合は使わない。
+// policy: 壊れた ref を消してよいかの判断に使う材料。
+// 戻り値: 作成に失敗した場合のエラー。孤児 branch の削除も試みた場合は、
+// その結果をエラー文に含める。
+func gitWorktreeAdd(
+	ctx context.Context,
+	repoDir, path string,
+	branch normalize.SafeName,
+	base normalize.SafeName,
+	policy brokenRefPolicy,
+) error {
+	err := gitWorktreeAddOnce(ctx, repoDir, path, branch, base)
+	if err == nil {
+		return nil
+	}
+	pruned, pruneErr := pruneBrokenBranchRef(ctx, repoDir, branch, policy)
+	if pruneErr != nil {
+		policy.log(slog.LevelWarn, "壊れた ref を始末できませんでした（元の失敗をそのまま返します）",
+			"branch", branch.String(), "repo", repoDir, "error", pruneErr)
+		return err
+	}
+	if !pruned {
+		// **壊れた ref ではなかった。**今までどおりの失敗を返す。
+		return err
+	}
+	// **packed-refs 側の ref が生き返っていることがある。**その場合、やり直しは
+	// base からの作り直しではなく、**packed-refs が指す（古いかもしれない）commit の
+	// チェックアウト**になる。どちらだったのかを必ずログに残す。
+	if revived, existsErr := gitBranchExists(ctx, repoDir, branch); existsErr == nil && revived {
+		tip, _ := gitBranchTip(ctx, repoDir, branch)
+		policy.log(slog.LevelWarn,
+			"壊れた loose な ref を消したら packed-refs 側の ref が生き返ったので、その commit で worktree を作ります",
+			"branch", branch.String(), "worktree", path, "repo", repoDir, "sha", tip)
+	} else {
+		policy.log(slog.LevelInfo, "壊れた ref を消したので worktree の作成をやり直します",
+			"branch", branch.String(), "worktree", path, "repo", repoDir)
+	}
+	return gitWorktreeAddOnce(ctx, repoDir, path, branch, base)
+}
+
+// gitWorktreeAddOnce は worktree を1回だけ作りに行く（3-22 の段4・段5）。
 //
 // branch が既にあればそれをチェックアウトし、無ければ base から新しく作る。
 // **`git worktree add -b` は branch を先に作ってからパスを検査するので、
@@ -236,7 +302,7 @@ func gitBranchExists(ctx context.Context, repoDir string, branch normalize.SafeN
 // base: branch を新しく作るときの派生元。branch が既にある場合は使わない。
 // 戻り値: 作成に失敗した場合のエラー。孤児 branch の削除も試みた場合は、
 // その結果をエラー文に含める。
-func gitWorktreeAdd(
+func gitWorktreeAddOnce(
 	ctx context.Context,
 	repoDir, path string,
 	branch normalize.SafeName,
@@ -301,18 +367,69 @@ func gitCurrentBranch(ctx context.Context, worktreePath string) (string, error) 
 // repoDir: 検算済みのリポジトリの作業ディレクトリ。
 // worktreePath: 対象の worktree の絶対パス。
 // 戻り値の1つ目: チェックアウト中の branch 名。**detached HEAD なら空文字である。**
-// 戻り値の2つ目: 一覧を引けない場合・**その worktree が登録されていない場合**のエラー。
-func gitWorktreeBranchAt(ctx context.Context, repoDir, worktreePath string) (string, error) {
+// 戻り値の2つ目: detached HEAD かどうか。
+// **branch 名が空になる理由は2つあり、この真偽値だけが両者を分ける**
+// （detached HEAD か、ref が壊れていて git が答えを出せないか）。
+// 戻り値の3つ目: 一覧を引けない場合・**その worktree が登録されていない場合**のエラー。
+func gitWorktreeHeadAt(ctx context.Context, repoDir, worktreePath string) (string, bool, error) {
 	entries, err := gitWorktreeEntries(ctx, repoDir)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	for _, entry := range entries {
 		if samePath(entry.Path, worktreePath) {
-			return entry.Branch, nil
+			return entry.Branch, entry.Detached, nil
 		}
 	}
-	return "", i18n.Errorf(i18n.KeyWorkspaceGitWorktreeBranchAtNotRegistered, worktreePath, repoDir)
+	return "", false, i18n.Errorf(i18n.KeyWorkspaceGitWorktreeBranchAtNotRegistered, worktreePath, repoDir)
+}
+
+// worktreeHeadRefs は、`<共通ディレクトリ>/worktrees/*/HEAD` を直接読んで、
+// **各 worktree がどの branch を指しているか**を返す（設計 3-22b）。
+//
+// **`git worktree list --porcelain` の代わりではなく、その穴を埋めるものである。**
+// あちらは ref が壊れた worktree について `branch` の行を出さない（実測: 2026-08-25）。
+// **その worktree の branch を「誰も使っていない」と誤判定すると、生きている
+// worktree の ref を消しに行くことになる。**HEAD のファイルは symref の1行
+// （`ref: refs/heads/<名前>`）なので、ref が壊れていても読める。
+//
+// commonDir: リポジトリの共通ディレクトリ（`.git`）。
+// 戻り値の1つ目: worktree の絶対パス（Clean 済み）から branch 名への対応。
+// **読めなかった worktree は入らない。**
+// 戻り値の2つ目: `worktrees` の下を読めなかった場合のエラー。**そこが無い場合は
+// エラーにしない**（worktree を1つも持たないリポジトリでは普通に無い）。
+func worktreeHeadRefs(commonDir string) (map[string]string, error) {
+	base := filepath.Join(filepath.Clean(commonDir), "worktrees")
+	dirs, err := os.ReadDir(base)
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]string{}, nil
+	}
+	if err != nil {
+		return nil, i18n.Errorf(i18n.KeyWorkspaceWorktreeHeadRefsUnreadable, base, err)
+	}
+	refs := map[string]string{}
+	for _, dir := range dirs {
+		if !dir.IsDir() {
+			continue
+		}
+		// `gitdir` は `<worktree>/.git` の絶対パスを1行で持つ。
+		gitdir, err := os.ReadFile(filepath.Join(base, dir.Name(), "gitdir"))
+		if err != nil {
+			continue
+		}
+		worktreePath := filepath.Clean(filepath.Dir(strings.TrimSpace(string(gitdir))))
+		head, err := os.ReadFile(filepath.Join(base, dir.Name(), "HEAD"))
+		if err != nil {
+			continue
+		}
+		name, ok := strings.CutPrefix(strings.TrimSpace(string(head)), "ref: refs/heads/")
+		if !ok || name == "" {
+			// detached HEAD の worktree は SHA が1行あるだけである。
+			continue
+		}
+		refs[worktreePath] = name
+	}
+	return refs, nil
 }
 
 // gitBranchTip は branch が指している commit の SHA を返す。
@@ -334,13 +451,84 @@ func gitBranchTip(ctx context.Context, repoDir string, branch normalize.SafeName
 // gitBranchDelete は `git branch -D` で branch を消す（3-9 の段4）。
 // herdr の worktree.remove は branch を消さないので、continuo が自分で叩く。
 //
+// **`git branch -D` が失敗したら、壊れた ref を1回だけ始末する**（設計 3-22b）。
+// ref のファイルが読めない状態（`reference broken`）だと `git branch -D` は
+// `error: branch '<名前>' not found` で断り、**その branch は誰にも消せないまま残る。**
+//
+// **ファイルを消しただけで「消えた」と答えてはならない。**壊れた loose な ref が
+// packed-refs 側の生きた ref を隠していると、**loose を消した瞬間に packed 側が生き返る**
+// （実測: 2026-08-25、git 2.50.1）。しかも packed 側は古い commit を指しうる。
+// そこで**消したあとに存在を確かめ直し、生き返っていたら `git branch -D` を1回だけ撃ち直す。**
+// それでも残るなら、**「消した」とは答えずにエラーを返す**（呼び出し側が Leftovers に積む）。
+//
 // ctx: 実行に適用するコンテキスト。
 // repoDir: リポジトリの作業ディレクトリ。
 // branch: 消す branch 名。
-// 戻り値: 削除に失敗した場合のエラー。
-func gitBranchDelete(ctx context.Context, repoDir string, branch normalize.SafeName) error {
+// policy: 壊れた ref を消してよいかの判断に使う材料。
+// 戻り値: 削除に失敗した場合のエラー。**nil を返したときは branch が本当に無い。**
+func gitBranchDelete(
+	ctx context.Context, repoDir string, branch normalize.SafeName, policy brokenRefPolicy,
+) error {
 	_, err := runGit(ctx, repoDir, "branch", "-D", branch.String())
-	return err
+	if err == nil {
+		return nil
+	}
+	pruned, pruneErr := pruneBrokenBranchRef(ctx, repoDir, branch, policy)
+	if pruneErr != nil {
+		policy.log(slog.LevelWarn, "壊れた ref を始末できませんでした（元の失敗をそのまま返します）",
+			"branch", branch.String(), "repo", repoDir, "error", pruneErr)
+		return err
+	}
+	if !pruned {
+		return err
+	}
+	return confirmBranchGone(ctx, repoDir, branch, policy, err)
+}
+
+// confirmBranchGone は、壊れた ref のファイルを消したあとに branch が本当に消えたかを
+// 確かめ、packed-refs 側から生き返っていたら `git branch -D` を1回だけ撃ち直す。
+//
+// **撃ち直しは合計1回で止める。**そこまでやって残るなら、消せない理由は
+// 壊れた ref ではない。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: リポジトリの作業ディレクトリ。
+// branch: 消した branch 名。
+// policy: ログの出し先。
+// original: 最初の `git branch -D` の失敗（エラー文に含める）。
+// 戻り値: **branch が残っている場合のエラー。**消え切っていれば nil。
+func confirmBranchGone(
+	ctx context.Context,
+	repoDir string,
+	branch normalize.SafeName,
+	policy brokenRefPolicy,
+	original error,
+) error {
+	exists, existsErr := gitBranchExists(ctx, repoDir, branch)
+	if existsErr != nil {
+		return i18n.Errorf(
+			i18n.KeyWorkspaceBrokenRefBranchCheckFailed, branch.String(), original, existsErr)
+	}
+	if !exists {
+		return nil
+	}
+	tip, _ := gitBranchTip(ctx, repoDir, branch)
+	policy.log(slog.LevelWarn,
+		"壊れた loose な ref を消したら packed-refs 側の ref が生き返ったので、branch を消し直します",
+		"branch", branch.String(), "repo", repoDir, "sha", tip)
+	if _, retryErr := runGit(ctx, repoDir, "branch", "-D", branch.String()); retryErr != nil {
+		return i18n.Errorf(
+			i18n.KeyWorkspaceBrokenRefBranchSurvived, branch.String(), retryErr)
+	}
+	still, existsErr := gitBranchExists(ctx, repoDir, branch)
+	if existsErr != nil {
+		return i18n.Errorf(
+			i18n.KeyWorkspaceBrokenRefBranchCheckFailed, branch.String(), original, existsErr)
+	}
+	if still {
+		return i18n.Errorf(i18n.KeyWorkspaceBrokenRefBranchSurvived, branch.String(), original)
+	}
+	return nil
 }
 
 // gitStatusPorcelainLimit は `git status --porcelain` の出力を読む上限（バイト）である。

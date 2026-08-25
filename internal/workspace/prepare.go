@@ -196,7 +196,7 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		if err := os.MkdirAll(filepath.Dir(loc.Path), rootDirPerm); err != nil {
 			return nil, i18n.Errorf(i18n.KeyWorkspacePrepareParentDirCreateFailed, filepath.Dir(loc.Path), err)
 		}
-		if err := gitWorktreeAdd(ctx, repoPath, loc.Path, loc.Branch, base); err != nil {
+		if err := gitWorktreeAdd(ctx, repoPath, loc.Path, loc.Branch, base, m.brokenRefPolicy()); err != nil {
 			return nil, err
 		}
 		result.Created = true
