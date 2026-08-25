@@ -24,6 +24,13 @@ const (
 	turnStalled
 	// turnAborted は ctx が終わったことを表す。
 	turnAborted
+	// turnSendFailed は herdr への呼び出しそのものが失敗したことを表す。
+	//
+	// **`turnStalled` と混ぜてはならない。**混ぜると、turn を1文字も送れていないのに
+	// 「herdr は agent が待機状態になったと答えたが Stop hook の通知が届かなかった」という、
+	// **起きていないことを断定した文面が issue に残る**（`agent_not_found` /
+	// `agent_not_ready` / socket 断のいずれでもそうなる）。
+	turnSendFailed
 )
 
 // startTurnLoop は run ごとの turn ループの goroutine を起こす（設計 3-8）。
@@ -98,6 +105,9 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		snap := rs.snapshot()
 
 		var outcome turnOutcome
+		// **送信そのものが失敗したときの原因を握っておく。**握らないと、issue に
+		// 残す理由が「Stop hook が届かなかった」という別の話にすり替わる。
+		var sendErr error
 		if awaitFirst {
 			// **引き継いだ run である。turn を送らずに、走っている turn の終わりを待つ**
 			// （設計 3-4 の段5a2「hook を待ち、来なければ stall 検知で拾う」の前半）。
@@ -106,7 +116,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			awaitFirst = false
 			o.logger.Info("引き継いだ run の turn の終わりを待ちます（turn は送りません）",
 				"identifier", snap.Identifier)
-			outcome = o.confirmTurnEnd(ctx, rs, false)
+			outcome, sendErr = o.confirmTurnEnd(ctx, rs, false)
 		} else {
 			if snap.TurnCount >= o.cfg.Agent.MaxDispatchTurns {
 				o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
@@ -135,7 +145,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				return
 			}
 
-			outcome = o.sendTurn(ctx, rs, text)
+			outcome, sendErr = o.sendTurn(ctx, rs, text)
 		}
 		if !rs.currentWorker(epoch) {
 			// **待っている間に、巡回の stall 検知などが先にこの run を諦めていた。**
@@ -186,6 +196,18 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"\n【よくある原因】hook を受ける socket のパスが変わった / "+
 				"エージェントが `/hooks` などで設定を上書きした。"+
 				"\n【対処】Status を着手待ちへ戻してください。次の着手で設定を書き直します。")
+			return
+		case turnSendFailed:
+			// **turn は1文字も届いていない。**Stop hook を疑わせる文面を出してはならない。
+			o.abandonRun(ctx, rs, fmt.Sprintf(
+				"continuo が herdr へ指示を送れませんでした。"+
+					"**この turn の指示は Claude Code に届いていません。**"+
+					"\n【確かめ方】herdr の画面で、この issue の pane がまだ開いているかを見てください。"+
+					"pane が消えていれば、そこで動いていた Claude Code はもう居ません。"+
+					"\n【よくある原因】人間が herdr の画面から pane を閉じた（agent_not_found） / "+
+					"herdr が応答しない（socket が落ちている） / agent がまだ指示を受けられない（agent_not_ready）。"+
+					"\n【対処】herdr が動いていることを確かめてから、Status を着手待ちへ戻してください。"+
+					"\n元のエラー: %v", sendErr))
 			return
 		case turnQuotaRecovered:
 			// 枠が明けた。**次の turn を送る（この送信は turn 数に数える。設計 3-27）。**
@@ -253,8 +275,11 @@ func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, er
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // text: 送る本文。
-// 戻り値: turn の結果。
-func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) turnOutcome {
+// 戻り値の1つ目: turn の結果。
+// 戻り値の2つ目: **`turnSendFailed` のときだけ入る** herdr が返した元のエラー。
+// **これを捨ててはならない。**捨てると、issue に残す理由から本当の原因
+// （`agent_not_found` / `agent_not_ready` / socket 断）が消える。
+func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) (turnOutcome, error) {
 	turnCount := rs.beginTurn(o.now())
 	o.logger.Info("turn を送ります",
 		"identifier", rs.issue().Identifier, "turn", turnCount, "max_dispatch_turns", o.cfg.Agent.MaxDispatchTurns)
@@ -269,23 +294,25 @@ func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) 
 	})
 	if err != nil {
 		if ctx.Err() != nil {
-			return turnAborted
+			return turnAborted, nil
 		}
 		if herdr.IsCode(err, herdr.ErrCodeTimeout) {
-			if outcome := o.afterWaitTimeout(ctx, rs); outcome != turnWaitAgain {
-				return outcome
+			if outcome, waitErr := o.afterWaitTimeout(ctx, rs); outcome != turnWaitAgain {
+				return outcome, waitErr
 			}
 			// **打ち切らずに待ち直す。**`agent.prompt` は再送しない（二重に投入される）。
 			// 画面が止まったかどうかは巡回の stall 検知（checkStalls）だけが決める。
 			return o.confirmTurnEnd(ctx, rs, false)
 		}
+		// **`turnStalled` を返してはならない。**turn は1文字も届いていない。
+		// 「Stop hook が届かなかった」は、待ち受けが返ったあとにだけ言えることである。
 		o.logger.Warn("turn を送れませんでした", "identifier", rs.issue().Identifier, "error", err)
-		return turnStalled
+		return turnSendFailed, err
 	}
 
 	switch res.Agent.AgentStatus {
 	case herdr.AgentStatusBlocked:
-		return turnBlocked
+		return turnBlocked, nil
 	case herdr.AgentStatusIdle, herdr.AgentStatusDone:
 		return o.confirmTurnEnd(ctx, rs, true)
 	default:
@@ -303,10 +330,11 @@ func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) 
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// 戻り値: turn の結果。枠待ちでなければ `turnWaitAgain`。
-func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) turnOutcome {
+// 戻り値の1つ目: turn の結果。枠待ちでなければ `turnWaitAgain`。
+// 戻り値の2つ目: **`turnSendFailed` のときだけ入る** herdr が返した元のエラー。
+func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turnOutcome, error) {
 	if !o.isQuotaWaiting(rs) {
-		return turnWaitAgain
+		return turnWaitAgain, nil
 	}
 
 	resetAt, ok := o.quotaResetAt()
@@ -322,7 +350,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) turnO
 
 	for {
 		if ctx.Err() != nil {
-			return turnAborted
+			return turnAborted, nil
 		}
 		iterationStart := o.now()
 		// 枠待ちの間は agent.wait で待ち直す（設計 3-2 の段3）。
@@ -335,7 +363,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) turnO
 			switch res.Agent.AgentStatus {
 			case herdr.AgentStatusBlocked:
 				rs.clearWaitingQuota(o.now())
-				return turnBlocked
+				return turnBlocked, nil
 			case herdr.AgentStatusIdle, herdr.AgentStatusDone:
 				if _, seen := rs.stopSeen(); seen {
 					rs.clearWaitingQuota(o.now())
@@ -344,11 +372,13 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) turnO
 			}
 		} else if !herdr.IsCode(err, herdr.ErrCodeTimeout) {
 			if ctx.Err() != nil {
-				return turnAborted
+				return turnAborted, nil
 			}
+			// **これも「送れなかった」側である。**`agent.wait` が答えないことと、
+			// Stop hook が届かないことは別の話なので、`turnStalled` に混ぜない。
 			o.logger.Warn("枠待ちの待ち直しに失敗しました", "identifier", rs.issue().Identifier, "error", err)
 			rs.clearWaitingQuota(o.now())
-			return turnStalled
+			return turnSendFailed, err
 		}
 
 		// 枠が明けたか。**印を外す契機は「枠の resets_at を過ぎたこと」だけである**（設計 3-27）。
@@ -365,7 +395,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) turnO
 		// **下限の待ち。**`agent.wait` が即返っても1周あたり poll_wait_ms は必ず空ける。
 		if rest := pollWait - o.now().Sub(iterationStart); rest > 0 {
 			if !sleepCtx(ctx, rest) {
-				return turnAborted
+				return turnAborted, nil
 			}
 		}
 	}
@@ -402,20 +432,21 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// 戻り値: turn の結果。`turnQuotaRecovered` なら turn ループが次の turn を送る
+// 戻り値の1つ目: turn の結果。`turnQuotaRecovered` なら turn ループが次の turn を送る
 // （**この送信は turn 数に数える。**設計 3-27。数えないと、枠待ちと復帰を繰り返す間に
 // max_dispatch_turns が一度も発火しない）。
-func (o *Orchestrator) afterQuotaReset(ctx context.Context, rs *runState) turnOutcome {
+// 戻り値の2つ目: **`turnSendFailed` のときだけ入る** herdr が返した元のエラー。
+func (o *Orchestrator) afterQuotaReset(ctx context.Context, rs *runState) (turnOutcome, error) {
 	status, err := o.agentStatus(ctx, rs)
 	if err != nil {
 		o.logger.Warn("枠明けの agent_status を読めません（継続の指示を送ります）",
 			"identifier", rs.issue().Identifier, "error", err)
-		return turnQuotaRecovered
+		return turnQuotaRecovered, nil
 	}
 
 	switch status {
 	case herdr.AgentStatusBlocked:
-		return turnBlocked
+		return turnBlocked, nil
 	case herdr.AgentStatusWorking:
 		// **Claude Code が自分で継続している。**送らずに hook を待つ（設計 3-27）。
 		// Claude Code 2.1.234 以降、枠のリセット時にセッションを自動継続する機能が
@@ -427,7 +458,7 @@ func (o *Orchestrator) afterQuotaReset(ctx context.Context, rs *runState) turnOu
 	default:
 		o.logger.Info("枠が明けたので継続の指示を1回送ります（この送信は turn 数に数えます）",
 			"identifier", rs.issue().Identifier)
-		return turnQuotaRecovered
+		return turnQuotaRecovered, nil
 	}
 }
 
@@ -507,12 +538,14 @@ func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
 // strictFirstWait: 「待ち受けが返った直後」なら真。真のときは、settle_ms のあいだに
 // `Stop` が来なければ stall として扱う。**枠明けに Claude Code が自分で継続した場合は
 // 偽を渡す**（まだ走り出したばかりで `Stop` は来ないため。設計 3-27）。
-// 戻り値: turn の結果。
+// 戻り値の1つ目: turn の結果。
+// 戻り値の2つ目: **`turnSendFailed` のときだけ入る** herdr が返した元のエラー
+// （枠待ちの待ち直しが答えなかった場合。それ以外では nil）。
 func (o *Orchestrator) confirmTurnEnd(
 	ctx context.Context,
 	rs *runState,
 	strictFirstWait bool,
-) turnOutcome {
+) (turnOutcome, error) {
 	settle := time.Duration(o.cfg.Claude.SettleMs) * time.Millisecond
 	pollWait := time.Duration(o.cfg.Claude.PollWaitMs) * time.Millisecond
 	// firstWait が真の間は「待ち受けが返った直後」である。ここで Stop が来なければ stall。
@@ -520,7 +553,7 @@ func (o *Orchestrator) confirmTurnEnd(
 
 	for {
 		if ctx.Err() != nil {
-			return turnAborted
+			return turnAborted, nil
 		}
 
 		stopAt, seen := rs.stopSeen()
@@ -533,7 +566,9 @@ func (o *Orchestrator) confirmTurnEnd(
 			}
 			if !o.awaitHook(ctx, rs, patience, isEmptyStop) {
 				if firstWait {
-					return turnStalled
+					// **ここだけが「Stop hook が届かなかった」と言ってよい場所である。**
+					// herdr の待ち受けが返ったあとで、Stop が来なかったことを実際に見た。
+					return turnStalled, nil
 				}
 				// **枠待ちなら時計を止めて待ち直す**（設計 3-27）。
 				// **総時間では打ち切らない。**打ち切るかどうかは checkStalls が決める。
@@ -541,7 +576,7 @@ func (o *Orchestrator) confirmTurnEnd(
 					return o.afterWaitTimeout(ctx, rs)
 				}
 				if st, err := o.agentStatus(ctx, rs); err == nil && st == herdr.AgentStatusBlocked {
-					return turnBlocked
+					return turnBlocked, nil
 				}
 				continue
 			}
@@ -551,7 +586,7 @@ func (o *Orchestrator) confirmTurnEnd(
 		// settle_ms のあいだ `<task-notification>` が来ないことを確かめる（設計 1-3 / 3-2）。
 		remaining := settle - o.now().Sub(stopAt)
 		if !o.awaitHook(ctx, rs, remaining, isTaskNotification) {
-			return turnEnded
+			return turnEnded, nil
 		}
 		// 来た。turn は続いている。待ち直す。
 		rs.clearStopSeen()

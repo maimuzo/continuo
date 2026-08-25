@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "58d7bb744413d8d9ebd6fcd50964cd3fbdc9dd479adff7a6bc5c48c84c02ae60", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "33b9d94182273f943bef9b8d6a4d704b11a15a8d8b913ecd081a86b143ad7bc6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -218,7 +218,7 @@ func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *test
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P009"}
 //
 // TestTurn_blockedが返ったらescを送ってから人間へ渡す は、安全に関わる分岐を確かめる。
 //

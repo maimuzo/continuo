@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "58d7bb744413d8d9ebd6fcd50964cd3fbdc9dd479adff7a6bc5c48c84c02ae60", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "33b9d94182273f943bef9b8d6a4d704b11a15a8d8b913ecd081a86b143ad7bc6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **候補の取り方と、着手を取りやめる経路の検査である。**
 //
@@ -598,19 +598,20 @@ func TestDispatch_unknownのまま期限を過ぎたら人間へ渡さず試し�
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P017"}
 //
-// TestDispatch_failure_stateのissueをrunning_stateへ上書きしない は、段2 の拒否リストを確かめる。
+// TestDispatch_failure_stateのissueをrunning_stateへ上書きしない は、段2 の許可リストを確かめる。
 //
 // **候補の一覧は GitHub のサーバ側の検索結果である。**continuo が直前に書いた Status が
 // 索引へ反映される前に取り直すと、failure_state へ落としたばかりの issue が
-// そのまま候補として返る。段2 の拒否リストが terminal_states だけだと、
+// そのまま候補として返る。段2 が取り直しをしないと、
 // **人間が Blocked に置いた issue を continuo が In Progress へ上書きしてしまう。**
 //
 // 目的: ボードの Status が failure_state にある issue へ running_state を書かないこと。
 // また、書かなかったときに段3 へ進まず、印を静かに外すこと。
 // 与える情報: ボードでは Blocked にあるのに、候補の写しでは Ready を名乗る issue。
-// 成功条件: Status が Blocked のままで、worktree が開かれず、印が残らないこと。
+// 成功条件: Status が Blocked のままで、書き込みそのものを試みず、worktree も開かず、
+// 印が残らないこと。
 func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
@@ -621,11 +622,16 @@ func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *
 
 	fx.Orc.Tick(context.Background())
 
+	// **段2 の取り直しが走ったことを待ち合わせの目印にする。**許可リストに落ちる場合、
+	// continuo は UpdateStatus を1回も呼ばないので、そちらでは待てない。
 	waitFor(t, 10*time.Second, "着手の試みが終わる", func() bool {
-		return fx.Tracker.CountCall("UpdateStatus") > 0
+		return fx.Tracker.CountCall("FetchIssuesByIDs") > 0
 	})
 	time.Sleep(500 * time.Millisecond)
 
+	if got := fx.Tracker.CountCall("UpdateStatus"); got != 0 {
+		t.Errorf("active_states に無い issue へ書き込みを試みている: UpdateStatus を %d 回呼んだ", got)
+	}
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "Blocked" {
 		t.Errorf("failure_state の issue を上書きしている: got %q, want Blocked", got)
 	}
@@ -640,7 +646,7 @@ func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *
 	}
 }
 
-// {"RUCM-PATH": "P021"}
+// {"RUCM-PATH": "P022"}
 //
 // TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら拾わない は、
 // issue 単位の失敗の記録を確かめる。
@@ -679,7 +685,7 @@ func TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら
 	}
 }
 
-// {"RUCM-PATH": "P022"}
+// {"RUCM-PATH": "P023"}
 //
 // TestDispatch_絞り込みの食い違いが1件あっても他のissueのdispatchは続く は、
 // 巡回全体を止めないことを確かめる。

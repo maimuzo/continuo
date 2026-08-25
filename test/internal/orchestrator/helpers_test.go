@@ -416,6 +416,19 @@ func (fh *fakeHerdr) Handle(method string, fn herdrHandler) {
 	fh.handlers[method] = fn
 }
 
+// HandlerOf はいま入っている台本を返す。
+//
+// **本物の herdr に近づける「包む」台本を書くために使う。**既定の台本を写し取らずに
+// 書き直すと、テストだけで通る挙動が2つに分かれる。
+//
+// method: 対象のメソッド名。
+// 戻り値: いまの台本（無ければ nil）。
+func (fh *fakeHerdr) HandlerOf(method string) herdrHandler {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	return fh.handlers[method]
+}
+
 // serve は1本の接続を処理する。
 //
 // **接続ごとの goroutine から呼ばれるので t.Fatalf を使ってはならない。**

@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "2e40830ec2c9b551af5ae5fc76f319456d45c42ed879b532b59233a57475bae4"
+    "rucm_block_sha256": "08ca67f0b643614a703e7dded0a6a9a11b86d0d7741d50311e3ae37d0c65d546"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -149,7 +149,7 @@
       "rfs": {
         "flow": "コメントの取り戻し",
         "steps": [
-          6
+          7
         ]
       },
       "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。worktree は残っている。"
@@ -186,6 +186,18 @@
         }
       ],
       "postcondition": "issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。worktree は残っている。"
+    },
+    "送信の失敗": {
+      "when": "herdr が指示の送信そのものを断った場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            23
+          ]
+        }
+      ],
+      "postcondition": "turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。"
     },
     "無音の打ち切り": {
       "when": "turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合",
@@ -269,7 +281,7 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。"
+      "statement": "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。"
     },
     {
       "id": "BASIC FLOW-11",
@@ -794,34 +806,41 @@
       "type": "action",
       "flow": "コメントの取り戻し",
       "step": 3,
-      "statement": "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。"
+      "statement": "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。"
     },
     {
       "id": "コメントの取り戻し-4",
       "type": "action",
       "flow": "コメントの取り戻し",
       "step": 4,
-      "statement": "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。"
+      "statement": "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。"
     },
     {
       "id": "コメントの取り戻し-5",
       "type": "action",
       "flow": "コメントの取り戻し",
       "step": 5,
-      "statement": "システムは issue のコメントを読み直す。"
+      "statement": "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。"
     },
     {
       "id": "コメントの取り戻し-6",
-      "type": "condition",
+      "type": "action",
       "flow": "コメントの取り戻し",
       "step": 6,
-      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+      "statement": "システムは issue のコメントを読み直す。"
     },
     {
       "id": "コメントの取り戻し-7",
-      "type": "resume",
+      "type": "condition",
       "flow": "コメントの取り戻し",
       "step": 7,
+      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+    },
+    {
+      "id": "コメントの取り戻し-8",
+      "type": "resume",
+      "flow": "コメントの取り戻し",
+      "step": 8,
       "statement": "RESUME STEP 32"
     },
     {
@@ -941,6 +960,34 @@
       "type": "abort",
       "flow": "権限の確認",
       "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "送信の失敗-1",
+      "type": "action",
+      "flow": "送信の失敗",
+      "step": 1,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "送信の失敗-2",
+      "type": "action",
+      "flow": "送信の失敗",
+      "step": 2,
+      "statement": "システムはリトライの回数を1つ増やす。"
+    },
+    {
+      "id": "送信の失敗-3",
+      "type": "action",
+      "flow": "送信の失敗",
+      "step": 3,
+      "statement": "システムはバックオフの期限を印に書く。"
+    },
+    {
+      "id": "送信の失敗-4",
+      "type": "abort",
+      "flow": "送信の失敗",
+      "step": 4,
       "statement": "ABORT"
     },
     {
@@ -1071,13 +1118,13 @@
       "from": "BASIC FLOW-10",
       "to": "BASIC FLOW-11",
       "kind": "true",
-      "condition": "ボードの issue の Status が terminal_states にも failure_state にも入っていない"
+      "condition": "ID 指定で取り直したボードの issue の Status が active_states に入っている"
     },
     {
       "from": "BASIC FLOW-10",
       "to": "書かずに取りやめる-1",
       "kind": "false",
-      "condition": "NOT ボードの issue の Status が terminal_states にも failure_state にも入っていない"
+      "condition": "NOT ID 指定で取り直したボードの issue の Status が active_states に入っている"
     },
     {
       "from": "BASIC FLOW-11",
@@ -1177,6 +1224,12 @@
       "to": "権限の確認-1",
       "kind": "global",
       "condition": "herdr の待ち受けが blocked を返した場合"
+    },
+    {
+      "from": "BASIC FLOW-23",
+      "to": "送信の失敗-1",
+      "kind": "global",
+      "condition": "herdr が指示の送信そのものを断った場合"
     },
     {
       "from": "BASIC FLOW-24",
@@ -1487,17 +1540,22 @@
     {
       "from": "コメントの取り戻し-6",
       "to": "コメントの取り戻し-7",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻し-7",
+      "to": "コメントの取り戻し-8",
       "kind": "true",
       "condition": "issue に今回の run が書いたコメントがある"
     },
     {
-      "from": "コメントの取り戻し-6",
+      "from": "コメントの取り戻し-7",
       "to": "コメントの取り戻しの失敗-1",
       "kind": "false",
       "condition": "NOT issue に今回の run が書いたコメントがある"
     },
     {
-      "from": "コメントの取り戻し-7",
+      "from": "コメントの取り戻し-8",
       "to": "BASIC FLOW-32",
       "kind": "resume"
     },
@@ -1579,6 +1637,21 @@
       "kind": "seq"
     },
     {
+      "from": "送信の失敗-1",
+      "to": "送信の失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "送信の失敗-2",
+      "to": "送信の失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "送信の失敗-3",
+      "to": "送信の失敗-4",
+      "kind": "seq"
+    },
+    {
       "from": "無音の打ち切り-1",
       "to": "無音の打ち切り-2",
       "kind": "seq"
@@ -1650,7 +1723,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -1719,6 +1792,7 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
+        "コメントの取り戻し-8",
         "BASIC FLOW-32",
         "BASIC FLOW-33",
         "BASIC FLOW-34"
@@ -1733,7 +1807,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -1757,6 +1831,7 @@
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
         "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
         "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。",
         "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
@@ -1809,6 +1884,7 @@
         "コメントの取り戻し-4",
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
         "コメントの取り戻しの失敗-1",
         "コメントの取り戻しの失敗-2",
         "コメントの取り戻しの失敗-3",
@@ -1824,7 +1900,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -1848,6 +1924,7 @@
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
         "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
         "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。",
         "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
@@ -1905,7 +1982,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -1973,7 +2050,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2040,7 +2117,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2106,7 +2183,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2129,6 +2206,69 @@
     },
     {
       "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "送信の失敗",
+      "postcondition": "turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "送信の失敗-1",
+        "送信の失敗-2",
+        "送信の失敗-3",
+        "送信の失敗-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは Claude Code に turn の本文を送る。",
+        "CONDITION: herdr が指示の送信そのものを断った場合",
+        "システムは herdr の pane を閉じる。",
+        "システムはリトライの回数を1つ増やす。",
+        "システムはバックオフの期限を印に書く。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
       "terminal": "abort",
       "terminal_flow": "上限での打ち切り",
       "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。",
@@ -2170,7 +2310,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2191,7 +2331,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P010",
       "terminal": "abort",
       "terminal_flow": "起動直後の確認画面",
       "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。",
@@ -2232,7 +2372,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2252,7 +2392,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P011",
       "terminal": "cycle",
       "terminal_flow": "起動の待ち直し",
       "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。",
@@ -2293,7 +2433,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2313,7 +2453,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "起動の断念",
       "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。",
@@ -2357,7 +2497,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2381,7 +2521,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P013",
       "terminal": "cycle",
       "terminal_flow": "paneがまだ使えない",
       "postcondition": "pane が起動を受け付けるまで待ち続けている。Claude Code はまだ起動していない。",
@@ -2419,7 +2559,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2436,7 +2576,7 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "paneの断念",
       "postcondition": "issue の Status は failure_state の選択肢である。Claude Code は起動していない。worktree は残っている。",
@@ -2477,7 +2617,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
@@ -2498,7 +2638,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P015",
       "terminal": "cycle",
       "terminal_flow": "壊れたref",
       "postcondition": "壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。",
@@ -2531,7 +2671,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "CONDITION: branch の ref が読めず git が worktree を作れず、まだその ref のファイルを消していない場合",
@@ -2543,7 +2683,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P016",
       "terminal": "abort",
       "terminal_flow": "消さないref",
       "postcondition": "ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。",
@@ -2576,7 +2716,7 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは workspace.root の下に issue の worktree を作る。",
         "CONDITION: branch の ref が読めず git が worktree を作れず、まだその ref のファイルを消していない場合",
@@ -2589,7 +2729,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "書かずに取りやめる",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。issue にコメントは付いていない。",
@@ -2617,14 +2757,14 @@
         "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
         "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
         "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。",
-        "CONDITION: NOT ボードの issue の Status が terminal_states にも failure_state にも入っていない",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "CONDITION: NOT ID 指定で取り直したボードの issue の Status が active_states に入っている",
         "システムは印を外す。",
         "ABORT"
       ]
     },
     {
-      "id": "P017",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "使われているbranch",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。branch を使っている worktree は残っている。",
@@ -2657,7 +2797,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P019",
       "terminal": "abort",
       "terminal_flow": "使えないworktree",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -2688,7 +2828,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P020",
       "terminal": "abort",
       "terminal_flow": "未信頼のリポジトリ",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。issue に信頼登録の承認を促すコメントが1件ある。",
@@ -2719,7 +2859,7 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "空きスロット不足",
       "postcondition": "印の件数は変わっていない。issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。",
@@ -2744,7 +2884,7 @@
       ]
     },
     {
-      "id": "P021",
+      "id": "P022",
       "terminal": "abort",
       "terminal_flow": "失敗の繰り返し",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。",
@@ -2767,7 +2907,7 @@
       ]
     },
     {
-      "id": "P022",
+      "id": "P023",
       "terminal": "abort",
       "terminal_flow": "頼んでいないStatus",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。",
@@ -2791,9 +2931,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 111,
-    "nodes_covered": 111,
-    "edges_total": 116,
-    "edges_covered": 116
+    "nodes_total": 116,
+    "nodes_covered": 116,
+    "edges_total": 121,
+    "edges_covered": 121
   }
 }

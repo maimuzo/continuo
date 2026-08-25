@@ -51,19 +51,91 @@ var ErrStatusNotWritten = errors.New("ボードの Status を書かなかった�
 
 // dispatchBlockedStates は着手の段2 で「この状態なら Status を書かない」一覧を返す。
 //
-// **`terminal_states` に `failure_state` を足す。**足さないと、人間が `Blocked` に
-// 置いた issue を continuo が `In Progress` へ上書きできてしまう。候補の一覧は
-// GitHub のサーバ側の検索結果であり、直前に書いた値がまだ反映されていないことがあるので
-// （設計 3-34）、**候補に載っていること自体は「いま着手してよい」の根拠にならない。**
+// **これは二重の守りの外側であって、主の守りではない。**主の守りは
+// `dispatchStatusAllowed`（許可リスト）である。拒否リストは「設定に名前が出てくる状態」
+// しか並べられず、**ボードにあって設定に出てこない状態（`In Review` など）を1つも
+// 拒否できない**ためである。
+//
+// **並べるのは、設定に名前が出てくるもののうち `active_states` に入っていないもの全部である。**
+// `terminal_states`・`failure_state`・`dispatch_state`・`status_signal_map` の遷移先を集める。
 //
 // 戻り値: 拒否する Status の一覧（**設定のスライスは書き換えない。**新しい配列を返す）。
 func (o *Orchestrator) dispatchBlockedStates() []string {
-	out := make([]string, 0, len(o.cfg.Tracker.TerminalStates)+1)
-	out = append(out, o.cfg.Tracker.TerminalStates...)
-	if o.cfg.Tracker.FailureState != "" {
-		out = append(out, o.cfg.Tracker.FailureState)
+	seen := map[string]bool{}
+	out := make([]string, 0, len(o.cfg.Tracker.TerminalStates)+2)
+	add := func(state string) {
+		s := strings.TrimSpace(state)
+		if s == "" {
+			return
+		}
+		// **`active_states` に入っているものは拒否しない。**`running_state` 自身も
+		// ここに入る（再 dispatch で `In Progress` のまま書き直すことがある）。
+		if containsFold(o.cfg.Tracker.ActiveStates, s) {
+			return
+		}
+		key := strings.ToLower(s)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, s)
+	}
+	for _, s := range o.cfg.Tracker.TerminalStates {
+		add(s)
+	}
+	add(o.cfg.Tracker.FailureState)
+	add(o.cfg.Tracker.DispatchState)
+	for _, dest := range o.cfg.Tracker.StatusSignalMap {
+		if dest != nil {
+			add(*dest)
+		}
 	}
 	return out
+}
+
+// dispatchStatusAllowed は着手の段2 で「いま Status を書いてよいか」を許可リストで決める。
+//
+// **言いたいこと。**拒否リストでは守れない。**書いてよいのは `active_states` に
+// 入っているときだけ**であり、それ以外は全部やめる。
+//
+// **なぜ拒否リストでは守れないか。**ボードの Status は人間が自由に増やせる。
+// `In Review` は `active_states` にも `terminal_states` にも `failure_state` にも
+// 入らない（設計 3-9 / 3-10。`In Review` を `terminal_states` に入れてはならない）ので、
+// **拒否リストに載らず、人間へ引き渡し済みの issue を `In Progress` で上書きしてしまう。**
+//
+// **なぜここで取り直すか。**候補の一覧は GitHub のサーバ側の検索結果であり、
+// 直前に書いた値が索引へ反映される前は古い写しが返る（設計 3-34）。
+// **ID 指定の取り直しは索引を通らない**ので、いまのボードの値が返る。
+// バックオフ明けの再 dispatch でも同じで、印を付けたときの写しは古い。
+//
+// **1回の追加の問い合わせで済ませる。**これは dispatch の直前にだけ通る経路であり、
+// 巡回のたびに全件へ走るものではない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// itemID: 着手する project item の ID。
+// identifier: ログに出す `<owner>/<repo>#<番号>`。
+// 戻り値: `active_states` にあれば true。**取り直しに失敗したときも false**
+// （分からないなら書かない）。
+func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identifier string) bool {
+	current, err := o.tracker.FetchIssuesByIDs(ctx, []string{itemID})
+	if err != nil {
+		o.logger.Warn("着手の直前に Status を取り直せないので着手しません（次の巡回でやり直します）",
+			"identifier", identifier, "error", err)
+		return false
+	}
+	if len(current) == 0 {
+		o.logger.Warn("着手の直前に取り直したら item が見えないので着手しません",
+			"identifier", identifier)
+		return false
+	}
+	state := current[0].State
+	if containsFold(o.cfg.Tracker.ActiveStates, state) {
+		return true
+	}
+	o.logger.Info("着手の直前に取り直した Status が active_states に無いので着手しません（人間が動かした可能性があります）",
+		"identifier", identifier, "取り直した Status", state,
+		"active_states", strings.Join(o.cfg.Tracker.ActiveStates, ", "))
+	return false
 }
 
 // dispatchCandidates は候補を並び順のまま、空きスロットが尽きるまで dispatch する
@@ -494,8 +566,15 @@ func (o *Orchestrator) clearUntrusted(owner, repo string) {
 // 戻り値: いずれかの段で失敗した場合のエラー。
 func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker.Issue, reuse bool) error {
 	// 段2: ボードの Status を tracker.running_state へ書く。**ハードコードしない。**
-	// **書く前に必ず ID 指定で取り直す**（UpdateStatus が内部で行う）。
-	// **terminal_states と failure_state に入っていたら書かない。**
+	//
+	// **書く前に ID 指定で取り直し、`active_states` にあるときだけ書く**（許可リスト）。
+	// 拒否リストだけでは `In Review` のような「設定に名前が出てこない状態」を守れず、
+	// 人間へ引き渡し済みの issue を上書きしてしまう。
+	if !o.dispatchStatusAllowed(ctx, issue.ID, issue.Identifier) {
+		return ErrStatusNotWritten
+	}
+	// **拒否リストも渡し続ける。**UpdateStatus はこのあともう一度 ID 指定で取り直すので、
+	// 上の取り直しとの隙間に人間が動かした場合は、そちらが最後の砦になる。
 	written, err := o.tracker.UpdateStatus(ctx, issue.ID, o.cfg.Tracker.RunningState, o.dispatchBlockedStates())
 	if err != nil {
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunStatusUpdateFailed, o.cfg.Tracker.RunningState, err)

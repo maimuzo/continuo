@@ -190,7 +190,7 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 		// 条件なしに閉じると、復元の直後の巡回が、人間のレビュー待ちで正常に
 		// 止まっている Claude Code を毎巡回で落とす。
 		if containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
-			o.closeOrphanPane(ctx, orph.identity)
+			o.closeOrphanPane(ctx, orph.path, orph.identity)
 		}
 	}
 }
@@ -200,22 +200,45 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 //
 // **閉じないと、次の巡回で同じ worktree に2つ目の Claude Code が立つ。**
 //
+// **身元ファイルの `herdr_workspace_id` を宛先にしてはならない。**身元ファイルは
+// worktree の直下にあり、その worktree ではエージェントが `--permission-mode dontAsk` で
+// 動く（設計 3-16 の段9）。**つまりこの値はエージェントが書き換えられる。**
+// 書き換えられた値をそのまま `pane.close` へ渡すと、**同じ機械で走っている別の run の
+// Claude Code を turn の途中で殺せる。**
+//
+// **そこで身元ファイルを1つも使わず、herdr 自身に答えさせる。**`pane.list` を絞り込みなしで
+// 引き、**pane の `cwd` がこの worktree のパスと同じ場所を指すものだけ**を閉じる。
+// worktree のパスは封じ込め検査（設計 3-20）を通った置き場所の内側の実体であり、
+// エージェントには書き換えられない。**照合はシンボリックリンクを解決してから行う**
+// （置き場所は解決済みだが、pane の cwd は起動時の文字列がそのまま入りうる。設計 3-4 の段4）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
-// identity: worktree の身元ファイル。
-func (o *Orchestrator) closeOrphanPane(ctx context.Context, identity *workspace.Identity) {
-	if identity.HerdrWorkspaceID == "" {
+// worktreePath: 対象の worktree の絶対パス（走査で得た値）。
+// identity: worktree の身元ファイル（**ログに出す issue の名前にだけ使う**）。
+func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string, identity *workspace.Identity) {
+	want, ok := resolvePath(worktreePath)
+	if !ok {
+		// 解決できないパスは突き合わせの対象から外す（設計 3-4 の段4 と同じ判断）。
+		o.logger.Warn("worktree のパスを解決できないので pane は閉じません",
+			"identifier", identity.IssueIdentifier, "path", worktreePath)
 		return
 	}
-	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{WorkspaceID: identity.HerdrWorkspaceID})
+	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
 	if err != nil {
+		o.logger.Warn("pane の一覧を取れないので pane は閉じません",
+			"identifier", identity.IssueIdentifier, "path", worktreePath, "error", err)
 		return
 	}
 	for _, p := range list.Panes {
 		if p.Agent == "" {
 			continue
 		}
+		got, ok := resolvePath(p.Cwd)
+		if !ok || got != want {
+			continue
+		}
 		o.logger.Warn("印に入っていない worktree に生きた pane があったので閉じます",
-			"identifier", identity.IssueIdentifier, "pane_id", p.PaneID)
+			"identifier", identity.IssueIdentifier, "pane_id", p.PaneID, "cwd", p.Cwd)
 		if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: p.PaneID}); err != nil {
 			o.logger.Warn("pane を閉じられませんでした", "pane_id", p.PaneID, "error", err)
 		}

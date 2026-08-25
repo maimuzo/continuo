@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "58d7bb744413d8d9ebd6fcd50964cd3fbdc9dd479adff7a6bc5c48c84c02ae60", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "33b9d94182273f943bef9b8d6a4d704b11a15a8d8b913ecd081a86b143ad7bc6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「issue を1件処理する」の段13〜段15
 // （pane が起動を受け付けるか / Claude Code が入力を受け付けられるか）を通る
@@ -21,7 +21,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P012"}
+// {"RUCM-PATH": "P013"}
 //
 // TestRUCM_P012_paneがまだ使えないなら待ち直す は、段13 の代替フロー「paneがまだ使えない」を検査する。
 //
@@ -64,7 +64,7 @@ func TestRUCM_P012_paneがまだ使えないなら待ち直す(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P013"}
+// {"RUCM-PATH": "P014"}
 //
 // TestRUCM_P013_paneが使えないまま期限を過ぎたら人間へ渡す は、代替フロー「paneの断念」を検査する。
 //
@@ -99,7 +99,7 @@ func TestRUCM_P013_paneが使えないまま期限を過ぎたら人間へ渡す
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P011"}
 //
 // TestRUCM_P010_入力を受け付けられるまで待ち直す は、段15 の代替フロー「起動の待ち直し」を検査する。
 //
@@ -145,7 +145,7 @@ func TestRUCM_P010_入力を受け付けられるまで待ち直す(t *testing.T
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P012"}
 //
 // TestRUCM_P011_入力を受け付けないまま期限を過ぎたら人間へ渡す は、代替フロー「起動の断念」を検査する。
 //

@@ -2,9 +2,11 @@ package orchestrator
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/workspace"
 )
 
 // commentRecheckWait は「書いてください」と送ったあとにコメントを読み直すまでの待ちである。
@@ -28,7 +30,8 @@ const commentRecheckWait = 2 * time.Second
 //  2. 無ければ、まず走行中の worker を止める（pane.close）
 //     → 止めないと、同じセッション UUID が2つ生きることになる
 //  3. 身元ファイルからセッション UUID と設定ファイルのパスを読む
-//  4. herdr の worktree.open で workspace を開き、その中の pane を pane.list で引く
+//  4. worktree を herdr の workspace として開き直し（着手の段3 と同じ Prepare を通す）、
+//     その中の pane を pane.list で引く
 //  5. その pane で agent.start を呼ぶ（--resume <UUID> --settings <設定ファイル> --permission-mode dontAsk）
 //  6. agent_status が idle または done になるのを待つ
 //  7. agent.prompt で「作業の内容を issue のコメントに書いてください」とだけ送る
@@ -99,8 +102,24 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		return
 	}
 
-	// 段4: worktree.open で workspace を開き、その中の pane を引く。
-	opened, err := o.herdr.WorktreeOpen(ctx, herdr.WorktreeOpenParams{Path: snap.WorktreePath})
+	// 段4: worktree を herdr の workspace として開き直し、その中の pane を引く。
+	//
+	// **`worktree.open` を自分で呼ばず、着手の段3 と同じ `workspace.Manager.Prepare` を通す。**
+	// `worktree.open` は `cwd` にリポジトリ本体を渡さないと
+	// `worktree_not_found: worktree path not found` で断る（実測: 2026-08-25、test/live。
+	// 設計 6-10 の表）。**その `cwd` に渡す clone の場所を知っているのは Prepare だけである。**
+	// Prepare を通せば `focus: false`・`label`（`owner/repo/issues/N`）・
+	// 開いたものが本当にこの worktree かの検算・**continuo が開かせたリポジトリの親 workspace の
+	// 控え**（issue #19）も、着手のときと同じ1箇所から出る。**2箇所に書くと必ずずれる。**
+	//
+	// **worktree の実体が無ければ呼ばない。**Prepare は無ければ `git worktree add` で
+	// 作り直すので、**片付け済みの worktree をここで復活させてしまう。**
+	if _, statErr := os.Stat(snap.WorktreePath); statErr != nil {
+		o.logger.Warn("worktree の実体が無いので復元しません（作り直しません）",
+			"identifier", snap.Identifier, "path", snap.WorktreePath, "error", statErr)
+		return
+	}
+	prepared, err := o.ws.Prepare(ctx, toIssueRef(rs.issue()))
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
@@ -108,15 +127,17 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		o.logger.Warn("復元のための workspace を開けません", "identifier", snap.Identifier, "error", err)
 		return
 	}
-	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{WorkspaceID: opened.Workspace.WorkspaceID})
-	if err != nil || len(list.Panes) != 1 {
+	// **開かせた親 workspace を身元ファイルへ控える**（issue #19）。控えないと、
+	// 片付けが閉じる相手を知らないまま終わり、この経路で開いた workspace が残る。
+	o.recordRepoWorkspace(ctx, prepared, identity)
+	paneID, err := o.resolvePane(ctx, prepared)
+	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
 		o.logger.Warn("復元のための pane を引けません", "identifier", snap.Identifier, "error", err)
 		return
 	}
-	paneID := list.Panes[0].PaneID
 	rs.setPaneID(paneID)
 
 	// 段5: --resume で復帰させる。**--settings と --permission-mode は毎回渡し直す**
@@ -188,6 +209,35 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 
 	// 段9: それでも書かれなければ人間に渡す。
 	o.failCommentRecovery(ctx, rs)
+}
+
+// recordRepoWorkspace は、コメントの復元が開かせたリポジトリの親 workspace を
+// 身元ファイルへ控える（issue #19）。
+//
+// **控えないと、片付けが閉じる相手を知らないまま終わる。**着手の段3 では
+// `workspace.Manager.Prepare` が「自分より前から親 workspace があったか」を見て、
+// **自分が開かせたときだけ ID を返す。**その値を段6 で身元ファイルへ書いているので、
+// 復元の経路でも同じことをしないと、この経路で開いた workspace だけが閉じ残る。
+//
+// **既に控えてある値は上書きしない。**先に書いてあるのは着手のときの値であり、
+// そちらが「continuo が開かせた」ことの記録として正しい。
+//
+// ctx: 呼び出しに適用するコンテキスト（git を実行するときに使う）。
+// prepared: `Prepare` が返した結果。
+// identity: 段3 で読んだ身元ファイル（**この関数が書き換える**）。
+func (o *Orchestrator) recordRepoWorkspace(
+	ctx context.Context,
+	prepared *workspace.PrepareResult,
+	identity *workspace.Identity,
+) {
+	if prepared.HerdrRepoWorkspaceID == "" || identity.HerdrRepoWorkspaceID != "" {
+		return
+	}
+	identity.HerdrRepoWorkspaceID = prepared.HerdrRepoWorkspaceID
+	if err := o.ws.WriteIdentity(ctx, prepared.Path, *identity); err != nil {
+		o.logger.Warn("復元で開いた親 workspace の ID を身元ファイルへ書けませんでした",
+			"path", prepared.Path, "herdr_repo_workspace_id", prepared.HerdrRepoWorkspaceID, "error", err)
+	}
 }
 
 // hasRunComment は「この run が書いたコメント」があるかを返す（設計 3-25 の段1）。

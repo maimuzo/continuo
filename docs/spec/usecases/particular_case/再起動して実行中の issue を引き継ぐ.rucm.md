@@ -33,29 +33,31 @@ BASIC FLOW:
 3. システムは VALIDATES THAT 起動時の検査をすべて通る。
 4. システムは worktree の置き場所を4階層まで走査する。
 5. システムは worktree の中の身元ファイルを読む。
-6. システムは VALIDATES THAT ボードを project item の ID 指定で取り直せる。
-7. システムは herdr から pane と agent の一覧を取る。
-8. システムは VALIDATES THAT worktree のパスと cwd が一致する pane がある。
-9. システムは VALIDATES THAT 取り直した Status が active_states に入っている。
-10. システムは VALIDATES THAT pane の agent_status を読み取れる。
-11. システムは VALIDATES THAT agent_status が blocked でない。
-12. システムは VALIDATES THAT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない。
-13. システムは身元ファイルの引き継いだ回数を1つ増やす。
-14. システムは pane の agent_session からセッション UUID を取る。
-15. システムは agent の一覧から pane に対応する agent 名を取る。
-16. システムは run の実行時状態を組み立てる。
-17. システムは hook を受ける socket の listen を始める。
-18. システムは逃がし先に溜まった hook を読み戻す。
-19. システムは引き継ぐ issue に印を付ける。
-20. システムは溜めた hook の配送を始める。
-21. システムは run の turn 数を 1 に戻す。
-22. IF agent_status が working である THEN
-23.   システムは Stop hook の到着を待つ。
-24. ELSE
-25.   システムは run に次の turn を要する印を立てる。
-26.   システムは run に継続の指示を送る。
-27. ENDIF
-28. システムは巡回のループを始める。
+6. システムは VALIDATES THAT 身元ファイルが名乗る owner とリポジトリ名が worktree の置き場所の階層と一致する。
+7. システムは VALIDATES THAT ボードを project item の ID 指定で取り直せる。
+8. システムは VALIDATES THAT 取り直した issue の owner とリポジトリ名が worktree の置き場所の階層と一致する。
+9. システムは VALIDATES THAT herdr から pane と agent の一覧を取れる。
+10. システムは VALIDATES THAT worktree のパスと cwd が一致する pane がある。
+11. システムは VALIDATES THAT 取り直した Status が active_states に入っている。
+12. システムは VALIDATES THAT pane の agent_status を読み取れる。
+13. システムは VALIDATES THAT agent_status が blocked でない。
+14. システムは VALIDATES THAT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない。
+15. システムは身元ファイルの引き継いだ回数を1つ増やす。
+16. システムは pane の agent_session からセッション UUID を取る。
+17. システムは agent の一覧から pane に対応する agent 名を取る。
+18. システムは run の実行時状態を組み立てる。
+19. システムは hook を受ける socket の listen を始める。
+20. システムは逃がし先に溜まった hook を読み戻す。
+21. システムは引き継ぐ issue に印を付ける。
+22. システムは溜めた hook の配送を始める。
+23. システムは run の turn 数を 1 に戻す。
+24. IF agent_status が working である THEN
+25.   システムは Stop hook の到着を待つ。
+26. ELSE
+27.   システムは run に次の turn を要する印を立てる。
+28.   システムは run に継続の指示を送る。
+29. ENDIF
+30. システムは巡回のループを始める。
 POSTCONDITION: 引き継いだ issue は印の集合に入っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 二重起動:
@@ -72,8 +74,30 @@ RFS BASIC FLOW 3
 3. ABORT
 POSTCONDITION: continuo は常駐していない。herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。
 
-SPECIFIC ALTERNATIVE FLOW ボードの取り直しの失敗:
+SPECIFIC ALTERNATIVE FLOW 名乗りの食い違い:
 RFS BASIC FLOW 6
+1. システムはこの worktree を引き継ぎの候補から外す。
+2. システムは置き場所の階層と身元ファイルの名乗りが食い違ったことを記録に残す。
+3. ABORT
+POSTCONDITION: worktree は残っている。ボードへは1バイトも書いていない。herdr の pane は閉じていない。continuo は常駐している。
+
+SPECIFIC ALTERNATIVE FLOW issueの取り違え:
+RFS BASIC FLOW 8
+1. システムはこの worktree を引き継ぎの候補から外す。
+2. システムは取り直した issue と置き場所の階層が食い違ったことを記録に残す。
+3. ABORT
+POSTCONDITION: worktree は残っている。取り直した issue の Status は変わっていない。herdr の pane は閉じていない。continuo は常駐している。
+
+SPECIFIC ALTERNATIVE FLOW 一覧の取得の失敗:
+RFS BASIC FLOW 9
+1. システムは pane が生きているかどうかの判断を保留する。
+2. システムは herdr の pane を1つも閉じない。
+3. システムは worktree と issue の Status を残す。
+4. ABORT
+POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。印の集合は空である。continuo は常駐している。
+
+SPECIFIC ALTERNATIVE FLOW ボードの取り直しの失敗:
+RFS BASIC FLOW 7
 1. システムは利用者に取り直しに失敗した理由をログで応答する。
 2. システムは引き継げない run の herdr の pane を閉じる。
 3. システムは worktree と issue の Status を残す。
@@ -81,7 +105,7 @@ RFS BASIC FLOW 6
 POSTCONDITION: herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。continuo は常駐している。
 
 SPECIFIC ALTERNATIVE FLOW paneの不在:
-RFS BASIC FLOW 8
+RFS BASIC FLOW 10
 1. システムは restart.orphan_running_action の値を読む。
 2. システムは worktree と issue の Status を残す。
 3. システムは issue を次の巡回に委ねる。
@@ -89,7 +113,7 @@ RFS BASIC FLOW 8
 POSTCONDITION: issue は印の集合に入っていない。worktree は残っている。issue の Status は running_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 引き渡し状態:
-RFS BASIC FLOW 9
+RFS BASIC FLOW 11
 1. システムは herdr の pane を閉じずに残す。
 2. システムは worktree を残す。
 3. システムは issue を印の集合に入れない。
@@ -97,7 +121,7 @@ RFS BASIC FLOW 9
 POSTCONDITION: herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。利用者は pane の中身を読める。
 
 SPECIFIC ALTERNATIVE FLOW 状態の不明:
-RFS BASIC FLOW 10
+RFS BASIC FLOW 12
 1. システムは herdr の pane を閉じる。
 2. システムは worktree と issue の Status を残す。
 3. システムは issue を印の集合に入れない。
@@ -105,7 +129,7 @@ RFS BASIC FLOW 10
 POSTCONDITION: herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 権限の確認での停止:
-RFS BASIC FLOW 11
+RFS BASIC FLOW 13
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
 2. システムは herdr の pane を閉じる。
 3. システムは worktree を残す。
@@ -113,7 +137,7 @@ RFS BASIC FLOW 11
 POSTCONDITION: issue の Status は failure_state の選択肢である。herdr の pane は閉じている。保留中の権限の要求は pane ごと消えている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 引き継ぎの上限:
-RFS BASIC FLOW 12
+RFS BASIC FLOW 14
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
 2. システムは herdr の pane を閉じる。
 3. システムは worktree を残す。
@@ -121,7 +145,7 @@ RFS BASIC FLOW 12
 POSTCONDITION: issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 中断:
-BRANCH FROM BASIC FLOW 19
+BRANCH FROM BASIC FLOW 21
 WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合
 1. システムはボードの巡回を止める。
 2. システムは hook を受ける socket を閉じる。
@@ -161,28 +185,30 @@ flowchart TD
     B3{"3. VALIDATES THAT 起動時の検査をすべて通る"}
     B4["4. 置き場所を4階層まで走査する"]
     B5["5. 身元ファイルを読む"]
-    B6{"6. VALIDATES THAT ボードを ID 指定で取り直せる"}
-    B7["7. pane と agent の一覧を取る"]
-    B8{"8. VALIDATES THAT cwd が一致する pane がある"}
-    B9{"9. VALIDATES THAT Status が active_states に入っている"}
-    B10{"10. VALIDATES THAT agent_status を読み取れる"}
-    B11{"11. VALIDATES THAT agent_status が blocked でない"}
-    B12{"12. VALIDATES THAT 引き継いだ回数が上限に達していない"}
-    B13["13. 引き継いだ回数を1つ増やす"]
-    B14["14. agent_session からセッション UUID を取る"]
-    B15["15. pane に対応する agent 名を取る"]
-    B16["16. run の実行時状態を組み立てる"]
-    B17["17. socket の listen を始める"]
-    B18["18. 逃がし先の hook を読み戻す"]
-    B19["19. 引き継ぐ issue に印を付ける"]
-    B20["20. 溜めた hook の配送を始める"]
-    B21["21. turn 数を 1 に戻す"]
-    B22{"22. IF agent_status が working である"}
-    B23["23. Stop hook の到着を待つ"]
-    B25["25. 次の turn を要する印を立てる"]
-    B26["26. 継続の指示を送る"]
-    B27["27. ENDIF"]
-    B28["28. 巡回のループを始める"]
+    B6{"6. VALIDATES THAT 身元ファイルの名乗りが置き場所と一致する"}
+    B7{"7. VALIDATES THAT ボードを ID 指定で取り直せる"}
+    B8{"8. VALIDATES THAT 取り直した issue が置き場所と一致する"}
+    B9{"9. VALIDATES THAT pane と agent の一覧を取れる"}
+    B10{"10. VALIDATES THAT cwd が一致する pane がある"}
+    B11{"11. VALIDATES THAT Status が active_states に入っている"}
+    B12{"12. VALIDATES THAT agent_status を読み取れる"}
+    B13{"13. VALIDATES THAT agent_status が blocked でない"}
+    B14{"14. VALIDATES THAT 引き継いだ回数が上限に達していない"}
+    B15["15. 引き継いだ回数を1つ増やす"]
+    B16["16. agent_session からセッション UUID を取る"]
+    B17["17. pane に対応する agent 名を取る"]
+    B18["18. run の実行時状態を組み立てる"]
+    B19["19. socket の listen を始める"]
+    B20["20. 逃がし先の hook を読み戻す"]
+    B21["21. 引き継ぐ issue に印を付ける"]
+    B22["22. 溜めた hook の配送を始める"]
+    B23["23. turn 数を 1 に戻す"]
+    B24{"24. IF agent_status が working である"}
+    B25["25. Stop hook の到着を待つ"]
+    B27["27. 次の turn を要する印を立てる"]
+    B28["28. 継続の指示を送る"]
+    B29["29. ENDIF"]
+    B30["30. 巡回のループを始める"]
     BPOST(["POSTCONDITION 生きている worker を引き継いでいる"])
 
     B1 --> B2
@@ -191,21 +217,27 @@ flowchart TD
     B3 -- 偽 --> F2S1
     B3 -- 真 --> B4 --> B5 --> B6
     B6 -- 偽 --> F3S1
-    B6 -- 真 --> B7 --> B8
+    B6 -- 真 --> B7
+    B7 -- 偽 --> F6S1
+    B7 -- 真 --> B8
     B8 -- 偽 --> F4S1
     B8 -- 真 --> B9
     B9 -- 偽 --> F5S1
     B9 -- 真 --> B10
-    B10 -- 偽 --> F6S1
+    B10 -- 偽 --> F7S1
     B10 -- 真 --> B11
-    B11 -- 偽 --> F7S1
+    B11 -- 偽 --> F8S1
     B11 -- 真 --> B12
-    B12 -- 偽 --> F8S1
-    B12 -- 真 --> B13 --> B14 --> B15 --> B16 --> B17 --> B18 --> B19 --> B20 --> B21 --> B22
-    B22 -- 真 --> B23 --> B27
-    B22 -- 偽 --> B25 --> B26 --> B27
-    B27 --> B28 --> BPOST
-    B19 -. "中断: WHEN Ctrl+C を入力する場合" .-> G1S1
+    B12 -- 偽 --> F9S1
+    B12 -- 真 --> B13
+    B13 -- 偽 --> F10S1
+    B13 -- 真 --> B14
+    B14 -- 偽 --> F11S1
+    B14 -- 真 --> B15 --> B16 --> B17 --> B18 --> B19 --> B20 --> B21 --> B22 --> B23 --> B24
+    B24 -- 真 --> B25 --> B29
+    B24 -- 偽 --> B27 --> B28 --> B29
+    B29 --> B30 --> BPOST
+    B21 -. "中断: WHEN Ctrl+C を入力する場合" .-> G1S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 二重起動 / RFS BASIC FLOW 2"]
         F1S1["1. 既に動いていることを応答する"] --> F1S2["2. pane を閉じずに終了する"] --> F1S3["3. ABORT"]
@@ -215,31 +247,43 @@ flowchart TD
         F2S1["1. 失敗した検査と直し方を応答する"] --> F2S2["2. pane を閉じずに終了する"] --> F2S3["3. ABORT"]
     end
 
-    subgraph SAF3 ["SPECIFIC ALTERNATIVE FLOW ボードの取り直しの失敗 / RFS BASIC FLOW 6"]
-        F3S1["1. 理由をログで応答する"] --> F3S2["2. 引き継げない run の pane を閉じる"] --> F3S3["3. worktree と Status を残す"] --> F3S4["4. ABORT"]
+    subgraph SAF3 ["SPECIFIC ALTERNATIVE FLOW 名乗りの食い違い / RFS BASIC FLOW 6"]
+        F3S1["1. 引き継ぎの候補から外す"] --> F3S2["2. 食い違いを記録に残す"] --> F3S3["3. ABORT"]
     end
 
-    subgraph SAF4 ["SPECIFIC ALTERNATIVE FLOW paneの不在 / RFS BASIC FLOW 8"]
-        F4S1["1. orphan_running_action の値を読む"] --> F4S2["2. worktree と Status を残す"] --> F4S3["3. 次の巡回に委ねる"] --> F4S4["4. ABORT"]
+    subgraph SAF4 ["SPECIFIC ALTERNATIVE FLOW issueの取り違え / RFS BASIC FLOW 8"]
+        F4S1["1. 引き継ぎの候補から外す"] --> F4S2["2. 食い違いを記録に残す"] --> F4S3["3. ABORT"]
     end
 
-    subgraph SAF5 ["SPECIFIC ALTERNATIVE FLOW 引き渡し状態 / RFS BASIC FLOW 9"]
-        F5S1["1. pane を閉じずに残す"] --> F5S2["2. worktree を残す"] --> F5S3["3. 印に入れない"] --> F5S4["4. ABORT"]
+    subgraph SAF5 ["SPECIFIC ALTERNATIVE FLOW 一覧の取得の失敗 / RFS BASIC FLOW 9"]
+        F5S1["1. pane の有無の判断を保留する"] --> F5S2["2. pane を1つも閉じない"] --> F5S3["3. worktree と Status を残す"] --> F5S4["4. ABORT"]
     end
 
-    subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW 状態の不明 / RFS BASIC FLOW 10"]
-        F6S1["1. pane を閉じる"] --> F6S2["2. worktree と Status を残す"] --> F6S3["3. 印に入れない"] --> F6S4["4. ABORT"]
+    subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW ボードの取り直しの失敗 / RFS BASIC FLOW 7"]
+        F6S1["1. 理由をログで応答する"] --> F6S2["2. 引き継げない run の pane を閉じる"] --> F6S3["3. worktree と Status を残す"] --> F6S4["4. ABORT"]
     end
 
-    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW 権限の確認での停止 / RFS BASIC FLOW 11"]
-        F7S1["1. Status に failure_state を書く"] --> F7S2["2. pane を閉じる"] --> F7S3["3. worktree を残す"] --> F7S4["4. ABORT"]
+    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW paneの不在 / RFS BASIC FLOW 10"]
+        F7S1["1. orphan_running_action の値を読む"] --> F7S2["2. worktree と Status を残す"] --> F7S3["3. 次の巡回に委ねる"] --> F7S4["4. ABORT"]
     end
 
-    subgraph SAF8 ["SPECIFIC ALTERNATIVE FLOW 引き継ぎの上限 / RFS BASIC FLOW 12"]
-        F8S1["1. Status に failure_state を書く"] --> F8S2["2. pane を閉じる"] --> F8S3["3. worktree を残す"] --> F8S4["4. ABORT"]
+    subgraph SAF8 ["SPECIFIC ALTERNATIVE FLOW 引き渡し状態 / RFS BASIC FLOW 11"]
+        F8S1["1. pane を閉じずに残す"] --> F8S2["2. worktree を残す"] --> F8S3["3. 印に入れない"] --> F8S4["4. ABORT"]
     end
 
-    subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 中断 / BRANCH FROM BASIC FLOW 19"]
+    subgraph SAF9 ["SPECIFIC ALTERNATIVE FLOW 状態の不明 / RFS BASIC FLOW 12"]
+        F9S1["1. pane を閉じる"] --> F9S2["2. worktree と Status を残す"] --> F9S3["3. 印に入れない"] --> F9S4["4. ABORT"]
+    end
+
+    subgraph SAF10 ["SPECIFIC ALTERNATIVE FLOW 権限の確認での停止 / RFS BASIC FLOW 13"]
+        F10S1["1. Status に failure_state を書く"] --> F10S2["2. pane を閉じる"] --> F10S3["3. worktree を残す"] --> F10S4["4. ABORT"]
+    end
+
+    subgraph SAF11 ["SPECIFIC ALTERNATIVE FLOW 引き継ぎの上限 / RFS BASIC FLOW 14"]
+        F11S1["1. Status に failure_state を書く"] --> F11S2["2. pane を閉じる"] --> F11S3["3. worktree を残す"] --> F11S4["4. ABORT"]
+    end
+
+    subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 中断 / BRANCH FROM BASIC FLOW 21"]
         G1S1["1. ボードの巡回を止める"] --> G1S2["2. socket を閉じる"] --> G1S3["3. pane を閉じずに終了する"] --> G1S4["4. ABORT"]
     end
 ```
@@ -266,34 +310,48 @@ sequenceDiagram
             Note over S: ABORT pane は1つも閉じない
         else 検査を通る
             S->>S: 置き場所を走査して身元ファイルを読む
-            S->>GH: project item の ID 指定での取り直しを要求する
-            GH-->>S: 現在の Status を応答する
-            S->>H: pane と agent の一覧を要求する
-            H-->>S: pane の cwd と agent 名を応答する
-            S->>S: cwd と worktree のパスを突き合わせる
-            alt Status が引き渡しである
-                Note over S: ABORT pane も worktree も残す
-            else Status が active_states である
-                S->>H: pane の agent_status を要求する
-                H-->>S: agent_status を応答する
-                alt agent_status が blocked である
-                    S->>GH: Status への failure_state の書き込みを要求する
-                    S->>H: pane の close を要求する
-                    Note over S: ABORT 人間の判断が要る
-                else agent_status が idle または done または working である
-                    S->>S: 引き継いだ回数を1つ増やして身元ファイルへ書く
-                    S->>H: pane の agent_session を要求する
-                    H-->>S: セッション UUID を応答する
-                    S->>S: socket の listen を始める
-                    S->>S: 逃がし先の hook を読み戻す
-                    S->>S: 引き継ぐ issue に印を付ける
-                    S->>S: 溜めた hook の配送を始める
-                    alt agent_status が working である
-                        Note over S: 次の turn を要する印を立てず Stop hook を待つ
-                    else agent_status が idle または done である
-                        S->>CC: 継続の指示を送る
+            S->>S: 身元ファイルの名乗りを置き場所の階層と突き合わせる
+            alt 名乗りが置き場所と食い違う
+                Note over S: ABORT 候補から外す。何も消さない
+            else 名乗りが置き場所と一致する
+                S->>GH: project item の ID 指定での取り直しを要求する
+                GH-->>S: 現在の Status を応答する
+                S->>S: 取り直した issue を置き場所の階層と突き合わせる
+                alt 取り直した issue が置き場所と食い違う
+                    Note over S: ABORT 候補から外す。ボードへ書かない
+                else 取り直した issue が置き場所と一致する
+                    S->>H: pane と agent の一覧を要求する
+                    alt 一覧を取れない
+                        Note over S: ABORT 判断を保留し次の巡回へ委ねる
+                    else 一覧を取れる
+                        H-->>S: pane の cwd と agent 名を応答する
+                        S->>S: cwd と worktree のパスを突き合わせる
+                        alt Status が引き渡しである
+                            Note over S: ABORT pane も worktree も残す
+                        else Status が active_states である
+                            S->>H: pane の agent_status を要求する
+                            H-->>S: agent_status を応答する
+                            alt agent_status が blocked である
+                                S->>GH: Status への failure_state の書き込みを要求する
+                                S->>H: pane の close を要求する
+                                Note over S: ABORT 人間の判断が要る
+                            else agent_status が idle または done または working である
+                                S->>S: 引き継いだ回数を1つ増やして身元ファイルへ書く
+                                S->>H: pane の agent_session を要求する
+                                H-->>S: セッション UUID を応答する
+                                S->>S: socket の listen を始める
+                                S->>S: 逃がし先の hook を読み戻す
+                                S->>S: 引き継ぐ issue に印を付ける
+                                S->>S: 溜めた hook の配送を始める
+                                alt agent_status が working である
+                                    Note over S: 次の turn を要する印を立てず Stop hook を待つ
+                                else agent_status が idle または done である
+                                    S->>CC: 継続の指示を送る
+                                end
+                                S->>S: 巡回のループを始める
+                            end
+                        end
                     end
-                    S->>S: 巡回のループを始める
                 end
             end
         end

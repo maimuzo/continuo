@@ -4354,6 +4354,172 @@ text/template は受け付けるためである。
 
 ---
 
+### 3-38. 着手が Status を書いてよいのは `active_states` のときだけである
+
+**言いたいこと。**拒否リストでは守れない。**ボードの Status は人間が自由に増やせる**ので、
+`In Review` のように設定に出てこない Status を1つも拒否できない。
+**許可リストにして、`active_states` に入っているときだけ書く。**
+
+**採るやり方。**着手の段2（3-16）は、`UpdateStatus` を呼ぶ前に **ID 指定で1回取り直し、
+`active_states` に無ければ `ErrStatusNotWritten` で静かにやめる**
+（[internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の
+`dispatchStatusAllowed`）。取り直しに失敗したときも書かない（分からないなら書かない）。
+
+**拒否リストも渡し続ける。**`UpdateStatus` は内部でもう一度取り直すので、
+上の取り直しとの隙間に人間が動かした場合の最後の砦になる。
+**並べるのは、設定に名前が出てくるもののうち `active_states` に入っていないもの全部**
+（`terminal_states`・`failure_state`・`dispatch_state`・`status_signal_map` の遷移先）。
+
+**なぜ拒否リストだけでは駄目か。**`In Review` は `active_states` にも `terminal_states` にも
+`failure_state` にも入らない（3-9 / 3-10）。人間がレビューのために引き取った issue を
+continuo が `In Progress` へ上書きし、その worktree で Claude Code をもう一度起動していた。
+**しかも `In Progress` は `active_states` なので、以後その issue は毎巡回で候補に上がり続ける。**
+人間からは「ボードに置いた印が勝手に戻される」ように見える。
+
+**採らなかった案。**`tracker.Adapter.UpdateStatus` の引数を拒否リストから許可リストへ変える。
+呼び出し元が4箇所あり、そのうち引き渡しの経路（`failCommentRecovery` / `moveToFailure`）は
+「`terminal_states` でなければ `failure_state` を書く」という別の意味を持つ。
+**1つの引数に2つの意味を持たせると、どちらの経路も読めなくなる。**
+
+---
+
+### 3-39. 閉じる pane は herdr に答えさせる。身元ファイルの workspace ID を宛先にしない
+
+**言いたいこと。**`herdr_workspace_id` はエージェントが書き換えられる。
+そのまま `pane.close` へ渡すと、**別の run の Claude Code を turn の途中で殺せる。**
+**`pane.list` の `cwd` で突き合わせる。**
+
+**採るやり方。**巡回の worktree の照合の手順7b（3-9）は、
+`pane.list` を**絞り込みなし**で引き、**pane の `cwd` がその worktree と同じ場所を指すもの**
+だけを閉じる（[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の
+`closeOrphanPane`）。**照合はシンボリックリンクを解決してから行う。**
+
+**なぜこれで足りるか。**worktree のパスは封じ込め検査（3-20）を通った置き場所の内側の実体であり、
+**エージェントには書き換えられない。**身元ファイルの値は1つも使わない
+（ログに出す issue の名前だけに使う）。片付け側の検算（3-9 の段3）と同じ考え方である。
+
+**攻撃の形。**引き渡し（`In Review` など）で run が終わり worktree が残っているとき、
+その worktree の `.continuo.json` の `project_item_id` を `active_states` の別 issue に、
+`herdr_workspace_id` を走行中の別 run の workspace ID にしておく。
+**エージェントは `--permission-mode dontAsk` で worktree の直下に書けるので、通常の道具だけでできる。**
+
+---
+
+### 3-40. 「送れなかった」と「Stop hook が来なかった」を混ぜない
+
+**言いたいこと。**`agent.prompt` が断ったとき、turn は1文字も届いていない。
+**それを stall と同じ文面で報告すると、正常な設定ファイルを人間に確かめさせることになる。**
+
+**採るやり方。**turn の結果に `turnSendFailed` を足す
+（[internal/orchestrator/turn.go](../../internal/orchestrator/turn.go)）。
+`agent.prompt` と `agent.wait` が **timeout 以外**のエラーで返ったらこれを返し、
+**herdr が返した元のエラーをそのまま添えて** issue へ書く。
+
+**issue に残る文面。**
+
+```
+continuo が herdr へ指示を送れませんでした。**この turn の指示は Claude Code に届いていません。**
+【確かめ方】herdr の画面で、この issue の pane がまだ開いているかを見てください。pane が消えていれば、そこで動いていた Claude Code はもう居ません。
+【よくある原因】人間が herdr の画面から pane を閉じた（agent_not_found） / herdr が応答しない（socket が落ちている） / agent がまだ指示を受けられない（agent_not_ready）。
+【対処】herdr が動いていることを確かめてから、Status を着手待ちへ戻してください。
+元のエラー: herdr エラー [agent_not_found]: ...
+```
+
+**「Stop hook が届かなかった」と書いてよいのは1箇所だけである。**`confirmTurnEnd` の
+待ち受けが返った直後（`firstWait`）に `Stop` が来なかったときだけ。
+**待ち受けが返っていない段階で、届く/届かないは言えない。**
+
+---
+
+### 3-41. コメントの取り戻しは `Prepare` を通す
+
+**言いたいこと。**`worktree.open` は `cwd` にリポジトリ本体を渡さないと断る（6-10 の実測表）。
+**その clone の場所を知っているのは `workspace.Manager.Prepare` だけである。**
+
+**採るやり方。**3-25 の段4 は、自分で `worktree.open` を呼ばず、
+**着手の段3 と同じ `o.ws.Prepare` を通す**
+（[internal/orchestrator/comment.go](../../internal/orchestrator/comment.go)）。
+`cwd`・`focus: false`・`label`（`owner/repo/issues/N`）・開いたものがその worktree かの検算・
+**continuo が開かせたリポジトリの親 workspace の控え**（issue #19）が、すべて同じ1箇所から出る。
+
+**worktree の実体が無ければ呼ばない。**`Prepare` は実体が無ければ `git worktree add` で
+作り直すので、**片付け済みの worktree をここで復活させてしまう。**`os.Stat` で先に見る。
+
+**控えた親 workspace の書き先。**`<worktree>/.continuo.json` の `herdr_repo_workspace_id`。
+**既に値が入っていれば上書きしない**（着手のときの記録が正である）。
+
+```json
+{
+  "issue_identifier": "octocat/hello-world#42",
+  "herdr_workspace_id": "w7",
+  "herdr_repo_workspace_id": "w6"
+}
+```
+
+---
+
+### 3-42. 打ち切りの通知は、本当の理由が投稿枠を先に取る
+
+**言いたいこと。**引き渡しの通知は1つの run につき1件しか投稿しない。
+**コメントの取り戻しの失敗が先に枠を使うと、打ち切った本当の理由が issue に1文字も残らない。**
+
+**採るやり方。**リトライを使い切って人間へ渡す分岐（`abandonRunClaimed`）の順番を、
+`failRun` と同じにする（[internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go)）。
+
+| 順 | 何をするか |
+| --- | --- |
+| 1 | Status を `failure_state` へ落とす |
+| 2 | 失敗を issue 単位で数える |
+| 3 | **打ち切った理由を投稿する**（ここで投稿枠を取る） |
+| 4 | コメントの取り戻しを走らせる（失敗はログに残る） |
+| 5 | `after_run` を実行し、worker を止め、印を外す |
+
+**逆順だと何が残るか。**「Claude Code は作業を終えたと表明しましたが、何をしたのかを
+issue に書き残しませんでした」だけが残る。**実際にはエージェントは完了を表明しておらず、
+画面が止まって打ち切られている。**人間は成果を探しに行き、本当の原因はログにしか無い。
+
+---
+
+### 3-43. 復元は身元ファイルの `project_item_id` を検算してから鍵にする
+
+**言いたいこと。**`project_item_id` もエージェントが書き換えられる。
+検算しないと、**書き換えた側の worktree が別 issue の run として印に入り、
+被害者の生きた pane が『捨てた身元』として閉じられる。**
+
+**採るやり方。**復元の段2（3-4）で候補に採る前に、
+**置き場所のパスから引いた `<owner>/<repo>`**（3-22 の固定4階層。書き換えられない）と、
+身元ファイルが名乗る `issue_identifier` / `issue_url` の `<owner>/<repo>` を、
+**大文字小文字を無視して突き合わせる**（[internal/orchestrator/restore.go](../../internal/orchestrator/restore.go) の
+`pathAgrees`）。段3 で取り直した issue についても同じ突き合わせを行う（`issueAgreesWithPath`）。
+**食い違ったら候補から外す。消さない。**どちらが正しいか continuo には判断できない。
+
+**この検算の届く範囲。**`<owner>/<repo>` までである。
+**同じリポジトリの別 issue へ差し替える経路は止まらない。**置き場所のパスから
+機械的に引けるのがそこまでだからである（`continuo abandon` の `pathAgrees` と同じ限界）。
+**それ以上を求めて `branch_template` を描画し直して照合する案は採らない。**
+テンプレートを変えた環境で、走っている worktree が全部「食い違い」になる。
+
+---
+
+### 3-44. 「一覧を取れなかった」を「pane が無い」と読み替えない
+
+**言いたいこと。**`pane.list` か `agent.list` が1回失敗しただけで、
+**走っている全部の run が人間へ渡され、pane は誰も閉じないまま残る。**
+**pane が無いことを実際に確かめられたときだけ、段8 を動かす。**
+
+**採るやり方。**突き合わせの結果（`paneMatch`）に `Unknown` を足し、
+`pane.list` か `agent.list` が失敗したら真にする。
+`decideAdoptions` は `Unknown` が真なら**候補を1件も段8 へ流さず、次の巡回に委ねる**
+（[internal/orchestrator/restore.go](../../internal/orchestrator/restore.go)）。
+
+**放っておくと何が起きるか。**段8 は pane を閉じないだけで、
+**Status の書き換えと worktree の片付けは行う。**`restart.orphan_running_action` が
+`to_failure_state` なら、issue に
+「この issue の Claude Code の pane が残っていませんでした」という**嘘の理由**が投稿される。
+pane は実際には生きていて誰も閉じないので、continuo の管理から外れた Claude Code が残り続ける。
+
+---
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す

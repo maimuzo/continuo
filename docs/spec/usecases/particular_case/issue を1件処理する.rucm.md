@@ -44,7 +44,7 @@ BASIC FLOW:
 7. システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。
 8. システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。
 9. システムは先頭の issue に印を付ける。
-10. システムは VALIDATES THAT ボードの issue の Status が terminal_states にも failure_state にも入っていない。
+10. システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。
 11. システムはボードの issue の Status に running_state の選択肢を書く。
 12. システムは workspace.root の下に issue の worktree を作る。
 13. システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。
@@ -180,15 +180,16 @@ SPECIFIC ALTERNATIVE FLOW コメントの取り戻し:
 RFS BASIC FLOW 31
 1. システムは herdr の pane を閉じる。
 2. システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。
-3. システムは pane で Claude Code をセッション UUID の復帰つきで起動する。
-4. システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。
-5. システムは issue のコメントを読み直す。
-6. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
-7. RESUME STEP 32
+3. システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。
+4. システムは pane で Claude Code をセッション UUID の復帰つきで起動する。
+5. システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。
+6. システムは issue のコメントを読み直す。
+7. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
+8. RESUME STEP 32
 POSTCONDITION: issue にエージェントが書いたコメントが1件以上ある。turn 数は増えていない。issue の Status は表明の値の遷移先の選択肢である。
 
 SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗:
-RFS コメントの取り戻し 6
+RFS コメントの取り戻し 7
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
 2. システムは herdr の pane を閉じる。
 3. システムは印を外す。
@@ -221,6 +222,15 @@ WHEN herdr の待ち受けが blocked を返した場合
 4. システムは印を外す。
 5. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。worktree は残っている。
+
+GLOBAL ALTERNATIVE FLOW 送信の失敗:
+BRANCH FROM BASIC FLOW 23
+WHEN herdr が指示の送信そのものを断った場合
+1. システムは herdr の pane を閉じる。
+2. システムはリトライの回数を1つ増やす。
+3. システムはバックオフの期限を印に書く。
+4. ABORT
+POSTCONDITION: turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 無音の打ち切り:
 BRANCH FROM BASIC FLOW 24
@@ -322,7 +332,7 @@ flowchart TD
     B7{"7. VALIDATES THAT worktree の置き場所をそのまま使える"}
     B8{"8. VALIDATES THAT branch を置き場所以外の worktree が使っていない"}
     B9["9. 先頭の issue に印を付ける"]
-    B10{"10. VALIDATES THAT Status が terminal_states にも failure_state にも入っていない"}
+    B10{"10. VALIDATES THAT 取り直した Status が active_states に入っている"}
     B11["11. Status に running_state を書く"]
     B12["12. worktree を作る"]
     B13["13. worktree の絶対パスとリポジトリ本体を渡して開き label に owner/repo/issues/N を書く"]
@@ -378,6 +388,7 @@ flowchart TD
     B31 -- 真 --> B32 --> B33 --> B34 --> BPOST
     B12 -. "壊れたref: WHEN ref が読めず worktree を作れない場合" .-> G3S1
     B23 -. "権限の確認: WHEN blocked が返った場合" .-> G1S1
+    B23 -. "送信の失敗: WHEN herdr が送信そのものを断った場合" .-> G4S1
     B24 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> G2S1
 
     subgraph SAF12 ["SPECIFIC ALTERNATIVE FLOW 頼んでいないStatus / RFS BASIC FLOW 3"]
@@ -439,11 +450,11 @@ flowchart TD
     end
 
     subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻し / RFS BASIC FLOW 31"]
-        F6S1["1. pane を閉じる"] --> F6S2["2. セッション UUID と設定ファイルのパスを読む"] --> F6S3["3. セッションの復帰つきで起動する"] --> F6S4["4. コメントへの記録を要求する"] --> F6S5["5. コメントを読み直す"] --> F6S6{"6. VALIDATES THAT コメントがある"}
-        F6S6 -- 真 --> F6S7["7. RESUME STEP 33"]
+        F6S1["1. pane を閉じる"] --> F6S2["2. セッション UUID と設定ファイルのパスを読む"] --> F6S3["3. worktree とリポジトリ本体を渡して開き直し pane を引く"] --> F6S4["4. セッションの復帰つきで起動する"] --> F6S5["5. コメントへの記録を要求する"] --> F6S6["6. コメントを読み直す"] --> F6S7{"7. VALIDATES THAT コメントがある"}
+        F6S7 -- 真 --> F6S8["8. RESUME STEP 33"]
     end
 
-    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗 / RFS コメントの取り戻し 6"]
+    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗 / RFS コメントの取り戻し 7"]
         F7S1["1. Status に failure_state を書く"] --> F7S2["2. pane を閉じる"] --> F7S3["3. 印を外す"] --> F7S4["4. ABORT"]
     end
 
@@ -460,6 +471,10 @@ flowchart TD
         G1S1["1. pane に esc を送る"] --> G1S2["2. Status に failure_state を書く"] --> G1S3["3. pane を閉じる"] --> G1S4["4. 印を外す"] --> G1S5["5. ABORT"]
     end
 
+    subgraph GAF4 ["GLOBAL ALTERNATIVE FLOW 送信の失敗 / BRANCH FROM BASIC FLOW 23"]
+        G4S1["1. pane を閉じる"] --> G4S2["2. リトライの回数を1つ増やす"] --> G4S3["3. バックオフの期限を印に書く"] --> G4S4["4. ABORT"]
+    end
+
     subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 無音の打ち切り / BRANCH FROM BASIC FLOW 24"]
         G2S1["1. agent_status と画面の版を要求する"] --> G2S2["2. pane を閉じる"] --> G2S3["3. リトライの回数を1つ増やす"] --> G2S4["4. バックオフの期限を印に書く"] --> G2S5["5. ABORT"]
     end
@@ -469,8 +484,8 @@ flowchart TD
     F10S2 -- 偽 --> F11S1
     F10S4 --> B20
     F5S2 --> B24
-    F6S6 -- 偽 --> F7S1
-    F6S7 --> B32
+    F6S7 -- 偽 --> F7S1
+    F6S8 --> B32
     G3S1 -- 偽 --> F17S1
     G3S4 --> B12
 ```
@@ -525,6 +540,10 @@ sequenceDiagram
                     loop 表明の値が working でなくなるまで
                         S->>S: turn 数が max_dispatch_turns に達していないことを検証する
                         S->>CC: turn の本文を送る
+                        alt herdr が送信そのものを断る
+                            S->>H: pane の close を要求する
+                            Note over S: ABORT 本文は届いていない。リトライを1つ積む
+                        end
                         CC-->>S: Stop hook を届ける
                         S->>S: settle_ms のあいだ待つ
                         alt task-notification が届く
@@ -540,6 +559,8 @@ sequenceDiagram
                     GH-->>S: コメントの一覧を応答する
                     alt 今回の run のコメントがない
                         S->>H: pane の close を要求する
+                        S->>H: worktree とリポジトリ本体を渡した workspace の open を要求する
+                        H-->>S: workspace と pane を応答する
                         S->>H: セッションの復帰つきの起動を要求する
                         H->>CC: セッションを復帰する
                         S->>CC: 作業の内容のコメントへの記録を要求する
