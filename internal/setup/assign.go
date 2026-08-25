@@ -37,6 +37,12 @@ var (
 	ErrInterrupted = errors.New("利用者が中断しました")
 	// ErrInputClosed は、番号を待っている間に入力が終わったことを表す。
 	ErrInputClosed = errors.New("入力が終わりました")
+	// ErrLineTooLong は、1行が maxInputLine を超えたことを表す。
+	//
+	// **打ち切る理由にはしない。**受け取るのは番号だけなので、これを超える行は貼り間違いで
+	// ある。**それまでに答えた割り当てを全部捨てて最初からやり直させる理由が無い。**
+	// 番号として読めない入力と同じ扱いで、同じ役割を尋ね直す。
+	ErrLineTooLong = errors.New("1行が長すぎます")
 )
 
 // Assignment は5つの役割へ割り当てた Status の選択肢名である。
@@ -138,6 +144,11 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 			fmt.Fprint(out, i18n.T(i18n.KeySetupPromptInput))
 
 			line, err := reader.read(ctx)
+			if errors.Is(err, ErrLineTooLong) {
+				// **打ち切らない。**貼り間違いはその場で入れ直せる。
+				fmt.Fprintln(out, i18n.T(i18n.KeySetupErrLineTooLong, maxInputLine, len(opts.Options)))
+				continue
+			}
 			if err != nil {
 				fmt.Fprintln(out)
 				switch {
@@ -145,6 +156,10 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 					fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortInterrupted))
 				case errors.Is(err, ErrInputClosed):
 					fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortInputClosed))
+				default:
+					// **理由を必ず出す。**ここで黙ると、画面には空行が1つ増えるだけで、
+					// なぜ終わったのかがどこにも出ないまま終了コード 1 で終わる。
+					fmt.Fprintln(out, i18n.T(i18n.KeySetupAbortReadFailed, err))
 				}
 				return Assignment{}, err
 			}
@@ -239,13 +254,22 @@ func parseNumber(line string) (int, bool) {
 	return n, true
 }
 
+// lineResult は1行を読もうとした結果である。
+type lineResult struct {
+	// line は読めた行である（err が nil のときだけ意味を持つ）。
+	line string
+	// err は ErrLineTooLong か nil である。**打ち切る理由はここには入らない**
+	// （それは lineReader.errs へ流す）。
+	err error
+}
+
 // lineReader は入力を1行ずつ読み、**コンテキストの取り消しで待ちを打ち切れるようにする。**
 //
 // io.Reader の Read は取り消せないので、読む側を goroutine に分けて、
 // 「読めた行」と「コンテキストの取り消し」を select で待つ。
 type lineReader struct {
-	// lines は読めた行が流れてくる。
-	lines chan string
+	// results は読もうとした結果が流れてくる。
+	results chan lineResult
 	// errs は読み終わり（io.EOF）または読めなかった理由が1度だけ流れてくる。
 	errs chan error
 	// done は goroutine を止める合図である。close で伝える。
@@ -261,32 +285,83 @@ type lineReader struct {
 // 戻り値: 読み手。使い終わったら close を呼ぶこと。
 func newLineReader(r io.Reader) *lineReader {
 	lr := &lineReader{
-		lines: make(chan string),
-		errs:  make(chan error, 1),
-		done:  make(chan struct{}),
+		results: make(chan lineResult),
+		errs:    make(chan error, 1),
+		done:    make(chan struct{}),
 	}
 	if r == nil {
 		lr.errs <- io.EOF
 		return lr
 	}
 	go func() {
-		sc := bufio.NewScanner(r)
-		sc.Buffer(make([]byte, 0, 1024), maxInputLine)
-		for sc.Scan() {
+		// **bufio.Scanner は使わない。**上限を超えた行を受け取ると
+		// bufio.ErrTooLong で止まり、**そのあとの正しい行も1行も読めなくなる。**
+		// bufio.Reader なら、長すぎる行を改行まで読み捨てて次の行から読み直せる。
+		br := bufio.NewReaderSize(r, maxInputLine)
+		for {
+			line, err := readLimitedLine(br)
+			if err != nil && !errors.Is(err, ErrLineTooLong) {
+				// errs は容量1なので、受け手が居なくてもここで止まらない。
+				lr.errs <- err
+				return
+			}
 			select {
-			case lr.lines <- sc.Text():
+			case lr.results <- lineResult{line: line, err: err}:
 			case <-lr.done:
 				return
 			}
 		}
-		err := sc.Err()
-		if err == nil {
-			err = io.EOF
-		}
-		// errs は容量1なので、受け手が居なくてもここで止まらない。
-		lr.errs <- err
 	}()
 	return lr
+}
+
+// readLimitedLine は1行を上限つきで読む。
+//
+// **上限を超えた行は改行まで読み捨てる。**捨てたことを ErrLineTooLong で知らせ、
+// **次の呼び出しからは次の行が読める。**受け取るのは番号だけなので、
+// maxInputLine を超える1行は貼り間違いである（長い URL やログの塊など）。
+//
+// br: 読む先。**バッファの大きさが上限になる**ので maxInputLine で作ること。
+// 戻り値の1つ目: 読めた行（改行と、その手前の CR は含まない）。
+// 戻り値の2つ目: 長すぎて捨てたら ErrLineTooLong、入力が終わったら io.EOF、
+// それ以外に読めなかったらその理由。
+func readLimitedLine(br *bufio.Reader) (string, error) {
+	var buf []byte
+	tooLong := false
+	for {
+		seg, err := br.ReadSlice('\n')
+		switch {
+		case err == nil:
+			if tooLong {
+				return "", ErrLineTooLong
+			}
+			buf = append(buf, seg...)
+			return trimEOL(buf), nil
+		case errors.Is(err, bufio.ErrBufferFull):
+			// バッファが埋まりきっても改行が来ない。**この行は捨てる。**
+			tooLong = true
+			buf = nil
+		default:
+			if tooLong {
+				return "", ErrLineTooLong
+			}
+			if len(seg) > 0 {
+				// 改行で終わっていない最後の1行も、1行として読む。
+				buf = append(buf, seg...)
+				return trimEOL(buf), nil
+			}
+			return "", err
+		}
+	}
+}
+
+// trimEOL は行末の改行と、その手前の CR を落とす。
+//
+// b: 読めた1行（改行を含みうる）。
+// 戻り値: 改行を落とした文字列。
+func trimEOL(b []byte) string {
+	s := strings.TrimSuffix(string(b), "\n")
+	return strings.TrimSuffix(s, "\r")
 }
 
 // read は1行を読む。
@@ -294,13 +369,13 @@ func newLineReader(r io.Reader) *lineReader {
 // ctx: 取り消しを受け取るコンテキスト。
 // 戻り値の1つ目: 読めた1行（改行は含まない）。
 // 戻り値の2つ目: 取り消されたら ErrInterrupted、入力が終わったら ErrInputClosed、
-// それ以外に読めなかったらその理由。
+// 1行が長すぎて捨てたら ErrLineTooLong、それ以外に読めなかったらその理由。
 func (l *lineReader) read(ctx context.Context) (string, error) {
 	select {
 	case <-ctx.Done():
 		return "", ErrInterrupted
-	case line := <-l.lines:
-		return line, nil
+	case r := <-l.results:
+		return r.line, r.err
 	case err := <-l.errs:
 		if errors.Is(err, io.EOF) {
 			return "", ErrInputClosed
