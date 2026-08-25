@@ -148,9 +148,25 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 
 	// worktree を消したあとでは共通ディレクトリを引けないので、先に引いておく。
 	// **どのリポジトリかは検算する**（worktree の .git はエージェントが書き換えられる）。
-	_, repoDir, err := m.verifiedRepo(ctx, resolvedPath)
-	if err != nil {
-		return nil, err
+	//
+	// **検算できなくても片付けをあきらめない**（issue #23）。clone を人間が移した・
+	// 消した環境では、リポジトリを名指しできない。**そのとき branch には触らない**
+	// （どの branch を消してよいかを確かめる手立てが無い）が、
+	// **worktree のディレクトリと herdr の workspace は、リポジトリを知らなくても消せる。**
+	// できる分を消して、残したものを人間へ言う。
+	//
+	// **「調べられない」と「食い違っている」は別である。**後者は worktree の `.git` が
+	// 書き換えられた痕跡であり、**消す相手を取り違えている可能性がある。**
+	// そのときだけは1バイトも消さずに止まる（3-20 / 3-22）。
+	repoDir := ""
+	if _, verified, repoErr := m.verifiedRepo(ctx, resolvedPath); repoErr != nil {
+		if errors.Is(repoErr, ErrRepoMismatch) {
+			return nil, repoErr
+		}
+		m.logger.Warn("worktree が属するリポジトリを検算できないので、branch には触らずに worktree だけを片付けます",
+			"worktree", resolvedPath, "error", repoErr)
+	} else {
+		repoDir = verified
 	}
 
 	// base は身元ファイルにも書いてある（3-18）。**再起動をまたぐと呼び出し側は
@@ -161,10 +177,7 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 	// 起動するだけ遅くなり、結果は使われない（下の分岐が Force で無効になる）。
 	var reasons []string
 	if !req.Force {
-		reasons, err = m.leftoverReasons(ctx, req)
-		if err != nil {
-			return nil, err
-		}
+		reasons = m.leftoverReasons(ctx, req)
 	}
 	if len(reasons) > 0 {
 		result.Deferred = true
@@ -180,7 +193,7 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 
 	// 段4 の準備: 消してよい branch かどうかを、**worktree がまだあるうちに**検算する
 	// （git に現物を答えさせる検査が要るため。deletableBranch を見よ）。
-	branch, branchDeletable := m.deletableBranch(ctx, resolvedPath, identity)
+	branch, branchDeletable := m.deletableBranch(ctx, repoDir, resolvedPath, identity)
 
 	// 段3 の準備: 消す宛先の herdr workspace も、**worktree がまだ開いているうちに**
 	// herdr に答えさせて検算する（resolveWorkspaceID を見よ）。
@@ -279,14 +292,21 @@ func (m *Manager) effectiveBase(requested normalize.SafeName, identity *Identity
 // 言わせられる。**返ってきた ID だけを消す宛先にする。身元ファイルの値と食い違ったら、
 // 現物のほうを採り、食い違ったことを警告としてログに残す。
 //
+// **`worktree.open` が答えられなくても、そこで止まらない**（issue #23）。
+// `worktree.open` は git を触る（worktree の `.git` が壊れていれば断られうる）ので、
+// 断られたら `workspace.list` に「このパスを開いている workspace はどれか」を
+// 答えさせ直す。**どちらも herdr 自身の答えなので、検算としての強さは変わらない。**
+// **身元ファイルの値へは決して落とさない**（エージェントが書き換えられる）。
+// **どちらでも答えが出なければ空文字を返す**（片付けは worktree の実体だけを消して続ける）。
+//
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 封じ込め検査を通った worktree の絶対パス。
 // repoDir: 検算済みのリポジトリの作業ディレクトリ（worktree.open の cwd に渡す）。
 // identity: 読み取った身元ファイル。
 // 戻り値の1つ目: 消してよい herdr workspace の ID。
 // **herdr.worktree.create_via_herdr が偽なら空文字**（herdr を使わないので要らない）。
-// 戻り値の2つ目: herdr のクライアントが無い場合・`worktree.open` に失敗した場合・
-// **herdr が別のパスを答えた場合**のエラー。
+// **herdr が答えられなかった場合も空文字である。**
+// 戻り値の2つ目: herdr のクライアントが無い場合・**herdr が別のパスを答えた場合**のエラー。
 func (m *Manager) resolveWorkspaceID(
 	ctx context.Context,
 	worktreePath, repoDir string,
@@ -306,17 +326,21 @@ func (m *Manager) resolveWorkspaceID(
 		Focus: &focus,
 	})
 	if err != nil {
-		return "", i18n.Errorf(
-			i18n.KeyWorkspaceResolveWorkspaceIDWorktreeOpenFailed, worktreePath, err)
+		m.logger.Warn("herdr の worktree.open が断ったので、workspace の一覧から探し直します",
+			"worktree", worktreePath, "error", err)
+		return m.fallbackWorkspaceID(ctx, worktreePath), nil
 	}
 	if opened.Worktree.Path != "" && !samePath(opened.Worktree.Path, worktreePath) {
+		// **これは「答えられない」ではなく「別の相手を答えた」である。**
+		// 落とさずに進むと、無関係の workspace を消すことになる。
 		return "", i18n.Errorf(
 			i18n.KeyWorkspaceResolveWorkspaceIDPathMismatch, opened.Worktree.Path, worktreePath)
 	}
 	workspaceID := opened.Workspace.WorkspaceID
 	if workspaceID == "" {
-		return "", i18n.Errorf(
-			i18n.KeyWorkspaceResolveWorkspaceIDWorkspaceIDMissing, worktreePath)
+		m.logger.Warn("herdr の worktree.open が workspace の ID を返さなかったので、workspace の一覧から探し直します",
+			"worktree", worktreePath)
+		return m.fallbackWorkspaceID(ctx, worktreePath), nil
 	}
 	if identity.HerdrWorkspaceID != "" && identity.HerdrWorkspaceID != workspaceID {
 		m.logger.Warn("身元ファイルの herdr_workspace_id が herdr の現物と一致しないので、現物のほうを消します",
@@ -325,6 +349,56 @@ func (m *Manager) resolveWorkspaceID(
 			"herdr_workspace_id", workspaceID)
 	}
 	return workspaceID, nil
+}
+
+// fallbackWorkspaceID は、`worktree.open` が答えられなかったときに `workspace.list` で
+// 探し直し、結果をログに残す（3-9 の段3）。
+//
+// ctx: 実行に適用するコンテキスト。
+// worktreePath: 封じ込め検査を通った worktree の絶対パス。
+// 戻り値: 見つかった workspace の ID。**見つからない場合と問い合わせに失敗した場合は空文字**
+// （そのときは worktree の実体だけを片付ける）。
+func (m *Manager) fallbackWorkspaceID(ctx context.Context, worktreePath string) string {
+	workspaceID, err := m.findWorkspaceIDByPath(ctx, worktreePath)
+	if err != nil {
+		m.logger.Warn("herdr の workspace の一覧を引けないので、herdr workspace は残ります（手で閉じてください）",
+			"worktree", worktreePath, "error", err)
+		return ""
+	}
+	if workspaceID == "" {
+		m.logger.Warn("この worktree を開いている herdr workspace が一覧に無いので、worktree の実体だけを片付けます",
+			"worktree", worktreePath)
+	}
+	return workspaceID
+}
+
+// findWorkspaceIDByPath は `workspace.list` に、そのパスを開いている workspace を答えさせる。
+//
+// **`worktree.open` の代わりに使う。**あちらは git を触るので、worktree の `.git` が
+// 壊れていると断られうる。こちらは herdr が持っている一覧を読むだけである。
+// **照合は checkout_path であり、身元ファイルの値は1つも使わない。**
+//
+// **ログは出さない。**「答えが無い」ことの意味は呼び出し側の文脈で変わる
+// （消す前なら「実体だけ片付ける」、消したあとなら「もう閉じている」）。
+//
+// ctx: 実行に適用するコンテキスト。
+// worktreePath: 封じ込め検査を通った worktree の絶対パス。
+// 戻り値の1つ目: 見つかった workspace の ID。**見つからなければ空文字。**
+// 戻り値の2つ目: 一覧を引けなかった場合のエラー。
+func (m *Manager) findWorkspaceIDByPath(ctx context.Context, worktreePath string) (string, error) {
+	list, err := m.herdr.WorkspaceList(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, ws := range list.Workspaces {
+		if ws.Worktree == nil {
+			continue
+		}
+		if samePath(ws.Worktree.CheckoutPath, worktreePath) {
+			return ws.WorkspaceID, nil
+		}
+	}
+	return "", nil
 }
 
 // deletableBranch は、身元ファイルに書かれた branch を `git branch -D` に渡してよいかを
@@ -344,17 +418,32 @@ func (m *Manager) resolveWorkspaceID(
 //   - **worktree が実際にチェックアウトしている branch と一致すること。**
 //     git が答える現物との突き合わせであり、身元ファイルだけでは成立しない
 //
+// **現物はリポジトリ側に答えさせる**（`git -C <リポジトリ> worktree list --porcelain`）。
+// worktree 側に `git -C <worktree> rev-parse HEAD` を聞くと、**worktree の `.git` が
+// 壊れているだけで branch が消せなくなる**（issue #23）。しかも `.git` はエージェントが
+// 書き換えられるファイルなので、**その答えは検算の根拠として弱い。**
+// リポジトリのパスは ghq と置き場所のパスで検算済みであり（verifiedRepo）、
+// `worktree list` は `.git` が壊れていてもその worktree の branch を答える（実測: 2026-08-25）。
+//
 // ctx: 実行に適用するコンテキスト。
-// worktreePath: 対象の worktree のパス（**まだ消していないこと。**HEAD を引くため）。
+// repoDir: 検算済みのリポジトリの作業ディレクトリ。
+// worktreePath: 対象の worktree のパス（**まだ消していないこと。**登録を引くため）。
 // identity: 読み取った身元ファイル。
 // 戻り値の1つ目: 消してよい branch 名。
 // 戻り値の2つ目: 消してよければ true。**偽のときは何も消さない**（理由は警告としてログに出す）。
 func (m *Manager) deletableBranch(
 	ctx context.Context,
-	worktreePath string,
+	repoDir, worktreePath string,
 	identity *Identity,
 ) (normalize.SafeName, bool) {
 	if identity.Branch == "" {
+		return "", false
+	}
+	// **リポジトリを名指しできないなら branch には触らない。**空のまま git を呼ぶと
+	// `-C` が付かず、**continuo 自身の作業ディレクトリのリポジトリに撃つ。**
+	if repoDir == "" {
+		m.logger.Warn("worktree が属するリポジトリを名指しできないので branch を消しません",
+			"worktree", worktreePath, "branch", identity.Branch)
 		return "", false
 	}
 
@@ -380,10 +469,10 @@ func (m *Manager) deletableBranch(
 		return "", false
 	}
 
-	head, err := gitCurrentBranch(ctx, worktreePath)
+	head, err := gitWorktreeBranchAt(ctx, repoDir, worktreePath)
 	if err != nil {
 		m.logger.Warn("worktree がチェックアウトしている branch を引けないので branch を消しません",
-			"worktree", worktreePath, "error", err)
+			"repo", repoDir, "worktree", worktreePath, "error", err)
 		return "", false
 	}
 	if head != branch.String() {
@@ -432,11 +521,15 @@ func (m *Manager) removeSettingsFile(settingsPath string) {
 // **commit の有無では判定しない。**commit していなくても編集したファイルが残っていれば
 // 成果はあるので、手順2（git status --porcelain）で拾う。
 //
+// **git が答えられないことをエラーにしない**（issue #23）。worktree の `.git` が
+// 壊れていると `git -C <worktree> …` が1つも通らないが、それは呼び出し側が扱えない
+// エラーではなく「調べられないので消さない」という**見送りの理由**である。
+// エラーにすると、`continuo abandon` が壊れた worktree の中身を1行も見せられなくなる。
+//
 // ctx: 実行に適用するコンテキスト。
 // req: 対象の worktree と base。
-// 戻り値の1つ目: 見送る理由（空なら消してよい）。
-// 戻り値の2つ目: git を実行できない場合のエラー。
-func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) ([]string, error) {
+// 戻り値: 見送る理由（空なら消してよい）。
+func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) []string {
 	var reasons []string
 
 	if m.cfg.Cleanup.RequireCleanWorktree {
@@ -446,10 +539,10 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) ([]st
 		// **打ち切りの有無は見ない。**この判定は「空かどうか」しか見ないので、
 		// 打ち切られるほど出ているなら、それは空ではない。
 		status, _, err := gitStatusPorcelain(ctx, req.WorktreePath, m.identityStatusExcludes()...)
-		if err != nil {
-			return nil, err
-		}
-		if status != "" {
+		switch {
+		case err != nil:
+			reasons = append(reasons, i18n.T(i18n.KeyWorkspaceUndeterminedDirty, err))
+		case status != "":
 			reasons = append(reasons, "コミットされていない変更が残っている（未追跡のファイルを含む）")
 		}
 	}
@@ -457,17 +550,17 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) ([]st
 	if m.cfg.Cleanup.RequirePushed {
 		hasUpstream, err := gitHasUpstream(ctx, req.WorktreePath)
 		if err != nil {
-			return nil, err
+			return append(reasons, i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err))
 		}
 		if hasUpstream {
 			ahead, err := gitAheadOfUpstream(ctx, req.WorktreePath)
 			if err != nil {
-				return nil, err
+				return append(reasons, i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err))
 			}
 			if ahead > 0 {
 				reasons = append(reasons, fmt.Sprintf("push されていない commit が %d 件残っている", ahead))
 			}
-			return reasons, nil
+			return reasons
 		}
 
 		// upstream が無い側。base からの差分を見る。
@@ -475,12 +568,12 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) ([]st
 			reasons = append(reasons,
 				"push されていないか、worktree を作ったときの base を確かめられないので消せない"+
 					"（エージェントに push させると片付けられる）")
-			return reasons, nil
+			return reasons
 		}
 		noDiff, err := gitNoDiffFromBase(ctx, req.WorktreePath, req.Base)
 		if err != nil {
 			reasons = append(reasons, fmt.Sprintf("base %s との差分を判定できない: %v", req.Base.String(), err))
-			return reasons, nil
+			return reasons
 		}
 		if !noDiff {
 			reasons = append(reasons, fmt.Sprintf(
@@ -488,7 +581,7 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) ([]st
 		}
 	}
 
-	return reasons, nil
+	return reasons
 }
 
 // identityStatusExcludes は `git status --porcelain` の数から外す名前を返す。
@@ -520,36 +613,172 @@ func (m *Manager) identityStatusExcludes() []string {
 // **渡す workspace の ID は resolveWorkspaceID が herdr に答えさせたものである。**
 // 身元ファイルの値をそのまま渡してはならない（エージェントが書き換えられる）。
 //
+// **消えたことを必ず自分で確かめる**（3-9 の段3。issue #23）。herdr も git も
+// 「消した」と答えたのに実体が残ることがある。worktree の `.git` が壊れていると
+// `git worktree remove` は `validation failed, cannot remove working tree` で断り
+// （実測: 2026-08-25）、herdr の `worktree.remove` はその内側で同じことをする。
+// **答えだけを信じると、「消しました」と表示して残す。**
+//
+// **残っていたら自分の手で片付ける**（removeWorktreeByHand）。
+// **そこで諦めると、まさに片付けたい worktree だけが永久に残る。**
+//
 // ctx: 実行に適用するコンテキスト。
-// workspaceID: 検算済みの herdr workspace の ID（herdr を使わない設定なら空文字）。
-// repoDir: 検算済みのリポジトリの作業ディレクトリ（herdr を使わないときに使う）。
-// worktreePath: 消す worktree の絶対パス。
-// 戻り値: 削除に失敗した場合・herdr を使う設定なのに ID やクライアントが無い場合のエラー。
+// workspaceID: 検算済みの herdr workspace の ID
+// （herdr を使わない設定のとき、および herdr が答えられなかったときは空文字）。
+// repoDir: 検算済みのリポジトリの作業ディレクトリ。
+// worktreePath: 消す worktree の絶対パス（封じ込め検査を通っていること）。
+// 戻り値: 実体を消せなかった場合・herdr を使う設定なのにクライアントが無い場合のエラー。
 func (m *Manager) removeWorktree(
 	ctx context.Context,
 	workspaceID string,
 	repoDir, worktreePath string,
 ) error {
-	if !m.cfg.Herdr.Worktree.CreateViaHerdr {
-		if err := gitWorktreeRemove(ctx, repoDir, worktreePath); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	if m.herdr == nil {
+	if m.cfg.Herdr.Worktree.CreateViaHerdr && m.herdr == nil {
 		return fmt.Errorf("herdr.worktree.create_via_herdr が真ですが herdr のクライアントが設定されていません")
 	}
+
+	refused := m.requestWorktreeRemoval(ctx, workspaceID, repoDir, worktreePath)
+	gone, statErr := worktreeGone(worktreePath)
+	if refused == nil && gone {
+		return nil
+	}
+	if refused == nil {
+		// **断られていないのに残っている。**答えと現物が食い違っているので、その旨を残す。
+		refused = i18n.Errorf(i18n.KeyWorkspaceRemoveWorktreeStillThere, worktreePath, statErr)
+	}
+	if err := m.removeWorktreeByHand(ctx, repoDir, worktreePath, refused); err != nil {
+		return err
+	}
+	// **herdr workspace が残っていれば閉じる。**閉じ残すと、中身の消えた workspace が
+	// herdr の画面に残り続ける。**閉じる宛先は herdr 自身に答えさせる**（身元ファイルは使わない）。
+	m.closeWorktreeWorkspace(ctx, worktreePath)
+	return nil
+}
+
+// requestWorktreeRemoval は、設定された経路に worktree の削除を要求する（3-9 の段3）。
+//
+// **「要求した」だけで、消えたかどうかは見ない。**消えたかを確かめるのは removeWorktree である。
+//
+// ctx: 実行に適用するコンテキスト。
+// workspaceID: 検算済みの herdr workspace の ID（空なら herdr へは要求できない）。
+// repoDir: 検算済みのリポジトリの作業ディレクトリ。
+// worktreePath: 消す worktree の絶対パス。
+// 戻り値: 要求が断られた理由。断られなければ nil。
+func (m *Manager) requestWorktreeRemoval(
+	ctx context.Context,
+	workspaceID string,
+	repoDir, worktreePath string,
+) error {
+	if !m.cfg.Herdr.Worktree.CreateViaHerdr {
+		if repoDir == "" {
+			// **リポジトリを名指しできない。**空のまま git を呼ぶと `-C` が付かず、
+			// continuo 自身の作業ディレクトリのリポジトリに撃つ。実体は自分で消せる。
+			return i18n.Errorf(i18n.KeyWorkspaceRemoveWorktreeRepoUnknown, worktreePath)
+		}
+		return gitWorktreeRemove(ctx, repoDir, worktreePath)
+	}
 	if workspaceID == "" {
-		return i18n.Errorf(
-			i18n.KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown, worktreePath)
+		// **herdr がこの worktree の workspace を答えられなかった。**
+		// 消す宛先が分からないだけであり、実体と git の登録は自分で片付けられる。
+		return i18n.Errorf(i18n.KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown, worktreePath)
 	}
 	if _, err := m.herdr.WorktreeRemove(ctx, herdr.WorktreeRemoveParams{
 		WorkspaceID: workspaceID,
 		Force:       true,
 	}); err != nil {
-		return i18n.Errorf(
-			i18n.KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed, workspaceID, err)
+		return i18n.Errorf(i18n.KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed, workspaceID, err)
 	}
 	return nil
+}
+
+// worktreeGone は worktree の実体がもう無いかを返す。
+//
+// **シンボリックリンクを追わない**（Lstat）。追うと、リンクの先が消えただけで
+// 「消えた」と答えてしまう。
+//
+// worktreePath: 調べる worktree の絶対パス。
+// 戻り値の1つ目: 無ければ true。**調べられなかった場合は false**（残っている側に倒す）。
+// 戻り値の2つ目: 調べられなかった理由（無ければ nil）。
+func worktreeGone(worktreePath string) (bool, error) {
+	if _, err := os.Lstat(worktreePath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return true, nil
+		}
+		return false, err
+	}
+	return false, nil
+}
+
+// removeWorktreeByHand は git にも herdr にも頼らずに worktree を片付ける（issue #23）。
+//
+// **`continuo abandon` は壊れた状態を片付ける道具である。**worktree の `.git` が壊れて
+// いれば `git worktree remove` は断り、herdr の `worktree.remove` も同じ理由で断りうる。
+// **断られたまま終わると、利用者には手が無くなる。**そこで実体を消し、
+// `git worktree prune` でリポジトリ側の登録を落とす。
+//
+// **消してよいかの判定は、ここへ来る前に済んでいる**（手順2 と 2b、または `--force`）。
+// **パスは封じ込め検査（3-20）を通っている**ので、置き場所の外は1バイトも消さない。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: 検算済みのリポジトリの作業ディレクトリ。
+// worktreePath: 消す worktree の絶対パス。
+// cause: 通常の経路が断った理由（ログとエラー文に残す）。
+// 戻り値: 実体を消せなかった場合のエラー。**登録の掃除に失敗しても止めない**
+// （実体はもう無いので、次の `git worktree prune` で落ちる）。
+func (m *Manager) removeWorktreeByHand(
+	ctx context.Context,
+	repoDir, worktreePath string,
+	cause error,
+) error {
+	m.logger.Warn("通常の経路で worktree を消せなかったので、実体を消して git の登録を掃除します",
+		"worktree", worktreePath, "repo", repoDir, "error", cause)
+	if err := os.RemoveAll(worktreePath); err != nil {
+		return i18n.Errorf(i18n.KeyWorkspaceRemoveWorktreeByHandFailed, worktreePath, cause, err)
+	}
+	if repoDir == "" {
+		// **リポジトリを名指しできないので登録は掃除できない。**残るのは
+		// `git worktree list` の1行だけであり、次に `git worktree prune` が走れば落ちる。
+		m.logger.Warn("worktree が属するリポジトリを名指しできないので、git の worktree の登録は残ります",
+			"worktree", worktreePath)
+		return nil
+	}
+	if err := gitWorktreePrune(ctx, repoDir); err != nil {
+		m.logger.Warn("worktree の登録を掃除できませんでした（実体は消してあります）",
+			"repo", repoDir, "worktree", worktreePath, "error", err)
+	}
+	return nil
+}
+
+// closeWorktreeWorkspace は、実体を自分で消した worktree の herdr workspace を閉じる。
+//
+// **`worktree.remove` が届かなかったときの後始末である。**閉じ残すと、中身の消えた
+// workspace が herdr の画面に残る。**閉じる宛先は herdr 自身に答えさせる**
+// （`workspace.list` の checkout_path で照合する。身元ファイルの値は1つも使わない）。
+// **もう残っていなければ何もしない**（`worktree.remove` が閉じ切っていた場合）。
+//
+// **失敗してもエラーにしない。**worktree の実体はもう消えており、ここで止めると
+// 「消えたのに Cleanup は失敗を返す」という、呼び出し側が扱えない結果になる。
+//
+// ctx: 実行に適用するコンテキスト。
+// worktreePath: 消した worktree の絶対パス。
+func (m *Manager) closeWorktreeWorkspace(ctx context.Context, worktreePath string) {
+	if !m.cfg.Herdr.Worktree.CreateViaHerdr || m.herdr == nil {
+		return
+	}
+	workspaceID, err := m.findWorkspaceIDByPath(ctx, worktreePath)
+	if err != nil {
+		m.logger.Warn("herdr の workspace の一覧を引けないので、herdr workspace は残ります（手で閉じてください）",
+			"worktree", worktreePath, "error", err)
+		return
+	}
+	if workspaceID == "" {
+		return
+	}
+	if _, err := m.herdr.WorkspaceClose(ctx, herdr.WorkspaceCloseParams{WorkspaceID: workspaceID}); err != nil {
+		m.logger.Warn("worktree の herdr workspace を閉じられませんでした（手で閉じてください）",
+			"worktree", worktreePath, "workspace_id", workspaceID, "error", err)
+		return
+	}
+	m.logger.Info("worktree の herdr workspace を閉じました",
+		"worktree", worktreePath, "workspace_id", workspaceID)
 }

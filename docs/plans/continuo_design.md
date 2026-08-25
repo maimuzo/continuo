@@ -4046,6 +4046,41 @@ worktree が1つも見つからなかった実行では、そもそもここへ�
 **0件のときに Status だけを動かすことはしない。**worktree が無い理由は「もう片付けた」とは限らず、
 **URL の打ち間違い**でもある。**打ち間違えた相手の Status を動かすほうが害が大きい。**
 
+### 3-37-6. git と herdr が答えられなくても片付けられる
+
+**言いたいこと。**`abandon` は壊れた状態を片付ける道具である。
+**外の道具が答えられないことを理由に止まると、いちばん要る場面で使えない**（issue #23）。
+調べられないことは**隠さずに見せ**、消す実行では `--force` を要求する。
+
+**実測（2026-08-25）。**worktree の `.git`（`gitdir: …` の1行だけのファイル。3-18）を
+空・でたらめ・不在にすると、`git -C <worktree> …` は1つも通らない。
+一方、**リポジトリ側は答え続ける。**
+
+| コマンド | `.git` が壊れた worktree に対して |
+| --- | --- |
+| `git -C <worktree> status --porcelain` | `fatal: invalid gitfile format`（不在なら `not a git repository`） |
+| `git -C <リポジトリ> worktree list --porcelain` | **その worktree の `branch refs/heads/…` を返す** |
+| `git -C <リポジトリ> worktree remove --force <パス>` | `fatal: validation failed, cannot remove working tree` |
+| ディレクトリを消して `git -C <リポジトリ> worktree prune` | **通る。**そのあと `git branch -D` も通る |
+
+**採る扱い。**
+
+| 答えられない相手 | どうするか |
+| --- | --- |
+| 失うものの判定（`Inspect`） | エラーにせず `Leftover.Undetermined` に理由を積む。**`HasLoss` は真になる**ので `--force` が要る |
+| branch の現物 | worktree ではなく**リポジトリ側**の `worktree list --porcelain` に答えさせる |
+| `git worktree remove` | ディレクトリを自分で消し、`git worktree prune` で登録を落とす |
+| herdr の workspace の ID | `workspace.list` の `checkout_path` で探し直す。駄目なら実体だけ片付ける |
+| herdr の pane の生死 | `--force` があれば、確かめずに消したことを言ってから進む |
+| ghq の clone（リポジトリの検算） | branch には触らず、worktree と herdr workspace だけ片付ける |
+
+**消えたかは必ず自分で確かめる。**herdr も git も「消した」と答えて消えていないことがある。
+答えだけを信じると、**「消しました」と表示して残す。**
+
+**「調べられない」と「食い違っている」は分ける。**worktree の `.git` が**別のリポジトリを
+指していた**ときだけは1バイトも消さない（`ErrRepoMismatch`）。壊れているのではなく
+**書き換えの痕跡**であり、消す相手を取り違えている可能性がある（3-20 / 3-22）。
+
 ---
 
 ## 4. 人間が決めたこと

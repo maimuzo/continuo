@@ -628,6 +628,9 @@ const (
 	// KeyAbandonToSkipped は片付ける worktree が無く、`--to` の指定を使わずに
 	// 終わるときに出る。**指定を黙って捨てない。**
 	KeyAbandonToSkipped Key = "abandon.to_skipped"
+	// KeyAbandonIdentityUnreadable は身元ファイルを読めない worktree を候補から
+	// 外したときに出る。**黙って飛ばすと「worktree はありません」としか見えない。**
+	KeyAbandonIdentityUnreadable Key = "abandon.identity_unreadable"
 	// KeyAbandonErrMultiple はその issue の worktree が2つ以上あるときに出る。
 	KeyAbandonErrMultiple Key = "abandon.err_multiple"
 	// KeyAbandonMultipleItem は同じときに候補を1つずつ並べる行に出る。
@@ -667,6 +670,9 @@ const (
 	KeyAbandonErrPaneRemains Key = "abandon.err_pane_remains"
 	// KeyAbandonErrPaneAlive は継続監視が動いていないのに pane が生きているときに出る。
 	KeyAbandonErrPaneAlive Key = "abandon.err_pane_alive"
+	// KeyAbandonPaneCheckSkipped は、herdr へ問い合わせられないまま `--force` が
+	// 指定されていて、pane の生死を確かめずに消すときに出る。
+	KeyAbandonPaneCheckSkipped Key = "abandon.pane_check_skipped"
 	// KeyAbandonErrPaneWaitInterrupted は pane が閉じるのを待っている途中で
 	// `SIGINT` / `SIGTERM` を受けたときに出る。**時間切れとは言い分ける。**
 	KeyAbandonErrPaneWaitInterrupted Key = "abandon.err_pane_wait_interrupted"
@@ -698,8 +704,16 @@ const (
 	// KeyAbandonPlanDirtyAtLeast は変更のファイル数を数え切れなかったときの行に出る
 	// （`git status --porcelain` の読み取りが上限で打ち切られた場合）。
 	KeyAbandonPlanDirtyAtLeast Key = "abandon.plan_dirty_at_least"
+	// KeyAbandonPlanDirtyUnknown は、git が答えられずに変更のファイル数を
+	// 1件も数えられなかったときの行に出る（worktree の `.git` が壊れている場合など）。
+	KeyAbandonPlanDirtyUnknown Key = "abandon.plan_dirty_unknown"
 	// KeyAbandonPlanUnpushed はpush されていない commit の件数の行に出る。
 	KeyAbandonPlanUnpushed Key = "abandon.plan_unpushed"
+	// KeyAbandonPlanUnpushedUnknown は、git が答えられずに push されていない成果が
+	// あるかを判定できなかったときの行に出る。
+	KeyAbandonPlanUnpushedUnknown Key = "abandon.plan_unpushed_unknown"
+	// KeyAbandonPlanUndetermined は、調べられなかったことを1件ずつ並べる行に出る。
+	KeyAbandonPlanUndetermined Key = "abandon.plan_undetermined"
 	// KeyAbandonPlanBaseUnknown はupstream も base も無く判定できないときの行に出る。
 	KeyAbandonPlanBaseUnknown Key = "abandon.plan_base_unknown"
 	// KeyAbandonPlanDiffFromBase はupstream が無いまま base との差分が残っているときの行に出る。
@@ -714,6 +728,9 @@ const (
 	KeyAbandonDryRunNote Key = "abandon.dry_run_note"
 	// KeyAbandonErrLossWithoutForce は失うものがあるのに --force が無いときに出る。
 	KeyAbandonErrLossWithoutForce Key = "abandon.err_loss_without_force"
+	// KeyAbandonErrUndeterminedWithoutForce は、失うものがあるかを調べ切れなかったのに
+	// --force が無いときに出る。**「失うものがある」とは言い分ける。**
+	KeyAbandonErrUndeterminedWithoutForce Key = "abandon.err_undetermined_without_force"
 	// KeyAbandonErrCleanup は片付けに失敗したときに出る。
 	KeyAbandonErrCleanup Key = "abandon.err_cleanup"
 	// KeyAbandonErrDeferred は片付けが見送られたときに出る。
@@ -1384,16 +1401,31 @@ const (
 	KeyWorkspaceRunHookOutputFileCreateFailed Key = "workspace.run_hook.output_file_create_failed"
 	// KeyWorkspaceRunHookRunFailed は workspace_hooks のコマンドが非 0 で終わった・起動できなかった・時間切れになったときに出る。
 	KeyWorkspaceRunHookRunFailed Key = "workspace.run_hook.run_failed"
-	// KeyWorkspaceResolveWorkspaceIDWorktreeOpenFailed は消す前の確認で herdr の worktree.open に失敗したときに出る。
-	KeyWorkspaceResolveWorkspaceIDWorktreeOpenFailed Key = "workspace.resolve_workspace_id.worktree_open_failed"
 	// KeyWorkspaceResolveWorkspaceIDPathMismatch は herdr が答えた worktree のパスが、消そうとしているパスと違ったときに出る。
 	KeyWorkspaceResolveWorkspaceIDPathMismatch Key = "workspace.resolve_workspace_id.path_mismatch"
-	// KeyWorkspaceResolveWorkspaceIDWorkspaceIDMissing は herdr の worktree.open が workspace の ID を返さなかったときに出る。
-	KeyWorkspaceResolveWorkspaceIDWorkspaceIDMissing Key = "workspace.resolve_workspace_id.workspace_id_missing"
 	// KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown は消す herdr workspace の ID を確かめられなかったときに出る。
 	KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown Key = "workspace.remove_worktree.workspace_id_unknown"
 	// KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed は herdr の worktree.remove に失敗したときに出る。
 	KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed Key = "workspace.remove_worktree.worktree_remove_failed"
+	// KeyWorkspaceRemoveWorktreeByHandFailed は、git も herdr も断ったあとに worktree の実体を
+	// 自分で消そうとして、それも失敗したときに出る。
+	KeyWorkspaceRemoveWorktreeByHandFailed Key = "workspace.remove_worktree.by_hand_failed"
+	// KeyWorkspaceRemoveWorktreeStillThere は、削除の要求が断られていないのに worktree の
+	// 実体が残っていたときに出る。
+	KeyWorkspaceRemoveWorktreeStillThere Key = "workspace.remove_worktree.still_there"
+	// KeyWorkspaceRemoveWorktreeRepoUnknown は、worktree が属するリポジトリを名指しできず、
+	// `git worktree remove` を撃てなかったときに出る。
+	KeyWorkspaceRemoveWorktreeRepoUnknown Key = "workspace.remove_worktree.repo_unknown"
+	// KeyWorkspaceGitWorktreeBranchAtNotRegistered は、リポジトリ側の worktree の一覧に
+	// その worktree が載っていなかったときに出る。
+	KeyWorkspaceGitWorktreeBranchAtNotRegistered Key = "workspace.git_worktree_branch_at.not_registered"
+	// KeyWorkspaceVerifiedRepoCommonDirUnreadable は、worktree からも clone からも
+	// git の共通ディレクトリを引けなかったときに出る。
+	KeyWorkspaceVerifiedRepoCommonDirUnreadable Key = "workspace.verified_repo.common_dir_unreadable"
+	// KeyWorkspaceUndeterminedDirty は、コミットされていない変更を git に数えさせられなかったときに出る。
+	KeyWorkspaceUndeterminedDirty Key = "workspace.undetermined.dirty"
+	// KeyWorkspaceUndeterminedUnpushed は、push されていない成果があるかを git に判定させられなかったときに出る。
+	KeyWorkspaceUndeterminedUnpushed Key = "workspace.undetermined.unpushed"
 	// KeyWorkspaceRunGitOutputTooLarge は git の標準出力が上限を超えて読み切れなかったときに出る。
 	KeyWorkspaceRunGitOutputTooLarge Key = "workspace.run_git.output_too_large"
 	// KeyWorkspaceRunGitRunFailed は git が非 0 で終わった・起動できなかったときに出る。
@@ -1902,6 +1934,7 @@ var allKeys = []Key{
 	KeyAbandonNotFound,
 	KeyAbandonOwnerRepoMismatch,
 	KeyAbandonOwnerRepoUnreadable,
+	KeyAbandonIdentityUnreadable,
 	KeyAbandonErrMultiple,
 	KeyAbandonErrUnknownState,
 	KeyAbandonToSkipped,
@@ -1920,6 +1953,7 @@ var allKeys = []Key{
 	KeyAbandonPaneGone,
 	KeyAbandonErrPaneRemains,
 	KeyAbandonErrPaneAlive,
+	KeyAbandonPaneCheckSkipped,
 	KeyAbandonErrPaneWaitInterrupted,
 	KeyAbandonErrInspect,
 	KeyAbandonPlanHeader,
@@ -1934,13 +1968,17 @@ var allKeys = []Key{
 	KeyAbandonPlanPaneUnknown,
 	KeyAbandonPlanDirty,
 	KeyAbandonPlanDirtyAtLeast,
+	KeyAbandonPlanDirtyUnknown,
 	KeyAbandonPlanUnpushed,
+	KeyAbandonPlanUnpushedUnknown,
+	KeyAbandonPlanUndetermined,
 	KeyAbandonPlanBaseUnknown,
 	KeyAbandonPlanDiffFromBase,
 	KeyAbandonPlanNoDiffFromBase,
 	KeyAbandonPlanParkPending,
 	KeyAbandonDryRunNote,
 	KeyAbandonErrLossWithoutForce,
+	KeyAbandonErrUndeterminedWithoutForce,
 	KeyAbandonErrCleanup,
 	KeyAbandonErrDeferred,
 	KeyAbandonDeferredReason,
@@ -2166,11 +2204,16 @@ var allKeys = []Key{
 	KeyTrustReplaceFileRenameFailed,
 	KeyWorkspaceRunHookOutputFileCreateFailed,
 	KeyWorkspaceRunHookRunFailed,
-	KeyWorkspaceResolveWorkspaceIDWorktreeOpenFailed,
 	KeyWorkspaceResolveWorkspaceIDPathMismatch,
-	KeyWorkspaceResolveWorkspaceIDWorkspaceIDMissing,
 	KeyWorkspaceRemoveWorktreeWorkspaceIDUnknown,
 	KeyWorkspaceRemoveWorktreeWorktreeRemoveFailed,
+	KeyWorkspaceRemoveWorktreeByHandFailed,
+	KeyWorkspaceRemoveWorktreeStillThere,
+	KeyWorkspaceRemoveWorktreeRepoUnknown,
+	KeyWorkspaceGitWorktreeBranchAtNotRegistered,
+	KeyWorkspaceVerifiedRepoCommonDirUnreadable,
+	KeyWorkspaceUndeterminedDirty,
+	KeyWorkspaceUndeterminedUnpushed,
 	KeyWorkspaceRunGitOutputTooLarge,
 	KeyWorkspaceRunGitRunFailed,
 	KeyWorkspaceGitExitCodeStartFailed,

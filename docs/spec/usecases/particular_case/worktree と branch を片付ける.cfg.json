@@ -3,7 +3,7 @@
   "usecase_name": "worktree と branch を片付ける",
   "source": {
     "file": "docs/spec/usecases/particular_case/worktree と branch を片付ける.rucm.md",
-    "rucm_block_sha256": "58a760abf98b99b037682a6db475e0b922cf025ca18073daccef8de3430c142a"
+    "rucm_block_sha256": "49fc2aa8d36bbc828d3669c39650973fc6b66d44512b6164e373980a671dec4d"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -107,14 +107,14 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 7,
-      "statement": "システムは VALIDATES THAT worktree にコミットされていない変更がない。"
+      "statement": "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。"
     },
     {
       "id": "BASIC FLOW-8",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 8,
-      "statement": "システムは VALIDATES THAT branch に push されていない成果がない。"
+      "statement": "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。"
     },
     {
       "id": "BASIC FLOW-9",
@@ -128,7 +128,7 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは herdr に workspace の ID を渡して worktree の削除を要求する。"
+      "statement": "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。"
     },
     {
       "id": "BASIC FLOW-11",
@@ -163,7 +163,7 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "システムは git に branch の削除を要求する。"
+      "statement": "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。"
     },
     {
       "id": "BASIC FLOW-18",
@@ -375,25 +375,25 @@
       "from": "BASIC FLOW-7",
       "to": "BASIC FLOW-8",
       "kind": "true",
-      "condition": "worktree にコミットされていない変更がない"
+      "condition": "worktree にコミットされていない変更がなく、その判定ができている"
     },
     {
       "from": "BASIC FLOW-7",
       "to": "未コミットの変更-1",
       "kind": "false",
-      "condition": "NOT worktree にコミットされていない変更がない"
+      "condition": "NOT worktree にコミットされていない変更がなく、その判定ができている"
     },
     {
       "from": "BASIC FLOW-8",
       "to": "BASIC FLOW-9",
       "kind": "true",
-      "condition": "branch に push されていない成果がない"
+      "condition": "branch に push されていない成果がなく、その判定ができている"
     },
     {
       "from": "BASIC FLOW-8",
       "to": "未pushの成果-1",
       "kind": "false",
-      "condition": "NOT branch に push されていない成果がない"
+      "condition": "NOT branch に push されていない成果がなく、その判定ができている"
     },
     {
       "from": "BASIC FLOW-9",
@@ -564,15 +564,15 @@
         "システムはボードを project item の ID 指定でまとめて取り直す。",
         "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
         "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
-        "システムは VALIDATES THAT worktree にコミットされていない変更がない。",
-        "システムは VALIDATES THAT branch に push されていない成果がない。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
         "システムは workspace_hooks の before_remove を実行する。",
-        "システムは herdr に workspace の ID を渡して worktree の削除を要求する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
         "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
         "システムは herdr に workspace の一覧を要求する。",
         "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
         "システムは herdr にリポジトリの親 workspace を閉じることを要求する。",
-        "システムは git に branch の削除を要求する。",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
         "システムは issue ごとの Claude Code の設定ファイルを消す。",
         "システムは利用者に片付けの完了をログで応答する。"
       ]
@@ -607,15 +607,15 @@
         "システムはボードを project item の ID 指定でまとめて取り直す。",
         "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
         "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
-        "システムは VALIDATES THAT worktree にコミットされていない変更がない。",
-        "システムは VALIDATES THAT branch に push されていない成果がない。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
         "システムは workspace_hooks の before_remove を実行する。",
-        "システムは herdr に workspace の ID を渡して worktree の削除を要求する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
         "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
         "システムは herdr に workspace の一覧を要求する。",
         "IF 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない THEN",
         "CONDITION: NOT 控えた ID の workspace がそのリポジトリ本体を開いていて、同じリポジトリの worktree の workspace が1つも残っていない",
-        "システムは git に branch の削除を要求する。",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
         "システムは issue ごとの Claude Code の設定ファイルを消す。",
         "システムは利用者に片付けの完了をログで応答する。"
       ]
@@ -648,13 +648,13 @@
         "システムはボードを project item の ID 指定でまとめて取り直す。",
         "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
         "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
-        "システムは VALIDATES THAT worktree にコミットされていない変更がない。",
-        "システムは VALIDATES THAT branch に push されていない成果がない。",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
         "システムは workspace_hooks の before_remove を実行する。",
-        "システムは herdr に workspace の ID を渡して worktree の削除を要求する。",
+        "システムは herdr に workspace の ID を渡して worktree の削除を要求し、実体が残っていれば worktree のディレクトリを消して git の worktree の登録を掃除する。",
         "IF システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある THEN",
         "CONDITION: NOT システムが開かせたリポジトリの親 workspace が身元ファイルに控えてある",
-        "システムは git に branch の削除を要求する。",
+        "システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。",
         "システムは issue ごとの Claude Code の設定ファイルを消す。",
         "システムは利用者に片付けの完了をログで応答する。"
       ]
@@ -685,9 +685,9 @@
         "システムはボードを project item の ID 指定でまとめて取り直す。",
         "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
         "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
-        "システムは VALIDATES THAT worktree にコミットされていない変更がない。",
-        "システムは VALIDATES THAT branch に push されていない成果がない。",
-        "CONDITION: NOT branch に push されていない成果がない",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "システムは VALIDATES THAT branch に push されていない成果がなく、その判定ができている。",
+        "CONDITION: NOT branch に push されていない成果がなく、その判定ができている",
         "システムは worktree を消さない。",
         "システムは issue に片付けを見送った理由を1件コメントする。",
         "システムは身元ファイルに片付けを見送った時刻を書く。",
@@ -719,8 +719,8 @@
         "システムはボードを project item の ID 指定でまとめて取り直す。",
         "システムは VALIDATES THAT 取り直した Status が cleanup.on_states に入っている。",
         "システムは VALIDATES THAT worktree が workspace.root の内側にある。",
-        "システムは VALIDATES THAT worktree にコミットされていない変更がない。",
-        "CONDITION: NOT worktree にコミットされていない変更がない",
+        "システムは VALIDATES THAT worktree にコミットされていない変更がなく、その判定ができている。",
+        "CONDITION: NOT worktree にコミットされていない変更がなく、その判定ができている",
         "システムは worktree を消さない。",
         "システムは issue に片付けを見送った理由を1件コメントする。",
         "システムは身元ファイルに片付けを見送った時刻を書く。",

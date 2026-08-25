@@ -157,6 +157,10 @@ continuo abandon https://github.com/octocat/hello-world/issues/42              #
 
 **If there is anything to lose, it deletes nothing and stops.** Add `--force` if you want it gone anyway.
 
+**A broken worktree is still cleanable.** A worktree's `.git` is a one-line file, and if it is emptied, overwritten or removed, every `git` command inside that worktree fails. **`abandon` does not stop there** — that is exactly the state you wanted it for. It shows what it *can* see, lists what it could not work out and why, and **never claims there is nothing to lose**. Since it cannot see inside, **the real run asks for `--force`**, and with it the worktree directory, the branch and the herdr workspace all go away without git's help.
+
+**The same applies when herdr does not answer.** Without `--force` it still refuses to delete while it cannot check for a live pane; with `--force` it says out loud that it skipped the check. **The one thing it never degrades on is a worktree whose `.git` points at a *different* repository** — that is a sign of tampering, not of breakage, so it deletes nothing at all.
+
 **You can run it while continuo is running.** It makes continuo let go of the issue first: if the issue is still in a working state, it parks the Status at `tracker.failure_state` (`Blocked` by default; use `--park` to send it somewhere else), then waits for the pane to close before deleting anything. **If the pane does not close, nothing is deleted.**
 
 **If it stops after parking, the Status stays at the parked value.** continuo does not move it back — the value it came from is a working state, so restoring it could have continuo pick the issue up again on the spot. **It tells you so in one line**; whether to move it back is your call on the board.

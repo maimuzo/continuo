@@ -36,11 +36,16 @@ import (
 
 // fakeHerdr は herdr の socket API の代わりに使う偽のサーバである。
 //
-// **答えるのは3つのメソッドだけである。**`pane.list`（段1 の待ちと段3 の一覧）、
-// `worktree.open`（片付けの前の検算）、`worktree.remove`（片付け本体）。
+// **答えるのは5つのメソッドだけである。**`pane.list`（段1 の待ちと段3 の一覧）、
+// `worktree.open`（片付けの前の検算）、`worktree.remove`（片付け本体）、
+// `workspace.list` と `workspace.close`（`worktree.open` が答えられなかったときの
+// 探し直しと、閉じ残した workspace の後始末）。
 type fakeHerdr struct {
 	// SocketPath は listen している socket の絶対パスである。
 	SocketPath string
+
+	// listener は受け口である。**止めて「herdr が落ちている」状態を作るのに持っておく。**
+	listener net.Listener
 
 	mu sync.Mutex
 	// repoDir は worktree を切った clone の絶対パスである。
@@ -89,6 +94,7 @@ func newFakeHerdr(t *testing.T, dir, repoDir string) *fakeHerdr {
 
 	fh := &fakeHerdr{
 		SocketPath:   socketPath,
+		listener:     ln,
 		repoDir:      repoDir,
 		workspaceIDs: map[string]string{},
 		paths:        map[string]string{},
@@ -216,9 +222,69 @@ func (fh *fakeHerdr) respond(method string, params map[string]any) (map[string]a
 			return nil, removeErr
 		}
 		return fh.worktreeRemove(params), nil
+	case herdr.MethodWorkspaceList:
+		return fh.workspaceList(), nil
+	case herdr.MethodWorkspaceClose:
+		return fh.workspaceClose(params), nil
 	default:
 		return nil, &rpcError{Code: "unknown_method", Message: method}
 	}
+}
+
+// workspaceList は `workspace.list` の応答を組み立てる。
+//
+// **開いたままの workspace だけを返す。**continuo は「このパスを開いている workspace は
+// どれか」をここに答えさせて、閉じる宛先を決める（身元ファイルの値は使わない）。
+//
+// 戻り値: 変種 workspace_list の result。
+func (fh *fakeHerdr) workspaceList() map[string]any {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+
+	workspaces := []map[string]any{}
+	for id, path := range fh.paths {
+		workspaces = append(workspaces, map[string]any{
+			"workspace_id": id,
+			"worktree": map[string]any{
+				"repo_root":          fh.repoDir,
+				"checkout_path":      path,
+				"is_linked_worktree": true,
+			},
+		})
+	}
+	return map[string]any{"type": "workspace_list", "workspaces": workspaces}
+}
+
+// workspaceClose は `workspace.close` の応答を組み立て、**一覧からもその workspace を落とす。**
+//
+// params: 受け取った params（workspace_id を読む）。
+// 戻り値: 変種 ok の result。
+func (fh *fakeHerdr) workspaceClose(params map[string]any) map[string]any {
+	id, _ := params["workspace_id"].(string)
+
+	fh.mu.Lock()
+	if path, ok := fh.paths[id]; ok {
+		delete(fh.paths, id)
+		delete(fh.workspaceIDs, path)
+	}
+	fh.mu.Unlock()
+
+	return map[string]any{"type": "ok"}
+}
+
+// OpenWorkspaceIDs は、まだ閉じていない workspace の ID を返す。
+//
+// **「herdr の workspace が残っていないこと」を確かめるのに使う。**
+//
+// 戻り値: 開いたままの workspace の ID（順序は決まっていない）。
+func (fh *fakeHerdr) OpenWorkspaceIDs() []string {
+	fh.mu.Lock()
+	defer fh.mu.Unlock()
+	ids := make([]string, 0, len(fh.paths))
+	for id := range fh.paths {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // paneList は `pane.list` の応答を組み立てる。
@@ -272,6 +338,13 @@ func (fh *fakeHerdr) worktreeOpen(params map[string]any) map[string]any {
 // **本物の herdr は worktree を消す。**消さないと `git branch -D` が
 // 「checkout 中の branch は消せない」で必ず失敗し、片付けの段4 を検証できない。
 //
+// **本物と同じく `git worktree remove` に消させ、その成否を隠す**（**成功を返す**）。
+// worktree の `.git` が壊れていると git は
+// `validation failed, cannot remove working tree` で断るので（実測: 2026-08-25）、
+// **「消したと答えたのに実体が残っている」状態がここで再現される**（issue #23）。
+// **実体が消えたときだけ workspace も閉じる**（本物の `worktree.remove` は
+// worktree の workspace を閉じる）。
+//
 // params: 受け取った params（workspace_id を読む）。
 // 戻り値: 変種 worktree_removed の result。
 func (fh *fakeHerdr) worktreeRemove(params map[string]any) map[string]any {
@@ -285,6 +358,12 @@ func (fh *fakeHerdr) worktreeRemove(params map[string]any) map[string]any {
 	if path != "" && repoDir != "" {
 		// **接続ごとの goroutine なので t.Fatalf は使わない。**
 		_ = exec.Command("git", "-C", repoDir, "worktree", "remove", "--force", path).Run()
+	}
+	if _, err := os.Lstat(path); path != "" && os.IsNotExist(err) {
+		fh.mu.Lock()
+		delete(fh.paths, id)
+		delete(fh.workspaceIDs, path)
+		fh.mu.Unlock()
 	}
 	return map[string]any{
 		"type": "worktree_removed", "workspace_id": id, "path": path, "forced": true,
@@ -919,6 +998,103 @@ func (fx *fixture) Output() string {
 // 戻り値: 作った回数。
 func (fx *fixture) TrackerBuilds() int {
 	return fx.trackerBuilds
+}
+
+// ===== 壊れた worktree を作る =====
+
+// gitFileBreakage は worktree の `.git` の壊れ方である（issue #23）。
+//
+// **worktree の `.git` はディレクトリではなく `gitdir: …` と書かれただけのファイルである。**
+// そこでエージェントが `--permission-mode dontAsk` で動くので、**中身は書き換えられるし、
+// 消せる。**壊れると `git -C <worktree> …` が1つも通らなくなる。
+type gitFileBreakage string
+
+const (
+	// gitFileEmpty は `.git` が空のファイルになっている状態である。
+	// git は `fatal: invalid gitfile format` で断る。
+	gitFileEmpty gitFileBreakage = "空"
+	// gitFileGarbage は `.git` に `gitdir:` で始まらない文字列が入っている状態である。
+	// git は `fatal: invalid gitfile format` で断る。
+	gitFileGarbage gitFileBreakage = "でたらめ"
+	// gitFileMissing は `.git` そのものが無い状態である。
+	// git は `fatal: not a git repository` で断る。
+	gitFileMissing gitFileBreakage = "不在"
+)
+
+// BreakGitFile は worktree の `.git` を壊す。
+//
+// **利用者が実際に踏んだ状態を作る**（issue #23。`continuo abandon --dry-run` が
+// `fatal: invalid gitfile format` で落ちて、何もできなくなった）。
+//
+// t: 呼び出し元のテスト。
+// prepared: 対象の worktree。
+// how: 壊し方。
+func (fx *fixture) BreakGitFile(
+	t *testing.T, prepared *workspace.PrepareResult, how gitFileBreakage,
+) {
+	t.Helper()
+	gitFile := filepath.Join(prepared.Path, ".git")
+	var err error
+	switch how {
+	case gitFileEmpty:
+		err = os.WriteFile(gitFile, nil, 0o644)
+	case gitFileGarbage:
+		err = os.WriteFile(gitFile, []byte("でたらめな文字列\n"), 0o644)
+	case gitFileMissing:
+		err = os.Remove(gitFile)
+	default:
+		t.Fatalf("知らない壊し方です: %s", how)
+	}
+	if err != nil {
+		t.Fatalf(".git を%sにできません（%s）: %v", how, gitFile, err)
+	}
+	// **前提が崩れていないことを確かめる。**壊したつもりで git が通っていたら、
+	// このテストは何も検証していない。
+	out, runErr := exec.Command("git", "-C", prepared.Path, "status", "--porcelain").CombinedOutput()
+	if runErr == nil {
+		t.Fatalf(".git を%sにしたのに `git -C %s status` が通ってしまった:\n%s",
+			how, prepared.Path, out)
+	}
+}
+
+// CloseHerdr はテスト用herdr mock を止め、以後の問い合わせを必ず失敗させる。
+//
+// **「herdr ごと落ちている」状態を作るために要る**（issue #23）。
+// **worktree を用意したあとで呼ぶこと。**用意の段階では herdr が要る。
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 以後 abandon が受け取るのと同じエラー（**文言の照合に使う**）。
+func (fx *fixture) CloseHerdr(t *testing.T) error {
+	t.Helper()
+	if err := fx.Herdr.listener.Close(); err != nil {
+		t.Fatalf("テスト用herdr mock を止められません: %v", err)
+	}
+	_, err := fx.Herdr.Client().PaneList(context.Background(), herdr.PaneListParams{})
+	if err == nil {
+		t.Fatal("テスト用herdr mock を止めたのに pane の一覧を引けてしまった（前提が崩れている）")
+	}
+	return err
+}
+
+// freezeDir はディレクトリから書き込みの権限を落とし、中身を1つも消せなくする。
+//
+// **「本当に片付けられない」状態を作るために要る。**herdr にエラーを返させるだけでは、
+// continuo が実体を自分で消しにいく（issue #23）ので、片付けは成功してしまう。
+//
+// **後始末で戻す。**戻さないと一時ディレクトリを消せない。
+//
+// t: 呼び出し元のテスト。
+// dir: 書き込みを止めるディレクトリ。
+func freezeDir(t *testing.T, dir string) {
+	t.Helper()
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("ディレクトリを調べられません（%s）: %v", dir, err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("ディレクトリの権限を落とせません（%s）: %v", dir, err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, info.Mode().Perm()) })
 }
 
 // ===== 検査の道具 =====

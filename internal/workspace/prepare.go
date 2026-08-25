@@ -36,6 +36,14 @@ var ErrBranchInUseElsewhere = errors.New("目的の branch を別の場所の wo
 // **continuo は勝手に clone しない**（3-22）。その issue を飛ばして人間に知らせる。
 var ErrCloneNotFound = errors.New("ghq に対象リポジトリの clone がありません")
 
+// ErrRepoMismatch は worktree の `.git` が指すリポジトリが、置き場所のパスと ghq から
+// 決まるリポジトリと食い違うことを表す（3-20 / 3-22 の検算）。
+//
+// **「調べられない」とは別である。**調べられないだけなら、branch には触らずに worktree の
+// 実体を片付けてよい（issue #23）。**食い違っているのは書き換えの痕跡であり、
+// 消す相手を取り違えている可能性がある。**そのときは1バイトも消さない。
+var ErrRepoMismatch = errors.New("worktree の .git が指すリポジトリが検算に合いません")
+
 // ErrBaseUnknown は base を決められなかったことを表す（3-22 の段4）。
 // herdr.worktree.base が null で、Issue.NativeRef["default_branch"] も無い場合に返る。
 var ErrBaseUnknown = errors.New("worktree を切る base を決められません")

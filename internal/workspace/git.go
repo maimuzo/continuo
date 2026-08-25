@@ -276,10 +276,9 @@ func gitWorktreeAdd(
 
 // gitCurrentBranch は worktree が実際にチェックアウトしている branch 名を返す。
 //
-// **身元ファイルに書かれた branch 名を検算するために使う**（3-9 の段4）。
-// 身元ファイルは worktree の直下にあり、その worktree ではエージェントが
-// `--permission-mode dontAsk` で動く（3-16 の段9）ので、**書かれている branch 名は
-// エージェントが書き換えられる。**git が答える現物と一致しない値は消さない。
+// **worktree を作り直してよいかの判定に使う**（3-22 の再利用の判定）。
+// **片付けの段4 の検算には使わない。**あちらはリポジトリ側に答えさせる
+// （gitWorktreeBranchAt。worktree の `.git` が壊れていても答えが出るため）。
 //
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 対象の worktree のパス（まだ消していないこと）。
@@ -287,6 +286,33 @@ func gitWorktreeAdd(
 // 戻り値の2つ目: 実行に失敗した場合のエラー。
 func gitCurrentBranch(ctx context.Context, worktreePath string) (string, error) {
 	return runGit(ctx, worktreePath, "rev-parse", "--abbrev-ref", "HEAD")
+}
+
+// gitWorktreeBranchAt は、そのパスの worktree がチェックアウトしている branch 名を、
+// **リポジトリ側に答えさせて**返す（3-9 の段4 の検算）。
+//
+// **worktree の `.git` を1バイトも読まない。**あれはエージェントが書き換えられるファイル
+// であり、壊れていると `git -C <worktree> …` が1つも通らない（issue #23）。
+// `git -C <リポジトリ> worktree list --porcelain` は、worktree の `.git` が空でも
+// でたらめでも無くても、その worktree の `branch refs/heads/<名前>` を答える
+// （実測: 2026-08-25。`.git` を消した場合は `prunable` の行が増えるだけである）。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: 検算済みのリポジトリの作業ディレクトリ。
+// worktreePath: 対象の worktree の絶対パス。
+// 戻り値の1つ目: チェックアウト中の branch 名。**detached HEAD なら空文字である。**
+// 戻り値の2つ目: 一覧を引けない場合・**その worktree が登録されていない場合**のエラー。
+func gitWorktreeBranchAt(ctx context.Context, repoDir, worktreePath string) (string, error) {
+	entries, err := gitWorktreeEntries(ctx, repoDir)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if samePath(entry.Path, worktreePath) {
+			return entry.Branch, nil
+		}
+	}
+	return "", i18n.Errorf(i18n.KeyWorkspaceGitWorktreeBranchAtNotRegistered, worktreePath, repoDir)
 }
 
 // gitBranchTip は branch が指している commit の SHA を返す。
