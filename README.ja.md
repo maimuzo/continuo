@@ -141,6 +141,8 @@ continuo                          # 常駐を始める
 
 **あとは issue を `Ready` に置くだけです。**
 
+**うまく動かないときは [docs/FAQ.md](docs/FAQ.md) を見てください。**画面に出たメッセージから引ける一覧です。
+
 **止めるときは `Ctrl+C`。**巡回を止め、turn ループを畳んで抜けます。**pane は閉じません。**Claude Code はそのまま動き続けるので、次に起動したとき、その pane を引き継いで続きから進めます。
 
 **フラグは位置引数の前でも後ろでも構いません。**`git` や `gh` と同じで、`continuo trust ~/continuo-work --dry-run` と `continuo trust --dry-run ~/continuo-work` は同じ意味です。**`--` より後ろは、`-` で始まっていても位置引数として扱います。**知らないフラグは、どこに書いてもエラーのままです。
@@ -247,6 +249,7 @@ claude:
 | **なぜそう作ったか**（読むならこちら） | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md)（634行） |
 | 判断の根拠・実測値・比較した案 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md)（4800行近い） |
 | ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
+| **うまく動かないとき** | [docs/FAQ.md](docs/FAQ.md)（画面のメッセージから引く） |
 | **開発とテスト** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | 実行ファイルに含まれる第三者 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
 

@@ -138,6 +138,8 @@ continuo                          # start the daemon
 
 From here on, moving an issue to `Ready` is all it takes.
 
+If something does not work, [docs/FAQ.md](docs/FAQ.md) lists the symptoms you are likely to hit and the exact command that fixes each one (written in Japanese).
+
 **`Ctrl+C` stops it.** It stops polling and unwinds its turn loops, but **it does not close the panes** — Claude Code keeps running, and the next start picks those panes back up and continues.
 
 **Flags go before or after the positional arguments**, the way `git` and `gh` take them: `continuo trust ~/continuo-work --dry-run` and `continuo trust --dry-run ~/continuo-work` do the same thing. **Everything after `--` is a positional argument**, even when it starts with `-`. A flag it does not know is still an error, wherever you put it.
@@ -245,6 +247,7 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 | **Why it is built this way** (start here) | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md) (634 lines) |
 | The full record: reasoning, measurements, rejected alternatives | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) (nearly 4,800 lines) |
 | Use case specifications (RUCM) | [docs/spec/usecases/](docs/spec/usecases/) |
+| **When it does not work** | [docs/FAQ.md](docs/FAQ.md) — look up the message you saw (Japanese) |
 | **Development and testing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Third-party software in the binary | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
 
