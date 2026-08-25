@@ -187,6 +187,12 @@ func checkWorkspaceRoot(cfg loadedConfig, configSymbol Symbol) Result {
 // **食い違うと、doctor が見る場所と起動が使う場所がずれる。**
 const daemonEnvRuntimeDir = "CONTINUO_RUNTIME_DIR"
 
+// runtimeDirDialTimeout は、置き場所に在るものへ繋いでみるときの待ち時間である。
+//
+// **既に continuo が待ち受けているなら、繋がるのは同じマシンの unix socket なので即座である。**
+// 待つのは、相手が backlog を捌けずに詰まっている場合だけなので、短くてよい。
+const runtimeDirDialTimeout = 2 * time.Second
+
 // checkRuntimeDir は、hook を受ける socket を実際に置けるかを検査する。
 //
 // **文字列を組み立てるだけでは足りない。**決めた場所にディレクトリを作り、
@@ -233,16 +239,15 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol) Result {
 	// **本当に listen できるかまで確かめる。**
 	// パス長の上限、権限、既に使われている、のどれでもここで分かる。
 	//
-	// **既に continuo が動いていれば、その socket は使われている。**
-	// それは「用意できない」ではないので、その場合だけは通す。
+	// **EADDRINUSE は「既に continuo が動いている」を意味しない。**そのパスに何かが在れば
+	// 必ず返る（通常ファイル・ディレクトリ・listen していない残骸の socket のどれでも
+	// errno 48 が返ることを darwin で実測した）。**繋がるかどうかまで見ないと、
+	// continuo が起動できない状態を `✓` と報告する。**その形は issue #9 と同じで、
+	// **doctor が全項目 ✓ なのに起動だけが落ちる。**
 	ln, lerr := net.Listen("unix", sock)
 	if lerr != nil {
 		if errors.Is(lerr, syscall.EADDRINUSE) {
-			return Result{
-				Label:  LabelRuntimeDir,
-				Symbol: SymbolOK,
-				Detail: i18n.T(i18n.KeyDoctorRuntimeDirOK, sock),
-			}
+			return runtimeDirInUse(sock, notes)
 		}
 		return Result{
 			Label:    LabelRuntimeDir,
@@ -262,6 +267,39 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol) Result {
 		Symbol: SymbolOK,
 		Detail: i18n.T(i18n.KeyDoctorRuntimeDirOK, sock),
 		Notes:  notes,
+	}
+}
+
+// runtimeDirInUse は、socket の置き場所が既に使われていたときの結果を組み立てる。
+//
+// **繋がるかどうかで分ける。**hookserver が起動時に行う判定（internal/hookserver の
+// removeStaleSocketFile）と同じやり方にする。繋がれば既に continuo が待ち受けており、
+// そのまま起動できる。繋がらなければ、hookserver は残骸を消してから作ろうとするので、
+// **消せない残骸（root 所有のファイル、ディレクトリなど）は起動を止める。**
+//
+// sock: 決まった socket のパス。
+// notes: 記号の下に添える内訳（設定を読めずに既定値で確かめたこと、など）。
+// 戻り値: 検査の結果。
+func runtimeDirInUse(sock string, notes []string) Result {
+	conn, derr := net.DialTimeout("unix", sock, runtimeDirDialTimeout)
+	if derr == nil {
+		_ = conn.Close()
+		return Result{
+			Label:  LabelRuntimeDir,
+			Symbol: SymbolOK,
+			Detail: i18n.T(i18n.KeyDoctorRuntimeDirInUse, sock),
+			Notes:  notes,
+		}
+	}
+	return Result{
+		Label:  LabelRuntimeDir,
+		Symbol: SymbolMissing,
+		Detail: i18n.T(i18n.KeyDoctorRuntimeDirStale, sock),
+		Notes:  notes,
+		Remedies: []string{
+			i18n.T(i18n.KeyDoctorRuntimeDirRemedyStale, sock, sock),
+			i18n.T(i18n.KeyDoctorRuntimeDirRemedy),
+		},
 	}
 }
 

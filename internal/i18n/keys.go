@@ -28,6 +28,12 @@ const (
 	KeyDoctorRuntimeDirFailed Key = "doctor.runtime_dir.failed"
 	// KeyDoctorRuntimeDirRemedy は hook の socket を用意できなかったときの直し方である。
 	KeyDoctorRuntimeDirRemedy Key = "doctor.runtime_dir.remedy"
+	// KeyDoctorRuntimeDirInUse は置き場所で既に continuo が待ち受けているときに出る。
+	KeyDoctorRuntimeDirInUse Key = "doctor.runtime_dir.in_use"
+	// KeyDoctorRuntimeDirStale は置き場所に残骸があって起動できないときに出る。
+	KeyDoctorRuntimeDirStale Key = "doctor.runtime_dir.stale"
+	// KeyDoctorRuntimeDirRemedyStale は残骸を確かめて消す手順である。
+	KeyDoctorRuntimeDirRemedyStale Key = "doctor.runtime_dir.remedy_stale"
 
 	// KeyDoctorClaudeNotFound は claude が PATH に無いときの文言である。
 	KeyDoctorClaudeNotFound Key = "doctor.claude.not_found"
@@ -410,6 +416,10 @@ const (
 	KeySetupErrNotANumber Key = "setup.err.not_a_number"
 	// KeySetupErrOutOfRange は番号が一覧の範囲外だったときに出る。
 	KeySetupErrOutOfRange Key = "setup.err.out_of_range"
+	// KeySetupErrLineTooLong は1行が長すぎて読み捨てたときに出る。
+	KeySetupErrLineTooLong Key = "setup.err.line_too_long"
+	// KeySetupAbortReadFailed は入力を読めずに打ち切るときに出る。
+	KeySetupAbortReadFailed Key = "setup.abort.read_failed"
 	// KeySetupErrDuplicate は選んだ選択肢が別の役割に割り当て済みのときに出る。
 	KeySetupErrDuplicate Key = "setup.err.duplicate"
 	// KeySetupSummaryHeader は5つの割り当ての一覧の見出しに出る。
@@ -452,6 +462,14 @@ const (
 	KeyCLISetupErrNotFoundRemedy Key = "cli.setup.err_not_found_remedy"
 	// KeyCLISetupErrKeysNotFound は書き換える対象のキーが WORKFLOW.md に無いときに出る。
 	KeyCLISetupErrKeysNotFound Key = "cli.setup.err_keys_not_found"
+	// KeyCLISetupErrKeysNotRewritable はキーの値が下の行にぶら下がっていて書き換えられないときに出る。
+	KeyCLISetupErrKeysNotRewritable Key = "cli.setup.err_keys_not_rewritable"
+	// KeyCLISetupErrKeysNotRewritableRemedy は同じときの直し方に出る。
+	KeyCLISetupErrKeysNotRewritableRemedy Key = "cli.setup.err_keys_not_rewritable_remedy"
+	// KeyCLISetupErrWouldBreakConfig は書き換えると WORKFLOW.md を読めなくなるときに出る。
+	KeyCLISetupErrWouldBreakConfig Key = "cli.setup.err_would_break_config"
+	// KeyCLISetupBoardUsing はどのボードの Status の選択肢を読むかを出す。
+	KeyCLISetupBoardUsing Key = "cli.setup.board_using"
 	// KeyCLISetupErrDirNotFound は置き場所のディレクトリが無いときに出る。
 	KeyCLISetupErrDirNotFound Key = "cli.setup.err_dir_not_found"
 	// KeyCLISetupErrNotADirectory は置き場所がディレクトリでないときに出る。
@@ -1811,6 +1829,9 @@ var allKeys = []Key{
 	KeyDoctorRuntimeDirOK,
 	KeyDoctorRuntimeDirFailed,
 	KeyDoctorRuntimeDirRemedy,
+	KeyDoctorRuntimeDirInUse,
+	KeyDoctorRuntimeDirStale,
+	KeyDoctorRuntimeDirRemedyStale,
 	KeyDoctorClaudeNotFound,
 	KeyDoctorClaudeFound,
 	KeyDoctorClaudeRemedyInstall,
@@ -1963,6 +1984,8 @@ var allKeys = []Key{
 	KeySetupPromptAssigned,
 	KeySetupErrNotANumber,
 	KeySetupErrOutOfRange,
+	KeySetupErrLineTooLong,
+	KeySetupAbortReadFailed,
 	KeySetupErrDuplicate,
 	KeySetupSummaryHeader,
 	KeySetupSummaryLine,
@@ -1982,6 +2005,10 @@ var allKeys = []Key{
 	KeyCLISetupErrNotFound,
 	KeyCLISetupErrNotFoundRemedy,
 	KeyCLISetupErrKeysNotFound,
+	KeyCLISetupErrKeysNotRewritable,
+	KeyCLISetupErrKeysNotRewritableRemedy,
+	KeyCLISetupErrWouldBreakConfig,
+	KeyCLISetupBoardUsing,
 	KeyCLISetupErrDirNotFound,
 	KeyCLISetupErrNotADirectory,
 	KeyCLISetupErrSymlink,

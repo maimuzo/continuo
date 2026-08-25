@@ -115,9 +115,10 @@ func TemplateWithValues(values Values) string {
 		out = replaceLineWithBlock(out, repositoriesPlaceholderCode, repositoriesBlock(values.Repositories))
 	}
 	if values.Statuses.Complete() {
-		// **雛形には7つのキーが必ずあるので、見つからないことは起こらない。**
+		// **雛形には8つのキーが必ずあり、どれも値を同じ行に持つので、
+		// 見つからないことも書き換えられないことも起こらない。**
 		// 雛形を壊したときは test/internal/scaffold/statuses_test.go が落とす。
-		out, _ = applyStatuses(out, values.Statuses)
+		out, _, _ = applyStatuses(out, values.Statuses)
 	}
 	return out
 }
@@ -305,7 +306,7 @@ type statusKey struct {
 	value func(Statuses) string
 }
 
-// statusKeys は `continuo setup` が書き換える7つのキーである。**ここに無いキーは触らない。**
+// statusKeys は `continuo setup` が書き換える8つのキーである。**ここに無いキーは触らない。**
 //
 // **値は %q で囲む。**選択肢名は空白を含みうる（`In Progress`）し、`Done` のような
 // 素の語でも YAML の別の型として読まれうるので、必ず引用符を付ける。
@@ -337,6 +338,16 @@ var statusKeys = []statusKey{
 	{
 		path:  []string{"tracker", "failure_state"},
 		value: func(st Statuses) string { return fmt.Sprintf("%q", st.Blocked) },
+	},
+	{
+		// **片付けを始める Status も割り当てから書く。**ここを雛形の `["Done"]` のまま
+		// 残すと、ボードの完了の選択肢が別名（`完了` など）の環境で片付けが一度も走らず、
+		// worktree と branch が永久に残る。**その状態は誰も指摘しない**
+		// （`Done` は active_states に無いので config の検証を通り、起動時の Status の
+		// 照合も cleanup を見ない）。利用者からは「Done にしたのに worktree が消えない」
+		// だけが見える。
+		path:  []string{"cleanup", "on_states"},
+		value: func(st Statuses) string { return fmt.Sprintf("[%q]", st.Done) },
 	},
 }
 
@@ -382,7 +393,7 @@ func (s Statuses) Complete() bool {
 	return s.Dispatch != "" && s.Running != "" && s.Review != "" && s.Blocked != "" && s.Done != ""
 }
 
-// applyStatuses は front matter の Status に関する7行を、割り当てた選択肢名で置き換える。
+// applyStatuses は front matter の Status に関する8行を、割り当てた選択肢名で置き換える。
 //
 // **値の部分だけを組み立て直す。**行の右側のコメントは原文のまま残し、他の行・空行・
 // 並び順・インデントは1文字も変えない。**`continuo setup` は既にある WORKFLOW.md へ
@@ -391,27 +402,110 @@ func (s Statuses) Complete() bool {
 // **探すのは front matter の中だけである。**本文には `CONTINUO-STATUS: review` のように
 // 似た形の行があるので、範囲を切らないと本文を書き換えうる。
 //
+// **値が下の行にぶら下がっているキーは書き換えない。**`active_states:` の下に
+// `- "Ready"` が並ぶ形（block 形式）でキーの行だけを組み立て直すと、下の行が残って
+// YAML として読めないファイルになる。**そのまま書くと「成功しました」と出たあとに
+// continuo が一切起動しなくなる**ので、書き換えずに名前を返して呼び出し側に止めさせる。
+//
 // s: 差し替える対象の全文（front matter と本文）。
 // st: 割り当てた選択肢名（Complete が真であること）。
-// 戻り値: 差し替えた全文と、見つからなかったキーの名前（ドット区切り）。
-// front matter を切り出せない場合は、全文をそのまま返し、7つ全部を見つからなかったものとして返す。
-func applyStatuses(s string, st Statuses) (string, []string) {
+// 戻り値の1つ目: 差し替えた全文。
+// 戻り値の2つ目: 見つからなかったキーの名前（ドット区切り）。
+// 戻り値の3つ目: 見つかったが書き換えられない形だったキーの名前（ドット区切り）。
+// front matter を切り出せない場合は、全文をそのまま返し、全部を見つからなかったものとして返す。
+func applyStatuses(s string, st Statuses) (string, []string, []string) {
 	lines := strings.Split(s, "\n")
 	start, end, ok := frontMatterRange(lines)
 	if !ok {
-		return s, StatusKeyNames()
+		return s, StatusKeyNames(), nil
 	}
 
-	var missing []string
+	var missing, blocked []string
 	for _, k := range statusKeys {
 		i, found := findKeyLine(lines, start, end, k.path)
 		if !found {
 			missing = append(missing, strings.Join(k.path, "."))
 			continue
 		}
+		if hasNestedValue(lines, i, end) {
+			blocked = append(blocked, strings.Join(k.path, "."))
+			continue
+		}
 		lines[i] = rewriteValue(lines[i], k.path[len(k.path)-1], k.value(st))
 	}
-	return strings.Join(lines, "\n"), missing
+	// **書き換えられない形が1つでもあれば、1行も書き換えない。**一部だけ書き換えた全文を
+	// 返すと、呼び出し側が止めても「途中まで当たった文字列」が残る。
+	if len(blocked) > 0 {
+		return s, missing, blocked
+	}
+	return strings.Join(lines, "\n"), missing, blocked
+}
+
+// hasNestedValue は、キーの行の値が下の行にぶら下がっているかを返す。
+//
+// **YAML では、キーの行に値が無いとき、下のより深い行が値である**（`- "x"` の並びや
+// 入れ子のキー）。その形で行を1本だけ組み立て直すと、下の行が値の残骸として残る。
+//
+// lines: WORKFLOW.md を改行で分けた行の並び。
+// i: キーの行の添字。
+// end: 探す範囲の終わり（front matter の終端の区切り行の添字。含まない）。
+// 戻り値: 値が下の行にぶら下がっていれば真。キーの行に値が書いてあれば偽。
+func hasNestedValue(lines []string, i, end int) bool {
+	line := trimEOL(lines[i])
+	trimmed := strings.TrimLeft(line, " \t")
+	keyIndent := len(line) - len(trimmed)
+	// キーの行に値が書いてあれば、下の行は別のキーである。
+	if _, _, rest := splitKeyValue(trimmed); strings.TrimSpace(stripComment(rest)) != "" {
+		return false
+	}
+	for j := i + 1; j < end; j++ {
+		l := trimEOL(lines[j])
+		t := strings.TrimLeft(l, " \t")
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		if len(l)-len(t) <= keyIndent {
+			// 同じ深さかそれより浅い行に当たった。このキーの値は空である。
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// splitKeyValue は `key: value` の形の行を、キーと区切りと値に分ける。
+//
+// trimmed: 行頭の空白を落とした1行。
+// 戻り値: キー、区切り（`:`）、値の部分。`:` が無ければ3つ目に元の文字列を返す。
+func splitKeyValue(trimmed string) (string, string, string) {
+	idx := strings.Index(trimmed, ":")
+	if idx < 0 {
+		return "", "", trimmed
+	}
+	return trimmed[:idx], ":", trimmed[idx+1:]
+}
+
+// stripComment は、値の部分から行の右側のコメントを落とす。
+//
+// s: 値の部分（キーと `:` より右）。
+// 戻り値: コメントを落とした値の部分。
+func stripComment(s string) string {
+	if c := inlineComment(s); c != "" {
+		return strings.TrimSuffix(s, c)
+	}
+	return s
+}
+
+// trimEOL は行末の CR を落とす。
+//
+// **CRLF の WORKFLOW.md でも同じ判定になるようにする。**internal/config の
+// splitFrontMatter は CRLF を LF に直してから読むので、ここで落とさないと
+// 「doctor では読めるのに setup ではキーが1つも見つからない」という食い違いが起きる。
+//
+// line: 1行。
+// 戻り値: 行末の CR を落とした1行。
+func trimEOL(line string) string {
+	return strings.TrimSuffix(line, "\r")
 }
 
 // frontMatterRange は行の並びの中で front matter が占める範囲を返す。
@@ -420,11 +514,11 @@ func applyStatuses(s string, st Statuses) (string, []string) {
 // 戻り値: front matter の最初の行の添字（開始の区切り行の次）、終端の区切り行の添字、
 // front matter を切り出せたかどうか。
 func frontMatterRange(lines []string) (start, end int, ok bool) {
-	if len(lines) == 0 || strings.TrimRight(lines[0], " \t") != frontMatterDelimiter {
+	if len(lines) == 0 || strings.TrimRight(lines[0], " \t\r") != frontMatterDelimiter {
 		return 0, 0, false
 	}
 	for i := 1; i < len(lines); i++ {
-		if strings.TrimRight(lines[i], " \t") == frontMatterDelimiter {
+		if strings.TrimRight(lines[i], " \t\r") == frontMatterDelimiter {
 			return 1, i, true
 		}
 	}
@@ -481,13 +575,20 @@ func findKeyLine(lines []string, start, end int, path []string) (int, bool) {
 // value: 書き込む YAML の値。
 // 戻り値: 組み立て直した1行。元の行にコメントが無ければコメントを付けない。
 func rewriteValue(line, key, value string) string {
+	// **行末の CR は落とさずに戻す。**CRLF のファイルでこの行だけ LF になると、
+	// 改行コードが混ざったファイルができる。
+	eol := ""
+	if trimmed := trimEOL(line); trimmed != line {
+		eol = "\r"
+		line = trimmed
+	}
 	indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 	code := indent + key + ": " + value
 	comment := inlineComment(line)
 	if comment == "" {
-		return code
+		return code + eol
 	}
-	return joinComment(code, comment)
+	return joinComment(code, comment) + eol
 }
 
 // inlineComment は行の右側にあるコメントを、`#` から行末まで原文のまま返す。

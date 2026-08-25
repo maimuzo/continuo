@@ -24,7 +24,7 @@
 
 ```rucm
 USE CASE NAME: 既存のボードの Status を割り当てる
-BRIEF DESCRIPTION: 利用者が continuo setup を実行する。システムはボードの Status フィールドの選択肢を番号付きで並べる。システムは continuo の5つの役割を1つずつ説明して選択肢を選ばせる。システムは既にある WORKFLOW.md の Status に関する7つのキーの行だけを書き換える。
+BRIEF DESCRIPTION: 利用者が continuo setup を実行する。システムはボードの Status フィールドの選択肢を番号付きで並べる。システムは continuo の5つの役割を1つずつ説明して選択肢を選ばせる。システムは既にある WORKFLOW.md の Status に関する8つのキーの行だけを書き換える。
 PRECONDITION: 利用者は gh auth login -s project を実行済みである。利用者は GitHub Projects v2 のボードを1枚持っている。ボードは single-select の Status フィールドを持つ。利用者は continuo init を実行済みであり、WORKFLOW.md がある。
 PRIMARY ACTOR: 利用者
 SECONDARY ACTORS: GitHub Projects v2
@@ -34,7 +34,7 @@ GENERALIZATION: なし
 BASIC FLOW:
 1. 利用者はシステムに continuo setup の実行を要求する。
 2. システムは VALIDATES THAT WORKFLOW.md がある。
-3. システムは gh からボードの owner とボードの番号を引く。
+3. システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く。
 4. システムは VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる。
 5. システムは VALIDATES THAT 読み取った選択肢が5個以上ある。
 6. システムは利用者に選択肢の一覧を番号付きで応答する。
@@ -47,10 +47,10 @@ BASIC FLOW:
 13.   システムは番号の選択肢をいま割り当てる役割へ割り当てる。
 14. UNTIL 5つの役割すべてに選択肢が割り当てられている
 15. システムは利用者に5つの役割の割り当ての一覧を応答する。
-16. システムは VALIDATES THAT WORKFLOW.md に書き換える対象の7つのキーがある。
-17. システムは WORKFLOW.md の Status に関する7つのキーの行を書き換える。
+16. システムは VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている。
+17. システムは WORKFLOW.md の Status に関する8つのキーの行を書き換える。
 18. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する。
-POSTCONDITION: 5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の7つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
+POSTCONDITION: 5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の8つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW WORKFLOW.mdが無い:
 RFS BASIC FLOW 2
@@ -76,7 +76,7 @@ POSTCONDITION: WORKFLOW.md は変わっていない。ボードの選択肢は�
 
 SPECIFIC ALTERNATIVE FLOW 番号が範囲外:
 RFS BASIC FLOW 10
-1. システムは利用者に入力が一覧の番号でないことを応答する。
+1. システムは利用者に入力を一覧の番号として読めなかったことを応答する。
 2. システムは利用者に選べる番号の範囲を応答する。
 3. RESUME STEP 8
 POSTCONDITION: 役割への割り当ては増えていない。システムは同じ役割の番号をもう一度待っている。
@@ -98,8 +98,8 @@ POSTCONDITION: 役割への割り当ては増えていない。1つの選択肢�
 
 SPECIFIC ALTERNATIVE FLOW 書き換える対象のキーが無い:
 RFS BASIC FLOW 16
-1. システムは利用者に WORKFLOW.md から消えているキーの名前を応答する。
-2. システムは利用者にキーを書き戻すか continuo init で作り直す案内を応答する。
+1. システムは利用者に WORKFLOW.md から消えているキーと、値がキーの行に無いキーの名前を応答する。
+2. システムは利用者にキーを書き戻すか、値をキーの行に書くか、continuo init で作り直す案内を応答する。
 3. ABORT
 POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 である。
 
@@ -122,7 +122,7 @@ POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当�
 | 2 | `running_state: continuo が処理を開始したときに移動する Status は何番ですか?` | `running_state`、`active_states` の2つめ |
 | 3 | `status_signal_map.review: エージェントが作業を完了したときに移動する Status は何番ですか?` | `status_signal_map.review` |
 | 4 | `status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する Status は何番ですか?` | `failure_state`、`status_signal_map.blocked` |
-| 5 | `terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?` | `terminal_states` の1つめ |
+| 5 | `terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?` | `terminal_states` の1つめ、`cleanup.on_states` |
 
 **番号 `0` は「この役割に使える選択肢がボードに無い」を表す。**5つの役割は continuo の動作に全部必要なので、
 `0` が入ったら割り当てを打ち切る（`該当する選択肢が無い` のフロー）。
@@ -143,7 +143,7 @@ POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当�
 flowchart TD
     B1["1. 利用者はシステムに continuo setup の実行を要求する"]
     B2{"2. VALIDATES THAT WORKFLOW.md がある"}
-    B3["3. システムは gh からボードの owner とボードの番号を引く"]
+    B3["3. システムは WORKFLOW.md に書かれた owner とボードの番号を使い、足りないぶんを gh から引く"]
     B4{"4. VALIDATES THAT ボードの Status フィールドの選択肢を読み取れる"}
     B5{"5. VALIDATES THAT 読み取った選択肢が5個以上ある"}
     B6["6. システムは利用者に選択肢の一覧を番号付きで応答する"]
@@ -156,10 +156,10 @@ flowchart TD
     B13["13. システムは番号の選択肢をいま割り当てる役割へ割り当てる"]
     B14{"14. UNTIL 5つの役割すべてに選択肢が割り当てられている"}
     B15["15. システムは利用者に5つの役割の割り当ての一覧を応答する"]
-    B16{"16. VALIDATES THAT WORKFLOW.md に書き換える対象の7つのキーがある"}
-    B17["17. システムは WORKFLOW.md の Status に関する7つのキーの行を書き換える"]
+    B16{"16. VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている"}
+    B17["17. システムは WORKFLOW.md の Status に関する8つのキーの行を書き換える"]
     B18["18. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する"]
-    BPOST(["POSTCONDITION WORKFLOW.md の7つのキー以外の行は変わっていない"])
+    BPOST(["POSTCONDITION WORKFLOW.md の8つのキー以外の行は変わっていない"])
 
     B1 --> B2
     B2 -- 真 --> B3
@@ -212,7 +212,7 @@ flowchart TD
     end
 
     subgraph SAF4 ["SPECIFIC ALTERNATIVE FLOW 番号が範囲外 / RFS BASIC FLOW 10"]
-        F4S1["1. システムは利用者に入力が一覧の番号でないことを応答する"]
+        F4S1["1. システムは利用者に入力を一覧の番号として読めなかったことを応答する"]
         F4S2["2. システムは利用者に選べる番号の範囲を応答する"]
         F4S3["3. RESUME STEP 8"]
         F4S1 --> F4S2 --> F4S3
@@ -234,8 +234,8 @@ flowchart TD
     end
 
     subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW 書き換える対象のキーが無い / RFS BASIC FLOW 16"]
-        F7S1["1. システムは利用者に WORKFLOW.md から消えているキーの名前を応答する"]
-        F7S2["2. システムは利用者にキーを書き戻すか continuo init で作り直す案内を応答する"]
+        F7S1["1. システムは利用者に WORKFLOW.md から消えているキーと、値がキーの行に無いキーの名前を応答する"]
+        F7S2["2. システムは利用者にキーを書き戻すか、値をキーの行に書くか、continuo init で作り直す案内を応答する"]
         F7S3["3. ABORT"]
         F7S1 --> F7S2 --> F7S3
     end
@@ -264,7 +264,7 @@ sequenceDiagram
         Sys-->>User: WORKFLOW.md が無いことと continuo init の案内を応答する
         Note over Sys: ABORT 終了コード 1
     else WORKFLOW.md がある
-        Sys->>GH: gh からボードの owner とボードの番号を引く
+        Sys->>GH: WORKFLOW.md に書かれていないぶんの owner とボードの番号を引く
         GH-->>Sys: owner とボードの番号を返す
         Sys->>GH: Status フィールドの選択肢を要求する
         alt 選択肢を読み取れない
@@ -298,11 +298,11 @@ sequenceDiagram
                 alt 利用者が Ctrl+C を入力する
                     Sys-->>User: 割り当てを保存しないことを応答する
                     Note over Sys: ABORT WORKFLOW.md は変わっていない
-                else 書き換える対象の7つのキーが WORKFLOW.md に無い
-                    Sys-->>User: 消えているキーの名前と書き戻す案内を応答する
+                else 書き換える対象の8つのキーが WORKFLOW.md に無い、または値がキーの行に無い
+                    Sys-->>User: 消えているキーと値がキーの行に無いキーの名前、書き戻す案内を応答する
                     Note over Sys: ABORT WORKFLOW.md は変わっていない
                 else 割り当てを書き換える
-                    Sys->>Sys: WORKFLOW.md の Status に関する7つのキーの行を書き換える
+                    Sys->>Sys: WORKFLOW.md の Status に関する8つのキーの行を書き換える
                     Sys-->>User: WORKFLOW.md のパスと書き換えたキーの一覧を応答する
                 end
             end

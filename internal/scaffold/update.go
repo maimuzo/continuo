@@ -5,7 +5,7 @@ package scaffold
 // **雛形を書き直さない。**`continuo setup` は `continuo init` が置いたあとの
 // WORKFLOW.md に対して走るので、雛形で丸ごと上書きすると、利用者がその間に手で直した行
 // （`workspace.root`、`agent.max_concurrent_agents`、`trust.repositories` から消した行など）が
-// 全部消える。書き換えるのは StatusKeyNames が返す7つのキーの行だけで、
+// 全部消える。書き換えるのは StatusKeyNames が返す8つのキーの行だけで、
 // **他の行・空行・並び順・インデント・行の右側のコメントは1文字も変えない。**
 
 import (
@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
@@ -39,6 +40,19 @@ var (
 	//
 	// **一部だけ書き換えると、割り当てた Status と雛形の既定値が混ざる。**
 	ErrStatusesIncomplete = errors.New("5つの役割すべてに選択肢が必要です")
+
+	// ErrKeysNotRewritable は、キーはあるが値が下の行にぶら下がっていて書き換えられない
+	// ことを表す。
+	//
+	// **キーの行だけを組み立て直すと、下の行が値の残骸として残る。**そのまま書くと
+	// YAML として読めないファイルになり、**画面には「書き換えました」が出る。**
+	// 利用者は「setup は成功したのに continuo が起動しない」状態になるので、書かずに止める。
+	ErrKeysNotRewritable = errors.New("WORKFLOW.md のキーの値が下の行にぶら下がっていて書き換えられません")
+
+	// ErrWouldBreakConfig は、書き換えた結果が front matter として読めなくなることを表す。
+	//
+	// **書き込む前に組み立てた全文を自分で読み直す。**読めなくなる書き換えは行わない。
+	ErrWouldBreakConfig = errors.New("書き換えると WORKFLOW.md を読めなくなります")
 )
 
 // CheckUpdatable は、Status の割り当てを書き換えられるかだけを確かめる。
@@ -50,8 +64,8 @@ var (
 //
 // dir: WORKFLOW.md があるディレクトリ。空文字なら、いまいるディレクトリ。
 // 戻り値: 書き換える WORKFLOW.md の絶対パス（Result.Overwritten は常に真）。
-// エラー: ErrDirNotFound / ErrNotADirectory / ErrNotFound / ErrSymlink を
-// errors.Is で判定できる形で返す。
+// エラー: ErrDirNotFound / ErrNotADirectory / ErrNotFound / ErrSymlink /
+// ErrKeysNotFound / ErrKeysNotRewritable を errors.Is で判定できる形で返す。
 func CheckUpdatable(dir string) (Result, error) {
 	path, _, err := statTarget(dir)
 	if err != nil {
@@ -67,8 +81,12 @@ func CheckUpdatable(dir string) (Result, error) {
 	// 5問すべて答えさせたあとで「キーが無い」と落とすと、入力が全部捨てられる。
 	// 置き換える値はここでは使わないので、Complete() を満たすだけのダミーを渡す。
 	probe := Statuses{Dispatch: "x", Running: "x", Review: "x", Blocked: "x", Done: "x"}
-	if _, missing := applyStatuses(string(raw), probe); len(missing) > 0 {
+	_, missing, blocked := applyStatuses(string(raw), probe)
+	if len(missing) > 0 {
 		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotFound, path, strings.Join(missing, " / "))
+	}
+	if len(blocked) > 0 {
+		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotRewritable, path, strings.Join(blocked, " / "))
 	}
 
 	// **既に書かれている owner とボードの番号を拾って返す。**
@@ -79,7 +97,7 @@ func CheckUpdatable(dir string) (Result, error) {
 	return Result{Path: path, Overwritten: true, Owner: owner, ProjectNumber: number}, nil
 }
 
-// UpdateStatuses は、既にある WORKFLOW.md の Status に関する7行だけを書き換える。
+// UpdateStatuses は、既にある WORKFLOW.md の Status に関する8行だけを書き換える。
 //
 // **書き換えるのは StatusKeyNames が返すキーの行だけである。**行の右側のコメントは
 // 原文のまま残し、他の行には触れない。YAML を組み立て直さないので、並び順・空行・
@@ -99,6 +117,8 @@ func CheckUpdatable(dir string) (Result, error) {
 //   - ErrNotFound: dir の直下に WORKFLOW.md が無い
 //   - ErrSymlink: WORKFLOW.md が symlink である（辿ると dir の外を書き換えるため）
 //   - ErrKeysNotFound: 書き換える対象のキーが WORKFLOW.md に無い
+//   - ErrKeysNotRewritable: キーはあるが、値が下の行にぶら下がっていて書き換えられない
+//   - ErrWouldBreakConfig: 書き換えると front matter を読めなくなる
 //   - 上記以外: 読み込み・書き込みに失敗した
 //
 // いずれの sentinel error も errors.Is で判定できる形で返す。
@@ -117,9 +137,22 @@ func UpdateStatuses(dir string, st Statuses) (Result, error) {
 		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileReadFailed, path, err)
 	}
 
-	updated, missing := applyStatuses(string(raw), st)
+	updated, missing, blocked := applyStatuses(string(raw), st)
 	if len(missing) > 0 {
 		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotFound, path, strings.Join(missing, " / "))
+	}
+	if len(blocked) > 0 {
+		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotRewritable, path, strings.Join(blocked, " / "))
+	}
+
+	// **書き込む前に、組み立てた全文を自分で読み直す**（設計 3-32-1）。
+	// 読めなくする書き換えを「成功しました」と報告しないための最後の関門である。
+	// **元から読めなかった場合は止めない。**それは setup が壊したものではないし、
+	// ここで止めると Status の割り当てを直す手立てが無くなる。
+	if config.CheckFrontMatterSyntax(string(raw)) == nil {
+		if err := config.CheckFrontMatterSyntax(updated); err != nil {
+			return Result{Path: path}, fmt.Errorf("%w: %s: %v", ErrWouldBreakConfig, path, err)
+		}
 	}
 
 	if err := writeAtomically(path, updated, info.Mode().Perm()); err != nil {
