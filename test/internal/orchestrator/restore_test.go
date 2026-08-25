@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "ce8d532c782613f2a1ac399af990f7ad7e385e2cc49df059e420d04bc688a7cd", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "f64d06a86d40fd3871399f7f56f7e4c99cd4777aa2e6143f292c1618ccc2ff3e", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「再起動して実行中の issue を引き継ぐ」の
 // 11本のパスに、それぞれ対応するテストがある（既存のテストへマーカーを付けた）。
@@ -116,7 +116,7 @@ func TestRestore_引き継いだrunにはstallの時計が引き継いだ時刻�
 	}
 }
 
-// {"RUCM-PATH": "P001"}
+// {"RUCM-PATH": "P003"}
 //
 // TestRestore_agent_statusがworkingならNeedsPromptを立てない は、
 // 走っている turn に別の turn を投げないことを確かめる。
@@ -148,7 +148,7 @@ func TestRestore_agent_statusがworkingならNeedsPromptを立てない(t *testi
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P006"}
 //
 // TestRestore_idleなら継続の指示を送る は、引き継いだ run へ送る本文を確かめる。
 //
@@ -193,7 +193,7 @@ func TestRestore_idleなら継続の指示を送る(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P009"}
 //
 // TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる は、
 // 保留中の権限要求が承認されて実行されるのを防ぐ。
@@ -231,7 +231,7 @@ func TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落�
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P010"}
 //
 // TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す は、
 // 判断できない run を引き継がないことを確かめる。
@@ -337,7 +337,7 @@ func TestRestore_socketのパスが前回と違えば引き継がずpaneを閉�
 	}
 }
 
-// {"RUCM-PATH": "P004"}
+// {"RUCM-PATH": "P008"}
 //
 // TestRestore_引き継いだ回数が上限ならturnを1回も送らずfailure_stateへ落とす は、
 // 設計 3-4 の段5b を確かめる。
@@ -431,7 +431,7 @@ func TestRestore_同じissueのworktreeが2つあるとき新しいほうを採�
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P011"}
 //
 // TestRestore_In_Reviewのrunはpaneもworktreeも残して何もしない は、
 // 設計 3-4 の段5a の「引き渡し」を確かめる。
@@ -570,7 +570,7 @@ func TestRestore_取り直しで見つからないrunはpaneもworktreeも残し
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P015"}
 //
 // TestRestore_取り直しに失敗しても起動を続けpaneを閉じる は、設計 3-4 の段3 を確かめる。
 //
@@ -604,7 +604,7 @@ func TestRestore_取り直しに失敗しても起動を続けpaneを閉じる(t
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P012"}
 //
 // TestRestore_paneが無い実行中のrunは既定では次の巡回に委ねる は、
 // `restart.orphan_running_action` の既定（`redispatch`）を確かめる。
@@ -763,6 +763,8 @@ func TestRestore_壊れた身元ファイルは無視してログに出す(t *te
 	}
 }
 
+// {"RUCM-PATH": "P004"}
+//
 // TestSweepOnStartup_復元のあとに走り引き継いだbranchを消さない は、
 // 起動時の掃除の順番と対象を確かめる。
 //
@@ -800,6 +802,47 @@ func TestSweepOnStartup_復元のあとに走り引き継いだbranchを消さ�
 	}
 	if !strings.Contains(branches, "feature/keep") {
 		t.Fatalf("接頭辞に一致しない branch を消してしまった: %s", branches)
+	}
+}
+
+// {"RUCM-PATH": "P005"}
+//
+// TestSweepOnStartup_deleteBranchが偽なら孤児branchを1本も消さない は、
+// **起動時の掃除が `cleanup.delete_branch` を見る**ことを確かめる。
+//
+// 目的: 片付け（設計 3-9 の段4）はこの設定を見て branch を残し、「branch は残しました」と
+// 人間へ言う。**その branch は掃除の3条件を全部満たす**（接頭辞に一致し、どの worktree も
+// チェックアウトしておらず、実行中の run も無い）。**設定を見ない掃除は、次に continuo を
+// 起動しただけでその branch を強制削除で消す。**`continuo abandon --force` で片付けた
+// worktree の branch には未 push の commit が載っていることがあり、消えれば reflog を
+// 掘る以外に戻す手立ては無い。
+//
+// 与える情報: `cleanup.delete_branch` を偽にした設定と、worktree を持たない孤児 branch
+// `continuo/orphan/1`。**掃除そのものは有効のまま**（`cleanup.enabled` と
+// `cleanup.sweep_on_startup` は真）なので、掃除の入口までは同じように入る。
+// 成功条件: 孤児 branch が残っていること。
+func TestSweepOnStartup_deleteBranchが偽なら孤児branchを1本も消さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Cleanup.DeleteBranch = false
+	}})
+	issue := sampleIssue(188, "In Progress")
+	fx.Tracker.AddIssue(issue)
+	wt := prepareWorktree(t, fx, issue, identityOverride{})
+	installPanes(fx, livePane{
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
+		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
+	})
+	runGit(t, fx.Repo.Dir, "branch", "continuo/orphan/1")
+
+	result, _ := restore(t, fx)
+	fx.Orc.SweepOnStartup(context.Background(), result)
+
+	branches := runGit(t, fx.Repo.Dir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if !strings.Contains(branches, "continuo/orphan/1") {
+		t.Fatalf("cleanup.delete_branch が false なのに孤児 branch を消した: %s", branches)
+	}
+	if !strings.Contains(branches, wt.Branch) {
+		t.Fatalf("引き継いだ run の branch を消してしまった: %s", branches)
 	}
 }
 

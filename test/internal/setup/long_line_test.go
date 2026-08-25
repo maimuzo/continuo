@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "0522685f2ac9ef7313389909ac9deb636619176f727600d752a7f1a0ada70b8a", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **上限を超える1行を流し込まれたときの検査である。**
 //
@@ -16,7 +16,7 @@ import (
 	"github.com/maimuzo/continuo/internal/setup"
 )
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P008"}
 //
 // TestAssign_長すぎる1行は捨てて同じ役割を尋ね直す は、**無言の終了**を落とす。
 //
@@ -43,7 +43,7 @@ func TestAssign_長すぎる1行は捨てて同じ役割を尋ね直す(t *testi
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P008"}
 //
 // TestAssign_長すぎる1行が続いても答え終えられる は、**1回きりの回復ではない**ことを見る。
 //

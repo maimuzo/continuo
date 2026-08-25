@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "943d20234f97e95ce8320c4f28b7d6b0dbc9f4bdde8ebd2e9198f9cfa1c01349", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "88c2b027c3bcbd59e467677a8c4938b4d6a396a1e17e34cd454d8512b3e9b077", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
 // 7本のパスに、それぞれ対応するテストがある。
@@ -127,7 +127,7 @@ func cleanupRequest(cf *cleanupFixture) workspace.CleanupRequest {
 	}
 }
 
-// {"RUCM-PATH": "P022"}
+// {"RUCM-PATH": "P026"}
 //
 // 目的: 未コミットの変更（未追跡のファイル）が残っていれば worktree を消さないことを確認する
 // （設計 3-9 の手順2。エージェントが作った成果物が消えるのを防ぐ）。
@@ -197,7 +197,7 @@ func TestCleanup_見送りのコメントは1回だけになる(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P021"}
 //
 // 目的: upstream があり push 済みなら片付け、そのとき worktree.remove に渡すのが
 // **身元ファイルの herdr workspace の ID** であることを確認する（設計 3-9 の手順2b・3）。
@@ -253,7 +253,7 @@ func TestCleanup_push済みなら消してbranchと設定ファイルも消す(t
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P020"}
 //
 // 目的: `cleanup.delete_branch` が偽なら、worktree を消しても branch は残し、
 // **残ったものとして画面へ出す**ことを確認する（設計 3-9 の段4）。
@@ -292,7 +292,7 @@ func TestCleanup_deleteBranchが偽ならbranchを残して残ったものに積
 	}
 }
 
-// {"RUCM-PATH": "P021"}
+// {"RUCM-PATH": "P025"}
 //
 // 目的: upstream があり push されていない commit が残っていれば消さないことを確認する
 // （設計 3-9 の手順2b の upstream がある側）。
@@ -368,7 +368,7 @@ func TestCleanup_upstreamが無くbaseと差分が無ければ消す(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P021"}
+// {"RUCM-PATH": "P025"}
 //
 // 目的: upstream が無く base も分からないときは、判定できないので消さないことを確認する
 // （設計 3-9 の手順2b。base を推測して消すと成果を失う）。
@@ -444,7 +444,7 @@ func TestCleanup_before_removeが失敗しても片付けを続ける(t *testing
 	}
 }
 
-// {"RUCM-PATH": "P023"}
+// {"RUCM-PATH": "P027"}
 //
 // 目的: 消す直前の封じ込め検査に落ちたら、何も消さずに失敗することを確認する
 // （設計 3-20。「消す直前」がいちばん危ない検査点である）。
@@ -473,7 +473,7 @@ func TestCleanup_置き場所の外側は消さずに失敗する(t *testing.T) 
 	}
 }
 
-// {"RUCM-PATH": "P026"}
+// {"RUCM-PATH": "P030"}
 //
 // 目的: cleanup.enabled が偽なら何も消さず、かつ「見送った」と分かる戻り値になることを
 // 確認する（設計 3-9 の手順5。デバッグ時に中身を見たい場合がある）。
@@ -509,7 +509,7 @@ func TestCleanup_無効なら何もしない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P024"}
+// {"RUCM-PATH": "P028"}
 //
 // 目的: 片付けを始める判定が cleanup.on_states に入った時点であり、
 // active でなくなった時点ではないことを確認する（設計 3-9 の手順1）。
@@ -975,7 +975,7 @@ func TestInspect_未追跡ディレクトリの中身を1件に畳まない(t *t
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P019"}
 //
 // 目的: 身元ファイルに書かれた branch が**リポジトリに実在しない**とき、
 // 残ったものとして数えないことを確認する（issue #27）。
@@ -1011,7 +1011,33 @@ func TestCleanup_実在しないbranchを残ったものとして数えない(t 
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P019"}
+//
+// 目的: branch が実在しないなら、**`cleanup.delete_branch` が偽でも**残ったものに数えない
+// ことを確認する（RUCM の基本フローで、実在の判定が設定の判定より先にある理由である）。
+// **元から無いものを「設定で消さないので残しました」と言う理由は無い。**
+// そう言われた利用者は、存在しない branch を探して消しに行く。
+// 与える情報: `cleanup.delete_branch` を偽にした設定と、リポジトリに1度も作られていない
+// branch 名を書いた身元ファイル。
+// 成功条件: BranchAbsent が真で、Leftovers が空であること。
+func TestCleanup_実在しないbranchはdeleteBranchが偽でも残ったものに数えない(t *testing.T) {
+	cf := newCleanupFixture(t, func(cfg *config.Config) { cfg.Cleanup.DeleteBranch = false })
+	missing := cf.Prepared.Branch.String() + "-missing"
+	setIdentityBranch(t, cf, missing)
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.BranchAbsent {
+		t.Fatalf("実在しない branch なのに BranchAbsent が偽になっている: %+v", *result)
+	}
+	if len(result.Leftovers) != 0 {
+		t.Fatalf("元から無い branch を残ったものとして数えている: %v", result.Leftovers)
+	}
+}
+
+// {"RUCM-PATH": "P021"}
 //
 // 目的: branch が**実在して**現物と食い違うときは、いままでどおり残ったものとして
 // 理由を返すことを確認する（設計 3-9 の段4。issue #27 で消さなくなったのは

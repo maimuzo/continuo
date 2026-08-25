@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "0522685f2ac9ef7313389909ac9deb636619176f727600d752a7f1a0ada70b8a", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **`continuo setup` がどのボードを読むかを決める経路の検査である。**
 //

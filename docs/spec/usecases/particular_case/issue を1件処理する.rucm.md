@@ -16,7 +16,7 @@
 - `docs/plans/continuo_design.md#4-1`（誰がどの遷移を起こすか）
 - `internal/orchestrator/dispatch.go` の `dispatchCandidates`、`claimForDispatch`、`preflight`、`startRun`、`confirmStartup`
 - `internal/orchestrator/failure.go` の `noteFailure`、`skipByFailure`
-- `internal/orchestrator/turn.go` の `turnLoop`、`sendTurn`、`confirmTurnEnd`
+- `internal/orchestrator/turn.go` の `turnLoop`、`sendTurn`、`afterWaitTimeout`、`confirmTurnEnd`、`turnSendFailed` と `turnTransient`
 - `internal/orchestrator/lifecycle.go` の `handleTurnEnd`、`readSignals`、`applySignals`、`finishRun`
 - `internal/orchestrator/comment.go` の `ensureAgentComment`
 - `internal/orchestrator/signal.go` の `ParseSignals`
@@ -241,6 +241,15 @@ WHEN turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増�
 4. システムはバックオフの期限を印に書く。
 5. ABORT
 POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
+
+GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗:
+BRANCH FROM BASIC FLOW 23
+WHEN herdr の呼び出しが一時的な理由で失敗した場合
+1. システムは turn の本文が Claude Code に届いたかどうかを判断しない。
+2. システムは turn の本文を送り直さない。
+3. システムは run に turn の終わりを待ち直す印を立てる。
+4. ABORT
+POSTCONDITION: 印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。
 ```
 
 ## 着手の段と、落ちたときに外側へ残るもの
@@ -319,6 +328,21 @@ loose を消した瞬間に packed 側が有効になり、**やり直しはそ�
 | 項目が欠けている | 判定できない。turn の終わりとみなさない |
 | 空配列 | settle_ms のあいだ待ち、task-notification が届かなければ turn の終わりとする |
 
+## turn を送れなかったときは、2つに分ける
+
+**言いたいこと。**herdr へ送れなかったことと、Stop hook が届かなかったことは別である。
+**混ぜると、1文字も届いていないのに「agent が待機状態になったと答えた」と issue に残る。**
+
+| 何が起きたか | どう扱うか | issue と印はどうなるか |
+| --- | --- | --- |
+| herdr の呼び出しが**一時的な理由**で失敗した（再起動・socket の一瞬の不通・応答の遅れ） | run を諦めない。turn の終わりを待ち直す印を立てて抜ける | 印は残る。リトライは増えない |
+| herdr が**送信そのものを断った**（pane が消えている・agent が受け取れない） | run を手放す。届いていないことを明記した理由を残す | 印は残る。リトライを1つ積む |
+| 待ち受けが返ったのに **Stop hook が来ない** | 打ち切りの判定へ回す | 巡回の停滞の検知が決める |
+
+**一時的な失敗でも `agent.prompt` を送り直さない。**届いていたかどうかは分からず、
+届いていた場合に送り直すと turn が二重に投入される。**黙って止まりもしない。**
+画面が動かないままなら、巡回の停滞の検知が `claude.turn_timeout_ms` の沈黙で拾う。
+
 ## フローチャート
 
 ```mermaid
@@ -389,6 +413,7 @@ flowchart TD
     B12 -. "壊れたref: WHEN ref が読めず worktree を作れない場合" .-> G3S1
     B23 -. "権限の確認: WHEN blocked が返った場合" .-> G1S1
     B23 -. "送信の失敗: WHEN herdr が送信そのものを断った場合" .-> G4S1
+    B23 -. "一時的な送信の失敗: WHEN herdr の呼び出しが一時的な理由で失敗した場合" .-> G5S1
     B24 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> G2S1
 
     subgraph SAF12 ["SPECIFIC ALTERNATIVE FLOW 頼んでいないStatus / RFS BASIC FLOW 3"]
@@ -477,6 +502,10 @@ flowchart TD
 
     subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 無音の打ち切り / BRANCH FROM BASIC FLOW 24"]
         G2S1["1. agent_status と画面の版を要求する"] --> G2S2["2. pane を閉じる"] --> G2S3["3. リトライの回数を1つ増やす"] --> G2S4["4. バックオフの期限を印に書く"] --> G2S5["5. ABORT"]
+    end
+
+    subgraph GAF5 ["GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗 / BRANCH FROM BASIC FLOW 23"]
+        G5S1["1. 本文が届いたかどうかを判断しない"] --> G5S2["2. 本文を送り直さない"] --> G5S3["3. turn の終わりを待ち直す印を立てる"] --> G5S4["4. ABORT"]
     end
 
     F8S2 -- 偽 --> F9S1

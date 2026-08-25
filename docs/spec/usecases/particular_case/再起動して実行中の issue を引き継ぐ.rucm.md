@@ -15,6 +15,8 @@
 - `internal/orchestrator/turn.go` の `startTurnLoop`
 - `internal/workspace/scan.go` と `internal/workspace/identity.go`
 - `internal/lock/lock.go`
+- `internal/orchestrator/sweep.go` の `SweepOnStartup`、`sweepFinishedWorktrees`
+- `internal/workspace/sweep.go` の `SweepOrphanBranches`
 
 ## RUCM
 
@@ -57,8 +59,16 @@ BASIC FLOW:
 27.   システムは run に次の turn を要する印を立てる。
 28.   システムは run に継続の指示を送る。
 29. ENDIF
-30. システムは巡回のループを始める。
-POSTCONDITION: 引き継いだ issue は印の集合に入っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。
+30. IF 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である THEN
+31.   システムは Status が cleanup.on_states に入った issue の worktree を片付ける。
+32.   IF 設定の cleanup.delete_branch が真である THEN
+33.     システムは接頭辞に一致してどの worktree もチェックアウトしておらず印にも入っていない branch を消す。
+34.   ELSE
+35.     システムは孤児 branch を1本も消さない。
+36.   ENDIF
+37. ENDIF
+38. システムは巡回のループを始める。
+POSTCONDITION: 引き継いだ issue は印の集合に入っている。孤児 branch は cleanup.delete_branch が真のときだけ消えている。引き継いだ run の branch は残っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 二重起動:
 RFS BASIC FLOW 2
@@ -176,6 +186,27 @@ POSTCONDITION: continuo は常駐していない。印の集合は失われて�
 | working | 引き継ぐ。次の turn を要する印を立てず、Stop hook を待つ |
 | 読み取れない | pane を閉じ、worktree と Status を残す |
 
+## 起動時の掃除は、引き継ぎが終わってから走らせる
+
+**言いたいこと。**先に走らせると、**これから引き継ぐ run の branch を孤児と判定して消す。**
+だから掃除はステップ30 以降、印を組み立て終えたあとに置く。
+
+**消してよい branch は3条件を全部満たすものだけである。**
+
+| 条件 | 落とすと何が起きるか |
+| --- | --- |
+| `herdr.worktree.branch_template` の接頭辞（既定 `continuo/`）で始まる | 人間が切った branch を消す |
+| どの worktree もチェックアウトしていない | 作業中の worktree の branch を消す |
+| 復元後の印の集合に入っていない | いま引き継いだ run の branch を消す |
+
+**`cleanup.delete_branch` が偽なら1本も消さない**（ステップ32〜36）。
+**壊れた ref だけは消す、という例外も作らない。**壊れているかどうかは利用者から見えず、
+**「消すなと言ったのに消えた」という結果だけが同じである。**
+片付けが `cleanup.delete_branch` を見て残した branch は、上の3条件を全部満たすので、
+**設定を見ない掃除は次の起動だけでその branch を強制削除で消す。**
+`continuo abandon --force` で片付けた worktree の branch には未 push の commit が
+載っていることがあり、消えれば reflog を掘る以外に戻す手立ては無い。
+
 ## フローチャート
 
 ```mermaid
@@ -208,7 +239,15 @@ flowchart TD
     B27["27. 次の turn を要する印を立てる"]
     B28["28. 継続の指示を送る"]
     B29["29. ENDIF"]
-    B30["30. 巡回のループを始める"]
+    B30{"30. IF cleanup.enabled と cleanup.sweep_on_startup がどちらも真"}
+    B31["31. cleanup.on_states の issue の worktree を片付ける"]
+    B32{"32. IF cleanup.delete_branch が真"}
+    B33["33. 接頭辞に一致し誰も出していない branch を消す"]
+    B34["34. ELSE"]
+    B35["35. 孤児 branch を1本も消さない"]
+    B36["36. ENDIF"]
+    B37["37. ENDIF"]
+    B38["38. 巡回のループを始める"]
     BPOST(["POSTCONDITION 生きている worker を引き継いでいる"])
 
     B1 --> B2
@@ -236,7 +275,13 @@ flowchart TD
     B14 -- 真 --> B15 --> B16 --> B17 --> B18 --> B19 --> B20 --> B21 --> B22 --> B23 --> B24
     B24 -- 真 --> B25 --> B29
     B24 -- 偽 --> B27 --> B28 --> B29
-    B29 --> B30 --> BPOST
+    B29 --> B30
+    B30 -- 偽 --> B37
+    B30 -- 真 --> B31 --> B32
+    B32 -- 真 --> B33 --> B36
+    B32 -- 偽 --> B34 --> B35 --> B36
+    B36 --> B37
+    B37 --> B38 --> BPOST
     B21 -. "中断: WHEN Ctrl+C を入力する場合" .-> G1S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 二重起動 / RFS BASIC FLOW 2"]

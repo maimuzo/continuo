@@ -48,14 +48,16 @@ BASIC FLOW:
 18.     ENDIF
 19.   ENDIF
 20. ENDIF
-21. IF 身元ファイルに書かれた branch がリポジトリに実在する THEN
-22.   システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。
-23. ELSE
-24.   システムは branch を消す対象が無かったものとして扱い、残ったものに数えない。
-25. ENDIF
-26. システムは issue ごとの Claude Code の設定ファイルを消す。
-27. システムは利用者に片付けの完了をログで応答する。
-POSTCONDITION: worktree は置き場所に無い。branch は無い（元から無かった場合を含む）。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。残っていた場合は、その worktree の身元ファイルが親 workspace の ID を持っている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
+21. IF 身元ファイルに書かれた branch がリポジトリに実在しない THEN
+22.   システムは branch を消す対象が無かったものとして扱い、残ったものに数えない。
+23. ELSEIF 設定の cleanup.delete_branch が偽である THEN
+24.   システムは branch を残し、残ったものとして利用者に伝える。
+25. ELSE
+26.   システムはリポジトリ側の worktree の一覧で branch の現物を確かめ、git に branch の削除を要求する。
+27. ENDIF
+28. システムは issue ごとの Claude Code の設定ファイルを消す。
+29. システムは利用者に片付けの完了をログで応答する。
+POSTCONDITION: worktree は置き場所に無い。branch は、設定の cleanup.delete_branch が真であれば無い（元から無かった場合を含む）。偽であれば残っており、残ったものとして利用者に伝えている。herdr の workspace は閉じている。システムが開かせたリポジトリの親 workspace は、同じリポジトリの worktree が残っていなければ閉じている。残っていた場合は、その worktree の身元ファイルが親 workspace の ID を持っている。人間が開いたリポジトリの workspace は開いたままである。issue ごとの Claude Code の設定ファイルは無い。issue の Status は変わっていない。印の集合は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW 片付けの対象外:
 RFS BASIC FLOW 5
@@ -98,7 +100,7 @@ WHEN branch の ref が読めず git が branch の実在にも削除にも答�
 3. システムは消したファイルのパスと消す前の commit と消した理由を利用者に応答する。
 4. システムは VALIDATES THAT 消したあとに branch が残っていない。
 5. システムは branch の始末の結果を利用者に応答する。
-6. RESUME STEP 26
+6. RESUME STEP 28
 POSTCONDITION: branch は無い。壊れた ref のファイルは消えている。packed-refs は書き換えていない。
 
 SPECIFIC ALTERNATIVE FLOW 消さないref:
@@ -236,6 +238,26 @@ issue #19 で直したはずの「issue 1件につき1つ溜まる」が、並�
 **全部が持っていれば、最後に片付いた1つが閉じる**（それより前の片付けは
 「まだ他の worktree がある」ので閉じずに書き直すだけである）。
 
+## `cleanup.delete_branch` が偽なら1本も消さない
+
+**言いたいこと。**設定で「branch は消すな」と言われているなら、片付けも起動時の掃除も
+**1本も消さない。**壊れた ref だけは消す、という例外も作らない。
+
+| どの経路が消しうるか | 設定が偽のときどうするか |
+| --- | --- |
+| 片付け（ステップ21〜27） | 消さずに、残ったものとして利用者に伝える |
+| 起動時の孤児 branch の掃除 | **1本も消さない。**壊れた ref も消さない |
+
+**なぜ起動時の掃除にも要るか。**片付けが残した branch は、(1) 接頭辞に一致し
+(2) どの worktree も出しておらず (3) 実行中の run も無いので、**掃除の3条件を全部満たす。**
+設定を見ない掃除は、**次に continuo を起動しただけでその branch を強制削除で消す。**
+`continuo abandon --force` で片付けた worktree の branch には未 push の commit が
+載っていることがあり、消えれば reflog を掘る以外に戻す手立てが無い。
+
+**起動時の掃除の手順は
+[再起動して実行中の issue を引き継ぐ.rucm.md](%E5%86%8D%E8%B5%B7%E5%8B%95%E3%81%97%E3%81%A6%E5%AE%9F%E8%A1%8C%E4%B8%AD%E3%81%AE%20issue%20%E3%82%92%E5%BC%95%E3%81%8D%E7%B6%99%E3%81%90.rucm.md)
+にある**（起動の手順の一部であり、巡回の片付けとは契機が違う）。
+
 ## 実在しない branch を「残っている」と言わない
 
 **言いたいこと。**着手が `git worktree add` で失敗し続けると、**ディレクトリだけが残って
@@ -287,13 +309,16 @@ flowchart TD
     B18["18. ENDIF"]
     B19["19. ENDIF"]
     B20["20. ENDIF"]
-    B21{"21. IF 身元ファイルの branch がリポジトリに実在する"}
-    B22["22. リポジトリ側で branch の現物を確かめて削除を要求する"]
-    B24["24. 消す対象が無かったものとして扱い残ったものに数えない"]
-    B25["25. ENDIF"]
-    B26["26. issue ごとの設定ファイルを消す"]
-    B27["27. 片付けの完了をログで応答する"]
-    BPOST(["POSTCONDITION worktree と branch が無い"])
+    B21{"21. IF 身元ファイルの branch がリポジトリに実在しない"}
+    B22["22. 消す対象が無かったものとして扱い残ったものに数えない"]
+    B23{"23. ELSEIF cleanup.delete_branch が偽である"}
+    B24["24. branch を残し残ったものとして伝える"]
+    B25["25. ELSE"]
+    B26["26. リポジトリ側で branch の現物を確かめて削除を要求する"]
+    B27["27. ENDIF"]
+    B28["28. issue ごとの設定ファイルを消す"]
+    B29["29. 片付けの完了をログで応答する"]
+    BPOST(["POSTCONDITION worktree が無く branch は設定どおりに始末されている"])
 
     B1 --> B2 --> B3 --> B4 --> B5
     B5 -- 偽 --> F1S1
@@ -313,9 +338,11 @@ flowchart TD
     B18 --> B19
     B19 --> B20
     B20 --> B21
-    B21 -- 真 --> B22 --> B25
-    B21 -- 偽 --> B24 --> B25
-    B25 --> B26 --> B27 --> BPOST
+    B21 -- 真 --> B22 --> B27
+    B21 -- 偽 --> B23
+    B23 -- 真 --> B24 --> B27
+    B23 -- 偽 --> B25 --> B26 --> B27
+    B27 --> B28 --> B29 --> BPOST
     B5 -. "片付けの無効: WHEN cleanup.enabled が false の場合" .-> G1S1
     B21 -. "壊れたref: WHEN ref が読めず branch の実在にも削除にも答えられない場合" .-> G2S1
 
@@ -345,7 +372,7 @@ flowchart TD
     subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 21"]
         G2S1{"1. VALIDATES THAT continuo の接頭辞で始まる refs/heads の下の通常のファイルで中身が読めない"}
         G2S1 -- 真 --> G2S2["2. 壊れた ref のファイルを1つ消す"] --> G2S3["3. 消したパスと消す前の commit と理由を応答する"] --> G2S4{"4. VALIDATES THAT 消したあとに branch が残っていない"}
-        G2S4 -- 真 --> G2S5["5. branch の始末の結果を応答する"] --> G2S6["6. RESUME STEP 26"]
+        G2S4 -- 真 --> G2S5["5. branch の始末の結果を応答する"] --> G2S6["6. RESUME STEP 28"]
     end
 
     subgraph SAF5 ["SPECIFIC ALTERNATIVE FLOW 消さないref / RFS 壊れたref 1"]
@@ -360,7 +387,7 @@ flowchart TD
     F5S2 --> G2S5
     G2S4 -- 偽 --> F6S1
     F6S3 --> G2S6
-    G2S6 --> B22
+    G2S6 --> B28
 ```
 
 ## シーケンス図
@@ -409,7 +436,11 @@ sequenceDiagram
             end
             S->>G: branch がリポジトリに実在するかを要求する
             G-->>S: 実在するかどうかを応答する
-            opt branch が実在する
+            alt branch が実在しない
+                S->>S: 消す対象が無かったものとして扱い、残ったものに数えない
+            else cleanup.delete_branch が偽である
+                S-->>T: branch を残したことを応答する
+            else branch が実在し cleanup.delete_branch が真である
                 S->>G: branch の削除を要求する
             end
             opt branch の ref が読めず git が実在にも削除にも答えられない

@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "08ca67f0b643614a703e7dded0a6a9a11b86d0d7741d50311e3ae37d0c65d546"
+    "rucm_block_sha256": "1d117571e36d10cf08b53acac4498897242602ae5386819a8b550bdfda3e7d0e"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -210,6 +210,18 @@
         }
       ],
       "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。"
+    },
+    "一時的な送信の失敗": {
+      "when": "herdr の呼び出しが一時的な理由で失敗した場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            23
+          ]
+        }
+      ],
+      "postcondition": "印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。"
     }
   },
   "nodes": [
@@ -1024,6 +1036,34 @@
       "flow": "無音の打ち切り",
       "step": 5,
       "statement": "ABORT"
+    },
+    {
+      "id": "一時的な送信の失敗-1",
+      "type": "action",
+      "flow": "一時的な送信の失敗",
+      "step": 1,
+      "statement": "システムは turn の本文が Claude Code に届いたかどうかを判断しない。"
+    },
+    {
+      "id": "一時的な送信の失敗-2",
+      "type": "action",
+      "flow": "一時的な送信の失敗",
+      "step": 2,
+      "statement": "システムは turn の本文を送り直さない。"
+    },
+    {
+      "id": "一時的な送信の失敗-3",
+      "type": "action",
+      "flow": "一時的な送信の失敗",
+      "step": 3,
+      "statement": "システムは run に turn の終わりを待ち直す印を立てる。"
+    },
+    {
+      "id": "一時的な送信の失敗-4",
+      "type": "abort",
+      "flow": "一時的な送信の失敗",
+      "step": 4,
+      "statement": "ABORT"
     }
   ],
   "edges": [
@@ -1230,6 +1270,12 @@
       "to": "送信の失敗-1",
       "kind": "global",
       "condition": "herdr が指示の送信そのものを断った場合"
+    },
+    {
+      "from": "BASIC FLOW-23",
+      "to": "一時的な送信の失敗-1",
+      "kind": "global",
+      "condition": "herdr の呼び出しが一時的な理由で失敗した場合"
     },
     {
       "from": "BASIC FLOW-24",
@@ -1669,6 +1715,21 @@
     {
       "from": "無音の打ち切り-4",
       "to": "無音の打ち切り-5",
+      "kind": "seq"
+    },
+    {
+      "from": "一時的な送信の失敗-1",
+      "to": "一時的な送信の失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "一時的な送信の失敗-2",
+      "to": "一時的な送信の失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "一時的な送信の失敗-3",
+      "to": "一時的な送信の失敗-4",
       "kind": "seq"
     }
   ],
@@ -2270,6 +2331,69 @@
     {
       "id": "P009",
       "terminal": "abort",
+      "terminal_flow": "一時的な送信の失敗",
+      "postcondition": "印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "一時的な送信の失敗-1",
+        "一時的な送信の失敗-2",
+        "一時的な送信の失敗-3",
+        "一時的な送信の失敗-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは Claude Code に turn の本文を送る。",
+        "CONDITION: herdr の呼び出しが一時的な理由で失敗した場合",
+        "システムは turn の本文が Claude Code に届いたかどうかを判断しない。",
+        "システムは turn の本文を送り直さない。",
+        "システムは run に turn の終わりを待ち直す印を立てる。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
       "terminal_flow": "上限での打ち切り",
       "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。",
       "node_ids": [
@@ -2331,7 +2455,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "起動直後の確認画面",
       "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。",
@@ -2392,7 +2516,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P012",
       "terminal": "cycle",
       "terminal_flow": "起動の待ち直し",
       "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。",
@@ -2453,7 +2577,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "起動の断念",
       "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。",
@@ -2521,7 +2645,7 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P014",
       "terminal": "cycle",
       "terminal_flow": "paneがまだ使えない",
       "postcondition": "pane が起動を受け付けるまで待ち続けている。Claude Code はまだ起動していない。",
@@ -2576,7 +2700,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "paneの断念",
       "postcondition": "issue の Status は failure_state の選択肢である。Claude Code は起動していない。worktree は残っている。",
@@ -2638,7 +2762,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P016",
       "terminal": "cycle",
       "terminal_flow": "壊れたref",
       "postcondition": "壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。",
@@ -2683,7 +2807,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "消さないref",
       "postcondition": "ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。",
@@ -2729,7 +2853,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "書かずに取りやめる",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。issue にコメントは付いていない。",
@@ -2764,7 +2888,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P019",
       "terminal": "abort",
       "terminal_flow": "使われているbranch",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。branch を使っている worktree は残っている。",
@@ -2797,7 +2921,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P020",
       "terminal": "abort",
       "terminal_flow": "使えないworktree",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -2828,7 +2952,7 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "未信頼のリポジトリ",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。issue に信頼登録の承認を促すコメントが1件ある。",
@@ -2859,7 +2983,7 @@
       ]
     },
     {
-      "id": "P021",
+      "id": "P022",
       "terminal": "abort",
       "terminal_flow": "空きスロット不足",
       "postcondition": "印の件数は変わっていない。issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。",
@@ -2884,7 +3008,7 @@
       ]
     },
     {
-      "id": "P022",
+      "id": "P023",
       "terminal": "abort",
       "terminal_flow": "失敗の繰り返し",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。",
@@ -2907,7 +3031,7 @@
       ]
     },
     {
-      "id": "P023",
+      "id": "P024",
       "terminal": "abort",
       "terminal_flow": "頼んでいないStatus",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。",
@@ -2931,9 +3055,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 116,
-    "nodes_covered": 116,
-    "edges_total": 121,
-    "edges_covered": 121
+    "nodes_total": 120,
+    "nodes_covered": 120,
+    "edges_total": 125,
+    "edges_covered": 125
   }
 }

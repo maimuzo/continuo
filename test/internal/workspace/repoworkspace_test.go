@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "943d20234f97e95ce8320c4f28b7d6b0dbc9f4bdde8ebd2e9198f9cfa1c01349", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "88c2b027c3bcbd59e467677a8c4938b4d6a396a1e17e34cd454d8512b3e9b077", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
 // うち、**リポジトリの親 workspace を閉じるかどうか**の分岐（ステップ11〜20）を通る
@@ -79,7 +79,7 @@ func closedWorkspaceIDs(t *testing.T, fx *repoWorkspaceFixture) []string {
 	return ids
 }
 
-// {"RUCM-PATH": "P001"}
+// {"RUCM-PATH": "P003"}
 //
 // 目的: continuo が開かせたリポジトリの親 workspace を、配下の worktree が無くなった
 // あとに閉じることを確認する（issue #19）。
@@ -109,7 +109,7 @@ func TestCleanup_continuoが開かせた親workspaceを閉じる(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P021"}
 //
 // 目的: 人間が先に開いていたリポジトリの親 workspace を閉じないことを確認する（issue #19）。
 // 与える情報: herdr_repo_workspace_id を書いていない worktree と、
@@ -132,7 +132,7 @@ func TestCleanup_人間が開いた親workspaceは閉じない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P009"}
 //
 // 目的: 同じリポジトリの別の worktree がまだ開いていれば、親 workspace を閉じないことを
 // 確認する（issue #19）。
@@ -157,7 +157,7 @@ func TestCleanup_同じリポジトリのworktreeが残っていれば親workspa
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P009"}
 //
 // 目的: 親 workspace を閉じずに残したとき、**閉じる責任を残っている worktree へ
 // 書き移す**ことを確認する（issue #19）。
@@ -203,7 +203,7 @@ func TestCleanup_親workspaceを閉じる責任を残ったworktreeへ渡す(t *
 	}
 }
 
-// {"RUCM-PATH": "P006"}
+// {"RUCM-PATH": "P009"}
 //
 // 目的: 引き継ぎが**既に持っている値を上書きしない**ことを確認する（issue #19）。
 //
@@ -264,7 +264,7 @@ func writeSecondIdentity(t *testing.T, fx *repoWorkspaceFixture, second *workspa
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P015"}
 //
 // 目的: 身元ファイルの herdr_repo_workspace_id が herdr の現物と食い違えば閉じないことを
 // 確認する（issue #19）。

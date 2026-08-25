@@ -3,12 +3,12 @@
   "usecase_name": "再起動して実行中の issue を引き継ぐ",
   "source": {
     "file": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.rucm.md",
-    "rucm_block_sha256": "75b1683b86fd4a2181599eb40e5fda5a5680cee9617ff8fa86962bc8d0fd4d26"
+    "rucm_block_sha256": "73e7e13f2888651ec64be1645dabb6aee97bd4d54898bdacef0e8d8578759d89"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "引き継いだ issue は印の集合に入っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。"
+      "postcondition": "引き継いだ issue は印の集合に入っている。孤児 branch は cleanup.delete_branch が真のときだけ消えている。引き継いだ run の branch は残っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。"
     },
     "二重起動": {
       "rfs": {
@@ -314,9 +314,44 @@
     },
     {
       "id": "BASIC FLOW-30",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 30,
+      "statement": "IF 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である THEN"
+    },
+    {
+      "id": "BASIC FLOW-31",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 31,
+      "statement": "システムは Status が cleanup.on_states に入った issue の worktree を片付ける。"
+    },
+    {
+      "id": "BASIC FLOW-32",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 32,
+      "statement": "IF 設定の cleanup.delete_branch が真である THEN"
+    },
+    {
+      "id": "BASIC FLOW-33",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 33,
+      "statement": "システムは接頭辞に一致してどの worktree もチェックアウトしておらず印にも入っていない branch を消す。"
+    },
+    {
+      "id": "BASIC FLOW-35",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 35,
+      "statement": "システムは孤児 branch を1本も消さない。"
+    },
+    {
+      "id": "BASIC FLOW-38",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 38,
       "statement": "システムは巡回のループを始める。"
     },
     {
@@ -855,6 +890,45 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-30",
+      "to": "BASIC FLOW-31",
+      "kind": "true",
+      "condition": "設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "BASIC FLOW-38",
+      "kind": "false",
+      "condition": "NOT 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である"
+    },
+    {
+      "from": "BASIC FLOW-31",
+      "to": "BASIC FLOW-32",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-32",
+      "to": "BASIC FLOW-33",
+      "kind": "true",
+      "condition": "設定の cleanup.delete_branch が真である"
+    },
+    {
+      "from": "BASIC FLOW-32",
+      "to": "BASIC FLOW-35",
+      "kind": "false",
+      "condition": "NOT 設定の cleanup.delete_branch が真である"
+    },
+    {
+      "from": "BASIC FLOW-33",
+      "to": "BASIC FLOW-38",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-35",
+      "to": "BASIC FLOW-38",
+      "kind": "seq"
+    },
+    {
       "from": "二重起動-1",
       "to": "二重起動-2",
       "kind": "seq"
@@ -1020,7 +1094,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "引き継いだ issue は印の集合に入っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "postcondition": "引き継いだ issue は印の集合に入っている。孤児 branch は cleanup.delete_branch が真のときだけ消えている。引き継いだ run の branch は残っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1047,7 +1121,11 @@
         "BASIC FLOW-23",
         "BASIC FLOW-24",
         "BASIC FLOW-25",
-        "BASIC FLOW-30"
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-38"
       ],
       "steps": [
         "利用者はシステムに continuo の常駐の開始を要求する。",
@@ -1075,6 +1153,10 @@
         "システムは run の turn 数を 1 に戻す。",
         "IF agent_status が working である THEN",
         "システムは Stop hook の到着を待つ。",
+        "IF 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である THEN",
+        "システムは Status が cleanup.on_states に入った issue の worktree を片付ける。",
+        "IF 設定の cleanup.delete_branch が真である THEN",
+        "システムは接頭辞に一致してどの worktree もチェックアウトしておらず印にも入っていない branch を消す。",
         "システムは巡回のループを始める。"
       ]
     },
@@ -1082,7 +1164,143 @@
       "id": "P002",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "引き継いだ issue は印の集合に入っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "postcondition": "引き継いだ issue は印の集合に入っている。孤児 branch は cleanup.delete_branch が真のときだけ消えている。引き継いだ run の branch は残っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-35",
+        "BASIC FLOW-38"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは VALIDATES THAT ロックファイルの flock を取れる。",
+        "システムは VALIDATES THAT 起動時の検査をすべて通る。",
+        "システムは worktree の置き場所を4階層まで走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは VALIDATES THAT 身元ファイルが名乗る owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT ボードを project item の ID 指定で取り直せる。",
+        "システムは VALIDATES THAT 取り直した issue の owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT herdr から pane と agent の一覧を取れる。",
+        "システムは VALIDATES THAT worktree のパスと cwd が一致する pane がある。",
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っている。",
+        "システムは VALIDATES THAT pane の agent_status を読み取れる。",
+        "システムは VALIDATES THAT agent_status が blocked でない。",
+        "システムは VALIDATES THAT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない。",
+        "システムは身元ファイルの引き継いだ回数を1つ増やす。",
+        "システムは pane の agent_session からセッション UUID を取る。",
+        "システムは agent の一覧から pane に対応する agent 名を取る。",
+        "システムは run の実行時状態を組み立てる。",
+        "システムは hook を受ける socket の listen を始める。",
+        "システムは逃がし先に溜まった hook を読み戻す。",
+        "システムは引き継ぐ issue に印を付ける。",
+        "システムは溜めた hook の配送を始める。",
+        "システムは run の turn 数を 1 に戻す。",
+        "IF agent_status が working である THEN",
+        "システムは Stop hook の到着を待つ。",
+        "IF 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である THEN",
+        "システムは Status が cleanup.on_states に入った issue の worktree を片付ける。",
+        "IF 設定の cleanup.delete_branch が真である THEN",
+        "CONDITION: NOT 設定の cleanup.delete_branch が真である",
+        "システムは孤児 branch を1本も消さない。",
+        "システムは巡回のループを始める。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "引き継いだ issue は印の集合に入っている。孤児 branch は cleanup.delete_branch が真のときだけ消えている。引き継いだ run の branch は残っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-30",
+        "BASIC FLOW-38"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは VALIDATES THAT ロックファイルの flock を取れる。",
+        "システムは VALIDATES THAT 起動時の検査をすべて通る。",
+        "システムは worktree の置き場所を4階層まで走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは VALIDATES THAT 身元ファイルが名乗る owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT ボードを project item の ID 指定で取り直せる。",
+        "システムは VALIDATES THAT 取り直した issue の owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT herdr から pane と agent の一覧を取れる。",
+        "システムは VALIDATES THAT worktree のパスと cwd が一致する pane がある。",
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っている。",
+        "システムは VALIDATES THAT pane の agent_status を読み取れる。",
+        "システムは VALIDATES THAT agent_status が blocked でない。",
+        "システムは VALIDATES THAT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない。",
+        "システムは身元ファイルの引き継いだ回数を1つ増やす。",
+        "システムは pane の agent_session からセッション UUID を取る。",
+        "システムは agent の一覧から pane に対応する agent 名を取る。",
+        "システムは run の実行時状態を組み立てる。",
+        "システムは hook を受ける socket の listen を始める。",
+        "システムは逃がし先に溜まった hook を読み戻す。",
+        "システムは引き継ぐ issue に印を付ける。",
+        "システムは溜めた hook の配送を始める。",
+        "システムは run の turn 数を 1 に戻す。",
+        "IF agent_status が working である THEN",
+        "システムは Stop hook の到着を待つ。",
+        "IF 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である THEN",
+        "CONDITION: NOT 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である",
+        "システムは巡回のループを始める。"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "引き継いだ issue は印の集合に入っている。孤児 branch は cleanup.delete_branch が真のときだけ消えている。引き継いだ run の branch は残っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1110,7 +1328,11 @@
         "BASIC FLOW-24",
         "BASIC FLOW-27",
         "BASIC FLOW-28",
-        "BASIC FLOW-30"
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-38"
       ],
       "steps": [
         "利用者はシステムに continuo の常駐の開始を要求する。",
@@ -1140,11 +1362,157 @@
         "CONDITION: NOT agent_status が working である",
         "システムは run に次の turn を要する印を立てる。",
         "システムは run に継続の指示を送る。",
+        "IF 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である THEN",
+        "システムは Status が cleanup.on_states に入った issue の worktree を片付ける。",
+        "IF 設定の cleanup.delete_branch が真である THEN",
+        "システムは接頭辞に一致してどの worktree もチェックアウトしておらず印にも入っていない branch を消す。",
         "システムは巡回のループを始める。"
       ]
     },
     {
-      "id": "P003",
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "引き継いだ issue は印の集合に入っている。孤児 branch は cleanup.delete_branch が真のときだけ消えている。引き継いだ run の branch は残っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-35",
+        "BASIC FLOW-38"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは VALIDATES THAT ロックファイルの flock を取れる。",
+        "システムは VALIDATES THAT 起動時の検査をすべて通る。",
+        "システムは worktree の置き場所を4階層まで走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは VALIDATES THAT 身元ファイルが名乗る owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT ボードを project item の ID 指定で取り直せる。",
+        "システムは VALIDATES THAT 取り直した issue の owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT herdr から pane と agent の一覧を取れる。",
+        "システムは VALIDATES THAT worktree のパスと cwd が一致する pane がある。",
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っている。",
+        "システムは VALIDATES THAT pane の agent_status を読み取れる。",
+        "システムは VALIDATES THAT agent_status が blocked でない。",
+        "システムは VALIDATES THAT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない。",
+        "システムは身元ファイルの引き継いだ回数を1つ増やす。",
+        "システムは pane の agent_session からセッション UUID を取る。",
+        "システムは agent の一覧から pane に対応する agent 名を取る。",
+        "システムは run の実行時状態を組み立てる。",
+        "システムは hook を受ける socket の listen を始める。",
+        "システムは逃がし先に溜まった hook を読み戻す。",
+        "システムは引き継ぐ issue に印を付ける。",
+        "システムは溜めた hook の配送を始める。",
+        "システムは run の turn 数を 1 に戻す。",
+        "IF agent_status が working である THEN",
+        "CONDITION: NOT agent_status が working である",
+        "システムは run に次の turn を要する印を立てる。",
+        "システムは run に継続の指示を送る。",
+        "IF 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である THEN",
+        "システムは Status が cleanup.on_states に入った issue の worktree を片付ける。",
+        "IF 設定の cleanup.delete_branch が真である THEN",
+        "CONDITION: NOT 設定の cleanup.delete_branch が真である",
+        "システムは孤児 branch を1本も消さない。",
+        "システムは巡回のループを始める。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "引き継いだ issue は印の集合に入っている。孤児 branch は cleanup.delete_branch が真のときだけ消えている。引き継いだ run の branch は残っている。身元ファイルの引き継いだ回数は1つ増えている。run の turn 数は 1 である。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-30",
+        "BASIC FLOW-38"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは VALIDATES THAT ロックファイルの flock を取れる。",
+        "システムは VALIDATES THAT 起動時の検査をすべて通る。",
+        "システムは worktree の置き場所を4階層まで走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは VALIDATES THAT 身元ファイルが名乗る owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT ボードを project item の ID 指定で取り直せる。",
+        "システムは VALIDATES THAT 取り直した issue の owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT herdr から pane と agent の一覧を取れる。",
+        "システムは VALIDATES THAT worktree のパスと cwd が一致する pane がある。",
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っている。",
+        "システムは VALIDATES THAT pane の agent_status を読み取れる。",
+        "システムは VALIDATES THAT agent_status が blocked でない。",
+        "システムは VALIDATES THAT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない。",
+        "システムは身元ファイルの引き継いだ回数を1つ増やす。",
+        "システムは pane の agent_session からセッション UUID を取る。",
+        "システムは agent の一覧から pane に対応する agent 名を取る。",
+        "システムは run の実行時状態を組み立てる。",
+        "システムは hook を受ける socket の listen を始める。",
+        "システムは逃がし先に溜まった hook を読み戻す。",
+        "システムは引き継ぐ issue に印を付ける。",
+        "システムは溜めた hook の配送を始める。",
+        "システムは run の turn 数を 1 に戻す。",
+        "IF agent_status が working である THEN",
+        "CONDITION: NOT agent_status が working である",
+        "システムは run に次の turn を要する印を立てる。",
+        "システムは run に継続の指示を送る。",
+        "IF 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である THEN",
+        "CONDITION: NOT 設定の cleanup.enabled と cleanup.sweep_on_startup がどちらも真である",
+        "システムは巡回のループを始める。"
+      ]
+    },
+    {
+      "id": "P007",
       "terminal": "abort",
       "terminal_flow": "中断",
       "postcondition": "continuo は常駐していない。印の集合は失われている。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
@@ -1205,7 +1573,7 @@
       ]
     },
     {
-      "id": "P004",
+      "id": "P008",
       "terminal": "abort",
       "terminal_flow": "引き継ぎの上限",
       "postcondition": "issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。worktree は残っている。",
@@ -1252,7 +1620,7 @@
       ]
     },
     {
-      "id": "P005",
+      "id": "P009",
       "terminal": "abort",
       "terminal_flow": "権限の確認での停止",
       "postcondition": "issue の Status は failure_state の選択肢である。herdr の pane は閉じている。保留中の権限の要求は pane ごと消えている。worktree は残っている。",
@@ -1297,7 +1665,7 @@
       ]
     },
     {
-      "id": "P006",
+      "id": "P010",
       "terminal": "abort",
       "terminal_flow": "状態の不明",
       "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。",
@@ -1340,7 +1708,7 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "引き渡し状態",
       "postcondition": "herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。利用者は pane の中身を読める。",
@@ -1381,7 +1749,7 @@
       ]
     },
     {
-      "id": "P008",
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "paneの不在",
       "postcondition": "issue は印の集合に入っていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
@@ -1420,7 +1788,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "一覧の取得の失敗",
       "postcondition": "herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。印の集合は空である。continuo は常駐している。",
@@ -1457,7 +1825,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "issueの取り違え",
       "postcondition": "worktree は残っている。取り直した issue の Status は変わっていない。herdr の pane は閉じていない。continuo は常駐している。",
@@ -1490,7 +1858,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "ボードの取り直しの失敗",
       "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。continuo は常駐している。",
@@ -1523,7 +1891,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P016",
       "terminal": "abort",
       "terminal_flow": "名乗りの食い違い",
       "postcondition": "worktree は残っている。ボードへは1バイトも書いていない。herdr の pane は閉じていない。continuo は常駐している。",
@@ -1552,7 +1920,7 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "前提の不足",
       "postcondition": "continuo は常駐していない。herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。",
@@ -1575,7 +1943,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "二重起動",
       "postcondition": "2つめの continuo のプロセスは終了している。1つめの continuo のプロセスは動いている。herdr の pane は閉じていない。",
@@ -1597,9 +1965,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 72,
-    "nodes_covered": 72,
-    "edges_total": 72,
-    "edges_covered": 72
+    "nodes_total": 77,
+    "nodes_covered": 77,
+    "edges_total": 79,
+    "edges_covered": 79
   }
 }

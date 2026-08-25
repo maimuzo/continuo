@@ -48,8 +48,10 @@ BASIC FLOW:
 14. UNTIL 5つの役割すべてに選択肢が割り当てられている
 15. システムは利用者に5つの役割の割り当ての一覧を応答する。
 16. システムは VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている。
-17. システムは WORKFLOW.md の Status に関する8つのキーの行を書き換える。
-18. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する。
+17. システムは書き換えたあとの全文を組み立てる。
+18. システムは VALIDATES THAT 元の WORKFLOW.md の front matter が読めないか、組み立てた全文の front matter を読み直せる。
+19. システムは組み立てた全文を WORKFLOW.md へ書き込む。
+20. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する。
 POSTCONDITION: 5つの役割それぞれに1つの選択肢が書かれている。同じ選択肢が2つの役割に書かれていない。WORKFLOW.md の8つのキー以外の行は変わっていない。ボードの選択肢は変わっていない。ボードの item の Status は変わっていない。
 
 SPECIFIC ALTERNATIVE FLOW WORKFLOW.mdが無い:
@@ -100,6 +102,13 @@ SPECIFIC ALTERNATIVE FLOW 書き換える対象のキーが無い:
 RFS BASIC FLOW 16
 1. システムは利用者に WORKFLOW.md から消えているキーと、値がキーの行に無いキーの名前を応答する。
 2. システムは利用者にキーを書き戻すか、値をキーの行に書くか、continuo init で作り直す案内を応答する。
+3. ABORT
+POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 である。
+
+SPECIFIC ALTERNATIVE FLOW 書き換えると読めなくなる:
+RFS BASIC FLOW 18
+1. システムは利用者に組み立てた全文の front matter を読み直せないことと理由を応答する。
+2. システムは利用者に WORKFLOW.md を手で直すか continuo init で作り直す案内を応答する。
 3. ABORT
 POSTCONDITION: WORKFLOW.md は変わっていない。5つの役割の割り当ては保存されていない。終了コードは 1 である。
 
@@ -157,8 +166,10 @@ flowchart TD
     B14{"14. UNTIL 5つの役割すべてに選択肢が割り当てられている"}
     B15["15. システムは利用者に5つの役割の割り当ての一覧を応答する"]
     B16{"16. VALIDATES THAT WORKFLOW.md に書き換える対象の8つのキーがあり、どれも値がキーの行に書かれている"}
-    B17["17. システムは WORKFLOW.md の Status に関する8つのキーの行を書き換える"]
-    B18["18. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する"]
+    B17["17. システムは書き換えたあとの全文を組み立てる"]
+    B18{"18. VALIDATES THAT 元の front matter が読めないか、組み立てた全文の front matter を読み直せる"}
+    B19["19. システムは組み立てた全文を WORKFLOW.md へ書き込む"]
+    B20["20. システムは利用者に WORKFLOW.md のパスと書き換えたキーの一覧を応答する"]
     BPOST(["POSTCONDITION WORKFLOW.md の8つのキー以外の行は変わっていない"])
 
     B1 --> B2
@@ -186,7 +197,10 @@ flowchart TD
     B16 -- 真 --> B17
     B16 -- 偽 --> F7S1
     B17 --> B18
-    B18 --> BPOST
+    B18 -- 真 --> B19
+    B18 -- 偽 --> F9S1
+    B19 --> B20
+    B20 --> BPOST
     B15 -- "WHEN 利用者が Ctrl+C を入力した場合" --> F8S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW WORKFLOW.mdが無い / RFS BASIC FLOW 2"]
@@ -238,6 +252,13 @@ flowchart TD
         F7S2["2. システムは利用者にキーを書き戻すか、値をキーの行に書くか、continuo init で作り直す案内を応答する"]
         F7S3["3. ABORT"]
         F7S1 --> F7S2 --> F7S3
+    end
+
+    subgraph SAF9 ["SPECIFIC ALTERNATIVE FLOW 書き換えると読めなくなる / RFS BASIC FLOW 18"]
+        F9S1["1. システムは利用者に組み立てた全文の front matter を読み直せないことと理由を応答する"]
+        F9S2["2. システムは利用者に WORKFLOW.md を手で直すか continuo init で作り直す案内を応答する"]
+        F9S3["3. ABORT"]
+        F9S1 --> F9S2 --> F9S3
     end
 
     subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 中断 / BRANCH FROM BASIC FLOW 15"]
@@ -302,8 +323,15 @@ sequenceDiagram
                     Sys-->>User: 消えているキーと値がキーの行に無いキーの名前、書き戻す案内を応答する
                     Note over Sys: ABORT WORKFLOW.md は変わっていない
                 else 割り当てを書き換える
-                    Sys->>Sys: WORKFLOW.md の Status に関する8つのキーの行を書き換える
-                    Sys-->>User: WORKFLOW.md のパスと書き換えたキーの一覧を応答する
+                    Sys->>Sys: 8つのキーの行を書き換えた全文を組み立てる
+                    Sys->>Sys: 組み立てた全文の front matter を読み直せるかを検証する
+                    alt 元は読めたのに組み立てた全文を読み直せない
+                        Sys-->>User: 読み直せない理由と手で直す案内を応答する
+                        Note over Sys: ABORT WORKFLOW.md は変わっていない
+                    else 読み直せる
+                        Sys->>Sys: 組み立てた全文を WORKFLOW.md へ書き込む
+                        Sys-->>User: WORKFLOW.md のパスと書き換えたキーの一覧を応答する
+                    end
                 end
             end
         end

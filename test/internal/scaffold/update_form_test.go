@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "0522685f2ac9ef7313389909ac9deb636619176f727600d752a7f1a0ada70b8a", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
+// {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
 // **書き方が違う WORKFLOW.md を `continuo setup` に渡したときの検査である。**
 //
@@ -50,7 +50,7 @@ func TestUpdateStatuses_片付けを始めるStatusも書き換える(t *testing
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P003"}
 //
 // TestUpdateStatuses_値が下の行にぶら下がっていたら書かずに止める は、
 // **「成功しました」と出したあと continuo が起動しなくなる**経路を落とす。
@@ -80,7 +80,7 @@ func TestUpdateStatuses_値が下の行にぶら下がっていたら書かず�
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P003"}
 //
 // TestCheckUpdatable_値が下の行にぶら下がっていたら尋ねる前に止める は、
 // **5問答えさせたあとで落とさない**ことを確かめる。
@@ -99,9 +99,10 @@ func TestCheckUpdatable_値が下の行にぶら下がっていたら尋ねる�
 	}
 }
 
-// {"RUCM-PATH": "P002"}
+// {"RUCM-PATH": "P003"}
 //
 // TestUpdateStatuses_書き換えると読めなくなるなら書かない は、**最後の関門**を確かめる。
+// {"RUCM-PATH": "P002"}
 //
 // **行を1本だけ組み立て直す書き換えは、値の書き方によっては下の行を残す。**
 // block 形式は名指しで止めているが、書き方はほかにもある（`>` や `|` で始まる複数行の値）。
