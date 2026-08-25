@@ -23,6 +23,13 @@ type CleanupResult struct {
 	// **呼び出し側は「worktree を消した＝branch も消えた」と書いてはならない**
 	// （`continuo abandon` が人間に見せる1行がこれを読む）。
 	BranchDeleted bool
+	// BranchAbsent は、**身元ファイルに書かれた branch がリポジトリに実在しなかった**
+	// ことを表す（issue #27）。
+	//
+	// **BranchDeleted と両立しない。**消す対象が無かっただけなので Leftovers にも積まない。
+	// **「消しました」と書いてはならない。**消していないし、元から無かった。
+	// 呼び出し側は「消す対象がありませんでした」と言うこと。
+	BranchAbsent bool
 	// Deferred は消さずに見送ったかどうかである。
 	//
 	// **cleanup.enabled が false のときも真になる**（3-9 の手順5）。
@@ -217,7 +224,7 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 
 	// 段4 の準備: 消してよい branch かどうかを、**worktree がまだあるうちに**検算する
 	// （git に現物を答えさせる検査が要るため。deletableBranch を見よ）。
-	branch, branchDeletable, branchReason := m.deletableBranch(ctx, repoDir, resolvedPath, identity)
+	branch, branchState, branchReason := m.deletableBranch(ctx, repoDir, resolvedPath, identity)
 
 	// 段3 の準備: 消す宛先の herdr workspace も、**worktree がまだ開いているうちに**
 	// herdr に答えさせて検算する（resolveWorkspaceID を見よ）。
@@ -247,12 +254,19 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 	// **消せなかったときは、そのことを人間の画面へ届ける**（issue #23）。
 	// ここをログにだけ書くと、`continuo abandon` は Logger を渡さないので誰も読めない。
 	switch {
+	case branchState == branchAbsent:
+		// **リポジトリに実在しない branch を「残っています」と言わない**（issue #27）。
+		// 着手が `git worktree add` で失敗し続けた worktree には、ディレクトリだけが
+		// 残って branch が1度も作られていないことがある。そこへ「消せませんでした」と
+		// 出すと、**利用者は存在しないものを探して消しに行く。**
+		// **`cleanup.delete_branch` が偽でも同じである。**消す対象が元から無い。
+		result.BranchAbsent = true
 	case !m.cfg.Cleanup.DeleteBranch:
 		if identity.Branch != "" {
 			result.Leftovers = append(result.Leftovers,
 				i18n.T(i18n.KeyWorkspaceLeftoverBranchDisabled, identity.Branch))
 		}
-	case !branchDeletable:
+	case branchState == branchKeep:
 		result.Leftovers = append(result.Leftovers,
 			i18n.T(i18n.KeyWorkspaceLeftoverBranchUndeletable, identity.Branch, branchReason))
 	default:
@@ -278,10 +292,14 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 	// `cleanup.delete_branch` が偽のとき・branch の検算に落ちたとき・`git branch -D` が
 	// 失敗したときは branch が残る。ログだけを見て「もう無い」と判断されると、
 	// **残った branch を探す人がログを疑うところから始めることになる。**
-	if result.BranchDeleted {
+	switch {
+	case result.BranchDeleted:
 		m.logger.Info("worktree と branch を片付けました",
 			"worktree", resolvedPath, "branch", identity.Branch, "issue", identity.IssueIdentifier)
-	} else {
+	case result.BranchAbsent:
+		m.logger.Info("worktree を片付けました（branch は元からありませんでした）",
+			"worktree", resolvedPath, "branch", identity.Branch, "issue", identity.IssueIdentifier)
+	default:
 		m.logger.Info("worktree を片付けました（branch は残しました）",
 			"worktree", resolvedPath, "branch", identity.Branch, "issue", identity.IssueIdentifier)
 	}
@@ -439,6 +457,24 @@ func (m *Manager) findWorkspaceIDByPath(ctx context.Context, worktreePath string
 	return "", nil
 }
 
+// branchVerdict は、身元ファイルに書かれた branch をどう扱うかの判定である（3-9 の段4）。
+//
+// **「消してよい／いけない」の2値では足りない**（issue #27）。**消す対象が
+// リポジトリに実在しない**という3つ目があり、それを「消せなかった」に丸めると、
+// 利用者は存在しない branch を探しに行く。
+type branchVerdict int
+
+const (
+	// branchDeletable は `git branch -D` に渡してよいことを表す。
+	branchDeletable branchVerdict = iota
+	// branchAbsent は、その branch がリポジトリに実在しないことを表す。
+	// **消す対象が無いだけなので、残ったものとして数えない。**
+	branchAbsent
+	// branchKeep は、実在するかもしれないのに消してよいと検算できないことを表す。
+	// **残ったものとして人間の画面へ出す**（理由を添える）。
+	branchKeep
+)
+
 // deletableBranch は、身元ファイルに書かれた branch を `git branch -D` に渡してよいかを
 // 検算する（3-9 の段4）。
 //
@@ -456,6 +492,13 @@ func (m *Manager) findWorkspaceIDByPath(ctx context.Context, worktreePath string
 //   - **worktree が実際にチェックアウトしている branch と一致すること。**
 //     git が答える現物との突き合わせであり、身元ファイルだけでは成立しない
 //
+// **その前に「そもそも実在するか」を見る**（issue #27）。`git worktree add` が失敗し続けた
+// あとの worktree には、ディレクトリだけが残って branch が1度も作られていないことがある。
+// **実在しないものを「消せませんでした」として人間に見せると、利用者は無いものを
+// 探して消しに行く。**実在しなければ branchAbsent を返し、画面には何も出さない。
+// **リポジトリを名指しできないときは実在するかを確かめられない**ので、そこは
+// いままでどおり branchKeep のままにする（「無い」と「調べられない」は別である）。
+//
 // **現物はリポジトリ側に答えさせる**（`git -C <リポジトリ> worktree list --porcelain`）。
 // worktree 側に `git -C <worktree> rev-parse HEAD` を聞くと、**worktree の `.git` が
 // 壊れているだけで branch が消せなくなる**（issue #23）。しかも `.git` はエージェントが
@@ -467,25 +510,25 @@ func (m *Manager) findWorkspaceIDByPath(ctx context.Context, worktreePath string
 // repoDir: 検算済みのリポジトリの作業ディレクトリ。
 // worktreePath: 対象の worktree のパス（**まだ消していないこと。**登録を引くため）。
 // identity: 読み取った身元ファイル。
-// 戻り値の1つ目: 消してよい branch 名。
-// 戻り値の2つ目: 消してよければ true。**偽のときは何も消さない。**
-// 戻り値の3つ目: 消さない理由（人間が読む文。**偽のときだけ入る**）。
+// 戻り値の1つ目: 消してよい branch 名（**branchDeletable のときだけ入る**）。
+// 戻り値の2つ目: 判定（branchDeletable / branchAbsent / branchKeep）。
+// 戻り値の3つ目: 消さない理由（人間が読む文。**branchKeep のときだけ入る**）。
 // **この文は CleanupResult.Leftovers を通って人間の画面へ出る。**ログにだけ書くと、
 // `continuo abandon` は Logger を渡さないので誰にも届かない（issue #23）。
 func (m *Manager) deletableBranch(
 	ctx context.Context,
 	repoDir, worktreePath string,
 	identity *Identity,
-) (normalize.SafeName, bool, string) {
+) (normalize.SafeName, branchVerdict, string) {
 	if identity.Branch == "" {
-		return "", false, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonNoIdentity)
+		return "", branchKeep, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonNoIdentity)
 	}
 	// **リポジトリを名指しできないなら branch には触らない。**空のまま git を呼ぶと
 	// `-C` が付かず、**continuo 自身の作業ディレクトリのリポジトリに撃つ。**
 	if repoDir == "" {
 		m.logger.Warn("worktree が属するリポジトリを名指しできないので branch を消しません",
 			"worktree", worktreePath, "branch", identity.Branch)
-		return "", false, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonRepoUnknown)
+		return "", branchKeep, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonRepoUnknown)
 	}
 
 	branch, warnings := normalize.Normalize(identity.Branch)
@@ -494,28 +537,49 @@ func (m *Manager) deletableBranch(
 		m.logger.Warn("身元ファイルの branch 名が正規化で変わるので消しません",
 			"identity_path", m.IdentityPath(worktreePath),
 			"branch", identity.Branch, "normalized", branch.String())
-		return "", false, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonNormalized, branch.String())
+		return "", branchKeep, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonNormalized, branch.String())
 	}
 
 	prefix := BranchPrefix(m.cfg.Herdr.Worktree.BranchTemplate)
 	if prefix == "" {
 		m.logger.Warn("herdr.worktree.branch_template に変数が無いので branch を消しません",
 			"branch_template", m.cfg.Herdr.Worktree.BranchTemplate, "branch", branch.String())
-		return "", false, i18n.T(
+		return "", branchKeep, i18n.T(
 			i18n.KeyWorkspaceLeftoverBranchReasonNoPrefix, m.cfg.Herdr.Worktree.BranchTemplate)
 	}
 	if !strings.HasPrefix(branch.String(), prefix) {
 		m.logger.Warn("身元ファイルの branch が continuo の接頭辞で始まらないので消しません",
 			"identity_path", m.IdentityPath(worktreePath),
 			"branch", branch.String(), "prefix", prefix)
-		return "", false, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonPrefixMismatch, prefix)
+		return "", branchKeep, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonPrefixMismatch, prefix)
+	}
+
+	// **消す対象が実在するかを、現物との突き合わせより先に見る**（issue #27）。
+	// 実在しなければ、このあとの検算が通ろうと落ちようと消すものは無い。
+	// **git が答えられなければ「無い」とは言わない。**そのまま下の検算へ進み、
+	// 消せない理由を人間へ出す（「無い」と「調べられない」は別である）。
+	switch exists, err := gitBranchExists(ctx, repoDir, branch); {
+	case err != nil:
+		m.logger.Warn("branch がリポジトリに実在するかを確かめられませんでした（検算は続けます）",
+			"repo", repoDir, "branch", branch.String(), "error", err)
+	case !exists:
+		// **「無い」と「ref が壊れていて git が答えを出せない」を混ぜない**（issue #28）。
+		// `git show-ref --verify --quiet` は**壊れた ref にも終了コード 1 を返す**
+		// （実測: 2026-08-25、git 2.50.1）。**そこを branchAbsent に丸めると、
+		// 壊れた ref のファイルが誰にも消されないまま残る。**
+		if m.brokenRefBranchAt(ctx, repoDir, worktreePath, branch) {
+			return branch, branchDeletable, ""
+		}
+		m.logger.Info("身元ファイルに書かれた branch はリポジトリに実在しないので、消す対象がありません",
+			"repo", repoDir, "branch", branch.String(), "worktree", worktreePath)
+		return "", branchAbsent, ""
 	}
 
 	head, detached, err := gitWorktreeHeadAt(ctx, repoDir, worktreePath)
 	if err != nil {
 		m.logger.Warn("worktree がチェックアウトしている branch を引けないので branch を消しません",
 			"repo", repoDir, "worktree", worktreePath, "error", err)
-		return "", false, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonHeadUnreadable, err)
+		return "", branchKeep, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonHeadUnreadable, err)
 	}
 	if head == "" && !detached {
 		// **git が branch を1つも答えず、detached でもないのは、その ref が壊れているときである**
@@ -528,17 +592,17 @@ func (m *Manager) deletableBranch(
 		// 身元ファイルの branch が git の現物と1度も突き合わされないまま削除の対象になる。**
 		// detached は `detached` の行で見分けられるので、その場合は下の一致検査で落とす。
 		if m.brokenRefBranchAt(ctx, repoDir, worktreePath, branch) {
-			return branch, true, ""
+			return branch, branchDeletable, ""
 		}
 	}
 	if head != branch.String() {
 		m.logger.Warn("身元ファイルの branch が worktree の現物と一致しないので消しません",
 			"identity_path", m.IdentityPath(worktreePath),
 			"identity_branch", branch.String(), "checked_out", head)
-		return "", false, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonHeadMismatch, head)
+		return "", branchKeep, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonHeadMismatch, head)
 	}
 
-	return branch, true, ""
+	return branch, branchDeletable, ""
 }
 
 // brokenRefBranchAt は、その worktree の branch の ref が壊れていて、continuo が
@@ -856,6 +920,28 @@ func (m *Manager) removeWorktreeByHand(
 			"worktree", worktreePath)
 		result.Leftovers = append(result.Leftovers,
 			i18n.T(i18n.KeyWorkspaceLeftoverPruneRepoUnknown, worktreePath))
+		return nil
+	}
+	// **prune を撃つ前に、実体の無い登録がほかにも無いかを見る**（3-37-9b）。
+	// `git worktree prune` はリポジトリ全体に効くので、**利用者がディレクトリごと移した
+	// worktree の登録も一緒に落とす。**落とされた側の branch は git に守られなくなり、
+	// **あとの `git branch -D` が通ってしまう。**
+	//
+	// **ここで撃ってよいのは、continuo が自分で消した1件だけが対象のときである。**
+	// ほかにもあるなら撃たず、登録が残ったことを人間へ出す（消えるものを決めるのは利用者である）。
+	stale, staleErr := gitStaleWorktreesExcept(ctx, repoDir, worktreePath)
+	if staleErr != nil {
+		m.logger.Warn("worktree の登録の一覧を引けないので prune は撃ちません（実体は消してあります）",
+			"repo", repoDir, "worktree", worktreePath, "error", staleErr)
+		result.Leftovers = append(result.Leftovers,
+			i18n.T(i18n.KeyWorkspaceLeftoverPruneFailed, staleErr, repoDir))
+		return nil
+	}
+	if len(stale) > 0 {
+		m.logger.Warn("実体の無い worktree の登録がほかにもあるので prune は撃ちません",
+			"repo", repoDir, "worktree", worktreePath, "others", strings.Join(stale, ", "))
+		result.Leftovers = append(result.Leftovers,
+			i18n.T(i18n.KeyWorkspaceLeftoverPruneSkipped, strings.Join(stale, ", "), repoDir))
 		return nil
 	}
 	if err := gitWorktreePrune(ctx, repoDir); err != nil {

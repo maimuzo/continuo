@@ -56,6 +56,37 @@ func (m *Manager) Scan() ([]ScannedWorktree, error) {
 	return found, nil
 }
 
+// ScanUnidentified は置き場所の走査で見つかった、**身元ファイルが無いディレクトリ**を返す
+// （3-37-9c）。
+//
+// **Scan が結果に含めないものを、別の口で数えられるようにするためにある。**
+// 着手は worktree を作ってから身元ファイルを書くので（3-16 の段6〜段9）、
+// **その間で落ちると身元ファイルの無い worktree ができる。**それを「無かったこと」に
+// すると、`continuo abandon` は「この issue の worktree はありません」と言って
+// 残った branch を消しにいく。**その branch は孤児ではなく、目の前の worktree のもの
+// かもしれない。**
+//
+// **消す判断には使わない。**人間が置いた worktree かもしれないので、continuo は
+// 触れない（3-4 の段2）。**数えて止まるためだけの値である。**
+//
+// 戻り値の1つ目: 身元ファイルが無いディレクトリの絶対パス（パスの昇順）。
+// 戻り値の2つ目: 置き場所そのものを読めない場合のエラー。
+// 途中の階層が読めない場合はその階層を飛ばし、エラーにはしない。
+func (m *Manager) ScanUnidentified() ([]string, error) {
+	dirs, err := m.scanLevel(m.resolvedRoot, scanDepth)
+	if err != nil {
+		return nil, err
+	}
+
+	var found []string
+	for _, dir := range dirs {
+		if _, readErr := m.ReadIdentity(dir); readErr != nil && errors.Is(readErr, ErrIdentityNotFound) {
+			found = append(found, dir)
+		}
+	}
+	return found, nil
+}
+
 // scanLevel は dir の下を depth 階層だけ掘り、その深さのディレクトリの一覧を返す。
 //
 // dir: 掘り始めるディレクトリ。

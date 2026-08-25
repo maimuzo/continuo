@@ -167,6 +167,44 @@ func TestValidate_知らない選択肢を弾く(t *testing.T) {
 	}
 }
 
+// TestValidate_branch_templateにissueの番号が無ければ弾く は、branch 名の衝突を防ぐ検査を確かめる。
+//
+// **番号が入っていないと、issue が違っても同じ branch 名になる。**
+// そのとき `continuo abandon <issue>` は、worktree が無い経路で「規則から組み立てた名前」
+// だけを頼りに消す相手を決めるので、**名指しされた issue とは別の issue の branch を消す。**
+//
+// 目的: `herdr.worktree.branch_template` に `.issue.number` が無ければ、起動する前に弾くこと。
+// 与える情報: `{{.issue.number}}` を落とした branch_template を書いた WORKFLOW.md。
+// 成功条件: エラーになり、キーの名前と `.issue.number` が文面に入っていること。
+func TestValidate_branch_templateにissueの番号が無ければ弾く(t *testing.T) {
+	err := loadWithReplaced(t, "branch_template",
+		`    branch_template: "continuo/{{.issue.owner}}/{{.issue.repo}}"`)
+	if err == nil {
+		t.Fatal("issue の番号が入っていない branch_template を通してしまった")
+	}
+	if !strings.Contains(err.Error(), "herdr.worktree.branch_template") {
+		t.Errorf("どのキーが悪いか分からない: %v", err)
+	}
+	if !strings.Contains(err.Error(), ".issue.number") {
+		t.Errorf("何を足せばよいのか分からない: %v", err)
+	}
+}
+
+// TestValidate_branch_templateにissueの番号があれば通す は、上の検査が効きすぎていないことを確かめる。
+//
+// **番号さえ入っていれば、並べ方は利用者の自由である。**
+// 番号を含む書き方まで弾くと、既に設定している利用者が起動できなくなる。
+//
+// 目的: `.issue.number` を含む branch_template を通すこと。
+// 与える情報: owner も repo も使わず、番号だけを使う branch_template。
+// 成功条件: エラーにならないこと。
+func TestValidate_branch_templateにissueの番号があれば通す(t *testing.T) {
+	if err := loadWithReplaced(t, "branch_template",
+		`    branch_template: "issue-{{.issue.number}}"`); err != nil {
+		t.Fatalf("issue の番号が入っている branch_template を弾いてしまった: %v", err)
+	}
+}
+
 // TestResolvePath_ディレクトリを渡したら中の設定ファイルを見る は、パスの解決を確かめる。
 //
 // **`continuo init <ディレクトリ>` がディレクトリを取るので、他のサブコマンドも揃える。**

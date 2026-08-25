@@ -11,6 +11,14 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
+// issueNumberPlaceholder は herdr.worktree.branch_template が必ず含んでいなければならない
+// 変数の参照である（3-37-9d）。
+//
+// **`{{` と `}}` を含めず、変数の参照だけを見る。**text/template は
+// `{{ .issue.number }}` のように空白を挟んだ書き方も受け付けるので、
+// 波括弧ごと照合すると、正しい設定を弾いてしまう。
+const issueNumberPlaceholder = ".issue.number"
+
 // validate は front matter をパースした直後の Config に対して、YAML としては正しいが
 // 値として不正なものが無いかを検査する。ここでの不正は「起動を止める」対象である
 // （設計「その2」。CLAUDE.md にも明示されている絶対条件）。
@@ -246,6 +254,14 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Herdr.Worktree.BranchTemplate == "" {
 		return requiredValueError("herdr.worktree.branch_template")
+	}
+	// **issue の番号を必ず含める**（3-37-9d）。番号が入っていないと、issue が違っても
+	// 同じ branch 名になる。**そのとき `continuo abandon` は、名指しされた issue とは
+	// 別の issue の branch を消す**（worktree が無い経路は、この規則だけを頼りに
+	// 消す相手を決める）。
+	if !strings.Contains(cfg.Herdr.Worktree.BranchTemplate, issueNumberPlaceholder) {
+		return invalidValueError("herdr.worktree.branch_template", cfg.Herdr.Worktree.BranchTemplate,
+			i18n.T(i18n.KeyConfigValidateBranchTemplateNeedsIssueNumber, issueNumberPlaceholder))
 	}
 
 	if cfg.Cleanup.Enabled && len(cfg.Cleanup.OnStates) == 0 {

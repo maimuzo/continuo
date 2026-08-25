@@ -1,4 +1,6 @@
-# 作業の進捗
+# 作業の記録
+
+**このファイルは追記する。既存の内容を消さない。**
 
 ## issue #28 壊れた ref があると着手できない
 
@@ -44,7 +46,7 @@
 | ファイル | 足したフロー |
 | --- | --- |
 | `issue を1件処理する.rucm.md` | GLOBAL `壊れたref`（BRANCH FROM BASIC FLOW 12、RESUME STEP 12）と SPECIFIC `消さないref` |
-| `worktree と branch を片付ける.rucm.md` | GLOBAL `壊れたref`（BRANCH FROM BASIC FLOW 17、RESUME STEP 18）と SPECIFIC `消さないref` |
+| `worktree と branch を片付ける.rucm.md` | GLOBAL `壊れたref`（BRANCH FROM BASIC FLOW 17、RESUME STEP 22）と SPECIFIC `消さないref` |
 
 **RUCM → CFG → テストの順で通した。**`rucm_validator.py` はどちらもエラー0件・警告0件。
 CFG を再生成すると path ID が振り直されるので、テストの `RUCM-PATH` マーカーを対応表で書き換えた
@@ -57,3 +59,47 @@ mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2
 
 **通したもの。**`gofmt -l ./cmd ./internal ./test`（出力なし）、`go vet ./...`（出力なし）、
 `sh scripts/test-like-ci.sh`（`-race` 込みで全パッケージ ok）。
+## issue #27 の修正への監査（9件）を直す
+
+**言いたいこと。**`git worktree prune` が git の守りを外していた。
+撃つのをやめ、断られた理由を人間へ渡す形にした。あわせて、
+「調べられない」を「無い」に丸めていた3箇所と、テストの空白を埋めた。
+
+### 直したもの
+
+| 指摘 | どこ | 何をしたか |
+| --- | --- | --- |
+| prune が守りを外す | [internal/workspace/issuebranch.go](../../internal/workspace/issuebranch.go) | `DeleteIssueBranch` から prune を外し、断られたら登録のパスと prune の案内を返す |
+| prune の巻き添え | [internal/workspace/cleanup.go](../../internal/workspace/cleanup.go) | `removeWorktreeByHand` は、実体の無い登録が自分で消した1件だけのときにしか撃たない |
+| prune の行にテストが無い | [test/internal/workspace/issuebranch_test.go](../../test/internal/workspace/issuebranch_test.go) | `FindIssueBranch` / `DeleteIssueBranch` / `ScanUnidentified` の5本を新設 |
+| git の失敗を「無い」に丸める | [internal/workspace/git.go](../../internal/workspace/git.go) | `gitBranchExists` は終了コード 1 だけを「無い」とし、それ以外はエラーにする |
+| 身元ファイルが無い worktree を数えない | [internal/workspace/scan.go](../../internal/workspace/scan.go) | `ScanUnidentified` を足し、`abandon` が「判断できないもの」に数える |
+| `cleanup.delete_branch` を切った経路のテストが無い | cleanup_test.go / abandon_test.go | worktree がある経路と無い経路に1本ずつ足した |
+| 「調べられなかった」経路のテストが無い | abandon_test.go | clone を引けないときに「無い」と言わないことを確かめる |
+| `branch_template` に issue 番号が要らない | [internal/config/validate.go](../../internal/config/validate.go) | `.issue.number` を必須にした |
+| 未 push の commit を数えない | issuebranch.go / abandon.go | `git rev-list --count <branch> --not --remotes` で数え、`--force` の前に見せる |
+
+### あわせて直したもの
+
+- RUCM: 着手を取り消す / worktree と branch を片付ける（フローと mermaid の2ブロックずつ）
+- CFG: 両方を `rucm_to_cfg.py` で再生成し、テストの `RUCM-CFG-SHA256` を更新
+- 設計: [docs/plans/continuo_design.md](continuo_design.md) に 3-37-9b / 3-37-9c / 3-37-9d を追加
+- 文言: `internal/i18n/keys.go` と `internal/i18n/messages/ja.json` に8件
+
+### 確かめたこと
+
+- 新しいテストは、直す前の実装（prune を撃つ・分岐を消す）に戻すと**実際に落ちる**
+- `gofmt -l` / `go vet` / `sh scripts/test-like-ci.sh` / `sh scripts/check-rucm.sh --strict`
+
+## issue #27 を issue #28 のあとに乗せ直した
+
+**言いたいこと。**同じ検査点に2つの直しが重なったので、順番を決め直した。
+**`git show-ref --verify --quiet` は壊れた ref にも終了コード 1 を返す**（実測: 2026-08-25、git 2.50.1）。
+そのまま「実在しない」に丸めると、issue #28 が消すはずの壊れた ref が誰にも消されないまま残る。
+
+| どこ | 何をしたか |
+| --- | --- |
+| [internal/workspace/cleanup.go](../../internal/workspace/cleanup.go) | `deletableBranch` は、実在の検査が「無い」と答えたら **`brokenRefBranchAt` を先に見てから** `branchAbsent` を返す |
+| [internal/workspace/issuebranch.go](../../internal/workspace/issuebranch.go) | `gitBranchDelete` の呼び出しに `brokenRefPolicy` を渡す |
+| `worktree と branch を片付ける.rucm.md` | BASIC FLOW の 17〜23（実在の検査）と GLOBAL `壊れたref` の両方を持つ形に書き直し、CFG を再生成した |
+| cleanup_test.go / repoworkspace_test.go | 振り直された path ID に `RUCM-PATH` と `RUCM-CFG-SHA256` を貼り直した |

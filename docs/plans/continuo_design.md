@@ -1305,7 +1305,7 @@ func Normalize(raw string) (SafeName, []Warning)
 | — その制約 | **herdr workspace として開いていない worktree は、この API では消せない。**continuo が worktree だけ作って herdr workspace を閉じてしまうと片付けられなくなる |
 | — **workspace は別途閉じない** | **`worktree.remove` を呼ぶと、その worktree の pane も一緒に消える**（実測 2026-08-24。捨てリポジトリの worktree で `sleep 600` を走らせていた pane が、`worktree.remove` のあと消えた）。**だから `workspace.close` を続けて呼ばない。**呼ぶ手段も第2段階のクライアントに持たせない。**RPC の応答に `workspace` は入らない** — herdr 0.8.2（protocol 20）の `worktree_removed` は、RPC の成功応答では `type` / `workspace_id` / `path` / `forced` の4つだけで、`workspace` を持つのは同名のイベントのほうである（`herdr api schema --output <ファイル>` で確認。2026-08-24） |
 | 3b | **continuo が開かせたリポジトリの親 workspace を閉じる**（下の節）。`worktree.remove` はこれを閉じないので、放置すると issue 1件につき1つ溜まる |
-| 4 | **branch は herdr が消さないので、continuo が `git branch -D` を自分で叩く**（実測） |
+| 4 | **branch は herdr が消さないので、continuo が `git branch -D` を自分で叩く**（実測）。**渡す前に `git show-ref --verify refs/heads/<名前>` で実在するかを見る。**実在しなければ「消す対象が無かった」として扱い、**残ったものに数えない**（3-37-8） |
 | 5 | 設定で片付け全体を無効にできるようにする（デバッグ時に中身を見たい場合がある） |
 | 6 | **起動時に掃除する。**トラッカーから `cleanup.on_states` の issue を取得し、対応する worktree と branch を消す。**取得に失敗したら警告を出して起動を続ける**（`SPEC.md` 8.6）。**この掃除は復元の手順が終わったあとに走らせる**（3-4 の段9 のあと。**先に走らせると、これから引き継ぐ run の branch を孤児と判定して消しかねない**） |
 | 6b | **孤児 branch を消す。**`internal/workspace` に置く。**対象は、段2 の置き場所の走査で見つかった worktree が属するリポジトリだけである**（ボードを読まずに決まる）。そのリポジトリで**接頭辞に一致する branch** を列挙し、**対応する worktree も無く、復元後の印の集合にも入っていないもの**を消す。**接頭辞は `herdr.worktree.branch_template` の先頭から、最初の `{{` の直前までを取る**（既定なら `continuo/`）。**テンプレートに変数が1つも無ければ、掃除を行わない**（全部の branch が対象になってしまう） |
@@ -4000,7 +4000,7 @@ CI から呼ぶときに使う。
 | --- | --- |
 | 1 | `lock.Acquire` で continuo が動いているかを調べる（3-17）。**取れたロックは実行の最後まで握る。**動いていて、**かつ `--dry-run` でなければ**、ボードの Status が `tracker.active_states` に入っているときに `--park`（既定 `tracker.failure_state`）へ動かして手を離させる。そのうえで**その worktree を cwd に持つ pane が消えるまで待つ。**上限は `herdr.read_timeout_ms` の10倍（既定50秒）で、**超えたら何も消さずに止まる** |
 | 1 の後 | **書き込みが通ったら、持ち回っている Status もその値に更新する。**ボードは1回しか読まないので、更新しないと段3 の計画表示に park の**前**の値が出る（これから消す worktree の issue が「まだ作業中」に見える） |
-| 2 | `workspace.Scan` で走査し、**身元ファイルの `issue_url` で照合する。**パスを owner / repo / 番号から組み立てない（`workspace.root` や `branch_template` を変えている環境で空振りする）。**照合できたものは置き場所のパスで検算する**（3-37-4）。**0件は終了コード 0**（消すものが無い。`--to` を指定していたら、動かしていないことを1行出す。3-37-5）、**2件以上は止める**（どれを消すかは人間が中身を見て決める） |
+| 2 | `workspace.Scan` で走査し、**身元ファイルの `issue_url` で照合する。**パスを owner / repo / 番号から組み立てない（`workspace.root` や `branch_template` を変えている環境で空振りする）。**照合できたものは置き場所のパスで検算する**（3-37-4）。**0件のときは、規則から組み立てた branch が残っていないかを見る**（3-37-9）。`--to` を指定していたら、動かしていないことを1行出す（3-37-5）。**2件以上は止める**（どれを消すかは人間が中身を見て決める） |
 | 2 の後 | **これから書きうる Status の値を確かめる**（3-37-5）。`--to` と park の先がボードの選択肢にあるか、park の先が `tracker.active_states` に入っていないか。**読むだけなので `--dry-run` でも通す** |
 | 3 | 失われるもの（issue と Status・worktree・branch と base・herdr の workspace と pane・コミットされていない変更のファイル数・push されていない commit の件数）を見せる。**ファイル数は `git status --porcelain` の読み取りが上限で打ち切られたら「%d ファイル以上」と出す**（`Leftover.DirtyFilesTruncated`。打ち切った行数をそのまま出すと、失う量を実際より少なく見せる）。**`--dry-run` で継続監視が動いているときは、実行したら Status をどこへ動かすかも予告する。**`--dry-run` はここで終わる。**失うものがあって `--force` が無ければ、何も消さずに終了コード 1** |
 | 4 | **継続監視が動いていないと判定したときは、消す前に pane の生死を確かめる**（3-37-3）。そのうえで `workspace.Cleanup` を呼ぶ。worktree・pane・herdr の workspace・branch がまとめて消える（3-9） |
@@ -4192,7 +4192,7 @@ worktree が1つも見つからなかった実行では、そもそもここへ�
 
 | 何が残ったか | 添える情報 |
 | --- | --- |
-| branch（設定で無効・検算に落ちた・`git branch -D` が失敗） | branch 名と、残した理由 |
+| branch（設定で無効・検算に落ちた・`git branch -D` が失敗） | branch 名と、残した理由。**リポジトリに実在しなかったものは積まない**（3-37-8） |
 | git の worktree の登録（`prune` が失敗・リポジトリを名指しできない） | 叩き直すコマンド（`git -C <clone> worktree prune`） |
 | herdr の workspace（一覧を引けない・`workspace.close` が失敗） | workspace の ID と `herdr workspace close <ID>` |
 
@@ -4205,6 +4205,152 @@ worktree を消しました（<worktree>）。片付け切れずに残ったも�
 
 **`Reasons` とは別物である。**`Reasons` は「消さなかった」理由、`Leftovers` は
 「消したが、これだけ残った」ものである。**混ぜると、消えたのか残ったのかが読めなくなる。**
+
+### 3-37-8. 実在しない branch を「残っている」と言わない
+
+**言いたいこと。**着手が `git worktree add` で失敗し続けると、**ディレクトリだけが残って
+branch は1度も作られない。**そこへ `--force` を叩いて「branch が残っています」と出すと、
+**利用者は存在しないものを探して消しに行く**（issue #27）。
+
+**採るやり方。**`git branch -D` に渡す前に、その branch が**リポジトリに実在するか**を
+`git show-ref --verify refs/heads/<名前>` で見る
+（[internal/workspace/cleanup.go](../../internal/workspace/cleanup.go) の `deletableBranch`）。
+
+| 実在するか | どうするか |
+| --- | --- |
+| 実在しない | **残ったものに数えず、画面にも出さない。**`CleanupResult.BranchAbsent` を真にし、`abandon` は「消す対象がありませんでした」と1行出す |
+| 実在する | いままでどおり現物（`git worktree list --porcelain`）と突き合わせ、消せなければ理由を出す |
+| **確かめられない**（リポジトリを名指しできない・git が答えない） | **「無い」とは言わない。**いままでどおり残ったものとして出す |
+| **ref が壊れている** | **「無い」とは言わない。**3-22b の経路でファイルとして片付ける |
+
+**壊れた ref を「実在しない」に丸めてはならない。**`git show-ref --verify --quiet` は
+**壊れた ref にも終了コード 1 を返す**（実測: 2026-08-25、git 2.50.1）。
+そこを `BranchAbsent` に丸めると、**3-22b が消すはずの壊れた ref のファイルが
+誰にも消されないまま残る。**そこで「無い」と答える前に `brokenRefBranchAt` を通し、
+壊れた ref なら消してよい branch として扱う。
+
+**「消しました」とも言わない。**消していないし、元から無かった。
+**`cleanup.delete_branch` が false でも同じである。**設定で消さないことにしていても、
+**元から無いものを「残っています」と言う理由が無い。**
+
+**画面に出る形（実測: 2026-08-25）。**
+
+```
+worktree を消しました（<worktree>）。branch continuo/<owner>/<repo>/4000 はリポジトリに無かったので、消す対象はありませんでした。
+```
+
+### 3-37-9. worktree が無くても、残った branch は片付ける
+
+**言いたいこと。**片付けの途中で失敗すると **branch だけが残る。**worktree を起点にしか
+探さないと、もう一度叩いても「この issue の worktree はありません」で終わり、
+**利用者は手で `git branch -D` を叩くしかなくなる**（issue #27）。
+
+**採るやり方。**段2 が0件だったとき、**規則から branch 名を組み立てて探す**
+（[internal/workspace/issuebranch.go](../../internal/workspace/issuebranch.go) の
+`FindIssueBranch` / `DeleteIssueBranch`）。
+
+| 何を根拠にするか | なぜそれか |
+| --- | --- |
+| 利用者が打った issue の URL | 人間が名指しした相手そのものである |
+| 設定の `herdr.worktree.branch_template` | continuo が着手のときに使ったのと同じ規則である |
+| `ghq list -p -e <owner>/<repo>` が答えた clone | 消す宛先を worktree の外側で決められる |
+
+**身元ファイルは1バイトも読まない。**読む worktree がもう無いうえ、身元ファイルは
+worktree の直下にあってエージェントが書き換えられる（3-16 の段9）。
+**上の3つはどれも書き換えられないので、身元ファイルを検算するより根拠が強い。**
+
+**そのうえで、次の4つを守る。**
+
+| 守ること | なぜ |
+| --- | --- |
+| **消すには `--force` が要る** | worktree が無いので、コミットしていない編集が残っていたかは調べようがない。調べられないものを黙って消さない（段3 と同じ扱い） |
+| **未 push の commit は数えて見せる** | `git -C <clone> rev-list --count <branch> --not --remotes` は worktree が無くても答える。**数えられなかったときは 0 件と見せず、そう言う** |
+| **消したら戻すコマンドを1行出す** | `git branch -D` はマージ状態を見ない。`git -C <clone> branch <名前> <SHA>` を添える |
+| **候補から外したものが1つでもあれば進まない** | 身元ファイルを読めなかったものと**身元ファイルが1つも無いもの**は、この issue の worktree かもしれない（3-37-9c） |
+| **`cleanup.delete_branch` は越えない** | worktree がある経路（`workspace.Cleanup`）が越えない。ここだけ越えると「worktree があると残るが、無いと消える」という筋の通らない差が生まれる |
+
+**Status は動かさない。**worktree が無い実行で `--to` を通さないのは、
+**URL の打ち間違いと区別できないから**である（3-37-5）。branch を1本消しても、
+その issue をボードでどこへ置くべきかは決まらない。
+
+**画面に出る形（実測: 2026-08-25）。**
+
+```
+この issue の worktree はありません: https://github.com/octocat/hello-world/issues/4000
+worktree はありませんが、branch continuo/octocat/hello-world/4000 が残っています（リポジトリ: <clone> / 先頭の commit: 8d1c0b1…）。
+この branch には、どの remote にも載っていない commit が 2 件あります。消すと失われます。
+branch continuo/octocat/hello-world/4000 を消しました（リポジトリ: <clone>）。戻すなら: git -C <clone> branch continuo/octocat/hello-world/4000 8d1c0b1…
+```
+
+### 3-37-9b. 残った branch を消すために `git worktree prune` を撃たない
+
+**言いたいこと。**git が `used by worktree` で断るのは、**その branch を守っているから**である。
+prune で登録を落とすと git は断らなくなり、**終了コード 0 の「消しました」と一緒に、
+利用者が push していない commit が失われる。**
+
+**実測（2026-08-25）。**worktree のディレクトリを**移しただけ**（中身は全部ある）で、
+git の登録は「実体が無い」ものとして扱われる。
+
+| 何をしたか | git の答え |
+| --- | --- |
+| 移しただけで `git branch -D` | `error: cannot delete branch 'continuo/x' used by worktree at '<元のパス>'`（終了コード 1） |
+| prune してから `git branch -D` | `Deleted branch continuo/x (was 756b039).`（終了コード 0） |
+| prune された側の worktree | `fatal: not a git repository`（git の管理から外れる） |
+
+**採るやり方。**[internal/workspace/issuebranch.go](../../internal/workspace/issuebranch.go) の
+`DeleteIssueBranch` は `git branch -D` をそのまま叩き、断られたら
+`git worktree list --porcelain` に**その branch を使っている登録のパスを答えさせて**人間へ出す。
+**continuo は prune を代行しない。**消えるものを決めるのは利用者である。
+
+**画面に出る形。**
+
+```
+git がこの branch を消しませんでした: continuo/octocat/hello-world/4000
+  次の worktree が使っていることになっています:
+  <元のパス>
+  そのディレクトリが本当に無いなら、`git -C <clone> worktree prune` を叩いてからもう一度実行してください。
+```
+
+**片付けの本流でも同じ規則を守る。**[internal/workspace/cleanup.go](../../internal/workspace/cleanup.go) の
+`removeWorktreeByHand` は、**continuo が自分で消した worktree の登録がただ1件だけ**
+実体を失っているときに限って prune を撃つ。ほかにも実体の無い登録があれば撃たずに、
+登録が残ったことと掃除するコマンドを画面へ出す。**prune はリポジトリ全体に効く**ので、
+利用者が移した worktree の登録まで巻き添えにするからである。
+
+**worktree を作るとき（3-22 の段1）の prune は残す。**あちらは「登録は残っているが実体が
+消えている」を解消しないと `git worktree add` が通らず、**そのあとで既存の branch を
+消さない。**守りを外して消す、という連鎖がここでは閉じない。
+
+### 3-37-9c. 身元ファイルが無いディレクトリを「判断できないもの」に数える
+
+**言いたいこと。**着手は worktree を作ってから身元ファイルを書く（3-16 の段6〜段9）。
+**その間で落ちると、身元ファイルの無い worktree ができる。**数に入れないと、
+`abandon` はそれを「無かったこと」にして、目の前の worktree の branch を消しにいく。
+
+**採るやり方。**[internal/workspace/scan.go](../../internal/workspace/scan.go) の
+`ScanUnidentified` が、置き場所の4階層目にあって身元ファイルが無いディレクトリを返す。
+`abandon` はこれを身元ファイルが壊れていたものと同じく「判断できないもの」に数え、
+**1件でもあれば残った branch の片付けへ進まない。**
+
+**`Scan` の結果には入れない。**`Scan` は身元ファイルを持つ worktree の一覧であり、
+巡回はそれを消す判断に使う。**人間が置いた worktree を巡回の対象にしてはならない。**
+
+### 3-37-9d. `branch_template` は issue の番号を必ず含む
+
+**言いたいこと。**番号が入っていないと、issue が違っても同じ branch 名になる。
+**worktree が無い経路は、この規則だけを頼りに消す相手を決める**（3-37-9）ので、
+**名指しされた issue とは別の issue の branch を消す。**
+
+**採るやり方。**設定の検査（[internal/config/validate.go](../../internal/config/validate.go)）で
+`herdr.worktree.branch_template` に `.issue.number` が含まれることを必須にする。
+**波括弧ごとは照合しない。**`{{ .issue.number }}` のように空白を挟んだ書き方も
+text/template は受け付けるためである。
+
+**弾かれたときに出る文言。**
+
+```
+設定キー herdr.worktree.branch_template の値 continuo/{{.issue.repo}} が不正です: .issue.number を必ず含めること。issue の番号が入っていないと、別の issue でも同じ branch 名になり、worktree が無いときの片付けが、名指しした issue とは別の issue の branch を消す
+```
 
 ---
 
