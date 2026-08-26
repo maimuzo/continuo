@@ -662,9 +662,10 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	// **`agent_status` が `working` の run はこちらを立てる**（設計 3-4 の段5a2）。
 	// turn は送らないが、走っている turn の `Stop` を読む goroutine は要る。
 	rs.awaitTurnEnd = state.AwaitTurnEnd
-	// **FreshSession は立てない**（ゼロ値の偽のままにする）。セッションは引き継いで
-	// いるので、送るのは**継続の指示（5-4）**である。**1回目の本文（5-3）ではない**
-	// （設計 3-4 の段5c）。エージェントは issue の URL も完了の作法も既に知っている。
+	// **SendFirstPrompt は立てない**（ゼロ値の偽のままにする）。走っている worker を
+	// そのまま引き継いでいるので、送るのは**継続の指示（5-4）**である。
+	// **1回目の本文（5-3）ではない**（設計 3-4 の段5c）。
+	// エージェントは issue の URL も完了の作法も既に知っている。
 	// **turn 数を 1 から数え直すのは打ち切りの計算のためであって、1回目をやり直すことではない。**
 	o.runs[issue.ID] = rs
 	if state.SessionUUID != "" {

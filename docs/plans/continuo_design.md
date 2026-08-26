@@ -131,6 +131,7 @@
 - 3-1 全体構成
 - 3-2 turn の終わりは hooks から continuo へ直接通知させる
 - 3-3 run を指す識別子を、消えない2箇所に書く
+- 3-3b 再着手は前回のセッションへ復帰する
 - 3-4 状態は in-memory。永続化層を作らない
 - 3-5 完了検知の3層（完了検知の3層を分ける）
 - 3-6 起動時の検査を厚くする
@@ -868,12 +869,13 @@ pane（`pane.rename`）と herdr workspace（`worktree.open` の `label` と `wo
 そのため continuo は `worktree.open` の直後に `workspace.rename` を1回掛けて書き直す。
 **失敗しても致命にしない。**label は表示名であり、復元の照合には使わないためである。
 
-> **セッション UUID は起動のたびに新しく作る。使い回してはならない。**
-> 一度使った UUID をもう一度渡すと、Claude Code が `Error: Session ID ... is already in use.` を出して起動に失敗する（実測）。
+> **`--session-id` に渡す UUID は、そのつど新しく作る。使い回してはならない。**
+> 一度使った UUID をもう一度 `--session-id` に渡すと、Claude Code が `Error: Session ID ... is already in use.` を出して起動に失敗する（実測）。
 > **しかも herdr 経由だと `timed out waiting for agent startup` としか返らないので、continuo は起動に失敗したとき pane の画面を読んで理由を判定する必要がある。**
-> 再起動して run を引き継ぐときは、**`--resume <元の UUID>` で戻る**（実測で確認済み）。
+> **既にあるセッションへ入り直すときは `--resume <元の UUID>` を使う**（実測で確認済み）。
 > **戻すのも herdr の pane 経由である**（3-25 の9段）。continuo が `claude` を直接 exec することはない。
-> **新しい turn を始めるために新規のセッションを立てる場合だけ、新しい UUID を作る。**
+> **どちらを使うかは 3-3b が決める。**worktree を新しく作る着手が `--session-id`、
+> 既存の worktree を使う再着手が `--resume` である。
 
 **metadata の tokens は「起動後に自分で貼り直す揮発キャッシュ」として扱う。**復元の根拠にしない。書くときはキーに `continuo_` の接頭辞を付け、**値が80文字を超えないことを continuo 側で検査する**（超えても herdr はエラーを返さず黙って切る）。
 
@@ -893,6 +895,58 @@ pane（`pane.rename`）と herdr workspace（`worktree.open` の `label` と `wo
 
 > **「agent 名を issue の URL にし、turn 数も書き足す」案は採らない。**agent 名に URL は入らず（32文字の制限）、
 > turn 数を書き足す先（metadata の tokens）は再起動で消えるためである（いずれも実測）。**turn 数の復元は諦める**（`SPEC.md` 14.3 も *"It does not mean retry timers, running sessions, or live worker state survive process restart."* — **訳:** リトライのタイマー、実行中のセッション、稼働中の worker の状態がプロセスの再起動を生き延びることを意味しない — と明記している）。
+
+### 3-3b. 再着手は前回のセッションへ復帰する
+
+**言いたいこと。**同じ issue にもう一度着手するとき、前回のセッションへ `--resume` で戻る。
+**それでも送る本文は1回目のもの（5-3）である。**戻れなければ新しいセッションで始め直す。
+
+**どちらの起動フラグを使うか。**着手の段5b で決める。**復帰しても身元ファイルの `session_uuid` は書き換えない。**
+
+| worktree | 身元ファイルの `session_uuid` | 起動フラグ |
+| --- | --- | --- |
+| 新しく作った | 無い | `--session-id <新しい UUID>` |
+| 再利用する | 入っている | `--resume <その UUID>` |
+| 再利用する | 空・壊れている | `--session-id <新しい UUID>` |
+
+**なぜ復帰するのか。**`In Review` から差し戻された issue は前回の続きである。会話履歴を
+捨てると、**何をどこまでやったかを issue とコードから推測し直すことになる。**それでも送るのは
+1回目の本文（5-3）である。差し戻しの場面では人間が PR にレビューを書いているが、
+**「issue を読むこと」「紐づく PR も読むこと」が入っているのは1回目の本文だけ**で、継続の指示
+（5-4）には無い。5-4 だけを送ると**新しく付いたレビューを読まないまま進む。**
+
+**「会話履歴があるか」と「1回目の本文を送るか」を1つの値で兼ねない。**復帰した run は会話履歴を
+持つのに1回目の本文を送るので、**2つは一致しない。**`runState` が持つのは**「次の turn は1回目の
+本文である」の意味だけ**（`SendFirstPrompt`）。会話履歴の有無はどの分岐でも使わない。
+
+**トークンの集計の基準（`tokensBase`）は、復帰したときには作り直さない。**transcript のファイル名は
+セッション UUID なので（3-15）、**復帰すると同じファイルである。**作り直すとその中身をもう一度足し、
+**使った量を実際の2倍に見せる。**
+
+> **実測（2026-08-26、Claude Code 2.1.246）。**`--session-id <UUID>` のセッションを終了させ、別の pane で
+> `--resume <同じ UUID>` を叩いた。hook が名乗る `session_id` と `transcript_path` は**復帰の前後で同じ値**で、
+> 前の turn の内容を覚えていた。herdr の `agent_session.value` も同じだった。
+
+**復帰に失敗したら新しいセッションで始め直す。**`~/.claude/projects/` は利用者が消せる。**実測（2026-08-26）。**
+`claude --resume <無い UUID>` は終了コード 1 で、標準エラーへ `No conversation found with session ID: <UUID>` を出す。
+**herdr 経由だと `agent.start` が `{"error":{"code":"timeout","message":"timed out waiting for agent startup"}}` を返し、
+pane はシェルのプロンプトへ戻る**（**同じ pane でそのまま起動し直せる**）。
+
+始め直すときは、UUID を採り直して hook の索引を張り替え、`tokensBase` を作り直し、**身元ファイルの
+`session_uuid` も書き直す。**書き直さないと、次の再着手も同じ死んだ UUID へ復帰しにいき、毎回
+`herdr.startup_timeout_ms` を捨てる。**ログは3通りを書き分ける。**
+
+```text
+level=INFO msg="前回のセッションに復帰して再着手します（会話履歴を引き継ぎます）" identifier=octocat/hello-world#188 session_uuid=8aebf7af-… worktree=/…/worktrees/…
+level=INFO msg="新しいセッションを立てて着手します（会話履歴はありません）" identifier=octocat/hello-world#188 session_uuid=e1f2… worktree=/…/worktrees/…
+level=WARN msg="前回のセッションへ復帰できなかったので、新しいセッションで始め直します" identifier=octocat/hello-world#188 復帰しようとしたセッション=8aebf7af-… 新しいセッション=e1f2… error="…"
+```
+
+| 採らなかった案 | 採らない理由 |
+| --- | --- |
+| 復帰したら継続の指示（5-4）を送る | **差し戻しで付いた PR のレビューを読まない**（5-4 に「紐づく PR も読むこと」が無い） |
+| 復帰したかで送る本文を変える | 同じ「再着手」で本文が2通りになり、**どちらを送ったかをログから追えない** |
+| 復帰できなければ人間へ渡す | **利用者が `~/.claude/projects/` を消しただけで issue が `failure_state` へ落ちる** |
 
 ### 3-4. 状態は in-memory。永続化層を作らない
 
@@ -1822,6 +1876,8 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
 5. Claude Code の設定ファイルを worktree の外に作る（3-12）
    → hook 7種（3-2 の一覧）と permissions.allow を1ファイルに書く
      hook のコマンド行には socket の絶対パスを埋め込む
+5b. どのセッションで起動するかを決める（3-3b）
+   → worktree を再利用していて身元ファイルに session_uuid があれば --resume、無ければ新しく採番して --session-id
 6. worktree の中に身元ファイルを書く（3-18）
    → ここまで来れば、落ちても再起動後に身元が分かる
 7. workspace_hooks の before_run を実行する（失敗したら致命）
@@ -1831,7 +1887,7 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
    → pane.rename を呼び、label に `owner/repo/issues/N` を書く（3-3）
 9. その pane で Claude Code を起動する（agent.start）
    → 起動フラグは args に載せる（2-1）。
-     --settings <設定ファイル> / --session-id <UUID> / --permission-mode dontAsk
+     --settings <設定ファイル> / --session-id <UUID> か --resume <UUID>（段5b）/ --permission-mode dontAsk
    → **環境変数は設定ファイル（--settings）の env に書く。**pane にも agent.start にも渡さない
      （どちらにも env を渡す手段が無い。設定ファイル経由で届くことは実測で確認済み。3-12）
    → 起動直後は agent_pane_busy が返ることがあるのでリトライする（2-1）
@@ -2648,7 +2704,7 @@ type runState struct {
     → 段2 の Status の書き込みは行う（取り直して terminal_states でなければ書く）
     → 段3 の worktree は再利用する（身元ファイルの takeover_count を1つ増やす）
     → 段5 の設定ファイルは作り直す（socket のパスが変わっているかもしれない）
-    → セッション UUID は新しく採番する（一度使った UUID は再利用できない。3-3）
+    → セッションは身元ファイルの UUID へ `--resume` で復帰する（3-3b）
     → RetryCount はそのまま。BackoffUntil はゼロ値へ戻す
 ```
 

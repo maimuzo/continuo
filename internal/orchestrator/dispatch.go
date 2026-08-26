@@ -404,11 +404,12 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 //	段2 の Status の書き込みは行う（取り直して terminal_states でなければ書く）
 //	段3 の worktree は再利用する（身元ファイルの takeover_count を1つ増やす）
 //	段5 の設定ファイルは作り直す（socket のパスが変わっているかもしれない）
-//	**セッション UUID は新しく採番する**（一度使った UUID は再利用できない。設計 3-3）
+//	**セッションは身元ファイルの UUID へ `--resume` で復帰する**（設計 3-3b）
 //	RetryCount はそのまま。BackoffUntil はゼロ値へ戻す
 //
-// **送るのは1回目の本文（5-3）である。**UUID を採り直した時点で会話履歴を持たない
-// 別のセッションになっているので、継続の指示（5-4）だけでは何をすべきか伝わらない。
+// **送るのは1回目の本文（5-3）である。**復帰して会話履歴があっても変えない。
+// 継続の指示（5-4）には「issue を読むこと」「紐づく PR も読むこと」が無いので、
+// **差し戻しで新しく付いたレビューを読まないまま進むことになる**（設計 3-3b）。
 // **`.attempt` には `RetryCount + 1` が入る**（5-3 の「この作業は n 回目の試行です」）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -614,18 +615,45 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 	rs.setSettingsPath(settingsPath)
 
-	// セッション UUID は起動のたびに新しく採番する（設計 3-3）。
-	sessionUUID, err := o.newSessionUUID()
-	if err != nil {
-		return err
+	// 段5b: どのセッションで起動するかを決める（設計 3-3b）。
+	//
+	// **既存の worktree を再利用していて、身元ファイルにセッション UUID があるなら、
+	// そのセッションへ `--resume` で復帰する。**前回の会話が残るので、エージェントは
+	// 「前回どこまでやったか」を自分で分かったうえで続きに入れる。
+	// **新規の着手は新しく採番する。**一度使った UUID を `--session-id` に渡すと
+	// `Session ID ... is already in use.` で起動に失敗する（設計 3-3）。
+	//
+	// **`--resume` は session_id を変えない**（実測: 2026-08-26。復帰の前後で hook が
+	// 名乗る `session_id` と `transcript_path` が一致した）。**だから復帰した run も、
+	// この UUID のままで hook を引ける。**
+	resumeUUID := ""
+	if prepared.ExistingIdentity != nil {
+		resumeUUID = prepared.ExistingIdentity.SessionUUID
+	}
+	sessionUUID := resumeUUID
+	if resumeUUID == "" {
+		sessionUUID, err = o.newSessionUUID()
+		if err != nil {
+			return err
+		}
 	}
 	rs.setSessionUUID(sessionUUID)
 	o.bindSession(rs, sessionUUID)
-	// **ここから先は会話履歴を持たない別のセッションである。**worker の世代を1つ進め、
-	// 次の turn で1回目の本文（5-3）を送るようにする（設計 5-3 / 5-4）。
-	// **再 dispatch でも同じである。**UUID を採り直しているので、継続の指示（5-4）だけを
-	// 送ると、どの issue を何のためにやるのかが1文字も伝わらない。
-	rs.beginAttempt()
+	// **worker の世代を1つ進め、次の turn で1回目の本文（5-3）を送るようにする。**
+	// **復帰した場合もそうする**（設計 3-3b）。継続の指示（5-4）には
+	// 「issue を読むこと」「紐づく PR も読むこと」が入っていないので、それだけを送ると
+	// **`In Review` から差し戻された issue で、新しく付いたレビューを読まないまま進む。**
+	//
+	// **復帰した場合はトークンの集計の基準を作り直さない。**transcript のファイルが
+	// 同じままなので、作り直すと同じファイルを2回数える（設計 3-15）。
+	rs.beginAttempt(resumeUUID != "")
+	if resumeUUID != "" {
+		o.logger.Info("前回のセッションに復帰して再着手します（会話履歴を引き継ぎます）",
+			"identifier", issue.Identifier, "session_uuid", resumeUUID, "worktree", prepared.Path)
+	} else {
+		o.logger.Info("新しいセッションを立てて着手します（会話履歴はありません）",
+			"identifier", issue.Identifier, "session_uuid", sessionUUID, "worktree", prepared.Path)
+	}
 
 	// 段6: worktree の中に身元ファイルを書く。ここまで来れば、落ちても身元が分かる。
 	identity := workspace.Identity{
@@ -681,38 +709,37 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	if err != nil {
 		return err
 	}
-	startArgs := o.claudeStartArgs(settingsPath, sessionUUID, "")
-	started, err := o.herdr.AgentStartWithRetry(ctx, herdr.AgentStartParams{
+	startErr := o.launchClaude(ctx, rs, prepared.Path, herdr.AgentStartParams{
 		Name:   agentName,
 		Kind:   o.cfg.Claude.Kind,
 		PaneID: paneID,
-		Args:   startArgs,
-	}, agentStartBusyBudget, agentStartRetryDelay)
-	if err != nil {
-		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
+		Args:   o.claudeStartArgs(settingsPath, sessionUUID, resumeUUID),
+	})
+	if startErr != nil && resumeUUID != "" {
+		// **復帰に失敗した。新しいセッションで始め直す**（設計 3-3b）。
+		//
+		// **身元ファイルの UUID のセッションは消えていることがある。**
+		// `~/.claude/projects/` の中身は利用者が消せるためである。実測（2026-08-26）:
+		//
+		//	claude --resume <無い UUID>
+		//	→ 終了コード 1、標準エラーに `No conversation found with session ID: <UUID>`
+		//	→ herdr 経由だと agent.start が `timeout: timed out waiting for agent startup` を返し、
+		//	  pane はシェルのプロンプトへ戻る（同じ pane で、そのまま起動し直せる）
+		//
+		// **ここで諦めてはならない。**利用者が履歴を消しただけで issue が
+		// `failure_state` へ落ちることになる。
+		if newErr := o.restartWithNewSession(ctx, rs, prepared.Path, settingsPath, issue, resumeUUID, startErr); newErr != nil {
+			return newErr
+		}
+		startErr = o.launchClaude(ctx, rs, prepared.Path, herdr.AgentStartParams{
+			Name:   agentName,
+			Kind:   o.cfg.Claude.Kind,
+			PaneID: paneID,
+			Args:   o.claudeStartArgs(settingsPath, rs.sessionUUID(), ""),
+		})
 	}
-	rs.setAgentName(agentName)
-	// **起動直後の画面の版を stall の判定の種にする**（設計 3-21）。種を入れないと、
-	// 最初の判定が必ず「版が変わった」になり、打ち切りまでに
-	// `claude.turn_timeout_ms` を2回またぐことになる。
-	rs.noteRevision(started.Agent.Revision, o.now())
-	if err := o.ws.SetAgentName(ctx, prepared.Path, agentName.String()); err != nil {
-		o.logger.Warn("身元ファイルへ agent 名を書けませんでした", "identifier", issue.Identifier, "error", err)
-	}
-
-	// 段10: agent_status が idle か done であることを確かめる。
-	//
-	// **通らなければ `agent.start` からやり直す**（設計 3-16 の段10。2026-08-21 に E2E で確定）。
-	// **herdr が pane を「使える」と判断しても、シェルのプロンプトが出ていないことがある。**
-	// そのとき `agent.start` はエラーを返さずに登録だけを済ませ、Claude Code は起動しない。
-	// **あとから `agent.prompt` を投げると `agent_not_ready` になる**ので、ここで見切る。
-	if err := o.confirmStartupWithRestart(ctx, rs, herdr.AgentStartParams{
-		Name:   agentName,
-		Kind:   o.cfg.Claude.Kind,
-		PaneID: paneID,
-		Args:   startArgs,
-	}); err != nil {
-		return err
+	if startErr != nil {
+		return startErr
 	}
 
 	// 段11: 1回目の turn を送る。**巡回のループはここでブロックしない。**
@@ -723,6 +750,84 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 			"identifier", issue.Identifier)
 		rs.setNeedsPrompt()
 	}
+	return nil
+}
+
+// launchClaude は着手の段9（`agent.start`）と段10（起動の確認）を1回通す（設計 3-16）。
+//
+// **環境変数は設定ファイルの env に書く。**pane にも `agent.start` にも渡さない（設計 3-12）。
+//
+// **段10 で通らなければ `agent.start` からやり直す**（2026-08-21 に E2E で確定）。
+// **herdr が pane を「使える」と判断しても、シェルのプロンプトが出ていないことがある。**
+// そのとき `agent.start` はエラーを返さずに登録だけを済ませ、Claude Code は起動しない。
+// **あとから `agent.prompt` を投げると `agent_not_ready` になる**ので、ここで見切る。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 起動する run。
+// worktreePath: 身元ファイルへ agent 名を書き足す先。
+// params: `agent.start` の引数。
+// 戻り値: 起動できなかった場合のエラー。
+func (o *Orchestrator) launchClaude(
+	ctx context.Context, rs *runState, worktreePath string, params herdr.AgentStartParams,
+) error {
+	started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
+	if err != nil {
+		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
+	}
+	rs.setAgentName(params.Name)
+	// **起動直後の画面の版を stall の判定の種にする**（設計 3-21）。種を入れないと、
+	// 最初の判定が必ず「版が変わった」になり、打ち切りまでに
+	// `claude.turn_timeout_ms` を2回またぐことになる。
+	rs.noteRevision(started.Agent.Revision, o.now())
+	if err := o.ws.SetAgentName(ctx, worktreePath, params.Name.String()); err != nil {
+		o.logger.Warn("身元ファイルへ agent 名を書けませんでした",
+			"identifier", rs.issue().Identifier, "error", err)
+	}
+	return o.confirmStartupWithRestart(ctx, rs, params)
+}
+
+// restartWithNewSession は、復帰に失敗した run を新しいセッションで始め直せる状態にする
+// （設計 3-3b）。
+//
+// **`agent.start` はここでは呼ばない。**呼び出し側が新しい起動フラグで `launchClaude` を
+// もう一度通す。ここでやるのは次の4つである。
+//
+//  1. セッション UUID を採り直し、hook の索引を張り替える
+//  2. トークンの集計の基準を作り直す（新しいセッションの transcript は別のファイルである）
+//  3. 身元ファイルの `session_uuid` を書き直す
+//     → 書き直さないと、**次の再着手も同じ死んだ UUID へ復帰しにいく**
+//  4. 何が起きたかをログに残す
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// worktreePath: 身元ファイルのある worktree の絶対パス。
+// settingsPath: issue ごとの設定ファイルの絶対パス（ログに出す）。
+// issue: 対象の issue。
+// deadUUID: 復帰しようとして失敗したセッションの UUID。
+// cause: 復帰に失敗した理由。
+// 戻り値: UUID を採り直せなかった場合のエラー。
+func (o *Orchestrator) restartWithNewSession(
+	ctx context.Context, rs *runState, worktreePath, settingsPath string,
+	issue tracker.Issue, deadUUID string, cause error,
+) error {
+	fresh, err := o.newSessionUUID()
+	if err != nil {
+		return err
+	}
+	rs.setSessionUUID(fresh)
+	o.bindSession(rs, fresh)
+	// **ここで初めて transcript のファイルが別物になる**（設計 3-15）。
+	rs.foldTokensBase()
+	if err := o.ws.SetSessionUUID(ctx, worktreePath, fresh); err != nil {
+		o.logger.Warn("身元ファイルのセッション UUID を書き直せませんでした（次の再着手もまた復帰を試みます）",
+			"identifier", issue.Identifier, "session_uuid", fresh, "error", err)
+	}
+	o.logger.Warn("前回のセッションへ復帰できなかったので、新しいセッションで始め直します",
+		"identifier", issue.Identifier,
+		"復帰しようとしたセッション", deadUUID,
+		"新しいセッション", fresh,
+		"設定ファイル", settingsPath,
+		"error", cause)
 	return nil
 }
 

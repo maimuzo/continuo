@@ -246,19 +246,22 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。
 //
-// **分岐の基準は turn 数ではなく「いまのセッションに会話履歴があるか」である。**
+// **分岐の基準は turn 数でも会話履歴の有無でもなく、`SendFirstPrompt` だけである。**
 //
-//	FreshSession が真  … 1回目の本文（5-3）。新しい UUID で起動した直後の
-//	                     セッションには会話履歴が無いので、issue の URL も完了の作法も
-//	                     ここで渡さないと1文字も伝わらない
-//	FreshSession が偽  … 継続の指示（5-4）のみ。本文は送り直さない（`SPEC.md` 7.1）
+//	SendFirstPrompt が真  … 1回目の本文（5-3）。着手と再着手の最初の turn
+//	SendFirstPrompt が偽  … 継続の指示（5-4）のみ。本文は送り直さない（`SPEC.md` 7.1）
 //
-// **turn 数で分岐してはならない。**復元で引き継いだ run は turn 数を 1 から数え直すが
-// （設計 3-4 の段7）、セッションは引き継いでいるので **1回目をやり直してはならない**
-// （段5c）。逆に、バックオフ明けの再 dispatch は turn 数を引き継ぐが**セッションは
-// 新しい**ので、継続の指示だけでは通じない。
+// **会話履歴の有無で分岐してはならない**（設計 3-3b）。再着手はセッションへ `--resume` で
+// 復帰するので会話履歴があるが、**それでも送るのは1回目の本文である。**
+// `In Review` から `In Progress` へ差し戻される場面では人間が PR にレビューを書いており、
+// **「issue を読むこと」「紐づく PR も読むこと」が入っているのは1回目の本文だけだからである。**
+// 会話は残っているので、エージェントは前回どこまでやったかを分かったうえでレビューを読める。
 //
-// **試行回数（`.attempt`）は再 dispatch で埋まる。**1回目の着手では nil である
+// **turn 数で分岐してもならない。**復元で引き継いだ run は turn 数を 1 から数え直すが
+// （設計 3-4 の段7）、送るのは継続の指示である（段5c）。逆に、バックオフ明けの再着手は
+// turn 数を引き継ぐが、送るのは1回目の本文である。
+//
+// **試行回数（`.attempt`）は再着手で埋まる。**1回目の着手では nil である
 // （`RetryCount` が 0 のため）。
 //
 // rs: 対象の run。
@@ -267,7 +270,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 // 戻り値の2つ目: 1回目のテンプレートの描画に失敗した場合のエラー
 // （`missingkey=error` なので、5-3 の一覧に無い変数を書くとここで落ちる）。
 func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, error) {
-	if !snap.FreshSession {
+	if !snap.SendFirstPrompt {
 		return BuildContinuationPrompt(
 			snap.TurnCount+1,
 			o.cfg.Agent.MaxDispatchTurns,
