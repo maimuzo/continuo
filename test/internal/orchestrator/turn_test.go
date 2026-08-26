@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "c432ba5c1bc2937054269562f29ad8d9d26e282720b1e9ad8c6bc379527f3a6e", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "5daef8c8acf1205e2086912b1972a78e864e8813ab2f2b4bb285d1971185b1e4", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -15,7 +15,7 @@ import (
 	"github.com/maimuzo/continuo/internal/hookserver"
 )
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P008"}
 //
 // TestTurn_background_tasksが空のStopだけでturnの終わりと判定しない は、
 // turn の終わりの判定の要を確かめる。
@@ -170,7 +170,7 @@ func TestTurn_表明が無かった次のturnで促す(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P010"}
 //
 // TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす は、打ち切りを確かめる。
 //
@@ -218,7 +218,7 @@ func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *test
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P013"}
 //
 // TestTurn_blockedが返ったらescを送ってから人間へ渡す は、安全に関わる分岐を確かめる。
 //
@@ -321,7 +321,7 @@ func TestTurn_waitはuntilにblockedを含めてagent_promptに載せる(t *test
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P012"}
 //
 // TestTurn_一時的な送信の失敗ではpaneを閉じない は、
 // **一時的な失敗と、送信そのものを断られたときとで、後始末が正反対である**ことを確かめる。

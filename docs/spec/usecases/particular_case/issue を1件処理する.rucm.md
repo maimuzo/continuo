@@ -20,6 +20,7 @@
 - `internal/orchestrator/signal.go` の `ParseSignals`
 - `internal/workspace/prepare.go` の `CheckWorktreeUsable`、`checkBranchFree`、`Prepare`
 - `internal/tracker/adapter.go` の `dropUnrequestedStates`、`UpdateStatus`
+- `internal/tracker/query.go` の `foldStatus`（Status 名の比較の正規化）
 
 ## RUCM
 
@@ -248,6 +249,13 @@ WHEN herdr の呼び出しが一時的な理由で失敗した場合
 3. システムは run に turn の終わりを待ち直す印を立てる。
 4. ABORT
 POSTCONDITION: 印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。
+
+GLOBAL ALTERNATIVE FLOW 既に同じStatus:
+BRANCH FROM BASIC FLOW 30
+WHEN 取り直した Status が表明の値の遷移先の選択肢と同じ場合
+1. システムはボードへ書き込まない。
+2. RESUME STEP 31
+POSTCONDITION: issue の Status は表明の値の遷移先の選択肢である。ボードへは1バイトも書いていない。
 ```
 
 ## 着手の段と、落ちたときに外側へ残るもの
@@ -325,6 +333,21 @@ loose を消した瞬間に packed 側が有効になり、**やり直しはそ�
 | 空でない | まだ動いている。turn の終わりとして扱わない |
 | 項目が欠けている | 判定できない。turn の終わりとみなさない |
 | 空配列 | settle_ms のあいだ待ち、task-notification が届かなければ turn の終わりとする |
+
+## 既に目的の Status なら、書きに行かない
+
+**言いたいこと。**同じ値を書いても GitHub 側では遷移が起きず、**timeline に1行も残らない。**
+continuo のログにだけ「書き込みました」が出るので、あとから「誰がいつ Status を動かしたか」を
+突き合わせるとき、**continuo が書いたはずの時刻に記録が無い**という形になる。
+
+**だからステップ30 は、書く前に取り直した値が書こうとしている値と同じなら、書き込みを送らない。**
+比較は前後の空白と大文字小文字を無視する（`internal/tracker/query.go` の `foldStatus`）。
+無駄な API の呼び出しが1回減るのは副産物であり、主目的はログと timeline を食い違わせないことである。
+
+**それでも「Status を動かせた」として扱う。**着手や失敗の記録は、書き込みの API を呼んだかどうかではなく
+**目的の Status になっているか**で決める（`internal/tracker/adapter.go` の `UpdateStatus` の戻り値）。
+ここを「書かなかった」として扱うと、`active_states` に `running_state` が入っている構成
+（雛形の既定は `["Ready", "In Progress"]`）で、**既に `running_state` だった issue に着手できなくなる。**
 
 ## turn を送れなかったときは、2つに分ける
 
@@ -413,6 +436,7 @@ flowchart TD
     B23 -. "送信の失敗: WHEN herdr が送信そのものを断った場合" .-> G4S1
     B23 -. "一時的な送信の失敗: WHEN herdr の呼び出しが一時的な理由で失敗した場合" .-> G5S1
     B24 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> G2S1
+    B30 -. "既に同じStatus: WHEN 取り直した Status が遷移先と同じ場合" .-> G6S1
 
     subgraph SAF12 ["SPECIFIC ALTERNATIVE FLOW 頼んでいないStatus / RFS BASIC FLOW 3"]
         F12S1["1. この issue を dispatch の対象から外す"] --> F12S2["2. 頼んだ Status に無い候補が返ったことを記録に残す"] --> F12S3["3. ABORT"]
@@ -506,6 +530,10 @@ flowchart TD
         G5S1["1. 本文が届いたかどうかを判断しない"] --> G5S2["2. 本文を送り直さない"] --> G5S3["3. turn の終わりを待ち直す印を立てる"] --> G5S4["4. ABORT"]
     end
 
+    subgraph GAF6 ["GLOBAL ALTERNATIVE FLOW 既に同じStatus / BRANCH FROM BASIC FLOW 30"]
+        G6S1["1. ボードへ書き込まない"] --> G6S2["2. RESUME STEP 31"]
+    end
+
     F8S2 -- 偽 --> F9S1
     F8S3 --> B18
     F10S2 -- 偽 --> F11S1
@@ -515,6 +543,7 @@ flowchart TD
     F6S8 --> B32
     G3S1 -- 偽 --> F17S1
     G3S4 --> B12
+    G6S2 --> B31
 ```
 
 ## シーケンス図
@@ -581,7 +610,13 @@ sequenceDiagram
                             GH-->>S: 現在の Status を応答する
                         end
                     end
-                    S->>GH: Status への表明の遷移先の書き込みを要求する
+                    S->>GH: Status の取り直しを要求する
+                    GH-->>S: 現在の Status を応答する
+                    alt 取り直した Status が表明の遷移先と同じ
+                        Note over S: 書き込みを省く。ボードへは1バイトも書かない
+                    else 取り直した Status が表明の遷移先と違う
+                        S->>GH: Status への表明の遷移先の書き込みを要求する
+                    end
                     S->>GH: issue のコメントの取得を要求する
                     GH-->>S: コメントの一覧を応答する
                     alt 今回の run のコメントがない
