@@ -1,5 +1,3 @@
-<!-- 目的: continuo の設計の要約。詳細は continuo_design.md にある -->
-
 # continuo の設計（要約）
 
 **言いたいこと。**GitHub Projects v2 のボード1枚を見張り、issue ごとに worktree を用意し、herdr の pane で Claude Code を対話モードで起動して、完了まで面倒を見る常駐プロセスを Go で作る。**従量課金にならないこと**と、**エージェントが完了を申告し忘れても作業が落ちないこと**が最優先である。

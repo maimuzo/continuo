@@ -1,5 +1,3 @@
-<!-- 目的: 「再起動して実行中の issue を引き継ぐ」の RUCM を書くときに AI が行った判断と、その根拠を記録する -->
-
 # 判断ログ: 再起動して実行中の issue を引き継ぐ
 
 - 対象: `docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.rucm.md`

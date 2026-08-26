@@ -1,5 +1,3 @@
-<!-- 目的: continuo が issue を1件取り、worker を立て、turn ループを回して表明どおりに Status を動かすまでを RUCM で定義する -->
-
 # ユースケース: issue を1件処理する
 
 ## 根拠資料

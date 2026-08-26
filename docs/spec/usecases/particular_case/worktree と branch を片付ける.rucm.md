@@ -1,5 +1,3 @@
-<!-- 目的: Status が cleanup.on_states に入った issue の worktree と branch を continuo が片付けるまでを RUCM で定義する -->
-
 # ユースケース: worktree と branch を片付ける
 
 ## 根拠資料

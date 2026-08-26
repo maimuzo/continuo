@@ -1,5 +1,3 @@
-<!-- 目的: hook の受け口と continuo hook サブコマンドを実装するタスク -->
-
 # 04. hook の受け口
 
 **言いたいこと。**Claude Code の hook を Unix socket で受け、**turn の終わりを判定できるようにする。**

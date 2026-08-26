@@ -163,8 +163,11 @@ func TestTurn_turnを送れなかったときStopHookのせいにしない(t *te
 		return nil, &rpcErr{Code: "agent_not_found", Message: "agent は登録されていません"}
 	})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	// **コメントの取り戻しも同じ台本で落ちる。**この検証は agent.prompt を全部
+	// agent_not_found にするので、引き渡しの直前に走るコメントの取り戻しも届かない。
+	// 走る順番は機械の速さで前後するため、許可しておかないと環境によって落ちる。
 	fx.AllowLog("turn を送れませんでした", "リトライの回数を使い切りました",
-		"turn を1回も送っていないので")
+		"turn を1回も送っていないので", "コメントを書かせるプロンプトを送れません")
 
 	fx.Orc.Tick(context.Background())
 

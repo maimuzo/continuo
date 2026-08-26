@@ -1,5 +1,3 @@
-<!-- 目的: 1件の issue がボードに載ってから worktree と branch が片付くまでの時系列を、既存の particular_case を繋いで RUCM で定義する -->
-
 # ユースケース: issue を着手から片付けまで見届ける
 
 ## 根拠資料
