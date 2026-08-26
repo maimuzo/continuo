@@ -52,6 +52,9 @@ func DefaultConfig() *Config {
 		Workspace: WorkspaceConfig{
 			Root:         "~/worktrees",
 			IdentityFile: ".continuo.json",
+			// **既定は止める側である**（3-49）。壊れた worktree を飛ばして走り続けると、
+			// その issue はボード上で running_state のまま何時間も放置される。
+			OnBrokenWorktree: OnBrokenWorktreeStop,
 		},
 		WorkspaceHooks: WorkspaceHooksConfig{
 			AfterCreate:  nil,

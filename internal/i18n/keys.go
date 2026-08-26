@@ -124,6 +124,14 @@ const (
 	KeyDoctorWorkspaceRootConfigUnreadable Key = "doctor.workspace_root.config_unreadable"
 	// KeyDoctorWorkspaceRootReason は、なぜここが書けないと困るのかの説明に出る。
 	KeyDoctorWorkspaceRootReason Key = "doctor.workspace_root.reason"
+	// KeyDoctorWorkspaceRootBrokenStop は、身元を確かめられない worktree があり、
+	// その設定では起動が止まることの説明に出る（3-49）。
+	KeyDoctorWorkspaceRootBrokenStop Key = "doctor.workspace_root.broken_stop"
+	// KeyDoctorWorkspaceRootBrokenSkip は、身元を確かめられない worktree があるが、
+	// その設定では飛ばして起動することの説明に出る（3-49）。
+	KeyDoctorWorkspaceRootBrokenSkip Key = "doctor.workspace_root.broken_skip"
+	// KeyDoctorWorkspaceRootBrokenScanFailed は置き場所を走査できなかったときの説明に出る。
+	KeyDoctorWorkspaceRootBrokenScanFailed Key = "doctor.workspace_root.broken_scan_failed"
 )
 
 // internal/fsprobe（その場所に本当に書けるかを実際に書いて確かめる）。
@@ -1562,6 +1570,20 @@ const (
 	KeyWorkspaceGitWorktreeAddOrphanDeleteFailed Key = "workspace.git_worktree_add.orphan_delete_failed"
 	// KeyWorkspaceGitWorktreeAddOrphanDeleted は孤児 branch を消せたときに、元の失敗へ添えて出る。
 	KeyWorkspaceGitWorktreeAddOrphanDeleted Key = "workspace.git_worktree_add.orphan_deleted"
+	// KeyWorkspaceBrokenIdentityMissing は、置き場所の命名に一致する worktree に
+	// 身元ファイルが1つも無かったときに「何が起きているか」として出る（3-49）。
+	KeyWorkspaceBrokenIdentityMissing Key = "workspace.broken.identity_missing"
+	// KeyWorkspaceBrokenIdentityUnreadable は、身元ファイルはあるのに読めなかったときに
+	// 「何が起きているか」として出る（3-49）。
+	KeyWorkspaceBrokenIdentityUnreadable Key = "workspace.broken.identity_unreadable"
+	// KeyWorkspaceBrokenStepAbandon は、壊れた worktree の消し方を案内する行である（3-49）。
+	KeyWorkspaceBrokenStepAbandon Key = "workspace.broken.step_abandon"
+	// KeyWorkspaceBrokenStepAbandonUnknown は、issue の URL を引けなかったときの消し方の案内である。
+	KeyWorkspaceBrokenStepAbandonUnknown Key = "workspace.broken.step_abandon_unknown"
+	// KeyWorkspaceBrokenStepBackup は、消す前に要るファイルを控える手順の行である（3-49）。
+	KeyWorkspaceBrokenStepBackup Key = "workspace.broken.step_backup"
+	// KeyWorkspaceBrokenStepInspect は、壊れた worktree の中を調べる手順の行である（3-49）。
+	KeyWorkspaceBrokenStepInspect Key = "workspace.broken.step_inspect"
 	// KeyWorkspaceBrokenRefStatFailed は壊れた ref のファイルの状態を見に行けなかったときに出る。
 	KeyWorkspaceBrokenRefStatFailed Key = "workspace.broken_ref.stat_failed"
 	// KeyWorkspaceBrokenRefRemoveFailed は壊れた ref のファイルを消せなかったときに出る。
@@ -1775,6 +1797,9 @@ const (
 	// KeyOrchestratorConfirmStartupNotInteractive は、agent は居るが入力を受け付けられない
 	// ことを表す（`interactive_ready` が偽）。
 	KeyOrchestratorConfirmStartupNotInteractive Key = "orchestrator.confirm_startup.not_interactive"
+	// KeyOrchestratorRestoreBrokenWorktreeStop は、身元を確かめられない worktree を見つけて
+	// 起動を止めるときに出る（3-49。`workspace.on_broken_worktree` が `stop` のとき）。
+	KeyOrchestratorRestoreBrokenWorktreeStop Key = "orchestrator.restore.broken_worktree_stop"
 	// KeyOrchestratorRestoreHookListenFailed は復元の途中で hook を受ける socket の listen を始められなかったときに出る。
 	KeyOrchestratorRestoreHookListenFailed Key = "orchestrator.restore.hook_listen_failed"
 )
@@ -1874,6 +1899,9 @@ var allKeys = []Key{
 	KeyDoctorWorkspaceRootFailed,
 	KeyDoctorWorkspaceRootConfigUnreadable,
 	KeyDoctorWorkspaceRootReason,
+	KeyDoctorWorkspaceRootBrokenStop,
+	KeyDoctorWorkspaceRootBrokenSkip,
+	KeyDoctorWorkspaceRootBrokenScanFailed,
 	KeyFsprobeDirEmpty,
 	KeyFsprobeDirNotAbsolute,
 	KeyFsprobeMkdirFailed,
@@ -2416,6 +2444,12 @@ var allKeys = []Key{
 	KeyWorkspaceGitWorktreeAddOrphanCheckFailed,
 	KeyWorkspaceGitWorktreeAddOrphanDeleteFailed,
 	KeyWorkspaceGitWorktreeAddOrphanDeleted,
+	KeyWorkspaceBrokenIdentityMissing,
+	KeyWorkspaceBrokenIdentityUnreadable,
+	KeyWorkspaceBrokenStepAbandon,
+	KeyWorkspaceBrokenStepAbandonUnknown,
+	KeyWorkspaceBrokenStepBackup,
+	KeyWorkspaceBrokenStepInspect,
 	KeyWorkspaceBrokenRefStatFailed,
 	KeyWorkspaceBrokenRefRemoveFailed,
 	KeyWorkspaceBrokenRefResolveFailed,
@@ -2516,6 +2550,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupWorkingTimeout,
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,
+	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
 	KeyDaemonRunConfigLoadFailed,
 	KeyDaemonRunSocketPathUnresolved,

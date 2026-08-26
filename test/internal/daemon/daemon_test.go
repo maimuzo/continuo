@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f64d06a86d40fd3871399f7f56f7e4c99cd4777aa2e6143f292c1618ccc2ff3e", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "705d728333ad529e653770c1108760c6c0902f43929b385e8a7f5d71947b6be4", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「再起動して実行中の issue を引き継ぐ」の
 // 起動と中断に関わるパスを検査する。
@@ -463,7 +463,7 @@ func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(
 	}
 }
 
-// {"RUCM-PATH": "P018"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDaemon_flockが取れなければ即座に終了する は、二重起動の防止を確かめる。
 //
@@ -512,7 +512,7 @@ func TestDaemon_flockが取れなければ即座に終了する(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P019"}
 //
 // TestDaemon_起動時の検査に落ちたら生きているpaneを閉じずに起動を止める は、
 // 設計 3-4 の「起動から復元までの順序」の段3 を確かめる。

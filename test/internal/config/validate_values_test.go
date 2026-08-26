@@ -74,6 +74,13 @@ func TestValidate_使えない値は起動する前に弾く(t *testing.T) {
 		{"failure_state が空", "failure_state", `  failure_state: ""`, "failure_state"},
 		{"active_states が空", "active_states", "  active_states: []", "active_states"},
 		{"terminal_states が空", "terminal_states", "  terminal_states: []", "terminal_states"},
+		// **知らない値を黙って既定に丸めない**（設計 3-49）。`halt` と書いた利用者は
+		// 「止まる」つもりでいる。丸めた側が偶然一致しても、次に `continue` と書いたときには
+		// **飛ばすつもりが止まる。**書いた値が効いていないことに気づけない。
+		{"壊れた worktree の扱いが知らない値", "on_broken_worktree",
+			"  on_broken_worktree: halt", "workspace.on_broken_worktree"},
+		{"壊れた worktree の扱いが空", "on_broken_worktree",
+			`  on_broken_worktree: ""`, "workspace.on_broken_worktree"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := loadWithReplaced(t, tc.key, tc.line)

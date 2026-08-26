@@ -613,6 +613,14 @@ func (o *Orchestrator) cleanupPath(
 	}
 	o.logger.Warn("worktree を片付けずに残しました",
 		"identifier", identifier, "path", worktreePath, "理由", strings.Join(result.Reasons, " / "))
+	// **理由だけでは、読んだ人間は次に何をすればよいか分からない**（設計 3-49）。
+	// git が1つも答えられなかったなら、その worktree は壊れており、
+	// **continuo は二度と自分では片付けられない。**巡回のたびに同じ理由が出続けるので、
+	// **人間が手で始末するための3行をその場に出す。**
+	for _, step := range result.NextSteps {
+		o.logger.Warn("壊れた worktree です。次にこれをしてください",
+			"identifier", identifier, "path", worktreePath, "手順", step)
+	}
 
 	if !result.ShouldComment || nodeID == "" {
 		return false

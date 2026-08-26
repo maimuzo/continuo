@@ -56,6 +56,9 @@ workspace:
   root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する。
                                             # 中の並べ方は <root>/<ホスト>/<owner>/<repo>/<branch> に固定で、選べない
   identity_file: .continuo.json             # どの issue の worktree かを worktree の中に書き残すファイルの名前
+  on_broken_worktree: stop                  # 上のファイルを読めない worktree を見つけたときの振る舞い。
+                                            # stop なら起動を止める。skip ならその worktree だけ飛ばして続ける。
+                                            # どちらでも worktree は消さない（消すのは continuo abandon --force だけ）
 
 workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
   after_create: null                        # worktree を作った直後に走る。失敗したらその issue は進めない
