@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -370,32 +371,71 @@ func TestRun_ghauthtokenが返らなければ起動を止める(t *testing.T) {
 	}
 }
 
-// TestRestoreDefaultSignalsOnShutdown_1回目を受けたら登録を外す は、
-// 2回目の signal が効くことを支える結線を確かめる。
+// TestWatchInterrupt_1回目で理由を出し2回目で待たずに終わる は、
+// 「Ctrl+C を押しても何も反応しない」を潰した仕掛けを確かめる。
 //
-// 目的: `signal.NotifyContext` は1回目の signal のあとも登録を残すため、**外さないと
-// 2回目以降の `SIGTERM` / `SIGINT` が吸われて効かない。**終了処理が長引いたときに
-// `SIGKILL` しか手が無くなる（設計 3-4 の終了の作法）。
-// 与える情報: 途中で終わらせるコンテキストと、呼ばれたことを記録する解除の関数。
-// 成功条件: コンテキストが生きている間は解除が呼ばれず、終わったあとに1回呼ばれること。
-func TestRestoreDefaultSignalsOnShutdown_1回目を受けたら登録を外す(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	stopped := make(chan struct{})
+// 目的: 終了は3段の直列で最大 daemon.ShutdownBudget() だけ掛かる。**1回目の割り込みで
+// 待たせる理由と抜け道を出さないと、その間ずっと画面が無反応になる。**また、2回目の
+// 割り込みは**自分で数えて終わらせる。**`signal.Stop` で「元の動作」へ戻すやり方は、
+// 起動元が `SIGINT` を無視に設定していると戻る先が「無視」になり、何も起きない。
+// 与える情報: 自分自身へ送る `SIGINT` を2回と、os.Exit の代わりに呼ばれたことを記録する関数。
+// 成功条件: 1回目で待つ理由・2回目の効き目・`kill -QUIT` の案内が出ること。
+// 2回目で ExitInterrupted が渡ること。
+func TestWatchInterrupt_1回目で理由を出し2回目で待たずに終わる(t *testing.T) {
+	logs := &syncBuffer{}
+	exited := make(chan int, 1)
 
-	daemon.RestoreDefaultSignalsOnShutdown(ctx, func() { close(stopped) })
+	stop := daemon.WatchInterrupt(slog.New(slog.NewTextHandler(logs, nil)), func(code int) {
+		exited <- code
+	})
+	// **登録を外すのは最後である。**外したあとに SIGINT が届くと、テストのプロセスごと死ぬ。
+	defer stop()
 
+	// 1回目。**まだ終わらない。**待たせる理由が出るだけである。
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatalf("1回目の SIGINT を送れません: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(logs.String(), "kill -QUIT") {
+		if time.Now().After(deadline) {
+			t.Fatalf("1回目の割り込みで何も出なかった:\n%s", logs.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	select {
-	case <-stopped:
-		t.Fatal("コンテキストが生きているうちに signal の登録を外した")
-	case <-time.After(50 * time.Millisecond):
+	case code := <-exited:
+		t.Fatalf("1回目の割り込みで終わってしまった: exit code %d", code)
+	case <-time.After(100 * time.Millisecond):
 	}
 
-	cancel()
+	first := logs.String()
+	if !strings.Contains(first, "もう一度 Ctrl+C") {
+		t.Fatalf("2回目で即座に終わることが画面に出ていない:\n%s", first)
+	}
+	if !strings.Contains(first, "max_wait") {
+		t.Fatalf("待たせる時間が画面に出ていない:\n%s", first)
+	}
+
+	// 2回目。**後始末を待たずに終わる。**
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatalf("2回目の SIGINT を送れません: %v", err)
+	}
 	select {
-	case <-stopped:
+	case code := <-exited:
+		if code != daemon.ExitInterrupted {
+			t.Fatalf("終了コードが %d ではない: %d", daemon.ExitInterrupted, code)
+		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("コンテキストが終わっても signal の登録を外さなかった（2回目の signal が効かない）")
+		t.Fatalf("2回目の割り込みが効かなかった:\n%s", logs.String())
 	}
+}
+
+// TestWatchInterrupt_stopを2回呼んでも落ちない は、`defer stop()` を重ねても
+// 安全であることを確かめる（signal の登録を外す関数は何回呼んでも安全と約束している）。
+func TestWatchInterrupt_stopを2回呼んでも落ちない(t *testing.T) {
+	stop := daemon.WatchInterrupt(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)), func(int) {})
+	stop()
+	stop()
 }
 
 // TestRun_起動時検査が期限内に終わらなければ起動を止める は、外向きの呼び出しの期限を確かめる。

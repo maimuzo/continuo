@@ -3,7 +3,7 @@
   "usecase_name": "再起動して実行中の issue を引き継ぐ",
   "source": {
     "file": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.rucm.md",
-    "rucm_block_sha256": "881fe57c42fac86930d96c916b43530c532800e34a9aa533fceee6785a158c39"
+    "rucm_block_sha256": "353f71941f7d3a8397fc82a811071c39c168153fa9ac2b076d81171fcfbac3c7"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -125,6 +125,18 @@
           "flow": "BASIC FLOW",
           "steps": [
             22
+          ]
+        }
+      ],
+      "postcondition": "continuo は常駐していない。印の集合は失われている。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。"
+    },
+    "中断の連打": {
+      "when": "利用者が後始末の途中でもう一度 Ctrl+C を入力する場合",
+      "branch_from": [
+        {
+          "flow": "中断",
+          "steps": [
+            3
           ]
         }
       ],
@@ -697,27 +709,69 @@
       "type": "action",
       "flow": "中断",
       "step": 1,
-      "statement": "システムはボードの巡回を止める。"
+      "statement": "システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する。"
     },
     {
       "id": "中断-2",
       "type": "action",
       "flow": "中断",
       "step": 2,
-      "statement": "システムは hook を受ける socket を閉じる。"
+      "statement": "システムはボードの巡回を止める。"
     },
     {
       "id": "中断-3",
       "type": "action",
       "flow": "中断",
       "step": 3,
-      "statement": "システムは herdr の pane を閉じずに終了する。"
+      "statement": "システムはダッシュボードを閉じる。"
     },
     {
       "id": "中断-4",
-      "type": "abort",
+      "type": "action",
       "flow": "中断",
       "step": 4,
+      "statement": "システムは hook を受ける socket を閉じる。"
+    },
+    {
+      "id": "中断-5",
+      "type": "action",
+      "flow": "中断",
+      "step": 5,
+      "statement": "システムは走行中の turn ループの終了を待つ。"
+    },
+    {
+      "id": "中断-6",
+      "type": "action",
+      "flow": "中断",
+      "step": 6,
+      "statement": "システムは herdr の pane を閉じずに終了する。"
+    },
+    {
+      "id": "中断-7",
+      "type": "abort",
+      "flow": "中断",
+      "step": 7,
+      "statement": "ABORT"
+    },
+    {
+      "id": "中断の連打-1",
+      "type": "action",
+      "flow": "中断の連打",
+      "step": 1,
+      "statement": "システムは利用者に後始末を待たずに終わることを応答する。"
+    },
+    {
+      "id": "中断の連打-2",
+      "type": "action",
+      "flow": "中断の連打",
+      "step": 2,
+      "statement": "システムは herdr の pane を閉じずに終了する。"
+    },
+    {
+      "id": "中断の連打-3",
+      "type": "abort",
+      "flow": "中断の連打",
+      "step": 3,
       "statement": "ABORT"
     }
   ],
@@ -1189,6 +1243,37 @@
       "from": "中断-3",
       "to": "中断-4",
       "kind": "seq"
+    },
+    {
+      "from": "中断-3",
+      "to": "中断の連打-1",
+      "kind": "global",
+      "condition": "利用者が後始末の途中でもう一度 Ctrl+C を入力する場合"
+    },
+    {
+      "from": "中断-4",
+      "to": "中断-5",
+      "kind": "seq"
+    },
+    {
+      "from": "中断-5",
+      "to": "中断-6",
+      "kind": "seq"
+    },
+    {
+      "from": "中断-6",
+      "to": "中断-7",
+      "kind": "seq"
+    },
+    {
+      "from": "中断の連打-1",
+      "to": "中断の連打-2",
+      "kind": "seq"
+    },
+    {
+      "from": "中断の連打-2",
+      "to": "中断の連打-3",
+      "kind": "seq"
     }
   ],
   "paths": [
@@ -1656,7 +1741,10 @@
         "中断-1",
         "中断-2",
         "中断-3",
-        "中断-4"
+        "中断-4",
+        "中断-5",
+        "中断-6",
+        "中断-7"
       ],
       "steps": [
         "利用者はシステムに continuo の常駐の開始を要求する。",
@@ -1682,14 +1770,85 @@
         "システムは逃がし先に溜まった hook を読み戻す。",
         "システムは引き継ぐ issue に印を付ける。",
         "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
+        "システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する。",
         "システムはボードの巡回を止める。",
+        "システムはダッシュボードを閉じる。",
         "システムは hook を受ける socket を閉じる。",
+        "システムは走行中の turn ループの終了を待つ。",
         "システムは herdr の pane を閉じずに終了する。",
         "ABORT"
       ]
     },
     {
       "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "中断の連打",
+      "postcondition": "continuo は常駐していない。印の集合は失われている。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "中断-1",
+        "中断-2",
+        "中断-3",
+        "中断の連打-1",
+        "中断の連打-2",
+        "中断の連打-3"
+      ],
+      "steps": [
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "システムは VALIDATES THAT ロックファイルの flock を取れる。",
+        "システムは VALIDATES THAT 起動時の検査をすべて通る。",
+        "システムは worktree の置き場所を4階層まで走査する。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは VALIDATES THAT 身元ファイルを読めない worktree を、置き場所と herdr の pane の label とボードから復元できる。",
+        "システムは VALIDATES THAT 身元ファイルが名乗る owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT ボードを project item の ID 指定で取り直せる。",
+        "システムは VALIDATES THAT 取り直した issue の owner とリポジトリ名が worktree の置き場所の階層と一致する。",
+        "システムは VALIDATES THAT herdr から pane と agent の一覧を取れる。",
+        "システムは VALIDATES THAT worktree のパスと cwd が一致する pane がある。",
+        "システムは VALIDATES THAT 取り直した Status が active_states に入っている。",
+        "システムは VALIDATES THAT pane の agent_status を読み取れる。",
+        "システムは VALIDATES THAT agent_status が blocked でない。",
+        "システムは VALIDATES THAT 身元ファイルの引き継いだ回数が agent.max_takeover に達していない。",
+        "システムは身元ファイルの引き継いだ回数を1つ増やす。",
+        "システムは pane の agent_session からセッション UUID を取る。",
+        "システムは agent の一覧から pane に対応する agent 名を取る。",
+        "システムは run の実行時状態を組み立てる。",
+        "システムは hook を受ける socket の listen を始める。",
+        "システムは逃がし先に溜まった hook を読み戻す。",
+        "システムは引き継ぐ issue に印を付ける。",
+        "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
+        "システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する。",
+        "システムはボードの巡回を止める。",
+        "システムはダッシュボードを閉じる。",
+        "CONDITION: 利用者が後始末の途中でもう一度 Ctrl+C を入力する場合",
+        "システムは利用者に後始末を待たずに終わることを応答する。",
+        "システムは herdr の pane を閉じずに終了する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
       "terminal": "abort",
       "terminal_flow": "引き継ぎの上限",
       "postcondition": "issue の Status は failure_state の選択肢である。continuo は turn を1回も送っていない。worktree は残っている。",
@@ -1738,7 +1897,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P010",
       "terminal": "abort",
       "terminal_flow": "権限の確認での停止",
       "postcondition": "issue の Status は failure_state の選択肢である。herdr の pane は閉じている。保留中の権限の要求は pane ごと消えている。worktree は残っている。",
@@ -1785,7 +1944,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "状態の不明",
       "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。",
@@ -1830,7 +1989,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "引き渡し状態",
       "postcondition": "herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。利用者は pane の中身を読める。",
@@ -1873,7 +2032,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "paneの不在",
       "postcondition": "issue は印の集合に入っていない。worktree は残っている。issue の Status は running_state の選択肢のままである。",
@@ -1914,7 +2073,7 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "一覧の取得の失敗",
       "postcondition": "herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。印の集合は空である。continuo は常駐している。",
@@ -1953,7 +2112,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "issueの取り違え",
       "postcondition": "worktree は残っている。取り直した issue の Status は変わっていない。herdr の pane は閉じていない。continuo は常駐している。",
@@ -1988,7 +2147,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P016",
       "terminal": "abort",
       "terminal_flow": "ボードの取り直しの失敗",
       "postcondition": "herdr の pane は閉じている。worktree は残っている。issue の Status は running_state の選択肢のままである。continuo は常駐している。",
@@ -2023,7 +2182,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "名乗りの食い違い",
       "postcondition": "worktree は残っている。ボードへは1バイトも書いていない。herdr の pane は閉じていない。continuo は常駐している。",
@@ -2054,7 +2213,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "復元できない壊れたworktree",
       "postcondition": "壊れた worktree は残っている。ボードへは1バイトも書いていない。herdr の pane は閉じていない。workspace.on_broken_worktree が stop なら continuo は常駐していない。",
@@ -2087,7 +2246,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P019",
       "terminal": "abort",
       "terminal_flow": "復元できない壊れたworktree",
       "postcondition": "壊れた worktree は残っている。ボードへは1バイトも書いていない。herdr の pane は閉じていない。workspace.on_broken_worktree が stop なら continuo は常駐していない。",
@@ -2121,7 +2280,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P020",
       "terminal": "abort",
       "terminal_flow": "前提の不足",
       "postcondition": "continuo は常駐していない。herdr の pane は閉じていない。worktree は残っている。issue の Status は変わっていない。",
@@ -2144,7 +2303,7 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "二重起動",
       "postcondition": "2つめの continuo のプロセスは終了している。1つめの continuo のプロセスは動いている。herdr の pane は閉じていない。",
@@ -2166,9 +2325,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 84,
-    "nodes_covered": 84,
-    "edges_total": 87,
-    "edges_covered": 87
+    "nodes_total": 90,
+    "nodes_covered": 90,
+    "edges_total": 93,
+    "edges_covered": 93
   }
 }

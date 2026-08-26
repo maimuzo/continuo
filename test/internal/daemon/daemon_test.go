@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "705d728333ad529e653770c1108760c6c0902f43929b385e8a7f5d71947b6be4", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "72f9472fcdb4c37c29c829202b58a7f601161257172517df5464cc1a221c1996", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「再起動して実行中の issue を引き継ぐ」の
 // 起動と中断に関わるパスを検査する。
@@ -249,10 +249,42 @@ func (e *daemonEnv) start(t *testing.T) (*exec.Cmd, *syncBuffer) {
 // 戻り値の2つ目: 標準出力と標準エラーを溜める先。
 func (e *daemonEnv) startWithArgs(t *testing.T, extra ...string) (*exec.Cmd, *syncBuffer) {
 	t.Helper()
+	args := append(append([]string{}, extra...), "--log-level=debug", e.WorkflowPath)
+	return e.startProgram(t, e.Binary, args)
+}
+
+// startIgnoringSIGINT は **`SIGINT` を「無視」に設定した親から** continuo を起動する。
+//
+// **`nohup` / `setsid` / job control の無いシェルのバックグラウンド起動が作る状態である。**
+// この状態だと、`signal.Stop` で「元の動作」へ戻すやり方は戻る先が「無視」になり、
+// **2回目以降の Ctrl+C が何も起こさない。**その筋を実際に踏むための入口である。
+//
+// `trap "" INT` は `SIGINT` を SIG_IGN にし、**`exec` を跨いでも残る**（POSIX）。
+// `exec` するので、返る `*exec.Cmd` の PID は continuo 自身の PID である。
+//
+// t: 呼び出し元のテスト。
+// extra: `--log-level` と WORKFLOW.md のパスの前に置く追加の引数。
+// 戻り値の1つ目: 起動したプロセス。
+// 戻り値の2つ目: 標準出力と標準エラーを溜める先。
+func (e *daemonEnv) startIgnoringSIGINT(t *testing.T, extra ...string) (*exec.Cmd, *syncBuffer) {
+	t.Helper()
+	args := append(append([]string{}, extra...), "--log-level=debug", e.WorkflowPath)
+	shArgs := append([]string{"-c", `trap "" INT; exec "$0" "$@"`, e.Binary}, args...)
+	return e.startProgram(t, "/bin/sh", shArgs)
+}
+
+// startProgram は用意した環境変数で任意のコマンドを起動する。
+//
+// t: 呼び出し元のテスト。
+// name: 起動する実行ファイル。
+// args: 渡す引数。
+// 戻り値の1つ目: 起動したプロセス。
+// 戻り値の2つ目: 標準出力と標準エラーを溜める先。
+func (e *daemonEnv) startProgram(t *testing.T, name string, args []string) (*exec.Cmd, *syncBuffer) {
+	t.Helper()
 
 	logs := &syncBuffer{}
-	args := append(append([]string{}, extra...), "--log-level=debug", e.WorkflowPath)
-	cmd := exec.Command(e.Binary, args...)
+	cmd := exec.Command(name, args...)
 	cmd.Dir = e.Root
 	cmd.Env = []string{
 		"PATH=" + e.BinDir + string(os.PathListSeparator) + os.Getenv("PATH"),
@@ -463,7 +495,7 @@ func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(
 	}
 }
 
-// {"RUCM-PATH": "P020"}
+// {"RUCM-PATH": "P021"}
 //
 // TestDaemon_flockが取れなければ即座に終了する は、二重起動の防止を確かめる。
 //
@@ -512,7 +544,7 @@ func TestDaemon_flockが取れなければ即座に終了する(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P019"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDaemon_起動時の検査に落ちたら生きているpaneを閉じずに起動を止める は、
 // 設計 3-4 の「起動から復元までの順序」の段3 を確かめる。
@@ -805,6 +837,184 @@ func TestDaemon_CLIのportでダッシュボードを開いて実行中のrunを
 	}
 	if _, err := client.Get("http://" + addr + "/api/v1/state"); err == nil {
 		t.Fatal("終了したのにダッシュボードへ接続できた")
+	}
+}
+
+// holdDashboardConnection は、応答を返し終えられない要求をダッシュボードへ1本ぶら下げる。
+//
+// **終了の1段目を必ず期限まで引き延ばすためにある。**要求行だけ送って空行を送らないと、
+// その接続は「処理中」として数えられ、`http.Server.Shutdown` は待ちに入る。
+// これが無いと後始末が一瞬で終わってしまい、**期限や2回目の Ctrl+C を確かめられない。**
+//
+// t: 呼び出し元のテスト。
+// addr: ダッシュボードの待ち受け先（`127.0.0.1:<ポート>`）。
+func holdDashboardConnection(t *testing.T, addr string) {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		t.Fatalf("ダッシュボードへ繋げません: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	// **空行を送らない。**要求はここで途切れたままになる。
+	if _, err := conn.Write([]byte("GET /api/v1/state HTTP/1.1\r\nHost: 127.0.0.1\r\n")); err != nil {
+		t.Fatalf("要求の途中まで送れません: %v", err)
+	}
+}
+
+// {"RUCM-PATH": "P007"}
+//
+// TestDaemon_portを付けてSIGINTを受けたら段ごとに名乗って終わる は、
+// 「Ctrl+C を押しても何も反応しない」を潰したことを、バイナリを起動して確かめる。
+//
+// 目的: 終了は3段の直列（ダッシュボード → hook の受け口 → turn ループ）で、
+// 合計で 30 秒を超えうる。**入口の1行だけ出して黙り込むと、止まったのか固まったのかが
+// 人間に区別できない。**段ごとに名乗り、待たせる理由と抜け道を必ず出す。
+//
+// **`--port` を付けた `SIGINT` の経路を通す。**ダッシュボードを開く経路は
+// `SIGTERM` でしか通っていなかった。利用者が実際に押すのは Ctrl+C である。
+//
+// 与える情報: `--port=0` で開いたダッシュボードと、**応答を返し終えられない要求が1本**
+// （後始末の1段目を必ず期限まで引き延ばす）。そこへ `SIGINT` を1回。
+//
+// 成功条件:
+//   - 3段が順に名乗ること（1/3 → 2/3 → 3/3）
+//   - 2回目の Ctrl+C で即座に終わることと、`kill -QUIT` の案内が出ること
+//   - **ダッシュボードを叩き切ること**（応答の読み切りの期限 10 秒まで待たない）
+//   - 終了コード 0 で終わること
+func TestDaemon_portを付けてSIGINTを受けたら段ごとに名乗って終わる(t *testing.T) {
+	env := newDaemonEnv(t)
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
+	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "pane_list", "panes": []any{}}, nil
+	})
+	env.Herdr.Handle("agent.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "agent_list", "agents": []any{}}, nil
+	})
+
+	cmd, logs := env.startWithArgs(t, "--port=0")
+	t.Cleanup(func() {
+		if t.Failed() || testing.Verbose() {
+			t.Logf("continuo の出力:\n%s", logs.String())
+		}
+	})
+
+	var addr string
+	waitFor(t, 30*time.Second, "ダッシュボードが開く", func() bool {
+		var ok bool
+		addr, ok = dashboardAddr(logs)
+		return ok
+	})
+	waitFor(t, 30*time.Second, "巡回が始まる", func() bool {
+		return strings.Contains(logs.String(), "巡回を始めます")
+	})
+	holdDashboardConnection(t, addr)
+
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatalf("SIGINT を送れません: %v", err)
+	}
+
+	// **押した直後に反応が出ること。**後始末の1段目より前に出る。
+	waitFor(t, 5*time.Second, "割り込みを受けたことがすぐ出る", func() bool {
+		return strings.Contains(logs.String(), "もう一度 Ctrl+C")
+	})
+	early := logs.String()
+	if !strings.Contains(early, "kill -QUIT") {
+		t.Fatalf("止まらないときの次の一手が出ていない:\n%s", early)
+	}
+
+	started := time.Now()
+	code, finished := waitProcess(context.Background(), cmd, 30*time.Second)
+	if !finished {
+		t.Fatalf("SIGINT を受けても 30 秒以内に終了しなかった\n%s", logs.String())
+	}
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではない: got %d\n%s", code, logs.String())
+	}
+
+	// **応答の読み切りの期限（10 秒）まで待っていない。**待っていたら叩き切れていない。
+	if elapsed := time.Since(started); elapsed > 9*time.Second {
+		t.Fatalf("ダッシュボードを叩き切らずに待った: %v\n%s", elapsed, logs.String())
+	}
+
+	out := logs.String()
+	for _, want := range []string{
+		"後始末 1/3: ダッシュボードを閉じています",
+		"後始末 2/3: hook の受け口を閉じています",
+		"後始末 3/3: 走行中の turn ループの終了を待っています",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("段ごとの名乗りが出ていない: %q\n%s", want, out)
+		}
+	}
+	if !strings.Contains(out, "ダッシュボードの応答が期限内に終わらないので、接続を切って閉じます") {
+		t.Fatalf("ダッシュボードを叩き切ったことが出ていない:\n%s", out)
+	}
+	// socket のファイルを残さない（次の起動が「残骸がある」と言って止まる）。
+	if _, err := os.Stat(env.SocketPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("hook の socket のファイルが残っている: %v", err)
+	}
+}
+
+// {"RUCM-PATH": "P008"}
+//
+// TestDaemon_SIGINTを無視に設定した親から起動しても2回目のCtrlCで止まる は、
+// **利用者の「連打しても、いつまで経っても止まらなかった」を潰した筋**を確かめる。
+//
+// 目的: 2回目の割り込みを `signal.Stop`（元の動作へ戻す）に頼ると、**起動元が `SIGINT` を
+// 「無視」に設定していたときに戻る先が「無視」になり、2回目以降が何も起こさない。**
+// `nohup` / `setsid` / job control の無いシェルのバックグラウンド起動がこの状態を作る。
+// **自分で数えて終わらせれば、起動元が何であっても結果は変わらない。**
+//
+// 与える情報: `trap "" INT` を掛けた `/bin/sh` から `exec` した continuo と、
+// **応答を返し終えられない要求が1本**（後始末の1段目を必ず期限まで引き延ばす）。
+// そこへ `SIGINT` を2回。
+//
+// 成功条件: 2回目のあと 10 秒以内に、**割り込みの終了コード（130）**で終わること。
+// 0 で終わったなら、それは後始末が普通に終わっただけで、2回目は効いていない。
+func TestDaemon_SIGINTを無視に設定した親から起動しても2回目のCtrlCで止まる(t *testing.T) {
+	env := newDaemonEnv(t)
+	env.GitHub = newFakeGitHub(t, "octocat", env.Timeline)
+	env.Herdr.Handle("pane.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "pane_list", "panes": []any{}}, nil
+	})
+	env.Herdr.Handle("agent.list", func(map[string]any) (any, *rpcErr) {
+		return map[string]any{"type": "agent_list", "agents": []any{}}, nil
+	})
+
+	cmd, logs := env.startIgnoringSIGINT(t, "--port=0")
+	t.Cleanup(func() {
+		if t.Failed() || testing.Verbose() {
+			t.Logf("continuo の出力:\n%s", logs.String())
+		}
+	})
+
+	var addr string
+	waitFor(t, 30*time.Second, "ダッシュボードが開く", func() bool {
+		var ok bool
+		addr, ok = dashboardAddr(logs)
+		return ok
+	})
+	holdDashboardConnection(t, addr)
+
+	// 1回目。**まだ終わらない。**待たせる理由が出るだけである。
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatalf("1回目の SIGINT を送れません: %v", err)
+	}
+	waitFor(t, 10*time.Second, "1回目の SIGINT が届く（無視のままなら1行も出ない）", func() bool {
+		return strings.Contains(logs.String(), "もう一度 Ctrl+C")
+	})
+
+	// 2回目。**後始末を待たずに終わる。**
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatalf("2回目の SIGINT を送れません: %v", err)
+	}
+	code, finished := waitProcess(context.Background(), cmd, 10*time.Second)
+	if !finished {
+		t.Fatalf("2回目の SIGINT を受けても 10 秒以内に終了しなかった\n%s", logs.String())
+	}
+	if code != 130 {
+		t.Fatalf("2回目の SIGINT が効いていない（割り込みの終了コードで終わっていない）: got %d\n%s",
+			code, logs.String())
 	}
 }
 
