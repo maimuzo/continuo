@@ -185,7 +185,7 @@ func Run(ctx context.Context, opts Options) Report {
 	report.add(checkClaudeHome(opts))
 	// **worktree の置き場所に書けるかも確かめる。**書けないと着手は段3 で必ず落ちる。
 	// **置き場所は `workspace.root` にしか書いていないので、設定が読めているときだけ走る。**
-	report.add(checkWorkspaceRoot(cfg, configResult.Symbol))
+	report.add(checkWorkspaceRoot(opts, cfg, configResult.Symbol))
 
 	// 段3: herdr。照合する protocol は設定から来るので、設定が読めなければ確かめられない。
 	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {

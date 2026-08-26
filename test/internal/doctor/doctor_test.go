@@ -1046,3 +1046,38 @@ func TestDoctor_worktreeの置き場所に書けなければ落とす(t *testing
 		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
 	}
 }
+
+// TestDoctor_身元を確かめられないworktreeがあれば落とす は、起動より前に気づけることを
+// 確かめる（設計 3-49）。
+//
+// 目的: `workspace.on_broken_worktree` の既定は `stop` である。**身元を確かめられない
+// worktree が1件でもあると continuo は起動しない。**doctor が黙っていると、利用者は
+// 起動してから初めてそれを知る。
+//
+// 与える情報: `workspace.root` の4階層目に置いた、身元ファイルを読めない worktree。
+//
+// 成功条件: `worktree の場所` が `✗`、直し方が1件以上、**その worktree が消えないこと。**
+func TestDoctor_身元を確かめられないworktreeがあれば落とす(t *testing.T) {
+	fx := newFixture(t)
+	// `workspace.root` は `<root>/wt` である（fixture の WriteWorkflow）。
+	// 置き場所は `<root>/<host>/<owner>/<repo>/<スラグ>` の固定4階層である（設計 3-22）。
+	broken := filepath.Join(fx.Root, "wt", "github.com", "octocat", "hello-world",
+		"continuo-octocat-hello-world-188")
+	if err := os.MkdirAll(broken, 0o700); err != nil {
+		t.Fatalf("壊れた worktree を作れません: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(broken, ".continuo.json"), []byte("{壊れている"), 0o600); err != nil {
+		t.Fatalf("壊れた身元ファイルを書けません: %v", err)
+	}
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelWorkspaceRoot, doctor.SymbolMissing)
+	if len(res.Remedies) == 0 {
+		t.Fatalf("壊れた worktree があるのに直し方が出ていない: %+v", res)
+	}
+	if _, err := os.Stat(broken); err != nil {
+		t.Fatalf("doctor が壊れた worktree を消してしまった: %v", err)
+	}
+}

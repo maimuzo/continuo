@@ -147,7 +147,29 @@ type WorkspaceConfig struct {
 	Root string `yaml:"root"`
 	// IdentityFile は worktree の身元を書くファイルの名前である（3-18）。
 	IdentityFile string `yaml:"identity_file"`
+	// OnBrokenWorktree は、身元を確かめられない worktree を見つけたときの振る舞いである（3-49）。
+	//
+	//	OnBrokenWorktreeStop … 起動を止める（既定）
+	//	OnBrokenWorktreeSkip … その worktree だけ飛ばして起動を続ける
+	//
+	// **どちらでも worktree は1バイトも消さない。**消すのは人間が
+	// `continuo abandon --force` を打ったときだけである。
+	OnBrokenWorktree string `yaml:"on_broken_worktree"`
 }
+
+// workspace.on_broken_worktree に書ける値である（3-49）。
+const (
+	// OnBrokenWorktreeStop は、壊れた worktree を1件でも見つけたら起動を止める。**既定である。**
+	//
+	// **止めることで被害の悪化を防ぎ、壊れていることを早く知れる。**続けると、
+	// その issue はボード上で running_state のまま誰にも触られず、
+	// **人間が気づくのは何時間も後になる。**
+	OnBrokenWorktreeStop = "stop"
+	// OnBrokenWorktreeSkip は、壊れた worktree をログに出して飛ばし、起動を続ける。
+	//
+	// **1件の壊れた worktree で他の issue まで止めたくない環境向けである。**
+	OnBrokenWorktreeSkip = "skip"
+)
 
 // WorkspaceHooksConfig は worktree のライフサイクルに沿って呼ぶ外部コマンドを決める。
 // いずれのコマンド文字列も null（未設定）を許す。null のときはそのフェーズで何も実行しない。

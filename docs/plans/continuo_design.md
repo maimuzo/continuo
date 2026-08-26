@@ -4883,6 +4883,88 @@ pane は実際には生きていて誰も閉じないので、continuo の管理
 
 ---
 
+### 3-49. 身元を確かめられない worktree は、復元を試してから止まる。消さない
+
+**言いたいこと。**壊れた worktree を continuo が消してよいことは1度も無い。
+**まず手掛かりから身元ファイルを復元し、復元できなければ既定で起動を止める。**
+止めるときは「何が起きているか」と「次に何をすべきか」を必ず両方出す。
+
+**壊れた worktree の定義。**置き場所の固定4階層にあって、**continuo が身元を確かめられない**もの。
+
+| 種類 | 何が起きているか | 壊れたと数えるか |
+| --- | --- | --- |
+| 身元ファイルを読めない | JSON が壊れた・通常のファイルでない・64 KiB を超えた | 数える |
+| 身元ファイルが無い | 着手の段6 の手前で落ちた（3-16） | **スラグから issue の番号を切り出せたときだけ**数える |
+| 身元ファイルが無く、スラグも合わない | 人間が自分で置いた worktree | **数えない。触らない** |
+
+**復元の手掛かりは3つで、最後に必ず裏を取る。**実体は
+[internal/orchestrator/restore.go](../../internal/orchestrator/restore.go) の `recoverIdentity` である。
+
+| 手掛かり | 実体 | 書き換えられるか |
+| --- | --- | --- |
+| 置き場所のパス | `<root>/<host>/<owner>/<repo>/<スラグ>`。スラグに issue の番号が入る | **書き換えられない**（封じ込め検査を通っている。3-20） |
+| herdr の pane の label | `owner/repo/issues/N`（3-3） | **書き換えられる**（herdr の CLI から誰でも書ける） |
+| ボードの issue | 上の2つで作った `<owner>/<repo>#<番号>` で1件だけ引き直す | — |
+
+**裏の取り方。**引き直した issue から `ExpectedSlugFor` でスラグを作り直し、
+**目の前のディレクトリ名と一字一句一致すること**を確かめる。ここを外すと、
+**pane の label を書き換えるだけで、別の issue の worktree として復元させられる。**
+
+**復元して書く身元ファイル**（`<worktree>/.continuo.json`）。
+
+```json
+{
+  "issue_url": "https://github.com/octocat/hello-world/issues/188",
+  "issue_identifier": "octocat/hello-world#188",
+  "project_item_id": "PVTI_xxx",
+  "branch": "continuo/octocat/hello-world/188",
+  "base": "",
+  "herdr_workspace_id": "w3",
+  "socket_path": "",
+  "settings_path": "",
+  "agent_name": "continuo-hello-world-188",
+  "session_uuid": "e1f2…",
+  "created_at": "2026-08-26T12:00:00+09:00",
+  "takeover_count": 0
+}
+```
+
+**`base` と `settings_path` は空のままにする。**どの手掛かりにも残っていないためである。
+**空でも消す側へは倒れない**（片付けは「base が分からない」として見送る。3-9 の手順2b）。
+**`takeover_count` は 0 から数え直す。**読めなかった値を推測で埋めない。
+
+**復元できなかったときの振る舞いは設定で決める**（`workspace.on_broken_worktree`）。
+
+| 値 | 何をするか |
+| --- | --- |
+| `stop`（**既定**） | 何が壊れているか・どの worktree か・次に何をすべきかを出して**起動を止める** |
+| `skip` | 同じものをログへ出して、**その worktree だけ飛ばして起動を続ける** |
+
+**既定を `stop` にする理由。**飛ばして走り続けると、その issue はボードの上で
+running_state のまま誰にも触られず、**人間が気づくのは何時間も後になる。**
+止まれば被害はそこで止まり、壊れていることをすぐ知れる。
+
+**出す案内は3行で固定する**（[internal/workspace/broken.go](../../internal/workspace/broken.go) の `NextSteps`）。
+**消し方だけを書かない。**壊れた worktree にはまだ push していない成果が残っていることがある。
+
+```
+1. 中を調べる: ls -la <worktree> && git -C <worktree> status
+2. 要るファイルを控える: cp -a <worktree>/<残したいファイル> <控え先>
+3. 控え終えたら消す: continuo abandon --force <issue の URL>
+```
+
+**巡回の片付けも同じ3行を出す。**git が1つも答えられないまま見送ったとき、
+`CleanupResult.NextSteps` にこの3行が入り、
+[internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `cleanupPath` が
+1行ずつログへ出す。**理由だけを出しても、読んだ人間は次に何をすればよいか分からない。**
+
+**`continuo doctor` も同じ判定を行う**（見出し語 `worktree の場所`）。
+起動する前に気づけるほうがよいためである。**判定は
+[internal/workspace/broken.go](../../internal/workspace/broken.go) の `ScanBroken` 1箇所だけに書く。**
+`stop` の設定なら `✗`、`skip` なら `✓` に注記を添える。
+
+---
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す
@@ -5255,6 +5337,9 @@ workspace:
   root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する。
                                             # 中の並べ方は <root>/<ホスト>/<owner>/<repo>/<branch> に固定で、選べない
   identity_file: .continuo.json             # どの issue の worktree かを worktree の中に書き残すファイルの名前
+  on_broken_worktree: stop                  # 上のファイルを読めない worktree を見つけたときの振る舞い。
+                                            # stop なら起動を止める。skip ならその worktree だけ飛ばして続ける。
+                                            # どちらでも worktree は消さない（消すのは continuo abandon --force だけ）
 
 workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
   after_create: null                        # worktree を作った直後に走る。失敗したらその issue は進めない

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f64d06a86d40fd3871399f7f56f7e4c99cd4777aa2e6143f292c1618ccc2ff3e", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "705d728333ad529e653770c1108760c6c0902f43929b385e8a7f5d71947b6be4", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「再起動して実行中の issue を引き継ぐ」の
 // 11本のパスに、それぞれ対応するテストがある（既存のテストへマーカーを付けた）。
@@ -713,12 +713,22 @@ func TestRestore_paneが無くIn_Reviewなら何もしない(t *testing.T) {
 // 目的: continuo のものと断定できないので、閉じずに人間へ見せる（設計 3-4 の段9）。
 //
 // 与える情報: 置き場所の中にあるが身元ファイルを持たない worktree と、その pane。
+// **その issue はボードに載せない。**載せると復元（設計 3-49）が身元ファイルを
+// 書き直してしまい、段9 へ入らない。**飛ばす設定にして、起動が止まらないようにする。**
 //
 // 成功条件: pane を閉じず、ログに残る。
 func TestRestore_身元ファイルの無いworktreeのpaneは閉じずにログへ残す(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
+	}})
+	fx.AllowLog(
+		"復元のために引いた issue がボードにありません",
+		"手掛かりから issue を確かめられないので復元できません",
+		"身元を確かめられない worktree があります",
+		"次にこれをしてください",
+		"workspace.on_broken_worktree が skip なので",
+	)
 	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{SkipIdentity: true})
 	installPanes(fx, livePane{
 		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
@@ -740,12 +750,22 @@ func TestRestore_身元ファイルの無いworktreeのpaneは閉じずにログ
 // 目的: 段6 の書き込み途中で落ちた場合に起こる。**消してはならない。**
 //
 // 与える情報: JSON が壊れた身元ファイルを持つ worktree。
+// **その issue はボードに載せない。**載せると復元（設計 3-49）が身元ファイルを
+// 書き直してしまう。**飛ばす設定にして、起動が止まらないようにする。**
 //
 // 成功条件: Restore が落ちず、worktree が残り、ログに出る。
 func TestRestore_壊れた身元ファイルは無視してログに出す(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
+	}})
+	fx.AllowLog(
+		"復元のために引いた issue がボードにありません",
+		"手掛かりから issue を確かめられないので復元できません",
+		"身元を確かめられない worktree があります",
+		"次にこれをしてください",
+		"workspace.on_broken_worktree が skip なので",
+	)
 	issue := sampleIssue(188, "In Progress")
-	fx.Tracker.AddIssue(issue)
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	if err := os.WriteFile(
 		filepath.Join(wt.Path, fx.Config.Workspace.IdentityFile), []byte("{壊れている"), 0o600); err != nil {
@@ -1098,5 +1118,134 @@ func TestRestore_agentの一覧を取れなくてもpaneを1つも閉じない(t
 	}
 	if _, err := os.Stat(wt.Path); err != nil {
 		t.Fatalf("worktree を消してしまった: %v", err)
+	}
+}
+
+// TestRestore_身元ファイルが無くても置き場所とボードから復元する は、設計 3-49 を確かめる。
+//
+// 目的: 着手は worktree を作ってから身元ファイルを書く（設計 3-16 の段6〜段9）ので、
+// **その間で落ちると身元ファイルの無い worktree ができる。**それは「壊れた」のではなく
+// 「書き終える前に落ちた」だけであり、置き場所とボードから組み立て直せる。
+//
+// 与える情報: 身元ファイルを持たない worktree と、その pane と、ボードに載っている issue。
+//
+// 成功条件: 身元ファイルが書き直され、その run が引き継がれること。
+func TestRestore_身元ファイルが無くても置き場所とボードから復元する(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	issue := sampleIssue(188, "In Progress")
+	fx.Tracker.AddIssue(issue)
+	wt := prepareWorktree(t, fx, issue, identityOverride{SkipIdentity: true})
+	installPanes(fx, livePane{
+		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
+		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
+	})
+
+	result, _ := restore(t, fx)
+
+	identity, err := fx.Workspace.ReadIdentity(wt.Path)
+	if err != nil {
+		t.Fatalf("身元ファイルを復元していない: %v", err)
+	}
+	if identity.ProjectItemID != issue.ID {
+		t.Fatalf("project item の ID が違う: got %q, want %q", identity.ProjectItemID, issue.ID)
+	}
+	if identity.IssueIdentifier != issue.Identifier {
+		t.Fatalf("識別子が違う: got %q, want %q", identity.IssueIdentifier, issue.Identifier)
+	}
+	if identity.Branch != wt.Branch {
+		t.Fatalf("branch 名が違う: got %q, want %q", identity.Branch, wt.Branch)
+	}
+	if identity.AgentName != "continuo-hello-world-188" {
+		t.Fatalf("pane から agent 名を拾っていない: got %q", identity.AgentName)
+	}
+	if identity.SessionUUID != "sess-188" {
+		t.Fatalf("pane からセッション UUID を拾っていない: got %q", identity.SessionUUID)
+	}
+	if len(result.Adopted) != 1 || result.Adopted[0] != issue.Identifier {
+		t.Fatalf("復元した run を引き継いでいない: %+v", result.Adopted)
+	}
+}
+
+// {"RUCM-PATH": "P018"}
+//
+// TestRestore_復元できない壊れたworktreeがあれば起動を止める は、設計 3-49 を確かめる。
+//
+// 目的: 飛ばして走り続けると、その issue はボードの上で running_state のまま誰にも
+// 触られず、**人間が気づくのは何時間も後になる。**既定は止める側である。
+//
+// 与える情報: JSON が壊れた身元ファイルを持つ worktree と、**ボードに載っていない issue。**
+//
+// 成功条件: Restore がエラーを返し、**worktree は消えず**、エラーに「何が起きているか」と
+// 「次に何をすべきか」の両方が入っていること。
+func TestRestore_復元できない壊れたworktreeがあれば起動を止める(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.AllowLog(
+		"復元のために引いた issue がボードにありません",
+		"手掛かりから issue を確かめられないので復元できません",
+		"身元を確かめられない worktree があります",
+		"次にこれをしてください",
+	)
+	issue := sampleIssue(188, "In Progress")
+	wt := prepareWorktree(t, fx, issue, identityOverride{})
+	if err := os.WriteFile(
+		filepath.Join(wt.Path, fx.Config.Workspace.IdentityFile), []byte("{壊れている"), 0o600); err != nil {
+		t.Fatalf("壊れた身元ファイルを書けません: %v", err)
+	}
+	installPanes(fx)
+
+	_, err := fx.Orc.Restore(context.Background(), &fakeHookServer{})
+	if err == nil {
+		t.Fatal("復元できない壊れた worktree があるのに起動を止めていない")
+	}
+	if !strings.Contains(err.Error(), wt.Path) {
+		t.Errorf("どの worktree が壊れているか分からない: %v", err)
+	}
+	if !strings.Contains(err.Error(), "continuo abandon --force") {
+		t.Errorf("次に何をすべきかが書かれていない: %v", err)
+	}
+	if _, statErr := os.Stat(wt.Path); statErr != nil {
+		t.Fatalf("壊れた worktree を消してしまった: %v", statErr)
+	}
+}
+
+// {"RUCM-PATH": "P017"}
+//
+// TestRestore_paneのlabelが置き場所と食い違えば復元しない は、設計 3-49 の裏取りを確かめる。
+//
+// 目的: pane の label は herdr の CLI から誰でも書き換えられる。**裏を取らずに使うと、
+// label を書き換えるだけで別の issue の worktree として復元させられる。**
+// 引き直した issue からスラグを作り直し、目の前のディレクトリ名と一致することを確かめる。
+//
+// 与える情報: issue 188 の置き場所に立つ、身元ファイルの無い worktree。
+// その pane の label は issue 999 を指し、**ボードには 999 だけが載っている。**
+//
+// 成功条件: 身元ファイルを書かないこと（別の issue のものとして復元しない）。
+func TestRestore_paneのlabelが置き場所と食い違えば復元しない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
+	}})
+	fx.AllowLog(
+		"復元のために引いた issue がボードにありません",
+		"引き直した issue のスラグが置き場所のディレクトリ名と違うので復元しません",
+		"手掛かりから issue を確かめられないので復元できません",
+		"身元を確かめられない worktree があります",
+		"次にこれをしてください",
+		"workspace.on_broken_worktree が skip なので",
+		"身元ファイルの無い worktree に pane がありました",
+	)
+	victim := sampleIssue(188, "In Progress")
+	attacker := sampleIssue(999, "In Progress")
+	fx.Tracker.AddIssue(attacker)
+	wt := prepareWorktree(t, fx, victim, identityOverride{SkipIdentity: true})
+	installPanes(fx, livePane{
+		PaneID: "p-999", Cwd: wt.Path, AgentName: "continuo-hello-world-999",
+		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-999",
+		Label: "octocat/hello-world/issues/999",
+	})
+
+	restore(t, fx)
+
+	if identity, err := fx.Workspace.ReadIdentity(wt.Path); err == nil {
+		t.Fatalf("別の issue のものとして復元してしまった: %+v", identity)
 	}
 }

@@ -162,6 +162,19 @@ func validate(cfg *Config) error {
 	if cfg.Workspace.IdentityFile == "" {
 		return requiredValueError("workspace.identity_file")
 	}
+	// **知らない値を黙って既定に丸めない**（3-49）。`halt` や `abort` と書いた利用者は
+	// 「止まる」つもりでいるので、丸めた側が偶然一致しても、次に `continue` と
+	// 書いたときには**飛ばすつもりが止まる**。書いた値が効いていないことに気づけない。
+	switch cfg.Workspace.OnBrokenWorktree {
+	case OnBrokenWorktreeStop, OnBrokenWorktreeSkip:
+	default:
+		return invalidValueError(
+			"workspace.on_broken_worktree", cfg.Workspace.OnBrokenWorktree,
+			fmt.Sprintf("%q（壊れた worktree を見つけたら起動を止める）か %q"+
+				"（その worktree だけ飛ばして起動を続ける）のどちらかにすること",
+				OnBrokenWorktreeStop, OnBrokenWorktreeSkip),
+		)
+	}
 
 	if cfg.Agent.MaxConcurrentAgents <= 0 {
 		return invalidValueError("agent.max_concurrent_agents", cfg.Agent.MaxConcurrentAgents, "0より大きい整数にすること")

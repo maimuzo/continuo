@@ -53,6 +53,19 @@ type CleanupResult struct {
 	// **Removed が真でも空とは限らない。**worktree は消えたが branch と
 	// herdr の workspace が残る、という結果はふつうに起こる。
 	Leftovers []string
+	// NextSteps は**人間が次に何をすべきか**である（人間が読む文。設計 3-49）。
+	//
+	// **git が1つも答えられないまま見送ったときだけ入る。**そのとき worktree は
+	// 壊れており、**continuo は二度と自分では片付けられない。**放っておくと、
+	// その worktree は巡回のたびに同じ理由で見送られ続ける。
+	//
+	// **Reasons とは別物である。**Reasons は「なぜ消さなかったか」、NextSteps は
+	// 「だから人間は何をすればよいか」である。**理由だけを出しても、読んだ人間は
+	// 次に何をすればよいか分からない。**
+	//
+	// **中を調べる → 要るファイルを控える → `continuo abandon --force` で消す**の
+	// 3行が入る（workspace.NextSteps が作る）。
+	NextSteps []string
 	// Notices は**片付けの途中で continuo が自分で行った、人間へ知らせるべきこと**である
 	// （人間が読む文。issue #28）。
 	//
@@ -207,17 +220,24 @@ func (m *Manager) Cleanup(ctx context.Context, req CleanupRequest) (*CleanupResu
 	// **`--force` のときは見送りの判定を通さない。**通すと、判定に使う git を
 	// 起動するだけ遅くなり、結果は使われない（下の分岐が Force で無効になる）。
 	var reasons []string
+	gitUnavailable := false
 	if !req.Force {
-		reasons = m.leftoverReasons(ctx, req)
+		reasons, gitUnavailable = m.leftoverReasons(ctx, req)
 	}
 	if len(reasons) > 0 {
 		result.Deferred = true
 		result.Reasons = reasons
 		result.ShouldComment = identity.CleanupDeferredAt.IsZero()
+		if gitUnavailable {
+			// **この worktree は壊れている。**continuo は二度と自分では片付けられないので、
+			// 見送りの理由だけでなく、**人間が次に何をすべきか**を必ず添える（設計 3-49）。
+			result.NextSteps = NextSteps(resolvedPath, identity.IssueURL)
+		}
 		m.logger.Warn("worktree を消さずに残しました",
 			"worktree", resolvedPath,
 			"issue", identity.IssueIdentifier,
 			"reasons", fmt.Sprint(reasons),
+			"next_steps", fmt.Sprint(result.NextSteps),
 			"should_comment", result.ShouldComment)
 		return result, nil
 	}
@@ -700,11 +720,17 @@ func (m *Manager) removeSettingsFile(settingsPath string) {
 // エラーではなく「調べられないので消さない」という**見送りの理由**である。
 // エラーにすると、`continuo abandon` が壊れた worktree の中身を1行も見せられなくなる。
 //
+// **git が1度も答えられなかったことを、呼び出し側へ別に返す。**そのとき worktree は
+// 壊れており、**continuo は二度と自分では片付けられない。**理由を並べるだけでは
+// 「次に何をすべきか」が人間に伝わらないので、呼び出し側が案内を添えられるようにする（3-49）。
+//
 // ctx: 実行に適用するコンテキスト。
 // req: 対象の worktree と base。
-// 戻り値: 見送る理由（空なら消してよい）。
-func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) []string {
+// 戻り値の1つ目: 見送る理由（空なら消してよい）。
+// 戻り値の2つ目: git が1つも答えられなかったかどうか（＝壊れた worktree である）。
+func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) ([]string, bool) {
 	var reasons []string
+	gitUnavailable := false
 
 	if m.cfg.Cleanup.RequireCleanWorktree {
 		// **continuo 自身が置いた身元ファイルとその一時ファイルは数から外す**（3-18）。
@@ -715,6 +741,7 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) []str
 		status, _, err := gitStatusPorcelain(ctx, req.WorktreePath, m.identityStatusExcludes()...)
 		switch {
 		case err != nil:
+			gitUnavailable = true
 			reasons = append(reasons, i18n.T(i18n.KeyWorkspaceUndeterminedDirty, err))
 		case status != "":
 			reasons = append(reasons, "コミットされていない変更が残っている（未追跡のファイルを含む）")
@@ -724,17 +751,17 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) []str
 	if m.cfg.Cleanup.RequirePushed {
 		hasUpstream, err := gitHasUpstream(ctx, req.WorktreePath)
 		if err != nil {
-			return append(reasons, i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err))
+			return append(reasons, i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err)), true
 		}
 		if hasUpstream {
 			ahead, err := gitAheadOfUpstream(ctx, req.WorktreePath)
 			if err != nil {
-				return append(reasons, i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err))
+				return append(reasons, i18n.T(i18n.KeyWorkspaceUndeterminedUnpushed, err)), true
 			}
 			if ahead > 0 {
 				reasons = append(reasons, fmt.Sprintf("push されていない commit が %d 件残っている", ahead))
 			}
-			return reasons
+			return reasons, gitUnavailable
 		}
 
 		// upstream が無い側。base からの差分を見る。
@@ -742,12 +769,12 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) []str
 			reasons = append(reasons,
 				"push されていないか、worktree を作ったときの base を確かめられないので消せない"+
 					"（エージェントに push させると片付けられる）")
-			return reasons
+			return reasons, gitUnavailable
 		}
 		noDiff, err := gitNoDiffFromBase(ctx, req.WorktreePath, req.Base)
 		if err != nil {
 			reasons = append(reasons, fmt.Sprintf("base %s との差分を判定できない: %v", req.Base.String(), err))
-			return reasons
+			return reasons, true
 		}
 		if !noDiff {
 			reasons = append(reasons, fmt.Sprintf(
@@ -755,7 +782,7 @@ func (m *Manager) leftoverReasons(ctx context.Context, req CleanupRequest) []str
 		}
 	}
 
-	return reasons
+	return reasons, gitUnavailable
 }
 
 // identityStatusExcludes は `git status --porcelain` の数から外す名前を返す。
