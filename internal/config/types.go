@@ -119,6 +119,16 @@ type TrackerConfig struct {
 	// 毎巡回では行わない。選択肢名が変わるのは人間がボードを触ったときだけなので、
 	// 20 巡回に1回で足りる。0 なら起動時の1回だけ行う。
 	VerifyStatesEvery int `yaml:"verify_states_every"`
+	// UnknownStateGraceMs は「continuo が知らない Status」を見つけてから worker を止めるまでに
+	// 置く猶予（ミリ秒）である（設計 3-49）。
+	//
+	// **エージェントが turn の最後に表明を書けば、continuo が正しい Status へ戻す。**
+	// turn の途中で殺すと、その表明が読まれずに捨てられる。だから turn が動いている間は
+	// この長さだけ待ち、turn の終わりの表明を読んでから判断する。
+	//
+	// **0 以下なら猶予を置かない**（見つけた巡回でそのまま止める）。
+	// **turn が動いていなければ猶予は使わない**（待っても表明は出てこない）。
+	UnknownStateGraceMs int `yaml:"unknown_state_grace_ms"`
 	// StatusSignalPrefix は、エージェントが応答に書く表明の印である（3-25）。
 	// continuo は turn が終わったと判定したあと transcript を読み、
 	// この印で始まる行を探して、続く値を StatusSignalMap で引いて Status を動かす。

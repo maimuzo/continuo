@@ -48,6 +48,9 @@ tracker:
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
   verify_states_every: 20                   # 上に書いた Status 名がボードに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
+  unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。
+                                            # turn の途中なら、この長さまで turn の終わりを待ち、エージェントの表明を読んでから判断する。
+                                            # 0 なら待たずに止める。待つぶん、人間が止めたいときに止まるのが遅れる
 
 polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと

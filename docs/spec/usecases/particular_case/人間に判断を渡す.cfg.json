@@ -3,7 +3,7 @@
   "usecase_name": "人間に判断を渡す",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間に判断を渡す.rucm.md",
-    "rucm_block_sha256": "e98c29f69e25b3bd3b3c12e803f23f593b2e93cc748f80d2910fdb651b427a2d"
+    "rucm_block_sha256": "aebd9d5f9b50508e27813004e71dd024375c63d953cbb88ec253005ce0523149"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -45,6 +45,27 @@
         ]
       },
       "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。worktree は残っている。"
+    },
+    "知らないStatus": {
+      "when": "利用者が issue の Status を設定に名前の無い選択肢へ動かす場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            2
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は利用者が動かした選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。"
+    },
+    "turnの猶予": {
+      "rfs": {
+        "flow": "知らないStatus",
+        "steps": [
+          1
+        ]
+      },
+      "postcondition": "issue の Status は利用者が動かした選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。"
     },
     "レビューの完了": {
       "when": "利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
@@ -299,6 +320,69 @@
       "statement": "ABORT"
     },
     {
+      "id": "知らないStatus-1",
+      "type": "condition",
+      "flow": "知らないStatus",
+      "step": 1,
+      "statement": "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
+    },
+    {
+      "id": "知らないStatus-2",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 2,
+      "statement": "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。"
+    },
+    {
+      "id": "知らないStatus-3",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 3,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "知らないStatus-4",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 4,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "知らないStatus-5",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 5,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "知らないStatus-6",
+      "type": "abort",
+      "flow": "知らないStatus",
+      "step": 6,
+      "statement": "ABORT"
+    },
+    {
+      "id": "turnの猶予-1",
+      "type": "action",
+      "flow": "turnの猶予",
+      "step": 1,
+      "statement": "システムは worker を止めずに turn の終わりを待つ。"
+    },
+    {
+      "id": "turnの猶予-2",
+      "type": "action",
+      "flow": "turnの猶予",
+      "step": 2,
+      "statement": "システムは turn の終わりを待っていることを記録に残す。"
+    },
+    {
+      "id": "turnの猶予-3",
+      "type": "abort",
+      "flow": "turnの猶予",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
       "id": "レビューの完了-1",
       "type": "action",
       "flow": "レビューの完了",
@@ -323,6 +407,12 @@
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
       "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "知らないStatus-1",
+      "kind": "global",
+      "condition": "利用者が issue の Status を設定に名前の無い選択肢へ動かす場合"
     },
     {
       "from": "BASIC FLOW-3",
@@ -503,6 +593,48 @@
     {
       "from": "コメントの取り戻しの失敗-3",
       "to": "コメントの取り戻しの失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-1",
+      "to": "知らないStatus-2",
+      "kind": "true",
+      "condition": "turn の終わりを待つ猶予が残っていない"
+    },
+    {
+      "from": "知らないStatus-1",
+      "to": "turnの猶予-1",
+      "kind": "false",
+      "condition": "NOT turn の終わりを待つ猶予が残っていない"
+    },
+    {
+      "from": "知らないStatus-2",
+      "to": "知らないStatus-3",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-3",
+      "to": "知らないStatus-4",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-4",
+      "to": "知らないStatus-5",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-5",
+      "to": "知らないStatus-6",
+      "kind": "seq"
+    },
+    {
+      "from": "turnの猶予-1",
+      "to": "turnの猶予-2",
+      "kind": "seq"
+    },
+    {
+      "from": "turnの猶予-2",
+      "to": "turnの猶予-3",
       "kind": "seq"
     },
     {
@@ -1034,12 +1166,63 @@
         "システムは次の turn の継続の指示に表明を促す1文を差し込む。",
         "ABORT"
       ]
+    },
+    {
+      "id": "P013",
+      "terminal": "abort",
+      "terminal_flow": "知らないStatus",
+      "postcondition": "issue の Status は利用者が動かした選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "知らないStatus-1",
+        "知らないStatus-2",
+        "知らないStatus-3",
+        "知らないStatus-4",
+        "知らないStatus-5",
+        "知らないStatus-6"
+      ],
+      "steps": [
+        "エージェントはシステムに表明の1行を含む最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "CONDITION: 利用者が issue の Status を設定に名前の無い選択肢へ動かす場合",
+        "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
+        "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "abort",
+      "terminal_flow": "turnの猶予",
+      "postcondition": "issue の Status は利用者が動かした選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "知らないStatus-1",
+        "turnの猶予-1",
+        "turnの猶予-2",
+        "turnの猶予-3"
+      ],
+      "steps": [
+        "エージェントはシステムに表明の1行を含む最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "CONDITION: 利用者が issue の Status を設定に名前の無い選択肢へ動かす場合",
+        "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
+        "CONDITION: NOT turn の終わりを待つ猶予が残っていない",
+        "システムは worker を止めずに turn の終わりを待つ。",
+        "システムは turn の終わりを待っていることを記録に残す。",
+        "ABORT"
+      ]
     }
   ],
   "coverage": {
-    "nodes_total": 36,
-    "nodes_covered": 36,
-    "edges_total": 37,
-    "edges_covered": 37
+    "nodes_total": 45,
+    "nodes_covered": 45,
+    "edges_total": 46,
+    "edges_covered": 46
   }
 }

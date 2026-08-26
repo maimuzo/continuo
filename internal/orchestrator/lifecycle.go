@@ -49,7 +49,15 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 		return true
 	case containsFold(o.cfg.Tracker.ActiveStates, current.State):
 		// 次の turn へ。打ち切りの判定は turnLoop の先頭で行う。
+		// **知らない Status だった記録は消す**（設計 3-49）。表明で戻ったのだから、
+		// 猶予の起点も捨てる。
+		rs.clearUnknownState()
 		return false
+	case current.State != "" && !o.isKnownState(current.State):
+		// **猶予を置いて待った先である**（設計 3-49）。turn の終わりまで待ったが、
+		// エージェントは正しい Status への表明を出さなかった。**黙って終えない。**
+		o.finishRunUnknownState(ctx, rs, current.State)
+		return true
 	default:
 		// 引き渡し（In Review / Blocked）。**worker は止めるが worktree は残す**（設計 3-5）。
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました（人間へ引き渡します）", current.State))
@@ -197,6 +205,11 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 		}
 		o.logger.Info("表明どおりに Status を動かしました",
 			"identifier", rs.issue().Identifier, "対象", target, "遷移先", *next, "書き込んだか", written)
+		if written && itemID == rs.IssueID {
+			// **いま作業している issue へ書けたときだけ控える**（設計 3-49）。
+			// 知らない Status になったときに「元は何だったか」を書くために要る。
+			rs.setLastWrittenState(*next)
+		}
 	}
 }
 
@@ -506,14 +519,20 @@ func retryBackoff(retryCount int, max time.Duration) time.Duration {
 // **止めたことを記録する。**turn ループはこれを見て、既に諦められた run を
 // もう一度諦めないようにする（設計 3-21。`runState.currentWorker`）。
 //
+// **pane を閉じる前に turn ループへ「待つのをやめろ」と伝える**（設計 3-50）。
+// 伝えずに閉じると、待ち受けの中にいた turn ループが
+// `turn を送れませんでした（agent is no longer running）` を WARN で印字する。
+// **それは外の障害ではなく、continuo が1秒前に自分で pane を閉じた結果である。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	rs.mu.Lock()
 	paneID := rs.PaneID
 	rs.PaneID = ""
-	rs.workerStopped = true
 	rs.mu.Unlock()
+	// **閉じる前に伝える。**順番を入れ替えてはならない。
+	rs.markWorkerStopped()
 	if paneID == "" {
 		return
 	}

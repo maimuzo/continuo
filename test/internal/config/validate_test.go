@@ -75,6 +75,7 @@ func TestLoad_時間の設定値が0以下ならキーを名指しして落ち�
 		{"rate_limit.poll_interval_msが負", validFrontMatter + "rate_limit:\n  poll_interval_ms: -1\n", "rate_limit.poll_interval_ms"},
 		{"workspace_hooks.timeout_msが負", validFrontMatter + "workspace_hooks:\n  timeout_ms: -1\n", "workspace_hooks.timeout_ms"},
 		{"tracker.verify_states_everyが負", trackerFrontMatter("  verify_states_every: -1\n"), "tracker.verify_states_every"},
+		{"tracker.unknown_state_grace_msが負", trackerFrontMatter("  unknown_state_grace_ms: -1\n"), "tracker.unknown_state_grace_ms"},
 	}
 
 	for _, c := range cases {
@@ -93,7 +94,7 @@ func TestLoad_時間の設定値が0以下ならキーを名指しして落ち�
 // 与える情報: この2つのキーに 0 を書いた front matter。
 // 成功条件: config.Load が成功し、値が 0 のまま保たれていること。
 func TestLoad_0に意味がある設定値は0でも通る(t *testing.T) {
-	front := trackerFrontMatter("  verify_states_every: 0\n") +
+	front := trackerFrontMatter("  verify_states_every: 0\n  unknown_state_grace_ms: 0\n") +
 		"claude:\n  turn_timeout_ms: 0\n"
 	path := writeWorkflow(t, front, "")
 
@@ -106,6 +107,10 @@ func TestLoad_0に意味がある設定値は0でも通る(t *testing.T) {
 	}
 	if loaded.Config.Tracker.VerifyStatesEvery != 0 {
 		t.Errorf("tracker.verify_states_every が 0 のまま保たれていない: got %d", loaded.Config.Tracker.VerifyStatesEvery)
+	}
+	// tracker.unknown_state_grace_ms の 0 は「猶予を置かずにその巡回で止める」である（3-49）。
+	if loaded.Config.Tracker.UnknownStateGraceMs != 0 {
+		t.Errorf("tracker.unknown_state_grace_ms が 0 のまま保たれていない: got %d", loaded.Config.Tracker.UnknownStateGraceMs)
 	}
 }
 
