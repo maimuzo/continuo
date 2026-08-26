@@ -155,10 +155,21 @@ POSTCONDITION: issue の Status は failure_state の選択肢である。contin
 GLOBAL ALTERNATIVE FLOW 中断:
 BRANCH FROM BASIC FLOW 21
 WHEN 利用者が continuo を動かしている端末で Ctrl+C を入力する場合
-1. システムはボードの巡回を止める。
-2. システムは hook を受ける socket を閉じる。
-3. システムは herdr の pane を閉じずに終了する。
-4. ABORT
+1. システムは利用者に待たせる理由と、もう一度 Ctrl+C を押せば後始末を待たずに終わることを応答する。
+2. システムはボードの巡回を止める。
+3. システムはダッシュボードを閉じる。
+4. システムは hook を受ける socket を閉じる。
+5. システムは走行中の turn ループの終了を待つ。
+6. システムは herdr の pane を閉じずに終了する。
+7. ABORT
+POSTCONDITION: continuo は常駐していない。印の集合は失われている。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。
+
+GLOBAL ALTERNATIVE FLOW 中断の連打:
+BRANCH FROM 中断 3
+WHEN 利用者が後始末の途中でもう一度 Ctrl+C を入力する場合
+1. システムは利用者に後始末を待たずに終わることを応答する。
+2. システムは herdr の pane を閉じずに終了する。
+3. ABORT
 POSTCONDITION: continuo は常駐していない。印の集合は失われている。herdr の pane は閉じていない。worktree は残っている。issue の Status は running_state の選択肢のままである。
 ```
 
@@ -281,6 +292,7 @@ flowchart TD
     B36 --> B37
     B37 --> B38 --> BPOST
     B21 -. "中断: WHEN Ctrl+C を入力する場合" .-> G1S1
+    G1S3 -. "中断の連打: WHEN もう一度 Ctrl+C を入力する場合" .-> G2S1
 
     subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 二重起動 / RFS BASIC FLOW 2"]
         F1S1["1. 既に動いていることを応答する"] --> F1S2["2. pane を閉じずに終了する"] --> F1S3["3. ABORT"]
@@ -327,7 +339,11 @@ flowchart TD
     end
 
     subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 中断 / BRANCH FROM BASIC FLOW 21"]
-        G1S1["1. ボードの巡回を止める"] --> G1S2["2. socket を閉じる"] --> G1S3["3. pane を閉じずに終了する"] --> G1S4["4. ABORT"]
+        G1S1["1. 待たせる理由と2回目で即座に終わることを応答する"] --> G1S2["2. ボードの巡回を止める"] --> G1S3["3. ダッシュボードを閉じる"] --> G1S4["4. socket を閉じる"] --> G1S5["5. turn ループの終了を待つ"] --> G1S6["6. pane を閉じずに終了する"] --> G1S7["7. ABORT"]
+    end
+
+    subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 中断の連打 / BRANCH FROM 中断 3"]
+        G2S1["1. 後始末を待たずに終わることを応答する"] --> G2S2["2. pane を閉じずに終了する"] --> G2S3["3. ABORT"]
     end
 ```
 

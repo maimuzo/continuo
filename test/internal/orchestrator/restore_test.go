@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "f64d06a86d40fd3871399f7f56f7e4c99cd4777aa2e6143f292c1618ccc2ff3e", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
+// {"RUCM-CFG-SHA256": "e653831ecc44c2353c825683cb7a330b70f2a3bce90ce1127cceada16b903ca3", "SOURCE": "docs/spec/usecases/particular_case/再起動して実行中の issue を引き継ぐ.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「再起動して実行中の issue を引き継ぐ」の
 // 11本のパスに、それぞれ対応するテストがある（既存のテストへマーカーを付けた）。
@@ -193,7 +193,7 @@ func TestRestore_idleなら継続の指示を送る(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P010"}
 //
 // TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる は、
 // 保留中の権限要求が承認されて実行されるのを防ぐ。
@@ -231,7 +231,7 @@ func TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落�
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P011"}
 //
 // TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す は、
 // 判断できない run を引き継がないことを確かめる。
@@ -337,7 +337,7 @@ func TestRestore_socketのパスが前回と違えば引き継がずpaneを閉�
 	}
 }
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P009"}
 //
 // TestRestore_引き継いだ回数が上限ならturnを1回も送らずfailure_stateへ落とす は、
 // 設計 3-4 の段5b を確かめる。
@@ -431,7 +431,7 @@ func TestRestore_同じissueのworktreeが2つあるとき新しいほうを採�
 	}
 }
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P012"}
 //
 // TestRestore_In_Reviewのrunはpaneもworktreeも残して何もしない は、
 // 設計 3-4 の段5a の「引き渡し」を確かめる。
@@ -570,7 +570,7 @@ func TestRestore_取り直しで見つからないrunはpaneもworktreeも残し
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P016"}
 //
 // TestRestore_取り直しに失敗しても起動を続けpaneを閉じる は、設計 3-4 の段3 を確かめる。
 //
@@ -604,7 +604,7 @@ func TestRestore_取り直しに失敗しても起動を続けpaneを閉じる(t
 	}
 }
 
-// {"RUCM-PATH": "P012"}
+// {"RUCM-PATH": "P013"}
 //
 // TestRestore_paneが無い実行中のrunは既定では次の巡回に委ねる は、
 // `restart.orphan_running_action` の既定（`redispatch`）を確かめる。

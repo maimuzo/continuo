@@ -4881,6 +4881,58 @@ pane は実際には生きていて誰も閉じないので、continuo の管理
 外すと stall の時計が動き出し、**枠が明けるより先に stall として諦める。**印を外す契機は
 「枠の `resets_at` を過ぎたこと」だけである（3-27）。
 
+### 3-49. Ctrl+C には必ず即座に反応し、2回目で待たずに終わる
+
+**言いたいこと。**終了は3段の直列で最大36秒かかる。**押した直後に何も出さないと、
+止まったのか固まったのかを人間が区別できない。**段ごとに名乗り、抜け道を必ず添える。
+**2回目の Ctrl+C は自前で数えて終わらせる。**「既定の動作へ戻す」やり方は効かないことがある。
+
+**押した直後に出すもの。**[internal/daemon/daemon.go](../../internal/daemon/daemon.go) の
+`WatchInterrupt` が1回目の signal で3行を出す。
+
+```
+level=WARN msg="割り込みを受けました。走行中の turn ループを壊さないよう、順に閉じてから終わります" signal=interrupt max_wait=36s pid=88890
+level=WARN msg="待ちたくない場合は、もう一度 Ctrl+C を押してください（同じ signal をもう一度送っても同じです）。後始末を待たずに即座に終了します" exit_code=130
+level=WARN msg="それでも終わらない場合は、次のコマンドで全 goroutine のスタックを出して、その出力を issue へ貼ってください" command="kill -QUIT 88890"
+```
+
+**後始末は段ごとに名乗る。**[internal/daemon/daemon.go](../../internal/daemon/daemon.go) の `deps.close` が
+待ちに入る**前**に1行ずつ出す。順序が仕様である（3-4 の段5）。
+
+| 段 | 上限 | 何を待つのか |
+| --- | --- | --- |
+| ダッシュボードを閉じる | **1秒**（`server.DefaultShutdownTimeout`） | 処理中の応答。**過ぎたら `http.Server.Close` で叩き切る** |
+| hook の受け口を閉じる | **5秒**（`daemon.DefaultHookServerWait`） | 受け取り済みの hook を印へ書き終えること |
+| turn ループの終了を待つ | **30秒**（`daemon.DefaultTurnLoopWait`） | 送った指示が中途半端に切れないこと |
+
+**ダッシュボードだけ叩き切ってよい理由。**`GET` しか受けない読み取り専用のサーバであり、
+途中で切れて困る書き込みが1つも無い。応答を読まない相手が1本いるだけで終了が伸びるほうが害である。
+
+**2回目を `signal.Stop` で実現してはならない。**`signal.Stop` が戻すのは「既定の動作」ではなく
+**continuo が起動する前にその signal へ設定されていた動作**である。親が `SIGINT` を無視に
+設定していると（`nohup` / `setsid` / 非対話シェルの `&` 起動 / 一部の supervisor）、
+**戻る先が「無視」になり、2回目以降の Ctrl+C は何も起こさない。**
+
+実測（darwin、旧方式で10秒の後始末を持つ小さなプログラム）。
+
+| 親 | 2回目の Ctrl+C | 経過 |
+| --- | --- | --- |
+| 普通の親（Go の `os/exec`） | 効く（`signal: interrupt`） | 1.3秒 |
+| `trap "" INT` を掛けた `/bin/sh` | **効かない** | 10秒走り切って終了コード 0 |
+
+**採る方法。**`signal.Notify` で自前の channel を持ち、**1回目と2回目を自分で数える。**
+2回目で `os.Exit(130)` を呼ぶ。`signal.Notify` は元の動作が「無視」であっても signal を
+channel へ届けるので、**起動元が何であっても結果が変わらない。**終了コード 130 は
+`128 + SIGINT` で、シェルが signal で死んだプロセスに付ける値に揃えてある。
+
+**`hookserver.Close` は socket ファイルの後始末を待ちの前に済ませる。**受け口の待ちに期限が
+付いたので、待ち切れずに抜けたときに socket ファイルが残ると、次の起動が「残骸がある」と
+言って止まる。listener は既に閉じており、配送中の goroutine はこのファイルを必要としない。
+
+**実際には `net.Listen` が作った Unix の listener が `Close` の時点で自分で unlink する**
+（`net.UnixListener.SetUnlinkOnClose` の既定）。`os.Remove` はその取りこぼしに備える保険であり、
+**期限の内側に置くために listener を閉じた直後で呼ぶ。**
+
 ---
 
 ## 4. 人間が決めたこと
