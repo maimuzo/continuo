@@ -28,6 +28,7 @@ import (
 // **画面に出る語そのものではなくキーで比べる**（設計 3-35）。語は言語で変わる。
 var wantLabels = []i18n.Key{
 	doctor.LabelConfig,
+	doctor.LabelCleanupStates,
 	doctor.LabelClaude,
 	doctor.LabelRuntimeDir,
 	doctor.LabelClaudeHome,
@@ -103,6 +104,8 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 	assertSymbol(t, report, doctor.LabelClaudeHome, doctor.SymbolOK)
 	// **worktree の置き場所は `workspace.root` にしか書いていない。**設定が読めなければ決まらない。
 	assertSymbol(t, report, doctor.LabelWorkspaceRoot, doctor.SymbolUnknown)
+	// **片付けの状態も、突き合わせる2つのキーが両方とも設定にしか無い。**
+	assertSymbol(t, report, doctor.LabelCleanupStates, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelHerdr, doctor.SymbolUnknown)
 	// **gh の認証は設定ファイルの下流である**（設計 3-32 の依存の図）。
 	gh := assertSymbol(t, report, doctor.LabelGHAuth, doctor.SymbolUnknown)

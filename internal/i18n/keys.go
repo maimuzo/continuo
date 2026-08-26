@@ -59,6 +59,25 @@ const (
 	KeyDoctorLabelClaudeHome Key = "doctor.label.claude_home"
 	// KeyDoctorLabelWorkspaceRoot は worktree の置き場所に書けるかの検査の見出し語である。
 	KeyDoctorLabelWorkspaceRoot Key = "doctor.label.workspace_root"
+	// KeyDoctorLabelCleanupStates は片付ける Status と終わったとみなす Status の
+	// 噛み合いを見る検査の見出し語である。
+	KeyDoctorLabelCleanupStates Key = "doctor.label.cleanup_states"
+)
+
+// doctor の検査「片付けの状態」（設計 3-9。issue #35）。
+const (
+	// KeyDoctorCleanupStatesConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorCleanupStatesConfigUnreadable Key = "doctor.cleanup_states.config_unreadable"
+	// KeyDoctorCleanupStatesDisabled は片付けそのものを行わない設定のときの説明に出る。
+	KeyDoctorCleanupStatesDisabled Key = "doctor.cleanup_states.disabled"
+	// KeyDoctorCleanupStatesOK は2つの集合が噛み合っているときの説明に出る。
+	KeyDoctorCleanupStatesOK Key = "doctor.cleanup_states.ok"
+	// KeyDoctorCleanupStatesMismatch は噛み合っていないときの説明に出る。
+	KeyDoctorCleanupStatesMismatch Key = "doctor.cleanup_states.mismatch"
+	// KeyDoctorCleanupStatesNote は食い違った値1つずつの内訳に出る。
+	KeyDoctorCleanupStatesNote Key = "doctor.cleanup_states.note"
+	// KeyDoctorCleanupStatesRemedy は食い違った値1つずつの直し方に出る。
+	KeyDoctorCleanupStatesRemedy Key = "doctor.cleanup_states.remedy"
 )
 
 // doctor の集計の行（検査結果の末尾に出る1行）。
@@ -1912,6 +1931,13 @@ var allKeys = []Key{
 	KeyDoctorConfigOK,
 	KeyDoctorLabelClaudeHome,
 	KeyDoctorLabelWorkspaceRoot,
+	KeyDoctorLabelCleanupStates,
+	KeyDoctorCleanupStatesConfigUnreadable,
+	KeyDoctorCleanupStatesDisabled,
+	KeyDoctorCleanupStatesOK,
+	KeyDoctorCleanupStatesMismatch,
+	KeyDoctorCleanupStatesNote,
+	KeyDoctorCleanupStatesRemedy,
 	KeyDoctorFilesystemFault,
 	KeyDoctorFilesystemRemedyMount,
 	KeyDoctorFilesystemRemedyDmesg,
