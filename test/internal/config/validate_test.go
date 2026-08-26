@@ -336,6 +336,95 @@ func TestLoad_状態の集合が重なっていると落ちる(t *testing.T) {
 	})
 }
 
+// 目的: `cleanup.on_states` に `tracker.terminal_states` の外の値を書いても、
+// **起動が止まらない**ことを固定する（設計 3-9。issue #35）。
+//
+// **`tracker.active_states` との重なりとは扱いが違う。**あちらは走っている worktree を
+// 消すので `config.Load` が止める。こちらは**片付けの筋が通らないだけ**で壊れるものが無く、
+// **止めると、いま動いている人の continuo が版を上げた瞬間に起動しなくなる。**
+// 報告された `WORKFLOW.md`（`terminal_states: ["AI Done"]` と `on_states: ["Done"]`）が、
+// まさにこの形である。
+//
+// 与える情報: `terminal_states` に無い値を `cleanup.on_states` に書いた front matter。
+// 成功条件: `config.Load` が成功し、`CleanupStatesOutsideTerminal` が食い違った値を返すこと。
+func TestLoad_片付ける状態が終わったとみなす状態の外にあっても起動は止まらない(t *testing.T) {
+	front := trackerFrontMatter("  terminal_states: [\"AI Done\"]\n") +
+		"cleanup:\n  on_states: [\"Done\"]\n"
+	path := writeWorkflow(t, front, "")
+
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("起動を止めない設定なのにエラーが返った: %v", err)
+	}
+
+	got := config.CleanupStatesOutsideTerminal(loaded.Config)
+	if !slices.Equal(got, []string{"Done"}) {
+		t.Fatalf("食い違った値が取れない: %v（期待: [Done]）", got)
+	}
+}
+
+// 目的: `CleanupStatesOutsideTerminal` が、どの設定で何を返すかを固定する
+// （設計 3-9。issue #35）。**起動時の警告と `continuo doctor` は、どちらもこの関数を呼ぶ。**
+//
+// 与える情報: 噛み合っている場合・片付けを行わない場合・綴りだけが違う場合・
+// 一部だけ外れている場合の4通り。
+// 成功条件: 食い違った値だけが、書いてある綴り・書いてある順で返ること。
+func TestCleanupStatesOutsideTerminal_食い違った値だけを書いてある綴りで返す(t *testing.T) {
+	cases := []struct {
+		name     string
+		enabled  bool
+		terminal []string
+		onStates []string
+		want     []string
+	}{
+		{
+			name:     "全部入っていれば何も返さない",
+			enabled:  true,
+			terminal: []string{"AI Done", "Done"},
+			onStates: []string{"AI Done", "Done"},
+			want:     nil,
+		},
+		{
+			// **片付けそのものが走らないので、噛み合っていなくても何も起きない。**
+			name:     "片付けを行わない設定なら何も返さない",
+			enabled:  false,
+			terminal: []string{"AI Done"},
+			onStates: []string{"Done"},
+			want:     nil,
+		},
+		{
+			// **比べ方は containsStateFold に合わせる**（大文字小文字と前後の空白を無視する）。
+			// ここだけ完全一致で比べると、実行時には同じ Status として扱われる値を
+			// 「食い違っている」と報告することになる。
+			name:     "大文字小文字と前後の空白だけが違えば同じ値とみなす",
+			enabled:  true,
+			terminal: []string{"Done"},
+			onStates: []string{"  dONE  "},
+			want:     nil,
+		},
+		{
+			name:     "外れている値だけを書いてある綴りで返す",
+			enabled:  true,
+			terminal: []string{"AI Done"},
+			onStates: []string{"AI Done", "Done", "Archived"},
+			want:     []string{"Done", "Archived"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := *config.DefaultConfig()
+			cfg.Cleanup.Enabled = c.enabled
+			cfg.Tracker.TerminalStates = c.terminal
+			cfg.Cleanup.OnStates = c.onStates
+
+			if got := config.CleanupStatesOutsideTerminal(cfg); !slices.Equal(got, c.want) {
+				t.Fatalf("戻り値が違う: %v（期待: %v）", got, c.want)
+			}
+		})
+	}
+}
+
 // 目的: 状態の集合の重なりを、**大文字小文字を無視して**見ることを確認する
 // （設計 3-13 / SPEC.md 11.3）。
 // **照合する側（トラッカー・巡回・abandon）は全部そうしている。**ここだけ完全一致で

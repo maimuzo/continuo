@@ -42,7 +42,7 @@ tracker:
     working: null                           # まだ続きがあるとき。null なので Status は動かさない
   required_labels: []                       # ここに書いたラベルが全部付いた issue だけを対象にする。空なら絞り込まない
   active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
-  terminal_states: ["Done"]                 # 終わったとみなす Status。ここへ移った issue の worktree を片付ける
+  terminal_states: ["Done"]                 # 終わったとみなす Status。下の cleanup.on_states は、この一覧の中から選ぶこと
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
@@ -126,7 +126,7 @@ naming:
 
 cleanup:
   enabled: true                             # 終わった issue の worktree と branch を片付けるかどうか
-  on_states: ["Done"]                       # この Status へ移った時点で片付ける
+  on_states: ["Done"]                       # この Status へ移った時点で片付ける。上の tracker.terminal_states に無い値を書かないこと
   require_clean_worktree: true              # commit していない変更が残っていたら消さない
   require_pushed: true                      # push していない commit が残っていたら消さない
   delete_branch: true                       # worktree と一緒に branch も消すかどうか

@@ -1322,6 +1322,55 @@ func Normalize(raw string) (SafeName, []Warning)
 
 **削除に失敗しても turn ループや dispatch を止めない。**
 
+#### 3-9e. 片付ける Status は、終わったとみなす Status の中から選ぶ
+
+**言いたいこと。**`cleanup.on_states` に `tracker.terminal_states` の外の値を書くと、
+**「終わっていない」と判定した直後に worktree を片付ける。**
+**起動は止めない。警告で知らせる。**
+
+**2つのキーは別の問いに答える。**
+
+| キー | 何に答えるか | 外れた Status になると何をするか |
+| --- | --- | --- |
+| `tracker.terminal_states` | その issue は終わったか | 終わっていないとみなす。知らない Status として worker を止める（3-10） |
+| `cleanup.on_states` | その issue の worktree を片付けてよいか | 片付ける |
+
+**噛み合っていないと、この2つが同じ巡回で同時に起きる。**
+ボードの組み込みの自動化が PR のマージで `Done` を書く運用で、実際にこの形になった
+（`tracker.terminal_states: ["AI Done"]` と `cleanup.on_states: ["Done"]`）。
+
+**なぜ起動を止めないのか。**壊れるものが無いからである。
+`cleanup.on_states` と `tracker.active_states` の重なりは**走っている worktree を消す**ので、
+`internal/config/validate.go` が起動前に止める。**こちらは片付けの筋が通らないだけである。**
+**止めると、この形の `WORKFLOW.md` で動いている人の continuo が、版を上げた瞬間に起動しなくなる。**
+
+**知らせる先は2つ。判定は `internal/config` の `CleanupStatesOutsideTerminal` 1つに置く。**
+`cleanup.enabled` が偽なら片付けそのものが走らないので、**何も言わない。**
+**大文字小文字と前後の空白だけの違いは同じ値とみなす**（`containsStateFold` と同じ比べ方）。
+
+| いつ | どこが出すか | 出るもの |
+| --- | --- | --- |
+| 起動時に1回 | `internal/daemon/daemon.go` の `WarnCleanupStates` | `level=WARN` のログ1行 |
+| `continuo doctor` | `internal/doctor/checks.go` の `checkCleanupStates` | 見出し語 `片付けの状態` に `!` |
+
+**起動時のログ**（`terminal_states: ["AI Done"]` / `on_states: ["Done"]` のとき）。
+
+```text
+level=WARN msg="cleanup.on_states の \"Done\" が tracker.terminal_states にありません（終わったとみなさない Status で worktree を片付けます）。tracker.terminal_states に \"Done\" を足すか、cleanup.on_states から外してください" cleanup.on_states="\"Done\"" tracker.terminal_states="\"AI Done\""
+```
+
+**`continuo doctor` の出力。**
+
+```text
+! 片付けの状態    cleanup.on_states に、tracker.terminal_states の外の Status があります（1件）
+                  cleanup.on_states の "Done" が tracker.terminal_states にありません（終わったとみなさない Status で worktree を片付けます）
+                  → tracker.terminal_states に "Done" を足すか、cleanup.on_states から "Done" を外してください
+```
+
+**雛形は最初から揃えてある。**`continuo init` が置く `WORKFLOW.md` も、
+`continuo setup` が書き換えた結果（`tracker.terminal_states` と `cleanup.on_states` の
+両方へ同じ完了の Status を書く。3-32d）も、この関係を満たす。
+
 #### 3-9b. リポジトリの親 workspace を閉じる条件（段3b）
 
 **言いたいこと。**`worktree.open` は workspace を2つ開くのに `worktree.remove` は1つしか
@@ -3262,6 +3311,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | Claude の資格情報 | **`rate_limit.token_source` が指す先から取れるか**（ファイル / Keychain / 環境変数） | **Keychain も読む。**上限を掛けて固まらないようにする（下記） |
 | **ボードを読めるか** | **`Bootstrap` を呼んで project と Status フィールドを解決し、`active_states` の選択肢名が全部あるかを照合する** | **`gh` の認証が通っても、ここで落ちることがある**（project が見つからない・トークンの取り出しに失敗・レートリミット）。**選択肢名の不一致は `✗` にする。**巡回が無言で0件を返す原因になる（3-6） |
 | **紛らわしい Status の組が無いか** | **ボードの選択肢名を全部読み、設定に書いた名前と「同じに見える」「含んでいる」の組になっていないかを見る**（6-14） | **記号は `!`。**continuo は動くので起動は止めない。**`Bootstrap` も `config.Validate` も、綴りが違えば素通りする** |
+| **片付ける Status が終わったとみなす Status に収まっているか** | **`cleanup.on_states` の値が `tracker.terminal_states` に全部あるかを見る**（3-9e） | **記号は `!`。**ボードを1バイトも読まない（設定の2つのキーを突き合わせるだけである）。**`config.Validate` は `tracker.active_states` との重なりしか見ていない** |
 
 **doctor は Keychain を読む。**
 
@@ -3298,7 +3348,8 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 **検査の依存関係。**
 
 ```text
-設定ファイル ─┬─ herdr（設定の protocol と照合する）
+設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる。3-9e）
+              ├─ herdr（設定の protocol と照合する）
               └─ gh の認証 ── ボードを読める ─┬─ Status の名前（選択肢名を照合する）
                                               ├─ clone（対象リポジトリが決まる）
                                               └─ 信頼登録（clone のパスが要る）
@@ -3503,7 +3554,7 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
     review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき
     blocked: "Blocked"                      # 判断を仰ぎたいとき、または失敗したとき
   active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
-  terminal_states: ["Done"]                 # 終わったとみなす Status。ここへ移った issue の worktree を片付ける
+  terminal_states: ["Done"]                 # 終わったとみなす Status。下の cleanup.on_states は、この一覧の中から選ぶこと
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
@@ -5466,7 +5517,7 @@ tracker:
     working: null                           # まだ続きがあるとき。null なので Status は動かさない
   required_labels: []                       # ここに書いたラベルが全部付いた issue だけを対象にする。空なら絞り込まない
   active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
-  terminal_states: ["Done"]                 # 終わったとみなす Status。ここへ移った issue の worktree を片付ける
+  terminal_states: ["Done"]                 # 終わったとみなす Status。下の cleanup.on_states は、この一覧の中から選ぶこと
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
@@ -5550,7 +5601,7 @@ naming:
 
 cleanup:
   enabled: true                             # 終わった issue の worktree と branch を片付けるかどうか
-  on_states: ["Done"]                       # この Status へ移った時点で片付ける
+  on_states: ["Done"]                       # この Status へ移った時点で片付ける。上の tracker.terminal_states に無い値を書かないこと
   require_clean_worktree: true              # commit していない変更が残っていたら消さない
   require_pushed: true                      # push していない commit が残っていたら消さない
   delete_branch: true                       # worktree と一緒に branch も消すかどうか

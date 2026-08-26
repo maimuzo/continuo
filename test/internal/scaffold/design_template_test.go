@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/goccy/go-yaml"
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
@@ -36,6 +37,54 @@ func TestTemplate_雛形のキー構成が設計5_2の設定例と一致する(t
 	gotKeys := flattenYAMLKeys(t, "雛形", frontMatterOf(t, "雛形", scaffold.Template()))
 
 	assertSameKeySet(t, wantKeys, gotKeys)
+}
+
+// 目的: 雛形の `cleanup.on_states` が `tracker.terminal_states` に収まっていることを固定する
+// （設計 3-9。issue #35）。
+//
+// **値は既に揃っている。**守られていなかったのは「揃っていること」のほうで、
+// どちらか片方だけを直しても、この2つが噛み合わなくなったことに誰も気づかなかった。
+// **噛み合っていない雛形を配ると、利用者は「終わっていない」と判定された直後に
+// worktree を片付けられる。**
+//
+// **判定は書き直さない。**起動時の警告と `continuo doctor` が呼ぶ
+// `config.CleanupStatesOutsideTerminal` をそのまま使う。
+//
+// 与える情報: `scaffold.Template()` の front matter。
+// 成功条件: `cleanup.on_states` に `tracker.terminal_states` の外の値が1つも無いこと。
+func TestTemplate_雛形の片付ける状態が終わったとみなす状態に収まっている(t *testing.T) {
+	var parsed struct {
+		Tracker struct {
+			TerminalStates []string `yaml:"terminal_states"`
+		} `yaml:"tracker"`
+		Cleanup struct {
+			Enabled  bool     `yaml:"enabled"`
+			OnStates []string `yaml:"on_states"`
+		} `yaml:"cleanup"`
+	}
+	front := frontMatterOf(t, "雛形", scaffold.Template())
+	if err := yaml.Unmarshal([]byte(front), &parsed); err != nil {
+		t.Fatalf("雛形の front matter を読めません: %v", err)
+	}
+	// **空のまま通してはならない。**キー名を書き間違えると両方とも空になり、
+	// 「食い違いは無い」で素通りする。
+	if len(parsed.Tracker.TerminalStates) == 0 {
+		t.Fatal("雛形から tracker.terminal_states を取れません")
+	}
+	if len(parsed.Cleanup.OnStates) == 0 {
+		t.Fatal("雛形から cleanup.on_states を取れません")
+	}
+
+	cfg := *config.DefaultConfig()
+	cfg.Cleanup.Enabled = parsed.Cleanup.Enabled
+	cfg.Tracker.TerminalStates = parsed.Tracker.TerminalStates
+	cfg.Cleanup.OnStates = parsed.Cleanup.OnStates
+
+	if outside := config.CleanupStatesOutsideTerminal(cfg); len(outside) != 0 {
+		t.Fatalf("雛形の cleanup.on_states に tracker.terminal_states の外の値がある: %v"+
+			"（terminal_states=%v / on_states=%v）",
+			outside, parsed.Tracker.TerminalStates, parsed.Cleanup.OnStates)
+	}
 }
 
 // 目的: 雛形の本文が、設計 5-3 の本文のブロックと一字一句そのまま一致することを確認する。
