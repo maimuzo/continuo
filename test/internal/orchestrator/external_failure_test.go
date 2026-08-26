@@ -1,3 +1,5 @@
+// {"RUCM-CFG-SHA256": "d92fac04d66e71486749907f52e99ac7057383438bb6b9a27d69a4c7d65743f2", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
 // 外部（GitHub・herdr）が失敗したときの検査である。
 //
 // **continuo は外部が落ちても止まらない。**GitHub が読めなくても、herdr が返さなくても、
@@ -79,6 +81,8 @@ func TestExternalFailure_worktreeを開けなければ着手を諦めて次の�
 	}
 }
 
+// {"RUCM-PATH": "P025"}
+//
 // TestExternalFailure_paneのlabelを書けなければ着手しない は、段8 の失敗を確かめる。
 //
 // **pane の label は issue の URL である。**再起動時にどの pane がどの issue かを
@@ -147,6 +151,8 @@ func TestExternalFailure_Statusを書けなければworktreeを作らない(t *t
 	}
 }
 
+// {"RUCM-PATH": "P006"}
+//
 // TestExternalFailure_turnの終わりに issue が消えていたら手放す は、設計 3-10 を確かめる。
 //
 // **turn が終わってから issue を取り直したとき、ボードから返ってこないことがある**

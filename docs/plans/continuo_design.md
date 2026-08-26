@@ -6489,6 +6489,44 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 **ボードを取り直せない経路だけはテストが無い**（`[W1]` に残る）。
 その分岐は tracker と orchestrator にあり、workspace のテストからは踏めない。
 
+### 6-18. issue 1件の RUCM は、代替フローを32本にする
+
+**言いたいこと。**`issue を1件処理する` の代替フローは、実装が持つ分岐を10本取りこぼしていた。
+**足すのは実装に分岐が実在するものだけである。**22本から32本になり、CFG のテストパスは
+24本から34本になった。
+
+**足した10本。**
+
+| フロー | 分岐元 | 実装のどこか |
+| --- | --- | --- |
+| `走行中のissue` | ステップ3 | `internal/orchestrator/dispatch.go` の `dispatchCandidates` |
+| `ラベルの不足` | ステップ6 | `internal/orchestrator/dispatch.go` の `hasRequiredLabels` |
+| `turnループの重なり` | ステップ23 | `internal/orchestrator/turn.go` の `startTurnLoop` |
+| `本文の組み立ての失敗` | ステップ26 | `internal/orchestrator/turn.go` の `buildTurnText` |
+| `turnの終わりの取りこぼし` | ステップ28 | `internal/orchestrator/turn.go` の `confirmTurnEnd` |
+| `リトライの尽き` | `turnの終わりの取りこぼし` 1 | `internal/orchestrator/lifecycle.go` の `abandonRunClaimed` |
+| `騙りのhook` | ステップ30 | `internal/orchestrator/hookinput.go` の `acceptHookCwd` |
+| `ボードから消えたissue` | ステップ35 | `internal/orchestrator/lifecycle.go` の `refreshIssue` |
+| `復元の断念` | `コメントの取り戻し` 2 | `internal/orchestrator/comment.go` の `ensureAgentComment` |
+| `着手の途中の失敗`（任意時点） | ステップ14 | `internal/orchestrator/dispatch.go` の `startRun` |
+
+**リトライを積む出口は4つあるが、尽きたときの後始末は1本しかない。**
+`turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`ボードから消えたissue` は
+すべて `abandonRunClaimed` へ入る。**`リトライの尽き` はそこへ1本だけ書く。**
+4箇所に同じ枝を並べると、後始末を直すたびに4箇所を直すことになる。
+
+**引き金が重なる枝は、WHEN で除く。**`着手の途中の失敗` の WHEN からは
+「壊れた ref」と「pane の受け付け待ち」を外してある。除かないと `壊れたref` と
+`paneの断念` が同じ出来事を主張し、どちらへ進むかが記述から決まらない。
+
+**`コメントの取り戻し` のステップ2 だけは条件ステップに変えた。**
+`復元の断念` を任意時点代替フローで書くと `rucm_validator.py` が W005 を出し、
+**このリポジトリで唯一の警告が残る。**真の側の並びは1つも変えていない。
+
+**テストは10本すべてに貼った。**うち2本（`turnの終わりの取りこぼし`・`復元の断念`）は
+新しく書き、8本は既にあったテストに印を付けた。
+**`[W1]` に残るのは5本で、いずれも今回より前からの取りこぼしである。**
+
 ---
 
 ## 7. 実装の順序

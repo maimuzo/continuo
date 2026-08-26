@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "d92fac04d66e71486749907f52e99ac7057383438bb6b9a27d69a4c7d65743f2", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
+// **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある。**
 package orchestrator_test
 
 import (
@@ -143,6 +146,8 @@ func sessionStartEvent(sessionID, transcriptPath string) hookserver.HookEvent {
 	}
 }
 
+// {"RUCM-PATH": "P008"}
+//
 // TestOnHook_worktreeの外のcwdを名乗るhookは捨てる は、送り主の突き合わせを確かめる。
 //
 // 目的: `session_id` はプロセスの引数に載るので他の run のエージェントから読める。
@@ -448,6 +453,8 @@ func viewOf2(t *testing.T, fx *fixture, identifier string) (orchestrator.RunView
 	return orchestrator.RunView{}, false
 }
 
+// {"RUCM-PATH": "P017"}
+//
 // TestTurn_turnループを起こせなかったらNeedsPromptを立て直す は、設計 3-8 を確かめる。
 //
 // 目的: 同じ run に turn ループを2本立てないのは正しいが、**起こせなかったことを黙って

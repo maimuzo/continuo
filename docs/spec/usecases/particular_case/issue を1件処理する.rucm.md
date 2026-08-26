@@ -9,14 +9,17 @@
 - `docs/plans/continuo_design.md#3-16`（着手の手順の順番。段-1 から段11）
 - `docs/plans/continuo_design.md#3-18`（worktree の身元ファイル）
 - `docs/plans/continuo_design.md#3-21`（打ち切りは「画面の版」で測る）
+- `docs/plans/continuo_design.md#3-23`（hook の中身は外部入力であり、そのまま信じない）
 - `docs/plans/continuo_design.md#3-25`（表明を transcript から読む。コメントが無かったらセッションを復元して書かせる）
 - `docs/plans/continuo_design.md#3-34`（候補の絞り込みはサーバ側の検索であり、書いた値の反映が遅れる）
 - `docs/plans/continuo_design.md#4-1`（誰がどの遷移を起こすか）
-- `internal/orchestrator/dispatch.go` の `dispatchCandidates`、`claimForDispatch`、`preflight`、`startRun`、`confirmStartup`
+- `internal/orchestrator/dispatch.go` の `dispatchCandidates`、`hasRequiredLabels`、`claimForDispatch`、`preflight`、`startRun`、`runStartOrFail`、`confirmStartup`、`confirmStartupWithRestart`
 - `internal/orchestrator/failure.go` の `noteFailure`、`skipByFailure`
-- `internal/orchestrator/turn.go` の `turnLoop`、`sendTurn`、`afterWaitTimeout`、`confirmTurnEnd`、`turnSendFailed` と `turnTransient`
-- `internal/orchestrator/lifecycle.go` の `handleTurnEnd`、`readSignals`、`applySignals`、`finishRun`
-- `internal/orchestrator/comment.go` の `ensureAgentComment`
+- `internal/orchestrator/turn.go` の `startTurnLoop`、`turnLoop`、`buildTurnText`、`sendTurn`、`afterWaitTimeout`、`confirmTurnEnd`、`turnSendFailed` と `turnTransient`
+- `internal/orchestrator/hookinput.go` の `sanitizeHookEvent`、`acceptHookCwd`
+- `internal/orchestrator/lifecycle.go` の `handleTurnEnd`、`refreshIssue`、`readSignals`、`applySignals`、`finishRun`、`failRun`、`abandonRunClaimed`
+- `internal/orchestrator/reconcile.go` の `checkStalls`
+- `internal/orchestrator/comment.go` の `ensureAgentComment`、`failCommentRecovery`
 - `internal/orchestrator/signal.go` の `ParseSignals`
 - `internal/workspace/prepare.go` の `CheckWorktreeUsable`、`checkBranchFree`、`Prepare`
 - `internal/tracker/adapter.go` の `dropUnrequestedStates`、`UpdateStatus`
@@ -35,61 +38,80 @@ GENERALIZATION: なし
 BASIC FLOW:
 1. 巡回タイマーはシステムに巡回の開始を要求する。
 2. システムはボードから active_states の issue の一覧を取る。
-3. システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。
-4. システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。
-5. システムは VALIDATES THAT 空きスロットが1つ以上ある。
-6. システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。
-7. システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。
-8. システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。
-9. システムは先頭の issue に印を付ける。
-10. システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。
-11. システムはボードの issue の Status に running_state の選択肢を書く。
-12. システムは workspace.root の下に issue の worktree を作る。
-13. システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。
-14. システムは Claude Code の設定ファイルを worktree の外に書く。
-15. システムは worktree の中に身元ファイルを書く。
-16. システムは herdr に workspace の pane の一覧を要求する。
-17. システムは pane の label に owner/repo/issues/N を書く。
-18. システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。
-19. システムは pane で Claude Code を起動する。
-20. システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。
-21. DO
-22.   システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。
-23.   システムは Claude Code に turn の本文を送る。
-24.   システムは Claude Code の Stop hook を受ける。
-25.   システムは settle_ms のあいだ待つ。
-26.   システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。
-27.   システムは transcript から表明の行を読む。
-28.   システムはボードの issue の Status を ID 指定で取り直す。
-29. UNTIL 表明の値が working でない
-30. システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。
-31. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
-32. システムは workspace_hooks の after_run を実行する。
-33. システムは herdr の pane を閉じる。
-34. システムは印を外す。
+3. システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。
+4. システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。
+5. システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。
+6. システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。
+7. システムは VALIDATES THAT 空きスロットが1つ以上ある。
+8. システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。
+9. システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。
+10. システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。
+11. システムは先頭の issue に印を付ける。
+12. システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。
+13. システムはボードの issue の Status に running_state の選択肢を書く。
+14. システムは workspace.root の下に issue の worktree を作る。
+15. システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。
+16. システムは Claude Code の設定ファイルを worktree の外に書く。
+17. システムは worktree の中に身元ファイルを書く。
+18. システムは herdr に workspace の pane の一覧を要求する。
+19. システムは pane の label に owner/repo/issues/N を書く。
+20. システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。
+21. システムは pane で Claude Code を起動する。
+22. システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。
+23. システムは VALIDATES THAT この run の turn ループが1本も走っていない。
+24. DO
+25.   システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。
+26.   システムは VALIDATES THAT turn の本文を組み立てられる。
+27.   システムは Claude Code に turn の本文を送る。
+28.   システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く。
+29.   システムは Claude Code の Stop hook を受ける。
+30.   システムは VALIDATES THAT 受けた Stop hook の cwd が worktree の内側である。
+31.   システムは settle_ms のあいだ待つ。
+32.   システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。
+33.   システムは transcript から表明の行を読む。
+34.   システムはボードの issue の Status を ID 指定で取り直す。
+35.   システムは VALIDATES THAT 取り直した issue がボードから見えている。
+36. UNTIL 表明の値が working でない
+37. システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。
+38. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
+39. システムは workspace_hooks の after_run を実行する。
+40. システムは herdr の pane を閉じる。
+41. システムは印を外す。
 POSTCONDITION: issue の Status は表明の値の遷移先の選択肢である。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。
 
-SPECIFIC ALTERNATIVE FLOW 頼んでいないStatus:
+SPECIFIC ALTERNATIVE FLOW 走行中のissue:
 RFS BASIC FLOW 3
+1. システムはこの issue を dispatch の対象から外す。
+2. ABORT
+POSTCONDITION: 先に印を取った run は走り続けている。ボードへは1バイトも書いていない。印の件数は変わっていない。
+
+SPECIFIC ALTERNATIVE FLOW 頼んでいないStatus:
+RFS BASIC FLOW 4
 1. システムはこの issue を dispatch の対象から外す。
 2. システムは頼んだ Status に無い候補が返ったことを記録に残す。
 3. ABORT
 POSTCONDITION: issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。
 
 SPECIFIC ALTERNATIVE FLOW 失敗の繰り返し:
-RFS BASIC FLOW 4
+RFS BASIC FLOW 5
 1. システムはこの issue を dispatch の対象から外す。
 2. ABORT
 POSTCONDITION: issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。
 
+SPECIFIC ALTERNATIVE FLOW ラベルの不足:
+RFS BASIC FLOW 6
+1. システムはこの issue を dispatch の対象から外す。
+2. ABORT
+POSTCONDITION: issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。
+
 SPECIFIC ALTERNATIVE FLOW 空きスロット不足:
-RFS BASIC FLOW 5
+RFS BASIC FLOW 7
 1. システムはこの巡回で issue を1件も dispatch しない。
 2. ABORT
 POSTCONDITION: 印の件数は変わっていない。issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。
 
 SPECIFIC ALTERNATIVE FLOW 未信頼のリポジトリ:
-RFS BASIC FLOW 6
+RFS BASIC FLOW 8
 1. システムは issue を dispatch の対象から外す。
 2. システムは issue に信頼登録の承認を促すコメントを1件書く。
 3. システムは対象リポジトリを通知済みとして記録する。
@@ -97,27 +119,27 @@ RFS BASIC FLOW 6
 POSTCONDITION: issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。issue に信頼登録の承認を促すコメントが1件ある。
 
 SPECIFIC ALTERNATIVE FLOW 使えないworktree:
-RFS BASIC FLOW 7
+RFS BASIC FLOW 9
 1. システムはこの issue を dispatch の対象から外す。
 2. システムは置き場所をそのまま使えない理由を記録に残す。
 3. ABORT
 POSTCONDITION: issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。
 
 SPECIFIC ALTERNATIVE FLOW 使われているbranch:
-RFS BASIC FLOW 8
+RFS BASIC FLOW 10
 1. システムはこの issue を dispatch の対象から外す。
 2. システムは branch を使っている worktree の場所と片付けの手順を記録に残す。
 3. ABORT
 POSTCONDITION: issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。branch を使っている worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 書かずに取りやめる:
-RFS BASIC FLOW 10
+RFS BASIC FLOW 12
 1. システムは印を外す。
 2. ABORT
 POSTCONDITION: issue の Status はボードにある選択肢のままである。worktree は作られていない。issue にコメントは付いていない。
 
 SPECIFIC ALTERNATIVE FLOW 起動直後の確認画面:
-RFS BASIC FLOW 20
+RFS BASIC FLOW 22
 1. システムは pane に esc のキー入力を送る。
 2. システムはボードの issue の Status に failure_state の選択肢を書く。
 3. システムは herdr の pane を閉じる。
@@ -126,11 +148,11 @@ RFS BASIC FLOW 20
 POSTCONDITION: issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 起動の待ち直し:
-RFS BASIC FLOW 20
+RFS BASIC FLOW 22
 1. システムは 500 ミリ秒待つ。
 2. システムは VALIDATES THAT 起動を待ち始めてから herdr.startup_timeout_ms が経っていない。
 3. システムは pane で Claude Code をもう一度起動する。
-4. RESUME STEP 20
+4. RESUME STEP 22
 POSTCONDITION: Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。
 
 SPECIFIC ALTERNATIVE FLOW 起動の断念:
@@ -144,10 +166,10 @@ RFS 起動の待ち直し 2
 POSTCONDITION: issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW paneがまだ使えない:
-RFS BASIC FLOW 18
+RFS BASIC FLOW 20
 1. システムは 500 ミリ秒待つ。
 2. システムは VALIDATES THAT pane を待ち始めてから 30 秒が経っていない。
-3. RESUME STEP 18
+3. RESUME STEP 20
 POSTCONDITION: pane が起動を受け付けるまで待ち続けている。Claude Code はまだ起動していない。
 
 SPECIFIC ALTERNATIVE FLOW paneの断念:
@@ -159,8 +181,14 @@ RFS paneがまだ使えない 2
 5. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。Claude Code は起動していない。worktree は残っている。
 
+SPECIFIC ALTERNATIVE FLOW turnループの重なり:
+RFS BASIC FLOW 23
+1. システムは次の巡回で turn を送り直す印を立てる。
+2. ABORT
+POSTCONDITION: 印は残っている。issue の Status は running_state の選択肢のままである。turn の本文は Claude Code に届いていない。worktree は残っている。
+
 SPECIFIC ALTERNATIVE FLOW 上限での打ち切り:
-RFS BASIC FLOW 22
+RFS BASIC FLOW 25
 1. システムはボードの issue の Status に failure_state の選択肢を書く。
 2. システムは issue に打ち切りの理由を1件コメントする。
 3. システムは herdr の pane を閉じる。
@@ -168,22 +196,70 @@ RFS BASIC FLOW 22
 5. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。
 
-SPECIFIC ALTERNATIVE FLOW turnの継続:
+SPECIFIC ALTERNATIVE FLOW 本文の組み立ての失敗:
 RFS BASIC FLOW 26
-1. システムは turn がまだ続いているとみなす。
-2. RESUME STEP 24
+1. システムはボードの issue の Status に failure_state の選択肢を書く。
+2. システムは issue にテンプレートの直し方を1件コメントする。
+3. システムは workspace_hooks の after_run を実行する。
+4. システムは herdr の pane を閉じる。
+5. システムは印を外す。
+6. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。この turn の本文は Claude Code に届いていない。印は外れている。worktree は残っている。
+
+SPECIFIC ALTERNATIVE FLOW turnの終わりの取りこぼし:
+RFS BASIC FLOW 28
+1. システムは VALIDATES THAT リトライの回数が agent.max_retries に達していない。
+2. システムは workspace_hooks の after_run を実行する。
+3. システムは herdr の pane を閉じる。
+4. システムはリトライの回数を1つ増やす。
+5. システムはバックオフの期限を印に書く。
+6. ABORT
+POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
+
+SPECIFIC ALTERNATIVE FLOW リトライの尽き:
+RFS turnの終わりの取りこぼし 1
+1. システムはボードの issue の Status に failure_state の選択肢を書く。
+2. システムは issue に打ち切りの理由を1件コメントする。
+3. システムは issue に今回の run が書いたコメントを確かめる段を通す。
+4. システムは workspace_hooks の after_run を実行する。
+5. システムは herdr の pane を閉じる。
+6. システムは印を外す。
+7. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。印は外れている。issue に打ち切りの理由のコメントが1件ある。worktree は残っている。
+
+SPECIFIC ALTERNATIVE FLOW 騙りのhook:
+RFS BASIC FLOW 30
+1. システムはこの hook を捨てる。
+2. システムは捨てた理由と session_id を記録に残す。
+3. RESUME STEP 29
 POSTCONDITION: turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。
 
+SPECIFIC ALTERNATIVE FLOW turnの継続:
+RFS BASIC FLOW 32
+1. システムは turn がまだ続いているとみなす。
+2. RESUME STEP 29
+POSTCONDITION: turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。
+
+SPECIFIC ALTERNATIVE FLOW ボードから消えたissue:
+RFS BASIC FLOW 35
+1. システムは issue がボードから見えなくなったことを記録に残す。
+2. システムは workspace_hooks の after_run を実行する。
+3. システムは herdr の pane を閉じる。
+4. システムはリトライの回数を1つ増やす。
+5. システムはバックオフの期限を印に書く。
+6. ABORT
+POSTCONDITION: herdr の pane は閉じている。印は残っている。issue はボードから見えていない。worktree は残っている。
+
 SPECIFIC ALTERNATIVE FLOW コメントの取り戻し:
-RFS BASIC FLOW 31
+RFS BASIC FLOW 38
 1. システムは herdr の pane を閉じる。
-2. システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。
+2. システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。
 3. システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。
 4. システムは pane で Claude Code をセッション UUID の復帰つきで起動する。
 5. システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。
 6. システムは issue のコメントを読み直す。
 7. システムは VALIDATES THAT issue に今回の run が書いたコメントがある。
-8. RESUME STEP 32
+8. RESUME STEP 39
 POSTCONDITION: issue にエージェントが書いたコメントが1件以上ある。turn 数は増えていない。issue の Status は表明の値の遷移先の選択肢である。
 
 SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗:
@@ -194,13 +270,19 @@ RFS コメントの取り戻し 7
 4. ABORT
 POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。worktree は残っている。
 
+SPECIFIC ALTERNATIVE FLOW 復元の断念:
+RFS コメントの取り戻し 2
+1. システムは復元の材料が足りない理由を記録に残す。
+2. RESUME STEP 8
+POSTCONDITION: issue にエージェントが書いたコメントがない。issue の Status は表明の値の遷移先の選択肢である。片付けは続いている。
+
 GLOBAL ALTERNATIVE FLOW 壊れたref:
-BRANCH FROM BASIC FLOW 12
+BRANCH FROM BASIC FLOW 14
 WHEN branch の ref が読めず git が worktree を作れず、まだその ref のファイルを消していない場合
 1. システムは VALIDATES THAT 壊れた ref が branch_template の接頭辞で始まり refs/heads の下の通常のファイルであり中身が ref として読めない。
 2. システムは壊れた ref のファイルを1つ消す。
 3. システムは消したファイルのパスと消した理由を記録に残す。
-4. RESUME STEP 12
+4. RESUME STEP 14
 POSTCONDITION: 壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。
 
 SPECIFIC ALTERNATIVE FLOW 消さないref:
@@ -211,8 +293,19 @@ RFS 壊れたref 1
 4. ABORT
 POSTCONDITION: ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。
 
+GLOBAL ALTERNATIVE FLOW 着手の途中の失敗:
+BRANCH FROM BASIC FLOW 14
+WHEN worktree の用意から Claude Code の起動までのあいだに git・ghq・herdr の呼び出しが、壊れた ref でも pane の受け付け待ちでもない理由で失敗した場合
+1. システムはボードの issue の Status に failure_state の選択肢を書く。
+2. システムは issue に失敗した段と直し方を1件コメントする。
+3. システムは workspace_hooks の after_run を実行する。
+4. システムは herdr の pane を閉じる。
+5. システムは印を外す。
+6. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。作りかけの worktree は残っている。
+
 GLOBAL ALTERNATIVE FLOW 権限の確認:
-BRANCH FROM BASIC FLOW 23
+BRANCH FROM BASIC FLOW 27
 WHEN herdr の待ち受けが blocked を返した場合
 1. システムは pane に esc のキー入力を送る。
 2. システムはボードの issue の Status に failure_state の選択肢を書く。
@@ -222,7 +315,7 @@ WHEN herdr の待ち受けが blocked を返した場合
 POSTCONDITION: issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 送信の失敗:
-BRANCH FROM BASIC FLOW 23
+BRANCH FROM BASIC FLOW 27
 WHEN herdr が指示の送信そのものを断った場合
 1. システムは herdr の pane を閉じる。
 2. システムはリトライの回数を1つ増やす。
@@ -231,7 +324,7 @@ WHEN herdr が指示の送信そのものを断った場合
 POSTCONDITION: turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 無音の打ち切り:
-BRANCH FROM BASIC FLOW 24
+BRANCH FROM BASIC FLOW 29
 WHEN turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合
 1. システムは herdr に agent_status と pane の画面の版を要求する。
 2. システムは herdr の pane を閉じる。
@@ -241,7 +334,7 @@ WHEN turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増�
 POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗:
-BRANCH FROM BASIC FLOW 23
+BRANCH FROM BASIC FLOW 27
 WHEN herdr の呼び出しが一時的な理由で失敗した場合
 1. システムは turn の本文が Claude Code に届いたかどうかを判断しない。
 2. システムは turn の本文を送り直さない。
@@ -253,17 +346,17 @@ POSTCONDITION: 印は残っている。リトライの回数は増えていな�
 ## 着手の段と、落ちたときに外側へ残るもの
 
 **Status を先に書くことが、外部に残る唯一の印である**（設計 3-16）。
-**だから、着手が確定して失敗する検査はステップ11 より前に置く**（ステップ3・4・7・8）。
+**だから、着手が確定して失敗する検査はステップ13 より前に置く**（ステップ4・5・9・10）。
 
 | 落ちた段 | 外側に残るもの | 次の巡回でどうなるか |
 | --- | --- | --- |
-| ステップ3 から8 | 何も残らない | issue はボードにある Status のままなので、直せばまた候補に上がる |
-| ステップ9 の直後 | 何も残らない | issue は dispatch_state のままなので候補に上がる |
-| ステップ11 の直後 | ボードの Status だけ | running_state は active_states に入るので候補に上がる |
-| ステップ12 から18 の途中 | Status と作りかけの worktree | worktree を再利用して着手をやり直す |
-| ステップ15 の直後 | 身元ファイル | 再起動したときに身元が分かる |
+| ステップ3 から10 | 何も残らない | issue はボードにある Status のままなので、直せばまた候補に上がる |
+| ステップ11 の直後 | 何も残らない | issue は dispatch_state のままなので候補に上がる |
+| ステップ13 の直後 | ボードの Status だけ | running_state は active_states に入るので候補に上がる |
+| ステップ14 から20 の途中 | Status と作りかけの worktree | worktree を再利用して着手をやり直す |
+| ステップ17 の直後 | 身元ファイル | 再起動したときに身元が分かる |
 
-## ステップ13 がリポジトリ本体も渡す理由
+## ステップ15 がリポジトリ本体も渡す理由
 
 **`worktree.open` の `cwd` は外せない。**省くと herdr が `worktree_not_found` で断り、
 worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026-08-25、
@@ -274,24 +367,26 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 閉じるのは continuo の仕事になる（片付け側の条件は
 [worktree と branch を片付ける.rucm.md](worktree%20と%20branch%20を片付ける.rucm.md) にある）。
 
-**そのためステップ13 の前後で `workspace.list` を読む。**前は「この呼び出しより前から
+**そのためステップ15 の前後で `workspace.list` を読む。**前は「この呼び出しより前から
 親があったか」を見るため、後ろは「無かったなら、いま開いた親の ID」を控えるためである。
-**控えた ID はステップ15 の身元ファイルへ書く**（`herdr_repo_workspace_id`）。
+**控えた ID はステップ17 の身元ファイルへ書く**（`herdr_repo_workspace_id`）。
 **前からあったなら人間が開いたものなので、控えず、二度と触らない。**
 
-## 候補を飛ばす4つの検査
+## 候補を飛ばす6つの検査
 
 **候補の一覧は GitHub のサーバ側の検索結果であり、そのまま信じてはならない**（設計 3-34）。
 
 | 検査 | 何を見るか | 落ちたらどうするか |
 | --- | --- | --- |
-| ステップ3 | issue の Status が active_states に入っているか | その issue だけ飛ばす。他の候補は続ける |
-| ステップ4 | 失敗の回数が max_retries を超えていないか | 人間が Status を動かすまで拾わない |
-| ステップ7 | 目的のパスに実体があるのに git の登録が無いか | Status を1バイトも書かずに飛ばす |
-| ステップ8 | その branch を置き場所以外の worktree が使っていないか | Status を1バイトも書かずに飛ばす |
+| ステップ3 | その issue に別の run の印が既に付いていないか | その issue だけ飛ばす。走っている run はそのまま |
+| ステップ4 | issue の Status が active_states に入っているか | その issue だけ飛ばす。他の候補は続ける |
+| ステップ5 | 失敗の回数が max_retries を超えていないか | 人間が Status を動かすまで拾わない |
+| ステップ6 | required_labels をすべて持っているか | その issue だけ飛ばす。ボードへは1バイトも書かない |
+| ステップ9 | 目的のパスに実体があるのに git の登録が無いか | Status を1バイトも書かずに飛ばす |
+| ステップ10 | その branch を置き場所以外の worktree が使っていないか | Status を1バイトも書かずに飛ばす |
 
-**ステップ8 は、目的のパスに何も無くても落ちる。**git は1つの branch を2つの worktree に
-出せないので、別の場所の worktree がその branch を出していると、ステップ12 の
+**ステップ10 は、目的のパスに何も無くても落ちる。**git は1つの branch を2つの worktree に
+出せないので、別の場所の worktree がその branch を出していると、ステップ14 の
 `git worktree add` が `fatal: '<branch>' is already used by worktree at '<別のパス>'` で
 必ず失敗する。**片付けは `continuo abandon <issue の URL>` の出番である**
 （[着手を取り消す.rucm.md](%E7%9D%80%E6%89%8B%E3%82%92%E5%8F%96%E3%82%8A%E6%B6%88%E3%81%99.rucm.md)）。
@@ -299,7 +394,7 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 ## 壊れた ref に出会ったら、その1ファイルを消してやり直す
 
 **言いたいこと。**`refs/heads/<branch>` のファイルが読めない状態になると、
-ステップ12 は何度やり直しても `reference broken` で失敗し、その issue には二度と着手できない。
+ステップ14 は何度やり直しても `reference broken` で失敗し、その issue には二度と着手できない。
 **git のコマンドでは消せないので、continuo がファイルとして1つ消して、1回だけやり直す。**
 
 **消してよい条件は設計 [3-22b](../../../plans/continuo_design.md) にある7つで、全部を満たすときだけ消す。**
@@ -326,6 +421,11 @@ loose を消した瞬間に packed 側が有効になり、**やり直しはそ�
 | 項目が欠けている | 判定できない。turn の終わりとみなさない |
 | 空配列 | settle_ms のあいだ待ち、task-notification が届かなければ turn の終わりとする |
 
+**hook の中身はエージェントが書き換えられる外部入力である**（設計 3-23）。
+run を引くのは `session_id` だけなので、**`cwd` がその run の worktree の外にある hook は、
+その1件ごと捨てる**（ステップ30）。**捨てても turn の終わりの待ちは続く。**
+`cwd` が空の hook と、worktree のパスをまだ知らない run は判定できないので通す。
+
 ## turn を送れなかったときは、2つに分ける
 
 **言いたいこと。**herdr へ送れなかったことと、Stop hook が届かなかったことは別である。
@@ -335,11 +435,28 @@ loose を消した瞬間に packed 側が有効になり、**やり直しはそ�
 | --- | --- | --- |
 | herdr の呼び出しが**一時的な理由**で失敗した（再起動・socket の一瞬の不通・応答の遅れ） | run を諦めない。turn の終わりを待ち直す印を立てて抜ける | 印は残る。リトライは増えない |
 | herdr が**送信そのものを断った**（pane が消えている・agent が受け取れない） | run を手放す。届いていないことを明記した理由を残す | 印は残る。リトライを1つ積む |
-| 待ち受けが返ったのに **Stop hook が来ない** | 打ち切りの判定へ回す | 巡回の停滞の検知が決める |
+| 待ち受けが返ったのに **Stop hook が来ない** | run を手放す。設定ファイルの hook を確かめさせる理由を残す | 印は残る。リトライを1つ積む |
+| **画面の版が turn_timeout_ms のあいだ増えない** | 巡回の停滞の検知が run を手放す | 印は残る。リトライを1つ積む |
 
 **一時的な失敗でも `agent.prompt` を送り直さない。**届いていたかどうかは分からず、
 届いていた場合に送り直すと turn が二重に投入される。**黙って止まりもしない。**
 画面が動かないままなら、巡回の停滞の検知が `claude.turn_timeout_ms` の沈黙で拾う。
+
+## リトライを積むフローは、尽きたときだけ人間へ渡す
+
+**言いたいこと。**リトライを積む出口は4つあるが、**尽きたときの後始末は1本しかない。**
+だから `リトライの尽き` は1箇所にだけ書き、残りの3つはそこへ落ちる同じ枝として扱う。
+
+| リトライを積む出口 | 何が起きたか |
+| --- | --- |
+| `turnの終わりの取りこぼし` | 待ち受けが返ったのに settle_ms のあいだ Stop hook が来なかった |
+| `送信の失敗` | herdr が指示の送信そのものを断った |
+| `無音の打ち切り` | 画面の版が turn_timeout_ms のあいだ増えなかった |
+| `ボードから消えたissue` | turn の終わりに ID 指定で取り直したら、ボードから返らなかった |
+
+**尽きたときだけ、Status を failure_state へ落とし、理由を1件コメントし、印を外す。**
+**その順番は変えられない。**引き渡しの通知は1つの run につき1件しか投稿できないので、
+コメントの取り戻しより先に本当の理由が投稿枠を取らなければならない。
 
 ## フローチャート
 
@@ -347,174 +464,242 @@ loose を消した瞬間に packed 側が有効になり、**やり直しはそ�
 flowchart TD
     B1["1. 巡回タイマーが巡回の開始を要求する"]
     B2["2. ボードから active_states の issue の一覧を取る"]
-    B3{"3. VALIDATES THAT Status が active_states に入っている"}
-    B4{"4. VALIDATES THAT 失敗の回数が max_retries を超えていない"}
-    B5{"5. VALIDATES THAT 空きスロットが1つ以上ある"}
-    B6{"6. VALIDATES THAT 対象リポジトリが信頼登録されている"}
-    B7{"7. VALIDATES THAT worktree の置き場所をそのまま使える"}
-    B8{"8. VALIDATES THAT branch を置き場所以外の worktree が使っていない"}
-    B9["9. 先頭の issue に印を付ける"]
-    B10{"10. VALIDATES THAT 取り直した Status が active_states に入っている"}
-    B11["11. Status に running_state を書く"]
-    B12["12. worktree を作る"]
-    B13["13. worktree の絶対パスとリポジトリ本体を渡して開き label に owner/repo/issues/N を書く"]
-    B14["14. 設定ファイルを worktree の外に書く"]
-    B15["15. 身元ファイルを書く"]
-    B16["16. workspace の pane の一覧を要求する"]
-    B17["17. pane の label に owner/repo/issues/N を書く"]
-    B18{"18. VALIDATES THAT pane が起動を受け付ける"}
-    B19["19. pane で Claude Code を起動する"]
-    B20{"20. VALIDATES THAT agent_status が idle か done で interactive_ready が真"}
-    B21["21. DO"]
-    B22{"22. VALIDATES THAT turn 数が max_dispatch_turns に達していない"}
-    B23["23. turn の本文を送る"]
-    B24["24. Stop hook を受ける"]
-    B25["25. settle_ms のあいだ待つ"]
-    B26{"26. VALIDATES THAT task-notification が届かない"}
-    B27["27. transcript から表明の行を読む"]
-    B28["28. Status を ID 指定で取り直す"]
-    B29{"29. UNTIL 表明の値が working でない"}
-    B30["30. Status に表明の遷移先を書く"]
-    B31{"31. VALIDATES THAT 今回の run のコメントがある"}
-    B32["32. workspace_hooks の after_run を実行する"]
-    B33["33. herdr の pane を閉じる"]
-    B34["34. 印を外す"]
+    B3{"3. VALIDATES THAT 別の run の印が付いていない"}
+    B4{"4. VALIDATES THAT Status が active_states に入っている"}
+    B5{"5. VALIDATES THAT 失敗の回数が max_retries を超えていない"}
+    B6{"6. VALIDATES THAT required_labels をすべて持っている"}
+    B7{"7. VALIDATES THAT 空きスロットが1つ以上ある"}
+    B8{"8. VALIDATES THAT 対象リポジトリが信頼登録されている"}
+    B9{"9. VALIDATES THAT worktree の置き場所をそのまま使える"}
+    B10{"10. VALIDATES THAT branch を置き場所以外の worktree が使っていない"}
+    B11["11. 先頭の issue に印を付ける"]
+    B12{"12. VALIDATES THAT 取り直した Status が active_states に入っている"}
+    B13["13. Status に running_state を書く"]
+    B14["14. worktree を作る"]
+    B15["15. worktree の絶対パスとリポジトリ本体を渡して開き label に owner/repo/issues/N を書く"]
+    B16["16. 設定ファイルを worktree の外に書く"]
+    B17["17. 身元ファイルを書く"]
+    B18["18. workspace の pane の一覧を要求する"]
+    B19["19. pane の label に owner/repo/issues/N を書く"]
+    B20{"20. VALIDATES THAT pane が起動を受け付ける"}
+    B21["21. pane で Claude Code を起動する"]
+    B22{"22. VALIDATES THAT agent_status が idle か done で interactive_ready が真"}
+    B23{"23. VALIDATES THAT turn ループが1本も走っていない"}
+    B24["24. DO"]
+    B25{"25. VALIDATES THAT turn 数が max_dispatch_turns に達していない"}
+    B26{"26. VALIDATES THAT turn の本文を組み立てられる"}
+    B27["27. turn の本文を送る"]
+    B28{"28. VALIDATES THAT 待ち受けが返ってから settle_ms のあいだに Stop hook が届く"}
+    B29["29. Stop hook を受ける"]
+    B30{"30. VALIDATES THAT Stop hook の cwd が worktree の内側である"}
+    B31["31. settle_ms のあいだ待つ"]
+    B32{"32. VALIDATES THAT task-notification が届かない"}
+    B33["33. transcript から表明の行を読む"]
+    B34["34. Status を ID 指定で取り直す"]
+    B35{"35. VALIDATES THAT 取り直した issue がボードから見えている"}
+    B36{"36. UNTIL 表明の値が working でない"}
+    B37["37. Status に表明の遷移先を書く"]
+    B38{"38. VALIDATES THAT 今回の run のコメントがある"}
+    B39["39. workspace_hooks の after_run を実行する"]
+    B40["40. herdr の pane を閉じる"]
+    B41["41. 印を外す"]
     BPOST(["POSTCONDITION 表明どおりに Status が動き worker が止まっている"])
 
     B1 --> B2 --> B3
-    B3 -- 偽 --> F12S1
+    B3 -- 偽 --> N01S1
     B3 -- 真 --> B4
-    B4 -- 偽 --> F13S1
+    B4 -- 偽 --> N02S1
     B4 -- 真 --> B5
-    B5 -- 偽 --> F1S1
+    B5 -- 偽 --> N03S1
     B5 -- 真 --> B6
-    B6 -- 偽 --> F2S1
+    B6 -- 偽 --> N04S1
     B6 -- 真 --> B7
-    B7 -- 偽 --> F14S1
+    B7 -- 偽 --> N05S1
     B7 -- 真 --> B8
-    B8 -- 偽 --> F16S1
-    B8 -- 真 --> B9 --> B10
-    B10 -- 偽 --> F15S1
-    B10 -- 真 --> B11 --> B12 --> B13 --> B14 --> B15 --> B16 --> B17 --> B18
-    B18 -- 偽 --> F8S1
-    B18 -- 真 --> B19 --> B20
-    B20 -- 偽 --> F3S1
+    B8 -- 偽 --> N06S1
+    B8 -- 真 --> B9
+    B9 -- 偽 --> N07S1
+    B9 -- 真 --> B10
+    B10 -- 偽 --> N08S1
+    B10 -- 真 --> B11 --> B12
+    B12 -- 偽 --> N09S1
+    B12 -- 真 --> B13 --> B14 --> B15 --> B16 --> B17 --> B18 --> B19 --> B20
+    B20 -- 偽 --> N13S1
     B20 -- 真 --> B21 --> B22
-    B22 -- 偽 --> F4S1
-    B22 -- 真 --> B23 --> B24 --> B25 --> B26
-    B26 -- 偽 --> F5S1
-    B26 -- 真 --> B27 --> B28 --> B29
-    B29 -- 偽 --> B22
-    B29 -- 真 --> B30 --> B31
-    B31 -- 偽 --> F6S1
-    B31 -- 真 --> B32 --> B33 --> B34 --> BPOST
-    B12 -. "壊れたref: WHEN ref が読めず worktree を作れない場合" .-> G3S1
-    B23 -. "権限の確認: WHEN blocked が返った場合" .-> G1S1
-    B23 -. "送信の失敗: WHEN herdr が送信そのものを断った場合" .-> G4S1
-    B23 -. "一時的な送信の失敗: WHEN herdr の呼び出しが一時的な理由で失敗した場合" .-> G5S1
-    B24 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> G2S1
+    B22 -- 偽 --> N10S1
+    B22 -- 真 --> B23
+    B23 -- 偽 --> N15S1
+    B23 -- 真 --> B24 --> B25
+    B25 -- 偽 --> N16S1
+    B25 -- 真 --> B26
+    B26 -- 偽 --> N17S1
+    B26 -- 真 --> B27 --> B28
+    B28 -- 偽 --> N18S1
+    B28 -- 真 --> B29 --> B30
+    B30 -- 偽 --> N20S1
+    B30 -- 真 --> B31 --> B32
+    B32 -- 偽 --> N21S1
+    B32 -- 真 --> B33 --> B34 --> B35
+    B35 -- 偽 --> N22S1
+    B35 -- 真 --> B36
+    B36 -- 偽 --> B25
+    B36 -- 真 --> B37 --> B38
+    B38 -- 偽 --> N23S1
+    B38 -- 真 --> B39 --> B40 --> B41 --> BPOST
+    B14 -. "壊れたref: WHEN ref が読めず worktree を作れない場合" .-> N25S1
+    B14 -. "着手の途中の失敗: WHEN git・ghq・herdr の呼び出しが失敗した場合" .-> N27S1
+    B27 -. "権限の確認: WHEN blocked が返った場合" .-> N28S1
+    B27 -. "送信の失敗: WHEN herdr が送信そのものを断った場合" .-> N29S1
+    B27 -. "一時的な送信の失敗: WHEN herdr の呼び出しが一時的な理由で失敗した場合" .-> N31S1
+    B29 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> N30S1
 
-    subgraph SAF12 ["SPECIFIC ALTERNATIVE FLOW 頼んでいないStatus / RFS BASIC FLOW 3"]
-        F12S1["1. この issue を dispatch の対象から外す"] --> F12S2["2. 頼んだ Status に無い候補が返ったことを記録に残す"] --> F12S3["3. ABORT"]
+    subgraph SG01 ["SPECIFIC ALTERNATIVE FLOW 走行中のissue / RFS BASIC FLOW 3"]
+        N01S1["1. この issue を dispatch の対象から外す"] --> N01S2["2. ABORT"]
     end
 
-    subgraph SAF13 ["SPECIFIC ALTERNATIVE FLOW 失敗の繰り返し / RFS BASIC FLOW 4"]
-        F13S1["1. この issue を dispatch の対象から外す"] --> F13S2["2. ABORT"]
+    subgraph SG02 ["SPECIFIC ALTERNATIVE FLOW 頼んでいないStatus / RFS BASIC FLOW 4"]
+        N02S1["1. この issue を dispatch の対象から外す"] --> N02S2["2. 頼んだ Status に無い候補が返ったことを記録に残す"] --> N02S3["3. ABORT"]
     end
 
-    subgraph SAF1 ["SPECIFIC ALTERNATIVE FLOW 空きスロット不足 / RFS BASIC FLOW 5"]
-        F1S1["1. この巡回で1件も dispatch しない"] --> F1S2["2. ABORT"]
+    subgraph SG03 ["SPECIFIC ALTERNATIVE FLOW 失敗の繰り返し / RFS BASIC FLOW 5"]
+        N03S1["1. この issue を dispatch の対象から外す"] --> N03S2["2. ABORT"]
     end
 
-    subgraph SAF2 ["SPECIFIC ALTERNATIVE FLOW 未信頼のリポジトリ / RFS BASIC FLOW 6"]
-        F2S1["1. dispatch の対象から外す"] --> F2S2["2. 承認を促すコメントを1件書く"] --> F2S3["3. 通知済みとして記録する"] --> F2S4["4. ABORT"]
+    subgraph SG04 ["SPECIFIC ALTERNATIVE FLOW ラベルの不足 / RFS BASIC FLOW 6"]
+        N04S1["1. この issue を dispatch の対象から外す"] --> N04S2["2. ABORT"]
     end
 
-    subgraph SAF14 ["SPECIFIC ALTERNATIVE FLOW 使えないworktree / RFS BASIC FLOW 7"]
-        F14S1["1. この issue を dispatch の対象から外す"] --> F14S2["2. 使えない理由を記録に残す"] --> F14S3["3. ABORT"]
+    subgraph SG05 ["SPECIFIC ALTERNATIVE FLOW 空きスロット不足 / RFS BASIC FLOW 7"]
+        N05S1["1. この巡回で1件も dispatch しない"] --> N05S2["2. ABORT"]
     end
 
-    subgraph SAF16 ["SPECIFIC ALTERNATIVE FLOW 使われているbranch / RFS BASIC FLOW 8"]
-        F16S1["1. この issue を dispatch の対象から外す"] --> F16S2["2. branch を使っている worktree の場所と片付けの手順を記録に残す"] --> F16S3["3. ABORT"]
+    subgraph SG06 ["SPECIFIC ALTERNATIVE FLOW 未信頼のリポジトリ / RFS BASIC FLOW 8"]
+        N06S1["1. dispatch の対象から外す"] --> N06S2["2. 承認を促すコメントを1件書く"] --> N06S3["3. 通知済みとして記録する"] --> N06S4["4. ABORT"]
     end
 
-    subgraph SAF15 ["SPECIFIC ALTERNATIVE FLOW 書かずに取りやめる / RFS BASIC FLOW 10"]
-        F15S1["1. 印を外す"] --> F15S2["2. ABORT"]
+    subgraph SG07 ["SPECIFIC ALTERNATIVE FLOW 使えないworktree / RFS BASIC FLOW 9"]
+        N07S1["1. この issue を dispatch の対象から外す"] --> N07S2["2. 使えない理由を記録に残す"] --> N07S3["3. ABORT"]
     end
 
-    subgraph SAF8 ["SPECIFIC ALTERNATIVE FLOW paneがまだ使えない / RFS BASIC FLOW 18"]
-        F8S1["1. 500 ミリ秒待つ"] --> F8S2{"2. VALIDATES THAT 30 秒が経っていない"}
-        F8S2 -- 真 --> F8S3["3. RESUME STEP 19"]
+    subgraph SG08 ["SPECIFIC ALTERNATIVE FLOW 使われているbranch / RFS BASIC FLOW 10"]
+        N08S1["1. この issue を dispatch の対象から外す"] --> N08S2["2. branch を使っている worktree の場所と片付けの手順を記録に残す"] --> N08S3["3. ABORT"]
     end
 
-    subgraph SAF9 ["SPECIFIC ALTERNATIVE FLOW paneの断念 / RFS paneがまだ使えない 2"]
-        F9S1["1. Status に failure_state を書く"] --> F9S2["2. pane が使えなかった理由をコメントする"] --> F9S3["3. pane を閉じる"] --> F9S4["4. 印を外す"] --> F9S5["5. ABORT"]
+    subgraph SG09 ["SPECIFIC ALTERNATIVE FLOW 書かずに取りやめる / RFS BASIC FLOW 12"]
+        N09S1["1. 印を外す"] --> N09S2["2. ABORT"]
     end
 
-    subgraph SAF3 ["SPECIFIC ALTERNATIVE FLOW 起動直後の確認画面 / RFS BASIC FLOW 20"]
-        F3S1["1. pane に esc を送る"] --> F3S2["2. Status に failure_state を書く"] --> F3S3["3. pane を閉じる"] --> F3S4["4. 印を外す"] --> F3S5["5. ABORT"]
+    subgraph SG10 ["SPECIFIC ALTERNATIVE FLOW 起動直後の確認画面 / RFS BASIC FLOW 22"]
+        N10S1["1. pane に esc を送る"] --> N10S2["2. Status に failure_state を書く"] --> N10S3["3. pane を閉じる"] --> N10S4["4. 印を外す"] --> N10S5["5. ABORT"]
     end
 
-    subgraph SAF10 ["SPECIFIC ALTERNATIVE FLOW 起動の待ち直し / RFS BASIC FLOW 20"]
-        F10S1["1. 500 ミリ秒待つ"] --> F10S2{"2. VALIDATES THAT startup_timeout_ms が経っていない"}
-        F10S2 -- 真 --> F10S3["3. もう一度 Claude Code を起動する"] --> F10S4["4. RESUME STEP 21"]
+    subgraph SG11 ["SPECIFIC ALTERNATIVE FLOW 起動の待ち直し / RFS BASIC FLOW 22"]
+        N11S1["1. 500 ミリ秒待つ"] --> N11S2{"2. VALIDATES THAT startup_timeout_ms が経っていない"}
+        N11S2 -- 真 --> N11S3["3. もう一度 Claude Code を起動する"] --> N11S4["4. RESUME STEP 22"]
     end
 
-    subgraph SAF11 ["SPECIFIC ALTERNATIVE FLOW 起動の断念 / RFS 起動の待ち直し 2"]
-        F11S1["1. max_retries までバックオフして着手をやり直す"] --> F11S2["2. Status に failure_state を書く"] --> F11S3["3. 起動できなかった理由をコメントする"] --> F11S4["4. pane を閉じる"] --> F11S5["5. 印を外す"] --> F11S6["6. ABORT"]
+    subgraph SG12 ["SPECIFIC ALTERNATIVE FLOW 起動の断念 / RFS 起動の待ち直し 2"]
+        N12S1["1. max_retries までバックオフして着手をやり直す"] --> N12S2["2. Status に failure_state を書く"] --> N12S3["3. 起動できなかった理由をコメントする"] --> N12S4["4. pane を閉じる"] --> N12S5["5. 印を外す"] --> N12S6["6. ABORT"]
     end
 
-    subgraph SAF4 ["SPECIFIC ALTERNATIVE FLOW 上限での打ち切り / RFS BASIC FLOW 22"]
-        F4S1["1. Status に failure_state を書く"] --> F4S2["2. 打ち切りの理由をコメントする"] --> F4S3["3. pane を閉じる"] --> F4S4["4. 印を外す"] --> F4S5["5. ABORT"]
+    subgraph SG13 ["SPECIFIC ALTERNATIVE FLOW paneがまだ使えない / RFS BASIC FLOW 20"]
+        N13S1["1. 500 ミリ秒待つ"] --> N13S2{"2. VALIDATES THAT 30 秒が経っていない"}
+        N13S2 -- 真 --> N13S3["3. RESUME STEP 20"]
     end
 
-    subgraph SAF5 ["SPECIFIC ALTERNATIVE FLOW turnの継続 / RFS BASIC FLOW 26"]
-        F5S1["1. turn がまだ続いているとみなす"] --> F5S2["2. RESUME STEP 25"]
+    subgraph SG14 ["SPECIFIC ALTERNATIVE FLOW paneの断念 / RFS paneがまだ使えない 2"]
+        N14S1["1. Status に failure_state を書く"] --> N14S2["2. pane が使えなかった理由をコメントする"] --> N14S3["3. pane を閉じる"] --> N14S4["4. 印を外す"] --> N14S5["5. ABORT"]
     end
 
-    subgraph SAF6 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻し / RFS BASIC FLOW 31"]
-        F6S1["1. pane を閉じる"] --> F6S2["2. セッション UUID と設定ファイルのパスを読む"] --> F6S3["3. worktree とリポジトリ本体を渡して開き直し pane を引く"] --> F6S4["4. セッションの復帰つきで起動する"] --> F6S5["5. コメントへの記録を要求する"] --> F6S6["6. コメントを読み直す"] --> F6S7{"7. VALIDATES THAT コメントがある"}
-        F6S7 -- 真 --> F6S8["8. RESUME STEP 33"]
+    subgraph SG15 ["SPECIFIC ALTERNATIVE FLOW turnループの重なり / RFS BASIC FLOW 23"]
+        N15S1["1. 次の巡回で turn を送り直す印を立てる"] --> N15S2["2. ABORT"]
     end
 
-    subgraph SAF7 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗 / RFS コメントの取り戻し 7"]
-        F7S1["1. Status に failure_state を書く"] --> F7S2["2. pane を閉じる"] --> F7S3["3. 印を外す"] --> F7S4["4. ABORT"]
+    subgraph SG16 ["SPECIFIC ALTERNATIVE FLOW 上限での打ち切り / RFS BASIC FLOW 25"]
+        N16S1["1. Status に failure_state を書く"] --> N16S2["2. 打ち切りの理由をコメントする"] --> N16S3["3. pane を閉じる"] --> N16S4["4. 印を外す"] --> N16S5["5. ABORT"]
     end
 
-    subgraph GAF3 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 12"]
-        G3S1{"1. VALIDATES THAT continuo の接頭辞で始まる refs/heads の下の通常のファイルで中身が読めない"}
-        G3S1 -- 真 --> G3S2["2. 壊れた ref のファイルを1つ消す"] --> G3S3["3. 消したパスと理由を記録に残す"] --> G3S4["4. RESUME STEP 12"]
+    subgraph SG17 ["SPECIFIC ALTERNATIVE FLOW 本文の組み立ての失敗 / RFS BASIC FLOW 26"]
+        N17S1["1. Status に failure_state を書く"] --> N17S2["2. テンプレートの直し方をコメントする"] --> N17S3["3. after_run を実行する"] --> N17S4["4. pane を閉じる"] --> N17S5["5. 印を外す"] --> N17S6["6. ABORT"]
     end
 
-    subgraph SAF17 ["SPECIFIC ALTERNATIVE FLOW 消さないref / RFS 壊れたref 1"]
-        F17S1["1. Status に failure_state を書く"] --> F17S2["2. 用意できなかった理由をコメントする"] --> F17S3["3. 印を外す"] --> F17S4["4. ABORT"]
+    subgraph SG18 ["SPECIFIC ALTERNATIVE FLOW turnの終わりの取りこぼし / RFS BASIC FLOW 28"]
+        N18S1{"1. VALIDATES THAT リトライの回数が max_retries に達していない"}
+        N18S1 -- 真 --> N18S2["2. after_run を実行する"] --> N18S3["3. pane を閉じる"] --> N18S4["4. リトライの回数を1つ増やす"] --> N18S5["5. バックオフの期限を印に書く"] --> N18S6["6. ABORT"]
     end
 
-    subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 権限の確認 / BRANCH FROM BASIC FLOW 23"]
-        G1S1["1. pane に esc を送る"] --> G1S2["2. Status に failure_state を書く"] --> G1S3["3. pane を閉じる"] --> G1S4["4. 印を外す"] --> G1S5["5. ABORT"]
+    subgraph SG19 ["SPECIFIC ALTERNATIVE FLOW リトライの尽き / RFS turnの終わりの取りこぼし 1"]
+        N19S1["1. Status に failure_state を書く"] --> N19S2["2. 打ち切りの理由をコメントする"] --> N19S3["3. 今回の run のコメントを確かめる段を通す"] --> N19S4["4. after_run を実行する"] --> N19S5["5. pane を閉じる"] --> N19S6["6. 印を外す"] --> N19S7["7. ABORT"]
     end
 
-    subgraph GAF4 ["GLOBAL ALTERNATIVE FLOW 送信の失敗 / BRANCH FROM BASIC FLOW 23"]
-        G4S1["1. pane を閉じる"] --> G4S2["2. リトライの回数を1つ増やす"] --> G4S3["3. バックオフの期限を印に書く"] --> G4S4["4. ABORT"]
+    subgraph SG20 ["SPECIFIC ALTERNATIVE FLOW 騙りのhook / RFS BASIC FLOW 30"]
+        N20S1["1. この hook を捨てる"] --> N20S2["2. 捨てた理由と session_id を記録に残す"] --> N20S3["3. RESUME STEP 29"]
     end
 
-    subgraph GAF2 ["GLOBAL ALTERNATIVE FLOW 無音の打ち切り / BRANCH FROM BASIC FLOW 24"]
-        G2S1["1. agent_status と画面の版を要求する"] --> G2S2["2. pane を閉じる"] --> G2S3["3. リトライの回数を1つ増やす"] --> G2S4["4. バックオフの期限を印に書く"] --> G2S5["5. ABORT"]
+    subgraph SG21 ["SPECIFIC ALTERNATIVE FLOW turnの継続 / RFS BASIC FLOW 32"]
+        N21S1["1. turn がまだ続いているとみなす"] --> N21S2["2. RESUME STEP 29"]
     end
 
-    subgraph GAF5 ["GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗 / BRANCH FROM BASIC FLOW 23"]
-        G5S1["1. 本文が届いたかどうかを判断しない"] --> G5S2["2. 本文を送り直さない"] --> G5S3["3. turn の終わりを待ち直す印を立てる"] --> G5S4["4. ABORT"]
+    subgraph SG22 ["SPECIFIC ALTERNATIVE FLOW ボードから消えたissue / RFS BASIC FLOW 35"]
+        N22S1["1. ボードから見えなくなったことを記録に残す"] --> N22S2["2. after_run を実行する"] --> N22S3["3. pane を閉じる"] --> N22S4["4. リトライの回数を1つ増やす"] --> N22S5["5. バックオフの期限を印に書く"] --> N22S6["6. ABORT"]
     end
 
-    F8S2 -- 偽 --> F9S1
-    F8S3 --> B18
-    F10S2 -- 偽 --> F11S1
-    F10S4 --> B20
-    F5S2 --> B24
-    F6S7 -- 偽 --> F7S1
-    F6S8 --> B32
-    G3S1 -- 偽 --> F17S1
-    G3S4 --> B12
+    subgraph SG23 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻し / RFS BASIC FLOW 38"]
+        N23S1["1. pane を閉じる"] --> N23S2{"2. VALIDATES THAT セッション UUID と設定ファイルのパスを読める"}
+        N23S2 -- 真 --> N23S3["3. worktree とリポジトリ本体を渡して開き直し pane を引く"] --> N23S4["4. セッションの復帰つきで起動する"] --> N23S5["5. コメントへの記録を要求する"] --> N23S6["6. コメントを読み直す"] --> N23S7{"7. VALIDATES THAT コメントがある"}
+        N23S7 -- 真 --> N23S8["8. RESUME STEP 39"]
+    end
+
+    subgraph SG24 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗 / RFS コメントの取り戻し 7"]
+        N24S1["1. Status に failure_state を書く"] --> N24S2["2. pane を閉じる"] --> N24S3["3. 印を外す"] --> N24S4["4. ABORT"]
+    end
+
+    subgraph SG25 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 14"]
+        N25S1{"1. VALIDATES THAT continuo の接頭辞で始まる refs/heads の下の通常のファイルで中身が読めない"}
+        N25S1 -- 真 --> N25S2["2. 壊れた ref のファイルを1つ消す"] --> N25S3["3. 消したパスと理由を記録に残す"] --> N25S4["4. RESUME STEP 14"]
+    end
+
+    subgraph SG26 ["SPECIFIC ALTERNATIVE FLOW 消さないref / RFS 壊れたref 1"]
+        N26S1["1. Status に failure_state を書く"] --> N26S2["2. 用意できなかった理由をコメントする"] --> N26S3["3. 印を外す"] --> N26S4["4. ABORT"]
+    end
+
+    subgraph SG27 ["GLOBAL ALTERNATIVE FLOW 着手の途中の失敗 / BRANCH FROM BASIC FLOW 14"]
+        N27S1["1. Status に failure_state を書く"] --> N27S2["2. 失敗した段と直し方をコメントする"] --> N27S3["3. after_run を実行する"] --> N27S4["4. pane を閉じる"] --> N27S5["5. 印を外す"] --> N27S6["6. ABORT"]
+    end
+
+    subgraph SG28 ["GLOBAL ALTERNATIVE FLOW 権限の確認 / BRANCH FROM BASIC FLOW 27"]
+        N28S1["1. pane に esc を送る"] --> N28S2["2. Status に failure_state を書く"] --> N28S3["3. pane を閉じる"] --> N28S4["4. 印を外す"] --> N28S5["5. ABORT"]
+    end
+
+    subgraph SG29 ["GLOBAL ALTERNATIVE FLOW 送信の失敗 / BRANCH FROM BASIC FLOW 27"]
+        N29S1["1. pane を閉じる"] --> N29S2["2. リトライの回数を1つ増やす"] --> N29S3["3. バックオフの期限を印に書く"] --> N29S4["4. ABORT"]
+    end
+
+    subgraph SG30 ["GLOBAL ALTERNATIVE FLOW 無音の打ち切り / BRANCH FROM BASIC FLOW 29"]
+        N30S1["1. agent_status と画面の版を要求する"] --> N30S2["2. pane を閉じる"] --> N30S3["3. リトライの回数を1つ増やす"] --> N30S4["4. バックオフの期限を印に書く"] --> N30S5["5. ABORT"]
+    end
+
+    subgraph SG31 ["GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗 / BRANCH FROM BASIC FLOW 27"]
+        N31S1["1. 本文が届いたかどうかを判断しない"] --> N31S2["2. 本文を送り直さない"] --> N31S3["3. turn の終わりを待ち直す印を立てる"] --> N31S4["4. ABORT"]
+    end
+
+    subgraph SG32 ["SPECIFIC ALTERNATIVE FLOW 復元の断念 / RFS コメントの取り戻し 2"]
+        N32S1["1. 復元の材料が足りない理由を記録に残す"] --> N32S2["2. RESUME STEP 8"]
+    end
+
+    N13S2 -- 偽 --> N14S1
+    N13S3 --> B20
+    N11S2 -- 偽 --> N12S1
+    N11S4 --> B22
+    N18S1 -- 偽 --> N19S1
+    N20S3 --> B29
+    N21S2 --> B29
+    N23S7 -- 偽 --> N24S1
+    N23S8 --> B39
+    N25S1 -- 偽 --> N26S1
+    N25S4 --> B14
+    N23S2 -- 偽 --> N32S1
+    N32S2 --> N23S8
 ```
 
 ## シーケンス図
@@ -530,9 +715,11 @@ sequenceDiagram
     T->>S: 巡回の開始を要求する
     S->>GH: active_states の issue の一覧を要求する
     GH-->>S: 候補を並び順で応答する
+    S->>S: 別の run の印が付いていないことを検証する
     S->>S: 候補の Status が active_states に入っていることを検証する
     S->>S: 失敗の回数が max_retries を超えていないことを検証する
-    alt 頼んだ Status に無い、または失敗の回数を使い切っている
+    S->>S: required_labels をすべて持っていることを検証する
+    alt 印が付いている、頼んだ Status に無い、失敗の回数を使い切っている、またはラベルが足りない
         Note over S: ABORT この issue だけ飛ばし、他の候補は続ける
     else 着手してよい候補である
         S->>S: 空きスロットが1つ以上あることを検証する
@@ -564,21 +751,48 @@ sequenceDiagram
                     H->>CC: Claude Code を起動する
                     H-->>S: agent_status を応答する
                     S->>S: agent_status が idle または done であることを検証する
+                    alt 着手の途中で git・ghq・herdr の呼び出しが失敗する
+                        S->>GH: Status への failure_state の書き込みを要求する
+                        Note over S: ABORT 失敗した段と直し方を1件コメントする
+                    end
+                    S->>S: この run の turn ループが1本も走っていないことを検証する
+                    alt 前の turn ループがまだ走っている
+                        S->>S: 次の巡回で turn を送り直す印を立てる
+                        Note over S: ABORT turn の本文は送らない
+                    end
                     loop 表明の値が working でなくなるまで
                         S->>S: turn 数が max_dispatch_turns に達していないことを検証する
+                        S->>S: turn の本文を組み立てられることを検証する
+                        alt テンプレートを描画できない
+                            S->>GH: Status への failure_state の書き込みを要求する
+                            Note over S: ABORT この turn の本文は届いていない
+                        end
                         S->>CC: turn の本文を送る
                         alt herdr が送信そのものを断る
                             S->>H: pane の close を要求する
                             Note over S: ABORT 本文は届いていない。リトライを1つ積む
                         end
+                        S->>S: 待ち受けが返ってから settle_ms のあいだに Stop hook が届くことを検証する
+                        alt Stop hook が届かない
+                            S->>H: pane の close を要求する
+                            Note over S: ABORT リトライを1つ積む。尽きていれば人間へ渡す
+                        end
                         CC-->>S: Stop hook を届ける
+                        S->>S: Stop hook の cwd が worktree の内側であることを検証する
+                        alt cwd が worktree の外である
+                            Note over S: RESUME STEP 29 この hook を捨てて待ち直す
+                        end
                         S->>S: settle_ms のあいだ待つ
                         alt task-notification が届く
-                            Note over S: RESUME STEP 24 turn は続いている
+                            Note over S: RESUME STEP 29 turn は続いている
                         else task-notification が届かない
                             S->>S: transcript から表明の行を読む
                             S->>GH: Status の取り直しを要求する
                             GH-->>S: 現在の Status を応答する
+                            alt issue がボードから返らない
+                                S->>H: pane の close を要求する
+                                Note over S: ABORT リトライを1つ積む
+                            end
                         end
                     end
                     S->>GH: Status への表明の遷移先の書き込みを要求する
@@ -586,6 +800,10 @@ sequenceDiagram
                     GH-->>S: コメントの一覧を応答する
                     alt 今回の run のコメントがない
                         S->>H: pane の close を要求する
+                        S->>S: 身元ファイルからセッション UUID と設定ファイルのパスを読む
+                        alt 復元の材料が足りない
+                            Note over S: 復元をあきらめて片付けへ進む
+                        end
                         S->>H: worktree とリポジトリ本体を渡した workspace の open を要求する
                         H-->>S: workspace と pane を応答する
                         S->>H: セッションの復帰つきの起動を要求する
