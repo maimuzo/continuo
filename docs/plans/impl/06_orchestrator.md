@@ -66,7 +66,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - [x] **環境変数は設定ファイルの `env` に書く。**pane にも `agent.start` にも渡さない（設計 3-12。実測で確認済み）
 - [x] **「実行中の一覧」と「自分が取った印の集合」は同じ `map[string]*runState` 1本である**（設計 3-25）
 - [x] **バックオフが明けた run は、巡回の先頭で印の集合を走査して拾う**（設計 3-21）
-  - 段0 から入り直す。段1 は飛ばす。**セッション UUID は新しく採番する**
+  - 段0 から入り直す。段1 は飛ばす。**セッションは身元ファイルの UUID へ `--resume` で復帰する**（設計 3-3b）
 - [x] **stall の閾値に達したら、枠待ちの判定を先に見る**（設計 3-27 の評価順）
   - 「時計を止める」は `runState.WaitingQuota` を立てて判定を飛ばすこと。`LastSeenAt` は進めない
 - [x] **枠のトークンの出所は `rate_limit.token_source` で決まる**（`claude_credentials` / `keychain` / `env`。設計 3-15）
@@ -174,7 +174,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | 何を | どう決めたか | なぜ |
 | --- | --- | --- |
 | **`Tracker` / `HerdrClient` をインタフェースで受ける** | `*tracker.Adapter` と `*herdr.Client` が満たすことを `var _ Tracker = (*tracker.Adapter)(nil)` でコンパイル時に表明する | **巡回1回のリクエスト本数（3本）をテストから数えるため。**テストはmockしか渡さないので、表明が無いとシグネチャがずれても第7段階まで誰も気づかない |
-| **送る本文は turn 数ではなく `runState.FreshSession` で決める** | 新しいセッション UUID で起動した直後（着手・再 dispatch）だけ真にし、真なら1回目の本文（5-3）、偽なら継続の指示（5-4）を送る | **turn 数では分けられない。**復元で引き継いだ run は turn 数を 1 から数え直すが**セッションは引き継いでいる**ので継続の指示である（3-4 の段5c）。逆に再 dispatch は turn 数を引き継ぐが**セッションは新しい**ので、継続の指示だけでは何をすべきか伝わらない |
+| **送る本文は turn 数ではなく `runState.SendFirstPrompt` で決める** | 着手と再着手（`beginAttempt`）で真にし、真なら1回目の本文（5-3）、偽なら継続の指示（5-4）を送る | **turn 数でも会話履歴の有無でも分けられない。**復元で引き継いだ run は turn 数を 1 から数え直すが、走っている worker をそのまま引き継いでいるので継続の指示である（3-4 の段5c）。逆に再着手はセッションへ復帰して会話履歴を持つが、**5-4 には「紐づく PR も読むこと」が無い**ので1回目の本文を送る（3-3b） |
 | **run を終わらせる処理を1本に絞る（`beginTerminal`）** | 終わらせ始めた印を立て、リトライを積んでバックオフに入るときだけ外す | 終わらせる処理は 3-25 の9段（待ち受けつきの `agent.prompt`）を通り**既定で最大1時間返らない。**印が無いと、次の巡回が同じ run をもう一度終わらせにかかり、`failure_state` の書き込みと引き渡しコメントが二重になる |
 | **turn ループは worker の世代（`workerEpoch`）を持つ** | 起こされたときの世代を覚え、変わっていたら run を諦めずに抜ける | **1回の stall で abandon が2回走るのを防ぐ**（3-21）。巡回の stall 検知が pane を閉じた直後、まだ待ち受けにいた turn ループが同じ run を諦めると RetryCount が2倍の速さで消費される |
 | **巡回のループから run を終わらせるときは goroutine へ逃がす** | `finishRunAsync` / `abandonRunAsync` / `stopAndReleaseAsync` が印だけ同期で確保し、本体を別の goroutine で回す | **設計 3-8 の「巡回のループの中で同期的に呼んではならない」を、照合と stall 検知の経路でも守るため。**コメントの確認は待ち受けつきの `agent.prompt` を通る |
@@ -207,7 +207,8 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | `group_test.go` | グループの表明（`Ice Box` の issue も動かす）／ボードに無い対象／コメントを書かせ直す9段 |
 | `stall_test.go` | **`testing/synctest` で実時間ゼロ。**画面の版が増えている間は打ち切らない／版が止まったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
 | `quota_test.go` | 枠待ちの2条件／`pause_above_percent` は新規だけ止める／`none` なら1回も叩かない／資格情報が無くても起動は続く／**枠明けに `working` なら継続の指示を送らない** |
-| `prompt_choice_test.go` | **復元で引き継いだ run には継続の指示（5-4）を送る**／**再 dispatch は UUID を採り直して1回目の本文（5-3）を `.attempt` 付きで送る** |
+| `prompt_choice_test.go` | **復元で引き継いだ run には継続の指示（5-4）を送る**／**再着手はセッションへ復帰したうえで1回目の本文（5-3）を `.attempt` 付きで送る** |
+| `resume_session_test.go` | **新規の着手は `--session-id`、再着手は `--resume`**／身元ファイルの `session_uuid` を変えない／**復帰に失敗したら新しいセッションで始め直す** |
 | `terminal_test.go` | **巡回のループがコメントの確認でブロックしない**／1回の stall で abandon が2回走らない／打ち切りの前にコメントを確かめる |
 | `signal_test.go` / `transcript_test.go` / `naming_test.go` | 表明の解析／transcript の区切りとトークンの重複排除／agent 名の4段（**連番の段4 を含む**）とスラグ |
 
@@ -219,15 +220,15 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 
 | 短縮名 | 何が問題だったか | どう直したか |
 | --- | --- | --- |
-| **復元の本文** | 引き継いだ run へ1回目の本文（5-3）を送っていた（設計 3-4 の段5c が禁じている） | 送る本文の分岐を turn 数から `runState.FreshSession` に変えた。`Adopt` は立てない |
-| **再 dispatch の本文** | 会話履歴を持たない新しいセッションへ継続の指示（5-4）だけを送っていた。5-3 の `{{if .attempt}}` も到達不能だった | 同じ `FreshSession` で解決。`startRun` が立てるので、再 dispatch は 5-3 を `.attempt = RetryCount + 1` 付きで送る |
+| **復元の本文** | 引き継いだ run へ1回目の本文（5-3）を送っていた（設計 3-4 の段5c が禁じている） | 送る本文の分岐を turn 数から `runState.SendFirstPrompt` に変えた。`Adopt` は立てない |
+| **再着手の本文** | 継続の指示（5-4）だけを送っていた。5-3 の `{{if .attempt}}` も到達不能だった | 同じ `SendFirstPrompt` で解決。`startRun` が立てるので、再着手は 5-3 を `.attempt = RetryCount + 1` 付きで送る |
 | **巡回のブロック** | 実行中の照合が `terminal_states` を見つけると、巡回のループの中でコメントの確認（待ち受けつきの `agent.prompt`）を同期的に呼んでいた | `finishRunAsync` / `abandonRunAsync` / `stopAndReleaseAsync` を足し、印だけ同期で確保して本体を goroutine へ逃がした |
 | **打ち切りのコメント** | stall や時間切れで打ち切ったときに、コメントの確認を1度も走らせていなかった | `abandonRun` の「リトライを使い切った」分岐と `failRun` で、worker を止める前に走らせる。**1回も turn を送っていない run では何もしない** |
 | **二重の打ち切り** | 1回の stall に対して、巡回の stall 検知と turn ループの両方が run を諦めていた | `runState.workerEpoch` と `beginTerminal` を足した。turn ループは世代が変わっていたら諦めない |
 | **agent 名の直接参照** | `sendEscape` が `rs.AgentName` を排他なしで読んでいた | `rs.agentName()` に直した |
 | **連番の未検証** | agent 名の段4（重複したら末尾に連番）を通すテストが無かった | `agent.list` が素の名前を返す状態で dispatch し、`continuo-hello-world-188-2` になることを検査する |
 | **段2 の順番の未検査** | Status の書き込みが `worktree.open` より前かを比べていなかった（記録が別々の並びだった） | テスト用トラッカー mockとテスト用herdr mock が**1本の並び**（`timeline`）へ積むようにし、位置を比べる |
-| **UUID の未検査** | バックオフ明けにセッション UUID を採り直すことを誰も見ていなかった | テスト用socket mockと手で進める時計を使うテストを足し、`agent.start` の `--session-id` を比べる |
+| **UUID の未検査** | バックオフ明けにどのセッションで起動するかを誰も見ていなかった | テスト用socket mockと手で進める時計を使うテストを足し、`agent.start` の `--session-id` と `--resume` を比べる |
 | **表明の GoDoc** | `ParseSignals` の GoDoc が実装と食い違っていた（「解決できなかった行はそのまま識別子として持つ」） | 実装どおりに書き直した。**対象を解決できなかった行は、対象なしの行として扱う** |
 | **インタフェースの表明** | `*tracker.Adapter` と `*herdr.Client` がインタフェースを満たすことを、コンパイル時に確かめていなかった | `var _ Tracker = (*tracker.Adapter)(nil)` と `var _ HerdrClient = (*herdr.Client)(nil)` を足した |
 

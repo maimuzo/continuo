@@ -121,8 +121,12 @@ type runState struct {
 	// **足しておかないと、ダッシュボードの累計が再 dispatch のたびに巻き戻る。**
 	// **ダッシュボード（第9段階）だけが読む。**判断には使わない。
 	Tokens TokenUsage
-	// tokensBase は前のセッションまでの累計である（再 dispatch の時点で畳み込む）。
-	// **beginAttempt が Tokens をここへ移し、setTokens がこれに足して Tokens を作る。**
+	// tokensBase は前のセッションまでの累計である（セッションを採り直した時点で畳み込む）。
+	// **foldTokensBase が Tokens をここへ移し、setTokens がこれに足して Tokens を作る。**
+	//
+	// **セッションへ `--resume` で復帰したときは畳み込まない**（設計 3-3b）。
+	// 復帰すると transcript のファイルは同じままなので、畳み込むと
+	// **同じファイルの中身を2回数える。**
 	tokensBase TokenUsage
 	// TokensAt は Tokens を集計した時刻である。ゼロ値なら一度も集計していない。
 	TokensAt time.Time
@@ -132,20 +136,25 @@ type runState struct {
 	// Finished は run が終わって印から外したことを表す。
 	// turn ループが自分の goroutine を止める判定に使う。
 	Finished bool
-	// FreshSession は「いまのセッションに会話履歴が無い」ことを表す。
+	// SendFirstPrompt は「次に送る turn は1回目の本文（5-3）である」ことを表す。
 	//
-	// **新しいセッション UUID で Claude Code を起動した直後だけ真である**
-	// （着手の段5 と、バックオフ明けの再 dispatch。どちらも UUID を採り直すので
-	// 会話履歴を持たない別のセッションになる）。真なら次に送る turn は
-	// **1回目の本文（5-3）**である。
+	// **会話履歴の有無を表す値ではない**（設計 3-3b）。以前は「いまのセッションに
+	// 会話履歴が無い」という1つの値でこの分岐を兼ねていたが、**再着手でセッションへ
+	// `--resume` で復帰するようになって、その2つは一致しなくなった。**
+	// 復帰した run には会話履歴があるのに、送るのは1回目の本文だからである。
+	// **1つの値に2つの意味を持たせると、どちらの意味で書かれた分岐なのかが読めなくなる。**
 	//
-	// **復元で引き継いだ run は偽である**（設計 3-4 の段5c）。セッションを引き継いで
-	// いるのでエージェントは issue の URL も作法も既に知っており、送るのは
+	// **着手と再着手で真になる**（beginAttempt）。1回目の本文には「issue を読むこと」と
+	// 「紐づく PR も読むこと」が入っており、**`In Review` から差し戻された issue で
+	// 新しく付いたレビューを読ませられるのは、この本文だけである。**
+	//
+	// **復元で引き継いだ run は偽である**（設計 3-4 の段5c）。continuo が起動し直された
+	// だけで、その worker は前の turn の続きを走らせている最中かもしれない。送るのは
 	// **継続の指示（5-4）**である。**turn 数を 1 から数え直すのは打ち切りの計算のためで
 	// あって、1回目をやり直すことではない。**
 	//
 	// **turn を1つ送るたびに偽へ戻す**（beginTurn）。
-	FreshSession bool
+	SendFirstPrompt bool
 
 	// ===== run の終わり方と worker の世代 =====
 
@@ -274,7 +283,7 @@ func (rs *runState) snapshot() runSnapshot {
 		TranscriptPath:   rs.TranscriptPath,
 		HerdrWorkspaceID: rs.HerdrWorkspaceID,
 		Finished:         rs.Finished,
-		FreshSession:     rs.FreshSession,
+		SendFirstPrompt:  rs.SendFirstPrompt,
 		State:            rs.Issue.State,
 		Title:            rs.Issue.Title,
 		URL:              issueURL(rs.Issue),
@@ -307,7 +316,7 @@ type runSnapshot struct {
 	TranscriptPath   string
 	HerdrWorkspaceID string
 	Finished         bool
-	FreshSession     bool
+	SendFirstPrompt  bool
 	State            string
 	Title            string
 	URL              string
@@ -330,7 +339,7 @@ func (rs *runState) beginTurn(now time.Time) int {
 	rs.NeedsPrompt = false
 	// 1回目の本文（5-3）を送るのは、新しいセッションの最初の turn だけである。
 	// 2回目からは継続の指示（5-4）に切り替える（設計 3-8 / `SPEC.md` 7.1）。
-	rs.FreshSession = false
+	rs.SendFirstPrompt = false
 	rs.stopSeenAt = time.Time{}
 	rs.hookSeenThisTurn = false
 	rs.LastSeenAt = now
@@ -719,13 +728,21 @@ func (rs *runState) setSettingsPath(path string) {
 	rs.SettingsPath = path
 }
 
-// setSessionUUID は採番したセッション UUID を入れる（着手の段5）。
+// setSessionUUID はこの run が使うセッション UUID を入れる（着手の段5b）。
 //
-// uuid: 新しく採番した UUID。**使い回してはならない**（設計 3-3）。
+// uuid: 新しく採番した UUID、または `--resume` で復帰する既存の UUID（設計 3-3b）。
+// **新しく採番したものを使い回してはならない**（設計 3-3）。
 func (rs *runState) setSessionUUID(uuid string) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.SessionUUID = uuid
+}
+
+// sessionUUID はこの run が使っているセッション UUID を返す。
+func (rs *runState) sessionUUID() string {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.SessionUUID
 }
 
 // setPaneID は使う pane の ID を入れる（着手の段8）。
@@ -753,28 +770,47 @@ func (rs *runState) agentName() normalize.SafeName {
 	return rs.AgentName
 }
 
-// beginAttempt は新しい試行（着手・再 dispatch）を始めることを記録する。
+// foldTokensBase は、ここまでの累計トークンを「前のセッションまでの分」へ畳み込む
+// （設計 3-15）。
 //
-// **worker の世代を1つ進め、「終わらせる処理が走っている」印と「worker を止めた」印を
-// 外し、`FreshSession` を立てる。**セッション UUID を採り直した直後に呼ぶこと。
+// **セッションを新しく採番した直後にだけ呼ぶこと。**transcript のファイル名は
+// セッション UUID なので、採り直すと集計の対象ファイルが別物になり、そこから集計した値には
+// 前のセッションの分が入っていない。**畳み込まないと、ダッシュボードの累計が巻き戻る。**
 //
-// **`FreshSession` を立てるのは、そのセッションが会話履歴を持たないからである。**
-// 再 dispatch でも UUID は新しく採番するので（設計 3-3）、継続の指示（5-4）だけを送ると
-// **どの issue を何のためにやるのかが1文字も伝わらない。**
-//
-// **ここまでの累計トークンを tokensBase へ畳み込む。**次のセッションの transcript は
-// 別のファイル（ファイル名はセッション UUID）になり、そこから集計した値には
-// 前のセッションの分が入っていないためである。
-//
-// 戻り値: 新しい worker の世代。turn ループはこれを覚えて `currentWorker` に渡す。
-func (rs *runState) beginAttempt() int {
+// **`--resume` で復帰したときは呼んではならない。**復帰しても transcript のファイルは
+// 同じままである（実測: 2026-08-26。復帰の前後で hook が渡す `transcript_path` が一致した）。
+// **呼ぶと、同じファイルの中身を2回数える。**
+func (rs *runState) foldTokensBase() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.tokensBase = rs.Tokens
+}
+
+// beginAttempt は新しい試行（着手・再着手）を始めることを記録する。
+//
+// **worker の世代を1つ進め、「終わらせる処理が走っている」印と「worker を止めた」印を
+// 外し、`SendFirstPrompt` を立てる。**起動するセッションを決めた直後に呼ぶこと。
+//
+// **`SendFirstPrompt` を立てるのは、着手も再着手も1回目の本文（5-3）から始めるからである**
+// （設計 3-3b）。**セッションへ復帰した再着手でもそうする。**`In Review` から差し戻された
+// issue では人間が PR にレビューを書いており、**「issue を読むこと」「紐づく PR も読むこと」が
+// 入っているのは1回目の本文だけだからである。**継続の指示（5-4）にはそれが無い。
+//
+// **新しいセッションを採番した場合だけ、累計トークンを tokensBase へ畳み込む。**
+// 復帰した場合の transcript は同じファイルなので、畳み込むと二重に数える（foldTokensBase）。
+//
+// resumed: 既存のセッションへ `--resume` で復帰する場合は真。新しく採番したなら偽。
+// 戻り値: 新しい worker の世代。turn ループはこれを覚えて `currentWorker` に渡す。
+func (rs *runState) beginAttempt(resumed bool) int {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !resumed {
+		rs.tokensBase = rs.Tokens
+	}
 	rs.workerEpoch++
 	rs.workerStopped = false
 	rs.terminating = false
-	rs.FreshSession = true
+	rs.SendFirstPrompt = true
 	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
 	// 既に終わっているコンテキストを新しい turn ループへ渡すことになり、
 	// 最初の turn を送る前に待ちが打ち切られる。
