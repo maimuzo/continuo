@@ -775,6 +775,24 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 	return result, nil
 }
 
+// StatusWrite は UpdateStatus が何をしたかを返す。
+//
+// **`bool` を2つ並べない。**呼び出し側で取り違える。
+type StatusWrite struct {
+	// Reached は「目的の Status になっているか」である。
+	// **取り直した値が既に目的の値で、書き込みを省いた場合も true になる。**
+	Reached bool
+	// Wrote は「書き込みの mutation を実際に呼んだか」である。
+	//
+	// **issue へ「Status を動かした」と書いてよいのは、これが真のときだけである。**
+	// Reached が真でも Wrote が偽なら、ボードは何も動いていないので書くことがない。
+	Wrote bool
+	// Previous は書き込む直前に ID 指定で取り直した Status である。
+	//
+	// **巡回で読んだ値ではない。**item がもう見えなかったときだけ空になる。
+	Previous string
+}
+
 // UpdateStatus は project item の Status を書き換える（SPEC.md 11.5 が言う
 // provider-native tool 相当の操作。設計「その4」/ 3-25 / 4-1）。
 //
@@ -788,21 +806,29 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 // **許可リストではなく拒否リストである。**グループの issue は Ice Box に置かれるので
 // （設計 3-26）、active_states で絞ると表明が1件も反映されない。
 //
-// **取り直した値が targetState と同じなら、書きに行かない。**同じ値の書き込みでは
-// GitHub 側で遷移が起きず timeline に何も残らないので、continuo のログにだけ
-// 「書き込みました」が出て、あとから「誰がいつ Status を動かしたか」を突き合わせるときに
-// **continuo が書いたはずの時刻に記録が無い**という食い違いになる。API の呼び出しも1回無駄に増える。
+// **取り直した値が既に targetState と同じなら、書き込みの mutation を送らない。**
+// GitHub は同じ値の書き込みを timeline に残さないので、送っても continuo のログにだけ
+// 「Status を書き込みました」が出て、issue には何も現れない。あとから「誰がいつ Status を
+// 動かしたか」を突き合わせるときに、**continuo が書いたはずの時刻に記録が無い**という
+// 食い違いになる。API の呼び出しも1回無駄に増える。
+// **送らずに「目的の Status になっている」（Reached が真）を返し、Wrote は偽のままにする。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // itemID: 書き込む対象の project item ID（Issue.ID）。
 // targetState: 書き込む先の Status 名。Bootstrap で解決した選択肢名と大文字小文字を
 // 無視して照合する。
 // blockedStates: 「この状態なら書かない」Status の一覧。呼び出し側は terminal_states を渡す。
-// 戻り値の1つ目: **書き込みの API を呼んだかどうかではなく、目的の Status になっているか**である。
-// 取り直した値が既に targetState と同じだった場合は、書き込みを省いたうえで true を返す
-// （呼び出し側は「Status を動かせた」として先へ進んでよい）。false はエラーではなく、
-// 「item がもう見えない」または「取り直した結果、書いてはいけない状態に入っていたので
-// 書かなかった」のいずれかを意味する（呼び出し側はログに残すだけでよい）。
+// 戻り値の1つ目: 何をしたか（StatusWrite）。
+// **Reached は「書き込みの API を呼んだかどうか」ではなく「目的の Status になっているか」
+// である。**取り直した値が既に targetState と同じだった場合は、書き込みを省いたうえで
+// Reached を真にする（呼び出し側は「Status を動かせた」として先へ進んでよい）。
+// **Reached が偽なのはエラーではなく、「item がもう見えない」または「取り直した結果、
+// blockedStates に入っていたので書かなかった」のいずれかを意味する**
+// （呼び出し側はログに残すだけでよい）。
+// **Wrote は mutation を実際に呼んだときだけ真になる。**issue へ「何から何へ動かした」と
+// 書いてよいのはこのときだけである。
+// **Previous には書き込む直前に取り直した Status が入る。**「何から動かしたか」を
+// issue へ書くのはこの値である（設計 3-29）。
 // 戻り値の2つ目: Bootstrap が未実行の場合は CategoryInvalidConfig、targetState が
 // Bootstrap で解決した選択肢に無い場合も CategoryInvalidConfig。取り直しや書き込みの
 // GraphQL 呼び出しが失敗した場合はそのエラーを返す。
@@ -811,19 +837,19 @@ func (a *Adapter) UpdateStatus(
 	itemID string,
 	targetState string,
 	blockedStates []string,
-) (bool, error) {
+) (StatusWrite, error) {
 	// **project ID・フィールド ID・選択肢 ID を1回のロックでまとめて取る。**
 	// 巡回ループが VerifyStatusOptions で選択肢を差し替えている最中に別々に読むと、
 	// 新しい正式名と古い選択肢 ID の組み合わせを書き込みかねない。
 	projectID, statusFieldID, optionID, bootstrapped, ok := a.writeTargets(targetState)
 	if !bootstrapped {
-		return false, &Error{
+		return StatusWrite{}, &Error{
 			Category: CategoryInvalidConfig,
 			Message:  "Bootstrap が呼ばれていません（project / Status フィールドの ID が未解決です）",
 		}
 	}
 	if !ok {
-		return false, &Error{
+		return StatusWrite{}, &Error{
 			Category: CategoryInvalidConfig,
 			Message:  fmt.Sprintf("Status の選択肢 %q が見つかりません（Bootstrap で解決した選択肢の一覧に無い）", targetState),
 		}
@@ -832,26 +858,29 @@ func (a *Adapter) UpdateStatus(
 	// 書く前に必ず取り直す。
 	current, err := a.FetchIssuesByIDs(ctx, []string{itemID})
 	if err != nil {
-		return false, err
+		return StatusWrite{}, err
 	}
 	if len(current) == 0 {
 		a.logger.Warn("Status を書きませんでした（item がもう見えません）", "item_id", itemID, "target_state", targetState)
-		return false, nil
+		return StatusWrite{}, nil
 	}
-	if containsFoldedStatus(blockedStates, current[0].State) {
+	previous := current[0].State
+	if containsFoldedStatus(blockedStates, previous) {
 		a.logger.Info("Status を書きませんでした（取り直した結果、書いてはいけない状態に入っていました）",
-			"item_id", itemID, "target_state", targetState, "現在の状態", current[0].State,
+			"item_id", itemID, "target_state", targetState, "現在の状態", previous,
 		)
-		return false, nil
+		return StatusWrite{Previous: previous}, nil
 	}
-	// **既に目的の値なら書きに行かない。**書いても GitHub の timeline には何も残らないので、
+	// **既にその値なら書きに行かない。**書いても GitHub の timeline には何も残らないので、
 	// 「書き込みました」のログだけが残って突き合わせができなくなる。
-	// **戻り値は true である。**目的の Status にはなっており、呼び出し側は先へ進んでよい。
-	if foldStatus(current[0].State) == foldStatus(targetState) {
+	// 比較は foldStatus で行う（statusOptionNamesFold の作り方と同じ正規化。SPEC.md 11.3）。
+	// **選択肢の正式名ではなく targetState と比べる。**
+	// **Reached は真、Wrote は偽である。**目的の Status にはなっているので呼び出し側は
+	// 先へ進んでよいが、ボードは動いていないので「何から何へ動かした」を issue へ書かない。
+	if foldStatus(previous) == foldStatus(targetState) {
 		a.logger.Info("Status は既にその値でした（書き込みを省きました）",
-			"item_id", itemID, "target_state", targetState,
-		)
-		return true, nil
+			"item_id", itemID, "target_state", targetState)
+		return StatusWrite{Reached: true, Previous: previous}, nil
 	}
 
 	var resp updateStatusResponse
@@ -862,11 +891,12 @@ func (a *Adapter) UpdateStatus(
 		"optionId":  optionID,
 	}
 	if err := a.gql.do(ctx, updateStatusMutation, vars, &resp); err != nil {
-		return false, err
+		return StatusWrite{Previous: previous}, err
 	}
 
-	a.logger.Info("Status を書き込みました", "item_id", itemID, "target_state", targetState)
-	return true, nil
+	a.logger.Info("Status を書き込みました",
+		"item_id", itemID, "target_state", targetState, "動かす前の状態", previous)
+	return StatusWrite{Reached: true, Wrote: true, Previous: previous}, nil
 }
 
 // FetchComments は issue に付いたコメントを取得する。
@@ -962,7 +992,7 @@ func (a *Adapter) FetchComments(
 
 // PostComment は continuo 自身が issue へコメントを投稿する。
 //
-// 投稿するのは人間への引き渡しの通知だけである（打ち切り・stall・信頼が無い、など）。
+// 投稿するのは人間への引き渡しの通知と、Status を動かした記録の2つだけである（設計 3-29）。
 // 成果の要約は書かない。エージェントが成果を書かずに終えた場合は、代筆せずに
 // セッションを復元して書かせる（設計 3-25 / 3-29）。
 // 自分が書いたものには self_marker の印を付け、次の turn の入力から外せるようにする。

@@ -519,14 +519,11 @@ func TestComment_引き渡しの通知は1つのrunにつき1件だけ書く(t *
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
 
-	selfComments := 0
-	for _, c := range fx.Tracker.CommentsOf("I_node188") {
-		if c.IsSelf {
-			selfComments++
-		}
-	}
-	if selfComments != 1 {
+	// **数えるのは引き渡しの通知だけである。**Status を動かした記録も self_marker が
+	// 付くので、`IsSelf` で数えると着手の記録まで混ざる（設計 3-29）。
+	handoffs := fx.Tracker.HandoffCommentsOf("I_node188")
+	if len(handoffs) != 1 {
 		t.Fatalf("引き渡しの通知が1件に絞れていない: %d 件（%+v）",
-			selfComments, fx.Tracker.CommentsOf("I_node188"))
+			len(handoffs), fx.Tracker.CommentsOf("I_node188"))
 	}
 }

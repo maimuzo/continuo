@@ -65,7 +65,7 @@ func TestFetchIssuesByStates_archive済みのitemは省く(t *testing.T) {
 // 目的: UpdateStatus が archive 済みの item へは書き込まないことを確認する
 // （書く前の取り直しで「もう見えない」と判定されるため）。
 // 与える情報: Bootstrap 応答 → 取り直しで archive 済みの item を返す偽サーバ。
-// 成功条件: 書き込んでいない（false）ことと、ミューテーションのリクエストが送られていない
+// 成功条件: 書き込んでいない（Reached が偽）ことと、ミューテーションのリクエストが送られていない
 // （リクエストが Bootstrap と取り直しの2件だけである）こと。
 func TestUpdateStatus_archive済みのitemには書き込まない(t *testing.T) {
 	archived := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
@@ -80,11 +80,11 @@ func TestUpdateStatus_archive済みのitemには書き込まない(t *testing.T)
 	})
 	a := newBootstrappedAdapter(t, fs)
 
-	written, err := a.UpdateStatus(t.Context(), "item-archived", "In Review", []string{"Ready", "In Progress"})
+	moved, err := a.UpdateStatus(t.Context(), "item-archived", "In Review", []string{"Ready", "In Progress"})
 	if err != nil {
 		t.Fatalf("UpdateStatus が失敗した: %v", err)
 	}
-	if written {
+	if moved.Reached {
 		t.Fatalf("archive 済みの item へ書き込んでしまった")
 	}
 	if fs.RequestCount() != 2 {

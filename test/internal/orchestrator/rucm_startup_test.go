@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "5daef8c8acf1205e2086912b1972a78e864e8813ab2f2b4bb285d1971185b1e4", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "9a1b2a5867ba950e6ab15cb6e6d1b0934e5b0d27cd9968f7b03284b1cb2d25ec", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「issue を1件処理する」の段13〜段15
 // （pane が起動を受け付けるか / Claude Code が入力を受け付けられるか）を通る

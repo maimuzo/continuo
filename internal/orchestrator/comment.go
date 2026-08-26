@@ -278,7 +278,8 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 // rs: 対象の run。
 func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState) {
 	o.stopWorker(ctx, rs)
-	if _, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
@@ -288,5 +289,36 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState) {
 		"continuo は成果の要約を代筆しないので、このままでは何が行われたか誰にも分かりません。"+
 		"\n【確かめ方】worktree の中身（下記）と `git log` を見て、実際に何が変わったかを確かめてください。"+
 		"\n【よくある原因】エージェントがコメントの投稿に失敗した / 指示の文面にコメントを書く手順が無い。"+
-		"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。")
+		"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。",
+		newStatusMove(moved, o.cfg.Tracker.FailureState))
+}
+
+// postStatusMove は continuo が Status を動かした記録を issue のコメントに残す（設計 3-29）。
+//
+// **書き込みが起きていなければ何もしない。**ボードが動いていないので書くことがない。
+// 「動かさない」表明（`status_signal_map` の値が null）と、item が見えない・
+// 書いてはいけない状態だった・既に同じ値だった場合が、これに当たる。
+//
+// **引き渡しの通知を出す経路からは呼ばない。**そちらは通知の本文に1行入れる
+// （`buildHandoffComment`）。
+//
+// **この投稿が `hasRunComment` を満たすことはない。**`self_marker` が付くので
+// `FetchComments` の結果から外れる（設計 3-29）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// identifier: issue の識別子（ログに出す）。
+// nodeID: 投稿先の issue のノード ID。空なら何もしない。
+// move: 動かした記録。
+// why: 「なぜ」に入れる文。「〜ためです」で終わる形で渡す。
+func (o *Orchestrator) postStatusMove(
+	ctx context.Context, identifier, nodeID string, move statusMove, why string,
+) {
+	if !move.Wrote || nodeID == "" {
+		return
+	}
+	if _, err := o.tracker.PostComment(ctx, nodeID,
+		buildStatusMoveComment(move, why, o.now()),
+		o.cfg.Tracker.Comments.SelfMarker); err != nil {
+		o.logger.Warn("Status を動かした記録を投稿できませんでした", "identifier", identifier, "error", err)
+	}
 }

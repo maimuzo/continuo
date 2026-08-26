@@ -534,18 +534,19 @@ func (ft *fakeTracker) FetchIssueByIdentifier(
 // itemID: 書き込み先の project item の ID。
 // targetState: 書き込む Status の値。
 // blockedStates: 書かない状態の一覧（使わない）。
-// 戻り値の1つ目: 書けたかどうか。
+// 戻り値の1つ目: 何をしたか。**Previous には書き込む直前の Status が入る。**
 // 戻り値の2つ目: 常に nil。
 func (ft *fakeTracker) UpdateStatus(
 	_ context.Context, itemID, targetState string, _ []string,
-) (bool, error) {
+) (tracker.StatusWrite, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.updates = append(ft.updates, statusUpdate{ItemID: itemID, State: targetState})
+	previous := ft.state
 	if ft.written {
 		ft.state = targetState
 	}
-	return ft.written, nil
+	return tracker.StatusWrite{Reached: ft.written, Wrote: ft.written, Previous: previous}, nil
 }
 
 // Updates は書き込んだ内容を書き込んだ順に返す。
