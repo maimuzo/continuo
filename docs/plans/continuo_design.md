@@ -597,6 +597,53 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 
 ---
 
+### 2-6. ボードの自動化が動かした Status は、`actor` の型でしか見分けられない
+
+**言いたいこと。**`ProjectV2ItemStatusChangedEvent.wasAutomated` は、**組み込みの自動化が動かしたときでも `false` を返す。**
+見分けに使えるのは `actor` である。**自動化は `Bot`、人間は `User`** になる。
+どちらも同じ1リクエストで返るので、読む項目を変えても API の消費は増えない。
+
+**実測（2026-08-26）。**一時ボード（`maimuzo` の project #11。実測後に消す前提で作った）で、
+`maimuzo/continuo-e2e#1` に `Closes #1` を書いた PR を1本作り、timeline を引いた。
+**本番のボード（project #3）と実機確認用のボード（project #10）には書き込んでいない。**
+
+| 何が動かしたか | `wasAutomated` | `actor.__typename` | `actor.login` |
+| --- | --- | --- | --- |
+| 組み込みの `Pull request linked to issue`（`Todo` → `In Progress`） | **`false`** | `Bot` | `github-project-automation` |
+| 組み込みの `Item added to project`（未設定 → `Todo`） | **`false`** | `Bot` | `github-project-automation` |
+| 人間が画面や API で動かしたもの | `false` | `User` | （そのアカウント名） |
+
+**応答の原文**（`project.number` で自分のボードに絞れることも同時に確かめた）。
+
+```json
+{ "createdAt": "2026-08-26T12:32:35Z", "previousStatus": "Todo", "status": "In Progress",
+  "wasAutomated": false,
+  "actor": { "__typename": "Bot", "login": "github-project-automation", "id": "BOT_kgDOBr0Lng" },
+  "project": { "number": 11 } }
+```
+
+**公開リポジトリでも同じだった。**`nodejs/node#65525` / `#65516` の
+`github-project-automation` による遷移も `wasAutomated` は `false` である（2026-08-26 に読み取りのみで確認）。
+
+**`wasAutomated` が何のための項目かは分かっていない。**GraphQL の説明文は
+"Did this event result from workflow automation?"（**訳:** このイベントは workflow の自動化から生じたものか？）だが、
+**組み込みの自動化では真にならない。**GitHub Actions から書いた場合の値は測っていない。
+
+**新しいボードは自動化6件がすべて有効な状態で作られる。**`gh project create` で作った project #11 の
+`workflows` は6件とも `enabled: true` だった。**この事故は既定の設定のまま起きる。**
+
+**リクエストは増やさずに取れる。**ID 指定の取り直し（`nodes(ids:)`）の `content` の
+`... on Issue` に `timelineItems` を足すと、Status の値と同じ1リクエストで返ることを実測した
+（2026-08-26、project #10 の item に対して読み取りのみ）。
+**`project.number` で自分のボードに絞る必要がある。**1つの issue が複数のボードに載っていると、
+他のボードのイベントが同じ配列に混ざって返る（実測でも #10 と #11 の両方が返った）。
+
+**ボードの自動化の有効・無効は API から変えられない。**GraphQL の mutation は
+`deleteProjectV2Workflow` しか無く、有効化・無効化に当たるものが無い（2026-08-26 に introspection で確認）。
+**切り替えは GitHub の画面からしかできない。**
+
+---
+
 ## 3. 設計
 
 ### 3-1. 全体構成
