@@ -98,7 +98,14 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 			o.finishRunAsync(ctx, rs, "", fmt.Sprintf("Status が %s になっていました", issue.State))
 		case containsFold(o.cfg.Tracker.ActiveStates, issue.State) && issue.Dispatchable:
 			// まだ作業中で routable である。スナップショットの更新だけ。
+			// **知らない Status だった記録は消す**（設計 3-50）。エージェントが表明で
+			// 戻したのだから、猶予の起点も捨てる。
+			rs.clearUnknownState()
+		case issue.State != "" && !o.isKnownState(issue.State):
+			// **continuo が知らない Status である**（設計 3-50）。黙って止めない。
+			o.handleUnknownState(ctx, rs, issue)
 		default:
+			// 引き渡し（`In Review` / `Blocked` など、設定に名前が出てくる Status）。
 			o.logger.Info("作業中でも完了でもない状態になったので worker を止めます（worktree は残します）",
 				"identifier", issue.Identifier, "状態", issue.State)
 			o.stopAndReleaseAsync(ctx, rs)

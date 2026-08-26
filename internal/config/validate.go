@@ -136,6 +136,11 @@ func validate(cfg *Config) error {
 	if cfg.Tracker.VerifyStatesEvery < 0 {
 		return invalidValueError("tracker.verify_states_every", cfg.Tracker.VerifyStatesEvery, "0以上の整数にすること（0 なら起動時だけ照合する）")
 	}
+	// 0 は「猶予を置かない」という意味を持つので許す。負の値は意味を持たない（3-50）。
+	if cfg.Tracker.UnknownStateGraceMs < 0 {
+		return invalidValueError("tracker.unknown_state_grace_ms", cfg.Tracker.UnknownStateGraceMs,
+			"0以上の整数にすること（0 なら猶予を置かずにその巡回で止める）")
+	}
 	// status_signal_map の値は「動かす先の Status 名」である。null は「Status を動かさない」
 	// という意味を持つので許すが、空文字の Status 名は存在しないので誤りとして止める。
 	// 名前がボードに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。
@@ -161,6 +166,19 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Workspace.IdentityFile == "" {
 		return requiredValueError("workspace.identity_file")
+	}
+	// **知らない値を黙って既定に丸めない**（3-49）。`halt` や `abort` と書いた利用者は
+	// 「止まる」つもりでいるので、丸めた側が偶然一致しても、次に `continue` と
+	// 書いたときには**飛ばすつもりが止まる**。書いた値が効いていないことに気づけない。
+	switch cfg.Workspace.OnBrokenWorktree {
+	case OnBrokenWorktreeStop, OnBrokenWorktreeSkip:
+	default:
+		return invalidValueError(
+			"workspace.on_broken_worktree", cfg.Workspace.OnBrokenWorktree,
+			fmt.Sprintf("%q（壊れた worktree を見つけたら起動を止める）か %q"+
+				"（その worktree だけ飛ばして起動を続ける）のどちらかにすること",
+				OnBrokenWorktreeStop, OnBrokenWorktreeSkip),
+		)
 	}
 
 	if cfg.Agent.MaxConcurrentAgents <= 0 {

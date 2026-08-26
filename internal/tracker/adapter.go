@@ -202,7 +202,51 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 		"project_number", a.projectNumber,
 		"status_options", a.statusOptionCount(),
 	)
+	// **起動時に1回だけ、ボードにあって設定に無い Status を名前で出す**（設計 3-50）。
+	//
+	// **件数だけでは気づけない。**`status_options=11` とだけ出しても、そのうち
+	// どれを continuo が扱えないのかが分からない。**扱えない Status へ動かされた issue は
+	// worker を止められる**ので、名前を先に見せておく。
+	//
+	// **巡回ごとの再照合（VerifyStatusOptions）では出さない。**10分に1回同じ行が流れると
+	// 他の行が埋もれる。
+	if unknown := a.unknownStatusOptions(cfg); len(unknown) > 0 {
+		a.logger.Info("ボードには continuo が知らない Status があります"+
+			"（continuo は WORKFLOW.md に書かれた Status だけを扱います。"+
+			"知らない Status へ動かされた issue は worker を止めます）",
+			"件数", len(unknown),
+			"知らない Status", strings.Join(unknown, ", "),
+		)
+	}
 	return nil
+}
+
+// unknownStatusOptions はボードにあって設定に無い Status の選択肢名を返す（設計 3-50）。
+//
+// **照合の向きが `Bootstrap` の検査と逆である。**`Bootstrap` は「設定の名前がボードに
+// 在るか」を見る（無ければ起動を止める）。こちらは「ボードの名前が設定に在るか」を見る
+// （無くても止めない。知らせるだけである）。
+//
+// **`Bootstrap` を通したあとに呼ぶこと。**通っていなければ選択肢の一覧を持っていないので、
+// 空を返す。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// 戻り値: 設定に名前が出てこない選択肢名（ボードの綴りのまま。名前順）。
+func (a *Adapter) unknownStatusOptions(cfg config.TrackerConfig) []string {
+	wanted := make(map[string]bool)
+	for _, s := range requiredStatesForBootstrap(cfg) {
+		wanted[foldStatus(s)] = true
+	}
+	a.mu.RLock()
+	names := make([]string, 0, len(a.statusOptionIDs))
+	for name := range a.statusOptionIDs {
+		if !wanted[foldStatus(name)] {
+			names = append(names, name)
+		}
+	}
+	a.mu.RUnlock()
+	sort.Strings(names)
+	return names
 }
 
 // VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6 の
@@ -371,6 +415,30 @@ func (a *Adapter) statusOptionCount() int {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return len(a.statusOptionIDs)
+}
+
+// StatusOptionNames はボード側の Status の選択肢名を、GitHub の綴りのまま全部返す。
+//
+// **設定に書いた名前だけでは、取り違えを見つけられないから公開してある。**
+// `Bootstrap` が照合するのは「設定に書いた名前がボードに在るか」だけである。
+// **ボードに `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。**
+// `continuo doctor` はここで全部の選択肢名を受け取り、設定の名前と紛らわしい組を警告する。
+//
+// **Bootstrap（または VerifyStatusOptions）を通してから呼ぶこと。**通っていなければ nil を返す。
+//
+// 戻り値: 選択肢名の一覧（昇順。出力の順序を安定させるため）。通っていなければ nil。
+func (a *Adapter) StatusOptionNames() []string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if !a.bootstrapped {
+		return nil
+	}
+	names := make([]string, 0, len(a.statusOptionIDs))
+	for name := range a.statusOptionIDs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // writeTargets は書き込み（updateProjectV2ItemFieldValue）に要る値を、

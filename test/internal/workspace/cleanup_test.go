@@ -1078,3 +1078,48 @@ func TestCleanup_実在するbranchを消せなければ理由を返す(t *testi
 		t.Fatalf("現物と食い違う branch %s を消している", stale)
 	}
 }
+
+// 目的: git が1つも答えられないまま片付けを見送ったとき、**次に何をすべきか**を
+// 呼び出し側へ渡すことを確認する（設計 3-49）。
+//
+// **理由だけを出しても、読んだ人間は次に何をすればよいか分からない。**
+// その worktree は壊れており、continuo は二度と自分では片付けられないので、
+// 巡回のたびに同じ理由が出続ける。**人間が手で始末する道筋をその場に置く。**
+//
+// 与える情報: `.git` を読めない文字列で潰した worktree。
+//
+// 成功条件: 見送りになり、**worktree が消えず**、
+// 「中を調べる」「控える」「消す」の3行が返ること。
+func TestCleanup_gitが答えられないときは次にすべきことを添える(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	// worktree の `.git` は `gitdir: …` と書かれただけのファイルである（issue #23）。
+	// 潰すと `git -C <worktree> …` が1つも通らない。
+	if err := os.WriteFile(
+		filepath.Join(cf.Prepared.Path, ".git"), []byte("こわれている\n"), 0o644); err != nil {
+		t.Fatalf("worktree の .git を潰せない: %v", err)
+	}
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("片付けがエラーになった（見送りで返すこと）: %v", err)
+	}
+	if !result.Deferred || result.Removed {
+		t.Fatalf("git が答えられないのに片付けてしまった: %+v", result)
+	}
+	if len(result.NextSteps) != 3 {
+		t.Fatalf("次にすべきことが3行で入っていない: %+v", result.NextSteps)
+	}
+	if !strings.Contains(result.NextSteps[0], cf.Prepared.Path) {
+		t.Errorf("1行目に調べる相手が入っていない: %q", result.NextSteps[0])
+	}
+	if !strings.Contains(result.NextSteps[1], "cp -a") {
+		t.Errorf("2行目に控え方が入っていない: %q", result.NextSteps[1])
+	}
+	if !strings.Contains(result.NextSteps[2], "continuo abandon --force") {
+		t.Errorf("3行目に消し方が入っていない: %q", result.NextSteps[2])
+	}
+	if _, statErr := os.Stat(cf.Prepared.Path); statErr != nil {
+		t.Fatalf("壊れた worktree を消してしまった: %v", statErr)
+	}
+}

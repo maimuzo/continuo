@@ -122,12 +122,15 @@ func (m *Manager) Inspect(ctx context.Context, req CleanupRequest) (*Leftover, e
 	}
 	req.Base = m.effectiveBase(req.Base, identity)
 
+	reasons, _ := m.leftoverReasons(ctx, req)
 	result := &Leftover{
 		Identity:     identity,
 		WorktreePath: resolvedPath,
 		Base:         req.Base.String(),
 		// **見送りの理由は Cleanup と同じ関数に出させる。**
-		Reasons: m.leftoverReasons(ctx, req),
+		// **git が答えられたかどうかはここでは使わない**（Inspect は Undetermined で
+		// 「調べ切れなかった」を別に持っている）。
+		Reasons: reasons,
 	}
 
 	// **件数は設定に関係なく数える。**人間に見せるための数であり、

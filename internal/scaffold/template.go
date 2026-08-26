@@ -48,6 +48,9 @@ tracker:
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
   verify_states_every: 20                   # 上に書いた Status 名がボードに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
+  unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。
+                                            # turn の途中なら、この長さまで turn の終わりを待ち、エージェントの表明を読んでから判断する。
+                                            # 0 なら待たずに止める。待つぶん、人間が止めたいときに止まるのが遅れる
 
 polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと
@@ -56,6 +59,9 @@ workspace:
   root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する。
                                             # 中の並べ方は <root>/<ホスト>/<owner>/<repo>/<branch> に固定で、選べない
   identity_file: .continuo.json             # どの issue の worktree かを worktree の中に書き残すファイルの名前
+  on_broken_worktree: stop                  # 上のファイルを読めない worktree を見つけたときの振る舞い。
+                                            # stop なら起動を止める。skip ならその worktree だけ飛ばして続ける。
+                                            # どちらでも worktree は消さない（消すのは continuo abandon --force だけ）
 
 workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
   after_create: null                        # worktree を作った直後に走る。失敗したらその issue は進めない
@@ -171,6 +177,29 @@ language: auto                              # 画面に出す文言の言語。a
 	"`" +
 	` を出してください。**
 中身が分からないまま作業を始めないでください。
+
+## この issue に紐づく PR も読むこと
+
+**PR ができたあと、レビューの指摘は PR に書かれます。**issue のコメントだけを読むと見落とします。
+
+**まず、この issue に紐づく PR の番号を全部出してください。**次の2つを両方実行し、重複を除きます。
+
+    gh pr list --repo {{.issue.owner}}/{{.issue.repo}} --state all --limit 100 --json number,state,title,closingIssuesReferences --jq '.[] | select(any(.closingIssuesReferences[]?; .number == {{.issue.number}})) | "\(.number)\t\(.state)\t\(.title)"'
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}}/timeline --paginate --jq '.[] | select(.event == "cross-referenced") | .source.issue | select(.pull_request != null) | "\(.number)\t\(.state)\t\(.title)"'
+
+**出てきた PR 1件ずつについて、次の3つを全部読んでください。**<PR番号> は上で出た数字に置き換えます。
+
+    gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --comments
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '.[] | "\(.user.login) \(.path):\(.line // .original_line)\n\(.body)\n"'
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '.[] | "\(.user.login) \(.state)\n\(.body)\n"'
+
+**2つ目を飛ばさないでください。**行に紐づくレビューコメントは gh pr view --comments に1件も出ません。
+**指摘の本体はそこに書かれます。**
+
+**読んだ指摘は、直すか、直さない理由を issue のコメントに残すかのどちらかにしてください。**
 
 ## 終わったらやること
 

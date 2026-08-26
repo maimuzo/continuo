@@ -91,6 +91,12 @@ type Deps struct {
 	// GOOS は動いている OS である。`continuo allow-keychain-access` は macOS 専用なので、
 	// **macOS 以外での応答を検査するために差し替えられるようにしてある。**空なら runtime.GOOS。
 	GOOS string
+	// ForceExit は2回目の割り込みでプロセスを叩き落とす。**空なら os.Exit。**
+	//
+	// **ここだけは Run の戻り値を経由できない。**2回目の Ctrl+C は「後始末を待たない」
+	// ことに意味があり、待ち込んでいる呼び出しの内側から即座に抜ける必要がある。
+	// **検査ではここを差し替えて、os.Exit を呼ばせずに呼ばれたことだけを確かめる。**
+	ForceExit func(code int)
 }
 
 // withDefaults は埋まっていないフィールドを本物で埋める。
@@ -126,6 +132,9 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.GOOS == "" {
 		d.GOOS = runtime.GOOS
+	}
+	if d.ForceExit == nil {
+		d.ForceExit = os.Exit
 	}
 	return d
 }
@@ -1157,9 +1166,11 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// **2回目の signal を効かせる。**1回目を受けたら登録を外し、既定の動作
-	// （プロセスの終了）へ戻す。理由は daemon.RestoreDefaultSignalsOnShutdown にある。
-	daemon.RestoreDefaultSignalsOnShutdown(ctx, stop)
+	// **1回目で待たせる理由を出し、2回目で即座に終わらせる。**
+	// **既定の動作へ戻すやり方は使わない**（戻る先が「無視」になりうる。
+	// 理由は daemon.WatchInterrupt にある）。
+	stopWatch := daemon.WatchInterrupt(logger, d.ForceExit)
+	defer stopWatch()
 
 	// **設定を読めたら、その言語で出す**（設計 3-35）。読めなければ daemon.Run が
 	// 起動できない理由をログに出すので、ここでは環境変数から決めた言語のまま進む。

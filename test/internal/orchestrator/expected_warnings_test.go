@@ -94,6 +94,8 @@ var expectedWarnings = map[string][]string{
 	"TestPreflight_未信頼の通知は巡回のたびに繰り返さない":                                 {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestRUCMHandoff_P012_知らない表明ではStatusを動かさない":                         {"表明の値が status_signal_map にありません"},
 	"TestReconcile_active_statesに戻ったらdispatchの前にpaneを閉じる":               {"印に入っていない worktree に生きた pane があったので閉じます"},
+	"TestRUCMHandoff_P013_知らないStatusで止めるときはissueに理由を書く":                 {"continuo が知らない Status になったので worker を止めます"},
+	"TestRUCMHandoff_P014_turnが動いている間は知らないStatusでもすぐには止めない":             {"知らない Status のまま猶予を過ぎたので worker を止めます"},
 	"TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる": {"権限の確認で止まっているので引き継ぎません"},
 	"TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す":        {"agent_status を判断できないので引き継ぎません"},
 	"TestRestore_agentの一覧を取れなくてもpaneを1つも閉じない":                           {"agent の一覧を取れません"},

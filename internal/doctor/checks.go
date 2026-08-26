@@ -148,10 +148,15 @@ func checkClaudeHome(opts Options) Result {
 // **ここが書けないと、着手は段3（ws.Prepare）で必ず落ちる。**doctor がそれを
 // 事前に何も言わなかったので、利用者は起動してから初めて気づくことになっていた。
 //
+// **書けたあとに、壊れた worktree が残っていないかも見る**（設計 3-49）。
+// `workspace.on_broken_worktree` が既定の `stop` なら、それが1件でもあると continuo は
+// 起動しない。**doctor が黙っていると、利用者は起動してから初めてそれを知る。**
+//
+// opts: doctor の入力（ホームディレクトリの差し替えに使う）。
 // cfg: 読めた場合の設定。
 // configSymbol: 設定ファイルの検査の結果。
 // 戻り値: 検査の結果。
-func checkWorkspaceRoot(cfg loadedConfig, configSymbol Symbol) Result {
+func checkWorkspaceRoot(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
 	if configSymbol != SymbolOK {
 		return Result{
 			Label:  LabelWorkspaceRoot,
@@ -173,11 +178,60 @@ func checkWorkspaceRoot(cfg loadedConfig, configSymbol Symbol) Result {
 		}
 		return res
 	}
-	return Result{
+	return brokenWorktreeResult(opts, cfg, root)
+}
+
+// brokenWorktreeResult は、置き場所に**身元を確かめられない worktree**が残っていないかを
+// 調べて、見出し語 `worktree の場所` の結果に足す（設計 3-49）。
+//
+// **起動する前に気づけるほうがよい。**`workspace.on_broken_worktree` が既定の `stop` なら、
+// この worktree が1件でもあるだけで continuo は起動しない。doctor が黙っていると、
+// 利用者は起動してから初めてそれを知る。
+//
+// **判定は書き直さない。**internal/workspace の ScanBroken をそのまま呼ぶ
+// （doctor は判定の実体を持たない、という 3-32 の規則どおりである）。
+//
+// **1件も消さない。**doctor は読むだけである。
+//
+// opts: doctor の入力（ホームディレクトリの差し替えに使う）。
+// cfg: 読めた設定。
+// root: 検査した置き場所。
+// 戻り値: 検査の結果。
+func brokenWorktreeResult(opts Options, cfg loadedConfig, root string) Result {
+	ok := Result{
 		Label:  LabelWorkspaceRoot,
 		Symbol: SymbolOK,
 		Detail: i18n.T(i18n.KeyDoctorWorkspaceRootOK, root),
 	}
+
+	manager, err := workspace.New(workspace.Options{Config: cfg.Config, HomeDir: opts.HomeDir})
+	if err != nil {
+		ok.Notes = append(ok.Notes, i18n.T(i18n.KeyDoctorWorkspaceRootBrokenScanFailed, root, err))
+		return ok
+	}
+	broken, err := manager.ScanBroken()
+	if err != nil {
+		ok.Notes = append(ok.Notes, i18n.T(i18n.KeyDoctorWorkspaceRootBrokenScanFailed, root, err))
+		return ok
+	}
+	if len(broken) == 0 {
+		return ok
+	}
+
+	// **何が起きているかと、次に何をすべきかを、必ず両方出す。**
+	identityFile := manager.IdentityFileName()
+	for _, b := range broken {
+		ok.Notes = append(ok.Notes, b.What(identityFile))
+		ok.Remedies = append(ok.Remedies, b.NextSteps()...)
+	}
+	if cfg.Config.Workspace.OnBrokenWorktree == config.OnBrokenWorktreeSkip {
+		// **飛ばす設定でも黙らない。**起動はできるが、その worktree は誰も面倒を見ない。
+		ok.Detail = i18n.T(i18n.KeyDoctorWorkspaceRootBrokenSkip, root, len(broken))
+		return ok
+	}
+	ok.Symbol = SymbolMissing
+	ok.Detail = i18n.T(i18n.KeyDoctorWorkspaceRootBrokenStop, root, len(broken))
+	return ok
 }
 
 // daemonEnvRuntimeDir は実行時ディレクトリを差し替える環境変数である。
@@ -461,18 +515,20 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 // ghSymbol: 上流（gh の認証）の記号。
 // 戻り値の1つ目: 検査結果。
 // 戻り値の2つ目: ボードから集めた対象リポジトリ（読めなければ nil）。
+// 戻り値の3つ目: ボード側の Status の選択肢名（Bootstrap を通っていなければ nil）。
+// **見出し語 `Status の名前` がこれを使う。**同じ応答から取るので、追加のリクエストは要らない。
 func checkBoard(
 	ctx context.Context,
 	cfg loadedConfig,
 	opts Options,
 	configSymbol, ghSymbol Symbol,
-) (Result, []Repo) {
+) (Result, []Repo, []string) {
 	if configSymbol != SymbolOK {
 		return Result{
 			Label:  LabelBoard,
 			Symbol: SymbolUnknown,
 			Detail: i18n.T(i18n.KeyDoctorBoardConfigUnreadable),
-		}, nil
+		}, nil, nil
 	}
 	if ghSymbol != SymbolOK {
 		// **上流の記号によって文言を分ける。**`✗`（足りない）を「確かめられなかった」と
@@ -481,7 +537,7 @@ func checkBoard(
 		if ghSymbol == SymbolUnknown {
 			reason = i18n.T(i18n.KeyDoctorBoardGHUnknown)
 		}
-		return Result{Label: LabelBoard, Symbol: SymbolUnknown, Detail: reason}, nil
+		return Result{Label: LabelBoard, Symbol: SymbolUnknown, Detail: reason}, nil, nil
 	}
 
 	token, err := tracker.ResolveToken(ctx, cfg.Config.Tracker.Provider, opts.GHAuthToken)
@@ -491,7 +547,7 @@ func checkBoard(
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorBoardTokenUnresolved, err),
 			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyTokenSource)},
-		}, nil
+		}, nil, nil
 	}
 
 	adapter, err := tracker.NewAdapter(
@@ -502,16 +558,17 @@ func checkBoard(
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorBoardAdapterFailed, err),
 			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyTracker)},
-		}, nil
+		}, nil, nil
 	}
 
 	if err := adapter.Bootstrap(ctx, cfg.Config.Tracker); err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil, nil
 	}
+	boardStates := adapter.StatusOptionNames()
 
 	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
 	if err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil, nil
 	}
 
 	repos := collectRepos(issues)
@@ -521,7 +578,7 @@ func checkBoard(
 		Detail: i18n.T(i18n.KeyDoctorBoardOK,
 			cfg.Config.Tracker.Provider.Owner, cfg.Config.Tracker.Provider.ProjectNumber,
 			len(issues), len(repos), endpointNote(opts.GraphQLEndpoint)),
-	}, repos
+	}, repos, boardStates
 }
 
 // endpointNote は接続先を差し替えているときに添える1行を作る。

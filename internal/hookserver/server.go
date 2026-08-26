@@ -715,6 +715,15 @@ func (s *Server) isClosed() bool {
 // **accept 済みの接続も閉じる。**閉じないと handleConn が読み取りの期限（既定10秒）まで
 // 戻らず、wg.Wait がその間ずっと返らない。continuo の終了・再起動がその都度止まる。
 //
+// **socket ファイルの後始末は goroutine の終了を待つ前に済ませる。**呼び出し側はこの Close
+// 自体に期限を掛けており（`daemon.DefaultHookServerWait`）、待ち切れずに抜けたときに
+// socket ファイルが残ると、次の起動が「残骸がある」と言って止まる。listener は既に
+// 閉じてあるので、配送中の goroutine はこのファイルを必要としない。
+//
+// **`net.Listen` が作った Unix の listener は、`Close` の時点で自分で unlink する**
+// （`net.UnixListener.SetUnlinkOnClose` の既定）。ここの `os.Remove` はその取りこぼしに
+// 備える保険であり、**期限の内側に置くために listener を閉じた直後で呼ぶ。**
+//
 // 2回以上呼んでも安全である（2回目以降は何もしない）。
 // 戻り値: リスナーを閉じられなかった場合のエラー。socket ファイルを消せなかった場合は
 // ログに残すだけでエラーにしない（次回の起動が残骸として片付けるため）。
@@ -744,6 +753,11 @@ func (s *Server) Close() error {
 		if err := ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			closeErr = i18n.Errorf(i18n.KeyHookserverCloseListenerCloseFailed, s.socketPath, err)
 		}
+		// **listener が自分で unlink する取りこぼしに備える保険である。**
+		// 待ちに期限が掛かっているので、期限の内側であるここで呼ぶ。
+		if err := os.Remove(s.socketPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			s.logger.Warn("hook を受ける socket のファイルを消せませんでした", "socket", s.socketPath, "error", err)
+		}
 	}
 	for _, c := range conns {
 		// 読み取りの途中の接続を叩き起こす。handleConn 側が同じ接続をもう一度閉じるが、
@@ -753,10 +767,5 @@ func (s *Server) Close() error {
 
 	s.wg.Wait()
 
-	if ln != nil {
-		if err := os.Remove(s.socketPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			s.logger.Warn("hook を受ける socket のファイルを消せませんでした", "socket", s.socketPath, "error", err)
-		}
-	}
 	return closeErr
 }

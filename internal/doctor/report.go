@@ -39,6 +39,11 @@ const (
 	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。
 	LabelBoard = i18n.KeyDoctorLabelBoard
+	// LabelStatusNames は、設定に書いた Status 名と紛らわしい選択肢がボードに無いかの検査である。
+	//
+	// **`✗` にしない。**紛らわしいだけでは continuo は動く。だが取り違えたまま無人で回すと、
+	// **人間が作業中の issue にエージェントが着手する。**
+	LabelStatusNames = i18n.KeyDoctorLabelStatusNames
 	// LabelClone は対象リポジトリが `ghq list -p -e` で見つかるかの検査である。
 	LabelClone = i18n.KeyDoctorLabelClone
 	// LabelTrust は対象リポジトリの clone のパスが `~/.claude.json` で承認済みかの検査である。
@@ -76,7 +81,8 @@ const (
 	SymbolOK Symbol = "✓"
 	// SymbolMissing は「足りない」である。**1つでもあれば終了コードは 1 になる。**
 	SymbolMissing Symbol = "✗"
-	// SymbolUnknown は「確かめられなかった」である。動くかもしれないので終了コードは 0 のままにする。
+	// SymbolUnknown は「確かめられなかった」と「確かめたが、そのままだと取り違えやすい」である。
+	// **どちらも起動を止めるほどではないので、終了コードは 0 のままにする。**
 	SymbolUnknown Symbol = "!"
 )
 
