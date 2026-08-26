@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "2c5a59c5ec81e07fbfd3ad6674c34810521b697c9b2b1b7037dfa481d75b9459", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "9a1b2a5867ba950e6ab15cb6e6d1b0934e5b0d27cd9968f7b03284b1cb2d25ec", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **候補の取り方と、着手を取りやめる経路の検査である。**
 //

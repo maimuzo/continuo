@@ -125,7 +125,8 @@ func (o *Orchestrator) stopForUnknownStateAsync(ctx context.Context, rs *runStat
 		defer cancel()
 		// **コメントを先に書く。**pane を閉じてから書くと、投稿に失敗したときに
 		// 「黙って止まった」状態がそのまま残る。
-		o.postHandoffComment(cleanupCtx, rs, reason)
+		// **Status を動かした記録は添えない。**動かしたのは人間であって continuo ではない。
+		o.postHandoffComment(cleanupCtx, rs, reason, statusMove{})
 		o.runAfterRun(cleanupCtx, rs)
 		o.stopWorker(cleanupCtx, rs)
 		o.release(rs)
@@ -146,7 +147,8 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 		return
 	}
 	reason := o.unknownStateReason(rs, state)
-	o.postHandoffComment(ctx, rs, reason)
+	// **Status を動かした記録は添えない。**動かしたのは人間であって continuo ではない。
+	o.postHandoffComment(ctx, rs, reason, statusMove{})
 	// **`failureState` は渡さない。**人間が自分で動かした Status を continuo が
 	// 上書きしてはならない（設計 3-4 の「人間の操作を巻き戻さない」）。
 	o.finishRunClaimed(ctx, rs, "", reason)

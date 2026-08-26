@@ -575,16 +575,21 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 	// **拒否リストも渡し続ける。**UpdateStatus はこのあともう一度 ID 指定で取り直すので、
 	// 上の取り直しとの隙間に人間が動かした場合は、そちらが最後の砦になる。
-	written, err := o.tracker.UpdateStatus(ctx, issue.ID, o.cfg.Tracker.RunningState, o.dispatchBlockedStates())
+	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, o.cfg.Tracker.RunningState, o.dispatchBlockedStates())
 	if err != nil {
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunStatusUpdateFailed, o.cfg.Tracker.RunningState, err)
 	}
-	if !written {
+	if !moved.Reached {
 		// **書かなかったのに段3 へ進んではならない。**item がもう見えないか、
 		// 取り直した結果 terminal_states / failure_state に入っていたということである。
 		// どちらも「いま着手してはいけない」を意味する。
 		return ErrStatusNotWritten
 	}
+	// **動かしたなら、その記録を issue に残す**（設計 3-29）。
+	// **既に running_state だった場合は書き込みが起きないので、コメントも出ない。**
+	o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue),
+		newStatusMove(moved, o.cfg.Tracker.RunningState),
+		"この issue に着手し、Claude Code の pane を立てたためです")
 	// **段-1 の状態ごとの上限は running_state のバケツで数える**（設計 3-16）。
 	// 手元のスナップショットを書き換えておかないと、次の巡回で取り直すまで
 	// dispatch 前の Status（Ready）のまま数えてしまう。

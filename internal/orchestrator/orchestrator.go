@@ -88,10 +88,13 @@ type Tracker interface {
 	// **見つからないことをエラーにしない。**
 	FetchIssueByIdentifier(ctx context.Context, identifier string) (tracker.Issue, bool, error)
 	// UpdateStatus は Status を書き換える。**書く前に必ず ID 指定で取り直す**（設計 3-4）。
-	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (bool, error)
+	// **戻り値の Previous がその取り直した値である。**「何から動かしたか」を issue へ
+	// 書くのはこの値であって、巡回で読んだ値ではない（設計 3-29）。
+	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error)
 	// FetchComments は issue のコメントを取る（エージェントが書いたかの判別に使う）。
 	FetchComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig, markers config.TrackerCommentsConfig) ([]tracker.Comment, error)
-	// PostComment は continuo 自身が人間への引き渡しの通知を書く。
+	// PostComment は continuo 自身のコメントを書く。
+	// **書くのは引き渡しの通知と、Status を動かした記録の2つだけである**（設計 3-29）。
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
 	// VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6）。
 	VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error

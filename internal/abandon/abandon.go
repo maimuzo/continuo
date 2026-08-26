@@ -794,12 +794,12 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 	}
 	// **書かない状態の一覧は渡さない。**人間が「手を離させろ」と言っている実行であり、
 	// いまの Status が何であっても park の先へ動かす。
-	written, err := tr.UpdateStatus(ctx, itemID, target, nil)
+	moved, err := tr.UpdateStatus(ctx, itemID, target, nil)
 	if err != nil {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkFailed, target, err))
 		return ExitStopped
 	}
-	if !written {
+	if !moved.Reached {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonParkNotWritten, target))
 		return ExitStopped
 	}
@@ -1031,12 +1031,12 @@ func (r *runner) moveStatus(ctx context.Context) int {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrTracker, err))
 		return ExitStopped
 	}
-	written, err := tr.UpdateStatus(ctx, itemID, target, nil)
+	moved, err := tr.UpdateStatus(ctx, itemID, target, nil)
 	if err != nil {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrStatusFailed, target, err))
 		return ExitStopped
 	}
-	if !written {
+	if !moved.Reached {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonStatusNotWritten, target))
 		return ExitStopped
 	}

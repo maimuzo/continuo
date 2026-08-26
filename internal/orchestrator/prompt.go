@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -150,13 +151,22 @@ func buildUntrustedComment(owner, repo, reason string) string {
 // **成果の要約は書かない**（設計 3-29。continuo は代筆しない）。
 // 書くのは「なぜ人間へ渡したか」だけである。
 //
+// **Status を動かした記録も、独立したコメントにせずここへ1行入れる**（設計 3-29）。
+// 引き渡しの通知は既に「なぜ人間に渡したか」を書いており、Status の遷移はその一部である。
+// 別々に投稿すると、同じことが2件並ぶ。
+//
 // identifier: issue の識別子。
 // reason: 引き渡す理由。
 // hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
+// move: Status を動かした記録。**書き込みが起きていなければ1行も出さない。**
 // 戻り値: コメント本文。
-func buildHandoffComment(identifier, reason string, hc handoffContext) string {
+func buildHandoffComment(identifier, reason string, hc handoffContext, move statusMove) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "continuo が %s の作業を人間へ引き渡しました。\n\n理由: %s\n", identifier, reason)
+
+	if line := move.line(); line != "" {
+		fmt.Fprintf(&b, "\n%s\n", line)
+	}
 
 	// **どこを見に行けばよいかを必ず添える。**理由だけを読んでも、人間は
 	// 作業の跡がどこに残っているのかを知る手立てがない。
@@ -196,6 +206,60 @@ type handoffContext struct {
 	// SettingsPath は continuo が書いた Claude Code の設定ファイルの絶対パスである。
 	// **worktree の中ではない**（設計 3-12）。
 	SettingsPath string
+}
+
+// statusMove は continuo がボードの Status を動かした記録である（設計 3-29）。
+//
+// **Wrote が偽なら issue に1行も書かない。**item が見えない・書いてはいけない状態だった・
+// 既に同じ値だった、のいずれかであり、**ボードは何も動いていない。**
+type statusMove struct {
+	// Wrote は書き込みの mutation を実際に呼んだかどうかである。
+	Wrote bool
+	// From は書き込む直前に ID 指定で取り直した Status である。
+	// **巡回で読んだ値ではない。**古い値を「何から」として書くと、この記録が嘘をつく。
+	From string
+	// To は書き込んだ先の Status である。
+	To string
+}
+
+// newStatusMove は UpdateStatus の戻り値から記録を作る。
+//
+// sw: UpdateStatus が返した結果。
+// target: 書き込みを頼んだ Status。
+// 戻り値: 組み立てた記録。
+func newStatusMove(sw tracker.StatusWrite, target string) statusMove {
+	return statusMove{Wrote: sw.Wrote, From: sw.Previous, To: target}
+}
+
+// line は「何から何へ動かしたか」の1行を返す。
+//
+// 戻り値: 動かしていれば1行。書き込みが起きていなければ空文字列。
+func (m statusMove) line() string {
+	if !m.Wrote {
+		return ""
+	}
+	return fmt.Sprintf("Status を **%s → %s** へ動かしました。", m.From, m.To)
+}
+
+// buildStatusMoveComment は Status を動かした記録のコメント本文を作る（設計 3-29）。
+//
+// **`tracker.comments.self_marker` は付けない。**`PostComment` が自分で付ける。
+//
+// **引き渡しの通知を出す経路からは呼ばない。**そちらは通知の本文に1行入れる
+// （`buildHandoffComment`）。同じことが2件並ぶのを避けるためである。
+//
+// m: 動かした記録。**Wrote が真であることは呼び出し側が確かめる。**
+// why: 「なぜ」に入れる文。「〜ためです」で終わる形で渡す。
+// at: 記録に載せる時刻。**`o.now()` を渡す。**`time.Now` を直に呼ぶと、
+// 時刻を差し替えているテストが書けない。
+// 戻り値: コメント本文。
+func buildStatusMoveComment(m statusMove, why string, at time.Time) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", m.line())
+	fmt.Fprintf(&b, "- なぜ: %s\n", why)
+	fmt.Fprintf(&b, "- いつ: %s\n", at.Format("2006-01-02 15:04 (MST)"))
+	b.WriteString("- 書いたのは continuo です（人間の操作ではありません）\n")
+	return b.String()
 }
 
 // summaryLine は、人間へ見せる理由の1行目だけを返す（ログ用）。
