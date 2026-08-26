@@ -20,6 +20,7 @@
 - `internal/orchestrator/signal.go` の `ParseSignals`
 - `internal/workspace/prepare.go` の `CheckWorktreeUsable`、`checkBranchFree`、`Prepare`
 - `internal/tracker/adapter.go` の `dropUnrequestedStates`、`UpdateStatus`
+- `internal/tracker/query.go` の `foldStatus`（Status 名の比較の正規化）
 
 ## RUCM
 
@@ -335,6 +336,27 @@ loose を消した瞬間に packed 側が有効になり、**やり直しはそ�
 | 空でない | まだ動いている。turn の終わりとして扱わない |
 | 項目が欠けている | 判定できない。turn の終わりとみなさない |
 | 空配列 | settle_ms のあいだ待ち、task-notification が届かなければ turn の終わりとする |
+
+## 既に目的の Status なら、書きに行かない
+
+**言いたいこと。**同じ値を書いても GitHub 側では遷移が起きず、**timeline に1行も残らない。**
+continuo のログにだけ「書き込みました」が出るので、あとから「誰がいつ Status を動かしたか」を
+突き合わせるとき、**continuo が書いたはずの時刻に記録が無い**という形になる。
+
+**だからステップ31 は、書く前に取り直した値が書こうとしている値と同じなら、書き込みを送らない。**
+比較は前後の空白と大文字小文字を無視する（`internal/tracker/query.go` の `foldStatus`）。
+無駄な API の呼び出しが1回減るのは副産物であり、主目的はログと timeline を食い違わせないことである。
+
+**送らなかったときは、ステップ32 の「何から何へ動かしたか」のコメントも書かない。**
+ボードが動いていないので、書けば嘘の記録になる。代替フロー「既に同じStatus」がステップ33 へ戻すのは
+そのためである。判断に使うのは `StatusWrite.Wrote` であり、
+`internal/orchestrator/comment.go` の `postStatusMove` が偽なら投稿しない。
+
+**それでも「Status を動かせた」として扱う。**着手や失敗の記録は、書き込みの API を呼んだかどうかではなく
+**目的の Status になっているか**で決める（`internal/tracker/adapter.go` の `UpdateStatus` が返す
+`StatusWrite.Reached`）。ここを「書かなかった」として扱うと、`active_states` に `running_state` が
+入っている構成（雛形の既定は `["Ready", "In Progress"]`）で、
+**既に `running_state` だった issue に着手できなくなる。**
 
 ## turn を送れなかったときは、2つに分ける
 

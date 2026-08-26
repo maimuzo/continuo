@@ -64,6 +64,20 @@ func TestUpdateStatus_取り直してから書き込む(t *testing.T) {
 	}
 }
 
+// countStatusMutations は偽サーバが受け取ったリクエストのうち、Status の書き込み
+// （updateProjectV2ItemFieldValue）が何件あったかを数える。
+// **「リクエストの総数」ではなく「書き込みの mutation の件数」で数える。**取り直しの
+// クエリは飛んでよいので、総数では「書きに行かなかったこと」を確かめられない。
+func countStatusMutations(fs *fakeGraphQLServer) int {
+	n := 0
+	for _, req := range fs.Requests() {
+		if strings.Contains(req.Query, "updateProjectV2ItemFieldValue") {
+			n++
+		}
+	}
+	return n
+}
+
 // 目的: 取り直した値が既に目的の値と同じなら、書き込みの mutation を1回も送らないことを
 // 確認する（GitHub は同じ値の書き込みを timeline に残さないので、送っても issue には
 // 何も現れない）。
@@ -99,6 +113,9 @@ func TestUpdateStatus_既に同じ値なら書きに行かない(t *testing.T) {
 	}
 	if moved.Wrote {
 		t.Fatalf("Wrote が true になっている（mutation は送っていないはず）")
+	}
+	if got := countStatusMutations(fs); got != 0 {
+		t.Fatalf("書き込みの mutation が飛んでしまった: got %d件, want 0件", got)
 	}
 	if fs.RequestCount() != 2 {
 		t.Fatalf("書き込みリクエストが送られてしまった: リクエスト件数 got %d, want 2", fs.RequestCount())
@@ -140,8 +157,59 @@ func TestUpdateStatus_大文字小文字と空白の違いは同じ値とみな�
 	if moved.Wrote {
 		t.Fatalf("Wrote が true になっている（mutation は送っていないはず）")
 	}
+	if got := countStatusMutations(fs); got != 0 {
+		t.Fatalf("書き込みの mutation が飛んでしまった: got %d件, want 0件", got)
+	}
 	if fs.RequestCount() != 2 {
 		t.Fatalf("書き込みリクエストが送られてしまった: リクエスト件数 got %d, want 2", fs.RequestCount())
+	}
+}
+
+// 目的: 取り直した値が目的の値と違う場合は、今までどおり書きに行くことを確認する。
+// **「同じなら書かない」を入れたせいで、違うときまで書かなくなっていないか**を見る。
+// 与える情報: 取り直し応答の State が "In Progress"（目的の値は "In Review"）である偽サーバ。
+// 成功条件: 書き込みの mutation がちょうど1件飛ぶこと。UpdateStatus が Reached / Wrote
+// ともに真で、Previous に取り直した "In Progress" を載せて返すこと。
+func TestUpdateStatus_値が違えば書きに行く(t *testing.T) {
+	refetched := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-1", Status: "In Progress", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "t",
+	}))
+
+	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
+		switch n {
+		case 1:
+			return dataResponse(bootstrapProjectPayload(testStatusOptions))
+		case 2:
+			return dataResponse(byIDsPayload([]any{refetched}))
+		case 3:
+			return dataResponse(map[string]any{
+				"updateProjectV2ItemFieldValue": map[string]any{
+					"projectV2Item": map[string]any{"id": "item-1"},
+				},
+			})
+		default:
+			t.Errorf("想定より多くのリクエストが送られた（%d回目）: %s", n, req.Query)
+			return dataResponse(nil)
+		}
+	})
+
+	a := newBootstrappedAdapter(t, fs)
+
+	moved, err := a.UpdateStatus(t.Context(), "item-1", "In Review", []string{"Done"})
+	if err != nil {
+		t.Fatalf("UpdateStatus が失敗した: %v", err)
+	}
+	if !moved.Reached {
+		t.Fatalf("Reached が false になっている（書き込まれたはず）")
+	}
+	if !moved.Wrote {
+		t.Fatalf("Wrote が false になっている（mutation を送ったはず）")
+	}
+	if moved.Previous != "In Progress" {
+		t.Fatalf("Previous が取り直した値になっていない: got %q, want \"In Progress\"", moved.Previous)
+	}
+	if got := countStatusMutations(fs); got != 1 {
+		t.Fatalf("書き込みの mutation の件数が想定と違う: got %d件, want 1件", got)
 	}
 }
 
