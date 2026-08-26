@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -93,6 +94,12 @@ type runState struct {
 	// Issue は dispatch した時点の issue のスナップショットである。
 	// プロンプトの描画・表明の対象の解決・コメントの投稿先に使う。
 	Issue tracker.Issue
+	// LastWrittenState は continuo がこの run のためにボードへ最後に書いた Status である。
+	//
+	// **知らない Status になった issue へ「元は何だったか」を書くために持つ**（設計 3-50）。
+	// **書き込みが成功した時点でだけ入れる。**入れるのは着手の段2（running_state）と、
+	// 表明どおりに Status を動かしたときである。ゼロ値なら continuo は1度も書いていない。
+	LastWrittenState string
 	// WorktreePath は worktree の絶対パスである。
 	WorktreePath string
 	// Base は worktree を作ったときの base である（片付けの手順2b に要る）。
@@ -182,6 +189,22 @@ type runState struct {
 	// `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
 	awaitTurnEnd bool
+	// unknownStateSince は「continuo が知らない Status になっている」と最初に見た時刻である
+	// （設計 3-50）。ゼロ値なら、いまは知っている Status である。
+	//
+	// **猶予の起点である。**巡回のたびに入れ直すと猶予が永久に切れないので、
+	// 既に入っているときは触らない。知っている Status に戻ったら消す。
+	unknownStateSince time.Time
+	// workerStopCtx は「この世代の worker を止めた」ことを turn ループへ伝える経路である
+	// （設計 3-51）。
+	//
+	// **止める側が turn ループへ「待つのをやめろ」と伝える手段である。**これが無いと、
+	// continuo が自分で pane を閉じた1秒後に `agent.prompt` が
+	// `agent is no longer running` で落ち、**自分のせいの失敗が外の障害のように WARN で出る。**
+	// **worker の世代ごとに作り直す**（beginAttempt）。
+	workerStopCtx context.Context
+	// workerStopCancel は workerStopCtx を終わらせる。stopWorker が呼ぶ。
+	workerStopCancel context.CancelFunc
 	// handoffPosted は引き渡しの通知を投稿済みであることを表す。
 	//
 	// **1つの run について1件だけにする。**failure_state へ落とす経路（finishRunClaimed）と
@@ -208,12 +231,15 @@ func (rs *runState) clearStopSeen() {
 // 判定され、人間へ見せる経過時間も 1970 年起点になる）。
 // 戻り値: 組み立てた runState。
 func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &runState{
-		IssueID:    issueID,
-		Issue:      issue,
-		LastSeenAt: now,
-		RevisionAt: now,
-		hookCh:     make(chan hookserver.HookEvent, hookChanSize),
+		IssueID:          issueID,
+		Issue:            issue,
+		LastSeenAt:       now,
+		RevisionAt:       now,
+		hookCh:           make(chan hookserver.HookEvent, hookChanSize),
+		workerStopCtx:    stopCtx,
+		workerStopCancel: stopCancel,
 	}
 }
 
@@ -561,6 +587,104 @@ func (rs *runState) setIssue(issue tracker.Issue) {
 	rs.Issue = issue
 }
 
+// setLastWrittenState は continuo がボードへ書いた Status を控える（設計 3-50）。
+//
+// **書き込みが成功したときだけ呼ぶ。**知らない Status になった issue へ
+// 「元は何だったか」を書くための唯一の材料である。
+//
+// state: 書き込んだ Status 名。
+func (rs *runState) setLastWrittenState(state string) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.LastWrittenState = state
+}
+
+// lastWrittenState は continuo がボードへ最後に書いた Status を返す。
+//
+// 戻り値: 書いた Status 名。1度も書いていなければ空文字。
+func (rs *runState) lastWrittenState() string {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.LastWrittenState
+}
+
+// noteUnknownState は「continuo が知らない Status になっている」と見た時刻を控え、
+// その起点を返す（設計 3-50）。
+//
+// **起点は最初に見たときのまま据え置く。**巡回のたびに入れ直すと、猶予が永久に切れない。
+//
+// now: いまの時刻。
+// 戻り値: 猶予の起点（最初に見た時刻）。
+func (rs *runState) noteUnknownState(now time.Time) time.Time {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.unknownStateSince.IsZero() {
+		rs.unknownStateSince = now
+	}
+	return rs.unknownStateSince
+}
+
+// clearUnknownState は「知らない Status になっている」という記録を消す。
+//
+// **知っている Status に戻ったときに呼ぶ。**消さないと、次に知らない Status へ動かされた
+// ときに、前回の起点で猶予を測ってしまう。
+func (rs *runState) clearUnknownState() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.unknownStateSince = time.Time{}
+}
+
+// turnLoopActive は turn ループの goroutine が走っているかを返す（設計 3-50）。
+//
+// **「turn が動いている」の判定はこれである。**turn ループは turn を送ってから
+// `Stop` hook を読み、表明を読んで Status を動かすところまでを1本で回す。
+// **その goroutine が居る間は、エージェントの表明がこれから届きうる。**
+//
+// 戻り値: turn ループが走っていれば true。
+func (rs *runState) turnLoopActive() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.turnLoopRunning
+}
+
+// markWorkerStopped は「この世代の worker を止めた」ことを記録し、
+// turn ループへ「待つのをやめろ」と伝える（設計 3-51）。
+//
+// **`pane.close` を呼ぶ前に呼ぶこと。**閉じたあとに伝えると、turn ループは先に
+// `agent is no longer running` を受け取り、**continuo 自身が止めたせいの失敗を
+// 外の障害として印字する。**
+func (rs *runState) markWorkerStopped() {
+	rs.mu.Lock()
+	rs.workerStopped = true
+	cancel := rs.workerStopCancel
+	rs.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// workerStopped は、いまの世代の worker を continuo 自身が止めたかを返す。
+//
+// **turn ループはこれを見て、自分のせいの失敗を WARN にしない**（設計 3-51）。
+//
+// 戻り値: 止めていれば true。
+func (rs *runState) stoppedByContinuo() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.workerStopped
+}
+
+// workerStopContext は「この世代の worker を止めた」ときに終わるコンテキストを返す。
+//
+// **turn ループはこれで待ちを打ち切る**（設計 3-51）。
+//
+// 戻り値: 止めたときに終わるコンテキスト。
+func (rs *runState) workerStopContext() context.Context {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.workerStopCtx
+}
+
 // setIssueState は issue のスナップショットの Status だけを差し替える。
 //
 // **段2 で running_state を書いたあとに呼ぶ**（設計 3-16 の段-1 が状態ごとの上限を
@@ -651,6 +775,13 @@ func (rs *runState) beginAttempt() int {
 	rs.workerStopped = false
 	rs.terminating = false
 	rs.FreshSession = true
+	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
+	// 既に終わっているコンテキストを新しい turn ループへ渡すことになり、
+	// 最初の turn を送る前に待ちが打ち切られる。
+	if rs.workerStopCancel != nil {
+		rs.workerStopCancel()
+	}
+	rs.workerStopCtx, rs.workerStopCancel = context.WithCancel(context.Background())
 	return rs.workerEpoch
 }
 

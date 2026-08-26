@@ -4965,6 +4965,93 @@ running_state のまま誰にも触られず、**人間が気づくのは何時�
 
 ---
 
+### 3-50. 知らない Status で止めるときは、理由を issue に残し、turn の終わりを待つ
+
+**言いたいこと。**設定に名前が出てこない Status へ動かされた issue を、continuo は黙って
+止めていた。**その issue は `active_states` に入らないので二度と拾われない。**
+理由を issue へ書き、turn が動いている間は表明を待ってから判断する。
+
+**「知らない Status」の定義。**`tracker.active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `status_signal_map` の遷移先の**どれにも名前が出てこない
+Status** である（[internal/orchestrator/unknownstate.go](../../internal/orchestrator/unknownstate.go) の `knownStates`）。
+**`In Review` や `Blocked` は知っている Status である**（`status_signal_map` と `failure_state` に名前が出る）。
+そちらはいまどおり引き渡しとして扱い、この節の対象にしない。
+
+**採る手順。**
+
+| いつ | 何をするか |
+| --- | --- |
+| turn が動いていて、猶予の内側 | **止めない。**turn の終わりまで待ち、表明を読んでから判断する |
+| turn が動いていない | その場で止める（待っても表明は出てこない） |
+| 猶予（`tracker.unknown_state_grace_ms`）を過ぎた | その場で止める |
+| `terminal_states` へ動かされた | **いまどおり即座に終える**（人間が「終わった」と言っている） |
+
+**なぜ待つのか。**エージェントが `CONTINUO-STATUS:` を書けば、continuo が正しい Status へ戻す
+（3-25）。**turn が終わる前に殺すと、その表明が読まれずに捨てられる。**
+
+**なぜ猶予に上限を置くのか。**`claude.turn_timeout_ms` の stall 検知（3-21）だけに任せると、
+**画面が変わり続けている限り何時間でも待つ。**人間が「止めたい」と思って Status を動かしても、
+止まる時刻が誰にも分からない。だから独立した上限を持たせる。
+**待つぶん、人間が本気で止めたいときに止まるのは遅れる。**そのことは待つたびにログへ出す
+（`知らない Status になりましたが turn の終わりを待っています`）。
+
+**止めるときに issue へ書くこと。**[internal/orchestrator/unknownstate.go](../../internal/orchestrator/unknownstate.go) の
+`unknownStateReason` が作り、`postHandoffComment`（3-29）が1件だけ投稿する。中身は3つである。
+
+```
+continuo が知らない Status になったので、この issue の作業を止めました。
+Status が `In Progress` から `Icebox` へ動いていました（`In Progress` は continuo が最後に書いた値です）。
+【なぜ止めたか】continuo は WORKFLOW.md に書かれた Status しか扱いません（いま知っているのは Ready / In Progress / Done / Blocked / In Review です）。…
+【続けるには】Status を `tracker.active_states` に入っている Status（Ready / In Progress）のいずれかへ戻してください。…
+```
+
+**「元は何だったか」は continuo が最後に書いた値である**（`runState.LastWrittenState`）。
+着手の段2 で `running_state` を書いたときと、表明どおりに Status を動かしたときに控える。
+**書けなかったときは控えない。**1度も書いていなければ、その1文を出さない。
+
+**起動時に1回だけ、知らない選択肢を名前で出す。**起動時の照合は「設定の名前がボードに在るか」の
+一方向だけであり、**ボードにあって設定に無いものは件数（`status_options=11`）にしか出ない。**
+[internal/tracker/adapter.go](../../internal/tracker/adapter.go) の `unknownStatusOptions` が逆向きに照合し、
+`Bootstrap` が1行出す。**巡回ごとの再照合（`verify_states_every`）では出さない**
+（10分に1回同じ行が流れると他の行が埋もれる）。
+
+**採らなかった案。**知らない Status を見つけたら `failure_state` へ落とす、は採らない。
+**人間が自分で動かした Status を continuo が上書きすることになる**（3-4 の「人間の操作を巻き戻さない」）。
+worktree も残す。人間が Status を戻せば、そのまま作業を続けられる。
+
+---
+
+### 3-51. continuo が自分で止めた worker の失敗を、外の障害として印字しない
+
+**言いたいこと。**`turn を送れませんでした（agent is no longer running）` は、
+continuo が1秒前に自分で `pane.close` を呼んだために起きている。
+**WARN で出すと、読んだ人は herdr か Claude Code を疑って原因を探しにいく。**
+
+**足りなかったもの。**止める側（`stopWorker`）は turn ループへ「待つのをやめろ」と伝える手段を
+持っていなかった。turn ループは `agent.prompt` の待ち受けの中に居たまま pane を失い、
+**その失敗を外から来たものとして分類していた。**
+
+**作った経路。**`runState` が worker の世代ごとに「止めた」の合図（`workerStopCtx`）を持つ。
+
+| 誰が | 何をするか |
+| --- | --- |
+| `stopWorker` | **`pane.close` を呼ぶ前に** `markWorkerStopped` を呼び、合図を終わらせる |
+| `turnLoop` | 合図を**待ち専用の ctx** に繋ぐ（`context.AfterFunc`）。herdr の待ちはそこで解ける |
+| `sendTurn` / `afterWaitTimeout` | 失敗を分類する前に `selfStoppedTurn` を通し、自分で止めていたら Info を1行出して `turnAborted` を返す |
+
+**順番を入れ替えてはならない。**閉じてから伝えると、turn ループは先に
+`agent is no longer running` を受け取ってしまう。
+
+**turn ループの `ctx` そのものを切ってはならない。**turn の終わりの処理（表明の適用・
+コメントの確認・worktree の片付け）はその `ctx` で動いており、`finishRun` の中から
+`stopWorker` が呼ばれる。**切ると、自分で自分の後片付けを道連れにする**
+（branch が消えず、`refreshIssue` も落ちる）。**切ってよいのは herdr の待ち専用の ctx だけである。**
+
+**`beginAttempt` で合図を作り直す。**再 dispatch は worker の世代を進める（3-21）ので、
+前の世代の合図を使い回すと、**最初の turn を送る前に待ちが打ち切られる。**
+
+---
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す
@@ -5329,6 +5416,9 @@ tracker:
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
   verify_states_every: 20                   # 上に書いた Status 名がボードに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
+  unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。
+                                            # turn の途中なら、この長さまで turn の終わりを待ち、エージェントの表明を読んでから判断する。
+                                            # 0 なら待たずに止める。待つぶん、人間が止めたいときに止まるのが遅れる
 
 polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと

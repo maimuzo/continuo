@@ -589,6 +589,9 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// 手元のスナップショットを書き換えておかないと、次の巡回で取り直すまで
 	// dispatch 前の Status（Ready）のまま数えてしまう。
 	rs.setIssueState(o.cfg.Tracker.RunningState)
+	// **書けたことを控える**（設計 3-50）。知らない Status になったときに
+	// 「元は何だったか」を書くために要る。
+	rs.setLastWrittenState(o.cfg.Tracker.RunningState)
 
 	// 段3: worktree を用意し、herdr workspace として開く。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(issue))
