@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "62473a258ede20aa1bab988973d0ce2dece3fdccc05441eb7e28601b480d8958", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "05dde3d6b6d1fff7cc317912d27113c4890cf461623b277e4c4c53852fe9b5c3", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 //
 // **hook の置き場所の検査だけを集めたファイルである。**
 //
@@ -73,7 +73,7 @@ func TestDoctorRuntimeDir_既にcontinuoが待ち受けていれば通る(t *tes
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDoctorRuntimeDir_残骸があれば足りないと出す は、**「作れます」の嘘**を落とす。
 //
@@ -103,7 +103,7 @@ func TestDoctorRuntimeDir_残骸があれば足りないと出す(t *testing.T) 
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDoctorRuntimeDir_置き場所がディレクトリなら足りないと出す は、
 // 残骸が socket とは限らないことを確かめる。
@@ -123,7 +123,7 @@ func TestDoctorRuntimeDir_置き場所がディレクトリなら足りないと
 	assertSocketUnderRoot(t, fx, res.Detail)
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDoctorRuntimeDir_置き場所を決められなければ足りないと出す は、
 // 置き場所そのものを用意できない場合を確かめる。
