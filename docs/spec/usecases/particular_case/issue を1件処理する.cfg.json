@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "1d117571e36d10cf08b53acac4498897242602ae5386819a8b550bdfda3e7d0e"
+    "rucm_block_sha256": "ff298f744fd8a9f90fb6de2e8046a9412bc06fefce3626c7a0c53cc70653a1e3"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -222,6 +222,18 @@
         }
       ],
       "postcondition": "印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。"
+    },
+    "既に同じStatus": {
+      "when": "取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            30
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は表明の値の遷移先の選択肢である。ボードへは1バイトも書いていない。"
     }
   },
   "nodes": [
@@ -1064,6 +1076,20 @@
       "flow": "一時的な送信の失敗",
       "step": 4,
       "statement": "ABORT"
+    },
+    {
+      "id": "既に同じStatus-1",
+      "type": "action",
+      "flow": "既に同じStatus",
+      "step": 1,
+      "statement": "システムはボードへ書き込まない。"
+    },
+    {
+      "id": "既に同じStatus-2",
+      "type": "resume",
+      "flow": "既に同じStatus",
+      "step": 2,
+      "statement": "RESUME STEP 31"
     }
   ],
   "edges": [
@@ -1331,6 +1357,12 @@
       "from": "BASIC FLOW-30",
       "to": "BASIC FLOW-31",
       "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "既に同じStatus-1",
+      "kind": "global",
+      "condition": "取り直した Status が表明の値の遷移先の選択肢と同じ場合"
     },
     {
       "from": "BASIC FLOW-31",
@@ -1731,6 +1763,16 @@
       "from": "一時的な送信の失敗-3",
       "to": "一時的な送信の失敗-4",
       "kind": "seq"
+    },
+    {
+      "from": "既に同じStatus-1",
+      "to": "既に同じStatus-2",
+      "kind": "seq"
+    },
+    {
+      "from": "既に同じStatus-2",
+      "to": "BASIC FLOW-31",
+      "kind": "resume"
     }
   ],
   "paths": [
@@ -1999,6 +2041,284 @@
     },
     {
       "id": "P004",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue の Status は表明の値の遷移先の選択肢である。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
+        "システムは transcript から表明の行を読む。",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "UNTIL 表明の値が working でない",
+        "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+        "システムはボードへ書き込まない。",
+        "RESUME STEP 31",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue の Status は表明の値の遷移先の選択肢である。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "BASIC FLOW-31",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "コメントの取り戻し-5",
+        "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
+        "コメントの取り戻し-8",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
+        "システムは transcript から表明の行を読む。",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "UNTIL 表明の値が working でない",
+        "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+        "システムはボードへ書き込まない。",
+        "RESUME STEP 31",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
+        "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。",
+        "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
+        "システムは issue のコメントを読み直す。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "RESUME STEP 32",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "コメントの取り戻しの失敗",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "BASIC FLOW-31",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "コメントの取り戻し-5",
+        "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
+        "コメントの取り戻しの失敗-1",
+        "コメントの取り戻しの失敗-2",
+        "コメントの取り戻しの失敗-3",
+        "コメントの取り戻しの失敗-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは worktree の中に身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code を起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
+        "システムは transcript から表明の行を読む。",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "UNTIL 表明の値が working でない",
+        "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+        "システムはボードへ書き込まない。",
+        "RESUME STEP 31",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは身元ファイルからセッション UUID と設定ファイルのパスを読む。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
+        "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。",
+        "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
+        "システムは issue のコメントを読み直す。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
       "terminal": "cycle",
       "terminal_flow": "",
       "postcondition": "",
@@ -2067,7 +2387,7 @@
       ]
     },
     {
-      "id": "P005",
+      "id": "P008",
       "terminal": "cycle",
       "terminal_flow": "turnの継続",
       "postcondition": "turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。",
@@ -2134,7 +2454,7 @@
       ]
     },
     {
-      "id": "P006",
+      "id": "P009",
       "terminal": "abort",
       "terminal_flow": "無音の打ち切り",
       "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
@@ -2201,7 +2521,7 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P010",
       "terminal": "abort",
       "terminal_flow": "権限の確認",
       "postcondition": "issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。worktree は残っている。",
@@ -2266,7 +2586,7 @@
       ]
     },
     {
-      "id": "P008",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "送信の失敗",
       "postcondition": "turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
@@ -2329,7 +2649,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "一時的な送信の失敗",
       "postcondition": "印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。",
@@ -2392,7 +2712,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "上限での打ち切り",
       "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。",
@@ -2455,7 +2775,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "起動直後の確認画面",
       "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。",
@@ -2516,7 +2836,7 @@
       ]
     },
     {
-      "id": "P012",
+      "id": "P015",
       "terminal": "cycle",
       "terminal_flow": "起動の待ち直し",
       "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。",
@@ -2577,7 +2897,7 @@
       ]
     },
     {
-      "id": "P013",
+      "id": "P016",
       "terminal": "abort",
       "terminal_flow": "起動の断念",
       "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。",
@@ -2645,7 +2965,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P017",
       "terminal": "cycle",
       "terminal_flow": "paneがまだ使えない",
       "postcondition": "pane が起動を受け付けるまで待ち続けている。Claude Code はまだ起動していない。",
@@ -2700,7 +3020,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "paneの断念",
       "postcondition": "issue の Status は failure_state の選択肢である。Claude Code は起動していない。worktree は残っている。",
@@ -2762,7 +3082,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P019",
       "terminal": "cycle",
       "terminal_flow": "壊れたref",
       "postcondition": "壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。",
@@ -2807,7 +3127,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P020",
       "terminal": "abort",
       "terminal_flow": "消さないref",
       "postcondition": "ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。",
@@ -2853,7 +3173,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "書かずに取りやめる",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。issue にコメントは付いていない。",
@@ -2888,7 +3208,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P022",
       "terminal": "abort",
       "terminal_flow": "使われているbranch",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。branch を使っている worktree は残っている。",
@@ -2921,7 +3241,7 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P023",
       "terminal": "abort",
       "terminal_flow": "使えないworktree",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -2952,7 +3272,7 @@
       ]
     },
     {
-      "id": "P021",
+      "id": "P024",
       "terminal": "abort",
       "terminal_flow": "未信頼のリポジトリ",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。issue に信頼登録の承認を促すコメントが1件ある。",
@@ -2983,7 +3303,7 @@
       ]
     },
     {
-      "id": "P022",
+      "id": "P025",
       "terminal": "abort",
       "terminal_flow": "空きスロット不足",
       "postcondition": "印の件数は変わっていない。issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。",
@@ -3008,7 +3328,7 @@
       ]
     },
     {
-      "id": "P023",
+      "id": "P026",
       "terminal": "abort",
       "terminal_flow": "失敗の繰り返し",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。",
@@ -3031,7 +3351,7 @@
       ]
     },
     {
-      "id": "P024",
+      "id": "P027",
       "terminal": "abort",
       "terminal_flow": "頼んでいないStatus",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。",
@@ -3055,9 +3375,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 120,
-    "nodes_covered": 120,
-    "edges_total": 125,
-    "edges_covered": 125
+    "nodes_total": 122,
+    "nodes_covered": 122,
+    "edges_total": 128,
+    "edges_covered": 128
   }
 }

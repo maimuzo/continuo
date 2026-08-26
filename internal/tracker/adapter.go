@@ -788,14 +788,21 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 // **許可リストではなく拒否リストである。**グループの issue は Ice Box に置かれるので
 // （設計 3-26）、active_states で絞ると表明が1件も反映されない。
 //
+// **取り直した値が targetState と同じなら、書きに行かない。**同じ値の書き込みでは
+// GitHub 側で遷移が起きず timeline に何も残らないので、continuo のログにだけ
+// 「書き込みました」が出て、あとから「誰がいつ Status を動かしたか」を突き合わせるときに
+// **continuo が書いたはずの時刻に記録が無い**という食い違いになる。API の呼び出しも1回無駄に増える。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // itemID: 書き込む対象の project item ID（Issue.ID）。
 // targetState: 書き込む先の Status 名。Bootstrap で解決した選択肢名と大文字小文字を
 // 無視して照合する。
 // blockedStates: 「この状態なら書かない」Status の一覧。呼び出し側は terminal_states を渡す。
-// 戻り値の1つ目: 実際に書き込んだかどうか。false はエラーではなく、「item がもう見えない」
-// または「取り直した結果、既に別の Status へ動いていたので書かなかった」のいずれかを意味する
-// （呼び出し側はログに残すだけでよい）。
+// 戻り値の1つ目: **書き込みの API を呼んだかどうかではなく、目的の Status になっているか**である。
+// 取り直した値が既に targetState と同じだった場合は、書き込みを省いたうえで true を返す
+// （呼び出し側は「Status を動かせた」として先へ進んでよい）。false はエラーではなく、
+// 「item がもう見えない」または「取り直した結果、書いてはいけない状態に入っていたので
+// 書かなかった」のいずれかを意味する（呼び出し側はログに残すだけでよい）。
 // 戻り値の2つ目: Bootstrap が未実行の場合は CategoryInvalidConfig、targetState が
 // Bootstrap で解決した選択肢に無い場合も CategoryInvalidConfig。取り直しや書き込みの
 // GraphQL 呼び出しが失敗した場合はそのエラーを返す。
@@ -836,6 +843,15 @@ func (a *Adapter) UpdateStatus(
 			"item_id", itemID, "target_state", targetState, "現在の状態", current[0].State,
 		)
 		return false, nil
+	}
+	// **既に目的の値なら書きに行かない。**書いても GitHub の timeline には何も残らないので、
+	// 「書き込みました」のログだけが残って突き合わせができなくなる。
+	// **戻り値は true である。**目的の Status にはなっており、呼び出し側は先へ進んでよい。
+	if foldStatus(current[0].State) == foldStatus(targetState) {
+		a.logger.Info("Status は既にその値でした（書き込みを省きました）",
+			"item_id", itemID, "target_state", targetState,
+		)
+		return true, nil
 	}
 
 	var resp updateStatusResponse
