@@ -31,6 +31,7 @@
 | `herdr` | socket の `ping` の応答の `protocol` が `herdr.protocol` と一致するか |
 | `gh の認証` | `gh auth status` の `Token scopes:` に `project` が単独で並んでいるか |
 | `ボード` | `Bootstrap` が通り、`active_states` の選択肢名が全部あるか |
+| `Status の名前` | 設定に書いた Status と紛らわしい選択肢がボードに無いか（記号は `!` だけ。設計 6-14） |
 | `clone` | 対象リポジトリが `ghq list -p -e` で見つかるか |
 | `信頼登録` | 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか |
 | `資格情報` | `rate_limit` の設定に応じて、環境変数かファイルがあるか |
@@ -111,6 +112,7 @@
 | herdr | `herdr.Client.CheckProtocol`（**`herdr status` の CLI は使わない**） |
 | gh の認証 | `tracker.CheckGHAvailable` / `tracker.CheckGHProjectScope` |
 | ボード | `tracker.ResolveToken` → `tracker.Adapter.Bootstrap` → `FetchIssuesByStates` |
+| Status の名前 | `tracker.Adapter.StatusOptionNames`（ボードを読んだときの応答を使い回す。リクエストは増えない） |
 | clone | `workspace.RunGhqList`（`ghq list -p -e <owner>/<repo>`） |
 | 信頼登録 | `workspace.CheckTrustForClonePath` |
 | 資格情報 | `ratelimit` の定数（`SourceNone` / `TokenSourceEnv` / `CredentialsRelPath`） |
