@@ -407,8 +407,8 @@ func containsSubstring(lines []string, sub string) bool {
 const emptyProjectJSON = `{"projects":[],"totalCount":0}`
 
 // orgProjectJSON は organization が持つボード1件の出力である。
-const orgProjectJSON = `{"projects":[{"closed":false,"number":6,"owner":{"login":"TS3-SE4","type":"Organization"},` +
-	`"title":"チームの看板","url":"https://github.com/orgs/TS3-SE4/projects/6"}],"totalCount":1}`
+const orgProjectJSON = `{"projects":[{"closed":false,"number":6,"owner":{"login":"octodev","type":"Organization"},` +
+	`"title":"チームの看板","url":"https://github.com/orgs/octodev/projects/6"}],"totalCount":1}`
 
 // ownerAwareGH は、`project list` の応答を owner ごとに変えられる差し替えである。
 //
@@ -457,11 +457,11 @@ func ownerAwareGH(t *testing.T, login string, orgs []string, byOwner map[string]
 // 置いていた利用者が、`continuo setup` で1歩も進めなかった。**
 //
 // 目的: ログイン名のボードが0件なら、所属する organization のボードも探すこと。
-// 与える情報: ログイン名では0件、organization `TS3-SE4` では1件を返す gh。
+// 与える情報: ログイン名では0件、organization `octodev` では1件を返す gh。
 // 成功条件: ボードの番号が埋まり、**owner も organization に決め直される**こと。
 func TestDetect_ログイン名にボードが無ければorganizationも探す(t *testing.T) {
-	run, calls := ownerAwareGH(t, "yusuke-omichi-ctc", []string{"TS3-SE4"},
-		map[string]string{"TS3-SE4": orgProjectJSON}, twoRepoItemsJSON)
+	run, calls := ownerAwareGH(t, "octocat", []string{"octodev"},
+		map[string]string{"octodev": orgProjectJSON}, twoRepoItemsJSON)
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
 
@@ -470,8 +470,8 @@ func TestDetect_ログイン名にボードが無ければorganizationも探す(
 	}
 	// **owner を決め直さないと、どこにも存在しない組み合わせが書かれる。**
 	// `project_number` は organization のボードを指すのに、`owner` はログイン名のまま、という状態。
-	if got.Values.Owner != "TS3-SE4" {
-		t.Errorf("owner をボードの持ち主に合わせていない: got %q, want %q", got.Values.Owner, "TS3-SE4")
+	if got.Values.Owner != "octodev" {
+		t.Errorf("owner をボードの持ち主に合わせていない: got %q, want %q", got.Values.Owner, "octodev")
 	}
 	if !got.AllFilled() {
 		t.Errorf("両方埋まったのに AllFilled が偽である: %+v", got.Fields)
@@ -521,7 +521,7 @@ func TestDetect_ログイン名にボードがあればorganizationを探さな�
 // 与える情報: どの owner でも0件を返す gh。
 // 成功条件: 理由にログイン名と organization の両方が出て、`--owner` の案内があること。
 func TestDetect_どこにもボードが無ければ探した先を全部出す(t *testing.T) {
-	run, _ := ownerAwareGH(t, "yusuke-omichi-ctc", []string{"TS3-SE4", "another-org"},
+	run, _ := ownerAwareGH(t, "octocat", []string{"octodev", "another-org"},
 		map[string]string{}, twoRepoItemsJSON)
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
@@ -533,7 +533,7 @@ func TestDetect_どこにもボードが無ければ探した先を全部出す(
 			reason, advice = f.Reason, f.Advice
 		}
 	}
-	for _, want := range []string{"yusuke-omichi-ctc", "TS3-SE4", "another-org"} {
+	for _, want := range []string{"octocat", "octodev", "another-org"} {
 		if !strings.Contains(reason, want) {
 			t.Errorf("探した owner %q が理由に出ていない: %q", want, reason)
 		}

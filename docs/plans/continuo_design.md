@@ -3549,7 +3549,7 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 
 ```
 $ continuo setup
-使うボードの番号が決まりませんでした（yusuke-omichi-ctc のボードが1件も見つかりませんでした）
+使うボードの番号が決まりませんでした（octocat のボードが1件も見つかりませんでした）
 → --project <番号> を付けて、使うボードを指定して実行し直してください
 
 $ continuo setup --project 6
@@ -3557,7 +3557,7 @@ $ continuo setup --project 6
 ```
 
 **`--project` を付けても直らない。**owner がログイン名のままなので、`user.projectV2` を引き続ける。
-**利用者に必要だったのは `--owner TS3-SE4` だったが、案内のどこにも書かれていなかった。**
+**利用者に必要だったのは `--owner octodev` だったが、案内のどこにも書かれていなかった。**
 
 **どう探すか。**
 
@@ -3574,7 +3574,7 @@ $ continuo setup --project 6
 **見つからないときは、探した owner を全部見せる。**
 
 ```
-ボードが1件も見つかりませんでした（探した owner: yusuke-omichi-ctc, TS3-SE4, another-org）
+ボードが1件も見つかりませんでした（探した owner: octocat, octodev, another-org）
 → ボードが別の user / organization にあるなら、`continuo init --owner <名前> --project <番号>` を実行してください
 ```
 
