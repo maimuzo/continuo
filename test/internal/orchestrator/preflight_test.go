@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "9a1b2a5867ba950e6ab15cb6e6d1b0934e5b0d27cd9968f7b03284b1cb2d25ec", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "465f03a9ce5babf39f52394708de534812f9fd67a2642cd94af81ac519febdf3", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // dispatch 直前の検査（段0）の検査である。
@@ -20,7 +20,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P024"}
+// {"RUCM-PATH": "P033"}
 //
 // TestPreflight_未信頼なら着手せず承認を促すコメントを1件書く は、段0 の信頼の検査を確かめる。
 //
@@ -101,7 +101,7 @@ func TestPreflight_信頼の検査を切れば未信頼でも着手する(t *tes
 	})
 }
 
-// {"RUCM-PATH": "P023"}
+// {"RUCM-PATH": "P032"}
 //
 // TestPreflight_登録の無い実体があるならStatusを1バイトも書かずに飛ばす は、
 // 段0 の worktree の検査を確かめる。
@@ -143,7 +143,7 @@ func TestPreflight_登録の無い実体があるならStatusを1バイトも書
 	}
 }
 
-// {"RUCM-PATH": "P022"}
+// {"RUCM-PATH": "P031"}
 //
 // TestPreflight_branchを別のworktreeが使っているならStatusを1バイトも書かずに飛ばす は、
 // 段0 の branch の検査を確かめる。

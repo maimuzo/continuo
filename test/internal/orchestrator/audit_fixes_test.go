@@ -1,6 +1,9 @@
+// {"RUCM-CFG-SHA256": "465f03a9ce5babf39f52394708de534812f9fd67a2642cd94af81ac519febdf3", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
-// **RUCM のパスからは生成していない**（review_fixes_test.go と同じ扱い）。
+// **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある**
+// （review_fixes_test.go と同じ扱い）。
 // どれも「守りはあるのにテストが1本も検査していなかった」箇所なので、
 // **足したテストは、守りを1箇所だけ潰すと必ず落ちることを実測してから置いている。**
 package orchestrator_test
@@ -140,6 +143,8 @@ func TestReconcile_身元ファイルのworkspaceIDを信じて別のrunのpane�
 	}
 }
 
+// {"RUCM-PATH": "P017"}
+//
 // TestTurn_turnを送れなかったときStopHookのせいにしない は、
 // 送信の失敗と「Stop hook が届かない」を混ぜないことを確かめる。
 //
@@ -262,6 +267,8 @@ func requireCwdOnWorktreeOpen(t *testing.T, fx *fixture) {
 	})
 }
 
+// {"RUCM-PATH": "P015"}
+//
 // TestAbandon_打ち切りのときissueに残る理由が本当の理由である は、
 // 引き渡しの通知の投稿枠を、本当の理由が先に取ることを確かめる。
 //
