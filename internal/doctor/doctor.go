@@ -15,6 +15,7 @@
 //	herdr            … socket の ping の応答の protocol が herdr.protocol と一致するか
 //	gh の認証         … `gh auth status` の Token scopes に project が単独で並んでいるか
 //	ボード            … Bootstrap が通り、active_states の選択肢名が全部あるか
+//	Status の名前      … 設定に書いた Status と紛らわしい選択肢がボードに無いか
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
 //	資格情報          … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
@@ -128,7 +129,8 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 // 検査せずに `!` にして「なぜ確かめられなかったか」を出す（3-32 の依存の表）。
 //
 //	設定ファイル ─┬─ herdr（設定の protocol と照合する）
-//	              └─ gh の認証 ── ボード ─┬─ clone
+//	              └─ gh の認証 ── ボード ─┬─ Status の名前
+//	                                      ├─ clone
 //	                                      └─ 信頼登録
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
 //
@@ -202,12 +204,19 @@ func Run(ctx context.Context, opts Options) Report {
 	// **ここだけ期限を2倍にする。**Bootstrap と候補の取得で2リクエスト送るためである。
 	var boardResult Result
 	var repos []Repo
+	var boardStates []string
 	boardResult = withCheckTimeout(ctx, 2*opts.CheckTimeout, func(ctx context.Context) Result {
 		var res Result
-		res, repos = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
+		res, repos, boardStates = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
 		return res
 	})
 	report.add(boardResult)
+
+	// 段5b: Status の名前。**ボードを読んだときの応答を使い回すので、リクエストは増えない。**
+	// **Bootstrap は「設定に書いた名前がボードに在るか」しか見ない。**ボードに
+	// `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。
+	// **取り違えたまま無人で回すと、人間が作業中の issue にエージェントが着手する。**
+	report.add(checkStatusNames(cfg, boardStates, boardResult.Symbol))
 
 	// 段6: clone。対象リポジトリはボードを読んで決まる。
 	var cloneResult Result

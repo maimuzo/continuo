@@ -47,6 +47,8 @@ const (
 	KeyDoctorLabelGHAuth Key = "doctor.label.gh_auth"
 	// KeyDoctorLabelBoard はボードを読む検査の見出し語に出る。
 	KeyDoctorLabelBoard Key = "doctor.label.board"
+	// KeyDoctorLabelStatusNames は紛らわしい Status の組を見る検査の見出し語に出る。
+	KeyDoctorLabelStatusNames Key = "doctor.label.status_names"
 	// KeyDoctorLabelClone はclone が手元にあるかの検査の見出し語に出る。
 	KeyDoctorLabelClone Key = "doctor.label.clone"
 	// KeyDoctorLabelTrust はリポジトリが承認済みかの検査の見出し語に出る。
@@ -232,6 +234,30 @@ const (
 	KeyDoctorBoardRemedyTokenInvalid Key = "doctor.board.remedy_token_invalid"
 	// KeyDoctorBoardFailed はそのほかの理由で落ちたときの説明に出る。
 	KeyDoctorBoardFailed Key = "doctor.board.failed"
+)
+
+// doctor の検査「Status の名前」。
+const (
+	// KeyDoctorStatusNamesConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorStatusNamesConfigUnreadable Key = "doctor.status_names.config_unreadable"
+	// KeyDoctorStatusNamesBoardUnreadable は上流のボードが落ちたときの説明に出る。
+	KeyDoctorStatusNamesBoardUnreadable Key = "doctor.status_names.board_unreadable"
+	// KeyDoctorStatusNamesOK は紛らわしい組が無かったときの説明に出る。
+	KeyDoctorStatusNamesOK Key = "doctor.status_names.ok"
+	// KeyDoctorStatusNamesConfusing は紛らわしい組があったときの説明に出る。
+	KeyDoctorStatusNamesConfusing Key = "doctor.status_names.confusing"
+	// KeyDoctorStatusNamesNote は紛らわしい組1件ずつの内訳に出る。
+	KeyDoctorStatusNamesNote Key = "doctor.status_names.note"
+	// KeyDoctorStatusNamesReasonSame は区切りと大文字小文字を落とすと同じになる組の理由に出る。
+	KeyDoctorStatusNamesReasonSame Key = "doctor.status_names.reason_same"
+	// KeyDoctorStatusNamesReasonContains は一方が他方を語の並びとして含む組の理由に出る。
+	KeyDoctorStatusNamesReasonContains Key = "doctor.status_names.reason_contains"
+	// KeyDoctorStatusNamesRemedyPickOne はどちらを使うか決めさせる直し方に出る。
+	KeyDoctorStatusNamesRemedyPickOne Key = "doctor.status_names.remedy_pick_one"
+	// KeyDoctorStatusNamesRemedyActiveStates は active_states に足したときの副作用の案内に出る。
+	KeyDoctorStatusNamesRemedyActiveStates Key = "doctor.status_names.remedy_active_states"
+	// KeyDoctorStatusNamesRemedyOverlap は片付ける Status・終わった Status との取り違えの案内に出る。
+	KeyDoctorStatusNamesRemedyOverlap Key = "doctor.status_names.remedy_overlap"
 )
 
 // doctor の検査「clone」。
@@ -1872,6 +1898,7 @@ var allKeys = []Key{
 	KeyDoctorClaudeRemedyInstall,
 	KeyDoctorLabelGHAuth,
 	KeyDoctorLabelBoard,
+	KeyDoctorLabelStatusNames,
 	KeyDoctorLabelClone,
 	KeyDoctorLabelTrust,
 	KeyDoctorLabelCredentials,
@@ -1944,6 +1971,16 @@ var allKeys = []Key{
 	KeyDoctorBoardRemedyStatusOptions,
 	KeyDoctorBoardRemedyTokenInvalid,
 	KeyDoctorBoardFailed,
+	KeyDoctorStatusNamesConfigUnreadable,
+	KeyDoctorStatusNamesBoardUnreadable,
+	KeyDoctorStatusNamesOK,
+	KeyDoctorStatusNamesConfusing,
+	KeyDoctorStatusNamesNote,
+	KeyDoctorStatusNamesReasonSame,
+	KeyDoctorStatusNamesReasonContains,
+	KeyDoctorStatusNamesRemedyPickOne,
+	KeyDoctorStatusNamesRemedyActiveStates,
+	KeyDoctorStatusNamesRemedyOverlap,
 	KeyDoctorCloneBinNotFound,
 	KeyDoctorCloneRemedyInstallBin,
 	KeyDoctorCloneBoardUnreadable,

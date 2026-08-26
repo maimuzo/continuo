@@ -178,6 +178,29 @@ language: auto                              # 画面に出す文言の言語。a
 	` を出してください。**
 中身が分からないまま作業を始めないでください。
 
+## この issue に紐づく PR も読むこと
+
+**PR ができたあと、レビューの指摘は PR に書かれます。**issue のコメントだけを読むと見落とします。
+
+**まず、この issue に紐づく PR の番号を全部出してください。**次の2つを両方実行し、重複を除きます。
+
+    gh pr list --repo {{.issue.owner}}/{{.issue.repo}} --state all --limit 100 --json number,state,title,closingIssuesReferences --jq '.[] | select(any(.closingIssuesReferences[]?; .number == {{.issue.number}})) | "\(.number)\t\(.state)\t\(.title)"'
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}}/timeline --paginate --jq '.[] | select(.event == "cross-referenced") | .source.issue | select(.pull_request != null) | "\(.number)\t\(.state)\t\(.title)"'
+
+**出てきた PR 1件ずつについて、次の3つを全部読んでください。**<PR番号> は上で出た数字に置き換えます。
+
+    gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --comments
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '.[] | "\(.user.login) \(.path):\(.line // .original_line)\n\(.body)\n"'
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '.[] | "\(.user.login) \(.state)\n\(.body)\n"'
+
+**2つ目を飛ばさないでください。**行に紐づくレビューコメントは gh pr view --comments に1件も出ません。
+**指摘の本体はそこに書かれます。**
+
+**読んだ指摘は、直すか、直さない理由を issue のコメントに残すかのどちらかにしてください。**
+
 ## 終わったらやること
 
 **作業の区切りがついたら、応答の最後に次のいずれか1行を必ず書いてください。**

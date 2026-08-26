@@ -3261,6 +3261,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | **`workspace.root` に書けるか** | 使い捨てのディレクトリを**実際に作って消す** | **置き場所は設定にしか書いていない**ので、設定が読めているときだけ走る。書けないと着手は worktree を用意する段で必ず落ちる |
 | Claude の資格情報 | **`rate_limit.token_source` が指す先から取れるか**（ファイル / Keychain / 環境変数） | **Keychain も読む。**上限を掛けて固まらないようにする（下記） |
 | **ボードを読めるか** | **`Bootstrap` を呼んで project と Status フィールドを解決し、`active_states` の選択肢名が全部あるかを照合する** | **`gh` の認証が通っても、ここで落ちることがある**（project が見つからない・トークンの取り出しに失敗・レートリミット）。**選択肢名の不一致は `✗` にする。**巡回が無言で0件を返す原因になる（3-6） |
+| **紛らわしい Status の組が無いか** | **ボードの選択肢名を全部読み、設定に書いた名前と「同じに見える」「含んでいる」の組になっていないかを見る**（6-14） | **記号は `!`。**continuo は動くので起動は止めない。**`Bootstrap` も `config.Validate` も、綴りが違えば素通りする** |
 
 **doctor は Keychain を読む。**
 
@@ -3298,7 +3299,8 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 
 ```text
 設定ファイル ─┬─ herdr（設定の protocol と照合する）
-              └─ gh の認証 ── ボードを読める ─┬─ clone（対象リポジトリが決まる）
+              └─ gh の認証 ── ボードを読める ─┬─ Status の名前（選択肢名を照合する）
+                                              ├─ clone（対象リポジトリが決まる）
                                               └─ 信頼登録（clone のパスが要る）
 資格情報（token_source が指す先だけを見る。ほかの検査に依存しないので飛ばさない）
 ```
@@ -5623,6 +5625,29 @@ language: auto                              # 画面に出す文言の言語。a
 **読めなかった場合は、その旨を最終応答に書いて `CONTINUO-STATUS: blocked` を出してください。**
 中身が分からないまま作業を始めないでください。
 
+## この issue に紐づく PR も読むこと
+
+**PR ができたあと、レビューの指摘は PR に書かれます。**issue のコメントだけを読むと見落とします。
+
+**まず、この issue に紐づく PR の番号を全部出してください。**次の2つを両方実行し、重複を除きます。
+
+    gh pr list --repo {{.issue.owner}}/{{.issue.repo}} --state all --limit 100 --json number,state,title,closingIssuesReferences --jq '.[] | select(any(.closingIssuesReferences[]?; .number == {{.issue.number}})) | "\(.number)\t\(.state)\t\(.title)"'
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}}/timeline --paginate --jq '.[] | select(.event == "cross-referenced") | .source.issue | select(.pull_request != null) | "\(.number)\t\(.state)\t\(.title)"'
+
+**出てきた PR 1件ずつについて、次の3つを全部読んでください。**<PR番号> は上で出た数字に置き換えます。
+
+    gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --comments
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '.[] | "\(.user.login) \(.path):\(.line // .original_line)\n\(.body)\n"'
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '.[] | "\(.user.login) \(.state)\n\(.body)\n"'
+
+**2つ目を飛ばさないでください。**行に紐づくレビューコメントは gh pr view --comments に1件も出ません。
+**指摘の本体はそこに書かれます。**
+
+**読んだ指摘は、直すか、直さない理由を issue のコメントに残すかのどちらかにしてください。**
+
 ## 終わったらやること
 
 **作業の区切りがついたら、応答の最後に次のいずれか1行を必ず書いてください。**
@@ -6241,42 +6266,6 @@ pane / workspace には手を出さない。
 
 ---
 
-### 6-11. `continuo abandon` のレビューで直したこと
-
-**言いたいこと。**`continuo abandon` の code / security の指摘のうち、**まだ直っていなかった
-ものを全部片付けた。**あわせて issue #19（herdr workspace の閉じ残し）を直した。
-**直さないと決めたものは1件だけで、理由も下にある。**
-
-**直したもの。**
-
-| 短縮名 | 何が起きるか | どう直したか |
-| --- | --- | --- |
-| **身元ファイルの読み取りが無制限** | 上限が無く、実測で 67,109,391 バイトを読み切った。symlink も辿り、置き場所の外の中身が「この worktree の身元」として照合された | 64 KiB の上限と `O_NOFOLLOW` を付け、超えたら `ErrIdentityBroken`（3-18） |
-| **workspace の閉じ残し** | `worktree.open` が開く**リポジトリの親 workspace**を誰も閉じず、issue 1件につき1つ溜まる | 片付けの段3b で、条件を2つとも満たすときだけ閉じる（3-9b） |
-| **park のあと止まると板が戻らない** | ボードは書き換わったのに「何も消していません」としか出ず、issue が置き去りになる | Status がその値のまま残ることを1行で言う。**戻しはしない**（3-37） |
-| **計画表示の Status が古い** | ボードを1回しか読まないので、park の**前**の値が出る | 書き込みが通ったら持ち回っている値も更新する |
-| **接続先の注釈が実態より強い** | 「どんな宛先へも Bearer が飛ばない」と書いてあるが、拒むのは平文の http だけである | 注釈を実態に直した（**https ならどのホストでも通る**） |
-| **実在の名前** | `test/internal/herdr/pane_test.go` に実在のアカウント名とリポジトリ名が残っていた | 架空の名前へ直した |
-
-**既に直っていたもの**（この作業では触っていない）。`--to` を消す前に確かめる・`--park` が
-作業中の値なら止まる・worktree が無いとき `--to` を捨てたと言う・失うファイル数が
-「◯◯以上」と出る・branch を消していなければそう書く・中断と時間切れを言い分ける・
-読めない URL の照合・`failure_state` の綴りの照合（設定の検証も `containsStateFold` である）。
-
-**直さないと決めたもの。**
-
-| 短縮名 | なぜ直さないか |
-| --- | --- |
-| **テストに残る実在の名前**（`test/internal/herdr/pane_test.go` 以外の75箇所） | **`test/internal/config/design_example_test.go` は、この設計文書に載っている設定例と一致することを検査している。**一括で置き換えるとそこが落ちる。**まとめて直すなら、設定例のほうから直す別の作業になる** |
-
-**塞がっていたもの。****`Inspect` と削除の間が再検査されない**という指摘は、いま塞がっている。
-継続監視が動いていれば段1 が pane の消滅を待ってから段3 へ進み、そこへ戻ってくる経路は無い
-（park の先が `tracker.active_states` に入らないことは段2 の直後で確かめるので、
-継続監視がその issue を拾い直せない）。動いていなければ段3 と段4 の間で pane を数え、
-1件でもあれば消さずに止まる。**どちらの経路でも、消す時点で生きた pane は無い。**
-
----
-
 ### 6-11. 書けない場所を、起動する前に捕まえる
 
 **言いたいこと。**利用者の WSL でファイルシステムが壊れ、ホームが read-only になった。
@@ -6328,6 +6317,116 @@ read-only へ落とし、そのうえで I/O エラーも返す。**利用者の
 
 **同じ読み分けを、書き込みの検査にも使う。**`Claude の設定` と `worktree の場所` が
 落ちたときも、ファイルシステムの異常なら同じ4つの案内を出す。
+
+### 6-13. `continuo abandon` のレビューで直したこと
+
+**言いたいこと。**`continuo abandon` の code / security の指摘のうち、**まだ直っていなかった
+ものを全部片付けた。**あわせて issue #19（herdr workspace の閉じ残し）を直した。
+**直さないと決めたものは1件だけで、理由も下にある。**
+
+**直したもの。**
+
+| 短縮名 | 何が起きるか | どう直したか |
+| --- | --- | --- |
+| **身元ファイルの読み取りが無制限** | 上限が無く、実測で 67,109,391 バイトを読み切った。symlink も辿り、置き場所の外の中身が「この worktree の身元」として照合された | 64 KiB の上限と `O_NOFOLLOW` を付け、超えたら `ErrIdentityBroken`（3-18） |
+| **workspace の閉じ残し** | `worktree.open` が開く**リポジトリの親 workspace**を誰も閉じず、issue 1件につき1つ溜まる | 片付けの段3b で、条件を2つとも満たすときだけ閉じる（3-9b） |
+| **park のあと止まると板が戻らない** | ボードは書き換わったのに「何も消していません」としか出ず、issue が置き去りになる | Status がその値のまま残ることを1行で言う。**戻しはしない**（3-37） |
+| **計画表示の Status が古い** | ボードを1回しか読まないので、park の**前**の値が出る | 書き込みが通ったら持ち回っている値も更新する |
+| **接続先の注釈が実態より強い** | 「どんな宛先へも Bearer が飛ばない」と書いてあるが、拒むのは平文の http だけである | 注釈を実態に直した（**https ならどのホストでも通る**） |
+| **実在の名前** | `test/internal/herdr/pane_test.go` に実在のアカウント名とリポジトリ名が残っていた | 架空の名前へ直した |
+
+**既に直っていたもの**（この作業では触っていない）。`--to` を消す前に確かめる・`--park` が
+作業中の値なら止まる・worktree が無いとき `--to` を捨てたと言う・失うファイル数が
+「◯◯以上」と出る・branch を消していなければそう書く・中断と時間切れを言い分ける・
+読めない URL の照合・`failure_state` の綴りの照合（設定の検証も `containsStateFold` である）。
+
+**直さないと決めたもの。**
+
+| 短縮名 | なぜ直さないか |
+| --- | --- |
+| **テストに残る実在の名前**（`test/internal/herdr/pane_test.go` 以外の75箇所） | **`test/internal/config/design_example_test.go` は、この設計文書に載っている設定例と一致することを検査している。**一括で置き換えるとそこが落ちる。**まとめて直すなら、設定例のほうから直す別の作業になる** |
+
+**塞がっていたもの。****`Inspect` と削除の間が再検査されない**という指摘は、いま塞がっている。
+継続監視が動いていれば段1 が pane の消滅を待ってから段3 へ進み、そこへ戻ってくる経路は無い
+（park の先が `tracker.active_states` に入らないことは段2 の直後で確かめるので、
+継続監視がその issue を拾い直せない）。動いていなければ段3 と段4 の間で pane を数え、
+1件でもあれば消さずに止まる。**どちらの経路でも、消す時点で生きた pane は無い。**
+
+---
+
+### 6-14. 紛らわしい Status の組を、doctor が注意する
+
+**言いたいこと。**ボードに `In Progress` と `AI In Progress` が並んでいると、
+**どちらを設定に書いたかを人間が取り違える。**取り違えたまま無人で回すと、
+**人間が自分で作業している issue にエージェントが着手する。**
+
+**見出し語 `Status の名前` を足し、記号は `!` にする**（`✗` にしない。continuo は動く）。
+実体は [internal/doctor/status_names.go](internal/doctor/status_names.go) の `checkStatusNames` である。
+**ボードを読んだときの応答を使い回すので、リクエストは1本も増えない**
+（`tracker.Adapter.StatusOptionNames` が Bootstrap で解決した選択肢名を返す）。
+
+**紛らわしいとは何かを、2つに限って決める。**
+
+| 短縮名 | 判定 | 例 |
+| --- | --- | --- |
+| 同じに見える | 大文字小文字と区切り（空白・記号）を落とすと同じ綴り | `InProgress` と `In Progress` |
+| 含んでいる | **語の並びとして**一方が他方を丸ごと含む | `In Progress` ⊂ `AI In Progress` |
+
+**含む・含まれるを、ただの部分文字列で見てはならない。**`Abandoned` は文字の並びとして
+`Done` を含む（a-b-a-n-**d-o-n-e**-d）。ボードに `Done` と `Abandoned` を並べるのはごく普通で、
+そこを警告すると**警告そのものが読まれなくなる。**
+
+**なぜ既にある検査では捕まらないのか。**
+
+| 既にある検査 | 何を見るか | なぜ足りないか |
+| --- | --- | --- |
+| `Adapter.Bootstrap` | 設定に書いた名前がボード側に在るか | **ボードに紛らわしい別の選択肢が並んでいても通る** |
+| `config.Validate` | `active_states` と `terminal_states` / `cleanup.on_states` が重なっていないか | **綴りが同じときだけ落とす。**紛らわしい組は綴りが違うので素通りする |
+
+**警告に載せる副作用は、実装を読んで確かめた3つである。**
+
+| 何が起きるか | 根拠 |
+| --- | --- |
+| **人間がその Status へ置いた issue も continuo が拾う** | `Adapter.FetchIssuesByStates` は `active_states` の item を誰が置いたかを問わず返す。作成者・担当者での絞り込みは1つも無い。絞るのは `tracker.required_labels` だけで、既定は空である |
+| `cleanup.on_states` との重なりは起動前に止まる | `config.Validate` が `active_states` と同じ綴りを見つけて落とす |
+| `terminal_states` との重なりも起動前に止まる | 同上。**どちらも綴りが同じときに限る** |
+
+**記号は3値のままにする。**`!` は「確かめられなかった」と「確かめたが取り違えやすい」の
+両方を表す。**4値目を足すと、終了コードの規則（`✗` だけが 1）を作り直すことになる。**
+集計の行は両方をまとめて数えるので、文言も両方を指す形にしてある。
+
+### 6-15. PR のコメントとレビューも、エージェントに読ませる
+
+**言いたいこと。**PR ができたあと、レビューの指摘が書かれる自然な場所は PR である。
+**それなのに雛形が読ませていたのは issue のコメントだけだった**（issue #34）。
+**指摘を読まないまま「終わりました」と表明する。**
+
+**雛形の本文（5-3）に節を1つ足す。**その issue に紐づく PR を全部出し、
+1件ずつ3つのコマンドで読ませる。**実物は 5-3 の本文にある**
+（[internal/scaffold/template.go](internal/scaffold/template.go) が一字一句そのまま持つ）。
+
+| 何を読むか | 使うコマンド | なぜそれか |
+| --- | --- | --- |
+| 紐づく PR の番号 | `gh pr list --json closingIssuesReferences` と、issue の `timeline` の `cross-referenced` | 前者は閉じる指定のある PR、後者は参照しているだけの PR。**両方を出して重複を除く** |
+| 説明・会話のコメント・レビューの本文 | `gh pr view <番号> --comments` | ここまでは1コマンドで出る |
+| **行に紐づくレビューコメント** | `gh api repos/<owner>/<repo>/pulls/<番号>/comments` | **`gh pr view --comments` に1件も出ない** |
+| レビューの判定と本文 | `gh api repos/<owner>/<repo>/pulls/<番号>/reviews` | `approved` / `changes_requested` は判定側にしか無い |
+
+**「`gh pr view --comments` に出ない」は実測である**（2026-08-26、gh 2.97.0）。
+`cli/cli` の PR #3 には `command/pr.go:297` に紐づくレビューコメントがあるが、
+`gh pr view 3 --repo cli/cli --comments` の出力にその本文は1行も現れない。
+`gh api repos/cli/cli/pulls/3/comments` では出る。
+
+**雛形を直しても、既に WORKFLOW.md を持っている利用者には届かない。**
+`continuo init` は既にあるファイルを作り直さず、`continuo setup` は Status の8つのキーの行しか
+書き換えない（[internal/scaffold/update.go](internal/scaffold/update.go)）。
+**本文は1文字も触らない。**したがって**新しい版へ上げても、古い本文のまま回り続ける。**
+
+**これは issue #38（破壊的変更が入った版へ上げるとき、インストーラーが警告する）と同じ問題である。**
+#38 が扱っているのは front matter のキーの増減だが、**本文の変更も同じ経路で届かない。**
+**#38 で決める「破壊的変更をどこに書くか」の対象に、本文の変更を含めること。**
+front matter と違って本文は起動を止めない（未知のキーではないので `yaml.Strict()` に掛からない）ため、
+**黙って古い手順のまま動き続ける。**気づく手がかりが1つも無い点で、front matter より始末が悪い。
 
 ---
 

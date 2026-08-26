@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3d863250157ac1b1ab2b30cf082365e732a370436d66b0eeb4ac171005345b60", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "62473a258ede20aa1bab988973d0ce2dece3fdccc05441eb7e28601b480d8958", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // **RUCM は見出し語の並びを `DO`〜`UNTIL` の1周として書いてある**ので、
@@ -35,6 +35,7 @@ var wantLabels = []i18n.Key{
 	doctor.LabelHerdr,
 	doctor.LabelGHAuth,
 	doctor.LabelBoard,
+	doctor.LabelStatusNames,
 	doctor.LabelClone,
 	doctor.LabelTrust,
 	doctor.LabelCredentials,
