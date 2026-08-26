@@ -1,13 +1,11 @@
-<!-- 目的: 利用者がつまずいたときに、症状から答えを引けるようにする -->
-
 # よくある質問
 
-**言いたいこと。**困っている症状で引ける一覧です。仕組みの説明は [README.ja.md](../README.ja.md) と
-[docs/trying_it_out.md](trying_it_out.md) にあります。ここには**「こう出たときにどう叩くか」だけ**を置きます。
+画面に出たメッセージから引ける一覧です。使い方は [README.ja.md](../README.ja.md) と
+[trying_it_out.md](trying_it_out.md) にあります。
 
-**まず `continuo doctor` を叩いてください。**11個の見出し語（設定ファイル / claude / hook の置き場所 /
-Claude の設定 / worktree の場所 / herdr / gh の認証 / ボード / clone / 信頼登録 / 資格情報）を調べます。
-**`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。**
+困ったら、まず `continuo doctor` を叩いてください。設定ファイル / claude / hook の置き場所 /
+Claude の設定 / worktree の場所 / herdr / gh の認証 / ボード / clone / 信頼登録 / 資格情報の
+11個を調べます。`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
 cd ~/continuo-work && continuo doctor
@@ -89,8 +87,8 @@ grep -n "消したいキー名" ~/continuo-work/WORKFLOW.md
 ボードの番号は `gh project list` の左端の数字です。
 
 ```bash
-gh project list --owner <ACCOUNT>
-continuo init --owner <ACCOUNT> --project 6 ~/continuo-work
+gh project list --owner <owner>
+continuo init --owner <owner> --project <番号> ~/continuo-work
 ```
 
 ---
@@ -108,7 +106,7 @@ GraphQL はエラーを出さずに0件を返し続けるので、起動時の�
 足したら役割との対応を付け直します。
 
 ```bash
-gh project field-list <PROJECT> --owner <ACCOUNT>   # いまの選択肢を確かめる
+gh project field-list <番号> --owner <owner>   # いまの選択肢を確かめる
 continuo setup ~/continuo-work                      # 5つの役割に、どの選択肢を使うかを対話で決める
 ```
 
@@ -254,7 +252,7 @@ cd ~/continuo-work && continuo doctor; echo "exit=$?"
 
 ```bash
 gh issue create --repo <owner>/<repo> --title "…" --body "…"
-gh project item-add <PROJECT> --owner <ACCOUNT> --url https://github.com/<owner>/<repo>/issues/42
+gh project item-add <番号> --owner <owner> --url https://github.com/<owner>/<repo>/issues/42
 ```
 
 ### `continuo setup` が「使うボードの番号が決まりませんでした」で止まる
@@ -267,8 +265,8 @@ GitHub Enterprise で organization のボードを使っていると必ずこう
 それでも複数見つかるときは owner を明示します。
 
 ```bash
-gh project list --owner <ORG>
-continuo setup --owner <ORG> --project 6 ~/continuo-work
+gh project list --owner <owner>
+continuo setup --owner <owner> --project <番号> ~/continuo-work
 ```
 
 ### 着手が「1つの branch を出せる worktree は1つだけなので…」で止まる
@@ -561,7 +559,7 @@ continuo version
 
 ```bash
 grep -n "status_field" ~/continuo-work/WORKFLOW.md
-gh project field-list <PROJECT> --owner <ACCOUNT>
+gh project field-list <番号> --owner <owner>
 ```
 
 ### issue を1件処理するたびに herdr の workspace が閉じ残る

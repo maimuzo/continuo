@@ -1,5 +1,3 @@
-<!-- 目的: 人間が continuo を実際に動かして確かめるための手順 -->
-
 # 試してみる / Trying it out
 
 **English:** This walks `continuo` through one issue end to end **on a board you already have** —

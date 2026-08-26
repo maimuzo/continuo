@@ -1,5 +1,3 @@
-<!-- 目的: scenario「issue を着手から片付けまで見届ける」の RUCM を書くときに AI が行った判断と、その根拠を記録する -->
-
 # 判断ログ: issue を着手から片付けまで見届ける
 
 - 対象: `docs/spec/usecases/scenario/issue を着手から片付けまで見届ける.rucm.md`

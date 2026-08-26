@@ -1,5 +1,3 @@
-<!-- 目的: 「issue を1件処理する」の RUCM を書くときに AI が行った判断と、その根拠を記録する -->
-
 # 判断ログ: issue を1件処理する
 
 - 対象: `docs/spec/usecases/particular_case/issue を1件処理する.rucm.md`

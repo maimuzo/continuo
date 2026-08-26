@@ -1,5 +1,3 @@
-<!-- 目的: 「worktree と branch を片付ける」の RUCM を書くときに AI が行った判断と、その根拠を記録する -->
-
 # 判断ログ: worktree と branch を片付ける
 
 - 対象: `docs/spec/usecases/particular_case/worktree と branch を片付ける.rucm.md`
