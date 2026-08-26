@@ -247,6 +247,7 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 | **Why it is built this way** (start here) | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md) (634 lines) |
 | The full record: reasoning, measurements, rejected alternatives | [docs/plans/continuo_design.md](docs/plans/continuo_design.md) (nearly 4,800 lines) |
 | Use case specifications (RUCM) | [docs/spec/usecases/](docs/spec/usecases/) |
+| **Problems that come from the shape of the design** (read before changing code) | [docs/bug_details.md](docs/bug_details.md) — the seven that keep biting, and what to watch for when you touch them (Japanese) |
 | **When it does not work** | [docs/FAQ.md](docs/FAQ.md) — look up the message you saw (Japanese) |
 | **Development and testing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Third-party software in the binary | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |

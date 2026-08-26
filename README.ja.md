@@ -249,6 +249,7 @@ claude:
 | **なぜそう作ったか**（読むならこちら） | [docs/plans/continuo_design_slim.md](docs/plans/continuo_design_slim.md)（634行） |
 | 判断の根拠・実測値・比較した案 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md)（4800行近い） |
 | ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
+| **作りの形からくる問題**（コードを直す前に読む） | [docs/bug_details.md](docs/bug_details.md)（繰り返し噛みつく7つと、触るときの注意） |
 | **うまく動かないとき** | [docs/FAQ.md](docs/FAQ.md)（画面のメッセージから引く） |
 | **開発とテスト** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | 実行ファイルに含まれる第三者 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
