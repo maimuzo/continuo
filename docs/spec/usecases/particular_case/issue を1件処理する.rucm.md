@@ -240,6 +240,13 @@ WHEN turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増�
 5. ABORT
 POSTCONDITION: herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。
 
+GLOBAL ALTERNATIVE FLOW 既に同じStatus:
+BRANCH FROM BASIC FLOW 30
+WHEN 取り直した Status が表明の値の遷移先の選択肢と同じ場合
+1. システムはボードへ書き込まない。
+2. RESUME STEP 31
+POSTCONDITION: issue の Status は表明の値の遷移先の選択肢である。ボードへは1バイトも書いていない。
+
 GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗:
 BRANCH FROM BASIC FLOW 23
 WHEN herdr の呼び出しが一時的な理由で失敗した場合
@@ -413,6 +420,7 @@ flowchart TD
     B23 -. "送信の失敗: WHEN herdr が送信そのものを断った場合" .-> G4S1
     B23 -. "一時的な送信の失敗: WHEN herdr の呼び出しが一時的な理由で失敗した場合" .-> G5S1
     B24 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> G2S1
+    B30 -. "既に同じStatus: WHEN 取り直した Status が遷移先と同じ場合" .-> G6S1
 
     subgraph SAF12 ["SPECIFIC ALTERNATIVE FLOW 頼んでいないStatus / RFS BASIC FLOW 3"]
         F12S1["1. この issue を dispatch の対象から外す"] --> F12S2["2. 頼んだ Status に無い候補が返ったことを記録に残す"] --> F12S3["3. ABORT"]
@@ -506,6 +514,10 @@ flowchart TD
         G5S1["1. 本文が届いたかどうかを判断しない"] --> G5S2["2. 本文を送り直さない"] --> G5S3["3. turn の終わりを待ち直す印を立てる"] --> G5S4["4. ABORT"]
     end
 
+    subgraph GAF6 ["GLOBAL ALTERNATIVE FLOW 既に同じStatus / BRANCH FROM BASIC FLOW 30"]
+        G6S1["1. ボードへ書き込まない"] --> G6S2["2. RESUME STEP 31"]
+    end
+
     F8S2 -- 偽 --> F9S1
     F8S3 --> B18
     F10S2 -- 偽 --> F11S1
@@ -515,6 +527,7 @@ flowchart TD
     F6S8 --> B32
     G3S1 -- 偽 --> F17S1
     G3S4 --> B12
+    G6S2 --> B31
 ```
 
 ## シーケンス図
@@ -581,7 +594,11 @@ sequenceDiagram
                             GH-->>S: 現在の Status を応答する
                         end
                     end
-                    S->>GH: Status への表明の遷移先の書き込みを要求する
+                    alt 取り直した Status が既に表明の遷移先と同じ
+                        Note over S: 書き込みを送らない。ボードへは1バイトも書かない
+                    else 取り直した Status が表明の遷移先と違う
+                        S->>GH: Status への表明の遷移先の書き込みを要求する
+                    end
                     S->>GH: issue のコメントの取得を要求する
                     GH-->>S: コメントの一覧を応答する
                     alt 今回の run のコメントがない

@@ -788,13 +788,19 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 // **許可リストではなく拒否リストである。**グループの issue は Ice Box に置かれるので
 // （設計 3-26）、active_states で絞ると表明が1件も反映されない。
 //
+// **取り直した値が既に targetState と同じなら、書き込みの mutation を送らない。**
+// GitHub は同じ値の書き込みを timeline に残さないので、送っても「Status を書き込みました」と
+// ログに出るだけで、issue には何も現れない。**送らずに「目的の Status になっている」を返す。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // itemID: 書き込む対象の project item ID（Issue.ID）。
 // targetState: 書き込む先の Status 名。Bootstrap で解決した選択肢名と大文字小文字を
 // 無視して照合する。
 // blockedStates: 「この状態なら書かない」Status の一覧。呼び出し側は terminal_states を渡す。
-// 戻り値の1つ目: 実際に書き込んだかどうか。false はエラーではなく、「item がもう見えない」
-// または「取り直した結果、既に別の Status へ動いていたので書かなかった」のいずれかを意味する
+// 戻り値の1つ目: **目的の Status になっているかどうか**である。「書き込みの mutation を
+// 呼んだかどうか」ではない。**取り直した値が既に targetState と同じで書き込みを省いた場合も
+// true になる。**false はエラーではなく、「item がもう見えない」または「取り直した結果、
+// blockedStates に入っていたので書かなかった」のいずれかを意味する
 // （呼び出し側はログに残すだけでよい）。
 // 戻り値の2つ目: Bootstrap が未実行の場合は CategoryInvalidConfig、targetState が
 // Bootstrap で解決した選択肢に無い場合も CategoryInvalidConfig。取り直しや書き込みの
@@ -836,6 +842,13 @@ func (a *Adapter) UpdateStatus(
 			"item_id", itemID, "target_state", targetState, "現在の状態", current[0].State,
 		)
 		return false, nil
+	}
+	// **既にその値なら書きに行かない。**比較は foldStatus で行う（statusOptionNamesFold の
+	// 作り方と同じ正規化。SPEC.md 11.3）。**選択肢の正式名ではなく targetState と比べる。**
+	if foldStatus(current[0].State) == foldStatus(targetState) {
+		a.logger.Info("Status は既にその値でした（書き込みを省きました）",
+			"item_id", itemID, "target_state", targetState)
+		return true, nil
 	}
 
 	var resp updateStatusResponse

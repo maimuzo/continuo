@@ -57,6 +57,81 @@ func TestUpdateStatus_取り直してから書き込む(t *testing.T) {
 	}
 }
 
+// 目的: 取り直した値が既に目的の値と同じなら、書き込みの mutation を1回も送らないことを
+// 確認する（GitHub は同じ値の書き込みを timeline に残さないので、送っても issue には
+// 何も現れない）。
+// 与える情報: 取り直し応答の State が "In Review"（目的の値と同じ）である偽サーバ。
+// 成功条件: 書き込みミューテーションのリクエストが送られないこと（Bootstrap + 取り直しの
+// 2リクエストだけで終わること）。UpdateStatus が (true, nil) を返すこと
+// （**目的の Status にはなっているので true である**）。
+func TestUpdateStatus_既に同じ値なら書きに行かない(t *testing.T) {
+	refetched := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-1", Status: "In Review", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "t",
+	}))
+
+	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
+		switch n {
+		case 1:
+			return dataResponse(bootstrapProjectPayload(testStatusOptions))
+		case 2:
+			return dataResponse(byIDsPayload([]any{refetched}))
+		default:
+			t.Errorf("既に同じ値なのに書き込みリクエストが送られた（%d回目）: %s", n, req.Query)
+			return dataResponse(nil)
+		}
+	})
+
+	a := newBootstrappedAdapter(t, fs)
+
+	written, err := a.UpdateStatus(t.Context(), "item-1", "In Review", []string{"Done"})
+	if err != nil {
+		t.Fatalf("UpdateStatus がエラーを返した: %v", err)
+	}
+	if !written {
+		t.Fatalf("written が false になっている（書かなくても目的の Status にはなっているので true のはず）")
+	}
+	if fs.RequestCount() != 2 {
+		t.Fatalf("書き込みリクエストが送られてしまった: リクエスト件数 got %d, want 2", fs.RequestCount())
+	}
+}
+
+// 目的: 大文字小文字と前後の空白しか違わない値も「同じ」とみなして書きに行かないことを
+// 確認する（foldStatus で比較する。SPEC.md 11.3）。
+// 与える情報: 取り直し応答の State が "  in review  "（目的の値 "In Review" と綴りだけ違う）
+// である偽サーバ。
+// 成功条件: 書き込みミューテーションのリクエストが送られないこと。
+// UpdateStatus が (true, nil) を返すこと。
+func TestUpdateStatus_大文字小文字と空白の違いは同じ値とみなす(t *testing.T) {
+	refetched := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-1", Status: "  in review  ", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "t",
+	}))
+
+	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
+		switch n {
+		case 1:
+			return dataResponse(bootstrapProjectPayload(testStatusOptions))
+		case 2:
+			return dataResponse(byIDsPayload([]any{refetched}))
+		default:
+			t.Errorf("綴りだけが違う同じ値なのに書き込みリクエストが送られた（%d回目）: %s", n, req.Query)
+			return dataResponse(nil)
+		}
+	})
+
+	a := newBootstrappedAdapter(t, fs)
+
+	written, err := a.UpdateStatus(t.Context(), "item-1", "In Review", []string{"Done"})
+	if err != nil {
+		t.Fatalf("UpdateStatus がエラーを返した: %v", err)
+	}
+	if !written {
+		t.Fatalf("written が false になっている（書かなくても目的の Status にはなっているので true のはず）")
+	}
+	if fs.RequestCount() != 2 {
+		t.Fatalf("書き込みリクエストが送られてしまった: リクエスト件数 got %d, want 2", fs.RequestCount())
+	}
+}
+
 // 目的: 取り直した結果が blockedStates に含まれている（＝エージェントが自分で gh を叩いて
 // 既に Done へ動かしていた等）場合は、書き込まないことを確認する（設計 3-4:
 // 「取り直した結果が terminal_states に入っていたら書かない」）。
