@@ -28,6 +28,7 @@ import (
 // **画面に出る語そのものではなくキーで比べる**（設計 3-35）。語は言語で変わる。
 var wantLabels = []i18n.Key{
 	doctor.LabelConfig,
+	doctor.LabelCleanupStates,
 	doctor.LabelClaude,
 	doctor.LabelRuntimeDir,
 	doctor.LabelClaudeHome,
@@ -103,6 +104,8 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 	assertSymbol(t, report, doctor.LabelClaudeHome, doctor.SymbolOK)
 	// **worktree の置き場所は `workspace.root` にしか書いていない。**設定が読めなければ決まらない。
 	assertSymbol(t, report, doctor.LabelWorkspaceRoot, doctor.SymbolUnknown)
+	// **片付けの状態も、突き合わせる2つのキーが両方とも設定にしか無い。**
+	assertSymbol(t, report, doctor.LabelCleanupStates, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelHerdr, doctor.SymbolUnknown)
 	// **gh の認証は設定ファイルの下流である**（設計 3-32 の依存の図）。
 	gh := assertSymbol(t, report, doctor.LabelGHAuth, doctor.SymbolUnknown)
@@ -124,7 +127,7 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P018"}
 //
 // TestDoctor_ghが未ログインなら足りないと出しログインの手順を出す は、
 // 未ログインの検出と直し方の提示を確かめる。
@@ -133,7 +136,7 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 // 「`gh auth login -s project` を実行してください」と出すこと。
 // 与える情報: `gh auth status` が未ログインの出力を返し、終了コード 1 で終わる。
 // 成功条件: `gh の認証` が `✗`、直し方に `gh auth login -s project` が入り、
-// 下流（ボード・clone・信頼登録）が `!` になること。
+// 下流（ボード・clone・信頼登録）が `!` になり、終了コードが 1 になること。
 func TestDoctor_ghが未ログインなら足りないと出しログインの手順を出す(t *testing.T) {
 	fx := newFixture(t)
 	writeFakeGH(t, fx.BinDir, "You are not logged into any GitHub hosts. To log in, run: gh auth login", 1)
@@ -149,6 +152,9 @@ func TestDoctor_ghが未ログインなら足りないと出しログインの�
 	assertSymbol(t, report, doctor.LabelTrust, doctor.SymbolUnknown)
 	if len(fx.GitHub.Queries()) != 0 {
 		t.Fatalf("gh の認証が落ちたのにボードを読んでいる: %v", fx.GitHub.Queries())
+	}
+	if report.ExitCode() != 1 {
+		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
 	}
 }
 
@@ -310,7 +316,7 @@ func TestDoctor_projectが見つからなければ足りない(t *testing.T) {
 //
 // 目的: ボードを読むトークンを取り出せないときに `✗` にすること（設計 3-32）。
 // 与える情報: `tracker.provider.token_source` が指す環境変数を空にした状態。
-// 成功条件: `ボード` が `✗` になり、ボードへ1リクエストも送らないこと。
+// 成功条件: `ボード` が `✗` になり、ボードへ1リクエストも送らず、終了コードが 1 になること。
 func TestDoctor_トークンを取り出せなければ足りない(t *testing.T) {
 	fx := newFixture(t)
 	t.Setenv("CONTINUO_TEST_TOKEN", "")
@@ -323,6 +329,9 @@ func TestDoctor_トークンを取り出せなければ足りない(t *testing.T
 	}
 	if len(fx.GitHub.Queries()) != 0 {
 		t.Fatalf("トークンが無いのにボードを読んでいる: %v", fx.GitHub.Queries())
+	}
+	if report.ExitCode() != 1 {
+		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
 	}
 }
 
@@ -909,7 +918,8 @@ func TestDoctor_claudeがPATHに無ければ落とす(t *testing.T) {
 //
 // 目的: 設定ファイルが**無い**（ENOENT）ときだけ `continuo init` を勧めること。
 // 与える情報: WORKFLOW.md を消した状態。
-// 成功条件: 直し方に `continuo init` が入り、ファイルシステムの案内が混ざらないこと。
+// 成功条件: 直し方に `continuo init` が入り、ファイルシステムの案内が混ざらず、
+// 終了コードが 1 になること。
 func TestDoctor_設定ファイルが無ければ雛形の作成を勧める(t *testing.T) {
 	fx := newFixture(t)
 	if err := os.Remove(fx.WorkflowPath); err != nil {
@@ -926,6 +936,9 @@ func TestDoctor_設定ファイルが無ければ雛形の作成を勧める(t *
 	if strings.Contains(remedies, "wsl --shutdown") {
 		t.Fatalf("ただ無いだけなのにファイルシステムの案内を出している: %v", res.Remedies)
 	}
+	if report.ExitCode() != 1 {
+		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
+	}
 }
 
 // {"RUCM-PATH": "P073"}
@@ -937,7 +950,8 @@ func TestDoctor_設定ファイルが無ければ雛形の作成を勧める(t *
 // その案内に従うと `continuo init` は「既にあります」で止まり、
 // **`--force` を足すと本物の設定を雛形で潰す。**
 // 与える情報: WORKFLOW.md の権限を 0 にした状態。
-// 成功条件: 直し方が所有者と権限の確認になり、`continuo init` を含まないこと。
+// 成功条件: 直し方が所有者と権限の確認になり、`continuo init` を含まず、
+// 終了コードが 1 になること。
 func TestDoctor_設定ファイルを読めないだけなら雛形の作成を勧めない(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root は権限に関係なく読めるので、この検査は成立しない")
@@ -957,6 +971,9 @@ func TestDoctor_設定ファイルを読めないだけなら雛形の作成を�
 	}
 	if !strings.Contains(remedies, "所有者と権限") {
 		t.Fatalf("所有者と権限の確認を勧めていない: %v", res.Remedies)
+	}
+	if report.ExitCode() != 1 {
+		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
 	}
 }
 

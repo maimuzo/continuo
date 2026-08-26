@@ -88,10 +88,13 @@ type Tracker interface {
 	// **見つからないことをエラーにしない。**
 	FetchIssueByIdentifier(ctx context.Context, identifier string) (tracker.Issue, bool, error)
 	// UpdateStatus は Status を書き換える。**書く前に必ず ID 指定で取り直す**（設計 3-4）。
-	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (bool, error)
+	// **戻り値の Previous がその取り直した値である。**「何から動かしたか」を issue へ
+	// 書くのはこの値であって、巡回で読んだ値ではない（設計 3-29）。
+	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error)
 	// FetchComments は issue のコメントを取る（エージェントが書いたかの判別に使う）。
 	FetchComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig, markers config.TrackerCommentsConfig) ([]tracker.Comment, error)
-	// PostComment は continuo 自身が人間への引き渡しの通知を書く。
+	// PostComment は continuo 自身のコメントを書く。
+	// **書くのは引き渡しの通知と、Status を動かした記録の2つだけである**（設計 3-29）。
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
 	// VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6）。
 	VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error
@@ -662,9 +665,10 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	// **`agent_status` が `working` の run はこちらを立てる**（設計 3-4 の段5a2）。
 	// turn は送らないが、走っている turn の `Stop` を読む goroutine は要る。
 	rs.awaitTurnEnd = state.AwaitTurnEnd
-	// **FreshSession は立てない**（ゼロ値の偽のままにする）。セッションは引き継いで
-	// いるので、送るのは**継続の指示（5-4）**である。**1回目の本文（5-3）ではない**
-	// （設計 3-4 の段5c）。エージェントは issue の URL も完了の作法も既に知っている。
+	// **SendFirstPrompt は立てない**（ゼロ値の偽のままにする）。走っている worker を
+	// そのまま引き継いでいるので、送るのは**継続の指示（5-4）**である。
+	// **1回目の本文（5-3）ではない**（設計 3-4 の段5c）。
+	// エージェントは issue の URL も完了の作法も既に知っている。
 	// **turn 数を 1 から数え直すのは打ち切りの計算のためであって、1回目をやり直すことではない。**
 	o.runs[issue.ID] = rs
 	if state.SessionUUID != "" {

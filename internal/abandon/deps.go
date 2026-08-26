@@ -39,7 +39,9 @@ type Tracker interface {
 	// FetchIssueByIdentifier は `<owner>/<repo>#<番号>` でボードの issue を1件引く。
 	FetchIssueByIdentifier(ctx context.Context, identifier string) (tracker.Issue, bool, error)
 	// UpdateStatus は project item の Status を書き換える。
-	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (bool, error)
+	// **見るのは Reached（目的の Status になったか）だけである。**abandon は issue へ
+	// コメントを書かないので、Wrote と Previous は使わない。
+	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error)
 	// VerifyKnownStates は、渡した Status 名がすべてボードの選択肢にあるかを確かめる。
 	// **Bootstrap を通してから呼ぶこと。**
 	VerifyKnownStates(states []string) error

@@ -485,6 +485,29 @@ func (m *Manager) SetAgentName(ctx context.Context, worktreePath, agentName stri
 	return m.writeIdentityLocked(ctx, worktreePath, *identity)
 }
 
+// SetSessionUUID は身元ファイルの session_uuid だけを書き換える（3-3b。着手の段9 のあと）。
+//
+// **再着手で `--resume` が失敗したときに呼ぶ。**身元ファイルに書いてある UUID の
+// セッションがもう無いのに、そのまま残しておくと、**次の再着手も同じ死んだ UUID へ
+// 復帰しにいき、毎回 `herdr.startup_timeout_ms` を捨てる。**
+//
+// ctx: git を実行するときに適用するコンテキスト（exclude の登録に使う）。
+// worktreePath: worktree の絶対パス。
+// sessionUUID: 新しく採番したセッション UUID。
+// 戻り値: 身元ファイルを読めない・書けない場合のエラー。
+func (m *Manager) SetSessionUUID(ctx context.Context, worktreePath, sessionUUID string) error {
+	// **読んで書き戻すので、その間ほかの更新を入れない**（入れると片方が消える）。
+	unlock := m.identityMu.lock(identityLockKey(worktreePath))
+	defer unlock()
+
+	identity, err := m.ReadIdentity(worktreePath)
+	if err != nil {
+		return err
+	}
+	identity.SessionUUID = sessionUUID
+	return m.writeIdentityLocked(ctx, worktreePath, *identity)
+}
+
 // errRepoWorkspaceIDTaken は、その worktree が既にリポジトリの親 workspace を
 // 閉じる責任を持っていることを表す（**上書きしない**という判断の合図である）。
 var errRepoWorkspaceIDTaken = errors.New("この worktree は既に親 workspace の ID を持っています")

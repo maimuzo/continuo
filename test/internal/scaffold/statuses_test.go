@@ -100,6 +100,14 @@ func TestWriteTemplateWithValues_日本語の選択肢名でも読み込める(t
 	if got := p.StatusSignalMap["blocked"]; got == nil || *got != jaStatuses.Blocked {
 		t.Errorf("status_signal_map.blocked が違う: %v（期待 %q）", got, jaStatuses.Blocked)
 	}
+	// **片付けを始める Status も、終わったとみなす Status と同じ値でなければならない**
+	// （設計 3-9。issue #35）。片方だけが割り当てで置き換わると、
+	// **「終わっていない」と判定された直後に worktree を片付ける**設定ができあがる。
+	if outside := config.CleanupStatesOutsideTerminal(loaded.Config); len(outside) != 0 {
+		t.Errorf("cleanup.on_states に terminal_states の外の値がある: %v"+
+			"（terminal_states=%v / on_states=%v）",
+			outside, p.TerminalStates, loaded.Config.Cleanup.OnStates)
+	}
 }
 
 // 目的: 5つの役割のうち1つでも欠けたら、雛形の既定値をそのまま残すことを確認する。
@@ -246,7 +254,7 @@ func TestUpdateStatuses_コメントと行数を保つ(t *testing.T) {
 		"# エージェントを起動したときに書き込む Status",
 		"# 打ち切ったとき・失敗したときに落とす Status",
 		"# 対象にする Status。下の running_state と dispatch_state を必ず含めること",
-		"# 終わったとみなす Status。ここへ移った issue の worktree を片付ける",
+		"# 終わったとみなす Status。下の cleanup.on_states は、この一覧の中から選ぶこと",
 		"# 作業が終わり、人間のレビューに回してよいとき",
 		"# 判断を仰ぎたいとき、または失敗したとき",
 	} {

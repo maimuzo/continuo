@@ -26,7 +26,7 @@ import (
 // 目的: 置き場所に何も無いとき、socket を作れることを確かめ、**作った socket を残さない**こと。
 // 与える情報: 一時ディレクトリへ閉じた置き場所（CONTINUO_RUNTIME_DIR）。
 // 成功条件: `✓` で、説明が一時ディレクトリの下の socket を指し、
-// 検査のあとにその socket が残っていないこと。
+// 検査のあとにその socket が残っておらず、終了コードが 0 になること。
 func TestDoctorRuntimeDir_何も無ければ作って消す(t *testing.T) {
 	fx := newFixture(t)
 
@@ -40,6 +40,9 @@ func TestDoctorRuntimeDir_何も無ければ作って消す(t *testing.T) {
 	if _, err := os.Lstat(fx.SocketPath()); !os.IsNotExist(err) {
 		t.Fatalf("検査が作った socket が残っている: %s（%v）", fx.SocketPath(), err)
 	}
+	if report.ExitCode() != 0 {
+		t.Fatalf("すべて通ったのに終了コードが %d だった", report.ExitCode())
+	}
 }
 
 // {"RUCM-PATH": "P001"}
@@ -49,7 +52,7 @@ func TestDoctorRuntimeDir_何も無ければ作って消す(t *testing.T) {
 //
 // 目的: 置き場所で誰かが待ち受けているとき、`✓` にし、**「作れます」とは言わない**こと。
 // 与える情報: 一時ディレクトリの置き場所に、テストが自分で listen した socket。
-// 成功条件: `✓` で、説明が「既に continuo が待ち受けています」であること。
+// 成功条件: `✓` で、説明が「既に continuo が待ち受けています」で、終了コードが 0 になること。
 func TestDoctorRuntimeDir_既にcontinuoが待ち受けていれば通る(t *testing.T) {
 	fx := newFixture(t)
 	if err := os.MkdirAll(fx.RunDir, 0o700); err != nil {
@@ -70,6 +73,9 @@ func TestDoctorRuntimeDir_既にcontinuoが待ち受けていれば通る(t *tes
 	}
 	if strings.Contains(res.Detail, "作れます") {
 		t.Fatalf("使われているのに「作れます」と出ている: %q", res.Detail)
+	}
+	if report.ExitCode() != 0 {
+		t.Fatalf("すべて通ったのに終了コードが %d だった", report.ExitCode())
 	}
 }
 

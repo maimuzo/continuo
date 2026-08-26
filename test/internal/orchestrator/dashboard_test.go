@@ -90,20 +90,21 @@ func TestRunViews_turnの終わりの集計がダッシュボードへ届く(t *
 	}
 }
 
-// TestRunViews_再dispatchでもトークンの累計が巻き戻らない は、
-// セッションをまたいだ累計を確かめる。
+// TestRunViews_セッションに復帰した再着手でトークンを二重に数えない は、
+// 復帰したときの累計を確かめる。
 //
-// 目的: 設計 3-15 の「この run の累計」を実際に満たしていることを示す。
-// **transcript のファイル名はセッション UUID なので、再 dispatch で UUID を採り直すと
-// 集計の対象ファイルが別物になる。**足さずに上書きすると、ダッシュボードの累計が
-// 巻き戻り、使ったトークンを実際より少なく見せる。
+// 目的: 設計 3-3b の「**復帰した場合、transcript のファイルは同じである。**
+// したがって `tokensBase` を作り直してはならない」を示す。作り直すと、同じファイルの
+// 中身をもう一度足すことになり、**使ったトークンを実際の2倍に見せる。**
 //
-// 与える情報: 1回目の turn は `session-1` の transcript で終わり、2回目の turn は
-// `Stop` が来ずに stall で打ち切られる。バックオフが明けたあとの再 dispatch は
-// `session-2` の transcript で終わる。**時計は手で進める**（実時間では待たない）。
+// 与える情報: 1回目の turn は `session-1` の transcript（API 応答1件）で終わり、
+// 2回目の turn は `Stop` が来ずに stall で打ち切られる。バックオフが明けたあとの再着手は
+// **同じ `session-1` へ復帰し、同じファイルが2件目まで伸びた状態**で終わる。
+// **時計は手で進める**（実時間では待たない）。
 //
-// 成功条件: 再 dispatch のあとの累計が、2つのセッションの合計（API 応答2件）になること。
-func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t *testing.T) {
+// 成功条件: 再着手のあとの累計が、そのファイルの中身そのもの（API 応答2件）になること。
+// **1件目を二重に数えて3件ぶんになっていないこと。**
+func TestRunViews_セッションに復帰した再着手でトークンを二重に数えない(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{
 		Now: clock.Now,
@@ -115,15 +116,9 @@ func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t 
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
 	transcriptDir := t.TempDir()
-	first := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+	transcript := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
 		typedUserLine("p1", "実装してください"),
 		assistantLine("req1", "作業を続けています。\nCONTINUO-STATUS: working", false),
-	})
-	// **セッションが変わると transcript も別のファイルになる。**
-	// この中に1回目のセッションの分は入っていない。
-	second := writeTranscript(t, transcriptDir, "session-2.jsonl", []any{
-		typedUserLine("p2", "続けてください"),
-		assistantLine("req2", "まだ作業しています。\nCONTINUO-STATUS: working", false),
 	})
 
 	var mu sync.Mutex
@@ -135,10 +130,17 @@ func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t 
 		mu.Unlock()
 		switch n {
 		case 1:
-			fx.Orc.OnHook(stopEvent("session-1", first, "p1"))
+			fx.Orc.OnHook(stopEvent("session-1", transcript, "p1"))
 		case 3:
-			// 再 dispatch のあとの turn。**別のセッションの transcript で終わる。**
-			fx.Orc.OnHook(stopEvent("session-2", second, "p2"))
+			// 再着手のあとの turn。**復帰したので transcript は同じファイルであり、
+			// その中には1件目の応答も入ったままである。**
+			writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+				typedUserLine("p1", "実装してください"),
+				assistantLine("req1", "作業を続けています。\nCONTINUO-STATUS: working", false),
+				typedUserLine("p2", "実装してください"),
+				assistantLine("req2", "まだ作業しています。\nCONTINUO-STATUS: working", false),
+			})
+			fx.Orc.OnHook(stopEvent("session-1", transcript, "p2"))
 		default:
 			// **`Stop` を返さない。**stall として打ち切られ、リトライが1つ積まれる。
 		}
@@ -149,7 +151,7 @@ func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t 
 	})
 
 	fx.Orc.Tick(context.Background())
-	waitFor(t, 30*time.Second, "1回目のセッションの集計が載る", func() bool {
+	waitFor(t, 30*time.Second, "1件目の応答の集計が載る", func() bool {
 		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 		return ok && v.Tokens.APICalls == 1
 	})
@@ -158,13 +160,13 @@ func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t 
 		return ok && v.RetryCount == 1
 	})
 
-	// バックオフが明けるまで時計を進めて再 dispatch させる（セッション UUID を採り直す）。
+	// バックオフが明けるまで時計を進めて再着手させる（**セッションへ復帰する**）。
 	clock.Advance(30 * time.Second)
 	fx.Orc.Tick(context.Background())
 
-	waitFor(t, 30*time.Second, "再 dispatch のあとの集計が2つのセッションの合計になる", func() bool {
+	waitFor(t, 30*time.Second, "再着手のあとの集計が2件になる", func() bool {
 		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
-		return ok && v.Tokens.APICalls == 2
+		return ok && v.Tokens.APICalls >= 2
 	})
 
 	v, ok := viewOfFixture(fx, "octocat/hello-world#188")
@@ -173,7 +175,7 @@ func TestRunViews_再dispatchでもトークンの累計が巻き戻らない(t 
 	}
 	want := orchestrator.TokenUsage{APICalls: 2, Input: 20, CacheCreation: 40, CacheRead: 60, Output: 80}
 	if v.Tokens != want {
-		t.Fatalf("累計が2つのセッションの合計になっていない: got %+v, want %+v", v.Tokens, want)
+		t.Fatalf("復帰した先の transcript を二重に数えている: got %+v, want %+v", v.Tokens, want)
 	}
 }
 
