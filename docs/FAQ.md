@@ -369,6 +369,40 @@ herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 信頼登録が足りないなら `continuo trust ~/continuo-work`。
 許可が要るなら `WORKFLOW.md` の `claude.permissions.allow` に足します。
 
+### 「作業の途中で確認の画面に止まりました」と出る
+
+**まず見る場所。**issue に付いた引き渡しの通知の【調べるところ】に、記録のパスが並んでいます。
+**親のセッションの記録と、サブエージェントの記録の両方を開いてください。**
+**親の記録の末尾には何も残っていないことがあります。**作業がサブエージェントの側で進んでいた場合、
+そこで何が起きたかは親の記録には書かれません。
+
+```bash
+tail -n 20 ~/.claude/projects/<符号化した worktree>/<セッション UUID>.jsonl
+ls -lt ~/.claude/projects/<符号化した worktree>/<セッション UUID>/subagents/
+```
+
+**「走行中のサブエージェントを止めました」と書いてあったら、worktree を先に見てください。**
+continuo は esc を送る前に、走っているサブエージェントが終わるのを少し待ちます
+（`claude.poll_wait_ms` のあいだ）。**それでも終わらなければ、走ったまま止めます。**
+**そのときは、書きかけの変更が worktree に残っている可能性があります。**
+
+```bash
+git -C <worktree のパス> status
+git -C <worktree のパス> diff
+```
+
+**待っても確認の画面は消えません。**待つのは「別のサブエージェントが書き終えるのを待つ」ためであって、
+**待てば作業が再開する、という意味ではありません。**この issue は人間が見ないと進みません。
+
+**`claude.permissions.allow` に足しても直らない止まり方があります。**
+continuo は Claude Code を `--permission-mode dontAsk` で起動します。
+**このモードでは、許可の一覧に無いツールは確認の画面を出さずに、その場で拒否されます。**
+拒否は静かに起きるので、**確認の画面が出て止まったのなら、それは許可の一覧の不足とは別の原因です。**
+
+**直し方。**記録を読んで、何をしようとして止まったのかを確かめます。
+**許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足し、
+Status を着手待ちへ戻してください。
+
 ### 「Claude Code が起動しませんでした（herdr が返した状態: "unknown"）」と出る
 
 **原因。**`claude` が PATH に無い / 起動が途中で失敗した / そのフォルダが信頼登録されていない、のどれかです。

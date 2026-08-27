@@ -836,6 +836,13 @@ func (o *Orchestrator) cleanupPath(
 	return false
 }
 
+// handoffSubagentLimit は引き渡しの通知に載せる subagent の記録の件数の上限である。
+//
+// **全部は載せない。**1回の run で subagent を何十本も立てることがあり、
+// 全件を並べるとコメントが読めなくなる。**新しい順に上から数件あれば、
+// 止まった直前に何が動いていたかは辿れる。**
+const handoffSubagentLimit = 3
+
 // postHandoffComment は人間へ引き渡すときの通知を issue へ書く。
 //
 // **成果の要約は書かない**（設計 3-29）。continuo が書くのは、この通知と
@@ -863,11 +870,42 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 		return
 	}
 	snap := rs.snapshot()
+	// **ファイルの走査はロックの外で行う。**`snapshot` で `rs.mu` は既に外れている。
+	//
+	// **まず走っている subagent の `agent_id` から組み立てる**（設計 3-11）。
+	// `SubagentStart` が `agent_id` を持っているので、置き場所は推測せずに決まる。
+	// **1件も走っていない・記録がまだ書かれていないなら、glob に落ちる。**
+	// `SubagentStart` を取りこぼした場合と、前の turn の subagent の記録を見たい場合が
+	// あるので、**glob の側は消さない。**
+	//
+	// **`blocked` の道では、esc を送る直前に凍結した集合を使う**（`handoffSubagentIDs`）。
+	// **理由の文面と同じ時点で数えるためである。**通知を書くのは esc の数百ミリ秒あとであり、
+	// いま走っているものを数え直すと、**「N 件を止めました」と書きながら記録は
+	// 1件も載らない**が起きる。
+	subagentRunning := false
+	subagentDir, subagentTranscripts := SubagentTranscriptsFor(
+		snap.TranscriptPath, o.transcriptRoot, rs.handoffSubagentIDs(), handoffSubagentLimit)
+	if len(subagentTranscripts) > 0 {
+		subagentRunning = true
+	} else {
+		subagentDir, subagentTranscripts = ListSubagentTranscripts(
+			snap.TranscriptPath, o.transcriptRoot, handoffSubagentLimit)
+	}
+	if subagentDir != "" {
+		// **Debug より上で出してはならない。**subagent を1つも使わなかった turn では
+		// ディレクトリが作られず、それは正常な並びである。
+		o.logger.Debug("引き渡しの通知に subagent の記録を載せます",
+			"identifier", rs.issue().Identifier, "置き場所", subagentDir,
+			"件数", len(subagentTranscripts), "走行中のものか", subagentRunning)
+	}
 	if _, err := o.tracker.PostComment(ctx, nodeID,
 		buildHandoffComment(rs.issue().Identifier, reason, handoffContext{
-			WorktreePath:   snap.WorktreePath,
-			TranscriptPath: snap.TranscriptPath,
-			SettingsPath:   snap.SettingsPath,
+			WorktreePath:        snap.WorktreePath,
+			TranscriptPath:      snap.TranscriptPath,
+			SubagentDir:         subagentDir,
+			SubagentTranscripts: subagentTranscripts,
+			SubagentRunning:     subagentRunning,
+			SettingsPath:        snap.SettingsPath,
 		}, move),
 		o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
