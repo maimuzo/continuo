@@ -61,24 +61,118 @@ func startRunForAutomation(t *testing.T, fx *fixture) string {
 	return issue.ID
 }
 
-// waitRewriteSettled は、書き戻しがボードへ着地し、記録の投稿まで終わるのを待つ。
+// tickUntil は、条件が満たされるまで巡回を打ち直す。
+//
+// **巡回を1回打てば必ず効く、と思ってはならない。**巡回からの書き戻しは別の goroutine で
+// 走り、**ボードへ書いて記録を投稿したあとで書き戻しの印を返す**（`endRewrite`）。
+// 印が返る前に次の巡回が来ると、continuo はその巡回では何もしない
+// （書き戻しは `beginRewrite` が `rewriteBusy`、終わらせる処理は `beginTerminal` が
+// `terminalRewriting` を返す）。**実運用では30秒後の巡回が拾い直すので何も起きないが、
+// テストが巡回を1回しか打たないと、そこから先へ永久に進まない。**
+//
+// **打ち直しても押し合いの数え方は壊れない。**書き戻しが飛んでいる間の巡回は
+// `beginRewrite` に弾かれ、確保した書き戻しの枠をその場で返す（`rewriteClaim.release`）。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// d: 待つ上限。
+// message: 満たされなかったときに出す説明。
+// cond: 満たされたかを返す関数。
+func tickUntil(t *testing.T, fx *fixture, d time.Duration, message string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for {
+		fx.Orc.Tick(context.Background())
+		// **1回の巡回の効き目を見届けてから打ち直す。**
+		next := time.Now().Add(200 * time.Millisecond)
+		for time.Now().Before(next) {
+			if cond() {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if cond() {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("%s（%s 以内に条件を満たしませんでした）", message, d)
+		}
+	}
+}
+
+// tickRewriteOnce は、自動化が動かした Status への書き戻しを**ちょうど1回**走らせる。
+//
+// **書き込みを関門で止めてから巡回を打つ。**書き戻しが `UpdateStatus` に入った時点で
+// `beginRewrite` が塞がるので、**打ち直した巡回は必ず空振りする。**
+// これが無いと、打ち直しと書き戻しの終わりが競り、**1回のつもりが2回書きに行く。**
+// 失敗の回数を数えているテスト（`maxAutomatedRewriteFailures`）では、それが
+// そのまま誤判定になる。
+//
+// **関門は抜けてから帰る。**呼び出し側は、このあと書き戻しの着地を待てばよい。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+func tickRewriteOnce(t *testing.T, fx *fixture) {
+	t.Helper()
+	release, entered := fx.Tracker.HoldUpdate()
+	defer release()
+	started := false
+	tickUntil(t, fx, 10*time.Second, "巡回が自動化の書き戻しを始める", func() bool {
+		if started {
+			return true
+		}
+		select {
+		case <-entered:
+			started = true
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+// waitRunsDrainedByTick は、巡回を打ち直しながら走行中の run が無くなるのを待つ。
+//
+// **`fixture.WaitRunsDrained` との違いは、巡回を自分で打ち直すことである。**
+// 書き戻しが飛んでいる間の巡回は「終わらせる処理」の印を取れずに何もしないので
+// （`beginTerminal` が `terminalRewriting`）、1回打っただけでは run が終わらない。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// d: 待つ上限。
+func waitRunsDrainedByTick(t *testing.T, fx *fixture, d time.Duration) {
+	t.Helper()
+	tickUntil(t, fx, d, "走行中の run が無くなる（後始末まで終わる）", func() bool {
+		return len(fx.Orc.RunViews()) == 0
+	})
+}
+
+// waitRewriteSettled は、巡回に書き戻しを1回走らせ、それがボードへ着地して
+// 記録の投稿まで終わるのを待つ。
 //
 // **ボードの Status だけを見て待ってはならない。**書き戻しの goroutine は Status を書いたあと
-// 「何から何へ動かしたか」を投稿し、**そのあとで書き戻しの印を返す**（`endRewrite`）。
-// **Status だけで待つと、次の巡回が「別の書き戻しが飛んでいる」と判断して何もせず、
-// テストだけが理由もなく落ちる**（実運用の巡回は30秒ごとなので、この重なりは起きない）。
+// 「戻した」をログに出し、**そのあとで「何から何へ動かしたか」を投稿する。**
+// **Status だけで待つと、ログも記録もまだ無いうちに次の検査へ進む。**
+//
+// **記録は「何件あるか」ではなく「1件増えたか」で見る。**着手のときにも
+// 「Ready → In Progress (AI)」の記録が1件積まれているので、
+// **絶対の件数で待つと、書き戻しの記録を1件も待たないまま通ってしまう。**
+//
+// **巡回は `tickRewriteOnce` が打つ。**呼び出し側が `Tick` を打ってはならない。
+// 前の書き戻しの印がまだ返っていなければ、その巡回は空振りする。
 //
 // t: 呼び出し元のテスト。
 // fx: 対象の fixture。
 // itemID: 見る project item の ID。
 // nodeID: 記録が投稿される issue のノード ID。
 // want: 戻ってほしい Status 名。
-// moves: ここまでに積まれているはずの「Status を動かした記録」の件数。
-func waitRewriteSettled(t *testing.T, fx *fixture, itemID, nodeID, want string, moves int) {
+func waitRewriteSettled(t *testing.T, fx *fixture, itemID, nodeID, want string) {
 	t.Helper()
+	before := len(fx.Tracker.StatusMoveCommentsOf(nodeID))
+	tickRewriteOnce(t, fx)
 	waitFor(t, 10*time.Second, "自動化が動かした Status が戻り、記録の投稿まで終わる", func() bool {
 		return fx.Tracker.StateOf(itemID) == want &&
-			len(fx.Tracker.StatusMoveCommentsOf(nodeID)) >= moves
+			len(fx.Tracker.StatusMoveCommentsOf(nodeID)) > before
 	})
 }
 
@@ -104,11 +198,7 @@ func TestRUCMHandoff_P015_自動化が動かした知らないStatusではworker
 
 	// ★ エージェントが PR を作り、ボードの組み込みの自動化が Status を動かした。
 	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-	fx.Orc.Tick(context.Background())
-
-	waitFor(t, 5*time.Second, "自動化が動かした Status が戻る", func() bool {
-		return fx.Tracker.StateOf(itemID) == "In Progress (AI)"
-	})
+	waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
 	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
 		t.Fatalf("自動化が動かしただけなのに印を外している: 印は %d 件", got)
 	}
@@ -243,14 +333,12 @@ func TestAutomatedState_書き戻しを繰り返しても上限で止まる(t *t
 	// 上限は3回である（internal/orchestrator の maxAutomatedRewrites）。
 	for i := 1; i <= 3; i++ {
 		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-		fx.Orc.Tick(context.Background())
-		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)", i)
+		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
 	}
 
 	// 4回目。**ここからは戻さず、人間へ渡す。**
 	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-	fx.Orc.Tick(context.Background())
-	fx.WaitRunsDrained(t, 10*time.Second)
+	waitRunsDrainedByTick(t, fx, 10*time.Second)
 
 	if got := fx.Tracker.StateOf(itemID); got != "In Progress" {
 		t.Errorf("上限を超えたのに書き戻している: got %q, want %q", got, "In Progress")
@@ -283,7 +371,10 @@ func TestAutomatedState_書き戻せなかったときは書き込みが見たSt
 	// 設定のどこにも名前が出てこない。
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
@@ -307,6 +398,8 @@ func TestAutomatedState_書き戻せなかったときは書き込みが見たSt
 		assistantLine("req1", "続けます。\n\nCONTINUO-STATUS: working", false),
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 
 	select {
 	case <-entered:
@@ -351,7 +444,7 @@ func TestAutomatedState_書き込みが失敗しても書き戻しの回数を�
 	fx.Tracker.SetUpdateError(errors.New("GitHub へ書き込めませんでした（通信の失敗）"))
 	for i := 1; i <= 2; i++ {
 		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-		fx.Orc.Tick(context.Background())
+		tickRewriteOnce(t, fx)
 		want := i
 		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
 			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
@@ -362,8 +455,7 @@ func TestAutomatedState_書き込みが失敗しても書き戻しの回数を�
 	fx.Tracker.SetUpdateError(nil)
 	for i := 1; i <= 3; i++ {
 		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-		fx.Orc.Tick(context.Background())
-		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)", i)
+		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
 	}
 
 	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
@@ -398,7 +490,7 @@ func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *test
 	// 上限は3回である（internal/orchestrator の maxAutomatedRewriteFailures）。
 	for i := 1; i <= 3; i++ {
 		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-		fx.Orc.Tick(context.Background())
+		tickRewriteOnce(t, fx)
 		want := i
 		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
 			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
@@ -410,8 +502,7 @@ func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *test
 
 	// 4回目。**ここからは書き戻さず、人間へ渡す。**
 	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-	fx.Orc.Tick(context.Background())
-	fx.WaitRunsDrained(t, 10*time.Second)
+	waitRunsDrainedByTick(t, fx, 10*time.Second)
 
 	body := selfCommentBody(fx, "I_node188")
 	if body == "" {
@@ -454,7 +545,10 @@ func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *test
 func TestAutomatedState_turnの終わりから書き戻すあいだもrunを手放させない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
@@ -476,6 +570,8 @@ func TestAutomatedState_turnの終わりから書き戻すあいだもrunを手�
 		assistantLine("req1", "続けます。\n\nCONTINUO-STATUS: working", false),
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 
 	select {
 	case <-entered:
@@ -574,7 +670,10 @@ func TestAutomatedState_手放したrunへは書き戻さない(t *testing.T) {
 func TestAutomatedState_巡回の書き戻しが飛んでいてもturnループは止まらない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
@@ -601,6 +700,8 @@ func TestAutomatedState_巡回の書き戻しが飛んでいてもturnループ�
 		assistantLine("req1", "続けます。\n\nCONTINUO-STATUS: working", false),
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 
 	// **turn ループは続く。**飛んでいる書き戻しが Status を直すので、この run は終わっていない。
 	waitFor(t, 20*time.Second, "2回目の turn が送られる", func() bool {
@@ -625,7 +726,10 @@ func TestAutomatedState_巡回の書き戻しが飛んでいてもturnループ�
 func TestAutomatedState_書き戻しが飛んでいても終わらせる処理は黙って戻らない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
@@ -661,6 +765,8 @@ func TestAutomatedState_書き戻しが飛んでいても終わらせる処理�
 		assistantLine("req1", "続けます。\n\nCONTINUO-STATUS: working", false),
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 	// **turn の終わりの取り直しは「誰が Status を書いたか」も取る側である**（設計 3-61）。
 	// 記録を取らない側（`FetchIssuesByIDsWithoutTimeline`）は数えない。
 	waitFor(t, 20*time.Second, "turn の終わりの取り直しが走る", func() bool {
