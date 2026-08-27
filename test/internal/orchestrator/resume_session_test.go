@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "b0090ac4bfeebe6f9d3d42d56eece2357a1a5a0a12cfc2db846459eacdf395ab", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "2c854e22e65cf8d38ee5c667e7de804feaa7949469540feaba74c84c5348cd32", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **再着手でセッションに復帰することの検査である。**
 //
@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -24,41 +23,124 @@ import (
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
+// nodeIDOf は issue のノード ID を取り出す。
+//
+// **テストが `I_node188` のような値を直書きしてはならない。**引数の issue と別の issue を
+// 見に行っても、テストは何も言わずに通る。
+//
+// t: 呼び出し元のテスト。
+// issue: 対象の issue。
+// 戻り値: issue のノード ID。
+func nodeIDOf(t *testing.T, issue tracker.Issue) string {
+	t.Helper()
+	nodeID, _ := issue.NativeRef["issue_node_id"].(string)
+	if nodeID == "" {
+		t.Fatalf("issue にノード ID が無い: %s", issue.Identifier)
+	}
+	return nodeID
+}
+
+// paneIDOf は、その issue のために continuo が使った pane の ID を herdr のリクエストから引く。
+//
+// **着手は pane の label に `owner/repo/issues/N` を書く**（設計 3-3）ので、
+// その `pane.rename` を issue ごとに1件だけ引ける。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// issue: 対象の issue。
+// 戻り値: pane の ID。
+func paneIDOf(t *testing.T, fx *fixture, issue tracker.Issue) string {
+	t.Helper()
+	label := herdr.IssueLabel(issue.Owner, issue.Repo, issue.Number)
+	for _, r := range fx.Herdr.Requests() {
+		if r.Method != herdr.MethodPaneRename {
+			continue
+		}
+		if got, _ := r.Params["label"].(string); got != label {
+			continue
+		}
+		id, _ := r.Params["pane_id"].(string)
+		return id
+	}
+	t.Fatalf("label が %q の pane.rename が1件も無い（受け取ったのは %v）", label, fx.Herdr.Methods())
+	return ""
+}
+
+// closedPane は、その pane を閉じたかを返す。
+//
+// **fixture 全体の `pane.close` の回数で見てはならない。**issue が2件走っていると、
+// **別の run が閉じた1件でこちらの検査も通り、pane を置き去りにした run が合格する。**
+//
+// fx: 対象の fixture。
+// paneID: 見る pane の ID。
+// 戻り値: その pane に対する `pane.close` があれば true。
+func closedPane(fx *fixture, paneID string) bool {
+	for _, r := range fx.Herdr.Requests() {
+		if r.Method != herdr.MethodPaneClose {
+			continue
+		}
+		if got, _ := r.Params["pane_id"].(string); got == paneID {
+			return true
+		}
+	}
+	return false
+}
+
 // finishRunOnPrompt は、`agent.prompt` を受けたら「エージェントが作業を終えて
 // `CONTINUO-STATUS: review` を書き、issue にコメントを残した」状態を作って Stop hook を流す。
 //
 // **これを入れないと、基本フローは turn を送ったところで止まる。**
 // 事後条件（Status・コメント・pane・印）は、そこから先でしか決まらない。
 //
+// **台本の中では `t` を使わない。**`t.Fatalf` は呼んだ goroutine で `runtime.Goexit` を
+// 起こすので、台本の goroutine から呼ぶと **JSON-RPC の応答が返らず、テストは落ちずに
+// 待ち時間まで固まる。**`t.Errorf` も、テスト本体が返ったあとに走ると panic する。
+// **だから transcript は先に書き、hook を捨てられたことは変数に控えて後片付けで見る。**
+//
+// **応答は既定の台本に返させる**（`fakeHerdr.HandlerOf` で包む）。写して書き直すと、
+// 既定の応答が変わったときにこの2本だけが古い形のまま通り続ける。
+//
 // t: 呼び出し元のテスト。
 // fx: 対象の fixture。
+// issue: turn を回す issue（コメントの宛先をここから導く）。
 // sessionUUID: 起動したセッションの UUID（transcript の名前と hook の名乗りに使う）。
-// nodeID: コメントを書く issue のノード ID。
 // 戻り値: 送られた本文を送られた順に返す関数。
-func finishRunOnPrompt(t *testing.T, fx *fixture, sessionUUID, nodeID string) func() []string {
+func finishRunOnPrompt(t *testing.T, fx *fixture, issue tracker.Issue, sessionUUID string) func() []string {
 	t.Helper()
-	transcriptDir := t.TempDir()
+	nodeID := nodeIDOf(t, issue)
+	transcriptPath := writeTranscript(t, t.TempDir(), sessionUUID+".jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "実装して commit と push をしました。\n\nCONTINUO-STATUS: review", false),
+	})
+	base := fx.Herdr.HandlerOf(herdr.MethodAgentPrompt)
+	if base == nil {
+		t.Fatalf("agent.prompt の既定の台本が入っていない")
+	}
+
 	var mu sync.Mutex
 	var texts []string
+	hookDropped := false
 	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
 		text, _ := params["text"].(string)
 		mu.Lock()
 		texts = append(texts, text)
 		mu.Unlock()
 
-		path := writeTranscript(t, transcriptDir, sessionUUID+".jsonl", []any{
-			typedUserLine("p1", "実装してください"),
-			assistantLine("req1", "実装して commit と push をしました。\n\nCONTINUO-STATUS: review", false),
-		})
 		// **何をしたかはエージェントが書く**（continuo は代筆しない。設計 3-25 / 3-29）。
 		fx.Tracker.AddComment(nodeID, "<!-- continuo:agent -->\n実装しました", true, time.Now())
-		if !fx.Orc.OnHook(stopEvent(sessionUUID, path, "p1")) {
+		if !fx.Orc.OnHook(stopEvent(sessionUUID, transcriptPath, "p1")) {
+			mu.Lock()
+			hookDropped = true
+			mu.Unlock()
+		}
+		return base(params)
+	})
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if hookDropped {
 			t.Errorf("continuo が %s の hook を知らない run のものとして捨てた", sessionUUID)
 		}
-		return map[string]any{
-			"type":  "agent_prompted",
-			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
-		}, nil
 	})
 	return func() []string {
 		mu.Lock()
@@ -83,19 +165,14 @@ func finishRunOnPrompt(t *testing.T, fx *fixture, sessionUUID, nodeID string) fu
 // t: 呼び出し元のテスト。
 // fx: 対象の fixture。
 // issue: 対象の issue。
-// worktreePath: その issue の worktree の絶対パス。
-func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue, worktreePath string) {
+func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue) {
 	t.Helper()
 
 	if got := fx.Tracker.StateOf(issue.ID); got != "In Review" {
 		t.Errorf("Status が表明の値の遷移先になっていない: got %q, want %q", got, "In Review")
 	}
-	nodeID, _ := issue.NativeRef["issue_node_id"].(string)
-	if nodeID == "" {
-		t.Fatalf("issue にノード ID が無い: %s", issue.Identifier)
-	}
 	agentComments := 0
-	for _, c := range fx.Tracker.CommentsOf(nodeID) {
+	for _, c := range fx.Tracker.CommentsOf(nodeIDOf(t, issue)) {
 		if c.IsAgent {
 			agentComments++
 		}
@@ -106,12 +183,14 @@ func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue
 	if strings.Contains(fx.Logs.String(), "セッションを復元して書かせます") {
 		t.Errorf("コメントがあるのに取り戻しへ入っている（基本フローの経路から外れている）")
 	}
-	if fx.Herdr.CountMethod(herdr.MethodPaneClose) == 0 {
-		t.Errorf("pane を閉じていない: %v", fx.Herdr.Methods())
+	paneID := paneIDOf(t, fx, issue)
+	if !closedPane(fx, paneID) {
+		t.Errorf("この issue の pane を閉じていない: pane_id=%s（受け取ったのは %v）", paneID, fx.Herdr.Methods())
 	}
 	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
 		t.Errorf("印が外れていない: %d 件", got)
 	}
+	worktreePath := worktreePathOf(t, fx, issue)
 	if _, err := os.Stat(worktreePath); err != nil {
 		t.Errorf("worktree が残っていない: %s (err=%v)", worktreePath, err)
 	}
@@ -121,13 +200,17 @@ func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue
 	}
 }
 
-// {"RUCM-PATH": "P001"}
-//
 // TestDispatch_新規の着手は新しいセッションを立てる は、設計 3-3b の「新規」側を確かめる。
 //
 // 目的: 「**新規の着手（worktree を新しく作る）は、いままでどおり新しい UUID を採番して
 // `--session-id` を渡す**」を示す。**復帰する相手が無いのに `--resume` を渡すと、
 // `No conversation found with session ID` で1文字も起動しない。**
+//
+// **この検査には経路の印を付けない**（設計 6-18e）。通る経路は
+// `TestDispatch_既存のworktreeがあれば前回のセッションに復帰する` と同じ P001 である。
+// 「起動フラグを決める」の段は条件ステップではないので、CFG に枝が無く、
+// 新規と再着手を別の経路として指せない。**同じ印を2本に付けると、片方を消しても
+// 集計は満たされたままになる**ので、印は再着手の側1本に絞ってある。
 //
 // 与える情報: worktree がまだ無い `Ready` の issue 1件。エージェントは1回目の turn で
 // `CONTINUO-STATUS: review` を書いてコメントを残し、turn を終える。
@@ -138,7 +221,7 @@ func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue
 func TestDispatch_新規の着手は新しいセッションを立てる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "Ready")
-	prompts := finishRunOnPrompt(t, fx, "session-1", "I_node188")
+	prompts := finishRunOnPrompt(t, fx, issue, "session-1")
 	fx.Tracker.AddIssue(issue)
 
 	fx.Orc.Tick(context.Background())
@@ -164,9 +247,7 @@ func TestDispatch_新規の着手は新しいセッションを立てる(t *test
 	waitFor(t, 10*time.Second, "run が印から外れる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
-	worktreePath := filepath.Join(fx.WorktreeRoot,
-		"github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
-	assertBasicFlowPostcondition(t, fx, issue, worktreePath)
+	assertBasicFlowPostcondition(t, fx, issue)
 }
 
 // {"RUCM-PATH": "P001"}
@@ -194,8 +275,8 @@ func TestDispatch_既存のworktreeがあれば前回のセッションに復帰
 	fx := newFixture(t, fixtureOptions{})
 
 	issue := sampleIssue(188, "In Progress")
-	wt := prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
-	prompts := finishRunOnPrompt(t, fx, "sess-188", "I_node188")
+	prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
+	prompts := finishRunOnPrompt(t, fx, issue, "sess-188")
 	fx.Tracker.AddIssue(issue)
 
 	fx.Orc.Tick(context.Background())
@@ -230,7 +311,7 @@ func TestDispatch_既存のworktreeがあれば前回のセッションに復帰
 	waitFor(t, 10*time.Second, "run が印から外れる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
-	assertBasicFlowPostcondition(t, fx, issue, wt.Path)
+	assertBasicFlowPostcondition(t, fx, issue)
 }
 
 // {"RUCM-PATH": "P027"}
@@ -250,10 +331,12 @@ func TestDispatch_既存のworktreeがあれば前回のセッションに復帰
 // 与える情報: セッション UUID `sess-188` を書いた身元ファイルつきの worktree と、
 // `--resume` つきの `agent.start` だけが `timeout` を返す herdr。
 // 成功条件（代替フロー `復帰の失敗` の事後条件をそのまま見る）:
-//   - 起動フラグが新しいセッション UUID の指定つきへ差し替わっている
-//     （`--session-id` が入り、その起動には `--resume` が1つも無い）
+//   - 1回目の起動が `--resume sess-188` であり、立て直しの起動はそれとは別の `agent.start` である
 //   - 身元ファイルの `session_uuid` が新しい UUID へ書き直されている
 //     （書き直さないと、次の再着手も同じ死んだ UUID へ復帰しにいく）
+//   - hook の引き当ての索引が張り替わっていて、前回のセッション UUID を名乗る hook は
+//     どの run のものでもないとして捨てられる
+//   - herdr の pane は開いたままである（閉じると立て直しの起動先が無くなる）
 //   - issue の Status は running_state のままである（`failure_state` へ落とさない）
 //   - 印は残っている
 //   - worktree は残っている
@@ -268,6 +351,10 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 
 	var mu sync.Mutex
 	resumeAttempts := 0
+	base := fx.Herdr.HandlerOf(herdr.MethodAgentStart)
+	if base == nil {
+		t.Fatalf("agent.start の既定の台本が入っていない")
+	}
 	fx.Herdr.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
 		args, _ := params["args"].([]any)
 		resuming := false
@@ -283,13 +370,7 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 			mu.Unlock()
 			return nil, &rpcErr{Code: herdr.ErrCodeTimeout, Message: "timed out waiting for agent startup"}
 		}
-		return map[string]any{
-			"type": "agent_started",
-			"agent": map[string]any{
-				"name": params["name"], "agent_status": "idle",
-				"interactive_ready": true, "pane_id": params["pane_id"],
-			},
-		}, nil
+		return base(params)
 	})
 
 	fx.Orc.Tick(context.Background())
@@ -306,6 +387,23 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 
 	starts := startSessionIDs(fx)
 	resumes := startResumeUUIDs(fx)
+	if len(starts) < 2 {
+		t.Fatalf("agent.start が2回に届いていない（復帰と立て直しで2回のはず）: %v", starts)
+	}
+	// **1回目の起動が、代替フロー `復帰の失敗` の分岐元である。**
+	// 死んだ UUID へ復帰しにいったことを、ここで見る。
+	if resumes[0] != "sess-188" {
+		t.Fatalf("1回目の起動が身元ファイルの UUID へ復帰していない: --resume=%q, want %q", resumes[0], "sess-188")
+	}
+	if starts[0] != "" {
+		t.Fatalf("復帰の起動に --session-id が混ざっている: %q", starts[0])
+	}
+
+	// **立て直しの起動は、1回目とは別の `agent.start` である**
+	// （事後条件「立て直しの起動はまだ1回も呼んでいない」の裏返しである）。
+	// **`--resume` と `--session-id` は排他なので**（`internal/orchestrator/settings.go` の
+	// `claudeStartArgs`）、`--session-id` が入っていること自体が
+	// 「会話履歴を1文字も読まない起動である」ことを意味する。
 	fresh := ""
 	freshAt := -1
 	for i, id := range starts {
@@ -318,12 +416,11 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	if fresh == "" {
 		t.Fatalf("復帰に失敗したあと --session-id つきで起動し直していない: %v", starts)
 	}
+	if freshAt == 0 {
+		t.Fatalf("立て直しの起動が1回目の起動と同じ呼び出しになっている: starts=%v, resumes=%v", starts, resumes)
+	}
 	if fresh == "sess-188" {
 		t.Fatalf("死んだセッションの UUID を --session-id に使い回している: %q", fresh)
-	}
-	// **立て直した起動は、前回の会話履歴を1文字も読まない。**
-	if resumes[freshAt] != "" {
-		t.Fatalf("立て直した起動に --resume が残っている: %q", resumes[freshAt])
 	}
 	if got := identitySessionUUID(t, fx, 188); got != fresh {
 		t.Fatalf("身元ファイルの session_uuid を書き直していない（次の再着手もまた復帰を試みる）: got %q, want %q",
@@ -331,6 +428,21 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	}
 
 	// 代替フロー `復帰の失敗` の残りの事後条件。
+	//
+	// **hook の引き当ての索引の張り替えを見る。**張り替えていないと、pane に残った前の
+	// Claude Code が前回のセッション UUID を名乗って Stop hook を送り、
+	// **立て直した run の turn が別の会話の transcript で終わる。**
+	stale := writeTranscript(t, t.TempDir(), "sess-188.jsonl", []any{
+		typedUserLine("p-stale", "前のセッションの1行"),
+		assistantLine("req-stale", "CONTINUO-STATUS: review", false),
+	})
+	if fx.Orc.OnHook(stopEvent("sess-188", stale, "p-stale")) {
+		t.Errorf("前回のセッション UUID を名乗る hook を、まだこの run のものとして受けている")
+	}
+	// **pane は開いたままである。**閉じてしまうと、立て直しの起動先そのものが無くなる。
+	if paneID := paneIDOf(t, fx, issue); closedPane(fx, paneID) {
+		t.Errorf("立て直しの前に pane を閉じている: pane_id=%s", paneID)
+	}
 	if got := fx.Tracker.StateOf(issue.ID); got != "In Progress" {
 		t.Errorf("Status が running_state のままになっていない: got %q, want %q", got, "In Progress")
 	}

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "b0090ac4bfeebe6f9d3d42d56eece2357a1a5a0a12cfc2db846459eacdf395ab", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "2c854e22e65cf8d38ee5c667e7de804feaa7949469540feaba74c84c5348cd32", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // 外部（GitHub・herdr）が失敗したときの検査である。
 //

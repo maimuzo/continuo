@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "987c32c703f8570cda048f4b383a3475e0396c5b9e57f443e4bf6e66c4d4d8ed"
+    "rucm_block_sha256": "d0669b833564f80f87adb5c3e0457c4e2a226af913d880188c489a5508cb1be3"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -125,7 +125,7 @@
           23
         ]
       },
-      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。"
+      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。前回のセッションが消えていた場合は、pane はシェルのプロンプトへ戻っている。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままか、既に落ちてシェルのプロンプトへ戻っているかのどちらかである。"
     },
     "paneの断念": {
       "rfs": {
@@ -134,7 +134,7 @@
           2
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。断念した起動は新しいセッション UUID の指定つきの起動である。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。"
     },
     "turnループの重なり": {
       "rfs": {
@@ -224,7 +224,7 @@
           7
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。herdr の pane は閉じている。印は外れている。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。"
     },
     "取り戻しの復帰の失敗": {
       "rfs": {
@@ -233,7 +233,7 @@
           4
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。"
     },
     "復元の断念": {
       "rfs": {
@@ -287,7 +287,7 @@
           ]
         }
       ],
-      "postcondition": "起動フラグは新しいセッション UUID の指定つきである。立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。"
+      "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。"
     },
     "権限の確認": {
       "when": "herdr の待ち受けが blocked を返した場合",
@@ -1315,7 +1315,7 @@
       "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 3,
-      "statement": "システムは issue に成果を人間に確かめてほしいことを1件コメントする。"
+      "statement": "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。"
     },
     {
       "id": "コメントの取り戻しの失敗-4",
@@ -1357,7 +1357,7 @@
       "type": "action",
       "flow": "取り戻しの復帰の失敗",
       "step": 4,
-      "statement": "システムは issue に成果を人間に確かめてほしいことを1件コメントする。"
+      "statement": "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。"
     },
     {
       "id": "取り戻しの復帰の失敗-5",
@@ -2960,7 +2960,7 @@
       "id": "P003",
       "terminal": "abort",
       "terminal_flow": "コメントの取り戻しの失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3069,7 +3069,7 @@
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
         "システムは印を外す。",
         "ABORT"
       ]
@@ -3078,7 +3078,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "取り戻しの復帰の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3183,7 +3183,7 @@
         "システムは復帰できなかった理由を記録に残す。",
         "システムは herdr の pane を閉じる。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
         "システムは印を外す。",
         "ABORT"
       ]
@@ -3521,7 +3521,7 @@
       "id": "P008",
       "terminal": "abort",
       "terminal_flow": "コメントの取り戻しの失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3633,7 +3633,7 @@
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
         "システムは印を外す。",
         "ABORT"
       ]
@@ -3642,7 +3642,7 @@
       "id": "P009",
       "terminal": "abort",
       "terminal_flow": "取り戻しの復帰の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3750,7 +3750,7 @@
         "システムは復帰できなかった理由を記録に残す。",
         "システムは herdr の pane を閉じる。",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
         "システムは印を外す。",
         "ABORT"
       ]
@@ -5154,7 +5154,7 @@
       "id": "P027",
       "terminal": "cycle",
       "terminal_flow": "復帰の失敗",
-      "postcondition": "起動フラグは新しいセッション UUID の指定つきである。立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
+      "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5231,7 +5231,7 @@
       "id": "P028",
       "terminal": "cycle",
       "terminal_flow": "paneがまだ使えない",
-      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。",
+      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。前回のセッションが消えていた場合は、pane はシェルのプロンプトへ戻っている。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままか、既に落ちてシェルのプロンプトへ戻っているかのどちらかである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5296,7 +5296,7 @@
       "id": "P029",
       "terminal": "abort",
       "terminal_flow": "paneの断念",
-      "postcondition": "issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。断念した起動は新しいセッション UUID の指定つきの起動である。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",

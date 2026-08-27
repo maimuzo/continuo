@@ -176,7 +176,7 @@ RFS BASIC FLOW 23
 1. システムは 500 ミリ秒待つ。
 2. システムは VALIDATES THAT pane を待ち始めてから 30 秒が経っていない。
 3. RESUME STEP 23
-POSTCONDITION: pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。
+POSTCONDITION: pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。前回のセッションが消えていた場合は、pane はシェルのプロンプトへ戻っている。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままか、既に落ちてシェルのプロンプトへ戻っているかのどちらかである。
 
 SPECIFIC ALTERNATIVE FLOW paneの断念:
 RFS paneがまだ使えない 2
@@ -185,7 +185,7 @@ RFS paneがまだ使えない 2
 3. システムは herdr の pane を閉じる。
 4. システムは印を外す。
 5. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。
+POSTCONDITION: issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。断念した起動は新しいセッション UUID の指定つきの起動である。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW turnループの重なり:
 RFS BASIC FLOW 26
@@ -272,20 +272,20 @@ SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗:
 RFS コメントの取り戻し 7
 1. システムは herdr の pane を閉じる。
 2. システムはボードの issue の Status に failure_state の選択肢を書く。
-3. システムは issue に成果を人間に確かめてほしいことを1件コメントする。
+3. システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。
 4. システムは印を外す。
 5. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。herdr の pane は閉じている。印は外れている。worktree は残っている。
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 取り戻しの復帰の失敗:
 RFS コメントの取り戻し 4
 1. システムは復帰できなかった理由を記録に残す。
 2. システムは herdr の pane を閉じる。
 3. システムはボードの issue の Status に failure_state の選択肢を書く。
-4. システムは issue に成果を人間に確かめてほしいことを1件コメントする。
+4. システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。
 5. システムは印を外す。
 6. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 復元の断念:
 RFS コメントの取り戻し 2
@@ -332,7 +332,7 @@ WHEN 復帰つきの起動が、前回のセッションの不在でも起動直
 6. システムは起動フラグを新しいセッション UUID の指定つきへ差し替える。
 7. システムは前の Claude Code を止めずに同じ pane を使い続ける。
 8. RESUME STEP 23
-POSTCONDITION: 起動フラグは新しいセッション UUID の指定つきである。立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。
+POSTCONDITION: 立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 権限の確認:
 BRANCH FROM BASIC FLOW 30
@@ -380,21 +380,28 @@ WHEN herdr の呼び出しが一時的な理由で失敗した場合
 POSTCONDITION: 印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。
 ```
 
+## 段は名前で指す
+
+**この節から下の本文は、段を番号ではなく名前で指す。**段を1つ足すと以降の番号が全部ずれ、
+**本文のほうは黙ったまま嘘になる。**名前は上の `rucm` ブロックの本文から取る。
+`RFS` と `RESUME STEP` の番号は RUCM の文法そのものなので、そちらは番号のままである。
+
 ## 着手の段と、落ちたときに外側へ残るもの
 
 **Status を先に書くことが、外部に残る唯一の印である**（設計 3-16）。
-**だから、着手が確定して失敗する検査はステップ13 より前に置く**（ステップ4・5・9・10）。
+**だから、着手が確定して失敗する検査は「running_state を書く」の段より前に置く**
+（「候補の Status が active_states か見る」「失敗の回数を見る」「worktree の置き場所を見る」「branch の使われ方を見る」の4段）。
 
 | 落ちた段 | 外側に残るもの | 次の巡回でどうなるか |
 | --- | --- | --- |
-| ステップ3 から10 | 何も残らない | issue はボードにある Status のままなので、直せばまた候補に上がる |
-| ステップ11 の直後 | 何も残らない | issue は dispatch_state のままなので候補に上がる |
-| ステップ13 の直後 | ボードの Status だけ | running_state は active_states に入るので候補に上がる |
-| ステップ14 の直後 | Status と、動かした記録のコメント | 同上。記録が残るので、誰がいつ動かしたかは追える |
-| ステップ15 から23 の途中 | Status と作りかけの worktree | worktree を再利用して着手をやり直す |
-| ステップ20 の直後 | 身元ファイル | 再起動したときに身元が分かる |
+| 「別の run の印を見る」から「branch の使われ方を見る」まで | 何も残らない | issue はボードにある Status のままなので、直せばまた候補に上がる |
+| 「印を付ける」の直後 | 何も残らない | issue は dispatch_state のままなので候補に上がる |
+| 「running_state を書く」の直後 | ボードの Status だけ | running_state は active_states に入るので候補に上がる |
+| 「running_state を書いた記録をコメントする」の直後 | Status と、動かした記録のコメント | 同上。記録が残るので、誰がいつ動かしたかは追える |
+| 「worktree を作る」から「pane の受け付けを見る」までの途中 | Status と作りかけの worktree | worktree を再利用して着手をやり直す |
+| 「身元ファイルを書く」の直後 | 身元ファイル | 再起動したときに身元が分かる |
 
-## ステップ17 がリポジトリ本体も渡す理由
+## 「workspace として開く」の段がリポジトリ本体も渡す理由
 
 **`worktree.open` の `cwd` は外せない。**省くと herdr が `worktree_not_found` で断り、
 worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026-08-25、
@@ -405,28 +412,38 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 閉じるのは continuo の仕事になる（片付け側の条件は
 [worktree と branch を片付ける.rucm.md](worktree%20と%20branch%20を片付ける.rucm.md) にある）。
 
-**そのためステップ17 の前後で `workspace.list` を読む。**前は「この呼び出しより前から
+**そのため「workspace として開く」の段の前後で `workspace.list` を読む。**前は「この呼び出しより前から
 親があったか」を見るため、後ろは「無かったなら、いま開いた親の ID」を控えるためである。
-**控えた ID はステップ20 の身元ファイルへ書く**（`herdr_repo_workspace_id`）。
+**控えた ID は「身元ファイルを書く」の段で身元ファイルへ書く**（`herdr_repo_workspace_id`）。
 **前からあったなら人間が開いたものなので、控えず、二度と触らない。**
 
 ## 復帰つきの起動は、失敗の理由を問わず捨てて立て直す
 
-**言いたいこと。**ステップ24 が復帰つきの起動なら、**どんな理由で完了しなくても**会話を丸ごと捨て、
-新しいセッション UUID で立て直す（代替フロー `復帰の失敗`）。
-**だからステップ25 の検査から ABORT で抜ける2本は、新しいセッション UUID の指定つきの起動でだけ通る。**
+**言いたいこと。**「Claude Code を起動する」の段が復帰つきの起動なら、**どんな理由で完了しなくても**
+会話を丸ごと捨て、新しいセッション UUID で立て直す（代替フロー `復帰の失敗`）。
+**だから ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの断念` の3本は、
+新しいセッション UUID の指定つきの起動でだけ通る。**
 
-| ステップ24 の起動 | 完了しなかったときにどうなるか |
+| 復帰つきの起動が完了しなかった理由 | どこを通ってどこへ行くか |
 | --- | --- |
-| 復帰つきで、確認の画面が出た | **待ち直しを1回も通らずに**`復帰の失敗` が受け取ってステップ23 からやり直す |
-| 復帰つきで、それ以外の理由 | `起動の待ち直し` で期限まで粘り、それでも通らなければ `復帰の失敗` が受け取ってステップ23 からやり直す |
-| 新しいセッション UUID の指定つき | `起動直後の確認画面`・`起動の待ち直し`・`起動の断念` のどれかへ進む |
+| `agent.start` そのものがエラーを返した（pane が30秒占められたまま・herdr が起動の待ちで timeout を返した） | **待ち直しを1回も通らずに** `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
+| 起動直後の確認の画面が出た | **待ち直しを1回も通らずに** `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
+| `agent.start` は通ったが、起動の確認が期限まで idle にならなかった | `起動の待ち直し` で期限まで粘ったのち `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
 
-**確認の画面だけは待ち直しを通らない。**`confirmStartup` は `blocked` を見たら `esc` を送って
+**新しいセッション UUID の指定つきの起動は、`起動直後の確認画面`・`起動の待ち直し`・`起動の断念`・
+`paneがまだ使えない`・`paneの断念` のどれかへ進む。**
+
+**`agent.start` がエラーを返した場合に待ち直しを通らない理由。**`launchClaude` は
+`AgentStartWithRetry` が返したエラーをその場で返し、**待ち直しを持つ `confirmStartupWithRestart` を
+1度も呼ばない**（`internal/orchestrator/dispatch.go`）。pane が30秒占められたままの場合も、
+herdr が起動の待ちで timeout を返した場合も、この経路である。
+
+**確認の画面が待ち直しを通らない理由。**`confirmStartup` は `blocked` を見たら `esc` を送って
 **やり直せない形のエラーで即座に戻り**、`confirmStartupWithRestart` はそれを見て期限を待たずに返す
 （`internal/orchestrator/dispatch.go` の `if !errors.Is(err, ErrStartupRetryable)`）。
 
-**`起動の待ち直し` は、確認の画面以外の理由なら両方の起動で通る。**ABORT で抜ける `起動直後の確認画面` と `起動の断念` だけが、
+**`起動の待ち直し` は、起動の確認が期限まで idle にならない理由なら両方の起動で通る。**
+ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの断念` だけが、
 新しいセッション UUID の指定つきの起動に限られる（復帰つきなら `復帰の失敗` が先に受け取るためである）。
 
 **見分けているのは `internal/orchestrator/dispatch.go` の `startRun` の1行だけである**
@@ -466,6 +483,7 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 | --- | --- | --- |
 | 前回のセッションが消えていた | `claude --resume` が落ち、シェルのプロンプトへ戻る | 受け付けられる |
 | 起動直後の確認の画面で止まった | `esc` で画面だけを畳んだ Claude Code が前面で走り続ける | **受け付けられない** |
+| 起動の確認が期限まで idle にならなかった | 前の Claude Code が前面で走り続けているか、落ちてシェルのプロンプトへ戻っているかのどちらか | **呼んでみるまで分からない** |
 
 **受け付けられない理由。**herdr の `agent.start` は「対話プロンプトに来ていて、前面で走る
 コマンドも editor も agent も無い pane」を要求する。herdr 0.8.2 の `herdr --skill` の原文は
@@ -476,7 +494,7 @@ foreground and no foreground command, editor, or agent running."（**訳:** 使�
 （`agent target pane <pane の ID> is not an available shell`）が返る**
 （herdr 0.8.2 で実測: 2026-08-27。pane で `sleep 180` を走らせてから `agent start` を呼んだ）。
 
-**だから `復帰の失敗` の RESUME 先はステップ23 である。**確認の画面で止まっていた場合は
+**だから `復帰の失敗` の RESUME 先は「pane の受け付けを見る」の段である。**確認の画面で止まっていた場合は
 そこで落ち、`paneがまだ使えない` で30秒粘ったのち `paneの断念` へ進む。
 **`paneの断念` が pane を閉じるので、残っていた前の Claude Code もそこで終わる。**
 
@@ -510,21 +528,29 @@ foreground and no foreground command, editor, or agent running."（**訳:** 使�
 **通知は1つの run につき1件だけ書ける**（`takeHandoffPost`）。`取り戻しの復帰の失敗` と
 `コメントの取り戻しの失敗` の段の並びは、この順に合わせてある。
 
+**打ち切りから来た場合は、この経路が通知を書き足さない。**`リトライの尽き` は
+`abandonRunClaimed` が打ち切りの理由で通知の枠を取ってから「run のコメントの有無を見る」の段を通す。
+**枠は1件しか無いので、`postHandoffComment` は2件目を投稿せずにログへ落とす。**
+だから2本の失敗のフローの段は「まだ1件も書いていなければ」と条件を付けてあり、
+事後条件も「1件だけある」と書いてある。**この並びを崩すと、stall で打ち切った本当の理由が
+issue に1文字も残らない**（`test/internal/orchestrator/audit_fixes_test.go` の
+`TestAbandon_打ち切りのときissueに残る理由が本当の理由である` がそれを確かめている）。
+
 ## 候補を飛ばす6つの検査
 
 **候補の一覧は GitHub のサーバ側の検索結果であり、そのまま信じてはならない**（設計 3-34）。
 
-| 検査 | 何を見るか | 落ちたらどうするか |
+| 検査の段 | 何を見るか | 落ちたらどうするか |
 | --- | --- | --- |
-| ステップ3 | その issue に別の run の印が既に付いていないか | その issue だけ飛ばす。走っている run はそのまま |
-| ステップ4 | issue の Status が active_states に入っているか | その issue だけ飛ばす。他の候補は続ける |
-| ステップ5 | 失敗の回数が max_retries を超えていないか | 人間が Status を動かすまで拾わない |
-| ステップ6 | required_labels をすべて持っているか | その issue だけ飛ばす。ボードへは1バイトも書かない |
-| ステップ9 | 目的のパスに実体があるのに git の登録が無いか | Status を1バイトも書かずに飛ばす |
-| ステップ10 | その branch を置き場所以外の worktree が使っていないか | Status を1バイトも書かずに飛ばす |
+| 別の run の印を見る | その issue に別の run の印が既に付いていないか | その issue だけ飛ばす。走っている run はそのまま |
+| 候補の Status が active_states か見る | issue の Status が active_states に入っているか | その issue だけ飛ばす。他の候補は続ける |
+| 失敗の回数を見る | 失敗の回数が max_retries を超えていないか | 人間が Status を動かすまで拾わない |
+| required_labels を見る | required_labels をすべて持っているか | その issue だけ飛ばす。ボードへは1バイトも書かない |
+| worktree の置き場所を見る | 目的のパスに実体があるのに git の登録が無いか | Status を1バイトも書かずに飛ばす |
+| branch の使われ方を見る | その branch を置き場所以外の worktree が使っていないか | Status を1バイトも書かずに飛ばす |
 
-**ステップ10 は、目的のパスに何も無くても落ちる。**git は1つの branch を2つの worktree に
-出せないので、別の場所の worktree がその branch を出していると、ステップ15 の
+**「branch の使われ方を見る」の段は、目的のパスに何も無くても落ちる。**git は1つの branch を2つの worktree に
+出せないので、別の場所の worktree がその branch を出していると、「worktree を作る」の段の
 `git worktree add` が `fatal: '<branch>' is already used by worktree at '<別のパス>'` で
 必ず失敗する。**片付けは `continuo abandon <issue の URL>` の出番である**
 （[着手を取り消す.rucm.md](%E7%9D%80%E6%89%8B%E3%82%92%E5%8F%96%E3%82%8A%E6%B6%88%E3%81%99.rucm.md)）。
@@ -532,7 +558,7 @@ foreground and no foreground command, editor, or agent running."（**訳:** 使�
 ## 壊れた ref に出会ったら、その1ファイルを消してやり直す
 
 **言いたいこと。**`refs/heads/<branch>` のファイルが読めない状態になると、
-ステップ15 は何度やり直しても `reference broken` で失敗し、その issue には二度と着手できない。
+「worktree を作る」の段は何度やり直しても `reference broken` で失敗し、その issue には二度と着手できない。
 **git のコマンドでは消せないので、continuo がファイルとして1つ消して、1回だけやり直す。**
 
 **消してよい条件は設計 [3-22b](../../../plans/continuo_design.md) にある7つで、全部を満たすときだけ消す。**
@@ -561,7 +587,7 @@ loose を消した瞬間に packed 側が有効になり、**やり直しはそ�
 
 **hook の中身はエージェントが書き換えられる外部入力である**（設計 3-23）。
 run を引くのは `session_id` だけなので、**`cwd` がその run の worktree の外にある hook は、
-その1件ごと捨てる**（ステップ33）。**捨てても turn の終わりの待ちは続く。**
+その1件ごと捨てる**（「hook の cwd を見る」の段）。**捨てても turn の終わりの待ちは続く。**
 `cwd` が空の hook と、worktree のパスをまだ知らない run は判定できないので通す。
 
 ## 既に目的の Status なら、書きに行かない
@@ -570,13 +596,13 @@ run を引くのは `session_id` だけなので、**`cwd` がその run の wor
 continuo のログにだけ「書き込みました」が出るので、あとから「誰がいつ Status を動かしたか」を
 突き合わせるとき、**continuo が書いたはずの時刻に記録が無い**という形になる。
 
-**だからステップ40 は、書く前に取り直した値が書こうとしている値と同じなら、書き込みを送らない。**
+**だから「表明の遷移先を書く」の段は、書く前に取り直した値が書こうとしている値と同じなら、書き込みを送らない。**
 比較は前後の空白と大文字小文字を無視する（`internal/tracker/query.go` の `foldStatus`）。
 無駄な API の呼び出しが1回減るのは副産物であり、主目的はログと timeline を食い違わせないことである。
 
-**送らなかったときは、ステップ41 の「何から何へ動かしたか」のコメントも書かない。**
-ボードが動いていないので、書けば嘘の記録になる。代替フロー「既に同じStatus」がステップ42 へ戻すのは
-そのためである。判断に使うのは `StatusWrite.Wrote` であり、
+**送らなかったときは、「表明の遷移先を書いた記録をコメントする」の段の「何から何へ動かしたか」のコメントも書かない。**
+ボードが動いていないので、書けば嘘の記録になる。代替フロー「既に同じStatus」が
+「run のコメントの有無を見る」の段へ戻すのはそのためである。判断に使うのは `StatusWrite.Wrote` であり、
 `internal/orchestrator/comment.go` の `postStatusMove` が偽なら投稿しない。
 
 **それでも「Status を動かせた」として扱う。**着手や失敗の記録は、書き込みの API を呼んだかどうかではなく

@@ -11,6 +11,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
@@ -222,18 +223,17 @@ func startFlagValues(fx *fixture, flag string) []string {
 	return out
 }
 
-// identitySessionUUID は、その issue の worktree の身元ファイルから `session_uuid` を読む。
+// worktreePathOf は、その issue の worktree の絶対パスを `workspace.Locate` に決めさせる。
 //
-// **worktree の置き場所は `workspace.Locate` に決めさせる。**テストが組み立てると、
-// 置き場所の規則が変わったときにテストだけが古い場所を見に行く。
+// **テストがパスを組み立ててはならない。**置き場所の規則が変わったとき、テストだけが
+// 古い場所を見に行き、**本物の合格を「worktree が残っていない」と報告する。**
 //
 // t: 呼び出し元のテスト。
 // fx: 対象の fixture。
-// number: issue の番号（`sampleIssue` に渡したもの）。
-// 戻り値: 身元ファイルの `session_uuid`。
-func identitySessionUUID(t *testing.T, fx *fixture, number int) string {
+// issue: 対象の issue。
+// 戻り値: worktree の絶対パス。
+func worktreePathOf(t *testing.T, fx *fixture, issue tracker.Issue) string {
 	t.Helper()
-	issue := sampleIssue(number, "In Progress")
 	loc, _, err := workspace.Locate(
 		fx.Workspace.ResolvedRoot(),
 		fx.Config.Herdr.Worktree.BranchTemplate,
@@ -249,7 +249,18 @@ func identitySessionUUID(t *testing.T, fx *fixture, number int) string {
 	if err != nil {
 		t.Fatalf("worktree の置き場所を決められません: %v", err)
 	}
-	identity, err := fx.Workspace.ReadIdentity(loc.Path)
+	return loc.Path
+}
+
+// identitySessionUUID は、その issue の worktree の身元ファイルから `session_uuid` を読む。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// number: issue の番号（`sampleIssue` に渡したもの）。
+// 戻り値: 身元ファイルの `session_uuid`。
+func identitySessionUUID(t *testing.T, fx *fixture, number int) string {
+	t.Helper()
+	identity, err := fx.Workspace.ReadIdentity(worktreePathOf(t, fx, sampleIssue(number, "In Progress")))
 	if err != nil {
 		t.Fatalf("身元ファイルを読めません: %v", err)
 	}
