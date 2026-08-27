@@ -69,6 +69,10 @@ var (
 	// ErrSymlink は、書き出す先の WORKFLOW.md が symlink だったことを表す。
 	// symlink を辿って書くと、指定されたディレクトリの外にあるリンク先を壊す。
 	// --force であっても辿らずに止める。
+	//
+	// **--force の経路には隙間がある。**os.Lstat で symlink を見てから os.Rename で
+	// 差し替えるまでの間に symlink へ置き換えられると、これを返さずに差し替える（設計 3-60）。
+	// 新しく作る経路には隙間が無い（O_EXCL と O_NOFOLLOW が kernel の open の時点で見る）。
 	ErrSymlink = errors.New("WORKFLOW.md が symlink です")
 )
 
@@ -84,10 +88,14 @@ var (
 //
 // 書き込む先が symlink だった場合は、force が真でも辿らずに ErrSymlink で止める。
 // 辿ると dir の外にあるリンク先を雛形で潰すためである。
+// **ただし force の経路には隙間がある。**os.Lstat で見てから os.Rename で差し替えるまでの間に
+// symlink へ置き換えられると、ErrSymlink を返さずに差し替える（設計 3-60）。
 //
 // **force で既にある WORKFLOW.md を置き換えるときは、その場で空にしてから書かない。**
 // 同じディレクトリの一時ファイルへ書き切ってから差し替える（設計 3-59）。途中で落ちても、
 // 利用者が手で直した WORKFLOW.md は元のまま残る。**元のファイルの権限もそのまま残る。**
+// **読み取り専用（0444 など）の WORKFLOW.md も force なら置き換わる。**差し替えに要るのは
+// 親ディレクトリへの書き込み権限であって、ファイル自身の権限ではないためである（設計 3-60）。
 // **新しく作るときは差し替えない。**失うものが無いうえ、差し替えにすると umask が効かなくなる。
 //
 // エラー:
@@ -131,6 +139,14 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 			// 「リンクを雛形で置き換えてしまった」ことになる。
 			if info.Mode()&fs.ModeSymlink != 0 {
 				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
+			}
+			// **WORKFLOW.md という名前のディレクトリは、ここで名指しして止める。**
+			// そのまま差し替えに進むと os.Rename が失敗し、利用者には
+			// 「一時ファイルの名前と rename の失敗」だけが並んだ読めない文言が出る。
+			// EISDIR を添えて「作成できません: … is a directory」に揃える
+			// （その場で開いて書いていた頃と同じ文言である）。
+			if info.IsDir() {
+				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, path, syscall.EISDIR)
 			}
 			// **既にある WORKFLOW.md は、その場で空にしてから書かない**（CLAUDE.md の
 			// 「絶対に守る制約」4 / 設計 3-59）。O_TRUNC で開くと、書いている途中で落ちたときに

@@ -5661,9 +5661,38 @@ origin/main:internal/scaffold/scaffold.go:130:		flags |= os.O_TRUNC
 | `internal/workspace/identity.go` の `.git/info/exclude` | **追記のみ。**全置換にすると、読んでから書くまでの間に他が書いた行を消す |
 
 **戻らないように検査を1本置いた。**`test/internal/atomicfile/no_truncating_write_test.go` が
-`internal/` と `cmd/` を構文木で走査し、`os.WriteFile` と `O_TRUNC`（`syscall` 側と import の
-別名も含む）が現れたら落とす。**文字列ではなく構文木を見るのは、**上の2箇所のように
+`internal/` と `cmd/` を構文木で走査し、**書き込む先をその場で切り詰める書き方を全部落とす**
+（`os.WriteFile` / `ioutil.WriteFile` / `os.Create` / `os.Truncate` / `f.Truncate` / `O_TRUNC`。
+`syscall` 側・import の別名・dot import も追う）。**flag を数値で書くことも落とす。**
+`os.O_TRUNC` は macOS で 0x400、Linux で 0x200 と値が違ううえ `1024` とも書けるので、
+数値のままでは構文木から見分けられない。**文字列ではなく構文木を見るのは、**上の2箇所のように
 「なぜその書き方をしないのか」をコメントで説明できるようにするためである。
+
+**振る舞いは別のテストで押さえる。**`test/internal/atomicfile/write_test.go` が
+「中身が新しくなる」「渡した権限が残る」「落ちても元の中身が残る」「一時ファイルを残さない」を、
+`test/internal/scaffold/write_perm_test.go` が「新しく作るときは umask が効く」
+「force で置き換えても元の権限が残る」を見る。
+
+---
+
+### 3-60. 差し替えにして変わった振る舞い
+
+**言いたいこと。**一時ファイルから差し替える形にしたことで、その場で開いて書いていた頃とは
+**結果が変わる場面が6つある。**どれも直さずに受け入れる。理由をここに置く。
+
+| 短縮名 | 何が変わったか | なぜ直さないか |
+| --- | --- | --- |
+| **読み取り専用の上書き** | `chmod 444` にした `WORKFLOW.md` を `continuo init --force` が置き換えるようになった。変更前は `permission denied` で拒否していた | **`os.Rename` に要るのは親ディレクトリへの書き込み権限であって、ファイル自身の権限ではない。**差し替えである以上、ファイルの権限では止められない。`--force` は「置き換えてよい」と利用者が明示した経路である |
+| **symlink の隙間** | `os.Lstat` で symlink を見てから `os.Rename` するまでの間に symlink へ差し替えられると、`ErrSymlink` を返さずに置き換える | 変更前は `syscall.O_NOFOLLOW` が kernel の open の時点で見ていたので隙間が無かった。**`rename(2)` には「symlink なら失敗する」という指定が無い。**新しく作る経路には隙間が無いままである |
+| **force で「既にあります」** | `--force` でも、まだ無いファイルへ書く経路は `O_EXCL` を通る。その隙間に別のプロセスが同じファイルを作ると `ErrAlreadyExists` になる | **単一の利用者が手で打つ CLI である。**`continuo init` を2つ同時に走らせる場面が無い |
+| **特殊ビットとハードリンク** | setgid / sticky が落ちる。hard link を張っていた相方は古い中身のまま残る | **差し替え方式に本質的な代償である。**`continuo setup` は変更前からこれを払っていた（`internal/scaffold/update.go`）。ここだけ別扱いにする理由が無い |
+| **FIFO の置き換え** | 書き込む先が FIFO だと、変更前は開いた時点で読み手を待って固まった。いまは通常のファイルに置き換えて成功する | **いまのほうが良い。**固まると `continuo init` が返ってこない |
+| **一時ファイルの残骸** | 強制終了や電源断で `.WORKFLOW.md.*` / `.settings.json.*` が残る。片付ける経路は無い | ディスクを少し食うだけである。**`WORKFLOW.md` の側は利用者に未追跡のファイルとして見えるので、ユースケースの事後条件に書いた**（[docs/spec/usecases/particular_case/設定ファイルを作る.rucm.md](../spec/usecases/particular_case/設定ファイルを作る.rucm.md) の `GLOBAL ALTERNATIVE FLOW 書き込み中の中断`） |
+
+**1つだけ直した。****`WORKFLOW.md` という名前のディレクトリ**に `--force` を当てたとき、
+差し替えの失敗がそのまま出ると「一時ファイルの名前と `rename` の失敗」が並ぶだけで読めない。
+`os.Lstat` の結果がディレクトリなら、差し替えに進む前に
+`WORKFLOW.md を作成できません: <パス>: is a directory` で止める（変更前と同じ文言である）。
 
 ---
 
