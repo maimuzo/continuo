@@ -185,15 +185,25 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **次を投げる前に必ず esc を送る**（設計 3-11。送らずに投げると保留中の
 			// 権限要求が承認されて実行される。3/3 で再現）。
 			o.sendEscape(ctx, rs)
+			// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない
+			// （設計 3-11。`Notification` hook は出ず、拒否は静かに起きる）。
+			// 書けるのは「記録を見て確かめてください」までである。
 			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
 				"Claude Code が作業の途中で確認の画面に止まりました。"+
 					"continuo は esc を送って画面を閉じましたが、"+
 					"**この issue は人間が見ないと進みません。**"+
-					"\n【確かめ方】下記の「Claude Code の会話の記録」を開き、末尾で何を実行しようとしていたかを見てください。"+
-					"\n【よくある原因】許可されていないコマンドを実行しようとした / "+
-					"許可の一覧に無いツールを使おうとした。"+
-					"\n【対処】許してよい操作なら WORKFLOW.md の `claude.permissions.allow` に足してから、"+
-					"Status を着手待ちへ戻してください。")
+					"\n【確かめ方】下記の【調べるところ】に挙げた記録を開き、"+
+					"末尾で何をしようとしていたかを見てください。"+
+					"**サブエージェントの記録も見てください。**"+
+					"親の記録の末尾には何も残っていないことがあります。"+
+					"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。"+
+					"**何の確認だったかは continuo の側には残りません。**"+
+					"\n【dontAsk について】continuo は `--permission-mode dontAsk` で起動しており、"+
+					"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、"+
+					"**この停止は拒否とは別の原因のことがあります。**"+
+					"\n【対処】記録を見て、許してよい操作だと分かったときだけ "+
+					"WORKFLOW.md の `claude.permissions.allow` に足してください。"+
+					"そのうえで Status を着手待ちへ戻してください。")
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+

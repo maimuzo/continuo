@@ -345,6 +345,27 @@ herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 信頼登録が足りないなら `continuo trust ~/continuo-work`。
 許可が要るなら `WORKFLOW.md` の `claude.permissions.allow` に足します。
 
+### 「作業の途中で確認の画面に止まりました」と出る
+
+**まず見る場所。**issue に付いた引き渡しの通知の【調べるところ】に、記録のパスが並んでいます。
+**親のセッションの記録と、サブエージェントの記録の両方を開いてください。**
+**親の記録の末尾には何も残っていないことがあります。**作業がサブエージェントの側で進んでいた場合、
+そこで何が起きたかは親の記録には書かれません。
+
+```bash
+tail -n 20 ~/.claude/projects/<符号化した worktree>/<セッション UUID>.jsonl
+ls -lt ~/.claude/projects/<符号化した worktree>/<セッション UUID>/subagents/
+```
+
+**`claude.permissions.allow` に足しても直らない止まり方があります。**
+continuo は Claude Code を `--permission-mode dontAsk` で起動します。
+**このモードでは、許可の一覧に無いツールは確認の画面を出さずに、その場で拒否されます。**
+拒否は静かに起きるので、**確認の画面が出て止まったのなら、それは許可の一覧の不足とは別の原因です。**
+
+**直し方。**記録を読んで、何をしようとして止まったのかを確かめます。
+**許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足し、
+Status を着手待ちへ戻してください。
+
 ### 「Claude Code が起動しませんでした（herdr が返した状態: "unknown"）」と出る
 
 **原因。**`claude` が PATH に無い / 起動が途中で失敗した / そのフォルダが信頼登録されていない、のどれかです。

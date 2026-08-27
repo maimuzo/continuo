@@ -173,12 +173,24 @@ func buildHandoffComment(identifier, reason string, hc handoffContext, move stat
 	// **pane を閉じたあとも残るものだけを出す。**このコメントを人間が読むのは
 	// 数十分後であり、そのとき `herdr agent read` は agent_not_found で落ちる
 	// （引き渡しの経路はコメントの直後に pane.close を呼ぶ）。
-	lines := make([]string, 0, 3)
+	lines := make([]string, 0, 5)
 	if hc.WorktreePath != "" {
 		lines = append(lines, fmt.Sprintf("- 作業していた場所: `%s`", hc.WorktreePath))
 	}
 	if hc.TranscriptPath != "" {
 		lines = append(lines, fmt.Sprintf("- Claude Code の会話の記録: `%s`", hc.TranscriptPath))
+	}
+	// **subagent の記録も出す。**親の記録の末尾には何も残っていないことがあり、
+	// そこだけを案内すると「何も無い」で行き止まりになる（issue #65）。
+	if len(hc.SubagentTranscripts) > 0 {
+		quoted := make([]string, 0, len(hc.SubagentTranscripts))
+		for _, p := range hc.SubagentTranscripts {
+			quoted = append(quoted, "`"+p+"`")
+		}
+		lines = append(lines, "- サブエージェントの記録（新しい順）: "+strings.Join(quoted, " / "))
+	}
+	if hc.SubagentDir != "" {
+		lines = append(lines, fmt.Sprintf("- サブエージェントの記録の置き場所: `%s`", hc.SubagentDir))
 	}
 	if hc.SettingsPath != "" {
 		lines = append(lines, fmt.Sprintf("- continuo が渡した設定: `%s`", hc.SettingsPath))
@@ -203,6 +215,17 @@ type handoffContext struct {
 	// **pane を閉じても残るのはこれである。**hook が渡してくるので、
 	// turn を1回も終えていない run では空になる。
 	TranscriptPath string
+	// SubagentDir は subagent の記録の置き場所の絶対パスである。
+	//
+	// **親の記録の隣にある**（`<親の記録から `.jsonl` を落としたパス>/subagents`）。
+	// subagent を1つも使わなかった turn では作られないので、そのときは空になる。
+	SubagentDir string
+	// SubagentTranscripts は subagent の記録の絶対パスを、更新時刻の新しい順に
+	// 並べたものである（`handoffSubagentLimit` 件まで）。
+	//
+	// **ここではファイルを走査しない。**値として受け取る（`buildHandoffComment` を
+	// 副作用の無い純関数のままにしておくため）。
+	SubagentTranscripts []string
 	// SettingsPath は continuo が書いた Claude Code の設定ファイルの絶対パスである。
 	// **worktree の中ではない**（設計 3-12）。
 	SettingsPath string

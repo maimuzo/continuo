@@ -5,6 +5,8 @@ package orchestrator_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -285,6 +287,78 @@ func TestTurn_blockedが返ったらescを送ってから人間へ渡す(t *test
 	keys, _ := keysParams["keys"].([]any)
 	if len(keys) != 1 || keys[0] != "esc" {
 		t.Fatalf("送ったキーが想定と違う: got %v, want [esc]", keys)
+	}
+}
+
+// TestTurn_blockedで引き渡すときサブエージェントの記録も案内する は、
+// 「案内された記録の末尾に何も無い」で行き止まりにしないことを確かめる。
+//
+// 目的: 設計 3-11 の「引き渡しの通知には、親のセッションの記録だけでなく
+// subagent の記録も載せる」を守っていることを示す。**親の記録の末尾には何も
+// 残っていないことがあり、そこだけを案内すると人間が原因に辿り着けない。**
+// 与える情報: `blocked` を返す台本と、hook が渡す親の記録、その隣の
+// `<セッション UUID>/subagents/agent-*.jsonl`。
+// 成功条件: 引き渡しの通知の【調べるところ】に subagent の記録のパスと置き場所が並び、
+// 【確かめ方】が【調べるところ】を指していること。**原因を断定していないこと。**
+func TestTurn_blockedで引き渡すときサブエージェントの記録も案内する(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(189, "Ready"))
+
+	transcriptDir := t.TempDir()
+	parent := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "調べます", false),
+	})
+	// **置き場所の規則は実測で確かめられている**（docs/evidence/hooks_probe_20260817.jsonl）。
+	subagentDir := filepath.Join(transcriptDir, "session-1", "subagents")
+	if err := os.MkdirAll(subagentDir, 0o700); err != nil {
+		t.Fatalf("subagents ディレクトリを作れません: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(subagentDir, "agent-a1f9f743.jsonl"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("subagent の記録を書けません: %v", err)
+	}
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **記録のパスは hook から届く。**引き渡しの通知はこの値から subagents を辿る。
+		fx.Orc.OnHook(stopEvent("session-1", parent, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "blocked"},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "引き渡しの通知が投稿される", func() bool {
+		for _, c := range fx.Tracker.CommentsOf("I_node189") {
+			if strings.Contains(c.Body, "人間へ引き渡しました") {
+				return true
+			}
+		}
+		return false
+	})
+	fx.WaitRunsDrained(t, 15*time.Second)
+
+	var body string
+	for _, c := range fx.Tracker.CommentsOf("I_node189") {
+		if strings.Contains(c.Body, "人間へ引き渡しました") {
+			body = c.Body
+		}
+	}
+	for _, want := range []string{
+		"【調べるところ】",
+		"サブエージェントの記録（新しい順）",
+		"agent-a1f9f743.jsonl",
+		"サブエージェントの記録の置き場所",
+		"下記の【調べるところ】に挙げた記録",
+		"dontAsk",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("引き渡しの通知に %q が無い:\n%s", want, body)
+		}
+	}
+	// **原因を断定してはならない。**何が確認の画面を出したかは continuo の側に残らない。
+	if strings.Contains(body, "許可されていないコマンドを実行しようとした") {
+		t.Errorf("確かめていない原因を断定している:\n%s", body)
 	}
 }
 
