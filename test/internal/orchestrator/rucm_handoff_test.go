@@ -31,7 +31,10 @@ import (
 func TestRUCMHandoff_P012_知らない表明ではStatusを動かさない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
@@ -44,6 +47,8 @@ func TestRUCMHandoff_P012_知らない表明ではStatusを動かさない(t *te
 		assistantLine("req1", "やりました。\n\nCONTINUO-STATUS: よくわからない値", false),
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 
 	// **2回目の turn が送られることで「続いている」ことを確かめる。**
 	//
@@ -76,7 +81,10 @@ func TestRUCMHandoff_P012_知らない表明ではStatusを動かさない(t *te
 func TestRUCMHandoff_P011_完了済みのissueにはStatusを書かない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
@@ -93,6 +101,8 @@ func TestRUCMHandoff_P011_完了済みのissueにはStatusを書かない(t *tes
 		assistantLine("req1", "終わりました。\n\nCONTINUO-STATUS: review", false),
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 
 	waitFor(t, 20*time.Second, "run が印から外れる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
@@ -114,7 +124,10 @@ func TestRUCMHandoff_P011_完了済みのissueにはStatusを書かない(t *tes
 func TestRUCMHandoff_P001_reviewの表明で遷移先へ書いて片付ける(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
@@ -128,6 +141,8 @@ func TestRUCMHandoff_P001_reviewの表明で遷移先へ書いて片付ける(t 
 		assistantLine("req1", "終わりました。\n\nCONTINUO-STATUS: review", false),
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 
 	waitFor(t, 20*time.Second, "run が印から外れる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
