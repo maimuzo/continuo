@@ -7345,6 +7345,70 @@ abandon の段1〜段5 は**それぞれ別のことをする。**1周にまと�
 
 ---
 
+### 6-21. turn の終わりは、`agent.prompt` を返す前に積む
+
+**言いたいこと。**`agent.prompt` が返った瞬間から `claude.settle_ms` の時計が走る。
+**テストが準備をしている間に返させると、遅い機械では準備が終わる前に run が諦められる。**
+**`Stop` を先に流し、そのあとで `agent.prompt` を返させる。**
+
+**何が起きるか。**
+
+| 誰が | 何をする |
+| --- | --- |
+| `sendTurn` | `agent.prompt` が返ると `confirmTurnEnd` へ入り、**`settle_ms` だけ `Stop` を待つ** |
+| 来なければ | `turnStalled` → `abandonRun`。**2回目の turn は来ない。ログも出ない**（`claimTerminal` の中で止まる） |
+| テスト | 台本が即座に返したあと、transcript を書いてから `OnHook` を呼ぶ |
+
+**fixture の `settle_ms` は 50ms である**（[test/internal/orchestrator/helpers_test.go](test/internal/orchestrator/helpers_test.go) の `newFixture`）。
+**`t.TempDir()` と1回の巡回を挟めば、遅い機械では簡単に超える。**
+
+**どう直したか。**`blockFirstPrompt` が**1回目の `agent.prompt` を放す関数を返す。**
+テストは `Stop` を流してからそれを呼ぶ。`beginTurn` は `agent.prompt` の前に走るので、
+**先に積んだ `Stop` は消されない**（`rs.stopSeenAt` に残る）。
+
+```go
+releasePrompt := blockFirstPrompt(t, fx)
+…
+fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+releasePrompt()
+```
+
+**`holdPrompt` を turn の終わりを起こすテストで使ってはならない。**
+あれは `agent.prompt` を**即座に返す**台本である（返さない台本ではない）。
+
+**再現のしかた。**`OnHook` の直前に `time.Sleep(500 * time.Millisecond)` を差し込む。
+直す前は6本が落ち、直したあとは全部通る（2026-08-27 の実測）。
+
+---
+
+### 6-22. 巡回を1回打っただけで、効いたことにしない
+
+**言いたいこと。**巡回からの書き戻しは、記録を投稿した**あとで**印を返す（`endRewrite`）。
+**印が返る前に来た巡回は何もしない。**テストが巡回を1回しか打たないと、そこで止まる。
+
+**何が起きるか。**
+
+| 誰が | 何をする |
+| --- | --- |
+| 書き戻しの goroutine | Status を書く → 記録を投稿する → **`endRewrite` で印を返す** |
+| テスト | 記録が積まれたのを見て、次の巡回を1回だけ打つ |
+| その巡回 | `beginRewrite` が `rewriteBusy`、`beginTerminal` が `terminalRewriting`。**何もしない** |
+
+**実運用では30秒後の巡回が拾い直すので、この重なりは問題にならない。**
+
+**どう直したか。**条件が満たされるまで巡回を打ち直す（`tickUntil`）。
+**書き戻しの回数を数えるテストでは、`UpdateStatus` を関門で止めてから打つ**（`tickRewriteOnce`）。
+書き戻しが始まった時点で `beginRewrite` が塞がるので、**打ち直した巡回は必ず空振りする。**
+**1回のつもりが2回書きに行くことがない。**
+
+**記録は「何件あるか」ではなく「増えたか」で見る。**着手のときにも記録が1件積まれているので、
+**件数で待つと、書き戻しの記録を1件も待たないまま通る。**
+
+**再現のしかた。**`GOMAXPROCS=1` で `-count=100`。
+直す前は200回中10回落ちた。直したあとは480回すべて通る（2026-08-27 の実測）。
+
+---
+
 ## 7. 実装の順序
 
 **第6節に残る4件は実装を止めない。**運用に入ったら 6-1 のとおり記録を残す。
