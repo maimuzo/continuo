@@ -6,32 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
-
-// computeKnownStates は continuo が意味を知っている Status 名をすべて集める（設計 3-50）。
-//
-// **設定に名前が出てくる Status がすべてである。**active_states・terminal_states・
-// running_state・dispatch_state・failure_state・status_signal_map の遷移先と、
-// automated_state_rewrite の**戻す先**を集める。
-// **これは起動時にボードと照合する一覧と同じ集合である**（`tracker` の
-// `requiredStatesForBootstrap`）。
-//
-// **`automated_state_rewrite` のキーは入れない**（設計 3-54）。キーは
-// 「ボードの自動化が書く、continuo が知らない Status」であり、ここへ入れると
-// 知っている Status になって、書き戻しの分岐が二度と通らなくなる。
-//
-// **呼ぶのは `New` の1回だけである。**結果は `knownStateNames` に持つ。
-//
-// cfg: WORKFLOW.md の front matter の tracker セクション。
-// 戻り値: Status 名の並び（重複と空文字は落とす。順序は設定に書かれた順、
-// 戻す先だけは名前順で末尾に付く）。
-func computeKnownStates(cfg config.TrackerConfig) []string {
-	// **集めるのは `config.KnownStates` の1箇所だけである。**起動時にボードと照合する
-	// 一覧（`tracker` の `requiredStatesForBootstrap`）も同じ関数を呼ぶ。
-	return config.KnownStates(cfg)
-}
 
 // knownStates は continuo が意味を知っている Status 名をすべて返す（設計 3-50）。
 //
@@ -73,6 +49,19 @@ const maxAutomatedRewrites = 3
 // **待っても直らないと分かっている失敗は、1回で人間へ渡す**（`rewriteAutomatedState` が
 // `tracker.CategoryInvalidConfig` にこの値をそのまま足す）。
 const maxAutomatedRewriteFailures = 3
+
+// automatedRewriteFailureRetryAfter は、「戻せない」の上限に達してから、もう一度だけ
+// 試すまでの間隔である（設計 3-56）。
+//
+// **数えているのは「続けて何回」である。**成功で 0 に戻す道はあるが、
+// **上限に達した run は書き戻しそのものをやめるので、その道へは二度と入れない。**
+// 切り直さないと、**通信が回復しても永久に拒み続ける。**
+//
+// **5分にする。**巡回は30秒ごとなので、打ち直す間隔が10分の1に落ちる
+// （「失敗する書き込みを30秒ごとに永久に打ち続ける」は起きない）。
+// **知らない Status の猶予の既定（10分）より短くしてある。**猶予より長いと、
+// 待っているあいだに一度も試し直せず、この切り直しが死んだ枝になる。
+const automatedRewriteFailureRetryAfter = 5 * time.Minute
 
 // handleUnknownState は「continuo が知らない Status」になった run をどうするかを決める
 // （設計 3-50 / 3-54）。
@@ -176,8 +165,17 @@ func (o *Orchestrator) claimAutomatedRewrite(
 	}
 	// **「戻せない」が続いたら、そこで書き戻すのをやめる**（設計 3-54）。
 	// やめないと猶予の時計が始まらず、失敗する書き込みを永久に打ち続ける。
-	if failed := rs.automatedRewriteFailureCount(issue.State); failed >= maxAutomatedRewriteFailures {
-		if rs.noteAutomatedRewriteHandoff(issue.State) {
+	failed := rs.automatedRewriteFailureCount(issue.State)
+	if failed >= maxAutomatedRewriteFailures &&
+		rs.expireAutomatedRewriteFailures(issue.State, o.now(), automatedRewriteFailureRetryAfter) {
+		// **「続けて何回」を時間で切り直す**（設計 3-56）。通信が回復していれば、ここで通る。
+		o.logger.Info("自動化が動かした Status の書き戻しを、時間を置いてもう一度試します",
+			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
+			"戻す先", target, "置いた時間", formatDuration(automatedRewriteFailureRetryAfter))
+		failed = 0
+	}
+	if failed >= maxAutomatedRewriteFailures {
+		if rs.noteAutomatedRewriteHandoff(issue.State, handoffByFailures) {
 			o.logger.Warn("自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します"+
 				"（ボードから戻す先の選択肢が消えている可能性があります）",
 				"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
@@ -187,7 +185,7 @@ func (o *Orchestrator) claimAutomatedRewrite(
 	}
 	claim, done := rs.claimAutomatedRewrite(issue.State, maxAutomatedRewrites)
 	if claim == nil {
-		if rs.noteAutomatedRewriteHandoff(issue.State) {
+		if rs.noteAutomatedRewriteHandoff(issue.State, handoffByPushback) {
 			o.logger.Warn("自動化が動かした Status を書き戻す回数が上限に達しました"+
 				"（continuo とボードの自動化が押し合っています。ここからは人間へ渡します）",
 				"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
@@ -214,7 +212,11 @@ func (o *Orchestrator) claimAutomatedRewrite(
 // **印が消えたあとに「作業中」の Status がボードへ書かれる。**次の巡回はその issue を
 // 候補として拾い直し、**同じ worktree に2本目の Claude Code を立てる。**
 // **印を確保できなければ、書かずに戻る。**確保できたぶんは、書き終えたら必ず返す
-// （`endTerminal`）。返さないと、そのあと run を終わらせる経路が1つも通らなくなる。
+// （`endRewrite`）。返さないと、終わらせる処理が書き戻しの終わりを永久に待つ。
+//
+// **取るのは書き戻し専用の印である**（`beginRewrite`。設計 3-56）。
+// 「終わらせる処理」の印を使い回すと、**書き戻しが飛んでいるだけの run が
+// 「終わりに向かっている」と読まれ、turn ループが宙に浮く。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
@@ -224,21 +226,25 @@ func (o *Orchestrator) claimAutomatedRewrite(
 func (o *Orchestrator) rewriteAutomatedStateAsync(
 	ctx context.Context, rs *runState, issue tracker.Issue, target string, claim *rewriteClaim,
 ) {
-	if !rs.beginTerminal() {
-		// 既に終わらせる処理が走っている（または run が終わっている）。
+	if gate := rs.beginRewrite(); gate != rewriteClaimed {
+		// 終わらせる処理が走っている（run が終わっている）か、別の書き戻しが飛んでいる。
 		// **確保した書き戻しの枠を返す。**返さないと、止まらなかった run が
 		// この issue について1回ぶん損をしたまま次の巡回へ進む。
 		claim.release()
-		o.logger.Info("自動化が動かした Status を戻しませんでした（この run は既に終わりに向かっています）",
+		reason := "この run は既に終わりに向かっています"
+		if gate == rewriteBusy {
+			reason = "別の書き戻しが飛んでいます"
+		}
+		o.logger.Info("自動化が動かした Status を戻しませんでした（"+reason+"）",
 			"identifier", issue.Identifier, "自動化が書いた Status", issue.State, "戻す先", target)
 		return
 	}
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		// **run はこのあとも続く。**印を外しておかないと、次に止める理由ができたときに
-		// 終わらせる処理が1つも通らない（`abandonRunClaimed` の `endTerminal` と同じ判断）。
-		defer rs.endTerminal()
+		// **run はこのあとも続く。**印を返さないと、終わらせる処理が
+		// 書き戻しの終わりを待ったまま返らなくなる。
+		defer rs.endRewrite()
 		// **書き込みの結果は使わない。**巡回から来た経路には「このあとどうするか」が無く、
 		// 次の巡回が取り直した Status で判断し直す。**turn ループから来た経路だけが
 		// 結果を使う**（`rewriteAndDecide`）。
@@ -293,7 +299,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 		if tracker.IsCategory(err, tracker.CategoryInvalidConfig) {
 			add = maxAutomatedRewriteFailures
 		}
-		failed := rs.noteAutomatedRewriteFailure(issue.State, add)
+		failed := rs.noteAutomatedRewriteFailure(issue.State, add, o.now())
 		o.logger.Warn("自動化が動かした Status を戻せませんでした（次の巡回で拾い直します）",
 			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
 			"戻す先", target, "書いたのは", by,
@@ -308,9 +314,17 @@ func (o *Orchestrator) rewriteAutomatedState(
 			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
 			"戻す先", target, "取り直した状態", moved.Previous)
 		if !moved.Reached {
-			// **目的の Status にはなっていない。**これも「戻せなかった」として数える。
-			// 数えないと、item が見えない issue へ永久に書きに行き続ける。
-			rs.noteAutomatedRewriteFailure(issue.State, 1)
+			if moved.Previous != "" {
+				// **人間が `terminal_states` へ動かしていたので断られた。**
+				// **これは「戻せなかった」に数えない。**数えると、
+				// 「ボードから戻す先の選択肢が消えている」という的外れな案内が人間へ出る
+				// （`automatedStateHint` はその文面を出す前提でこの経路を除いている）。
+				// **終わった issue は、このあと終端の判定が拾う**（`rewriteAndDecide`）。
+				return moved, nil
+			}
+			// **item がもう見えない。**これは「戻せなかった」として数える。
+			// 数えないと、見えない issue へ永久に書きに行き続ける。
+			rs.noteAutomatedRewriteFailure(issue.State, 1, o.now())
 			return moved, nil
 		}
 		// 既にその値だった。**ボードは目的の Status である。**
@@ -375,11 +389,13 @@ func lookupStateRewrite(table map[string]string, state string) (string, bool) {
 // **巡回のループから呼ぶので、印だけ同期で確保して別の goroutine で回す**（設計 3-8）。
 // **worktree は残す。**人間が Status を戻せば、そのまま作業を続けられる。
 //
+// **書き戻しが飛んでいたら、この巡回では止めない**（次の巡回でやり直す）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // state: 動かされた先の Status 名。
 func (o *Orchestrator) stopForUnknownStateAsync(ctx context.Context, rs *runState, state string) {
-	if !rs.beginTerminal() {
+	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
 	reason := o.unknownStateReason(rs, state)
@@ -407,11 +423,14 @@ func (o *Orchestrator) stopForUnknownStateAsync(ctx context.Context, rs *runStat
 // **猶予を置いて待った先である。**待った結果、エージェントは正しい Status への表明を
 // 出さなかった。**ここで黙って終えると、issue には何も残らない。**
 //
+// **turn ループから呼ぶので、書き戻しが飛んでいたら終わるまで待つ**（`claimTerminal`）。
+// 待たずに戻ると、この run を終わらせる者が誰も居なくなる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // state: 動かされた先の Status 名。
 func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, state string) {
-	if !rs.beginTerminal() {
+	if !rs.claimTerminal(ctx) {
 		return
 	}
 	reason := o.unknownStateReason(rs, state)
@@ -429,6 +448,13 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 //	どの Status になったか  … 元（continuo が最後に書いた値）と、いまの値
 //	なぜ止めたか            … continuo が知らない Status だから
 //	続けるにはどうするか    … active_states に入っている Status へ戻す
+//
+// **設定の足し方の案内は、必ず1つだけにする**（設計 3-55）。
+// 「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を並べて出すと、
+// **両方やった設定は起動しない。**`automated_state_rewrite` のキーは
+// 「設定のどこにも名前が出てこない Status」でなければならず、`active_states` へ
+// 足した時点で `config.Validate` がその行を弾くためである。
+// **書き戻しの案内を出すときは、`active_states` の案内を出さない。**
 //
 // rs: 対象の run。
 // state: 動かされた先の Status 名。
@@ -456,6 +482,16 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 			"continuo は turn の途中でもその場で止めます。" +
 			"エージェントの表明を読んでから判断させたいなら、この値を大きくしてください。"
 	}
+	// **案内は1つだけにする。**書き戻しの案内（対応表へ1行足す）を出すときは、
+	// 「`active_states` に足す」の案内を出さない。両方やると設定の検査に落ちて起動しない。
+	hint, proposesRewrite := o.automatedStateHint(rs, state)
+	teach := fmt.Sprintf(
+		"\n【`%s` も continuo に扱わせたいときは】WORKFLOW.md の `tracker.active_states` か "+
+			"`tracker.status_signal_map` にその名前を書き足してから、continuo を再起動してください。",
+		state)
+	if proposesRewrite {
+		teach = ""
+	}
 	return fmt.Sprintf(
 		"continuo が知らない Status になったので、この issue の作業を止めました。\n%s"+
 			"\n【なぜ止めたか】continuo は WORKFLOW.md に書かれた Status しか扱いません"+
@@ -463,16 +499,14 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 			"この issue をどう進めればよいかを判断できません。"+
 			"\n【続けるには】Status を `tracker.active_states` に入っている Status（%s）のいずれかへ戻してください。"+
 			"次の巡回で着手し直します。worktree は残してあります（下記）。"+
-			"\n【`%s` も continuo に扱わせたいときは】WORKFLOW.md の `tracker.active_states` か "+
-			"`tracker.status_signal_map` にその名前を書き足してから、continuo を再起動してください。"+
-			"%s%s",
+			"%s%s%s",
 		moved,
 		strings.Join(o.knownStates(), " / "),
 		state,
 		back,
-		state,
+		teach,
 		grace,
-		o.automatedStateHint(rs, state))
+		hint)
 }
 
 // automatedStateHint は「その Status を書いたのはボードの自動化だった」ことと、
@@ -493,15 +527,23 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 //
 // **書き込みが1〜2回失敗しただけでは、ここへ来ない。**その場合は run が続き、
 // 次の巡回が同じ判定でもう一度書きに行く。**`terminal_states` に入っていて断られた場合も
-// ここへ来ない**（枠を返して run が続く）。**だから、どちらが起きたのかを数えて書き分ける。**
+// ここへ来ない**（枠を返して run が続き、「戻せなかった」にも数えない。
+// `rewriteAutomatedState`）。**だから、どちらが起きたのかを数えて書き分ける。**
+//
+// **提案する戻す先は `active_states` に入っているものに限る**（設計 3-55）。
+// 設定の検査が「戻す先は `active_states` に入っていること」を要求しているので、
+// **入っていない値を提案すると、貼った利用者の continuo が起動しなくなる。**
+// 最後に書いた値は `In Review` のような引き渡しの Status のこともあるので、そのまま使えない。
 //
 // rs: 対象の run（取り直した issue を持っている）。
 // state: 動かされた先の Status 名。
-// 戻り値: 足す文。足すものが無ければ空文字。
-func (o *Orchestrator) automatedStateHint(rs *runState, state string) string {
+// 戻り値の1つ目: 足す文。足すものが無ければ空文字。
+// 戻り値の2つ目: `automated_state_rewrite` へ1行足す案内を出したなら true
+// （呼び出し側は、そのとき `active_states` へ足す案内を出さない）。
+func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, bool) {
 	issue := rs.issue()
 	if !issue.StatusChangedByAutomation {
-		return ""
+		return "", false
 	}
 	by := issue.StatusChangedBy
 	if by == "" {
@@ -527,23 +569,52 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string) string {
 					"\n【対処】ボードに `%s` の選択肢を作り直すか、"+
 					"`tracker.automated_state_rewrite` の戻す先を実在する Status に直して、"+
 					"continuo を再起動してください。",
-				target, maxAutomatedRewriteFailures, target, target)
+				target, maxAutomatedRewriteFailures, target, target), false
 		}
 		return written + fmt.Sprintf(
 			"\n【何が起きたか】continuo が `%s` へ戻すたびに自動化が `%s` を書き直していて、"+
 				"書き戻す回数が上限（%d 回）に達しました。"+
 				"\n【対処】ボードの `Workflows` でこの自動化を切るか、"+
 				"`%s` を continuo が使わない Status に変えてください。",
-			target, state, maxAutomatedRewrites, state)
+			target, state, maxAutomatedRewrites, state), false
 	}
 
-	back := rs.lastWrittenState()
+	back := o.rewriteTargetSuggestion(rs)
 	if back == "" {
-		back = o.cfg.Tracker.RunningState
+		// **提案できる戻す先が1つも無い**（`active_states` が空）。
+		// **書けない設定を見せない。**`active_states` へ足す案内だけが残る。
+		return written, false
 	}
 	return written + fmt.Sprintf(
 		"**次からは continuo に戻させることができます。**WORKFLOW.md の `tracker:` の下へ"+
 			"次の2行を足して、continuo を再起動してください。"+
 			"\n```yaml\n  automated_state_rewrite:\n    %q: %q\n```",
-		state, back)
+		state, back), true
+}
+
+// rewriteTargetSuggestion は、対応表へ提案する「戻す先」を1つ選ぶ（設計 3-55）。
+//
+// **`tracker.active_states` に入っているものしか選ばない。**設定の検査が
+// 「戻す先は `active_states` に入っていること」を要求しているので、
+// **外の値を提案すると、貼った利用者の continuo が起動しなくなる。**
+//
+//	continuo が最後に書いた値  … それが `active_states` にあれば、いちばん自然な戻り先
+//	`tracker.running_state`    … 無ければこれ（作業中の Status そのものである）
+//	`active_states` の先頭      … それも外れているなら、とにかく入っているものを1つ
+//
+// rs: 対象の run。
+// 戻り値: 提案する Status 名。**提案できるものが無ければ空文字。**
+func (o *Orchestrator) rewriteTargetSuggestion(rs *runState) string {
+	if last := rs.lastWrittenState(); containsFold(o.cfg.Tracker.ActiveStates, last) {
+		return last
+	}
+	if containsFold(o.cfg.Tracker.ActiveStates, o.cfg.Tracker.RunningState) {
+		return o.cfg.Tracker.RunningState
+	}
+	for _, s := range o.cfg.Tracker.ActiveStates {
+		if strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
 }

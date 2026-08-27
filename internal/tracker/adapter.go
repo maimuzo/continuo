@@ -152,19 +152,20 @@ func NewAdapter(
 
 // requiredStatesForBootstrap は Bootstrap が照合すべき Status 名の一覧を、
 // cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
-// failure_state・status_signal_map の遷移先・automated_state_rewrite の戻す先をすべて含める
-// （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+// failure_state・status_signal_map の遷移先・**automated_state_rewrite のキー**を
+// すべて含める（3-6: 「書き込みに要る ID をすべて解決して覚える」）。
 //
-// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-55）。
-// 起動時に照合する一覧と、実行時に「知っている Status か」を判定する一覧
-// （orchestrator の `knownStates`）は同じ集合でなければならないので、**自前で集め直さない。**
-// 片方だけに足すと、**起動時の照合を通った設定が、実行時には知らない Status として扱われる。**
+// **集めるのは `config.BootstrapStates` の1箇所だけである**（設計 3-55）。**自前で集め直さない。**
+// 実行時に「知っている Status か」を判定する一覧（orchestrator の `knownStates`）とは
+// **対応表のキーのぶんだけ違う。**その差は意図したものである。
 //
-// **`automated_state_rewrite` は値（戻す先）だけが入る。**キーは「ボードの自動化が書く、
-// continuo が知らない Status」であり、**ここへ入れると知っている Status になってしまう**
-// ので、書き戻しの分岐そのものが二度と通らなくなる（設計 3-54）。
+//	照合する（ここ）        … キーがボードに実在しなければ起動を止める。綴りの打ち間違いを見つける
+//	知っている Status に入れない … 入れると「知らない Status」でなくなり、書き戻しが二度と通らない
+//
+// **戻す先（値）は足さない。**`config.Validate` が「戻す先は `active_states` に入っていること」を
+// 起動前に要求しているので、足しても1件も増えない。
 func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
-	return config.KnownStates(cfg)
+	return config.BootstrapStates(cfg)
 }
 
 // Bootstrap は起動時の検査を行う（設計 3-6）。

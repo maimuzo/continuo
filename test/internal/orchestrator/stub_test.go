@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -280,4 +281,69 @@ func viewOf(fx *stubFixture, identifier string) (orchestrator.RunView, bool) {
 // 戻り値: hook のイベント。
 func toolHook(sessionID, name string) hookserver.HookEvent {
 	return hookserver.HookEvent{HookEventName: name, SessionID: sessionID, PromptID: "p1"}
+}
+
+// TestOrchestratorNew_扱うStatusが1つも無い設定を弾く は、組み立てのときの検査を確かめる。
+//
+// 目的: **知っている Status の一覧は組み立てのときに1度だけ計算する。**
+// その計算に使う設定が空のまま渡されても、いままでは黙って通っていた。
+// **1つも取れないと、continuo はボード上のどの Status も「知らない Status」と判定し、
+// 着手した run を片端から止める。**しかも止めた理由には「いま知っているのは です」と
+// 空欄が出るだけで、人間には原因が読み取れない。
+// **他の必須の依存（Tracker / Herdr / Workspace）と同じく、名前つきのエラーで弾く。**
+//
+// 与える情報: Status 名を1つも持たない設定と、正しい既定の設定。
+// 成功条件: 空の設定ではエラーを返し、既定の設定では組み立てが成功すること。
+func TestOrchestratorNew_扱うStatusが1つも無い設定を弾く(t *testing.T) {
+	root := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	cfg := *config.DefaultConfig()
+	cfg.Workspace.Root = filepath.Join(root, "wt")
+	mgr, err := workspace.New(workspace.Options{
+		Config:  cfg,
+		Logger:  logger,
+		HomeDir: root,
+		GhqList: func(context.Context, string, string) (string, error) { return "", nil },
+	})
+	if err != nil {
+		t.Fatalf("workspace.New に失敗した: %v", err)
+	}
+
+	build := func(c config.Config) error {
+		_, err := orchestrator.New(orchestrator.Options{
+			Config:         c,
+			PromptTemplate: samplePromptTemplate,
+			Tracker:        newFakeTracker(nil),
+			Herdr:          newStubHerdr(herdr.AgentStatusIdle),
+			Workspace:      mgr,
+			HookSocketPath: filepath.Join(root, "hooks.sock"),
+			ContinuoPath:   "/opt/continuo/bin/continuo",
+			Logger:         logger,
+		})
+		return err
+	}
+
+	// **設定に Status 名が1つも無い状態を作る。**
+	empty := cfg
+	empty.Tracker.ActiveStates = nil
+	empty.Tracker.TerminalStates = nil
+	empty.Tracker.RunningState = ""
+	empty.Tracker.DispatchState = ""
+	empty.Tracker.FailureState = ""
+	empty.Tracker.StatusSignalMap = nil
+
+	err = build(empty)
+	if err == nil {
+		t.Fatalf("Status 名が1つも無い設定なのに組み立てが成功した" +
+			"（この orchestrator はどの Status も知らないので、着手した run を片端から止める）")
+	}
+	if !strings.Contains(err.Error(), "Status") {
+		t.Errorf("エラーが何を弾いたのかを名指ししていない: %v", err)
+	}
+
+	// **正しい設定まで弾いてはならない。**
+	if err := build(cfg); err != nil {
+		t.Fatalf("既定の設定なのに組み立てが失敗した: %v", err)
+	}
 }

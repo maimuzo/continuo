@@ -511,7 +511,7 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 	}
 	sort.Strings(froms)
 
-	named := StatesNamedInConfig(cfg.Tracker)
+	named := KnownStates(cfg.Tracker)
 	seen := map[string]string{}
 	for _, from := range froms {
 		to := cfg.Tracker.AutomatedStateRewrite[from]
