@@ -4967,9 +4967,23 @@ herdr workspace には、その worktree を cwd に持つ pane が必ず1枚あ
 **片方の検査だけ越えられないのは筋が通らない。**止まる文言（`abandon.err_pane_remains`）にも
 `--force` で越えられることを書く。
 
-**herdr が答えないときも同じように越える。**待っている最中に pane の一覧を引けなくなったら、
-`--force` があれば確かめずに消したことを1行言って進み、無ければ止まる
-（`abandon.err_pane_list_check` / `abandon.pane_check_skipped`。`stopIfPaneAlive` と同じ扱い）。
+**herdr が答えないときも越える。ただし越えるのは期限を過ぎてからである**（issue #66）。
+一覧を引けなくなったら**期限内は待ち直す**（`abandon.waiting_pane_list_failed`。
+**この1行は1度だけ出す。**毎回だと同じ長い行が既定50本並ぶ）。期限後は `--force` があれば
+1行言って進み、無ければ止まる（`abandon.err_pane_list_check` / `abandon.pane_check_skipped`。
+`stopIfPaneAlive` と同じ扱い）。**待ち直しの最中に中断されたら pane の ID を書けない**ので
+別の文言を出す（`abandon.err_pane_wait_interrupted_unknown`。空欄だと pane が0枚と読める）。
+
+**期限を見ずに越えてはならない。**herdr が答えなければ、**その待ち自体を1度も行えていない。**
+**待たずに越えるのは、手を離させたばかりの pane を、閉じる暇も与えずに消すことである。**
+**継続監視がその pane を閉じにいく1周は、まだ回っていない。**
+
+**待つかどうかは `--force` の有無で変わらない。**期限の判定が `--force` より外側にあるので、
+**付けない実行も0秒ではなく上限まで待ってから止まる**（待ち時間は4通りとも上限に揃う）。
+**代償は往復である。herdr が落ちたまま付けずに叩くと、上限まで待ってから「`--force` を
+付けてください」と言われ、付けて叩き直すとそこでもう一度上限まで待つ**（既定50秒なので +100秒）。
+**それでも待つ側を採る。**待たずに止めると、その実行は**park の値へ動かした直後に、
+pane が閉じたかを1度も確かめずに終わる。**
 
 **ここだけ越えられない壁にしてはならない理由。**この段へ来る実行は、
 **ボードを park の値へ動かし終えている。**越えられないと、**ボードだけ動いた状態のまま、
@@ -5539,9 +5553,9 @@ worker を止めた（利用者の環境での実測。全体の流れは [docs/
 **人間はボードを見て状況を判断するので、列を分けた意味が消える。**
 **失敗しても run は止めず**（次の巡回で拾い直す）、**戻したぶんは issue に1件残す**（3-29）。
 
-**リクエストは増えない。**ID 指定の取り直し（`nodes(ids:)`）の `... on Issue` に `timelineItems` を
-足すだけで、Status の値と同じ1リクエストで返る（設計 2-6 の実測）。**候補の取得（100件返る）・
-識別子での照合・Status を書く前の取り直しには足さない**（`byIDsWithoutTimelineQueryTemplate`）。
+**リクエストは増えない。**ID 指定の取り直し（`nodes(ids:)`）の `... on Issue` に `timelineItems` を足すだけで、
+Status の値と同じ1リクエストで返る（設計 2-6 の実測）。**足すのは記録を読む2つ**（実行中の run の照合・
+turn の終わりの取り直し）**だけである。**残る4つの呼び出し元・`UpdateStatus` の取り直し・候補の取得には足さない（3-61）。
 **`project.number` で自分のボードへ絞る**（複数のボードに載っていると両方返る。設計 2-6）。
 **窓は `last: 50` である。**ボードで絞る引数が無いので絞るのは返ってきたあとであり、
 **別のボードで Status が何度も動くと自分のボードのイベントが窓から押し出される**（書き戻しが効かなくなる）。
@@ -5818,6 +5832,56 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 差し替えの失敗がそのまま出ると「一時ファイルの名前と `rename` の失敗」が並ぶだけで読めない。
 `os.Lstat` の結果がディレクトリなら、差し替えに進む前に
 `WORKFLOW.md を作成できません: <パス>: is a directory` で止める（変更前と同じ文言である）。
+
+### 3-61. 「誰が Status を書いたか」は、それを読む2つの呼び出し元でだけ取る
+
+**言いたいこと。**ID 指定の取り直しは6箇所から呼ばれるが、**記録（timeline）を読むのは2つだけである。**
+残る4つも取っていたので、使わない50件のイベントを巡回のたび・着手のたび・起動のたびに読んでいた。
+**インタフェースを2本に分け、呼ぶ側が選ぶ。**
+
+**呼び出し元の内訳**（[internal/orchestrator/orchestrator.go](../../internal/orchestrator/orchestrator.go) の `Tracker` に同じ表を置いた）。
+
+| 呼び出し元 | 記録を | 何を見るか |
+| --- | --- | --- |
+| `reconcileRunning`（実行中の run の照合） | **読む** | 知らない Status を書き戻すか止めるかを決める（3-54） |
+| `handleTurnEnd`（turn の終わりの取り直し） | **読む** | 同上を turn の終わりに決める |
+| `finishRunClaimed`（片付けの判定） | 読まない | `cleanup.on_states` に入っているか |
+| `reconcileWorktrees`（worktree の照合） | 読まない | `cleanup.on_states` / `active_states` に入っているか |
+| `dispatchStatusAllowed`（着手してよいかの判定） | 読まない | `active_states` に入っているか |
+| `refetchByIdentities`（復元の取り直し） | 読まない | Status と識別子 |
+
+**採る形。**`Tracker` に `FetchIssuesByIDsWithoutTimeline` を足す。アダプタは
+`byIDsWithoutTimelineQueryTemplate`（`UpdateStatus` が既に使っていた軽いクエリ）を呼ぶだけである。
+**`refreshIssue` は引数で受ける。**読む `handleTurnEnd` と読まない `finishRunClaimed` が
+同じ関数を通るので、**関数を分ける形では表せない。**
+
+**「読まない」に記録を渡さなくてよい理由。**記録を使う判断は**引数で受け取った写しを読み、
+その引数は記録を取る側（`FetchIssuesByIDs`）の戻り値そのものである**（`handleUnknownState` へは
+`reconcileRunning` が、`claimAutomatedRewrite` / `rewriteAutomatedState` へは `handleTurnEnd` が渡す）。
+`finishRunUnknownState` は写しを読まない（受け取るのは Status 名の文字列だけ）。
+`rs.issue()` から読むのは `automatedStateHint` だけで、**`rs.setIssue` を呼ぶ3箇所は
+どれも記録を取った写しである。**
+
+**この安全が崩れる条件。「復元が `active_states` 以外も引き継ぐ」ようにすると崩れる。**
+復元が入れた写しは記録を持たないが、いまは引き継ぐ先を `active_states` に絞っているので、
+**知らない Status の道（`handleUnknownState` / `automatedStateHint`）へは入らない。**
+**広げるなら、復元の取り直しも記録を取る側へ戻すこと。**
+
+**採らなかった案。**
+
+| 案 | 中身 | 採らない理由 |
+| --- | --- | --- |
+| **引数で渡す** | `FetchIssuesByIDs(ctx, ids, withTimeline bool)` の1本にする | 呼び出し側が真偽値だけを見ることになり、**表と照らさないと何を頼んだのか読めない。**偽の tracker で呼び分けを数えるのも難しくなる |
+| **常に取って捨てる** | いままでどおり全部取り、使わない側は無視する | **点数は返る node の数で決まる**（3-31）。捨てる前に払っている |
+| **記録だけ別に引く** | 要るときに timeline を2本目のリクエストで引く | **読む側は巡回のたびに要る。**1本が2本になり、いちばん多い経路が重くなる |
+
+**戻らないように検査を置いた。**
+[test/internal/orchestrator/timeline_scope_test.go](../../test/internal/orchestrator/timeline_scope_test.go) が
+6つの呼び出し元それぞれについて、**どちらの取り直しを呼んだか**を呼び出しの並びで見る。
+[test/internal/tracker/status_author_test.go](../../test/internal/tracker/status_author_test.go) が
+**軽い側のクエリに `timelineItems` が入っていないこと**を送信内容で見る。
+**偽の tracker は軽い側で `StatusChangedBy` と `StatusChangedByAutomation` を落とす**
+（本物と同じ振る舞い。落とさないと、記録に頼った実装がそちらの経路でも書けてしまう）。
 
 ---
 

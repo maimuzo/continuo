@@ -60,8 +60,9 @@ func TestDispatch_active_statesに無いStatusのissueを着手が上書きし�
 
 			// **どちらの実装でも待ち合わせが成り立つようにする。**許可リストが効いていれば
 			// 取り直しだけが走り、効いていなければ書き込みまで走る。
+			// **取り直しは timeline の有無で2本に分かれるので、両方を数える**（設計 3-61）。
 			waitFor(t, 10*time.Second, "着手の試みが終わる", func() bool {
-				return fx.Tracker.CountCall("FetchIssuesByIDs") > 0 ||
+				return fx.Tracker.CountIDRefreshes() > 0 ||
 					fx.Tracker.CountCall("UpdateStatus") > 0
 			})
 			time.Sleep(500 * time.Millisecond)

@@ -82,8 +82,28 @@ const baseRetryBackoff = 5 * time.Second
 type Tracker interface {
 	// FetchIssuesByStates は候補を並び順のまま取る（設計 4-2）。
 	FetchIssuesByStates(ctx context.Context, states []string) ([]tracker.Issue, error)
-	// FetchIssuesByIDs は ID 指定で取り直す（実行中の照合・worktree の照合）。
+	// FetchIssuesByIDs は ID 指定で取り直す。
+	// **「いまの Status を書いたのは誰か」（timeline）も一緒に取る**（設計 3-54）。
 	FetchIssuesByIDs(ctx context.Context, ids []string) ([]tracker.Issue, error)
+	// FetchIssuesByIDsWithoutTimeline は ID 指定で取り直すが、
+	// **「いまの Status を書いたのは誰か」は取らない**（設計 3-61）。
+	//
+	// **どちらを呼ぶかは、その呼び出し元が `Issue.StatusChangedBy` /
+	// `Issue.StatusChangedByAutomation` を読むかどうかだけで決まる。**
+	// **6つの呼び出し元の内訳は次のとおりである。呼び出し元を足すときは、この表も足すこと。**
+	//
+	//	読む     reconcileRunning       知らない Status を書き戻すか止めるかを決める（reconcile.go）
+	//	読む     handleTurnEnd          同上を turn の終わりに決める（refreshIssue に真を渡す。lifecycle.go）
+	//	読まない finishRunClaimed       片付けてよいかを Status だけで決める（refreshIssue に偽を渡す。lifecycle.go）
+	//	読まない reconcileWorktrees     取り残された worktree を片付けてよいかを Status だけで決める（reconcile.go）
+	//	読まない dispatchStatusAllowed  着手してよいかを Status だけで決める（dispatch.go）
+	//	読まない refetchByIdentities    復元のときに Status と識別子だけを見る（restore.go）
+	//
+	// **「読まない」に timeline を渡さなくてよいのは、判断が要る場所へ届く写しが
+	// 必ず「読む」側の取り直しで上書きされるからである。**知らない Status の判断
+	// （`handleUnknownState` / `finishRunUnknownState`）へ入る直前には、
+	// `reconcileRunning` か `handleTurnEnd` の `rs.setIssue` が必ず通っている。
+	FetchIssuesByIDsWithoutTimeline(ctx context.Context, ids []string) ([]tracker.Issue, error)
 	// FetchIssueByIdentifier は `<owner>/<repo>#<番号>` で1件引く（設計 3-25）。
 	// **見つからないことをエラーにしない。**
 	FetchIssueByIdentifier(ctx context.Context, identifier string) (tracker.Issue, bool, error)

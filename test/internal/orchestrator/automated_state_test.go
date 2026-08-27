@@ -767,6 +767,8 @@ func TestAutomatedState_書き戻しが飛んでいても終わらせる処理�
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
 	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
 	releasePrompt()
+	// **turn の終わりの取り直しは「誰が Status を書いたか」も取る側である**（設計 3-61）。
+	// 記録を取らない側（`FetchIssuesByIDsWithoutTimeline`）は数えない。
 	waitFor(t, 20*time.Second, "turn の終わりの取り直しが走る", func() bool {
 		return fx.Tracker.CountCall("FetchIssuesByIDs") > 0
 	})

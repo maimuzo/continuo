@@ -117,7 +117,9 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 // 戻り値: `active_states` にあれば true。**取り直しに失敗したときも false**
 // （分からないなら書かない）。
 func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identifier string) bool {
-	current, err := o.tracker.FetchIssuesByIDs(ctx, []string{itemID})
+	// **「誰が Status を書いたか」は取らない**（設計 3-61）。見るのは `State` が
+	// `active_states` に入っているかだけである。
+	current, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{itemID})
 	if err != nil {
 		o.logger.Warn("着手の直前に Status を取り直せないので着手しません（次の巡回でやり直します）",
 			"identifier", identifier, "error", err)

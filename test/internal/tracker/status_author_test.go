@@ -180,6 +180,58 @@ func TestStatusAuthor_timelineを要求するのはID指定の取り直しだけ
 	}
 }
 
+// TestStatusAuthor_記録を読まない取り直しはtimelineを要求しない は、設計 3-61 を確かめる。
+//
+// 目的: **ID 指定の取り直しは2本ある。**「いまの Status を書いたのは誰か」を読む
+// 呼び出し元は6つのうち2つだけであり（実行中の run の照合と turn の終わりの取り直し）、
+// **残る4つは `FetchIssuesByIDsWithoutTimeline` を通る。**
+// **そこへ timeline をぶら下げたままにすると、使わない50件のイベントを、
+// 着手のたび・巡回のたび・起動のたびに読むことになる**（設計 3-31）。
+//
+// 与える情報: 記録を取らない側で1件取り直す。
+// 成功条件: 送ったクエリに `timelineItems` が入っておらず、それでも Status と識別子は
+// ふつうに読めていて、記録の2つのフィールドだけがゼロ値であること。
+func TestStatusAuthor_記録を読まない取り直しはtimelineを要求しない(t *testing.T) {
+	// **timeline を持たない応答である。**要求していないものは返ってこない。
+	item := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-1", Status: "In Progress", Owner: "octocat", Repo: "hello-world",
+		Number: 10, Title: "記録を読まない取り直しの相手",
+	}))
+	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{item}))))
+	a := newAdapterForFetch(t, fs)
+
+	issues, err := a.FetchIssuesByIDsWithoutTimeline(t.Context(), []string{"item-1"})
+	if err != nil {
+		t.Fatalf("記録を取らない取り直しが失敗した: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("件数が想定と違う: got %d, want 1", len(issues))
+	}
+
+	reqs := fs.Requests()
+	if len(reqs) != 1 {
+		t.Fatalf("リクエストの件数が想定と違う: got %d, want 1", len(reqs))
+	}
+	if strings.Contains(reqs[0].Query, "timelineItems") {
+		t.Errorf("記録を読まない取り直しのクエリに timelineItems が入っている:\n%s", reqs[0].Query)
+	}
+
+	// **省くのは記録の2つだけである。**他が落ちていないことも同時に見る
+	// （クエリを丸ごと軽くして、取り直しそのものが壊れていないか）。
+	if got, want := issues[0].State, "In Progress"; got != want {
+		t.Errorf("Status が読めていない: got %q, want %q", got, want)
+	}
+	if got, want := issues[0].Identifier, "octocat/hello-world#10"; got != want {
+		t.Errorf("識別子が読めていない: got %q, want %q", got, want)
+	}
+	if issues[0].StatusChangedByAutomation {
+		t.Errorf("記録を取らないはずなのに「自動化が書いた」が立っている")
+	}
+	if got := issues[0].StatusChangedBy; got != "" {
+		t.Errorf("記録を取らないはずなのに書いた主体が入っている: got %q", got)
+	}
+}
+
 // TestStatusAuthor_識別子での照合はtimelineを要求しない は、設計 3-54 を確かめる。
 //
 // 目的: 識別子での照合（`FetchIssueByIdentifier`）は**ボードを丸ごと読む**（設計 3-25）。

@@ -387,7 +387,10 @@ func (o *Orchestrator) refetchByIdentities(
 	for _, c := range candidates {
 		ids = append(ids, c.Identity.ProjectItemID)
 	}
-	issues, err := o.tracker.FetchIssuesByIDs(ctx, ids)
+	// **「誰が Status を書いたか」は取らない**（設計 3-61）。復元が見るのは `State` と
+	// 識別子だけである。**引き継いだ run の記録は、最初の巡回の `reconcileRunning` が
+	// `rs.setIssue` で入れ直す**（知らない Status の判定はそのあとにしか来ない）。
+	issues, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, ids)
 	if err != nil {
 		o.logger.Warn(
 			"復元のための取り直しに失敗しました（起動は続けます。引き継げない run の pane は閉じます）",

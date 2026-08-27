@@ -85,8 +85,8 @@ const itemFieldsFragmentTemplate = `
 //
 // **ネストした connection が1本増えるので、この断片を候補の取得（100件返る）へ
 // 足してはならない。**足すのは ID 指定の取り直しだけで、しかも
-// **Status を書く前の取り直しには足さない**（`byIDsQueryTemplate` と
-// `byIDsWithoutTimelineQueryTemplate`）。
+// **「誰が書いたか」を読む呼び出し元のための取り直しにしか足さない**
+// （`byIDsQueryTemplate` と `byIDsWithoutTimelineQueryTemplate` の使い分け。設計 3-61）。
 const statusChangedTimelineFragment = `
       timelineItems(last: 50, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
         nodes {
@@ -157,14 +157,15 @@ query($statusField: String!, $ids: [ID!]!) {
 }
 `
 
-// byIDsWithoutTimelineQueryTemplate は **Status を書く前の取り直し**（`UpdateStatus`）が
-// 使うクエリである。
+// byIDsWithoutTimelineQueryTemplate は **「誰が Status を書いたか」を読まない取り直し**が
+// 使うクエリである（`UpdateStatus` と `FetchIssuesByIDsWithoutTimeline`。設計 3-61）。
 //
-// **timeline を取らない。**書き込みの経路が timeline から読むものは1つも無い
-// （見るのは取り直した `State` だけで、それを `blockedStates` と突き合わせる）。
-// **Status は turn ごと・巡回ごとに書くので、この経路がいちばん多く呼ばれる。**
-// ネストした connection を1本ぶら下げたままにすると、**使わない50件のイベントを
-// 書き込みのたびに読む**ことになる（GraphQL の点数は返す node の数で決まる。設計 3-31）。
+// **timeline を取らない。**これらの経路が timeline から読むものは1つも無い
+// （見るのは取り直した `State` だけである）。
+// **Status は turn ごと・巡回ごとに書き、取り直しは着手ごと・巡回ごとにも走るので、
+// この経路がいちばん多く呼ばれる。**ネストした connection を1本ぶら下げたままにすると、
+// **使わない50件のイベントを毎回読む**ことになる
+// （GraphQL の点数は返す node の数で決まる。設計 3-31）。
 var byIDsWithoutTimelineQueryTemplate = `
 query($statusField: String!, $ids: [ID!]!) {
   nodes(ids: $ids) {
