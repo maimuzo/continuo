@@ -19,6 +19,7 @@ import (
 //  3. Status を ID 指定で取り直し、その値で分岐する
 //     terminal_states           … コメントを確かめてから worktree と branch を片付ける
 //     active_states             … max_dispatch_turns に未到達なら次の turn、到達なら failure_state
+//     知らない Status（自動化が書いた）… 本来の Status へ戻し、run を続ける（設計 3-54）
 //     どちらでもない（引き渡し） … コメントを確かめてから worker を止める。**worktree は消さない**
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -54,6 +55,15 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 		rs.clearUnknownState()
 		return false
 	case current.State != "" && !o.isKnownState(current.State):
+		if target, ok := o.claimAutomatedRewrite(rs, current); ok {
+			// **ボードの自動化が動かしただけである**（設計 3-54）。人間の引き渡しではないので
+			// run を終えない。**turn ループの goroutine なので、ここは同期で書きに行ってよい。**
+			o.rewriteAutomatedState(ctx, rs, current, target)
+			// **書き込みが失敗しても run は続ける。**失敗したのは continuo であって、
+			// 人間が引き渡したわけではない。次の巡回が同じ判定でもう一度書きに行く。
+			rs.clearUnknownState()
+			return false
+		}
 		// **猶予を置いて待った先である**（設計 3-50）。turn の終わりまで待ったが、
 		// エージェントは正しい Status への表明を出さなかった。**黙って終えない。**
 		o.finishRunUnknownState(ctx, rs, current.State)

@@ -51,6 +51,10 @@ tracker:
   unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。
                                             # turn の途中なら、この長さまで turn の終わりを待ち、エージェントの表明を読んでから判断する。
                                             # 0 なら待たずに止める。待つぶん、人間が止めたいときに止まるのが遅れる
+  automated_state_rewrite: {}               # ボードの組み込みの自動化（PR を issue に紐づけた・PR をマージした等）が
+                                            # Status を動かしたときだけ、その Status を上に書いた Status へ戻す。
+                                            # 空なら戻さず、上の猶予を置いてから worker を止める。人間が動かしたものは戻さない。
+                                            # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる
 
 polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと

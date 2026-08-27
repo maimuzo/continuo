@@ -3,7 +3,7 @@
   "usecase_name": "人間に判断を渡す",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間に判断を渡す.rucm.md",
-    "rucm_block_sha256": "3db4002aba1e33ef94b751c4f4357d3cd4018de1f1f30627a139d569d9120695"
+    "rucm_block_sha256": "2c9ce67bbd584b832b2e7defb00486e1372f4ce54ef6bd4fc0d4f39ed961a512"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -47,7 +47,7 @@
       "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。worktree は残っている。"
     },
     "知らないStatus": {
-      "when": "利用者が issue の Status を設定に名前の無い選択肢へ動かす場合",
+      "when": "issue の Status が設定に名前の無い選択肢へ動く場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -56,16 +56,16 @@
           ]
         }
       ],
-      "postcondition": "issue の Status は利用者が動かした選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。"
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。"
     },
     "turnの猶予": {
       "rfs": {
         "flow": "知らないStatus",
         "steps": [
-          1
+          6
         ]
       },
-      "postcondition": "issue の Status は利用者が動かした選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。"
+      "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。"
     },
     "レビューの完了": {
       "when": "利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
@@ -331,41 +331,69 @@
       "type": "condition",
       "flow": "知らないStatus",
       "step": 1,
-      "statement": "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
+      "statement": "IF その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない THEN"
     },
     {
       "id": "知らないStatus-2",
       "type": "action",
       "flow": "知らないStatus",
       "step": 2,
-      "statement": "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。"
+      "statement": "システムはボードの issue の Status に戻す先の選択肢を書く。"
     },
     {
       "id": "知らないStatus-3",
       "type": "action",
       "flow": "知らないStatus",
       "step": 3,
-      "statement": "システムは workspace_hooks の after_run を実行する。"
+      "statement": "システムは Status を動かした記録を issue にコメントする。"
     },
     {
       "id": "知らないStatus-4",
-      "type": "action",
+      "type": "abort",
       "flow": "知らないStatus",
       "step": 4,
-      "statement": "システムは herdr の pane を閉じる。"
-    },
-    {
-      "id": "知らないStatus-5",
-      "type": "action",
-      "flow": "知らないStatus",
-      "step": 5,
-      "statement": "システムは印を外す。"
+      "statement": "ABORT"
     },
     {
       "id": "知らないStatus-6",
-      "type": "abort",
+      "type": "condition",
       "flow": "知らないStatus",
       "step": 6,
+      "statement": "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
+    },
+    {
+      "id": "知らないStatus-7",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 7,
+      "statement": "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。"
+    },
+    {
+      "id": "知らないStatus-8",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 8,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "知らないStatus-9",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 9,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "知らないStatus-10",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 10,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "知らないStatus-11",
+      "type": "abort",
+      "flow": "知らないStatus",
+      "step": 11,
       "statement": "ABORT"
     },
     {
@@ -419,7 +447,7 @@
       "from": "BASIC FLOW-2",
       "to": "知らないStatus-1",
       "kind": "global",
-      "condition": "利用者が issue の Status を設定に名前の無い選択肢へ動かす場合"
+      "condition": "issue の Status が設定に名前の無い選択肢へ動く場合"
     },
     {
       "from": "BASIC FLOW-3",
@@ -611,13 +639,13 @@
       "from": "知らないStatus-1",
       "to": "知らないStatus-2",
       "kind": "true",
-      "condition": "turn の終わりを待つ猶予が残っていない"
+      "condition": "その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない"
     },
     {
       "from": "知らないStatus-1",
-      "to": "turnの猶予-1",
+      "to": "知らないStatus-6",
       "kind": "false",
-      "condition": "NOT turn の終わりを待つ猶予が残っていない"
+      "condition": "NOT その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない"
     },
     {
       "from": "知らないStatus-2",
@@ -630,13 +658,35 @@
       "kind": "seq"
     },
     {
-      "from": "知らないStatus-4",
-      "to": "知らないStatus-5",
+      "from": "知らないStatus-6",
+      "to": "知らないStatus-7",
+      "kind": "true",
+      "condition": "turn の終わりを待つ猶予が残っていない"
+    },
+    {
+      "from": "知らないStatus-6",
+      "to": "turnの猶予-1",
+      "kind": "false",
+      "condition": "NOT turn の終わりを待つ猶予が残っていない"
+    },
+    {
+      "from": "知らないStatus-7",
+      "to": "知らないStatus-8",
       "kind": "seq"
     },
     {
-      "from": "知らないStatus-5",
-      "to": "知らないStatus-6",
+      "from": "知らないStatus-8",
+      "to": "知らないStatus-9",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-9",
+      "to": "知らないStatus-10",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-10",
+      "to": "知らないStatus-11",
       "kind": "seq"
     },
     {
@@ -1203,21 +1253,47 @@
       "id": "P013",
       "terminal": "abort",
       "terminal_flow": "知らないStatus",
-      "postcondition": "issue の Status は利用者が動かした選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。",
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "知らないStatus-1",
         "知らないStatus-2",
         "知らないStatus-3",
-        "知らないStatus-4",
-        "知らないStatus-5",
-        "知らないStatus-6"
+        "知らないStatus-4"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
         "システムは transcript から表明の行を読む。",
-        "CONDITION: 利用者が issue の Status を設定に名前の無い選択肢へ動かす場合",
+        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
+        "IF その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない THEN",
+        "システムはボードの issue の Status に戻す先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "abort",
+      "terminal_flow": "知らないStatus",
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "知らないStatus-1",
+        "知らないStatus-6",
+        "知らないStatus-7",
+        "知らないStatus-8",
+        "知らないStatus-9",
+        "知らないStatus-10",
+        "知らないStatus-11"
+      ],
+      "steps": [
+        "エージェントはシステムに表明の1行を含む最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
+        "IF その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない THEN",
+        "CONDITION: NOT その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない",
         "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
         "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
         "システムは workspace_hooks の after_run を実行する。",
@@ -1227,14 +1303,15 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "turnの猶予",
-      "postcondition": "issue の Status は利用者が動かした選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。",
+      "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "知らないStatus-1",
+        "知らないStatus-6",
         "turnの猶予-1",
         "turnの猶予-2",
         "turnの猶予-3"
@@ -1242,7 +1319,9 @@
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
         "システムは transcript から表明の行を読む。",
-        "CONDITION: 利用者が issue の Status を設定に名前の無い選択肢へ動かす場合",
+        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
+        "IF その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない THEN",
+        "CONDITION: NOT その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない",
         "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
         "CONDITION: NOT turn の終わりを待つ猶予が残っていない",
         "システムは worker を止めずに turn の終わりを待つ。",
@@ -1252,9 +1331,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 46,
-    "nodes_covered": 46,
-    "edges_total": 47,
-    "edges_covered": 47
+    "nodes_total": 50,
+    "nodes_covered": 50,
+    "edges_total": 51,
+    "edges_covered": 51
   }
 }

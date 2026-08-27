@@ -86,6 +86,34 @@ type testIssueItemOpts struct {
 	AssigneeID    string
 	AssigneeLogin string
 	BlockedBy     []map[string]any
+	// StatusEvents は timelineItems（ProjectV2ItemStatusChangedEvent）の nodes である
+	// （設計 3-54）。**nil なら `timelineItems` そのものを付けない**
+	// （候補の取得のクエリが要求していない状態の再現）。statusEventJSON で1件ずつ作る。
+	StatusEvents []map[string]any
+}
+
+// statusEventJSON は ProjectV2ItemStatusChangedEvent 1件分の JSON を組み立てる（設計 3-54）。
+//
+// createdAt: イベントの時刻（RFC3339）。
+// status: このイベントで書き込まれた Status 名。
+// actorType: `actor.__typename`（`Bot` なら自動化、`User` なら人間か continuo 自身）。
+// 空文字なら actor そのものを付けない。
+// actorLogin: `actor.login`。
+// wasAutomated: `wasAutomated` の値。**組み込みの自動化でも false が返る**（設計 2-6）。
+// projectNumber: そのイベントが起きたボードの番号。
+func statusEventJSON(
+	createdAt, status, actorType, actorLogin string, wasAutomated bool, projectNumber int,
+) map[string]any {
+	ev := map[string]any{
+		"createdAt":    createdAt,
+		"status":       status,
+		"wasAutomated": wasAutomated,
+		"project":      map[string]any{"number": projectNumber},
+	}
+	if actorType != "" {
+		ev["actor"] = map[string]any{"__typename": actorType, "login": actorLogin}
+	}
+	return ev
 }
 
 // issueItemJSON は content が Issue である project item 1件分の、偽サーバが返す JSON
@@ -139,6 +167,9 @@ func issueItemJSON(o testIssueItemOpts) map[string]any {
 		"blockedBy":      map[string]any{"nodes": blockedBy},
 		"linkedBranches": map[string]any{"nodes": linkedBranchNodes},
 		"comments":       map[string]any{"totalCount": o.CommentCount},
+	}
+	if o.StatusEvents != nil {
+		content["timelineItems"] = map[string]any{"nodes": o.StatusEvents}
 	}
 
 	return map[string]any{

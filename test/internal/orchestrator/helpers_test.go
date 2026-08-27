@@ -746,6 +746,46 @@ func (ft *fakeTracker) SetState(id, state string) {
 	for i := range ft.board {
 		if ft.board[i].ID == id {
 			ft.board[i].State = state
+			// **人間が動かした扱いにする**（設計 3-54 の `actor.__typename` が `User`）。
+			ft.board[i].StatusChangedByAutomation = false
+			ft.board[i].StatusChangedBy = "octocat"
+			return
+		}
+	}
+}
+
+// ClearStatusAuthor は「いまの Status を誰が書いたか分からない」状況を作る
+// （設計 3-54。timeline のイベントが消えた・権限が無い・直近10件から溢れた）。
+//
+// id: project item の ID。
+func (ft *fakeTracker) ClearStatusAuthor(id string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID == id {
+			ft.board[i].StatusChangedByAutomation = false
+			ft.board[i].StatusChangedBy = ""
+			return
+		}
+	}
+}
+
+// SetStateByAutomation は、ボードの組み込みの自動化が Status を動かした状況を作る
+// （設計 3-54。PR を issue に紐づけた・PR をマージしたときに起きる）。
+//
+// **ID 指定で取り直したときだけ「自動化が書いた」と分かる。**候補の取得では分からない
+// （FetchIssuesByStates がその欄を落として返す）。
+//
+// id: project item の ID。
+// state: 自動化が書いた Status。
+func (ft *fakeTracker) SetStateByAutomation(id, state string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID == id {
+			ft.board[i].State = state
+			ft.board[i].StatusChangedByAutomation = true
+			ft.board[i].StatusChangedBy = "github-project-automation"
 			return
 		}
 	}
@@ -839,6 +879,11 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 	for _, issue := range ft.board {
 		for _, s := range states {
 			if strings.EqualFold(s, issue.State) {
+				// **候補の取得は「誰が Status を書いたか」を持たない**（設計 3-54）。
+				// 本物のクエリに timeline を足していないので、ここでも落として返す。
+				// **落とさないと、候補の側に頼った実装が書けてしまう。**
+				issue.StatusChangedByAutomation = false
+				issue.StatusChangedBy = ""
 				out = append(out, issue)
 				break
 			}
@@ -924,6 +969,10 @@ func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState strin
 			return tracker.StatusWrite{Reached: true, Previous: previous}, nil
 		}
 		ft.board[i].State = targetState
+		// **continuo が書いたものは自動化ではない**（設計 3-54。本物では
+		// `gh auth token` の持ち主として書くので `actor.__typename` は `User` になる）。
+		ft.board[i].StatusChangedByAutomation = false
+		ft.board[i].StatusChangedBy = "octocat"
 		return tracker.StatusWrite{Reached: true, Wrote: true, Previous: previous}, nil
 	}
 	return tracker.StatusWrite{}, nil

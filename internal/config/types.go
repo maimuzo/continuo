@@ -129,6 +129,20 @@ type TrackerConfig struct {
 	// **0 以下なら猶予を置かない**（見つけた巡回でそのまま止める）。
 	// **turn が動いていなければ猶予は使わない**（待っても表明は出てこない）。
 	UnknownStateGraceMs int `yaml:"unknown_state_grace_ms"`
+	// AutomatedStateRewrite は、ボードの組み込みの自動化が動かした Status を、
+	// continuo が意図した Status へ戻すための対応表である（設計 3-54）。
+	//
+	// **キーが「自動化が書いた Status」、値が「戻す先の Status」。**
+	// 例: `{"In Progress": "AI In Progress"}`。
+	//
+	// **効くのは「自動化が動かした」と判定できたときだけである**（`Issue.StatusChangedByAutomation`）。
+	// 人間が同じ Status へ動かした場合は、いままでどおり猶予を置いて worker を止める。
+	// **人間の操作を書き戻しで打ち消してはならない**（設計 3-4）。
+	//
+	// **既定は空である。**書かなければ挙動は変わらないので、既存の WORKFLOW.md をそのまま使える。
+	// **キーをここに書いても、その Status が「知っている Status」になるわけではない**
+	// （知っている Status は active_states などに書かれたものだけである。設計 3-50）。
+	AutomatedStateRewrite map[string]string `yaml:"automated_state_rewrite"`
 	// StatusSignalPrefix は、エージェントが応答に書く表明の印である（3-25）。
 	// continuo は turn が終わったと判定したあと transcript を読み、
 	// この印で始まる行を探して、続く値を StatusSignalMap で引いて Status を動かす。

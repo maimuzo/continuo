@@ -152,7 +152,12 @@ func NewAdapter(
 
 // requiredStatesForBootstrap は Bootstrap が照合すべき Status 名の一覧を、
 // cfg から重複無く集める。active_states・terminal_states・dispatch_state・failure_state・
-// status_signal_map の遷移先をすべて含める（3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+// status_signal_map の遷移先・automated_state_rewrite の戻す先をすべて含める
+// （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+//
+// **`automated_state_rewrite` は値（戻す先）だけを入れる。**キーは「ボードの自動化が書く、
+// continuo が知らない Status」であり、**ここへ入れると知っている Status になってしまう**
+// ので、書き戻しの分岐そのものが二度と通らなくなる（設計 3-54）。
 func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
 	seen := make(map[string]bool)
 	var result []string
@@ -175,6 +180,16 @@ func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
 		if target != nil {
 			add(*target)
 		}
+	}
+	// **map の反復順は決まらないので、名前順に並べてから足す。**
+	// 照合に落ちたときのメッセージの並びを、実行のたびに変えないためである。
+	rewriteTargets := make([]string, 0, len(cfg.AutomatedStateRewrite))
+	for _, target := range cfg.AutomatedStateRewrite {
+		rewriteTargets = append(rewriteTargets, target)
+	}
+	sort.Strings(rewriteTargets)
+	for _, target := range rewriteTargets {
+		add(target)
 	}
 	return result
 }
@@ -597,7 +612,7 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 		conn := resp.RepositoryOwner.ProjectV2.Items
 		for i := range conn.Nodes {
 			raw := &conn.Nodes[i]
-			mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+			mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted, a.projectNumber)
 			if !mapped.Ok {
 				a.logger.Warn("候補の一覧から除外しました",
 					"item_id", raw.ID, "理由", mapped.Reason,
@@ -752,7 +767,7 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 				Message:  fmt.Sprintf("想定外の node 型です（ProjectV2Item ではない）: %s", raw.Typename),
 			}
 		}
-		mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+		mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted, a.projectNumber)
 		if !mapped.Ok && mapped.Gone {
 			// 候補の集合に居ない（archive 済み・Status 未設定・Issue でも DraftIssue でも
 			// ない content）。**候補の取得（items）はどれも返さないのに、nodes(ids:) は

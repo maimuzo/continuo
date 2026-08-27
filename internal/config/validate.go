@@ -141,6 +141,30 @@ func validate(cfg *Config) error {
 		return invalidValueError("tracker.unknown_state_grace_ms", cfg.Tracker.UnknownStateGraceMs,
 			"0以上の整数にすること（0 なら猶予を置かずにその巡回で止める）")
 	}
+	// automated_state_rewrite は「自動化が書いた Status → 戻す先の Status」の対応表である（3-54）。
+	// **空文字は Status 名として存在しない。**そして**キーと値が同じ値だと1バイトも動かない**
+	// （同じ値の書き込みは省かれるので、知らない Status のまま巡回のたびに書きに行き続ける）。
+	// 名前がボードに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。
+	for from, to := range cfg.Tracker.AutomatedStateRewrite {
+		if strings.TrimSpace(from) == "" {
+			return requiredValueError("tracker.automated_state_rewrite のキー（自動化が書いた Status 名）")
+		}
+		if strings.TrimSpace(to) == "" {
+			return invalidValueError(
+				fmt.Sprintf("tracker.automated_state_rewrite.%s", from),
+				`""`,
+				"戻す先の Status 名を書くこと（書き戻さないなら、この行ごと消すこと）",
+			)
+		}
+		if containsStateFold([]string{from}, to) {
+			return invalidValueError(
+				fmt.Sprintf("tracker.automated_state_rewrite.%s", from),
+				to,
+				"キーと違う Status 名にすること（同じ値では Status が動かず、巡回のたびに書きに行き続ける）",
+			)
+		}
+	}
+
 	// status_signal_map の値は「動かす先の Status 名」である。null は「Status を動かさない」
 	// という意味を持つので許すが、空文字の Status 名は存在しないので誤りとして止める。
 	// 名前がボードに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。

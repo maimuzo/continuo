@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -204,6 +205,12 @@ type runState struct {
 	// **猶予の起点である。**巡回のたびに入れ直すと猶予が永久に切れないので、
 	// 既に入っているときは触らない。知っている Status に戻ったら消す。
 	unknownStateSince time.Time
+	// automatedRewrites は、ボードの自動化が動かした Status を書き戻した回数である
+	// （設計 3-54）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
+	//
+	// **上限を持たないと止まらない。**書き戻した直後に自動化がまた動く組み合わせがあると、
+	// continuo とボードが同じ issue の Status を押し合い続ける。
+	automatedRewrites map[string]int
 	// workerStopCtx は「この世代の worker を止めた」ことを turn ループへ伝える経路である
 	// （設計 3-51）。
 	//
@@ -641,6 +648,34 @@ func (rs *runState) clearUnknownState() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.unknownStateSince = time.Time{}
+}
+
+// claimAutomatedRewrite は「自動化が動かした Status を書き戻す」1回ぶんを確保する
+// （設計 3-54）。
+//
+// **確保できたときだけ true を返し、その場で1回ぶん数える。**巡回は30秒ごとに走るので、
+// 数える前に書きに行くと、書き込みが終わる前の巡回が同じ書き戻しを何本も立てる。
+//
+// **数えるのは Status ごとである。**自動化が `In Progress` と `Done` の両方を書く運用で、
+// 片方の回数がもう片方を食い潰さないようにする。
+//
+// state: 自動化が書いた Status 名（前後の空白と大文字小文字は無視して数える）。
+// limit: 1つの Status につき書き戻してよい回数。
+// 戻り値の1つ目: 確保できたら true。上限に達していたら false。
+// 戻り値の2つ目: この Status をこれまでに書き戻した回数（確保した分を含まない）。
+func (rs *runState) claimAutomatedRewrite(state string, limit int) (bool, int) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	done := rs.automatedRewrites[key]
+	if done >= limit {
+		return false, done
+	}
+	if rs.automatedRewrites == nil {
+		rs.automatedRewrites = map[string]int{}
+	}
+	rs.automatedRewrites[key] = done + 1
+	return true, done
 }
 
 // turnLoopActive は turn ループの goroutine が走っているかを返す（設計 3-50）。
