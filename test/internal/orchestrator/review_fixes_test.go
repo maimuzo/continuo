@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "6894d2e2f32b6ce2d08afb087e8d399ac45b30b51d037b0ce5c9d6fabf9ae430", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "89495ef235abec9e025d81f6bd3f442137888f5d75054530717327c3e47de8bc", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある。**
 package orchestrator_test
@@ -146,7 +146,7 @@ func sessionStartEvent(sessionID, transcriptPath string) hookserver.HookEvent {
 	}
 }
 
-// {"RUCM-PATH": "P060"}
+// {"RUCM-PATH": "P014"}
 //
 // TestOnHook_worktreeの外のcwdを名乗るhookは捨てる は、送り主の突き合わせを確かめる。
 //
@@ -453,7 +453,7 @@ func viewOf2(t *testing.T, fx *fixture, identifier string) (orchestrator.RunView
 	return orchestrator.RunView{}, false
 }
 
-// {"RUCM-PATH": "P069"}
+// {"RUCM-PATH": "P023"}
 //
 // TestTurn_turnループを起こせなかったらNeedsPromptを立て直す は、設計 3-8 を確かめる。
 //

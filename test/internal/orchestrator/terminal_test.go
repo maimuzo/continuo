@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "6894d2e2f32b6ce2d08afb087e8d399ac45b30b51d037b0ce5c9d6fabf9ae430", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "89495ef235abec9e025d81f6bd3f442137888f5d75054530717327c3e47de8bc", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -143,7 +143,7 @@ func TestCheckStalls_1回のstallでabandonが2回走らない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P050"}
+// {"RUCM-PATH": "P002"}
 //
 // TestAbandon_打ち切るときはworkerを止める前にコメントを確かめる は、
 // 設計 3-25 の「いつ走らせるか」の表を確かめる。

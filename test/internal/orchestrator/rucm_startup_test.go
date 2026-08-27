@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "6894d2e2f32b6ce2d08afb087e8d399ac45b30b51d037b0ce5c9d6fabf9ae430", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "89495ef235abec9e025d81f6bd3f442137888f5d75054530717327c3e47de8bc", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「issue を1件処理する」の段13〜段15
 // （pane が起動を受け付けるか / Claude Code が入力を受け付けられるか）を通る
@@ -21,9 +21,9 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P073"}
+// {"RUCM-PATH": "P028"}
 //
-// TestRUCM_P073_paneがまだ使えないなら待ち直す は、段13 の代替フロー「paneがまだ使えない」を検査する。
+// TestRUCM_P028_paneがまだ使えないなら待ち直す は、段13 の代替フロー「paneがまだ使えない」を検査する。
 //
 // **`worktree.open` が作った pane は、シェルの起動が終わるまでコマンドを受け取れない。**
 // herdr はそれを `agent_pane_busy`（`is not an available shell`）で返す。
@@ -32,7 +32,7 @@ import (
 // 与える情報: 最初の2回だけ `agent_pane_busy` を返し、3回目から成功する `agent.start` の台本。
 // 成功条件（RUCM の POSTCONDITION）: pane が起動を受け付けるまで待ち続けている。
 // **ここでは「着手が最後まで進むこと」で確かめる**（待ち続けた結果、turn が送られる）。
-func TestRUCM_P073_paneがまだ使えないなら待ち直す(t *testing.T) {
+func TestRUCM_P028_paneがまだ使えないなら待ち直す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 	holdPrompt(fx)
@@ -64,15 +64,15 @@ func TestRUCM_P073_paneがまだ使えないなら待ち直す(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P074"}
+// {"RUCM-PATH": "P029"}
 //
-// TestRUCM_P074_paneが使えないまま期限を過ぎたら人間へ渡す は、代替フロー「paneの断念」を検査する。
+// TestRUCM_P029_paneが使えないまま期限を過ぎたら人間へ渡す は、代替フロー「paneの断念」を検査する。
 //
 // 目的: pane が最後まで使えなければ、`failure_state` へ落として理由を書くこと。
 // 与える情報: `agent.start` が常に `agent_pane_busy` を返す台本と、粘りの上限を短くした設定。
 // 成功条件（RUCM の POSTCONDITION）: issue の Status は `failure_state` の選択肢である。
 // Claude Code は起動していない。worktree は残っている。
-func TestRUCM_P074_paneが使えないまま期限を過ぎたら人間へ渡す(t *testing.T) {
+func TestRUCM_P029_paneが使えないまま期限を過ぎたら人間へ渡す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		// **リトライを1回で使い切らせる。**既定（3回）のままだと、バックオフの合計が
 		// テストの待ち時間を超える。
@@ -99,9 +99,9 @@ func TestRUCM_P074_paneが使えないまま期限を過ぎたら人間へ渡す
 	}
 }
 
-// {"RUCM-PATH": "P071"}
+// {"RUCM-PATH": "P025"}
 //
-// TestRUCM_P071_入力を受け付けられるまで待ち直す は、段15 の代替フロー「起動の待ち直し」を検査する。
+// TestRUCM_P025_入力を受け付けられるまで待ち直す は、段15 の代替フロー「起動の待ち直し」を検査する。
 //
 // **`agent.start` は起動が終わるのを待たずに返る。**返った直後の `agent_status` は
 // `unknown` で、`idle` になったあとも数秒は `interactive_ready` が偽である
@@ -111,7 +111,7 @@ func TestRUCM_P074_paneが使えないまま期限を過ぎたら人間へ渡す
 // 与える情報: `unknown` → `idle`（ready=false）→ `idle`（ready=true）と変わる `agent.get` の台本。
 // 成功条件（RUCM の POSTCONDITION）: 入力を受け付けられるようになるまで待ち続け、
 // **そのあいだ turn の本文を送らない。**
-func TestRUCM_P071_入力を受け付けられるまで待ち直す(t *testing.T) {
+func TestRUCM_P025_入力を受け付けられるまで待ち直す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 	holdPrompt(fx)
@@ -145,9 +145,9 @@ func TestRUCM_P071_入力を受け付けられるまで待ち直す(t *testing.T
 	}
 }
 
-// {"RUCM-PATH": "P072"}
+// {"RUCM-PATH": "P026"}
 //
-// TestRUCM_P072_入力を受け付けないまま期限を過ぎたら人間へ渡す は、代替フロー「起動の断念」を検査する。
+// TestRUCM_P026_入力を受け付けないまま期限を過ぎたら人間へ渡す は、代替フロー「起動の断念」を検査する。
 //
 // 目的: `herdr.startup_timeout_ms` を過ぎても入力を受け付けなければ、
 // `agent.max_retries` まで試したうえで `failure_state` へ落とすこと。
@@ -155,7 +155,7 @@ func TestRUCM_P071_入力を受け付けられるまで待ち直す(t *testing.T
 // 短い `startup_timeout_ms`、リトライ 0 回の設定。
 // 成功条件（RUCM の POSTCONDITION）: issue の Status は `failure_state` の選択肢である。
 // **turn の本文は Claude Code に届いていない。**worktree は残っている。
-func TestRUCM_P072_入力を受け付けないまま期限を過ぎたら人間へ渡す(t *testing.T) {
+func TestRUCM_P026_入力を受け付けないまま期限を過ぎたら人間へ渡す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
 			cfg.Herdr.StartupTimeoutMs = 1500

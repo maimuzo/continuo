@@ -6680,26 +6680,48 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 **ボードを取り直せない経路だけはテストが無い**（`[W1]` に残る）。
 その分岐は tracker と orchestrator にあり、workspace のテストからは踏めない。
 
-### 6-18. issue 1件の RUCM は、代替フローを32本にする
+### 6-18. issue 1件の RUCM は、代替フローを35本にする
 
-**言いたいこと。**`issue を1件処理する` の代替フローは、実装が持つ分岐を10本取りこぼしていた。
-**足すのは実装に分岐が実在するものだけである。**22本から32本になり、CFG のテストパスは
-24本から34本になった。
+**言いたいこと。**`issue を1件処理する` の代替フローは35本、CFG のテストパスは41本である。
+**足すのは実装に分岐が実在するものだけであり、分岐元は実装の行で裏を取る。**
 
-**足した10本。**
+**分岐元が見つけにくい10本。**
 
 | フロー | 分岐元 | 実装のどこか |
 | --- | --- | --- |
 | `走行中のissue` | ステップ3 | `internal/orchestrator/dispatch.go` の `dispatchCandidates` |
 | `ラベルの不足` | ステップ6 | `internal/orchestrator/dispatch.go` の `hasRequiredLabels` |
-| `turnループの重なり` | ステップ23 | `internal/orchestrator/turn.go` の `startTurnLoop` |
-| `本文の組み立ての失敗` | ステップ26 | `internal/orchestrator/turn.go` の `buildTurnText` |
-| `turnの終わりの取りこぼし` | ステップ28 | `internal/orchestrator/turn.go` の `confirmTurnEnd` |
+| `turnループの重なり` | ステップ26 | `internal/orchestrator/turn.go` の `startTurnLoop` |
+| `本文の組み立ての失敗` | ステップ29 | `internal/orchestrator/turn.go` の `buildTurnText` |
+| `turnの終わりの取りこぼし` | ステップ31 | `internal/orchestrator/turn.go` の `confirmTurnEnd` |
 | `リトライの尽き` | `turnの終わりの取りこぼし` 1 | `internal/orchestrator/lifecycle.go` の `abandonRunClaimed` |
-| `騙りのhook` | ステップ30 | `internal/orchestrator/hookinput.go` の `acceptHookCwd` |
-| `ボードから消えたissue` | ステップ35 | `internal/orchestrator/lifecycle.go` の `refreshIssue` |
+| `騙りのhook` | ステップ33 | `internal/orchestrator/hookinput.go` の `acceptHookCwd` |
+| `ボードから消えたissue` | ステップ38 | `internal/orchestrator/lifecycle.go` の `refreshIssue` |
 | `復元の断念` | `コメントの取り戻し` 2 | `internal/orchestrator/comment.go` の `ensureAgentComment` |
-| `着手の途中の失敗`（任意時点） | ステップ14 | `internal/orchestrator/dispatch.go` の `startRun` |
+| `着手の途中の失敗`（任意時点） | ステップ15 | `internal/orchestrator/dispatch.go` の `startRun` |
+
+**セッションの復帰に関わる2本。**
+
+| フロー | 分岐元 | 実装のどこか |
+| --- | --- | --- |
+| `復帰の失敗`（任意時点） | ステップ24 | `internal/orchestrator/dispatch.go` の `startRun` の `if startErr != nil && resumeUUID != ""` |
+| `取り戻しの復帰の失敗` | `コメントの取り戻し` 4 | `internal/orchestrator/comment.go` の `ensureAgentComment` の `failCommentRecovery` |
+
+**`復帰の失敗` の WHEN は理由を絞らない。**`startRun` はエラーの種類を見ずに立て直すので、
+**確認の画面で止まっても、`herdr.startup_timeout_ms` が経っても、同じ枝へ入る。**
+そのぶん `起動直後の確認画面`・`起動の待ち直し`・`起動の断念` は、
+**新しいセッション UUID の指定つきの起動でだけ通る。**3本の事後条件にそう書いてある。
+
+**`復帰の失敗` の RESUME 先は、起動の確認ではなく起動のステップである。**
+確認（ステップ25）へ戻すと、**戻ったあとの状態が成功した起動と1バイトも変わらない**
+（新しいセッション・会話履歴なし）のに、そこから先の枝が全部2本ずつになる。
+**実測で経路は38本から86本に増え、うち24本は区別できなかった。**
+起動のステップ（ステップ24）へ戻せば、経路の列挙はそこで1周として閉じ、41本に収まる。
+
+**起動フラグの選び分けは IF に割らない。**ステップ19 で「どちらの起動フラグを使うか」を
+1度だけ決め、ステップ24 はその結果で起動する。**IF に割ると、新規の着手と再着手で
+後続の手順が1つも変わらないのに、以降の枝が全部2本ずつになる。**
+どちらのフラグを渡したかは、テストが `agent.start` の引数で見る。
 
 **リトライを積む出口は4つあるが、尽きたときの後始末は1本しかない。**
 `turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`ボードから消えたissue` は
@@ -6707,16 +6729,14 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 4箇所に同じ枝を並べると、後始末を直すたびに4箇所を直すことになる。
 
 **引き金が重なる枝は、WHEN で除く。**`着手の途中の失敗` の WHEN からは
-「壊れた ref」と「pane の受け付け待ち」を外してある。除かないと `壊れたref` と
-`paneの断念` が同じ出来事を主張し、どちらへ進むかが記述から決まらない。
+「壊れた ref」「pane の受け付け待ち」「復帰つきの起動の失敗」を外してある。除かないと
+`壊れたref`・`paneの断念`・`復帰の失敗` が同じ出来事を主張し、どちらへ進むかが記述から決まらない。
 
-**`コメントの取り戻し` のステップ2 だけは条件ステップに変えた。**
-`復元の断念` を任意時点代替フローで書くと `rucm_validator.py` が W005 を出し、
-**このリポジトリで唯一の警告が残る。**真の側の並びは1つも変えていない。
+**`コメントの取り戻し` のステップ2 と4 は条件ステップにしてある。**
+`復元の断念` と `取り戻しの復帰の失敗` を任意時点代替フローで書くと `rucm_validator.py` が
+W005 を出し、**このリポジトリで唯一の警告が残る。**真の側の並びは1つも変えていない。
 
-**テストは10本すべてに貼った。**うち2本（`turnの終わりの取りこぼし`・`復元の断念`）は
-新しく書き、8本は既にあったテストに印を付けた。
-**`[W1]` に残るのは5本で、いずれも今回より前からの取りこぼしである。**
+**テストの印は41本のうち31本に付いている。**`[W1]` に残るのは10本である。
 
 ### 6-19. `着手を取り消す` の RUCM は、代替フローを18本のままにする
 
