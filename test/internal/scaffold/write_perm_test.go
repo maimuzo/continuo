@@ -17,27 +17,38 @@ import (
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
-// currentUmask はいまの umask を、変えずに読み出す。
+// fixUmask は、このテストの間だけ umask を mask に固定し、終わったら元へ戻す。
 //
-// syscall.Umask は「新しい値を入れて、古い値を返す」しかできないので、
-// 一度入れてすぐ戻す。**この呼び出しの間に別の goroutine がファイルを作ると
-// 権限が変わる**が、このパッケージのテストは t.Parallel を使っていないので並びは1本である。
+// **実行環境の umask に任せてはならない。**多くの機械の既定は 0022 で、
+// 0644 から引いても 0644 のまま（＝ WriteTemplate が open へ渡している権限そのもの）になる。
+// その値では、新しく作る経路を差し替えへ寄せ替えても同じ権限が出るので、テストが素通りする。
 //
-// 戻り値: いまの umask。
-func currentUmask() fs.FileMode {
-	old := syscall.Umask(0)
-	syscall.Umask(old)
-	return fs.FileMode(old)
+// syscall.Umask は「新しい値を入れて、古い値を返す」しかできないので、返ってきた古い値を
+// t.Cleanup で戻す。**umask はプロセス全体に効く。**このパッケージのテストは t.Parallel を
+// 使っていないので並びは1本であり、固定している間に他のテストがファイルを作ることは無い。
+//
+// t: テストコンテキスト。
+// mask: このテストの間だけ使う umask。
+func fixUmask(t *testing.T, mask fs.FileMode) {
+	t.Helper()
+	old := syscall.Umask(int(mask))
+	t.Cleanup(func() { syscall.Umask(old) })
 }
 
 // 目的: 新しく WORKFLOW.md を作るときは umask が効くことを確認する。
-// 与える情報: 空の一時ディレクトリ。force は偽の場合と真の場合の両方。
-// 成功条件: できたファイルの権限が 0644 から umask を引いたものであること。
+// 与える情報: umask を 0027 に固定した状態と、空の一時ディレクトリ。force は偽の場合と真の場合の両方。
+// 成功条件: できたファイルの権限が 0640（0644 から umask 0027 を引いたもの）であること。
 //
 // **新しく作る経路は差し替えにしていない**（設計 3-59）。差し替えにすると権限を chmod で
 // 決めることになり、umask が効かなくなる。この検査は、そこが差し替えへ寄せられていないことを守る。
+//
+// **umask に 0027 を選ぶのは、0644 とも 0600 とも違う値を作るためである。**差し替えへ寄せると
+// 権限は chmod で 0644（WriteTemplate が渡す値）になり、一時ファイルの既定は 0600 なので、
+// 0640 を期待しておけばどちらとも見分けられる。
 func TestWriteTemplate_新しく作るときはumaskが効く(t *testing.T) {
-	want := fs.FileMode(0o644) &^ currentUmask()
+	const mask fs.FileMode = 0o027
+	fixUmask(t, mask)
+	const want = fs.FileMode(0o644) &^ mask
 
 	for _, force := range []bool{false, true} {
 		dir := t.TempDir()

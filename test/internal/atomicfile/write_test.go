@@ -81,16 +81,19 @@ func TestWrite_置き換えると中身が新しくなり渡した権限が残�
 }
 
 // 目的: まだ無いファイルへ書くときも、渡した権限のとおりになることを確認する。
-// 与える情報: 空の一時ディレクトリと、権限 0600。
-// 成功条件: ファイルができ、権限が 0600 であること。
+// 与える情報: 空の一時ディレクトリと、権限 0640。
+// 成功条件: ファイルができ、権限が 0640 であること。
 //
 // **差し替えなので umask を通らない。**os.CreateTemp が 0600 で作ったものを chmod で
 // 揃えてから差し替えるため、渡した権限がそのまま付く。umask を効かせたい経路
 // （`continuo init` の新規作成）は、この関数を通していない（設計 3-59）。
+//
+// **0600 を期待値にしてはならない。**os.CreateTemp が一時ファイルを作るときの権限そのもので、
+// 権限を貼り直す処理（f.Chmod）を消しても同じ値が出る。0640 なら貼り直しの有無を見分けられる。
 func TestWrite_新しく作るときも渡した権限になる(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
-	const want fs.FileMode = 0o600
+	const want fs.FileMode = 0o640
 
 	if err := atomicfile.Write(path, []byte("{}\n"), want); err != nil {
 		t.Fatalf("新しく書けなかった: %v", err)

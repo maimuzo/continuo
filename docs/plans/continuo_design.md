@@ -5661,17 +5661,27 @@ origin/main:internal/scaffold/scaffold.go:130:		flags |= os.O_TRUNC
 | `internal/workspace/identity.go` の `.git/info/exclude` | **追記のみ。**全置換にすると、読んでから書くまでの間に他が書いた行を消す |
 
 **戻らないように検査を1本置いた。**`test/internal/atomicfile/no_truncating_write_test.go` が
-`internal/` と `cmd/` を構文木で走査し、**書き込む先をその場で切り詰める書き方を全部落とす**
+`internal/` と `cmd/` を構文木で走査し、**名前で書かれた形を落とす**
 （`os.WriteFile` / `ioutil.WriteFile` / `os.Create` / `os.Truncate` / `f.Truncate` / `O_TRUNC`。
-`syscall` 側・import の別名・dot import も追う）。**flag を数値で書くことも落とす。**
-`os.O_TRUNC` は macOS で 0x400、Linux で 0x200 と値が違ううえ `1024` とも書けるので、
-数値のままでは構文木から見分けられない。**文字列ではなく構文木を見るのは、**上の2箇所のように
-「なぜその書き方をしないのか」をコメントで説明できるようにするためである。
+`syscall` 側・import の別名・dot import も追う）。**flag を数値で書いた形も落とす**
+（引数に直接書いた数値と、名前の定数に混ぜた数値）。`os.O_TRUNC` は macOS で 0x400、
+Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値のままでは構文木から見分けられない。
+**文字列ではなく構文木を見るのは、**上の2箇所のように「なぜその書き方をしないのか」を
+コメントで説明できるようにするためである。
+
+**数値へ逃がされた形は落ちないことがある。**名前付き定数への退避（`const truncWrite = 0x601`）・
+`|=` での追加・関数値や数値を返す関数の経由・`os.Remove` してから作り直す形は素通りする。
+**`Truncate` は受け手の型を見ずに名前だけで落としている**ので、別の型の `Truncate` があれば
+誤検知しうる（いま `internal/` と `cmd/` に `.Truncate(` の呼び出しは1つも無い）。
+**どちらも式や受け手の型を解く仕組みが要るため、別の issue に切り出す。**
 
 **振る舞いは別のテストで押さえる。**`test/internal/atomicfile/write_test.go` が
 「中身が新しくなる」「渡した権限が残る」「落ちても元の中身が残る」「一時ファイルを残さない」を、
 `test/internal/scaffold/write_perm_test.go` が「新しく作るときは umask が効く」
-「force で置き換えても元の権限が残る」を見る。
+「force で置き換えても元の権限が残る」を、`test/internal/scaffold/write_dir_test.go` が
+「WORKFLOW.md という名前のディレクトリを force の有無どちらでも壊さない」を見る。
+**期待値は実行環境に合わせない。**umask は 0027 に固定する（既定の 0022 では 0644 から引いても
+0644 のままで、渡している権限と区別が付かず、差し替えへ寄せ替えても素通りする）。
 
 ---
 
