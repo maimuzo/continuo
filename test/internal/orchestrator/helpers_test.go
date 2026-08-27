@@ -576,7 +576,10 @@ type fakeTracker struct {
 	//
 	// **GitHub へ書けない状況の再現に使う**（認証切れ・レートリミット・ネットワークの断）。
 	updateErr error
-	// idsErr は FetchIssuesByIDs が返すエラーである（復元の段3 の失敗の再現）。
+	// idsErr は ID 指定の取り直しが返すエラーである（復元の段3 の失敗の再現）。
+	//
+	// **記録を取る側と取らない側の両方に効く。**どちらも `fetchByIDs` を通るからである
+	// （`FetchIssuesByIDs` / `FetchIssuesByIDsWithoutTimeline`。設計 3-61）。
 	idsErr error
 	// commentsErr は FetchComments が返すエラーである。
 	//
@@ -684,8 +687,11 @@ func (ft *fakeTracker) SetVerifyError(err error) {
 	ft.verifyErr = err
 }
 
-// SetIDsError は FetchIssuesByIDs が返すエラーを差し替える
+// SetIDsError は ID 指定の取り直しが返すエラーを差し替える
 // （復元の取り直しが認証切れ・レートリミットで落ちる状況の再現。設計 3-4 の段3）。
+//
+// **記録を取る側と取らない側の両方に効く**（`FetchIssuesByIDs` /
+// `FetchIssuesByIDsWithoutTimeline`。設計 3-61）。復元が呼ぶのは取らない側である。
 //
 // err: 返すエラー。nil なら成功にする。
 func (ft *fakeTracker) SetIDsError(err error) {

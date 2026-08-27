@@ -5424,9 +5424,9 @@ worker を止めた（利用者の環境での実測。全体の流れは [docs/
 **人間はボードを見て状況を判断するので、列を分けた意味が消える。**
 **失敗しても run は止めず**（次の巡回で拾い直す）、**戻したぶんは issue に1件残す**（3-29）。
 
-**リクエストは増えない。**ID 指定の取り直し（`nodes(ids:)`）の `... on Issue` に `timelineItems` を
-足すだけで、Status の値と同じ1リクエストで返る（設計 2-6 の実測）。**候補の取得（100件返る）・
-識別子での照合・Status を書く前の取り直しには足さない**（`byIDsWithoutTimelineQueryTemplate`）。
+**リクエストは増えない。**ID 指定の取り直し（`nodes(ids:)`）の `... on Issue` に `timelineItems` を足すだけで、
+Status の値と同じ1リクエストで返る（設計 2-6 の実測）。**足すのは記録を読む2つ**（実行中の run の照合・
+turn の終わりの取り直し）**だけである。**残る4つの呼び出し元・`UpdateStatus` の取り直し・候補の取得には足さない（3-61）。
 **`project.number` で自分のボードへ絞る**（複数のボードに載っていると両方返る。設計 2-6）。
 **窓は `last: 50` である。**ボードで絞る引数が無いので絞るのは返ってきたあとであり、
 **別のボードで Status が何度も動くと自分のボードのイベントが窓から押し出される**（書き戻しが効かなくなる）。
@@ -5726,11 +5726,17 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 **`refreshIssue` は引数で受ける。**読む `handleTurnEnd` と読まない `finishRunClaimed` が
 同じ関数を通るので、**関数を分ける形では表せない。**
 
-**「読まない」に記録を渡さなくてよい理由。**記録を実際に使う判断
-（`handleUnknownState` / `finishRunUnknownState` / `automatedStateHint`）は `rs.issue()` から読む。
-**そこへ入る直前には、必ず `reconcileRunning` か `handleTurnEnd` の `rs.setIssue` が通っている。**
-復元が入れた写しは記録を持たないが、**その写しで判断する経路は無い**（最初の巡回が入れ直す）。
-`finishRunClaimed` の取り直しは `rs.setIssue` で控えないので、空の写しが漏れることも無い。
+**「読まない」に記録を渡さなくてよい理由。**記録を使う判断は**引数で受け取った写しを読み、
+その引数は記録を取る側（`FetchIssuesByIDs`）の戻り値そのものである**（`handleUnknownState` へは
+`reconcileRunning` が、`claimAutomatedRewrite` / `rewriteAutomatedState` へは `handleTurnEnd` が渡す）。
+`finishRunUnknownState` は写しを読まない（受け取るのは Status 名の文字列だけ）。
+`rs.issue()` から読むのは `automatedStateHint` だけで、**`rs.setIssue` を呼ぶ3箇所は
+どれも記録を取った写しである。**
+
+**この安全が崩れる条件。「復元が `active_states` 以外も引き継ぐ」ようにすると崩れる。**
+復元が入れた写しは記録を持たないが、いまは引き継ぐ先を `active_states` に絞っているので、
+**知らない Status の道（`handleUnknownState` / `automatedStateHint`）へは入らない。**
+**広げるなら、復元の取り直しも記録を取る側へ戻すこと。**
 
 **採らなかった案。**
 
@@ -5747,8 +5753,6 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 **軽い側のクエリに `timelineItems` が入っていないこと**を送信内容で見る。
 **偽の tracker は軽い側で `StatusChangedBy` と `StatusChangedByAutomation` を落とす**
 （本物と同じ振る舞い。落とさないと、記録に頼った実装がそちらの経路でも書けてしまう）。
-
----
 
 ---
 
