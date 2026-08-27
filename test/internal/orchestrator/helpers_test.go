@@ -587,6 +587,10 @@ type fakeTracker struct {
 	//
 	// **issue へ書けない状況の再現に使う**（片付けを見送った通知・引き渡しの通知）。
 	postErr error
+	// updateGate は UpdateStatus を待たせる関門である（nil なら待たせない。HoldUpdate が仕掛ける）。
+	updateGate chan struct{}
+	// updateEntered は UpdateStatus が関門に着いたことをテストへ知らせるチャネルである。
+	updateEntered chan struct{}
 	// now は CreatedAt に入れる時刻を返す関数である。
 	now func() time.Time
 	// timeline はテスト用herdr mock と共有する呼び出しの並びである（nil なら記録しない）。
@@ -710,6 +714,43 @@ func (ft *fakeTracker) SetPostError(err error) {
 	ft.postErr = err
 }
 
+// HoldUpdate は**次の1回の `UpdateStatus` を、返り値の関数を呼ぶまで返さないようにする。**
+//
+// **書き込みが飛んでいる最中に別のことが起きる場面を作るためにある**（設計 3-54）。
+// 書き込みは巡回のループとは別の goroutine で走るので、テストから
+// 「書き込みの途中」を掴む手が無いと、その最中に run を手放す並びを作れない。
+//
+// 戻り値の1つ目: 待たせている `UpdateStatus` を進ませる関数。**必ず1回呼ぶこと。**
+// 戻り値の2つ目: `UpdateStatus` が関門に着いたら閉じるチャネル。
+func (ft *fakeTracker) HoldUpdate() (func(), <-chan struct{}) {
+	gate := make(chan struct{})
+	entered := make(chan struct{})
+	ft.mu.Lock()
+	ft.updateGate = gate
+	ft.updateEntered = entered
+	ft.mu.Unlock()
+	var once sync.Once
+	return func() { once.Do(func() { close(gate) }) }, entered
+}
+
+// waitAtUpdateGate は、関門が仕掛けられていれば `UpdateStatus` をそこで待たせる。
+//
+// **`ft.mu` を持ったまま待たない。**持ったまま待つと、ボードを読む呼び出しが全部止まり、
+// 巡回のループごと固まる。
+func (ft *fakeTracker) waitAtUpdateGate() {
+	ft.mu.Lock()
+	gate := ft.updateGate
+	entered := ft.updateEntered
+	ft.updateGate = nil
+	ft.updateEntered = nil
+	ft.mu.Unlock()
+	if gate == nil {
+		return
+	}
+	close(entered)
+	<-gate
+}
+
 // AddIssue はボードの末尾に issue を足す。
 func (ft *fakeTracker) AddIssue(issue tracker.Issue) {
 	ft.mu.Lock()
@@ -746,6 +787,46 @@ func (ft *fakeTracker) SetState(id, state string) {
 	for i := range ft.board {
 		if ft.board[i].ID == id {
 			ft.board[i].State = state
+			// **人間が動かした扱いにする**（設計 3-54 の `actor.__typename` が `User`）。
+			ft.board[i].StatusChangedByAutomation = false
+			ft.board[i].StatusChangedBy = "octocat"
+			return
+		}
+	}
+}
+
+// ClearStatusAuthor は「いまの Status を誰が書いたか分からない」状況を作る
+// （設計 3-54。timeline のイベントが消えた・権限が無い・直近50件から溢れた）。
+//
+// id: project item の ID。
+func (ft *fakeTracker) ClearStatusAuthor(id string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID == id {
+			ft.board[i].StatusChangedByAutomation = false
+			ft.board[i].StatusChangedBy = ""
+			return
+		}
+	}
+}
+
+// SetStateByAutomation は、ボードの組み込みの自動化が Status を動かした状況を作る
+// （設計 3-54。PR を issue に紐づけた・PR をマージしたときに起きる）。
+//
+// **ID 指定で取り直したときだけ「自動化が書いた」と分かる。**候補の取得では分からない
+// （FetchIssuesByStates がその欄を落として返す）。
+//
+// id: project item の ID。
+// state: 自動化が書いた Status。
+func (ft *fakeTracker) SetStateByAutomation(id, state string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID == id {
+			ft.board[i].State = state
+			ft.board[i].StatusChangedByAutomation = true
+			ft.board[i].StatusChangedBy = "github-project-automation"
 			return
 		}
 	}
@@ -839,6 +920,11 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 	for _, issue := range ft.board {
 		for _, s := range states {
 			if strings.EqualFold(s, issue.State) {
+				// **候補の取得は「誰が Status を書いたか」を持たない**（設計 3-54）。
+				// 本物のクエリに timeline を足していないので、ここでも落として返す。
+				// **落とさないと、候補の側に頼った実装が書けてしまう。**
+				issue.StatusChangedByAutomation = false
+				issue.StatusChangedBy = ""
 				out = append(out, issue)
 				break
 			}
@@ -888,6 +974,12 @@ func (ft *fakeTracker) FetchIssueByIdentifier(_ context.Context, identifier stri
 	ft.record("FetchIssueByIdentifier")
 	for _, issue := range ft.board {
 		if strings.EqualFold(issue.Identifier, identifier) {
+			// **識別子での照合は「誰が Status を書いたか」を持たない**（設計 3-54）。
+			// 候補の取得と同じく、本物のクエリには timeline を足していない
+			// （`TestStatusAuthor_識別子での照合はtimelineを要求しない`）。
+			// **落とさないと、ここに頼った実装が書けてしまう。**
+			issue.StatusChangedByAutomation = false
+			issue.StatusChangedBy = ""
 			return issue, true, nil
 		}
 	}
@@ -903,6 +995,7 @@ func (ft *fakeTracker) FetchIssueByIdentifier(_ context.Context, identifier stri
 //	Reached … 目的の Status になったか。**既に同じ値で書き込みを省いた場合も真である**
 //	Wrote   … 書き込みを実際に行ったか。**issue へ記録を書いてよいのはこれが真のときだけ**
 func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error) {
+	ft.waitAtUpdateGate()
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("UpdateStatus")
@@ -924,6 +1017,10 @@ func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState strin
 			return tracker.StatusWrite{Reached: true, Previous: previous}, nil
 		}
 		ft.board[i].State = targetState
+		// **continuo が書いたものは自動化ではない**（設計 3-54。本物では
+		// `gh auth token` の持ち主として書くので `actor.__typename` は `User` になる）。
+		ft.board[i].StatusChangedByAutomation = false
+		ft.board[i].StatusChangedBy = "octocat"
 		return tracker.StatusWrite{Reached: true, Wrote: true, Previous: previous}, nil
 	}
 	return tracker.StatusWrite{}, nil

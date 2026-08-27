@@ -161,3 +161,57 @@ func TestBootstrap_認証が無いとMissingSecretに分類される(t *testing.
 		t.Fatalf("エラーのカテゴリが CategoryMissingSecret ではない: %v", err)
 	}
 }
+
+// TestBootstrap_書き戻しの対応表のキーもボードと照合する は、設計 3-57 を確かめる。
+//
+// 目的: **`tracker.automated_state_rewrite` のキーの綴りを打ち間違えても、
+// いままでは誰も気づけなかった。**設定の検査は「設定の中での辻褄」しか見ず、
+// キーは「continuo が知らない Status」なので実行時の照合にも掛からない。
+// **結果、`In Progres` と書いても起動し、書き戻しだけが一度も動かない。**
+//
+// 与える情報: ボードに実在しない `In Progres`（`s` が1つ足りない）をキーに書いた設定。
+// 成功条件: Bootstrap がエラーを返し、カテゴリが CategoryInvalidConfig で、
+// メッセージにその綴りが載っていること。
+func TestBootstrap_書き戻しの対応表のキーもボードと照合する(t *testing.T) {
+	cfg := testTrackerConfig()
+	// **戻す先は active_states にある実在の Status。**弾かれる理由をキーだけに絞る。
+	cfg.AutomatedStateRewrite = map[string]string{"In Progres": "In Progress"}
+	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
+
+	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAdapter が失敗した: %v", err)
+	}
+
+	err = a.Bootstrap(t.Context(), cfg)
+	if err == nil {
+		t.Fatalf("対応表のキーがボードに無いのに Bootstrap が成功した（綴りの誤りを誰も見つけられない）")
+	}
+	if !tracker.IsCategory(err, tracker.CategoryInvalidConfig) {
+		t.Fatalf("エラーのカテゴリが CategoryInvalidConfig ではない: %v", err)
+	}
+	if !strings.Contains(err.Error(), "In Progres") {
+		t.Fatalf("エラーメッセージに打ち間違えたキーが含まれていない: %v", err)
+	}
+}
+
+// TestBootstrap_ボードに在る対応表のキーは起動を止めない は、設計 3-57 を確かめる。
+//
+// 目的: **照合を足したせいで、正しい設定まで起動しなくなってはならない。**
+//
+// 与える情報: ボードに実在する `Ice Box` をキーに書いた設定
+// （`Ice Box` は設定の他のキーには出てこないので、対応表のキーとして正しい）。
+// 成功条件: Bootstrap が成功すること。
+func TestBootstrap_ボードに在る対応表のキーは起動を止めない(t *testing.T) {
+	cfg := testTrackerConfig()
+	cfg.AutomatedStateRewrite = map[string]string{"Ice Box": "In Progress"}
+	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
+
+	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAdapter が失敗した: %v", err)
+	}
+	if err := a.Bootstrap(t.Context(), cfg); err != nil {
+		t.Fatalf("ボードに在るキーなのに Bootstrap が失敗した: %v", err)
+	}
+}

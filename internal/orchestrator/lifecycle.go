@@ -19,6 +19,7 @@ import (
 //  3. Status を ID 指定で取り直し、その値で分岐する
 //     terminal_states           … コメントを確かめてから worktree と branch を片付ける
 //     active_states             … max_dispatch_turns に未到達なら次の turn、到達なら failure_state
+//     知らない Status（自動化が書いた）… 本来の Status へ戻し、**書き込みの結果で判定し直す**（設計 3-54 / 3-56）
 //     どちらでもない（引き渡し） … コメントを確かめてから worker を止める。**worktree は消さない**
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -42,7 +43,21 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 		return true
 	}
 	rs.setIssue(current)
+	return o.decideAfterTurn(ctx, rs, current, true)
+}
 
+// decideAfterTurn は取り直した Status を見て、turn ループを続けるかどうかを決める
+// （設計 3-5 の図）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// current: 取り直した issue。
+// mayRewrite: ボードの自動化が書いた Status を書き戻してよいか。
+// **書き戻したあとの判定し直しでは偽で呼ぶ**（同じ turn で二度書きに行かないため）。
+// 戻り値: この run が終わったら true（turn ループを止める）。
+func (o *Orchestrator) decideAfterTurn(
+	ctx context.Context, rs *runState, current tracker.Issue, mayRewrite bool,
+) bool {
 	switch {
 	case containsFold(o.cfg.Tracker.TerminalStates, current.State):
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました", current.State))
@@ -54,6 +69,11 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 		rs.clearUnknownState()
 		return false
 	case current.State != "" && !o.isKnownState(current.State):
+		if mayRewrite {
+			if target, claim, ok := o.claimAutomatedRewrite(rs, current); ok {
+				return o.rewriteAndDecide(ctx, rs, current, target, claim)
+			}
+		}
 		// **猶予を置いて待った先である**（設計 3-50）。turn の終わりまで待ったが、
 		// エージェントは正しい Status への表明を出さなかった。**黙って終えない。**
 		o.finishRunUnknownState(ctx, rs, current.State)
@@ -63,6 +83,103 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました（人間へ引き渡します）", current.State))
 		return true
 	}
+}
+
+// rewriteAndDecide は、ボードの自動化が動かした Status を書き戻し、
+// **書き込みの結果が示す Status で「終わりかどうか」を判定し直す**（設計 3-56）。
+//
+// **戻す先が `terminal_states` になることはない。**`tracker.automated_state_rewrite` の
+// 戻す先は `active_states` に入っていることを設定の検査が起動前に要求している
+// （`validateAutomatedStateRewrite`。設計 3-55）。**書けたときの行き先は必ず「次の turn へ」である。**
+// **`"Done": "AI Done"` のような終端への書き戻しは、そもそも起動しない。**
+//
+// **`UpdateStatus` は書いたあとに読み直さない。**返る `Previous` は
+// **書きに行く直前**のボードの値である。だから「書いた直後にさらに動かされた値」は、
+// この経路のどこにも現れない。**判定し直すのは、書けなかったときのためである。**
+//
+//	書けた（Wrote）             … ボードは target になっている。target は active_states なので次の turn へ
+//	既に target だった（Reached）… 同上
+//	Previous が返って Reached が偽 … **人間が `terminal_states` へ動かしていた**ので書き戻しを断られた。
+//	                              **その値で判定し直す**（終わった issue へ次の指示を送らない）
+//	Previous も空              … item がもう見えない。次の巡回が拾い直す
+//
+// **書き込みのあいだだけ `beginRewrite` で書き戻しの印を取る**（設計 3-56）。
+// turn の終わりの処理は表明を読む1秒ほどの待ちと2往復の書き込みを含む。
+// **その間に巡回が「人間が動かした」と判断して run を手放すと、印が消えたあとに
+// 「作業中」の Status がボードへ書かれる。**次の巡回はそれを候補として拾い直し、
+// **同じ worktree に2本目の Claude Code を立てる。**
+// **書き終えたら必ず印を返す**（`endRewrite`）。返さないと、このあと続く
+// `decideAfterTurn` の `finishRun` が書き戻しの終わりを永久に待つ。
+//
+// **書き戻しの印は「終わらせる処理」の印とは別である。**同じ印にすると、
+// **巡回からの書き戻しが飛んでいるだけの run を「終わりに向かっている」と読んで、
+// turn ループが宙に浮く**（誰も終わらせていないのに turn ループだけが抜ける）。
+//
+//	別の書き戻しが飛んでいる（rewriteBusy）  … **turn ループは続ける。**着地する書き込みが Status を直す
+//	終わりに向かっている（rewriteEnding）    … turn ループを止める
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// current: 書き戻す前の issue。
+// target: 戻す先の Status 名。
+// claim: 確保した書き戻しの枠。
+// 戻り値: この run が終わったら true（turn ループを止める）。
+func (o *Orchestrator) rewriteAndDecide(
+	ctx context.Context, rs *runState, current tracker.Issue, target string, claim *rewriteClaim,
+) bool {
+	switch rs.beginRewrite() {
+	case rewriteEnding:
+		// 既に終わらせる処理が走っている（または run が終わっている）。
+		// **確保した枠を返し、turn ループを止める。**
+		claim.release()
+		o.logger.Info("自動化が動かした Status を戻しませんでした（この run は既に終わりに向かっています）",
+			"identifier", current.Identifier, "自動化が書いた Status", current.State, "戻す先", target)
+		return true
+	case rewriteBusy:
+		// **巡回からの書き戻しが既に飛んでいる。**この run は終わっていないので、
+		// **turn ループを止めてはならない。**着地する書き込みが Status を直す。
+		claim.release()
+		o.logger.Info("自動化が動かした Status は、飛んでいる書き戻しに任せます（turn は続けます）",
+			"identifier", current.Identifier, "自動化が書いた Status", current.State, "戻す先", target)
+		return false
+	}
+	// **turn ループの goroutine なので、ここは同期で書きに行ってよい。**
+	moved, err := o.rewriteAutomatedState(ctx, rs, current, target, claim)
+	// **印はここで返す。**このあとの `decideAfterTurn` は `finishRun` を通り、
+	// そこで終わらせる処理の印を取る。持ったままだと、その取得が書き戻しの終わりを待って
+	// 返らなくなる。
+	rs.endRewrite()
+
+	next := target
+	switch {
+	case err != nil:
+		// **書き込みが失敗しても run は続ける。**失敗したのは continuo であって、
+		// 人間が引き渡したわけではない。次の巡回が同じ判定でもう一度書きに行く。
+		// **「戻せない」が続いたときは `claimAutomatedRewrite` が枠を渡さなくなり、
+		// 猶予の時計が始まって人間へ渡る**（設計 3-56）。
+		rs.clearUnknownState()
+		return false
+	case !moved.Reached && moved.Previous == "":
+		// item がもう見えない。次の巡回が取り直して判断する。
+		rs.clearUnknownState()
+		return false
+	case !moved.Reached:
+		// **書きに行く直前のボードは `terminal_states` に入っていた。**
+		// 人間が「終わった」にしたということなので、**その値で判定し直す。**
+		next = moved.Previous
+	}
+
+	movedIssue := current
+	movedIssue.State = next
+	if next == target {
+		// **書いたのは continuo である。**自動化が書いたという印を残したままにすると、
+		// このあと止める経路が「ボードの自動化が書きました」という的外れな案内を出す。
+		movedIssue.StatusChangedBy = ""
+		movedIssue.StatusChangedByAutomation = false
+	}
+	rs.setIssue(movedIssue)
+	rs.clearUnknownState()
+	return o.decideAfterTurn(ctx, rs, movedIssue, false)
 }
 
 // readSignals は turn が終わったあとに transcript を読んで表明を拾う（設計 3-25）。
@@ -304,16 +421,20 @@ func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState) (tracker.
 //
 // **`failureState` が空でなければ、先に Status をそこへ落とす**（打ち切り・失敗のとき）。
 //
-// **終わらせる処理は1本に絞る**（`beginTerminal`）。次の巡回が同じ run を
+// **終わらせる処理は1本に絞る**（`claimTerminal`）。次の巡回が同じ run を
 // もう一度終わらせにかかると、`failure_state` への書き込みと引き渡しコメントの投稿が
 // 二重になる。
+//
+// **書き戻しが飛んでいたら、終わるまで待ってから印を取る**（設計 3-56）。
+// **待たずに戻ると、この run を終わらせる者が誰も居なくなる。**turn ループはここを
+// 呼んだあと戻ってしまうので、Status も動かず、引き渡しのコメントも出ず、印も外れない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // failureState: 落とす先の Status。空なら落とさない。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) finishRun(ctx context.Context, rs *runState, failureState, reason string) {
-	if !rs.beginTerminal() {
+	if !rs.claimTerminal(ctx) {
 		return
 	}
 	o.finishRunClaimed(ctx, rs, failureState, reason)
@@ -325,12 +446,15 @@ func (o *Orchestrator) finishRun(ctx context.Context, rs *runState, failureState
 // 3-25 の9段（`agent.prompt` を待ち受けつきで呼ぶ）を通ることがあり、
 // **既定では最大1時間返らない。巡回のループの中で同期的に呼んではならない。**
 //
+// **書き戻しが飛んでいたら、この巡回では終わらせない**（`claimTerminal` で待たない）。
+// 巡回のループを書き込み1回ぶん止めることになるためである。**次の巡回でやり直せばよい。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // failureState: 落とす先の Status。空なら落とさない。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failureState, reason string) {
-	if !rs.beginTerminal() {
+	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
 	o.wg.Add(1)
@@ -380,11 +504,14 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 // **まだ1回も turn を送っていない run では何も起きない**（`ensureAgentComment` が
 // `StartedAt` のゼロ値で抜ける）。書かせる材料が無いためである。
 //
+// **書き戻しが飛んでいたら、終わるまで待ってから印を取る**（設計 3-56）。
+// **待たずに戻ると、着手に失敗した run が誰にも失敗として扱われないまま残る。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string) {
-	if !rs.beginTerminal() {
+	if !rs.claimTerminal(ctx) {
 		return
 	}
 	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
@@ -414,11 +541,14 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 // **リトライがまだ残っている場合は走らせない。**run はこのあと再 dispatch されて続くので、
 // 打ち切りではないためである。
 //
+// **書き戻しが飛んでいたら、終わるまで待ってから印を取る**（設計 3-56）。
+// **待たずに戻ると、諦めるべき run にリトライが1つも積まれない。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) abandonRun(ctx context.Context, rs *runState, reason string) {
-	if !rs.beginTerminal() {
+	if !rs.claimTerminal(ctx) {
 		return
 	}
 	o.abandonRunClaimed(ctx, rs, reason)
@@ -429,11 +559,13 @@ func (o *Orchestrator) abandonRun(ctx context.Context, rs *runState, reason stri
 // **印だけ同期で確保し、実際の処理は別の goroutine で回す。**打ち切りのときは
 // 3-25 の9段（`agent.prompt` を待ち受けつきで呼ぶ）を通るので、既定では最大1時間返らない。
 //
+// **書き戻しが飛んでいたら、この巡回では諦めない**（次の巡回でやり直す）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) abandonRunAsync(ctx context.Context, rs *runState, reason string) {
-	if !rs.beginTerminal() {
+	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
 	o.wg.Add(1)
@@ -492,10 +624,12 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 // `workspace_hooks.after_run` は利用者が書いた外部コマンドであり、どれだけ時間がかかるか
 // continuo には分からない。
 //
+// **書き戻しが飛んでいたら、この巡回では止めない**（次の巡回でやり直す）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
-	if !rs.beginTerminal() {
+	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
 	o.wg.Add(1)

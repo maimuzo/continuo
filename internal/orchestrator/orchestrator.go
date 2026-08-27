@@ -202,6 +202,12 @@ type Orchestrator struct {
 	now            func() time.Time
 	newSessionUUID func() (string, error)
 	ghAuthCheck    GHAuthCheckFunc
+	// knownStateNames は continuo が意味を知っている Status 名の一覧である（設計 3-50）。
+	//
+	// **設定から作る値であり、走っている間は変わらない。**巡回のたびに作り直すと、
+	// 実行中の run 1件ごとに確保と整列をやり直すことになる（`reconcileRunning` は
+	// run ごとに `isKnownState` を引く）。**組み立てのときに1度だけ計算して持つ。**
+	knownStateNames []string
 
 	// mu は runs / sessions / notified / tickCount / quota を守る。
 	mu sync.Mutex
@@ -245,8 +251,8 @@ type Orchestrator struct {
 //
 // opts: 設定・トラッカー・herdr・workspace・枠の読み取り・socket のパス・ログ。
 // 戻り値: 組み立てた Orchestrator。Tracker / Herdr / Workspace が nil の場合、
-// HookSocketPath が空または絶対パスでない場合、`continuo` の実行ファイルの場所を
-// 決められない場合はエラーを返す。
+// **Config に Status 名が1つも無い場合**、HookSocketPath が空または絶対パスでない場合、
+// `continuo` の実行ファイルの場所を決められない場合はエラーを返す。
 func New(opts Options) (*Orchestrator, error) {
 	if opts.Tracker == nil {
 		return nil, errors.New("トラッカーのアダプタ（Tracker）が nil です")
@@ -261,6 +267,19 @@ func New(opts Options) (*Orchestrator, error) {
 		return nil, fmt.Errorf(
 			"hook を受ける socket のパス %q が絶対パスではありません（設定ファイルへ埋め込めない）",
 			opts.HookSocketPath)
+	}
+	// **知っている Status の一覧は組み立てのときに1度だけ計算する**（`knownStateNames`）。
+	// **計算に使う設定が空のまま渡されても、いままでは黙って通っていた。**
+	// 1つも取れないと、continuo は**ボード上のどの Status も「知らない Status」と判定し、
+	// 着手した run を片端から止める。**しかも止めた理由には「いま知っているのは です」と
+	// 空欄が出るだけで、原因が読み取れない。
+	// **他の必須の依存と同じく、ここで名前つきのエラーにする。**
+	knownStateNames := config.KnownStates(opts.Config.Tracker)
+	if len(knownStateNames) == 0 {
+		return nil, errors.New(
+			"continuo が扱う Status が1つも設定されていません（Config）" +
+				"（WORKFLOW.md の tracker.active_states / terminal_states / running_state / " +
+				"dispatch_state / failure_state / status_signal_map の遷移先を確かめてください）")
 	}
 
 	continuoPath := opts.ContinuoPath
@@ -312,6 +331,11 @@ func New(opts Options) (*Orchestrator, error) {
 		now:            nowFunc,
 		newSessionUUID: newUUID,
 		ghAuthCheck:    opts.GHAuthCheck,
+		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-55）。
+		// 起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）も
+		// 同じ関数の上に立つ（あちらは対応表のキーを足す）。
+		knownStateNames: knownStateNames,
+
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
 		notified:       map[string]time.Time{},

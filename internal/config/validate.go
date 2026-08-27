@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/herdr"
@@ -141,6 +142,17 @@ func validate(cfg *Config) error {
 		return invalidValueError("tracker.unknown_state_grace_ms", cfg.Tracker.UnknownStateGraceMs,
 			"0以上の整数にすること（0 なら猶予を置かずにその巡回で止める）")
 	}
+	// automated_state_rewrite は「自動化が書いた Status → 戻す先の Status」の対応表である（3-54）。
+	// **空文字は Status 名として存在しない。**そして**キーと値が同じ値だと1バイトも動かない**
+	// （同じ値の書き込みは省かれるので、知らない Status のまま巡回のたびに書きに行き続ける）。
+	// 名前がボードに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。
+	//
+	// **キーを名前順に見る。**map の反復順は決まらないので、そのまま回すと
+	// **同じ設定ファイルなのに、実行のたびに違う行のエラーが出る。**
+	if err := validateAutomatedStateRewrite(cfg); err != nil {
+		return err
+	}
+
 	// status_signal_map の値は「動かす先の Status 名」である。null は「Status を動かさない」
 	// という意味を持つので許すが、空文字の Status 名は存在しないので誤りとして止める。
 	// 名前がボードに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。
@@ -460,6 +472,92 @@ func validateExpanded(cfg *Config) error {
 				keyRuntimeLockFile,
 				*cfg.Runtime.LockFile,
 				"絶対パスにすること（相対パスだと起動したディレクトリごとに別のロックファイルになり、二重起動を防げない）",
+			)
+		}
+	}
+	return nil
+}
+
+// validateAutomatedStateRewrite は `tracker.automated_state_rewrite` を検査する（設計 3-55）。
+//
+// **5つを見る。**どれも「設定は通るのに、実行時は1度も効かない」か
+// 「効いた結果が壊れる」ものである。
+//
+//	キーが空          … Status 名として存在しない
+//	値が空            … 戻す先が無い（書き戻さないなら行ごと消す）
+//	キーと値が同じ    … 同じ値の書き込みは省かれるので、巡回のたびに書きに行き続ける
+//	キーが既知の Status … その行は1度も発火しない（知らない Status のときだけ引くため）
+//	値が active_states の外 … 戻した先で作業を続けられない
+//
+// **キーが既知の Status だと、その行は死ぬ。**書き戻しを引くのは
+// 「continuo が知らない Status になった」ときだけであり（`handleUnknownState`）、
+// **既に名前の出てくる Status はそこへ来ない。**設定した人は効いているつもりでいる。
+//
+// **値は `active_states` に入っていなければならない。**戻す先が `terminal_states` だと
+// 書き戻した瞬間に run が終わり、`cleanup.on_states` だと worktree が消える。
+// **`running_state` / `dispatch_state` と同じ扱いにする**（どちらも `active_states` に
+// 入っていることを要求している）。
+//
+// **キーは名前順に見る。**map の反復順は決まらないので、そのまま回すと同じ設定ファイルから
+// 実行のたびに違う行のエラーが出る。**大文字小文字だけが違うキーが2つあると、
+// どちらに当たるかも実行のたびに変わる**ので、それも弾く。
+//
+// cfg: 検査する設定。
+// 戻り値: 誤りがあればそのエラー。無ければ nil。
+func validateAutomatedStateRewrite(cfg *Config) error {
+	froms := make([]string, 0, len(cfg.Tracker.AutomatedStateRewrite))
+	for from := range cfg.Tracker.AutomatedStateRewrite {
+		froms = append(froms, from)
+	}
+	sort.Strings(froms)
+
+	named := KnownStates(cfg.Tracker)
+	seen := map[string]string{}
+	for _, from := range froms {
+		to := cfg.Tracker.AutomatedStateRewrite[from]
+		if strings.TrimSpace(from) == "" {
+			return requiredValueError("tracker.automated_state_rewrite のキー（自動化が書いた Status 名）")
+		}
+		key := strings.ToLower(strings.TrimSpace(from))
+		if first, dup := seen[key]; dup {
+			return invalidValueError(
+				fmt.Sprintf("tracker.automated_state_rewrite.%s", from),
+				to,
+				fmt.Sprintf(
+					"キー %q と大文字小文字だけが違うので、どちらの行に当たるかが実行のたびに変わる"+
+						"（どちらか1行にすること）", first),
+			)
+		}
+		seen[key] = from
+		if strings.TrimSpace(to) == "" {
+			return invalidValueError(
+				fmt.Sprintf("tracker.automated_state_rewrite.%s", from),
+				`""`,
+				"戻す先の Status 名を書くこと（書き戻さないなら、この行ごと消すこと）",
+			)
+		}
+		if containsStateFold([]string{from}, to) {
+			return invalidValueError(
+				fmt.Sprintf("tracker.automated_state_rewrite.%s", from),
+				to,
+				"キーと違う Status 名にすること（同じ値では Status が動かず、巡回のたびに書きに行き続ける）",
+			)
+		}
+		if containsStateFold(named, from) {
+			return invalidValueError(
+				"tracker.automated_state_rewrite のキー",
+				from,
+				"tracker の他のキー（active_states / terminal_states / running_state / "+
+					"dispatch_state / failure_state / status_signal_map の遷移先）に無い Status 名にすること"+
+					"（既に名前の出てくる Status は「知らない Status」にならないので、この行は1度も効かない）",
+			)
+		}
+		if !containsStateFold(cfg.Tracker.ActiveStates, to) {
+			return invalidValueError(
+				fmt.Sprintf("tracker.automated_state_rewrite.%s", from),
+				to,
+				"tracker.active_states に含まれる値にすること"+
+					"（戻した先が作業中の Status でないと、書き戻した直後に run が終わるか worktree が消える）",
 			)
 		}
 	}
