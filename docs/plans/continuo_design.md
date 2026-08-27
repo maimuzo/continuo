@@ -7003,43 +7003,165 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 **ボードを取り直せない経路だけはテストが無い**（`[W1]` に残る）。
 その分岐は tracker と orchestrator にあり、workspace のテストからは踏めない。
 
-### 6-18. issue 1件の RUCM は、代替フローを32本にする
+### 6-18. issue 1件の RUCM は、代替フローを35本にする
 
-**言いたいこと。**`issue を1件処理する` の代替フローは、実装が持つ分岐を10本取りこぼしていた。
-**足すのは実装に分岐が実在するものだけである。**22本から32本になり、CFG のテストパスは
-24本から34本になった。
+**言いたいこと。**`issue を1件処理する` の代替フローは35本、CFG のテストパスは42本である。
+**足すのは実装に分岐が実在するものだけであり、分岐元は実装の行で裏を取る。**
 
-**足した10本。**
+**分岐元が見つけにくい12本**（段は名前で指す。番号は段を増やすたびに動く）。
 
-| フロー | 分岐元 | 実装のどこか |
+| フロー | 分岐元の段 | 実装のどこか |
 | --- | --- | --- |
-| `走行中のissue` | ステップ3 | `internal/orchestrator/dispatch.go` の `dispatchCandidates` |
-| `ラベルの不足` | ステップ6 | `internal/orchestrator/dispatch.go` の `hasRequiredLabels` |
-| `turnループの重なり` | ステップ23 | `internal/orchestrator/turn.go` の `startTurnLoop` |
-| `本文の組み立ての失敗` | ステップ26 | `internal/orchestrator/turn.go` の `buildTurnText` |
-| `turnの終わりの取りこぼし` | ステップ28 | `internal/orchestrator/turn.go` の `confirmTurnEnd` |
-| `リトライの尽き` | `turnの終わりの取りこぼし` 1 | `internal/orchestrator/lifecycle.go` の `abandonRunClaimed` |
-| `騙りのhook` | ステップ30 | `internal/orchestrator/hookinput.go` の `acceptHookCwd` |
-| `ボードから消えたissue` | ステップ35 | `internal/orchestrator/lifecycle.go` の `refreshIssue` |
-| `復元の断念` | `コメントの取り戻し` 2 | `internal/orchestrator/comment.go` の `ensureAgentComment` |
-| `着手の途中の失敗`（任意時点） | ステップ14 | `internal/orchestrator/dispatch.go` の `startRun` |
+| `走行中のissue` | 別の run の印を見る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `dispatchCandidates` |
+| `ラベルの不足` | required_labels を見る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `hasRequiredLabels` |
+| `turnループの重なり` | turn ループの重なりを見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `startTurnLoop` |
+| `本文の組み立ての失敗` | 本文の組み立てを見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `buildTurnText` |
+| `turnの終わりの取りこぼし` | Stop hook の到着を見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `confirmTurnEnd` |
+| `リトライの尽き` | `turnの終わりの取りこぼし` のリトライの回数を見る | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `abandonRunClaimed` |
+| `騙りのhook` | hook の cwd を見る | [internal/orchestrator/hookinput.go](../../internal/orchestrator/hookinput.go) の `acceptHookCwd` |
+| `ボードから消えたissue` | issue がボードに見えるかを見る | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `refreshIssue` |
+| `復元の断念` | `コメントの取り戻し` の身元ファイルを読めるかを見る | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `ensureAgentComment` |
+| `着手の途中の失敗`（任意時点） | worktree を作る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` |
+| `復帰の失敗`（任意時点） | pane の受け付けを見る／Claude Code を起動する | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` の `if startErr != nil && resumeUUID != ""` |
+| `取り戻しの復帰の失敗` | `コメントの取り戻し` の復帰つきの起動の完了を見る | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `ensureAgentComment` |
 
-**リトライを積む出口は4つあるが、尽きたときの後始末は1本しかない。**
-`turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`ボードから消えたissue` は
-すべて `abandonRunClaimed` へ入る。**`リトライの尽き` はそこへ1本だけ書く。**
-4箇所に同じ枝を並べると、後始末を直すたびに4箇所を直すことになる。
+**「実装のどこか」には、枝を決めている関数を書く。**フローの本体の関数ではない。
+`取り戻しの復帰の失敗` と `コメントの取り戻しの失敗` はどちらも `failCommentRecovery` を
+本体に持つが、**枝を決めているのは `ensureAgentComment` の中の3つの `if`** である
+（`AgentStartWithRetry` の失敗・`confirmStartup` の失敗・`hasRunComment` の再確認）。
+**本体の関数を書くと、読んだ人が条件を1つも持たない関数へ行き着く。**
 
-**引き金が重なる枝は、WHEN で除く。**`着手の途中の失敗` の WHEN からは
-「壊れた ref」と「pane の受け付け待ち」を外してある。除かないと `壊れたref` と
-`paneの断念` が同じ出来事を主張し、どちらへ進むかが記述から決まらない。
+**リトライを積む出口は4つあるが、尽きたときの後始末は `abandonRunClaimed` の1本しかない。**
+`turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`ボードから消えたissue` が
+そこへ入る。**`リトライの尽き` は1本だけ書く。**
 
-**`コメントの取り戻し` のステップ2 だけは条件ステップに変えた。**
-`復元の断念` を任意時点代替フローで書くと `rucm_validator.py` が W005 を出し、
-**このリポジトリで唯一の警告が残る。**真の側の並びは1つも変えていない。
+**引き金が重なる枝は、WHEN で除く。**`着手の途中の失敗` の WHEN からは「壊れた ref」
+「pane の受け付け待ち」「復帰つきの起動の失敗」を外してある。**`コメントの取り戻し` の2つの段は
+条件ステップにしてある**（任意時点代替フローにすると `rucm_validator.py` が W005 を出す）。
 
-**テストは10本すべてに貼った。**うち2本（`turnの終わりの取りこぼし`・`復元の断念`）は
-新しく書き、8本は既にあったテストに印を付けた。
-**`[W1]` に残るのは5本で、いずれも今回より前からの取りこぼしである。**
+### 6-18b. `復帰の失敗` は、立て直しの成否を事後条件に書かない
+
+**言いたいこと。**立て直しは前の Claude Code を止めずに同じ pane で行うので、
+**前が残っていると立て直しの起動そのものを受け付けてもらえない。**
+だから RESUME 先は「pane の受け付けを見る」の段であり、事後条件は成否を書かない。
+
+**`復帰の失敗` の WHEN は理由を絞らない。**`startRun` はエラーの種類を見ずに立て直すので、
+**pane が `agent_pane_busy` を30秒返し続けても、確認の画面で止まっても、
+`herdr.startup_timeout_ms` が経っても、同じ枝へ入る。**
+そのぶん、**ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの断念` の3本は、
+新しいセッション UUID の指定つきの起動でだけ通る。**3本の事後条件にそう書いてある。
+
+**`起動の待ち直し` は別である。**`confirmStartupWithRestart` は直前に使った引数をそのまま
+渡し直すので、**再着手ではその引数に `--resume` が入ったまま待ち直す。**だから事後条件に
+起動フラグの種類を書かない。**`起動の待ち直し` を1回も通らない失敗が2つある。**
+
+| `起動の待ち直し` を1回も通らない失敗 | 通らない理由 |
+| --- | --- |
+| `agent.start` そのものがエラーを返した | `launchClaude` が `AgentStartWithRetry` のエラーをその場で返し、待ち直しを持つ `confirmStartupWithRestart` を1度も呼ばない |
+| 起動直後の確認の画面で止まった | `confirmStartup` の `blocked` は `ErrStartupRetryable` を包まないので、`confirmStartupWithRestart` が期限を待たずに返る |
+
+**上の行は珍しくない。**pane が占められたままだと `AgentStartWithRetry` は
+`agent_pane_busy` を `agentStartBusyBudget`（30秒）粘ってからエラーを返す。
+**復帰つきの起動なら、その30秒のあとは `paneの断念` でも `起動の待ち直し` でもなく
+`復帰の失敗` である。**粘りは `AgentStartWithRetry` の中にあり、その戻り値が
+`if startErr != nil && resumeUUID != ""` へ落ちるためである。**だから `復帰の失敗` は
+「pane の受け付けを見る」の段からも枝を出す**（`BRANCH FROM BASIC FLOW 23,24`）。
+**枝を1本にすると、復帰つきの起動が pane の受け付けで打ち切られることになり、
+実装に無い経路を仕様が持つ。**
+
+**RESUME 先を「pane の受け付けを見る」の段にする理由。**`launchClaude` は pane の
+受け付けを粘る `AgentStartWithRetry` から始まるので、**起動の段へ直接戻すと、その検査が
+仕様から消える。**
+
+**起動の確認の段へは戻さない。**戻ったあとの状態が成功した起動と1バイトも変わらないのに
+枝が全部2本ずつになる（実測: 2026-08-27。確認の段へ戻すと92本、起動の段へ戻すと68本、
+受け付けの検査へ戻すと42本）。
+**起動フラグの選び分けも IF に割らない。**「起動フラグを決める」の段で1度だけ決め、
+どちらを渡したかはテストが `agent.start` の引数で見る。
+
+### 6-18c. 立て直しが通るかは、前の Claude Code が pane に残るかで割れる
+
+**言いたいこと。**continuo は agent を止められないので、立て直しの起動を受け付けてもらえるかは
+**前の Claude Code が pane に残るかで決まり、残るかどうかは失敗の理由ごとに違う。**
+だから `paneがまだ使えない` の事後条件は、pane の状態を1つに決めない。
+
+**continuo は agent を止められない。**[internal/herdr/agent.go](../../internal/herdr/agent.go) の
+method は start / prompt / read / get / list / wait / rename / send_keys の8つで、止める method が
+無い。`startRun` は同じ pane・同じ agent 名で `agent.start` をもう一度通す。
+
+| 復帰つきの起動が完了しなかった理由 | pane に何が残るか | 立て直しの起動 |
+| --- | --- | --- |
+| 前回のセッションが消えていた | `claude --resume` が落ち、シェルのプロンプトへ戻る | 受け付けられる |
+| 起動直後の確認の画面で止まった | `esc` で画面だけを畳んだ Claude Code が前面で走り続ける | **受け付けられない** |
+| 起動の確認が期限まで idle にならなかった | 前の Claude Code が前面で走り続けているか、落ちてシェルのプロンプトへ戻っているかのどちらか | **呼んでみるまで分からない** |
+
+**受け付けられない根拠。**herdr 0.8.2 の `herdr --skill` は
+"An available shell pane must be at its interactive prompt, with the shell itself in the
+foreground and no foreground command, editor, or agent running." （**訳:** 使えるシェルの pane とは、
+**対話プロンプトに来ていて、シェル自身が前面にあり、前面で走るコマンドも editor も agent も
+無いものである**）と書いている。**占められた pane へ `agent.start` を投げると
+`agent_pane_busy`（`agent target pane <pane の ID> is not an available shell`）が返る**
+（2026-08-27 に実測。pane で `sleep 180` を走らせてから `herdr agent start` を呼んだ）。
+
+**立て直しの起動を受け付けてもらえなかった run は `paneの断念` で人間へ渡す。**
+`paneがまだ使えない` で30秒粘り、**`paneの断念` が pane を閉じる。**
+閉じることで、残っていた前の Claude Code も終わる。
+**ここへ来るのは新しいセッション UUID の指定つきの起動だけである。**復帰つきの起動が
+pane の受け付けで落ちた場合は、その前に `復帰の失敗` が受け取って立て直しへ回している。
+
+**その30秒のあいだ、pane に残った Claude Code の hook は捨てられる。**`復帰の失敗` は
+hook の索引を新しいセッション UUID へ張り替えており（`bindSession` は同じ run の古い結び付きを
+消してから書く）、pane に残っているのは前回のセッション UUID を名乗る Claude Code である。
+`OnHook` は索引に無い `session_id` に偽を返し、hookserver がその hook を捨てる。
+
+### 6-18d. 引き渡しの通知は1つの run につき1件しか書けない
+
+**言いたいこと。**通知の枠は run につき1つである（`runState.takeHandoffPost`）。
+**打ち切りから `コメントの取り戻し` へ入ると、枠は打ち切りの理由が既に取っている。**
+だから失敗の2本のフローは「まだ1件も書いていなければ」と条件付きで書く。
+
+**`failCommentRecovery` から出る2本の枝は、実装の並びに合わせる。**
+[internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の
+`failCommentRecovery` は **pane を閉じ、Status を `failure_state` へ落としてから、
+引き渡しのコメントを1件書く**（`stopWorker` → `UpdateStatus` → `postHandoffComment`）。
+`コメントの取り戻しの失敗` と `取り戻しの復帰の失敗` の段はこの順である。
+
+**条件を落とすと、仕様が通っているテストと食い違う。**`リトライの尽き` は
+`abandonRunClaimed` が打ち切りの理由で枠を取ってから「run のコメントの有無を見る」の段を通す。
+**そこから失敗の2本のフローへ入っても、`postHandoffComment` は2件目を投稿せずにログへ落とす。**
+2本の事後条件は「人間へ引き渡す通知のコメントが1件だけある」と書き、
+**打ち切りから来た場合はその1件が打ち切りの理由であると添えてある。**
+`TestAbandon_打ち切りのときissueに残る理由が本当の理由である` がその挙動を確かめている。
+
+### 6-18e. テストの印は、同じ経路の1本にだけ付ける
+
+**言いたいこと。**印は42本のうち31本に付いている。**印の無い11本のうち4本は、
+6-18d で書き直した2本のフローの経路であり、テストが1本も無い。**
+同じ経路を2本のテストに付けるのもやめる。片方が消えても集計が満たされたままになる。
+
+**印の無い11本は `sh scripts/check-rucm.sh` の `[W1]` に出る。**
+
+| 印の無いフロー | `[W1]` に出る経路 | いつからの取りこぼしか |
+| --- | --- | --- |
+| `コメントの取り戻しの失敗` | P003・P008 | **段の並びを書き直したのに、テストが無い** |
+| `取り戻しの復帰の失敗` | P004・P009 | **足したのに、テストが無い** |
+| `既に同じStatus` を通る組み合わせ | P006・P007・P010 | 前からの取りこぼし |
+| turn ループを2周する経路 | P011 | 前からの取りこぼし |
+| `復帰の失敗` へ pane の受け付けから入る側 | P030 | **枝を足したのに、テストが無い** |
+| `壊れたref` と `消さないref` | P031・P032 | 前からの取りこぼし |
+
+**P030 にテストを付けていない理由。**その経路を踏むには `agent.start` に
+`agent_pane_busy` を `agentStartBusyBudget`（30秒）のあいだ返し続けさせる必要がある。
+`agentStartBusyBudget` は `internal/orchestrator/dispatch.go` の const で、
+**設定から短くできないので、テスト1本が30秒を使う。**同じ待ちを使う
+`TestRUCM_P029_paneが使えないまま期限を過ぎたら人間へ渡す` が既に1本あり、
+**もう1本足すとテストの所要時間が倍になる。**短くできるようにするのが先である。
+
+**新規の着手と再着手は同じ経路（P001）を通る。**6-18b のとおり「起動フラグを決める」の段を
+IF に割っていないので、CFG に枝が無く、2つを別の経路として指せない。
+**印を持つのは再着手の側1本だけにする。**「起動フラグを決める」の段の本文が、
+身元ファイルにセッション UUID があるほうを先に書いているためである。
+**新規の着手の側には、同じ経路を別の入力で通ることを doc コメントに書く。**
 
 ### 6-19. `着手を取り消す` の RUCM は、代替フローを18本のままにする
 

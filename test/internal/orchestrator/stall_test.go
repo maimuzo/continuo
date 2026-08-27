@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "465f03a9ce5babf39f52394708de534812f9fd67a2642cd94af81ac519febdf3", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -66,7 +66,7 @@ func TestCheckStalls_画面の版が増えている間は何時間かかって�
 	})
 }
 
-// {"RUCM-PATH": "P013"}
+// {"RUCM-PATH": "P015"}
 //
 // TestCheckStalls_画面の版が止まったまま閾値を超えたら打ち切る は、打ち切りの条件を確かめる。
 //

@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "37398757a1005de30b7599cb4b9826cd1fec70f90f3db6ddc514fbded5a4bf69"
+    "rucm_block_sha256": "18eb8b85f4284a994b00b0e73a0fcaf6f843329e9bec5228c88978f7e2bf154f"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -95,19 +95,19 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          23
+          25
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。止まった起動は新しいセッション UUID の指定つきの起動である。"
     },
     "起動の待ち直し": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          23
+          25
         ]
       },
-      "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。"
+      "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。もう一度渡す起動フラグは直前と同じ値であり、復帰つきの起動なら復帰つきのまま送り直す。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。"
     },
     "起動の断念": {
       "rfs": {
@@ -116,16 +116,16 @@
           2
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。断念した起動は新しいセッション UUID の指定つきの起動である。"
     },
     "paneがまだ使えない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          21
+          23
         ]
       },
-      "postcondition": "pane が起動を受け付けるまで待ち続けている。Claude Code はまだ起動していない。"
+      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままである。"
     },
     "paneの断念": {
       "rfs": {
@@ -134,13 +134,13 @@
           2
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。Claude Code は起動していない。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。断念した起動は新しいセッション UUID の指定つきの起動である。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。"
     },
     "turnループの重なり": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          24
+          26
         ]
       },
       "postcondition": "印は残っている。issue の Status は running_state の選択肢のままである。turn の本文は Claude Code に届いていない。worktree は残っている。"
@@ -149,7 +149,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          26
+          28
         ]
       },
       "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。"
@@ -158,7 +158,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          27
+          29
         ]
       },
       "postcondition": "issue の Status は failure_state の選択肢である。この turn の本文は Claude Code に届いていない。印は外れている。worktree は残っている。"
@@ -167,7 +167,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          29
+          31
         ]
       },
       "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。"
@@ -185,7 +185,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          31
+          33
         ]
       },
       "postcondition": "turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。"
@@ -194,7 +194,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          33
+          35
         ]
       },
       "postcondition": "turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。"
@@ -203,7 +203,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          36
+          38
         ]
       },
       "postcondition": "herdr の pane は閉じている。印は残っている。issue はボードから見えていない。worktree は残っている。"
@@ -212,7 +212,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          40
+          42
         ]
       },
       "postcondition": "issue にエージェントが書いたコメントが1件以上ある。turn 数は増えていない。issue の Status は表明の値の遷移先の選択肢である。"
@@ -224,7 +224,16 @@
           7
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。"
+    },
+    "取り戻しの復帰の失敗": {
+      "rfs": {
+        "flow": "コメントの取り戻し",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。"
     },
     "復元の断念": {
       "rfs": {
@@ -257,7 +266,7 @@
       "postcondition": "ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。"
     },
     "着手の途中の失敗": {
-      "when": "worktree の用意から Claude Code の起動までのあいだに git・ghq・herdr の呼び出しが、壊れた ref でも pane の受け付け待ちでもない理由で失敗した場合",
+      "when": "worktree の用意から Claude Code の起動までのあいだに git・ghq・herdr の呼び出しが、壊れた ref でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -268,13 +277,26 @@
       ],
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。作りかけの worktree は残っている。"
     },
+    "復帰の失敗": {
+      "when": "復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            23,
+            24
+          ]
+        }
+      ],
+      "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。"
+    },
     "権限の確認": {
       "when": "herdr の待ち受けが blocked を返した場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
           "steps": [
-            28
+            30
           ]
         }
       ],
@@ -286,7 +308,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            28
+            30
           ]
         }
       ],
@@ -298,7 +320,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            30
+            32
           ]
         }
       ],
@@ -310,7 +332,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            38
+            40
           ]
         }
       ],
@@ -322,7 +344,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            28
+            30
           ]
         }
       ],
@@ -440,188 +462,202 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。"
+      "statement": "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "システムは Claude Code の設定ファイルを worktree の外に書く。"
+      "statement": "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。"
     },
     {
       "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "システムは worktree の中に身元ファイルを書く。"
+      "statement": "システムは Claude Code の設定ファイルを worktree の外に書く。"
     },
     {
       "id": "BASIC FLOW-19",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 19,
-      "statement": "システムは herdr に workspace の pane の一覧を要求する。"
+      "statement": "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。"
     },
     {
       "id": "BASIC FLOW-20",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 20,
-      "statement": "システムは pane の label に owner/repo/issues/N を書く。"
+      "statement": "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。"
     },
     {
       "id": "BASIC FLOW-21",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
+      "statement": "システムは herdr に workspace の pane の一覧を要求する。"
     },
     {
       "id": "BASIC FLOW-22",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 22,
-      "statement": "システムは pane で Claude Code を起動する。"
+      "statement": "システムは pane の label に owner/repo/issues/N を書く。"
     },
     {
       "id": "BASIC FLOW-23",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 23,
-      "statement": "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。"
+      "statement": "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
     },
     {
       "id": "BASIC FLOW-24",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "システムは VALIDATES THAT この run の turn ループが1本も走っていない。"
+      "statement": "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。"
+    },
+    {
+      "id": "BASIC FLOW-25",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 25,
+      "statement": "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。"
     },
     {
       "id": "BASIC FLOW-26",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 26,
-      "statement": "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。"
-    },
-    {
-      "id": "BASIC FLOW-27",
-      "type": "condition",
-      "flow": "BASIC FLOW",
-      "step": 27,
-      "statement": "システムは VALIDATES THAT turn の本文を組み立てられる。"
+      "statement": "システムは VALIDATES THAT この run の turn ループが1本も走っていない。"
     },
     {
       "id": "BASIC FLOW-28",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 28,
-      "statement": "システムは Claude Code に turn の本文を送る。"
+      "statement": "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。"
     },
     {
       "id": "BASIC FLOW-29",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 29,
-      "statement": "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く。"
+      "statement": "システムは VALIDATES THAT turn の本文を組み立てられる。"
     },
     {
       "id": "BASIC FLOW-30",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 30,
-      "statement": "システムは Claude Code の Stop hook を受ける。"
+      "statement": "システムは Claude Code に turn の本文を送る。"
     },
     {
       "id": "BASIC FLOW-31",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 31,
-      "statement": "システムは VALIDATES THAT 受けた Stop hook の cwd が worktree の内側である。"
+      "statement": "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く。"
     },
     {
       "id": "BASIC FLOW-32",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 32,
-      "statement": "システムは settle_ms のあいだ待つ。"
+      "statement": "システムは Claude Code の Stop hook を受ける。"
     },
     {
       "id": "BASIC FLOW-33",
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 33,
-      "statement": "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。"
+      "statement": "システムは VALIDATES THAT 受けた Stop hook の cwd が worktree の内側である。"
     },
     {
       "id": "BASIC FLOW-34",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 34,
-      "statement": "システムは transcript から表明の行を読む。"
+      "statement": "システムは settle_ms のあいだ待つ。"
     },
     {
       "id": "BASIC FLOW-35",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 35,
-      "statement": "システムはボードの issue の Status を ID 指定で取り直す。"
+      "statement": "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。"
     },
     {
       "id": "BASIC FLOW-36",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 36,
-      "statement": "システムは VALIDATES THAT 取り直した issue がボードから見えている。"
+      "statement": "システムは transcript から表明の行を読む。"
     },
     {
       "id": "BASIC FLOW-37",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 37,
-      "statement": "UNTIL 表明の値が working でない"
+      "statement": "システムはボードの issue の Status を ID 指定で取り直す。"
     },
     {
       "id": "BASIC FLOW-38",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 38,
-      "statement": "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。"
+      "statement": "システムは VALIDATES THAT 取り直した issue がボードから見えている。"
     },
     {
       "id": "BASIC FLOW-39",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 39,
-      "statement": "システムは Status を動かした記録を issue にコメントする。"
+      "statement": "UNTIL 表明の値が working でない"
     },
     {
       "id": "BASIC FLOW-40",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 40,
-      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+      "statement": "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。"
     },
     {
       "id": "BASIC FLOW-41",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 41,
-      "statement": "システムは workspace_hooks の after_run を実行する。"
+      "statement": "システムは Status を動かした記録を issue にコメントする。"
     },
     {
       "id": "BASIC FLOW-42",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 42,
-      "statement": "システムは herdr の pane を閉じる。"
+      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
     },
     {
       "id": "BASIC FLOW-43",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 43,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "BASIC FLOW-44",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 44,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "BASIC FLOW-45",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 45,
       "statement": "システムは印を外す。"
     },
     {
@@ -839,14 +875,14 @@
       "type": "action",
       "flow": "起動の待ち直し",
       "step": 3,
-      "statement": "システムは pane で Claude Code をもう一度起動する。"
+      "statement": "システムは pane で Claude Code を、直前と同じ起動フラグでもう一度起動する。"
     },
     {
       "id": "起動の待ち直し-4",
       "type": "resume",
       "flow": "起動の待ち直し",
       "step": 4,
-      "statement": "RESUME STEP 23"
+      "statement": "RESUME STEP 25"
     },
     {
       "id": "起動の断念-1",
@@ -909,7 +945,7 @@
       "type": "resume",
       "flow": "paneがまだ使えない",
       "step": 3,
-      "statement": "RESUME STEP 21"
+      "statement": "RESUME STEP 23"
     },
     {
       "id": "paneの断念-1",
@@ -1147,7 +1183,7 @@
       "type": "resume",
       "flow": "騙りのhook",
       "step": 3,
-      "statement": "RESUME STEP 30"
+      "statement": "RESUME STEP 32"
     },
     {
       "id": "turnの継続-1",
@@ -1161,7 +1197,7 @@
       "type": "resume",
       "flow": "turnの継続",
       "step": 2,
-      "statement": "RESUME STEP 30"
+      "statement": "RESUME STEP 32"
     },
     {
       "id": "ボードから消えたissue-1",
@@ -1228,10 +1264,10 @@
     },
     {
       "id": "コメントの取り戻し-4",
-      "type": "action",
+      "type": "condition",
       "flow": "コメントの取り戻し",
       "step": 4,
-      "statement": "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。"
+      "statement": "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。"
     },
     {
       "id": "コメントの取り戻し-5",
@@ -1259,34 +1295,83 @@
       "type": "resume",
       "flow": "コメントの取り戻し",
       "step": 8,
-      "statement": "RESUME STEP 41"
+      "statement": "RESUME STEP 43"
     },
     {
       "id": "コメントの取り戻しの失敗-1",
       "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 1,
-      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+      "statement": "システムは herdr の pane を閉じる。"
     },
     {
       "id": "コメントの取り戻しの失敗-2",
       "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 2,
-      "statement": "システムは herdr の pane を閉じる。"
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
     },
     {
       "id": "コメントの取り戻しの失敗-3",
       "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 3,
-      "statement": "システムは印を外す。"
+      "statement": "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。"
     },
     {
       "id": "コメントの取り戻しの失敗-4",
-      "type": "abort",
+      "type": "action",
       "flow": "コメントの取り戻しの失敗",
       "step": 4,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "コメントの取り戻しの失敗-5",
+      "type": "abort",
+      "flow": "コメントの取り戻しの失敗",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-1",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 1,
+      "statement": "システムは復帰できなかった理由を記録に残す。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-2",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 2,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-3",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 3,
+      "statement": "システムはボードの issue の Status に failure_state の選択肢を書く。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-4",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 4,
+      "statement": "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-5",
+      "type": "action",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 5,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "取り戻しの復帰の失敗-6",
+      "type": "abort",
+      "flow": "取り戻しの復帰の失敗",
+      "step": 6,
       "statement": "ABORT"
     },
     {
@@ -1402,6 +1487,62 @@
       "statement": "ABORT"
     },
     {
+      "id": "復帰の失敗-1",
+      "type": "action",
+      "flow": "復帰の失敗",
+      "step": 1,
+      "statement": "システムは新しいセッション UUID を採番する。"
+    },
+    {
+      "id": "復帰の失敗-2",
+      "type": "action",
+      "flow": "復帰の失敗",
+      "step": 2,
+      "statement": "システムは hook の引き当ての索引を新しいセッション UUID へ張り替える。"
+    },
+    {
+      "id": "復帰の失敗-3",
+      "type": "action",
+      "flow": "復帰の失敗",
+      "step": 3,
+      "statement": "システムはトークンの集計の基準を作り直す。"
+    },
+    {
+      "id": "復帰の失敗-4",
+      "type": "action",
+      "flow": "復帰の失敗",
+      "step": 4,
+      "statement": "システムは身元ファイルのセッション UUID を新しいセッション UUID へ書き直し、書き直せなければ警告を記録に残して先へ進む。"
+    },
+    {
+      "id": "復帰の失敗-5",
+      "type": "action",
+      "flow": "復帰の失敗",
+      "step": 5,
+      "statement": "システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す。"
+    },
+    {
+      "id": "復帰の失敗-6",
+      "type": "action",
+      "flow": "復帰の失敗",
+      "step": 6,
+      "statement": "システムは起動フラグを新しいセッション UUID の指定つきへ差し替える。"
+    },
+    {
+      "id": "復帰の失敗-7",
+      "type": "action",
+      "flow": "復帰の失敗",
+      "step": 7,
+      "statement": "システムは前の Claude Code を止めずに同じ pane を使い続ける。"
+    },
+    {
+      "id": "復帰の失敗-8",
+      "type": "resume",
+      "flow": "復帰の失敗",
+      "step": 8,
+      "statement": "RESUME STEP 23"
+    },
+    {
       "id": "権限の確認-1",
       "type": "action",
       "flow": "権限の確認",
@@ -1511,7 +1652,7 @@
       "type": "resume",
       "flow": "既に同じStatus",
       "step": 2,
-      "statement": "RESUME STEP 40"
+      "statement": "RESUME STEP 42"
     },
     {
       "id": "一時的な送信の失敗-1",
@@ -1691,7 +1832,7 @@
       "from": "BASIC FLOW-15",
       "to": "着手の途中の失敗-1",
       "kind": "global",
-      "condition": "worktree の用意から Claude Code の起動までのあいだに git・ghq・herdr の呼び出しが、壊れた ref でも pane の受け付け待ちでもない理由で失敗した場合"
+      "condition": "worktree の用意から Claude Code の起動までのあいだに git・ghq・herdr の呼び出しが、壊れた ref でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合"
     },
     {
       "from": "BASIC FLOW-16",
@@ -1721,14 +1862,7 @@
     {
       "from": "BASIC FLOW-21",
       "to": "BASIC FLOW-22",
-      "kind": "true",
-      "condition": "pane が Claude Code の起動を受け付ける"
-    },
-    {
-      "from": "BASIC FLOW-21",
-      "to": "paneがまだ使えない-1",
-      "kind": "false",
-      "condition": "NOT pane が Claude Code の起動を受け付ける"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-22",
@@ -1739,90 +1873,84 @@
       "from": "BASIC FLOW-23",
       "to": "BASIC FLOW-24",
       "kind": "true",
-      "condition": "Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
+      "condition": "pane が Claude Code の起動を受け付ける"
     },
     {
       "from": "BASIC FLOW-23",
+      "to": "paneがまだ使えない-1",
+      "kind": "false",
+      "condition": "NOT pane が Claude Code の起動を受け付ける"
+    },
+    {
+      "from": "BASIC FLOW-23",
+      "to": "復帰の失敗-1",
+      "kind": "global",
+      "condition": "復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合"
+    },
+    {
+      "from": "BASIC FLOW-24",
+      "to": "BASIC FLOW-25",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-24",
+      "to": "復帰の失敗-1",
+      "kind": "global",
+      "condition": "復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合"
+    },
+    {
+      "from": "BASIC FLOW-25",
+      "to": "BASIC FLOW-26",
+      "kind": "true",
+      "condition": "Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
+    },
+    {
+      "from": "BASIC FLOW-25",
       "to": "起動直後の確認画面-1",
       "kind": "false",
       "condition": "NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
     },
     {
-      "from": "BASIC FLOW-23",
+      "from": "BASIC FLOW-25",
       "to": "起動の待ち直し-1",
       "kind": "false",
       "condition": "NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である"
     },
     {
-      "from": "BASIC FLOW-24",
-      "to": "BASIC FLOW-26",
+      "from": "BASIC FLOW-26",
+      "to": "BASIC FLOW-28",
       "kind": "true",
       "condition": "この run の turn ループが1本も走っていない"
     },
     {
-      "from": "BASIC FLOW-24",
+      "from": "BASIC FLOW-26",
       "to": "turnループの重なり-1",
       "kind": "false",
       "condition": "NOT この run の turn ループが1本も走っていない"
     },
     {
-      "from": "BASIC FLOW-26",
-      "to": "BASIC FLOW-27",
+      "from": "BASIC FLOW-28",
+      "to": "BASIC FLOW-29",
       "kind": "true",
       "condition": "turn 数が max_dispatch_turns に達していない"
     },
     {
-      "from": "BASIC FLOW-26",
+      "from": "BASIC FLOW-28",
       "to": "上限での打ち切り-1",
       "kind": "false",
       "condition": "NOT turn 数が max_dispatch_turns に達していない"
     },
     {
-      "from": "BASIC FLOW-27",
-      "to": "BASIC FLOW-28",
+      "from": "BASIC FLOW-29",
+      "to": "BASIC FLOW-30",
       "kind": "true",
       "condition": "turn の本文を組み立てられる"
     },
     {
-      "from": "BASIC FLOW-27",
+      "from": "BASIC FLOW-29",
       "to": "本文の組み立ての失敗-1",
       "kind": "false",
       "condition": "NOT turn の本文を組み立てられる"
-    },
-    {
-      "from": "BASIC FLOW-28",
-      "to": "BASIC FLOW-29",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-28",
-      "to": "権限の確認-1",
-      "kind": "global",
-      "condition": "herdr の待ち受けが blocked を返した場合"
-    },
-    {
-      "from": "BASIC FLOW-28",
-      "to": "送信の失敗-1",
-      "kind": "global",
-      "condition": "herdr が指示の送信そのものを断った場合"
-    },
-    {
-      "from": "BASIC FLOW-28",
-      "to": "一時的な送信の失敗-1",
-      "kind": "global",
-      "condition": "herdr の呼び出しが一時的な理由で失敗した場合"
-    },
-    {
-      "from": "BASIC FLOW-29",
-      "to": "BASIC FLOW-30",
-      "kind": "true",
-      "condition": "herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く"
-    },
-    {
-      "from": "BASIC FLOW-29",
-      "to": "turnの終わりの取りこぼし-1",
-      "kind": "false",
-      "condition": "NOT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く"
     },
     {
       "from": "BASIC FLOW-30",
@@ -1831,21 +1959,33 @@
     },
     {
       "from": "BASIC FLOW-30",
-      "to": "無音の打ち切り-1",
+      "to": "権限の確認-1",
       "kind": "global",
-      "condition": "turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合"
+      "condition": "herdr の待ち受けが blocked を返した場合"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "送信の失敗-1",
+      "kind": "global",
+      "condition": "herdr が指示の送信そのものを断った場合"
+    },
+    {
+      "from": "BASIC FLOW-30",
+      "to": "一時的な送信の失敗-1",
+      "kind": "global",
+      "condition": "herdr の呼び出しが一時的な理由で失敗した場合"
     },
     {
       "from": "BASIC FLOW-31",
       "to": "BASIC FLOW-32",
       "kind": "true",
-      "condition": "受けた Stop hook の cwd が worktree の内側である"
+      "condition": "herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く"
     },
     {
       "from": "BASIC FLOW-31",
-      "to": "騙りのhook-1",
+      "to": "turnの終わりの取りこぼし-1",
       "kind": "false",
-      "condition": "NOT 受けた Stop hook の cwd が worktree の内側である"
+      "condition": "NOT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く"
     },
     {
       "from": "BASIC FLOW-32",
@@ -1853,16 +1993,22 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-33",
-      "to": "BASIC FLOW-34",
-      "kind": "true",
-      "condition": "settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない"
+      "from": "BASIC FLOW-32",
+      "to": "無音の打ち切り-1",
+      "kind": "global",
+      "condition": "turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合"
     },
     {
       "from": "BASIC FLOW-33",
-      "to": "turnの継続-1",
+      "to": "BASIC FLOW-34",
+      "kind": "true",
+      "condition": "受けた Stop hook の cwd が worktree の内側である"
+    },
+    {
+      "from": "BASIC FLOW-33",
+      "to": "騙りのhook-1",
       "kind": "false",
-      "condition": "NOT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない"
+      "condition": "NOT 受けた Stop hook の cwd が worktree の内側である"
     },
     {
       "from": "BASIC FLOW-34",
@@ -1872,59 +2018,59 @@
     {
       "from": "BASIC FLOW-35",
       "to": "BASIC FLOW-36",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない"
+    },
+    {
+      "from": "BASIC FLOW-35",
+      "to": "turnの継続-1",
+      "kind": "false",
+      "condition": "NOT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない"
     },
     {
       "from": "BASIC FLOW-36",
       "to": "BASIC FLOW-37",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-37",
+      "to": "BASIC FLOW-38",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-38",
+      "to": "BASIC FLOW-39",
       "kind": "true",
       "condition": "取り直した issue がボードから見えている"
     },
     {
-      "from": "BASIC FLOW-36",
+      "from": "BASIC FLOW-38",
       "to": "ボードから消えたissue-1",
       "kind": "false",
       "condition": "NOT 取り直した issue がボードから見えている"
     },
     {
-      "from": "BASIC FLOW-37",
-      "to": "BASIC FLOW-38",
+      "from": "BASIC FLOW-39",
+      "to": "BASIC FLOW-40",
       "kind": "true",
       "condition": "表明の値が working でない"
     },
     {
-      "from": "BASIC FLOW-37",
-      "to": "BASIC FLOW-26",
+      "from": "BASIC FLOW-39",
+      "to": "BASIC FLOW-28",
       "kind": "loop",
       "condition": "NOT 表明の値が working でない"
     },
     {
-      "from": "BASIC FLOW-38",
-      "to": "BASIC FLOW-39",
+      "from": "BASIC FLOW-40",
+      "to": "BASIC FLOW-41",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-38",
+      "from": "BASIC FLOW-40",
       "to": "既に同じStatus-1",
       "kind": "global",
       "condition": "取り直した Status が表明の値の遷移先の選択肢と同じ場合"
-    },
-    {
-      "from": "BASIC FLOW-39",
-      "to": "BASIC FLOW-40",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-40",
-      "to": "BASIC FLOW-41",
-      "kind": "true",
-      "condition": "issue に今回の run が書いたコメントがある"
-    },
-    {
-      "from": "BASIC FLOW-40",
-      "to": "コメントの取り戻し-1",
-      "kind": "false",
-      "condition": "NOT issue に今回の run が書いたコメントがある"
     },
     {
       "from": "BASIC FLOW-41",
@@ -1934,6 +2080,23 @@
     {
       "from": "BASIC FLOW-42",
       "to": "BASIC FLOW-43",
+      "kind": "true",
+      "condition": "issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-42",
+      "to": "コメントの取り戻し-1",
+      "kind": "false",
+      "condition": "NOT issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-43",
+      "to": "BASIC FLOW-44",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-44",
+      "to": "BASIC FLOW-45",
       "kind": "seq"
     },
     {
@@ -2050,7 +2213,7 @@
     },
     {
       "from": "起動の待ち直し-4",
-      "to": "BASIC FLOW-23",
+      "to": "BASIC FLOW-25",
       "kind": "resume"
     },
     {
@@ -2097,7 +2260,7 @@
     },
     {
       "from": "paneがまだ使えない-3",
-      "to": "BASIC FLOW-21",
+      "to": "BASIC FLOW-23",
       "kind": "resume"
     },
     {
@@ -2244,7 +2407,7 @@
     },
     {
       "from": "騙りのhook-3",
-      "to": "BASIC FLOW-30",
+      "to": "BASIC FLOW-32",
       "kind": "resume"
     },
     {
@@ -2254,7 +2417,7 @@
     },
     {
       "from": "turnの継続-2",
-      "to": "BASIC FLOW-30",
+      "to": "BASIC FLOW-32",
       "kind": "resume"
     },
     {
@@ -2307,7 +2470,14 @@
     {
       "from": "コメントの取り戻し-4",
       "to": "コメントの取り戻し-5",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる"
+    },
+    {
+      "from": "コメントの取り戻し-4",
+      "to": "取り戻しの復帰の失敗-1",
+      "kind": "false",
+      "condition": "NOT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる"
     },
     {
       "from": "コメントの取り戻し-5",
@@ -2333,7 +2503,7 @@
     },
     {
       "from": "コメントの取り戻し-8",
-      "to": "BASIC FLOW-41",
+      "to": "BASIC FLOW-43",
       "kind": "resume"
     },
     {
@@ -2349,6 +2519,36 @@
     {
       "from": "コメントの取り戻しの失敗-3",
       "to": "コメントの取り戻しの失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "コメントの取り戻しの失敗-4",
+      "to": "コメントの取り戻しの失敗-5",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-1",
+      "to": "取り戻しの復帰の失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-2",
+      "to": "取り戻しの復帰の失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-3",
+      "to": "取り戻しの復帰の失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-4",
+      "to": "取り戻しの復帰の失敗-5",
+      "kind": "seq"
+    },
+    {
+      "from": "取り戻しの復帰の失敗-5",
+      "to": "取り戻しの復帰の失敗-6",
       "kind": "seq"
     },
     {
@@ -2429,6 +2629,46 @@
       "kind": "seq"
     },
     {
+      "from": "復帰の失敗-1",
+      "to": "復帰の失敗-2",
+      "kind": "seq"
+    },
+    {
+      "from": "復帰の失敗-2",
+      "to": "復帰の失敗-3",
+      "kind": "seq"
+    },
+    {
+      "from": "復帰の失敗-3",
+      "to": "復帰の失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "復帰の失敗-4",
+      "to": "復帰の失敗-5",
+      "kind": "seq"
+    },
+    {
+      "from": "復帰の失敗-5",
+      "to": "復帰の失敗-6",
+      "kind": "seq"
+    },
+    {
+      "from": "復帰の失敗-6",
+      "to": "復帰の失敗-7",
+      "kind": "seq"
+    },
+    {
+      "from": "復帰の失敗-7",
+      "to": "復帰の失敗-8",
+      "kind": "seq"
+    },
+    {
+      "from": "復帰の失敗-8",
+      "to": "BASIC FLOW-23",
+      "kind": "resume"
+    },
+    {
       "from": "権限の確認-1",
       "to": "権限の確認-2",
       "kind": "seq"
@@ -2490,7 +2730,7 @@
     },
     {
       "from": "既に同じStatus-2",
-      "to": "BASIC FLOW-40",
+      "to": "BASIC FLOW-42",
       "kind": "resume"
     },
     {
@@ -2540,8 +2780,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -2557,7 +2797,9 @@
         "BASIC FLOW-40",
         "BASIC FLOW-41",
         "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2575,13 +2817,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -2634,8 +2878,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -2649,6 +2893,8 @@
         "BASIC FLOW-38",
         "BASIC FLOW-39",
         "BASIC FLOW-40",
+        "BASIC FLOW-41",
+        "BASIC FLOW-42",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -2657,9 +2903,9 @@
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
         "コメントの取り戻し-8",
-        "BASIC FLOW-41",
-        "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2677,13 +2923,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -2705,11 +2953,11 @@
         "システムは herdr の pane を閉じる。",
         "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
-        "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。",
         "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 41",
+        "RESUME STEP 43",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。"
@@ -2719,7 +2967,7 @@
       "id": "P003",
       "terminal": "abort",
       "terminal_flow": "コメントの取り戻しの失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2745,8 +2993,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -2760,6 +3008,8 @@
         "BASIC FLOW-38",
         "BASIC FLOW-39",
         "BASIC FLOW-40",
+        "BASIC FLOW-41",
+        "BASIC FLOW-42",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -2770,7 +3020,8 @@
         "コメントの取り戻しの失敗-1",
         "コメントの取り戻しの失敗-2",
         "コメントの取り戻しの失敗-3",
-        "コメントの取り戻しの失敗-4"
+        "コメントの取り戻しの失敗-4",
+        "コメントの取り戻しの失敗-5"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2788,13 +3039,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -2816,22 +3069,23 @@
         "システムは herdr の pane を閉じる。",
         "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
-        "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。",
         "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは herdr の pane を閉じる。",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
         "システムは印を外す。",
         "ABORT"
       ]
     },
     {
       "id": "P004",
-      "terminal": "end",
-      "terminal_flow": "BASIC FLOW",
-      "postcondition": "issue の Status は表明の値の遷移先の選択肢である。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。",
+      "terminal": "abort",
+      "terminal_flow": "取り戻しの復帰の失敗",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2857,8 +3111,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -2872,14 +3126,18 @@
         "BASIC FLOW-38",
         "BASIC FLOW-39",
         "BASIC FLOW-40",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "復元の断念-1",
-        "復元の断念-2",
-        "コメントの取り戻し-8",
         "BASIC FLOW-41",
         "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "取り戻しの復帰の失敗-1",
+        "取り戻しの復帰の失敗-2",
+        "取り戻しの復帰の失敗-3",
+        "取り戻しの復帰の失敗-4",
+        "取り戻しの復帰の失敗-5",
+        "取り戻しの復帰の失敗-6"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2897,13 +3155,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -2924,13 +3184,15 @@
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
         "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
-        "CONDITION: NOT 身元ファイルからセッション UUID と設定ファイルのパスを読める",
-        "システムは復元の材料が足りない理由を記録に残す。",
-        "RESUME STEP 8",
-        "RESUME STEP 41",
-        "システムは workspace_hooks の after_run を実行する。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。",
+        "CONDITION: NOT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる",
+        "システムは復帰できなかった理由を記録に残す。",
         "システムは herdr の pane を閉じる。",
-        "システムは印を外す。"
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは印を外す。",
+        "ABORT"
       ]
     },
     {
@@ -2963,8 +3225,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -2976,12 +3238,18 @@
         "BASIC FLOW-36",
         "BASIC FLOW-37",
         "BASIC FLOW-38",
-        "既に同じStatus-1",
-        "既に同じStatus-2",
+        "BASIC FLOW-39",
         "BASIC FLOW-40",
         "BASIC FLOW-41",
         "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "復元の断念-1",
+        "復元の断念-2",
+        "コメントの取り戻し-8",
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -2999,13 +3267,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3021,10 +3291,15 @@
         "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
         "UNTIL 表明の値が working でない",
         "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
-        "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
-        "システムはボードへ書き込まない。",
-        "RESUME STEP 40",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
+        "CONDITION: NOT 身元ファイルからセッション UUID と設定ファイルのパスを読める",
+        "システムは復元の材料が足りない理由を記録に残す。",
+        "RESUME STEP 8",
+        "RESUME STEP 43",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。"
@@ -3060,8 +3335,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -3073,20 +3348,14 @@
         "BASIC FLOW-36",
         "BASIC FLOW-37",
         "BASIC FLOW-38",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
         "既に同じStatus-1",
         "既に同じStatus-2",
-        "BASIC FLOW-40",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "コメントの取り戻し-3",
-        "コメントの取り戻し-4",
-        "コメントの取り戻し-5",
-        "コメントの取り戻し-6",
-        "コメントの取り戻し-7",
-        "コメントの取り戻し-8",
-        "BASIC FLOW-41",
         "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -3104,13 +3373,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3128,17 +3399,8 @@
         "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
         "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
         "システムはボードへ書き込まない。",
-        "RESUME STEP 40",
+        "RESUME STEP 42",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
-        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
-        "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。",
-        "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
-        "システムは issue のコメントを読み直す。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 41",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。"
@@ -3146,121 +3408,6 @@
     },
     {
       "id": "P007",
-      "terminal": "abort",
-      "terminal_flow": "コメントの取り戻しの失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。worktree は残っている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "BASIC FLOW-13",
-        "BASIC FLOW-14",
-        "BASIC FLOW-15",
-        "BASIC FLOW-16",
-        "BASIC FLOW-17",
-        "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-20",
-        "BASIC FLOW-21",
-        "BASIC FLOW-22",
-        "BASIC FLOW-23",
-        "BASIC FLOW-24",
-        "BASIC FLOW-26",
-        "BASIC FLOW-27",
-        "BASIC FLOW-28",
-        "BASIC FLOW-29",
-        "BASIC FLOW-30",
-        "BASIC FLOW-31",
-        "BASIC FLOW-32",
-        "BASIC FLOW-33",
-        "BASIC FLOW-34",
-        "BASIC FLOW-35",
-        "BASIC FLOW-36",
-        "BASIC FLOW-37",
-        "BASIC FLOW-38",
-        "既に同じStatus-1",
-        "既に同じStatus-2",
-        "BASIC FLOW-40",
-        "コメントの取り戻し-1",
-        "コメントの取り戻し-2",
-        "コメントの取り戻し-3",
-        "コメントの取り戻し-4",
-        "コメントの取り戻し-5",
-        "コメントの取り戻し-6",
-        "コメントの取り戻し-7",
-        "コメントの取り戻しの失敗-1",
-        "コメントの取り戻しの失敗-2",
-        "コメントの取り戻しの失敗-3",
-        "コメントの取り戻しの失敗-4"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから active_states の issue の一覧を取る。",
-        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
-        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
-        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
-        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
-        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
-        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
-        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
-        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
-        "システムは先頭の issue に印を付ける。",
-        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
-        "システムはボードの issue の Status に running_state の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "システムは workspace.root の下に issue の worktree を作る。",
-        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
-        "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
-        "システムは herdr に workspace の pane の一覧を要求する。",
-        "システムは pane の label に owner/repo/issues/N を書く。",
-        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
-        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
-        "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
-        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
-        "システムは VALIDATES THAT turn の本文を組み立てられる。",
-        "システムは Claude Code に turn の本文を送る。",
-        "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く。",
-        "システムは Claude Code の Stop hook を受ける。",
-        "システムは VALIDATES THAT 受けた Stop hook の cwd が worktree の内側である。",
-        "システムは settle_ms のあいだ待つ。",
-        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
-        "システムは transcript から表明の行を読む。",
-        "システムはボードの issue の Status を ID 指定で取り直す。",
-        "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
-        "UNTIL 表明の値が working でない",
-        "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
-        "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
-        "システムはボードへ書き込まない。",
-        "RESUME STEP 40",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムは herdr の pane を閉じる。",
-        "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
-        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
-        "システムは pane で Claude Code をセッション UUID の復帰つきで起動する。",
-        "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
-        "システムは issue のコメントを読み直す。",
-        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "CONDITION: NOT issue に今回の run が書いたコメントがある",
-        "システムはボードの issue の Status に failure_state の選択肢を書く。",
-        "システムは herdr の pane を閉じる。",
-        "システムは印を外す。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P008",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "issue の Status は表明の値の遷移先の選択肢である。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。",
@@ -3289,8 +3436,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -3302,17 +3449,22 @@
         "BASIC FLOW-36",
         "BASIC FLOW-37",
         "BASIC FLOW-38",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
         "既に同じStatus-1",
         "既に同じStatus-2",
-        "BASIC FLOW-40",
+        "BASIC FLOW-42",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
-        "復元の断念-1",
-        "復元の断念-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "コメントの取り戻し-5",
+        "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
         "コメントの取り戻し-8",
-        "BASIC FLOW-41",
-        "BASIC FLOW-42",
-        "BASIC FLOW-43"
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -3330,13 +3482,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3354,7 +3508,360 @@
         "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
         "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
         "システムはボードへ書き込まない。",
-        "RESUME STEP 40",
+        "RESUME STEP 42",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。",
+        "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
+        "システムは issue のコメントを読み直す。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "RESUME STEP 43",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "コメントの取り戻しの失敗",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
+        "BASIC FLOW-37",
+        "BASIC FLOW-38",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "BASIC FLOW-42",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "コメントの取り戻し-5",
+        "コメントの取り戻し-6",
+        "コメントの取り戻し-7",
+        "コメントの取り戻しの失敗-1",
+        "コメントの取り戻しの失敗-2",
+        "コメントの取り戻しの失敗-3",
+        "コメントの取り戻しの失敗-4",
+        "コメントの取り戻しの失敗-5"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは VALIDATES THAT turn の本文を組み立てられる。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは VALIDATES THAT 受けた Stop hook の cwd が worktree の内側である。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
+        "システムは transcript から表明の行を読む。",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "UNTIL 表明の値が working でない",
+        "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+        "システムはボードへ書き込まない。",
+        "RESUME STEP 42",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。",
+        "システムは Claude Code に作業の内容の issue のコメントへの記録を要求する。",
+        "システムは issue のコメントを読み直す。",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "取り戻しの復帰の失敗",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件だけある。打ち切りや失敗で先に理由を書いていた場合は、その1件が残り、成果の確認の依頼は書き足さない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
+        "BASIC FLOW-37",
+        "BASIC FLOW-38",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "BASIC FLOW-42",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "コメントの取り戻し-3",
+        "コメントの取り戻し-4",
+        "取り戻しの復帰の失敗-1",
+        "取り戻しの復帰の失敗-2",
+        "取り戻しの復帰の失敗-3",
+        "取り戻しの復帰の失敗-4",
+        "取り戻しの復帰の失敗-5",
+        "取り戻しの復帰の失敗-6"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは VALIDATES THAT turn の本文を組み立てられる。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは VALIDATES THAT 受けた Stop hook の cwd が worktree の内側である。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
+        "システムは transcript から表明の行を読む。",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "UNTIL 表明の値が working でない",
+        "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+        "システムはボードへ書き込まない。",
+        "RESUME STEP 42",
+        "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
+        "CONDITION: NOT issue に今回の run が書いたコメントがある",
+        "システムは herdr の pane を閉じる。",
+        "システムは VALIDATES THAT 身元ファイルからセッション UUID と設定ファイルのパスを読める。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き直し、その中の pane を pane.list で引く。",
+        "システムは VALIDATES THAT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる。",
+        "CONDITION: NOT pane で Claude Code をセッション UUID の復帰つきで起動でき、agent_status が idle または done になる",
+        "システムは復帰できなかった理由を記録に残す。",
+        "システムは herdr の pane を閉じる。",
+        "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは、引き渡しの通知をまだ1件も書いていなければ、issue に成果を人間に確かめてほしいことを1件コメントする。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "issue の Status は表明の値の遷移先の選択肢である。issue にエージェントが書いたコメントが1件以上ある。herdr の pane は閉じている。印は外れている。worktree と branch は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
+        "BASIC FLOW-36",
+        "BASIC FLOW-37",
+        "BASIC FLOW-38",
+        "BASIC FLOW-39",
+        "BASIC FLOW-40",
+        "既に同じStatus-1",
+        "既に同じStatus-2",
+        "BASIC FLOW-42",
+        "コメントの取り戻し-1",
+        "コメントの取り戻し-2",
+        "復元の断念-1",
+        "復元の断念-2",
+        "コメントの取り戻し-8",
+        "BASIC FLOW-43",
+        "BASIC FLOW-44",
+        "BASIC FLOW-45"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
+        "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
+        "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
+        "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
+        "システムは VALIDATES THAT turn の本文を組み立てられる。",
+        "システムは Claude Code に turn の本文を送る。",
+        "システムは VALIDATES THAT herdr の待ち受けが返ってから settle_ms のあいだに Claude Code の Stop hook が届く。",
+        "システムは Claude Code の Stop hook を受ける。",
+        "システムは VALIDATES THAT 受けた Stop hook の cwd が worktree の内側である。",
+        "システムは settle_ms のあいだ待つ。",
+        "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
+        "システムは transcript から表明の行を読む。",
+        "システムはボードの issue の Status を ID 指定で取り直す。",
+        "システムは VALIDATES THAT 取り直した issue がボードから見えている。",
+        "UNTIL 表明の値が working でない",
+        "システムはボードの issue の Status に表明の値の遷移先の選択肢を書く。",
+        "CONDITION: 取り直した Status が表明の値の遷移先の選択肢と同じ場合",
+        "システムはボードへ書き込まない。",
+        "RESUME STEP 42",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -3362,14 +3869,14 @@
         "CONDITION: NOT 身元ファイルからセッション UUID と設定ファイルのパスを読める",
         "システムは復元の材料が足りない理由を記録に残す。",
         "RESUME STEP 8",
-        "RESUME STEP 41",
+        "RESUME STEP 43",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。"
       ]
     },
     {
-      "id": "P009",
+      "id": "P011",
       "terminal": "cycle",
       "terminal_flow": "",
       "postcondition": "",
@@ -3398,8 +3905,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -3410,7 +3917,9 @@
         "BASIC FLOW-35",
         "BASIC FLOW-36",
         "BASIC FLOW-37",
-        "BASIC FLOW-26"
+        "BASIC FLOW-38",
+        "BASIC FLOW-39",
+        "BASIC FLOW-28"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -3428,13 +3937,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3454,7 +3965,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P012",
       "terminal": "abort",
       "terminal_flow": "ボードから消えたissue",
       "postcondition": "herdr の pane は閉じている。印は残っている。issue はボードから見えていない。worktree は残っている。",
@@ -3483,8 +3994,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
@@ -3494,6 +4005,8 @@
         "BASIC FLOW-34",
         "BASIC FLOW-35",
         "BASIC FLOW-36",
+        "BASIC FLOW-37",
+        "BASIC FLOW-38",
         "ボードから消えたissue-1",
         "ボードから消えたissue-2",
         "ボードから消えたissue-3",
@@ -3517,13 +4030,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3547,7 +4062,7 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P013",
       "terminal": "cycle",
       "terminal_flow": "turnの継続",
       "postcondition": "turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。",
@@ -3576,17 +4091,19 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
         "BASIC FLOW-31",
         "BASIC FLOW-32",
         "BASIC FLOW-33",
+        "BASIC FLOW-34",
+        "BASIC FLOW-35",
         "turnの継続-1",
         "turnの継続-2",
-        "BASIC FLOW-30"
+        "BASIC FLOW-32"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -3604,13 +4121,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3623,12 +4142,12 @@
         "システムは VALIDATES THAT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない。",
         "CONDITION: NOT settle_ms のあいだに task-notification で始まる UserPromptSubmit が届かない",
         "システムは turn がまだ続いているとみなす。",
-        "RESUME STEP 30",
+        "RESUME STEP 32",
         "システムは Claude Code の Stop hook を受ける。"
       ]
     },
     {
-      "id": "P012",
+      "id": "P014",
       "terminal": "cycle",
       "terminal_flow": "騙りのhook",
       "postcondition": "turn 数は増えていない。システムは次の Stop hook を待っている。issue の Status は running_state の選択肢のままである。",
@@ -3657,16 +4176,18 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
         "BASIC FLOW-31",
+        "BASIC FLOW-32",
+        "BASIC FLOW-33",
         "騙りのhook-1",
         "騙りのhook-2",
         "騙りのhook-3",
-        "BASIC FLOW-30"
+        "BASIC FLOW-32"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -3684,13 +4205,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3702,12 +4225,12 @@
         "CONDITION: NOT 受けた Stop hook の cwd が worktree の内側である",
         "システムはこの hook を捨てる。",
         "システムは捨てた理由と session_id を記録に残す。",
-        "RESUME STEP 30",
+        "RESUME STEP 32",
         "システムは Claude Code の Stop hook を受ける。"
       ]
     },
     {
-      "id": "P013",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "無音の打ち切り",
       "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
@@ -3736,11 +4259,13 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
         "BASIC FLOW-30",
+        "BASIC FLOW-31",
+        "BASIC FLOW-32",
         "無音の打ち切り-1",
         "無音の打ち切り-2",
         "無音の打ち切り-3",
@@ -3763,13 +4288,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3786,7 +4313,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P016",
       "terminal": "abort",
       "terminal_flow": "turnの終わりの取りこぼし",
       "postcondition": "herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
@@ -3815,10 +4342,12 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
         "turnの終わりの取りこぼし-1",
         "turnの終わりの取りこぼし-2",
         "turnの終わりの取りこぼし-3",
@@ -3842,13 +4371,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3865,7 +4396,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P017",
       "terminal": "abort",
       "terminal_flow": "リトライの尽き",
       "postcondition": "issue の Status は failure_state の選択肢である。印は外れている。issue に打ち切りの理由のコメントが1件ある。worktree は残っている。",
@@ -3894,10 +4425,12 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
         "BASIC FLOW-29",
+        "BASIC FLOW-30",
+        "BASIC FLOW-31",
         "turnの終わりの取りこぼし-1",
         "リトライの尽き-1",
         "リトライの尽き-2",
@@ -3923,13 +4456,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3949,7 +4484,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P018",
       "terminal": "abort",
       "terminal_flow": "権限の確認",
       "postcondition": "issue の Status は failure_state の選択肢である。保留中の権限の要求は取り消されている。worktree は残っている。",
@@ -3978,9 +4513,11 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
         "権限の確認-1",
         "権限の確認-2",
         "権限の確認-3",
@@ -4003,13 +4540,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4024,7 +4563,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P019",
       "terminal": "abort",
       "terminal_flow": "送信の失敗",
       "postcondition": "turn の本文は Claude Code に届いていない。herdr の pane は閉じている。印は残っている。issue の Status は running_state の選択肢のままである。worktree は残っている。",
@@ -4053,9 +4592,11 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
         "送信の失敗-1",
         "送信の失敗-2",
         "送信の失敗-3",
@@ -4077,13 +4618,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4097,7 +4640,7 @@
       ]
     },
     {
-      "id": "P018",
+      "id": "P020",
       "terminal": "abort",
       "terminal_flow": "一時的な送信の失敗",
       "postcondition": "印は残っている。リトライの回数は増えていない。herdr の pane は閉じていない。issue の Status は running_state の選択肢のままである。worktree は残っている。",
@@ -4126,9 +4669,11 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
         "BASIC FLOW-28",
+        "BASIC FLOW-29",
+        "BASIC FLOW-30",
         "一時的な送信の失敗-1",
         "一時的な送信の失敗-2",
         "一時的な送信の失敗-3",
@@ -4150,13 +4695,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4170,7 +4717,7 @@
       ]
     },
     {
-      "id": "P019",
+      "id": "P021",
       "terminal": "abort",
       "terminal_flow": "本文の組み立ての失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。この turn の本文は Claude Code に届いていない。印は外れている。worktree は残っている。",
@@ -4199,8 +4746,10 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
-        "BASIC FLOW-27",
+        "BASIC FLOW-28",
+        "BASIC FLOW-29",
         "本文の組み立ての失敗-1",
         "本文の組み立ての失敗-2",
         "本文の組み立ての失敗-3",
@@ -4224,13 +4773,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4245,7 +4796,7 @@
       ]
     },
     {
-      "id": "P020",
+      "id": "P022",
       "terminal": "abort",
       "terminal_flow": "上限での打ち切り",
       "postcondition": "issue の Status は failure_state の選択肢である。turn 数は max_dispatch_turns と等しい。worktree は残っている。issue に打ち切りの理由のコメントが1件ある。",
@@ -4274,7 +4825,9 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "BASIC FLOW-26",
+        "BASIC FLOW-28",
         "上限での打ち切り-1",
         "上限での打ち切り-2",
         "上限での打ち切り-3",
@@ -4297,13 +4850,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4316,7 +4871,7 @@
       ]
     },
     {
-      "id": "P021",
+      "id": "P023",
       "terminal": "abort",
       "terminal_flow": "turnループの重なり",
       "postcondition": "印は残っている。issue の Status は running_state の選択肢のままである。turn の本文は Claude Code に届いていない。worktree は残っている。",
@@ -4345,6 +4900,8 @@
         "BASIC FLOW-22",
         "BASIC FLOW-23",
         "BASIC FLOW-24",
+        "BASIC FLOW-25",
+        "BASIC FLOW-26",
         "turnループの重なり-1",
         "turnループの重なり-2"
       ],
@@ -4364,13 +4921,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "CONDITION: NOT この run の turn ループが1本も走っていない",
@@ -4379,10 +4938,10 @@
       ]
     },
     {
-      "id": "P022",
+      "id": "P024",
       "terminal": "abort",
       "terminal_flow": "起動直後の確認画面",
-      "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。止まった起動は新しいセッション UUID の指定つきの起動である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4407,6 +4966,8 @@
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "起動直後の確認画面-1",
         "起動直後の確認画面-2",
         "起動直後の確認画面-3",
@@ -4429,13 +4990,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "CONDITION: NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である",
         "システムは pane に esc のキー入力を送る。",
@@ -4446,10 +5009,10 @@
       ]
     },
     {
-      "id": "P023",
+      "id": "P025",
       "terminal": "cycle",
       "terminal_flow": "起動の待ち直し",
-      "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。",
+      "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。もう一度渡す起動フラグは直前と同じ値であり、復帰つきの起動なら復帰つきのまま送り直す。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4474,11 +5037,13 @@
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "起動の待ち直し-1",
         "起動の待ち直し-2",
         "起動の待ち直し-3",
         "起動の待ち直し-4",
-        "BASIC FLOW-23"
+        "BASIC FLOW-25"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -4496,27 +5061,29 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "CONDITION: NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である",
         "システムは 500 ミリ秒待つ。",
         "システムは VALIDATES THAT 起動を待ち始めてから herdr.startup_timeout_ms が経っていない。",
-        "システムは pane で Claude Code をもう一度起動する。",
-        "RESUME STEP 23",
+        "システムは pane で Claude Code を、直前と同じ起動フラグでもう一度起動する。",
+        "RESUME STEP 25",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。"
       ]
     },
     {
-      "id": "P024",
+      "id": "P026",
       "terminal": "abort",
       "terminal_flow": "起動の断念",
-      "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。turn の本文は Claude Code に届いていない。worktree は残っている。断念した起動は新しいセッション UUID の指定つきの起動である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4541,6 +5108,8 @@
         "BASIC FLOW-21",
         "BASIC FLOW-22",
         "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "BASIC FLOW-25",
         "起動の待ち直し-1",
         "起動の待ち直し-2",
         "起動の断念-1",
@@ -4566,13 +5135,15 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code を起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "CONDITION: NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である",
         "システムは 500 ミリ秒待つ。",
@@ -4587,10 +5158,10 @@
       ]
     },
     {
-      "id": "P025",
+      "id": "P027",
       "terminal": "cycle",
-      "terminal_flow": "paneがまだ使えない",
-      "postcondition": "pane が起動を受け付けるまで待ち続けている。Claude Code はまだ起動していない。",
+      "terminal_flow": "復帰の失敗",
+      "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4613,10 +5184,18 @@
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "paneがまだ使えない-1",
-        "paneがまだ使えない-2",
-        "paneがまだ使えない-3",
-        "BASIC FLOW-21"
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "BASIC FLOW-24",
+        "復帰の失敗-1",
+        "復帰の失敗-2",
+        "復帰の失敗-3",
+        "復帰の失敗-4",
+        "復帰の失敗-5",
+        "復帰の失敗-6",
+        "復帰の失敗-7",
+        "復帰の失敗-8",
+        "BASIC FLOW-23"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -4634,24 +5213,32 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "CONDITION: NOT pane が Claude Code の起動を受け付ける",
-        "システムは 500 ミリ秒待つ。",
-        "システムは VALIDATES THAT pane を待ち始めてから 30 秒が経っていない。",
-        "RESUME STEP 21",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
+        "CONDITION: 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
+        "システムは新しいセッション UUID を採番する。",
+        "システムは hook の引き当ての索引を新しいセッション UUID へ張り替える。",
+        "システムはトークンの集計の基準を作り直す。",
+        "システムは身元ファイルのセッション UUID を新しいセッション UUID へ書き直し、書き直せなければ警告を記録に残して先へ進む。",
+        "システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す。",
+        "システムは起動フラグを新しいセッション UUID の指定つきへ差し替える。",
+        "システムは前の Claude Code を止めずに同じ pane を使い続ける。",
+        "RESUME STEP 23",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
       ]
     },
     {
-      "id": "P026",
-      "terminal": "abort",
-      "terminal_flow": "paneの断念",
-      "postcondition": "issue の Status は failure_state の選択肢である。Claude Code は起動していない。worktree は残っている。",
+      "id": "P028",
+      "terminal": "cycle",
+      "terminal_flow": "paneがまだ使えない",
+      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4674,6 +5261,73 @@
         "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "paneがまだ使えない-1",
+        "paneがまだ使えない-2",
+        "paneがまだ使えない-3",
+        "BASIC FLOW-23"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "CONDITION: NOT pane が Claude Code の起動を受け付ける",
+        "システムは 500 ミリ秒待つ。",
+        "システムは VALIDATES THAT pane を待ち始めてから 30 秒が経っていない。",
+        "RESUME STEP 23",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
+      ]
+    },
+    {
+      "id": "P029",
+      "terminal": "abort",
+      "terminal_flow": "paneの断念",
+      "postcondition": "issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。断念した起動は新しいセッション UUID の指定つきの起動である。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
         "paneがまだ使えない-1",
         "paneがまだ使えない-2",
         "paneの断念-1",
@@ -4698,9 +5352,11 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
         "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
         "システムは Claude Code の設定ファイルを worktree の外に書く。",
-        "システムは worktree の中に身元ファイルを書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
@@ -4716,7 +5372,82 @@
       ]
     },
     {
-      "id": "P027",
+      "id": "P030",
+      "terminal": "cycle",
+      "terminal_flow": "復帰の失敗",
+      "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "復帰の失敗-1",
+        "復帰の失敗-2",
+        "復帰の失敗-3",
+        "復帰の失敗-4",
+        "復帰の失敗-5",
+        "復帰の失敗-6",
+        "復帰の失敗-7",
+        "復帰の失敗-8",
+        "BASIC FLOW-23"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "CONDITION: 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
+        "システムは新しいセッション UUID を採番する。",
+        "システムは hook の引き当ての索引を新しいセッション UUID へ張り替える。",
+        "システムはトークンの集計の基準を作り直す。",
+        "システムは身元ファイルのセッション UUID を新しいセッション UUID へ書き直し、書き直せなければ警告を記録に残して先へ進む。",
+        "システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す。",
+        "システムは起動フラグを新しいセッション UUID の指定つきへ差し替える。",
+        "システムは前の Claude Code を止めずに同じ pane を使い続ける。",
+        "RESUME STEP 23",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
+      ]
+    },
+    {
+      "id": "P031",
       "terminal": "cycle",
       "terminal_flow": "壊れたref",
       "postcondition": "壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。",
@@ -4767,7 +5498,7 @@
       ]
     },
     {
-      "id": "P028",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "消さないref",
       "postcondition": "ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。",
@@ -4819,7 +5550,7 @@
       ]
     },
     {
-      "id": "P029",
+      "id": "P033",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。作りかけの worktree は残っている。",
@@ -4862,7 +5593,7 @@
         "システムはボードの issue の Status に running_state の選択肢を書く。",
         "システムは Status を動かした記録を issue にコメントする。",
         "システムは workspace.root の下に issue の worktree を作る。",
-        "CONDITION: worktree の用意から Claude Code の起動までのあいだに git・ghq・herdr の呼び出しが、壊れた ref でも pane の受け付け待ちでもない理由で失敗した場合",
+        "CONDITION: worktree の用意から Claude Code の起動までのあいだに git・ghq・herdr の呼び出しが、壊れた ref でも pane の受け付け待ちでも復帰つきの起動の失敗でもない理由で失敗した場合",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
         "システムは issue に失敗した段と直し方を1件コメントする。",
         "システムは workspace_hooks の after_run を実行する。",
@@ -4872,7 +5603,7 @@
       ]
     },
     {
-      "id": "P030",
+      "id": "P034",
       "terminal": "abort",
       "terminal_flow": "書かずに取りやめる",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。issue にコメントは付いていない。",
@@ -4911,7 +5642,7 @@
       ]
     },
     {
-      "id": "P031",
+      "id": "P035",
       "terminal": "abort",
       "terminal_flow": "使われているbranch",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。branch を使っている worktree は残っている。",
@@ -4948,7 +5679,7 @@
       ]
     },
     {
-      "id": "P032",
+      "id": "P036",
       "terminal": "abort",
       "terminal_flow": "使えないworktree",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -4983,7 +5714,7 @@
       ]
     },
     {
-      "id": "P033",
+      "id": "P037",
       "terminal": "abort",
       "terminal_flow": "未信頼のリポジトリ",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。issue に信頼登録の承認を促すコメントが1件ある。",
@@ -5018,7 +5749,7 @@
       ]
     },
     {
-      "id": "P034",
+      "id": "P038",
       "terminal": "abort",
       "terminal_flow": "空きスロット不足",
       "postcondition": "印の件数は変わっていない。issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。",
@@ -5047,7 +5778,7 @@
       ]
     },
     {
-      "id": "P035",
+      "id": "P039",
       "terminal": "abort",
       "terminal_flow": "ラベルの不足",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -5074,7 +5805,7 @@
       ]
     },
     {
-      "id": "P036",
+      "id": "P040",
       "terminal": "abort",
       "terminal_flow": "失敗の繰り返し",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。",
@@ -5099,7 +5830,7 @@
       ]
     },
     {
-      "id": "P037",
+      "id": "P041",
       "terminal": "abort",
       "terminal_flow": "頼んでいないStatus",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。",
@@ -5124,7 +5855,7 @@
       ]
     },
     {
-      "id": "P038",
+      "id": "P042",
       "terminal": "abort",
       "terminal_flow": "走行中のissue",
       "postcondition": "先に印を取った run は走り続けている。ボードへは1バイトも書いていない。印の件数は変わっていない。",
@@ -5146,9 +5877,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 173,
-    "nodes_covered": 173,
-    "edges_total": 181,
-    "edges_covered": 181
+    "nodes_total": 190,
+    "nodes_covered": 190,
+    "edges_total": 200,
+    "edges_covered": 200
   }
 }

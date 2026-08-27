@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "465f03a9ce5babf39f52394708de534812f9fd67a2642cd94af81ac519febdf3", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // 空きスロットの数え方（`agent.max_concurrent_agents` と
@@ -18,7 +18,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P034"}
+// {"RUCM-PATH": "P038"}
 //
 // TestSlots_上限まで着手したらそれ以上着手しない は、全体の上限を確かめる。
 //

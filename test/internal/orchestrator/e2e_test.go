@@ -110,7 +110,7 @@ func TestTick_1件のissueが候補に上がってからDoneで片付くまで�
 	}
 
 	// worktree と branch が本当に消えている（本物の git で確かめる）。
-	worktreePath := filepath.Join(fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	worktreePath := worktreePathOf(t, fx, issue)
 	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
 		t.Fatalf("worktree が残っている: %s (err=%v)", worktreePath, err)
 	}
@@ -134,11 +134,12 @@ func TestTick_1件のissueが候補に上がってからDoneで片付くまで�
 //   - 設定ファイル（段5）と身元ファイル（段6）が、agent の起動より前に置かれている
 func TestTick_着手の13段が設計の順番どおりに進む(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
 
 	settingsSeen := make(chan struct{}, 1)
 	identitySeen := make(chan struct{}, 1)
-	worktreePath := filepath.Join(fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	worktreePath := worktreePathOf(t, fx, issue)
 	settingsPath := filepath.Join(fx.RuntimeDir, "issues", "octocat-hello-world-188", "settings.json")
 
 	fx.Herdr.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
