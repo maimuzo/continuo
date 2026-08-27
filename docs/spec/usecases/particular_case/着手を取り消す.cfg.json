@@ -3,7 +3,7 @@
   "usecase_name": "着手を取り消す",
   "source": {
     "file": "docs/spec/usecases/particular_case/着手を取り消す.rucm.md",
-    "rucm_block_sha256": "2b02d8558c26fe6912acc9ef98cdf69b07d6a3c5c90383ac8ab06948db87b93d"
+    "rucm_block_sha256": "06d2e4109c9e153a394d4ecf5e1c38c95f8a02e5a5bbf85856fec4c9d3678dc2"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -131,7 +131,7 @@
       },
       "postcondition": "worktree は残っている。コミットしていない変更は残っている。push していない commit は残っている。終了コードは 1 である。"
     },
-    "動いていないのにpaneが生きている": {
+    "手を離させていないのにpaneが生きている": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
@@ -732,7 +732,7 @@
       "type": "action",
       "flow": "失うものがある",
       "step": 2,
-      "statement": "システムは Status を park の値へ動かしているときだけ、利用者に Status を park の値のまま残すことを応答する。"
+      "statement": "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。"
     },
     {
       "id": "失うものがある-3",
@@ -742,16 +742,16 @@
       "statement": "ABORT"
     },
     {
-      "id": "動いていないのにpaneが生きている-1",
+      "id": "手を離させていないのにpaneが生きている-1",
       "type": "action",
-      "flow": "動いていないのにpaneが生きている",
+      "flow": "手を離させていないのにpaneが生きている",
       "step": 1,
       "statement": "システムは利用者に残っている pane の ID とロックファイルのパスを応答する。"
     },
     {
-      "id": "動いていないのにpaneが生きている-2",
+      "id": "手を離させていないのにpaneが生きている-2",
       "type": "abort",
-      "flow": "動いていないのにpaneが生きている",
+      "flow": "手を離させていないのにpaneが生きている",
       "step": 2,
       "statement": "ABORT"
     },
@@ -767,7 +767,7 @@
       "type": "action",
       "flow": "片付けの失敗",
       "step": 2,
-      "statement": "システムは Status を park の値へ動かしているときだけ、利用者に Status を park の値のまま残すことを応答する。"
+      "statement": "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。"
     },
     {
       "id": "片付けの失敗-3",
@@ -1065,7 +1065,7 @@
     },
     {
       "from": "BASIC FLOW-25",
-      "to": "動いていないのにpaneが生きている-1",
+      "to": "手を離させていないのにpaneが生きている-1",
       "kind": "false",
       "condition": "NOT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している"
     },
@@ -1361,8 +1361,8 @@
       "kind": "seq"
     },
     {
-      "from": "動いていないのにpaneが生きている-1",
-      "to": "動いていないのにpaneが生きている-2",
+      "from": "手を離させていないのにpaneが生きている-1",
+      "to": "手を離させていないのにpaneが生きている-2",
       "kind": "seq"
     },
     {
@@ -2408,14 +2408,14 @@
         "システムは VALIDATES THAT worktree が置き場所から消えている。",
         "CONDITION: NOT worktree が置き場所から消えている",
         "システムは利用者に片付けを見送った理由の一覧を応答する。",
-        "システムは Status を park の値へ動かしているときだけ、利用者に Status を park の値のまま残すことを応答する。",
+        "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
     },
     {
       "id": "P014",
       "terminal": "abort",
-      "terminal_flow": "動いていないのにpaneが生きている",
+      "terminal_flow": "手を離させていないのにpaneが生きている",
       "postcondition": "worktree は残っている。branch は残っている。pane は開いたままである。issue の Status は変わっていない。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
@@ -2443,8 +2443,8 @@
         "BASIC FLOW-23",
         "BASIC FLOW-24",
         "BASIC FLOW-25",
-        "動いていないのにpaneが生きている-1",
-        "動いていないのにpaneが生きている-2"
+        "手を離させていないのにpaneが生きている-1",
+        "手を離させていないのにpaneが生きている-2"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
@@ -2538,7 +2538,7 @@
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "CONDITION: NOT 失うものが無く調べ切れているか、利用者が force を指定している",
         "システムは利用者に force が無い限り消さないことを応答する。",
-        "システムは Status を park の値へ動かしているときだけ、利用者に Status を park の値のまま残すことを応答する。",
+        "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
     },
