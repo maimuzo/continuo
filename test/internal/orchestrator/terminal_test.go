@@ -21,13 +21,21 @@ import (
 // 待ち受けつきで呼ぶと turn の終わりまで返らない（既定1時間）ので、その状態を作る。
 // 2回目以降（3-25 の9段でコメントを書かせる送信など）はすぐ返す。
 //
+// **戻り値の関数を呼ぶと、そこで1回目の `agent.prompt` が返る。**
+// **turn の終わりを自分の手で起こすテストは、`Stop` の hook を流してから呼ぶこと。**
+// `agent.prompt` が返った瞬間から continuo は `claude.settle_ms` のあいだだけ `Stop` を
+// 待ち、来なければ「turn の終わりを検知できなかった」として run を諦める。
+// **先に返させてしまうと、テストの準備が終わる前にその時計が走り出す。**
+//
 // t: 呼び出し元のテスト。後始末で必ず解放する。
 // fx: 対象の fixture。
-func blockFirstPrompt(t *testing.T, fx *fixture) {
+// 戻り値: 1回目の `agent.prompt` を返させる関数。**何度呼んでもよい。**
+func blockFirstPrompt(t *testing.T, fx *fixture) func() {
 	t.Helper()
 	release := make(chan struct{})
 	var once sync.Once
-	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	releaseOnce := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(releaseOnce)
 
 	var mu sync.Mutex
 	count := 0
@@ -44,6 +52,7 @@ func blockFirstPrompt(t *testing.T, fx *fixture) {
 			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
+	return releaseOnce
 }
 
 // TestTick_巡回のループはコメントの確認でブロックしない は、設計 3-8 の制約を確かめる。

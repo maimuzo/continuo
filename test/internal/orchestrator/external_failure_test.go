@@ -164,7 +164,10 @@ func TestExternalFailure_Statusを書けなければworktreeを作らない(t *t
 func TestExternalFailure_turnの終わりにissueが消えていたら手放す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
@@ -180,10 +183,11 @@ func TestExternalFailure_turnの終わりにissueが消えていたら手放す(
 		assistantLine("req1", "終わりました。\n\nCONTINUO-STATUS: review", false),
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 
-	// **手放したことをログで確かめる。**`holdPrompt` は prompt を返さないので、
-	// turn ループはこのあとも `agent.prompt` の待ち受けから戻らない。
-	// **印から外れたかどうかでは確かめられない**（run の終わりは turn ループの外で起きる）。
+	// **手放したことをログで確かめる。**手放した run は印に残したままバックオフへ入る
+	// （設計 3-21）ので、**印から外れたかどうかでは確かめられない。**
 	waitFor(t, 20*time.Second, "手放したことがログに出る", func() bool {
 		return strings.Contains(fx.Logs.String(), "ボードから見えなくなりました")
 	})
@@ -200,7 +204,10 @@ func TestExternalFailure_turnの終わりにissueが消えていたら手放す(
 func TestExternalFailure_transcriptを読めなくてもturnを終えられる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	holdPrompt(fx)
+	// **1回目の `agent.prompt` は、`Stop` を流すまで返させない**（`blockFirstPrompt`）。
+	// 返った瞬間から `claude.settle_ms`（この fixture では 50ms）の時計が走り出し、
+	// **遅い機械では準備が終わる前に run を諦めてしまう。**
+	releasePrompt := blockFirstPrompt(t, fx)
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 15*time.Second, "turn が送られる", func() bool {
@@ -210,6 +217,8 @@ func TestExternalFailure_transcriptを読めなくてもturnを終えられる(t
 	// **存在しないパスを渡す。**hook 自体は届くが、transcript は読めない。
 	missing := filepath.Join(t.TempDir(), "no-such-transcript.jsonl")
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], missing, "p1"))
+	// **`Stop` を積んでから返す。**ここから turn の終わりの判定が始まる。
+	releasePrompt()
 	time.Sleep(2 * time.Second)
 
 	// **表明を読めないので Status を動かさない。**
