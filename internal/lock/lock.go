@@ -39,6 +39,15 @@ type Lock struct {
 // 解放するため、「このロックファイルは残骸か本当に使用中か」を判定する処理は
 // 一切持たない。これが flock を選ぶ理由そのものである（3-17）。
 func Acquire(path string) (*Lock, error) {
+	// **ここは「一時ファイルへ書いてから差し替える」に揃えない**（CLAUDE.md の
+	// 「絶対に守る制約」4 / 設計 3-59）。**差し替えるとロックが切れる。**
+	// flock(2) は inode に対して掛かるので、os.Rename で別の inode を被せた瞬間、
+	// このプロセスが掴んでいるロックは「もう誰も開いていない古い inode」の側に残り、
+	// **新しいロックファイルに対しては誰もロックしていない状態になる。**
+	// そこへ2つ目の continuo が flock すると、二重起動が素通りする。
+	//
+	// **中身も書かない。**このファイルは開いて flock するためだけにあり、
+	// O_TRUNC も付けないので、既にある中身を空にすることも無い。
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyLockAcquireOpenFailed, path, err)

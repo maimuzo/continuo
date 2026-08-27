@@ -13,11 +13,11 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
@@ -155,7 +155,7 @@ func UpdateStatuses(dir string, st Statuses) (Result, error) {
 		}
 	}
 
-	if err := writeAtomically(path, updated, info.Mode().Perm()); err != nil {
+	if err := atomicfile.Write(path, []byte(updated), info.Mode().Perm()); err != nil {
 		return Result{Path: path}, err
 	}
 	return Result{Path: path, Overwritten: true}, nil
@@ -189,53 +189,6 @@ func statTarget(dir string) (string, fs.FileInfo, error) {
 		return path, nil, i18n.Errorf(i18n.KeyScaffoldUpdateNotRegularFile, ErrNotFound, path)
 	}
 	return path, info, nil
-}
-
-// writeAtomically は content を path へ不可分に書き込む。
-//
-// **同じディレクトリに一時ファイルを作ってから os.Rename する。**別のファイルシステムを
-// またぐと os.Rename が使えないので、置き場所は必ず書き込む先と同じディレクトリにする。
-// 途中で失敗したときは一時ファイルを消す（消せなかった場合は、書き込みの失敗の理由を優先して返す）。
-//
-// path: 書き込む先の絶対パス。
-// content: 書き込む全文。
-// perm: 書き込んだあとに設定する権限（元のファイルの権限をそのまま渡すこと）。
-// 戻り値: 書き込みに失敗した理由。成功したら nil。
-func writeAtomically(path, content string, perm fs.FileMode) error {
-	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*")
-	if err != nil {
-		return i18n.Errorf(i18n.KeyScaffoldUpdateTempCreateFailed, dir, err)
-	}
-	tmp := f.Name()
-
-	if _, err := f.WriteString(content); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, tmp, err)
-	}
-	// os.CreateTemp は 0600 で作るので、元のファイルの権限に戻す。
-	if err := f.Chmod(perm); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldUpdateChmodFailed, tmp, err)
-	}
-	// **rename の前に fsync する。**書き込んだ内容がディスクに届く前に rename が
-	// 先に届くと、電源が落ちたときに中身の無いファイルが残りうる。
-	if err := f.Sync(); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldUpdateSyncFailed, tmp, err)
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, tmp, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldUpdateRenameFailed, path, err)
-	}
-	return nil
 }
 
 // providerOwnerRe と providerProjectRe は front matter に書かれた値を拾う。

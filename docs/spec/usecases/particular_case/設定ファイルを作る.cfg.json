@@ -3,7 +3,7 @@
   "usecase_name": "設定ファイルを作る",
   "source": {
     "file": "docs/spec/usecases/particular_case/設定ファイルを作る.rucm.md",
-    "rucm_block_sha256": "fed2424399aca6c1d05cd120b8dbd4399e2ae052e23c53cb86ee63a24e368e86"
+    "rucm_block_sha256": "37aa760cc319b47b879d15a409fd2996822368c18cf2f83e3fbbba91846f243f"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -137,7 +137,7 @@
           ]
         }
       ],
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。"
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。"
     }
   },
   "nodes": [
@@ -734,7 +734,7 @@
       "type": "action",
       "flow": "書き込み中の中断",
       "step": 1,
-      "statement": "システムは WORKFLOW.md への書き込みの途中で終了する。"
+      "statement": "システムは雛形の全文の書き込みの途中で終了する。"
     },
     {
       "id": "書き込み中の中断-2",
@@ -1546,7 +1546,7 @@
       "id": "P007",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1577,7 +1577,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -2055,7 +2055,7 @@
       "id": "P016",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2105,7 +2105,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -2701,7 +2701,7 @@
       "id": "P027",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2748,7 +2748,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -3380,7 +3380,7 @@
       "id": "P038",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3435,7 +3435,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -4063,7 +4063,7 @@
       "id": "P049",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4112,7 +4112,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -4638,7 +4638,7 @@
       "id": "P060",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -4674,7 +4674,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -5192,7 +5192,7 @@
       "id": "P069",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5247,7 +5247,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -5893,7 +5893,7 @@
       "id": "P080",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5945,7 +5945,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -6627,7 +6627,7 @@
       "id": "P091",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -6687,7 +6687,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -7365,7 +7365,7 @@
       "id": "P102",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -7419,7 +7419,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -8019,7 +8019,7 @@
       "id": "P113",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -8064,7 +8064,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -8654,7 +8654,7 @@
       "id": "P122",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -8718,7 +8718,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -9454,7 +9454,7 @@
       "id": "P133",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -9515,7 +9515,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -10287,7 +10287,7 @@
       "id": "P144",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -10356,7 +10356,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },
@@ -11124,7 +11124,7 @@
       "id": "P155",
       "terminal": "abort",
       "terminal_flow": "書き込み中の中断",
-      "postcondition": "WORKFLOW.md の内容は雛形の全文と一致しない。force オプションを伴う実行では、元の WORKFLOW.md の内容が失われる。",
+      "postcondition": "既にある WORKFLOW.md を force オプションで置き換える実行では、元の WORKFLOW.md の内容がそのまま残っている。システムは一時ファイルへ雛形の全文を書き切ってから WORKFLOW.md へ差し替えるので、上書きの途中で終わった WORKFLOW.md は残らない。システムが強制終了するか電源が落ちる場合は、書きかけの一時ファイルが同じディレクトリに残る。一時ファイルの名前は WORKFLOW.md の前に点を付けたもので始まるので、利用者のリポジトリでは未追跡のファイルとして見える。WORKFLOW.md をまだ持たないディレクトリで実行する場合は、force オプションを付けていても新しく作る経路を通る。この場合は WORKFLOW.md が無いか、途中まで書かれた WORKFLOW.md が残る。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -11187,7 +11187,7 @@
         "システムは集めた名前を trust.repositories の値に決める。",
         "システムは VALIDATES THAT 書き出す先に指定されたパスがある。",
         "CONDITION: 利用者が continuo init の実行を中断する場合",
-        "システムは WORKFLOW.md への書き込みの途中で終了する。",
+        "システムは雛形の全文の書き込みの途中で終了する。",
         "ABORT"
       ]
     },

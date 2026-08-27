@@ -1434,8 +1434,13 @@ const (
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
 )
 
-// `continuo setup` が既にある WORKFLOW.md を書き換えるとき（internal/scaffold の
-// statTarget / writeAtomically）の文言。
+// 既にあるファイルを差し替えで書き換えるとき（internal/scaffold の statTarget と
+// internal/atomicfile の Write）の文言。
+//
+// **temp_create_failed から rename_failed までの5つは internal/atomicfile が使う。**
+// `continuo setup` の書き換えだけでなく、`continuo init --force` と
+// issue ごとの settings.json の書き出しからも出る。**文言は WORKFLOW.md を名指ししているが、
+// キーを増やさないことを優先している**（設計 3-59）。
 //
 // **symlink_not_followed と not_regular_file は先頭の %w に ErrSymlink / ErrNotFound を渡す**
 // （errors.Is の切り分けを保つため）。
