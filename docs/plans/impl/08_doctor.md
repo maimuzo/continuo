@@ -24,6 +24,7 @@
 | 見出し語 | 何を検査するか |
 | --- | --- |
 | `設定ファイル` | `WORKFLOW.md` が読めて、front matter が検証を通るか |
+| `片付けの状態` | `cleanup.on_states` の値が `tracker.terminal_states` に全部あるか（記号は `!` だけ。設計 3-9e） |
 | `claude` | `claude.kind` の実行ファイルが PATH にあるか |
 | `hook の置き場所` | 決めた場所にディレクトリを作り、unix socket を listen できるか |
 | `Claude の設定` | `~/.claude/session-env` に使い捨てのディレクトリを作って消せるか |
@@ -109,6 +110,7 @@
 | 見出し語 | 呼ぶもの |
 | --- | --- |
 | 設定ファイル | `config.Load` |
+| 片付けの状態 | `config.CleanupStatesOutsideTerminal`（**起動時の警告と同じ関数を呼ぶ。**ボードは読まない） |
 | herdr | `herdr.Client.CheckProtocol`（**`herdr status` の CLI は使わない**） |
 | gh の認証 | `tracker.CheckGHAvailable` / `tracker.CheckGHProjectScope` |
 | ボード | `tracker.ResolveToken` → `tracker.Adapter.Bootstrap` → `FetchIssuesByStates` |

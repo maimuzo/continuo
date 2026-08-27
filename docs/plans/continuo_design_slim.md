@@ -67,7 +67,7 @@ flowchart TB
     CC -->|"Stop / Notification など"| HKR
 
     TRK ==>|"読む（毎巡回）"| BOARD
-    TRK ==>|"書く（Status・引き渡しの通知）"| BOARD
+    TRK ==>|"書く（Status・引き渡しの通知・Status を動かした記録）"| BOARD
     CC -.->|"書く（エージェントが自分で gh を叩いた場合）"| BOARD
     HUMAN ==>|"書く（着手・並び替え・回答・レビュー完了）"| BOARD
 ```
@@ -334,6 +334,9 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 **片付けの契機は `cleanup.on_states`（既定 `Done`）に入った時点である。**「active でなくなった時点」ではない。
 **`In Review` や `Blocked` で消すと、人間が回答して `Ready` へ戻したときに成果が失われる。**
 
+**`cleanup.on_states` は `tracker.terminal_states` の中から選ぶ**（3-9e）。外の値を書くと、
+**「終わっていない」と判定した直後に worktree を片付ける。起動は止めず、警告と `continuo doctor` で知らせる。**
+
 **`In Review` へ移った issue が `Done` になったことは、毎巡回の worktree の照合で拾う**（3-9）。
 巡回の候補からは外れているので、これ以外に知る方法が無い。
 
@@ -498,6 +501,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | リポジトリの信頼登録 | `~/.claude.json` の `hasTrustDialogAccepted` が `true` か |
 | ローカルの clone | `ghq list -p -e <owner>/<repo>` の**出力が空でないか**（exit code は常に 0 なので使えない） |
 | 設定ファイル | `WORKFLOW.md` が読めて、front matter が検証を通るか |
+| 片付ける Status | `cleanup.on_states` の値が `tracker.terminal_states` に全部あるか（記号は `!` まで。3-9e） |
 | Claude の資格情報 | `rate_limit.token_source` が指す先から取れるか（macOS の既定は Keychain） |
 
 **`init` が置くのは `WORKFLOW.md` 1つだけである。**埋めないと動かない値にはプレースホルダを入れ、

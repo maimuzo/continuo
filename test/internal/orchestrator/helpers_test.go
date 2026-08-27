@@ -751,6 +751,44 @@ func (ft *fakeTracker) SetState(id, state string) {
 	}
 }
 
+// isHandoffComment は、そのコメントが引き渡しの通知かどうかを返す。
+//
+// **continuo が自分で書くコメントは2種類ある**（設計 3-29）。引き渡しの通知と、
+// Status を動かした記録である。**どちらにも self_marker が付くので、
+// `IsSelf` だけでは区別できない。**本文で選り分ける。
+func isHandoffComment(c tracker.Comment) bool {
+	return strings.Contains(c.Body, "の作業を人間へ引き渡しました")
+}
+
+// isStatusMoveComment は、そのコメントが Status を動かした記録かどうかを返す。
+//
+// **引き渡しの通知の中にも遷移の1行が入る**ので、そちらを先に除く。
+func isStatusMoveComment(c tracker.Comment) bool {
+	return !isHandoffComment(c) && strings.Contains(c.Body, "へ動かしました。")
+}
+
+// HandoffCommentsOf は issue に付いた引き渡しの通知だけを返す。
+func (ft *fakeTracker) HandoffCommentsOf(nodeID string) []tracker.Comment {
+	var out []tracker.Comment
+	for _, c := range ft.CommentsOf(nodeID) {
+		if isHandoffComment(c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// StatusMoveCommentsOf は issue に付いた「Status を動かした記録」だけを返す。
+func (ft *fakeTracker) StatusMoveCommentsOf(nodeID string) []tracker.Comment {
+	var out []tracker.Comment
+	for _, c := range ft.CommentsOf(nodeID) {
+		if isStatusMoveComment(c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // StateOf は issue の現在の Status を返す。
 func (ft *fakeTracker) StateOf(id string) string {
 	ft.mu.Lock()
@@ -857,26 +895,38 @@ func (ft *fakeTracker) FetchIssueByIdentifier(_ context.Context, identifier stri
 }
 
 // UpdateStatus は Status を書き換える。**書く前に取り直し、blockedStates なら書かない。**
-func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState string, blockedStates []string) (bool, error) {
+//
+// **本物と同じ形で返す**（`internal/tracker` の `UpdateStatus`）。
+//
+//	Previous … 書き込む直前のボードの値。**巡回で読んだ値ではない。**
+//	            テストが SetState でボードだけを動かすと、ここに新しい値が入る
+//	Reached … 目的の Status になったか。**既に同じ値で書き込みを省いた場合も真である**
+//	Wrote   … 書き込みを実際に行ったか。**issue へ記録を書いてよいのはこれが真のときだけ**
+func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("UpdateStatus")
 	if ft.updateErr != nil {
-		return false, ft.updateErr
+		return tracker.StatusWrite{}, ft.updateErr
 	}
 	for i := range ft.board {
 		if ft.board[i].ID != itemID {
 			continue
 		}
+		previous := ft.board[i].State
 		for _, b := range blockedStates {
-			if strings.EqualFold(b, ft.board[i].State) {
-				return false, nil
+			if strings.EqualFold(b, previous) {
+				return tracker.StatusWrite{Previous: previous}, nil
 			}
 		}
+		if strings.EqualFold(strings.TrimSpace(previous), strings.TrimSpace(targetState)) {
+			// **既に同じ値なら書きに行かない**（本物と同じ振る舞い）。
+			return tracker.StatusWrite{Reached: true, Previous: previous}, nil
+		}
 		ft.board[i].State = targetState
-		return true, nil
+		return tracker.StatusWrite{Reached: true, Wrote: true, Previous: previous}, nil
 	}
-	return false, nil
+	return tracker.StatusWrite{}, nil
 }
 
 // FetchComments は issue のコメントを返す。

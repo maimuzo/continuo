@@ -179,8 +179,10 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 		}
 
 		itemID := ""
+		nodeID := ""
 		if strings.EqualFold(target, rs.issue().Identifier) {
 			itemID = rs.issue().ID
+			nodeID = issueNodeID(rs.issue())
 		} else {
 			found, ok, err := o.tracker.FetchIssueByIdentifier(ctx, target)
 			if err != nil {
@@ -195,22 +197,44 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 				continue
 			}
 			itemID = found.ID
+			// **記録は動かされた issue へ書く。**代表の issue に何件も並べない（設計 3-26）。
+			nodeID = issueNodeID(found)
 		}
 
-		written, err := o.tracker.UpdateStatus(ctx, itemID, *next, o.cfg.Tracker.TerminalStates)
+		moved, err := o.tracker.UpdateStatus(ctx, itemID, *next, o.cfg.Tracker.TerminalStates)
 		if err != nil {
 			o.logger.Warn("表明どおりに Status を動かせません",
 				"identifier", rs.issue().Identifier, "対象", target, "遷移先", *next, "error", err)
 			continue
 		}
 		o.logger.Info("表明どおりに Status を動かしました",
-			"identifier", rs.issue().Identifier, "対象", target, "遷移先", *next, "書き込んだか", written)
-		if written && itemID == rs.IssueID {
+			"identifier", rs.issue().Identifier, "対象", target, "遷移先", *next, "書き込んだか", moved.Wrote)
+		if moved.Reached && itemID == rs.IssueID {
 			// **いま作業している issue へ書けたときだけ控える**（設計 3-50）。
 			// 知らない Status になったときに「元は何だったか」を書くために要る。
 			rs.setLastWrittenState(*next)
 		}
+		o.postStatusMove(ctx, rs.issue().Identifier, nodeID, newStatusMove(moved, *next),
+			signalMoveReason(rs.issue().Identifier, target, value, itemID == rs.IssueID))
 	}
+}
+
+// signalMoveReason は、表明で Status を動かしたときの「なぜ」の文を作る（設計 3-29）。
+//
+// **表明を書いたのは、いま作業している issue のエージェントである。**対象が別の issue の
+// ときは、誰の表明で動いたのかが分かるように、その issue の識別子を添える（設計 3-26）。
+//
+// identifier: いま作業している issue の識別子。
+// target: 表明が指していた対象。
+// value: 表明の値（`review` / `blocked` など）。
+// self: 対象がいま作業している issue 自身かどうか。
+// 戻り値: 「〜ためです」で終わる1文。
+func signalMoveReason(identifier, target, value string, self bool) string {
+	if self {
+		return fmt.Sprintf("担当している Claude Code が `CONTINUO-STATUS: %s` と表明したためです", value)
+	}
+	return fmt.Sprintf("`%s` を担当している Claude Code が `CONTINUO-STATUS: %s %s` と表明したためです",
+		identifier, target, value)
 }
 
 // noteSignalTargetsMissing は、表明が指す issue がボードに載っていなかったことを
@@ -326,11 +350,12 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	o.logger.Info("run を終えます", "identifier", rs.issue().Identifier, "理由", summaryLine(reason))
 
 	if failureState != "" {
-		if _, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.cfg.Tracker.TerminalStates); err != nil {
+		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.cfg.Tracker.TerminalStates)
+		if err != nil {
 			o.logger.Warn("Status を落とせません",
 				"identifier", rs.issue().Identifier, "遷移先", failureState, "error", err)
 		}
-		o.postHandoffComment(ctx, rs, reason)
+		o.postHandoffComment(ctx, rs, reason, newStatusMove(moved, failureState))
 	}
 
 	o.ensureAgentComment(ctx, rs)
@@ -369,8 +394,8 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 	}
 	// **失敗は issue 単位で数える**（設計 3-16）。印はこのあと release で消えるので、
 	// 印の中の RetryCount では次の巡回が0回目として拾い直してしまう。
-	o.noteFailure(rs.IssueID, reason, moved && err == nil)
-	o.postHandoffComment(ctx, rs, reason)
+	o.noteFailure(rs.IssueID, reason, moved.Reached && err == nil)
+	o.postHandoffComment(ctx, rs, reason, newStatusMove(moved, o.cfg.Tracker.FailureState))
 	o.ensureAgentComment(ctx, rs)
 	o.runAfterRun(ctx, rs)
 	o.stopWorker(ctx, rs)
@@ -438,8 +463,8 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 			o.logger.Warn("Status を落とせません", "identifier", snap.Identifier, "error", err)
 		}
 		// **打ち切りも issue 単位で数える**（failRun と同じ器に積む）。
-		o.noteFailure(rs.IssueID, reason, moved && err == nil)
-		o.postHandoffComment(ctx, rs, reason)
+		o.noteFailure(rs.IssueID, reason, moved.Reached && err == nil)
+		o.postHandoffComment(ctx, rs, reason, newStatusMove(moved, o.cfg.Tracker.FailureState))
 		// **打ち切りである。worker を止める前にコメントを確かめる**（設計 3-25）。
 		o.ensureAgentComment(ctx, rs)
 		o.runAfterRun(ctx, rs)
@@ -660,14 +685,19 @@ func (o *Orchestrator) cleanupPath(
 
 // postHandoffComment は人間へ引き渡すときの通知を issue へ書く。
 //
-// **成果の要約は書かない**（設計 3-29）。continuo が書くのは引き渡しの通知だけである。
+// **成果の要約は書かない**（設計 3-29）。continuo が書くのは、この通知と
+// Status を動かした記録（`postStatusMove`）の2つだけである。
 //
 // **1つの run について1件だけ投稿する。**2件目以降は理由をログに残して捨てる。
+//
+// **Status を動かした記録もこの通知の中に入れる**（設計 3-29）。この経路では
+// `postStatusMove` を呼ばない。呼ぶと、同じことを書いたコメントが2件並ぶ。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // reason: 引き渡す理由。
-func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, reason string) {
+// move: Status を動かした記録。書き込みが起きていなければ1行も出さない。
+func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, reason string, move statusMove) {
 	nodeID := issueNodeID(rs.issue())
 	if nodeID == "" {
 		return
@@ -685,7 +715,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			WorktreePath:   snap.WorktreePath,
 			TranscriptPath: snap.TranscriptPath,
 			SettingsPath:   snap.SettingsPath,
-		}),
+		}, move),
 		o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}

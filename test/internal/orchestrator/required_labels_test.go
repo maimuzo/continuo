@@ -1,3 +1,5 @@
+// {"RUCM-CFG-SHA256": "465f03a9ce5babf39f52394708de534812f9fd67a2642cd94af81ac519febdf3", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
 // `tracker.required_labels` による dispatch の絞り込みの検査である。
 //
 // **これを取り違えると、着手してはいけない issue に着手する。**
@@ -42,6 +44,8 @@ func TestRequiredLabels_必須ラベルが空なら全部に着手する(t *test
 	})
 }
 
+// {"RUCM-PATH": "P035"}
+//
 // TestRequiredLabels_1つでも欠けたら着手しない は、絞り込みが効くことを確かめる。
 //
 // 目的: `required_labels` に並べたラベルを**全部**持っている issue だけに着手すること。

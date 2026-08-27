@@ -817,6 +817,10 @@ cd ~/continuo-try
 > 取り直したものである**（2026-08-21）。**`claude` から `worktree の場所` までの4行は、
 > 同じ macOS で別に叩いて取ったものである**（2026-08-24）。**件数の行はそれに合わせて数え直してある。**
 > **hook の socket の場所は、機械ごとに変わる文字列を `$TMPDIR` に置き換えてある。**
+>
+> **このあとに出てくる `continuo doctor` の出力は、どれも見出し語が2つ足りない。**
+> `片付けの状態` と `Status の名前` は、この写しを取ったあとに足したものである。
+> **並びの正は [internal/doctor/report.go](../internal/doctor/report.go) の `Label` 定数である。**
 
 ```text
 ✓ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めました（front matter の検証も通りました）

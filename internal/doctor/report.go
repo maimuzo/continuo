@@ -63,6 +63,14 @@ const (
 	//
 	// **ここが書けないと、着手は worktree を用意する段で必ず落ちる。**
 	LabelWorkspaceRoot = i18n.KeyDoctorLabelWorkspaceRoot
+	// LabelCleanupStates は `cleanup.on_states` が `tracker.terminal_states` に
+	// 収まっているかの検査である（設計 3-9e。issue #35）。
+	//
+	// **`✗` にしない。**噛み合っていなくても continuo は起動し、走る。だが
+	// **「終わっていない」と判定した直後に worktree を片付ける**という筋の通らない
+	// 動きになる。**起動を止めると、いま動いている人の continuo が版を上げた瞬間に
+	// 起動しなくなる**ので、警告に留める。
+	LabelCleanupStates = i18n.KeyDoctorLabelCleanupStates
 )
 
 // LabelText は見出し語のキーを、いま使っている言語の語に直す。

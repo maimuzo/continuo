@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "62473a258ede20aa1bab988973d0ce2dece3fdccc05441eb7e28601b480d8958", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "05dde3d6b6d1fff7cc317912d27113c4890cf461623b277e4c4c53852fe9b5c3", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 //
 // **hook の置き場所の検査だけを集めたファイルである。**
 //
@@ -26,7 +26,7 @@ import (
 // 目的: 置き場所に何も無いとき、socket を作れることを確かめ、**作った socket を残さない**こと。
 // 与える情報: 一時ディレクトリへ閉じた置き場所（CONTINUO_RUNTIME_DIR）。
 // 成功条件: `✓` で、説明が一時ディレクトリの下の socket を指し、
-// 検査のあとにその socket が残っていないこと。
+// 検査のあとにその socket が残っておらず、終了コードが 0 になること。
 func TestDoctorRuntimeDir_何も無ければ作って消す(t *testing.T) {
 	fx := newFixture(t)
 
@@ -40,6 +40,9 @@ func TestDoctorRuntimeDir_何も無ければ作って消す(t *testing.T) {
 	if _, err := os.Lstat(fx.SocketPath()); !os.IsNotExist(err) {
 		t.Fatalf("検査が作った socket が残っている: %s（%v）", fx.SocketPath(), err)
 	}
+	if report.ExitCode() != 0 {
+		t.Fatalf("すべて通ったのに終了コードが %d だった", report.ExitCode())
+	}
 }
 
 // {"RUCM-PATH": "P001"}
@@ -49,7 +52,7 @@ func TestDoctorRuntimeDir_何も無ければ作って消す(t *testing.T) {
 //
 // 目的: 置き場所で誰かが待ち受けているとき、`✓` にし、**「作れます」とは言わない**こと。
 // 与える情報: 一時ディレクトリの置き場所に、テストが自分で listen した socket。
-// 成功条件: `✓` で、説明が「既に continuo が待ち受けています」であること。
+// 成功条件: `✓` で、説明が「既に continuo が待ち受けています」で、終了コードが 0 になること。
 func TestDoctorRuntimeDir_既にcontinuoが待ち受けていれば通る(t *testing.T) {
 	fx := newFixture(t)
 	if err := os.MkdirAll(fx.RunDir, 0o700); err != nil {
@@ -71,9 +74,12 @@ func TestDoctorRuntimeDir_既にcontinuoが待ち受けていれば通る(t *tes
 	if strings.Contains(res.Detail, "作れます") {
 		t.Fatalf("使われているのに「作れます」と出ている: %q", res.Detail)
 	}
+	if report.ExitCode() != 0 {
+		t.Fatalf("すべて通ったのに終了コードが %d だった", report.ExitCode())
+	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDoctorRuntimeDir_残骸があれば足りないと出す は、**「作れます」の嘘**を落とす。
 //
@@ -103,7 +109,7 @@ func TestDoctorRuntimeDir_残骸があれば足りないと出す(t *testing.T) 
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDoctorRuntimeDir_置き場所がディレクトリなら足りないと出す は、
 // 残骸が socket とは限らないことを確かめる。
@@ -123,7 +129,7 @@ func TestDoctorRuntimeDir_置き場所がディレクトリなら足りないと
 	assertSocketUnderRoot(t, fx, res.Detail)
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P020"}
 //
 // TestDoctorRuntimeDir_置き場所を決められなければ足りないと出す は、
 // 置き場所そのものを用意できない場合を確かめる。

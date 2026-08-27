@@ -3,9 +3,10 @@
 画面に出たメッセージから引ける一覧です。使い方は [README.ja.md](../README.ja.md) と
 [trying_it_out.md](trying_it_out.md) にあります。
 
-困ったら、まず `continuo doctor` を叩いてください。設定ファイル / claude / hook の置き場所 /
-Claude の設定 / worktree の場所 / herdr / gh の認証 / ボード / clone / 信頼登録 / 資格情報の
-11個を調べます。`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
+困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 / claude /
+hook の置き場所 / Claude の設定 / worktree の場所 / herdr / gh の認証 / ボード /
+Status の名前 / clone / 信頼登録 / 資格情報の13個を調べます。
+`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
 cd ~/continuo-work && continuo doctor
@@ -239,6 +240,26 @@ grep -n "protocol:" ~/continuo-work/WORKFLOW.md
 ```bash
 cd ~/continuo-work && continuo doctor; echo "exit=$?"
 ```
+
+### `! 片付けの状態  cleanup.on_states に、tracker.terminal_states の外の Status があります`
+
+**原因。**片付けを始める Status（`cleanup.on_states`）が、
+終わったとみなす Status（`tracker.terminal_states`）に入っていません。
+**この状態だと、continuo は同じ issue を「終わっていない」と判定した直後に worktree を片付けます。**
+
+**よくある形。**ボードの組み込みの自動化が PR のマージで `Done` を書くのに、
+`tracker.terminal_states` には `AI Done` しか書いていない、という組み合わせです。
+
+**直し方。**どちらかにそろえます。**同じ内容の警告が、起動したときにもログへ1行出ます。**
+
+```yaml
+tracker:
+  terminal_states: ["AI Done", "Done"]   # 片付ける Status を、こちらにも並べる
+cleanup:
+  on_states: ["AI Done", "Done"]         # あるいは、こちらから外の値を外す
+```
+
+**起動は止まりません。**`!` なので終了コードも 0 のままです。
 
 ---
 

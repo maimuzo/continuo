@@ -3,7 +3,8 @@
 //
 // **順序が仕様である。**
 //
-//	1 設定を読んで検証する      … 起動を止める。**pane には触らない**
+//	1 設定を読んで検証する      … 起動を止める。**pane には触らない**。
+//	                             **噛み合っていない Status の集合は、ここで警告だけ出す**（3-9e）
 //	2 flock を取る             … 二重起動なので即座に終了する
 //	2b 依存を組み立てる          … **ここで外部プロセスを1つ起こす**（`gh auth token`）。
 //	                             **必ず期限を掛ける**（掛けないと無言で永久に止まる）
@@ -36,6 +37,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -167,6 +169,10 @@ func Run(ctx context.Context, opts Options) error {
 	cfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
 
+	// **起動は止めずに、噛み合っていない Status の集合だけを知らせる**（設計 3-9e。issue #35）。
+	// **段1 の中に置く。**flock より前なので、二重起動で落ちる経路でも必ず1回出る。
+	WarnCleanupStates(cfg, logger)
+
 	// **トークンを載せる前に接続先を確かめる**（設計 3-23 の環境変数）。
 	// ここを飛ばすと、環境変数に書かれたどんな宛先へも `Authorization: Bearer` が飛ぶ。
 	endpoint := os.Getenv(EnvGraphQLEndpoint)
@@ -289,6 +295,52 @@ func Run(ctx context.Context, opts Options) error {
 		return runErr
 	}
 	return nil
+}
+
+// WarnCleanupStates は、片付けを始める Status に「終わったとみなさない Status」が
+// 混ざっていたら、起動時に1回だけ警告を出す（設計 3-9e。issue #35）。
+//
+// **起動を止めない。**止めると、いま動いている人の continuo が版を上げた瞬間に
+// 起動しなくなる。報告された `WORKFLOW.md` は `tracker.terminal_states: ["AI Done"]` と
+// `cleanup.on_states: ["Done"]` で、**まさにこの検査に引っかかる形である。**
+// **壊れるものは無く、片付けの筋が通らないだけである**ので、警告に留める。
+//
+// **`cleanup.on_states` と `tracker.active_states` の重なりとは扱いが違う。**
+// あちらは走っている worktree を消すので、`config.Validate` が起動前に止める。
+//
+// **どのキーのどの値かを必ず本文に出す。**「食い違っています」とだけ言われても、
+// 人間はどの行を直せばよいか分からない（`continuo doctor` の見出し語 `Status の名前` と
+// 同じ流儀である）。
+//
+// cfg: 検証を通った設定。
+// logger: ログの出力先。**nil を渡してはならない**（呼び出し元が既に解決している）。
+func WarnCleanupStates(cfg config.Config, logger *slog.Logger) {
+	outside := config.CleanupStatesOutsideTerminal(cfg)
+	if len(outside) == 0 {
+		return
+	}
+	logger.Warn(fmt.Sprintf(
+		"cleanup.on_states の %s が tracker.terminal_states にありません"+
+			"（終わったとみなさない Status で worktree を片付けます）。"+
+			"tracker.terminal_states に %s を足すか、cleanup.on_states から外してください",
+		quoteStates(outside), quoteStates(outside)),
+		"cleanup.on_states", quoteStates(cfg.Cleanup.OnStates),
+		"tracker.terminal_states", quoteStates(cfg.Tracker.TerminalStates))
+}
+
+// quoteStates は Status 名の並びを、引用符で囲んで読点でつないだ1つの文字列にする。
+//
+// **引用符を必ず付ける。**Status 名は空白を含みうる（`In Progress`）ので、
+// 裸で並べると、どこまでが1つの名前なのかが読めない。
+//
+// states: 並べる Status 名。
+// 戻り値: `"Done", "In Progress"` の形の文字列（空なら空文字）。
+func quoteStates(states []string) string {
+	quoted := make([]string, 0, len(states))
+	for _, s := range states {
+		quoted = append(quoted, fmt.Sprintf("%q", s))
+	}
+	return strings.Join(quoted, ", ")
 }
 
 // deps は組み立てた依存の束である。

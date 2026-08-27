@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -105,6 +106,70 @@ func writeRemedies(dir string, err error) []string {
 		return filesystemRemedies()
 	}
 	return []string{i18n.T(i18n.KeyDoctorWriteRemedyPermission, dir)}
+}
+
+// checkCleanupStates は、片付けを始める Status が「終わったとみなす Status」に
+// 収まっているかを検査する（見出し語 `片付けの状態`。設計 3-9e。issue #35）。
+//
+// **判定は書き直さない。**internal/config の `CleanupStatesOutsideTerminal` をそのまま呼ぶ。
+// 起動時の警告（internal/daemon の `WarnCleanupStates`）も同じ関数を呼んでいる。
+// **違うのは出し方だけである。**
+//
+// **記号は `✗` ではなく `!` にする。**噛み合っていなくても continuo は起動し、走る。
+// **起動を止めると、いま動いている人の continuo が版を上げた瞬間に起動しなくなる**
+// （報告された `WORKFLOW.md` が、まさにこの検査に引っかかる形だった）。
+//
+// **なぜ既にある検査では捕まらないのか。**`config.Validate` が見ているのは
+// 「`cleanup.on_states` が `tracker.active_states` と重ならないこと」だけである。
+// あちらは**走っている worktree を消す**ので起動を止める価値があるが、
+// **`tracker.terminal_states` との関係は誰も見ていなかった。**
+//
+// **どのキーのどの値かを必ず出す。**見出し語 `Status の名前` と同じ流儀である。
+//
+// cfg: 読めた場合の設定。
+// configSymbol: 上流（設定ファイル）の記号。
+// 戻り値: 検査結果。
+func checkCleanupStates(cfg loadedConfig, configSymbol Symbol) Result {
+	if configSymbol != SymbolOK {
+		return Result{
+			Label:  LabelCleanupStates,
+			Symbol: SymbolUnknown,
+			Detail: i18n.T(i18n.KeyDoctorCleanupStatesConfigUnreadable),
+		}
+	}
+	// **片付けそのものを行わない設定なら、噛み合っていなくても何も起きない。**
+	// ここで注意を出すと、`cleanup.enabled: false` にした人が毎回読み飛ばす注意を1件抱える。
+	if !cfg.Config.Cleanup.Enabled {
+		return Result{
+			Label:  LabelCleanupStates,
+			Symbol: SymbolOK,
+			Detail: i18n.T(i18n.KeyDoctorCleanupStatesDisabled),
+		}
+	}
+
+	outside := config.CleanupStatesOutsideTerminal(cfg.Config)
+	if len(outside) == 0 {
+		return Result{
+			Label:  LabelCleanupStates,
+			Symbol: SymbolOK,
+			Detail: i18n.T(i18n.KeyDoctorCleanupStatesOK, len(cfg.Config.Cleanup.OnStates)),
+		}
+	}
+
+	notes := make([]string, 0, len(outside))
+	remedies := make([]string, 0, len(outside))
+	for _, state := range outside {
+		quoted := strconv.Quote(state)
+		notes = append(notes, i18n.T(i18n.KeyDoctorCleanupStatesNote, quoted))
+		remedies = append(remedies, i18n.T(i18n.KeyDoctorCleanupStatesRemedy, quoted, quoted))
+	}
+	return Result{
+		Label:    LabelCleanupStates,
+		Symbol:   SymbolUnknown,
+		Detail:   i18n.T(i18n.KeyDoctorCleanupStatesMismatch, len(outside)),
+		Notes:    notes,
+		Remedies: remedies,
+	}
 }
 
 // checkClaudeHome は Claude Code の設定ディレクトリに本当に書けるかを検査する

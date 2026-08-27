@@ -874,10 +874,16 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 	case "to_dispatch_state":
 		o.logger.Info("pane の無い実行中の run の Status を dispatch_state へ戻します",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.DispatchState)
-		if _, err := o.tracker.UpdateStatus(
-			ctx, issue.ID, o.cfg.Tracker.DispatchState, o.cfg.Tracker.TerminalStates); err != nil {
+		moved, err := o.tracker.UpdateStatus(
+			ctx, issue.ID, o.cfg.Tracker.DispatchState, o.cfg.Tracker.TerminalStates)
+		if err != nil {
 			o.logger.Warn("Status を戻せません", "identifier", issue.Identifier, "error", err)
 		}
+		// **この経路は引き渡しの通知を出さない。**独立した記録として1件残す（設計 3-29）。
+		o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue),
+			newStatusMove(moved, o.cfg.Tracker.DispatchState),
+			"continuo を再起動したとき、この issue の Claude Code の pane が残っていなかったので、"+
+				"着手待ちへ戻したためです（`restart.orphan_running_action` が `to_dispatch_state`）")
 	case "to_failure_state":
 		o.logger.Info("pane の無い実行中の run を人間へ渡します（worktree は残します）",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.FailureState)
@@ -909,8 +915,9 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 // reason: 人間へ見せる理由。
 // hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
 func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, reason string, hc handoffContext) {
-	if _, err := o.tracker.UpdateStatus(
-		ctx, issue.ID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {
+	moved, err := o.tracker.UpdateStatus(
+		ctx, issue.ID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	if err != nil {
 		o.logger.Warn("Status を落とせません",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.FailureState, "error", err)
 		return
@@ -919,8 +926,10 @@ func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, r
 	if nodeID == "" {
 		return
 	}
+	// **Status を動かした記録は引き渡しの通知の中に入れる**（設計 3-29）。
+	// 独立したコメントにすると、同じことが2件並ぶ。
 	if _, err := o.tracker.PostComment(ctx, nodeID,
-		buildHandoffComment(issue.Identifier, reason, hc),
+		buildHandoffComment(issue.Identifier, reason, hc, newStatusMove(moved, o.cfg.Tracker.FailureState)),
 		o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", issue.Identifier, "error", err)
 	}

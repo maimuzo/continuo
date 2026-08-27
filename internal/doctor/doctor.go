@@ -8,6 +8,7 @@
 // 数を2箇所に書けば必ずずれる。数えられる場所は Label 定数の一覧だけにする。
 //
 //	設定ファイル      … WORKFLOW.md が読めて、front matter が検証を通るか
+//	片付けの状態      … `cleanup.on_states` が `tracker.terminal_states` に収まっているか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
 //	hook の置き場所    … hook を受ける socket を実際に置けるか
 //	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか
@@ -128,7 +129,8 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 // **1つ失敗しても残りを全部検査する。**上流が `✗` か `!` になった検査の下流は、
 // 検査せずに `!` にして「なぜ確かめられなかったか」を出す（3-32 の依存の表）。
 //
-//	設定ファイル ─┬─ herdr（設定の protocol と照合する）
+//	設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる）
+//	              ├─ herdr（設定の protocol と照合する）
 //	              └─ gh の認証 ── ボード ─┬─ Status の名前
 //	                                      ├─ clone
 //	                                      └─ 信頼登録
@@ -173,6 +175,11 @@ func Run(ctx context.Context, opts Options) Report {
 	// 段1: 設定ファイル。**ここが落ちても打ち切らない**（設計 3-32 / 08_doctor.md）。
 	configResult, cfg := checkConfig(opts.ConfigPath)
 	report.add(configResult)
+
+	// 段1b: 片付けの状態。**設定を読むだけで済むので、外へ出る検査より先に置く**（設計 3-9e）。
+	// `config.Validate` は `cleanup.on_states` と `tracker.active_states` の重なりしか
+	// 見ておらず、**`tracker.terminal_states` との関係は誰も見ていなかった**（issue #35）。
+	report.add(checkCleanupStates(cfg, configResult.Symbol))
 
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "c432ba5c1bc2937054269562f29ad8d9d26e282720b1e9ad8c6bc379527f3a6e", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "465f03a9ce5babf39f52394708de534812f9fd67a2642cd94af81ac519febdf3", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -13,9 +13,11 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P011"}
 //
 // TestTurn_background_tasksが空のStopだけでturnの終わりと判定しない は、
 // turn の終わりの判定の要を確かめる。
@@ -170,7 +172,7 @@ func TestTurn_表明が無かった次のturnで促す(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P007"}
+// {"RUCM-PATH": "P016"}
 //
 // TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす は、打ち切りを確かめる。
 //
@@ -218,7 +220,7 @@ func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *test
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P020"}
 //
 // TestTurn_blockedが返ったらescを送ってから人間へ渡す は、安全に関わる分岐を確かめる。
 //
@@ -321,7 +323,7 @@ func TestTurn_waitはuntilにblockedを含めてagent_promptに載せる(t *test
 	}
 }
 
-// {"RUCM-PATH": "P009"}
+// {"RUCM-PATH": "P018"}
 //
 // TestTurn_一時的な送信の失敗ではpaneを閉じない は、
 // **一時的な失敗と、送信そのものを断られたときとで、後始末が正反対である**ことを確かめる。
@@ -364,4 +366,81 @@ func TestTurn_一時的な送信の失敗ではpaneを閉じない(t *testing.T)
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
 		t.Errorf("Status を動かした: got %q, want In Progress", got)
 	}
+}
+
+// {"RUCM-PATH": "P014"}
+//
+// TestTurn_待ち受けが返ってもStopHookが来なければ打ち切る は、
+// 代替フロー「turnの終わりの取りこぼし」を検査する。
+//
+// 目的: 設計 3-2 / 3-40 の「**待ち受けが返ったあとに Stop hook が来なかったこと**だけが
+// 『Stop hook が届かなかった』と言ってよい場所である」を示す。
+// **巡回の停滞の検知（`claude.turn_timeout_ms` の沈黙）とは別の経路である。**
+// あちらは画面の版で測るが、こちらは待ち受けが返った直後の `settle_ms` だけを見る。
+//
+// 与える情報: `agent.prompt` は `idle` で返るのに、Stop hook が1件も届かない。
+// 成功条件: 「turn が終わったことを検知できませんでした」を理由にリトライを1つ積み、
+// **Status は running_state のままで、印にも残る**（`failure_state` へは落とさない）。
+func TestTurn_待ち受けが返ってもStopHookが来なければ打ち切る(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 20*time.Second, "Stop hook が来ないまま打ち切られる", func() bool {
+		return strings.Contains(fx.Logs.String(), "run を諦めてリトライを積みました")
+	})
+
+	if !strings.Contains(fx.Logs.String(), "turn が終わったことを検知できませんでした") {
+		t.Fatalf("Stop hook が届かなかったことを理由にしていない:\n%s", fx.Logs.String())
+	}
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
+		t.Errorf("リトライが残っているのに Status を動かした: got %q, want In Progress", got)
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Errorf("バックオフ中も印には残すはずが外れている: %d 件（1 件のはず）", got)
+	}
+}
+
+// {"RUCM-PATH": "P004"}
+//
+// TestComment_身元ファイルを読めなければ復元をあきらめて片付けへ進む は、
+// 代替フロー「復元の断念」を検査する。
+//
+// 目的: 設計 3-25 の「コメントを書かせるための復元は、材料が足りなければ**そこでやめる**」
+// を示す。**run を `failure_state` へ落とし直さない。**落とすのは
+// `agent.start --resume` まで進んで書かせられなかったとき（`コメントの取り戻しの失敗`）だけである。
+//
+// 与える情報: 身元ファイル（`.continuo.json`）の無い worktree を持つ run。
+// リトライは 0 なので、1回目の打ち切りでそのまま引き渡しへ進む。
+// 成功条件: 「身元ファイルを読めないので復元できません」を記録に残し、
+// **そのまま片付けを続けて印から外す**こと。
+func TestComment_身元ファイルを読めなければ復元をあきらめて片付けへ進む(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Agent.MaxRetries = 0
+			cfg.Tracker.VerifyStatesEvery = 0
+		},
+	})
+	issue := sampleIssue(188, "In Progress")
+	fx.Tracker.AddIssue(issue)
+	// **身元ファイルを1バイトも置いていない worktree を持たせる。**
+	fx.AllowLog("身元ファイルを読めないので復元できません")
+	if !fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
+		AgentName:    normalize.SafeName("continuo-hello-world-188"),
+		PaneID:       "p-188",
+		SessionUUID:  "session-1",
+		WorktreePath: t.TempDir(),
+	}, true) {
+		t.Fatalf("検査用の run を印の集合へ入れられません")
+	}
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 20*time.Second, "身元ファイルを読めないことが記録に残る", func() bool {
+		return strings.Contains(fx.Logs.String(), "身元ファイルを読めないので復元できません")
+	})
+	waitFor(t, 20*time.Second, "片付けが続いて印から外れる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
 }

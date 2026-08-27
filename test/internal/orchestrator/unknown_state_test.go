@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "05d24eb379bab8a15b5035df1d406fbe55eee6a30374464dc6d56a6a116ff2a2", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
+// {"RUCM-CFG-SHA256": "6cc018c1c2cdb9abc3d1989308126aa232886c78328bccfb2c7b15ce671e3e09", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
 //
 // **設定に名前の無い Status へ動かされたときの検査である**（設計 3-50 / 3-51）。
 //
@@ -61,10 +61,12 @@ func promptUntilPaneClosed(t *testing.T, fx *fixture) {
 // fx: 対象の fixture。
 // nodeID: 下敷きの GitHub issue のノード ID。
 // 戻り値: continuo 自身が書いたコメントの本文を連結したもの。
+// **Status を動かした記録は数えない。**着手のたびに1件付くので、混ぜると
+// 「止めた理由を書いたか」を判定できなくなる（設計 3-29）。
 func selfCommentBody(fx *fixture, nodeID string) string {
 	var b strings.Builder
 	for _, c := range fx.Tracker.CommentsOf(nodeID) {
-		if c.IsSelf {
+		if c.IsSelf && !isStatusMoveComment(c) {
 			b.WriteString(c.Body)
 			b.WriteString("\n")
 		}
