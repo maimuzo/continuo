@@ -202,3 +202,48 @@ func TestStatusAuthor_識別子での照合はtimelineを要求しない(t *test
 		t.Errorf("識別子での照合のクエリに timelineItems が入っている（ボードを丸ごと読む側である）:\n%s", reqs[0].Query)
 	}
 }
+
+// TestStatusAuthor_Statusを書く前の取り直しはtimelineを要求しない は、設計 3-54 を確かめる。
+//
+// 目的: **書き込みの経路は timeline を1バイトも読まない。**見るのは取り直した Status だけで、
+// それを blockedStates と突き合わせるためである。**Status は turn ごと・巡回ごとに書くので、
+// この経路がいちばん多く呼ばれる。**ネストした connection をぶら下げたままにすると、
+// 使わない50件のイベントを書き込みのたびに読むことになる（設計 3-31）。
+//
+// 与える情報: Bootstrap のあと `UpdateStatus` を1回呼ぶ。
+// 成功条件: 書く前の取り直しのクエリに `timelineItems` が入っていないこと。
+func TestStatusAuthor_Statusを書く前の取り直しはtimelineを要求しない(t *testing.T) {
+	refetched := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
+		ItemID: "item-1", Status: "In Progress", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "t",
+	}))
+	fs := newFakeGraphQLServer(t, func(n int, _ capturedRequest) fakeGraphQLResponse {
+		switch n {
+		case 1:
+			return dataResponse(bootstrapProjectPayload(testStatusOptions))
+		case 2:
+			return dataResponse(byIDsPayload([]any{refetched}))
+		default:
+			return dataResponse(map[string]any{
+				"updateProjectV2ItemFieldValue": map[string]any{
+					"projectV2Item": map[string]any{"id": "item-1"},
+				},
+			})
+		}
+	})
+	a := newBootstrappedAdapter(t, fs)
+
+	if _, err := a.UpdateStatus(t.Context(), "item-1", "In Review", []string{"Done"}); err != nil {
+		t.Fatalf("UpdateStatus が失敗した: %v", err)
+	}
+
+	reqs := fs.Requests()
+	if len(reqs) < 2 {
+		t.Fatalf("リクエストの件数が想定と違う: got %d, want 2 以上", len(reqs))
+	}
+	if !strings.Contains(reqs[1].Query, "nodes(ids:") {
+		t.Fatalf("2回目のリクエストが ID 指定の取り直しになっていない:\n%s", reqs[1].Query)
+	}
+	if strings.Contains(reqs[1].Query, "timelineItems") {
+		t.Errorf("Status を書く前の取り直しに timelineItems が入っている（書き込みの経路は読まない）:\n%s", reqs[1].Query)
+	}
+}

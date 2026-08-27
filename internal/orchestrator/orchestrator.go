@@ -202,6 +202,12 @@ type Orchestrator struct {
 	now            func() time.Time
 	newSessionUUID func() (string, error)
 	ghAuthCheck    GHAuthCheckFunc
+	// knownStateNames は continuo が意味を知っている Status 名の一覧である（設計 3-50）。
+	//
+	// **設定から作る値であり、走っている間は変わらない。**巡回のたびに作り直すと、
+	// 実行中の run 1件ごとに確保と整列をやり直すことになる（`reconcileRunning` は
+	// run ごとに `isKnownState` を引く）。**組み立てのときに1度だけ計算して持つ。**
+	knownStateNames []string
 
 	// mu は runs / sessions / notified / tickCount / quota を守る。
 	mu sync.Mutex
@@ -298,20 +304,22 @@ func New(opts Options) (*Orchestrator, error) {
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
-		cfg:            opts.Config,
-		promptTemplate: opts.PromptTemplate,
-		tracker:        opts.Tracker,
-		herdr:          opts.Herdr,
-		ws:             opts.Workspace,
-		rl:             opts.RateLimit,
-		socketPath:     opts.HookSocketPath,
-		runtimeDir:     filepath.Dir(opts.HookSocketPath),
-		continuoPath:   continuoPath,
-		transcriptRoot: transcriptRoot,
-		logger:         logger,
-		now:            nowFunc,
-		newSessionUUID: newUUID,
-		ghAuthCheck:    opts.GHAuthCheck,
+		cfg:             opts.Config,
+		promptTemplate:  opts.PromptTemplate,
+		tracker:         opts.Tracker,
+		herdr:           opts.Herdr,
+		ws:              opts.Workspace,
+		rl:              opts.RateLimit,
+		socketPath:      opts.HookSocketPath,
+		runtimeDir:      filepath.Dir(opts.HookSocketPath),
+		continuoPath:    continuoPath,
+		transcriptRoot:  transcriptRoot,
+		logger:          logger,
+		now:             nowFunc,
+		newSessionUUID:  newUUID,
+		ghAuthCheck:     opts.GHAuthCheck,
+		knownStateNames: computeKnownStates(opts.Config.Tracker),
+
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
 		notified:       map[string]time.Time{},

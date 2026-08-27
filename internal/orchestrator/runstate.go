@@ -678,6 +678,32 @@ func (rs *runState) claimAutomatedRewrite(state string, limit int) (bool, int) {
 	return true, done
 }
 
+// releaseAutomatedRewrite は、確保した書き戻しの1回ぶんを返す（設計 3-54）。
+//
+// **ボードが1ミリも動かなかったときに呼ぶ。**通信が失敗した・item がもう見えない・
+// 既にその値だった・`terminal_states` に入っていたので書かなかった、のいずれかである。
+//
+// **返さないと、押し合いが1度も起きていない run が止まる。**枠は
+// 「continuo とボードの自動化が同じ issue を押し合っている」ことを数えるためにあり、
+// **押し合いはボードが動いたときにだけ起きる。**GitHub への書き込みが3回続けて
+// 失敗しただけで上限に達すると、**その run はそこから書き戻しをやめ、次に自動化が
+// 動いた時点で worker ごと止まる。**
+//
+// **0 より下へは減らさない。**確保していないのに返す呼び出しがあっても、
+// 上限の意味が壊れないようにする。
+//
+// state: 自動化が書いた Status 名（claimAutomatedRewrite に渡したものと同じ）。
+func (rs *runState) releaseAutomatedRewrite(state string) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	done := rs.automatedRewrites[key]
+	if done <= 0 {
+		return
+	}
+	rs.automatedRewrites[key] = done - 1
+}
+
 // turnLoopActive は turn ループの goroutine が走っているかを返す（設計 3-50）。
 //
 // **「turn が動いている」の判定はこれである。**turn ループは turn を送ってから

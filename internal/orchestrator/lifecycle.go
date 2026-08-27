@@ -19,7 +19,7 @@ import (
 //  3. Status を ID 指定で取り直し、その値で分岐する
 //     terminal_states           … コメントを確かめてから worktree と branch を片付ける
 //     active_states             … max_dispatch_turns に未到達なら次の turn、到達なら failure_state
-//     知らない Status（自動化が書いた）… 本来の Status へ戻し、run を続ける（設計 3-54）
+//     知らない Status（自動化が書いた）… 本来の Status へ戻し、**戻した先で判定し直す**（設計 3-54）
 //     どちらでもない（引き渡し） … コメントを確かめてから worker を止める。**worktree は消さない**
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -43,7 +43,21 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 		return true
 	}
 	rs.setIssue(current)
+	return o.decideAfterTurn(ctx, rs, current, true)
+}
 
+// decideAfterTurn は取り直した Status を見て、turn ループを続けるかどうかを決める
+// （設計 3-5 の図）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// current: 取り直した issue。
+// mayRewrite: ボードの自動化が書いた Status を書き戻してよいか。
+// **書き戻したあとの判定し直しでは偽で呼ぶ**（同じ turn で二度書きに行かないため）。
+// 戻り値: この run が終わったら true（turn ループを止める）。
+func (o *Orchestrator) decideAfterTurn(
+	ctx context.Context, rs *runState, current tracker.Issue, mayRewrite bool,
+) bool {
 	switch {
 	case containsFold(o.cfg.Tracker.TerminalStates, current.State):
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました", current.State))
@@ -55,14 +69,10 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 		rs.clearUnknownState()
 		return false
 	case current.State != "" && !o.isKnownState(current.State):
-		if target, ok := o.claimAutomatedRewrite(rs, current); ok {
-			// **ボードの自動化が動かしただけである**（設計 3-54）。人間の引き渡しではないので
-			// run を終えない。**turn ループの goroutine なので、ここは同期で書きに行ってよい。**
-			o.rewriteAutomatedState(ctx, rs, current, target)
-			// **書き込みが失敗しても run は続ける。**失敗したのは continuo であって、
-			// 人間が引き渡したわけではない。次の巡回が同じ判定でもう一度書きに行く。
-			rs.clearUnknownState()
-			return false
+		if mayRewrite {
+			if target, ok := o.claimAutomatedRewrite(rs, current); ok {
+				return o.rewriteAndDecide(ctx, rs, current, target)
+			}
 		}
 		// **猶予を置いて待った先である**（設計 3-50）。turn の終わりまで待ったが、
 		// エージェントは正しい Status への表明を出さなかった。**黙って終えない。**
@@ -73,6 +83,46 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました（人間へ引き渡します）", current.State))
 		return true
 	}
+}
+
+// rewriteAndDecide は、ボードの自動化が動かした Status を書き戻し、
+// **戻した先の Status で「終わりかどうか」を判定し直す**（設計 3-54）。
+//
+// **判定し直さないと、終わった issue へ次のプロンプトを送る。**
+// 終わりかどうかの判定は書き戻しの**前**に済んでおり、書き戻しはそのあとで Status を
+// 別の値へ変える。**戻す先が `terminal_states` に入っていると、その issue は
+// もう終わっているのに turn ループが続く。**
+//
+// **`tracker.automated_state_rewrite` の戻す先は `active_states` に入っていることを
+// `config.Validate` が要求している**ので、通常この判定はそのまま「次の turn へ」になる。
+// **それでも判定し直す。**書き戻しは `UpdateStatus` を通るので、
+// **書いた直後に人間やボードの自動化がさらに動かした値が返ることがある**（設計 3-34）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// current: 書き戻す前の issue。
+// target: 戻す先の Status 名。
+// 戻り値: この run が終わったら true（turn ループを止める）。
+func (o *Orchestrator) rewriteAndDecide(
+	ctx context.Context, rs *runState, current tracker.Issue, target string,
+) bool {
+	// **turn ループの goroutine なので、ここは同期で書きに行ってよい。**
+	if !o.rewriteAutomatedState(ctx, rs, current, target) {
+		// **書き込みが失敗しても run は続ける。**失敗したのは continuo であって、
+		// 人間が引き渡したわけではない。次の巡回が同じ判定でもう一度書きに行く。
+		rs.clearUnknownState()
+		return false
+	}
+	// **ボードは戻す先の Status になっている。**その値で判定をやり直す。
+	moved := current
+	moved.State = target
+	// **書いたのは continuo である。**自動化が書いたという印を残したままにすると、
+	// このあと止める経路が「ボードの自動化が書きました」という的外れな案内を出す。
+	moved.StatusChangedBy = ""
+	moved.StatusChangedByAutomation = false
+	rs.setIssue(moved)
+	rs.clearUnknownState()
+	return o.decideAfterTurn(ctx, rs, moved, false)
 }
 
 // readSignals は turn が終わったあとに transcript を読んで表明を拾う（設計 3-25）。

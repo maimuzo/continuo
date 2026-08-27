@@ -3,7 +3,7 @@
   "usecase_name": "人間に判断を渡す",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間に判断を渡す.rucm.md",
-    "rucm_block_sha256": "2c9ce67bbd584b832b2e7defb00486e1372f4ce54ef6bd4fc0d4f39ed961a512"
+    "rucm_block_sha256": "5d950dde5d3cc375276b4dd73083618431e913e4aedc3be91da0540b2ae06014"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -58,11 +58,20 @@
       ],
       "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。"
     },
+    "自動化の書き戻し": {
+      "rfs": {
+        "flow": "知らないStatus",
+        "steps": [
+          1
+        ]
+      },
+      "postcondition": "issue の Status は戻す先の選択肢である。issue に Status を動かした記録のコメントが1件ある。herdr の pane は閉じていない。worktree は残っている。印は残っている。"
+    },
     "turnの猶予": {
       "rfs": {
         "flow": "知らないStatus",
         "steps": [
-          6
+          2
         ]
       },
       "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。"
@@ -331,69 +340,69 @@
       "type": "condition",
       "flow": "知らないStatus",
       "step": 1,
-      "statement": "IF その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない THEN"
+      "statement": "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している。"
     },
     {
       "id": "知らないStatus-2",
-      "type": "action",
+      "type": "condition",
       "flow": "知らないStatus",
       "step": 2,
-      "statement": "システムはボードの issue の Status に戻す先の選択肢を書く。"
+      "statement": "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
     },
     {
       "id": "知らないStatus-3",
       "type": "action",
       "flow": "知らないStatus",
       "step": 3,
-      "statement": "システムは Status を動かした記録を issue にコメントする。"
-    },
-    {
-      "id": "知らないStatus-4",
-      "type": "abort",
-      "flow": "知らないStatus",
-      "step": 4,
-      "statement": "ABORT"
-    },
-    {
-      "id": "知らないStatus-6",
-      "type": "condition",
-      "flow": "知らないStatus",
-      "step": 6,
-      "statement": "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
-    },
-    {
-      "id": "知らないStatus-7",
-      "type": "action",
-      "flow": "知らないStatus",
-      "step": 7,
       "statement": "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。"
     },
     {
-      "id": "知らないStatus-8",
+      "id": "知らないStatus-4",
       "type": "action",
       "flow": "知らないStatus",
-      "step": 8,
+      "step": 4,
       "statement": "システムは workspace_hooks の after_run を実行する。"
     },
     {
-      "id": "知らないStatus-9",
+      "id": "知らないStatus-5",
       "type": "action",
       "flow": "知らないStatus",
-      "step": 9,
+      "step": 5,
       "statement": "システムは herdr の pane を閉じる。"
     },
     {
-      "id": "知らないStatus-10",
+      "id": "知らないStatus-6",
       "type": "action",
       "flow": "知らないStatus",
-      "step": 10,
+      "step": 6,
       "statement": "システムは印を外す。"
     },
     {
-      "id": "知らないStatus-11",
+      "id": "知らないStatus-7",
       "type": "abort",
       "flow": "知らないStatus",
-      "step": 11,
+      "step": 7,
+      "statement": "ABORT"
+    },
+    {
+      "id": "自動化の書き戻し-1",
+      "type": "action",
+      "flow": "自動化の書き戻し",
+      "step": 1,
+      "statement": "システムはボードの issue の Status に戻す先の選択肢を書く。"
+    },
+    {
+      "id": "自動化の書き戻し-2",
+      "type": "action",
+      "flow": "自動化の書き戻し",
+      "step": 2,
+      "statement": "システムは Status を動かした記録を issue にコメントする。"
+    },
+    {
+      "id": "自動化の書き戻し-3",
+      "type": "abort",
+      "flow": "自動化の書き戻し",
+      "step": 3,
       "statement": "ABORT"
     },
     {
@@ -639,18 +648,25 @@
       "from": "知らないStatus-1",
       "to": "知らないStatus-2",
       "kind": "true",
-      "condition": "その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない"
+      "condition": "その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している"
     },
     {
       "from": "知らないStatus-1",
-      "to": "知らないStatus-6",
+      "to": "自動化の書き戻し-1",
       "kind": "false",
-      "condition": "NOT その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない"
+      "condition": "NOT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している"
     },
     {
       "from": "知らないStatus-2",
       "to": "知らないStatus-3",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "turn の終わりを待つ猶予が残っていない"
+    },
+    {
+      "from": "知らないStatus-2",
+      "to": "turnの猶予-1",
+      "kind": "false",
+      "condition": "NOT turn の終わりを待つ猶予が残っていない"
     },
     {
       "from": "知らないStatus-3",
@@ -658,35 +674,28 @@
       "kind": "seq"
     },
     {
+      "from": "知らないStatus-4",
+      "to": "知らないStatus-5",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-5",
+      "to": "知らないStatus-6",
+      "kind": "seq"
+    },
+    {
       "from": "知らないStatus-6",
       "to": "知らないStatus-7",
-      "kind": "true",
-      "condition": "turn の終わりを待つ猶予が残っていない"
-    },
-    {
-      "from": "知らないStatus-6",
-      "to": "turnの猶予-1",
-      "kind": "false",
-      "condition": "NOT turn の終わりを待つ猶予が残っていない"
-    },
-    {
-      "from": "知らないStatus-7",
-      "to": "知らないStatus-8",
       "kind": "seq"
     },
     {
-      "from": "知らないStatus-8",
-      "to": "知らないStatus-9",
+      "from": "自動化の書き戻し-1",
+      "to": "自動化の書き戻し-2",
       "kind": "seq"
     },
     {
-      "from": "知らないStatus-9",
-      "to": "知らないStatus-10",
-      "kind": "seq"
-    },
-    {
-      "from": "知らないStatus-10",
-      "to": "知らないStatus-11",
+      "from": "自動化の書き戻し-2",
+      "to": "自動化の書き戻し-3",
       "kind": "seq"
     },
     {
@@ -1260,40 +1269,16 @@
         "知らないStatus-1",
         "知らないStatus-2",
         "知らないStatus-3",
-        "知らないStatus-4"
-      ],
-      "steps": [
-        "エージェントはシステムに表明の1行を含む最終応答を返す。",
-        "システムは transcript から表明の行を読む。",
-        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
-        "IF その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない THEN",
-        "システムはボードの issue の Status に戻す先の選択肢を書く。",
-        "システムは Status を動かした記録を issue にコメントする。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P014",
-      "terminal": "abort",
-      "terminal_flow": "知らないStatus",
-      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "知らないStatus-1",
+        "知らないStatus-4",
+        "知らないStatus-5",
         "知らないStatus-6",
-        "知らないStatus-7",
-        "知らないStatus-8",
-        "知らないStatus-9",
-        "知らないStatus-10",
-        "知らないStatus-11"
+        "知らないStatus-7"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
         "システムは transcript から表明の行を読む。",
         "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
-        "IF その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない THEN",
-        "CONDITION: NOT その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない",
+        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している。",
         "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
         "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
         "システムは workspace_hooks の after_run を実行する。",
@@ -1303,7 +1288,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "turnの猶予",
       "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。",
@@ -1311,7 +1296,7 @@
         "BASIC FLOW-1",
         "BASIC FLOW-2",
         "知らないStatus-1",
-        "知らないStatus-6",
+        "知らないStatus-2",
         "turnの猶予-1",
         "turnの猶予-2",
         "turnの猶予-3"
@@ -1320,12 +1305,35 @@
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
         "システムは transcript から表明の行を読む。",
         "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
-        "IF その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない THEN",
-        "CONDITION: NOT その Status を書いたのがボードの自動化であり、対応表に戻す先があり、書き戻した回数が上限に達していない",
+        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している。",
         "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
         "CONDITION: NOT turn の終わりを待つ猶予が残っていない",
         "システムは worker を止めずに turn の終わりを待つ。",
         "システムは turn の終わりを待っていることを記録に残す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "abort",
+      "terminal_flow": "自動化の書き戻し",
+      "postcondition": "issue の Status は戻す先の選択肢である。issue に Status を動かした記録のコメントが1件ある。herdr の pane は閉じていない。worktree は残っている。印は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "知らないStatus-1",
+        "自動化の書き戻し-1",
+        "自動化の書き戻し-2",
+        "自動化の書き戻し-3"
+      ],
+      "steps": [
+        "エージェントはシステムに表明の1行を含む最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
+        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している。",
+        "CONDITION: NOT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している",
+        "システムはボードの issue の Status に戻す先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "ABORT"
       ]
     }

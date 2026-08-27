@@ -258,14 +258,20 @@ sequenceDiagram
 
 ```yaml
 tracker:
+  active_states: ["AI Ready", "AI In Progress"]
   automated_state_rewrite:
     "In Progress": "AI In Progress"
-    "In Review":   "AI In Review"
-    "Done":        "AI Done"
-    "Blocked":     "AI Blocked"
 ```
 
 **既定は空である。**書かなければ、いままでどおり猶予を置いて止まる。
+
+**戻し先は `active_states` に入っている Status でなければならない**（起動時に弾かれる）。
+**書き戻しは「continuo はまだこの issue を担当している」と言い直す操作である。**
+戻した先が作業中の Status でないと、**書き戻した瞬間に run が終わるか worktree が消える。**
+
+**キーには、設定のどこにも名前が出てこない Status を書く。**`active_states` などに
+書いてある Status をキーにしても、**その行は1度も効かない**（書き戻しを引くのは
+「continuo が知らない Status」になったときだけである）。これも起動時に弾かれる。
 
 ### 判定と行き先
 
@@ -296,7 +302,8 @@ flowchart TD
 | --- | --- |
 | **1つの issue が2枚のボードに載っていると** | **両方の記録が同じ配列で返る。**ボードの番号で絞ること |
 | **書き戻しが失敗しても止めない** | 次の巡回で拾い直す |
-| **同じ Status へ何度も書き戻さない** | 1つの issue につき上限を置く |
+| **同じ Status へ何度も書き戻さない** | 1つの issue につき上限を置く。**数えるのはボードが実際に動いたときだけ**（通信の失敗では数えない） |
+| **書き戻したら、終わりかどうかを判定し直す** | 終わりの判定は書き戻しの**前**に済んでいる。やり直さないと、終わった issue へ次の指示を送る |
 | **`Bot` 型で見ると、組み込み以外の GitHub App も自動化に入る** | 名前の一覧で見る案より、綴りに依存しないことを優先した |
 
 ---

@@ -3,14 +3,14 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// knownStates は continuo が意味を知っている Status 名をすべて返す（設計 3-50）。
+// computeKnownStates は continuo が意味を知っている Status 名をすべて集める（設計 3-50）。
 //
 // **設定に名前が出てくる Status がすべてである。**active_states・terminal_states・
 // running_state・dispatch_state・failure_state・status_signal_map の遷移先と、
@@ -22,10 +22,14 @@ import (
 // 「ボードの自動化が書く、continuo が知らない Status」であり、ここへ入れると
 // 知っている Status になって、書き戻しの分岐が二度と通らなくなる。
 //
-// 戻り値: Status 名の並び（重複と空文字は落とす。順序は設定に書かれた順）。
-func (o *Orchestrator) knownStates() []string {
+// **呼ぶのは `New` の1回だけである。**結果は `knownStateNames` に持つ。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// 戻り値: Status 名の並び（重複と空文字は落とす。順序は設定に書かれた順、
+// 戻す先だけは名前順で末尾に付く）。
+func computeKnownStates(cfg config.TrackerConfig) []string {
 	seen := map[string]bool{}
-	out := make([]string, 0, len(o.cfg.Tracker.ActiveStates)+len(o.cfg.Tracker.TerminalStates)+3)
+	out := make([]string, 0, len(cfg.ActiveStates)+len(cfg.TerminalStates)+3)
 	add := func(s string) {
 		s = strings.TrimSpace(s)
 		if s == "" {
@@ -38,31 +42,22 @@ func (o *Orchestrator) knownStates() []string {
 		seen[key] = true
 		out = append(out, s)
 	}
-	for _, s := range o.cfg.Tracker.ActiveStates {
+	for _, s := range config.StatesNamedInConfig(cfg) {
 		add(s)
 	}
-	for _, s := range o.cfg.Tracker.TerminalStates {
-		add(s)
-	}
-	add(o.cfg.Tracker.RunningState)
-	add(o.cfg.Tracker.DispatchState)
-	add(o.cfg.Tracker.FailureState)
-	for _, target := range o.cfg.Tracker.StatusSignalMap {
-		if target != nil {
-			add(*target)
-		}
-	}
-	// **map の反復順は決まらないので、名前順に並べてから足す。**
+	// **`config.AutomatedRewriteTargets` が名前順に並べて返す。**
 	// この一覧は issue のコメントとログにそのまま載るので、実行のたびに順序が変わってはならない。
-	rewriteTargets := make([]string, 0, len(o.cfg.Tracker.AutomatedStateRewrite))
-	for _, target := range o.cfg.Tracker.AutomatedStateRewrite {
-		rewriteTargets = append(rewriteTargets, target)
-	}
-	sort.Strings(rewriteTargets)
-	for _, target := range rewriteTargets {
+	for _, target := range config.AutomatedRewriteTargets(cfg.AutomatedStateRewrite) {
 		add(target)
 	}
 	return out
+}
+
+// knownStates は continuo が意味を知っている Status 名をすべて返す（設計 3-50）。
+//
+// 戻り値: `New` で1度だけ計算した一覧。**呼び出し側は書き換えてはならない。**
+func (o *Orchestrator) knownStates() []string {
+	return o.knownStateNames
 }
 
 // isKnownState は continuo がその Status の意味を知っているかを返す（設計 3-50）。
@@ -70,7 +65,7 @@ func (o *Orchestrator) knownStates() []string {
 // state: 判定する Status 名。
 // 戻り値: 設定に名前が出てくる Status なら true。
 func (o *Orchestrator) isKnownState(state string) bool {
-	return containsFold(o.knownStates(), state)
+	return containsFold(o.knownStateNames, state)
 }
 
 // maxAutomatedRewrites は、1つの run が1つの Status について書き戻してよい回数である
@@ -145,12 +140,15 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 // claimAutomatedRewrite は「知らない Status を書いたのはボードの自動化で、対応表に
 // 戻す先がある」ときに、その戻す先を返す（設計 3-54）。
 //
-// **4つが揃ったときだけ確保できる。**
+// **3つが揃ったときだけ確保できる。**
 //
-//	書いたのが自動化である   … `actor.__typename` が `Bot`、または `wasAutomated` が真（設計 2-6）
-//	対応表に戻す先がある     … `tracker.automated_state_rewrite` のキーに一致する
-//	戻す先が知っている Status … 戻した先でまた「知らない Status」になるのを防ぐ
-//	書き戻す回数が残っている  … 1つの Status につき maxAutomatedRewrites 回まで
+//	書いたのが自動化である  … `actor.__typename` が `Bot`、または `wasAutomated` が真（設計 2-6）
+//	対応表に戻す先がある    … `tracker.automated_state_rewrite` のキーに一致する
+//	書き戻す回数が残っている … 1つの Status につき maxAutomatedRewrites 回まで
+//
+// **戻す先が使える Status かどうかは、ここでは見ない。**`config.Validate` が起動前に
+// 「戻す先は `tracker.active_states` に入っていること」を要求しており（設計 3-54）、
+// **ここへ来た時点でその検査は通っている。**
 //
 // **確保した時点で1回ぶん数える。**書き込みが終わる前に次の巡回が来ても、同じ書き戻しを
 // 二重に立てないためである。
@@ -168,14 +166,6 @@ func (o *Orchestrator) claimAutomatedRewrite(rs *runState, issue tracker.Issue) 
 		// **対応表に無ければ書き戻さない。**いままでどおり猶予を置いて止める。
 		// **足し方は issue のコメントに書く**（unknownStateReason）。ログに毎巡回出すと
 		// 同じ行が流れ続けて他の行が埋もれる。
-		return "", false
-	}
-	if !o.isKnownState(target) {
-		// 戻した先がまた「知らない Status」なら、押し合いが終わらない。
-		// **設定の誤りなので、書き戻さずに人間へ渡す。**
-		o.logger.Warn("自動化が動かした Status の戻す先が、continuo の知らない Status です"+
-			"（書き戻しません。WORKFLOW.md の tracker.automated_state_rewrite を直してください）",
-			"identifier", issue.Identifier, "自動化が書いた Status", issue.State, "戻す先", target)
 		return "", false
 	}
 	claimed, done := rs.claimAutomatedRewrite(issue.State, maxAutomatedRewrites)
@@ -200,6 +190,13 @@ func (o *Orchestrator) claimAutomatedRewrite(rs *runState, issue tracker.Issue) 
 // 誰も閉じない）。**期限も付けない。**GraphQL の呼び出しはトラッカーの HTTP クライアントが
 // 1リクエスト30秒で切るので、この goroutine は放っておいても終わる。
 //
+// **手放した run へは書かない**（`stopForUnknownStateAsync` と同じ守り）。
+// この goroutine が飛んでいる間に turn ループが失敗して run を手放すと、
+// **印が消えたあとに「作業中」の Status がボードへ書かれる。**次の巡回はその issue を
+// 候補として拾い直し、**同じ worktree に2本目の Claude Code を立てる。**
+// **印を確保できなければ、書かずに戻る。**確保できたぶんは、書き終えたら必ず返す
+// （`endTerminal`）。返さないと、そのあと run を終わらせる経路が1つも通らなくなる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // issue: 取り直した issue。
@@ -207,9 +204,21 @@ func (o *Orchestrator) claimAutomatedRewrite(rs *runState, issue tracker.Issue) 
 func (o *Orchestrator) rewriteAutomatedStateAsync(
 	ctx context.Context, rs *runState, issue tracker.Issue, target string,
 ) {
+	if !rs.beginTerminal() {
+		// 既に終わらせる処理が走っている（または run が終わっている）。
+		// **確保した書き戻しの枠を返す。**返さないと、止まらなかった run が
+		// この issue について1回ぶん損をしたまま次の巡回へ進む。
+		rs.releaseAutomatedRewrite(issue.State)
+		o.logger.Info("自動化が動かした Status を戻しませんでした（この run は既に終わりに向かっています）",
+			"identifier", issue.Identifier, "自動化が書いた Status", issue.State, "戻す先", target)
+		return
+	}
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
+		// **run はこのあとも続く。**印を外しておかないと、次に止める理由ができたときに
+		// 終わらせる処理が1つも通らない（`abandonRunClaimed` の `endTerminal` と同じ判断）。
+		defer rs.endTerminal()
 		o.rewriteAutomatedState(ctx, rs, issue, target)
 	}()
 }
@@ -222,13 +231,22 @@ func (o *Orchestrator) rewriteAutomatedStateAsync(
 //
 // **失敗しても run は止めない。**Status の書き込みは失敗しうるので、次の巡回で拾い直す。
 //
+// **ボードが動かなかったら、確保した書き戻しの枠を返す**（設計 3-54）。
+// 枠は「continuo とボードの自動化が Status を押し合っている」ことを数えるためにある。
+// **押し合いは、ボードが実際に動いたときにだけ起きる。**通信の失敗や
+// 「既にその値だった」で枠を食い潰すと、**3回の失敗で上限に達し、押し合いが
+// 1度も起きていない run が人間へ渡されて worker が止まる。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // issue: 取り直した issue。
 // target: 戻す先の Status 名。
+// 戻り値: 書き戻したあと、ボードがその Status になっていれば true
+// （書き込んだ場合と、既にその値だった場合）。**呼び出し側はこれが真のときだけ、
+// 戻した先の Status で判断をやり直してよい。**
 func (o *Orchestrator) rewriteAutomatedState(
 	ctx context.Context, rs *runState, issue tracker.Issue, target string,
-) {
+) bool {
 	by := issue.StatusChangedBy
 	if by == "" {
 		by = "(ログイン名を取れませんでした)"
@@ -237,17 +255,21 @@ func (o *Orchestrator) rewriteAutomatedState(
 	// 書き戻しで巻き戻してはならない（`UpdateStatus` の blockedStates）。
 	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.cfg.Tracker.TerminalStates)
 	if err != nil {
+		// **枠を返す。**ボードは動いていない（押し合いは起きていない）。
+		rs.releaseAutomatedRewrite(issue.State)
 		o.logger.Warn("自動化が動かした Status を戻せませんでした（次の巡回で拾い直します）",
 			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
 			"戻す先", target, "書いたのは", by, "error", err)
-		return
+		return false
 	}
 	if !moved.Wrote {
 		// 既にその値だった・item がもう見えない・終わったとみなす状態だった、のいずれか。
+		// **どれもボードは動いていないので、枠を返す。**
+		rs.releaseAutomatedRewrite(issue.State)
 		o.logger.Info("自動化が動かした Status は戻しませんでした（ボードは動いていません）",
 			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
 			"戻す先", target, "取り直した状態", moved.Previous)
-		return
+		return moved.Reached
 	}
 	o.logger.Info("ボードの自動化が動かした Status を、continuo が意図した Status へ戻しました"+
 		"（人間が動かしたものは戻しません）",
@@ -257,6 +279,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 	rs.clearUnknownState()
 	o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue), newStatusMove(moved, target),
 		automatedMoveReason(moved.Previous, by))
+	return true
 }
 
 // automatedMoveReason は、書き戻したときの「なぜ」の文を作る（設計 3-29）。
@@ -275,15 +298,20 @@ func automatedMoveReason(from, by string) string {
 //
 // **照合は大文字小文字と前後の空白を無視する。**トラッカーの Status の照合が
 // そうしているので（SPEC.md 11.3）、ここだけ完全一致で引くと、設定が黙って効かなくなる。
+// **比べ方はこのリポジトリの他の箇所と同じ `strings.EqualFold` に揃える**
+// （`containsFold` / `containsStateFold` / `containsFoldedStatus`）。
+//
+// **大文字小文字だけが違うキーが2つ並ぶことはない。**`config.Validate` が起動前に弾く
+// （どちらに当たるかが map の反復順で決まってしまうため。設計 3-54）。
 //
 // table: `tracker.automated_state_rewrite`。
 // state: 自動化が書いた Status 名。
 // 戻り値の1つ目: 戻す先の Status 名（設定に書かれた綴りのまま）。
 // 戻り値の2つ目: 対応表にあれば true。
 func lookupStateRewrite(table map[string]string, state string) (string, bool) {
-	folded := strings.ToLower(strings.TrimSpace(state))
+	target := strings.TrimSpace(state)
 	for from, to := range table {
-		if strings.ToLower(strings.TrimSpace(from)) == folded {
+		if strings.EqualFold(strings.TrimSpace(from), target) {
 			return to, true
 		}
 	}
@@ -402,9 +430,14 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 // **人間が動かしたときは何も足さない。**その場合は止まったことが正しい振る舞いであり、
 // 設定を足す話ではない。
 //
-// **書いたのが自動化なのに対応表に無い、という場合だけが本題である。**
+// **書いたのが自動化なのに対応表に無い、という場合が本題である。**
 // PR を作った・PR がマージされた、といった操作でボードの組み込みの自動化が動くことは、
-// 設定の既定のまま起きる（設計 2-6）。**足す1行をそのまま書いて見せる。**
+// 設定の既定のまま起きる（設計 2-6）。**足す2行をそのまま書いて見せる。**
+//
+// **既に対応表にある Status なら、足せとは言わない。**それでも止まったということは、
+// 書き戻す回数が上限（`maxAutomatedRewrites`）に達したか、書き込みが続けて失敗したか、
+// **`terminal_states` に入っていて書き戻しを断られたか**である。
+// **同じ行をもう一度足させても直らない。**押し合いが起きていることを書く。
 //
 // rs: 対象の run（取り直した issue を持っている）。
 // state: 動かされた先の Status 名。
@@ -418,16 +451,31 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string) string {
 	if by == "" {
 		by = "ボードの自動化"
 	}
+	written := fmt.Sprintf(
+		"\n【この Status を書いたのは人間ではありません】`%s` が書いています"+
+			"（ボードの組み込みの自動化です。PR を issue に紐づけた・PR をマージした、"+
+			"といった操作で動きます）。", by)
+
+	if target, ok := lookupStateRewrite(o.cfg.Tracker.AutomatedStateRewrite, state); ok {
+		return written + fmt.Sprintf(
+			"**この Status は WORKFLOW.md の `tracker.automated_state_rewrite` に"+
+				"（`%s` → `%s` として）既に書かれています。**それでも止まったので、"+
+				"足りないのは設定の1行ではありません。"+
+				"\n【考えられること】continuo が `%s` へ戻すたびに自動化が `%s` を書き直していて、"+
+				"書き戻す回数が上限（%d 回）に達した。あるいは、この issue の Status を"+
+				"`tracker.terminal_states` の値へ動かしたので、continuo が書き戻しを見送った。"+
+				"\n【対処】ボードの `Workflows` でこの自動化を切るか、"+
+				"`%s` を continuo が使わない Status に変えてください。",
+			state, target, target, state, maxAutomatedRewrites, state)
+	}
+
 	back := rs.lastWrittenState()
 	if back == "" {
 		back = o.cfg.Tracker.RunningState
 	}
-	return fmt.Sprintf(
-		"\n【この Status を書いたのは人間ではありません】`%s` が書いています"+
-			"（ボードの組み込みの自動化です。PR を issue に紐づけた・PR をマージした、"+
-			"といった操作で動きます）。"+
-			"**次からは continuo に戻させることができます。**WORKFLOW.md の `tracker:` の下へ"+
-			"次の3行を足して、continuo を再起動してください。"+
+	return written + fmt.Sprintf(
+		"**次からは continuo に戻させることができます。**WORKFLOW.md の `tracker:` の下へ"+
+			"次の2行を足して、continuo を再起動してください。"+
 			"\n```yaml\n  automated_state_rewrite:\n    %q: %q\n```",
-		by, state, back)
+		state, back)
 }

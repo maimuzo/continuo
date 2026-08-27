@@ -142,6 +142,13 @@ type TrackerConfig struct {
 	// **既定は空である。**書かなければ挙動は変わらないので、既存の WORKFLOW.md をそのまま使える。
 	// **キーをここに書いても、その Status が「知っている Status」になるわけではない**
 	// （知っている Status は active_states などに書かれたものだけである。設計 3-50）。
+	//
+	// **キーは、設定のどこにも名前が出てこない Status でなければならない。**
+	// 書き戻しを引くのは「continuo が知らない Status」になったときだけなので、
+	// **既に名前の出てくる Status をキーにすると、その行は1度も効かない。**
+	// **値（戻す先）は active_states に入っていなければならない。**
+	// 戻した先が作業中の Status でないと、書き戻した直後に run が終わるか worktree が消える。
+	// **どちらも `Validate` が起動前に弾く**（設計 3-54）。
 	AutomatedStateRewrite map[string]string `yaml:"automated_state_rewrite"`
 	// StatusSignalPrefix は、エージェントが応答に書く表明の印である（3-25）。
 	// continuo は turn が終わったと判定したあと transcript を読み、

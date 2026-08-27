@@ -54,7 +54,9 @@ tracker:
   automated_state_rewrite: {}               # ボードの組み込みの自動化（PR を issue に紐づけた・PR をマージした等）が
                                             # Status を動かしたときだけ、その Status を上に書いた Status へ戻す。
                                             # 空なら戻さず、上の猶予を置いてから worker を止める。人間が動かしたものは戻さない。
-                                            # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる
+                                            # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる。
+                                            # 戻す先は上の active_states に入っている Status にすること。
+                                            # キーには、この設定のどこにも名前が出てこない Status を書くこと
 
 polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと

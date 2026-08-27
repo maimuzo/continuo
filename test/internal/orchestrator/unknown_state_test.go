@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "6d8adc604f9d9a695450141f57fe45ed8b9cd48e0f096865f8f4e79c69ab985b", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
+// {"RUCM-CFG-SHA256": "b31ec412bb9644953ad5aab4c93557b8fedebe7d4ab09a7e550fcf9623864fe2", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
 //
 // **設定に名前の無い Status へ動かされたときの検査である**（設計 3-50 / 3-51）。
 //
@@ -74,9 +74,9 @@ func selfCommentBody(fx *fixture, nodeID string) string {
 	return b.String()
 }
 
-// {"RUCM-PATH": "P014"}
+// {"RUCM-PATH": "P013"}
 //
-// TestRUCMHandoff_P014_知らないStatusで止めるときはissueに理由を書く は、設計 3-50 を確かめる。
+// TestRUCMHandoff_P013_知らないStatusで止めるときはissueに理由を書く は、設計 3-50 を確かめる。
 //
 // 目的: 設定に名前が出てこない Status へ動かされた issue を、continuo は黙って止めていた。
 // **その issue は `active_states` に入らないので二度と拾われず、ボードにも issue にも
@@ -87,7 +87,7 @@ func selfCommentBody(fx *fixture, nodeID string) string {
 // 成功条件: issue に continuo のコメントが1件付き、そこに
 // 「どの Status になったか（元の値も）」「なぜ止めたか」「続けるにはどうするか」が書かれていること。
 // **Status は continuo が書き換えないこと**（人間の操作を巻き戻さない）。
-func TestRUCMHandoff_P014_知らないStatusで止めるときはissueに理由を書く(t *testing.T) {
+func TestRUCMHandoff_P013_知らないStatusで止めるときはissueに理由を書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
 			cfg.Tracker.VerifyStatesEvery = 0
@@ -132,9 +132,9 @@ func TestRUCMHandoff_P014_知らないStatusで止めるときはissueに理由�
 	}
 }
 
-// {"RUCM-PATH": "P015"}
+// {"RUCM-PATH": "P014"}
 //
-// TestRUCMHandoff_P015_turnが動いている間は知らないStatusでもすぐには止めない は、設計 3-50 を確かめる。
+// TestRUCMHandoff_P014_turnが動いている間は知らないStatusでもすぐには止めない は、設計 3-50 を確かめる。
 //
 // 目的: エージェントが turn の最後に `CONTINUO-STATUS:` を書けば、continuo が正しい Status へ
 // 戻す（3-25）。**turn が終わる前に殺すと、その表明が読まれずに捨てられる。**
@@ -145,7 +145,7 @@ func TestRUCMHandoff_P014_知らないStatusで止めるときはissueに理由�
 //   - 猶予の内側では worker を止めない（pane も閉じない。コメントも書かない）
 //   - 待っていることをログに出す（人間が止めたいときに遅れることを黙って隠さない）
 //   - 猶予を過ぎたら止めて、理由を issue へ書く
-func TestRUCMHandoff_P015_turnが動いている間は知らないStatusでもすぐには止めない(t *testing.T) {
+func TestRUCMHandoff_P014_turnが動いている間は知らないStatusでもすぐには止めない(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{
 		Now: clock.Now,

@@ -94,8 +94,8 @@ var expectedWarnings = map[string][]string{
 	"TestPreflight_未信頼の通知は巡回のたびに繰り返さない":                          {"リポジトリが Claude Code に信頼登録されていません"},
 	"TestRUCMHandoff_P012_知らない表明ではStatusを動かさない":                  {"表明の値が status_signal_map にありません"},
 	"TestReconcile_active_statesに戻ったらdispatchの前にpaneを閉じる":        {"印に入っていない worktree に生きた pane があったので閉じます"},
-	"TestRUCMHandoff_P014_知らないStatusで止めるときはissueに理由を書く":          {"continuo が知らない Status になったので worker を止めます"},
-	"TestRUCMHandoff_P015_turnが動いている間は知らないStatusでもすぐには止めない":      {"知らない Status のまま猶予を過ぎたので worker を止めます"},
+	"TestRUCMHandoff_P013_知らないStatusで止めるときはissueに理由を書く":          {"continuo が知らない Status になったので worker を止めます"},
+	"TestRUCMHandoff_P014_turnが動いている間は知らないStatusでもすぐには止めない":      {"知らない Status のまま猶予を過ぎたので worker を止めます"},
 	// 設計 3-54: **止まることそのものを確かめるテストである。**
 	// 自動化が動かしても対応表に無い・人間が動かした・誰が動かしたか分からない、の3つは
 	// いままでどおり止まる。**止まったときの WARN は、そのテストが起こしている。**

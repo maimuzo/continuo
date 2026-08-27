@@ -76,11 +76,19 @@ const itemFieldsFragmentTemplate = `
 // **`project { number }` を必ず読む。**1つの issue が複数のボードに載っていると、
 // 他のボードのイベントが同じ配列で返る（設計 2-6 の実測）。絞り込みに要る。
 //
-// **`last: 10` である。**要るのは「いまの Status を書いた最後の1件」だけで、
-// 直近10件を超えて遡る意味が無い。ネストした connection が1本増えるので、
-// **この断片を候補の取得（100件返る）へ足してはならない。**
+// **`last: 50` である。**要るのは「いまの Status を書いた最後の1件」だけだが、
+// **窓を絞るのはボードで絞り込む前である。**`timelineItems` に「どのボードのイベントか」で
+// 絞る引数は無いので、**別のボードで Status が何度も動くと、自分のボードのイベントが
+// 窓から押し出される**（`judgeStatusAuthor` が絞るのは、返ってきた50件の中だけである）。
+// **押し出されると「誰が書いたか分からない」になり、自動化の書き戻しが効かないまま
+// worker が止まる。**1つの issue が載るボードの数だけ余裕を持たせる。
+//
+// **ネストした connection が1本増えるので、この断片を候補の取得（100件返る）へ
+// 足してはならない。**足すのは ID 指定の取り直しだけで、しかも
+// **Status を書く前の取り直しには足さない**（`byIDsQueryTemplate` と
+// `byIDsWithoutTimelineQueryTemplate`）。
 const statusChangedTimelineFragment = `
-      timelineItems(last: 10, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
+      timelineItems(last: 50, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
         nodes {
           ... on ProjectV2ItemStatusChangedEvent {
             createdAt
@@ -144,6 +152,24 @@ query($statusField: String!, $ids: [ID!]!) {
   nodes(ids: $ids) {
     __typename
     ... on ProjectV2Item {` + itemFieldsWithTimelineFragment + `
+    }
+  }
+}
+`
+
+// byIDsWithoutTimelineQueryTemplate は **Status を書く前の取り直し**（`UpdateStatus`）が
+// 使うクエリである。
+//
+// **timeline を取らない。**書き込みの経路が timeline から読むものは1つも無い
+// （見るのは取り直した `State` だけで、それを `blockedStates` と突き合わせる）。
+// **Status は turn ごと・巡回ごとに書くので、この経路がいちばん多く呼ばれる。**
+// ネストした connection を1本ぶら下げたままにすると、**使わない50件のイベントを
+// 書き込みのたびに読む**ことになる（GraphQL の点数は返す node の数で決まる。設計 3-31）。
+var byIDsWithoutTimelineQueryTemplate = `
+query($statusField: String!, $ids: [ID!]!) {
+  nodes(ids: $ids) {
+    __typename
+    ... on ProjectV2Item {` + itemFieldsFragment + `
     }
   }
 }

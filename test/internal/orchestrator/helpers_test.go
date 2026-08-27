@@ -587,6 +587,10 @@ type fakeTracker struct {
 	//
 	// **issue へ書けない状況の再現に使う**（片付けを見送った通知・引き渡しの通知）。
 	postErr error
+	// updateGate は UpdateStatus を待たせる関門である（nil なら待たせない。HoldUpdate が仕掛ける）。
+	updateGate chan struct{}
+	// updateEntered は UpdateStatus が関門に着いたことをテストへ知らせるチャネルである。
+	updateEntered chan struct{}
 	// now は CreatedAt に入れる時刻を返す関数である。
 	now func() time.Time
 	// timeline はテスト用herdr mock と共有する呼び出しの並びである（nil なら記録しない）。
@@ -710,6 +714,43 @@ func (ft *fakeTracker) SetPostError(err error) {
 	ft.postErr = err
 }
 
+// HoldUpdate は**次の1回の `UpdateStatus` を、返り値の関数を呼ぶまで返さないようにする。**
+//
+// **書き込みが飛んでいる最中に別のことが起きる場面を作るためにある**（設計 3-54）。
+// 書き込みは巡回のループとは別の goroutine で走るので、テストから
+// 「書き込みの途中」を掴む手が無いと、その最中に run を手放す並びを作れない。
+//
+// 戻り値の1つ目: 待たせている `UpdateStatus` を進ませる関数。**必ず1回呼ぶこと。**
+// 戻り値の2つ目: `UpdateStatus` が関門に着いたら閉じるチャネル。
+func (ft *fakeTracker) HoldUpdate() (func(), <-chan struct{}) {
+	gate := make(chan struct{})
+	entered := make(chan struct{})
+	ft.mu.Lock()
+	ft.updateGate = gate
+	ft.updateEntered = entered
+	ft.mu.Unlock()
+	var once sync.Once
+	return func() { once.Do(func() { close(gate) }) }, entered
+}
+
+// waitAtUpdateGate は、関門が仕掛けられていれば `UpdateStatus` をそこで待たせる。
+//
+// **`ft.mu` を持ったまま待たない。**持ったまま待つと、ボードを読む呼び出しが全部止まり、
+// 巡回のループごと固まる。
+func (ft *fakeTracker) waitAtUpdateGate() {
+	ft.mu.Lock()
+	gate := ft.updateGate
+	entered := ft.updateEntered
+	ft.updateGate = nil
+	ft.updateEntered = nil
+	ft.mu.Unlock()
+	if gate == nil {
+		return
+	}
+	close(entered)
+	<-gate
+}
+
 // AddIssue はボードの末尾に issue を足す。
 func (ft *fakeTracker) AddIssue(issue tracker.Issue) {
 	ft.mu.Lock()
@@ -755,7 +796,7 @@ func (ft *fakeTracker) SetState(id, state string) {
 }
 
 // ClearStatusAuthor は「いまの Status を誰が書いたか分からない」状況を作る
-// （設計 3-54。timeline のイベントが消えた・権限が無い・直近10件から溢れた）。
+// （設計 3-54。timeline のイベントが消えた・権限が無い・直近50件から溢れた）。
 //
 // id: project item の ID。
 func (ft *fakeTracker) ClearStatusAuthor(id string) {
@@ -948,6 +989,7 @@ func (ft *fakeTracker) FetchIssueByIdentifier(_ context.Context, identifier stri
 //	Reached … 目的の Status になったか。**既に同じ値で書き込みを省いた場合も真である**
 //	Wrote   … 書き込みを実際に行ったか。**issue へ記録を書いてよいのはこれが真のときだけ**
 func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error) {
+	ft.waitAtUpdateGate()
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("UpdateStatus")

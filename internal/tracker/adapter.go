@@ -181,14 +181,10 @@ func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
 			add(*target)
 		}
 	}
-	// **map の反復順は決まらないので、名前順に並べてから足す。**
-	// 照合に落ちたときのメッセージの並びを、実行のたびに変えないためである。
-	rewriteTargets := make([]string, 0, len(cfg.AutomatedStateRewrite))
-	for _, target := range cfg.AutomatedStateRewrite {
-		rewriteTargets = append(rewriteTargets, target)
-	}
-	sort.Strings(rewriteTargets)
-	for _, target := range rewriteTargets {
+	// **戻す先を集めるのは `config.AutomatedRewriteTargets` の仕事である**（設計 3-54）。
+	// 起動時に照合する一覧と、実行時に知っている Status の一覧（orchestrator の
+	// `knownStates`）は同じ集合でなければならないので、集める処理を2箇所に置かない。
+	for _, target := range config.AutomatedRewriteTargets(cfg.AutomatedStateRewrite) {
 		add(target)
 	}
 	return result
@@ -712,8 +708,11 @@ func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q strin
 }
 
 // FetchIssuesByIDs は指定した project item ID の現在のスナップショットを取り直す
-// （SPEC.md 11.1 の fetch_issues_by_ids。設計「その3」）。実行中 issue の照合や、
-// UpdateStatus が書き込み前に行う取り直しに使う。
+// （SPEC.md 11.1 の fetch_issues_by_ids。設計「その3」）。実行中 issue の照合に使う。
+//
+// **「いまの Status を書いたのは誰か」（timeline）も一緒に取る**（設計 3-54）。
+// **Status を書く前の取り直しは `fetchIssuesByIDs` を timeline 無しで呼ぶ**
+// （`UpdateStatus`）。そちらは timeline を1バイトも読まない。
 //
 // **見つからない ID は「もう見えない」として扱い、結果から省く。**合成した状態を作らない
 // （SPEC.md: "IDs no longer visible in the configured scope are omitted; the orchestrator
@@ -740,10 +739,26 @@ func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q strin
 // significant"）。いずれかの ID が見つかったのに正規化できなかった場合は CategoryResponse の
 // *Error を返す。GraphQL 呼び出し自体が失敗した場合はそのエラーを返す。
 func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, error) {
+	return a.fetchIssuesByIDs(ctx, ids, true)
+}
+
+// fetchIssuesByIDs は ID 指定の取り直しの本体である。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// ids: 取り直す project item ID の一覧。
+// withTimeline: 「いまの Status を書いたのは誰か」も取るかどうか。
+// **偽で呼ぶのは Status を書く前の取り直しだけである**（`UpdateStatus`）。
+// 偽のとき `Issue.StatusChangedBy` と `Issue.StatusChangedByAutomation` はゼロ値になる。
+// 戻り値: FetchIssuesByIDs と同じ。
+func (a *Adapter) fetchIssuesByIDs(ctx context.Context, ids []string, withTimeline bool) ([]Issue, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 
+	query := byIDsQueryTemplate
+	if !withTimeline {
+		query = byIDsWithoutTimelineQueryTemplate
+	}
 	var resp byIDsQueryResponse
 	vars := map[string]any{
 		"statusField": a.statusField,
@@ -751,7 +766,7 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 	}
 	// **`NOT_FOUND` は「その ID がもう見えない」ことを意味するので、部分的な成功として扱う。**
 	// 消えた ID は `data.nodes` に `null` で入るので、下のループが省く。
-	if err := a.gql.doAllowingNotFound(ctx, byIDsQueryTemplate, vars, &resp); err != nil {
+	if err := a.gql.doAllowingNotFound(ctx, query, vars, &resp); err != nil {
 		return nil, err
 	}
 
@@ -871,7 +886,9 @@ func (a *Adapter) UpdateStatus(
 	}
 
 	// 書く前に必ず取り直す。
-	current, err := a.FetchIssuesByIDs(ctx, []string{itemID})
+	// **timeline は取らない。**ここで見るのは取り直した `State` だけであり、
+	// 「誰が書いたか」は書き込みの判断に1つも使わない（設計 3-54）。
+	current, err := a.fetchIssuesByIDs(ctx, []string{itemID}, false)
 	if err != nil {
 		return StatusWrite{}, err
 	}
