@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "2c854e22e65cf8d38ee5c667e7de804feaa7949469540feaba74c84c5348cd32", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **再着手でセッションに復帰することの検査である。**
 //
@@ -93,8 +93,10 @@ func closedPane(fx *fixture, paneID string) bool {
 // 事後条件（Status・コメント・pane・印）は、そこから先でしか決まらない。
 //
 // **台本の中では `t` を使わない。**`t.Fatalf` は呼んだ goroutine で `runtime.Goexit` を
-// 起こすので、台本の goroutine から呼ぶと **JSON-RPC の応答が返らず、テストは落ちずに
-// 待ち時間まで固まる。**`t.Errorf` も、テスト本体が返ったあとに走ると panic する。
+// 起こす。台本は `fakeHerdr.serve` の goroutine で走るので、**応答を書かないまま
+// `defer conn.Close()` が走り、continuo 側は EOF を受け取って herdr の呼び出しが失敗する。**
+// **落ちる理由が「台本が見つけたかったこと」から「herdr の呼び出しが切れた」へすり替わる。**
+// `t.Errorf` も、テスト本体が返ったあとに走ると panic する。
 // **だから transcript は先に書き、hook を捨てられたことは変数に控えて後片付けで見る。**
 //
 // **応答は既定の台本に返させる**（`fakeHerdr.HandlerOf` で包む）。写して書き直すと、
@@ -331,7 +333,9 @@ func TestDispatch_既存のworktreeがあれば前回のセッションに復帰
 // 与える情報: セッション UUID `sess-188` を書いた身元ファイルつきの worktree と、
 // `--resume` つきの `agent.start` だけが `timeout` を返す herdr。
 // 成功条件（代替フロー `復帰の失敗` の事後条件をそのまま見る）:
-//   - 1回目の起動が `--resume sess-188` であり、立て直しの起動はそれとは別の `agent.start` である
+//   - 1回目の起動が `--resume sess-188` で、`--session-id` が1つも入っていない
+//   - 立て直しの起動は別の `agent.start` で、`--session-id` が新しい UUID であり、
+//     **`--resume` が1つも残っていない**（残ると捨てたはずの会話へまた戻る）
 //   - 身元ファイルの `session_uuid` が新しい UUID へ書き直されている
 //     （書き直さないと、次の再着手も同じ死んだ UUID へ復帰しにいく）
 //   - hook の引き当ての索引が張り替わっていて、前回のセッション UUID を名乗る hook は
@@ -416,8 +420,11 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	if fresh == "" {
 		t.Fatalf("復帰に失敗したあと --session-id つきで起動し直していない: %v", starts)
 	}
-	if freshAt == 0 {
-		t.Fatalf("立て直しの起動が1回目の起動と同じ呼び出しになっている: starts=%v, resumes=%v", starts, resumes)
+	// **立て直しの起動には `--resume` が1つも残っていない。**
+	// **残ったままだと、`復帰の失敗` が捨てたはずの会話へまた戻りにいく。**
+	if resumes[freshAt] != "" {
+		t.Fatalf("立て直しの起動に --resume が残っている: --resume=%q (starts=%v, resumes=%v)",
+			resumes[freshAt], starts, resumes)
 	}
 	if fresh == "sess-188" {
 		t.Fatalf("死んだセッションの UUID を --session-id に使い回している: %q", fresh)

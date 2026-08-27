@@ -7005,7 +7005,7 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 
 ### 6-18. issue 1件の RUCM は、代替フローを35本にする
 
-**言いたいこと。**`issue を1件処理する` の代替フローは35本、CFG のテストパスは41本である。
+**言いたいこと。**`issue を1件処理する` の代替フローは35本、CFG のテストパスは42本である。
 **足すのは実装に分岐が実在するものだけであり、分岐元は実装の行で裏を取る。**
 
 **分岐元が見つけにくい12本**（段は名前で指す。番号は段を増やすたびに動く）。
@@ -7022,7 +7022,7 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 | `ボードから消えたissue` | issue がボードに見えるかを見る | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `refreshIssue` |
 | `復元の断念` | `コメントの取り戻し` の身元ファイルを読めるかを見る | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `ensureAgentComment` |
 | `着手の途中の失敗`（任意時点） | worktree を作る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` |
-| `復帰の失敗`（任意時点） | Claude Code を起動する | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` の `if startErr != nil && resumeUUID != ""` |
+| `復帰の失敗`（任意時点） | pane の受け付けを見る／Claude Code を起動する | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` の `if startErr != nil && resumeUUID != ""` |
 | `取り戻しの復帰の失敗` | `コメントの取り戻し` の復帰つきの起動の完了を見る | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `ensureAgentComment` |
 
 **「実装のどこか」には、枝を決めている関数を書く。**フローの本体の関数ではない。
@@ -7043,32 +7043,39 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 
 **言いたいこと。**立て直しは前の Claude Code を止めずに同じ pane で行うので、
 **前が残っていると立て直しの起動そのものを受け付けてもらえない。**
-だから RESUME 先は「pane が起動を受け付ける」の検査であり、事後条件は成否を書かない。
+だから RESUME 先は「pane の受け付けを見る」の段であり、事後条件は成否を書かない。
 
 **`復帰の失敗` の WHEN は理由を絞らない。**`startRun` はエラーの種類を見ずに立て直すので、
-**確認の画面で止まっても、`herdr.startup_timeout_ms` が経っても、同じ枝へ入る。**
+**pane が `agent_pane_busy` を30秒返し続けても、確認の画面で止まっても、
+`herdr.startup_timeout_ms` が経っても、同じ枝へ入る。**
 そのぶん、**ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの断念` の3本は、
 新しいセッション UUID の指定つきの起動でだけ通る。**3本の事後条件にそう書いてある。
 
 **`起動の待ち直し` は別である。**`confirmStartupWithRestart` は直前に使った引数をそのまま
 渡し直すので、**再着手ではその引数に `--resume` が入ったまま待ち直す。**だから事後条件に
-起動フラグの種類を書かない。**待ち直しを1回も通らない失敗が2つある。**
+起動フラグの種類を書かない。**`起動の待ち直し` を1回も通らない失敗が2つある。**
 
-| 待ち直しを1回も通らない失敗 | 通らない理由 |
+| `起動の待ち直し` を1回も通らない失敗 | 通らない理由 |
 | --- | --- |
 | `agent.start` そのものがエラーを返した | `launchClaude` が `AgentStartWithRetry` のエラーをその場で返し、待ち直しを持つ `confirmStartupWithRestart` を1度も呼ばない |
 | 起動直後の確認の画面で止まった | `confirmStartup` の `blocked` は `ErrStartupRetryable` を包まないので、`confirmStartupWithRestart` が期限を待たずに返る |
 
 **上の行は珍しくない。**pane が占められたままだと `AgentStartWithRetry` は
 `agent_pane_busy` を `agentStartBusyBudget`（30秒）粘ってからエラーを返す。
-**復帰つきの起動なら、その30秒のあとは `起動の待ち直し` ではなく `復帰の失敗` である。**
+**復帰つきの起動なら、その30秒のあとは `paneの断念` でも `起動の待ち直し` でもなく
+`復帰の失敗` である。**粘りは `AgentStartWithRetry` の中にあり、その戻り値が
+`if startErr != nil && resumeUUID != ""` へ落ちるためである。**だから `復帰の失敗` は
+「pane の受け付けを見る」の段からも枝を出す**（`BRANCH FROM BASIC FLOW 23,24`）。
+**枝を1本にすると、復帰つきの起動が pane の受け付けで打ち切られることになり、
+実装に無い経路を仕様が持つ。**
 
-**だから RESUME 先は「pane が起動を受け付ける」の検査である。**`launchClaude` は pane の
+**RESUME 先を「pane の受け付けを見る」の段にする理由。**`launchClaude` は pane の
 受け付けを粘る `AgentStartWithRetry` から始まるので、**起動の段へ直接戻すと、その検査が
 仕様から消える。**
 
 **起動の確認の段へは戻さない。**戻ったあとの状態が成功した起動と1バイトも変わらないのに
-枝が全部2本ずつになる（実測: 2026-08-27。確認の段へ戻すと66本、起動の段でも受け付けの検査でも41本）。
+枝が全部2本ずつになる（実測: 2026-08-27。確認の段へ戻すと92本、起動の段へ戻すと68本、
+受け付けの検査へ戻すと42本）。
 **起動フラグの選び分けも IF に割らない。**「起動フラグを決める」の段で1度だけ決め、
 どちらを渡したかはテストが `agent.start` の引数で見る。
 
@@ -7096,8 +7103,11 @@ foreground and no foreground command, editor, or agent running." （**訳:** 使
 `agent_pane_busy`（`agent target pane <pane の ID> is not an available shell`）が返る**
 （2026-08-27 に実測。pane で `sleep 180` を走らせてから `herdr agent start` を呼んだ）。
 
-**受け付けてもらえなかった run は `paneの断念` で人間へ渡す。**`paneがまだ使えない` で30秒粘り、
-**`paneの断念` が pane を閉じる。**閉じることで、残っていた前の Claude Code も終わる。
+**立て直しの起動を受け付けてもらえなかった run は `paneの断念` で人間へ渡す。**
+`paneがまだ使えない` で30秒粘り、**`paneの断念` が pane を閉じる。**
+閉じることで、残っていた前の Claude Code も終わる。
+**ここへ来るのは新しいセッション UUID の指定つきの起動だけである。**復帰つきの起動が
+pane の受け付けで落ちた場合は、その前に `復帰の失敗` が受け取って立て直しへ回している。
 
 **その30秒のあいだ、pane に残った Claude Code の hook は捨てられる。**`復帰の失敗` は
 hook の索引を新しいセッション UUID へ張り替えており（`bindSession` は同じ run の古い結び付きを
@@ -7125,11 +7135,11 @@ hook の索引を新しいセッション UUID へ張り替えており（`bindS
 
 ### 6-18e. テストの印は、同じ経路の1本にだけ付ける
 
-**言いたいこと。**印は41本のうち31本に付いている。**印の無い10本のうち4本は、
+**言いたいこと。**印は42本のうち31本に付いている。**印の無い11本のうち4本は、
 6-18d で書き直した2本のフローの経路であり、テストが1本も無い。**
 同じ経路を2本のテストに付けるのもやめる。片方が消えても集計が満たされたままになる。
 
-**印の無い10本は `sh scripts/check-rucm.sh` の `[W1]` に出る。**
+**印の無い11本は `sh scripts/check-rucm.sh` の `[W1]` に出る。**
 
 | 印の無いフロー | `[W1]` に出る経路 | いつからの取りこぼしか |
 | --- | --- | --- |
@@ -7137,7 +7147,15 @@ hook の索引を新しいセッション UUID へ張り替えており（`bindS
 | `取り戻しの復帰の失敗` | P004・P009 | **足したのに、テストが無い** |
 | `既に同じStatus` を通る組み合わせ | P006・P007・P010 | 前からの取りこぼし |
 | turn ループを2周する経路 | P011 | 前からの取りこぼし |
-| `壊れたref` と `消さないref` | P030・P031 | 前からの取りこぼし |
+| `復帰の失敗` へ pane の受け付けから入る側 | P030 | **枝を足したのに、テストが無い** |
+| `壊れたref` と `消さないref` | P031・P032 | 前からの取りこぼし |
+
+**P030 にテストを付けていない理由。**その経路を踏むには `agent.start` に
+`agent_pane_busy` を `agentStartBusyBudget`（30秒）のあいだ返し続けさせる必要がある。
+`agentStartBusyBudget` は `internal/orchestrator/dispatch.go` の const で、
+**設定から短くできないので、テスト1本が30秒を使う。**同じ待ちを使う
+`TestRUCM_P029_paneが使えないまま期限を過ぎたら人間へ渡す` が既に1本あり、
+**もう1本足すとテストの所要時間が倍になる。**短くできるようにするのが先である。
 
 **新規の着手と再着手は同じ経路（P001）を通る。**6-18b のとおり「起動フラグを決める」の段を
 IF に割っていないので、CFG に枝が無く、2つを別の経路として指せない。

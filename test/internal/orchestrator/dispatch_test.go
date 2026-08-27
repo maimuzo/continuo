@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "2c854e22e65cf8d38ee5c667e7de804feaa7949469540feaba74c84c5348cd32", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **候補の取り方と、着手を取りやめる経路の検査である。**
 //
@@ -86,7 +86,7 @@ func TestDispatch_空きスロットが尽きたらそれ以上dispatchしない
 	}
 }
 
-// {"RUCM-PATH": "P041"}
+// {"RUCM-PATH": "P042"}
 //
 // TestDispatch_既に印を持っているissueは二重にdispatchしない は、印の役目を確かめる。
 //
@@ -604,7 +604,7 @@ func TestDispatch_unknownのまま期限を過ぎたら人間へ渡さず試し�
 	}
 }
 
-// {"RUCM-PATH": "P033"}
+// {"RUCM-PATH": "P034"}
 //
 // TestDispatch_failure_stateのissueをrunning_stateへ上書きしない は、段2 の許可リストを確かめる。
 //
@@ -652,7 +652,7 @@ func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *
 	}
 }
 
-// {"RUCM-PATH": "P039"}
+// {"RUCM-PATH": "P040"}
 //
 // TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら拾わない は、
 // issue 単位の失敗の記録を確かめる。
@@ -691,7 +691,7 @@ func TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら
 	}
 }
 
-// {"RUCM-PATH": "P040"}
+// {"RUCM-PATH": "P041"}
 //
 // TestDispatch_絞り込みの食い違いが1件あっても他のissueのdispatchは続く は、
 // 巡回全体を止めないことを確かめる。

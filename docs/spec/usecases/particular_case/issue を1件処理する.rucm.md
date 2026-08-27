@@ -176,7 +176,7 @@ RFS BASIC FLOW 23
 1. システムは 500 ミリ秒待つ。
 2. システムは VALIDATES THAT pane を待ち始めてから 30 秒が経っていない。
 3. RESUME STEP 23
-POSTCONDITION: pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。前回のセッションが消えていた場合は、pane はシェルのプロンプトへ戻っている。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままか、既に落ちてシェルのプロンプトへ戻っているかのどちらかである。
+POSTCONDITION: pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままである。
 
 SPECIFIC ALTERNATIVE FLOW paneの断念:
 RFS paneがまだ使えない 2
@@ -322,8 +322,8 @@ WHEN worktree の用意から Claude Code の起動までのあいだに git・g
 POSTCONDITION: issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。作りかけの worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 復帰の失敗:
-BRANCH FROM BASIC FLOW 24
-WHEN 復帰つきの起動が、前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合
+BRANCH FROM BASIC FLOW 23,24
+WHEN 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合
 1. システムは新しいセッション UUID を採番する。
 2. システムは hook の引き当ての索引を新しいセッション UUID へ張り替える。
 3. システムはトークンの集計の基準を作り直す。
@@ -426,19 +426,25 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 
 | 復帰つきの起動が完了しなかった理由 | どこを通ってどこへ行くか |
 | --- | --- |
-| `agent.start` そのものがエラーを返した（pane が30秒占められたまま・herdr が起動の待ちで timeout を返した） | **待ち直しを1回も通らずに** `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
-| 起動直後の確認の画面が出た | **待ち直しを1回も通らずに** `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
+| pane が `agent_pane_busy` を30秒返し続けた | `paneがまだ使えない` で30秒粘ったのち、**`paneの断念` へは進まずに** `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
+| `agent.start` が起動の待ちで timeout を返した | **`起動の待ち直し` を1回も通らずに** `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
+| 起動直後の確認の画面が出た | **`起動の待ち直し` を1回も通らずに** `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
 | `agent.start` は通ったが、起動の確認が期限まで idle にならなかった | `起動の待ち直し` で期限まで粘ったのち `復帰の失敗` が受け取り、「pane の受け付けを見る」の段からやり直す |
 
 **新しいセッション UUID の指定つきの起動は、`起動直後の確認画面`・`起動の待ち直し`・`起動の断念`・
 `paneがまだ使えない`・`paneの断念` のどれかへ進む。**
 
-**`agent.start` がエラーを返した場合に待ち直しを通らない理由。**`launchClaude` は
-`AgentStartWithRetry` が返したエラーをその場で返し、**待ち直しを持つ `confirmStartupWithRestart` を
-1度も呼ばない**（`internal/orchestrator/dispatch.go`）。pane が30秒占められたままの場合も、
-herdr が起動の待ちで timeout を返した場合も、この経路である。
+**pane の30秒が `paneの断念` で終わらない理由。**pane の粘りは `AgentStartWithRetry` の中にあり、
+**その戻り値は `startRun` の `if startErr != nil && resumeUUID != ""` へ落ちる**
+（`internal/orchestrator/dispatch.go`）。**エラーの種類を見ていないので、`agent_pane_busy` を
+30秒返され続けた場合も、復帰つきの起動なら立て直しへ回る。**だから `復帰の失敗` は
+「pane の受け付けを見る」の段からも枝を出している（`BRANCH FROM BASIC FLOW 23,24`）。
 
-**確認の画面が待ち直しを通らない理由。**`confirmStartup` は `blocked` を見たら `esc` を送って
+**`agent.start` がエラーを返した場合に `起動の待ち直し` を通らない理由。**`launchClaude` は
+`AgentStartWithRetry` が返したエラーをその場で返し、**待ち直しを持つ `confirmStartupWithRestart` を
+1度も呼ばない**（`internal/orchestrator/dispatch.go`）。
+
+**確認の画面が `起動の待ち直し` を通らない理由。**`confirmStartup` は `blocked` を見たら `esc` を送って
 **やり直せない形のエラーで即座に戻り**、`confirmStartupWithRestart` はそれを見て期限を待たずに返す
 （`internal/orchestrator/dispatch.go` の `if !errors.Is(err, ErrStartupRetryable)`）。
 
@@ -473,7 +479,7 @@ ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの�
 
 **言いたいこと。**立て直しは前の Claude Code を止めずに同じ pane で行うので、
 **前が残っている場合は立て直しの起動そのものを受け付けてもらえない。**
-だから `復帰の失敗` は「立て直した」と言い切らず、pane の受け付けの検査へ戻す。
+だから `復帰の失敗` は「立て直した」と言い切らず、「pane の受け付けを見る」の段へ戻す。
 
 **continuo は agent を止められない。**`internal/herdr/agent.go` が定義する method は
 `agent.start` / `prompt` / `read` / `get` / `list` / `wait` / `rename` / `send_keys` の8つで、
@@ -738,6 +744,7 @@ flowchart TD
     B42 -- 真 --> B43 --> B44 --> B45 --> BPOST
     B15 -. "壊れたref: WHEN ref が読めず worktree を作れない場合" .-> N25S1
     B15 -. "着手の途中の失敗: WHEN git・ghq・herdr の呼び出しが失敗した場合" .-> N27S1
+    B23 -. "復帰の失敗: WHEN 復帰つきの起動が理由を問わず完了しなかった場合" .-> N34S1
     B24 -. "復帰の失敗: WHEN 復帰つきの起動が理由を問わず完了しなかった場合" .-> N34S1
     B30 -. "権限の確認: WHEN blocked が返った場合" .-> N28S1
     B30 -. "送信の失敗: WHEN herdr が送信そのものを断った場合" .-> N29S1
@@ -884,7 +891,7 @@ flowchart TD
         N33S1["1. ボードへ書き込まない"] --> N33S2["2. RESUME STEP 42"]
     end
 
-    subgraph SG34 ["GLOBAL ALTERNATIVE FLOW 復帰の失敗 / BRANCH FROM BASIC FLOW 24"]
+    subgraph SG34 ["GLOBAL ALTERNATIVE FLOW 復帰の失敗 / BRANCH FROM BASIC FLOW 23,24"]
         N34S1["1. 新しいセッション UUID を採番する"] --> N34S2["2. hook の引き当ての索引を新しいセッション UUID へ張り替える"] --> N34S3["3. トークンの集計の基準を作り直す"] --> N34S4["4. 身元ファイルのセッション UUID を書き直し、書き直せなければ警告を残す"] --> N34S5["5. 復帰できなかった UUID と新しい UUID と理由を記録に残す"] --> N34S6["6. 起動フラグを新しいセッション UUID の指定つきへ差し替える"] --> N34S7["7. 前の Claude Code を止めずに同じ pane を使い続ける"] --> N34S8["8. RESUME STEP 23"]
     end
 

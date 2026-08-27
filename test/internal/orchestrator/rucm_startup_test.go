@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "2c854e22e65cf8d38ee5c667e7de804feaa7949469540feaba74c84c5348cd32", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「issue を1件処理する」の
 // 「pane が起動を受け付ける」「agent_status が idle か done で interactive_ready が真」の
@@ -13,7 +13,6 @@ package orchestrator_test
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -80,7 +79,8 @@ func TestRUCM_P029_paneが使えないまま期限を過ぎたら人間へ渡す
 		// テストの待ち時間を超える。
 		Mutate: func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 },
 	})
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
 	fx.Herdr.Handle(herdr.MethodAgentStart, func(_ map[string]any) (any, *rpcErr) {
 		return nil, &rpcErr{Code: "agent_pane_busy", Message: "agent target pane is not an available shell"}
 	})
@@ -95,7 +95,7 @@ func TestRUCM_P029_paneが使えないまま期限を過ぎたら人間へ渡す
 	if fx.Herdr.CountMethod(herdr.MethodAgentPrompt) != 0 {
 		t.Errorf("起動していないのに turn を送っている: %v", fx.Herdr.Methods())
 	}
-	worktreePath := filepath.Join(fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	worktreePath := worktreePathOf(t, fx, issue)
 	if _, err := os.Stat(worktreePath); err != nil {
 		t.Errorf("起動に失敗しても worktree は残すこと: %s (err=%v)", worktreePath, err)
 	}
@@ -165,7 +165,8 @@ func TestRUCM_P026_入力を受け付けないまま期限を過ぎたら人間�
 			cfg.Agent.MaxRetries = 0
 		},
 	})
-	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
 	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
 			"type": "agent_info",
@@ -185,7 +186,7 @@ func TestRUCM_P026_入力を受け付けないまま期限を過ぎたら人間�
 	if fx.Herdr.CountMethod(herdr.MethodAgentPrompt) != 0 {
 		t.Errorf("入力を受け付けないのに turn を送っている: %v", fx.Herdr.Methods())
 	}
-	worktreePath := filepath.Join(fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	worktreePath := worktreePathOf(t, fx, issue)
 	if _, err := os.Stat(worktreePath); err != nil {
 		t.Errorf("起動に失敗しても worktree は残すこと: %s (err=%v)", worktreePath, err)
 	}

@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "d0669b833564f80f87adb5c3e0457c4e2a226af913d880188c489a5508cb1be3"
+    "rucm_block_sha256": "18eb8b85f4284a994b00b0e73a0fcaf6f843329e9bec5228c88978f7e2bf154f"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -125,7 +125,7 @@
           23
         ]
       },
-      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。前回のセッションが消えていた場合は、pane はシェルのプロンプトへ戻っている。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままか、既に落ちてシェルのプロンプトへ戻っているかのどちらかである。"
+      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままである。"
     },
     "paneの断念": {
       "rfs": {
@@ -278,11 +278,12 @@
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。作りかけの worktree は残っている。"
     },
     "復帰の失敗": {
-      "when": "復帰つきの起動が、前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
+      "when": "復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
           "steps": [
+            23,
             24
           ]
         }
@@ -1881,6 +1882,12 @@
       "condition": "NOT pane が Claude Code の起動を受け付ける"
     },
     {
+      "from": "BASIC FLOW-23",
+      "to": "復帰の失敗-1",
+      "kind": "global",
+      "condition": "復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合"
+    },
+    {
       "from": "BASIC FLOW-24",
       "to": "BASIC FLOW-25",
       "kind": "seq"
@@ -1889,7 +1896,7 @@
       "from": "BASIC FLOW-24",
       "to": "復帰の失敗-1",
       "kind": "global",
-      "condition": "復帰つきの起動が、前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合"
+      "condition": "復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合"
     },
     {
       "from": "BASIC FLOW-25",
@@ -5215,7 +5222,7 @@
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
         "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
-        "CONDITION: 復帰つきの起動が、前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
+        "CONDITION: 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
         "システムは新しいセッション UUID を採番する。",
         "システムは hook の引き当ての索引を新しいセッション UUID へ張り替える。",
         "システムはトークンの集計の基準を作り直す。",
@@ -5231,7 +5238,7 @@
       "id": "P028",
       "terminal": "cycle",
       "terminal_flow": "paneがまだ使えない",
-      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。前回のセッションが消えていた場合は、pane はシェルのプロンプトへ戻っている。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままか、既に落ちてシェルのプロンプトへ戻っているかのどちらかである。",
+      "postcondition": "pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合に pane へ残っているものは、復帰つきの起動が完了しなかった理由で決まる。起動直後の確認の画面で止まっていた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。herdr.startup_timeout_ms の経過で終わった場合は、確認の画面を畳んでいない前の Claude Code が pane を占めたままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5367,6 +5374,81 @@
     {
       "id": "P030",
       "terminal": "cycle",
+      "terminal_flow": "復帰の失敗",
+      "postcondition": "立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16",
+        "BASIC FLOW-17",
+        "BASIC FLOW-18",
+        "BASIC FLOW-19",
+        "BASIC FLOW-20",
+        "BASIC FLOW-21",
+        "BASIC FLOW-22",
+        "BASIC FLOW-23",
+        "復帰の失敗-1",
+        "復帰の失敗-2",
+        "復帰の失敗-3",
+        "復帰の失敗-4",
+        "復帰の失敗-5",
+        "復帰の失敗-6",
+        "復帰の失敗-7",
+        "復帰の失敗-8",
+        "BASIC FLOW-23"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはボードから active_states の issue の一覧を取る。",
+        "システムは VALIDATES THAT 先頭の issue に別の run の印が付いていない。",
+        "システムは VALIDATES THAT 先頭の issue の Status が active_states に入っている。",
+        "システムは VALIDATES THAT 先頭の issue の失敗の回数が max_retries を超えていない。",
+        "システムは VALIDATES THAT 先頭の issue が required_labels をすべて持っている。",
+        "システムは VALIDATES THAT 空きスロットが1つ以上ある。",
+        "システムは VALIDATES THAT 先頭の issue の対象リポジトリが Claude Code に信頼登録されている。",
+        "システムは VALIDATES THAT 先頭の issue の worktree の置き場所をそのまま使える。",
+        "システムは VALIDATES THAT 先頭の issue の branch を置き場所以外の worktree が使っていない。",
+        "システムは先頭の issue に印を付ける。",
+        "システムは VALIDATES THAT ID 指定で取り直したボードの issue の Status が active_states に入っている。",
+        "システムはボードの issue の Status に running_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "システムは workspace.root の下に issue の worktree を作る。",
+        "システムは再利用する worktree の中の既存の身元ファイルを読み、身元ファイルが無いか読めなければ新規の着手として扱う。",
+        "システムは worktree の絶対パスとリポジトリ本体の作業ディレクトリを渡して workspace として開き、その label に owner/repo/issues/N を書く。",
+        "システムは Claude Code の設定ファイルを worktree の外に書く。",
+        "システムは、読んだ身元ファイルに前回のセッション UUID があれば前回のセッション UUID への復帰つきの起動フラグを使うと決め、無ければ新しく採番したセッション UUID の指定つきの起動フラグを使うと決める。",
+        "システムは worktree の中に、起動に使うセッション UUID を書いた身元ファイルを書く。",
+        "システムは herdr に workspace の pane の一覧を要求する。",
+        "システムは pane の label に owner/repo/issues/N を書く。",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
+        "CONDITION: 復帰つきの起動が、pane が 30 秒受け付けないままでも前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
+        "システムは新しいセッション UUID を採番する。",
+        "システムは hook の引き当ての索引を新しいセッション UUID へ張り替える。",
+        "システムはトークンの集計の基準を作り直す。",
+        "システムは身元ファイルのセッション UUID を新しいセッション UUID へ書き直し、書き直せなければ警告を記録に残して先へ進む。",
+        "システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す。",
+        "システムは起動フラグを新しいセッション UUID の指定つきへ差し替える。",
+        "システムは前の Claude Code を止めずに同じ pane を使い続ける。",
+        "RESUME STEP 23",
+        "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。"
+      ]
+    },
+    {
+      "id": "P031",
+      "terminal": "cycle",
       "terminal_flow": "壊れたref",
       "postcondition": "壊れた ref のファイルは消えている。packed-refs は書き換えていない。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
@@ -5416,7 +5498,7 @@
       ]
     },
     {
-      "id": "P031",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "消さないref",
       "postcondition": "ref のファイルは1バイトも消えていない。issue の Status は failure_state の選択肢である。worktree は作られていない。",
@@ -5468,7 +5550,7 @@
       ]
     },
     {
-      "id": "P032",
+      "id": "P033",
       "terminal": "abort",
       "terminal_flow": "着手の途中の失敗",
       "postcondition": "issue の Status は failure_state の選択肢である。issue に失敗の理由のコメントが1件ある。herdr の pane は閉じている。印は外れている。作りかけの worktree は残っている。",
@@ -5521,7 +5603,7 @@
       ]
     },
     {
-      "id": "P033",
+      "id": "P034",
       "terminal": "abort",
       "terminal_flow": "書かずに取りやめる",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。issue にコメントは付いていない。",
@@ -5560,7 +5642,7 @@
       ]
     },
     {
-      "id": "P034",
+      "id": "P035",
       "terminal": "abort",
       "terminal_flow": "使われているbranch",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。branch を使っている worktree は残っている。",
@@ -5597,7 +5679,7 @@
       ]
     },
     {
-      "id": "P035",
+      "id": "P036",
       "terminal": "abort",
       "terminal_flow": "使えないworktree",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -5632,7 +5714,7 @@
       ]
     },
     {
-      "id": "P036",
+      "id": "P037",
       "terminal": "abort",
       "terminal_flow": "未信頼のリポジトリ",
       "postcondition": "issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。issue に信頼登録の承認を促すコメントが1件ある。",
@@ -5667,7 +5749,7 @@
       ]
     },
     {
-      "id": "P037",
+      "id": "P038",
       "terminal": "abort",
       "terminal_flow": "空きスロット不足",
       "postcondition": "印の件数は変わっていない。issue の Status は dispatch_state の選択肢のままである。worktree は作られていない。",
@@ -5696,7 +5778,7 @@
       ]
     },
     {
-      "id": "P038",
+      "id": "P039",
       "terminal": "abort",
       "terminal_flow": "ラベルの不足",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。worktree は作られていない。",
@@ -5723,7 +5805,7 @@
       ]
     },
     {
-      "id": "P039",
+      "id": "P040",
       "terminal": "abort",
       "terminal_flow": "失敗の繰り返し",
       "postcondition": "issue の Status はボードにある選択肢のままである。worktree は作られていない。印は付いていない。",
@@ -5748,7 +5830,7 @@
       ]
     },
     {
-      "id": "P040",
+      "id": "P041",
       "terminal": "abort",
       "terminal_flow": "頼んでいないStatus",
       "postcondition": "issue の Status はボードにある選択肢のままである。ボードへは1バイトも書いていない。他の候補の dispatch は続いている。",
@@ -5773,7 +5855,7 @@
       ]
     },
     {
-      "id": "P041",
+      "id": "P042",
       "terminal": "abort",
       "terminal_flow": "走行中のissue",
       "postcondition": "先に印を取った run は走り続けている。ボードへは1バイトも書いていない。印の件数は変わっていない。",
@@ -5797,7 +5879,7 @@
   "coverage": {
     "nodes_total": 190,
     "nodes_covered": 190,
-    "edges_total": 199,
-    "edges_covered": 199
+    "edges_total": 200,
+    "edges_covered": 200
   }
 }
