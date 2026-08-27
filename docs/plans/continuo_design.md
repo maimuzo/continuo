@@ -5438,9 +5438,9 @@ worker を止めた（利用者の環境での実測。全体の流れは [docs/
 **人間はボードを見て状況を判断するので、列を分けた意味が消える。**
 **失敗しても run は止めず**（次の巡回で拾い直す）、**戻したぶんは issue に1件残す**（3-29）。
 
-**リクエストは増えない。**ID 指定の取り直し（`nodes(ids:)`）の `... on Issue` に `timelineItems` を
-足すだけで、Status の値と同じ1リクエストで返る（設計 2-6 の実測）。**候補の取得（100件返る）・
-識別子での照合・Status を書く前の取り直しには足さない**（`byIDsWithoutTimelineQueryTemplate`）。
+**リクエストは増えない。**ID 指定の取り直し（`nodes(ids:)`）の `... on Issue` に `timelineItems` を足すだけで、
+Status の値と同じ1リクエストで返る（設計 2-6 の実測）。**足すのは記録を読む2つ**（実行中の run の照合・
+turn の終わりの取り直し）**だけである。**残る4つの呼び出し元・`UpdateStatus` の取り直し・候補の取得には足さない（3-61）。
 **`project.number` で自分のボードへ絞る**（複数のボードに載っていると両方返る。設計 2-6）。
 **窓は `last: 50` である。**ボードで絞る引数が無いので絞るのは返ってきたあとであり、
 **別のボードで Status が何度も動くと自分のボードのイベントが窓から押し出される**（書き戻しが効かなくなる）。
@@ -5717,6 +5717,56 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 差し替えの失敗がそのまま出ると「一時ファイルの名前と `rename` の失敗」が並ぶだけで読めない。
 `os.Lstat` の結果がディレクトリなら、差し替えに進む前に
 `WORKFLOW.md を作成できません: <パス>: is a directory` で止める（変更前と同じ文言である）。
+
+### 3-61. 「誰が Status を書いたか」は、それを読む2つの呼び出し元でだけ取る
+
+**言いたいこと。**ID 指定の取り直しは6箇所から呼ばれるが、**記録（timeline）を読むのは2つだけである。**
+残る4つも取っていたので、使わない50件のイベントを巡回のたび・着手のたび・起動のたびに読んでいた。
+**インタフェースを2本に分け、呼ぶ側が選ぶ。**
+
+**呼び出し元の内訳**（[internal/orchestrator/orchestrator.go](../../internal/orchestrator/orchestrator.go) の `Tracker` に同じ表を置いた）。
+
+| 呼び出し元 | 記録を | 何を見るか |
+| --- | --- | --- |
+| `reconcileRunning`（実行中の run の照合） | **読む** | 知らない Status を書き戻すか止めるかを決める（3-54） |
+| `handleTurnEnd`（turn の終わりの取り直し） | **読む** | 同上を turn の終わりに決める |
+| `finishRunClaimed`（片付けの判定） | 読まない | `cleanup.on_states` に入っているか |
+| `reconcileWorktrees`（worktree の照合） | 読まない | `cleanup.on_states` / `active_states` に入っているか |
+| `dispatchStatusAllowed`（着手してよいかの判定） | 読まない | `active_states` に入っているか |
+| `refetchByIdentities`（復元の取り直し） | 読まない | Status と識別子 |
+
+**採る形。**`Tracker` に `FetchIssuesByIDsWithoutTimeline` を足す。アダプタは
+`byIDsWithoutTimelineQueryTemplate`（`UpdateStatus` が既に使っていた軽いクエリ）を呼ぶだけである。
+**`refreshIssue` は引数で受ける。**読む `handleTurnEnd` と読まない `finishRunClaimed` が
+同じ関数を通るので、**関数を分ける形では表せない。**
+
+**「読まない」に記録を渡さなくてよい理由。**記録を使う判断は**引数で受け取った写しを読み、
+その引数は記録を取る側（`FetchIssuesByIDs`）の戻り値そのものである**（`handleUnknownState` へは
+`reconcileRunning` が、`claimAutomatedRewrite` / `rewriteAutomatedState` へは `handleTurnEnd` が渡す）。
+`finishRunUnknownState` は写しを読まない（受け取るのは Status 名の文字列だけ）。
+`rs.issue()` から読むのは `automatedStateHint` だけで、**`rs.setIssue` を呼ぶ3箇所は
+どれも記録を取った写しである。**
+
+**この安全が崩れる条件。「復元が `active_states` 以外も引き継ぐ」ようにすると崩れる。**
+復元が入れた写しは記録を持たないが、いまは引き継ぐ先を `active_states` に絞っているので、
+**知らない Status の道（`handleUnknownState` / `automatedStateHint`）へは入らない。**
+**広げるなら、復元の取り直しも記録を取る側へ戻すこと。**
+
+**採らなかった案。**
+
+| 案 | 中身 | 採らない理由 |
+| --- | --- | --- |
+| **引数で渡す** | `FetchIssuesByIDs(ctx, ids, withTimeline bool)` の1本にする | 呼び出し側が真偽値だけを見ることになり、**表と照らさないと何を頼んだのか読めない。**偽の tracker で呼び分けを数えるのも難しくなる |
+| **常に取って捨てる** | いままでどおり全部取り、使わない側は無視する | **点数は返る node の数で決まる**（3-31）。捨てる前に払っている |
+| **記録だけ別に引く** | 要るときに timeline を2本目のリクエストで引く | **読む側は巡回のたびに要る。**1本が2本になり、いちばん多い経路が重くなる |
+
+**戻らないように検査を置いた。**
+[test/internal/orchestrator/timeline_scope_test.go](../../test/internal/orchestrator/timeline_scope_test.go) が
+6つの呼び出し元それぞれについて、**どちらの取り直しを呼んだか**を呼び出しの並びで見る。
+[test/internal/tracker/status_author_test.go](../../test/internal/tracker/status_author_test.go) が
+**軽い側のクエリに `timelineItems` が入っていないこと**を送信内容で見る。
+**偽の tracker は軽い側で `StatusChangedBy` と `StatusChangedByAutomation` を落とす**
+（本物と同じ振る舞い。落とさないと、記録に頼った実装がそちらの経路でも書けてしまう）。
 
 ---
 
