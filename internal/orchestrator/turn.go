@@ -187,7 +187,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **`blocked` が解けるからではない。**確認の画面は自分では消えないので、
 			// 待っても解けない。引き渡しは直後に pane を閉じる（`finishRun`）ので、
 			// 待たずに esc を送ると、そのとき書きかけだった編集がまるごと消える。
-			stillRunning := o.waitForRunningSubagents(waitCtx, rs)
+			o.waitForRunningSubagents(waitCtx, rs)
 			if ctx.Err() != nil || !rs.currentWorker(epoch) {
 				// **待っている間に、別の経路がこの run を終わらせていた**（上の分岐と同じ理由）。
 				// ここで諦め直すと RetryCount が2倍の速さで消費され、引き渡しの
@@ -196,6 +196,10 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 					"identifier", snap.Identifier)
 				return
 			}
+			// **理由の文面と【調べるところ】を、同じ時点で数える**（設計 3-11）。
+			// 通知を投稿するのは esc の数百ミリ秒あとであり、その間に `SubagentStop` が
+			// 届くと、**「N 件を止めました」と書きながら記録は1件も載らない**が起きる。
+			stillRunning := rs.freezeHandoffSubagents()
 			// **次を投げる前に必ず esc を送る**（設計 3-11。送らずに投げると保留中の
 			// 権限要求が承認されて実行される。3/3 で再現）。
 			o.sendEscape(ctx, rs)
@@ -275,17 +279,20 @@ const subagentPollInterval = 50 * time.Millisecond
 // **長くしても救えない。**上のとおり `blocked` は解けないので、伸ばすぶんだけ
 // 人間へ渡すのが遅れるだけである。
 //
+// **待ち終えた結果は返さない。**通知に載せる集合は、呼び出し側が esc の直前に
+// `freezeHandoffSubagents` で凍結する。**ここで返した値を使うと、凍結の時点と
+// 数え方がずれる。**
+//
 // ctx: 待ちを打ち切るコンテキスト。
 // rs: 対象の run。
-// 戻り値: 待ち終えた時点でまだ走っている subagent の名前の並び。1件も無ければ nil。
-func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState) []string {
+func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState) {
 	running := rs.runningSubagentList()
 	if len(running) == 0 {
-		return nil
+		return
 	}
 	grace := time.Duration(o.cfg.Claude.PollWaitMs) * time.Millisecond
 	if grace <= 0 {
-		return running
+		return
 	}
 	o.logger.Info("走っているサブエージェントが終わるのを待ってから esc を送ります",
 		"identifier", rs.issue().Identifier, "サブエージェント", running, "猶予", grace)
@@ -297,19 +304,18 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 	for {
 		select {
 		case <-ctx.Done():
-			return rs.runningSubagentList()
+			return
 		case <-deadline.C:
-			left := rs.runningSubagentList()
-			if len(left) > 0 {
+			if left := rs.runningSubagentList(); len(left) > 0 {
 				o.logger.Warn("猶予のあいだにサブエージェントが終わらなかったので、走行中のまま esc を送ります",
 					"identifier", rs.issue().Identifier, "サブエージェント", left)
 			}
-			return left
+			return
 		case <-tick.C:
 			if len(rs.runningSubagentList()) == 0 {
 				o.logger.Info("走っていたサブエージェントが終わったので esc を送ります",
 					"identifier", rs.issue().Identifier)
-				return nil
+				return
 			}
 		}
 	}
@@ -325,6 +331,11 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // 走っていたものは途中で終わる。**書かないと、人間は worktree に書きかけの変更が
 // 残っていることに気づけない。**
 //
+// **名前は `handoffSubagentLimit` 件までしか並べない。**件数は最大
+// `maxTrackedSubagents` の2倍（2つの申告を足し合わせるため）まで増えうるので、
+// **全部並べるとコメントが名前で埋まる。**記録のパスと同じ上限で切り、
+// 残りは件数だけ書く。**「動いていた件数」そのものは切らずに出す。**
+//
 // stillRunning: esc を送る時点でまだ走っていた subagent の名前の並び。空なら1件も無い。
 // 戻り値: 引き渡しの通知に載せる理由。
 func blockedHandoffReason(stillRunning []string) string {
@@ -333,15 +344,25 @@ func blockedHandoffReason(stillRunning []string) string {
 		"continuo は esc を送って画面を閉じましたが、" +
 		"**この issue は人間が見ないと進みません。**")
 	if len(stillRunning) > 0 {
-		quoted := make([]string, 0, len(stillRunning))
-		for _, name := range stillRunning {
+		shown := stillRunning
+		omitted := 0
+		if len(shown) > handoffSubagentLimit {
+			omitted = len(shown) - handoffSubagentLimit
+			shown = shown[:handoffSubagentLimit]
+		}
+		quoted := make([]string, 0, len(shown))
+		for _, name := range shown {
 			quoted = append(quoted, "`"+name+"`")
+		}
+		names := strings.Join(quoted, " / ")
+		if omitted > 0 {
+			names += fmt.Sprintf(" ほか %d 件", omitted)
 		}
 		b.WriteString(fmt.Sprintf(
 			"\n【走行中のサブエージェントを止めました】esc を送った時点で %d 件が動いていました（%s）。"+
 				"**worktree には書きかけの変更が残っている可能性があります。**"+
 				"下記の【調べるところ】の worktree を確かめてください。",
-			len(stillRunning), strings.Join(quoted, " / ")))
+			len(stillRunning), names))
 	}
 	b.WriteString("\n【確かめ方】下記の【調べるところ】に挙げた記録を開き、" +
 		"末尾で何をしようとしていたかを見てください。" +

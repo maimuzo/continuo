@@ -256,7 +256,26 @@ type runState struct {
 	//
 	// **`type` が `subagent` のものだけを入れる。**`shell` のものは、この節が扱う
 	// 「サブエージェントを止めた」の話ではない。
+	//
+	// **`SubagentStop` を受けたら、その `agent_id` をここからも外す**（`noteSubagentStop`）。
+	// **`SubagentStop` 自身が `background_tasks` を持ってきて、いま終わったその subagent を
+	// `status` が `running` のまま載せてくるためである**（実測記録1件で確認）。
+	// **turn を送るときと「`background_tasks` が空の `Stop`」でも空へ戻すが、
+	// `blocked` で終わる turn にはどちらも来ない。**
 	backgroundSubagents map[string]string
+	// handoffSubagents は **esc を送った時点で**走っていた subagent である（設計 3-11）。
+	// キーと値は `runningSubagents` と同じ（`agent_id` → `agent_type`）。
+	//
+	// **引き渡しの通知は、理由の文面も【調べるところ】もここから作る。**
+	// 通知を投稿するのは esc の数百ミリ秒あとであり、その間に `SubagentStop` が届くと、
+	// **「N 件を止めました」と書きながら、記録は1件も載らない**が起きる。
+	// **どちらも同じ時点で数える。**
+	handoffSubagents map[string]string
+	// handoffSubagentsFrozen は handoffSubagents に値を入れ終えたかどうかである。
+	//
+	// **0件で凍結した場合と、1度も凍結していない場合を区別するために持つ。**
+	// 偽のあいだ（`blocked` 以外の引き渡し）は、いま走っているものをそのまま使う。
+	handoffSubagentsFrozen bool
 	// turnLoopRunning は turn ループの goroutine が走っているかどうかである。
 	// **同じ run に2本目を立てない**ための印である。
 	turnLoopRunning bool
@@ -487,7 +506,16 @@ func (rs *runState) noteHook(ev hookserver.HookEvent, now time.Time) {
 	}
 	if ev.BackgroundTasks != nil {
 		// **`background_tasks` は Claude Code 自身の申告である**（設計 1-7 / 3-2）。
-		// `Stop` と `SubagentStop` にだけ入る。**中身をそのまま覚え直す**（差分ではない）。
+		// **中身をそのまま覚え直す**（差分ではない）。
+		//
+		// **手元の実測記録では `Stop` 4件と `SubagentStop` 1件にだけ入っていた**
+		// （[docs/evidence/hooks_probe_20260817.jsonl](../../docs/evidence/hooks_probe_20260817.jsonl)
+		// の14件。`SessionStart` / `UserPromptSubmit` / `PreToolUse` / `PostToolUse` /
+		// `SubagentStart` には無い）。**記録は1回ぶんなので、他の hook に入らないとは言い切れない。**
+		// だから hook の種類では絞らず、**入っていたら読む。**
+		//
+		// **その `SubagentStop` は、いま終わった subagent を `status` が `running` のまま
+		// 載せていた。**だから `noteSubagentStop` が明示的に外す（`OnHook` はこちらを先に呼ぶ）。
 		rs.setBackgroundSubagentsLocked(*ev.BackgroundTasks)
 	}
 	if ev.HookEventName == hookStop && ev.BackgroundTasks != nil && len(*ev.BackgroundTasks) == 0 {
@@ -523,6 +551,20 @@ func (rs *runState) noteSubagentStart(agentID, agentType string) {
 
 // noteSubagentStop は subagent が終わったことを覚える（設計 3-11）。
 //
+// **2つの集合の両方から外す。**走行中かどうかは `runningSubagents` と
+// `backgroundSubagents` を足し合わせて決めるので（`runningSubagentsLocked`）、
+// **片方だけ外しても「走行中」のままである。**
+//
+// **`backgroundSubagents` を外す必要があるのは、`SubagentStop` 自身が
+// `background_tasks` を持ってくるからである。**実測記録の `SubagentStop` 1件は、
+// **いま終わったその subagent を `status` が `running` のまま載せていた**
+// （[docs/evidence/hooks_probe_20260817.jsonl](../../docs/evidence/hooks_probe_20260817.jsonl)）。
+// `OnHook` は `noteHook`（= `background_tasks` を覚え直す）を先に呼ぶので、
+// **ここで外さないと、いま終わったものが走行中として残る。**
+// `backgroundSubagents` が空へ戻るのは「turn を送るとき」と
+// 「`background_tasks` が空の `Stop` を受けたとき」だけであり、
+// **`blocked` で終わる turn にはどちらも来ない。**
+//
 // agentID: `SubagentStop` の `agent_id`。空なら何もしない。
 func (rs *runState) noteSubagentStop(agentID string) {
 	if agentID == "" {
@@ -531,6 +573,7 @@ func (rs *runState) noteSubagentStop(agentID string) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	delete(rs.runningSubagents, agentID)
+	delete(rs.backgroundSubagents, agentID)
 }
 
 // setBackgroundSubagentsLocked は `background_tasks` の申告を覚え直す（設計 1-7 / 3-2）。
@@ -574,9 +617,62 @@ func (rs *runState) setBackgroundSubagentsLocked(tasks []hookserver.BackgroundTa
 //
 // **呼び出し側が `rs.mu` を持っていること。**turn を送るときと、
 // 「`background_tasks` が空の `Stop`」を受けたときに呼ぶ。
+//
+// **`handoffSubagents` は下ろさない。**あちらは「esc を送った時点で走っていた」を
+// 凍結したものであり、**そのあと何が起きても変わってはならない。**
 func (rs *runState) resetSubagentsLocked() {
 	rs.runningSubagents = nil
 	rs.backgroundSubagents = nil
+}
+
+// freezeHandoffSubagents は「esc を送る時点で走っていた subagent」を凍結する（設計 3-11）。
+//
+// **esc を送る直前に1回だけ呼ぶ。**引き渡しの通知は、理由の文面（`blockedHandoffReason`）も
+// 【調べるところ】の記録（`postHandoffComment`）も、ここで凍結した集合から作る。
+// **2度呼んでも上書きするだけなので、同じ run で2回引き渡されることは無い**
+// （引き渡しは `currentWorker` で1回に絞られている）。
+//
+// 戻り値: 凍結した subagent の名前の並び（名前順）。1件も走っていなければ nil。
+func (rs *runState) freezeHandoffSubagents() []string {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.handoffSubagents = rs.runningSubagentsLocked()
+	rs.handoffSubagentsFrozen = true
+	return subagentLabels(rs.handoffSubagents)
+}
+
+// handoffSubagentsLocked は引き渡しの通知が使う subagent の集合を返す（設計 3-11）。
+//
+// **凍結してあるならそれを返す。**凍結していない引き渡し（stall / 知らない Status など）では
+// いま走っているものをそのまま返す。
+//
+// **呼び出し側が `rs.mu` を持っていること。**
+//
+// 戻り値: `agent_id` から `agent_type` への対応。1件も無ければ nil。
+func (rs *runState) handoffSubagentsLocked() map[string]string {
+	if rs.handoffSubagentsFrozen {
+		return rs.handoffSubagents
+	}
+	return rs.runningSubagentsLocked()
+}
+
+// subagentLabels は subagent の集合を、通知へ載せてよい名前の並びに直す。
+//
+// **並びは名前順である。**同じ状態なら同じ文面が出るようにするためで、
+// map の走査順のままだと引き渡しの通知が呼ぶたびに入れ替わる。
+//
+// running: `agent_id` から `agent_type` への対応。
+// 戻り値: `<agent_type>(<agent_id>)` の形の並び。1件も無ければ nil。
+func subagentLabels(running map[string]string) []string {
+	if len(running) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(running))
+	for id, typ := range running {
+		out = append(out, formatSubagentLabel(typ, id))
+	}
+	slices.Sort(out)
+	return out
 }
 
 // runningSubagentsLocked は2つの申告を足し合わせて返す（設計 3-11）。
@@ -605,41 +701,35 @@ func (rs *runState) runningSubagentsLocked() map[string]string {
 	return out
 }
 
-// runningSubagentList は、いま走っている subagent の名前を並べて返す（設計 3-11）。
+// runningSubagentList は、**いま**走っている subagent の名前を並べて返す（設計 3-11）。
 //
-// **並びは名前順である。**同じ状態なら同じ文面が出るようにするためで、
-// map の走査順のままだと引き渡しの通知が呼ぶたびに入れ替わる。
+// **凍結したものではなく、その瞬間の値である。**esc を送る前の待ち
+// （`waitForRunningSubagents`）が、終わったかどうかを覗くために呼ぶ。
 //
-// 戻り値: `<agent_type>(<agent_id>)` の形の並び。1件も走っていなければ nil。
+// 戻り値: `<agent_type>(<agent_id>)` の形の並び（名前順）。1件も走っていなければ nil。
 func (rs *runState) runningSubagentList() []string {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	running := rs.runningSubagentsLocked()
-	if len(running) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(running))
-	for id, typ := range running {
-		out = append(out, formatSubagentLabel(typ, id))
-	}
-	slices.Sort(out)
-	return out
+	return subagentLabels(rs.runningSubagentsLocked())
 }
 
-// runningSubagentIDs は、いま走っている subagent の `agent_id` を並べて返す（設計 3-11）。
+// handoffSubagentIDs は、引き渡しの通知に載せる subagent の `agent_id` を並べて返す
+// （設計 3-11）。
 //
 // **記録の置き場所を組み立てるために使う**（`SubagentTranscriptsFor`）。
 // **`agent_id` は外部入力のままである。**パスの部品に使ってよいかは、使う側が
 // `safeAgentID` で確かめる。
 //
-// **並びは名前順である**（`runningSubagentList` と同じ理由。呼ぶたびに順番が
-// 入れ替わると、引き渡しの通知の文面が毎回変わる）。
+// **凍結してあるならその集合を使う**（`freezeHandoffSubagents`）。**理由の文面と
+// 同じ時点で数えるためである。**凍結していない引き渡しでは、いま走っているものを使う。
 //
-// 戻り値: `agent_id` の並び。1件も走っていなければ nil。
-func (rs *runState) runningSubagentIDs() []string {
+// **並びは名前順である。**呼ぶたびに順番が入れ替わると、通知の文面が毎回変わる。
+//
+// 戻り値: `agent_id` の並び。1件も無ければ nil。
+func (rs *runState) handoffSubagentIDs() []string {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	running := rs.runningSubagentsLocked()
+	running := rs.handoffSubagentsLocked()
 	if len(running) == 0 {
 		return nil
 	}

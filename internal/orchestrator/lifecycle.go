@@ -877,9 +877,14 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 	// **1件も走っていない・記録がまだ書かれていないなら、glob に落ちる。**
 	// `SubagentStart` を取りこぼした場合と、前の turn の subagent の記録を見たい場合が
 	// あるので、**glob の側は消さない。**
+	//
+	// **`blocked` の道では、esc を送る直前に凍結した集合を使う**（`handoffSubagentIDs`）。
+	// **理由の文面と同じ時点で数えるためである。**通知を書くのは esc の数百ミリ秒あとであり、
+	// いま走っているものを数え直すと、**「N 件を止めました」と書きながら記録は
+	// 1件も載らない**が起きる。
 	subagentRunning := false
 	subagentDir, subagentTranscripts := SubagentTranscriptsFor(
-		snap.TranscriptPath, o.transcriptRoot, rs.runningSubagentIDs(), handoffSubagentLimit)
+		snap.TranscriptPath, o.transcriptRoot, rs.handoffSubagentIDs(), handoffSubagentLimit)
 	if len(subagentTranscripts) > 0 {
 		subagentRunning = true
 	} else {
