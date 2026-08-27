@@ -242,9 +242,15 @@ func (r *runner) run(ctx context.Context) int {
 	// どの段で止まっても Status は park の値のまま残る。**どこで止まっても同じ1行が
 	// 出るように、段ごとに書かず、ここで1度だけ仕掛ける**（書き漏らす段が出ない）。
 	defer r.reportParkLeftBehind()
-	if running {
+	// **「先に手を離させます」は、手を離させる段を通る実行にだけ言う。**
+	// **`--dry-run` では通らない**ので、そこで言うと**しない約束をしたことになる。**
+	// README は「先に `--dry-run` を叩け」と勧めており、勧めた手順で嘘を出すことになる。
+	switch {
+	case running && !r.opts.DryRun:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRunning, r.deps.LockPath))
-	} else {
+	case running:
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRunningDryRun, r.deps.LockPath))
+	default:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonNotRunning))
 	}
 
@@ -570,21 +576,23 @@ func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
 // その issue をボードでどこへ置くべきかは決まらない。
 // **だが黙って捨てない。**止まる経路も含めて、**どの出口でも reportToSkipped を通す。**
 // 指定した人間は「動いた」と受け取るので、言わずに終わるとボードの値を誤解したまま次へ進む。
+// **段ごとに書かず、入り口で1度だけ仕掛ける**（run の reportParkLeftBehind と同じ形）。
+// **写すと、あとから出口が増えたときに書き漏らし、ビルドもテストも気づかない。**
 //
 // ctx: 実行に適用するコンテキスト。
 // 戻り値: 終了コード。**消した・消すものが無かった・`--dry-run` は ExitOK である。**
 // **`--force` が無くて消さなかった場合と、消せなかった場合は ExitStopped である。**
 func (r *runner) abandonOrphanBranch(ctx context.Context) int {
+	defer r.reportToSkipped()
+
 	branch, err := r.deps.Workspace.FindIssueBranch(ctx, r.issueRef())
 	if err != nil {
 		// **「残っている」とも「無い」とも言わない。**調べられなかっただけである。
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchUnknown, err))
-		r.reportToSkipped()
 		return ExitOK
 	}
 	if !branch.Exists {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchNone, branch.Name.String()))
-		r.reportToSkipped()
 		return ExitOK
 	}
 
@@ -602,7 +610,6 @@ func (r *runner) abandonOrphanBranch(ctx context.Context) int {
 	switch {
 	case r.opts.DryRun:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonDryRunNote))
-		r.reportToSkipped()
 		return ExitOK
 	case !r.cfg.Cleanup.DeleteBranch:
 		// **`abandon --force` でも `cleanup.delete_branch` は越えない。**
@@ -610,11 +617,9 @@ func (r *runner) abandonOrphanBranch(ctx context.Context) int {
 		// 「worktree があると残るが、無いと消える」という筋の通らない差が生まれる。
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchDisabled,
 			branch.Name.String(), branch.RepoDir, branch.Name.String()))
-		r.reportToSkipped()
 		return ExitOK
 	case !r.opts.Force:
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrOrphanBranchWithoutForce, branch.Name.String()))
-		r.reportToSkipped()
 		return ExitStopped
 	}
 
@@ -624,17 +629,14 @@ func (r *runner) abandonOrphanBranch(ctx context.Context) int {
 		// 断られる。叩くべきコマンド（`git worktree prune`）はエラーの中に入っている。
 		if errors.Is(err, workspace.ErrBranchUsedByWorktree) {
 			fmt.Fprintln(r.errOut, err)
-			r.reportToSkipped()
 			return ExitStopped
 		}
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrOrphanBranchDeleteFailed,
 			branch.Name.String(), err, branch.RepoDir, branch.Name.String()))
-		r.reportToSkipped()
 		return ExitStopped
 	}
 	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOrphanBranchRemoved,
 		branch.Name.String(), branch.RepoDir, branch.RepoDir, branch.Name.String(), branch.Tip))
-	r.reportToSkipped()
 	return ExitOK
 }
 
@@ -734,8 +736,8 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 // **`--force` が無いときは今までどおり止まる。**止まる文言には `--force` で越えられることを
 // 書く（越え方が分からなければ、止まったことと詰まったことは同じである）。
 // **herdr が答えないときの文言も同じである**（`abandon.err_pane_list_check`）。
-// **pane 待ちの `abandon.err_pane_list` と鍵を分けているのは、あちらの `--force` が
-// 越えられないからである。**同じ鍵を使い回すと、越えられない側にも越え方が出る。
+// **pane 待ち（waitPaneGone）も同じ鍵を使う。**どちらも `--force` で越えるので、
+// **鍵を分けると同じ失敗に越え方を書いた文言と書いていない文言が並ぶ。**
 //
 // **「herdr が答えられない」より「pane がある」のほうを厳しくしない。**
 // 前者で消せて後者で消せないのは筋が通らない。どちらも `--force` で越える。
@@ -848,10 +850,15 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 // **呼ぶのは、手を離させる書き込みが実際に入ったときだけである。**書き込みが入って
 // いなければ継続監視はその pane を閉じないので、待っても必ず時間切れになる。
 //
+// **herdr が答えないときも `--force` で越える。**兄弟の検査（stopIfPaneAlive）は同じ失敗を
+// 越えさせるので、**ここだけ越えられないと「herdr が答えられない」が「pane がある」より
+// 厳しくなる。**しかもここへ来る実行は**ボードを park の値へ動かし終えている**ので、
+// 越えられないと**ボードだけ動いた状態のまま、herdr を直すまで取り消せない。**
+//
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 対象の worktree の絶対パス。
-// 戻り値: pane が消えたら ExitOK、上限を超えた場合は `--force` の有無で
-// ExitOK / ExitStopped、herdr に問い合わせられない場合は ExitStopped。
+// 戻り値: pane が消えたら ExitOK、上限を超えた場合と herdr に問い合わせられない場合は
+// `--force` の有無で ExitOK / ExitStopped。
 func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 	timeout := r.paneWaitTimeout()
 	interval := r.opts.PaneWaitInterval
@@ -863,8 +870,15 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 	for {
 		panes, err := r.panesOf(ctx, worktreePath)
 		if err != nil {
-			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneList, err))
-			return ExitStopped
+			// **herdr の失敗を `--force` で越えられない壁にしない**（stopIfPaneAlive と同じ扱い）。
+			// **ここへ来た実行はボードを park の値へ動かし終えている。**越えられないと、
+			// herdr を直すまでボードだけ動いた状態が残る。
+			if !r.opts.Force {
+				fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneListCheck, err))
+				return ExitStopped
+			}
+			fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPaneCheckSkipped, err))
+			return ExitOK
 		}
 		if len(panes) == 0 {
 			fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPaneGone))
@@ -1035,11 +1049,21 @@ func (r *runner) remove(ctx context.Context, worktreePath string, leftover *work
 // **`--to` が無ければ動かさない。**どこへ置くかは、その issue をこれからどうするかで
 // 決まる。continuo が勝手に決めてよいものではない。
 //
+// **ただし park で動かした実行に「動かしていません」と言ってはならない。**
+// 手を離させるために動かしたのは continuo である。**そこで「動かしていません」と言うと、
+// ボードが park の値になっていることを誰も言わないまま終わる**（この1行が
+// reportParkLeftBehind を黙らせる）。**park で動かしたときは、その1行に言わせる。**
+//
 // ctx: 実行に適用するコンテキスト。
 // 戻り値: ExitOK か、書き込みに失敗した場合の ExitStopped。
 func (r *runner) moveStatus(ctx context.Context) int {
 	target := strings.TrimSpace(r.opts.ToState)
 	if target == "" {
+		if r.parkedTo != "" {
+			// **statusSettled を立てない。**立てると reportParkLeftBehind が黙り、
+			// **ボードが park の値のまま残ったことを誰も言わなくなる。**
+			return ExitOK
+		}
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonStatusLeftAlone))
 		r.statusSettled = true
 		return ExitOK

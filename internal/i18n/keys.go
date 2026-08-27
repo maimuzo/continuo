@@ -679,8 +679,14 @@ const (
 	KeyAbandonErrBuild Key = "abandon.err_build"
 	// KeyAbandonErrLockFile はロックファイルそのものを開けないときに出る。
 	KeyAbandonErrLockFile Key = "abandon.err_lock_file"
-	// KeyAbandonRunning はcontinuo が動いているときの1行に出る。
+	// KeyAbandonRunning は、**continuo が動いていて、手を離させる段を通る**ときの1行に出る。
 	KeyAbandonRunning Key = "abandon.running"
+	// KeyAbandonRunningDryRun は、**continuo が動いているが `--dry-run` なので
+	// 手を離させる段を通らない**ときの1行に出る。
+	//
+	// **`abandon.running` と鍵を分ける。**あちらは「先に手を離させます」と言うので、
+	// `--dry-run` で出すと**しない約束をしたことになる。**
+	KeyAbandonRunningDryRun Key = "abandon.running_dry_run"
 	// KeyAbandonNotRunning はcontinuo が動いていないときの1行に出る。
 	KeyAbandonNotRunning Key = "abandon.not_running"
 
@@ -741,19 +747,12 @@ const (
 	// 止まったときに出る。**Status は park の値のままであり、continuo は戻さない。**
 	KeyAbandonParkLeftBehind Key = "abandon.park_left_behind"
 
-	// KeyAbandonErrPaneList は、**pane が閉じるのを待っている最中に** herdr へ
-	// pane の一覧を問い合わせられないときに出る。
+	// KeyAbandonErrPaneListCheck は、**herdr へ pane の一覧を問い合わせられない**ときに出る。
 	//
-	// **越え方を書かない。**ここの `--force` は「上限まで待っても閉じなかったら越えろ」で
-	// あって、herdr が答えなければその待ちを1度も行えていない。**書くと、越えられない
-	// ものを越えられると読ませる。**
-	KeyAbandonErrPaneList Key = "abandon.err_pane_list"
-	// KeyAbandonErrPaneListCheck は、**消す前の pane の生死の検査で** herdr へ
-	// pane の一覧を問い合わせられないときに出る。
-	//
-	// **越え方（`--force`）を書く。**こちらの `--force` は「確かめずに消せ」なので、
-	// herdr が答えなくても越えられる。**`abandon.err_pane_list` と鍵を分けているのは、
-	// 片方に越え方を書くともう片方にも出てしまうからである。**
+	// **pane が閉じるのを待つ段と、消す前の生死の検査の両方がこれを使う。**
+	// どちらも `--force` で越えられるので、**越え方（`--force`）を書く。**
+	// **鍵を2つに分けない。**分けると、同じ失敗に対して越え方を書いた文言と
+	// 書いていない文言が並び、**どちらが本当かを読む側が決められない。**
 	KeyAbandonErrPaneListCheck Key = "abandon.err_pane_list_check"
 	// KeyAbandonWaitingPane はpane が閉じるのを待っているあいだに出る。
 	KeyAbandonWaitingPane Key = "abandon.waiting_pane"
@@ -2204,6 +2203,7 @@ var allKeys = []Key{
 	KeyAbandonErrBuild,
 	KeyAbandonErrLockFile,
 	KeyAbandonRunning,
+	KeyAbandonRunningDryRun,
 	KeyAbandonNotRunning,
 	KeyAbandonErrScan,
 	KeyAbandonNotFound,
@@ -2227,7 +2227,6 @@ var allKeys = []Key{
 	KeyAbandonErrParkFailed,
 	KeyAbandonParkNotWritten,
 	KeyAbandonParkLeftBehind,
-	KeyAbandonErrPaneList,
 	KeyAbandonErrPaneListCheck,
 	KeyAbandonWaitingPane,
 	KeyAbandonPaneGone,

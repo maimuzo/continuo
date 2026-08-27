@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "63a226919d6f4748400b3e2044d952ad99d2c0ad5f40e11b08d95b566e226b8b", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
+// {"RUCM-CFG-SHA256": "cc41508e87df8942fb8bd435168b3ee9052f15dce84711b61de89ca4a6aeee13", "SOURCE": "docs/spec/usecases/particular_case/着手を取り消す.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「着手を取り消す」のテストパスのうち、
 // **判断が分かれるところ**を通るものに、それぞれ1本以上のテストがある。
@@ -349,46 +349,6 @@ func TestAbandon_herdrに繋げずforceも無ければ消さない(t *testing.T)
 
 // {"RUCM-PATH": "P014"}
 //
-// 目的: **pane の生死を確かめられずに止まったときも、`--force` で越えられることを言う**
-// ことを確認する（設計 3-4 の段4 の前）。
-//
-// **代替フロー `手を離させていないのにpaneが無いと言えない` は、pane が生きている場合と
-// herdr が答えない場合の2つを受ける。**仕様がその枝の応答として「残っている pane の ID
-// とロックファイルのパス」しか書いていなかったころは、herdr が答えない実行が出す文言が
-// 仕様のどこにも無かった。**仕様が主張する振る舞いを実装が持っていない状態だった。**
-//
-// **pane 待ち（`waitPaneGone`）の文言と鍵を分けていることも、ここで押さえる。**
-// あちらの `--force` は「上限まで待っても閉じなかったら越えろ」なので herdr の失敗を
-// 越えられない。**同じ鍵を使い回すと、越えられない側にも越え方が出る。**
-//
-// 与える情報: 誰も掴んでいないロックファイル、繋がらない herdr の socket、
-// `--force` を付けない実行。
-// 成功条件: 終了コードが 1、止まる文言に `--force` が入っている、
-// **pane 待ちの文言（`abandon.err_pane_list`）とは別の文言である**こと。
-func TestAbandon_paneを確かめられずに止まるときはforceの越え方を言う(t *testing.T) {
-	fx := newFixture(t)
-	prepared := fx.Prepare(t, 188)
-	unreachable := fx.CloseHerdr(t)
-
-	code := fx.Run(t, 188, nil)
-
-	assertExit(t, fx, code, abandon.ExitStopped)
-	line := i18n.T(i18n.KeyAbandonErrPaneListCheck, unreachable)
-	if !strings.Contains(line, "--force") {
-		t.Fatalf("pane を確かめられずに止まる文言に越え方（--force）が書かれていない: %s", line)
-	}
-	waiting := i18n.T(i18n.KeyAbandonErrPaneList, unreachable)
-	if line == waiting {
-		t.Fatalf("pane 待ちの文言と同じものを使っている（越えられない側にも越え方が出る）: %s", line)
-	}
-	assertContains(t, fx, line)
-	assertNotContains(t, fx, waiting)
-	assertWorktreeExists(t, fx, prepared.Path)
-	assertNoRemoval(t, fx)
-}
-
-// {"RUCM-PATH": "P014"}
-//
 // 目的: **継続監視が動いているのに手を離させなかった実行**で pane が生きていたとき、
 // **ロックファイルの食い違いを疑わせない**ことを確認する（設計 3-4 の段4 の前）。
 //
@@ -401,7 +361,11 @@ func TestAbandon_paneを確かめられずに止まるときはforceの越え方
 // 与える情報: テストが先に掴んだロックファイル（＝動いている）、`tracker.active_states`
 // に入らない Status（In Review）、その worktree を作業ディレクトリに持つ pane。
 // 成功条件: 終了コードが 1、動いている側の文言が出ている、
-// **ロックファイルのパスが1度も出ていない**、worktree が残っていること。
+// **止まった理由の出力にロックファイルのパスが1度も出ていない**、worktree が残っていること。
+//
+// **「出力の全文」で見てはならない。**動いていることを伝える1行
+// （`abandon.running`）はロックファイルのパスを含むので、必ず当たる。
+// **見るのは止まった理由の側だけである。**
 func TestAbandon_動いていて手を離させなかったときはロックを疑わせない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -415,9 +379,10 @@ func TestAbandon_動いていて手を離させなかったときはロックを
 	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneAliveRunning, "w1:p1"))
 	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneAliveNotRunning, "w1:p1", fx.LockPath))
-	// **止まる文言にロックファイルのパスを混ぜない。**動いていると判定できている。
-	if strings.Contains(i18n.T(i18n.KeyAbandonErrPaneAliveRunning, "w1:p1"), fx.LockPath) {
-		t.Fatal("動いている側の文言にロックファイルのパスが入っている")
+	// **止まった理由にロックファイルのパスを混ぜない。**動いていると判定できているので、
+	// 疑わせると無いものを探しに行かせる。
+	if stopped := fx.Err.String(); strings.Contains(stopped, fx.LockPath) {
+		t.Fatalf("止まった理由にロックファイルのパス（%s）が入っている:\n%s", fx.LockPath, stopped)
 	}
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
@@ -564,9 +529,16 @@ func TestAbandon_continuoが動いていればparkへ動かしてpaneが消え�
 // 目的: `--park` を付けなかったとき、手を離させる先が tracker.failure_state に
 // なることを確認する（設計 3-4 の段1。failure_state が active_states に入らないことは
 // 設定の検証が保証しているので、そこへ動かせば必ず active から外れる）。
+//
+// **`--to` が無い実行の締めの1行も、ここで押さえる。**手を離させるために動かしたのは
+// continuo である。**そこで「Status は動かしていません」と言うと嘘になる**うえ、
+// その1行が「park の値のまま残っています」を黙らせるので、
+// **ボードが Blocked になったことを誰も言わないまま終わる。**
+//
 // 与える情報: テストが先に掴んだロックファイル、Status が In Progress のボード、
 // pane が1つも無いテスト用herdr mock、`--park` を付けない実行。
-// 成功条件: 終了コードが 0、ボードへの書き込みが既定の failure_state（Blocked）1件であること。
+// 成功条件: 終了コードが 0、ボードへの書き込みが既定の failure_state（Blocked）1件、
+// **「Status は動かしていません」が出ておらず、park の値のまま残ることが出ている**こと。
 func TestAbandon_parkの指定が無ければfailureStateへ動かす(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -584,6 +556,8 @@ func TestAbandon_parkの指定が無ければfailureStateへ動かす(t *testing
 		t.Fatalf("手を離させる先が %q ではなく %q だった",
 			fx.Config.Tracker.FailureState, updates[0].State)
 	}
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonStatusLeftAlone))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonParkLeftBehind, fx.Config.Tracker.FailureState))
 	assertWorktreeGone(t, fx, prepared.Path)
 }
 
@@ -636,6 +610,72 @@ func TestAbandon_動いていてpaneが閉じなくてもforceで消し切る(t 
 
 	assertExit(t, fx, code, abandon.ExitOK)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonPaneAliveForced, "w1:p1"))
+	assertWorktreeGone(t, fx, prepared.Path)
+}
+
+// {"RUCM-PATH": "P018"}
+//
+// 目的: **pane が消えるのを待っている最中に herdr が答えなくなり、`--force` も無い**とき、
+// 何も消さずに止まり、**`--force` で越えられることと、Status が park の値のまま残ることを
+// 両方言う**ことを確認する（設計 3-4 の段1）。
+//
+// **この経路にはテストが1本も無かった。**pane 待ちの中の herdr の失敗だけが
+// `--force` を見ずに止まっていたので、**ボードを park の値へ動かし終えた実行が、
+// herdr を直すまで取り消せない状態で終わっていた。**
+//
+// 与える情報: テストが先に掴んだロックファイル（＝動いている）、`tracker.active_states`
+// に入る Status（In Progress）、**worktree を用意したあとで落とした herdr の socket**、
+// `--force` を付けない実行。
+// 成功条件: 終了コードが 1、越え方（`--force`）の書かれた文言が出ている、
+// Status が park の値のまま残ることが出ている、worktree が残っていること。
+func TestAbandon_pane待ちでherdrが答えずforceも無ければ越え方を言う(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	// **worktree を用意したあとで socket を落とす。**用意の段階では herdr が要る。
+	unreachable := fx.CloseHerdr(t)
+
+	code := fx.Run(t, 188, nil)
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneListCheck, unreachable))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonParkLeftBehind, fx.Config.Tracker.FailureState))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+	// **ここへ来る実行は、ボードを park の値へ動かし終えている。**
+	if updates := fx.Tracker.Updates(); len(updates) != 1 {
+		t.Fatalf("手を離させる書き込みが1件ではなく %d 件だった: %v", len(updates), updates)
+	}
+}
+
+// {"RUCM-PATH": "P008"}
+//
+// 目的: **pane が消えるのを待っている最中に herdr が答えなくなっても、`--force` があれば
+// 片付けを最後まで通す**ことを確認する（設計 3-4 の段1）。
+//
+// **越えられないと、ボードだけ park の値へ動いた状態が残る。**手を離させる書き込みは
+// もう済んでいるので、`abandon` を叩き直しても herdr が直るまで前へ進めない。
+// **手を離させていない側の同じ検査（`stopIfPaneAlive`）は同じ失敗を `--force` で
+// 越えさせる**ので、こちらだけ越えられないのは筋が通らない。
+//
+// 与える情報: テストが先に掴んだロックファイル、`tracker.active_states` に入る Status、
+// worktree を用意したあとで落とした herdr の socket、`--force`。
+// 成功条件: 終了コードが 0、確かめずに消したことを伝える1行が出ている、
+// worktree が消えていること。
+func TestAbandon_pane待ちでherdrが答えなくてもforceなら越える(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	unreachable := fx.CloseHerdr(t)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitOK)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonPaneCheckSkipped, unreachable))
 	assertWorktreeGone(t, fx, prepared.Path)
 }
 
@@ -1127,9 +1167,12 @@ func TestAbandon_動いている状態でtoまで通せば書き込みは2件だ
 // 与える情報: テストが先に掴んだロックファイル（＝継続監視が動いている）、
 // tracker.active_states に入る Status（In Progress）、いつまでも pane を返し続ける
 // テスト用herdr mock、`--dry-run`。
+// **「先に手を離させます」と言わないこともここで押さえる。**`--dry-run` は
+// 手を離させる段を通らないので、言えば**しない約束をしたことになる。**
 // 成功条件: 終了コードが 0、ボードへの書き込みが0件、worktree が残っている、
 // herdr へ worktree.remove を送っていない、実行したときに動かす先の予告と
-// 「何も消していません」が出ていること。
+// 「何も消していません」が出ている、**`--dry-run` 用の1行が出ていて
+// 「先に手を離させます」の1行が出ていない**こと。
 func TestAbandon_動いていてもdryRunならボードへ書かない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -1145,6 +1188,8 @@ func TestAbandon_動いていてもdryRunならボードへ書かない(t *testi
 	assertExit(t, fx, code, abandon.ExitOK)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonPlanParkPending, fx.Config.Tracker.FailureState))
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonDryRunNote))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonRunningDryRun, fx.LockPath))
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonRunning, fx.LockPath))
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 	if len(fx.Tracker.Updates()) != 0 {
@@ -1695,9 +1740,13 @@ func TestAbandon_worktreeが無いときdryRunならbranchを消さない(t *tes
 // 残し、登録の在りかと掃除するコマンドを画面へ出すことを確認する（設計 3-37-9b）。
 // **git は登録を根拠に branch を守っている。**`git worktree prune` で登録を落とすと
 // git は断らなくなり、**push していない commit が「消しました」と一緒に失われる。**
-// 与える情報: 着手で作った worktree のディレクトリだけを消した置き場所と `--force`。
+//
+// **`--to` を黙って捨てないことも、ここで押さえる。**git が断って止まる出口である。
+// 出口ごとに1行を書き写していたころは、こういう出口が書き漏れの当たりどころだった。
+// 与える情報: 着手で作った worktree のディレクトリだけを消した置き場所と
+// `--force` と `--to Ice Box`。
 // 成功条件: 終了コードが 1、branch が残っている、登録のパスと `worktree prune` の
-// 案内が出ていること。
+// 案内が出ている、**`--to` へ動かしていないことが出ている**こと。
 func TestAbandon_登録だけ残ったbranchを消さずに在りかを見せる(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 999)
@@ -1706,13 +1755,56 @@ func TestAbandon_登録だけ残ったbranchを消さずに在りかを見せる
 		t.Fatalf("worktree のディレクトリを消せません: %v", err)
 	}
 
-	code := fx.Run(t, 999, func(opts *abandon.Options) { opts.Force = true })
+	code := fx.Run(t, 999, func(opts *abandon.Options) {
+		opts.Force = true
+		opts.ToState = "Ice Box"
+	})
 
 	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, prepared.Path)
 	assertContains(t, fx, "worktree prune")
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonToSkipped, "Ice Box"))
 	if !branchExists(t, fx, prepared.Branch.String()) {
 		t.Fatalf("git が守っている branch %s を消してしまった", prepared.Branch.String())
+	}
+}
+
+// {"RUCM-PATH": "P025"}
+//
+// 目的: git が**「worktree が使っている」以外の理由で** branch を消せなかったときも、
+// 理由と手で消すコマンドを出し、**`--to` を黙って捨てない**ことを確認する（issue #27）。
+//
+// **この出口だけがテストから漏れていた。**`--to` を伝える1行を出口ごとに書き写していたので、
+// 書き漏らしてもビルドもテストも気づかない状態だった。
+//
+// 与える情報: worktree は無く branch だけがあるリポジトリで、**その branch の ref を
+// 置いてあるディレクトリから書き込みの権限を落とした**状態（`git branch -D` が
+// ロックファイルを作れずに断る）と、`--force` と `--to Ice Box`。
+// 成功条件: 終了コードが 1、branch が残っている、消せなかった理由と手で消すコマンドが
+// 出ている、`--to` へ動かしていないことが出ていること。
+func TestAbandon_残ったbranchを消せなかった理由を出してtoも捨てない(t *testing.T) {
+	fx := newFixture(t)
+	fx.Prepare(t, 188)
+	branch, _ := orphanBranch(t, fx, 999)
+	// **ref のファイルが置いてあるディレクトリを凍らせる。**git は削除の前に
+	// `<ref>.lock` を同じディレクトリへ作るので、作れずに断る。
+	// **`worktree が使っている` とは別の理由である**（この branch を使っている
+	// worktree の登録は1件も無い）。
+	freezeDir(t, filepath.Join(fx.Repo.Dir, ".git", "refs", "heads", filepath.Dir(branch)))
+
+	code := fx.Run(t, 999, func(opts *abandon.Options) {
+		opts.Force = true
+		opts.ToState = "Ice Box"
+	})
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonToSkipped, "Ice Box"))
+	// **手で消すコマンドを出す。**「worktree が使っている」ときは同じ理由で断られるので
+	// 出さないが、**それ以外の理由なら手で叩けば消せる。**
+	assertContains(t, fx, "branch -D "+branch)
+	assertNotContains(t, fx, "worktree prune")
+	if !branchExists(t, fx, branch) {
+		t.Fatalf("消せなかったはずの branch %s が消えている", branch)
 	}
 }
 
