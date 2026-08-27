@@ -227,7 +227,16 @@ const subagentDirName = "subagents"
 // subagentTranscriptGlob は subagent の記録のファイル名の型である。
 //
 // **名前を決め打ちしない。**Glob で拾えば、ファイル名の付け方が変わっても壊れない。
-const subagentTranscriptGlob = "agent-*.jsonl"
+const subagentTranscriptGlob = subagentTranscriptPrefix + "*" + subagentTranscriptExt
+
+// subagentTranscriptPrefix / subagentTranscriptExt は subagent の記録のファイル名の前後である。
+//
+// **`agent_id` を挟むと `agent_transcript_path` になる**（実測記録1件で確認。
+// `SubagentTranscriptsFor` の説明を見ること）。
+const (
+	subagentTranscriptPrefix = "agent-"
+	subagentTranscriptExt    = ".jsonl"
+)
 
 // subagentMaxCandidates は Glob の結果を見る件数の上限である。
 //
@@ -235,6 +244,138 @@ const subagentTranscriptGlob = "agent-*.jsonl"
 // 上限が無く（Claude Code が書くもので、細工もできる）、全件を `os.Lstat` して並べ替えると、
 // 引き渡しのコメントを1件作るだけで際限なく時間とメモリを使う。
 const subagentMaxCandidates = 1000
+
+// subagentDirOf は親の記録から subagent の記録の置き場所を組み立て、検査して返す。
+//
+// **検査は `acceptTranscriptPath` と同じ順である。**まず解決し、実在とディレクトリで
+// あることを見て、**そのあと許可された根の内側かを比べる**（解決は実在するときにしか通らない）。
+//
+// parentPath: 親のセッションの記録の絶対パス。
+// root: 受け入れてよい置き場所の根。空なら根の検査だけを飛ばす。
+// 戻り値の1つ目: 解決した置き場所の絶対パス。
+// 戻り値の2つ目: 使ってよければ true。
+func subagentDirOf(parentPath, root string) (string, bool) {
+	if !strings.HasSuffix(parentPath, ".jsonl") {
+		return "", false
+	}
+	dir := filepath.Clean(filepath.Join(strings.TrimSuffix(parentPath, ".jsonl"), subagentDirName))
+	// **実在するなら解決してから比べる。**実在しなければ字句のままにしておく。
+	if resolved, ok := resolvePath(dir); ok {
+		dir = resolved
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", false
+	}
+	if root != "" && !isUnder(root, dir) {
+		return "", false
+	}
+	if !info.IsDir() {
+		return "", false
+	}
+	return dir, true
+}
+
+// safeAgentID は `agent_id` をパスの部品として使ってよいかを判定する。
+//
+// **`agent_id` は hook から来る外部入力である**（設計 3-2 / 3-23）。
+// **英数字とハイフンとアンダースコアだけを通す。**`/` も `\` も `.` も通さないので、
+// **`..` で置き場所の外へ出る組み立て方が成立しない。**
+//
+// 実測で出ている値は `a1f9f743842d397e1` である
+// （[docs/evidence/hooks_probe_20260817.jsonl](../../docs/evidence/hooks_probe_20260817.jsonl)）。
+//
+// id: 判定する `agent_id`。
+// 戻り値: パスの部品に使ってよければ true。
+func safeAgentID(id string) bool {
+	if id == "" || len(id) > maxAgentIDBytes {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// maxAgentIDBytes は `agent_id` をパスの部品に使うときの長さの上限（バイト）である。
+//
+// **上限を置く理由は `maxTrackedSubagents` と同じである。**外部入力をそのまま
+// ファイル名にすると、置き場所の走査に際限なく時間を使う組み立て方ができる。
+// 実測で出ている値は17バイトである。
+const maxAgentIDBytes = 128
+
+// SubagentTranscriptsFor は、走っている subagent の `agent_id` から記録のパスを組み立てる
+// （設計 3-11）。
+//
+// **推測しない。**`SubagentStart` が `agent_id` を持っているので、置き場所の規則から
+// 一意に決まる。**glob で「たぶんこれだろう」と選ぶ必要が無い。**
+//
+//	<親の記録から `.jsonl` を落としたパス>/subagents/agent-<agent_id>.jsonl
+//
+// **この規則は実測記録1件から言えることである**（docs/evidence/hooks_probe_20260817.jsonl の
+// `SubagentStop` 1件。`agent_id` = `a1f9f743842d397e1` に対して
+// `agent_transcript_path` が `…/subagents/agent-a1f9f743842d397e1.jsonl` だった）。
+// **同じ記録の `SubagentStart` には `agent_transcript_path` が入っていなかった**ので、
+// 開始の側からは組み立てるしかない。
+//
+// **ファイルは1バイトも開かない。**`os.Lstat` で種別を見るだけである。
+// **まだ書かれていないものは落とす。**Claude Code は記録を非同期に書くので（設計 3-25）、
+// 走り始めた直後の subagent はファイルを持たないことがある。**そのときは呼び出し側が
+// `ListSubagentTranscripts` に落ちる。**
+//
+// parentPath: 親のセッションの記録の絶対パス。
+// root: 受け入れてよい置き場所の根。空なら根の検査だけを飛ばす。
+// agentIDs: 走っている subagent の `agent_id`。
+// limit: 返す件数の上限。0以下なら何も返さない。
+// 戻り値の1つ目: subagent の記録の置き場所（解決した絶対パス）。無ければ空文字列。
+// 戻り値の2つ目: 実在した記録のパス。渡された順のまま返す。無ければ nil。
+func SubagentTranscriptsFor(parentPath, root string, agentIDs []string, limit int) (string, []string) {
+	if limit <= 0 || len(agentIDs) == 0 {
+		return "", nil
+	}
+	dir, ok := subagentDirOf(parentPath, root)
+	if !ok {
+		return "", nil
+	}
+	out := make([]string, 0, len(agentIDs))
+	for _, id := range agentIDs {
+		if !safeAgentID(id) {
+			continue
+		}
+		path := filepath.Join(dir, subagentTranscriptPrefix+id+subagentTranscriptExt)
+		// **組み立てたパスも、置き場所の検査を通す**（`acceptTranscriptPath` と同じ順。
+		// まず解決し、次に実在と種別を見て、そのあと内側かを比べる）。
+		// **`safeAgentID` が既に区切り文字を弾いているので、ここは二重の備えである。**
+		// 弾き方を1つに頼ると、名前の付け方が変わったときに黙って穴が開く。
+		if resolved, ok := resolvePath(path); ok {
+			path = resolved
+		}
+		// **`os.Lstat` である。**シンボリックリンクは通常のファイルとして数えない
+		// （`ListSubagentTranscripts` と同じ判断）。
+		fi, err := os.Lstat(path)
+		if err != nil || !fi.Mode().IsRegular() {
+			continue
+		}
+		if !isUnder(dir, path) {
+			continue
+		}
+		out = append(out, path)
+		if len(out) >= limit {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return dir, nil
+	}
+	return dir, out
+}
 
 // ListSubagentTranscripts は親の記録の隣にある subagent の記録を、新しい順に列挙する。
 //
@@ -260,23 +401,11 @@ const subagentMaxCandidates = 1000
 // 戻り値の1つ目: subagent の記録の置き場所（解決した絶対パス）。無ければ空文字列。
 // 戻り値の2つ目: 記録のパスを新しい順に並べたもの。無ければ nil。
 func ListSubagentTranscripts(parentPath, root string, limit int) (string, []string) {
-	if limit <= 0 || !strings.HasSuffix(parentPath, ".jsonl") {
+	if limit <= 0 {
 		return "", nil
 	}
-	dir := filepath.Clean(filepath.Join(strings.TrimSuffix(parentPath, ".jsonl"), subagentDirName))
-	// **実在するなら解決してから比べる。**実在しなければ字句のままにしておく
-	// （`acceptTranscriptPath` と同じ順。解決は実在するときにしか通らない）。
-	if resolved, ok := resolvePath(dir); ok {
-		dir = resolved
-	}
-	info, err := os.Lstat(dir)
-	if err != nil {
-		return "", nil
-	}
-	if root != "" && !isUnder(root, dir) {
-		return "", nil
-	}
-	if !info.IsDir() {
+	dir, ok := subagentDirOf(parentPath, root)
+	if !ok {
 		return "", nil
 	}
 

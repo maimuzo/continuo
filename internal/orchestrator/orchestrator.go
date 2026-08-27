@@ -772,6 +772,16 @@ func (o *Orchestrator) OnHook(ev hookserver.HookEvent) bool {
 
 	rs.noteHook(ev, o.now())
 
+	// **走っている subagent を覚える**（設計 3-11）。`blocked` で esc を送る前に、
+	// 走っているものが無いかを見るためだけに使う。**turn の終わりの判定には使わない。**
+	switch ev.HookEventName {
+	case hookSubagentStart:
+		rs.noteSubagentStart(ev.AgentID, ev.AgentType)
+	case hookSubagentStop:
+		// **ここへ来るのは `agent_type` が入っているものだけである**（上で捨てている）。
+		rs.noteSubagentStop(ev.AgentID)
+	}
+
 	if !isTurnBoundaryHook(ev) {
 		return true
 	}

@@ -518,3 +518,280 @@ func TestComment_身元ファイルを読めなければ復元をあきらめて
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
 }
+
+// subagentStartEvent は `SubagentStart` の hook を作る（設計 3-11）。
+//
+// **`transcript_path` は親のものである。**実測記録でもそうなっている
+// （docs/evidence/hooks_probe_20260817.jsonl）。
+//
+// sessionID: セッション UUID。
+// transcriptPath: 親のセッションの記録のパス。
+// agentID: `agent_id`。
+// agentType: `agent_type`。
+// 戻り値: hook のイベント。
+func subagentStartEvent(sessionID, transcriptPath, agentID, agentType string) hookserver.HookEvent {
+	return hookserver.HookEvent{
+		HookEventName:  "SubagentStart",
+		SessionID:      sessionID,
+		TranscriptPath: transcriptPath,
+		AgentID:        agentID,
+		AgentType:      agentType,
+	}
+}
+
+// subagentStopEvent は `SubagentStop` の hook を作る（設計 3-11）。
+//
+// **`agent_type` を空にしてはならない。**空文字のものは orchestrator が捨てる（設計 1-3）。
+//
+// sessionID: セッション UUID。
+// agentID: `agent_id`。
+// agentType: `agent_type`。
+// 戻り値: hook のイベント。
+func subagentStopEvent(sessionID, agentID, agentType string) hookserver.HookEvent {
+	return hookserver.HookEvent{
+		HookEventName: "SubagentStop",
+		SessionID:     sessionID,
+		AgentID:       agentID,
+		AgentType:     agentType,
+	}
+}
+
+// handoffCommentBody は引き渡しの通知の本文を返す（無ければ空文字）。
+//
+// fx: 対象の fixture。
+// nodeID: issue の node ID。
+// 戻り値: 引き渡しの通知の本文。
+func handoffCommentBody(fx *fixture, nodeID string) string {
+	body := ""
+	for _, c := range fx.Tracker.CommentsOf(nodeID) {
+		if strings.Contains(c.Body, "人間へ引き渡しました") {
+			body = c.Body
+		}
+	}
+	return body
+}
+
+// TestTurn_走行中のサブエージェントを止めたら通知にそう書く は、
+// 「4件中3件まで終わっていて4件目で止まった」が黙って起きないことを確かめる。
+//
+// 目的: 設計 3-11 の「走行中の subagent を止めたなら、引き渡しの通知にそう書き、
+// **その `agent_id` から記録のパスを組み立てて載せる**」を守っていることを示す。
+// **引き渡しは直後に pane を閉じるので、走っていたものは途中で終わる。**
+// **書かないと、人間は worktree に書きかけの変更が残っていることに気づけない。**
+// 与える情報: `SubagentStart` だけが届き `SubagentStop` が来ないまま `blocked` になる台本と、
+// その `agent_id` で組み立てた記録のファイル。
+// **`agent_type` には backtick と制御文字を混ぜる**（hook は外部入力である）。
+// 成功条件: 通知に件数と名前が載り、backtick と制御文字が落ち、
+// **glob ではなく `agent_id` から組み立てたパスが「走っていた」印つきで載ること。**
+func TestTurn_走行中のサブエージェントを止めたら通知にそう書く(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	// **これは想定して起こしている失敗である。**猶予のあいだ待っても終わらない
+	// subagent を、走行中のまま止める場面をわざと作っている。
+	fx.AllowLog("猶予のあいだにサブエージェントが終わらなかったので")
+	fx.Tracker.AddIssue(sampleIssue(190, "Ready"))
+
+	transcriptDir := t.TempDir()
+	parent := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+	})
+	// **ファイル名の規則は実測記録1件から言えることである**
+	// （`agent_id` = a1f9f743842d397e1 に対して `agent-a1f9f743842d397e1.jsonl`）。
+	subagentDir := filepath.Join(transcriptDir, "session-1", "subagents")
+	if err := os.MkdirAll(subagentDir, 0o700); err != nil {
+		t.Fatalf("subagents ディレクトリを作れません: %v", err)
+	}
+	running := filepath.Join(subagentDir, "agent-a1f9f743842d397e1.jsonl")
+	if err := os.WriteFile(running, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("走行中の subagent の記録を書けません: %v", err)
+	}
+	// **glob なら、こちらのほうが新しいので先に並ぶ。**走行中のものを出すなら選ばれない。
+	stale := filepath.Join(subagentDir, "agent-old0000000000000.jsonl")
+	if err := os.WriteFile(stale, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("前の turn の subagent の記録を書けません: %v", err)
+	}
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **backtick と制御文字は落とさなければならない。**落とさないと通知の
+		// code span を抜け出して、issue へ好きな Markdown を書き込める。
+		fx.Orc.OnHook(subagentStartEvent("session-1", parent, "a1f9f743842d397e1", "impl-`x`\x07"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "blocked"},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "引き渡しの通知が投稿される", func() bool {
+		return handoffCommentBody(fx, "I_node190") != ""
+	})
+	fx.WaitRunsDrained(t, 15*time.Second)
+
+	body := handoffCommentBody(fx, "I_node190")
+	for _, want := range []string{
+		"【走行中のサブエージェントを止めました】",
+		"1 件が動いていました",
+		"impl-x(a1f9f743842d397e1)",
+		"worktree には書きかけの変更が残っている可能性があります",
+		"**止めた時点で走っていた**サブエージェントの記録",
+		running,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("引き渡しの通知に %q が無い:\n%s", want, body)
+		}
+	}
+	// **推測で選んではならない。**走行中のものが分かっているのに glob の結果を並べると、
+	// 止まった直前に動いていたものと関係の無い記録を「これを見ろ」と案内することになる。
+	if strings.Contains(body, stale) {
+		t.Errorf("走行中のものが分かっているのに glob の結果を載せている:\n%s", body)
+	}
+	// **外部入力をそのまま載せてはならない。**
+	if strings.Contains(body, "impl-`x`") {
+		t.Errorf("hook が渡した backtick をそのまま載せている:\n%s", body)
+	}
+	if strings.ContainsRune(body, '\x07') {
+		t.Errorf("hook が渡した制御文字をそのまま載せている:\n%q", body)
+	}
+}
+
+// TestTurn_escを送る前に走行中のサブエージェントが終わるのを待つ は、
+// 「走っているなら待つ」を確かめる。
+//
+// 目的: 設計 3-11 の「esc を送る前に、走っている subagent が終わるのを
+// `claude.poll_wait_ms` のあいだ待つ」を守っていることを示す。**待つのは
+// 「別の subagent が書き終えるのを待つ」ためであって、`blocked` が解けるからではない。**
+// 与える情報: `blocked` を返したあとに `SubagentStop` が遅れて届く台本と、
+// それより十分に長い猶予（`poll_wait_ms` = 5秒）。
+// 成功条件: 通知に「走行中のサブエージェントを止めました」が**出ない**こと。
+// **待たずに esc を送っていれば、この行は必ず出る。**
+func TestTurn_escを送る前に走行中のサブエージェントが終わるのを待つ(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		// **猶予を、遅れて届く `SubagentStop` より十分に長くする。**
+		cfg.Claude.PollWaitMs = 5000
+	}})
+	fx.Tracker.AddIssue(sampleIssue(191, "Ready"))
+
+	var timerMu sync.Mutex
+	var timer *time.Timer
+	t.Cleanup(func() {
+		timerMu.Lock()
+		defer timerMu.Unlock()
+		if timer != nil {
+			timer.Stop()
+		}
+	})
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		fx.Orc.OnHook(subagentStartEvent("session-1", "", "a1f9f743842d397e1", "Explore"))
+		timerMu.Lock()
+		timer = time.AfterFunc(200*time.Millisecond, func() {
+			fx.Orc.OnHook(subagentStopEvent("session-1", "a1f9f743842d397e1", "Explore"))
+		})
+		timerMu.Unlock()
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "blocked"},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "引き渡しの通知が投稿される", func() bool {
+		return handoffCommentBody(fx, "I_node191") != ""
+	})
+	fx.WaitRunsDrained(t, 20*time.Second)
+
+	body := handoffCommentBody(fx, "I_node191")
+	if strings.Contains(body, "【走行中のサブエージェントを止めました】") {
+		t.Errorf("サブエージェントが終わるのを待たずに esc を送っている:\n%s", body)
+	}
+	// **待ったからといって、引き渡しをやめるわけではない。**確認の画面は自分では消えない。
+	if !strings.Contains(body, "確認の画面に止まりました") {
+		t.Errorf("引き渡しの理由が `blocked` のものになっていない:\n%s", body)
+	}
+}
+
+// runningStopEvent は「background_tasks に走行中の subagent が載っている Stop」を作る
+// （設計 1-7 / 3-2）。
+//
+// **これは turn の終わりではない。**`background_tasks` が空でないので、
+// 設計 3-2 の判定では「まだ動いている」である。
+//
+// sessionID: セッション UUID。
+// transcriptPath: 親のセッションの記録のパス。
+// promptID: prompt_id。
+// agentID: `background_tasks[].id`（`agent_id` と同じ文字列である。設計 1-3）。
+// agentType: `background_tasks[].agent_type`。
+// 戻り値: hook のイベント。
+func runningStopEvent(sessionID, transcriptPath, promptID, agentID, agentType string) hookserver.HookEvent {
+	tasks := []hookserver.BackgroundTask{{
+		ID:          agentID,
+		Type:        "subagent",
+		Status:      "running",
+		Description: "実装",
+		AgentType:   agentType,
+	}}
+	return hookserver.HookEvent{
+		HookEventName:   "Stop",
+		SessionID:       sessionID,
+		TranscriptPath:  transcriptPath,
+		PromptID:        promptID,
+		BackgroundTasks: &tasks,
+	}
+}
+
+// TestTurn_SubagentStartを取りこぼしてもbackground_tasksが走行中を拾う は、
+// 走行中の判定の2本目の足を確かめる。
+//
+// 目的: 設計 3-11 の「`SubagentStart` から `SubagentStop` までの `agent_id` の集合と、
+// 直近の `Stop` の `background_tasks` を足し合わせる。**どちらかが「動いている」と
+// 言っているなら、動いていると扱う**」を守っていることを示す。
+// **片方だけでは足りない。**`SubagentStart` を取りこぼすと1本目は空のままになる。
+// 与える情報: `SubagentStart` を**送らず**、`background_tasks` に subagent が1件載った
+// `Stop` だけを届けてから `blocked` になる台本。
+// 成功条件: 走行中として扱われ、その `id` から組み立てた記録が通知に載ること。
+func TestTurn_SubagentStartを取りこぼしてもbackground_tasksが走行中を拾う(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	// **これは想定して起こしている失敗である。**猶予のあいだ待っても終わらない
+	// subagent を、走行中のまま止める場面をわざと作っている。
+	fx.AllowLog("猶予のあいだにサブエージェントが終わらなかったので")
+	fx.Tracker.AddIssue(sampleIssue(192, "Ready"))
+
+	transcriptDir := t.TempDir()
+	parent := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+	})
+	subagentDir := filepath.Join(transcriptDir, "session-1", "subagents")
+	if err := os.MkdirAll(subagentDir, 0o700); err != nil {
+		t.Fatalf("subagents ディレクトリを作れません: %v", err)
+	}
+	running := filepath.Join(subagentDir, "agent-b2c0e5551ff248a2.jsonl")
+	if err := os.WriteFile(running, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("走行中の subagent の記録を書けません: %v", err)
+	}
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **`SubagentStart` は送らない。**取りこぼした場合を作っている。
+		fx.Orc.OnHook(runningStopEvent("session-1", parent, "p1", "b2c0e5551ff248a2", "impl"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "blocked"},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "引き渡しの通知が投稿される", func() bool {
+		return handoffCommentBody(fx, "I_node192") != ""
+	})
+	fx.WaitRunsDrained(t, 15*time.Second)
+
+	body := handoffCommentBody(fx, "I_node192")
+	for _, want := range []string{
+		"【走行中のサブエージェントを止めました】",
+		"1 件が動いていました",
+		"impl(b2c0e5551ff248a2)",
+		"**止めた時点で走っていた**サブエージェントの記録",
+		running,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("引き渡しの通知に %q が無い:\n%s", want, body)
+		}
+	}
+}

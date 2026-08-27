@@ -852,13 +852,27 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 	}
 	snap := rs.snapshot()
 	// **ファイルの走査はロックの外で行う。**`snapshot` で `rs.mu` は既に外れている。
-	subagentDir, subagentTranscripts := ListSubagentTranscripts(
-		snap.TranscriptPath, o.transcriptRoot, handoffSubagentLimit)
+	//
+	// **まず走っている subagent の `agent_id` から組み立てる**（設計 3-11）。
+	// `SubagentStart` が `agent_id` を持っているので、置き場所は推測せずに決まる。
+	// **1件も走っていない・記録がまだ書かれていないなら、glob に落ちる。**
+	// `SubagentStart` を取りこぼした場合と、前の turn の subagent の記録を見たい場合が
+	// あるので、**glob の側は消さない。**
+	subagentRunning := false
+	subagentDir, subagentTranscripts := SubagentTranscriptsFor(
+		snap.TranscriptPath, o.transcriptRoot, rs.runningSubagentIDs(), handoffSubagentLimit)
+	if len(subagentTranscripts) > 0 {
+		subagentRunning = true
+	} else {
+		subagentDir, subagentTranscripts = ListSubagentTranscripts(
+			snap.TranscriptPath, o.transcriptRoot, handoffSubagentLimit)
+	}
 	if subagentDir != "" {
 		// **Debug より上で出してはならない。**subagent を1つも使わなかった turn では
 		// ディレクトリが作られず、それは正常な並びである。
 		o.logger.Debug("引き渡しの通知に subagent の記録を載せます",
-			"identifier", rs.issue().Identifier, "置き場所", subagentDir, "件数", len(subagentTranscripts))
+			"identifier", rs.issue().Identifier, "置き場所", subagentDir,
+			"件数", len(subagentTranscripts), "走行中のものか", subagentRunning)
 	}
 	if _, err := o.tracker.PostComment(ctx, nodeID,
 		buildHandoffComment(rs.issue().Identifier, reason, handoffContext{
@@ -866,6 +880,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			TranscriptPath:      snap.TranscriptPath,
 			SubagentDir:         subagentDir,
 			SubagentTranscripts: subagentTranscripts,
+			SubagentRunning:     subagentRunning,
 			SettingsPath:        snap.SettingsPath,
 		}, move),
 		o.cfg.Tracker.Comments.SelfMarker); err != nil {

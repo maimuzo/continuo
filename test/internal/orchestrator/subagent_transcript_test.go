@@ -183,3 +183,94 @@ func TestListSubagentTranscripts_根の外を指すなら何も返さない(t *t
 		t.Errorf("根の外の記録を返している: %v", files)
 	}
 }
+
+// TestSubagentTranscriptsFor_agent_idから記録のパスを組み立てる は、
+// 推測を使わない組み立てを確かめる。
+//
+// 目的: 設計 3-11 の「`SubagentStart` が `agent_id` を持っているので、置き場所は
+// `<親の記録から .jsonl を落としたパス>/subagents/agent-<agent_id>.jsonl` に一意に決まる」を
+// 守っていることを示す。**glob で「たぶんこれだろう」と選ぶ必要が無い。**
+// **この規則は実測記録1件から言えることである**
+// （docs/evidence/hooks_probe_20260817.jsonl の `SubagentStop` 1件）。
+// 与える情報: `agent_id` に対応する記録と、対応しない記録。
+// 成功条件: 渡した `agent_id` のものだけが、渡した順で返ること。
+func TestSubagentTranscriptsFor_agent_idから記録のパスを組み立てる(t *testing.T) {
+	root, parent, subagentDir := subagentFixture(t, true)
+	base := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
+	first := writeSubagentTranscript(t, subagentDir, "agent-a1f9f743842d397e1.jsonl", base)
+	second := writeSubagentTranscript(t, subagentDir, "agent-b2c0e5551ff248a2.jsonl", base.Add(1*time.Hour))
+	// **走っていないものは返してはならない。**glob なら更新時刻がいちばん新しいので先に出る。
+	writeSubagentTranscript(t, subagentDir, "agent-old0000000000000.jsonl", base.Add(2*time.Hour))
+
+	dir, files := orchestrator.SubagentTranscriptsFor(
+		parent, root, []string{"a1f9f743842d397e1", "b2c0e5551ff248a2"}, 3)
+
+	if dir != subagentDir {
+		t.Errorf("置き場所が想定と違う: got %q, want %q", dir, subagentDir)
+	}
+	want := []string{first, second}
+	if len(files) != len(want) {
+		t.Fatalf("返った件数が想定と違う: got %v, want %v", files, want)
+	}
+	for i := range want {
+		if files[i] != want[i] {
+			t.Fatalf("渡した順で返っていない: got %v, want %v", files, want)
+		}
+	}
+}
+
+// TestSubagentTranscriptsFor_パスに使えないagent_idは組み立てない は、
+// 外部入力の検査を確かめる。
+//
+// 目的: 「`agent_id` は hook から来る外部入力である。**英数字とハイフンと
+// アンダースコアだけを通す**」を守っていることを示す。**区切り文字を通すと、
+// `..` で置き場所の外のファイルを「ここを見ろ」と案内できる。**
+// 与える情報: 区切り文字・`..`・空文字を含む `agent_id` と、実在する外のファイル。
+// 成功条件: 置き場所だけが返り、記録は1件も返らないこと。
+func TestSubagentTranscriptsFor_パスに使えないagent_idは組み立てない(t *testing.T) {
+	root, parent, subagentDir := subagentFixture(t, true)
+	// **置き場所の1つ上に、名前の合うファイルを置く。**`..` を通すとこれが返ってしまう。
+	outside := filepath.Join(filepath.Dir(subagentDir), "agent-escaped.jsonl")
+	if err := os.WriteFile(outside, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("外側のファイルを書けません: %v", err)
+	}
+
+	dir, files := orchestrator.SubagentTranscriptsFor(parent, root, []string{
+		// **`agent-` と `.jsonl` で挟まれるので、先頭の `..` は `agent-..` に化ける。**
+		// **3つ並べると、置き場所の1つ上の実在ファイルにちょうど当たる**
+		// （`agent-..` を1つ目が消し、2つ目で `subagents` を出て、3つ目で1つ上へ行く）。
+		"../../../agent-escaped",
+		"..",
+		"a/b",
+		"a\\b",
+		"",
+	}, 3)
+
+	if dir != subagentDir {
+		t.Errorf("置き場所が想定と違う: got %q, want %q", dir, subagentDir)
+	}
+	if len(files) != 0 {
+		t.Fatalf("パスに使えない agent_id から組み立ててしまった: %v", files)
+	}
+}
+
+// TestSubagentTranscriptsFor_記録がまだ無ければ置き場所だけを返す は、
+// glob へ落ちる分かれ目を確かめる。
+//
+// 目的: 「Claude Code は記録を非同期に書く（設計 3-25）ので、走り始めた直後の subagent は
+// ファイルを持たないことがある。**そのときは呼び出し側が `ListSubagentTranscripts` に落ちる**」
+// を成り立たせていることを示す。
+// 与える情報: 実在する置き場所と、そこに記録を持たない `agent_id`。
+// 成功条件: 置き場所は返るが、記録は1件も返らないこと。
+func TestSubagentTranscriptsFor_記録がまだ無ければ置き場所だけを返す(t *testing.T) {
+	root, parent, subagentDir := subagentFixture(t, true)
+
+	dir, files := orchestrator.SubagentTranscriptsFor(parent, root, []string{"a1f9f743842d397e1"}, 3)
+
+	if dir != subagentDir {
+		t.Errorf("置き場所が想定と違う: got %q, want %q", dir, subagentDir)
+	}
+	if len(files) != 0 {
+		t.Fatalf("書かれていない記録を返している: %v", files)
+	}
+}

@@ -187,7 +187,14 @@ func buildHandoffComment(identifier, reason string, hc handoffContext, move stat
 		for _, p := range hc.SubagentTranscripts {
 			quoted = append(quoted, "`"+p+"`")
 		}
-		lines = append(lines, "- サブエージェントの記録（新しい順）: "+strings.Join(quoted, " / "))
+		// **走行中のものだと分かる印を付ける。**`agent_id` から組み立てた記録は、
+		// 止まった直前に動いていたものそのものである。**人間が「これが原因だ」と
+		// 当たりを付けられる。**glob で拾ったものは、そう言い切れない。
+		label := "- サブエージェントの記録（新しい順）: "
+		if hc.SubagentRunning {
+			label = "- **止めた時点で走っていた**サブエージェントの記録: "
+		}
+		lines = append(lines, label+strings.Join(quoted, " / "))
 	}
 	if hc.SubagentDir != "" {
 		lines = append(lines, fmt.Sprintf("- サブエージェントの記録の置き場所: `%s`", hc.SubagentDir))
@@ -226,6 +233,11 @@ type handoffContext struct {
 	// **ここではファイルを走査しない。**値として受け取る（`buildHandoffComment` を
 	// 副作用の無い純関数のままにしておくため）。
 	SubagentTranscripts []string
+	// SubagentRunning は、SubagentTranscripts が「止めた時点で走っていた subagent の
+	// `agent_id` から組み立てたもの」であることを表す（設計 3-11）。
+	//
+	// **偽なら glob で拾ったものである**（更新時刻の新しい順。走行中とは限らない）。
+	SubagentRunning bool
 	// SettingsPath は continuo が書いた Claude Code の設定ファイルの絶対パスである。
 	// **worktree の中ではない**（設計 3-12）。
 	SettingsPath string

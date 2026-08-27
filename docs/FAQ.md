@@ -357,6 +357,19 @@ tail -n 20 ~/.claude/projects/<符号化した worktree>/<セッション UUID>.
 ls -lt ~/.claude/projects/<符号化した worktree>/<セッション UUID>/subagents/
 ```
 
+**「走行中のサブエージェントを止めました」と書いてあったら、worktree を先に見てください。**
+continuo は esc を送る前に、走っているサブエージェントが終わるのを少し待ちます
+（`claude.poll_wait_ms` のあいだ）。**それでも終わらなければ、走ったまま止めます。**
+**そのときは、書きかけの変更が worktree に残っている可能性があります。**
+
+```bash
+git -C <worktree のパス> status
+git -C <worktree のパス> diff
+```
+
+**待っても確認の画面は消えません。**待つのは「別のサブエージェントが書き終えるのを待つ」ためであって、
+**待てば作業が再開する、という意味ではありません。**この issue は人間が見ないと進みません。
+
 **`claude.permissions.allow` に足しても直らない止まり方があります。**
 continuo は Claude Code を `--permission-mode dontAsk` で起動します。
 **このモードでは、許可の一覧に無いツールは確認の画面を出さずに、その場で拒否されます。**

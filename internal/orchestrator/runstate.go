@@ -2,9 +2,11 @@ package orchestrator
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/normalize"
@@ -18,6 +20,27 @@ import (
 // あふれても判定は壊れない。stall の時計は受け口とは無関係に OnHook が直接進めるため、
 // 捨てても「生きていることの確認」は失われない（設計 3-21）。
 const hookChanSize = 256
+
+// maxTrackedSubagents は「走っている」と覚えておく subagent の件数の上限である。
+//
+// **hook の中身は外部入力である**（設計 3-2 / 3-23）。`agent_id` を作り変えた
+// `SubagentStart` を何万件でも送れるので、上限が無いと1つの run のメモリが際限なく膨らむ。
+//
+// **上限に達したら、そこから先は覚えない**（`SubagentStop` を待たずに捨てる）。
+// **覚えなかったぶんは「走っていない」側に倒れる。**倒す向きはこちらでなければならない。
+// 逆に倒すと、作り話の `SubagentStart` を送るだけで引き渡しを永久に足止めできる。
+const maxTrackedSubagents = 64
+
+// maxSubagentLabelRunes は通知に載せる subagent の名前1つあたりの長さの上限（文字数）である。
+//
+// **`agent_id` も `agent_type` も外部入力であり、そのまま issue のコメントへ載る。**
+const maxSubagentLabelRunes = 48
+
+// backgroundTaskTypeSubagent は `background_tasks[].type` が subagent であることを表す値である。
+//
+// **実測で出ている値は `subagent` と `shell` の2つである**
+// （docs/evidence/hooks_probe_20260817.jsonl）。
+const backgroundTaskTypeSubagent = "subagent"
 
 // runState は run ごとの実行時状態である（設計 3-25 の型定義）。
 //
@@ -210,6 +233,30 @@ type runState struct {
 	// hookSeenThisTurn は、この turn で hook を1件でも受けたかどうかである。
 	// 枠待ちの判定の条件その2（この run から hook が来ていない）に使う（設計 3-27）。
 	hookSeenThisTurn bool
+	// runningSubagents は、いま走っている subagent である（キー: `agent_id`、値: `agent_type`）。
+	//
+	// **`blocked` で esc を送る前に「走っているものがあるか」を見るためだけに持つ**
+	// （設計 3-11 の「走っている subagent を待ってから esc を送る」）。
+	// **turn の終わりの判定には使わない。**判定は `Stop` の `background_tasks` である（設計 3-2）。
+	//
+	// **`SubagentStart` で足し、`SubagentStop` で外す。**turn を送るたび（`beginTurn`）と、
+	// 「`background_tasks` が空の `Stop`」を受けたときに空へ戻す。
+	// **戻さないと、`SubagentStop` を1件取りこぼしただけで印が永久に残る。**
+	runningSubagents map[string]string
+	// backgroundSubagents は、直近の `Stop` / `SubagentStop` が申告した走行中の subagent である
+	// （キー: `background_tasks[].id`、値: `agent_type`）。
+	//
+	// **`runningSubagents` と足し合わせて使う**（設計 3-11）。**片方だけでは足りない。**
+	// 親が subagent を待っている間は `Stop` が1度も来ないので `background_tasks` が空のままであり、
+	// 逆に `SubagentStart` を取りこぼすと `runningSubagents` が空のままになる。
+	//
+	// **`id` と `agent_id` は突き合わせられる**（設計 1-3。`SubagentStart.agent_id` /
+	// `Stop.background_tasks[].id` / `SubagentStop.agent_id` は named subagent 15件すべてで
+	// 同じ文字列だった）。だから2つを1つの集合にまとめてよい。
+	//
+	// **`type` が `subagent` のものだけを入れる。**`shell` のものは、この節が扱う
+	// 「サブエージェントを止めた」の話ではない。
+	backgroundSubagents map[string]string
 	// turnLoopRunning は turn ループの goroutine が走っているかどうかである。
 	// **同じ run に2本目を立てない**ための印である。
 	turnLoopRunning bool
@@ -395,6 +442,9 @@ func (rs *runState) beginTurn(now time.Time) int {
 	rs.SendFirstPrompt = false
 	rs.stopSeenAt = time.Time{}
 	rs.hookSeenThisTurn = false
+	// **前の turn の subagent を持ち越さない**（設計 3-11）。持ち越すと、次の turn で
+	// `blocked` になったときに「走っている」と誤って判定し、猶予いっぱい待たされる。
+	rs.resetSubagentsLocked()
 	rs.LastSeenAt = now
 	if rs.StartedAt.IsZero() {
 		rs.StartedAt = now
@@ -435,9 +485,207 @@ func (rs *runState) noteHook(ev hookserver.HookEvent, now time.Time) {
 		// 投入時には取れないので、UserPromptSubmit を受けた時点で入れる（設計 3-25）。
 		rs.PromptID = ev.PromptID
 	}
+	if ev.BackgroundTasks != nil {
+		// **`background_tasks` は Claude Code 自身の申告である**（設計 1-7 / 3-2）。
+		// `Stop` と `SubagentStop` にだけ入る。**中身をそのまま覚え直す**（差分ではない）。
+		rs.setBackgroundSubagentsLocked(*ev.BackgroundTasks)
+	}
 	if ev.HookEventName == hookStop && ev.BackgroundTasks != nil && len(*ev.BackgroundTasks) == 0 {
 		rs.stopSeenAt = now
+		// **`background_tasks` が空なのは「1つも走っていない」ことである**（設計 3-2）。
+		// **Claude Code 自身が数えたものなので、こちらの数え方より確かである。**
+		// `SubagentStop` を取りこぼしていても、ここで印が残り続けないようにする。
+		rs.resetSubagentsLocked()
 	}
+}
+
+// noteSubagentStart は subagent が走り始めたことを覚える（設計 3-11）。
+//
+// **`agent_id` が空なら覚えない。**`SubagentStop` と対にできず、外す手立てが無くなる。
+// **上限に達していたら、新しいものは覚えない**（`maxTrackedSubagents`）。
+//
+// agentID: `SubagentStart` の `agent_id`。
+// agentType: `SubagentStart` の `agent_type`。通知に載せる名前に使う。
+func (rs *runState) noteSubagentStart(agentID, agentType string) {
+	if agentID == "" {
+		return
+	}
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.runningSubagents == nil {
+		rs.runningSubagents = make(map[string]string, 1)
+	}
+	if _, known := rs.runningSubagents[agentID]; !known && len(rs.runningSubagents) >= maxTrackedSubagents {
+		return
+	}
+	rs.runningSubagents[agentID] = agentType
+}
+
+// noteSubagentStop は subagent が終わったことを覚える（設計 3-11）。
+//
+// agentID: `SubagentStop` の `agent_id`。空なら何もしない。
+func (rs *runState) noteSubagentStop(agentID string) {
+	if agentID == "" {
+		return
+	}
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	delete(rs.runningSubagents, agentID)
+}
+
+// setBackgroundSubagentsLocked は `background_tasks` の申告を覚え直す（設計 1-7 / 3-2）。
+//
+// **差分ではなく、丸ごと入れ替える。**`background_tasks` はその時点で走っているものの
+// 一覧であり、載っていないものは走っていない。
+//
+// **`type` が `subagent` のものだけを入れる**（`shell` は扱わない。フィールドの実測値は
+// docs/evidence/hooks_probe_20260817.jsonl にある）。
+// **`status` では絞らない。**設計 3-2 が「`background_tasks` が空でなければ未完了」と
+// 決めており、**そこへ新しい判断を足さない。**
+//
+// **件数に上限を置く**（`maxTrackedSubagents`）。hook は外部入力である（設計 3-2 / 3-23）。
+//
+// **呼び出し側が `rs.mu` を持っていること。**
+//
+// tasks: 受け取った `background_tasks`。
+func (rs *runState) setBackgroundSubagentsLocked(tasks []hookserver.BackgroundTask) {
+	if len(tasks) == 0 {
+		rs.backgroundSubagents = nil
+		return
+	}
+	got := make(map[string]string, len(tasks))
+	for _, t := range tasks {
+		if t.Type != backgroundTaskTypeSubagent || t.ID == "" {
+			continue
+		}
+		if _, known := got[t.ID]; !known && len(got) >= maxTrackedSubagents {
+			break
+		}
+		got[t.ID] = t.AgentType
+	}
+	if len(got) == 0 {
+		rs.backgroundSubagents = nil
+		return
+	}
+	rs.backgroundSubagents = got
+}
+
+// resetSubagentsLocked は走っている subagent の印を全部下ろす。
+//
+// **呼び出し側が `rs.mu` を持っていること。**turn を送るときと、
+// 「`background_tasks` が空の `Stop`」を受けたときに呼ぶ。
+func (rs *runState) resetSubagentsLocked() {
+	rs.runningSubagents = nil
+	rs.backgroundSubagents = nil
+}
+
+// runningSubagentsLocked は2つの申告を足し合わせて返す（設計 3-11）。
+//
+// **どちらかが「動いている」と言っているなら、動いていると扱う。**
+//
+//	`SubagentStart` から `SubagentStop` まで … 親が subagent を待っている間はこちらだけが持つ
+//	直近の `Stop` の `background_tasks`      … `SubagentStart` を取りこぼしたときはこちらが拾う
+//
+// **同じ `agent_id` なら同じものである**（設計 1-3）。名前は `SubagentStart` 側を優先する。
+//
+// **呼び出し側が `rs.mu` を持っていること。**
+//
+// 戻り値: `agent_id` から `agent_type` への対応。1件も走っていなければ nil。
+func (rs *runState) runningSubagentsLocked() map[string]string {
+	if len(rs.runningSubagents) == 0 && len(rs.backgroundSubagents) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(rs.runningSubagents)+len(rs.backgroundSubagents))
+	for id, typ := range rs.backgroundSubagents {
+		out[id] = typ
+	}
+	for id, typ := range rs.runningSubagents {
+		out[id] = typ
+	}
+	return out
+}
+
+// runningSubagentList は、いま走っている subagent の名前を並べて返す（設計 3-11）。
+//
+// **並びは名前順である。**同じ状態なら同じ文面が出るようにするためで、
+// map の走査順のままだと引き渡しの通知が呼ぶたびに入れ替わる。
+//
+// 戻り値: `<agent_type>(<agent_id>)` の形の並び。1件も走っていなければ nil。
+func (rs *runState) runningSubagentList() []string {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	running := rs.runningSubagentsLocked()
+	if len(running) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(running))
+	for id, typ := range running {
+		out = append(out, formatSubagentLabel(typ, id))
+	}
+	slices.Sort(out)
+	return out
+}
+
+// runningSubagentIDs は、いま走っている subagent の `agent_id` を並べて返す（設計 3-11）。
+//
+// **記録の置き場所を組み立てるために使う**（`SubagentTranscriptsFor`）。
+// **`agent_id` は外部入力のままである。**パスの部品に使ってよいかは、使う側が
+// `safeAgentID` で確かめる。
+//
+// **並びは名前順である**（`runningSubagentList` と同じ理由。呼ぶたびに順番が
+// 入れ替わると、引き渡しの通知の文面が毎回変わる）。
+//
+// 戻り値: `agent_id` の並び。1件も走っていなければ nil。
+func (rs *runState) runningSubagentIDs() []string {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	running := rs.runningSubagentsLocked()
+	if len(running) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(running))
+	for id := range running {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// formatSubagentLabel は subagent の名前を、issue のコメントへ載せてよい形に直す。
+//
+// agentType: `agent_type`。空なら `subagent` とする。
+// agentID: `agent_id`。
+// 戻り値: `<agent_type>(<agent_id>)` の形の名前。
+func formatSubagentLabel(agentType, agentID string) string {
+	name := sanitizeSubagentField(agentType)
+	if name == "" {
+		name = "subagent"
+	}
+	return name + "(" + sanitizeSubagentField(agentID) + ")"
+}
+
+// sanitizeSubagentField は hook から来た文字列を、コメントへ載せてよい1行に均す。
+//
+// **`agent_type` も `agent_id` も hook から来る外部入力である**（設計 3-2 / 3-23）。
+// **backtick と制御文字を落とし、長さを切る。**落とさないと、引き渡しの通知の
+// code span を抜け出して、issue へ好きな Markdown を書き込める。
+//
+// s: 元の文字列。
+// 戻り値: 均した文字列（`maxSubagentLabelRunes` 文字まで）。
+func sanitizeSubagentField(s string) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range s {
+		if r == '`' || unicode.IsControl(r) {
+			continue
+		}
+		if n >= maxSubagentLabelRunes {
+			break
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // stopSeen は「background_tasks が空の Stop」を受けているかを返す。

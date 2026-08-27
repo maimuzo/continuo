@@ -182,28 +182,27 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		case turnAborted:
 			return
 		case turnBlocked:
+			// **esc を送る前に、走っている subagent が終わるのを待つ**（設計 3-11）。
+			// **待つのは「別の subagent が書き終えるのを待つ」ためである。**
+			// **`blocked` が解けるからではない。**確認の画面は自分では消えないので、
+			// 待っても解けない。引き渡しは直後に pane を閉じる（`finishRun`）ので、
+			// 待たずに esc を送ると、そのとき書きかけだった編集がまるごと消える。
+			stillRunning := o.waitForRunningSubagents(waitCtx, rs)
+			if ctx.Err() != nil || !rs.currentWorker(epoch) {
+				// **待っている間に、別の経路がこの run を終わらせていた**（上の分岐と同じ理由）。
+				// ここで諦め直すと RetryCount が2倍の速さで消費され、引き渡しの
+				// コメントも二重に投稿される（設計 3-21）。
+				o.logger.Debug("サブエージェントを待っている間に、別の経路が run を終わらせていました",
+					"identifier", snap.Identifier)
+				return
+			}
 			// **次を投げる前に必ず esc を送る**（設計 3-11。送らずに投げると保留中の
 			// 権限要求が承認されて実行される。3/3 で再現）。
 			o.sendEscape(ctx, rs)
 			// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない
 			// （設計 3-11。`Notification` hook は出ず、拒否は静かに起きる）。
 			// 書けるのは「記録を見て確かめてください」までである。
-			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
-				"Claude Code が作業の途中で確認の画面に止まりました。"+
-					"continuo は esc を送って画面を閉じましたが、"+
-					"**この issue は人間が見ないと進みません。**"+
-					"\n【確かめ方】下記の【調べるところ】に挙げた記録を開き、"+
-					"末尾で何をしようとしていたかを見てください。"+
-					"**サブエージェントの記録も見てください。**"+
-					"親の記録の末尾には何も残っていないことがあります。"+
-					"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。"+
-					"**何の確認だったかは continuo の側には残りません。**"+
-					"\n【dontAsk について】continuo は `--permission-mode dontAsk` で起動しており、"+
-					"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、"+
-					"**この停止は拒否とは別の原因のことがあります。**"+
-					"\n【対処】記録を見て、許してよい操作だと分かったときだけ "+
-					"WORKFLOW.md の `claude.permissions.allow` に足してください。"+
-					"そのうえで Status を着手待ちへ戻してください。")
+			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState, blockedHandoffReason(stillRunning))
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
@@ -252,6 +251,111 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			}
 		}
 	}
+}
+
+// subagentPollInterval は「走っている subagent が終わったか」を覗きに行く間隔である。
+//
+// **hook の受け口（`hookCh`）は使わない。**`SubagentStart` / `SubagentStop` は turn の
+// 終わりの判定に使わないので、そこへ流すと `confirmTurnEnd` の待ちが横取りして取りこぼす
+// （設計 3-2 の `isTurnBoundaryHook`）。**覗くだけにする。**待つのは長くても
+// `claude.poll_wait_ms` の1回ぶんなので、この間隔で起きる回数はたかが知れている。
+const subagentPollInterval = 50 * time.Millisecond
+
+// waitForRunningSubagents は、走っている subagent が終わるのを猶予いっぱいまで待つ
+// （設計 3-11）。
+//
+// **待つ理由は1つだけである。「別の subagent が書き終えるのを待つ」ためである。**
+// **`blocked` が解けるのを待っているのではない。**確認の画面は自分では消えないので、
+// 待っても解けない。**「待てば復帰する」ものではない。**
+// 引き渡しは通知の直後に pane を閉じるので、走っていたものは途中で終わる。
+// **待たなければ、そのとき書きかけだった編集がまるごと消える**（報告の回は 4件中3件まで
+// 書き終えていて、4件目で止まった）。
+//
+// **猶予は `claude.poll_wait_ms` である。**新しい設定は足さない。
+// **長くしても救えない。**上のとおり `blocked` は解けないので、伸ばすぶんだけ
+// 人間へ渡すのが遅れるだけである。
+//
+// ctx: 待ちを打ち切るコンテキスト。
+// rs: 対象の run。
+// 戻り値: 待ち終えた時点でまだ走っている subagent の名前の並び。1件も無ければ nil。
+func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState) []string {
+	running := rs.runningSubagentList()
+	if len(running) == 0 {
+		return nil
+	}
+	grace := time.Duration(o.cfg.Claude.PollWaitMs) * time.Millisecond
+	if grace <= 0 {
+		return running
+	}
+	o.logger.Info("走っているサブエージェントが終わるのを待ってから esc を送ります",
+		"identifier", rs.issue().Identifier, "サブエージェント", running, "猶予", grace)
+
+	deadline := time.NewTimer(grace)
+	defer deadline.Stop()
+	tick := time.NewTicker(subagentPollInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return rs.runningSubagentList()
+		case <-deadline.C:
+			left := rs.runningSubagentList()
+			if len(left) > 0 {
+				o.logger.Warn("猶予のあいだにサブエージェントが終わらなかったので、走行中のまま esc を送ります",
+					"identifier", rs.issue().Identifier, "サブエージェント", left)
+			}
+			return left
+		case <-tick.C:
+			if len(rs.runningSubagentList()) == 0 {
+				o.logger.Info("走っていたサブエージェントが終わったので esc を送ります",
+					"identifier", rs.issue().Identifier)
+				return nil
+			}
+		}
+	}
+}
+
+// blockedHandoffReason は `blocked` で人間へ渡すときの理由の文面を組み立てる（設計 3-11）。
+//
+// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない
+// （`Notification` hook は出ず、拒否は静かに起きる）。書けるのは
+// 「記録を見て確かめてください」までである。
+//
+// **走行中の subagent を止めたなら、そう書く。**引き渡しの直後に pane を閉じるので、
+// 走っていたものは途中で終わる。**書かないと、人間は worktree に書きかけの変更が
+// 残っていることに気づけない。**
+//
+// stillRunning: esc を送る時点でまだ走っていた subagent の名前の並び。空なら1件も無い。
+// 戻り値: 引き渡しの通知に載せる理由。
+func blockedHandoffReason(stillRunning []string) string {
+	var b strings.Builder
+	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
+		"continuo は esc を送って画面を閉じましたが、" +
+		"**この issue は人間が見ないと進みません。**")
+	if len(stillRunning) > 0 {
+		quoted := make([]string, 0, len(stillRunning))
+		for _, name := range stillRunning {
+			quoted = append(quoted, "`"+name+"`")
+		}
+		b.WriteString(fmt.Sprintf(
+			"\n【走行中のサブエージェントを止めました】esc を送った時点で %d 件が動いていました（%s）。"+
+				"**worktree には書きかけの変更が残っている可能性があります。**"+
+				"下記の【調べるところ】の worktree を確かめてください。",
+			len(stillRunning), strings.Join(quoted, " / ")))
+	}
+	b.WriteString("\n【確かめ方】下記の【調べるところ】に挙げた記録を開き、" +
+		"末尾で何をしようとしていたかを見てください。" +
+		"**サブエージェントの記録も見てください。**" +
+		"親の記録の末尾には何も残っていないことがあります。" +
+		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
+		"**何の確認だったかは continuo の側には残りません。**" +
+		"\n【dontAsk について】continuo は `--permission-mode dontAsk` で起動しており、" +
+		"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
+		"**この停止は拒否とは別の原因のことがあります。**" +
+		"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
+		"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
+		"そのうえで Status を着手待ちへ戻してください。")
+	return b.String()
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。
