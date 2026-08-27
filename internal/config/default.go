@@ -40,6 +40,9 @@ func DefaultConfig() *Config {
 			// 知らない Status を見つけてから worker を止めるまでの猶予（設計 3-50）。
 			// **既定は10分。**turn 1回ぶんの表明を読めれば足りる長さにしてある。
 			UnknownStateGraceMs: 600000,
+			// ボードの自動化が動かした Status を戻す先の対応表（設計 3-54）。
+			// **既定は空である。**書かなければ、いままでどおり猶予を置いて worker を止める。
+			AutomatedStateRewrite: map[string]string{},
 			// エージェントが最終応答に書く表明の印と、その値から Status への対応（3-25）。
 			// "working" は null（＝Status を動かさない）である。
 			StatusSignalPrefix: "CONTINUO-STATUS:",

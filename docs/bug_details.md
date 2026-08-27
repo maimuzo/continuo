@@ -27,7 +27,7 @@
 | --- | --- |
 | [表明の受け取り口](#表明の受け取り口) | turn が途中で止められると、エージェントが言おうとしていたことが誰にも読まれずに捨てられる |
 | [止める側と待つ側](#止める側と待つ側) | 巡回が pane を閉じても、待っている turn ループはそれを知らない |
-| [共有されたボード](#共有されたボード) | GitHub の組み込みの自動化もボードを書き換える。continuo は人間と区別できない |
+| [共有されたボード](#共有されたボード) | GitHub の組み込みの自動化もボードを書き換える。誰が書いたかは記録から引けるが、戻し先は設定に書いてもらうしかない |
 | [メモリの中の印](#メモリの中の印) | 「自分が取った」印は他の機械から見えない。2台で動かすと同じ issue を両方が取る |
 | [3つの Status の集合](#3つの-status-の集合) | 設定に Status の集合が3つあり、重なり方によっては終わっていない issue を片付ける |
 | [配り直せない雛形](#配り直せない雛形) | 雛形を直しても、既に動かしている人の `WORKFLOW.md` には届かない |
@@ -159,35 +159,43 @@ turn.go にはそのための分類が5つ（`turnEnded` / `turnBlocked` / `turn
 ### どういう形の問題か
 
 **ボードは continuo だけのものではありません。**人間も、GitHub Projects v2 の組み込みの
-自動化も、同じ Status を書き換えます。**continuo には、その書き換えが誰によるものかを
-知る手立てがありません。**設定に書いていない Status へ動かされると、
-continuo は一律に「人間が引き渡した」と解釈して worker を止めます。
+自動化も、同じ Status を書き換えます。**書いたのが自動化かどうかは、issue の記録
+（`ProjectV2ItemStatusChangedEvent`）の `actor.__typename` が `Bot` かどうかで引けます。**
+
+**引けるのはそこまでです。**「その issue を本来どの Status に戻すべきか」は記録に無いので、
+**`tracker.automated_state_rewrite` に人間が書いた対応表を引きます。**
+**書いていなければ、いままでどおり「人間が引き渡した」と解釈して worker を止めます。**
 
 ### どこにあるか
 
 | ファイル | 何をしているか |
 | --- | --- |
-| `internal/orchestrator/reconcile.go` | `reconcileRunning` が毎巡回で Status を取り直し、3つに分類する |
+| `internal/orchestrator/reconcile.go` | `reconcileRunning` が毎巡回で Status を取り直して分類する |
+| `internal/orchestrator/unknownstate.go` | `claimAutomatedRewrite` が「書いたのは自動化か」を見て、戻すか止めるかを決める |
 | `internal/orchestrator/lifecycle.go` | `handleTurnEnd` が turn の終わりに同じ分類をする |
+| `internal/tracker/query.go` | `judgeStatusAuthor` が issue の記録から書いた主体を引く |
 | `internal/tracker/adapter.go` | `UpdateStatus` が Status を書く。**書く前に読み直しますが、compare-and-swap ではありません** |
 
-**分類は3つだけです。**
+**分類は4つです。**
 
 | 取り直した Status | continuo の解釈 | 何をするか |
 | --- | --- | --- |
 | `terminal_states` にある | 終わった | worktree と branch を片付ける |
 | `active_states` にあり、着手できる | まだ作業中 | 次の turn を送る |
+| **設定に名前が無く、書いたのは自動化で、対応表に戻し先がある** | **横取りされた** | **本来の Status へ戻す。止めない** |
 | **それ以外のすべて** | **人間が引き渡した** | **worker を止める。worktree は残す** |
 
-**3つめが「それ以外のすべて」であることが、この問題の形です。**
-ボードの自動化が書いた値も、人間が手で動かした値も、ここに落ちます。
+**最後が「それ以外のすべて」であることが、この問題の形です。**
+**対応表に書いていない自動化の書き込みも、人間が手で動かした値も、まだここに落ちます。**
 
 ### どう噛みつくか
 
-**issue #33。**エージェントが PR を作ると、組み込みの自動化「Pull request linked」が
-Status を `In Progress` へ動かしました。設定の `active_states` は
+**issue #33（直しました）。**エージェントが PR を作ると、組み込みの自動化
+「Pull request linked」が Status を `In Progress` へ動かしました。設定の `active_states` は
 `["AI Ready", "AI In Progress"]` なので、`In Progress` はどこにも入りません。
 **人間は何も操作していないのに、worker が止まりました。**
+**いまは書いた主体を見て、対応表に戻し先があれば書き戻します**（設計 3-54）。
+**対応表を書いていないボードでは、いまも止まります。**
 
 **issue #35。**PR をマージすると、組み込みの自動化「Pull request merged」が
 Status を `Done` へ動かしました。設定は `terminal_states: ["AI Done"]` なので
@@ -202,12 +210,15 @@ Status を `Done` へ動かしました。設定は `terminal_states: ["AI Done"
 **continuo が動かしたときだけは、記録が残ります。**continuo がボードへ書き込むと、
 **何から何へ動かしたのか・なぜ動かしたのか・いつ動かしたのかを issue にコメントします**
 （設計 3-29）。**ボードの自動化が動かしたぶんは、いまも何も残りません。**
+**ただし continuo がそれを書き戻したときは、書き戻したぶんの記録が1件残ります。**
 記録の無い遷移を見つけたら、それは continuo 以外が書いたということです。
 
 ### 触るときに気をつけること
 
 - **「知らない Status＝人間の引き渡し」という前提のコードを増やさないでください。**
   その前提はもう成立していません。書いた主体は人間・continuo・ボードの自動化の3つあります。
+- **`actor.__typename` を見る経路を増やすときは、`project.number` で自分のボードへ絞ってください。**
+  1つの issue が2枚のボードに載っていると、**両方のボードのイベントが同じ配列で返ります。**
 - **Status を書く経路を足すときは、書く前に読み直してください。**
   `UpdateStatus` は読んでから書きますが、**読み直しと書き込みの間に他人が動かした場合は上書きします。**
   GitHub Projects v2 に compare-and-swap はありません。

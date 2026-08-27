@@ -26,6 +26,9 @@ const (
 	stateOriginFailureState = "tracker.failure_state"
 	// stateOriginStatusSignalMap は `tracker.status_signal_map` の遷移先に書いた名前である。
 	stateOriginStatusSignalMap = "tracker.status_signal_map"
+	// stateOriginAutomatedStateRewrite は `tracker.automated_state_rewrite` の**キー**
+	// （ボードの自動化が書く Status 名）に書いた名前である。
+	stateOriginAutomatedStateRewrite = "tracker.automated_state_rewrite"
 	// stateOriginCleanupOnStates は `cleanup.on_states` に書いた名前である。
 	stateOriginCleanupOnStates = "cleanup.on_states"
 )
@@ -130,6 +133,11 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 // **`cleanup.on_states` も含める。**Bootstrap は照合しないが、
 // **人間が「片付ける Status」を取り違えると、走っている worktree を消す。**
 //
+// **`tracker.automated_state_rewrite` のキーも含める**（設計 3-55）。
+// **キーは「continuo が知らない Status」なので、実行時の照合には一度も掛からない。**
+// 紛らわしい選択肢がボードにあると（`In Progress` と `AI In Progress` など）、
+// **書き戻しが一度も動かないのに、その理由がどこにも出ない。**
+//
 // 同じ名前が複数のキーに書いてあるときは、**先に見たキーだけを残す。**
 // 同じ組を出どころ違いで何度も並べても、直すべき行は結局同じである。
 //
@@ -168,6 +176,17 @@ func configuredStates(cfg config.Config) []configuredState {
 		if target := cfg.Tracker.StatusSignalMap[signal]; target != nil {
 			add(stateOriginStatusSignalMap, *target)
 		}
+	}
+	// **対応表も map の反復順に頼らない。**キーを名前順に見る。
+	// **足すのはキーだけである。**戻す先は `config.Validate` が
+	// 「`active_states` に入っていること」を要求しているので、上の active_states で既に足りている。
+	rewrites := make([]string, 0, len(cfg.Tracker.AutomatedStateRewrite))
+	for from := range cfg.Tracker.AutomatedStateRewrite {
+		rewrites = append(rewrites, from)
+	}
+	sort.Strings(rewrites)
+	for _, from := range rewrites {
+		add(stateOriginAutomatedStateRewrite, from)
 	}
 	for _, s := range cfg.Cleanup.OnStates {
 		add(stateOriginCleanupOnStates, s)

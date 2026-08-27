@@ -151,32 +151,21 @@ func NewAdapter(
 }
 
 // requiredStatesForBootstrap は Bootstrap が照合すべき Status 名の一覧を、
-// cfg から重複無く集める。active_states・terminal_states・dispatch_state・failure_state・
-// status_signal_map の遷移先をすべて含める（3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+// cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
+// failure_state・status_signal_map の遷移先・**automated_state_rewrite のキー**を
+// すべて含める（3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+//
+// **集めるのは `config.BootstrapStates` の1箇所だけである**（設計 3-55）。**自前で集め直さない。**
+// 実行時に「知っている Status か」を判定する一覧（orchestrator の `knownStates`）とは
+// **対応表のキーのぶんだけ違う。**その差は意図したものである。
+//
+//	照合する（ここ）        … キーがボードに実在しなければ起動を止める。綴りの打ち間違いを見つける
+//	知っている Status に入れない … 入れると「知らない Status」でなくなり、書き戻しが二度と通らない
+//
+// **戻す先（値）は足さない。**`config.Validate` が「戻す先は `active_states` に入っていること」を
+// 起動前に要求しているので、足しても1件も増えない。
 func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
-	seen := make(map[string]bool)
-	var result []string
-	add := func(s string) {
-		if s == "" || seen[s] {
-			return
-		}
-		seen[s] = true
-		result = append(result, s)
-	}
-	for _, s := range cfg.ActiveStates {
-		add(s)
-	}
-	for _, s := range cfg.TerminalStates {
-		add(s)
-	}
-	add(cfg.DispatchState)
-	add(cfg.FailureState)
-	for _, target := range cfg.StatusSignalMap {
-		if target != nil {
-			add(*target)
-		}
-	}
-	return result
+	return config.BootstrapStates(cfg)
 }
 
 // Bootstrap は起動時の検査を行う（設計 3-6）。
@@ -597,7 +586,7 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 		conn := resp.RepositoryOwner.ProjectV2.Items
 		for i := range conn.Nodes {
 			raw := &conn.Nodes[i]
-			mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+			mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted, a.projectNumber)
 			if !mapped.Ok {
 				a.logger.Warn("候補の一覧から除外しました",
 					"item_id", raw.ID, "理由", mapped.Reason,
@@ -697,8 +686,11 @@ func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q strin
 }
 
 // FetchIssuesByIDs は指定した project item ID の現在のスナップショットを取り直す
-// （SPEC.md 11.1 の fetch_issues_by_ids。設計「その3」）。実行中 issue の照合や、
-// UpdateStatus が書き込み前に行う取り直しに使う。
+// （SPEC.md 11.1 の fetch_issues_by_ids。設計「その3」）。実行中 issue の照合に使う。
+//
+// **「いまの Status を書いたのは誰か」（timeline）も一緒に取る**（設計 3-54）。
+// **Status を書く前の取り直しは `fetchIssuesByIDs` を timeline 無しで呼ぶ**
+// （`UpdateStatus`）。そちらは timeline を1バイトも読まない。
 //
 // **見つからない ID は「もう見えない」として扱い、結果から省く。**合成した状態を作らない
 // （SPEC.md: "IDs no longer visible in the configured scope are omitted; the orchestrator
@@ -725,10 +717,26 @@ func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q strin
 // significant"）。いずれかの ID が見つかったのに正規化できなかった場合は CategoryResponse の
 // *Error を返す。GraphQL 呼び出し自体が失敗した場合はそのエラーを返す。
 func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, error) {
+	return a.fetchIssuesByIDs(ctx, ids, true)
+}
+
+// fetchIssuesByIDs は ID 指定の取り直しの本体である。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// ids: 取り直す project item ID の一覧。
+// withTimeline: 「いまの Status を書いたのは誰か」も取るかどうか。
+// **偽で呼ぶのは Status を書く前の取り直しだけである**（`UpdateStatus`）。
+// 偽のとき `Issue.StatusChangedBy` と `Issue.StatusChangedByAutomation` はゼロ値になる。
+// 戻り値: FetchIssuesByIDs と同じ。
+func (a *Adapter) fetchIssuesByIDs(ctx context.Context, ids []string, withTimeline bool) ([]Issue, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 
+	query := byIDsQueryTemplate
+	if !withTimeline {
+		query = byIDsWithoutTimelineQueryTemplate
+	}
 	var resp byIDsQueryResponse
 	vars := map[string]any{
 		"statusField": a.statusField,
@@ -736,7 +744,7 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 	}
 	// **`NOT_FOUND` は「その ID がもう見えない」ことを意味するので、部分的な成功として扱う。**
 	// 消えた ID は `data.nodes` に `null` で入るので、下のループが省く。
-	if err := a.gql.doAllowingNotFound(ctx, byIDsQueryTemplate, vars, &resp); err != nil {
+	if err := a.gql.doAllowingNotFound(ctx, query, vars, &resp); err != nil {
 		return nil, err
 	}
 
@@ -752,7 +760,7 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 				Message:  fmt.Sprintf("想定外の node 型です（ProjectV2Item ではない）: %s", raw.Typename),
 			}
 		}
-		mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+		mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted, a.projectNumber)
 		if !mapped.Ok && mapped.Gone {
 			// 候補の集合に居ない（archive 済み・Status 未設定・Issue でも DraftIssue でも
 			// ない content）。**候補の取得（items）はどれも返さないのに、nodes(ids:) は
@@ -856,7 +864,9 @@ func (a *Adapter) UpdateStatus(
 	}
 
 	// 書く前に必ず取り直す。
-	current, err := a.FetchIssuesByIDs(ctx, []string{itemID})
+	// **timeline は取らない。**ここで見るのは取り直した `State` だけであり、
+	// 「誰が書いたか」は書き込みの判断に1つも使わない（設計 3-54）。
+	current, err := a.fetchIssuesByIDs(ctx, []string{itemID}, false)
 	if err != nil {
 		return StatusWrite{}, err
 	}

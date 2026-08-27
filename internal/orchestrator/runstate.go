@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -165,7 +166,28 @@ type runState struct {
 	// 1時間返らない。その間に次の巡回が来ても、二重に走らせてはならない。
 	//
 	// **リトライを積んでバックオフに入る場合は偽へ戻す**（run はまだ続くため）。
+	//
+	// **書き戻しはこの印を取らない**（設計 3-56）。取らせると「終わらせない持ち主」が
+	// できてしまい、この印を見て「終わらせる処理が走っている」と判断する場所が
+	// すべて誤判定する。書き戻しは `rewriting` を使う。
 	terminating bool
+	// rewriting は「ボードの自動化が動かした Status の書き戻し」が飛んでいる最中である
+	// ことを表す（設計 3-56）。
+	//
+	// **`terminating` とは別の印である。**書き戻しは run を終わらせない。
+	// **この印が立っている間は run を手放してはならない。**手放したあとに書き込みが
+	// 着地すると、印の消えた issue に「作業中」の Status が書かれ、次の巡回が
+	// **同じ worktree に2本目の Claude Code を立てる。**
+	rewriting bool
+	// rewriteDone は、飛んでいる書き戻しが終わったときに閉じるチャネルである。
+	// **`rewriting` が偽のときは nil である。**
+	rewriteDone chan struct{}
+	// terminalWaiting は、書き戻しの終わりを待っている「終わらせる処理」の本数である
+	// （設計 3-56）。
+	//
+	// **1本でも待っていれば、新しい書き戻しは始めない。**始めさせると、待っている側が
+	// 書き戻しの列に永久に割り込まれる。
+	terminalWaiting int
 	// workerEpoch は worker（pane と agent）を起こした回数である。
 	//
 	// **turn ループは自分が起こされたときの世代を覚えておき、それが変わっていたら
@@ -204,6 +226,37 @@ type runState struct {
 	// **猶予の起点である。**巡回のたびに入れ直すと猶予が永久に切れないので、
 	// 既に入っているときは触らない。知っている Status に戻ったら消す。
 	unknownStateSince time.Time
+	// automatedRewrites は、ボードの自動化が動かした Status を書き戻した回数である
+	// （設計 3-56）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
+	//
+	// **上限を持たないと止まらない。**書き戻した直後に自動化がまた動く組み合わせがあると、
+	// continuo とボードが同じ issue の Status を押し合い続ける。
+	automatedRewrites map[string]int
+	// automatedRewriteFailures は、書き戻しが**ボードを1ミリも動かせないまま終わった**回数である
+	// （設計 3-56）。キーは automatedRewrites と同じ作り方である。
+	//
+	// **押し合いの上限とは別に数える。**ボードが動かなかったぶんは押し合いの枠を返すので、
+	// **返すだけだと「毎回失敗する書き込みを永久に打ち続ける」ことになる。**
+	// 人間が戻す先の選択肢をボードから消した場合がそれである。
+	// **ボードが目的の Status になったら 0 に戻す。**
+	// **上限に達したまま時間が経ったときも 0 に戻す**（`expireAutomatedRewriteFailures`）。
+	// 戻さないと「続けて何回」を数えているつもりで、**通信が回復しても永久に拒む。**
+	automatedRewriteFailures map[string]int
+	// automatedRewriteFailedAt は、その Status について最後に「戻せなかった」を数えた時刻である
+	// （設計 3-56）。キーは automatedRewrites と同じ作り方である。
+	//
+	// **「続けて何回」を時間で切り直すために持つ。**
+	automatedRewriteFailedAt map[string]time.Time
+	// automatedRewriteHandedOff は、その Status とその理由について「ここからは人間へ渡す」と
+	// 既にログへ出したかである（設計 3-56）。
+	//
+	// **キーは Status だけでは足りない。**人間へ渡る道は「押し合いの上限」と
+	// 「戻せない失敗の上限」の2本あり、**Status だけで数えると、先に起きたほうが
+	// もう片方のログを永久に黙らせる。**理由もキーに入れる（`automatedHandoffKey`）。
+	//
+	// **出すのは1度だけである。**上限に達したあとも巡回は30秒ごとに同じ判定へ来るので、
+	// 毎回出すと猶予のあいだに同じ行が20回ほど流れ、他の行が埋もれる。
+	automatedRewriteHandedOff map[string]bool
 	// workerStopCtx は「この世代の worker を止めた」ことを turn ループへ伝える経路である
 	// （設計 3-51）。
 	//
@@ -643,6 +696,207 @@ func (rs *runState) clearUnknownState() {
 	rs.unknownStateSince = time.Time{}
 }
 
+// rewriteClaim は「自動化が動かした Status を書き戻す」1回ぶんの確保である（設計 3-56）。
+//
+// **枠を取った側だけが返せる形にしてある。**枠を Status 名だけで返す作りにすると、
+// **巡回の goroutine と turn ループが同じ Status について同時に取ったとき、
+// 片方の失敗がもう片方の枠を返してしまう。**返った枠は次の巡回がまた取れるので、
+// **ボードが実際に動いた回数が上限を超える。**逆に、同じ失敗の経路を2度通ると
+// **1回の確保で2回ぶん返し、押し合いの数え方が壊れる。**
+//
+// **`release` は何度呼んでも1回しか返さない**（`sync.Once`）。
+// **nil に対して呼んでも安全である**（確保できなかったときの後始末を分岐で書かずに済む）。
+type rewriteClaim struct {
+	// rs は枠を取った run である。
+	rs *runState
+	// state は自動化が書いた Status 名（確保したときの綴りのまま）。
+	state string
+	// once は「返すのは1回だけ」を守る。
+	once sync.Once
+}
+
+// release は確保した書き戻しの1回ぶんを返す（設計 3-56）。
+//
+// **ボードが1ミリも動かなかったときに呼ぶ。**通信が失敗した・item がもう見えない・
+// 既にその値だった・`terminal_states` に入っていたので書かなかった、のいずれかである。
+//
+// **返さないと、押し合いが1度も起きていない run が止まる。**枠は
+// 「continuo とボードの自動化が同じ issue を押し合っている」ことを数えるためにあり、
+// **押し合いはボードが動いたときにだけ起きる。**GitHub への書き込みが3回続けて
+// 失敗しただけで上限に達すると、**その run はそこから書き戻しをやめ、次に自動化が
+// 動いた時点で worker ごと止まる。**
+func (c *rewriteClaim) release() {
+	if c == nil {
+		return
+	}
+	c.once.Do(func() { c.rs.releaseAutomatedRewrite(c.state) })
+}
+
+// claimAutomatedRewrite は「自動化が動かした Status を書き戻す」1回ぶんを確保する
+// （設計 3-56）。
+//
+// **確保できたときだけ handle を返し、その場で1回ぶん数える。**巡回は30秒ごとに走るので、
+// 数える前に書きに行くと、書き込みが終わる前の巡回が同じ書き戻しを何本も立てる。
+//
+// **数えるのは Status ごとである。**自動化が `In Progress` と `Done` の両方を書く運用で、
+// 片方の回数がもう片方を食い潰さないようにする。
+//
+// state: 自動化が書いた Status 名（前後の空白と大文字小文字は無視して数える）。
+// limit: 1つの Status につき書き戻してよい回数。
+// 戻り値の1つ目: 確保できたら handle。上限に達していたら nil。
+// 戻り値の2つ目: この Status をこれまでに書き戻した回数（確保した分を含まない）。
+func (rs *runState) claimAutomatedRewrite(state string, limit int) (*rewriteClaim, int) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	done := rs.automatedRewrites[key]
+	if done >= limit {
+		return nil, done
+	}
+	if rs.automatedRewrites == nil {
+		rs.automatedRewrites = map[string]int{}
+	}
+	rs.automatedRewrites[key] = done + 1
+	return &rewriteClaim{rs: rs, state: state}, done
+}
+
+// releaseAutomatedRewrite は枠を1つ返す。**呼ぶのは `rewriteClaim.release` だけである。**
+//
+// **0 より下へは減らさない。**確保していないのに返す呼び出しがあっても、
+// 上限の意味が壊れないようにする。
+//
+// state: 自動化が書いた Status 名（claimAutomatedRewrite に渡したものと同じ）。
+func (rs *runState) releaseAutomatedRewrite(state string) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	done := rs.automatedRewrites[key]
+	if done <= 0 {
+		return
+	}
+	rs.automatedRewrites[key] = done - 1
+}
+
+// noteAutomatedRewriteFailure は「書き戻したが、ボードは1ミリも動かなかった」を数える
+// （設計 3-56）。
+//
+// **押し合いの枠とは別に数える。**枠は失敗のたびに返るので、
+// **返すだけでは、毎回失敗する書き込みを永久に打ち続ける run ができる。**
+//
+// state: 自動化が書いた Status 名。
+// add: 数える回数。**待っても直らない失敗では上限をそのまま渡す**（1回で人間へ渡すため）。
+// now: いまの時刻（「続けて何回」を時間で切り直すために控える）。
+// 戻り値: 数えたあとの回数。
+func (rs *runState) noteAutomatedRewriteFailure(state string, add int, now time.Time) int {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.automatedRewriteFailures == nil {
+		rs.automatedRewriteFailures = map[string]int{}
+	}
+	if rs.automatedRewriteFailedAt == nil {
+		rs.automatedRewriteFailedAt = map[string]time.Time{}
+	}
+	rs.automatedRewriteFailures[key] += add
+	rs.automatedRewriteFailedAt[key] = now
+	return rs.automatedRewriteFailures[key]
+}
+
+// clearAutomatedRewriteFailures は「戻せなかった」回数を 0 に戻す（設計 3-56）。
+//
+// **ボードが目的の Status になったときに呼ぶ。**一度でも戻せたのなら、
+// それまでの失敗は一時的なものだったということである。
+//
+// state: 自動化が書いた Status 名。
+func (rs *runState) clearAutomatedRewriteFailures(state string) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	delete(rs.automatedRewriteFailures, key)
+	delete(rs.automatedRewriteFailedAt, key)
+}
+
+// expireAutomatedRewriteFailures は「戻せなかった」回数を、最後の失敗から時間が経っていれば
+// 0 に戻す（設計 3-56）。
+//
+// **数えているのは「続けて何回」である。**成功で 0 に戻す道はあるが、
+// **上限に達した run は書き戻しそのものをやめるので、その道へは二度と入れない。**
+// **通信が回復しても永久に拒み続ける**ことになるので、時間でも切り直す。
+//
+// **巡回のたびに打ち直すのとは違う。**打ち直す間隔が30秒から `after` へ伸びる。
+//
+// state: 自動化が書いた Status 名。
+// now: いまの時刻。
+// after: 最後の失敗からこれだけ経っていたら 0 に戻す。
+// 戻り値: 0 に戻したら true。
+func (rs *runState) expireAutomatedRewriteFailures(state string, now time.Time, after time.Duration) bool {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.automatedRewriteFailures[key] <= 0 {
+		return false
+	}
+	last, ok := rs.automatedRewriteFailedAt[key]
+	if !ok || now.Sub(last) < after {
+		return false
+	}
+	delete(rs.automatedRewriteFailures, key)
+	delete(rs.automatedRewriteFailedAt, key)
+	return true
+}
+
+// automatedRewriteFailureCount は「戻せなかった」回数を返す（設計 3-56）。
+//
+// state: 自動化が書いた Status 名。
+// 戻り値: 続けて戻せなかった回数。
+func (rs *runState) automatedRewriteFailureCount(state string) int {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.automatedRewriteFailures[key]
+}
+
+// automatedHandoffReason は「自動化が動かした Status を、なぜ人間へ渡すのか」である
+// （設計 3-56）。
+//
+// **理由ごとに数える。**Status だけで数えると、先に起きたほうがもう片方のログを
+// 永久に黙らせる（**人間には、起きているうちの1つしか見えなくなる**）。
+type automatedHandoffReason string
+
+const (
+	// handoffByPushback は「continuo とボードの自動化が押し合って上限に達した」である。
+	handoffByPushback automatedHandoffReason = "押し合いの上限"
+	// handoffByFailures は「書き戻しがボードを1ミリも動かせないまま上限に達した」である。
+	handoffByFailures automatedHandoffReason = "戻せない失敗の上限"
+)
+
+// noteAutomatedRewriteHandoff は「ここからは人間へ渡す」を**最初の1回だけ**真で返す
+// （設計 3-56）。
+//
+// **巡回は30秒ごとに同じ判定へ来る。**毎回ログに出すと、猶予のあいだに同じ行が
+// 20回ほど流れて他の行が埋もれる。**対応表に無かったときの分岐が1行も出さないのと
+// 同じ理由である**（案内は issue のコメントに書く）。
+//
+// **数えるのは Status と理由の組である。**Status だけで数えると、
+// 押し合いで先に1度出したあとに「戻せない失敗」が起きても、その行が出ない。
+//
+// state: 自動化が書いた Status 名。
+// reason: 人間へ渡す理由。
+// 戻り値: この Status とこの理由の組で初めて人間へ渡すなら true。
+func (rs *runState) noteAutomatedRewriteHandoff(state string, reason automatedHandoffReason) bool {
+	key := strings.ToLower(strings.TrimSpace(state)) + "\x00" + string(reason)
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.automatedRewriteHandedOff[key] {
+		return false
+	}
+	if rs.automatedRewriteHandedOff == nil {
+		rs.automatedRewriteHandedOff = map[string]bool{}
+	}
+	rs.automatedRewriteHandedOff[key] = true
+	return true
+}
+
 // turnLoopActive は turn ループの goroutine が走っているかを返す（設計 3-50）。
 //
 // **「turn が動いている」の判定はこれである。**turn ループは turn を送ってから
@@ -843,21 +1097,157 @@ func (rs *runState) currentWorker(epoch int) bool {
 	return !rs.Finished && !rs.workerStopped && rs.workerEpoch == epoch
 }
 
+// terminalGate は `beginTerminal` が印を確保できたかどうかと、確保できなかった理由である
+// （設計 3-56）。
+//
+// **理由を返さないと、呼び出し側が「終わりに向かっている」と「書き戻しが飛んでいる」を
+// 取り違える。**取り違えると、誰も終わらせていない run の turn ループが抜けて宙に浮くか、
+// 終わらせる処理が黙って戻って Status も引き渡しのコメントも出なくなる。
+type terminalGate int
+
+const (
+	// terminalClaimed は印を確保できたことを表す。
+	terminalClaimed terminalGate = iota
+	// terminalTaken は、既に別の「終わらせる処理」が走っている（または run が終わっている）
+	// ことを表す。**呼び出し側は何もせずに戻ってよい。**その run は終わりに向かっている。
+	terminalTaken
+	// terminalRewriting は、自動化が動かした Status の書き戻しが飛んでいることを表す。
+	// **run はまだ続いている。**待てば印は取れる（`claimTerminal`）。
+	terminalRewriting
+)
+
 // beginTerminal は「この run を終わらせる処理」を1本に絞る。
 //
 // **巡回のループから終わらせるときは、印を同期で確保してから goroutine を起こす。**
 // 終わらせる処理は 3-25 の9段（`agent.prompt` を待ち受けつきで呼ぶ）を通ることがあり、
 // **既定では最大1時間返らない。**印が無いと、次の巡回が同じ run をもう一度終わらせにかかる。
 //
-// 戻り値: 確保できたら true。既に走っている、または run が終わっていれば false。
-func (rs *runState) beginTerminal() bool {
+// **書き戻しが飛んでいる間は確保させない**（設計 3-56）。確保させて run を手放すと、
+// あとから着地する書き込みが印の消えた issue を「作業中」にし、次の巡回が
+// **同じ worktree に2本目の Claude Code を立てる。**
+// **ただしそれは `terminalTaken` とは別の答えである。**巡回のループから呼ぶ経路は
+// 次の巡回でやり直せばよいので待たずに戻ってよいが、**turn ループのように
+// 「自分が終わらせなければ誰も終わらせない」経路は `claimTerminal` で待つこと。**
+//
+// 戻り値: 確保できたら terminalClaimed。確保できなければその理由。
+func (rs *runState) beginTerminal() terminalGate {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	if rs.terminating || rs.Finished {
-		return false
+		return terminalTaken
+	}
+	if rs.rewriting {
+		return terminalRewriting
 	}
 	rs.terminating = true
-	return true
+	return terminalClaimed
+}
+
+// claimTerminal は「この run を終わらせる処理」の印を、**書き戻しの終わりを待ってから**
+// 確保する（設計 3-56）。
+//
+// **「自分が終わらせなければ誰も終わらせない」経路が使う。**turn ループの
+// `finishRun` / `failRun` / `abandonRun` がそれである。**待たずに戻ると、turn の上限に
+// 達した run が Status も動かさず、引き渡しのコメントも出さず、印も外れないまま残る。**
+//
+// **待っている間は新しい書き戻しを始めさせない**（`terminalWaiting`）。
+// 始めさせると、待っている側が書き戻しの列に永久に割り込まれる。
+//
+// **巡回のループから同期で呼んではならない**（設計 3-8）。待つ長さは書き込み1回ぶんである。
+//
+// ctx: 待ちを打ち切るコンテキスト。**終わっていたら印を取らずに偽を返す**
+// （止められた run は次の起動で引き継ぐ。設計 3-4）。
+// 戻り値: 確保できたら true。
+func (rs *runState) claimTerminal(ctx context.Context) bool {
+	rs.mu.Lock()
+	rs.terminalWaiting++
+	rs.mu.Unlock()
+	defer func() {
+		rs.mu.Lock()
+		rs.terminalWaiting--
+		rs.mu.Unlock()
+	}()
+
+	for {
+		switch rs.beginTerminal() {
+		case terminalClaimed:
+			return true
+		case terminalTaken:
+			return false
+		}
+		done := rs.rewriteInFlight()
+		if done == nil {
+			// 直前に終わった。取り直す。
+			continue
+		}
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return false
+		}
+	}
+}
+
+// rewriteInFlight は、飛んでいる書き戻しの完了を知らせるチャネルを返す（設計 3-56）。
+//
+// 戻り値: 書き戻しが飛んでいれば、終わったときに閉じるチャネル。飛んでいなければ nil。
+func (rs *runState) rewriteInFlight() <-chan struct{} {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.rewriteDone
+}
+
+// rewriteGate は `beginRewrite` が印を確保できたかどうかと、確保できなかった理由である
+// （設計 3-56）。
+type rewriteGate int
+
+const (
+	// rewriteClaimed は書き戻しの印を確保できたことを表す。
+	rewriteClaimed rewriteGate = iota
+	// rewriteBusy は、別の書き戻しが既に飛んでいることを表す。**run はまだ続いている。**
+	// 呼び出し側は書き戻しを諦めてよいが、**run を終わったことにしてはならない。**
+	rewriteBusy
+	// rewriteEnding は、この run が終わりに向かっている（または終わっている）ことを表す。
+	rewriteEnding
+)
+
+// beginRewrite は「自動化が動かした Status の書き戻し」を1本に絞る（設計 3-56）。
+//
+// **終わらせる処理が走っている run へは書かない。**印が消えたあとに「作業中」の Status を
+// 書くと、次の巡回が**同じ worktree に2本目の Claude Code を立てる。**
+// **終わらせる処理が書き戻しの終わりを待っている場合も同じ扱いにする**
+// （`terminalWaiting`）。その run はもう終わりに向かっている。
+//
+// **確保したら必ず `endRewrite` で返すこと。**返さないと、待っている
+// `claimTerminal` が永久に返らない。
+//
+// 戻り値: 確保できたら rewriteClaimed。確保できなければその理由。
+func (rs *runState) beginRewrite() rewriteGate {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.terminating || rs.Finished || rs.terminalWaiting > 0 {
+		return rewriteEnding
+	}
+	if rs.rewriting {
+		return rewriteBusy
+	}
+	rs.rewriting = true
+	rs.rewriteDone = make(chan struct{})
+	return rewriteClaimed
+}
+
+// endRewrite は書き戻しの印を返す（設計 3-56）。
+//
+// **`beginRewrite` が rewriteClaimed を返したときだけ呼ぶこと。**
+func (rs *runState) endRewrite() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !rs.rewriting {
+		return
+	}
+	rs.rewriting = false
+	close(rs.rewriteDone)
+	rs.rewriteDone = nil
 }
 
 // endTerminal は「終わらせる処理」の印を外す。

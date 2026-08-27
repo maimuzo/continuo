@@ -94,6 +94,100 @@ func TestValidate_使えない値は起動する前に弾く(t *testing.T) {
 	}
 }
 
+// TestValidate_書き戻しの対応表の値を弾く は、設計 3-54 の検査を確かめる。
+//
+// **`automated_state_rewrite` は「自動化が書いた Status → 戻す先の Status」の対応表である。**
+// **キーと値が同じだと1バイトも動かない。**同じ値の書き込みは省かれるので（設計 3-53）、
+// 知らない Status のまま巡回のたびに書きに行き続ける。**空文字も Status 名として存在しない。**
+//
+// 目的: 使えない対応表を、起動する前に弾くこと。
+// 与える情報: `automated_state_rewrite` の1行だけを差し替えた WORKFLOW.md。
+// 成功条件: エラーになり、キーの名前がエラーの文面に入っていること。
+func TestValidate_書き戻しの対応表の値を弾く(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		line string
+	}{
+		{"戻す先が空", `  automated_state_rewrite: {"In Progress": ""}`},
+		{"キーが空", `  automated_state_rewrite: {"": "In Progress"}`},
+		{"キーと戻す先が同じ", `  automated_state_rewrite: {"In Progress": "In Progress"}`},
+		{"キーと戻す先が大文字小文字だけ違う", `  automated_state_rewrite: {"In Progress": "in progress"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := loadWithReplaced(t, "automated_state_rewrite", tc.line)
+			if err == nil {
+				t.Fatalf("%s を弾いていない", tc.name)
+			}
+			if !strings.Contains(err.Error(), "automated_state_rewrite") {
+				t.Errorf("どのキーが悪いか分からない: %v", err)
+			}
+		})
+	}
+}
+
+// TestValidate_1度も効かない書き戻しの対応表を弾く は、設計 3-54 の検査を確かめる。
+//
+// **どれも「設定は通るのに、実行時は1度も効かない」か「効いた結果が壊れる」ものである。**
+// 書いた人は効いているつもりでいるので、**起動する前に落とす。**
+//
+// 目的: 使えない対応表を、起動する前に弾くこと。
+// 与える情報: `automated_state_rewrite` の1行だけを差し替えた WORKFLOW.md。
+// 成功条件: エラーになり、**なぜ使えないのかが文面から読み取れること。**
+func TestValidate_1度も効かない書き戻しの対応表を弾く(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			// `Ready` は active_states に書かれているので「知らない Status」にならない。
+			// 書き戻しを引くのは知らない Status のときだけなので、この行は死んでいる。
+			name: "キーが既に設定に名前の出てくる Status",
+			line: `  automated_state_rewrite: {"Ready": "In Progress"}`,
+			want: "既に名前の出てくる Status",
+		},
+		{
+			// `Done` は terminal_states である。戻した瞬間に run が終わる。
+			name: "戻す先が active_states の外",
+			line: `  automated_state_rewrite: {"Todo": "Done"}`,
+			want: "tracker.active_states に含まれる値にすること",
+		},
+		{
+			// どちらの行に当たるかが map の反復順で決まってしまう。
+			name: "大文字小文字だけが違うキーが2つ",
+			line: `  automated_state_rewrite: {"Todo": "Ready", "todo": "In Progress"}`,
+			want: "大文字小文字だけが違う",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := loadWithReplaced(t, "automated_state_rewrite", tc.line)
+			if err == nil {
+				t.Fatalf("%s を弾いていない", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("なぜ使えないのかが文面から読み取れない: %v", err)
+			}
+		})
+	}
+}
+
+// TestValidate_書き戻しの対応表は空でも書いてあっても通る は、設計 3-54 を確かめる。
+//
+// **既定は空である。**書かなければ挙動は変わらないので、既存の WORKFLOW.md をそのまま使える。
+//
+// 目的: 空の対応表と、正しく書いた対応表の両方が通ること。
+// 与える情報: 雛形そのまま（空）と、1件書いた対応表。
+// 成功条件: どちらも読めて、読んだ値がそのまま入っていること。
+func TestValidate_書き戻しの対応表は空でも書いてあっても通る(t *testing.T) {
+	if err := loadWithReplaced(t, "automated_state_rewrite", `  automated_state_rewrite: {}`); err != nil {
+		t.Fatalf("空の対応表で起動が止まった: %v", err)
+	}
+	if err := loadWithReplaced(t, "automated_state_rewrite",
+		`  automated_state_rewrite: {"Todo": "Ready"}`); err != nil {
+		t.Fatalf("正しく書いた対応表で起動が止まった: %v", err)
+	}
+}
+
 // TestValidate_running_stateはactive_statesに入っていること は、整合の検査を確かめる。
 //
 // **`running_state` は「着手したときに書く Status」である。**

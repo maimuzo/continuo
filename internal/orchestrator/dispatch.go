@@ -379,7 +379,9 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 	if errors.Is(err, ErrStatusNotWritten) {
 		o.logger.Info(label+"を取りやめました（ボードの Status を書かなかったため）",
 			"identifier", issue.Identifier, "理由", summaryLine(err.Error()))
-		if rs.beginTerminal() {
+		// **書き戻しが飛んでいたら、終わるまで待ってから印を取る**（設計 3-56）。
+		// 待たずに戻ると、着手を取りやめた run の印が外れないまま残る。
+		if rs.claimTerminal(ctx) {
 			o.stopWorker(ctx, rs)
 			o.release(rs)
 		}

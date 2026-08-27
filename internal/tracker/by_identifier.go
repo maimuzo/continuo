@@ -18,7 +18,7 @@ import (
 // このクエリは itemFieldsFragment を埋め込んでおり、その下に labels / assignees /
 // blockedBy / linkedBranches の**4本**のネストした connection を持つので
 // 1リクエスト 4 point、104件は `items(first: 100)` で切れて2ページ目が要る。
-const allItemsQueryTemplate = `
+var allItemsQueryTemplate = `
 query($login: String!, $number: Int!, $statusField: String!, $after: String) {
   repositoryOwner(login: $login) {
     ... on ProjectV2Owner {
@@ -99,13 +99,13 @@ func (a *Adapter) FetchIssueByIdentifier(ctx context.Context, identifier string)
 			// `~/.claude.json` を読み直すので（約56ミリ秒／件）、識別子が一致するか見る前に
 			// 全件へ掛けると、表明1行あたりボード104件ぶん・外部プロセス208回になる。
 			// 一致した1件にだけ掛け直す（下）。
-			mapped := mapRawItemToIssue(raw, a.statusField, nil)
+			mapped := mapRawItemToIssue(raw, a.statusField, nil, a.projectNumber)
 			if !mapped.Ok {
 				continue
 			}
 			if strings.EqualFold(mapped.Issue.Identifier, target) {
 				// 一致した1件だけ、信頼の判定を入れて作り直す（Dispatchable を正しく埋める）。
-				resolved := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+				resolved := mapRawItemToIssue(raw, a.statusField, a.repoTrusted, a.projectNumber)
 				if !resolved.Ok {
 					return mapped.Issue, true, nil
 				}
