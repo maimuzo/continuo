@@ -721,6 +721,56 @@ func TestAbandon_pane待ちでherdrが答えなくてもforceは期限まで待�
 	assertWorktreeGone(t, fx, prepared.Path)
 }
 
+// {"RUCM-PATH": "P019"}
+//
+// 目的: **herdr が pane の一覧に答えないまま待ち直している最中に中断されたら**、
+// 何も消さずに終了コード 1 で止まり、**pane の ID を書かない中断の文言**が出ることを
+// 確認する（設計 3-37-12。issue #66）。
+//
+// **兄弟の中断の文言（`abandon.err_pane_wait_interrupted`）は使えない。**あちらは
+// 「残っている pane: %s」を持つが、**一覧を引けていないので書く ID が無い。**
+// 空欄で出すと**pane が0枚だった**と読め、「待っていた pane はもう無かったのか」と
+// 逆の意味になる。
+//
+// **待ち直しの1行が中断と並ばないことも、あわせて見る。**「上限までは待ち直します」の
+// 直後に「中断されました」が出ると、**待つと言った直後にやめたように見える。**
+//
+// 与える情報: テストが先に掴んだロックファイル（＝動いている）、`tracker.active_states`
+// に入る Status（In Progress）、**worktree を用意したあとで落とした herdr の socket**、
+// 待機を打ち切って偽を返す Sleep（＝`SIGINT` / `SIGTERM` を受けた状態）、`--force` は付けない。
+// 成功条件: 終了コードが 1、**pane の ID を書かない中断の文言が出ている**、
+// **待ち直しの1行が出ていない**、**pane の ID が空欄の中断の文言も出ていない**、
+// worktree が残っている、herdr へ worktree.remove を送っていない、
+// 手を離させた Status を元へ戻していないこと。
+func TestAbandon_herdrが答えないpane待ちを中断されたら何も消さない(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	// **worktree を用意したあとで socket を落とす。**用意の段階では herdr が要る。
+	unreachable := fx.CloseHerdr(t)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) {
+		// **待たずに打ち切る。**`SIGINT` / `SIGTERM` で ctx が終わった状態と同じである。
+		opts.Deps.Sleep = func(_ context.Context, _ time.Duration) bool { return false }
+	})
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneWaitInterruptedUnknown, unreachable))
+	// **待つと言った直後にやめた、と読める並びを作らない。**
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonWaitingPaneListFailed, unreachable))
+	// **pane の ID を空欄にした中断の文言で代用していないこと。**
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneWaitInterrupted, ""))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+
+	updates := fx.Tracker.Updates()
+	if len(updates) != 1 || updates[0].State != fx.Config.Tracker.FailureState {
+		t.Fatalf("手を離させた Status を元へ戻している（書き込み: %v）", updates)
+	}
+}
+
 // {"RUCM-PATH": "P008"}
 //
 // 目的: 手を離させる書き込みが入らなかったときは、**pane が閉じるのを待たない**ことを
