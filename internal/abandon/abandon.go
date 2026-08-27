@@ -850,15 +850,27 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 // **呼ぶのは、手を離させる書き込みが実際に入ったときだけである。**書き込みが入って
 // いなければ継続監視はその pane を閉じないので、待っても必ず時間切れになる。
 //
-// **herdr が答えないときも `--force` で越える。**兄弟の検査（stopIfPaneAlive）は同じ失敗を
-// 越えさせるので、**ここだけ越えられないと「herdr が答えられない」が「pane がある」より
-// 厳しくなる。**しかもここへ来る実行は**ボードを park の値へ動かし終えている**ので、
-// 越えられないと**ボードだけ動いた状態のまま、herdr を直すまで取り消せない。**
+// **herdr が答えないときも `--force` で越える。ただし越えるのは期限を過ぎてからである。**
+// 兄弟の検査（stopIfPaneAlive）は同じ失敗を越えさせるので、**ここだけ越えられないと
+// 「herdr が答えられない」が「pane がある」より厳しくなる。**しかもここへ来る実行は
+// **ボードを park の値へ動かし終えている**ので、越えられないと**ボードだけ動いた状態のまま、
+// herdr を直すまで取り消せない。**
+//
+// **期限を見ずに越えてはならない。**herdr が答えなければ、**待ちそのものを1度も行えていない。**
+// **待たずに越えるのは、手を離させたばかりの pane を、閉じる暇も与えずに消すことである。**
+// 継続監視がその pane を閉じにいく1周は、まだ回っていない。
+// **だからエラーのときも期限を見て、期限内なら待ち直し、期限を超えてから `--force` で越える。**
+// **こうすると `--force` の待ち時間は、pane が生きている場合と同じになる。**
+//
+// **`--force` を付けない実行も、同じだけ待ってから止まる。**期限の判定は `--force` の
+// 有無より外側にあるので、herdr が答えないときの待ち時間は4通りとも上限に揃う。
+// **herdr が落ちたまま `--force` 無しで叩くと、上限まで待ってから `--force` を要求され、
+// 付けて叩き直すとそこでもう一度上限まで待つ。**
 //
 // ctx: 実行に適用するコンテキスト。
 // worktreePath: 対象の worktree の絶対パス。
-// 戻り値: pane が消えたら ExitOK、上限を超えた場合と herdr に問い合わせられない場合は
-// `--force` の有無で ExitOK / ExitStopped。
+// 戻り値: pane が消えたら ExitOK、上限を超えた場合と、上限を超えてなお herdr に
+// 問い合わせられない場合は `--force` の有無で ExitOK / ExitStopped。
 func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 	timeout := r.paneWaitTimeout()
 	interval := r.opts.PaneWaitInterval
@@ -867,12 +879,42 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 	}
 
 	deadline := r.deps.Now().Add(timeout)
+	// **待ち直しの1行を出したかどうかを覚えておく。**下で1度しか出さないために要る。
+	listFailureReported := false
 	for {
 		panes, err := r.panesOf(ctx, worktreePath)
+		// **期限は、答えが返っても返らなくても同じように見る。**
+		// 見る場所を分けると、**同じ `--force` なのに待ち時間が2通りになる。**
+		expired := !r.deps.Now().Before(deadline)
 		if err != nil {
-			// **herdr の失敗を `--force` で越えられない壁にしない**（stopIfPaneAlive と同じ扱い）。
-			// **ここへ来た実行はボードを park の値へ動かし終えている。**越えられないと、
-			// herdr を直すまでボードだけ動いた状態が残る。
+			// **期限内はまだ越えない。**herdr が答えないだけで、待つ時間は残っている。
+			// **ここで越えると、手を離させたばかりの pane を閉じる暇も与えずに消す。**
+			if !expired {
+				if !r.deps.Sleep(ctx, interval) {
+					// **中断を「確かめられなかった」と同じ文言で出さない。**
+					// pane の生死は分からないままだが、止まった理由は herdr ではなく人間である。
+					fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneWaitInterruptedUnknown, err))
+					return ExitStopped
+				}
+				// **待ち直しの1行は、待てたときに1度だけ出す。**理由は2つある。
+				//
+				// **(1) 中断されたあとに出さないため、Sleep のあとに置く。**先に出すと
+				// 「上限までは待ち直します」の直後に「中断されました」が並び、
+				// **待つと言った直後にやめたように見える。**
+				//
+				// **(2) 同じ1行を積まないため、1度だけにする。**上限は既定50秒・間隔は1秒で、
+				// この行には herdr の socket のパスまで入る。毎回出すと同じ長い行が50本並ぶ。
+				// **文面が「上限までは待ち直します」と先まで言い切っている**ので、
+				// 2本目から先は新しいことを1つも足さない。
+				if !listFailureReported {
+					fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonWaitingPaneListFailed, err))
+					listFailureReported = true
+				}
+				continue
+			}
+			// **期限を過ぎたら、herdr の失敗を `--force` で越えられない壁にしない**
+			// （stopIfPaneAlive と同じ扱い）。**ここへ来た実行はボードを park の値へ
+			// 動かし終えている。**越えられないと、herdr を直すまでボードだけ動いた状態が残る。
 			if !r.opts.Force {
 				fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneListCheck, err))
 				return ExitStopped
@@ -884,7 +926,7 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 			fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPaneGone))
 			return ExitOK
 		}
-		if !r.deps.Now().Before(deadline) {
+		if expired {
 			ids := strings.Join(paneIDs(panes), " ")
 			// **`--force` なら pane ごと消す。**止まったままにすると、
 			// **herdr workspace を手で閉じるまでその issue を取り消せない。**

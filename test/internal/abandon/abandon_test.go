@@ -681,6 +681,98 @@ func TestAbandon_pane待ちでherdrが答えなくてもforceなら越える(t *
 
 // {"RUCM-PATH": "P008"}
 //
+// 目的: **herdr が pane の一覧に答えなくても、`--force` は上限まで待ってから越える**ことを
+// 確認する（設計 3-37-12。issue #66）。
+//
+// **同じ `--force` で待ち時間が2通りになってはならない。**pane が生きている場合は
+// 上限（この試験では3秒）まで待ってから越えるのに、herdr が答えない場合だけ
+// **1度も待たずに越えていた。****ここへ来る実行はボードを park の値へ動かした直後であり、
+// 継続監視がその pane を閉じにいく1周はまだ回っていない。**待たずに越えるのは、
+// 手を離させたばかりの pane を、閉じる暇も与えずに消すことである。
+//
+// 与える情報: テストが先に掴んだロックファイル（＝動いている）、`tracker.active_states`
+// に入る Status（In Progress）、**worktree を用意したあとで落とした herdr の socket**、
+// 上限3秒・間隔1秒（時計は Sleep のたびに進める）、`--force`。
+// 成功条件: 終了コードが 0、**待ち直すことを言う1行が出ている**、越えたことを言う1行が
+// 出ている、**時計が上限ぶん進んでいる**（＝1度も待たずに越えていない）、
+// worktree が消えていること。
+func TestAbandon_pane待ちでherdrが答えなくてもforceは期限まで待つ(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	// **worktree を用意したあとで socket を落とす。**用意の段階では herdr が要る。
+	unreachable := fx.CloseHerdr(t)
+	started := fx.Clock.Now()
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitOK)
+	// **待ち直したことを言う。**既定の上限は50秒あり、黙って待つと固まったように見える。
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonWaitingPaneListFailed, unreachable))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonPaneCheckSkipped, unreachable))
+	// **待った時間そのものを見る。**「越えた」という文言だけでは、上限まで待ってから
+	// 越えたのか、1度も待たずに越えたのかを区別できない。
+	if waited := fx.Clock.Now().Sub(started); waited < 3*time.Second {
+		t.Fatalf("herdr が答えないだけで待たずに越えている（待った時間: %v。上限は %v）\n出力:\n%s",
+			waited, 3*time.Second, fx.Output())
+	}
+	assertWorktreeGone(t, fx, prepared.Path)
+}
+
+// {"RUCM-PATH": "P019"}
+//
+// 目的: **herdr が pane の一覧に答えないまま待ち直している最中に中断されたら**、
+// 何も消さずに終了コード 1 で止まり、**pane の ID を書かない中断の文言**が出ることを
+// 確認する（設計 3-37-12。issue #66）。
+//
+// **兄弟の中断の文言（`abandon.err_pane_wait_interrupted`）は使えない。**あちらは
+// 「残っている pane: %s」を持つが、**一覧を引けていないので書く ID が無い。**
+// 空欄で出すと**pane が0枚だった**と読め、「待っていた pane はもう無かったのか」と
+// 逆の意味になる。
+//
+// **待ち直しの1行が中断と並ばないことも、あわせて見る。**「上限までは待ち直します」の
+// 直後に「中断されました」が出ると、**待つと言った直後にやめたように見える。**
+//
+// 与える情報: テストが先に掴んだロックファイル（＝動いている）、`tracker.active_states`
+// に入る Status（In Progress）、**worktree を用意したあとで落とした herdr の socket**、
+// 待機を打ち切って偽を返す Sleep（＝`SIGINT` / `SIGTERM` を受けた状態）、`--force` は付けない。
+// 成功条件: 終了コードが 1、**pane の ID を書かない中断の文言が出ている**、
+// **待ち直しの1行が出ていない**、**pane の ID が空欄の中断の文言も出ていない**、
+// worktree が残っている、herdr へ worktree.remove を送っていない、
+// 手を離させた Status を元へ戻していないこと。
+func TestAbandon_herdrが答えないpane待ちを中断されたら何も消さない(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	// **worktree を用意したあとで socket を落とす。**用意の段階では herdr が要る。
+	unreachable := fx.CloseHerdr(t)
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) {
+		// **待たずに打ち切る。**`SIGINT` / `SIGTERM` で ctx が終わった状態と同じである。
+		opts.Deps.Sleep = func(_ context.Context, _ time.Duration) bool { return false }
+	})
+
+	assertExit(t, fx, code, abandon.ExitStopped)
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneWaitInterruptedUnknown, unreachable))
+	// **待つと言った直後にやめた、と読める並びを作らない。**
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonWaitingPaneListFailed, unreachable))
+	// **pane の ID を空欄にした中断の文言で代用していないこと。**
+	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneWaitInterrupted, ""))
+	assertWorktreeExists(t, fx, prepared.Path)
+	assertNoRemoval(t, fx)
+
+	updates := fx.Tracker.Updates()
+	if len(updates) != 1 || updates[0].State != fx.Config.Tracker.FailureState {
+		t.Fatalf("手を離させた Status を元へ戻している（書き込み: %v）", updates)
+	}
+}
+
+// {"RUCM-PATH": "P008"}
+//
 // 目的: 手を離させる書き込みが入らなかったときは、**pane が閉じるのを待たない**ことを
 // 確認する（設計 3-4 の段1）。
 //
