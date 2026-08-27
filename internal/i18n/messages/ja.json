@@ -10,7 +10,7 @@
   "abandon.err_lock_file": "ロックファイル %s を開けません: %v（runtime.lock_file の指定を確かめてください）",
   "abandon.err_loss_without_force": "失うものがあるので何も消しません。それでも消すなら --force を付けてください。",
   "abandon.err_multiple": "この issue の worktree が %d 個あります。どれを消すかは人間が中身を見て決めてください: %s",
-  "abandon.err_pane_alive": "continuo は動いていませんが、この worktree を作業ディレクトリに持つ pane が残っています（%s）。何も消していません。ロックファイル %s の場所が、動いている continuo のものと食い違っていないか確かめてください。pane ごと消してよいなら --force を付けてください。",
+  "abandon.err_pane_alive": "この worktree を作業ディレクトリに持つ pane が残っています（%s）。この issue からは手を離させていないので、continuo がこの pane を閉じることはありません。何も消していません。「continuo は動いていません」と表示されていたなら、ロックファイル %s の場所が、動いている continuo のものと食い違っていないか確かめてください。pane ごと消してよいなら --force を付けてください。",
   "abandon.err_pane_list": "herdr へ pane の一覧を問い合わせられません: %v",
   "abandon.err_pane_remains": "pane が %v 以内に閉じませんでした（残っている pane: %s）。何も消していません。pane ごと消してよいなら --force を付けてください。",
   "abandon.err_pane_wait_interrupted": "中断されました（残っている pane: %s）。何も消していません。",

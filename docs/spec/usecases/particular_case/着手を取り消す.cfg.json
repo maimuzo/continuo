@@ -3,7 +3,7 @@
   "usecase_name": "着手を取り消す",
   "source": {
     "file": "docs/spec/usecases/particular_case/着手を取り消す.rucm.md",
-    "rucm_block_sha256": "06d2e4109c9e153a394d4ecf5e1c38c95f8a02e5a5bbf85856fec4c9d3678dc2"
+    "rucm_block_sha256": "1b47088c0e2bb34c9ad8252f50c3013aef1ff1f5e7d2a4df4cbe5cfc2d0019d3"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -104,7 +104,7 @@
       },
       "postcondition": "worktree は残っている。branch は残っている。issue の Status は tracker.active_states の値のままである。終了コードは 1 である。"
     },
-    "paneが期限内に消えない": {
+    "pane待ちを終えられない": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
@@ -168,7 +168,7 @@
       "postcondition": "worktree は置き場所に無い。herdr の workspace は閉じている。issue の Status は利用者が指定した値ではない。終了コードは 1 である。"
     },
     "実行の中断": {
-      "when": "pane が消えるのを待っているあいだに利用者が SIGINT または SIGTERM で実行を中断した場合",
+      "when": "利用者が SIGINT または SIGTERM で実行を中断した場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -177,7 +177,7 @@
           ]
         }
       ],
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。終了コードは 1 である。"
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は、手を離させる書き込みを行ったなら park の値のまま、行っていなければ変わっていない。終了コードは 1 である。"
     }
   },
   "nodes": [
@@ -312,7 +312,7 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 19,
-      "statement": "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。"
+      "statement": "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。"
     },
     {
       "id": "BASIC FLOW-20",
@@ -326,14 +326,14 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。"
+      "statement": "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。"
     },
     {
       "id": "BASIC FLOW-22",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 22,
-      "statement": "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。"
+      "statement": "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。"
     },
     {
       "id": "BASIC FLOW-23",
@@ -554,23 +554,16 @@
     },
     {
       "id": "worktreeが無い-17",
-      "type": "condition",
+      "type": "action",
       "flow": "worktreeが無い",
       "step": 17,
-      "statement": "IF 利用者が片付けたあとの Status の値を指定している THEN"
+      "statement": "システムは利用者が片付けたあとの Status の値を指定しているときだけ、利用者に指定された Status へ動かしていないことを応答する。"
     },
     {
       "id": "worktreeが無い-18",
-      "type": "action",
-      "flow": "worktreeが無い",
-      "step": 18,
-      "statement": "システムは利用者に指定された Status へ動かしていないことを応答する。"
-    },
-    {
-      "id": "worktreeが無い-20",
       "type": "abort",
       "flow": "worktreeが無い",
-      "step": 20,
+      "step": 18,
       "statement": "ABORT"
     },
     {
@@ -582,23 +575,16 @@
     },
     {
       "id": "候補から外したworktreeがある-2",
-      "type": "condition",
+      "type": "action",
       "flow": "候補から外したworktreeがある",
       "step": 2,
-      "statement": "IF 利用者が片付けたあとの Status の値を指定している THEN"
+      "statement": "システムは利用者が片付けたあとの Status の値を指定しているときだけ、利用者に指定された Status へ動かしていないことを応答する。"
     },
     {
       "id": "候補から外したworktreeがある-3",
-      "type": "action",
-      "flow": "候補から外したworktreeがある",
-      "step": 3,
-      "statement": "システムは利用者に指定された Status へ動かしていないことを応答する。"
-    },
-    {
-      "id": "候補から外したworktreeがある-5",
       "type": "abort",
       "flow": "候補から外したworktreeがある",
-      "step": 5,
+      "step": 3,
       "statement": "ABORT"
     },
     {
@@ -686,23 +672,23 @@
       "statement": "ABORT"
     },
     {
-      "id": "paneが期限内に消えない-1",
+      "id": "pane待ちを終えられない-1",
       "type": "action",
-      "flow": "paneが期限内に消えない",
+      "flow": "pane待ちを終えられない",
       "step": 1,
-      "statement": "システムは利用者に残っている pane の ID と待った上限と、force で越えられることを応答する。"
+      "statement": "システムは利用者に、残っている pane の ID と待った上限と force で越えられることか、herdr が pane の一覧に答えられない理由を応答する。"
     },
     {
-      "id": "paneが期限内に消えない-2",
+      "id": "pane待ちを終えられない-2",
       "type": "action",
-      "flow": "paneが期限内に消えない",
+      "flow": "pane待ちを終えられない",
       "step": 2,
       "statement": "システムは利用者に Status を park の値のまま残すことを応答する。"
     },
     {
-      "id": "paneが期限内に消えない-3",
+      "id": "pane待ちを終えられない-3",
       "type": "abort",
-      "flow": "paneが期限内に消えない",
+      "flow": "pane待ちを終えられない",
       "step": 3,
       "statement": "ABORT"
     },
@@ -809,21 +795,21 @@
       "type": "action",
       "flow": "実行の中断",
       "step": 1,
-      "statement": "システムは pane が消えるのを待つのをやめる。"
+      "statement": "システムは pane が消えるのを待つのと、git と herdr とボードへの問い合わせをやめる。"
     },
     {
       "id": "実行の中断-2",
       "type": "action",
       "flow": "実行の中断",
       "step": 2,
-      "statement": "システムは利用者に中断されたことと残っている pane の ID を応答する。"
+      "statement": "システムは利用者に中断されたことと、pane が消えるのを待っていたときだけ残っている pane の ID を応答する。"
     },
     {
       "id": "実行の中断-3",
       "type": "action",
       "flow": "実行の中断",
       "step": 3,
-      "statement": "システムは利用者に Status を park の値のまま残すことを応答する。"
+      "statement": "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。"
     },
     {
       "id": "実行の中断-4",
@@ -997,19 +983,19 @@
       "from": "BASIC FLOW-19",
       "to": "BASIC FLOW-20",
       "kind": "true",
-      "condition": "手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している"
+      "condition": "手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している"
     },
     {
       "from": "BASIC FLOW-19",
-      "to": "paneが期限内に消えない-1",
+      "to": "pane待ちを終えられない-1",
       "kind": "false",
-      "condition": "NOT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している"
+      "condition": "NOT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している"
     },
     {
       "from": "BASIC FLOW-19",
       "to": "実行の中断-1",
       "kind": "global",
-      "condition": "pane が消えるのを待っているあいだに利用者が SIGINT または SIGTERM で実行を中断した場合"
+      "condition": "利用者が SIGINT または SIGTERM で実行を中断した場合"
     },
     {
       "from": "BASIC FLOW-20",
@@ -1269,18 +1255,6 @@
     {
       "from": "worktreeが無い-17",
       "to": "worktreeが無い-18",
-      "kind": "true",
-      "condition": "利用者が片付けたあとの Status の値を指定している"
-    },
-    {
-      "from": "worktreeが無い-17",
-      "to": "worktreeが無い-20",
-      "kind": "false",
-      "condition": "NOT 利用者が片付けたあとの Status の値を指定している"
-    },
-    {
-      "from": "worktreeが無い-18",
-      "to": "worktreeが無い-20",
       "kind": "seq"
     },
     {
@@ -1291,18 +1265,6 @@
     {
       "from": "候補から外したworktreeがある-2",
       "to": "候補から外したworktreeがある-3",
-      "kind": "true",
-      "condition": "利用者が片付けたあとの Status の値を指定している"
-    },
-    {
-      "from": "候補から外したworktreeがある-2",
-      "to": "候補から外したworktreeがある-5",
-      "kind": "false",
-      "condition": "NOT 利用者が片付けたあとの Status の値を指定している"
-    },
-    {
-      "from": "候補から外したworktreeがある-3",
-      "to": "候補から外したworktreeがある-5",
       "kind": "seq"
     },
     {
@@ -1336,13 +1298,13 @@
       "kind": "seq"
     },
     {
-      "from": "paneが期限内に消えない-1",
-      "to": "paneが期限内に消えない-2",
+      "from": "pane待ちを終えられない-1",
+      "to": "pane待ちを終えられない-2",
       "kind": "seq"
     },
     {
-      "from": "paneが期限内に消えない-2",
-      "to": "paneが期限内に消えない-3",
+      "from": "pane待ちを終えられない-2",
+      "to": "pane待ちを終えられない-3",
       "kind": "seq"
     },
     {
@@ -1462,10 +1424,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -1541,10 +1503,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -1621,10 +1583,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -1698,10 +1660,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -1775,10 +1737,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -1855,10 +1817,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -1936,10 +1898,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -2014,10 +1976,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -2091,10 +2053,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -2169,10 +2131,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -2248,10 +2210,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -2324,10 +2286,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -2397,10 +2359,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -2465,10 +2427,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "システムは VALIDATES THAT 手を離させる書き込みを行ったか、worktree を作業ディレクトリに持つ pane が1つも無いか、利用者が force を指定している。",
@@ -2530,10 +2492,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "システムは VALIDATES THAT 失うものが無く調べ切れているか、利用者が force を指定している。",
         "CONDITION: NOT 失うものが無く調べ切れているか、利用者が force を指定している",
@@ -2593,10 +2555,10 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
-        "システムは利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧を応答する。",
-        "システムは継続監視が動いていて利用者が dry-run を指定しているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
+        "システムはボードから issue の Status を引き、利用者に消すものと、失うものと、git が答えられずに調べられなかったものの一覧と、引けた Status か引けなかった理由を応答する。",
+        "システムは手を離させる段を通らず継続監視が動いているときだけ、利用者に実行したときに手を離させるために動かす Status の値を応答する。",
         "システムは VALIDATES THAT 利用者が dry-run を指定していない。",
         "CONDITION: NOT 利用者が dry-run を指定していない",
         "システムは利用者に何も消していないことを応答する。",
@@ -2651,7 +2613,7 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
         "システムは VALIDATES THAT worktree が置き場所の内側にあり身元ファイルを読める。",
         "CONDITION: NOT worktree が置き場所の内側にあり身元ファイルを読める",
         "システムは利用者に読めなかった対象と理由を応答する。",
@@ -2661,7 +2623,7 @@
     {
       "id": "P018",
       "terminal": "abort",
-      "terminal_flow": "paneが期限内に消えない",
+      "terminal_flow": "pane待ちを終えられない",
       "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
@@ -2683,9 +2645,9 @@
         "BASIC FLOW-17",
         "BASIC FLOW-18",
         "BASIC FLOW-19",
-        "paneが期限内に消えない-1",
-        "paneが期限内に消えない-2",
-        "paneが期限内に消えない-3"
+        "pane待ちを終えられない-1",
+        "pane待ちを終えられない-2",
+        "pane待ちを終えられない-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
@@ -2706,9 +2668,9 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
-        "CONDITION: NOT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している",
-        "システムは利用者に残っている pane の ID と待った上限と、force で越えられることを応答する。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
+        "CONDITION: NOT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している",
+        "システムは利用者に、残っている pane の ID と待った上限と force で越えられることか、herdr が pane の一覧に答えられない理由を応答する。",
         "システムは利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
@@ -2717,7 +2679,7 @@
       "id": "P019",
       "terminal": "abort",
       "terminal_flow": "実行の中断",
-      "postcondition": "worktree は残っている。branch は残っている。issue の Status は park の値のままである。終了コードは 1 である。",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は、手を離させる書き込みを行ったなら park の値のまま、行っていなければ変わっていない。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -2762,11 +2724,11 @@
         "システムは手を離させる段を通っていてボードの Status が tracker.active_states に入っているときに限り、手を離させる書き込みを行うと判定する。",
         "システムは VALIDATES THAT 手を離させる書き込みを行わないか、ボードの Status を park の値へ書き換えられる。",
         "システムは手を離させる書き込みを行ったときだけ、利用者に手を離させた先の Status を応答する。",
-        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、worktree を作業ディレクトリに持つ pane が期限内に無くなるか、利用者が force を指定している。",
-        "CONDITION: pane が消えるのを待っているあいだに利用者が SIGINT または SIGTERM で実行を中断した場合",
-        "システムは pane が消えるのを待つのをやめる。",
-        "システムは利用者に中断されたことと残っている pane の ID を応答する。",
-        "システムは利用者に Status を park の値のまま残すことを応答する。",
+        "システムは VALIDATES THAT 手を離させる書き込みを行っていないか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなるか利用者が force を指定している。",
+        "CONDITION: 利用者が SIGINT または SIGTERM で実行を中断した場合",
+        "システムは pane が消えるのを待つのと、git と herdr とボードへの問い合わせをやめる。",
+        "システムは利用者に中断されたことと、pane が消えるのを待っていたときだけ残っている pane の ID を応答する。",
+        "システムは手を離させる書き込みを行ったときだけ、利用者に Status を park の値のまま残すことを応答する。",
         "ABORT"
       ]
     },
@@ -2977,8 +2939,7 @@
         "worktreeが無い-9",
         "worktreeが無い-10",
         "worktreeが無い-17",
-        "worktreeが無い-18",
-        "worktreeが無い-20"
+        "worktreeが無い-18"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
@@ -3004,73 +2965,12 @@
         "システムは VALIDATES THAT 利用者が force を指定している。",
         "システムは VALIDATES THAT git が branch を消せる。",
         "システムは利用者に消した branch と、戻すためのコマンドを応答する。",
-        "IF 利用者が片付けたあとの Status の値を指定している THEN",
-        "システムは利用者に指定された Status へ動かしていないことを応答する。",
+        "システムは利用者が片付けたあとの Status の値を指定しているときだけ、利用者に指定された Status へ動かしていないことを応答する。",
         "ABORT"
       ]
     },
     {
       "id": "P025",
-      "terminal": "abort",
-      "terminal_flow": "worktreeが無い",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "worktreeが無い-1",
-        "worktreeが無い-2",
-        "worktreeが無い-3",
-        "worktreeが無い-4",
-        "worktreeが無い-5",
-        "worktreeが無い-6",
-        "worktreeが無い-7",
-        "worktreeが無い-8",
-        "worktreeが無い-9",
-        "worktreeが無い-10",
-        "worktreeが無い-17",
-        "worktreeが無い-20"
-      ],
-      "steps": [
-        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
-        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
-        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
-        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
-        "システムは獲得できたロックを実行が終わるまで握り続ける。",
-        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
-        "システムは利用者に継続監視が動いているかどうかを応答する。",
-        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
-        "システムは worktree の中の身元ファイルを読む。",
-        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
-        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
-        "CONDITION: NOT 候補の worktree がちょうど1つある",
-        "システムは VALIDATES THAT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い。",
-        "システムは利用者に一致する worktree が無いことを応答する。",
-        "システムは herdr.worktree.branch_template と issue の URL から branch 名を組み立て、ghq が答えた clone を宛先にする。",
-        "IF branch 名と clone を決められて、その branch が clone に実在する THEN",
-        "システムは利用者に残っている branch の名前とリポジトリと先頭の commit を応答する。",
-        "システムは利用者に、どの remote にも載っていない commit があればその数を、数えられなければ数えられなかったことを応答する。",
-        "IF 利用者が dry-run を指定しておらず設定の cleanup.delete_branch が true である THEN",
-        "システムは VALIDATES THAT 利用者が force を指定している。",
-        "システムは VALIDATES THAT git が branch を消せる。",
-        "システムは利用者に消した branch と、戻すためのコマンドを応答する。",
-        "IF 利用者が片付けたあとの Status の値を指定している THEN",
-        "CONDITION: NOT 利用者が片付けたあとの Status の値を指定している",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P026",
       "terminal": "abort",
       "terminal_flow": "残ったbranchを消せない",
       "postcondition": "worktree は1つも消えていない。残っていた branch は残っている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。終了コードは 1 である。",
@@ -3128,7 +3028,7 @@
       ]
     },
     {
-      "id": "P027",
+      "id": "P026",
       "terminal": "abort",
       "terminal_flow": "残ったbranchを消せない",
       "postcondition": "worktree は1つも消えていない。残っていた branch は残っている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。終了コードは 1 である。",
@@ -3184,6 +3084,62 @@
       ]
     },
     {
+      "id": "P027",
+      "terminal": "abort",
+      "terminal_flow": "worktreeが無い",
+      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "worktreeが無い-1",
+        "worktreeが無い-2",
+        "worktreeが無い-3",
+        "worktreeが無い-4",
+        "worktreeが無い-5",
+        "worktreeが無い-6",
+        "worktreeが無い-7",
+        "worktreeが無い-12",
+        "worktreeが無い-17",
+        "worktreeが無い-18"
+      ],
+      "steps": [
+        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
+        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
+        "システムは VALIDATES THAT 設定ファイルを読める。",
+        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
+        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
+        "システムは獲得できたロックを実行が終わるまで握り続ける。",
+        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
+        "システムは利用者に継続監視が動いているかどうかを応答する。",
+        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
+        "システムは worktree の中の身元ファイルを読む。",
+        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
+        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
+        "CONDITION: NOT 候補の worktree がちょうど1つある",
+        "システムは VALIDATES THAT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い。",
+        "システムは利用者に一致する worktree が無いことを応答する。",
+        "システムは herdr.worktree.branch_template と issue の URL から branch 名を組み立て、ghq が答えた clone を宛先にする。",
+        "IF branch 名と clone を決められて、その branch が clone に実在する THEN",
+        "システムは利用者に残っている branch の名前とリポジトリと先頭の commit を応答する。",
+        "システムは利用者に、どの remote にも載っていない commit があればその数を、数えられなければ数えられなかったことを応答する。",
+        "IF 利用者が dry-run を指定しておらず設定の cleanup.delete_branch が true である THEN",
+        "CONDITION: NOT 利用者が dry-run を指定しておらず設定の cleanup.delete_branch が true である",
+        "システムは利用者に branch を消していないことと、その理由を応答する。",
+        "システムは利用者が片付けたあとの Status の値を指定しているときだけ、利用者に指定された Status へ動かしていないことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
       "id": "P028",
       "terminal": "abort",
       "terminal_flow": "worktreeが無い",
@@ -3205,13 +3161,9 @@
         "worktreeが無い-2",
         "worktreeが無い-3",
         "worktreeが無い-4",
-        "worktreeが無い-5",
-        "worktreeが無い-6",
-        "worktreeが無い-7",
-        "worktreeが無い-12",
+        "worktreeが無い-15",
         "worktreeが無い-17",
-        "worktreeが無い-18",
-        "worktreeが無い-20"
+        "worktreeが無い-18"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
@@ -3231,21 +3183,17 @@
         "システムは利用者に一致する worktree が無いことを応答する。",
         "システムは herdr.worktree.branch_template と issue の URL から branch 名を組み立て、ghq が答えた clone を宛先にする。",
         "IF branch 名と clone を決められて、その branch が clone に実在する THEN",
-        "システムは利用者に残っている branch の名前とリポジトリと先頭の commit を応答する。",
-        "システムは利用者に、どの remote にも載っていない commit があればその数を、数えられなければ数えられなかったことを応答する。",
-        "IF 利用者が dry-run を指定しておらず設定の cleanup.delete_branch が true である THEN",
-        "CONDITION: NOT 利用者が dry-run を指定しておらず設定の cleanup.delete_branch が true である",
-        "システムは利用者に branch を消していないことと、その理由を応答する。",
-        "IF 利用者が片付けたあとの Status の値を指定している THEN",
-        "システムは利用者に指定された Status へ動かしていないことを応答する。",
+        "CONDITION: NOT branch 名と clone を決められて、その branch が clone に実在する",
+        "システムは利用者に branch も残っていないか、残っているかを調べられなかったことを応答する。",
+        "システムは利用者が片付けたあとの Status の値を指定しているときだけ、利用者に指定された Status へ動かしていないことを応答する。",
         "ABORT"
       ]
     },
     {
       "id": "P029",
       "terminal": "abort",
-      "terminal_flow": "worktreeが無い",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。",
+      "terminal_flow": "候補から外したworktreeがある",
+      "postcondition": "worktree は1つも消えていない。branch は1つも消えていない。herdr の workspace は残っている。issue の Status は変わっていない。終了コードは 1 である。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3260,15 +3208,9 @@
         "BASIC FLOW-11",
         "BASIC FLOW-12",
         "worktreeが無い-1",
-        "worktreeが無い-2",
-        "worktreeが無い-3",
-        "worktreeが無い-4",
-        "worktreeが無い-5",
-        "worktreeが無い-6",
-        "worktreeが無い-7",
-        "worktreeが無い-12",
-        "worktreeが無い-17",
-        "worktreeが無い-20"
+        "候補から外したworktreeがある-1",
+        "候補から外したworktreeがある-2",
+        "候補から外したworktreeがある-3"
       ],
       "steps": [
         "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
@@ -3285,215 +3227,14 @@
         "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
         "CONDITION: NOT 候補の worktree がちょうど1つある",
         "システムは VALIDATES THAT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い。",
-        "システムは利用者に一致する worktree が無いことを応答する。",
-        "システムは herdr.worktree.branch_template と issue の URL から branch 名を組み立て、ghq が答えた clone を宛先にする。",
-        "IF branch 名と clone を決められて、その branch が clone に実在する THEN",
-        "システムは利用者に残っている branch の名前とリポジトリと先頭の commit を応答する。",
-        "システムは利用者に、どの remote にも載っていない commit があればその数を、数えられなければ数えられなかったことを応答する。",
-        "IF 利用者が dry-run を指定しておらず設定の cleanup.delete_branch が true である THEN",
-        "CONDITION: NOT 利用者が dry-run を指定しておらず設定の cleanup.delete_branch が true である",
-        "システムは利用者に branch を消していないことと、その理由を応答する。",
-        "IF 利用者が片付けたあとの Status の値を指定している THEN",
-        "CONDITION: NOT 利用者が片付けたあとの Status の値を指定している",
+        "CONDITION: NOT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い",
+        "システムは利用者に候補から外した worktree の件数と、この issue の worktree があるかを確かめられなかったことを応答する。",
+        "システムは利用者が片付けたあとの Status の値を指定しているときだけ、利用者に指定された Status へ動かしていないことを応答する。",
         "ABORT"
       ]
     },
     {
       "id": "P030",
-      "terminal": "abort",
-      "terminal_flow": "worktreeが無い",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "worktreeが無い-1",
-        "worktreeが無い-2",
-        "worktreeが無い-3",
-        "worktreeが無い-4",
-        "worktreeが無い-15",
-        "worktreeが無い-17",
-        "worktreeが無い-18",
-        "worktreeが無い-20"
-      ],
-      "steps": [
-        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
-        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
-        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
-        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
-        "システムは獲得できたロックを実行が終わるまで握り続ける。",
-        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
-        "システムは利用者に継続監視が動いているかどうかを応答する。",
-        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
-        "システムは worktree の中の身元ファイルを読む。",
-        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
-        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
-        "CONDITION: NOT 候補の worktree がちょうど1つある",
-        "システムは VALIDATES THAT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い。",
-        "システムは利用者に一致する worktree が無いことを応答する。",
-        "システムは herdr.worktree.branch_template と issue の URL から branch 名を組み立て、ghq が答えた clone を宛先にする。",
-        "IF branch 名と clone を決められて、その branch が clone に実在する THEN",
-        "CONDITION: NOT branch 名と clone を決められて、その branch が clone に実在する",
-        "システムは利用者に branch も残っていないか、残っているかを調べられなかったことを応答する。",
-        "IF 利用者が片付けたあとの Status の値を指定している THEN",
-        "システムは利用者に指定された Status へ動かしていないことを応答する。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P031",
-      "terminal": "abort",
-      "terminal_flow": "worktreeが無い",
-      "postcondition": "worktree は1つも消えていない。残っていた branch は、利用者が force を指定したときだけ消えている。git の worktree の登録は1件も掃除していない。issue の Status は変わっていない。ボードへの問い合わせは1回も起きていない。終了コードは 0 である。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "worktreeが無い-1",
-        "worktreeが無い-2",
-        "worktreeが無い-3",
-        "worktreeが無い-4",
-        "worktreeが無い-15",
-        "worktreeが無い-17",
-        "worktreeが無い-20"
-      ],
-      "steps": [
-        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
-        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
-        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
-        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
-        "システムは獲得できたロックを実行が終わるまで握り続ける。",
-        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
-        "システムは利用者に継続監視が動いているかどうかを応答する。",
-        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
-        "システムは worktree の中の身元ファイルを読む。",
-        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
-        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
-        "CONDITION: NOT 候補の worktree がちょうど1つある",
-        "システムは VALIDATES THAT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い。",
-        "システムは利用者に一致する worktree が無いことを応答する。",
-        "システムは herdr.worktree.branch_template と issue の URL から branch 名を組み立て、ghq が答えた clone を宛先にする。",
-        "IF branch 名と clone を決められて、その branch が clone に実在する THEN",
-        "CONDITION: NOT branch 名と clone を決められて、その branch が clone に実在する",
-        "システムは利用者に branch も残っていないか、残っているかを調べられなかったことを応答する。",
-        "IF 利用者が片付けたあとの Status の値を指定している THEN",
-        "CONDITION: NOT 利用者が片付けたあとの Status の値を指定している",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P032",
-      "terminal": "abort",
-      "terminal_flow": "候補から外したworktreeがある",
-      "postcondition": "worktree は1つも消えていない。branch は1つも消えていない。herdr の workspace は残っている。issue の Status は変わっていない。終了コードは 1 である。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "worktreeが無い-1",
-        "候補から外したworktreeがある-1",
-        "候補から外したworktreeがある-2",
-        "候補から外したworktreeがある-3",
-        "候補から外したworktreeがある-5"
-      ],
-      "steps": [
-        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
-        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
-        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
-        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
-        "システムは獲得できたロックを実行が終わるまで握り続ける。",
-        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
-        "システムは利用者に継続監視が動いているかどうかを応答する。",
-        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
-        "システムは worktree の中の身元ファイルを読む。",
-        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
-        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
-        "CONDITION: NOT 候補の worktree がちょうど1つある",
-        "システムは VALIDATES THAT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い。",
-        "CONDITION: NOT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い",
-        "システムは利用者に候補から外した worktree の件数と、この issue の worktree があるかを確かめられなかったことを応答する。",
-        "IF 利用者が片付けたあとの Status の値を指定している THEN",
-        "システムは利用者に指定された Status へ動かしていないことを応答する。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P033",
-      "terminal": "abort",
-      "terminal_flow": "候補から外したworktreeがある",
-      "postcondition": "worktree は1つも消えていない。branch は1つも消えていない。herdr の workspace は残っている。issue の Status は変わっていない。終了コードは 1 である。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "BASIC FLOW-10",
-        "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "worktreeが無い-1",
-        "候補から外したworktreeがある-1",
-        "候補から外したworktreeがある-2",
-        "候補から外したworktreeがある-5"
-      ],
-      "steps": [
-        "利用者はシステムに issue の URL を渡して着手の取り消しを要求する。",
-        "システムは VALIDATES THAT issue の URL を host と owner とリポジトリ名と issue の番号に分解できる。",
-        "システムは VALIDATES THAT 設定ファイルを読める。",
-        "システムは VALIDATES THAT 二重起動防止のロックファイルを開ける。",
-        "システムはロックの獲得の可否から継続監視が動いているかを判定する。",
-        "システムは獲得できたロックを実行が終わるまで握り続ける。",
-        "システムは継続監視が動いていて利用者が dry-run を指定していないときに限り、手を離させる段を通ると判定する。",
-        "システムは利用者に継続監視が動いているかどうかを応答する。",
-        "システムは VALIDATES THAT worktree の置き場所を走査できる。",
-        "システムは worktree の中の身元ファイルを読む。",
-        "システムは身元ファイルを読めない worktree と、身元ファイルが1つも無いディレクトリと、身元ファイルの issue_url が渡された issue と一致するが置き場所のパスから取り出した owner とリポジトリ名か最下層のディレクトリ名が食い違う worktree を候補から外し、外したことを利用者に応答する。",
-        "システムは VALIDATES THAT 候補の worktree がちょうど1つある。",
-        "CONDITION: NOT 候補の worktree がちょうど1つある",
-        "システムは VALIDATES THAT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い。",
-        "CONDITION: NOT 身元ファイルを読めないか身元ファイルが無いか置き場所と食い違うために候補から外したディレクトリが1つも無い",
-        "システムは利用者に候補から外した worktree の件数と、この issue の worktree があるかを確かめられなかったことを応答する。",
-        "IF 利用者が片付けたあとの Status の値を指定している THEN",
-        "CONDITION: NOT 利用者が片付けたあとの Status の値を指定している",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P034",
       "terminal": "abort",
       "terminal_flow": "worktreeが2つ以上",
       "postcondition": "一致した worktree はすべて残っている。branch はすべて残っている。issue の Status は変わっていない。終了コードは 1 である。",
@@ -3532,7 +3273,7 @@
       ]
     },
     {
-      "id": "P035",
+      "id": "P031",
       "terminal": "abort",
       "terminal_flow": "前提を読めない",
       "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。終了コードは 1 である。",
@@ -3565,7 +3306,7 @@
       ]
     },
     {
-      "id": "P036",
+      "id": "P032",
       "terminal": "abort",
       "terminal_flow": "前提を読めない",
       "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。終了コードは 1 である。",
@@ -3588,7 +3329,7 @@
       ]
     },
     {
-      "id": "P037",
+      "id": "P033",
       "terminal": "abort",
       "terminal_flow": "前提を読めない",
       "postcondition": "worktree は残っている。branch は残っている。herdr の workspace は残っている。終了コードは 1 である。",
@@ -3609,7 +3350,7 @@
       ]
     },
     {
-      "id": "P038",
+      "id": "P034",
       "terminal": "abort",
       "terminal_flow": "issueURLの解釈不能",
       "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。終了コードは 1 である。",
@@ -3629,9 +3370,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 93,
-    "nodes_covered": 93,
-    "edges_total": 102,
-    "edges_covered": 102
+    "nodes_total": 91,
+    "nodes_covered": 91,
+    "edges_total": 98,
+    "edges_covered": 98
   }
 }

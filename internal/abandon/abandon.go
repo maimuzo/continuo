@@ -10,7 +10,7 @@
 //	段2b worktree が0件なら、規則から組み立てた branch が残っていないかを見て片付ける
 //	段2の後 これから書きうる Status の値を確かめる（**消す前に確かめる。--dry-run でも通る**）
 //	段3 失われるものを調べて見せる（--dry-run はここで終わる）
-//	段4 消す（**その前に、動いていないのに pane が生きていないかを確かめる**）
+//	段4 消す（**その前に、手を離させていないのに pane が生きていないかを確かめる**）
 //	段5 Status を動かす（--to があるときだけ）
 //
 // **実行の順は段2 が段1 の後半より先である。**段1 の後半は「その worktree を cwd に
@@ -266,7 +266,7 @@ func (r *runner) run(ctx context.Context) int {
 	// `tracker.active_states` に入っていなければ park は何も書かずに戻り、
 	// **継続監視は active に戻った pane しか閉じない**（3-37-3）。
 	// つまり誰もその pane を閉じないので、**待てば必ず時間切れになる。**
-	// そのときは「動いていない」ときと同じ検査（stopIfPaneAlive）へ落とす。
+	// そのときは、継続監視が動いていなかったときと同じ検査（stopIfPaneAlive）へ落とす。
 	switch {
 	case running && r.opts.DryRun:
 		r.parkDeferred = true
@@ -304,13 +304,15 @@ func (r *runner) run(ctx context.Context) int {
 		}
 		return ExitStopped
 	}
-	// **動いていないと判定したときこそ pane を確かめる。**ロックファイルの場所は
-	// 環境変数（CONTINUO_RUNTIME_DIR / XDG_RUNTIME_DIR / TMPDIR）で決まるので、
-	// launchd から起動した継続監視と端末から叩いた abandon で食い違いうる。
-	// **herdr の socket は設定で決まって環境変数では動かないので、ロックより信用できる。**
+	// **手を離させる書き込みが入らなかったときこそ pane を確かめる。**書き込みが
+	// 入っていなければ pane 待ち（waitPaneGone）を飛ばしているので、確かめる口がここしか無い。
 	//
-	// **手を離させる書き込みが入らなかったときも、ここを通す。**pane 待ちを飛ばして
-	// いるので、確かめる口がここしか無い。
+	// **入らない理由は2つある。**継続監視が動いていなかった場合と、動いてはいるが
+	// ボードの Status が `tracker.active_states` の外だった場合である。
+	// **前者はロックの判定を疑う理由になる。**ロックファイルの場所は環境変数
+	// （CONTINUO_RUNTIME_DIR / XDG_RUNTIME_DIR / TMPDIR）で決まるので、launchd から
+	// 起動した継続監視と端末から叩いた abandon で食い違いうる。
+	// **herdr の socket は設定で決まって環境変数では動かないので、ロックより信用できる。**
 	if r.parkedTo == "" {
 		if code := r.stopIfPaneAlive(ctx, found.Path); code != ExitOK {
 			return code
@@ -693,7 +695,12 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 	return ExitOK
 }
 
-// stopIfPaneAlive は、継続監視が動いていないと判定したときに pane の生死を確かめる（段4 の前）。
+// stopIfPaneAlive は、手を離させる書き込みを行っていない実行で pane の生死を確かめる（段4 の前）。
+//
+// **継続監視が動いていない実行だけではない。**動いていても、ボードの Status が
+// `tracker.active_states` の外なら park は何も書かずに戻るので、その実行もここへ来る。
+// **だから「continuo は動いていません」を前提にした文言を出してはならない**
+// （i18n の `abandon.err_pane_alive`）。
 //
 // **ロックだけを根拠に消しにいかない。**ロックファイルの場所は環境変数で決まるので、
 // launchd から起動した継続監視と端末から叩いた abandon で食い違いうる。食い違えば
@@ -846,7 +853,7 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 			ids := strings.Join(paneIDs(panes), " ")
 			// **`--force` なら pane ごと消す。**止まったままにすると、
 			// **herdr workspace を手で閉じるまでその issue を取り消せない。**
-			// 動いていない側の同じ検査（stopIfPaneAlive）には元から逃げ道があり、
+			// 手を離させていない側の同じ検査（stopIfPaneAlive）には元から逃げ道があり、
 			// **こちらだけ越えられないのは筋が通らない。**
 			if r.opts.Force {
 				fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonPaneAliveForced, ids))

@@ -749,7 +749,10 @@ const (
 	KeyAbandonPaneGone Key = "abandon.pane_gone"
 	// KeyAbandonErrPaneRemains は上限までに pane が閉じなかったときに出る。
 	KeyAbandonErrPaneRemains Key = "abandon.err_pane_remains"
-	// KeyAbandonErrPaneAlive は継続監視が動いていないのに pane が生きているときに出る。
+	// KeyAbandonErrPaneAlive は、**手を離させる書き込みを行っていないのに** pane が
+	// 生きているときに出る。**継続監視が動いていても、ボードの Status が
+	// `tracker.active_states` の外なら park は何も書かずに戻るので、ここへ来る。**
+	// だから「continuo は動いていません」と断定しない。
 	KeyAbandonErrPaneAlive Key = "abandon.err_pane_alive"
 	// KeyAbandonPaneCheckSkipped は、herdr へ問い合わせられないまま `--force` が
 	// 指定されていて、pane の生死を確かめずに消すときに出る。
