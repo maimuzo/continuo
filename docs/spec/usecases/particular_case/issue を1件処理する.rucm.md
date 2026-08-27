@@ -176,7 +176,7 @@ RFS BASIC FLOW 23
 1. システムは 500 ミリ秒待つ。
 2. システムは VALIDATES THAT pane を待ち始めてから 30 秒が経っていない。
 3. RESUME STEP 23
-POSTCONDITION: pane が起動を受け付けるまで待ち続けている。Claude Code はまだ起動していない。
+POSTCONDITION: pane が起動を受け付けるまで待ち続けている。この pane で新しい Claude Code はまだ起動していない。復帰の失敗から戻ってきた場合は、確認の画面を esc で畳んだ前の Claude Code が pane を占めたままである。
 
 SPECIFIC ALTERNATIVE FLOW paneの断念:
 RFS paneがまだ使えない 2
@@ -185,7 +185,7 @@ RFS paneがまだ使えない 2
 3. システムは herdr の pane を閉じる。
 4. システムは印を外す。
 5. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。Claude Code は起動していない。worktree は残っている。
+POSTCONDITION: issue の Status は failure_state の選択肢である。この pane で新しい Claude Code は起動していない。herdr の pane を閉じたので、確認の画面を畳んだ前の Claude Code が残っていた場合も、その pane ごと終わっている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW turnループの重なり:
 RFS BASIC FLOW 26
@@ -270,20 +270,22 @@ POSTCONDITION: issue にエージェントが書いたコメントが1件以上�
 
 SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗:
 RFS コメントの取り戻し 7
-1. システムはボードの issue の Status に failure_state の選択肢を書く。
-2. システムは herdr の pane を閉じる。
-3. システムは印を外す。
-4. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。worktree は残っている。
+1. システムは herdr の pane を閉じる。
+2. システムはボードの issue の Status に failure_state の選択肢を書く。
+3. システムは issue に成果を人間に確かめてほしいことを1件コメントする。
+4. システムは印を外す。
+5. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。herdr の pane は閉じている。印は外れている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 取り戻しの復帰の失敗:
 RFS コメントの取り戻し 4
-1. システムは復帰できなかったセッション UUID と失敗の理由を記録に残す。
-2. システムはボードの issue の Status に failure_state の選択肢を書く。
-3. システムは herdr の pane を閉じる。
-4. システムは印を外す。
-5. ABORT
-POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。
+1. システムは復帰できなかった理由を記録に残す。
+2. システムは herdr の pane を閉じる。
+3. システムはボードの issue の Status に failure_state の選択肢を書く。
+4. システムは issue に成果を人間に確かめてほしいことを1件コメントする。
+5. システムは印を外す。
+6. ABORT
+POSTCONDITION: issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。issue に人間へ引き渡す通知のコメントが1件ある。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。
 
 SPECIFIC ALTERNATIVE FLOW 復元の断念:
 RFS コメントの取り戻し 2
@@ -329,8 +331,8 @@ WHEN 復帰つきの起動が、前回のセッションの不在でも起動直
 5. システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す。
 6. システムは起動フラグを新しいセッション UUID の指定つきへ差し替える。
 7. システムは前の Claude Code を止めずに同じ pane を使い続ける。
-8. RESUME STEP 24
-POSTCONDITION: 起動フラグは新しいセッション UUID の指定つきである。立て直したあとの起動は前回の会話履歴を読まない。前の Claude Code は止めていないので、起動直後の確認の画面で止まっていた場合は、前回の会話履歴を読み込んだ Claude Code が同じ pane に残っている。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。
+8. RESUME STEP 23
+POSTCONDITION: 起動フラグは新しいセッション UUID の指定つきである。立て直しの起動はまだ1回も呼んでいない。hook の引き当ての索引は新しいセッション UUID だけを指しているので、前回のセッション UUID を名乗る hook はどの run のものでもないとして捨てられる。前の Claude Code を止める手立てが無いので、起動直後の確認の画面で止まっていた場合は、確認の画面だけを esc で畳んだ Claude Code が同じ pane に残り、その pane は起動を受け付けない。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。
 
 GLOBAL ALTERNATIVE FLOW 権限の確認:
 BRANCH FROM BASIC FLOW 30
@@ -416,10 +418,15 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 
 | ステップ24 の起動 | 完了しなかったときにどうなるか |
 | --- | --- |
-| 前回のセッション UUID への復帰つき | `起動の待ち直し` で期限まで粘り、それでも通らなければ `復帰の失敗` が受け取ってステップ24 からやり直す |
+| 復帰つきで、確認の画面が出た | **待ち直しを1回も通らずに**`復帰の失敗` が受け取ってステップ23 からやり直す |
+| 復帰つきで、それ以外の理由 | `起動の待ち直し` で期限まで粘り、それでも通らなければ `復帰の失敗` が受け取ってステップ23 からやり直す |
 | 新しいセッション UUID の指定つき | `起動直後の確認画面`・`起動の待ち直し`・`起動の断念` のどれかへ進む |
 
-**`起動の待ち直し` は両方の起動で通る。**ABORT で抜ける `起動直後の確認画面` と `起動の断念` だけが、
+**確認の画面だけは待ち直しを通らない。**`confirmStartup` は `blocked` を見たら `esc` を送って
+**やり直せない形のエラーで即座に戻り**、`confirmStartupWithRestart` はそれを見て期限を待たずに返す
+（`internal/orchestrator/dispatch.go` の `if !errors.Is(err, ErrStartupRetryable)`）。
+
+**`起動の待ち直し` は、確認の画面以外の理由なら両方の起動で通る。**ABORT で抜ける `起動直後の確認画面` と `起動の断念` だけが、
 新しいセッション UUID の指定つきの起動に限られる（復帰つきなら `復帰の失敗` が先に受け取るためである）。
 
 **見分けているのは `internal/orchestrator/dispatch.go` の `startRun` の1行だけである**
@@ -445,14 +452,38 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 **送り直しが失敗しても run は捨てない。**`confirmStartupWithRestart` はやり直しの
 `agent.start` の失敗を警告1行に落とし、期限まで確認を続ける。
 
-**立て直しは、前の Claude Code を止めずに同じ pane で行う。**`startRun` は同じ pane と
-同じ agent 名で `launchClaude` をもう一度通す（`internal/orchestrator/dispatch.go`）。
-**そもそも continuo は agent を止められない。**`internal/herdr/agent.go` が定義する method は
+## 立て直しが通るかは、前の Claude Code が pane に残るかで割れる
+
+**言いたいこと。**立て直しは前の Claude Code を止めずに同じ pane で行うので、
+**前が残っている場合は立て直しの起動そのものを受け付けてもらえない。**
+だから `復帰の失敗` は「立て直した」と言い切らず、pane の受け付けの検査へ戻す。
+
+**continuo は agent を止められない。**`internal/herdr/agent.go` が定義する method は
 `agent.start` / `prompt` / `read` / `get` / `list` / `wait` / `rename` / `send_keys` の8つで、
-止める method が無い。**起動直後の確認の画面で止まっていた場合、そこには
-`--resume` で起動して前回の会話履歴を読み込んだ Claude Code が残っている**
-（`confirmStartup` が `esc` を送って確認の画面だけは畳んである）。
-`復帰の失敗` の事後条件はその状態を書いてある。
+止める method が無い。`startRun` は同じ pane と同じ agent 名で `launchClaude` をもう一度通す。
+
+| 復帰つきの起動が完了しなかった理由 | pane に何が残るか | 立て直しの起動 |
+| --- | --- | --- |
+| 前回のセッションが消えていた | `claude --resume` が落ち、シェルのプロンプトへ戻る | 受け付けられる |
+| 起動直後の確認の画面で止まった | `esc` で画面だけを畳んだ Claude Code が前面で走り続ける | **受け付けられない** |
+
+**受け付けられない理由。**herdr の `agent.start` は「対話プロンプトに来ていて、前面で走る
+コマンドも editor も agent も無い pane」を要求する。herdr 0.8.2 の `herdr --skill` の原文は
+"An available shell pane must be at its interactive prompt, with the shell itself in the
+foreground and no foreground command, editor, or agent running."（**訳:** 使えるシェルの pane とは、
+**対話プロンプトに来ていて、シェル自身が前面にあり、前面で走るコマンドも editor も agent も
+無いものである**）。**占められた pane へ投げると `agent_pane_busy`
+（`agent target pane <pane の ID> is not an available shell`）が返る**
+（herdr 0.8.2 で実測: 2026-08-27。pane で `sleep 180` を走らせてから `agent start` を呼んだ）。
+
+**だから `復帰の失敗` の RESUME 先はステップ23 である。**確認の画面で止まっていた場合は
+そこで落ち、`paneがまだ使えない` で30秒粘ったのち `paneの断念` へ進む。
+**`paneの断念` が pane を閉じるので、残っていた前の Claude Code もそこで終わる。**
+
+**その30秒のあいだ、pane に残った Claude Code の hook は捨てられる。**`復帰の失敗` は hook の
+索引を新しいセッション UUID へ張り替えており（`bindSession` は同じ run の古い結び付きを消してから
+書く）、**pane に残っているのは前回のセッション UUID を名乗る Claude Code である。**
+`OnHook` は索引に無い `session_id` に偽を返し、hookserver がその hook を捨てる。
 
 **身元ファイルを書き直せなくても止まらない。**`restartWithNewSession` は `SetSessionUUID` の
 失敗を警告1行にして先へ進む。**そのときは前回のセッション UUID が身元ファイルに残るので、
@@ -473,6 +504,11 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 **立て直さないのは、立て直しても書かせるものが無いからである。**新しいセッションには会話が
 1つも無く、**continuo は成果の要約を代筆しない**（設計 3-25 / 3-29）。だから人間へ
 「worktree の中身と `git log` を見て確かめてほしい」と渡す。
+
+**渡し方は issue へのコメント1件である。**`failCommentRecovery` は **pane を閉じ、Status を
+`failure_state` へ落としてから**、`postHandoffComment` でその1件を書く（この順である）。
+**通知は1つの run につき1件だけ書ける**（`takeHandoffPost`）。`取り戻しの復帰の失敗` と
+`コメントの取り戻しの失敗` の段の並びは、この順に合わせてある。
 
 ## 候補を飛ばす6つの検査
 
@@ -782,7 +818,7 @@ flowchart TD
     end
 
     subgraph SG24 ["SPECIFIC ALTERNATIVE FLOW コメントの取り戻しの失敗 / RFS コメントの取り戻し 7"]
-        N24S1["1. Status に failure_state を書く"] --> N24S2["2. pane を閉じる"] --> N24S3["3. 印を外す"] --> N24S4["4. ABORT"]
+        N24S1["1. pane を閉じる"] --> N24S2["2. Status に failure_state を書く"] --> N24S3["3. 成果を確かめてほしいことをコメントする"] --> N24S4["4. 印を外す"] --> N24S5["5. ABORT"]
     end
 
     subgraph SG25 ["GLOBAL ALTERNATIVE FLOW 壊れたref / BRANCH FROM BASIC FLOW 15"]
@@ -823,11 +859,11 @@ flowchart TD
     end
 
     subgraph SG34 ["GLOBAL ALTERNATIVE FLOW 復帰の失敗 / BRANCH FROM BASIC FLOW 24"]
-        N34S1["1. 新しいセッション UUID を採番する"] --> N34S2["2. hook の引き当ての索引を新しいセッション UUID へ張り替える"] --> N34S3["3. トークンの集計の基準を作り直す"] --> N34S4["4. 身元ファイルのセッション UUID を書き直し、書き直せなければ警告を残す"] --> N34S5["5. 復帰できなかった UUID と新しい UUID と理由を記録に残す"] --> N34S6["6. 起動フラグを新しいセッション UUID の指定つきへ差し替える"] --> N34S7["7. 前の Claude Code を止めずに同じ pane を使い続ける"] --> N34S8["8. RESUME STEP 24"]
+        N34S1["1. 新しいセッション UUID を採番する"] --> N34S2["2. hook の引き当ての索引を新しいセッション UUID へ張り替える"] --> N34S3["3. トークンの集計の基準を作り直す"] --> N34S4["4. 身元ファイルのセッション UUID を書き直し、書き直せなければ警告を残す"] --> N34S5["5. 復帰できなかった UUID と新しい UUID と理由を記録に残す"] --> N34S6["6. 起動フラグを新しいセッション UUID の指定つきへ差し替える"] --> N34S7["7. 前の Claude Code を止めずに同じ pane を使い続ける"] --> N34S8["8. RESUME STEP 23"]
     end
 
     subgraph SG35 ["SPECIFIC ALTERNATIVE FLOW 取り戻しの復帰の失敗 / RFS コメントの取り戻し 4"]
-        N35S1["1. 復帰できなかった UUID と失敗の理由を記録に残す"] --> N35S2["2. Status に failure_state を書く"] --> N35S3["3. pane を閉じる"] --> N35S4["4. 印を外す"] --> N35S5["5. ABORT"]
+        N35S1["1. 復帰できなかった理由を記録に残す"] --> N35S2["2. pane を閉じる"] --> N35S3["3. Status に failure_state を書く"] --> N35S4["4. 成果を確かめてほしいことをコメントする"] --> N35S5["5. 印を外す"] --> N35S6["6. ABORT"]
     end
 
     N13S2 -- 偽 --> N14S1
@@ -845,7 +881,7 @@ flowchart TD
     N23S2 -- 偽 --> N32S1
     N32S2 --> N23S8
     N33S2 --> B42
-    N34S8 --> B24
+    N34S8 --> B23
 ```
 
 ## シーケンス図
@@ -906,7 +942,14 @@ sequenceDiagram
                             S->>S: 身元ファイルのセッション UUID を書き直す
                             S->>S: 前の Claude Code を止めずに同じ pane を使い続ける
                             S->>H: 同じ pane での新しいセッション UUID の指定つきの起動を要求する
-                            H->>CC: 会話履歴を持たないセッションで Claude Code を起動する
+                            alt 確認の画面を畳んだ前の Claude Code が pane に残っている
+                                H-->>S: 使えるシェルの pane ではないと30秒のあいだ応答し続ける
+                                S->>GH: Status への failure_state の書き込みを要求する
+                                S->>H: pane の close を要求する
+                                Note over S: ABORT 残っていた前の Claude Code も pane ごと終わる
+                            else pane がシェルのプロンプトへ戻っている
+                                H->>CC: 会話履歴を持たないセッションで Claude Code を起動する
+                            end
                         else 復帰つきの起動が完了する
                             H->>CC: 前回のセッションを復帰して会話履歴を引き継ぐ
                         end
@@ -979,7 +1022,9 @@ sequenceDiagram
                         S->>H: セッションの復帰つきの起動を要求する
                         alt 復帰つきの起動が完了しない
                             H-->>S: 起動が完了しなかったことを応答する
+                            S->>H: pane の close を要求する
                             S->>GH: Status への failure_state の書き込みを要求する
+                            S->>GH: 成果を確かめてほしい通知のコメントの投稿を要求する
                             Note over S: ABORT 着手と違って新しいセッションでは立て直さない
                         else 復帰つきの起動が完了する
                             H->>CC: セッションを復帰する

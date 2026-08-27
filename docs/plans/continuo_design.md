@@ -6689,37 +6689,18 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 
 | フロー | 分岐元の段 | 実装のどこか |
 | --- | --- | --- |
-| `走行中のissue` | 別の run の印を見る | `dispatch.go` の `dispatchCandidates` |
-| `ラベルの不足` | required_labels を見る | `dispatch.go` の `hasRequiredLabels` |
-| `turnループの重なり` | turn ループの重なりを見る | `turn.go` の `startTurnLoop` |
-| `本文の組み立ての失敗` | 本文の組み立てを見る | `turn.go` の `buildTurnText` |
-| `turnの終わりの取りこぼし` | Stop hook の到着を見る | `turn.go` の `confirmTurnEnd` |
-| `リトライの尽き` | `turnの終わりの取りこぼし` のリトライの回数を見る | `lifecycle.go` の `abandonRunClaimed` |
-| `騙りのhook` | hook の cwd を見る | `hookinput.go` の `acceptHookCwd` |
-| `ボードから消えたissue` | issue がボードに見えるかを見る | `lifecycle.go` の `refreshIssue` |
-| `復元の断念` | `コメントの取り戻し` の身元ファイルを読めるかを見る | `comment.go` の `ensureAgentComment` |
-| `着手の途中の失敗`（任意時点） | worktree を作る | `dispatch.go` の `startRun` |
-| `復帰の失敗`（任意時点） | Claude Code を起動する | `dispatch.go` の `startRun` の `if startErr != nil && resumeUUID != ""` |
-| `取り戻しの復帰の失敗` | `コメントの取り戻し` の復帰つきの起動の完了を見る | `comment.go` の `failCommentRecovery` |
-
-**`復帰の失敗` の WHEN は理由を絞らない。**`startRun` はエラーの種類を見ずに立て直すので、
-**確認の画面で止まっても、`herdr.startup_timeout_ms` が経っても、同じ枝へ入る。**
-そのぶん、**ABORT で抜ける `起動直後の確認画面` と `起動の断念` は、新しいセッション UUID の
-指定つきの起動でだけ通る。**2本の事後条件にそう書いてある。
-**`起動の待ち直し` は別である。**`confirmStartupWithRestart` は直前に使った引数をそのまま
-渡し直すので、**再着手ではその引数に `--resume` が入ったまま待ち直す。**だから事後条件に
-起動フラグの種類を書かない。
-
-**立て直しは前の Claude Code を止めない。**continuo に agent を止める呼び出しは1つも無く
-（`internal/herdr/agent.go` の method は start / prompt / read / get / list / wait / rename /
-send_keys の8つ）、同じ pane・同じ agent 名で `agent.start` をもう一度通す。**確認の画面で
-止まっていた場合は、`--resume` で会話履歴を読み込んだ Claude Code がその pane に残る。**
-
-**`復帰の失敗` の RESUME 先は、起動の確認ではなく起動の段である。**確認の段へ戻すと、
-**戻ったあとの状態が成功した起動と1バイトも変わらない**のに枝が全部2本ずつになる
-（実測で38本から86本へ増え、うち24本は区別できなかった）。起動の段へ戻せば41本に収まる。
-**起動フラグの選び分けも IF に割らない。**「起動フラグを決める」の段で1度だけ決め、
-どちらを渡したかはテストが `agent.start` の引数で見る。
+| `走行中のissue` | 別の run の印を見る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `dispatchCandidates` |
+| `ラベルの不足` | required_labels を見る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `hasRequiredLabels` |
+| `turnループの重なり` | turn ループの重なりを見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `startTurnLoop` |
+| `本文の組み立ての失敗` | 本文の組み立てを見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `buildTurnText` |
+| `turnの終わりの取りこぼし` | Stop hook の到着を見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `confirmTurnEnd` |
+| `リトライの尽き` | `turnの終わりの取りこぼし` のリトライの回数を見る | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `abandonRunClaimed` |
+| `騙りのhook` | hook の cwd を見る | [internal/orchestrator/hookinput.go](../../internal/orchestrator/hookinput.go) の `acceptHookCwd` |
+| `ボードから消えたissue` | issue がボードに見えるかを見る | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `refreshIssue` |
+| `復元の断念` | `コメントの取り戻し` の身元ファイルを読めるかを見る | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `ensureAgentComment` |
+| `着手の途中の失敗`（任意時点） | worktree を作る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` |
+| `復帰の失敗`（任意時点） | Claude Code を起動する | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` の `if startErr != nil && resumeUUID != ""` |
+| `取り戻しの復帰の失敗` | `コメントの取り戻し` の復帰つきの起動の完了を見る | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `failCommentRecovery` |
 
 **リトライを積む出口は4つあるが、尽きたときの後始末は `abandonRunClaimed` の1本しかない。**
 `turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`ボードから消えたissue` が
@@ -6729,6 +6710,59 @@ send_keys の8つ）、同じ pane・同じ agent 名で `agent.start` をもう
 「pane の受け付け待ち」「復帰つきの起動の失敗」を外してある。**`コメントの取り戻し` の2つの段は
 条件ステップにしてある**（任意時点代替フローにすると `rucm_validator.py` が W005 を出す）。
 **テストの印は41本のうち31本に付いている。**
+
+**`failCommentRecovery` から出る2本の枝は、実装の並びに合わせる。**
+[internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の
+`failCommentRecovery` は **pane を閉じ、Status を `failure_state` へ落としてから、
+引き渡しのコメントを1件書く**（`stopWorker` → `UpdateStatus` → `postHandoffComment`）。
+`コメントの取り戻しの失敗` と `取り戻しの復帰の失敗` の段はこの順である。
+
+### 6-18b. `復帰の失敗` は、立て直しの成否を事後条件に書かない
+
+**言いたいこと。**立て直しは前の Claude Code を止めずに同じ pane で行うので、
+**前が残っていると立て直しの起動そのものを受け付けてもらえない。**
+だから RESUME 先は「pane が起動を受け付ける」の検査であり、事後条件は成否を書かない。
+
+**`復帰の失敗` の WHEN は理由を絞らない。**`startRun` はエラーの種類を見ずに立て直すので、
+**確認の画面で止まっても、`herdr.startup_timeout_ms` が経っても、同じ枝へ入る。**
+そのぶん、**ABORT で抜ける `起動直後の確認画面` と `起動の断念` は、新しいセッション UUID の
+指定つきの起動でだけ通る。**2本の事後条件にそう書いてある。
+**`起動の待ち直し` は別である。**`confirmStartupWithRestart` は直前に使った引数をそのまま
+渡し直すので、**再着手ではその引数に `--resume` が入ったまま待ち直す。**だから事後条件に
+起動フラグの種類を書かない。**確認の画面で止まった場合だけは、待ち直しを1回も通らない**
+（`confirmStartup` の `blocked` は `ErrStartupRetryable` を包まないので、期限を待たずに返る）。
+
+**continuo は agent を止められない。**[internal/herdr/agent.go](../../internal/herdr/agent.go) の
+method は start / prompt / read / get / list / wait / rename / send_keys の8つで、止める method が
+無い。`startRun` は同じ pane・同じ agent 名で `agent.start` をもう一度通す。
+
+| 復帰つきの起動が完了しなかった理由 | pane に何が残るか | 立て直しの起動 |
+| --- | --- | --- |
+| 前回のセッションが消えていた | `claude --resume` が落ち、シェルのプロンプトへ戻る | 受け付けられる |
+| 起動直後の確認の画面で止まった | `esc` で画面だけを畳んだ Claude Code が前面で走り続ける | **受け付けられない** |
+
+**受け付けられない根拠。**herdr 0.8.2 の `herdr --skill` は
+"An available shell pane must be at its interactive prompt, with the shell itself in the
+foreground and no foreground command, editor, or agent running." （**訳:** 使えるシェルの pane とは、
+**対話プロンプトに来ていて、シェル自身が前面にあり、前面で走るコマンドも editor も agent も
+無いものである**）と書いている。**占められた pane へ `agent.start` を投げると
+`agent_pane_busy`（`agent target pane <pane の ID> is not an available shell`）が返る**
+（2026-08-27 に実測。pane で `sleep 180` を走らせてから `herdr agent start` を呼んだ）。
+
+**だから RESUME 先は「pane が起動を受け付ける」の検査である。**`launchClaude` は pane の
+受け付けを粘る `AgentStartWithRetry` から始まるので、**起動の段へ直接戻すと、その検査が
+仕様から消える。**確認の画面で止まった run はそこで落ち、`paneがまだ使えない` で30秒粘ったのち、
+**`paneの断念` が pane を閉じて人間へ渡す。**閉じることで、残っていた前の Claude Code も終わる。
+
+**起動の確認の段へは戻さない。**戻ったあとの状態が成功した起動と1バイトも変わらないのに
+枝が全部2本ずつになる（実測: 2026-08-27。確認の段へ戻すと66本、起動の段でも受け付けの検査でも41本）。
+**起動フラグの選び分けも IF に割らない。**「起動フラグを決める」の段で1度だけ決め、
+どちらを渡したかはテストが `agent.start` の引数で見る。
+
+**立て直しの30秒のあいだ、pane に残った Claude Code の hook は捨てられる。**`復帰の失敗` は
+hook の索引を新しいセッション UUID へ張り替えており（`bindSession` は同じ run の古い結び付きを
+消してから書く）、pane に残っているのは前回のセッション UUID を名乗る Claude Code である。
+`OnHook` は索引に無い `session_id` に偽を返し、hookserver がその hook を捨てる。
 
 ### 6-19. `着手を取り消す` の RUCM は、代替フローを18本のままにする
 

@@ -1,11 +1,12 @@
-// {"RUCM-CFG-SHA256": "4617dc72733c20141806eb53c3f5534fd0ae158f541e37fc9e82dbd64ecdf1af", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "b0090ac4bfeebe6f9d3d42d56eece2357a1a5a0a12cfc2db846459eacdf395ab", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
-// **RUCM から生成したテストである。**「issue を1件処理する」の段13〜段15
-// （pane が起動を受け付けるか / Claude Code が入力を受け付けられるか）を通る
-// テストパスを1本ずつ検査する。
+// **RUCM から生成したテストである。**「issue を1件処理する」の
+// 「pane が起動を受け付ける」「agent_status が idle か done で interactive_ready が真」の
+// 2つの検査を通るテストパスを1本ずつ検査する（段は名前で指す。番号は段の増減で動く）。
 //
 // **この4本は、実運用で issue が着手できなかった経路である**（2026-08-21、設計 6-2）。
-// 当時の RUCM には段13 も `interactive_ready` も無く、代替フローも書かれていなかった。
+// 当時の RUCM には「pane が起動を受け付ける」の検査も `interactive_ready` も無く、
+// 代替フローも書かれていなかった。
 // **RUCM に無いものはテストにもならない**ので、実機で回すまで誰も気づけなかった。
 package orchestrator_test
 
@@ -23,7 +24,8 @@ import (
 
 // {"RUCM-PATH": "P028"}
 //
-// TestRUCM_P028_paneがまだ使えないなら待ち直す は、段13 の代替フロー「paneがまだ使えない」を検査する。
+// TestRUCM_P028_paneがまだ使えないなら待ち直す は、「pane が起動を受け付ける」の検査から出る
+// 代替フロー「paneがまだ使えない」を検査する。
 //
 // **`worktree.open` が作った pane は、シェルの起動が終わるまでコマンドを受け取れない。**
 // herdr はそれを `agent_pane_busy`（`is not an available shell`）で返す。
@@ -101,7 +103,8 @@ func TestRUCM_P029_paneが使えないまま期限を過ぎたら人間へ渡す
 
 // {"RUCM-PATH": "P025"}
 //
-// TestRUCM_P025_入力を受け付けられるまで待ち直す は、段15 の代替フロー「起動の待ち直し」を検査する。
+// TestRUCM_P025_入力を受け付けられるまで待ち直す は、「agent_status が idle か done で
+// interactive_ready が真」の検査から出る代替フロー「起動の待ち直し」を検査する。
 //
 // **`agent.start` は起動が終わるのを待たずに返る。**返った直後の `agent_status` は
 // `unknown` で、`idle` になったあとも数秒は `interactive_ready` が偽である
