@@ -351,9 +351,10 @@ func New(opts Options) (*Orchestrator, error) {
 		now:            nowFunc,
 		newSessionUUID: newUUID,
 		ghAuthCheck:    opts.GHAuthCheck,
-		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-55）。
-		// 起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）も
-		// 同じ関数の上に立つ（あちらは対応表のキーを足す）。
+		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。
+		// **起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）は、
+		// 同じ関数の戻り値そのものである。**ずれると、起動時に通した設定が実行時には
+		// 別の意味になる（対応表のキーは、どちらにも入れない）。
 		knownStateNames: knownStateNames,
 
 		runs:           map[string]*runState{},

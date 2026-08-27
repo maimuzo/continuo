@@ -71,6 +71,16 @@ const (
 	// 動きになる。**起動を止めると、いま動いている人の continuo が版を上げた瞬間に
 	// 起動しなくなる**ので、警告に留める。
 	LabelCleanupStates = i18n.KeyDoctorLabelCleanupStates
+	// LabelRewriteKeys は `tracker.automated_state_rewrite` のキーがボードの Status の
+	// 選択肢にあるかの検査である（設計 3-57。issue #67）。
+	//
+	// **`✗` にしない。**キーはボードに実在しなくてよく、無ければその行が引かれないだけである。
+	// **`✗` にすると、ボードの自動化をやめて選択肢を消した人が抜け出せなくなる。**
+	//
+	// **黙って通してもいけない。**綴りを打ち間違えた行は一度も効かないまま死ぬのに、
+	// **起動時の警告は `continuo doctor` には出てこない**（doctor は tracker のログを捨てる）。
+	// **ここが、打ち間違いを人間に見せる唯一の場所である。**
+	LabelRewriteKeys = i18n.KeyDoctorLabelRewriteKeys
 )
 
 // LabelText は見出し語のキーを、いま使っている言語の語に直す。

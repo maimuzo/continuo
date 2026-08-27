@@ -784,3 +784,127 @@ func TestAutomatedState_書き戻しが飛んでいても終わらせる処理�
 		t.Errorf("人間が終わりにした Status を continuo が巻き戻している: got %q, want %q", got, "Done")
 	}
 }
+
+// assertRewriteKeyHintIsPastable は、対応表に書いてある Status で止めたときのコメントが
+// **貼っても continuo が起動する案内だけになっている**ことを確かめる（設計 3-57。issue #67）。
+//
+// **`active_states` か `status_signal_map` に書き足せ、を出してはならない。**
+// 対応表のキーは「設定の他のどこにも名前が出てこない Status」でなければならず、
+// **書き足した時点で `config.Validate` がその行を弾く＝continuo が起動しなくなる。**
+//
+// **代わりに「先に対応表のその行を消す」が出ていること。**それが唯一、貼っても起動する直し方であり、
+// **ボードの自動化をやめた人が抜け出す道でもある。**
+//
+// t: 呼び出し元のテスト。
+// body: issue へ書いた「止めた理由」のコメント本文。
+func assertRewriteKeyHintIsPastable(t *testing.T, body string) {
+	t.Helper()
+	if strings.Contains(body, "`tracker.status_signal_map` にその名前を書き足して") {
+		t.Errorf("対応表に書いてある Status なのに `active_states` へ足す案内を出している"+
+			"（言われたとおりに貼ると continuo が起動しない）:\n%s", body)
+	}
+	if !strings.Contains(body, "対応表のその行を消してください") {
+		t.Errorf("対応表のその行を消す案内が出ていない（抜け出し方がどこにも書かれていない）:\n%s", body)
+	}
+}
+
+// TestAutomatedState_押し合いで止めても貼ると起動しない案内を出さない は、設計 3-57 を確かめる
+// （issue #67 の1件目）。
+//
+// 目的: **抑止は「対応表へ1行足す案内を出したか」で判定していた。**
+// 押し合いで止めた道はその案内を出さないので、**`active_states` へ足す案内がそのまま出ていた。**
+// **その Status は既に対応表のキーなので、言われたとおりに足すと continuo は起動しなくなる。**
+//
+// 与える情報: 対応表に `In Progress` が載っている設定で、押し合いの上限（3回）を超えさせる。
+// 成功条件: 止めた理由のコメントに `active_states` へ足す案内が無く、
+// 代わりに「対応表のその行を消す」が書かれていること。
+func TestAutomatedState_押し合いで止めても貼ると起動しない案内を出さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
+	itemID := startRunForAutomation(t, fx)
+
+	// 上限は3回である（internal/orchestrator の maxAutomatedRewrites）。
+	// **巡回は `waitRewriteSettled` が打つ。**ここで `Tick` を打ってはならない
+	// （前の書き戻しの印がまだ返っていなければ、その巡回は空振りする）。
+	for i := 1; i <= 3; i++ {
+		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
+	}
+
+	// 4回目。**ここからは戻さず、人間へ渡す。**
+	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+	waitRunsDrainedByTick(t, fx, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatal("押し合いで止めたのに、理由を issue へ1文字も残していない")
+	}
+	assertRewriteKeyHintIsPastable(t, body)
+}
+
+// TestAutomatedState_戻せないまま止めても貼ると起動しない案内を出さない は、設計 3-57 を確かめる
+// （issue #67 の1件目）。
+//
+// 目的: 押し合いの道と同じ欠陥が、**戻せない失敗が続いて止めた道**にもある。
+// こちらは「ボードから戻す先の選択肢が消えた」状況であり、**設定を書き足しても直らない。**
+// それなのに `active_states` へ足す案内が出ていて、しかも貼ると起動しなくなる。
+//
+// 与える情報: `UpdateStatus` がずっと失敗する状況で、「戻せない」の上限（3回）を超えさせる。
+// 成功条件: 止めた理由のコメントに `active_states` へ足す案内が無く、
+// 代わりに「対応表のその行を消す」が書かれていること。
+func TestAutomatedState_戻せないまま止めても貼ると起動しない案内を出さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
+	// **書き込みの失敗は、このテストが自分で起こしているものである。**
+	fx.AllowLog("自動化が動かした Status を戻せませんでした")
+	itemID := startRunForAutomation(t, fx)
+
+	// **ボードから戻す先の選択肢が消えた状況である。**次の巡回でも直らない。
+	fx.Tracker.SetUpdateError(errors.New("Status の選択肢 \"In Progress (AI)\" が見つかりません"))
+
+	// 上限は3回である（internal/orchestrator の maxAutomatedRewriteFailures）。
+	// **巡回は `tickRewriteOnce` が打つ。**書き戻しが始まったことを見てから次へ進める。
+	for i := 1; i <= 3; i++ {
+		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+		tickRewriteOnce(t, fx)
+		want := i
+		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
+			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
+		})
+	}
+
+	// 4回目。**ここからは書き戻さず、人間へ渡す。**
+	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+	waitRunsDrainedByTick(t, fx, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatal("戻せないまま止めたのに、理由を issue へ1文字も残していない")
+	}
+	assertRewriteKeyHintIsPastable(t, body)
+}
+
+// TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない は、
+// 設計 3-57 を確かめる（issue #67 の1件目）。
+//
+// 目的: **人間が動かした場合も同じ道へ入る。**この道では「自動化が書いた」の説明そのものが
+// 出ないので、抑止を `automatedStateHint` の中だけに置くと**必ず取りこぼす。**
+// 判定は「対応表に書いてある名前か」で行わなければならない。
+//
+// 与える情報: 対応表に `In Progress` が載っている設定で、**人間が** Status を
+// `In Progress` へ動かす（`actor.__typename` が `User`）。
+// 成功条件: 止めた理由のコメントに `active_states` へ足す案内が無く、
+// 代わりに「対応表のその行を消す」が書かれていること。
+func TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
+	itemID := startRunForAutomation(t, fx)
+
+	// **SetState は人間が動かした扱いである**（SetStateByAutomation と対になる）。
+	fx.Tracker.SetState(itemID, "In Progress")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatal("人間が動かして止めたのに、理由を issue へ1文字も残していない")
+	}
+	assertRewriteKeyHintIsPastable(t, body)
+}

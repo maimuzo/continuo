@@ -112,6 +112,19 @@ var expectedWarnings = map[string][]string{
 		"自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します",
 		"continuo が知らない Status になったので worker を止めます",
 	},
+	// 設計 3-57（issue #67）: **止まったときに出す案内を見るテストである。**
+	// 止まること自体は上のテスト群と同じで、**その WARN はテストが起こしている。**
+	"TestAutomatedState_押し合いで止めても貼ると起動しない案内を出さない": {
+		"自動化が動かした Status を書き戻す回数が上限に達しました",
+		"continuo が知らない Status になったので worker を止めます",
+	},
+	"TestAutomatedState_戻せないまま止めても貼ると起動しない案内を出さない": {
+		"自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します",
+		"continuo が知らない Status になったので worker を止めます",
+	},
+	"TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
 	"TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる": {"権限の確認で止まっているので引き継ぎません"},
 	"TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す":        {"agent_status を判断できないので引き継ぎません"},
 	"TestRestore_agentの一覧を取れなくてもpaneを1つも閉じない":                           {"agent の一覧を取れません"},

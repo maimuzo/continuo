@@ -1,6 +1,8 @@
 package tracker_test
 
 import (
+	"bytes"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -162,56 +164,111 @@ func TestBootstrap_認証が無いとMissingSecretに分類される(t *testing.
 	}
 }
 
-// TestBootstrap_書き戻しの対応表のキーもボードと照合する は、設計 3-57 を確かめる。
+// TestBootstrap_ボードに無い対応表のキーは起動を止めず名前で知らせる は、設計 3-57 を確かめる
+// （issue #67 の2件目）。
 //
-// 目的: **`tracker.automated_state_rewrite` のキーの綴りを打ち間違えても、
-// いままでは誰も気づけなかった。**設定の検査は「設定の中での辻褄」しか見ず、
-// キーは「continuo が知らない Status」なので実行時の照合にも掛からない。
-// **結果、`In Progres` と書いても起動し、書き戻しだけが一度も動かない。**
+// 目的: **人間がボードの自動化をやめ、使わなくなった Status の選択肢を画面から消す。**
+// 対応表のキーをボードと照合して起動を止めていたので、**設定は正しいままなのに
+// continuo が二度と立ち上がらなくなり、抜け出す方法もどこにも出なかった。**
+// **キーは定義上「continuo が知らない Status」であり、ボードに実在しなくてよい。**
+//
+// **綴りの打ち間違いも同じ形に見える**ので、起動を止める代わりに名前で知らせる。
 //
 // 与える情報: ボードに実在しない `In Progres`（`s` が1つ足りない）をキーに書いた設定。
-// 成功条件: Bootstrap がエラーを返し、カテゴリが CategoryInvalidConfig で、
-// メッセージにその綴りが載っていること。
-func TestBootstrap_書き戻しの対応表のキーもボードと照合する(t *testing.T) {
+// 成功条件:
+//   - Bootstrap が成功すること（起動を止めない）
+//   - ログにそのキーの名前と、対応表から消す案内が出ること
+func TestBootstrap_ボードに無い対応表のキーは起動を止めず名前で知らせる(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	cfg := testTrackerConfig()
-	// **戻す先は active_states にある実在の Status。**弾かれる理由をキーだけに絞る。
+	// **戻す先は active_states にある実在の Status。**見たい違いをキーだけに絞る。
 	cfg.AutomatedStateRewrite = map[string]string{"In Progres": "In Progress"}
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
 
-	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, logger, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
 
-	err = a.Bootstrap(t.Context(), cfg)
-	if err == nil {
-		t.Fatalf("対応表のキーがボードに無いのに Bootstrap が成功した（綴りの誤りを誰も見つけられない）")
+	if err := a.Bootstrap(t.Context(), cfg); err != nil {
+		t.Fatalf("対応表のキーがボードに無いだけで起動を止めている"+
+			"（自動化をやめて選択肢を消した人が抜け出せない）: %v", err)
 	}
-	if !tracker.IsCategory(err, tracker.CategoryInvalidConfig) {
-		t.Fatalf("エラーのカテゴリが CategoryInvalidConfig ではない: %v", err)
+	logs := buf.String()
+	if !strings.Contains(logs, "In Progres") {
+		t.Fatalf("ボードに無い対応表のキーの名前がログに出ていない:\n%s", logs)
 	}
-	if !strings.Contains(err.Error(), "In Progres") {
-		t.Fatalf("エラーメッセージに打ち間違えたキーが含まれていない: %v", err)
+	if !strings.Contains(logs, "対応表からその行を消してください") {
+		t.Fatalf("対応表から行を消す案内がログに出ていない（抜け出し方が分からない）:\n%s", logs)
 	}
 }
 
-// TestBootstrap_ボードに在る対応表のキーは起動を止めない は、設計 3-57 を確かめる。
+// TestVerifyStatusOptions_対応表のキーがボードから消えても巡回の照合は落ちない は、
+// 設計 3-57 を確かめる（issue #67 の2件目）。
 //
-// 目的: **照合を足したせいで、正しい設定まで起動しなくなってはならない。**
+// 目的: **走っている最中に人間が選択肢を消すと、巡回ごとの照合が毎回落ちる。**
+// 落ちた巡回は dispatch を丸ごと飛ばすので、**対応表の1行のためにボード全体が止まる。**
+// 設定を直して再起動しないと戻らない。**キーはボードに実在しなくてよいので、落とさない。**
 //
-// 与える情報: ボードに実在する `Ice Box` をキーに書いた設定
-// （`Ice Box` は設定の他のキーには出てこないので、対応表のキーとして正しい）。
-// 成功条件: Bootstrap が成功すること。
-func TestBootstrap_ボードに在る対応表のキーは起動を止めない(t *testing.T) {
+// 与える情報: ボードに `Ice Box` がある状態で Bootstrap を通し、そのあと
+// ボードから `Ice Box` が消えた応答に切り替える（`Ice Box` は対応表のキーだけに出てくる）。
+// 成功条件: VerifyStatusOptions がエラーを返さないこと。
+func TestVerifyStatusOptions_対応表のキーがボードから消えても巡回の照合は落ちない(t *testing.T) {
 	cfg := testTrackerConfig()
 	cfg.AutomatedStateRewrite = map[string]string{"Ice Box": "In Progress"}
-	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
+	// **1回目（Bootstrap）は `Ice Box` があり、2回目からは消えている。**
+	withoutIceBox := testStatusOptions[1:]
+	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
+		if n == 1 {
+			return dataResponse(bootstrapProjectPayload(testStatusOptions))
+		}
+		return dataResponse(bootstrapProjectPayload(withoutIceBox))
+	})
 
 	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
 	if err := a.Bootstrap(t.Context(), cfg); err != nil {
+		t.Fatalf("Bootstrap が失敗した: %v", err)
+	}
+
+	if err := a.VerifyStatusOptions(t.Context(), cfg); err != nil {
+		t.Fatalf("対応表のキーがボードから消えただけで巡回の照合が落ちている"+
+			"（この巡回の dispatch がボードごと飛ぶ）: %v", err)
+	}
+}
+
+// TestBootstrap_ボードに在る対応表のキーは起動も知らせも起こさない は、設計 3-57 を確かめる。
+//
+// 目的: **知らせるようにしたせいで、正しい設定にまで文句を言ってはならない。**
+// ボードに在るキーは打ち間違いでも消し忘れでもないので、何も起きないのが正しい。
+//
+// 与える情報: ボードに実在する `Ice Box` をキーに書いた設定
+// （`Ice Box` は設定の他のキーには出てこないので、対応表のキーとして正しい）。
+// 成功条件: Bootstrap が成功し、**ボードに無いキーの知らせが出ないこと。**
+func TestBootstrap_ボードに在る対応表のキーは起動も知らせも起こさない(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	cfg := testTrackerConfig()
+	cfg.AutomatedStateRewrite = map[string]string{"Ice Box": "In Progress"}
+	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
+
+	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, logger, nil)
+	if err != nil {
+		t.Fatalf("NewAdapter が失敗した: %v", err)
+	}
+	if err := a.Bootstrap(t.Context(), cfg); err != nil {
 		t.Fatalf("ボードに在るキーなのに Bootstrap が失敗した: %v", err)
+	}
+	logs := buf.String()
+	if strings.Contains(logs, "対応表からその行を消してください") {
+		t.Fatalf("ボードに在るキーなのに、対応表から消せと言っている:\n%s", logs)
+	}
+	// **`Ice Box` は対応表のキーなので、「continuo が知らない Status」にも数えない**
+	// （キーの Status へ動かされた issue は書き戻されるのであって、worker は止まらない）。
+	if strings.Contains(logs, "ボードには continuo が知らない Status があります") {
+		t.Fatalf("対応表のキーを「知らない Status」として名指ししている:\n%s", logs)
 	}
 }

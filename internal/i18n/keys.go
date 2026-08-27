@@ -62,6 +62,27 @@ const (
 	// KeyDoctorLabelCleanupStates は片付ける Status と終わったとみなす Status の
 	// 噛み合いを見る検査の見出し語である。
 	KeyDoctorLabelCleanupStates Key = "doctor.label.cleanup_states"
+	// KeyDoctorLabelRewriteKeys は `tracker.automated_state_rewrite` のキーがボードの
+	// Status の選択肢にあるかを見る検査の見出し語である。
+	KeyDoctorLabelRewriteKeys Key = "doctor.label.rewrite_keys"
+)
+
+// doctor の検査「対応表のキー」（設計 3-57。issue #67）。
+const (
+	// KeyDoctorRewriteKeysConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorRewriteKeysConfigUnreadable Key = "doctor.rewrite_keys.config_unreadable"
+	// KeyDoctorRewriteKeysBoardUnreadable は上流のボードが落ちたときの説明に出る。
+	KeyDoctorRewriteKeysBoardUnreadable Key = "doctor.rewrite_keys.board_unreadable"
+	// KeyDoctorRewriteKeysEmpty は対応表そのものが空のときの説明に出る。
+	KeyDoctorRewriteKeysEmpty Key = "doctor.rewrite_keys.empty"
+	// KeyDoctorRewriteKeysOK はキーがすべてボードにあるときの説明に出る。
+	KeyDoctorRewriteKeysOK Key = "doctor.rewrite_keys.ok"
+	// KeyDoctorRewriteKeysMissing はボードに無いキーがあるときの説明に出る。
+	KeyDoctorRewriteKeysMissing Key = "doctor.rewrite_keys.missing"
+	// KeyDoctorRewriteKeysNote はボードに無いキー1つずつの内訳に出る。
+	KeyDoctorRewriteKeysNote Key = "doctor.rewrite_keys.note"
+	// KeyDoctorRewriteKeysRemedy はボードに無いキー1つずつの直し方に出る。
+	KeyDoctorRewriteKeysRemedy Key = "doctor.rewrite_keys.remedy"
 )
 
 // doctor の検査「片付けの状態」（設計 3-9。issue #35）。
@@ -1977,6 +1998,14 @@ var allKeys = []Key{
 	KeyDoctorLabelClaudeHome,
 	KeyDoctorLabelWorkspaceRoot,
 	KeyDoctorLabelCleanupStates,
+	KeyDoctorLabelRewriteKeys,
+	KeyDoctorRewriteKeysConfigUnreadable,
+	KeyDoctorRewriteKeysBoardUnreadable,
+	KeyDoctorRewriteKeysEmpty,
+	KeyDoctorRewriteKeysOK,
+	KeyDoctorRewriteKeysMissing,
+	KeyDoctorRewriteKeysNote,
+	KeyDoctorRewriteKeysRemedy,
 	KeyDoctorCleanupStatesConfigUnreadable,
 	KeyDoctorCleanupStatesDisabled,
 	KeyDoctorCleanupStatesOK,

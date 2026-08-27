@@ -449,12 +449,19 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 //	なぜ止めたか            … continuo が知らない Status だから
 //	続けるにはどうするか    … active_states に入っている Status へ戻す
 //
-// **設定の足し方の案内は、必ず1つだけにする**（設計 3-55）。
+// **設定の足し方の案内は、必ず1つだけにする**（設計 3-57）。
 // 「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を並べて出すと、
 // **両方やった設定は起動しない。**`automated_state_rewrite` のキーは
 // 「設定のどこにも名前が出てこない Status」でなければならず、`active_states` へ
 // 足した時点で `config.Validate` がその行を弾くためである。
-// **書き戻しの案内を出すときは、`active_states` の案内を出さない。**
+//
+// **判定は「対応表に既に書いてある名前か」で行う。**「書き戻しの案内を出したか」で
+// 判定すると、**対応表に書いてある Status で止まった道を1本も塞げない**（そこでは
+// 案内を出さないので偽になる）。塞ぎ損ねる道は3本ある。
+//
+//	書き戻す回数が上限に達した … `automatedStateHint` の押し合いの分岐
+//	戻せない失敗が続いた       … 同じく、戻す先がボードから消えたときの分岐
+//	人間がそのキーの Status へ動かした … `automatedStateHint` は人間には何も返さない
 //
 // rs: 対象の run。
 // state: 動かされた先の Status 名。
@@ -482,15 +489,28 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 			"continuo は turn の途中でもその場で止めます。" +
 			"エージェントの表明を読んでから判断させたいなら、この値を大きくしてください。"
 	}
-	// **案内は1つだけにする。**書き戻しの案内（対応表へ1行足す）を出すときは、
-	// 「`active_states` に足す」の案内を出さない。両方やると設定の検査に落ちて起動しない。
+	// **貼ると起動しなくなる案内を出さない**（設計 3-57）。
+	// 対応表に既に書いてある Status なら、`active_states` へ足す案内の代わりに
+	// **「先に対応表のその行を消す」を出す。**それが唯一、貼っても起動する直し方である。
 	hint, proposesRewrite := o.automatedStateHint(rs, state)
+	rewriteTarget, inRewriteTable := lookupStateRewrite(o.cfg.Tracker.AutomatedStateRewrite, state)
 	teach := fmt.Sprintf(
 		"\n【`%s` も continuo に扱わせたいときは】WORKFLOW.md の `tracker.active_states` か "+
 			"`tracker.status_signal_map` にその名前を書き足してから、continuo を再起動してください。",
 		state)
-	if proposesRewrite {
+	switch {
+	case proposesRewrite:
+		// 対応表へ1行足す案内を出した。**この Status はまだ対応表に無い。**
 		teach = ""
+	case inRewriteTable:
+		teach = fmt.Sprintf(
+			"\n【`%s` も continuo に扱わせたいときは】この名前は WORKFLOW.md の "+
+				"`tracker.automated_state_rewrite` のキー（`%s` → `%s`）です。"+
+				"**`tracker.active_states` や `tracker.status_signal_map` へ書き足す前に、"+
+				"対応表のその行を消してください。**両方に書いた設定では continuo は起動しません"+
+				"（キーは設定の他のどこにも名前が出てこない Status でなければなりません）。"+
+				"**ボードの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
+			state, state, rewriteTarget, state)
 	}
 	return fmt.Sprintf(
 		"continuo が知らない Status になったので、この issue の作業を止めました。\n%s"+
@@ -540,6 +560,9 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 // 戻り値の1つ目: 足す文。足すものが無ければ空文字。
 // 戻り値の2つ目: `automated_state_rewrite` へ1行足す案内を出したなら true
 // （呼び出し側は、そのとき `active_states` へ足す案内を出さない）。
+// **既に対応表にある Status のときは偽である。**その場合に `active_states` の案内を
+// 抑えるかどうかは、**呼び出し側が対応表を自分で引いて決める**（`unknownStateReason`）。
+// ここで決めさせると、人間が動かして早々に戻る道（この関数の1つ目の分岐）を塞げない。
 func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, bool) {
 	issue := rs.issue()
 	if !issue.StatusChangedByAutomation {
