@@ -29,6 +29,52 @@ func AutomatedRewriteTargets(table map[string]string) []string {
 	return out
 }
 
+// KnownStates は continuo が意味を知っている Status 名をすべて返す（設計 3-50 / 3-55）。
+//
+// **`StatesNamedInConfig` に `AutomatedRewriteTargets` を足したものである。**
+// **足す場所が2つあってはならない。**起動時にボードと照合する一覧
+// （`tracker` の `requiredStatesForBootstrap`）と、実行時に「知っている Status か」を
+// 判定する一覧（`orchestrator` の `knownStates`）は、**同じ集合でなければならない。**
+// 片方だけに足すと、**起動時の照合を通った設定が、実行時には知らない Status として扱われる。**
+//
+// **`automated_state_rewrite` のキーは入れない**（設計 3-54）。キーは
+// 「ボードの自動化が書く、continuo が知らない Status」であり、ここへ入れると
+// 知っている Status になって、書き戻しの分岐が二度と通らなくなる。
+//
+// **重複の判定は大文字小文字と前後の空白を無視する**（`StatesNamedInConfig` と同じ）。
+// トラッカーの Status の照合がそうしているので（SPEC.md 11.3）、ここだけ完全一致で
+// 数えると、綴りだけが違う同じ Status を2件として扱ってしまう。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// 戻り値: Status 名の並び（重複と空文字は落とす。順序は設定に書かれた順、
+// 戻す先だけは名前順で末尾に付く）。
+func KnownStates(cfg TrackerConfig) []string {
+	named := StatesNamedInConfig(cfg)
+	out := make([]string, 0, len(named)+len(cfg.AutomatedStateRewrite))
+	seen := map[string]bool{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		key := strings.ToLower(s)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, s)
+	}
+	for _, s := range named {
+		add(s)
+	}
+	// **`AutomatedRewriteTargets` が名前順に並べて返す。**
+	// この一覧は issue のコメントとログにそのまま載るので、実行のたびに順序が変わってはならない。
+	for _, target := range AutomatedRewriteTargets(cfg.AutomatedStateRewrite) {
+		add(target)
+	}
+	return out
+}
+
 // StatesNamedInConfig は、`tracker.automated_state_rewrite` のキー以外で設定に名前が
 // 出てくる Status をすべて返す（設計 3-50 / 3-54）。
 //

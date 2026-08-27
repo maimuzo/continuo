@@ -106,6 +106,12 @@ var expectedWarnings = map[string][]string{
 		"自動化が動かした Status を書き戻す回数が上限に達しました",
 		"continuo が知らない Status になったので worker を止めます",
 	},
+	// 設計 3-56: **戻す先の選択肢がボードから消えた状況を、このテストが作っている。**
+	// 書き込みが失敗し続けることも、そのあと人間へ渡すことも、どちらもテストが起こしている。
+	"TestAutomatedState_戻せない状態が続いたら人間へ渡す": {
+		"自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します",
+		"continuo が知らない Status になったので worker を止めます",
+	},
 	"TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる": {"権限の確認で止まっているので引き継ぎません"},
 	"TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す":        {"agent_status を判断できないので引き継ぎません"},
 	"TestRestore_agentの一覧を取れなくてもpaneを1つも閉じない":                           {"agent の一覧を取れません"},

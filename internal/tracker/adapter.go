@@ -151,43 +151,20 @@ func NewAdapter(
 }
 
 // requiredStatesForBootstrap は Bootstrap が照合すべき Status 名の一覧を、
-// cfg から重複無く集める。active_states・terminal_states・dispatch_state・failure_state・
-// status_signal_map の遷移先・automated_state_rewrite の戻す先をすべて含める
+// cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
+// failure_state・status_signal_map の遷移先・automated_state_rewrite の戻す先をすべて含める
 // （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
 //
-// **`automated_state_rewrite` は値（戻す先）だけを入れる。**キーは「ボードの自動化が書く、
+// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-55）。
+// 起動時に照合する一覧と、実行時に「知っている Status か」を判定する一覧
+// （orchestrator の `knownStates`）は同じ集合でなければならないので、**自前で集め直さない。**
+// 片方だけに足すと、**起動時の照合を通った設定が、実行時には知らない Status として扱われる。**
+//
+// **`automated_state_rewrite` は値（戻す先）だけが入る。**キーは「ボードの自動化が書く、
 // continuo が知らない Status」であり、**ここへ入れると知っている Status になってしまう**
 // ので、書き戻しの分岐そのものが二度と通らなくなる（設計 3-54）。
 func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
-	seen := make(map[string]bool)
-	var result []string
-	add := func(s string) {
-		if s == "" || seen[s] {
-			return
-		}
-		seen[s] = true
-		result = append(result, s)
-	}
-	for _, s := range cfg.ActiveStates {
-		add(s)
-	}
-	for _, s := range cfg.TerminalStates {
-		add(s)
-	}
-	add(cfg.DispatchState)
-	add(cfg.FailureState)
-	for _, target := range cfg.StatusSignalMap {
-		if target != nil {
-			add(*target)
-		}
-	}
-	// **戻す先を集めるのは `config.AutomatedRewriteTargets` の仕事である**（設計 3-54）。
-	// 起動時に照合する一覧と、実行時に知っている Status の一覧（orchestrator の
-	// `knownStates`）は同じ集合でなければならないので、集める処理を2箇所に置かない。
-	for _, target := range config.AutomatedRewriteTargets(cfg.AutomatedStateRewrite) {
-		add(target)
-	}
-	return result
+	return config.KnownStates(cfg)
 }
 
 // Bootstrap は起動時の検査を行う（設計 3-6）。

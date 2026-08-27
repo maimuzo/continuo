@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "b31ec412bb9644953ad5aab4c93557b8fedebe7d4ab09a7e550fcf9623864fe2", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
+// {"RUCM-CFG-SHA256": "2131e9a8ee86af8fdba4d479fe94444550b398f19e23439716928ec0c7ee73eb", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
 //
 // **ボードの組み込みの自動化が Status を動かしたときの検査である**（設計 3-54。issue #33）。
 //
@@ -11,6 +11,7 @@ package orchestrator_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -237,30 +238,25 @@ func TestAutomatedState_書き戻しを繰り返しても上限で止まる(t *t
 	}
 }
 
-// TestAutomatedState_書き戻した先が完了の状態なら次のturnを送らない は、設計 3-54 を確かめる。
+// TestAutomatedState_書き戻せなかったときは書き込みが見たStatusで判定し直す は、
+// 設計 3-56 を確かめる。
 //
-// 目的: **書き戻しは Status を別の値へ変える。**終わりかどうかの判定は書き戻しの**前**に
-// 済んでいるので、**やり直さないと「終わった issue へ次の指示を送る」ことになる。**
+// 目的: **戻す先は `active_states` に限られる**（設計 3-55）ので、書き戻しが成功したときの
+// 行き先は必ず「次の turn へ」である。**判定し直しが要るのは、書き戻せなかったときである。**
+// `UpdateStatus` は書く前にボードを取り直し、**`terminal_states` に入っていたら書かずに返す。**
+// そのとき返る「取り直した Status」を捨てると、**人間が終わりにした issue へ次の指示を送る。**
 //
-// 与える情報: `terminal_states` が `AI Done` だけのボードで、
-// 対応表が `Done` → `AI Done` である設定。人間が PR をマージし、
-// ボードの組み込みの自動化が turn の途中で `Done` を書く。
-// **`Done` は設定のどこにも出てこない**ので、continuo にとっては知らない Status である。
+// 与える情報: 書き戻しの `UpdateStatus` をテストが放すまで返さないようにしたうえで、
+// その最中に人間が Status を `Done`（`terminal_states`）へ動かす。
 // 成功条件:
-//   - Status を `AI Done` へ戻すこと
+//   - Status を書き換えないこと（人間が終わりにしたものを巻き戻さない）
 //   - **2回目の turn を送らないこと**（`agent.prompt` は1回のまま）
 //   - 印を外すこと（run を終えること）
-func TestAutomatedState_書き戻した先が完了の状態なら次のturnを送らない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
-		cfg.Tracker.VerifyStatesEvery = 0
-		cfg.Tracker.UnknownStateGraceMs = 0
-		cfg.Tracker.ActiveStates = []string{"Ready", "In Progress (AI)"}
-		cfg.Tracker.RunningState = "In Progress (AI)"
-		// **完了は `AI Done` である。**ボードの自動化が書く `Done` とは別の Status にする。
-		cfg.Tracker.TerminalStates = []string{"AI Done"}
-		cfg.Cleanup.OnStates = []string{"AI Done"}
-		cfg.Tracker.AutomatedStateRewrite = map[string]string{"Done": "AI Done"}
-	}})
+func TestAutomatedState_書き戻せなかったときは書き込みが見たStatusで判定し直す(t *testing.T) {
+	// **`automatedRewriteConfig` は設定の検査を通る組み合わせである**（設計 3-55）。
+	// 戻す先 `In Progress (AI)` は `active_states` にあり、キー `In Progress` は
+	// 設定のどこにも名前が出てこない。
+	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 	holdPrompt(fx)
 
@@ -269,13 +265,17 @@ func TestAutomatedState_書き戻した先が完了の状態なら次のturnを�
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// ★ 人間が PR をマージし、ボードの組み込みの自動化が `Done` を書いた。
-	fx.Tracker.SetStateByAutomation("PVTI_item188", "Done")
+	// ★ エージェントが PR を作り、ボードの組み込みの自動化が `In Progress` を書いた。
+	fx.Tracker.SetStateByAutomation("PVTI_item188", "In Progress")
 	// **エージェントのコメントを置いておく。**無いと run を終えるときに
 	// 「コメントの取り戻し」（設計 3-25 の9段）へ入り、そこでも `agent.prompt` を呼ぶ。
 	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
 
-	// turn が終わる（表明は `working`＝Status を動かさない）。
+	// ★ 書き戻しの書き込みを、テストが放すまで返さないようにする。
+	release, entered := fx.Tracker.HoldUpdate()
+	defer release()
+
+	// turn が終わる（表明は `working`＝Status を動かさない。書き込みは書き戻しの1回だけになる）。
 	transcriptDir := t.TempDir()
 	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
 		typedUserLine("p1", "実装してください"),
@@ -283,34 +283,48 @@ func TestAutomatedState_書き戻した先が完了の状態なら次のturnを�
 	})
 	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
 
-	waitFor(t, 20*time.Second, "自動化が動かした Status が戻る", func() bool {
-		return fx.Tracker.StateOf("PVTI_item188") == "AI Done"
-	})
+	select {
+	case <-entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("書き戻しの書き込みが始まりませんでした")
+	}
+
+	// ★ 書き込みが飛んでいる最中に、人間が「終わった」にした。
+	fx.Tracker.SetState("PVTI_item188", "Done")
+	release()
+
 	waitFor(t, 20*time.Second, "run が印から外れる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "Done" {
+		t.Errorf("人間が終わりにした Status を continuo が巻き戻している: got %q, want %q", got, "Done")
+	}
 	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got != 1 {
 		t.Fatalf("終わった issue へ次の指示を送っている: agent.prompt が %d 回（1回のはず）", got)
 	}
 }
 
-// TestAutomatedState_書き込みが失敗しても書き戻しの回数を食い潰さない は、設計 3-54 を確かめる。
+// TestAutomatedState_書き込みが失敗しても書き戻しの回数を食い潰さない は、設計 3-56 を確かめる。
 //
-// 目的: **上限は「continuo とボードが押し合っている」ことを数えるためにある。**
+// 目的: **押し合いの上限は「continuo とボードが押し合っている」ことを数えるためにある。**
 // 押し合いはボードが実際に動いたときにだけ起きる。**通信の失敗で数えてしまうと、
-// GitHub へ3回書けなかっただけで上限に達し、押し合いが1度も起きていない run が止まる。**
+// GitHub へ書けなかったぶんだけ押し合いの枠が減り、押し合いが1度も起きていない run が
+// 早々に止まる。**
 //
-// 与える情報: `UpdateStatus` が3回続けて失敗する状況。そのあと失敗を止める。
-// 成功条件: 4回目で書き戻せること。**上限に達したというログを出さないこと。**
+// 与える情報: `UpdateStatus` が2回続けて失敗する状況。そのあと失敗を止め、
+// **押し合いの上限（3回）ぶんの書き戻しを続けて行わせる。**
+// 成功条件: 失敗のあとでも3回とも書き戻せること。**上限に達したというログを出さないこと。**
+// **枠を食い潰していれば、2回の失敗で残りが1回になり、2回目の書き戻しで止まる。**
 func TestAutomatedState_書き込みが失敗しても書き戻しの回数を食い潰さない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
 	// **書き込みの失敗は、このテストが自分で起こしているものである。**
 	fx.AllowLog("自動化が動かした Status を戻せませんでした")
 	itemID := startRunForAutomation(t, fx)
 
-	// 上限は3回である（internal/orchestrator の maxAutomatedRewrites）。
+	// **「戻せない」の上限（3回）には届かせない**（internal/orchestrator の
+	// maxAutomatedRewriteFailures。届くとそこで人間へ渡すのが正しい振る舞いである）。
 	fx.Tracker.SetUpdateError(errors.New("GitHub へ書き込めませんでした（通信の失敗）"))
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= 2; i++ {
 		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
 		fx.Orc.Tick(context.Background())
 		want := i
@@ -319,13 +333,16 @@ func TestAutomatedState_書き込みが失敗しても書き戻しの回数を�
 		})
 	}
 
-	// 通信が戻った。**ここで書き戻せなければ、失敗で枠を食い潰している。**
+	// 通信が戻った。**押し合いの上限ぶん（3回）を続けて書き戻せなければ、失敗で枠を食い潰している。**
 	fx.Tracker.SetUpdateError(nil)
-	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 5*time.Second, "通信が戻ったら書き戻せる", func() bool {
-		return fx.Tracker.StateOf(itemID) == "In Progress (AI)"
-	})
+	for i := 1; i <= 3; i++ {
+		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+		fx.Orc.Tick(context.Background())
+		round := i
+		waitFor(t, 5*time.Second, fmt.Sprintf("%d 回目の書き戻しが通る", round), func() bool {
+			return fx.Tracker.StateOf(itemID) == "In Progress (AI)"
+		})
+	}
 
 	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
 		t.Fatalf("書き込みに失敗しただけなのに印を外している: 印は %d 件", got)
@@ -335,9 +352,143 @@ func TestAutomatedState_書き込みが失敗しても書き戻しの回数を�
 	}
 }
 
-// TestAutomatedState_手放した run へは書き戻さない は、設計 3-54 を確かめる。
+// TestAutomatedState_戻せない状態が続いたら人間へ渡す は、設計 3-56 を確かめる。
 //
-// 目的: **書き戻しは巡回のループとは別の goroutine で走る。**その最中に run を手放すと、
+// 目的: **人間がボードから戻す先の選択肢を消すと、書き込みが毎回失敗する。**
+// 押し合いの枠は失敗のたびに返るので上限には届かず、猶予の時計もその手前で戻るので始まらない。
+// **止める仕組みが1つも無いと、30秒ごとに失敗する書き込みを永久に打ち続け、
+// worker は止まらず、人間にも渡らない。**
+//
+// 与える情報: `UpdateStatus` がずっと失敗する状況。巡回を繰り返す。
+// 成功条件:
+//   - 「戻せない」の上限（3回）を超えたら worker を止め、止めた理由を issue へ書くこと
+//   - **その理由に「押し合っている」と書かないこと**（押し合いは1度も起きていない）
+//   - **人間へ渡すログを毎巡回出さないこと**（同じ行が流れ続けると他の行が埋もれる）
+func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
+	// **書き込みの失敗は、このテストが自分で起こしているものである。**
+	fx.AllowLog("自動化が動かした Status を戻せませんでした")
+	itemID := startRunForAutomation(t, fx)
+
+	// **ボードから戻す先の選択肢が消えた状況である。**次の巡回でも直らない。
+	fx.Tracker.SetUpdateError(errors.New("Status の選択肢 \"In Progress (AI)\" が見つかりません"))
+
+	// 上限は3回である（internal/orchestrator の maxAutomatedRewriteFailures）。
+	for i := 1; i <= 3; i++ {
+		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+		fx.Orc.Tick(context.Background())
+		want := i
+		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
+			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
+		})
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("上限に達する前に印を外している: 印は %d 件", got)
+	}
+
+	// 4回目。**ここからは書き戻さず、人間へ渡す。**
+	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatal("戻せないまま止めたのに、理由を issue へ1文字も残していない")
+	}
+	for _, want := range []string{
+		// 何が起きたか。
+		"書き込めませんでした",
+		// どうすればよいか（ボードの選択肢を作り直す）。
+		"In Progress (AI)",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("止めた理由のコメントに %q が無い:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "押し合") {
+		t.Errorf("押し合いは1度も起きていないのに、押し合いの話を書いている:\n%s", body)
+	}
+	logs := fx.Logs.String()
+	if got := strings.Count(logs, "戻せない状態が続いたので、ここからは人間へ渡します"); got != 1 {
+		t.Errorf("人間へ渡すログの本数が1本ではない: %d 本（巡回のたびに出すと他の行が埋もれる）", got)
+	}
+	if got := fx.Tracker.StateOf(itemID); got != "In Progress" {
+		t.Errorf("書き戻せていないのに Status が変わっている: got %q, want %q", got, "In Progress")
+	}
+}
+
+// TestAutomatedState_turnの終わりから書き戻すあいだも run を手放させない は、
+// 設計 3-56 を確かめる。
+//
+// 目的: **書き戻しは巡回からも turn の終わりからも走る。**turn の終わりの処理は
+// 表明を読む1秒ほどの待ちと2往復の書き込みを含む。**その間に巡回が「人間が動かした」と
+// 判断して run を手放すと、印が消えたあとに「作業中」の Status がボードへ書かれる。**
+// 次の巡回はそれを候補として拾い直し、**同じ worktree に2本目の Claude Code を立てる。**
+//
+// 与える情報: turn の終わりから走る書き戻しの `UpdateStatus` を、テストが放すまで
+// 返さないようにしたうえで、その最中に Status を `In Review` へ動かして
+// 巡回に worker を止めにかからせる。
+// 成功条件: 最後まで worker が1本のままであること（`agent.start` が1回のまま）。
+func TestAutomatedState_turnの終わりから書き戻すあいだもrunを手放させない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: automatedRewriteConfig(true)})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	holdPrompt(fx)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	startsBefore := fx.Herdr.CountMethod(herdr.MethodAgentStart)
+
+	// ★ エージェントが PR を作り、ボードの組み込みの自動化が `In Progress` を書いた。
+	fx.Tracker.SetStateByAutomation("PVTI_item188", "In Progress")
+
+	// ★ 書き戻しの書き込みを、テストが放すまで返さないようにする。
+	release, entered := fx.Tracker.HoldUpdate()
+	defer release()
+
+	// turn が終わる（表明は `working`＝Status を動かさない。書き込みは書き戻しの1回だけになる）。
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "続けます。\n\nCONTINUO-STATUS: working", false),
+	})
+	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+
+	select {
+	case <-entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("書き戻しの書き込みが始まりませんでした")
+	}
+
+	// ★ 書き込みが飛んでいる最中に、人間がレビューへ引き取った。
+	// **ここで run を手放すと、そのあと着地する書き込みが印の無い issue を作業中にする。**
+	fx.Tracker.SetState("PVTI_item188", "In Review")
+	fx.Orc.Tick(context.Background())
+	// **止める処理は別の goroutine で走る。**走り切る時間を与える。
+	time.Sleep(500 * time.Millisecond)
+
+	// 書き込みが着地する。
+	release()
+	waitFor(t, 10*time.Second, "書き戻しが着地する", func() bool {
+		return fx.Tracker.StateOf("PVTI_item188") == "In Progress (AI)"
+	})
+
+	// 次の巡回。**印が外れていれば、ここで2本目の worker が立つ。**
+	fx.Orc.Tick(context.Background())
+	time.Sleep(500 * time.Millisecond)
+
+	if got := fx.Herdr.CountMethod(herdr.MethodAgentStart) - startsBefore; got != 0 {
+		t.Fatalf("同じ worktree に2本目の worker を立てている: agent.start が追加で %d 回", got)
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("書き戻した issue の印が1件ではない: 印は %d 件", got)
+	}
+}
+
+// TestAutomatedState_手放した run へは書き戻さない は、設計 3-56 を確かめる。
+//
+// 目的: **巡回からの書き戻しは別の goroutine で走る。**その最中に run を手放すと、
 // **印が消えたあとに「作業中」の Status がボードへ書かれる。**次の巡回はそれを候補として
 // 拾い直し、**同じ worktree に2本目の Claude Code を立てる。**
 //

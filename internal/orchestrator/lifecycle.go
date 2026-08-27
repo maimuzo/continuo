@@ -19,7 +19,7 @@ import (
 //  3. Status を ID 指定で取り直し、その値で分岐する
 //     terminal_states           … コメントを確かめてから worktree と branch を片付ける
 //     active_states             … max_dispatch_turns に未到達なら次の turn、到達なら failure_state
-//     知らない Status（自動化が書いた）… 本来の Status へ戻し、**戻した先で判定し直す**（設計 3-54）
+//     知らない Status（自動化が書いた）… 本来の Status へ戻し、**書き込みの結果で判定し直す**（設計 3-54 / 3-56）
 //     どちらでもない（引き渡し） … コメントを確かめてから worker を止める。**worktree は消さない**
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -70,8 +70,8 @@ func (o *Orchestrator) decideAfterTurn(
 		return false
 	case current.State != "" && !o.isKnownState(current.State):
 		if mayRewrite {
-			if target, ok := o.claimAutomatedRewrite(rs, current); ok {
-				return o.rewriteAndDecide(ctx, rs, current, target)
+			if target, claim, ok := o.claimAutomatedRewrite(rs, current); ok {
+				return o.rewriteAndDecide(ctx, rs, current, target, claim)
 			}
 		}
 		// **猶予を置いて待った先である**（設計 3-50）。turn の終わりまで待ったが、
@@ -86,43 +86,84 @@ func (o *Orchestrator) decideAfterTurn(
 }
 
 // rewriteAndDecide は、ボードの自動化が動かした Status を書き戻し、
-// **戻した先の Status で「終わりかどうか」を判定し直す**（設計 3-54）。
+// **書き込みの結果が示す Status で「終わりかどうか」を判定し直す**（設計 3-56）。
 //
-// **判定し直さないと、終わった issue へ次のプロンプトを送る。**
-// 終わりかどうかの判定は書き戻しの**前**に済んでおり、書き戻しはそのあとで Status を
-// 別の値へ変える。**戻す先が `terminal_states` に入っていると、その issue は
-// もう終わっているのに turn ループが続く。**
+// **戻す先が `terminal_states` になることはない。**`tracker.automated_state_rewrite` の
+// 戻す先は `active_states` に入っていることを設定の検査が起動前に要求している
+// （`validateAutomatedStateRewrite`。設計 3-55）。**書けたときの行き先は必ず「次の turn へ」である。**
+// **`"Done": "AI Done"` のような終端への書き戻しは、そもそも起動しない。**
 //
-// **`tracker.automated_state_rewrite` の戻す先は `active_states` に入っていることを
-// `config.Validate` が要求している**ので、通常この判定はそのまま「次の turn へ」になる。
-// **それでも判定し直す。**書き戻しは `UpdateStatus` を通るので、
-// **書いた直後に人間やボードの自動化がさらに動かした値が返ることがある**（設計 3-34）。
+// **`UpdateStatus` は書いたあとに読み直さない。**返る `Previous` は
+// **書きに行く直前**のボードの値である。だから「書いた直後にさらに動かされた値」は、
+// この経路のどこにも現れない。**判定し直すのは、書けなかったときのためである。**
+//
+//	書けた（Wrote）             … ボードは target になっている。target は active_states なので次の turn へ
+//	既に target だった（Reached）… 同上
+//	Previous が返って Reached が偽 … **人間が `terminal_states` へ動かしていた**ので書き戻しを断られた。
+//	                              **その値で判定し直す**（終わった issue へ次の指示を送らない）
+//	Previous も空              … item がもう見えない。次の巡回が拾い直す
+//
+// **書き込みのあいだだけ `beginTerminal` で印を取る**（設計 3-56）。
+// turn の終わりの処理は表明を読む1秒ほどの待ちと2往復の書き込みを含む。
+// **その間に巡回が「人間が動かした」と判断して run を手放すと、印が消えたあとに
+// 「作業中」の Status がボードへ書かれる。**次の巡回はそれを候補として拾い直し、
+// **同じ worktree に2本目の Claude Code を立てる。**
+// **書き終えたら必ず印を返す**（`endTerminal`）。返さないと、このあと続く
+// `decideAfterTurn` の `finishRun` が1つも通らず、run が終われなくなる。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // current: 書き戻す前の issue。
 // target: 戻す先の Status 名。
+// claim: 確保した書き戻しの枠。
 // 戻り値: この run が終わったら true（turn ループを止める）。
 func (o *Orchestrator) rewriteAndDecide(
-	ctx context.Context, rs *runState, current tracker.Issue, target string,
+	ctx context.Context, rs *runState, current tracker.Issue, target string, claim *rewriteClaim,
 ) bool {
+	if !rs.beginTerminal() {
+		// 既に終わらせる処理が走っている（または run が終わっている）。
+		// **確保した枠を返し、turn ループを止める。**
+		claim.release()
+		o.logger.Info("自動化が動かした Status を戻しませんでした（この run は既に終わりに向かっています）",
+			"identifier", current.Identifier, "自動化が書いた Status", current.State, "戻す先", target)
+		return true
+	}
 	// **turn ループの goroutine なので、ここは同期で書きに行ってよい。**
-	if !o.rewriteAutomatedState(ctx, rs, current, target) {
+	moved, err := o.rewriteAutomatedState(ctx, rs, current, target, claim)
+	// **印はここで返す。**このあとの `decideAfterTurn` は `finishRun` を通り、
+	// そこで印を取り直す。持ったままだと、その取り直しが必ず失敗する。
+	rs.endTerminal()
+
+	next := target
+	switch {
+	case err != nil:
 		// **書き込みが失敗しても run は続ける。**失敗したのは continuo であって、
 		// 人間が引き渡したわけではない。次の巡回が同じ判定でもう一度書きに行く。
+		// **「戻せない」が続いたときは `claimAutomatedRewrite` が枠を渡さなくなり、
+		// 猶予の時計が始まって人間へ渡る**（設計 3-56）。
 		rs.clearUnknownState()
 		return false
+	case !moved.Reached && moved.Previous == "":
+		// item がもう見えない。次の巡回が取り直して判断する。
+		rs.clearUnknownState()
+		return false
+	case !moved.Reached:
+		// **書きに行く直前のボードは `terminal_states` に入っていた。**
+		// 人間が「終わった」にしたということなので、**その値で判定し直す。**
+		next = moved.Previous
 	}
-	// **ボードは戻す先の Status になっている。**その値で判定をやり直す。
-	moved := current
-	moved.State = target
-	// **書いたのは continuo である。**自動化が書いたという印を残したままにすると、
-	// このあと止める経路が「ボードの自動化が書きました」という的外れな案内を出す。
-	moved.StatusChangedBy = ""
-	moved.StatusChangedByAutomation = false
-	rs.setIssue(moved)
+
+	movedIssue := current
+	movedIssue.State = next
+	if next == target {
+		// **書いたのは continuo である。**自動化が書いたという印を残したままにすると、
+		// このあと止める経路が「ボードの自動化が書きました」という的外れな案内を出す。
+		movedIssue.StatusChangedBy = ""
+		movedIssue.StatusChangedByAutomation = false
+	}
+	rs.setIssue(movedIssue)
 	rs.clearUnknownState()
-	return o.decideAfterTurn(ctx, rs, moved, false)
+	return o.decideAfterTurn(ctx, rs, movedIssue, false)
 }
 
 // readSignals は turn が終わったあとに transcript を読んで表明を拾う（設計 3-25）。

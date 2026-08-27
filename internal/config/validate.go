@@ -478,7 +478,7 @@ func validateExpanded(cfg *Config) error {
 	return nil
 }
 
-// validateAutomatedStateRewrite は `tracker.automated_state_rewrite` を検査する（設計 3-54）。
+// validateAutomatedStateRewrite は `tracker.automated_state_rewrite` を検査する（設計 3-55）。
 //
 // **5つを見る。**どれも「設定は通るのに、実行時は1度も効かない」か
 // 「効いた結果が壊れる」ものである。

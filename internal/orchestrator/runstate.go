@@ -206,11 +206,25 @@ type runState struct {
 	// 既に入っているときは触らない。知っている Status に戻ったら消す。
 	unknownStateSince time.Time
 	// automatedRewrites は、ボードの自動化が動かした Status を書き戻した回数である
-	// （設計 3-54）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
+	// （設計 3-56）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
 	//
 	// **上限を持たないと止まらない。**書き戻した直後に自動化がまた動く組み合わせがあると、
 	// continuo とボードが同じ issue の Status を押し合い続ける。
 	automatedRewrites map[string]int
+	// automatedRewriteFailures は、書き戻しが**ボードを1ミリも動かせないまま終わった**回数である
+	// （設計 3-56）。キーは automatedRewrites と同じ作り方である。
+	//
+	// **押し合いの上限とは別に数える。**ボードが動かなかったぶんは押し合いの枠を返すので、
+	// **返すだけだと「毎回失敗する書き込みを永久に打ち続ける」ことになる。**
+	// 人間が戻す先の選択肢をボードから消した場合がそれである。
+	// **ボードが目的の Status になったら 0 に戻す。**
+	automatedRewriteFailures map[string]int
+	// automatedRewriteHandedOff は、その Status について「ここからは人間へ渡す」と
+	// 既にログへ出したかである（設計 3-56）。キーは automatedRewrites と同じ作り方である。
+	//
+	// **出すのは1度だけである。**上限に達したあとも巡回は30秒ごとに同じ判定へ来るので、
+	// 毎回出すと猶予のあいだに同じ行が20回ほど流れ、他の行が埋もれる。
+	automatedRewriteHandedOff map[string]bool
 	// workerStopCtx は「この世代の worker を止めた」ことを turn ループへ伝える経路である
 	// （設計 3-51）。
 	//
@@ -650,35 +664,26 @@ func (rs *runState) clearUnknownState() {
 	rs.unknownStateSince = time.Time{}
 }
 
-// claimAutomatedRewrite は「自動化が動かした Status を書き戻す」1回ぶんを確保する
-// （設計 3-54）。
+// rewriteClaim は「自動化が動かした Status を書き戻す」1回ぶんの確保である（設計 3-56）。
 //
-// **確保できたときだけ true を返し、その場で1回ぶん数える。**巡回は30秒ごとに走るので、
-// 数える前に書きに行くと、書き込みが終わる前の巡回が同じ書き戻しを何本も立てる。
+// **枠を取った側だけが返せる形にしてある。**枠を Status 名だけで返す作りにすると、
+// **巡回の goroutine と turn ループが同じ Status について同時に取ったとき、
+// 片方の失敗がもう片方の枠を返してしまう。**返った枠は次の巡回がまた取れるので、
+// **ボードが実際に動いた回数が上限を超える。**逆に、同じ失敗の経路を2度通ると
+// **1回の確保で2回ぶん返し、押し合いの数え方が壊れる。**
 //
-// **数えるのは Status ごとである。**自動化が `In Progress` と `Done` の両方を書く運用で、
-// 片方の回数がもう片方を食い潰さないようにする。
-//
-// state: 自動化が書いた Status 名（前後の空白と大文字小文字は無視して数える）。
-// limit: 1つの Status につき書き戻してよい回数。
-// 戻り値の1つ目: 確保できたら true。上限に達していたら false。
-// 戻り値の2つ目: この Status をこれまでに書き戻した回数（確保した分を含まない）。
-func (rs *runState) claimAutomatedRewrite(state string, limit int) (bool, int) {
-	key := strings.ToLower(strings.TrimSpace(state))
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	done := rs.automatedRewrites[key]
-	if done >= limit {
-		return false, done
-	}
-	if rs.automatedRewrites == nil {
-		rs.automatedRewrites = map[string]int{}
-	}
-	rs.automatedRewrites[key] = done + 1
-	return true, done
+// **`release` は何度呼んでも1回しか返さない**（`sync.Once`）。
+// **nil に対して呼んでも安全である**（確保できなかったときの後始末を分岐で書かずに済む）。
+type rewriteClaim struct {
+	// rs は枠を取った run である。
+	rs *runState
+	// state は自動化が書いた Status 名（確保したときの綴りのまま）。
+	state string
+	// once は「返すのは1回だけ」を守る。
+	once sync.Once
 }
 
-// releaseAutomatedRewrite は、確保した書き戻しの1回ぶんを返す（設計 3-54）。
+// release は確保した書き戻しの1回ぶんを返す（設計 3-56）。
 //
 // **ボードが1ミリも動かなかったときに呼ぶ。**通信が失敗した・item がもう見えない・
 // 既にその値だった・`terminal_states` に入っていたので書かなかった、のいずれかである。
@@ -688,6 +693,42 @@ func (rs *runState) claimAutomatedRewrite(state string, limit int) (bool, int) {
 // **押し合いはボードが動いたときにだけ起きる。**GitHub への書き込みが3回続けて
 // 失敗しただけで上限に達すると、**その run はそこから書き戻しをやめ、次に自動化が
 // 動いた時点で worker ごと止まる。**
+func (c *rewriteClaim) release() {
+	if c == nil {
+		return
+	}
+	c.once.Do(func() { c.rs.releaseAutomatedRewrite(c.state) })
+}
+
+// claimAutomatedRewrite は「自動化が動かした Status を書き戻す」1回ぶんを確保する
+// （設計 3-56）。
+//
+// **確保できたときだけ handle を返し、その場で1回ぶん数える。**巡回は30秒ごとに走るので、
+// 数える前に書きに行くと、書き込みが終わる前の巡回が同じ書き戻しを何本も立てる。
+//
+// **数えるのは Status ごとである。**自動化が `In Progress` と `Done` の両方を書く運用で、
+// 片方の回数がもう片方を食い潰さないようにする。
+//
+// state: 自動化が書いた Status 名（前後の空白と大文字小文字は無視して数える）。
+// limit: 1つの Status につき書き戻してよい回数。
+// 戻り値の1つ目: 確保できたら handle。上限に達していたら nil。
+// 戻り値の2つ目: この Status をこれまでに書き戻した回数（確保した分を含まない）。
+func (rs *runState) claimAutomatedRewrite(state string, limit int) (*rewriteClaim, int) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	done := rs.automatedRewrites[key]
+	if done >= limit {
+		return nil, done
+	}
+	if rs.automatedRewrites == nil {
+		rs.automatedRewrites = map[string]int{}
+	}
+	rs.automatedRewrites[key] = done + 1
+	return &rewriteClaim{rs: rs, state: state}, done
+}
+
+// releaseAutomatedRewrite は枠を1つ返す。**呼ぶのは `rewriteClaim.release` だけである。**
 //
 // **0 より下へは減らさない。**確保していないのに返す呼び出しがあっても、
 // 上限の意味が壊れないようにする。
@@ -702,6 +743,73 @@ func (rs *runState) releaseAutomatedRewrite(state string) {
 		return
 	}
 	rs.automatedRewrites[key] = done - 1
+}
+
+// noteAutomatedRewriteFailure は「書き戻したが、ボードは1ミリも動かなかった」を数える
+// （設計 3-56）。
+//
+// **押し合いの枠とは別に数える。**枠は失敗のたびに返るので、
+// **返すだけでは、毎回失敗する書き込みを永久に打ち続ける run ができる。**
+//
+// state: 自動化が書いた Status 名。
+// add: 数える回数。**待っても直らない失敗では上限をそのまま渡す**（1回で人間へ渡すため）。
+// 戻り値: 数えたあとの回数。
+func (rs *runState) noteAutomatedRewriteFailure(state string, add int) int {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.automatedRewriteFailures == nil {
+		rs.automatedRewriteFailures = map[string]int{}
+	}
+	rs.automatedRewriteFailures[key] += add
+	return rs.automatedRewriteFailures[key]
+}
+
+// clearAutomatedRewriteFailures は「戻せなかった」回数を 0 に戻す（設計 3-56）。
+//
+// **ボードが目的の Status になったときに呼ぶ。**一度でも戻せたのなら、
+// それまでの失敗は一時的なものだったということである。
+//
+// state: 自動化が書いた Status 名。
+func (rs *runState) clearAutomatedRewriteFailures(state string) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	delete(rs.automatedRewriteFailures, key)
+}
+
+// automatedRewriteFailureCount は「戻せなかった」回数を返す（設計 3-56）。
+//
+// state: 自動化が書いた Status 名。
+// 戻り値: 続けて戻せなかった回数。
+func (rs *runState) automatedRewriteFailureCount(state string) int {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.automatedRewriteFailures[key]
+}
+
+// noteAutomatedRewriteHandoff は「ここからは人間へ渡す」を**最初の1回だけ**真で返す
+// （設計 3-56）。
+//
+// **巡回は30秒ごとに同じ判定へ来る。**毎回ログに出すと、猶予のあいだに同じ行が
+// 20回ほど流れて他の行が埋もれる。**対応表に無かったときの分岐が1行も出さないのと
+// 同じ理由である**（案内は issue のコメントに書く）。
+//
+// state: 自動化が書いた Status 名。
+// 戻り値: この Status について初めて人間へ渡すなら true。
+func (rs *runState) noteAutomatedRewriteHandoff(state string) bool {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.automatedRewriteHandedOff[key] {
+		return false
+	}
+	if rs.automatedRewriteHandedOff == nil {
+		rs.automatedRewriteHandedOff = map[string]bool{}
+	}
+	rs.automatedRewriteHandedOff[key] = true
+	return true
 }
 
 // turnLoopActive は turn ループの goroutine が走っているかを返す（設計 3-50）。

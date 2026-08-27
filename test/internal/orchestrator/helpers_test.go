@@ -974,6 +974,12 @@ func (ft *fakeTracker) FetchIssueByIdentifier(_ context.Context, identifier stri
 	ft.record("FetchIssueByIdentifier")
 	for _, issue := range ft.board {
 		if strings.EqualFold(issue.Identifier, identifier) {
+			// **識別子での照合は「誰が Status を書いたか」を持たない**（設計 3-54）。
+			// 候補の取得と同じく、本物のクエリには timeline を足していない
+			// （`TestStatusAuthor_識別子での照合はtimelineを要求しない`）。
+			// **落とさないと、ここに頼った実装が書けてしまう。**
+			issue.StatusChangedByAutomation = false
+			issue.StatusChangedBy = ""
 			return issue, true, nil
 		}
 	}
