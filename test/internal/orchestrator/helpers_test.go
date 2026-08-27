@@ -946,13 +946,34 @@ func (ft *fakeTracker) SetExtraCandidates(issues ...tracker.Issue) {
 }
 
 // FetchIssuesByIDs は ID 指定で取り直す。見つからない ID は結果から省く。
+// **「いまの Status を書いたのは誰か」も一緒に返す**（設計 3-54）。
 func (ft *fakeTracker) FetchIssuesByIDs(_ context.Context, ids []string) ([]tracker.Issue, error) {
+	return ft.fetchByIDs("FetchIssuesByIDs", ids, true)
+}
+
+// FetchIssuesByIDsWithoutTimeline は ID 指定で取り直すが、
+// **「いまの Status を書いたのは誰か」は返さない**（設計 3-61）。
+//
+// **本物と同じく `StatusChangedBy` と `StatusChangedByAutomation` を落とす。**
+// 落とさないと、記録を読む実装がこちらの経路でも通ってしまい、
+// **テストが「記録を取らずに済ませた」ことを検出できなくなる**
+// （`FetchIssueByIdentifier` と同じ理由）。
+func (ft *fakeTracker) FetchIssuesByIDsWithoutTimeline(_ context.Context, ids []string) ([]tracker.Issue, error) {
+	return ft.fetchByIDs("FetchIssuesByIDsWithoutTimeline", ids, false)
+}
+
+// fetchByIDs は ID 指定の取り直しの本体である。
+//
+// call: 呼び出しの記録に残す名前。
+// ids: 取り直す project item ID の一覧。
+// withTimeline: 「いまの Status を書いたのは誰か」を残すか。
+func (ft *fakeTracker) fetchByIDs(call string, ids []string, withTimeline bool) ([]tracker.Issue, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	ft.record("FetchIssuesByIDs")
+	ft.record(call)
 	if ft.idsErr != nil {
 		return nil, ft.idsErr
 	}
@@ -960,11 +981,24 @@ func (ft *fakeTracker) FetchIssuesByIDs(_ context.Context, ids []string) ([]trac
 	for _, id := range ids {
 		for _, issue := range ft.board {
 			if issue.ID == id {
+				if !withTimeline {
+					issue.StatusChangedByAutomation = false
+					issue.StatusChangedBy = ""
+				}
 				out = append(out, issue)
 			}
 		}
 	}
 	return out, nil
+}
+
+// CountIDRefreshes は ID 指定の取り直しを呼んだ回数を、timeline の有無をまとめて数える。
+//
+// **リクエストの本数を数える場面と、「取り直しが走ったか」を待ち合わせる場面のためのものである。**
+// どちらもクエリの中身ではなく「1本打ったか」を見ている（設計 3-31 / 3-61）。
+// **どちらの経路を通ったかを見たいときは `CountCall` を名前で呼ぶこと。**
+func (ft *fakeTracker) CountIDRefreshes() int {
+	return ft.CountCall("FetchIssuesByIDs") + ft.CountCall("FetchIssuesByIDsWithoutTimeline")
 }
 
 // FetchIssueByIdentifier は識別子で1件引く。**見つからないことをエラーにしない。**

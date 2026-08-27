@@ -30,7 +30,9 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	rs.setMissingSignal(len(signals) == 0)
 	o.applySignals(ctx, rs, signals)
 
-	current, ok := o.refreshIssue(ctx, rs)
+	// **ここだけは「誰が Status を書いたか」も取る**（設計 3-61）。この写しを `rs.setIssue` で
+	// 控え、`decideAfterTurn` が「ボードの自動化が書いたのか」を判定する。
+	current, ok := o.refreshIssue(ctx, rs, true)
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
 		o.abandonRun(ctx, rs, "この issue がボードから見えなくなりました。"+
@@ -395,12 +397,27 @@ func lookupSignalTarget(m map[string]*string, value string) (*string, bool) {
 
 // refreshIssue は issue を ID 指定で取り直す。
 //
+// **「いまの Status を書いたのは誰か」を取るかどうかは、呼ぶ側が渡す**（設計 3-61）。
+// **関数単位では分けられない。**この1本を、記録を読む `handleTurnEnd` と
+// 読まない `finishRunClaimed` の両方が通るからである。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
+// withTimeline: 記録も取るか。**真で呼ぶのは `handleTurnEnd` だけである。**
+// そこだけが取り直した issue を `rs.setIssue` で控え、知らない Status の判定
+// （`decideAfterTurn` → `claimAutomatedRewrite` / `finishRunUnknownState`）がそれを読む。
 // 戻り値の1つ目: 取り直した issue。
 // 戻り値の2つ目: ボードから見えていれば true。
-func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState) (tracker.Issue, bool) {
-	issues, err := o.tracker.FetchIssuesByIDs(ctx, []string{rs.IssueID})
+func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimeline bool) (tracker.Issue, bool) {
+	var (
+		issues []tracker.Issue
+		err    error
+	)
+	if withTimeline {
+		issues, err = o.tracker.FetchIssuesByIDs(ctx, []string{rs.IssueID})
+	} else {
+		issues, err = o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{rs.IssueID})
+	}
 	if err != nil {
 		o.logger.Warn("issue を取り直せません", "identifier", rs.issue().Identifier, "error", err)
 		return rs.issue(), true
@@ -489,7 +506,9 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	// **最後まで通った run は、過去の失敗の記録を消す。**次に失敗したら0から数え直す。
 	o.forgetFailure(rs.IssueID)
 
-	current, ok := o.refreshIssue(ctx, rs)
+	// **「誰が Status を書いたか」は取らない**（設計 3-61）。ここで見るのは `State` だけであり、
+	// **`rs.setIssue` でも控えない**ので、記録を読む経路へ空の写しが流れることも無い。
+	current, ok := o.refreshIssue(ctx, rs, false)
 	if ok && o.ws.ShouldCleanup(current.State) {
 		o.cleanupWorktree(ctx, rs)
 	}

@@ -5704,6 +5704,52 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 `os.Lstat` の結果がディレクトリなら、差し替えに進む前に
 `WORKFLOW.md を作成できません: <パス>: is a directory` で止める（変更前と同じ文言である）。
 
+### 3-61. 「誰が Status を書いたか」は、それを読む2つの呼び出し元でだけ取る
+
+**言いたいこと。**ID 指定の取り直しは6箇所から呼ばれるが、**記録（timeline）を読むのは2つだけである。**
+残る4つも取っていたので、使わない50件のイベントを巡回のたび・着手のたび・起動のたびに読んでいた。
+**インタフェースを2本に分け、呼ぶ側が選ぶ。**
+
+**呼び出し元の内訳**（[internal/orchestrator/orchestrator.go](../../internal/orchestrator/orchestrator.go) の `Tracker` に同じ表を置いた）。
+
+| 呼び出し元 | 記録を | 何を見るか |
+| --- | --- | --- |
+| `reconcileRunning`（実行中の run の照合） | **読む** | 知らない Status を書き戻すか止めるかを決める（3-54） |
+| `handleTurnEnd`（turn の終わりの取り直し） | **読む** | 同上を turn の終わりに決める |
+| `finishRunClaimed`（片付けの判定） | 読まない | `cleanup.on_states` に入っているか |
+| `reconcileWorktrees`（worktree の照合） | 読まない | `cleanup.on_states` / `active_states` に入っているか |
+| `dispatchStatusAllowed`（着手してよいかの判定） | 読まない | `active_states` に入っているか |
+| `refetchByIdentities`（復元の取り直し） | 読まない | Status と識別子 |
+
+**採る形。**`Tracker` に `FetchIssuesByIDsWithoutTimeline` を足す。アダプタは
+`byIDsWithoutTimelineQueryTemplate`（`UpdateStatus` が既に使っていた軽いクエリ）を呼ぶだけである。
+**`refreshIssue` は引数で受ける。**読む `handleTurnEnd` と読まない `finishRunClaimed` が
+同じ関数を通るので、**関数を分ける形では表せない。**
+
+**「読まない」に記録を渡さなくてよい理由。**記録を実際に使う判断
+（`handleUnknownState` / `finishRunUnknownState` / `automatedStateHint`）は `rs.issue()` から読む。
+**そこへ入る直前には、必ず `reconcileRunning` か `handleTurnEnd` の `rs.setIssue` が通っている。**
+復元が入れた写しは記録を持たないが、**その写しで判断する経路は無い**（最初の巡回が入れ直す）。
+`finishRunClaimed` の取り直しは `rs.setIssue` で控えないので、空の写しが漏れることも無い。
+
+**採らなかった案。**
+
+| 案 | 中身 | 採らない理由 |
+| --- | --- | --- |
+| **引数で渡す** | `FetchIssuesByIDs(ctx, ids, withTimeline bool)` の1本にする | 呼び出し側が真偽値だけを見ることになり、**表と照らさないと何を頼んだのか読めない。**偽の tracker で呼び分けを数えるのも難しくなる |
+| **常に取って捨てる** | いままでどおり全部取り、使わない側は無視する | **点数は返る node の数で決まる**（3-31）。捨てる前に払っている |
+| **記録だけ別に引く** | 要るときに timeline を2本目のリクエストで引く | **読む側は巡回のたびに要る。**1本が2本になり、いちばん多い経路が重くなる |
+
+**戻らないように検査を置いた。**
+[test/internal/orchestrator/timeline_scope_test.go](../../test/internal/orchestrator/timeline_scope_test.go) が
+6つの呼び出し元それぞれについて、**どちらの取り直しを呼んだか**を呼び出しの並びで見る。
+[test/internal/tracker/status_author_test.go](../../test/internal/tracker/status_author_test.go) が
+**軽い側のクエリに `timelineItems` が入っていないこと**を送信内容で見る。
+**偽の tracker は軽い側で `StatusChangedBy` と `StatusChangedByAutomation` を落とす**
+（本物と同じ振る舞い。落とさないと、記録に頼った実装がそちらの経路でも書けてしまう）。
+
+---
+
 ---
 
 ## 4. 人間が決めたこと

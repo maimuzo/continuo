@@ -74,6 +74,8 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		return
 	}
 
+	// **ここは「誰が Status を書いたか」も取る**（設計 3-61）。知らない Status になったとき、
+	// 書き戻すか止めるかをその記録で決める（`handleUnknownState`）。
 	issues, err := o.tracker.FetchIssuesByIDs(ctx, ids)
 	if err != nil {
 		o.logger.Warn("実行中の issue を取り直せません（この巡回では照合しません）", "error", err)
@@ -159,7 +161,9 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 		return
 	}
 
-	issues, err := o.tracker.FetchIssuesByIDs(ctx, ids)
+	// **「誰が Status を書いたか」は取らない**（設計 3-61）。見るのは `State` が
+	// `cleanup.on_states` に入っているかだけである。
+	issues, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, ids)
 	if err != nil {
 		o.logger.Warn("worktree の照合で issue を取り直せません", "error", err)
 		return

@@ -130,7 +130,10 @@ func TestTick_巡回1回のリクエストが3本を超えない(t *testing.T) {
 	fx.Tracker.ResetCalls()
 	fx.Orc.Tick(context.Background())
 
-	reads := fx.Tracker.CountCall("FetchIssuesByStates") + fx.Tracker.CountCall("FetchIssuesByIDs")
+	// **ID 指定の取り直しは timeline の有無で2本に分かれる**（設計 3-61）。
+	// **ここで数えているのはリクエストの本数なので、両方を足す。**
+	// 片方だけを数えると、軽い経路へ移った取り直しが数から消え、見積りの検査が素通りする。
+	reads := fx.Tracker.CountCall("FetchIssuesByStates") + fx.Tracker.CountIDRefreshes()
 	if reads > 3 {
 		t.Fatalf("巡回1回の読み取りが3本を超えた: got %d (%v)", reads, fx.Tracker.Calls())
 	}
@@ -630,8 +633,10 @@ func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *
 
 	// **段2 の取り直しが走ったことを待ち合わせの目印にする。**許可リストに落ちる場合、
 	// continuo は UpdateStatus を1回も呼ばないので、そちらでは待てない。
+	// **timeline の有無で経路が分かれるので、両方を数える**（設計 3-61。
+	// 段2 が使うのは記録を取らない側だが、待ち合わせの意味は「取り直しが1本走った」である）。
 	waitFor(t, 10*time.Second, "着手の試みが終わる", func() bool {
-		return fx.Tracker.CountCall("FetchIssuesByIDs") > 0
+		return fx.Tracker.CountIDRefreshes() > 0
 	})
 	time.Sleep(500 * time.Millisecond)
 

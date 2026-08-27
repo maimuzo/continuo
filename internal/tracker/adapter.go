@@ -34,7 +34,8 @@ const maxItemPages = 20
 //     各選択肢の ID を解決し、設定と選択肢名が一致するかを検査する。
 //     **これを呼ぶ前は FetchIssuesByStates 等を呼んでも動くが、UpdateStatus は
 //     必ず失敗する**（書き込みに要る ID が無いため）。
-//  3. FetchIssuesByStates / FetchIssuesByIDs / UpdateStatus / FetchComments / PostComment を
+//  3. FetchIssuesByStates / FetchIssuesByIDs / FetchIssuesByIDsWithoutTimeline /
+//     UpdateStatus / FetchComments / PostComment を
 //     必要に応じて呼ぶ
 //
 // **Status の選択肢そのものを書き換える mutation（選択肢の指定が全件置き換えとして扱われ、
@@ -689,8 +690,8 @@ func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q strin
 // （SPEC.md 11.1 の fetch_issues_by_ids。設計「その3」）。実行中 issue の照合に使う。
 //
 // **「いまの Status を書いたのは誰か」（timeline）も一緒に取る**（設計 3-54）。
-// **Status を書く前の取り直しは `fetchIssuesByIDs` を timeline 無しで呼ぶ**
-// （`UpdateStatus`）。そちらは timeline を1バイトも読まない。
+// **読まない呼び出し元は `FetchIssuesByIDsWithoutTimeline` を呼ぶ**（設計 3-61）。
+// **どの呼び出し元がどちらを使うかの一覧は `orchestrator.Tracker` のコメントにある。**
 //
 // **見つからない ID は「もう見えない」として扱い、結果から省く。**合成した状態を作らない
 // （SPEC.md: "IDs no longer visible in the configured scope are omitted; the orchestrator
@@ -720,12 +721,35 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 	return a.fetchIssuesByIDs(ctx, ids, true)
 }
 
+// FetchIssuesByIDsWithoutTimeline は ID 指定の取り直しのうち、
+// **「いまの Status を書いたのは誰か」（timeline）を取らない**ものである（設計 3-61）。
+//
+// **省くのはその1点だけである。**見つからない ID を省く扱いも、候補の集合に居ない item
+// （archive 済み・Status 未設定・Issue でも DraftIssue でもない content）を省く扱いも、
+// provider 側の異常をエラーにする扱いも `FetchIssuesByIDs` と同じである。
+// **`Issue.StatusChangedBy` と `Issue.StatusChangedByAutomation` はゼロ値になる。**
+//
+// **なぜ2本に分けるか。**timeline はネストした connection を1本ぶら下げるので、
+// **使わなくても返る node の数だけ点数が増える**（設計 3-31）。取り直しは巡回ごと・
+// turn ごと・着手ごとに走るので、読まない側を軽い経路へ寄せる。
+//
+// **どの呼び出し元がどちらを使うかの一覧は `orchestrator.Tracker` のコメントにある。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// ids: 取り直す project item ID の一覧（Issue.ID）。空なら GraphQL へリクエストを送らず、
+// 空の結果を返す。
+// 戻り値: FetchIssuesByIDs と同じ（timeline から埋める2つのフィールドだけがゼロ値になる）。
+func (a *Adapter) FetchIssuesByIDsWithoutTimeline(ctx context.Context, ids []string) ([]Issue, error) {
+	return a.fetchIssuesByIDs(ctx, ids, false)
+}
+
 // fetchIssuesByIDs は ID 指定の取り直しの本体である。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // ids: 取り直す project item ID の一覧。
 // withTimeline: 「いまの Status を書いたのは誰か」も取るかどうか。
-// **偽で呼ぶのは Status を書く前の取り直しだけである**（`UpdateStatus`）。
+// **偽で呼ぶのは2つである。**Status を書く前の取り直し（`UpdateStatus`）と、
+// 記録を読まない呼び出し元のための `FetchIssuesByIDsWithoutTimeline` である。
 // 偽のとき `Issue.StatusChangedBy` と `Issue.StatusChangedByAutomation` はゼロ値になる。
 // 戻り値: FetchIssuesByIDs と同じ。
 func (a *Adapter) fetchIssuesByIDs(ctx context.Context, ids []string, withTimeline bool) ([]Issue, error) {
