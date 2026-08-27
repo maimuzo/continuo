@@ -741,24 +741,48 @@ const (
 	// 止まったときに出る。**Status は park の値のままであり、continuo は戻さない。**
 	KeyAbandonParkLeftBehind Key = "abandon.park_left_behind"
 
-	// KeyAbandonErrPaneList はherdr へ pane の一覧を問い合わせられないときに出る。
+	// KeyAbandonErrPaneList は、**pane が閉じるのを待っている最中に** herdr へ
+	// pane の一覧を問い合わせられないときに出る。
+	//
+	// **越え方を書かない。**ここの `--force` は「上限まで待っても閉じなかったら越えろ」で
+	// あって、herdr が答えなければその待ちを1度も行えていない。**書くと、越えられない
+	// ものを越えられると読ませる。**
 	KeyAbandonErrPaneList Key = "abandon.err_pane_list"
+	// KeyAbandonErrPaneListCheck は、**消す前の pane の生死の検査で** herdr へ
+	// pane の一覧を問い合わせられないときに出る。
+	//
+	// **越え方（`--force`）を書く。**こちらの `--force` は「確かめずに消せ」なので、
+	// herdr が答えなくても越えられる。**`abandon.err_pane_list` と鍵を分けているのは、
+	// 片方に越え方を書くともう片方にも出てしまうからである。**
+	KeyAbandonErrPaneListCheck Key = "abandon.err_pane_list_check"
 	// KeyAbandonWaitingPane はpane が閉じるのを待っているあいだに出る。
 	KeyAbandonWaitingPane Key = "abandon.waiting_pane"
 	// KeyAbandonPaneGone はpane が閉じたときに出る。
 	KeyAbandonPaneGone Key = "abandon.pane_gone"
 	// KeyAbandonErrPaneRemains は上限までに pane が閉じなかったときに出る。
 	KeyAbandonErrPaneRemains Key = "abandon.err_pane_remains"
-	// KeyAbandonErrPaneAlive は、**手を離させる書き込みを行っていないのに** pane が
-	// 生きているときに出る。**継続監視が動いていても、ボードの Status が
-	// `tracker.active_states` の外なら park は何も書かずに戻るので、ここへ来る。**
-	// だから「continuo は動いていません」と断定しない。
-	KeyAbandonErrPaneAlive Key = "abandon.err_pane_alive"
+	// KeyAbandonErrPaneAliveNotRunning は、**継続監視が動いていないと判定した実行で**
+	// pane が生きているときに出る。
+	//
+	// **ロックファイルの場所を疑わせる。**ロックファイルの場所は環境変数
+	// （`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR`）で決まるので、launchd から
+	// 起動した継続監視と端末から叩いた abandon で食い違いうる。
+	KeyAbandonErrPaneAliveNotRunning Key = "abandon.err_pane_alive_not_running"
+	// KeyAbandonErrPaneAliveRunning は、**継続監視は動いているが、ボードの Status が
+	// `tracker.active_states` の外だったので手を離させなかった実行で** pane が
+	// 生きているときに出る。
+	//
+	// **ロックファイルの食い違いには触れない。**動いていると判定できているので、
+	// そこを疑わせると読む人を無いものを探しに行かせる。
+	// **鍵を2つに分けているのは、呼ぶ側がどちらの原因かを知っているからである。**
+	// 1つの文言で受けると「『continuo は動いていません』と表示されていたなら」のような
+	// 条件付きの案内になり、**別の文言の文面を直書きすることになる。**
+	KeyAbandonErrPaneAliveRunning Key = "abandon.err_pane_alive_running"
 	// KeyAbandonPaneCheckSkipped は、herdr へ問い合わせられないまま `--force` が
 	// 指定されていて、pane の生死を確かめずに消すときに出る。
 	KeyAbandonPaneCheckSkipped Key = "abandon.pane_check_skipped"
 	// KeyAbandonPaneAliveForced は、pane が生きているのに `--force` が指定されていて、
-	// pane ごと消すときに出る。**err_pane_alive と言い分ける**（あちらは止まる）。
+	// pane ごと消すときに出る。**err_pane_alive_* と言い分ける**（あちらは止まる）。
 	KeyAbandonPaneAliveForced Key = "abandon.pane_alive_forced"
 	// KeyAbandonErrPaneWaitInterrupted は pane が閉じるのを待っている途中で
 	// `SIGINT` / `SIGTERM` を受けたときに出る。**時間切れとは言い分ける。**
@@ -2204,10 +2228,12 @@ var allKeys = []Key{
 	KeyAbandonParkNotWritten,
 	KeyAbandonParkLeftBehind,
 	KeyAbandonErrPaneList,
+	KeyAbandonErrPaneListCheck,
 	KeyAbandonWaitingPane,
 	KeyAbandonPaneGone,
 	KeyAbandonErrPaneRemains,
-	KeyAbandonErrPaneAlive,
+	KeyAbandonErrPaneAliveNotRunning,
+	KeyAbandonErrPaneAliveRunning,
 	KeyAbandonPaneCheckSkipped,
 	KeyAbandonPaneAliveForced,
 	KeyAbandonErrPaneWaitInterrupted,
