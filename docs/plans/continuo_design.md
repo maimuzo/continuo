@@ -131,6 +131,7 @@
 - 3-1 全体構成
 - 3-2 turn の終わりは hooks から continuo へ直接通知させる
 - 3-3 run を指す識別子を、消えない2箇所に書く
+- 3-3b 再着手は前回のセッションへ復帰する
 - 3-4 状態は in-memory。永続化層を作らない
 - 3-5 完了検知の3層（完了検知の3層を分ける）
 - 3-6 起動時の検査を厚くする
@@ -168,7 +169,7 @@
 - 3-37 間違えて着手した issue は `continuo abandon` で戻す
 - 3-37-1 `--dry-run` は段1 の後半を通らない
 - 3-37-2 取れたロックは実行の最後まで握る
-- 3-37-3 動いていないと判定したときこそ pane を確かめる
+- 3-37-3 手を離させていないときこそ pane を確かめる
 - 3-37-4 消す相手は身元ファイルだけで決めない
 - 3-37-5 書き込む先の Status は消す前に確かめる
 
@@ -597,6 +598,53 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 
 ---
 
+### 2-6. ボードの自動化が動かした Status は、`actor` の型でしか見分けられない
+
+**言いたいこと。**`ProjectV2ItemStatusChangedEvent.wasAutomated` は、**組み込みの自動化が動かしたときでも `false` を返す。**
+見分けに使えるのは `actor` である。**自動化は `Bot`、人間は `User`** になる。
+どちらも同じ1リクエストで返るので、読む項目を変えても API の消費は増えない。
+
+**実測（2026-08-26）。**一時ボード（`<ACCOUNT>` の project #11。実測後に消す前提で作った）で、
+`octocat/hello-world#1` に `Closes #1` を書いた PR を1本作り、timeline を引いた。
+**本番のボード（project #3）と実機確認用のボード（project #10）には書き込んでいない。**
+
+| 何が動かしたか | `wasAutomated` | `actor.__typename` | `actor.login` |
+| --- | --- | --- | --- |
+| 組み込みの `Pull request linked to issue`（`Todo` → `In Progress`） | **`false`** | `Bot` | `github-project-automation` |
+| 組み込みの `Item added to project`（未設定 → `Todo`） | **`false`** | `Bot` | `github-project-automation` |
+| 人間が画面や API で動かしたもの | `false` | `User` | （そのアカウント名） |
+
+**応答の原文**（`project.number` で自分のボードに絞れることも同時に確かめた）。
+
+```json
+{ "createdAt": "2026-08-26T12:32:35Z", "previousStatus": "Todo", "status": "In Progress",
+  "wasAutomated": false,
+  "actor": { "__typename": "Bot", "login": "github-project-automation", "id": "BOT_kgDOBr0Lng" },
+  "project": { "number": 11 } }
+```
+
+**公開リポジトリでも同じだった。**`nodejs/node#65525` / `#65516` の
+`github-project-automation` による遷移も `wasAutomated` は `false` である（2026-08-26 に読み取りのみで確認）。
+
+**`wasAutomated` が何のための項目かは分かっていない。**GraphQL の説明文は
+"Did this event result from workflow automation?"（**訳:** このイベントは workflow の自動化から生じたものか？）だが、
+**組み込みの自動化では真にならない。**GitHub Actions から書いた場合の値は測っていない。
+
+**新しいボードは自動化6件がすべて有効な状態で作られる。**`gh project create` で作った project #11 の
+`workflows` は6件とも `enabled: true` だった。**この事故は既定の設定のまま起きる。**
+
+**リクエストは増やさずに取れる。**ID 指定の取り直し（`nodes(ids:)`）の `content` の
+`... on Issue` に `timelineItems` を足すと、Status の値と同じ1リクエストで返ることを実測した
+（2026-08-26、project #10 の item に対して読み取りのみ）。
+**`project.number` で自分のボードに絞る必要がある。**1つの issue が複数のボードに載っていると、
+他のボードのイベントが同じ配列に混ざって返る（実測でも #10 と #11 の両方が返った）。
+
+**ボードの自動化の有効・無効は API から変えられない。**GraphQL の mutation は
+`deleteProjectV2Workflow` しか無く、有効化・無効化に当たるものが無い（2026-08-26 に introspection で確認）。
+**切り替えは GitHub の画面からしかできない。**
+
+---
+
 ## 3. 設計
 
 ### 3-1. 全体構成
@@ -868,12 +916,13 @@ pane（`pane.rename`）と herdr workspace（`worktree.open` の `label` と `wo
 そのため continuo は `worktree.open` の直後に `workspace.rename` を1回掛けて書き直す。
 **失敗しても致命にしない。**label は表示名であり、復元の照合には使わないためである。
 
-> **セッション UUID は起動のたびに新しく作る。使い回してはならない。**
-> 一度使った UUID をもう一度渡すと、Claude Code が `Error: Session ID ... is already in use.` を出して起動に失敗する（実測）。
+> **`--session-id` に渡す UUID は、そのつど新しく作る。使い回してはならない。**
+> 一度使った UUID をもう一度 `--session-id` に渡すと、Claude Code が `Error: Session ID ... is already in use.` を出して起動に失敗する（実測）。
 > **しかも herdr 経由だと `timed out waiting for agent startup` としか返らないので、continuo は起動に失敗したとき pane の画面を読んで理由を判定する必要がある。**
-> 再起動して run を引き継ぐときは、**`--resume <元の UUID>` で戻る**（実測で確認済み）。
+> **既にあるセッションへ入り直すときは `--resume <元の UUID>` を使う**（実測で確認済み）。
 > **戻すのも herdr の pane 経由である**（3-25 の9段）。continuo が `claude` を直接 exec することはない。
-> **新しい turn を始めるために新規のセッションを立てる場合だけ、新しい UUID を作る。**
+> **どちらを使うかは 3-3b が決める。**worktree を新しく作る着手が `--session-id`、
+> 既存の worktree を使う再着手が `--resume` である。
 
 **metadata の tokens は「起動後に自分で貼り直す揮発キャッシュ」として扱う。**復元の根拠にしない。書くときはキーに `continuo_` の接頭辞を付け、**値が80文字を超えないことを continuo 側で検査する**（超えても herdr はエラーを返さず黙って切る）。
 
@@ -893,6 +942,58 @@ pane（`pane.rename`）と herdr workspace（`worktree.open` の `label` と `wo
 
 > **「agent 名を issue の URL にし、turn 数も書き足す」案は採らない。**agent 名に URL は入らず（32文字の制限）、
 > turn 数を書き足す先（metadata の tokens）は再起動で消えるためである（いずれも実測）。**turn 数の復元は諦める**（`SPEC.md` 14.3 も *"It does not mean retry timers, running sessions, or live worker state survive process restart."* — **訳:** リトライのタイマー、実行中のセッション、稼働中の worker の状態がプロセスの再起動を生き延びることを意味しない — と明記している）。
+
+### 3-3b. 再着手は前回のセッションへ復帰する
+
+**言いたいこと。**同じ issue にもう一度着手するとき、前回のセッションへ `--resume` で戻る。
+**それでも送る本文は1回目のもの（5-3）である。**戻れなければ新しいセッションで始め直す。
+
+**どちらの起動フラグを使うか。**着手の段5b で決める。**復帰しても身元ファイルの `session_uuid` は書き換えない。**
+
+| worktree | 身元ファイルの `session_uuid` | 起動フラグ |
+| --- | --- | --- |
+| 新しく作った | 無い | `--session-id <新しい UUID>` |
+| 再利用する | 入っている | `--resume <その UUID>` |
+| 再利用する | 空・壊れている | `--session-id <新しい UUID>` |
+
+**なぜ復帰するのか。**`In Review` から差し戻された issue は前回の続きである。会話履歴を
+捨てると、**何をどこまでやったかを issue とコードから推測し直すことになる。**それでも送るのは
+1回目の本文（5-3）である。差し戻しの場面では人間が PR にレビューを書いているが、
+**「issue を読むこと」「紐づく PR も読むこと」が入っているのは1回目の本文だけ**で、継続の指示
+（5-4）には無い。5-4 だけを送ると**新しく付いたレビューを読まないまま進む。**
+
+**「会話履歴があるか」と「1回目の本文を送るか」を1つの値で兼ねない。**復帰した run は会話履歴を
+持つのに1回目の本文を送るので、**2つは一致しない。**`runState` が持つのは**「次の turn は1回目の
+本文である」の意味だけ**（`SendFirstPrompt`）。会話履歴の有無はどの分岐でも使わない。
+
+**トークンの集計の基準（`tokensBase`）は、復帰したときには作り直さない。**transcript のファイル名は
+セッション UUID なので（3-15）、**復帰すると同じファイルである。**作り直すとその中身をもう一度足し、
+**使った量を実際の2倍に見せる。**
+
+> **実測（2026-08-26、Claude Code 2.1.246）。**`--session-id <UUID>` のセッションを終了させ、別の pane で
+> `--resume <同じ UUID>` を叩いた。hook が名乗る `session_id` と `transcript_path` は**復帰の前後で同じ値**で、
+> 前の turn の内容を覚えていた。herdr の `agent_session.value` も同じだった。
+
+**復帰に失敗したら新しいセッションで始め直す。**`~/.claude/projects/` は利用者が消せる。**実測（2026-08-26）。**
+`claude --resume <無い UUID>` は終了コード 1 で、標準エラーへ `No conversation found with session ID: <UUID>` を出す。
+**herdr 経由だと `agent.start` が `{"error":{"code":"timeout","message":"timed out waiting for agent startup"}}` を返し、
+pane はシェルのプロンプトへ戻る**（**同じ pane でそのまま起動し直せる**）。
+
+始め直すときは、UUID を採り直して hook の索引を張り替え、`tokensBase` を作り直し、**身元ファイルの
+`session_uuid` も書き直す。**書き直さないと、次の再着手も同じ死んだ UUID へ復帰しにいき、毎回
+`herdr.startup_timeout_ms` を捨てる。**ログは3通りを書き分ける。**
+
+```text
+level=INFO msg="前回のセッションに復帰して再着手します（会話履歴を引き継ぎます）" identifier=octocat/hello-world#188 session_uuid=8aebf7af-… worktree=/…/worktrees/…
+level=INFO msg="新しいセッションを立てて着手します（会話履歴はありません）" identifier=octocat/hello-world#188 session_uuid=e1f2… worktree=/…/worktrees/…
+level=WARN msg="前回のセッションへ復帰できなかったので、新しいセッションで始め直します" identifier=octocat/hello-world#188 復帰しようとしたセッション=8aebf7af-… 新しいセッション=e1f2… error="…"
+```
+
+| 採らなかった案 | 採らない理由 |
+| --- | --- |
+| 復帰したら継続の指示（5-4）を送る | **差し戻しで付いた PR のレビューを読まない**（5-4 に「紐づく PR も読むこと」が無い） |
+| 復帰したかで送る本文を変える | 同じ「再着手」で本文が2通りになり、**どちらを送ったかをログから追えない** |
+| 復帰できなければ人間へ渡す | **利用者が `~/.claude/projects/` を消しただけで issue が `failure_state` へ落ちる** |
 
 ### 3-4. 状態は in-memory。永続化層を作らない
 
@@ -1321,6 +1422,55 @@ func Normalize(raw string) (SafeName, []Warning)
 毎巡回で見る必要が無い。**その1回は候補の取得に追加のリクエストとして乗る（cost 1）。
 
 **削除に失敗しても turn ループや dispatch を止めない。**
+
+#### 3-9e. 片付ける Status は、終わったとみなす Status の中から選ぶ
+
+**言いたいこと。**`cleanup.on_states` に `tracker.terminal_states` の外の値を書くと、
+**「終わっていない」と判定した直後に worktree を片付ける。**
+**起動は止めない。警告で知らせる。**
+
+**2つのキーは別の問いに答える。**
+
+| キー | 何に答えるか | 外れた Status になると何をするか |
+| --- | --- | --- |
+| `tracker.terminal_states` | その issue は終わったか | 終わっていないとみなす。知らない Status として worker を止める（3-10） |
+| `cleanup.on_states` | その issue の worktree を片付けてよいか | 片付ける |
+
+**噛み合っていないと、この2つが同じ巡回で同時に起きる。**
+ボードの組み込みの自動化が PR のマージで `Done` を書く運用で、実際にこの形になった
+（`tracker.terminal_states: ["AI Done"]` と `cleanup.on_states: ["Done"]`）。
+
+**なぜ起動を止めないのか。**壊れるものが無いからである。
+`cleanup.on_states` と `tracker.active_states` の重なりは**走っている worktree を消す**ので、
+`internal/config/validate.go` が起動前に止める。**こちらは片付けの筋が通らないだけである。**
+**止めると、この形の `WORKFLOW.md` で動いている人の continuo が、版を上げた瞬間に起動しなくなる。**
+
+**知らせる先は2つ。判定は `internal/config` の `CleanupStatesOutsideTerminal` 1つに置く。**
+`cleanup.enabled` が偽なら片付けそのものが走らないので、**何も言わない。**
+**大文字小文字と前後の空白だけの違いは同じ値とみなす**（`containsStateFold` と同じ比べ方）。
+
+| いつ | どこが出すか | 出るもの |
+| --- | --- | --- |
+| 起動時に1回 | `internal/daemon/daemon.go` の `WarnCleanupStates` | `level=WARN` のログ1行 |
+| `continuo doctor` | `internal/doctor/checks.go` の `checkCleanupStates` | 見出し語 `片付けの状態` に `!` |
+
+**起動時のログ**（`terminal_states: ["AI Done"]` / `on_states: ["Done"]` のとき）。
+
+```text
+level=WARN msg="cleanup.on_states の \"Done\" が tracker.terminal_states にありません（終わったとみなさない Status で worktree を片付けます）。tracker.terminal_states に \"Done\" を足すか、cleanup.on_states から外してください" cleanup.on_states="\"Done\"" tracker.terminal_states="\"AI Done\""
+```
+
+**`continuo doctor` の出力。**
+
+```text
+! 片付けの状態    cleanup.on_states に、tracker.terminal_states の外の Status があります（1件）
+                  cleanup.on_states の "Done" が tracker.terminal_states にありません（終わったとみなさない Status で worktree を片付けます）
+                  → tracker.terminal_states に "Done" を足すか、cleanup.on_states から "Done" を外してください
+```
+
+**雛形は最初から揃えてある。**`continuo init` が置く `WORKFLOW.md` も、
+`continuo setup` が書き換えた結果（`tracker.terminal_states` と `cleanup.on_states` の
+両方へ同じ完了の Status を書く。3-32d）も、この関係を満たす。
 
 #### 3-9b. リポジトリの親 workspace を閉じる条件（段3b）
 
@@ -1822,6 +1972,8 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
 5. Claude Code の設定ファイルを worktree の外に作る（3-12）
    → hook 7種（3-2 の一覧）と permissions.allow を1ファイルに書く
      hook のコマンド行には socket の絶対パスを埋め込む
+5b. どのセッションで起動するかを決める（3-3b）
+   → worktree を再利用していて身元ファイルに session_uuid があれば --resume、無ければ新しく採番して --session-id
 6. worktree の中に身元ファイルを書く（3-18）
    → ここまで来れば、落ちても再起動後に身元が分かる
 7. workspace_hooks の before_run を実行する（失敗したら致命）
@@ -1831,7 +1983,7 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
    → pane.rename を呼び、label に `owner/repo/issues/N` を書く（3-3）
 9. その pane で Claude Code を起動する（agent.start）
    → 起動フラグは args に載せる（2-1）。
-     --settings <設定ファイル> / --session-id <UUID> / --permission-mode dontAsk
+     --settings <設定ファイル> / --session-id <UUID> か --resume <UUID>（段5b）/ --permission-mode dontAsk
    → **環境変数は設定ファイル（--settings）の env に書く。**pane にも agent.start にも渡さない
      （どちらにも env を渡す手段が無い。設定ファイル経由で届くことは実測で確認済み。3-12）
    → 起動直後は agent_pane_busy が返ることがあるのでリトライする（2-1）
@@ -2510,6 +2662,10 @@ run 中の Claude Code は前回のパスを持ったままなので、引き継
 そのうえで、何をしたかを issue のコメントに残す。
 ```
 
+**表明を受けて continuo がボードへ書き込んだら、何から何へ動かしたかを issue に残す**（3-29）。
+**「AI がステータスを変更した」の実体は、エージェントの表明を受けて continuo が書き込んだことである。**
+その書き込みが issue に何も残らないと、人間には誰がいつ動かしたのかが分からない。
+
 #### 印は transcript から読む。`last_assistant_message` は使わない
 
 **`last_assistant_message` は使えない。**印を書いた17件の turn すべてで、印が入っていなかった（0/17）。
@@ -2648,7 +2804,7 @@ type runState struct {
     → 段2 の Status の書き込みは行う（取り直して terminal_states でなければ書く）
     → 段3 の worktree は再利用する（身元ファイルの takeover_count を1つ増やす）
     → 段5 の設定ファイルは作り直す（socket のパスが変わっているかもしれない）
-    → セッション UUID は新しく採番する（一度使った UUID は再利用できない。3-3）
+    → セッションは身元ファイルの UUID へ `--resume` で復帰する（3-3b）
     → RetryCount はそのまま。BackoffUntil はゼロ値へ戻す
 ```
 
@@ -3122,9 +3278,60 @@ gh issue view <issue の URL> --comments
 | いつ読むか | 何のために |
 | --- | --- |
 | turn が終わったあと | **エージェントがコメントを書いたかどうかを確かめる。**書いていなければ**セッションを復元して書かせる**（3-25） |
-| continuo 自身がコメントを書くとき | **`self_marker` を付ける。**continuo がコメントを書くのは**人間へ引き渡すときの通知だけ**である（打ち切り・stall・信頼が無い）。**成果の要約は書かない** |
+| continuo 自身がコメントを書くとき | **`self_marker` を付ける。**continuo が書くのは**引き渡しの通知**と**Status を動かした記録**の2つだけである（次項）。**成果の要約は書かない** |
 
 **したがって設定の `tracker.provider.comments` は残す。ただし用途が変わる。**
+
+#### continuo が Status を動かしたら、何から何へ動かしたかを issue に残す
+
+**言いたいこと。**ボードの Status を書くのは continuo であって、エージェントではない（3-25）。
+**その書き込みは、いま issue のどこにも残っていない。**ログに「Status を書き込みました」と出るだけで、
+issue を読む人間には**誰がいつ何を根拠に動かしたのかが見えない**（#33 の申告がこれである）。
+
+**採る形。書き込みが実際に起きたときだけ、1件のコメントを残す。**
+
+```text
+<!-- continuo:self -->
+Status を **In Progress → In Review** へ動かしました。
+
+- なぜ: 担当している Claude Code が `CONTINUO-STATUS: review` と表明したためです
+- いつ: 2026-08-26 14:03 (JST)
+- 書いたのは continuo です（人間の操作ではありません）
+```
+
+**「なぜ」は書き込んだ場所からそのまま決まる。**
+
+| 区分 | どこから来るか | どこに書くか |
+| --- | --- | --- |
+| エージェントの表明 | `applySignals` | **独立したコメントを1件** |
+| 着手 | `startRun` | **独立したコメントを1件** |
+| 再起動後に着手待ちへ戻す | `applyOrphanRunningAction` | **独立したコメントを1件** |
+| 打ち切り・失敗 | `failRun` / `abandonRunClaimed` / `failCommentRecovery` / `moveToFailure` | **引き渡しの通知の本文に1行** |
+| 人間が動かした Status | どこでもない | **書かない**（動かしたのは continuo ではない） |
+
+**打ち切り・失敗の経路で独立したコメントを作らないのは、同じことを言うコメントが2件並ぶからである。**
+引き渡しの通知は既に「なぜ人間に渡したか」を書いており、Status の遷移はその一部である。
+
+**「何から」は `UpdateStatus` が書き込む直前に ID 指定で取り直した値である**（`tracker.StatusWrite` の
+`Previous`）。**呼び出し側が持っている issue の写しは使わない。**写しは巡回で読んだ時点の値であり、
+**古い値を書くと、この記録そのものが嘘をつく。**
+
+**書き込みが起きなければ書かない。**次の3つがこれに当たる。
+
+| 起きなかった理由 | 判定 |
+| --- | --- |
+| 表明の遷移先が null（既定では `working`） | そもそも `UpdateStatus` を呼ばない |
+| item がもう見えない / 取り直した結果が `blockedStates` に入っていた | `StatusWrite.Reached` が偽 |
+| 取り直した値が既に目的の値だった（同じ値は書きに行かない） | `Reached` は真だが `StatusWrite.Wrote` が偽 |
+
+**設定のキーは足さない。**振る舞いを切りたいという要望が出ていない一方で、キーを足すと
+**既に動かしている人の `WORKFLOW.md` にその行が無いまま既定値で動く。**
+
+**コメントは増えない。**1つの run で Status が動くのは、着手のときと終わるときの2回である。
+作業中の turn でエージェントが出す `working` は null に対応づいており、20 turn 回しても書き込みは0件である。
+
+**この投稿が `hasRunComment` の判定をすり抜けることはない。**`self_marker` が付くので
+`FetchComments` の結果から外れる（エージェントが何をしたか書いたかの判定には数えない）。
 
 #### エージェントが読めることを保証する
 
@@ -3195,7 +3402,7 @@ cost = (1 + 親の件数 × ネストした connection の本数) ÷ 100 を四�
 | --- | --- | --- |
 | 同時リクエスト | 100まで | **収まる。**continuo は逐次に投げる |
 | GraphQL エンドポイント | **2,000ポイント/分。**読み取り1回=1点、**mutation を含む1回=5点** | 収まる。1分あたり最大10リクエスト程度 |
-| 書き込みの間隔 | **1秒以上あけることが推奨されている** | **continuo が書くのは Status と引き渡しの通知だけで、もともと間隔が空く** |
+| 書き込みの間隔 | **1秒以上あけることが推奨されている** | **continuo が書くのは Status と自分のコメント（引き渡しの通知・Status を動かした記録）だけで、もともと間隔が空く** |
 
 **超えたときの挙動に注意する。**`rateLimit` の枠を使い切ると **HTTP 200 のままエラーメッセージが返る。**
 **ステータスコードだけを見ていると気づけない。**応答の `errors` を必ず見る。
@@ -3261,6 +3468,8 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | **`workspace.root` に書けるか** | 使い捨てのディレクトリを**実際に作って消す** | **置き場所は設定にしか書いていない**ので、設定が読めているときだけ走る。書けないと着手は worktree を用意する段で必ず落ちる |
 | Claude の資格情報 | **`rate_limit.token_source` が指す先から取れるか**（ファイル / Keychain / 環境変数） | **Keychain も読む。**上限を掛けて固まらないようにする（下記） |
 | **ボードを読めるか** | **`Bootstrap` を呼んで project と Status フィールドを解決し、`active_states` の選択肢名が全部あるかを照合する** | **`gh` の認証が通っても、ここで落ちることがある**（project が見つからない・トークンの取り出しに失敗・レートリミット）。**選択肢名の不一致は `✗` にする。**巡回が無言で0件を返す原因になる（3-6） |
+| **紛らわしい Status の組が無いか** | **ボードの選択肢名を全部読み、設定に書いた名前と「同じに見える」「含んでいる」の組になっていないかを見る**（6-14） | **記号は `!`。**continuo は動くので起動は止めない。**`Bootstrap` も `config.Validate` も、綴りが違えば素通りする** |
+| **片付ける Status が終わったとみなす Status に収まっているか** | **`cleanup.on_states` の値が `tracker.terminal_states` に全部あるかを見る**（3-9e） | **記号は `!`。**ボードを1バイトも読まない（設定の2つのキーを突き合わせるだけである）。**`config.Validate` は `tracker.active_states` との重なりしか見ていない** |
 
 **doctor は Keychain を読む。**
 
@@ -3297,8 +3506,10 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 **検査の依存関係。**
 
 ```text
-設定ファイル ─┬─ herdr（設定の protocol と照合する）
-              └─ gh の認証 ── ボードを読める ─┬─ clone（対象リポジトリが決まる）
+設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる。3-9e）
+              ├─ herdr（設定の protocol と照合する）
+              └─ gh の認証 ── ボードを読める ─┬─ Status の名前（選択肢名を照合する）
+                                              ├─ clone（対象リポジトリが決まる）
                                               └─ 信頼登録（clone のパスが要る）
 資格情報（token_source が指す先だけを見る。ほかの検査に依存しないので飛ばさない）
 ```
@@ -3501,7 +3712,7 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
     review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき
     blocked: "Blocked"                      # 判断を仰ぎたいとき、または失敗したとき
   active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
-  terminal_states: ["Done"]                 # 終わったとみなす Status。ここへ移った issue の worktree を片付ける
+  terminal_states: ["Done"]                 # 終わったとみなす Status。下の cleanup.on_states は、この一覧の中から選ぶこと
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
@@ -4178,7 +4389,7 @@ CI から呼ぶときに使う。
 | 2 | `workspace.Scan` で走査し、**身元ファイルの `issue_url` で照合する。**パスを owner / repo / 番号から組み立てない（`workspace.root` や `branch_template` を変えている環境で空振りする）。**照合できたものは置き場所のパスで検算する**（3-37-4）。**0件のときは、規則から組み立てた branch が残っていないかを見る**（3-37-9）。`--to` を指定していたら、動かしていないことを1行出す（3-37-5）。**2件以上は止める**（どれを消すかは人間が中身を見て決める） |
 | 2 の後 | **これから書きうる Status の値を確かめる**（3-37-5）。`--to` と park の先がボードの選択肢にあるか、park の先が `tracker.active_states` に入っていないか。**読むだけなので `--dry-run` でも通す** |
 | 3 | 失われるもの（issue と Status・worktree・branch と base・herdr の workspace と pane・コミットされていない変更のファイル数・push されていない commit の件数）を見せる。**ファイル数は `git status --porcelain` の読み取りが上限で打ち切られたら「%d ファイル以上」と出す**（`Leftover.DirtyFilesTruncated`。打ち切った行数をそのまま出すと、失う量を実際より少なく見せる）。**`--dry-run` で継続監視が動いているときは、実行したら Status をどこへ動かすかも予告する。**`--dry-run` はここで終わる。**失うものがあって `--force` が無ければ、何も消さずに終了コード 1** |
-| 4 | **継続監視が動いていないと判定したときは、消す前に pane の生死を確かめる**（3-37-3）。そのうえで `workspace.Cleanup` を呼ぶ。worktree・pane・herdr の workspace・branch がまとめて消える（3-9） |
+| 4 | **手を離させる書き込みが入らなかったときは、消す前に pane の生死を確かめる**（3-37-3）。そのうえで `workspace.Cleanup` を呼ぶ。worktree・pane・herdr の workspace・branch がまとめて消える（3-9） |
 | 5 | `--to` があれば Status をその値へ動かす。**無ければ動かさない** |
 
 **仕様は [docs/spec/usecases/particular_case/着手を取り消す.rucm.md](../spec/usecases/particular_case/着手を取り消す.rucm.md) が持つ。**
@@ -4188,7 +4399,10 @@ CI から呼ぶときに使う。
 「何も消していません」だけだと、**ボードも元のままだ**と読まれ、その issue が置き去りになる。
 **continuo は元へ戻さない。**戻す先は `tracker.active_states` の値なので、**戻した瞬間に
 動いている継続監視がその issue を拾い直しうる。**戻すかどうかは人間がボードで決める。
-**消せたときは言わない**（そのときは段5 が Status について応答する）。
+**言わずに済ませるのは、段5 が Status について応答し終えたときだけである。**
+**「消せたかどうか」で決めない。**片付けに成功しても `--to` の書き込みに失敗すると
+段5 は Status の在りかを言わずに終わるので、そこで黙ると、**worktree は消えたのに
+Status が park の値のまま残ったことを誰も言わない。**
 
 **なぜ Status を既定で動かさないのか。**
 
@@ -4203,8 +4417,14 @@ CI から呼ぶときに使う。
 | `terminal_states`（`Done`） | **やっていないものが完了として残る。**しかも 3-9 の片付けの経路がもう一度走る |
 
 だから既定では「Status は動かしていません。ボードで決めてください。」と1行出して終わる
-（[internal/abandon/abandon.go:683-688](../../internal/abandon/abandon.go#L683-L688)）。
+（[internal/abandon/abandon.go](../../internal/abandon/abandon.go) の `moveStatus`）。
 **動かす先を知っているのは人間だけなので、`--to` で明示させる。**
+
+**ただし park で動かした実行には、その1行を出さない。**手を離させるために Status を
+動かしたのは continuo である。**そこで「動かしていません」と言うのは嘘であるうえ、
+その1行は「park の値のまま残っています」を黙らせる**ので、
+**ボードが `Blocked` になったことを誰も言わないまま終了コード 0 で終わる。**
+`--to` が無く park で動かしたときは、**段5 は何も言わず、park の在りかを言う1行に任せる。**
 
 **判断は書き直さない。**コミットされていない変更と push されていない commit の判定は
 [internal/workspace/inspect.go:80-144](../../internal/workspace/inspect.go#L80-L144) の `Inspect` が
@@ -4226,6 +4446,12 @@ README は「先に `--dry-run` を叩け」と勧めているので、**勧め�
 **予告が要る理由。**`--dry-run` はボードへ1文字も書かないので、
 **書かれる値をここで見せなければ、人間は実行して初めてそれを知る。**
 
+**継続監視が動いているときの冒頭の1行も、`--dry-run` では言い換える**
+（`abandon.running_dry_run`）。通常の1行（`abandon.running`）は「先に手を離させます」と
+続けるが、**`--dry-run` は段1 の後半を通らないので、しない約束をしたことになる。**
+**鍵を分ける。**1つの鍵にまとめて条件で文面を組み立てると、
+**別の文言の文面を直書きすることになる**（3-37-3 と同じ理由）。
+
 **通していたときに起きたこと。**継続監視が動いていると Status が `failure_state` へ実際に書き込まれ、
 pane が閉じるまで最大50秒待ち、**閉じなければ一覧を1行も出さずに終了コード 1 で終わっていた。**
 
@@ -4240,17 +4466,19 @@ pane が閉じるまで最大50秒待ち、**閉じなければ一覧を1行も�
 | --- | --- |
 | abandon が git と herdr の RPC を叩いているあいだ（秒単位）に継続監視が起動し、**その worktree を消しにいく** | 起動しようとした継続監視は「既に起動しています」で止まる。**消されるより望ましい** |
 
-### 3-37-3. 動いていないと判定したときこそ pane を確かめる
+### 3-37-3. 手を離させていないときこそ pane を確かめる
 
 **言いたいこと。**ロックだけを根拠に消しにいってはならない。
 **ロックファイルの場所は環境変数で決まるので、食い違うことがある。**
+**この検査へ来るのは「継続監視が動いていない」実行だけではない。**動いていても、
+ボードの Status が `tracker.active_states` の外なら手を離させる書き込みは入らず、ここへ落ちる。
 
 | 何で場所が決まるか | 食い違う場面 |
 | --- | --- |
 | ロックファイル: `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` | launchd から起動した継続監視と、端末から叩いた `continuo abandon` |
 | herdr の socket: 設定の `herdr.socket`（**環境変数では動かない**） | 食い違わない |
 
-**採るやり方。**段3 と段4 のあいだに、**継続監視が動いていないと判定したときだけ** pane を引き、
+**採るやり方。**段3 と段4 のあいだに、**手を離させる書き込みが入らなかったときだけ** pane を引き、
 **1件でもあれば待たずに止まる**（手を離させていない以上、待っても閉じない）。
 **ただし `--force` は越えられる。**越えたことを1行で言ってから進む。
 
@@ -4262,7 +4490,17 @@ pane が閉じるまで最大50秒待ち、**閉じなければ一覧を1行も�
 
 **「herdr が答えられない」より「pane がある」を厳しくしない。**前者で消せて後者で消せないのは
 筋が通らない。**止まる文言には `--force` で越えられることを書く**（越え方が分からなければ、
-止まったことと詰まったことは同じである）。
+止まったことと詰まったことは同じである）。**pane の一覧を引けないときの文言は、
+pane 待ちと同じ鍵を使う**（`abandon.err_pane_list_check`）。**どちらの段でも `--force` で
+越えられるからである**（3-37-12）。**鍵を分けてはならない。**分けると、同じ失敗に対して
+越え方を書いた文言と書いていない文言が並び、**どちらが本当かを読む側が決められない。**
+
+**pane が生きて止まるときの文言も、原因ごとに鍵を分ける**
+（`abandon.err_pane_alive_not_running` と `abandon.err_pane_alive_running`）。
+**どちらの原因かは呼ぶ側が知っている**ので、渡せば条件付きの案内が要らなくなる。
+1つにまとめると「『continuo は動いていません』と表示されていたなら」のような書き方になり、
+**別の文言（`abandon.not_running`）の文面を直書きすることになる。**
+**動いていると判定できている実行にロックの食い違いを疑わせると、無いものを探しに行かせる。**
 
 **pane の照合は「一致、または内側」である。**Claude Code が worktree の下の階層へ降りると、
 完全一致だけでは「pane はもう無い」と判定して**生きている pane ごと worktree を消す。**
@@ -4447,6 +4685,14 @@ worktree の直下にあってエージェントが書き換えられる（3-16 
 **Status は動かさない。**worktree が無い実行で `--to` を通さないのは、
 **URL の打ち間違いと区別できないから**である（3-37-5）。branch を1本消しても、
 その issue をボードでどこへ置くべきかは決まらない。
+**だが黙って捨てない。****止まる出口も含めて、どの出口でも「動かしていません」を1行出す**
+（`--force` が無い場合・`git branch -D` が断られた場合・それ以外で失敗した場合も同じ）。
+指定した人間は「動いた」と受け取るので、言わずに終わるとボードの値を誤解したまま次へ進む。
+
+**その1行は、出口ごとに書かず、入り口で1度だけ `defer` で仕掛ける**
+（[internal/abandon/abandon.go](../../internal/abandon/abandon.go) の `abandonOrphanBranch`。
+`run` の `reportParkLeftBehind` と同じ形である）。**出口ごとに書き写すと、
+あとから出口が増えたときに書き漏らし、ビルドもテストも気づかない。**
 
 **画面に出る形（実測: 2026-08-25）。**
 
@@ -4598,13 +4844,23 @@ text/template は受け付けるためである。
 
 | 手を離させる書き込み | pane の確かめ方 |
 | --- | --- |
-| 入った | 消えるまで待つ。**時間切れは `--force` で越え、越えたことを1行で言う** |
-| 入らなかった | **待たない。**動いていないときと同じ検査（`stopIfPaneAlive`）へ落とす |
+| 入った | 消えるまで待つ。**時間切れも herdr の無応答も `--force` で越え、越えたことを1行で言う** |
+| 入らなかった | **待たない。**継続監視が動いていなかったときと同じ検査（`stopIfPaneAlive`）へ落とす |
 
 **`--force` を通す理由は 3-37-3 と同じである。**continuo が worktree のために開いた
 herdr workspace には、その worktree を cwd に持つ pane が必ず1枚ある。
 **片方の検査だけ越えられないのは筋が通らない。**止まる文言（`abandon.err_pane_remains`）にも
 `--force` で越えられることを書く。
+
+**herdr が答えないときも同じように越える。**待っている最中に pane の一覧を引けなくなったら、
+`--force` があれば確かめずに消したことを1行言って進み、無ければ止まる
+（`abandon.err_pane_list_check` / `abandon.pane_check_skipped`。`stopIfPaneAlive` と同じ扱い）。
+
+**ここだけ越えられない壁にしてはならない理由。**この段へ来る実行は、
+**ボードを park の値へ動かし終えている。**越えられないと、**ボードだけ動いた状態のまま、
+herdr を直すまでその issue を取り消せない。**叩き直しても同じ段で止まる。
+**「herdr が答えられない」を「pane がある」より厳しくしない**という 3-37-3 の扱いは、
+この段にもそのまま当てる。
 
 ---
 
@@ -4880,6 +5136,573 @@ pane は実際には生きていて誰も閉じないので、continuo の管理
 **枠待ちの待ち直し（`afterWaitTimeout`）でも同じ判定を行う。**そこでは**枠待ちの印を外さない。**
 外すと stall の時計が動き出し、**枠が明けるより先に stall として諦める。**印を外す契機は
 「枠の `resets_at` を過ぎたこと」だけである（3-27）。
+
+---
+
+### 3-49. 身元を確かめられない worktree は、復元を試してから止まる。消さない
+
+**言いたいこと。**壊れた worktree を continuo が消してよいことは1度も無い。
+**まず手掛かりから身元ファイルを復元し、復元できなければ既定で起動を止める。**
+止めるときは「何が起きているか」と「次に何をすべきか」を必ず両方出す。
+
+**壊れた worktree の定義。**置き場所の固定4階層にあって、**continuo が身元を確かめられない**もの。
+
+| 種類 | 何が起きているか | 壊れたと数えるか |
+| --- | --- | --- |
+| 身元ファイルを読めない | JSON が壊れた・通常のファイルでない・64 KiB を超えた | 数える |
+| 身元ファイルが無い | 着手の段6 の手前で落ちた（3-16） | **スラグから issue の番号を切り出せたときだけ**数える |
+| 身元ファイルが無く、スラグも合わない | 人間が自分で置いた worktree | **数えない。触らない** |
+
+**復元の手掛かりは3つで、最後に必ず裏を取る。**実体は
+[internal/orchestrator/restore.go](../../internal/orchestrator/restore.go) の `recoverIdentity` である。
+
+| 手掛かり | 実体 | 書き換えられるか |
+| --- | --- | --- |
+| 置き場所のパス | `<root>/<host>/<owner>/<repo>/<スラグ>`。スラグに issue の番号が入る | **書き換えられない**（封じ込め検査を通っている。3-20） |
+| herdr の pane の label | `owner/repo/issues/N`（3-3） | **書き換えられる**（herdr の CLI から誰でも書ける） |
+| ボードの issue | 上の2つで作った `<owner>/<repo>#<番号>` で1件だけ引き直す | — |
+
+**裏の取り方。**引き直した issue から `ExpectedSlugFor` でスラグを作り直し、
+**目の前のディレクトリ名と一字一句一致すること**を確かめる。ここを外すと、
+**pane の label を書き換えるだけで、別の issue の worktree として復元させられる。**
+
+**復元して書く身元ファイル**（`<worktree>/.continuo.json`）。
+
+```json
+{
+  "issue_url": "https://github.com/octocat/hello-world/issues/188",
+  "issue_identifier": "octocat/hello-world#188",
+  "project_item_id": "PVTI_xxx",
+  "branch": "continuo/octocat/hello-world/188",
+  "base": "",
+  "herdr_workspace_id": "w3",
+  "socket_path": "",
+  "settings_path": "",
+  "agent_name": "continuo-hello-world-188",
+  "session_uuid": "e1f2…",
+  "created_at": "2026-08-26T12:00:00+09:00",
+  "takeover_count": 0
+}
+```
+
+**`base` と `settings_path` は空のままにする。**どの手掛かりにも残っていないためである。
+**空でも消す側へは倒れない**（片付けは「base が分からない」として見送る。3-9 の手順2b）。
+**`takeover_count` は 0 から数え直す。**読めなかった値を推測で埋めない。
+
+**復元できなかったときの振る舞いは設定で決める**（`workspace.on_broken_worktree`）。
+
+| 値 | 何をするか |
+| --- | --- |
+| `stop`（**既定**） | 何が壊れているか・どの worktree か・次に何をすべきかを出して**起動を止める** |
+| `skip` | 同じものをログへ出して、**その worktree だけ飛ばして起動を続ける** |
+
+**既定を `stop` にする理由。**飛ばして走り続けると、その issue はボードの上で
+running_state のまま誰にも触られず、**人間が気づくのは何時間も後になる。**
+止まれば被害はそこで止まり、壊れていることをすぐ知れる。
+
+**出す案内は3行で固定する**（[internal/workspace/broken.go](../../internal/workspace/broken.go) の `NextSteps`）。
+**消し方だけを書かない。**壊れた worktree にはまだ push していない成果が残っていることがある。
+
+```
+1. 中を調べる: ls -la <worktree> && git -C <worktree> status
+2. 要るファイルを控える: cp -a <worktree>/<残したいファイル> <控え先>
+3. 控え終えたら消す: continuo abandon --force <issue の URL>
+```
+
+**巡回の片付けも同じ3行を出す。**git が1つも答えられないまま見送ったとき、
+`CleanupResult.NextSteps` にこの3行が入り、
+[internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `cleanupPath` が
+1行ずつログへ出す。**理由だけを出しても、読んだ人間は次に何をすればよいか分からない。**
+
+**`continuo doctor` も同じ判定を行う**（見出し語 `worktree の場所`）。
+起動する前に気づけるほうがよいためである。**判定は
+[internal/workspace/broken.go](../../internal/workspace/broken.go) の `ScanBroken` 1箇所だけに書く。**
+`stop` の設定なら `✗`、`skip` なら `✓` に注記を添える。
+
+---
+
+### 3-50. 知らない Status で止めるときは、理由を issue に残し、turn の終わりを待つ
+
+**言いたいこと。**設定に名前が出てこない Status へ動かされた issue を、continuo は黙って
+止めていた。**その issue は `active_states` に入らないので二度と拾われない。**
+理由を issue へ書き、turn が動いている間は表明を待ってから判断する。
+
+**「知らない Status」の定義。**`tracker.active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `status_signal_map` の遷移先の**どれにも名前が出てこない
+Status** である（[internal/orchestrator/unknownstate.go](../../internal/orchestrator/unknownstate.go) の `knownStates`）。
+**`In Review` や `Blocked` は知っている Status である**（`status_signal_map` と `failure_state` に名前が出る）。
+そちらはいまどおり引き渡しとして扱い、この節の対象にしない。
+
+**採る手順。**
+
+| いつ | 何をするか |
+| --- | --- |
+| turn が動いていて、猶予の内側 | **止めない。**turn の終わりまで待ち、表明を読んでから判断する |
+| turn が動いていない | その場で止める（待っても表明は出てこない） |
+| 猶予（`tracker.unknown_state_grace_ms`）を過ぎた | その場で止める |
+| `terminal_states` へ動かされた | **いまどおり即座に終える**（人間が「終わった」と言っている） |
+
+**なぜ待つのか。**エージェントが `CONTINUO-STATUS:` を書けば、continuo が正しい Status へ戻す
+（3-25）。**turn が終わる前に殺すと、その表明が読まれずに捨てられる。**
+
+**なぜ猶予に上限を置くのか。**`claude.turn_timeout_ms` の stall 検知（3-21）だけに任せると、
+**画面が変わり続けている限り何時間でも待つ。**人間が「止めたい」と思って Status を動かしても、
+止まる時刻が誰にも分からない。だから独立した上限を持たせる。
+**待つぶん、人間が本気で止めたいときに止まるのは遅れる。**そのことは待つたびにログへ出す
+（`知らない Status になりましたが turn の終わりを待っています`）。
+
+**止めるときに issue へ書くこと。**[internal/orchestrator/unknownstate.go](../../internal/orchestrator/unknownstate.go) の
+`unknownStateReason` が作り、`postHandoffComment`（3-29）が1件だけ投稿する。中身は3つである。
+
+```
+continuo が知らない Status になったので、この issue の作業を止めました。
+Status が `In Progress` から `Icebox` へ動いていました（`In Progress` は continuo が最後に書いた値です）。
+【なぜ止めたか】continuo は WORKFLOW.md に書かれた Status しか扱いません（いま知っているのは Ready / In Progress / Done / Blocked / In Review です）。…
+【続けるには】Status を `tracker.active_states` に入っている Status（Ready / In Progress）のいずれかへ戻してください。…
+```
+
+**「元は何だったか」は continuo が最後に書いた値である**（`runState.LastWrittenState`）。
+着手の段2 で `running_state` を書いたときと、表明どおりに Status を動かしたときに控える。
+**書けなかったときは控えない。**1度も書いていなければ、その1文を出さない。
+
+**起動時に1回だけ、知らない選択肢を名前で出す。**起動時の照合は「設定の名前がボードに在るか」の
+一方向だけであり、**ボードにあって設定に無いものは件数（`status_options=11`）にしか出ない。**
+[internal/tracker/adapter.go](../../internal/tracker/adapter.go) の `unknownStatusOptions` が逆向きに照合し、
+`Bootstrap` が1行出す。**巡回ごとの再照合（`verify_states_every`）では出さない**
+（10分に1回同じ行が流れると他の行が埋もれる）。
+
+**採らなかった案。**知らない Status を見つけたら `failure_state` へ落とす、は採らない。
+**人間が自分で動かした Status を continuo が上書きすることになる**（3-4 の「人間の操作を巻き戻さない」）。
+worktree も残す。人間が Status を戻せば、そのまま作業を続けられる。
+
+---
+
+### 3-51. continuo が自分で止めた worker の失敗を、外の障害として印字しない
+
+**言いたいこと。**`turn を送れませんでした（agent is no longer running）` は、
+continuo が1秒前に自分で `pane.close` を呼んだために起きている。
+**WARN で出すと、読んだ人は herdr か Claude Code を疑って原因を探しにいく。**
+
+**足りなかったもの。**止める側（`stopWorker`）は turn ループへ「待つのをやめろ」と伝える手段を
+持っていなかった。turn ループは `agent.prompt` の待ち受けの中に居たまま pane を失い、
+**その失敗を外から来たものとして分類していた。**
+
+**作った経路。**`runState` が worker の世代ごとに「止めた」の合図（`workerStopCtx`）を持つ。
+
+| 誰が | 何をするか |
+| --- | --- |
+| `stopWorker` | **`pane.close` を呼ぶ前に** `markWorkerStopped` を呼び、合図を終わらせる |
+| `turnLoop` | 合図を**待ち専用の ctx** に繋ぐ（`context.AfterFunc`）。herdr の待ちはそこで解ける |
+| `sendTurn` / `afterWaitTimeout` | 失敗を分類する前に `selfStoppedTurn` を通し、自分で止めていたら Info を1行出して `turnAborted` を返す |
+
+**順番を入れ替えてはならない。**閉じてから伝えると、turn ループは先に
+`agent is no longer running` を受け取ってしまう。
+
+**turn ループの `ctx` そのものを切ってはならない。**turn の終わりの処理（表明の適用・
+コメントの確認・worktree の片付け）はその `ctx` で動いており、`finishRun` の中から
+`stopWorker` が呼ばれる。**切ると、自分で自分の後片付けを道連れにする**
+（branch が消えず、`refreshIssue` も落ちる）。**切ってよいのは herdr の待ち専用の ctx だけである。**
+
+**`beginAttempt` で合図を作り直す。**再 dispatch は worker の世代を進める（3-21）ので、
+前の世代の合図を使い回すと、**最初の turn を送る前に待ちが打ち切られる。**
+
+---
+
+### 3-52. Ctrl+C には必ず即座に反応し、2回目で待たずに終わる
+
+**言いたいこと。**終了は3段の直列で最大36秒かかる。**押した直後に何も出さないと、
+止まったのか固まったのかを人間が区別できない。**段ごとに名乗り、抜け道を必ず添える。
+**2回目の Ctrl+C は自前で数えて終わらせる。**「既定の動作へ戻す」やり方は効かないことがある。
+
+**押した直後に出すもの。**[internal/daemon/daemon.go](../../internal/daemon/daemon.go) の
+`WatchInterrupt` が1回目の signal で3行を出す。
+
+```
+level=WARN msg="割り込みを受けました。走行中の turn ループを壊さないよう、順に閉じてから終わります" signal=interrupt max_wait=36s pid=88890
+level=WARN msg="待ちたくない場合は、もう一度 Ctrl+C を押してください（同じ signal をもう一度送っても同じです）。後始末を待たずに即座に終了します" exit_code=130
+level=WARN msg="それでも終わらない場合は、次のコマンドで全 goroutine のスタックを出して、その出力を issue へ貼ってください" command="kill -QUIT 88890"
+```
+
+**後始末は段ごとに名乗る。**[internal/daemon/daemon.go](../../internal/daemon/daemon.go) の `deps.close` が
+待ちに入る**前**に1行ずつ出す。順序が仕様である（3-4 の段5）。
+
+| 段 | 上限 | 何を待つのか |
+| --- | --- | --- |
+| ダッシュボードを閉じる | **1秒**（`server.DefaultShutdownTimeout`） | 処理中の応答。**過ぎたら `http.Server.Close` で叩き切る** |
+| hook の受け口を閉じる | **5秒**（`daemon.DefaultHookServerWait`） | 受け取り済みの hook を印へ書き終えること |
+| turn ループの終了を待つ | **30秒**（`daemon.DefaultTurnLoopWait`） | 送った指示が中途半端に切れないこと |
+
+**ダッシュボードだけ叩き切ってよい理由。**`GET` しか受けない読み取り専用のサーバであり、
+途中で切れて困る書き込みが1つも無い。応答を読まない相手が1本いるだけで終了が伸びるほうが害である。
+
+**2回目を `signal.Stop` で実現してはならない。**`signal.Stop` が戻すのは「既定の動作」ではなく
+**continuo が起動する前にその signal へ設定されていた動作**である。親が `SIGINT` を無視に
+設定していると（`nohup` / `setsid` / 非対話シェルの `&` 起動 / 一部の supervisor）、
+**戻る先が「無視」になり、2回目以降の Ctrl+C は何も起こさない。**
+
+実測（darwin、旧方式で10秒の後始末を持つ小さなプログラム）。
+
+| 親 | 2回目の Ctrl+C | 経過 |
+| --- | --- | --- |
+| 普通の親（Go の `os/exec`） | 効く（`signal: interrupt`） | 1.3秒 |
+| `trap "" INT` を掛けた `/bin/sh` | **効かない** | 10秒走り切って終了コード 0 |
+
+**採る方法。**`signal.Notify` で自前の channel を持ち、**1回目と2回目を自分で数える。**
+2回目で `os.Exit(130)` を呼ぶ。`signal.Notify` は元の動作が「無視」であっても signal を
+channel へ届けるので、**起動元が何であっても結果が変わらない。**終了コード 130 は
+`128 + SIGINT` で、シェルが signal で死んだプロセスに付ける値に揃えてある。
+
+**`hookserver.Close` は socket ファイルの後始末を待ちの前に済ませる。**受け口の待ちに期限が
+付いたので、待ち切れずに抜けたときに socket ファイルが残ると、次の起動が「残骸がある」と
+言って止まる。listener は既に閉じており、配送中の goroutine はこのファイルを必要としない。
+
+**実際には `net.Listen` が作った Unix の listener が `Close` の時点で自分で unlink する**
+（`net.UnixListener.SetUnlinkOnClose` の既定）。`os.Remove` はその取りこぼしに備える保険であり、
+**期限の内側に置くために listener を閉じた直後で呼ぶ。**
+
+### 3-53. Status が既にその値なら書きに行かない
+
+**言いたいこと。**同じ値を書いても GitHub 側では遷移が起きず、**timeline に1行も残らない。**
+continuo のログにだけ「Status を書き込みました」が出るので、
+**continuo が書いたはずの時刻に記録が無い**という食い違いになり、原因の切り分けが1段むずかしくなる。
+
+**採る方法。**`UpdateStatus` は書く前の取り直しで得た値と `targetState` を比べ、同じなら書き込みを送らない。
+比較は `foldStatus`（前後の空白を落として小文字化。SPEC.md 11.3）で行う。
+**拒否リストの検査のほうが先である。**書いてはいけない状態に入っていたときは、
+値が同じかどうかに関わらず「書かなかった」として扱う。
+
+| 取り直した値 | 書き込みの mutation | `StatusWrite` | ログ |
+| --- | --- | --- | --- |
+| `blockedStates` に入っている | 送らない | `Reached` 偽 / `Wrote` 偽 | 書いてはいけない状態に入っていました |
+| item がもう見えない | 送らない | `Reached` 偽 / `Wrote` 偽 | item がもう見えません |
+| `targetState` と同じ | **送らない** | **`Reached` 真 / `Wrote` 偽** | **Status は既にその値でした（書き込みを省きました）** |
+| `targetState` と違う | 送る | `Reached` 真 / `Wrote` 真 | Status を書き込みました |
+
+**`Reached` は「書き込みの API を呼んだか」ではなく「目的の Status になっているか」である。**
+呼び出し側（`startRun` / `failRun` / `abandonRunClaimed`）は `Reached` で先へ進むかどうかを決めるので、
+**同じ値だったときに偽を返すと、着手も失敗の記録もできなくなる。**
+`active_states` は `running_state` を含む（雛形の既定は `["Ready", "In Progress"]`）ので、
+**既に `In Progress` の issue が候補に上がるのは普通のことである。**
+
+**`Wrote` が偽なら「何から何へ動かしたか」のコメントも書かない**（3-29）。
+ボードが動いていないので、書けば嘘の記録になる。
+
+**設定で選べるようにはしない。**同じ値を書きに行きたい場面が1つも無い。
+
+---
+
+### 3-54. ボードの自動化が動かした Status では worker を止めず、本来の Status へ戻す
+
+**言いたいこと。**エージェントが PR を作ると、ボードの組み込みの自動化が Status を動かす。
+それを「人間が引き渡した」と読んで、**continuo が自分のエージェントを turn の途中で殺していた**（issue #33）。
+**書いたのが自動化なら止めず、対応表にある Status へ戻す。**人間が動かしたときの扱いは変えない。
+
+**何が起きたか。**エージェントが PR を作った3秒後に自動化が Status を書き、その29秒後の巡回が
+worker を止めた（利用者の環境での実測。全体の流れは [docs/agent_life_cycle.md](../agent_life_cycle.md)）。
+
+**判定の式。**設定キーは増やさない（設計 2-6 の実測）。
+
+```
+自動化が動かした = (actor.__typename == "Bot") || wasAutomated
+```
+
+**`Bot` が組み込みの自動化、`User` が人間と continuo 自身である**
+（continuo は `gh auth token` の持ち主として書くので、自分の書き込みを自動化と取り違えない）。
+**`wasAutomated` だけでは見分けられない。**組み込みの自動化でも `false` を返す（設計 2-6）。
+**同じ応答に載っているので OR に混ぜるのはただで済み、**GitHub が将来直せば自動で効く。
+
+**採る手順**（[internal/orchestrator/unknownstate.go](../../internal/orchestrator/unknownstate.go)）。3-50 の分岐の**手前**に入る。
+
+| 何が起きたか | どうするか |
+| --- | --- |
+| 自動化が動かし、対応表に戻す先がある | **止めない。**その Status へ書き戻す |
+| 自動化が動かしたが、対応表に無い | いままでどおり止める。**足す2行を issue のコメントに書く** |
+| 自動化が動かしたが、書き戻せない形になった | 書き戻さずに止める。**何が起きたかを issue に書く**（3-56） |
+| 人間が動かした | **いままでどおり。**猶予を置いて止める |
+
+**なぜ書き戻すのか。**止めないだけだと人間の列（`In Progress`）に continuo 担当の issue が居座り、
+**人間はボードを見て状況を判断するので、列を分けた意味が消える。**
+**失敗しても run は止めず**（次の巡回で拾い直す）、**戻したぶんは issue に1件残す**（3-29）。
+
+**リクエストは増えない。**ID 指定の取り直し（`nodes(ids:)`）の `... on Issue` に `timelineItems` を
+足すだけで、Status の値と同じ1リクエストで返る（設計 2-6 の実測）。**候補の取得（100件返る）・
+識別子での照合・Status を書く前の取り直しには足さない**（`byIDsWithoutTimelineQueryTemplate`）。
+**`project.number` で自分のボードへ絞る**（複数のボードに載っていると両方返る。設計 2-6）。
+**窓は `last: 50` である。**ボードで絞る引数が無いので絞るのは返ってきたあとであり、
+**別のボードで Status が何度も動くと自分のボードのイベントが窓から押し出される**（書き戻しが効かなくなる）。
+
+**採らなかった案。**
+
+| 案 | 中身 | 採らない理由 |
+| --- | --- | --- |
+| **読み替え表** | `In Progress` を `AI In Progress` と読み替える | **人間が `In Progress` へ動かして止める操作が効かなくなる。**同じ値に2つの意味があり、書いた主体を見ない案は必ずここで詰む |
+| **候補の集合を分ける** | `candidate_states` を新設し、`active_states` に `In Progress` を足す | 上と同じ取りこぼしに加えて、**既に動いている設定の `active_states` の意味が黙って変わる** |
+| **猶予だけ**（3-50 のまま） | `unknown_state_grace_ms` に任せる | **助かるのは「10分以内に turn が終わり、かつ `review` と表明した」場合だけ。**PR を作ってから CI の直しを続ける流れでは止まる |
+| **無条件に書き戻す** | 知らない Status なら常に元へ戻す | **人間の操作が黙って巻き戻る**（3-4 の土台を破る） |
+| **ボードの自動化を切る** | 利用者に `Workflows` を無効化してもらう | **ボードは人間も使っている。**continuo を入れることが、人間の設定を変える理由になってはならない |
+
+---
+
+### 3-55. 戻す先は `active_states` に限る。終端へは書き戻さない
+
+**言いたいこと。**`automated_state_rewrite` の戻す先は `tracker.active_states` に
+入っている Status だけである。**`"Done": "AI Done"` のような終端への書き戻しは起動しない。**
+**「PR がマージされた」と「worker が動いている」は別の話であり、同じ仕組みに載せない。**
+
+**終端へ書き戻さない理由。**
+
+| なぜ | 何が起きるか |
+| --- | --- |
+| **書き戻しは「まだ担当している」と言い直す操作である** | 終端へ書き戻すと、**言い直した直後に continuo 自身がその run を終わらせる。**言っていることと、していることが逆になる |
+| **片付けが書き戻しに引きずられる** | 戻した先が `cleanup.on_states` に入っていれば、**書き戻した直後に worktree が消える。**エージェントはまだ動いている |
+| **順番が決められない** | 「終わったので片付ける」と「担当を続けるので Status を直す」が同じ経路に同居し、**どちらを先にするかを決める根拠がどこにも無い** |
+
+**PR のマージで `Done` になる件（issue #35）は、この仕組みでは解かない。**
+あれは「終わったとみなす Status」と「片付ける Status」の食い違いであり、
+**3-9e（`cleanup.on_states` が `terminal_states` の外にある）で扱う。**
+
+**対応表は設定に持たせる。**ボードごとに Status の名前が違うので、コードに埋め込まない。
+
+```yaml
+tracker:
+  active_states: ["AI Ready", "AI In Progress"]
+  automated_state_rewrite: {"In Progress": "AI In Progress"}
+```
+
+**既定は空である。**書かなければ挙動は変わらないので、既存の `WORKFLOW.md` をそのまま使える。
+
+**設定の検査は5つを見る**（[internal/config/validate.go](../../internal/config/validate.go) の `validateAutomatedStateRewrite`）。
+
+| 何を弾くか | なぜ |
+| --- | --- |
+| キーが空・値が空 | Status 名として存在しない |
+| キーと値が同じ | 同じ値の書き込みは省かれるので、巡回のたびに書きに行き続ける |
+| **キーが既に設定に名前の出てくる Status** | その行は1度も発火しない（引くのは「知らない Status」のときだけである） |
+| **値が `active_states` の外** | 上の3つが起きる |
+| **大文字小文字だけが違うキーが2つ** | どちらに当たるかが map の反復順で決まり、実行のたびに変わる |
+
+**名前をボードと照合する範囲と、人間へ出す案内の出し方は 3-57 にある。**
+
+---
+
+### 3-56. 書き戻しが止まらなくなる形を、4つとも塞ぐ
+
+**言いたいこと。**書き戻しは「書いて、また書かれて」を繰り返しうる。
+**押し合い・戻せない失敗・手放した run への書き込み・書けなかったときの判定、の4つを塞ぐ。**
+どれか1つでも空けると、**worker が止まらないまま人間にも渡らない run ができる。**
+
+**押し合いに上限を置く**（`maxAutomatedRewrites` = 3）。書き戻した直後に自動化がまた動く
+組み合わせがあると、continuo とボードが同じ issue を押し合い続ける。
+**上限に達したら猶予を置いて worker を止める**（押し合いを人間へ渡す）。
+
+**数えるのは、ボードが実際に動いたときだけである。**通信の失敗・item が見えない・
+既にその値だった、のいずれでも枠を返す（`rewriteClaim.release`）。
+**返さないと、書き込みが3回失敗しただけで押し合いと同じ扱いになり、worker が止まる。**
+**枠は取った側だけが返す。**Status 名だけで返す作りにすると、巡回と turn ループが同時に
+取ったときに片方の失敗がもう片方の枠を返し、**ボードが動いた回数が上限を超える。**
+
+**「戻せない」にも別の上限を置く**（`maxAutomatedRewriteFailures` = 3）。
+**枠を返すだけだと、毎回失敗する書き込みを30秒ごとに永久に打ち続ける。**
+枠は返るので押し合いの上限には届かず、猶予の時計もその手前で戻るので始まらない。
+**結果、worker は止まらず、人間にも渡らない。**
+**これが起きるのは、人間がボードから戻す先の選択肢を消したときである**（起動時の照合は通っていた）。
+**上限に達したら書き戻しをやめ、猶予を置いて人間へ渡す。**
+**`tracker.CategoryInvalidConfig` は上限をそのまま足して1回で渡す**（待っても直らない）。
+
+**書き込みのあいだは書き戻し専用の印を取る**（`beginRewrite` / `endRewrite`。**分け方は 3-58**）。
+**巡回からの書き戻しも、turn の終わりからの書き戻しも同じである。**
+**その間に巡回が run を手放すと、印が消えたあとに「作業中」の Status がボードへ書かれ、
+次の巡回が同じ worktree に2本目の Claude Code を立てる。**
+
+**「戻せない」の回数は時間でも切り直す**（`automatedRewriteFailureRetryAfter` = 5分）。
+数えているのは「続けて何回」だが、**上限に達した run は書き戻しそのものをやめるので、
+成功で 0 に戻す道へは二度と入れない。**切り直さないと**通信が回復しても永久に拒む。**
+**猶予の既定（10分）より短くする。**長いと、待っているあいだに一度も試し直せない。
+
+**`terminal_states` に入っていて断られた場合は「戻せなかった」に数えない。**
+数えると「ボードから戻す先の選択肢が消えている」という的外れな案内が人間へ出る
+（その issue は下の表の2行目が拾う）。**人間へ渡すログは、Status と理由の組ごとに1度だけ出す**
+（`noteAutomatedRewriteHandoff`）。**Status だけで数えると、先に起きたほうがもう片方を永久に黙らせる。**
+
+**書けなかったときは、書き込みの結果が示す Status で判定し直す**（`rewriteAndDecide`）。
+**`UpdateStatus` は書いたあとに読み直さない。**返る `Previous` は**書きに行く直前**の値である。
+
+| 書き込みの結果 | 次にどうするか |
+| --- | --- |
+| 書けた／既にその値だった | ボードは戻す先である。**戻す先は `active_states` に限られる**（3-55）ので、次の turn へ |
+| `Previous` が返り、目的の Status になっていない | 人間が `terminal_states` へ動かしていた。**その値で判定し直す**（終わった issue へ次の指示を送らない） |
+| `Previous` も空 | item がもう見えない。次の巡回が取り直して判断する |
+
+---
+
+### 3-57. 対応表の名前は起動時にボードと照合する。人間へ出す案内は1つだけにする
+
+**言いたいこと。**`automated_state_rewrite` の**キーの綴りを打ち間違えても、
+いままでは誰も気づけなかった。**起動時の照合にキーを足し、`continuo doctor` にも掛ける。
+**そして、issue へ出す設定の案内は必ず1つだけにする。**2つ出すと、両方やった設定が起動しない。
+
+**キーも起動時にボードと照合する**（`requiredStatesForBootstrap`）。
+**設定の検査（3-55）が見るのは「設定の中での辻褄」だけであり、その名前がボードに実在するかは見ない。**
+キーは「continuo が知らない Status」なので、実行時の照合にも掛からない。
+**照合しないと、`In Progres` と書いても起動し、`continuo doctor` も通り、書き戻しだけが一度も動かない。**
+**`continuo doctor` の見出し語 `Status の名前` でも、キーを紛らわしさの検査に掛ける**（`configuredStates`）。
+
+**値（戻す先）は照合の一覧に足さない。**設定の検査が「`active_states` に入っていること」を
+要求しているので、足しても1件も増えない。
+
+**集める処理は2つで、どちらも1箇所にある。**
+
+| 関数 | 何の一覧か | 対応表のキー |
+| --- | --- | --- |
+| `config.KnownStates` | 実行時に「知っている Status か」を判定する（`knownStates`） | **入れない。**入れると書き戻しの分岐が二度と通らない |
+| `config.BootstrapStates` | 起動時にボードの選択肢と照合する（`requiredStatesForBootstrap`） | **入れる。**綴りの打ち間違いを見つける |
+
+**`config.KnownStates` が1つも返さない設定は、組み立ての時点で弾く**（`orchestrator.New`）。
+1つも無いと、continuo は**ボード上のどの Status も「知らない Status」と判定し、着手した run を
+片端から止める。**しかも止めた理由には「いま知っているのは です」と空欄が出るだけで、
+原因が読み取れない。**他の必須の依存（Tracker / Herdr / Workspace）と同じ形で名前つきのエラーにする。**
+
+**案内は1つだけ出す。**「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を
+並べて出すと、**両方やった設定は起動しない**（キーは設定のどこにも名前が出てこない Status で
+なければならない）。**書き戻しの案内を出すときは、`active_states` の案内を出さない**（`unknownStateReason`）。
+
+**提案する戻す先も `active_states` に入っているものに限る**（`rewriteTargetSuggestion`）。
+continuo が最後に書いた値は `In Review` のこともあり、**そのまま提案すると、
+貼った利用者の continuo が起動しない。**
+
+| 何を提案するか | いつ |
+| --- | --- |
+| continuo が最後に書いた値 | それが `active_states` に入っているとき |
+| `tracker.running_state` | 上が外れているとき |
+| `active_states` の先頭 | それも外れているとき |
+| **提案しない**（`active_states` の案内だけを出す） | `active_states` が空のとき |
+
+---
+
+### 3-58. 書き戻しの印と「終わらせる処理」の印を分ける
+
+**言いたいこと。**書き戻しのあいだ run を手放させない仕組みは要る。
+**だが「終わらせる処理が走っている」印を使い回してはならない。**
+その印に2つ目の意味ができ、**印を見て判断している場所が全部誤判定する。**
+
+**使い回すと何が壊れるか。**
+
+| 誤判定する場所 | 何が起きるか |
+| --- | --- |
+| `rewriteAndDecide`（turn の終わり） | 巡回の書き戻しが飛んでいるだけなのに「終わりに向かっている」と読み、**turn ループが宙に浮く**（誰も終わらせていないのに turn ループだけが消え、run も pane も残る。画面が動かない判定＝既定1時間まで放置される） |
+| `finishRun` / `failRun` / `abandonRun` | 書き戻しが飛んでいるだけで黙って戻り、**Status も動かず、引き渡しのコメントも出ず、印も外れない** |
+
+**印は2つに分け、取れなかった理由を返す**（`terminalGate` / `rewriteGate`）。
+
+| 呼ぶ側 | 書き戻しが飛んでいたら |
+| --- | --- |
+| 巡回のループ（`finishRunAsync` などの `*Async`） | **その巡回では何もしない。**次の巡回でやり直す（巡回を書き込み1回ぶん止めない） |
+| turn ループ・着手の失敗（`claimTerminal`） | **終わるまで待ってから印を取る。**待たないと、この run を終わらせる者が誰も居なくなる |
+| 書き戻し（`beginRewrite`） | 終わらせる処理が走っている・待っているなら**書かずに戻る。**別の書き戻しが飛んでいるだけなら**run は終わっていない**ので、turn ループは続ける |
+
+**「同じ worktree に2本目の worker が立たない」は保たれる。**
+書き戻しの印が立っている間、run を手放す経路は1つも通らない（巡回の経路は戻り、
+turn ループの経路は待つ）。**待っている間は新しい書き戻しも始めない**（`terminalWaiting`）。
+始めさせると、待っている側が書き戻しの列に永久に割り込まれる。
+
+**書き終えたら必ず印を返す**（`endRewrite`）。返さないと、待っている `claimTerminal` が永久に返らない。
+
+**採らなかった案。**
+
+| 案 | 中身 | 採らない理由 |
+| --- | --- | --- |
+| **書き戻しは印を取らない** | run が解放されていないことを別の方法で確かめる | **確かめてから書き込みが着地するまでに1秒ある。**その間に手放されたら同じことが起きる |
+| **`beginTerminal` を待たせる** | 印を取れなければ、書き戻しが終わるまで待って取り直す | **巡回のループが書き込み1回ぶん止まる**（設計 3-8 に反する）。待つのは巡回の外にいる呼び出し側だけでよい |
+
+---
+
+### 3-59. ファイルの書き換えは一時ファイルへ書いてから差し替える
+
+**言いたいこと。**main を全部洗ったら、その場で空にしてから書いていたのは2箇所だけだった。
+その2箇所を差し替えに直し、残りは触っていない。**差し替えにできない2箇所には理由をコードへ書いた。**
+
+**実測（`origin/main` の `internal/` と `cmd/`）。**
+
+```
+$ git grep -n "os.WriteFile\|O_TRUNC" origin/main -- 'internal/*.go'
+origin/main:internal/orchestrator/settings.go:148:	if err := os.WriteFile(path, data, settingsFilePerm); err != nil {
+origin/main:internal/scaffold/scaffold.go:130:		flags |= os.O_TRUNC
+```
+
+**この2箇所だけを直した。**
+
+| どこ | 直し方 |
+| --- | --- |
+| `internal/scaffold/scaffold.go` の `--force` | 一時ファイルへ書き切ってから差し替える。元のファイルの権限をそのまま貼り直す |
+| `internal/orchestrator/settings.go` | 同上。権限は `0600` 固定（continuo が持ち主のファイルである） |
+
+**残る5箇所は main の時点で既に差し替えだった。**`internal/scaffold/update.go` /
+`internal/trust/trust.go` / `internal/workspace/identity.go` / `internal/hookclient/hookclient.go` /
+`internal/hookserver/pending.go`。**1行も触っていない。**動いているものを書き直すと退行が入る。
+
+**手順は1本に寄せた。**`internal/scaffold/update.go` にあった `writeAtomically` を
+`internal/atomicfile` へ移し、`Write` として公開した。呼ぶのは `update.go` と `scaffold.go` と
+`settings.go` の3箇所である。**新しい型もエラーも i18n のキーも作っていない。**
+
+**差し替えには、書き込む先の親ディレクトリへの書き込み権限が要る。**その場で開いて書く実装では
+要らなかったものである。`os.Rename` はディレクトリの要素を書き換える操作だからで、
+**ファイルだけを書けるように用意した場所では、ここで落ちる。**continuo が書くのは
+自分で作ったディレクトリ（`<実行時ディレクトリ>/issues/…`）と、`continuo init --force` を
+打った人がいるディレクトリなので、実際に困る配置は無い。
+
+**新しく作るときは差し替えない。**まだ無いファイルには失うものが無い。それに、差し替えると
+権限を `chmod` で決めることになり、**umask が効かなくなる**（できるファイルの権限が変わる）。
+
+**揃えられない2箇所には、その理由をコードのコメントに書いた**（CLAUDE.md の「絶対に守る制約」4）。
+
+| どこ | 揃えない理由 |
+| --- | --- |
+| `internal/lock/lock.go` | **差し替えるとロックが切れる。**`flock(2)` は inode に掛かるので、別の inode を被せた瞬間に二重起動が素通りする |
+| `internal/workspace/identity.go` の `.git/info/exclude` | **追記のみ。**全置換にすると、読んでから書くまでの間に他が書いた行を消す |
+
+**戻らないように検査を1本置いた。**`test/internal/atomicfile/no_truncating_write_test.go` が
+`internal/` と `cmd/` を構文木で走査し、**名前で書かれた形を落とす**
+（`os.WriteFile` / `ioutil.WriteFile` / `os.Create` / `os.Truncate` / `f.Truncate` / `O_TRUNC`。
+`syscall` 側・import の別名・dot import も追う）。**flag を数値で書いた形も落とす**
+（引数に直接書いた数値と、名前の定数に混ぜた数値）。`os.O_TRUNC` は macOS で 0x400、
+Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値のままでは構文木から見分けられない。
+**文字列ではなく構文木を見るのは、**上の2箇所のように「なぜその書き方をしないのか」を
+コメントで説明できるようにするためである。
+
+**数値へ逃がされた形は落ちないことがある。**名前付き定数への退避（`const truncWrite = 0x601`）・
+`|=` での追加・関数値や数値を返す関数の経由・`os.Remove` してから作り直す形は素通りする。
+**`Truncate` は受け手の型を見ずに名前だけで落としている**ので、別の型の `Truncate` があれば
+誤検知しうる（いま `internal/` と `cmd/` に `.Truncate(` の呼び出しは1つも無い）。
+**どちらも式や受け手の型を解く仕組みが要るため、別の issue に切り出す。**
+
+**振る舞いは別のテストで押さえる。**`test/internal/atomicfile/write_test.go` が
+「中身が新しくなる」「渡した権限が残る」「落ちても元の中身が残る」「一時ファイルを残さない」を、
+`test/internal/scaffold/write_perm_test.go` が「新しく作るときは umask が効く」
+「force で置き換えても元の権限が残る」を、`test/internal/scaffold/write_dir_test.go` が
+「WORKFLOW.md という名前のディレクトリを force の有無どちらでも壊さない」を見る。
+**期待値は実行環境に合わせない。**umask は 0027 に固定する（既定の 0022 では 0644 から引いても
+0644 のままで、渡している権限と区別が付かず、差し替えへ寄せ替えても素通りする）。
+
+---
+
+### 3-60. 差し替えにして変わった振る舞い
+
+**言いたいこと。**一時ファイルから差し替える形にしたことで、その場で開いて書いていた頃とは
+**結果が変わる場面が6つある。**どれも直さずに受け入れる。理由をここに置く。
+
+| 短縮名 | 何が変わったか | なぜ直さないか |
+| --- | --- | --- |
+| **読み取り専用の上書き** | `chmod 444` にした `WORKFLOW.md` を `continuo init --force` が置き換えるようになった。変更前は `permission denied` で拒否していた | **`os.Rename` に要るのは親ディレクトリへの書き込み権限であって、ファイル自身の権限ではない。**差し替えである以上、ファイルの権限では止められない。`--force` は「置き換えてよい」と利用者が明示した経路である |
+| **symlink の隙間** | `os.Lstat` で symlink を見てから `os.Rename` するまでの間に symlink へ差し替えられると、`ErrSymlink` を返さずに置き換える | 変更前は `syscall.O_NOFOLLOW` が kernel の open の時点で見ていたので隙間が無かった。**`rename(2)` には「symlink なら失敗する」という指定が無い。**新しく作る経路には隙間が無いままである |
+| **force で「既にあります」** | `--force` でも、まだ無いファイルへ書く経路は `O_EXCL` を通る。その隙間に別のプロセスが同じファイルを作ると `ErrAlreadyExists` になる | **単一の利用者が手で打つ CLI である。**`continuo init` を2つ同時に走らせる場面が無い |
+| **特殊ビットとハードリンク** | setgid / sticky が落ちる。hard link を張っていた相方は古い中身のまま残る | **差し替え方式に本質的な代償である。**`continuo setup` は変更前からこれを払っていた（`internal/scaffold/update.go`）。ここだけ別扱いにする理由が無い |
+| **FIFO の置き換え** | 書き込む先が FIFO だと、変更前は開いた時点で読み手を待って固まった。いまは通常のファイルに置き換えて成功する | **いまのほうが良い。**固まると `continuo init` が返ってこない |
+| **一時ファイルの残骸** | 強制終了や電源断で `.WORKFLOW.md.*` / `.settings.json.*` が残る。片付ける経路は無い | ディスクを少し食うだけである。**`WORKFLOW.md` の側は利用者に未追跡のファイルとして見えるので、ユースケースの事後条件に書いた**（[docs/spec/usecases/particular_case/設定ファイルを作る.rucm.md](../spec/usecases/particular_case/設定ファイルを作る.rucm.md) の `GLOBAL ALTERNATIVE FLOW 書き込み中の中断`） |
+
+**1つだけ直した。****`WORKFLOW.md` という名前のディレクトリ**に `--force` を当てたとき、
+差し替えの失敗がそのまま出ると「一時ファイルの名前と `rename` の失敗」が並ぶだけで読めない。
+`os.Lstat` の結果がディレクトリなら、差し替えに進む前に
+`WORKFLOW.md を作成できません: <パス>: is a directory` で止める（変更前と同じ文言である）。
 
 ---
 
@@ -5241,12 +6064,21 @@ tracker:
     working: null                           # まだ続きがあるとき。null なので Status は動かさない
   required_labels: []                       # ここに書いたラベルが全部付いた issue だけを対象にする。空なら絞り込まない
   active_states: ["Ready", "In Progress"]   # 対象にする Status。下の running_state と dispatch_state を必ず含めること
-  terminal_states: ["Done"]                 # 終わったとみなす Status。ここへ移った issue の worktree を片付ける
+  terminal_states: ["Done"]                 # 終わったとみなす Status。下の cleanup.on_states は、この一覧の中から選ぶこと
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
   verify_states_every: 20                   # 上に書いた Status 名がボードに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
+  unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。
+                                            # turn の途中なら、この長さまで turn の終わりを待ち、エージェントの表明を読んでから判断する。
+                                            # 0 なら待たずに止める。待つぶん、人間が止めたいときに止まるのが遅れる
+  automated_state_rewrite: {}               # ボードの組み込みの自動化（PR を issue に紐づけた・PR をマージした等）が
+                                            # Status を動かしたときだけ、その Status を上に書いた Status へ戻す。
+                                            # 空なら戻さず、上の猶予を置いてから worker を止める。人間が動かしたものは戻さない。
+                                            # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる。
+                                            # 戻す先は上の active_states に入っている Status にすること。
+                                            # キーには、この設定のどこにも名前が出てこない Status を書くこと
 
 polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと
@@ -5255,6 +6087,9 @@ workspace:
   root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する。
                                             # 中の並べ方は <root>/<ホスト>/<owner>/<repo>/<branch> に固定で、選べない
   identity_file: .continuo.json             # どの issue の worktree かを worktree の中に書き残すファイルの名前
+  on_broken_worktree: stop                  # 上のファイルを読めない worktree を見つけたときの振る舞い。
+                                            # stop なら起動を止める。skip ならその worktree だけ飛ばして続ける。
+                                            # どちらでも worktree は消さない（消すのは continuo abandon --force だけ）
 
 workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
   after_create: null                        # worktree を作った直後に走る。失敗したらその issue は進めない
@@ -5319,7 +6154,7 @@ naming:
 
 cleanup:
   enabled: true                             # 終わった issue の worktree と branch を片付けるかどうか
-  on_states: ["Done"]                       # この Status へ移った時点で片付ける
+  on_states: ["Done"]                       # この Status へ移った時点で片付ける。上の tracker.terminal_states に無い値を書かないこと
   require_clean_worktree: true              # commit していない変更が残っていたら消さない
   require_pushed: true                      # push していない commit が残っていたら消さない
   delete_branch: true                       # worktree と一緒に branch も消すかどうか
@@ -5393,6 +6228,29 @@ language: auto                              # 画面に出す文言の言語。a
 
 **読めなかった場合は、その旨を最終応答に書いて `CONTINUO-STATUS: blocked` を出してください。**
 中身が分からないまま作業を始めないでください。
+
+## この issue に紐づく PR も読むこと
+
+**PR ができたあと、レビューの指摘は PR に書かれます。**issue のコメントだけを読むと見落とします。
+
+**まず、この issue に紐づく PR の番号を全部出してください。**次の2つを両方実行し、重複を除きます。
+
+    gh pr list --repo {{.issue.owner}}/{{.issue.repo}} --state all --limit 100 --json number,state,title,closingIssuesReferences --jq '.[] | select(any(.closingIssuesReferences[]?; .number == {{.issue.number}})) | "\(.number)\t\(.state)\t\(.title)"'
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}}/timeline --paginate --jq '.[] | select(.event == "cross-referenced") | .source.issue | select(.pull_request != null) | "\(.number)\t\(.state)\t\(.title)"'
+
+**出てきた PR 1件ずつについて、次の3つを全部読んでください。**<PR番号> は上で出た数字に置き換えます。
+
+    gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --comments
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '.[] | "\(.user.login) \(.path):\(.line // .original_line)\n\(.body)\n"'
+
+    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '.[] | "\(.user.login) \(.state)\n\(.body)\n"'
+
+**2つ目を飛ばさないでください。**行に紐づくレビューコメントは gh pr view --comments に1件も出ません。
+**指摘の本体はそこに書かれます。**
+
+**読んだ指摘は、直すか、直さない理由を issue のコメントに残すかのどちらかにしてください。**
 
 ## 終わったらやること
 
@@ -6012,42 +6870,6 @@ pane / workspace には手を出さない。
 
 ---
 
-### 6-11. `continuo abandon` のレビューで直したこと
-
-**言いたいこと。**`continuo abandon` の code / security の指摘のうち、**まだ直っていなかった
-ものを全部片付けた。**あわせて issue #19（herdr workspace の閉じ残し）を直した。
-**直さないと決めたものは1件だけで、理由も下にある。**
-
-**直したもの。**
-
-| 短縮名 | 何が起きるか | どう直したか |
-| --- | --- | --- |
-| **身元ファイルの読み取りが無制限** | 上限が無く、実測で 67,109,391 バイトを読み切った。symlink も辿り、置き場所の外の中身が「この worktree の身元」として照合された | 64 KiB の上限と `O_NOFOLLOW` を付け、超えたら `ErrIdentityBroken`（3-18） |
-| **workspace の閉じ残し** | `worktree.open` が開く**リポジトリの親 workspace**を誰も閉じず、issue 1件につき1つ溜まる | 片付けの段3b で、条件を2つとも満たすときだけ閉じる（3-9b） |
-| **park のあと止まると板が戻らない** | ボードは書き換わったのに「何も消していません」としか出ず、issue が置き去りになる | Status がその値のまま残ることを1行で言う。**戻しはしない**（3-37） |
-| **計画表示の Status が古い** | ボードを1回しか読まないので、park の**前**の値が出る | 書き込みが通ったら持ち回っている値も更新する |
-| **接続先の注釈が実態より強い** | 「どんな宛先へも Bearer が飛ばない」と書いてあるが、拒むのは平文の http だけである | 注釈を実態に直した（**https ならどのホストでも通る**） |
-| **実在の名前** | `test/internal/herdr/pane_test.go` に実在のアカウント名とリポジトリ名が残っていた | 架空の名前へ直した |
-
-**既に直っていたもの**（この作業では触っていない）。`--to` を消す前に確かめる・`--park` が
-作業中の値なら止まる・worktree が無いとき `--to` を捨てたと言う・失うファイル数が
-「◯◯以上」と出る・branch を消していなければそう書く・中断と時間切れを言い分ける・
-読めない URL の照合・`failure_state` の綴りの照合（設定の検証も `containsStateFold` である）。
-
-**直さないと決めたもの。**
-
-| 短縮名 | なぜ直さないか |
-| --- | --- |
-| **テストに残る実在の名前**（`test/internal/herdr/pane_test.go` 以外の75箇所） | **`test/internal/config/design_example_test.go` は、この設計文書に載っている設定例と一致することを検査している。**一括で置き換えるとそこが落ちる。**まとめて直すなら、設定例のほうから直す別の作業になる** |
-
-**塞がっていたもの。****`Inspect` と削除の間が再検査されない**という指摘は、いま塞がっている。
-継続監視が動いていれば段1 が pane の消滅を待ってから段3 へ進み、そこへ戻ってくる経路は無い
-（park の先が `tracker.active_states` に入らないことは段2 の直後で確かめるので、
-継続監視がその issue を拾い直せない）。動いていなければ段3 と段4 の間で pane を数え、
-1件でもあれば消さずに止まる。**どちらの経路でも、消す時点で生きた pane は無い。**
-
----
-
 ### 6-11. 書けない場所を、起動する前に捕まえる
 
 **言いたいこと。**利用者の WSL でファイルシステムが壊れ、ホームが read-only になった。
@@ -6099,6 +6921,483 @@ read-only へ落とし、そのうえで I/O エラーも返す。**利用者の
 
 **同じ読み分けを、書き込みの検査にも使う。**`Claude の設定` と `worktree の場所` が
 落ちたときも、ファイルシステムの異常なら同じ4つの案内を出す。
+
+### 6-13. `continuo abandon` のレビューで直したこと
+
+**言いたいこと。**`continuo abandon` の code / security の指摘のうち、**まだ直っていなかった
+ものを全部片付けた。**あわせて issue #19（herdr workspace の閉じ残し）を直した。
+**直さないと決めたものは1件だけで、理由も下にある。**
+
+**直したもの。**
+
+| 短縮名 | 何が起きるか | どう直したか |
+| --- | --- | --- |
+| **身元ファイルの読み取りが無制限** | 上限が無く、実測で 67,109,391 バイトを読み切った。symlink も辿り、置き場所の外の中身が「この worktree の身元」として照合された | 64 KiB の上限と `O_NOFOLLOW` を付け、超えたら `ErrIdentityBroken`（3-18） |
+| **workspace の閉じ残し** | `worktree.open` が開く**リポジトリの親 workspace**を誰も閉じず、issue 1件につき1つ溜まる | 片付けの段3b で、条件を2つとも満たすときだけ閉じる（3-9b） |
+| **park のあと止まると板が戻らない** | ボードは書き換わったのに「何も消していません」としか出ず、issue が置き去りになる | Status がその値のまま残ることを1行で言う。**戻しはしない**（3-37） |
+| **計画表示の Status が古い** | ボードを1回しか読まないので、park の**前**の値が出る | 書き込みが通ったら持ち回っている値も更新する |
+| **接続先の注釈が実態より強い** | 「どんな宛先へも Bearer が飛ばない」と書いてあるが、拒むのは平文の http だけである | 注釈を実態に直した（**https ならどのホストでも通る**） |
+| **実在の名前** | `test/internal/herdr/pane_test.go` に実在のアカウント名とリポジトリ名が残っていた | 架空の名前へ直した |
+
+**既に直っていたもの**（この作業では触っていない）。`--to` を消す前に確かめる・`--park` が
+作業中の値なら止まる・worktree が無いとき `--to` を捨てたと言う・失うファイル数が
+「◯◯以上」と出る・branch を消していなければそう書く・中断と時間切れを言い分ける・
+読めない URL の照合・`failure_state` の綴りの照合（設定の検証も `containsStateFold` である）。
+
+**直さないと決めたもの。**
+
+| 短縮名 | なぜ直さないか |
+| --- | --- |
+| **テストに残る実在の名前**（`test/internal/herdr/pane_test.go` 以外の75箇所） | **`test/internal/config/design_example_test.go` は、この設計文書に載っている設定例と一致することを検査している。**一括で置き換えるとそこが落ちる。**まとめて直すなら、設定例のほうから直す別の作業になる** |
+
+**塞がっていたもの。****`Inspect` と削除の間が再検査されない**という指摘は、いま塞がっている。
+継続監視が動いていれば段1 が pane の消滅を待ってから段3 へ進み、そこへ戻ってくる経路は無い
+（park の先が `tracker.active_states` に入らないことは段2 の直後で確かめるので、
+継続監視がその issue を拾い直せない）。動いていなければ段3 と段4 の間で pane を数え、
+1件でもあれば消さずに止まる。**どちらの経路でも、消す時点で生きた pane は無い。**
+
+---
+
+### 6-14. 紛らわしい Status の組を、doctor が注意する
+
+**言いたいこと。**ボードに `In Progress` と `AI In Progress` が並んでいると、
+**どちらを設定に書いたかを人間が取り違える。**取り違えたまま無人で回すと、
+**人間が自分で作業している issue にエージェントが着手する。**
+
+**見出し語 `Status の名前` を足し、記号は `!` にする**（`✗` にしない。continuo は動く）。
+実体は [internal/doctor/status_names.go](internal/doctor/status_names.go) の `checkStatusNames` である。
+**ボードを読んだときの応答を使い回すので、リクエストは1本も増えない**
+（`tracker.Adapter.StatusOptionNames` が Bootstrap で解決した選択肢名を返す）。
+
+**紛らわしいとは何かを、2つに限って決める。**
+
+| 短縮名 | 判定 | 例 |
+| --- | --- | --- |
+| 同じに見える | 大文字小文字と区切り（空白・記号）を落とすと同じ綴り | `InProgress` と `In Progress` |
+| 含んでいる | **語の並びとして**一方が他方を丸ごと含む | `In Progress` ⊂ `AI In Progress` |
+
+**含む・含まれるを、ただの部分文字列で見てはならない。**`Abandoned` は文字の並びとして
+`Done` を含む（a-b-a-n-**d-o-n-e**-d）。ボードに `Done` と `Abandoned` を並べるのはごく普通で、
+そこを警告すると**警告そのものが読まれなくなる。**
+
+**なぜ既にある検査では捕まらないのか。**
+
+| 既にある検査 | 何を見るか | なぜ足りないか |
+| --- | --- | --- |
+| `Adapter.Bootstrap` | 設定に書いた名前がボード側に在るか | **ボードに紛らわしい別の選択肢が並んでいても通る** |
+| `config.Validate` | `active_states` と `terminal_states` / `cleanup.on_states` が重なっていないか | **綴りが同じときだけ落とす。**紛らわしい組は綴りが違うので素通りする |
+
+**警告に載せる副作用は、実装を読んで確かめた3つである。**
+
+| 何が起きるか | 根拠 |
+| --- | --- |
+| **人間がその Status へ置いた issue も continuo が拾う** | `Adapter.FetchIssuesByStates` は `active_states` の item を誰が置いたかを問わず返す。作成者・担当者での絞り込みは1つも無い。絞るのは `tracker.required_labels` だけで、既定は空である |
+| `cleanup.on_states` との重なりは起動前に止まる | `config.Validate` が `active_states` と同じ綴りを見つけて落とす |
+| `terminal_states` との重なりも起動前に止まる | 同上。**どちらも綴りが同じときに限る** |
+
+**記号は3値のままにする。**`!` は「確かめられなかった」と「確かめたが取り違えやすい」の
+両方を表す。**4値目を足すと、終了コードの規則（`✗` だけが 1）を作り直すことになる。**
+集計の行は両方をまとめて数えるので、文言も両方を指す形にしてある。
+
+### 6-15. PR のコメントとレビューも、エージェントに読ませる
+
+**言いたいこと。**PR ができたあと、レビューの指摘が書かれる自然な場所は PR である。
+**それなのに雛形が読ませていたのは issue のコメントだけだった**（issue #34）。
+**指摘を読まないまま「終わりました」と表明する。**
+
+**雛形の本文（5-3）に節を1つ足す。**その issue に紐づく PR を全部出し、
+1件ずつ3つのコマンドで読ませる。**実物は 5-3 の本文にある**
+（[internal/scaffold/template.go](internal/scaffold/template.go) が一字一句そのまま持つ）。
+
+| 何を読むか | 使うコマンド | なぜそれか |
+| --- | --- | --- |
+| 紐づく PR の番号 | `gh pr list --json closingIssuesReferences` と、issue の `timeline` の `cross-referenced` | 前者は閉じる指定のある PR、後者は参照しているだけの PR。**両方を出して重複を除く** |
+| 説明・会話のコメント・レビューの本文 | `gh pr view <番号> --comments` | ここまでは1コマンドで出る |
+| **行に紐づくレビューコメント** | `gh api repos/<owner>/<repo>/pulls/<番号>/comments` | **`gh pr view --comments` に1件も出ない** |
+| レビューの判定と本文 | `gh api repos/<owner>/<repo>/pulls/<番号>/reviews` | `approved` / `changes_requested` は判定側にしか無い |
+
+**「`gh pr view --comments` に出ない」は実測である**（2026-08-26、gh 2.97.0）。
+`cli/cli` の PR #3 には `command/pr.go:297` に紐づくレビューコメントがあるが、
+`gh pr view 3 --repo cli/cli --comments` の出力にその本文は1行も現れない。
+`gh api repos/cli/cli/pulls/3/comments` では出る。
+
+**雛形を直しても、既に WORKFLOW.md を持っている利用者には届かない。**
+`continuo init` は既にあるファイルを作り直さず、`continuo setup` は Status の8つのキーの行しか
+書き換えない（[internal/scaffold/update.go](internal/scaffold/update.go)）。
+**本文は1文字も触らない。**したがって**新しい版へ上げても、古い本文のまま回り続ける。**
+
+**これは issue #38（破壊的変更が入った版へ上げるとき、インストーラーが警告する）と同じ問題である。**
+#38 が扱っているのは front matter のキーの増減だが、**本文の変更も同じ経路で届かない。**
+**#38 で決める「破壊的変更をどこに書くか」の対象に、本文の変更を含めること。**
+front matter と違って本文は起動を止めない（未知のキーではないので `yaml.Strict()` に掛からない）ため、
+**黙って古い手順のまま動き続ける。**気づく手がかりが1つも無い点で、front matter より始末が悪い。
+
+---
+
+### 6-16. doctor の枝は、実装の早い戻りまで数える
+
+**言いたいこと。**`continuo doctor` の代替フローは10本ある。検査そのものの分岐だけでなく、
+**「検査を始める前に止まる」「結果を届けられない」「確かめる対象がそもそも無い」も枝として数える。**
+実装に在る早い戻りと、仕様の枝を1対1にするためである。
+
+**検査の中身以外で分かれる4本と、対応する実装。**
+
+| 代替フロー | 実装の在りか | 何が起きるか |
+| --- | --- | --- |
+| 引数の指定が不正 | [internal/cli/cli.go](internal/cli/cli.go) の `runDoctor` / `parseErrorExitCode` | 位置引数が2つ以上なら検査を1件も行わずに終了コード 2 |
+| 確かめる対象が0件 | [internal/doctor/checks.go](internal/doctor/checks.go) の `checkClone` / `checkTrust` | ボードが空だと `clone` と `信頼登録` は `!`。終了コードに影響させない |
+| 検査結果を書き出せない | [internal/cli/cli.go](internal/cli/cli.go) の `runDoctor` の `report.Write` | 書き出しが失敗したら終了コード 3 |
+| 確かめられなかった見出し語がある | [internal/doctor/report.go](internal/doctor/report.go) の `Write` | `!` があって `✗` が無いときは、要約の文言だけが変わる。終了コードは 0 |
+
+**なぜ「確かめられなかった見出し語がある」を別の枝にするか。**
+終了コードは基本フローと同じ 0 である。**違うのは要約の1行だけである。**
+`Write` は `✓` だけ・`!` だけ・`✗` ありの3通りに文言を分けており、
+**`!` だけのときを「問題があります」と書かない**（対象が0件のボードもここへ来るため）。
+仕様に枝が無いと、この3通りをテストで名指しできない。
+
+**なぜ「確かめる対象が0件」を「前提が揃っている」の判定より後ろに置くか。**
+`checkClone` は対象が0件でも先に `ghq` と `git` が PATH にあるかを見て、無ければ `✗` で戻る。
+**0件の判定を前に置くと、`ghq` が入っていない環境で `!` が出て `✗` が消える。**
+
+**代替フロー10本で、CFG のテストパスは 177本・612KB である**（2026-08-26 に再生成した実測）。
+1周として書く方針（6-3）は変えていないので、伸びるのは分岐の数に比例する範囲に収まる。
+
+---
+
+### 6-17. 片付けの RUCM は、止まる経路を3つ足して11本にする
+
+**言いたいこと。**`worktree と branch を片付ける` の代替フローは、実装が持つ「止まる経路」を
+3本取りこぼしていた。**足すのは実装に分岐が実在するものだけで、実装と食い違う候補は足さない。**
+
+**足した3本。**
+
+| フロー | 分岐元 | 実装のどこか |
+| --- | --- | --- |
+| `材料を取れない`（限定代替フロー） | ステップ2・3・4 | `internal/orchestrator/reconcile.go` の `reconcileWorktrees` |
+| `宛先が定まらない` | ステップ9 | `internal/workspace/cleanup.go` の `resolveWorkspaceID` |
+| `消せないworktree` | ステップ12 | `internal/workspace/cleanup.go` の `removeWorktreeByHand` |
+
+**足さなかった1本。**`リポジトリを検算できない` は**実装と食い違うので置かない。**
+`Cleanup` は検算できなくても止まらず、**branch に触らずに worktree と herdr workspace だけを消す**
+（issue #23）。止まるのは `ErrRepoMismatch`（`.git` が別のリポジトリを指していた）ときだけであり、
+それは「検算できない」とは別の状態である。
+
+**書き方は 6-3 の方針を変えていない。**材料を取れない3つは終わり方が同じなので、
+**限定代替フロー1本にまとめて `RFS BASIC FLOW 2,3,4` で受ける。**3本に割ると同じ事後条件が3回並ぶ。
+
+**代替フロー11本で、CFG のテストパスは 35本である**（2026-08-26 に再生成した実測。足す前は 30本）。
+増えたのは分岐の数ぶんだけで、経路の爆発は起きていない。
+
+**テストは4本に貼った。**`宛先が定まらない`・`消せないworktree`・材料を取れないの
+うち走査と身元ファイルの2つに、`test/internal/workspace/` のテストが対応する。
+**ボードを取り直せない経路だけはテストが無い**（`[W1]` に残る）。
+その分岐は tracker と orchestrator にあり、workspace のテストからは踏めない。
+
+### 6-18. issue 1件の RUCM は、代替フローを35本にする
+
+**言いたいこと。**`issue を1件処理する` の代替フローは35本、CFG のテストパスは42本である。
+**足すのは実装に分岐が実在するものだけであり、分岐元は実装の行で裏を取る。**
+
+**分岐元が見つけにくい12本**（段は名前で指す。番号は段を増やすたびに動く）。
+
+| フロー | 分岐元の段 | 実装のどこか |
+| --- | --- | --- |
+| `走行中のissue` | 別の run の印を見る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `dispatchCandidates` |
+| `ラベルの不足` | required_labels を見る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `hasRequiredLabels` |
+| `turnループの重なり` | turn ループの重なりを見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `startTurnLoop` |
+| `本文の組み立ての失敗` | 本文の組み立てを見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `buildTurnText` |
+| `turnの終わりの取りこぼし` | Stop hook の到着を見る | [internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `confirmTurnEnd` |
+| `リトライの尽き` | `turnの終わりの取りこぼし` のリトライの回数を見る | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `abandonRunClaimed` |
+| `騙りのhook` | hook の cwd を見る | [internal/orchestrator/hookinput.go](../../internal/orchestrator/hookinput.go) の `acceptHookCwd` |
+| `ボードから消えたissue` | issue がボードに見えるかを見る | [internal/orchestrator/lifecycle.go](../../internal/orchestrator/lifecycle.go) の `refreshIssue` |
+| `復元の断念` | `コメントの取り戻し` の身元ファイルを読めるかを見る | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `ensureAgentComment` |
+| `着手の途中の失敗`（任意時点） | worktree を作る | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` |
+| `復帰の失敗`（任意時点） | pane の受け付けを見る／Claude Code を起動する | [internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun` の `if startErr != nil && resumeUUID != ""` |
+| `取り戻しの復帰の失敗` | `コメントの取り戻し` の復帰つきの起動の完了を見る | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `ensureAgentComment` |
+
+**「実装のどこか」には、枝を決めている関数を書く。**フローの本体の関数ではない。
+`取り戻しの復帰の失敗` と `コメントの取り戻しの失敗` はどちらも `failCommentRecovery` を
+本体に持つが、**枝を決めているのは `ensureAgentComment` の中の3つの `if`** である
+（`AgentStartWithRetry` の失敗・`confirmStartup` の失敗・`hasRunComment` の再確認）。
+**本体の関数を書くと、読んだ人が条件を1つも持たない関数へ行き着く。**
+
+**リトライを積む出口は4つあるが、尽きたときの後始末は `abandonRunClaimed` の1本しかない。**
+`turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`ボードから消えたissue` が
+そこへ入る。**`リトライの尽き` は1本だけ書く。**
+
+**引き金が重なる枝は、WHEN で除く。**`着手の途中の失敗` の WHEN からは「壊れた ref」
+「pane の受け付け待ち」「復帰つきの起動の失敗」を外してある。**`コメントの取り戻し` の2つの段は
+条件ステップにしてある**（任意時点代替フローにすると `rucm_validator.py` が W005 を出す）。
+
+### 6-18b. `復帰の失敗` は、立て直しの成否を事後条件に書かない
+
+**言いたいこと。**立て直しは前の Claude Code を止めずに同じ pane で行うので、
+**前が残っていると立て直しの起動そのものを受け付けてもらえない。**
+だから RESUME 先は「pane の受け付けを見る」の段であり、事後条件は成否を書かない。
+
+**`復帰の失敗` の WHEN は理由を絞らない。**`startRun` はエラーの種類を見ずに立て直すので、
+**pane が `agent_pane_busy` を30秒返し続けても、確認の画面で止まっても、
+`herdr.startup_timeout_ms` が経っても、同じ枝へ入る。**
+そのぶん、**ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの断念` の3本は、
+新しいセッション UUID の指定つきの起動でだけ通る。**3本の事後条件にそう書いてある。
+
+**`起動の待ち直し` は別である。**`confirmStartupWithRestart` は直前に使った引数をそのまま
+渡し直すので、**再着手ではその引数に `--resume` が入ったまま待ち直す。**だから事後条件に
+起動フラグの種類を書かない。**`起動の待ち直し` を1回も通らない失敗が2つある。**
+
+| `起動の待ち直し` を1回も通らない失敗 | 通らない理由 |
+| --- | --- |
+| `agent.start` そのものがエラーを返した | `launchClaude` が `AgentStartWithRetry` のエラーをその場で返し、待ち直しを持つ `confirmStartupWithRestart` を1度も呼ばない |
+| 起動直後の確認の画面で止まった | `confirmStartup` の `blocked` は `ErrStartupRetryable` を包まないので、`confirmStartupWithRestart` が期限を待たずに返る |
+
+**上の行は珍しくない。**pane が占められたままだと `AgentStartWithRetry` は
+`agent_pane_busy` を `agentStartBusyBudget`（30秒）粘ってからエラーを返す。
+**復帰つきの起動なら、その30秒のあとは `paneの断念` でも `起動の待ち直し` でもなく
+`復帰の失敗` である。**粘りは `AgentStartWithRetry` の中にあり、その戻り値が
+`if startErr != nil && resumeUUID != ""` へ落ちるためである。**だから `復帰の失敗` は
+「pane の受け付けを見る」の段からも枝を出す**（`BRANCH FROM BASIC FLOW 23,24`）。
+**枝を1本にすると、復帰つきの起動が pane の受け付けで打ち切られることになり、
+実装に無い経路を仕様が持つ。**
+
+**RESUME 先を「pane の受け付けを見る」の段にする理由。**`launchClaude` は pane の
+受け付けを粘る `AgentStartWithRetry` から始まるので、**起動の段へ直接戻すと、その検査が
+仕様から消える。**
+
+**起動の確認の段へは戻さない。**戻ったあとの状態が成功した起動と1バイトも変わらないのに
+枝が全部2本ずつになる（実測: 2026-08-27。確認の段へ戻すと92本、起動の段へ戻すと68本、
+受け付けの検査へ戻すと42本）。
+**起動フラグの選び分けも IF に割らない。**「起動フラグを決める」の段で1度だけ決め、
+どちらを渡したかはテストが `agent.start` の引数で見る。
+
+### 6-18c. 立て直しが通るかは、前の Claude Code が pane に残るかで割れる
+
+**言いたいこと。**continuo は agent を止められないので、立て直しの起動を受け付けてもらえるかは
+**前の Claude Code が pane に残るかで決まり、残るかどうかは失敗の理由ごとに違う。**
+だから `paneがまだ使えない` の事後条件は、pane の状態を1つに決めない。
+
+**continuo は agent を止められない。**[internal/herdr/agent.go](../../internal/herdr/agent.go) の
+method は start / prompt / read / get / list / wait / rename / send_keys の8つで、止める method が
+無い。`startRun` は同じ pane・同じ agent 名で `agent.start` をもう一度通す。
+
+| 復帰つきの起動が完了しなかった理由 | pane に何が残るか | 立て直しの起動 |
+| --- | --- | --- |
+| 前回のセッションが消えていた | `claude --resume` が落ち、シェルのプロンプトへ戻る | 受け付けられる |
+| 起動直後の確認の画面で止まった | `esc` で画面だけを畳んだ Claude Code が前面で走り続ける | **受け付けられない** |
+| 起動の確認が期限まで idle にならなかった | 前の Claude Code が前面で走り続けているか、落ちてシェルのプロンプトへ戻っているかのどちらか | **呼んでみるまで分からない** |
+
+**受け付けられない根拠。**herdr 0.8.2 の `herdr --skill` は
+"An available shell pane must be at its interactive prompt, with the shell itself in the
+foreground and no foreground command, editor, or agent running." （**訳:** 使えるシェルの pane とは、
+**対話プロンプトに来ていて、シェル自身が前面にあり、前面で走るコマンドも editor も agent も
+無いものである**）と書いている。**占められた pane へ `agent.start` を投げると
+`agent_pane_busy`（`agent target pane <pane の ID> is not an available shell`）が返る**
+（2026-08-27 に実測。pane で `sleep 180` を走らせてから `herdr agent start` を呼んだ）。
+
+**立て直しの起動を受け付けてもらえなかった run は `paneの断念` で人間へ渡す。**
+`paneがまだ使えない` で30秒粘り、**`paneの断念` が pane を閉じる。**
+閉じることで、残っていた前の Claude Code も終わる。
+**ここへ来るのは新しいセッション UUID の指定つきの起動だけである。**復帰つきの起動が
+pane の受け付けで落ちた場合は、その前に `復帰の失敗` が受け取って立て直しへ回している。
+
+**その30秒のあいだ、pane に残った Claude Code の hook は捨てられる。**`復帰の失敗` は
+hook の索引を新しいセッション UUID へ張り替えており（`bindSession` は同じ run の古い結び付きを
+消してから書く）、pane に残っているのは前回のセッション UUID を名乗る Claude Code である。
+`OnHook` は索引に無い `session_id` に偽を返し、hookserver がその hook を捨てる。
+
+### 6-18d. 引き渡しの通知は1つの run につき1件しか書けない
+
+**言いたいこと。**通知の枠は run につき1つである（`runState.takeHandoffPost`）。
+**打ち切りから `コメントの取り戻し` へ入ると、枠は打ち切りの理由が既に取っている。**
+だから失敗の2本のフローは「まだ1件も書いていなければ」と条件付きで書く。
+
+**`failCommentRecovery` から出る2本の枝は、実装の並びに合わせる。**
+[internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の
+`failCommentRecovery` は **pane を閉じ、Status を `failure_state` へ落としてから、
+引き渡しのコメントを1件書く**（`stopWorker` → `UpdateStatus` → `postHandoffComment`）。
+`コメントの取り戻しの失敗` と `取り戻しの復帰の失敗` の段はこの順である。
+
+**条件を落とすと、仕様が通っているテストと食い違う。**`リトライの尽き` は
+`abandonRunClaimed` が打ち切りの理由で枠を取ってから「run のコメントの有無を見る」の段を通す。
+**そこから失敗の2本のフローへ入っても、`postHandoffComment` は2件目を投稿せずにログへ落とす。**
+2本の事後条件は「人間へ引き渡す通知のコメントが1件だけある」と書き、
+**打ち切りから来た場合はその1件が打ち切りの理由であると添えてある。**
+`TestAbandon_打ち切りのときissueに残る理由が本当の理由である` がその挙動を確かめている。
+
+### 6-18e. テストの印は、同じ経路の1本にだけ付ける
+
+**言いたいこと。**印は42本のうち31本に付いている。**印の無い11本のうち4本は、
+6-18d で書き直した2本のフローの経路であり、テストが1本も無い。**
+同じ経路を2本のテストに付けるのもやめる。片方が消えても集計が満たされたままになる。
+
+**印の無い11本は `sh scripts/check-rucm.sh` の `[W1]` に出る。**
+
+| 印の無いフロー | `[W1]` に出る経路 | いつからの取りこぼしか |
+| --- | --- | --- |
+| `コメントの取り戻しの失敗` | P003・P008 | **段の並びを書き直したのに、テストが無い** |
+| `取り戻しの復帰の失敗` | P004・P009 | **足したのに、テストが無い** |
+| `既に同じStatus` を通る組み合わせ | P006・P007・P010 | 前からの取りこぼし |
+| turn ループを2周する経路 | P011 | 前からの取りこぼし |
+| `復帰の失敗` へ pane の受け付けから入る側 | P030 | **枝を足したのに、テストが無い** |
+| `壊れたref` と `消さないref` | P031・P032 | 前からの取りこぼし |
+
+**P030 にテストを付けていない理由。**その経路を踏むには `agent.start` に
+`agent_pane_busy` を `agentStartBusyBudget`（30秒）のあいだ返し続けさせる必要がある。
+`agentStartBusyBudget` は `internal/orchestrator/dispatch.go` の const で、
+**設定から短くできないので、テスト1本が30秒を使う。**同じ待ちを使う
+`TestRUCM_P029_paneが使えないまま期限を過ぎたら人間へ渡す` が既に1本あり、
+**もう1本足すとテストの所要時間が倍になる。**短くできるようにするのが先である。
+
+**新規の着手と再着手は同じ経路（P001）を通る。**6-18b のとおり「起動フラグを決める」の段を
+IF に割っていないので、CFG に枝が無く、2つを別の経路として指せない。
+**印を持つのは再着手の側1本だけにする。**「起動フラグを決める」の段の本文が、
+身元ファイルにセッション UUID があるほうを先に書いているためである。
+**新規の着手の側には、同じ経路を別の入力で通ることを doc コメントに書く。**
+
+### 6-19. `着手を取り消す` の RUCM は、代替フローを18本のままにする
+
+**言いたいこと。**別の branch にあった候補2本は、どちらも本流の既存フローと役割が同じである。
+**同じ結末のフローを2本置くと、どちらを読めばよいかが決められなくなる。**
+代替フローは18本である（経路の本数の抑え方は 6-20 に書いてある）。
+
+**足さないと決めた2本。**
+
+| 候補 | 判定 | 本流のどこが同じ役割か |
+| --- | --- | --- |
+| `実行の前提を整えられない` | 足さない（重複） | `前提を読めない`。どちらも「読めなかった対象と理由を1行出し、何も消さずに終了コード 1 で止まる」 |
+| `失うものを調べられない` | 足さない（実装に分岐が無い） | 基本フローの「消すものと失うものと調べられなかったものの応答」と「失うものが無く調べ切れているかの検査」。`Inspect` は git の失敗をエラーにせず直線で通す |
+
+**`実行の前提を整えられない` が余分に持っていた分岐元。**「設定から外部へ繋ぐ処理を
+組み立てられる」を独立した検査に立てていた。**本流はそれを設定の読み取りと1つにまとめてある**
+（`internal/abandon/abandon.go` の `Run`。`config.Load` の失敗も `resolve` の失敗も、
+副作用が始まる前に同じ終了コードで止まる）。**検査を2つに割っても、人間から見た結末が1つも変わらない。**
+
+**`失うものを調べられない` に対応する分岐は実装に無い。**`internal/workspace/inspect.go` の
+`Inspect` は、git が答えられなかった項目を `Leftover.Undetermined` に積んで正常に返す
+（`HasLoss` が真になる）。**「調べられないときは失うものがある側に倒す」は分岐ではなく直線の処理**
+であり、基本フローが「調べられなかったものも一覧に出す」「失うものが無く調べ切れているか
+force があるか」の2つのステップで既に書いている。`Inspect` が本当にエラーを返すのは
+**封じ込め検査に落ちたときと身元ファイルを読めないとき**だけで、そこは `前提を読めない` の分岐元である。
+
+---
+
+### 6-20. `着手を取り消す` は、同じ入力で2度分岐しない
+
+**言いたいこと。**継続監視が動いているか・dry-run か・park を実際に書いたかは、
+**名前を付けた判定を1つにつき1度だけ置いて決め、以降の段は文の中の条件として持ち回る。**
+基本フローの `IF` は3つ、CFG のテストパスは34本である（2026-08-27 の実測）。
+
+**なぜ `IF` にしないか。**`IF` は**そこへ至る `IF` の組み合わせを後ろの段へ全部引き継ぐ。**
+継続監視が動いているかを4箇所、dry-run かを2箇所、片付けたあとの Status の指定を2箇所で
+`IF` に置くと、**基本フローを完走するだけで288通りになる。**
+**その大半は現実には起こらない組み合わせである**（継続監視が動いていないのに
+手を離させる書き込みを済ませている、など）。
+
+**採る書き方。**名前を付けた判定を2つ置き、以降は `VALIDATES THAT` の選言で受ける。
+**名前と、どの段にどの条件を畳んだかは
+[docs/spec/usecases/particular_case/着手を取り消す.rucm.md](../spec/usecases/particular_case/着手を取り消す.rucm.md)
+の「同じ入力で2度分岐しない」の表が正である。**設計はここに写さない（2箇所に持つと必ずずれる）。
+
+例: `システムは VALIDATES THAT 手を離させる書き込みを行っていないか、利用者が force を指定しているか、herdr が pane の一覧に答えたうえで worktree を作業ディレクトリに持つ pane が期限内に無くなる。`
+
+**`IF` のまま残す基準。**真と偽で**通る段の並びが変わる**ものは畳まない。
+**残るのは基本フローに3つ、代替フロー `worktreeが無い` に2つである**
+（どれが残ったかは、上のリンク先の「分岐のまま残したもの」の表にある）。
+
+**フローをまたいで数えないのは、代替フローがすべて `ABORT` で終わって分岐元へ戻らないからである。**
+1回の実行が3つのフローを通ることはある（基本フロー → `worktreeが無い` →
+`残ったbranchを消せない`）が、**そのとき通る `IF` は逸れた先のフローが持つものだけである。**
+
+**代わりに失われるもの。**畳んだ条件は経路の分岐ではないので、
+**CFG の経路1本が、その条件の真の側と偽の側の両方を含む。**`paths[].steps` にはその段の文が
+1行だけ並び、**どちらの側を通ったかは書かれない。**現に abandon のテスト62本は26本の経路に
+集まり（2026-08-27 の実測）、**同じ経路 ID のテストが真の側と偽の側に分かれて並ぶ。**
+**経路の一覧をそのまま検査に落とす道具は、真の側にしか成り立たない検査を偽の側にも当てる。**
+**テストは経路1本に1本ではなく、畳んだ条件の真偽の両側を通す。**
+
+**片側にしか倒れない条件は、そもそも段に書かない。**両側を通すテストを書けないのは、
+**片側が起こらない**からである。書けば常に真（または常に偽）になり、
+**読む側は起こりうる場合分けだと誤解する。**`pane待ちを終えられない` と `実行の中断` は
+手を離させる書き込みを済ませた実行しか通らないので、無条件に応答する。
+`片付け後のStatusを読めない` はその逆で、park を書いた実行が来ない
+（ボードは1回しか読まないので、park が読めていれば読み直しは起きない）。
+
+**繰り返しにまとめる案は採らない。**doctor（6-3）は確かめる項目が同じ形をしていて順に1周回すだけだが、
+abandon の段1〜段5 は**それぞれ別のことをする。**1周にまとめると、
+**段の順番でなければならない理由**（worktree を絞る前に pane を待てない、
+消す前に Status の綴りを確かめる）が書けなくなる。
+
+**畳んでも表現できる場合分けは減らない。**条件はすべて段の文に残っており、
+どの入力の組み合わせも同じ段を通る。**減るのは経路の本数と、経路の ID で区別できる粒度だけである。**
+
+**CFG の網羅率は根拠にならない。**`rucm_to_cfg.py` は列挙した経路からノードとエッジの
+被覆数を数えるので、**どの `.rucm.md` でも必ず100%になる**（このリポジトリの14本すべてが
+100%である。2026-08-27 の実測）。**畳めばノードもエッジも減る**（この変更で
+ノードは99から95へ、エッジは116から102へ、**経路は814本から34本へ**減った。2026-08-27 の実測）。
+**数えるべきは、段の文に条件が残っているかである。**
+
+---
+
+### 6-21. turn の終わりは、`agent.prompt` を返す前に積む
+
+**言いたいこと。**`agent.prompt` が返った瞬間から `claude.settle_ms` の時計が走る。
+**テストが準備をしている間に返させると、遅い機械では準備が終わる前に run が諦められる。**
+**`Stop` を先に流し、そのあとで `agent.prompt` を返させる。**
+
+**何が起きるか。**
+
+| 誰が | 何をする |
+| --- | --- |
+| `sendTurn` | `agent.prompt` が返ると `confirmTurnEnd` へ入り、**`settle_ms` だけ `Stop` を待つ** |
+| 来なければ | `turnStalled` → `abandonRun`。**2回目の turn は来ない。ログも出ない**（`claimTerminal` の中で止まる） |
+| テスト | 台本が即座に返したあと、transcript を書いてから `OnHook` を呼ぶ |
+
+**fixture の `settle_ms` は 50ms である**（[test/internal/orchestrator/helpers_test.go](test/internal/orchestrator/helpers_test.go) の `newFixture`）。
+**`t.TempDir()` と1回の巡回を挟めば、遅い機械では簡単に超える。**
+
+**どう直したか。**`blockFirstPrompt` が**1回目の `agent.prompt` を放す関数を返す。**
+テストは `Stop` を流してからそれを呼ぶ。`beginTurn` は `agent.prompt` の前に走るので、
+**先に積んだ `Stop` は消されない**（`rs.stopSeenAt` に残る）。
+
+```go
+releasePrompt := blockFirstPrompt(t, fx)
+…
+fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+releasePrompt()
+```
+
+**`holdPrompt` を turn の終わりを起こすテストで使ってはならない。**
+あれは `agent.prompt` を**即座に返す**台本である（返さない台本ではない）。
+
+**再現のしかた。**`OnHook` の直前に `time.Sleep(500 * time.Millisecond)` を差し込む。
+直す前は6本が落ち、直したあとは全部通る（2026-08-27 の実測）。
+
+---
+
+### 6-22. 巡回を1回打っただけで、効いたことにしない
+
+**言いたいこと。**巡回からの書き戻しは、記録を投稿した**あとで**印を返す（`endRewrite`）。
+**印が返る前に来た巡回は何もしない。**テストが巡回を1回しか打たないと、そこで止まる。
+
+**何が起きるか。**
+
+| 誰が | 何をする |
+| --- | --- |
+| 書き戻しの goroutine | Status を書く → 記録を投稿する → **`endRewrite` で印を返す** |
+| テスト | 記録が積まれたのを見て、次の巡回を1回だけ打つ |
+| その巡回 | `beginRewrite` が `rewriteBusy`、`beginTerminal` が `terminalRewriting`。**何もしない** |
+
+**実運用では30秒後の巡回が拾い直すので、この重なりは問題にならない。**
+
+**どう直したか。**条件が満たされるまで巡回を打ち直す（`tickUntil`）。
+**書き戻しの回数を数えるテストでは、`UpdateStatus` を関門で止めてから打つ**（`tickRewriteOnce`）。
+書き戻しが始まった時点で `beginRewrite` が塞がるので、**打ち直した巡回は必ず空振りする。**
+**1回のつもりが2回書きに行くことがない。**
+
+**記録は「何件あるか」ではなく「増えたか」で見る。**着手のときにも記録が1件積まれているので、
+**件数で待つと、書き戻しの記録を1件も待たないまま通る。**
+
+**再現のしかた。**`GOMAXPROCS=1` で `-count=100`。
+直す前は200回中10回落ちた。直したあとは480回すべて通る（2026-08-27 の実測）。
 
 ---
 
@@ -6303,7 +7602,7 @@ URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く
 | --- | --- | --- |
 | `codex.stall_timeout_ms` | 5.3.6 | continuo の観測点は herdr の pane の `revision`（画面の版）1つしかない。同じ時計に閾値を2つ置くと、小さいほうだけが効いて片方が死ぬ（3-21） |
 | `claude.liveness_hooks` | 仕様に無い（continuo 独自） | 設定にあるだけで読むコードが1行も無かった |
-| `tracker.write_interval_ms` | 仕様に無い（continuo 独自） | 読むコードが無い。3-31 が「continuo が書くのは Status と引き渡しの通知だけで、もともと間隔が空く」と結論している |
+| `tracker.write_interval_ms` | 仕様に無い（continuo 独自） | 読むコードが無い。3-31 が「continuo が書くのは Status と自分のコメントだけで、もともと間隔が空く」と結論している |
 | `workspace.layout` | 仕様に無い（continuo 独自） | 検証で `gwq` 以外を弾くだけで、値を見て処理を変える場所が無い（3-22） |
 | `claude.hook_bridge.mode` | 仕様に無い（continuo 独自） | 同上（`settings_flag` 以外を弾くだけ。3-12） |
 | `tracker.provider.comments.fetch` | 仕様に無い（continuo 独自） | `false` にすると全 run が `failure_state` に落ちる。選べる意味が無い |

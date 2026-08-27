@@ -3,7 +3,8 @@
 //
 // **順序が仕様である。**
 //
-//	1 設定を読んで検証する      … 起動を止める。**pane には触らない**
+//	1 設定を読んで検証する      … 起動を止める。**pane には触らない**。
+//	                             **噛み合っていない Status の集合は、ここで警告だけ出す**（3-9e）
 //	2 flock を取る             … 二重起動なので即座に終了する
 //	2b 依存を組み立てる          … **ここで外部プロセスを1つ起こす**（`gh auth token`）。
 //	                             **必ず期限を掛ける**（掛けないと無言で永久に止まる）
@@ -34,7 +35,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
@@ -84,7 +89,33 @@ const (
 	// **待ち切れなくても pane は閉じない。**次の起動で復元が引き継ぐ（設計 3-4 の段5）ので、
 	// ここで無期限に待つより、期限を切って抜けたほうが運用の妨げにならない。
 	DefaultTurnLoopWait = 30 * time.Second
+
+	// DefaultHookServerWait は終了時に hook の受け口が閉じ切るのを待つ上限である。
+	//
+	// **ここに期限が無かった**（`hookserver.Close` を裸で呼んでいた）。受け口の Close は
+	// 配送中の goroutine の終了を待つので、hook を1件でも捌き切れない goroutine が
+	// 残ると、終了が永久に返らなくなる。
+	//
+	// **5秒で足りる。**待っている相手は「受け取り済みの hook を印へ書き終えること」であり、
+	// ディスクへの追記しか残っていない。
+	DefaultHookServerWait = 5 * time.Second
+
+	// ExitInterrupted は後始末を待たずに割り込みで終わったときの終了コードである。
+	//
+	// **128 + SIGINT(2) である。**シェルが signal で死んだプロセスに付ける値と揃えて、
+	// 呼び出し側のスクリプトが「割り込みで終わった」と読めるようにする。
+	ExitInterrupted = 130
 )
+
+// ShutdownBudget は終了の後始末に掛かりうる最大の時間である。
+//
+// **3段は直列なので足し算になる**（ダッシュボード → hook の受け口 → turn ループ）。
+// 「Ctrl+C を押してから、最悪どれだけ待たされるのか」を人間へ数字で見せるために公開している。
+//
+// 戻り値: 3段の期限の合計。
+func ShutdownBudget() time.Duration {
+	return server.DefaultShutdownTimeout + DefaultHookServerWait + DefaultTurnLoopWait
+}
 
 // ErrStartup は「起動の段（設定の読み込みから巡回を始めるまで）で落ちた」ことを表す。
 //
@@ -137,6 +168,10 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	cfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
+
+	// **起動は止めずに、噛み合っていない Status の集合だけを知らせる**（設計 3-9e。issue #35）。
+	// **段1 の中に置く。**flock より前なので、二重起動で落ちる経路でも必ず1回出る。
+	WarnCleanupStates(cfg, logger)
 
 	// **トークンを載せる前に接続先を確かめる**（設計 3-23 の環境変数）。
 	// ここを飛ばすと、環境変数に書かれたどんな宛先へも `Authorization: Bearer` が飛ぶ。
@@ -251,13 +286,61 @@ func Run(ctx context.Context, opts Options) error {
 	// **pane は閉じない**（次の起動で引き継ぐ。設計 3-4 の段5）。
 	// **ダッシュボードを先に閉じる。**閉じかけの状態を人間に見せても意味が無く、
 	// 応答の goroutine が orchestrator の写しを取り続ける理由も無い。
-	logger.Info("巡回を止めました（hook の受け口を閉じて turn ループの終了を待ちます）")
+	logger.Info("巡回を止めました。後始末を始めます"+
+		"（ダッシュボード → hook の受け口 → turn ループの順に閉じます）",
+		"max_wait", ShutdownBudget(), "pid", os.Getpid())
 	shutdown()
 
 	if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, context.DeadlineExceeded) {
 		return runErr
 	}
 	return nil
+}
+
+// WarnCleanupStates は、片付けを始める Status に「終わったとみなさない Status」が
+// 混ざっていたら、起動時に1回だけ警告を出す（設計 3-9e。issue #35）。
+//
+// **起動を止めない。**止めると、いま動いている人の continuo が版を上げた瞬間に
+// 起動しなくなる。報告された `WORKFLOW.md` は `tracker.terminal_states: ["AI Done"]` と
+// `cleanup.on_states: ["Done"]` で、**まさにこの検査に引っかかる形である。**
+// **壊れるものは無く、片付けの筋が通らないだけである**ので、警告に留める。
+//
+// **`cleanup.on_states` と `tracker.active_states` の重なりとは扱いが違う。**
+// あちらは走っている worktree を消すので、`config.Validate` が起動前に止める。
+//
+// **どのキーのどの値かを必ず本文に出す。**「食い違っています」とだけ言われても、
+// 人間はどの行を直せばよいか分からない（`continuo doctor` の見出し語 `Status の名前` と
+// 同じ流儀である）。
+//
+// cfg: 検証を通った設定。
+// logger: ログの出力先。**nil を渡してはならない**（呼び出し元が既に解決している）。
+func WarnCleanupStates(cfg config.Config, logger *slog.Logger) {
+	outside := config.CleanupStatesOutsideTerminal(cfg)
+	if len(outside) == 0 {
+		return
+	}
+	logger.Warn(fmt.Sprintf(
+		"cleanup.on_states の %s が tracker.terminal_states にありません"+
+			"（終わったとみなさない Status で worktree を片付けます）。"+
+			"tracker.terminal_states に %s を足すか、cleanup.on_states から外してください",
+		quoteStates(outside), quoteStates(outside)),
+		"cleanup.on_states", quoteStates(cfg.Cleanup.OnStates),
+		"tracker.terminal_states", quoteStates(cfg.Tracker.TerminalStates))
+}
+
+// quoteStates は Status 名の並びを、引用符で囲んで読点でつないだ1つの文字列にする。
+//
+// **引用符を必ず付ける。**Status 名は空白を含みうる（`In Progress`）ので、
+// 裸で並べると、どこまでが1つの名前なのかが読めない。
+//
+// states: 並べる Status 名。
+// 戻り値: `"Done", "In Progress"` の形の文字列（空なら空文字）。
+func quoteStates(states []string) string {
+	quoted := make([]string, 0, len(states))
+	for _, s := range states {
+		quoted = append(quoted, fmt.Sprintf("%q", s))
+	}
+	return strings.Join(quoted, ", ")
 }
 
 // deps は組み立てた依存の束である。
@@ -286,11 +369,22 @@ type deps struct {
 // **どの待ちにも期限を付ける。**ダッシュボードだけに期限があって turn ループの待ちが
 // 無期限だと、turn ループが1本でも返らなくなった時点で `SIGKILL` でしか止められなくなる。
 //
+// **待ちに入る前に、どの段で何秒待つのかを1行ずつ出す。**出さないと、入口の1行のあと
+// 最大 ShutdownBudget() のあいだ画面が無反応になり、**止まったのか固まったのかが
+// 人間に区別できない。**
+//
 // **2回呼んでも安全である**（`hookserver.Close` と `server.Close` は閉じ済みを見ている）。
 //
 // ctx: 呼び出し元のコンテキスト。**キャンセル済みでもよい**（期限は付け直す）。
 // logger: ログの出力先。
 func (d *deps) close(ctx context.Context, logger *slog.Logger) {
+	// 段1: ダッシュボード。**待たずに叩き切る**（読み取り専用なので、途中で切れて
+	// 困る書き込みが1つも無い。`server.DefaultShutdownTimeout` を見よ）。
+	if d.Dashboard != nil {
+		logger.Info("後始末 1/3: ダッシュボードを閉じています"+
+			"（処理中の応答をこの時間だけ待ち、過ぎたら接続を切ります）",
+			"timeout", server.DefaultShutdownTimeout)
+	}
 	shutdownCtx, cancelShutdown := context.WithTimeout(
 		context.WithoutCancel(ctx), server.DefaultShutdownTimeout)
 	if err := d.Dashboard.Close(shutdownCtx); err != nil {
@@ -298,10 +392,28 @@ func (d *deps) close(ctx context.Context, logger *slog.Logger) {
 	}
 	cancelShutdown()
 
-	if err := d.HookServer.Close(); err != nil {
-		logger.Warn("hook の受け口を閉じられませんでした", "error", err)
+	// 段2: hook の受け口。**受け取り済みの hook を印へ書き終えるのを待つ。**
+	// ここを待たずに抜けると、Claude Code が送り終えた `Stop` を落としたまま終わり、
+	// 次の起動が「turn が終わっていない run」として引き継ぎ直すことになる。
+	logger.Info("後始末 2/3: hook の受け口を閉じています"+
+		"（受け取り済みの hook を印へ書き終えるまで待ちます）",
+		"timeout", DefaultHookServerWait)
+	var hookErr error
+	if WaitWithTimeout(func() { hookErr = d.HookServer.Close() }, DefaultHookServerWait) {
+		if hookErr != nil {
+			logger.Warn("hook の受け口を閉じられませんでした", "error", hookErr)
+		}
+	} else {
+		logger.Warn("hook の受け口が期限内に閉じないので待つのをやめます"+
+			"（socket のファイルは消してあります）",
+			"timeout", DefaultHookServerWait)
 	}
 
+	// 段3: turn ループ。**いちばん長い。**相手は Claude Code の1回の応答なので、
+	// 送り終えた指示が中途半端に切れないよう、ここだけは長めに待つ。
+	logger.Info("後始末 3/3: 走行中の turn ループの終了を待っています"+
+		"（送った指示が中途半端に切れないようにするためです）",
+		"timeout", DefaultTurnLoopWait)
 	if WaitWithTimeout(d.Orchestrator.Close, DefaultTurnLoopWait) {
 		logger.Info("走行中の turn ループが終わりました（pane は閉じていません）")
 		return
@@ -340,23 +452,83 @@ func WaitWithTimeout(wait func(), timeout time.Duration) bool {
 	}
 }
 
-// RestoreDefaultSignalsOnShutdown は、ctx が終わったら stop を呼んで signal の登録を外す。
+// WatchInterrupt は `SIGINT` / `SIGTERM` を自前で数え、1回目で待たせる理由を出し、
+// 2回目で後始末を待たずにプロセスを終わらせる。
 //
-// **2回目の signal を効かせるためにある。**`signal.NotifyContext` は1回目の signal で
-// コンテキストを終わらせるが、**登録は残したまま**なので、そのままだと2回目以降の
-// `SIGTERM` / `SIGINT` が buffered channel に吸われて何も起きない。終了処理が長引いたとき、
-// 運用者の手段が `SIGKILL` だけになる。登録を外せば、2回目は既定の動作
-// （プロセスの終了）に戻る。
+// **戻り値の stop を呼ぶまで signal の登録は残る。**呼び出し側で `defer` すること。
 //
-// **この関数は待たない。**別の goroutine で ctx の終了を待つ。
+// # なぜ「既定の動作へ戻す」やり方をやめたのか
 //
-// ctx: `signal.NotifyContext` が返したコンテキスト。
-// stop: `signal.NotifyContext` が返した解除の関数。**何回呼んでも安全である。**
-func RestoreDefaultSignalsOnShutdown(ctx context.Context, stop func()) {
+// 以前は `signal.NotifyContext` が返す解除の関数を1回目のあとに呼び、**2回目を
+// 既定の動作（プロセスの終了）へ戻していた。**これは効かないことがある。
+//
+// `signal.Stop` が戻すのは「既定の動作」ではなく、**continuo が起動する前に
+// その signal へ設定されていた動作**である。**親が `SIGINT` を無視に設定して
+// continuo を起動していると、戻る先が「無視」になり、2回目以降の Ctrl+C は
+// 何も起こさない。**`nohup` / `setsid` / job control の無いシェルの
+// バックグラウンド起動・一部の supervisor が、この状態を作る。
+//
+// **自分で数えれば、起動元が何であっても結果は変わらない。**`signal.Notify` は
+// 元の動作が無視であっても signal を channel へ届けるので、2回目を必ず捕まえられる。
+//
+// logger: ログの出力先。nil なら slog.Default()。
+// exit: プロセスを終わらせる関数。nil なら os.Exit。**検査はここを差し替える。**
+// 戻り値: signal の登録を外す関数。**何回呼んでも安全である。**
+func WatchInterrupt(logger *slog.Logger, exit func(int)) func() {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if exit == nil {
+		exit = os.Exit
+	}
+	// **溜められる数に余裕を持たせる。**`signal.Notify` は buffer が埋まっていると
+	// signal を捨てる。連打された2回目を捨てると、この仕掛けの意味が無くなる。
+	ch := make(chan os.Signal, 4)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+
+	quit := make(chan struct{})
+	var once sync.Once
+	stop := func() {
+		once.Do(func() { close(quit) })
+	}
+
 	go func() {
-		<-ctx.Done()
-		stop()
+		defer signal.Stop(ch)
+		select {
+		case sig := <-ch:
+			announceShutdown(logger, sig)
+		case <-quit:
+			return
+		}
+		select {
+		case sig := <-ch:
+			logger.Warn("2回目の割り込みを受けました。後始末を待たずに終了します"+
+				"（pane は閉じていません。次の起動で引き継ぎます）",
+				"signal", sig.String(), "exit_code", ExitInterrupted)
+			exit(ExitInterrupted)
+		case <-quit:
+		}
 	}()
+	return stop
+}
+
+// announceShutdown は1回目の割り込みで、待たせる理由と次の一手を画面へ出す。
+//
+// **「何も反応しない」を無くすためにある。**押した直後にここが出るので、
+// 受け取ったこと・なぜ待つのか・待ちたくないときにどうするかが、その場で分かる。
+//
+// logger: ログの出力先。
+// sig: 受け取った signal。
+func announceShutdown(logger *slog.Logger, sig os.Signal) {
+	pid := os.Getpid()
+	logger.Warn("割り込みを受けました。走行中の turn ループを壊さないよう、順に閉じてから終わります",
+		"signal", sig.String(), "max_wait", ShutdownBudget(), "pid", pid)
+	logger.Warn("待ちたくない場合は、もう一度 Ctrl+C を押してください"+
+		"（同じ signal をもう一度送っても同じです）。後始末を待たずに即座に終了します",
+		"exit_code", ExitInterrupted)
+	logger.Warn("それでも終わらない場合は、次のコマンドで全 goroutine のスタックを出して、"+
+		"その出力を issue へ貼ってください",
+		"command", fmt.Sprintf("kill -QUIT %d", pid))
 }
 
 // ValidateGraphQLEndpoint は EnvGraphQLEndpoint に書かれた接続先を検査する。

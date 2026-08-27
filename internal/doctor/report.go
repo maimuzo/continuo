@@ -39,6 +39,11 @@ const (
 	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。
 	LabelBoard = i18n.KeyDoctorLabelBoard
+	// LabelStatusNames は、設定に書いた Status 名と紛らわしい選択肢がボードに無いかの検査である。
+	//
+	// **`✗` にしない。**紛らわしいだけでは continuo は動く。だが取り違えたまま無人で回すと、
+	// **人間が作業中の issue にエージェントが着手する。**
+	LabelStatusNames = i18n.KeyDoctorLabelStatusNames
 	// LabelClone は対象リポジトリが `ghq list -p -e` で見つかるかの検査である。
 	LabelClone = i18n.KeyDoctorLabelClone
 	// LabelTrust は対象リポジトリの clone のパスが `~/.claude.json` で承認済みかの検査である。
@@ -58,6 +63,14 @@ const (
 	//
 	// **ここが書けないと、着手は worktree を用意する段で必ず落ちる。**
 	LabelWorkspaceRoot = i18n.KeyDoctorLabelWorkspaceRoot
+	// LabelCleanupStates は `cleanup.on_states` が `tracker.terminal_states` に
+	// 収まっているかの検査である（設計 3-9e。issue #35）。
+	//
+	// **`✗` にしない。**噛み合っていなくても continuo は起動し、走る。だが
+	// **「終わっていない」と判定した直後に worktree を片付ける**という筋の通らない
+	// 動きになる。**起動を止めると、いま動いている人の continuo が版を上げた瞬間に
+	// 起動しなくなる**ので、警告に留める。
+	LabelCleanupStates = i18n.KeyDoctorLabelCleanupStates
 )
 
 // LabelText は見出し語のキーを、いま使っている言語の語に直す。
@@ -76,7 +89,8 @@ const (
 	SymbolOK Symbol = "✓"
 	// SymbolMissing は「足りない」である。**1つでもあれば終了コードは 1 になる。**
 	SymbolMissing Symbol = "✗"
-	// SymbolUnknown は「確かめられなかった」である。動くかもしれないので終了コードは 0 のままにする。
+	// SymbolUnknown は「確かめられなかった」と「確かめたが、そのままだと取り違えやすい」である。
+	// **どちらも起動を止めるほどではないので、終了コードは 0 のままにする。**
 	SymbolUnknown Symbol = "!"
 )
 

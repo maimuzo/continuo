@@ -1,6 +1,9 @@
+// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
-// **RUCM のパスからは生成していない**（review_fixes_test.go と同じ扱い）。
+// **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある**
+// （review_fixes_test.go と同じ扱い）。
 // どれも「守りはあるのにテストが1本も検査していなかった」箇所なので、
 // **足したテストは、守りを1箇所だけ潰すと必ず落ちることを実測してから置いている。**
 package orchestrator_test
@@ -140,6 +143,8 @@ func TestReconcile_身元ファイルのworkspaceIDを信じて別のrunのpane�
 	}
 }
 
+// {"RUCM-PATH": "P019"}
+//
 // TestTurn_turnを送れなかったときStopHookのせいにしない は、
 // 送信の失敗と「Stop hook が届かない」を混ぜないことを確かめる。
 //
@@ -171,11 +176,12 @@ func TestTurn_turnを送れなかったときStopHookのせいにしない(t *te
 
 	fx.Orc.Tick(context.Background())
 
+	// **着手の記録（Status を動かした記録）とは別物である。**引き渡しの通知だけを待つ。
 	waitFor(t, 20*time.Second, "引き渡しの通知が issue に残る", func() bool {
-		return len(fx.Tracker.CommentsOf("I_node188")) > 0
+		return len(fx.Tracker.HandoffCommentsOf("I_node188")) > 0
 	})
 
-	body := fx.Tracker.CommentsOf("I_node188")[0].Body
+	body := fx.Tracker.HandoffCommentsOf("I_node188")[0].Body
 	if !strings.Contains(body, "herdr へ指示を送れませんでした") {
 		t.Errorf("送れなかったことが issue に書かれていない:\n%s", body)
 	}
@@ -261,6 +267,8 @@ func requireCwdOnWorktreeOpen(t *testing.T, fx *fixture) {
 	})
 }
 
+// {"RUCM-PATH": "P017"}
+//
 // TestAbandon_打ち切りのときissueに残る理由が本当の理由である は、
 // 引き渡しの通知の投稿枠を、本当の理由が先に取ることを確かめる。
 //
@@ -310,11 +318,11 @@ func TestAbandon_打ち切りのときissueに残る理由が本当の理由で�
 	fx.Orc.Tick(context.Background())
 
 	waitFor(t, 20*time.Second, "引き渡しの通知が issue に残る", func() bool {
-		return len(fx.Tracker.CommentsOf("I_node188")) > 0
+		return len(fx.Tracker.HandoffCommentsOf("I_node188")) > 0
 	})
 	time.Sleep(500 * time.Millisecond)
 
-	comments := fx.Tracker.CommentsOf("I_node188")
+	comments := fx.Tracker.HandoffCommentsOf("I_node188")
 	if len(comments) != 1 {
 		t.Fatalf("引き渡しの通知が1件ではない: %d 件", len(comments))
 	}
@@ -457,7 +465,7 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
 		t.Errorf("herdr が一瞬落ちただけで Status を落とした: got %q, want In Progress", got)
 	}
-	if got := fx.Tracker.CommentsOf("I_node188"); len(got) != 0 {
+	if got := fx.Tracker.HandoffCommentsOf("I_node188"); len(got) != 0 {
 		t.Errorf("run を捨てて issue へ引き渡しを書いた: %d 件\n%s", len(got), got[0].Body)
 	}
 	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
@@ -545,7 +553,7 @@ func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨て�
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
 		t.Errorf("待ち直しが届かなかっただけで Status を落とした: got %q, want In Progress", got)
 	}
-	if got := fx.Tracker.CommentsOf("I_node188"); len(got) != 0 {
+	if got := fx.Tracker.HandoffCommentsOf("I_node188"); len(got) != 0 {
 		t.Errorf("run を捨てて issue へ引き渡しを書いた: %d 件\n%s", len(got), got[0].Body)
 	}
 	v, ok := viewOfFixture(fx, "octocat/hello-world#188")

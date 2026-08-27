@@ -119,6 +119,37 @@ type TrackerConfig struct {
 	// 毎巡回では行わない。選択肢名が変わるのは人間がボードを触ったときだけなので、
 	// 20 巡回に1回で足りる。0 なら起動時の1回だけ行う。
 	VerifyStatesEvery int `yaml:"verify_states_every"`
+	// UnknownStateGraceMs は「continuo が知らない Status」を見つけてから worker を止めるまでに
+	// 置く猶予（ミリ秒）である（設計 3-50）。
+	//
+	// **エージェントが turn の最後に表明を書けば、continuo が正しい Status へ戻す。**
+	// turn の途中で殺すと、その表明が読まれずに捨てられる。だから turn が動いている間は
+	// この長さだけ待ち、turn の終わりの表明を読んでから判断する。
+	//
+	// **0 以下なら猶予を置かない**（見つけた巡回でそのまま止める）。
+	// **turn が動いていなければ猶予は使わない**（待っても表明は出てこない）。
+	UnknownStateGraceMs int `yaml:"unknown_state_grace_ms"`
+	// AutomatedStateRewrite は、ボードの組み込みの自動化が動かした Status を、
+	// continuo が意図した Status へ戻すための対応表である（設計 3-54）。
+	//
+	// **キーが「自動化が書いた Status」、値が「戻す先の Status」。**
+	// 例: `{"In Progress": "AI In Progress"}`。
+	//
+	// **効くのは「自動化が動かした」と判定できたときだけである**（`Issue.StatusChangedByAutomation`）。
+	// 人間が同じ Status へ動かした場合は、いままでどおり猶予を置いて worker を止める。
+	// **人間の操作を書き戻しで打ち消してはならない**（設計 3-4）。
+	//
+	// **既定は空である。**書かなければ挙動は変わらないので、既存の WORKFLOW.md をそのまま使える。
+	// **キーをここに書いても、その Status が「知っている Status」になるわけではない**
+	// （知っている Status は active_states などに書かれたものだけである。設計 3-50）。
+	//
+	// **キーは、設定のどこにも名前が出てこない Status でなければならない。**
+	// 書き戻しを引くのは「continuo が知らない Status」になったときだけなので、
+	// **既に名前の出てくる Status をキーにすると、その行は1度も効かない。**
+	// **値（戻す先）は active_states に入っていなければならない。**
+	// 戻した先が作業中の Status でないと、書き戻した直後に run が終わるか worktree が消える。
+	// **どちらも `Validate` が起動前に弾く**（設計 3-54）。
+	AutomatedStateRewrite map[string]string `yaml:"automated_state_rewrite"`
 	// StatusSignalPrefix は、エージェントが応答に書く表明の印である（3-25）。
 	// continuo は turn が終わったと判定したあと transcript を読み、
 	// この印で始まる行を探して、続く値を StatusSignalMap で引いて Status を動かす。
@@ -147,7 +178,29 @@ type WorkspaceConfig struct {
 	Root string `yaml:"root"`
 	// IdentityFile は worktree の身元を書くファイルの名前である（3-18）。
 	IdentityFile string `yaml:"identity_file"`
+	// OnBrokenWorktree は、身元を確かめられない worktree を見つけたときの振る舞いである（3-49）。
+	//
+	//	OnBrokenWorktreeStop … 起動を止める（既定）
+	//	OnBrokenWorktreeSkip … その worktree だけ飛ばして起動を続ける
+	//
+	// **どちらでも worktree は1バイトも消さない。**消すのは人間が
+	// `continuo abandon --force` を打ったときだけである。
+	OnBrokenWorktree string `yaml:"on_broken_worktree"`
 }
+
+// workspace.on_broken_worktree に書ける値である（3-49）。
+const (
+	// OnBrokenWorktreeStop は、壊れた worktree を1件でも見つけたら起動を止める。**既定である。**
+	//
+	// **止めることで被害の悪化を防ぎ、壊れていることを早く知れる。**続けると、
+	// その issue はボード上で running_state のまま誰にも触られず、
+	// **人間が気づくのは何時間も後になる。**
+	OnBrokenWorktreeStop = "stop"
+	// OnBrokenWorktreeSkip は、壊れた worktree をログに出して飛ばし、起動を続ける。
+	//
+	// **1件の壊れた worktree で他の issue まで止めたくない環境向けである。**
+	OnBrokenWorktreeSkip = "skip"
+)
 
 // WorkspaceHooksConfig は worktree のライフサイクルに沿って呼ぶ外部コマンドを決める。
 // いずれのコマンド文字列も null（未設定）を許す。null のときはそのフェーズで何も実行しない。

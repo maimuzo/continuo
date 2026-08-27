@@ -817,6 +817,10 @@ cd ~/continuo-try
 > 取り直したものである**（2026-08-21）。**`claude` から `worktree の場所` までの4行は、
 > 同じ macOS で別に叩いて取ったものである**（2026-08-24）。**件数の行はそれに合わせて数え直してある。**
 > **hook の socket の場所は、機械ごとに変わる文字列を `$TMPDIR` に置き換えてある。**
+>
+> **このあとに出てくる `continuo doctor` の出力は、どれも見出し語が2つ足りない。**
+> `片付けの状態` と `Status の名前` は、この写しを取ったあとに足したものである。
+> **並びの正は [internal/doctor/report.go](../internal/doctor/report.go) の `Label` 定数である。**
 
 ```text
 ✓ 設定ファイル    ~/continuo-try/WORKFLOW.md を読めました（front matter の検証も通りました）
@@ -1175,13 +1179,23 @@ cd ~/continuo-try
 
 **continuo を動かしている端末で** `Ctrl+C` を押す。
 
-**巡回を止め、hook の受け口を閉じ、走行中の turn の終わりを待ってから抜ける。**
+**巡回を止め、ダッシュボードと hook の受け口を閉じ、走行中の turn の終わりを待ってから抜ける。**
 **pane は閉じない。**次に起動したとき、その pane を引き継ぐ。
+
+**待たされるのが嫌なら、もう一度 `Ctrl+C` を押す。**後始末を待たずに、その場で終わる
+（終了コードは 130）。**それでも終わらないときは `kill -QUIT <pid>` を実行する。**
+全 goroutine のスタックが出るので、その出力を issue へ貼ってほしい。
 
 実際に叩いた出力（終了コードは 0）。
 
 ```text
-level=INFO msg="巡回を止めました（hook の受け口を閉じて turn ループの終了を待ちます）"
+level=WARN msg="割り込みを受けました。走行中の turn ループを壊さないよう、順に閉じてから終わります" signal=interrupt max_wait=36s pid=88890
+level=WARN msg="待ちたくない場合は、もう一度 Ctrl+C を押してください（同じ signal をもう一度送っても同じです）。後始末を待たずに即座に終了します" exit_code=130
+level=WARN msg="それでも終わらない場合は、次のコマンドで全 goroutine のスタックを出して、その出力を issue へ貼ってください" command="kill -QUIT 88890"
+level=INFO msg="巡回を止めました。後始末を始めます（ダッシュボード → hook の受け口 → turn ループの順に閉じます）" max_wait=36s pid=88890
+level=INFO msg="後始末 1/3: ダッシュボードを閉じています（処理中の応答をこの時間だけ待ち、過ぎたら接続を切ります）" timeout=1s
+level=INFO msg="後始末 2/3: hook の受け口を閉じています（受け取り済みの hook を印へ書き終えるまで待ちます）" timeout=5s
+level=INFO msg="後始末 3/3: 走行中の turn ループの終了を待っています（送った指示が中途半端に切れないようにするためです）" timeout=30s
 level=INFO msg="走行中の turn ループが終わりました（pane は閉じていません）"
 level=INFO msg=continuo を終了しました
 ```

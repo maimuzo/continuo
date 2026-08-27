@@ -1,8 +1,10 @@
-// {"RUCM-CFG-SHA256": "3d863250157ac1b1ab2b30cf082365e732a370436d66b0eeb4ac171005345b60", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
+// {"RUCM-CFG-SHA256": "05dde3d6b6d1fff7cc317912d27113c4890cf461623b277e4c4c53852fe9b5c3", "SOURCE": "docs/spec/usecases/particular_case/前提が揃っているかを検査する.cfg.json"}
 
 package doctor_test
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/maimuzo/continuo/internal/cli"
 	"github.com/maimuzo/continuo/internal/doctor"
 )
 
@@ -157,6 +160,8 @@ func TestDoctorCLI_足りないものがあれば直し方を出して終了コ�
 	}
 }
 
+// {"RUCM-PATH": "P177"}
+//
 // TestDoctorCLI_位置引数を2つ以上渡したら使い方の誤りとして止まる は、引数の受け取り方を固定する。
 //
 // 目的: WORKFLOW.md のパスは1つだけ受け付け、2つ以上なら終了コード 2 で止まること
@@ -186,7 +191,7 @@ func TestDoctorCLI_位置引数を2つ以上渡したら使い方の誤りとし
 	}
 }
 
-// {"RUCM-PATH": "P091"}
+// {"RUCM-PATH": "P176"}
 //
 // TestDoctorCLI_接続先がループバック以外のhttpなら検査せずに止まる は、
 // トークンの送り先の検査が `continuo doctor` にも入っていることを確かめる。
@@ -210,5 +215,63 @@ func TestDoctorCLI_接続先がループバック以外のhttpなら検査せず
 	}
 	if strings.Contains(out, doctor.LabelText(doctor.LabelBoard)) {
 		t.Fatalf("接続先が不正なのに検査を始めている:\n%s", out)
+	}
+}
+
+// failingWriter は書き込みを必ず失敗させる出力先である。
+//
+// **検査結果の書き出しが失敗する状態は、外から作れない。**リダイレクト先の
+// ディスクが一杯になった場合などがそれに当たるが、テストで再現できないので、
+// 出力先そのものを失敗させて `continuo doctor` の応答を確かめる。
+type failingWriter struct {
+	// err は Write が必ず返すエラーである。
+	err error
+}
+
+// Write は書き込まずに err を返す。
+//
+// p: 書き込もうとした内容（使わない）。
+// 戻り値: 書けた byte 数（常に 0）と、失敗の理由。
+func (w failingWriter) Write(p []byte) (int, error) { return 0, w.err }
+
+// {"RUCM-PATH": "P004"}
+//
+// TestDoctorCLI_検査結果を書き出せなければ終了コード3で止まる は、
+// **検査そのものは動いたが、結果を届けられなかった場合**の応答を固定する。
+//
+// 目的: 検査結果を書き出せないとき、理由を標準エラーへ出し、終了コードを 3 にすること。
+// **`✗` があったことの 1 とも、引数の誤りの 2 とも別の値にする**（設計 3-32）。
+// 書き出せなかったことを 0 で返すと、検査結果を読めていないのに「前提は揃っている」
+// と受け取られる。
+// 与える情報: 検査は全項目 `✓` を返し、標準出力への書き込みだけが必ず失敗する状態。
+// 成功条件: 終了コードが 3 で、標準エラーに書き出せない理由が出ること。
+func TestDoctorCLI_検査結果を書き出せなければ終了コード3で止まる(t *testing.T) {
+	// **接続先の検査より先に進ませる。**空なら本番の GitHub を指すが、
+	// 検査そのものは差し替えてあるので、どこへも繋がない。
+	t.Setenv("CONTINUO_GITHUB_GRAPHQL_ENDPOINT", "")
+
+	called := false
+	deps := cli.Deps{
+		DoctorRun: func(_ context.Context, _ doctor.Options) doctor.Report {
+			called = true
+			return doctor.Report{Results: []doctor.Result{
+				{Label: doctor.LabelConfig, Symbol: doctor.SymbolOK, Detail: "読めました"},
+			}}
+		},
+	}
+	writeErr := errors.New("書き出し先が閉じています")
+	var stderr bytes.Buffer
+
+	code := cli.RunWith(deps, []string{"doctor", t.TempDir()},
+		strings.NewReader(""), failingWriter{err: writeErr}, &stderr)
+
+	if !called {
+		t.Fatalf("検査そのものが走っていない（書き出しより前で止まっている）:\n%s", stderr.String())
+	}
+	if code != 3 {
+		t.Fatalf("終了コードが 3 ではなく %d だった:\n%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), writeErr.Error()) {
+		t.Fatalf("書き出せない理由が出ていない:\n%s", stderr.String())
 	}
 }

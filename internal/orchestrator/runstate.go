@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -93,6 +95,12 @@ type runState struct {
 	// Issue は dispatch した時点の issue のスナップショットである。
 	// プロンプトの描画・表明の対象の解決・コメントの投稿先に使う。
 	Issue tracker.Issue
+	// LastWrittenState は continuo がこの run のためにボードへ最後に書いた Status である。
+	//
+	// **知らない Status になった issue へ「元は何だったか」を書くために持つ**（設計 3-50）。
+	// **書き込みが成功した時点でだけ入れる。**入れるのは着手の段2（running_state）と、
+	// 表明どおりに Status を動かしたときである。ゼロ値なら continuo は1度も書いていない。
+	LastWrittenState string
 	// WorktreePath は worktree の絶対パスである。
 	WorktreePath string
 	// Base は worktree を作ったときの base である（片付けの手順2b に要る）。
@@ -114,8 +122,12 @@ type runState struct {
 	// **足しておかないと、ダッシュボードの累計が再 dispatch のたびに巻き戻る。**
 	// **ダッシュボード（第9段階）だけが読む。**判断には使わない。
 	Tokens TokenUsage
-	// tokensBase は前のセッションまでの累計である（再 dispatch の時点で畳み込む）。
-	// **beginAttempt が Tokens をここへ移し、setTokens がこれに足して Tokens を作る。**
+	// tokensBase は前のセッションまでの累計である（セッションを採り直した時点で畳み込む）。
+	// **foldTokensBase が Tokens をここへ移し、setTokens がこれに足して Tokens を作る。**
+	//
+	// **セッションへ `--resume` で復帰したときは畳み込まない**（設計 3-3b）。
+	// 復帰すると transcript のファイルは同じままなので、畳み込むと
+	// **同じファイルの中身を2回数える。**
 	tokensBase TokenUsage
 	// TokensAt は Tokens を集計した時刻である。ゼロ値なら一度も集計していない。
 	TokensAt time.Time
@@ -125,20 +137,25 @@ type runState struct {
 	// Finished は run が終わって印から外したことを表す。
 	// turn ループが自分の goroutine を止める判定に使う。
 	Finished bool
-	// FreshSession は「いまのセッションに会話履歴が無い」ことを表す。
+	// SendFirstPrompt は「次に送る turn は1回目の本文（5-3）である」ことを表す。
 	//
-	// **新しいセッション UUID で Claude Code を起動した直後だけ真である**
-	// （着手の段5 と、バックオフ明けの再 dispatch。どちらも UUID を採り直すので
-	// 会話履歴を持たない別のセッションになる）。真なら次に送る turn は
-	// **1回目の本文（5-3）**である。
+	// **会話履歴の有無を表す値ではない**（設計 3-3b）。以前は「いまのセッションに
+	// 会話履歴が無い」という1つの値でこの分岐を兼ねていたが、**再着手でセッションへ
+	// `--resume` で復帰するようになって、その2つは一致しなくなった。**
+	// 復帰した run には会話履歴があるのに、送るのは1回目の本文だからである。
+	// **1つの値に2つの意味を持たせると、どちらの意味で書かれた分岐なのかが読めなくなる。**
 	//
-	// **復元で引き継いだ run は偽である**（設計 3-4 の段5c）。セッションを引き継いで
-	// いるのでエージェントは issue の URL も作法も既に知っており、送るのは
+	// **着手と再着手で真になる**（beginAttempt）。1回目の本文には「issue を読むこと」と
+	// 「紐づく PR も読むこと」が入っており、**`In Review` から差し戻された issue で
+	// 新しく付いたレビューを読ませられるのは、この本文だけである。**
+	//
+	// **復元で引き継いだ run は偽である**（設計 3-4 の段5c）。continuo が起動し直された
+	// だけで、その worker は前の turn の続きを走らせている最中かもしれない。送るのは
 	// **継続の指示（5-4）**である。**turn 数を 1 から数え直すのは打ち切りの計算のためで
 	// あって、1回目をやり直すことではない。**
 	//
 	// **turn を1つ送るたびに偽へ戻す**（beginTurn）。
-	FreshSession bool
+	SendFirstPrompt bool
 
 	// ===== run の終わり方と worker の世代 =====
 
@@ -149,7 +166,28 @@ type runState struct {
 	// 1時間返らない。その間に次の巡回が来ても、二重に走らせてはならない。
 	//
 	// **リトライを積んでバックオフに入る場合は偽へ戻す**（run はまだ続くため）。
+	//
+	// **書き戻しはこの印を取らない**（設計 3-56）。取らせると「終わらせない持ち主」が
+	// できてしまい、この印を見て「終わらせる処理が走っている」と判断する場所が
+	// すべて誤判定する。書き戻しは `rewriting` を使う。
 	terminating bool
+	// rewriting は「ボードの自動化が動かした Status の書き戻し」が飛んでいる最中である
+	// ことを表す（設計 3-56）。
+	//
+	// **`terminating` とは別の印である。**書き戻しは run を終わらせない。
+	// **この印が立っている間は run を手放してはならない。**手放したあとに書き込みが
+	// 着地すると、印の消えた issue に「作業中」の Status が書かれ、次の巡回が
+	// **同じ worktree に2本目の Claude Code を立てる。**
+	rewriting bool
+	// rewriteDone は、飛んでいる書き戻しが終わったときに閉じるチャネルである。
+	// **`rewriting` が偽のときは nil である。**
+	rewriteDone chan struct{}
+	// terminalWaiting は、書き戻しの終わりを待っている「終わらせる処理」の本数である
+	// （設計 3-56）。
+	//
+	// **1本でも待っていれば、新しい書き戻しは始めない。**始めさせると、待っている側が
+	// 書き戻しの列に永久に割り込まれる。
+	terminalWaiting int
 	// workerEpoch は worker（pane と agent）を起こした回数である。
 	//
 	// **turn ループは自分が起こされたときの世代を覚えておき、それが変わっていたら
@@ -182,6 +220,53 @@ type runState struct {
 	// `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
 	awaitTurnEnd bool
+	// unknownStateSince は「continuo が知らない Status になっている」と最初に見た時刻である
+	// （設計 3-50）。ゼロ値なら、いまは知っている Status である。
+	//
+	// **猶予の起点である。**巡回のたびに入れ直すと猶予が永久に切れないので、
+	// 既に入っているときは触らない。知っている Status に戻ったら消す。
+	unknownStateSince time.Time
+	// automatedRewrites は、ボードの自動化が動かした Status を書き戻した回数である
+	// （設計 3-56）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
+	//
+	// **上限を持たないと止まらない。**書き戻した直後に自動化がまた動く組み合わせがあると、
+	// continuo とボードが同じ issue の Status を押し合い続ける。
+	automatedRewrites map[string]int
+	// automatedRewriteFailures は、書き戻しが**ボードを1ミリも動かせないまま終わった**回数である
+	// （設計 3-56）。キーは automatedRewrites と同じ作り方である。
+	//
+	// **押し合いの上限とは別に数える。**ボードが動かなかったぶんは押し合いの枠を返すので、
+	// **返すだけだと「毎回失敗する書き込みを永久に打ち続ける」ことになる。**
+	// 人間が戻す先の選択肢をボードから消した場合がそれである。
+	// **ボードが目的の Status になったら 0 に戻す。**
+	// **上限に達したまま時間が経ったときも 0 に戻す**（`expireAutomatedRewriteFailures`）。
+	// 戻さないと「続けて何回」を数えているつもりで、**通信が回復しても永久に拒む。**
+	automatedRewriteFailures map[string]int
+	// automatedRewriteFailedAt は、その Status について最後に「戻せなかった」を数えた時刻である
+	// （設計 3-56）。キーは automatedRewrites と同じ作り方である。
+	//
+	// **「続けて何回」を時間で切り直すために持つ。**
+	automatedRewriteFailedAt map[string]time.Time
+	// automatedRewriteHandedOff は、その Status とその理由について「ここからは人間へ渡す」と
+	// 既にログへ出したかである（設計 3-56）。
+	//
+	// **キーは Status だけでは足りない。**人間へ渡る道は「押し合いの上限」と
+	// 「戻せない失敗の上限」の2本あり、**Status だけで数えると、先に起きたほうが
+	// もう片方のログを永久に黙らせる。**理由もキーに入れる（`automatedHandoffKey`）。
+	//
+	// **出すのは1度だけである。**上限に達したあとも巡回は30秒ごとに同じ判定へ来るので、
+	// 毎回出すと猶予のあいだに同じ行が20回ほど流れ、他の行が埋もれる。
+	automatedRewriteHandedOff map[string]bool
+	// workerStopCtx は「この世代の worker を止めた」ことを turn ループへ伝える経路である
+	// （設計 3-51）。
+	//
+	// **止める側が turn ループへ「待つのをやめろ」と伝える手段である。**これが無いと、
+	// continuo が自分で pane を閉じた1秒後に `agent.prompt` が
+	// `agent is no longer running` で落ち、**自分のせいの失敗が外の障害のように WARN で出る。**
+	// **worker の世代ごとに作り直す**（beginAttempt）。
+	workerStopCtx context.Context
+	// workerStopCancel は workerStopCtx を終わらせる。stopWorker が呼ぶ。
+	workerStopCancel context.CancelFunc
 	// handoffPosted は引き渡しの通知を投稿済みであることを表す。
 	//
 	// **1つの run について1件だけにする。**failure_state へ落とす経路（finishRunClaimed）と
@@ -208,12 +293,15 @@ func (rs *runState) clearStopSeen() {
 // 判定され、人間へ見せる経過時間も 1970 年起点になる）。
 // 戻り値: 組み立てた runState。
 func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &runState{
-		IssueID:    issueID,
-		Issue:      issue,
-		LastSeenAt: now,
-		RevisionAt: now,
-		hookCh:     make(chan hookserver.HookEvent, hookChanSize),
+		IssueID:          issueID,
+		Issue:            issue,
+		LastSeenAt:       now,
+		RevisionAt:       now,
+		hookCh:           make(chan hookserver.HookEvent, hookChanSize),
+		workerStopCtx:    stopCtx,
+		workerStopCancel: stopCancel,
 	}
 }
 
@@ -248,7 +336,7 @@ func (rs *runState) snapshot() runSnapshot {
 		TranscriptPath:   rs.TranscriptPath,
 		HerdrWorkspaceID: rs.HerdrWorkspaceID,
 		Finished:         rs.Finished,
-		FreshSession:     rs.FreshSession,
+		SendFirstPrompt:  rs.SendFirstPrompt,
 		State:            rs.Issue.State,
 		Title:            rs.Issue.Title,
 		URL:              issueURL(rs.Issue),
@@ -281,7 +369,7 @@ type runSnapshot struct {
 	TranscriptPath   string
 	HerdrWorkspaceID string
 	Finished         bool
-	FreshSession     bool
+	SendFirstPrompt  bool
 	State            string
 	Title            string
 	URL              string
@@ -304,7 +392,7 @@ func (rs *runState) beginTurn(now time.Time) int {
 	rs.NeedsPrompt = false
 	// 1回目の本文（5-3）を送るのは、新しいセッションの最初の turn だけである。
 	// 2回目からは継続の指示（5-4）に切り替える（設計 3-8 / `SPEC.md` 7.1）。
-	rs.FreshSession = false
+	rs.SendFirstPrompt = false
 	rs.stopSeenAt = time.Time{}
 	rs.hookSeenThisTurn = false
 	rs.LastSeenAt = now
@@ -561,6 +649,305 @@ func (rs *runState) setIssue(issue tracker.Issue) {
 	rs.Issue = issue
 }
 
+// setLastWrittenState は continuo がボードへ書いた Status を控える（設計 3-50）。
+//
+// **書き込みが成功したときだけ呼ぶ。**知らない Status になった issue へ
+// 「元は何だったか」を書くための唯一の材料である。
+//
+// state: 書き込んだ Status 名。
+func (rs *runState) setLastWrittenState(state string) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.LastWrittenState = state
+}
+
+// lastWrittenState は continuo がボードへ最後に書いた Status を返す。
+//
+// 戻り値: 書いた Status 名。1度も書いていなければ空文字。
+func (rs *runState) lastWrittenState() string {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.LastWrittenState
+}
+
+// noteUnknownState は「continuo が知らない Status になっている」と見た時刻を控え、
+// その起点を返す（設計 3-50）。
+//
+// **起点は最初に見たときのまま据え置く。**巡回のたびに入れ直すと、猶予が永久に切れない。
+//
+// now: いまの時刻。
+// 戻り値: 猶予の起点（最初に見た時刻）。
+func (rs *runState) noteUnknownState(now time.Time) time.Time {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.unknownStateSince.IsZero() {
+		rs.unknownStateSince = now
+	}
+	return rs.unknownStateSince
+}
+
+// clearUnknownState は「知らない Status になっている」という記録を消す。
+//
+// **知っている Status に戻ったときに呼ぶ。**消さないと、次に知らない Status へ動かされた
+// ときに、前回の起点で猶予を測ってしまう。
+func (rs *runState) clearUnknownState() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.unknownStateSince = time.Time{}
+}
+
+// rewriteClaim は「自動化が動かした Status を書き戻す」1回ぶんの確保である（設計 3-56）。
+//
+// **枠を取った側だけが返せる形にしてある。**枠を Status 名だけで返す作りにすると、
+// **巡回の goroutine と turn ループが同じ Status について同時に取ったとき、
+// 片方の失敗がもう片方の枠を返してしまう。**返った枠は次の巡回がまた取れるので、
+// **ボードが実際に動いた回数が上限を超える。**逆に、同じ失敗の経路を2度通ると
+// **1回の確保で2回ぶん返し、押し合いの数え方が壊れる。**
+//
+// **`release` は何度呼んでも1回しか返さない**（`sync.Once`）。
+// **nil に対して呼んでも安全である**（確保できなかったときの後始末を分岐で書かずに済む）。
+type rewriteClaim struct {
+	// rs は枠を取った run である。
+	rs *runState
+	// state は自動化が書いた Status 名（確保したときの綴りのまま）。
+	state string
+	// once は「返すのは1回だけ」を守る。
+	once sync.Once
+}
+
+// release は確保した書き戻しの1回ぶんを返す（設計 3-56）。
+//
+// **ボードが1ミリも動かなかったときに呼ぶ。**通信が失敗した・item がもう見えない・
+// 既にその値だった・`terminal_states` に入っていたので書かなかった、のいずれかである。
+//
+// **返さないと、押し合いが1度も起きていない run が止まる。**枠は
+// 「continuo とボードの自動化が同じ issue を押し合っている」ことを数えるためにあり、
+// **押し合いはボードが動いたときにだけ起きる。**GitHub への書き込みが3回続けて
+// 失敗しただけで上限に達すると、**その run はそこから書き戻しをやめ、次に自動化が
+// 動いた時点で worker ごと止まる。**
+func (c *rewriteClaim) release() {
+	if c == nil {
+		return
+	}
+	c.once.Do(func() { c.rs.releaseAutomatedRewrite(c.state) })
+}
+
+// claimAutomatedRewrite は「自動化が動かした Status を書き戻す」1回ぶんを確保する
+// （設計 3-56）。
+//
+// **確保できたときだけ handle を返し、その場で1回ぶん数える。**巡回は30秒ごとに走るので、
+// 数える前に書きに行くと、書き込みが終わる前の巡回が同じ書き戻しを何本も立てる。
+//
+// **数えるのは Status ごとである。**自動化が `In Progress` と `Done` の両方を書く運用で、
+// 片方の回数がもう片方を食い潰さないようにする。
+//
+// state: 自動化が書いた Status 名（前後の空白と大文字小文字は無視して数える）。
+// limit: 1つの Status につき書き戻してよい回数。
+// 戻り値の1つ目: 確保できたら handle。上限に達していたら nil。
+// 戻り値の2つ目: この Status をこれまでに書き戻した回数（確保した分を含まない）。
+func (rs *runState) claimAutomatedRewrite(state string, limit int) (*rewriteClaim, int) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	done := rs.automatedRewrites[key]
+	if done >= limit {
+		return nil, done
+	}
+	if rs.automatedRewrites == nil {
+		rs.automatedRewrites = map[string]int{}
+	}
+	rs.automatedRewrites[key] = done + 1
+	return &rewriteClaim{rs: rs, state: state}, done
+}
+
+// releaseAutomatedRewrite は枠を1つ返す。**呼ぶのは `rewriteClaim.release` だけである。**
+//
+// **0 より下へは減らさない。**確保していないのに返す呼び出しがあっても、
+// 上限の意味が壊れないようにする。
+//
+// state: 自動化が書いた Status 名（claimAutomatedRewrite に渡したものと同じ）。
+func (rs *runState) releaseAutomatedRewrite(state string) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	done := rs.automatedRewrites[key]
+	if done <= 0 {
+		return
+	}
+	rs.automatedRewrites[key] = done - 1
+}
+
+// noteAutomatedRewriteFailure は「書き戻したが、ボードは1ミリも動かなかった」を数える
+// （設計 3-56）。
+//
+// **押し合いの枠とは別に数える。**枠は失敗のたびに返るので、
+// **返すだけでは、毎回失敗する書き込みを永久に打ち続ける run ができる。**
+//
+// state: 自動化が書いた Status 名。
+// add: 数える回数。**待っても直らない失敗では上限をそのまま渡す**（1回で人間へ渡すため）。
+// now: いまの時刻（「続けて何回」を時間で切り直すために控える）。
+// 戻り値: 数えたあとの回数。
+func (rs *runState) noteAutomatedRewriteFailure(state string, add int, now time.Time) int {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.automatedRewriteFailures == nil {
+		rs.automatedRewriteFailures = map[string]int{}
+	}
+	if rs.automatedRewriteFailedAt == nil {
+		rs.automatedRewriteFailedAt = map[string]time.Time{}
+	}
+	rs.automatedRewriteFailures[key] += add
+	rs.automatedRewriteFailedAt[key] = now
+	return rs.automatedRewriteFailures[key]
+}
+
+// clearAutomatedRewriteFailures は「戻せなかった」回数を 0 に戻す（設計 3-56）。
+//
+// **ボードが目的の Status になったときに呼ぶ。**一度でも戻せたのなら、
+// それまでの失敗は一時的なものだったということである。
+//
+// state: 自動化が書いた Status 名。
+func (rs *runState) clearAutomatedRewriteFailures(state string) {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	delete(rs.automatedRewriteFailures, key)
+	delete(rs.automatedRewriteFailedAt, key)
+}
+
+// expireAutomatedRewriteFailures は「戻せなかった」回数を、最後の失敗から時間が経っていれば
+// 0 に戻す（設計 3-56）。
+//
+// **数えているのは「続けて何回」である。**成功で 0 に戻す道はあるが、
+// **上限に達した run は書き戻しそのものをやめるので、その道へは二度と入れない。**
+// **通信が回復しても永久に拒み続ける**ことになるので、時間でも切り直す。
+//
+// **巡回のたびに打ち直すのとは違う。**打ち直す間隔が30秒から `after` へ伸びる。
+//
+// state: 自動化が書いた Status 名。
+// now: いまの時刻。
+// after: 最後の失敗からこれだけ経っていたら 0 に戻す。
+// 戻り値: 0 に戻したら true。
+func (rs *runState) expireAutomatedRewriteFailures(state string, now time.Time, after time.Duration) bool {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.automatedRewriteFailures[key] <= 0 {
+		return false
+	}
+	last, ok := rs.automatedRewriteFailedAt[key]
+	if !ok || now.Sub(last) < after {
+		return false
+	}
+	delete(rs.automatedRewriteFailures, key)
+	delete(rs.automatedRewriteFailedAt, key)
+	return true
+}
+
+// automatedRewriteFailureCount は「戻せなかった」回数を返す（設計 3-56）。
+//
+// state: 自動化が書いた Status 名。
+// 戻り値: 続けて戻せなかった回数。
+func (rs *runState) automatedRewriteFailureCount(state string) int {
+	key := strings.ToLower(strings.TrimSpace(state))
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.automatedRewriteFailures[key]
+}
+
+// automatedHandoffReason は「自動化が動かした Status を、なぜ人間へ渡すのか」である
+// （設計 3-56）。
+//
+// **理由ごとに数える。**Status だけで数えると、先に起きたほうがもう片方のログを
+// 永久に黙らせる（**人間には、起きているうちの1つしか見えなくなる**）。
+type automatedHandoffReason string
+
+const (
+	// handoffByPushback は「continuo とボードの自動化が押し合って上限に達した」である。
+	handoffByPushback automatedHandoffReason = "押し合いの上限"
+	// handoffByFailures は「書き戻しがボードを1ミリも動かせないまま上限に達した」である。
+	handoffByFailures automatedHandoffReason = "戻せない失敗の上限"
+)
+
+// noteAutomatedRewriteHandoff は「ここからは人間へ渡す」を**最初の1回だけ**真で返す
+// （設計 3-56）。
+//
+// **巡回は30秒ごとに同じ判定へ来る。**毎回ログに出すと、猶予のあいだに同じ行が
+// 20回ほど流れて他の行が埋もれる。**対応表に無かったときの分岐が1行も出さないのと
+// 同じ理由である**（案内は issue のコメントに書く）。
+//
+// **数えるのは Status と理由の組である。**Status だけで数えると、
+// 押し合いで先に1度出したあとに「戻せない失敗」が起きても、その行が出ない。
+//
+// state: 自動化が書いた Status 名。
+// reason: 人間へ渡す理由。
+// 戻り値: この Status とこの理由の組で初めて人間へ渡すなら true。
+func (rs *runState) noteAutomatedRewriteHandoff(state string, reason automatedHandoffReason) bool {
+	key := strings.ToLower(strings.TrimSpace(state)) + "\x00" + string(reason)
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.automatedRewriteHandedOff[key] {
+		return false
+	}
+	if rs.automatedRewriteHandedOff == nil {
+		rs.automatedRewriteHandedOff = map[string]bool{}
+	}
+	rs.automatedRewriteHandedOff[key] = true
+	return true
+}
+
+// turnLoopActive は turn ループの goroutine が走っているかを返す（設計 3-50）。
+//
+// **「turn が動いている」の判定はこれである。**turn ループは turn を送ってから
+// `Stop` hook を読み、表明を読んで Status を動かすところまでを1本で回す。
+// **その goroutine が居る間は、エージェントの表明がこれから届きうる。**
+//
+// 戻り値: turn ループが走っていれば true。
+func (rs *runState) turnLoopActive() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.turnLoopRunning
+}
+
+// markWorkerStopped は「この世代の worker を止めた」ことを記録し、
+// turn ループへ「待つのをやめろ」と伝える（設計 3-51）。
+//
+// **`pane.close` を呼ぶ前に呼ぶこと。**閉じたあとに伝えると、turn ループは先に
+// `agent is no longer running` を受け取り、**continuo 自身が止めたせいの失敗を
+// 外の障害として印字する。**
+func (rs *runState) markWorkerStopped() {
+	rs.mu.Lock()
+	rs.workerStopped = true
+	cancel := rs.workerStopCancel
+	rs.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// workerStopped は、いまの世代の worker を continuo 自身が止めたかを返す。
+//
+// **turn ループはこれを見て、自分のせいの失敗を WARN にしない**（設計 3-51）。
+//
+// 戻り値: 止めていれば true。
+func (rs *runState) stoppedByContinuo() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.workerStopped
+}
+
+// workerStopContext は「この世代の worker を止めた」ときに終わるコンテキストを返す。
+//
+// **turn ループはこれで待ちを打ち切る**（設計 3-51）。
+//
+// 戻り値: 止めたときに終わるコンテキスト。
+func (rs *runState) workerStopContext() context.Context {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.workerStopCtx
+}
+
 // setIssueState は issue のスナップショットの Status だけを差し替える。
 //
 // **段2 で running_state を書いたあとに呼ぶ**（設計 3-16 の段-1 が状態ごとの上限を
@@ -595,13 +982,21 @@ func (rs *runState) setSettingsPath(path string) {
 	rs.SettingsPath = path
 }
 
-// setSessionUUID は採番したセッション UUID を入れる（着手の段5）。
+// setSessionUUID はこの run が使うセッション UUID を入れる（着手の段5b）。
 //
-// uuid: 新しく採番した UUID。**使い回してはならない**（設計 3-3）。
+// uuid: 新しく採番した UUID、または `--resume` で復帰する既存の UUID（設計 3-3b）。
+// **新しく採番したものを使い回してはならない**（設計 3-3）。
 func (rs *runState) setSessionUUID(uuid string) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.SessionUUID = uuid
+}
+
+// sessionUUID はこの run が使っているセッション UUID を返す。
+func (rs *runState) sessionUUID() string {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.SessionUUID
 }
 
 // setPaneID は使う pane の ID を入れる（着手の段8）。
@@ -629,28 +1024,54 @@ func (rs *runState) agentName() normalize.SafeName {
 	return rs.AgentName
 }
 
-// beginAttempt は新しい試行（着手・再 dispatch）を始めることを記録する。
+// foldTokensBase は、ここまでの累計トークンを「前のセッションまでの分」へ畳み込む
+// （設計 3-15）。
 //
-// **worker の世代を1つ進め、「終わらせる処理が走っている」印と「worker を止めた」印を
-// 外し、`FreshSession` を立てる。**セッション UUID を採り直した直後に呼ぶこと。
+// **セッションを新しく採番した直後にだけ呼ぶこと。**transcript のファイル名は
+// セッション UUID なので、採り直すと集計の対象ファイルが別物になり、そこから集計した値には
+// 前のセッションの分が入っていない。**畳み込まないと、ダッシュボードの累計が巻き戻る。**
 //
-// **`FreshSession` を立てるのは、そのセッションが会話履歴を持たないからである。**
-// 再 dispatch でも UUID は新しく採番するので（設計 3-3）、継続の指示（5-4）だけを送ると
-// **どの issue を何のためにやるのかが1文字も伝わらない。**
-//
-// **ここまでの累計トークンを tokensBase へ畳み込む。**次のセッションの transcript は
-// 別のファイル（ファイル名はセッション UUID）になり、そこから集計した値には
-// 前のセッションの分が入っていないためである。
-//
-// 戻り値: 新しい worker の世代。turn ループはこれを覚えて `currentWorker` に渡す。
-func (rs *runState) beginAttempt() int {
+// **`--resume` で復帰したときは呼んではならない。**復帰しても transcript のファイルは
+// 同じままである（実測: 2026-08-26。復帰の前後で hook が渡す `transcript_path` が一致した）。
+// **呼ぶと、同じファイルの中身を2回数える。**
+func (rs *runState) foldTokensBase() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.tokensBase = rs.Tokens
+}
+
+// beginAttempt は新しい試行（着手・再着手）を始めることを記録する。
+//
+// **worker の世代を1つ進め、「終わらせる処理が走っている」印と「worker を止めた」印を
+// 外し、`SendFirstPrompt` を立てる。**起動するセッションを決めた直後に呼ぶこと。
+//
+// **`SendFirstPrompt` を立てるのは、着手も再着手も1回目の本文（5-3）から始めるからである**
+// （設計 3-3b）。**セッションへ復帰した再着手でもそうする。**`In Review` から差し戻された
+// issue では人間が PR にレビューを書いており、**「issue を読むこと」「紐づく PR も読むこと」が
+// 入っているのは1回目の本文だけだからである。**継続の指示（5-4）にはそれが無い。
+//
+// **新しいセッションを採番した場合だけ、累計トークンを tokensBase へ畳み込む。**
+// 復帰した場合の transcript は同じファイルなので、畳み込むと二重に数える（foldTokensBase）。
+//
+// resumed: 既存のセッションへ `--resume` で復帰する場合は真。新しく採番したなら偽。
+// 戻り値: 新しい worker の世代。turn ループはこれを覚えて `currentWorker` に渡す。
+func (rs *runState) beginAttempt(resumed bool) int {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !resumed {
+		rs.tokensBase = rs.Tokens
+	}
 	rs.workerEpoch++
 	rs.workerStopped = false
 	rs.terminating = false
-	rs.FreshSession = true
+	rs.SendFirstPrompt = true
+	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
+	// 既に終わっているコンテキストを新しい turn ループへ渡すことになり、
+	// 最初の turn を送る前に待ちが打ち切られる。
+	if rs.workerStopCancel != nil {
+		rs.workerStopCancel()
+	}
+	rs.workerStopCtx, rs.workerStopCancel = context.WithCancel(context.Background())
 	return rs.workerEpoch
 }
 
@@ -676,21 +1097,157 @@ func (rs *runState) currentWorker(epoch int) bool {
 	return !rs.Finished && !rs.workerStopped && rs.workerEpoch == epoch
 }
 
+// terminalGate は `beginTerminal` が印を確保できたかどうかと、確保できなかった理由である
+// （設計 3-56）。
+//
+// **理由を返さないと、呼び出し側が「終わりに向かっている」と「書き戻しが飛んでいる」を
+// 取り違える。**取り違えると、誰も終わらせていない run の turn ループが抜けて宙に浮くか、
+// 終わらせる処理が黙って戻って Status も引き渡しのコメントも出なくなる。
+type terminalGate int
+
+const (
+	// terminalClaimed は印を確保できたことを表す。
+	terminalClaimed terminalGate = iota
+	// terminalTaken は、既に別の「終わらせる処理」が走っている（または run が終わっている）
+	// ことを表す。**呼び出し側は何もせずに戻ってよい。**その run は終わりに向かっている。
+	terminalTaken
+	// terminalRewriting は、自動化が動かした Status の書き戻しが飛んでいることを表す。
+	// **run はまだ続いている。**待てば印は取れる（`claimTerminal`）。
+	terminalRewriting
+)
+
 // beginTerminal は「この run を終わらせる処理」を1本に絞る。
 //
 // **巡回のループから終わらせるときは、印を同期で確保してから goroutine を起こす。**
 // 終わらせる処理は 3-25 の9段（`agent.prompt` を待ち受けつきで呼ぶ）を通ることがあり、
 // **既定では最大1時間返らない。**印が無いと、次の巡回が同じ run をもう一度終わらせにかかる。
 //
-// 戻り値: 確保できたら true。既に走っている、または run が終わっていれば false。
-func (rs *runState) beginTerminal() bool {
+// **書き戻しが飛んでいる間は確保させない**（設計 3-56）。確保させて run を手放すと、
+// あとから着地する書き込みが印の消えた issue を「作業中」にし、次の巡回が
+// **同じ worktree に2本目の Claude Code を立てる。**
+// **ただしそれは `terminalTaken` とは別の答えである。**巡回のループから呼ぶ経路は
+// 次の巡回でやり直せばよいので待たずに戻ってよいが、**turn ループのように
+// 「自分が終わらせなければ誰も終わらせない」経路は `claimTerminal` で待つこと。**
+//
+// 戻り値: 確保できたら terminalClaimed。確保できなければその理由。
+func (rs *runState) beginTerminal() terminalGate {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	if rs.terminating || rs.Finished {
-		return false
+		return terminalTaken
+	}
+	if rs.rewriting {
+		return terminalRewriting
 	}
 	rs.terminating = true
-	return true
+	return terminalClaimed
+}
+
+// claimTerminal は「この run を終わらせる処理」の印を、**書き戻しの終わりを待ってから**
+// 確保する（設計 3-56）。
+//
+// **「自分が終わらせなければ誰も終わらせない」経路が使う。**turn ループの
+// `finishRun` / `failRun` / `abandonRun` がそれである。**待たずに戻ると、turn の上限に
+// 達した run が Status も動かさず、引き渡しのコメントも出さず、印も外れないまま残る。**
+//
+// **待っている間は新しい書き戻しを始めさせない**（`terminalWaiting`）。
+// 始めさせると、待っている側が書き戻しの列に永久に割り込まれる。
+//
+// **巡回のループから同期で呼んではならない**（設計 3-8）。待つ長さは書き込み1回ぶんである。
+//
+// ctx: 待ちを打ち切るコンテキスト。**終わっていたら印を取らずに偽を返す**
+// （止められた run は次の起動で引き継ぐ。設計 3-4）。
+// 戻り値: 確保できたら true。
+func (rs *runState) claimTerminal(ctx context.Context) bool {
+	rs.mu.Lock()
+	rs.terminalWaiting++
+	rs.mu.Unlock()
+	defer func() {
+		rs.mu.Lock()
+		rs.terminalWaiting--
+		rs.mu.Unlock()
+	}()
+
+	for {
+		switch rs.beginTerminal() {
+		case terminalClaimed:
+			return true
+		case terminalTaken:
+			return false
+		}
+		done := rs.rewriteInFlight()
+		if done == nil {
+			// 直前に終わった。取り直す。
+			continue
+		}
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return false
+		}
+	}
+}
+
+// rewriteInFlight は、飛んでいる書き戻しの完了を知らせるチャネルを返す（設計 3-56）。
+//
+// 戻り値: 書き戻しが飛んでいれば、終わったときに閉じるチャネル。飛んでいなければ nil。
+func (rs *runState) rewriteInFlight() <-chan struct{} {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.rewriteDone
+}
+
+// rewriteGate は `beginRewrite` が印を確保できたかどうかと、確保できなかった理由である
+// （設計 3-56）。
+type rewriteGate int
+
+const (
+	// rewriteClaimed は書き戻しの印を確保できたことを表す。
+	rewriteClaimed rewriteGate = iota
+	// rewriteBusy は、別の書き戻しが既に飛んでいることを表す。**run はまだ続いている。**
+	// 呼び出し側は書き戻しを諦めてよいが、**run を終わったことにしてはならない。**
+	rewriteBusy
+	// rewriteEnding は、この run が終わりに向かっている（または終わっている）ことを表す。
+	rewriteEnding
+)
+
+// beginRewrite は「自動化が動かした Status の書き戻し」を1本に絞る（設計 3-56）。
+//
+// **終わらせる処理が走っている run へは書かない。**印が消えたあとに「作業中」の Status を
+// 書くと、次の巡回が**同じ worktree に2本目の Claude Code を立てる。**
+// **終わらせる処理が書き戻しの終わりを待っている場合も同じ扱いにする**
+// （`terminalWaiting`）。その run はもう終わりに向かっている。
+//
+// **確保したら必ず `endRewrite` で返すこと。**返さないと、待っている
+// `claimTerminal` が永久に返らない。
+//
+// 戻り値: 確保できたら rewriteClaimed。確保できなければその理由。
+func (rs *runState) beginRewrite() rewriteGate {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.terminating || rs.Finished || rs.terminalWaiting > 0 {
+		return rewriteEnding
+	}
+	if rs.rewriting {
+		return rewriteBusy
+	}
+	rs.rewriting = true
+	rs.rewriteDone = make(chan struct{})
+	return rewriteClaimed
+}
+
+// endRewrite は書き戻しの印を返す（設計 3-56）。
+//
+// **`beginRewrite` が rewriteClaimed を返したときだけ呼ぶこと。**
+func (rs *runState) endRewrite() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !rs.rewriting {
+		return
+	}
+	rs.rewriting = false
+	close(rs.rewriteDone)
+	rs.rewriteDone = nil
 }
 
 // endTerminal は「終わらせる処理」の印を外す。

@@ -8,6 +8,7 @@
 // 数を2箇所に書けば必ずずれる。数えられる場所は Label 定数の一覧だけにする。
 //
 //	設定ファイル      … WORKFLOW.md が読めて、front matter が検証を通るか
+//	片付けの状態      … `cleanup.on_states` が `tracker.terminal_states` に収まっているか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
 //	hook の置き場所    … hook を受ける socket を実際に置けるか
 //	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか
@@ -15,6 +16,7 @@
 //	herdr            … socket の ping の応答の protocol が herdr.protocol と一致するか
 //	gh の認証         … `gh auth status` の Token scopes に project が単独で並んでいるか
 //	ボード            … Bootstrap が通り、active_states の選択肢名が全部あるか
+//	Status の名前      … 設定に書いた Status と紛らわしい選択肢がボードに無いか
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
 //	資格情報          … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
@@ -127,8 +129,10 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 // **1つ失敗しても残りを全部検査する。**上流が `✗` か `!` になった検査の下流は、
 // 検査せずに `!` にして「なぜ確かめられなかったか」を出す（3-32 の依存の表）。
 //
-//	設定ファイル ─┬─ herdr（設定の protocol と照合する）
-//	              └─ gh の認証 ── ボード ─┬─ clone
+//	設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる）
+//	              ├─ herdr（設定の protocol と照合する）
+//	              └─ gh の認証 ── ボード ─┬─ Status の名前
+//	                                      ├─ clone
 //	                                      └─ 信頼登録
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
 //
@@ -172,6 +176,11 @@ func Run(ctx context.Context, opts Options) Report {
 	configResult, cfg := checkConfig(opts.ConfigPath)
 	report.add(configResult)
 
+	// 段1b: 片付けの状態。**設定を読むだけで済むので、外へ出る検査より先に置く**（設計 3-9e）。
+	// `config.Validate` は `cleanup.on_states` と `tracker.active_states` の重なりしか
+	// 見ておらず、**`tracker.terminal_states` との関係は誰も見ていなかった**（issue #35）。
+	report.add(checkCleanupStates(cfg, configResult.Symbol))
+
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。
 	report.add(checkClaude(opts, cfg, configResult.Symbol))
@@ -185,7 +194,7 @@ func Run(ctx context.Context, opts Options) Report {
 	report.add(checkClaudeHome(opts))
 	// **worktree の置き場所に書けるかも確かめる。**書けないと着手は段3 で必ず落ちる。
 	// **置き場所は `workspace.root` にしか書いていないので、設定が読めているときだけ走る。**
-	report.add(checkWorkspaceRoot(cfg, configResult.Symbol))
+	report.add(checkWorkspaceRoot(opts, cfg, configResult.Symbol))
 
 	// 段3: herdr。照合する protocol は設定から来るので、設定が読めなければ確かめられない。
 	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
@@ -202,12 +211,19 @@ func Run(ctx context.Context, opts Options) Report {
 	// **ここだけ期限を2倍にする。**Bootstrap と候補の取得で2リクエスト送るためである。
 	var boardResult Result
 	var repos []Repo
+	var boardStates []string
 	boardResult = withCheckTimeout(ctx, 2*opts.CheckTimeout, func(ctx context.Context) Result {
 		var res Result
-		res, repos = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
+		res, repos, boardStates = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
 		return res
 	})
 	report.add(boardResult)
+
+	// 段5b: Status の名前。**ボードを読んだときの応答を使い回すので、リクエストは増えない。**
+	// **Bootstrap は「設定に書いた名前がボードに在るか」しか見ない。**ボードに
+	// `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。
+	// **取り違えたまま無人で回すと、人間が作業中の issue にエージェントが着手する。**
+	report.add(checkStatusNames(cfg, boardStates, boardResult.Symbol))
 
 	// 段6: clone。対象リポジトリはボードを読んで決まる。
 	var cloneResult Result

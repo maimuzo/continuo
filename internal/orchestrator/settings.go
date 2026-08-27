@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
@@ -144,8 +145,12 @@ func (o *Orchestrator) writeSettingsFile(identifier string) (string, error) {
 	}
 	data = append(data, '\n')
 
+	// **その場で空にしてから書かない**（CLAUDE.md の「絶対に守る制約」4 / 設計 3-59）。
+	// このファイルは再 dispatch のたびに作り直すので、書いている途中で落ちると、
+	// **前回の設定も新しい設定も無い settings.json が残る。**それを `--settings` に渡された
+	// Claude Code は hook を1つも実行しないため、turn の終わりを永久に検知できなくなる。
 	path := filepath.Join(dir, settingsFileName)
-	if err := os.WriteFile(path, data, settingsFilePerm); err != nil {
+	if err := atomicfile.Write(path, data, settingsFilePerm); err != nil {
 		return "", i18n.Errorf(i18n.KeyOrchestratorWriteSettingsFileWriteFailed, path, err)
 	}
 	return path, nil

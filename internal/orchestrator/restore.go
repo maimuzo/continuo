@@ -6,8 +6,10 @@ import (
 	"net/url"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -106,6 +108,14 @@ type adoption struct {
 // 一覧を取れない、はいずれも警告を出して起動を続ける。設計 3-4 の段3）。
 func (o *Orchestrator) Restore(ctx context.Context, hs HookServer) (*RestoreResult, error) {
 	result := &RestoreResult{}
+
+	// 段1b: 身元ファイルを読めない worktree を、置き場所と pane の label とボードから
+	// 復元する（設計 3-49）。**段2 より先に行う。**復元できれば、段2 以降は
+	// ふつうの引き継ぎの候補として扱える。
+	// **復元できないものが残ったら、`workspace.on_broken_worktree` に従う**（既定は止める）。
+	if err := o.handleBrokenWorktrees(ctx); err != nil {
+		return result, err
+	}
 
 	// 段2: 置き場所を固定の4階層で走査し、身元ファイルを読む。
 	candidates, discarded := o.scanIdentities()
@@ -864,10 +874,16 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 	case "to_dispatch_state":
 		o.logger.Info("pane の無い実行中の run の Status を dispatch_state へ戻します",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.DispatchState)
-		if _, err := o.tracker.UpdateStatus(
-			ctx, issue.ID, o.cfg.Tracker.DispatchState, o.cfg.Tracker.TerminalStates); err != nil {
+		moved, err := o.tracker.UpdateStatus(
+			ctx, issue.ID, o.cfg.Tracker.DispatchState, o.cfg.Tracker.TerminalStates)
+		if err != nil {
 			o.logger.Warn("Status を戻せません", "identifier", issue.Identifier, "error", err)
 		}
+		// **この経路は引き渡しの通知を出さない。**独立した記録として1件残す（設計 3-29）。
+		o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue),
+			newStatusMove(moved, o.cfg.Tracker.DispatchState),
+			"continuo を再起動したとき、この issue の Claude Code の pane が残っていなかったので、"+
+				"着手待ちへ戻したためです（`restart.orphan_running_action` が `to_dispatch_state`）")
 	case "to_failure_state":
 		o.logger.Info("pane の無い実行中の run を人間へ渡します（worktree は残します）",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.FailureState)
@@ -899,8 +915,9 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 // reason: 人間へ見せる理由。
 // hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
 func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, reason string, hc handoffContext) {
-	if _, err := o.tracker.UpdateStatus(
-		ctx, issue.ID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates); err != nil {
+	moved, err := o.tracker.UpdateStatus(
+		ctx, issue.ID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	if err != nil {
 		o.logger.Warn("Status を落とせません",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.FailureState, "error", err)
 		return
@@ -909,8 +926,10 @@ func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, r
 	if nodeID == "" {
 		return
 	}
+	// **Status を動かした記録は引き渡しの通知の中に入れる**（設計 3-29）。
+	// 独立したコメントにすると、同じことが2件並ぶ。
 	if _, err := o.tracker.PostComment(ctx, nodeID,
-		buildHandoffComment(issue.Identifier, reason, hc),
+		buildHandoffComment(issue.Identifier, reason, hc, newStatusMove(moved, o.cfg.Tracker.FailureState)),
 		o.cfg.Tracker.Comments.SelfMarker); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", issue.Identifier, "error", err)
 	}
@@ -1004,4 +1023,353 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// ===== 壊れた worktree の復元と、見つけたときの止まり方（設計 3-49）=====
+
+// handleBrokenWorktrees は、身元ファイルを読めない worktree を手掛かりから復元し、
+// 復元できなかったものを `workspace.on_broken_worktree` に従って扱う（設計 3-49）。
+//
+// **復元より先に、消すことは一度も考えない。**壊れた worktree の中には、まだ push して
+// いない成果が残っていることがある。**continuo は1バイトも消さない。**
+//
+// **復元を先に試す理由。**着手は worktree を作ってから身元ファイルを書く（3-16 の段6〜段9）
+// ので、**その間で落ちると身元ファイルの無い worktree ができる。**それは「壊れた」のでは
+// なく「書き終える前に落ちた」だけであり、置き場所とボードから元どおりに組み立て直せる。
+//
+// **復元できなかったものは、既定では起動を止める。**飛ばして走り続けると、その issue は
+// ボードの上で running_state のまま誰にも触られず、**人間が気づくのは何時間も後になる。**
+// 止まれば、被害はその時点で止まり、壊れていることをすぐ知れる。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// 戻り値: `workspace.on_broken_worktree` が `stop` で、復元できない worktree が
+// 1件でもあった場合のエラー。**それ以外は nil である**（置き場所を走査できない場合も
+// 警告を出して起動を続ける）。
+func (o *Orchestrator) handleBrokenWorktrees(ctx context.Context) error {
+	broken, err := o.ws.ScanBroken()
+	if err != nil {
+		o.logger.Warn("置き場所を走査できないので、壊れた worktree の検査を行いません（起動は続けます）",
+			"error", err)
+		return nil
+	}
+	if len(broken) == 0 {
+		return nil
+	}
+
+	// **pane を引くのは、壊れた worktree が1件でもあったときだけである。**
+	// herdr への呼び出しを1回増やすので、平常時は1回も呼ばない。
+	panes, agents := o.panesByCwd(ctx)
+
+	var stillBroken []workspace.BrokenWorktree
+	for _, b := range broken {
+		if o.recoverIdentity(ctx, b, panes, agents) {
+			continue
+		}
+		stillBroken = append(stillBroken, b)
+	}
+	if len(stillBroken) == 0 {
+		return nil
+	}
+
+	// **何が起きているかと、次に何をすべきかを、必ず両方出す**（設計 3-49）。
+	identityFile := o.ws.IdentityFileName()
+	summary := make([]string, 0, len(stillBroken))
+	for _, b := range stillBroken {
+		o.logger.Error("身元を確かめられない worktree があります（continuo は消しません）",
+			"path", b.Path, "何が起きているか", b.What(identityFile))
+		for _, step := range b.NextSteps() {
+			o.logger.Error("次にこれをしてください", "path", b.Path, "手順", step)
+		}
+		summary = append(summary, b.Path)
+	}
+
+	if o.cfg.Workspace.OnBrokenWorktree == config.OnBrokenWorktreeSkip {
+		o.logger.Warn("workspace.on_broken_worktree が skip なので、壊れた worktree を飛ばして起動を続けます",
+			"count", len(stillBroken), "paths", summary)
+		return nil
+	}
+	// 止める側。**何が壊れているか・どの worktree か・次に何をすべきかを出してから終わる。**
+	first := stillBroken[0]
+	return i18n.Errorf(i18n.KeyOrchestratorRestoreBrokenWorktreeStop,
+		len(stillBroken),
+		strings.Join(summary, "\n  "),
+		first.What(identityFile),
+		strings.Join(first.NextSteps(), "\n  "))
+}
+
+// panesByCwd は herdr の pane を、解決済みの cwd から引ける形にする（設計 3-49）。
+//
+// **段4 の matchPanes とは別に引く。**あちらは身元ファイルを読めた worktree だけを
+// 相手にするので、**まさに読めなかった worktree の pane が入らない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// 戻り値の1つ目: 解決済みの cwd から pane を引く写像。**引けなければ空である。**
+// 戻り値の2つ目: pane の ID から agent を引く写像。**引けなければ空である。**
+func (o *Orchestrator) panesByCwd(ctx context.Context) (map[string]herdr.Pane, map[string]herdr.Agent) {
+	byCwd := map[string]herdr.Pane{}
+	byPane := map[string]herdr.Agent{}
+
+	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
+	if err != nil {
+		o.logger.Warn("pane の一覧を取れないので、pane の label を復元の手掛かりに使いません", "error", err)
+		return byCwd, byPane
+	}
+	for _, pane := range list.Panes {
+		if pane.Cwd == "" {
+			continue
+		}
+		resolved, ok := resolvePath(pane.Cwd)
+		if !ok {
+			continue
+		}
+		if _, dup := byCwd[resolved]; dup {
+			// **同じ cwd に pane が2つあるなら、どちらの label を信じてよいか決められない。**
+			// 手掛かりとして使わない（置き場所からの切り出しは残る）。
+			o.logger.Warn("同じ cwd に pane が2つあるので、label を復元の手掛かりに使いません",
+				"cwd", pane.Cwd)
+			byCwd[resolved] = herdr.Pane{}
+			continue
+		}
+		byCwd[resolved] = pane
+	}
+
+	agents, err := o.herdr.AgentList(ctx)
+	if err != nil {
+		o.logger.Warn("agent の一覧を取れないので、agent 名を復元の手掛かりに使いません", "error", err)
+		return byCwd, byPane
+	}
+	for _, a := range agents.Agents {
+		if a.PaneID == "" || a.Name == "" {
+			continue
+		}
+		byPane[a.PaneID] = a
+	}
+	return byCwd, byPane
+}
+
+// recoverIdentity は、身元ファイルを読めない worktree の身元ファイルを書き直す（設計 3-49）。
+//
+// **手掛かりは3つある。**
+//
+//	置き場所のパス  … `<root>/<host>/<owner>/<repo>/<スラグ>` の固定4階層。スラグに issue の番号が入る
+//	pane の label   … `owner/repo/issues/N`（設計 3-3）。スラグから切り出せなかったときに使う
+//	ボードの issue  … 上の2つで組み立てた `<owner>/<repo>#<番号>` で1件だけ引き直す
+//
+// **どの手掛かりも、そのままでは信じない。**引き直した issue から**スラグを作り直し、
+// 目の前のディレクトリ名と一致すること**を確かめる（ExpectedSlugFor）。ここを外すと、
+// **pane の label を書き換えるだけで、別の issue の worktree として復元させられる**
+// （label は herdr の CLI から誰でも書き換えられる。continuo だけのものではない）。
+//
+// **base は復元しない。**worktree を作ったときの base は、どの手掛かりにも残っていない。
+// 空のままにすると片付けは「判定できない」として見送る（3-9 の手順2b）ので、
+// **消す側へ倒れることは無い。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// b: 身元を確かめられない worktree。
+// panes: 解決済みの cwd から引く pane。
+// agents: pane の ID から引く agent。
+// 戻り値: 身元ファイルを書き直せたら true。
+func (o *Orchestrator) recoverIdentity(
+	ctx context.Context,
+	b workspace.BrokenWorktree,
+	panes map[string]herdr.Pane,
+	agents map[string]herdr.Agent,
+) bool {
+	if b.Clue == nil {
+		o.logger.Warn("置き場所の4階層に合わないので復元できません（消しません）", "path", b.Path)
+		return false
+	}
+	pane := panes[resolveOrCleanPath(b.Path)]
+
+	for _, number := range recoveryNumbers(b, pane) {
+		identifier := fmt.Sprintf("%s/%s#%d", b.Clue.Owner, b.Clue.Repo, number)
+		issue, found, err := o.tracker.FetchIssueByIdentifier(ctx, identifier)
+		if err != nil {
+			o.logger.Warn("復元のために issue を引けませんでした（消しません）",
+				"path", b.Path, "identifier", identifier, "error", err)
+			continue
+		}
+		if !found {
+			o.logger.Warn("復元のために引いた issue がボードにありません（消しません）",
+				"path", b.Path, "identifier", identifier)
+			continue
+		}
+		if !o.slugAgrees(b, issue) {
+			continue
+		}
+		if o.writeRecoveredIdentity(ctx, b, issue, pane, agents) {
+			return true
+		}
+		return false
+	}
+	o.logger.Warn("手掛かりから issue を確かめられないので復元できません（消しません）",
+		"path", b.Path, "置き場所", b.Clue.Owner+"/"+b.Clue.Repo, "スラグ", b.Clue.Slug)
+	return false
+}
+
+// writeRecoveredIdentity は、裏の取れた issue から身元ファイルを組み立てて書く（設計 3-49）。
+//
+// **書くのは、置き場所とボードと pane から確かめられたものだけである。**
+// `base` と `settings_path` は復元しない（どの手掛かりにも残っていない）。
+// **takeover_count は 0 から数え直す。**引き継いだ回数は身元ファイルにしか無く、
+// それが読めなかったのだから、**復元した値を推測で埋めてはならない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// b: 身元を確かめられない worktree。
+// issue: 裏の取れた issue。
+// pane: その worktree を cwd に持つ pane（無ければゼロ値）。
+// agents: pane の ID から引く agent。
+// 戻り値: 書けたら true。
+func (o *Orchestrator) writeRecoveredIdentity(
+	ctx context.Context,
+	b workspace.BrokenWorktree,
+	issue tracker.Issue,
+	pane herdr.Pane,
+	agents map[string]herdr.Agent,
+) bool {
+	branch, warnings, err := workspace.RenderBranch(o.cfg.Herdr.Worktree.BranchTemplate, toIssueRef(issue))
+	if err != nil {
+		o.logger.Warn("復元のために branch 名を組み立てられませんでした（消しません）",
+			"path", b.Path, "identifier", issue.Identifier, "error", err)
+		return false
+	}
+	for _, w := range warnings {
+		o.logger.Warn("復元で組み立てた branch 名の正規化で情報が落ちました", "warning", w.Message)
+	}
+
+	identity := workspace.Identity{
+		IssueURL:        issueURL(issue),
+		IssueIdentifier: issue.Identifier,
+		ProjectItemID:   issue.ID,
+		Branch:          branch.String(),
+		CreatedAt:       o.now(),
+	}
+	if pane.PaneID != "" {
+		// **pane から取れるものは取る。**取れなくても復元は成立する
+		// （herdr workspace の ID が無ければ、片付けは worktree の登録から引き直す）。
+		identity.HerdrWorkspaceID = pane.WorkspaceID
+		if uuid, ok := pane.SessionUUID(); ok {
+			identity.SessionUUID = uuid
+		}
+		if agent, ok := agents[pane.PaneID]; ok {
+			identity.AgentName = agent.Name
+		}
+	}
+	// **書き込む直前に封じ込め検査を通す**（設計 3-20）。走査は `os.ReadDir` で
+	// 名前をたどるだけなので、置き場所の4階層目が外を指すシンボリックリンクだと、
+	// **置き場所の外側へ身元ファイルを書く。**読むだけの走査と違い、ここは書き込みである。
+	resolved, err := workspace.CheckContainmentResolved(o.ws.ResolvedRoot(), b.Path)
+	if err != nil {
+		o.logger.Warn("復元先が置き場所の内側だと確かめられないので身元ファイルを書きません（消しません）",
+			"path", b.Path, "error", err)
+		return false
+	}
+	if err := o.ws.WriteIdentity(ctx, resolved, identity); err != nil {
+		o.logger.Warn("復元した身元ファイルを書けませんでした（消しません）",
+			"path", b.Path, "identifier", issue.Identifier, "error", err)
+		return false
+	}
+	o.logger.Info("身元ファイルを復元しました",
+		"path", b.Path, "identifier", issue.Identifier, "branch", identity.Branch,
+		"herdr_workspace_id", identity.HerdrWorkspaceID, "agent", identity.AgentName)
+	return true
+}
+
+// recoveryNumbers は復元で試す issue の番号を、手掛かりの強い順に並べる（設計 3-49）。
+//
+// **置き場所のパスが先である。**パスは封じ込め検査（3-20）を通っており、
+// エージェントには書き換えられない。pane の label は herdr の CLI から書き換えられる
+// ので、**パスから切り出せなかったときの補いとしてだけ使う。**
+//
+// b: 身元を確かめられない worktree。
+// pane: その worktree を cwd に持つ pane（無ければゼロ値）。
+// 戻り値: 試す番号（重複は除く）。
+func recoveryNumbers(b workspace.BrokenWorktree, pane herdr.Pane) []int {
+	var numbers []int
+	if b.Clue != nil && b.Clue.Number > 0 {
+		numbers = append(numbers, b.Clue.Number)
+	}
+	if n, ok := issueNumberFromPaneLabel(pane.Label); ok && !containsInt(numbers, n) {
+		numbers = append(numbers, n)
+	}
+	return numbers
+}
+
+// slugAgrees は、引き直した issue から作り直したスラグが、目の前のディレクトリ名と
+// 一致するかを返す（設計 3-49）。
+//
+// **これが復元の最後の関門である。**手掛かり（置き場所の番号・pane の label）は
+// どちらも「候補を出す」だけの役目であり、**正しいかどうかはここでしか確かめない。**
+//
+// b: 身元を確かめられない worktree。
+// issue: 引き直した issue。
+// 戻り値: 一致すれば true。
+func (o *Orchestrator) slugAgrees(b workspace.BrokenWorktree, issue tracker.Issue) bool {
+	if !strings.EqualFold(issue.Owner, b.Clue.Owner) || !strings.EqualFold(issue.Repo, b.Clue.Repo) {
+		o.logger.Warn("引き直した issue が置き場所と違うリポジトリなので復元しません（消しません）",
+			"path", b.Path, "置き場所", b.Clue.Owner+"/"+b.Clue.Repo, "引き直した issue", issue.Identifier)
+		return false
+	}
+	slug, err := o.ws.ExpectedSlugFor(toIssueRef(issue))
+	if err != nil {
+		o.logger.Warn("引き直した issue のスラグを組み立てられないので復元しません（消しません）",
+			"path", b.Path, "identifier", issue.Identifier, "error", err)
+		return false
+	}
+	if slug != b.Clue.Slug {
+		o.logger.Warn("引き直した issue のスラグが置き場所のディレクトリ名と違うので復元しません（消しません）",
+			"path", b.Path, "置き場所のディレクトリ名", b.Clue.Slug, "issue から作ったスラグ", slug,
+			"identifier", issue.Identifier)
+		return false
+	}
+	return true
+}
+
+// issueNumberFromPaneLabel は pane の label（`owner/repo/issues/N`。設計 3-3）から
+// issue の番号を取り出す。
+//
+// **herdr.IssueLabel の逆である。**label は herdr の CLI から誰でも書き換えられるので、
+// **ここで取れた番号は候補にすぎない**（slugAgrees が裏を取る）。
+//
+// label: pane の label。
+// 戻り値の1つ目: issue の番号。
+// 戻り値の2つ目: 形が合って正の整数として読めたら true。
+func issueNumberFromPaneLabel(label string) (int, bool) {
+	parts := strings.Split(strings.TrimSpace(label), "/")
+	if len(parts) != 4 || parts[2] != "issues" {
+		return 0, false
+	}
+	number, err := strconv.Atoi(parts[3])
+	if err != nil || number <= 0 {
+		return 0, false
+	}
+	return number, true
+}
+
+// containsInt は整数の並びに値が入っているかを返す。
+//
+// values: 探す先。
+// target: 探す値。
+// 戻り値: 入っていれば true。
+func containsInt(values []int, target int) bool {
+	for _, v := range values {
+		if v == target {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveOrCleanPath はシンボリックリンクを解決した絶対パスを返す。解決できなければ Clean する。
+//
+// **pane の cwd と worktree のパスを同じ土俵で比べるために要る**（panesByCwd は
+// 解決済みの cwd を鍵にしている）。
+//
+// path: 対象のパス。
+// 戻り値: 比較に使えるパス。
+func resolveOrCleanPath(path string) string {
+	if resolved, ok := resolvePath(path); ok {
+		return resolved
+	}
+	return filepath.Clean(path)
 }

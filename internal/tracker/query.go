@@ -25,7 +25,11 @@ import (
 // 候補の取得（`items(...)`）は既定の archivedStates が `[NOT_ARCHIVED]` なので archive 済みは
 // そもそも返らないが、ID 指定の取り直し（`nodes(ids:)`）にはその既定が効かない
 // （2026-08-18 に introspection で確認）。
-const itemFieldsFragment = `
+//
+// **`%s` には Issue の断片へ足す追加のフィールドが入る。**いまそこへ入るのは
+// `statusChangedTimelineFragment`（誰が Status を書いたか）だけで、
+// **足すのは ID 指定の取り直しのクエリにだけである**（itemFieldsFragment を参照）。
+const itemFieldsFragmentTemplate = `
   id
   isArchived
   fieldValueByName(name: $statusField) {
@@ -48,7 +52,7 @@ const itemFieldsFragment = `
       assignees(first: 1) { nodes { id login } }
       blockedBy(first: 20) { nodes { id number state repository { nameWithOwner } } }
       linkedBranches(first: 1) { nodes { ref { name } } }
-      comments { totalCount }
+      comments { totalCount }%s
     }
     ... on DraftIssue {
       id
@@ -60,6 +64,51 @@ const itemFieldsFragment = `
     }
   }
 `
+
+// statusChangedTimelineFragment は「いまの Status を書いたのは誰か」を読む断片である
+// （設計 2-6 / 3-54）。
+//
+// **`wasAutomated` だけでは見分けられない。**組み込みの自動化
+// （`Pull request linked to issue` など）が動かしたときでも `false` が返る（設計 2-6 の実測）。
+// **見分けに使うのは `actor.__typename` である**（自動化は `Bot`、人間と continuo 自身は `User`）。
+// **`wasAutomated` も一緒に読む。**同じ応答に載るので費用が増えず、GitHub が将来直せば自動で効く。
+//
+// **`project { number }` を必ず読む。**1つの issue が複数のボードに載っていると、
+// 他のボードのイベントが同じ配列で返る（設計 2-6 の実測）。絞り込みに要る。
+//
+// **`last: 50` である。**要るのは「いまの Status を書いた最後の1件」だけだが、
+// **窓を絞るのはボードで絞り込む前である。**`timelineItems` に「どのボードのイベントか」で
+// 絞る引数は無いので、**別のボードで Status が何度も動くと、自分のボードのイベントが
+// 窓から押し出される**（`judgeStatusAuthor` が絞るのは、返ってきた50件の中だけである）。
+// **押し出されると「誰が書いたか分からない」になり、自動化の書き戻しが効かないまま
+// worker が止まる。**1つの issue が載るボードの数だけ余裕を持たせる。
+//
+// **ネストした connection が1本増えるので、この断片を候補の取得（100件返る）へ
+// 足してはならない。**足すのは ID 指定の取り直しだけで、しかも
+// **Status を書く前の取り直しには足さない**（`byIDsQueryTemplate` と
+// `byIDsWithoutTimelineQueryTemplate`）。
+const statusChangedTimelineFragment = `
+      timelineItems(last: 50, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
+        nodes {
+          ... on ProjectV2ItemStatusChangedEvent {
+            createdAt
+            status
+            wasAutomated
+            actor { __typename login }
+            project { number }
+          }
+        }
+      }`
+
+// itemFieldsFragment は候補の取得（fetch_issues_by_states）と識別子での照合が使う断片である。
+// **timeline を含まない。**どちらも100件単位でボードを読むので、1件ずつにしか意味の無い
+// timeline を足すと費用だけが増える。
+var itemFieldsFragment = fmt.Sprintf(itemFieldsFragmentTemplate, "")
+
+// itemFieldsWithTimelineFragment は ID 指定の取り直し（fetch_issues_by_ids）が使う断片である。
+// **こちらにだけ timeline を足す**（設計 3-54）。取り直すのは担当中の issue だけなので、
+// 件数が少なく、**Status の値と同じ1リクエストで返る**（設計 2-6 の実測）。
+var itemFieldsWithTimelineFragment = fmt.Sprintf(itemFieldsFragmentTemplate, statusChangedTimelineFragment)
 
 // candidateQueryTemplate は fetch_issues_by_states が使うクエリである。
 // `items(query: $q)` のサーバ側フィルタで Status を絞り込み、返ってきた順序をそのまま使う
@@ -76,7 +125,7 @@ const itemFieldsFragment = `
 // `repositoryOwner` を使う。**Organization / User はどちらも ProjectV2Owner インターフェースを
 // 実装しているため、`... on ProjectV2Owner` のフラグメントで両対応できる
 // （2026-08-18 に project #3 で読み取り専用の introspection とクエリで実測確認済み）。
-const candidateQueryTemplate = `
+var candidateQueryTemplate = `
 query($login: String!, $number: Int!, $statusField: String!, $q: String!, $after: String) {
   repositoryOwner(login: $login) {
     ... on ProjectV2Owner {
@@ -95,7 +144,28 @@ query($login: String!, $number: Int!, $statusField: String!, $q: String!, $after
 // byIDsQueryTemplate は fetch_issues_by_ids が使うクエリである。
 // `nodes(ids:)` は見つからない ID に対して null を返す（削除・archive 等で
 // 「もう見えない」ID を、エラーにせず「見えなくなった」として扱える。2026-08-18 に実測確認）。
-const byIDsQueryTemplate = `
+//
+// **timeline を足してあるのはこのクエリだけである**（設計 3-54）。取り直すのは担当中の
+// issue だけなので件数が少なく、リクエストは1本のままである。
+var byIDsQueryTemplate = `
+query($statusField: String!, $ids: [ID!]!) {
+  nodes(ids: $ids) {
+    __typename
+    ... on ProjectV2Item {` + itemFieldsWithTimelineFragment + `
+    }
+  }
+}
+`
+
+// byIDsWithoutTimelineQueryTemplate は **Status を書く前の取り直し**（`UpdateStatus`）が
+// 使うクエリである。
+//
+// **timeline を取らない。**書き込みの経路が timeline から読むものは1つも無い
+// （見るのは取り直した `State` だけで、それを `blockedStates` と突き合わせる）。
+// **Status は turn ごと・巡回ごとに書くので、この経路がいちばん多く呼ばれる。**
+// ネストした connection を1本ぶら下げたままにすると、**使わない50件のイベントを
+// 書き込みのたびに読む**ことになる（GraphQL の点数は返す node の数で決まる。設計 3-31）。
+var byIDsWithoutTimelineQueryTemplate = `
 query($statusField: String!, $ids: [ID!]!) {
   nodes(ids: $ids) {
     __typename
@@ -264,6 +334,38 @@ type rawCommentsCount struct {
 	TotalCount int `json:"totalCount"`
 }
 
+// rawActor は timeline のイベントを起こした主体である（設計 2-6）。
+//
+// **`__typename` で自動化と人間を見分ける。**`Bot` なら GitHub App（組み込みの自動化を含む）、
+// `User` なら人間か continuo 自身（`gh auth token` の持ち主）である。
+type rawActor struct {
+	Typename string `json:"__typename"`
+	Login    string `json:"login"`
+}
+
+// rawEventProject は timeline のイベントが指すボードである。番号での絞り込みにだけ使う。
+type rawEventProject struct {
+	Number int `json:"number"`
+}
+
+// rawStatusChangedEvent は ProjectV2ItemStatusChangedEvent 1件の応答である（設計 2-6）。
+type rawStatusChangedEvent struct {
+	CreatedAt *time.Time `json:"createdAt"`
+	// Status はこのイベントで書き込まれた Status 名である。
+	Status string `json:"status"`
+	// WasAutomated は GraphQL の "Did this event result from workflow automation?"
+	// （訳: このイベントは workflow の自動化から生じたものか？）である。
+	// **組み込みの自動化でも false が返る**ので、これ単独では判定に使えない（設計 2-6）。
+	WasAutomated bool             `json:"wasAutomated"`
+	Actor        *rawActor        `json:"actor"`
+	Project      *rawEventProject `json:"project"`
+}
+
+// rawTimelineItems は timelineItems 接続の応答である。
+type rawTimelineItems struct {
+	Nodes []rawStatusChangedEvent `json:"nodes"`
+}
+
 // rawContent は ProjectV2Item.content の中身である。Issue と DraftIssue のフィールドを
 // すべて1つの構造体に平らに持つ（GraphQL のインラインフラグメントは同じ JSON オブジェクトに
 // マージされる）。どちらの型のフィールドかは Typename で判別する。
@@ -283,6 +385,9 @@ type rawContent struct {
 	BlockedBy      *rawBlockerConn      `json:"blockedBy"`
 	LinkedBranches *rawLinkedBranchConn `json:"linkedBranches"`
 	Comments       *rawCommentsCount    `json:"comments"`
+	// TimelineItems は「誰が Status を書いたか」のイベントである（設計 3-54）。
+	// **ID 指定の取り直しのクエリでだけ埋まる。**候補の取得では常に nil である。
+	TimelineItems *rawTimelineItems `json:"timelineItems"`
 }
 
 // rawStatusValue は fieldValueByName(name: "Status") の応答である。
@@ -511,6 +616,78 @@ func foldStatus(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
+// actorTypeBot は、自動化が起こしたイベントの `actor.__typename` である（設計 2-6）。
+//
+// **組み込みの自動化（`Pull request linked to issue` など）は `Bot` になる。**
+// **continuo 自身の書き込みは `User` になる**（`gh auth token` の持ち主として書くため）。
+// 人間も `User` なので、continuo は自分の書き込みを自動化と取り違えない。
+const actorTypeBot = "Bot"
+
+// statusAuthor は「いまの Status を書いたのは誰か」の判定結果である（設計 3-54）。
+type statusAuthor struct {
+	// Automated は、書いたのがボードの自動化（`Bot`）だったかどうかである。
+	// **イベントが1件も引けなければ false である**（分からないなら「自動化ではない」に倒す）。
+	Automated bool
+	// Login は書いた主体のログイン名である。ログと issue のコメントに出すためだけに持つ。
+	// 取れなければ空文字。
+	Login string
+}
+
+// judgeStatusAuthor は timeline のイベントから「いまの Status を書いたのは誰か」を決める
+// （設計 2-6 / 3-54）。
+//
+// **自分のボードのイベントだけを見る。**1つの issue が複数のボードに載っていると、
+// 他のボードのイベントが同じ配列で返る（設計 2-6 の実測）。**絞り込まないと、
+// 別のボードで自動化が動いただけで「自動化が動かした」と判定してしまう。**
+//
+// **いまの Status と一致する、いちばん新しいイベントを採る。**古いイベントを採ると、
+// そのあと誰かが上書きしても、最初の書き手を指し続ける。
+//
+// **判定は「`actor.__typename` が `Bot`、または `wasAutomated` が真」である。**
+// `wasAutomated` は組み込みの自動化でも `false` を返すので、これ単独では使えない（設計 2-6）。
+//
+// items: timelineItems の応答（nil なら判定しない）。
+// state: いまの Status 名（大文字小文字と前後の空白は無視して照合する）。
+// projectNumber: 自分のボードの番号。**0 以下なら絞り込まない**（テストの都合で番号を
+// 持たない偽サーバに合わせるためではなく、番号が未設定のアダプタを作れないので実際には起きない）。
+// 戻り値: 判定結果。一致するイベントが1件も無ければゼロ値。
+func judgeStatusAuthor(items *rawTimelineItems, state string, projectNumber int) statusAuthor {
+	if items == nil {
+		return statusAuthor{}
+	}
+	folded := foldStatus(state)
+	var latest *rawStatusChangedEvent
+	for i := range items.Nodes {
+		ev := &items.Nodes[i]
+		if projectNumber > 0 && (ev.Project == nil || ev.Project.Number != projectNumber) {
+			continue
+		}
+		if foldStatus(ev.Status) != folded {
+			continue
+		}
+		if latest == nil {
+			latest = ev
+			continue
+		}
+		// **時刻が取れないイベントは、あとから来たものを新しいとみなす。**
+		// `timelineItems(last:)` は古い順に返るので、並びの後ろほど新しい。
+		if latest.CreatedAt == nil || ev.CreatedAt == nil || !ev.CreatedAt.Before(*latest.CreatedAt) {
+			latest = ev
+		}
+	}
+	if latest == nil {
+		return statusAuthor{}
+	}
+	author := statusAuthor{Automated: latest.WasAutomated}
+	if latest.Actor != nil {
+		author.Login = latest.Actor.Login
+		if latest.Actor.Typename == actorTypeBot {
+			author.Automated = true
+		}
+	}
+	return author
+}
+
 // containsFoldedStatus は states の中に target と（foldStatus で比較して）一致するものが
 // あるかどうかを判定する。
 func containsFoldedStatus(states []string, target string) bool {
@@ -584,6 +761,7 @@ type mapItemResult struct {
 // statusFieldName: エラーメッセージ用（tracker.provider.status_field の値）。
 // repoTrusted: `<owner>/<repo>` が Claude Code に信頼登録されているかを判定する関数
 // （設計 3-13 の「リポジトリが信頼済み」）。nil なら全て信頼済みとして扱う。
+// projectNumber: 自分のボードの番号（timeline のイベントを自分のボードへ絞るのに使う。設計 3-54）。
 // 戻り値: Ok が true なら Issue が有効。false なら Reason に理由（人間可読）が入る。
 // **Gone が true のものは「壊れている」ではなく「候補の集合にもう居ない」である**
 // （呼び出し側は ID 指定の取り直しでもエラーにせず省く）。
@@ -594,7 +772,9 @@ type mapItemResult struct {
 //   - content が無い（provider 側の異常。Gone にしない）
 //   - Issue 型なのに repository が無い、または nameWithOwner の形が不正
 //     （provider 側の異常。Gone にしない）
-func mapRawItemToIssue(raw *rawItem, statusFieldName string, repoTrusted RepoTrustFunc) mapItemResult {
+func mapRawItemToIssue(
+	raw *rawItem, statusFieldName string, repoTrusted RepoTrustFunc, projectNumber int,
+) mapItemResult {
 	if raw.IsArchived {
 		// archive 済みの item はボード上でもう見えない。候補の取得は `items(...)` の既定
 		// （archivedStates: [NOT_ARCHIVED]）で最初から返らないが、ID 指定の取り直しには
@@ -716,26 +896,32 @@ func mapRawItemToIssue(raw *rawItem, statusFieldName string, repoTrusted RepoTru
 			)
 		}
 
+		// **いまの Status を書いたのが誰かを、同じ応答から読む**（設計 3-54）。
+		// timeline を要求していないクエリ（候補の取得・識別子での照合）ではゼロ値になる。
+		author := judgeStatusAuthor(raw.Content.TimelineItems, state, projectNumber)
+
 		issue := Issue{
-			ID:           raw.ID,
-			NativeRef:    nativeRef,
-			Identifier:   identifier,
-			Title:        raw.Content.Title,
-			Description:  description,
-			Priority:     nil, // 設計 4-2: Priority を読まない。常に nil。
-			State:        state,
-			BranchName:   branchName,
-			URL:          url,
-			AssigneeID:   assigneeID,
-			Labels:       labels,
-			BlockedBy:    blockedBy,
-			Dispatchable: dispatchable,
-			CreatedAt:    raw.Content.CreatedAt,
-			UpdatedAt:    raw.Content.UpdatedAt,
-			Owner:        owner,
-			Repo:         repo,
-			Number:       raw.Content.Number,
-			CommentCount: commentCount,
+			ID:                        raw.ID,
+			NativeRef:                 nativeRef,
+			Identifier:                identifier,
+			Title:                     raw.Content.Title,
+			Description:               description,
+			Priority:                  nil, // 設計 4-2: Priority を読まない。常に nil。
+			State:                     state,
+			StatusChangedByAutomation: author.Automated,
+			StatusChangedBy:           author.Login,
+			BranchName:                branchName,
+			URL:                       url,
+			AssigneeID:                assigneeID,
+			Labels:                    labels,
+			BlockedBy:                 blockedBy,
+			Dispatchable:              dispatchable,
+			CreatedAt:                 raw.Content.CreatedAt,
+			UpdatedAt:                 raw.Content.UpdatedAt,
+			Owner:                     owner,
+			Repo:                      repo,
+			Number:                    raw.Content.Number,
+			CommentCount:              commentCount,
 		}
 		return mapItemResult{Ok: true, Issue: issue, NotDispatchableReason: notDispatchableReason}
 

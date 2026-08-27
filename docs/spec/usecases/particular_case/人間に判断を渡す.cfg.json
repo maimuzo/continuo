@@ -3,7 +3,7 @@
   "usecase_name": "人間に判断を渡す",
   "source": {
     "file": "docs/spec/usecases/particular_case/人間に判断を渡す.rucm.md",
-    "rucm_block_sha256": "e98c29f69e25b3bd3b3c12e803f23f593b2e93cc748f80d2910fdb651b427a2d"
+    "rucm_block_sha256": "04b42c41187808b86cb22353cb55250c4c9b1cdb726a4a21a6eeb1ed7e95906e"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -32,7 +32,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          11
+          12
         ]
       },
       "postcondition": "issue にエージェントが書いたコメントが1件以上ある。issue の Status は引き渡しの選択肢のままである。worktree は残っている。"
@@ -46,13 +46,43 @@
       },
       "postcondition": "issue の Status は failure_state の選択肢である。issue に引き渡しの通知のコメントが1件ある。issue にエージェントが書いたコメントがない。worktree は残っている。"
     },
+    "知らないStatus": {
+      "when": "issue の Status が設定に名前の無い選択肢へ動く場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            2
+          ]
+        }
+      ],
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。"
+    },
+    "自動化の書き戻し": {
+      "rfs": {
+        "flow": "知らないStatus",
+        "steps": [
+          1
+        ]
+      },
+      "postcondition": "issue の Status は戻す先の選択肢である。issue に Status を動かした記録のコメントが1件ある。herdr の pane は閉じていない。worktree は残っている。印は残っている。"
+    },
+    "turnの猶予": {
+      "rfs": {
+        "flow": "知らないStatus",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。"
+    },
     "レビューの完了": {
       "when": "利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
           "steps": [
-            15
+            16
           ]
         }
       ],
@@ -118,51 +148,58 @@
     },
     {
       "id": "BASIC FLOW-11",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 11,
-      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
+      "statement": "システムは Status を動かした記録を issue にコメントする。"
     },
     {
       "id": "BASIC FLOW-12",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは workspace_hooks の after_run を実行する。"
+      "statement": "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。"
     },
     {
       "id": "BASIC FLOW-13",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "システムは herdr の pane を閉じる。"
+      "statement": "システムは workspace_hooks の after_run を実行する。"
     },
     {
       "id": "BASIC FLOW-14",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "システムは印を外す。"
+      "statement": "システムは herdr の pane を閉じる。"
     },
     {
       "id": "BASIC FLOW-15",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "利用者はボードの issue のコメントを読む。"
+      "statement": "システムは印を外す。"
     },
     {
       "id": "BASIC FLOW-16",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "利用者はボードの issue に判断の回答をコメントする。"
+      "statement": "利用者はボードの issue のコメントを読む。"
     },
     {
       "id": "BASIC FLOW-17",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
+      "statement": "利用者はボードの issue に判断の回答をコメントする。"
+    },
+    {
+      "id": "BASIC FLOW-18",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 18,
       "statement": "利用者はボードの issue の Status に dispatch_state の選択肢を書く。"
     },
     {
@@ -268,7 +305,7 @@
       "type": "resume",
       "flow": "コメントの取り戻し",
       "step": 7,
-      "statement": "RESUME STEP 12"
+      "statement": "RESUME STEP 13"
     },
     {
       "id": "コメントの取り戻しの失敗-1",
@@ -299,6 +336,97 @@
       "statement": "ABORT"
     },
     {
+      "id": "知らないStatus-1",
+      "type": "condition",
+      "flow": "知らないStatus",
+      "step": 1,
+      "statement": "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している。"
+    },
+    {
+      "id": "知らないStatus-2",
+      "type": "condition",
+      "flow": "知らないStatus",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。"
+    },
+    {
+      "id": "知らないStatus-3",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 3,
+      "statement": "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。"
+    },
+    {
+      "id": "知らないStatus-4",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 4,
+      "statement": "システムは workspace_hooks の after_run を実行する。"
+    },
+    {
+      "id": "知らないStatus-5",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 5,
+      "statement": "システムは herdr の pane を閉じる。"
+    },
+    {
+      "id": "知らないStatus-6",
+      "type": "action",
+      "flow": "知らないStatus",
+      "step": 6,
+      "statement": "システムは印を外す。"
+    },
+    {
+      "id": "知らないStatus-7",
+      "type": "abort",
+      "flow": "知らないStatus",
+      "step": 7,
+      "statement": "ABORT"
+    },
+    {
+      "id": "自動化の書き戻し-1",
+      "type": "action",
+      "flow": "自動化の書き戻し",
+      "step": 1,
+      "statement": "システムはボードの issue の Status に戻す先の選択肢を書く。"
+    },
+    {
+      "id": "自動化の書き戻し-2",
+      "type": "action",
+      "flow": "自動化の書き戻し",
+      "step": 2,
+      "statement": "システムは Status を動かした記録を issue にコメントする。"
+    },
+    {
+      "id": "自動化の書き戻し-3",
+      "type": "abort",
+      "flow": "自動化の書き戻し",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "turnの猶予-1",
+      "type": "action",
+      "flow": "turnの猶予",
+      "step": 1,
+      "statement": "システムは worker を止めずに turn の終わりを待つ。"
+    },
+    {
+      "id": "turnの猶予-2",
+      "type": "action",
+      "flow": "turnの猶予",
+      "step": 2,
+      "statement": "システムは turn の終わりを待っていることを記録に残す。"
+    },
+    {
+      "id": "turnの猶予-3",
+      "type": "abort",
+      "flow": "turnの猶予",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
       "id": "レビューの完了-1",
       "type": "action",
       "flow": "レビューの完了",
@@ -323,6 +451,12 @@
       "from": "BASIC FLOW-2",
       "to": "BASIC FLOW-3",
       "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "知らないStatus-1",
+      "kind": "global",
+      "condition": "issue の Status が設定に名前の無い選択肢へ動く場合"
     },
     {
       "from": "BASIC FLOW-3",
@@ -378,19 +512,19 @@
     {
       "from": "BASIC FLOW-11",
       "to": "BASIC FLOW-12",
-      "kind": "true",
-      "condition": "issue に今回の run が書いたコメントがある"
-    },
-    {
-      "from": "BASIC FLOW-11",
-      "to": "コメントの取り戻し-1",
-      "kind": "false",
-      "condition": "NOT issue に今回の run が書いたコメントがある"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-12",
       "to": "BASIC FLOW-13",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "issue に今回の run が書いたコメントがある"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "コメントの取り戻し-1",
+      "kind": "false",
+      "condition": "NOT issue に今回の run が書いたコメントがある"
     },
     {
       "from": "BASIC FLOW-13",
@@ -408,14 +542,19 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-15",
+      "from": "BASIC FLOW-16",
+      "to": "BASIC FLOW-17",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-16",
       "to": "レビューの完了-1",
       "kind": "global",
       "condition": "利用者が判断の回答の代わりに issue の Status を terminal_states の選択肢へ動かす場合"
     },
     {
-      "from": "BASIC FLOW-16",
-      "to": "BASIC FLOW-17",
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
       "kind": "seq"
     },
     {
@@ -487,7 +626,7 @@
     },
     {
       "from": "コメントの取り戻し-7",
-      "to": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
       "kind": "resume"
     },
     {
@@ -503,6 +642,70 @@
     {
       "from": "コメントの取り戻しの失敗-3",
       "to": "コメントの取り戻しの失敗-4",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-1",
+      "to": "知らないStatus-2",
+      "kind": "true",
+      "condition": "その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している"
+    },
+    {
+      "from": "知らないStatus-1",
+      "to": "自動化の書き戻し-1",
+      "kind": "false",
+      "condition": "NOT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している"
+    },
+    {
+      "from": "知らないStatus-2",
+      "to": "知らないStatus-3",
+      "kind": "true",
+      "condition": "turn の終わりを待つ猶予が残っていない"
+    },
+    {
+      "from": "知らないStatus-2",
+      "to": "turnの猶予-1",
+      "kind": "false",
+      "condition": "NOT turn の終わりを待つ猶予が残っていない"
+    },
+    {
+      "from": "知らないStatus-3",
+      "to": "知らないStatus-4",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-4",
+      "to": "知らないStatus-5",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-5",
+      "to": "知らないStatus-6",
+      "kind": "seq"
+    },
+    {
+      "from": "知らないStatus-6",
+      "to": "知らないStatus-7",
+      "kind": "seq"
+    },
+    {
+      "from": "自動化の書き戻し-1",
+      "to": "自動化の書き戻し-2",
+      "kind": "seq"
+    },
+    {
+      "from": "自動化の書き戻し-2",
+      "to": "自動化の書き戻し-3",
+      "kind": "seq"
+    },
+    {
+      "from": "turnの猶予-1",
+      "to": "turnの猶予-2",
+      "kind": "seq"
+    },
+    {
+      "from": "turnの猶予-2",
+      "to": "turnの猶予-3",
       "kind": "seq"
     },
     {
@@ -531,7 +734,8 @@
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
-        "BASIC FLOW-17"
+        "BASIC FLOW-17",
+        "BASIC FLOW-18"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -541,6 +745,7 @@
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
         "IF 表明の値が blocked である THEN",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
@@ -568,6 +773,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
@@ -579,6 +785,7 @@
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
         "IF 表明の値が blocked である THEN",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
@@ -603,6 +810,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -610,12 +818,12 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
-        "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
-        "BASIC FLOW-17"
+        "BASIC FLOW-17",
+        "BASIC FLOW-18"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -625,6 +833,7 @@
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
         "IF 表明の値が blocked である THEN",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -633,7 +842,7 @@
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 12",
+        "RESUME STEP 13",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。",
@@ -656,6 +865,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -663,10 +873,10 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
-        "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
@@ -678,6 +888,7 @@
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
         "IF 表明の値が blocked である THEN",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -686,7 +897,7 @@
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 12",
+        "RESUME STEP 13",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。",
@@ -710,6 +921,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-7",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -729,6 +941,7 @@
         "システムは VALIDATES THAT 取り直した Status が terminal_states に入っていない。",
         "IF 表明の値が blocked である THEN",
         "システムはボードの issue の Status に failure_state の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -763,7 +976,8 @@
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
-        "BASIC FLOW-17"
+        "BASIC FLOW-17",
+        "BASIC FLOW-18"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -774,6 +988,7 @@
         "IF 表明の値が blocked である THEN",
         "CONDITION: NOT 表明の値が blocked である",
         "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
@@ -801,6 +1016,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
@@ -813,6 +1029,7 @@
         "IF 表明の値が blocked である THEN",
         "CONDITION: NOT 表明の値が blocked である",
         "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
@@ -837,6 +1054,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-9",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -844,12 +1062,12 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
-        "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
-        "BASIC FLOW-17"
+        "BASIC FLOW-17",
+        "BASIC FLOW-18"
       ],
       "steps": [
         "エージェントはシステムに表明の1行を含む最終応答を返す。",
@@ -860,6 +1078,7 @@
         "IF 表明の値が blocked である THEN",
         "CONDITION: NOT 表明の値が blocked である",
         "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -868,7 +1087,7 @@
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 12",
+        "RESUME STEP 13",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。",
@@ -891,6 +1110,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-9",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -898,10 +1118,10 @@
         "コメントの取り戻し-5",
         "コメントの取り戻し-6",
         "コメントの取り戻し-7",
-        "BASIC FLOW-12",
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "レビューの完了-1",
         "レビューの完了-2"
       ],
@@ -914,6 +1134,7 @@
         "IF 表明の値が blocked である THEN",
         "CONDITION: NOT 表明の値が blocked である",
         "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -922,7 +1143,7 @@
         "システムはエージェントに作業の内容の issue のコメントへの記録を要求する。",
         "システムは issue のコメントを読み直す。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
-        "RESUME STEP 12",
+        "RESUME STEP 13",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
         "システムは印を外す。",
@@ -946,6 +1167,7 @@
         "BASIC FLOW-6",
         "BASIC FLOW-9",
         "BASIC FLOW-11",
+        "BASIC FLOW-12",
         "コメントの取り戻し-1",
         "コメントの取り戻し-2",
         "コメントの取り戻し-3",
@@ -966,6 +1188,7 @@
         "IF 表明の値が blocked である THEN",
         "CONDITION: NOT 表明の値が blocked である",
         "システムはボードの issue の Status に review の遷移先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
         "システムは VALIDATES THAT issue に今回の run が書いたコメントがある。",
         "CONDITION: NOT issue に今回の run が書いたコメントがある",
         "システムは herdr の pane を閉じる。",
@@ -1034,12 +1257,91 @@
         "システムは次の turn の継続の指示に表明を促す1文を差し込む。",
         "ABORT"
       ]
+    },
+    {
+      "id": "P013",
+      "terminal": "abort",
+      "terminal_flow": "知らないStatus",
+      "postcondition": "issue の Status は動かされた選択肢のままである。issue に止めた理由のコメントが1件ある。herdr の pane は閉じている。worktree は残っている。印は外れている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "知らないStatus-1",
+        "知らないStatus-2",
+        "知らないStatus-3",
+        "知らないStatus-4",
+        "知らないStatus-5",
+        "知らないStatus-6",
+        "知らないStatus-7"
+      ],
+      "steps": [
+        "エージェントはシステムに表明の1行を含む最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
+        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している。",
+        "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
+        "システムは issue に動いた先の Status と止めた理由と戻し方のコメントを1件書く。",
+        "システムは workspace_hooks の after_run を実行する。",
+        "システムは herdr の pane を閉じる。",
+        "システムは印を外す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P014",
+      "terminal": "abort",
+      "terminal_flow": "turnの猶予",
+      "postcondition": "issue の Status は動かされた選択肢のままである。herdr の pane は閉じていない。印は残っている。issue にコメントは付いていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "知らないStatus-1",
+        "知らないStatus-2",
+        "turnの猶予-1",
+        "turnの猶予-2",
+        "turnの猶予-3"
+      ],
+      "steps": [
+        "エージェントはシステムに表明の1行を含む最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
+        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している。",
+        "システムは VALIDATES THAT turn の終わりを待つ猶予が残っていない。",
+        "CONDITION: NOT turn の終わりを待つ猶予が残っていない",
+        "システムは worker を止めずに turn の終わりを待つ。",
+        "システムは turn の終わりを待っていることを記録に残す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P015",
+      "terminal": "abort",
+      "terminal_flow": "自動化の書き戻し",
+      "postcondition": "issue の Status は戻す先の選択肢である。issue に Status を動かした記録のコメントが1件ある。herdr の pane は閉じていない。worktree は残っている。印は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "知らないStatus-1",
+        "自動化の書き戻し-1",
+        "自動化の書き戻し-2",
+        "自動化の書き戻し-3"
+      ],
+      "steps": [
+        "エージェントはシステムに表明の1行を含む最終応答を返す。",
+        "システムは transcript から表明の行を読む。",
+        "CONDITION: issue の Status が設定に名前の無い選択肢へ動く場合",
+        "システムは VALIDATES THAT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している。",
+        "CONDITION: NOT その Status を書いたのがボードの自動化ではない、または対応表に戻す先が無い、または書き戻した回数が上限に達している、または戻せなかった回数が上限に達している",
+        "システムはボードの issue の Status に戻す先の選択肢を書く。",
+        "システムは Status を動かした記録を issue にコメントする。",
+        "ABORT"
+      ]
     }
   ],
   "coverage": {
-    "nodes_total": 36,
-    "nodes_covered": 36,
-    "edges_total": 37,
-    "edges_covered": 37
+    "nodes_total": 50,
+    "nodes_covered": 50,
+    "edges_total": 51,
+    "edges_covered": 51
   }
 }

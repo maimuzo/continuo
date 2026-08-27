@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "88c2b027c3bcbd59e467677a8c4938b4d6a396a1e17e34cd454d8512b3e9b077", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
+// {"RUCM-CFG-SHA256": "347ee23a1a99fc2a0637b259c00510bdd8f48cdb7f340d653599af6bf1894721", "SOURCE": "docs/spec/usecases/particular_case/worktree と branch を片付ける.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「worktree と branch を片付ける」の
 // 7本のパスに、それぞれ対応するテストがある。
@@ -127,7 +127,7 @@ func cleanupRequest(cf *cleanupFixture) workspace.CleanupRequest {
 	}
 }
 
-// {"RUCM-PATH": "P026"}
+// {"RUCM-PATH": "P028"}
 //
 // 目的: 未コミットの変更（未追跡のファイル）が残っていれば worktree を消さないことを確認する
 // （設計 3-9 の手順2。エージェントが作った成果物が消えるのを防ぐ）。
@@ -292,7 +292,7 @@ func TestCleanup_deleteBranchが偽ならbranchを残して残ったものに積
 	}
 }
 
-// {"RUCM-PATH": "P025"}
+// {"RUCM-PATH": "P027"}
 //
 // 目的: upstream があり push されていない commit が残っていれば消さないことを確認する
 // （設計 3-9 の手順2b の upstream がある側）。
@@ -368,7 +368,7 @@ func TestCleanup_upstreamが無くbaseと差分が無ければ消す(t *testing.
 	}
 }
 
-// {"RUCM-PATH": "P025"}
+// {"RUCM-PATH": "P027"}
 //
 // 目的: upstream が無く base も分からないときは、判定できないので消さないことを確認する
 // （設計 3-9 の手順2b。base を推測して消すと成果を失う）。
@@ -444,7 +444,40 @@ func TestCleanup_before_removeが失敗しても片付けを続ける(t *testing
 	}
 }
 
-// {"RUCM-PATH": "P027"}
+// {"RUCM-PATH": "P025"}
+//
+// 目的: worktree の実体を消し切れなかったら、branch も設定ファイルも消さずに止まることを
+// 確認する（RUCM のステップ12。実体が残ったまま先へ進むと、中身のある worktree だけが
+// 取り残される）。
+// 与える情報: 書き込みを落とした worktree のディレクトリ（`os.RemoveAll` が必ず失敗する）。
+// 成功条件: Cleanup がエラーを返し、worktree が残り、branch と issue ごとの設定ファイルが
+// どちらも残っていること。
+func TestCleanup_worktreeを消し切れなければbranchも設定ファイルも消さない(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	// **中身ではなく worktree 自身の書き込みを落とす。**親を落とすと中身だけが先に消え、
+	// 「実体が残っている」状態を作れない。
+	if err := os.Chmod(cf.Prepared.Path, 0o500); err != nil {
+		t.Fatalf("worktree の permission を落とせない: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(cf.Prepared.Path, 0o700) })
+
+	if _, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf)); err == nil {
+		t.Fatal("worktree を消し切れていないのにエラーにならなかった")
+	}
+	if _, statErr := os.Stat(cf.Prepared.Path); statErr != nil {
+		t.Fatalf("消し切れなかったはずの worktree が消えている: %v", statErr)
+	}
+	branches := runGit(t, cf.Repo.Dir, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if !strings.Contains(branches, cf.Prepared.Branch.String()) {
+		t.Fatalf("worktree を消せていないのに branch を消している: %s", branches)
+	}
+	if _, statErr := os.Stat(cf.SettingsPath); statErr != nil {
+		t.Fatalf("worktree を消せていないのに設定ファイルを消している: %v", statErr)
+	}
+}
+
+// {"RUCM-PATH": "P029"}
 //
 // 目的: 消す直前の封じ込め検査に落ちたら、何も消さずに失敗することを確認する
 // （設計 3-20。「消す直前」がいちばん危ない検査点である）。
@@ -473,7 +506,7 @@ func TestCleanup_置き場所の外側は消さずに失敗する(t *testing.T) 
 	}
 }
 
-// {"RUCM-PATH": "P030"}
+// {"RUCM-PATH": "P032"}
 //
 // 目的: cleanup.enabled が偽なら何も消さず、かつ「見送った」と分かる戻り値になることを
 // 確認する（設計 3-9 の手順5。デバッグ時に中身を見たい場合がある）。
@@ -509,7 +542,7 @@ func TestCleanup_無効なら何もしない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P028"}
+// {"RUCM-PATH": "P030"}
 //
 // 目的: 片付けを始める判定が cleanup.on_states に入った時点であり、
 // active でなくなった時点ではないことを確認する（設計 3-9 の手順1）。
@@ -715,8 +748,11 @@ func TestCleanup_身元ファイルのherdr_workspace_idが書き換えられて
 	}
 }
 
+// {"RUCM-PATH": "P026"}
+//
 // 目的: herdr が別のパスを開いている workspace を答えたら、何も消さないことを確認する
-// （設計 3-9 の段3。検算の答えが食い違ったら止まる）。
+// （設計 3-9 の段3。検算の答えが食い違ったら止まる。RUCM のステップ9 で消す宛先を
+// 確定できないときの経路であり、before_remove も実行しない）。
 // 与える情報: 常に別のパスを worktree として答えるテスト用herdr mock。
 // 成功条件: Cleanup がエラーになり、worktree.remove を1度も送らず、worktree が残ること。
 func TestCleanup_herdrが別のパスを答えたら何も消さない(t *testing.T) {
@@ -1076,5 +1112,50 @@ func TestCleanup_実在するbranchを消せなければ理由を返す(t *testi
 	}
 	if strings.TrimSpace(runGit(t, cf.Repo.Dir, "branch", "--list", stale)) == "" {
 		t.Fatalf("現物と食い違う branch %s を消している", stale)
+	}
+}
+
+// 目的: git が1つも答えられないまま片付けを見送ったとき、**次に何をすべきか**を
+// 呼び出し側へ渡すことを確認する（設計 3-49）。
+//
+// **理由だけを出しても、読んだ人間は次に何をすればよいか分からない。**
+// その worktree は壊れており、continuo は二度と自分では片付けられないので、
+// 巡回のたびに同じ理由が出続ける。**人間が手で始末する道筋をその場に置く。**
+//
+// 与える情報: `.git` を読めない文字列で潰した worktree。
+//
+// 成功条件: 見送りになり、**worktree が消えず**、
+// 「中を調べる」「控える」「消す」の3行が返ること。
+func TestCleanup_gitが答えられないときは次にすべきことを添える(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	// worktree の `.git` は `gitdir: …` と書かれただけのファイルである（issue #23）。
+	// 潰すと `git -C <worktree> …` が1つも通らない。
+	if err := os.WriteFile(
+		filepath.Join(cf.Prepared.Path, ".git"), []byte("こわれている\n"), 0o644); err != nil {
+		t.Fatalf("worktree の .git を潰せない: %v", err)
+	}
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("片付けがエラーになった（見送りで返すこと）: %v", err)
+	}
+	if !result.Deferred || result.Removed {
+		t.Fatalf("git が答えられないのに片付けてしまった: %+v", result)
+	}
+	if len(result.NextSteps) != 3 {
+		t.Fatalf("次にすべきことが3行で入っていない: %+v", result.NextSteps)
+	}
+	if !strings.Contains(result.NextSteps[0], cf.Prepared.Path) {
+		t.Errorf("1行目に調べる相手が入っていない: %q", result.NextSteps[0])
+	}
+	if !strings.Contains(result.NextSteps[1], "cp -a") {
+		t.Errorf("2行目に控え方が入っていない: %q", result.NextSteps[1])
+	}
+	if !strings.Contains(result.NextSteps[2], "continuo abandon --force") {
+		t.Errorf("3行目に消し方が入っていない: %q", result.NextSteps[2])
+	}
+	if _, statErr := os.Stat(cf.Prepared.Path); statErr != nil {
+		t.Fatalf("壊れた worktree を消してしまった: %v", statErr)
 	}
 }

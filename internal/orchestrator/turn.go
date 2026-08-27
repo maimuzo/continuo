@@ -97,6 +97,15 @@ func (o *Orchestrator) startTurnLoop(ctx context.Context, rs *runState, awaitFir
 // run を諦めずに黙って抜ける。**巡回の stall 検知が先に諦めた run を二重に諦めないためである。
 // awaitFirst: 真なら、1周目は turn を送らずに turn の終わりを待つ（設計 3-4 の段5a2）。
 func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, awaitFirst bool) {
+	// **continuo 自身が worker を止めたら、herdr の待ちだけをやめる**（設計 3-51）。
+	//
+	// **`ctx` そのものを切ってはならない。**turn の終わりの処理（表明の適用・
+	// コメントの確認・`worktree` の片付け）はこの `ctx` で動いており、`finishRun` の
+	// 中から `stopWorker` が呼ばれる。切ると、**自分で自分の後片付けを道連れにする。**
+	waitCtx, waitCancel := context.WithCancel(ctx)
+	defer waitCancel()
+	defer context.AfterFunc(rs.workerStopContext(), waitCancel)()
+
 	for {
 		if ctx.Err() != nil || !rs.currentWorker(epoch) {
 			return
@@ -116,7 +125,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			awaitFirst = false
 			o.logger.Info("引き継いだ run の turn の終わりを待ちます（turn は送りません）",
 				"identifier", snap.Identifier)
-			outcome, sendErr = o.confirmTurnEnd(ctx, rs, false)
+			outcome, sendErr = o.confirmTurnEnd(waitCtx, rs, false)
 		} else {
 			if snap.TurnCount >= o.cfg.Agent.MaxDispatchTurns {
 				o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
@@ -145,7 +154,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				return
 			}
 
-			outcome, sendErr = o.sendTurn(ctx, rs, text)
+			outcome, sendErr = o.sendTurn(waitCtx, rs, text)
 		}
 		if !rs.currentWorker(epoch) {
 			// **待っている間に、巡回の stall 検知などが先にこの run を諦めていた。**
@@ -237,19 +246,22 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。
 //
-// **分岐の基準は turn 数ではなく「いまのセッションに会話履歴があるか」である。**
+// **分岐の基準は turn 数でも会話履歴の有無でもなく、`SendFirstPrompt` だけである。**
 //
-//	FreshSession が真  … 1回目の本文（5-3）。新しい UUID で起動した直後の
-//	                     セッションには会話履歴が無いので、issue の URL も完了の作法も
-//	                     ここで渡さないと1文字も伝わらない
-//	FreshSession が偽  … 継続の指示（5-4）のみ。本文は送り直さない（`SPEC.md` 7.1）
+//	SendFirstPrompt が真  … 1回目の本文（5-3）。着手と再着手の最初の turn
+//	SendFirstPrompt が偽  … 継続の指示（5-4）のみ。本文は送り直さない（`SPEC.md` 7.1）
 //
-// **turn 数で分岐してはならない。**復元で引き継いだ run は turn 数を 1 から数え直すが
-// （設計 3-4 の段7）、セッションは引き継いでいるので **1回目をやり直してはならない**
-// （段5c）。逆に、バックオフ明けの再 dispatch は turn 数を引き継ぐが**セッションは
-// 新しい**ので、継続の指示だけでは通じない。
+// **会話履歴の有無で分岐してはならない**（設計 3-3b）。再着手はセッションへ `--resume` で
+// 復帰するので会話履歴があるが、**それでも送るのは1回目の本文である。**
+// `In Review` から `In Progress` へ差し戻される場面では人間が PR にレビューを書いており、
+// **「issue を読むこと」「紐づく PR も読むこと」が入っているのは1回目の本文だけだからである。**
+// 会話は残っているので、エージェントは前回どこまでやったかを分かったうえでレビューを読める。
 //
-// **試行回数（`.attempt`）は再 dispatch で埋まる。**1回目の着手では nil である
+// **turn 数で分岐してもならない。**復元で引き継いだ run は turn 数を 1 から数え直すが
+// （設計 3-4 の段7）、送るのは継続の指示である（段5c）。逆に、バックオフ明けの再着手は
+// turn 数を引き継ぐが、送るのは1回目の本文である。
+//
+// **試行回数（`.attempt`）は再着手で埋まる。**1回目の着手では nil である
 // （`RetryCount` が 0 のため）。
 //
 // rs: 対象の run。
@@ -258,7 +270,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 // 戻り値の2つ目: 1回目のテンプレートの描画に失敗した場合のエラー
 // （`missingkey=error` なので、5-3 の一覧に無い変数を書くとここで落ちる）。
 func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, error) {
-	if !snap.FreshSession {
+	if !snap.SendFirstPrompt {
 		return BuildContinuationPrompt(
 			snap.TurnCount+1,
 			o.cfg.Agent.MaxDispatchTurns,
@@ -308,6 +320,9 @@ func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) 
 		},
 	})
 	if err != nil {
+		if outcome, handled := o.selfStoppedTurn(rs, err); handled {
+			return outcome, nil
+		}
 		if ctx.Err() != nil {
 			return turnAborted, nil
 		}
@@ -343,6 +358,29 @@ func (o *Orchestrator) sendTurn(ctx context.Context, rs *runState, text string) 
 		// working / unknown のまま返るのは想定外である。Stop を確かめてから判断する。
 		return o.confirmTurnEnd(ctx, rs, true)
 	}
+}
+
+// selfStoppedTurn は「その失敗は continuo 自身が worker を止めたせいか」を判定する
+// （設計 3-51）。
+//
+// **`turn を送れませんでした（agent is no longer running）` は外の障害ではない。**
+// continuo が1秒前に自分で `pane.close` を呼んだために起きている。**そのまま WARN で
+// 出すと、読んだ人は herdr か Claude Code を疑って原因を探しにいく。**
+//
+// **止めたことと結び付けて1行だけ出し、run は諦めない。**この run は既に別の経路
+// （引き渡し・打ち切り・知らない Status）で終わらせている最中である。
+//
+// rs: 対象の run。
+// err: herdr が返したエラー。
+// 戻り値の1つ目: 自分で止めていた場合の turn の結果（`turnAborted`）。
+// 戻り値の2つ目: 自分で止めていたら true。偽なら呼び出し側が通常どおり分類する。
+func (o *Orchestrator) selfStoppedTurn(rs *runState, err error) (turnOutcome, bool) {
+	if !rs.stoppedByContinuo() {
+		return turnAborted, false
+	}
+	o.logger.Info("continuo がこの worker を止めたので、待っていた turn はここで終わりにします",
+		"identifier", rs.issue().Identifier, "herdr の応答", err)
+	return turnAborted, true
 }
 
 // afterWaitTimeout は待ち受けが timeout で返ったときの分岐である（設計 3-2 の段3 / 3-27）。
@@ -396,6 +434,9 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 				}
 			}
 		} else if !herdr.IsCode(err, herdr.ErrCodeTimeout) {
+			if outcome, handled := o.selfStoppedTurn(rs, err); handled {
+				return outcome, nil
+			}
 			if ctx.Err() != nil {
 				return turnAborted, nil
 			}

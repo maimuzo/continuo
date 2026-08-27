@@ -47,6 +47,8 @@ const (
 	KeyDoctorLabelGHAuth Key = "doctor.label.gh_auth"
 	// KeyDoctorLabelBoard はボードを読む検査の見出し語に出る。
 	KeyDoctorLabelBoard Key = "doctor.label.board"
+	// KeyDoctorLabelStatusNames は紛らわしい Status の組を見る検査の見出し語に出る。
+	KeyDoctorLabelStatusNames Key = "doctor.label.status_names"
 	// KeyDoctorLabelClone はclone が手元にあるかの検査の見出し語に出る。
 	KeyDoctorLabelClone Key = "doctor.label.clone"
 	// KeyDoctorLabelTrust はリポジトリが承認済みかの検査の見出し語に出る。
@@ -57,6 +59,25 @@ const (
 	KeyDoctorLabelClaudeHome Key = "doctor.label.claude_home"
 	// KeyDoctorLabelWorkspaceRoot は worktree の置き場所に書けるかの検査の見出し語である。
 	KeyDoctorLabelWorkspaceRoot Key = "doctor.label.workspace_root"
+	// KeyDoctorLabelCleanupStates は片付ける Status と終わったとみなす Status の
+	// 噛み合いを見る検査の見出し語である。
+	KeyDoctorLabelCleanupStates Key = "doctor.label.cleanup_states"
+)
+
+// doctor の検査「片付けの状態」（設計 3-9。issue #35）。
+const (
+	// KeyDoctorCleanupStatesConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorCleanupStatesConfigUnreadable Key = "doctor.cleanup_states.config_unreadable"
+	// KeyDoctorCleanupStatesDisabled は片付けそのものを行わない設定のときの説明に出る。
+	KeyDoctorCleanupStatesDisabled Key = "doctor.cleanup_states.disabled"
+	// KeyDoctorCleanupStatesOK は2つの集合が噛み合っているときの説明に出る。
+	KeyDoctorCleanupStatesOK Key = "doctor.cleanup_states.ok"
+	// KeyDoctorCleanupStatesMismatch は噛み合っていないときの説明に出る。
+	KeyDoctorCleanupStatesMismatch Key = "doctor.cleanup_states.mismatch"
+	// KeyDoctorCleanupStatesNote は食い違った値1つずつの内訳に出る。
+	KeyDoctorCleanupStatesNote Key = "doctor.cleanup_states.note"
+	// KeyDoctorCleanupStatesRemedy は食い違った値1つずつの直し方に出る。
+	KeyDoctorCleanupStatesRemedy Key = "doctor.cleanup_states.remedy"
 )
 
 // doctor の集計の行（検査結果の末尾に出る1行）。
@@ -124,6 +145,14 @@ const (
 	KeyDoctorWorkspaceRootConfigUnreadable Key = "doctor.workspace_root.config_unreadable"
 	// KeyDoctorWorkspaceRootReason は、なぜここが書けないと困るのかの説明に出る。
 	KeyDoctorWorkspaceRootReason Key = "doctor.workspace_root.reason"
+	// KeyDoctorWorkspaceRootBrokenStop は、身元を確かめられない worktree があり、
+	// その設定では起動が止まることの説明に出る（3-49）。
+	KeyDoctorWorkspaceRootBrokenStop Key = "doctor.workspace_root.broken_stop"
+	// KeyDoctorWorkspaceRootBrokenSkip は、身元を確かめられない worktree があるが、
+	// その設定では飛ばして起動することの説明に出る（3-49）。
+	KeyDoctorWorkspaceRootBrokenSkip Key = "doctor.workspace_root.broken_skip"
+	// KeyDoctorWorkspaceRootBrokenScanFailed は置き場所を走査できなかったときの説明に出る。
+	KeyDoctorWorkspaceRootBrokenScanFailed Key = "doctor.workspace_root.broken_scan_failed"
 )
 
 // internal/fsprobe（その場所に本当に書けるかを実際に書いて確かめる）。
@@ -224,6 +253,30 @@ const (
 	KeyDoctorBoardRemedyTokenInvalid Key = "doctor.board.remedy_token_invalid"
 	// KeyDoctorBoardFailed はそのほかの理由で落ちたときの説明に出る。
 	KeyDoctorBoardFailed Key = "doctor.board.failed"
+)
+
+// doctor の検査「Status の名前」。
+const (
+	// KeyDoctorStatusNamesConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorStatusNamesConfigUnreadable Key = "doctor.status_names.config_unreadable"
+	// KeyDoctorStatusNamesBoardUnreadable は上流のボードが落ちたときの説明に出る。
+	KeyDoctorStatusNamesBoardUnreadable Key = "doctor.status_names.board_unreadable"
+	// KeyDoctorStatusNamesOK は紛らわしい組が無かったときの説明に出る。
+	KeyDoctorStatusNamesOK Key = "doctor.status_names.ok"
+	// KeyDoctorStatusNamesConfusing は紛らわしい組があったときの説明に出る。
+	KeyDoctorStatusNamesConfusing Key = "doctor.status_names.confusing"
+	// KeyDoctorStatusNamesNote は紛らわしい組1件ずつの内訳に出る。
+	KeyDoctorStatusNamesNote Key = "doctor.status_names.note"
+	// KeyDoctorStatusNamesReasonSame は区切りと大文字小文字を落とすと同じになる組の理由に出る。
+	KeyDoctorStatusNamesReasonSame Key = "doctor.status_names.reason_same"
+	// KeyDoctorStatusNamesReasonContains は一方が他方を語の並びとして含む組の理由に出る。
+	KeyDoctorStatusNamesReasonContains Key = "doctor.status_names.reason_contains"
+	// KeyDoctorStatusNamesRemedyPickOne はどちらを使うか決めさせる直し方に出る。
+	KeyDoctorStatusNamesRemedyPickOne Key = "doctor.status_names.remedy_pick_one"
+	// KeyDoctorStatusNamesRemedyActiveStates は active_states に足したときの副作用の案内に出る。
+	KeyDoctorStatusNamesRemedyActiveStates Key = "doctor.status_names.remedy_active_states"
+	// KeyDoctorStatusNamesRemedyOverlap は片付ける Status・終わった Status との取り違えの案内に出る。
+	KeyDoctorStatusNamesRemedyOverlap Key = "doctor.status_names.remedy_overlap"
 )
 
 // doctor の検査「clone」。
@@ -626,8 +679,14 @@ const (
 	KeyAbandonErrBuild Key = "abandon.err_build"
 	// KeyAbandonErrLockFile はロックファイルそのものを開けないときに出る。
 	KeyAbandonErrLockFile Key = "abandon.err_lock_file"
-	// KeyAbandonRunning はcontinuo が動いているときの1行に出る。
+	// KeyAbandonRunning は、**continuo が動いていて、手を離させる段を通る**ときの1行に出る。
 	KeyAbandonRunning Key = "abandon.running"
+	// KeyAbandonRunningDryRun は、**continuo が動いているが `--dry-run` なので
+	// 手を離させる段を通らない**ときの1行に出る。
+	//
+	// **`abandon.running` と鍵を分ける。**あちらは「先に手を離させます」と言うので、
+	// `--dry-run` で出すと**しない約束をしたことになる。**
+	KeyAbandonRunningDryRun Key = "abandon.running_dry_run"
 	// KeyAbandonNotRunning はcontinuo が動いていないときの1行に出る。
 	KeyAbandonNotRunning Key = "abandon.not_running"
 
@@ -688,21 +747,41 @@ const (
 	// 止まったときに出る。**Status は park の値のままであり、continuo は戻さない。**
 	KeyAbandonParkLeftBehind Key = "abandon.park_left_behind"
 
-	// KeyAbandonErrPaneList はherdr へ pane の一覧を問い合わせられないときに出る。
-	KeyAbandonErrPaneList Key = "abandon.err_pane_list"
+	// KeyAbandonErrPaneListCheck は、**herdr へ pane の一覧を問い合わせられない**ときに出る。
+	//
+	// **pane が閉じるのを待つ段と、消す前の生死の検査の両方がこれを使う。**
+	// どちらも `--force` で越えられるので、**越え方（`--force`）を書く。**
+	// **鍵を2つに分けない。**分けると、同じ失敗に対して越え方を書いた文言と
+	// 書いていない文言が並び、**どちらが本当かを読む側が決められない。**
+	KeyAbandonErrPaneListCheck Key = "abandon.err_pane_list_check"
 	// KeyAbandonWaitingPane はpane が閉じるのを待っているあいだに出る。
 	KeyAbandonWaitingPane Key = "abandon.waiting_pane"
 	// KeyAbandonPaneGone はpane が閉じたときに出る。
 	KeyAbandonPaneGone Key = "abandon.pane_gone"
 	// KeyAbandonErrPaneRemains は上限までに pane が閉じなかったときに出る。
 	KeyAbandonErrPaneRemains Key = "abandon.err_pane_remains"
-	// KeyAbandonErrPaneAlive は継続監視が動いていないのに pane が生きているときに出る。
-	KeyAbandonErrPaneAlive Key = "abandon.err_pane_alive"
+	// KeyAbandonErrPaneAliveNotRunning は、**継続監視が動いていないと判定した実行で**
+	// pane が生きているときに出る。
+	//
+	// **ロックファイルの場所を疑わせる。**ロックファイルの場所は環境変数
+	// （`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR`）で決まるので、launchd から
+	// 起動した継続監視と端末から叩いた abandon で食い違いうる。
+	KeyAbandonErrPaneAliveNotRunning Key = "abandon.err_pane_alive_not_running"
+	// KeyAbandonErrPaneAliveRunning は、**継続監視は動いているが、ボードの Status が
+	// `tracker.active_states` の外だったので手を離させなかった実行で** pane が
+	// 生きているときに出る。
+	//
+	// **ロックファイルの食い違いには触れない。**動いていると判定できているので、
+	// そこを疑わせると読む人を無いものを探しに行かせる。
+	// **鍵を2つに分けているのは、呼ぶ側がどちらの原因かを知っているからである。**
+	// 1つの文言で受けると「『continuo は動いていません』と表示されていたなら」のような
+	// 条件付きの案内になり、**別の文言の文面を直書きすることになる。**
+	KeyAbandonErrPaneAliveRunning Key = "abandon.err_pane_alive_running"
 	// KeyAbandonPaneCheckSkipped は、herdr へ問い合わせられないまま `--force` が
 	// 指定されていて、pane の生死を確かめずに消すときに出る。
 	KeyAbandonPaneCheckSkipped Key = "abandon.pane_check_skipped"
 	// KeyAbandonPaneAliveForced は、pane が生きているのに `--force` が指定されていて、
-	// pane ごと消すときに出る。**err_pane_alive と言い分ける**（あちらは止まる）。
+	// pane ごと消すときに出る。**err_pane_alive_* と言い分ける**（あちらは止まる）。
 	KeyAbandonPaneAliveForced Key = "abandon.pane_alive_forced"
 	// KeyAbandonErrPaneWaitInterrupted は pane が閉じるのを待っている途中で
 	// `SIGINT` / `SIGTERM` を受けたときに出る。**時間切れとは言い分ける。**
@@ -1355,8 +1434,13 @@ const (
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
 )
 
-// `continuo setup` が既にある WORKFLOW.md を書き換えるとき（internal/scaffold の
-// statTarget / writeAtomically）の文言。
+// 既にあるファイルを差し替えで書き換えるとき（internal/scaffold の statTarget と
+// internal/atomicfile の Write）の文言。
+//
+// **temp_create_failed から rename_failed までの5つは internal/atomicfile が使う。**
+// `continuo setup` の書き換えだけでなく、`continuo init --force` と
+// issue ごとの settings.json の書き出しからも出る。**文言は WORKFLOW.md を名指ししているが、
+// キーを増やさないことを優先している**（設計 3-59）。
 //
 // **symlink_not_followed と not_regular_file は先頭の %w に ErrSymlink / ErrNotFound を渡す**
 // （errors.Is の切り分けを保つため）。
@@ -1562,6 +1646,20 @@ const (
 	KeyWorkspaceGitWorktreeAddOrphanDeleteFailed Key = "workspace.git_worktree_add.orphan_delete_failed"
 	// KeyWorkspaceGitWorktreeAddOrphanDeleted は孤児 branch を消せたときに、元の失敗へ添えて出る。
 	KeyWorkspaceGitWorktreeAddOrphanDeleted Key = "workspace.git_worktree_add.orphan_deleted"
+	// KeyWorkspaceBrokenIdentityMissing は、置き場所の命名に一致する worktree に
+	// 身元ファイルが1つも無かったときに「何が起きているか」として出る（3-49）。
+	KeyWorkspaceBrokenIdentityMissing Key = "workspace.broken.identity_missing"
+	// KeyWorkspaceBrokenIdentityUnreadable は、身元ファイルはあるのに読めなかったときに
+	// 「何が起きているか」として出る（3-49）。
+	KeyWorkspaceBrokenIdentityUnreadable Key = "workspace.broken.identity_unreadable"
+	// KeyWorkspaceBrokenStepAbandon は、壊れた worktree の消し方を案内する行である（3-49）。
+	KeyWorkspaceBrokenStepAbandon Key = "workspace.broken.step_abandon"
+	// KeyWorkspaceBrokenStepAbandonUnknown は、issue の URL を引けなかったときの消し方の案内である。
+	KeyWorkspaceBrokenStepAbandonUnknown Key = "workspace.broken.step_abandon_unknown"
+	// KeyWorkspaceBrokenStepBackup は、消す前に要るファイルを控える手順の行である（3-49）。
+	KeyWorkspaceBrokenStepBackup Key = "workspace.broken.step_backup"
+	// KeyWorkspaceBrokenStepInspect は、壊れた worktree の中を調べる手順の行である（3-49）。
+	KeyWorkspaceBrokenStepInspect Key = "workspace.broken.step_inspect"
 	// KeyWorkspaceBrokenRefStatFailed は壊れた ref のファイルの状態を見に行けなかったときに出る。
 	KeyWorkspaceBrokenRefStatFailed Key = "workspace.broken_ref.stat_failed"
 	// KeyWorkspaceBrokenRefRemoveFailed は壊れた ref のファイルを消せなかったときに出る。
@@ -1775,6 +1873,9 @@ const (
 	// KeyOrchestratorConfirmStartupNotInteractive は、agent は居るが入力を受け付けられない
 	// ことを表す（`interactive_ready` が偽）。
 	KeyOrchestratorConfirmStartupNotInteractive Key = "orchestrator.confirm_startup.not_interactive"
+	// KeyOrchestratorRestoreBrokenWorktreeStop は、身元を確かめられない worktree を見つけて
+	// 起動を止めるときに出る（3-49。`workspace.on_broken_worktree` が `stop` のとき）。
+	KeyOrchestratorRestoreBrokenWorktreeStop Key = "orchestrator.restore.broken_worktree_stop"
 	// KeyOrchestratorRestoreHookListenFailed は復元の途中で hook を受ける socket の listen を始められなかったときに出る。
 	KeyOrchestratorRestoreHookListenFailed Key = "orchestrator.restore.hook_listen_failed"
 )
@@ -1847,6 +1948,7 @@ var allKeys = []Key{
 	KeyDoctorClaudeRemedyInstall,
 	KeyDoctorLabelGHAuth,
 	KeyDoctorLabelBoard,
+	KeyDoctorLabelStatusNames,
 	KeyDoctorLabelClone,
 	KeyDoctorLabelTrust,
 	KeyDoctorLabelCredentials,
@@ -1860,6 +1962,13 @@ var allKeys = []Key{
 	KeyDoctorConfigOK,
 	KeyDoctorLabelClaudeHome,
 	KeyDoctorLabelWorkspaceRoot,
+	KeyDoctorLabelCleanupStates,
+	KeyDoctorCleanupStatesConfigUnreadable,
+	KeyDoctorCleanupStatesDisabled,
+	KeyDoctorCleanupStatesOK,
+	KeyDoctorCleanupStatesMismatch,
+	KeyDoctorCleanupStatesNote,
+	KeyDoctorCleanupStatesRemedy,
 	KeyDoctorFilesystemFault,
 	KeyDoctorFilesystemRemedyMount,
 	KeyDoctorFilesystemRemedyDmesg,
@@ -1874,6 +1983,9 @@ var allKeys = []Key{
 	KeyDoctorWorkspaceRootFailed,
 	KeyDoctorWorkspaceRootConfigUnreadable,
 	KeyDoctorWorkspaceRootReason,
+	KeyDoctorWorkspaceRootBrokenStop,
+	KeyDoctorWorkspaceRootBrokenSkip,
+	KeyDoctorWorkspaceRootBrokenScanFailed,
 	KeyFsprobeDirEmpty,
 	KeyFsprobeDirNotAbsolute,
 	KeyFsprobeMkdirFailed,
@@ -1916,6 +2028,16 @@ var allKeys = []Key{
 	KeyDoctorBoardRemedyStatusOptions,
 	KeyDoctorBoardRemedyTokenInvalid,
 	KeyDoctorBoardFailed,
+	KeyDoctorStatusNamesConfigUnreadable,
+	KeyDoctorStatusNamesBoardUnreadable,
+	KeyDoctorStatusNamesOK,
+	KeyDoctorStatusNamesConfusing,
+	KeyDoctorStatusNamesNote,
+	KeyDoctorStatusNamesReasonSame,
+	KeyDoctorStatusNamesReasonContains,
+	KeyDoctorStatusNamesRemedyPickOne,
+	KeyDoctorStatusNamesRemedyActiveStates,
+	KeyDoctorStatusNamesRemedyOverlap,
 	KeyDoctorCloneBinNotFound,
 	KeyDoctorCloneRemedyInstallBin,
 	KeyDoctorCloneBoardUnreadable,
@@ -2086,6 +2208,7 @@ var allKeys = []Key{
 	KeyAbandonErrBuild,
 	KeyAbandonErrLockFile,
 	KeyAbandonRunning,
+	KeyAbandonRunningDryRun,
 	KeyAbandonNotRunning,
 	KeyAbandonErrScan,
 	KeyAbandonNotFound,
@@ -2109,11 +2232,12 @@ var allKeys = []Key{
 	KeyAbandonErrParkFailed,
 	KeyAbandonParkNotWritten,
 	KeyAbandonParkLeftBehind,
-	KeyAbandonErrPaneList,
+	KeyAbandonErrPaneListCheck,
 	KeyAbandonWaitingPane,
 	KeyAbandonPaneGone,
 	KeyAbandonErrPaneRemains,
-	KeyAbandonErrPaneAlive,
+	KeyAbandonErrPaneAliveNotRunning,
+	KeyAbandonErrPaneAliveRunning,
 	KeyAbandonPaneCheckSkipped,
 	KeyAbandonPaneAliveForced,
 	KeyAbandonErrPaneWaitInterrupted,
@@ -2416,6 +2540,12 @@ var allKeys = []Key{
 	KeyWorkspaceGitWorktreeAddOrphanCheckFailed,
 	KeyWorkspaceGitWorktreeAddOrphanDeleteFailed,
 	KeyWorkspaceGitWorktreeAddOrphanDeleted,
+	KeyWorkspaceBrokenIdentityMissing,
+	KeyWorkspaceBrokenIdentityUnreadable,
+	KeyWorkspaceBrokenStepAbandon,
+	KeyWorkspaceBrokenStepAbandonUnknown,
+	KeyWorkspaceBrokenStepBackup,
+	KeyWorkspaceBrokenStepInspect,
 	KeyWorkspaceBrokenRefStatFailed,
 	KeyWorkspaceBrokenRefRemoveFailed,
 	KeyWorkspaceBrokenRefResolveFailed,
@@ -2516,6 +2646,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupWorkingTimeout,
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,
+	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
 	KeyDaemonRunConfigLoadFailed,
 	KeyDaemonRunSocketPathUnresolved,

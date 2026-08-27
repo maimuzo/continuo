@@ -28,6 +28,7 @@ import (
 	"github.com/maimuzo/continuo/internal/abandon"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -394,6 +395,9 @@ type fakeTracker struct {
 	found bool
 	// written は UpdateStatus が返す「書けたかどうか」である。
 	written bool
+	// rejectFrom は「何回目の UpdateStatus から書けなかったことにするか」である
+	// （1 始まり。0 なら落とさない）。
+	rejectFrom int
 	// bootstraps は Bootstrap を受けた回数である。
 	bootstraps int
 	// fetches は FetchIssueByIdentifier が受け取った identifier である。
@@ -497,6 +501,18 @@ func (ft *fakeTracker) SetWriteRejected() {
 	ft.written = false
 }
 
+// RejectWriteFrom は、n 回目以降の UpdateStatus だけを「書けなかった」にする。
+//
+// **手を離させる書き込みは通し、片付けたあとの書き込みだけを落とすために要る。**
+// SetWriteRejected は1件目から落とすので、park の段で止まって片付けまで進めない。
+//
+// n: 落とし始める回数（1 始まり）。
+func (ft *fakeTracker) RejectWriteFrom(n int) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.rejectFrom = n
+}
+
 // Bootstrap は project と Status フィールドの ID の解決を受けたことだけを記録する。
 //
 // ctx: 実行に適用するコンテキスト（使わない）。
@@ -534,18 +550,23 @@ func (ft *fakeTracker) FetchIssueByIdentifier(
 // itemID: 書き込み先の project item の ID。
 // targetState: 書き込む Status の値。
 // blockedStates: 書かない状態の一覧（使わない）。
-// 戻り値の1つ目: 書けたかどうか。
+// 戻り値の1つ目: 何をしたか。**Previous には書き込む直前の Status が入る。**
 // 戻り値の2つ目: 常に nil。
 func (ft *fakeTracker) UpdateStatus(
 	_ context.Context, itemID, targetState string, _ []string,
-) (bool, error) {
+) (tracker.StatusWrite, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.updates = append(ft.updates, statusUpdate{ItemID: itemID, State: targetState})
-	if ft.written {
+	written := ft.written
+	if ft.rejectFrom > 0 && len(ft.updates) >= ft.rejectFrom {
+		written = false
+	}
+	previous := ft.state
+	if written {
 		ft.state = targetState
 	}
-	return ft.written, nil
+	return tracker.StatusWrite{Reached: written, Wrote: written, Previous: previous}, nil
 }
 
 // Updates は書き込んだ内容を書き込んだ順に返す。
@@ -1204,6 +1225,27 @@ func (fx *fixture) CloseHerdr(t *testing.T) error {
 		t.Fatal("テスト用herdr mock を止めたのに pane の一覧を引けてしまった（前提が崩れている）")
 	}
 	return err
+}
+
+// holdLock は「continuo が動いている」状態を作る。
+//
+// **abandon はロックを取れたかどうかで継続監視の生死を判定する**（設計 3-17）ので、
+// テストが先に掴んでおけば「動いている」側の経路に入る。
+// **掴んだロックはテストの終わりに手放す。**手放さないと、同じロックファイルを使う
+// あとのテストが「動いている」状態を引きずる。
+//
+// **1箇所にまとめてある。**同じ前置きを17箇所へ書き写していたので、掴み方を変えると
+// **書き換え漏れが必ず出る。**
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の一式（`LockPath` を使う）。
+func holdLock(t *testing.T, fx *fixture) {
+	t.Helper()
+	held, err := lock.Acquire(fx.LockPath)
+	if err != nil {
+		t.Fatalf("テストがロックを掴めません: %v", err)
+	}
+	t.Cleanup(func() { _ = held.Release() })
 }
 
 // freezeDir はディレクトリから書き込みの権限を落とし、中身を1つも消せなくする。

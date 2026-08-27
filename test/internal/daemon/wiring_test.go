@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -297,6 +298,112 @@ func TestRun_ghがPATHに無ければ起動時検査の文言で落ちる(t *tes
 	}
 }
 
+// cleanupStatesWarning は、片付ける Status が終わったとみなす Status の外にあるときの
+// 警告を見分ける文字列である。
+//
+// **文言そのもので数える。**slog の出力から「この警告が何件出たか」を数えるには、
+// ほかの行と重ならない一片を持つしかない。
+const cleanupStatesWarning = "tracker.terminal_states にありません"
+
+// runForStartupLog は、起動の段で必ず落ちる状態で daemon.Run を1回呼び、そのログを返す。
+//
+// **`gh` を1つも見つけられない PATH で呼ぶ。**本物の `gh` を起動しないためであり、
+// **段2b（依存の組み立て）で必ず落ちるので、巡回にも復元にも進まない。**
+// 段1（設定を読む）のログだけを見たいときに使う。
+//
+// t: 呼び出し元のテスト。
+// extra: front matter へ足す節（末尾に改行を含めること）。
+// 戻り値: daemon.Run が書き出したログ全文。
+func runForStartupLog(t *testing.T, extra string) string {
+	t.Helper()
+
+	root := wiringRoot(t)
+	runtimeDir := filepath.Join(root, "rt")
+	emptyBin := filepath.Join(root, "emptybin")
+	for _, dir := range []string{runtimeDir, emptyBin} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatalf("ディレクトリを作れません（%s）: %v", dir, err)
+		}
+	}
+	path := writeWiringWorkflow(t, root, "", extra)
+
+	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
+	t.Setenv(daemon.EnvGraphQLEndpoint, "")
+	t.Setenv("PATH", emptyBin)
+
+	var logged strings.Builder
+	err := daemon.Run(context.Background(), daemon.Options{
+		ConfigPath: path,
+		Logger:     slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	})
+	// **落ちること自体は前提である。**段2b まで進めば、段1 のログは出揃っている。
+	if err == nil {
+		t.Fatal("gh が無い PATH なのに起動できてしまった")
+	}
+	return logged.String()
+}
+
+// TestRun_片付ける状態が終わったとみなす状態の外にあれば警告を出して起動を続ける は、
+// **起動を止めずに知らせる**ことを固定する（設計 3-9。issue #35）。
+//
+// 目的: `cleanup.on_states` に `tracker.terminal_states` の外の値があるとき、
+// 起動時に警告を1件だけ出し、**そこで起動を止めないこと。**
+// **止めると、いま動いている人の continuo が版を上げた瞬間に起動しなくなる。**
+// **どのキーのどの値かを本文に出すこと**（「食い違っています」だけでは、どの行を直せばよいか分からない）。
+//
+// 与える情報: 既定の `tracker.terminal_states`（`["Done"]`）と `cleanup.on_states: ["Archived"]`。
+// 成功条件: 警告が1件だけ出て、本文に両方のキー名と `Archived` が入り、
+// **設定の検証では落ちていない**こと（落ちる先は `gh` が無いことである）。
+func TestRun_片付ける状態が終わったとみなす状態の外にあれば警告を出して起動を続ける(t *testing.T) {
+	logged := runForStartupLog(t, "cleanup:\n  on_states: [\"Archived\"]\n")
+
+	if got := strings.Count(logged, cleanupStatesWarning); got != 1 {
+		t.Fatalf("警告が1件ではなく %d件だった\n%s", got, logged)
+	}
+	for _, want := range []string{"cleanup.on_states", "tracker.terminal_states", "Archived"} {
+		if !strings.Contains(logged, want) {
+			t.Fatalf("%q が警告に出ていない\n%s", want, logged)
+		}
+	}
+	// **設定の検証で落としていない**ことを確かめる（落ちる先は `gh` が無いことである）。
+	if !strings.Contains(logged, "設定ファイルを読み込みました") {
+		t.Fatalf("設定を読む段より前で止まっている\n%s", logged)
+	}
+}
+
+// TestRun_片付ける状態が噛み合っていれば警告を出さない は、
+// **読み飛ばされる警告を作らない**ことを確かめる。
+//
+// 目的: 噛み合っている設定と、片付けそのものを行わない設定では、警告を1件も出さないこと。
+// 与える情報: `cleanup.on_states: ["Done"]`（既定の `terminal_states` と同じ）と、
+// `cleanup.enabled: false` で外れた値を書いた設定の2通り。
+// 成功条件: どちらもこの警告が1件も出ないこと。
+func TestRun_片付ける状態が噛み合っていれば警告を出さない(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra string
+	}{
+		{
+			name:  "終わったとみなす状態に全部入っている",
+			extra: "cleanup:\n  on_states: [\"Done\"]\n",
+		},
+		{
+			// **片付けそのものが走らないので、噛み合っていなくても何も起きない。**
+			name:  "片付けを行わない設定",
+			extra: "cleanup:\n  enabled: false\n  on_states: [\"Archived\"]\n",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			logged := runForStartupLog(t, c.extra)
+			if strings.Contains(logged, cleanupStatesWarning) {
+				t.Fatalf("警告を出す設定ではないのに出ている\n%s", logged)
+			}
+		})
+	}
+}
+
 // writeHangingGHAuthToken は、`gh auth token` が返ってこない偽の `gh` を PATH の先頭へ置く。
 //
 // **`gh auth status` には答える。**止まるのはトークンの取得だけにして、
@@ -370,32 +477,71 @@ func TestRun_ghauthtokenが返らなければ起動を止める(t *testing.T) {
 	}
 }
 
-// TestRestoreDefaultSignalsOnShutdown_1回目を受けたら登録を外す は、
-// 2回目の signal が効くことを支える結線を確かめる。
+// TestWatchInterrupt_1回目で理由を出し2回目で待たずに終わる は、
+// 「Ctrl+C を押しても何も反応しない」を潰した仕掛けを確かめる。
 //
-// 目的: `signal.NotifyContext` は1回目の signal のあとも登録を残すため、**外さないと
-// 2回目以降の `SIGTERM` / `SIGINT` が吸われて効かない。**終了処理が長引いたときに
-// `SIGKILL` しか手が無くなる（設計 3-4 の終了の作法）。
-// 与える情報: 途中で終わらせるコンテキストと、呼ばれたことを記録する解除の関数。
-// 成功条件: コンテキストが生きている間は解除が呼ばれず、終わったあとに1回呼ばれること。
-func TestRestoreDefaultSignalsOnShutdown_1回目を受けたら登録を外す(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	stopped := make(chan struct{})
+// 目的: 終了は3段の直列で最大 daemon.ShutdownBudget() だけ掛かる。**1回目の割り込みで
+// 待たせる理由と抜け道を出さないと、その間ずっと画面が無反応になる。**また、2回目の
+// 割り込みは**自分で数えて終わらせる。**`signal.Stop` で「元の動作」へ戻すやり方は、
+// 起動元が `SIGINT` を無視に設定していると戻る先が「無視」になり、何も起きない。
+// 与える情報: 自分自身へ送る `SIGINT` を2回と、os.Exit の代わりに呼ばれたことを記録する関数。
+// 成功条件: 1回目で待つ理由・2回目の効き目・`kill -QUIT` の案内が出ること。
+// 2回目で ExitInterrupted が渡ること。
+func TestWatchInterrupt_1回目で理由を出し2回目で待たずに終わる(t *testing.T) {
+	logs := &syncBuffer{}
+	exited := make(chan int, 1)
 
-	daemon.RestoreDefaultSignalsOnShutdown(ctx, func() { close(stopped) })
+	stop := daemon.WatchInterrupt(slog.New(slog.NewTextHandler(logs, nil)), func(code int) {
+		exited <- code
+	})
+	// **登録を外すのは最後である。**外したあとに SIGINT が届くと、テストのプロセスごと死ぬ。
+	defer stop()
 
+	// 1回目。**まだ終わらない。**待たせる理由が出るだけである。
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatalf("1回目の SIGINT を送れません: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(logs.String(), "kill -QUIT") {
+		if time.Now().After(deadline) {
+			t.Fatalf("1回目の割り込みで何も出なかった:\n%s", logs.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	select {
-	case <-stopped:
-		t.Fatal("コンテキストが生きているうちに signal の登録を外した")
-	case <-time.After(50 * time.Millisecond):
+	case code := <-exited:
+		t.Fatalf("1回目の割り込みで終わってしまった: exit code %d", code)
+	case <-time.After(100 * time.Millisecond):
 	}
 
-	cancel()
+	first := logs.String()
+	if !strings.Contains(first, "もう一度 Ctrl+C") {
+		t.Fatalf("2回目で即座に終わることが画面に出ていない:\n%s", first)
+	}
+	if !strings.Contains(first, "max_wait") {
+		t.Fatalf("待たせる時間が画面に出ていない:\n%s", first)
+	}
+
+	// 2回目。**後始末を待たずに終わる。**
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatalf("2回目の SIGINT を送れません: %v", err)
+	}
 	select {
-	case <-stopped:
+	case code := <-exited:
+		if code != daemon.ExitInterrupted {
+			t.Fatalf("終了コードが %d ではない: %d", daemon.ExitInterrupted, code)
+		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("コンテキストが終わっても signal の登録を外さなかった（2回目の signal が効かない）")
+		t.Fatalf("2回目の割り込みが効かなかった:\n%s", logs.String())
 	}
+}
+
+// TestWatchInterrupt_stopを2回呼んでも落ちない は、`defer stop()` を重ねても
+// 安全であることを確かめる（signal の登録を外す関数は何回呼んでも安全と約束している）。
+func TestWatchInterrupt_stopを2回呼んでも落ちない(t *testing.T) {
+	stop := daemon.WatchInterrupt(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)), func(int) {})
+	stop()
+	stop()
 }
 
 // TestRun_起動時検査が期限内に終わらなければ起動を止める は、外向きの呼び出しの期限を確かめる。

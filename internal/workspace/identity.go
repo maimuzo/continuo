@@ -355,8 +355,13 @@ func (m *Manager) excludeLines() []string {
 // 書かない（そのままだと積み上がる）。**同じリポジトリに対する更新は直列化する。**
 //
 // **書き足すだけで、書き直さない。**`info/exclude` は利用者のファイルであり、
-// 読み取り → 連結 → 全置換（os.WriteFile は O_TRUNC）で更新すると、**途中で落ちたときに
-// 利用者が自分で書いた除外規則が消える。**追記なら既存の内容にも権限にも触らない。
+// 読み取り → 連結 → 全置換で更新すると、**途中で落ちたときに利用者が自分で書いた
+// 除外規則が消える。**追記なら既存の内容にも権限にも触らない。
+//
+// **ここは「一時ファイルへ書いてから差し替える」に揃えない**（CLAUDE.md の
+// 「絶対に守る制約」4 / 設計 3-59）。**追記のみだからである。**差し替えにすると、
+// 読み取ってから差し替えるまでの間に git や利用者が書いた行を黙って消す。
+// **追記は既にある行を1行も触らないので、そもそも失うものが無い。**
 //
 // **書き込む先のリポジトリは検算する。**worktree の `.git` はエージェントが書き換えられる
 // ファイルなので、検算しないと任意のリポジトリの `info/exclude` に行を足せる
@@ -482,6 +487,29 @@ func (m *Manager) SetAgentName(ctx context.Context, worktreePath, agentName stri
 		return err
 	}
 	identity.AgentName = agentName
+	return m.writeIdentityLocked(ctx, worktreePath, *identity)
+}
+
+// SetSessionUUID は身元ファイルの session_uuid だけを書き換える（3-3b。着手の段9 のあと）。
+//
+// **再着手で `--resume` が失敗したときに呼ぶ。**身元ファイルに書いてある UUID の
+// セッションがもう無いのに、そのまま残しておくと、**次の再着手も同じ死んだ UUID へ
+// 復帰しにいき、毎回 `herdr.startup_timeout_ms` を捨てる。**
+//
+// ctx: git を実行するときに適用するコンテキスト（exclude の登録に使う）。
+// worktreePath: worktree の絶対パス。
+// sessionUUID: 新しく採番したセッション UUID。
+// 戻り値: 身元ファイルを読めない・書けない場合のエラー。
+func (m *Manager) SetSessionUUID(ctx context.Context, worktreePath, sessionUUID string) error {
+	// **読んで書き戻すので、その間ほかの更新を入れない**（入れると片方が消える）。
+	unlock := m.identityMu.lock(identityLockKey(worktreePath))
+	defer unlock()
+
+	identity, err := m.ReadIdentity(worktreePath)
+	if err != nil {
+		return err
+	}
+	identity.SessionUUID = sessionUUID
 	return m.writeIdentityLocked(ctx, worktreePath, *identity)
 }
 

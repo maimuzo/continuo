@@ -117,6 +117,24 @@ type Issue struct {
 	// （その値は NativeRef["github_issue_state"] に入る）。GitHub の綴りをそのまま保つ
 	// （比較のときだけ大文字小文字を無視する。SPEC.md 11.3）。
 	State string
+	// StatusChangedByAutomation は、いまの State を書いたのがボードの組み込みの自動化
+	// （`Pull request linked to issue` など）かどうかである（設計 2-6 / 3-54）。
+	//
+	// **ID 指定の取り直し（FetchIssuesByIDs）でだけ埋まる。**候補の取得
+	// （FetchIssuesByStates）と識別子での照合（FetchIssueByIdentifier）では常に false である。
+	// そちらは100件単位でボードを読むので、1件ずつにしか意味の無い timeline を要求しない。
+	//
+	// **判定は「`actor.__typename` が `Bot`、または `wasAutomated` が真」である。**
+	// `wasAutomated` は組み込みの自動化でも `false` を返すため、単独では使えない（設計 2-6）。
+	// **continuo 自身の書き込みは `User` になる**ので、自分の書き込みは自動化と判定されない。
+	//
+	// **イベントを1件も引けなかった場合は false である。**分からないなら
+	// 「自動化ではない」に倒す（人間が動かしたときの扱いを既定にする）。
+	StatusChangedByAutomation bool
+	// StatusChangedBy は、いまの State を書いた主体のログイン名である
+	// （組み込みの自動化なら `github-project-automation`）。
+	// **ログと issue のコメントに出すためだけに持つ。**判定には使わない。取れなければ空文字。
+	StatusChangedBy string
 	// BranchName はトラッカーが返す branch のメタデータである（SPEC.md 4.1.1 の branch_name）。
 	// OPTIONAL。GitHub の "Development" 機能でリンクされた branch があれば、その1本目の名前。
 	// 無ければ nil。

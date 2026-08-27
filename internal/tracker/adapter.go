@@ -151,32 +151,21 @@ func NewAdapter(
 }
 
 // requiredStatesForBootstrap は Bootstrap が照合すべき Status 名の一覧を、
-// cfg から重複無く集める。active_states・terminal_states・dispatch_state・failure_state・
-// status_signal_map の遷移先をすべて含める（3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+// cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
+// failure_state・status_signal_map の遷移先・**automated_state_rewrite のキー**を
+// すべて含める（3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+//
+// **集めるのは `config.BootstrapStates` の1箇所だけである**（設計 3-55）。**自前で集め直さない。**
+// 実行時に「知っている Status か」を判定する一覧（orchestrator の `knownStates`）とは
+// **対応表のキーのぶんだけ違う。**その差は意図したものである。
+//
+//	照合する（ここ）        … キーがボードに実在しなければ起動を止める。綴りの打ち間違いを見つける
+//	知っている Status に入れない … 入れると「知らない Status」でなくなり、書き戻しが二度と通らない
+//
+// **戻す先（値）は足さない。**`config.Validate` が「戻す先は `active_states` に入っていること」を
+// 起動前に要求しているので、足しても1件も増えない。
 func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
-	seen := make(map[string]bool)
-	var result []string
-	add := func(s string) {
-		if s == "" || seen[s] {
-			return
-		}
-		seen[s] = true
-		result = append(result, s)
-	}
-	for _, s := range cfg.ActiveStates {
-		add(s)
-	}
-	for _, s := range cfg.TerminalStates {
-		add(s)
-	}
-	add(cfg.DispatchState)
-	add(cfg.FailureState)
-	for _, target := range cfg.StatusSignalMap {
-		if target != nil {
-			add(*target)
-		}
-	}
-	return result
+	return config.BootstrapStates(cfg)
 }
 
 // Bootstrap は起動時の検査を行う（設計 3-6）。
@@ -202,7 +191,51 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 		"project_number", a.projectNumber,
 		"status_options", a.statusOptionCount(),
 	)
+	// **起動時に1回だけ、ボードにあって設定に無い Status を名前で出す**（設計 3-50）。
+	//
+	// **件数だけでは気づけない。**`status_options=11` とだけ出しても、そのうち
+	// どれを continuo が扱えないのかが分からない。**扱えない Status へ動かされた issue は
+	// worker を止められる**ので、名前を先に見せておく。
+	//
+	// **巡回ごとの再照合（VerifyStatusOptions）では出さない。**10分に1回同じ行が流れると
+	// 他の行が埋もれる。
+	if unknown := a.unknownStatusOptions(cfg); len(unknown) > 0 {
+		a.logger.Info("ボードには continuo が知らない Status があります"+
+			"（continuo は WORKFLOW.md に書かれた Status だけを扱います。"+
+			"知らない Status へ動かされた issue は worker を止めます）",
+			"件数", len(unknown),
+			"知らない Status", strings.Join(unknown, ", "),
+		)
+	}
 	return nil
+}
+
+// unknownStatusOptions はボードにあって設定に無い Status の選択肢名を返す（設計 3-50）。
+//
+// **照合の向きが `Bootstrap` の検査と逆である。**`Bootstrap` は「設定の名前がボードに
+// 在るか」を見る（無ければ起動を止める）。こちらは「ボードの名前が設定に在るか」を見る
+// （無くても止めない。知らせるだけである）。
+//
+// **`Bootstrap` を通したあとに呼ぶこと。**通っていなければ選択肢の一覧を持っていないので、
+// 空を返す。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// 戻り値: 設定に名前が出てこない選択肢名（ボードの綴りのまま。名前順）。
+func (a *Adapter) unknownStatusOptions(cfg config.TrackerConfig) []string {
+	wanted := make(map[string]bool)
+	for _, s := range requiredStatesForBootstrap(cfg) {
+		wanted[foldStatus(s)] = true
+	}
+	a.mu.RLock()
+	names := make([]string, 0, len(a.statusOptionIDs))
+	for name := range a.statusOptionIDs {
+		if !wanted[foldStatus(name)] {
+			names = append(names, name)
+		}
+	}
+	a.mu.RUnlock()
+	sort.Strings(names)
+	return names
 }
 
 // VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6 の
@@ -373,6 +406,30 @@ func (a *Adapter) statusOptionCount() int {
 	return len(a.statusOptionIDs)
 }
 
+// StatusOptionNames はボード側の Status の選択肢名を、GitHub の綴りのまま全部返す。
+//
+// **設定に書いた名前だけでは、取り違えを見つけられないから公開してある。**
+// `Bootstrap` が照合するのは「設定に書いた名前がボードに在るか」だけである。
+// **ボードに `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。**
+// `continuo doctor` はここで全部の選択肢名を受け取り、設定の名前と紛らわしい組を警告する。
+//
+// **Bootstrap（または VerifyStatusOptions）を通してから呼ぶこと。**通っていなければ nil を返す。
+//
+// 戻り値: 選択肢名の一覧（昇順。出力の順序を安定させるため）。通っていなければ nil。
+func (a *Adapter) StatusOptionNames() []string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if !a.bootstrapped {
+		return nil
+	}
+	names := make([]string, 0, len(a.statusOptionIDs))
+	for name := range a.statusOptionIDs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // writeTargets は書き込み（updateProjectV2ItemFieldValue）に要る値を、
 // **1回のロックでまとめて**取り出す。
 //
@@ -529,7 +586,7 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 		conn := resp.RepositoryOwner.ProjectV2.Items
 		for i := range conn.Nodes {
 			raw := &conn.Nodes[i]
-			mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+			mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted, a.projectNumber)
 			if !mapped.Ok {
 				a.logger.Warn("候補の一覧から除外しました",
 					"item_id", raw.ID, "理由", mapped.Reason,
@@ -629,8 +686,11 @@ func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q strin
 }
 
 // FetchIssuesByIDs は指定した project item ID の現在のスナップショットを取り直す
-// （SPEC.md 11.1 の fetch_issues_by_ids。設計「その3」）。実行中 issue の照合や、
-// UpdateStatus が書き込み前に行う取り直しに使う。
+// （SPEC.md 11.1 の fetch_issues_by_ids。設計「その3」）。実行中 issue の照合に使う。
+//
+// **「いまの Status を書いたのは誰か」（timeline）も一緒に取る**（設計 3-54）。
+// **Status を書く前の取り直しは `fetchIssuesByIDs` を timeline 無しで呼ぶ**
+// （`UpdateStatus`）。そちらは timeline を1バイトも読まない。
 //
 // **見つからない ID は「もう見えない」として扱い、結果から省く。**合成した状態を作らない
 // （SPEC.md: "IDs no longer visible in the configured scope are omitted; the orchestrator
@@ -657,10 +717,26 @@ func (a *Adapter) dropUnrequestedStates(result []Issue, states []string, q strin
 // significant"）。いずれかの ID が見つかったのに正規化できなかった場合は CategoryResponse の
 // *Error を返す。GraphQL 呼び出し自体が失敗した場合はそのエラーを返す。
 func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, error) {
+	return a.fetchIssuesByIDs(ctx, ids, true)
+}
+
+// fetchIssuesByIDs は ID 指定の取り直しの本体である。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// ids: 取り直す project item ID の一覧。
+// withTimeline: 「いまの Status を書いたのは誰か」も取るかどうか。
+// **偽で呼ぶのは Status を書く前の取り直しだけである**（`UpdateStatus`）。
+// 偽のとき `Issue.StatusChangedBy` と `Issue.StatusChangedByAutomation` はゼロ値になる。
+// 戻り値: FetchIssuesByIDs と同じ。
+func (a *Adapter) fetchIssuesByIDs(ctx context.Context, ids []string, withTimeline bool) ([]Issue, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 
+	query := byIDsQueryTemplate
+	if !withTimeline {
+		query = byIDsWithoutTimelineQueryTemplate
+	}
 	var resp byIDsQueryResponse
 	vars := map[string]any{
 		"statusField": a.statusField,
@@ -668,7 +744,7 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 	}
 	// **`NOT_FOUND` は「その ID がもう見えない」ことを意味するので、部分的な成功として扱う。**
 	// 消えた ID は `data.nodes` に `null` で入るので、下のループが省く。
-	if err := a.gql.doAllowingNotFound(ctx, byIDsQueryTemplate, vars, &resp); err != nil {
+	if err := a.gql.doAllowingNotFound(ctx, query, vars, &resp); err != nil {
 		return nil, err
 	}
 
@@ -684,7 +760,7 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 				Message:  fmt.Sprintf("想定外の node 型です（ProjectV2Item ではない）: %s", raw.Typename),
 			}
 		}
-		mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted)
+		mapped := mapRawItemToIssue(raw, a.statusField, a.repoTrusted, a.projectNumber)
 		if !mapped.Ok && mapped.Gone {
 			// 候補の集合に居ない（archive 済み・Status 未設定・Issue でも DraftIssue でも
 			// ない content）。**候補の取得（items）はどれも返さないのに、nodes(ids:) は
@@ -707,6 +783,24 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 	return result, nil
 }
 
+// StatusWrite は UpdateStatus が何をしたかを返す。
+//
+// **`bool` を2つ並べない。**呼び出し側で取り違える。
+type StatusWrite struct {
+	// Reached は「目的の Status になっているか」である。
+	// **取り直した値が既に目的の値で、書き込みを省いた場合も true になる。**
+	Reached bool
+	// Wrote は「書き込みの mutation を実際に呼んだか」である。
+	//
+	// **issue へ「Status を動かした」と書いてよいのは、これが真のときだけである。**
+	// Reached が真でも Wrote が偽なら、ボードは何も動いていないので書くことがない。
+	Wrote bool
+	// Previous は書き込む直前に ID 指定で取り直した Status である。
+	//
+	// **巡回で読んだ値ではない。**item がもう見えなかったときだけ空になる。
+	Previous string
+}
+
 // UpdateStatus は project item の Status を書き換える（SPEC.md 11.5 が言う
 // provider-native tool 相当の操作。設計「その4」/ 3-25 / 4-1）。
 //
@@ -720,14 +814,29 @@ func (a *Adapter) FetchIssuesByIDs(ctx context.Context, ids []string) ([]Issue, 
 // **許可リストではなく拒否リストである。**グループの issue は Ice Box に置かれるので
 // （設計 3-26）、active_states で絞ると表明が1件も反映されない。
 //
+// **取り直した値が既に targetState と同じなら、書き込みの mutation を送らない。**
+// GitHub は同じ値の書き込みを timeline に残さないので、送っても continuo のログにだけ
+// 「Status を書き込みました」が出て、issue には何も現れない。あとから「誰がいつ Status を
+// 動かしたか」を突き合わせるときに、**continuo が書いたはずの時刻に記録が無い**という
+// 食い違いになる。API の呼び出しも1回無駄に増える。
+// **送らずに「目的の Status になっている」（Reached が真）を返し、Wrote は偽のままにする。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // itemID: 書き込む対象の project item ID（Issue.ID）。
 // targetState: 書き込む先の Status 名。Bootstrap で解決した選択肢名と大文字小文字を
 // 無視して照合する。
 // blockedStates: 「この状態なら書かない」Status の一覧。呼び出し側は terminal_states を渡す。
-// 戻り値の1つ目: 実際に書き込んだかどうか。false はエラーではなく、「item がもう見えない」
-// または「取り直した結果、既に別の Status へ動いていたので書かなかった」のいずれかを意味する
+// 戻り値の1つ目: 何をしたか（StatusWrite）。
+// **Reached は「書き込みの API を呼んだかどうか」ではなく「目的の Status になっているか」
+// である。**取り直した値が既に targetState と同じだった場合は、書き込みを省いたうえで
+// Reached を真にする（呼び出し側は「Status を動かせた」として先へ進んでよい）。
+// **Reached が偽なのはエラーではなく、「item がもう見えない」または「取り直した結果、
+// blockedStates に入っていたので書かなかった」のいずれかを意味する**
 // （呼び出し側はログに残すだけでよい）。
+// **Wrote は mutation を実際に呼んだときだけ真になる。**issue へ「何から何へ動かした」と
+// 書いてよいのはこのときだけである。
+// **Previous には書き込む直前に取り直した Status が入る。**「何から動かしたか」を
+// issue へ書くのはこの値である（設計 3-29）。
 // 戻り値の2つ目: Bootstrap が未実行の場合は CategoryInvalidConfig、targetState が
 // Bootstrap で解決した選択肢に無い場合も CategoryInvalidConfig。取り直しや書き込みの
 // GraphQL 呼び出しが失敗した場合はそのエラーを返す。
@@ -736,38 +845,52 @@ func (a *Adapter) UpdateStatus(
 	itemID string,
 	targetState string,
 	blockedStates []string,
-) (bool, error) {
+) (StatusWrite, error) {
 	// **project ID・フィールド ID・選択肢 ID を1回のロックでまとめて取る。**
 	// 巡回ループが VerifyStatusOptions で選択肢を差し替えている最中に別々に読むと、
 	// 新しい正式名と古い選択肢 ID の組み合わせを書き込みかねない。
 	projectID, statusFieldID, optionID, bootstrapped, ok := a.writeTargets(targetState)
 	if !bootstrapped {
-		return false, &Error{
+		return StatusWrite{}, &Error{
 			Category: CategoryInvalidConfig,
 			Message:  "Bootstrap が呼ばれていません（project / Status フィールドの ID が未解決です）",
 		}
 	}
 	if !ok {
-		return false, &Error{
+		return StatusWrite{}, &Error{
 			Category: CategoryInvalidConfig,
 			Message:  fmt.Sprintf("Status の選択肢 %q が見つかりません（Bootstrap で解決した選択肢の一覧に無い）", targetState),
 		}
 	}
 
 	// 書く前に必ず取り直す。
-	current, err := a.FetchIssuesByIDs(ctx, []string{itemID})
+	// **timeline は取らない。**ここで見るのは取り直した `State` だけであり、
+	// 「誰が書いたか」は書き込みの判断に1つも使わない（設計 3-54）。
+	current, err := a.fetchIssuesByIDs(ctx, []string{itemID}, false)
 	if err != nil {
-		return false, err
+		return StatusWrite{}, err
 	}
 	if len(current) == 0 {
 		a.logger.Warn("Status を書きませんでした（item がもう見えません）", "item_id", itemID, "target_state", targetState)
-		return false, nil
+		return StatusWrite{}, nil
 	}
-	if containsFoldedStatus(blockedStates, current[0].State) {
+	previous := current[0].State
+	if containsFoldedStatus(blockedStates, previous) {
 		a.logger.Info("Status を書きませんでした（取り直した結果、書いてはいけない状態に入っていました）",
-			"item_id", itemID, "target_state", targetState, "現在の状態", current[0].State,
+			"item_id", itemID, "target_state", targetState, "現在の状態", previous,
 		)
-		return false, nil
+		return StatusWrite{Previous: previous}, nil
+	}
+	// **既にその値なら書きに行かない。**書いても GitHub の timeline には何も残らないので、
+	// 「書き込みました」のログだけが残って突き合わせができなくなる。
+	// 比較は foldStatus で行う（statusOptionNamesFold の作り方と同じ正規化。SPEC.md 11.3）。
+	// **選択肢の正式名ではなく targetState と比べる。**
+	// **Reached は真、Wrote は偽である。**目的の Status にはなっているので呼び出し側は
+	// 先へ進んでよいが、ボードは動いていないので「何から何へ動かした」を issue へ書かない。
+	if foldStatus(previous) == foldStatus(targetState) {
+		a.logger.Info("Status は既にその値でした（書き込みを省きました）",
+			"item_id", itemID, "target_state", targetState)
+		return StatusWrite{Reached: true, Previous: previous}, nil
 	}
 
 	var resp updateStatusResponse
@@ -778,11 +901,12 @@ func (a *Adapter) UpdateStatus(
 		"optionId":  optionID,
 	}
 	if err := a.gql.do(ctx, updateStatusMutation, vars, &resp); err != nil {
-		return false, err
+		return StatusWrite{Previous: previous}, err
 	}
 
-	a.logger.Info("Status を書き込みました", "item_id", itemID, "target_state", targetState)
-	return true, nil
+	a.logger.Info("Status を書き込みました",
+		"item_id", itemID, "target_state", targetState, "動かす前の状態", previous)
+	return StatusWrite{Reached: true, Wrote: true, Previous: previous}, nil
 }
 
 // FetchComments は issue に付いたコメントを取得する。
@@ -878,7 +1002,7 @@ func (a *Adapter) FetchComments(
 
 // PostComment は continuo 自身が issue へコメントを投稿する。
 //
-// 投稿するのは人間への引き渡しの通知だけである（打ち切り・stall・信頼が無い、など）。
+// 投稿するのは人間への引き渡しの通知と、Status を動かした記録の2つだけである（設計 3-29）。
 // 成果の要約は書かない。エージェントが成果を書かずに終えた場合は、代筆せずに
 // セッションを復元して書かせる（設計 3-25 / 3-29）。
 // 自分が書いたものには self_marker の印を付け、次の turn の入力から外せるようにする。

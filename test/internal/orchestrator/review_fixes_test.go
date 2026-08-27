@@ -1,3 +1,6 @@
+// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
+// **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある。**
 package orchestrator_test
 
 import (
@@ -143,6 +146,8 @@ func sessionStartEvent(sessionID, transcriptPath string) hookserver.HookEvent {
 	}
 }
 
+// {"RUCM-PATH": "P014"}
+//
 // TestOnHook_worktreeの外のcwdを名乗るhookは捨てる は、送り主の突き合わせを確かめる。
 //
 // 目的: `session_id` はプロセスの引数に載るので他の run のエージェントから読める。
@@ -448,6 +453,8 @@ func viewOf2(t *testing.T, fx *fixture, identifier string) (orchestrator.RunView
 	return orchestrator.RunView{}, false
 }
 
+// {"RUCM-PATH": "P023"}
+//
 // TestTurn_turnループを起こせなかったらNeedsPromptを立て直す は、設計 3-8 を確かめる。
 //
 // 目的: 同じ run に turn ループを2本立てないのは正しいが、**起こせなかったことを黙って
@@ -519,14 +526,11 @@ func TestComment_引き渡しの通知は1つのrunにつき1件だけ書く(t *
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
 
-	selfComments := 0
-	for _, c := range fx.Tracker.CommentsOf("I_node188") {
-		if c.IsSelf {
-			selfComments++
-		}
-	}
-	if selfComments != 1 {
+	// **数えるのは引き渡しの通知だけである。**Status を動かした記録も self_marker が
+	// 付くので、`IsSelf` で数えると着手の記録まで混ざる（設計 3-29）。
+	handoffs := fx.Tracker.HandoffCommentsOf("I_node188")
+	if len(handoffs) != 1 {
 		t.Fatalf("引き渡しの通知が1件に絞れていない: %d 件（%+v）",
-			selfComments, fx.Tracker.CommentsOf("I_node188"))
+			len(handoffs), fx.Tracker.CommentsOf("I_node188"))
 	}
 }

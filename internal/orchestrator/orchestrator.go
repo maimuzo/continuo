@@ -88,10 +88,13 @@ type Tracker interface {
 	// **見つからないことをエラーにしない。**
 	FetchIssueByIdentifier(ctx context.Context, identifier string) (tracker.Issue, bool, error)
 	// UpdateStatus は Status を書き換える。**書く前に必ず ID 指定で取り直す**（設計 3-4）。
-	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (bool, error)
+	// **戻り値の Previous がその取り直した値である。**「何から動かしたか」を issue へ
+	// 書くのはこの値であって、巡回で読んだ値ではない（設計 3-29）。
+	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error)
 	// FetchComments は issue のコメントを取る（エージェントが書いたかの判別に使う）。
 	FetchComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig, markers config.TrackerCommentsConfig) ([]tracker.Comment, error)
-	// PostComment は continuo 自身が人間への引き渡しの通知を書く。
+	// PostComment は continuo 自身のコメントを書く。
+	// **書くのは引き渡しの通知と、Status を動かした記録の2つだけである**（設計 3-29）。
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
 	// VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6）。
 	VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error
@@ -199,6 +202,12 @@ type Orchestrator struct {
 	now            func() time.Time
 	newSessionUUID func() (string, error)
 	ghAuthCheck    GHAuthCheckFunc
+	// knownStateNames は continuo が意味を知っている Status 名の一覧である（設計 3-50）。
+	//
+	// **設定から作る値であり、走っている間は変わらない。**巡回のたびに作り直すと、
+	// 実行中の run 1件ごとに確保と整列をやり直すことになる（`reconcileRunning` は
+	// run ごとに `isKnownState` を引く）。**組み立てのときに1度だけ計算して持つ。**
+	knownStateNames []string
 
 	// mu は runs / sessions / notified / tickCount / quota を守る。
 	mu sync.Mutex
@@ -242,8 +251,8 @@ type Orchestrator struct {
 //
 // opts: 設定・トラッカー・herdr・workspace・枠の読み取り・socket のパス・ログ。
 // 戻り値: 組み立てた Orchestrator。Tracker / Herdr / Workspace が nil の場合、
-// HookSocketPath が空または絶対パスでない場合、`continuo` の実行ファイルの場所を
-// 決められない場合はエラーを返す。
+// **Config に Status 名が1つも無い場合**、HookSocketPath が空または絶対パスでない場合、
+// `continuo` の実行ファイルの場所を決められない場合はエラーを返す。
 func New(opts Options) (*Orchestrator, error) {
 	if opts.Tracker == nil {
 		return nil, errors.New("トラッカーのアダプタ（Tracker）が nil です")
@@ -258,6 +267,19 @@ func New(opts Options) (*Orchestrator, error) {
 		return nil, fmt.Errorf(
 			"hook を受ける socket のパス %q が絶対パスではありません（設定ファイルへ埋め込めない）",
 			opts.HookSocketPath)
+	}
+	// **知っている Status の一覧は組み立てのときに1度だけ計算する**（`knownStateNames`）。
+	// **計算に使う設定が空のまま渡されても、いままでは黙って通っていた。**
+	// 1つも取れないと、continuo は**ボード上のどの Status も「知らない Status」と判定し、
+	// 着手した run を片端から止める。**しかも止めた理由には「いま知っているのは です」と
+	// 空欄が出るだけで、原因が読み取れない。
+	// **他の必須の依存と同じく、ここで名前つきのエラーにする。**
+	knownStateNames := config.KnownStates(opts.Config.Tracker)
+	if len(knownStateNames) == 0 {
+		return nil, errors.New(
+			"continuo が扱う Status が1つも設定されていません（Config）" +
+				"（WORKFLOW.md の tracker.active_states / terminal_states / running_state / " +
+				"dispatch_state / failure_state / status_signal_map の遷移先を確かめてください）")
 	}
 
 	continuoPath := opts.ContinuoPath
@@ -309,6 +331,11 @@ func New(opts Options) (*Orchestrator, error) {
 		now:            nowFunc,
 		newSessionUUID: newUUID,
 		ghAuthCheck:    opts.GHAuthCheck,
+		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-55）。
+		// 起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）も
+		// 同じ関数の上に立つ（あちらは対応表のキーを足す）。
+		knownStateNames: knownStateNames,
+
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
 		notified:       map[string]time.Time{},
@@ -662,9 +689,10 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	// **`agent_status` が `working` の run はこちらを立てる**（設計 3-4 の段5a2）。
 	// turn は送らないが、走っている turn の `Stop` を読む goroutine は要る。
 	rs.awaitTurnEnd = state.AwaitTurnEnd
-	// **FreshSession は立てない**（ゼロ値の偽のままにする）。セッションは引き継いで
-	// いるので、送るのは**継続の指示（5-4）**である。**1回目の本文（5-3）ではない**
-	// （設計 3-4 の段5c）。エージェントは issue の URL も完了の作法も既に知っている。
+	// **SendFirstPrompt は立てない**（ゼロ値の偽のままにする）。走っている worker を
+	// そのまま引き継いでいるので、送るのは**継続の指示（5-4）**である。
+	// **1回目の本文（5-3）ではない**（設計 3-4 の段5c）。
+	// エージェントは issue の URL も完了の作法も既に知っている。
 	// **turn 数を 1 から数え直すのは打ち切りの計算のためであって、1回目をやり直すことではない。**
 	o.runs[issue.ID] = rs
 	if state.SessionUUID != "" {

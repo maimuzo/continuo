@@ -79,7 +79,15 @@ const (
 	DefaultMaxHeaderBytes = 64 * 1024
 
 	// DefaultShutdownTimeout は Close が処理中の応答を待つ上限である。
-	DefaultShutdownTimeout = 5 * time.Second
+	//
+	// **1秒しか待たない。**このダッシュボードは読み取り専用で（`GET` しか受けない）、
+	// 途中で切れて困る書き込みが1つも無い。終了は3段の直列（ダッシュボード →
+	// hook の受け口 → turn ループ）なので、ここで長く待つと、その分だけ
+	// 「Ctrl+C を押したのに何も起きない」時間が伸びる。
+	//
+	// **この期限を過ぎたら待つのをやめて叩き切る**（`http.Server.Close`）。
+	// 期限切れを「閉じられなかった」として持ち帰らない。
+	DefaultShutdownTimeout = 1 * time.Second
 
 	// refreshSeconds は HTML の自動再読み込みの間隔（秒）である。
 	// **JavaScript は使わない**（`<meta http-equiv="refresh">` で行う）。
@@ -236,13 +244,19 @@ func (s *Server) Addr() string {
 	return s.ln.Addr().String()
 }
 
-// Close は待ち受けを閉じ、処理中の応答が終わるのを待つ。
+// Close は待ち受けを閉じ、処理中の応答を短いあいだだけ待ってから叩き切る。
 //
 // **`nil` レシーバでも安全である**（`New` が返した nil をそのまま渡してよい）。
 //
+// **期限を過ぎたら待たない。**`http.Server.Close` で接続ごと落とす。
+// **そうしてよい理由は、このサーバが読み取り専用だからである。**`GET` しか受けず、
+// 途中で切れて困る書き込みが1つも無い。応答を読まない相手が1本いるだけで
+// continuo の終了が伸びるほうが、運用の妨げになる。
+//
 // ctx: 処理中の応答を待つ上限。**期限を持つものを渡すこと**（`DefaultShutdownTimeout` が
 // その目安である）。期限が無いと、応答が返らない相手を待って終了が止まる。
-// 戻り値: 閉じられなかった場合のエラー。
+// 戻り値: 叩き切ることすらできなかった場合のエラー。**期限切れはエラーにしない**
+// （待つのをやめたことは警告としてログに出す）。
 func (s *Server) Close(ctx context.Context) error {
 	if s == nil {
 		return nil
@@ -263,11 +277,18 @@ func (s *Server) Close(ctx context.Context) error {
 		return nil
 	}
 
-	err := s.http.Shutdown(ctx)
-	s.wg.Wait()
-	if err != nil {
-		return i18n.Errorf(i18n.KeyServerCloseShutdownFailed, err)
+	// **待たずに叩き切る側へ倒す。**`Shutdown` は処理中の応答が終わるのを待つが、
+	// このサーバは読み取り専用なので、途中で切れて困る書き込みが1つも無い。
+	// 期限を過ぎたら `Close` で接続ごと落とす。
+	if err := s.http.Shutdown(ctx); err != nil {
+		s.logger.Warn("ダッシュボードの応答が期限内に終わらないので、接続を切って閉じます",
+			"timeout", DefaultShutdownTimeout, "reason", err)
+		if err := s.http.Close(); err != nil {
+			s.wg.Wait()
+			return i18n.Errorf(i18n.KeyServerCloseShutdownFailed, err)
+		}
 	}
+	s.wg.Wait()
 	s.logger.Info("ダッシュボードを閉じました")
 	return nil
 }
