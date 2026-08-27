@@ -317,20 +317,20 @@ func New(opts Options) (*Orchestrator, error) {
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
-		cfg:             opts.Config,
-		promptTemplate:  opts.PromptTemplate,
-		tracker:         opts.Tracker,
-		herdr:           opts.Herdr,
-		ws:              opts.Workspace,
-		rl:              opts.RateLimit,
-		socketPath:      opts.HookSocketPath,
-		runtimeDir:      filepath.Dir(opts.HookSocketPath),
-		continuoPath:    continuoPath,
-		transcriptRoot:  transcriptRoot,
-		logger:          logger,
-		now:             nowFunc,
-		newSessionUUID:  newUUID,
-		ghAuthCheck:     opts.GHAuthCheck,
+		cfg:            opts.Config,
+		promptTemplate: opts.PromptTemplate,
+		tracker:        opts.Tracker,
+		herdr:          opts.Herdr,
+		ws:             opts.Workspace,
+		rl:             opts.RateLimit,
+		socketPath:     opts.HookSocketPath,
+		runtimeDir:     filepath.Dir(opts.HookSocketPath),
+		continuoPath:   continuoPath,
+		transcriptRoot: transcriptRoot,
+		logger:         logger,
+		now:            nowFunc,
+		newSessionUUID: newUUID,
+		ghAuthCheck:    opts.GHAuthCheck,
 		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-55）。
 		// 起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）も
 		// 同じ関数の上に立つ（あちらは対応表のキーを足す）。
