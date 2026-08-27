@@ -681,6 +681,48 @@ func TestAbandon_pane待ちでherdrが答えなくてもforceなら越える(t *
 
 // {"RUCM-PATH": "P008"}
 //
+// 目的: **herdr が pane の一覧に答えなくても、`--force` は上限まで待ってから越える**ことを
+// 確認する（設計 3-37-12。issue #66）。
+//
+// **同じ `--force` で待ち時間が2通りになってはならない。**pane が生きている場合は
+// 上限（この試験では3秒）まで待ってから越えるのに、herdr が答えない場合だけ
+// **1度も待たずに越えていた。****ここへ来る実行はボードを park の値へ動かした直後であり、
+// 継続監視がその pane を閉じにいく1周はまだ回っていない。**待たずに越えるのは、
+// 手を離させたばかりの pane を、閉じる暇も与えずに消すことである。
+//
+// 与える情報: テストが先に掴んだロックファイル（＝動いている）、`tracker.active_states`
+// に入る Status（In Progress）、**worktree を用意したあとで落とした herdr の socket**、
+// 上限3秒・間隔1秒（時計は Sleep のたびに進める）、`--force`。
+// 成功条件: 終了コードが 0、**待ち直すことを言う1行が出ている**、越えたことを言う1行が
+// 出ている、**時計が上限ぶん進んでいる**（＝1度も待たずに越えていない）、
+// worktree が消えていること。
+func TestAbandon_pane待ちでherdrが答えなくてもforceは期限まで待つ(t *testing.T) {
+	fx := newFixture(t)
+	prepared := fx.Prepare(t, 188)
+
+	holdLock(t, fx)
+
+	// **worktree を用意したあとで socket を落とす。**用意の段階では herdr が要る。
+	unreachable := fx.CloseHerdr(t)
+	started := fx.Clock.Now()
+
+	code := fx.Run(t, 188, func(opts *abandon.Options) { opts.Force = true })
+
+	assertExit(t, fx, code, abandon.ExitOK)
+	// **待ち直したことを言う。**既定の上限は50秒あり、黙って待つと固まったように見える。
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonWaitingPaneListFailed, unreachable))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonPaneCheckSkipped, unreachable))
+	// **待った時間そのものを見る。**「越えた」という文言だけでは、上限まで待ってから
+	// 越えたのか、1度も待たずに越えたのかを区別できない。
+	if waited := fx.Clock.Now().Sub(started); waited < 3*time.Second {
+		t.Fatalf("herdr が答えないだけで待たずに越えている（待った時間: %v。上限は %v）\n出力:\n%s",
+			waited, 3*time.Second, fx.Output())
+	}
+	assertWorktreeGone(t, fx, prepared.Path)
+}
+
+// {"RUCM-PATH": "P008"}
+//
 // 目的: 手を離させる書き込みが入らなかったときは、**pane が閉じるのを待たない**ことを
 // 確認する（設計 3-4 の段1）。
 //

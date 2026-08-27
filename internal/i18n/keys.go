@@ -756,6 +756,13 @@ const (
 	KeyAbandonErrPaneListCheck Key = "abandon.err_pane_list_check"
 	// KeyAbandonWaitingPane はpane が閉じるのを待っているあいだに出る。
 	KeyAbandonWaitingPane Key = "abandon.waiting_pane"
+	// KeyAbandonWaitingPaneListFailed は、pane が閉じるのを待っている最中に
+	// **herdr へ pane の一覧を問い合わせられなかったが、まだ期限が残っている**ときに出る。
+	//
+	// **黙って待ち直さない。**既定の上限は50秒あり、何も出さないと固まったように見える。
+	// **`abandon.err_pane_list_check` とは言い分ける。**あちらは何も消さずに止まる文であり、
+	// ここはまだ待っている。
+	KeyAbandonWaitingPaneListFailed Key = "abandon.waiting_pane_list_failed"
 	// KeyAbandonPaneGone はpane が閉じたときに出る。
 	KeyAbandonPaneGone Key = "abandon.pane_gone"
 	// KeyAbandonErrPaneRemains は上限までに pane が閉じなかったときに出る。
@@ -786,6 +793,13 @@ const (
 	// KeyAbandonErrPaneWaitInterrupted は pane が閉じるのを待っている途中で
 	// `SIGINT` / `SIGTERM` を受けたときに出る。**時間切れとは言い分ける。**
 	KeyAbandonErrPaneWaitInterrupted Key = "abandon.err_pane_wait_interrupted"
+	// KeyAbandonErrPaneWaitInterruptedUnknown は、**herdr が pane の一覧に答えないまま
+	// 待ち直している途中で** `SIGINT` / `SIGTERM` を受けたときに出る。
+	//
+	// **残っている pane の ID を書けない。**一覧を引けていないので、
+	// `abandon.err_pane_wait_interrupted` の「残っている pane: %s」に入れる値が無い。
+	// **無いものを空欄で出すと、pane が0枚だったと読める。**
+	KeyAbandonErrPaneWaitInterruptedUnknown Key = "abandon.err_pane_wait_interrupted_unknown"
 
 	// KeyAbandonErrInspect は失われるものを調べられないときに出る。
 	KeyAbandonErrInspect Key = "abandon.err_inspect"
@@ -2234,6 +2248,7 @@ var allKeys = []Key{
 	KeyAbandonParkLeftBehind,
 	KeyAbandonErrPaneListCheck,
 	KeyAbandonWaitingPane,
+	KeyAbandonWaitingPaneListFailed,
 	KeyAbandonPaneGone,
 	KeyAbandonErrPaneRemains,
 	KeyAbandonErrPaneAliveNotRunning,
@@ -2241,6 +2256,7 @@ var allKeys = []Key{
 	KeyAbandonPaneCheckSkipped,
 	KeyAbandonPaneAliveForced,
 	KeyAbandonErrPaneWaitInterrupted,
+	KeyAbandonErrPaneWaitInterruptedUnknown,
 	KeyAbandonErrInspect,
 	KeyAbandonPlanHeader,
 	KeyAbandonPlanIssue,
