@@ -37,6 +37,7 @@ var wantLabels = []i18n.Key{
 	doctor.LabelGHAuth,
 	doctor.LabelBoard,
 	doctor.LabelStatusNames,
+	doctor.LabelRewriteKeys,
 	doctor.LabelClone,
 	doctor.LabelTrust,
 	doctor.LabelCredentials,

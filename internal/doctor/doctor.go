@@ -17,6 +17,7 @@
 //	gh の認証         … `gh auth status` の Token scopes に project が単独で並んでいるか
 //	ボード            … Bootstrap が通り、active_states の選択肢名が全部あるか
 //	Status の名前      … 設定に書いた Status と紛らわしい選択肢がボードに無いか
+//	対応表のキー       … `tracker.automated_state_rewrite` のキーがボードの選択肢にあるか
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
 //	資格情報          … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
@@ -132,6 +133,7 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //	設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる）
 //	              ├─ herdr（設定の protocol と照合する）
 //	              └─ gh の認証 ── ボード ─┬─ Status の名前
+//	                                      ├─ 対応表のキー
 //	                                      ├─ clone
 //	                                      └─ 信頼登録
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
@@ -224,6 +226,12 @@ func Run(ctx context.Context, opts Options) Report {
 	// `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。
 	// **取り違えたまま無人で回すと、人間が作業中の issue にエージェントが着手する。**
 	report.add(checkStatusNames(cfg, boardStates, boardResult.Symbol))
+
+	// 段5c: 対応表のキー。**同じ応答を使い回すので、ここでもリクエストは増えない。**
+	// **起動時の警告（tracker の missingRewriteKeys）は doctor には出てこない。**
+	// doctor は tracker のアダプタへ捨てる logger を渡す（Options.Logger の既定）ので、
+	// **この項目が無いと、キーの綴りの打ち間違いを人間に見せる場所が1つも無い**（issue #67）。
+	report.add(checkRewriteKeys(cfg, boardStates, boardResult.Symbol))
 
 	// 段6: clone。対象リポジトリはボードを読んで決まる。
 	var cloneResult Result

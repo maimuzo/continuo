@@ -20,7 +20,7 @@ import (
 // **起動時に「ボードに実在しなければ起動を止める」一覧も、これである**
 // （`tracker` の `requiredStatesForBootstrap`。設計 3-57）。
 // **キーも含む一覧が要るのは、ボード側の選択肢が設定に出てくるかを見るときだけである**
-// （`BootstrapStates`）。
+// （`NamedStates`）。
 //
 // **集めるのはこの1箇所だけである。**同じ処理を tracker と orchestrator の両方に書くと、
 // 片方だけ直したときに「起動時に照合する Status」と「実行時に知っている Status」が
@@ -64,13 +64,18 @@ func KnownStates(cfg TrackerConfig) []string {
 	return out
 }
 
-// BootstrapStates は、設定のどこかに名前が出てくる Status をすべて返す（設計 3-57）。
+// NamedStates は、設定のどこかに名前が出てくる Status をすべて返す（設計 3-57）。
 //
 // **`KnownStates` に `automated_state_rewrite` のキーを足したものである。**
 //
 // **使うのは「ボードの選択肢が設定に出てくるか」を見る向きだけである**
-// （`tracker` の `unknownStatusOptions`）。キーに書いてある Status へ動かされた issue は
-// 書き戻されるので、**「continuo が知らない Status」として名前を挙げてはならない。**
+// （`tracker` の `unknownStatusOptions`）。**キーは人間が WORKFLOW.md に書いた名前である**ので、
+// **「continuo が知らない Status」として名前を挙げてはならない。**
+// WORKFLOW.md に書いたその名前を「知らない」と言われると、人間は直す先を見失う。
+//
+// **「キーの Status では worker が止まらないから」ではない。**書き戻して worker を続けるのは
+// **ボードの自動化がその Status を書いたときだけ**であり（設計 3-54）、
+// **人間がキーの Status へ動かしたときは、いままでどおり worker を止めて人間へ渡す**（設計 3-50）。
 //
 // **逆向き（設定の名前がボードに実在するか）には使わない。**そちらは `KnownStates` である。
 // **キーはボードに実在しなくてよい**（消した人が抜け出せなくなる。設計 3-57）。
@@ -81,7 +86,7 @@ func KnownStates(cfg TrackerConfig) []string {
 // cfg: WORKFLOW.md の front matter の tracker セクション。
 // 戻り値: Status 名の並び（重複と空文字は落とす。順序は `KnownStates` の並び、
 // 対応表のキーだけは名前順で末尾に付く）。
-func BootstrapStates(cfg TrackerConfig) []string {
+func NamedStates(cfg TrackerConfig) []string {
 	known := KnownStates(cfg)
 	seen := make(map[string]bool, len(known))
 	for _, s := range known {
@@ -107,6 +112,51 @@ func BootstrapStates(cfg TrackerConfig) []string {
 		seen[key] = true
 		out = append(out, from)
 	}
+	return out
+}
+
+// RewriteKeysOutsideBoard は `tracker.automated_state_rewrite` のキーのうち、
+// ボードの Status の選択肢に無いものを、書いてある綴りのまま返す（設計 3-57）。
+//
+// **「その行が一度も効かない」ことを見つけるためにある。**キーはボードの自動化が書く
+// Status 名なので、ボードにその選択肢が無ければ、対応表のその行は永久に引かれない。
+//
+// **これで起動を止めてはならない。**キーはボードに実在しなくてよい
+// （`tracker` の `requiredStatesForBootstrap` はキーを照合しない）。
+// **止めると、ボードの自動化をやめて選択肢を消した人が抜け出せなくなる。**
+// **だが「綴りを打ち間違えた」と「使わなくなったので選択肢を消した」は同じ形に見える**ので、
+// 黙って通すこともできない。**知らせるだけにする。**
+//
+//	起動時のログ          … `tracker` の `missingRewriteKeys` が呼ぶ（警告を1回出す）
+//	`continuo doctor`     … `doctor` の `checkRewriteKeys` が呼ぶ（見出し語 `対応表のキー` を `!` にする）
+//
+// **集めるのはこの1箇所だけである。**同じ判定を tracker と doctor の両方に書くと、
+// 片方だけ直したときに、起動時の警告と `continuo doctor` が違うことを言う。
+//
+// **比べ方は tracker の `foldStatus` に合わせる**（大文字小文字と前後の空白を無視する。
+// SPEC.md 11.3）。ここだけ完全一致で比べると、実行時には引ける行を「効かない」と報告する。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// boardOptions: ボード側の Status の選択肢名（`tracker.Adapter.StatusOptionNames` の戻り値）。
+// 戻り値: ボードに無いキー（設定に書いてある綴りのまま。名前順。1件も無ければ nil）。
+func RewriteKeysOutsideBoard(cfg TrackerConfig, boardOptions []string) []string {
+	onBoard := make(map[string]bool, len(boardOptions))
+	for _, name := range boardOptions {
+		onBoard[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+	var out []string
+	for from := range cfg.AutomatedStateRewrite {
+		if strings.TrimSpace(from) == "" {
+			continue
+		}
+		if onBoard[strings.ToLower(strings.TrimSpace(from))] {
+			continue
+		}
+		out = append(out, from)
+	}
+	// **map の反復順に頼らない。**この一覧は起動時の警告と `continuo doctor` の
+	// 内訳にそのまま載るので、実行のたびに並びが変わってはならない。
+	sort.Strings(out)
 	return out
 }
 

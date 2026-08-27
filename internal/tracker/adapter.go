@@ -179,27 +179,29 @@ func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
 // **だが「綴りを打ち間違えた」と「使わなくなったので選択肢を消した」は同じ形に見える。**
 // 前者はその行が一度も効かないまま黙って死ぬので、**起動時に1回だけ名前で知らせる。**
 //
+// **判定は書き直さない。**`config.RewriteKeysOutsideBoard` をそのまま呼ぶ。
+// **`continuo doctor` の見出し語 `対応表のキー` も同じ関数を呼んでいる**（設計 3-57）。
+// **違うのは出し方だけである**（こちらは起動時の警告、あちらは記号）。
+//
 // **`Bootstrap` を通したあとに呼ぶこと。**通っていなければ選択肢の一覧を持っていないので、
 // 空を返す。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション。
 // 戻り値: ボードに無いキー（設定に書いてある綴りのまま。名前順）。
 func (a *Adapter) missingRewriteKeys(cfg config.TrackerConfig) []string {
-	var out []string
 	a.mu.RLock()
-	if a.bootstrapped {
-		for from := range cfg.AutomatedStateRewrite {
-			if strings.TrimSpace(from) == "" {
-				continue
-			}
-			if _, ok := a.statusOptionNamesFold[foldStatus(from)]; !ok {
-				out = append(out, from)
-			}
-		}
+	bootstrapped := a.bootstrapped
+	names := make([]string, 0, len(a.statusOptionNamesFold))
+	for _, name := range a.statusOptionNamesFold {
+		names = append(names, name)
 	}
 	a.mu.RUnlock()
-	sort.Strings(out)
-	return out
+	// **通っていなければ「全部ボードに無い」ではなく「1件も無い」を返す。**
+	// 選択肢の一覧を持っていないだけで、キーが実在しないと分かったわけではない。
+	if !bootstrapped {
+		return nil
+	}
+	return config.RewriteKeysOutsideBoard(cfg, names)
 }
 
 // Bootstrap は起動時の検査を行う（設計 3-6）。
@@ -263,17 +265,21 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 // **`Bootstrap` を通したあとに呼ぶこと。**通っていなければ選択肢の一覧を持っていないので、
 // 空を返す。
 //
-// **対応表のキーは「設定に名前が出てくる」側に数える**（`config.BootstrapStates`。設計 3-57）。
+// **対応表のキーは「設定に名前が出てくる」側に数える**（`config.NamedStates`。設計 3-57）。
 // **起動を止める照合（`requiredStatesForBootstrap`）とは、そこだけ一覧が違う。**
-// キーに書いてある Status へ動かされた issue は書き戻されるのであって、worker は止まらない。
-// **この行は「知らない Status へ動かされた issue は worker を止めます」と言う**ので、
-// キーを混ぜると嘘になる。
+// **キーは人間が WORKFLOW.md に書いた名前である。**この行は
+// 「continuo は WORKFLOW.md に書かれた Status だけを扱います」と言うので、
+// **書いてある名前を挙げると嘘になる。**
+//
+// **「キーの Status では worker が止まらないから」ではない。**書き戻して worker を続けるのは
+// **ボードの自動化がその Status を書いたときだけ**であり（設計 3-54）、
+// **人間がキーの Status へ動かしたときは、いままでどおり worker を止める**（設計 3-50）。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション。
 // 戻り値: 設定に名前が出てこない選択肢名（ボードの綴りのまま。名前順）。
 func (a *Adapter) unknownStatusOptions(cfg config.TrackerConfig) []string {
 	wanted := make(map[string]bool)
-	for _, s := range config.BootstrapStates(cfg) {
+	for _, s := range config.NamedStates(cfg) {
 		wanted[foldStatus(s)] = true
 	}
 	a.mu.RLock()

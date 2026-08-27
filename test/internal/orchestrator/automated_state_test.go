@@ -821,16 +821,16 @@ func TestAutomatedState_押し合いで止めても貼ると起動しない案�
 	itemID := startRunForAutomation(t, fx)
 
 	// 上限は3回である（internal/orchestrator の maxAutomatedRewrites）。
+	// **巡回は `waitRewriteSettled` が打つ。**ここで `Tick` を打ってはならない
+	// （前の書き戻しの印がまだ返っていなければ、その巡回は空振りする）。
 	for i := 1; i <= 3; i++ {
 		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-		fx.Orc.Tick(context.Background())
-		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)", i)
+		waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
 	}
 
 	// 4回目。**ここからは戻さず、人間へ渡す。**
 	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-	fx.Orc.Tick(context.Background())
-	fx.WaitRunsDrained(t, 10*time.Second)
+	waitRunsDrainedByTick(t, fx, 10*time.Second)
 
 	body := selfCommentBody(fx, "I_node188")
 	if body == "" {
@@ -859,9 +859,10 @@ func TestAutomatedState_戻せないまま止めても貼ると起動しない�
 	fx.Tracker.SetUpdateError(errors.New("Status の選択肢 \"In Progress (AI)\" が見つかりません"))
 
 	// 上限は3回である（internal/orchestrator の maxAutomatedRewriteFailures）。
+	// **巡回は `tickRewriteOnce` が打つ。**書き戻しが始まったことを見てから次へ進める。
 	for i := 1; i <= 3; i++ {
 		fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-		fx.Orc.Tick(context.Background())
+		tickRewriteOnce(t, fx)
 		want := i
 		waitFor(t, 5*time.Second, "書き戻しの失敗が記録される", func() bool {
 			return strings.Count(fx.Logs.String(), "自動化が動かした Status を戻せませんでした") >= want
@@ -870,8 +871,7 @@ func TestAutomatedState_戻せないまま止めても貼ると起動しない�
 
 	// 4回目。**ここからは書き戻さず、人間へ渡す。**
 	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
-	fx.Orc.Tick(context.Background())
-	fx.WaitRunsDrained(t, 10*time.Second)
+	waitRunsDrainedByTick(t, fx, 10*time.Second)
 
 	body := selfCommentBody(fx, "I_node188")
 	if body == "" {
