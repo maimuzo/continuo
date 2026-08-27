@@ -150,22 +150,56 @@ func NewAdapter(
 	}, nil
 }
 
-// requiredStatesForBootstrap は Bootstrap が照合すべき Status 名の一覧を、
+// requiredStatesForBootstrap は「ボードに実在しなければ起動を止める」Status 名を、
 // cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
-// failure_state・status_signal_map の遷移先・**automated_state_rewrite のキー**を
-// すべて含める（3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+// failure_state・status_signal_map の遷移先を含める
+// （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
 //
-// **集めるのは `config.BootstrapStates` の1箇所だけである**（設計 3-55）。**自前で集め直さない。**
-// 実行時に「知っている Status か」を判定する一覧（orchestrator の `knownStates`）とは
-// **対応表のキーのぶんだけ違う。**その差は意図したものである。
+// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。**自前で集め直さない。**
+// **実行時に「知っている Status か」を判定する一覧**（orchestrator の `knownStates`）
+// **とぴったり同じにする。**ずれると、起動時に通した設定が実行時には別の意味になる。
 //
-//	照合する（ここ）        … キーがボードに実在しなければ起動を止める。綴りの打ち間違いを見つける
-//	知っている Status に入れない … 入れると「知らない Status」でなくなり、書き戻しが二度と通らない
+// **`automated_state_rewrite` のキーは入れない**（設計 3-57）。
+// キーは定義上「continuo が知らない Status」であり、**ボードに実在しなくてよい。**
+// 入れると、**ボードの自動化をやめて選択肢を消した人が抜け出せなくなる。**
+// 設定は正しいままなのに、起動は止まり、走っている continuo は巡回ごとの照合に落ちて
+// **ボード全体の dispatch を飛ばし続ける。**
+// **綴りの打ち間違いは、起動を止めずに知らせる**（`missingRewriteKeys`）。
 //
-// **戻す先（値）は足さない。**`config.Validate` が「戻す先は `active_states` に入っていること」を
+// **戻す先（値）も足さない。**`config.Validate` が「戻す先は `active_states` に入っていること」を
 // 起動前に要求しているので、足しても1件も増えない。
 func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
-	return config.BootstrapStates(cfg)
+	return config.KnownStates(cfg)
+}
+
+// missingRewriteKeys は `tracker.automated_state_rewrite` のキーのうち、ボードの Status の
+// 選択肢に無いものを返す（設計 3-57）。
+//
+// **これは起動を止めない。**キーはボードに実在しなくてよい（`requiredStatesForBootstrap`）。
+// **だが「綴りを打ち間違えた」と「使わなくなったので選択肢を消した」は同じ形に見える。**
+// 前者はその行が一度も効かないまま黙って死ぬので、**起動時に1回だけ名前で知らせる。**
+//
+// **`Bootstrap` を通したあとに呼ぶこと。**通っていなければ選択肢の一覧を持っていないので、
+// 空を返す。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// 戻り値: ボードに無いキー（設定に書いてある綴りのまま。名前順）。
+func (a *Adapter) missingRewriteKeys(cfg config.TrackerConfig) []string {
+	var out []string
+	a.mu.RLock()
+	if a.bootstrapped {
+		for from := range cfg.AutomatedStateRewrite {
+			if strings.TrimSpace(from) == "" {
+				continue
+			}
+			if _, ok := a.statusOptionNamesFold[foldStatus(from)]; !ok {
+				out = append(out, from)
+			}
+		}
+	}
+	a.mu.RUnlock()
+	sort.Strings(out)
+	return out
 }
 
 // Bootstrap は起動時の検査を行う（設計 3-6）。
@@ -207,6 +241,16 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 			"知らない Status", strings.Join(unknown, ", "),
 		)
 	}
+	// **対応表のキーがボードに無くても起動は止めない**（設計 3-57）。
+	// **だが綴りの打ち間違いと見分けが付かない**ので、起動時に1回だけ名前で知らせる。
+	if missing := a.missingRewriteKeys(cfg); len(missing) > 0 {
+		a.logger.Warn("tracker.automated_state_rewrite のキーがボードの Status の選択肢にありません"+
+			"（その行は一度も効きません。綴りの打ち間違いなら直してください。"+
+			"その Status をボードで使わなくなったのなら、対応表からその行を消してください）",
+			"件数", len(missing),
+			"ボードに無いキー", strings.Join(missing, ", "),
+		)
+	}
 	return nil
 }
 
@@ -219,11 +263,17 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 // **`Bootstrap` を通したあとに呼ぶこと。**通っていなければ選択肢の一覧を持っていないので、
 // 空を返す。
 //
+// **対応表のキーは「設定に名前が出てくる」側に数える**（`config.BootstrapStates`。設計 3-57）。
+// **起動を止める照合（`requiredStatesForBootstrap`）とは、そこだけ一覧が違う。**
+// キーに書いてある Status へ動かされた issue は書き戻されるのであって、worker は止まらない。
+// **この行は「知らない Status へ動かされた issue は worker を止めます」と言う**ので、
+// キーを混ぜると嘘になる。
+//
 // cfg: WORKFLOW.md の front matter の tracker セクション。
 // 戻り値: 設定に名前が出てこない選択肢名（ボードの綴りのまま。名前順）。
 func (a *Adapter) unknownStatusOptions(cfg config.TrackerConfig) []string {
 	wanted := make(map[string]bool)
-	for _, s := range requiredStatesForBootstrap(cfg) {
+	for _, s := range config.BootstrapStates(cfg) {
 		wanted[foldStatus(s)] = true
 	}
 	a.mu.RLock()

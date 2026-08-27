@@ -17,8 +17,10 @@ import (
 //	値   … `Validate` が「`active_states` に入っていること」を起動前に要求しているので
 //	       （`validateAutomatedStateRewrite`）、**足しても1件も増えない**
 //
-// **起動時にボードの選択肢と照合する一覧はこれではない**（`BootstrapStates`）。
-// あちらは**キーも照合する。**キーの綴りを打ち間違えたまま起動させないためである。
+// **起動時に「ボードに実在しなければ起動を止める」一覧も、これである**
+// （`tracker` の `requiredStatesForBootstrap`。設計 3-57）。
+// **キーも含む一覧が要るのは、ボード側の選択肢が設定に出てくるかを見るときだけである**
+// （`BootstrapStates`）。
 //
 // **集めるのはこの1箇所だけである。**同じ処理を tracker と orchestrator の両方に書くと、
 // 片方だけ直したときに「起動時に照合する Status」と「実行時に知っている Status」が
@@ -62,19 +64,19 @@ func KnownStates(cfg TrackerConfig) []string {
 	return out
 }
 
-// BootstrapStates は、起動時にボードの Status の選択肢と照合する名前をすべて返す
-// （設計 3-55）。
+// BootstrapStates は、設定のどこかに名前が出てくる Status をすべて返す（設計 3-57）。
 //
 // **`KnownStates` に `automated_state_rewrite` のキーを足したものである。**
 //
-// **キーも照合しなければ、綴りの打ち間違いを誰も見つけられない。**
-// 設定の検査（`validateAutomatedStateRewrite`）が見るのは「設定の中での辻褄」だけであり、
-// **その名前がボードに実在するかは見ない。**キーは「continuo が知らない Status」なので
-// 実行時の照合にも掛からない。**結果、`In Progres` と書いても起動し、doctor も通り、
-// 書き戻しだけが一度も動かない。**
+// **使うのは「ボードの選択肢が設定に出てくるか」を見る向きだけである**
+// （`tracker` の `unknownStatusOptions`）。キーに書いてある Status へ動かされた issue は
+// 書き戻されるので、**「continuo が知らない Status」として名前を挙げてはならない。**
+//
+// **逆向き（設定の名前がボードに実在するか）には使わない。**そちらは `KnownStates` である。
+// **キーはボードに実在しなくてよい**（消した人が抜け出せなくなる。設計 3-57）。
 //
 // **キーは名前順で末尾に足す。**map の反復順は決まらないので、そのまま回すと
-// 照合のメッセージが実行のたびに変わる。
+// 出てくる並びが実行のたびに変わる。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション。
 // 戻り値: Status 名の並び（重複と空文字は落とす。順序は `KnownStates` の並び、
