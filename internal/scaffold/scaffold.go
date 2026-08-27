@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
@@ -84,6 +85,11 @@ var (
 // 書き込む先が symlink だった場合は、force が真でも辿らずに ErrSymlink で止める。
 // 辿ると dir の外にあるリンク先を雛形で潰すためである。
 //
+// **force で既にある WORKFLOW.md を置き換えるときは、その場で空にしてから書かない。**
+// 同じディレクトリの一時ファイルへ書き切ってから差し替える（設計 3-59）。途中で落ちても、
+// 利用者が手で直した WORKFLOW.md は元のまま残る。**元のファイルの権限もそのまま残る。**
+// **新しく作るときは差し替えない。**失うものが無いうえ、差し替えにすると umask が効かなくなる。
+//
 // エラー:
 //   - ErrDirNotFound: dir が存在しない。force が真でもディレクトリは作らない
 //   - ErrNotADirectory: dir が存在するがディレクトリではない
@@ -111,30 +117,48 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 		return Result{}, err
 	}
 
-	// syscall.O_NOFOLLOW は「最後の要素が symlink なら開かずに ELOOP で失敗する」フラグである。
-	// これが無いと os.WriteFile / os.OpenFile は symlink を辿るため、<dir>/WORKFLOW.md が
-	// symlink のとき、dir の外にあるリンク先を雛形で上書きしてしまう。
-	// syscall は標準ライブラリなので、外部依存は増えない。
-	flags := os.O_WRONLY | os.O_CREATE | syscall.O_NOFOLLOW
-
-	overwritten := false
 	if force {
-		// force のときだけ、上書きしたかどうかを報告するために事前の存在を見る。
+		// force のときだけ、既にあるかどうかを先に見る。上書きしたかどうかの報告に使うのと、
+		// 既にあるなら「その場で空にしてから書く」のではなく差し替えるためである。
 		// symlink そのものの有無を見たいので os.Stat ではなく os.Lstat を使う。
-		// ここで見た結果と実際の書き込みがずれても、報告する文言が変わるだけで害は無い。
-		_, statErr := os.Lstat(path)
+		info, statErr := os.Lstat(path)
 		if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
 			return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, path, statErr)
 		}
-		overwritten = statErr == nil
-		flags |= os.O_TRUNC
-	} else {
-		// O_EXCL で「無いときだけ作る」を1回の操作にする。先に os.Stat で存在を見てから
-		// 書くと、その隙間に別のプロセスが作ったファイルを黙って壊しうる。
-		// O_EXCL は既存の symlink があれば（リンク先の有無によらず）失敗するので
-		// O_NOFOLLOW は無くても辿らないが、「辿らない」という意図を明示するために付ける。
-		flags |= os.O_EXCL
+		if statErr == nil {
+			// --force であっても symlink は辿らない。辿ると dir の外にあるリンク先を潰す。
+			// os.Rename は symlink を辿らずリンクそのものを置き換えるので、ここで止めないと
+			// 「リンクを雛形で置き換えてしまった」ことになる。
+			if info.Mode()&fs.ModeSymlink != 0 {
+				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
+			}
+			// **既にある WORKFLOW.md は、その場で空にしてから書かない**（CLAUDE.md の
+			// 「絶対に守る制約」4 / 設計 3-59）。O_TRUNC で開くと、書いている途中で落ちたときに
+			// 利用者が手で直した WORKFLOW.md が失われる。
+			// **元のファイルの権限をそのまま渡す。**差し替えは書き込みであって、権限を変える
+			// 操作ではない。
+			if err := atomicfile.Write(path, []byte(TemplateWithValues(values)), info.Mode().Perm()); err != nil {
+				return Result{Path: path}, err
+			}
+			return Result{Path: path, Overwritten: true}, nil
+		}
+		// force でも、まだ無いなら下の「新しく作る」経路へ落ちる。
 	}
+
+	// **新しく作る経路は変えない。**まだ無いファイルには失うものが無いので、差し替えにする
+	// 理由が無い。ここを差し替えにすると、umask ではなく chmod で権限が決まるようになり、
+	// 出来上がるファイルの権限が変わってしまう。
+	//
+	// syscall.O_NOFOLLOW は「最後の要素が symlink なら開かずに ELOOP で失敗する」フラグである。
+	// これが無いと os.OpenFile は symlink を辿るため、<dir>/WORKFLOW.md が symlink のとき、
+	// dir の外にあるリンク先を雛形で上書きしてしまう。
+	// syscall は標準ライブラリなので、外部依存は増えない。
+	//
+	// O_EXCL で「無いときだけ作る」を1回の操作にする。先に os.Stat で存在を見てから
+	// 書くと、その隙間に別のプロセスが作ったファイルを黙って壊しうる。
+	// O_EXCL は既存の symlink があれば（リンク先の有無によらず）失敗するので
+	// O_NOFOLLOW は無くても辿らないが、「辿らない」という意図を明示するために付ける。
+	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL | syscall.O_NOFOLLOW
 
 	f, err := os.OpenFile(path, flags, filePerm)
 	if err != nil {
@@ -147,7 +171,7 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 	if err := f.Close(); err != nil {
 		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, path, err)
 	}
-	return Result{Path: path, Overwritten: overwritten}, nil
+	return Result{Path: path, Overwritten: false}, nil
 }
 
 // resolveTarget は受け取ったディレクトリから、書き出す WORKFLOW.md の絶対パスを決める。

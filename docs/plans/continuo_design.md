@@ -5616,6 +5616,57 @@ turn ループの経路は待つ）。**待っている間は新しい書き戻�
 
 ---
 
+### 3-59. ファイルの書き換えは一時ファイルへ書いてから差し替える
+
+**言いたいこと。**main を全部洗ったら、その場で空にしてから書いていたのは2箇所だけだった。
+その2箇所を差し替えに直し、残りは触っていない。**差し替えにできない2箇所には理由をコードへ書いた。**
+
+**実測（`origin/main` の `internal/` と `cmd/`）。**
+
+```
+$ git grep -n "os.WriteFile\|O_TRUNC" origin/main -- 'internal/*.go'
+origin/main:internal/orchestrator/settings.go:148:	if err := os.WriteFile(path, data, settingsFilePerm); err != nil {
+origin/main:internal/scaffold/scaffold.go:130:		flags |= os.O_TRUNC
+```
+
+**この2箇所だけを直した。**
+
+| どこ | 直し方 |
+| --- | --- |
+| `internal/scaffold/scaffold.go` の `--force` | 一時ファイルへ書き切ってから差し替える。元のファイルの権限をそのまま貼り直す |
+| `internal/orchestrator/settings.go` | 同上。権限は `0600` 固定（continuo が持ち主のファイルである） |
+
+**残る5箇所は main の時点で既に差し替えだった。**`internal/scaffold/update.go` /
+`internal/trust/trust.go` / `internal/workspace/identity.go` / `internal/hookclient/hookclient.go` /
+`internal/hookserver/pending.go`。**1行も触っていない。**動いているものを書き直すと退行が入る。
+
+**手順は1本に寄せた。**`internal/scaffold/update.go` にあった `writeAtomically` を
+`internal/atomicfile` へ移し、`Write` として公開した。呼ぶのは `update.go` と `scaffold.go` と
+`settings.go` の3箇所である。**新しい型もエラーも i18n のキーも作っていない。**
+
+**差し替えには、書き込む先の親ディレクトリへの書き込み権限が要る。**その場で開いて書く実装では
+要らなかったものである。`os.Rename` はディレクトリの要素を書き換える操作だからで、
+**ファイルだけを書けるように用意した場所では、ここで落ちる。**continuo が書くのは
+自分で作ったディレクトリ（`<実行時ディレクトリ>/issues/…`）と、`continuo init --force` を
+打った人がいるディレクトリなので、実際に困る配置は無い。
+
+**新しく作るときは差し替えない。**まだ無いファイルには失うものが無い。それに、差し替えると
+権限を `chmod` で決めることになり、**umask が効かなくなる**（できるファイルの権限が変わる）。
+
+**揃えられない2箇所には、その理由をコードのコメントに書いた**（CLAUDE.md の「絶対に守る制約」4）。
+
+| どこ | 揃えない理由 |
+| --- | --- |
+| `internal/lock/lock.go` | **差し替えるとロックが切れる。**`flock(2)` は inode に掛かるので、別の inode を被せた瞬間に二重起動が素通りする |
+| `internal/workspace/identity.go` の `.git/info/exclude` | **追記のみ。**全置換にすると、読んでから書くまでの間に他が書いた行を消す |
+
+**戻らないように検査を1本置いた。**`test/internal/atomicfile/no_truncating_write_test.go` が
+`internal/` と `cmd/` を構文木で走査し、`os.WriteFile` と `O_TRUNC`（`syscall` 側と import の
+別名も含む）が現れたら落とす。**文字列ではなく構文木を見るのは、**上の2箇所のように
+「なぜその書き方をしないのか」をコメントで説明できるようにするためである。
+
+---
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す

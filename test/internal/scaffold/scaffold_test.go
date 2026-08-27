@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "b814047b06582cd14a50b3e108d16e8976e61a4c41c1688845b164a9f7c72aa1", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
+// {"RUCM-CFG-SHA256": "12d0d9fab8f43bc9dcca209b14e0b660a2c4b6926f81671ae707302427249d5c", "SOURCE": "docs/spec/usecases/particular_case/設定ファイルを作る.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 // **379本のパスは、引数の指定の組み合わせで爆発したものである。**結末は8通りしかないので、
