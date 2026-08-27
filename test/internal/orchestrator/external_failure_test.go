@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "465f03a9ce5babf39f52394708de534812f9fd67a2642cd94af81ac519febdf3", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "6894d2e2f32b6ce2d08afb087e8d399ac45b30b51d037b0ce5c9d6fabf9ae430", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // 外部（GitHub・herdr）が失敗したときの検査である。
 //
@@ -81,7 +81,7 @@ func TestExternalFailure_worktreeを開けなければ着手を諦めて次の�
 	}
 }
 
-// {"RUCM-PATH": "P029"}
+// {"RUCM-PATH": "P077"}
 //
 // TestExternalFailure_paneのlabelを書けなければ着手しない は、段8 の失敗を確かめる。
 //
@@ -151,7 +151,7 @@ func TestExternalFailure_Statusを書けなければworktreeを作らない(t *t
 	}
 }
 
-// {"RUCM-PATH": "P010"}
+// {"RUCM-PATH": "P058"}
 //
 // TestExternalFailure_turnの終わりに issue が消えていたら手放す は、設計 3-10 を確かめる。
 //

@@ -1,3 +1,5 @@
+// {"RUCM-CFG-SHA256": "6894d2e2f32b6ce2d08afb087e8d399ac45b30b51d037b0ce5c9d6fabf9ae430", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+//
 // **再着手でセッションに復帰することの検査である。**
 //
 // **worktree を新しく作る着手は、新しいセッション UUID を採番して `--session-id` で始める。**
@@ -15,6 +17,8 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
+// {"RUCM-PATH": "P049"}
+//
 // TestDispatch_新規の着手は新しいセッションを立てる は、設計 3-3b の「新規」側を確かめる。
 //
 // 目的: 「**新規の着手（worktree を新しく作る）は、いままでどおり新しい UUID を採番して
@@ -49,6 +53,8 @@ func TestDispatch_新規の着手は新しいセッションを立てる(t *test
 	}
 }
 
+// {"RUCM-PATH": "P001"}
+//
 // TestDispatch_既存のworktreeがあれば前回のセッションに復帰する は、設計 3-3b の「再着手」側を
 // 確かめる。
 //
@@ -104,6 +110,8 @@ func TestDispatch_既存のworktreeがあれば前回のセッションに復帰
 	}
 }
 
+// {"RUCM-PATH": "P025"}
+//
 // TestDispatch_復帰に失敗したら新しいセッションで始め直す は、設計 3-3b の後始末を確かめる。
 //
 // 目的: 「**`--resume` に渡した UUID のセッションが、もう存在しないことがある**

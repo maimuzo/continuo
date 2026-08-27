@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "465f03a9ce5babf39f52394708de534812f9fd67a2642cd94af81ac519febdf3", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "6894d2e2f32b6ce2d08afb087e8d399ac45b30b51d037b0ce5c9d6fabf9ae430", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -17,7 +17,7 @@ import (
 	"github.com/maimuzo/continuo/internal/orchestrator"
 )
 
-// {"RUCM-PATH": "P011"}
+// {"RUCM-PATH": "P059"}
 //
 // TestTurn_background_tasksが空のStopだけでturnの終わりと判定しない は、
 // turn の終わりの判定の要を確かめる。
@@ -172,7 +172,7 @@ func TestTurn_表明が無かった次のturnで促す(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P016"}
+// {"RUCM-PATH": "P068"}
 //
 // TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす は、打ち切りを確かめる。
 //
@@ -220,7 +220,7 @@ func TestTurn_max_dispatch_turnsに達したらfailure_stateへ落とす(t *test
 	}
 }
 
-// {"RUCM-PATH": "P020"}
+// {"RUCM-PATH": "P064"}
 //
 // TestTurn_blockedが返ったらescを送ってから人間へ渡す は、安全に関わる分岐を確かめる。
 //
@@ -323,7 +323,7 @@ func TestTurn_waitはuntilにblockedを含めてagent_promptに載せる(t *test
 	}
 }
 
-// {"RUCM-PATH": "P018"}
+// {"RUCM-PATH": "P066"}
 //
 // TestTurn_一時的な送信の失敗ではpaneを閉じない は、
 // **一時的な失敗と、送信そのものを断られたときとで、後始末が正反対である**ことを確かめる。
@@ -368,7 +368,7 @@ func TestTurn_一時的な送信の失敗ではpaneを閉じない(t *testing.T)
 	}
 }
 
-// {"RUCM-PATH": "P014"}
+// {"RUCM-PATH": "P062"}
 //
 // TestTurn_待ち受けが返ってもStopHookが来なければ打ち切る は、
 // 代替フロー「turnの終わりの取りこぼし」を検査する。
@@ -402,7 +402,7 @@ func TestTurn_待ち受けが返ってもStopHookが来なければ打ち切る(
 	}
 }
 
-// {"RUCM-PATH": "P004"}
+// {"RUCM-PATH": "P052"}
 //
 // TestComment_身元ファイルを読めなければ復元をあきらめて片付けへ進む は、
 // 代替フロー「復元の断念」を検査する。
