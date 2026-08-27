@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "89495ef235abec9e025d81f6bd3f442137888f5d75054530717327c3e47de8bc", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4617dc72733c20141806eb53c3f5534fd0ae158f541e37fc9e82dbd64ecdf1af", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **再着手でセッションに復帰することの検査である。**
 //
@@ -12,6 +12,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,6 +77,9 @@ func finishRunOnPrompt(t *testing.T, fx *fixture, sessionUUID, nodeID string) fu
 //	印は外れている
 //	worktree と branch は残っている
 //
+// **見に行く先は、引数の issue から導く。**別の issue の番号を直書きすると、
+// **どの issue を渡しても同じ1件だけを見る検査**になり、事後条件を確かめたことにならない。
+//
 // t: 呼び出し元のテスト。
 // fx: 対象の fixture。
 // issue: 対象の issue。
@@ -86,8 +90,12 @@ func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue
 	if got := fx.Tracker.StateOf(issue.ID); got != "In Review" {
 		t.Errorf("Status が表明の値の遷移先になっていない: got %q, want %q", got, "In Review")
 	}
+	nodeID, _ := issue.NativeRef["issue_node_id"].(string)
+	if nodeID == "" {
+		t.Fatalf("issue にノード ID が無い: %s", issue.Identifier)
+	}
 	agentComments := 0
-	for _, c := range fx.Tracker.CommentsOf("I_node188") {
+	for _, c := range fx.Tracker.CommentsOf(nodeID) {
 		if c.IsAgent {
 			agentComments++
 		}
@@ -107,8 +115,9 @@ func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue
 	if _, err := os.Stat(worktreePath); err != nil {
 		t.Errorf("worktree が残っていない: %s (err=%v)", worktreePath, err)
 	}
-	if runGit(t, fx.Repo.Dir, "branch", "--list", "continuo/octocat/hello-world/188") == "" {
-		t.Errorf("branch が残っていない: continuo/octocat/hello-world/188")
+	branch := fmt.Sprintf("continuo/%s/%s/%d", issue.Owner, issue.Repo, issue.Number)
+	if runGit(t, fx.Repo.Dir, "branch", "--list", branch) == "" {
+		t.Errorf("branch が残っていない: %s", branch)
 	}
 }
 

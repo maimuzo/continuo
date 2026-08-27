@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "89495ef235abec9e025d81f6bd3f442137888f5d75054530717327c3e47de8bc", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4617dc72733c20141806eb53c3f5534fd0ae158f541e37fc9e82dbd64ecdf1af", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //

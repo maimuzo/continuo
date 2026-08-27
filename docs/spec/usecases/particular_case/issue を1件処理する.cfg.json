@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "c7217e37b0a1237772641d09e6a1cb1a3305cd452f1fdbb57f211798d8db02d6"
+    "rucm_block_sha256": "41ca5f572d894eef0aa28303b7b6cfeb41fcde47a252870bbb6261698de0bb47"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -107,7 +107,7 @@
           25
         ]
       },
-      "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。待ち直している起動は新しいセッション UUID の指定つきの起動である。もう一度渡す起動フラグは直前と同じ値である。"
+      "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。もう一度渡す起動フラグは直前と同じ値であり、復帰つきの起動なら復帰つきのまま送り直す。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。"
     },
     "起動の断念": {
       "rfs": {
@@ -233,7 +233,7 @@
           4
         ]
       },
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。着手のときと違って、新しいセッション UUID での立て直しは行わない。worktree は残っている。"
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。"
     },
     "復元の断念": {
       "rfs": {
@@ -287,7 +287,7 @@
           ]
         }
       ],
-      "postcondition": "起動フラグは新しいセッション UUID の指定つきである。この run が前回の会話履歴を読むことは無い。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。印は残っている。worktree は残っている。"
+      "postcondition": "起動フラグは新しいセッション UUID の指定つきである。立て直したあとの起動は前回の会話履歴を読まない。前の Claude Code は止めていないので、起動直後の確認の画面で止まっていた場合は、前回の会話履歴を読み込んだ Claude Code が同じ pane に残っている。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。"
     },
     "権限の確認": {
       "when": "herdr の待ち受けが blocked を返した場合",
@@ -517,7 +517,7 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。"
+      "statement": "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。"
     },
     {
       "id": "BASIC FLOW-25",
@@ -1515,9 +1515,16 @@
     },
     {
       "id": "復帰の失敗-7",
-      "type": "resume",
+      "type": "action",
       "flow": "復帰の失敗",
       "step": 7,
+      "statement": "システムは前の Claude Code を止めずに同じ pane を使い続ける。"
+    },
+    {
+      "id": "復帰の失敗-8",
+      "type": "resume",
+      "flow": "復帰の失敗",
+      "step": 8,
       "statement": "RESUME STEP 24"
     },
     {
@@ -2622,6 +2629,11 @@
     },
     {
       "from": "復帰の失敗-7",
+      "to": "復帰の失敗-8",
+      "kind": "seq"
+    },
+    {
+      "from": "復帰の失敗-8",
       "to": "BASIC FLOW-24",
       "kind": "resume"
     },
@@ -2782,7 +2794,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -2888,7 +2900,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3003,7 +3015,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3040,7 +3052,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "取り戻しの復帰の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。着手のときと違って、新しいセッション UUID での立て直しは行わない。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3117,7 +3129,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3228,7 +3240,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3334,7 +3346,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3443,7 +3455,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3561,7 +3573,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3600,7 +3612,7 @@
       "id": "P009",
       "terminal": "abort",
       "terminal_flow": "取り戻しの復帰の失敗",
-      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。着手のときと違って、新しいセッション UUID での立て直しは行わない。worktree は残っている。",
+      "postcondition": "issue の Status は failure_state の選択肢である。issue にエージェントが書いたコメントがない。着手のときと違って、新しいセッション UUID での立て直しは行わない。herdr の pane は閉じている。印は外れている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -3678,7 +3690,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3792,7 +3804,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3894,7 +3906,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -3987,7 +3999,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4078,7 +4090,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4162,7 +4174,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4245,7 +4257,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4328,7 +4340,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4413,7 +4425,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4497,7 +4509,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4575,7 +4587,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4652,7 +4664,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4730,7 +4742,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4807,7 +4819,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "システムは VALIDATES THAT turn 数が max_dispatch_turns に達していない。",
@@ -4878,7 +4890,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "システムは VALIDATES THAT この run の turn ループが1本も走っていない。",
         "CONDITION: NOT この run の turn ループが1本も走っていない",
@@ -4947,7 +4959,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "CONDITION: NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である",
         "システムは pane に esc のキー入力を送る。",
@@ -4961,7 +4973,7 @@
       "id": "P025",
       "terminal": "cycle",
       "terminal_flow": "起動の待ち直し",
-      "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。待ち直している起動は新しいセッション UUID の指定つきの起動である。もう一度渡す起動フラグは直前と同じ値である。",
+      "postcondition": "Claude Code が入力を受け付けられるようになるまで待ち続けている。turn の本文はまだ送っていない。もう一度渡す起動フラグは直前と同じ値であり、復帰つきの起動なら復帰つきのまま送り直す。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5018,7 +5030,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "CONDITION: NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である",
         "システムは 500 ミリ秒待つ。",
@@ -5092,7 +5104,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "システムは VALIDATES THAT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である。",
         "CONDITION: NOT Claude Code の agent_status が idle または done であり、かつ interactive_ready が真である",
         "システムは 500 ミリ秒待つ。",
@@ -5110,7 +5122,7 @@
       "id": "P027",
       "terminal": "cycle",
       "terminal_flow": "復帰の失敗",
-      "postcondition": "起動フラグは新しいセッション UUID の指定つきである。この run が前回の会話履歴を読むことは無い。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。印は残っている。worktree は残っている。",
+      "postcondition": "起動フラグは新しいセッション UUID の指定つきである。立て直したあとの起動は前回の会話履歴を読まない。前の Claude Code は止めていないので、起動直後の確認の画面で止まっていた場合は、前回の会話履歴を読み込んだ Claude Code が同じ pane に残っている。身元ファイルのセッション UUID は、書き直せていれば新しいセッション UUID であり、書き直せなければ前回のセッション UUID のままである。issue の Status は running_state の選択肢のままである。herdr の pane は開いたままである。印は残っている。worktree は残っている。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -5143,6 +5155,7 @@
         "復帰の失敗-5",
         "復帰の失敗-6",
         "復帰の失敗-7",
+        "復帰の失敗-8",
         "BASIC FLOW-24"
       ],
       "steps": [
@@ -5169,7 +5182,7 @@
         "システムは herdr に workspace の pane の一覧を要求する。",
         "システムは pane の label に owner/repo/issues/N を書く。",
         "システムは VALIDATES THAT pane が Claude Code の起動を受け付ける。",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。",
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。",
         "CONDITION: 復帰つきの起動が、前回のセッションの不在でも起動直後の確認の画面でも herdr.startup_timeout_ms の経過でも、理由を問わず完了しなかった場合",
         "システムは新しいセッション UUID を採番する。",
         "システムは hook の引き当ての索引を新しいセッション UUID へ張り替える。",
@@ -5177,8 +5190,9 @@
         "システムは身元ファイルのセッション UUID を新しいセッション UUID へ書き直し、書き直せなければ警告を記録に残して先へ進む。",
         "システムは復帰できなかったセッション UUID と新しいセッション UUID と失敗の理由を記録に残す。",
         "システムは起動フラグを新しいセッション UUID の指定つきへ差し替える。",
+        "システムは前の Claude Code を止めずに同じ pane を使い続ける。",
         "RESUME STEP 24",
-        "システムは pane で Claude Code をステップ19 で決めた起動フラグで起動する。"
+        "システムは pane で Claude Code をいま選ばれている起動フラグで起動する。"
       ]
     },
     {
@@ -5749,9 +5763,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 187,
-    "nodes_covered": 187,
-    "edges_total": 196,
-    "edges_covered": 196
+    "nodes_total": 188,
+    "nodes_covered": 188,
+    "edges_total": 197,
+    "edges_covered": 197
   }
 }

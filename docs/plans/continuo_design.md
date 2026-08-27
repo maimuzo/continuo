@@ -6685,58 +6685,50 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 **言いたいこと。**`issue を1件処理する` の代替フローは35本、CFG のテストパスは41本である。
 **足すのは実装に分岐が実在するものだけであり、分岐元は実装の行で裏を取る。**
 
-**分岐元が見つけにくい10本。**
+**分岐元が見つけにくい12本**（段は名前で指す。番号は段を増やすたびに動く）。
 
-| フロー | 分岐元 | 実装のどこか |
+| フロー | 分岐元の段 | 実装のどこか |
 | --- | --- | --- |
-| `走行中のissue` | ステップ3 | `internal/orchestrator/dispatch.go` の `dispatchCandidates` |
-| `ラベルの不足` | ステップ6 | `internal/orchestrator/dispatch.go` の `hasRequiredLabels` |
-| `turnループの重なり` | ステップ26 | `internal/orchestrator/turn.go` の `startTurnLoop` |
-| `本文の組み立ての失敗` | ステップ29 | `internal/orchestrator/turn.go` の `buildTurnText` |
-| `turnの終わりの取りこぼし` | ステップ31 | `internal/orchestrator/turn.go` の `confirmTurnEnd` |
-| `リトライの尽き` | `turnの終わりの取りこぼし` 1 | `internal/orchestrator/lifecycle.go` の `abandonRunClaimed` |
-| `騙りのhook` | ステップ33 | `internal/orchestrator/hookinput.go` の `acceptHookCwd` |
-| `ボードから消えたissue` | ステップ38 | `internal/orchestrator/lifecycle.go` の `refreshIssue` |
-| `復元の断念` | `コメントの取り戻し` 2 | `internal/orchestrator/comment.go` の `ensureAgentComment` |
-| `着手の途中の失敗`（任意時点） | ステップ15 | `internal/orchestrator/dispatch.go` の `startRun` |
-
-**セッションの復帰に関わる2本。**
-
-| フロー | 分岐元 | 実装のどこか |
-| --- | --- | --- |
-| `復帰の失敗`（任意時点） | ステップ24 | `internal/orchestrator/dispatch.go` の `startRun` の `if startErr != nil && resumeUUID != ""` |
-| `取り戻しの復帰の失敗` | `コメントの取り戻し` 4 | `internal/orchestrator/comment.go` の `ensureAgentComment` の `failCommentRecovery` |
+| `走行中のissue` | 別の run の印を見る | `dispatch.go` の `dispatchCandidates` |
+| `ラベルの不足` | required_labels を見る | `dispatch.go` の `hasRequiredLabels` |
+| `turnループの重なり` | turn ループの重なりを見る | `turn.go` の `startTurnLoop` |
+| `本文の組み立ての失敗` | 本文の組み立てを見る | `turn.go` の `buildTurnText` |
+| `turnの終わりの取りこぼし` | Stop hook の到着を見る | `turn.go` の `confirmTurnEnd` |
+| `リトライの尽き` | `turnの終わりの取りこぼし` のリトライの回数を見る | `lifecycle.go` の `abandonRunClaimed` |
+| `騙りのhook` | hook の cwd を見る | `hookinput.go` の `acceptHookCwd` |
+| `ボードから消えたissue` | issue がボードに見えるかを見る | `lifecycle.go` の `refreshIssue` |
+| `復元の断念` | `コメントの取り戻し` の身元ファイルを読めるかを見る | `comment.go` の `ensureAgentComment` |
+| `着手の途中の失敗`（任意時点） | worktree を作る | `dispatch.go` の `startRun` |
+| `復帰の失敗`（任意時点） | Claude Code を起動する | `dispatch.go` の `startRun` の `if startErr != nil && resumeUUID != ""` |
+| `取り戻しの復帰の失敗` | `コメントの取り戻し` の復帰つきの起動の完了を見る | `comment.go` の `failCommentRecovery` |
 
 **`復帰の失敗` の WHEN は理由を絞らない。**`startRun` はエラーの種類を見ずに立て直すので、
 **確認の画面で止まっても、`herdr.startup_timeout_ms` が経っても、同じ枝へ入る。**
-そのぶん `起動直後の確認画面`・`起動の待ち直し`・`起動の断念` は、
-**新しいセッション UUID の指定つきの起動でだけ通る。**3本の事後条件にそう書いてある。
+そのぶん、**ABORT で抜ける `起動直後の確認画面` と `起動の断念` は、新しいセッション UUID の
+指定つきの起動でだけ通る。**2本の事後条件にそう書いてある。
+**`起動の待ち直し` は別である。**`confirmStartupWithRestart` は直前に使った引数をそのまま
+渡し直すので、**再着手ではその引数に `--resume` が入ったまま待ち直す。**だから事後条件に
+起動フラグの種類を書かない。
 
-**`復帰の失敗` の RESUME 先は、起動の確認ではなく起動のステップである。**
-確認（ステップ25）へ戻すと、**戻ったあとの状態が成功した起動と1バイトも変わらない**
-（新しいセッション・会話履歴なし）のに、そこから先の枝が全部2本ずつになる。
-**実測で経路は38本から86本に増え、うち24本は区別できなかった。**
-起動のステップ（ステップ24）へ戻せば、経路の列挙はそこで1周として閉じ、41本に収まる。
+**立て直しは前の Claude Code を止めない。**continuo に agent を止める呼び出しは1つも無く
+（`internal/herdr/agent.go` の method は start / prompt / read / get / list / wait / rename /
+send_keys の8つ）、同じ pane・同じ agent 名で `agent.start` をもう一度通す。**確認の画面で
+止まっていた場合は、`--resume` で会話履歴を読み込んだ Claude Code がその pane に残る。**
 
-**起動フラグの選び分けは IF に割らない。**ステップ19 で「どちらの起動フラグを使うか」を
-1度だけ決め、ステップ24 はその結果で起動する。**IF に割ると、新規の着手と再着手で
-後続の手順が1つも変わらないのに、以降の枝が全部2本ずつになる。**
-どちらのフラグを渡したかは、テストが `agent.start` の引数で見る。
+**`復帰の失敗` の RESUME 先は、起動の確認ではなく起動の段である。**確認の段へ戻すと、
+**戻ったあとの状態が成功した起動と1バイトも変わらない**のに枝が全部2本ずつになる
+（実測で38本から86本へ増え、うち24本は区別できなかった）。起動の段へ戻せば41本に収まる。
+**起動フラグの選び分けも IF に割らない。**「起動フラグを決める」の段で1度だけ決め、
+どちらを渡したかはテストが `agent.start` の引数で見る。
 
-**リトライを積む出口は4つあるが、尽きたときの後始末は1本しかない。**
-`turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`ボードから消えたissue` は
-すべて `abandonRunClaimed` へ入る。**`リトライの尽き` はそこへ1本だけ書く。**
-4箇所に同じ枝を並べると、後始末を直すたびに4箇所を直すことになる。
+**リトライを積む出口は4つあるが、尽きたときの後始末は `abandonRunClaimed` の1本しかない。**
+`turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`ボードから消えたissue` が
+そこへ入る。**`リトライの尽き` は1本だけ書く。**
 
-**引き金が重なる枝は、WHEN で除く。**`着手の途中の失敗` の WHEN からは
-「壊れた ref」「pane の受け付け待ち」「復帰つきの起動の失敗」を外してある。除かないと
-`壊れたref`・`paneの断念`・`復帰の失敗` が同じ出来事を主張し、どちらへ進むかが記述から決まらない。
-
-**`コメントの取り戻し` のステップ2 と4 は条件ステップにしてある。**
-`復元の断念` と `取り戻しの復帰の失敗` を任意時点代替フローで書くと `rucm_validator.py` が
-W005 を出し、**このリポジトリで唯一の警告が残る。**真の側の並びは1つも変えていない。
-
-**テストの印は41本のうち31本に付いている。**`[W1]` に残るのは10本である。
+**引き金が重なる枝は、WHEN で除く。**`着手の途中の失敗` の WHEN からは「壊れた ref」
+「pane の受け付け待ち」「復帰つきの起動の失敗」を外してある。**`コメントの取り戻し` の2つの段は
+条件ステップにしてある**（任意時点代替フローにすると `rucm_validator.py` が W005 を出す）。
+**テストの印は41本のうち31本に付いている。**
 
 ### 6-19. `着手を取り消す` の RUCM は、代替フローを18本のままにする
 
