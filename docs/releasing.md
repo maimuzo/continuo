@@ -1,31 +1,19 @@
 # リリースの作り方
 
 **言いたいこと。**タグを打つのは人間である。**タグを push した瞬間に CI が動き、release ができる。**
-打つ前に確かめることが4つある。
+**この文書は、そのとき CI が何を作り、受け取った人がどう検証できるかを書く。**
 
 ---
 
 ## 1. 打つ前に確かめる
 
-**この4つを通してから打つ。**どれか1つでも落ちていたら、タグを打ってはならない。
+**通す検査と、その順番は [.claude/rules/release.md](../.claude/rules/release.md) にある。**
+**6つあり、1つでも落ちていたらタグを打ってはならない。**
+**手順を2箇所に置かないため、ここには置いていない。**
 
-| 何を | どう確かめるか |
-| --- | --- |
-| **CI が緑である** | `gh run list --branch main --limit 1` |
-| **CI と同じ状況で手元も通る** | `sh scripts/test-like-ci.sh` |
-| **仕様とテストの連鎖が揃っている** | `sh scripts/check-rucm.sh --strict` |
-| **実機で issue を1件通した** | [docs/trying_it_out.md](trying_it_out.md) の手順 |
-
-**4つ目がいちばん重い。**mock だけで通しても、実機で初めて出る欠陥がある。
+**いちばん重いのは「実機で issue を1件通す」である**（[docs/trying_it_out.md](trying_it_out.md)）。
+mock だけで通しても、実機で初めて出る欠陥がある。
 実際、`interactive_ready` を見ていなかった欠陥は、テストが全部通っている状態で残っていた。
-
-**タグを打たずに CI を試せる。**
-
-```bash
-gh workflow run release.yml --ref main
-```
-
-**test と build までが走り、release は作られない**（publish はタグのときだけ動く）。
 
 ## 2. タグを打つ
 
