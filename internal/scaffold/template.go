@@ -56,7 +56,9 @@ tracker:
                                             # 空なら戻さず、上の猶予を置いてから worker を止める。人間が動かしたものは戻さない。
                                             # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる。
                                             # 戻す先は上の active_states に入っている Status にすること。
-                                            # キーには、この設定のどこにも名前が出てこない Status を書くこと
+                                            # キーには、tracker の他のキー（上の active_states / terminal_states /
+                                            # running_state / dispatch_state / failure_state / status_signal_map の
+                                            # 遷移先）に名前が出てこない Status を書くこと
 
 polling:
   interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと
