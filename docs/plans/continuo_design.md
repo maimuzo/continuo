@@ -6115,6 +6115,67 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 
 ---
 
+### 3-62. 確認の画面は、出てから閉じるのではなく、出る前に断る
+
+**言いたいこと。**esc を送って画面を閉じる作りは、走っている subagent を巻き込む。
+**`PermissionRequest` hook を張れば、画面が出る前にその要求を断れる。**
+**断られた道具の名前も手に入るので、人間への案内が「何を許せばよいか」を名指しできる。**
+
+**この hook の性質**（すべて公式文書で確認。2026-08-28）。
+
+| 何 | 内容 |
+| --- | --- |
+| いつ走るか | **確認を出そうとする瞬間と、`dontAsk` で自動拒否しようとする瞬間の両方** |
+| 確認を出せない場面 | **走る。**どの hook も判定を返さなければ、その道具の呼び出しは断られる |
+| 受け取れるもの | `tool_name` / `tool_input` / `permission_suggestions`（画面に出る「always allow」の選択肢） |
+| 断り方 | **`decision` オブジェクトだけ。**終了コード 2 は効かない |
+| 非同期 | **不可。**`async` を付けると判定を返せない |
+
+**張る設定**（continuo が issue ごとに書く settings.json。`hookEventNames` に1件足す）。
+
+```json
+{ "hooks": { "PermissionRequest": [ { "hooks": [ { "type": "command",
+  "command": "'/home/octocat/.local/bin/continuo' hook --socket … --pending-dir …" } ] } ] } }
+```
+
+**断るときに標準出力へ書く1行**（`continuo hook` が `Result.EventName` で分岐して出す）。
+
+```json
+{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny",
+  "message":"continuo は無人で走らせています。この操作は WORKFLOW.md の claude.permissions.allow にありません。"}}}
+```
+
+**効かない場面が3つある。**「これで全部塞がる」と書いてはならない。
+
+| 何 | なぜ |
+| --- | --- |
+| sandbox のコマンドのネットワーク要求 | **この hook が走らない。**`permission_prompt` の通知で拾うしかない |
+| MCP サーバーの elicitation の画面 | 別の `Elicitation` hook で閉じる |
+| `AskUserQuestion` | 許可を要求しない道具なので、この hook を通らない |
+
+**subagent が親のモードを継がない問題も、これで回避できる。**
+subagent の定義に `permissionMode` があるとそちらが勝ち、`dontAsk` は上書きできる側の一覧に入っていない。
+**継がせる手立ては公式文書に無い。**だが `default` はこの hook が走るモードなので、**そちらでも断れる。**
+
+### 3-62b. 出る前に断る形は、他の「無人で止まる」にも使える
+
+**言いたいこと。**3-62 で得た形は `PermissionRequest` に限らない。
+**「無人で走らせる仕組みが、人間の入力を待って止まる」場面すべてに同じ筋が通る。**
+
+**一般化すると3段になる。**
+
+| 段 | 何をするか | continuo での例 |
+| --- | --- | --- |
+| **1. 出させない** | 止まる原因になる要求を、発生の瞬間に機械で断る | `PermissionRequest` hook で deny を返す |
+| **2. 出たら閉じる** | それでも止まったら画面を閉じ、**閉じる前に走っているものを守る** | esc を送る前に subagent の終わりを待つ（3-11） |
+| **3. 記録を残す** | 何が起きたかを、あとから人間が辿れる形で残す | 断った道具の名前と `permission_suggestions` を issue のコメントへ |
+
+**段1を持たずに段2から作ると、必ず「待っても直らない」に突き当たる。**
+**画面は自分では消えないので、待ちは「別のものが書き終えるのを守る」以上の意味を持てない。**
+
+**段1が要るかどうかの見分け方。**その止まり方に **hook が用意されているか**を先に調べる。
+用意されていれば段1が作れる。無ければ段2と段3で受けるしかない。
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す
