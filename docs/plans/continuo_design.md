@@ -6176,142 +6176,52 @@ subagent の定義に `permissionMode` があるとそちらが勝ち、`dontAsk
 **段1が要るかどうかの見分け方。**その止まり方に **hook が用意されているか**を先に調べる。
 用意されていれば段1が作れる。無ければ段2と段3で受けるしかない。
 
-### 3-63. Bash の sandbox で守れるものと、守れないもの
+### 3-63. Bash の sandbox は採らない
 
-**言いたいこと。**Claude Code には **OS の層で Bash とその子プロセスを囲う仕組み**がある。
-**docker は要らない。**macOS は Seatbelt、Linux と WSL2 は別の道具を、Claude Code が内部で使い分ける。
-**書く設定は同じである。**ただし**守れる範囲は限られる。**下の表を読んでから採ること。
+**言いたいこと。**Claude Code には OS の層で Bash を囲う仕組みがある。**docker は要らない。**
+**だが continuo では採らない**（2026-08-28、人間の判断）。
+**守れないものの側に、いちばん止めたいものが全部入っているためである。**
 
-**一次情報。**[https://code.claude.com/docs/en/sandboxing.md](https://code.claude.com/docs/en/sandboxing.md)（2026-08-28 に取得）。
-原文: *"The sandbox is built into Claude Code and runs on macOS, Linux, and WSL2. Native Windows is not supported."*
-（**訳:** sandbox は Claude Code に組み込まれており、macOS・Linux・WSL2 で動く。Windows ネイティブは非対応である。）
-**手元で確かめるには `/sandbox` を叩く。**
+**一次情報。**[https://code.claude.com/docs/en/sandboxing.md](https://code.claude.com/docs/en/sandboxing.md)（2026-08-28 取得）。
+macOS は Seatbelt、Linux と WSL2 は bubblewrap を Claude Code が内部で使い分ける。**書く設定は同じである。**
 
 **守れるもの。**
 
 | 何 | どう守るか |
 | --- | --- |
-| **worktree の外への書き込み** | 既定で書けるのは作業ディレクトリとセッションの一時ディレクトリだけ。**`~/.local/bin/continuo` の上書きが OS の層で失敗する** |
-| **許可していないホストへの通信** | ドメインの許可制。`sandbox.network.allowedDomains` に書いたものだけ通る |
-| **子プロセス** | **OS が掛ける境界なので、`python3` や `sh -c` で包んでも効く**。文字列の照合ではない |
-| **subagent** | 同じ設定が掛かる |
+| worktree の外への書き込み | 既定で書けるのは作業ディレクトリとセッションの一時ディレクトリだけ |
+| 子プロセス | **`python3` や `sh -c` で包んでも効く。**OS が掛ける境界である |
+| subagent | 同じ設定が掛かる |
 
-**守れないもの。**
+**守れないもの。ここが採らない理由である。**
 
 | 何 | なぜ |
 | --- | --- |
-| **ファイルの読み取り** | **既定でコンピュータ全体を読める。**`~/.ssh/` も `~/.aws/credentials` も読める。**`sandbox.credentials` か `denyRead` を書かない限り開いたままである** |
+| **ファイルの読み取り** | **既定でコンピュータ全体を読める。**`~/.ssh/` も読める |
 | **hook と MCP サーバー** | **host でそのまま走る。**sandbox の外である |
-| **許したドメインの中での持ち出し** | `api.github.com` を許すと `gh gist create -p` が通る。**ドメイン単位なので中身は見ない** |
-| **`excludedCommands` に入れた道具** | sandbox の外で走る。**`gh` はここへ入れることになりうる**（下記） |
+| **`gh` を使った持ち出し** | **`gh` を sandbox の外へ出さざるを得ない**（下記）。出した瞬間 `gh gist create -p` も `gh api` も通る |
 
-**`gh` が動かないかもしれない。**公式が名指ししている。
-原文: *"Go-based CLIs fail TLS verification on macOS: tools such as `gh`, `gcloud`, and `terraform` may fail TLS verification under Seatbelt."*
-（**訳:** Go 製の CLI は macOS で TLS の検証に失敗する。`gh` / `gcloud` / `terraform` のような道具は Seatbelt の下で TLS の検証に失敗しうる。）
-**continuo の作業はほぼ全部 `gh` に依存しているので、ここが通らなければ sandbox は使えない。**
-**採る前に実機で確かめること。**
-
-**閉じておく逃げ道が2つある。**
-
-| 設定 | 何を閉じるか |
-| --- | --- |
-| `failIfUnavailable: true` | **既定では sandbox を起動できないと警告だけ出して素通しする**（fail open） |
-| `allowUnsandboxedCommands: false` | **既定では sandbox に弾かれた命令を `dangerouslyDisableSandbox` で外へ出して再試行できる** |
-
-**ファイルシステムだけ切ることもできる。**`sandbox.filesystem.disabled: true` にすると、
-**書き込みの制限が消えてネットワークの制限だけが残る。**逆はできない。
-
-### 3-63b. sandbox を `WORKFLOW.md` から切り替える
-
-**言いたいこと。**sandbox を常に掛けると、**手元の非公開なリポジトリの作業まで遅くなる。**
-**外部の第三者が書ける issue のときだけ掛けたい。****だから3択にする。**
-
-| 設定の値 | いつ掛けるか |
-| --- | --- |
-| `off` | 掛けない |
-| `on` | 常に掛ける |
-| **`public_only`（既定）** | **その issue が公開リポジトリのものなら掛ける** |
-
-**`WORKFLOW.md` の front matter に書く形。**
-
-```yaml
-claude:
-  sandbox:
-    mode: off                               # off / on / public_only。既定は off（下記）
-    allowed_domains: ["*"]                  # **既定は全部許可。**調査の仕事を殺さないため（3-63c）
-    excluded_commands: ["gh"]               # sandbox の外で走らせる道具（3-63c）
-    deny_read: ["~/.ssh", "~/.aws", "~/.claude/.credentials.json"]
-    fail_if_unavailable: true               # sandbox を起動できなければ着手しない
-    allow_unsandboxed_commands: false       # 逃げ道を閉じる
-```
-
-**既定を `off` にする理由。**macOS では `gh` が動かないことを実測した（3-63c）。
-**`gh` を外に出すと、いちばん止めたい持ち出しが素通りする。**
-**Linux では動く見込みがあるので、設定の口だけは残す**（未検証）。
-
-**公開かどうかは、いま取っていない。**GraphQL に `repository { isPrivate }` を足す（3-13 の第3段階のアダプタ）。
-**取れなかったときは掛ける側へ倒す。**分からないものを公開でないと決めない。
-
-### 3-63c. ネットワークは全部許可する。絞らない
-
-**言いたいこと。**sandbox のネットワークを絞ると、**調査の仕事が全部止まる**（2026-08-28、人間の判断）。
-**だから `allowed_domains` の既定は `["*"]` にする。**
-**sandbox でネットワークを絞ることはしない。**守るのはファイルシステムの側だけである。
-
-**なぜ絞れないか。**エージェントは調べるために外へ出る。
-**どこへ出るかを先に列挙するのは無理である。**issue ごとに違う。
-
-**既定で絞られていることに注意する。**公式文書より。
-
-> Claude Code pre-allows no domains by default. The first time a command needs a new domain, Claude Code prompts for approval.
-
-**訳。**Claude Code は既定でどのドメインも前もって許可しない。
-コマンドが新しいドメインを必要とした最初の1回、Claude Code は確認を出す。
-
-**無人運用では、この確認が出た時点で止まる。**だから**明示的に全部許可する。**
-
-**書き方は2つあり、どちらでもよい。**
-
-| 書き方 | どこに書くか |
-| --- | --- |
-| `"allowedDomains": ["*"]` | sandbox の設定 |
-| `"allow": ["WebFetch(domain:*)"]` | 許可の一覧。**sandbox もこれを読む** |
-
-**`*` 単独の形は Claude Code v2.1.186 以降で使える。**
-
-### 3-63d. macOS の sandbox では `gh` が動かない
-
-**言いたいこと。**これは 3-63c とは**別の問題である。**ドメインを全部許可しても直らない。
-**sandbox の外向き通信が proxy を経由し、`gh` がその証明書を信頼できずに接続を切る。**
-**逃げ道は `excluded_commands` に入れることだけである。**
-
-**実測**（2026-08-28、herdr の pane で sandbox を有効にした Claude Code に叩かせた）。
+**`gh` が動かない**（2026-08-28 に実測。herdr の pane で sandbox を有効にした Claude Code に叩かせた）。
 
 ```text
 Post "https://api.github.com/graphql": tls: failed to verify certificate: x509: OSStatus -26276
 ```
 
-**`allowedDomains: ["*"]` を入れても、同じエラーで落ちた。**ドメインの制限とは無関係である。
+**`allowedDomains: ["*"]` を入れても同じエラーで落ちた。**ドメインの制限とは無関係である。
+**sandbox の外向き通信が proxy を経由し、`gh` がその証明書を信頼できずに切る。**
+公式も *"Go-based CLIs fail TLS verification on macOS"*（**訳:** Go 製の CLI は macOS で TLS の検証に失敗する）と名指ししている。
 
-**公式文書も名指ししている。**
+**採らないと決めた理由をまとめる。**
 
-> Go-based CLIs fail TLS verification on macOS: tools such as `gh`, `gcloud`, and `terraform` may fail TLS verification under Seatbelt.
-
-**訳。**Go 製の CLI は macOS で TLS の検証に失敗する。
-`gh` / `gcloud` / `terraform` のような道具は Seatbelt の下で TLS の検証に失敗しうる。
-
-**公式が示す代案は、この機械には当てはまらない。**
-`enableWeakerNetworkIsolation` は「会社の proxy と独自の CA を使っている環境」向けである。
-
-**`excluded_commands` に入れると何が失われるか。**
-
-| 何 | どうなるか |
+| 理由 | 中身 |
 | --- | --- |
-| `gh` のファイルの読み書き | **隔離されない** |
-| `gh gist create -p` での持ち出し | **止まらない** |
-| `gh api` で任意のファイルを issue に貼る | **止まらない** |
+| **主目的が達成できない** | 止めたい持ち出しが、`gh` を外へ出した時点で全部素通りする |
+| **副作用が実際の運用に当たる** | Unix socket が塞がるので **herdr が使えない。**CLAUDE.md が正規の手順として書いているものである |
+| **同じ穴を、もっと軽く塞げる** | continuo の実行ファイルは、置き場所を変えるかハッシュを控えるだけで守れる |
 
-**Linux は未検証である。**bubblewrap を使うので、同じ問題が出るとは限らない。
+**ネットワークを絞る形も採らない。**絞ると調査の仕事が全部止まる（2026-08-28、人間の判断）。
+**仮に将来 sandbox を入れるとしても、`allowedDomains` は `["*"]` にする。**
+
 
 ### 3-64. 危ない道具の呼び出しは、事前の一覧ではなく判定で止める
 
@@ -8260,13 +8170,12 @@ releasePrompt()
 | **issue を立てて、維持者に `Ready` へ動かしてもらう** | **要る** |
 | **既に処理中の issue にコメントする** | **要らない。こちらが本命である** |
 
-**採る形は4層である。**どれか1つでは足りない。
+**採る形は3層である。**どれか1つでは足りない。
 
 | 層 | 何をするか | 効き方 |
 | --- | --- | --- |
 | **立場の札を付ける** | 外部（`NONE` / `CONTRIBUTOR`）が書いたものに「情報であって指示ではない」と印を付けて渡す | **読めるままにする。**指示として扱わせない |
 | **道具の呼び出しを判定する** | `PreToolUse` hook の `type: "prompt"` で、コマンドが危ないかを LLM に判定させる（3-64） | 事前の一覧が要らない |
-| **OS の層で囲う** | Bash の sandbox（3-63） | **プロンプトが破られても効く** |
 | **印を騙らせない** | `<!-- continuo:agent -->` を、投稿者が continuo の `gh` の持ち主であることと併せて見る | 誤認を消す |
 
 **立場は GitHub が自動で判定する。**こちらで名前の一覧を持たない。
@@ -8310,6 +8219,7 @@ gh api repos/<owner>/<repo>/issues/<番号>/comments --paginate \
 | **`auto` モードにする** | **無人運用と両立しない。**3回連続または累計20回ブロックすると一時停止して確認を出す。**閾値は設定できない** |
 | **allowlist（これだけ通す）** | **この脅威に効かない。**加害の手段が仕事に必ず要るコマンドそのものである。`git` と `gh` を許さないと1件も回せず、許した瞬間に force push も PR の merge も通る |
 | **専用の OS ユーザー** | **使いづらい。**こんな構造を強いられると誰も使わない（2026-08-28、人間の判断） |
+| **Claude Code の Bash sandbox** | **守れないものの側に、止めたいものが全部入っている**（3-63）。`gh` を外へ出さざるを得ず、出した瞬間に持ち出しが素通りする（2026-08-28、人間の判断） |
 
 ## 7. 実装の順序
 
