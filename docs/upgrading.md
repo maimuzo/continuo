@@ -52,32 +52,56 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 | | 書かない場合 | 書いた場合 |
 | --- | --- | --- |
-| **自動化に Status を動かされたら** | **猶予（`tracker.unknown_state_grace_ms`、既定10分）を置いて worker を止める** | **本来の Status へ戻して、止めずに続ける** |
+| **自動化に Status を動かされたら** | **猶予（`tracker.unknown_state_grace_ms`、既定10分）を置いて worker を止める** | **本来の Status へ戻して、止めずに続ける**（戻すのは3回まで） |
 | **人間が Status を動かしたら** | 猶予を置いて止める | **猶予を置いて止める**（変わりません） |
 | **起動** | 通ります | 通ります |
 
 **壊れません。**書かないと、いままでどおり止まるだけです。**新しい機能が使えないだけです。**
 
+**書き戻しは無制限ではありません。****同じ issue の同じ Status を戻せるのは3回まで**です。
+continuo が戻すたびに自動化が書き直す押し合いになったら、**3回でその issue の書き戻しをやめ、
+いままでどおり猶予を置いて worker を止めます**（そこから先は人間が決めます）。
+そのとき issue のコメントに、押し合いが起きたことと、`Workflows` を切る手が案内されます。
+
 ### 足す場所と中身
 
-**`tracker:` の下に足します。**そのまま貼れる形は次のとおりです。
+**`tracker:` の下に足します。**`continuo init` が置いた雛形の Status 名のままなら、
+次の2行をそのまま貼れば起動します。
 
 ```yaml
 tracker:
-  active_states: ["AI Ready", "AI In Progress"]
   automated_state_rewrite:
-    "In Progress": "AI In Progress"
+    "Todo": "In Progress"   # 自動化が書く Status: 戻す先の Status
 ```
 
-**Status の名前は、あなたのボードのものに置き換えてください。**上の例は
-「自動化が `In Progress` を書いたら、`AI In Progress` へ戻す」という意味です。
+**Status の名前は、あなたのボードと `WORKFLOW.md` に合わせて置き換えてください。**上の例は
+「自動化が `Todo` を書いたら、`In Progress` へ戻す」という意味です。
+**`Todo` は GitHub が既定で作る選択肢です。**ボードから消してあるなら
+`! 対応表のキー` が出ますが、**起動は止まりません**（下の「足したあとの確かめ方」を見てください）。
+
+**左に、`tracker` の他のキーで使っている Status 名を書くと起動しません。**
+雛形のままなら `Ready` / `In Progress` / `Done` / `Blocked` / `In Review` の5つが該当します。
+たとえば `"In Progress": "AI In Progress"` を足すと、`continuo doctor` がこう言います。
+
+```text
+✗ 設定ファイル    … 設定キー tracker.automated_state_rewrite のキー の値 In Progress が不正です:
+  tracker の他のキー（active_states / terminal_states / running_state / dispatch_state /
+  failure_state / status_signal_map の遷移先）に無い Status 名にすること
+```
+
+**自動化が書く Status が `tracker` の他のキーに既に書いてあるなら、対応表は要りません。**
+continuo が知っている Status なので、そもそも止まらないからです。
 
 ### 左と右の決め方
 
 | どちら | 何を書くか | 守らないとどうなるか |
 | --- | --- | --- |
-| **左（キー）** | **設定の他のどこにも名前が出てこない Status。**自動化が書く Status 名です | **continuo が起動しません** |
+| **左（キー）** | **`tracker` の他のキーに名前が出てこない Status。**自動化が書く Status 名です | **continuo が起動しません** |
 | **右（値）** | **`tracker.active_states` に入っている Status** | **continuo が起動しません** |
+
+**「`tracker` の他のキー」は6つです。**`active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `status_signal_map` の遷移先。
+**`tracker` の外（`cleanup` など）は見ません。**
 
 **どちらも起動時に弾かれます。**貼ってから気づけるので、当てずっぽうで書いても手元は壊れません。
 
@@ -100,16 +124,26 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 
 ### 足したあとの確かめ方
 
-**`continuo doctor` に `対応表のキー` の行があります。**
-`✓` なら、キーがボードの Status の選択肢にすべて実在しています。
+**`continuo doctor` の `対応表のキー` の行を読みます。****記号だけで判断しないでください。**
+**1行も足していなくても `✓` が出ます**（照合するものが無いためです）。
+**足せたかどうかは、記号のうしろの文で見分けます。**
 
 ```bash
 cd ~/continuo-work && continuo doctor; echo "exit=$?"
 ```
 
-**`! 対応表のキー` が出たら、綴りがボードと違うか、その Status をボードで使わなくなっています。**
-直し方は [FAQ.md](FAQ.md) の「doctor が通らないとき」にあります。
+| 記号のうしろに出る文 | どう読むか |
+| --- | --- |
+| `tracker.automated_state_rewrite は空です（書き戻しを行わない設定です）` | **足せていません。**別のファイルを編集したか、`tracker:` の下に置けていません |
+| `tracker.automated_state_rewrite のキーはすべてボードの Status の選択肢にあります（1件）` | **足せています。**括弧の中の件数が、書いた行数と合っているかも見てください |
+| `tracker.automated_state_rewrite のキーに、ボードの Status の選択肢に無いものがあります（1件）` | 足せてはいますが、**綴りがボードと違うか、その Status をボードで使わなくなっています** |
+
+**上の2つは `✓`、いちばん下は `!` です。**
 **`!` のままでも continuo は起動します**（終了コードも 0 です）。
+直し方は [FAQ.md](FAQ.md) の「doctor が通らないとき」にあります。
+
+**`✗ 設定ファイル` が出たときは、対応表そのものが弾かれています。**
+左右の決め方をもう一度読んでください。**この場合 continuo は起動しません。**
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 

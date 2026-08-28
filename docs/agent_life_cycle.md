@@ -254,25 +254,16 @@ sequenceDiagram
 
 ### 戻し先の決め方
 
-**戻し先はボードごとに違うので、設定で持つ。**
-
-```yaml
-tracker:
-  active_states: ["AI Ready", "AI In Progress"]
-  automated_state_rewrite:
-    "In Progress": "AI In Progress"
-```
-
+**戻し先はボードごとに違うので、`tracker.automated_state_rewrite` に設定で持つ。**
 **既定は空である。**書かなければ、いままでどおり猶予を置いて止まる。
 
-**戻し先は `active_states` に入っている Status でなければならない**（起動時に弾かれる）。
+**書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正である。**
+そのまま貼れる yaml・左と右の決め方・書き戻しの上限・確かめ方は、そこに1箇所だけ置く。
+**この文書には写しを置かない**（2箇所にあると、片方だけ直したときに食い違う）。
+
 **`"Done": "AI Done"` のような終端への書き戻しは書けない。**理由と、
 「PR がマージされて `Done` になる」件をどこで扱うかは
 [docs/plans/continuo_design.md](plans/continuo_design.md) の 3-55 にある。
-
-**キーには、設定のどこにも名前が出てこない Status を書く。**`active_states` などに
-書いてある Status をキーにしても、**その行は1度も効かない**（書き戻しを引くのは
-「continuo が知らない Status」になったときだけである）。これも起動時に弾かれる。
 
 ### 判定と行き先
 

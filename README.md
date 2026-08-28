@@ -80,7 +80,11 @@ How many issues run at once is a setting (two by default).
 
 `continuo doctor` runs fourteen checks: config, cleanup states, Claude Code, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, board, Status names, the rewrite table's keys, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
 
-**A `✗` means the exit code is 1; a `!` on its own leaves it at 0** and continuo still starts.
+**A `✗` means the exit code is 1; a `!` on its own leaves it at 0.**
+Exit code 0 is not the same as "continuo will start", though. **Failing to read the board**
+(rate limiting, or the check running out of time) **also shows up as `!`**, and continuo performs
+the same read every time it starts — so while that `!` is there, it will not start.
+Wait a while and run `continuo doctor` again.
 
 ## Install
 

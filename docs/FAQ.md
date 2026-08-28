@@ -298,14 +298,16 @@ cleanup:
 
 | 形 | どうするか |
 | --- | --- |
-| **綴りを打ち間違えた**（`In Progres`） | キーの綴りを、ボードの選択肢名に合わせる |
+| **綴りを打ち間違えた**（`Todo` を `To Do` と書いた） | キーの綴りを、ボードの選択肢名に合わせる |
 | **その Status をボードで使わなくなった** | 対応表からその行を消す |
 
 ```yaml
 tracker:
   automated_state_rewrite:
-    "In Progress": "In Progress (AI)"   # ボードの選択肢名と1文字ずつ合っているか
+    "Todo": "In Progress"   # 左がボードの選択肢名と1文字ずつ合っているか
 ```
+
+**大文字小文字と前後の空白は無視して照合します。**`todo` と書いても `!` にはなりません。
 
 **起動は止まりません。**`!` なので終了コードも 0 のままです。
 **ボードの自動化をやめて選択肢を消した人が、起動できなくなってはならないからです**
@@ -489,27 +491,19 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 | **書き戻させる** | `WORKFLOW.md` に対応表を書く。自動化が書いた Status を、本来の Status へ戻させる |
 | **自動化を止める** | ボードの `Workflows` から、その自動化を無効にする |
 
-```yaml
-tracker:
-  active_states: ["AI Ready", "AI In Progress"]
-  automated_state_rewrite:
-    "In Progress": "AI In Progress"   # 自動化が書く Status: 戻す先の Status
-```
-
-**キーには、設定のどこにも名前が出てこない Status を書きます。**
-書き戻しを引くのは「continuo が知らない Status になったとき」だけなので、
-`active_states` などに書いてある Status をキーにすると**その行は1度も効かず、continuo は起動しません。**
-**戻す先は `active_states` に入っている Status にします**（終わったとみなす Status へ戻すと、その瞬間に片付いてしまいます）。
-
-**書いたら continuo を再起動してください。**動いている最中は設定を読み直しません。
-**キーの綴りは `continuo doctor` の `対応表のキー` が照合します。**
+**対応表の書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正です。**
+そのまま貼れる yaml・左と右の決め方・書き戻しの上限・確かめ方が、そこに1箇所だけあります。
+**この文書には写しを置きません**（2箇所にあると、片方だけ直したときに食い違います）。
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
 **「この2行を足してください」とそのまま貼れる形で書きます。**
 
-**足し方の詳しい手順は [upgrading.md](upgrading.md) に、
-仕組みは [agent_life_cycle.md](agent_life_cycle.md) の「自動化に Status を横取りされたとき」にあります。**
+**書いたら continuo を再起動してください。**動いている最中は設定を読み直しません。
+**キーの綴りは `continuo doctor` の `対応表のキー` が照合します。**
+
+**仕組み**（誰が Status を動かしたかの見分け方と、戻す先を決める道筋）**は
+[agent_life_cycle.md](agent_life_cycle.md) の「自動化に Status を横取りされたとき」にあります。**
 
 ### issue が `In Review` にならない
 
@@ -576,8 +570,21 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 **herdr が答えないときも、その場では止まりません。**
 「herdr へ pane の一覧を問い合わせられませんでした（…）。上限までは待ち直します。」を1行だけ出し、
 **上限まで待ってから**「pane ごと消してよいなら `--force` を付けてください」と言って止まります。
-**`--force` を付けて叩き直すと、そこでもう一度上限まで待ちます。**
-**herdr が落ちたままだと、合わせて上限の2回ぶん待つことになります。**
+
+**叩き直したときにまた待つかどうかは、そのときの Status で決まります。**
+**待つのは、手を離させる書き込みを実際に行ったときだけです。**
+
+| 叩き直したときの Status | 2回目の待ち時間 |
+| --- | --- |
+| **`tracker.active_states` の外**（1回目が動かした `Blocked` のまま） | **待ちません**（手を離させる段を通らないので0秒） |
+| **`tracker.active_states` の中**（そのあいだに誰かがボードで戻した） | **もう一度上限まで待ちます**（合わせて上限の2回ぶん） |
+
+**ふつうは上の行になります。**1回目が Status を `tracker.failure_state`（既定は `Blocked`）へ
+動かしているので、2回目はこう言ってすぐ先へ進みます。
+
+```text
+Status は "Blocked" で、tracker.active_states に入っていないので動かしません（continuo はもうこの issue を持っていません）。
+```
 
 **直し方。**herdr が動くなら、直してから叩くのがいちばん速いです。
 
