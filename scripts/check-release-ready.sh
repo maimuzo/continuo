@@ -6,14 +6,16 @@
 # 見るもの:
 #   レビュー結果 … PR に code-review の結果が貼ってあるか
 #                  （CLAUDE.md「PR を出すときの絶対条件」。貼ってあることが実施の唯一の証拠）
-#   対の issue   … PR と対になる issue が閉じていて、閉じたあとに説明のコメントがあるか
+#   対の issue   … PR が閉じた issue に、閉じたあとの説明のコメントがあるか
 #                  （自動で閉じた issue にはリンクしか残らず、報告した人に伝わらない）
 #
 # 使い方:
-#   sh scripts/check-release-ready.sh          … 直近のタグから origin/main まで
-#   sh scripts/check-release-ready.sh v0.1.7   … 起点の版を指定する
+#   sh scripts/check-release-ready.sh                  … 直近のタグ → origin/main
+#   sh scripts/check-release-ready.sh v0.1.7           … 起点の版を指定する
+#   sh scripts/check-release-ready.sh v0.1.7 <commit>  … レビューの規則が入った commit を指定する
+#   sh scripts/check-release-ready.sh v0.1.7 ""        … 区間の PR を全部見る（絞らない）
 #
-# 1件でも欠けていれば 1 で終わる。
+# 直すものが1件でも残れば 1 で終わる。
 #
 # **gh の認証が要る。**ネットワークにも出るので CI では回さない。
 
@@ -28,22 +30,40 @@ prev="${1:-}"
 if [ -z "${prev}" ]; then
 	prev="$(git describe --tags --abbrev=0 origin/main)"
 fi
+
+# **レビューの規則が main に入った commit より前の PR は見ない。**
+# その規則は c9f4a50（PR #63）で入った。**それ以前の PR は、規則が無い状態でマージされている。**
+# 見に行くと、いま直しようのないものが毎回並び、検査そのものが読まれなくなる。
+#
+# **既定を「規則が入った commit」にしたのは、起点を人が覚えなくてよいからである。**
+# 起点を渡す形だけにすると、渡し忘れたときに黙って全部を見てしまう。
+# 全部を見たいときは、第2引数に空文字を渡す。
+gate="${2-c9f4a50}"
+
+range_log() {
+	if [ -n "${gate}" ]; then
+		git log --oneline "${prev}"..origin/main --not "${gate}"
+	else
+		git log --oneline "${prev}"..origin/main
+	fi
+}
+
 echo "起点: ${prev} → origin/main"
+if [ -n "${gate}" ]; then
+	echo "レビューの規則が入った ${gate} 以降の PR だけを見る"
+fi
 echo ""
 
 # **PR 番号は merge commit の題名からだけ拾う。**
 # commit の本文から `#N` を拾うと、issue 番号と混ざる。
-prs="$(git log --oneline "${prev}"..origin/main \
-	| grep -oE 'Merge pull request #[0-9]+' \
-	| grep -oE '[0-9]+' | sort -un)"
+prs="$(range_log | grep -oE 'Merge pull request #[0-9]+' | grep -oE '[0-9]+' | sort -un || true)"
 
 if [ -z "${prs}" ]; then
-	echo "この区間にマージした PR はありません。"
+	echo "この区間に、見る対象の PR はありません。"
 	exit 0
 fi
 
-ng=0  # 直さないと出せないもの
-chk=0 # 人が見て判断するもの
+ng=0
 
 # レビュー結果が貼ってあるかを見る。
 # **目印は `<!-- code-review-result -->` である。**本文に "code-review" と書いただけの
@@ -54,18 +74,16 @@ review_of() {
 }
 
 # 対になる issue の番号を並べる。
-# **まず GitHub が紐付けたもの（Closes / Fixes / Resolves を GitHub が解釈した結果）と、
-# 本文に書いた同じ形の記述を採る。**どちらも無ければ、本文に出てくる `#N` を候補として出す。
+# **拾うのは、GitHub が紐付けたものと、本文の `Closes` / `Fixes` / `Resolves` の後ろだけである。**
+# **ただ本文に出てくる `#N` は拾わない。**「足すのは issue #53 で扱う」のような参照まで
+# 対の issue として数えてしまい、まだ開いている issue が毎回並ぶ（実測: PR #63）。
 # **1つの PR に複数あってよい。**全部出す。
 issues_of() {
-	# shellcheck disable=SC2016  # $named は jq の変数である。シェルに展開させない。
+	# shellcheck disable=SC2016  # jq の中の記法である。シェルに展開させない。
 	gh pr view "$1" --json body,closingIssuesReferences --jq '
-		([ .closingIssuesReferences[].number,
-		   (.body // "" | scan("(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
-		 ] | unique) as $named
-		| (if ($named | length) > 0 then $named
-		   else ([ .body // "" | scan("#([0-9]+)") | .[0] | tonumber ] | unique) end)
-		| .[] | tostring'
+		[ .closingIssuesReferences[].number,
+		  (.body // "" | scan("(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
+		] | unique | .[] | tostring'
 }
 
 # issue の状態と、閉じたあとに説明のコメントが付いているかを見る。
@@ -104,15 +122,16 @@ for p in ${prs}; do
 		esac
 	done
 	if [ "${found}" = "0" ]; then
-		echo "          対になる issue が本文に出てきません ← 対が無いか、書き忘れかを確かめること"
-		chk=$((chk + 1))
+		# **issue から生まれない PR はある。**文書だけの直し・CI の直しなどである。
+		# **無いことを異常として数えない。**数えると、毎回ここで止まる。
+		echo "          対の issue=無し（issue から生まれた PR ではない）"
 	fi
 done
 
 echo ""
-if [ "${ng}" -gt 0 ] || [ "${chk}" -gt 0 ]; then
-	echo "直すもの ${ng}件 ／ 見て判断するもの ${chk}件"
+if [ "${ng}" -gt 0 ]; then
+	echo "直すもの ${ng}件"
 	echo "**直すものが残っている間は、タグを打たないこと。**"
 	exit 1
 fi
-echo "マージした PR とその issue は揃っています。"
+echo "直すもの 0件。マージした PR とその issue は揃っています。"
