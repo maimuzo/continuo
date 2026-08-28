@@ -2,6 +2,7 @@
 
 画面に出たメッセージから引ける一覧です。使い方は [README.ja.md](../README.ja.md) と
 [trying_it_out.md](trying_it_out.md) にあります。
+**新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 / claude /
 hook の置き場所 / Claude の設定 / worktree の場所 / herdr / gh の認証 / ボード /
@@ -91,6 +92,32 @@ grep -n "消したいキー名" ~/continuo-work/WORKFLOW.md
 gh project list --owner <owner>
 continuo init --owner <owner> --project <番号> ~/continuo-work
 ```
+
+### `continuo init --force` が「WORKFLOW.md を書き換える一時ファイルを作れません」で止まる
+
+**原因。**既にある `WORKFLOW.md` を書き換えるとき、continuo は
+**同じディレクトリに一時ファイルを書いてから差し替えます。**
+途中で落ちても、手で直した `WORKFLOW.md` が失われないようにするためです。
+**そのため、`WORKFLOW.md` を置いてあるディレクトリ自身への書き込み権限が要ります。**
+ファイルだけ書ければ足りた頃とは、要る権限が違います。
+
+**直し方。**ディレクトリの権限を見てください。`continuo setup` の書き換えも同じ経路です。
+
+```bash
+ls -ld ~/continuo-work
+chmod u+w ~/continuo-work
+```
+
+**ファイルが読み取り専用（`0444` など）でも止まりません。**
+差し替えに要るのはディレクトリの権限だけなので、**読み取り専用の `WORKFLOW.md` も `--force` で置き換わります。**
+消えては困る内容があるなら、権限ではなく控えで守ってください。
+
+```bash
+cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak
+```
+
+**`WORKFLOW.md` が symlink のときは、`--force` でも辿らずに止まります**
+（リンク先を雛形で潰さないためです）。実体を置き直してください。
 
 ---
 
@@ -442,6 +469,48 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 **`turn_timeout_ms` は turn の総実行時間の上限ではありません。**
 画面が変わり続けている限り、1つの指示に何時間かかっても打ち切りません。
 
+### 人間は何も触っていないのに Status が変わり、issue が止まった
+
+**原因。****ボードの組み込みの自動化です。**GitHub Projects で新しく作ったボードは、
+`Item added to project` / `Pull request linked to issue` / `Pull request merged` が有効な状態で作られます。
+**エージェントが PR を作って issue に紐づけた瞬間に、ボードが Status を書き換えます。**
+continuo は自分の知らない Status になった issue を、猶予（`tracker.unknown_state_grace_ms`、既定10分）のあと止めます。
+
+**見分け方。**issue のコメントに **【この Status を書いたのは人間ではありません】** の行があれば、これです。
+
+```bash
+gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
+```
+
+**直し方は2つ。どちらか一方でかまいません。**
+
+| どうするか | 何をするか |
+| --- | --- |
+| **書き戻させる** | `WORKFLOW.md` に対応表を書く。自動化が書いた Status を、本来の Status へ戻させる |
+| **自動化を止める** | ボードの `Workflows` から、その自動化を無効にする |
+
+```yaml
+tracker:
+  active_states: ["AI Ready", "AI In Progress"]
+  automated_state_rewrite:
+    "In Progress": "AI In Progress"   # 自動化が書く Status: 戻す先の Status
+```
+
+**キーには、設定のどこにも名前が出てこない Status を書きます。**
+書き戻しを引くのは「continuo が知らない Status になったとき」だけなので、
+`active_states` などに書いてある Status をキーにすると**その行は1度も効かず、continuo は起動しません。**
+**戻す先は `active_states` に入っている Status にします**（終わったとみなす Status へ戻すと、その瞬間に片付いてしまいます）。
+
+**書いたら continuo を再起動してください。**動いている最中は設定を読み直しません。
+**キーの綴りは `continuo doctor` の `対応表のキー` が照合します。**
+
+**左に何を書けばよいか分からないときは、書かなくて構いません。**
+次に自動化が Status を動かしたとき、continuo が issue のコメントに
+**「この2行を足してください」とそのまま貼れる形で書きます。**
+
+**足し方の詳しい手順は [upgrading.md](upgrading.md) に、
+仕組みは [agent_life_cycle.md](agent_life_cycle.md) の「自動化に Status を横取りされたとき」にあります。**
+
 ### issue が `In Review` にならない
 
 **原因。**エージェントが `CONTINUO-STATUS: review` を出していません。
@@ -497,6 +566,33 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 
 `--dry-run` はボードに1文字も書きません。詳しい振る舞いは [README.ja.md](../README.ja.md) の
 「間違えて着手したとき」にあります。
+
+### `continuo abandon` が返ってこない（「pane が閉じるのを待っています」のまま止まって見える）
+
+**原因。****待っているだけです。**continuo が動いていて、その issue が作業中の Status なら、
+`abandon` はまず**手を離させてから** pane が閉じるのを待ちます。
+**上限は `herdr.read_timeout_ms` の10倍**です（既定は 5000 ミリ秒なので50秒）。
+
+**herdr が答えないときも、その場では止まりません。**
+「herdr へ pane の一覧を問い合わせられませんでした（…）。上限までは待ち直します。」を1行だけ出し、
+**上限まで待ってから**「pane ごと消してよいなら `--force` を付けてください」と言って止まります。
+**`--force` を付けて叩き直すと、そこでもう一度上限まで待ちます。**
+**herdr が落ちたままだと、合わせて上限の2回ぶん待つことになります。**
+
+**直し方。**herdr が動くなら、直してから叩くのがいちばん速いです。
+
+```bash
+herdr pane list
+continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
+```
+
+**herdr が戻らないまま消し切ってよいなら `--force` を付けます。**
+pane の生死を確かめずに、worktree・branch・herdr の workspace を消します。
+
+**`--dry-run` は待ちません。**手を離させる段を通らないので、その場で調べて終わります。
+
+**待ち終えても pane が残っていた場合は、何も消さずに止まります。**
+`--force` を付けない限り、勝手に pane ごと消すことはありません。
 
 ### `continuo abandon` が「失うものがあるので何も消しません」で止まる
 
@@ -689,7 +785,7 @@ continuo --help
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | ボードの Status を5つの役割へ対応づける（対話） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを11の見出し語で調べる |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかを14の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
@@ -709,6 +805,31 @@ continuo trust --dry-run ~/continuo-work
 
 `--` より後ろは、`-` で始まっていても位置引数として扱います。
 知らないフラグは、どこに書いてもエラーのままです（終了コード 2）。
+
+### continuo を新しい版に入れ替えた。`WORKFLOW.md` は作り直したほうがいい？
+
+**原因。**v0.x のうちは設定のキーが増減しうるので、作り直しが要るのかどうかが判断しづらい。
+
+**直し方（v0.1.9 に上げた場合）。****作り直しは要りません。v0.1.8 の `WORKFLOW.md` がそのまま通ります。**
+
+| 何 | v0.1.9 では |
+| --- | --- |
+| **消えたキー** | **ありません** |
+| **名前が変わったキー** | **ありません** |
+| **増えたキー** | `tracker.automated_state_rewrite` の1つだけ。**省略できます**（既定は空で、書き戻しを行わない、いままでどおりの動きです） |
+
+**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れます。
+**増えた設定を使いたいときは、その行だけを手で書き足します。**
+
+**足す場所と中身、書かないと何が起きるか、足したあとの確かめ方は
+[upgrading.md](upgrading.md) にあります。**版ごとにそこへ積み上げます。
+
+**上げたあとは `continuo doctor` を1回叩いてください。**
+`片付けの状態` と `対応表のキー` は `!` を出すことがありますが、**`!` だけなら起動します**（終了コードも 0 です）。
+
+```bash
+cd ~/continuo-work && continuo doctor; echo "exit=$?"
+```
 
 ### `WORKFLOW.md` を書き換えたのに反映されない
 

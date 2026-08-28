@@ -78,7 +78,9 @@ How many issues run at once is a setting (two by default).
 
 **Your board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
 
-`continuo doctor` runs nine checks: config, Claude Code, **the hook socket location**, herdr, `gh` auth, board, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
+`continuo doctor` runs fourteen checks: config, cleanup states, Claude Code, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, board, Status names, the rewrite table's keys, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
+
+**A `✗` means the exit code is 1; a `!` on its own leaves it at 0** and continuo still starts.
 
 ## Install
 
@@ -250,6 +252,7 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 | **How one issue is driven end to end** | [docs/agent_life_cycle.md](docs/agent_life_cycle.md) — the status transitions, how the agent gets its previous conversation back, and how a status taken over by GitHub automation is put back (Japanese, with diagrams) |
 | **Problems that come from the shape of the design** (read before changing code) | [docs/bug_details.md](docs/bug_details.md) — the seven that keep biting, and what to watch for when you touch them (Japanese) |
 | **When it does not work** | [docs/FAQ.md](docs/FAQ.md) — look up the message you saw (Japanese) |
+| **After upgrading to a new version** | [docs/upgrading.md](docs/upgrading.md) — which settings were added, what happens if you leave them out, and how to check (Japanese) |
 | **Development and testing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Third-party software in the binary | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
 
