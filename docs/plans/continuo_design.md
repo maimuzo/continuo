@@ -6592,6 +6592,9 @@ restart:
   orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
                                             # もう一度起動する。to_dispatch_state は着手待ちへ戻し、to_failure_state は失敗として落とす
 
+runtime:
+  lock_file: null                           # 二重起動を防ぐロックファイル。null なら hook の socket と同じディレクトリに置く
+
 server:
   port: null                                # 進み具合を見る HTTP ダッシュボードのポート。null なら起動しない。
                                             # 0 なら空いているポートを OS に選ばせる。--port を渡すとそちらが優先される
@@ -6741,7 +6744,7 @@ push していない作業は、この worktree が片付くときに失われ�
 | **未定義の環境変数** | **エラー。**空文字に落とさない。無人運用では、原因の分からないエラーで落ちるより、設定を読んだ時点で名指しで落ちるほうがよい |
 | **設定されているが空** | **エラー** |
 | **チルダ** | **先頭の `~` または `~/` だけ展開する。**`~user` 形式はエラー。展開の実体は `os.UserHomeDir()` |
-| **適用するキー** | **パスと接続先を表すものだけ。**`herdr.socket` / `workspace.root` / `claude.hook_bridge.listen` |
+| **適用するキー** | **パスと接続先を表すものだけ。**`herdr.socket` / `workspace.root` / `claude.hook_bridge.listen` / `runtime.lock_file`（**このキーは #87 の実装で廃止する。3-17**） |
 | **適用しないキー** | `herdr.worktree.branch_template`（テンプレート文字列）、`claude.env`（Claude Code へ渡す値）、`workspace_hooks` の各コマンド |
 
 **エラーメッセージには設定キーの名前と元の文字列を必ず含める。**
@@ -8043,7 +8046,7 @@ URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く
 
 ### 8-4. 設定キーとして持たないもの
 
-**言いたいこと。**下の7つは**設定ファイルに書けない。**書けば未知のキーとして起動を止める（8-1「未知の設定キーを弾く」）。
+**言いたいこと。**下の6つは**設定ファイルに書けない。**書けば未知のキーとして起動を止める（8-1「未知の設定キーを弾く」）。
 **仕様にあるものも、仕様に無い continuo 独自のものも、この1つの表にまとめる。**
 
 | キー | 仕様のどこ | なぜ continuo では持たないか |
@@ -8054,7 +8057,6 @@ URL を渡せば全部読めて、しかも**読んだ時点の最新**が届く
 | `workspace.layout` | 仕様に無い（continuo 独自） | 検証で `gwq` 以外を弾くだけで、値を見て処理を変える場所が無い（3-22） |
 | `claude.hook_bridge.mode` | 仕様に無い（continuo 独自） | 同上（`settings_flag` 以外を弾くだけ。3-12） |
 | `tracker.provider.comments.fetch` | 仕様に無い（continuo 独自） | `false` にすると全 run が `failure_state` に落ちる。選べる意味が無い |
-| `runtime.lock_file` | 仕様に無い（continuo 独自） | ロックは `~/.continuo/continuo.lock` に固定する。設定で動かせると `continuo abandon` が別の場所を見て、走っている worktree を消す（3-17 / 3-17c）。**分ける必要があるなら `--id` を使う** |
 
 **`stall_timeout_ms` だけ補足する。**仕様がこのキーを `turn_timeout_ms` と分けて持つのは、
 **Codex には観測点が2つある**からである。app-server が turn のストリームを流し（`turn_timeout_ms` はその無音を測る）、
