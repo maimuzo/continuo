@@ -43,7 +43,7 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 
 | 何を | どう確かめるか |
 | --- | --- |
-| **CI が緑である** | `gh run list --branch main --limit 1` |
+| **CI が緑である** | `gh run list --workflow ci.yml --branch main --limit 1` |
 | **CI と同じ状況で手元も通る** | `sh scripts/test-like-ci.sh` |
 | **仕様とテストの連鎖が揃っている** | `sh scripts/check-rucm.sh --strict` |
 | **実機で issue を1件通した** | 下の「実機で issue を1件通す」 |
@@ -59,7 +59,9 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 ```bash
 # continuo リポジトリの root で実行する
 git fetch origin
-gh run list --branch main --limit 1 --json headSha,status,conclusion \
+# **`--workflow` で絞る。**絞らないと、直前に走った release の run を掴んで、
+# ci が赤でも `success` が返る。
+gh run list --workflow ci.yml --branch main --limit 1 --json headSha,status,conclusion \
   --jq '.[] | "\(.headSha[0:7]) \(.status)/\(.conclusion)"'
 sh scripts/test-like-ci.sh
 sh scripts/check-rucm.sh --strict

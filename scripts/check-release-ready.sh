@@ -40,6 +40,18 @@ fi
 # 全部を見たいときは、第2引数に空文字を渡す。
 gate="${2-c9f4a50}"
 
+# **起点を読めなければ、そこで止める。**
+# `git log` が落ちてもパイプラインの終了状態には現れないので、`set -e` では捕まらない。
+# **捕まえないと、版の名前を打ち間違えただけで「見る対象の PR はありません」と出て
+# exit 0 を返す。**リリースの門番が、何も見ずに合格を出すことになる。
+for ref in "${prev}" "${gate}"; do
+	if [ -n "${ref}" ] && ! git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null; then
+		echo "起点を読めません: ${ref}" >&2
+		echo "  → 版の名前が正しいかを確かめてください（例: sh $0 v0.1.8）" >&2
+		exit 1
+	fi
+done
+
 range_log() {
 	if [ -n "${gate}" ]; then
 		git log --oneline "${prev}"..origin/main --not "${gate}"
@@ -56,6 +68,10 @@ echo ""
 
 # **PR 番号は merge commit の題名からだけ拾う。**
 # commit の本文から `#N` を拾うと、issue 番号と混ざる。
+#
+# **rebase merge は merge commit を作らないので、この方法では拾えない。**
+# このリポジトリは merge commit を使う。**rebase merge に切り替えるなら、
+# 拾い方を `gh pr list --state merged` から引く形に変えること。**
 prs="$(range_log | grep -oE 'Merge pull request #[0-9]+' | grep -oE '[0-9]+' | sort -un || true)"
 
 if [ -z "${prs}" ]; then
