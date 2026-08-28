@@ -6237,16 +6237,81 @@ subagent の定義に `permissionMode` があるとそちらが勝ち、`dontAsk
 ```yaml
 claude:
   sandbox:
-    mode: public_only                       # off / on / public_only。既定は public_only
-    excluded_commands: ["gh"]               # sandbox の外で走らせる道具
-    allowed_domains: ["api.github.com", "github.com", "proxy.golang.org"]
+    mode: off                               # off / on / public_only。既定は off（下記）
+    allowed_domains: ["*"]                  # **既定は全部許可。**調査の仕事を殺さないため（3-63c）
+    excluded_commands: ["gh"]               # sandbox の外で走らせる道具（3-63c）
     deny_read: ["~/.ssh", "~/.aws", "~/.claude/.credentials.json"]
     fail_if_unavailable: true               # sandbox を起動できなければ着手しない
     allow_unsandboxed_commands: false       # 逃げ道を閉じる
 ```
 
+**既定を `off` にする理由。**macOS では `gh` が動かないことを実測した（3-63c）。
+**`gh` を外に出すと、いちばん止めたい持ち出しが素通りする。**
+**Linux では動く見込みがあるので、設定の口だけは残す**（未検証）。
+
 **公開かどうかは、いま取っていない。**GraphQL に `repository { isPrivate }` を足す（3-13 の第3段階のアダプタ）。
 **取れなかったときは掛ける側へ倒す。**分からないものを公開でないと決めない。
+
+### 3-63c. ネットワークは全部許可する。絞らない
+
+**言いたいこと。**sandbox のネットワークを絞ると、**調査の仕事が全部止まる**（2026-08-28、人間の判断）。
+**だから `allowed_domains` の既定は `["*"]` にする。**
+**sandbox でネットワークを絞ることはしない。**守るのはファイルシステムの側だけである。
+
+**なぜ絞れないか。**エージェントは調べるために外へ出る。
+**どこへ出るかを先に列挙するのは無理である。**issue ごとに違う。
+
+**既定で絞られていることに注意する。**公式文書より。
+
+> Claude Code pre-allows no domains by default. The first time a command needs a new domain, Claude Code prompts for approval.
+
+**訳。**Claude Code は既定でどのドメインも前もって許可しない。
+コマンドが新しいドメインを必要とした最初の1回、Claude Code は確認を出す。
+
+**無人運用では、この確認が出た時点で止まる。**だから**明示的に全部許可する。**
+
+**書き方は2つあり、どちらでもよい。**
+
+| 書き方 | どこに書くか |
+| --- | --- |
+| `"allowedDomains": ["*"]` | sandbox の設定 |
+| `"allow": ["WebFetch(domain:*)"]` | 許可の一覧。**sandbox もこれを読む** |
+
+**`*` 単独の形は Claude Code v2.1.186 以降で使える。**
+
+### 3-63d. macOS の sandbox では `gh` が動かない
+
+**言いたいこと。**これは 3-63c とは**別の問題である。**ドメインを全部許可しても直らない。
+**sandbox の外向き通信が proxy を経由し、`gh` がその証明書を信頼できずに接続を切る。**
+**逃げ道は `excluded_commands` に入れることだけである。**
+
+**実測**（2026-08-28、herdr の pane で sandbox を有効にした Claude Code に叩かせた）。
+
+```text
+Post "https://api.github.com/graphql": tls: failed to verify certificate: x509: OSStatus -26276
+```
+
+**`allowedDomains: ["*"]` を入れても、同じエラーで落ちた。**ドメインの制限とは無関係である。
+
+**公式文書も名指ししている。**
+
+> Go-based CLIs fail TLS verification on macOS: tools such as `gh`, `gcloud`, and `terraform` may fail TLS verification under Seatbelt.
+
+**訳。**Go 製の CLI は macOS で TLS の検証に失敗する。
+`gh` / `gcloud` / `terraform` のような道具は Seatbelt の下で TLS の検証に失敗しうる。
+
+**公式が示す代案は、この機械には当てはまらない。**
+`enableWeakerNetworkIsolation` は「会社の proxy と独自の CA を使っている環境」向けである。
+
+**`excluded_commands` に入れると何が失われるか。**
+
+| 何 | どうなるか |
+| --- | --- |
+| `gh` のファイルの読み書き | **隔離されない** |
+| `gh gist create -p` での持ち出し | **止まらない** |
+| `gh api` で任意のファイルを issue に貼る | **止まらない** |
+
+**Linux は未検証である。**bubblewrap を使うので、同じ問題が出るとは限らない。
 
 ### 3-64. 危ない道具の呼び出しは、事前の一覧ではなく判定で止める
 
