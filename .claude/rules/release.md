@@ -56,7 +56,8 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 
 ### 1. 出す前の6つの検査を通す
 
-**言いたいこと。****4つ目がいちばん重い。**mock だけで通しても、実機で初めて出る欠陥がある。
+**言いたいこと。****「実機で issue を1件通す」がいちばん重い。**
+mock だけで通しても、実機で初めて出る欠陥がある。
 実際、`interactive_ready` を見ていなかった欠陥は、テストが全部通っている状態で残っていた。
 
 | 短縮名 | 何を見るか |
@@ -78,13 +79,14 @@ sh scripts/check-rucm.sh --strict
 sh scripts/check-release-ready.sh
 ```
 
-**1つ目が `completed/success` でなければ止まる。**
+**「main が緑」は `completed/success` でなければ止まる。**
 
-**実機で1件通す手順は [docs/trying_it_out.md](../../docs/trying_it_out.md) にある。**
-その文書の段7〜段9 を、本物のボードに対して行う。
+**「実機で issue を1件通す」の手順は [docs/trying_it_out.md](../../docs/trying_it_out.md) にある。**
+その文書の段7〜段9 を、本物のボードに対して行う。**上の block には入っていない。**
 **ここから利用の枠を消費するので、人間の判断で行う。**
 
-**最後の5つ目と6つ目は [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) が見る。**
+**「PR にレビュー結果が貼ってある」と「対の issue」は
+[scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) が見る。**
 次の段で、その読み方を書く。
 
 ### 2. PR とその issue の検査の結果を読む
