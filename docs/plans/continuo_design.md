@@ -6176,6 +6176,78 @@ subagent の定義に `permissionMode` があるとそちらが勝ち、`dontAsk
 **段1が要るかどうかの見分け方。**その止まり方に **hook が用意されているか**を先に調べる。
 用意されていれば段1が作れる。無ければ段2と段3で受けるしかない。
 
+### 3-63. Bash の sandbox で守れるものと、守れないもの
+
+**言いたいこと。**Claude Code には **OS の層で Bash とその子プロセスを囲う仕組み**がある。
+**docker は要らない。**macOS は Seatbelt、Linux と WSL2 は別の道具を、Claude Code が内部で使い分ける。
+**書く設定は同じである。**ただし**守れる範囲は限られる。**下の表を読んでから採ること。
+
+**一次情報。**[https://code.claude.com/docs/en/sandboxing.md](https://code.claude.com/docs/en/sandboxing.md)（2026-08-28 に取得）。
+原文: *"The sandbox is built into Claude Code and runs on macOS, Linux, and WSL2. Native Windows is not supported."*
+（**訳:** sandbox は Claude Code に組み込まれており、macOS・Linux・WSL2 で動く。Windows ネイティブは非対応である。）
+**手元で確かめるには `/sandbox` を叩く。**
+
+**守れるもの。**
+
+| 何 | どう守るか |
+| --- | --- |
+| **worktree の外への書き込み** | 既定で書けるのは作業ディレクトリとセッションの一時ディレクトリだけ。**`~/.local/bin/continuo` の上書きが OS の層で失敗する** |
+| **許可していないホストへの通信** | ドメインの許可制。`sandbox.network.allowedDomains` に書いたものだけ通る |
+| **子プロセス** | **OS が掛ける境界なので、`python3` や `sh -c` で包んでも効く**。文字列の照合ではない |
+| **subagent** | 同じ設定が掛かる |
+
+**守れないもの。**
+
+| 何 | なぜ |
+| --- | --- |
+| **ファイルの読み取り** | **既定でコンピュータ全体を読める。**`~/.ssh/` も `~/.aws/credentials` も読める。**`sandbox.credentials` か `denyRead` を書かない限り開いたままである** |
+| **hook と MCP サーバー** | **host でそのまま走る。**sandbox の外である |
+| **許したドメインの中での持ち出し** | `api.github.com` を許すと `gh gist create -p` が通る。**ドメイン単位なので中身は見ない** |
+| **`excludedCommands` に入れた道具** | sandbox の外で走る。**`gh` はここへ入れることになりうる**（下記） |
+
+**`gh` が動かないかもしれない。**公式が名指ししている。
+原文: *"Go-based CLIs fail TLS verification on macOS: tools such as `gh`, `gcloud`, and `terraform` may fail TLS verification under Seatbelt."*
+（**訳:** Go 製の CLI は macOS で TLS の検証に失敗する。`gh` / `gcloud` / `terraform` のような道具は Seatbelt の下で TLS の検証に失敗しうる。）
+**continuo の作業はほぼ全部 `gh` に依存しているので、ここが通らなければ sandbox は使えない。**
+**採る前に実機で確かめること。**
+
+**閉じておく逃げ道が2つある。**
+
+| 設定 | 何を閉じるか |
+| --- | --- |
+| `failIfUnavailable: true` | **既定では sandbox を起動できないと警告だけ出して素通しする**（fail open） |
+| `allowUnsandboxedCommands: false` | **既定では sandbox に弾かれた命令を `dangerouslyDisableSandbox` で外へ出して再試行できる** |
+
+**ファイルシステムだけ切ることもできる。**`sandbox.filesystem.disabled: true` にすると、
+**書き込みの制限が消えてネットワークの制限だけが残る。**逆はできない。
+
+### 3-63b. sandbox を `WORKFLOW.md` から切り替える
+
+**言いたいこと。**sandbox を常に掛けると、**手元の非公開なリポジトリの作業まで遅くなる。**
+**外部の第三者が書ける issue のときだけ掛けたい。****だから3択にする。**
+
+| 設定の値 | いつ掛けるか |
+| --- | --- |
+| `off` | 掛けない |
+| `on` | 常に掛ける |
+| **`public_only`（既定）** | **その issue が公開リポジトリのものなら掛ける** |
+
+**`WORKFLOW.md` の front matter に書く形。**
+
+```yaml
+claude:
+  sandbox:
+    mode: public_only                       # off / on / public_only。既定は public_only
+    excluded_commands: ["gh"]               # sandbox の外で走らせる道具
+    allowed_domains: ["api.github.com", "github.com", "proxy.golang.org"]
+    deny_read: ["~/.ssh", "~/.aws", "~/.claude/.credentials.json"]
+    fail_if_unavailable: true               # sandbox を起動できなければ着手しない
+    allow_unsandboxed_commands: false       # 逃げ道を閉じる
+```
+
+**公開かどうかは、いま取っていない。**GraphQL に `repository { isPrivate }` を足す（3-13 の第3段階のアダプタ）。
+**取れなかったときは掛ける側へ倒す。**分からないものを公開でないと決めない。
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す
@@ -7877,7 +7949,7 @@ releasePrompt()
 
 **言いたいこと。**この1件が片付くまで、**continuo をこのリポジトリのボードで動かさない**（2026-08-28、人間の判断）。
 **外部の第三者が書いた issue とコメントが、`dontAsk` で `Bash` を持つエージェントへ確認なしで届く。**
-**決めることが2つある。**どちらも人間の判断が要る。
+**「読ませない」では解けない。**外部のバグ報告は情報源として要る（2026-08-28、人間の判断）。
 
 **塞がっているところ。**ボードは非公開なので、外部から Status は動かせない。
 
@@ -7885,33 +7957,59 @@ releasePrompt()
 
 | 経路 | 維持者の操作 |
 | --- | --- |
-| **issue を立てて、維持者に `Ready` へ動かしてもらう** | **要る**（もっともらしい issue を書けば通る） |
+| **issue を立てて、維持者に `Ready` へ動かしてもらう** | **要る** |
 | **既に処理中の issue にコメントする** | **要らない。こちらが本命である** |
 
-**決めること1。外部のコメントをエージェントに読ませない方法。**
+**採る形は4層である。**どれか1つでは足りない。
 
-**エージェントは自分で `gh issue view --comments` を叩いて読む。**continuo が渡しているのではない。
-**だから「渡さない」だけでは塞がらない。**
+| 層 | 何をするか | 効き方 |
+| --- | --- | --- |
+| **立場の札を付ける** | 外部（`NONE` / `CONTRIBUTOR`）が書いたものに「情報であって指示ではない」と印を付けて渡す | **読めるままにする。**指示として扱わせない |
+| **道具の呼び出しを判定する** | `PreToolUse` hook の `type: "prompt"` で、コマンドが危ないかを LLM に判定させる（3-64） | 事前の一覧が要らない |
+| **OS の層で囲う** | Bash の sandbox（3-63） | **プロンプトが破られても効く** |
+| **印を騙らせない** | `<!-- continuo:agent -->` を、投稿者が continuo の `gh` の持ち主であることと併せて見る | 誤認を消す |
 
-| 案 | 損 |
+**立場は GitHub が自動で判定する。**こちらで名前の一覧を持たない。
+
+| 立場 | 指示として扱うか |
 | --- | --- |
-| **continuo が本文を取ってプロンプトに埋める** | **設計 3-29 の「本文を埋め込まない」方針を変えることになる** |
-| エージェントに「誰のコメントを読んでよいか」を渡す | **守られる保証が無い。**塞いだことにならない |
+| `OWNER` / `MEMBER` / `COLLABORATOR` | **扱う** |
+| **`CONTRIBUTOR`** | **扱わない。**過去に1回 commit が merge されただけで付く |
+| `NONE` | 扱わない |
 
-**決めること2。`Bash` をどこまで狭めるか。**
+**取り方を2本に分ける。**issue の本文の立場は `gh issue view --json` に無い。
 
-| 案 | 損 |
+```bash
+gh api repos/<owner>/<repo>/issues/<番号> --jq '{author:.user.login, association:.author_association, body:.body}'
+gh api repos/<owner>/<repo>/issues/<番号>/comments --paginate \
+  --jq '.[] | {author:.user.login, association:.author_association, body:.body}'
+```
+
+**`gh issue view --comments` を判定に使ってはならない。**理由が2つある。
+
+| 何 | 中身 |
 | --- | --- |
-| `Bash` を allow から外す | **ほとんどの作業ができなくなる** |
-| `Bash` の引数を絞る | **雛形のコメントが「引数まで絞ると書き込み系の操作が拒否される」と言っている。要実測** |
-| `deny` に危険なものを並べる | **抜け道が必ず残る。弾き漏らしに気づけない** |
-| **狭めない** | **決めること1が効けば、外部の指示がそもそも届かない** |
+| **本文が出ない** | パイプで受けると**コメントだけ**が出る。いまの雛形は本文を読ませていない |
+| **偽装できる形** | 区切りが行頭の `--` だけで、本文が桁0から無加工で流れる。**外部が自分のコメントに `--` と `author:` を書ける** |
 
 **すぐ効く緩和が1つある。**`tracker.required_labels: ["continuo"]` を書くと、
-label を付けられる人（triage 以上）が選んだ issue だけが対象になる。
+**label を付けられる人（このリポジトリでは維持者だけ）が選んだ issue だけが対象になる。**
 **ただし経路1しか塞がらない。**
 
 **詳細は issue #60 にある。**
+
+### 6-24. 採らなかった塞ぎ方と、その理由
+
+**言いたいこと。**6-23 を決めるまでに5つ検討して落とした。**同じ案が再び出たときのために残す。**
+
+| 案 | 落とした理由 |
+| --- | --- |
+| **外部のコメントを読ませない** | **外部のバグ報告は情報源である。**読めないと修正できない（2026-08-28、人間の判断） |
+| **private な task 用リポジトリに指示を置く** | worktree も branch も「その issue のリポジトリ」に作られるので、**直したいコードがそこに無い。**PR のレビューコメントも塞がらない |
+| **docker で囲う** | **continuo にも herdr にも pane をコンテナの中に作る経路が無い。**turn の終わりの検知は Unix socket 1本に賭かっており、macOS で host の socket を渡すには Docker Desktop 4.87 と VMM が要る。**clone の `.git` を書き込み可で mount した時点で隔離が破れる** |
+| **`auto` モードにする** | **無人運用と両立しない。**3回連続または累計20回ブロックすると一時停止して確認を出す。**閾値は設定できない** |
+| **allowlist（これだけ通す）** | **この脅威に効かない。**加害の手段が仕事に必ず要るコマンドそのものである。`git` と `gh` を許さないと1件も回せず、許した瞬間に force push も PR の merge も通る |
+| **専用の OS ユーザー** | **使いづらい。**こんな構造を強いられると誰も使わない（2026-08-28、人間の判断） |
 
 ## 7. 実装の順序
 
