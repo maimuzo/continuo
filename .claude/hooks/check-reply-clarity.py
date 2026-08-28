@@ -1,0 +1,510 @@
+#!/usr/bin/env python3
+"""Claude Code の Stop hook。返答が「初見で正しく理解できる形」かを検査する。
+
+これは何か
+----------
+Claude Code が1つの turn を終えようとするたびに呼ばれるプログラムである。
+返答の文面を読み、**読む側が意図を掴むのに余分な労力を使う書き方**を見つけたら、
+turn を終わらせずに書き直させる。
+
+5段構成（引用 → 三行まとめ → 何が言いたいのか → 結果 → 詳細）そのものは
+`maimuzo-chat-response` プラグインの Stop hook が見ている。**こちらはその上に載る検査である。**
+両方が Stop で走り、どちらかが止めれば turn は終わらない。
+
+なぜ要るか
+----------
+規則を文書に書いても守られず、同じ指摘を何度も繰り返すことになった。
+実際に指摘された3つを、そのまま検査にしてある。
+
+1. **issue と PR を番号だけで書く。**「#60 を最優先します」と書かれても、
+   読む側は番号と内容の対応表を覚えていない。番号だけを書くのは「調べ直せ」と同じである。
+
+2. **`## 何が言いたいのか` に、返答か質問かが書いていない。**
+   読む側は「自分は何をすればよいのか」を毎回추측することになる。
+   **報告（読むだけでよい）/ 質問（答えが要る）/ 確認（決定済みだが返事が要る）**の
+   どれなのかを先に名乗らせる。
+
+3. **`###` のサブセクションが、いきなり事実の羅列で始まる。**
+   節の冒頭に「これは何の話で、一言で言うと何か」が無いと、読み終えるまで趣旨が分からない。
+
+どう繋がっているか
+------------------
+`.claude/settings.json` の `hooks.Stop` から呼ばれる。
+
+    "hooks": {
+      "Stop": [
+        {"hooks": [{"type": "command",
+                    "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-reply-clarity.py\"",
+                    "timeout": 10}]}
+      ]
+    }
+
+**外したいときは、この `Stop` の項目を消す。**このファイル自体は消さなくてよい。
+
+入出力
+------
+- **標準入力**: Claude Code が渡す JSON。使うのは次の2つ。
+    `last_assistant_message` … いま終えようとしている turn の返答の本文
+    `stop_hook_active`       … 差し戻しの直後かどうか。真なら何もしない（無限ループの防止）
+- **標準出力**: 止めるときだけ `{"decision": "block", "reason": "..."}` を1行。
+  通すときは何も出さない。
+
+壊れたときの振る舞い
+--------------------
+例外が出ても turn は止めない（fail-open）。検査が壊れて全部の turn が止まるのを避ける。
+ただし黙って死なない。何が起きたかを `systemMessage` で見せる。
+`REPLY_CLARITY_HOOK_DEBUG=1` のときは stderr に traceback も出す。
+
+正規表現を使わない理由
+----------------------
+`#` や空白が10万文字並んだ行で破滅的なバックトラックが起きる。
+行ごとの走査なら長さに比例した時間で終わる。
+"""
+
+import json
+import os
+import sys
+
+# この文字数以上の返答を検査する。コードフェンスを除いた散文で数える。
+# 短い確認や相槌に構成を求めると、やり取りが冗長になるだけである。
+# プラグイン側の5段構成の検査と同じ値にしてある。
+MIN_LEN_FOR_CHECK = 200
+
+# stdin をこのバイト数まで読む。超えたら検査しない。
+MAX_INPUT_BYTES = 1024 * 1024
+
+# コードフェンスの開き・閉じの記号。
+FENCE_MARKS = ("```", "~~~")
+# フェンスを差し替える印。中身のある1行として数えられるが、見出しにも引用にも一致しない。
+FENCE_MARK_LINE = "コードブロック"
+
+SPACES = " \t　"
+
+# 番号の参照に添える補足を囲む記号。全角と半角の両方を見る。
+OPEN_PARENS = "（("
+CLOSE_PARENS = "）)"
+
+# `## 何が言いたいのか` の冒頭で名乗らせる3つのカテゴリ。
+# 読む側が「自分は何をすればよいか」を最初の1語で掴めるようにする。
+CATEGORY_WORDS = ("報告", "質問", "確認")
+
+# 引用（`> `）の合計がこの文字数に満たなければ、対象が分からないと見なす。
+# 「これをうまく使えないか検討して」だけでは、何の話か読み取れなかった実例による。
+MIN_QUOTE_CHARS = 30
+
+# サブセクションの見出しの直後、この行数以内に要約が無ければ「いきなり本題」と見なす。
+SUBSECTION_LEAD_LINES = 2
+
+ISSUE_REF_NAME = "issue / PR の番号に内容が添えられていない箇所"
+CATEGORY_NAME = "`## 何が言いたいのか` の冒頭に、報告 / 質問 / 確認のどれかを名乗っていない"
+QUOTE_THIN_NAME = "引用が短く、何の話への返答かが読み取れない"
+SUBSECTION_NAME = "冒頭に要約の無いサブセクション（`###`）"
+
+
+def debug_enabled() -> bool:
+    """REPLY_CLARITY_HOOK_DEBUG=1 のときだけ stderr に診断を出す。"""
+    return os.environ.get("REPLY_CLARITY_HOOK_DEBUG", "") not in ("", "0", "false", "no")
+
+
+def emit(obj) -> None:
+    """hook の出力を stdout に書く。
+
+    ensure_ascii=True にしてあるのは、stdio の符号化がロケール依存だからである。
+    PYTHONIOENCODING=ascii の環境で日本語をそのまま書くと例外になり、検査が黙って無効化される。
+    """
+    sys.stdout.write(json.dumps(obj, ensure_ascii=True) + "\n")
+    sys.stdout.flush()
+
+
+def notify(text: str) -> None:
+    """turn は止めずに、利用者へ一言見せる。"""
+    emit({"systemMessage": "check-reply-clarity: " + text})
+
+
+def sanitize(text, limit: int = 200) -> str:
+    """systemMessage に載せる文字列を1行・短めに刈り込む。"""
+    return " ".join(str(text).split())[:limit]
+
+
+def is_true(value) -> bool:
+    """真偽の判定。文字列の "false" / "0" / "no" を真として扱わない。"""
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "false", "0", "no", "off")
+    return bool(value)
+
+
+def heading_level(line: str) -> int:
+    """行が見出しならその段（`#` の数）を返す。見出しでなければ 0 を返す。"""
+    level = 0
+    for ch in line:
+        if ch != "#":
+            break
+        level += 1
+    if level == 0 or level > 6:
+        return 0
+    rest = line[level:]
+    if rest and rest[0] not in SPACES:
+        return 0
+    return level
+
+
+def heading_text(line: str) -> str:
+    """見出しの飾りを剥がした中身を返す。"""
+    level = heading_level(line)
+    if level == 0:
+        return ""
+    text = line[level:].strip(SPACES)
+    text = text.strip("*").strip(SPACES)
+    return text.rstrip(":：").strip(SPACES)
+
+
+def is_quote_line(line: str) -> bool:
+    """引用の行か。`> 原文` `>原文` `>　原文` のどれでもよい。`>` だけの行は数えない。"""
+    stripped = line.lstrip(" \t")
+    if not stripped.startswith(">"):
+        return False
+    return bool(stripped[1:].strip(SPACES))
+
+
+def quote_body(line: str) -> str:
+    """引用の行から `>` を剥がした中身を返す。"""
+    stripped = line.lstrip(" \t")
+    return stripped[1:].strip(SPACES) if stripped.startswith(">") else ""
+
+
+def split_fences(msg: str):
+    """(散文だけの文字列, フェンスを印に差し替えた文字列) を返す。
+
+    散文のほうは長さの判定に使う。コードだけの返答に構成を求めないためである。
+    印のほうは見出し・引用の検査に使う。フェンスの中に見出しを並べた回避を塞ぎつつ、
+    「フェンス1つだけの節」を中身が空と誤判定しないよう、印を1行として残す。
+    閉じ忘れたフェンスは、開いたところから末尾までをフェンス扱いにする。
+    """
+    prose = []
+    masked = []
+    fence = None
+    for line in msg.split("\n"):
+        head = line.lstrip(" \t")
+        if fence is None:
+            if head.startswith(FENCE_MARKS[0]) or head.startswith(FENCE_MARKS[1]):
+                fence = head[:3]
+                masked.append(FENCE_MARK_LINE)
+            else:
+                prose.append(line)
+                masked.append(line)
+        elif head.startswith(fence):
+            fence = None
+    return "\n".join(prose), "\n".join(masked)
+
+
+def strip_inline_code(line: str) -> str:
+    """インラインコード（`...`）の中身を空白に潰す。
+
+    書き方の例として番号を見せることがあるので、説明を求める対象にしない。
+    閉じ忘れたバッククォートは、開いたところから行末までをコード扱いにする。
+    """
+    out = []
+    in_code = False
+    for ch in line:
+        if ch == "`":
+            in_code = not in_code
+            out.append(" ")
+        else:
+            out.append(" " if in_code else ch)
+    return "".join(out)
+
+
+def strip_urls(text: str) -> str:
+    """URL を含むトークンを空白に潰す。
+
+    GitHub のリンク（`.../issues/60`、`#issuecomment-…`）を番号の参照と数えないため。
+    """
+    out = []
+    for token in text.split(" "):
+        if "http://" in token or "https://" in token:
+            out.append(" " * len(token))
+        else:
+            out.append(token)
+    return " ".join(out)
+
+
+def inside_parens(text: str, pos: int) -> bool:
+    """pos が括弧の内側にあるか。
+
+    「外部コメントからの実行経路（#60）」のように、内容を書いた文の末尾へ
+    補足として置いた番号を通すためである。
+    """
+    depth = 0
+    for ch in text[:pos]:
+        if ch in OPEN_PARENS:
+            depth += 1
+        elif ch in CLOSE_PARENS and depth > 0:
+            depth -= 1
+    return depth > 0
+
+
+def count_bare_refs(text: str) -> int:
+    """1行の中の「内容を添えていない番号の参照」を数える。
+
+    通すのは次の2つだけである。
+        `#60（外部コメントからの実行経路）` — 直後に括弧で内容を添えたもの
+        `…の経路（#60）`                     — 内容を書いた文の末尾に括弧で補足したもの
+    """
+    bare = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] != "#":
+            i += 1
+            continue
+        j = i + 1
+        while j < n and text[j].isdigit():
+            j += 1
+        if j == i + 1:  # `#` の後ろが数字でない（見出しや `#L12` など）
+            i += 1
+            continue
+        k = j
+        while k < n and text[k] in SPACES:
+            k += 1
+        if k < n and text[k] in OPEN_PARENS:  # 直後に内容を添えている
+            i = j
+            continue
+        if inside_parens(text, i):  # 括弧の中の補足
+            i = j
+            continue
+        bare += 1
+        i = j
+    return bare
+
+
+def bare_issue_refs(masked: str) -> int:
+    """内容を添えていない issue / PR の番号の参照を数える。
+
+    見ないもの。
+        コードフェンスの中（呼ぶ側が masked を渡す）、インラインコードの中、
+        URL を含むトークン、そして引用行。
+        引用は人間の原文をそのまま引くところなので、こちらでは直せない。
+    """
+    count = 0
+    for line in masked.split("\n"):
+        if is_quote_line(line):
+            continue
+        count += count_bare_refs(strip_urls(strip_inline_code(line)))
+    return count
+
+
+def quote_chars(masked: str) -> int:
+    """引用の中身の合計文字数（空白を除く）を返す。"""
+    total = 0
+    for line in masked.split("\n"):
+        if is_quote_line(line):
+            total += len("".join(quote_body(line).split()))
+    return total
+
+
+def missing_category(masked: str):
+    """`## 何が言いたいのか` の冒頭でカテゴリを名乗っていなければ True を返す。
+
+    節が見つからなければ False（プラグイン側の5段構成の検査が別に止めるため、
+    ここで二重に止めない）。
+    """
+    lines = masked.split("\n")
+    start = None
+    for i, line in enumerate(lines):
+        if heading_level(line) and heading_text(line) in ("何が言いたいのか", "何が言いたいか"):
+            start = i + 1
+            break
+    if start is None:
+        return False
+
+    for line in lines[start:]:
+        if heading_level(line):
+            break
+        stripped = line.strip(SPACES + "*>-|　")
+        if not stripped:
+            continue
+        # 最初の中身のある行に、3つのうちどれかが入っていればよい。
+        return not any(word in stripped for word in CATEGORY_WORDS)
+    return True
+
+
+def leadless_subsections(masked: str):
+    """冒頭に要約の無いサブセクション（`###` 以下）の名前を返す。
+
+    見出しの直後 SUBSECTION_LEAD_LINES 行以内に、
+    太字（`**` で始まる）かカテゴリ語で始まる行が1つも無ければ「いきなり本題」と見なす。
+    表・箇条書き・コードブロックでいきなり始まる節を拾う。
+    """
+    lines = masked.split("\n")
+    bad = []
+    for i, line in enumerate(lines):
+        if heading_level(line) < 3:
+            continue
+        name = heading_text(line)
+        if not name:
+            continue
+        seen = 0
+        ok = False
+        for nxt in lines[i + 1:]:
+            if heading_level(nxt):
+                break
+            stripped = nxt.strip(SPACES)
+            if not stripped:
+                continue
+            seen += 1
+            if stripped.startswith("**") or any(stripped.startswith(w) for w in CATEGORY_WORDS):
+                ok = True
+                break
+            if seen >= SUBSECTION_LEAD_LINES:
+                break
+        if not ok:
+            bad.append(name)
+    return bad
+
+
+def read_payload():
+    """stdin を UTF-8 として読み、辞書なら返す。それ以外は空の辞書を返す。"""
+    stream = getattr(sys.stdin, "buffer", None)
+    if stream is None:
+        raw = sys.stdin.read()
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8", "replace")
+    else:
+        raw = stream.read(MAX_INPUT_BYTES + 1)
+
+    if len(raw) > MAX_INPUT_BYTES:
+        return {}
+
+    try:
+        payload = json.loads(raw.decode("utf-8", "replace"))
+    except Exception:
+        if debug_enabled():
+            import traceback
+
+            traceback.print_exc(file=sys.stderr)
+        return {}
+
+    return payload if isinstance(payload, dict) else {}
+
+
+def build_reason(bare_refs, no_category, thin_quote, leadless) -> str:
+    """block したときに Claude へ返す指示文。
+
+    入力由来の文字列を混ぜない。件数だけは int に通してから %d で埋める。
+    サブセクションの名前だけは、どこを直せばよいかが分からなくなるので載せる。
+    """
+    parts = ["返答が「初見で理解できる形」になっていません。**書き直してください。**\n"]
+
+    if bare_refs:
+        parts.append("\n%s: %d 件\n" % (ISSUE_REF_NAME, int(bare_refs)))
+        parts.append(
+            "\n**issue と PR を番号だけで書かないこと。**同じ文の中に「何の話か」を添える。\n"
+            "  悪い: #60 を最優先します\n"
+            "  良い: #60（外部コメントからの実行経路）を最優先します\n"
+            "  良い: 外部コメントからの実行経路（#60）を最優先します\n"
+            "**初出でも2度目以降でも添えること。**表の中でも同じです。\n"
+        )
+
+    if no_category:
+        parts.append("\n%s\n" % CATEGORY_NAME)
+        parts.append(
+            "\n**`## 何が言いたいのか` は、まず次のどれかを名乗ってから1行でまとめること。**\n"
+            "  **報告** … 読んで理解してもらえればよい。返事は要らない\n"
+            "  **質問** … 答えをもらわないと先へ進めない\n"
+            "  **確認** … こちらで決めたが、違っていたら言ってほしい\n"
+            "書き方の例: `**報告。**workflow の報告に誤りがあったので、原文で確かめ直しました。`\n"
+            "**これが無いと、読む側は自分が何をすればよいのかを毎回推し量ることになります。**\n"
+        )
+
+    if thin_quote:
+        parts.append("\n%s\n" % QUOTE_THIN_NAME)
+        parts.append(
+            "\n**引用は、原文をそのまま短く引くだけにしないこと。**\n"
+            "何の話への返答なのかが分かる長さまで引くか、話の概要を添えること。\n"
+            "  悪い: > これをうまく使えないか検討して\n"
+            "  良い: > これをうまく使えないか検討して\n"
+            "        （PermissionRequest hook で、確認の画面が出ること自体を止める案について）\n"
+        )
+
+    if leadless:
+        shown = leadless[:5]
+        omitted = len(leadless) - len(shown)
+        names = " / ".join(shown)
+        if omitted > 0:
+            names += " ほか %d 件" % omitted
+        parts.append("\n%s: %s\n" % (SUBSECTION_NAME, names))
+        parts.append(
+            "\n**`###` の節も、冒頭に「一言で言うと何か」を太字で置くこと。**\n"
+            "表や箇条書きから始めない。読み終えるまで趣旨が分からない書き方になります。\n"
+            "書き方の例:\n"
+            "  ### workflow の報告に誤りがあった件\n"
+            "  **報告。**JSON の形が違っていたので、原文を落として確かめ直しました。\n"
+        )
+
+    parts.append(
+        "\n規則は .claude/rules/reporting.md にあります。"
+        "5段構成そのものは別の hook が見ているので、そちらの指示もあれば両方直してください。"
+    )
+    return "".join(parts)
+
+
+def main() -> int:
+    payload = read_payload()
+    if not payload:
+        return 0
+
+    # 既に block した結果の再実行なら、そのまま通す（無限ループを避ける）。
+    if is_true(payload.get("stop_hook_active")):
+        return 0
+
+    raw_msg = payload.get("last_assistant_message")
+    if raw_msg is None:
+        return 0
+    if not isinstance(raw_msg, str):
+        notify(
+            "last_assistant_message が文字列ではありません（type=%s）。"
+            "この turn の検査は飛ばしました。" % type(raw_msg).__name__
+        )
+        return 0
+
+    msg = raw_msg.replace("\r\n", "\n").replace("\r", "\n")
+    prose, masked = split_fences(msg)
+
+    if len(prose) < MIN_LEN_FOR_CHECK:
+        return 0
+
+    bare_refs = bare_issue_refs(masked)
+    no_category = missing_category(masked)
+    # 引用が1文字も無い場合は、5段構成の検査（プラグイン側）が止めるので二重に止めない。
+    qchars = quote_chars(masked)
+    thin_quote = 0 < qchars < MIN_QUOTE_CHARS
+    leadless = leadless_subsections(masked)
+
+    if not bare_refs and not no_category and not thin_quote and not leadless:
+        return 0
+
+    emit({
+        "decision": "block",
+        "reason": build_reason(bare_refs, no_category, thin_quote, leadless),
+    })
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except Exception as exc:  # 検査が壊れても turn は止めない
+        if debug_enabled():
+            import traceback
+
+            traceback.print_exc(file=sys.stderr)
+        try:
+            notify(
+                "検査が失敗しました（%s: %s）。この turn は素通しにしました。"
+                % (type(exc).__name__, sanitize(exc))
+            )
+        except Exception:
+            pass
+        sys.exit(0)

@@ -26,6 +26,7 @@
 
 | 順 | 何 | 状態 |
 | --- | --- | --- |
+| — | **返答の検査をプラグインへ移す** | **まだやらない。**[.claude/hooks/check-reply-clarity.py](../../.claude/hooks/check-reply-clarity.py) でしばらく使い、良し悪しが分かってから `maimuzo-chat-response` へ移す（2026-08-28、人間の指示） |
 | 1 | **RUCM 作り直し 3本目**（`issue を1件処理する`） | **実行中** |
 | 2 | **RUCM 作り直し 4本目**（`着手を取り消す`） | 待ち |
 | 3 | **`fix/issue-43-rucm-redo` を push して PR を作る** | 作り直しの完了後 |
