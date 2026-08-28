@@ -138,6 +138,14 @@ os.Rename(tmp.Name(), path)
 - **修正の履歴を書かない。**置くのは最新の仕様・選定根拠・比較した案の否定根拠だけ
 - **1つの節は50行以内。**長くなったら要約版を別ファイルに作る（元は残す）
 
+## リリースの手順
+
+[.claude/rules/release.md](.claude/rules/release.md) に従うこと。とくに次の3点。
+
+- **実機で issue を1件通してから出す。**テストが全部通っていても、実機で初めて出る欠陥がある
+- **文書を直してから出す。**[docs/FAQ.md](docs/FAQ.md) と [docs/upgrading.md](docs/upgrading.md) の両方に入れる。ノートは1回きりで、あとから困った人が引けない
+- **`--generate-notes` のまま放置しない。**commit の一覧は利用者に読めない
+
 ## 報告のルール
 
 [.claude/rules/reporting.md](.claude/rules/reporting.md) に従うこと。とくに次の3点。
@@ -162,7 +170,8 @@ os.Rename(tmp.Name(), path)
 
 1. **まず draft で作る**（`gh pr create --draft`）
 2. **`/code-review` を通す**
-3. **レビュー結果を、その PR のコメントに貼る**
+3. **レビュー結果を、その PR のコメントに貼る。**
+   **コメントの先頭に `<!-- code-review-result -->` を置く**（リリース前の検査がこの目印を数える）
 4. **指摘に対応する**（下の「コードレビュー記録フロー」に従う）
 5. **`gh pr ready` で draft を外す**
 
