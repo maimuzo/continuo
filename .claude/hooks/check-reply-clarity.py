@@ -24,8 +24,10 @@ turn を終わらせずに書き直させる。
    **報告（読むだけでよい）/ 質問（答えが要る）/ 確認（決定済みだが返事が要る）**の
    どれなのかを先に名乗らせる。
 
-3. **`###` のサブセクションが、いきなり事実の羅列で始まる。**
-   節の冒頭に「これは何の話で、一言で言うと何か」が無いと、読み終えるまで趣旨が分からない。
+3. **話題が変わったのに、区切りも三行まとめも無い。**
+   1つの返答で別の話題へ移るときは、`-----` の区切り線を入れ、
+   **その先にも `## 三行まとめ` と `## 何が言いたいのか` を置く。**
+   これが無いと、読む側は同じ話の続きなのか別の話なのかを判断できない。
 
 どう繋がっているか
 ------------------
@@ -92,13 +94,21 @@ CATEGORY_WORDS = ("報告", "質問", "確認")
 # 「これをうまく使えないか検討して」だけでは、何の話か読み取れなかった実例による。
 MIN_QUOTE_CHARS = 30
 
-# サブセクションの見出しの直後、この行数以内に要約が無ければ「いきなり本題」と見なす。
-SUBSECTION_LEAD_LINES = 2
+# 話題の切れ目に入れる区切り線。行頭からこの文字だけが並ぶ行を区切りとみなす。
+# 表の区切り（`| --- |`）は行頭が `|` なので当たらない。
+DIVIDER_CHARS = "-"
+DIVIDER_MIN = 3
+
+# 区切り線の先に求める見出し。話題が変わったら、そこでも名乗り直す。
+REQUIRED_AFTER_DIVIDER = (
+    ("三行まとめ", ("三行まとめ", "3行まとめ", "３行まとめ")),
+    ("何が言いたいのか", ("何が言いたいのか", "何が言いたいか")),
+)
 
 ISSUE_REF_NAME = "issue / PR の番号に内容が添えられていない箇所"
 CATEGORY_NAME = "`## 何が言いたいのか` の冒頭に、報告 / 質問 / 確認のどれかを名乗っていない"
 QUOTE_THIN_NAME = "引用が短く、何の話への返答かが読み取れない"
-SUBSECTION_NAME = "冒頭に要約の無いサブセクション（`###`）"
+DIVIDER_NAME = "区切り線（`-----`）の先に、三行まとめと何が言いたいのかが無い"
 
 
 def debug_enabled() -> bool:
@@ -328,37 +338,52 @@ def missing_category(masked: str):
     return True
 
 
-def leadless_subsections(masked: str):
-    """冒頭に要約の無いサブセクション（`###` 以下）の名前を返す。
+def is_divider(line: str) -> bool:
+    """話題の切れ目の区切り線か。行頭から `-` だけが3つ以上並ぶ行。
 
-    見出しの直後 SUBSECTION_LEAD_LINES 行以内に、
-    太字（`**` で始まる）かカテゴリ語で始まる行が1つも無ければ「いきなり本題」と見なす。
-    表・箇条書き・コードブロックでいきなり始まる節を拾う。
+    表の区切り（`| --- |`）は行頭が `|` なので当たらない。
     """
-    lines = masked.split("\n")
+    stripped = line.strip()
+    if len(stripped) < DIVIDER_MIN:
+        return False
+    return all(ch in DIVIDER_CHARS for ch in stripped)
+
+
+def blocks_missing_summary(masked: str):
+    """区切り線の先で、三行まとめか何が言いたいのかが欠けているブロックの番号を返す。
+
+    **話題が変わったら、そこでも名乗り直す。**見出しの階層は見ない。
+    先頭のブロック（1つ目の話題）は、5段構成の検査（別の hook）が見ているので、ここでは見ない。
+    """
+    blocks = []
+    current = []
+    for line in masked.split("\n"):
+        if is_divider(line):
+            blocks.append(current)
+            current = []
+        else:
+            current.append(line)
+    blocks.append(current)
+
+    if len(blocks) < 2:
+        return []
+
     bad = []
-    for i, line in enumerate(lines):
-        if heading_level(line) < 3:
+    for i, block in enumerate(blocks[1:], start=2):
+        body = "\n".join(block)
+        # 中身がほとんど無いブロック（署名や1行の補足）は求めない。
+        if len("".join(body.split())) < MIN_LEN_FOR_CHECK // 2:
             continue
-        name = heading_text(line)
-        if not name:
-            continue
-        seen = 0
-        ok = False
-        for nxt in lines[i + 1:]:
-            if heading_level(nxt):
-                break
-            stripped = nxt.strip(SPACES)
-            if not stripped:
+        labels = set()
+        for line in block:
+            text = heading_text(line)
+            if not text:
                 continue
-            seen += 1
-            if stripped.startswith("**") or any(stripped.startswith(w) for w in CATEGORY_WORDS):
-                ok = True
-                break
-            if seen >= SUBSECTION_LEAD_LINES:
-                break
-        if not ok:
-            bad.append(name)
+            for name, variants in REQUIRED_AFTER_DIVIDER:
+                if text in variants:
+                    labels.add(name)
+        if len(labels) < len(REQUIRED_AFTER_DIVIDER):
+            bad.append(i)
     return bad
 
 
@@ -387,11 +412,11 @@ def read_payload():
     return payload if isinstance(payload, dict) else {}
 
 
-def build_reason(bare_refs, no_category, thin_quote, leadless) -> str:
+def build_reason(bare_refs, no_category, thin_quote, late_blocks) -> str:
     """block したときに Claude へ返す指示文。
 
     入力由来の文字列を混ぜない。件数だけは int に通してから %d で埋める。
-    サブセクションの名前だけは、どこを直せばよいかが分からなくなるので載せる。
+    ブロックの番号だけは、どこを直せばよいかが分からなくなるので載せる（数値なので安全）。
     """
     parts = ["返答が「初見で理解できる形」になっていません。**書き直してください。**\n"]
 
@@ -426,19 +451,14 @@ def build_reason(bare_refs, no_category, thin_quote, leadless) -> str:
             "        （PermissionRequest hook で、確認の画面が出ること自体を止める案について）\n"
         )
 
-    if leadless:
-        shown = leadless[:5]
-        omitted = len(leadless) - len(shown)
-        names = " / ".join(shown)
-        if omitted > 0:
-            names += " ほか %d 件" % omitted
-        parts.append("\n%s: %s\n" % (SUBSECTION_NAME, names))
+    if late_blocks:
+        nums = " / ".join("%d つ目" % int(n) for n in late_blocks[:5])
+        parts.append("\n%s: %s の話題\n" % (DIVIDER_NAME, nums))
         parts.append(
-            "\n**`###` の節も、冒頭に「一言で言うと何か」を太字で置くこと。**\n"
-            "表や箇条書きから始めない。読み終えるまで趣旨が分からない書き方になります。\n"
-            "書き方の例:\n"
-            "  ### workflow の報告に誤りがあった件\n"
-            "  **報告。**JSON の形が違っていたので、原文を落として確かめ直しました。\n"
+            "\n**1つの返答で別の話題へ移るときは、`-----` の区切り線を入れ、"
+            "その先にも `## 三行まとめ` と `## 何が言いたいのか` を置くこと。**\n"
+            "見出しの階層（`##` か `###` か）は関係ありません。**話題が変わったかどうかで判断してください。**\n"
+            "**これが無いと、読む側は同じ話の続きなのか別の話なのかを判断できません。**\n"
         )
 
     parts.append(
@@ -478,14 +498,14 @@ def main() -> int:
     # 引用が1文字も無い場合は、5段構成の検査（プラグイン側）が止めるので二重に止めない。
     qchars = quote_chars(masked)
     thin_quote = 0 < qchars < MIN_QUOTE_CHARS
-    leadless = leadless_subsections(masked)
+    late_blocks = blocks_missing_summary(masked)
 
-    if not bare_refs and not no_category and not thin_quote and not leadless:
+    if not bare_refs and not no_category and not thin_quote and not late_blocks:
         return 0
 
     emit({
         "decision": "block",
-        "reason": build_reason(bare_refs, no_category, thin_quote, leadless),
+        "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks),
     })
     return 0
 
