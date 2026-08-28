@@ -79,7 +79,13 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 
 **ボードには Status の選択肢が5つ要ります。**GitHub の既定は `Todo` / `In Progress` / `Done` の3つなので、**足りない2つは GitHub の画面から足してください** — ボードの `Settings` を開き、左の `Custom fields` の `Status` を選び、`Options` の下の `Add option...` に名前を入れて `Add`。名前は何でも構いません。役割との対応は `continuo setup` で決めます。
 
-**`continuo doctor` が9つの検査を通します** — 設定 / Claude Code / **hook の置き場所** / herdr / gh 認証 / ボード / clone / 信頼 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
+**`continuo doctor` が14の検査を通します** — 設定ファイル / 片付けの状態 / claude / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / ボード / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
+
+**`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。**
+**ただし「終了コードが 0」は「continuo が起動する」という意味ではありません。**
+**ボードを読めなかったこと**（レートリミット、応答を待つ期限切れ）**も `!` で出ます。**
+continuo は起動のたびに同じ読み取りを行うので、**その `!` が出ているあいだは起動しません。**
+時間をおいてから `continuo doctor` をやり直してください。
 
 ## 入れる
 
@@ -250,7 +256,9 @@ claude:
 | 判断の根拠・実測値・比較した案 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md)（4800行近い） |
 | ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
 | **作りの形からくる問題**（コードを直す前に読む） | [docs/bug_details.md](docs/bug_details.md)（繰り返し噛みつく7つと、触るときの注意） |
+| **issue 1件が着手から片付けまでどう進むか** | [docs/agent_life_cycle.md](docs/agent_life_cycle.md)（Status の移り変わり・会話の引き継ぎ・自動化に横取りされた Status の戻し方。図つき） |
 | **うまく動かないとき** | [docs/FAQ.md](docs/FAQ.md)（画面のメッセージから引く） |
+| **新しい版に上げたあと** | [docs/upgrading.md](docs/upgrading.md)（増えた設定・書かないとどうなるか・確かめ方） |
 | **開発とテスト** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | 実行ファイルに含まれる第三者 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
 
