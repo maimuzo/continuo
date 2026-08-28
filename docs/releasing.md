@@ -46,7 +46,7 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 | **CI が緑である** | `gh run list --branch main --limit 1` |
 | **CI と同じ状況で手元も通る** | `sh scripts/test-like-ci.sh` |
 | **仕様とテストの連鎖が揃っている** | `sh scripts/check-rucm.sh --strict` |
-| **実機で issue を1件通した** | [docs/trying_it_out.md](trying_it_out.md) の手順 |
+| **実機で issue を1件通した** | 下の「実機で issue を1件通す」 |
 | **`docs/upgrading.md` にこの版の節がある** | 下の「5. 版ごとの節を書く」 |
 | **`docs/FAQ.md` に新しい設定と見出し語がある** | 上の「絶対条件」の数え方 |
 | **PR にレビュー結果が貼ってある** | `sh scripts/check-release-ready.sh` |
@@ -54,8 +54,7 @@ README に1行あるだけで通ってしまうと、**症状から引ける場�
 
 **実機で issue を1件通すのがいちばん重い。**mock だけで通しても、実機で初めて出る欠陥がある。
 実際、`interactive_ready` を見ていなかった欠陥は、テストが全部通っている状態で残っていた。
-**その手順は [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 である。**
-**ここから利用の枠を消費するので、人間の判断で行う。**
+**やり方は下の「実機で issue を1件通す」にある。**
 
 ```bash
 # continuo リポジトリの root で実行する
@@ -76,6 +75,98 @@ gh workflow run release.yml --ref main
 ```
 
 **test と build までが走り、release は作られない**（publish はタグのときだけ動く）。
+
+### 実機で issue を1件通す
+
+**言いたいこと。**動いている continuo は止めなくてよい。
+**worktree と socket の置き場所を分ければ、2つ目の continuo を並べて動かせる。**
+**AI だけで最後まで回せる。**人間の判断を待つ段ではない。
+
+**ただし Claude Code が実際に動くので、定額プランの枠を消費する。**続けて何度も回さない。
+**本番のボード（project #3）には触れない。**使うのは検証用のボードだけである。
+**その番号・リポジトリ・issue・Status の識別子は [docs/test_environment.md](test_environment.md) にある。**
+
+**一、隔離する設定を2つ変える。**
+
+```yaml
+workspace:
+  root: ~/continuo-e2e-worktrees            # worktree の置き場所を本番と分ける
+claude:
+  hook_bridge:
+    listen: /tmp/continuo-e2e/hooks.sock    # socket を分ける
+```
+
+**二重起動を止めるロックは、socket と同じディレクトリに置かれる。**
+**だから socket を分ければ、ロックも一緒に分かれる**
+（[internal/daemon/daemon.go](../internal/daemon/daemon.go) の `ResolveLockFilePath`）。
+
+**二、socket を置くディレクトリの権限を 0700 にする。**
+
+```bash
+mkdir -p /tmp/continuo-e2e ~/continuo-e2e-worktrees
+chmod 0700 /tmp/continuo-e2e
+```
+
+**忘れると `doctor` がここで落ちる。**
+
+```
+✗ hook の置き場所 hook を受ける socket を用意できません: 既にある hook を受ける socket の
+                  ディレクトリ /tmp/continuo-e2e の権限が 0755 です。0700 にしてから起動してください
+                  （continuo は自分が作っていないディレクトリの権限を書き換えません）
+```
+
+**パスは短くする。**macOS の Unix domain socket は104バイト以上で bind に失敗するので、
+**深いディレクトリを指すと、権限とは別の理由でここが `✗` になる。**
+
+**三、検証用のボードで設定を作り、検査を通す。**
+
+```bash
+# どこで実行してもよい
+OWNER="$(gh repo view --json owner --jq .owner.login)"
+WORK=~/continuo-e2e-work        # 置き場所は好きにしてよい。本番の作業ディレクトリと分けること
+mkdir -p "$WORK"
+continuo init --project 10 --owner "$OWNER" --force "$WORK"
+# ここで、一の2つの設定を WORKFLOW.md へ書き込む
+continuo doctor "$WORK"
+```
+
+**`✗` が0件になること。**
+**ボードに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
+
+**四、起動して、issue を1件通す。**
+
+```bash
+# どこで実行してもよい
+continuo ~/continuo-e2e-work
+```
+
+**着手待ちの issue が拾われ、`In Progress` になり、Claude Code が起動する。**
+**`In Review` になれば成功である。**
+**issue を着手待ちへ動かす手順と、進み方の見方は [docs/test_environment.md](test_environment.md) にある。**
+**各段が何をしているのかは [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 に書いてある。**
+
+**本番の continuo は動いたままでよい。**socket もロックも worktree も分かれているので、互いに触らない。
+
+**五、詰まりやすいところ。**前の検証の残り物で止まることがある。
+
+```
+level=WARN msg="目的の worktree をそのまま使えません（Status を書かずにこの issue を飛ばします）"
+  error="目的の branch を別の場所の worktree が使っています…
+  【対処】continuo abandon <issue の URL> を実行してください。"
+```
+
+**案内どおり `continuo abandon <issue の URL> <ディレクトリ>` を叩く。**
+**それでも消えないなら、git の登録だけが残っている。**
+
+```bash
+# どこで実行してもよい。<リポジトリ> は clone してある場所
+git -C <リポジトリ> worktree remove <残っている worktree>
+git -C <リポジトリ> worktree prune
+git -C <リポジトリ> branch -D <残っている branch>
+```
+
+**どこが branch を掴んでいるかは `git -C <リポジトリ> worktree list` で並ぶ。**
+**片付け方の全体は [docs/test_environment.md](test_environment.md) にある。**
 
 ## 2. PR とその issue の検査の結果を読む
 

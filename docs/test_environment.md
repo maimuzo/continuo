@@ -68,6 +68,11 @@ continuo init --project 10 --owner "$OWNER" --force .
 mkdir -p ~/continuo-e2e-worktrees
 ```
 
+**本番の continuo を動かしたまま回すなら、socket も分ける。**
+`claude.hook_bridge.listen` を `/tmp/continuo-e2e/hooks.sock` のような専用のパスに向け、
+そのディレクトリを `chmod 0700` する。**二重起動を止めるロックは socket と同じディレクトリに置かれるので、
+socket を分ければロックも分かれる。**手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
+
 **Status の割り当ては既定のままで合う。**ボードの選択肢を `Ready` / `In Progress` / `In Review` /
 `Blocked` / `Done` の5つにしてあるので、`continuo setup` を回さなくてよい。
 
