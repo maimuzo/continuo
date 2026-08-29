@@ -49,5 +49,5 @@ func validatePlaceholders(cfg *Config) error {
 // value: 雛形が置いているプレースホルダの値。
 // 戻り値: 「<キー> がプレースホルダ（<値>）のままです」という1件分の文言。
 func placeholderItem(key, value string) string {
-	return fmt.Sprintf("%s がプレースホルダ（%s）のままです", key, value)
+	return i18n.T(i18n.KeyConfigPlaceholderItem, key, value)
 }

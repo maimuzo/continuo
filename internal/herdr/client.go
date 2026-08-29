@@ -23,7 +23,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -292,7 +291,7 @@ func marshalParams(params any) (json.RawMessage, error) {
 func canceledError(method string, cause error) error {
 	return &Error{
 		Code:    ErrCodeCanceled,
-		Message: fmt.Sprintf("herdr の呼び出しが打ち切られました（method=%s）", method),
+		Message: i18n.T(i18n.KeyHerdrCallCanceled, method),
 		Err:     cause,
 	}
 }
@@ -352,7 +351,7 @@ func (c *Client) call(
 		}
 		return nil, &Error{
 			Code:      ErrCodeTransport,
-			Message:   fmt.Sprintf("herdr の socket に接続できません: %s", c.socketPath),
+			Message:   i18n.T(i18n.KeyHerdrCallSocketConnectFailed, c.socketPath),
 			Retryable: true,
 			Err:       err,
 		}
@@ -376,7 +375,7 @@ func (c *Client) call(
 	if err := conn.SetDeadline(deadline); err != nil {
 		return nil, &Error{
 			Code:      ErrCodeTransport,
-			Message:   "herdr の socket にタイムアウトを設定できません",
+			Message:   i18n.T(i18n.KeyHerdrCallSetDeadlineFailed),
 			Retryable: true,
 			Err:       err,
 		}
@@ -388,7 +387,7 @@ func (c *Client) call(
 		}
 		return nil, &Error{
 			Code:      ErrCodeTransport,
-			Message:   fmt.Sprintf("herdr へのリクエスト送信に失敗しました（method=%s）", method),
+			Message:   i18n.T(i18n.KeyHerdrCallSendFailed, method),
 			Retryable: true,
 			Err:       err,
 		}
@@ -410,10 +409,8 @@ func (c *Client) call(
 		if errors.As(err, &ne) && ne.Timeout() {
 			return nil, &Error{
 				Code: ErrCodeReadTimeout,
-				Message: fmt.Sprintf(
-					"herdr からの応答がタイムアウトしました（method=%s, %s 待機, 受信済み %d バイト）",
-					method, budget.Round(time.Millisecond), len(line),
-				),
+				Message: i18n.T(i18n.KeyHerdrCallResponseTimeout,
+					method, budget.Round(time.Millisecond), len(line)),
 				Retryable: true,
 				Err:       err,
 			}
@@ -421,7 +418,7 @@ func (c *Client) call(
 		if len(line) == 0 {
 			return nil, &Error{
 				Code:      ErrCodeTransport,
-				Message:   fmt.Sprintf("herdr からの応答読み取りに失敗しました（method=%s）", method),
+				Message:   i18n.T(i18n.KeyHerdrCallResponseReadFailed, method),
 				Retryable: true,
 				Err:       err,
 			}
@@ -431,10 +428,8 @@ func (c *Client) call(
 		// 読み取りエラーを添えて返す。
 		if !json.Valid(bytes.TrimSpace(line)) {
 			return nil, &Error{
-				Code: ErrCodeTransport,
-				Message: fmt.Sprintf(
-					"herdr の応答が途中で切れています（method=%s, body=%s）", method, string(line),
-				),
+				Code:      ErrCodeTransport,
+				Message:   i18n.T(i18n.KeyHerdrCallResponseTruncated, method, string(line)),
 				Retryable: true,
 				Err:       err,
 			}
@@ -445,11 +440,9 @@ func (c *Client) call(
 	if err := json.Unmarshal(bytes.TrimSpace(line), &resp); err != nil {
 		// **壊れた応答は一時的な失敗ではない。**同じものが返ってくるだけなので Retryable にしない。
 		return nil, &Error{
-			Code: ErrCodeTransport,
-			Message: fmt.Sprintf(
-				"herdr の応答を JSON として解析できません（method=%s, body=%s）", method, string(line),
-			),
-			Err: err,
+			Code:    ErrCodeTransport,
+			Message: i18n.T(i18n.KeyHerdrCallResponseNotJSON, method, string(line)),
+			Err:     err,
 		}
 	}
 
