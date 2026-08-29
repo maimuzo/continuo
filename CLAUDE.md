@@ -180,6 +180,13 @@ os.Rename(tmp.Name(), path)
 
 **既に draft を外してしまったものは、`gh pr ready --undo` で戻してからレビューする。**
 
+**この規則は機械で止める。**[.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) が
+`gh pr merge <番号>` と `gh pr ready <番号>` を実行の前に見て、**目印が無ければ拒否する。**
+
+**規則に書くだけでは守られなかった**（2026-08-29。12本をレビューせずにマージし、あとから回し直すことになった）。
+**人間が明示的に許すときだけ、環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を置いて通す。**
+**AI が自分でその環境変数を置いてはならない。**
+
 **エージェントが作る PR にも同じ規則を当てる。**continuo が作った PR も、
 レビューを通すまで draft のままにする。
 

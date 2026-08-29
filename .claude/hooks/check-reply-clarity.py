@@ -524,7 +524,7 @@ def read_payload():
     return payload if isinstance(payload, dict) else {}
 
 
-def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0, file_no_lines=0, file_backtick=0) -> str:
+def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0, file_no_lines=0, file_backtick=0, qchars=0) -> str:
     """block したときに Claude へ返す指示文。
 
     入力由来の文字列を混ぜない。件数だけは int に通してから %d で埋める。
@@ -554,13 +554,27 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0
         )
 
     if thin_quote:
-        parts.append("\n%s\n" % QUOTE_THIN_NAME)
+        parts.append("\n引用が短く、何の話への返答かが読み取れない\n")
         parts.append(
-            "\n**引用は、原文をそのまま短く引くだけにしないこと。**\n"
-            "何の話への返答なのかが分かる長さまで引くか、話の概要を添えること。\n"
-            "  悪い: > これをうまく使えないか検討して\n"
-            "  良い: > これをうまく使えないか検討して\n"
-            "        （PermissionRequest hook で、確認の画面が出ること自体を止める案について）\n"
+            "\n**引用は、判断の材料になった部分から引くこと。**\n"
+            "結びの1文だけを引いても、何の話への返答かは伝わりません。\n"
+            "\n"
+            "**引用の合計は %d 文字以上にすること**（空白は数えません）。\n"
+            "**いまの引用は %d 文字です。**\n"
+            "\n"
+            "**箇条書きで指示が来たら、判断に効いた項目をそのまま引く。**\n"
+            "**長すぎるときは途中を飛ばしてよいが、飛ばしたぶんは文字数に数えられません。**\n"
+            "足りなければ、判断に効いた行をもう1つ引くこと。\n"
+            "\n"
+            "  悪い（結びだけ）:\n"
+            "    > これでなにか問題があるか検討し、問題なければ実装して良い\n"
+            "\n"
+            "  良い（判断の材料から引く）:\n"
+            "    > - 判定は5時間枠、1週間全体枠の2つ。\n"
+            "    > - 5時間余裕値=5時間枠-5時間マージン、…\n"
+            "    > - 判定スコア=5時間余裕値*2+1週間余裕値とし、…\n"
+            "    > これでなにか問題があるか検討し、問題なければ実装して良い\n"
+            % (MIN_QUOTE_CHARS, int(qchars))
         )
 
     if late_blocks:
@@ -635,9 +649,13 @@ def main() -> int:
 
     bare_refs = bare_issue_refs(masked)
     no_category = missing_category(masked)
-    # 引用が1文字も無い場合は、5段構成の検査（プラグイン側）が止めるので二重に止めない。
+    # **引用が1文字も無い場合も止める。**
+    # 0 を見逃すと、**引用を消すのがいちばん安い逃げ道になる。**
+    # 実例（2026-08-29 のレビュー）: 閾値を 80 へ上げた結果、
+    # 「40文字だけ正直に引く」は止まり、「1文字も引かない」は通る状態になっていた。
+    # **罰する範囲だけを広げて、逃げ道を残してはならない。**
     qchars = quote_chars(masked)
-    thin_quote = 0 < qchars < MIN_QUOTE_CHARS
+    thin_quote = qchars < MIN_QUOTE_CHARS
     late_blocks = blocks_missing_summary(masked)
     section_refs = bare_section_refs(masked)
     file_no_lines, file_backtick = file_refs_without_lines(masked)
@@ -649,7 +667,7 @@ def main() -> int:
     emit({
         "decision": "block",
         "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs,
-                               file_no_lines, file_backtick),
+                               file_no_lines, file_backtick, qchars),
     })
     return 0
 
