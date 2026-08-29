@@ -1395,7 +1395,8 @@ func Normalize(raw string) (SafeName, []Warning)
 | 1 | **Status が `cleanup.on_states`（既定は `Done` だけ）に入った時点で片付けを始める。**「active でなくなった時点」ではない。`In Review` と `Blocked` は active_states に入らないが、**そこで消すと、人間が回答して `Ready` へ戻したときに作業成果が失われる**（4-1） |
 | 2 | **コミットされていない変更が残っていないか確認する**（`cleanup.require_clean_worktree`）。**`git -C <worktree> status --porcelain` の出力が空でなければ「残っている」とする。未追跡のファイルも数に入れる**（エージェントが作った成果物が消えるのを防ぐ）。残っていれば消さずに警告として記録し、issue のコメントに残す |
 | 2b | **push されていない成果が残っていないか確認する**（`cleanup.require_pushed`）。**upstream があるか無いかで判定を分ける**（下記） |
-| — その前提 | **エージェントに push させる。**continuo が作る branch は `git worktree add -b` で切った新しいものなので、**push しない限り upstream が無い。**そこで**プロンプトに「`review` を出す前に必ず commit して push すること」を入れる**（5-3） |
+| — その前提 | **エージェントに push させる。**continuo が作る branch は `git worktree add -b` で切った新しいものなので、**push しない限り upstream が無い。**そこで**プロンプトに「`review` または `blocked` を出す前に必ず commit して push すること」を入れる**（5-3） |
+| — その push 先 | **`git push -u origin HEAD` で足りる。**worktree は branch に乗った状態で作られる（detached ではない）ので、同じ名前の branch が remote にでき、upstream もそこへ張られる。**git の側は [docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) で確かめてある**（remote はローカルの bare repository。**GitHub 側の認証と branch protection は未確認**） |
 | 2c | **2 か 2b で消さなかった worktree は、毎巡回で警告を積まない。**issue へのコメントは1回だけ書き、以後は構造化ログにのみ残す。**消さないまま放置してよい**（人間が片付ける） |
 
 **手順2b の判定。「失うものがあるか」を見る。commit の有無では判定しない。**
@@ -7579,8 +7580,14 @@ gh pr view の --comments にも --json comments にも1件も出ません。**�
     CONTINUO-STATUS: blocked    判断を仰ぎたい、または失敗した
     CONTINUO-STATUS: working    まだ続きがある
 
-**`review` を出す前に、必ず commit して push してください。**
+**`review` または `blocked` を出す前に、必ず commit して push してください。**
 push していない作業は、この worktree が片付くときに失われます。
+**`blocked` は人間へ渡す合図なので、そこから先この worktree で作業が続くとは限りません。**
+
+**push 先は、この issue のために作られた branch です。**
+`git push -u origin HEAD` で足ります。branch 名を自分で決める必要はありません。
+
+**push できなかったときは、その理由も `blocked` のコメントに書いてください。**
 
 **読んだコメントに「まとめて対応する issue のグループ」が書かれている場合は、
 同じリポジトリの issue に限り、まとめて直してください。**
@@ -7635,6 +7642,26 @@ push していない作業は、この worktree が片付くときに失われ�
 
 **`CONTRIBUTOR` をこの3つに含めてはならない。**この値は、**そのリポジトリで過去に commit が
 1回 merge されただけで付く。**いまそのリポジトリに対する権限があることを意味しない。
+
+### 5-3b. push の求め方で、まだ人間が決めていないこと
+
+**言いたいこと。**5-3 の本文は「`review` または `blocked` を出す前に必ず commit して push」を
+例外なく求め、それ以外の push は求めていない。**次の4つは、そこに例外や追加を入れるかどうかの判断であり、人間が決めるまで動かさない。**
+**4つとも「決めるまでは、いまの文面のまま出す」で運用する。**
+
+| 短縮名 | 何を決めてもらうか | 決めるまでの振る舞い |
+| --- | --- | --- |
+| **push できないときの行き先** | push に失敗したエージェントに、`blocked` を出させるか `working` のままにさせるか。**`blocked` を出させると、その worktree は手順2b（`cleanup.require_pushed`、既定 `true`）に引っかかって片付かず、人間が手で始末することになる**（`continuo abandon --force` で押し切れば、そこで失われる）。**`working` のままにさせると、人間に渡らないまま `agent.max_dispatch_turns` を使い切る** | **`blocked` を出させ、失敗の理由をコメントに書かせる**（いまの本文） |
+| **commit するものが無いとき** | まだ1行も書いていない段階の `blocked` に、push を求めるかどうか。**`git commit` は `nothing to commit, working tree clean` を出して exit 1 で落ちる**（[docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) で実測）。その失敗理由が、人間へ渡す合図のコメントを埋める | **例外を作らない**（いまの本文） |
+| **PR を作らせるか** | `review` を出すエージェントに、push だけをさせるか `gh pr create` までさせるか。**いまの雛形は PR を読ませるだけで、作らせる指示は1つも無い**（`internal/scaffold/template.go` に `gh pr create` は無い）。作らせない場合、人間は branch を自分で見つけて PR を作ることになる。作らせる場合、[CLAUDE.md](../../CLAUDE.md) の「まず draft で作り、`/code-review` を通してから `gh pr ready`」までを雛形に書き足すことになる | **作らせない**（いまの本文） |
+| **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:75](../../internal/config/default.go#L75)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
+
+**なぜ勝手に決めないか。**4つとも**「人間の手間が増える」と「人間に届かない」のどちらを取るか**の判断である。
+**その issue をどれだけ待てるかで答えが変わる**ので、設計として一方に倒す根拠を continuo の側は持たない。
+
+**決まったら 5-3 の本文と 3-9 の「— その前提」を同時に直す。**
+片方だけ直すと、[test/internal/scaffold/blocked_push_test.go](../../test/internal/scaffold/blocked_push_test.go) と
+`TestTemplate_雛形の本文が設計5_3の本文と一致する` のどちらかが落ちる。
 
 ### 5-4. 2回目以降のプロンプト
 

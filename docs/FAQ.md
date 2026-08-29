@@ -689,6 +689,35 @@ pane の生死を確かめずに、worktree・branch・herdr の workspace を�
 **待ち終えても pane が残っていた場合は、何も消さずに止まります。**
 `--force` を付けない限り、勝手に pane ごと消すことはありません。
 
+### `Blocked` になった issue の worktree に、push していない作業が残っている
+
+**原因。**v0.1.9 までの `WORKFLOW.md` は、`review` の前にしか push を求めていませんでした。
+**`blocked` を出したエージェントは、push せずに手を離します。**
+
+**そうなるとどうなるか。****その issue は片付きません。**
+`cleanup.require_clean_worktree` と `cleanup.require_pushed` が既定で `true` なので、
+continuo も `continuo abandon` も「失うものがあるので何も消しません」で止まります。
+**勝手に消されることはありませんが、あなたが手で始末するまで worktree が残り続けます。**
+
+**直し方は2つあり、両方やってください。**
+
+**1. 残っている作業を救い出す。**worktree に入って push します。
+
+```bash
+grep -n -A2 '^workspace:' ~/continuo-work/WORKFLOW.md   # root: が worktree の置き場所
+cd <その issue の worktree>
+git status
+git add -A && git commit -m "<何をしたか>"
+git push -u origin HEAD
+```
+
+**`git push -u origin HEAD` で足ります。**worktree はその issue のために作られた branch に
+乗っているので、branch 名を自分で調べる必要はありません。
+
+**2. 同じことが起きないように、`WORKFLOW.md` の本文を当てる。**
+差し替える文面は [upgrading.md](upgrading.md) の「v0.1.9 から v0.1.10 へ」にあります。
+**当てたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+
 ### `continuo abandon` が「失うものがあるので何も消しません」で止まる
 
 **原因。**コミットしていない変更か、push していない commit があります。
@@ -906,21 +935,26 @@ continuo trust --dry-run ~/continuo-work
 **原因。**v0.x のうちは設定のキーが増減しうるので、作り直しが要るのかどうかが判断しづらい。
 
 **直し方（v0.1.10 に上げた場合）。****作り直しは要りません。v0.1.9 の `WORKFLOW.md` がそのまま通ります。**
+**ただし、当てるものが2つあります。**
 
 | 何 | v0.1.10 では |
 | --- | --- |
 | **消えたキー** | **ありません** |
 | **名前が変わったキー** | **ありません** |
 | **増えたキー** | `claude.tool_gate` の1つだけ。**省略できます** |
+| **本文（プロンプト）** | **`blocked` を出す前にも push させる指示が入りました。**当てないと、エージェントは人間へ渡す前に push しません |
 
-**ただし、省略すると既定が効きます。****この版だけは、書き足さなくても動きが変わります。**
-公開リポジトリの issue で、エージェントが `Bash` を叩くたびに、その中身が危なくないかの検査が1回入ります。
-**元に戻す1行は [upgrading.md](upgrading.md) にあります。**
+**設定と本文は、当てなかったときに起きることが違います。**
+
+| どこ | 当てないとどうなるか |
+| --- | --- |
+| **front matter**（先頭の `---` に挟まれた YAML） | **壊れません。**ただし `claude.tool_gate` は**省略すると既定が効きます。**公開リポジトリの issue で、エージェントが `Bash` を叩くたびに、その中身が危なくないかの検査が1回入ります。**元に戻す1行は [upgrading.md](upgrading.md) にあります** |
+| **本文**（front matter より下） | **エージェントの動きが古いままです。**continuo は本文を読み替えないので、書いていない指示は届きません |
 
 **`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れます。
-**増えた設定を使いたいときは、その行だけを手で書き足します。**
+**増えた設定も、変わった本文も、その部分だけを手で当てます。**
 
-**足す場所と中身、書かないと何が起きるか、足したあとの確かめ方は
+**足す場所と中身、当てないと何が起きるか、当てたあとの確かめ方は
 [upgrading.md](upgrading.md) にあります。**版ごとにそこへ積み上げます。
 
 **上げたあとは `continuo doctor` を1回叩いてください。**
@@ -929,6 +963,16 @@ continuo trust --dry-run ~/continuo-work
 ```bash
 cd ~/continuo-work && continuo doctor; echo "exit=$?"
 ```
+
+**`continuo doctor` は本文を検査しません。**本文が当たっているかは `grep` で見ます。
+
+```bash
+grep -c 'blocked` を出す前に' ~/continuo-work/WORKFLOW.md
+```
+
+**`1` なら当たっています。**`0` なら [upgrading.md](upgrading.md) の「v0.1.9 から v0.1.10 へ」を見てください。
+**既に `blocked` で止まっている issue があるなら、**「片付けたいとき」の
+**`Blocked` になった issue の worktree に、push していない作業が残っている** も見てください。
 
 ### `WORKFLOW.md` を書き換えたのに反映されない
 

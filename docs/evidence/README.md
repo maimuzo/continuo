@@ -11,6 +11,10 @@ Raw observations that the design in [../plans/continuo_design.md](../plans/conti
 | `hooks_probe_20260817.jsonl` | Every hook payload Claude Code delivered during the 2026-08-17 experiment, one JSON object per line |
 | `hooks_probe_settings.local.json` | The `.claude/settings.local.json` that registered those hooks |
 | `hooks_probe.py` | The hook handler — writes stdin verbatim to the JSONL |
+| `push_u_origin_head.md` | Whether `git push -u origin HEAD` reaches the issue's branch from a continuo-shaped worktree — the script and its verbatim output |
+
+**`push_u_origin_head.md` は git そのものの振る舞いだけを記録したものです。**remote はローカルの
+bare repository で、**GitHub 側（認証・branch protection）は含みません。**その旨はファイルの冒頭にも書いてあります。
 
 ## How it was produced
 
