@@ -6,9 +6,10 @@
 // あとから消しても取り消せない。**
 //
 // **縮めるのは、continuo を動かしている機械の home で始まるパスだけである。**
-// **綴り方は3つある。**home をそのまま書いた形、home を symlink 越しに解決した形、
-// **home の `/` を `-` に置き換えた形**（Claude Code の会話の記録の置き場所の名前）。
-// **3つとも縮める。**
+// **綴り方は4つある。**home をそのまま書いた形、home を symlink 越しに解決した形、
+// **home の `/` を `-` に置き換えた形**、
+// **home の `/` と `.` と `_` を `-` に置き換えた形**（Claude Code の会話の記録の置き場所の名前）。
+// **4つとも縮める。**
 //
 // **home の外にあるパスはそのまま出す。**縮めようが無いうえ、伏せてしまうと
 // 引き渡しの通知の【調べるところ】が「どこを見ればよいか分からない」ものになる。
@@ -16,6 +17,8 @@
 package redact
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +26,13 @@ import (
 
 // homeMark は縮めたあとに置く印である。
 const homeMark = "~"
+
+// ErrUnusableHome は、home の値が縮める対象として使えないことを表す
+// （空文字列・`/` そのもの・相対のパス）。
+//
+// **返さないと、何も縮めずに素通りしたことが誰にも伝わらない。**
+// `Paths` の呼び出し側はこれを見て警告を1行出す（設計 3-73）。
+var ErrUnusableHome = errors.New("home が縮める対象として使えません")
 
 // Paths は body の中の絶対パスのうち、continuo を動かしている機械の home で始まるものを
 // `~` に縮める。
@@ -37,15 +47,19 @@ const homeMark = "~"
 // （環境を絞った常駐の仕組みから起こす、別の利用者へ切り替えて起こす）をすると、
 // **警告が無ければ絶対パスが公開の issue へ出る。**
 //
+// **引けても使えない値のときも同じである。**`HOME=/` や `HOME=relative/path` は
+// `os.UserHomeDir` を素通りするが、縮める対象にはできない。**このときも
+// `ErrUnusableHome` を返す。**返さないと、何も縮めなかったことが誰にも伝わらない。
+//
 // body: issue へ書く本文。
 // 戻り値の1つ目: home を `~` に縮めた本文。縮められなければ body そのまま。
-// 戻り値の2つ目: home を引けなかったときのエラー。
+// 戻り値の2つ目: home を引けなかった／引けても使えなかったときのエラー。
 func Paths(body string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return body, err
 	}
-	return PathsWithHome(body, home), nil
+	return PathsWithHome(body, home)
 }
 
 // PathsWithHome は home を明示して Paths と同じことを行う。
@@ -54,18 +68,24 @@ func Paths(body string) (string, error) {
 // 縮め方を確かめられる。
 //
 // **`/` を home として渡しても何もしない。**すべての絶対パスが `~` に化けるためである。
+// **ただし黙っては通さない。**`ErrUnusableHome` を添えて返す。
 //
 // body: issue へ書く本文。
 // home: 縮める対象の home の絶対パス。末尾のスラッシュは無視する。
-// 戻り値: home を `~` に縮めた本文。
-func PathsWithHome(body, home string) string {
-	for _, spelling := range homeSpellings(home) {
+// 戻り値の1つ目: home を `~` に縮めた本文。縮められなければ body そのまま。
+// 戻り値の2つ目: home が縮める対象として使えないときの `ErrUnusableHome`。
+func PathsWithHome(body, home string) (string, error) {
+	spellings := homeSpellings(home)
+	if len(spellings) == 0 {
+		return body, fmt.Errorf("%w: %q", ErrUnusableHome, home)
+	}
+	for _, spelling := range spellings {
 		body = replaceBounded(body, spelling, slashBounded)
-		if dash := dashSpelling(spelling); dash != "" {
+		for _, dash := range dashSpellings(spelling) {
 			body = replaceBounded(body, dash, dashBounded)
 		}
 	}
-	return body
+	return body, nil
 }
 
 // homeSpellings は縮める対象の home の綴りを、長いものから順に返す。
@@ -107,6 +127,9 @@ func homeSpellings(home string) []string {
 
 // normalizeHome は home の綴りを整え、縮める対象として使えるかを判定する。
 //
+// **`/` そのものは使えない。**末尾のスラッシュを落とすと空になるので、ここで弾かれる。
+// 通してしまうと、本文中のすべての絶対パスが `~` に化ける。
+//
 // home: 整える綴り。
 // 戻り値: 末尾のスラッシュを落とした絶対パス。使えなければ空文字列。
 func normalizeHome(home string) string {
@@ -117,29 +140,49 @@ func normalizeHome(home string) string {
 	return home
 }
 
-// dashSpelling は home の `/` を `-` に置き換えた綴りを返す。
+// dashSpellings は home を `-` で綴り直した形を返す。
 //
 // **Claude Code の会話の記録の置き場所が、この綴りを名前に持つ。**
-// 置き場所は `~/.claude/projects/<cwd の `/` を `-` に置き換えたもの>/<セッション UUID>.jsonl`
-// であり、**cwd が home の下にある限り、その名前の中に利用者名が丸ごと入る。**
-// issue #75 が挙げた例そのものである。
+// 置き場所は `~/.claude/projects/<cwd を綴り直したもの>/<セッション UUID>.jsonl` であり、
+// **cwd が home の下にある限り、その名前の中に利用者名が丸ごと入る。**
 //
-//	/home/alice/.claude/projects/-home-alice-worktrees-issue-1/….jsonl
+// **Claude Code は `/` だけでなく `.` と `_` も `-` に変える。**
+// `/Users/first.last` は会社で使う Mac の既定の形であり、`/` だけを見ていると
+// **`-Users-first-last-…` が1文字も縮まらないまま公開される。**
+//
+//	/Users/john.doe/.claude/projects/-Users-john-doe-worktrees-issue-1/….jsonl
 //	→ ~/.claude/projects/~-worktrees-issue-1/….jsonl
+//
+// **2通り返す。**`/` だけを置き換えた形と、`/` と `.` と `_` を置き換えた形である。
+// home に `.` も `_` も無ければ両者は同じ文字列になるので、そのときは1つだけ返す。
+// **両方要る理由。**綴り直す規則を持っているのは Claude Code であり、こちらは版を選べない。
+// 片方だけに賭けると、外れた版で利用者名が公開される。
+// **多く縮める側に外れても、失われるのは案内の読みやすさだけである。**
 //
 // **home の区切りが1つしか無ければ縮めない。**`/alice` のような home では
 // `-alice` が別の言葉に当たりやすく、縮めすぎて文面が読めなくなる。
 //
 // home: 整えた home の絶対パス。
-// 戻り値: `-` で綴り直した形。縮める対象にしないなら空文字列。
-func dashSpelling(home string) string {
+// 戻り値: `-` で綴り直した形の並び。縮める対象にしないなら長さ0。
+func dashSpellings(home string) []string {
 	if strings.Count(home, "/") < 2 {
-		return ""
+		return nil
 	}
-	return strings.ReplaceAll(home, "/", "-")
+	slashOnly := strings.ReplaceAll(home, "/", "-")
+	full := strings.NewReplacer("/", "-", ".", "-", "_", "-").Replace(home)
+	if full == slashOnly {
+		return []string{slashOnly}
+	}
+	return []string{slashOnly, full}
 }
 
 // replaceBounded は body の中の needle を、境界の検査を通ったものだけ `~` に置き換える。
+//
+// **走査は body の全体に対して行う。**一致を1つ捨てるたびに文字列を切り詰めると、
+// **2つ目以降の一致で「直前の1文字」が読めなくなる。**そうなると
+// `/mnt/home/alice/home/alice/x` の2つ目が行頭にあるものとして通り、
+// **縮めてはいけない側が `/mnt/home/alice~/x` に縮む。**
+// だから位置だけを進め、境界の判定には常に body そのものを渡す。
 //
 // body: 走査する文字列。
 // needle: 探す綴り。
@@ -150,48 +193,50 @@ func replaceBounded(body, needle string, bounded func(string, int, int) bool) st
 		return body
 	}
 	var b strings.Builder
-	rest := body
-	for {
-		i := strings.Index(rest, needle)
-		if i < 0 {
+	// written は、まだ b へ書き出していない範囲の先頭である。
+	// next は、次に needle を探し始める位置である。どちらも body の先頭からの位置。
+	written, next := 0, 0
+	for next <= len(body)-len(needle) {
+		rel := strings.Index(body[next:], needle)
+		if rel < 0 {
 			break
 		}
+		i := next + rel
 		end := i + len(needle)
-		if !bounded(rest, i, end) {
+		next = end
+		if !bounded(body, i, end) {
 			// 別のパスの一部である（`/mnt/home/alice` や `/home/alice2` など）。
-			// **そこまでを出して、続きから探し直す。**
-			b.WriteString(rest[:end])
-			rest = rest[end:]
+			// **書き出さずに位置だけ進める。**前後の文脈は body の中に残る。
 			continue
 		}
-		b.WriteString(rest[:i])
+		b.WriteString(body[written:i])
 		b.WriteString(homeMark)
-		rest = rest[end:]
+		written = end
 	}
-	b.WriteString(rest)
+	b.WriteString(body[written:])
 	return b.String()
 }
 
-// slashBounded は rest[i:end] が「`/` で綴った home そのもの」を指しているかを返す。
+// slashBounded は body[i:end] が「`/` で綴った home そのもの」を指しているかを返す。
 //
 // **前後を見ずに置き換えてはならない。**`/home/alice` を縮める場面で、
 // `/home/alice2/…` を `~2/…` に、`/mnt/home/alice` を `/mnt~` にしてしまう。
 //
-// rest: 走査中の文字列。
+// body: 走査中の文字列の全体。
 // i: 一致した先頭の位置。
 // end: 一致の終端（次の位置）。
 // 戻り値: home そのものを指していれば真。
-func slashBounded(rest string, i, end int) bool {
-	if i > 0 && (rest[i-1] == '/' || isNameByte(rest[i-1])) {
+func slashBounded(body string, i, end int) bool {
+	if i > 0 && (body[i-1] == '/' || isNameByte(body[i-1])) {
 		return false
 	}
-	if end < len(rest) && rest[end] != '/' && isNameByte(rest[end]) {
+	if end < len(body) && body[end] != '/' && isNameByte(body[end]) {
 		return false
 	}
 	return true
 }
 
-// dashBounded は rest[i:end] が「`-` で綴った home そのもの」を指しているかを返す。
+// dashBounded は body[i:end] が「`-` で綴った home そのもの」を指しているかを返す。
 //
 // **`-` は区切りであって名前の続きではない。**`-home-alice-worktrees-issue-1` の
 // `-home-alice` は、そのディレクトリ名の先頭にある home の綴りである。
@@ -202,15 +247,15 @@ func slashBounded(rest string, i, end int) bool {
 //
 // **後ろが英数字・`_`・`.` なら弾く。**`-home-alice2-…` は別の利用者である。
 //
-// rest: 走査中の文字列。
+// body: 走査中の文字列の全体。
 // i: 一致した先頭の位置。
 // end: 一致の終端（次の位置）。
 // 戻り値: home そのものを指していれば真。
-func dashBounded(rest string, i, end int) bool {
-	if i > 0 && isDashNameByte(rest[i-1]) {
+func dashBounded(body string, i, end int) bool {
+	if i > 0 && isDashNameByte(body[i-1]) {
 		return false
 	}
-	if end < len(rest) && isDashNameByte(rest[end]) {
+	if end < len(body) && isDashNameByte(body[end]) {
 		return false
 	}
 	return true

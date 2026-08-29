@@ -2,6 +2,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -80,14 +81,14 @@ func TestPrompt_本文はJSONのまま読ませる(t *testing.T) {
 		// issue のコメント。要素に authorAssociation が入る。
 		"gh issue view 188 --repo octocat/hello-world --json comments",
 		// issue の本文。立場は REST の author_association にしか無い。
-		"gh api repos/octocat/hello-world/issues/188 --jq '{author: .user.login, association: .author_association, body: .body}'",
+		"gh api repos/octocat/hello-world/issues/188 --jq '{author: .user.login, author_association: .author_association, body: .body}'",
 		// PR の説明。立場は REST の author_association にしか無い。
-		"gh api repos/octocat/hello-world/pulls/<PR番号> --jq '{author: .user.login, association: .author_association",
+		"gh api repos/octocat/hello-world/pulls/<PR番号> --jq '{author: .user.login, author_association: .author_association",
 		// PR の会話のコメント。要素に authorAssociation が入る。
 		"gh pr view <PR番号> --repo octocat/hello-world --json comments",
 		// 行に紐づくレビューコメントと、レビューの判定。どちらもオブジェクトのまま出す。
-		"gh api repos/octocat/hello-world/pulls/<PR番号>/comments --paginate --jq '.[] | {author: .user.login, association: .author_association",
-		"gh api repos/octocat/hello-world/pulls/<PR番号>/reviews --paginate --jq '.[] | {author: .user.login, association: .author_association",
+		"gh api repos/octocat/hello-world/pulls/<PR番号>/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association",
+		"gh api repos/octocat/hello-world/pulls/<PR番号>/reviews --paginate --jq '.[] | {author: .user.login, author_association: .author_association",
 	}
 	for _, want := range wantEach {
 		if !strings.Contains(got, want) {
@@ -195,5 +196,144 @@ func TestPrompt_着手してよいことは立場と切り離されている(t *
 		t.Errorf("着手が承認済みである説明が、立場の節より後ろにある。"+
 			"先に「信用してよいのは3つだけ」を読ませると、外部が立てた issue でそこで止まる（承認=%d / 立場=%d）",
 			approval, association)
+	}
+}
+
+// jqOutputKeyPattern は、`--jq` が組み立てるオブジェクトの `<キー>: .author_association` を拾う。
+//
+// **見たいのは左側である。**`--jq '{association: .author_association}'` は
+// `.author_association` を読んで `association` という名前で出す。
+// **出す側の名前が、本文の指示と揃っていなければならない。**
+var jqOutputKeyPattern = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\.author_association\b`)
+
+// associationWordPattern は、本文に出てくる「…association…」の綴りを全部拾う。
+var associationWordPattern = regexp.MustCompile(`[A-Za-z_]*[Aa]ssociation[A-Za-z0-9_]*`)
+
+// forbiddenDisplaySample は、使わせない表示（`gh issue view --comments`）の見本の行である。
+//
+// **この行の `association:` は gh が出す文字列であって、本文の指示ではない。**
+// 見本ごと落としてしまうと、なぜその表示を使ってはいけないのかを説明できなくなる。
+const forbiddenDisplaySample = "    association:"
+
+// commandLinePrefix は、本文の中で「実行させるコマンド」を1行で並べている形である
+// （雛形は4つの空白で字下げして書く）。
+//
+// **地の文と区別する。**地の文にもコマンドの名前は出るので、
+// 区別しないと同じコマンドを何度も数えてしまう。
+const commandLinePrefix = "    gh "
+
+// jqCommandCount は、投稿者の立場を `gh api` で取るコマンドの本数である。
+//
+// **issue の本文 / PR の説明 / PR のレビューコメント / PR のレビュー の4本。**
+// 残る2本（issue のコメント / PR の会話のコメント）は `--json comments` で取るので
+// `--jq` を使わない。**合わせて、読ませる場所は5種類すべてを覆う。**
+const jqCommandCount = 4
+
+// jsonCommentsCommandCount は、`--json comments` で取るコマンドの本数である
+// （issue のコメントと、PR の会話のコメント）。
+const jsonCommentsCommandCount = 2
+
+// TestPrompt_jqが出すキーの名前を変えていない は、
+// **雛形の `--jq` が、投稿者の立場のキーを別の名前で出していないこと**を確かめる。
+//
+// 目的: 本文は「author_association を見よ」と指示している。
+// **同じ本文の `--jq` がその名前を `association` に変えていると、
+// エージェントは指示された名前を探しても見つけられない。**
+// 見つからなければ、外部の人のコメントを立場の分からないものとして扱うか、
+// 全部止めるかのどちらかになる。**どちらも守りが機能していない状態である。**
+//
+// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 成功条件: `--jq` の出力のキーがどれも author_association であること。
+// **`gh api` でその値を取る行が4本あること**（issue の本文 / PR の説明 /
+// PR のレビューコメント / PR のレビュー）。
+func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
+	got := renderedPrompt(t)
+
+	found := 0
+	for i, line := range strings.Split(got, "\n") {
+		if !strings.Contains(line, "--jq") || !strings.Contains(line, ".author_association") {
+			continue
+		}
+		found++
+		for _, m := range jqOutputKeyPattern.FindAllStringSubmatch(line, -1) {
+			if m[1] == "author_association" {
+				continue
+			}
+			t.Errorf("本文の %d 行目の --jq が、投稿者の立場のキーを %q という名前で出している。"+
+				"本文は author_association を探せと指示しているので、エージェントは見つけられない:\n  %s",
+				i+1, m[1], line)
+		}
+	}
+	if found != jqCommandCount {
+		t.Errorf("投稿者の立場を gh api で取る行が %d 本しかない（%d 本あるはず: "+
+			"issue の本文 / PR の説明 / PR のレビューコメント / PR のレビュー）", found, jqCommandCount)
+	}
+}
+
+// TestPrompt_指示する名前はどれかのコマンドが返す名前である は、
+// **本文が「これを見よ」と書いている名前が、本文に並んだコマンドの出力に実在すること**を確かめる。
+//
+// 目的: **指示とコマンドが別々に直されると、片方だけが古くなる。**
+// この検査は、本文に並んだコマンドから「返ってくる名前の一覧」を組み立て、
+// **本文のどこかにそれ以外の綴りが書かれていたら落とす。**
+//
+// **`gh api` の `--jq` は出力のキーを自分で決める**ので、決めた名前をそのまま採る。
+// **`gh issue view --json comments` と `gh pr view --json comments` は
+// authorAssociation という綴りで返す**（gh 2.97.0 で実測）。
+// **この2つは綴りが違うだけで同じものである。**本文はその違いを説明していなければならない。
+//
+// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 成功条件: 本文に出る「…association…」の綴りが、どれもコマンドの出力に実在すること。
+// 使わせない表示（`gh issue view --comments`）の見本の行だけは、gh が出す文字列なので除く。
+func TestPrompt_指示する名前はどれかのコマンドが返す名前である(t *testing.T) {
+	got := renderedPrompt(t)
+	lines := strings.Split(got, "\n")
+
+	// 本文に並んだコマンドから、返ってくる名前を集める。
+	produced := map[string]string{}
+	jsonComments := 0
+	for _, line := range lines {
+		if !strings.HasPrefix(line, commandLinePrefix) {
+			continue
+		}
+		switch {
+		case strings.Contains(line, "--jq") && strings.Contains(line, ".author_association"):
+			for _, m := range jqOutputKeyPattern.FindAllStringSubmatch(line, -1) {
+				produced[m[1]] = line
+			}
+		case strings.Contains(line, "--json comments"):
+			// gh issue view / gh pr view の --json comments は authorAssociation で返す。
+			produced["authorAssociation"] = line
+			jsonComments++
+		}
+	}
+	if jsonComments != jsonCommentsCommandCount {
+		t.Errorf("--json comments で取る行が %d 本しかない（%d 本あるはず: "+
+			"issue のコメント / PR の会話のコメント）", jsonComments, jsonCommentsCommandCount)
+	}
+	if len(produced) == 0 {
+		t.Fatalf("投稿者の立場を取るコマンドが本文に1本もありません:\n%s", got)
+	}
+
+	for i, line := range lines {
+		if strings.HasPrefix(line, forbiddenDisplaySample) {
+			continue
+		}
+		for _, word := range associationWordPattern.FindAllString(line, -1) {
+			if _, ok := produced[word]; ok {
+				continue
+			}
+			t.Errorf("本文の %d 行目が %q という名前を出しているが、"+
+				"本文に並んだどのコマンドもその名前では返さない。"+
+				"エージェントは探しても見つけられない:\n  %s", i+1, word, line)
+		}
+	}
+
+	// **2つの綴りの違いを説明していること。**どちらか片方しか説明していないと、
+	// もう片方を取ったときに「指示された名前が無い」と読まれる。
+	for _, want := range []string{"author_association", "authorAssociation"} {
+		if _, ok := produced[want]; !ok {
+			t.Errorf("投稿者の立場を %q で返すコマンドが本文にありません", want)
+		}
 	}
 }
