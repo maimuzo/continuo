@@ -330,6 +330,57 @@ case(
     "94",
 )
 
+# --- ここから、実際に踏む3件のうち2件（`<<` の誤認 / `#` の中の branch 名）を確かめる。
+# **直す前は、上4件がどれも素通りし、下2件がどちらも誤って止まっていた。**
+
+case(
+    "引用符の中の << は heredoc の始まりではない（あとのマージを見落とさない）",
+    "echo 'a << b'\n%s %s 94" % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+case(
+    "<<< は here-string であって heredoc ではない（あとのマージを見落とさない）",
+    "echo x <<< WORD\n%s %s 94" % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+case(
+    "改行が CRLF でも heredoc の区切り語は一致する（あとのマージを見落とさない）",
+    "cat > memo.txt <<EOF\r\nhello\r\nEOF\r\n%s %s 94\r\n" % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+case(
+    "閉じていない heredoc は、残りの行を捨てない",
+    "cat > memo.txt <<EOF\nhello\n%s %s 94\n" % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+case(
+    "行末のコメントの中の gh pr ready は通す",
+    "echo hi   # %s %s main de modosu" % (GH, READY),
+    False,
+    False,
+)
+case(
+    "行頭のコメントの中の gh pr merge は通す",
+    "# %s %s 94\necho hi" % (GH, MERGE),
+    False,
+    False,
+)
+case(
+    "コメントの中の << も heredoc の始まりにはしない",
+    "echo hi   # a << b\n%s %s 94" % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+
 
 def run_cases(mod):
     """(ng, total) を返す。"""
@@ -627,6 +678,58 @@ def run_has_review_json_cases(mod, real_has_review):
     return ng, total
 
 
+def run_has_review_target_cases(mod, real_has_review):
+    """(ng, total) を返す。
+
+    **`has_review()` が問い合わせる先が、リポジトリ名の判定（`current_repo()`）と
+    同じリポジトリを指すことを確かめる。**直す前は、`gh pr view` をいまいる
+    ディレクトリで引数なしに呼んでいた。worktree の中で作業していると、
+    **`is_this_repo()` は `CLAUDE_PROJECT_DIR` のリポジトリで判定したのに、
+    レビューの有無は別のリポジトリの同じ番号の PR を見る**、という食い違いが起きる。
+
+    **`gh` は呼ばない。**`subprocess.run` を差し替えて、渡された引数と `cwd` を見る。
+    """
+    ng = 0
+    total = 0
+    original_run = subprocess.run
+    seen = {}
+
+    def fake(args, **kwargs):
+        seen["args"] = list(args)
+        seen["cwd"] = kwargs.get("cwd")
+        return subprocess.CompletedProcess(args, 0, stdout=json.dumps({"comments": []}), stderr="")
+
+    old = os.environ.get("CLAUDE_PROJECT_DIR")
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["CLAUDE_PROJECT_DIR"] = d
+        subprocess.run = fake
+        try:
+            real_has_review("94")
+        finally:
+            subprocess.run = original_run
+            if old is None:
+                os.environ.pop("CLAUDE_PROJECT_DIR", None)
+            else:
+                os.environ["CLAUDE_PROJECT_DIR"] = old
+
+        args = seen.get("args") or []
+        total += 1
+        if "--repo" in args and args[args.index("--repo") + 1] == THIS_REPO:
+            print("ok  has_review() は current_repo() のリポジトリを --repo で明示する")
+        else:
+            ng += 1
+            print("NG  has_review() の引数に --repo %s が無い: %r" % (THIS_REPO, args))
+
+        total += 1
+        if seen.get("cwd") == d:
+            print("ok  has_review() は CLAUDE_PROJECT_DIR のディレクトリで gh を呼ぶ")
+        else:
+            ng += 1
+            print("NG  has_review() の cwd: %r（想定は %r）" % (seen.get("cwd"), d))
+
+    return ng, total
+
+
 # --- C群: 信頼する肩書きの一覧が、scripts/check-release-ready.sh と揃っていることを確かめる。
 # Python の集合（TRUSTED_ASSOCIATIONS）と jq の配列に、別々の一覧を書いてしまうと、
 # リリース前の検査とマージの検査が食い違う。
@@ -704,6 +807,7 @@ def main():
         run_parse_owner_repo_cases(mod),
         run_current_repo_case(mod, real_current_repo),
         run_has_review_json_cases(mod, real_has_review),
+        run_has_review_target_cases(mod, real_has_review),
     ]
     ng = sum(n for n, _ in results)
     total = sum(t for _, t in results)

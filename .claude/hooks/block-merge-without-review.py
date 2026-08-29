@@ -45,7 +45,11 @@
 - **heredoc の中身**（`<<EOF` … `EOF` の間の行）。**実行される文ではなく、ファイルへ書く
   文章そのものである。**中に `gh pr merge 94` という例が出てきても、それは実行されない
   （2026-08-30、レビューで指摘。以前は中身も素朴に読んでいて、文書を書き足すだけで
-  誤って止まっていた）
+  誤って止まっていた）。**heredoc とみなすのは、引用符の外にある `<<` で、区切り語が
+  ちゃんと閉じている場合だけである**（`<<<` は here-string であって heredoc ではない。
+  閉じていないものは heredoc として扱わない）
+- **`#` から行末まで**（コメント）。**ただし `#` が語の先頭に来たときだけである。**
+  `https://example.com/#x` のような語の途中の `#` はコメントではない
 
 ## 番号を特定できない書き方は、念のため止める
 
@@ -223,50 +227,142 @@ def _is_gh(token):
     return token == "gh" or token.rsplit("/", 1)[-1] == "gh"
 
 
-# heredoc の開始を見つける正規表現。`<<EOF` `<<'EOF'` `<<"EOF"` `<<-EOF` の4形を扱う。
+# heredoc の区切り語を読む正規表現。`<<EOF` `<<'EOF'` `<<"EOF"` `<<-EOF` の4形を扱う。
 # 区切り語は `\w+`（英数字とアンダースコア）に限る。実務上の heredoc の区切り語は
 # ほぼ全てこの範囲に収まる。
-_HEREDOC_START_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
+# **`<<` と区切り語の間に置けるのは空白とタブだけにする**（`\s` だと改行まで含んでしまう）。
+# **この正規表現は行全体に対して `search` しない。**`_scan_line()` が、引用符の外に
+# 見つけた `<<` の位置でだけ `match` する。
+_HEREDOC_DELIM_RE = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1")
+
+# `#` がコメントの始まりになるのは、語の先頭に来たときだけである。
+# 行頭・空白の直後に加えて、これらの文字の直後も語の先頭とみなす。
+_WORD_START_AFTER = ";&|()"
 
 
-def _strip_heredocs(lines):
-    """行のリストから、heredoc の中身の行を取り除く。
+def _scan_line(line):
+    """1行を先頭から読み、(コメントを落とした行, heredoc の区切り語のリスト) を返す。
+
+    **引用符（`'` `"`）の中と、`\\` で逃がした直後の1文字は、シェルの構文ではなく
+    ただの文字として扱う。**この2つを見ないと、次の2つの誤爆が起きる。
+
+    - **`echo 'a << b'` の `<<` を heredoc の始まりだと読む。**区切り語 `b` は
+      当然どこにも現れず、その先の行を全部 heredoc の中身として捨ててしまう
+      （＝以降の `gh pr merge` が素通りする）
+    - **`echo hi   # gh pr ready main` のコメントの中の語を、実行される呼び出しだと読む**
+
+    **`<<<`（here-string）は heredoc ではない。**`echo x <<< WORD` の `WORD` は
+    区切り語ではなく、その場で渡される文字列である。**`<<` として読むと、やはり
+    区切り語 `WORD` が閉じないまま、その先の行を全部捨ててしまう。**
+
+    区切り語のリストの各要素は `(区切り語, `<<-` か)` である。1行に複数の heredoc を
+    書いた形（`cat <<A <<B`）に備えて list で返す。
+    """
+    out = []
+    delims = []
+    quote = None  # いま開いている引用符（`'` / `"`）。開いていなければ None
+    prev = ""  # 直前に読んだ文字。`#` が語の先頭かどうかの判定に使う
+    i, n = 0, len(line)
+    while i < n:
+        ch = line[i]
+        if quote is not None:
+            out.append(ch)
+            # `"` の中では `\` が次の1文字を逃がす。`'` の中では逃がさない。
+            if ch == "\\" and quote == '"' and i + 1 < n:
+                out.append(line[i + 1])
+                prev = line[i + 1]
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            prev = ch
+            i += 1
+            continue
+        if ch == "\\":
+            out.append(ch)
+            if i + 1 < n:
+                out.append(line[i + 1])
+                prev = line[i + 1]
+                i += 2
+            else:
+                i += 1
+            continue
+        if ch in "'\"":
+            quote = ch
+            out.append(ch)
+            prev = ch
+            i += 1
+            continue
+        if ch == "#" and (prev == "" or prev.isspace() or prev in _WORD_START_AFTER):
+            # ここから行末はコメント。**語の途中の `#`（`https://example.com/#x`）は
+            # コメントではないので、ここには来ない。**
+            break
+        if line.startswith("<<<", i):
+            # here-string。heredoc ではない。
+            out.append("<<<")
+            prev = "<"
+            i += 3
+            continue
+        if line.startswith("<<", i):
+            m = _HEREDOC_DELIM_RE.match(line, i)
+            if m:
+                delims.append((m.group(2), line.startswith("<<-", i)))
+                out.append(m.group(0))
+                prev = m.group(0)[-1]
+                i = m.end()
+                continue
+        out.append(ch)
+        prev = ch
+        i += 1
+    return "".join(out), delims
+
+
+def _code_lines(lines):
+    """行のリストを、実行される部分だけの行のリストにする。
+
+    **各行からコメントを落とし、heredoc の中身の行を取り除く。**
 
     **heredoc の中身は「実行される文」ではなく「ファイルへ書く文章」である。**
     その中に `gh pr merge 94` という例が出てきても、実行はされない。中身をそのまま
-    トークン化すると、文書を書き足しただけで誤って止まる（2026-08-30、レビューで指摘）。
+    トークン化すると、文書を書き足しただけで誤って止まる。
 
-    `<<EOF` `<<'EOF'` `<<"EOF"` `<<-EOF` のいずれかを見つけたら、次の行から
-    区切り語が単独で現れる行までを丸ごと飛ばす（区切り語の行自身も飛ばす）。
-    `<<-` のときは、区切り語の行の先頭のタブを取り除いてから比べる
+    区切り語の行を探すときは、**行末の `\\r` を先に取り除く。**改行が CRLF の
+    コマンドでは、行が `EOF\\r` の形になって区切り語と一致せず、heredoc が
+    閉じていないものとして扱われてしまう。
+    `<<-` のときは、区切り語の行の先頭のタブも取り除いてから比べる
     （bash の `<<-` はタブだけを取り除く。スペースは取り除かない）。
 
-    **区切り語が最後まで見つからなければ（heredoc が閉じていない）、残りの行を
-    すべて飛ばす。**bash では、閉じていない heredoc はそこから先の入力を
-    全部中身として読み続け、実際のコマンドとしては実行されない。
+    **区切り語が最後まで見つからなければ（heredoc が閉じていない）、飛ばした行を
+    元に戻し、ふつうの行として読み直す。**残りの行を全部捨てると、`<<` を
+    heredoc の始まりだと読み違えたときに、その先の `gh pr merge` がまるごと
+    素通りしてしまう。**読み違えたときの実害が大きすぎるので、閉じていない
+    heredoc は「heredoc ではなかった」として扱う。**
     """
     out = []
     i, n = 0, len(lines)
     while i < n:
-        line = lines[i]
-        out.append(line)
-        m = _HEREDOC_START_RE.search(line)
-        if not m:
-            i += 1
-            continue
-        strip_tabs = line[m.start() : m.start() + 3].startswith("<<-")
-        delim = m.group(2)
+        code, delims = _scan_line(lines[i])
+        out.append(code)
         i += 1
-        closed = False
-        while i < n:
-            body_line = lines[i]
-            check = body_line.lstrip("\t") if strip_tabs else body_line
-            i += 1
-            if check == delim:
-                closed = True
+        if not delims:
+            continue
+        start = i
+        closed = True
+        for delim, strip_tabs in delims:
+            closed = False
+            while i < n:
+                body = lines[i].rstrip("\r")
+                if strip_tabs:
+                    body = body.lstrip("\t")
+                i += 1
+                if body == delim:
+                    closed = True
+                    break
+            if not closed:
                 break
         if not closed:
-            break
+            # 閉じていない。飛ばした行を捨てず、ふつうの行として読み直す。
+            i = start
     return out
 
 
@@ -281,11 +377,12 @@ def _tokenize(command):
     **`commenters` を空にする。**既定の `#` はコメント開始とみなされ、
     `https://example.com/#x` のような語の途中の `#` から後ろが消えてしまう
     （2026-08-30、レビューで指摘。bash は語の途中の `#` をコメントにしない）。
+    **語の先頭に来た `#` から行末までは、その前に `_code_lines()` が落としている。**
 
     改行は `shlex` が空白として扱い、独立したトークンにならない。**先に行ごとへ分けて
     から行ごとにトークン化し、行と行の間に `"\\n"` という区切りトークンを自分で挟む。**
-    行末が `\\` で終わる行継続は、トークン化の前に1行へつなげる。**heredoc の中身は、
-    トークン化の前に `_strip_heredocs()` で取り除く。**
+    行末が `\\` で終わる行継続は、トークン化の前に1行へつなげる。**コメントと heredoc の
+    中身は、トークン化の前に `_code_lines()` で取り除く。**
 
     **崩れた引用符で解析に失敗したら、その行は何も拾わない。**空白で素朴に切り直す
     経路はやめた（2026-08-30、レビューで指摘。以前は空白区切りへ落ちており、
@@ -295,7 +392,7 @@ def _tokenize(command):
     避けること」を「見逃しを減らすこと」より優先するためである。
     """
     joined = re.sub(r"\\\n", " ", command)
-    lines = _strip_heredocs(joined.split("\n"))
+    lines = _code_lines(joined.split("\n"))
     tokens = []
     for i, line in enumerate(lines):
         if i > 0:
@@ -430,6 +527,16 @@ def _parse_owner_repo(url):
     return "%s/%s" % (m.group("owner"), m.group("repo"))
 
 
+def _project_dir():
+    """`git` と `gh` を実行するディレクトリを返す。`CLAUDE_PROJECT_DIR` が無ければ None。
+
+    **`current_repo()`（リポジトリ名の判定）と `has_review()`（レビューの問い合わせ）が、
+    必ず同じ場所を見るようにするための1箇所である。**None は「いま実行している
+    ディレクトリのまま」を意味する（`subprocess.run(cwd=None)`）。
+    """
+    return os.environ.get("CLAUDE_PROJECT_DIR") or None
+
+
 @functools.lru_cache(maxsize=1)
 def current_repo():
     """このリポジトリの `owner/repo` を返す。分からなければ None。
@@ -451,12 +558,11 @@ def current_repo():
     毎回待たされる。`git remote get-url origin` はローカルの設定を読むだけで、
     通信しない（同じ日に計測して 0.02 秒）。
     """
-    cwd = os.environ.get("CLAUDE_PROJECT_DIR") or None
     try:
         out = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             capture_output=True, text=True, timeout=GH_TIMEOUT_SEC,
-            cwd=cwd,
+            cwd=_project_dir(),
         )
     except Exception:
         return None
@@ -558,11 +664,29 @@ def count_trusted_reviews(comments):
 
 
 def has_review(pr):
-    """その PR に、信頼できる投稿者によるレビュー結果の目印があるかを返す。確かめられなければ None。"""
+    """その PR に、信頼できる投稿者によるレビュー結果の目印があるかを返す。確かめられなければ None。
+
+    **どのリポジトリの PR かを、リポジトリ名の判定（`current_repo()`）と必ず揃える。**
+    `gh` は、リポジトリを指定しないと「いま実行しているディレクトリ」から判断する。
+    continuo は他所のリポジトリの worktree の中で動くので、そのままだと
+    **`is_this_repo()` は `CLAUDE_PROJECT_DIR` のリポジトリで判定したのに、
+    レビューの有無は別のリポジトリの同じ番号の PR を見る**、という食い違いが起きる。
+
+    揃え方は2つで、両方を行う。
+
+    - `--repo`（`current_repo()` が読めたとき）。**`gh` に明示するのがいちばん強い**
+    - `cwd=_project_dir()`。`current_repo()` が読めなかったときの拠り所であり、
+      `git remote get-url origin` を実行したのと同じ場所である
+    """
+    args = ["gh", "pr", "view", pr, "--json", "comments"]
+    repo = current_repo()
+    if repo:
+        args += ["--repo", repo]
     try:
         out = subprocess.run(
-            ["gh", "pr", "view", pr, "--json", "comments"],
+            args,
             capture_output=True, text=True, timeout=GH_TIMEOUT_SEC,
+            cwd=_project_dir(),
         )
     except Exception:
         return None
