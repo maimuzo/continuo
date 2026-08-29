@@ -30,7 +30,11 @@
 
 - **番号を書かない形**（`gh pr merge` だけ）。現在の branch から引く形は、番号を取れないので見送る
 - `gh pr merge --repo <他所>` / `-R <他所>` / 他所を指す PR の URL。
-  **`--repo` / `-R` / URL に書かれたリポジトリ名を、実際にこのリポジトリ（`git remote get-url origin` で取れる名前）と比べる。**
+  **`--repo` / `-R` / URL に書かれたリポジトリ名を、実際にこのリポジトリ
+  （`CLAUDE_PROJECT_DIR` のディレクトリで `git remote get-url origin` を実行して取れる名前。
+  無ければ、いま実行しているディレクトリで実行する）と比べる。**
+  **`--repo` / `-R` と URL が両方あるときは、URL の値を優先する**（`gh` 自身がそうする挙動を確認済み。
+  でたらめな `--repo` を前に置いて URL の判定を逃れることはできない）。
   比べるのは `/` で区切った最後の2つ（`HOST/owner/repo` の形を許すため）。
   一致しなければ見ない。一致すれば、番号は他所の値でも意味が無いので、**このリポジトリの番号として扱って止める。**
   **このリポジトリの名前が分からないときも同じく、このリポジトリの番号として扱って止める**
@@ -38,6 +42,17 @@
 - `gh pr ready <番号> --undo`。**draft へ戻す操作なので止めない**（`gh pr ready` の呼び出しに限る。
   `gh pr merge` に `--undo` という flag は無い — `gh pr merge -h` で確かめた）
 - `gh` が使えない・応答しないとき。**検査そのものが落ちたら通す**（作業を止めない）
+- **heredoc の中身**（`<<EOF` … `EOF` の間の行）。**実行される文ではなく、ファイルへ書く
+  文章そのものである。**中に `gh pr merge 94` という例が出てきても、それは実行されない
+  （2026-08-30、レビューで指摘。以前は中身も素朴に読んでいて、文書を書き足すだけで
+  誤って止まっていた）
+
+## 番号を特定できない書き方は、念のため止める
+
+**`gh pr ready my-branch` のように、番号でも URL でもない語（branch 名など）を書いた形は、
+対象の PR が分からずレビューの有無を確かめられない。**「番号を書かない形」（前項）とは違う
+——**何かは書いてあるのに、それを PR として読み取れない**という状態である。
+**読み取れないまま通すと検査が無意味になるため、念のため止め、「番号で指し直してください」と案内する。**
 
 ## この hook で防げないもの
 
@@ -136,6 +151,14 @@ REPO_FLAGS = {"-R", "--repo"}
 # PR の URL からリポジトリ名と番号を拾う。
 PR_URL_RE = re.compile(r"^https?://github\.com/([^/\s]+/[^/\s]+?)/pull/(\d+)(?:[/?#].*)?$")
 
+# 「branch 名らしい語」だけを許す形。英数字・`.` `_` `/` `-` のみで、先頭は英数字。
+# **これに合わないものは、branch 名として扱わず、素通り（見送る）させる。**
+# `<` `>` をトークン化で独立させていないため（`_tokenize()` 参照）、
+# `gh pr merge --help 2>&1` のようなコマンドで `2>` という残骸トークンが残ることがある。
+# これを branch 名と誤認して止めると、無関係なコマンドまで誤爆する
+# （2026-08-30、このテストを書く作業中に実際に踏んだ）。
+_BRANCH_LIKE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+
 REASON = """**レビュー結果が貼られていない PR は、マージも ready もできません。**
 
 PR #{pr} のコメントに、信頼できる投稿者（OWNER / MEMBER / COLLABORATOR）が貼った
@@ -152,6 +175,22 @@ PR #{pr} のコメントに、信頼できる投稿者（OWNER / MEMBER / COLLAB
 **なぜ止めているか。**[CLAUDE.md](CLAUDE.md) が「レビュー結果を貼ってあることが、実施したことの唯一の証拠である」と定めています。
 **貼っていないものは、リリース前の検査（scripts/check-release-ready.sh）が落とします。**
 マージしてからレビューを回し直すと、手戻りが大きくなります。
+
+**人間が明示的に許した場合だけ、環境変数 `{env}=1` を置いて通せます**（`claude` を起動する前のシェルで置くこと）。
+"""
+
+BRANCH_REASON = """**マージ・ready の対象を PR 番号として読み取れませんでした。**
+
+`{token}` は番号でも PR の URL でもありません。**この検査は対象の PR が分からないと、
+レビューの有無を確かめられません。**分からないまま通すと検査が無意味になるため、
+念のため止めます。
+
+**番号で指し直してください。**
+
+    gh pr merge <PR番号>
+    gh pr ready <PR番号>
+
+対象の番号が分からないときは `gh pr list` で確認してください。
 
 **人間が明示的に許した場合だけ、環境変数 `{env}=1` を置いて通せます**（`claude` を起動する前のシェルで置くこと）。
 """
@@ -184,6 +223,53 @@ def _is_gh(token):
     return token == "gh" or token.rsplit("/", 1)[-1] == "gh"
 
 
+# heredoc の開始を見つける正規表現。`<<EOF` `<<'EOF'` `<<"EOF"` `<<-EOF` の4形を扱う。
+# 区切り語は `\w+`（英数字とアンダースコア）に限る。実務上の heredoc の区切り語は
+# ほぼ全てこの範囲に収まる。
+_HEREDOC_START_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
+
+
+def _strip_heredocs(lines):
+    """行のリストから、heredoc の中身の行を取り除く。
+
+    **heredoc の中身は「実行される文」ではなく「ファイルへ書く文章」である。**
+    その中に `gh pr merge 94` という例が出てきても、実行はされない。中身をそのまま
+    トークン化すると、文書を書き足しただけで誤って止まる（2026-08-30、レビューで指摘）。
+
+    `<<EOF` `<<'EOF'` `<<"EOF"` `<<-EOF` のいずれかを見つけたら、次の行から
+    区切り語が単独で現れる行までを丸ごと飛ばす（区切り語の行自身も飛ばす）。
+    `<<-` のときは、区切り語の行の先頭のタブを取り除いてから比べる
+    （bash の `<<-` はタブだけを取り除く。スペースは取り除かない）。
+
+    **区切り語が最後まで見つからなければ（heredoc が閉じていない）、残りの行を
+    すべて飛ばす。**bash では、閉じていない heredoc はそこから先の入力を
+    全部中身として読み続け、実際のコマンドとしては実行されない。
+    """
+    out = []
+    i, n = 0, len(lines)
+    while i < n:
+        line = lines[i]
+        out.append(line)
+        m = _HEREDOC_START_RE.search(line)
+        if not m:
+            i += 1
+            continue
+        strip_tabs = line[m.start() : m.start() + 3].startswith("<<-")
+        delim = m.group(2)
+        i += 1
+        closed = False
+        while i < n:
+            body_line = lines[i]
+            check = body_line.lstrip("\t") if strip_tabs else body_line
+            i += 1
+            if check == delim:
+                closed = True
+                break
+        if not closed:
+            break
+    return out
+
+
 def _tokenize(command):
     """command を、shell の区切り演算子も独立した語として持つトークン列にする。
 
@@ -192,24 +278,36 @@ def _tokenize(command):
     リダイレクトが `2` という独立トークンに割れ、PR 番号と誤認する
     （2026-08-30 に `punctuation_chars=True`〈既定は `();<>|&`〉で試して実際に踏んだ）。
 
+    **`commenters` を空にする。**既定の `#` はコメント開始とみなされ、
+    `https://example.com/#x` のような語の途中の `#` から後ろが消えてしまう
+    （2026-08-30、レビューで指摘。bash は語の途中の `#` をコメントにしない）。
+
     改行は `shlex` が空白として扱い、独立したトークンにならない。**先に行ごとへ分けて
     から行ごとにトークン化し、行と行の間に `"\\n"` という区切りトークンを自分で挟む。**
-    行末が `\\` で終わる行継続は、トークン化の前に1行へつなげる。
+    行末が `\\` で終わる行継続は、トークン化の前に1行へつなげる。**heredoc の中身は、
+    トークン化の前に `_strip_heredocs()` で取り除く。**
 
-    **崩れた引用符で解析に失敗したら、その行だけ素朴な空白区切りへ落ちる。**
-    誤って見逃すことはあっても、誤って壊れた解析結果で誤爆はしない。
+    **崩れた引用符で解析に失敗したら、その行は何も拾わない。**空白で素朴に切り直す
+    経路はやめた（2026-08-30、レビューで指摘。以前は空白区切りへ落ちており、
+    `echo 'it will …` のような閉じていない引用符の行が `gh pr merge 94` という
+    語を含んでいるだけで誤って止まっていた）。**誤って見逃すことはあっても、
+    誤って壊れた解析結果で誤爆はしない**——この hook の役目は「実害が大きい誤爆を
+    避けること」を「見逃しを減らすこと」より優先するためである。
     """
     joined = re.sub(r"\\\n", " ", command)
+    lines = _strip_heredocs(joined.split("\n"))
     tokens = []
-    for i, line in enumerate(joined.split("\n")):
+    for i, line in enumerate(lines):
         if i > 0:
             tokens.append("\n")
         try:
             lex = shlex.shlex(line, posix=True, punctuation_chars="();|&`")
+            lex.commenters = ""
             lex.whitespace_split = True
             tokens.extend(lex)
         except ValueError:
-            tokens.extend(line.split())
+            # 崩れた引用符。この行からは何も拾わない（見逃す側へ倒す）。
+            pass
     return tokens
 
 
@@ -241,16 +339,26 @@ def _invocations(tokens):
 
 
 def _extract(seg):
-    """1回の gh 呼び出し分のトークンから (undo か, リポジトリ名 or None, PR番号 or None) を返す。
+    """1回の gh 呼び出し分のトークンから
+    (undo か, リポジトリ名 or None, PR番号 or None, 番号でもURLでもない語 or None) を返す。
 
-    **リポジトリ名は「最初に見つかった値」を採る。**`--repo` / `-R` / URL のどれから来ても、
-    2つ目以降に見つかった値では上書きしない。**PR 番号も同じ方針**（`number is None` の
-    ガード）。この2つを揃えていないと、`--repo` と URL のどちらが勝つかが書く順番で
-    変わってしまう。
+    **リポジトリ名は、URL から読めた値を `--repo` / `-R` から読めた値より優先する。**
+    `gh` 自身が、`--repo` / `-R` と PR の URL が両方指定されたとき URL 側を使う
+    （2026-08-30、レビューで確かめた挙動: `gh pr merge --repo <他所> <このリポジトリのURL>`
+    は URL 側で処理される）。**旧コードは「最初に見つかった値」を採っていたため、
+    でたらめな `--repo` を前に置くだけで URL の判定を逃れられた。**
+    `--repo` / `-R` どうし、URL どうしでは、それぞれ最初に見つかった値を採る。
+
+    **PR 番号は「最初に見つかった値」を採る**（`number is None` のガード）。
+
+    **番号でも URL でもない語（branch 名など）を見つけたら、最初の1つを覚えておく。**
+    呼び出し側（`_pending_refs()`）が、番号が1つも取れなかったときにこれを使う。
     """
     undo = False
-    repo = None
+    repo_flag = None
+    repo_url = None
     number = None
+    branch_like = None
     k, n = 0, len(seg)
     while k < n:
         tok = seg[k]
@@ -261,20 +369,24 @@ def _extract(seg):
         if tok.startswith("--") and "=" in tok:
             name, _, value = tok.partition("=")
             if name in REPO_FLAGS and value:
-                repo = repo or value
+                repo_flag = repo_flag or value
             k += 1
             continue
-        if tok.startswith("-R") and tok != "-R" and not tok.startswith("--"):
-            # `-Rowner/repo` のようにくっついた形。gh はこの形を受け付ける。
+        if tok.startswith("-R") and tok != "-R":
+            # `-Rowner/repo` / `-R=owner/repo` のようにくっついた形。gh はどちらの形も
+            # 受け付ける。**`=` は値に含めない。**（2026-08-30、レビューで指摘。以前は
+            # `-R=owner/repo` の `=` が値に残り、どのリポジトリとも一致しなかった）
             value = tok[2:]
+            if value.startswith("="):
+                value = value[1:]
             if value:
-                repo = repo or value
+                repo_flag = repo_flag or value
             k += 1
             continue
         if tok in VALUE_FLAGS:
             value = seg[k + 1] if k + 1 < n else None
             if tok in REPO_FLAGS and value:
-                repo = repo or value
+                repo_flag = repo_flag or value
             k += 2
             continue
         if tok.startswith("-"):
@@ -284,7 +396,7 @@ def _extract(seg):
         m = PR_URL_RE.match(tok)
         if m:
             if number is None:
-                repo = repo or m.group(1)
+                repo_url = repo_url or m.group(1)
                 number = m.group(2)
             k += 1
             continue
@@ -293,9 +405,14 @@ def _extract(seg):
                 number = tok
             k += 1
             continue
-        # 番号でも URL でもない引数（branch 名など）。番号は取れない。
+        # 番号でも URL でもない引数。**branch 名らしい語（`_BRANCH_LIKE_RE`）だけを
+        # 覚える。**シェルのリダイレクトの残骸（`2>` など）まで拾うと、無関係な
+        # コマンドを誤って止めてしまう。それ以外の語は、そのまま見送る。
+        if branch_like is None and _BRANCH_LIKE_RE.match(tok):
+            branch_like = tok
         k += 1
-    return undo, repo, number
+    repo = repo_url if repo_url is not None else repo_flag
+    return undo, repo, number, branch_like
 
 
 # git remote の URL から owner/repo を取り出す。対応する形:
@@ -317,16 +434,29 @@ def _parse_owner_repo(url):
 def current_repo():
     """このリポジトリの `owner/repo` を返す。分からなければ None。
 
+    **`git remote get-url origin` を、`CLAUDE_PROJECT_DIR`（環境変数）のディレクトリで
+    実行する。**それが設定されていなければ、いま実行しているディレクトリで実行する。
+
+    **実行時のディレクトリをそのまま使うと、fork や worktree で外れる。**fork では
+    `origin` が自分の複製を指し、上流のリポジトリ名と一致しない。continuo は
+    他所のリポジトリの worktree の中で動くので、そこでも実行時のディレクトリが
+    対象のリポジトリを指すとは限らない（2026-08-30、レビューで指摘）。
+    `CLAUDE_PROJECT_DIR` は、この hook を登録している `.claude/settings.json` 自身が
+    `$CLAUDE_PROJECT_DIR/.claude/hooks/block-merge-without-review.py` という形で
+    使っている環境変数であり、Claude Code がセッションのプロジェクトルートに設定する。
+
     **`gh repo view` は使わない。**通信を伴い、実測 0.44 秒かかる
     （2026-08-30 に `time gh repo view --json nameWithOwner --jq .nameWithOwner` で計測）。
     逃がし口（`CONTINUO_ALLOW_UNREVIEWED_MERGE=1`）より前でこれを呼ぶと、通す場合でも
     毎回待たされる。`git remote get-url origin` はローカルの設定を読むだけで、
     通信しない（同じ日に計測して 0.02 秒）。
     """
+    cwd = os.environ.get("CLAUDE_PROJECT_DIR") or None
     try:
         out = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             capture_output=True, text=True, timeout=GH_TIMEOUT_SEC,
+            cwd=cwd,
         )
     except Exception:
         return None
@@ -366,24 +496,42 @@ def is_this_repo(repo):
     return given == _last_two_segments(current)
 
 
-def target_prs(command):
-    """コマンドから、マージ・ready の対象になる PR 番号を集める。"""
+def _pending_refs(command):
+    """コマンドから (対象PR番号のリスト, 番号を特定できなかった語) を返す。
+
+    PR 番号のリストは重複を除き、出現順に並べる。**同じ PR 番号を2度書いても、
+    `has_review()`（`gh` への問い合わせ）は1回しか呼ばれない**（2026-08-30、
+    レビューで指摘。以前は呼び出しのたびに `gh` へ問い合わせていた）。
+
+    2つ目の戻り値（番号を特定できなかった語）は、**PR 番号が1件も取れなかったときだけ**
+    呼び出し側（`main()`）が使う。branch 名などで指されたために番号を読み取れなかった
+    呼び出しがあれば、その最初の語を返す。
+    """
     if "gh" not in command:
-        return []
+        return [], None
     tokens = _tokenize(command)
-    prs = []
+    numbers = []
+    branch_like = None
     for subcommand, seg in _invocations(tokens):
-        undo, repo, number = _extract(seg)
+        undo, repo, number, seg_branch_like = _extract(seg)
         # **`--undo` は `gh pr ready` にしかない flag である**（`gh pr merge -h` で確認、
         # `--undo` は出てこない）。`pr merge` の呼び出しに紛れ込んでも見送らない。
         if undo and subcommand == "ready":
             continue
-        if number is None:
-            continue
         if repo is not None and not is_this_repo(repo):
             continue
-        prs.append(number)
-    return prs
+        if number is not None:
+            if number not in numbers:
+                numbers.append(number)
+        elif seg_branch_like is not None and branch_like is None:
+            branch_like = seg_branch_like
+    return numbers, branch_like
+
+
+def target_prs(command):
+    """コマンドから、マージ・ready の対象になる PR 番号を集める（重複を除く）。"""
+    numbers, _ = _pending_refs(command)
+    return numbers
 
 
 def count_trusted_reviews(comments):
@@ -438,16 +586,20 @@ def main():
         return 0
 
     # **人間が明示的に許したときは、ここで抜ける。**
-    # `target_prs()` は `--repo` の判定で `current_repo()`（`git remote get-url origin`）
+    # `_pending_refs()` は `--repo` の判定で `current_repo()`（`git remote get-url origin`）
     # を呼ぶことがある。逃がし口を先に見ることで、通す場合に無駄な呼び出しをしない。
     if os.environ.get(ESCAPE_ENV) == "1":
         return 0
 
-    prs = target_prs(command)
-    if not prs:
+    numbers, branch_like = _pending_refs(command)
+    if not numbers:
+        # **番号が1件も無いが、branch 名などそれらしい語はあった。**分からないまま
+        # 通すと検査が無意味になるため、念のため止める。
+        if branch_like is not None:
+            emit("deny", BRANCH_REASON.format(token=branch_like, env=ESCAPE_ENV))
         return 0
 
-    for pr in prs:
+    for pr in numbers:
         ok = has_review(pr)
         # **確かめられなかったら通す。**検査が落ちて作業を止めない。
         if ok is None:

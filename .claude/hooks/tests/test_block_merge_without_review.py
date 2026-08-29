@@ -16,7 +16,9 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 
 HOOK = os.path.join(".claude", "hooks", "block-merge-without-review.py")
 
@@ -243,8 +245,94 @@ case(
     False,
 )
 
+# --- ここから、PR #109 の2回目のレビューで見つかった、何もしていないのに
+# 止めてしまう2件（A群）。直す前は、どちらも誤って止まっていた。
+
+case(
+    "heredoc の中身（<<EOF）はコマンドとして読まない",
+    "cat > memo.txt <<EOF\n%s %s 94\nEOF\n" % (GH, MERGE),
+    False,
+    False,
+)
+case(
+    "heredoc の中身（<<'EOF'）はコマンドとして読まない",
+    "cat > memo.txt <<'EOF'\n%s %s 94\nEOF\n" % (GH, MERGE),
+    False,
+    False,
+)
+case(
+    "heredoc の中身（<<\"EOF\"）はコマンドとして読まない",
+    'cat > memo.txt <<"EOF"\n%s %s 94\nEOF\n' % (GH, MERGE),
+    False,
+    False,
+)
+case(
+    "heredoc の中身（<<-EOF、区切り語の前にタブ）はコマンドとして読まない",
+    "cat > memo.txt <<-EOF\n\t%s %s 94\n\tEOF\n" % (GH, MERGE),
+    False,
+    False,
+)
+case(
+    "heredoc の後ろに続く gh pr merge は、引き続き見る",
+    "cat > memo.txt <<EOF\n%s %s 94\nEOF\n%s %s 95\n" % (GH, MERGE, GH, MERGE),
+    False,
+    True,
+    "95",
+)
+case(
+    "壊れた引用符の行は、空白区切りに落とさず見送る（誤爆しない）",
+    "echo 'it will run %s %s 94 later" % (GH, MERGE),
+    False,
+    False,
+)
+
+# --- ここから、2回目のレビューで見つかった、素直な書き方なのに素通りする5件（B群）
+# のうち、コマンド全体で確かめられる4件。直す前は、どれも [] を返していた。
+
+case(
+    "branch 名で指すと、番号で指し直すよう求めて止める",
+    "%s %s my-branch" % (GH, READY),
+    False,
+    True,
+    "番号で指し直してください",
+)
+case(
+    "-R= の形でもこのリポジトリを指せば止める",
+    "%s %s -R=%s 94" % (GH, MERGE, THIS_REPO),
+    False,
+    True,
+    "94",
+)
+case(
+    "-R= の形で別のリポジトリを指せば見ない",
+    "%s %s -R=%s 94" % (GH, MERGE, OTHER_REPO),
+    False,
+    False,
+)
+case(
+    "--repo が他所を指しても、URL がこのリポジトリなら見る（gh は URL を優先する）",
+    "%s %s --repo %s https://github.com/%s/pull/94" % (GH, MERGE, OTHER_REPO, THIS_REPO),
+    False,
+    True,
+    "94",
+)
+case(
+    "--repo がこのリポジトリを指しても、URL が他所なら見ない（gh は URL を優先する）",
+    "%s %s --repo %s https://github.com/%s/pull/94" % (GH, MERGE, THIS_REPO, OTHER_REPO),
+    False,
+    False,
+)
+case(
+    "語の途中の # はコメント扱いにしない",
+    "curl https://example.com/#x && %s %s 94" % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+
 
 def run_cases(mod):
+    """(ng, total) を返す。"""
     ng = 0
     for name, command, review, want_block, want_in in cases:
         # 「逃がし口」のケースだけ、環境変数を置いて試す。
@@ -267,7 +355,7 @@ def run_cases(mod):
             print("ok  %s" % name)
 
     os.environ.pop(mod.ESCAPE_ENV, None)
-    return ng
+    return ng, len(cases)
 
 
 # --- レビューで見つかった「目印を誰が貼っても通る」穴を塞いだことを確かめる。
@@ -333,15 +421,17 @@ def build_review_cases(marker):
 
 
 def run_review_cases(mod):
+    """(ng, total) を返す。"""
+    cases_ = build_review_cases(mod.MARKER)
     ng = 0
-    for name, comments, want_count in build_review_cases(mod.MARKER):
+    for name, comments, want_count in cases_:
         got = mod.count_trusted_reviews(comments)
         if got == want_count:
             print("ok  %s" % name)
         else:
             ng += 1
             print("NG  %s: %d 件（想定は %d 件）" % (name, got, want_count))
-    return ng
+    return ng, len(cases_)
 
 
 # --- B群: リポジトリ名の判定を、target_prs() で直接確かめる。
@@ -349,12 +439,15 @@ def run_review_cases(mod):
 
 
 def run_repo_cases(mod):
+    """(ng, total) を返す。"""
     ng = 0
+    total = 0
 
     # 末尾一致（str.endswith）ではなく、`/` 区切りの末尾2つで比べることを確かめる。
     mod.current_repo = lambda: THIS_REPO
     imposter_repo = "my" + THIS_REPO  # 例: "myoctocat/hello-world"
     got = mod.target_prs("%s %s --repo %s 94" % (GH, MERGE, imposter_repo))
+    total += 1
     if got == []:
         print("ok  リポジトリ名の境界（末尾一致で誤判定しない）")
     else:
@@ -365,6 +458,7 @@ def run_repo_cases(mod):
     # （分からないからと見送ると、`--repo` を付けるだけで検査ごと素通りできてしまう）
     mod.current_repo = lambda: None
     got = mod.target_prs("%s %s --repo %s 94" % (GH, MERGE, OTHER_REPO))
+    total += 1
     if got == ["94"]:
         print("ok  リポジトリ名を取れないときは止める側へ倒れる")
     else:
@@ -372,7 +466,165 @@ def run_repo_cases(mod):
         print("NG  リポジトリ名を取れないとき: %r（想定は ['94']）" % (got,))
 
     mod.current_repo = lambda: THIS_REPO
-    return ng
+    return ng, total
+
+
+def run_dedupe_case(mod):
+    """(ng, total) を返す。
+
+    PR #109 の2回目のレビューで見つかった、同じ PR 番号を2度書くと `gh` へ2度
+    問い合わせてしまう穴を確かめる。`target_prs()` が重複を除くことを見る。
+    """
+    got = mod.target_prs("%s %s 94 && %s %s 94" % (GH, MERGE, GH, MERGE))
+    if got == ["94"]:
+        print("ok  同じ PR 番号を2度書いても、1回だけ集める")
+        return 0, 1
+    print("NG  同じ PR 番号の重複除去: %r（想定は ['94']）" % (got,))
+    return 1, 1
+
+
+def run_parse_owner_repo_cases(mod):
+    """(ng, total) を返す。
+
+    `_parse_owner_repo()` を直接呼び、`current_repo()` が使う git remote の URL の
+    書き方（https / https の `.git` 無し / 末尾スラッシュ / ssh の短縮形 / `ssh://`）を
+    正しく読み取れることを確かめる。
+    """
+    samples = [
+        ("https://github.com/%s.git" % THIS_REPO, THIS_REPO),
+        ("https://github.com/%s" % THIS_REPO, THIS_REPO),
+        ("https://github.com/%s/" % THIS_REPO, THIS_REPO),
+        ("git@github.com:%s.git" % THIS_REPO, THIS_REPO),
+        ("ssh://git@github.com/%s.git" % THIS_REPO, THIS_REPO),
+    ]
+    ng = 0
+    for url, want in samples:
+        got = mod._parse_owner_repo(url)
+        if got == want:
+            print("ok  _parse_owner_repo(%r) == %r" % (url, want))
+        else:
+            ng += 1
+            print("NG  _parse_owner_repo(%r): %r（想定は %r）" % (url, got, want))
+    return ng, len(samples)
+
+
+def run_current_repo_case(mod, real_current_repo):
+    """(ng, total) を返す。
+
+    **PR #109 の2回目のレビューで指摘された「テストが本物を通らない」の1つ目
+    （リポジトリ名の切り出し・origin の読み取り）を、実際の `git` で確かめる。**
+    以前は `mod.current_repo` を丸ごと差し替えて試しており、`current_repo()` 自身の
+    subprocess 呼び出しと `CLAUDE_PROJECT_DIR` の扱いは1度も動いていなかった。
+
+    **`gh` は呼ばない。**`git` は禁止されていない（本番のボード・PR に触れるのは
+    `gh` だけである）。実際に `git init` した使い捨てのディレクトリを
+    `CLAUDE_PROJECT_DIR` に指定し、`real_current_repo`
+    （`load_hook()` 直後に捕まえておいた、差し替え前の本物の `current_repo`）を
+    そのまま呼ぶ。
+    """
+    ng = 0
+    total = 0
+
+    def with_project_dir(d):
+        old = os.environ.get("CLAUDE_PROJECT_DIR")
+        os.environ["CLAUDE_PROJECT_DIR"] = d
+        real_current_repo.cache_clear()
+        try:
+            return real_current_repo()
+        finally:
+            if old is None:
+                os.environ.pop("CLAUDE_PROJECT_DIR", None)
+            else:
+                os.environ["CLAUDE_PROJECT_DIR"] = old
+            real_current_repo.cache_clear()
+
+    with tempfile.TemporaryDirectory() as d:
+        subprocess.run(["git", "init", "-q"], cwd=d, check=True)
+        subprocess.run(
+            ["git", "remote", "add", "origin", "https://github.com/%s.git" % THIS_REPO],
+            cwd=d,
+            check=True,
+        )
+        got = with_project_dir(d)
+        total += 1
+        if got == THIS_REPO:
+            print("ok  current_repo() は CLAUDE_PROJECT_DIR のリポジトリの origin を読む")
+        else:
+            ng += 1
+            print("NG  current_repo(): %r（想定は %r）" % (got, THIS_REPO))
+
+    with tempfile.TemporaryDirectory() as d2:
+        # git リポジトリではない場所。`git remote get-url origin` が失敗し、None になる。
+        got = with_project_dir(d2)
+        total += 1
+        if got is None:
+            print("ok  current_repo() は git リポジトリでない場所では None を返す")
+        else:
+            ng += 1
+            print("NG  current_repo()（git でない場所）: %r（想定は None）" % (got,))
+
+    return ng, total
+
+
+def run_has_review_json_cases(mod, real_has_review):
+    """(ng, total) を返す。
+
+    **PR #109 の2回目のレビューで指摘された「テストが本物を通らない」の2つ目
+    （コメントの JSON の読み取り）を確かめる。**以前は `has_review` 自体を
+    `lambda pr: review` に差し替えて試しており、`has_review()` 本体の JSON の
+    パース・件数の集計・エラー処理（終了コード非0・壊れた JSON・例外）は
+    1度も動いていなかった。
+
+    **`gh` は呼ばない。**`subprocess.run`（hook モジュールと同じ singleton）を
+    一時的に差し替え、`gh pr view --json comments` が返すはずの文字列を模して渡す。
+    `real_has_review`（`load_hook()` 直後に捕まえておいた、差し替え前の本物の
+    `has_review`）自身のパース処理を、置き換えずに通す。
+    """
+    ng = 0
+    total = 0
+    original_run = subprocess.run
+
+    def check(name, fake_run, want):
+        nonlocal ng, total
+        total += 1
+        subprocess.run = fake_run
+        try:
+            got = real_has_review("94")
+        finally:
+            subprocess.run = original_run
+        if got == want:
+            print("ok  %s" % name)
+        else:
+            ng += 1
+            print("NG  %s: %r（想定は %r）" % (name, got, want))
+
+    def ok_run(stdout):
+        def fake(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+        return fake
+
+    def fail_run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr="not found")
+
+    def raising_run(args, **kwargs):
+        raise OSError("gh が無い")
+
+    check(
+        "信頼できる投稿者の目印が有れば True",
+        ok_run(json.dumps({"comments": [{"authorAssociation": "OWNER", "body": mod.MARKER}]})),
+        True,
+    )
+    check(
+        "目印が無ければ False",
+        ok_run(json.dumps({"comments": [{"authorAssociation": "OWNER", "body": "レビューしました"}]})),
+        False,
+    )
+    check("gh が失敗（終了コード非0）したら None", fail_run, None)
+    check("壊れた JSON では None", ok_run("not json"), None)
+    check("gh の呼び出しで例外が飛んでも None", raising_run, None)
+
+    return ng, total
 
 
 # --- C群: 信頼する肩書きの一覧が、scripts/check-release-ready.sh と揃っていることを確かめる。
@@ -381,6 +633,7 @@ def run_repo_cases(mod):
 
 
 def run_associations_sync_case(mod):
+    """(ng, total) を返す。"""
     path = os.path.join("scripts", "check-release-ready.sh")
     with open(path, encoding="utf-8") as f:
         text = f.read()
@@ -388,28 +641,73 @@ def run_associations_sync_case(mod):
     m = re.search(r'\[([^\]]*"OWNER"[^\]]*)\]', text)
     if not m:
         print("NG  scripts/check-release-ready.sh から肩書きの一覧を見つけられない")
-        return 1
+        return 1, 1
     found = set(re.findall(r'"([A-Z]+)"', m.group(1)))
     if found == mod.TRUSTED_ASSOCIATIONS:
         print("ok  scripts/check-release-ready.sh の肩書きの一覧が hook 側と揃っている")
-        return 0
+        return 0, 1
     print(
         "NG  肩書きの一覧が食い違う: sh=%r python=%r" % (found, mod.TRUSTED_ASSOCIATIONS)
     )
-    return 1
+    return 1, 1
+
+
+def run_marker_sync_case(mod):
+    """(ng, total) を返す。
+
+    PR #109 の2回目のレビューで指摘された「目印の二重定義」を確かめる。
+    `scripts/check-release-ready.sh` の `review_of()` は、目印の文字列と
+    「コメントの先頭にあること」の2つを、Python 側とは別に jq の正規表現で
+    書いている。**この2つが実際に揃っているかまでは、肩書きの一覧の同期テスト
+    （`run_associations_sync_case`）は見ていなかった。**
+    """
+    path = os.path.join("scripts", "check-release-ready.sh")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+
+    ng = 0
+    total = 2
+
+    if mod.MARKER in text:
+        print("ok  scripts/check-release-ready.sh に MARKER と同じ文字列がある")
+    else:
+        ng += 1
+        print("NG  scripts/check-release-ready.sh に MARKER の文字列が見つからない: %r" % (mod.MARKER,))
+
+    # jq の `test("^\\s*<MARKER>")` に相当するリテラル（ファイル上は `\` が2つ）を探す。
+    # Python 文字列としては `"^\\\\s*"`（`\\\\` が、ファイル中の2文字のバックスラッシュに対応する）。
+    anchored = "^\\\\s*" + mod.MARKER
+    if anchored in text:
+        print("ok  scripts/check-release-ready.sh の判定が、MARKER を先頭に置く条件になっている")
+    else:
+        ng += 1
+        print("NG  scripts/check-release-ready.sh の判定が、MARKER を先頭に置く条件になっていない")
+
+    return ng, total
 
 
 def main():
     mod = load_hook()
+    # 差し替える前に、本物の関数を捕まえておく（`_本物_` 系のテストが使う）。
+    real_current_repo = mod.current_repo
+    real_has_review = mod.has_review
     # 「このリポジトリ」を、実行環境に依存しない架空の名前へ固定する。
     mod.current_repo = lambda: THIS_REPO
 
-    ng = run_cases(mod)
-    ng += run_review_cases(mod)
-    ng += run_repo_cases(mod)
-    ng += run_associations_sync_case(mod)
+    results = [
+        run_cases(mod),
+        run_review_cases(mod),
+        run_repo_cases(mod),
+        run_dedupe_case(mod),
+        run_associations_sync_case(mod),
+        run_marker_sync_case(mod),
+        run_parse_owner_repo_cases(mod),
+        run_current_repo_case(mod, real_current_repo),
+        run_has_review_json_cases(mod, real_has_review),
+    ]
+    ng = sum(n for n, _ in results)
+    total = sum(t for _, t in results)
 
-    total = len(cases) + len(build_review_cases(mod.MARKER)) + 3
     print("\n%d 件中 %d 件が想定どおり" % (total, total - ng))
     return 1 if ng else 0
 
