@@ -6,7 +6,9 @@
 **リポジトリのルートから実行すること。**
 
 **gh を呼ばずに試す。**`has_review` を差し替えて、レビューの有無を作る。
-本物の `gh` を呼ぶと、その日の PR の状態でテストの結果が変わってしまう。
+`current_repo`（このリポジトリの `owner/repo` を返す関数）も差し替えて、
+「このリポジトリ」を固定の架空の名前にする。
+本物の `gh` を呼ぶと、その日の PR やリポジトリの状態でテストの結果が変わってしまう。
 """
 
 import importlib.util
@@ -53,6 +55,11 @@ GH = "gh"
 MERGE = "pr merge"
 READY = "pr ready"
 
+# テストの中で「このリポジトリ」とみなす架空の名前と、「別のリポジトリ」の架空の名前。
+# 実在のリポジトリ名は使わない（CLAUDE.md「公開してよい情報かを常に判断する」）。
+THIS_REPO = "octocat/hello-world"
+OTHER_REPO = "example/other-repo"
+
 cases = []
 
 
@@ -69,8 +76,8 @@ case("番号が無ければ見ない", "%s %s --merge" % (GH, MERGE), False, Fal
 case("関係ないコマンドは通す", "git status", False, False)
 case("似た語を含むだけなら通す", "echo 'merge した'", False, False)
 case(
-    "ほかのリポジトリは見ない",
-    "%s %s --repo octocat/hello-world 188 --merge" % (GH, MERGE),
+    "ほかのリポジトリ（--repo）は見ない",
+    "%s %s --repo %s 188 --merge" % (GH, MERGE, OTHER_REPO),
     False,
     False,
 )
@@ -94,12 +101,80 @@ case(
     False,
 )
 
+# --- ここから、レビューで見つかった「番号を取り出せない書き方」の穴を塞いだことを確かめる。
+# 直す前は、target_prs() がどれも [] を返し、素通りしていた。
 
-def main():
-    mod = load_hook()
+case(
+    "引用符付きの番号（ダブルクォート）も拾う",
+    '%s %s "94"' % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+case(
+    "引用符付きの番号（シングルクォート）も拾う",
+    "%s %s '94'" % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+case(
+    "このリポジトリを指す --repo は止める",
+    "%s %s --repo %s 94" % (GH, MERGE, THIS_REPO),
+    False,
+    True,
+    "94",
+)
+case(
+    "このリポジトリを指す -R も止める",
+    "%s %s -R %s 94" % (GH, MERGE, THIS_REPO),
+    False,
+    True,
+    "94",
+)
+case(
+    "このリポジトリを指す -R は、別のリポジトリなら見ない",
+    "%s %s -R %s 188" % (GH, MERGE, OTHER_REPO),
+    False,
+    False,
+)
+case(
+    "PR の URL からも番号を拾う",
+    "%s %s https://github.com/%s/pull/94" % (GH, MERGE, THIS_REPO),
+    False,
+    True,
+    "94",
+)
+case(
+    "別のリポジトリを指す URL は見ない",
+    "%s %s https://github.com/%s/pull/188" % (GH, MERGE, OTHER_REPO),
+    False,
+    False,
+)
+case(
+    "値を取るオプションが前に来ても番号を拾う（--body）",
+    '%s %s --body "x" 94' % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
+
+# --- おまけ: トークン化に変えたことで、シェルのリダイレクト（`2>&1`）の数字を
+# PR 番号と誤認しなくなったことも確かめる。
+# 直す前の正規表現は、`--help 2>&1` の "2" を PR 番号として拾い、
+# 無関係な `gh pr merge --help` まで誤って止めていた（このテストを書く作業中に実際に踏んだ）。
+case(
+    "--help のあとのリダイレクトは番号ではない",
+    "%s %s --help" % (GH, MERGE) + " 2>&1",
+    False,
+    False,
+)
+
+
+def run_cases(mod):
     ng = 0
-    for i, (name, command, review, want_block, want_in) in enumerate(cases):
-        # 最後の1件だけ、逃がし口の環境変数を置いて試す。
+    for name, command, review, want_block, want_in in cases:
+        # 「逃がし口」のケースだけ、環境変数を置いて試す。
         escape = name.startswith("逃がし口")
         if escape:
             os.environ[mod.ESCAPE_ENV] = "1"
@@ -119,7 +194,83 @@ def main():
             print("ok  %s" % name)
 
     os.environ.pop(mod.ESCAPE_ENV, None)
-    print("\n%d 件中 %d 件が想定どおり" % (len(cases), len(cases) - ng))
+    return ng
+
+
+# --- レビューで見つかった「目印を誰が貼っても通る」穴を塞いだことを確かめる。
+# count_trusted_reviews() を直接試す。gh は呼ばない。
+
+
+def build_review_cases(marker):
+    return [
+        (
+            "OWNER の目印は数える",
+            [{"authorAssociation": "OWNER", "body": marker + "\n本文"}],
+            1,
+        ),
+        (
+            "MEMBER の目印も数える",
+            [{"authorAssociation": "MEMBER", "body": marker}],
+            1,
+        ),
+        (
+            "COLLABORATOR の目印も数える",
+            [{"authorAssociation": "COLLABORATOR", "body": marker}],
+            1,
+        ),
+        (
+            "通りがかりの投稿者（NONE）の目印は数えない",
+            [{"authorAssociation": "NONE", "body": marker}],
+            0,
+        ),
+        (
+            "CONTRIBUTOR の目印も数えない",
+            [{"authorAssociation": "CONTRIBUTOR", "body": marker}],
+            0,
+        ),
+        (
+            "目印が無いコメントは数えない",
+            [{"authorAssociation": "OWNER", "body": "レビューしました"}],
+            0,
+        ),
+        (
+            "信頼できる投稿者と通りがかりが混ざっていれば、信頼できる分だけ数える",
+            [
+                {"authorAssociation": "NONE", "body": marker},
+                {"authorAssociation": "OWNER", "body": marker},
+            ],
+            1,
+        ),
+        (
+            "authorAssociation が無いコメントは数えない",
+            [{"body": marker}],
+            0,
+        ),
+    ]
+
+
+def run_review_cases(mod):
+    ng = 0
+    for name, comments, want_count in build_review_cases(mod.MARKER):
+        got = mod.count_trusted_reviews(comments)
+        if got == want_count:
+            print("ok  %s" % name)
+        else:
+            ng += 1
+            print("NG  %s: %d 件（想定は %d 件）" % (name, got, want_count))
+    return ng
+
+
+def main():
+    mod = load_hook()
+    # 「このリポジトリ」を、実行環境に依存しない架空の名前へ固定する。
+    mod.current_repo = lambda: THIS_REPO
+
+    ng = run_cases(mod)
+    ng += run_review_cases(mod)
+
+    total = len(cases) + len(build_review_cases(mod.MARKER))
+    print("\n%d 件中 %d 件が想定どおり" % (total, total - ng))
     return 1 if ng else 0
 
 

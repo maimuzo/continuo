@@ -84,9 +84,19 @@ ng=0
 # レビュー結果が貼ってあるかを見る。
 # **目印は `<!-- code-review-result -->` である。**本文に "code-review" と書いただけの
 # コメントを数えると、実施していないものが通ってしまう。
+# **信頼できる投稿者（OWNER / MEMBER / COLLABORATOR）が貼ったものだけを数える。**
+# このリポジトリは PUBLIC なので、通りがかりの投稿者が貼った目印まで数えると、
+# その PR は恒久的にレビュー済み扱いになってしまう。
+# **同じ目印・同じ判定基準が `.claude/hooks/block-merge-without-review.py` の
+# `count_trusted_reviews()` にもある。片方だけ直すと、リリース前の検査とマージの検査が食い違う。
+# 両方直すこと。**
 review_of() {
+	# shellcheck disable=SC2016  # $a は jq の変数である。シェルに展開させない。
 	gh pr view "$1" --json comments \
-		--jq '[.comments[] | select(.body | contains("<!-- code-review-result -->"))] | length'
+		--jq '[.comments[] | select(
+			(.body | contains("<!-- code-review-result -->"))
+			and (.authorAssociation as $a | (["OWNER", "MEMBER", "COLLABORATOR"] | index($a)) != null)
+		)] | length'
 }
 
 # 対になる issue の番号を並べる。

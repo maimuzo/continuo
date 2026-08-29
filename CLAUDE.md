@@ -187,6 +187,13 @@ os.Rename(tmp.Name(), path)
 **人間が明示的に許すときだけ、環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を置いて通す。**
 **AI が自分でその環境変数を置いてはならない。**
 
+**置くのは、`claude` を起動する前のシェルだけである。**hook は `claude` プロセス自身の環境変数を読む。
+**セッションの中で Bash ツールから `export CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を実行しても、
+それは Bash ツールが動かす別プロセスの環境を変えるだけで、`claude` 本体には届かない。**
+だから「セッションの中からは置けない」——これは意図した性質である（AI が自分で置けないようにするため）。
+**人間が置く場合は、`claude` を起動する端末で `export CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を実行してから `claude` を起動するか、
+`CONTINUO_ALLOW_UNREVIEWED_MERGE=1 claude` のように起動コマンドの前に置くこと。**
+
 **エージェントが作る PR にも同じ規則を当てる。**continuo が作った PR も、
 レビューを通すまで draft のままにする。
 
