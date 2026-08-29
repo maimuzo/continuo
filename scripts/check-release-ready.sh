@@ -91,10 +91,10 @@ ng=0
 # **信頼できる投稿者（OWNER / MEMBER / COLLABORATOR）が貼ったものだけを数える。**
 # このリポジトリは PUBLIC なので、通りがかりの投稿者が貼った目印まで数えると、
 # その PR は恒久的にレビュー済み扱いになってしまう。
-# **同じ目印・同じ判定基準が `.claude/hooks/block-merge-without-review.py` の
-# `count_trusted_reviews()` にもある。片方だけ直すと、リリース前の検査とマージの検査が食い違う。
-# 両方直すこと。**（`.claude/hooks/tests/test_block_merge_without_review.py` が、
-# この一覧と Python 側の `TRUSTED_ASSOCIATIONS` が揃っていることを確かめる）
+# **目印を数えるのは、この検査だけである。**マージの前に止める hook
+# （`.claude/hooks/block-merge-without-review.py`）は、目印もレビューの有無も見ない。
+# マージと ready を一律で止め、通すかどうかは人間が逃がし口の環境変数で決める。
+# **だから、この判定基準を写した場所は他に無い。ここだけ直せばよい。**
 review_of() {
 	# shellcheck disable=SC2016  # $a は jq の変数である。シェルに展開させない。
 	gh pr view "$1" --json comments \
