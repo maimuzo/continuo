@@ -71,8 +71,8 @@ const automatedRewriteFailureRetryAfter = 5 * time.Minute
 //	turn が動いていない                              … その場で止める（待っても表明は出てこない）
 //	猶予を過ぎた                                    … その場で止める（人間が止めたがっている可能性がある）
 //
-// **`terminal_states` へ動かされた場合はここへ来ない。**そちらは即座に終わる
-// （人間が「終わった」と言っているので、待つ意味が無い）。
+// **`terminal_states` と引き渡しの Status へ動かされた場合はここへ来ない。**
+// そちらは `holdForAutomatedMove` が同じ猶予を掛ける（設計 3-73）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
@@ -86,7 +86,7 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 	}
 
 	now := o.now()
-	since := rs.noteUnknownState(now)
+	since := rs.noteExternalMove(now, externalMoveUnknownState)
 	grace := time.Duration(o.cfg.Tracker.UnknownStateGraceMs) * time.Millisecond
 	waited := now.Sub(since)
 
@@ -127,6 +127,71 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 			"書いたのは", writtenBy, "自動化か", issue.StatusChangedByAutomation)
 	}
 	o.stopForUnknownStateAsync(ctx, rs, issue.State)
+}
+
+// holdForAutomatedMove は、終端の Status と引き渡しの Status へ動かされた run を、
+// この巡回では止めずに turn の終わりまで待つかどうかを決める（設計 3-73）。
+//
+// **見るのは「誰が書いたか」と「turn が動いているか」の2つだけである。**
+//
+//	人間が書いた             … **待たない。**人間は自分で動かした結果を分かっている
+//	自動化が書き、turn が動いていて猶予の内側 … **待つ。**turn の終わりまで止めない
+//	自動化が書いたが turn が動いていない       … 待たない（待っても turn は終わらない）
+//	猶予（`tracker.unknown_state_grace_ms`）を過ぎた … 待たない
+//
+// **`active_states` のままの run へは呼ばない。**呼び出し側（`reconcileRunning`）が
+// 別の分岐で受ける。`active_states` に入ったまま止まる run は「Status を引き渡された」の
+// ではなく `Dispatchable` が偽になった run であり（リポジトリの信頼登録が外れた等）、
+// **Status を誰が書いたかは、止める理由と何の関係も無い。**
+//
+// **待つ理由は、走っている Claude Code を continuo 自身が殺さないためである。**
+// エージェントが turn の途中で自分の PR をマージすると、ボードの組み込みの自動化が
+// `Done` を書く。**次の巡回はそれを「終わった」と読み、走っている turn ごと片付けにいく。**
+// 書いたのが人間でないと分かっているのだから、知らない Status と同じく猶予を置く（3-50）。
+//
+// **書き戻しの対応表（`tracker.automated_state_rewrite`）はここでは引かない。**
+// 対応表のキーは「設定のどこにも名前が出てこない Status」でなければならず
+// （`validateAutomatedStateRewrite`。設計 3-55）、**終端も引き渡しも設定に名前が出てくる。**
+// **引ける行は1つも作れないので、引く経路を持たせない。**
+//
+// **猶予の起点は知らない Status と同じ場所に持つ**（`runState.externalMoveSince`）。
+// **ただし種類が変わったら起点を切り直す**（`externalMoveAutomatedHandoff`）。
+// 知らない Status で待っていた run が続けて自動化に動かされることがあり、
+// 起点を繰り越すと、そこから測る猶予が前回ぶんだけ短くなる。
+//
+// rs: 対象の run。
+// issue: 取り直した issue。
+// 戻り値: この巡回では止めないなら true。
+func (o *Orchestrator) holdForAutomatedMove(rs *runState, issue tracker.Issue) bool {
+	if !issue.StatusChangedByAutomation {
+		// **人間が動かした。**引き渡しも終端も、そのまま受け取るのが正しい振る舞いである。
+		return false
+	}
+	grace := time.Duration(o.cfg.Tracker.UnknownStateGraceMs) * time.Millisecond
+	if grace <= 0 {
+		// **猶予を 0 にしてある。**その場で止めると決めた設定なので、待たない。
+		return false
+	}
+	now := o.now()
+	since := rs.noteExternalMove(now, externalMoveAutomatedHandoff)
+	waited := now.Sub(since)
+	if waited >= grace || !rs.turnLoopActive() {
+		return false
+	}
+	writtenBy := issue.StatusChangedBy
+	if writtenBy == "" {
+		writtenBy = "ボードの自動化"
+	}
+	// **黙って遅らせない。**人間がこのあと自分で止めたくなったとき、
+	// 何を待っているのかがログから読める状態にしておく。
+	o.logger.Info("ボードの自動化が Status を動かしましたが turn の終わりを待っています"+
+		"（走っている Claude Code をここで止めると、書きかけの turn が捨てられます）",
+		"identifier", issue.Identifier,
+		"状態", issue.State,
+		"書いたのは", writtenBy,
+		"待っている時間", formatDuration(waited),
+		"猶予の上限", formatDuration(grace))
+	return true
 }
 
 // claimAutomatedRewrite は「知らない Status を書いたのはボードの自動化で、対応表に
@@ -338,7 +403,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 		// 書いていない値を「continuo が最後に書いた値」として名指しする（`unknownStateReason`）。
 		rs.clearAutomatedRewriteFailures(issue.State)
 		rs.setLastWrittenState(target)
-		rs.clearUnknownState()
+		rs.clearExternalMove()
 		return moved, nil
 	}
 	rs.clearAutomatedRewriteFailures(issue.State)
@@ -347,7 +412,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 		"identifier", issue.Identifier, "何から", moved.Previous, "何へ", target, "書いたのは", by)
 	rs.setLastWrittenState(target)
 	// **知らない Status だった記録を消す**（設計 3-50）。戻したのだから猶予の起点も捨てる。
-	rs.clearUnknownState()
+	rs.clearExternalMove()
 	o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue), newStatusMove(moved, target),
 		automatedMoveReason(moved.Previous, by))
 	return moved, nil

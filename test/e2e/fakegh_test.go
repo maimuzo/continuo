@@ -463,11 +463,15 @@ func issueComment(b *ghBoard, args []string) {
 	}
 	id := "IC_" + strconv.Itoa(b.NextComment)
 	b.NextComment++
+	// **投稿者は gh の持ち主である**（設計 2-2）。エージェントは continuo と同じ
+	// @BQ@gh@BQ@ を使うので、書いたコメントは @BQ@gh api user --jq .login@BQ@ が返すのと同じ
+	// アカウントで残る。**別の名前にすると、投稿者と印を併せて見る判定（設計 3-65）が
+	// 本番では通るのにここでだけ落ちる。**
 	b.Comments[is.NodeID] = append(b.Comments[is.NodeID], ghComment{
 		ID:        id,
 		Body:      body,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-		Author:    "claude-agent",
+		Author:    b.Login,
 	})
 	fmt.Println("https://github.com/comment/" + id)
 }

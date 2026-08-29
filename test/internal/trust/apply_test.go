@@ -45,11 +45,11 @@ const otherSettings = `{
 // 成功条件: hasTrustDialogAccepted が true になり、
 // バックアップに書き換える前の中身がそのまま残っていること。
 func TestApply_未信頼のリポジトリを登録しバックアップを残す(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	home, configPath := fakeHome(t, otherSettings)
-	report := planFor(t, home, map[string]string{"maimuzo/continuo": repo}, "maimuzo/continuo")
+	report := planFor(t, home, map[string]string{"octocat/hello-world": repo}, "octocat/hello-world")
 
-	result, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"maimuzo/continuo": repo}), report)
+	result, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"octocat/hello-world": repo}), report)
 	if err != nil {
 		t.Fatalf("登録できなかった: %v", err)
 	}
@@ -87,11 +87,11 @@ func TestApply_未信頼のリポジトリを登録しバックアップを残�
 // 与える情報: 未信頼のリポジトリ1つ。
 // 成功条件: Apply の確認で問題が出ず、workspace.CheckTrustForClonePath が真を返すこと。
 func TestApply_書き込んだものが巡回のループから信頼済みに見える(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	home, _ := fakeHome(t, `{"projects":{}}`)
-	report := planFor(t, home, map[string]string{"maimuzo/continuo": repo}, "maimuzo/continuo")
+	report := planFor(t, home, map[string]string{"octocat/hello-world": repo}, "octocat/hello-world")
 
-	result, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"maimuzo/continuo": repo}), report)
+	result, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"octocat/hello-world": repo}), report)
 	if err != nil {
 		t.Fatalf("登録できなかった: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestApply_書き込んだものが巡回のループから信頼済みに�
 // 与える情報: 対象のリポジトリが既に信頼済みである `.claude.json`。
 // 成功条件: ファイルが1バイトも変わらず、バックアップが作られないこと。
 func TestApply_既にtrueのものは触らない(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	key := trustKeyOf(t, repo)
 	before := `{
   "projects": {
@@ -127,9 +127,9 @@ func TestApply_既にtrueのものは触らない(t *testing.T) {
 }
 `
 	home, configPath := fakeHome(t, before)
-	report := planFor(t, home, map[string]string{"maimuzo/continuo": repo}, "maimuzo/continuo")
+	report := planFor(t, home, map[string]string{"octocat/hello-world": repo}, "octocat/hello-world")
 
-	result, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"maimuzo/continuo": repo}), report)
+	result, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"octocat/hello-world": repo}), report)
 	if err != nil {
 		t.Fatalf("実行できなかった: %v", err)
 	}
@@ -158,11 +158,11 @@ func TestApply_既にtrueのものは触らない(t *testing.T) {
 // 与える情報: 別のリポジトリの記述と、continuo が知らないトップレベルのキーを持つ `.claude.json`。
 // 成功条件: 追加した鍵以外のすべてが、中身として変わっていないこと。
 func TestApply_他のリポジトリの記述を1つも変えない(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	home, configPath := fakeHome(t, otherSettings)
-	report := planFor(t, home, map[string]string{"maimuzo/continuo": repo}, "maimuzo/continuo")
+	report := planFor(t, home, map[string]string{"octocat/hello-world": repo}, "octocat/hello-world")
 
-	if _, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"maimuzo/continuo": repo}), report); err != nil {
+	if _, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"octocat/hello-world": repo}), report); err != nil {
 		t.Fatalf("登録できなかった: %v", err)
 	}
 
@@ -198,9 +198,9 @@ func TestApply_他のリポジトリの記述を1つも変えない(t *testing.T
 // 与える情報: Plan のあと、Apply の前に別のキーが足された `.claude.json`。
 // 成功条件: あとから足されたキーが、書き換えたあとも残っていること。
 func TestApply_書き込みの直前に読み直す(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	home, configPath := fakeHome(t, `{"projects":{}}`)
-	report := planFor(t, home, map[string]string{"maimuzo/continuo": repo}, "maimuzo/continuo")
+	report := planFor(t, home, map[string]string{"octocat/hello-world": repo}, "octocat/hello-world")
 
 	// Plan と Apply の間に、別のセッションが書き戻したことにする。
 	const meanwhile = `{
@@ -214,7 +214,7 @@ func TestApply_書き込みの直前に読み直す(t *testing.T) {
 		t.Fatalf("途中の書き換えを再現できなかった: %v", err)
 	}
 
-	if _, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"maimuzo/continuo": repo}), report); err != nil {
+	if _, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"octocat/hello-world": repo}), report); err != nil {
 		t.Fatalf("登録できなかった: %v", err)
 	}
 
@@ -239,7 +239,7 @@ func TestApply_書き込みの直前に読み直す(t *testing.T) {
 // 与える情報: 調べたあとに壊した `.claude.json` を5通り。
 // 成功条件: ErrUnexpectedShape が返り、ファイルが変わらず、バックアップも作られないこと。
 func TestApply_調べたあとに形が壊れたら1バイトも書かない(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	key := trustKeyOf(t, repo)
 
 	cases := map[string]string{
@@ -252,8 +252,8 @@ func TestApply_調べたあとに形が壊れたら1バイトも書かない(t *
 	for name, broken := range cases {
 		t.Run(name, func(t *testing.T) {
 			home, configPath := fakeHome(t, `{"projects":{}}`)
-			clones := map[string]string{"maimuzo/continuo": repo}
-			report := planFor(t, home, clones, "maimuzo/continuo")
+			clones := map[string]string{"octocat/hello-world": repo}
+			report := planFor(t, home, clones, "octocat/hello-world")
 			if len(report.Pending()) != 1 {
 				t.Fatalf("調べた時点では登録の対象であるはずだが、そうなっていない: %+v", report.Entries)
 			}
@@ -282,11 +282,11 @@ func TestApply_調べたあとに形が壊れたら1バイトも書かない(t *
 // 与える情報: トップレベルが配列である `.claude.json`。
 // 成功条件: 登録の対象が0件になり、ファイルもバックアップも変わらないこと。
 func TestApply_調べた時点で形が読めなければ対象から外す(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	const broken = `[1, 2, 3]`
 	home, configPath := fakeHome(t, broken)
-	clones := map[string]string{"maimuzo/continuo": repo}
-	report := planFor(t, home, clones, "maimuzo/continuo")
+	clones := map[string]string{"octocat/hello-world": repo}
+	report := planFor(t, home, clones, "octocat/hello-world")
 
 	if len(report.Problems()) != 1 {
 		t.Fatalf("読めない形なのに調べられた扱いになっている: %+v", report.Entries)
@@ -314,11 +314,11 @@ func TestApply_調べた時点で形が読めなければ対象から外す(t *t
 // 与える情報: `.claude.json` を置いていないテスト用ホームディレクトリ。
 // 成功条件: ErrNoClaudeConfig が返り、ファイルが作られないこと。
 func TestApply_claudejsonが無ければ作らずに止める(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	home, configPath := fakeHome(t, "")
-	report := planFor(t, home, map[string]string{"maimuzo/continuo": repo}, "maimuzo/continuo")
+	report := planFor(t, home, map[string]string{"octocat/hello-world": repo}, "octocat/hello-world")
 
-	_, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"maimuzo/continuo": repo}), report)
+	_, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"octocat/hello-world": repo}), report)
 	if !errors.Is(err, trust.ErrNoClaudeConfig) {
 		t.Fatalf("無いことを表すエラーが返っていない: %v", err)
 	}
@@ -335,11 +335,11 @@ func TestApply_claudejsonが無ければ作らずに止める(t *testing.T) {
 // 与える情報: 0600 の `.claude.json`。
 // 成功条件: 書き換えたあとも 0600 であり、バックアップも 0600 であること。
 func TestApply_権限を引き継ぐ(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	home, configPath := fakeHome(t, `{"projects":{}}`)
-	report := planFor(t, home, map[string]string{"maimuzo/continuo": repo}, "maimuzo/continuo")
+	report := planFor(t, home, map[string]string{"octocat/hello-world": repo}, "octocat/hello-world")
 
-	result, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"maimuzo/continuo": repo}), report)
+	result, err := trust.Apply(context.Background(), optionsFor(home, map[string]string{"octocat/hello-world": repo}), report)
 	if err != nil {
 		t.Fatalf("登録できなかった: %v", err)
 	}
@@ -359,16 +359,16 @@ func TestApply_権限を引き継ぐ(t *testing.T) {
 // 与える情報: 登録できるリポジトリ1つと、clone の無いリポジトリ1つ。
 // 成功条件: 登録できるほうだけが書かれ、もう一方の鍵が作られないこと。
 func TestApply_調べられなかったものは書き込まない(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	home, configPath := fakeHome(t, `{"projects":{}}`)
-	clones := map[string]string{"maimuzo/continuo": repo}
-	report := planFor(t, home, clones, "maimuzo/continuo", "maimuzo/nowhere")
+	clones := map[string]string{"octocat/hello-world": repo}
+	report := planFor(t, home, clones, "octocat/hello-world", "octocat/nowhere")
 
 	result, err := trust.Apply(context.Background(), optionsFor(home, clones), report)
 	if err != nil {
 		t.Fatalf("登録できなかった: %v", err)
 	}
-	if len(result.Changed) != 1 || result.Changed[0].Repository != "maimuzo/continuo" {
+	if len(result.Changed) != 1 || result.Changed[0].Repository != "octocat/hello-world" {
 		t.Fatalf("書き込んだ対象が想定と違う: %+v", result.Changed)
 	}
 	after := readFile(t, configPath)
@@ -382,12 +382,12 @@ func TestApply_調べられなかったものは書き込まない(t *testing.T)
 // 与える情報: 時刻を固定した Options。
 // 成功条件: `~/.claude.json.continuo-backup-<RFC3339>` という名前で残ること。
 func TestApply_バックアップの名前は時刻つきで残る(t *testing.T) {
-	repo := initRepo(t, "continuo")
+	repo := initRepo(t, "hello-world")
 	home, _ := fakeHome(t, `{"projects":{}}`)
-	report := planFor(t, home, map[string]string{"maimuzo/continuo": repo}, "maimuzo/continuo")
+	report := planFor(t, home, map[string]string{"octocat/hello-world": repo}, "octocat/hello-world")
 
 	fixed := time.Date(2026, 8, 20, 13, 45, 12, 0, time.FixedZone("JST", 9*60*60))
-	opts := optionsFor(home, map[string]string{"maimuzo/continuo": repo})
+	opts := optionsFor(home, map[string]string{"octocat/hello-world": repo})
 	opts.Now = func() time.Time { return fixed }
 
 	result, err := trust.Apply(context.Background(), opts, report)

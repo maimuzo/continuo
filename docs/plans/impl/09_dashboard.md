@@ -92,7 +92,7 @@ run ごとの項目は `/api/v1/state` が全部返している。**識別子に
 ### 応答の実物
 
 ```json
-{"identifier":"maimuzo/continuo#12","state":"In Progress","turn_count":3,
+{"identifier":"octocat/hello-world#12","state":"In Progress","turn_count":3,
  "last_hook_at":"2026-08-19T11:58:30Z","last_hook_ago":"1分30秒前",
  "stall_clock_at":"2026-08-19T11:59:59Z",
  "tokens":{"api_calls":19,"input":38,"cache_creation":14358,"cache_read":701185,"output":1216,"total":716797},
