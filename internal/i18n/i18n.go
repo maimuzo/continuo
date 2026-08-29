@@ -183,6 +183,29 @@ type Catalog struct {
 	source map[Key]string
 }
 
+// NewCatalog は与えた文言から資源を1つ作る。落とし先は正の言語（日本語）の埋め込んだ資源である。
+//
+// **いまの呼び出し元はテストだけである。**埋め込んだ資源だけでは落とし先（訳の無いキーを
+// 正の言語から引くこと）を検査できない。**`messages/en.json` が `messages/ja.json` の複製で、
+// 訳の無いキーが1つも無いためである**（設計 3-35b）。**穴の空いた資源をここで組んで、
+// 落とし先が効くことを確かめる。**テストは `test/` の下の別 package に置く決まりなので、
+// package の中の変数を直接触れない。
+//
+// lang: 作る資源の言語。
+// messages: この言語の文言。nil でもよい（そのとき全部のキーが正の言語へ落ちる）。
+// 戻り値: 資源。渡した map は複製するので、あとから書き換えても影響しない。
+func NewCatalog(lang Lang, messages map[Key]string) *Catalog {
+	copied := make(map[Key]string, len(messages))
+	for k, v := range messages {
+		copied[k] = v
+	}
+	var source map[Key]string
+	if c := catalogs[SourceLang]; c != nil {
+		source = c.messages
+	}
+	return &Catalog{lang: lang, messages: copied, source: source}
+}
+
 // Lang はこの資源の言語を返す。
 //
 // 戻り値: 言語。
