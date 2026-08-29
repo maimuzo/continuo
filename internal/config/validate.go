@@ -487,8 +487,6 @@ func validateLanguage(value string) error {
 //   - claude.hook_bridge.listen が非 null なら絶対パスであること。相対パスだと
 //     continuo をどのディレクトリから起動したかで socket の場所が変わり、身元ファイルに
 //     書いたパスとの一致検査（3-23 / 3-18）が成立しない
-//   - runtime.lock_file が非 null なら絶対パスであること。相対パスだと二重起動の判定が
-//     起動ディレクトリごとに別ファイルになり、flock による排他が成立しない（3-17）
 //
 // cfg: expandConfig を通したあとの Config。
 // 戻り値: 最初に見つかった不正な値についてのエラー。エラーメッセージには設定キーの名前と
@@ -510,15 +508,6 @@ func validateExpanded(cfg *Config) error {
 					"null にすれば 3-23 の探索順で決まる）。**既にある共用のディレクトリ（ホーム直下など）の直下を"+
 					"指さないこと。**その親ディレクトリは socket・ロックファイル・issue ごとの逃がし先を置く"+
 					"実行時ディレクトリとして使われ、権限が 0700 でなければ起動を止める（3-23）",
-			)
-		}
-	}
-	if cfg.Runtime.LockFile != nil && *cfg.Runtime.LockFile != "" {
-		if !filepath.IsAbs(*cfg.Runtime.LockFile) {
-			return invalidValueError(
-				keyRuntimeLockFile,
-				*cfg.Runtime.LockFile,
-				"絶対パスにすること（相対パスだと起動したディレクトリごとに別のロックファイルになり、二重起動を防げない）",
 			)
 		}
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/internal/hookclient"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/logging"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/scaffold"
@@ -975,8 +976,15 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 	forceFlag := fs.Bool("force", false, i18n.T(i18n.KeyCLIAbandonFlagForce))
 	toFlag := fs.String("to", "", i18n.T(i18n.KeyCLIAbandonFlagTo))
 	parkFlag := fs.String("park", "", i18n.T(i18n.KeyCLIAbandonFlagPark))
+	// **常駐している側に `--id` を付けているなら、abandon にも同じ名前を渡す**（設計 3-17c）。
+	// 渡さなければ既定の1本を見る。
+	idFlag := fs.String("id", "", i18n.T(i18n.KeyCLIAbandonFlagID))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
+	}
+	// **フラグを読んだ直後に検査する**（設計 3-17d。runMain と同じ）。
+	if err := checkInstanceID(*idFlag, stderr); err != nil {
+		return 2
 	}
 
 	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
@@ -1035,6 +1043,7 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 		Force:           *forceFlag,
 		ToState:         *toFlag,
 		ParkState:       *parkFlag,
+		ID:              *idFlag,
 		GraphQLEndpoint: endpoint,
 		Out:             stdout,
 		Err:             stderr,
@@ -1047,6 +1056,24 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 // **`✗` があったこと（1）と、引数の誤り（2）のどちらとも別の値にする。**
 // スクリプトから「前提が足りない」と「doctor 自体が動けなかった」を区別できるようにする。
 const doctorInternalErrorExitCode = 3
+
+// checkInstanceID は `--id` に渡された名前が使える形かを、フラグを読んだ直後に検査する
+// （設計 3-17d）。
+//
+// **`internal/instance` の Resolve をそのまま呼ぶ。**名前の形も長さも
+// socket のパスの長さも、**判定を持つのは1箇所だけにする。**
+// ここに写しを置くと、片方だけを直したときに CLI と常駐で判定が食い違う。
+//
+// id: `--id` に渡された名前。空文字なら既定の1本なので、必ず通る。
+// stderr: 弾いた理由の出力先。
+// 戻り値: 使えない名前だった場合のエラー（**理由は stderr へ書き出し済みである**）。
+func checkInstanceID(id string, stderr io.Writer) error {
+	if _, err := instance.Resolve(id); err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrInvalidID, err))
+		return err
+	}
+	return nil
+}
 
 // reorderArgs は、位置引数のあとに書かれたフラグを前へ寄せてから flag へ渡すための並べ替えである。
 //
@@ -1158,8 +1185,18 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	// （`--port=0` は「OS に空きポートを選ばせる」という意味を持つ指定であり、
 	// 「指定しなかった」と同じ扱いにしてはならない）。
 	portFlag := fs.Int("port", 0, i18n.T(i18n.KeyCLIMainFlagPort))
+	// **`--id` は「1台で何本目か」を表す名前である**（設計 3-17b）。
+	// 付けると、ロック・実行時ディレクトリ・worktree の置き場所・branch 名の4つが
+	// その名前ごとに分かれる。
+	idFlag := fs.String("id", "", i18n.T(i18n.KeyCLIMainFlagID))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
+	}
+	// **フラグを読んだ直後に検査し、弾いたら起動しない**（設計 3-17d）。
+	// **この文字列はパスにも branch 名にも socket のパスにも入る。**あとで検査すると、
+	// 検査より先に `~/.continuo` の外を指すパスが組み上がる。
+	if err := checkInstanceID(*idFlag, stderr); err != nil {
+		return 2
 	}
 	var port *int
 	fs.Visit(func(f *flag.Flag) {
@@ -1228,7 +1265,12 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	useLanguageFromConfig(path)
 
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIMainStarting, path))
-	if err := d.DaemonRun(ctx, daemon.Options{ConfigPath: path, Logger: logger, Port: port}); err != nil {
+	if err := d.DaemonRun(ctx, daemon.Options{
+		ConfigPath: path,
+		Logger:     logger,
+		Port:       port,
+		ID:         *idFlag,
+	}); err != nil {
 		// **起動できなかったのか、動いていたものが落ちたのかを言い分ける。**
 		// 無人運用のログを後から読む人間が、起動失敗と実行中の異常終了を取り違えないようにする。
 		if errors.Is(err, daemon.ErrStartup) {

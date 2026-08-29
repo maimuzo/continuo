@@ -57,6 +57,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -101,6 +102,12 @@ type Options struct {
 	// ParkState は continuo に手を離させるために一時的に動かす先である。
 	// **空なら tracker.failure_state を使う。**
 	ParkState string
+	// ID は `--id` に渡された名前である（設計 3-17b / 3-17c）。
+	//
+	// **常駐している側に `--id` を付けているなら、同じ名前を渡すこと。**
+	// **空なら既定の1本を見る。**ロック・実行時ディレクトリ・worktree の置き場所・
+	// branch 名の4つが、常駐している側と同じ関数から導かれる。
+	ID string
 	// GraphQLEndpoint は GitHub の GraphQL API の接続先である。
 	// **空なら本番の GitHub を使う。**テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
@@ -200,7 +207,18 @@ func Run(ctx context.Context, opts Options) int {
 		return ExitStopped
 	}
 
-	deps, err := opts.Deps.resolve(loaded.Config, opts.GraphQLEndpoint, logger)
+	// **常駐している側と同じ関数から4つを導く**（設計 3-17c）。
+	// **ロックだけを揃えても足りない。**`--id e2e` で動かしていれば worktree は
+	// `<workspace.root>/e2e/…` にあるのに、既定の置き場所を走査すると0件になり、
+	// **手を離させた run を消せないまま終わる。**
+	inst, err := instance.Resolve(opts.ID)
+	if err != nil {
+		fmt.Fprintln(errOut, i18n.T(i18n.KeyAbandonErrBuild, err))
+		return ExitStopped
+	}
+	cfg := inst.Apply(loaded.Config)
+
+	deps, err := opts.Deps.resolve(cfg, inst, opts.GraphQLEndpoint, logger)
 	if err != nil {
 		fmt.Fprintln(errOut, i18n.T(i18n.KeyAbandonErrBuild, err))
 		return ExitStopped
@@ -208,7 +226,7 @@ func Run(ctx context.Context, opts Options) int {
 
 	r := &runner{
 		opts:   opts,
-		cfg:    loaded.Config,
+		cfg:    cfg,
 		deps:   deps,
 		issue:  issue,
 		out:    out,
@@ -348,7 +366,7 @@ func (r *runner) run(ctx context.Context) int {
 // 戻り値の1つ目: 動いていれば true。
 // 戻り値の2つ目: 取れたロック（**動いていたときと開けなかったときは nil**）。
 // 戻り値の3つ目: **ロックファイルそのものを開けなかった場合のエラー**
-// （二重起動とは言い分ける。設定の `runtime.lock_file` の打ち間違いがこれである）。
+// （二重起動とは言い分ける。置き場所を作れない・権限が足りないのがこれである）。
 func (r *runner) isRunning() (bool, Unlocker, error) {
 	l, err := r.deps.AcquireLock(r.deps.LockPath)
 	if err != nil {

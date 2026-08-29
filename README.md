@@ -191,7 +191,7 @@ cannot be checked — is it reported as a leftover, as before.
 
 **If it stops after parking, the Status stays at the parked value.** continuo does not move it back — the value it came from is a working state, so restoring it could have continuo pick the issue up again on the spot. **It tells you so in one line**; whether to move it back is your call on the board.
 
-**If continuo is not running, it still checks the panes before deleting.** The lock file's location depends on your environment (`CONTINUO_RUNTIME_DIR`, `XDG_RUNTIME_DIR`, `TMPDIR`), so a daemon started by launchd and an `abandon` typed into a terminal can disagree about it. **A live pane on that worktree stops the deletion**, whatever the lock file says.
+**If continuo is not running, it still checks the panes before deleting.** The lock file is fixed at `~/.continuo/continuo.lock`, so a daemon started by launchd and an `abandon` typed into a terminal can never disagree about it. **If you run continuo with `--id <name>`, pass the same name to `abandon`.** **A live pane on that worktree stops the deletion**, whatever the lock file says.
 
 **It leaves the Status where it is.** continuo cannot tell whether you are dropping the issue for good or rewriting it and filing it again, so **that call is yours to make on the board.** If you already know, pass it: `--to "Ice Box"`.
 

@@ -81,44 +81,44 @@ gh workflow run release.yml --ref main
 ### 実機で issue を1件通す
 
 **言いたいこと。**動いている continuo は止めなくてよい。
-**worktree と socket の置き場所を分ければ、2つ目の continuo を並べて動かせる。**
+**`--id <名前>` を付ければ、2つ目の continuo を並べて動かせる。**
 **AI だけで最後まで回せる。**人間の判断を待つ段ではない。
 
 **ただし Claude Code が実際に動くので、定額プランの枠を消費する。**続けて何度も回さない。
 **本番のボード（project #3）には触れない。**使うのは検証用のボードだけである。
 **その番号・リポジトリ・issue・Status の識別子は [docs/test_environment.md](test_environment.md) にある。**
 
-**一、隔離する設定を2つ変える。**
-
-```yaml
-workspace:
-  root: ~/continuo-e2e-worktrees            # worktree の置き場所を本番と分ける
-claude:
-  hook_bridge:
-    listen: /tmp/continuo-e2e/hooks.sock    # socket を分ける
-```
-
-**二重起動を止めるロックは、socket と同じディレクトリに置かれる。**
-**だから socket を分ければ、ロックも一緒に分かれる**
-（[internal/daemon/daemon.go](../internal/daemon/daemon.go) の `ResolveLockFilePath`）。
-
-**二、socket を置くディレクトリの権限を 0700 にする。**
+**一、`--id` を付けて起動する。**それだけで分かれる。
 
 ```bash
-mkdir -p /tmp/continuo-e2e ~/continuo-e2e-worktrees
-chmod 0700 /tmp/continuo-e2e
+# 起動のときに付ける。abandon にも同じ名前を渡す
+continuo --id e2e ~/continuo-e2e-work
 ```
 
-**忘れると `doctor` がここで落ちる。**
+**`--id <名前>` は、分けるべきものを4つまとめて分ける。**
 
-```
-✗ hook の置き場所 hook を受ける socket を用意できません: 既にある hook を受ける socket の
-                  ディレクトリ /tmp/continuo-e2e の権限が 0755 です。0700 にしてから起動してください
-                  （continuo は自分が作っていないディレクトリの権限を書き換えません）
-```
+| 分ける対象 | `--id e2e` を付けたとき |
+| --- | --- |
+| **ロック** | `~/.continuo/id/e2e/continuo.lock` |
+| **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
+| **worktree の置き場所** | `<workspace.root>/e2e` |
+| **branch 名** | `e2e/` を先頭に付けたもの |
 
-**パスは短くする。**macOS の Unix domain socket は104バイト以上で bind に失敗するので、
-**深いディレクトリを指すと、権限とは別の理由でここが `✗` になる。**
+**`claude.hook_bridge.listen` は書かない。**`--id` を付けたときは使われない
+（書いてあっても、起動の記録に「使いません」と1行出る）。
+**`workspace.root` も本番と同じままでよい。**末尾に `/e2e` が足される。
+
+**名前に書けるのは、小文字の英数字とハイフンだけである。**先頭は英数字、32文字まで。
+**大文字・空白・`..`・`/` は起動する前に弾かれる。**
+
+**socket を分けてもロックは分かれない。**ロックは `~/.continuo` に固定されている
+（[docs/plans/continuo_design.md](plans/continuo_design.md) 3-17）。**分けたいなら `--id` である。**
+
+**二、名前の長さに気をつける。**
+
+**`--id` を付けたときの socket は `~/.continuo/id/<名前>/run/hooks.sock` である。**
+**ホームディレクトリのパスが長いと、macOS の上限（103バイト）に当たる。**
+そのときは起動する前に、上限のバイト数を添えて弾かれる。**名前を短くすること。**
 
 **三、検証用のボードで設定を作り、検査を通す。**
 
@@ -128,18 +128,20 @@ OWNER="$(gh repo view --json owner --jq .owner.login)"
 WORK=~/continuo-e2e-work        # 置き場所は好きにしてよい。本番の作業ディレクトリと分けること
 mkdir -p "$WORK"
 continuo init --project 10 --owner "$OWNER" --force "$WORK"
-# ここで、一の2つの設定を WORKFLOW.md へ書き込む
 continuo doctor "$WORK"
 ```
 
 **`✗` が0件になること。**
 **ボードに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
 
+**`continuo doctor` は `--id` を取らない。**hook の置き場所の行が見ているのは既定の場所であって、
+`--id` を付けたときの `~/.continuo/id/<名前>/run` ではない。**そこは起動のときに用意される。**
+
 **四、起動して、issue を1件通す。**
 
 ```bash
 # どこで実行してもよい
-continuo ~/continuo-e2e-work
+continuo --id e2e ~/continuo-e2e-work
 ```
 
 **着手待ちの issue が拾われ、`In Progress` になり、Claude Code が起動する。**
@@ -147,7 +149,12 @@ continuo ~/continuo-e2e-work
 **issue を着手待ちへ動かす手順と、進み方の見方は [docs/test_environment.md](test_environment.md) にある。**
 **各段が何をしているのかは [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 に書いてある。**
 
-**本番の continuo は動いたままでよい。**socket もロックも worktree も分かれているので、互いに触らない。
+**本番の continuo は動いたままでよい。**`--id` を付けたので、ロックも socket も worktree も
+branch も分かれている。互いに触らない。
+
+**ただし、本番と同じボードを見ることはできない。**同じボードを2つの continuo が見ると
+同じ issue を2つが拾うので、**2つ目はボードのロックで起動を止められる**
+（`~/.continuo/board/<owner>-<番号>.lock`）。**検証用のボード（project #10）を使うこと。**
 
 **五、詰まりやすいところ。**前の検証の残り物で止まることがある。
 
@@ -157,7 +164,9 @@ level=WARN msg="目的の worktree をそのまま使えません（Status を�
   【対処】continuo abandon <issue の URL> を実行してください。"
 ```
 
-**案内どおり `continuo abandon <issue の URL> <ディレクトリ>` を叩く。**
+**案内どおり `continuo abandon --id e2e <issue の URL> <ディレクトリ>` を叩く。**
+**`--id` を落とさないこと。**落とすと abandon は既定の1本を見に行き、
+`--id e2e` で作った worktree も branch も見つけられない。
 **それでも消えないなら、git の登録だけが残っている。**
 
 ```bash

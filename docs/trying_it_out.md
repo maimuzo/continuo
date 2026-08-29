@@ -1039,7 +1039,8 @@ cd ~/continuo-try
 continuo を起動します（設定ファイル: ~/continuo-try/WORKFLOW.md）
 level=INFO msg=設定ファイルを読み込みました path=~/continuo-try/WORKFLOW.md
 level=INFO msg="hook を受ける socket の場所を決めました" socket=/tmp/cnt-run/hooks.sock
-level=INFO msg=二重起動防止のロックを獲得しました lock_file=/tmp/cnt-run/continuo.lock
+level=INFO msg=二重起動防止のロックを獲得しました lock_file=~/.continuo/continuo.lock
+level=INFO msg=ボードのロックを獲得しました board_lock_file=~/.continuo/board/<ACCOUNT>-<PROJECT>.lock owner=<ACCOUNT> project_number=<PROJECT>
 level=INFO msg=リポジトリの信頼はこのファイルで判定します claude_config=~/.claude.json
 level=INFO msg="gh の認証と scope を確かめました" scope=project
 level=INFO msg="herdr の socket に到達しました" protocol=19

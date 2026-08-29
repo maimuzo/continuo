@@ -2301,12 +2301,12 @@ type failureNote struct {
 **`continuo abandon` が別の場所を見て「動いていない」と判定し、走っている worktree を消しに行く**（3-17c）。
 **分ける必要があるなら `--id` を使う。**そちらは分けるべきものを全部まとめて分ける。
 
-**実装するときに、あわせて直すものが2つある。**
+**文書が言うことも、これに合わせて1つに揃える。**
 
-| 何 | なぜ |
+| 何 | 何を言うか |
 | --- | --- |
-| [docs/releasing.md](../releasing.md) と [docs/test_environment.md](../test_environment.md) | **「socket を分ければロックも一緒に分かれる」と書いてある。**ロックを固定すると、実機で確かめる手順が通らなくなる。**`--id` に置き換える** |
-| [docs/upgrading.md](../upgrading.md) と [docs/FAQ.md](../FAQ.md) | **`runtime.lock_file` を書いてある `WORKFLOW.md` は、廃止した瞬間に起動しなくなる**（8-1 が未知のキーを弾く）。**消し方を両方に書いてから出す** |
+| [docs/releasing.md](../releasing.md) と [docs/test_environment.md](../test_environment.md) | **本番を止めずに2本目を並べる手順は `--id` である。**socket を分けてもロックは分かれない |
+| [docs/upgrading.md](../upgrading.md) と [docs/FAQ.md](../FAQ.md) | **`runtime.lock_file` を書いてある `WORKFLOW.md` は起動しない**（8-1 が未知のキーを弾く）。**消し方を両方に置く** |
 
 **ホストをまたぐ二重起動は、ロックでは防げない。**flock はそのマシンの中でしか効かないためである。
 **代わりに、同じ issue を2台が拾わない仕組みを持つ**（3-77。issue の担当者と、余裕値による入札）。
@@ -2390,10 +2390,14 @@ abandon が `<workspace.root>` を走査して0件になり、**手を離させ�
 | 1 | 自分のロックを取る（`~/.continuo/continuo.lock`、または `--id` を付けたなら `~/.continuo/id/<名前>/continuo.lock`） |
 | 2 | **ボードのロック `~/.continuo/board/<owner>-<project_number>.lock` に `flock` を非待機で試す** |
 | 3 | **取れなければ、同じボードを見ている continuo が生きている。**起動を止める |
-| 4 | 隣に `board.json` を書く。**誰が握っているかを人間が読めるようにするためだけのものである** |
+| 4 | 隣に `<owner>-<project_number>.json` を書く。**誰が握っているかを人間が読めるようにするためだけのものである** |
 
-**ロックを読み合う形にしてはならない。**「生きているロックの隣の `board.json` を読む」やり方は、
-**同時に起動した2つが、互いに相手の `board.json` を書き終える前に読んでしまう。**
+**覚え書きの名前を `board.json` に固定しない。**固定すると、別のボードを見る continuo が
+互いに上書きし、**「誰が握っているか」を読むという目的そのものが果たせない。**
+ロック1本につき1つになるよう、ロックと同じ幹の名前にする。
+
+**ロックを読み合う形にしてはならない。**「生きているロックの隣の覚え書きを読む」やり方は、
+**同時に起動した2つが、互いに相手の覚え書きを書き終える前に読んでしまう。**
 **自分のロックも走査に入るので、自分自身を見つけて起動できなくなる。**
 **ボードのロック1本なら、`flock` が同じ瞬間に2つへ渡らないので、順序も競合も無い。**
 **プロセスが死ねば OS が解放する**ので、残骸の判定も要らない（3-17 と同じ理由）。
@@ -2875,11 +2879,9 @@ socket も、issue ごとの設定ファイル（3-12）も、hook の逃がし�
 **flock のファイルだけは、ここに置かない。**`~/.continuo/continuo.lock` に固定する（3-17）。
 **下の探索順は環境で動くので、「機械で1つ」を名乗るロックがそれに従ってはならない。**
 
-> **いまの実装はまだ古い形である。**`internal/daemon` の `Run` は
-> `socketpath.ResolveHookSocketPath(...)` で socket のパスを解決したあと、
-> `socketpath.EnsureDir(filepath.Dir(sockPath))` でそのディレクトリを作る。
-> **`ResolveLockFilePath` は `filepath.Join(filepath.Dir(sockPath), socketpath.LockFileName)` を返しており、
-> socket の置き場所からロックを導いている。**3-17 に合わせて直す。
+**`--id <名前>` を付けたときは、下の探索順を使わない。**
+`~/.continuo/id/<名前>/run` に固定する（3-17b）。**`claude.hook_bridge.listen` も使わない。**
+同じ `WORKFLOW.md` から2本立てたときに、issue ごとの設定と hook の逃がし先を共有しないためである。
 
 **採る規則。上から順に、最初に見つかったものを使う。**
 
@@ -8392,9 +8394,6 @@ restart:
   orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
                                             # もう一度起動する。to_dispatch_state は着手待ちへ戻し、to_failure_state は失敗として落とす
 
-runtime:
-  lock_file: null                           # 二重起動を防ぐロックファイル。null なら hook の socket と同じディレクトリに置く
-
 server:
   port: null                                # 進み具合を見る HTTP ダッシュボードのポート。null なら起動しない。
                                             # 0 なら空いているポートを OS に選ばせる。--port を渡すとそちらが優先される
@@ -8677,7 +8676,7 @@ push していない作業は、この worktree が片付くときに失われ�
 | **未定義の環境変数** | **エラー。**空文字に落とさない。無人運用では、原因の分からないエラーで落ちるより、設定を読んだ時点で名指しで落ちるほうがよい |
 | **設定されているが空** | **エラー** |
 | **チルダ** | **先頭の `~` または `~/` だけ展開する。**`~user` 形式はエラー。展開の実体は `os.UserHomeDir()` |
-| **適用するキー** | **パスと接続先を表すものだけ。**`herdr.socket` / `workspace.root` / `claude.hook_bridge.listen` / `runtime.lock_file`（**このキーは #87 の実装で廃止する。3-17**） |
+| **適用するキー** | **パスと接続先を表すものだけ。**`herdr.socket` / `workspace.root` / `claude.hook_bridge.listen` の3つ（**ロックの場所は設定で変えられない。3-17**） |
 | **適用しないキー** | `herdr.worktree.branch_template`（テンプレート文字列）、`claude.env`（Claude Code へ渡す値）、`workspace_hooks` の各コマンド |
 
 **エラーメッセージには設定キーの名前と元の文字列を必ず含める。**

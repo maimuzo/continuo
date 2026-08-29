@@ -13,8 +13,8 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
-	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -92,7 +92,7 @@ type Workspace interface {
 // 本番のボード・本物の herdr・利用者の worktree に触らずに検査するためである。**
 type Deps struct {
 	// LockPath は二重起動防止のロックファイルの絶対パスである。
-	// 空なら設定と実行時ディレクトリから決める（daemon.ResolveLockFilePath と同じ経路）。
+	// **空なら常駐している側と同じ関数から決める**（internal/instance の Layout）。
 	LockPath string
 	// AcquireLock はロックを試みる。nil なら internal/lock を呼ぶ。
 	//
@@ -123,11 +123,17 @@ type Deps struct {
 // **ここで組み立てるのは、設定を読めたあとでなければ作れないものだけである。**
 // herdr の socket も worktree の置き場所も設定から決まる。
 //
-// cfg: 検証済みの設定。
+// cfg: 検証済みの設定（**`--id` の Apply を通したもの**）。
+// inst: `--id` から導いた置き場所。**常駐している側と同じ Layout である**（3-17c）。
 // endpoint: GitHub の GraphQL API の接続先（検査済み）。空なら本番の GitHub。
 // logger: ログの出力先。
 // 戻り値: すべてのフィールドが埋まった Deps と、組み立てに失敗した場合のエラー。
-func (d Deps) resolve(cfg config.Config, endpoint string, logger *slog.Logger) (Deps, error) {
+func (d Deps) resolve(
+	cfg config.Config,
+	inst instance.Layout,
+	endpoint string,
+	logger *slog.Logger,
+) (Deps, error) {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
@@ -159,7 +165,7 @@ func (d Deps) resolve(cfg config.Config, endpoint string, logger *slog.Logger) (
 	if d.Workspace == nil {
 		// **issue ごとの設定ファイルの置き場所は、常駐プロセスと同じ決め方にする。**
 		// 違う値を渡すと、片付けが `settings_path` を「置き場所の外側」と判定して消し残す。
-		settingsRoot, err := resolveSettingsRoot(cfg)
+		settingsRoot, err := resolveSettingsRoot(cfg, inst)
 		if err != nil {
 			return d, err
 		}
@@ -175,11 +181,13 @@ func (d Deps) resolve(cfg config.Config, endpoint string, logger *slog.Logger) (
 		d.Workspace = ws
 	}
 	if d.LockPath == "" {
-		sockPath, err := resolveSocketPath(cfg)
-		if err != nil {
+		// **常駐している側と同じ Layout から取る**（3-17c）。
+		// **ここが1バイトでもずれると、動いている continuo を「動いていない」と
+		// 判定して worktree を消しにいく。**
+		if err := inst.EnsureLockDir(); err != nil {
 			return d, err
 		}
-		d.LockPath = daemon.ResolveLockFilePath(cfg, sockPath)
+		d.LockPath = inst.LockPath()
 	}
 	if d.NewTracker == nil {
 		d.NewTracker = func(ctx context.Context) (Tracker, error) {
@@ -195,9 +203,10 @@ func (d Deps) resolve(cfg config.Config, endpoint string, logger *slog.Logger) (
 // 「動いていない」と判定して worktree を消しにいく。
 //
 // cfg: 検証済みの設定。
+// inst: `--id` から導いた置き場所。
 // 戻り値: socket の絶対パスと、置き場所を用意できなかった場合のエラー。
-func resolveSocketPath(cfg config.Config) (string, error) {
-	sockPath, err := socketpath.Prepare(os.Getenv(daemon.EnvRuntimeDir), cfg.Claude.HookBridge.Listen)
+func resolveSocketPath(cfg config.Config, inst instance.Layout) (string, error) {
+	sockPath, err := inst.HookSocketPath(os.Getenv(daemon.EnvRuntimeDir), cfg.Claude.HookBridge.Listen)
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyAbandonRuntimeDirFailed, err)
 	}
@@ -207,9 +216,10 @@ func resolveSocketPath(cfg config.Config) (string, error) {
 // resolveSettingsRoot は issue ごとの Claude Code の設定ファイルの置き場所を決める（3-12）。
 //
 // cfg: 検証済みの設定。
+// inst: `--id` から導いた置き場所。
 // 戻り値: `<実行時ディレクトリ>/issues` の絶対パスと、決められなかった場合のエラー。
-func resolveSettingsRoot(cfg config.Config) (string, error) {
-	sockPath, err := resolveSocketPath(cfg)
+func resolveSettingsRoot(cfg config.Config, inst instance.Layout) (string, error) {
+	sockPath, err := resolveSocketPath(cfg, inst)
 	if err != nil {
 		return "", err
 	}

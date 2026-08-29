@@ -70,6 +70,108 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.1.10 から v0.1.11 へ
+
+**破壊的変更があります。****当てないと起動しません。**
+
+| 何 | 中身 |
+| --- | --- |
+| **消えたキー** | **`runtime.lock_file`（`runtime:` の節ごと）。****残っていると起動しません** |
+| **増えたキー** | **ありません**（増えたのは設定ではなくフラグ `--id` です） |
+| **名前が変わったキー** | **ありません** |
+| **変わった振る舞い** | **ロックが `~/.continuo/continuo.lock` に固定されました。**環境変数では動きません。**同じボードを2つの continuo が見ると、2つ目は起動を止められます** |
+
+### `runtime.lock_file` を消す — これをしないと起動しません
+
+**何が起きるか。**front matter は未知のキーを弾くので、**残したまま起動すると次で止まります。**
+
+```
+front matter が不正です: unknown field "runtime"
+```
+
+**直し方。****`runtime:` の節を丸ごと消してください。2行です。**
+
+```bash
+grep -n -A1 "^runtime:" ~/continuo-work/WORKFLOW.md
+```
+
+```yaml
+runtime:
+  lock_file: null                           # ← この2行を消す
+```
+
+**消したかどうかは、次で確かめられます。**
+
+```bash
+grep -c "^runtime:" ~/continuo-work/WORKFLOW.md    # 0 になること
+continuo doctor ~/continuo-work                    # 設定ファイルの行が ✓ になること
+```
+
+**なぜ消したのか。**設定でロックの場所を変えられると、**`continuo abandon` が別の場所を見て
+「continuo は動いていない」と判定し、走っている worktree を消しに行きます。**
+**分けたいときは、下の `--id` を使ってください。**そちらは分けるべきものを全部まとめて分けます。
+
+### ロックが `~/.continuo/continuo.lock` に固定されました
+
+**何が変わったか。**これまでロックは hook の socket と同じディレクトリに置かれていました。
+socket の場所は `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` で決まるので、
+**launchd から起動した continuo と、端末で叩いたコマンドが別のロックを握ることがありました。**
+
+**これからは、環境変数を何に向けてもロックは1本です。**
+**「1台で continuo は1本だけ」と覚えてください。**
+
+**当てるものはありません。**設定は関係しません。
+
+### `--id <名前>` — 1台で2本目を動かす
+
+**何のためのものか。**本番を止めずに、検証用の continuo をもう1本動かすためです。
+
+```bash
+continuo --id e2e ~/continuo-e2e-work
+continuo abandon --id e2e https://github.com/octocat/hello-world/issues/42 ~/continuo-e2e-work
+```
+
+**付けると、分けるべきものを4つまとめて分けます。**
+
+| 分ける対象 | `--id e2e` を付けたとき |
+| --- | --- |
+| **ロック** | `~/.continuo/id/e2e/continuo.lock` |
+| **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
+| **worktree の置き場所** | `<workspace.root>/e2e` |
+| **branch 名** | `e2e/` を先頭に付けたもの |
+
+**`claude.hook_bridge.listen` は使われません。**書いてあっても、起動の記録に1行出て無視されます。
+**同じ `WORKFLOW.md` から2本立てても、hook の逃がし先が混ざらないようにするためです。**
+
+**名前に書けるのは、小文字の英数字とハイフンだけです。**先頭は英数字、32文字まで。
+**大文字・空白・`.`・`/` は起動する前に弾きます。**
+
+**`continuo abandon` にも同じ名前を渡してください。**渡さないと既定の1本を見に行き、
+**`--id` で作った worktree も branch も見つけられません。**
+
+### 同じボードを2つの continuo が見られなくなりました
+
+**何が変わったか。**起動のときに、**ボード1枚につきロック1本**を取ります
+（`~/.continuo/board/<owner>-<番号>.lock`）。**取れなければ起動を止めます。**
+
+```
+同じボード（octocat の project #10）を見ている continuo が既に動いています
+```
+
+**なぜか。**同じボードを2つの continuo が見ると、**同じ issue を2つが拾います。**
+**`--id` を付けても回避できません。**ボードだけは名前から分けられないからです。
+
+**誰が握っているかは、ロックの隣の覚え書きで読めます。**
+
+```bash
+cat ~/.continuo/board/<owner>-<番号>.json
+```
+
+**当てるものはありません。**1台で1つのボードだけを見ているなら、何も変わりません。
+
+---
+
+
 ## v0.1.9 から v0.1.10 へ
 
 **当てるものが4つあります。****設定が2つと、本文（プロンプト）の差し替えが2つです。**

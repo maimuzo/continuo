@@ -46,11 +46,11 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/server"
-	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -145,6 +145,12 @@ type Options struct {
 	// **`nil` なら `server.port` に従う。**`nil` でなければ `server.port` を上書きし、
 	// 設定に `server.port` が無くてもダッシュボードを開く。
 	Port *int
+	// ID は `--id` に渡された「1台で何本目か」を表す名前である（設計 3-17b）。
+	//
+	// **空なら既定の1本である**（ロックは `~/.continuo/continuo.lock`）。
+	// **空でなければ、ロック・実行時ディレクトリ・worktree の置き場所・branch 名の
+	// 4つが、この名前ごとに分かれる。**4つとも internal/instance の Layout 1つから導く。
+	ID string
 	// StartupCheckTimeout は起動時検査（設計 3-6）全体の上限である。
 	// **0 なら DefaultStartupCheckTimeout を使う。**テストが短い期限を与えるための口である。
 	StartupCheckTimeout time.Duration
@@ -175,6 +181,23 @@ func Run(ctx context.Context, opts Options) error {
 	cfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
 
+	// **`--id` から導く4つを、ここで1つの Layout にまとめる**（設計 3-17b）。
+	// **別々に導いてはならない。**片方だけを直すと、常駐している側と
+	// `continuo abandon` が別の場所を見る（3-17c）。
+	inst, err := instance.Resolve(opts.ID)
+	if err != nil {
+		return i18n.Errorf(i18n.KeyDaemonRunInstanceFailed, ErrStartup, err)
+	}
+	cfg = inst.Apply(cfg)
+	if inst.ID() != "" {
+		logger.Info("--id で分けて動かします",
+			"id", inst.ID(),
+			"lock_file", inst.LockPath(),
+			"runtime_dir", inst.RuntimeDir(),
+			"workspace_root", cfg.Workspace.Root,
+			"branch_template", cfg.Herdr.Worktree.BranchTemplate)
+	}
+
 	// **起動は止めずに、噛み合っていない Status の集合だけを知らせる**（設計 3-9e。issue #35）。
 	// **段1 の中に置く。**flock より前なので、二重起動で落ちる経路でも必ず1回出る。
 	WarnCleanupStates(cfg, logger)
@@ -204,7 +227,16 @@ func Run(ctx context.Context, opts Options) error {
 	// **`Prepare` に1本化してある。**
 	// 「決める」と「用意する」を別々に呼んでいたときは、その継ぎ目を通すテストが
 	// 1本も無く、実在しない `XDG_RUNTIME_DIR` がそのまま通り抜けた（issue #9）。
-	sockPath, err := socketpath.Prepare(os.Getenv(EnvRuntimeDir), cfg.Claude.HookBridge.Listen)
+	//
+	// **`--id` を付けたときだけは、Layout が決めた `~/.continuo/id/<名前>/run` に固定する。**
+	// 3-23 の探索順も `claude.hook_bridge.listen` も、そのときは使わない（3-17b）。
+	if inst.OverridesListen(cfg) {
+		logger.Warn("--id を付けたので claude.hook_bridge.listen は使いません",
+			"id", inst.ID(),
+			"listen", *cfg.Claude.HookBridge.Listen,
+			"runtime_dir", inst.RuntimeDir())
+	}
+	sockPath, err := inst.HookSocketPath(os.Getenv(EnvRuntimeDir), cfg.Claude.HookBridge.Listen)
 	if err != nil {
 		return i18n.Errorf(i18n.KeyDaemonRunSocketDirFailed, ErrStartup, err)
 	}
@@ -212,11 +244,17 @@ func Run(ctx context.Context, opts Options) error {
 	logger.Info("hook を受ける socket の場所を決めました", "socket", sockPath)
 
 	// 段2: flock を取る。**取れなければ即座に終了する**（設計 3-17）。
-	lockPath := ResolveLockFilePath(cfg, sockPath)
+	//
+	// **socket の場所からは導かない。**socket の場所は環境変数で動くので、
+	// そこから導くと、同じ機械の同じ利用者が別のロックを握る（3-17）。
+	lockPath := inst.LockPath()
+	if err := inst.EnsureLockDir(); err != nil {
+		return i18n.Errorf(i18n.KeyDaemonRunLockFileFailed, ErrStartup, lockPath, err)
+	}
 	l, err := lock.Acquire(lockPath)
 	if err != nil {
 		// **「二重起動」と「ロックファイルを開けない」を言い分ける。**
-		// 両方を二重起動と報告すると、`runtime.lock_file` のパスを打ち間違えた運用者が、
+		// 両方を二重起動と報告すると、置き場所を作れていない運用者が、
 		// 動いてもいない2つ目の continuo を探しに行くことになる。
 		if errors.Is(err, lock.ErrAlreadyRunning) {
 			return i18n.Errorf(i18n.KeyDaemonRunAlreadyRunning, ErrStartup, lockPath, err)
@@ -231,6 +269,20 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}()
 	logger.Info("二重起動防止のロックを獲得しました", "lock_file", lockPath)
+
+	// 段2a: ボードのロックを取る。**取れなければ起動を止める**（設計 3-17e）。
+	//
+	// **`--id` を付けてもボードだけは名前から導けない。**同じボードを2つの continuo が
+	// 見ると、**同じ issue を2つが拾う。**
+	boardLock, err := acquireBoardLock(cfg, inst, opts.ConfigPath, logger)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := boardLock.Release(); err != nil {
+			logger.Warn("ボードのロックの解放に失敗しました", "error", err)
+		}
+	}()
 
 	// 段2b: 依存を組み立てる。**ここで `gh auth token` が走る**（`token_source` の既定は
 	// `gh_auth`）。外部プロセスを起こす段なので、起動時検査と同じ期限を掛ける。
@@ -736,17 +788,56 @@ func newTrackerHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
 
-// ResolveLockFilePath は二重起動防止のロックファイルの絶対パスを決める（設計 3-17 / 3-23）。
+// acquireBoardLock はボード1枚ぶんのロックを取る（設計 3-17e）。
 //
-// `runtime.lock_file` が明示されていればそれを使い、無ければ hook の socket と同じ
-// ディレクトリ（＝実行時ディレクトリ）に置く。
+// **取れなければ、同じボードを見ている continuo が生きている。**起動を止める。
+// **ロックを読み合う形にしてはならない。**同時に起動した2つが、互いに相手の
+// 覚え書きを書き終える前に読んでしまう。**`flock` が同じ瞬間に2つへ渡らないので、
+// ロック1本なら順序も競合も無い。**
 //
-// cfg: 読み込み済みの設定（5-5 の展開を通したもの）。
-// sockPath: 解決済みの hook の socket の絶対パス。
-// 戻り値: ロックファイルの絶対パス。
-func ResolveLockFilePath(cfg config.Config, sockPath string) string {
-	if cfg.Runtime.LockFile != nil && *cfg.Runtime.LockFile != "" {
-		return *cfg.Runtime.LockFile
+// **覚え書き（隣に置く JSON）は人間が読むためだけのものである。**書けなくても起動は止めない。
+//
+// cfg: 読み込み・検証済みの設定。
+// inst: `--id` から導いた置き場所。
+// configPath: 読み込んだ `WORKFLOW.md` の絶対パス（覚え書きに残す）。
+// logger: ログの出力先。
+// 戻り値: 獲得したロックと、取れなかった場合のエラー（`ErrStartup` を包む）。
+func acquireBoardLock(
+	cfg config.Config,
+	inst instance.Layout,
+	configPath string,
+	logger *slog.Logger,
+) (*lock.Lock, error) {
+	owner := cfg.Tracker.Provider.Owner
+	number := cfg.Tracker.Provider.ProjectNumber
+
+	boardLockPath, err := instance.BoardLockPath(owner, number)
+	if err != nil {
+		return nil, i18n.Errorf(i18n.KeyDaemonRunBoardLockFileFailed, ErrStartup, "", err)
 	}
-	return filepath.Join(filepath.Dir(sockPath), socketpath.LockFileName)
+
+	bl, err := lock.Acquire(boardLockPath)
+	if err != nil {
+		if errors.Is(err, lock.ErrAlreadyRunning) {
+			return nil, i18n.Errorf(i18n.KeyDaemonRunBoardInUse,
+				ErrStartup, owner, number, boardLockPath, err)
+		}
+		return nil, i18n.Errorf(i18n.KeyDaemonRunBoardLockFileFailed, ErrStartup, boardLockPath, err)
+	}
+	logger.Info("ボードのロックを獲得しました",
+		"board_lock_file", boardLockPath, "owner", owner, "project_number", number)
+
+	if err := instance.WriteBoardInfo(boardLockPath, instance.BoardInfo{
+		Owner:         owner,
+		ProjectNumber: number,
+		InstanceID:    inst.ID(),
+		PID:           os.Getpid(),
+		ConfigPath:    configPath,
+		LockFile:      inst.LockPath(),
+	}, nil); err != nil {
+		// **起動は止めない。**これは人間のための覚え書きであって、排他の一部ではない。
+		logger.Warn("ボードのロックの覚え書きを書けませんでした（起動は続けます）",
+			"path", instance.BoardInfoPath(boardLockPath), "error", err)
+	}
+	return bl, nil
 }

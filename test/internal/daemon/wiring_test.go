@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,8 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/daemon"
+	"github.com/maimuzo/continuo/internal/instance"
+	"github.com/maimuzo/continuo/internal/lock"
 )
 
 // writeWiringWorkflow は、結線だけを確かめるための最小の WORKFLOW.md を書く。
@@ -59,6 +61,11 @@ rate_limit:
 
 // wiringRoot は短い一時ディレクトリを1つ作る（socket のパスを103バイト以内に保つため）。
 //
+// **ホームディレクトリもここへ向ける。**二重起動を防ぐロックは
+// `~/.continuo/continuo.lock` に固定されており（設計 3-17）、ボードのロックは
+// `~/.continuo/board/` に置かれる（3-17e）。**向けないと、テストが利用者の
+// 本物の `~/.continuo` を掴み、動いている continuo と取り合いになる。**
+//
 // t: 呼び出し元のテスト。
 // 戻り値: 実体のパス（symlink を解決済み）。
 func wiringRoot(t *testing.T) string {
@@ -72,54 +79,8 @@ func wiringRoot(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("一時ディレクトリを解決できません: %v", err)
 	}
+	t.Setenv("HOME", root)
 	return root
-}
-
-// TestResolveLockFilePath_lock_fileの指定があればそれを使い無ければsocketと同じ場所に置く は、
-// 設定の解釈を固定する。
-//
-// 目的: 設計 3-17 / 3-23。`runtime.lock_file` を書いたときと書かないときで、
-// ロックファイルの場所が変わることを確かめる。**この関数は公開されているのに
-// 一度も実行されていなかった。**
-// 与える情報: `runtime.lock_file` が null・空文字・絶対パスの3通りと、hook の socket のパス。
-// 成功条件: 絶対パスを書いたときだけその値になり、ほかは socket と同じディレクトリになること。
-func TestResolveLockFilePath_lock_fileの指定があればそれを使い無ければsocketと同じ場所に置く(t *testing.T) {
-	sockPath := "/tmp/continuo-rt/hooks.sock"
-	empty := ""
-	explicit := "/var/tmp/continuo-elsewhere/continuo.lock"
-
-	cases := []struct {
-		name     string
-		lockFile *string
-		want     string
-	}{
-		{
-			name:     "lock_file が null なら socket と同じディレクトリに置く",
-			lockFile: nil,
-			want:     "/tmp/continuo-rt/continuo.lock",
-		},
-		{
-			name:     "lock_file が空文字でも socket と同じディレクトリに置く",
-			lockFile: &empty,
-			want:     "/tmp/continuo-rt/continuo.lock",
-		},
-		{
-			name:     "lock_file に絶対パスを書いたらそこに置く",
-			lockFile: &explicit,
-			want:     explicit,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var cfg config.Config
-			cfg.Runtime.LockFile = tc.lockFile
-
-			if got := daemon.ResolveLockFilePath(cfg, sockPath); got != tc.want {
-				t.Fatalf("ロックファイルの場所が違う: got %q, want %q", got, tc.want)
-			}
-		})
-	}
 }
 
 // TestValidateGraphQLEndpoint_httpsとループバック宛のhttpだけを受け付ける は、
@@ -185,9 +146,9 @@ func TestWaitWithTimeout_期限内に終わらなければ待つのをやめる(
 // TestRun_ロックファイルを開けないときは二重起動と報告しない は、
 // 起動を止めた理由の言い分けを固定する。
 //
-// 目的: `runtime.lock_file` のパスを打ち間違えた運用者に「二重起動」と報告すると、
+// 目的: ロックの置き場所を作れなかった運用者に「二重起動」と報告すると、
 // 動いてもいない2つ目の continuo を探しに行かせることになる。
-// 与える情報: 親ディレクトリが存在しない `runtime.lock_file`。
+// 与える情報: `~/.continuo` を作れないホームディレクトリ（実体がファイルである）。
 // 成功条件: 起動の段のエラー（daemon.ErrStartup）で、文言が「ロックファイルを用意できません」
 // であり、**「二重起動」を含まないこと。**
 func TestRun_ロックファイルを開けないときは二重起動と報告しない(t *testing.T) {
@@ -196,8 +157,15 @@ func TestRun_ロックファイルを開けないときは二重起動と報告�
 	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
 		t.Fatalf("実行時ディレクトリを作れません: %v", err)
 	}
-	lockFile := filepath.Join(root, "この階層は存在しない", "continuo.lock")
-	path := writeWiringWorkflow(t, root, "", fmt.Sprintf("runtime:\n  lock_file: %s\n", lockFile))
+	path := writeWiringWorkflow(t, root, "", "")
+
+	// **ホームディレクトリの実体をファイルにする。**`~/.continuo` を作れないので、
+	// 二重起動ではなく「ロックファイルを用意できません」で止まらなければならない。
+	notADir := filepath.Join(root, "home-is-a-file")
+	if err := os.WriteFile(notADir, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("ホームディレクトリの代わりのファイルを作れません: %v", err)
+	}
+	t.Setenv("HOME", notADir)
 
 	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
 	t.Setenv(daemon.EnvGraphQLEndpoint, "")
@@ -669,5 +637,198 @@ func TestHookCLI_socketとpending_dirが相対パスなら受け付けない(t *
 				t.Fatal("相対パスの逃がし先を掘ってしまった（worktree の中に作られる）")
 			}
 		})
+	}
+}
+
+// wiringShortHome は、ホームディレクトリの代わりに使う短い一時ディレクトリを作り、
+// `HOME` をそこへ向ける。
+//
+// **短くなければならない。**`--id` を付けたときの socket は
+// `~/.continuo/id/<名前>/run/hooks.sock` であり、103バイトに収まらないと起動できない
+// （設計 3-17d / 3-23）。**macOS の `TMPDIR` はそれだけで66文字前後ある。**
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 実体のパス（symlink を解決済み）。
+func wiringShortHome(t *testing.T) string {
+	t.Helper()
+
+	for _, base := range []string{"/tmp", ""} {
+		dir, err := os.MkdirTemp(base, "ch")
+		if err != nil {
+			continue
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			resolved = dir
+		}
+		t.Setenv("HOME", resolved)
+		return resolved
+	}
+	t.Fatal("一時ディレクトリを作れません")
+	return ""
+}
+
+// TestRun_idを付けると4つが名前ごとに分かれる は、`--id` の結線を固定する。
+//
+// 目的: 設計 3-17b。**ロックだけを分けると事故になる。**残り3つを分け忘れると、
+// 2本目が1本目の worktree を巡回のたびに閉じ、hook を食べ、branch を出せなくなる。
+// **4つとも internal/instance の Layout 1つから導いていることを、結線の側で確かめる。**
+//
+// 与える情報: `--id e2e` と、`~/.continuo/id/e2e/continuo.lock` を先に握った別のプロセス。
+// 成功条件: 起動の段のエラーで、**その名前ごとのロックのパスを指して**二重起動と言うこと。
+// **起動の記録に、名前ごとに分かれた worktree の置き場所と branch 名が出ること。**
+func TestRun_idを付けると4つが名前ごとに分かれる(t *testing.T) {
+	root := wiringRoot(t)
+	home := wiringShortHome(t)
+	runtimeDir := filepath.Join(root, "rt")
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		t.Fatalf("実行時ディレクトリを作れません: %v", err)
+	}
+	path := writeWiringWorkflow(t, root, "", "")
+
+	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
+	t.Setenv(daemon.EnvGraphQLEndpoint, "")
+
+	// **1本目の代わりに、名前ごとのロックを先に握る。**
+	idLock := filepath.Join(home, ".continuo", "id", "e2e", "continuo.lock")
+	if err := os.MkdirAll(filepath.Dir(idLock), 0o700); err != nil {
+		t.Fatalf("名前ごとのロックの置き場所を作れません: %v", err)
+	}
+	held, err := lock.Acquire(idLock)
+	if err != nil {
+		t.Fatalf("名前ごとのロックを先に握れません: %v", err)
+	}
+	t.Cleanup(func() { _ = held.Release() })
+
+	logs := &syncBuffer{}
+	err = daemon.Run(context.Background(), daemon.Options{
+		ConfigPath: path,
+		Logger:     slog.New(slog.NewTextHandler(logs, nil)),
+		ID:         "e2e",
+	})
+
+	if err == nil {
+		t.Fatal("同じ名前のロックを握られているのに起動できてしまった")
+	}
+	if !errors.Is(err, daemon.ErrStartup) {
+		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+	}
+	if !strings.Contains(err.Error(), idLock) {
+		t.Fatalf("名前ごとのロックを見ていない: %v", err)
+	}
+	if !strings.Contains(err.Error(), "二重起動") {
+		t.Fatalf("二重起動として報告していない: %v", err)
+	}
+
+	wantRoot := filepath.Join(root, "wt", "e2e")
+	if !strings.Contains(logs.String(), wantRoot) {
+		t.Fatalf("worktree の置き場所が名前ごとに分かれていない（%q が記録に無い）:\n%s", wantRoot, logs.String())
+	}
+	if !strings.Contains(logs.String(), "e2e/continuo/") {
+		t.Fatalf("branch 名が名前ごとに分かれていない:\n%s", logs.String())
+	}
+}
+
+// TestRun_同じボードを見ている2つ目は起動を止める は、ボードごとのロックを固定する。
+//
+// 目的: 設計 3-17e。**同じボードを2つの continuo が見ると、同じ issue を2つが拾う。**
+// `--id` を付けても、ボードだけは名前から導けない。
+//
+// 与える情報: `~/.continuo/board/octocat-3.lock` を先に握った別のプロセス。
+// 成功条件: 起動の段のエラーで止まり、**ボードのロックのパスを文言に出すこと。**
+func TestRun_同じボードを見ている2つ目は起動を止める(t *testing.T) {
+	root := wiringRoot(t)
+	runtimeDir := filepath.Join(root, "rt")
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		t.Fatalf("実行時ディレクトリを作れません: %v", err)
+	}
+	path := writeWiringWorkflow(t, root, "", "")
+
+	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
+	t.Setenv(daemon.EnvGraphQLEndpoint, "")
+
+	boardLock, err := instance.BoardLockPath("octocat", 3)
+	if err != nil {
+		t.Fatalf("ボードのロックの場所を決められません: %v", err)
+	}
+	held, err := lock.Acquire(boardLock)
+	if err != nil {
+		t.Fatalf("ボードのロックを先に握れません: %v", err)
+	}
+	t.Cleanup(func() { _ = held.Release() })
+
+	err = daemon.Run(context.Background(), daemon.Options{
+		ConfigPath: path,
+		Logger:     slog.New(slog.DiscardHandler),
+	})
+
+	if err == nil {
+		t.Fatal("同じボードを見ている continuo が居るのに起動できてしまった")
+	}
+	if !errors.Is(err, daemon.ErrStartup) {
+		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+	}
+	if !strings.Contains(err.Error(), boardLock) {
+		t.Fatalf("ボードのロックのパスが文言に出ていない: %v", err)
+	}
+	if !strings.Contains(err.Error(), "既に動いています") {
+		t.Fatalf("同じボードを見ている continuo が居ることが文言に出ていない: %v", err)
+	}
+}
+
+// TestRun_ボードのロックを取ったら誰が握っているかを書き残す は、3-17e の段4 を固定する。
+//
+// 目的: **人間が「どの continuo がそのボードを握っているか」を読めるようにする。**
+// **排他の判定には使わない**（判定は flock 1本だけである）。
+//
+// 与える情報: 返ってこない `gh auth token`（依存の組み立てで止まる。ボードのロックは
+// その手前で取り終えている）。
+// 成功条件: ロックの隣に覚え書きが在り、読み込んだ `WORKFLOW.md` のパスが入っていること。
+func TestRun_ボードのロックを取ったら誰が握っているかを書き残す(t *testing.T) {
+	root := wiringRoot(t)
+	runtimeDir := filepath.Join(root, "rt")
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		t.Fatalf("実行時ディレクトリを作れません: %v", err)
+	}
+	writeHangingGHAuthToken(t, binDir)
+	path := writeWiringWorkflow(t, root, "", "")
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
+	t.Setenv(daemon.EnvGraphQLEndpoint, "")
+
+	if err := daemon.Run(context.Background(), daemon.Options{
+		ConfigPath:          path,
+		Logger:              slog.New(slog.DiscardHandler),
+		StartupCheckTimeout: 500 * time.Millisecond,
+	}); err == nil {
+		t.Fatal("gh auth token が返らないのに起動できてしまった")
+	}
+
+	boardLock, err := instance.BoardLockPath("octocat", 3)
+	if err != nil {
+		t.Fatalf("ボードのロックの場所を決められません: %v", err)
+	}
+	raw, err := os.ReadFile(instance.BoardInfoPath(boardLock))
+	if err != nil {
+		t.Fatalf("ボードのロックの覚え書きを読めません: %v", err)
+	}
+	var info instance.BoardInfo
+	if err := json.Unmarshal(raw, &info); err != nil {
+		t.Fatalf("ボードのロックの覚え書きを読み解けません: %v（中身: %s）", err, raw)
+	}
+	if info.ConfigPath != path {
+		t.Errorf("読み込んだ WORKFLOW.md のパスが入っていない: got %q, want %q", info.ConfigPath, path)
+	}
+	if info.Owner != "octocat" || info.ProjectNumber != 3 {
+		t.Errorf("どのボードかが入っていない: got %q / %d", info.Owner, info.ProjectNumber)
+	}
+	if info.PID != os.Getpid() {
+		t.Errorf("握っているプロセスの ID が入っていない: got %d, want %d", info.PID, os.Getpid())
+	}
+	if info.StartedAt == "" {
+		t.Error("いつ取ったかが入っていない")
 	}
 }

@@ -1355,3 +1355,78 @@ func TestRunAbandon_helpは0で返して本体を呼ばない(t *testing.T) {
 		t.Errorf("使い方にフラグの説明が出ていない: %s", stderr)
 	}
 }
+
+// TestRunMain_idの名前が使えなければ常駐を始めない は、フラグを読んだ直後の検査を確かめる。
+//
+// 目的: 設計 3-17d。**この文字列はパスにも branch 名にも socket のパスにも入る。**
+// **あとで検査すると、検査より先に `~/.continuo` の外を指すパスが組み上がる。**
+// 与える情報: 大文字・`..`・空白・33文字の名前。
+// 成功条件: 終了コードが 2 で、daemon を1回も呼ばないこと。
+func TestRunMain_idの名前が使えなければ常駐を始めない(t *testing.T) {
+	var called bool
+	deps := cli.Deps{
+		DaemonRun: func(_ context.Context, _ daemon.Options) error { called = true; return nil },
+	}
+
+	for _, id := range []string{"E2E", "..", "../../etc", "my id", strings.Repeat("a", 33)} {
+		t.Run(id, func(t *testing.T) {
+			code, _, stderr := runCLIWith(deps, []string{"--id", id, writeWorkflowFor(t)}, "")
+			if code != 2 {
+				t.Errorf("--id %q の終了コードが 2 でない: %d（stderr: %s）", id, code, stderr)
+			}
+			if !strings.Contains(stderr, "--id") {
+				t.Errorf("--id が悪いことを言っていない: %s", stderr)
+			}
+		})
+	}
+	if called {
+		t.Error("使えない名前なのに常駐を始めている")
+	}
+}
+
+// TestRunMain_idをそのまま常駐へ渡す は、フラグの受け渡しを確かめる。
+//
+// 目的: 設計 3-17b。`--id` は常駐の側で4つの置き場所へ展開される。
+// **CLI で握り潰すと、名前を付けたのに何も分かれない。**
+// 与える情報: `--id e2e`。
+// 成功条件: daemon.Options.ID に `e2e` が渡ること。
+func TestRunMain_idをそのまま常駐へ渡す(t *testing.T) {
+	var got string
+	deps := cli.Deps{
+		DaemonRun: func(_ context.Context, opts daemon.Options) error {
+			got = opts.ID
+			return nil
+		},
+	}
+
+	code, _, stderr := runCLIWith(deps, []string{"--id", "e2e", writeWorkflowFor(t)}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if got != "e2e" {
+		t.Errorf("--id が常駐へ渡っていない: got %q, want %q", got, "e2e")
+	}
+}
+
+// TestRunAbandon_idをそのまま片付けへ渡す は、フラグの受け渡しを確かめる。
+//
+// 目的: 設計 3-17c。**常駐している側と同じ名前を渡さないと、abandon は別の場所を見る。**
+// 与える情報: `--id e2e` と issue の URL。
+// 成功条件: abandon.Options.ID に `e2e` が渡ること。
+func TestRunAbandon_idをそのまま片付けへ渡す(t *testing.T) {
+	var got string
+	deps := cli.Deps{AbandonRun: func(_ context.Context, opts abandon.Options) int {
+		got = opts.ID
+		return 0
+	}}
+
+	dir := writeWorkflowFor(t)
+	code, _, stderr := runCLIWith(deps,
+		[]string{"abandon", "https://github.com/octocat/hello-world/issues/42", dir, "--id", "e2e"}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if got != "e2e" {
+		t.Errorf("--id が片付けへ渡っていない: got %q, want %q", got, "e2e")
+	}
+}

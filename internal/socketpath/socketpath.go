@@ -27,7 +27,10 @@ const MaxPathLen = 103
 const HookSocketFileName = "hooks.sock"
 
 // LockFileName は二重起動防止のロックファイル名である（internal/lock が使う）。
-// hook の socket と同じディレクトリに置く（設計 5-2 の runtime.lock_file の既定値の説明）。
+//
+// **置き場所を決めるのは internal/instance であって、この package ではない**（設計 3-17）。
+// **socket の場所から導いてはならない。**socket の場所は環境変数で動くので、
+// そこから導くと、同じ機械の同じ利用者が別のロックを握る。
 const LockFileName = "continuo.lock"
 
 // RuntimeDir は hook を受ける socket を置くディレクトリを、設計 3-23 の探索順で決める。

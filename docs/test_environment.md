@@ -60,18 +60,27 @@ mkdir -p "$WORK" && cd "$WORK"
 continuo init --project 10 --owner "$OWNER" --force .
 ```
 
-**worktree の置き場所を本番と分ける。**`workspace.root` を書き換える。
+**本番の continuo を動かしたまま回すなら、`--id <名前>` を付ける。**
+**設定は1行も書き換えない。**ロック・socket と実行時ディレクトリ・worktree の置き場所・
+branch 名の4つが、その名前ごとに分かれる。
 
 ```bash
-# WORKFLOW.md の workspace.root を、本番（~/worktrees）以外へ向ける
-#   root: ~/continuo-e2e-worktrees
-mkdir -p ~/continuo-e2e-worktrees
+continuo --id e2e .                        # 起動
+continuo abandon --id e2e <issue の URL> . # 片付け。同じ名前を渡すこと
 ```
 
-**本番の continuo を動かしたまま回すなら、socket も分ける。**
-`claude.hook_bridge.listen` を `/tmp/continuo-e2e/hooks.sock` のような専用のパスに向け、
-そのディレクトリを `chmod 0700` する。**二重起動を止めるロックは socket と同じディレクトリに置かれるので、
-socket を分ければロックも分かれる。**手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
+| 分ける対象 | `--id e2e` を付けたとき |
+| --- | --- |
+| **ロック** | `~/.continuo/id/e2e/continuo.lock` |
+| **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
+| **worktree の置き場所** | `<workspace.root>/e2e` |
+| **branch 名** | `e2e/` を先頭に付けたもの |
+
+**socket を分けてもロックは分かれない。**ロックは `~/.continuo` に固定されている。
+**分けたいなら `--id` である。**手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
+
+**本番のボード（project #3）は見られない。**同じボードを2つの continuo が見ると同じ issue を
+2つが拾うので、2つ目はボードのロックで起動を止められる。**このボード（project #10）を使うこと。**
 
 **Status の割り当ては既定のままで合う。**ボードの選択肢を `Ready` / `In Progress` / `In Review` /
 `Blocked` / `Done` の5つにしてあるので、`continuo setup` を回さなくてよい。
@@ -81,7 +90,7 @@ socket を分ければロックも分かれる。**手順は [docs/releasing.md]
 ```bash
 continuo trust --dry-run .    # 何を許すかを見る
 continuo doctor .             # ✗ が0件になること
-continuo                      # 起動（別の端末か背後で）
+continuo --id e2e             # 起動（別の端末か背後で）
 ```
 
 **issue を着手待ちへ動かす。**画面を触らずに API でできる。
@@ -111,11 +120,13 @@ gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.tit
 
 ```bash
 # continuo を止める（pane は閉じないので、必要なら自分で閉じる）
-kill -INT "$(pgrep -f 'continuo$' | head -1)"
+# **`--id e2e` で起動したものだけを止める。**本番の continuo を巻き込まない
+kill -INT "$(pgrep -f 'continuo --id e2e' | head -1)"
 
 # worktree と branch と herdr の workspace をまとめて消す
-continuo abandon https://github.com/<ACCOUNT>/continuo-e2e/issues/1 . --dry-run   # 先に見る
-continuo abandon https://github.com/<ACCOUNT>/continuo-e2e/issues/1 .
+# **`--id` を落とさないこと。**落とすと既定の1本を見に行き、何も見つけられない
+continuo abandon --id e2e https://github.com/<ACCOUNT>/continuo-e2e/issues/1 . --dry-run   # 先に見る
+continuo abandon --id e2e https://github.com/<ACCOUNT>/continuo-e2e/issues/1 .
 
 # ボードの Status を戻す（Ready へ戻すと、次に起動したとき拾われる）
 gh project item-edit --id PVTI_lAHNNEjOAYV2fM4N9wYE --project-id PVT_kwHNNEjOAYV2fA \
@@ -125,7 +136,7 @@ gh project item-edit --id PVTI_lAHNNEjOAYV2fM4N9wYE --project-id PVT_kwHNNEjOAYV
 **origin に push された branch は残る。**消すなら次を叩く（**取り消せない**）。
 
 ```bash
-git -C "$(ghq root)/github.com/<ACCOUNT>/continuo-e2e" push origin --delete continuo/<ACCOUNT>/continuo-e2e/1
+git -C "$(ghq root)/github.com/<ACCOUNT>/continuo-e2e" push origin --delete e2e/continuo/<ACCOUNT>/continuo-e2e/1
 ```
 
 **issue に付いたコメントも残る。**continuo は消さないので、溜まったら手で消す。
@@ -144,6 +155,7 @@ git -C "$(ghq root)/github.com/<ACCOUNT>/continuo-e2e" push origin --delete cont
 
 - **Claude Code が実際に動く。**定額プランの枠を消費する。**続けて何度も回さない**
 - **`updateProjectV2Field` は、このボードに対してだけ許される。**本番のボードで呼ぶと**設定済みの Status の値が全部消える**
-- **`workspace.root` を本番と同じにしない。**同じにすると、本番の worktree と混ざる
+- **`--id` を落とさない。**落とすと本番と同じロック・同じ worktree の置き場所・同じ branch 名になり、
+  **本番の continuo と取り合いになる**
 - **ボードの題名が「continuo 動作確認（使い捨て）」のままである。**作ったときの名前で、実際は恒久である。
   変えるときは `gh project edit 10 --owner "$OWNER" --title "..."`

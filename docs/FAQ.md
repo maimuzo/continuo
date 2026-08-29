@@ -56,16 +56,102 @@ CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo doctor
 
 ### 「二重起動を検出しました（ロックファイル …）」で起動できない
 
-**原因。**別の continuo が動いています。または**ロックファイルの置き場所が食い違っています。**
-置き場所は `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` で決まるので、
-launchd から起動した continuo と、端末で叩いたコマンドが別の場所を見ることがあります。
+**原因。**別の continuo が既に動いています。
+**ロックは `~/.continuo/continuo.lock` の1本に固定されています。**
+環境変数（`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR`）では動きません。
+**1台で continuo は1本だけ、と覚えてください。**
 
-**直し方。**動いている continuo を止めるか、同じ環境変数で叩き直します。
+**直し方。**動いているものを止めるか、**`--id <名前>` を付けて別の1本として動かします。**
 
 ```bash
 pgrep -fl continuo
-CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo
+continuo --id e2e ~/continuo-work    # 別の1本として動かす
 ```
+
+**`--id` は、分けるべきものを4つまとめて分けます。**
+
+| 分ける対象 | `--id e2e` を付けたとき |
+| --- | --- |
+| **ロック** | `~/.continuo/id/e2e/continuo.lock` |
+| **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
+| **worktree の置き場所** | `<workspace.root>/e2e` |
+| **branch 名** | `e2e/` を先頭に付けたもの |
+
+**名前は小文字の英数字とハイフンだけです。**先頭は英数字、32文字まで。
+**`continuo abandon` にも同じ名前を渡してください。**渡さないと既定の1本を見に行き、
+`--id` で作った worktree も branch も見つけられません。
+
+### 「同じボード（… の project #…）を見ている continuo が既に動いています」で起動できない
+
+**原因。****同じボードを2つの continuo が見ると、同じ issue を2つが拾います。**
+だから**ボード1枚につきロック1本**を取り、取れなければ起動を止めます
+（`~/.continuo/board/<owner>-<番号>.lock`）。
+
+**`--id` を付けても、これは回避できません。**ボードだけは名前から分けられないからです。
+
+**直し方。**誰が握っているかは、ロックの隣の覚え書きに書いてあります。
+
+```bash
+cat ~/.continuo/board/<owner>-<番号>.json
+```
+
+```json
+{
+  "owner": "octocat",
+  "project_number": 10,
+  "instance_id": "e2e",
+  "pid": 12345,
+  "config_path": "/Users/…/continuo-e2e-work/WORKFLOW.md",
+  "lock_file": "/Users/…/.continuo/id/e2e/continuo.lock",
+  "started_at": "2026-08-30T12:00:00+09:00"
+}
+```
+
+**この覚え書きは、人間が読むためだけのものです。**排他の判定には使いません
+（判定は `flock` 1本だけです）。**握っていたプロセスが死ねば、OS がロックを解放します。**
+**残骸を消す必要はありません。**
+
+**2本目を動かしたいなら、別のボードを見せてください。**
+
+### 「--id に渡した名前が使えません」で起動できない
+
+**原因。**`--id` に書けるのは、**小文字の英数字で始まり、以降が小文字の英数字とハイフンだけ**の
+名前です。**32文字まで。****大文字・空白・`.`・`/` は弾きます。**
+
+**この文字列はパスにも branch 名にも socket のパスにも入ります。**
+絞らないと `--id ../../etc` が `~/.continuo` の外を指し、空白や `..` は git の branch 名として不正になります。
+
+**直し方。**名前を書き直してください。
+
+```bash
+continuo --id e2e ~/continuo-work        # ○
+continuo --id issue-87 ~/continuo-work   # ○
+continuo --id E2E ~/continuo-work        # ×（大文字）
+continuo --id "my id" ~/continuo-work    # ×（空白）
+```
+
+**「hook を受ける socket のパスが長すぎます」と一緒に出たときは、名前が長すぎます。**
+socket は `~/.continuo/id/<名前>/run/hooks.sock` になるので、
+**ホームディレクトリのパスが長いと、それだけで上限（103バイト）に近づきます。**名前を短くしてください。
+
+### `runtime` / `lock_file` で「front matter が不正です: unknown field」と出る
+
+**原因。**`runtime.lock_file` は**廃止しました。**設定でロックの場所を変えられると、
+`continuo abandon` が別の場所を見て「動いていない」と判定し、**走っている worktree を消しに行きます。**
+
+**直し方。**`WORKFLOW.md` から `runtime:` の節を丸ごと消してください。**2行です。**
+
+```bash
+grep -n -A1 "^runtime:" ~/continuo-work/WORKFLOW.md
+```
+
+```yaml
+runtime:
+  lock_file: null                           # ← この2行を消す
+```
+
+**消したあとに何をロックするのか。****`~/.continuo/continuo.lock` の1本です。**
+**分けたいときは `--id <名前>` を使ってください**（上の「二重起動を検出しました」を見てください）。
 
 ### 「front matter が不正です: unknown field "…"」で止まる
 

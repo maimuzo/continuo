@@ -180,9 +180,6 @@ restart:
   orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
                                             # もう一度起動する。to_dispatch_state は着手待ちへ戻し、to_failure_state は失敗として落とす
 
-runtime:
-  lock_file: null                           # 二重起動を防ぐロックファイル。null なら hook の socket と同じディレクトリに置く
-
 server:
   port: null                                # 進み具合を見る HTTP ダッシュボードのポート。null なら起動しない。
                                             # 0 なら空いているポートを OS に選ばせる。--port を渡すとそちらが優先される
