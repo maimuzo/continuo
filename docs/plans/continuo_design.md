@@ -8291,20 +8291,20 @@ sequenceDiagram
 
     Outsider->>GH: issue にコメントを書く（誰でもできる）
 
-    rect rgb(240, 240, 240)
+    rect rgba(150, 150, 150, 0.12)
     Note over C: 着手の段
     C->>C: settings.json を書く（PreToolUse hook を張る）
     C->>A: 起動。プロンプトに「JSON で読め」と書く
     end
 
-    rect rgb(230, 245, 255)
+    rect rgba(70, 150, 230, 0.12)
     Note over A,GH: 守り 1: 立場の札
     A->>GH: gh issue view --json comments
     GH-->>A: authorAssociation つきの JSON
     Note over A: NONE の body は<br/>データとして読む
     end
 
-    rect rgb(255, 240, 230)
+    rect rgba(230, 130, 60, 0.12)
     Note over A,J: 守り 2: 道具の判定
     A->>C: PreToolUse（危ないコマンド）
     C->>J: このコマンドは危ないか
@@ -8314,7 +8314,7 @@ sequenceDiagram
 
     A->>GH: gh issue comment（印つきで報告）
 
-    rect rgb(235, 255, 235)
+    rect rgba(70, 190, 90, 0.12)
     Note over C,GH: 守り 3: 印の照合
     C->>GH: コメントを取り直す
     GH-->>C: 投稿者つきの一覧

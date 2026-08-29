@@ -157,6 +157,46 @@ case("インラインコードの中は数えない", base("`設計 6-23b` と�
 case("数字が続かなければ止まらない", base("設計の記録をまとめました。"), False)
 case("ハイフンの後ろが数字でなければ止まらない", base("設計 3-abc を見てください。"), False)
 
+# ---- ファイル参照の形式 -----------------------------------------------------
+
+case(
+    "行番号の無い markdown link は止まる",
+    base("[docs/plans/continuo_design.md](docs/plans/continuo_design.md) を見てください。"),
+    True,
+    "行番号まで書くこと",
+)
+case(
+    "行番号があれば通る",
+    base("[docs/plans/continuo_design.md:12-34](docs/plans/continuo_design.md#L12-L34) を見てください。"),
+    False,
+)
+case(
+    "backtick で囲んだファイルパスは止まる",
+    base("`internal/orchestrator/dispatch.go` を見てください。"),
+    True,
+    "backtick で囲まないこと",
+)
+case(
+    "ディレクトリは求めない",
+    base("[docs/plans/](docs/plans/) にあります。"),
+    False,
+)
+case(
+    "URL は求めない",
+    base("[公式文書](https://code.claude.com/docs/en/hooks.md) を見てください。"),
+    False,
+)
+case(
+    "コードフェンスの中のパスは数えない",
+    base() + "\n```bash\ncat internal/config/types.go\n```\n",
+    False,
+)
+case(
+    "空白を含む backtick はコマンドとみなして通す",
+    base("`go test ./test/internal/scaffold/...` を実行しました。"),
+    False,
+)
+
 # ---- 検査しない場合 -------------------------------------------------------
 
 case("200文字未満は検査しない", "#60 を直しました。", False)

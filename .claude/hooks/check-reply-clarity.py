@@ -99,6 +99,16 @@ MIN_QUOTE_CHARS = 30
 SECTION_REF_WORDS = ("設計", "節")
 SECTION_REF_NAME = "設計の節を番号だけで指している箇所（ファイルパスと行番号が無い）"
 
+# ファイルを指すときは [path:12-34](path#L12-L34) の形に固定する。
+# 行番号が無いと、読む側はファイルを開いてから探すことになる。
+# backtick で囲むのも禁止（規則がそう定めている）。
+FILE_EXTS = (
+    ".go", ".md", ".py", ".json", ".yaml", ".yml", ".sh", ".ts", ".js",
+    ".toml", ".txt", ".jsonl", ".sql", ".html", ".css", ".mod", ".sum",
+)
+FILE_REF_NAME = "ファイルの参照に行番号（#L12-L34）が無い箇所"
+FILE_BACKTICK_NAME = "backtick で囲んだファイルパス"
+
 # 話題の切れ目に入れる区切り線。行頭からこの文字だけが並ぶ行を区切りとみなす。
 # 表の区切り（`| --- |`）は行頭が `|` なので当たらない。
 DIVIDER_CHARS = "-"
@@ -383,6 +393,57 @@ def bare_section_refs(masked: str) -> int:
     return count
 
 
+def looks_like_path(text: str) -> bool:
+    """ファイルパスに見えるか。拡張子を持ち、空白を含まないものだけを拾う。"""
+    if not text or " " in text or "\t" in text:
+        return False
+    lowered = text.lower()
+    return any(lowered.endswith(e) or (e + "#") in lowered or (e + ":") in lowered for e in FILE_EXTS)
+
+
+def file_refs_without_lines(masked: str):
+    """行番号の無いファイル参照と、backtick で囲んだファイルパスを数える。
+
+    通す形は1つだけである。
+        [docs/plans/foo.md:12-34](docs/plans/foo.md#L12-L34)
+
+    見ないもの。
+        コードフェンスの中（呼ぶ側が masked を渡す）、引用行、http で始まるリンク先、
+        ディレクトリ（拡張子が無いもの）。
+    """
+    no_lines = 0
+    in_backtick = 0
+    for line in masked.split("\n"):
+        if is_quote_line(line):
+            continue
+
+        # backtick で囲んだファイルパス
+        parts = line.split("`")
+        for idx in range(1, len(parts), 2):  # 奇数番目が backtick の中身
+            if looks_like_path(parts[idx]):
+                in_backtick += 1
+
+        # markdown link のリンク先
+        text = strip_inline_code(line)
+        i = 0
+        while True:
+            i = text.find("](", i)
+            if i < 0:
+                break
+            j = text.find(")", i + 2)
+            if j < 0:
+                break
+            target = text[i + 2:j]
+            i = j + 1
+            if target.startswith("http://") or target.startswith("https://"):
+                continue
+            if not looks_like_path(target):
+                continue
+            if "#l" not in target.lower():
+                no_lines += 1
+    return no_lines, in_backtick
+
+
 def is_divider(line: str) -> bool:
     """話題の切れ目の区切り線か。行頭から `-` だけが3つ以上並ぶ行。
 
@@ -457,7 +518,7 @@ def read_payload():
     return payload if isinstance(payload, dict) else {}
 
 
-def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0) -> str:
+def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0, file_no_lines=0, file_backtick=0) -> str:
     """block したときに Claude へ返す指示文。
 
     入力由来の文字列を混ぜない。件数だけは int に通してから %d で埋める。
@@ -517,6 +578,23 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0
             "同じ行に markdown link があれば通ります。\n"
         )
 
+    if file_no_lines:
+        parts.append("\n%s: %d 件\n" % (FILE_REF_NAME, int(file_no_lines)))
+        parts.append(
+            "\n**ファイルを指すときは、行番号まで書くこと。**\n"
+            "  悪い: [docs/plans/continuo_design.md](docs/plans/continuo_design.md)\n"
+            "  良い: [docs/plans/continuo_design.md:8278-8342](docs/plans/continuo_design.md#L8278-L8342)\n"
+            "**行番号が無いと、読む側はファイルを開いてから探すことになります。**\n"
+        )
+
+    if file_backtick:
+        parts.append("\n%s: %d 件\n" % (FILE_BACKTICK_NAME, int(file_backtick)))
+        parts.append(
+            "\n**ファイルパスを backtick で囲まないこと。**markdown link 形式で書いてください。\n"
+            "  悪い: `docs/plans/continuo_design.md`\n"
+            "  良い: [docs/plans/continuo_design.md:8278-8342](docs/plans/continuo_design.md#L8278-L8342)\n"
+        )
+
     parts.append(
         "\n規則は .claude/rules/reporting.md にあります。"
         "5段構成そのものは別の hook が見ているので、そちらの指示もあれば両方直してください。"
@@ -556,13 +634,16 @@ def main() -> int:
     thin_quote = 0 < qchars < MIN_QUOTE_CHARS
     late_blocks = blocks_missing_summary(masked)
     section_refs = bare_section_refs(masked)
+    file_no_lines, file_backtick = file_refs_without_lines(masked)
 
-    if not bare_refs and not no_category and not thin_quote and not late_blocks and not section_refs:
+    if (not bare_refs and not no_category and not thin_quote and not late_blocks
+            and not section_refs and not file_no_lines and not file_backtick):
         return 0
 
     emit({
         "decision": "block",
-        "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs),
+        "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs,
+                               file_no_lines, file_backtick),
     })
     return 0
 
