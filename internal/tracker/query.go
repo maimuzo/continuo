@@ -47,7 +47,7 @@ const itemFieldsFragmentTemplate = `
       state
       createdAt
       updatedAt
-      repository { nameWithOwner defaultBranchRef { name } }
+      repository { nameWithOwner isPrivate defaultBranchRef { name } }
       labels(first: 50) { nodes { name } }
       assignees(first: 1) { nodes { id login } }
       blockedBy(first: 20) { nodes { id number state repository { nameWithOwner } } }
@@ -316,7 +316,14 @@ type rawUserConn struct {
 }
 
 type rawRepository struct {
-	NameWithOwner    string  `json:"nameWithOwner"`
+	NameWithOwner string `json:"nameWithOwner"`
+	// IsPrivate はリポジトリが非公開かどうかである（設計 3-64）。
+	//
+	// **ポインタで持つ。**GraphQL の `isPrivate` は非 null だが、
+	// **この構造体は `blockedBy` の中の `repository`（`nameWithOwner` しか
+	// 要求していない）にも使い回される。**値型にすると、要求していない応答が
+	// 「公開である」と読めてしまう。**nil は「取れなかった」である。**
+	IsPrivate        *bool   `json:"isPrivate"`
 	DefaultBranchRef *rawRef `json:"defaultBranchRef"`
 }
 
@@ -921,6 +928,7 @@ func mapRawItemToIssue(
 			UpdatedAt:                 raw.Content.UpdatedAt,
 			Owner:                     owner,
 			Repo:                      repo,
+			RepoIsPrivate:             raw.Content.Repository.IsPrivate,
 			Number:                    raw.Content.Number,
 			CommentCount:              commentCount,
 		}

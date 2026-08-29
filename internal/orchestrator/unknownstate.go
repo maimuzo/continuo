@@ -72,7 +72,7 @@ const automatedRewriteFailureRetryAfter = 5 * time.Minute
 //	猶予を過ぎた                                    … その場で止める（人間が止めたがっている可能性がある）
 //
 // **`terminal_states` と引き渡しの Status へ動かされた場合はここへ来ない。**
-// そちらは `holdForAutomatedMove` が同じ猶予を掛ける（設計 3-73）。
+// そちらは `holdForAutomatedMove` が同じ猶予を掛ける（設計 3-74）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
@@ -131,7 +131,7 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 }
 
 // holdForAutomatedMove は、終端の Status と引き渡しの Status へ動かされた run を、
-// この巡回では止めずに turn の終わりまで待つかどうかを決める（設計 3-73）。
+// この巡回では止めずに turn の終わりまで待つかどうかを決める（設計 3-74）。
 //
 // **見るのは「誰が書いたか」と「turn が動いているか」の2つだけである。**
 //
