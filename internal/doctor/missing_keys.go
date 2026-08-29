@@ -8,7 +8,7 @@ import (
 )
 
 // checkMissingKeys は、雛形にあって WORKFLOW.md に書かれていない設定項目を見る
-// （見出し語 `未記入の項目`。設計 3-74。issue #85）。
+// （見出し語 `未記入の項目`。設計 3-75。issue #85）。
 //
 // **判定は書き直さない。**internal/scaffold の `MissingKeys` をそのまま呼ぶ。
 // `continuo doctor --missing-keys-patch` も同じ関数を呼んでいる。
