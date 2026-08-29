@@ -1,8 +1,8 @@
 # リポジトリ自身の運用の仕掛け（hook・スクリプト）
 
 **言いたいこと。**このリポジトリは、「PR を出すときは `/code-review` を通す」という
-CLAUDE.md の規則を、`.claude/hooks/block-merge-without-review.py`（PreToolUse hook）と
-`scripts/check-release-ready.sh`（リリース前の検査）の2つの機械で支えている。
+CLAUDE.md の規則を、[.claude/hooks/block-merge-without-review.py:1](../../.claude/hooks/block-merge-without-review.py#L1)（PreToolUse hook）と
+[scripts/check-release-ready.sh:1](../../scripts/check-release-ready.sh#L1)（リリース前の検査）の2つの機械で支えている。
 **この節は、その2つの「いまの仕様」だけを置く。修正の履歴は置かない。**
 
 ---
@@ -15,7 +15,7 @@ CLAUDE.md の規則を、`.claude/hooks/block-merge-without-review.py`（PreTool
 止め、意図した迂回は防げない**（1-2）。
 
 **実装。**[.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py)。
-`Bash` ツールの `PreToolUse` として `.claude/settings.json` に登録されている。
+`Bash` ツールの `PreToolUse` として [.claude/settings.json:87-96](../../.claude/settings.json#L87-L96) に登録されている。
 
 **止めるもの。**
 - PR 番号・PR の URL で指した `gh pr merge` / `gh pr ready`（レビューの目印が無いか、
@@ -45,7 +45,7 @@ CLAUDE.md の規則を、`.claude/hooks/block-merge-without-review.py`（PreTool
 **完璧にできない理由。**`eval "gh pr merge 94"` / `bash -c "…"` / 変数越しの呼び出しの
 ように、文字列の中に隠す形は字句解析では見つけられない。この hook は `Bash` ツールに
 渡す `command` 文字列を実行の前に読むだけで、実際にシェルへ渡して実行するわけでは
-ない（`.claude/hooks/block-merge-without-review.py` 冒頭の docstring 参照）。
+ない（[.claude/hooks/block-merge-without-review.py:2-87](../../.claude/hooks/block-merge-without-review.py#L2-L87) 冒頭の docstring 参照）。
 
 **誤爆と見逃しのどちらを選ぶか。**このリポジトリでは、hook が何もしていない作業を
 止めると、そのぶん作業が進まなくなる実害のほうが大きい（PR #109 の2回目のレビューで
@@ -69,7 +69,7 @@ CLAUDE.md の規則を、`.claude/hooks/block-merge-without-review.py`（PreTool
 
 | 条件 | Python 側 | jq 側 |
 | --- | --- | --- |
-| 目印の文字列と、先頭にあること | `MARKER`（`.claude/hooks/block-merge-without-review.py`）と `count_trusted_reviews()` | `review_of()` の `test("^\\s*<!-- code-review-result -->")` |
+| 目印の文字列と、先頭にあること | `MARKER`（[.claude/hooks/block-merge-without-review.py:100](../../.claude/hooks/block-merge-without-review.py#L100)）と `count_trusted_reviews()` | `review_of()` の `test("^\\s*<!-- code-review-result -->")` |
 | 信頼する投稿者 | `TRUSTED_ASSOCIATIONS` | `review_of()` の `["OWNER", "MEMBER", "COLLABORATOR"]` |
 
 **揃っていることは機械で確かめる。**

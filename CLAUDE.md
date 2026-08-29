@@ -182,6 +182,7 @@ os.Rename(tmp.Name(), path)
 
 **この規則は機械で止める。**[.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) が
 `gh pr merge <番号>` と `gh pr ready <番号>` を実行の前に見て、**目印が無ければ拒否する。**
+**目印は、コメントの先頭に無ければ数えない**（投稿者が OWNER / MEMBER / COLLABORATOR であることも見る）。
 
 **規則に書くだけでは守られなかった**（2026-08-29。12本をレビューせずにマージし、あとから回し直すことになった）。
 **人間が明示的に許すときだけ、環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を置いて通す。**
