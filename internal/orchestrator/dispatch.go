@@ -618,7 +618,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 
 	// 段5: Claude Code の設定ファイルを worktree の外に作る（再 dispatch でも作り直す）。
-	settingsPath, err := o.writeSettingsFile(issue.Identifier)
+	settingsPath, err := o.writeSettingsFile(issue)
 	if err != nil {
 		return err
 	}

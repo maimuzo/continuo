@@ -6606,6 +6606,11 @@ claude:
                                             # 届け方は「issue ごとに作った設定ファイルを --settings で渡す」に固定で、選べない
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
                                             # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
+  tool_gate:                                # 危ない道具の呼び出しを、Claude Code の中のモデルに実行の前に断らせる仕掛け
+    mode: public_only                       # off なら掛けない。on ならいつでも掛ける。public_only なら公開リポジトリの issue にだけ掛ける。
+                                            # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）
+    model: haiku                            # 判定させるモデル。空にすると Claude Code の既定の速いモデルに任せる
+    tools: ["Bash"]                         # 判定に回す道具の名前。空なら全部の道具に掛かり、道具1回ごとに判定の待ち時間が乗る
 
 # ===== herdr（pane と worktree をまとめる常駐プロセス）との連携 =====
 herdr:

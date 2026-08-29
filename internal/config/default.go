@@ -106,6 +106,14 @@ func DefaultConfig() *Config {
 			HookBridge: ClaudeHookBridgeConfig{
 				Listen: nil,
 			},
+			// **既定で公開リポジトリの issue にだけ判定を掛ける**（設計 3-64）。
+			// 判定に回すのは Bash だけにしてある。読み書きの道具まで回すと、
+			// 道具1回ごとにモデルの呼び出しが乗る。
+			ToolGate: ClaudeToolGateConfig{
+				Mode:  ClaudeToolGateModePublicOnly,
+				Model: "haiku",
+				Tools: []string{"Bash"},
+			},
 		},
 		Herdr: HerdrConfig{
 			// herdr の socket の既定のパス（設計 2-1 / 5-2）。
