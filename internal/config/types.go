@@ -92,6 +92,55 @@ type TrackerProviderConfig struct {
 	TokenEnv string `yaml:"token_env"`
 	// Comments は GitHub からコメントを取ってくるときの件数と並び順である。
 	Comments TrackerProviderCommentsConfig `yaml:"comments"`
+	// Handoff は同じボードを複数の機械で持ち回るときの取り決めである（設計 3-77 / 3-77b / 3-77c）。
+	Handoff TrackerProviderHandoffConfig `yaml:"handoff"`
+}
+
+// TrackerProviderHandoffConfig は、同じボードを複数の機械が見張るときに
+// 「どの機械が1件を処理するか」を決めるための設定である（設計 3-77 / 3-77b / 3-77c）。
+//
+// **担当は issue の担当者（assignee）で持ち、期限は hold のコメントで持つ。**
+// ボードに新しい欄は足さない。
+//
+// **1台でしか動かしていなくても、この設定は効く。**担当者のいない issue には必ず入札の
+// コメントを1件書き、締め切りを待ってから自分を担当者に加える。
+// **待ちたくない場合は BidWindowMs を 0 にする**（締め切りを待たずに勝者を決める）。
+type TrackerProviderHandoffConfig struct {
+	// BidWindowMs は入札を締め切るまでの待ち時間（ミリ秒）である。**既定は3分。**
+	//
+	// **数えはじめるのは「入札が1件も無い issue へ最初の入札が入った時刻」である**
+	// （その issue のいちばん古い入札のコメントの時刻）。**自分が書いた時刻ではない。**
+	// 同じコメントの列を読んだ機械は同じ締め切りに行き着くので、勝者も一致する。
+	//
+	// **巡回の間隔（`polling.interval_ms`。既定30秒）より十分長く取ること。**
+	// 位相がずれている機械も、締め切りまでに6回は巡回できる。
+	BidWindowMs int `yaml:"bid_window_ms"`
+	// IdleTimeoutMs は、担当者の最後のコメントからこれだけ経つと担当を外す長さ（ミリ秒）である。
+	// **既定は18時間。**
+	//
+	// **数えるのは「hold を書いた時刻」ではなく「その担当者の最後のコメントが現れた時刻」である。**
+	// 進捗を書き続けている機械は担当を外されないので、hold のコメントは1件で足りる。
+	//
+	// **18時間の意味。**終業時に機械を落とした人が翌朝に再開すれば、そのまま続けられる長さである。
+	IdleTimeoutMs int `yaml:"idle_timeout_ms"`
+	// RecheckIntervalMs は、走っている最中に担当を確かめ直す間隔（ミリ秒）である。**既定は1時間。**
+	//
+	// **担当が自分でなくなっていたら、その turn の終わりで止める。push しない**（設計 3-77c）。
+	// **0 以下なら確かめ直さない。**
+	RecheckIntervalMs int `yaml:"recheck_interval_ms"`
+	// FiveHourMarginPercent は5時間の枠のうち continuo のために残しておきたい割合（%）である。
+	//
+	//	5時間余裕値 = 100 − 5時間の使用率 − FiveHourMarginPercent
+	//
+	// **余裕値がマイナスになったら入札しない**（処理する余裕が無いという意味である）。
+	FiveHourMarginPercent int `yaml:"five_hour_margin_percent"`
+	// WeeklyMarginPercent は1週間の枠のうち continuo のために残しておきたい割合（%）である。
+	//
+	//	1週間余裕値 = 100 − 1週間の使用率 − WeeklyMarginPercent
+	//
+	// **1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
+	// モデル別の枠は一定量を使うまで現れないので、現れないものは判定に入らない。
+	WeeklyMarginPercent int `yaml:"weekly_margin_percent"`
 }
 
 // TrackerConfig は GitHub Projects v2 のボードをどう見るかを決める。

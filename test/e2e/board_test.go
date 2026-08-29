@@ -71,6 +71,10 @@ type ghIssue struct {
 	State string `json:"state"`
 	// CreatedAt は作成時刻である（RFC3339 の文字列）。
 	CreatedAt string `json:"created_at"`
+	// Assignees は担当者のログイン名である（設計 3-77b）。
+	//
+	// **ノード ID は `U_` + ログイン名で作る**（このテスト用GraphQL mock の中だけの決まりである）。
+	Assignees []string `json:"assignees"`
 }
 
 // ghBoard は偽のボード1枚ぶんの状態である。
@@ -434,7 +438,7 @@ func itemPayload(b *ghBoard, is *ghIssue, withTypename bool) map[string]any {
 				"defaultBranchRef": map[string]any{"name": is.DefaultBranch},
 			},
 			"labels":         map[string]any{"nodes": []any{}},
-			"assignees":      map[string]any{"nodes": []any{}},
+			"assignees":      assigneesPayload(is),
 			"blockedBy":      map[string]any{"nodes": []any{}},
 			"linkedBranches": map[string]any{"nodes": []any{}},
 			"comments":       map[string]any{"totalCount": len(b.Comments[is.NodeID])},
@@ -444,6 +448,82 @@ func itemPayload(b *ghBoard, is *ghIssue, withTypename bool) map[string]any {
 		payload["__typename"] = "ProjectV2Item"
 	}
 	return payload
+}
+
+// assigneesPayload は担当者の connection を組み立てる（設計 3-77b）。
+//
+// is: 対象の issue。
+// 戻り値: `totalCount` と `nodes` を持つ connection。
+func assigneesPayload(is *ghIssue) map[string]any {
+	nodes := make([]any, 0, len(is.Assignees))
+	for _, login := range is.Assignees {
+		nodes = append(nodes, map[string]any{"id": "U_" + login, "login": login})
+	}
+	return map[string]any{"totalCount": len(is.Assignees), "nodes": nodes}
+}
+
+// viewerPayload は「いまのトークンの持ち主」を返す（設計 3-77b）。
+//
+// b: いまのボード。
+// 戻り値: 応答の data。
+func viewerPayload(b *ghBoard) map[string]any {
+	return map[string]any{"viewer": map[string]any{"id": "U_" + b.Login, "login": b.Login}}
+}
+
+// changeAssigneesPayload は担当者の書き足し／取り外しに答える（**ボードも書き換える**）。
+//
+// b: いまのボード。書き換える。
+// vars: 受け取った変数。
+// key: 応答のキー（`addAssigneesToAssignable` か `removeAssigneesFromAssignable`）。
+// add: 書き足しなら真、取り外しなら偽。
+// 戻り値: 応答の data。
+func changeAssigneesPayload(b *ghBoard, vars map[string]any, key string, add bool) map[string]any {
+	nodeID, _ := vars["assignableId"].(string)
+	raw, _ := vars["assigneeIds"].([]any)
+	logins := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if id, ok := v.(string); ok {
+			logins = append(logins, strings.TrimPrefix(id, "U_"))
+		}
+	}
+	for _, is := range b.Issues {
+		if is.NodeID != nodeID {
+			continue
+		}
+		if add {
+			for _, l := range logins {
+				if !containsLogin(is.Assignees, l) {
+					is.Assignees = append(is.Assignees, l)
+				}
+			}
+		} else {
+			kept := make([]string, 0, len(is.Assignees))
+			for _, a := range is.Assignees {
+				if !containsLogin(logins, a) {
+					kept = append(kept, a)
+				}
+			}
+			is.Assignees = kept
+		}
+		return map[string]any{key: map[string]any{
+			"assignable": map[string]any{"id": is.NodeID, "assignees": assigneesPayload(is)},
+		}}
+	}
+	return map[string]any{key: map[string]any{"assignable": nil}}
+}
+
+// containsLogin は一覧にログイン名があるかを返す。
+//
+// list: 探す先の一覧。
+// login: 探すログイン名。
+// 戻り値: あれば真。
+func containsLogin(list []string, login string) bool {
+	for _, l := range list {
+		if l == login {
+			return true
+		}
+	}
+	return false
 }
 
 // fieldNotFoundErrors は実在しないフィールド名を指定されたときの GraphQL の errors を組み立てる。

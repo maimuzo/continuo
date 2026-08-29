@@ -71,6 +71,12 @@ const (
 	transcriptRetryCount = 5
 )
 
+// unknownHostName は `os.Hostname()` が答えなかったときに入札へ書く名前である（設計 3-77）。
+//
+// **空文字にしない。**空だと入札の JSON の `host` が空になり、
+// **勝った機械の名前が issue から読めなくなる。**
+const unknownHostName = "unknown-host"
+
 // baseRetryBackoff はリトライの指数バックオフの初項である（設計 3-21）。
 // 上限は agent.max_retry_backoff_ms である。
 const baseRetryBackoff = 5 * time.Second
@@ -118,6 +124,16 @@ type Tracker interface {
 	// PostComment は continuo 自身のコメントを書く。
 	// **書くのは引き渡しの通知と、Status を動かした記録の2つだけである**（設計 3-29）。
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
+	// FetchAllComments は issue のコメントを1件残らず取る（設計 3-77a）。
+	// **持ち回りの印が付いたコメントも落とさない。**担当の持ち回りの判定はこれを読む。
+	FetchAllComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig) ([]tracker.Comment, error)
+	// FetchViewer は、いま使っているトークンの持ち主を返す（設計 3-77b）。
+	// **担当者を書き足すにはノード ID が要る。**
+	FetchViewer(ctx context.Context) (tracker.Assignee, error)
+	// AddAssignees は issue に担当者を書き足す（設計 3-77b）。**置き換えではない。**
+	AddAssignees(ctx context.Context, issueNodeID string, assigneeIDs []string) ([]tracker.Assignee, error)
+	// RemoveAssignees は issue から担当者を外す（設計 3-77c）。**名指しした1人だけを外す。**
+	RemoveAssignees(ctx context.Context, issueNodeID string, assigneeIDs []string) ([]tracker.Assignee, error)
 	// VerifyStatusOptions は Status の選択肢名がまだ設定と一致するかを検査し直す（設計 3-6）。
 	VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error
 }
@@ -219,6 +235,11 @@ type Options struct {
 	// **nil なら `gh api user --jq .login`（tracker.RunGHAPIUserLogin）を使う。**
 	// **テストは偽の関数を渡して外部プロセスの起動を避けること。**
 	GHLogin tracker.GHLoginFunc
+	// HostName はこの機械の名前である（設計 3-77）。**入札と hold のコメントに書く。**
+	//
+	// **空なら `os.Hostname()` の結果を使う。**テストは固定の名前を渡して、
+	// 走らせる機械によって結果が変わらないようにすること。
+	HostName string
 	// TranscriptRoot は hook が渡す `transcript_path` を受け入れる根である。
 	//
 	// **空なら `~/.claude/projects` を使う**（Claude Code が transcript を書く場所。設計 3-15）。
@@ -274,6 +295,8 @@ type Orchestrator struct {
 	// 実行中の run 1件ごとに確保と整列をやり直すことになる（`reconcileRunning` は
 	// run ごとに `isKnownState` を引く）。**組み立てのときに1度だけ計算して持つ。**
 	knownStateNames []string
+	// hostName はこの機械の名前である（設計 3-77）。入札と hold のコメントに書く。
+	hostName string
 
 	// mu は runs / sessions / notified / tickCount / quota を守る。
 	mu sync.Mutex
@@ -299,6 +322,11 @@ type Orchestrator struct {
 	quota *ratelimit.Snapshot
 	// quotaFetchedAt は枠を最後に読んだ時刻である（poll_interval_ms の判定に使う）。
 	quotaFetchedAt time.Time
+	// viewer はいま使っているトークンの持ち主である（設計 3-77b）。
+	//
+	// **一度取れたら取り直さない。**持ち主が変わるのは `gh auth switch` を人間が
+	// 叩いたときだけで、その操作は continuo を止めずに行うものではない。
+	viewer tracker.Assignee
 
 	// wg は run ごとの turn ループの goroutine を数える。Close が待ち合わせる。
 	wg sync.WaitGroup
@@ -386,6 +414,21 @@ func New(opts Options) (*Orchestrator, error) {
 	if ghLogin == nil {
 		ghLogin = tracker.RunGHAPIUserLogin
 	}
+	// **この機械の名前を決める**（設計 3-77）。入札と hold のコメントに書く値である。
+	// **取れなくても起動は止めない。**空のまま入札すると誰が入札したのか読めなくなるので、
+	// そのときだけ固定の名前へ落とす（勝っても、どの機械かは hold の `assignee` で辿れる）。
+	hostName := strings.TrimSpace(opts.HostName)
+	if hostName == "" {
+		name, err := os.Hostname()
+		if err != nil || strings.TrimSpace(name) == "" {
+			logger.Warn("この機械の名前を取れないので、入札には固定の名前を使います",
+				"使う名前", unknownHostName, "error", err)
+			hostName = unknownHostName
+		} else {
+			hostName = strings.TrimSpace(name)
+		}
+	}
+
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
@@ -409,6 +452,7 @@ func New(opts Options) (*Orchestrator, error) {
 		// 同じ関数の戻り値そのものである。**ずれると、起動時に通した設定が実行時には
 		// 別の意味になる（対応表のキーは、どちらにも入れない）。
 		knownStateNames: knownStateNames,
+		hostName:        hostName,
 
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},

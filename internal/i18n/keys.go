@@ -217,6 +217,17 @@ const (
 	KeyFsprobeHomeDirFailed Key = "fsprobe.home_dir_failed"
 	// KeyFsprobeClaudeHomeFailed は Claude Code の設定ディレクトリに書けなかったときのエラーに出る。
 	KeyFsprobeClaudeHomeFailed Key = "fsprobe.claude_home_failed"
+
+	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77b / 3-77c）。
+
+	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
+	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
+	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
+	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
+	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
+	KeyHandoffLostReason Key = "handoff.lost.reason"
+	// KeyHandoffLostUnknownHost は、担当が移った先の機械の名前を読めなかったときに差し込む。
+	KeyHandoffLostUnknownHost Key = "handoff.lost.unknown_host"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
 )
@@ -2090,6 +2101,10 @@ var allKeys = []Key{
 	KeyFsprobeHomeDirFailed,
 	KeyFsprobeClaudeHomeFailed,
 	KeyFsprobeWorkspaceRootFailed,
+	KeyHandoffReleasedReassign,
+	KeyHandoffReleasedDoNotPush,
+	KeyHandoffLostReason,
+	KeyHandoffLostUnknownHost,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
 	KeyDoctorHerdrRemedySocketAbs,

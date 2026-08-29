@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/orchestrator"
@@ -44,6 +45,11 @@ import (
 //
 // **実在のアカウント名を書かない。**公開リポジトリなので octocat を使う。
 const testGHLogin = "octocat"
+
+// testHostName はテストで使う「この機械の名前」である（設計 3-77）。
+//
+// **架空の名前を使う。**入札と hold のコメントに書かれる値である。
+const testHostName = "test-host"
 
 // ghLoginForTest は「gh の持ち主」を取る偽物を返す（設計 3-65）。
 //
@@ -620,6 +626,12 @@ type fakeTracker struct {
 	now func() time.Time
 	// timeline はテスト用herdr mock と共有する呼び出しの並びである（nil なら記録しない）。
 	timeline *timeline
+	// viewer はこのテスト用トラッカー mock が名乗る「gh の持ち主」である（設計 3-77b）。
+	viewer tracker.Assignee
+	// viewerErr は FetchViewer が返すエラーである。
+	viewerErr error
+	// assignErr は AddAssignees / RemoveAssignees が返すエラーである。
+	assignErr error
 	// extraCandidates は FetchIssuesByStates が「頼んだ Status に無いのに返してくる」
 	// item である（設計 3-34 の read-after-write の食い違いの再現）。
 	//
@@ -629,6 +641,15 @@ type fakeTracker struct {
 	extraCandidates []tracker.Issue
 }
 
+// fakeViewerLogin はテスト用トラッカー mock が名乗る「gh の持ち主」のログイン名である。
+//
+// **`testGHLogin` と同じにする。**印の判定（設計 3-65）と担当の持ち回りの判定
+// （設計 3-77b）が別の名前を見ていると、**片方だけが「自分の書いたもの」と認める。**
+const fakeViewerLogin = testGHLogin
+
+// fakeViewerID は fakeViewerLogin のノード ID である。
+const fakeViewerID = "U_octocat"
+
 // newFakeTracker はテスト用トラッカー mockを作る。
 //
 // now: 現在時刻を返す関数。nil なら time.Now を使う。
@@ -637,7 +658,13 @@ func newFakeTracker(now func() time.Time) *fakeTracker {
 	if now == nil {
 		now = time.Now
 	}
-	return &fakeTracker{comments: map[string][]tracker.Comment{}, now: now}
+	return &fakeTracker{
+		comments: map[string][]tracker.Comment{},
+		now:      now,
+		// **持ち主を最初から持たせる。**担当の持ち回りの判定（設計 3-77b）は
+		// 「自分が誰か」が分からないと、担当のある issue に一切触らない。
+		viewer: tracker.Assignee{ID: fakeViewerID, Login: fakeViewerLogin},
+	}
 }
 
 // record は呼ばれたメソッドを記録する。
@@ -937,6 +964,63 @@ func (ft *fakeTracker) StateOf(id string) string {
 	return ""
 }
 
+// SetAssignees はボードの issue の担当者を差し替える（設計 3-77b）。
+//
+// **人間や別の機械が担当を書き換えた状況の再現に使う。**
+//
+// id: project item の ID。
+// logins: 担当者のログイン名（ノード ID は `U_` + ログイン名にする）。
+func (ft *fakeTracker) SetAssignees(id string, logins ...string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID != id {
+			continue
+		}
+		out := make([]tracker.Assignee, 0, len(logins))
+		for _, l := range logins {
+			out = append(out, tracker.Assignee{ID: "U_" + l, Login: l})
+		}
+		ft.board[i].Assignees = out
+		ft.board[i].AssigneeCount = len(out)
+		return
+	}
+}
+
+// IssueByID はボードの issue を1件返す（担当者の変化を確かめるために使う）。
+//
+// id: project item の ID。
+// 戻り値の1つ目: 見つかった issue の写し。
+// 戻り値の2つ目: 見つかれば true。
+func (ft *fakeTracker) IssueByID(id string) (tracker.Issue, bool) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID == id {
+			return ft.board[i], true
+		}
+	}
+	return tracker.Issue{}, false
+}
+
+// AddCommentBy は投稿者を指定して issue にコメントを足す。
+//
+// **担当の持ち回りの判定は投稿者を見る**（設計 3-77b の「担当者の最後のコメント」）ので、
+// 投稿者を指定できないと期限の判定を組み立てられない。
+//
+// nodeID: 下敷きの GitHub issue のノード ID。
+// author: 投稿者のログイン名。
+// body: コメント本文（印を剥がさずそのまま）。
+// createdAt: 作成時刻。
+func (ft *fakeTracker) AddCommentBy(nodeID, author, body string, createdAt time.Time) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.comments[nodeID] = append(ft.comments[nodeID], tracker.Comment{
+		ID: fmt.Sprintf("C_%d", len(ft.comments[nodeID])+1), Body: body,
+		Author: author, CreatedAt: createdAt,
+	})
+}
+
 // AddComment は issue にコメントを足す。
 //
 // nodeID: 下敷きの GitHub issue のノード ID。
@@ -973,11 +1057,45 @@ func (ft *fakeTracker) AddSpoofedComment(nodeID, body, author string, createdAt 
 }
 
 // CommentsOf は issue に付いているコメントを返す。
+//
+// **持ち回りの印が付いたコメント（入札・hold・released）は除く**（設計 3-77a）。
+// あれは continuo どうしが読み合う覚え書きであり、**人間にもエージェントにも見せない。**
+// 数に入れると、「何も起きていないのにコメントしている」の判定が入札で崩れる。
+// **持ち回りのコメントを数えたいテストは HandoffCommentsOf を使うこと。**
 func (ft *fakeTracker) CommentsOf(nodeID string) []tracker.Comment {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
-	out := make([]tracker.Comment, len(ft.comments[nodeID]))
-	copy(out, ft.comments[nodeID])
+	out := make([]tracker.Comment, 0, len(ft.comments[nodeID]))
+	for _, c := range ft.comments[nodeID] {
+		if handoff.IsMarked(c.Body) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// MarkedHandoffCommentsOf は issue に付いた「機械どうしの持ち回りのコメント」だけを返す
+// （設計 3-77a の入札・hold・released）。
+//
+// **`HandoffCommentsOf` とは別物である。**あちらは「人間への引き渡しの通知」を返す。
+//
+// nodeID: 対象の issue のノード ID。
+// marker: 探す印（`config.HandoffBidMarker` など）。空なら3つの印すべてを返す。
+// 戻り値: 印の付いたコメント。
+func (ft *fakeTracker) MarkedHandoffCommentsOf(nodeID, marker string) []tracker.Comment {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	out := make([]tracker.Comment, 0, len(ft.comments[nodeID]))
+	for _, c := range ft.comments[nodeID] {
+		if !handoff.IsMarked(c.Body) {
+			continue
+		}
+		if marker != "" && !strings.HasPrefix(strings.TrimSpace(c.Body), marker) {
+			continue
+		}
+		out = append(out, c)
+	}
 	return out
 }
 
@@ -1168,6 +1286,151 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 	}
 	ft.comments[issueNodeID] = append(ft.comments[issueNodeID], c)
 	return &c, nil
+}
+
+// FetchAllComments は issue のコメントを1件残らず返す（設計 3-77a）。
+//
+// **印で外す処理を1つも通さない。**担当の持ち回りの判定はこれを読む。
+func (ft *fakeTracker) FetchAllComments(
+	_ context.Context, issueNodeID string, _ config.TrackerProviderCommentsConfig,
+) ([]tracker.Comment, error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.record("FetchAllComments")
+	if ft.commentsErr != nil {
+		return nil, ft.commentsErr
+	}
+	out := make([]tracker.Comment, len(ft.comments[issueNodeID]))
+	copy(out, ft.comments[issueNodeID])
+	return out, nil
+}
+
+// FetchViewer はこのテスト用トラッカー mock が名乗る「gh の持ち主」を返す（設計 3-77b）。
+func (ft *fakeTracker) FetchViewer(_ context.Context) (tracker.Assignee, error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.record("FetchViewer")
+	if ft.viewerErr != nil {
+		return tracker.Assignee{}, ft.viewerErr
+	}
+	return ft.viewer, nil
+}
+
+// AddAssignees は issue に担当者を書き足す（設計 3-77b）。**置き換えではない。**
+func (ft *fakeTracker) AddAssignees(
+	_ context.Context, issueNodeID string, assigneeIDs []string,
+) ([]tracker.Assignee, error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.record("AddAssignees")
+	if ft.assignErr != nil {
+		return nil, ft.assignErr
+	}
+	for i := range ft.board {
+		if issueNodeID != nodeIDOfIssue(ft.board[i]) {
+			continue
+		}
+		for _, id := range assigneeIDs {
+			if id == "" || hasAssigneeID(ft.board[i].Assignees, id) {
+				continue
+			}
+			ft.board[i].Assignees = append(ft.board[i].Assignees,
+				tracker.Assignee{ID: id, Login: ft.loginOfAssigneeID(id)})
+		}
+		ft.board[i].AssigneeCount = len(ft.board[i].Assignees)
+		return append([]tracker.Assignee(nil), ft.board[i].Assignees...), nil
+	}
+	return nil, nil
+}
+
+// RemoveAssignees は issue から担当者を外す（設計 3-77c）。**名指しした1人だけを外す。**
+func (ft *fakeTracker) RemoveAssignees(
+	_ context.Context, issueNodeID string, assigneeIDs []string,
+) ([]tracker.Assignee, error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.record("RemoveAssignees")
+	if ft.assignErr != nil {
+		return nil, ft.assignErr
+	}
+	for i := range ft.board {
+		if issueNodeID != nodeIDOfIssue(ft.board[i]) {
+			continue
+		}
+		kept := make([]tracker.Assignee, 0, len(ft.board[i].Assignees))
+		for _, a := range ft.board[i].Assignees {
+			if containsString(assigneeIDs, a.ID) {
+				continue
+			}
+			kept = append(kept, a)
+		}
+		ft.board[i].Assignees = kept
+		ft.board[i].AssigneeCount = len(kept)
+		return append([]tracker.Assignee(nil), kept...), nil
+	}
+	return nil, nil
+}
+
+// loginOfAssigneeID は、そのノード ID に対応するログイン名を返す。
+//
+// **持ち主のノード ID なら持ち主のログイン名を返す。**それ以外は ID をそのまま名前にする
+// （テストでは名前の中身より「誰の担当か」が変わることのほうが大事である）。
+//
+// **呼び出し側が ft.mu を保持したまま呼ぶ。**
+func (ft *fakeTracker) loginOfAssigneeID(id string) string {
+	if id == ft.viewer.ID {
+		return ft.viewer.Login
+	}
+	return id
+}
+
+// hasAssigneeID は、一覧にそのノード ID の担当者がいるかを返す。
+func hasAssigneeID(list []tracker.Assignee, id string) bool {
+	for _, a := range list {
+		if a.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// containsString は一覧に値があるかを返す。
+func containsString(list []string, v string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+// nodeIDOfIssue は issue の下敷きの GitHub issue のノード ID を返す。
+func nodeIDOfIssue(issue tracker.Issue) string {
+	if v, ok := issue.NativeRef["issue_node_id"].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// SetViewer は、このテスト用トラッカー mock が名乗る「gh の持ち主」を差し替える。
+func (ft *fakeTracker) SetViewer(v tracker.Assignee) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.viewer = v
+}
+
+// SetViewerError は FetchViewer が返すエラーを差し替える。
+func (ft *fakeTracker) SetViewerError(err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.viewerErr = err
+}
+
+// SetAssignError は AddAssignees / RemoveAssignees が返すエラーを差し替える。
+func (ft *fakeTracker) SetAssignError(err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.assignErr = err
 }
 
 // VerifyStatusOptions は Status の選択肢名の照合である。
@@ -1445,6 +1708,10 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	cfg.Polling.IntervalMs = 3600000
 	// 枠の判定は既定で行わない（usage API を1回も叩かない）。
 	cfg.RateLimit.Source = "none"
+	// **入札の締め切りを待たない**（設計 3-77）。既定の3分を待つと、
+	// **どのテストも1回の巡回では着手できない。**締め切りそのものを見たいテストは
+	// Mutate で長さを入れること。
+	cfg.Tracker.Provider.Handoff.BidWindowMs = 0
 	if opts.Mutate != nil {
 		opts.Mutate(&cfg)
 	}
@@ -1503,6 +1770,9 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		RateLimit:      opts.RateLimit,
 		HookSocketPath: fx.SocketPath,
 		ContinuoPath:   continuoPath,
+		// **機械の名前を固定する**（設計 3-77）。走らせる機械によって
+		// 入札のコメントの中身が変わらないようにする。
+		HostName: testHostName,
 		// **テストの transcript は一時ディレクトリに置く。**hook が渡す
 		// transcript_path は許可された根の内側だけを受け入れるので、根をそこへ向ける
 		// （本番の既定は `~/.claude/projects`）。

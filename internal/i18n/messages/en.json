@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "2f1d3c9b1a6106b41f1ceebf6c33d4b36cd906e728165369313e9ff57b5ffb22",
+  "_source_sha256": "c42f796e18e48e3ae572e58132a6533621e2733d32f983c71d5df53c293b05a1",
   "abandon.board_not_listed": "issue %s はボードに載っていません",
   "abandon.deferred_reason": "  理由: %s",
   "abandon.dry_run_note": "--dry-run なので何も消していません。",
@@ -433,6 +433,10 @@
   "fsprobe.mkdir_failed": "%s を用意できません: %w",
   "fsprobe.workspace_root_failed": "worktree の置き場所 %s に書けません: %w",
   "fsprobe.write_failed": "%s に書けません: %w",
+  "handoff.lost.unknown_host": "(the machine could not be read)",
+  "handoff.lost.reason": "This issue was handed over to %s. **This machine stops working on it here, and will not push.**\n[Why] The assignee posted no progress for %s, so another machine cleared the assignment and re-ran the bidding.\n[How to check] Read the hold comment on this issue; it names the machine that holds it now.\n[What to do] The new machine continues on the same branch. Changes that were never pushed are lost.",
+  "handoff.released.do_not_push": "**Do not push the work that was running on %s to this branch.**",
+  "handoff.released.reassign": "**This issue is no longer assigned. The next owner is decided by bidding.**",
   "herdr.agent.invalid_name": "agent 名が herdr の許容パターンに収まりません（`^[a-z][a-z0-9_-]{0,31}$`、小文字始まり・32文字以内である必要があります）: %q",
   "herdr.agent.send_keys_empty": "%s には少なくとも1つのキーが要ります",
   "herdr.call.marshal_params_failed": "params の JSON 変換に失敗しました: %w",

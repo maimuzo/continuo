@@ -111,6 +111,12 @@ func respond(b *ghBoard, query string, vars map[string]any) (string, map[string]
 		return "comments", commentsPayload(b, vars), nil
 	case strings.Contains(query, "addComment"):
 		return "add_comment", addCommentPayload(b, vars), nil
+	case strings.Contains(query, "viewer {"):
+		return "viewer", viewerPayload(b), nil
+	case strings.Contains(query, "addAssigneesToAssignable"):
+		return "add_assignees", changeAssigneesPayload(b, vars, "addAssigneesToAssignable", true), nil
+	case strings.Contains(query, "removeAssigneesFromAssignable"):
+		return "remove_assignees", changeAssigneesPayload(b, vars, "removeAssigneesFromAssignable", false), nil
 	default:
 		return "unknown", map[string]any{}, nil
 	}

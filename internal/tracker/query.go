@@ -49,7 +49,7 @@ const itemFieldsFragmentTemplate = `
       updatedAt
       repository { nameWithOwner isPrivate defaultBranchRef { name } }
       labels(first: 50) { nodes { name } }
-      assignees(first: 1) { nodes { id login } }
+      assignees(first: 10) { totalCount nodes { id login } }
       blockedBy(first: 20) { nodes { id number state repository { nameWithOwner } } }
       linkedBranches(first: 1) { nodes { ref { name } } }
       comments { totalCount }%s
@@ -60,7 +60,7 @@ const itemFieldsFragmentTemplate = `
       body
       createdAt
       updatedAt
-      assignees(first: 1) { nodes { id login } }
+      assignees(first: 10) { totalCount nodes { id login } }
     }
   }
 `
@@ -233,22 +233,76 @@ mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
 }
 `
 
-// commentsQueryTemplate は作業開始時に既存コメントを取るクエリである（設計「その7」）。
+// commentsQueryTemplate は作業開始時に既存コメントを取るクエリである（設計「その7」/ 3-77a）。
 // IssueCommentOrderField の取りうる値は UPDATED_AT のみ（2026-08-18 に introspection で確認）。
 //
-// **降順（DESC）で取る。**設定の `comments.max` は「判別のために何件まで遡るか」であり
-// （設計 5-2）、遡るとは新しい方から過去へ数えることである。昇順で先頭から max 件を取ると、
-// コメントが max 件を超える issue で**最新のコメントが落ちて最古のコメントだけが残る。**
-// 代筆の要否（エージェントが直近の turn でコメントを書いたか）の判別には最新側が要る。
+// **降順（DESC）で取る。**昇順で先頭から取ると、続きを取り切れなかったときに
+// **最新のコメントが落ちて最古のコメントだけが残る。**代筆の要否（エージェントが直近の
+// turn でコメントを書いたか）の判別には最新側が要る。
 // **Go 側で受け取ってから逆順に並べ替え、古い順（oldest_first）にして返す**（FetchComments）。
+//
+// **`comments.max` は「1回の取得で何件ずつ取るか」である**（設計 3-77a）。
+// **打ち切りの件数ではない。**`pageInfo` を読んで、続きがある限り `after` で取り直す。
+// **持ち回りを始めると入札のコメントが積み上がるので、新しい方から数十件だけを見ていると
+// エージェントが書いた報告が窓から押し出される。**
 const commentsQueryTemplate = `
-query($issueId: ID!, $first: Int!) {
+query($issueId: ID!, $first: Int!, $after: String) {
   node(id: $issueId) {
     __typename
     ... on Issue {
-      comments(first: $first, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      comments(first: $first, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
+        pageInfo { hasNextPage endCursor }
         nodes { id url body createdAt author { login } }
       }
+    }
+  }
+}
+`
+
+// maxCommentPages はコメントの取得で辿るページ数の上限である。
+//
+// **上限を置かないと、荒らされた issue1件で巡回が止まる。**1ページ100件なので
+// 20ページで2000件まで読める。**ここに達したら、読めた分で判定し、WARN を1行残す。**
+const maxCommentPages = 20
+
+// viewerQuery は「いまのトークンの持ち主」を取るクエリである（設計 3-77b）。
+//
+// **ノード ID が要る。**担当者を書き足す `addAssigneesToAssignable` はログイン名を受け付けず、
+// **ノード ID しか受け付けない。**
+//
+// **`gh api user` ではなく GraphQL で取る。**ボードの読み書きと同じ経路・同じ認証で取れるので、
+// **「ボードは読めるのに持ち主だけ取れない」という食い違いが起きない。**
+const viewerQuery = `
+query {
+  viewer { id login }
+}
+`
+
+// addAssigneesMutation は issue に担当者を書き足すミューテーションである（設計 3-77b）。
+//
+// **書き足しであって、置き換えではない。**`addAssigneesToAssignable` は既にいる担当者を
+// 消さないので、**人間が付けた担当を巻き込んで消すことがない。**
+//
+// **いまの `gh` の認証（scope に `repo`）でそのまま呼べる**（2026-08-29 に `viewerCanAssign: true` を確認）。
+const addAssigneesMutation = `
+mutation($assignableId: ID!, $assigneeIds: [ID!]!) {
+  addAssigneesToAssignable(input: { assignableId: $assignableId, assigneeIds: $assigneeIds }) {
+    assignable {
+      ... on Issue { id assignees(first: 10) { totalCount nodes { id login } } }
+    }
+  }
+}
+`
+
+// removeAssigneesMutation は issue から担当者を外すミューテーションである（設計 3-77c）。
+//
+// **名指しした1人だけを外す。**全員を置き換える呼び方はしない。
+// **人間が同じ issue に別の担当者を足していたら、その人は残す。**
+const removeAssigneesMutation = `
+mutation($assignableId: ID!, $assigneeIds: [ID!]!) {
+  removeAssigneesFromAssignable(input: { assignableId: $assignableId, assigneeIds: $assigneeIds }) {
+    assignable {
+      ... on Issue { id assignees(first: 10) { totalCount nodes { id login } } }
     }
   }
 }
@@ -311,8 +365,14 @@ type rawUser struct {
 	Login string `json:"login"`
 }
 
+// rawUserConn は担当者の connection である。
+//
+// **`totalCount` も読む**（設計 3-77b）。担当者が2人以上いる issue には continuo は触らない
+// ので、**「返ってきた件数」ではなく「本当に何人いるか」を知る必要がある。**
+// `first` の窓に収まらないほど付いていても、件数だけは正しく返る。
 type rawUserConn struct {
-	Nodes []rawUser `json:"nodes"`
+	TotalCount int       `json:"totalCount"`
+	Nodes      []rawUser `json:"nodes"`
 }
 
 type rawRepository struct {
@@ -496,7 +556,17 @@ type rawComment struct {
 }
 
 type rawCommentConn struct {
-	Nodes []rawComment `json:"nodes"`
+	PageInfo *rawPageInfo `json:"pageInfo"`
+	Nodes    []rawComment `json:"nodes"`
+}
+
+// rawPageInfo は connection の続きの有無である。
+//
+// **nil は「続きは無い」として扱う。**`pageInfo` を返さない応答（テストの偽サーバ）で
+// 取得が止まらなくなるのを避ける。
+type rawPageInfo struct {
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
 }
 
 type rawIssueForComments struct {
@@ -514,6 +584,28 @@ type addCommentResponse struct {
 			Node rawComment `json:"node"`
 		} `json:"commentEdge"`
 	} `json:"addComment"`
+}
+
+type viewerResponse struct {
+	Viewer *rawUser `json:"viewer"`
+}
+
+// rawAssignable は担当者を書き換えたあとの issue である。
+type rawAssignable struct {
+	ID        string       `json:"id"`
+	Assignees *rawUserConn `json:"assignees"`
+}
+
+type addAssigneesResponse struct {
+	AddAssignees *struct {
+		Assignable *rawAssignable `json:"assignable"`
+	} `json:"addAssigneesToAssignable"`
+}
+
+type removeAssigneesResponse struct {
+	RemoveAssignees *struct {
+		Assignable *rawAssignable `json:"assignable"`
+	} `json:"removeAssigneesFromAssignable"`
 }
 
 // ===== クエリの組み立て =====
@@ -708,6 +800,40 @@ func containsFoldedStatus(states []string, target string) bool {
 	return false
 }
 
+// mapAssignees は GraphQL の担当者の connection を、正規化した形へ移す（設計 3-77b）。
+//
+// **`native_ref` の `assignee_login` は先頭の1人のままにする。**既にそこを読んでいる
+// 経路（プロンプトのテンプレート）があり、**意味を変えると出力が黙って変わる。**
+//
+// conn: GraphQL が返した担当者の connection（nil でよい）。
+// nativeRef: 先頭の担当者のログイン名を書き込む先。
+// 戻り値の1つ目: 先頭の担当者のノード ID（いなければ nil）。
+// 戻り値の2つ目: 担当者の全員（いなければ空）。
+// 戻り値の3つ目: 担当者の人数（`totalCount`。返らなければ返ってきた件数）。
+func mapAssignees(conn *rawUserConn, nativeRef map[string]any) (*string, []Assignee, int) {
+	if conn == nil || len(conn.Nodes) == 0 {
+		// **`totalCount` だけが返って node が空、ということは起きうる**（窓が 0 のとき）。
+		// **人数は落とさない。**落とすと「担当者がいない」と読まれて入札してしまう。
+		if conn != nil {
+			return nil, nil, conn.TotalCount
+		}
+		return nil, nil, 0
+	}
+	assignees := make([]Assignee, 0, len(conn.Nodes))
+	for _, n := range conn.Nodes {
+		assignees = append(assignees, Assignee{ID: n.ID, Login: n.Login})
+	}
+	count := conn.TotalCount
+	if count < len(assignees) {
+		// **`totalCount` を要求していない古い応答**（テストの偽サーバを含む）では 0 が入る。
+		// **返ってきた件数のほうが確かなので、そちらを採る。**
+		count = len(assignees)
+	}
+	id := assignees[0].ID
+	nativeRef["assignee_login"] = assignees[0].Login
+	return &id, assignees, count
+}
+
 // ===== 正規化（設計 3-13 / SPEC.md 11.3） =====
 
 // normalizeLabels はラベルの一覧を正規化する。
@@ -847,13 +973,7 @@ func mapRawItemToIssue(
 			}
 		}
 
-		var assigneeID *string
-		if raw.Content.Assignees != nil && len(raw.Content.Assignees.Nodes) > 0 {
-			a := raw.Content.Assignees.Nodes[0]
-			id := a.ID
-			assigneeID = &id
-			nativeRef["assignee_login"] = a.Login
-		}
+		assigneeID, assignees, assigneeCount := mapAssignees(raw.Content.Assignees, nativeRef)
 
 		var labels []string
 		if raw.Content.Labels != nil {
@@ -921,6 +1041,8 @@ func mapRawItemToIssue(
 			BranchName:                branchName,
 			URL:                       url,
 			AssigneeID:                assigneeID,
+			Assignees:                 assignees,
+			AssigneeCount:             assigneeCount,
 			Labels:                    labels,
 			BlockedBy:                 blockedBy,
 			Dispatchable:              dispatchable,
@@ -945,37 +1067,33 @@ func mapRawItemToIssue(
 			description = &d
 		}
 
-		var assigneeID *string
-		if raw.Content.Assignees != nil && len(raw.Content.Assignees.Nodes) > 0 {
-			a := raw.Content.Assignees.Nodes[0]
-			id := a.ID
-			assigneeID = &id
-			nativeRef["assignee_login"] = a.Login
-		}
+		assigneeID, assignees, assigneeCount := mapAssignees(raw.Content.Assignees, nativeRef)
 
 		nativeRef["issue_node_id"] = raw.Content.ID
 		nativeRef["content_type"] = "DRAFT_ISSUE"
 
 		issue := Issue{
-			ID:           raw.ID,
-			NativeRef:    nativeRef,
-			Identifier:   identifier,
-			Title:        raw.Content.Title,
-			Description:  description,
-			Priority:     nil,
-			State:        state,
-			BranchName:   nil,
-			URL:          nil,
-			AssigneeID:   assigneeID,
-			Labels:       nil,
-			BlockedBy:    nil,
-			Dispatchable: false,
-			CreatedAt:    raw.Content.CreatedAt,
-			UpdatedAt:    raw.Content.UpdatedAt,
-			Owner:        "",
-			Repo:         "",
-			Number:       0,
-			CommentCount: 0,
+			ID:            raw.ID,
+			NativeRef:     nativeRef,
+			Identifier:    identifier,
+			Title:         raw.Content.Title,
+			Description:   description,
+			Priority:      nil,
+			State:         state,
+			BranchName:    nil,
+			URL:           nil,
+			AssigneeID:    assigneeID,
+			Assignees:     assignees,
+			AssigneeCount: assigneeCount,
+			Labels:        nil,
+			BlockedBy:     nil,
+			Dispatchable:  false,
+			CreatedAt:     raw.Content.CreatedAt,
+			UpdatedAt:     raw.Content.UpdatedAt,
+			Owner:         "",
+			Repo:          "",
+			Number:        0,
+			CommentCount:  0,
 		}
 		return mapItemResult{
 			Ok:                    true,

@@ -293,6 +293,11 @@ type runState struct {
 	// **猶予の起点である。**巡回のたびに入れ直すと猶予が永久に切れないので、
 	// 既に入っているときは触らない。`active_states` に戻ったら消す。
 	externalMoveSince time.Time
+	// handoffCheckedAt は、走っている最中に担当を最後に確かめ直した時刻である（設計 3-77c）。
+	//
+	// **ゼロ値なら1度も確かめていない。**確かめ直す間隔は
+	// `tracker.provider.handoff.recheck_interval_ms`（既定1時間）である。
+	handoffCheckedAt time.Time
 	// externalMoveKind は externalMoveSince がどの種類の動かされ方を数えているかである
 	// （設計 3-74）。**種類が変わったら起点を切り直すために持つ。**
 	//
@@ -1063,6 +1068,41 @@ func (rs *runState) clearExternalMove() {
 	defer rs.mu.Unlock()
 	rs.externalMoveSince = time.Time{}
 	rs.externalMoveKind = externalMoveNone
+}
+
+// handoffRecheckDue は、走っている最中に担当を確かめ直す時刻が来たかを返す（設計 3-77c）。
+//
+// **`true` を返したら、その時点で時計を進める。**進めないと、確かめ直しに失敗するたびに
+// 次の turn でも確かめ直すことになり、**turn の終わりごとに issue のコメントを
+// 全部読むはめになる。**
+//
+// **markHandoffChecked は、確かめ直したことにして時計だけを進める。**
+//
+// **着手したときは `markHandoffChecked` で時計を進めておく。**担当者になった直後に
+// 確かめ直しても答えは分かりきっており、**turn の終わりごとに issue を1件取り直す
+// リクエストが増えるだけである。**
+//
+// **引き継いだ run（復元・巡回からの引き取り）では時計がゼロ値のままなので、
+// 最初の turn の終わりで必ず確かめる**（設計 3-77c の「作業を再開するとき」）。
+//
+// now: いまの時刻。
+// interval: 確かめ直す間隔。
+// 戻り値: 確かめ直す時刻が来ていれば true。
+func (rs *runState) markHandoffChecked(now time.Time) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.handoffCheckedAt = now
+}
+
+// handoffRecheckDue は、走っている最中に担当を確かめ直す時刻が来たかを返す（設計 3-77c）。
+func (rs *runState) handoffRecheckDue(now time.Time, interval time.Duration) bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !rs.handoffCheckedAt.IsZero() && now.Before(rs.handoffCheckedAt.Add(interval)) {
+		return false
+	}
+	rs.handoffCheckedAt = now
+	return true
 }
 
 // rewriteClaim は「自動化が動かした Status を書き戻す」1回ぶんの確保である（設計 3-56）。

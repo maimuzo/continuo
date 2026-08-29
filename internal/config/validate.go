@@ -76,6 +76,9 @@ func validate(cfg *Config) error {
 			`"oldest_first" のみサポートする`,
 		)
 	}
+	if err := validateHandoff(cfg.Tracker.Provider.Handoff); err != nil {
+		return err
+	}
 	if len(cfg.Tracker.ActiveStates) == 0 {
 		return requiredValueError("tracker.active_states")
 	}
@@ -644,6 +647,42 @@ func invalidValueError(key string, value any, requirement string) error {
 // key: 設定キーの名前（ドット区切り）。
 func requiredValueError(key string) error {
 	return i18n.Errorf(i18n.KeyConfigValidateRequired, key)
+}
+
+// validateHandoff は持ち回りの設定を検査する（設計 3-77 / 3-77b / 3-77c）。
+//
+// **負の値を通してはならない。**待ち時間が負だと締め切りが常に過ぎたことになり、
+// **入札を書いた直後に自分を勝者と決めてしまう。**期限が負だと、進捗を書いている
+// 他の機械の担当を毎回外しにいく。
+//
+// **マージンは 0〜100 に限る。**余裕値は `100 − 使用率 − マージン` なので、
+// **100 を超えるマージンでは、使用率が 0 でも余裕値がマイナスになり、
+// その機械は永久に入札しない**（黙って1件も処理しなくなる）。
+//
+// h: `tracker.provider.handoff` の設定。
+// 戻り値: 値が範囲の外にあるときのエラー。
+func validateHandoff(h TrackerProviderHandoffConfig) error {
+	if h.BidWindowMs < 0 {
+		return invalidValueError("tracker.provider.handoff.bid_window_ms", h.BidWindowMs,
+			"0以上にすること（0 なら締め切りを待たずに勝者を決める）")
+	}
+	if h.IdleTimeoutMs < 0 {
+		return invalidValueError("tracker.provider.handoff.idle_timeout_ms", h.IdleTimeoutMs,
+			"0以上にすること（0 なら既定の18時間を使う）")
+	}
+	if h.RecheckIntervalMs < 0 {
+		return invalidValueError("tracker.provider.handoff.recheck_interval_ms", h.RecheckIntervalMs,
+			"0以上にすること（0 なら走っている最中に担当を確かめ直さない）")
+	}
+	if h.FiveHourMarginPercent < 0 || h.FiveHourMarginPercent > 100 {
+		return invalidValueError("tracker.provider.handoff.five_hour_margin_percent",
+			h.FiveHourMarginPercent, "0以上100以下にすること")
+	}
+	if h.WeeklyMarginPercent < 0 || h.WeeklyMarginPercent > 100 {
+		return invalidValueError("tracker.provider.handoff.weekly_margin_percent",
+			h.WeeklyMarginPercent, "0以上100以下にすること")
+	}
+	return nil
 }
 
 // trustRepositoryPattern は trust.repositories の要素として受け付ける形である（3-33）。

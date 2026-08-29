@@ -1,0 +1,506 @@
+// Package handoff は、同じボードを複数の機械が見張るときに
+// 「どの機械が1件を処理するか」を決める判定を持つ（docs/plans/continuo_design.md 3-77 / 3-77a / 3-77b / 3-77c）。
+//
+// **決めるのは3つだけである。**
+//
+//	余裕値と判定スコア … 枠の使用率から作る。入札してよいかもここで決まる
+//	勝者              … 届いた入札のうち判定スコアがいちばん大きい機械。同点なら最初に投稿した機械
+//	担当を外すか      … 担当者の最後のコメントからの経過が期限を過ぎているか
+//
+// **外部へは1バイトも書かない。**GitHub を叩くのは呼び出し側（internal/orchestrator）である。
+// ここに置くのは「読んだものから答えを出す」部分だけなので、テストから直接呼べる。
+//
+// **担当は issue の担当者（assignee）で持ち、期限は hold のコメントで持つ**（設計 3-77b）。
+// ボードに新しい欄は足さない。
+package handoff
+
+import (
+	"encoding/json"
+	"strings"
+	"time"
+
+	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/ratelimit"
+)
+
+// 枠の種別である（Claude の usage API が `kind` に返す値。設計 3-77）。
+const (
+	// LimitKindSession は5時間の枠である。
+	LimitKindSession = "session"
+	// LimitKindWeeklyAll は1週間全体の枠である。
+	LimitKindWeeklyAll = "weekly_all"
+	// LimitKindWeeklyScoped は1週間のモデル別の枠である。
+	//
+	// **一定量を使うまで現れない。**現れないものは判定に入らない（最大を採れば自動的にそうなる）。
+	LimitKindWeeklyScoped = "weekly_scoped"
+)
+
+// fullPercent は「使い切り」を表す使用率である。余裕値はここから引いて作る。
+const fullPercent = 100
+
+// Bid は1台の機械が書いた入札である（設計 3-77a のコメントの形）。
+//
+// **JSON のキーは issue のコメントに書く形そのものである。**別の機械が読むので、
+// **キー名を変えると、古い版の continuo が書いた入札を読めなくなる。**
+type Bid struct {
+	// Host は入札した機械の名前である（`os.Hostname()` の値）。
+	Host string `json:"host"`
+	// FiveHour は5時間余裕値である（`100 − 5時間の使用率 − 5時間マージン`）。
+	FiveHour int `json:"five_hour"`
+	// Weekly は1週間余裕値である（`100 − 1週間の使用率 − 1週間マージン`）。
+	Weekly int `json:"weekly"`
+	// Score は判定スコアである（`5時間余裕値 × 2 + 1週間余裕値`）。
+	Score int `json:"score"`
+	// At は投稿した時刻である。**その機械のタイムゾーンで書く**（`Z` に直さない。設計 3-77a）。
+	At time.Time `json:"at"`
+
+	// ===== ここから下はコメントの JSON に入らない。読み取った側が埋める =====
+
+	// PostedAt は、そのコメントが GitHub に作られた時刻である。
+	//
+	// **同点の決着はこちらで行う**（設計 3-77 の「同点なら、いちばん最初に投稿した機械」）。
+	// `At` は投稿した機械が自分で書いた値なので、**時計がずれている機械が
+	// 過去の時刻を書けば必ず勝ててしまう。**GitHub が付けた時刻は騙れない。
+	PostedAt time.Time `json:"-"`
+}
+
+// Hold は担当を取ったことを示すコメントである（設計 3-77b）。
+type Hold struct {
+	// Host は担当を取った機械の名前である。
+	//
+	// **released のコメントの `from` はここから引く**（設計 3-77c）。
+	// 担当者のログイン名しか分からないと、どの機械を止めればよいかが人間に読めない。
+	Host string `json:"host"`
+	// Assignee は担当者にしたアカウントのログイン名である。
+	Assignee string `json:"assignee"`
+	// Branch はこの issue のために使う branch の名前である。
+	Branch string `json:"branch"`
+	// At は書いた時刻である。**その機械のタイムゾーンで書く。**
+	At time.Time `json:"at"`
+}
+
+// Released は期限切れの担当を外したことを知らせるコメントである（設計 3-77c）。
+//
+// **引き継ぐ機械の名前は書かない。**外すのは入札をやり直す前であり、
+// **そのとき勝つ機械はまだ決まっていない**（外した機械が負けることもある）。
+// 次に誰が担当になったかは、あとから現れる hold のコメントの `host` で読める。
+type Released struct {
+	// From は担当を外された機械の名前である（hold のコメントの `host` から引く）。
+	From string `json:"from"`
+	// Branch は担当を外された機械が使っていた branch の名前である。
+	Branch string `json:"branch"`
+	// At は外した時刻である。**外した機械のタイムゾーンで書く。**
+	At time.Time `json:"at"`
+}
+
+// Margins は余裕値を作るときに引くマージンである（単位は %）。
+type Margins struct {
+	// FiveHour は5時間の枠から引く割合である。
+	FiveHour int
+	// Weekly は1週間の枠から引く割合である。
+	Weekly int
+}
+
+// SkipReason は「入札しない」と決めた理由である（設計 3-77 の表）。
+type SkipReason int
+
+const (
+	// SkipNone は入札してよいことを表す。
+	SkipNone SkipReason = iota
+	// SkipQuotaUnreadable は枠を読めなかったことを表す。
+	//
+	// **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**だから黙る。
+	SkipQuotaUnreadable
+	// SkipPauseThreshold は、どれかの枠が `rate_limit.pause_above_percent` を超えたことを表す。
+	//
+	// **この機械は入札に勝っても着手しない**（新規の dispatch を止める仕組みが別に効いている）。
+	// 揃えないと、勝ったのに動かない機械が出て issue が誰にも着手されないまま止まる。
+	SkipPauseThreshold
+	// SkipNoHeadroom は5時間余裕値と1週間余裕値のどちらかがマイナスであることを表す。
+	SkipNoHeadroom
+)
+
+// String は理由を人間が読める1語で返す（ログに出す）。
+//
+// 戻り値: 理由を表す語。
+func (r SkipReason) String() string {
+	switch r {
+	case SkipNone:
+		return "入札してよい"
+	case SkipQuotaUnreadable:
+		return "枠を読めない"
+	case SkipPauseThreshold:
+		return "枠の使い過ぎ"
+	case SkipNoHeadroom:
+		return "余裕値がマイナス"
+	default:
+		return "不明"
+	}
+}
+
+// WeeklyPercent は1週間の使用率を返す（設計 3-77）。
+//
+// **1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
+// モデル別の枠は一定量を使うまで現れないので、**現れないものは判定に入らない**
+// （最大を採れば自動的にそうなる）。
+//
+// snap: 読み取った枠の一覧。
+// 戻り値の1つ目: いちばん大きい1週間の使用率。
+// 戻り値の2つ目: 1週間の枠が1件でもあれば true。
+func WeeklyPercent(snap *ratelimit.Snapshot) (int, bool) {
+	return maxPercentOfKinds(snap, LimitKindWeeklyAll, LimitKindWeeklyScoped)
+}
+
+// SessionPercent は5時間の使用率を返す（設計 3-77）。
+//
+// snap: 読み取った枠の一覧。
+// 戻り値の1つ目: 5時間の枠の使用率（複数あればいちばん大きいもの）。
+// 戻り値の2つ目: 5時間の枠が1件でもあれば true。
+func SessionPercent(snap *ratelimit.Snapshot) (int, bool) {
+	return maxPercentOfKinds(snap, LimitKindSession)
+}
+
+// maxPercentOfKinds は、指定した種別の枠のうちいちばん大きい使用率を返す。
+//
+// snap: 読み取った枠の一覧。
+// kinds: 数える種別。
+// 戻り値の1つ目: いちばん大きい使用率。
+// 戻り値の2つ目: 該当する枠が1件でもあれば true。
+func maxPercentOfKinds(snap *ratelimit.Snapshot, kinds ...string) (int, bool) {
+	if snap == nil {
+		return 0, false
+	}
+	best := 0
+	found := false
+	for _, l := range snap.Limits {
+		if !matchesKind(l.Kind, kinds) {
+			continue
+		}
+		if !found || l.Percent > best {
+			best = l.Percent
+			found = true
+		}
+	}
+	return best, found
+}
+
+// matchesKind は枠の種別が一覧のどれかと一致するかを返す。
+//
+// **大文字小文字を無視して比べる。**provider が綴りを変えても判定が落ちないようにする。
+//
+// kind: 枠の種別。
+// kinds: 探す種別の一覧。
+// 戻り値: 一致すれば true。
+func matchesKind(kind string, kinds []string) bool {
+	for _, k := range kinds {
+		if strings.EqualFold(strings.TrimSpace(kind), k) {
+			return true
+		}
+	}
+	return false
+}
+
+// Evaluate は枠から入札の中身を作る（設計 3-77 の式と、投稿しない条件）。
+//
+//	5時間余裕値 = 100 − 5時間の使用率 − 5時間マージン
+//	1週間余裕値 = 100 − 1週間の使用率 − 1週間マージン
+//	判定スコア  = 5時間余裕値 × 2 + 1週間余裕値
+//
+// **投稿しない条件は3つある。**枠を読めなかった・どれかの枠が pauseAbovePercent を超えた・
+// どちらかの余裕値がマイナス。**どれも「黙る」だけで、ほかの機械はこの機械を待たない。**
+//
+// **「読めなかった」は「枠が1件も返ってこなかった」である。**返ってきた中に
+// 特定の種別が無いのは、その枠をまだ使っていないという意味なので、使用率0として扱う
+// （モデル別の枠は一定量を使うまで現れない）。
+//
+// snap: 読み取った枠の一覧。**nil なら「枠を読めなかった」である。**
+// quotaEnabled: 枠を読む設定になっているか（`rate_limit.source` が `none` でないか）。
+// **偽なら使用率を0として扱い、閾値の判定も行わない。**
+// **「読めなかった」と言い分ける。**`none` は運用者が「枠で判定しない」と決めた状態であり、
+// **そこで黙ると、その機械は1件も処理しなくなる**（枠の判定を切る逃げ道が塞がる）。
+// margins: 引くマージン（%）。
+// pauseAbovePercent: これを超えている枠が1つでもあれば入札しない（`rate_limit.pause_above_percent`）。
+// host: この機械の名前。
+// at: 入札に書く時刻。**その機械のタイムゾーンのまま渡すこと。**
+// 戻り値の1つ目: 組み立てた入札（入札しないときの中身は使わない）。
+// 戻り値の2つ目: 入札しないと決めた理由。SkipNone なら入札してよい。
+func Evaluate(
+	snap *ratelimit.Snapshot,
+	quotaEnabled bool,
+	margins Margins,
+	pauseAbovePercent int,
+	host string,
+	at time.Time,
+) (Bid, SkipReason) {
+	sessionPercent, weeklyPercent := 0, 0
+	if quotaEnabled {
+		// **1件も読めていない（写しが無い）なら「読めなかった」である。**
+		// **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**
+		//
+		// **写しがあって特定の種別が載っていないのは、別の話である。**
+		// この API は、使い始めるまで現れない枠を持つ（モデル別の枠がそれである）。
+		// **現れないものは「まだ使っていない」であって「読めなかった」ではない。**
+		if snap == nil || len(snap.Limits) == 0 {
+			return Bid{}, SkipQuotaUnreadable
+		}
+		sessionPercent, _ = SessionPercent(snap)
+		weeklyPercent, _ = WeeklyPercent(snap)
+		// **閾値の判定は余裕値より先に行う。**閾値を超えた機械は入札に勝っても着手しないので、
+		// 余裕値が正でも黙らせる（設計 3-77）。
+		if snap.MaxPercent() > pauseAbovePercent {
+			return Bid{}, SkipPauseThreshold
+		}
+	}
+
+	fiveHour := fullPercent - sessionPercent - margins.FiveHour
+	weekly := fullPercent - weeklyPercent - margins.Weekly
+	if fiveHour < 0 || weekly < 0 {
+		return Bid{}, SkipNoHeadroom
+	}
+	return Bid{
+		Host:     host,
+		FiveHour: fiveHour,
+		Weekly:   weekly,
+		Score:    Score(fiveHour, weekly),
+		At:       at,
+	}, SkipNone
+}
+
+// Score は判定スコアを返す（設計 3-77）。
+//
+//	判定スコア = 5時間余裕値 × 2 + 1週間余裕値
+//
+// **5時間の枠に重みを置く。**先に尽きるのは5時間の枠であり、
+// そこに余裕がある機械のほうが「いま」動かせる。
+//
+// fiveHour: 5時間余裕値。
+// weekly: 1週間余裕値。
+// 戻り値: 判定スコア。
+func Score(fiveHour, weekly int) int {
+	return fiveHour*2 + weekly
+}
+
+// Winner は届いた入札から勝者を選ぶ（設計 3-77）。
+//
+// **判定スコアがいちばん大きい機械。同点なら、いちばん最初に投稿した機械。**
+// **同じコメントの列を読んだ機械は同じ勝者に行き着く**ので、担当者を書く前に
+// もう一度担当者を読み直す段は置かない。
+//
+// **投稿の時刻は GitHub が付けた `PostedAt` で比べる**（`At` は投稿者が自分で書いた値であり、
+// 時計を戻せば必ず勝ててしまう）。**それも同じなら、機械の名前の小さい順で決める。**
+// 決め手を最後まで用意しないと、機械ごとに違う勝者を選び、2台が同じ issue を掴む。
+//
+// bids: 届いた入札（順不同）。
+// 戻り値の1つ目: 勝った入札。
+// 戻り値の2つ目: 入札が1件でもあれば true。
+func Winner(bids []Bid) (Bid, bool) {
+	if len(bids) == 0 {
+		return Bid{}, false
+	}
+	best := bids[0]
+	for _, b := range bids[1:] {
+		if beats(b, best) {
+			best = b
+		}
+	}
+	return best, true
+}
+
+// beats は入札 a が入札 b より強いかを返す。
+//
+// a: 比べる入札。
+// b: 比べられる入札。
+// 戻り値: a のほうが強ければ true。
+func beats(a, b Bid) bool {
+	if a.Score != b.Score {
+		return a.Score > b.Score
+	}
+	if !a.PostedAt.Equal(b.PostedAt) {
+		return a.PostedAt.Before(b.PostedAt)
+	}
+	return a.Host < b.Host
+}
+
+// Deadline は入札の締め切りを返す（設計 3-77）。
+//
+// **数えはじめるのは「入札が1件も無い issue への最初の投稿」である。**
+// 自分が書いた時刻ではない。**同じコメントの列を読んだ機械は同じ締め切りに行き着く。**
+//
+// bids: その issue に付いている入札。
+// window: `tracker.provider.handoff.bid_window_ms` の長さ。
+// 戻り値の1つ目: 締め切りの時刻。
+// 戻り値の2つ目: 入札が1件でもあれば true。
+func Deadline(bids []Bid, window time.Duration) (time.Time, bool) {
+	if len(bids) == 0 {
+		return time.Time{}, false
+	}
+	first := bids[0].PostedAt
+	for _, b := range bids[1:] {
+		if b.PostedAt.Before(first) {
+			first = b.PostedAt
+		}
+	}
+	return first.Add(window), true
+}
+
+// BidsBefore は締め切りまでに届いた入札だけを返す（設計 3-77 の「届いた入札だけで決まる」）。
+//
+// **締め切りちょうどの投稿は含める。**境界で機械ごとに答えが割れないよう、
+// 「`deadline` より後のものだけを捨てる」に固定する。
+//
+// bids: その issue に付いている入札。
+// deadline: 締め切りの時刻。
+// 戻り値: 締め切りまでに届いた入札（**渡された配列は書き換えない**）。
+func BidsBefore(bids []Bid, deadline time.Time) []Bid {
+	out := make([]Bid, 0, len(bids))
+	for _, b := range bids {
+		if b.PostedAt.After(deadline) {
+			continue
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
+// FreshBids は、いま決着させてよい入札だけを返す（設計 3-77d）。
+//
+// **1回の入札は「最初の投稿から window、決着にさらに window」で終わりにする。**
+// **終わった回の入札を数え続けてはならない。**勝った機械が担当者を書けないまま落ちると、
+// **その機械が永久に勝ち続け、issue は誰にも着手されないまま止まる**
+// （担当者がいないので hold の期限も効かない）。
+//
+// **回が終わっていたら、入札を1件も返さない。**呼び出し側は新しい入札を書き、
+// そこから次の回が始まる。
+//
+// **`window` が 0 以下なら、そのまま返す。**締め切りを待たない設定では回の区切りが無い。
+//
+// bids: その issue に付いている入札。
+// now: いまの時刻。
+// window: `tracker.provider.handoff.bid_window_ms` の長さ。
+// 戻り値: いまの回の入札（**渡された配列は書き換えない**）。
+func FreshBids(bids []Bid, now time.Time, window time.Duration) []Bid {
+	if window <= 0 || len(bids) == 0 {
+		return bids
+	}
+	deadline, ok := Deadline(bids, window)
+	if !ok || !now.After(deadline.Add(window)) {
+		return bids
+	}
+	return nil
+}
+
+// IsMarked は、コメント本文が持ち回りの印のどれかで始まっているかを返す（設計 3-77a）。
+//
+// **投稿者は問わない。**この印が付いたコメントは、誰が書いたものでも
+// エージェントへ渡す入力から外す。
+//
+// body: コメント本文。
+// 戻り値: 入札・hold・released のどれかの印で始まっていれば true。
+func IsMarked(body string) bool {
+	trimmed := strings.TrimSpace(body)
+	return strings.HasPrefix(trimmed, config.HandoffBidMarker) ||
+		strings.HasPrefix(trimmed, config.HandoffHoldMarker) ||
+		strings.HasPrefix(trimmed, config.HandoffReleasedMarker)
+}
+
+// FormatBid は入札のコメントの本文を組み立てる（設計 3-77a）。
+//
+// **時刻はその機械のタイムゾーンで書く。**`Z`（協定世界時）に直さない。
+// 人間がログと突き合わせるとき、手元の時計と合っているほうが読みやすい。
+//
+// b: 書く入札。
+// 戻り値: 印を先頭に置いたコメント本文。
+func FormatBid(b Bid) string {
+	return config.HandoffBidMarker + "\n" + marshalLine(b)
+}
+
+// FormatHold は hold のコメントの本文を組み立てる（設計 3-77b）。
+//
+// h: 書く hold。
+// 戻り値: 印を先頭に置いたコメント本文。
+func FormatHold(h Hold) string {
+	return config.HandoffHoldMarker + "\n" + marshalLine(h)
+}
+
+// marshalLine は JSON を1行にして返す。
+//
+// **失敗しない形しか渡さない**（どの型も文字列・整数・時刻だけを持つ）。
+// **それでも失敗したら空の JSON を返す。**印だけのコメントになるが、
+// **投稿そのものを止めない**（止めると、その機械は永久に入札できない）。
+//
+// v: 書き出す値。
+// 戻り値: 1行の JSON。
+func marshalLine(v any) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}
+
+// ParseBid はコメント本文から入札を読む（設計 3-77a）。
+//
+// **印で始まっていないコメントは入札ではない。**
+// **JSON を読めないコメントも入札として数えない**（人間が印だけ真似て書いたときに、
+// 使用率0の入札が生まれて必ず勝ってしまう）。
+//
+// body: コメント本文。
+// postedAt: GitHub がそのコメントに付けた作成時刻（同点の決着と締め切りに使う）。
+// 戻り値の1つ目: 読み取った入札。
+// 戻り値の2つ目: 入札として読めれば true。
+func ParseBid(body string, postedAt time.Time) (Bid, bool) {
+	payload, ok := payloadAfterMarker(body, config.HandoffBidMarker)
+	if !ok {
+		return Bid{}, false
+	}
+	var b Bid
+	if err := json.Unmarshal([]byte(payload), &b); err != nil {
+		return Bid{}, false
+	}
+	if strings.TrimSpace(b.Host) == "" {
+		// **機械の名前の無い入札は数えない。**勝っても誰が担当になったのかを人間が読めない。
+		return Bid{}, false
+	}
+	b.PostedAt = postedAt
+	return b, true
+}
+
+// ParseHold はコメント本文から hold を読む（設計 3-77b）。
+//
+// body: コメント本文。
+// 戻り値の1つ目: 読み取った hold。
+// 戻り値の2つ目: hold として読めれば true。
+func ParseHold(body string) (Hold, bool) {
+	payload, ok := payloadAfterMarker(body, config.HandoffHoldMarker)
+	if !ok {
+		return Hold{}, false
+	}
+	var h Hold
+	if err := json.Unmarshal([]byte(payload), &h); err != nil {
+		return Hold{}, false
+	}
+	return h, true
+}
+
+// payloadAfterMarker は、印で始まるコメントから JSON の部分を切り出す。
+//
+// **印の直後の1行だけを読むのではない。**`{` から最後の `}` までを取る。
+// 人間が読む文を JSON の下へ足しても壊れないようにするためである（released のコメントがそう）。
+//
+// body: コメント本文。
+// marker: 探す印。
+// 戻り値の1つ目: JSON の部分。
+// 戻り値の2つ目: 印で始まっていて、JSON らしき部分があれば true。
+func payloadAfterMarker(body, marker string) (string, bool) {
+	trimmed := strings.TrimSpace(body)
+	if !strings.HasPrefix(trimmed, marker) {
+		return "", false
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(trimmed, marker))
+	start := strings.Index(rest, "{")
+	end := strings.LastIndex(rest, "}")
+	if start < 0 || end < start {
+		return "", false
+	}
+	return rest[start : end+1], true
+}

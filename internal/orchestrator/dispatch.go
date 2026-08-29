@@ -209,7 +209,17 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			break
 		}
 
+		// 段-0: 担当の持ち回りを決める（設計 3-77）。**空きスロットを数えたあとに行う。**
+		// 入札に勝つのは「いま着手できる機械」でなければならず、
+		// **枠が空いていない機械が勝つと、issue は誰にも着手されないまま止まる。**
+		if !o.handoffGate(ctx, issue) {
+			continue
+		}
+
 		if rs, ok := o.claimForDispatch(ctx, issue); ok {
+			// **担当者になった直後は、確かめ直しの時計を進めておく**（設計 3-77c）。
+			// 進めないと、最初の turn の終わりで必ず issue を1件取り直すことになる。
+			rs.markHandoffChecked(o.now())
 			claimed = append(claimed, claimedRun{rs: rs, issue: issue})
 		}
 	}
