@@ -247,7 +247,7 @@ func TestAutomatedState_対応表に無ければいままでどおり止まる(t
 	for _, want := range []string{
 		// 誰が書いたか。
 		"github-project-automation",
-		// 次から止まらなくする1行。**貼ればそのまま起動する形であること**（設計 3-57）。
+		// 次から止まらなくする1行。**貼ればそのまま起動する形であること**（設計 3-57b）。
 		"automated_state_rewrite",
 		`"In Progress": "In Progress (AI)"`,
 	} {
@@ -255,7 +255,7 @@ func TestAutomatedState_対応表に無ければいままでどおり止まる(t
 			t.Errorf("止めた理由のコメントに %q が無い:\n%s", want, body)
 		}
 	}
-	// **案内は1つだけである**（設計 3-57）。「対応表に1行足せ」と
+	// **案内は1つだけである**（設計 3-57b）。「対応表に1行足せ」と
 	// 「`active_states` か `status_signal_map` に書き足せ」を並べて出すと、
 	// **両方やった設定は設定の検査に落ちて起動しない**（対応表のキーは
 	// 設定のどこにも名前が出てこない Status でなければならない）。
@@ -786,7 +786,7 @@ func TestAutomatedState_書き戻しが飛んでいても終わらせる処理�
 }
 
 // assertRewriteKeyHintIsPastable は、対応表に書いてある Status で止めたときのコメントが
-// **貼っても continuo が起動する案内だけになっている**ことを確かめる（設計 3-57。issue #67）。
+// **貼っても continuo が起動する案内だけになっている**ことを確かめる（設計 3-57b。issue #67）。
 //
 // **`active_states` か `status_signal_map` に書き足せ、を出してはならない。**
 // 対応表のキーは「設定の他のどこにも名前が出てこない Status」でなければならず、
@@ -808,7 +808,7 @@ func assertRewriteKeyHintIsPastable(t *testing.T, body string) {
 	}
 }
 
-// TestAutomatedState_押し合いで止めても貼ると起動しない案内を出さない は、設計 3-57 を確かめる
+// TestAutomatedState_押し合いで止めても貼ると起動しない案内を出さない は、設計 3-57b を確かめる
 // （issue #67 の1件目）。
 //
 // 目的: **抑止は「対応表へ1行足す案内を出したか」で判定していた。**
@@ -841,7 +841,7 @@ func TestAutomatedState_押し合いで止めても貼ると起動しない案�
 	assertRewriteKeyHintIsPastable(t, body)
 }
 
-// TestAutomatedState_戻せないまま止めても貼ると起動しない案内を出さない は、設計 3-57 を確かめる
+// TestAutomatedState_戻せないまま止めても貼ると起動しない案内を出さない は、設計 3-57b を確かめる
 // （issue #67 の1件目）。
 //
 // 目的: 押し合いの道と同じ欠陥が、**戻せない失敗が続いて止めた道**にもある。
@@ -883,7 +883,7 @@ func TestAutomatedState_戻せないまま止めても貼ると起動しない�
 }
 
 // TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない は、
-// 設計 3-57 を確かめる（issue #67 の1件目）。
+// 設計 3-57b を確かめる（issue #67 の1件目）。
 //
 // 目的: **人間が動かした場合も同じ道へ入る。**この道では「自動化が書いた」の説明そのものが
 // 出ないので、抑止を `automatedStateHint` の中だけに置くと**必ず取りこぼす。**

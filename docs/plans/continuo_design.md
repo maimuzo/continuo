@@ -1395,7 +1395,8 @@ func Normalize(raw string) (SafeName, []Warning)
 | 1 | **Status が `cleanup.on_states`（既定は `Done` だけ）に入った時点で片付けを始める。**「active でなくなった時点」ではない。`In Review` と `Blocked` は active_states に入らないが、**そこで消すと、人間が回答して `Ready` へ戻したときに作業成果が失われる**（4-1） |
 | 2 | **コミットされていない変更が残っていないか確認する**（`cleanup.require_clean_worktree`）。**`git -C <worktree> status --porcelain` の出力が空でなければ「残っている」とする。未追跡のファイルも数に入れる**（エージェントが作った成果物が消えるのを防ぐ）。残っていれば消さずに警告として記録し、issue のコメントに残す |
 | 2b | **push されていない成果が残っていないか確認する**（`cleanup.require_pushed`）。**upstream があるか無いかで判定を分ける**（下記） |
-| — その前提 | **エージェントに push させる。**continuo が作る branch は `git worktree add -b` で切った新しいものなので、**push しない限り upstream が無い。**そこで**プロンプトに「`review` を出す前に必ず commit して push すること」を入れる**（5-3） |
+| — その前提 | **エージェントに push させる。**continuo が作る branch は `git worktree add -b` で切った新しいものなので、**push しない限り upstream が無い。**そこで**プロンプトに「`review` または `blocked` を出す前に必ず commit して push すること」を入れる**（5-3） |
+| — その push 先 | **`git push -u origin HEAD` で足りる。**worktree は branch に乗った状態で作られる（detached ではない）ので、同じ名前の branch が remote にでき、upstream もそこへ張られる。**git の側は [docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) で確かめてある**（remote はローカルの bare repository。**GitHub 側の認証と branch protection は未確認**） |
 | 2c | **2 か 2b で消さなかった worktree は、毎巡回で警告を積まない。**issue へのコメントは1回だけ書き、以後は構造化ログにのみ残す。**消さないまま放置してよい**（人間が片付ける） |
 
 **手順2b の判定。「失うものがあるか」を見る。commit の有無では判定しない。**
@@ -4618,6 +4619,12 @@ Claude Code の会話の記録（transcript）・continuo が渡した設定フ�
 案内とフラグの説明・ダッシュボードの HTML の3つで、合計 156 件（doctor 79 / CLI 50 /
 ダッシュボード 27）。**エラーとログは移していない。**同じ `T` / `Errorf` で移せる形にしてある。
 
+**issue へ書くコメントの本文も、まだ移していない**（`internal/orchestrator` の
+`buildHandoffComment` / `buildUntrustedComment` / `unknownStateReason`。すべて Go の文字列リテラルである。
+このパッケージの `i18n` は `Errorf` だけに使っている）。**移すかどうかは決まっていない**
+（[docs/plans/pending_requests.md](pending_requests.md) に置いてある）。
+**移すなら関数ごと移す。**1つの段落の中で一部だけ資源から引くと、訳を作るときに文が繋がらない。
+
 ### 3-35b. 資源の正は日本語である
 
 **言いたいこと。**新しい機能を作って文言を足すときは、**日本語で書く。**
@@ -5947,7 +5954,7 @@ tracker:
 | **値が `active_states` の外** | 上の3つが起きる |
 | **大文字小文字だけが違うキーが2つ** | どちらに当たるかが map の反復順で決まり、実行のたびに変わる |
 
-**名前をボードと照合する範囲と、人間へ出す案内の出し方は 3-57 にある。**
+**名前をボードと照合する範囲は 3-57、人間へ出す案内の出し方は 3-57b にある。**
 
 ---
 
@@ -6001,19 +6008,17 @@ tracker:
 
 ---
 
-### 3-57. 対応表のキーはボードに実在しなくてよい。人間へ出す案内は1つだけにする
+### 3-57. 対応表のキーはボードに実在しなくてよい
 
 **言いたいこと。**`automated_state_rewrite` のキーを起動時にボードと照合していたので、
 **ボードの自動化をやめて選択肢を消した人が、continuo を二度と起動できなくなっていた**（issue #67）。
 **照合をやめ、綴りの打ち間違いは起動を止めずに知らせる。**
-**そして、issue へ出す設定の案内は必ず1つだけにする。**2つ出すと、両方やった設定が起動しない。
+**止めたときに人間へ出す設定の案内は 3-57b にある。**
 
 **キーは照合の一覧に入れない**（`requiredStatesForBootstrap` は `config.KnownStates` を返す）。
 **キーは定義上「continuo が知らない Status」であり、実在しなければその行が引かれないだけである。**
-
-**照合していたときは、起動時なら立ち上がらず、走っている最中なら巡回ごとの照合が毎回落ちて
-その巡回の dispatch をボードごと飛ばし続けた。**しかも「対応表のその行を消せばよい」は
-どこにも出なかった。
+**照合すると、起動時なら立ち上がらず、走っている最中なら巡回ごとの照合が毎回落ちて
+その巡回の dispatch をボードごと飛ばし続ける。**
 
 **綴りの打ち間違いは、起動を止めずに名前で知らせる。**
 `In Progres` と書くと**その行は一度も効かないまま黙って死ぬ**ので、知らせる価値はある。
@@ -6027,8 +6032,8 @@ tracker:
 | 起動時のログ | `tracker` の `missingRewriteKeys` が呼び、警告を1回出す |
 | `continuo doctor` | `doctor` の `checkRewriteKeys` が呼び、**見出し語 `対応表のキー` を `!` にする**（`✗` にしない） |
 
-**`continuo doctor` に項目を置かないと、打ち間違いを見せる場所が1つも無くなる。**
-起動時の警告は logger へ出るが、**doctor はその logger を捨てる**（`doctor.Options.Logger` の既定は `io.Discard`）。
+**`continuo doctor` に項目を置かないと、打ち間違いを見せる場所が1つも無くなる**
+（**doctor は起動時の logger を捨てる。**`doctor.Options.Logger` の既定は `io.Discard`）。
 **見出し語 `Status の名前` でも代わりにならない。**あちらが拾うのは「区切りを落とすと同じ綴り」か
 「一方が他方を語の並びとして丸ごと含む」だけで、**`In Progres` と `In Progress` はどちらにも当たらない。**
 
@@ -6052,24 +6057,57 @@ tracker:
 1つも無いと、continuo は**ボード上のどの Status も「知らない Status」と判定し、着手した run を
 片端から止める。**しかも止めた理由には「いま知っているのは です」と空欄が出るだけである。
 
-**案内は1つだけ出す。**「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を
-並べて出すと、**両方やった設定は起動しない**（キーは設定のどこにも名前が出てこない Status で
-なければならない）。**判定は「対応表に既に書いてある名前か」で行う**（`unknownStateReason`）。
-「書き戻しの案内を出したか」で判定すると、**3本の道を1本も塞げない。**
-書き戻す回数が上限に達した道と戻せない失敗が続いた道は、どちらもその案内を出さないので判定が偽になり、
-**人間がそのキーの Status へ動かした道**では `automatedStateHint` がそもそも何も返さない。
-**代わりに「先に対応表のその行を消す」を出す。**それが唯一、貼っても起動する直し方であり、
-**自動化をやめた人が抜け出す道でもある。**
+---
+
+### 3-57b. 止めたときの案内は、貼ってもそのまま起動する直し方だけを1つ出す
+
+**言いたいこと。**知らない Status で止めたときの案内が、**そのとおりに直すと起動しない設定**を
+指していた（issue #67 / #76）。**案内は必ず1つにし、貼れば `config.Load` を通る形だけを出す。**
+**そして「worktree は残してあります」と書けるのは、実際に残すときだけである。**
+
+**案内を2つ並べない。**「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を
+並べると、**両方やった設定は起動しない**（キーは設定のどこにも名前が出てこない Status に限る）。
+**判定は「その名前が設定のどこに書いてあるか」で行う**（`unknownStateReason` の `switch`）。
+「書き戻しの案内を出したか」で判定すると、**上限に達した道・戻せない失敗が続いた道・
+人間がキーの Status へ動かした道の3本を1本も塞げない。**
+
+| 名前がどこにあるか | 出す案内 |
+| --- | --- |
+| どこにも無い | `active_states` か `status_signal_map` へ書き足す |
+| `automated_state_rewrite` のキー | **先に対応表のその行を消す**（自動化をやめた人が抜け出す道でもある） |
+| `cleanup.on_states` | 下の表の2通り。**`active_states` へ足せとは言わない**（`config.Validate` が「作業中の worktree を片付けてしまう」として弾く。3-9） |
+| **両方**（キーかつ `cleanup.on_states`） | **対応表の行を消し、さらに下の表の2通りへ進む** |
+
+| その Status に持たせたい意味 | 出す案内 |
+| --- | --- |
+| 終わったとみなす（片付けてよい） | `tracker.terminal_states` に書き足す（`cleanup.on_states` はその一覧の中から選ぶ。3-9e） |
+| まだ作業を続けさせたい | **`cleanup.on_states` からその行を消してから**、`active_states` か `status_signal_map` へ書き足す |
+
+**両方に名前がある設定にも専用の分岐が要る**（issue #76 の残り）。**その設定はそのまま起動できるのに、**
+対応表の行だけ消して `active_states` へ足すと `cleanup.on_states` が残って弾かれ、
+`terminal_states` へ足すと対応表のキーの検査に落ちる。**消す先が2つあることを1つの文で書き切る。**
+
+**片付けるかどうかは設定を4つ見てから書く**（`willCleanupState` / `cleanupGuardSentence`）。
+**「片付ける Status か」だけでは決まらない。**同じ判定をログの1行にも当てる（`handleUnknownState` の WARN）。
+
+| 見る設定 | 何が変わるか |
+| --- | --- |
+| `cleanup.enabled` が偽 | **片付けは走らない**（`Manager.Cleanup` が `Deferred` で戻る）。「残してあります」と書く |
+| 真かつ `cleanup.on_states` にある | 片付ける（`ShouldCleanup`、猶予 0 の道は次の巡回の `reconcileWorktrees`）。「残りません」と書く |
+| `cleanup.require_clean_worktree` が真 | コミットしていない変更が残っていれば見送る、を添える |
+| `cleanup.require_pushed` が真 | push していない commit が残っていれば見送る、を添える |
+
+**残ると書いたパスが消えるのも、消えると書いたパスが残るのも、案内として成り立たない。**
+見送りの2つは既定が真だが**偽にできる**（`leftoverReasons` がそれぞれのフラグで囲っている）ので、条件付きで書く。
 
 **提案する戻す先も `active_states` に入っているものに限る**（`rewriteTargetSuggestion`）。
 continuo が最後に書いた値は `In Review` のこともあり、**そのまま提案すると起動しない。**
+順に、最後に書いた値 → `tracker.running_state` → `active_states` の先頭を見て、
+**`active_states` が空なら何も提案せず**、そこへ書き足す案内だけを出す。
 
-| 何を提案するか | いつ |
-| --- | --- |
-| continuo が最後に書いた値 | それが `active_states` に入っているとき |
-| `tracker.running_state` | 上が外れているとき |
-| `active_states` の先頭 | それも外れているとき |
-| **提案しない**（`active_states` の案内だけを出す） | `active_states` が空のとき |
+**案内が指す直し方が起動するかは、`config.Load` で機械的に固定する**
+（[test/internal/config/validate_test.go](../../test/internal/config/validate_test.go) の
+`TestLoad_止めたときの案内どおりに直した設定は起動する`）。**文面のテストだけでは足りない。**
 
 ---
 
@@ -7674,8 +7712,14 @@ gh pr view の --comments にも --json comments にも1件も出ません。**�
     CONTINUO-STATUS: blocked    判断を仰ぎたい、または失敗した
     CONTINUO-STATUS: working    まだ続きがある
 
-**`review` を出す前に、必ず commit して push してください。**
+**`review` または `blocked` を出す前に、必ず commit して push してください。**
 push していない作業は、この worktree が片付くときに失われます。
+**`blocked` は人間へ渡す合図なので、そこから先この worktree で作業が続くとは限りません。**
+
+**push 先は、この issue のために作られた branch です。**
+`git push -u origin HEAD` で足ります。branch 名を自分で決める必要はありません。
+
+**push できなかったときは、その理由も `blocked` のコメントに書いてください。**
 
 **読んだコメントに「まとめて対応する issue のグループ」が書かれている場合は、
 同じリポジトリの issue に限り、まとめて直してください。**
@@ -7730,6 +7774,26 @@ push していない作業は、この worktree が片付くときに失われ�
 
 **`CONTRIBUTOR` をこの3つに含めてはならない。**この値は、**そのリポジトリで過去に commit が
 1回 merge されただけで付く。**いまそのリポジトリに対する権限があることを意味しない。
+
+### 5-3b. push の求め方で、まだ人間が決めていないこと
+
+**言いたいこと。**5-3 の本文は「`review` または `blocked` を出す前に必ず commit して push」を
+例外なく求め、それ以外の push は求めていない。**次の4つは、そこに例外や追加を入れるかどうかの判断であり、人間が決めるまで動かさない。**
+**4つとも「決めるまでは、いまの文面のまま出す」で運用する。**
+
+| 短縮名 | 何を決めてもらうか | 決めるまでの振る舞い |
+| --- | --- | --- |
+| **push できないときの行き先** | push に失敗したエージェントに、`blocked` を出させるか `working` のままにさせるか。**`blocked` を出させると、その worktree は手順2b（`cleanup.require_pushed`、既定 `true`）に引っかかって片付かず、人間が手で始末することになる**（`continuo abandon --force` で押し切れば、そこで失われる）。**`working` のままにさせると、人間に渡らないまま `agent.max_dispatch_turns` を使い切る** | **`blocked` を出させ、失敗の理由をコメントに書かせる**（いまの本文） |
+| **commit するものが無いとき** | まだ1行も書いていない段階の `blocked` に、push を求めるかどうか。**`git commit` は `nothing to commit, working tree clean` を出して exit 1 で落ちる**（[docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) で実測）。その失敗理由が、人間へ渡す合図のコメントを埋める | **例外を作らない**（いまの本文） |
+| **PR を作らせるか** | `review` を出すエージェントに、push だけをさせるか `gh pr create` までさせるか。**いまの雛形は PR を読ませるだけで、作らせる指示は1つも無い**（`internal/scaffold/template.go` に `gh pr create` は無い）。作らせない場合、人間は branch を自分で見つけて PR を作ることになる。作らせる場合、[CLAUDE.md](../../CLAUDE.md) の「まず draft で作り、`/code-review` を通してから `gh pr ready`」までを雛形に書き足すことになる | **作らせない**（いまの本文） |
+| **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:75](../../internal/config/default.go#L75)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
+
+**なぜ勝手に決めないか。**4つとも**「人間の手間が増える」と「人間に届かない」のどちらを取るか**の判断である。
+**その issue をどれだけ待てるかで答えが変わる**ので、設計として一方に倒す根拠を continuo の側は持たない。
+
+**決まったら 5-3 の本文と 3-9 の「— その前提」を同時に直す。**
+片方だけ直すと、[test/internal/scaffold/blocked_push_test.go](../../test/internal/scaffold/blocked_push_test.go) と
+`TestTemplate_雛形の本文が設計5_3の本文と一致する` のどちらかが落ちる。
 
 ### 5-4. 2回目以降のプロンプト
 
