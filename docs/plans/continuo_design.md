@@ -7205,10 +7205,13 @@ tracker:
 
 ```
 <!-- continuo:bid -->
-{"host": "<機械の名前>", "five_hour": 87, "weekly": 16, "score": 190, "at": "2026-08-29T16:45:00Z"}
+{"host": "<機械の名前>", "five_hour": 87, "weekly": 16, "score": 190, "at": "2026-08-29T16:45:00+09:00"}
 ```
 
 **この印が付いたコメントは、エージェントへ渡す前に外す。**投稿者は問わない。
+
+**時刻は、その機械のタイムゾーンで書く。**日本で動いていれば `+09:00` を付ける。
+**`Z`（協定世界時）に直さない。**人間がログと突き合わせるとき、手元の時計と合っているほうが読みやすい。
 
 ### 3-77b. 担当は assignee で持ち、期限は hold のコメントで持つ
 
@@ -7249,7 +7252,7 @@ tracker:
 
 ```
 <!-- continuo:hold -->
-{"host":"mac-studio","assignee":"octocat-bot-a","branch":"continuo/octocat/hello-world/188","at":"2026-08-29T09:45:00Z"}
+{"host":"mac-studio","assignee":"octocat-bot-a","branch":"continuo/octocat/hello-world/188","at":"2026-08-29T18:45:00+09:00"}
 ```
 
 **branch の名前を入れる。**branch 名は issue から一意に決まる（`branch_template` の既定は
@@ -7288,6 +7291,36 @@ tracker:
 | **新しい機械の着手** | **branch は同じ名前**（issue から一意に決まる）。**前の機械が push していれば、その続きから始まる** |
 | **会話の文脈** | **引き継げない。**新しいセッションで最初からになる |
 
+**担当を外された機械は、その branch へ push してはならない。**
+**外した側が、その旨をコメントに書く。**
+
+```
+<!-- continuo:released -->
+{"from":"mac-studio","to":"thinkpad","branch":"continuo/octocat/hello-world/188","at":"2026-08-30T09:00:00+09:00"}
+
+**この issue の担当は thinkpad へ移りました。**
+**mac-studio で走っていた作業は、この branch へ push しないでください。**
+```
+
+**外された機械が、それを知る手立て。**
+
+| いつ | 何をするか |
+| --- | --- |
+| **作業を再開するとき** | **コメントを全部読み直す。**担当が自分でなくなっていれば、push せずに止まる |
+| **1時間ごと** | **走っている最中も、コメントを全部読み直す。**担当が移っていれば、その turn の終わりで止まる |
+
+**読み直す間隔は設定で決める。**
+
+```yaml
+tracker:
+  provider:
+    handoff:
+      recheck_interval_ms: 3600000   # 走っている最中に担当を確かめ直す間隔。既定は1時間
+```
+
+**この印も、入札と hold と同じくエージェントへ渡す前に外す**（3-77a）。
+**外すのは `continuo:bid` / `continuo:hold` / `continuo:released` の3つである。**
+
 **だから、生きている機械は進捗のコメントと一緒に push する。**
 **push していない変更は、担当が移った時点で失われる。**
 
@@ -7308,10 +7341,15 @@ tracker:
     # 命令として従ってよい投稿者の立場。ここに無い立場の本文は、データとして読ませる。
     # CONTRIBUTOR も足せるが、**そのリポジトリで過去に1件でも commit が merge された人**に付く。
     # 公開リポジトリで PR を1本受け入れただけで付くので、既定には入れていない。
+    # 書ける値は次の6つ。ここに書いた立場の投稿だけを、命令として扱う。
+    #   OWNER                  … このリポジトリの持ち主。個人のリポジトリなら本人
+    #   MEMBER                 … このリポジトリを持つ organization のメンバー
+    #   COLLABORATOR           … このリポジトリに招待されて、書き込み権を持つ人
+    #   CONTRIBUTOR            … 過去に1件でも commit が merge された人。
+    #                            公開リポジトリで PR を1本受け入れただけで付くので、既定には入れていない
+    #   FIRST_TIME_CONTRIBUTOR … このリポジトリへ初めて貢献した人
+    #   NONE                   … 上のどれでもない。通りすがりの第三者
     trusted_roles:
-      # OWNER        … このリポジトリの持ち主。個人のリポジトリなら本人
-      # MEMBER       … このリポジトリを持つ organization のメンバー
-      # COLLABORATOR … このリポジトリに招待されて、書き込み権を持つ人
       - OWNER
       - MEMBER
       - COLLABORATOR
