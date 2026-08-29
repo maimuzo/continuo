@@ -49,7 +49,7 @@ func (o *Orchestrator) resumeBackoff(ctx context.Context, dispatchAllowed bool) 
 //	それ以外（引き渡し・見えない） … **workspace を掃除せずに** worker を止める
 //
 // **終端と引き渡しは、書いたのがボードの自動化なら turn の終わりを待つ**
-// （`holdForAutomatedMove`。設計 3-73）。**人間が動かしたときはいままでどおり即座に止める。**
+// （`holdForAutomatedMove`。設計 3-74）。**人間が動かしたときはいままでどおり即座に止める。**
 //
 // **`active_states` のまま routable でなくなった run は、その待ちの対象にしない。**
 // Status の引き渡しではなく、リポジトリの信頼登録が外れた等の理由で止めるのだから、
@@ -101,7 +101,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 
 		switch {
 		case containsFold(o.cfg.Tracker.TerminalStates, issue.State):
-			// **書いたのがボードの自動化なら、turn の終わりを待つ**（設計 3-73）。
+			// **書いたのがボードの自動化なら、turn の終わりを待つ**（設計 3-74）。
 			// 「PR がマージされたら Done」の自動化が turn の途中で走ると、
 			// **走っている Claude Code を continuo 自身が殺してしまう。**
 			if o.holdForAutomatedMove(rs, issue) {
@@ -114,7 +114,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 			o.finishRunAsync(ctx, rs, "", fmt.Sprintf("Status が %s になっていました", issue.State))
 		case containsFold(o.cfg.Tracker.ActiveStates, issue.State) && issue.Dispatchable:
 			// まだ作業中で routable である。スナップショットの更新だけ。
-			// **外から動かされていた記録は消す**（設計 3-50 / 3-73）。エージェントが表明で
+			// **外から動かされていた記録は消す**（設計 3-50 / 3-74）。エージェントが表明で
 			// 戻したのだから、猶予の起点も捨てる。
 			rs.clearExternalMove()
 		case issue.State != "" && !o.isKnownState(issue.State):
@@ -123,13 +123,13 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		case containsFold(o.cfg.Tracker.ActiveStates, issue.State):
 			// **Status は作業中のままだが routable でない**（設計 3-13）。リポジトリの信頼
 			// 登録が外れた場合などがここへ来る。**Status の引き渡しではないので、書いたのが
-			// 自動化かどうかを見ない**（設計 3-73）。待っても routable には戻らない。
+			// 自動化かどうかを見ない**（設計 3-74）。待っても routable には戻らない。
 			o.logger.Info("作業中の Status のままですが dispatch できなくなったので worker を止めます（worktree は残します）",
 				"identifier", issue.Identifier, "状態", issue.State)
 			o.stopAndReleaseAsync(ctx, rs)
 		default:
 			// 引き渡し（`In Review` / `Blocked` など、設定に名前が出てくる Status）。
-			// **ここも書いたのが自動化なら turn の終わりを待つ**（設計 3-73）。
+			// **ここも書いたのが自動化なら turn の終わりを待つ**（設計 3-74）。
 			if o.holdForAutomatedMove(rs, issue) {
 				continue
 			}

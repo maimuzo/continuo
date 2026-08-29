@@ -208,6 +208,15 @@ type Issue struct {
 	Repo string
 	// Number は GitHub issue 番号である。draft issue では 0。
 	Number int
+	// RepoIsPrivate はリポジトリが非公開かどうかである（設計 3-64）。
+	//
+	// **nil は「取れなかった」である。**draft issue はリポジトリを持たないので常に nil、
+	// provider が `isPrivate` を返さなかったときも nil になる。
+	//
+	// **読み手は「危ない道具の呼び出しに判定を掛けるか」を決めるのに使う**
+	// （`claude.tool_gate.mode` が `public_only` のとき）。**nil のときは掛ける側へ倒す。**
+	// 分からないものを「公開ではない」と決めない。
+	RepoIsPrivate *bool
 	// CommentCount は現在付いているコメントの件数である。コメント本文そのものは
 	// 別途 FetchComments で取る（このフィールドは軽量なので候補の取得と同時に取れる）。
 	CommentCount int
