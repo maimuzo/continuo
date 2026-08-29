@@ -500,7 +500,7 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 **その戻り値は `startRun` の `if startErr != nil && resumeUUID != ""` へ落ちる**
 （`internal/orchestrator/dispatch.go`）。**エラーの種類を見ていないので、`agent_pane_busy` を
 30秒返され続けた場合も、復帰つきの起動なら立て直しへ回る。**だから `復帰の失敗` は
-「pane の受け付けを見る」の段からも枝を出している（`BRANCH FROM BASIC FLOW 23,24`）。
+「pane の受け付けを見る」の段からも枝を出している（`BRANCH FROM BASIC FLOW 24,25`）。
 
 **`agent.start` がエラーを返した場合に `起動の待ち直し` を通らない理由。**`launchClaude` は
 `AgentStartWithRetry` が返したエラーをその場で返し、**待ち直しを持つ `confirmStartupWithRestart` を

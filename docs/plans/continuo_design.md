@@ -7339,11 +7339,14 @@ tracker:
 
 ```
 <!-- continuo:released -->
-{"from":"mac-studio","to":"thinkpad","branch":"continuo/octocat/hello-world/188","at":"2026-08-30T09:00:00+09:00"}
+{"from":"mac-studio","branch":"continuo/octocat/hello-world/188","at":"2026-08-30T09:00:00+09:00"}
 
-**この issue の担当は thinkpad へ移りました。**
+**この issue の担当は外れました。次の担当は入札で決め直します。**
 **mac-studio で走っていた作業は、この branch へ push しないでください。**
 ```
+
+**引き継ぐ機械の名前は書かない。**外すのは入札をやり直す前で、勝つ機械が決まっていない
+（外した機械が負けることもある）。**次の担当は、あとから現れる hold のコメントの `host` で読める。**
 
 **外された機械が、それを知る手立て。**
 

@@ -3,12 +3,12 @@
   "usecase_name": "issue の担当を入札で決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue の担当を入札で決める.rucm.md",
-    "rucm_block_sha256": "44e31e99e05b9f070bb8bf7b54a98648b44f37b466ac4a886c95b8627ef08a95"
+    "rucm_block_sha256": "b6d9c967f63cacb4f5db5de504935947af9cc6c0b8dbc33d8e12f942ce03ef15"
   },
   "root": "BASIC FLOW-1",
   "flows": {
     "BASIC FLOW": {
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。"
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。"
     },
     "担当者が2人以上": {
       "rfs": {
@@ -53,7 +53,7 @@
           7
         ]
       },
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
     },
     "枠の使い過ぎ": {
       "rfs": {
@@ -62,7 +62,7 @@
           9
         ]
       },
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
     },
     "余裕値がマイナス": {
       "rfs": {
@@ -71,7 +71,7 @@
           12
         ]
       },
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
     },
     "入札に負けた": {
       "rfs": {
@@ -80,7 +80,7 @@
           17
         ]
       },
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。issue の Status は変わっていない。"
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。"
     },
     "締め切り待ちの中断": {
       "when": "利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
@@ -92,7 +92,7 @@
           ]
         }
       ],
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。hold のコメントは1件も無い。continuo は常駐していない。"
+      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。この機械が書いた hold のコメントは1件も無い。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。continuo は常駐していない。"
     }
   },
   "nodes": [
@@ -304,7 +304,7 @@
       "type": "action",
       "flow": "他人の担当",
       "step": 4,
-      "statement": "システムは外した担当者の機械の名前とこの機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。"
+      "statement": "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。"
     },
     {
       "id": "他人の担当-5",
@@ -800,7 +800,7 @@
       "id": "P001",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -852,7 +852,7 @@
       "id": "P002",
       "terminal": "abort",
       "terminal_flow": "入札に負けた",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。issue の Status は変わっていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -905,7 +905,7 @@
       "id": "P003",
       "terminal": "abort",
       "terminal_flow": "締め切り待ちの中断",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。hold のコメントは1件も無い。continuo は常駐していない。",
+      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。この機械が書いた hold のコメントは1件も無い。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。continuo は常駐していない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -954,7 +954,7 @@
       "id": "P004",
       "terminal": "abort",
       "terminal_flow": "余裕値がマイナス",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -995,7 +995,7 @@
       "id": "P005",
       "terminal": "abort",
       "terminal_flow": "枠の使い過ぎ",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1030,7 +1030,7 @@
       "id": "P006",
       "terminal": "abort",
       "terminal_flow": "枠を読めない",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1063,7 +1063,7 @@
       "id": "P007",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1094,7 +1094,7 @@
       "id": "P008",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1134,7 +1134,7 @@
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者の機械の名前とこの機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
+        "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
         "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
@@ -1159,7 +1159,7 @@
       "id": "P009",
       "terminal": "abort",
       "terminal_flow": "入札に負けた",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。issue の Status は変わっていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1199,7 +1199,7 @@
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者の機械の名前とこの機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
+        "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
         "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
@@ -1225,7 +1225,7 @@
       "id": "P010",
       "terminal": "abort",
       "terminal_flow": "締め切り待ちの中断",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。hold のコメントは1件も無い。continuo は常駐していない。",
+      "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。この機械が書いた hold のコメントは1件も無い。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。continuo は常駐していない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1263,7 +1263,7 @@
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者の機械の名前とこの機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
+        "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
         "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
@@ -1287,7 +1287,7 @@
       "id": "P011",
       "terminal": "abort",
       "terminal_flow": "余裕値がマイナス",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1321,7 +1321,7 @@
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者の機械の名前とこの機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
+        "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
         "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
@@ -1341,7 +1341,7 @@
       "id": "P012",
       "terminal": "abort",
       "terminal_flow": "枠の使い過ぎ",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1372,7 +1372,7 @@
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者の機械の名前とこの機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
+        "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
         "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
@@ -1389,7 +1389,7 @@
       "id": "P013",
       "terminal": "abort",
       "terminal_flow": "枠を読めない",
-      "postcondition": "先頭の issue に担当者は1人もいない。issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
+      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1419,7 +1419,7 @@
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者の機械の名前とこの機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
+        "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
         "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
@@ -1435,7 +1435,7 @@
       "id": "P014",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
-      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
+      "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1464,7 +1464,7 @@
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
         "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者の機械の名前とこの機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
+        "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
         "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
