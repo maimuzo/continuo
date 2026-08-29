@@ -156,7 +156,7 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			Port: nil,
 		},
-		// **既定は "auto" である。**環境変数 LANG から決め、決まらなければ日本語にする（3-35）。
+		// **既定は "auto" である。**環境変数 LANG から決め、決まらなければ**英語**にする（3-35）。
 		Language: i18n.LangConfigAuto,
 	}
 }

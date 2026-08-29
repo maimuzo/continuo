@@ -152,25 +152,59 @@ func TestT_資源に無いキーは検出できて生のキーを画面に出さ
 	}
 }
 
-// 目的: 訳が無いキーが日本語へ落ちることを確認する（設計 3-35）。
+// 目的: 英語を選んだとき、訳の無いキーが日本語へ落ちることを確認する（設計 3-35b）。
 //
-// **英語の資源はいま空である。**空のまま英語を選んでも、画面には日本語が出る。
+// **英語の資源は、本物の訳ができるまで日本語の複製である。**訳した分から差し替えるので、
+// 途中では「英語にあるキー」と「日本語にしかないキー」が混ざる。**混ざっても、
+// 画面に生のキーや空文字が出てはならない。**
 //
-// 与える情報: 英語を選んだ状態で、日本語にしかないキーを引く。
-// 成功条件: 日本語の文言と同じ文字列が返ること。
-func TestT_訳が無いキーは日本語へ落ちる(t *testing.T) {
-	source, ok := i18n.CatalogOf(i18n.SourceLang)
+// 与える情報: 英語を選んだ状態で、宣言したキーを全部引く。
+// 成功条件: 英語に無いキーが正の言語（日本語）から引けること。どのキーも空にならないこと。
+func TestT_英語に訳が無いキーは日本語へ落ちる(t *testing.T) {
+	target, ok := i18n.CatalogOf(i18n.LangEN)
 	if !ok {
-		t.Fatalf("正の言語 %s の資源がありません", i18n.SourceLang)
+		t.Fatalf("言語 %s の資源がありません", i18n.LangEN)
 	}
-	want := source.T(i18n.KeyDoctorLabelConfig)
+	inTarget := map[i18n.Key]bool{}
+	for _, k := range target.Keys() {
+		inTarget[k] = true
+	}
 
 	useLang(t, i18n.LangEN)
-	if got := i18n.T(i18n.KeyDoctorLabelConfig); got != want {
-		t.Fatalf("英語に訳が無いのに日本語へ落ちていない: got %q, want %q", got, want)
-	}
 	if i18n.Current() != i18n.LangEN {
 		t.Fatalf("選んだ言語が %s になっていない: %s", i18n.LangEN, i18n.Current())
+	}
+
+	for _, k := range i18n.AllKeys() {
+		if got := i18n.T(k); got == "" {
+			t.Errorf("英語を選んだときにキー %q の文言が空である", k)
+		}
+		if inTarget[k] {
+			// 英語に訳があるキーは、落とす先を見る対象ではない。
+			continue
+		}
+		_, from, ok := target.Lookup(k)
+		if !ok || from != i18n.SourceLang {
+			t.Errorf("英語に訳の無いキー %q が正の言語へ落ちていない（引けた言語: %q）", k, from)
+		}
+	}
+}
+
+// 目的: 言語を決められなかったときの落とし先が英語であることを固定する（設計 3-35 / 3-35b）。
+//
+// **資源の正（SourceLang）とは別である。**正は「文言を書くときの原文の言語」で、
+// 既定は「設定でも LANG でも決まらなかったときに出す言語」である。
+// **`LANG` を持たない環境（CI・コンテナ・`env -i`）で日本語を出すと、読めない人が
+// 最初の画面で詰まる。**
+//
+// 与える情報: なし（package の定数）。
+// 成功条件: 既定が英語で、正が日本語であること。
+func TestDefaultLang_決められなかったときは英語である(t *testing.T) {
+	if i18n.DefaultLang != i18n.LangEN {
+		t.Fatalf("既定の言語が %s ではなく %s になっている", i18n.LangEN, i18n.DefaultLang)
+	}
+	if i18n.SourceLang != i18n.LangJA {
+		t.Fatalf("正の言語が %s ではなく %s になっている", i18n.LangJA, i18n.SourceLang)
 	}
 }
 
