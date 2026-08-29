@@ -303,8 +303,13 @@ type ClaudeToolGateConfig struct {
 	// **既定を public_only にする理由。**公開リポジトリの issue は誰でも書けるので、
 	// 指示そのものが攻撃になりうる（3-64）。
 	Mode string `yaml:"mode"`
-	// Model は判定させるモデルである。空なら Claude Code の既定の速いモデルに任せる
-	// （settings.json へ `model` を書かない）。
+	// Model は判定させるモデルである。**既定は空である**（設計 3-64）。
+	// 空なら settings.json へ `model` を書かず、Claude Code の既定の速いモデルに任せる。
+	//
+	// **綴りは検査しない。**受け付ける名前を決めているのは Claude Code であり、
+	// 公式文書は "Model to use for evaluation. Defaults to a fast model"
+	// （判定に使うモデル。既定は速いモデル）としか書いていない。**一覧がこちらに無い。**
+	// **通らない名前を書いたときにどう倒れるかも確かめていない。**だから既定では書かない。
 	Model string `yaml:"model"`
 	// Tools は判定に回す道具の名前である。空なら全部の道具に掛ける。
 	//

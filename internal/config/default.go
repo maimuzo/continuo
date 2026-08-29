@@ -109,9 +109,14 @@ func DefaultConfig() *Config {
 			// **既定で公開リポジトリの issue にだけ判定を掛ける**（設計 3-64）。
 			// 判定に回すのは Bash だけにしてある。読み書きの道具まで回すと、
 			// 道具1回ごとにモデルの呼び出しが乗る。
+			//
+			// **Model は既定で空にする**（設計 3-64）。判定に使えるモデルの名前の一覧は
+			// 公式文書に無く（"Model to use for evaluation. Defaults to a fast model" しか
+			// 書かれていない）、**通らない名前を書いたときにどう倒れるかを確かめていない。**
+			// 空なら settings.json へ `model` を書かず、Claude Code の既定に任せる。
 			ToolGate: ClaudeToolGateConfig{
 				Mode:  ClaudeToolGateModePublicOnly,
-				Model: "haiku",
+				Model: "",
 				Tools: []string{"Bash"},
 			},
 		},
