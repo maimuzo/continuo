@@ -5579,7 +5579,7 @@ Status** である（[internal/orchestrator/unknownstate.go](../../internal/orch
 | turn が動いていて、猶予の内側 | **止めない。**turn の終わりまで待ち、表明を読んでから判断する |
 | turn が動いていない | その場で止める（待っても表明は出てこない） |
 | 猶予（`tracker.unknown_state_grace_ms`）を過ぎた | その場で止める |
-| `terminal_states` へ動かされた | **いまどおり即座に終える**（人間が「終わった」と言っている） |
+| `terminal_states` / 引き渡しへ動かされた | **この節の対象にしない。**書いた主体を見て猶予を掛ける（3-73） |
 
 **なぜ待つのか。**エージェントが `CONTINUO-STATUS:` を書けば、continuo が正しい Status へ戻す
 （3-25）。**turn が終わる前に殺すと、その表明が読まれずに捨てられる。**
@@ -6699,6 +6699,51 @@ Status を動かした記録・表明の取りこぼし・片付けの見送り�
 
 **縮めるのは issue へ書く本文だけである。**ログとダッシュボードは縮めない。
 どちらもその機械の中でしか読まれず、**縮めると人間がそのまま貼り付けて使えなくなる。**
+
+### 3-73. 終端と引き渡しの Status も、自動化が書いたなら turn の終わりを待つ
+
+**言いたいこと。**知らない Status には猶予があるのに、`Done` と `In Review` へ動かされると
+turn の途中でも即座に止まっていた。**エージェントが自分の PR をマージすると自動化が `Done` を
+書くので、走っている Claude Code を continuo 自身が殺す。**書いた主体を見て猶予を掛ける。
+
+**採る手順**（[internal/orchestrator/unknownstate.go](../../internal/orchestrator/unknownstate.go) の `holdForAutomatedMove`。
+[internal/orchestrator/reconcile.go](../../internal/orchestrator/reconcile.go) の `reconcileRunning` の終端と引き渡しの分岐から呼ぶ）。
+
+| 何が起きたか | どうするか |
+| --- | --- |
+| **人間が動かした** | **いままでどおり即座に止める。**人間は自分の操作の結果を分かっている |
+| 自動化が動かし、turn が動いていて猶予の内側 | **止めない。**turn の終わりを待ち、そこで判定し直す |
+| 自動化が動かしたが turn が動いていない | その場で止める（待っても turn は終わらない） |
+| 猶予（`tracker.unknown_state_grace_ms`）を過ぎた | その場で止める |
+
+**`active_states` のままの run は、この節の対象にしない。**Status が作業中のままで止めるのは
+`Dispatchable` が偽になったとき（リポジトリの信頼登録が外れた等。3-13）であり、
+**Status の引き渡しではない。**`reconcileRunning` に専用の分岐を置き、`holdForAutomatedMove` を通さない。
+**通すと、Status と無関係な理由で止めるはずの run が猶予ぶん止まらなくなる。**
+
+**猶予の長さの設定は知らない Status と共用にする**（`tracker.unknown_state_grace_ms`）。
+**起点も同じ場所に持つが、種類が変わったら切り直す**（`runState.externalMoveSince` と
+`externalMoveKind`。値は `externalMoveUnknownState` / `externalMoveAutomatedHandoff`）。
+**同時には起きないが、順には起きる。**知らない Status で9分待った run が続けて自動化に
+`Done` へ動かされたとき、起点を繰り越すと残りの猶予が1分しかない。**別の理由で止まりかけた
+のだから、数え直す。**待つあいだは毎回ログに出す（`ボードの自動化が Status を動かしましたが turn の終わりを待っています`）。
+
+**待っても run は宙に浮かない。**turn が終われば `decideAfterTurn`（3-5 の図）が同じ Status を
+読んで終端・引き渡しとして畳む。**猶予を過ぎれば巡回が畳む。**どちらの道でも run は必ず終わる。
+
+**書き戻しの対応表は引かない。**`tracker.automated_state_rewrite` のキーは
+「設定のどこにも名前が出てこない Status」でなければならず（3-55 の検査）、
+**終端も引き渡しも設定に名前が出てくる。**引ける行を1つも作れないので、引く経路を持たせない。
+
+**採らなかった案。**
+
+| 案 | 中身 | 採らない理由 |
+| --- | --- | --- |
+| **書いた主体を見ずに猶予を掛ける** | 知らない Status と完全に同じ扱いにする | **人間が `In Review` へ引き取る操作が既定10分効かなくなる。**人間の引き渡しは即座に効くのが正しい |
+| **`terminal_states` だけ直す** | 引き渡しはそのままにする | **同じ自動化が `In Review` も書く**（PR を issue に紐づけたとき）。片方だけ塞いでも同じ形で殺される |
+| **自動化が書いた終端を無視する** | `Done` を人間が書くまで終わらせない | **人間がマージして終わらせる運用が終わらなくなる。**待つのは turn の終わりまでで足りる |
+| **起点を種類ごとに別の欄で持つ** | `externalMoveSince` を2本に分ける | **同時には起きない**ので2本目は常にゼロ値になる。種類を1つ覚えるだけで足りる |
+
 
 ## 4. 人間が決めたこと
 
