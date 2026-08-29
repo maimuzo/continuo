@@ -40,6 +40,25 @@ import (
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
+// testGHLogin はテストで使う「continuo が使う gh の持ち主」である（設計 3-65）。
+//
+// **実在のアカウント名を書かない。**公開リポジトリなので octocat を使う。
+const testGHLogin = "octocat"
+
+// ghLoginForTest は「gh の持ち主」を取る偽物を返す（設計 3-65）。
+//
+// **本物を渡すと `gh api user` が起動する。**`testing/synctest` の bubble の中では
+// 外部プロセスを起こせないので、テストでは必ず偽物を渡す。
+//
+// fn: テストが指定した関数。nil なら testGHLogin を返すだけの関数にする。
+// 戻り値: 組み立てた関数。
+func ghLoginForTest(fn func(ctx context.Context) (string, error)) func(ctx context.Context) (string, error) {
+	if fn != nil {
+		return fn
+	}
+	return func(context.Context) (string, error) { return testGHLogin, nil }
+}
+
 // ===== 呼び出しの並びを1本にまとめる記録 =====
 
 // timeline はテスト用トラッカー mockとテスト用herdr mock の呼び出しを、**1本の並び**に混ぜて記録する。
@@ -586,6 +605,9 @@ type fakeTracker struct {
 	// **issue のコメントを読めない状況の再現に使う**（設計 3-25 の段1。
 	// 読めなかったときは「書かれていないもの」として扱う）。
 	commentsErr error
+	// commentsSelfLogin は FetchComments が最後に受け取った「gh の持ち主」である
+	// （設計 3-65）。**印だけで判定していないことを確かめるために記録する。**
+	commentsSelfLogin string
 	// postErr は PostComment が返すエラーである。
 	//
 	// **issue へ書けない状況の再現に使う**（片付けを見送った通知・引き渡しの通知）。
@@ -708,6 +730,15 @@ func (ft *fakeTracker) SetCommentsError(err error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.commentsErr = err
+}
+
+// CommentsSelfLogin は FetchComments が最後に受け取った「gh の持ち主」を返す（設計 3-65）。
+//
+// 戻り値: 受け取ったログイン名。**1度も呼ばれていなければ空文字。**
+func (ft *fakeTracker) CommentsSelfLogin() string {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	return ft.commentsSelfLogin
 }
 
 // SetPostError は PostComment が返すエラーを差し替える
@@ -1067,10 +1098,15 @@ func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState strin
 }
 
 // FetchComments は issue のコメントを返す。
-func (ft *fakeTracker) FetchComments(_ context.Context, issueNodeID string, _ config.TrackerProviderCommentsConfig, _ config.TrackerCommentsConfig) ([]tracker.Comment, error) {
+//
+// selfLogin: continuo が使う gh の持ち主（設計 3-65）。**この偽物は投稿者で絞らず、
+// 受け取った値を記録するだけである**（絞り込みそのものは internal/tracker の
+// FetchComments の試験で確かめる）。
+func (ft *fakeTracker) FetchComments(_ context.Context, issueNodeID string, _ config.TrackerProviderCommentsConfig, _ config.TrackerCommentsConfig, selfLogin string) ([]tracker.Comment, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchComments")
+	ft.commentsSelfLogin = selfLogin
 	if ft.commentsErr != nil {
 		return nil, ft.commentsErr
 	}
@@ -1277,6 +1313,10 @@ type fixtureOptions struct {
 	PromptTemplate string
 	// GHAuthCheck は `gh` の認証の検査である。nil なら検査しない。
 	GHAuthCheck func(ctx context.Context) error
+	// GHLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
+	//
+	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する。
+	GHLogin func(ctx context.Context) (string, error)
 	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない。
 	RateLimit *ratelimit.Reader
 	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
@@ -1432,6 +1472,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Logger:         logger,
 		Now:            nowFunc,
 		GHAuthCheck:    opts.GHAuthCheck,
+		// **本物の `gh` を起動させない**（設計 3-65）。渡さないと `gh api user` が走る。
+		GHLogin: ghLoginForTest(opts.GHLogin),
 		NewSessionUUID: func() (string, error) {
 			sessionMu.Lock()
 			defer sessionMu.Unlock()

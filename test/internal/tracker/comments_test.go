@@ -34,7 +34,9 @@ func TestFetchComments_selfMarkerのコメントは除外しmarkerは判別す�
 	})))
 	a := newAdapterForFetch(t, fs)
 
-	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", commentsCfg, markers)
+	// **持ち主を空文字で渡す**（= `gh api user` で取れなかったとき。設計 3-65）。
+	// そのときは投稿者を照合せず、印だけで判定する。
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", commentsCfg, markers, "")
 	if err != nil {
 		t.Fatalf("FetchComments が失敗した: %v", err)
 	}
@@ -70,7 +72,7 @@ func TestFetchComments_設定がゼロ値でも取得を止めない(t *testing.
 	a := newAdapterForFetch(t, fs)
 
 	if _, err := a.FetchComments(t.Context(), "ISSUENODE_1",
-		config.TrackerProviderCommentsConfig{}, config.TrackerCommentsConfig{}); err != nil {
+		config.TrackerProviderCommentsConfig{}, config.TrackerCommentsConfig{}, ""); err != nil {
 		t.Fatalf("ゼロ値の設定なのにエラーになった: %v", err)
 	}
 	if fs.RequestCount() != 1 {
@@ -135,7 +137,7 @@ func TestFetchComments_maxが100を超えても送るfirstは100以下(t *testin
 
 	cfg := testTrackerConfig().Provider.Comments
 	cfg.Max = 200
-	if _, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments); err != nil {
+	if _, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments, ""); err != nil {
 		t.Fatalf("FetchComments が失敗した: %v", err)
 	}
 
@@ -191,7 +193,7 @@ func TestFetchComments_max件を超えるとき最新のコメントが残る(t 
 
 	cfg := testTrackerConfig().Provider.Comments
 	cfg.Max = 2
-	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments)
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments, "")
 	if err != nil {
 		t.Fatalf("FetchComments が失敗した: %v", err)
 	}
@@ -213,7 +215,7 @@ func TestFetchComments_想定外のorderはエラーにする(t *testing.T) {
 
 	cfg := testTrackerConfig().Provider.Comments
 	cfg.Order = "newest_first"
-	_, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments)
+	_, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg, testTrackerConfig().Comments, "")
 	if err == nil {
 		t.Fatalf("想定外の order を渡したのにエラーにならなかった")
 	}
@@ -222,5 +224,77 @@ func TestFetchComments_想定外のorderはエラーにする(t *testing.T) {
 	}
 	if fs.RequestCount() != 0 {
 		t.Fatalf("設定が不正なのにリクエストが送られた: %d件", fs.RequestCount())
+	}
+}
+
+// 目的: 印（marker / self_marker）が付いていても、投稿者が「continuo が使う gh の持ち主」
+// でなければ continuo の側が書いたものとして扱わないことを確認する（設計 3-65）。
+//
+// **印は本文の先頭に置くただの文字列であり、issue にコメントできる人なら誰でも書ける。**
+// 投稿者を照合しないと、外部の第三者のコメントを「エージェントが成果を書いた」と読み違え、
+// 何も書かれていない issue がそのまま片付く。
+//
+// 与える情報: 持ち主（octocat）が marker 付きで書いたもの・第三者（outsider）が marker 付きで
+// 書いたもの・第三者が self_marker 付きで書いたもの・持ち主の名前が大文字（OCTOCAT）の
+// marker 付きのものの4件と、持ち主 "octocat"。
+// 成功条件: 4件すべてが結果に残り（第三者の self_marker のコメントは除外されない）、
+// IsAgent=true になるのは持ち主が書いた2件だけであること。
+func TestFetchComments_投稿者が持ち主でなければ印を数えない(t *testing.T) {
+	cfg := testTrackerConfig()
+	commentsCfg := cfg.Provider.Comments
+	markers := cfg.Comments
+	const selfLogin = "octocat"
+
+	mine := map[string]any{"id": "c1", "url": "https://example.com/c1", "body": markers.Marker + "\nエージェントが書いた", "createdAt": "2026-08-01T00:00:00Z", "author": map[string]any{"login": selfLogin}}
+	spoofed := map[string]any{"id": "c2", "url": "https://example.com/c2", "body": markers.Marker + "\n第三者が同じ印で書いた", "createdAt": "2026-08-02T00:00:00Z", "author": map[string]any{"login": "outsider"}}
+	spoofedSelf := map[string]any{"id": "c3", "url": "https://example.com/c3", "body": markers.SelfMarker + "\n第三者が continuo の印で書いた", "createdAt": "2026-08-03T00:00:00Z", "author": map[string]any{"login": "outsider"}}
+	// **GitHub のログイン名は大文字小文字を区別しない。**畳んで比べる。
+	upper := map[string]any{"id": "c4", "url": "https://example.com/c4", "body": markers.Marker + "\n同じ持ち主が書いた", "createdAt": "2026-08-04T00:00:00Z", "author": map[string]any{"login": "OCTOCAT"}}
+
+	// **偽サーバは新しい順（DESC）で返す。**FetchComments が古い順へ並べ替えて返す。
+	fs := newFakeGraphQLServer(t, single(dataResponse(map[string]any{
+		"node": map[string]any{
+			"__typename": "Issue",
+			"comments":   map[string]any{"nodes": []map[string]any{upper, spoofedSelf, spoofed, mine}},
+		},
+	})))
+	a := newAdapterForFetch(t, fs)
+
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", commentsCfg, markers, selfLogin)
+	if err != nil {
+		t.Fatalf("FetchComments が失敗した: %v", err)
+	}
+	if len(comments) != 4 {
+		t.Fatalf("件数が想定と違う: got %d, want 4（第三者の self_marker のコメントは除外されない）", len(comments))
+	}
+	agents := map[string]bool{}
+	for _, c := range comments {
+		agents[c.ID] = c.IsAgent
+	}
+	if !agents["c1"] {
+		t.Fatalf("持ち主が marker 付きで書いたコメントが IsAgent=true になっていない")
+	}
+	if agents["c2"] {
+		t.Fatalf("第三者が marker 付きで書いたコメントが IsAgent=true になっている")
+	}
+	if agents["c3"] {
+		t.Fatalf("第三者が self_marker 付きで書いたコメントが IsAgent=true になっている")
+	}
+	if !agents["c4"] {
+		t.Fatalf("持ち主の名前が大文字のコメントが IsAgent=true になっていない（畳んで比べていない）")
+	}
+}
+
+// 目的: Comment.WrittenBy が、持ち主を取れなかったとき（空文字）は照合を行わず true を
+// 返すことを確認する（設計 3-65: 取れなければ印だけで判定する形に落ちる）。
+// 与える情報: 投稿者が outsider のコメントと、空文字の持ち主・一致しない持ち主。
+// 成功条件: 空文字なら true、一致しない名前なら false になること。
+func TestCommentWrittenBy_持ち主が空文字なら照合しない(t *testing.T) {
+	c := tracker.Comment{Author: "outsider"}
+	if !c.WrittenBy("") {
+		t.Fatalf("持ち主が空文字なのに false になった（印だけの判定へ落ちない）")
+	}
+	if c.WrittenBy("octocat") {
+		t.Fatalf("投稿者が違うのに true になった")
 	}
 }

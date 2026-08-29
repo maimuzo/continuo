@@ -180,6 +180,11 @@ type stubFixtureOptions struct {
 	RateLimit *ratelimit.Reader
 	// GHAuthCheck は `gh` の認証の検査である。nil なら検査しない。
 	GHAuthCheck func(ctx context.Context) error
+	// GHLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
+	//
+	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する
+	// （bubble の中では外部プロセスを起こせない）。
+	GHLogin func(ctx context.Context) (string, error)
 }
 
 // newStubFixture は通信を行わない検査対象を組み立てる。
@@ -231,6 +236,8 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		ContinuoPath:   "/opt/continuo/bin/continuo",
 		Logger:         logger,
 		GHAuthCheck:    opts.GHAuthCheck,
+		// **本物の `gh` を起動させない**（設計 3-65）。
+		GHLogin: ghLoginForTest(opts.GHLogin),
 	})
 	if err != nil {
 		t.Fatalf("orchestrator.New に失敗した: %v", err)

@@ -245,12 +245,22 @@ func (o *Orchestrator) recordRepoWorkspace(
 // **marker が付いていて、かつ CreatedAt が runState.StartedAt より新しいものだけを数える。**
 // worktree を再利用すると前の run のコメントが残っているためである。
 //
+// **marker が付いているだけでは数えない**（設計 3-65）。印は本文の先頭に置くただの
+// 文字列であり、**issue にコメントできる人なら誰でも同じものを書ける。**
+// **投稿者が「continuo が使う gh の持ち主」であるものだけを、エージェントが書いたものとして扱う**
+// （その照合は `FetchComments` が行い、結果が `Comment.IsAgent` である）。
+// **持ち主が取れていなければ、いままでどおり印だけで判定する**（`ghLoginName` が空文字）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // nodeID: 下敷きの GitHub issue のノード ID。
 // snap: 対象の run の写し。
 // 戻り値: この run が書いたコメントがあれば true。
 func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap runSnapshot) bool {
-	comments, err := o.tracker.FetchComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments, o.cfg.Tracker.Comments)
+	// **最初の巡回より前にこの経路へ入ることがある**（引き継いだ run の turn が
+	// 先に終わる場合）。**そのときはここで持ち主を取る。取得は全体で1回だけである。**
+	o.ensureGHLogin(ctx)
+	comments, err := o.tracker.FetchComments(
+		ctx, nodeID, o.cfg.Tracker.Provider.Comments, o.cfg.Tracker.Comments, o.ghLoginName())
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			// **止められただけである。**「書かれていない」と答えて抜ける

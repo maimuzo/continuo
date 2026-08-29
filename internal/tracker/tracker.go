@@ -14,7 +14,10 @@
 // 接続しないこと。**
 package tracker
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // RepoTrustFunc は、あるリポジトリが Claude Code に信頼登録されているかを判定する関数である
 // （設計 3-6 / 3-13 / 4-3）。
@@ -71,6 +74,24 @@ type Comment struct {
 	// （＝continuo 自身が代筆した）ことを示す。IsSelf なコメントは
 	// FetchComments が次の turn の入力から自動的に除外する。
 	IsSelf bool
+}
+
+// WrittenBy は、このコメントの投稿者が login かどうかを返す（設計 3-65）。
+//
+// **印だけでは「continuo の側が書いた」ことの証明にならない。**印は本文の先頭に置く
+// ただの文字列であり、issue にコメントできる人なら誰でも同じものを書ける。
+// **投稿者を併せて見て初めて、外部の第三者のコメントと区別できる。**
+//
+// login: continuo が使う gh の持ち主のログイン名（RunGHAPIUserLogin の戻り値）。
+// **空文字なら照合を行わず true を返す。**持ち主を取れなかったときは印だけで
+// 判定する形に落ちる（設計 3-65。取れないことで判定を止めない）。
+// 戻り値: 投稿者が login と一致すれば true。
+// **GitHub のログイン名は大文字小文字を区別しないので、畳んで比べる。**
+func (c Comment) WrittenBy(login string) bool {
+	if login == "" {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(c.Author), strings.TrimSpace(login))
 }
 
 // Issue は SPEC.md 4.1.1 が定める15項目すべてを持つ、正規化済みの issue である。
