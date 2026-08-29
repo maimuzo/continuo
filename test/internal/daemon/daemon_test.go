@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/workspace"
+	"github.com/maimuzo/continuo/test/testlang"
 )
 
 // daemonEnv はバイナリを起動するための一式である。
@@ -292,6 +293,7 @@ func (e *daemonEnv) startProgram(t *testing.T, name string, args []string) (*exe
 		"CONTINUO_RUNTIME_DIR=" + e.RuntimeDir,
 		"CONTINUO_GITHUB_GRAPHQL_ENDPOINT=" + e.GitHub.URL,
 		"CONTINUO_TEST_TOKEN=dummy-token-for-the-fake-server",
+		testlang.EnvEntry(),
 	}
 	cmd.Stdout = logs
 	cmd.Stderr = logs

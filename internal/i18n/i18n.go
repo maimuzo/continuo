@@ -24,9 +24,7 @@
 package i18n
 
 import (
-	"crypto/sha256"
 	"embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -46,33 +44,13 @@ type Lang string
 const (
 	// LangJA は日本語である。**資源の正はこの言語である。**
 	LangJA Lang = "ja"
-	// LangEN は英語である。
+	// LangEN は英語である。**messages/en.json には訳文が全キーぶん入っている**（設計 3-35b）。
 	//
 	// **中途半端に訳さない。**一部だけ英訳すると、1つの画面に英語と日本語が混ざる
 	// （実際、13件だけ訳したとき `doctor` の出力が混ざった）。**混ざったものは、
 	// 全部日本語であるより読みにくい。**訳すときは全部訳す。
-	//
-	// **messages/en.json は、どの時点の messages/ja.json を訳したものかを
-	// `_source_sha256` に持つ**（設計 3-35b）。**日本語を直したらこの値がずれ、
-	// テストが落ちる。**訳を見直してから値を書き直す。
 	LangEN Lang = "en"
 )
-
-// MetaKeyPrefix は「文言ではないもの」を資源の中に置くための接頭辞である。
-//
-// **この接頭辞で始まるキーは、文言として扱わない。**Keys() にも出さず、Lookup でも引けない。
-// 資源のファイルはキーと文言の平らな対応なので、**訳文以外を持たせる場所がここしか無い。**
-const MetaKeyPrefix = "_"
-
-// MetaKeySourceSHA256 は、その言語の訳が「どの時点の正の言語の資源を訳したものか」を持つキーである。
-//
-// **値は messages/ja.json のファイルそのものの SHA-256 を16進の小文字で書いたものである。**
-// 次のコマンドで出る。
-//
-//	shasum -a 256 internal/i18n/messages/ja.json
-//
-// **ずれたらテストが落ちる**（設計 3-35b）。日本語を直したら、訳を見直してから値を書き直す。
-const MetaKeySourceSHA256 = "_source_sha256"
 
 // SourceLang は資源の正である言語である。
 //
@@ -98,6 +76,24 @@ const EnvLangName = "LANG"
 
 // LangConfigAuto は WORKFLOW.md の `language` に書ける「環境変数から決める」の値である。
 const LangConfigAuto = "auto"
+
+// MetaKeyPrefix は、資源のファイルに書ける「文言ではない項目」の目印である。
+//
+// **これで始まるキーは文言として扱わない。**Catalog.Keys() にも出ないし、T で引けない。
+// キーの名前空間は "." でつないだ1本の文字列（`doctor.label.board`）なので、
+// 先頭の "_" は文言のキーと衝突しない。
+const MetaKeyPrefix = "_"
+
+// SourceDigestKey は「どの版の正の資源を訳したか」を書く項目の名前である。
+//
+// **値は messages/ja.json そのもののファイルの SHA-256（16進の小文字）である**（設計 3-35b）。
+//
+//	shasum -a 256 internal/i18n/messages/ja.json
+//
+// **正の文言を直したのに訳を作り直していないと、この値が実物と食い違う。**
+// `test/internal/i18n/i18n_test.go` の
+// `TestMessages_英語の資源が正の資源の版に追いついている` がそこで落ちる。
+const SourceDigestKey = MetaKeyPrefix + "source_sha256"
 
 // Key は文言を引くための識別子である。
 //
@@ -125,10 +121,6 @@ var missingMu sync.Mutex
 // テストから Missing() で読める（設計 3-35 の「キーが存在しないことをテストで検出できる」）。
 var missing = map[Key]bool{}
 
-// sourceSHA256 は、埋め込んだ正の言語の資源（messages/ja.json）のバイト列の SHA-256 である。
-// init で埋め、以後は書き換えない。**ほかの言語の `_source_sha256` と突き合わせる相手である。**
-var sourceSHA256 string
-
 // init は埋め込んだ資源を全部読み、既定の言語を環境変数から決める。
 //
 // **資源が壊れていたら panic する。**文言を1つも引けない状態で走らせても、
@@ -141,35 +133,27 @@ func init() {
 	}
 	source := map[Key]string{}
 	raw := map[Lang]map[Key]string{}
-	metas := map[Lang]map[string]string{}
+	digests := map[Lang]string{}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
 		lang := Lang(strings.TrimSuffix(e.Name(), ".json"))
-		b, err := fs.ReadFile(messagesDir, path.Join(messagesDirName, e.Name()))
-		if err != nil {
-			panic(fmt.Sprintf("i18n: %s を読めません: %v", e.Name(), err))
-		}
-		messages, meta, err := parseMessages(b)
+		messages, meta, err := readMessages(messagesDir, path.Join(messagesDirName, e.Name()))
 		if err != nil {
 			panic(fmt.Sprintf("i18n: %s を読めません: %v", e.Name(), err))
 		}
 		raw[lang] = messages
-		metas[lang] = meta
+		digests[lang] = meta[SourceDigestKey]
 		if lang == SourceLang {
 			source = messages
-			// **ファイルのバイト列そのものを数える。**手元で
-			// `shasum -a 256 internal/i18n/messages/ja.json` を叩いた値と一致させるためである。
-			sum := sha256.Sum256(b)
-			sourceSHA256 = hex.EncodeToString(sum[:])
 		}
 	}
 	if len(source) == 0 {
 		panic(fmt.Sprintf("i18n: 正の言語 %s の資源が空です（messages/%s.json）", SourceLang, SourceLang))
 	}
 	for lang, messages := range raw {
-		catalogs[lang] = &Catalog{lang: lang, messages: messages, meta: metas[lang], source: source}
+		catalogs[lang] = &Catalog{lang: lang, messages: messages, source: source, sourceDigest: digests[lang]}
 	}
 	// **既定の言語（英語）の資源のファイルそのものが無いときは落とす。**
 	// 中身が `{}` なら正の言語へ落ちるので落とさないが、ファイルが無いと
@@ -181,43 +165,39 @@ func init() {
 	current.Store(catalogs[DefaultLang])
 }
 
-// parseMessages は資源のファイル1つの中身を、文言と「文言ではないもの」に分ける。
+// readMessages は資源のファイル1つを読み、文言と「文言ではない項目」に分ける。
 //
-// **`_` で始まるキーは文言ではない**（MetaKeyPrefix）。`_source_sha256` のような
-// 資源そのものについての記録がそこに入る。**文言として引けないようにするため、
-// ここで分ける。**分けないと Keys() に出て、キーの1対1の検査が落ちる。
+// **MetaKeyPrefix で始まるキーは文言ではない**（SourceDigestKey など）。
+// 混ぜたまま返すと Catalog.Keys() に出て、日本語の資源との突き合わせで
+// 「英語にしかないキーがある」と誤って報告される。
 //
-// b: 資源のファイルの中身。
+// fsys: 読み出し元。
+// name: 読むファイルのパス。
 // 戻り値の1つ目: キーと書式文字列の対応。
-// 戻り値の2つ目: 「文言ではないもの」のキーと値。
-// 戻り値の3つ目: JSON として読めなかった場合のエラー。
-func parseMessages(b []byte) (map[Key]string, map[string]string, error) {
+// 戻り値の2つ目: 文言ではない項目（キーは MetaKeyPrefix で始まる）。
+// 戻り値の3つ目: 読めなかった場合のエラー。
+func readMessages(fsys fs.FS, name string) (map[Key]string, map[string]string, error) {
+	b, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return nil, nil, err
+	}
 	// **平らな1階層だけを受ける。**入れ子の JSON を書くと、値が文字列でないので
 	// ここで落ちる。キーの名前空間は "." でつないだ1本の文字列で表す。
-	var m map[string]string
+	var m map[Key]string
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, nil, err
 	}
-	messages := map[Key]string{}
+	messages := make(map[Key]string, len(m))
 	meta := map[string]string{}
 	for k, v := range m {
-		if strings.HasPrefix(k, MetaKeyPrefix) {
-			meta[k] = v
+		if strings.HasPrefix(string(k), MetaKeyPrefix) {
+			meta[string(k)] = v
 			continue
 		}
-		messages[Key(k)] = v
+		messages[k] = v
 	}
 	return messages, meta, nil
 }
-
-// SourceSHA256 は、埋め込んだ正の言語の資源（messages/ja.json）のバイト列の SHA-256 を返す。
-//
-// **手元で次を叩いた値と一致する。**
-//
-//	shasum -a 256 internal/i18n/messages/ja.json
-//
-// 戻り値: 16進の小文字64文字。
-func SourceSHA256() string { return sourceSHA256 }
 
 // Catalog は言語1つぶんの資源である。
 //
@@ -228,30 +208,17 @@ type Catalog struct {
 	lang Lang
 	// messages はこの言語のキーと書式文字列の対応である。
 	messages map[Key]string
-	// meta はこの資源が持つ「文言ではないもの」である（`_` で始まるキー。MetaKeyPrefix）。
-	// **T でも Lookup でも引けない。**Meta で読む。
-	meta map[string]string
 	// source は正の言語（日本語）のキーと書式文字列の対応である。訳が無いときの落とし先。
 	source map[Key]string
-}
-
-// Meta はこの資源が持つ「文言ではないもの」を読む（`_source_sha256` など）。
-//
-// **正の言語へ落とさない。**記録が無いことと、記録が古いことは別の話なので、
-// 呼ぶ側が区別できるようにする。
-//
-// key: 読むキー（`_` で始まる。MetaKeyPrefix）。
-// 戻り値の1つ目: 値。無ければ空文字。
-// 戻り値の2つ目: この言語の資源にその記録があるかどうか。
-func (c *Catalog) Meta(key string) (string, bool) {
-	v, ok := c.meta[key]
-	return v, ok
+	// sourceDigest は、この訳を作ったときの正の資源のファイルの SHA-256 である
+	// （資源に SourceDigestKey が書かれていなければ空文字）。
+	sourceDigest string
 }
 
 // NewCatalog は与えた文言から資源を1つ作る。落とし先は正の言語（日本語）の埋め込んだ資源である。
 //
 // **いまの呼び出し元はテストだけである。**埋め込んだ資源だけでは落とし先（訳の無いキーを
-// 正の言語から引くこと）を検査できない。**`messages/en.json` が全部のキーを持っていて、
+// 正の言語から引くこと）を検査できない。**`messages/en.json` に全部のキーの訳が入っていて、
 // 訳の無いキーが1つも無いためである**（設計 3-35b）。**穴の空いた資源をここで組んで、
 // 落とし先が効くことを確かめる。**テストは `test/` の下の別 package に置く決まりなので、
 // package の中の変数を直接触れない。
@@ -275,6 +242,14 @@ func NewCatalog(lang Lang, messages map[Key]string) *Catalog {
 //
 // 戻り値: 言語。
 func (c *Catalog) Lang() Lang { return c.lang }
+
+// SourceDigest は、この訳を作ったときの正の資源のファイルの SHA-256 を返す。
+//
+// **実物の `messages/ja.json` と突き合わせるために使う**（設計 3-35b）。
+// 食い違っていれば、正の文言を直したのに訳を作り直していない。
+//
+// 戻り値: 16進の小文字の SHA-256。資源に SourceDigestKey が書かれていなければ空文字。
+func (c *Catalog) SourceDigest() string { return c.sourceDigest }
 
 // Lookup はキーに対応する書式文字列を引く。
 //
@@ -306,7 +281,9 @@ func (c *Catalog) pattern(key Key) string {
 		return p
 	}
 	recordMissing(key)
-	return fmt.Sprintf("（文言が登録されていません: %s）", string(key))
+	// **ここだけは資源から引けない**（引けなかったことを伝える文なので、引きに行くと同じ穴に落ちる）。
+	// **だから直に書く。英語で書く。**日本語で書くと、英語を選んだ画面にこの1行だけ日本語が出る。
+	return fmt.Sprintf("(no message is registered for this key: %s)", string(key))
 }
 
 // T はキーに対応する文言を組み立てる。
@@ -341,8 +318,7 @@ func (c *Catalog) Errorf(key Key, args ...any) error {
 
 // Keys はこの資源が持つキーを昇順で返す（訳の埋まり具合を調べるために使う）。
 //
-// 戻り値: この言語の資源に実際に書かれているキー（正の言語への落とし先は含めない。
-// `_` で始まる「文言ではないもの」も含めない。MetaKeyPrefix）。
+// 戻り値: この言語の資源に実際に書かれているキー（正の言語への落とし先は含めない）。
 func (c *Catalog) Keys() []Key {
 	keys := make([]Key, 0, len(c.messages))
 	for k := range c.messages {
@@ -428,6 +404,29 @@ func T(key Key, args ...any) string { return currentCatalog().T(key, args...) }
 // 戻り値: 組み立てたエラー。
 func Errorf(key Key, args ...any) error { return currentCatalog().Errorf(key, args...) }
 
+// sentinelError は文言を Error() が呼ばれるたびに資源から引く番兵エラーである。
+type sentinelError struct {
+	// key は引くキーである。
+	key Key
+}
+
+// Error は error インターフェースを満たす。**引くのはいま使っている言語である。**
+func (e *sentinelError) Error() string { return T(e.key) }
+
+// Sentinel は errors.Is で見分けるための番兵エラーを作る。
+//
+// **package の変数として持つ番兵に使う。**`errors.New` に文言を直接書くと、
+// **その文字列は package の初期化の時点で固まる。**言語が決まるのは Use を呼んだあと
+// （設定を読んだあと）なので、**英語を選んでも番兵の文だけ日本語のまま出る。**
+// 実際、`continuo doctor` の `credentials` の行で起きた。
+//
+// **返す値は呼び出しごとに別物である。**番兵は package の変数に1つだけ作り、
+// 比較は errors.Is でその変数に対して行うこと。
+//
+// key: 引くキー。
+// 戻り値: Error() のたびに資源から文言を引くエラー。
+func Sentinel(key Key) error { return &sentinelError{key: key} }
+
 // FromEnv は環境変数から言語を決める（設定に何も書かれていないときの当て推量）。
 //
 // **読むのは LANG だけである**（EnvLangName の説明を参照）。
@@ -489,8 +488,10 @@ func Resolve(configured string, getenv func(string) string) (Lang, error) {
 	}
 	lang := Lang(strings.ToLower(v))
 	if !Supported(lang) {
-		return DefaultLang, fmt.Errorf(
-			"language: %q は対応していません（%s か %q のいずれかにすること）",
+		// **この1文も資源から引く。**言語の設定が間違っているときに出る文だが、
+		// **出す言語は「いま決まっている言語」でよい**（引けなければ正の言語へ落ちる）。
+		// 直に書くと、英語を選んだ利用者の画面にここだけ日本語が出る。
+		return DefaultLang, Errorf(KeyI18nResolveUnsupportedLanguage,
 			configured, joinLangs(Available()), LangConfigAuto)
 	}
 	return lang, nil

@@ -15,6 +15,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/cli"
 	"github.com/maimuzo/continuo/internal/doctor"
+	"github.com/maimuzo/continuo/test/testlang"
 )
 
 // buildBinary は `continuo` をビルドする。
@@ -79,6 +80,7 @@ func runDoctorBinaryWithEndpoint(t *testing.T, fx *fixture, bin, endpoint string
 		"HOME=" + fx.Home,
 		"CONTINUO_GITHUB_GRAPHQL_ENDPOINT=" + endpoint,
 		"CONTINUO_TEST_TOKEN=dummy-token-for-the-fake-server",
+		testlang.EnvEntry(),
 	}
 	out, err := cmd.CombinedOutput()
 	code := 0
@@ -174,7 +176,7 @@ func TestDoctorCLI_位置引数を2つ以上渡したら使い方の誤りとし
 
 	cmd := exec.Command(bin, "doctor", fx.WorkflowPath, "もう1つ")
 	cmd.Dir = fx.Root
-	cmd.Env = []string{"PATH=" + fx.BinDir, "HOME=" + fx.Home}
+	cmd.Env = []string{"PATH=" + fx.BinDir, "HOME=" + fx.Home, testlang.EnvEntry()}
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("位置引数が2つあるのに正常終了した:\n%s", out)

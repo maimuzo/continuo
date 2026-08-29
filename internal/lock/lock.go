@@ -6,7 +6,6 @@
 package lock
 
 import (
-	"errors"
 	"os"
 	"syscall"
 
@@ -19,7 +18,12 @@ import (
 // パスがディレクトリを指している）と区別するために置いてある。両方を同じ文言で報告すると、
 // パスを打ち間違えた運用者が「起動しているはずのない2つ目のプロセス」を探すことになる。
 // 呼び出し側は errors.Is(err, lock.ErrAlreadyRunning) で切り分けること。
-var ErrAlreadyRunning = errors.New("continuo は既に起動しています")
+//
+// **文言は Error() が呼ばれるたびに資源から引く**（i18n.Sentinel）。
+// errors.New に書くと、その文字列は package の初期化の時点で固まる。**言語が決まるのは
+// 設定を読んだあと**なので、英語を選んでもこの1文だけ日本語のまま出る。
+// **errors.Is が見るのはこの変数の identity なので、資源から引いても切り分けは壊れない。**
+var ErrAlreadyRunning = i18n.Sentinel(i18n.KeyLockErrAlreadyRunning)
 
 // Lock は flock で獲得した単一プロセスロックを表す。
 type Lock struct {

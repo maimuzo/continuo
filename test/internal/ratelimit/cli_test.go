@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/test/testlang"
 )
 
 // buildContinuo は `continuo` をビルドする。
@@ -76,6 +77,7 @@ func runAllowKeychainAccess(t *testing.T, bin, pathDir string, args ...string) (
 	cmd.Env = []string{
 		"PATH=" + pathDir + string(os.PathListSeparator) + "/usr/bin:/bin",
 		"HOME=" + t.TempDir(),
+		testlang.EnvEntry(),
 	}
 	out, err := cmd.CombinedOutput()
 	code := 0
