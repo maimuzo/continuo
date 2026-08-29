@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
@@ -144,7 +144,7 @@ func TestReconcile_身元ファイルのworkspaceIDを信じて別のrunのpane�
 	}
 }
 
-// {"RUCM-PATH": "P019"}
+// {"RUCM-PATH": "P020"}
 //
 // TestTurn_turnを送れなかったときStopHookのせいにしない は、
 // 送信の失敗と「Stop hook が届かない」を混ぜないことを確かめる。
@@ -268,7 +268,7 @@ func requireCwdOnWorktreeOpen(t *testing.T, fx *fixture) {
 	})
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P018"}
 //
 // TestAbandon_打ち切りのときissueに残る理由が本当の理由である は、
 // 引き渡しの通知の投稿枠を、本当の理由が先に取ることを確かめる。

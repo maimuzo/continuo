@@ -118,6 +118,14 @@ jobs:
         # 外部からの PR では持っていない）。手元では `--strict` を付けて必ず回す。
         run: sh scripts/check-rucm.sh
 
+      - name: 返答の検査 hook が壊れていないか
+        # **この hook は全部の turn で走る。**
+        # 壊れると、誤検知で作業が止まるか、検知漏れで規則が効かなくなる。
+        # **どちらも、走らせてみるまで分からない。**
+        run: |
+          python3 .claude/hooks/tests/test_check_reply_clarity.py
+          python3 .claude/hooks/tests/test_block_merge_without_review.py
+
 
   build:
     # **配布物を作れることを、タグを打つ前に確かめる。**

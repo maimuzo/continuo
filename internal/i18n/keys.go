@@ -1067,6 +1067,11 @@ const (
 
 // 二重起動を防ぐロック（internal/lock）のエラーの文言。
 const (
+	// KeyLockErrAlreadyRunning は番兵エラー `lock.ErrAlreadyRunning` の文言である。
+	//
+	// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+	// **引くのは Error() が呼ばれたときである**（i18n.Sentinel）。
+	KeyLockErrAlreadyRunning Key = "lock.err.already_running"
 	// KeyLockAcquireOpenFailed はロックファイルを開けなかったときに出る。
 	KeyLockAcquireOpenFailed Key = "lock.acquire.open_failed"
 	// KeyLockAcquireAlreadyRunning は別のプロセスが同じロックファイルを掴んでいるときに出る。
@@ -1150,6 +1155,10 @@ const (
 	// KeyConfigPlaceholderRemaining は `continuo init` の雛形の値が埋められないまま
 	// 残っているときに出る。
 	KeyConfigPlaceholderRemaining Key = "config.placeholder.remaining"
+	// KeyConfigPlaceholderItem は埋めていないキーを1件ずつ並べるときの文言である。
+	//
+	// **KeyConfigPlaceholderRemaining の %s に、この文言を " / " でつないだものが入る。**
+	KeyConfigPlaceholderItem Key = "config.placeholder.item"
 )
 
 // front matter の値の検査（internal/config の validate）のエラーの文言。
@@ -1207,6 +1216,36 @@ const (
 	KeyHerdrCallMarshalParamsFailed Key = "herdr.call.marshal_params_failed"
 	// KeyHerdrCallMarshalRequestFailed はリクエスト全体を JSON へ変換できなかったときに出る。
 	KeyHerdrCallMarshalRequestFailed Key = "herdr.call.marshal_request_failed"
+	// KeyHerdrCallCanceled は呼び出し側が ctx を打ち切ったときに出る。
+	KeyHerdrCallCanceled Key = "herdr.call.canceled"
+	// KeyHerdrCallSocketConnectFailed は herdr の socket へ接続できなかったときに出る。
+	//
+	// **`continuo doctor` の `herdr` の行にそのまま出る。**herdr が起動していない環境で
+	// 最初に出会う文言なので、資源へ移していないと英語の画面に日本語が1行だけ混ざる。
+	KeyHerdrCallSocketConnectFailed Key = "herdr.call.socket_connect_failed"
+	// KeyHerdrCallSetDeadlineFailed は socket に期限を設定できなかったときに出る。
+	KeyHerdrCallSetDeadlineFailed Key = "herdr.call.set_deadline_failed"
+	// KeyHerdrCallSendFailed はリクエストを送れなかったときに出る。
+	KeyHerdrCallSendFailed Key = "herdr.call.send_failed"
+	// KeyHerdrCallResponseTimeout は応答が期限までに返らなかったときに出る。
+	KeyHerdrCallResponseTimeout Key = "herdr.call.response_timeout"
+	// KeyHerdrCallResponseReadFailed は応答を1バイトも読めなかったときに出る。
+	KeyHerdrCallResponseReadFailed Key = "herdr.call.response_read_failed"
+	// KeyHerdrCallResponseTruncated は応答が改行の前で途切れていたときに出る。
+	KeyHerdrCallResponseTruncated Key = "herdr.call.response_truncated"
+	// KeyHerdrCallResponseNotJSON は応答を JSON として解析できなかったときに出る。
+	KeyHerdrCallResponseNotJSON Key = "herdr.call.response_not_json"
+)
+
+// herdr のエラーを1行の文字列にする処理（internal/herdr の Error.Error）の文言。
+//
+// **包んだ原因の有無で書式を分ける。**原因が無いときに ": %v" を残すと
+// 末尾に "<nil>" が出る。
+const (
+	// KeyHerdrErrorWithCause は包んだ原因があるときの書式である（コード・本文・原因）。
+	KeyHerdrErrorWithCause Key = "herdr.error.with_cause"
+	// KeyHerdrErrorWithoutCause は包んだ原因が無いときの書式である（コード・本文）。
+	KeyHerdrErrorWithoutCause Key = "herdr.error.without_cause"
 )
 
 // herdr の socket のパスを決める処理（internal/herdr の ResolveSocketPath）の文言。
@@ -1454,6 +1493,23 @@ const (
 	KeyRatelimitKeychainAccessTokenMissing Key = "ratelimit.keychain.access_token_missing"
 )
 
+// 枠の判定の番兵エラー（internal/ratelimit の ErrNoCredentials / ErrKeychainTimeout /
+// ErrKeychainCanceled）の文言。
+//
+// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+// **引くのは Error() が呼ばれたときである**（internal/ratelimit の lazyError）。
+//
+// **ErrNoCredentials は上の credentials_file.* / keychain.* の先頭の %w に入る。**
+// **`continuo doctor` の `credentials` の行にそのまま出る。**
+const (
+	// KeyRatelimitErrNoCredentials は枠の判定に使う資格情報を取れなかったことを表す。
+	KeyRatelimitErrNoCredentials Key = "ratelimit.err.no_credentials"
+	// KeyRatelimitErrKeychainTimeout は Keychain の読み取りが期限内に終わらなかったことを表す。
+	KeyRatelimitErrKeychainTimeout Key = "ratelimit.err.keychain_timeout"
+	// KeyRatelimitErrKeychainCanceled は Keychain の読み取りを打ち切ったことを表す。
+	KeyRatelimitErrKeychainCanceled Key = "ratelimit.err.keychain_canceled"
+)
+
 // HTTP ダッシュボード（internal/server）の起動と停止のエラーの文言。
 //
 // **画面に並べる語は dashboard.* にある。**ここにあるのは、待ち受けの開始と停止、
@@ -1545,6 +1601,125 @@ const (
 	KeyScaffoldGHRunFailed Key = "scaffold.gh.run_failed"
 	// KeyScaffoldGHRunFailedWithStderr はgh の実行に失敗し、標準エラー出力があったときに出る。
 	KeyScaffoldGHRunFailedWithStderr Key = "scaffold.gh.run_failed_with_stderr"
+	// KeyScaffoldGHNotFound はgh そのものが PATH に無いことを表す番兵エラーの文言である。
+	KeyScaffoldGHNotFound Key = "scaffold.gh.not_found"
+)
+
+// `continuo init` と `continuo setup` の番兵エラー（internal/scaffold）の文言。
+//
+// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+// **引くのは Error() が呼ばれたときである**（i18n.Sentinel）。
+//
+// **`continuo init` の出力にそのまま出る。**存在しないディレクトリを渡したときの
+// 1行がこれである。
+const (
+	// KeyScaffoldErrAlreadyExists は書き出す先に既に WORKFLOW.md があるときに出る。
+	KeyScaffoldErrAlreadyExists Key = "scaffold.err.already_exists"
+	// KeyScaffoldErrDirNotFound は指定されたディレクトリが無いときに出る。
+	KeyScaffoldErrDirNotFound Key = "scaffold.err.dir_not_found"
+	// KeyScaffoldErrNotADirectory は指定されたパスがディレクトリでないときに出る。
+	KeyScaffoldErrNotADirectory Key = "scaffold.err.not_a_directory"
+	// KeyScaffoldErrSymlink は書き出す先の WORKFLOW.md が symlink だったときに出る。
+	KeyScaffoldErrSymlink Key = "scaffold.err.symlink"
+	// KeyScaffoldErrNotFound は書き換える先に WORKFLOW.md が無いときに出る。
+	KeyScaffoldErrNotFound Key = "scaffold.err.not_found"
+	// KeyScaffoldErrKeysNotFound は書き換える対象のキーが無いときに出る。
+	KeyScaffoldErrKeysNotFound Key = "scaffold.err.keys_not_found"
+	// KeyScaffoldErrStatusesIncomplete は5つの役割のどれかが空のまま渡されたときに出る。
+	KeyScaffoldErrStatusesIncomplete Key = "scaffold.err.statuses_incomplete"
+	// KeyScaffoldErrKeysNotRewritable はキーの値が下の行にぶら下がっているときに出る。
+	KeyScaffoldErrKeysNotRewritable Key = "scaffold.err.keys_not_rewritable"
+	// KeyScaffoldErrWouldBreakConfig は書き換えると front matter を読めなくなるときに出る。
+	KeyScaffoldErrWouldBreakConfig Key = "scaffold.err.would_break_config"
+)
+
+// `continuo init` が gh から値を引いて雛形を埋めるとき（internal/scaffold の Detect）の文言。
+//
+// **これは画面に出る文言である。**埋めた根拠（Reason）と、埋められなかったときに
+// 人が何をすればよいか（Advice）の2種類しかない。**どちらも `continuo init` の出力に
+// そのまま並ぶ。**
+const (
+	// KeyScaffoldDetectGHNotFound はgh コマンドそのものが見つからなかったときに出る。
+	//
+	// **owner・ボードの番号・リポジトリの一覧の3か所から出る。**同じ状況なので文言も1つにする。
+	KeyScaffoldDetectGHNotFound Key = "scaffold.detect.gh_not_found"
+	// KeyScaffoldDetectAdviceProjectScope はボードを読む権限が足りないときの案内である。
+	//
+	// **ボードの候補とリポジトリの一覧の2か所から出る。**
+	KeyScaffoldDetectAdviceProjectScope Key = "scaffold.detect.advice_project_scope"
+
+	// KeyScaffoldDetectOwnerFromFlag はowner を `--owner` で渡されたときに出る。
+	KeyScaffoldDetectOwnerFromFlag Key = "scaffold.detect.owner.from_flag"
+	// KeyScaffoldDetectOwnerAPIEmpty は`gh api user` が空を返したときに出る。
+	KeyScaffoldDetectOwnerAPIEmpty Key = "scaffold.detect.owner.api_empty"
+	// KeyScaffoldDetectOwnerAPIInvalid は`gh api user` が返した名前が owner として受け付けられないときに出る。
+	KeyScaffoldDetectOwnerAPIInvalid Key = "scaffold.detect.owner.api_invalid"
+	// KeyScaffoldDetectOwnerAPILogin はowner を `gh api user` のログイン名で埋めたときに出る。
+	KeyScaffoldDetectOwnerAPILogin Key = "scaffold.detect.owner.api_login"
+	// KeyScaffoldDetectOwnerGHFailed はgh を実行できたが値を取れなかったときに出る。
+	KeyScaffoldDetectOwnerGHFailed Key = "scaffold.detect.owner.gh_failed"
+	// KeyScaffoldDetectOwnerFollowedBoard は見つかったボードの持ち主に owner を合わせ直したときに出る。
+	KeyScaffoldDetectOwnerFollowedBoard Key = "scaffold.detect.owner.followed_board"
+	// KeyScaffoldDetectOwnerAdviceLogin はgh を入れてログインし直す案内である。
+	KeyScaffoldDetectOwnerAdviceLogin Key = "scaffold.detect.owner.advice_login"
+	// KeyScaffoldDetectOwnerAdviceFlag は`--owner` で直接指定する案内である。
+	KeyScaffoldDetectOwnerAdviceFlag Key = "scaffold.detect.owner.advice_flag"
+	// KeyScaffoldDetectOwnerAdviceWhere はURL のどの位置が owner なのかを示す案内である。
+	KeyScaffoldDetectOwnerAdviceWhere Key = "scaffold.detect.owner.advice_where"
+
+	// KeyScaffoldDetectProjectFromFlag はボードの番号を `--project` で渡されたときに出る。
+	KeyScaffoldDetectProjectFromFlag Key = "scaffold.detect.project.from_flag"
+	// KeyScaffoldDetectProjectNoOwner はowner が決まらず、ボードの候補を引けなかったときに出る。
+	KeyScaffoldDetectProjectNoOwner Key = "scaffold.detect.project.no_owner"
+	// KeyScaffoldDetectProjectListFailed は`gh project list` が失敗したときに出る。
+	KeyScaffoldDetectProjectListFailed Key = "scaffold.detect.project.list_failed"
+	// KeyScaffoldDetectProjectNone は探した owner のどこにもボードが無かったときに出る。
+	KeyScaffoldDetectProjectNone Key = "scaffold.detect.project.none"
+	// KeyScaffoldDetectProjectSingle は候補が1件だけで、そのまま埋めたときに出る。
+	KeyScaffoldDetectProjectSingle Key = "scaffold.detect.project.single"
+	// KeyScaffoldDetectProjectMultiple は候補が複数あり、選ばずに一覧を出したときに出る。
+	KeyScaffoldDetectProjectMultiple Key = "scaffold.detect.project.multiple"
+	// KeyScaffoldDetectProjectAdviceOwnerFirst は先に owner を決める案内である。
+	KeyScaffoldDetectProjectAdviceOwnerFirst Key = "scaffold.detect.project.advice_owner_first"
+	// KeyScaffoldDetectProjectAdviceFlag は`--project` で直接指定する案内である。
+	KeyScaffoldDetectProjectAdviceFlag Key = "scaffold.detect.project.advice_flag"
+	// KeyScaffoldDetectProjectAdviceCreate はボードの作り方の案内である。
+	KeyScaffoldDetectProjectAdviceCreate Key = "scaffold.detect.project.advice_create"
+	// KeyScaffoldDetectProjectAdviceOtherOwner はボードが別の user / organization にある場合の案内である。
+	KeyScaffoldDetectProjectAdviceOtherOwner Key = "scaffold.detect.project.advice_other_owner"
+	// KeyScaffoldDetectProjectAdviceRerun はボードを作ったあとに実行し直す案内である。
+	KeyScaffoldDetectProjectAdviceRerun Key = "scaffold.detect.project.advice_rerun"
+	// KeyScaffoldDetectProjectAdvicePick は候補から1つを選んで実行し直す案内である。
+	KeyScaffoldDetectProjectAdvicePick Key = "scaffold.detect.project.advice_pick"
+	// KeyScaffoldDetectProjectAdvicePickOwner は候補が別の owner のものだった場合の案内である。
+	KeyScaffoldDetectProjectAdvicePickOwner Key = "scaffold.detect.project.advice_pick_owner"
+
+	// KeyScaffoldDetectRepositoriesNoOwnerOrProject はowner かボードの番号が決まらず、一覧を引けなかったときに出る。
+	KeyScaffoldDetectRepositoriesNoOwnerOrProject Key = "scaffold.detect.repositories.no_owner_or_project"
+	// KeyScaffoldDetectRepositoriesItemListFailed は`gh project item-list` が失敗したときに出る。
+	KeyScaffoldDetectRepositoriesItemListFailed Key = "scaffold.detect.repositories.item_list_failed"
+	// KeyScaffoldDetectRepositoriesItemListUnparsable は`gh project item-list` の出力を解釈できなかったときに出る。
+	KeyScaffoldDetectRepositoriesItemListUnparsable Key = "scaffold.detect.repositories.item_list_unparsable"
+	// KeyScaffoldDetectRepositoriesNoIssue はボードにリポジトリの issue が1件も載っていなかったときに出る。
+	KeyScaffoldDetectRepositoriesNoIssue Key = "scaffold.detect.repositories.no_issue"
+	// KeyScaffoldDetectRepositoriesListed はボードから拾ったリポジトリを並べたときに出る。
+	KeyScaffoldDetectRepositoriesListed Key = "scaffold.detect.repositories.listed"
+	// KeyScaffoldDetectRepositoriesAdviceDecideFirst はowner とボードの番号を先に決める案内である。
+	KeyScaffoldDetectRepositoriesAdviceDecideFirst Key = "scaffold.detect.repositories.advice_decide_first"
+	// KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional は手で書いてもよいことを伝える案内である。
+	KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional Key = "scaffold.detect.repositories.advice_write_by_hand_optional"
+	// KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepoOptional はowner/repo を手で書いてもよいことを伝える案内である。
+	KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepoOptional Key = "scaffold.detect.repositories.advice_write_owner_repo_optional"
+	// KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepo はowner/repo を手で書く案内である。
+	KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepo Key = "scaffold.detect.repositories.advice_write_owner_repo"
+	// KeyScaffoldDetectRepositoriesAdviceWriteWanted は信頼させたいリポジトリを手で書く案内である。
+	KeyScaffoldDetectRepositoriesAdviceWriteWanted Key = "scaffold.detect.repositories.advice_write_wanted"
+	// KeyScaffoldDetectRepositoriesAdviceRemoveUnneeded は要らない行を消させる案内である。
+	KeyScaffoldDetectRepositoriesAdviceRemoveUnneeded Key = "scaffold.detect.repositories.advice_remove_unneeded"
+	// KeyScaffoldDetectRepositoriesAdviceDryRun は`continuo trust --dry-run` で確かめさせる案内である。
+	KeyScaffoldDetectRepositoriesAdviceDryRun Key = "scaffold.detect.repositories.advice_dry_run"
+	// KeyScaffoldDetectRepositoriesAdviceTruncated はボードの項目を打ち切って読んだことを伝える案内である。
+	KeyScaffoldDetectRepositoriesAdviceTruncated Key = "scaffold.detect.repositories.advice_truncated"
 )
 
 // ボードの Status フィールドを読む処理（internal/setup の FetchStatusField）の文言。
@@ -1825,6 +2000,16 @@ const (
 	KeyWorkspaceCheckTrustForClonePathConfigUnreadable Key = "workspace.check_trust_for_clone_path.config_unreadable"
 	// KeyWorkspaceCheckTrustForClonePathConfigUnparsable は `~/.claude.json` を JSON として解析できなかったときに出る。
 	KeyWorkspaceCheckTrustForClonePathConfigUnparsable Key = "workspace.check_trust_for_clone_path.config_unparsable"
+	// KeyWorkspaceCheckTrustCloneMissing はそのリポジトリの clone が手元に無かったときに出る。
+	KeyWorkspaceCheckTrustCloneMissing Key = "workspace.check_trust.clone_missing"
+	// KeyWorkspaceCheckTrustForClonePathConfigMissing は `~/.claude.json` そのものが無かったときに出る。
+	KeyWorkspaceCheckTrustForClonePathConfigMissing Key = "workspace.check_trust_for_clone_path.config_missing"
+	// KeyWorkspaceCheckTrustForClonePathKeyMissing は `~/.claude.json` の projects に鍵が無かったときに出る。
+	KeyWorkspaceCheckTrustForClonePathKeyMissing Key = "workspace.check_trust_for_clone_path.key_missing"
+	// KeyWorkspaceCheckTrustForClonePathNotAccepted は信頼ダイアログがまだ承認されていないときに出る。
+	KeyWorkspaceCheckTrustForClonePathNotAccepted Key = "workspace.check_trust_for_clone_path.not_accepted"
+	// KeyWorkspaceCheckTrustForClonePathTrusted はそのリポジトリが信頼済みだったときに出る。
+	KeyWorkspaceCheckTrustForClonePathTrusted Key = "workspace.check_trust_for_clone_path.trusted"
 	// KeyWorkspaceValidateIdentityFileNameEmpty は workspace.identity_file が空だったときに出る。
 	KeyWorkspaceValidateIdentityFileNameEmpty Key = "workspace.validate_identity_file_name.empty"
 	// KeyWorkspaceValidateIdentityFileNameHasSpaces は workspace.identity_file の前後に空白があったときに出る。
@@ -1962,6 +2147,12 @@ const (
 
 // daemon のエラー（起動の段・起動時の検査・依存の組み立て）。
 const (
+	// KeyDaemonErrStartup は番兵エラー `daemon.ErrStartup` の文言である。
+	//
+	// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+	// **引くのは Error() が呼ばれたときである**（i18n.Sentinel）。
+	// **`daemon.run.*` の先頭の `%w` に入って画面へ出る。**
+	KeyDaemonErrStartup Key = "daemon.err.startup"
 	// KeyDaemonRunConfigLoadFailed は起動の段1で WORKFLOW.md を読めなかったときに出る。
 	KeyDaemonRunConfigLoadFailed Key = "daemon.run.config_load_failed"
 	// KeyDaemonRunSocketPathUnresolved はhook を受ける socket の場所を決められなかったときに出る。
@@ -2006,6 +2197,16 @@ const (
 	KeyDaemonBuildHookServerFailed Key = "daemon.build.hookserver_failed"
 	// KeyDaemonBuildDashboardFailed は依存の組み立てでダッシュボードを作れなかったときに出る。
 	KeyDaemonBuildDashboardFailed Key = "daemon.build.dashboard_failed"
+)
+
+// 言語の決め方そのもののエラー（internal/i18n）の文言。
+const (
+	// KeyI18nResolveUnsupportedLanguage は WORKFLOW.md の `language` に資源の無い言語が
+	// 書かれていたときに出る。
+	//
+	// **この文も資源から引く。**言語の設定が間違っているときの文だが、出す言語は
+	// 「いま決まっている言語」でよい。直に書くと、英語を選んだ画面にここだけ日本語が出る。
+	KeyI18nResolveUnsupportedLanguage Key = "i18n.resolve.unsupported_language"
 )
 
 // allKeys は宣言済みのキーを全部並べたものである。
@@ -2430,6 +2631,7 @@ var allKeys = []Key{
 	KeyDashboardAgoMinutes,
 	KeyDashboardAgoHours,
 	KeyDashboardNone,
+	KeyLockErrAlreadyRunning,
 	KeyLockAcquireOpenFailed,
 	KeyLockAcquireAlreadyRunning,
 	KeyLockReleaseUnlockFailed,
@@ -2457,6 +2659,7 @@ var allKeys = []Key{
 	KeyConfigFrontMatterNoStartDelimiter,
 	KeyConfigFrontMatterNoEndDelimiter,
 	KeyConfigPlaceholderRemaining,
+	KeyConfigPlaceholderItem,
 	KeyConfigValidateInvalidValue,
 	KeyConfigValidateRequired,
 	KeyConfigValidateBranchTemplateNeedsIssueNumber,
@@ -2476,6 +2679,16 @@ var allKeys = []Key{
 	KeyHerdrCallRequestIDFailed,
 	KeyHerdrCallMarshalParamsFailed,
 	KeyHerdrCallMarshalRequestFailed,
+	KeyHerdrCallCanceled,
+	KeyHerdrCallSocketConnectFailed,
+	KeyHerdrCallSetDeadlineFailed,
+	KeyHerdrCallSendFailed,
+	KeyHerdrCallResponseTimeout,
+	KeyHerdrCallResponseReadFailed,
+	KeyHerdrCallResponseTruncated,
+	KeyHerdrCallResponseNotJSON,
+	KeyHerdrErrorWithCause,
+	KeyHerdrErrorWithoutCause,
 	KeyHerdrSocketPathNotAbsolute,
 	KeyHerdrSocketPathHomeDirFailed,
 	KeyHerdrSocketPathSourceConfig,
@@ -2544,6 +2757,9 @@ var allKeys = []Key{
 	KeyRatelimitKeychainParseFailed,
 	KeyRatelimitKeychainOauthMissing,
 	KeyRatelimitKeychainAccessTokenMissing,
+	KeyRatelimitErrNoCredentials,
+	KeyRatelimitErrKeychainTimeout,
+	KeyRatelimitErrKeychainCanceled,
 	KeyServerNewPortOutOfRange,
 	KeyServerStartListenFailed,
 	KeyServerCloseShutdownFailed,
@@ -2568,6 +2784,53 @@ var allKeys = []Key{
 	KeyScaffoldMissingKeysTemplateBroken,
 	KeyScaffoldGHRunFailed,
 	KeyScaffoldGHRunFailedWithStderr,
+	KeyScaffoldGHNotFound,
+	KeyScaffoldErrAlreadyExists,
+	KeyScaffoldErrDirNotFound,
+	KeyScaffoldErrNotADirectory,
+	KeyScaffoldErrSymlink,
+	KeyScaffoldErrNotFound,
+	KeyScaffoldErrKeysNotFound,
+	KeyScaffoldErrStatusesIncomplete,
+	KeyScaffoldErrKeysNotRewritable,
+	KeyScaffoldErrWouldBreakConfig,
+	KeyScaffoldDetectGHNotFound,
+	KeyScaffoldDetectAdviceProjectScope,
+	KeyScaffoldDetectOwnerFromFlag,
+	KeyScaffoldDetectOwnerAPIEmpty,
+	KeyScaffoldDetectOwnerAPIInvalid,
+	KeyScaffoldDetectOwnerAPILogin,
+	KeyScaffoldDetectOwnerGHFailed,
+	KeyScaffoldDetectOwnerFollowedBoard,
+	KeyScaffoldDetectOwnerAdviceLogin,
+	KeyScaffoldDetectOwnerAdviceFlag,
+	KeyScaffoldDetectOwnerAdviceWhere,
+	KeyScaffoldDetectProjectFromFlag,
+	KeyScaffoldDetectProjectNoOwner,
+	KeyScaffoldDetectProjectListFailed,
+	KeyScaffoldDetectProjectNone,
+	KeyScaffoldDetectProjectSingle,
+	KeyScaffoldDetectProjectMultiple,
+	KeyScaffoldDetectProjectAdviceOwnerFirst,
+	KeyScaffoldDetectProjectAdviceFlag,
+	KeyScaffoldDetectProjectAdviceCreate,
+	KeyScaffoldDetectProjectAdviceOtherOwner,
+	KeyScaffoldDetectProjectAdviceRerun,
+	KeyScaffoldDetectProjectAdvicePick,
+	KeyScaffoldDetectProjectAdvicePickOwner,
+	KeyScaffoldDetectRepositoriesNoOwnerOrProject,
+	KeyScaffoldDetectRepositoriesItemListFailed,
+	KeyScaffoldDetectRepositoriesItemListUnparsable,
+	KeyScaffoldDetectRepositoriesNoIssue,
+	KeyScaffoldDetectRepositoriesListed,
+	KeyScaffoldDetectRepositoriesAdviceDecideFirst,
+	KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional,
+	KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepoOptional,
+	KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepo,
+	KeyScaffoldDetectRepositoriesAdviceWriteWanted,
+	KeyScaffoldDetectRepositoriesAdviceRemoveUnneeded,
+	KeyScaffoldDetectRepositoriesAdviceDryRun,
+	KeyScaffoldDetectRepositoriesAdviceTruncated,
 	KeySetupBoardOwnerMissing,
 	KeySetupBoardProjectNumberMissing,
 	KeySetupBoardFieldListUnparsable,
@@ -2690,6 +2953,11 @@ var allKeys = []Key{
 	KeyWorkspaceCheckTrustForClonePathToplevelFailed,
 	KeyWorkspaceCheckTrustForClonePathConfigUnreadable,
 	KeyWorkspaceCheckTrustForClonePathConfigUnparsable,
+	KeyWorkspaceCheckTrustCloneMissing,
+	KeyWorkspaceCheckTrustForClonePathConfigMissing,
+	KeyWorkspaceCheckTrustForClonePathKeyMissing,
+	KeyWorkspaceCheckTrustForClonePathNotAccepted,
+	KeyWorkspaceCheckTrustForClonePathTrusted,
 	KeyWorkspaceValidateIdentityFileNameEmpty,
 	KeyWorkspaceValidateIdentityFileNameHasSpaces,
 	KeyWorkspaceValidateIdentityFileNameHasSeparator,
@@ -2752,6 +3020,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupNotInteractive,
 	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
+	KeyDaemonErrStartup,
 	KeyDaemonRunConfigLoadFailed,
 	KeyDaemonRunSocketPathUnresolved,
 	KeyDaemonRunSocketDirFailed,
@@ -2774,6 +3043,7 @@ var allKeys = []Key{
 	KeyDaemonBuildOrchestratorFailed,
 	KeyDaemonBuildHookServerFailed,
 	KeyDaemonBuildDashboardFailed,
+	KeyI18nResolveUnsupportedLanguage,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

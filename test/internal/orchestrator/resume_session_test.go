@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **再着手でセッションに復帰することの検査である。**
 //
@@ -316,7 +316,7 @@ func TestDispatch_既存のworktreeがあれば前回のセッションに復帰
 	assertBasicFlowPostcondition(t, fx, issue)
 }
 
-// {"RUCM-PATH": "P027"}
+// {"RUCM-PATH": "P028"}
 //
 // TestDispatch_復帰に失敗したら新しいセッションで始め直す は、代替フロー `復帰の失敗` を確かめる。
 //

@@ -49,7 +49,7 @@ const ghProjectItemListLimit = 500
 type GHRunner func(ctx context.Context, args ...string) ([]byte, error)
 
 // ErrGHNotFound は gh コマンドそのものが見つからなかったことを表す。
-var ErrGHNotFound = errors.New("gh コマンドが見つかりません")
+var ErrGHNotFound = i18n.Sentinel(i18n.KeyScaffoldGHNotFound)
 
 // Project は `gh project list` が返したボードの候補である。
 type Project struct {
@@ -175,7 +175,7 @@ func Detect(ctx context.Context, opts DetectOptions) Detection {
 	// `owner` はログイン名のまま**という、どこにも存在しない組み合わせが書かれる。
 	if boardOwner != "" && boardOwner != owner.Value {
 		owner.Value, owner.Filled = boardOwner, true
-		owner.Reason = fmt.Sprintf("ボード #%d を持つ %s に合わせました", number, boardOwner)
+		owner.Reason = i18n.T(i18n.KeyScaffoldDetectOwnerFollowedBoard, number, boardOwner)
 		owner.Advice = nil
 	}
 
@@ -213,10 +213,10 @@ func detectRepositories(ctx context.Context, run GHRunner, timeout time.Duration
 	f := Field{Key: RepositoriesKey}
 
 	if owner == "" || number <= 0 {
-		f.Reason = "owner とボードの番号が決まらないので、ボードに載っているリポジトリを引けませんでした"
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectRepositoriesNoOwnerOrProject)
 		f.Advice = []string{
-			"owner とボードの番号を決めてから、もう一度 `continuo init` を実行してください",
-			"`continuo trust` の対象は WORKFLOW.md の trust.repositories に手で書いても構いません",
+			i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceDecideFirst),
+			i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional),
 		}
 		return f, nil
 	}
@@ -227,39 +227,39 @@ func detectRepositories(ctx context.Context, run GHRunner, timeout time.Duration
 		"--owner", owner, "--format", "json", "--limit", strconv.Itoa(ghProjectItemListLimit))
 	if err != nil {
 		if errors.Is(err, ErrGHNotFound) {
-			f.Reason = "gh コマンドが見つかりませんでした"
+			f.Reason = i18n.T(i18n.KeyScaffoldDetectGHNotFound)
 		} else {
-			f.Reason = fmt.Sprintf("ボードの項目を引けませんでした（%v）", err)
+			f.Reason = i18n.T(i18n.KeyScaffoldDetectRepositoriesItemListFailed, err)
 		}
 		f.Advice = []string{
-			"ボードを読むには project の scope が要ります。`gh auth login -s project` でログインし直してください",
-			"WORKFLOW.md の trust.repositories に owner/repo を手で書いても構いません",
+			i18n.T(i18n.KeyScaffoldDetectAdviceProjectScope),
+			i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepoOptional),
 		}
 		return f, nil
 	}
 
 	repos, itemCount, err := parseItemRepositories(out)
 	if err != nil {
-		f.Reason = fmt.Sprintf("`gh project item-list` の出力を解釈できませんでした（%v）", err)
-		f.Advice = []string{"WORKFLOW.md の trust.repositories に owner/repo を手で書いてください"}
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectRepositoriesItemListUnparsable, err)
+		f.Advice = []string{i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepo)}
 		return f, nil
 	}
 
 	if len(repos) == 0 {
-		f.Reason = fmt.Sprintf("ボード #%d にリポジトリの issue が1件も載っていませんでした", number)
-		f.Advice = []string{"信頼させたいリポジトリを WORKFLOW.md の trust.repositories に手で書いてください"}
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectRepositoriesNoIssue, number)
+		f.Advice = []string{i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceWriteWanted)}
 		return f, nil
 	}
 
 	f.Value, f.Filled = strings.Join(repos, ", "), true
-	f.Reason = fmt.Sprintf("ボード #%d に載っている %d 個のリポジトリを並べました", number, len(repos))
+	f.Reason = i18n.T(i18n.KeyScaffoldDetectRepositoriesListed, number, len(repos))
 	f.Advice = []string{
-		"**要らない行は WORKFLOW.md から消してください。**残ったものだけが `continuo trust` の対象になります",
-		"何を許すことになるかは `continuo trust --dry-run` で確かめられます",
+		i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceRemoveUnneeded),
+		i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceDryRun),
 	}
 	if itemCount >= ghProjectItemListLimit {
 		f.Advice = append(f.Advice,
-			fmt.Sprintf("ボードの項目を %d 件で打ち切って読みました。これより後ろにしか無いリポジトリは並んでいません", ghProjectItemListLimit))
+			i18n.T(i18n.KeyScaffoldDetectRepositoriesAdviceTruncated, ghProjectItemListLimit))
 	}
 	return f, repos
 }
@@ -331,7 +331,7 @@ func detectOwner(ctx context.Context, opts DetectOptions, run GHRunner, timeout 
 
 	if opts.Owner != "" {
 		f.Value, f.Filled = opts.Owner, true
-		f.Reason = "--owner で指定された値です"
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectOwnerFromFlag)
 		return f
 	}
 
@@ -347,14 +347,14 @@ func detectOwner(ctx context.Context, opts DetectOptions, run GHRunner, timeout 
 	login := strings.TrimSpace(string(out))
 	switch {
 	case login == "":
-		f.Reason = "`gh api user` が空を返しました"
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectOwnerAPIEmpty)
 		f.Advice = ownerAdvice()
 	case !ValidOwner(login):
-		f.Reason = fmt.Sprintf("`gh api user` が返した %q は user / organization 名として受け付けられません", login)
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectOwnerAPIInvalid, login)
 		f.Advice = ownerAdvice()
 	default:
 		f.Value, f.Filled = login, true
-		f.Reason = "`gh api user` が返した GitHub のログイン名です"
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectOwnerAPILogin)
 	}
 	return f
 }
@@ -365,9 +365,9 @@ func detectOwner(ctx context.Context, opts DetectOptions, run GHRunner, timeout 
 // 戻り値: 人が読む1行。
 func ownerFailureReason(err error) string {
 	if errors.Is(err, ErrGHNotFound) {
-		return "gh コマンドが見つかりませんでした"
+		return i18n.T(i18n.KeyScaffoldDetectGHNotFound)
 	}
-	return fmt.Sprintf("gh から取得できませんでした（%v）", err)
+	return i18n.T(i18n.KeyScaffoldDetectOwnerGHFailed, err)
 }
 
 // ownerAdvice は owner を埋められなかったときに出す案内を返す。
@@ -375,9 +375,9 @@ func ownerFailureReason(err error) string {
 // 戻り値: 1行に1つずつの案内。
 func ownerAdvice() []string {
 	return []string{
-		"gh を入れて `gh auth login -s project` でログインしてください",
-		"または `continuo init --owner <名前>` でもう一度実行してください",
-		"https://github.com/octocat なら octocat の位置が owner です",
+		i18n.T(i18n.KeyScaffoldDetectOwnerAdviceLogin),
+		i18n.T(i18n.KeyScaffoldDetectOwnerAdviceFlag),
+		i18n.T(i18n.KeyScaffoldDetectOwnerAdviceWhere),
 	}
 }
 
@@ -394,16 +394,16 @@ func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeou
 
 	if opts.ProjectNumber > 0 {
 		f.Value, f.Filled = strconv.Itoa(opts.ProjectNumber), true
-		f.Reason = "--project で指定された値です"
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectProjectFromFlag)
 		// **`--project` を渡されたら owner は決め直さない。**
 		// 利用者が `--owner` と一緒に指定していることも、していないこともある。
 		return f, opts.ProjectNumber, ""
 	}
 	if owner == "" {
-		f.Reason = "owner が決まらないので、ボードの候補を引けませんでした"
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectProjectNoOwner)
 		f.Advice = []string{
-			"先に owner を決めてから、もう一度 `continuo init` を実行してください",
-			"または `continuo init --project <番号>` でボードの番号を直接指定してください",
+			i18n.T(i18n.KeyScaffoldDetectProjectAdviceOwnerFirst),
+			i18n.T(i18n.KeyScaffoldDetectProjectAdviceFlag),
 		}
 		return f, 0, ""
 	}
@@ -411,13 +411,13 @@ func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeou
 	projects, err := listProjects(ctx, run, timeout, owner)
 	if err != nil {
 		if errors.Is(err, ErrGHNotFound) {
-			f.Reason = "gh コマンドが見つかりませんでした"
+			f.Reason = i18n.T(i18n.KeyScaffoldDetectGHNotFound)
 		} else {
-			f.Reason = fmt.Sprintf("ボードの一覧を引けませんでした（%v）", err)
+			f.Reason = i18n.T(i18n.KeyScaffoldDetectProjectListFailed, err)
 		}
 		f.Advice = []string{
-			"ボードを読むには project の scope が要ります。`gh auth login -s project` でログインし直してください",
-			"または `continuo init --project <番号>` でボードの番号を直接指定してください",
+			i18n.T(i18n.KeyScaffoldDetectAdviceProjectScope),
+			i18n.T(i18n.KeyScaffoldDetectProjectAdviceFlag),
 		}
 		return f, 0, ""
 	}
@@ -450,26 +450,25 @@ func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeou
 	case 0:
 		// **探した owner を全部見せる。**「見つからない」だけでは、
 		// どこを探したのかが分からず、利用者は次の手を打てない。
-		f.Reason = fmt.Sprintf("ボードが1件も見つかりませんでした（探した owner: %s）",
-			strings.Join(searched, ", "))
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectProjectNone, strings.Join(searched, ", "))
 		f.Advice = []string{
-			"GitHub の画面でボードを1つ作るか、`gh project create --owner @me --title \"continuo\"` を実行してください",
-			"ボードが別の user / organization にあるなら、`continuo init --owner <名前> --project <番号>` を実行してください",
-			"作ったら `continuo init --project <番号>` でもう一度実行してください",
+			i18n.T(i18n.KeyScaffoldDetectProjectAdviceCreate),
+			i18n.T(i18n.KeyScaffoldDetectProjectAdviceOtherOwner),
+			i18n.T(i18n.KeyScaffoldDetectProjectAdviceRerun),
 		}
 	case 1:
 		number = projects[0].Number
 		boardOwner = projects[0].Owner
 		f.Value, f.Filled = strconv.Itoa(number), true
-		f.Reason = fmt.Sprintf("`gh project list` の候補が1件だけでした: %s #%d %s",
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectProjectSingle,
 			projects[0].Owner, projects[0].Number, projects[0].Title)
 	default:
-		f.Reason = fmt.Sprintf("ボードの候補が %d 件あります（探した owner: %s）",
+		f.Reason = i18n.T(i18n.KeyScaffoldDetectProjectMultiple,
 			len(projects), strings.Join(searched, ", "))
 		f.Candidates = projects
 		f.Advice = []string{
-			"`continuo init --project <番号>` で、使うボードを指定してもう一度実行してください",
-			"候補が別の owner のものなら、`--owner <名前>` も一緒に指定してください",
+			i18n.T(i18n.KeyScaffoldDetectProjectAdvicePick),
+			i18n.T(i18n.KeyScaffoldDetectProjectAdvicePickOwner),
 		}
 	}
 	return f, number, boardOwner

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "d2fb3793794f444d22e56bc837851ff6a647dc53a32046f1c24911b796af463c", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **候補の取り方と、着手を取りやめる経路の検査である。**
 //
@@ -86,7 +86,7 @@ func TestDispatch_空きスロットが尽きたらそれ以上dispatchしない
 	}
 }
 
-// {"RUCM-PATH": "P042"}
+// {"RUCM-PATH": "P043"}
 //
 // TestDispatch_既に印を持っているissueは二重にdispatchしない は、印の役目を確かめる。
 //
@@ -270,7 +270,7 @@ func TestDispatch_draft_issue_は信頼の検査に掛けない(t *testing.T) {
 	}
 }
 
-// {"RUCM-PATH": "P021"}
+// {"RUCM-PATH": "P022"}
 //
 // TestDispatch_テンプレートに一覧に無い変数を書いたらその issue を失敗にする は、
 // 描画の失敗の扱いを確かめる。
@@ -298,7 +298,7 @@ func TestDispatch_テンプレートに一覧に無い変数を書いたらそ�
 	}
 }
 
-// {"RUCM-PATH": "P024"}
+// {"RUCM-PATH": "P025"}
 //
 // TestDispatch_起動直後にblockedならescを送ってから失敗にする は、段10 の安全弁を確かめる。
 //
@@ -607,7 +607,7 @@ func TestDispatch_unknownのまま期限を過ぎたら人間へ渡さず試し�
 	}
 }
 
-// {"RUCM-PATH": "P034"}
+// {"RUCM-PATH": "P035"}
 //
 // TestDispatch_failure_stateのissueをrunning_stateへ上書きしない は、段2 の許可リストを確かめる。
 //
@@ -657,7 +657,7 @@ func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *
 	}
 }
 
-// {"RUCM-PATH": "P040"}
+// {"RUCM-PATH": "P041"}
 //
 // TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら拾わない は、
 // issue 単位の失敗の記録を確かめる。
@@ -696,7 +696,7 @@ func TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら
 	}
 }
 
-// {"RUCM-PATH": "P041"}
+// {"RUCM-PATH": "P042"}
 //
 // TestDispatch_絞り込みの食い違いが1件あっても他のissueのdispatchは続く は、
 // 巡回全体を止めないことを確かめる。
