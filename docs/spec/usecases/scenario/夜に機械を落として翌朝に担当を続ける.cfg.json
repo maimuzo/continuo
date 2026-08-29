@@ -1,0 +1,365 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "夜に機械を落として翌朝に担当を続ける",
+  "source": {
+    "file": "docs/spec/usecases/scenario/夜に機械を落として翌朝に担当を続ける.rucm.md",
+    "rucm_block_sha256": "1a6073d97aaa0087d329ee958f680de975137e1978183a0eed34922395dd2205"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "担当者は夜の前と同じこの機械の投稿者1人である。issue に入札の印のコメントは1件も増えていない。hold の印のコメントは1件も増えていない。worktree は夜の前と同じ場所に残っている。branch の名前は夜の前と同じである。issue の Status は running_state の選択肢のままである。"
+    },
+    "朝までに担当が移っている": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "担当者はほかの機械の投稿者である。この機械の worktree は残っている。push していない commit は残っている。この機械は issue にコメントを1件も書いていない。"
+    },
+    "期限をまたぐ": {
+      "when": "電源が落ちているあいだに担当者の最後のコメントから idle_timeout_ms を過ぎた場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            3
+          ]
+        }
+      ],
+      "postcondition": "担当者はほかの機械の投稿者である。branch の名前は夜の前と同じである。push した commit は残っている。push していない commit は失われている。会話の文脈は引き継がれていない。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者は就業時間の終わりに continuo を止める。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "利用者は機械の電源を落とす。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後のコメントから idle_timeout_ms を過ぎていないので、この issue に触らない。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "利用者は翌朝に同じ機械の電源を入れる。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "利用者はシステムに continuo の常駐の開始を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
+      "include": "再起動して実行中の issue を引き継ぐ"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT 最初の巡回で候補に出た issue の担当者がこの機械の投稿者1人のままである。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "include",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "INCLUDE USE CASE issue の担当を入札で決める",
+      "include": "issue の担当を入札で決める"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは前の日の worktree と身元ファイルのセッション UUID で会話の続きを開く。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは issue に進捗のコメントを1件書く。"
+    },
+    {
+      "id": "朝までに担当が移っている-1",
+      "type": "action",
+      "flow": "朝までに担当が移っている",
+      "step": 1,
+      "statement": "システムは担当者がほかの機械の投稿者であることを記録に残す。"
+    },
+    {
+      "id": "朝までに担当が移っている-2",
+      "type": "action",
+      "flow": "朝までに担当が移っている",
+      "step": 2,
+      "statement": "システムはこの issue を着手の対象から外す。"
+    },
+    {
+      "id": "朝までに担当が移っている-3",
+      "type": "action",
+      "flow": "朝までに担当が移っている",
+      "step": 3,
+      "statement": "システムは前の日の worktree を消さずに残す。"
+    },
+    {
+      "id": "朝までに担当が移っている-4",
+      "type": "abort",
+      "flow": "朝までに担当が移っている",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "期限をまたぐ-1",
+      "type": "action",
+      "flow": "期限をまたぐ",
+      "step": 1,
+      "statement": "ほかの機械は担当者を issue から外す。"
+    },
+    {
+      "id": "期限をまたぐ-2",
+      "type": "action",
+      "flow": "期限をまたぐ",
+      "step": 2,
+      "statement": "ほかの機械は入札をやり直す。"
+    },
+    {
+      "id": "期限をまたぐ-3",
+      "type": "action",
+      "flow": "期限をまたぐ",
+      "step": 3,
+      "statement": "ほかの機械は勝った機械の投稿者を担当者に加える。"
+    },
+    {
+      "id": "期限をまたぐ-4",
+      "type": "action",
+      "flow": "期限をまたぐ",
+      "step": 4,
+      "statement": "ほかの機械は同じ名前の branch で新しい worktree を作る。"
+    },
+    {
+      "id": "期限をまたぐ-5",
+      "type": "abort",
+      "flow": "期限をまたぐ",
+      "step": 5,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "期限をまたぐ-1",
+      "kind": "global",
+      "condition": "電源が落ちているあいだに担当者の最後のコメントから idle_timeout_ms を過ぎた場合"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "最初の巡回で候補に出た issue の担当者がこの機械の投稿者1人のままである"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "朝までに担当が移っている-1",
+      "kind": "false",
+      "condition": "NOT 最初の巡回で候補に出た issue の担当者がこの機械の投稿者1人のままである"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "朝までに担当が移っている-1",
+      "to": "朝までに担当が移っている-2",
+      "kind": "seq"
+    },
+    {
+      "from": "朝までに担当が移っている-2",
+      "to": "朝までに担当が移っている-3",
+      "kind": "seq"
+    },
+    {
+      "from": "朝までに担当が移っている-3",
+      "to": "朝までに担当が移っている-4",
+      "kind": "seq"
+    },
+    {
+      "from": "期限をまたぐ-1",
+      "to": "期限をまたぐ-2",
+      "kind": "seq"
+    },
+    {
+      "from": "期限をまたぐ-2",
+      "to": "期限をまたぐ-3",
+      "kind": "seq"
+    },
+    {
+      "from": "期限をまたぐ-3",
+      "to": "期限をまたぐ-4",
+      "kind": "seq"
+    },
+    {
+      "from": "期限をまたぐ-4",
+      "to": "期限をまたぐ-5",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "担当者は夜の前と同じこの機械の投稿者1人である。issue に入札の印のコメントは1件も増えていない。hold の印のコメントは1件も増えていない。worktree は夜の前と同じ場所に残っている。branch の名前は夜の前と同じである。issue の Status は running_state の選択肢のままである。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10"
+      ],
+      "steps": [
+        "利用者は就業時間の終わりに continuo を止める。",
+        "利用者は機械の電源を落とす。",
+        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後のコメントから idle_timeout_ms を過ぎていないので、この issue に触らない。",
+        "利用者は翌朝に同じ機械の電源を入れる。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
+        "システムは VALIDATES THAT 最初の巡回で候補に出た issue の担当者がこの機械の投稿者1人のままである。",
+        "INCLUDE USE CASE issue の担当を入札で決める",
+        "システムは前の日の worktree と身元ファイルのセッション UUID で会話の続きを開く。",
+        "システムは issue に進捗のコメントを1件書く。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "朝までに担当が移っている",
+      "postcondition": "担当者はほかの機械の投稿者である。この機械の worktree は残っている。push していない commit は残っている。この機械は issue にコメントを1件も書いていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "朝までに担当が移っている-1",
+        "朝までに担当が移っている-2",
+        "朝までに担当が移っている-3",
+        "朝までに担当が移っている-4"
+      ],
+      "steps": [
+        "利用者は就業時間の終わりに continuo を止める。",
+        "利用者は機械の電源を落とす。",
+        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後のコメントから idle_timeout_ms を過ぎていないので、この issue に触らない。",
+        "利用者は翌朝に同じ機械の電源を入れる。",
+        "利用者はシステムに continuo の常駐の開始を要求する。",
+        "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
+        "システムは VALIDATES THAT 最初の巡回で候補に出た issue の担当者がこの機械の投稿者1人のままである。",
+        "CONDITION: NOT 最初の巡回で候補に出た issue の担当者がこの機械の投稿者1人のままである",
+        "システムは担当者がほかの機械の投稿者であることを記録に残す。",
+        "システムはこの issue を着手の対象から外す。",
+        "システムは前の日の worktree を消さずに残す。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "期限をまたぐ",
+      "postcondition": "担当者はほかの機械の投稿者である。branch の名前は夜の前と同じである。push した commit は残っている。push していない commit は失われている。会話の文脈は引き継がれていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "期限をまたぐ-1",
+        "期限をまたぐ-2",
+        "期限をまたぐ-3",
+        "期限をまたぐ-4",
+        "期限をまたぐ-5"
+      ],
+      "steps": [
+        "利用者は就業時間の終わりに continuo を止める。",
+        "利用者は機械の電源を落とす。",
+        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後のコメントから idle_timeout_ms を過ぎていないので、この issue に触らない。",
+        "CONDITION: 電源が落ちているあいだに担当者の最後のコメントから idle_timeout_ms を過ぎた場合",
+        "ほかの機械は担当者を issue から外す。",
+        "ほかの機械は入札をやり直す。",
+        "ほかの機械は勝った機械の投稿者を担当者に加える。",
+        "ほかの機械は同じ名前の branch で新しい worktree を作る。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 19,
+    "nodes_covered": 19,
+    "edges_total": 18,
+    "edges_covered": 18
+  }
+}
