@@ -50,6 +50,18 @@ type BlockerRef struct {
 	State string
 }
 
+// Assignee は issue に付いた担当者1人である（設計 3-77b）。
+//
+// **ID とログイン名の両方を持つ。**担当者を書き足す／外す GraphQL のミューテーションは
+// ノード ID を要求し、**人間に見せる名前と、自分の担当かどうかの照合はログイン名で行う。**
+// どちらか片方だけでは、どちらの用にも足りない。
+type Assignee struct {
+	// ID は GitHub ユーザーのノード ID である。
+	ID string
+	// Login は GitHub のログイン名である。
+	Login string
+}
+
 // Comment は issue に付いた1件のコメントを正規化した形である。
 //
 // エージェントが `gh issue comment` で書いたコメントは author が人間のアカウントになり、
@@ -175,7 +187,21 @@ type Issue struct {
 	URL *string
 	// AssigneeID は担当者の ID である（SPEC.md 4.1.1 の assignee_id）。
 	// GitHub ユーザーのノード ID。担当者がいなければ nil。
+	//
+	// **担当者が複数いるときは先頭の1人である。**全員を見たいなら Assignees を読むこと。
 	AssigneeID *string
+	// Assignees は担当者の全員である（設計 3-77b）。担当者がいなければ空。
+	//
+	// **持ち回りの判定はこれを読む。**「担当者が自分1人か」「他人1人か」「2人以上か」で
+	// 振る舞いが変わるので、**先頭の1人だけでは判定できない。**
+	Assignees []Assignee
+	// AssigneeCount は担当者の人数である（GraphQL の `assignees.totalCount`）。
+	//
+	// **len(Assignees) と一致するとは限らない。**取得の窓（`assignees(first: 10)`）に
+	// 収まらないほど付いていると、件数だけが大きくなる。
+	// **「2人以上か」の判定はこちらで行う**（窓に収まらないほど付いているのは、
+	// まさに人間が触っている issue である）。
+	AssigneeCount int
 	// Labels はラベル名の一覧である（SPEC.md 4.1.1 の labels）。
 	// 前後の空白を落として小文字にし、空のラベルは捨て、重複は取り除いてある（3-13）。
 	Labels []string

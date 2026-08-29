@@ -371,6 +371,35 @@ func (o *Orchestrator) postStatusMove(
 // body: コメント本文。
 // 戻り値: 投稿に失敗したときのエラー。
 func (o *Orchestrator) postComment(ctx context.Context, nodeID, body string) error {
+	return o.postCommentWithMarker(ctx, nodeID, body, o.cfg.Tracker.Comments.SelfMarker)
+}
+
+// postOwnMarkedComment は、本文が自分で印を持っているコメントを1件書く（設計 3-77a）。
+//
+// **`self_marker` を付けない。**持ち回りのコメント（入札・hold・released）は
+// **本文の先頭が `<!-- continuo:bid -->` などの印そのものでなければならない。**
+// 前に `self_marker` が付くと、**別の機械がその入札を読めなくなる**（印で始まっていない）。
+//
+// **縮める処理は `postComment` と同じ1箇所を通る。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// nodeID: 投稿先の issue のノード ID。
+// body: 印を先頭に持つコメント本文。
+// 戻り値: 投稿に失敗したときのエラー。
+func (o *Orchestrator) postOwnMarkedComment(ctx context.Context, nodeID, body string) error {
+	return o.postCommentWithMarker(ctx, nodeID, body, "")
+}
+
+// postCommentWithMarker は、本文の先頭に付ける印を指定してコメントを1件書く。
+//
+// **ここが、手元の絶対パスを `~` に縮める唯一の場所である**（設計 3-73）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// nodeID: 投稿先の issue のノード ID。
+// body: コメント本文。
+// marker: 本文の先頭に付ける印。空なら付けない。
+// 戻り値: 投稿に失敗したときのエラー。
+func (o *Orchestrator) postCommentWithMarker(ctx context.Context, nodeID, body, marker string) error {
 	safe, redactErr := redact.Paths(body)
 	if redactErr != nil {
 		o.logger.Warn(
@@ -378,6 +407,6 @@ func (o *Orchestrator) postComment(ctx context.Context, nodeID, body string) err
 			"node_id", nodeID, "error", redactErr,
 		)
 	}
-	_, err := o.tracker.PostComment(ctx, nodeID, safe, o.cfg.Tracker.Comments.SelfMarker)
+	_, err := o.tracker.PostComment(ctx, nodeID, safe, marker)
 	return err
 }

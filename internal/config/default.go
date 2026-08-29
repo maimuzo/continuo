@@ -6,6 +6,27 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
+// 持ち回りのために continuo が issue へ書くコメントの印である（設計 3-77a / 3-77b / 3-77c）。
+//
+// **設定キーにしない。**この3つは continuo どうしが読み合う印であり、
+// **1台でも違う文字列を使うと、その機械の入札も担当も他の機械から見えなくなる。**
+// `tracker.comments.marker` / `self_marker`（エージェントと continuo のあいだの印）とは
+// 役割が違うので、同じところには置かない。
+//
+// **この印が先頭に付いたコメントは、エージェントへ渡す入力から外す**（設計 3-77a）。
+// **投稿者は問わない。**
+const (
+	// HandoffBidMarker は入札のコメントの印である。**入札のたびに新しく1件書く。**
+	HandoffBidMarker = "<!-- continuo:bid -->"
+	// HandoffHoldMarker は担当を取ったことを示すコメントの印である。**勝ったとき1件だけ書く。**
+	//
+	// **この印が1件でもあることが「その担当者は機械である」の唯一の証拠である**（設計 3-77b）。
+	// 印が1件も無い担当は人間が付けたものなので、continuo は奪わない。
+	HandoffHoldMarker = "<!-- continuo:hold -->"
+	// HandoffReleasedMarker は期限切れの担当を外したことを知らせるコメントの印である。
+	HandoffReleasedMarker = "<!-- continuo:released -->"
+)
+
 // DefaultConfig は front matter に書かれなかったキーへ入る既定値を返す。
 // front matter のパースはこの構造体へ上書きする形で行う（yaml.UnmarshalWithOptions は
 // 与えられた値へフィールド単位で上書きするため、front matter に書かれなかったキーは
@@ -23,6 +44,16 @@ func DefaultConfig() *Config {
 				Comments: TrackerProviderCommentsConfig{
 					Max:   50,
 					Order: "oldest_first",
+				},
+				// 同じボードを複数の機械で持ち回るときの取り決め（設計 3-77）。
+				Handoff: TrackerProviderHandoffConfig{
+					BidWindowMs:       180000,
+					IdleTimeoutMs:     64800000,
+					RecheckIntervalMs: 3600000,
+					// **既定のマージンは 10%。**枠を使い切る手前で入札をやめさせるための余白であり、
+					// 「continuo 以外の作業のために残しておく割合」でもある。
+					FiveHourMarginPercent: 10,
+					WeeklyMarginPercent:   10,
 				},
 			},
 			Comments: TrackerCommentsConfig{

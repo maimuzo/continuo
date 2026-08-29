@@ -371,6 +371,9 @@ func (e *e2eEnv) TestSettings(t *testing.T) {
 		{"  startup_timeout_ms: ", "  startup_timeout_ms: 10000"},
 		// 枠は読まない（実物の資格情報を読ませない。判定の対象でもない）。
 		{"  source: ", "  source: none"},
+		// **入札の締め切りを待たない**（設計 3-77）。既定の3分は、この手順書の
+		// 待ち（60秒）より長い。**待ちを縮めるだけで、判定の意味は変えない。**
+		{"      bid_window_ms: ", "      bid_window_ms: 0"},
 	})
 }
 
