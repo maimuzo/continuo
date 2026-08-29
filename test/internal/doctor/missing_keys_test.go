@@ -84,6 +84,17 @@ func TestDoctor_書かれていない設定項目があれば名前と差分の�
 	if !strings.Contains(remedies, "--missing-keys-patch") || !strings.Contains(remedies, "patch -p0") {
 		t.Fatalf("差分を当てるコマンドが出ていない: %q", remedies)
 	}
+	// **`patch` に当てる相手を引数で名指ししていること**（設計 3-75c）。
+	//
+	// **これが無いと Linux でだけ壊れる。**差分の `---` の行は WORKFLOW.md の絶対パスで、
+	// **GNU patch はそれを「いまいるディレクトリの外」として捨てる**
+	// （`Ignoring potentially dangerous file name` を出して当てずに終わる）。
+	// **macOS の Apple patch 2.0 はこの検査を持たない**ので、手元で当てても落ちない。
+	// **手元で当たることは、利用者の手元で当たることの根拠にならない。**
+	// だから当てて確かめるのではなく、**出す文字列の形をここで固定する。**
+	if !strings.Contains(remedies, "patch -p0 "+fx.WorkflowPath) {
+		t.Fatalf("当てる相手を patch の引数で名指ししていない: %q", remedies)
+	}
 	// **読むコマンドと当てるコマンドを分けて出す。**当てる前に読ませるためである。
 	if len(res.Remedies) != 2 {
 		t.Fatalf("差分を読むコマンドと当てるコマンドが揃っていない: %q", res.Remedies)

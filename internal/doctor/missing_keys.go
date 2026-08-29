@@ -81,7 +81,11 @@ func checkMissingKeys(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 		Notes:  missingKeyNotes(res.Keys),
 		Remedies: []string{
 			i18n.T(i18n.KeyDoctorMissingKeysRemedyShow, opts.ConfigPath),
-			i18n.T(i18n.KeyDoctorMissingKeysRemedyApply, opts.ConfigPath),
+			// **当てる相手を `patch` の引数でも名指しする。**差分の `---` / `+++` の行は
+			// WORKFLOW.md の絶対パスなので、**GNU patch はそれを「いまいるディレクトリの外」
+			// として捨てる**（設計 3-75c）。引数で名指しすれば、GNU patch でも
+			// macOS の Apple patch でも当たる。
+			i18n.T(i18n.KeyDoctorMissingKeysRemedyApply, opts.ConfigPath, opts.ConfigPath),
 		},
 	}
 }

@@ -153,7 +153,7 @@ func TestMissingKeys_親ごと無いときは親の1件にまとめる(t *testin
 // 目的: 利用者が節の並び順を入れ替えていても、**差分がそのファイルに当たる**こと。
 // **差分は雛形ではなく、利用者のファイルから組み立てている**ので当たる。
 // 与える情報: `polling` の節を先頭へ動かし、`restart` の節を落とした WORKFLOW.md。
-// 成功条件: `patch -p0` が通り、当てたあとに足りない項目が0件になること。
+// 成功条件: `patch -p0 <パス>` が通り、当てたあとに足りない項目が0件になること。
 func TestMissingKeys_並び順を変えていても差分が当たる(t *testing.T) {
 	content := reorderSections(t, fullWorkflow(t))
 	content = dropLines(t, content, "restart:")
@@ -167,7 +167,7 @@ func TestMissingKeys_並び順を変えていても差分が当たる(t *testing
 	if len(res.Keys) == 0 {
 		t.Fatal("足りない項目を1つも挙げていない")
 	}
-	applyPatch(t, res.Patch)
+	applyPatch(t, path, res.Patch)
 
 	after, err := os.ReadFile(path)
 	if err != nil {
@@ -258,7 +258,7 @@ func TestMissingKeys_親がその行で値を決めているなら子を足り�
 // 雛形の2スペースのまま差し込むと、当てたあとに front matter が読めなくなる。
 // 与える情報: front matter を4スペース刻みに書き直し、`tracker.automated_state_rewrite`
 // （v0.1.9 で増えた項目）を落とした WORKFLOW.md。
-// 成功条件: `patch -p0` が通り、当てたあとに front matter が読めて、足りない項目が0件になること。
+// 成功条件: `patch -p0 <パス>` が通り、当てたあとに front matter が読めて、足りない項目が0件になること。
 func TestMissingKeys_字下げが雛形と違っても当てたあと読める(t *testing.T) {
 	content := doubleIndent(t, fullWorkflow(t))
 	content = dropLines(t, content, "    automated_state_rewrite:")
@@ -275,7 +275,7 @@ func TestMissingKeys_字下げが雛形と違っても当てたあと読める(t
 	if !strings.Contains(res.Patch, "+    automated_state_rewrite:") {
 		t.Fatalf("差し込む行の字下げが兄弟に揃っていない:\n%s", res.Patch)
 	}
-	applyPatch(t, res.Patch)
+	applyPatch(t, path, res.Patch)
 
 	after, err := os.ReadFile(path)
 	if err != nil {
@@ -327,7 +327,7 @@ func TestMissingKeys_名前を利用者が決める対応表の中身は数え�
 // **その下の節を1つ足すときに一緒に持っていかれる。**利用者のファイルにその行が既にあるなら、
 // **差分に入れてはならない。**
 // 与える情報: その見出しの直下にある `naming:` の節だけを落とした WORKFLOW.md。
-// 成功条件: `patch -p0` が通り、当てたあとに見出しの行が1本だけであること。
+// 成功条件: `patch -p0 <パス>` が通り、当てたあとに見出しの行が1本だけであること。
 func TestMissingKeys_既にある見出しのコメントを二重に足さない(t *testing.T) {
 	const heading = "# ===== 後始末・使用量・二重起動の防止 ====="
 	content := dropLines(t, fullWorkflow(t), "naming:")
@@ -340,7 +340,7 @@ func TestMissingKeys_既にある見出しのコメントを二重に足さな�
 	if err != nil {
 		t.Fatalf("足りない項目を調べられません: %v", err)
 	}
-	applyPatch(t, res.Patch)
+	applyPatch(t, path, res.Patch)
 
 	after, err := os.ReadFile(path)
 	if err != nil {
@@ -410,20 +410,28 @@ func reorderSections(t *testing.T, content string) string {
 	return strings.Join(out, "\n")
 }
 
-// applyPatch は組み立てた差分を `patch -p0` で当てる。
+// applyPatch は組み立てた差分を `patch -p0 <path>` で当てる。
 //
 // **本物の `patch` に通す。**自前で当てて確かめると、`patch` が受け取らない形の差分を
 // 「当たる」と判定してしまう。**利用者の手元で走るのは `patch` である。**
 //
+// **当てる相手を引数で名指しするのは、`continuo doctor` が出す直し方の1行と
+// 同じ形にするためである**（設計 3-75c）。差分の `---` の行は WORKFLOW.md の絶対パスで、
+// **GNU patch はそれを「いまいるディレクトリの外」として捨てる**
+// （`Ignoring potentially dangerous file name`）。**macOS の Apple patch 2.0 は
+// この検査を持たないので、引数を落としても手元では落ちず、Linux でだけ落ちる。**
+// **ここで引数を落とさないこと。**
+//
 // t: 呼び出し元のテスト。`patch` が無い環境では飛ばす。
+// path: 当てる相手の WORKFLOW.md の絶対パス。
 // diff: 当てる unified diff。
-func applyPatch(t *testing.T, diff string) {
+func applyPatch(t *testing.T, path, diff string) {
 	t.Helper()
 	bin, err := exec.LookPath("patch")
 	if err != nil {
 		t.Skipf("patch が PATH にありません: %v", err)
 	}
-	cmd := exec.Command(bin, "-p0")
+	cmd := exec.Command(bin, "-p0", path)
 	cmd.Stdin = strings.NewReader(diff)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("patch が差分を当てられません: %v\n%s\n--- 差分 ---\n%s", err, out, diff)

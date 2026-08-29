@@ -327,8 +327,13 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
 **そのまま当てるなら、`patch` へ渡します。**当てる前に、上のコマンドで差分を読んでください。
 
 ```bash
-cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
 ```
+
+**最後の `WORKFLOW.md` を落とさないでください。**Linux の `patch`（GNU patch）は、
+差分の `---` の行が絶対パスだと**「いまいるディレクトリの外を書き換えようとしている」と見なして
+差分を捨てます**（`Ignoring potentially dangerous file name` が出て、1行も変わりません）。
+**当てる相手をこうして名指しすれば、Linux でも macOS でも当たります。**
 
 **当てても、あなたが書いた行は1つも消えません。**足すだけの差分です。
 **並び順を変えていても当たります。**差分は雛形ではなく、あなたの `WORKFLOW.md` から組み立てています。

@@ -85,6 +85,10 @@ const (
 	// KeyDoctorMissingKeysRemedyShow は足す差分を読むためのコマンドに出る。
 	KeyDoctorMissingKeysRemedyShow Key = "doctor.missing_keys.remedy_show"
 	// KeyDoctorMissingKeysRemedyApply は足す差分を当てるためのコマンドに出る。
+	//
+	// **WORKFLOW.md のパスを2回受け取る。**1つ目は差分を出す口へ、
+	// 2つ目は `patch` へ当てる相手として渡す。**当てる相手を名指ししないと
+	// GNU patch が差分を捨てる**（設計 3-75c）。
 	KeyDoctorMissingKeysRemedyApply Key = "doctor.missing_keys.remedy_apply"
 )
 

@@ -79,8 +79,14 @@ type MissingKeysResult struct {
 	Keys []string
 	// Patch は Keys を足すための unified diff である。**Keys が空なら空文字。**
 	//
-	// **`patch -p0` にそのまま渡せる形にしてある**（`---` と `+++` の行に
-	// WORKFLOW.md の絶対パスを書く）。
+	// **`---` と `+++` の行には WORKFLOW.md の絶対パスを書く。**どのファイルの差分なのかが、
+	// 差分だけを読んでも分かるようにするためである。
+	//
+	// **当てるときは `patch -p0 <WORKFLOW.md のパス>` と、相手を引数で名指しすること**
+	// （設計 3-75c）。**GNU patch は、`---` の名前が「いまいるディレクトリの外」を指していると
+	// その差分を捨てる**（`Ignoring potentially dangerous file name`）。絶対パスは、
+	// いまいるディレクトリが `/` でない限り必ず外を指すので、**引数が無いと当たらない。**
+	// macOS の Apple patch 2.0 はこの検査を持たないため、**手元だけで確かめると気づけない。**
 	Patch string
 	// Total は雛形の front matter にあるキーの総数である。
 	Total int

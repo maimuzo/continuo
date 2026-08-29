@@ -377,7 +377,7 @@
   "doctor.missing_keys.missing": "WORKFLOW.md に書かれていない設定項目があります（%d件／雛形は %d件）。書いていないあいだは continuo が持つ既定値が使われます",
   "doctor.missing_keys.more": "ほか %d 件",
   "doctor.missing_keys.ok": "雛形にある設定項目はすべて書かれています（%d件）",
-  "doctor.missing_keys.remedy_apply": "読んだうえで当てるなら: continuo doctor --missing-keys-patch %s | patch -p0",
+  "doctor.missing_keys.remedy_apply": "読んだうえで当てるなら: continuo doctor --missing-keys-patch %s | patch -p0 %s",
   "doctor.missing_keys.remedy_show": "足す差分を読むには: continuo doctor --missing-keys-patch %s",
   "doctor.missing_keys.unreadable": "WORKFLOW.md を読み直せなかったため、書かれていない設定項目を数えられません: %v",
   "doctor.rewrite_keys.board_unreadable": "ボードを読めなかったため、対応表のキーを照合できませんでした",

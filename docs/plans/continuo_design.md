@@ -7027,8 +7027,10 @@ turn の途中でも即座に止まっていた。**エージェントが自分�
 
 ```text
 → 足す差分を読むには: continuo doctor --missing-keys-patch <パス>
-→ 読んだうえで当てるなら: continuo doctor --missing-keys-patch <パス> | patch -p0
+→ 読んだうえで当てるなら: continuo doctor --missing-keys-patch <パス> | patch -p0 <パス>
 ```
+
+**当てる相手を `patch` の引数でも名指しする**（3-75c）。
 
 **continuo は書き換えない。**書き換えるのは `patch` である。
 **利用者が当てる前に差分を読める形にする**ためで、`continuo setup` のように直接書く形にはしない。
@@ -7082,6 +7084,49 @@ Status を割り当てる8つのキーだけで、**雛形にあって設定に�
 **`findKeyLine` は「親の最初の子と同じ深さの行」だけを子として数える。**
 「親より深ければ子」にすると、雛形にある `tracker.provider.comments` を
 `tracker.comments` と取り違える（前者のほうが先に書かれている）。
+
+### 3-75c. 差分を当てる相手は `patch` の引数で名指しする
+
+**言いたいこと。**差分の `---` の行に絶対パスを書いたまま `patch -p0` へ流すと、
+**Linux では1行も当たらない。**GNU patch がその名前を捨てるためである。
+**当てる相手を引数で名指しする**（`patch -p0 <パス>`）。
+
+**採る形。**
+
+| どこ | 出す文字列 |
+| --- | --- |
+| `doctor` の直し方 | `continuo doctor --missing-keys-patch <絶対パス> \| patch -p0 <絶対パス>` |
+| [docs/FAQ.md](../FAQ.md) / [docs/upgrading.md](../upgrading.md) | `cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md \| patch -p0 WORKFLOW.md` |
+| テスト（[test/internal/scaffold/missing_keys_test.go](../../test/internal/scaffold/missing_keys_test.go)） | `exec.Command(bin, "-p0", path)` |
+
+**差分の `---` / `+++` の行は絶対パスのままにする。**差分だけを読んだ人が、
+**どのファイルの差分なのかを判断できる**必要がある。
+
+**なぜ名指しが要るか。**GNU patch は、差分の中の名前が**いまいるディレクトリの外**を
+指していると、その差分を捨てる（`Ignoring potentially dangerous file name` を出し、
+`1 out of 1 hunk ignored` で終了コード 1）。**絶対パスは、いまいるディレクトリが `/` でない限り
+必ず外を指す。**引数で名指しすると、patch は差分の中の名前を使わないので当たる。
+
+**版の違いではない。**2026-08-29 に、同じ差分を同じ絶対パスで実測した。
+
+| patch | いまいるディレクトリが `/` | それ以外 | 引数で名指し |
+| --- | --- | --- | --- |
+| GNU patch 2.7.6（ubuntu 24.04） | 当たる | **捨てる** | 当たる |
+| GNU patch 2.8（ubuntu 26.04 / debian trixie） | 当たる | **捨てる** | 当たる |
+| Apple patch 2.0-12u11（macOS） | 当たる | 当たる | 当たる |
+
+**macOS の `/usr/bin/patch` はこの検査を持たない。**だから
+**手元で当たることは、利用者の手元で当たることの根拠にならない。**
+[test/internal/doctor/missing_keys_test.go](../../test/internal/doctor/missing_keys_test.go) で
+**出す文字列に当てる相手が入っていることを固定する。**当てて確かめる形では、macOS で守れない。
+
+**採らなかった案。**
+
+| 案 | 採らない理由 |
+| --- | --- |
+| `---` の行をファイル名だけにする | **当てる人がそのディレクトリにいないと当たらない。**差分を読んでも、どのファイルのものか分からなくなる |
+| `patch -d / -p0` にする | 通るのは「`/` にいれば絶対パスは外を指さない」からで、**利用者に見せるコマンドとして意味が読み取れない** |
+| `git apply` に替える | **利用者の `WORKFLOW.md` が git の管理下にあるとは限らない**（`continuo init` はリポジトリを作らない） |
 
 
 ## 4. 人間が決めたこと

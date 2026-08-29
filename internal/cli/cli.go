@@ -905,8 +905,12 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 // **雛形にあって WORKFLOW.md に書かれていない設定項目を足す差分だけを、
 // 標準出力へそのまま出す。**検査は1つも行わず、外部へも1回も出ない。
 //
-// **`patch -p0` にそのまま渡せる形にしてある。**`continuo doctor` が出す直し方の
-// 1行が、この口をそのまま呼ぶ（`continuo doctor --missing-keys-patch <パス> | patch -p0`）。
+// **`patch` にそのまま渡せる形にしてある。**`continuo doctor` が出す直し方の
+// 1行が、この口をそのまま呼ぶ
+// （`continuo doctor --missing-keys-patch <パス> | patch -p0 <パス>`）。
+//
+// **当てる相手をパイプの先の引数でも名指しする**（設計 3-75c）。差分の `---` の行は
+// 絶対パスなので、**GNU patch はそれを「いまいるディレクトリの外」として捨てる。**
 //
 // **書かない。**書き換えるのは `patch` であり、continuo ではない。
 // **利用者が当てる前に差分を読めるようにするため**で、`continuo setup` のように
