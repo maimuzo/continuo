@@ -172,6 +172,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		return
 	}
 
+	// **持ち回りの判定でコメントを読む枠を、巡回1回ぶんに戻す**（設計 3-77a）。
+	o.resetHandoffFetchBudget()
+
 	var claimed []claimedRun
 	for _, issue := range candidates {
 		if ctx.Err() != nil {
@@ -217,9 +220,41 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			break
 		}
 
-		if rs, ok := o.claimForDispatch(ctx, issue); ok {
-			claimed = append(claimed, claimedRun{rs: rs, issue: issue})
+		// 段0: dispatch の直前の検査（設計 3-6 の「issue ごと」の表）。
+		// **持ち回りの判定より先に行う**（設計 3-77b）。**担当者を書いてから落とすと、
+		// 着手しなかった issue に担当者と hold だけが残り、ほかの機械は
+		// `idle_timeout_ms`（既定18時間）触らない。**この機械では信頼していないが
+		// 別の機械では信頼しているリポジトリが、そのあいだ塞がる。
+		if !o.preflight(ctx, issue) {
+			continue
 		}
+
+		// 段-0: 担当の持ち回りを決める（設計 3-77）。**空きスロットを数えたあとに行う。**
+		// 入札に勝つのは「いま着手できる機械」でなければならず、
+		// **枠が空いていない機械が勝つと、issue は誰にも着手されないまま止まる。**
+		decision := o.handoffGate(ctx, issue)
+		if decision.stop {
+			// **コメントを読む枠を使い切った。**候補はボードの並び順で来るので、
+			// 上から順に見ることは保たれる。**続きは次の巡回で見る。**
+			break
+		}
+		if !decision.proceed {
+			continue
+		}
+
+		rs, ok := o.claimForDispatch(ctx, issue)
+		if !ok {
+			if decision.acquired {
+				// **この巡回で書いた担当者を消し戻す**（設計 3-77c）。
+				o.undoHandoffAcquire(ctx, issue)
+			}
+			continue
+		}
+		// **担当者になった直後は、確かめ直しの時計を進めておく**（設計 3-77c）。
+		// 進めないと、最初の turn の終わりで必ず issue を1件取り直すことになる。
+		rs.markHandoffChecked(o.now())
+		rs.setHandoffAcquired(decision.acquired)
+		claimed = append(claimed, claimedRun{rs: rs, issue: issue})
 	}
 	if len(claimed) == 0 {
 		return
@@ -348,10 +383,9 @@ func hasRequiredLabels(issue tracker.Issue, required []string) bool {
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 着手する issue。
 func (o *Orchestrator) claimForDispatch(ctx context.Context, issue tracker.Issue) (*runState, bool) {
-	// 段0: dispatch の直前の検査（設計 3-6 の「issue ごと」の表）。
-	if !o.preflight(ctx, issue) {
-		return nil, false
-	}
+	// **段0（dispatch の直前の検査）は呼び出し側が済ませている。**
+	// **持ち回りの判定より先に通しておく必要がある**（設計 3-77b）。ここで呼ぶと、
+	// 担当者を書いたあとで落ちることになり、着手しなかった issue が18時間塞がる。
 
 	// 段1: 印を付け、実行中の一覧へ入れる。
 	rs, ok := o.claim(issue.ID, issue)
@@ -394,6 +428,12 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 		if rs.claimTerminal(ctx) {
 			o.stopWorker(ctx, rs)
 			o.release(rs)
+		}
+		// **この着手で書いた担当者を消し戻す**（設計 3-77c）。ボードは continuo が
+		// 触る前の状態のままなので、issue の担当者も元へ戻す。**残すと、着手しなかった
+		// issue をほかの機械が18時間触らない。**
+		if rs.handoffAcquired() {
+			o.undoHandoffAcquire(ctx, issue)
 		}
 		return
 	}

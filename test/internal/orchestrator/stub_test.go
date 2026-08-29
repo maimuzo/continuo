@@ -209,6 +209,8 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 	cfg := *config.DefaultConfig()
 	cfg.Workspace.Root = filepath.Join(root, "wt")
 	cfg.Claude.TurnTimeoutMs = 60000
+	// **入札の締め切りを待たない**（設計 3-77）。
+	cfg.Tracker.Provider.Handoff.BidWindowMs = 0
 	cfg.RateLimit.Source = "none"
 	if opts.Mutate != nil {
 		opts.Mutate(&cfg)
@@ -238,6 +240,8 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		GHAuthCheck:    opts.GHAuthCheck,
 		// **本物の `gh` を起動させない**（設計 3-65）。
 		GHLogin: ghLoginForTest(opts.GHLogin),
+		// **機械の名前を固定する**（設計 3-77）。走らせる機械によって結果が変わらないようにする。
+		HostName: testHostName,
 	})
 	if err != nil {
 		t.Fatalf("orchestrator.New に失敗した: %v", err)

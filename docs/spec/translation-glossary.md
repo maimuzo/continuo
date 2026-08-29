@@ -173,6 +173,7 @@
 | 日本語 | 英語 | どこに出るか |
 | --- | --- | --- |
 | 何も消していません。 | `Nothing was deleted.` | `continuo abandon` の10箇所 |
+| 【なぜ】 | `Why:` | 担当が移った run を止めるときの理由 |
 | 【確かめ方】 | `How to check:` | doctor の10箇所 |
 | 【対処】 | `What to do:` | doctor の9箇所 |
 | 【よくある原因】 | `Common causes:` | doctor の8箇所。**1件でも複数形のまま** |

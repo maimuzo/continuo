@@ -30,8 +30,23 @@ tracker:
     token_source: gh_auth                   # gh_auth なら gh auth token コマンドで取る。env なら下の token_env から取る
     token_env: GITHUB_TOKEN                 # token_source が env のときに読む環境変数の名前
     comments:                               # GitHub からコメントを何件どの順で取るか。GitHub の上限に縛られる項目だけを置く
-      max: 50                               # 判別のために何件まで遡って読むか。GitHub は一度に100件までしか返さない
+      max: 50                               # 1回の取得で何件ずつ取るか。GitHub は一度に100件までしか返さない。
+                                            # 打ち切りの件数ではない。続きがある限り取り直して、コメントは全部読む
       order: oldest_first                   # 読む順番。古いコメントから読む
+    handoff:                                # 同じボードを複数の機械で見張るときの取り決め。担当は issue の担当者で持つ
+      bid_window_ms: 180000                 # 入札を締め切るまでの待ち時間。180000 なら3分。
+                                            # 数えはじめるのは、その issue へ最初の入札が入った時刻である。
+                                            # 上の polling.interval_ms より十分長く取ること
+      idle_timeout_ms: 64800000             # 担当者の最後のコメントからこれだけ経つと担当を外して入札をやり直す。
+                                            # 64800000 なら18時間。終業時に機械を落とした人が翌朝に再開できる長さ。
+                                            # hold のコメントが1件も無い担当は、人間が付けたものなので外さない
+      recheck_interval_ms: 3600000          # 走っている最中に担当を確かめ直す間隔。3600000 なら1時間。
+                                            # 担当が移っていたら、その turn の終わりで止めて push しない。0 なら確かめ直さない
+      five_hour_margin_percent: 10          # 5時間の枠のうち、continuo のために残しておきたい割合。
+                                            # 5時間余裕値 = 100 − 5時間の使用率 − この値
+      weekly_margin_percent: 10             # 1週間の枠のうち、continuo のために残しておきたい割合。
+                                            # 1週間余裕値 = 100 − 1週間の使用率 − この値。
+                                            # どちらかの余裕値がマイナスなら入札しない
   comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
     marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
     self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
@@ -203,6 +218,16 @@ language: auto                              # 画面に出す文言の言語。a
     gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}} --jq '{author: .user.login, author_association: .author_association, body: .body}'
 
 **1つ目がコメント、2つ目が issue の本文です。両方とも実行してください。**
+
+**次の3つで始まるコメントは読み飛ばしてください。**
+
+    <!-- continuo:bid -->
+    <!-- continuo:hold -->
+    <!-- continuo:released -->
+
+**これは、同じボードを見張っている機械どうしが「この issue を誰が処理するか」を
+決めるために書いているものです。**中身は枠の使用率と機械の名前だけで、
+**あなたへの指示は1文字も入っていません。**作業の材料にもしないでください。
 
 **どちらも JSON を返します。返ってきた JSON をそのまま読んでください。**
 **JSON を1行のテキストへ潰さないでください。**書いた人の立場は JSON のキーの値として届きます。

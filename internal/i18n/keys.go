@@ -217,6 +217,17 @@ const (
 	KeyFsprobeHomeDirFailed Key = "fsprobe.home_dir_failed"
 	// KeyFsprobeClaudeHomeFailed は Claude Code の設定ディレクトリに書けなかったときのエラーに出る。
 	KeyFsprobeClaudeHomeFailed Key = "fsprobe.claude_home_failed"
+
+	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77b / 3-77c）。
+
+	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
+	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
+	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
+	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
+	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
+	KeyHandoffLostReason Key = "handoff.lost.reason"
+	// KeyHandoffLostUnknownHost は、担当が移った先の機械の名前を読めなかったときに差し込む。
+	KeyHandoffLostUnknownHost Key = "handoff.lost.unknown_host"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
 )
@@ -1171,6 +1182,21 @@ const (
 	// herdr.worktree.branch_template に issue の番号が入っていないときに出る。
 	// **既に設定している利用者が居るので、なぜ要るのかを書く。**
 	KeyConfigValidateBranchTemplateNeedsIssueNumber Key = "config.validate.branch_template_needs_issue_number"
+	// KeyConfigValidateHandoffBidWindowRange は
+	// tracker.provider.handoff.bid_window_ms が負のときに出る。
+	KeyConfigValidateHandoffBidWindowRange Key = "config.validate.handoff_bid_window_range"
+	// KeyConfigValidateHandoffIdleTimeoutRange は
+	// tracker.provider.handoff.idle_timeout_ms が負のときに出る。
+	KeyConfigValidateHandoffIdleTimeoutRange Key = "config.validate.handoff_idle_timeout_range"
+	// KeyConfigValidateHandoffRecheckIntervalRange は
+	// tracker.provider.handoff.recheck_interval_ms が負のときに出る。
+	KeyConfigValidateHandoffRecheckIntervalRange Key = "config.validate.handoff_recheck_interval_range"
+	// KeyConfigValidateHandoffMarginRange は
+	// tracker.provider.handoff の2つのマージンが 0〜100 の外にあるときに出る。
+	//
+	// **5時間と1週間で同じ文言を使う。**求めるものが同じなので、
+	// 2つに分けると同じ日本語を2箇所で直すことになる。
+	KeyConfigValidateHandoffMarginRange Key = "config.validate.handoff_margin_range"
 )
 
 // 設定値の環境変数展開・チルダ展開（internal/config の expand）のエラーの文言。
@@ -2300,6 +2326,10 @@ var allKeys = []Key{
 	KeyFsprobeHomeDirFailed,
 	KeyFsprobeClaudeHomeFailed,
 	KeyFsprobeWorkspaceRootFailed,
+	KeyHandoffReleasedReassign,
+	KeyHandoffReleasedDoNotPush,
+	KeyHandoffLostReason,
+	KeyHandoffLostUnknownHost,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
 	KeyDoctorHerdrRemedySocketAbs,
@@ -2672,6 +2702,10 @@ var allKeys = []Key{
 	KeyConfigValidateInvalidValue,
 	KeyConfigValidateRequired,
 	KeyConfigValidateBranchTemplateNeedsIssueNumber,
+	KeyConfigValidateHandoffBidWindowRange,
+	KeyConfigValidateHandoffIdleTimeoutRange,
+	KeyConfigValidateHandoffRecheckIntervalRange,
+	KeyConfigValidateHandoffMarginRange,
 	KeyConfigExpandTrailingDollar,
 	KeyConfigExpandUnclosedBrace,
 	KeyConfigExpandEmptyEnvName,
