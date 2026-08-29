@@ -1536,6 +1536,31 @@ func stopEvent(sessionID, transcriptPath, promptID string) hookserver.HookEvent 
 	}
 }
 
+// runningShellStopEvent は「background_tasks にバックグラウンドの shell が載っている Stop」
+// を作る（設計 3-2 / 1-7）。
+//
+// **これは Claude Code 自身の「まだ動いています」という申告である。**
+// `type` が `shell` なので、走行中の subagent の印（設計 3-11）はこれでは動かない。
+// **`Stop` の中身だけで「まだ動いている」と判定できることを確かめるためにこの形にしている**
+// （subagent が載る形は turn_test.go の runningStopEvent が作る）。
+//
+// sessionID: セッション UUID。
+// transcriptPath: transcript のパス。
+// promptID: prompt_id。
+// 戻り値: hook のイベント。
+func runningShellStopEvent(sessionID, transcriptPath, promptID string) hookserver.HookEvent {
+	running := []hookserver.BackgroundTask{{
+		ID:          "bmr1ksf9i",
+		Type:        "shell",
+		Status:      "running",
+		Description: "テストの実行",
+		Command:     "sleep 45",
+	}}
+	ev := stopEvent(sessionID, transcriptPath, promptID)
+	ev.BackgroundTasks = &running
+	return ev
+}
+
 // taskNotificationEvent は `<task-notification>` の UserPromptSubmit を作る
 // （**これが来たら turn は続いている**）。
 //

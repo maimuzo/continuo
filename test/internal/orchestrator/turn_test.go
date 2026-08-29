@@ -114,6 +114,105 @@ func TestTurn_background_tasksの項目が欠けていたらturnの終わりと�
 	}
 }
 
+// TestTurn_まだ動いていると名乗ったStopを捨てない は、issue #77 の欠陥を塞ぐ。
+//
+// 目的: 設計 3-2 の「`background_tasks` が空でない → **まだ動いている。turn の終わりとしては
+// 扱わない**」と、設計 1-7 の「待っていれば `background_tasks` が空の `Stop` が来る」を
+// 守っていることを示す。
+//
+// **欠陥はこうだった。**空でない `Stop` は「空の `Stop`」ではないので読み捨てられ、
+// `settle_ms`（既定2000ミリ秒）が過ぎたところで turn の終わりを検知できなかったとして
+// pane を閉じていた。**「まだ動いています」と名乗ってきた2秒後に殺していた。**
+//
+// 与える情報: 1回目の `agent.prompt` のあとに、バックグラウンドの shell を1件載せた
+// `Stop` が届く。**しばらく空の `Stop` は来ない。**
+// 成功条件: run が生き続け、リトライも積まれないこと。そのあと空の `Stop` を受けて初めて
+// turn が終わること。
+func TestTurn_まだ動いていると名乗ったStopを捨てない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\nCONTINUO-STATUS: review", false),
+	})
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **Claude Code 自身の「まだ動いています」という申告。**
+		fx.Orc.OnHook(runningShellStopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+
+	// settle_ms（50ms）と poll_wait_ms（200ms）の何倍も待っても、まだ生きていること。
+	time.Sleep(1 * time.Second)
+	if len(fx.Orc.RunningIdentifiers()) == 0 {
+		t.Fatalf("まだ動いていると名乗った Stop を受けたのに run を終わらせた:\n%s", fx.Logs.String())
+	}
+	if strings.Contains(fx.Logs.String(), "run を諦めてリトライを積みました") {
+		t.Fatalf("まだ動いていると名乗った Stop を捨てて run を諦めた:\n%s", fx.Logs.String())
+	}
+
+	// バックグラウンド処理が終わり、空の `Stop` が来る。
+	fx.Tracker.SetState("PVTI_item188", "Done")
+	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+	fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+
+	waitFor(t, 10*time.Second, "空の Stop で turn が終わる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+}
+
+// TestTurn_Stopが読めなかったときは届かなかったと書かない は、issue #77 の後半を塞ぐ。
+//
+// 目的: `background_tasks` の項目が欠けた `Stop`（判定不能）で打ち切るときに、
+// **「Stop hook から continuo へ通知が届きませんでした」と書かない**ことを示す。
+// **届いている。読めなかっただけである。**逆に書くと、読んだ人は正常に配線されている
+// hook の設定ファイルを確かめに行かされる。
+//
+// 与える情報: `background_tasks` の項目そのものが無い `Stop`。
+// 成功条件: 打ち切りの理由が「Stop hook は continuo へ届きましたが」で、
+// 「届きませんでした」を含まないこと。
+func TestTurn_Stopが読めなかったときは届かなかったと書かない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		fx.Orc.OnHook(hookserver.HookEvent{
+			HookEventName: "Stop",
+			SessionID:     "session-1",
+			PromptID:      "p1",
+			// BackgroundTasks は nil のまま（項目が欠けている状態）。
+		})
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 20*time.Second, "判定不能として打ち切られる", func() bool {
+		return strings.Contains(fx.Logs.String(), "run を諦めてリトライを積みました")
+	})
+
+	logs := fx.Logs.String()
+	if !strings.Contains(logs, "Stop hook は continuo へ届きましたが") {
+		t.Fatalf("届いていたことを理由に書いていない:\n%s", logs)
+	}
+	if strings.Contains(logs, "Stop hook から continuo へ通知が届きませんでした") {
+		t.Fatalf("届いていたのに「届かなかった」と書いている:\n%s", logs)
+	}
+}
+
 // TestTurn_表明が無かった次のturnで促す は、設計 3-25 の第3層を確かめる。
 //
 // 目的: 「表明せずに終わったら、次の turn の継続の指示で促す（hook から差し戻す仕組みは

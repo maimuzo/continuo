@@ -852,8 +852,14 @@ flowchart TB
 Stop hook を受け取ったとき:
   background_tasks が空でない
     → まだ動いている。turn の終わりとしては扱わない
+    → **捨てずに、待ち時間を仕切り直して待ち直す。**待っていれば空の Stop が来る（1-7）
+      **捨てると、settle_ms が尽きた時点で「Stop hook が届かなかった」として pane を閉じる。**
+      「まだ動いています」と名乗ってきた 2 秒後に殺すことになる
+    → **総時間では打ち切らない。**打ち切るかどうかは巡回の判定だけが決める（3-21）
   background_tasks の項目が欠けている
     → 判定不能。turn の終わりとみなさない（連続したら stall 検知へ）
+    → **打ち切るときの文面は「届かなかった」と書かない。**届いてはいる。
+      「届いたが background_tasks が無くて判断できなかった」と書き分ける
   background_tasks が空配列
     → settle_ms（既定 2000）のあいだ待ち、
       <task-notification> で始まる UserPromptSubmit が来なければ turn の終わりとする
