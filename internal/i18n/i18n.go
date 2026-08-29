@@ -4,6 +4,10 @@
 // **日本語が正である。**messages/ja.json に全部のキーがあり、ほかの言語はそこからの
 // 差分として置く。**訳が無いキーは日本語へ落とす。**生のキーを画面に出さない。
 //
+// **画面に出す既定は英語である**（DefaultLang）。**正が日本語であることとは別の話で、
+// この2つは食い違っていてよい**（設計 3-35b）。正は「文言を書くときの原文の言語」、
+// 既定は「設定でも LANG でも言語が決まらなかったときに出す言語」である。
+//
 // **書式は fmt の verb をそのまま使う。**`%d` に3桁区切りを入れたりしないので、
 // `project #1234` が `project #1,234` に化けることがない。Errorf は fmt.Errorf を
 // そのまま呼ぶので `%w` の連鎖も切れない。
@@ -40,11 +44,14 @@ type Lang string
 const (
 	// LangJA は日本語である。**資源の正はこの言語である。**
 	LangJA Lang = "ja"
-	// LangEN は英語である。**いまは資源が空である。**
+	// LangEN は英語である。**いまは資源の中身が日本語の複製である。**
 	//
 	// **中途半端に訳さない。**一部だけ英訳すると、1つの画面に英語と日本語が混ざる
 	// （実際、13件だけ訳したとき `doctor` の出力が混ざった）。**混ざったものは、
 	// 全部日本語であるより読みにくい。**訳すときは全部訳す。
+	//
+	// **本物の英語に置き換えるまでは、messages/en.json は messages/ja.json の複製である**
+	// （設計 3-35b）。訳した分から差し替えれば、そのまま本来の形になる。
 	LangEN Lang = "en"
 )
 
@@ -54,7 +61,14 @@ const (
 const SourceLang = LangJA
 
 // DefaultLang は言語を決められなかったときに使う言語である。
-const DefaultLang = LangJA
+//
+// **英語である。正の言語（SourceLang）とは別であることに注意すること**（設計 3-35b）。
+// continuo は公開して配るので、`LANG` を持たない環境（CI・コンテナ・`env -i`）で
+// 日本語が出ると、読めない人が最初の画面で詰まる。
+//
+// **日本語で使いたい人は WORKFLOW.md に `language: ja` と書く**（`language: auto` の
+// ままでも、`LANG` が `ja_JP.UTF-8` なら日本語になる）。
+const DefaultLang = LangEN
 
 // EnvLangName は言語を決めるときに読む環境変数の名前である。
 //
@@ -124,6 +138,13 @@ func init() {
 	for lang, messages := range raw {
 		catalogs[lang] = &Catalog{lang: lang, messages: messages, source: source}
 	}
+	// **既定の言語（英語）の資源のファイルそのものが無いときは落とす。**
+	// 中身が `{}` なら正の言語へ落ちるので落とさないが、ファイルが無いと
+	// Use も currentCatalog も nil を掴み、文言を1つも引けなくなる。
+	// **DefaultLang と SourceLang が別の言語になったので、正の空判定では覆えない**（設計 3-35b）。
+	if catalogs[DefaultLang] == nil {
+		panic(fmt.Sprintf("i18n: 既定の言語 %s の資源がありません（messages/%s.json）", DefaultLang, DefaultLang))
+	}
 	current.Store(catalogs[DefaultLang])
 }
 
@@ -160,6 +181,29 @@ type Catalog struct {
 	messages map[Key]string
 	// source は正の言語（日本語）のキーと書式文字列の対応である。訳が無いときの落とし先。
 	source map[Key]string
+}
+
+// NewCatalog は与えた文言から資源を1つ作る。落とし先は正の言語（日本語）の埋め込んだ資源である。
+//
+// **いまの呼び出し元はテストだけである。**埋め込んだ資源だけでは落とし先（訳の無いキーを
+// 正の言語から引くこと）を検査できない。**`messages/en.json` が `messages/ja.json` の複製で、
+// 訳の無いキーが1つも無いためである**（設計 3-35b）。**穴の空いた資源をここで組んで、
+// 落とし先が効くことを確かめる。**テストは `test/` の下の別 package に置く決まりなので、
+// package の中の変数を直接触れない。
+//
+// lang: 作る資源の言語。
+// messages: この言語の文言。nil でもよい（そのとき全部のキーが正の言語へ落ちる）。
+// 戻り値: 資源。渡した map は複製するので、あとから書き換えても影響しない。
+func NewCatalog(lang Lang, messages map[Key]string) *Catalog {
+	copied := make(map[Key]string, len(messages))
+	for k, v := range messages {
+		copied[k] = v
+	}
+	var source map[Key]string
+	if c := catalogs[SourceLang]; c != nil {
+		source = c.messages
+	}
+	return &Catalog{lang: lang, messages: copied, source: source}
 }
 
 // Lang はこの資源の言語を返す。
@@ -275,8 +319,8 @@ func Supported(lang Lang) bool {
 
 // Use は以後 T / Errorf が使う言語を決める。
 //
-// **資源の無い言語を渡したときは既定の言語にする。**画面に何も出せなくなるより、
-// 日本語で出るほうがましである（呼ぶ前に Resolve で弾くこと）。
+// **資源の無い言語を渡したときは既定の言語（英語）にする。**画面に何も出せなくなるより、
+// 資源のある言語で出るほうがましである（呼ぶ前に Resolve で弾くこと）。
 //
 // lang: 使う言語。
 func Use(lang Lang) {
@@ -322,7 +366,7 @@ func Errorf(key Key, args ...any) error { return currentCatalog().Errorf(key, ar
 //
 // **読むのは LANG だけである**（EnvLangName の説明を参照）。
 // `ja_JP.UTF-8` / `ja-JP` / `ja` のいずれも `ja` になる。`C` と `POSIX`、
-// 資源の無い言語、空のときは既定の言語（日本語）にする。
+// 資源の無い言語、空のときは**既定の言語（英語）**にする。
 //
 // getenv: 環境変数を引く関数（os.Getenv を渡す。テストはmockを渡す）。
 // 戻り値: 決まった言語。

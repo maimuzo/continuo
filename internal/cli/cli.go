@@ -566,7 +566,7 @@ func useLanguageFromConfig(path string) {
 //
 // **`config.Load` が対応していない言語を先に弾いている**ので、ここへ来る値は
 // 空文字・`auto`・資源のある言語のいずれかである。i18n.Resolve はそれ以外の値に対しても
-// 既定の言語（日本語）を返すので、決められないまま進むことはない。
+// 既定の言語（i18n.DefaultLang）を返すので、決められないまま進むことはない。
 //
 // cfg: config.Load を通した設定。
 func useLanguage(cfg config.Config) {
