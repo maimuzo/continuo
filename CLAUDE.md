@@ -181,15 +181,12 @@ os.Rename(tmp.Name(), path)
 **既に draft を外してしまったものは、`gh pr ready --undo` で戻してからレビューする。**
 
 **この規則は機械で止める。**[.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) が
-PR のマージと ready を実行の前に見て、**一律で拒否する。**
-**PR 番号も、レビュー結果が貼ってあるかも見ない。**`gh` を呼ばず、`--undo`（draft へ戻す）と
-`--help` だけを通す。**貼ってあるかを確かめるのは人間である。**
+`gh pr merge <番号>` と `gh pr ready <番号>` を実行の前に見て、**目印が無ければ拒否する。**
+**目印は、コメントの先頭に無ければ数えない**（投稿者が OWNER / MEMBER / COLLABORATOR であることも見る）。
 
 **規則に書くだけでは守られなかった**（2026-08-29。12本をレビューせずにマージし、あとから回し直すことになった）。
 **人間が明示的に許すときだけ、環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を置いて通す。**
 **AI が自分でその環境変数を置いてはならない。**
-**だから上の手順5（draft を外す）とマージは、人間がこの環境変数を置いた状態でしか実行できない。**
-**AI は、レビュー結果を貼り終えたところで手を止め、人間に実行を頼むこと。**
 
 **置くのは、`claude` を起動する前のシェルだけである。**hook は `claude` プロセス自身の環境変数を読む。
 **セッションの中で Bash ツールから `export CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を実行しても、
