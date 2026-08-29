@@ -8395,6 +8395,50 @@ sequenceDiagram
 **「完全には塞げない」を前提に、層を重ねて1つ破られても次で止める形にする。**
 
 
+---
+
+### 6-26. 利用者へ配られる文言に、実在のアカウント名を入れない
+
+**言いたいこと。**雛形と案内の「例」に作者の GitHub アカウント名が書いてあり、
+**利用者が自分の手元に作る `WORKFLOW.md` へそのまま焼き込まれた**（issue #81）。
+**例に使う名前は `octocat` / `hello-world` に固定し、機械で弾く。**
+
+**どこに入っていたか。**利用者の目に触れる7行である。
+
+| 何 | 場所 |
+| --- | --- |
+| 雛形の `owner` と `project_number` の例 | [internal/scaffold/template.go:27-28](../../internal/scaffold/template.go#L27-L28) |
+| 値を埋めたあとに残すコメント | [internal/scaffold/fill.go:17-20](../../internal/scaffold/fill.go#L17-L20) |
+| `owner` を引けなかったときの案内 | [internal/scaffold/detect.go:377-381](../../internal/scaffold/detect.go#L377-L381) |
+| `trust.repositories` の形が違うときのエラー | [internal/config/validate.go:626-629](../../internal/config/validate.go#L626-L629) |
+| 表明の書き方を示す GoDoc | [internal/orchestrator/signal.go:9-13](../../internal/orchestrator/signal.go#L9-L13) |
+
+**触らないもの。**module のパス・`LICENSE` の著作権者・`install.sh` の配布 URL・
+`SECURITY.md` の報告先・`README` のバッジ。**本物でなければ壊れる。**
+
+**機械で弾く。**2本を置いた。
+
+| 検査 | 何を見るか |
+| --- | --- |
+| [test/internal/testdesign/no_real_account_test.go](../../test/internal/testdesign/no_real_account_test.go) | `internal/` と `cmd/` の全 `.go` の各行。**module のパスを取り除いてから** owner を探す |
+| [test/internal/scaffold/template_example_test.go](../../test/internal/scaffold/template_example_test.go) | 未記入の雛形の「例」の2行を、**桁揃えごと完全一致**で押さえる |
+
+**禁じる名前を検査の側に書かない。**`go.mod` の `module github.com/<owner>/<repo>` から
+owner を引く。書くと、伏せたはずの名前がテストに残る。
+
+**なぜ既にあった検査で止まらなかったか。**
+[test/internal/scaffold/design_template_test.go](../../test/internal/scaffold/design_template_test.go)
+は設計 5-2 とキーのパスの集合だけを突き合わせ、コメントの本文を見ない。
+`scaffold_test.go` は `# ここを埋めること` の部分一致だけを見る。
+`detect_test.go` は値を埋めたあとの行しか見ない。
+**未記入の雛形に何と書いてあるかを見るものが1つも無かった。**
+
+**負のテストを通した。**雛形の例を実在の名前へ戻すと、
+`no_real_account_test.go` は `internal/scaffold/template.go:27 に実在のアカウント名が入っています` で、
+`template_example_test.go` は `雛形の owner の行が変わっています` で落ちた。
+**落ちることを確かめていない検査は、置いたと言わない**（6-8 と同じ）。
+
+
 ## 7. 実装の順序
 
 **第6節に残る4件は実装を止めない。**運用に入ったら 6-1 のとおり記録を残す。

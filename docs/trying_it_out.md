@@ -327,6 +327,7 @@ WORKFLOW.md を上書きしました: ~/continuo-try/WORKFLOW.md
 **`gh` が無い・認証が無いときも `WORKFLOW.md` は作られ、終了コードは 0 である。**
 その場合だけプレースホルダ（`__FILL_ME__` と `0`）が残るので、案内どおりに手で埋める。
 実際に `gh` を PATH から外して叩いた出力。
+**`octocat` は文言に埋め込んである固定の例であり、あなたのアカウント名ではない。**
 
 ```text
 WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
@@ -706,9 +707,10 @@ cd ~/continuo-try
 
 **clone が無ければ、ここで `ghq get` が走る。**取ってきてから信頼を登録する。
 実際に叩いた出力の1行目（隔離したホームディレクトリに対して）。
+**リポジトリ名はこの節の他の出力と同じく `demo/sample-a` へ伏せてある。**
 
 ```text
-octocat/hello-world の clone がないので `ghq get` で取ってきます（時間がかかることがあります）
+demo/sample-a の clone がないので `ghq get` で取ってきます（時間がかかることがあります）
 ```
 
 **書き込む前に、`--dry-run` と同じ要求内容をもう一度出す。**そのうえで書き込む。

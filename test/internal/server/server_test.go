@@ -84,7 +84,7 @@ func TestIndex_実行中のrunの一覧を出せる(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"octocat/hello-world#12",                                // issue の識別子
+		"octocat/hello-world#12",                             // issue の識別子
 		"ダッシュボードを作る",                                         // タイトル
 		"In Progress",                                        // Status
 		"hook の受け口を直す",                                       // もう1件のタイトル
@@ -135,7 +135,7 @@ func TestIndex_issueのタイトルをエスケープする(t *testing.T) {
 		Identifier: "octocat/hello-world#1",
 		Title:      `<script>alert("x")</script>`,
 		State:      `" onmouseover="alert(1)`,
-		URL:        "https://github.com/maimuzo/continuo/issues/1",
+		URL:        "https://github.com/octocat/hello-world/issues/1",
 	}}
 	s, _ := newTestServer(t, views)
 	_, body := get(t, s, http.MethodGet, "/")

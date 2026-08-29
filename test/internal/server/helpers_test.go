@@ -137,7 +137,7 @@ func sampleViews() []orchestrator.RunView {
 		{
 			Identifier:   "octocat/hello-world#12",
 			Title:        "ダッシュボードを作る",
-			URL:          "https://github.com/maimuzo/continuo/issues/12",
+			URL:          "https://github.com/octocat/hello-world/issues/12",
 			State:        "In Progress",
 			TurnCount:    3,
 			LastHookAt:   testTime.Add(-90 * time.Second),
@@ -152,7 +152,7 @@ func sampleViews() []orchestrator.RunView {
 			// **こちらが先に並ぶ**（identifier の昇順）。
 			Identifier:   "octocat/hello-world#7",
 			Title:        "hook の受け口を直す",
-			URL:          "https://github.com/maimuzo/continuo/issues/7",
+			URL:          "https://github.com/octocat/hello-world/issues/7",
 			State:        "In Progress",
 			TurnCount:    11,
 			RetryCount:   1,
