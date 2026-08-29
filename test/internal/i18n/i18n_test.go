@@ -9,8 +9,10 @@
 package i18n_test
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -154,8 +156,8 @@ func TestT_資源に無いキーは検出できて生のキーを画面に出さ
 
 // 目的: 訳の無いキーが正の言語（日本語）へ落ちることを確認する（設計 3-35b）。
 //
-// **穴の空いた資源を組んで確かめる。**埋め込んだ `messages/en.json` は
-// `messages/ja.json` の複製なので、訳の無いキーが1つも無い。**それを相手にすると、
+// **穴の空いた資源を組んで確かめる。**埋め込んだ `messages/en.json` には
+// 全部のキーの訳が入っていて、訳の無いキーが1つも無い。**それを相手にすると、
 // 落とし先を見る検査が1度も走らないまま通ってしまう。**
 //
 // 与える情報: 宣言したキーのうち1つだけを持つ英語の資源。
@@ -234,42 +236,94 @@ func TestT_英語を選んでも引けないキーが1つも無い(t *testing.T)
 	}
 }
 
-// 目的: 英語の資源が日本語の資源の複製のままであることを確認する（設計 3-35b）。
+// sourceMessagesPath は正の資源のファイルである（このテストのファイルからの相対）。
+const sourceMessagesPath = "../../../internal/i18n/messages/ja.json"
+
+// 目的: 英語の資源に、宣言したキーの訳が1つ残らず入っていることを確認する（設計 3-35b）。
 //
-// **これが無いと、英語の資源は黙って古くなる。**`messages/ja.json` の文言を1つ直しても
-// `messages/en.json` は古いままで、**キーが英語側に在る以上、日本語へ落ちない。**
-// `LANG` を持たない環境の利用者には古い文言が出続ける。
+// **訳の抜けたキーは日本語へ落ちる。**落ちること自体は正しい挙動だが、
+// **1つの画面に英語と日本語が混ざると、全部日本語であるより読みにくい。**
+// **英語は全キーぶん揃っている状態を保つ。**
 //
-// **本物の英語の訳を入れ始めるときは、この検査を入れ替える**（訳したキーを除く形にするか、
-// 複製をやめて差分だけを置く形にする）。**入れ替えずに訳を入れると、ここで落ちる。**
-//
-// 与える情報: 宣言したキーと、日本語・英語それぞれの資源。
-// 成功条件: すべてのキーが英語側にもあり、文言が日本語側と一字一句同じであること。
-func TestMessages_英語の資源が日本語の資源の複製のままである(t *testing.T) {
-	source, ok := i18n.CatalogOf(i18n.SourceLang)
-	if !ok {
-		t.Fatalf("正の言語 %s の資源がありません", i18n.SourceLang)
-	}
+// 与える情報: 宣言したキーと、英語の資源。
+// 成功条件: すべてのキーが英語の資源そのものから引けること（日本語へ落ちないこと）。
+func TestMessages_英語の資源に訳の抜けたキーが無い(t *testing.T) {
 	target, ok := i18n.CatalogOf(i18n.LangEN)
 	if !ok {
 		t.Fatalf("言語 %s の資源がありません", i18n.LangEN)
 	}
 
 	for _, k := range i18n.AllKeys() {
-		want, _, ok := source.Lookup(k)
+		_, from, ok := target.Lookup(k)
 		if !ok {
-			// 日本語側の欠落は TestKeys_宣言したキーと日本語の資源が1対1である が報告する。
+			t.Errorf("キー %q がどちらの言語からも引けない", k)
 			continue
 		}
-		got, from, ok := target.Lookup(k)
-		if !ok || from != i18n.LangEN {
-			t.Errorf("キー %q が %s の資源に無い（複製が古い。ja.json から入れ直すこと）", k, i18n.LangEN)
-			continue
+		if from != i18n.LangEN {
+			t.Errorf("キー %q の訳が messages/en.json に無く %s へ落ちている", k, from)
 		}
-		if got != want {
-			t.Errorf("キー %q の文言が複製と食い違う（複製が古い。ja.json から入れ直すこと）: %s %q / %s %q",
-				k, i18n.LangEN, got, i18n.SourceLang, want)
+	}
+}
+
+// 目的: 英語の資源が、正の資源のいまの版に対して作られたものであることを確認する（設計 3-35b）。
+//
+// **これが無いと、英語の資源は黙って古くなる。**`messages/ja.json` の文言を1つ直しても
+// `messages/en.json` は古いままで、**キーが英語側に在る以上、日本語へ落ちない。**
+// 英語を出す利用者には古い文言が出続ける。**文言の中身は訳なので突き合わせられないため、
+// 「どの版の日本語を訳したか」を `_source_sha256` に書いて突き合わせる。**
+//
+// **日本語の文言を直したら、英語も直し、この値を入れ直すこと。**
+//
+//	shasum -a 256 internal/i18n/messages/ja.json
+//
+// 与える情報: `messages/ja.json` の実物の SHA-256 と、英語の資源が控えている値。
+// 成功条件: 2つが一致すること。
+func TestMessages_英語の資源が正の資源の版に追いついている(t *testing.T) {
+	target, ok := i18n.CatalogOf(i18n.LangEN)
+	if !ok {
+		t.Fatalf("言語 %s の資源がありません", i18n.LangEN)
+	}
+
+	b, err := os.ReadFile(sourceMessagesPath)
+	if err != nil {
+		t.Fatalf("正の資源 %s を読めません: %v", sourceMessagesPath, err)
+	}
+	want := fmt.Sprintf("%x", sha256.Sum256(b))
+
+	got := target.SourceDigest()
+	if got == "" {
+		t.Fatalf("messages/en.json に %s がありません（正の資源の SHA-256 を書くこと）", i18n.SourceDigestKey)
+	}
+	if got != want {
+		t.Fatalf("messages/en.json の訳が古い（%s が実物と食い違う）: 控え %q / 実物 %q\n"+
+			"ja.json を直したら en.json も直し、`shasum -a 256 %s` の値を %s へ入れ直すこと",
+			i18n.SourceDigestKey, got, want, sourceMessagesPath, i18n.SourceDigestKey)
+	}
+}
+
+// 目的: `_source_sha256` が文言として扱われないことを確認する（設計 3-35b）。
+//
+// **文言に混ざると Catalog.Keys() に出る。**そうなると日本語の資源との突き合わせで
+// 「英語にしかないキーがある」と誤って報告され、**本物の食い違いが埋もれる。**
+//
+// 与える情報: 英語の資源が持つキーの一覧。
+// 成功条件: `_` で始まるキーが1つも無く、`_source_sha256` を T で引けないこと。
+func TestMessages_版の控えは文言として扱われない(t *testing.T) {
+	target, ok := i18n.CatalogOf(i18n.LangEN)
+	if !ok {
+		t.Fatalf("言語 %s の資源がありません", i18n.LangEN)
+	}
+
+	for _, k := range target.Keys() {
+		if strings.HasPrefix(string(k), i18n.MetaKeyPrefix) {
+			t.Errorf("文言ではないキー %q が文言に混ざっている", k)
 		}
+	}
+
+	i18n.ResetMissing()
+	t.Cleanup(i18n.ResetMissing)
+	if _, _, ok := target.Lookup(i18n.Key(i18n.SourceDigestKey)); ok {
+		t.Errorf("%s が文言として引けてしまった", i18n.SourceDigestKey)
 	}
 }
 

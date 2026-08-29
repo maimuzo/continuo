@@ -44,14 +44,11 @@ type Lang string
 const (
 	// LangJA は日本語である。**資源の正はこの言語である。**
 	LangJA Lang = "ja"
-	// LangEN は英語である。**いまは資源の中身が日本語の複製である。**
+	// LangEN は英語である。**messages/en.json には訳文が全キーぶん入っている**（設計 3-35b）。
 	//
 	// **中途半端に訳さない。**一部だけ英訳すると、1つの画面に英語と日本語が混ざる
 	// （実際、13件だけ訳したとき `doctor` の出力が混ざった）。**混ざったものは、
 	// 全部日本語であるより読みにくい。**訳すときは全部訳す。
-	//
-	// **本物の英語に置き換えるまでは、messages/en.json は messages/ja.json の複製である**
-	// （設計 3-35b）。訳した分から差し替えれば、そのまま本来の形になる。
 	LangEN Lang = "en"
 )
 
@@ -79,6 +76,24 @@ const EnvLangName = "LANG"
 
 // LangConfigAuto は WORKFLOW.md の `language` に書ける「環境変数から決める」の値である。
 const LangConfigAuto = "auto"
+
+// MetaKeyPrefix は、資源のファイルに書ける「文言ではない項目」の目印である。
+//
+// **これで始まるキーは文言として扱わない。**Catalog.Keys() にも出ないし、T で引けない。
+// キーの名前空間は "." でつないだ1本の文字列（`doctor.label.board`）なので、
+// 先頭の "_" は文言のキーと衝突しない。
+const MetaKeyPrefix = "_"
+
+// SourceDigestKey は「どの版の正の資源を訳したか」を書く項目の名前である。
+//
+// **値は messages/ja.json そのもののファイルの SHA-256（16進の小文字）である**（設計 3-35b）。
+//
+//	shasum -a 256 internal/i18n/messages/ja.json
+//
+// **正の文言を直したのに訳を作り直していないと、この値が実物と食い違う。**
+// `test/internal/i18n/i18n_test.go` の
+// `TestMessages_英語の資源が正の資源の版に追いついている` がそこで落ちる。
+const SourceDigestKey = MetaKeyPrefix + "source_sha256"
 
 // Key は文言を引くための識別子である。
 //
@@ -118,16 +133,18 @@ func init() {
 	}
 	source := map[Key]string{}
 	raw := map[Lang]map[Key]string{}
+	digests := map[Lang]string{}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
 		lang := Lang(strings.TrimSuffix(e.Name(), ".json"))
-		messages, err := readMessages(messagesDir, path.Join(messagesDirName, e.Name()))
+		messages, meta, err := readMessages(messagesDir, path.Join(messagesDirName, e.Name()))
 		if err != nil {
 			panic(fmt.Sprintf("i18n: %s を読めません: %v", e.Name(), err))
 		}
 		raw[lang] = messages
+		digests[lang] = meta[SourceDigestKey]
 		if lang == SourceLang {
 			source = messages
 		}
@@ -136,7 +153,7 @@ func init() {
 		panic(fmt.Sprintf("i18n: 正の言語 %s の資源が空です（messages/%s.json）", SourceLang, SourceLang))
 	}
 	for lang, messages := range raw {
-		catalogs[lang] = &Catalog{lang: lang, messages: messages, source: source}
+		catalogs[lang] = &Catalog{lang: lang, messages: messages, source: source, sourceDigest: digests[lang]}
 	}
 	// **既定の言語（英語）の資源のファイルそのものが無いときは落とす。**
 	// 中身が `{}` なら正の言語へ落ちるので落とさないが、ファイルが無いと
@@ -148,26 +165,38 @@ func init() {
 	current.Store(catalogs[DefaultLang])
 }
 
-// readMessages は資源のファイル1つを読む。
+// readMessages は資源のファイル1つを読み、文言と「文言ではない項目」に分ける。
+//
+// **MetaKeyPrefix で始まるキーは文言ではない**（SourceDigestKey など）。
+// 混ぜたまま返すと Catalog.Keys() に出て、日本語の資源との突き合わせで
+// 「英語にしかないキーがある」と誤って報告される。
 //
 // fsys: 読み出し元。
 // name: 読むファイルのパス。
-// 戻り値: キーと書式文字列の対応と、読めなかった場合のエラー。
-func readMessages(fsys fs.FS, name string) (map[Key]string, error) {
+// 戻り値の1つ目: キーと書式文字列の対応。
+// 戻り値の2つ目: 文言ではない項目（キーは MetaKeyPrefix で始まる）。
+// 戻り値の3つ目: 読めなかった場合のエラー。
+func readMessages(fsys fs.FS, name string) (map[Key]string, map[string]string, error) {
 	b, err := fs.ReadFile(fsys, name)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// **平らな1階層だけを受ける。**入れ子の JSON を書くと、値が文字列でないので
 	// ここで落ちる。キーの名前空間は "." でつないだ1本の文字列で表す。
 	var m map[Key]string
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if m == nil {
-		m = map[Key]string{}
+	messages := make(map[Key]string, len(m))
+	meta := map[string]string{}
+	for k, v := range m {
+		if strings.HasPrefix(string(k), MetaKeyPrefix) {
+			meta[string(k)] = v
+			continue
+		}
+		messages[k] = v
 	}
-	return m, nil
+	return messages, meta, nil
 }
 
 // Catalog は言語1つぶんの資源である。
@@ -181,12 +210,15 @@ type Catalog struct {
 	messages map[Key]string
 	// source は正の言語（日本語）のキーと書式文字列の対応である。訳が無いときの落とし先。
 	source map[Key]string
+	// sourceDigest は、この訳を作ったときの正の資源のファイルの SHA-256 である
+	// （資源に SourceDigestKey が書かれていなければ空文字）。
+	sourceDigest string
 }
 
 // NewCatalog は与えた文言から資源を1つ作る。落とし先は正の言語（日本語）の埋め込んだ資源である。
 //
 // **いまの呼び出し元はテストだけである。**埋め込んだ資源だけでは落とし先（訳の無いキーを
-// 正の言語から引くこと）を検査できない。**`messages/en.json` が `messages/ja.json` の複製で、
+// 正の言語から引くこと）を検査できない。**`messages/en.json` に全部のキーの訳が入っていて、
 // 訳の無いキーが1つも無いためである**（設計 3-35b）。**穴の空いた資源をここで組んで、
 // 落とし先が効くことを確かめる。**テストは `test/` の下の別 package に置く決まりなので、
 // package の中の変数を直接触れない。
@@ -210,6 +242,14 @@ func NewCatalog(lang Lang, messages map[Key]string) *Catalog {
 //
 // 戻り値: 言語。
 func (c *Catalog) Lang() Lang { return c.lang }
+
+// SourceDigest は、この訳を作ったときの正の資源のファイルの SHA-256 を返す。
+//
+// **実物の `messages/ja.json` と突き合わせるために使う**（設計 3-35b）。
+// 食い違っていれば、正の文言を直したのに訳を作り直していない。
+//
+// 戻り値: 16進の小文字の SHA-256。資源に SourceDigestKey が書かれていなければ空文字。
+func (c *Catalog) SourceDigest() string { return c.sourceDigest }
 
 // Lookup はキーに対応する書式文字列を引く。
 //
