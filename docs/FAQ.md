@@ -134,12 +134,27 @@ continuo --id "my id" ~/continuo-work    # ×（空白）
 socket は `~/.continuo/id/<名前>/run/hooks.sock` になるので、
 **ホームディレクトリのパスが長いと、それだけで上限（103バイト）に近づきます。**名前を短くしてください。
 
-### `runtime` / `lock_file` で「front matter が不正です: unknown field」と出る
+### `runtime.lock_file` にパスを書いたのに、そこにロックができない
 
-**原因。**`runtime.lock_file` は**廃止しました。**設定でロックの場所を変えられると、
-`continuo abandon` が別の場所を見て「動いていない」と判定し、**走っている worktree を消しに行きます。**
+**起動のときに、こう出ているはずです。**
 
-**直し方。**`WORKFLOW.md` から `runtime:` の節を丸ごと消してください。**2行です。**
+```
+level=WARN msg="runtime.lock_file はもう効きません（この設定は無視して、機械で決めた場所のロックを使います）。
+                1台で2本以上動かしたいなら --id <名前> を使ってください
+                （ロック・実行時ディレクトリ・worktree の置き場所・branch 名が、その名前ごとに分かれます）"
+                runtime.lock_file=/tmp/continuo.lock
+```
+
+**原因。****`runtime.lock_file` は読まなくなりました。**ロックは `~/.continuo/continuo.lock` です。
+設定でロックの場所を変えられると、`continuo abandon` が別の場所を見て「動いていない」と判定し、
+**走っている worktree を消しに行くからです。**
+
+**キーは受け取ります。****書いてあっても起動は止まりません。**
+`lock_file: null` は `continuo init` の雛形が置いていった行なので、
+**キーごと弾くと、これまでに `continuo init` した人が全員、次の起動で落ちます。**
+
+**直し方。****ロックを分けたいのなら、`--id <名前>` を使ってください**
+（上の「二重起動を検出しました」を見てください）。**警告を止めたいだけなら、この2行を消します。**
 
 ```bash
 grep -n -A1 "^runtime:" ~/continuo-work/WORKFLOW.md
@@ -147,11 +162,10 @@ grep -n -A1 "^runtime:" ~/continuo-work/WORKFLOW.md
 
 ```yaml
 runtime:
-  lock_file: null                           # ← この2行を消す
+  lock_file: null                           # ← 消してよい。残しても起動する
 ```
 
-**消したあとに何をロックするのか。****`~/.continuo/continuo.lock` の1本です。**
-**分けたいときは `--id <名前>` を使ってください**（上の「二重起動を検出しました」を見てください）。
+**消しても `continuo doctor` は「未記入の項目」として挙げません。**雛形から外してあります。
 
 ### 「front matter が不正です: unknown field "…"」で止まる
 
@@ -972,6 +986,28 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 `--dry-run` はボードに1文字も書きません。詳しい振る舞いは [README.ja.md](../README.ja.md) の
 「間違えて着手したとき」にあります。
 
+### `continuo abandon` が、動いている continuo の worktree を消そうとする
+
+**原因。****`--id` の付け忘れです。**`--id e2e` で動かした continuo の worktree を、
+`--id` なしの `continuo abandon` で片付けようとすると、**abandon は既定の1本を見ます。**
+そこにロックは無いので「continuo は動いていない」と判定し、
+**`--id e2e` の continuo がいま使っている worktree を、止まっている残骸として消しに行きます。**
+
+**直し方。****起動に渡した名前を、そのまま `abandon` にも渡してください。**
+
+```bash
+continuo abandon --id e2e https://github.com/octocat/hello-world/issues/42 ~/continuo-e2e-work --dry-run
+continuo abandon --id e2e https://github.com/octocat/hello-world/issues/42 ~/continuo-e2e-work
+```
+
+**`--dry-run` を先に叩いてください。**消えるものが一覧で出ます。
+**`--id` を間違えていると、branch 名の先頭（`e2e/`）と worktree の置き場所が食い違うので、
+そこで気づけます。**
+
+**`runtime.lock_file` で分けようとしないでください。**この設定はもう読みません
+（「起動できないとき」の「`runtime.lock_file` にパスを書いたのに…」を見てください）。
+**この事故が起きうるから読まなくしました。**
+
 ### `continuo abandon` が返ってこない（「pane が閉じるのを待っています」のまま止まって見える）
 
 **原因。****待っているだけです。**continuo が動いていて、その issue が作業中の Status なら、
@@ -1238,6 +1274,34 @@ continuo --help
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
 
 `continuo hook` は Claude Code の hook から呼ばれるもので、人間が直接叩くものではありません。
+
+### 1台で continuo を2つ動かしたい（本番を止めずに、検証用をもう1本立てたい）
+
+**やること。****2本目に `--id <名前>` を付けます。**設定は1行も書き換えません。
+
+```bash
+continuo ~/continuo-work                   # 1本目（いま動いているもの）。そのままでよい
+continuo --id e2e ~/continuo-e2e-work      # 2本目
+```
+
+**`--id` は、分けるべきものを4つまとめて分けます。**
+
+| 分ける対象 | `--id e2e` を付けたとき |
+| --- | --- |
+| **ロック** | `~/.continuo/id/e2e/continuo.lock` |
+| **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
+| **worktree の置き場所** | `<workspace.root>/e2e` |
+| **branch 名** | `e2e/` を先頭に付けたもの |
+
+**設定や環境変数では分かれません。**`runtime.lock_file` は読みません。
+`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` を変えても、ロックは1本のままです。
+**分ける手段は `--id` だけです。**
+
+**2本目には別のボードを見せてください。**同じボードを2つの continuo が見ると同じ issue を
+2つが拾うので、**2つ目はボードのロックで起動を止められます**（上の「同じボード…」を見てください）。
+
+**`continuo abandon` にも同じ名前を渡してください。**渡さないと既定の1本を見に行き、
+`--id` で作った worktree も branch も見つけられません。
 
 ### フラグを位置引数の後ろに書いてもいい？
 

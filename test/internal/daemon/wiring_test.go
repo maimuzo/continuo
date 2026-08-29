@@ -832,3 +832,95 @@ func TestRun_ボードのロックを取ったら誰が握っているかを書�
 		t.Error("いつ取ったかが入っていない")
 	}
 }
+
+// ignoredLockFileWarning は、`runtime.lock_file` に書いた値を捨てたときの警告を
+// 見分ける文字列である。
+//
+// **文言そのもので数える。**slog の出力から「この警告が何件出たか」を数えるには、
+// ほかの行と重ならない一片を持つしかない。
+const ignoredLockFileWarning = "runtime.lock_file はもう効きません"
+
+// TestRun_runtimeのlock_fileは無視して警告を出し起動は続ける は、
+// **キーは受け取り、値だけを捨てる**ことを固定する（設計 3-17）。
+//
+// 目的: `runtime.lock_file` に値を書いた `WORKFLOW.md` で、
+// **起動が止まらないこと**（`lock_file: null` は `continuo init` の雛形に入っていたので、
+// キーごと弾くと過去に `continuo init` した全員が次の起動で落ちる）。
+// **書いた値が使われないこと**（ロックは `~/.continuo/continuo.lock` に固定である）。
+// **黙って捨てないこと**（無人運用では、効いていないことに気づけない）。
+//
+// 与える情報: `runtime.lock_file` に、home の外の書ける場所を書いた front matter。
+// 成功条件: 警告が1件だけ出て、本文に書いた値と `--id` の案内が入り、
+// **獲得したロックは `~/.continuo/continuo.lock` である**こと。
+func TestRun_runtimeのlock_fileは無視して警告を出し起動は続ける(t *testing.T) {
+	written := filepath.Join(t.TempDir(), "somewhere-else.lock")
+	logged := runForStartupLog(t, "runtime:\n  lock_file: \""+written+"\"\n")
+
+	if got := strings.Count(logged, ignoredLockFileWarning); got != 1 {
+		t.Fatalf("警告が1件ではなく %d件だった\n%s", got, logged)
+	}
+	// **書いた値と、代わりに使う手段を両方出す。**どちらが欠けても、
+	// 読んだ人はどの行を直せばよいのかが分からない。
+	for _, want := range []string{written, "--id"} {
+		if !strings.Contains(logged, want) {
+			t.Fatalf("%q が警告に出ていない\n%s", want, logged)
+		}
+	}
+
+	// **ロックは書いた値ではなく `~/.continuo/continuo.lock` である。**
+	// runForStartupLog が HOME を一時ディレクトリへ向けているので、そこから組み立てる。
+	fixed := filepath.Join(os.Getenv("HOME"), instance.DirName, "continuo.lock")
+	acquired := lineContaining(t, logged, "二重起動防止のロックを獲得しました")
+	if !strings.Contains(acquired, fixed) {
+		t.Fatalf("固定した場所 %q のロックを取っていない\n%s", fixed, acquired)
+	}
+	if strings.Contains(acquired, written) {
+		t.Fatalf("書いた値 %q をロックの置き場所に使っている\n%s", written, acquired)
+	}
+}
+
+// TestRun_runtimeのlock_fileがnullなら警告を出さない は、
+// **読み飛ばされる警告を作らない**ことを確かめる（設計 3-17）。
+//
+// 目的: `lock_file: null` は `continuo init` の雛形がそのまま置いていった形である。
+// **雛形どおりに書いてあるだけの人へ、毎回の起動で意味の無い警告を出さないこと。**
+// 与える情報: `runtime.lock_file: null` を書いた front matter と、`runtime:` の節が無い front matter。
+// 成功条件: どちらもこの警告が1件も出ないこと。
+func TestRun_runtimeのlock_fileがnullなら警告を出さない(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra string
+	}{
+		{name: "雛形のままのnull", extra: "runtime:\n  lock_file: null\n"},
+		{name: "節ごと消したあと", extra: ""},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			logged := runForStartupLog(t, c.extra)
+			if strings.Contains(logged, ignoredLockFileWarning) {
+				t.Fatalf("警告を出す設定ではないのに出ている\n%s", logged)
+			}
+		})
+	}
+}
+
+// lineContaining は、ログ全文から want を含む最初の1行を返す。
+//
+// **行で切り出す。**全文に対して `Contains` を当てると、別の行に出ている文字列を
+// 拾ってしまい、「どの行の値か」を確かめられない。
+//
+// t: 呼び出し元のテスト。
+// logged: ログ全文。
+// want: 目印にする文字列。
+// 戻り値: want を含む最初の行。見つからなければテストを落とす。
+func lineContaining(t *testing.T, logged, want string) string {
+	t.Helper()
+	for _, line := range strings.Split(logged, "\n") {
+		if strings.Contains(line, want) {
+			return line
+		}
+	}
+	t.Fatalf("%q を含む行がログに無い\n%s", want, logged)
+	return ""
+}

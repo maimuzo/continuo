@@ -194,6 +194,11 @@ func DefaultConfig() *Config {
 		Restart: RestartConfig{
 			OrphanRunningAction: "redispatch",
 		},
+		// **`runtime.lock_file` は読まれない**（3-17）。既定は null のままにしておく。
+		// 書いてあっても無視するので、既定値に意味は無い。
+		Runtime: RuntimeConfig{
+			LockFile: nil,
+		},
 		Server: ServerConfig{
 			Port: nil,
 		},

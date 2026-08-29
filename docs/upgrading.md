@@ -72,24 +72,37 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.10 から v0.1.11 へ
 
-**破壊的変更があります。****当てないと起動しません。**
+**破壊的変更はありません。****いまの `WORKFLOW.md` のまま起動します。**
 
 | 何 | 中身 |
 | --- | --- |
-| **消えたキー** | **`runtime.lock_file`（`runtime:` の節ごと）。****残っていると起動しません** |
+| **消えたキー** | **ありません。**`runtime.lock_file` は**効かなくなりましたが、書いてあっても起動します** |
 | **増えたキー** | **ありません**（増えたのは設定ではなくフラグ `--id` です） |
 | **名前が変わったキー** | **ありません** |
-| **変わった振る舞い** | **ロックが `~/.continuo/continuo.lock` に固定されました。**環境変数では動きません。**同じボードを2つの continuo が見ると、2つ目は起動を止められます** |
+| **変わった振る舞い** | **ロックが `~/.continuo/continuo.lock` に固定されました。**設定でも環境変数でも動きません。**同じボードを2つの continuo が見ると、2つ目は起動を止められます** |
 
-### `runtime.lock_file` を消す — これをしないと起動しません
+### `runtime.lock_file` は効かなくなりました — 当てるものはありません
 
-**何が起きるか。**front matter は未知のキーを弾くので、**残したまま起動すると次で止まります。**
+**何が変わったか。****書いてあっても読みません。**ロックは `~/.continuo/continuo.lock` です。
+
+**起動は止まりません。**`lock_file: null` は `continuo init` の雛形が置いていった行なので、
+**キーごと弾くと、これまでに `continuo init` した人が全員、次の起動で落ちます。**
+だから**キーは受け取り、値だけを捨てます。**
+
+**値が書いてあると、起動のときに1行出ます**（`null` なら何も出ません）。
 
 ```
-front matter が不正です: unknown field "runtime"
+level=WARN msg="runtime.lock_file はもう効きません（この設定は無視して、機械で決めた場所のロックを使います）。
+                1台で2本以上動かしたいなら --id <名前> を使ってください
+                （ロック・実行時ディレクトリ・worktree の置き場所・branch 名が、その名前ごとに分かれます）"
+                runtime.lock_file=/tmp/continuo.lock
 ```
 
-**直し方。****`runtime:` の節を丸ごと消してください。2行です。**
+**なぜ読まなくしたのか。**設定でロックの場所を変えられると、**`continuo abandon` が別の場所を見て
+「continuo は動いていない」と判定し、走っている worktree を消しに行きます。**
+**分けたいときは、下の `--id` を使ってください。**そちらは分けるべきものを全部まとめて分けます。
+
+**消しても構いません。**警告を止めたいなら、この2行を消してください。
 
 ```bash
 grep -n -A1 "^runtime:" ~/continuo-work/WORKFLOW.md
@@ -97,19 +110,11 @@ grep -n -A1 "^runtime:" ~/continuo-work/WORKFLOW.md
 
 ```yaml
 runtime:
-  lock_file: null                           # ← この2行を消す
+  lock_file: null                           # ← 消してよい。残しても起動する
 ```
 
-**消したかどうかは、次で確かめられます。**
-
-```bash
-grep -c "^runtime:" ~/continuo-work/WORKFLOW.md    # 0 になること
-continuo doctor ~/continuo-work                    # 設定ファイルの行が ✓ になること
-```
-
-**なぜ消したのか。**設定でロックの場所を変えられると、**`continuo abandon` が別の場所を見て
-「continuo は動いていない」と判定し、走っている worktree を消しに行きます。**
-**分けたいときは、下の `--id` を使ってください。**そちらは分けるべきものを全部まとめて分けます。
+**`continuo doctor` は「未記入の項目」として挙げません。**`continuo init` の雛形から外したので、
+**消したあとに「足りない」と言われることはありません。**
 
 ### ロックが `~/.continuo/continuo.lock` に固定されました
 

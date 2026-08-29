@@ -2269,7 +2269,6 @@ type failureNote struct {
 
 **言いたいこと。**既定では二重起動を止める。**利用者は「continuo は1つだけ動く」とだけ覚えればよい。**
 **`--id <名前>` を付けたときだけ、その名前ごとに別の1つとして動く。**検証のために要る。
-**`ps` は使えない。**hook を届けるサブコマンドが本体と同じ実行ファイル名で立つためである。
 
 **なぜ止めるか。**continuo の状態はメモリにしかないので、**2つ目のプロセスが立つと、1つ目が処理中の issue を平気で掴む。**
 `In Progress` を active_states に入れている（3-10）ため、ボードの Status も排他の役に立たない。
@@ -2297,16 +2296,22 @@ type failureNote struct {
 **この順は環境で動くので、同じ機械の同じ利用者が、誰も頼んでいないのに別のロックを握ることになる。**
 **「機械で1つ」を名乗るものが、環境変数1つで分かれてはならない。**
 
-**`runtime.lock_file` は持たない。**設定でロックの場所を変えられると、
-**`continuo abandon` が別の場所を見て「動いていない」と判定し、走っている worktree を消しに行く**（3-17c）。
-**分ける必要があるなら `--id` を使う。**そちらは分けるべきものを全部まとめて分ける。
+**`runtime.lock_file` は、キーだけ残して値を読まない。**読むと**`continuo abandon` が別の場所を見て
+「動いていない」と判定し、走っている worktree を消しに行く**（3-17c）。**分けるなら `--id` である。**
+
+| どうするか | なぜ |
+| --- | --- |
+| **キーは受け取る**（`config.RuntimeConfig.LockFile`） | **`lock_file: null` が `continuo init` の雛形に入っていた。**front matter は未知のキーを弾く（8-1）ので、キーごと消すと**これまでに `continuo init` した全員が次の起動で落ちる** |
+| **値は読まず、展開も検査もしない**（expandConfig / validateExpanded の対象外） | 読むと上の事故になる。**捨てる値のために起動を止める理由も無い** |
+| **値が非 null なら起動時に警告を1行**（`daemon.WarnIgnoredLockFile`）。**`null` なら黙る** | **黙って捨てると、効いていないことに無人運用では気づけない。**`null` は雛形どおりなので、毎回の起動で意味の無い警告を出さない |
+| **雛形からは外す**（`internal/scaffold`） | 新しく `continuo init` した人へ死んだキーを配らない。`doctor` の「未記入の項目」にも出ない |
 
 **文書が言うことも、これに合わせて1つに揃える。**
 
 | 何 | 何を言うか |
 | --- | --- |
 | [docs/releasing.md](../releasing.md) と [docs/test_environment.md](../test_environment.md) | **本番を止めずに2本目を並べる手順は `--id` である。**socket を分けてもロックは分かれない |
-| [docs/upgrading.md](../upgrading.md) と [docs/FAQ.md](../FAQ.md) | **`runtime.lock_file` を書いてある `WORKFLOW.md` は起動しない**（8-1 が未知のキーを弾く）。**消し方を両方に置く** |
+| [docs/upgrading.md](../upgrading.md) と [docs/FAQ.md](../FAQ.md) | **破壊的変更ではない。**`runtime.lock_file` を書いてある `WORKFLOW.md` も起動する。**効かないことと `--id` の使い方を両方に置く** |
 
 **ホストをまたぐ二重起動は、ロックでは防げない。**flock はそのマシンの中でしか効かないためである。
 **代わりに、同じ issue を2台が拾わない仕組みを持つ**（3-77。issue の担当者と、余裕値による入札）。
