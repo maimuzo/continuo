@@ -80,7 +80,7 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 
 **ボードには Status の選択肢が5つ要ります。**GitHub の既定は `Todo` / `In Progress` / `Done` の3つなので、**足りない2つは GitHub の画面から足してください** — ボードの `Settings` を開き、左の `Custom fields` の `Status` を選び、`Options` の下の `Add option...` に名前を入れて `Add`。名前は何でも構いません。役割との対応は `continuo setup` で決めます。
 
-**`continuo doctor` が14の検査を通します** — 設定ファイル / 片付けの状態 / claude / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / ボード / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
+**`continuo doctor` が15の検査を通します** — 設定ファイル / 片付けの状態 / **未記入の項目** / claude / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / ボード / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
 
 **`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。**
 **ただし「終了コードが 0」は「continuo が起動する」という意味ではありません。**

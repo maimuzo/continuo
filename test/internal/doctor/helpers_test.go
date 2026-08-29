@@ -27,6 +27,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
 // ===== テスト用herdr mock socket サーバ =====
@@ -636,38 +637,148 @@ func assertSocketUnderRoot(t *testing.T, fx *fixture, detail string) {
 
 // WriteWorkflow は WORKFLOW.md を書く。
 //
-// **書かないキーは既定値のままにする**（設計 5-2 の既定値）。
+// **`continuo init` が置く雛形から作る。**キーを1つも落とさないためである。
+// **前提が揃っている状態とは、雛形の設定項目が全部書かれている状態である**
+// （見出し語 `未記入の項目` が雛形と1対1で突き合わせる。設計 3-75）。
+// 手で短い front matter を書くと、**その検査だけが必ず `!` になる。**
+//
+// **差し替えるのは値だけである。**キーは1つも消さず、増やさない。
 //
 // t: 呼び出し元のテスト。
 // rateLimit: front matter へ書く `rate_limit` の節（末尾に改行を含めること）。
 // 空文字なら「枠の判定を行わない」設定（`source: none`）を書く。
+// **書いたキーだけが雛形の値を上書きする。**書かなかったキーは雛形の値のまま残る。
 func (fx *fixture) WriteWorkflow(t *testing.T, rateLimit string) {
 	t.Helper()
 	if rateLimit == "" {
 		rateLimit = "rate_limit:\n  source: none\n"
 	}
-	content := fmt.Sprintf(`---
-tracker:
-  provider:
-    owner: octocat
-    project_number: 3
-    status_field: Status
-    token_source: env
-    token_env: CONTINUO_TEST_TOKEN
-workspace:
-  root: %s
-herdr:
-  socket: %s
-  protocol: 20
-  read_timeout_ms: 3000
-%s---
 
-{{.issue.identifier}} を実装してください。
-`, filepath.Join(fx.Root, "wt"), fx.Herdr.SocketPath, rateLimit)
+	content := scaffold.TemplateWithValues(scaffold.Values{Owner: "octocat", ProjectNumber: 3})
+	overrides := []struct {
+		path  []string
+		value string
+	}{
+		// **ボードを読むトークンは環境変数から取る。**本物の `gh auth token` を呼ばせない。
+		{[]string{"tracker", "provider", "token_source"}, "env"},
+		{[]string{"tracker", "provider", "token_env"}, "CONTINUO_TEST_TOKEN"},
+		// **worktree の置き場所も herdr の socket も、テストの一時ディレクトリに閉じる。**
+		{[]string{"workspace", "root"}, filepath.Join(fx.Root, "wt")},
+		{[]string{"herdr", "socket"}, fx.Herdr.SocketPath},
+		{[]string{"herdr", "read_timeout_ms"}, "3000"},
+	}
+	overrides = append(overrides, parseSectionOverrides(t, rateLimit)...)
+	for _, o := range overrides {
+		content = setFrontMatterValue(t, content, o.path, o.value)
+	}
 
 	if err := os.WriteFile(fx.WorkflowPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}
+}
+
+// parseSectionOverrides は `rate_limit:\n  source: none\n` の形の節を、
+// 「キーのパスと値」の並びに直す。
+//
+// **節そのものを差し込まない。**差し込むと、その節の残りのキーが雛形から消え、
+// 見出し語 `未記入の項目` がテストのたびに `!` になる。
+//
+// t: 呼び出し元のテスト。
+// section: 1行目が節の名前、2行目以降が `  <キー>: <値>` の並び。
+// 戻り値: 差し替えるキーのパスと、そこへ書く値。
+func parseSectionOverrides(t *testing.T, section string) []struct {
+	path  []string
+	value string
+} {
+	t.Helper()
+	var out []struct {
+		path  []string
+		value string
+	}
+	lines := strings.Split(strings.TrimRight(section, "\n"), "\n")
+	if len(lines) == 0 {
+		return nil
+	}
+	name := strings.TrimSuffix(strings.TrimSpace(lines[0]), ":")
+	for _, line := range lines[1:] {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		idx := strings.Index(trimmed, ":")
+		if idx < 0 {
+			t.Fatalf("節の行に `:` がありません: %q", line)
+		}
+		out = append(out, struct {
+			path  []string
+			value string
+		}{
+			path:  []string{name, strings.TrimSpace(trimmed[:idx])},
+			value: strings.TrimSpace(trimmed[idx+1:]),
+		})
+	}
+	return out
+}
+
+// setFrontMatterValue は front matter の1行の値を差し替える。
+//
+// **キーの行を組み立て直すだけである。**行の右側のコメントは落とすが、キーは動かさない。
+// **入れ子は行頭のインデントで辿る**（internal/scaffold の findKeyLine と同じ判断）。
+//
+// t: 呼び出し元のテスト。
+// content: WORKFLOW.md の全文。
+// path: 差し替えるキーのパス（`["herdr", "socket"]` など）。
+// value: 書き込む値（YAML としてそのまま書く）。
+// 戻り値: 差し替えた全文。
+func setFrontMatterValue(t *testing.T, content string, path []string, value string) string {
+	t.Helper()
+	lines := strings.Split(content, "\n")
+
+	// front matter の範囲を切る。**本文にも似た形の行があるので、範囲を切らないと本文を書き換える。**
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimRight(lines[i], " \t") == "---" {
+			end = i
+			break
+		}
+	}
+	if len(lines) == 0 || strings.TrimRight(lines[0], " \t") != "---" || end < 0 {
+		t.Fatalf("front matter を切り出せません")
+	}
+
+	lo, parentIndent, childIndent, found := 1, -1, -1, -1
+	for _, key := range path {
+		idx := -1
+		for i := lo; i < end; i++ {
+			trimmed := strings.TrimLeft(lines[i], " \t")
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			indent := len(lines[i]) - len(trimmed)
+			if indent <= parentIndent {
+				break
+			}
+			if childIndent < 0 {
+				childIndent = indent
+			}
+			if indent != childIndent || !strings.HasPrefix(trimmed, key+":") {
+				continue
+			}
+			idx = i
+			break
+		}
+		if idx < 0 {
+			t.Fatalf("雛形に %s がありません", strings.Join(path, "."))
+		}
+		found = idx
+		parentIndent = childIndent
+		childIndent = -1
+		lo = idx + 1
+	}
+
+	indent := lines[found][:len(lines[found])-len(strings.TrimLeft(lines[found], " \t"))]
+	lines[found] = indent + path[len(path)-1] + ": " + value
+	return strings.Join(lines, "\n")
 }
 
 // Options は doctor.Run へ渡す入力を組み立てる。

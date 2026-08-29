@@ -9,6 +9,7 @@
 //
 //	設定ファイル      … WORKFLOW.md が読めて、front matter が検証を通るか
 //	片付けの状態      … `cleanup.on_states` が `tracker.terminal_states` に収まっているか
+//	未記入の項目      … 雛形にある設定項目が WORKFLOW.md に全部書かれているか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
 //	hook の置き場所    … hook を受ける socket を実際に置けるか
 //	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか
@@ -131,6 +132,7 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 // 検査せずに `!` にして「なぜ確かめられなかったか」を出す（3-32 の依存の表）。
 //
 //	設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる）
+//	              ├─ 未記入の項目（雛形と設定の原文を突き合わせる）
 //	              ├─ herdr（設定の protocol と照合する）
 //	              └─ gh の認証 ── ボード ─┬─ Status の名前
 //	                                      ├─ 対応表のキー
@@ -182,6 +184,11 @@ func Run(ctx context.Context, opts Options) Report {
 	// `config.Validate` は `cleanup.on_states` と `tracker.active_states` の重なりしか
 	// 見ておらず、**`tracker.terminal_states` との関係は誰も見ていなかった**（issue #35）。
 	report.add(checkCleanupStates(cfg, configResult.Symbol))
+
+	// 段1c: 未記入の項目。**ここもボードを1バイトも読まない**（雛形と設定の原文を
+	// 突き合わせるだけである）。**版を上げて増えた設定項目は、リリースノートを
+	// 読まないかぎり存在に気づけない**（issue #85）。**ここが人間に見せる唯一の場所である。**
+	report.add(checkMissingKeys(opts, cfg, configResult.Symbol))
 
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。

@@ -81,6 +81,16 @@ const (
 	// **起動時の警告は `continuo doctor` には出てこない**（doctor は tracker のログを捨てる）。
 	// **ここが、打ち間違いを人間に見せる唯一の場所である。**
 	LabelRewriteKeys = i18n.KeyDoctorLabelRewriteKeys
+	// LabelMissingKeys は、雛形にあって `WORKFLOW.md` に書かれていない設定項目が
+	// あるかの検査である（設計 3-75。issue #85）。
+	//
+	// **`✗` にしない。**書かれていなくても continuo は起動し、走る（Go が持つ既定値が使われる）。
+	// **`✗` にすると、版を上げた瞬間に、いま動いている人の起動が止まる。**
+	//
+	// **黙って通してもいけない。**版を上げて増えた設定項目は、
+	// **リリースノートを読まないかぎり、存在に気づく手段が1つも無い。**
+	// **ここが、増えた項目を人間に見せる唯一の場所である。**
+	LabelMissingKeys = i18n.KeyDoctorLabelMissingKeys
 )
 
 // LabelText は見出し語のキーを、いま使っている言語の語に直す。
