@@ -48,7 +48,7 @@ func (o *Orchestrator) resumeBackoff(ctx context.Context, dispatchAllowed bool) 
 //	それ以外（引き渡し・見えない） … **workspace を掃除せずに** worker を止める
 //
 // **終端と引き渡しは、書いたのがボードの自動化なら turn の終わりを待つ**
-// （`holdForAutomatedMove`。設計 3-63）。**人間が動かしたときはいままでどおり即座に止める。**
+// （`holdForAutomatedMove`。設計 3-73）。**人間が動かしたときはいままでどおり即座に止める。**
 //
 // **バックオフ待ちの run は触らない。**再 dispatch を待っている最中である。
 //
@@ -96,7 +96,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 
 		switch {
 		case containsFold(o.cfg.Tracker.TerminalStates, issue.State):
-			// **書いたのがボードの自動化なら、turn の終わりを待つ**（設計 3-63）。
+			// **書いたのがボードの自動化なら、turn の終わりを待つ**（設計 3-73）。
 			// 「PR がマージされたら Done」の自動化が turn の途中で走ると、
 			// **走っている Claude Code を continuo 自身が殺してしまう。**
 			if o.holdForAutomatedMove(rs, issue) {
@@ -109,7 +109,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 			o.finishRunAsync(ctx, rs, "", fmt.Sprintf("Status が %s になっていました", issue.State))
 		case containsFold(o.cfg.Tracker.ActiveStates, issue.State) && issue.Dispatchable:
 			// まだ作業中で routable である。スナップショットの更新だけ。
-			// **外から動かされていた記録は消す**（設計 3-50 / 3-63）。エージェントが表明で
+			// **外から動かされていた記録は消す**（設計 3-50 / 3-73）。エージェントが表明で
 			// 戻したのだから、猶予の起点も捨てる。
 			rs.clearExternalMove()
 		case issue.State != "" && !o.isKnownState(issue.State):
@@ -117,7 +117,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 			o.handleUnknownState(ctx, rs, issue)
 		default:
 			// 引き渡し（`In Review` / `Blocked` など、設定に名前が出てくる Status）。
-			// **ここも書いたのが自動化なら turn の終わりを待つ**（設計 3-63）。
+			// **ここも書いたのが自動化なら turn の終わりを待つ**（設計 3-73）。
 			if o.holdForAutomatedMove(rs, issue) {
 				continue
 			}

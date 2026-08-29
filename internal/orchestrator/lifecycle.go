@@ -66,7 +66,7 @@ func (o *Orchestrator) decideAfterTurn(
 		return true
 	case containsFold(o.cfg.Tracker.ActiveStates, current.State):
 		// 次の turn へ。打ち切りの判定は turnLoop の先頭で行う。
-		// **外から動かされていた記録は消す**（設計 3-50 / 3-63）。表明で戻ったのだから、
+		// **外から動かされていた記録は消す**（設計 3-50 / 3-73）。表明で戻ったのだから、
 		// 猶予の起点も捨てる。
 		rs.clearExternalMove()
 		return false

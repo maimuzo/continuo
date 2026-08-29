@@ -1,4 +1,4 @@
-// **終端と引き渡しの Status をボードの自動化が書いたときの検査である**（設計 3-63。issue #79）。
+// **終端と引き渡しの Status をボードの自動化が書いたときの検査である**（設計 3-73。issue #79）。
 //
 // **エージェントが turn の途中で自分の PR をマージすると、ボードの組み込みの自動化が
 // `Done` を書く。**それを「人間が終わったと言っている」と読んで、continuo は走っている
@@ -20,7 +20,7 @@ import (
 
 // automatedMoveGraceConfig は「猶予を1分だけ置く」設定を作る。
 //
-// **`unknown_state_grace_ms` は知らない Status と共用である**（設計 3-63）。
+// **`unknown_state_grace_ms` は知らない Status と共用である**（設計 3-73）。
 // 1つの issue の Status は1つなので、猶予の起点も設定キーも1つで足りる。
 func automatedMoveGraceConfig(cfg *config.Config) {
 	cfg.Tracker.VerifyStatesEvery = 0
@@ -48,7 +48,7 @@ func startRunAndBlockTurn(t *testing.T, fx *fixture) string {
 	return issue.ID
 }
 
-// TestReconcile_自動化がDoneを書いてもturnの終わりまでは止めない は、設計 3-63 を確かめる。
+// TestReconcile_自動化がDoneを書いてもturnの終わりまでは止めない は、設計 3-73 を確かめる。
 //
 // 目的: 「PR がマージされたら Done」の自動化は、エージェントが turn の途中で自分の PR を
 // マージした瞬間に走る。**次の巡回がそれを終端と読むと、走っている Claude Code を
@@ -88,7 +88,7 @@ func TestReconcile_自動化がDoneを書いてもturnの終わりまでは止�
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
 
-// TestReconcile_人間がDoneを書いたらturnの途中でも止める は、設計 3-63 を確かめる。
+// TestReconcile_人間がDoneを書いたらturnの途中でも止める は、設計 3-73 を確かめる。
 //
 // 目的: **待つのは「書いたのが自動化だったとき」だけである。**人間が `Done` にしたのなら、
 // その人は自分の操作の結果を分かっている。**猶予を掛けると、止めたい人が既定10分待たされる。**
@@ -107,7 +107,7 @@ func TestReconcile_人間がDoneを書いたらturnの途中でも止める(t *t
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
 
-// TestReconcile_自動化がInReviewを書いてもturnの終わりまでは止めない は、設計 3-63 を確かめる。
+// TestReconcile_自動化がInReviewを書いてもturnの終わりまでは止めない は、設計 3-73 を確かめる。
 //
 // 目的: 引き渡しの Status も自動化が書く（PR を issue に紐づけたとき）。
 // **終端だけ塞いでも、同じ形でエージェントが殺される。**
@@ -139,7 +139,7 @@ func TestReconcile_自動化がInReviewを書いてもturnの終わりまでは�
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
 
-// TestReconcile_猶予が0なら自動化が書いた終端でもその場で止める は、設計 3-63 を確かめる。
+// TestReconcile_猶予が0なら自動化が書いた終端でもその場で止める は、設計 3-73 を確かめる。
 //
 // 目的: `tracker.unknown_state_grace_ms` を 0 にした利用者は「その場で止める」と決めている。
 // **知らない Status でそう決めた設定が、終端と引き渡しでだけ効かない、を作らない。**
