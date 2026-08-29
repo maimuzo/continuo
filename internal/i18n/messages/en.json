@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "c42f796e18e48e3ae572e58132a6533621e2733d32f983c71d5df53c293b05a1",
+  "_source_sha256": "3601282e990d9a4b19b0ecbfdc071a39bf89f44842f0494a74447d96a9860c4a",
   "abandon.board_not_listed": "issue %s はボードに載っていません",
   "abandon.deferred_reason": "  理由: %s",
   "abandon.dry_run_note": "--dry-run なので何も消していません。",
@@ -220,6 +220,10 @@
   "config.placeholder.remaining": "埋めていない設定が %d 件あります。値を埋めてください: %s",
   "config.resolve_path.work_dir_not_absolute": "WORKFLOW.md の場所を絶対パスで決められません: 基準にする作業ディレクトリ %q が絶対パスではありません",
   "config.validate.branch_template_needs_issue_number": "%s を必ず含めること。issue の番号が入っていないと、別の issue でも同じ branch 名になり、worktree が無いときの片付けが、名指しした issue とは別の issue の branch を消す",
+  "config.validate.handoff_bid_window_range": "0以上にすること（0 なら締め切りを待たずに勝者を決める）",
+  "config.validate.handoff_idle_timeout_range": "0以上にすること（0 なら既定の18時間を使う）",
+  "config.validate.handoff_margin_range": "0以上100以下にすること",
+  "config.validate.handoff_recheck_interval_range": "0以上にすること（0 なら走っている最中に担当を確かめ直さない）",
   "config.validate.invalid_value": "設定キー %s の値 %v が不正です: %s",
   "config.validate.required": "設定キー %s は必須ですが空です",
   "daemon.build.dashboard_failed": "ダッシュボードを組み立てられません: %w",

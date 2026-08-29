@@ -362,31 +362,76 @@ func BidsBefore(bids []Bid, deadline time.Time) []Bid {
 	return out
 }
 
-// FreshBids は、いま決着させてよい入札だけを返す（設計 3-77d）。
+// RoundBids は、いまの回の入札だけを返す（設計 3-77e）。
 //
-// **1回の入札は「最初の投稿から window、決着にさらに window」で終わりにする。**
-// **終わった回の入札を数え続けてはならない。**勝った機械が担当者を書けないまま落ちると、
-// **その機械が永久に勝ち続け、issue は誰にも着手されないまま止まる**
-// （担当者がいないので hold の期限も効かない）。
+// **入札のコメントは消えない。**1回ごとに新しいコメントを書くので、**古い回の入札は
+// issue に残り続ける。**締め切りは「いちばん古い入札 + window」なので、
+// **古い入札を数に入れたままにすると、締め切りは永久にその古い時刻から数えられる。**
+// 締め切りは常に過ぎたことになり、**次の回が1度も始まらない。**
 //
-// **回が終わっていたら、入札を1件も返さない。**呼び出し側は新しい入札を書き、
+// **回の区切りは2つある。どちらも issue のコメントから読める。**
+//
+//	前の回を閉じたコメント … hold か released が現れた時刻。それより前の入札は前の回のものである
+//	決着の猶予切れ         … 締め切りからさらに window。勝った機械が担当者を書けずに消えた回である
+//
+// **どちらも記憶に持たない。**同じコメントの列を読んだ機械は同じ答えに行き着く。
+//
+// **回が終わっていたら、その回の入札は1件も返さない。**呼び出し側は新しい入札を書き、
 // そこから次の回が始まる。
 //
-// **`window` が 0 以下なら、そのまま返す。**締め切りを待たない設定では回の区切りが無い。
+// **`window` が 0 以下なら、猶予切れでは区切らない。**締め切りを待たない設定に決着の猶予は無い。
+// **前の回を閉じたコメントによる区切りは、そのときも効く。**
 //
-// bids: その issue に付いている入札。
+// comments: issue に付いているコメントの全件。
 // now: いまの時刻。
 // window: `tracker.provider.handoff.bid_window_ms` の長さ。
-// 戻り値: いまの回の入札（**渡された配列は書き換えない**）。
-func FreshBids(bids []Bid, now time.Time, window time.Duration) []Bid {
-	if window <= 0 || len(bids) == 0 {
+// 戻り値: いまの回の入札（**コメントの並び順のまま。1件も無ければ空**）。
+func RoundBids(comments []CommentView, now time.Time, window time.Duration) []Bid {
+	bids := CollectBids(comments)
+	cut, _ := RoundStart(comments)
+	for {
+		bids = bidsFrom(bids, cut)
+		if len(bids) == 0 || window <= 0 {
+			return bids
+		}
+		deadline, ok := Deadline(bids, window)
+		if !ok {
+			return bids
+		}
+		// **締め切りからさらに window。**勝った機械が担当者を書くまでの猶予である。
+		expiry := deadline.Add(window)
+		if !now.After(expiry) {
+			return bids
+		}
+		// **この回は終わっている。**猶予までに届いた入札を落として、残りで数え直す。
+		// **1回で切り上げない。**終わった回が2つ以上積まれている issue があるので、
+		// 残った入札の中でいちばん古いものから、もう一度同じ判定を行う。
+		cut = expiry
+	}
+}
+
+// bidsFrom は、その時刻より前に投稿された入札を落とす。
+//
+// **同じ時刻の入札は残す。**GitHub がコメントに付ける時刻は秒どまりで、
+// **担当を外した直後に書く入札は released のコメントと同じ秒に入る。**
+// そこで落とすと、その機械は入札を書くそばから自分で捨てることになり、
+// **巡回のたびに issue のコメントが1件ずつ増え続ける。**
+//
+// bids: 絞り込む入札。
+// cut: この時刻より前のものを落とす。ゼロ値なら1件も落とさない。
+// 戻り値: 残った入札（**渡された配列は書き換えない**）。
+func bidsFrom(bids []Bid, cut time.Time) []Bid {
+	if cut.IsZero() {
 		return bids
 	}
-	deadline, ok := Deadline(bids, window)
-	if !ok || !now.After(deadline.Add(window)) {
-		return bids
+	out := make([]Bid, 0, len(bids))
+	for _, b := range bids {
+		if b.PostedAt.Before(cut) {
+			continue
+		}
+		out = append(out, b)
 	}
-	return nil
+	return out
 }
 
 // IsMarked は、コメント本文が持ち回りの印のどれかで始まっているかを返す（設計 3-77a）。

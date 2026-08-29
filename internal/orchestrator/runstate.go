@@ -1070,24 +1070,12 @@ func (rs *runState) clearExternalMove() {
 	rs.externalMoveKind = externalMoveNone
 }
 
-// handoffRecheckDue は、走っている最中に担当を確かめ直す時刻が来たかを返す（設計 3-77c）。
+// markHandoffChecked は、担当を確かめ直したことにして時計だけを進める（設計 3-77c）。
 //
-// **`true` を返したら、その時点で時計を進める。**進めないと、確かめ直しに失敗するたびに
-// 次の turn でも確かめ直すことになり、**turn の終わりごとに issue のコメントを
-// 全部読むはめになる。**
-//
-// **markHandoffChecked は、確かめ直したことにして時計だけを進める。**
-//
-// **着手したときは `markHandoffChecked` で時計を進めておく。**担当者になった直後に
-// 確かめ直しても答えは分かりきっており、**turn の終わりごとに issue を1件取り直す
-// リクエストが増えるだけである。**
-//
-// **引き継いだ run（復元・巡回からの引き取り）では時計がゼロ値のままなので、
-// 最初の turn の終わりで必ず確かめる**（設計 3-77c の「作業を再開するとき」）。
+// **着手したときに呼ぶ。**担当者になった直後に確かめ直しても答えは分かりきっており、
+// **turn の終わりごとに issue を1件取り直すリクエストが増えるだけである。**
 //
 // now: いまの時刻。
-// interval: 確かめ直す間隔。
-// 戻り値: 確かめ直す時刻が来ていれば true。
 func (rs *runState) markHandoffChecked(now time.Time) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -1095,6 +1083,17 @@ func (rs *runState) markHandoffChecked(now time.Time) {
 }
 
 // handoffRecheckDue は、走っている最中に担当を確かめ直す時刻が来たかを返す（設計 3-77c）。
+//
+// **`true` を返したら、その時点で時計を進める。**進めないと、確かめ直しに失敗するたびに
+// 次の turn でも確かめ直すことになり、**turn の終わりごとに issue のコメントを
+// 全部読むはめになる。**
+//
+// **引き継いだ run（復元・巡回からの引き取り）では時計がゼロ値のままなので、
+// 最初の turn の終わりで必ず確かめる**（設計 3-77c の「作業を再開するとき」）。
+//
+// now: いまの時刻。
+// interval: 確かめ直す間隔。
+// 戻り値: 確かめ直す時刻が来ていれば true。
 func (rs *runState) handoffRecheckDue(now time.Time, interval time.Duration) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()

@@ -1709,8 +1709,13 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	// 枠の判定は既定で行わない（usage API を1回も叩かない）。
 	cfg.RateLimit.Source = "none"
 	// **入札の締め切りを待たない**（設計 3-77）。既定の3分を待つと、
-	// **どのテストも1回の巡回では着手できない。**締め切りそのものを見たいテストは
-	// Mutate で長さを入れること。
+	// **どのテストも1回の巡回では着手できない。**
+	//
+	// **締め切りと回の区切りは、ここを Mutate で書き換えたテストが見ている。**
+	// 既定のままだと締め切りの待ちも回の区切りも通らないので、**この2本を消してはならない。**
+	//
+	//	TestHandoff_締め切りの前は担当者にならない                    締め切りを待つあいだは担当者にならないこと
+	//	TestHandoff_古い入札が残っていても締め切りをまたいで担当者が決まる  巡回をまたいでも入札が増えず、締め切りの後に勝つこと
 	cfg.Tracker.Provider.Handoff.BidWindowMs = 0
 	if opts.Mutate != nil {
 		opts.Mutate(&cfg)

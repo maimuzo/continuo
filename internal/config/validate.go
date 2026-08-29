@@ -664,23 +664,23 @@ func requiredValueError(key string) error {
 func validateHandoff(h TrackerProviderHandoffConfig) error {
 	if h.BidWindowMs < 0 {
 		return invalidValueError("tracker.provider.handoff.bid_window_ms", h.BidWindowMs,
-			"0以上にすること（0 なら締め切りを待たずに勝者を決める）")
+			i18n.T(i18n.KeyConfigValidateHandoffBidWindowRange))
 	}
 	if h.IdleTimeoutMs < 0 {
 		return invalidValueError("tracker.provider.handoff.idle_timeout_ms", h.IdleTimeoutMs,
-			"0以上にすること（0 なら既定の18時間を使う）")
+			i18n.T(i18n.KeyConfigValidateHandoffIdleTimeoutRange))
 	}
 	if h.RecheckIntervalMs < 0 {
 		return invalidValueError("tracker.provider.handoff.recheck_interval_ms", h.RecheckIntervalMs,
-			"0以上にすること（0 なら走っている最中に担当を確かめ直さない）")
+			i18n.T(i18n.KeyConfigValidateHandoffRecheckIntervalRange))
 	}
 	if h.FiveHourMarginPercent < 0 || h.FiveHourMarginPercent > 100 {
 		return invalidValueError("tracker.provider.handoff.five_hour_margin_percent",
-			h.FiveHourMarginPercent, "0以上100以下にすること")
+			h.FiveHourMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}
 	if h.WeeklyMarginPercent < 0 || h.WeeklyMarginPercent > 100 {
 		return invalidValueError("tracker.provider.handoff.weekly_margin_percent",
-			h.WeeklyMarginPercent, "0以上100以下にすること")
+			h.WeeklyMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}
 	return nil
 }

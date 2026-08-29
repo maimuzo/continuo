@@ -294,6 +294,128 @@ func TestHandoff_期限切れの担当を外してreleasedを書く(t *testing.T
 	}
 }
 
+// ownBidsOf は、この機械が書いた入札のコメントだけを数える。
+//
+// **ほかの機械の入札と混ぜて数えない。**巡回のたびに増えるのはこの機械の入札であり、
+// **そこが増えないことが「次の回が始まった」の証拠である。**
+//
+// fx: 検査対象。
+// node: 下敷きの GitHub issue のノード ID。
+// 戻り値: この機械の名前が入った入札のコメント。
+func ownBidsOf(fx *fixture, node string) []tracker.Comment {
+	out := make([]tracker.Comment, 0, 4)
+	for _, c := range fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffBidMarker) {
+		if strings.Contains(c.Body, `"host":"`+testHostName+`"`) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// TestHandoff_古い入札が残っていても締め切りをまたいで担当者が決まる は、設計 3-77e を確かめる。
+//
+// 目的: **前の回の入札は issue に残り続ける**（入札は1回ごとに新しいコメントを書く）。
+// それを数え続けると締め切りが常にその古い時刻から数えられ、**次の回が1度も始まらない。**
+// **巡回のたびに入札のコメントだけが増え、担当者は永久に決まらない。**
+//
+// 与える情報: 締め切りを3分にした設定と、30分前に書かれたほかの機械の入札1件
+// （判定スコアはこの機械より大きい **300**）。時計は手で進める。
+// 成功条件: 巡回を3回行っても、**この機械の入札のコメントは1件だけ**であること。
+// 締め切りを過ぎた巡回でこの機械が担当者になり、hold が1件書かれ、着手されること。
+func TestHandoff_古い入札が残っていても締め切りをまたいで担当者が決まる(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{
+		Now: clock.Now,
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.Provider.Handoff.BidWindowMs = 180000
+		},
+	})
+	holdPrompt(fx)
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	node := issueNode(188)
+	// **終わった回の入札である。**締め切り（3分）にも決着の猶予（さらに3分）にも入らない。
+	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatBid(handoff.Bid{
+		Host: rivalHost, FiveHour: 100, Weekly: 100, Score: 300, At: clock.Now().Add(-30 * time.Minute),
+	}), clock.Now().Add(-30*time.Minute))
+
+	// 1回目。**次の回を始める入札を1件書き、締め切りを待つ。**
+	fx.Orc.Tick(context.Background())
+	if got := len(ownBidsOf(fx, node)); got != 1 {
+		t.Fatalf("1回目の巡回でこの機械の入札が1件ではない: %d 件", got)
+	}
+
+	// 2回目（30秒後）。**締め切りの中なので、入札は増えない。**
+	clock.Advance(30 * time.Second)
+	fx.Orc.Tick(context.Background())
+	if got := len(ownBidsOf(fx, node)); got != 1 {
+		t.Fatalf("締め切りを待つあいだに入札が増えた: %d 件", got)
+	}
+	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
+		t.Fatalf("締め切り前なのに着手している: %d 件", got)
+	}
+
+	// 3回目（締め切りの後）。**勝って担当者になる。**
+	clock.Advance(4 * time.Minute)
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "dispatch される", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 1
+	})
+
+	if got := len(ownBidsOf(fx, node)); got != 1 {
+		t.Errorf("巡回のたびに入札が増えている: %d 件", got)
+	}
+	if got := len(fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffHoldMarker)); got != 1 {
+		t.Errorf("hold のコメントが1件ではない: %d 件", got)
+	}
+	issue, _ := fx.Tracker.IssueByID("PVTI_item188")
+	if len(issue.Assignees) != 1 || issue.Assignees[0].Login != testGHLogin {
+		t.Errorf("担当者が gh の持ち主1人になっていない: %+v", issue.Assignees)
+	}
+}
+
+// TestHandoff_期限切れの担当を外したあと前の回の入札に負けない は、設計 3-77e を確かめる。
+//
+// 目的: **担当を外した直後は、前の回に勝った機械の入札が必ず issue に残っている。**
+// それを数えると、担当を外した機械は毎回その入札に負ける。**担当者は誰にも書かれず、
+// 巡回のたびに入札のコメントだけが増える。**この機能の主目的である「期限で担当を入れ替える」
+// 経路が、そのままこの状態に入る。
+//
+// 与える情報: ほかの機械が担当していて、その機械の hold が19時間前、
+// **その機械が前の回に勝ったときの入札（判定スコア 300）がその1分前**にある issue。
+// 成功条件: 担当が外れ、この機械が担当者になって着手すること。
+func TestHandoff_期限切れの担当を外したあと前の回の入札に負けない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	holdPrompt(fx)
+	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", rivalLogin))
+
+	node := issueNode(188)
+	old := time.Now().Add(-19 * time.Hour)
+	// **前の回の入札。**hold より前にあり、判定スコアはこの機械（270）より大きい。
+	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatBid(handoff.Bid{
+		Host: rivalHost, FiveHour: 100, Weekly: 100, Score: 300, At: old.Add(-time.Minute),
+	}), old.Add(-time.Minute))
+	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
+		Host: rivalHost, Assignee: rivalLogin, Branch: "continuo/octocat/hello-world/188", At: old,
+	}), old)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "dispatch される", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 1
+	})
+
+	if got := len(ownBidsOf(fx, node)); got != 1 {
+		t.Errorf("この機械の入札が1件ではない: %d 件", got)
+	}
+	issue, _ := fx.Tracker.IssueByID("PVTI_item188")
+	if len(issue.Assignees) != 1 || issue.Assignees[0].Login != testGHLogin {
+		t.Errorf("前の回の入札に負けて担当者になれていない: %+v", issue.Assignees)
+	}
+	if got := len(fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffHoldMarker)); got != 2 {
+		t.Errorf("hold のコメントが2件（前の回とこの回）ではない: %d 件", got)
+	}
+}
+
 // {"RUCM-PATH": "P006"}
 //
 // TestHandoff_枠を読めない機械は入札しない は、設計 3-77 の「投稿しない条件」を確かめる。

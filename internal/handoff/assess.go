@@ -279,6 +279,51 @@ func LatestReleased(comments []CommentView) (Released, bool) {
 	return latest, found
 }
 
+// RoundStart は、いまの回が始まりうるいちばん早い時刻を返す（設計 3-77e）。
+//
+// **前の回は hold か released で終わっている。**hold は勝った機械が担当者になったときに、
+// released は期限の切れた担当を外したときに書かれる。
+// **どちらかが現れた時点で、それより前の入札は前の回のものである。**
+//
+// **これが無いと、次の回が始まらない。**入札は1回ごとに新しいコメントを書くので、
+// **前の回の入札は issue に残り続ける。**締め切りをその古い入札から数え続けると、
+// 締め切りは常に過ぎたことになり、**担当者が永久に決まらない。**
+//
+// **時刻はコメントの作成時刻で見る。**入札の JSON の `at` は投稿者が自分で書いた値なので、
+// **時計を戻せば回の区切りを跨げてしまう。**
+//
+// comments: issue に付いているコメントの全件。
+// 戻り値の1つ目: いちばん新しい hold か released の作成時刻。
+// 戻り値の2つ目: どちらかが1件でもあれば true。
+func RoundStart(comments []CommentView) (time.Time, bool) {
+	var latest time.Time
+	found := false
+	for _, c := range comments {
+		if !endsRound(c.Body) {
+			continue
+		}
+		if !found || c.CreatedAt.After(latest) {
+			latest = c.CreatedAt
+			found = true
+		}
+	}
+	return latest, found
+}
+
+// endsRound は、そのコメントが入札の回を閉じるものかを返す。
+//
+// **入札の印は数えない。**入札は回を閉じない（回を開くものである）。
+//
+// body: コメント本文。
+// 戻り値: hold か released として読めれば true。
+func endsRound(body string) bool {
+	if _, ok := ParseHold(body); ok {
+		return true
+	}
+	_, ok := ParseReleased(body)
+	return ok
+}
+
 // HasBidBy は、その機械が既に入札を書いているかを返す。
 //
 // **書いていれば、締め切りまで待つだけである。**入札のたびに新しいコメントを書くので、

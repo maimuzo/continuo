@@ -273,30 +273,204 @@ func TestDeadline_最初の入札から数える(t *testing.T) {
 	}
 }
 
-// 目的: 終わった回の入札を数え続けないことを確認する（設計 3-77d）。
+// bidComment は入札のコメントを1件組み立てる。
+//
+// **本文から読み直させる。**Bid の値を直に並べると、印の付け方や JSON の形が
+// 変わったことに気づけない。
+//
+// host: 入札した機械の名前。
+// score: 判定スコア。
+// postedAt: GitHub がそのコメントに付けた作成時刻。
+// 戻り値: 入札のコメント。
+func bidComment(host string, score int, postedAt time.Time) handoff.CommentView {
+	return handoff.CommentView{
+		Body:      handoff.FormatBid(handoff.Bid{Host: host, Score: score, At: postedAt}),
+		CreatedAt: postedAt,
+	}
+}
+
+// releasedComment は released のコメントを1件組み立てる。
+//
+// from: 担当を外された機械の名前。
+// postedAt: 作成時刻。
+// 戻り値: released のコメント。
+func releasedComment(from string, postedAt time.Time) handoff.CommentView {
+	return handoff.CommentView{
+		Body:      handoff.FormatReleased(handoff.Released{From: from, At: postedAt}),
+		CreatedAt: postedAt,
+	}
+}
+
+// hostsOf は入札の一覧から機械の名前を並べる。
+//
+// bids: 並べる入札。
+// 戻り値: 機械の名前をカンマでつないだもの（読めない失敗表示にしないため）。
+func hostsOf(bids []handoff.Bid) string {
+	out := ""
+	for i, b := range bids {
+		if i > 0 {
+			out += ", "
+		}
+		out += b.Host
+	}
+	return "[" + out + "]"
+}
+
+// 目的: 古い入札と新しい入札が同居していても、次の回が始まることを確認する（設計 3-77e）。
+//
+// **これがいちばん起きやすい形である。**入札は1回ごとに新しいコメントを書くので、
+// **古い入札は必ず残る。**残った古い入札から締め切りを数えると、締め切りは常に過ぎたことになり、
+// **どの巡回でも「終わった回」と判定されて入札が1件も返らない。**呼び出し側は
+// 毎回そこへ新しい入札を書き足すので、**コメントだけが増えて担当者が永久に決まらない。**
+//
+// 与える情報: 締め切り3分に対して、終わった回の入札1件（base）と、
+// そのあとに書かれた入札1件（base+10分）。
+// 成功条件: 新しいほうだけが返り、締め切りが「新しい入札 + 3分」から数え直されること。
+// **次の巡回でも同じ1件が返る**こと（返らなければ、そこで入札がもう1件増える）。
+func TestRoundBids_古い入札が残っていても次の回が始まる(t *testing.T) {
+	base := at()
+	window := 3 * time.Minute
+	comments := []handoff.CommentView{
+		bidComment("thinkpad", 300, base),
+		bidComment(testHost, 190, base.Add(10*time.Minute)),
+	}
+
+	got := handoff.RoundBids(comments, base.Add(10*time.Minute), window)
+	if len(got) != 1 || got[0].Host != testHost {
+		t.Fatalf("いまの回の入札だけが返っていない: %s", hostsOf(got))
+	}
+	deadline, ok := handoff.Deadline(got, window)
+	if !ok || !deadline.Equal(base.Add(13*time.Minute)) {
+		t.Errorf("締め切りが新しい入札から数え直されていない: got %s, want %s",
+			deadline.Format(time.RFC3339), base.Add(13*time.Minute).Format(time.RFC3339))
+	}
+
+	// **次の巡回。**ここで空が返ると、呼び出し側は入札をもう1件書いてしまう。
+	next := handoff.RoundBids(comments, base.Add(10*time.Minute+30*time.Second), window)
+	if len(next) != 1 || next[0].Host != testHost {
+		t.Errorf("次の巡回でいまの回の入札を落としている: %s", hostsOf(next))
+	}
+}
+
+// 目的: 終わった回の入札を数え続けないことを確認する（設計 3-77e）。
 //
 // **勝った機械が担当者を書けないまま落ちると、その機械が永久に勝ち続ける。**
 // 担当者がいないので hold の期限も効かず、issue は誰にも着手されないまま止まる。
 //
-// 与える情報: 3分の締め切りに対して、締め切りからさらに3分を過ぎた入札1件と、
-// まだ回の中にある入札1件。
+// 与える情報: 3分の締め切りに対して、締め切りからさらに3分を過ぎた入札1件。
 // 成功条件: 回が終わっていれば1件も返らず、回の中なら返ること。
-func TestFreshBids_終わった回の入札は数えない(t *testing.T) {
+func TestRoundBids_終わった回の入札は数えない(t *testing.T) {
 	base := at()
 	window := 3 * time.Minute
-	bids := []handoff.Bid{{Host: "thinkpad", Score: 300, PostedAt: base}}
+	comments := []handoff.CommentView{bidComment("thinkpad", 300, base)}
 
 	// 締め切り（base+3分）からさらに3分。**回は終わっている。**
-	if got := handoff.FreshBids(bids, base.Add(6*time.Minute+time.Second), window); len(got) != 0 {
-		t.Errorf("終わった回の入札を数えている: %d 件", len(got))
+	if got := handoff.RoundBids(comments, base.Add(6*time.Minute+time.Second), window); len(got) != 0 {
+		t.Errorf("終わった回の入札を数えている: %s", hostsOf(got))
 	}
 	// 締め切りは過ぎたが、決着の猶予の中である。
-	if got := handoff.FreshBids(bids, base.Add(4*time.Minute), window); len(got) != 1 {
-		t.Errorf("いまの回の入札を落としている: %d 件", len(got))
+	if got := handoff.RoundBids(comments, base.Add(4*time.Minute), window); len(got) != 1 {
+		t.Errorf("いまの回の入札を落としている: %s", hostsOf(got))
 	}
-	// 締め切りを待たない設定では回の区切りが無い。
-	if got := handoff.FreshBids(bids, base.Add(365*24*time.Hour), 0); len(got) != 1 {
-		t.Errorf("締め切りを待たない設定で入札を落としている: %d 件", len(got))
+	// 締め切りを待たない設定に決着の猶予は無い。
+	if got := handoff.RoundBids(comments, base.Add(365*24*time.Hour), 0); len(got) != 1 {
+		t.Errorf("締め切りを待たない設定で入札を落としている: %s", hostsOf(got))
+	}
+}
+
+// 目的: 終わった回が2つ以上積まれていても、いまの回に行き着くことを確認する（設計 3-77e）。
+//
+// **1回ぶんだけ落として切り上げると、2つ前の回の入札が残る。**残ればそこから締め切りを
+// 数えることになり、次の回が始まらない。
+//
+// 与える情報: 締め切り3分に対して、10分ずつ離れた入札3件（base / base+10分 / base+20分）。
+// 成功条件: いちばん新しい1件だけが返ること。
+func TestRoundBids_終わった回が積まれていても数え直す(t *testing.T) {
+	base := at()
+	window := 3 * time.Minute
+	comments := []handoff.CommentView{
+		bidComment("thinkpad", 300, base),
+		bidComment("mac-studio", 280, base.Add(10*time.Minute)),
+		bidComment(testHost, 190, base.Add(20*time.Minute)),
+	}
+
+	got := handoff.RoundBids(comments, base.Add(20*time.Minute), window)
+	if len(got) != 1 || got[0].Host != testHost {
+		t.Fatalf("いまの回の入札だけが返っていない: %s", hostsOf(got))
+	}
+}
+
+// 目的: hold より前の入札を、いまの回に数えないことを確認する（設計 3-77e）。
+//
+// **hold は「その回に勝者が出た」という記録である。**そこで回は閉じている。
+// **締め切りを待たない設定（`bid_window_ms: 0`）でも、この区切りは効く。**
+//
+// 与える情報: 前の回の入札1件と hold 1件、そのあとに書かれた入札1件。
+// 成功条件: hold より後の1件だけが返ること（締め切りの有無によらず）。
+func TestRoundBids_holdより前の入札は前の回のもの(t *testing.T) {
+	base := at()
+	comments := []handoff.CommentView{
+		bidComment("thinkpad", 300, base),
+		holdComment(otherLogin, "thinkpad", base.Add(3*time.Minute)),
+		bidComment(testHost, 190, base.Add(19*time.Hour)),
+	}
+	now := base.Add(19 * time.Hour)
+
+	for _, window := range []time.Duration{3 * time.Minute, 0} {
+		got := handoff.RoundBids(comments, now, window)
+		if len(got) != 1 || got[0].Host != testHost {
+			t.Errorf("hold より前の入札を数えている（締め切り %s）: %s", window, hostsOf(got))
+		}
+	}
+}
+
+// 目的: released と同じ時刻に書かれた入札を落とさないことを確認する（設計 3-77e）。
+//
+// **GitHub がコメントに付ける時刻は秒どまりである。**担当を外した機械は、その場で
+// released と入札を続けて書くので、**2件は同じ秒に入る。**そこで入札を落とすと、
+// **その機械は書くそばから自分の入札を捨て、巡回のたびにコメントが1件ずつ増える。**
+//
+// 与える情報: 前の回の入札1件（19時間前）と、同じ時刻に並んだ released と入札。
+// 成功条件: 同じ時刻の入札が残り、前の回の入札は落ちること。
+func TestRoundBids_releasedと同じ時刻の入札は残す(t *testing.T) {
+	base := at()
+	now := base.Add(19 * time.Hour)
+	comments := []handoff.CommentView{
+		bidComment("thinkpad", 300, base),
+		holdComment(otherLogin, "thinkpad", base.Add(3*time.Minute)),
+		releasedComment("thinkpad", now),
+		bidComment(testHost, 190, now),
+	}
+
+	got := handoff.RoundBids(comments, now, 3*time.Minute)
+	if len(got) != 1 || got[0].Host != testHost {
+		t.Fatalf("released と同じ時刻の入札を落としている: %s", hostsOf(got))
+	}
+}
+
+// 目的: いまの回を閉じたコメントの時刻を読めることを確認する（設計 3-77e）。
+//
+// 与える情報: hold（3分後）と released（19時間後）が1件ずつあるコメントの列。
+// 成功条件: いちばん新しい released の作成時刻が返ること。
+func TestRoundStart_いちばん新しいholdかreleasedを採る(t *testing.T) {
+	base := at()
+	comments := []handoff.CommentView{
+		bidComment("thinkpad", 300, base),
+		holdComment(otherLogin, "thinkpad", base.Add(3*time.Minute)),
+		releasedComment("thinkpad", base.Add(19*time.Hour)),
+	}
+
+	got, ok := handoff.RoundStart(comments)
+	if !ok {
+		t.Fatal("hold も released もあるのに回の区切りが返らなかった")
+	}
+	if !got.Equal(base.Add(19 * time.Hour)) {
+		t.Errorf("いちばん新しい区切りを採っていない: got %s, want %s",
+			got.Format(time.RFC3339), base.Add(19*time.Hour).Format(time.RFC3339))
+	}
+
+	if _, ok := handoff.RoundStart([]handoff.CommentView{bidComment(testHost, 190, base)}); ok {
+		t.Error("入札だけの issue で回の区切りが返った（入札は回を閉じない）")
 	}
 }
 

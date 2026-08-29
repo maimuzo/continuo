@@ -194,10 +194,12 @@ func (o *Orchestrator) bidForIssue(
 		return false
 	}
 
-	// **終わった回の入札は数えない**（設計 3-77d）。数え続けると、担当者を書けないまま
-	// 落ちた機械が永久に勝ち続け、issue は誰にも着手されないまま止まる。
+	// **数えるのは、いまの回の入札だけである**（設計 3-77e）。
+	// **前の回の入札は issue に残り続ける**（1回ごとに新しいコメントを書くので消えない）。
+	// 数に入れると、締め切りが常にその古い時刻から数えられ、**次の回が1度も始まらない。**
+	// **巡回のたびに入札のコメントだけが増え、担当者は永久に決まらない。**
 	window := time.Duration(o.cfg.Tracker.Provider.Handoff.BidWindowMs) * time.Millisecond
-	bids := handoff.FreshBids(handoff.CollectBids(comments), o.now(), window)
+	bids := handoff.RoundBids(comments, o.now(), window)
 	if _, already := handoff.HasBidBy(bids, o.hostName); !already {
 		posted, ok := o.postBid(ctx, issue, nodeID, bid)
 		if !ok {

@@ -1173,6 +1173,21 @@ const (
 	// herdr.worktree.branch_template に issue の番号が入っていないときに出る。
 	// **既に設定している利用者が居るので、なぜ要るのかを書く。**
 	KeyConfigValidateBranchTemplateNeedsIssueNumber Key = "config.validate.branch_template_needs_issue_number"
+	// KeyConfigValidateHandoffBidWindowRange は
+	// tracker.provider.handoff.bid_window_ms が負のときに出る。
+	KeyConfigValidateHandoffBidWindowRange Key = "config.validate.handoff_bid_window_range"
+	// KeyConfigValidateHandoffIdleTimeoutRange は
+	// tracker.provider.handoff.idle_timeout_ms が負のときに出る。
+	KeyConfigValidateHandoffIdleTimeoutRange Key = "config.validate.handoff_idle_timeout_range"
+	// KeyConfigValidateHandoffRecheckIntervalRange は
+	// tracker.provider.handoff.recheck_interval_ms が負のときに出る。
+	KeyConfigValidateHandoffRecheckIntervalRange Key = "config.validate.handoff_recheck_interval_range"
+	// KeyConfigValidateHandoffMarginRange は
+	// tracker.provider.handoff の2つのマージンが 0〜100 の外にあるときに出る。
+	//
+	// **5時間と1週間で同じ文言を使う。**求めるものが同じなので、
+	// 2つに分けると同じ日本語を2箇所で直すことになる。
+	KeyConfigValidateHandoffMarginRange Key = "config.validate.handoff_margin_range"
 )
 
 // 設定値の環境変数展開・チルダ展開（internal/config の expand）のエラーの文言。
@@ -2475,6 +2490,10 @@ var allKeys = []Key{
 	KeyConfigValidateInvalidValue,
 	KeyConfigValidateRequired,
 	KeyConfigValidateBranchTemplateNeedsIssueNumber,
+	KeyConfigValidateHandoffBidWindowRange,
+	KeyConfigValidateHandoffIdleTimeoutRange,
+	KeyConfigValidateHandoffRecheckIntervalRange,
+	KeyConfigValidateHandoffMarginRange,
 	KeyConfigExpandTrailingDollar,
 	KeyConfigExpandUnclosedBrace,
 	KeyConfigExpandEmptyEnvName,
