@@ -6945,7 +6945,7 @@ Status を割り当てる8つのキーだけで、**雛形にあって設定に�
 | --- | --- |
 | `claude.env` | 環境変数の名前。**雛形の `CLAUDE_CODE_RETRY_WATCHDOG` は例である** |
 | `tracker.automated_state_rewrite` | ボードの Status 名 |
-| `concurrency.max_concurrent_agents_by_state` | ボードの Status 名 |
+| `agent.max_concurrent_agents_by_state` | ボードの Status 名 |
 
 **数えると、黙らせる手段が無いまま `!` を出し続けることになる。**
 雛形の環境変数を自分のものに替えただけの人が、消せない注意を受け取る。
@@ -6953,6 +6953,12 @@ Status を割り当てる8つのキーだけで、**雛形にあって設定に�
 **`tracker.status_signal_map` はここに入れない。**あのキー（`review` / `blocked` / `working`）は、
 **雛形の下半分のプロンプトがエージェントに書かせる語そのもの**である。
 **消せばその表明が一度も効かなくなる**ので、足りなければ言う。
+
+**この対応表のパスは、機械で雛形と突き合わせる**
+（[test/internal/scaffold/free_form_paths_test.go](../../test/internal/scaffold/free_form_paths_test.go)）。
+**綴りを1語間違えても、他のテストは1本も落ちない。**そのパスに一度も当たらなくなるだけで、
+守るはずの対応表の中身が「足りない」と言われ始める。構文木から `freeFormMapPaths` を読み、
+どのパスも雛形のキーそのものか、その下にキーを持つことを確かめる。
 
 **`findKeyLine` は「親の最初の子と同じ深さの行」だけを子として数える。**
 「親より深ければ子」にすると、雛形にある `tracker.provider.comments` を

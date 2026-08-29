@@ -52,7 +52,7 @@ var freeFormMapPaths = [][]string{
 	// キーはボードの Status 名である。
 	{"tracker", "automated_state_rewrite"},
 	// キーはボードの Status 名である。
-	{"concurrency", "max_concurrent_agents_by_state"},
+	{"agent", "max_concurrent_agents_by_state"},
 }
 
 // isUnderFreeFormMap は、そのキーが freeFormMapPaths のどれかの下にあるかを返す。
