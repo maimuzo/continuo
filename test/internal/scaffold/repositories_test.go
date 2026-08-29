@@ -35,7 +35,7 @@ func TestDetect_ボードに載っているリポジトリを重複なく並べ�
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
 
-	want := []string{"maimuzo/continuo", "octocat/hello-world"}
+	want := []string{"acme/anvil", "octocat/hello-world"}
 	if strings.Join(got.Values.Repositories, ",") != strings.Join(want, ",") {
 		t.Errorf("拾ったリポジトリが想定と違う: got %v, want %v", got.Values.Repositories, want)
 	}
@@ -117,14 +117,14 @@ func TestTemplateWithValues_repositoriesを埋めても消せという案内が�
 	filled := scaffold.TemplateWithValues(scaffold.Values{
 		Owner:         "octocat",
 		ProjectNumber: 3,
-		Repositories:  []string{"maimuzo/continuo", "octocat/hello-world"},
+		Repositories:  []string{"acme/anvil", "octocat/hello-world"},
 	})
 
 	if strings.Contains(filled, "repositories: []") {
 		t.Error("プレースホルダの repositories: [] が残っている")
 	}
 	for _, want := range []string{
-		`    - "maimuzo/continuo"`,
+		`    - "acme/anvil"`,
 		`    - "octocat/hello-world"`,
 		"要らない行は消すこと",
 	} {
@@ -152,7 +152,7 @@ func TestWriteTemplateWithValues_repositoriesを埋めたファイルはその�
 	result, err := scaffold.WriteTemplateWithValues(dir, false, scaffold.Values{
 		Owner:         "octocat",
 		ProjectNumber: 3,
-		Repositories:  []string{"maimuzo/continuo", "octocat/hello-world"},
+		Repositories:  []string{"acme/anvil", "octocat/hello-world"},
 	})
 	if err != nil {
 		t.Fatalf("雛形を書き出せなかった: %v", err)
@@ -168,7 +168,7 @@ func TestWriteTemplateWithValues_repositoriesを埋めたファイルはその�
 	if err != nil {
 		t.Fatalf("埋めた雛形を読み込めなかった: %v", err)
 	}
-	want := []string{"maimuzo/continuo", "octocat/hello-world"}
+	want := []string{"acme/anvil", "octocat/hello-world"}
 	got := loaded.Config.Trust.Repositories
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("trust.repositories が反映されていない: got %v, want %v", got, want)

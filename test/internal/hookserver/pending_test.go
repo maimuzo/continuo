@@ -158,7 +158,7 @@ func TestReplayPending_複数のissueの逃がし先を全部走査する(t *tes
 	ts := newTestServer(t, sink)
 
 	dirA := ts.pendingDir(t, "octocat-hello-world-188")
-	dirB := ts.pendingDir(t, "maimuzo-continuo-7")
+	dirB := ts.pendingDir(t, "acme-anvil-7")
 	writePendingFile(t, dirA, "1787057953362307-Stop.json", stopEventJSON("issue-a", "[]"))
 	writePendingFile(t, dirB, "1787057953362306-Stop.json", stopEventJSON("issue-b", "[]"))
 

@@ -39,7 +39,7 @@ func fieldListJSON(options []string) []byte {
 func TestFetchStatusField_選択肢をボードの並び順のまま読む(t *testing.T) {
 	var called [][]string
 	got, err := setup.FetchStatusField(context.Background(), setup.FetchOptions{
-		Owner:         "maimuzo",
+		Owner:         "octocat",
 		ProjectNumber: 3,
 		RunGH: func(_ context.Context, args ...string) ([]byte, error) {
 			called = append(called, args)
@@ -70,7 +70,7 @@ func TestFetchStatusField_選択肢をボードの並び順のまま読む(t *te
 // 成功条件: setup.ErrStatusFieldNotFound を返すこと。
 func TestFetchStatusField_名前の合うフィールドが無ければStatusフィールドが無いと返す(t *testing.T) {
 	_, err := setup.FetchStatusField(context.Background(), setup.FetchOptions{
-		Owner:         "maimuzo",
+		Owner:         "octocat",
 		ProjectNumber: 3,
 		FieldName:     "State",
 		RunGH: func(_ context.Context, _ ...string) ([]byte, error) {
@@ -87,7 +87,7 @@ func TestFetchStatusField_名前の合うフィールドが無ければStatusフ
 // 成功条件: setup.ErrStatusFieldNotFound を返し、single-select でないことを文言に含むこと。
 func TestFetchStatusField_singleSelectでないフィールドは受け付けない(t *testing.T) {
 	_, err := setup.FetchStatusField(context.Background(), setup.FetchOptions{
-		Owner:         "maimuzo",
+		Owner:         "octocat",
 		ProjectNumber: 3,
 		FieldName:     "Iteration",
 		RunGH: func(_ context.Context, _ ...string) ([]byte, error) {
@@ -127,7 +127,7 @@ func TestFetchStatusField_ghの落ち方を直し方が決まる形へ分類す�
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := setup.FetchStatusField(context.Background(), setup.FetchOptions{
-				Owner:         "maimuzo",
+				Owner:         "octocat",
 				ProjectNumber: 3,
 				RunGH: func(_ context.Context, _ ...string) ([]byte, error) {
 					return nil, errors.New(tc.ghError)

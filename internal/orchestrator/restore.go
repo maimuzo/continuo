@@ -931,9 +931,9 @@ func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, r
 	}
 	// **Status を動かした記録は引き渡しの通知の中に入れる**（設計 3-29）。
 	// 独立したコメントにすると、同じことが2件並ぶ。
-	if _, err := o.tracker.PostComment(ctx, nodeID,
-		buildHandoffComment(issue.Identifier, reason, hc, newStatusMove(moved, o.cfg.Tracker.FailureState)),
-		o.cfg.Tracker.Comments.SelfMarker); err != nil {
+	if err := o.postComment(ctx, nodeID,
+		buildHandoffComment(issue.Identifier, reason, hc,
+			newStatusMove(moved, o.cfg.Tracker.FailureState))); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", issue.Identifier, "error", err)
 	}
 }
