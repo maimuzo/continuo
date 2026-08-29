@@ -552,6 +552,7 @@
   "ratelimit.new_reader.home_dir_failed": "ホームディレクトリを特定できません（%s を読めない）: %w",
   "ratelimit.token.env_name_empty": "%w: rate_limit.token_env が空です",
   "ratelimit.token.env_value_empty": "%w: 環境変数 %s が空です",
+  "redact.err.unusable_home": "home が縮める対象として使えません",
   "scaffold.detect.advice_project_scope": "ボードを読むには project の scope が要ります。`gh auth login -s project` でログインし直してください",
   "scaffold.detect.gh_not_found": "gh コマンドが見つかりませんでした",
   "scaffold.detect.owner.advice_flag": "または `continuo init --owner <名前>` でもう一度実行してください",

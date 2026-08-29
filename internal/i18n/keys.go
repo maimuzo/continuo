@@ -2209,6 +2209,15 @@ const (
 	KeyI18nResolveUnsupportedLanguage Key = "i18n.resolve.unsupported_language"
 )
 
+// issue へ書く本文から home を縮める（internal/redact）の文言。
+const (
+	// KeyRedactErrUnusableHome は番兵エラー `redact.ErrUnusableHome` の文言である。
+	//
+	// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+	// **引くのは Error() が呼ばれたときである**（i18n.Sentinel）。
+	KeyRedactErrUnusableHome Key = "redact.err.unusable_home"
+)
+
 // allKeys は宣言済みのキーを全部並べたものである。
 //
 // **新しいキーを足したらここにも足すこと。**test/internal/i18n がこの一覧と
@@ -3044,6 +3053,7 @@ var allKeys = []Key{
 	KeyDaemonBuildHookServerFailed,
 	KeyDaemonBuildDashboardFailed,
 	KeyI18nResolveUnsupportedLanguage,
+	KeyRedactErrUnusableHome,
 }
 
 // AllKeys は宣言済みのキーを全部返す。
