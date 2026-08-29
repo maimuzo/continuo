@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
@@ -276,6 +277,13 @@ func validate(cfg *Config) error {
 		return err
 	}
 
+	// **綴りを検査する。**mode の値は settings.json へそのまま出るのではなく
+	// continuo 自身の分岐に使うので、知らない値のまま起動すると
+	// 「掛けたつもりの判定が1度も走らない」に化ける（設計 3-64 / 8-1）。
+	if err := validateClaudeToolGate(cfg.Claude.ToolGate); err != nil {
+		return err
+	}
+
 	if cfg.Herdr.Socket == "" {
 		return requiredValueError("herdr.socket")
 	}
@@ -359,6 +367,42 @@ func validate(cfg *Config) error {
 		return err
 	}
 
+	return nil
+}
+
+// validateClaudeToolGate は claude.tool_gate の値を検査する（3-64）。
+//
+// **見るのは3つである。**mode の綴り、道具の名前が空でないこと、道具の名前が重複して
+// いないこと。**道具の名前はそのまま hook の matcher になる**ので、空の要素があると
+// `Bash|` のような matcher ができ、何に掛かるのかが読めなくなる。
+//
+// **model は綴りを検査しない。**受け付ける名前を決めているのは Claude Code であり、
+// こちらに一覧が無い。空なら settings.json へ書かず、Claude Code の既定に任せる。
+//
+// gate: claude.tool_gate に書かれた設定。
+// 戻り値: 受け付けられない値があったときのエラー。すべて正しければ nil。
+func validateClaudeToolGate(gate ClaudeToolGateConfig) error {
+	if !slices.Contains(ClaudeToolGateModes, gate.Mode) {
+		labels := make([]string, 0, len(ClaudeToolGateModes))
+		for _, m := range ClaudeToolGateModes {
+			labels = append(labels, fmt.Sprintf("%q", m))
+		}
+		return invalidValueError("claude.tool_gate.mode", gate.Mode,
+			fmt.Sprintf("%s のいずれかにすること", strings.Join(labels, " / ")))
+	}
+
+	seen := make(map[string]struct{}, len(gate.Tools))
+	for i, name := range gate.Tools {
+		key := fmt.Sprintf("claude.tool_gate.tools[%d]", i)
+		if strings.TrimSpace(name) == "" {
+			return invalidValueError(key, name,
+				"道具の名前を書くこと（空の要素があると、何に掛かるのか読めない matcher になる）")
+		}
+		if _, dup := seen[name]; dup {
+			return invalidValueError(key, name, "同じ道具が2回書かれている（重複した行を消すこと）")
+		}
+		seen[name] = struct{}{}
+	}
 	return nil
 }
 

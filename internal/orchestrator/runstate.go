@@ -287,14 +287,14 @@ type runState struct {
 	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
 	awaitTurnEnd bool
 	// externalMoveSince は「continuo が意図していない Status へ外から動かされている」と
-	// 最初に見た時刻である（設計 3-50 / 3-73）。ゼロ値なら、いまは continuo が
+	// 最初に見た時刻である（設計 3-50 / 3-74）。ゼロ値なら、いまは continuo が
 	// 意図した Status（`active_states` のいずれか）である。
 	//
 	// **猶予の起点である。**巡回のたびに入れ直すと猶予が永久に切れないので、
 	// 既に入っているときは触らない。`active_states` に戻ったら消す。
 	externalMoveSince time.Time
 	// externalMoveKind は externalMoveSince がどの種類の動かされ方を数えているかである
-	// （設計 3-73）。**種類が変わったら起点を切り直すために持つ。**
+	// （設計 3-74）。**種類が変わったら起点を切り直すために持つ。**
 	//
 	// **同時には起きないが、順に起きる。**知らない Status で9分待った run が、続けて
 	// 自動化に `Done` へ動かされることがある。起点を繰り越すと、そこから測る猶予が
@@ -1016,7 +1016,7 @@ func (rs *runState) lastWrittenState() string {
 	return rs.LastWrittenState
 }
 
-// externalMoveKind は「外から動かされた」の種類である（設計 3-73）。
+// externalMoveKind は「外から動かされた」の種類である（設計 3-74）。
 //
 // **猶予の起点を種類ごとに切り直すために持つ。**種類が変わったのに起点を繰り越すと、
 // 前の種類で待った時間ぶんだけ、次の猶予が短くなる。
@@ -1028,12 +1028,12 @@ const (
 	// externalMoveUnknownState は continuo が知らない Status へ動かされたことを表す（設計 3-50）。
 	externalMoveUnknownState
 	// externalMoveAutomatedHandoff はボードの自動化が終端・引き渡しの Status を書いたことを
-	// 表す（設計 3-73）。
+	// 表す（設計 3-74）。
 	externalMoveAutomatedHandoff
 )
 
 // noteExternalMove は「continuo が意図していない Status へ外から動かされている」と見た
-// 時刻を控え、その起点を返す（設計 3-50 / 3-73）。
+// 時刻を控え、その起点を返す（設計 3-50 / 3-74）。
 //
 // **同じ種類が続くあいだ、起点は最初に見たときのまま据え置く。**巡回のたびに入れ直すと、
 // 猶予が永久に切れない。
