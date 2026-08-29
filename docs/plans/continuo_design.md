@@ -1381,7 +1381,7 @@ func Normalize(raw string) (SafeName, []Warning)
 | 1 | **Status が `cleanup.on_states`（既定は `Done` だけ）に入った時点で片付けを始める。**「active でなくなった時点」ではない。`In Review` と `Blocked` は active_states に入らないが、**そこで消すと、人間が回答して `Ready` へ戻したときに作業成果が失われる**（4-1） |
 | 2 | **コミットされていない変更が残っていないか確認する**（`cleanup.require_clean_worktree`）。**`git -C <worktree> status --porcelain` の出力が空でなければ「残っている」とする。未追跡のファイルも数に入れる**（エージェントが作った成果物が消えるのを防ぐ）。残っていれば消さずに警告として記録し、issue のコメントに残す |
 | 2b | **push されていない成果が残っていないか確認する**（`cleanup.require_pushed`）。**upstream があるか無いかで判定を分ける**（下記） |
-| — その前提 | **エージェントに push させる。**continuo が作る branch は `git worktree add -b` で切った新しいものなので、**push しない限り upstream が無い。**そこで**プロンプトに「`review` を出す前に必ず commit して push すること」を入れる**（5-3） |
+| — その前提 | **エージェントに push させる。**continuo が作る branch は `git worktree add -b` で切った新しいものなので、**push しない限り upstream が無い。**そこで**プロンプトに「`review` または `blocked` を出す前に必ず commit して push すること」を入れる**（5-3） |
 | 2c | **2 か 2b で消さなかった worktree は、毎巡回で警告を積まない。**issue へのコメントは1回だけ書き、以後は構造化ログにのみ残す。**消さないまま放置してよい**（人間が片付ける） |
 
 **手順2b の判定。「失うものがあるか」を見る。commit の有無では判定しない。**
@@ -6732,8 +6732,14 @@ language: auto                              # 画面に出す文言の言語。a
     CONTINUO-STATUS: blocked    判断を仰ぎたい、または失敗した
     CONTINUO-STATUS: working    まだ続きがある
 
-**`review` を出す前に、必ず commit して push してください。**
+**`review` または `blocked` を出す前に、必ず commit して push してください。**
 push していない作業は、この worktree が片付くときに失われます。
+**`blocked` は人間へ渡す合図なので、そこから先この worktree で作業が続くとは限りません。**
+
+**push 先は、この issue のために作られた branch です。**
+`git push -u origin HEAD` で足ります。branch 名を自分で決める必要はありません。
+
+**push できなかったときは、その理由も `blocked` のコメントに書いてください。**
 
 **読んだコメントに「まとめて対応する issue のグループ」が書かれている場合は、
 同じリポジトリの issue に限り、まとめて直してください。**
