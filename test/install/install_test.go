@@ -994,3 +994,110 @@ func TestInstall_版を名乗らないものからは警告しない(t *testing.
 		t.Errorf("版を比べられないのに破壊的変更を言っています:\n%s", out)
 	}
 }
+
+// TestInstall_一覧を引けなくても入れるのは止めない は、警告を作れない経路を確かめる。
+//
+// **警告は付随的なものである。**release の一覧を引けないことで導入を止めてはならない
+// （設計 3-36「破壊的変更を集めるときの決めごと」の「何も言わない場合」）。
+//
+// 目的: 一覧が 404 でも、終了コードが 0 で実行ファイルが入れ替わること。
+// 与える情報: v0.2.0 を名乗る実行ファイルと、一覧を配らない偽サーバ（/api は 404 を返す）。
+// 成功条件: 終了コードが 0 で、置いたものが v0.10.0 を名乗り、警告が出ないこと。
+func TestInstall_一覧を引けなくても入れるのは止めない(t *testing.T) {
+	// **SetReleases を呼ばない。**releases が空なので /api は 404 を返す。
+	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	dir := t.TempDir()
+	placeInstalled(t, dir, "v0.2.0")
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
+	}
+
+	got, err := exec.Command(filepath.Join(dir, "continuo")).Output()
+	if err != nil {
+		t.Fatalf("置いた実行ファイルを動かせません: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(got), "v0.10.0") {
+		t.Errorf("入れ替わっていません: %q\n%s", string(got), out)
+	}
+	if strings.Contains(out, "破壊的変更があります") {
+		t.Errorf("一覧を引けていないのに警告を出しています:\n%s", out)
+	}
+}
+
+// stubBrokenBreakingAwk は、印を読み出す awk だけが落ちる PATH を作る。
+//
+// **「awk が無い」ではなく「足した awk のプログラムがその処理系で通らない」を模す。**
+// install.sh は checksums.txt の照合にも awk を使うので、awk を丸ごと落とすと
+// **確かめたい経路より前で止まってしまう。**だから `breaking:start` を含むプログラムだけを落とす。
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 偽の awk を置いたディレクトリ。PATH の先頭へ足して使う。
+func stubBrokenBreakingAwk(t *testing.T) string {
+	t.Helper()
+	real, err := exec.LookPath("awk")
+	if err != nil {
+		t.Skipf("awk がありません: %v", err)
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\n" +
+		"for a in \"$@\"; do\n" +
+		"\tcase \"$a\" in\n" +
+		"\t\t*breaking:start*) exit 2 ;;\n" +
+		"\tesac\n" +
+		"done\n" +
+		"exec " + real + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "awk"), []byte(script), 0o755); err != nil {
+		t.Fatalf("偽の awk を置けません: %v", err)
+	}
+	return dir
+}
+
+// TestInstall_印を読み出せなくても入れるのは止めない は、awk が落ちる経路を確かめる。
+//
+// **install.sh は `set -eu` で走る。**警告を組み立てる代入を `|| true` で受けていないと、
+// **awk が 0 以外で終わった時点でスクリプトごと終わる。**
+// collect_breaking は install_binary より先に走るので、**実行ファイルを置く前に、
+// 何のメッセージも出さずに落ちる。**
+//
+// 目的: 印を読み出す awk が落ちても、終了コードが 0 で実行ファイルが入れ替わること。
+// 与える情報: v0.2.0 を名乗る実行ファイル、印のある一覧、印を読む awk だけが落ちる PATH。
+// 成功条件: 終了コードが 0 で、置いたものが v0.10.0 を名乗り、警告が出ないこと。
+func TestInstall_印を読み出せなくても入れるのは止めない(t *testing.T) {
+	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	fr.SetReleases(releasesJSON(t, []releaseNote{
+		{Tag: "v0.10.0", Breaking: []string{"読み出せないので出てはいけません"}},
+		{Tag: "v0.2.0"},
+	}))
+	dir := t.TempDir()
+	placeInstalled(t, dir, "v0.2.0")
+
+	cmd := exec.Command(installShell, scriptPath(t),
+		"--api-url", fr.Server.URL+"/api/latest",
+		"--base-url", fr.Server.URL+"/dl",
+		"--no-deps")
+	cmd.Stdin = nil
+	detachTerminal(cmd)
+	// **後ろの重複が勝つ**（os/exec が env を後勝ちで畳む）ので、PATH をここで上書きできる。
+	cmd.Env = append(os.Environ(),
+		"PATH="+stubBrokenBreakingAwk(t)+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"CONTINUO_INSTALL_DIR="+dir)
+	raw, err := cmd.CombinedOutput()
+	out := string(raw)
+	if err != nil {
+		t.Fatalf("印を読めないだけで導入が止まっています: %v\n%s", err, out)
+	}
+
+	got, gerr := exec.Command(filepath.Join(dir, "continuo")).Output()
+	if gerr != nil {
+		t.Fatalf("置いた実行ファイルを動かせません: %v\n%s", gerr, out)
+	}
+	if !strings.Contains(string(got), "v0.10.0") {
+		t.Errorf("入れ替わっていません: %q\n%s", string(got), out)
+	}
+	if strings.Contains(out, "破壊的変更があります") ||
+		strings.Contains(out, "読み出せないので出てはいけません") {
+		t.Errorf("読み出せていないのに警告を出しています:\n%s", out)
+	}
+}

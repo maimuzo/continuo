@@ -735,11 +735,15 @@ breaking_lines() {
 
 # collect_breaking は、上げる範囲に破壊的変更があるかを調べる。
 #
-# **何も言わない場合が4つある。**
+# **何も言わない場合が6つある。**
 #   1. 置き先に実行ファイルが無い（新規の導入なので、警告する相手がいない）
 #   2. いま入っているものが版を名乗らない（`dev`。比べられない）
 #   3. これから入れる版が vN.N.N の形でない（同上）
 #   4. release の一覧を引けなかった（**入れるのは止めない。**警告は付随的なものである）
+#   5. 印を読み出す awk が落ちた（同上。**`|| true` で受ける**）
+#   6. `-rc1` などの付いた版から、同じ数字の正式版へ上げる
+#      （`vcmp` は `-` から後ろを落とすので `v2.98.0-rc1` と `v2.98.0` が同じ大きさになる。
+#      continuo はまだ rc を出していない。設計 3-36 の「何も言わない場合」の表に載せてある）
 #
 # **下げるときも何も出ない。**範囲が「いま入っている版より後」なので空になる。
 collect_breaking() {
@@ -750,7 +754,10 @@ collect_breaking() {
 	cb_body="$(fetch "$RELEASES_URL" 2> /dev/null || true)"
 	[ -n "$cb_body" ] || return 0
 
-	BREAKING_NOTES="$(printf '%s\n' "$cb_body" | breaking_lines "$INSTALLED_VERSION" "$VERSION")"
+	# **awk が落ちても導入は止めない。**このスクリプトは `set -eu` なので、`|| true` が無いと
+	# **代入の時点で終了し、実行ファイルを置く前に落ちる**（collect_breaking は install_binary より
+	# 先に走る）。しかも何のメッセージも出ない。**警告は付随的なものであり、作れなければ黙って続ける。**
+	BREAKING_NOTES="$(printf '%s\n' "$cb_body" | breaking_lines "$INSTALLED_VERSION" "$VERSION" || true)"
 }
 
 # report_breaking は、見つかった破壊的変更を目立つ形で出す。
