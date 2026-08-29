@@ -324,7 +324,7 @@ func (o *Orchestrator) postStatusMove(
 
 // postComment は continuo のコメントを issue へ1件書く。
 //
-// **continuo が issue へ書くものは、例外なくここを通す**（設計 3-63）。
+// **continuo が issue へ書くものは、例外なくここを通す**（設計 3-73）。
 // **`o.tracker.PostComment` を直に呼んではならない。**
 // `test/internal/redact` の検査が、この1本を迂回した呼び出しを構文木で落とす。
 //
@@ -332,11 +332,22 @@ func (o *Orchestrator) postStatusMove(
 // 6箇所あり、そのどれもが worktree・会話の記録・設定ファイルの絶対パスを載せうる。
 // **git の失敗をそのまま貼る経路もある**ので、組み立てる側で縮めると必ず漏れる。
 //
+// **縮められなかったときは、投稿する前に警告を1行出す。**投稿そのものは止めない
+// （止めると人間は「なぜ止まったのか」を知る手立てを失う）。**その代わり、
+// 絶対パスが公開の issue へ出たことが、あとからログで辿れる。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // nodeID: 投稿先の issue のノード ID。
 // body: コメント本文。
 // 戻り値: 投稿に失敗したときのエラー。
 func (o *Orchestrator) postComment(ctx context.Context, nodeID, body string) error {
-	_, err := o.tracker.PostComment(ctx, nodeID, redact.Paths(body), o.cfg.Tracker.Comments.SelfMarker)
+	safe, redactErr := redact.Paths(body)
+	if redactErr != nil {
+		o.logger.Warn(
+			"手元の絶対パスを縮められませんでした。本文をそのまま投稿します",
+			"node_id", nodeID, "error", redactErr,
+		)
+	}
+	_, err := o.tracker.PostComment(ctx, nodeID, safe, o.cfg.Tracker.Comments.SelfMarker)
 	return err
 }
