@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "6cccc1ffefe95df1e7de0da29da0f8d24f00bb6ccda6f20335424f58dd061cbc",
+  "_source_sha256": "3076de898231d536eb2c0ad568dff87fce38a75d4e059ec430b49050cfedd7a7",
   "abandon.board_not_listed": "Issue %s is not listed on the board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -561,6 +561,7 @@
   "ratelimit.new_reader.home_dir_failed": "cannot determine the home directory (cannot read %s): %w",
   "ratelimit.token.env_name_empty": "%w: rate_limit.token_env is empty",
   "ratelimit.token.env_value_empty": "%w: environment variable %s is empty",
+  "redact.err.unusable_home": "home is not usable as something to shorten",
   "scaffold.detect.advice_project_scope": "Reading the board needs the project scope. Log in again with `gh auth login -s project`.",
   "scaffold.detect.gh_not_found": "gh was not found",
   "scaffold.detect.owner.advice_flag": "Or run it again with `continuo init --owner <name>`.",

@@ -3,14 +3,16 @@
 // **利用者名は個人情報である。**`/home/<利用者名>/…` を書いてしまうと、issue のコメントは
 // 編集履歴が残るので取り消せない。**home で始まるパスは `~` に縮める。**
 //
-// **綴り方は3つあり、3つとも縮める。**home をそのまま書いた形、symlink を解いた形、
-// **`/` を `-` に置き換えた形**（Claude Code の会話の記録の置き場所の名前）。
+// **綴り方は4つあり、4つとも縮める。**home をそのまま書いた形、symlink を解いた形、
+// **`/` を `-` に置き換えた形**、**`/` と `.` と `_` を `-` に置き換えた形**
+// （どちらも Claude Code の会話の記録の置き場所の名前になりうる）。
 //
 // **縮めすぎも落とす。**`/home/alice` を縮める場面で `/home/alice2` や `/mnt/home/alice`
 // まで縮めると、人間は存在しない場所を見に行くことになる。
 package redact_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +20,25 @@ import (
 
 	"github.com/maimuzo/continuo/internal/redact"
 )
+
+// shortened は PathsWithHome を呼び、縮められなかったらそこでテストを落とす。
+//
+// **エラーを握り潰さない。**縮める対象として使えない home が渡ると
+// `redact.ErrUnusableHome` が返る。**それを無視すると、何も縮めていない結果を
+// 「期待どおり」と読んでしまう。**
+//
+// t: 呼び出し元のテスト。
+// body: 縮める本文。
+// home: 縮める対象の home。
+// 戻り値: 縮めたあとの本文。
+func shortened(t *testing.T, body, home string) string {
+	t.Helper()
+	got, err := redact.PathsWithHome(body, home)
+	if err != nil {
+		t.Fatalf("縮められませんでした（home=%q）: %v", home, err)
+	}
+	return got
+}
 
 // TestPathsWithHome_homeで始まるパスを縮める は、
 // 公開の issue に出しては困る形が、どれも `~` に縮むことを確かめる。
@@ -67,7 +88,7 @@ func TestPathsWithHome_homeで始まるパスを縮める(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := redact.PathsWithHome(c.in, home)
+			got := shortened(t, c.in, home)
 			if got != c.want {
 				t.Fatalf("縮め方が違う:\n 入力: %s\n 結果: %s\n 期待: %s", c.in, got, c.want)
 			}
@@ -103,27 +124,79 @@ func TestPathsWithHome_home以外は縮めない(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := redact.PathsWithHome(c.in, home); got != c.in {
+			if got := shortened(t, c.in, home); got != c.in {
 				t.Fatalf("縮めてはいけないものを縮めた:\n 入力: %s\n 結果: %s", c.in, got)
 			}
 		})
 	}
 }
 
-// TestPathsWithHome_縮める先が決まらないなら何もしない は、
-// home が使えない値のときに本文を壊さないことを確かめる。
+// TestPathsWithHome_2つ目以降の一致でも境界を見る は、
+// **同じ本文に一致が2つ以上あるときも、直前の1文字を読めていること**を確かめる。
+//
+// 目的: 走査のたびに文字列を切り詰めると、**2つ目の一致が行頭にあるものとして通る。**
+// `/mnt/home/alice/home/alice/x` の2つ目がそれに当たり、
+// **縮めてはいけない側が `/mnt/home/alice~/x` に縮む**（利用者名を残したまま、
+// 案内としては壊れたパスになる）。
+//
+// 与える情報: 縮めない一致のすぐ後ろに、もう1つ一致が続く本文。
+// 成功条件: どちらも縮まないこと。**`~` が1文字も出ないこと。**
+func TestPathsWithHome_2つ目以降の一致でも境界を見る(t *testing.T) {
+	const home = "/home/alice"
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "縮めない一致の直後にもう1つ続く",
+			in:   "`/mnt/home/alice/home/alice/x`",
+			want: "`/mnt/home/alice/home/alice/x`",
+		},
+		{
+			name: "縮める一致の直後に同じ並びが続く",
+			in:   "`/home/alice/home/alice/x`",
+			want: "`~/home/alice/x`",
+		},
+		{
+			name: "綴り直した形でも直前の1文字を見る",
+			in:   "`-mnt-home-alice-home-alice-x`",
+			want: "`-mnt-home-alice-home-alice-x`",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := shortened(t, c.in, home); got != c.want {
+				t.Fatalf("境界の判定が2つ目以降で効いていない:\n 入力: %s\n 結果: %s\n 期待: %s",
+					c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// TestPathsWithHome_使えないhomeは何もせずエラーを返す は、
+// home が使えない値のときに本文を壊さず、**黙って通しもしない**ことを確かめる。
 //
 // 目的: **すべての絶対パスが `~` に化ける事故を防ぐ。**`/` を home として渡されると、
 // `/opt/continuo` まで `~opt/continuo` になり、コメントが読めなくなる。
+// **同時に、何も縮めなかったことを呼び出し側へ伝える。**伝えないと、
+// 絶対パスが警告1行も無いまま公開の issue へ出る。
+//
 // 与える情報: 空・`/`・相対パスの home。
-// 成功条件: どれも入力がそのまま返ること。
-func TestPathsWithHome_縮める先が決まらないなら何もしない(t *testing.T) {
+// 成功条件: どれも入力がそのまま返り、`redact.ErrUnusableHome` が返ること。
+func TestPathsWithHome_使えないhomeは何もせずエラーを返す(t *testing.T) {
 	const body = "`/home/alice/x` と `/opt/continuo/bin/continuo`"
 
 	for _, home := range []string{"", "/", "//", "home/alice", "relative/path"} {
 		t.Run("home="+home, func(t *testing.T) {
-			if got := redact.PathsWithHome(body, home); got != body {
+			got, err := redact.PathsWithHome(body, home)
+			if got != body {
 				t.Fatalf("本文を書き換えた（home=%q）:\n 結果: %s", home, got)
+			}
+			if !errors.Is(err, redact.ErrUnusableHome) {
+				t.Fatalf("縮められなかったことが伝わっていない（home=%q）: err=%v", home, err)
 			}
 		})
 	}
@@ -139,7 +212,7 @@ func TestPathsWithHome_末尾のスラッシュは無視する(t *testing.T) {
 	const body = "`/home/alice/.claude/projects/x.jsonl`"
 	const want = "`~/.claude/projects/x.jsonl`"
 
-	if got := redact.PathsWithHome(body, "/home/alice/"); got != want {
+	if got := shortened(t, body, "/home/alice/"); got != want {
 		t.Fatalf("結果: %s\n期待: %s", got, want)
 	}
 }
@@ -148,7 +221,7 @@ func TestPathsWithHome_末尾のスラッシュは無視する(t *testing.T) {
 // **issue #75 が挙げた当の例**が縮むことを確かめる。
 //
 // 目的: Claude Code の会話の記録は
-// `~/.claude/projects/<cwd の `/` を `-` に置き換えたもの>/<セッション UUID>.jsonl` にある。
+// `~/.claude/projects/<cwd を綴り直したもの>/<セッション UUID>.jsonl` にある。
 // **その真ん中のディレクトリ名に、利用者名が丸ごと入る。**前半を `~` にしただけでは、
 // 同じ行の後半で利用者名が公開されたままになる。
 // 与える情報: issue #75 の本文が挙げているのと同じ形のパス。
@@ -180,11 +253,106 @@ func TestPathsWithHome_綴り直したhomeも縮める(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := redact.PathsWithHome(c.in, home)
+			got := shortened(t, c.in, home)
 			if got != c.want {
 				t.Fatalf("縮め方が違う:\n 入力: %s\n 結果: %s\n 期待: %s", c.in, got, c.want)
 			}
 			if strings.Contains(got, "alice") {
+				t.Fatalf("利用者名が残っている: %s", got)
+			}
+		})
+	}
+}
+
+// TestPathsWithHome_利用者名にドットや下線があっても綴り直した形を縮める は、
+// **`/Users/first.last` の機械で会話の記録の置き場所が縮むこと**を確かめる。
+//
+// 目的: **Claude Code は `/` だけでなく `.` と `_` も `-` に変える。**
+// `/` だけを見ていると `-Users-john-doe-…` に1つも当たらず、
+// **`-Users-john-doe-` の部分がそのまま公開される。**
+// **`/Users/first.last` は、会社で使う Mac の既定の形である。**
+//
+// **`.` と `_` が混ざる利用者名では、置き換えの組み合わせが4通りある。**
+// `/Users/ann_b.c` は `-Users-ann-b-c` にも `-Users-ann_b.c` にも
+// `-Users-ann_b-c` にも `-Users-ann-b.c` にもなりうる。
+// **綴り直す規則を持っているのは Claude Code であり、こちらは版を選べない。**
+//
+// 与える情報: 利用者名に `.` を持つ home、`_` を持つ home、その両方を持つ home、
+// および Claude Code が作りうる置き場所の名前の綴り。
+// 成功条件: 利用者名が1文字も残らないこと。
+func TestPathsWithHome_利用者名にドットや下線があっても綴り直した形を縮める(t *testing.T) {
+	cases := []struct {
+		name    string
+		home    string
+		in      string
+		want    string
+		leaking string
+	}{
+		{
+			name:    "ドットを含む利用者名",
+			home:    "/Users/john.doe",
+			in:      "- 会話の記録: `/Users/john.doe/.claude/projects/-Users-john-doe-worktrees-issue-1/1f2e.jsonl`",
+			want:    "- 会話の記録: `~/.claude/projects/~-worktrees-issue-1/1f2e.jsonl`",
+			leaking: "john",
+		},
+		{
+			name:    "下線を含む利用者名",
+			home:    "/Users/john_doe",
+			in:      "- 会話の記録: `/Users/john_doe/.claude/projects/-Users-john-doe-worktrees-issue-1/1f2e.jsonl`",
+			want:    "- 会話の記録: `~/.claude/projects/~-worktrees-issue-1/1f2e.jsonl`",
+			leaking: "john",
+		},
+		{
+			name:    "ドットのまま綴られた置き場所も縮める",
+			home:    "/Users/john.doe",
+			in:      "`-Users-john.doe-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "john",
+		},
+		{
+			name:    "ドットと下線が混ざり、両方が置き換わった形",
+			home:    "/Users/ann_b.c",
+			in:      "`-Users-ann-b-c-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "ann",
+		},
+		{
+			name:    "ドットと下線が混ざり、どちらも置き換わらなかった形",
+			home:    "/Users/ann_b.c",
+			in:      "`-Users-ann_b.c-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "ann",
+		},
+		{
+			name:    "ドットと下線が混ざり、ドットだけが置き換わった形",
+			home:    "/Users/ann_b.c",
+			in:      "`-Users-ann_b-c-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "ann",
+		},
+		{
+			name:    "ドットと下線が混ざり、下線だけが置き換わった形",
+			home:    "/Users/ann_b.c",
+			in:      "`-Users-ann-b.c-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "ann",
+		},
+		{
+			name:    "スラッシュを残したまま下線だけが置き換わった形",
+			home:    "/Users/ann_b.c",
+			in:      "- worktree: `/Users/ann-b.c/worktrees/issue-1`",
+			want:    "- worktree: `~/worktrees/issue-1`",
+			leaking: "ann",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := shortened(t, c.in, c.home)
+			if got != c.want {
+				t.Fatalf("縮め方が違う:\n 入力: %s\n 結果: %s\n 期待: %s", c.in, got, c.want)
+			}
+			if strings.Contains(got, c.leaking) {
 				t.Fatalf("利用者名が残っている: %s", got)
 			}
 		})
@@ -214,7 +382,7 @@ func TestPathsWithHome_symlink越しのhomeも縮める(t *testing.T) {
 	in := "- 作業していた場所: `" + filepath.Join(resolved, "worktrees", "issue-1") + "`"
 	const want = "- 作業していた場所: `~/worktrees/issue-1`"
 
-	if got := redact.PathsWithHome(in, link); got != want {
+	if got := shortened(t, in, link); got != want {
 		t.Fatalf("解決後のパスが縮んでいない:\n 入力: %s\n 結果: %s\n 期待: %s", in, got, want)
 	}
 }
@@ -260,6 +428,32 @@ func TestPaths_homeを引けなければエラーを返す(t *testing.T) {
 	got, err := redact.Paths(in)
 	if err == nil {
 		t.Fatal("home を引けないのにエラーが返っていません")
+	}
+	if got != in {
+		t.Fatalf("本文を書き換えた:\n 結果: %s\n 期待: %s", got, in)
+	}
+}
+
+// TestPaths_引けたhomeが使えなければエラーを返す は、
+// **`os.UserHomeDir` が値を返しても、それが使えなければ警告が出る**ことを確かめる。
+//
+// 目的: `HOME=/` は `os.UserHomeDir` を素通りする。**そこで何も縮めずに
+// エラーも返さないと、絶対パスが警告1行も無いまま公開の issue へ出る。**
+// 引けなかった場合と、扱いを変える理由が無い。
+//
+// 与える情報: `HOME` を `/` にした状態。
+// 成功条件: `redact.ErrUnusableHome` が返り、本文はそのまま返ること。
+func TestPaths_引けたhomeが使えなければエラーを返す(t *testing.T) {
+	// **`/` は実在する。**continuo が作るディレクトリでもない。
+	// **確かめたいのは「この値を home として使えないこと」そのもの**なので、
+	// t.TempDir() では置き換えられない（置き換えると使える home になってしまう）。
+	// test-design:allow-fake-path
+	t.Setenv("HOME", "/")
+
+	const in = "- 作業していた場所: `/home/alice/worktrees/issue-1`"
+	got, err := redact.Paths(in)
+	if !errors.Is(err, redact.ErrUnusableHome) {
+		t.Fatalf("使えない home が黙って通っている: err=%v", err)
 	}
 	if got != in {
 		t.Fatalf("本文を書き換えた:\n 結果: %s\n 期待: %s", got, in)
