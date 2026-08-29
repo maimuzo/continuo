@@ -152,25 +152,142 @@ func TestT_資源に無いキーは検出できて生のキーを画面に出さ
 	}
 }
 
-// 目的: 訳が無いキーが日本語へ落ちることを確認する（設計 3-35）。
+// 目的: 訳の無いキーが正の言語（日本語）へ落ちることを確認する（設計 3-35b）。
 //
-// **英語の資源はいま空である。**空のまま英語を選んでも、画面には日本語が出る。
+// **穴の空いた資源を組んで確かめる。**埋め込んだ `messages/en.json` は
+// `messages/ja.json` の複製なので、訳の無いキーが1つも無い。**それを相手にすると、
+// 落とし先を見る検査が1度も走らないまま通ってしまう。**
 //
-// 与える情報: 英語を選んだ状態で、日本語にしかないキーを引く。
-// 成功条件: 日本語の文言と同じ文字列が返ること。
-func TestT_訳が無いキーは日本語へ落ちる(t *testing.T) {
+// 与える情報: 宣言したキーのうち1つだけを持つ英語の資源。
+// 成功条件: 持っているキーは英語から、持たないキーは日本語から引けること。
+func TestCatalog_訳の無いキーは正の言語へ落ちる(t *testing.T) {
 	source, ok := i18n.CatalogOf(i18n.SourceLang)
 	if !ok {
 		t.Fatalf("正の言語 %s の資源がありません", i18n.SourceLang)
 	}
-	want := source.T(i18n.KeyDoctorLabelConfig)
-
-	useLang(t, i18n.LangEN)
-	if got := i18n.T(i18n.KeyDoctorLabelConfig); got != want {
-		t.Fatalf("英語に訳が無いのに日本語へ落ちていない: got %q, want %q", got, want)
+	keys := i18n.AllKeys()
+	if len(keys) < 2 {
+		t.Fatalf("宣言したキーが %d 個しかなく、穴の空いた資源を組めない", len(keys))
 	}
+	translated, untranslated := keys[0], keys[1]
+
+	const englishPattern = "translated on purpose"
+	target := i18n.NewCatalog(i18n.LangEN, map[i18n.Key]string{translated: englishPattern})
+
+	// 訳のあるキーは、その言語から引ける。
+	got, from, ok := target.Lookup(translated)
+	if !ok || from != i18n.LangEN || got != englishPattern {
+		t.Errorf("訳のあるキー %q が英語から引けていない: pattern=%q from=%q ok=%v",
+			translated, got, from, ok)
+	}
+
+	// 訳の無いキーは、正の言語（日本語）へ落ちる。
+	wantJA, _, ok := source.Lookup(untranslated)
+	if !ok {
+		t.Fatalf("キー %q が正の言語 %s の資源に無い", untranslated, i18n.SourceLang)
+	}
+	got, from, ok = target.Lookup(untranslated)
+	if !ok {
+		t.Fatalf("訳の無いキー %q がどこからも引けない", untranslated)
+	}
+	if from != i18n.SourceLang {
+		t.Errorf("訳の無いキー %q が正の言語へ落ちていない（引けた言語: %q）", untranslated, from)
+	}
+	if got != wantJA {
+		t.Errorf("訳の無いキー %q の落とし先が日本語の文言と違う: got %q, want %q",
+			untranslated, got, wantJA)
+	}
+
+	// **どちらの言語にも無いキーは、生のキーを画面に出さずに「無い」と分かる形で返る。**
+	const unknown = i18n.Key("doctor.label.この文言は存在しない")
+	if _, _, ok := target.Lookup(unknown); ok {
+		t.Errorf("どちらの言語にも無いキー %q が引けてしまった", unknown)
+	}
+	i18n.ResetMissing()
+	t.Cleanup(i18n.ResetMissing)
+	if got := target.T(unknown); got == string(unknown) || !strings.Contains(got, "文言が登録されていません") {
+		t.Errorf("どちらの言語にも無いキーの戻り値が %q になっている", got)
+	}
+}
+
+// 目的: 英語を選んだとき、宣言したキーが1つ残らず引けることを確認する。
+//
+// **空文字では検出できない。**引けなかったときに返るのは空文字ではなく
+// 「（文言が登録されていません: …）」なので、**引けたかどうかは Missing() で見る**
+// （設計 3-35）。
+//
+// 与える情報: 英語を選んだ状態で、宣言したキーを全部引く。
+// 成功条件: Missing() が空であること。
+func TestT_英語を選んでも引けないキーが1つも無い(t *testing.T) {
+	useLang(t, i18n.LangEN)
 	if i18n.Current() != i18n.LangEN {
 		t.Fatalf("選んだ言語が %s になっていない: %s", i18n.LangEN, i18n.Current())
+	}
+	i18n.ResetMissing()
+	t.Cleanup(i18n.ResetMissing)
+
+	for _, k := range i18n.AllKeys() {
+		i18n.T(k)
+	}
+	if got := i18n.Missing(); len(got) > 0 {
+		t.Errorf("英語を選んだときに引けなかったキーがある: %v", got)
+	}
+}
+
+// 目的: 英語の資源が日本語の資源の複製のままであることを確認する（設計 3-35b）。
+//
+// **これが無いと、英語の資源は黙って古くなる。**`messages/ja.json` の文言を1つ直しても
+// `messages/en.json` は古いままで、**キーが英語側に在る以上、日本語へ落ちない。**
+// `LANG` を持たない環境の利用者には古い文言が出続ける。
+//
+// **本物の英語の訳を入れ始めるときは、この検査を入れ替える**（訳したキーを除く形にするか、
+// 複製をやめて差分だけを置く形にする）。**入れ替えずに訳を入れると、ここで落ちる。**
+//
+// 与える情報: 宣言したキーと、日本語・英語それぞれの資源。
+// 成功条件: すべてのキーが英語側にもあり、文言が日本語側と一字一句同じであること。
+func TestMessages_英語の資源が日本語の資源の複製のままである(t *testing.T) {
+	source, ok := i18n.CatalogOf(i18n.SourceLang)
+	if !ok {
+		t.Fatalf("正の言語 %s の資源がありません", i18n.SourceLang)
+	}
+	target, ok := i18n.CatalogOf(i18n.LangEN)
+	if !ok {
+		t.Fatalf("言語 %s の資源がありません", i18n.LangEN)
+	}
+
+	for _, k := range i18n.AllKeys() {
+		want, _, ok := source.Lookup(k)
+		if !ok {
+			// 日本語側の欠落は TestKeys_宣言したキーと日本語の資源が1対1である が報告する。
+			continue
+		}
+		got, from, ok := target.Lookup(k)
+		if !ok || from != i18n.LangEN {
+			t.Errorf("キー %q が %s の資源に無い（複製が古い。ja.json から入れ直すこと）", k, i18n.LangEN)
+			continue
+		}
+		if got != want {
+			t.Errorf("キー %q の文言が複製と食い違う（複製が古い。ja.json から入れ直すこと）: %s %q / %s %q",
+				k, i18n.LangEN, got, i18n.SourceLang, want)
+		}
+	}
+}
+
+// 目的: 言語を決められなかったときの落とし先が英語であることを固定する（設計 3-35 / 3-35b）。
+//
+// **資源の正（SourceLang）とは別である。**正は「文言を書くときの原文の言語」で、
+// 既定は「設定でも LANG でも決まらなかったときに出す言語」である。
+// **`LANG` を持たない環境（CI・コンテナ・`env -i`）で日本語を出すと、読めない人が
+// 最初の画面で詰まる。**
+//
+// 与える情報: なし（package の定数）。
+// 成功条件: 既定が英語で、正が日本語であること。
+func TestDefaultLang_決められなかったときは英語である(t *testing.T) {
+	if i18n.DefaultLang != i18n.LangEN {
+		t.Fatalf("既定の言語が %s ではなく %s になっている", i18n.LangEN, i18n.DefaultLang)
+	}
+	if i18n.SourceLang != i18n.LangJA {
+		t.Fatalf("正の言語が %s ではなく %s になっている", i18n.LangJA, i18n.SourceLang)
 	}
 }
 

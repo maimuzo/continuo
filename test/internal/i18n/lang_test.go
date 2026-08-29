@@ -21,7 +21,7 @@ func envOf(values map[string]string) func(string) string {
 //
 // 与える情報: `ja_JP.UTF-8` のような実際に見かける書き方。
 // 成功条件: 言語の部分だけが取り出され、資源の無い言語と `C` / `POSIX` は
-// 既定の言語（日本語）になること。
+// **既定の言語（英語）**になること（設計 3-35）。
 func TestFromEnv_LANGから言語を決める(t *testing.T) {
 	cases := []struct {
 		name string
@@ -33,10 +33,10 @@ func TestFromEnv_LANGから言語を決める(t *testing.T) {
 		{"ハイフン区切りの英語", "en-GB", i18n.LangEN},
 		{"言語だけ", "en", i18n.LangEN},
 		{"修飾子つき", "en_US@euro", i18n.LangEN},
-		{"ロケールを使わない指定", "C", i18n.DefaultLang},
-		{"POSIX", "POSIX", i18n.DefaultLang},
-		{"空", "", i18n.DefaultLang},
-		{"資源の無い言語", "fr_FR.UTF-8", i18n.DefaultLang},
+		{"ロケールを使わない指定", "C", i18n.LangEN},
+		{"POSIX", "POSIX", i18n.LangEN},
+		{"空", "", i18n.LangEN},
+		{"資源の無い言語", "fr_FR.UTF-8", i18n.LangEN},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -65,8 +65,8 @@ func TestResolve_設定が主で環境変数が従である(t *testing.T) {
 		{"設定が環境変数に勝つ（逆向き）", "ja", "en_US.UTF-8", i18n.LangJA, false},
 		{"auto なら環境変数で決まる", "auto", "en_US.UTF-8", i18n.LangEN, false},
 		{"空でも環境変数で決まる", "", "en_US.UTF-8", i18n.LangEN, false},
-		{"auto で LANG が無ければ日本語", "auto", "", i18n.DefaultLang, false},
-		{"資源の無い言語は落とす", "fr", "en_US.UTF-8", i18n.DefaultLang, true},
+		{"auto で LANG が無ければ英語", "auto", "", i18n.LangEN, false},
+		{"資源の無い言語は落とす", "fr", "en_US.UTF-8", i18n.LangEN, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -90,7 +90,7 @@ func TestResolve_設定が主で環境変数が従である(t *testing.T) {
 // **Resolve が先に弾く経路だが、Use 単体でも既定へ落とす。**
 //
 // 与える情報: 資源の無い言語。
-// 成功条件: いま使う言語が既定（日本語）になること。
+// 成功条件: いま使う言語が既定（英語）になること。
 func TestUse_資源の無い言語は既定へ落ちる(t *testing.T) {
 	i18n.Use(i18n.Lang("fr"))
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
