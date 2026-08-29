@@ -24,8 +24,8 @@ const workflowTemplate = `---
 tracker:
   kind: github_projects_v2                  # 見張る先の種類。いまは GitHub Projects v2 だけ
   provider:                                 # ここから下は GitHub Projects v2 に固有の設定
-    owner: __FILL_ME__                      # ここを埋めること。例: https://github.com/maimuzo なら maimuzo
-    project_number: 0                       # ここを埋めること。例: https://github.com/users/maimuzo/projects/3 なら 3
+    owner: __FILL_ME__                      # ここを埋めること。例: https://github.com/octocat なら octocat
+    project_number: 0                       # ここを埋めること。例: https://github.com/users/octocat/projects/3 なら 3
     status_field: Status                    # issue の進み方を読み書きする single-select フィールドの名前
     token_source: gh_auth                   # gh_auth なら gh auth token コマンドで取る。env なら下の token_env から取る
     token_env: GITHUB_TOKEN                 # token_source が env のときに読む環境変数の名前

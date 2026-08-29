@@ -9,7 +9,7 @@ import (
 //
 //	CONTINUO-STATUS: review              対象なし（いま作業している issue）
 //	CONTINUO-STATUS: #45 review          代表の issue と同じリポジトリの #45
-//	CONTINUO-STATUS: maimuzo/repo#47 blocked   別リポジトリを明示した形
+//	CONTINUO-STATUS: octocat/hello-world#47 blocked   別リポジトリを明示した形
 var targetPattern = regexp.MustCompile(`^(?:([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+))?#(\d+)$`)
 
 // maxSignalsPerTurn は1つの turn で受け付ける表明の件数の上限である。

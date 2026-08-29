@@ -377,7 +377,7 @@ func ownerAdvice() []string {
 	return []string{
 		"gh を入れて `gh auth login -s project` でログインしてください",
 		"または `continuo init --owner <名前>` でもう一度実行してください",
-		"https://github.com/maimuzo なら maimuzo の位置が owner です",
+		"https://github.com/octocat なら octocat の位置が owner です",
 	}
 }
 
