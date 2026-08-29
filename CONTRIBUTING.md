@@ -88,11 +88,22 @@ socket へ繋がらないのいずれかで飛びます。CI では必ず飛び�
 - **画面に出す文言を足したら、`internal/i18n/messages/ja.json` にキーを足し、
   `internal/i18n/keys.go` の定数と `allKeys` の両方に足してください。**
   どれか1つでも欠けるとテストが落ちます（実際に落としました）
-- **`internal/i18n/messages/en.json` は、いまは `ja.json` の複製です**（英語の文章はまだありません）。
-  中途半端に訳すと1つの画面に英語と日本語が混ざるので、いまは日本語で一貫させています
-- **`ja.json` を直したら、`en.json` の `_source_sha256` も直してください。**
-  値は `shasum -a 256 internal/i18n/messages/ja.json` で出ます。
-  ずれたままだとテストが落ち、直し方が文面に出ます
+- **文言を確かめるテストは、日本語の原文を相手に書いてください。**
+  その package に `TestMain` を1つ置けば、テストが日本語で走ります
+  （見本: [test/internal/doctor/lang_test.go](test/internal/doctor/lang_test.go)）。
+  **既定の言語は英語なので、置かないと訳文が返ってきて検査が空振りします**
+- **文言を足したら、`internal/i18n/messages/en.json` にも英語を足してください。**
+  片方だけだと1つの画面に英語と日本語が混ざり、全部日本語であるより読みにくくなります
+- **英語を書くときは [docs/spec/translation-glossary.md](docs/spec/translation-glossary.md) に従ってください。**
+  どの日本語をどの英語にするかと、句点・大文字・書式の verb の決めごとが書いてあります。
+  **そこに無い語を使ったときは、その語を訳語集へ足してください**
+- **`ja.json` の文言を直したときは、`en.json` の先頭の `_source_sha256` を入れ直してください。**
+
+  ```bash
+  shasum -a 256 internal/i18n/messages/ja.json
+  ```
+
+  この値が実物と食い違うと、「日本語だけ直して英語を直し忘れた」としてテストが落ちます
 
 ## 触らないもの
 
@@ -137,11 +148,26 @@ curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/
 
 ## 最初の一歩に向く仕事
 
-**英語の文言**（`internal/i18n/messages/en.json`）。いまは `ja.json` の複製で、画面には日本語が出ます。
-`ja.json` を見ながら値を英語に置き換えるだけで、設計を読む必要も RUCM に触る必要もありません。
+**英語の文言の直し**（`internal/i18n/messages/en.json`）。全キーの訳が入っていますが、
+**機械的に訳した箇所が残っています。**読みにくい英語を見つけたら直してください。
+`ja.json` を見ながら1件ずつ直すだけで、設計を読む必要も RUCM に触る必要もありません。
 
-**足すときの約束。**`ja.json` からキーを消さないこと。`%d` や `%s` の並び順を訳文でも保つこと。
-**`_source_sha256` は消さないこと**（訳の元にした `ja.json` の版を持っています）。
+**直すときの約束。**キーを消さないこと。`%d` や `%s` の並び順を訳文でも保つこと
+（並び順が違うと `%!d(string=…)` のような壊れた表示になります。テストが落とします）。
+**言い換えは [docs/spec/translation-glossary.md](docs/spec/translation-glossary.md) の語に揃えること。**
+
+**日本語のまま出てしまう箇所を見つけたときも歓迎します。**
+**次の3つは、まだ資源へ移していません。**
+
+| どこ | 画面のどこに出るか |
+| --- | --- |
+| ログ | 常駐して動かしているあいだの出力 |
+| [internal/config/validate.go](internal/config/validate.go) の要件の文（`0より大きい整数にすること` など） | `continuo doctor` の `config` の行。設定に不正な値を書いたとき |
+| [internal/tracker](internal/tracker) のエラーの本文 | `continuo doctor` の `board` の行。ボードを読めなかったとき |
+
+**番兵エラー**（`errors.New` で package の変数として持つエラー）**を資源へ移すときは
+`i18n.Sentinel` を使ってください。**`errors.New` に文言を直接書くと、
+**その文字列は package の初期化の時点で固まり、言語を決める前なので英語を選んでも日本語のまま出ます。**
 
 ## 脆弱性を見つけたら
 

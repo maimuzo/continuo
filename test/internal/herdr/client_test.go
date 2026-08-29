@@ -266,8 +266,11 @@ func TestResolveSocketPath_設定値が相対パスならエラーになる(t *t
 // 時間切れと壊れた応答を区別できるようにするため）。
 // 与える情報: 応答を `{"id":"x","result":{"pan` まで書いて改行を書かずに止まる偽サーバと、
 // 読み取りタイムアウト 200 ミリ秒の Client。
-// 成功条件: PaneList がエラーを返し、そのメッセージが「タイムアウト」と言っていること
-// （「JSON として解析できません」になっていないこと）。
+// 成功条件: PaneList がエラーを返し、そのコードが read_timeout であること
+// （transport（壊れた応答）になっていないこと）。
+//
+// **文言ではなくコードで確かめる。**文言は言語ごとの資源から引くので、
+// 日本語の語を当てにすると英語を選んだだけでこのテストが落ちる。
 func TestCall_応答が途中で切れたときタイムアウトとして報告される(t *testing.T) {
 	fs := newFakeServer(t, func(t *testing.T, n int32, line []byte, conn net.Conn) {
 		if _, err := conn.Write([]byte(`{"id":"x","result":{"pan`)); err != nil {
@@ -284,7 +287,7 @@ func TestCall_応答が途中で切れたときタイムアウトとして報告
 	if err == nil {
 		t.Fatalf("応答が途中で切れたのにエラーが返らなかった")
 	}
-	if !strings.Contains(err.Error(), "タイムアウト") {
+	if !herdr.IsCode(err, herdr.ErrCodeReadTimeout) {
 		t.Fatalf("タイムアウトとして報告されていない: %v", err)
 	}
 }

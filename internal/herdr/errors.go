@@ -2,7 +2,8 @@ package herdr
 
 import (
 	"errors"
-	"fmt"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // ErrCodeAgentPaneBusy は、pane を作った直後に agent.start を呼ぶと返ることがある
@@ -71,11 +72,14 @@ type Error struct {
 }
 
 // Error は error インターフェースを満たす。
+//
+// **書式は資源から引く**（設計 3-35）。ここに書式を直接書くと、英語を選んでも
+// `continuo doctor` の `herdr` の行にだけ日本語が混ざる。
 func (e *Error) Error() string {
 	if e.Err != nil {
-		return fmt.Sprintf("herdr エラー [%s]: %s: %v", e.Code, e.Message, e.Err)
+		return i18n.T(i18n.KeyHerdrErrorWithCause, e.Code, e.Message, e.Err)
 	}
-	return fmt.Sprintf("herdr エラー [%s]: %s", e.Code, e.Message)
+	return i18n.T(i18n.KeyHerdrErrorWithoutCause, e.Code, e.Message)
 }
 
 // Unwrap は errors.Is / errors.As がラップした元のエラーを辿れるようにする

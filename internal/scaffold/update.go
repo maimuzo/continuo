@@ -28,18 +28,18 @@ var (
 	//
 	// **`continuo setup` は雛形を新規に作らない。**雛形を置くのは `continuo init` の仕事であり、
 	// 2つのコマンドが同じファイルを作れると、どちらが正かが決まらない。
-	ErrNotFound = errors.New("WORKFLOW.md がありません")
+	ErrNotFound = i18n.Sentinel(i18n.KeyScaffoldErrNotFound)
 
 	// ErrKeysNotFound は、既にある WORKFLOW.md に書き換える対象のキーが無いことを表す。
 	//
 	// **黙って何もしないより落とす。**キーごと消された WORKFLOW.md に書き込んだつもりで
 	// 進むと、巡回は無言で「対象0件」を返し続ける。
-	ErrKeysNotFound = errors.New("WORKFLOW.md に書き換える対象のキーがありません")
+	ErrKeysNotFound = i18n.Sentinel(i18n.KeyScaffoldErrKeysNotFound)
 
 	// ErrStatusesIncomplete は、5つの役割のうち1つでも空のまま渡されたことを表す。
 	//
 	// **一部だけ書き換えると、割り当てた Status と雛形の既定値が混ざる。**
-	ErrStatusesIncomplete = errors.New("5つの役割すべてに選択肢が必要です")
+	ErrStatusesIncomplete = i18n.Sentinel(i18n.KeyScaffoldErrStatusesIncomplete)
 
 	// ErrKeysNotRewritable は、キーはあるが値が下の行にぶら下がっていて書き換えられない
 	// ことを表す。
@@ -47,12 +47,12 @@ var (
 	// **キーの行だけを組み立て直すと、下の行が値の残骸として残る。**そのまま書くと
 	// YAML として読めないファイルになり、**画面には「書き換えました」が出る。**
 	// 利用者は「setup は成功したのに continuo が起動しない」状態になるので、書かずに止める。
-	ErrKeysNotRewritable = errors.New("WORKFLOW.md のキーの値が下の行にぶら下がっていて書き換えられません")
+	ErrKeysNotRewritable = i18n.Sentinel(i18n.KeyScaffoldErrKeysNotRewritable)
 
 	// ErrWouldBreakConfig は、書き換えた結果が front matter として読めなくなることを表す。
 	//
 	// **書き込む前に組み立てた全文を自分で読み直す。**読めなくなる書き換えは行わない。
-	ErrWouldBreakConfig = errors.New("書き換えると WORKFLOW.md を読めなくなります")
+	ErrWouldBreakConfig = i18n.Sentinel(i18n.KeyScaffoldErrWouldBreakConfig)
 )
 
 // CheckUpdatable は、Status の割り当てを書き換えられるかだけを確かめる。

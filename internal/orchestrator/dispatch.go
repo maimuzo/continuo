@@ -36,7 +36,11 @@ const agentStatusPollInterval = 500 * time.Millisecond
 // pane を作った直後や Claude Code が起動しきる前の一瞬にも起きる。**ここで人間へ渡すと、
 // 待てば通ったはずの issue が毎回 Blocked で止まる**（2026-08-21 に実際に起きた）。
 //
-// **errors.Is の比較対象なので、この値の identity を変えてはならない**（i18n の対象外）。
+// **errors.Is の比較対象なので、この値の identity を変えてはならない。**
+// **i18n.Sentinel に替えても identity は変わらない**（比較するのはこの変数そのものである）。
+// **それでもまだ替えないのは、この文が入る先が internal/orchestrator の日本語のままの文だからである。**
+// ここだけ英語にすると、1つの引き渡しコメントの中で日本語と英語が混ざる。
+// **この package の人間向けの文言をまとめて資源へ移すときに、一緒に替えること。**
 var ErrStartupRetryable = errors.New("起動に失敗しましたが、待てば通るかもしれません")
 
 // ErrStatusNotWritten は、着手の段2 でボードの Status を書かなかったことを表す。
@@ -46,7 +50,11 @@ var ErrStartupRetryable = errors.New("起動に失敗しましたが、待てば
 // 意味する。**人間へ渡さず、印だけ静かに外す**（`failure_state` へ落とすと、
 // 人間が `Blocked` に置いた issue に continuo が上書きしたことになる）。
 //
-// **errors.Is の比較対象なので、この値の identity を変えてはならない**（i18n の対象外）。
+// **errors.Is の比較対象なので、この値の identity を変えてはならない。**
+// **i18n.Sentinel に替えても identity は変わらない**（比較するのはこの変数そのものである）。
+// **それでもまだ替えないのは、この文が出る先がログだけだからである**（人間へは渡さない）。
+// **ログは運用者が読むものなので、画面に出す文言と同じ資源には載せていない。**
+// **この package の人間向けの文言をまとめて資源へ移すときに、一緒に見直すこと。**
 var ErrStatusNotWritten = errors.New("ボードの Status を書かなかったので着手しません")
 
 // dispatchBlockedStates は着手の段2 で「この状態なら Status を書かない」一覧を返す。

@@ -88,7 +88,7 @@ var CredentialsRelPath = filepath.Join(".claude", ".credentials.json")
 //
 // **これはエラーとして扱うが、起動は止めない**（設計 3-27）。Reader は自分で握りつぶし、
 // 以後 Enabled が偽を返すようになる。
-var ErrNoCredentials = errors.New("枠の判定に使う資格情報を取得できません")
+var ErrNoCredentials = i18n.Sentinel(i18n.KeyRatelimitErrNoCredentials)
 
 // Limit は usage API が返す枠1件である（設計 3-15 の応答のサンプル）。
 type Limit struct {

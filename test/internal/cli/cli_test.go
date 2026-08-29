@@ -694,7 +694,10 @@ func TestRunTrust_ホームディレクトリを引けなければ書き込ま�
 // 与える情報: `language: en` を書いた WORKFLOW.md。
 // 成功条件: 呼んだあとの言語が英語になっていること。
 func TestRunDoctor_設定の言語で検査結果を出す(t *testing.T) {
-	t.Cleanup(func() { i18n.Use(i18n.FromEnv(os.Getenv)) })
+	// **`i18n.FromEnv(os.Getenv)` で戻してはならない。**開発者の手元の `LANG` 次第で
+	// 戻り先が変わり、あとに走る検査の相手の言語が変わる。
+	// **この package は TestMain（lang_test.go）で正の言語に固定してあるので、そこへ戻す。**
+	t.Cleanup(func() { i18n.Use(i18n.SourceLang) })
 	deps := fakeDoctor(doctor.Report{Results: []doctor.Result{
 		{Label: doctor.LabelConfig, Symbol: doctor.SymbolOK, Detail: "ok"},
 	}})

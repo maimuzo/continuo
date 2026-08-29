@@ -60,12 +60,12 @@ type Result struct {
 // 区別が要る失敗は sentinel error で返す。cmd/continuo はこれを見て終了コードと文言を決める。
 var (
 	// ErrAlreadyExists は、書き出す先に既に WORKFLOW.md があり、force が偽だったことを表す。
-	ErrAlreadyExists = errors.New("WORKFLOW.md が既にあります")
+	ErrAlreadyExists = i18n.Sentinel(i18n.KeyScaffoldErrAlreadyExists)
 	// ErrDirNotFound は、指定されたディレクトリが存在しないことを表す。
 	// force が真でもディレクトリは作らない（打ち間違えたパスに一式が生まれるのを防ぐ）。
-	ErrDirNotFound = errors.New("指定されたディレクトリがありません")
+	ErrDirNotFound = i18n.Sentinel(i18n.KeyScaffoldErrDirNotFound)
 	// ErrNotADirectory は、指定されたパスが存在するがディレクトリではないことを表す。
-	ErrNotADirectory = errors.New("指定されたパスはディレクトリではありません")
+	ErrNotADirectory = i18n.Sentinel(i18n.KeyScaffoldErrNotADirectory)
 	// ErrSymlink は、書き出す先の WORKFLOW.md が symlink だったことを表す。
 	// symlink を辿って書くと、指定されたディレクトリの外にあるリンク先を壊す。
 	// --force であっても辿らずに止める。
@@ -73,7 +73,7 @@ var (
 	// **--force の経路には隙間がある。**os.Lstat で symlink を見てから os.Rename で
 	// 差し替えるまでの間に symlink へ置き換えられると、これを返さずに差し替える（設計 3-60）。
 	// 新しく作る経路には隙間が無い（O_EXCL と O_NOFOLLOW が kernel の open の時点で見る）。
-	ErrSymlink = errors.New("WORKFLOW.md が symlink です")
+	ErrSymlink = i18n.Sentinel(i18n.KeyScaffoldErrSymlink)
 )
 
 // WriteTemplate は dir の直下に WORKFLOW.md の雛形を書く。
