@@ -6637,6 +6637,69 @@ gh api repos/<owner>/<repo>/issues/<番号> --jq '{author: .user.login, associat
 **順番を変えない。**先に「信用してよいのは3つだけ」を読ませると、そこで止まる。
 
 
+### 3-73. issue へ書く本文から、手元の絶対パスを消す
+
+**言いたいこと。**issue が公開のリポジトリにあると、`/home/<利用者名>/…` がそのまま公開される。
+**home で始まるパスは `~` に縮める。**縮めるのは投稿の直前の1箇所だけであり、本文を組み立てる
+場所では縮めない。
+
+**なぜ困るか。**利用者名は個人情報であり、worktree の置き場所はその機械の構成を明かす。
+**issue のコメントは編集履歴が残るので、書いてしまうと取り消せない。**
+CLAUDE.md が禁じているのはコミットだけだが、**実行時に書くものにも同じ配慮が要る。**
+
+**縮める場所は1箇所である。**
+
+| 何 | 中身 |
+| --- | --- |
+| **縮める関数** | [internal/redact/redact.go](../../internal/redact/redact.go) の `Paths` |
+| **通す唯一の入り口** | [internal/orchestrator/comment.go](../../internal/orchestrator/comment.go) の `Orchestrator.postComment` |
+| **迂回を落とす検査** | [test/internal/redact/single_choke_point_test.go](../../test/internal/redact/single_choke_point_test.go) |
+
+**`o.tracker.PostComment` を直に呼んではならない。**検査が構文木で `o.tracker.PostComment(…)` を
+探し、`comment.go` 以外で見つけたら落ちる。
+
+**組み立てる側で縮めない。**本文を作る場所は6箇所（未信頼の通知・引き渡しの通知・
+Status を動かした記録・表明の取りこぼし・片付けの見送り・復元時の引き渡し）あり、
+**git の失敗の文言をそのまま貼る経路もある**ので、組み立てる側で縮めると必ず漏れる。
+
+**縮めるのは home の3つの綴りである。**
+
+| 綴り | 例（home が `/home/alice`） |
+| --- | --- |
+| **そのまま** | `/home/alice/worktrees/issue-1` → `~/worktrees/issue-1` |
+| **symlink を解いた形** | `/var/home/alice/worktrees/issue-1` → `~/worktrees/issue-1` |
+| **`/` を `-` に置いた形** | `-home-alice-worktrees-issue-1` → `~-worktrees-issue-1` |
+
+**symlink を解いた形が要る理由。**引き渡しの通知に載る subagent の記録のパスは
+[internal/orchestrator/transcript.go](../../internal/orchestrator/transcript.go) が
+`filepath.EvalSymlinks` で解決済みにしている。一方 `os.UserHomeDir` は Unix では `$HOME` を
+そのまま返すので、**home が symlink 越しに指されている機械では、この2つが一致しない。**
+
+**`-` で綴り直した形が要る理由。**Claude Code の会話の記録は
+`~/.claude/projects/<cwd の `/` を `-` に置き換えたもの>/<セッション UUID>.jsonl` にあり、
+**その真ん中のディレクトリ名に利用者名が丸ごと入る。**issue #75 が挙げた例そのものであり、
+**前半だけ `~` にしても、同じ行の後半に利用者名が残る。**
+
+**前後を見ずに置き換えてはならない。**`/` の綴りでは `/home/alice2/x` を `~2/x` に、
+`/mnt/home/alice` を `/mnt~` にしてしまうので、**直前が名前の続きでなく、直後が `/` か
+名前の終わりのときだけ縮める。****`-` の綴りでは `-` を区切りとして扱う**（名前の続きに
+数えると1つも縮まらない）。`-home-alice2-x` のように直後が英数字なら縮めない。
+
+**home の外にあるパスはそのまま出す。**伏せると引き渡しの通知の【調べるところ】が
+「どこを見ればよいか分からない」ものになる。**利用者名が入るのは home の下である。**
+
+**`~` は「continuo を動かしている機械の home」を指す。**issue を読む人間の home とは限らないが、
+**それでも `~` にする。**読む人が別の機械にいるなら、絶対パスを出しても同じくその人の手元には
+無い。**縮めても失われる案内は無く、公開される情報だけが減る。**
+
+**home を引けなかったら、警告を1行出してから、そのまま投稿する。**
+`os.UserHomeDir` は Unix では `$HOME` しか見ないので、環境を絞って起こす仕組みからは引けない。
+**止めない理由。**投稿そのものを止めると、人間は「なぜ止まったのか」を知る手立てを失う。
+**黙って素通りさせない理由。****取り消せないものが公開の issue へ出たことは、ログで辿れなければならない。**
+
+**縮めるのは issue へ書く本文だけである。**ログとダッシュボードは縮めない。
+どちらもその機械の中でしか読まれず、**縮めると人間がそのまま貼り付けて使えなくなる。**
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す
