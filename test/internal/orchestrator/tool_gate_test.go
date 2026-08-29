@@ -90,13 +90,15 @@ func countPromptHooks(s toolGateSettings) int {
 // そこで終わり、無人運用が壊れる。
 //
 // 与える情報: `mode: public_only` の設定と、公開リポジトリ（`RepoIsPrivate` が false）の issue。
-// 成功条件: `prompt` の hook が1件あり、matcher が `Bash`、`model` が `haiku`、
+// 成功条件: `prompt` の hook が1件あり、matcher が `Bash`、`model` が設定に書いたとおりの文字列、
 // `continueOnBlock` が真、指示文に `$ARGUMENTS` が入っていること。`command` の hook も残ること。
 func TestToolGate_公開リポジトリのissueには判定のhookを足す(t *testing.T) {
 	public := false
+	// モデル名は架空である。**受け付ける名前の一覧が公式文書に無いので、実在の名前を書かない**
+	// （設計 3-64c）。ここで確かめたいのは「書いた文字列がそのまま settings.json へ通ること」である。
 	got, _ := writeSettingsForToolGate(t, config.ClaudeToolGateConfig{
 		Mode:  config.ClaudeToolGateModePublicOnly,
-		Model: "haiku",
+		Model: "example-fast-model",
 		Tools: []string{"Bash"},
 	}, &public)
 
@@ -129,8 +131,8 @@ func TestToolGate_公開リポジトリのissueには判定のhookを足す(t *t
 	if h.Async {
 		t.Fatal("async が付いています（非同期の hook は判定を返せない）")
 	}
-	if h.Model != "haiku" {
-		t.Fatalf("判定させるモデルが違います: got %q, want %q", h.Model, "haiku")
+	if h.Model != "example-fast-model" {
+		t.Fatalf("判定させるモデルが違います: got %q, want %q", h.Model, "example-fast-model")
 	}
 	if !strings.Contains(h.Prompt, "$ARGUMENTS") {
 		t.Fatalf("指示文に $ARGUMENTS がありません（判定する呼び出しが渡らない）: %q", h.Prompt)
@@ -162,7 +164,7 @@ func TestToolGate_公開かどうかで判定を掛けるかが決まる(t *test
 		t.Run(c.name, func(t *testing.T) {
 			got, _ := writeSettingsForToolGate(t, config.ClaudeToolGateConfig{
 				Mode:  config.ClaudeToolGateModePublicOnly,
-				Model: "haiku",
+				Model: "example-fast-model",
 				Tools: []string{"Bash"},
 			}, c.repoIsPrivate)
 			n := countPromptHooks(got)
@@ -195,7 +197,7 @@ func TestToolGate_modeで掛ける範囲が変わる(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			got, _ := writeSettingsForToolGate(t, config.ClaudeToolGateConfig{
 				Mode:  c.mode,
-				Model: "haiku",
+				Model: "example-fast-model",
 				Tools: []string{"Bash"},
 			}, &private)
 			if n := countPromptHooks(got); n != c.wantGate {
@@ -224,7 +226,7 @@ func TestToolGate_判定に回す道具のmatcherを組み立てる(t *testing.T
 		t.Run(c.name, func(t *testing.T) {
 			got, _ := writeSettingsForToolGate(t, config.ClaudeToolGateConfig{
 				Mode:  config.ClaudeToolGateModeOn,
-				Model: "haiku",
+				Model: "example-fast-model",
 				Tools: c.tools,
 			}, &public)
 			entries := got.Hooks["PreToolUse"]

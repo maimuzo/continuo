@@ -286,9 +286,12 @@ var ClaudeToolGateModes = []string{
 // 返ると、その道具の呼び出しが断られる。
 //
 //	"PreToolUse": [
-//	  { "matcher": "Bash", "hooks": [ { "type": "prompt", "model": "haiku",
+//	  { "matcher": "Bash", "hooks": [ { "type": "prompt",
 //	      "continueOnBlock": true, "prompt": "…$ARGUMENTS…" } ] }
 //	]
+//
+// **既定では `model` を書かない。**受け付ける名前の一覧が公式文書に無いためである
+// （Model のコメントを見よ）。書くのは利用者が自分の手元で試したときだけである。
 //
 // **`continueOnBlock` を必ず真にする。**偽だと、断った時点で turn がそこで終わる
 // （公式文書の Response schema。2026-08-29 に確認）。無人で回している continuo では、
