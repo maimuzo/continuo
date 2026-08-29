@@ -333,7 +333,7 @@ func TestRunDoctor_後ろに書いたhelpが効く(t *testing.T) {
 }
 
 // TestRunDoctor_差分だけを求められたら検査を1つも行わない は、
-// `continuo doctor --missing-keys-patch` を確かめる（設計 3-63。issue #85）。
+// `continuo doctor --missing-keys-patch` を確かめる（設計 3-73。issue #85）。
 //
 // **この口があるから、検査結果に出した差分を利用者が組み立て直さずに当てられる。**
 // 検査結果の中の差分は見出し語の桁に揃えて字下げされるので、そのままでは `patch` に渡せない。

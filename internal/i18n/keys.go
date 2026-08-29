@@ -70,7 +70,7 @@ const (
 	KeyDoctorLabelMissingKeys Key = "doctor.label.missing_keys"
 )
 
-// doctor の検査「未記入の項目」（設計 3-63。issue #85）。
+// doctor の検査「未記入の項目」（設計 3-73。issue #85）。
 const (
 	// KeyDoctorMissingKeysConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
 	KeyDoctorMissingKeysConfigUnreadable Key = "doctor.missing_keys.config_unreadable"
