@@ -463,6 +463,16 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 //	戻せない失敗が続いた       … 同じく、戻す先がボードから消えたときの分岐
 //	人間がそのキーの Status へ動かした … `automatedStateHint` は人間には何も返さない
 //
+// **`cleanup.on_states` に書いてある Status でも同じことが起きる**（設計 3-57。issue #76）。
+// あちらへ書いた名前を `tracker.active_states` へ足すと、`config.Validate` が
+// 「作業中の worktree を片付けてしまう」として弾く（設計 3-9）。
+// **だから、そこへ足せとは言わない。****貼っても起動する直し方だけを出す。**
+//
+// **`cleanup.on_states` の判定は対応表の分岐より後ろに置く。**両方に名前がある設定では、
+// **`tracker.terminal_states` へ足すと対応表のキーの検査に落ちる**
+// （キーは `config.KnownStates` のどこにも出てこない Status でなければならない）。
+// **先に対応表のその行を消す、が唯一の順番である。**
+//
 // rs: 対象の run。
 // state: 動かされた先の Status 名。
 // 戻り値: issue のコメントとログに載せる理由の文字列。
@@ -511,6 +521,18 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 				"（キーは設定の他のどこにも名前が出てこない Status でなければなりません）。"+
 				"**ボードの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
 			state, state, rewriteTarget, state)
+	case containsFold(o.cfg.Cleanup.OnStates, state):
+		teach = fmt.Sprintf(
+			"\n【`%s` も continuo に扱わせたいときは】この名前は WORKFLOW.md の "+
+				"`cleanup.on_states`（worktree の片付けを始める Status）に書いてあります。"+
+				"**`tracker.active_states` へ書き足すと continuo は起動しません**"+
+				"（走っている worktree を片付けてしまうので、設定の検査が弾きます）。"+
+				"**終わったとみなしてよい Status なら、`tracker.terminal_states` に書き足してください**"+
+				"（`cleanup.on_states` は、この一覧の中から選ぶ決まりです）。"+
+				"**`%s` でも作業を続けさせたいなら、先に `cleanup.on_states` からその行を消してから、"+
+				"`tracker.active_states` か `tracker.status_signal_map` へ書き足してください。**"+
+				"どちらの直し方も、そのまま設定へ書いて continuo が起動します。",
+			state, state)
 	}
 	return fmt.Sprintf(
 		"continuo が知らない Status になったので、この issue の作業を止めました。\n%s"+

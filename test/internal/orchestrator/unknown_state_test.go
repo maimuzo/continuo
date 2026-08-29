@@ -265,3 +265,67 @@ func TestStopWorker_止めたらherdrの待ち受けの中のturnループも解
 		return strings.Contains(fx.Logs.String(), "continuo がこの worker を止めたので")
 	})
 }
+
+// TestUnknownState_cleanup_on_statesで止めても貼ると起動しない案内を出さない は、
+// 設計 3-57 を確かめる（issue #76）。
+//
+// 目的: **止めたときの案内は `tracker.active_states` へ足せと言っていた。**
+// その名前が `cleanup.on_states` にあると、**言われたとおりに足した設定は起動しない**
+// （`config.Validate` が「走っている worktree を片付けてしまう」として弾く。設計 3-9）。
+// **人間は案内どおりに直したのに、continuo を起動できなくなる。**
+//
+// 与える情報: `cleanup.on_states` が `Archived` だけの設定（`tracker.terminal_states` は
+// 既定の `Done` のままなので、`Archived` は continuo の知らない Status である）と、
+// 着手済みの issue を `Archived` へ動かす操作。猶予は 0（turn の終わりを待たない）。
+//
+// 成功条件: 止めた理由のコメントに `active_states` へ書き足せという案内が無く、
+// 代わりに「この名前は `cleanup.on_states` にある」ことと、
+// **そのまま書いても起動する直し方**（`tracker.terminal_states` へ足す）が書かれていること。
+func TestUnknownState_cleanup_on_statesで止めても貼ると起動しない案内を出さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.VerifyStatesEvery = 0
+			// **猶予を置かない。**待つ側の挙動は別のテストで見る。
+			cfg.Tracker.UnknownStateGraceMs = 0
+			// **`tracker.terminal_states` には足さない。**足すと知っている Status になり、
+			// 知らない Status で止まる道を1度も通らない。
+			cfg.Cleanup.OnStates = []string{"Archived"}
+		},
+	})
+	blockFirstPrompt(t, fx)
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+
+	// ★ 人間が、片付けを始める Status へ動かした。
+	fx.Tracker.SetState(issue.ID, "Archived")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatalf("知らない Status で止めたのに issue に1文字も残っていない")
+	}
+	// **既定の案内をそのまま出してはならない。**書くと continuo が起動しなくなる。
+	if strings.Contains(body,
+		"WORKFLOW.md の `tracker.active_states` か `tracker.status_signal_map` にその名前を書き足して") {
+		t.Errorf("`cleanup.on_states` にある Status なのに `active_states` へ足す案内を出している"+
+			"（言われたとおりに書くと continuo が起動しない）:\n%s", body)
+	}
+	for _, want := range []string{
+		// どこに書いてある名前なのか。
+		"`cleanup.on_states`",
+		// そのまま書いても起動する直し方。
+		"`tracker.terminal_states` に書き足してください",
+		// 起動しなくなる直し方は、そうと分かるように書いてある。
+		"continuo は起動しません",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("止めた理由のコメントに %q が無い:\n%s", want, body)
+		}
+	}
+}

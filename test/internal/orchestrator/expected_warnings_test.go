@@ -125,6 +125,11 @@ var expectedWarnings = map[string][]string{
 	"TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない": {
 		"continuo が知らない Status になったので worker を止めます",
 	},
+	// 設計 3-57（issue #76）: **`cleanup.on_states` の Status で止めたときの案内を見る。**
+	// 止まること自体は上のテスト群と同じで、**その WARN はテストが起こしている。**
+	"TestUnknownState_cleanup_on_statesで止めても貼ると起動しない案内を出さない": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
 	"TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる": {"権限の確認で止まっているので引き継ぎません"},
 	"TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す":        {"agent_status を判断できないので引き継ぎません"},
 	"TestRestore_agentの一覧を取れなくてもpaneを1つも閉じない":                           {"agent の一覧を取れません"},

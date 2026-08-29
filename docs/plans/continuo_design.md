@@ -5936,6 +5936,20 @@ continuo が最後に書いた値は `In Review` のこともあり、**その�
 | `active_states` の先頭 | それも外れているとき |
 | **提案しない**（`active_states` の案内だけを出す） | `active_states` が空のとき |
 
+**`cleanup.on_states` に書いてある Status でも、同じ理由で案内を書き分ける。**
+あちらの名前を `tracker.active_states` へ足すと、`config.Validate` が
+「作業中の worktree を片付けてしまう」として弾く（3-9）。**足せとは言わない。**
+
+| その Status に持たせたい意味 | 出す案内 |
+| --- | --- |
+| 終わったとみなす（片付けてよい） | `tracker.terminal_states` に書き足す（`cleanup.on_states` はその一覧の中から選ぶ。3-9e） |
+| まだ作業を続けさせたい | **先に `cleanup.on_states` からその行を消してから**、`active_states` か `status_signal_map` へ書き足す |
+
+**判定は対応表（`automated_state_rewrite`）の分岐より後ろに置く**（`unknownStateReason` の `switch`）。
+両方に名前がある設定では、**`terminal_states` へ足すと対応表のキーの検査に落ちる**
+（キーは `config.KnownStates` のどこにも名前が出てこない Status でなければならない）。
+**「先に対応表のその行を消す」が唯一の順番である。**
+
 ---
 
 ### 3-58. 書き戻しの印と「終わらせる処理」の印を分ける
