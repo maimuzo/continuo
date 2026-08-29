@@ -801,6 +801,24 @@ func (ft *fakeTracker) SetState(id, state string) {
 	}
 }
 
+// SetDispatchable は issue の `Dispatchable` を書き換える（設計 3-13）。
+//
+// **本物のアダプタは、リポジトリが Claude Code に信頼登録されていないと偽にして返す。**
+// Status は `active_states` のまま偽になることがあり、そのときの巡回の振る舞いを見るために使う。
+//
+// id: project item の ID。
+// dispatchable: 新しい値。
+func (ft *fakeTracker) SetDispatchable(id string, dispatchable bool) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID == id {
+			ft.board[i].Dispatchable = dispatchable
+			return
+		}
+	}
+}
+
 // ClearStatusAuthor は「いまの Status を誰が書いたか分からない」状況を作る
 // （設計 3-54。timeline のイベントが消えた・権限が無い・直近50件から溢れた）。
 //

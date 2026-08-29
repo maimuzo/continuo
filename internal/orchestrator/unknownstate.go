@@ -86,7 +86,7 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 	}
 
 	now := o.now()
-	since := rs.noteExternalMove(now)
+	since := rs.noteExternalMove(now, externalMoveUnknownState)
 	grace := time.Duration(o.cfg.Tracker.UnknownStateGraceMs) * time.Millisecond
 	waited := now.Sub(since)
 
@@ -133,6 +133,11 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 //	自動化が書いたが turn が動いていない       … 待たない（待っても turn は終わらない）
 //	猶予（`tracker.unknown_state_grace_ms`）を過ぎた … 待たない
 //
+// **`active_states` のままの run へは呼ばない。**呼び出し側（`reconcileRunning`）が
+// 別の分岐で受ける。`active_states` に入ったまま止まる run は「Status を引き渡された」の
+// ではなく `Dispatchable` が偽になった run であり（リポジトリの信頼登録が外れた等）、
+// **Status を誰が書いたかは、止める理由と何の関係も無い。**
+//
 // **待つ理由は、走っている Claude Code を continuo 自身が殺さないためである。**
 // エージェントが turn の途中で自分の PR をマージすると、ボードの組み込みの自動化が
 // `Done` を書く。**次の巡回はそれを「終わった」と読み、走っている turn ごと片付けにいく。**
@@ -143,8 +148,10 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 // （`validateAutomatedStateRewrite`。設計 3-55）、**終端も引き渡しも設定に名前が出てくる。**
 // **引ける行は1つも作れないので、引く経路を持たせない。**
 //
-// **猶予の起点は知らない Status と同じものを使う**（`runState.externalMoveSince`）。
-// 1つの issue の Status は1つなので、2つの起点が同時に要ることはない。
+// **猶予の起点は知らない Status と同じ場所に持つ**（`runState.externalMoveSince`）。
+// **ただし種類が変わったら起点を切り直す**（`externalMoveAutomatedHandoff`）。
+// 知らない Status で待っていた run が続けて自動化に動かされることがあり、
+// 起点を繰り越すと、そこから測る猶予が前回ぶんだけ短くなる。
 //
 // rs: 対象の run。
 // issue: 取り直した issue。
@@ -160,7 +167,7 @@ func (o *Orchestrator) holdForAutomatedMove(rs *runState, issue tracker.Issue) b
 		return false
 	}
 	now := o.now()
-	since := rs.noteExternalMove(now)
+	since := rs.noteExternalMove(now, externalMoveAutomatedHandoff)
 	waited := now.Sub(since)
 	if waited >= grace || !rs.turnLoopActive() {
 		return false

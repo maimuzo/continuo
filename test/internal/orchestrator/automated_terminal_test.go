@@ -21,7 +21,7 @@ import (
 // automatedMoveGraceConfig は「猶予を1分だけ置く」設定を作る。
 //
 // **`unknown_state_grace_ms` は知らない Status と共用である**（設計 3-73）。
-// 1つの issue の Status は1つなので、猶予の起点も設定キーも1つで足りる。
+// **待つ長さの設定は共用だが、猶予の起点は種類が変わったら切り直す**（`externalMoveKind`）。
 func automatedMoveGraceConfig(cfg *config.Config) {
 	cfg.Tracker.VerifyStatesEvery = 0
 	cfg.Tracker.UnknownStateGraceMs = 60000
@@ -157,6 +157,76 @@ func TestReconcile_猶予が0なら自動化が書いた終端でもその場で
 	itemID := startRunAndBlockTurn(t, fx)
 
 	fx.Tracker.SetStateByAutomation(itemID, "Done")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}
+
+// TestReconcile_作業中のままdispatchできなくなったら待たずに止める は、設計 3-73 を確かめる。
+//
+// 目的: `active_states` に入ったままでも `Dispatchable` が偽になると止める（設計 3-13。
+// リポジトリの Claude Code への信頼登録が外れた等）。**これは Status の引き渡しではない。**
+// **書いたのが自動化かどうかで待つと、Status と無関係な理由で止めるはずの run が
+// 猶予ぶん止まらなくなる。**
+//
+// 与える情報: turn の待ち受けに入ったままの run。Status は `In Progress` のままで、
+// **書いたのはボードの自動化**、`Dispatchable` だけが偽になる。猶予は1分。
+// 成功条件: 時計を進めずに、その巡回で run が終わること。
+func TestReconcile_作業中のままdispatchできなくなったら待たずに止める(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now, Mutate: automatedMoveGraceConfig})
+	itemID := startRunAndBlockTurn(t, fx)
+
+	// Status は作業中のまま。**書いたのは自動化**だが、止める理由はそこではない。
+	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+	fx.Tracker.SetDispatchable(itemID, false)
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}
+
+// TestReconcile_知らないStatusで待った時間は自動化の猶予へ持ち越さない は、設計 3-73 を確かめる。
+//
+// 目的: 猶予の起点は知らない Status と同じ場所に持つが、**種類が変わったら切り直す。**
+// 2つは同時には起きないが、**順には起きる。**知らない Status で待っていた run が続けて
+// 自動化に `Done` へ動かされたとき、起点を繰り越すと猶予が前回ぶんだけ短くなる。
+//
+// 与える情報: 猶予1分。turn の待ち受けに入ったままの run へ、
+// まず人間が知らない Status（`Icebox`）を書き、50秒後にボードの自動化が `Done` を書く。
+// 成功条件: `Done` から50秒（最初の動きからは100秒）経っても、まだ止まっていないこと。
+// **起点を繰り越していれば、この時点で猶予（1分）を過ぎて止まっている。**
+func TestReconcile_知らないStatusで待った時間は自動化の猶予へ持ち越さない(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now, Mutate: automatedMoveGraceConfig})
+	itemID := startRunAndBlockTurn(t, fx)
+	closesBefore := fx.Herdr.CountMethod(herdr.MethodPaneClose)
+
+	// 人間が知らない Status へ動かした。turn が動いているので猶予の内側で待つ。
+	fx.Tracker.SetState(itemID, "Icebox")
+	fx.Orc.Tick(context.Background())
+	time.Sleep(300 * time.Millisecond)
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("知らない Status の猶予の内側なのに印を外している: 印は %d 件", got)
+	}
+
+	// 50秒後、ボードの自動化が `Done` を書いた。**ここで猶予を数え直す。**
+	clock.Advance(50 * time.Second)
+	fx.Tracker.SetStateByAutomation(itemID, "Done")
+	fx.Orc.Tick(context.Background())
+	time.Sleep(300 * time.Millisecond)
+
+	// さらに50秒。`Done` からは50秒しか経っていないので、まだ待つ。
+	clock.Advance(50 * time.Second)
+	fx.Orc.Tick(context.Background())
+	time.Sleep(500 * time.Millisecond)
+
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("起点を繰り越して猶予を短くしている: 印は %d 件", got)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodPaneClose); got != closesBefore {
+		t.Fatalf("起点を繰り越して pane を閉じている: pane.close が %d 回", got-closesBefore)
+	}
+
+	// `Done` から猶予を過ぎれば、いままでどおり終える。
+	clock.Advance(2 * time.Minute)
 	fx.Orc.Tick(context.Background())
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
