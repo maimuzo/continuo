@@ -1067,6 +1067,11 @@ const (
 
 // 二重起動を防ぐロック（internal/lock）のエラーの文言。
 const (
+	// KeyLockErrAlreadyRunning は番兵エラー `lock.ErrAlreadyRunning` の文言である。
+	//
+	// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+	// **引くのは Error() が呼ばれたときである**（i18n.Sentinel）。
+	KeyLockErrAlreadyRunning Key = "lock.err.already_running"
 	// KeyLockAcquireOpenFailed はロックファイルを開けなかったときに出る。
 	KeyLockAcquireOpenFailed Key = "lock.acquire.open_failed"
 	// KeyLockAcquireAlreadyRunning は別のプロセスが同じロックファイルを掴んでいるときに出る。
@@ -2142,6 +2147,12 @@ const (
 
 // daemon のエラー（起動の段・起動時の検査・依存の組み立て）。
 const (
+	// KeyDaemonErrStartup は番兵エラー `daemon.ErrStartup` の文言である。
+	//
+	// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+	// **引くのは Error() が呼ばれたときである**（i18n.Sentinel）。
+	// **`daemon.run.*` の先頭の `%w` に入って画面へ出る。**
+	KeyDaemonErrStartup Key = "daemon.err.startup"
 	// KeyDaemonRunConfigLoadFailed は起動の段1で WORKFLOW.md を読めなかったときに出る。
 	KeyDaemonRunConfigLoadFailed Key = "daemon.run.config_load_failed"
 	// KeyDaemonRunSocketPathUnresolved はhook を受ける socket の場所を決められなかったときに出る。
@@ -2186,6 +2197,16 @@ const (
 	KeyDaemonBuildHookServerFailed Key = "daemon.build.hookserver_failed"
 	// KeyDaemonBuildDashboardFailed は依存の組み立てでダッシュボードを作れなかったときに出る。
 	KeyDaemonBuildDashboardFailed Key = "daemon.build.dashboard_failed"
+)
+
+// 言語の決め方そのもののエラー（internal/i18n）の文言。
+const (
+	// KeyI18nResolveUnsupportedLanguage は WORKFLOW.md の `language` に資源の無い言語が
+	// 書かれていたときに出る。
+	//
+	// **この文も資源から引く。**言語の設定が間違っているときの文だが、出す言語は
+	// 「いま決まっている言語」でよい。直に書くと、英語を選んだ画面にここだけ日本語が出る。
+	KeyI18nResolveUnsupportedLanguage Key = "i18n.resolve.unsupported_language"
 )
 
 // allKeys は宣言済みのキーを全部並べたものである。
@@ -2610,6 +2631,7 @@ var allKeys = []Key{
 	KeyDashboardAgoMinutes,
 	KeyDashboardAgoHours,
 	KeyDashboardNone,
+	KeyLockErrAlreadyRunning,
 	KeyLockAcquireOpenFailed,
 	KeyLockAcquireAlreadyRunning,
 	KeyLockReleaseUnlockFailed,
@@ -2998,6 +3020,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupNotInteractive,
 	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
+	KeyDaemonErrStartup,
 	KeyDaemonRunConfigLoadFailed,
 	KeyDaemonRunSocketPathUnresolved,
 	KeyDaemonRunSocketDirFailed,
@@ -3020,6 +3043,7 @@ var allKeys = []Key{
 	KeyDaemonBuildOrchestratorFailed,
 	KeyDaemonBuildHookServerFailed,
 	KeyDaemonBuildDashboardFailed,
+	KeyI18nResolveUnsupportedLanguage,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

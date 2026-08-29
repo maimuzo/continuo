@@ -122,7 +122,13 @@ func ShutdownBudget() time.Duration {
 // **巡回が始まったあとの異常終了と言い分けるためにある。**両方を「起動できません」と
 // 記録すると、無人運用のログを後から読む人間が、起動失敗と実行中の異常終了を取り違える。
 // 呼び出し側は `errors.Is(err, daemon.ErrStartup)` で切り分けること。
-var ErrStartup = errors.New("起動できませんでした")
+//
+// **文言は Error() が呼ばれるたびに資源から引く**（i18n.Sentinel）。
+// errors.New に書くと、その文字列は package の初期化の時点で固まる。**言語が決まるのは
+// 設定を読んだあと**なので、英語を選んでもこの1文だけ日本語のまま出る。
+// **この値は `daemon.run.*` の文言の `%w` に入って画面へ出る**ので、そこだけ日本語になる。
+// **errors.Is が見るのはこの変数の identity なので、資源から引いても切り分けは壊れない。**
+var ErrStartup = i18n.Sentinel(i18n.KeyDaemonErrStartup)
 
 // Options は Run の入力である。
 type Options struct {

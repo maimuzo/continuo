@@ -281,7 +281,9 @@ func (c *Catalog) pattern(key Key) string {
 		return p
 	}
 	recordMissing(key)
-	return fmt.Sprintf("（文言が登録されていません: %s）", string(key))
+	// **ここだけは資源から引けない**（引けなかったことを伝える文なので、引きに行くと同じ穴に落ちる）。
+	// **だから直に書く。英語で書く。**日本語で書くと、英語を選んだ画面にこの1行だけ日本語が出る。
+	return fmt.Sprintf("(no message is registered for this key: %s)", string(key))
 }
 
 // T はキーに対応する文言を組み立てる。
@@ -486,8 +488,10 @@ func Resolve(configured string, getenv func(string) string) (Lang, error) {
 	}
 	lang := Lang(strings.ToLower(v))
 	if !Supported(lang) {
-		return DefaultLang, fmt.Errorf(
-			"language: %q は対応していません（%s か %q のいずれかにすること）",
+		// **この1文も資源から引く。**言語の設定が間違っているときに出る文だが、
+		// **出す言語は「いま決まっている言語」でよい**（引けなければ正の言語へ落ちる）。
+		// 直に書くと、英語を選んだ利用者の画面にここだけ日本語が出る。
+		return DefaultLang, Errorf(KeyI18nResolveUnsupportedLanguage,
 			configured, joinLangs(Available()), LangConfigAuto)
 	}
 	return lang, nil
