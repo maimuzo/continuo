@@ -17,11 +17,12 @@
 package redact
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // homeMark は縮めたあとに置く印である。
@@ -32,7 +33,12 @@ const homeMark = "~"
 //
 // **返さないと、何も縮めずに素通りしたことが誰にも伝わらない。**
 // `Paths` の呼び出し側はこれを見て警告を1行出す（設計 3-73c）。
-var ErrUnusableHome = errors.New("home が縮める対象として使えません")
+//
+// **文言は Error() が呼ばれるたびに資源から引く**（i18n.Sentinel）。
+// errors.New に書くと、その文字列は package の初期化の時点で固まる。**言語が決まるのは
+// 設定を読んだあと**なので、英語を選んでもこの1文だけ日本語のまま出る。
+// **errors.Is が見るのはこの変数の identity なので、資源から引いても切り分けは壊れない。**
+var ErrUnusableHome = i18n.Sentinel(i18n.KeyRedactErrUnusableHome)
 
 // Paths は body の中の絶対パスのうち、continuo を動かしている機械の home で始まるものを
 // `~` に縮める。
