@@ -112,7 +112,7 @@ var expectedWarnings = map[string][]string{
 		"自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します",
 		"continuo が知らない Status になったので worker を止めます",
 	},
-	// 設計 3-57（issue #67）: **止まったときに出す案内を見るテストである。**
+	// 設計 3-57b（issue #67）: **止まったときに出す案内を見るテストである。**
 	// 止まること自体は上のテスト群と同じで、**その WARN はテストが起こしている。**
 	"TestAutomatedState_押し合いで止めても貼ると起動しない案内を出さない": {
 		"自動化が動かした Status を書き戻す回数が上限に達しました",
@@ -123,6 +123,23 @@ var expectedWarnings = map[string][]string{
 		"continuo が知らない Status になったので worker を止めます",
 	},
 	"TestAutomatedState_人間が対応表のキーへ動かしても貼ると起動しない案内を出さない": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
+	// 設計 3-57b（issue #76）: **`cleanup.on_states` の Status で止めたときの案内を見る。**
+	// 止まること自体は上のテスト群と同じで、**その WARN はテストが起こしている。**
+	"TestUnknownState_cleanup_on_statesで止めても貼ると起動しない案内を出さない": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
+	"TestUnknownState_対応表と片付けの両方に名前があっても貼ると起動しない案内を出さない": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
+	"TestUnknownState_cleanup_on_statesで止めたらworktreeを片付けると書く": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
+	"TestUnknownState_cleanup_enabledがfalseならworktreeは残ると書く": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
+	"TestUnknownState_見送る条件を切ってあれば残っていれば片付けないと書かない": {
 		"continuo が知らない Status になったので worker を止めます",
 	},
 	"TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる": {"権限の確認で止まっているので引き継ぎません"},

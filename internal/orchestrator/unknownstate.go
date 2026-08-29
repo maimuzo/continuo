@@ -116,7 +116,14 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 			"identifier", issue.Identifier, "状態", issue.State, "猶予の上限", formatDuration(grace),
 			"書いたのは", writtenBy, "自動化か", issue.StatusChangedByAutomation)
 	} else {
-		o.logger.Warn("continuo が知らない Status になったので worker を止めます（worktree は残します）",
+		// **片付けるかどうかは `cleanup.enabled` と `cleanup.on_states` の両方で決まる**
+		// （設計 3-57b）。`cleanup.enabled` が偽なら `Manager.Cleanup` が
+		// 何もせずに戻るので、`cleanup.on_states` に入っていても worktree は残る。
+		kept := "（worktree は残します）"
+		if o.willCleanupState(issue.State) {
+			kept = "（cleanup.on_states の Status なので worktree は片付けます）"
+		}
+		o.logger.Warn("continuo が知らない Status になったので worker を止めます"+kept,
 			"identifier", issue.Identifier, "状態", issue.State,
 			"書いたのは", writtenBy, "自動化か", issue.StatusChangedByAutomation)
 	}
@@ -514,7 +521,7 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 //	なぜ止めたか            … continuo が知らない Status だから
 //	続けるにはどうするか    … active_states に入っている Status へ戻す
 //
-// **設定の足し方の案内は、必ず1つだけにする**（設計 3-57）。
+// **設定の足し方の案内は、必ず1つだけにする**（設計 3-57b）。
 // 「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を並べて出すと、
 // **両方やった設定は起動しない。**`automated_state_rewrite` のキーは
 // 「設定のどこにも名前が出てこない Status」でなければならず、`active_states` へ
@@ -527,6 +534,31 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 //	書き戻す回数が上限に達した … `automatedStateHint` の押し合いの分岐
 //	戻せない失敗が続いた       … 同じく、戻す先がボードから消えたときの分岐
 //	人間がそのキーの Status へ動かした … `automatedStateHint` は人間には何も返さない
+//
+// **`cleanup.on_states` に書いてある Status でも同じことが起きる**（設計 3-57b。issue #76）。
+// あちらへ書いた名前を `tracker.active_states` へ足すと、`config.Validate` が
+// 「作業中の worktree を片付けてしまう」として弾く（設計 3-9）。
+// **だから、そこへ足せとは言わない。****貼っても起動する直し方だけを出す。**
+//
+// **両方に名前がある設定には、専用の分岐を置く**（設計 3-57b）。
+// 対応表の案内だけでは足りず、`cleanup.on_states` の案内だけでも足りない。
+//
+//	対応表の行を消して `active_states` へ足す … `cleanup.on_states` が残るので弾かれる
+//	`terminal_states` へ足す                 … 対応表のキーの検査に落ちる
+//
+// **消す順番と、消す先が2つあることを1つの文で書き切る。**
+//
+// **片付けるかどうかは `cleanup.enabled` と `cleanup.on_states` の両方で決まる**
+// （設計 3-57b）。**両方が揃ったときだけ continuo はこの worktree を片付ける**
+// （`finishRunClaimed` が `ShouldCleanup` で消し、猶予 0 の道でも次の巡回の
+// `reconcileWorktrees` が消す）。**残ると書いたパスが消えるのも、消えると書いたパスが
+// 残るのも、どちらも案内として成り立たない。**
+//
+// **見送りの条件も設定で切れる。**「コミットしていない変更が残っていれば片付けない」は
+// `cleanup.require_clean_worktree` が真のときだけ、「push していない commit が残って
+// いれば片付けない」は `cleanup.require_pushed` が真のときだけの話である
+// （`internal/workspace/cleanup.go` の `leftoverReasons`）。**偽にしてある設定へ
+// その一文を出すと、消えないと読める worktree が消える。**
 //
 // rs: 対象の run。
 // state: 動かされた先の Status 名。
@@ -554,11 +586,12 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 			"continuo は turn の途中でもその場で止めます。" +
 			"エージェントの表明を読んでから判断させたいなら、この値を大きくしてください。"
 	}
-	// **貼ると起動しなくなる案内を出さない**（設計 3-57）。
+	// **貼ると起動しなくなる案内を出さない**（設計 3-57b）。
 	// 対応表に既に書いてある Status なら、`active_states` へ足す案内の代わりに
 	// **「先に対応表のその行を消す」を出す。**それが唯一、貼っても起動する直し方である。
 	hint, proposesRewrite := o.automatedStateHint(rs, state)
 	rewriteTarget, inRewriteTable := lookupStateRewrite(o.cfg.Tracker.AutomatedStateRewrite, state)
+	inCleanup := containsFold(o.cfg.Cleanup.OnStates, state)
 	teach := fmt.Sprintf(
 		"\n【`%s` も continuo に扱わせたいときは】WORKFLOW.md の `tracker.active_states` か "+
 			"`tracker.status_signal_map` にその名前を書き足してから、continuo を再起動してください。",
@@ -567,6 +600,23 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 	case proposesRewrite:
 		// 対応表へ1行足す案内を出した。**この Status はまだ対応表に無い。**
 		teach = ""
+	case inRewriteTable && inCleanup:
+		// **名前が2箇所にある。**片方だけ消しても起動しないので、両方の消し方を1つの文で出す。
+		teach = fmt.Sprintf(
+			"\n【`%s` も continuo に扱わせたいときは】この名前は WORKFLOW.md の2箇所にあります。"+
+				"`tracker.automated_state_rewrite` のキー（`%s` → `%s`）と、"+
+				"`cleanup.on_states`（worktree の片付けを始める Status）です。"+
+				"**まず `tracker.automated_state_rewrite` からその行を消してください。**"+
+				"消さずに `tracker` の他のキーへ書き足した設定では continuo は起動しません"+
+				"（キーは設定の他のどこにも名前が出てこない Status でなければなりません）。"+
+				"**そのうえで、終わったとみなしてよい Status なら `tracker.terminal_states` に書き足してください**"+
+				"（`cleanup.on_states` は、この一覧の中から選ぶ決まりです）。"+
+				"**`%s` でも作業を続けさせたいなら、`cleanup.on_states` からもその行を消してから、"+
+				"`tracker.active_states` か `tracker.status_signal_map` へ書き足してください。**"+
+				"**`cleanup.on_states` に残したまま `tracker.active_states` へ書き足すと、"+
+				"やはり continuo は起動しません**（走っている worktree を片付けてしまうので、設定の検査が弾きます）。"+
+				"**ボードの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
+			state, state, rewriteTarget, state, state)
 	case inRewriteTable:
 		teach = fmt.Sprintf(
 			"\n【`%s` も continuo に扱わせたいときは】この名前は WORKFLOW.md の "+
@@ -576,6 +626,39 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 				"（キーは設定の他のどこにも名前が出てこない Status でなければなりません）。"+
 				"**ボードの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
 			state, state, rewriteTarget, state)
+	case inCleanup:
+		teach = fmt.Sprintf(
+			"\n【`%s` も continuo に扱わせたいときは】この名前は WORKFLOW.md の "+
+				"`cleanup.on_states`（worktree の片付けを始める Status）に書いてあります。"+
+				"**`tracker.active_states` へ書き足すと continuo は起動しません**"+
+				"（走っている worktree を片付けてしまうので、設定の検査が弾きます）。"+
+				"**終わったとみなしてよい Status なら、`tracker.terminal_states` に書き足してください**"+
+				"（`cleanup.on_states` は、この一覧の中から選ぶ決まりです）。"+
+				"**`%s` でも作業を続けさせたいなら、先に `cleanup.on_states` からその行を消してから、"+
+				"`tracker.active_states` か `tracker.status_signal_map` へ書き足してください。**"+
+				"どちらの直し方も、そのまま設定へ書いて continuo が起動します。",
+			state, state)
+	}
+	// **片付ける設定でだけ「残りません」と書く。**continuo が worktree と branch を片付けるのは
+	// `cleanup.enabled` が真で、かつ Status が `cleanup.on_states` にあるときだけである
+	// （`finishRunClaimed` の `ShouldCleanup`、および次の巡回の `reconcileWorktrees`）。
+	kept := "worktree は残してあります（下記）。"
+	switch {
+	case o.willCleanupState(state):
+		kept = fmt.Sprintf(
+			"**worktree は残りません。**`%s` は `cleanup.on_states`（worktree の片付けを始める Status）"+
+				"なので、continuo はこの worktree と branch を片付けます（下記のパスは消えます）。"+
+				"%s"+
+				"**残したいなら、片付く前に Status を戻すか、`cleanup.on_states` からその行を消してください。**",
+			state, o.cleanupGuardSentence())
+	case inCleanup:
+		// **`cleanup.on_states` にはあるが `cleanup.enabled` が偽である。**片付けは走らない。
+		// 何も書かずに既定の一文だけを出すと、設定を直したときに何が起きるかが読めない。
+		kept = fmt.Sprintf(
+			"worktree は残してあります（下記）。`%s` は `cleanup.on_states`"+
+				"（worktree の片付けを始める Status）に書いてありますが、"+
+				"`cleanup.enabled` が false なので continuo は片付けを行いません。",
+			state)
 	}
 	return fmt.Sprintf(
 		"continuo が知らない Status になったので、この issue の作業を止めました。\n%s"+
@@ -583,12 +666,13 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 			"（いま知っているのは %s です）。`%s` はそのどれでもないので、"+
 			"この issue をどう進めればよいかを判断できません。"+
 			"\n【続けるには】Status を `tracker.active_states` に入っている Status（%s）のいずれかへ戻してください。"+
-			"次の巡回で着手し直します。worktree は残してあります（下記）。"+
+			"次の巡回で着手し直します。%s"+
 			"%s%s%s",
 		moved,
 		strings.Join(o.knownStates(), " / "),
 		state,
 		back,
+		kept,
 		teach,
 		grace,
 		hint)
@@ -705,4 +789,44 @@ func (o *Orchestrator) rewriteTargetSuggestion(rs *runState) string {
 		}
 	}
 	return ""
+}
+
+// willCleanupState は、その Status で止めたときに continuo が worktree と branch を
+// 実際に片付けるかどうかを返す（設計 3-57b。issue #76）。
+//
+// **`cleanup.on_states` に名前があるだけでは片付かない。**`cleanup.enabled` が偽なら
+// `workspace.Manager.Cleanup` は `Deferred` を返して1バイトも消さない。
+// **「片付ける Status か」と「片付けるか」を混同すると、案内が逆向きの嘘になる。**
+// 同じ判定は `config.CleanupStatesOutsideTerminal` も `cleanup.enabled` から始めている。
+//
+// **見送りの条件（`require_clean_worktree` / `require_pushed`）はここでは見ない。**
+// あれは worktree の中身を git に聞かないと決まらず、案内を組み立てる時点では確かめられない。
+// **残りものがあれば見送る、という条件付きの言い方を `cleanupGuardSentence` が添える。**
+//
+// state: 動かされた先の Status 名。
+// 戻り値: 片付けが走るなら true。
+func (o *Orchestrator) willCleanupState(state string) bool {
+	return o.cfg.Cleanup.Enabled && containsFold(o.cfg.Cleanup.OnStates, state)
+}
+
+// cleanupGuardSentence は、片付けを見送る条件を人間へ伝える一文を作る（設計 3-57b）。
+//
+// **真になっているフラグの分しか書かない。**`cleanup.require_clean_worktree` と
+// `cleanup.require_pushed` はどちらも設定で偽にできる（既定は両方 true）。
+// **偽にしてある設定へ「残っていれば片付けません」と書くと、消えないと読めた worktree が消える。**
+// 対応する実装は `internal/workspace/cleanup.go` の `leftoverReasons` である。
+//
+// 戻り値: 添える一文。**どちらのフラグも偽なら空文字**（見送る条件が無い）。
+func (o *Orchestrator) cleanupGuardSentence() string {
+	var left []string
+	if o.cfg.Cleanup.RequireCleanWorktree {
+		left = append(left, "コミットしていない変更")
+	}
+	if o.cfg.Cleanup.RequirePushed {
+		left = append(left, "push していない commit")
+	}
+	if len(left) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("**%s が残っている worktree は片付けません。**", strings.Join(left, "か、"))
 }
