@@ -1,4 +1,4 @@
-// **終端と引き渡しの Status をボードの自動化が書いたときの検査である**（設計 3-73。issue #79）。
+// **終端と引き渡しの Status をボードの自動化が書いたときの検査である**（設計 3-74。issue #79）。
 //
 // **エージェントが turn の途中で自分の PR をマージすると、ボードの組み込みの自動化が
 // `Done` を書く。**それを「人間が終わったと言っている」と読んで、continuo は走っている
@@ -20,7 +20,7 @@ import (
 
 // automatedMoveGraceConfig は「猶予を1分だけ置く」設定を作る。
 //
-// **`unknown_state_grace_ms` は知らない Status と共用である**（設計 3-73）。
+// **`unknown_state_grace_ms` は知らない Status と共用である**（設計 3-74）。
 // **待つ長さの設定は共用だが、猶予の起点は種類が変わったら切り直す**（`externalMoveKind`）。
 func automatedMoveGraceConfig(cfg *config.Config) {
 	cfg.Tracker.VerifyStatesEvery = 0
@@ -48,7 +48,7 @@ func startRunAndBlockTurn(t *testing.T, fx *fixture) string {
 	return issue.ID
 }
 
-// TestReconcile_自動化がDoneを書いてもturnの終わりまでは止めない は、設計 3-73 を確かめる。
+// TestReconcile_自動化がDoneを書いてもturnの終わりまでは止めない は、設計 3-74 を確かめる。
 //
 // 目的: 「PR がマージされたら Done」の自動化は、エージェントが turn の途中で自分の PR を
 // マージした瞬間に走る。**次の巡回がそれを終端と読むと、走っている Claude Code を
@@ -88,7 +88,7 @@ func TestReconcile_自動化がDoneを書いてもturnの終わりまでは止�
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
 
-// TestReconcile_人間がDoneを書いたらturnの途中でも止める は、設計 3-73 を確かめる。
+// TestReconcile_人間がDoneを書いたらturnの途中でも止める は、設計 3-74 を確かめる。
 //
 // 目的: **待つのは「書いたのが自動化だったとき」だけである。**人間が `Done` にしたのなら、
 // その人は自分の操作の結果を分かっている。**猶予を掛けると、止めたい人が既定10分待たされる。**
@@ -107,7 +107,7 @@ func TestReconcile_人間がDoneを書いたらturnの途中でも止める(t *t
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
 
-// TestReconcile_自動化がInReviewを書いてもturnの終わりまでは止めない は、設計 3-73 を確かめる。
+// TestReconcile_自動化がInReviewを書いてもturnの終わりまでは止めない は、設計 3-74 を確かめる。
 //
 // 目的: 引き渡しの Status も自動化が書く（PR を issue に紐づけたとき）。
 // **終端だけ塞いでも、同じ形でエージェントが殺される。**
@@ -139,7 +139,7 @@ func TestReconcile_自動化がInReviewを書いてもturnの終わりまでは�
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
 
-// TestReconcile_猶予が0なら自動化が書いた終端でもその場で止める は、設計 3-73 を確かめる。
+// TestReconcile_猶予が0なら自動化が書いた終端でもその場で止める は、設計 3-74 を確かめる。
 //
 // 目的: `tracker.unknown_state_grace_ms` を 0 にした利用者は「その場で止める」と決めている。
 // **知らない Status でそう決めた設定が、終端と引き渡しでだけ効かない、を作らない。**
@@ -161,7 +161,7 @@ func TestReconcile_猶予が0なら自動化が書いた終端でもその場で
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
 
-// TestReconcile_作業中のままdispatchできなくなったら待たずに止める は、設計 3-73 を確かめる。
+// TestReconcile_作業中のままdispatchできなくなったら待たずに止める は、設計 3-74 を確かめる。
 //
 // 目的: `active_states` に入ったままでも `Dispatchable` が偽になると止める（設計 3-13。
 // リポジトリの Claude Code への信頼登録が外れた等）。**これは Status の引き渡しではない。**
@@ -183,7 +183,7 @@ func TestReconcile_作業中のままdispatchできなくなったら待たず�
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
 
-// TestReconcile_知らないStatusで待った時間は自動化の猶予へ持ち越さない は、設計 3-73 を確かめる。
+// TestReconcile_知らないStatusで待った時間は自動化の猶予へ持ち越さない は、設計 3-74 を確かめる。
 //
 // 目的: 猶予の起点は知らない Status と同じ場所に持つが、**種類が変わったら切り直す。**
 // 2つは同時には起きないが、**順には起きる。**知らない Status で待っていた run が続けて

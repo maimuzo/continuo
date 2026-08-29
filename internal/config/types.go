@@ -259,6 +259,69 @@ type ClaudePermissionsConfig struct {
 	Deny []string `yaml:"deny"`
 }
 
+// ClaudeToolGateModeOff は tool_gate.mode の「掛けない」である。
+const ClaudeToolGateModeOff = "off"
+
+// ClaudeToolGateModeOn は tool_gate.mode の「issue の出どころに関わらず掛ける」である。
+const ClaudeToolGateModeOn = "on"
+
+// ClaudeToolGateModePublicOnly は tool_gate.mode の「公開リポジトリの issue にだけ掛ける」である。
+//
+// **公開リポジトリかどうかを取れなかった issue にも掛ける**（3-64）。
+// 分からないものを「公開ではない」と決めない。
+const ClaudeToolGateModePublicOnly = "public_only"
+
+// ClaudeToolGateModes は tool_gate.mode に書ける値の全部である。
+// **起動時の検査はこの一覧だけを見る**（validateClaudeToolGate）。
+var ClaudeToolGateModes = []string{
+	ClaudeToolGateModeOff,
+	ClaudeToolGateModeOn,
+	ClaudeToolGateModePublicOnly,
+}
+
+// ClaudeToolGateConfig は、エージェントが叩こうとした道具を Claude Code の中の
+// 判定モデルに見せて、危ないものを呼び出しの前に断らせる仕掛けの設定である（3-64）。
+//
+// **実体は issue ごとの settings.json に足す `PreToolUse` の `type: "prompt"` の hook である。**
+// 判定は Claude Code が内部で1回だけモデルを呼んで行い、`{"ok": false, "reason": "…"}` が
+// 返ると、その道具の呼び出しが断られる。
+//
+//	"PreToolUse": [
+//	  { "matcher": "Bash", "hooks": [ { "type": "prompt",
+//	      "continueOnBlock": true, "prompt": "…$ARGUMENTS…" } ] }
+//	]
+//
+// **既定では `model` を書かない。**受け付ける名前の一覧が公式文書に無いためである
+// （Model のコメントを見よ）。書くのは利用者が自分の手元で試したときだけである。
+//
+// **`continueOnBlock` を必ず真にする。**偽だと、断った時点で turn がそこで終わる
+// （公式文書の Response schema。2026-08-29 に確認）。無人で回している continuo では、
+// エージェントが断りを読んで自分でやり直せなければ、そこで作業が止まる。
+type ClaudeToolGateConfig struct {
+	// Mode は判定を掛ける範囲である。ClaudeToolGateModes のどれかを書く。
+	//
+	//	off          … 掛けない
+	//	on           … いつでも掛ける
+	//	public_only  … 公開リポジトリの issue にだけ掛ける（既定）
+	//
+	// **既定を public_only にする理由。**公開リポジトリの issue は誰でも書けるので、
+	// 指示そのものが攻撃になりうる（3-64）。
+	Mode string `yaml:"mode"`
+	// Model は判定させるモデルである。**既定は空である**（設計 3-64）。
+	// 空なら settings.json へ `model` を書かず、Claude Code の既定の速いモデルに任せる。
+	//
+	// **綴りは検査しない。**受け付ける名前を決めているのは Claude Code であり、
+	// 公式文書は "Model to use for evaluation. Defaults to a fast model"
+	// （判定に使うモデル。既定は速いモデル）としか書いていない。**一覧がこちらに無い。**
+	// **通らない名前を書いたときにどう倒れるかも確かめていない。**だから既定では書かない。
+	Model string `yaml:"model"`
+	// Tools は判定に回す道具の名前である。空なら全部の道具に掛ける。
+	//
+	// **書いた名前はそのまま hook の matcher になる。**複数書くと `Bash|Write` のように
+	// 縦棒でつないだ1つの matcher になる。
+	Tools []string `yaml:"tools"`
+}
+
 // ClaudeHookBridgeConfig は turn 終了検知の実体である hook の届け方を決める（3-12）。
 //
 // **届け方は `--settings` で外部の設定ファイルを指す経路に固定である**（設計 3-12）。
@@ -314,6 +377,8 @@ type ClaudeConfig struct {
 	TurnTimeoutMs int `yaml:"turn_timeout_ms"`
 	// HookBridge は turn 終了検知の実体である hook の届け方を決める。
 	HookBridge ClaudeHookBridgeConfig `yaml:"hook_bridge"`
+	// ToolGate は危ない道具の呼び出しを判定モデルに断らせる仕掛けの設定である（3-64）。
+	ToolGate ClaudeToolGateConfig `yaml:"tool_gate"`
 }
 
 // HerdrWorktreeConfig は herdr を介した worktree の作り方を決める。
