@@ -560,6 +560,59 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 **仕組み**（誰が Status を動かしたかの見分け方と、戻す先を決める道筋）**は
 [agent_life_cycle.md](agent_life_cycle.md) の「自動化に Status を横取りされたとき」にあります。**
 
+### 片付ける Status へ動かしたら issue が止まり、案内どおりに直したら起動しなくなった
+
+**原因。**止まった Status の名前が `cleanup.on_states`（worktree の片付けを始める Status）にあり、
+**`tracker.terminal_states` には無い**という組み合わせです。
+continuo が知っているのは `tracker` に書いた Status だけなので、その名前は「知らない Status」になります。
+
+**`tracker.active_states` へ書き足してはいけません。**次のエラーで起動しなくなります。
+
+```text
+設定キー cleanup.on_states の値 Archived が不正です:
+  tracker.active_states と同じ値を含めないこと（作業中の worktree を片付けてしまう。3-9）
+```
+
+**直し方。**その Status に持たせたい意味で選びます。**どちらもそのまま書いて起動します。**
+
+| その Status の意味 | どう直すか |
+| --- | --- |
+| **終わったとみなす**（片付けてよい） | `tracker.terminal_states` にその名前を書き足す |
+| **まだ作業を続けさせたい** | **先に `cleanup.on_states` からその行を消してから**、`tracker.active_states` に書き足す |
+
+```yaml
+tracker:
+  terminal_states: ["Done", "Archived"]   # 終わったとみなす Status に並べる
+cleanup:
+  on_states: ["Done", "Archived"]         # 片付けを始める Status は、上の一覧の中から選ぶ
+```
+
+**その名前が `tracker.automated_state_rewrite` のキーにもある場合は、消す先が2つあります。**
+**まず対応表のその行を消してください。**残したまま `tracker` の他のキーへ書き足すと、
+「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
+そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
+
+**その worktree が残るかどうかは `cleanup.enabled` で決まります。**
+**止めた理由のコメントに、その設定でどうなるかが書いてあります。**
+
+| `cleanup.enabled` | 止めたあとの worktree |
+| --- | --- |
+| **`true`**（既定） | **残りません。**continuo が worktree と branch を片付けます |
+| **`false`** | **残ります。**片付けそのものを行いません |
+
+**片付ける設定でも、次のものが残っていれば片付けを見送ります。**
+どちらも既定は `true` で、`false` にすると見なくなります（見ないので、残っていても片付きます）。
+
+| 設定キー | 残っていれば片付けない |
+| --- | --- |
+| `cleanup.require_clean_worktree` | コミットしていない変更（未追跡のファイルを含む） |
+| `cleanup.require_pushed` | push していない commit |
+
+**成果を残したいなら、片付く前に Status を戻すか、`cleanup.on_states` からその行を消してください。**
+
+**`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**
+**書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
+
 ### issue が `In Review` にならない
 
 **原因。**エージェントが `CONTINUO-STATUS: review` を出していません。
