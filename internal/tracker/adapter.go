@@ -993,7 +993,7 @@ func (a *Adapter) UpdateStatus(
 //
 // 用途は「エージェントがコメントを書いたかどうかを判別すること」だけである（設計 3-29）。
 // 取得した本文をプロンプトへ渡してはならない。issue の中身はエージェントが
-// gh issue view --comments で自分で読む。
+// gh の JSON 出力で自分で読む（設計 3-72。テキスト表示は使わせない）。
 //
 // **エージェントが書いたコメントは markers.Marker の印で判別する**（Comment.IsAgent）。
 // **continuo 自身が代筆したコメント（markers.SelfMarker の印）は、次の turn の入力から

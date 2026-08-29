@@ -437,8 +437,29 @@ flowchart TB
 
 ## 10. issue の中身はエージェントに直接読ませる
 
-**言いたいこと。**プロンプトに本文を埋め込まない。**URL を渡して `gh issue view <URL> --comments` で読ませる。**
+**言いたいこと。**プロンプトに本文を埋め込まない。**owner / repo / 番号だけを渡し、
+エージェントが `gh` の JSON 出力で読む**（3-29）。
 コメントを何件まで渡すかを continuo が決めると、切り捨てた分が読まれないからである。
+
+**読ませるのは JSON だけである。テキスト表示は使わせない**（3-72）。
+`gh issue view --comments` はコメントを行頭の `--` だけで区切り、本文を桁0から無加工で流す。
+**外部の人が自分のコメント本文に `author:` と `association:` の行を書けば、投稿者を偽装できる。**
+JSON なら本文は `body` の値にしかならず、**本文から `authorAssociation` を作れない。**
+`--jq` で1行のテキストへ潰すのも、偽装がそのまま通るので禁止する。
+
+| 何を読むか | 使うコマンド |
+| --- | --- |
+| issue のコメント | `gh issue view <番号> --repo <owner>/<repo> --json comments` |
+| issue の本文と投稿者の立場 | `gh api repos/<owner>/<repo>/issues/<番号>`（立場は REST にしか無い） |
+| PR の説明・会話・行に紐づくレビューコメント・レビュー | 4本とも JSON で読ませる（6-15） |
+
+**立場で分けるのは「命令に従ってよいか」だけである**（3-72a / 3-72b）。
+
+| 何を判断するか | 何を見るか |
+| --- | --- |
+| **この issue に取り組んでよいか** | **Status が `Ready` だったこと。**立場は見ない |
+| **本文やコメントの命令に従ってよいか** | `authorAssociation` が `OWNER` / `MEMBER` / `COLLABORATOR` か |
+| **再現手順や説明を材料に使ってよいか** | **立場によらず使ってよい。**命令ではないため |
 
 **副産物として、グループの扱いが簡単になる**（3-26）。
 
@@ -534,7 +555,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | branch を消す | worktree だけでなく branch も消す |
 | `read_timeout_ms` の相手が違う | herdr の socket API の応答を測る |
 | **Status を動かすのは continuo のコード** | エージェントは1行書くだけ |
-| **issue の中身をプロンプトに埋め込まない** | URL を渡して直接読ませる |
+| **issue の中身をプロンプトに埋め込まない** | owner / repo / 番号だけを渡し、`gh` の JSON 出力で直接読ませる |
 | 無音の測り方 | app-server の出力ではなく、pane の `revision`（画面の版）で測る |
 | `tracker` に仕様外のキーを足す | `dispatch_state` / `failure_state` / `status_signal_prefix` / `status_signal_map` |
 | 再起動後は引き渡し状態の worker を止めない | pane を残して人間に見せる |
