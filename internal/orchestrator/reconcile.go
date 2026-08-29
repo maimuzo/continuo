@@ -47,6 +47,9 @@ func (o *Orchestrator) resumeBackoff(ctx context.Context, dispatchAllowed bool) 
 //	active_states かつ routable … 手元のスナップショットを更新する
 //	それ以外（引き渡し・見えない） … **workspace を掃除せずに** worker を止める
 //
+// **終端と引き渡しは、書いたのがボードの自動化なら turn の終わりを待つ**
+// （`holdForAutomatedMove`。設計 3-63）。**人間が動かしたときはいままでどおり即座に止める。**
+//
 // **バックオフ待ちの run は触らない。**再 dispatch を待っている最中である。
 //
 // **worker を止める処理は別の goroutine で回す**（設計 3-8）。ここは巡回のループの
@@ -93,6 +96,12 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 
 		switch {
 		case containsFold(o.cfg.Tracker.TerminalStates, issue.State):
+			// **書いたのがボードの自動化なら、turn の終わりを待つ**（設計 3-63）。
+			// 「PR がマージされたら Done」の自動化が turn の途中で走ると、
+			// **走っている Claude Code を continuo 自身が殺してしまう。**
+			if o.holdForAutomatedMove(rs, issue) {
+				continue
+			}
 			// **同期で呼んではならない**（設計 3-8）。片付けの前にコメントを確かめる
 			// 経路（3-25 の9段）は `agent.prompt` を待ち受けつきで呼び、既定では最大
 			// 1時間返らない。巡回のループがそこで止まると、dispatch も stall 検知も
@@ -100,14 +109,18 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 			o.finishRunAsync(ctx, rs, "", fmt.Sprintf("Status が %s になっていました", issue.State))
 		case containsFold(o.cfg.Tracker.ActiveStates, issue.State) && issue.Dispatchable:
 			// まだ作業中で routable である。スナップショットの更新だけ。
-			// **知らない Status だった記録は消す**（設計 3-50）。エージェントが表明で
+			// **外から動かされていた記録は消す**（設計 3-50 / 3-63）。エージェントが表明で
 			// 戻したのだから、猶予の起点も捨てる。
-			rs.clearUnknownState()
+			rs.clearExternalMove()
 		case issue.State != "" && !o.isKnownState(issue.State):
 			// **continuo が知らない Status である**（設計 3-50）。黙って止めない。
 			o.handleUnknownState(ctx, rs, issue)
 		default:
 			// 引き渡し（`In Review` / `Blocked` など、設定に名前が出てくる Status）。
+			// **ここも書いたのが自動化なら turn の終わりを待つ**（設計 3-63）。
+			if o.holdForAutomatedMove(rs, issue) {
+				continue
+			}
 			o.logger.Info("作業中でも完了でもない状態になったので worker を止めます（worktree は残します）",
 				"identifier", issue.Identifier, "状態", issue.State)
 			o.stopAndReleaseAsync(ctx, rs)

@@ -66,9 +66,9 @@ func (o *Orchestrator) decideAfterTurn(
 		return true
 	case containsFold(o.cfg.Tracker.ActiveStates, current.State):
 		// 次の turn へ。打ち切りの判定は turnLoop の先頭で行う。
-		// **知らない Status だった記録は消す**（設計 3-50）。表明で戻ったのだから、
+		// **外から動かされていた記録は消す**（設計 3-50 / 3-63）。表明で戻ったのだから、
 		// 猶予の起点も捨てる。
-		rs.clearUnknownState()
+		rs.clearExternalMove()
 		return false
 	case current.State != "" && !o.isKnownState(current.State):
 		if mayRewrite {
@@ -159,11 +159,11 @@ func (o *Orchestrator) rewriteAndDecide(
 		// 人間が引き渡したわけではない。次の巡回が同じ判定でもう一度書きに行く。
 		// **「戻せない」が続いたときは `claimAutomatedRewrite` が枠を渡さなくなり、
 		// 猶予の時計が始まって人間へ渡る**（設計 3-56）。
-		rs.clearUnknownState()
+		rs.clearExternalMove()
 		return false
 	case !moved.Reached && moved.Previous == "":
 		// item がもう見えない。次の巡回が取り直して判断する。
-		rs.clearUnknownState()
+		rs.clearExternalMove()
 		return false
 	case !moved.Reached:
 		// **書きに行く直前のボードは `terminal_states` に入っていた。**
@@ -180,7 +180,7 @@ func (o *Orchestrator) rewriteAndDecide(
 		movedIssue.StatusChangedByAutomation = false
 	}
 	rs.setIssue(movedIssue)
-	rs.clearUnknownState()
+	rs.clearExternalMove()
 	return o.decideAfterTurn(ctx, rs, movedIssue, false)
 }
 

@@ -286,12 +286,17 @@ type runState struct {
 	// `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
 	awaitTurnEnd bool
-	// unknownStateSince は「continuo が知らない Status になっている」と最初に見た時刻である
-	// （設計 3-50）。ゼロ値なら、いまは知っている Status である。
+	// externalMoveSince は「continuo が意図していない Status へ外から動かされている」と
+	// 最初に見た時刻である（設計 3-50 / 3-63）。ゼロ値なら、いまは continuo が
+	// 意図した Status（`active_states` のいずれか）である。
+	//
+	// **数える対象は2つある。**continuo が知らない Status（3-50）と、
+	// **ボードの自動化が書いた終端・引き渡しの Status**（3-63）である。
+	// **どちらも同時には起きない**（1つの issue の Status は1つしかない）ので、起点は1つでよい。
 	//
 	// **猶予の起点である。**巡回のたびに入れ直すと猶予が永久に切れないので、
-	// 既に入っているときは触らない。知っている Status に戻ったら消す。
-	unknownStateSince time.Time
+	// 既に入っているときは触らない。`active_states` に戻ったら消す。
+	externalMoveSince time.Time
 	// automatedRewrites は、ボードの自動化が動かした Status を書き戻した回数である
 	// （設計 3-56）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
 	//
@@ -1008,30 +1013,30 @@ func (rs *runState) lastWrittenState() string {
 	return rs.LastWrittenState
 }
 
-// noteUnknownState は「continuo が知らない Status になっている」と見た時刻を控え、
-// その起点を返す（設計 3-50）。
+// noteExternalMove は「continuo が意図していない Status へ外から動かされている」と見た
+// 時刻を控え、その起点を返す（設計 3-50 / 3-63）。
 //
 // **起点は最初に見たときのまま据え置く。**巡回のたびに入れ直すと、猶予が永久に切れない。
 //
 // now: いまの時刻。
 // 戻り値: 猶予の起点（最初に見た時刻）。
-func (rs *runState) noteUnknownState(now time.Time) time.Time {
+func (rs *runState) noteExternalMove(now time.Time) time.Time {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if rs.unknownStateSince.IsZero() {
-		rs.unknownStateSince = now
+	if rs.externalMoveSince.IsZero() {
+		rs.externalMoveSince = now
 	}
-	return rs.unknownStateSince
+	return rs.externalMoveSince
 }
 
-// clearUnknownState は「知らない Status になっている」という記録を消す。
+// clearExternalMove は「外から動かされている」という記録を消す。
 //
-// **知っている Status に戻ったときに呼ぶ。**消さないと、次に知らない Status へ動かされた
-// ときに、前回の起点で猶予を測ってしまう。
-func (rs *runState) clearUnknownState() {
+// **`active_states` に戻ったときに呼ぶ。**消さないと、次に外から動かされたときに、
+// 前回の起点で猶予を測ってしまう。
+func (rs *runState) clearExternalMove() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	rs.unknownStateSince = time.Time{}
+	rs.externalMoveSince = time.Time{}
 }
 
 // rewriteClaim は「自動化が動かした Status を書き戻す」1回ぶんの確保である（設計 3-56）。
