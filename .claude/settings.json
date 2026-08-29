@@ -73,6 +73,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-reply-clarity.py\"",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
