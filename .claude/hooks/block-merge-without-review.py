@@ -21,7 +21,7 @@
 - 値を取るオプションが前に来た形（`gh pr merge --body "x" 94`）
 - PR の URL（`gh pr merge https://github.com/<owner>/<repo>/pull/94`）
 
-拾った番号について、**その PR のコメントに `<!-- code-review-result -->` があり、
+拾った番号について、**その PR のコメントの先頭に `<!-- code-review-result -->` があり、
 かつ、その投稿者がこのリポジトリの OWNER / MEMBER / COLLABORATOR であるかを `gh` で確かめる。**
 
 **無ければ止める。**あれば通す。
@@ -30,9 +30,13 @@
 
 - **番号を書かない形**（`gh pr merge` だけ）。現在の branch から引く形は、番号を取れないので見送る
 - `gh pr merge --repo <他所>` / `-R <他所>` / 他所を指す PR の URL。
-  **`--repo` / `-R` / URL に書かれたリポジトリ名を、実際にこのリポジトリ（`gh repo view` で取れる名前）と比べる。**
+  **`--repo` / `-R` / URL に書かれたリポジトリ名を、実際にこのリポジトリ（`git remote get-url origin` で取れる名前）と比べる。**
+  比べるのは `/` で区切った最後の2つ（`HOST/owner/repo` の形を許すため）。
   一致しなければ見ない。一致すれば、番号は他所の値でも意味が無いので、**このリポジトリの番号として扱って止める。**
-- `gh pr ready <番号> --undo`。**draft へ戻す操作なので止めない**（`--undo` が呼び出しのどこにあっても見送る）
+  **このリポジトリの名前が分からないときも同じく、このリポジトリの番号として扱って止める**
+  （分からないからと見送ると、`--repo` を付けるだけで検査ごと素通りできてしまう）。
+- `gh pr ready <番号> --undo`。**draft へ戻す操作なので止めない**（`gh pr ready` の呼び出しに限る。
+  `gh pr merge` に `--undo` という flag は無い — `gh pr merge -h` で確かめた）
 - `gh` が使えない・応答しないとき。**検査そのものが落ちたら通す**（作業を止めない）
 
 ## 手で通したいとき
@@ -66,13 +70,18 @@ TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 # 逃がし口。人間が明示的に許したときだけ置く。
 ESCAPE_ENV = "CONTINUO_ALLOW_UNREVIEWED_MERGE"
 
-# gh の応答を待つ秒数。**超えたら通す**（検査が落ちて作業を止めない）。
+# 外部コマンド（`gh` / `git`）の応答を待つ秒数。**超えたら通す**（検査が落ちて作業を止めない）。
 GH_TIMEOUT_SEC = 20
 
 # shlex でトークン化したとき、これらのトークンで「1回の gh 呼び出し」の区切りとみなす。
-# `&&` / `;` / `|` などで複数のコマンドをつないだときに、次のコマンドの引数を
-# 前の gh 呼び出しの引数として誤読しないためである。
-SEPARATORS = {";", "&&", "||", "|", "\n"}
+# `&&` / `;` / `|` / `&` / 改行 / 括弧などで複数のコマンドをつないだときに、
+# 次のコマンドの引数を前の gh 呼び出しの引数として誤読しないためである。
+#
+# **`"\n"` は、ここに書いただけでは働かない。**`shlex.split("a\nb")` は `['a', 'b']` を
+# 返し、改行そのものは独立したトークンとして出てこない（2026-08-30 に確認）。
+# `_tokenize()` が改行を行の区切りとして扱い、行と行の間に `"\n"` という独立した
+# トークンを自分で挟むことで、はじめてここに書いた `"\n"` が意味を持つ。
+SEPARATORS = {";", "&&", "||", "|", "&", "\n", "(", ")"}
 
 # gh pr merge / gh pr ready で、次のトークンを値として消費するオプション。
 # 値のトークンを PR 番号やリポジトリ名として誤読しないために要る。
@@ -148,15 +157,32 @@ def _is_gh(token):
 
 
 def _tokenize(command):
-    """command を、shell の引用符を解いたトークン列にする。
+    """command を、shell の区切り演算子も独立した語として持つトークン列にする。
 
-    **崩れた引用符で解析に失敗したら、素朴な空白区切りへ落ちる。**
+    `shlex.shlex(..., punctuation_chars="();|&")` を使い、`;` `&&` `||` `|` `&` `(` `)`
+    を独立したトークンとして切り出す。**`<` `>` は含めない。**含めると `2>&1` のような
+    リダイレクトが `2` という独立トークンに割れ、PR 番号と誤認する
+    （2026-08-30 に `punctuation_chars=True`〈既定は `();<>|&`〉で試して実際に踏んだ）。
+
+    改行は `shlex` が空白として扱い、独立したトークンにならない。**先に行ごとへ分けて
+    から行ごとにトークン化し、行と行の間に `"\\n"` という区切りトークンを自分で挟む。**
+    行末が `\\` で終わる行継続は、トークン化の前に1行へつなげる。
+
+    **崩れた引用符で解析に失敗したら、その行だけ素朴な空白区切りへ落ちる。**
     誤って見逃すことはあっても、誤って壊れた解析結果で誤爆はしない。
     """
-    try:
-        return shlex.split(command, posix=True)
-    except ValueError:
-        return command.split()
+    joined = re.sub(r"\\\n", " ", command)
+    tokens = []
+    for i, line in enumerate(joined.split("\n")):
+        if i > 0:
+            tokens.append("\n")
+        try:
+            lex = shlex.shlex(line, posix=True, punctuation_chars="();|&")
+            lex.whitespace_split = True
+            tokens.extend(lex)
+        except ValueError:
+            tokens.extend(line.split())
+    return tokens
 
 
 def _invocations(tokens):
@@ -187,7 +213,13 @@ def _invocations(tokens):
 
 
 def _extract(seg):
-    """1回の gh 呼び出し分のトークンから (undo か, リポジトリ名 or None, PR番号 or None) を返す。"""
+    """1回の gh 呼び出し分のトークンから (undo か, リポジトリ名 or None, PR番号 or None) を返す。
+
+    **リポジトリ名は「最初に見つかった値」を採る。**`--repo` / `-R` / URL のどれから来ても、
+    2つ目以降に見つかった値では上書きしない。**PR 番号も同じ方針**（`number is None` の
+    ガード）。この2つを揃えていないと、`--repo` と URL のどちらが勝つかが書く順番で
+    変わってしまう。
+    """
     undo = False
     repo = None
     number = None
@@ -201,13 +233,20 @@ def _extract(seg):
         if tok.startswith("--") and "=" in tok:
             name, _, value = tok.partition("=")
             if name in REPO_FLAGS and value:
-                repo = value
+                repo = repo or value
+            k += 1
+            continue
+        if tok.startswith("-R") and tok != "-R" and not tok.startswith("--"):
+            # `-Rowner/repo` のようにくっついた形。gh はこの形を受け付ける。
+            value = tok[2:]
+            if value:
+                repo = repo or value
             k += 1
             continue
         if tok in VALUE_FLAGS:
             value = seg[k + 1] if k + 1 < n else None
             if tok in REPO_FLAGS and value:
-                repo = value
+                repo = repo or value
             k += 2
             continue
         if tok.startswith("-"):
@@ -231,32 +270,72 @@ def _extract(seg):
     return undo, repo, number
 
 
+# git remote の URL から owner/repo を取り出す。対応する形:
+#   https://github.com/OWNER/REPO.git / https://github.com/OWNER/REPO
+#   git@github.com:OWNER/REPO.git
+#   ssh://git@github.com/OWNER/REPO.git
+_REMOTE_URL_RE = re.compile(r"[:/](?P<owner>[^/:]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
+
+
+def _parse_owner_repo(url):
+    """git remote の URL から `owner/repo` を取り出す。分からなければ None。"""
+    m = _REMOTE_URL_RE.search(url.strip())
+    if not m:
+        return None
+    return "%s/%s" % (m.group("owner"), m.group("repo"))
+
+
 @functools.lru_cache(maxsize=1)
 def current_repo():
-    """このリポジトリの `owner/repo` を返す。分からなければ None。"""
+    """このリポジトリの `owner/repo` を返す。分からなければ None。
+
+    **`gh repo view` は使わない。**通信を伴い、実測 0.44 秒かかる
+    （2026-08-30 に `time gh repo view --json nameWithOwner --jq .nameWithOwner` で計測）。
+    逃がし口（`CONTINUO_ALLOW_UNREVIEWED_MERGE=1`）より前でこれを呼ぶと、通す場合でも
+    毎回待たされる。`git remote get-url origin` はローカルの設定を読むだけで、
+    通信しない（同じ日に計測して 0.02 秒）。
+    """
     try:
         out = subprocess.run(
-            ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+            ["git", "remote", "get-url", "origin"],
             capture_output=True, text=True, timeout=GH_TIMEOUT_SEC,
         )
     except Exception:
         return None
     if out.returncode != 0:
         return None
-    value = out.stdout.strip()
-    return value or None
+    url = out.stdout.strip()
+    if not url:
+        return None
+    return _parse_owner_repo(url)
+
+
+def _last_two_segments(value):
+    """`OWNER/REPO` や `HOST/OWNER/REPO` から、末尾2つの `owner/repo` を返す。分からなければ None。"""
+    parts = [p for p in value.strip("/").split("/") if p]
+    if len(parts) < 2:
+        return None
+    return "/".join(parts[-2:]).lower()
 
 
 def is_this_repo(repo):
     """repo（`--repo` / `-R` / URL から拾った値）がこのリポジトリを指すかを返す。
 
-    分からなければ「このリポジトリではない」とみなす（検査が落ちて作業を止めないため）。
+    **分からなければ「このリポジトリかもしれない」とみなす（True を返す）。**
+    `current_repo()` が失敗しただけで `--repo` 付きのマージが検査対象から丸ごと
+    外れると、`--repo <なんでもいい値>` を付けるだけで通ってしまう。
+
+    比較は `/` で区切った最後の2つで行う（`HOST/OWNER/REPO` の形を許すため）。
+    **末尾一致（`str.endswith`）は使わない。**`myowner/repo` が `owner/repo` に
+    文字列として末尾一致してしまい、別のリポジトリを自分だと誤認する。
     """
     current = current_repo()
     if current is None:
-        return False
-    # gh は `[HOST/]OWNER/REPO` も受け付けるので、末尾一致で見る。
-    return repo.strip("/").lower().endswith(current.lower())
+        return True
+    given = _last_two_segments(repo)
+    if given is None:
+        return True
+    return given == _last_two_segments(current)
 
 
 def target_prs(command):
@@ -265,9 +344,11 @@ def target_prs(command):
         return []
     tokens = _tokenize(command)
     prs = []
-    for _subcommand, seg in _invocations(tokens):
+    for subcommand, seg in _invocations(tokens):
         undo, repo, number = _extract(seg)
-        if undo:
+        # **`--undo` は `gh pr ready` にしかない flag である**（`gh pr merge -h` で確認、
+        # `--undo` は出てこない）。`pr merge` の呼び出しに紛れ込んでも見送らない。
+        if undo and subcommand == "ready":
             continue
         if number is None:
             continue
@@ -282,6 +363,11 @@ def count_trusted_reviews(comments):
 
     comments は `gh pr view --json comments` の `.comments` と同じ形（dict の list）。
     投稿者は `authorAssociation` で判定する。`TRUSTED_ASSOCIATIONS` だけを数える。
+
+    **目印はコメントの先頭にあるものだけを数える。**[CLAUDE.md](../../CLAUDE.md) が
+    「コメントの先頭に `<!-- code-review-result -->` を置く」と定めている。本文の途中で
+    目印を引用しただけの説明コメント（例:「〇〇のコメントに目印が無い」という指摘そのもの）
+    まで数えると、その PR は恒久的にレビュー済み扱いになってしまう。
     """
     count = 0
     for c in comments or []:
@@ -289,7 +375,8 @@ def count_trusted_reviews(comments):
             continue
         if c.get("authorAssociation") not in TRUSTED_ASSOCIATIONS:
             continue
-        if MARKER in (c.get("body") or ""):
+        body = c.get("body") or ""
+        if body.lstrip().startswith(MARKER):
             count += 1
     return count
 
@@ -322,12 +409,14 @@ def main():
     if not isinstance(command, str):
         return 0
 
-    prs = target_prs(command)
-    if not prs:
+    # **人間が明示的に許したときは、ここで抜ける。**
+    # `target_prs()` は `--repo` の判定で `current_repo()`（`git remote get-url origin`）
+    # を呼ぶことがある。逃がし口を先に見ることで、通す場合に無駄な呼び出しをしない。
+    if os.environ.get(ESCAPE_ENV) == "1":
         return 0
 
-    # **人間が明示的に許したときだけ通す。**
-    if os.environ.get(ESCAPE_ENV) == "1":
+    prs = target_prs(command)
+    if not prs:
         return 0
 
     for pr in prs:

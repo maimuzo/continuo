@@ -84,17 +84,22 @@ ng=0
 # レビュー結果が貼ってあるかを見る。
 # **目印は `<!-- code-review-result -->` である。**本文に "code-review" と書いただけの
 # コメントを数えると、実施していないものが通ってしまう。
+# **目印はコメントの先頭にあるものだけを数える**（CLAUDE.md「コメントの先頭に
+# `<!-- code-review-result -->` を置く」）。**本文の途中で目印を引用しただけの
+# 説明コメント（例:「◯◯のコメントに目印が無い」という指摘そのもの）を contains() で
+# 数えると、その PR は恒久的にレビュー済み扱いになってしまう。**
 # **信頼できる投稿者（OWNER / MEMBER / COLLABORATOR）が貼ったものだけを数える。**
 # このリポジトリは PUBLIC なので、通りがかりの投稿者が貼った目印まで数えると、
 # その PR は恒久的にレビュー済み扱いになってしまう。
 # **同じ目印・同じ判定基準が `.claude/hooks/block-merge-without-review.py` の
 # `count_trusted_reviews()` にもある。片方だけ直すと、リリース前の検査とマージの検査が食い違う。
-# 両方直すこと。**
+# 両方直すこと。**（`.claude/hooks/tests/test_block_merge_without_review.py` が、
+# この一覧と Python 側の `TRUSTED_ASSOCIATIONS` が揃っていることを確かめる）
 review_of() {
 	# shellcheck disable=SC2016  # $a は jq の変数である。シェルに展開させない。
 	gh pr view "$1" --json comments \
 		--jq '[.comments[] | select(
-			(.body | contains("<!-- code-review-result -->"))
+			(.body // "" | test("^\\s*<!-- code-review-result -->"))
 			and (.authorAssociation as $a | (["OWNER", "MEMBER", "COLLABORATOR"] | index($a)) != null)
 		)] | length'
 }

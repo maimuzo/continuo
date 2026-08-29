@@ -15,6 +15,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import sys
 
 HOOK = os.path.join(".claude", "hooks", "block-merge-without-review.py")
@@ -54,6 +55,7 @@ def run(mod, command, review):
 GH = "gh"
 MERGE = "pr merge"
 READY = "pr ready"
+VIEW = "pr view"
 
 # テストの中で「このリポジトリ」とみなす架空の名前と、「別のリポジトリ」の架空の名前。
 # 実在のリポジトリ名は使わない（CLAUDE.md「公開してよい情報かを常に判断する」）。
@@ -158,6 +160,58 @@ case(
     True,
     "94",
 )
+case(
+    "くっついた -R も読む（-Rowner/repo）",
+    "%s %s -R%s 94" % (GH, MERGE, THIS_REPO),
+    False,
+    True,
+    "94",
+)
+case(
+    "くっついた -R でも別のリポジトリなら見ない",
+    "%s %s -R%s 188" % (GH, MERGE, OTHER_REPO),
+    False,
+    False,
+)
+
+# --- ここから、PR #109 のレビューで見つかった、コマンドの区切りを見ていなかった
+# 5件（A群）。直す前は target_prs() が [] か、別の PR の番号を返していた。
+
+case(
+    "別の PR を見る（; の手前で区切る）",
+    "%s %s 94; %s %s 105" % (GH, MERGE, GH, VIEW),
+    False,
+    True,
+    "94",
+)
+case(
+    "改行の区切り",
+    "%s %s 94\n%s %s 95 --undo" % (GH, MERGE, GH, READY),
+    False,
+    True,
+    "94",
+)
+case(
+    "2つ目の呼び出し（別のリポジトリのあとに、自分のリポジトリ）",
+    "%s %s --repo %s 1\n%s %s 94" % (GH, MERGE, OTHER_REPO, GH, MERGE),
+    False,
+    True,
+    "94",
+)
+case(
+    "& の区切り",
+    "%s %s 94 & %s %s 95 --undo" % (GH, MERGE, GH, READY),
+    False,
+    True,
+    "94",
+)
+case(
+    "括弧付きの gh",
+    "(%s %s 94)" % (GH, MERGE),
+    False,
+    True,
+    "94",
+)
 
 # --- おまけ: トークン化に変えたことで、シェルのリダイレクト（`2>&1`）の数字を
 # PR 番号と誤認しなくなったことも確かめる。
@@ -246,6 +300,16 @@ def build_review_cases(marker):
             [{"body": marker}],
             0,
         ),
+        (
+            "目印が本文の途中にあるコメントは数えない",
+            [{"authorAssociation": "OWNER", "body": "レビューしました\n" + marker}],
+            0,
+        ),
+        (
+            "目印の前に空白・改行があっても、先頭とみなして数える",
+            [{"authorAssociation": "OWNER", "body": "  \n" + marker + "\n本文"}],
+            1,
+        ),
     ]
 
 
@@ -261,6 +325,61 @@ def run_review_cases(mod):
     return ng
 
 
+# --- B群: リポジトリ名の判定を、target_prs() で直接確かめる。
+# `run_cases()` とは別に、`current_repo` の返す値を差し替えながら試す。
+
+
+def run_repo_cases(mod):
+    ng = 0
+
+    # 末尾一致（str.endswith）ではなく、`/` 区切りの末尾2つで比べることを確かめる。
+    mod.current_repo = lambda: THIS_REPO
+    imposter_repo = "my" + THIS_REPO  # 例: "myoctocat/hello-world"
+    got = mod.target_prs("%s %s --repo %s 94" % (GH, MERGE, imposter_repo))
+    if got == []:
+        print("ok  リポジトリ名の境界（末尾一致で誤判定しない）")
+    else:
+        ng += 1
+        print("NG  リポジトリ名の境界: %r（想定は []）" % (got,))
+
+    # このリポジトリの名前が分からないとき、止める側へ倒れることを確かめる。
+    # （分からないからと見送ると、`--repo` を付けるだけで検査ごと素通りできてしまう）
+    mod.current_repo = lambda: None
+    got = mod.target_prs("%s %s --repo %s 94" % (GH, MERGE, OTHER_REPO))
+    if got == ["94"]:
+        print("ok  リポジトリ名を取れないときは止める側へ倒れる")
+    else:
+        ng += 1
+        print("NG  リポジトリ名を取れないとき: %r（想定は ['94']）" % (got,))
+
+    mod.current_repo = lambda: THIS_REPO
+    return ng
+
+
+# --- C群: 信頼する肩書きの一覧が、scripts/check-release-ready.sh と揃っていることを確かめる。
+# Python の集合（TRUSTED_ASSOCIATIONS）と jq の配列に、別々の一覧を書いてしまうと、
+# リリース前の検査とマージの検査が食い違う。
+
+
+def run_associations_sync_case(mod):
+    path = os.path.join("scripts", "check-release-ready.sh")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    # review_of() の中にある `["OWNER", "MEMBER", "COLLABORATOR"]` を素朴に取り出す。
+    m = re.search(r'\[([^\]]*"OWNER"[^\]]*)\]', text)
+    if not m:
+        print("NG  scripts/check-release-ready.sh から肩書きの一覧を見つけられない")
+        return 1
+    found = set(re.findall(r'"([A-Z]+)"', m.group(1)))
+    if found == mod.TRUSTED_ASSOCIATIONS:
+        print("ok  scripts/check-release-ready.sh の肩書きの一覧が hook 側と揃っている")
+        return 0
+    print(
+        "NG  肩書きの一覧が食い違う: sh=%r python=%r" % (found, mod.TRUSTED_ASSOCIATIONS)
+    )
+    return 1
+
+
 def main():
     mod = load_hook()
     # 「このリポジトリ」を、実行環境に依存しない架空の名前へ固定する。
@@ -268,8 +387,10 @@ def main():
 
     ng = run_cases(mod)
     ng += run_review_cases(mod)
+    ng += run_repo_cases(mod)
+    ng += run_associations_sync_case(mod)
 
-    total = len(cases) + len(build_review_cases(mod.MARKER))
+    total = len(cases) + len(build_review_cases(mod.MARKER)) + 3
     print("\n%d 件中 %d 件が想定どおり" % (total, total - ng))
     return 1 if ng else 0
 
