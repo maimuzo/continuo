@@ -8,6 +8,8 @@ package orchestrator_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -267,7 +269,7 @@ func TestStopWorker_止めたらherdrの待ち受けの中のturnループも解
 }
 
 // TestUnknownState_cleanup_on_statesで止めても貼ると起動しない案内を出さない は、
-// 設計 3-57 を確かめる（issue #76）。
+// 設計 3-57b を確かめる（issue #76）。
 //
 // 目的: **止めたときの案内は `tracker.active_states` へ足せと言っていた。**
 // その名前が `cleanup.on_states` にあると、**言われたとおりに足した設定は起動しない**
@@ -327,5 +329,137 @@ func TestUnknownState_cleanup_on_statesで止めても貼ると起動しない�
 		if !strings.Contains(body, want) {
 			t.Errorf("止めた理由のコメントに %q が無い:\n%s", want, body)
 		}
+	}
+}
+
+// TestUnknownState_対応表と片付けの両方に名前があっても貼ると起動しない案内を出さない は、
+// 設計 3-57b を確かめる（issue #76）。
+//
+// 目的: **同じ名前が `tracker.automated_state_rewrite` のキーと `cleanup.on_states` の
+// 両方にある設定は、そのまま起動できる**（`config.Validate` はどちらの検査にも当たらない）。
+// **その設定で止まると、対応表側の案内だけが出る。**そこには「対応表のその行を消してから
+// `tracker.active_states` へ書き足せ」と書いてあるが、**そのとおりに直すと
+// `cleanup.on_states` に名前が残るので、`config.Validate` が弾いて起動しなくなる。**
+// issue #76 と同じ症状が、この組み合わせでだけ残っていた。
+//
+// 与える情報: `Archived` を `tracker.automated_state_rewrite` のキー（`Archived` → `Ready`）
+// と `cleanup.on_states` の両方に書いた設定と、**人間が**着手済みの issue を `Archived` へ
+// 動かす操作（人間が動かしたので書き戻しは起きず、止まる道へ入る）。猶予は 0。
+//
+// 成功条件: 止めた理由のコメントが、**名前が2箇所にあることと、両方から消す順番**を書いて
+// いること。**対応表の行を消すだけで済むかのように書いていないこと**
+// （`cleanup.on_states` からも消す、という文が要る）。
+func TestUnknownState_対応表と片付けの両方に名前があっても貼ると起動しない案内を出さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.VerifyStatesEvery = 0
+			cfg.Tracker.UnknownStateGraceMs = 0
+			// **同じ名前を2箇所に置く。**`config.Validate` はこの組み合わせを弾かない。
+			cfg.Tracker.AutomatedStateRewrite = map[string]string{"Archived": "Ready"}
+			cfg.Cleanup.OnStates = []string{"Archived"}
+		},
+	})
+	blockFirstPrompt(t, fx)
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+
+	// ★ **人間が**動かした（`SetState` は人間の操作である）。書き戻しは起きない。
+	fx.Tracker.SetState(issue.ID, "Archived")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatalf("知らない Status で止めたのに issue に1文字も残っていない")
+	}
+	// **既定の案内をそのまま出してはならない。**書くと continuo が起動しなくなる。
+	if strings.Contains(body,
+		"WORKFLOW.md の `tracker.active_states` か `tracker.status_signal_map` にその名前を書き足して") {
+		t.Errorf("2箇所に名前がある Status なのに既定の案内を出している"+
+			"（言われたとおりに書くと continuo が起動しない）:\n%s", body)
+	}
+	for _, want := range []string{
+		// 名前がどこにあるか（2箇所とも）。
+		"`tracker.automated_state_rewrite` のキー（`Archived` → `Ready`）",
+		"`cleanup.on_states`",
+		// 消す順番。
+		"まず `tracker.automated_state_rewrite` からその行を消してください",
+		// **`cleanup.on_states` からも消す**、が抜けていたのが issue #76 の残りである。
+		"`cleanup.on_states` からもその行を消してから",
+		// 終わったとみなす側の直し方。
+		"`tracker.terminal_states` に書き足してください",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("止めた理由のコメントに %q が無い:\n%s", want, body)
+		}
+	}
+}
+
+// TestUnknownState_cleanup_on_statesで止めたらworktreeを片付けると書く は、
+// 設計 3-57b を確かめる（issue #76）。
+//
+// 目的: **止めた理由のコメントは「worktree は残してあります（下記）」と書き、パスまで
+// 載せていた。**だが `cleanup.on_states` の Status では、continuo はその worktree を
+// 片付ける（`finishRunClaimed` の `ShouldCleanup` と、次の巡回の `reconcileWorktrees`）。
+// **案内どおりにパスを開こうとすると、もう無い。**
+//
+// 与える情報: `cleanup.on_states` が `Archived` だけの設定と、着手済みの issue を
+// `Archived` へ動かす操作。猶予は 0。**そのあと巡回をもう1回回す。**
+//
+// 成功条件: コメントに「残してあります」が無く、片付けることが書いてあること。
+// そして**実際に worktree が消えていること**（文言と実装が食い違っていないこと）。
+func TestUnknownState_cleanup_on_statesで止めたらworktreeを片付けると書く(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.VerifyStatesEvery = 0
+			cfg.Tracker.UnknownStateGraceMs = 0
+			cfg.Cleanup.OnStates = []string{"Archived"}
+		},
+	})
+	blockFirstPrompt(t, fx)
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	wtPath := filepath.Join(
+		fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Fatalf("着手したのに worktree が無い: %v", err)
+	}
+
+	fx.Tracker.SetState(issue.ID, "Archived")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatalf("知らない Status で止めたのに issue に1文字も残っていない")
+	}
+	if strings.Contains(body, "worktree は残してあります") {
+		t.Errorf("片付ける Status なのに「worktree は残してあります」と書いている:\n%s", body)
+	}
+	for _, want := range []string{
+		"worktree は残りません",
+		"この worktree と branch を片付けます",
+		"コミットしていない変更か、push していない commit が残っている worktree は片付けません",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("止めた理由のコメントに %q が無い:\n%s", want, body)
+		}
+	}
+
+	// **文言だけでなく、実際に消えることを見る。**次の巡回の `reconcileWorktrees` が片付ける。
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Errorf("片付けると書いたのに worktree が残っている: %s (err=%v)", wtPath, err)
 	}
 }

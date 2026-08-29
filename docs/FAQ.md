@@ -532,6 +532,16 @@ cleanup:
   on_states: ["Done", "Archived"]         # 片付けを始める Status は、上の一覧の中から選ぶ
 ```
 
+**その名前が `tracker.automated_state_rewrite` のキーにもある場合は、消す先が2つあります。**
+**まず対応表のその行を消してください。**残したまま `tracker` の他のキーへ書き足すと、
+「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
+そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
+
+**その worktree は残りません。**`cleanup.on_states` の Status なので、continuo は
+**止めたあとに worktree と branch を片付けます。**止めた理由のコメントにもそう書いてあります。
+**コミットしていない変更か、push していない commit が残っていれば片付けません**（そのまま残ります）。
+**成果を残したいなら、片付く前に Status を戻すか、`cleanup.on_states` からその行を消してください。**
+
 **`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 

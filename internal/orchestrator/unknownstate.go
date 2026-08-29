@@ -116,7 +116,13 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 			"identifier", issue.Identifier, "状態", issue.State, "猶予の上限", formatDuration(grace),
 			"書いたのは", writtenBy, "自動化か", issue.StatusChangedByAutomation)
 	} else {
-		o.logger.Warn("continuo が知らない Status になったので worker を止めます（worktree は残します）",
+		// **worktree を残すと書けるのは、その Status が `cleanup.on_states` に無いときだけである**
+		// （設計 3-57b）。入っているなら、このあと片付ける。
+		kept := "（worktree は残します）"
+		if containsFold(o.cfg.Cleanup.OnStates, issue.State) {
+			kept = "（cleanup.on_states の Status なので worktree は片付けます）"
+		}
+		o.logger.Warn("continuo が知らない Status になったので worker を止めます"+kept,
 			"identifier", issue.Identifier, "状態", issue.State,
 			"書いたのは", writtenBy, "自動化か", issue.StatusChangedByAutomation)
 	}
@@ -449,7 +455,7 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 //	なぜ止めたか            … continuo が知らない Status だから
 //	続けるにはどうするか    … active_states に入っている Status へ戻す
 //
-// **設定の足し方の案内は、必ず1つだけにする**（設計 3-57）。
+// **設定の足し方の案内は、必ず1つだけにする**（設計 3-57b）。
 // 「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を並べて出すと、
 // **両方やった設定は起動しない。**`automated_state_rewrite` のキーは
 // 「設定のどこにも名前が出てこない Status」でなければならず、`active_states` へ
@@ -463,15 +469,23 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 //	戻せない失敗が続いた       … 同じく、戻す先がボードから消えたときの分岐
 //	人間がそのキーの Status へ動かした … `automatedStateHint` は人間には何も返さない
 //
-// **`cleanup.on_states` に書いてある Status でも同じことが起きる**（設計 3-57。issue #76）。
+// **`cleanup.on_states` に書いてある Status でも同じことが起きる**（設計 3-57b。issue #76）。
 // あちらへ書いた名前を `tracker.active_states` へ足すと、`config.Validate` が
 // 「作業中の worktree を片付けてしまう」として弾く（設計 3-9）。
 // **だから、そこへ足せとは言わない。****貼っても起動する直し方だけを出す。**
 //
-// **`cleanup.on_states` の判定は対応表の分岐より後ろに置く。**両方に名前がある設定では、
-// **`tracker.terminal_states` へ足すと対応表のキーの検査に落ちる**
-// （キーは `config.KnownStates` のどこにも出てこない Status でなければならない）。
-// **先に対応表のその行を消す、が唯一の順番である。**
+// **両方に名前がある設定には、専用の分岐を置く**（設計 3-57b）。
+// 対応表の案内だけでは足りず、`cleanup.on_states` の案内だけでも足りない。
+//
+//	対応表の行を消して `active_states` へ足す … `cleanup.on_states` が残るので弾かれる
+//	`terminal_states` へ足す                 … 対応表のキーの検査に落ちる
+//
+// **消す順番と、消す先が2つあることを1つの文で書き切る。**
+//
+// **worktree を残すと書いてよいのは、その Status が `cleanup.on_states` に無いときだけである**
+// （設計 3-57b）。**入っているなら continuo はこの worktree を片付ける**
+// （`finishRunClaimed` が `ShouldCleanup` で消し、猶予 0 の道でも次の巡回の
+// `reconcileWorktrees` が消す）。**残ると書いたパスが消えるのは、案内として成り立たない。**
 //
 // rs: 対象の run。
 // state: 動かされた先の Status 名。
@@ -499,11 +513,12 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 			"continuo は turn の途中でもその場で止めます。" +
 			"エージェントの表明を読んでから判断させたいなら、この値を大きくしてください。"
 	}
-	// **貼ると起動しなくなる案内を出さない**（設計 3-57）。
+	// **貼ると起動しなくなる案内を出さない**（設計 3-57b）。
 	// 対応表に既に書いてある Status なら、`active_states` へ足す案内の代わりに
 	// **「先に対応表のその行を消す」を出す。**それが唯一、貼っても起動する直し方である。
 	hint, proposesRewrite := o.automatedStateHint(rs, state)
 	rewriteTarget, inRewriteTable := lookupStateRewrite(o.cfg.Tracker.AutomatedStateRewrite, state)
+	inCleanup := containsFold(o.cfg.Cleanup.OnStates, state)
 	teach := fmt.Sprintf(
 		"\n【`%s` も continuo に扱わせたいときは】WORKFLOW.md の `tracker.active_states` か "+
 			"`tracker.status_signal_map` にその名前を書き足してから、continuo を再起動してください。",
@@ -512,6 +527,23 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 	case proposesRewrite:
 		// 対応表へ1行足す案内を出した。**この Status はまだ対応表に無い。**
 		teach = ""
+	case inRewriteTable && inCleanup:
+		// **名前が2箇所にある。**片方だけ消しても起動しないので、両方の消し方を1つの文で出す。
+		teach = fmt.Sprintf(
+			"\n【`%s` も continuo に扱わせたいときは】この名前は WORKFLOW.md の2箇所にあります。"+
+				"`tracker.automated_state_rewrite` のキー（`%s` → `%s`）と、"+
+				"`cleanup.on_states`（worktree の片付けを始める Status）です。"+
+				"**まず `tracker.automated_state_rewrite` からその行を消してください。**"+
+				"消さずに `tracker` の他のキーへ書き足した設定では continuo は起動しません"+
+				"（キーは設定の他のどこにも名前が出てこない Status でなければなりません）。"+
+				"**そのうえで、終わったとみなしてよい Status なら `tracker.terminal_states` に書き足してください**"+
+				"（`cleanup.on_states` は、この一覧の中から選ぶ決まりです）。"+
+				"**`%s` でも作業を続けさせたいなら、`cleanup.on_states` からもその行を消してから、"+
+				"`tracker.active_states` か `tracker.status_signal_map` へ書き足してください。**"+
+				"**`cleanup.on_states` に残したまま `tracker.active_states` へ書き足すと、"+
+				"やはり continuo は起動しません**（走っている worktree を片付けてしまうので、設定の検査が弾きます）。"+
+				"**ボードの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
+			state, state, rewriteTarget, state, state)
 	case inRewriteTable:
 		teach = fmt.Sprintf(
 			"\n【`%s` も continuo に扱わせたいときは】この名前は WORKFLOW.md の "+
@@ -521,7 +553,7 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 				"（キーは設定の他のどこにも名前が出てこない Status でなければなりません）。"+
 				"**ボードの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
 			state, state, rewriteTarget, state)
-	case containsFold(o.cfg.Cleanup.OnStates, state):
+	case inCleanup:
 		teach = fmt.Sprintf(
 			"\n【`%s` も continuo に扱わせたいときは】この名前は WORKFLOW.md の "+
 				"`cleanup.on_states`（worktree の片付けを始める Status）に書いてあります。"+
@@ -534,18 +566,31 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 				"どちらの直し方も、そのまま設定へ書いて continuo が起動します。",
 			state, state)
 	}
+	// **`cleanup.on_states` の Status では「残してあります」と書かない。**
+	// continuo はこのあと worktree と branch を片付ける（`finishRunClaimed` の `ShouldCleanup`、
+	// および次の巡回の `reconcileWorktrees`）。**下に載せるパスは消える。**
+	kept := "worktree は残してあります（下記）。"
+	if inCleanup {
+		kept = fmt.Sprintf(
+			"**worktree は残りません。**`%s` は `cleanup.on_states`（worktree の片付けを始める Status）"+
+				"なので、continuo はこの worktree と branch を片付けます（下記のパスは消えます）。"+
+				"**コミットしていない変更か、push していない commit が残っている worktree は片付けません。**"+
+				"**残したいなら、片付く前に Status を戻すか、`cleanup.on_states` からその行を消してください。**",
+			state)
+	}
 	return fmt.Sprintf(
 		"continuo が知らない Status になったので、この issue の作業を止めました。\n%s"+
 			"\n【なぜ止めたか】continuo は WORKFLOW.md に書かれた Status しか扱いません"+
 			"（いま知っているのは %s です）。`%s` はそのどれでもないので、"+
 			"この issue をどう進めればよいかを判断できません。"+
 			"\n【続けるには】Status を `tracker.active_states` に入っている Status（%s）のいずれかへ戻してください。"+
-			"次の巡回で着手し直します。worktree は残してあります（下記）。"+
+			"次の巡回で着手し直します。%s"+
 			"%s%s%s",
 		moved,
 		strings.Join(o.knownStates(), " / "),
 		state,
 		back,
+		kept,
 		teach,
 		grace,
 		hint)

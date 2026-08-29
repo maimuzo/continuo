@@ -4594,6 +4594,12 @@ Claude Code の会話の記録（transcript）・continuo が渡した設定フ�
 案内とフラグの説明・ダッシュボードの HTML の3つで、合計 156 件（doctor 79 / CLI 50 /
 ダッシュボード 27）。**エラーとログは移していない。**同じ `T` / `Errorf` で移せる形にしてある。
 
+**issue へ書くコメントの本文も、まだ移していない**（`internal/orchestrator` の
+`buildHandoffComment` / `buildUntrustedComment` / `unknownStateReason`。すべて Go の文字列リテラルである。
+このパッケージの `i18n` は `Errorf` だけに使っている）。**移すかどうかは決まっていない**
+（[docs/plans/pending_requests.md](pending_requests.md) に置いてある）。
+**移すなら関数ごと移す。**1つの段落の中で一部だけ資源から引くと、訳を作るときに文が繋がらない。
+
 ### 3-35b. 資源の正は日本語である
 
 **言いたいこと。**新しい機能を作って文言を足すときは、**日本語で書く。**
@@ -5812,7 +5818,7 @@ tracker:
 | **値が `active_states` の外** | 上の3つが起きる |
 | **大文字小文字だけが違うキーが2つ** | どちらに当たるかが map の反復順で決まり、実行のたびに変わる |
 
-**名前をボードと照合する範囲と、人間へ出す案内の出し方は 3-57 にある。**
+**名前をボードと照合する範囲は 3-57、人間へ出す案内の出し方は 3-57b にある。**
 
 ---
 
@@ -5866,19 +5872,17 @@ tracker:
 
 ---
 
-### 3-57. 対応表のキーはボードに実在しなくてよい。人間へ出す案内は1つだけにする
+### 3-57. 対応表のキーはボードに実在しなくてよい
 
 **言いたいこと。**`automated_state_rewrite` のキーを起動時にボードと照合していたので、
 **ボードの自動化をやめて選択肢を消した人が、continuo を二度と起動できなくなっていた**（issue #67）。
 **照合をやめ、綴りの打ち間違いは起動を止めずに知らせる。**
-**そして、issue へ出す設定の案内は必ず1つだけにする。**2つ出すと、両方やった設定が起動しない。
+**止めたときに人間へ出す設定の案内は 3-57b にある。**
 
 **キーは照合の一覧に入れない**（`requiredStatesForBootstrap` は `config.KnownStates` を返す）。
 **キーは定義上「continuo が知らない Status」であり、実在しなければその行が引かれないだけである。**
-
-**照合していたときは、起動時なら立ち上がらず、走っている最中なら巡回ごとの照合が毎回落ちて
-その巡回の dispatch をボードごと飛ばし続けた。**しかも「対応表のその行を消せばよい」は
-どこにも出なかった。
+**照合すると、起動時なら立ち上がらず、走っている最中なら巡回ごとの照合が毎回落ちて
+その巡回の dispatch をボードごと飛ばし続ける。**
 
 **綴りの打ち間違いは、起動を止めずに名前で知らせる。**
 `In Progres` と書くと**その行は一度も効かないまま黙って死ぬ**ので、知らせる価値はある。
@@ -5892,8 +5896,8 @@ tracker:
 | 起動時のログ | `tracker` の `missingRewriteKeys` が呼び、警告を1回出す |
 | `continuo doctor` | `doctor` の `checkRewriteKeys` が呼び、**見出し語 `対応表のキー` を `!` にする**（`✗` にしない） |
 
-**`continuo doctor` に項目を置かないと、打ち間違いを見せる場所が1つも無くなる。**
-起動時の警告は logger へ出るが、**doctor はその logger を捨てる**（`doctor.Options.Logger` の既定は `io.Discard`）。
+**`continuo doctor` に項目を置かないと、打ち間違いを見せる場所が1つも無くなる**
+（**doctor は起動時の logger を捨てる。**`doctor.Options.Logger` の既定は `io.Discard`）。
 **見出し語 `Status の名前` でも代わりにならない。**あちらが拾うのは「区切りを落とすと同じ綴り」か
 「一方が他方を語の並びとして丸ごと含む」だけで、**`In Progres` と `In Progress` はどちらにも当たらない。**
 
@@ -5917,14 +5921,44 @@ tracker:
 1つも無いと、continuo は**ボード上のどの Status も「知らない Status」と判定し、着手した run を
 片端から止める。**しかも止めた理由には「いま知っているのは です」と空欄が出るだけである。
 
-**案内は1つだけ出す。**「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を
+---
+
+### 3-57b. 止めたときの案内は、貼ってもそのまま起動する直し方だけを1つ出す
+
+**言いたいこと。**知らない Status で止めたときの案内が、**そのとおりに直すと起動しない設定**を
+指していた（issue #67 / #76）。**案内は必ず1つにし、貼れば `config.Load` を通る形だけを出す。**
+**そして「worktree は残してあります」と書けるのは、実際に残すときだけである。**
+
+**案内を2つ並べない。**「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を
 並べて出すと、**両方やった設定は起動しない**（キーは設定のどこにも名前が出てこない Status で
-なければならない）。**判定は「対応表に既に書いてある名前か」で行う**（`unknownStateReason`）。
-「書き戻しの案内を出したか」で判定すると、**3本の道を1本も塞げない。**
-書き戻す回数が上限に達した道と戻せない失敗が続いた道は、どちらもその案内を出さないので判定が偽になり、
-**人間がそのキーの Status へ動かした道**では `automatedStateHint` がそもそも何も返さない。
-**代わりに「先に対応表のその行を消す」を出す。**それが唯一、貼っても起動する直し方であり、
-**自動化をやめた人が抜け出す道でもある。**
+なければならない）。**判定は「その名前が設定のどこに書いてあるか」で行う**（`unknownStateReason` の `switch`）。
+「書き戻しの案内を出したか」で判定すると、**3本の道を1本も塞げない**（回数の上限に達した道と
+戻せない失敗が続いた道はその案内を出さず、人間がキーの Status へ動かした道では
+`automatedStateHint` が何も返さない）。
+
+| 名前がどこにあるか | 出す案内 |
+| --- | --- |
+| どこにも無い | `active_states` か `status_signal_map` へ書き足す |
+| `automated_state_rewrite` のキー | **先に対応表のその行を消す**（自動化をやめた人が抜け出す道でもある） |
+| `cleanup.on_states` | 下の表の2通り。**`active_states` へ足せとは言わない**（`config.Validate` が「作業中の worktree を片付けてしまう」として弾く。3-9） |
+| **両方**（キーかつ `cleanup.on_states`） | **対応表の行を消し、さらに下の表の2通りへ進む** |
+
+| その Status に持たせたい意味 | 出す案内 |
+| --- | --- |
+| 終わったとみなす（片付けてよい） | `tracker.terminal_states` に書き足す（`cleanup.on_states` はその一覧の中から選ぶ。3-9e） |
+| まだ作業を続けさせたい | **`cleanup.on_states` からその行を消してから**、`active_states` か `status_signal_map` へ書き足す |
+
+**両方に名前がある設定にだけ専用の分岐を置く**（issue #76 の残り）。**その設定はそのまま起動できる**
+（`config.Validate` はキーを `KnownStates` としか、`cleanup.on_states` を `active_states` としか照合しない）。
+**片方の案内では足りない。**対応表の行だけ消して `active_states` へ足すと `cleanup.on_states` が残って弾かれ、
+`terminal_states` へ足すと対応表のキーの検査に落ちる。**消す先が2つあることを1つの文で書き切る。**
+
+**`cleanup.on_states` の Status では「worktree は残してあります」と書かない。**
+**continuo はその worktree と branch を片付ける**（猶予を過ぎた道は `finishRunClaimed` の
+`ShouldCleanup` が、猶予 0 の道は次の巡回の `reconcileWorktrees` が消す）。
+**残ると書いたパスを載せると、開きに行った人がそこで詰まる。**片付けることと、
+**コミットしていない変更か push していない commit があれば残ること**（3-9 の手順2 / 2b）を書き、
+**同じ判定をログの1行にも当てる**（`handleUnknownState` の WARN）。
 
 **提案する戻す先も `active_states` に入っているものに限る**（`rewriteTargetSuggestion`）。
 continuo が最後に書いた値は `In Review` のこともあり、**そのまま提案すると起動しない。**
@@ -5936,19 +5970,9 @@ continuo が最後に書いた値は `In Review` のこともあり、**その�
 | `active_states` の先頭 | それも外れているとき |
 | **提案しない**（`active_states` の案内だけを出す） | `active_states` が空のとき |
 
-**`cleanup.on_states` に書いてある Status でも、同じ理由で案内を書き分ける。**
-あちらの名前を `tracker.active_states` へ足すと、`config.Validate` が
-「作業中の worktree を片付けてしまう」として弾く（3-9）。**足せとは言わない。**
-
-| その Status に持たせたい意味 | 出す案内 |
-| --- | --- |
-| 終わったとみなす（片付けてよい） | `tracker.terminal_states` に書き足す（`cleanup.on_states` はその一覧の中から選ぶ。3-9e） |
-| まだ作業を続けさせたい | **先に `cleanup.on_states` からその行を消してから**、`active_states` か `status_signal_map` へ書き足す |
-
-**判定は対応表（`automated_state_rewrite`）の分岐より後ろに置く**（`unknownStateReason` の `switch`）。
-両方に名前がある設定では、**`terminal_states` へ足すと対応表のキーの検査に落ちる**
-（キーは `config.KnownStates` のどこにも名前が出てこない Status でなければならない）。
-**「先に対応表のその行を消す」が唯一の順番である。**
+**案内が指す直し方が起動するかは、`config.Load` で機械的に固定する**
+（[test/internal/config/validate_test.go](../../test/internal/config/validate_test.go) の
+`TestLoad_止めたときの案内どおりに直した設定は起動する`）。**文面のテストだけでは足りない。**
 
 ---
 

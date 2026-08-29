@@ -466,3 +466,83 @@ func TestLoad_rate_limitのsourceにnoneを書ける(t *testing.T) {
 		t.Fatalf("rate_limit.source が読めていない: got %q", loaded.Config.RateLimit.Source)
 	}
 }
+
+// TestLoad_止めたときの案内どおりに直した設定は起動する は、設計 3-57b を固定する（issue #76）。
+//
+// 目的: **知らない Status で止めたときの案内は、貼ったらそのまま起動する形でなければならない。**
+// issue #76 は「`tracker.active_states` へ書き足せ」という案内どおりに直したら
+// `config.Load` に弾かれた、というものである。**同じ名前が
+// `tracker.automated_state_rewrite` のキーと `cleanup.on_states` の両方にある設定でも同じことが起きる。**
+// **どちらの検査も、その組み合わせ自体は弾かない**ので、その設定は起動できてしまう。
+//
+// 与える情報: `Archived` を対応表のキーと `cleanup.on_states` の両方に書いた front matter
+// （出発点）と、案内が示す2つの直し方、そして案内が禁じている2つの直し方。
+//
+// 成功条件: 出発点と2つの直し方が `config.Load` を通り、禁じている2つが落ちて、
+// エラー文が直す先のキーを名指しすること。
+func TestLoad_止めたときの案内どおりに直した設定は起動する(t *testing.T) {
+	// 出発点。**この組み合わせを弾く検査は無いので、そのまま起動できる。**
+	t.Run("対応表と片付けの両方に名前がある設定はそのまま起動する", func(t *testing.T) {
+		front := trackerFrontMatter(
+			"  automated_state_rewrite:\n"+
+				"    Archived: In Progress\n") +
+			"cleanup:\n  on_states: [\"Archived\"]\n"
+		if _, err := config.Load(writeWorkflow(t, front, "")); err != nil {
+			t.Fatalf("起動できる設定のはずが落ちた（この道は到達不能ということになる）: %v", err)
+		}
+	})
+
+	// 案内が出す直し方。**どちらもそのまま起動する。**
+	ok := []struct {
+		name  string
+		front string
+	}{
+		{
+			name: "対応表の行を消して terminal_states へ足す",
+			front: trackerFrontMatter("  terminal_states: [\"Done\", \"Archived\"]\n") +
+				"cleanup:\n  on_states: [\"Archived\"]\n",
+		},
+		{
+			name: "対応表の行と cleanup.on_states の行を消して active_states へ足す",
+			front: trackerFrontMatter(
+				"  active_states: [\"Ready\", \"In Progress\", \"Archived\"]\n") +
+				"cleanup:\n  on_states: [\"Done\"]\n",
+		},
+	}
+	for _, c := range ok {
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := config.Load(writeWorkflow(t, c.front, "")); err != nil {
+				t.Fatalf("案内どおりに直した設定が起動しない（案内が誤っている）: %v", err)
+			}
+		})
+	}
+
+	// 案内が禁じている直し方。**落ちること自体は正しい。**案内がこれを勧めてはならない。
+	ng := []struct {
+		name  string
+		front string
+		key   string
+	}{
+		{
+			name: "対応表の行だけ消して active_states へ足す",
+			front: trackerFrontMatter(
+				"  active_states: [\"Ready\", \"In Progress\", \"Archived\"]\n") +
+				"cleanup:\n  on_states: [\"Archived\"]\n",
+			key: "cleanup.on_states",
+		},
+		{
+			name: "対応表の行を残したまま terminal_states へ足す",
+			front: trackerFrontMatter(
+				"  terminal_states: [\"Done\", \"Archived\"]\n"+
+					"  automated_state_rewrite:\n"+
+					"    Archived: In Progress\n") +
+				"cleanup:\n  on_states: [\"Archived\"]\n",
+			key: "tracker.automated_state_rewrite のキー",
+		},
+	}
+	for _, c := range ng {
+		t.Run(c.name, func(t *testing.T) {
+			assertLoadFailsWith(t, c.front, c.key)
+		})
+	}
+}
