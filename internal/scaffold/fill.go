@@ -14,10 +14,10 @@ const commentColumn = 44
 
 // ownerFilledComment は tracker.provider.owner を埋めたあとに残すコメントである。
 // 「ここを埋めること」は消す。埋まっているのに埋めろと書いてあると、読む人が迷う。
-const ownerFilledComment = "例: https://github.com/maimuzo なら maimuzo"
+const ownerFilledComment = "例: https://github.com/octocat なら octocat"
 
 // projectFilledComment は tracker.provider.project_number を埋めたあとに残すコメントである。
-const projectFilledComment = "例: https://github.com/users/maimuzo/projects/3 なら 3"
+const projectFilledComment = "例: https://github.com/users/octocat/projects/3 なら 3"
 
 // ownerPlaceholderCode は雛形の owner の行の、コメントより前の部分である。
 // 行の先頭から一致させることで、branch_template の中の {{.issue.owner}} のような

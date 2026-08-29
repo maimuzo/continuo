@@ -41,7 +41,7 @@ func TestLoad_trust_repositoriesの形が違うと落ちる(t *testing.T) {
 // 成功条件: エラー文に "trust.repositories[1]" と "重複" が含まれること。
 func TestLoad_trust_repositoriesに同じものを2回書くと落ちる(t *testing.T) {
 	front := validFrontMatter +
-		"trust:\n  repositories: [\"maimuzo/continuo\", \"maimuzo/continuo\"]\n"
+		"trust:\n  repositories: [\"octocat/hello-world\", \"octocat/hello-world\"]\n"
 	path := writeWorkflow(t, front, "")
 
 	_, err := config.Load(path)
@@ -65,14 +65,14 @@ func TestLoad_trust_repositoriesに同じものを2回書くと落ちる(t *test
 // 成功条件: 書いた順のまま3件が読み出せること。
 func TestLoad_trust_repositoriesは書いた順のまま読み出せる(t *testing.T) {
 	front := validFrontMatter +
-		"trust:\n  repositories:\n    - \"octocat/hello-world\"\n    - \"maimuzo/continuo\"\n    - \"acme/tool_kit.v2\"\n"
+		"trust:\n  repositories:\n    - \"octocat/hello-world\"\n    - \"acme/anvil\"\n    - \"acme/tool_kit.v2\"\n"
 	path := writeWorkflow(t, front, "")
 
 	loaded, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("正しい設定なのに読み込めなかった: %v", err)
 	}
-	want := []string{"octocat/hello-world", "maimuzo/continuo", "acme/tool_kit.v2"}
+	want := []string{"octocat/hello-world", "acme/anvil", "acme/tool_kit.v2"}
 	got := loaded.Config.Trust.Repositories
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("読み出した値が想定と違う: got %v, want %v", got, want)

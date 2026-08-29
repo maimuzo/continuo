@@ -64,6 +64,6 @@
 
 | 何 | いつ |
 | --- | --- |
-| `/Users/maimuzo/continuo_rucm_backup/` と、置き去りの4本の branch | **RUCM の作り直しが全部終わったら消す**（指示どおり） |
-| `/Users/maimuzo/continuo_rucm_backup_20260826/` | **失敗した1回目。消そうとして auto mode に断られた。**許可が要る |
+| `~/continuo_rucm_backup/` と、置き去りの4本の branch | **RUCM の作り直しが全部終わったら消す**（指示どおり） |
+| `~/continuo_rucm_backup_20260826/` | **失敗した1回目。消そうとして auto mode に断られた。**許可が要る |
 | `CLAUDE.md` の変更（ファイル書き換えの方針） | **未 commit。**worker が動いている間は commit しない |
