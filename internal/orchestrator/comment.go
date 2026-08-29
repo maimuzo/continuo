@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/redact"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
@@ -316,9 +317,26 @@ func (o *Orchestrator) postStatusMove(
 	if !move.Wrote || nodeID == "" {
 		return
 	}
-	if _, err := o.tracker.PostComment(ctx, nodeID,
-		buildStatusMoveComment(move, why, o.now()),
-		o.cfg.Tracker.Comments.SelfMarker); err != nil {
+	if err := o.postComment(ctx, nodeID, buildStatusMoveComment(move, why, o.now())); err != nil {
 		o.logger.Warn("Status を動かした記録を投稿できませんでした", "identifier", identifier, "error", err)
 	}
+}
+
+// postComment は continuo のコメントを issue へ1件書く。
+//
+// **continuo が issue へ書くものは、例外なくここを通す**（設計 3-63）。
+// **`o.tracker.PostComment` を直に呼んではならない。**
+// `test/internal/redact` の検査が、この1本を迂回した呼び出しを構文木で落とす。
+//
+// **ここが、手元の絶対パスを `~` に縮める唯一の場所である。**本文を組み立てる場所は
+// 6箇所あり、そのどれもが worktree・会話の記録・設定ファイルの絶対パスを載せうる。
+// **git の失敗をそのまま貼る経路もある**ので、組み立てる側で縮めると必ず漏れる。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// nodeID: 投稿先の issue のノード ID。
+// body: コメント本文。
+// 戻り値: 投稿に失敗したときのエラー。
+func (o *Orchestrator) postComment(ctx context.Context, nodeID, body string) error {
+	_, err := o.tracker.PostComment(ctx, nodeID, redact.Paths(body), o.cfg.Tracker.Comments.SelfMarker)
+	return err
 }

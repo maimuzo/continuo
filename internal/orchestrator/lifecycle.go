@@ -375,7 +375,7 @@ func (o *Orchestrator) noteSignalTargetsMissing(ctx context.Context, rs *runStat
 	}
 	body := fmt.Sprintf("表明に書かれた %s は、このボードに載っていないので Status を動かせませんでした。",
 		strings.Join(targets, " / "))
-	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Comments.SelfMarker); err != nil {
+	if err := o.postComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("表明の取りこぼしを投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}
 }
@@ -824,7 +824,7 @@ func (o *Orchestrator) cleanupPath(
 	}
 	body := fmt.Sprintf("worktree を片付けずに残しました（%s）。\n\n理由:\n- %s",
 		worktreePath, strings.Join(result.Reasons, "\n- "))
-	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Comments.SelfMarker); err != nil {
+	if err := o.postComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("片付けを見送った通知を投稿できませんでした", "identifier", identifier, "error", err)
 		return false
 	}
@@ -898,7 +898,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			"identifier", rs.issue().Identifier, "置き場所", subagentDir,
 			"件数", len(subagentTranscripts), "走行中のものか", subagentRunning)
 	}
-	if _, err := o.tracker.PostComment(ctx, nodeID,
+	if err := o.postComment(ctx, nodeID,
 		buildHandoffComment(rs.issue().Identifier, reason, handoffContext{
 			WorktreePath:        snap.WorktreePath,
 			TranscriptPath:      snap.TranscriptPath,
@@ -906,8 +906,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			SubagentTranscripts: subagentTranscripts,
 			SubagentRunning:     subagentRunning,
 			SettingsPath:        snap.SettingsPath,
-		}, move),
-		o.cfg.Tracker.Comments.SelfMarker); err != nil {
+		}, move)); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}
 }
