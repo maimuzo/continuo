@@ -40,6 +40,25 @@ import (
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
+// testGHLogin はテストで使う「continuo が使う gh の持ち主」である（設計 3-65）。
+//
+// **実在のアカウント名を書かない。**公開リポジトリなので octocat を使う。
+const testGHLogin = "octocat"
+
+// ghLoginForTest は「gh の持ち主」を取る偽物を返す（設計 3-65）。
+//
+// **本物を渡すと `gh api user` が起動する。**`testing/synctest` の bubble の中では
+// 外部プロセスを起こせないので、テストでは必ず偽物を渡す。
+//
+// fn: テストが指定した関数。nil なら testGHLogin を返すだけの関数にする。
+// 戻り値: 組み立てた関数。
+func ghLoginForTest(fn func(ctx context.Context) (string, error)) func(ctx context.Context) (string, error) {
+	if fn != nil {
+		return fn
+	}
+	return func(context.Context) (string, error) { return testGHLogin, nil }
+}
+
 // ===== 呼び出しの並びを1本にまとめる記録 =====
 
 // timeline はテスト用トラッカー mockとテスト用herdr mock の呼び出しを、**1本の並び**に混ぜて記録する。
@@ -586,6 +605,9 @@ type fakeTracker struct {
 	// **issue のコメントを読めない状況の再現に使う**（設計 3-25 の段1。
 	// 読めなかったときは「書かれていないもの」として扱う）。
 	commentsErr error
+	// commentsSelfLogin は FetchComments が最後に受け取った「gh の持ち主」である
+	// （設計 3-65）。**印だけで判定していないことを確かめるために記録する。**
+	commentsSelfLogin string
 	// postErr は PostComment が返すエラーである。
 	//
 	// **issue へ書けない状況の再現に使う**（片付けを見送った通知・引き渡しの通知）。
@@ -710,6 +732,15 @@ func (ft *fakeTracker) SetCommentsError(err error) {
 	ft.commentsErr = err
 }
 
+// CommentsSelfLogin は FetchComments が最後に受け取った「gh の持ち主」を返す（設計 3-65）。
+//
+// 戻り値: 受け取ったログイン名。**1度も呼ばれていなければ空文字。**
+func (ft *fakeTracker) CommentsSelfLogin() string {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	return ft.commentsSelfLogin
+}
+
 // SetPostError は PostComment が返すエラーを差し替える
 // （issue へコメントを書けない状況の再現）。
 //
@@ -796,6 +827,24 @@ func (ft *fakeTracker) SetState(id, state string) {
 			// **人間が動かした扱いにする**（設計 3-54 の `actor.__typename` が `User`）。
 			ft.board[i].StatusChangedByAutomation = false
 			ft.board[i].StatusChangedBy = "octocat"
+			return
+		}
+	}
+}
+
+// SetDispatchable は issue の `Dispatchable` を書き換える（設計 3-13）。
+//
+// **本物のアダプタは、リポジトリが Claude Code に信頼登録されていないと偽にして返す。**
+// Status は `active_states` のまま偽になることがあり、そのときの巡回の振る舞いを見るために使う。
+//
+// id: project item の ID。
+// dispatchable: 新しい値。
+func (ft *fakeTracker) SetDispatchable(id string, dispatchable bool) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID == id {
+			ft.board[i].Dispatchable = dispatchable
 			return
 		}
 	}
@@ -900,6 +949,26 @@ func (ft *fakeTracker) AddComment(nodeID, body string, isAgent bool, createdAt t
 	ft.comments[nodeID] = append(ft.comments[nodeID], tracker.Comment{
 		ID: fmt.Sprintf("C_%d", len(ft.comments[nodeID])+1), Body: body,
 		IsAgent: isAgent, CreatedAt: createdAt,
+	})
+}
+
+// AddSpoofedComment は「印は付いているが、投稿者が gh の持ち主ではない」コメントを足す
+// （設計 3-65）。
+//
+// **本物の FetchComments が第三者の印付きコメントに対して返す形をそのまま作る。**
+// すなわち IsAgent は偽のまま、MarkedByOther だけが立つ。
+//
+// nodeID: 下敷きの GitHub issue のノード ID。
+// body: 本文（印で始まるもの）。
+// author: 投稿者のログイン名（持ち主ではない誰か）。
+// createdAt: 作成時刻。
+func (ft *fakeTracker) AddSpoofedComment(nodeID, body, author string, createdAt time.Time) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.comments[nodeID] = append(ft.comments[nodeID], tracker.Comment{
+		ID: fmt.Sprintf("C_%d", len(ft.comments[nodeID])+1), Body: body,
+		Author: author, URL: "https://example.test/comment/spoofed",
+		MarkedByOther: true, CreatedAt: createdAt,
 	})
 }
 
@@ -1067,10 +1136,15 @@ func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState strin
 }
 
 // FetchComments は issue のコメントを返す。
-func (ft *fakeTracker) FetchComments(_ context.Context, issueNodeID string, _ config.TrackerProviderCommentsConfig, _ config.TrackerCommentsConfig) ([]tracker.Comment, error) {
+//
+// selfLogin: continuo が使う gh の持ち主（設計 3-65）。**この偽物は投稿者で絞らず、
+// 受け取った値を記録するだけである**（絞り込みそのものは internal/tracker の
+// FetchComments の試験で確かめる）。
+func (ft *fakeTracker) FetchComments(_ context.Context, issueNodeID string, _ config.TrackerProviderCommentsConfig, _ config.TrackerCommentsConfig, selfLogin string) ([]tracker.Comment, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchComments")
+	ft.commentsSelfLogin = selfLogin
 	if ft.commentsErr != nil {
 		return nil, ft.commentsErr
 	}
@@ -1277,6 +1351,10 @@ type fixtureOptions struct {
 	PromptTemplate string
 	// GHAuthCheck は `gh` の認証の検査である。nil なら検査しない。
 	GHAuthCheck func(ctx context.Context) error
+	// GHLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
+	//
+	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する。
+	GHLogin func(ctx context.Context) (string, error)
 	// RateLimit は枠の読み取りである。nil なら枠の判定を行わない。
 	RateLimit *ratelimit.Reader
 	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
@@ -1432,6 +1510,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Logger:         logger,
 		Now:            nowFunc,
 		GHAuthCheck:    opts.GHAuthCheck,
+		// **本物の `gh` を起動させない**（設計 3-65）。渡さないと `gh api user` が走る。
+		GHLogin: ghLoginForTest(opts.GHLogin),
 		NewSessionUUID: func() (string, error) {
 			sessionMu.Lock()
 			defer sessionMu.Unlock()
@@ -1534,6 +1614,31 @@ func stopEvent(sessionID, transcriptPath, promptID string) hookserver.HookEvent 
 		PromptID:        promptID,
 		BackgroundTasks: &empty,
 	}
+}
+
+// runningShellStopEvent は「background_tasks にバックグラウンドの shell が載っている Stop」
+// を作る（設計 3-2 / 1-7）。
+//
+// **これは Claude Code 自身の「まだ動いています」という申告である。**
+// `type` が `shell` なので、走行中の subagent の印（設計 3-11）はこれでは動かない。
+// **`Stop` の中身だけで「まだ動いている」と判定できることを確かめるためにこの形にしている**
+// （subagent が載る形は turn_test.go の runningStopEvent が作る）。
+//
+// sessionID: セッション UUID。
+// transcriptPath: transcript のパス。
+// promptID: prompt_id。
+// 戻り値: hook のイベント。
+func runningShellStopEvent(sessionID, transcriptPath, promptID string) hookserver.HookEvent {
+	running := []hookserver.BackgroundTask{{
+		ID:          "bmr1ksf9i",
+		Type:        "shell",
+		Status:      "running",
+		Description: "テストの実行",
+		Command:     "sleep 45",
+	}}
+	ev := stopEvent(sessionID, transcriptPath, promptID)
+	ev.BackgroundTasks = &running
+	return ev
 }
 
 // taskNotificationEvent は `<task-notification>` の UserPromptSubmit を作る

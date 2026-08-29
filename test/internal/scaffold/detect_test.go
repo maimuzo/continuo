@@ -74,8 +74,8 @@ const twoProjectsJSON = `{"projects":[` +
 // 実際に得た形から、判定に使う項目だけを写した。
 const twoRepoItemsJSON = `{"items":[` +
 	`{"content":{"number":188,"repository":"octocat/hello-world","type":"Issue"}},` +
-	`{"content":{"number":1,"repository":"maimuzo/continuo","type":"Issue"}},` +
-	`{"content":{"number":2,"repository":"maimuzo/continuo","type":"Issue"}},` +
+	`{"content":{"number":1,"repository":"acme/anvil","type":"Issue"}},` +
+	`{"content":{"number":2,"repository":"acme/anvil","type":"Issue"}},` +
 	`{"content":{"title":"下書き","type":"DraftIssue"}}],"totalCount":4}`
 
 // 目的: gh から owner とボードの番号を引いて、雛形の2つのプレースホルダが埋まることを確認する。
@@ -300,8 +300,8 @@ func TestTemplateWithValues_埋めた行はコメントごと置き換わる(t *
 		t.Error("project_number のプレースホルダが残っている")
 	}
 	for _, want := range []string{
-		"    owner: octocat                          # 例: https://github.com/maimuzo なら maimuzo",
-		"    project_number: 3                       # 例: https://github.com/users/maimuzo/projects/3 なら 3",
+		"    owner: octocat                          # 例: https://github.com/octocat なら octocat",
+		"    project_number: 3                       # 例: https://github.com/users/octocat/projects/3 なら 3",
 	} {
 		if !strings.Contains(filled, want) {
 			t.Errorf("埋めたあとの行が想定と違う。次の行が見つからない:\n  %q", want)

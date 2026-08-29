@@ -70,7 +70,7 @@ const (
 	KeyDoctorLabelMissingKeys Key = "doctor.label.missing_keys"
 )
 
-// doctor の検査「未記入の項目」（設計 3-73。issue #85）。
+// doctor の検査「未記入の項目」（設計 3-74。issue #85）。
 const (
 	// KeyDoctorMissingKeysConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
 	KeyDoctorMissingKeysConfigUnreadable Key = "doctor.missing_keys.config_unreadable"
@@ -1229,6 +1229,14 @@ const (
 	KeyTrackerGHAuthTokenRunFailed Key = "tracker.gh_auth_token.run_failed"
 	// KeyTrackerGHAuthTokenEmptyOutput は `gh auth token` が空文字を返したときに出る。
 	KeyTrackerGHAuthTokenEmptyOutput Key = "tracker.gh_auth_token.empty_output"
+)
+
+// 「continuo が使う gh の持ち主」の取得（internal/tracker の RunGHAPIUserLogin）の文言。
+const (
+	// KeyTrackerGHAPIUserRunFailed は `gh api user --jq .login` の実行が失敗したときに出る。
+	KeyTrackerGHAPIUserRunFailed Key = "tracker.gh_api_user.run_failed"
+	// KeyTrackerGHAPIUserEmptyOutput は `gh api user --jq .login` が空文字を返したときに出る。
+	KeyTrackerGHAPIUserEmptyOutput Key = "tracker.gh_api_user.empty_output"
 )
 
 // gh の有無と scope の検査（internal/tracker の RunGHAuthStatus / CheckGHAvailable /
@@ -2471,6 +2479,8 @@ var allKeys = []Key{
 	KeyHerdrAgentSendKeysEmpty,
 	KeyTrackerGHAuthTokenRunFailed,
 	KeyTrackerGHAuthTokenEmptyOutput,
+	KeyTrackerGHAPIUserRunFailed,
+	KeyTrackerGHAPIUserEmptyOutput,
 	KeyTrackerGHAuthStatusStartFailed,
 	KeyTrackerGHAvailableNotInPath,
 	KeyTrackerGHScopeNoActiveAccount,

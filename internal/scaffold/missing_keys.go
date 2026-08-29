@@ -1,7 +1,7 @@
 package scaffold
 
 // 雛形にあって WORKFLOW.md に書かれていない設定項目を見つけ、それを足す差分を組み立てる
-// （設計 3-73。issue #85）。
+// （設計 3-74。issue #85）。
 //
 // **正は雛形（template.go の front matter）である。**設定の型（internal/config）ではない。
 // 型には Go の既定値しか無く、**その項目に何を書けるのかを説明する文が1文字も無い。**
@@ -87,7 +87,7 @@ type MissingKeysResult struct {
 }
 
 // MissingKeys は、雛形の front matter にあって WORKFLOW.md に書かれていないキーと、
-// それを足す unified diff を返す（設計 3-73。issue #85）。
+// それを足す unified diff を返す（設計 3-74。issue #85）。
 //
 // **「要らないから書いていない」と「知らないから書いていない」を区別しない。**
 // 機械には区別できないので、**足りないものは足りないものとして扱う。**

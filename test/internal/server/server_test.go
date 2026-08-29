@@ -84,7 +84,7 @@ func TestIndex_実行中のrunの一覧を出せる(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"maimuzo/continuo#12",                                // issue の識別子
+		"octocat/hello-world#12",                             // issue の識別子
 		"ダッシュボードを作る",                                         // タイトル
 		"In Progress",                                        // Status
 		"hook の受け口を直す",                                       // もう1件のタイトル
@@ -106,7 +106,7 @@ func TestIndex_実行中のrunの一覧を出せる(t *testing.T) {
 
 	// identifier の昇順（#12 が #7 より前）で並ぶこと。`RunViews` の順序は不定なので、
 	// 並べ替えないと再読み込みのたびに行が入れ替わる。
-	if strings.Index(body, "maimuzo/continuo#12") > strings.Index(body, "maimuzo/continuo#7") {
+	if strings.Index(body, "octocat/hello-world#12") > strings.Index(body, "octocat/hello-world#7") {
 		t.Error("identifier の昇順で並んでいない")
 	}
 }
@@ -132,10 +132,10 @@ func TestIndex_実行中のrunが無くても表示できる(t *testing.T) {
 // 成功条件: 生の `<script>` が本文に現れず、エスケープされた形で現れること。
 func TestIndex_issueのタイトルをエスケープする(t *testing.T) {
 	views := []orchestrator.RunView{{
-		Identifier: "maimuzo/continuo#1",
+		Identifier: "octocat/hello-world#1",
 		Title:      `<script>alert("x")</script>`,
 		State:      `" onmouseover="alert(1)`,
-		URL:        "https://github.com/maimuzo/continuo/issues/1",
+		URL:        "https://github.com/octocat/hello-world/issues/1",
 	}}
 	s, _ := newTestServer(t, views)
 	_, body := get(t, s, http.MethodGet, "/")
@@ -157,7 +157,7 @@ func TestIndex_issueのタイトルをエスケープする(t *testing.T) {
 // 成功条件: その文字列が href に現れないこと。
 func TestIndex_危ないURLはリンクにしない(t *testing.T) {
 	views := []orchestrator.RunView{{
-		Identifier: "maimuzo/continuo#1",
+		Identifier: "octocat/hello-world#1",
 		Title:      "危ない URL",
 		URL:        "javascript:alert(1)",
 		State:      "In Progress",
@@ -205,7 +205,7 @@ func TestトークンAPI_集計を出せる(t *testing.T) {
 	if len(snap.Runs) != 2 {
 		t.Fatalf("run の件数が違う: got %d, want 2", len(snap.Runs))
 	}
-	if snap.Runs[0].Identifier != "maimuzo/continuo#12" {
+	if snap.Runs[0].Identifier != "octocat/hello-world#12" {
 		t.Errorf("identifier の昇順で並んでいない: got %q", snap.Runs[0].Identifier)
 	}
 	if snap.Runs[0].TurnCount != 3 {
@@ -228,7 +228,7 @@ func TestトークンAPI_requestIdで重複排除した値を出す(t *testing.T
 		`{"type":"assistant","requestId":"req_1","message":{"usage":{"input_tokens":10,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000,"output_tokens":5}}}`,
 		`{"type":"assistant","requestId":"req_2","message":{"usage":{"input_tokens":7,"cache_creation_input_tokens":0,"cache_read_input_tokens":2000,"output_tokens":3}}}`,
 	})
-	result, err := orchestrator.ReadTranscript(path, "", "CONTINUO-STATUS:", "maimuzo/continuo#1")
+	result, err := orchestrator.ReadTranscript(path, "", "CONTINUO-STATUS:", "octocat/hello-world#1")
 	if err != nil {
 		t.Fatalf("transcript を読めなかった: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestトークンAPI_requestIdで重複排除した値を出す(t *testing.T
 	}
 
 	s, _ := newTestServer(t, []orchestrator.RunView{{
-		Identifier: "maimuzo/continuo#1",
+		Identifier: "octocat/hello-world#1",
 		Title:      "重複排除の確認",
 		State:      "In Progress",
 		TurnCount:  1,
@@ -342,7 +342,7 @@ func TestStart_実際に待ち受けてHTTPで取得できる(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("HTML の状態コードが違う: got %d, want %d", code, http.StatusOK)
 	}
-	if !strings.Contains(body, "maimuzo/continuo#12") {
+	if !strings.Contains(body, "octocat/hello-world#12") {
 		t.Error("HTML に issue の識別子が出ていない")
 	}
 
@@ -401,7 +401,7 @@ func TestNew_不正な入力を弾く(t *testing.T) {
 // 成功条件: 200 が返り、問い合わせ文字列に影響されないこと（操作の引数として解釈しない）。
 func TestAPI_問い合わせ文字列を解釈しない(t *testing.T) {
 	s, _ := newTestServer(t, sampleViews())
-	u := url.URL{Path: server.APIStatePath, RawQuery: "stop=maimuzo/continuo%2312"}
+	u := url.URL{Path: server.APIStatePath, RawQuery: "stop=octocat/hello-world%2312"}
 	code, body := get(t, s, http.MethodGet, u.String())
 	if code != http.StatusOK {
 		t.Fatalf("状態コードが違う: got %d, want %d", code, http.StatusOK)
@@ -431,7 +431,7 @@ func TestHost_ループバック以外の宛先は断る(t *testing.T) {
 		if src.calls != 0 {
 			t.Errorf("%s で run の写しを取りに行った（中身が漏れる）: %d 回", path, src.calls)
 		}
-		if strings.Contains(body, "maimuzo/continuo#12") {
+		if strings.Contains(body, "octocat/hello-world#12") {
 			t.Errorf("%s の応答に issue の中身が入っている: %q", path, body)
 		}
 	}
@@ -505,8 +505,8 @@ func TestAPI_取得口は仕様どおりの経路にある(t *testing.T) {
 // 成功条件: `counts.running` が 1、`counts.retrying` が 1 になること。
 func TestAPI_runの件数の内訳を出す(t *testing.T) {
 	views := []orchestrator.RunView{
-		{Identifier: "maimuzo/continuo#1", State: "In Progress"},
-		{Identifier: "maimuzo/continuo#2", State: "In Progress", RetryCount: 1,
+		{Identifier: "octocat/hello-world#1", State: "In Progress"},
+		{Identifier: "octocat/hello-world#2", State: "In Progress", RetryCount: 1,
 			BackoffUntil: testTime.Add(5 * time.Minute)},
 	}
 	s, _ := newTestServer(t, views)
@@ -529,7 +529,7 @@ func TestAPI_runの件数の内訳を出す(t *testing.T) {
 // JSON では `last_hook_at` が null になり、`stall_clock_at` には時計の値が入ること。
 func Test最後にhookを受けた時刻はstallの時計を流用しない(t *testing.T) {
 	views := []orchestrator.RunView{{
-		Identifier:   "maimuzo/continuo#1",
+		Identifier:   "octocat/hello-world#1",
 		Title:        "hook を1件も返さないまま固まった run",
 		State:        "In Progress",
 		TurnCount:    2,

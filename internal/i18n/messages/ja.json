@@ -604,6 +604,8 @@
   "socketpath.source.env_continuo_runtime_dir": "環境変数 CONTINUO_RUNTIME_DIR",
   "socketpath.source.env_tmpdir": "環境変数 TMPDIR",
   "socketpath.source.env_xdg_runtime_dir": "環境変数 XDG_RUNTIME_DIR",
+  "tracker.gh_api_user.empty_output": "`gh api user --jq .login` の出力が空でした",
+  "tracker.gh_api_user.run_failed": "`gh api user --jq .login` の実行に失敗しました（gh の出力: %s）: %w",
   "tracker.gh_auth_status.start_failed": "`gh auth status --hostname %s` を起動できません: %w",
   "tracker.gh_auth_token.empty_output": "`gh auth token` の出力が空でした",
   "tracker.gh_auth_token.run_failed": "`gh auth token` の実行に失敗しました: %w",

@@ -1,0 +1,232 @@
+// **終端と引き渡しの Status をボードの自動化が書いたときの検査である**（設計 3-73。issue #79）。
+//
+// **エージェントが turn の途中で自分の PR をマージすると、ボードの組み込みの自動化が
+// `Done` を書く。**それを「人間が終わったと言っている」と読んで、continuo は走っている
+// Claude Code を殺し、worktree を消しにいっていた。**自分の足元が消える。**
+//
+// **知らない Status と同じ猶予を掛けること**と、**人間が動かしたときは
+// いままでどおり即座に止めること**を見る。
+package orchestrator_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/herdr"
+)
+
+// automatedMoveGraceConfig は「猶予を1分だけ置く」設定を作る。
+//
+// **`unknown_state_grace_ms` は知らない Status と共用である**（設計 3-73）。
+// **待つ長さの設定は共用だが、猶予の起点は種類が変わったら切り直す**（`externalMoveKind`）。
+func automatedMoveGraceConfig(cfg *config.Config) {
+	cfg.Tracker.VerifyStatesEvery = 0
+	cfg.Tracker.UnknownStateGraceMs = 60000
+}
+
+// startRunAndBlockTurn は issue を1件着手させ、1回目の turn を待ち受けに入れたままにする。
+//
+// **turn が動いている状態を作るためのものである。**`agent.prompt` が返らない限り、
+// turn ループの goroutine は生きている（`runState.turnLoopActive` が真になる）。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// 戻り値: 着手した issue の project item ID。
+func startRunAndBlockTurn(t *testing.T, fx *fixture) string {
+	t.Helper()
+	blockFirstPrompt(t, fx)
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	return issue.ID
+}
+
+// TestReconcile_自動化がDoneを書いてもturnの終わりまでは止めない は、設計 3-73 を確かめる。
+//
+// 目的: 「PR がマージされたら Done」の自動化は、エージェントが turn の途中で自分の PR を
+// マージした瞬間に走る。**次の巡回がそれを終端と読むと、走っている Claude Code を
+// continuo 自身が殺す。**書いたのが人間でないと分かっているのだから、待つ。
+//
+// 与える情報: 1回目の turn が `agent.prompt` の待ち受けに入ったままの run。
+// その間にボードの自動化が Status を `Done` へ動かす。猶予は1分。
+// 成功条件:
+//   - 猶予の内側では印を外さない（pane も閉じない）
+//   - 待っていることをログに出す
+//   - 猶予を過ぎたら、いままでどおり終える
+func TestReconcile_自動化がDoneを書いてもturnの終わりまでは止めない(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now, Mutate: automatedMoveGraceConfig})
+	itemID := startRunAndBlockTurn(t, fx)
+	closesBefore := fx.Herdr.CountMethod(herdr.MethodPaneClose)
+
+	// エージェントが自分の PR をマージし、ボードの組み込みの自動化が `Done` を書いた。
+	fx.Tracker.SetStateByAutomation(itemID, "Done")
+	fx.Orc.Tick(context.Background())
+	// **終わらせる処理は別の goroutine で走る。**走らないことを見たいので、少し待つ。
+	time.Sleep(500 * time.Millisecond)
+
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("turn の途中なのに印を外している: 印は %d 件", got)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodPaneClose); got != closesBefore {
+		t.Fatalf("turn の途中なのに pane を閉じている: pane.close が %d 回", got-closesBefore)
+	}
+	if logs := fx.Logs.String(); !strings.Contains(logs, "turn の終わりを待っています") {
+		t.Fatalf("待っていることをログに出していない（黙って遅らせている）")
+	}
+
+	// 猶予を過ぎた。**ここからは、いままでどおり終える。**
+	clock.Advance(2 * time.Minute)
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}
+
+// TestReconcile_人間がDoneを書いたらturnの途中でも止める は、設計 3-73 を確かめる。
+//
+// 目的: **待つのは「書いたのが自動化だったとき」だけである。**人間が `Done` にしたのなら、
+// その人は自分の操作の結果を分かっている。**猶予を掛けると、止めたい人が既定10分待たされる。**
+//
+// 与える情報: 1回目の turn が `agent.prompt` の待ち受けに入ったままの run。
+// その間に**人間が** Status を `Done` へ動かす。猶予は1分（掛かれば止まらないはずの長さ）。
+// 成功条件: 時計を進めずに、その巡回で run が終わること。
+func TestReconcile_人間がDoneを書いたらturnの途中でも止める(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now, Mutate: automatedMoveGraceConfig})
+	itemID := startRunAndBlockTurn(t, fx)
+
+	// **SetState は人間が動かした扱いである**（SetStateByAutomation と対になる）。
+	fx.Tracker.SetState(itemID, "Done")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}
+
+// TestReconcile_自動化がInReviewを書いてもturnの終わりまでは止めない は、設計 3-73 を確かめる。
+//
+// 目的: 引き渡しの Status も自動化が書く（PR を issue に紐づけたとき）。
+// **終端だけ塞いでも、同じ形でエージェントが殺される。**
+//
+// 与える情報: 1回目の turn が `agent.prompt` の待ち受けに入ったままの run。
+// その間にボードの自動化が Status を `In Review` へ動かす。猶予は1分。
+// 成功条件:
+//   - 猶予の内側では印を外さない（pane も閉じない）
+//   - 猶予を過ぎたら worker を止める
+func TestReconcile_自動化がInReviewを書いてもturnの終わりまでは止めない(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now, Mutate: automatedMoveGraceConfig})
+	itemID := startRunAndBlockTurn(t, fx)
+	closesBefore := fx.Herdr.CountMethod(herdr.MethodPaneClose)
+
+	fx.Tracker.SetStateByAutomation(itemID, "In Review")
+	fx.Orc.Tick(context.Background())
+	time.Sleep(500 * time.Millisecond)
+
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("turn の途中なのに印を外している: 印は %d 件", got)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodPaneClose); got != closesBefore {
+		t.Fatalf("turn の途中なのに pane を閉じている: pane.close が %d 回", got-closesBefore)
+	}
+
+	clock.Advance(2 * time.Minute)
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}
+
+// TestReconcile_猶予が0なら自動化が書いた終端でもその場で止める は、設計 3-73 を確かめる。
+//
+// 目的: `tracker.unknown_state_grace_ms` を 0 にした利用者は「その場で止める」と決めている。
+// **知らない Status でそう決めた設定が、終端と引き渡しでだけ効かない、を作らない。**
+//
+// 与える情報: 猶予 0 の設定で、turn の待ち受けに入ったままの run。
+// その間にボードの自動化が Status を `Done` へ動かす。
+// 成功条件: その巡回で run が終わること。
+func TestReconcile_猶予が0なら自動化が書いた終端でもその場で止める(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.VerifyStatesEvery = 0
+			cfg.Tracker.UnknownStateGraceMs = 0
+		},
+	})
+	itemID := startRunAndBlockTurn(t, fx)
+
+	fx.Tracker.SetStateByAutomation(itemID, "Done")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}
+
+// TestReconcile_作業中のままdispatchできなくなったら待たずに止める は、設計 3-73 を確かめる。
+//
+// 目的: `active_states` に入ったままでも `Dispatchable` が偽になると止める（設計 3-13。
+// リポジトリの Claude Code への信頼登録が外れた等）。**これは Status の引き渡しではない。**
+// **書いたのが自動化かどうかで待つと、Status と無関係な理由で止めるはずの run が
+// 猶予ぶん止まらなくなる。**
+//
+// 与える情報: turn の待ち受けに入ったままの run。Status は `In Progress` のままで、
+// **書いたのはボードの自動化**、`Dispatchable` だけが偽になる。猶予は1分。
+// 成功条件: 時計を進めずに、その巡回で run が終わること。
+func TestReconcile_作業中のままdispatchできなくなったら待たずに止める(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now, Mutate: automatedMoveGraceConfig})
+	itemID := startRunAndBlockTurn(t, fx)
+
+	// Status は作業中のまま。**書いたのは自動化**だが、止める理由はそこではない。
+	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
+	fx.Tracker.SetDispatchable(itemID, false)
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}
+
+// TestReconcile_知らないStatusで待った時間は自動化の猶予へ持ち越さない は、設計 3-73 を確かめる。
+//
+// 目的: 猶予の起点は知らない Status と同じ場所に持つが、**種類が変わったら切り直す。**
+// 2つは同時には起きないが、**順には起きる。**知らない Status で待っていた run が続けて
+// 自動化に `Done` へ動かされたとき、起点を繰り越すと猶予が前回ぶんだけ短くなる。
+//
+// 与える情報: 猶予1分。turn の待ち受けに入ったままの run へ、
+// まず人間が知らない Status（`Icebox`）を書き、50秒後にボードの自動化が `Done` を書く。
+// 成功条件: `Done` から50秒（最初の動きからは100秒）経っても、まだ止まっていないこと。
+// **起点を繰り越していれば、この時点で猶予（1分）を過ぎて止まっている。**
+func TestReconcile_知らないStatusで待った時間は自動化の猶予へ持ち越さない(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now, Mutate: automatedMoveGraceConfig})
+	itemID := startRunAndBlockTurn(t, fx)
+	closesBefore := fx.Herdr.CountMethod(herdr.MethodPaneClose)
+
+	// 人間が知らない Status へ動かした。turn が動いているので猶予の内側で待つ。
+	fx.Tracker.SetState(itemID, "Icebox")
+	fx.Orc.Tick(context.Background())
+	time.Sleep(300 * time.Millisecond)
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("知らない Status の猶予の内側なのに印を外している: 印は %d 件", got)
+	}
+
+	// 50秒後、ボードの自動化が `Done` を書いた。**ここで猶予を数え直す。**
+	clock.Advance(50 * time.Second)
+	fx.Tracker.SetStateByAutomation(itemID, "Done")
+	fx.Orc.Tick(context.Background())
+	time.Sleep(300 * time.Millisecond)
+
+	// さらに50秒。`Done` からは50秒しか経っていないので、まだ待つ。
+	clock.Advance(50 * time.Second)
+	fx.Orc.Tick(context.Background())
+	time.Sleep(500 * time.Millisecond)
+
+	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
+		t.Fatalf("起点を繰り越して猶予を短くしている: 印は %d 件", got)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodPaneClose); got != closesBefore {
+		t.Fatalf("起点を繰り越して pane を閉じている: pane.close が %d 回", got-closesBefore)
+	}
+
+	// `Done` から猶予を過ぎれば、いままでどおり終える。
+	clock.Advance(2 * time.Minute)
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}

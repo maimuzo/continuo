@@ -835,7 +835,7 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	// **差分だけを出す口を分ける。**検査結果に混ぜて出した差分は、見出し語の桁に
 	// 揃えて字下げされるので、そのままでは `patch` に渡せない。
-	// **人間が読む差分と、機械へ渡す差分の両方が要る**（設計 3-73）。
+	// **人間が読む差分と、機械へ渡す差分の両方が要る**（設計 3-74）。
 	patchFlag := fs.Bool("missing-keys-patch", false, i18n.T(i18n.KeyCLIDoctorFlagMissingKeysPatch))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
@@ -900,7 +900,7 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	return report.ExitCode()
 }
 
-// runDoctorMissingKeysPatch は `continuo doctor --missing-keys-patch` である（設計 3-73）。
+// runDoctorMissingKeysPatch は `continuo doctor --missing-keys-patch` である（設計 3-74）。
 //
 // **雛形にあって WORKFLOW.md に書かれていない設定項目を足す差分だけを、
 // 標準出力へそのまま出す。**検査は1つも行わず、外部へも1回も出ない。
