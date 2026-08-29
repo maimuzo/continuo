@@ -245,12 +245,28 @@ func (o *Orchestrator) recordRepoWorkspace(
 // **marker が付いていて、かつ CreatedAt が runState.StartedAt より新しいものだけを数える。**
 // worktree を再利用すると前の run のコメントが残っているためである。
 //
+// **marker が付いているだけでは数えない**（設計 3-65）。印は本文の先頭に置くただの
+// 文字列であり、**issue にコメントできる人なら誰でも同じものを書ける。**
+// **投稿者が「continuo が使う gh の持ち主」であるものだけを、エージェントが書いたものとして扱う**
+// （その照合は `FetchComments` が行い、結果が `Comment.IsAgent` である）。
+// **持ち主が取れていなければ、いままでどおり印だけで判定する**（`ghLoginName` が空文字）。
+//
+// **「印はあるが投稿者が違う」コメントを見つけたら、WARN で名指しする**（設計 3-65）。
+// **これがいちばん切り分けの難しい状態である。**issue の画面には印の付いたコメントが
+// 見えているのに、continuo は「書かれていない」と判定してセッションを復元しにいく。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // nodeID: 下敷きの GitHub issue のノード ID。
 // snap: 対象の run の写し。
 // 戻り値: この run が書いたコメントがあれば true。
 func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap runSnapshot) bool {
-	comments, err := o.tracker.FetchComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments, o.cfg.Tracker.Comments)
+	// **最初の巡回より前にこの経路へ入ることがある**（引き継いだ run の turn が
+	// 先に終わる場合）。**そのときはここで持ち主を取る。**
+	// **まだ取れていなければ ghLoginRetryInterval ごとに取り直し、一度取れたら取りに行かない**
+	// （設計 3-65。判定は ghLoginDue）。
+	o.ensureGHLogin(ctx)
+	comments, err := o.tracker.FetchComments(
+		ctx, nodeID, o.cfg.Tracker.Provider.Comments, o.cfg.Tracker.Comments, o.ghLoginName())
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			// **止められただけである。**「書かれていない」と答えて抜ける
@@ -261,15 +277,29 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 			"identifier", snap.Identifier, "error", err)
 		return false
 	}
+	found := false
 	for _, c := range comments {
-		if !c.IsAgent {
+		if !c.CreatedAt.After(snap.StartedAt) {
+			// 前の run のコメントである（worktree を再利用すると残っている）。
 			continue
 		}
-		if c.CreatedAt.After(snap.StartedAt) {
-			return true
+		// **「印はあるが投稿者が違う」は、名指しでログに出す**（設計 3-65）。
+		// **これがいちばん切り分けの難しい状態である。**issue の画面には印の付いた
+		// コメントが見えているのに、continuo は「書かれていない」と判定する。
+		// 出さないと、人間に見えるのは「この run のコメントが無いので…」の1行だけになり、
+		// 印を騙られたのか本当に書かれていないのかが分からない。
+		if c.MarkedByOther {
+			o.logger.Warn("コメントに印は付いていますが、投稿者が gh の持ち主と違います"+
+				"（エージェントが書いたものとして数えません）",
+				"identifier", snap.Identifier, "投稿者", c.Author,
+				"gh の持ち主", o.ghLoginName(), "url", c.URL)
+			continue
+		}
+		if c.IsAgent {
+			found = true
 		}
 	}
-	return false
+	return found
 }
 
 // failCommentRecovery はコメントを書かせられなかった run を人間へ渡す（設計 3-25 の段9）。

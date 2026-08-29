@@ -601,8 +601,12 @@ func addCommentPayload(b *ghBoard, vars map[string]any) map[string]any {
 	id := fmt.Sprintf("IC_%d", b.NextComment)
 	b.NextComment++
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	// **投稿者は gh の持ち主である。**continuo は `gh auth token` で取ったトークンで
+	// GraphQL を叩くので、書いたコメントは `gh api user --jq .login` が返すのと同じ
+	// アカウントで残る。**別の名前にすると、self_marker の付いたコメントが次の turn の
+	// 入力から外れなくなる**（設計 3-65。投稿者と印を併せて見るため）。
 	b.Comments[nodeID] = append(b.Comments[nodeID], ghComment{
-		ID: id, Body: body, CreatedAt: now, Author: "continuo",
+		ID: id, Body: body, CreatedAt: now, Author: b.Login,
 	})
 	return map[string]any{
 		"addComment": map[string]any{
@@ -610,7 +614,7 @@ func addCommentPayload(b *ghBoard, vars map[string]any) map[string]any {
 				"node": map[string]any{
 					"id": id, "url": "https://github.com/comment/" + id, "body": body,
 					"createdAt": now,
-					"author":    map[string]any{"login": "continuo", "id": "U_continuo"},
+					"author":    map[string]any{"login": b.Login, "id": "U_" + b.Login},
 				},
 			},
 		},
