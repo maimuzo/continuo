@@ -10,7 +10,9 @@
 | --- | --- |
 | **git そのものの振る舞い。**remote はローカルの bare repository | **GitHub 側。**認証・branch protection・組織の規則 |
 
-**GitHub 側は人間が実機で1度通してください。**この記録はそこまでを保証しません。
+**GitHub 側は、GitHub へ書き込んでよいセッションが1度通してください。**この記録はそこまでを保証しません。
+**通す先は [docs/test_environment.md](../test_environment.md) の実機の環境**（テスト用のリポジトリとテスト用のボード）で、
+そこで issue を1件通せば、認証も branch protection もまとめて確かめられます。**人間の手作業である必要はありません。**
 
 ## 再現の手順
 

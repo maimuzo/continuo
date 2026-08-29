@@ -19,7 +19,8 @@
 | **`preflight` が HEAD の branch 名を見るのをやめるか** | やめる / やめない | **説明がまだ不十分。**前提から書き直す |
 | **印を騙る経路を塞ぐ実装への着手** | 着手してよいか | 揃っている（30〜50行） |
 | **continuo の実行ファイルを守る実装への着手** | 着手してよいか | 揃っている |
-| **`blocked` の前の push に例外を作るか** | 2つ。**push できないときに `blocked` を出させるか `working` のままにさせるか**と、**commit するものが無いときも push を求めるか** | **揃っている。**選択肢と、決めるまでの振る舞いを設計 5-3b に整理済み |
+| **push の求め方**（issue #64 の「決めること」4件） | 4つ。**push できないときに `blocked` を出させるか `working` のままにさせるか** / **commit するものが無いときも push を求めるか** / **`review` のときに PR まで作らせるか** / **`working` でも毎 turn の push を求めるか** | **揃っている。**4件とも選択肢と、決めるまでの振る舞いを設計 5-3b に整理済み |
+| **issue #64 の受け入れ条件をどこまで求めるか** | 2つ。**GitHub へ書き込んでよいセッションで [docs/test_environment.md](../test_environment.md) の環境へ1度 push を通す**か、**ローカルの bare repository での確認で足りるとする**か | **揃っている。**git の側の記録は [docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) にある。残っているのは認証と branch protection だけ |
 
 ### AI だけで進められるもの
 
@@ -29,7 +30,7 @@
 | **「丁寧に説明しているか」を機械で見る代替案** | **辞書案は却下された。**代替が未提示 |
 | **#65 の修正のうち、決定待ちでないもの**（番兵エラーの新設・文言・FAQ の項目） | 設計は出ている。**プランファイルへの記載が未了** |
 | **起動時の掃除が身元ファイルを見る修正** | 設計は出ている。**プランファイルへの記載が未了** |
-| **`git push -u origin HEAD` を GitHub 相手に1度通す**（issue #64 の受け入れ条件） | **git の側は済み**（[docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md)。remote はローカルの bare repository）。**残るのは認証と branch protection で、[docs/test_environment.md](../test_environment.md) の環境で issue を1件通せば確かめられる** |
+| **`git push -u origin HEAD` を GitHub 相手に1度通す**（issue #64 の受け入れ条件） | **git の側は済み**（[docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md)。remote はローカルの bare repository）。**残るのは認証と branch protection だけで、[docs/test_environment.md](../test_environment.md) の環境で issue を1件通せば確かめられる。**ただし**この branch のセッションは「GitHub へ書き込まない」制約の下にあるので踏めない。GitHub へ書き込んでよいセッションが要る** |
 | **飛ばしたことを issue へ1回コメントする** | 設計は出ている。**プランファイルへの記載が未了** |
 | **レートリミットの上限（issue #36 へ追記済み）** | 実装の設計が未着手 |
 
