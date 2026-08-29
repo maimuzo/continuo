@@ -833,6 +833,10 @@ func printKeychainFailure(w io.Writer, headline string) {
 func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	// **差分だけを出す口を分ける。**検査結果に混ぜて出した差分は、見出し語の桁に
+	// 揃えて字下げされるので、そのままでは `patch` に渡せない。
+	// **人間が読む差分と、機械へ渡す差分の両方が要る**（設計 3-63）。
+	patchFlag := fs.Bool("missing-keys-patch", false, i18n.T(i18n.KeyCLIDoctorFlagMissingKeysPatch))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
@@ -865,6 +869,12 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	// （読めなかったこと自体が検査結果の1件目になる）。
 	useLanguageFromConfig(path)
 
+	// **差分だけを求められたら、検査は1つも行わない。**外部（gh / ghq / herdr /
+	// GitHub）へ1回も出ずに、雛形と WORKFLOW.md の原文だけを突き合わせる。
+	if *patchFlag {
+		return runDoctorMissingKeysPatch(path, stdout, stderr)
+	}
+
 	// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（daemon.EnvGraphQLEndpoint）。
 	// 空なら本番の GitHub GraphQL API を読む（読み取りだけである）。
 	// **常駐プロセスと同じ検査を通す。**ここへ `gh auth token` のトークンが送られるので、
@@ -888,6 +898,43 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 		return doctorInternalErrorExitCode
 	}
 	return report.ExitCode()
+}
+
+// runDoctorMissingKeysPatch は `continuo doctor --missing-keys-patch` である（設計 3-63）。
+//
+// **雛形にあって WORKFLOW.md に書かれていない設定項目を足す差分だけを、
+// 標準出力へそのまま出す。**検査は1つも行わず、外部へも1回も出ない。
+//
+// **`patch -p0` にそのまま渡せる形にしてある。**`continuo doctor` が出す直し方の
+// 1行が、この口をそのまま呼ぶ（`continuo doctor --missing-keys-patch <パス> | patch -p0`）。
+//
+// **書かない。**書き換えるのは `patch` であり、continuo ではない。
+// **利用者が当てる前に差分を読めるようにするため**で、`continuo setup` のように
+// continuo が直接書き換える形にはしない。
+//
+// path: 読み込む WORKFLOW.md の絶対パス。
+// stdout / stderr: 出力先。差分は stdout へ出す。
+// 戻り値: 終了コード。**足す項目が1つも無ければ、何も出さずに 0 で終わる。**
+// WORKFLOW.md を読めない・front matter を切り出せない場合は 1。
+func runDoctorMissingKeysPatch(path string, stdout, stderr io.Writer) int {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrMissingKeysPatch, err))
+		return 1
+	}
+	res, err := scaffold.MissingKeys(path, string(raw))
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrMissingKeysPatch, err))
+		return 1
+	}
+	if res.Patch == "" {
+		return 0
+	}
+	if _, err := io.WriteString(stdout, res.Patch); err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrMissingKeysPatch, err))
+		return 1
+	}
+	return 0
 }
 
 // runAbandon は `continuo abandon` サブコマンドである。

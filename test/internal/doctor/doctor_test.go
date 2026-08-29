@@ -29,6 +29,7 @@ import (
 var wantLabels = []i18n.Key{
 	doctor.LabelConfig,
 	doctor.LabelCleanupStates,
+	doctor.LabelMissingKeys,
 	doctor.LabelClaude,
 	doctor.LabelRuntimeDir,
 	doctor.LabelClaudeHome,
@@ -107,6 +108,8 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 	assertSymbol(t, report, doctor.LabelWorkspaceRoot, doctor.SymbolUnknown)
 	// **片付けの状態も、突き合わせる2つのキーが両方とも設定にしか無い。**
 	assertSymbol(t, report, doctor.LabelCleanupStates, doctor.SymbolUnknown)
+	// **未記入の項目も、突き合わせる相手（WORKFLOW.md の原文）が無い。**
+	assertSymbol(t, report, doctor.LabelMissingKeys, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelHerdr, doctor.SymbolUnknown)
 	// **gh の認証は設定ファイルの下流である**（設計 3-32 の依存の図）。
 	gh := assertSymbol(t, report, doctor.LabelGHAuth, doctor.SymbolUnknown)

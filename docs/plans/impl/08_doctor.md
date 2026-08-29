@@ -34,6 +34,7 @@
 | `ボード` | `Bootstrap` が通り、`active_states` の選択肢名が全部あるか |
 | `Status の名前` | 設定に書いた Status と紛らわしい選択肢がボードに無いか（記号は `!` だけ。設計 6-14） |
 | `対応表のキー` | `tracker.automated_state_rewrite` のキーがボードの Status の選択肢にあるか（記号は `!` だけ。設計 3-57） |
+| `未記入の項目` | 雛形の front matter のキーが `WORKFLOW.md` に全部書かれているか（記号は `!` だけ。設計 3-63） |
 | `clone` | 対象リポジトリが `ghq list -p -e` で見つかるか |
 | `信頼登録` | 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか |
 | `資格情報` | `rate_limit` の設定に応じて、環境変数かファイルがあるか |
@@ -117,6 +118,7 @@
 | ボード | `tracker.ResolveToken` → `tracker.Adapter.Bootstrap` → `FetchIssuesByStates` |
 | Status の名前 | `tracker.Adapter.StatusOptionNames`（ボードを読んだときの応答を使い回す。リクエストは増えない） |
 | 対応表のキー | `config.RewriteKeysOutsideBoard`（**起動時の警告と同じ関数を呼ぶ。**ボードを読んだときの応答を使い回す） |
+| 未記入の項目 | `scaffold.MissingKeys`（**`continuo doctor --missing-keys-patch` と同じ関数を呼ぶ。**ボードは読まない） |
 | clone | `workspace.RunGhqList`（`ghq list -p -e <owner>/<repo>`） |
 | 信頼登録 | `workspace.CheckTrustForClonePath` |
 | 資格情報 | `ratelimit` の定数（`SourceNone` / `TokenSourceEnv` / `CredentialsRelPath`） |

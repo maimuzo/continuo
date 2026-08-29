@@ -19,14 +19,31 @@ continuo が勝手に書き足すことはありません。**増えた設定は
 **`continuo setup` で決めた Status の割り当てが、雛形で潰れます。**
 **下半分に書いたプロンプトも消えます。**増えた設定は、**その行だけを手で足してください。**
 
-**雛形の説明を読みたいときは、別の場所へ書き出して見比べます**
-（`continuo init` はディレクトリを作らないので、先に作ります）。
+---
+
+## 何が足りないかは `continuo doctor` が出す
+
+**手で見比べる必要はありません。**`continuo doctor` の `未記入の項目` の行に、
+**足りない設定項目と、それを足す差分**が出ます。
+
+**差分だけが要るなら、次のコマンドで出せます。**
 
 ```bash
-mkdir -p /tmp/continuo-template
-continuo init /tmp/continuo-template
-diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
 ```
+
+**そのまま当てるなら、`patch` へ渡します。**当てる前に、上のコマンドで差分を読んでください。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0
+```
+
+**足すだけの差分です。**あなたが書いた行は1つも消えません。
+**並び順を変えていても当たります**（差分は雛形ではなく、あなたの `WORKFLOW.md` から組み立てます）。
+
+**当てたあとに何が増えたのかは、下の版ごとの節を読んでください。**
+差分には雛形の説明のコメントもそのまま入っていますが、**書かなかったときに何が起きるかは
+そちらにしか書いてありません。**
 
 ---
 

@@ -531,6 +531,14 @@ func frontMatterRange(lines []string) (start, end int, ok bool) {
 // 別の場所にある同じ名前のキーと取り違えないためである。親のキーより浅い行に
 // 当たった時点でその親のブロックは終わりなので、そこで探すのをやめる。
 //
+// **子として数えるのは、その親の最初の子と同じ深さの行だけである。**「親より深ければ子」に
+// すると、**孫を子と取り違える。**雛形には `tracker.provider.comments` と
+// `tracker.comments` の2つがあり、前者のほうが先に書かれている。深さを見なければ、
+// `tracker.comments` を探したときに `tracker.provider.comments` に当たってしまう。
+//
+// **深さの値は決め打ちにしない**（2文字とは限らない）。最初に見つけた子の深さを、
+// そのブロックの子の深さとして扱う。
+//
 // lines: WORKFLOW.md を改行で分けた行の並び。
 // start, end: 探す範囲（front matter の中。end は含まない）。
 // path: ルートから辿るキーの並び（`["tracker", "status_signal_map", "review"]` など）。
@@ -538,6 +546,8 @@ func frontMatterRange(lines []string) (start, end int, ok bool) {
 func findKeyLine(lines []string, start, end int, path []string) (int, bool) {
 	lo, hi := start, end
 	parentIndent := -1
+	// childIndent は、いま探しているブロックの子の深さである。**-1 は「まだ決まっていない」。**
+	childIndent := -1
 	found := -1
 
 	for _, key := range path {
@@ -552,6 +562,13 @@ func findKeyLine(lines []string, start, end int, path []string) (int, bool) {
 				// 親のブロックが終わった。これより先に子のキーは無い。
 				break
 			}
+			if childIndent < 0 {
+				childIndent = indent
+			}
+			if indent != childIndent {
+				// 孫（またはさらに深い行）である。子ではない。
+				continue
+			}
 			if !strings.HasPrefix(trimmed, key+":") {
 				continue
 			}
@@ -562,7 +579,8 @@ func findKeyLine(lines []string, start, end int, path []string) (int, bool) {
 			return 0, false
 		}
 		found = idx
-		parentIndent = len(lines[idx]) - len(strings.TrimLeft(lines[idx], " \t"))
+		parentIndent = childIndent
+		childIndent = -1
 		lo = idx + 1
 	}
 	return found, true

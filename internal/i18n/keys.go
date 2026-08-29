@@ -65,6 +65,23 @@ const (
 	// KeyDoctorLabelRewriteKeys は `tracker.automated_state_rewrite` のキーがボードの
 	// Status の選択肢にあるかを見る検査の見出し語である。
 	KeyDoctorLabelRewriteKeys Key = "doctor.label.rewrite_keys"
+	// KeyDoctorLabelMissingKeys は雛形にあって WORKFLOW.md に書かれていない設定項目を
+	// 見る検査の見出し語である。
+	KeyDoctorLabelMissingKeys Key = "doctor.label.missing_keys"
+)
+
+// doctor の検査「未記入の項目」（設計 3-63。issue #85）。
+const (
+	// KeyDoctorMissingKeysConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorMissingKeysConfigUnreadable Key = "doctor.missing_keys.config_unreadable"
+	// KeyDoctorMissingKeysUnreadable はWORKFLOW.md を読み直せなかったときの説明に出る。
+	KeyDoctorMissingKeysUnreadable Key = "doctor.missing_keys.unreadable"
+	// KeyDoctorMissingKeysOK は雛形の項目が全部書かれているときの説明に出る。
+	KeyDoctorMissingKeysOK Key = "doctor.missing_keys.ok"
+	// KeyDoctorMissingKeysMissing は書かれていない項目があるときの説明に出る。
+	KeyDoctorMissingKeysMissing Key = "doctor.missing_keys.missing"
+	// KeyDoctorMissingKeysRemedy は差分を当てるためのコマンドに出る。
+	KeyDoctorMissingKeysRemedy Key = "doctor.missing_keys.remedy"
 )
 
 // doctor の検査「対応表のキー」（設計 3-57。issue #67）。
@@ -616,6 +633,10 @@ const (
 	KeyCLIDoctorWarnPathUnresolved Key = "cli.doctor.warn_path_unresolved"
 	// KeyCLIDoctorErrWriteReport は検査結果を出せなかったときに出る。
 	KeyCLIDoctorErrWriteReport Key = "cli.doctor.err_write_report"
+	// KeyCLIDoctorFlagMissingKeysPatch は `--missing-keys-patch` の説明に出る。
+	KeyCLIDoctorFlagMissingKeysPatch Key = "cli.doctor.flag_missing_keys_patch"
+	// KeyCLIDoctorErrMissingKeysPatch は足す差分を組み立てられなかったときに出る。
+	KeyCLIDoctorErrMissingKeysPatch Key = "cli.doctor.err_missing_keys_patch"
 )
 
 // `continuo allow-keychain-access` の文言（macOS の Keychain へのアクセスを1回許可させる）。
@@ -1494,6 +1515,14 @@ const (
 	KeyScaffoldUpdateRenameFailed Key = "scaffold.update.rename_failed"
 )
 
+// 雛形にあって WORKFLOW.md に書かれていないキーを探す処理（internal/scaffold の MissingKeys）の文言。
+const (
+	// KeyScaffoldMissingKeysNoFrontMatter はWORKFLOW.md から front matter を切り出せなかったときに出る。
+	KeyScaffoldMissingKeysNoFrontMatter Key = "scaffold.missing_keys.no_front_matter"
+	// KeyScaffoldMissingKeysTemplateBroken は雛形そのものから front matter を切り出せなかったときに出る。
+	KeyScaffoldMissingKeysTemplateBroken Key = "scaffold.missing_keys.template_broken"
+)
+
 // gh コマンドの実行（internal/scaffold の RunGH）の文言。
 const (
 	// KeyScaffoldGHRunFailed はgh の実行に失敗し、標準エラー出力が空だったときに出る。
@@ -1999,6 +2028,12 @@ var allKeys = []Key{
 	KeyDoctorLabelWorkspaceRoot,
 	KeyDoctorLabelCleanupStates,
 	KeyDoctorLabelRewriteKeys,
+	KeyDoctorLabelMissingKeys,
+	KeyDoctorMissingKeysConfigUnreadable,
+	KeyDoctorMissingKeysUnreadable,
+	KeyDoctorMissingKeysOK,
+	KeyDoctorMissingKeysMissing,
+	KeyDoctorMissingKeysRemedy,
 	KeyDoctorRewriteKeysConfigUnreadable,
 	KeyDoctorRewriteKeysBoardUnreadable,
 	KeyDoctorRewriteKeysEmpty,
@@ -2216,6 +2251,8 @@ var allKeys = []Key{
 	KeyCLIDoctorErrTooManyPositional,
 	KeyCLIDoctorWarnPathUnresolved,
 	KeyCLIDoctorErrWriteReport,
+	KeyCLIDoctorFlagMissingKeysPatch,
+	KeyCLIDoctorErrMissingKeysPatch,
 	KeyCLIAllowKeychainAccessErrTooManyPositional,
 	KeyCLIAllowKeychainAccessNotDarwin,
 	KeyCLIAllowKeychainAccessBefore,
@@ -2507,6 +2544,8 @@ var allKeys = []Key{
 	KeyScaffoldUpdateChmodFailed,
 	KeyScaffoldUpdateSyncFailed,
 	KeyScaffoldUpdateRenameFailed,
+	KeyScaffoldMissingKeysNoFrontMatter,
+	KeyScaffoldMissingKeysTemplateBroken,
 	KeyScaffoldGHRunFailed,
 	KeyScaffoldGHRunFailedWithStderr,
 	KeySetupBoardOwnerMissing,
