@@ -1150,6 +1150,10 @@ const (
 	// KeyConfigPlaceholderRemaining は `continuo init` の雛形の値が埋められないまま
 	// 残っているときに出る。
 	KeyConfigPlaceholderRemaining Key = "config.placeholder.remaining"
+	// KeyConfigPlaceholderItem は埋めていないキーを1件ずつ並べるときの文言である。
+	//
+	// **KeyConfigPlaceholderRemaining の %s に、この文言を " / " でつないだものが入る。**
+	KeyConfigPlaceholderItem Key = "config.placeholder.item"
 )
 
 // front matter の値の検査（internal/config の validate）のエラーの文言。
@@ -1547,6 +1551,95 @@ const (
 	KeyScaffoldGHRunFailedWithStderr Key = "scaffold.gh.run_failed_with_stderr"
 )
 
+// `continuo init` が gh から値を引いて雛形を埋めるとき（internal/scaffold の Detect）の文言。
+//
+// **これは画面に出る文言である。**埋めた根拠（Reason）と、埋められなかったときに
+// 人が何をすればよいか（Advice）の2種類しかない。**どちらも `continuo init` の出力に
+// そのまま並ぶ。**
+const (
+	// KeyScaffoldDetectGHNotFound はgh コマンドそのものが見つからなかったときに出る。
+	//
+	// **owner・ボードの番号・リポジトリの一覧の3か所から出る。**同じ状況なので文言も1つにする。
+	KeyScaffoldDetectGHNotFound Key = "scaffold.detect.gh_not_found"
+	// KeyScaffoldDetectAdviceProjectScope はボードを読む権限が足りないときの案内である。
+	//
+	// **ボードの候補とリポジトリの一覧の2か所から出る。**
+	KeyScaffoldDetectAdviceProjectScope Key = "scaffold.detect.advice_project_scope"
+
+	// KeyScaffoldDetectOwnerFromFlag はowner を `--owner` で渡されたときに出る。
+	KeyScaffoldDetectOwnerFromFlag Key = "scaffold.detect.owner.from_flag"
+	// KeyScaffoldDetectOwnerAPIEmpty は`gh api user` が空を返したときに出る。
+	KeyScaffoldDetectOwnerAPIEmpty Key = "scaffold.detect.owner.api_empty"
+	// KeyScaffoldDetectOwnerAPIInvalid は`gh api user` が返した名前が owner として受け付けられないときに出る。
+	KeyScaffoldDetectOwnerAPIInvalid Key = "scaffold.detect.owner.api_invalid"
+	// KeyScaffoldDetectOwnerAPILogin はowner を `gh api user` のログイン名で埋めたときに出る。
+	KeyScaffoldDetectOwnerAPILogin Key = "scaffold.detect.owner.api_login"
+	// KeyScaffoldDetectOwnerGHFailed はgh を実行できたが値を取れなかったときに出る。
+	KeyScaffoldDetectOwnerGHFailed Key = "scaffold.detect.owner.gh_failed"
+	// KeyScaffoldDetectOwnerFollowedBoard は見つかったボードの持ち主に owner を合わせ直したときに出る。
+	KeyScaffoldDetectOwnerFollowedBoard Key = "scaffold.detect.owner.followed_board"
+	// KeyScaffoldDetectOwnerAdviceLogin はgh を入れてログインし直す案内である。
+	KeyScaffoldDetectOwnerAdviceLogin Key = "scaffold.detect.owner.advice_login"
+	// KeyScaffoldDetectOwnerAdviceFlag は`--owner` で直接指定する案内である。
+	KeyScaffoldDetectOwnerAdviceFlag Key = "scaffold.detect.owner.advice_flag"
+	// KeyScaffoldDetectOwnerAdviceWhere はURL のどの位置が owner なのかを示す案内である。
+	KeyScaffoldDetectOwnerAdviceWhere Key = "scaffold.detect.owner.advice_where"
+
+	// KeyScaffoldDetectProjectFromFlag はボードの番号を `--project` で渡されたときに出る。
+	KeyScaffoldDetectProjectFromFlag Key = "scaffold.detect.project.from_flag"
+	// KeyScaffoldDetectProjectNoOwner はowner が決まらず、ボードの候補を引けなかったときに出る。
+	KeyScaffoldDetectProjectNoOwner Key = "scaffold.detect.project.no_owner"
+	// KeyScaffoldDetectProjectListFailed は`gh project list` が失敗したときに出る。
+	KeyScaffoldDetectProjectListFailed Key = "scaffold.detect.project.list_failed"
+	// KeyScaffoldDetectProjectNone は探した owner のどこにもボードが無かったときに出る。
+	KeyScaffoldDetectProjectNone Key = "scaffold.detect.project.none"
+	// KeyScaffoldDetectProjectSingle は候補が1件だけで、そのまま埋めたときに出る。
+	KeyScaffoldDetectProjectSingle Key = "scaffold.detect.project.single"
+	// KeyScaffoldDetectProjectMultiple は候補が複数あり、選ばずに一覧を出したときに出る。
+	KeyScaffoldDetectProjectMultiple Key = "scaffold.detect.project.multiple"
+	// KeyScaffoldDetectProjectAdviceOwnerFirst は先に owner を決める案内である。
+	KeyScaffoldDetectProjectAdviceOwnerFirst Key = "scaffold.detect.project.advice_owner_first"
+	// KeyScaffoldDetectProjectAdviceFlag は`--project` で直接指定する案内である。
+	KeyScaffoldDetectProjectAdviceFlag Key = "scaffold.detect.project.advice_flag"
+	// KeyScaffoldDetectProjectAdviceCreate はボードの作り方の案内である。
+	KeyScaffoldDetectProjectAdviceCreate Key = "scaffold.detect.project.advice_create"
+	// KeyScaffoldDetectProjectAdviceOtherOwner はボードが別の user / organization にある場合の案内である。
+	KeyScaffoldDetectProjectAdviceOtherOwner Key = "scaffold.detect.project.advice_other_owner"
+	// KeyScaffoldDetectProjectAdviceRerun はボードを作ったあとに実行し直す案内である。
+	KeyScaffoldDetectProjectAdviceRerun Key = "scaffold.detect.project.advice_rerun"
+	// KeyScaffoldDetectProjectAdvicePick は候補から1つを選んで実行し直す案内である。
+	KeyScaffoldDetectProjectAdvicePick Key = "scaffold.detect.project.advice_pick"
+	// KeyScaffoldDetectProjectAdvicePickOwner は候補が別の owner のものだった場合の案内である。
+	KeyScaffoldDetectProjectAdvicePickOwner Key = "scaffold.detect.project.advice_pick_owner"
+
+	// KeyScaffoldDetectRepositoriesNoOwnerOrProject はowner かボードの番号が決まらず、一覧を引けなかったときに出る。
+	KeyScaffoldDetectRepositoriesNoOwnerOrProject Key = "scaffold.detect.repositories.no_owner_or_project"
+	// KeyScaffoldDetectRepositoriesItemListFailed は`gh project item-list` が失敗したときに出る。
+	KeyScaffoldDetectRepositoriesItemListFailed Key = "scaffold.detect.repositories.item_list_failed"
+	// KeyScaffoldDetectRepositoriesItemListUnparsable は`gh project item-list` の出力を解釈できなかったときに出る。
+	KeyScaffoldDetectRepositoriesItemListUnparsable Key = "scaffold.detect.repositories.item_list_unparsable"
+	// KeyScaffoldDetectRepositoriesNoIssue はボードにリポジトリの issue が1件も載っていなかったときに出る。
+	KeyScaffoldDetectRepositoriesNoIssue Key = "scaffold.detect.repositories.no_issue"
+	// KeyScaffoldDetectRepositoriesListed はボードから拾ったリポジトリを並べたときに出る。
+	KeyScaffoldDetectRepositoriesListed Key = "scaffold.detect.repositories.listed"
+	// KeyScaffoldDetectRepositoriesAdviceDecideFirst はowner とボードの番号を先に決める案内である。
+	KeyScaffoldDetectRepositoriesAdviceDecideFirst Key = "scaffold.detect.repositories.advice_decide_first"
+	// KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional は手で書いてもよいことを伝える案内である。
+	KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional Key = "scaffold.detect.repositories.advice_write_by_hand_optional"
+	// KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepoOptional はowner/repo を手で書いてもよいことを伝える案内である。
+	KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepoOptional Key = "scaffold.detect.repositories.advice_write_owner_repo_optional"
+	// KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepo はowner/repo を手で書く案内である。
+	KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepo Key = "scaffold.detect.repositories.advice_write_owner_repo"
+	// KeyScaffoldDetectRepositoriesAdviceWriteWanted は信頼させたいリポジトリを手で書く案内である。
+	KeyScaffoldDetectRepositoriesAdviceWriteWanted Key = "scaffold.detect.repositories.advice_write_wanted"
+	// KeyScaffoldDetectRepositoriesAdviceRemoveUnneeded は要らない行を消させる案内である。
+	KeyScaffoldDetectRepositoriesAdviceRemoveUnneeded Key = "scaffold.detect.repositories.advice_remove_unneeded"
+	// KeyScaffoldDetectRepositoriesAdviceDryRun は`continuo trust --dry-run` で確かめさせる案内である。
+	KeyScaffoldDetectRepositoriesAdviceDryRun Key = "scaffold.detect.repositories.advice_dry_run"
+	// KeyScaffoldDetectRepositoriesAdviceTruncated はボードの項目を打ち切って読んだことを伝える案内である。
+	KeyScaffoldDetectRepositoriesAdviceTruncated Key = "scaffold.detect.repositories.advice_truncated"
+)
+
 // ボードの Status フィールドを読む処理（internal/setup の FetchStatusField）の文言。
 //
 // **field_not_single_select と field_not_found は先頭の %w に ErrStatusFieldNotFound を渡す**
@@ -1825,6 +1918,16 @@ const (
 	KeyWorkspaceCheckTrustForClonePathConfigUnreadable Key = "workspace.check_trust_for_clone_path.config_unreadable"
 	// KeyWorkspaceCheckTrustForClonePathConfigUnparsable は `~/.claude.json` を JSON として解析できなかったときに出る。
 	KeyWorkspaceCheckTrustForClonePathConfigUnparsable Key = "workspace.check_trust_for_clone_path.config_unparsable"
+	// KeyWorkspaceCheckTrustCloneMissing はそのリポジトリの clone が手元に無かったときに出る。
+	KeyWorkspaceCheckTrustCloneMissing Key = "workspace.check_trust.clone_missing"
+	// KeyWorkspaceCheckTrustForClonePathConfigMissing は `~/.claude.json` そのものが無かったときに出る。
+	KeyWorkspaceCheckTrustForClonePathConfigMissing Key = "workspace.check_trust_for_clone_path.config_missing"
+	// KeyWorkspaceCheckTrustForClonePathKeyMissing は `~/.claude.json` の projects に鍵が無かったときに出る。
+	KeyWorkspaceCheckTrustForClonePathKeyMissing Key = "workspace.check_trust_for_clone_path.key_missing"
+	// KeyWorkspaceCheckTrustForClonePathNotAccepted は信頼ダイアログがまだ承認されていないときに出る。
+	KeyWorkspaceCheckTrustForClonePathNotAccepted Key = "workspace.check_trust_for_clone_path.not_accepted"
+	// KeyWorkspaceCheckTrustForClonePathTrusted はそのリポジトリが信頼済みだったときに出る。
+	KeyWorkspaceCheckTrustForClonePathTrusted Key = "workspace.check_trust_for_clone_path.trusted"
 	// KeyWorkspaceValidateIdentityFileNameEmpty は workspace.identity_file が空だったときに出る。
 	KeyWorkspaceValidateIdentityFileNameEmpty Key = "workspace.validate_identity_file_name.empty"
 	// KeyWorkspaceValidateIdentityFileNameHasSpaces は workspace.identity_file の前後に空白があったときに出る。
@@ -2457,6 +2560,7 @@ var allKeys = []Key{
 	KeyConfigFrontMatterNoStartDelimiter,
 	KeyConfigFrontMatterNoEndDelimiter,
 	KeyConfigPlaceholderRemaining,
+	KeyConfigPlaceholderItem,
 	KeyConfigValidateInvalidValue,
 	KeyConfigValidateRequired,
 	KeyConfigValidateBranchTemplateNeedsIssueNumber,
@@ -2568,6 +2672,43 @@ var allKeys = []Key{
 	KeyScaffoldMissingKeysTemplateBroken,
 	KeyScaffoldGHRunFailed,
 	KeyScaffoldGHRunFailedWithStderr,
+	KeyScaffoldDetectGHNotFound,
+	KeyScaffoldDetectAdviceProjectScope,
+	KeyScaffoldDetectOwnerFromFlag,
+	KeyScaffoldDetectOwnerAPIEmpty,
+	KeyScaffoldDetectOwnerAPIInvalid,
+	KeyScaffoldDetectOwnerAPILogin,
+	KeyScaffoldDetectOwnerGHFailed,
+	KeyScaffoldDetectOwnerFollowedBoard,
+	KeyScaffoldDetectOwnerAdviceLogin,
+	KeyScaffoldDetectOwnerAdviceFlag,
+	KeyScaffoldDetectOwnerAdviceWhere,
+	KeyScaffoldDetectProjectFromFlag,
+	KeyScaffoldDetectProjectNoOwner,
+	KeyScaffoldDetectProjectListFailed,
+	KeyScaffoldDetectProjectNone,
+	KeyScaffoldDetectProjectSingle,
+	KeyScaffoldDetectProjectMultiple,
+	KeyScaffoldDetectProjectAdviceOwnerFirst,
+	KeyScaffoldDetectProjectAdviceFlag,
+	KeyScaffoldDetectProjectAdviceCreate,
+	KeyScaffoldDetectProjectAdviceOtherOwner,
+	KeyScaffoldDetectProjectAdviceRerun,
+	KeyScaffoldDetectProjectAdvicePick,
+	KeyScaffoldDetectProjectAdvicePickOwner,
+	KeyScaffoldDetectRepositoriesNoOwnerOrProject,
+	KeyScaffoldDetectRepositoriesItemListFailed,
+	KeyScaffoldDetectRepositoriesItemListUnparsable,
+	KeyScaffoldDetectRepositoriesNoIssue,
+	KeyScaffoldDetectRepositoriesListed,
+	KeyScaffoldDetectRepositoriesAdviceDecideFirst,
+	KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional,
+	KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepoOptional,
+	KeyScaffoldDetectRepositoriesAdviceWriteOwnerRepo,
+	KeyScaffoldDetectRepositoriesAdviceWriteWanted,
+	KeyScaffoldDetectRepositoriesAdviceRemoveUnneeded,
+	KeyScaffoldDetectRepositoriesAdviceDryRun,
+	KeyScaffoldDetectRepositoriesAdviceTruncated,
 	KeySetupBoardOwnerMissing,
 	KeySetupBoardProjectNumberMissing,
 	KeySetupBoardFieldListUnparsable,
@@ -2690,6 +2831,11 @@ var allKeys = []Key{
 	KeyWorkspaceCheckTrustForClonePathToplevelFailed,
 	KeyWorkspaceCheckTrustForClonePathConfigUnreadable,
 	KeyWorkspaceCheckTrustForClonePathConfigUnparsable,
+	KeyWorkspaceCheckTrustCloneMissing,
+	KeyWorkspaceCheckTrustForClonePathConfigMissing,
+	KeyWorkspaceCheckTrustForClonePathKeyMissing,
+	KeyWorkspaceCheckTrustForClonePathNotAccepted,
+	KeyWorkspaceCheckTrustForClonePathTrusted,
 	KeyWorkspaceValidateIdentityFileNameEmpty,
 	KeyWorkspaceValidateIdentityFileNameHasSpaces,
 	KeyWorkspaceValidateIdentityFileNameHasSeparator,

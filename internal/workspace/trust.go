@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -76,9 +75,7 @@ func (m *Manager) CheckTrust(owner, repo string) (bool, string, error) {
 		return false, "", err
 	}
 	if clonePath == "" {
-		return false, fmt.Sprintf(
-			"%s/%s の clone がありません（`ghq list -p -e %s/%s` の出力が空。continuo は勝手に clone しません）",
-			owner, repo, owner, repo), nil
+		return false, i18n.T(i18n.KeyWorkspaceCheckTrustCloneMissing, owner, repo, owner, repo), nil
 	}
 
 	return CheckTrustForClonePath(clonePath, m.homeDir)
@@ -118,8 +115,7 @@ func CheckTrustForClonePath(clonePath, homeDir string) (bool, string, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return false, fmt.Sprintf(
-				"%s がありません（Claude Code をまだ一度も使っていない可能性がある）", configPath), nil
+			return false, i18n.T(i18n.KeyWorkspaceCheckTrustForClonePathConfigMissing, configPath), nil
 		}
 		return false, "", i18n.Errorf(i18n.KeyWorkspaceCheckTrustForClonePathConfigUnreadable, configPath, err)
 	}
@@ -130,14 +126,12 @@ func CheckTrustForClonePath(clonePath, homeDir string) (bool, string, error) {
 
 	entry, ok := parsed.Projects[key]
 	if !ok {
-		return false, fmt.Sprintf(
-			"%s が Claude Code に登録されていません（%s の projects に鍵がない）", key, configPath), nil
+		return false, i18n.T(i18n.KeyWorkspaceCheckTrustForClonePathKeyMissing, key, configPath), nil
 	}
 	if !entry.HasTrustDialogAccepted {
-		return false, fmt.Sprintf(
-			"%s の信頼ダイアログが承認されていません（%s の hasTrustDialogAccepted が false）", key, configPath), nil
+		return false, i18n.T(i18n.KeyWorkspaceCheckTrustForClonePathNotAccepted, key, configPath), nil
 	}
-	return true, fmt.Sprintf("%s は信頼済みです", key), nil
+	return true, i18n.T(i18n.KeyWorkspaceCheckTrustForClonePathTrusted, key), nil
 }
 
 // TrustFunc は tracker.RepoTrustFunc に合う薄い包みを返す（既存の呼び出し口に渡すため）。

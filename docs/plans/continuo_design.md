@@ -172,6 +172,7 @@
 - 3-35b 資源の正は日本語である
 - 3-35c 訳が古くなったことは、正の資源の SHA-256 で気づく
 - 3-35d 文言を確かめる検査は、日本語の原文に対して書く
+- 3-35e 訳語は docs/spec/translation-glossary.md で固定する
 - 3-36 入れ方は、ネットワークインストーラーの1行にする
 - 3-37 間違えて着手した issue は `continuo abandon` で戻す
 - 3-37-1 `--dry-run` は段1 の後半を通らない
@@ -4680,7 +4681,7 @@ setup 31 / ダッシュボード 27。**画面に出す文言に加えて、エ�
 
 ```json
 {
-  "_source_sha256": "2f1d3c9b1a6106b41f1ceebf6c33d4b36cd906e728165369313e9ff57b5ffb22",
+  "_source_sha256": "830b25def08b2cf6e65f1821666f4d33d1d97ea41797fd8507d49a57b483d2e7",
   "abandon.board_not_listed": "Issue %s is not listed on the board",
   "doctor.label.board": "board"
 }
@@ -4730,6 +4731,37 @@ func TestMain(m *testing.M) { os.Exit(testlang.Run(m)) }
 
 **英語の資源そのものは `test/internal/i18n` が確かめる。**宣言した全キーが英語から引けること・
 書式の verb の並びが日本語と一致すること・訳が正の資源のいまの版に対して作られていること。
+
+### 3-35e. 訳語は docs/spec/translation-glossary.md で固定する
+
+**言いたいこと。**訳す人が複数いると、同じものが2つの英単語で呼ばれる。
+**どの日本語をどの英語にするかを1箇所に決め、そこだけを見て訳す。**
+置き場所は [docs/spec/translation-glossary.md](../spec/translation-glossary.md) である。
+
+**出典に順位を付ける。**訳語を勝手に作らせないためである。
+
+| 順位 | 出典 | 扱い |
+| --- | --- | --- |
+| 1 | `README.md` | **正。**その言い回しをそのまま使う |
+| 2 | 設定のキー・フラグ・コマンド名 | 訳さない。英語の名詞はキーの語に合わせる |
+| 3 | この設計文書 | README に無い語はここを見る |
+| 4 | 訳語集 | 上の3つに無い語だけを、ここで決める |
+
+**訳語集が持つのは3種類である。**
+
+| 何を | 例 |
+| --- | --- |
+| **語の対応**（日本語 / 英語 / 決めた理由の3列） | 未承認 → `not trusted`（README の "trust those repositories" に合わせる） |
+| **文体の決めごと** | `error` は小文字で始める / 対処の1行には `.` を付ける / `please` は書かない |
+| **1文字も変えない文** | `Nothing was deleted.`（10箇所）/ `How to check:`（10箇所） |
+
+**doctor のラベルは15桁までである。**[internal/doctor/report.go](../../internal/doctor/report.go) の
+`labelColumn` が 16 で、超えると `padding()` が空白1つに落ちて全部の行の桁が崩れる。
+**伸ばすときは、先にこの定数を数え直す。**
+
+**まだ訳していないところも訳語集に書く。**いまは `continuo trust` の出力
+（[internal/trust](../../internal/trust)）とログの2つである。
+**「訳し終えた」と「まだ訳していない」を、訳す人が最初に見る場所で区別できるようにする。**
 
 ### 3-36. 入れ方は、ネットワークインストーラーの1行にする
 

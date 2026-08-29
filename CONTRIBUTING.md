@@ -94,6 +94,9 @@ socket へ繋がらないのいずれかで飛びます。CI では必ず飛び�
   **既定の言語は英語なので、置かないと訳文が返ってきて検査が空振りします**
 - **文言を足したら、`internal/i18n/messages/en.json` にも英語を足してください。**
   片方だけだと1つの画面に英語と日本語が混ざり、全部日本語であるより読みにくくなります
+- **英語を書くときは [docs/spec/translation-glossary.md](docs/spec/translation-glossary.md) に従ってください。**
+  どの日本語をどの英語にするかと、句点・大文字・書式の verb の決めごとが書いてあります。
+  **そこに無い語を使ったときは、その語を訳語集へ足してください**
 - **`ja.json` の文言を直したときは、`en.json` の先頭の `_source_sha256` を入れ直してください。**
 
   ```bash
@@ -151,6 +154,7 @@ curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/
 
 **直すときの約束。**キーを消さないこと。`%d` や `%s` の並び順を訳文でも保つこと
 （並び順が違うと `%!d(string=…)` のような壊れた表示になります。テストが落とします）。
+**言い換えは [docs/spec/translation-glossary.md](docs/spec/translation-glossary.md) の語に揃えること。**
 
 **日本語のまま出てしまう箇所を見つけたときも歓迎します。**
 ログと、[internal/config/placeholder.go](internal/config/placeholder.go) や
