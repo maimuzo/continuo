@@ -298,6 +298,13 @@ type runState struct {
 	// **ゼロ値なら1度も確かめていない。**確かめ直す間隔は
 	// `tracker.provider.handoff.recheck_interval_ms`（既定1時間）である。
 	handoffCheckedAt time.Time
+	// handoffAcquiredHere は、この run を着手するときに continuo がこの issue の
+	// 担当者を書いたかである（設計 3-77c）。
+	//
+	// **着手を取りやめたときに、書いた担当者を消し戻すために持つ。**残すと、
+	// **着手しなかった issue をほかの機械が `idle_timeout_ms`（既定18時間）触らない。**
+	// **人間が付けた担当を引き取った run では偽である**（消し戻してはならない）。
+	handoffAcquiredHere bool
 	// externalMoveKind は externalMoveSince がどの種類の動かされ方を数えているかである
 	// （設計 3-74）。**種類が変わったら起点を切り直すために持つ。**
 	//
@@ -1084,12 +1091,12 @@ func (rs *runState) markHandoffChecked(now time.Time) {
 
 // handoffRecheckDue は、走っている最中に担当を確かめ直す時刻が来たかを返す（設計 3-77c）。
 //
-// **`true` を返したら、その時点で時計を進める。**進めないと、確かめ直しに失敗するたびに
-// 次の turn でも確かめ直すことになり、**turn の終わりごとに issue のコメントを
-// 全部読むはめになる。**
+// **時計は進めない。**進めるのは `markHandoffChecked` であり、**答えを出せたときにだけ呼ぶ。**
+// ここで進めてしまうと、`gh` に一度届かなかっただけで**次の確かめが `recheck_interval_ms`
+// のあとになる**（既定1時間）。
 //
-// **引き継いだ run（復元・巡回からの引き取り）では時計がゼロ値のままなので、
-// 最初の turn の終わりで必ず確かめる**（設計 3-77c の「作業を再開するとき」）。
+// **引き継いだ run（復元・巡回からの引き取り）では時計がゼロ値のままなので、必ず確かめる**
+// （設計 3-77c の「作業を再開するとき」）。
 //
 // now: いまの時刻。
 // interval: 確かめ直す間隔。
@@ -1097,11 +1104,37 @@ func (rs *runState) markHandoffChecked(now time.Time) {
 func (rs *runState) handoffRecheckDue(now time.Time, interval time.Duration) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if !rs.handoffCheckedAt.IsZero() && now.Before(rs.handoffCheckedAt.Add(interval)) {
-		return false
-	}
-	rs.handoffCheckedAt = now
-	return true
+	return rs.handoffCheckedAt.IsZero() || !now.Before(rs.handoffCheckedAt.Add(interval))
+}
+
+// setHandoffAcquired は、着手のときに担当者を書いたかどうかを覚える（設計 3-77c）。
+//
+// acquired: この巡回で担当者を書いたなら true。
+func (rs *runState) setHandoffAcquired(acquired bool) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.handoffAcquiredHere = acquired
+}
+
+// handoffAcquired は、着手のときに担当者を書いたかどうかを返す（設計 3-77c）。
+//
+// 戻り値: この run のために担当者を書いていれば true。
+func (rs *runState) handoffAcquired() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.handoffAcquiredHere
+}
+
+// handoffNeverChecked は、この run の担当を1度も確かめていないかを返す（設計 3-77c）。
+//
+// **復元した run と、この機能より前に着手した run がそれである。**
+// **turn を送る前に1回だけ確かめる。**確かめずに送ると、担当が移っていても丸ごと1回ぶん働く。
+//
+// 戻り値: 1度も確かめていなければ true。
+func (rs *runState) handoffNeverChecked() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.handoffCheckedAt.IsZero()
 }
 
 // rewriteClaim は「自動化が動かした Status を書き戻す」1回ぶんの確保である（設計 3-56）。

@@ -322,11 +322,26 @@ type Orchestrator struct {
 	quota *ratelimit.Snapshot
 	// quotaFetchedAt は枠を最後に読んだ時刻である（poll_interval_ms の判定に使う）。
 	quotaFetchedAt time.Time
+	// quotaStale は、最後に試した枠の読み取りが失敗したかである（設計 3-77）。
+	//
+	// **失敗したら写しを使わせない。**資格情報が切れた機械は、切れる直前の
+	// 「使用率 5%」を1日中返し続ける。**入札はそれを「いちばん暇な機械」と読み、
+	// 正直に読めている機械に必ず勝つ。**
+	// **「読めなかったら入札しない」を、初回だけでなく常に効かせる。**
+	quotaStale bool
 	// viewer はいま使っているトークンの持ち主である（設計 3-77b）。
 	//
 	// **一度取れたら取り直さない。**持ち主が変わるのは `gh auth switch` を人間が
 	// 叩いたときだけで、その操作は continuo を止めずに行うものではない。
 	viewer tracker.Assignee
+	// viewerLastTriedAt は、持ち主を最後に取りに行った時刻である（設計 3-77b）。
+	//
+	// **取れなかったときに `ghLoginRetryInterval` を空けるために持つ。**
+	// 空けないと、`gh` が落ちているあいだ**巡回の候補ごとに GraphQL を1本ずつ投げる。**
+	viewerLastTriedAt time.Time
+	// handoffFetches は、いまの巡回で持ち回りのためにコメントを読んだ issue の数である
+	// （設計 3-77a）。**巡回の頭で 0 に戻す。**
+	handoffFetches int
 
 	// wg は run ごとの turn ループの goroutine を数える。Close が待ち合わせる。
 	wg sync.WaitGroup
@@ -705,16 +720,41 @@ func (o *Orchestrator) pollQuota(ctx context.Context) {
 
 	snap, err := o.rl.Fetch(ctx)
 	if err != nil {
-		o.logger.Warn("枠の読み取りに失敗しました（枠の判定を今回は行いません）", "error", err)
+		// **写しを古いままにしない**（設計 3-77）。入札は枠の写しで判定するので、
+		// **読めなくなった機械が、最後に読めた「暇な」値で入札し続ける。**
+		// **止めるのは入札だけである。**枠待ちと dispatch を止める閾値は、
+		// 最後に読めた値を使い続ける（読めないことを理由に走行中の run を捨てない）。
+		o.mu.Lock()
+		o.quotaStale = true
+		o.mu.Unlock()
+		o.logger.Warn("枠の読み取りに失敗しました（読めるまで入札しません）", "error", err)
 		return
 	}
 
 	o.mu.Lock()
 	o.quotaFetchedAt = now
+	o.quotaStale = false
 	if snap != nil {
 		o.quota = snap
 	}
 	o.mu.Unlock()
+}
+
+// quotaForBid は、入札の判定に使ってよい枠の写しを返す（設計 3-77）。
+//
+// **最後の読み取りに失敗していたら nil を返す。**`handoff.Evaluate` は nil を
+// 「枠を読めなかった」と読み、**入札そのものを取りやめる。**
+// **古い写しで入札させない。**資格情報が切れた機械は、切れる直前の「使用率 5%」を
+// 1日中返し続け、**正直に読めている機械に必ず勝つ。**
+//
+// 戻り値: 枠の状態。読めていない・最後の読み取りに失敗していれば nil。
+func (o *Orchestrator) quotaForBid() *ratelimit.Snapshot {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.quotaStale {
+		return nil
+	}
+	return o.quota
 }
 
 // quotaSnapshot は最後に読んだ枠の状態を返す。
@@ -756,6 +796,13 @@ func (o *Orchestrator) dispatchPaused() bool {
 func (o *Orchestrator) wakeRuns(ctx context.Context) {
 	for _, rs := range o.snapshotRuns() {
 		if rs.isFinished() {
+			continue
+		}
+		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
+		// **効くのは復元した run と、この機能より前に着手した run だけである。**
+		// **確かめずに送ると、担当が既に移っていても丸ごと1回ぶん働く**（`after_run` も走る）。
+		if lost, newHost := o.handoffLostOnResume(ctx, rs); lost {
+			o.stopBecauseHandoffLost(ctx, rs, newHost)
 			continue
 		}
 		if rs.takeAwaitTurnEnd() {

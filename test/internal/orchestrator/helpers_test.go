@@ -1021,6 +1021,18 @@ func (ft *fakeTracker) AddCommentBy(nodeID, author, body string, createdAt time.
 	})
 }
 
+// ClearComments は issue に付いたコメントを全部消す。
+//
+// **入札を書き直せる状態を作るために使う。**入札のコメントが残っていると
+// `HasBidBy` が「もう書いた」と読み、2回目の巡回では枠の判定へ進まない。
+//
+// nodeID: 下敷きの GitHub issue のノード ID。
+func (ft *fakeTracker) ClearComments(nodeID string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	delete(ft.comments, nodeID)
+}
+
 // AddComment は issue にコメントを足す。
 //
 // nodeID: 下敷きの GitHub issue のノード ID。

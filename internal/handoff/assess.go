@@ -37,6 +37,15 @@ type Situation struct {
 	// **空文字なら「自分が誰か分からない」である。**そのときは担当者が付いている issue に
 	// 一切触らない（自分の担当かどうかを言えないので、奪う側にも進む側にも倒せない）。
 	SelfLogin string
+	// SelfHost はこの機械の名前である（`os.Hostname()` の値。設計 3-77）。
+	//
+	// **担当者のアカウントだけでは足りない。**1人が2台の機械を1つの GitHub アカウントで
+	// 動かすのは、この機能のいちばん自然な使い方である。**アカウントだけで比べると、
+	// 勝った機械と負けた機械の両方が「担当者は自分だ」と読み、同じ issue に2台が着手する。**
+	// **だから hold のコメントの `host` と突き合わせる。**
+	//
+	// **空文字なら機械の名前で区別しない**（アカウントだけで判定していた頃と同じ動きになる）。
+	SelfHost string
 	// Now はいまの時刻である。
 	Now time.Time
 	// IdleTimeout は担当者の最後のコメントからこれだけ経つと担当を外す長さである。
@@ -64,6 +73,12 @@ const (
 	ActionSkipManyAssignees
 	// ActionSkipSelfUnknown は、gh の持ち主が分からないので担当のある issue に触らないことを表す。
 	ActionSkipSelfUnknown
+	// ActionSkipOtherMachine は、担当者は自分のアカウントだが hold を持っているのは
+	// 同じアカウントの別の機械なので触らないことを表す。**入札もしない。**
+	//
+	// **1人が2台の機械を1つのアカウントで動かすと、ここへ来る**（設計 3-77b）。
+	// 担当者のアカウントだけを見て進むと、同じ issue に2台が着手する。
+	ActionSkipOtherMachine
 )
 
 // String は判定を人間が読める1語で返す（ログに出す）。
@@ -85,6 +100,8 @@ func (a Action) String() string {
 		return "担当者が2人以上"
 	case ActionSkipSelfUnknown:
 		return "gh の持ち主が分からない"
+	case ActionSkipOtherMachine:
+		return "同じアカウントの別の機械の担当"
 	default:
 		return "不明"
 	}
@@ -109,12 +126,26 @@ type Assessment struct {
 
 // Assess は、いま見えているものから「次に何をするか」を決める（設計 3-77b の表）。
 //
-//	担当者が2人以上                          触らない。WARN を出す
-//	担当者が無い                             入札する
-//	担当者が自分1人                          着手・引き継ぎへ進む（入札しない）
-//	他人1人 ＋ hold が1件も無い               触らない。人間が付けた担当である
-//	他人1人 ＋ hold あり ＋ 期限内             触らない。入札もしない
-//	他人1人 ＋ hold あり ＋ 期限切れ           担当を外して入札をやり直す
+//	担当者が2人以上                                触らない。WARN を出す
+//	担当者が無い                                   入札する
+//	自分1人 ＋ この機械の hold                      着手・引き継ぎへ進む（入札しない）
+//	自分1人 ＋ hold が1件も無い                     着手・引き継ぎへ進む（人間が付けた担当である）
+//	自分1人 ＋ 別の機械の hold ＋ 期限内             触らない。入札もしない
+//	自分1人 ＋ 別の機械の hold ＋ 期限切れ           担当を外して入札をやり直す
+//	他人1人 ＋ hold が1件も無い                     触らない。人間が付けた担当である
+//	他人1人 ＋ hold あり ＋ 期限内                   触らない。入札もしない
+//	他人1人 ＋ hold あり ＋ 期限切れ                 担当を外して入札をやり直す
+//
+// **担当者のアカウントだけで「自分の担当」と決めてはならない**（設計 3-77b）。
+// **1人が2台の機械を1つの GitHub アカウントで動かすのが、この機能のいちばん自然な使い方である。**
+// アカウントだけで比べると、勝った機械と負けた機械の両方が「担当者は自分だ」と読み、
+// **同じ branch の worktree に2つ目の Claude Code が立つ。**
+// **どの機械のものかは hold のコメントの `host` が答える。**
+//
+// **hold は「いまの担当者が書いたもの」だけを数える**（設計 3-77b）。
+// **入札の回が変わっても hold のコメントは消えない**ので、機械が外れたあとに人間が
+// 自分を担当者にすると、**古い機械の hold が「この担当者は機械である」の証拠に化ける。**
+// **`Hold.Assignee` で担当者を突き合わせて、その化けを止める。**
 //
 // **期限は「hold を書いてから」ではなく「その担当者の最後のコメントが現れてから」で数える**
 // （設計 3-77b）。進捗を書き続けている機械は担当を外されない。
@@ -136,12 +167,16 @@ func Assess(s Situation) Assessment {
 		// 触ると、自分の担当を「他人の担当」と読んで自分から奪うことになる。
 		return Assessment{Action: ActionSkipSelfUnknown, Assignee: assignee}
 	}
+
+	// **hold は、いまの担当者が書いたものだけを見る。**別の担当者の古い hold を数えると、
+	// **人間が引き継いだ issue を機械が取り上げる。**
+	hold, hasHold := LatestHoldFor(s.Comments, assignee)
+
 	if strings.EqualFold(assignee, strings.TrimSpace(s.SelfLogin)) {
-		return Assessment{Action: ActionProceed, Assignee: assignee}
+		return assessSelfAssigned(s, assignee, hold, hasHold)
 	}
 
-	hold, ok := LatestHold(s.Comments)
-	if !ok {
+	if !hasHold {
 		return Assessment{Action: ActionSkipHumanAssigned, Assignee: assignee}
 	}
 
@@ -153,6 +188,44 @@ func Assess(s Situation) Assessment {
 	}
 	if s.Now.Sub(last) <= s.IdleTimeout {
 		return Assessment{Action: ActionSkipHeld, Assignee: assignee, Hold: hold, LastActivity: last}
+	}
+	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastActivity: last}
+}
+
+// assessSelfAssigned は「担当者が自分のアカウント1人」のときの判定である（設計 3-77b）。
+//
+// **アカウントが自分でも、この機械の担当だとは限らない。**1つのアカウントで2台の機械を
+// 動かしていると、**勝ったのは別の機械かもしれない。**それは hold のコメントの `host` で分かる。
+//
+// **hold が1件も無いときは進む。**そこは人間が担当者を付けた issue であり、
+// 設計 3-77b の表が「担当者が自分1人なら着手・引き継ぎへ進む」と決めている。
+// **この機械の名前を知らない（`SelfHost` が空）ときも進む。**機械の名前で区別できないので、
+// アカウントだけで判定していた頃と同じ動きへ落とす。
+//
+// s: いま見えているもの。
+// assignee: いま付いている担当者のログイン名（自分のアカウント）。
+// hold: その担当者が書いたいちばん新しい hold。
+// hasHold: hold が1件でもあれば true。
+// 戻り値: 判定と、その判定に使った値。
+func assessSelfAssigned(s Situation, assignee string, hold Hold, hasHold bool) Assessment {
+	selfHost := strings.TrimSpace(s.SelfHost)
+	holdHost := strings.TrimSpace(hold.Host)
+	if !hasHold || selfHost == "" || holdHost == "" {
+		return Assessment{Action: ActionProceed, Assignee: assignee}
+	}
+	if strings.EqualFold(holdHost, selfHost) {
+		return Assessment{Action: ActionProceed, Assignee: assignee, Hold: hold}
+	}
+
+	// **同じアカウントの別の機械が担当している。**
+	// **期限の数え方は他人の担当と揃える**（設計 3-77b）。揃えないと、その機械が落ちたとき
+	// **担当者が自分のアカウントのままなので、どの機械もこの issue を拾えなくなる。**
+	last, hasLast := lastActivityOf(s.Comments, assignee)
+	if !hasLast {
+		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold}
+	}
+	if s.Now.Sub(last) <= s.IdleTimeout {
+		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold, LastActivity: last}
 	}
 	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastActivity: last}
 }
@@ -209,21 +282,38 @@ func CollectBids(comments []CommentView) []Bid {
 	return out
 }
 
-// LatestHold は、コメントの全件からいちばん新しい hold を拾う（設計 3-77b）。
+// LatestHoldFor は、その担当者が書いたいちばん新しい hold を拾う（設計 3-77b）。
+//
+// **担当者で絞る。**hold のコメントは、担当が移っても入札の回が変わっても**消えない。**
+// **絞らないと、issue のどこかに1件でも hold があれば「いまの担当者は機械である」と読まれる。**
+// 機械が外れたあとに人間が自分を担当者にして18時間黙ると、
+// **別の機械が古い機械の hold を証拠にして、人間の担当を外す。**
+//
+// **`Hold.Assignee` が空の hold は、誰のものとも数えない。**continuo が書く hold は必ず
+// 担当者のログイン名を持つので、空なのは人間が印だけ真似て書いたときである。
+// **触らない側へ倒す**（奪ってよい証拠として使わない）。
 //
 // **いちばん新しいものを採る。**担当が何度か移った issue には hold が複数付いており、
 // **古いほうを読むと、既に居ない機械の名前を released のコメントへ書くことになる。**
 //
 // comments: issue に付いているコメントの全件。
+// assignee: いま付いている担当者のログイン名。**空文字なら1件も返さない。**
 // 戻り値の1つ目: いちばん新しい hold。
-// 戻り値の2つ目: hold が1件でもあれば true。
-func LatestHold(comments []CommentView) (Hold, bool) {
+// 戻り値の2つ目: その担当者の hold が1件でもあれば true。
+func LatestHoldFor(comments []CommentView, assignee string) (Hold, bool) {
+	login := strings.TrimSpace(assignee)
+	if login == "" {
+		return Hold{}, false
+	}
 	var latest Hold
 	var latestAt time.Time
 	found := false
 	for _, c := range comments {
 		h, ok := ParseHold(c.Body)
 		if !ok {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(h.Assignee), login) {
 			continue
 		}
 		if !found || c.CreatedAt.After(latestAt) {

@@ -72,6 +72,12 @@ type Hold struct {
 	// 担当者のログイン名しか分からないと、どの機械を止めればよいかが人間に読めない。
 	Host string `json:"host"`
 	// Assignee は担当者にしたアカウントのログイン名である。
+	//
+	// **`LatestHoldFor` がこれで hold を絞る**（設計 3-77b）。hold のコメントは
+	// **担当が移っても入札の回が変わっても消えない**ので、絞らないと
+	// **「issue のどこかに hold がある」だけで「いまの担当者は機械である」と読まれる。**
+	// 機械が外れたあとに人間が自分を担当者にすると、
+	// **別の機械が古い機械の hold を証拠にして、人間の担当を外す。**
 	Assignee string `json:"assignee"`
 	// Branch はこの issue のために使う branch の名前である。
 	Branch string `json:"branch"`

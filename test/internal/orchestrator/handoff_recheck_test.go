@@ -12,6 +12,9 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // TestHandoffRecheck_担当が移っていたらturnの終わりで止める は、設計 3-77c を確かめる。
@@ -107,5 +110,62 @@ func TestHandoffRecheck_担当者が1人もいないだけでは止めない(t *
 	})
 	if len(fx.Orc.RunningIdentifiers()) != 1 {
 		t.Errorf("担当者が消えただけで run を捨てている")
+	}
+}
+
+// TestHandoffRecheck_復元した_run_は_turn_を送る前に担当を確かめる は、設計 3-77h を確かめる。
+//
+// 目的: 「作業を再開するとき、コメントを全部読み直す。担当が自分でなくなっていれば、
+// push せずに止まる」。
+//
+// **turn の終わりで確かめるだけでは遅い。**朝、PC を起動したときに担当が既に移っていると、
+// **run を組み立てて turn を1回丸ごと送ってしまう**（`workspace_hooks.after_run` も走る）。
+//
+// 与える情報: 引き継いだ（＝1度も担当を確かめていない）run と、
+// **別の機械が担当者になっている**ボード。確かめ直す間隔は 0（走行中は確かめない設定）。
+// 成功条件: turn が1回も送られず、run が印から外れること。
+// **`recheck_interval_ms` が 0 でも、再開の確かめは行われること。**
+func TestHandoffRecheck_復元したrunはturnを送る前に担当を確かめる(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			// **走っている最中は確かめない設定にする。**再開の確かめはそれとは別の場面である。
+			cfg.Tracker.Provider.Handoff.RecheckIntervalMs = 0
+		},
+	})
+	fx.AllowLog("担当が移ったので")
+
+	issue := sampleIssue(188, "In Progress")
+	issue.Assignees = []tracker.Assignee{{ID: "U_" + rivalLogin, Login: rivalLogin}}
+	issue.AssigneeCount = 1
+	fx.Tracker.AddIssue(issue)
+
+	node := issueNode(188)
+	now := time.Now()
+	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
+		Host: rivalHost, Assignee: rivalLogin,
+		Branch: "continuo/octocat/hello-world/188", At: now,
+	}), now)
+
+	// **引き継いだ run として印を付ける。**`NeedsPrompt` を立てるので、
+	// 担当を確かめなければ次の巡回で turn が1回送られる。
+	if !fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
+		AgentName:        normalize.SafeName("continuo-hello-world-188"),
+		PaneID:           "w1:p1",
+		SessionUUID:      "session-188",
+		HerdrWorkspaceID: "w1",
+	}, true) {
+		t.Fatal("run を引き継げなかった")
+	}
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 10*time.Second, "担当が移った run が止まる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got != 0 {
+		t.Errorf("担当が移っているのに turn を送った: %d 回", got)
+	}
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
+		t.Errorf("担当を外された機械がボードを書き換えている: Status が %q", got)
 	}
 }

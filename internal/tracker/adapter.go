@@ -1017,8 +1017,11 @@ func (a *Adapter) UpdateStatus(
 // 入札は巡回のたびに積み上がるので、混ぜるとエージェントへ渡す入力がそれで埋まる。
 // **持ち回りの判定そのものは FetchAllComments が読む**（そちらは1件も落とさない）。
 //
-// **cfg.Max は「1回の取得で何件ずつ取るか」である**（設計 3-77a）。**打ち切りの件数ではない。**
-// 続きがある限り `after` で取り直し、**issue に付いたコメントを全部取る。**
+// **cfg.Max は「判別のために何件まで遡るか」である**（設計 5-2）。**意味を変えていない。**
+// **数えるのは持ち回りの印を外したあとの件数である。**入札は巡回のたびに積み上がるので、
+// 印の付いたものを数に入れると、**エージェントが書いた報告が窓から押し出される。**
+// **`max` 件が揃うまで、揃わなければ続きが無くなるまで、`after` で取り直す。**
+// 入札が積まれていない issue では、いままでどおり1回の問い合わせで終わる。
 // GraphQL には降順で要求し、受け取ってから古い順へ並べ替えて返す。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -1054,20 +1057,20 @@ func (a *Adapter) FetchComments(
 		}
 	}
 
-	oldestFirst, err := a.fetchCommentNodes(ctx, issueNodeID, cfg)
+	keep := commentsPerFetch(cfg.Max)
+	oldestFirst, err := a.fetchCommentNodes(ctx, issueNodeID, keep, keep)
 	if err != nil {
 		return nil, err
 	}
+	// **持ち回りの印が付いたコメントは、投稿者を問わず外す**（設計 3-77a）。
+	// **`self_marker` の判定より先に行う。**入札は継続的に積み上がるので、
+	// ここを通すとエージェントへ渡す入力がそれで埋まる。
+	// **外したうえで、新しい方から `max` 件だけ残す**（設計 5-2 の「何件まで遡るか」）。
+	oldestFirst = keepNewestUnmarked(oldestFirst, keep)
 
 	result := make([]Comment, 0, len(oldestFirst))
 	for _, c := range oldestFirst {
 		comment := rawCommentToComment(c)
-		// **持ち回りの印が付いたコメントは、投稿者を問わず外す**（設計 3-77a）。
-		// **`self_marker` の判定より先に行う。**入札は継続的に積み上がるので、
-		// ここを通すとエージェントへ渡す入力がそれで埋まる。
-		if handoff.IsMarked(comment.Body) {
-			continue
-		}
 		trimmed := strings.TrimSpace(comment.Body)
 		// **印は投稿者と併せて見る**（設計 3-65）。第三者が同じ印を書いても、
 		// continuo の側が書いたものとしては扱わない。
@@ -1135,17 +1138,21 @@ func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker
 // **`FetchComments` と使い分ける。**あちらは「エージェントへ渡す入力」を作る経路であり、
 // **印の付いたものを外す。**外したものを見なければ、持ち回りの判定はできない。
 //
+// **`tracker.provider.comments.max` は見ない。**あれは「エージェントへ渡す入力を何件まで
+// 遡るか」の設定であり（設計 5-2）、**ここが要るのは全件である。**
+// **1ページは GitHub の上限いっぱい（100件）で取る。**問い合わせの回数がいちばん少なくなる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // issueNodeID: 下敷きの GitHub issue のノード ID。
-// cfg: tracker.provider.comments の設定（1回に何件ずつ取るか）。
+// cfg: tracker.provider.comments の設定。**いまは読まない**（引数は呼び出し側の形に合わせてある）。
 // 戻り値: 正規化したコメントの一覧（**古い順**）。IsAgent / IsSelf / MarkedByOther は
 // 立てない（印の判定は呼び出し側が行う）。
 func (a *Adapter) FetchAllComments(
 	ctx context.Context,
 	issueNodeID string,
-	cfg config.TrackerProviderCommentsConfig,
+	_ config.TrackerProviderCommentsConfig,
 ) ([]Comment, error) {
-	nodes, err := a.fetchCommentNodes(ctx, issueNodeID, cfg)
+	nodes, err := a.fetchCommentNodes(ctx, issueNodeID, maxCommentsPerFetch, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -1156,10 +1163,52 @@ func (a *Adapter) FetchAllComments(
 	return out, nil
 }
 
-// fetchCommentNodes は issue のコメントを全ページ取り、古い順に並べて返す。
+// commentsPerFetch は `tracker.provider.comments.max` を、実際に使える件数へ丸める。
+//
+// max: 設定に書かれた件数。
+// 戻り値: 1 以上 maxCommentsPerFetch 以下の件数。
+func commentsPerFetch(max int) int {
+	if max <= 0 {
+		return defaultCommentsPerFetch
+	}
+	if max > maxCommentsPerFetch {
+		return maxCommentsPerFetch
+	}
+	return max
+}
+
+// keepNewestUnmarked は、持ち回りの印が付いたコメントを外し、新しい方から keep 件だけ残す
+// （設計 3-77a / 5-2）。
+//
+// **`tracker.provider.comments.max` が数えるのは、印を外したあとの件数である。**
+// 印の付いたものを数に入れると、入札が積まれた issue で**エージェントが書いた報告が
+// 窓から押し出される。**
+//
+// oldestFirst: 生のコメント（**古い順**）。
+// keep: 残す件数。**0 以下なら件数で絞らない**（印だけを外す）。
+// 戻り値: 印を外し、新しい方から keep 件だけ残したもの（**古い順**）。
+func keepNewestUnmarked(oldestFirst []rawComment, keep int) []rawComment {
+	out := make([]rawComment, 0, len(oldestFirst))
+	for _, c := range oldestFirst {
+		if handoff.IsMarked(c.Body) {
+			continue
+		}
+		out = append(out, c)
+	}
+	if keep > 0 && len(out) > keep {
+		out = out[len(out)-keep:]
+	}
+	return out
+}
+
+// fetchCommentNodes は issue のコメントをページを辿って取り、古い順に並べて返す。
 //
 // **GraphQL には降順（新しい順）で要求する。**打ち切られたときに落ちるのを
 // 古い側にするためである（最新側は判別に要る）。
+//
+// **`keep` 件が揃ったら、そこで取るのをやめる**（設計 5-2）。数えるのは
+// **持ち回りの印が付いていないコメント**である。入札の積まれていない issue では
+// 1ページで揃うので、**問い合わせは1回で終わる。**
 //
 // **ページ数には上限を置く**（maxCommentPages）。荒らされた issue1件で巡回が止まるのを避ける。
 // **上限に達したら WARN を1行残す。**黙って途中で切ると、
@@ -1167,26 +1216,18 @@ func (a *Adapter) FetchAllComments(
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issueNodeID: 下敷きの GitHub issue のノード ID。
-// cfg: tracker.provider.comments の設定。
+// perPage: 1ページで要求する件数（1 以上 maxCommentsPerFetch 以下）。
+// keep: 印の付いていないコメントがこれだけ揃ったら取るのをやめる。**0 以下なら全ページ取る。**
 // 戻り値: 生のコメント（**古い順**）。
 func (a *Adapter) fetchCommentNodes(
 	ctx context.Context,
 	issueNodeID string,
-	cfg config.TrackerProviderCommentsConfig,
+	perPage int,
+	keep int,
 ) ([]rawComment, error) {
-	perPage := cfg.Max
-	if perPage <= 0 {
-		perPage = defaultCommentsPerFetch
-	}
-	if perPage > maxCommentsPerFetch {
-		a.logger.Warn("tracker.provider.comments.max が GitHub の上限を超えているため丸めました",
-			"設定値", cfg.Max, "使う値", maxCommentsPerFetch,
-		)
-		perPage = maxCommentsPerFetch
-	}
-
 	// **新しい順に積む。**最後にまとめて反転して古い順へ戻す。
 	var newestFirst []rawComment
+	unmarked := 0
 	after := ""
 	for page := 0; page < maxCommentPages; page++ {
 		var resp commentsQueryResponse
@@ -1200,7 +1241,16 @@ func (a *Adapter) fetchCommentNodes(
 		if resp.Node == nil || resp.Node.Comments == nil {
 			break
 		}
-		newestFirst = append(newestFirst, resp.Node.Comments.Nodes...)
+		for _, c := range resp.Node.Comments.Nodes {
+			newestFirst = append(newestFirst, c)
+			if !handoff.IsMarked(c.Body) {
+				unmarked++
+			}
+		}
+		if keep > 0 && unmarked >= keep {
+			// **要る件数が揃った。**これ以上遡らない（設計 5-2）。
+			break
+		}
 		info := resp.Node.Comments.PageInfo
 		if info == nil || !info.HasNextPage || info.EndCursor == "" {
 			// **`pageInfo` を返さない応答は「続きは無い」として扱う。**

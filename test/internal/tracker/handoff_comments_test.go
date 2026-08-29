@@ -157,6 +157,102 @@ func TestFetchAllComments_続きがある限り取り直す(t *testing.T) {
 	}
 }
 
+// 目的: `tracker.provider.comments.max` の意味が変わっていないことを確認する（設計 5-2 / 3-77f）。
+//
+// **`max` は「判別のために何件まで遡るか」である。**1ページの件数ではない。
+// **数えるのは持ち回りの印を外したあとの件数である。**入札は巡回のたびに積み上がるので、
+// **印の付いたものを数に入れると、エージェントが書いた報告が窓から押し出される。**
+//
+// 与える情報: `max: 2` の設定。1ページ目は入札2件だけ（続きあり）、2ページ目に人間の
+// コメント2件と、さらに古い1件。
+// 成功条件: 印を外した2件だけが返ること（古い順で c2 → c3）。
+// **入札しか無い1ページ目で打ち切らず、続きを取り直していること。**
+func TestFetchComments_maxは印を外したあとの件数を数える(t *testing.T) {
+	cfg := testTrackerConfig()
+	cfg.Provider.Comments.Max = 2
+
+	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
+		if n == 1 {
+			return dataResponse(map[string]any{"node": map[string]any{
+				"__typename": "Issue",
+				"comments": map[string]any{
+					"pageInfo": map[string]any{"hasNextPage": true, "endCursor": "CURSOR1"},
+					"nodes": []map[string]any{
+						commentNode("b2", config.HandoffBidMarker+"\n{\"host\":\"thinkpad\"}", "2026-08-06T00:00:00Z", "other-bot"),
+						commentNode("b1", config.HandoffBidMarker+"\n{\"host\":\"mac-studio\"}", "2026-08-05T00:00:00Z", "continuo-bot"),
+					},
+				},
+			}})
+		}
+		return dataResponse(map[string]any{"node": map[string]any{
+			"__typename": "Issue",
+			"comments": map[string]any{
+				"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+				"nodes": []map[string]any{
+					commentNode("c3", "3件目", "2026-08-03T00:00:00Z", "human-user"),
+					commentNode("c2", "2件目", "2026-08-02T00:00:00Z", "human-user"),
+					commentNode("c1", "1件目", "2026-08-01T00:00:00Z", "human-user"),
+				},
+			},
+		}})
+	})
+	a := newAdapterForFetch(t, fs)
+
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg.Provider.Comments, cfg.Comments, "continuo-bot")
+	if err != nil {
+		t.Fatalf("FetchComments が失敗した: %v", err)
+	}
+	if len(comments) != 2 {
+		t.Fatalf("max の件数どおりに絞れていない: got %d 件, want 2 件", len(comments))
+	}
+	if comments[0].ID != "c2" || comments[1].ID != "c3" {
+		t.Errorf("新しい方から2件を古い順で返していない: got [%s, %s]", comments[0].ID, comments[1].ID)
+	}
+	if got := len(fs.Requests()); got != 2 {
+		t.Errorf("入札しか無いページで打ち切っている: リクエストが %d 本（2本であるべき）", got)
+	}
+}
+
+// 目的: 印の付いていないコメントが `max` 件揃ったら、そこで取るのをやめることを確認する
+// （設計 3-77f）。
+//
+// **`max: 50` と書いて費用を抑えている人の問い合わせを増やさない。**
+// 入札の積まれていない issue では、いままでどおり1回の問い合わせで終わる。
+//
+// 与える情報: `max: 2` の設定。1ページ目に人間のコメント3件（続きあり）。
+// 成功条件: リクエストが1本だけであること。
+func TestFetchComments_max件が揃ったら取るのをやめる(t *testing.T) {
+	cfg := testTrackerConfig()
+	cfg.Provider.Comments.Max = 2
+
+	fs := newFakeGraphQLServer(t, single(dataResponse(map[string]any{"node": map[string]any{
+		"__typename": "Issue",
+		"comments": map[string]any{
+			"pageInfo": map[string]any{"hasNextPage": true, "endCursor": "CURSOR1"},
+			"nodes": []map[string]any{
+				commentNode("c3", "3件目", "2026-08-03T00:00:00Z", "human-user"),
+				commentNode("c2", "2件目", "2026-08-02T00:00:00Z", "human-user"),
+				commentNode("c1", "1件目", "2026-08-01T00:00:00Z", "human-user"),
+			},
+		},
+	}})))
+	a := newAdapterForFetch(t, fs)
+
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg.Provider.Comments, cfg.Comments, "continuo-bot")
+	if err != nil {
+		t.Fatalf("FetchComments が失敗した: %v", err)
+	}
+	if got := len(fs.Requests()); got != 1 {
+		t.Fatalf("要る件数が揃ったのに取り直している: リクエストが %d 本（1本であるべき）", got)
+	}
+	if len(comments) != 2 {
+		t.Fatalf("max の件数どおりに絞れていない: got %d 件, want 2 件", len(comments))
+	}
+	if comments[0].ID != "c2" || comments[1].ID != "c3" {
+		t.Errorf("新しい方から2件を古い順で返していない: got [%s, %s]", comments[0].ID, comments[1].ID)
+	}
+}
+
 // 目的: 担当者を書き足す呼び出しが `addAssigneesToAssignable` を使い、
 // 名指ししたノード ID だけを送ることを確認する（設計 3-77b）。
 //
