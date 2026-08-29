@@ -261,7 +261,9 @@ func (o *Orchestrator) recordRepoWorkspace(
 // 戻り値: この run が書いたコメントがあれば true。
 func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap runSnapshot) bool {
 	// **最初の巡回より前にこの経路へ入ることがある**（引き継いだ run の turn が
-	// 先に終わる場合）。**そのときはここで持ち主を取る。取得は全体で1回だけである。**
+	// 先に終わる場合）。**そのときはここで持ち主を取る。**
+	// **まだ取れていなければ ghLoginRetryInterval ごとに取り直し、一度取れたら取りに行かない**
+	// （設計 3-65。判定は ghLoginDue）。
 	o.ensureGHLogin(ctx)
 	comments, err := o.tracker.FetchComments(
 		ctx, nodeID, o.cfg.Tracker.Provider.Comments, o.cfg.Tracker.Comments, o.ghLoginName())

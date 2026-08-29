@@ -480,8 +480,9 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	tick := o.tickCount
 	o.mu.Unlock()
 
-	// **「gh の持ち主」は最初の巡回で1回だけ取る**（設計 3-65）。
-	// 取れなくても巡回は続ける（印だけで判定する形に落ちる）。
+	// **「gh の持ち主」を取る**（設計 3-65）。**取れるまで ghLoginRetryInterval ごとに
+	// 取り直し、一度取れたらそれ以降は取りに行かない**（判定は ghLoginDue）。
+	// 取れないあいだも巡回は続ける（印だけで判定する形に落ちる）。
 	o.ensureGHLogin(ctx)
 
 	// **検査を先に行う。**落ちた巡回では新規の dispatch も再 dispatch も見送る
