@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""block-merge-without-review.py が、狙った場合に止まり、狙わない場合に通ることを確かめる。
+
+    python3 .claude/hooks/tests/test_block_merge_without_review.py
+
+**リポジトリのルートから実行すること。**
+
+**gh を呼ばずに試す。**`has_review` を差し替えて、レビューの有無を作る。
+本物の `gh` を呼ぶと、その日の PR の状態でテストの結果が変わってしまう。
+"""
+
+import importlib.util
+import io
+import json
+import os
+import sys
+
+HOOK = os.path.join(".claude", "hooks", "block-merge-without-review.py")
+
+
+def load_hook():
+    """hook を module として読み込む。"""
+    spec = importlib.util.spec_from_file_location("hook", HOOK)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def run(mod, command, review):
+    """hook を1回走らせて (止まったか, 理由) を返す。
+
+    review が True ならレビュー結果が有る、False なら無い、None なら確かめられない。
+    """
+    mod.has_review = lambda pr: review
+    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+    old_stdin, old_stdout = sys.stdin, sys.stdout
+    sys.stdin = io.StringIO(payload)
+    sys.stdout = io.StringIO()
+    try:
+        mod.main()
+        out = sys.stdout.getvalue()
+    finally:
+        sys.stdin, sys.stdout = old_stdin, old_stdout
+    if not out.strip():
+        return (False, "")
+    body = json.loads(out)
+    h = body.get("hookSpecificOutput") or {}
+    return (h.get("permissionDecision") == "deny", h.get("permissionDecisionReason") or "")
+
+
+# コマンドの断片を組み立てる。**1つの文字列にすると、この hook 自身が止める。**
+GH = "gh"
+MERGE = "pr merge"
+READY = "pr ready"
+
+cases = []
+
+
+def case(name, command, review, want_block, want_in=None):
+    cases.append((name, command, review, want_block, want_in))
+
+
+case("レビュー結果が無ければ止まる", "%s %s 94 --merge" % (GH, MERGE), False, True, "94")
+case("レビュー結果が有れば通る", "%s %s 94 --merge" % (GH, MERGE), True, False)
+case("ready も止まる", "%s %s 94" % (GH, READY), False, True)
+case("ready もレビューが有れば通る", "%s %s 94" % (GH, READY), True, False)
+case("確かめられなければ通す", "%s %s 94 --merge" % (GH, MERGE), None, False)
+case("番号が無ければ見ない", "%s %s --merge" % (GH, MERGE), False, False)
+case("関係ないコマンドは通す", "git status", False, False)
+case("似た語を含むだけなら通す", "echo 'merge した'", False, False)
+case(
+    "オプションが挟まっても番号を拾う",
+    "%s %s --repo octocat/hello-world 188 --merge" % (GH, MERGE),
+    False,
+    True,
+    "188",
+)
+case(
+    "逃がし口が置かれていれば通す",
+    "%s %s 94 --merge" % (GH, MERGE),
+    False,
+    False,
+)
+
+
+def main():
+    mod = load_hook()
+    ng = 0
+    for i, (name, command, review, want_block, want_in) in enumerate(cases):
+        # 最後の1件だけ、逃がし口の環境変数を置いて試す。
+        escape = name.startswith("逃がし口")
+        if escape:
+            os.environ[mod.ESCAPE_ENV] = "1"
+        else:
+            os.environ.pop(mod.ESCAPE_ENV, None)
+
+        blocked, reason = run(mod, command, review)
+        ok = blocked == want_block
+        if ok and want_in:
+            ok = want_in in reason
+        if not ok:
+            ng += 1
+            got = "止まった" if blocked else "通った"
+            want = "止まる" if want_block else "通る"
+            print("NG  %s: %s（想定は %s）" % (name, got, want))
+        else:
+            print("ok  %s" % name)
+
+    os.environ.pop(mod.ESCAPE_ENV, None)
+    print("\n%d 件中 %d 件が想定どおり" % (len(cases), len(cases) - ng))
+    return 1 if ng else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
