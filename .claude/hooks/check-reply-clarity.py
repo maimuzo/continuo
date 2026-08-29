@@ -94,6 +94,11 @@ CATEGORY_WORDS = ("報告", "質問", "確認")
 # 「これをうまく使えないか検討して」だけでは、何の話か読み取れなかった実例による。
 MIN_QUOTE_CHARS = 30
 
+# 「設計 6-23b」のように、節を番号だけで指すのを止める。
+# 直後に markdown link（`[path:12-34](path#L12-L34)`）が無ければ、どこを見ればよいか分からない。
+SECTION_REF_WORDS = ("設計", "節")
+SECTION_REF_NAME = "設計の節を番号だけで指している箇所（ファイルパスと行番号が無い）"
+
 # 話題の切れ目に入れる区切り線。行頭からこの文字だけが並ぶ行を区切りとみなす。
 # 表の区切り（`| --- |`）は行頭が `|` なので当たらない。
 DIVIDER_CHARS = "-"
@@ -338,6 +343,46 @@ def missing_category(masked: str):
     return True
 
 
+def bare_section_refs(masked: str) -> int:
+    """節を番号だけで指している箇所を数える。
+
+    「設計 6-23b」「節 3-64」のような書き方を拾う。
+    **同じ行に markdown link（`](` を含む）があれば通す。**
+    行をまたいで書くこともあるので、判定はその行だけで閉じる。
+
+    見ないもの。
+        コードフェンスの中（呼ぶ側が masked を渡す）、インラインコードの中、引用行。
+    """
+    count = 0
+    for line in masked.split("\n"):
+        if is_quote_line(line):
+            continue
+        text = strip_inline_code(line)
+        if "](" in text:  # その行に markdown link があるなら通す
+            continue
+        for word in SECTION_REF_WORDS:
+            i = 0
+            while True:
+                i = text.find(word, i)
+                if i < 0:
+                    break
+                j = i + len(word)
+                while j < len(text) and text[j] in SPACES:
+                    j += 1
+                # 数字 + ハイフン + 数字 の形が続くか
+                k = j
+                while k < len(text) and text[k].isdigit():
+                    k += 1
+                if k > j and k < len(text) and text[k] == "-":
+                    m = k + 1
+                    while m < len(text) and text[m].isdigit():
+                        m += 1
+                    if m > k + 1:
+                        count += 1
+                i = j
+    return count
+
+
 def is_divider(line: str) -> bool:
     """話題の切れ目の区切り線か。行頭から `-` だけが3つ以上並ぶ行。
 
@@ -412,7 +457,7 @@ def read_payload():
     return payload if isinstance(payload, dict) else {}
 
 
-def build_reason(bare_refs, no_category, thin_quote, late_blocks) -> str:
+def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0) -> str:
     """block したときに Claude へ返す指示文。
 
     入力由来の文字列を混ぜない。件数だけは int に通してから %d で埋める。
@@ -461,6 +506,17 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks) -> str:
             "**これが無いと、読む側は同じ話の続きなのか別の話なのかを判断できません。**\n"
         )
 
+    if section_refs:
+        parts.append("\n%s: %d 件\n" % (SECTION_REF_NAME, int(section_refs)))
+        parts.append(
+            "\n**設計の節を番号だけで指さないこと。**"
+            "読む側は、どのファイルの何行目かを毎回訊き直すことになります。\n"
+            "**markdown link 形式で、行番号を含めて書いてください。**\n"
+            "  悪い: 設計 6-23b に書きました\n"
+            "  良い: [docs/plans/continuo_design.md:8278-8342](docs/plans/continuo_design.md#L8278-L8342) に書きました\n"
+            "同じ行に markdown link があれば通ります。\n"
+        )
+
     parts.append(
         "\n規則は .claude/rules/reporting.md にあります。"
         "5段構成そのものは別の hook が見ているので、そちらの指示もあれば両方直してください。"
@@ -499,13 +555,14 @@ def main() -> int:
     qchars = quote_chars(masked)
     thin_quote = 0 < qchars < MIN_QUOTE_CHARS
     late_blocks = blocks_missing_summary(masked)
+    section_refs = bare_section_refs(masked)
 
-    if not bare_refs and not no_category and not thin_quote and not late_blocks:
+    if not bare_refs and not no_category and not thin_quote and not late_blocks and not section_refs:
         return 0
 
     emit({
         "decision": "block",
-        "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks),
+        "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs),
     })
     return 0
 
