@@ -49,7 +49,7 @@ const ghProjectItemListLimit = 500
 type GHRunner func(ctx context.Context, args ...string) ([]byte, error)
 
 // ErrGHNotFound は gh コマンドそのものが見つからなかったことを表す。
-var ErrGHNotFound = errors.New("gh コマンドが見つかりません")
+var ErrGHNotFound = i18n.Sentinel(i18n.KeyScaffoldGHNotFound)
 
 // Project は `gh project list` が返したボードの候補である。
 type Project struct {

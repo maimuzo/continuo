@@ -1211,6 +1211,36 @@ const (
 	KeyHerdrCallMarshalParamsFailed Key = "herdr.call.marshal_params_failed"
 	// KeyHerdrCallMarshalRequestFailed はリクエスト全体を JSON へ変換できなかったときに出る。
 	KeyHerdrCallMarshalRequestFailed Key = "herdr.call.marshal_request_failed"
+	// KeyHerdrCallCanceled は呼び出し側が ctx を打ち切ったときに出る。
+	KeyHerdrCallCanceled Key = "herdr.call.canceled"
+	// KeyHerdrCallSocketConnectFailed は herdr の socket へ接続できなかったときに出る。
+	//
+	// **`continuo doctor` の `herdr` の行にそのまま出る。**herdr が起動していない環境で
+	// 最初に出会う文言なので、資源へ移していないと英語の画面に日本語が1行だけ混ざる。
+	KeyHerdrCallSocketConnectFailed Key = "herdr.call.socket_connect_failed"
+	// KeyHerdrCallSetDeadlineFailed は socket に期限を設定できなかったときに出る。
+	KeyHerdrCallSetDeadlineFailed Key = "herdr.call.set_deadline_failed"
+	// KeyHerdrCallSendFailed はリクエストを送れなかったときに出る。
+	KeyHerdrCallSendFailed Key = "herdr.call.send_failed"
+	// KeyHerdrCallResponseTimeout は応答が期限までに返らなかったときに出る。
+	KeyHerdrCallResponseTimeout Key = "herdr.call.response_timeout"
+	// KeyHerdrCallResponseReadFailed は応答を1バイトも読めなかったときに出る。
+	KeyHerdrCallResponseReadFailed Key = "herdr.call.response_read_failed"
+	// KeyHerdrCallResponseTruncated は応答が改行の前で途切れていたときに出る。
+	KeyHerdrCallResponseTruncated Key = "herdr.call.response_truncated"
+	// KeyHerdrCallResponseNotJSON は応答を JSON として解析できなかったときに出る。
+	KeyHerdrCallResponseNotJSON Key = "herdr.call.response_not_json"
+)
+
+// herdr のエラーを1行の文字列にする処理（internal/herdr の Error.Error）の文言。
+//
+// **包んだ原因の有無で書式を分ける。**原因が無いときに ": %v" を残すと
+// 末尾に "<nil>" が出る。
+const (
+	// KeyHerdrErrorWithCause は包んだ原因があるときの書式である（コード・本文・原因）。
+	KeyHerdrErrorWithCause Key = "herdr.error.with_cause"
+	// KeyHerdrErrorWithoutCause は包んだ原因が無いときの書式である（コード・本文）。
+	KeyHerdrErrorWithoutCause Key = "herdr.error.without_cause"
 )
 
 // herdr の socket のパスを決める処理（internal/herdr の ResolveSocketPath）の文言。
@@ -1458,6 +1488,23 @@ const (
 	KeyRatelimitKeychainAccessTokenMissing Key = "ratelimit.keychain.access_token_missing"
 )
 
+// 枠の判定の番兵エラー（internal/ratelimit の ErrNoCredentials / ErrKeychainTimeout /
+// ErrKeychainCanceled）の文言。
+//
+// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+// **引くのは Error() が呼ばれたときである**（internal/ratelimit の lazyError）。
+//
+// **ErrNoCredentials は上の credentials_file.* / keychain.* の先頭の %w に入る。**
+// **`continuo doctor` の `credentials` の行にそのまま出る。**
+const (
+	// KeyRatelimitErrNoCredentials は枠の判定に使う資格情報を取れなかったことを表す。
+	KeyRatelimitErrNoCredentials Key = "ratelimit.err.no_credentials"
+	// KeyRatelimitErrKeychainTimeout は Keychain の読み取りが期限内に終わらなかったことを表す。
+	KeyRatelimitErrKeychainTimeout Key = "ratelimit.err.keychain_timeout"
+	// KeyRatelimitErrKeychainCanceled は Keychain の読み取りを打ち切ったことを表す。
+	KeyRatelimitErrKeychainCanceled Key = "ratelimit.err.keychain_canceled"
+)
+
 // HTTP ダッシュボード（internal/server）の起動と停止のエラーの文言。
 //
 // **画面に並べる語は dashboard.* にある。**ここにあるのは、待ち受けの開始と停止、
@@ -1549,6 +1596,36 @@ const (
 	KeyScaffoldGHRunFailed Key = "scaffold.gh.run_failed"
 	// KeyScaffoldGHRunFailedWithStderr はgh の実行に失敗し、標準エラー出力があったときに出る。
 	KeyScaffoldGHRunFailedWithStderr Key = "scaffold.gh.run_failed_with_stderr"
+	// KeyScaffoldGHNotFound はgh そのものが PATH に無いことを表す番兵エラーの文言である。
+	KeyScaffoldGHNotFound Key = "scaffold.gh.not_found"
+)
+
+// `continuo init` と `continuo setup` の番兵エラー（internal/scaffold）の文言。
+//
+// **番兵は package の変数なので、文言を errors.New に埋め込むと言語を決める前に固まる。**
+// **引くのは Error() が呼ばれたときである**（i18n.Sentinel）。
+//
+// **`continuo init` の出力にそのまま出る。**存在しないディレクトリを渡したときの
+// 1行がこれである。
+const (
+	// KeyScaffoldErrAlreadyExists は書き出す先に既に WORKFLOW.md があるときに出る。
+	KeyScaffoldErrAlreadyExists Key = "scaffold.err.already_exists"
+	// KeyScaffoldErrDirNotFound は指定されたディレクトリが無いときに出る。
+	KeyScaffoldErrDirNotFound Key = "scaffold.err.dir_not_found"
+	// KeyScaffoldErrNotADirectory は指定されたパスがディレクトリでないときに出る。
+	KeyScaffoldErrNotADirectory Key = "scaffold.err.not_a_directory"
+	// KeyScaffoldErrSymlink は書き出す先の WORKFLOW.md が symlink だったときに出る。
+	KeyScaffoldErrSymlink Key = "scaffold.err.symlink"
+	// KeyScaffoldErrNotFound は書き換える先に WORKFLOW.md が無いときに出る。
+	KeyScaffoldErrNotFound Key = "scaffold.err.not_found"
+	// KeyScaffoldErrKeysNotFound は書き換える対象のキーが無いときに出る。
+	KeyScaffoldErrKeysNotFound Key = "scaffold.err.keys_not_found"
+	// KeyScaffoldErrStatusesIncomplete は5つの役割のどれかが空のまま渡されたときに出る。
+	KeyScaffoldErrStatusesIncomplete Key = "scaffold.err.statuses_incomplete"
+	// KeyScaffoldErrKeysNotRewritable はキーの値が下の行にぶら下がっているときに出る。
+	KeyScaffoldErrKeysNotRewritable Key = "scaffold.err.keys_not_rewritable"
+	// KeyScaffoldErrWouldBreakConfig は書き換えると front matter を読めなくなるときに出る。
+	KeyScaffoldErrWouldBreakConfig Key = "scaffold.err.would_break_config"
 )
 
 // `continuo init` が gh から値を引いて雛形を埋めるとき（internal/scaffold の Detect）の文言。
@@ -2580,6 +2657,16 @@ var allKeys = []Key{
 	KeyHerdrCallRequestIDFailed,
 	KeyHerdrCallMarshalParamsFailed,
 	KeyHerdrCallMarshalRequestFailed,
+	KeyHerdrCallCanceled,
+	KeyHerdrCallSocketConnectFailed,
+	KeyHerdrCallSetDeadlineFailed,
+	KeyHerdrCallSendFailed,
+	KeyHerdrCallResponseTimeout,
+	KeyHerdrCallResponseReadFailed,
+	KeyHerdrCallResponseTruncated,
+	KeyHerdrCallResponseNotJSON,
+	KeyHerdrErrorWithCause,
+	KeyHerdrErrorWithoutCause,
 	KeyHerdrSocketPathNotAbsolute,
 	KeyHerdrSocketPathHomeDirFailed,
 	KeyHerdrSocketPathSourceConfig,
@@ -2648,6 +2735,9 @@ var allKeys = []Key{
 	KeyRatelimitKeychainParseFailed,
 	KeyRatelimitKeychainOauthMissing,
 	KeyRatelimitKeychainAccessTokenMissing,
+	KeyRatelimitErrNoCredentials,
+	KeyRatelimitErrKeychainTimeout,
+	KeyRatelimitErrKeychainCanceled,
 	KeyServerNewPortOutOfRange,
 	KeyServerStartListenFailed,
 	KeyServerCloseShutdownFailed,
@@ -2672,6 +2762,16 @@ var allKeys = []Key{
 	KeyScaffoldMissingKeysTemplateBroken,
 	KeyScaffoldGHRunFailed,
 	KeyScaffoldGHRunFailedWithStderr,
+	KeyScaffoldGHNotFound,
+	KeyScaffoldErrAlreadyExists,
+	KeyScaffoldErrDirNotFound,
+	KeyScaffoldErrNotADirectory,
+	KeyScaffoldErrSymlink,
+	KeyScaffoldErrNotFound,
+	KeyScaffoldErrKeysNotFound,
+	KeyScaffoldErrStatusesIncomplete,
+	KeyScaffoldErrKeysNotRewritable,
+	KeyScaffoldErrWouldBreakConfig,
 	KeyScaffoldDetectGHNotFound,
 	KeyScaffoldDetectAdviceProjectScope,
 	KeyScaffoldDetectOwnerFromFlag,

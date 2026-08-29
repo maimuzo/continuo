@@ -157,8 +157,17 @@ curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/
 **言い換えは [docs/spec/translation-glossary.md](docs/spec/translation-glossary.md) の語に揃えること。**
 
 **日本語のまま出てしまう箇所を見つけたときも歓迎します。**
-ログと、[internal/config/placeholder.go](internal/config/placeholder.go) や
-[internal/scaffold/detect.go](internal/scaffold/detect.go) の一部は、まだ資源へ移していません。
+**次の3つは、まだ資源へ移していません。**
+
+| どこ | 画面のどこに出るか |
+| --- | --- |
+| ログ | 常駐して動かしているあいだの出力 |
+| [internal/config/validate.go](internal/config/validate.go) の要件の文（`0より大きい整数にすること` など） | `continuo doctor` の `config` の行。設定に不正な値を書いたとき |
+| [internal/tracker](internal/tracker) のエラーの本文 | `continuo doctor` の `board` の行。ボードを読めなかったとき |
+
+**番兵エラー**（`errors.New` で package の変数として持つエラー）**を資源へ移すときは
+`i18n.Sentinel` を使ってください。**`errors.New` に文言を直接書くと、
+**その文字列は package の初期化の時点で固まり、言語を決める前なので英語を選んでも日本語のまま出ます。**
 
 ## 脆弱性を見つけたら
 

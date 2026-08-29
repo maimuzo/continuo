@@ -402,6 +402,29 @@ func T(key Key, args ...any) string { return currentCatalog().T(key, args...) }
 // 戻り値: 組み立てたエラー。
 func Errorf(key Key, args ...any) error { return currentCatalog().Errorf(key, args...) }
 
+// sentinelError は文言を Error() が呼ばれるたびに資源から引く番兵エラーである。
+type sentinelError struct {
+	// key は引くキーである。
+	key Key
+}
+
+// Error は error インターフェースを満たす。**引くのはいま使っている言語である。**
+func (e *sentinelError) Error() string { return T(e.key) }
+
+// Sentinel は errors.Is で見分けるための番兵エラーを作る。
+//
+// **package の変数として持つ番兵に使う。**`errors.New` に文言を直接書くと、
+// **その文字列は package の初期化の時点で固まる。**言語が決まるのは Use を呼んだあと
+// （設定を読んだあと）なので、**英語を選んでも番兵の文だけ日本語のまま出る。**
+// 実際、`continuo doctor` の `credentials` の行で起きた。
+//
+// **返す値は呼び出しごとに別物である。**番兵は package の変数に1つだけ作り、
+// 比較は errors.Is でその変数に対して行うこと。
+//
+// key: 引くキー。
+// 戻り値: Error() のたびに資源から文言を引くエラー。
+func Sentinel(key Key) error { return &sentinelError{key: key} }
+
 // FromEnv は環境変数から言語を決める（設定に何も書かれていないときの当て推量）。
 //
 // **読むのは LANG だけである**（EnvLangName の説明を参照）。

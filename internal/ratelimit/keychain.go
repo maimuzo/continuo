@@ -61,14 +61,14 @@ const keychainStderrMax = 200
 // **ただし1回で諦めてはならない。**確認のダイアログも子プロセスの起動の遅れも一時的なもので、
 // 次の巡回では読める。`Fetch` はこれを一時的な失敗として数え、
 // MaxTemporaryCredentialFailures 回続いて初めて枠の判定を諦める。
-var ErrKeychainTimeout = errors.New("Keychain の読み取りが期限内に終わりませんでした")
+var ErrKeychainTimeout = i18n.Sentinel(i18n.KeyRatelimitErrKeychainTimeout)
 
 // ErrKeychainCanceled は呼び出し側が `security` の実行を打ち切ったことを表す。
 //
 // **「読めなかった」と「打ち切った」を言い分けるためにある。**打ち切りは資格情報の問題では
 // ないので、**これを受けても枠の判定を諦めてはならない**（終了処理の途中で ctx を切ると
 // 必ずこれになる。設計 3-15）。
-var ErrKeychainCanceled = errors.New("Keychain の読み取りを打ち切りました")
+var ErrKeychainCanceled = i18n.Sentinel(i18n.KeyRatelimitErrKeychainCanceled)
 
 // KeychainProbe は Keychain から読めた資格情報の「項目の名前」だけを持つ。
 //

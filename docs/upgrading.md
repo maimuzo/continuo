@@ -79,7 +79,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **増えたキー** | `claude.tool_gate` の1つだけ（下に `mode` / `model` / `tools`） |
 | **消えたキー** | **ありません** |
 | **名前が変わったキー** | **ありません** |
-| **変わった振る舞い** | **英語の文言が入り、`en` を選ぶと画面が英語で出ます。**`language:` が `auto` で `LANG` からも決まらないときは `ja` ではなく `en` を選びます |
+| **変わった振る舞い** | **英語の文言が入り、`en` を選ぶと画面がほぼ英語で出ます**（`continuo trust` とログ、および `continuo doctor` の一部の行は日本語のままです）**。**`language:` が `auto` で `LANG` からも決まらないときは `ja` ではなく `en` を選びます |
 | **本文（プロンプト）** | **`blocked` を出す前にも push させる指示に差し替えました** |
 
 **v0.1.9 の `WORKFLOW.md` はそのまま起動します。**作り直しは要りません。
@@ -253,7 +253,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 **何が変わったか。2つあります。**
 
-1. **英語の文言が入りました。**`en` を選べば、画面は英語で出ます
+1. **英語の文言が入りました。**`en` を選べば、画面はほぼ英語で出ます（下に、まだ日本語のまま出るところを並べます）
 2. **設定でも `LANG` でも言語が決まらなかったときに選ぶ言語が、`ja` から `en` に変わりました**
 
 **言語の決め方そのものは変わっていません。**「設定が主、環境変数 `LANG` が従」のままです。
@@ -275,8 +275,18 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 language: ja
 ```
 
-**まだ日本語のまま出るところが2つあります。**`continuo trust` の出力と、ログです。
-`continuo init` と `continuo doctor` は、英語を選べば全部英語で出ます。
+**`continuo init` は、英語を選べば全部英語で出ます。**
+**`continuo doctor` も、下の表の後ろ2行の場合を除いて英語で出ます。**
+
+**まだ日本語のまま出るところが5つあります。**
+
+| どこ | いつ出るか |
+| --- | --- |
+| `continuo trust` の出力 | いつでも |
+| ログ | いつでも |
+| `continuo init` が書き出す `WORKFLOW.md` の中の説明 | いつでも。**画面ではなくファイルの中です。**設定のキーと値そのものは英語のままなので、読めなくても起動します |
+| `continuo doctor` の `config` の行 | 設定に不正な値を書いたとき。**理由の部分だけが日本語です**（例: `0より大きい整数にすること`）。**値を埋め忘れただけのときは英語で出ます** |
+| `continuo doctor` の `board` の行 | ボードを読めなかったとき。**GitHub と話す層が返すエラーの本文だけが日本語です**（例: `tracker エラー [tracker_response]: …`） |
 
 **確かめ方。**
 

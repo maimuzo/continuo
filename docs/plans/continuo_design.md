@@ -4621,20 +4621,31 @@ Claude Code の会話の記録（transcript）・continuo が渡した設定フ�
 設定を読めた時点で `useLanguageFromConfig` が設定の値で決め直す。**設定を読めなくても止めない**
 （読めないこと自体は各サブコマンドが自分の文言で報告する）。
 
-**資源にあるのは 761 件である**（`internal/i18n/messages/ja.json`。2026-08-29 に計測）。
-多いほうから doctor 154 / workspace 112 / CLI 108 / abandon 94 / trust 35 / orchestrator 32 /
-setup 31 / ダッシュボード 27。**画面に出す文言に加えて、エラーの多くも移してある。**
+**資源にあるのは 827 件である**（`internal/i18n/messages/ja.json`。2026-08-29 に計測）。
+多いほうから doctor 154 / workspace 117 / CLI 108 / abandon 94 / scaffold 67 / trust 35 /
+orchestrator 32 / setup 31 / ダッシュボード 27 / ratelimit 27。
+**画面に出す文言に加えて、エラーの多くも移してある。**
 
 **ログ（`slog` の `msg` と属性の名前）は移していない。**
 
-**移し残しのうち、英語を選んだ画面に混ざって見えるものが3つある**
-（2026-08-29 に `continuo doctor` と `continuo init` を英語で走らせて確認した分）。
+**番兵エラーは `i18n.Sentinel(key)` で作る。`errors.New` に文言を直接書かない。**
+package の変数は `init` の時点で評価されるので、**文言を埋め込むと言語を決める前に固まり、
+英語を選んでもその1行だけ日本語で出る。**`i18n.Sentinel` は `Error()` が呼ばれるたびに資源から引く。
+**比較は今までどおり `errors.Is` で package の変数に対して行う**（返る値は呼び出しごとに別物なので、
+番兵は変数に1つだけ作ること）。
 
-| どこ | 何が出るか |
+**移し残しのうち、英語を選んだ画面に混ざって見えるものが2つある**
+（2026-08-29 に `continuo doctor` を英語で走らせ、落ちる分岐を作って確認した分）。
+
+| どこ | いつ出るか |
 | --- | --- |
-| [internal/config/placeholder.go:52](../../internal/config/placeholder.go#L52) | 「<キー> がプレースホルダ（<値>）のままです」。`doctor` の config の行に出る |
-| [internal/workspace/trust.go:140](../../internal/workspace/trust.go#L140) | 「<パス> は信頼済みです」。`doctor` の trust の行に出る |
-| [internal/scaffold/detect.go](../../internal/scaffold/detect.go) の `Reason` | `continuo init` が値を埋めた理由と、埋まらなかったときの案内 |
+| [internal/config/validate.go](../../internal/config/validate.go) の要件の文 | 設定に不正な値を書いたとき。`doctor` の config の行に「0より大きい整数にすること」のような理由だけが混ざる。**値を埋め忘れただけのときは英語で出る** |
+| [internal/tracker](../../internal/tracker) の `Error.Message` と `Error()` の書式 | ボードを読めなかったとき。`doctor` の board の行に「tracker エラー [tracker_response]: …」が混ざる |
+
+**`continuo init` が書き出す `WORKFLOW.md` の説明は日本語のままである**
+（[internal/scaffold/template.go](../../internal/scaffold/template.go)）。**言語ごとに雛形を分けない。**
+設定のキーと値は英語なので、説明を読めなくても起動できる。**雛形を2本持つと、
+片方だけ既定値を直す事故が必ず起きる。**
 
 **issue へ書くコメントの本文も、まだ移していない**（`internal/orchestrator` の
 `buildHandoffComment` / `buildUntrustedComment` / `unknownStateReason`。すべて Go の文字列リテラルである。
