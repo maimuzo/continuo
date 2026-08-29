@@ -1,4 +1,5 @@
 {
+  "_source_sha256": "2f1d3c9b1a6106b41f1ceebf6c33d4b36cd906e728165369313e9ff57b5ffb22",
   "abandon.board_not_listed": "issue %s はボードに載っていません",
   "abandon.deferred_reason": "  理由: %s",
   "abandon.dry_run_note": "--dry-run なので何も消していません。",

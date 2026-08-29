@@ -88,8 +88,11 @@ socket へ繋がらないのいずれかで飛びます。CI では必ず飛び�
 - **画面に出す文言を足したら、`internal/i18n/messages/ja.json` にキーを足し、
   `internal/i18n/keys.go` の定数と `allKeys` の両方に足してください。**
   どれか1つでも欠けるとテストが落ちます（実際に落としました）
-- **`internal/i18n/messages/en.json` は空です。**中途半端に訳すと1つの画面に英語と日本語が
-  混ざるので、いまは日本語で一貫させています
+- **`internal/i18n/messages/en.json` は、いまは `ja.json` の複製です**（英語の文章はまだありません）。
+  中途半端に訳すと1つの画面に英語と日本語が混ざるので、いまは日本語で一貫させています
+- **`ja.json` を直したら、`en.json` の `_source_sha256` も直してください。**
+  値は `shasum -a 256 internal/i18n/messages/ja.json` で出ます。
+  ずれたままだとテストが落ち、直し方が文面に出ます
 
 ## 触らないもの
 
@@ -134,10 +137,11 @@ curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/
 
 ## 最初の一歩に向く仕事
 
-**英語の文言**（`internal/i18n/messages/en.json`）。いまは空で、全部日本語に落ちています。
-`ja.json` を見ながらキーを足すだけで、設計を読む必要も RUCM に触る必要もありません。
+**英語の文言**（`internal/i18n/messages/en.json`）。いまは `ja.json` の複製で、画面には日本語が出ます。
+`ja.json` を見ながら値を英語に置き換えるだけで、設計を読む必要も RUCM に触る必要もありません。
 
 **足すときの約束。**`ja.json` からキーを消さないこと。`%d` や `%s` の並び順を訳文でも保つこと。
+**`_source_sha256` は消さないこと**（訳の元にした `ja.json` の版を持っています）。
 
 ## 脆弱性を見つけたら
 

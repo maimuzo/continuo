@@ -155,7 +155,7 @@ func TestT_資源に無いキーは検出できて生のキーを画面に出さ
 // 目的: 訳の無いキーが正の言語（日本語）へ落ちることを確認する（設計 3-35b）。
 //
 // **穴の空いた資源を組んで確かめる。**埋め込んだ `messages/en.json` は
-// `messages/ja.json` の複製なので、訳の無いキーが1つも無い。**それを相手にすると、
+// 宣言したキーを全部持っているので、訳の無いキーが1つも無い。**それを相手にすると、
 // 落とし先を見る検査が1度も走らないまま通ってしまう。**
 //
 // 与える情報: 宣言したキーのうち1つだけを持つ英語の資源。
@@ -234,42 +234,75 @@ func TestT_英語を選んでも引けないキーが1つも無い(t *testing.T)
 	}
 }
 
-// 目的: 英語の資源が日本語の資源の複製のままであることを確認する（設計 3-35b）。
+// recomputeCommand はハッシュを計算し直すコマンドである。**落ちたときの文面に必ず入れる。**
+// 値を手で作れないと、直しようが無い。
+const recomputeCommand = "shasum -a 256 internal/i18n/messages/ja.json"
+
+// 目的: 英語の資源が「どの時点の日本語の資源を訳したものか」を持ち、それがいまの
+// `messages/ja.json` と一致することを確認する（設計 3-35b）。
 //
 // **これが無いと、英語の資源は黙って古くなる。**`messages/ja.json` の文言を1つ直しても
 // `messages/en.json` は古いままで、**キーが英語側に在る以上、日本語へ落ちない。**
 // `LANG` を持たない環境の利用者には古い文言が出続ける。
 //
-// **本物の英語の訳を入れ始めるときは、この検査を入れ替える**（訳したキーを除く形にするか、
-// 複製をやめて差分だけを置く形にする）。**入れ替えずに訳を入れると、ここで落ちる。**
+// **本物の英語の訳を入れたあとも、この検査はそのまま生きる。**見ているのは訳文ではなく
+// 「訳の元にした日本語の版」なので、**訳を入れ替えても落ちない。**
 //
-// 与える情報: 宣言したキーと、日本語・英語それぞれの資源。
-// 成功条件: すべてのキーが英語側にもあり、文言が日本語側と一字一句同じであること。
-func TestMessages_英語の資源が日本語の資源の複製のままである(t *testing.T) {
-	source, ok := i18n.CatalogOf(i18n.SourceLang)
+// 与える情報: 埋め込んだ `messages/ja.json` のバイト列の SHA-256 と、
+// `messages/en.json` の `_source_sha256`。
+// 成功条件: 2つが一致すること。
+func TestMessages_英語の資源が訳した日本語の版を記録している(t *testing.T) {
+	target, ok := i18n.CatalogOf(i18n.LangEN)
 	if !ok {
-		t.Fatalf("正の言語 %s の資源がありません", i18n.SourceLang)
+		t.Fatalf("言語 %s の資源がありません", i18n.LangEN)
 	}
+	want := i18n.SourceSHA256()
+	if want == "" {
+		t.Fatalf("正の言語 %s の資源のハッシュを計算できていない（i18n.SourceSHA256() が空）", i18n.SourceLang)
+	}
+
+	got, ok := target.Meta(i18n.MetaKeySourceSHA256)
+	if !ok {
+		t.Fatalf(`messages/en.json に %q がありません。
+どの時点の messages/ja.json を訳したものかが分からないと、日本語を直したことに気づけません。
+messages/en.json の先頭に次の1行を足してください:
+  %q: %q,
+値は次のコマンドで出ます:
+  %s`,
+			i18n.MetaKeySourceSHA256, i18n.MetaKeySourceSHA256, want, recomputeCommand)
+	}
+	if got != want {
+		t.Fatalf(`messages/ja.json が変わりました。messages/en.json の訳を見直し、%q を %q に直してください。
+  en.json に記録されている値: %s
+  いまの ja.json の値:        %s
+値は次のコマンドで出ます:
+  %s
+**英語の訳をまだ入れていないなら、ja.json の中身を en.json へ複製し直してから値を直すこと。**
+複製し忘れると LANG=en の利用者に古い文言が出続けます（キーが en.json に在る以上、日本語へ落ちません）。`,
+			i18n.MetaKeySourceSHA256, want, got, want, recomputeCommand)
+	}
+}
+
+// 目的: `_source_sha256` が文言として扱われないことを確認する（設計 3-35b）。
+//
+// **文言として扱われると、キーの1対1の検査が落ちる**（keys.go に宣言が無いため）。
+// **画面にハッシュが出る事故も起きうる。**
+//
+// 与える情報: 英語の資源。
+// 成功条件: `_source_sha256` が Keys() に出ず、Lookup でも引けないこと。
+func TestMessages_ハッシュの記録は文言として扱われない(t *testing.T) {
 	target, ok := i18n.CatalogOf(i18n.LangEN)
 	if !ok {
 		t.Fatalf("言語 %s の資源がありません", i18n.LangEN)
 	}
 
-	for _, k := range i18n.AllKeys() {
-		want, _, ok := source.Lookup(k)
-		if !ok {
-			// 日本語側の欠落は TestKeys_宣言したキーと日本語の資源が1対1である が報告する。
-			continue
+	for _, k := range target.Keys() {
+		if strings.HasPrefix(string(k), i18n.MetaKeyPrefix) {
+			t.Errorf("文言ではないキー %q が %s の資源のキーの一覧に出ている", k, i18n.LangEN)
 		}
-		got, from, ok := target.Lookup(k)
-		if !ok || from != i18n.LangEN {
-			t.Errorf("キー %q が %s の資源に無い（複製が古い。ja.json から入れ直すこと）", k, i18n.LangEN)
-			continue
-		}
-		if got != want {
-			t.Errorf("キー %q の文言が複製と食い違う（複製が古い。ja.json から入れ直すこと）: %s %q / %s %q",
-				k, i18n.LangEN, got, i18n.SourceLang, want)
-		}
+	}
+	if _, _, ok := target.Lookup(i18n.Key(i18n.MetaKeySourceSHA256)); ok {
+		t.Errorf("文言ではないキー %q が文言として引けてしまった", i18n.MetaKeySourceSHA256)
 	}
 }
 
