@@ -69,11 +69,23 @@ case("番号が無ければ見ない", "%s %s --merge" % (GH, MERGE), False, Fal
 case("関係ないコマンドは通す", "git status", False, False)
 case("似た語を含むだけなら通す", "echo 'merge した'", False, False)
 case(
-    "オプションが挟まっても番号を拾う",
+    "ほかのリポジトリは見ない",
     "%s %s --repo octocat/hello-world 188 --merge" % (GH, MERGE),
+    False,
+    False,
+)
+case(
+    "オプションが挟まっても番号を拾う",
+    "%s %s --auto 188" % (GH, MERGE),
     False,
     True,
     "188",
+)
+case(
+    "draft へ戻すのは止めない",
+    "%s %s 188 --undo" % (GH, READY),
+    False,
+    False,
 )
 case(
     "逃がし口が置かれていれば通す",
