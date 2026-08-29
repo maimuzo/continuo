@@ -1,15 +1,15 @@
 // Package redact は、continuo が issue へ書く文面から手元の絶対パスを取り除く
-// （docs/plans/continuo_design.md 3-73）。
+// （docs/plans/continuo_design.md 3-73 / 3-73b / 3-73c）。
 //
 // **issue は公開のリポジトリにあることがある。**`/home/<利用者名>/…` をそのまま書くと、
 // 利用者名とその機械の構成が公開される。**issue のコメントは編集履歴が残るので、
 // あとから消しても取り消せない。**
 //
 // **縮めるのは、continuo を動かしている機械の home で始まるパスだけである。**
-// **綴り方は4つある。**home をそのまま書いた形、home を symlink 越しに解決した形、
-// **home の `/` を `-` に置き換えた形**、
-// **home の `/` と `.` と `_` を `-` に置き換えた形**（Claude Code の会話の記録の置き場所の名前）。
-// **4つとも縮める。**
+// **綴り方は2つの軸の掛け算である。**home をそのまま書いた形と symlink 越しに解決した形の2つに、
+// **`/` `.` `_` のそれぞれを `-` に置き換える／置き換えないの8通り**を掛ける
+// （Claude Code の会話の記録の置き場所の名前が、この置き換えを受けた綴りである）。
+// **全部縮める。**
 //
 // **home の外にあるパスはそのまま出す。**縮めようが無いうえ、伏せてしまうと
 // 引き渡しの通知の【調べるところ】が「どこを見ればよいか分からない」ものになる。
@@ -31,7 +31,7 @@ const homeMark = "~"
 // （空文字列・`/` そのもの・相対のパス）。
 //
 // **返さないと、何も縮めずに素通りしたことが誰にも伝わらない。**
-// `Paths` の呼び出し側はこれを見て警告を1行出す（設計 3-73）。
+// `Paths` の呼び出し側はこれを見て警告を1行出す（設計 3-73c）。
 var ErrUnusableHome = errors.New("home が縮める対象として使えません")
 
 // Paths は body の中の絶対パスのうち、continuo を動かしている機械の home で始まるものを
@@ -81,14 +81,14 @@ func PathsWithHome(body, home string) (string, error) {
 	}
 	for _, spelling := range spellings {
 		body = replaceBounded(body, spelling, slashBounded)
-		for _, dash := range dashSpellings(spelling) {
-			body = replaceBounded(body, dash, dashBounded)
+		for _, variant := range dashSpellings(spelling) {
+			body = replaceBounded(body, variant.Text, variant.Bounded)
 		}
 	}
 	return body, nil
 }
 
-// homeSpellings は縮める対象の home の綴りを、長いものから順に返す。
+// homeSpellings は縮める対象の home の綴りを、長いものから順に返す（設計 3-73b）。
 //
 // **2通りある。**渡された綴りそのものと、**symlink を解いた綴り**である。
 //
@@ -140,40 +140,89 @@ func normalizeHome(home string) string {
 	return home
 }
 
-// dashSpellings は home を `-` で綴り直した形を返す。
+// homeSpellingVariant は、home を綴り直した1つの形である。
+type homeSpellingVariant struct {
+	// Text は綴り直した文字列である。
+	Text string
+	// Bounded は、その形が「home そのもの」を指しているかを判定する関数である。
+	Bounded func(string, int, int) bool
+}
+
+// homeDashChars は、Claude Code が会話の記録の置き場所の名前を作るときに
+// `-` へ置き換えうる文字である（設計 3-73b）。
+//
+// **`/` が置き換わることは確かである。**置き場所の名前は cwd を1つのディレクトリ名に
+// 畳んだものなので、`/` が残ることはありえない。
+//
+// **`.` が置き換わることも確かめてある。**`~/.foo` を cwd にしたときの置き場所の名前が
+// `-Users-<利用者名>--foo` になっていることを、`~/.claude/projects/` の実物で確認した
+// （2026-08-30）。**先頭の `.` が `-` になり、`/` の分と合わせて `-` が2つ並ぶ。**
+//
+// **`_` が置き換わることは確かめられていない。**手元の `~/.claude/projects/` には
+// `_` を含む cwd から作られた名前が1つも残っておらず、
+// **Claude Code の公式文書にも綴り直しの規則が書かれていない。**
+// それでも候補に入れるのは、**外れたときに失われるものが左右で釣り合わないから**である。
+// 置き換わらないのに縮めれば案内が少し読みにくくなるだけだが、
+// 置き換わるのに縮めなければ利用者名が公開の issue へ出る。
+var homeDashChars = []string{"/", ".", "_"}
+
+// dashSpellings は home を綴り直した形を全部返す（設計 3-73b）。
 //
 // **Claude Code の会話の記録の置き場所が、この綴りを名前に持つ。**
 // 置き場所は `~/.claude/projects/<cwd を綴り直したもの>/<セッション UUID>.jsonl` であり、
 // **cwd が home の下にある限り、その名前の中に利用者名が丸ごと入る。**
 //
-// **Claude Code は `/` だけでなく `.` と `_` も `-` に変える。**
-// `/Users/first.last` は会社で使う Mac の既定の形であり、`/` だけを見ていると
-// **`-Users-first-last-…` が1文字も縮まらないまま公開される。**
-//
 //	/Users/john.doe/.claude/projects/-Users-john-doe-worktrees-issue-1/….jsonl
 //	→ ~/.claude/projects/~-worktrees-issue-1/….jsonl
 //
-// **2通り返す。**`/` だけを置き換えた形と、`/` と `.` と `_` を置き換えた形である。
-// home に `.` も `_` も無ければ両者は同じ文字列になるので、そのときは1つだけ返す。
-// **両方要る理由。**綴り直す規則を持っているのは Claude Code であり、こちらは版を選べない。
-// 片方だけに賭けると、外れた版で利用者名が公開される。
-// **多く縮める側に外れても、失われるのは案内の読みやすさだけである。**
+// **`homeDashChars` の各文字について「置き換える／置き換えない」を全部作る。**
+// 2つだけ（全部置き換えた形と `/` だけ置き換えた形）では足りない。
+// **`/Users/ann_b.c` のように `.` と `_` が混ざる home では、どちらにも当たらない。**
+// `.` だけが置き換わる版なら `-Users-ann_b-c`、`_` だけなら `-Users-ann-b.c` であり、
+// **どちらも2つの形の外にある。**綴り直す規則を持っているのは Claude Code であって
+// こちらは版を選べないので、**組み合わせを全部当てる。**
 //
-// **home の区切りが1つしか無ければ縮めない。**`/alice` のような home では
+// **`/` を置き換えない形も作る。**`/Users/ann-b-c` のような、パスの形のまま
+// `.` や `_` だけが `-` になった綴りである。**Claude Code の置き場所の名前としては現れないが、
+// 作っておく費用は文字列1本分であり、外したときの費用は利用者名の公開である。**
+//
+// **縮めすぎる側に外れても、失われるのは案内の読みやすさだけである。**
+// `/Users/ann-b-c` が実在する別の利用者を指していた場合、その行は `~` に化けるが、
+// **公開される情報が増えることはない。**
+//
+// **home の区切りが1つしか無ければ何も返さない。**`/alice` のような home では
 // `-alice` が別の言葉に当たりやすく、縮めすぎて文面が読めなくなる。
 //
 // home: 整えた home の絶対パス。
-// 戻り値: `-` で綴り直した形の並び。縮める対象にしないなら長さ0。
-func dashSpellings(home string) []string {
+// 戻り値: 綴り直した形の並び。縮める対象にしないなら長さ0。
+func dashSpellings(home string) []homeSpellingVariant {
 	if strings.Count(home, "/") < 2 {
 		return nil
 	}
-	slashOnly := strings.ReplaceAll(home, "/", "-")
-	full := strings.NewReplacer("/", "-", ".", "-", "_", "-").Replace(home)
-	if full == slashOnly {
-		return []string{slashOnly}
+	// **home そのものは入れない。**呼び出し側が slashBounded で先に当てている。
+	seen := map[string]bool{home: true}
+	out := make([]homeSpellingVariant, 0, 1<<len(homeDashChars))
+	for mask := 1; mask < 1<<len(homeDashChars); mask++ {
+		pairs := make([]string, 0, 2*len(homeDashChars))
+		for i, c := range homeDashChars {
+			if mask&(1<<i) != 0 {
+				pairs = append(pairs, c, "-")
+			}
+		}
+		text := strings.NewReplacer(pairs...).Replace(home)
+		if seen[text] {
+			continue
+		}
+		seen[text] = true
+		// **`/` が残っている形は、まだパスの形をしている。**境界の見方も
+		// パスのものを使う（`-` は名前の続きとして扱う）。
+		bounded := dashBounded
+		if strings.Contains(text, "/") {
+			bounded = slashBounded
+		}
+		out = append(out, homeSpellingVariant{Text: text, Bounded: bounded})
 	}
-	return []string{slashOnly, full}
+	return out
 }
 
 // replaceBounded は body の中の needle を、境界の検査を通ったものだけ `~` に置き換える。

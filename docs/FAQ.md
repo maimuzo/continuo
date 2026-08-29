@@ -1135,7 +1135,7 @@ grep -c '^## 書いた人によって扱いを変えること' ~/continuo-work/W
 grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 ```
 
-**上から `1` `1` `4` なら、どちらも当たっています。**
+**上から `1` `1` `4` なら、3つとも当たっています。**
 そうでなければ [upgrading.md](upgrading.md) の「v0.1.9 から v0.1.10 へ」を見てください。
 **既に `blocked` で止まっている issue があるなら、**「片付けたいとき」の
 **`Blocked` になった issue の worktree に、push していない作業が残っている** も見てください。

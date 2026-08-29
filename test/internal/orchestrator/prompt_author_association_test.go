@@ -243,9 +243,16 @@ const jsonCommentsCommandCount = 2
 // 全部止めるかのどちらかになる。**どちらも守りが機能していない状態である。**
 //
 // 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// **4本それぞれで、キーの名前が1つ以上見つかることを求める。**
+// **名前ごと消えた場合を見逃さないためである。**`--jq \'.author_association\'` のように
+// キーを付けずに値だけを出す形へ変えると、**探す名前が1つも無くなるので
+// 「どれも author_association である」は素通りしてしまう。**
+// そのとき、エージェントが読むのは名前の無い裸の値であり、
+// **本文が指示している author_association という名前は、出力のどこにも現れない。**
+//
 // 成功条件: `--jq` の出力のキーがどれも author_association であること。
 // **`gh api` でその値を取る行が4本あること**（issue の本文 / PR の説明 /
-// PR のレビューコメント / PR のレビュー）。
+// PR のレビューコメント / PR のレビュー）。**その4本それぞれにキーの名前があること。**
 func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
 	got := renderedPrompt(t)
 
@@ -255,7 +262,14 @@ func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
 			continue
 		}
 		found++
-		for _, m := range jqOutputKeyPattern.FindAllStringSubmatch(line, -1) {
+		keys := jqOutputKeyPattern.FindAllStringSubmatch(line, -1)
+		if len(keys) == 0 {
+			t.Errorf("本文の %d 行目の --jq が、投稿者の立場に名前を付けずに出している。"+
+				"本文は author_association を探せと指示しているので、エージェントは見つけられない:\n  %s",
+				i+1, line)
+			continue
+		}
+		for _, m := range keys {
 			if m[1] == "author_association" {
 				continue
 			}

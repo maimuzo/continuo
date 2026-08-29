@@ -272,8 +272,13 @@ func TestPathsWithHome_綴り直したhomeも縮める(t *testing.T) {
 // **`-Users-john-doe-` の部分がそのまま公開される。**
 // **`/Users/first.last` は、会社で使う Mac の既定の形である。**
 //
-// 与える情報: 利用者名に `.` を持つ home と `_` を持つ home、
-// および Claude Code が実際に作る置き場所の名前。
+// **`.` と `_` が混ざる利用者名では、置き換えの組み合わせが4通りある。**
+// `/Users/ann_b.c` は `-Users-ann-b-c` にも `-Users-ann_b.c` にも
+// `-Users-ann_b-c` にも `-Users-ann-b.c` にもなりうる。
+// **綴り直す規則を持っているのは Claude Code であり、こちらは版を選べない。**
+//
+// 与える情報: 利用者名に `.` を持つ home、`_` を持つ home、その両方を持つ home、
+// および Claude Code が作りうる置き場所の名前の綴り。
 // 成功条件: 利用者名が1文字も残らないこと。
 func TestPathsWithHome_利用者名にドットや下線があっても綴り直した形を縮める(t *testing.T) {
 	cases := []struct {
@@ -303,6 +308,41 @@ func TestPathsWithHome_利用者名にドットや下線があっても綴り直
 			in:      "`-Users-john.doe-worktrees-issue-1`",
 			want:    "`~-worktrees-issue-1`",
 			leaking: "john",
+		},
+		{
+			name:    "ドットと下線が混ざり、両方が置き換わった形",
+			home:    "/Users/ann_b.c",
+			in:      "`-Users-ann-b-c-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "ann",
+		},
+		{
+			name:    "ドットと下線が混ざり、どちらも置き換わらなかった形",
+			home:    "/Users/ann_b.c",
+			in:      "`-Users-ann_b.c-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "ann",
+		},
+		{
+			name:    "ドットと下線が混ざり、ドットだけが置き換わった形",
+			home:    "/Users/ann_b.c",
+			in:      "`-Users-ann_b-c-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "ann",
+		},
+		{
+			name:    "ドットと下線が混ざり、下線だけが置き換わった形",
+			home:    "/Users/ann_b.c",
+			in:      "`-Users-ann-b.c-worktrees-issue-1`",
+			want:    "`~-worktrees-issue-1`",
+			leaking: "ann",
+		},
+		{
+			name:    "スラッシュを残したまま下線だけが置き換わった形",
+			home:    "/Users/ann_b.c",
+			in:      "- worktree: `/Users/ann-b.c/worktrees/issue-1`",
+			want:    "- worktree: `~/worktrees/issue-1`",
+			leaking: "ann",
 		},
 	}
 
