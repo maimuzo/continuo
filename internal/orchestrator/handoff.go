@@ -262,7 +262,8 @@ func (o *Orchestrator) releaseExpiredAssignee(
 // viewer: この機械が使っている gh の持ち主。
 // bid: この機械が書く入札（evaluateBid が組み立てたもの）。
 // comments: issue に付いているコメントの全件。
-// 戻り値: 勝って担当者になれたか（勝てたときは acquired も真になる）。
+// 戻り値: 着手してよいか。**hold を書けなかったときは、勝っていても着手しない**
+// （書いた担当者を消し戻すので acquired も立てない。設計 3-77g）。
 func (o *Orchestrator) bidForIssue(
 	ctx context.Context,
 	issue tracker.Issue,
@@ -323,10 +324,24 @@ func (o *Orchestrator) bidForIssue(
 		At:       o.now(),
 	})
 	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
-		// **担当者は既に書けている。**hold を書けなかったことで着手を止めない。
-		// **次の巡回で書き直せる**（担当者が自分なので、他の機械は触らない）。
-		o.logger.Warn("hold のコメントを書けませんでした（担当者は書けています）",
+		// **hold を書けないまま着手させてはならない**（設計 3-77g）。
+		//
+		// **「次の巡回で書き直せる」は成り立たない。**hold を書く箇所はここ1箇所だけであり、
+		// この issue は既に担当者が付いている（claim 済み）ので、次の巡回では
+		// `dispatchCandidates` 冒頭の `lookupRunByID` で弾かれ、`handoffGate` はもう呼ばれない。
+		//
+		// **「他の機械は触らない」も成り立たない。**担当者はあるが hold が無い状態は、
+		// assess.go の `assessSelfAssigned` の `!hasHold` にそのまま落ちる。あそこは
+		// 「人間が付けた担当」として**待たずに着手へ進む**行であり、同じ GitHub アカウントを
+		// 使う別の機械も同じ行を読む。**アカウントだけで比較していた頃と同じ穴が、
+		// この経路からもう一度開く**（3-77b がまさにそれを塞ぐために hold を持ち込んだ）。
+		//
+		// **だから着手しない。**`undoHandoffAcquire` で書いた担当者を消し戻し、
+		// 誰も担当していない状態から次の巡回で入札をやり直す。
+		o.logger.Warn("hold のコメントを書けないので、着手を見送って担当者を消し戻します",
 			"identifier", issue.Identifier, "error", err)
+		o.undoHandoffAcquire(ctx, issue)
+		return handoffDecision{}
 	}
 	return handoffDecision{proceed: true, acquired: true}
 }
@@ -340,6 +355,13 @@ func (o *Orchestrator) bidForIssue(
 //
 // **released のコメントを書く。**担当者を外したことを、ほかの機械と人間の両方が読めるようにする。
 // **入札の回もそこで区切られる**（設計 3-77e）。
+//
+// **`RemoveAssignees` 自体が失敗したときは、担当者を残したまま何もせず戻る。**released は書かない
+// （担当を外せていないのに外したと書くと嘘になる）。**そのときの扱いは設計 3-77g に書いてある。**
+// 要点だけ言うと、担当者はあるが hold は無い状態のまま残るので、次にこの issue を見る機械
+// （同じ GitHub アカウントを使う機械）は「hold の無い自分の担当」として、
+// 18時間を待たずに着手を試みる。**新しい穴ではない。**3-77b がもともと
+// 「hold の無い自分の担当は待たずに進む」と決めている行へ、そのまま落ちるだけである。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
@@ -355,7 +377,11 @@ func (o *Orchestrator) undoHandoffAcquire(ctx context.Context, issue tracker.Iss
 		return
 	}
 	if _, err := o.tracker.RemoveAssignees(ctx, nodeID, []string{viewer.ID}); err != nil {
-		o.logger.Warn("着手を取りやめましたが、書いた担当者を消し戻せません（次の巡回で入札し直します）",
+		// **担当者が残る。**hold も released も無いので、次にこの issue を見る機械は
+		// 「hold の無い自分の担当」として待たずに着手を試みる（設計 3-77g / 3-77b）。
+		// **「次の巡回で入札し直す」わけではない。**担当者が消えていない以上、
+		// 入札からはやり直されない。
+		o.logger.Warn("着手を取りやめましたが、書いた担当者を消し戻せません（担当者が残ります）",
 			"identifier", issue.Identifier, "error", err)
 		return
 	}

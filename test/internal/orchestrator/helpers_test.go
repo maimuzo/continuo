@@ -618,6 +618,13 @@ type fakeTracker struct {
 	//
 	// **issue へ書けない状況の再現に使う**（片付けを見送った通知・引き渡しの通知）。
 	postErr error
+	// postErrOnMarker と postErrOnMarkerErr は、本文がその印で始まるコメントだけ
+	// PostComment を失敗させる。
+	//
+	// **`postErr` は全件を止めてしまう。**hold だけ書けない状況（設計 3-77g）を作るには、
+	// 先に書く入札のコメントは成功させたまま、hold のコメントだけを失敗させる必要がある。
+	postErrOnMarker    string
+	postErrOnMarkerErr error
 	// updateGate は UpdateStatus を待たせる関門である（nil なら待たせない。HoldUpdate が仕掛ける）。
 	updateGate chan struct{}
 	// updateEntered は UpdateStatus が関門に着いたことをテストへ知らせるチャネルである。
@@ -776,6 +783,18 @@ func (ft *fakeTracker) SetPostError(err error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.postErr = err
+}
+
+// SetPostErrorForMarker は、本文がその印で始まるコメントだけ PostComment を失敗させる
+// （設計 3-77g。hold だけ書けない状況の再現に使う）。
+//
+// marker: 本文の先頭に付く印（例: `config.HandoffHoldMarker`）。
+// err: 返すエラー。
+func (ft *fakeTracker) SetPostErrorForMarker(marker string, err error) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.postErrOnMarker = marker
+	ft.postErrOnMarkerErr = err
 }
 
 // HoldUpdate は**次の1回の `UpdateStatus` を、返り値の関数を呼ぶまで返さないようにする。**
@@ -1288,6 +1307,9 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("PostComment")
+	if ft.postErrOnMarker != "" && strings.HasPrefix(body, ft.postErrOnMarker) {
+		return nil, ft.postErrOnMarkerErr
+	}
 	if ft.postErr != nil {
 		return nil, ft.postErr
 	}

@@ -10,6 +10,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -215,5 +216,56 @@ func TestHandoff_枠が読めなくなったら入札を止める(t *testing.T) 
 
 	if got := len(fx.Tracker.MarkedHandoffCommentsOf(issueNode(189), config.HandoffBidMarker)); got != 0 {
 		t.Errorf("枠を読めなくなったのに古い写しで入札している: %d 件", got)
+	}
+}
+
+// 目的: 入札に勝って担当者を書けても、hold のコメントを書けなかったら着手せず、
+// 書いた担当者を消し戻すことを確認する（設計 3-77g）。
+//
+// **hold を書けないまま着手を許すと、担当者はあるが hold は無い状態が issue に残る。**
+// **その状態は assess.go の「自分のアカウント1人＋hold が1件も無い」に落ち、
+// 同じ GitHub アカウントの別の機械も「待たずに着手してよい」と読む。**
+// **アカウントだけで比較していた頃と同じ穴が、この経路からもう一度開いてしまう。**
+//
+// 与える情報: 担当者のいない `Ready` の issue 1件。hold のコメント（`continuo:hold` で
+// 始まるコメント）だけ投稿が失敗するようにした偽のトラッカー。
+// 成功条件: 着手しないこと。入札のコメントは1件書かれるが hold は1件も書かれないこと。
+// **担当者が消え戻り、released のコメントが1件書かれる**こと。
+func TestHandoff_holdを書けなかったら担当者を消し戻して着手しない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	holdPrompt(fx)
+	fx.AllowLog("hold のコメントを書けないので、着手を見送って担当者を消し戻します")
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.Tracker.SetPostErrorForMarker(config.HandoffHoldMarker,
+		errors.New("hold のコメントの投稿に失敗しました（テスト用）"))
+
+	fx.Orc.Tick(context.Background())
+
+	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
+		t.Fatalf("hold を書けなかったのに着手した: 実行中 %d 件", got)
+	}
+
+	node := issueNode(188)
+	if got := len(fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffBidMarker)); got != 1 {
+		t.Fatalf("入札のコメントが1件ではない: %d 件", got)
+	}
+	if got := len(fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffHoldMarker)); got != 0 {
+		t.Errorf("投稿が失敗したはずの hold が書かれている: %d 件", got)
+	}
+
+	issue, ok := fx.Tracker.IssueByID("PVTI_item188")
+	if !ok {
+		t.Fatal("issue がボードから消えた")
+	}
+	if len(issue.Assignees) != 0 {
+		t.Errorf("hold を書けなかったのに担当者が残っている（18時間塞がる）: %+v", issue.Assignees)
+	}
+
+	released := fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffReleasedMarker)
+	if len(released) != 1 {
+		t.Fatalf("released のコメントが1件ではない: %d 件", len(released))
+	}
+	if !strings.Contains(released[0].Body, `"from":"`+testHostName+`"`) {
+		t.Errorf("released に消し戻した機械の名前が入っていない:\n%s", released[0].Body)
 	}
 }
