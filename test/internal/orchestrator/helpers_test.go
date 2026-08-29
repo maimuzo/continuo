@@ -934,6 +934,26 @@ func (ft *fakeTracker) AddComment(nodeID, body string, isAgent bool, createdAt t
 	})
 }
 
+// AddSpoofedComment は「印は付いているが、投稿者が gh の持ち主ではない」コメントを足す
+// （設計 3-65）。
+//
+// **本物の FetchComments が第三者の印付きコメントに対して返す形をそのまま作る。**
+// すなわち IsAgent は偽のまま、MarkedByOther だけが立つ。
+//
+// nodeID: 下敷きの GitHub issue のノード ID。
+// body: 本文（印で始まるもの）。
+// author: 投稿者のログイン名（持ち主ではない誰か）。
+// createdAt: 作成時刻。
+func (ft *fakeTracker) AddSpoofedComment(nodeID, body, author string, createdAt time.Time) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.comments[nodeID] = append(ft.comments[nodeID], tracker.Comment{
+		ID: fmt.Sprintf("C_%d", len(ft.comments[nodeID])+1), Body: body,
+		Author: author, URL: "https://example.test/comment/spoofed",
+		MarkedByOther: true, CreatedAt: createdAt,
+	})
+}
+
 // CommentsOf は issue に付いているコメントを返す。
 func (ft *fakeTracker) CommentsOf(nodeID string) []tracker.Comment {
 	ft.mu.Lock()

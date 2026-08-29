@@ -1005,6 +1005,8 @@ func (a *Adapter) UpdateStatus(
 // **selfLogin が分かっているときは、投稿者がその持ち主であるものだけを印として扱う。**
 // 外部の第三者が self_marker で始まるコメントを書いても、それは除外されずに残り、
 // エージェントのコメント（IsAgent）としても数えられない。
+// **そのコメントには `MarkedByOther` を立てて返す。**呼び出し側が
+// 「印はあるが投稿者が違う」を名指しでログに出せるようにするためである。
 //
 // **取得を止める経路は持たない。**取得しないと「エージェントがコメントを書いていない」と
 // 判定され、成功した run も含めて全件が failure_state へ落ちる。
@@ -1081,6 +1083,8 @@ func (a *Adapter) FetchComments(
 		// **印は投稿者と併せて見る**（設計 3-65）。第三者が同じ印を書いても、
 		// continuo の側が書いたものとしては扱わない。
 		writtenBySelf := comment.WrittenBy(selfLogin)
+		marked := (markers.SelfMarker != "" && strings.HasPrefix(trimmed, markers.SelfMarker)) ||
+			(markers.Marker != "" && strings.HasPrefix(trimmed, markers.Marker))
 		if writtenBySelf && markers.SelfMarker != "" && strings.HasPrefix(trimmed, markers.SelfMarker) {
 			// continuo 自身が代筆したコメント。次の turn の入力からは外す。
 			continue
@@ -1088,6 +1092,9 @@ func (a *Adapter) FetchComments(
 		if writtenBySelf && markers.Marker != "" && strings.HasPrefix(trimmed, markers.Marker) {
 			comment.IsAgent = true
 		}
+		// **「印はあるが投稿者が違う」を、落としたことが分かる形で残す**（設計 3-65）。
+		// 黙って印を無視すると、人間には「コメントが無い」としか見えない。
+		comment.MarkedByOther = marked && !writtenBySelf
 		result = append(result, comment)
 	}
 	return result, nil

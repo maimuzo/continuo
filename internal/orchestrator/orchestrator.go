@@ -176,6 +176,16 @@ type GHAuthCheckFunc func(ctx context.Context) error
 // **取れなくても起動は止めない**ので、長く待つ意味が無い。
 const ghLoginTimeout = 10 * time.Second
 
+// ghLoginRetryInterval は、持ち主を取れなかったあと次に取り直すまでの間隔である（設計 3-65）。
+//
+// **取れるまで取り直す。**1回で諦めると、`gh api` に一度届かなかっただけで、
+// **プロセスが生きている間ずっと印だけの判定に戻る。**常駐して何日も経つと、
+// そのことに気づく手掛かりが起動直後の1行しか残らない。
+//
+// **毎巡回では取り直さない**（既定の巡回は30秒に1回）。取り直しは外部プロセスの起動であり、
+// 期限（ghLoginTimeout）ぶん巡回そのものを遅らせる。
+const ghLoginRetryInterval = 5 * time.Minute
+
 // Options は Orchestrator を組み立てるための入力である。
 type Options struct {
 	// Config は WORKFLOW.md の front matter である。
@@ -236,9 +246,13 @@ type Orchestrator struct {
 	ghAuthCheck    GHAuthCheckFunc
 	// ghLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
 	ghLogin tracker.GHLoginFunc
-	// ghLoginOnce は持ち主の取得を1回だけに絞る。**取れなかったときのログも1回だけになる。**
-	ghLoginOnce sync.Once
-	// ghLoginMu は selfLogin を守る。
+	// ghLoginAttemptMu は取得そのものを1本に絞る。**外部プロセスを同時に何本も起こさない。**
+	//
+	// **状態を守る `ghLoginMu` と分ける。**取得は外部プロセスの実行なので
+	// 最大 ghLoginTimeout だけ掛かる。同じ錠で状態も守ると、その間ずっと
+	// 「取れているか」を読む側（`ghLoginName`）まで待たされる。
+	ghLoginAttemptMu sync.Mutex
+	// ghLoginMu は selfLogin と取得の失敗の記録を守る。
 	//
 	// **`mu`（runs / sessions を守るもの）と分ける。**持ち主は turn ループの goroutine から
 	// 読むので、`mu` を持ったまま入る経路と重なると相互待ちになりうる。
@@ -246,6 +260,14 @@ type Orchestrator struct {
 	// selfLogin は取れた持ち主のログイン名である。**空文字は「取れていない」を表し、
 	// そのときは印だけで判定する形に落ちる**（設計 3-65）。
 	selfLogin string
+	// ghLoginFailures は持ち主を取れなかった回数である（取れた時点で数えるのをやめる）。
+	// **失敗が続いていることをログに書くために持つ。**
+	ghLoginFailures int
+	// ghLoginFirstFailedAt は最初に取れなかった時刻である。ゼロ値なら1回も失敗していない。
+	ghLoginFirstFailedAt time.Time
+	// ghLoginLastTriedAt は最後に取得を試みた時刻である。
+	// **ghLoginRetryInterval を空けてから取り直すために持つ。**
+	ghLoginLastTriedAt time.Time
 	// knownStateNames は continuo が意味を知っている Status 名の一覧である（設計 3-50）。
 	//
 	// **設定から作る値であり、走っている間は変わらない。**巡回のたびに作り直すと、
@@ -522,42 +544,89 @@ func (o *Orchestrator) verifyPeriodically(ctx context.Context, tick int) bool {
 	return true
 }
 
-// ensureGHLogin は「continuo が使う gh の持ち主」を、走っている間に1回だけ取る（設計 3-65）。
+// ensureGHLogin は「continuo が使う gh の持ち主」を、取れるまで取り直す（設計 3-65）。
 //
 // **これが分からないと、印（`tracker.comments.marker` / `self_marker`）だけで
 // 「continuo の側が書いたコメント」を判定することになる。**印は本文の先頭に置く
 // ただの文字列なので、issue にコメントできる人なら誰でも同じものを書ける。
 //
 // **取れなくても起動も巡回も止めない。**止めると、`gh api` に一時的に届かないだけで
-// continuo が動かなくなる。**取れなかったときは印だけの判定へ落ち、その旨を1回だけ残す。**
-// **取り直しもしない。**巡回のたびに外部プロセスを起こさない（`GHAuthCheckFunc` と同じ方針）。
+// continuo が動かなくなる。**取れないあいだは印だけの判定へ落ちる。**
+//
+// **1回で諦めない。**諦めると、`gh api` に一度届かなかっただけで、プロセスが生きている
+// あいだずっと印だけの判定に戻る。**取れるまで ghLoginRetryInterval ごとに取り直し、
+// 取り直しに失敗するたびに、連続して失敗している回数を添えて WARN を残す。**
+// 常駐して何日経っても、いま印だけで判定していることがログから読める。
+//
+// **取れたら、そのあとは取り直さない。**持ち主が変わるのは `gh auth switch` を人間が
+// 叩いたときだけで、その操作は continuo を止めずに行うものではない。
 //
 // ctx: 呼び出しに適用するコンテキスト。**既に終わっているなら何もしない**
-// （止められている最中に外部プロセスを起こさない。**1回きりの取得はまだ使っていない**ので、
-// 次の巡回でやり直せる）。
+// （止められている最中に外部プロセスを起こさない。次の起動でやり直せる）。
 func (o *Orchestrator) ensureGHLogin(ctx context.Context) {
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || o.ghLogin == nil || !o.ghLoginDue() {
 		return
 	}
-	o.ghLoginOnce.Do(func() {
-		if o.ghLogin == nil {
+	// **取得そのものは1本に絞る。**巡回とコメントの確認は別の goroutine から来る。
+	o.ghLoginAttemptMu.Lock()
+	defer o.ghLoginAttemptMu.Unlock()
+	// **待っているあいだに、別の呼び出しが取り終えていることがある。**
+	if !o.ghLoginDue() {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, ghLoginTimeout)
+	defer cancel()
+	login, err := o.ghLogin(runCtx)
+	if err != nil {
+		if ctx.Err() != nil {
+			// **止められただけである。**失敗として数えない（数えると、`Ctrl+C` のたびに
+			// 「取れません」が1行増え、本当に取れないときと見分けがつかなくなる）。
+			o.logger.Debug("止められたので、gh の持ち主の取得は次の起動に回します")
 			return
 		}
-		runCtx, cancel := context.WithTimeout(ctx, ghLoginTimeout)
-		defer cancel()
-		login, err := o.ghLogin(runCtx)
-		if err != nil {
-			o.logger.Warn(
-				"gh の持ち主を取れませんでした（コメントの印だけで判定します。"+
-					"第三者が同じ印で書いたコメントをエージェントのものと読み違えることがあります）",
-				"error", err)
-			return
-		}
-		o.ghLoginMu.Lock()
-		o.selfLogin = login
-		o.ghLoginMu.Unlock()
-		o.logger.Info("gh の持ち主を確認しました（コメントの印と併せて見ます）", "login", login)
-	})
+		failures, since := o.noteGHLoginFailure()
+		o.logger.Warn(
+			"gh の持ち主を取れません（コメントの印だけで判定します。"+
+				"第三者が同じ印で書いたコメントをエージェントのものと読み違えることがあります）",
+			"連続して失敗した回数", failures, "最初に失敗した時刻", since, "error", err)
+		return
+	}
+	o.ghLoginMu.Lock()
+	o.selfLogin = login
+	o.ghLoginMu.Unlock()
+	o.logger.Info("gh の持ち主を確認しました（コメントの印と併せて見ます）", "login", login)
+}
+
+// ghLoginDue は、いま持ち主を取りに行くべきかを返す（設計 3-65）。
+//
+// 戻り値: まだ取れておらず、かつ前に試してから ghLoginRetryInterval が過ぎていれば true。
+// **1回目（まだ1度も試していない）は必ず true になる。**
+func (o *Orchestrator) ghLoginDue() bool {
+	o.ghLoginMu.Lock()
+	defer o.ghLoginMu.Unlock()
+	if o.selfLogin != "" {
+		return false
+	}
+	if o.ghLoginLastTriedAt.IsZero() {
+		return true
+	}
+	return !o.now().Before(o.ghLoginLastTriedAt.Add(ghLoginRetryInterval))
+}
+
+// noteGHLoginFailure は持ち主を取れなかったことを記録する（設計 3-65）。
+//
+// 戻り値の1つ目: 連続して失敗した回数（今回を含む）。
+// 戻り値の2つ目: 最初に失敗した時刻。
+func (o *Orchestrator) noteGHLoginFailure() (int, time.Time) {
+	o.ghLoginMu.Lock()
+	defer o.ghLoginMu.Unlock()
+	now := o.now()
+	o.ghLoginLastTriedAt = now
+	o.ghLoginFailures++
+	if o.ghLoginFirstFailedAt.IsZero() {
+		o.ghLoginFirstFailedAt = now
+	}
+	return o.ghLoginFailures, o.ghLoginFirstFailedAt
 }
 
 // ghLoginName は取れている「gh の持ち主」を返す（設計 3-65）。

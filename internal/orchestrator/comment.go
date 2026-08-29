@@ -251,6 +251,10 @@ func (o *Orchestrator) recordRepoWorkspace(
 // （その照合は `FetchComments` が行い、結果が `Comment.IsAgent` である）。
 // **持ち主が取れていなければ、いままでどおり印だけで判定する**（`ghLoginName` が空文字）。
 //
+// **「印はあるが投稿者が違う」コメントを見つけたら、WARN で名指しする**（設計 3-65）。
+// **これがいちばん切り分けの難しい状態である。**issue の画面には印の付いたコメントが
+// 見えているのに、continuo は「書かれていない」と判定してセッションを復元しにいく。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // nodeID: 下敷きの GitHub issue のノード ID。
 // snap: 対象の run の写し。
@@ -271,15 +275,29 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 			"identifier", snap.Identifier, "error", err)
 		return false
 	}
+	found := false
 	for _, c := range comments {
-		if !c.IsAgent {
+		if !c.CreatedAt.After(snap.StartedAt) {
+			// 前の run のコメントである（worktree を再利用すると残っている）。
 			continue
 		}
-		if c.CreatedAt.After(snap.StartedAt) {
-			return true
+		// **「印はあるが投稿者が違う」は、名指しでログに出す**（設計 3-65）。
+		// **これがいちばん切り分けの難しい状態である。**issue の画面には印の付いた
+		// コメントが見えているのに、continuo は「書かれていない」と判定する。
+		// 出さないと、人間に見えるのは「この run のコメントが無いので…」の1行だけになり、
+		// 印を騙られたのか本当に書かれていないのかが分からない。
+		if c.MarkedByOther {
+			o.logger.Warn("コメントに印は付いていますが、投稿者が gh の持ち主と違います"+
+				"（エージェントが書いたものとして数えません）",
+				"identifier", snap.Identifier, "投稿者", c.Author,
+				"gh の持ち主", o.ghLoginName(), "url", c.URL)
+			continue
+		}
+		if c.IsAgent {
+			found = true
 		}
 	}
-	return false
+	return found
 }
 
 // failCommentRecovery はコメントを書かせられなかった run を人間へ渡す（設計 3-25 の段9）。

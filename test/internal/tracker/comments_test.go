@@ -238,7 +238,8 @@ func TestFetchComments_想定外のorderはエラーにする(t *testing.T) {
 // 書いたもの・第三者が self_marker 付きで書いたもの・持ち主の名前が大文字（OCTOCAT）の
 // marker 付きのものの4件と、持ち主 "octocat"。
 // 成功条件: 4件すべてが結果に残り（第三者の self_marker のコメントは除外されない）、
-// IsAgent=true になるのは持ち主が書いた2件だけであること。
+// IsAgent=true になるのは持ち主が書いた2件だけで、**第三者の2件には MarkedByOther が
+// 立っている**こと（呼び出し側が「印はあるが投稿者が違う」を名指しでログに出せる）。
 func TestFetchComments_投稿者が持ち主でなければ印を数えない(t *testing.T) {
 	cfg := testTrackerConfig()
 	commentsCfg := cfg.Provider.Comments
@@ -282,6 +283,59 @@ func TestFetchComments_投稿者が持ち主でなければ印を数えない(t 
 	}
 	if !agents["c4"] {
 		t.Fatalf("持ち主の名前が大文字のコメントが IsAgent=true になっていない（畳んで比べていない）")
+	}
+
+	// **落としたことが分かる形で返っている**（設計 3-65）。これが返らないと、
+	// 呼び出し側は「印はあるが投稿者が違う」を黙って捨てるしかなく、
+	// 人間には「コメントが無い」としか見えなくなる。
+	marked := map[string]bool{}
+	for _, c := range comments {
+		marked[c.ID] = c.MarkedByOther
+	}
+	for _, id := range []string{"c2", "c3"} {
+		if !marked[id] {
+			t.Fatalf("第三者が印付きで書いたコメント（%s）に MarkedByOther が立っていない", id)
+		}
+	}
+	for _, id := range []string{"c1", "c4"} {
+		if marked[id] {
+			t.Fatalf("持ち主が書いたコメント（%s）に MarkedByOther が立っている", id)
+		}
+	}
+}
+
+// 目的: 持ち主を取れなかったとき（空文字）は、投稿者を照合しないので MarkedByOther が
+// 1件も立たないことを確認する（設計 3-65）。
+//
+// **照合していないのに「投稿者が違う」と警告を出しては、人間を無駄に調べさせる。**
+//
+// 与える情報: 第三者（outsider）が marker 付きで書いたコメント1件と、空文字の持ち主。
+// 成功条件: そのコメントが IsAgent=true（印だけの判定）で、MarkedByOther は偽であること。
+func TestFetchComments_持ち主が空文字なら投稿者の食い違いを立てない(t *testing.T) {
+	cfg := testTrackerConfig()
+	markers := cfg.Comments
+	spoofed := map[string]any{"id": "c1", "url": "https://example.com/c1", "body": markers.Marker + "\n第三者が同じ印で書いた", "createdAt": "2026-08-02T00:00:00Z", "author": map[string]any{"login": "outsider"}}
+
+	fs := newFakeGraphQLServer(t, single(dataResponse(map[string]any{
+		"node": map[string]any{
+			"__typename": "Issue",
+			"comments":   map[string]any{"nodes": []map[string]any{spoofed}},
+		},
+	})))
+	a := newAdapterForFetch(t, fs)
+
+	comments, err := a.FetchComments(t.Context(), "ISSUENODE_1", cfg.Provider.Comments, markers, "")
+	if err != nil {
+		t.Fatalf("FetchComments が失敗した: %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("件数が想定と違う: got %d, want 1", len(comments))
+	}
+	if !comments[0].IsAgent {
+		t.Fatalf("持ち主を取れていないときは印だけで判定するはずが、IsAgent=false になった")
+	}
+	if comments[0].MarkedByOther {
+		t.Fatalf("投稿者を照合していないのに MarkedByOther が立っている")
 	}
 }
 
