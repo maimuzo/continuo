@@ -136,6 +136,12 @@ var expectedWarnings = map[string][]string{
 	"TestUnknownState_cleanup_on_statesで止めたらworktreeを片付けると書く": {
 		"continuo が知らない Status になったので worker を止めます",
 	},
+	"TestUnknownState_cleanup_enabledがfalseならworktreeは残ると書く": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
+	"TestUnknownState_見送る条件を切ってあれば残っていれば片付けないと書かない": {
+		"continuo が知らない Status になったので worker を止めます",
+	},
 	"TestRestore_agent_statusがblockedなら引き継がずfailure_stateへ落としてpaneを閉じる": {"権限の確認で止まっているので引き継ぎません"},
 	"TestRestore_agent_statusが知らない値ならpaneを閉じてworktreeとStatusを残す":        {"agent_status を判断できないので引き継ぎません"},
 	"TestRestore_agentの一覧を取れなくてもpaneを1つも閉じない":                           {"agent の一覧を取れません"},

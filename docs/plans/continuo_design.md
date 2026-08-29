@@ -6063,11 +6063,10 @@ tracker:
 **そして「worktree は残してあります」と書けるのは、実際に残すときだけである。**
 
 **案内を2つ並べない。**「`active_states` に足せ」と「`automated_state_rewrite` に足せ」を
-並べて出すと、**両方やった設定は起動しない**（キーは設定のどこにも名前が出てこない Status で
-なければならない）。**判定は「その名前が設定のどこに書いてあるか」で行う**（`unknownStateReason` の `switch`）。
-「書き戻しの案内を出したか」で判定すると、**3本の道を1本も塞げない**（回数の上限に達した道と
-戻せない失敗が続いた道はその案内を出さず、人間がキーの Status へ動かした道では
-`automatedStateHint` が何も返さない）。
+並べると、**両方やった設定は起動しない**（キーは設定のどこにも名前が出てこない Status に限る）。
+**判定は「その名前が設定のどこに書いてあるか」で行う**（`unknownStateReason` の `switch`）。
+「書き戻しの案内を出したか」で判定すると、**上限に達した道・戻せない失敗が続いた道・
+人間がキーの Status へ動かした道の3本を1本も塞げない。**
 
 | 名前がどこにあるか | 出す案内 |
 | --- | --- |
@@ -6081,27 +6080,27 @@ tracker:
 | 終わったとみなす（片付けてよい） | `tracker.terminal_states` に書き足す（`cleanup.on_states` はその一覧の中から選ぶ。3-9e） |
 | まだ作業を続けさせたい | **`cleanup.on_states` からその行を消してから**、`active_states` か `status_signal_map` へ書き足す |
 
-**両方に名前がある設定にだけ専用の分岐を置く**（issue #76 の残り）。**その設定はそのまま起動できる**
-（`config.Validate` はキーを `KnownStates` としか、`cleanup.on_states` を `active_states` としか照合しない）。
-**片方の案内では足りない。**対応表の行だけ消して `active_states` へ足すと `cleanup.on_states` が残って弾かれ、
+**両方に名前がある設定にも専用の分岐が要る**（issue #76 の残り）。**その設定はそのまま起動できるのに、**
+対応表の行だけ消して `active_states` へ足すと `cleanup.on_states` が残って弾かれ、
 `terminal_states` へ足すと対応表のキーの検査に落ちる。**消す先が2つあることを1つの文で書き切る。**
 
-**`cleanup.on_states` の Status では「worktree は残してあります」と書かない。**
-**continuo はその worktree と branch を片付ける**（猶予を過ぎた道は `finishRunClaimed` の
-`ShouldCleanup` が、猶予 0 の道は次の巡回の `reconcileWorktrees` が消す）。
-**残ると書いたパスを載せると、開きに行った人がそこで詰まる。**片付けることと、
-**コミットしていない変更か push していない commit があれば残ること**（3-9 の手順2 / 2b）を書き、
-**同じ判定をログの1行にも当てる**（`handleUnknownState` の WARN）。
+**片付けるかどうかは設定を4つ見てから書く**（`willCleanupState` / `cleanupGuardSentence`）。
+**「片付ける Status か」だけでは決まらない。**同じ判定をログの1行にも当てる（`handleUnknownState` の WARN）。
+
+| 見る設定 | 何が変わるか |
+| --- | --- |
+| `cleanup.enabled` が偽 | **片付けは走らない**（`Manager.Cleanup` が `Deferred` で戻る）。「残してあります」と書く |
+| 真かつ `cleanup.on_states` にある | 片付ける（`ShouldCleanup`、猶予 0 の道は次の巡回の `reconcileWorktrees`）。「残りません」と書く |
+| `cleanup.require_clean_worktree` が真 | コミットしていない変更が残っていれば見送る、を添える |
+| `cleanup.require_pushed` が真 | push していない commit が残っていれば見送る、を添える |
+
+**残ると書いたパスが消えるのも、消えると書いたパスが残るのも、案内として成り立たない。**
+見送りの2つは既定が真だが**偽にできる**（`leftoverReasons` がそれぞれのフラグで囲っている）ので、条件付きで書く。
 
 **提案する戻す先も `active_states` に入っているものに限る**（`rewriteTargetSuggestion`）。
 continuo が最後に書いた値は `In Review` のこともあり、**そのまま提案すると起動しない。**
-
-| 何を提案するか | いつ |
-| --- | --- |
-| continuo が最後に書いた値 | それが `active_states` に入っているとき |
-| `tracker.running_state` | 上が外れているとき |
-| `active_states` の先頭 | それも外れているとき |
-| **提案しない**（`active_states` の案内だけを出す） | `active_states` が空のとき |
+順に、最後に書いた値 → `tracker.running_state` → `active_states` の先頭を見て、
+**`active_states` が空なら何も提案せず**、そこへ書き足す案内だけを出す。
 
 **案内が指す直し方が起動するかは、`config.Load` で機械的に固定する**
 （[test/internal/config/validate_test.go](../../test/internal/config/validate_test.go) の

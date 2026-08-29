@@ -555,9 +555,22 @@ cleanup:
 「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
 そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
 
-**その worktree は残りません。**`cleanup.on_states` の Status なので、continuo は
-**止めたあとに worktree と branch を片付けます。**止めた理由のコメントにもそう書いてあります。
-**コミットしていない変更か、push していない commit が残っていれば片付けません**（そのまま残ります）。
+**その worktree が残るかどうかは `cleanup.enabled` で決まります。**
+**止めた理由のコメントに、その設定でどうなるかが書いてあります。**
+
+| `cleanup.enabled` | 止めたあとの worktree |
+| --- | --- |
+| **`true`**（既定） | **残りません。**continuo が worktree と branch を片付けます |
+| **`false`** | **残ります。**片付けそのものを行いません |
+
+**片付ける設定でも、次のものが残っていれば片付けを見送ります。**
+どちらも既定は `true` で、`false` にすると見なくなります（見ないので、残っていても片付きます）。
+
+| 設定キー | 残っていれば片付けない |
+| --- | --- |
+| `cleanup.require_clean_worktree` | コミットしていない変更（未追跡のファイルを含む） |
+| `cleanup.require_pushed` | push していない commit |
+
 **成果を残したいなら、片付く前に Status を戻すか、`cleanup.on_states` からその行を消してください。**
 
 **`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**

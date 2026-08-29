@@ -463,3 +463,128 @@ func TestUnknownState_cleanup_on_statesで止めたらworktreeを片付けると
 		t.Errorf("片付けると書いたのに worktree が残っている: %s (err=%v)", wtPath, err)
 	}
 }
+
+// TestUnknownState_cleanup_enabledがfalseならworktreeは残ると書く は、設計 3-57b を確かめる
+// （issue #76）。
+//
+// 目的: **「片付ける Status か」だけを見て「片付けます」と書いてはならない。**
+// `cleanup.enabled` が false のとき `workspace.Manager.Cleanup` は `Deferred` を返して
+// 1バイトも消さない。それでも `cleanup.on_states` に名前があるだけで「worktree は残りません」
+// と書くと、**残っている worktree を捨てたと読ませることになる**（前の直しが作った逆向きの嘘）。
+//
+// 与える情報: `cleanup.on_states` が `Archived` だけで、**`cleanup.enabled` が false** の設定と、
+// 着手済みの issue を `Archived` へ動かす操作。猶予は 0。**そのあと巡回をもう1回回す。**
+//
+// 成功条件: コメントが「worktree は残してあります」と書き、`cleanup.enabled` が false である
+// ことに触れていること。**「残りません」と書いていないこと。**そして**実際に worktree が
+// 残っていること**（文言と実装が食い違っていないこと）。
+func TestUnknownState_cleanup_enabledがfalseならworktreeは残ると書く(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.VerifyStatesEvery = 0
+			cfg.Tracker.UnknownStateGraceMs = 0
+			cfg.Cleanup.OnStates = []string{"Archived"}
+			// ★ 片付けそのものを切ってある。名前が `cleanup.on_states` にあっても消えない。
+			cfg.Cleanup.Enabled = false
+		},
+	})
+	blockFirstPrompt(t, fx)
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	wtPath := filepath.Join(
+		fx.WorktreeRoot, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Fatalf("着手したのに worktree が無い: %v", err)
+	}
+
+	fx.Tracker.SetState(issue.ID, "Archived")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatalf("知らない Status で止めたのに issue に1文字も残っていない")
+	}
+	if strings.Contains(body, "worktree は残りません") {
+		t.Errorf("`cleanup.enabled` が false なのに「worktree は残りません」と書いている:\n%s", body)
+	}
+	for _, want := range []string{
+		"worktree は残してあります（下記）。",
+		"`cleanup.enabled` が false なので continuo は片付けを行いません",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("止めた理由のコメントに %q が無い:\n%s", want, body)
+		}
+	}
+	// **ログの1行も同じ判定でなければならない。**
+	if strings.Contains(fx.Logs.String(), "cleanup.on_states の Status なので worktree は片付けます") {
+		t.Errorf("`cleanup.enabled` が false なのに WARN が「worktree は片付けます」と言っている:\n%s",
+			fx.Logs.String())
+	}
+
+	// **文言だけでなく、実際に残ることを見る。**巡回をもう1回回しても消えない。
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Errorf("残してあると書いたのに worktree が無い: %s (err=%v)", wtPath, err)
+	}
+}
+
+// TestUnknownState_見送る条件を切ってあれば残っていれば片付けないと書かない は、
+// 設計 3-57b を確かめる（issue #76）。
+//
+// 目的: 「コミットしていない変更か、push していない commit が残っていれば片付けません」は
+// **`cleanup.require_clean_worktree` / `cleanup.require_pushed` が真のときだけの話である**
+// （`internal/workspace/cleanup.go` の `leftoverReasons` が、それぞれのフラグで囲っている）。
+// **両方を false にした設定へその一文を出すと、消えないと読める worktree が消える。**
+//
+// 与える情報: `cleanup.on_states` が `Archived` だけで、**見送る条件を2つとも false** にした
+// 設定と、着手済みの issue を `Archived` へ動かす操作。猶予は 0。
+//
+// 成功条件: コメントが「worktree は残りません」と書きつつ、**見送りの一文を出していないこと。**
+func TestUnknownState_見送る条件を切ってあれば残っていれば片付けないと書かない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.VerifyStatesEvery = 0
+			cfg.Tracker.UnknownStateGraceMs = 0
+			cfg.Cleanup.OnStates = []string{"Archived"}
+			// ★ 残りものを見ない設定。見ないので、残っていても片付ける。
+			cfg.Cleanup.RequireCleanWorktree = false
+			cfg.Cleanup.RequirePushed = false
+		},
+	})
+	blockFirstPrompt(t, fx)
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+
+	fx.Tracker.SetState(issue.ID, "Archived")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+
+	body := selfCommentBody(fx, "I_node188")
+	if body == "" {
+		t.Fatalf("知らない Status で止めたのに issue に1文字も残っていない")
+	}
+	if !strings.Contains(body, "worktree は残りません") {
+		t.Errorf("片付ける設定なのに「worktree は残りません」が無い:\n%s", body)
+	}
+	for _, unwanted := range []string{
+		"コミットしていない変更",
+		"push していない commit",
+	} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("見送る条件を切ってあるのに %q が残っていれば片付けない、と書いている:\n%s",
+				unwanted, body)
+		}
+	}
+}
