@@ -219,6 +219,30 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"エージェントが `/hooks` などで設定を上書きした。"+
 				"\n【対処】Status を着手待ちへ戻してください。次の着手で設定を書き直します。")
 			return
+		case turnStopUnreadable:
+			// **「届かなかった」と書いてはならない。**届いている。読めなかっただけである。
+			//
+			// **continuo のログを案内してはならない**（設計 3-34b の「持っていないものは
+			// 案内しない」）。continuo は hook の中身をどこにも残していない。
+			// 配送できた hook は逃がし先（pending ディレクトリ）にも残らないので、
+			// 案内すると読んだ人は存在しない行を探しにいくことになる。
+			//
+			// **「JSON が途中で切れた」も原因に挙げてはならない。**途中で切れた JSON は
+			// `decodeEvent` が弾き、hook そのものが orchestrator まで届かない
+			// （internal/hookserver/server.go の decodeEvent）。この文面が出る経路では
+			// JSON は読めている。読めなかったのは `background_tasks` の項目だけである。
+			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
+				"**Stop hook は continuo へ届きましたが、`background_tasks` の項目が入っていなかったため、"+
+				"バックグラウンド処理がまだ残っているのかどうかを判断できませんでした。**"+
+				"\n【確かめ方】**continuo は hook の中身を残していないので、届いた `Stop` を"+
+				"あとから読み返すことはできません。**下記の【調べるところ】に "+
+				"「Claude Code の会話の記録」があれば、それを開いて、"+
+				"turn がどこまで進んでいたかを見てください。"+
+				"\n【よくある原因】Claude Code の版が上がって `background_tasks` の項目が無くなった / "+
+				"`background_tasks` が null で届いた。"+
+				"\n【対処】Status を着手待ちへ戻してください。"+
+				"作業そのものは worktree に残っています（下記）。")
+			return
 		case turnSendFailed:
 			// **turn は1文字も届いていない。**Stop hook を疑わせる文面を出してはならない。
 			o.abandonRun(ctx, rs, fmt.Sprintf(
@@ -696,6 +720,14 @@ const turnWaitAgain turnOutcome = 101
 // 次の巡回で「turn を送らずに turn の終わりを待つ」ところから入り直す（設計 3-48）。
 const turnTransient turnOutcome = 102
 
+// turnStopUnreadable は「`Stop` は届いたが `background_tasks` の項目が欠けていて、
+// turn が終わったのかどうかを決められなかった」ことを表す（設計 3-2 の「判定不能」）。
+//
+// **`turnStalled` と混ぜてはならない。**混ぜると、hook は届いていたのに
+// 「Stop hook から continuo へ通知が届きませんでした」という**事実と逆の文面**が
+// issue に残り、読んだ人は届いていた hook の配線を疑って探しにいく。
+const turnStopUnreadable turnOutcome = 103
+
 // isQuotaWaiting は「この run は枠待ちである」を判定する（設計 3-27）。
 //
 // **2条件の連言である。**
@@ -745,13 +777,20 @@ func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
 
 // confirmTurnEnd は turn の終わりを確定させる（設計 3-2 の hook 側の規則）。
 //
-//	background_tasks が空でない        … まだ動いている。turn の終わりとして扱わない
+//	background_tasks が空でない        … まだ動いている。turn の終わりとして扱わない。
+//	                                    **待ち時間を仕切り直して待ち直す**
 //	background_tasks の項目が欠けている  … 判定不能。turn の終わりとみなさない
 //	background_tasks が空配列          … settle_ms のあいだ待ち、
-//	                                    `<task-notification>` が来なければ turn の終わりとする
+//	                                    `<task-notification>` も「空でない Stop」も
+//	                                    来なければ turn の終わりとする
+//
+// **空でない `Stop` を捨ててはならない。**捨てると、待ち時間が尽きた時点で
+// 「Stop hook が届かなかった」として pane を閉じる。**「まだ動いています」と
+// 名乗ってきた相手を、その2秒後に殺すことになる。**
 //
 // **`Stop` が1件も来ていなければ、settle_ms 待ってから stall として扱う**
 // （権限の確認が esc で取り消された場合など。設計 3-11）。
+// **届いたのに読めなかった場合は `turnStopUnreadable` で、届かなかった場合と書き分ける。**
 //
 // **`Stop` が来るまで何時間でも待つ。**turn の総実行時間に上限は無い（`SPEC.md` 10.6）。
 // 画面が止まったかどうかは巡回の stall 検知（checkStalls）だけが決める。
@@ -787,10 +826,29 @@ func (o *Orchestrator) confirmTurnEnd(
 				// ここで settle_ms しか待たないと、正常な turn を stall と誤判定する。
 				patience = pollWait
 			}
-			if !o.awaitHook(ctx, rs, patience, isEmptyStop) {
+			got := o.awaitStop(ctx, rs, patience)
+			if got == stopWaitRunning {
+				// **まだ動いている**（設計 3-2 / 1-7）。**この `Stop` を捨てて
+				// 待ち時間を使い切ってはならない。**捨てると settle_ms の後に
+				// 「Stop hook が届かなかった」として pane を閉じることになり、
+				// **「まだ動いています」と名乗った2秒後に殺す。**
+				//
+				// **待ち直す。**待っていれば `background_tasks` が空の `Stop` が来る
+				// （設計 1-7）。**総時間では打ち切らない。**打ち切るかどうかは
+				// 巡回の stall 検知（checkStalls）だけが決める。
+				o.logger.Info("バックグラウンド処理が残っていると名乗る Stop を受けたので、turn の終わりとせずに待ち直します",
+					"identifier", rs.issue().Identifier)
+				firstWait = false
+				continue
+			}
+			if got != stopWaitEmpty {
 				if firstWait {
-					// **ここだけが「Stop hook が届かなかった」と言ってよい場所である。**
-					// herdr の待ち受けが返ったあとで、Stop が来なかったことを実際に見た。
+					// **ここだけが「Stop の届き方」を issue に書いてよい場所である。**
+					// herdr の待ち受けが返ったあとで、実際に見たことしか書けない。
+					if got == stopWaitUnreadable {
+						// **届いてはいる。**「届かなかった」と書くと事実と逆になる。
+						return turnStopUnreadable, nil
+					}
 					return turnStalled, nil
 				}
 				// **枠待ちなら時計を止めて待ち直す**（設計 3-27）。
@@ -806,30 +864,106 @@ func (o *Orchestrator) confirmTurnEnd(
 			stopAt, _ = rs.stopSeen()
 		}
 
-		// settle_ms のあいだ `<task-notification>` が来ないことを確かめる（設計 1-3 / 3-2）。
+		// settle_ms のあいだ「turn がまだ続いている」しるしが来ないことを確かめる
+		// （設計 1-3 / 3-2）。
+		//
+		// **この窓でも「まだ動いている」と名乗る `Stop` を捨ててはならない**（設計 3-2）。
+		// `<task-notification>` だけを待つと、空の `Stop` の直後に届いた
+		// 「`background_tasks` が空でない `Stop`」が読み捨てられ、settle_ms の経過で
+		// turn の終わりとして pane を閉じる。**issue #77 が塞いだのと同じ形である。**
 		remaining := settle - o.now().Sub(stopAt)
-		if !o.awaitHook(ctx, rs, remaining, isTaskNotification) {
+		ev, got := o.awaitHook(ctx, rs, remaining, turnContinues)
+		if !got {
 			return turnEnded, nil
 		}
 		// 来た。turn は続いている。待ち直す。
+		if isRunningStop(ev) {
+			o.logger.Info("空の Stop のあとにバックグラウンド処理が残ると名乗る Stop を受けたので、turn の終わりとせずに待ち直します",
+				"identifier", rs.issue().Identifier)
+		}
 		rs.clearStopSeen()
 		firstWait = false
 	}
 }
 
+// stopWait は「`Stop` を待った結果」である（設計 3-2 の hook 側の規則）。
+//
+// **3つの `Stop` を1つに潰してはならない。**潰すと、まだ動いていると名乗ってきたものと
+// 1件も届かなかったものが同じ扱いになり、issue に事実と逆の理由が残る。
+type stopWait int
+
+const (
+	// stopWaitNone は `Stop` が1件も届かなかったことを表す。
+	stopWaitNone stopWait = iota
+	// stopWaitUnreadable は `Stop` は届いたが `background_tasks` の項目が欠けていたことを
+	// 表す（判定不能）。**届いてはいる。**
+	stopWaitUnreadable
+	// stopWaitRunning は `background_tasks` が空でない `Stop` が届いたことを表す
+	// （まだ動いている。設計 3-2 / 1-7）。
+	stopWaitRunning
+	// stopWaitEmpty は `background_tasks` が空配列の `Stop` が届いたことを表す
+	// （turn の終わりの判定の起点）。
+	stopWaitEmpty
+)
+
+// awaitStop は run の受け口から `Stop` が届くのを待ち、その中身を見分ける（設計 3-2）。
+//
+// **`background_tasks` の項目が欠けた `Stop` では待つのをやめない。**判定不能なので、
+// そこで返しても呼び出し側は何も決められない。**届いたことだけを覚えて待ち続け、
+// 待ち時間が尽きたときに `stopWaitUnreadable` として返す。**こうすることで、
+// 「届かなかった」と「届いたが読めなかった」を issue の文面で書き分けられる。
+//
+// **`Stop` 以外の hook は読み捨てる。**`<task-notification>` の待ちは `awaitHook` が持つ。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// d: 待つ長さ。0以下なら、既に届いているぶんだけを見る。
+// 戻り値: 待った結果。
+func (o *Orchestrator) awaitStop(ctx context.Context, rs *runState, d time.Duration) stopWait {
+	if d < 0 {
+		d = 0
+	}
+	result := stopWaitNone
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	for {
+		select {
+		case ev := <-rs.hookCh:
+			switch {
+			case isEmptyStop(ev):
+				return stopWaitEmpty
+			case isRunningStop(ev):
+				return stopWaitRunning
+			case ev.HookEventName == hookStop:
+				// `background_tasks` の項目が欠けている。**判定不能なので待ち続ける。**
+				result = stopWaitUnreadable
+			}
+		case <-timer.C:
+			return result
+		case <-ctx.Done():
+			return result
+		}
+	}
+}
+
 // awaitHook は run の受け口から、条件に合う hook が届くのを待つ。
+//
+// **合致した hook そのものを返す。**呼び出し側は「何が来たから待ち直すのか」を
+// 区別できないと、`<task-notification>` と「まだ動いていると名乗る `Stop`」を
+// 同じ扱いにしてしまう（設計 3-2）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // d: 待つ長さ。0以下なら、既に届いているぶんだけを見る。
 // pred: 合致を判定する関数。
-// 戻り値: 合致する hook が届けば true。
+// 戻り値の1つ目: 合致した hook（届かなかった場合はゼロ値）。
+// 戻り値の2つ目: 合致する hook が届けば true。
 func (o *Orchestrator) awaitHook(
 	ctx context.Context,
 	rs *runState,
 	d time.Duration,
 	pred func(hookserver.HookEvent) bool,
-) bool {
+) (hookserver.HookEvent, bool) {
 	if d < 0 {
 		d = 0
 	}
@@ -839,14 +973,27 @@ func (o *Orchestrator) awaitHook(
 		select {
 		case ev := <-rs.hookCh:
 			if pred(ev) {
-				return true
+				return ev, true
 			}
 		case <-timer.C:
-			return false
+			return hookserver.HookEvent{}, false
 		case <-ctx.Done():
-			return false
+			return hookserver.HookEvent{}, false
 		}
 	}
+}
+
+// turnContinues は「turn がまだ終わっていない」と分かる hook かを判定する（設計 3-2）。
+//
+// **2つある。**どちらも「空の `Stop` を受けたあとの settle_ms の窓」で捨ててはならない。
+//
+//	<task-notification> の UserPromptSubmit … 次の turn が始まっている（1-3）
+//	background_tasks が空でない Stop        … まだ動いていると名乗っている（1-7）
+//
+// ev: 判定する hook。
+// 戻り値: どちらかに当たれば true。
+func turnContinues(ev hookserver.HookEvent) bool {
+	return isTaskNotification(ev) || isRunningStop(ev)
 }
 
 // isEmptyStop は「background_tasks が空配列の Stop」かを判定する（設計 3-2）。
@@ -857,6 +1004,19 @@ func (o *Orchestrator) awaitHook(
 // 戻り値: 空配列の Stop なら true。
 func isEmptyStop(ev hookserver.HookEvent) bool {
 	return ev.HookEventName == hookStop && ev.BackgroundTasks != nil && len(*ev.BackgroundTasks) == 0
+}
+
+// isRunningStop は「background_tasks が空でない Stop」かを判定する（設計 3-2 / 1-7）。
+//
+// **これは Claude Code 自身の「まだ動いています」という申告である。**
+// turn の終わりとして扱わず、待ち直す材料にする。
+//
+// **項目が欠けている（nil）ときは偽である。**申告が無いだけで、動いているとは限らない。
+//
+// ev: 判定する hook。
+// 戻り値: 空でない配列を持つ Stop なら true。
+func isRunningStop(ev hookserver.HookEvent) bool {
+	return ev.HookEventName == hookStop && ev.BackgroundTasks != nil && len(*ev.BackgroundTasks) > 0
 }
 
 // isTaskNotification は `<task-notification>` で始まる UserPromptSubmit かを判定する
