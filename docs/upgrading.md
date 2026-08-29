@@ -72,11 +72,11 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.9 から v0.1.10 へ
 
-**当てるものが2つあります。****設定が1つと、本文（プロンプト）の差し替えが1つです。**
+**当てるものが3つあります。****設定が2つと、本文（プロンプト）の差し替えが1つです。**
 
 | 何 | 中身 |
 | --- | --- |
-| **増えたキー** | `claude.tool_gate` の1つだけ（下に `mode` / `model` / `tools`） |
+| **増えたキー** | `claude.tool_gate`（下に `mode` / `model` / `tools`）と、`tracker.provider.handoff`（下に `bid_window_ms` / `idle_timeout_ms` / `recheck_interval_ms` / `five_hour_margin_percent` / `weekly_margin_percent`）の2つ |
 | **消えたキー** | **ありません** |
 | **名前が変わったキー** | **ありません** |
 | **変わった振る舞い** | **英語の文言が入り、`en` を選ぶと画面がほぼ英語で出ます**（`continuo trust` とログ、および `continuo doctor` の一部の行は日本語のままです）**。**`language:` が `auto` で `LANG` からも決まらないときは `ja` ではなく `en` を選びます |
@@ -87,11 +87,16 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 | どこ | 当てないとどうなるか |
 | --- | --- |
-| **front matter**（先頭の `---` に挟まれた YAML） | **壊れません。**ただし `claude.tool_gate` は**書かなくても既定が効きます**（下の節を読んでください） |
+| **front matter**（先頭の `---` に挟まれた YAML） | **壊れません。**`claude.tool_gate` と `tracker.provider.handoff` はどちらも**書かなくても既定が効きます**（下の各節を読んでください） |
 | **本文**（front matter より下） | **エージェントの動きが古いままです。**continuo は本文を読み替えないので、書いていない指示は届きません |
 
 **`claude.tool_gate` は、書かないと既定が効きます。**この版から、**公開リポジトリの issue を処理するとき、
 エージェントが `Bash` を叩くたびに、その中身が危なくないかを Claude Code の中のモデルが検査します。**
+
+**`tracker.provider.handoff` も、書かないと既定が効きます。**この版から、**同じボードを複数の機械で見張るとき、
+担当者のいない issue に入札のコメントを書き、枠にいちばん余裕がある1台だけが担当者になります。**
+**1台だけで動かしていても、この仕組みは常に効きます**（詳しくは下の節と
+[docs/FAQ.md](FAQ.md) の「複数の機械で見張っているのに…」を見てください）。
 
 **本文の差し替えは、`continuo init` を新しく叩いた人には最初から入っています。**
 **既に `WORKFLOW.md` を持っている人には届きません。**下の差し替えを手で当ててください。
@@ -302,6 +307,71 @@ cd ~/continuo-work && continuo doctor
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
 ---
+
+### `tracker.provider.handoff` — 複数の機械で同じボードを見張るときの取り決め
+
+**何のためのものか。**この版から、同じボードを複数の機械（PC）で見張り、
+**issue 1件につき、枠にいちばん余裕がある1台だけが担当する**「持ち回り」を使えます。
+担当は issue の担当者（assignee）で持ち、期限は issue のコメントに書く `hold` で持ちます。
+**ボードに新しい欄は増えません。**
+
+**1台だけで動かしていても、この5つの設定は常に効きます。**担当者のいない issue には
+必ず入札のコメントを1件書き、締め切りを待ってから自分を担当者にします。
+**待ちたくない場合は下の `bid_window_ms` を `0` にしてください。**
+
+**書かないとどうなるか（＝既定の動き）。**
+
+| キー | 既定値 | 何をする値か |
+| --- | --- | --- |
+| `bid_window_ms` | `180000`（3分） | 入札を締め切るまでの待ち時間 |
+| `idle_timeout_ms` | `64800000`（18時間） | 担当者の最後のコメントからこれだけ経つと、担当を外して入札をやり直す長さ |
+| `recheck_interval_ms` | `3600000`（1時間） | 走っている最中に担当を確かめ直す間隔。担当が移っていたら、その turn の終わりで止めて push しない |
+| `five_hour_margin_percent` | `10`（%） | 5時間の枠のうち、continuo のために残しておきたい割合 |
+| `weekly_margin_percent` | `10`（%） | 1週間の枠のうち、continuo のために残しておきたい割合 |
+
+**`tracker.provider.handoff` セクションを丸ごと書かなくても、この5つの既定値がそのまま使われます。**
+壊れません。**書いていないことに気づく手段は、`continuo doctor` の `未記入の項目` の行だけです**
+（下の「足したかどうかの確かめ方」）。
+
+**何が変わって見えるか。**
+
+- **担当者のいない issue に、`<!-- continuo:bid -->` と `<!-- continuo:hold -->` のコメントが付くようになります。**
+  1台構成でも付きます。**このコメントはエージェントへは渡りません**（issue を GitHub の画面で開いたときだけ見えます）
+- **複数の機械で見張っている場合、枠の使用率がいちばん低い1台に処理が集まります**
+  （判定の中身は [docs/FAQ.md](FAQ.md) の「複数の機械で見張っているのに…」を見てください）
+- **担当している機械が `idle_timeout_ms`（既定18時間）のあいだ何も書かないと、ほかの機械が担当を外して入札をやり直します**
+
+### そのまま貼れる yaml
+
+**雛形の値のままです。**下の値で `continuo init` が書き出す `WORKFLOW.md` の
+`tracker.provider.comments` の下に足せます（実際にこの値で `continuo doctor` を通してあります。
+下の「足したかどうかの確かめ方」）。
+
+```yaml
+tracker:
+  provider:
+    handoff:
+      bid_window_ms: 180000
+      idle_timeout_ms: 64800000
+      recheck_interval_ms: 3600000
+      five_hour_margin_percent: 10
+      weekly_margin_percent: 10
+```
+
+### 足したかどうかの確かめ方
+
+**`continuo doctor` の `未記入の項目` の行が答えます。**
+
+```bash
+cd ~/continuo-work && continuo doctor
+```
+
+| 出方 | どう読むか |
+| --- | --- |
+| `! 未記入の項目 … tracker.provider.handoff` | まだ足りません。上の yaml をそのまま `WORKFLOW.md` に足すか、`continuo doctor --missing-keys-patch WORKFLOW.md` で差分を作ってください |
+| `✓ 未記入の項目 雛形にある設定項目はすべて書かれています（…件）` | 5つとも足せています |
+
+**書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
 
 ## v0.1.8 から v0.1.9 へ
