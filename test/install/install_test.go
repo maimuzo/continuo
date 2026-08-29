@@ -16,6 +16,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -137,6 +138,99 @@ type fakeRelease struct {
 	// **これを持たないと、どの版を要求しても同じ書庫を返してしまう。**
 	// 「指定した版が無い」を試せなくなる（実際、最初の版では試せていなかった）。
 	available map[string]bool
+	// releases は release の一覧として返す JSON である。空なら 404 を返す。**mu が守る。**
+	releases []byte
+}
+
+// releaseNote は、偽の release サーバが返す release 1件である。
+type releaseNote struct {
+	// Tag はその release の版である。
+	Tag string
+	// Breaking は破壊的変更の説明である。空なら本文に印を置かない。
+	Breaking []string
+}
+
+// releaseJSONEntry は、応答の中の release 1件である。
+//
+// **並び順に意味がある。**GitHub は1つの release の中で `tag_name` を `body` より先に返し、
+// **install.sh はその順番を頼りに、印がどの版のものかを決めている**
+// （api.github.com の応答で、どの release でも tag_name の行が body の行より前に来ることを確かめた）。
+// map で作ると鍵の名前の順に並び替えられ、**本物と違う並びの応答を検査することになる。**
+type releaseJSONEntry struct {
+	// TagName はその release の版である。
+	TagName string `json:"tag_name"`
+	// Name は release の題名である。
+	Name string `json:"name"`
+	// Body は release の本文である。破壊的変更の印はここに入る。
+	Body string `json:"body"`
+}
+
+// releasesJSON は、GitHub API の release の一覧と同じ形の JSON を作る。
+//
+// **改行は `\r\n` にする。**GitHub が返す本文はその形であり、
+// install.sh は JSON の中の `\r\n` を数えて1行ずつに分けている。
+//
+// **印の `<` を unicode の書き方へ逃がさない。**Go の encoding/json は既定で
+// `<` `>` `&` を `\u003c` のような形に書き換えるが、**GitHub の API はそのままの `<` を返す**
+// （api.github.com の応答に `\u003c` が1つも無いことを数えて確かめた）。
+// 逃がした形で配ると、本物と違う本文を検査することになる。
+//
+// notes: 並べる release（**新しい版から順に**。GitHub の並び順と同じ）。
+// 戻り値: 一覧の JSON。
+func releasesJSON(t *testing.T, notes []releaseNote) []byte {
+	t.Helper()
+	list := make([]releaseJSONEntry, 0, len(notes))
+	for _, n := range notes {
+		body := "## 直したこと\r\n\r\n- いくつか直しました\r\n"
+		if len(n.Breaking) > 0 {
+			body += "\r\n## 破壊的変更\r\n\r\n<!-- breaking:start -->\r\n"
+			for _, b := range n.Breaking {
+				body += "- " + b + "\r\n"
+			}
+			body += "<!-- breaking:end -->\r\n"
+		}
+		list = append(list, releaseJSONEntry{TagName: n.Tag, Name: n.Tag, Body: body})
+	}
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(list); err != nil {
+		t.Fatalf("偽の release の一覧を作れません: %v", err)
+	}
+	return []byte(buf.String())
+}
+
+// SetReleases は release の一覧を差し替える。
+//
+// **サーバを立てたあとに呼べる。**破壊的変更の印がある状況と無い状況を作り分ける。
+//
+// body: 一覧の JSON。
+func (fr *fakeRelease) SetReleases(body []byte) {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	fr.releases = body
+}
+
+// releasesBody は、いま配っている一覧を返す。
+func (fr *fakeRelease) releasesBody() []byte {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+	return fr.releases
+}
+
+// placeInstalled は、置き先に「いま入っているもの」を置く。
+//
+// **install.sh は置き換える前に、これへ `version` を訊く。**
+//
+// dir: 置き先。
+// version: そのものが名乗る版（`dev` を渡せば、版を名乗らないものになる）。
+func placeInstalled(t *testing.T, dir, version string) {
+	t.Helper()
+	script := "#!/bin/sh\necho " + version + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "continuo"), []byte(script), 0o755); err != nil {
+		t.Fatalf("いま入っているものを置けません: %v", err)
+	}
 }
 
 // Allow は、その版を配ることにする。
@@ -196,6 +290,16 @@ func newFakeRelease(t *testing.T, tag, body string, withSums bool) *fakeRelease 
 	// 最新の版を返す（install.sh は tag_name だけを読む）。
 	mux.HandleFunc("/api/latest", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, `{"tag_name": %q, "name": "%s"}`, fr.Tag, fr.Tag)
+	})
+	// release の一覧を返す。**install.sh は `/latest` を落とした URL を引く。**
+	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		body := fr.releasesBody()
+		if len(body) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
 	})
 	mux.HandleFunc("/dl/", func(w http.ResponseWriter, r *http.Request) {
 		// パスは /dl/<版>/<ファイル名> である。**版を見て、配っていなければ 404 を返す。**
@@ -754,5 +858,246 @@ func TestInstall_照合できず端末も無ければ置くだけで終わる(t 
 	}
 	if strings.Contains(text, "を入れました") {
 		t.Errorf("端末が無いのに道具を入れています:\n%s", text)
+	}
+}
+
+// TestInstall_破壊的変更のある版へ上げると名指しで警告する は、上げる前の警告を確かめる。
+//
+// **設定ファイルは、未知のキーがあると起動を止める。**キーが増減した版へ上げると、
+// **古い設定のまま起動しようとした時点で落ちる。**インストーラーが黙って上書きすると、
+// **上げたあとに初めて気づくことになる。**
+//
+// 目的: 飛び越えて上げたとき、あいだの版の破壊的変更まで名指しで並べること。
+// 与える情報: v0.2.0 を名乗る実行ファイルと、v0.3.0 と v0.10.0 に印がある release の一覧。
+// 成功条件: 終了コードが 0 で、実行ファイルが入れ替わり、
+//
+//	v0.3.0 と v0.10.0 の説明が出て、範囲の外（v0.1.0）の説明が出ないこと。
+func TestInstall_破壊的変更のある版へ上げると名指しで警告する(t *testing.T) {
+	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	fr.SetReleases(releasesJSON(t, []releaseNote{
+		{Tag: "v0.10.0", Breaking: []string{"WORKFLOW.md に tracker.dispatch_state が要ります"}},
+		{Tag: "v0.9.0"},
+		{Tag: "v0.3.0", Breaking: []string{"claude.model の既定が変わりました"}},
+		{Tag: "v0.2.0"},
+		{Tag: "v0.1.0", Breaking: []string{"これは範囲の外なので出てはいけません"}},
+	}))
+	dir := t.TempDir()
+	// **いま入っているものを置く。**install.sh は置き換える前にここへ版を訊く。
+	placeInstalled(t, dir, "v0.2.0")
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
+	}
+
+	// **止めない。**入れ替えたうえで警告する。
+	got, err := exec.Command(filepath.Join(dir, "continuo")).Output()
+	if err != nil {
+		t.Fatalf("置いた実行ファイルを動かせません: %v", err)
+	}
+	if !strings.Contains(string(got), "v0.10.0") {
+		t.Errorf("入れ替わっていません: %q", string(got))
+	}
+
+	if !strings.Contains(out, "破壊的変更があります") {
+		t.Fatalf("破壊的変更を伝えていません:\n%s", out)
+	}
+	for _, want := range []string{
+		"WORKFLOW.md に tracker.dispatch_state が要ります",
+		"claude.model の既定が変わりました",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q を名指ししていません:\n%s", want, out)
+		}
+	}
+	// **v0.10.0 と v0.2.0 の大小を、文字列として比べてはならない。**
+	// 取り違えると、範囲の外の v0.1.0 まで並ぶ。
+	if strings.Contains(out, "これは範囲の外なので出てはいけません") {
+		t.Errorf("いま入っている版より前の破壊的変更まで並べています:\n%s", out)
+	}
+}
+
+// TestInstall_破壊的変更が無ければ何も言わない は、余計なことを言わないことを確かめる。
+//
+// **毎回の更新で警告が出ると、本当に出たときに読まれなくなる。**
+//
+// 目的: 上げる範囲に印が1つも無ければ、破壊的変更について何も言わないこと。
+// 与える情報: 印を1つも持たない release の一覧。
+// 成功条件: 終了コードが 0 で、出力に「破壊的変更」が出ないこと。
+func TestInstall_破壊的変更が無ければ何も言わない(t *testing.T) {
+	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	fr.SetReleases(releasesJSON(t, []releaseNote{
+		{Tag: "v0.10.0"},
+		{Tag: "v0.3.0"},
+	}))
+	dir := t.TempDir()
+	placeInstalled(t, dir, "v0.2.0")
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
+	}
+	// **警告の見出しで見る。**一時ディレクトリのパスにテストの名前が入るので、
+	// 「破壊的変更」だけで探すと、警告が出ていなくても当たってしまう。
+	if strings.Contains(out, "破壊的変更があります") {
+		t.Errorf("破壊的変更が無いのに何か言っています:\n%s", out)
+	}
+}
+
+// TestInstall_新規の導入では破壊的変更を言わない は、警告する相手がいない場合を確かめる。
+//
+// **置き先に何も無ければ、上げるのではなく初めて入れるのである。**
+// 直す設定はまだ無いので、言うことは何も無い。
+//
+// 目的: 置き先に実行ファイルが無いとき、印があっても何も言わないこと。
+// 与える情報: 印を持つ release の一覧と、空の置き先。
+// 成功条件: 終了コードが 0 で、出力に「破壊的変更」が出ないこと。
+func TestInstall_新規の導入では破壊的変更を言わない(t *testing.T) {
+	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	fr.SetReleases(releasesJSON(t, []releaseNote{
+		{Tag: "v0.10.0", Breaking: []string{"新規の導入では出てはいけません"}},
+	}))
+	dir := t.TempDir()
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
+	}
+	if strings.Contains(out, "破壊的変更があります") ||
+		strings.Contains(out, "新規の導入では出てはいけません") {
+		t.Errorf("新規の導入なのに破壊的変更を言っています:\n%s", out)
+	}
+}
+
+// TestInstall_版を名乗らないものからは警告しない は、ソースから作ったものの扱いを確かめる。
+//
+// **`go build` しただけの実行ファイルは `dev` と名乗る**（internal/cli の version）。
+// **どの release より新しいのか古いのかを決められないので、範囲を作れない。**
+//
+// 目的: いま入っているものが `dev` と名乗るとき、誤った警告を出さないこと。
+// 与える情報: `dev` と名乗る実行ファイルと、印を持つ release の一覧。
+// 成功条件: 終了コードが 0 で、出力に「破壊的変更」が出ないこと。
+func TestInstall_版を名乗らないものからは警告しない(t *testing.T) {
+	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	fr.SetReleases(releasesJSON(t, []releaseNote{
+		{Tag: "v0.10.0", Breaking: []string{"版を比べられないので出てはいけません"}},
+	}))
+	dir := t.TempDir()
+	placeInstalled(t, dir, "dev")
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
+	}
+	if strings.Contains(out, "破壊的変更があります") ||
+		strings.Contains(out, "版を比べられないので出てはいけません") {
+		t.Errorf("版を比べられないのに破壊的変更を言っています:\n%s", out)
+	}
+}
+
+// TestInstall_一覧を引けなくても入れるのは止めない は、警告を作れない経路を確かめる。
+//
+// **警告は付随的なものである。**release の一覧を引けないことで導入を止めてはならない
+// （設計 3-36「破壊的変更を集めるときの決めごと」の「何も言わない場合」）。
+//
+// 目的: 一覧が 404 でも、終了コードが 0 で実行ファイルが入れ替わること。
+// 与える情報: v0.2.0 を名乗る実行ファイルと、一覧を配らない偽サーバ（/api は 404 を返す）。
+// 成功条件: 終了コードが 0 で、置いたものが v0.10.0 を名乗り、警告が出ないこと。
+func TestInstall_一覧を引けなくても入れるのは止めない(t *testing.T) {
+	// **SetReleases を呼ばない。**releases が空なので /api は 404 を返す。
+	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	dir := t.TempDir()
+	placeInstalled(t, dir, "v0.2.0")
+
+	code, out := runInstaller(t, fr, dir, "--no-deps")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 ではありません: %d\n%s", code, out)
+	}
+
+	got, err := exec.Command(filepath.Join(dir, "continuo")).Output()
+	if err != nil {
+		t.Fatalf("置いた実行ファイルを動かせません: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(got), "v0.10.0") {
+		t.Errorf("入れ替わっていません: %q\n%s", string(got), out)
+	}
+	if strings.Contains(out, "破壊的変更があります") {
+		t.Errorf("一覧を引けていないのに警告を出しています:\n%s", out)
+	}
+}
+
+// stubBrokenBreakingAwk は、印を読み出す awk だけが落ちる PATH を作る。
+//
+// **「awk が無い」ではなく「足した awk のプログラムがその処理系で通らない」を模す。**
+// install.sh は checksums.txt の照合にも awk を使うので、awk を丸ごと落とすと
+// **確かめたい経路より前で止まってしまう。**だから `breaking:start` を含むプログラムだけを落とす。
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 偽の awk を置いたディレクトリ。PATH の先頭へ足して使う。
+func stubBrokenBreakingAwk(t *testing.T) string {
+	t.Helper()
+	real, err := exec.LookPath("awk")
+	if err != nil {
+		t.Skipf("awk がありません: %v", err)
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\n" +
+		"for a in \"$@\"; do\n" +
+		"\tcase \"$a\" in\n" +
+		"\t\t*breaking:start*) exit 2 ;;\n" +
+		"\tesac\n" +
+		"done\n" +
+		"exec " + real + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "awk"), []byte(script), 0o755); err != nil {
+		t.Fatalf("偽の awk を置けません: %v", err)
+	}
+	return dir
+}
+
+// TestInstall_印を読み出せなくても入れるのは止めない は、awk が落ちる経路を確かめる。
+//
+// **install.sh は `set -eu` で走る。**警告を組み立てる代入を `|| true` で受けていないと、
+// **awk が 0 以外で終わった時点でスクリプトごと終わる。**
+// collect_breaking は install_binary より先に走るので、**実行ファイルを置く前に、
+// 何のメッセージも出さずに落ちる。**
+//
+// 目的: 印を読み出す awk が落ちても、終了コードが 0 で実行ファイルが入れ替わること。
+// 与える情報: v0.2.0 を名乗る実行ファイル、印のある一覧、印を読む awk だけが落ちる PATH。
+// 成功条件: 終了コードが 0 で、置いたものが v0.10.0 を名乗り、警告が出ないこと。
+func TestInstall_印を読み出せなくても入れるのは止めない(t *testing.T) {
+	fr := newFakeRelease(t, "v0.10.0", "#!/bin/sh\necho v0.10.0\n", true)
+	fr.SetReleases(releasesJSON(t, []releaseNote{
+		{Tag: "v0.10.0", Breaking: []string{"読み出せないので出てはいけません"}},
+		{Tag: "v0.2.0"},
+	}))
+	dir := t.TempDir()
+	placeInstalled(t, dir, "v0.2.0")
+
+	cmd := exec.Command(installShell, scriptPath(t),
+		"--api-url", fr.Server.URL+"/api/latest",
+		"--base-url", fr.Server.URL+"/dl",
+		"--no-deps")
+	cmd.Stdin = nil
+	detachTerminal(cmd)
+	// **後ろの重複が勝つ**（os/exec が env を後勝ちで畳む）ので、PATH をここで上書きできる。
+	cmd.Env = append(os.Environ(),
+		"PATH="+stubBrokenBreakingAwk(t)+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"CONTINUO_INSTALL_DIR="+dir)
+	raw, err := cmd.CombinedOutput()
+	out := string(raw)
+	if err != nil {
+		t.Fatalf("印を読めないだけで導入が止まっています: %v\n%s", err, out)
+	}
+
+	got, gerr := exec.Command(filepath.Join(dir, "continuo")).Output()
+	if gerr != nil {
+		t.Fatalf("置いた実行ファイルを動かせません: %v\n%s", gerr, out)
+	}
+	if !strings.Contains(string(got), "v0.10.0") {
+		t.Errorf("入れ替わっていません: %q\n%s", string(got), out)
+	}
+	if strings.Contains(out, "破壊的変更があります") ||
+		strings.Contains(out, "読み出せないので出てはいけません") {
+		t.Errorf("読み出せていないのに警告を出しています:\n%s", out)
 	}
 }

@@ -17,7 +17,8 @@ import (
 // 失敗したらその issue を失敗として扱う。
 //
 // **issue の本文とコメントは入れない**（設計 3-29）。エージェントが
-// `gh issue view <URL> --comments` で自分で読む。
+// `gh` の JSON 出力（`gh issue view --json comments` と REST）で自分で読む。
+// **テキスト表示（`--comments`）は使わせない**（設計 3-72）。
 //
 // issue: 対象の issue。
 // attempt: 試行回数。**1回目は nil を渡す**（仕様 12.3。`text/template` は nil を偽として

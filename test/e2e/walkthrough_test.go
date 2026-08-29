@@ -356,6 +356,25 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 		t.Fatalf("段8: エージェントのコメントが issue にありません: %v", bodies)
 	}
 
+	// **continuo がそのコメントを「エージェントが書いたもの」と認めている。**
+	//
+	// 印（`<!-- continuo:agent -->`）は投稿者と併せて見る（設計 3-65）。
+	// **投稿者の照合が本番と食い違っていると、issue にコメントが残っているのに
+	// continuo は「書かれていない」と判定し、セッションを復元して書かせにいく。**
+	// **その道は正常系でも最後まで通ってしまうので、ログを見ないと気づけない。**
+	waitFor(t, 60*time.Second, "段8: run の終わりまで進む", func() bool {
+		return strings.Contains(logs.String(), "run を終えます")
+	})
+	for _, ng := range []string{
+		"この run のコメントが無いので、セッションを復元して書かせます",
+		"投稿者が gh の持ち主と違います",
+	} {
+		if strings.Contains(logs.String(), ng) {
+			t.Fatalf("段8: エージェントのコメントが認められていません（%q がログに出ています）:\n%s",
+				ng, logs.String())
+		}
+	}
+
 	// **mockどうしが繋がっている証拠を確かめる。**
 	if env.Herdr.CountMethod("worktree.open") == 0 {
 		t.Fatalf("段8: テスト用herdr mock が worktree.open を受けていません: %v", env.Herdr.Methods())
@@ -402,7 +421,6 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 		t.Fatalf("段8: 片付けで origin の branch まで消えています: %q", remote)
 	}
 
-	_ = logs
 	return worktreePath
 }
 

@@ -1206,6 +1206,14 @@ const (
 	KeyTrackerGHAuthTokenEmptyOutput Key = "tracker.gh_auth_token.empty_output"
 )
 
+// 「continuo が使う gh の持ち主」の取得（internal/tracker の RunGHAPIUserLogin）の文言。
+const (
+	// KeyTrackerGHAPIUserRunFailed は `gh api user --jq .login` の実行が失敗したときに出る。
+	KeyTrackerGHAPIUserRunFailed Key = "tracker.gh_api_user.run_failed"
+	// KeyTrackerGHAPIUserEmptyOutput は `gh api user --jq .login` が空文字を返したときに出る。
+	KeyTrackerGHAPIUserEmptyOutput Key = "tracker.gh_api_user.empty_output"
+)
+
 // gh の有無と scope の検査（internal/tracker の RunGHAuthStatus / CheckGHAvailable /
 // CheckGHProjectScope）の文言。
 const (
@@ -2428,6 +2436,8 @@ var allKeys = []Key{
 	KeyHerdrAgentSendKeysEmpty,
 	KeyTrackerGHAuthTokenRunFailed,
 	KeyTrackerGHAuthTokenEmptyOutput,
+	KeyTrackerGHAPIUserRunFailed,
+	KeyTrackerGHAPIUserEmptyOutput,
 	KeyTrackerGHAuthStatusStartFailed,
 	KeyTrackerGHAvailableNotInPath,
 	KeyTrackerGHScopeNoActiveAccount,

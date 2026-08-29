@@ -66,9 +66,9 @@ func (o *Orchestrator) decideAfterTurn(
 		return true
 	case containsFold(o.cfg.Tracker.ActiveStates, current.State):
 		// 次の turn へ。打ち切りの判定は turnLoop の先頭で行う。
-		// **知らない Status だった記録は消す**（設計 3-50）。表明で戻ったのだから、
+		// **外から動かされていた記録は消す**（設計 3-50 / 3-73）。表明で戻ったのだから、
 		// 猶予の起点も捨てる。
-		rs.clearUnknownState()
+		rs.clearExternalMove()
 		return false
 	case current.State != "" && !o.isKnownState(current.State):
 		if mayRewrite {
@@ -159,11 +159,11 @@ func (o *Orchestrator) rewriteAndDecide(
 		// 人間が引き渡したわけではない。次の巡回が同じ判定でもう一度書きに行く。
 		// **「戻せない」が続いたときは `claimAutomatedRewrite` が枠を渡さなくなり、
 		// 猶予の時計が始まって人間へ渡る**（設計 3-56）。
-		rs.clearUnknownState()
+		rs.clearExternalMove()
 		return false
 	case !moved.Reached && moved.Previous == "":
 		// item がもう見えない。次の巡回が取り直して判断する。
-		rs.clearUnknownState()
+		rs.clearExternalMove()
 		return false
 	case !moved.Reached:
 		// **書きに行く直前のボードは `terminal_states` に入っていた。**
@@ -180,7 +180,7 @@ func (o *Orchestrator) rewriteAndDecide(
 		movedIssue.StatusChangedByAutomation = false
 	}
 	rs.setIssue(movedIssue)
-	rs.clearUnknownState()
+	rs.clearExternalMove()
 	return o.decideAfterTurn(ctx, rs, movedIssue, false)
 }
 
@@ -375,7 +375,7 @@ func (o *Orchestrator) noteSignalTargetsMissing(ctx context.Context, rs *runStat
 	}
 	body := fmt.Sprintf("表明に書かれた %s は、このボードに載っていないので Status を動かせませんでした。",
 		strings.Join(targets, " / "))
-	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Comments.SelfMarker); err != nil {
+	if err := o.postComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("表明の取りこぼしを投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}
 }
@@ -824,7 +824,7 @@ func (o *Orchestrator) cleanupPath(
 	}
 	body := fmt.Sprintf("worktree を片付けずに残しました（%s）。\n\n理由:\n- %s",
 		worktreePath, strings.Join(result.Reasons, "\n- "))
-	if _, err := o.tracker.PostComment(ctx, nodeID, body, o.cfg.Tracker.Comments.SelfMarker); err != nil {
+	if err := o.postComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("片付けを見送った通知を投稿できませんでした", "identifier", identifier, "error", err)
 		return false
 	}
@@ -898,7 +898,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			"identifier", rs.issue().Identifier, "置き場所", subagentDir,
 			"件数", len(subagentTranscripts), "走行中のものか", subagentRunning)
 	}
-	if _, err := o.tracker.PostComment(ctx, nodeID,
+	if err := o.postComment(ctx, nodeID,
 		buildHandoffComment(rs.issue().Identifier, reason, handoffContext{
 			WorktreePath:        snap.WorktreePath,
 			TranscriptPath:      snap.TranscriptPath,
@@ -906,8 +906,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			SubagentTranscripts: subagentTranscripts,
 			SubagentRunning:     subagentRunning,
 			SettingsPath:        snap.SettingsPath,
-		}, move),
-		o.cfg.Tracker.Comments.SelfMarker); err != nil {
+		}, move)); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}
 }

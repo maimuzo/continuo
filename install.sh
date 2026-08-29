@@ -10,6 +10,7 @@
 #   2. GitHub の release から、その組み合わせの実行ファイルを取る
 #   3. 前提の道具が揃っているかを調べ、**足りないものは1つずつ聞いてから**入れる
 #   4. `~/.local/bin/continuo` へ置き、PATH の通し方を案内する
+#   5. **上げるときに破壊的変更があれば、入れたうえで名指しで知らせる**（止めない）
 #
 # **`herdr` と `claude` は入れない。**どちらも独自の配布経路と認証があり、
 # 勝手に入れると利用者の既存の設定を壊しうる。足りないことを告げて案内するだけである。
@@ -64,6 +65,12 @@ VERSION=""
 # **引数を解釈したあとに組み立てる**（`--repo` を反映するため）。set_urls が行う。
 BASE_URL=""
 API_URL=""
+
+# RELEASES_URL は release の一覧を引く先である（破壊的変更の印を読むために使う）。
+#
+# **API_URL から組み立てる。**`--api-url` でテストの偽サーバへ向けたときも、
+# 同じ規則（末尾の `/latest` を落とす）で一覧に辿り着ける。set_urls が行う。
+RELEASES_URL=""
 
 # INSECURE_SOURCE が 1 なら、取得先が差し替えられている（テスト専用）。
 INSECURE_SOURCE=0
@@ -211,6 +218,7 @@ continuo のネットワークインストーラー
   2. GitHub の release から、その組み合わせの実行ファイルを取る
   3. 前提の道具が揃っているかを調べ、足りないものは1つずつ聞いてから入れる
   4. ~/.local/bin/continuo へ置き、PATH の通し方を案内する
+  5. 上げるときに破壊的変更があれば、入れたうえで知らせる（インストールは止めません）
 
 herdr と claude は入れません。どちらも独自の配布経路と認証があり、
 勝手に入れると既存の設定を壊しうるためです。案内するだけです。
@@ -254,6 +262,12 @@ set_urls() {
 	fi
 	if [ -z "$API_URL" ]; then
 		API_URL="https://api.github.com/repos/$REPO/releases/latest"
+	fi
+	if [ -z "$RELEASES_URL" ]; then
+		# **一覧は `/releases/latest` の1つ上である。**
+		# **1回の取得で見渡せるように多めに取る**（既定は30件）。
+		# 飛び越えて上げたとき、あいだの版の印も同じ応答の中に入る。
+		RELEASES_URL="${API_URL%/latest}?per_page=100"
 	fi
 	# **既定と違うリポジトリなら、差し替えられているものとして扱う。**
 	if [ "$REPO" != "$DEFAULT_REPO" ]; then
@@ -559,6 +573,218 @@ install_binary() {
 }
 
 # ---------------------------------------------------------------------------
+# 破壊的変更の警告
+# ---------------------------------------------------------------------------
+
+# INSTALLED_VERSION は、置き換える前に置き先にあったものが名乗った版である。
+#
+# **空なら、新規の導入か、版を訊けなかったということである。**どちらも何も言わない。
+INSTALLED_VERSION=""
+
+# BREAKING_NOTES は、上げる範囲で見つかった破壊的変更である（1行に1件）。
+BREAKING_NOTES=""
+
+# detect_installed_version は、置き換える前の実行ファイルに版を訊く。
+#
+# **置き換えたあとでは、何版から上げたのかを誰も知らない。**だから install_binary より前に呼ぶ。
+#
+# **symlink なら何もしない。**置き先が別のパスへのリンクだと、版を訊くつもりで
+# 無関係な実行ファイルを走らせることになる。
+# **答えを待ちすぎない。**`timeout` があれば5秒で打ち切る（無い環境ではそのまま呼ぶ）。
+detect_installed_version() {
+	div_bin="$INSTALL_DIR/continuo"
+	if [ -L "$div_bin" ]; then
+		return 0
+	fi
+	if [ ! -f "$div_bin" ] || [ ! -x "$div_bin" ]; then
+		return 0
+	fi
+	div_out=""
+	if have timeout; then
+		div_out="$(timeout 5 "$div_bin" version < /dev/null 2> /dev/null || true)"
+	else
+		div_out="$("$div_bin" version < /dev/null 2> /dev/null || true)"
+	fi
+	INSTALLED_VERSION="$(printf '%s' "$div_out" | head -1 | tr -d '\r')"
+}
+
+# is_release_version は、版が vN.N.N の形かを返す。
+#
+# **`dev` や `ci-<commit>` は比べられない。**手元で `go build` しただけのものが名乗る値で、
+# **どの release より新しいのか古いのかを決められない。**そういうものには何も言わない。
+#
+# $1: 調べる版。
+# 戻り値: vN.N.N の形なら 0。
+is_release_version() {
+	case "$1" in
+		v[0-9]*.[0-9]*.[0-9]*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# breaking_lines は、release の一覧から、上げる範囲の破壊的変更を並べる。
+#
+# 標準入力: GitHub API の release の一覧（JSON）。
+# $1: いま入っている版。$2: これから入れる版。
+# 標準出力: 「  <版>  <説明>」の行。**$1 より後・$2 まで**（$2 を含む）の版だけを出す。
+#
+# **release の本文に置いた印を読む。**
+#
+#     <!-- breaking:start -->
+#     - WORKFLOW.md の … が必須になりました
+#     <!-- breaking:end -->
+#
+# **JSON を厳密に解釈しない。**POSIX sh に JSON の道具は無く、`jq` は前提にできない。
+# `"tag_name"` と印を、応答に現れた順に拾う。**GitHub の応答では版が本文より先に来る**ので、
+# 直前に拾った版がその印の持ち主である。
+#
+# **本文は JSON の文字列1つに収まっている**ので、印の始まりと終わりは同じ行に来る。
+# 応答が整形されていても1行にまとめられていても、同じ読み方で拾える。
+breaking_lines() {
+	awk -v from="$1" -v to="$2" '
+		# vpart は版の i 番目の数を返す。先頭の v と、- や + から後ろは落とす。
+		function vpart(v, i,   a, n) {
+			sub(/^[vV]/, "", v)
+			sub(/[-+].*$/, "", v)
+			n = split(v, a, "[.]")
+			if (i > n) { return 0 }
+			return a[i] + 0
+		}
+		# vcmp は2つの版を比べる。**桁ごとに数として比べる。**
+		# 文字列として比べると v0.10.0 が v0.2.0 より小さくなる。
+		function vcmp(x, y,   i, dx, dy) {
+			for (i = 1; i <= 3; i++) {
+				dx = vpart(x, i)
+				dy = vpart(y, i)
+				if (dx != dy) { return (dx < dy) ? -1 : 1 }
+			}
+			return 0
+		}
+		# unesc は JSON の文字列の中の書き換えを戻す。
+		#
+		# **戻すのは改行・タブ・引用符だけである。**JSON では制御文字が
+		# バックスラッシュと u で始まる6文字の形で書かれる。**ここで戻さないので、
+		# そのままの文字列として出る。**戻すと、release の本文に置かれた並びで
+		# 利用者の端末を操作できてしまう。
+		function unesc(s) {
+			gsub(/\\r/, "", s)
+			gsub(/\\t/, " ", s)
+			gsub(/\\"/, "\"", s)
+			return s
+		}
+		# nlsplit は、JSON の中の改行（バックスラッシュと n の2文字）で分ける。
+		function nlsplit(s, out,   n, i, nl) {
+			nl = "\\" "n"
+			n = 0
+			while ((i = index(s, nl)) > 0) {
+				n++
+				out[n] = substr(s, 1, i - 1)
+				s = substr(s, i + 2)
+			}
+			n++
+			out[n] = s
+			return n
+		}
+		# emit は1つの印の中身を、範囲に入っていれば1行ずつ出す。
+		function emit(tag, block,   n, i, parts, line) {
+			if (tag == "") { return }
+			if (vcmp(tag, from) <= 0) { return }
+			if (vcmp(tag, to) > 0) { return }
+			n = nlsplit(block, parts)
+			for (i = 1; i <= n; i++) {
+				line = unesc(parts[i])
+				sub(/^[ \t]+/, "", line)
+				sub(/[ \t]+$/, "", line)
+				sub(/^[-*][ \t]+/, "", line)
+				if (line == "") { continue }
+				printf "  %s  %s\n", tag, line
+			}
+		}
+		BEGIN {
+			TAGKEY = "\"tag_name\""
+			STMARK = "<!-- breaking:start -->"
+			ENDMARK = "<!-- breaking:end -->"
+		}
+		{
+			rest = $0
+			while (1) {
+				ti = index(rest, TAGKEY)
+				si = index(rest, STMARK)
+				if (ti == 0 && si == 0) { break }
+				if (si == 0 || (ti != 0 && ti < si)) {
+					# 鍵の後ろの、最初の引用符から次の引用符までが版である。
+					rest = substr(rest, ti + length(TAGKEY))
+					q = index(rest, "\"")
+					if (q == 0) { break }
+					rest = substr(rest, q + 1)
+					q = index(rest, "\"")
+					if (q == 0) { break }
+					tag = substr(rest, 1, q - 1)
+					rest = substr(rest, q + 1)
+				} else {
+					rest = substr(rest, si + length(STMARK))
+					ei = index(rest, ENDMARK)
+					if (ei == 0) { break }
+					emit(tag, substr(rest, 1, ei - 1))
+					rest = substr(rest, ei + length(ENDMARK))
+				}
+			}
+		}
+	'
+}
+
+# collect_breaking は、上げる範囲に破壊的変更があるかを調べる。
+#
+# **何も言わない場合が6つある。**
+#   1. 置き先に実行ファイルが無い（新規の導入なので、警告する相手がいない）
+#   2. いま入っているものが版を名乗らない（`dev`。比べられない）
+#   3. これから入れる版が vN.N.N の形でない（同上）
+#   4. release の一覧を引けなかった（**入れるのは止めない。**警告は付随的なものである）
+#   5. 印を読み出す awk が落ちた（同上。**`|| true` で受ける**）
+#   6. `-rc1` などの付いた版から、同じ数字の正式版へ上げる
+#      （`vcmp` は `-` から後ろを落とすので `v2.98.0-rc1` と `v2.98.0` が同じ大きさになる。
+#      continuo はまだ rc を出していない。設計 3-36 の「何も言わない場合」の表に載せてある）
+#
+# **下げるときも何も出ない。**範囲が「いま入っている版より後」なので空になる。
+collect_breaking() {
+	[ -n "$INSTALLED_VERSION" ] || return 0
+	is_release_version "$INSTALLED_VERSION" || return 0
+	is_release_version "$VERSION" || return 0
+
+	cb_body="$(fetch "$RELEASES_URL" 2> /dev/null || true)"
+	[ -n "$cb_body" ] || return 0
+
+	# **awk が落ちても導入は止めない。**このスクリプトは `set -eu` なので、`|| true` が無いと
+	# **代入の時点で終了し、実行ファイルを置く前に落ちる**（collect_breaking は install_binary より
+	# 先に走る）。しかも何のメッセージも出ない。**警告は付随的なものであり、作れなければ黙って続ける。**
+	BREAKING_NOTES="$(printf '%s\n' "$cb_body" | breaking_lines "$INSTALLED_VERSION" "$VERSION" || true)"
+}
+
+# report_breaking は、見つかった破壊的変更を目立つ形で出す。
+#
+# **止めない。**`curl … | sh` の途中で止めると、**利用者は何が起きたか分からないまま、
+# 実行ファイルが古いまま残る。**入れたうえで、設定を直す必要があることを伝える。
+#
+# **チェックサムの照合とは扱いを変える。**あちらは「取ってきたものが壊れている・
+# すり替えられている」なので止める。こちらは「入れてよいが、設定を直す必要がある」である。
+#
+# **いちばん最後に出す。**先に出すと、そのあとの案内で流れて読まれない。
+report_breaking() {
+	[ -n "$BREAKING_NOTES" ] || return 0
+	say "============================================================"
+	say " 破壊的変更があります: ${INSTALLED_VERSION} → ${VERSION}"
+	say ""
+	say " 実行ファイルは入れ替えました。次に起動する前に設定を直してください。"
+	say " 直さないまま起動すると、設定を読めずに落ちることがあります。"
+	say ""
+	printf '%s\n' "$BREAKING_NOTES"
+	say ""
+	say " 詳しくは https://github.com/${REPO}/releases を見てください。"
+	say "============================================================"
+	say ""
+}
+
+# ---------------------------------------------------------------------------
 # 前提の道具
 # ---------------------------------------------------------------------------
 
@@ -710,6 +936,9 @@ main() {
 	say "見分けました: $GOOS / $GOARCH"
 
 	resolve_version
+	# **置き換える前に、いま入っているものへ版を訊く。**あとでは分からない。
+	detect_installed_version
+	collect_breaking
 	install_binary
 
 	check_deps
@@ -740,6 +969,10 @@ main() {
 	say ""
 	say "詳しくは https://github.com/${REPO}#使う を見てください。"
 	say ""
+
+	# **破壊的変更の警告は、いちばん最後に出す。**
+	# 上のほうへ出すと、そのあとの案内で流れて読まれない。
+	report_breaking
 }
 
 main

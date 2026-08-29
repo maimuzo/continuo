@@ -331,7 +331,7 @@ func TestMessages_英語の資源が日本語の資源と食い違わない(t *t
 func TestT_数値に3桁区切りが入らない(t *testing.T) {
 	useLang(t, i18n.SourceLang)
 
-	got := i18n.T(i18n.KeyDoctorBoardOK, "maimuzo", 1234, 5, 2, "")
+	got := i18n.T(i18n.KeyDoctorBoardOK, "octocat", 1234, 5, 2, "")
 
 	if !strings.Contains(got, "#1234") {
 		t.Fatalf("番号に区切りが入っている（または番号が出ていない）: %q", got)
