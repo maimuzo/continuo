@@ -418,7 +418,7 @@ func TestDoctor_ボードに載る全リポジトリを重複なく検査する(
 	fx.GitHub.SetItems(
 		boardItem{ItemID: "PVTI_1", NameWithOwner: "octocat/hello-world", Number: 188, State: "Ready"},
 		boardItem{ItemID: "PVTI_2", NameWithOwner: "octocat/hello-world", Number: 189, State: "Ready"},
-		boardItem{ItemID: "PVTI_3", NameWithOwner: "maimuzo/continuo", Number: 3, State: "Ready"},
+		boardItem{ItemID: "PVTI_3", NameWithOwner: "acme/anvil", Number: 3, State: "Ready"},
 	)
 	// **もう1つのリポジトリには clone を用意しない**（検査の対象になったことを記号で示す）。
 	fx.GhqPaths = map[string]string{"octocat/hello-world": fx.RepoDir}
@@ -430,7 +430,7 @@ func TestDoctor_ボードに載る全リポジトリを重複なく検査する(
 		t.Fatalf("対象リポジトリの内訳が2件ではなく %d件だった: %v", len(clone.Notes), clone.Notes)
 	}
 	joined := strings.Join(clone.Notes, "\n")
-	if !strings.Contains(joined, "octocat/hello-world") || !strings.Contains(joined, "maimuzo/continuo") {
+	if !strings.Contains(joined, "octocat/hello-world") || !strings.Contains(joined, "acme/anvil") {
 		t.Fatalf("内訳に両方のリポジトリが出ていない: %v", clone.Notes)
 	}
 }

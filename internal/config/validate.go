@@ -670,7 +670,7 @@ func validateTrustRepositories(repos []string) error {
 		if !trustRepositoryPattern.MatchString(r) {
 			return invalidValueError(
 				fmt.Sprintf("trust.repositories[%d]", i), r,
-				`"owner/repo" の形で書くこと（例 maimuzo/continuo）`)
+				`"owner/repo" の形で書くこと（例 octocat/hello-world）`)
 		}
 		if _, dup := seen[r]; dup {
 			return invalidValueError(

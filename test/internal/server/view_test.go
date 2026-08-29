@@ -16,7 +16,7 @@ import (
 // 成功条件: JSON では null になり、HTML では「—」と「未集計」になること。
 func TestNewSnapshot_時刻が無い項目はnullにする(t *testing.T) {
 	snap := server.NewSnapshot([]orchestrator.RunView{{
-		Identifier: "maimuzo/continuo#1",
+		Identifier: "octocat/hello-world#1",
 		Title:      "着手した直後",
 		State:      "In Progress",
 	}}, testTime)
@@ -41,7 +41,7 @@ func TestNewSnapshot_時刻が無い項目はnullにする(t *testing.T) {
 	}
 
 	s, _ := newTestServer(t, []orchestrator.RunView{{
-		Identifier: "maimuzo/continuo#1",
+		Identifier: "octocat/hello-world#1",
 		Title:      "着手した直後",
 		State:      "In Progress",
 	}})
@@ -84,16 +84,16 @@ func TestNewSnapshot_最後にhookを受けてからの経過を出す(t *testin
 // 成功条件: identifier の昇順になること。
 func TestNewSnapshot_identifierの昇順に並べる(t *testing.T) {
 	snap := server.NewSnapshot([]orchestrator.RunView{
-		{Identifier: "maimuzo/continuo#9"},
-		{Identifier: "maimuzo/continuo#12"},
-		{Identifier: "maimuzo/continuo#1"},
+		{Identifier: "octocat/hello-world#9"},
+		{Identifier: "octocat/hello-world#12"},
+		{Identifier: "octocat/hello-world#1"},
 	}, testTime)
 
 	got := make([]string, 0, len(snap.Runs))
 	for _, run := range snap.Runs {
 		got = append(got, run.Identifier)
 	}
-	want := []string{"maimuzo/continuo#1", "maimuzo/continuo#12", "maimuzo/continuo#9"}
+	want := []string{"octocat/hello-world#1", "octocat/hello-world#12", "octocat/hello-world#9"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("並びが違う: got %v, want %v", got, want)

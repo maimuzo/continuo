@@ -527,9 +527,8 @@ func (o *Orchestrator) noteUntrusted(ctx context.Context, issue tracker.Issue, r
 		o.logger.Warn("draft issue にはコメントできないのでログだけにします", "identifier", issue.Identifier)
 		return
 	}
-	if _, err := o.tracker.PostComment(ctx, nodeID,
-		buildUntrustedComment(issue.Owner, issue.Repo, reason),
-		o.cfg.Tracker.Comments.SelfMarker); err != nil {
+	if err := o.postComment(ctx, nodeID,
+		buildUntrustedComment(issue.Owner, issue.Repo, reason)); err != nil {
 		o.logger.Warn("未信頼のリポジトリの通知を投稿できませんでした",
 			"identifier", issue.Identifier, "error", err)
 	}

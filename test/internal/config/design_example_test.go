@@ -95,8 +95,8 @@ func TestLoad_設計5_2の設定例がそのまま読み込める(t *testing.T) 
 		t.Fatalf("設計 5-2 の設定例を読み込めませんでした（設計に載っているキーが構造体に無い可能性がある）: %v", err)
 	}
 
-	if loaded.Config.Tracker.Provider.Owner != "maimuzo" {
-		t.Errorf("tracker.provider.owner が反映されていない: got %q, want %q", loaded.Config.Tracker.Provider.Owner, "maimuzo")
+	if loaded.Config.Tracker.Provider.Owner != "octocat" {
+		t.Errorf("tracker.provider.owner が反映されていない: got %q, want %q", loaded.Config.Tracker.Provider.Owner, "octocat")
 	}
 	if loaded.Config.Tracker.Provider.ProjectNumber != 3 {
 		t.Errorf("tracker.provider.project_number が反映されていない: got %d, want %d", loaded.Config.Tracker.Provider.ProjectNumber, 3)
@@ -148,7 +148,7 @@ func TestLoad_設計5_2の設定例と既定値が一致する(t *testing.T) {
 	// OS ごとの既定値は TestDefaultConfig_rate_limitのtoken_sourceの既定がOSで分かれる が見る。
 	want.RateLimit.TokenSource = config.RateLimitTokenSourceClaudeCredentials
 	// 既定値を持たない必須キー（設定例が値を与えているもの）を埋める。
-	want.Tracker.Provider.Owner = "maimuzo"
+	want.Tracker.Provider.Owner = "octocat"
 	want.Tracker.Provider.ProjectNumber = 3
 	want.Tracker.Provider.StatusField = "Status"
 	// 5-5 の展開を通ったあとの値にそろえる。

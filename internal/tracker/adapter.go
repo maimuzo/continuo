@@ -993,12 +993,20 @@ func (a *Adapter) UpdateStatus(
 //
 // 用途は「エージェントがコメントを書いたかどうかを判別すること」だけである（設計 3-29）。
 // 取得した本文をプロンプトへ渡してはならない。issue の中身はエージェントが
-// gh issue view --comments で自分で読む。
+// gh の JSON 出力で自分で読む（設計 3-72。テキスト表示は使わせない）。
 //
 // **エージェントが書いたコメントは markers.Marker の印で判別する**（Comment.IsAgent）。
 // **continuo 自身が代筆したコメント（markers.SelfMarker の印）は、次の turn の入力から
 // 外すため結果に含めない**（設計 5-2 の comments.self_marker の説明: 「次の turn の入力
 // からは外す」）。
+//
+// **ただし、印だけで「continuo の側が書いた」と決めない**（設計 3-65）。印は本文の
+// 先頭に置くただの文字列であり、issue にコメントできる人なら誰でも同じものを書ける。
+// **selfLogin が分かっているときは、投稿者がその持ち主であるものだけを印として扱う。**
+// 外部の第三者が self_marker で始まるコメントを書いても、それは除外されずに残り、
+// エージェントのコメント（IsAgent）としても数えられない。
+// **そのコメントには `MarkedByOther` を立てて返す。**呼び出し側が
+// 「印はあるが投稿者が違う」を名指しでログに出せるようにするためである。
 //
 // **取得を止める経路は持たない。**取得しないと「エージェントがコメントを書いていない」と
 // 判定され、成功した run も含めて全件が failure_state へ落ちる。
@@ -1016,15 +1024,19 @@ func (a *Adapter) UpdateStatus(
 // EXCESSIVE_PAGINATION のエラーになる**。設定の検査でも同じ上限を弾いている）。
 // cfg.Order は "oldest_first"（または未設定）だけを受け付ける。
 // markers: tracker.comments の設定（マーカー）。空文字のマーカーは判別に使わない。
+// selfLogin: continuo が使う gh の持ち主のログイン名（設計 3-65）。
+// **空文字なら投稿者を照合せず、印だけで判別する**（持ち主を取れなかったときの動きである）。
 // 戻り値: 正規化したコメントの一覧（**古い順**。ただし件数が上限を超える場合は、
-// 新しい方から max 件を取ったうえでその中を古い順に並べたもの）。self_marker の付いた
-// コメントは除外済み。cfg.Order が想定外の値の場合は CategoryInvalidConfig の *Error。
+// 新しい方から max 件を取ったうえでその中を古い順に並べたもの）。**持ち主が書いた**
+// self_marker 付きのコメントは除外済み。cfg.Order が想定外の値の場合は
+// CategoryInvalidConfig の *Error。
 // GraphQL 呼び出しが失敗した場合はそのエラーを返す。
 func (a *Adapter) FetchComments(
 	ctx context.Context,
 	issueNodeID string,
 	cfg config.TrackerProviderCommentsConfig,
 	markers config.TrackerCommentsConfig,
+	selfLogin string,
 ) ([]Comment, error) {
 	// 想定外の order を黙って無視すると、書いたつもりの設定が効いていないことに気づけない。
 	if cfg.Order != "" && cfg.Order != commentsOrderOldestFirst {
@@ -1068,13 +1080,21 @@ func (a *Adapter) FetchComments(
 	for _, c := range oldestFirst {
 		comment := rawCommentToComment(c)
 		trimmed := strings.TrimSpace(comment.Body)
-		if markers.SelfMarker != "" && strings.HasPrefix(trimmed, markers.SelfMarker) {
+		// **印は投稿者と併せて見る**（設計 3-65）。第三者が同じ印を書いても、
+		// continuo の側が書いたものとしては扱わない。
+		writtenBySelf := comment.WrittenBy(selfLogin)
+		marked := (markers.SelfMarker != "" && strings.HasPrefix(trimmed, markers.SelfMarker)) ||
+			(markers.Marker != "" && strings.HasPrefix(trimmed, markers.Marker))
+		if writtenBySelf && markers.SelfMarker != "" && strings.HasPrefix(trimmed, markers.SelfMarker) {
 			// continuo 自身が代筆したコメント。次の turn の入力からは外す。
 			continue
 		}
-		if markers.Marker != "" && strings.HasPrefix(trimmed, markers.Marker) {
+		if writtenBySelf && markers.Marker != "" && strings.HasPrefix(trimmed, markers.Marker) {
 			comment.IsAgent = true
 		}
+		// **「印はあるが投稿者が違う」を、落としたことが分かる形で残す**（設計 3-65）。
+		// 黙って印を無視すると、人間には「コメントが無い」としか見えない。
+		comment.MarkedByOther = marked && !writtenBySelf
 		result = append(result, comment)
 	}
 	return result, nil

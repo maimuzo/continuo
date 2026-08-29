@@ -286,12 +286,20 @@ type runState struct {
 	// `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
 	awaitTurnEnd bool
-	// unknownStateSince は「continuo が知らない Status になっている」と最初に見た時刻である
-	// （設計 3-50）。ゼロ値なら、いまは知っている Status である。
+	// externalMoveSince は「continuo が意図していない Status へ外から動かされている」と
+	// 最初に見た時刻である（設計 3-50 / 3-74）。ゼロ値なら、いまは continuo が
+	// 意図した Status（`active_states` のいずれか）である。
 	//
 	// **猶予の起点である。**巡回のたびに入れ直すと猶予が永久に切れないので、
-	// 既に入っているときは触らない。知っている Status に戻ったら消す。
-	unknownStateSince time.Time
+	// 既に入っているときは触らない。`active_states` に戻ったら消す。
+	externalMoveSince time.Time
+	// externalMoveKind は externalMoveSince がどの種類の動かされ方を数えているかである
+	// （設計 3-74）。**種類が変わったら起点を切り直すために持つ。**
+	//
+	// **同時には起きないが、順に起きる。**知らない Status で9分待った run が、続けて
+	// 自動化に `Done` へ動かされることがある。起点を繰り越すと、そこから測る猶予が
+	// 残り1分しかない。**別の理由で止まりかけたのだから、猶予は最初から数え直す。**
+	externalMoveKind externalMoveKind
 	// automatedRewrites は、ボードの自動化が動かした Status を書き戻した回数である
 	// （設計 3-56）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
 	//
@@ -1008,30 +1016,53 @@ func (rs *runState) lastWrittenState() string {
 	return rs.LastWrittenState
 }
 
-// noteUnknownState は「continuo が知らない Status になっている」と見た時刻を控え、
-// その起点を返す（設計 3-50）。
+// externalMoveKind は「外から動かされた」の種類である（設計 3-74）。
 //
-// **起点は最初に見たときのまま据え置く。**巡回のたびに入れ直すと、猶予が永久に切れない。
+// **猶予の起点を種類ごとに切り直すために持つ。**種類が変わったのに起点を繰り越すと、
+// 前の種類で待った時間ぶんだけ、次の猶予が短くなる。
+type externalMoveKind int
+
+const (
+	// externalMoveNone は「外から動かされていない」を表す（起点はゼロ値）。
+	externalMoveNone externalMoveKind = iota
+	// externalMoveUnknownState は continuo が知らない Status へ動かされたことを表す（設計 3-50）。
+	externalMoveUnknownState
+	// externalMoveAutomatedHandoff はボードの自動化が終端・引き渡しの Status を書いたことを
+	// 表す（設計 3-74）。
+	externalMoveAutomatedHandoff
+)
+
+// noteExternalMove は「continuo が意図していない Status へ外から動かされている」と見た
+// 時刻を控え、その起点を返す（設計 3-50 / 3-74）。
+//
+// **同じ種類が続くあいだ、起点は最初に見たときのまま据え置く。**巡回のたびに入れ直すと、
+// 猶予が永久に切れない。
+//
+// **種類が変わったら起点を切り直す。**知らない Status で待っていた run が、続けて自動化に
+// `Done` へ動かされることがある。**別の理由で止まりかけたのだから、猶予は最初から数え直す。**
 //
 // now: いまの時刻。
-// 戻り値: 猶予の起点（最初に見た時刻）。
-func (rs *runState) noteUnknownState(now time.Time) time.Time {
+// kind: 何を数えているか（externalMoveNone を渡してはならない）。
+// 戻り値: 猶予の起点（この種類を最初に見た時刻）。
+func (rs *runState) noteExternalMove(now time.Time, kind externalMoveKind) time.Time {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if rs.unknownStateSince.IsZero() {
-		rs.unknownStateSince = now
+	if rs.externalMoveSince.IsZero() || rs.externalMoveKind != kind {
+		rs.externalMoveSince = now
+		rs.externalMoveKind = kind
 	}
-	return rs.unknownStateSince
+	return rs.externalMoveSince
 }
 
-// clearUnknownState は「知らない Status になっている」という記録を消す。
+// clearExternalMove は「外から動かされている」という記録を消す。
 //
-// **知っている Status に戻ったときに呼ぶ。**消さないと、次に知らない Status へ動かされた
-// ときに、前回の起点で猶予を測ってしまう。
-func (rs *runState) clearUnknownState() {
+// **`active_states` に戻ったときに呼ぶ。**消さないと、次に外から動かされたときに、
+// 前回の起点で猶予を測ってしまう。
+func (rs *runState) clearExternalMove() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	rs.unknownStateSince = time.Time{}
+	rs.externalMoveSince = time.Time{}
+	rs.externalMoveKind = externalMoveNone
 }
 
 // rewriteClaim は「自動化が動かした Status を書き戻す」1回ぶんの確保である（設計 3-56）。
