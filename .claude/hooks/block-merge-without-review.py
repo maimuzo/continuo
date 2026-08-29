@@ -40,7 +40,16 @@ import subprocess
 import sys
 
 # 実行の前に見る Bash のコマンド。番号を取り出す。
-MERGE_RE = re.compile(r"\bgh\s+pr\s+(?:merge|ready)\s+(?:[-\w=./:]+\s+)*?(\d+)\b")
+# **`--undo` は止めない。**CLAUDE.md が「draft へ戻してからレビューする」と定めた手順そのものだからである。
+# **`--repo <他所>` も止めない。**このリポジトリの PR ではないので、番号を当てても意味が無い。
+# **番号の前に来てよいのはオプションだけにする。**`--repo other/repo 123` の 123 を拾わないため。
+MERGE_RE = re.compile(
+    r"\bgh\s+pr\s+(?:merge|ready)\s+"
+    r"(?!(?:[-\w=./:]+\s+)*?--undo\b)"
+    r"(?!(?:[-\w=./:]+\s+)*?--repo\b)"
+    r"(?:--?[-\w]+(?:=[-\w./:]+)?\s+)*?"
+    r"(\d+)\b"
+)
 
 # この目印が PR のコメントに1つでもあれば、レビューを通したものとみなす。
 # **リリース前の検査（scripts/check-release-ready.sh）が数えるのと同じ目印である。**
