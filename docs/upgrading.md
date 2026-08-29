@@ -24,9 +24,9 @@ continuo が勝手に書き足すことはありません。**増えた設定は
 ## 何が足りないかは `continuo doctor` が出す
 
 **手で見比べる必要はありません。**`continuo doctor` の `未記入の項目` の行に、
-**足りない設定項目と、それを足す差分**が出ます。
+**足りない設定項目の名前**が出ます。
 
-**差分だけが要るなら、次のコマンドで出せます。**
+**それを足す差分は、次のコマンドで出します。**
 
 ```bash
 cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md
@@ -44,6 +44,15 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -
 **当てたあとに何が増えたのかは、下の版ごとの節を読んでください。**
 差分には雛形の説明のコメントもそのまま入っていますが、**書かなかったときに何が起きるかは
 そちらにしか書いてありません。**
+
+**`--missing-keys-patch` を持たない古い版から上げるときは、雛形を別の場所へ書き出して
+見比べてください**（`continuo init` はディレクトリを作らないので、先に作ります）。
+
+```bash
+mkdir -p /tmp/continuo-template
+continuo init /tmp/continuo-template
+diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
+```
 
 ---
 

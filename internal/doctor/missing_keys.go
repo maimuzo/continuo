@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"os"
-	"strings"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/scaffold"
@@ -26,8 +25,13 @@ import (
 // **黙らせる手段は作らない。**「要らないから書いていない」と「知らないから書いていない」は
 // 機械には区別できない。**足りないものは足りないものとして、直すまで毎回出す。**
 //
-// **出すのは差分そのものと、それを当てるコマンドの2つである。**キーの名前だけを並べても、
-// **何を書ける項目なのかが分からない。**差分には雛形のコメントがそのまま入っている。
+// **内訳に差分そのものは出さない。**差分は長い（実測: 版を1つ上げて増えた3項目で30行、
+// 手で書いた短い `WORKFLOW.md` で156行）。**そのまま並べると、他の14個の検査結果が
+// 画面の外へ押し出される。**内訳には**足りない項目の名前だけ**を出し、
+// **差分を読むコマンドと当てるコマンドを直し方に出す。**
+//
+// **名前も上限で切る**（missingKeysNoteLimit）。**名前だけなら1件1行なので短いが、
+// `continuo init` を使わずに手で書いた人では実測で31件になる。**
 //
 // opts: 検査の入力（`ConfigPath` だけを使う）。
 // cfg: 読めた場合の設定。**中身は見ない**（読めたかどうかだけを使う）。
@@ -71,25 +75,43 @@ func checkMissingKeys(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 	}
 
 	return Result{
-		Label:    LabelMissingKeys,
-		Symbol:   SymbolUnknown,
-		Detail:   i18n.T(i18n.KeyDoctorMissingKeysMissing, len(res.Keys), res.Total),
-		Notes:    patchNotes(res.Patch),
-		Remedies: []string{i18n.T(i18n.KeyDoctorMissingKeysRemedy, opts.ConfigPath)},
+		Label:  LabelMissingKeys,
+		Symbol: SymbolUnknown,
+		Detail: i18n.T(i18n.KeyDoctorMissingKeysMissing, len(res.Keys), res.Total),
+		Notes:  missingKeyNotes(res.Keys),
+		Remedies: []string{
+			i18n.T(i18n.KeyDoctorMissingKeysRemedyShow, opts.ConfigPath),
+			i18n.T(i18n.KeyDoctorMissingKeysRemedyApply, opts.ConfigPath),
+		},
 	}
 }
 
-// patchNotes は unified diff を、内訳として1行ずつ並べられる形にする。
+// missingKeysNoteLimit は内訳に並べる項目の名前の上限である。
 //
-// **差分をそのまま見せる。**足すキーの名前も、雛形が持つ説明のコメントも、
-// `+` の行に全部入っている。**別に一覧を並べると同じものを二度書くことになる。**
+// **10 にするのは、この検査1つで検査結果の並びを埋めないためである。**
+// `continuo doctor` は15個の検査を出す。**内訳がそれと同じ高さを超えると、
+// 何を見ている画面なのかが分からなくなる。**
 //
-// patch: 組み立てた unified diff。
-// 戻り値: 1行ずつに分けた差分（末尾の空行は落とす）。
-func patchNotes(patch string) []string {
-	trimmed := strings.TrimRight(patch, "\n")
-	if trimmed == "" {
+// **版を1つ上げて増える項目は、実測で最大3件である**（v0.1.5 から v0.1.9 まで
+// 上げたときの `tracker.unknown_state_grace_ms` / `tracker.automated_state_rewrite` /
+// `workspace.on_broken_worktree`）。**上限に当たるのは、`continuo init` を使わずに
+// 手で書いた `WORKFLOW.md` だけである**（実測31件）。
+const missingKeysNoteLimit = 10
+
+// missingKeyNotes は足りない項目の名前を、内訳として並べられる形にする。
+//
+// **差分は入れない。**差分は長すぎて他の検査結果を画面の外へ押し出す。
+// **差分を読むコマンドは直し方に出してある。**
+//
+// keys: 足りない項目の名前（`tracker.automated_state_rewrite` のようなドット区切り）。
+// 戻り値: 1行ずつに分けた内訳。**上限を超えたぶんは最後の1行にまとめる。**
+func missingKeyNotes(keys []string) []string {
+	if len(keys) == 0 {
 		return nil
 	}
-	return strings.Split(trimmed, "\n")
+	if len(keys) <= missingKeysNoteLimit {
+		return append([]string(nil), keys...)
+	}
+	notes := append([]string(nil), keys[:missingKeysNoteLimit]...)
+	return append(notes, i18n.T(i18n.KeyDoctorMissingKeysMore, len(keys)-missingKeysNoteLimit))
 }

@@ -80,8 +80,12 @@ const (
 	KeyDoctorMissingKeysOK Key = "doctor.missing_keys.ok"
 	// KeyDoctorMissingKeysMissing は書かれていない項目があるときの説明に出る。
 	KeyDoctorMissingKeysMissing Key = "doctor.missing_keys.missing"
-	// KeyDoctorMissingKeysRemedy は差分を当てるためのコマンドに出る。
-	KeyDoctorMissingKeysRemedy Key = "doctor.missing_keys.remedy"
+	// KeyDoctorMissingKeysMore は内訳の上限を超えたぶんの件数に出る。
+	KeyDoctorMissingKeysMore Key = "doctor.missing_keys.more"
+	// KeyDoctorMissingKeysRemedyShow は足す差分を読むためのコマンドに出る。
+	KeyDoctorMissingKeysRemedyShow Key = "doctor.missing_keys.remedy_show"
+	// KeyDoctorMissingKeysRemedyApply は足す差分を当てるためのコマンドに出る。
+	KeyDoctorMissingKeysRemedyApply Key = "doctor.missing_keys.remedy_apply"
 )
 
 // doctor の検査「対応表のキー」（設計 3-57。issue #67）。
@@ -2033,7 +2037,9 @@ var allKeys = []Key{
 	KeyDoctorMissingKeysUnreadable,
 	KeyDoctorMissingKeysOK,
 	KeyDoctorMissingKeysMissing,
-	KeyDoctorMissingKeysRemedy,
+	KeyDoctorMissingKeysMore,
+	KeyDoctorMissingKeysRemedyShow,
+	KeyDoctorMissingKeysRemedyApply,
 	KeyDoctorRewriteKeysConfigUnreadable,
 	KeyDoctorRewriteKeysBoardUnreadable,
 	KeyDoctorRewriteKeysEmpty,

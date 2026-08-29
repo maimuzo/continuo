@@ -35,6 +35,39 @@ const diffContext = 3
 // **雛形が正になる項目ではない。**
 var keyNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// freeFormMapPaths は、その下に並ぶ名前を利用者が決める対応表のキーである。
+//
+// **その下の行は設定項目ではない。**名前を決めるのは利用者（または利用者のボード）であり、
+// **continuo は特定の名前を探さない。**雛形が並べている名前は例にすぎないので、
+// **書いていない人に「足りない」と言ってはならない。**黙らせる手段は無いので、
+// 意図して外した人が永久に `!` を出され続けることになる。
+//
+// **`tracker.status_signal_map` はここに入れない。**あの対応表のキー
+// （`review` / `blocked` / `working`）は、雛形の下半分のプロンプトが
+// **エージェントに書かせる語そのもの**であり、名前は continuo 側で決まっている。
+// **消せば、その表明が一度も効かなくなる。**だから足りなければ言う。
+var freeFormMapPaths = [][]string{
+	// 環境変数の名前は利用者が決める（雛形の `CLAUDE_CODE_RETRY_WATCHDOG` は例である）。
+	{"claude", "env"},
+	// キーはボードの Status 名である。
+	{"tracker", "automated_state_rewrite"},
+	// キーはボードの Status 名である。
+	{"concurrency", "max_concurrent_agents_by_state"},
+}
+
+// isUnderFreeFormMap は、そのキーが freeFormMapPaths のどれかの下にあるかを返す。
+//
+// p: 調べるキーのパス。
+// 戻り値: 対応表そのものではなく、その下にあるなら真。
+func isUnderFreeFormMap(p []string) bool {
+	for _, base := range freeFormMapPaths {
+		if len(p) > len(base) && samePath(p[:len(base)], base) {
+			return true
+		}
+	}
+	return false
+}
+
 // MissingKeysResult は MissingKeys が返す結果である。
 type MissingKeysResult struct {
 	// Keys は書かれていないキーの名前である（`tracker.automated_state_rewrite` のような
@@ -150,6 +183,9 @@ func splitLines(s string) ([]string, bool) {
 // **入れ子は行頭のインデントで辿る**（findKeyLine と同じ判断である）。
 // リストの項目（`- "Bash"`）とコメント行と空行は数えない。
 //
+// **利用者が名前を決める対応表の中身も数えない**（freeFormMapPaths）。
+// **あれは設定項目ではなく値である。**
+//
 // lines: WORKFLOW.md か雛形を改行で分けた行の並び。
 // start, end: 探す範囲（front matter の中。end は含まない）。
 // 戻り値: ルートから辿るキーの並びの一覧。
@@ -180,6 +216,10 @@ func keyPathsIn(lines []string, start, end int) [][]string {
 		p := make([]string, 0, len(stack))
 		for _, f := range stack {
 			p = append(p, f.key)
+		}
+		// **利用者が名前を決める対応表の中身は、設定項目として数えない。**
+		if isUnderFreeFormMap(p) {
+			continue
 		}
 		paths = append(paths, p)
 	}
@@ -242,15 +282,16 @@ func planInsertion(
 	}
 	bStart, bEnd := blockRange(tmpl, tStart, tEnd, tIdx)
 	block := append([]string(nil), tmpl[bStart:bEnd]...)
+	block = dropLeadingCommentsAlreadyThere(block, user, uStart, uEnd)
 	// **節と節のあいだの空行も持っていく。**top-level の節を丸ごと足すとき、
 	// 前の節の最後の行にくっついて読めなくなるのを防ぐ。
 	if indentOf(tmpl[tIdx]) == 0 && bStart > tStart && strings.TrimSpace(tmpl[bStart-1]) == "" {
 		block = append([]string{""}, block...)
 	}
 
-	// 親のブロックの位置と、雛形との字下げの差を求める。
+	// 親のブロックの位置と、差し込む行が持つべき字下げを求める。
 	scopeStart := uStart
-	delta := 0
+	wantIndent := indentOf(tmpl[tIdx])
 	if len(p) > 1 {
 		parent := p[:len(p)-1]
 		uParent, ok := findKeyLine(user, uStart, uEnd, parent)
@@ -259,11 +300,19 @@ func planInsertion(
 			return uEnd, block
 		}
 		scopeStart = uParent + 1
-		if tParent, ok := findKeyLine(tmpl, tStart, tEnd, parent); ok {
-			delta = indentOf(user[uParent]) - indentOf(tmpl[tParent])
+		if childIndent, ok := firstChildIndent(user, uParent, uEnd); ok {
+			wantIndent = childIndent
+		} else {
+			// **親に子が1行も無い。**深さを決める手がかりが利用者のファイルに無いので、
+			// 雛形の親子の差をそのまま使う。
+			step := indentOf(tmpl[tIdx])
+			if tParent, ok := findKeyLine(tmpl, tStart, tEnd, parent); ok {
+				step -= indentOf(tmpl[tParent])
+			}
+			wantIndent = indentOf(user[uParent]) + step
 		}
 	}
-	block = shiftIndent(block, delta)
+	block = shiftIndent(block, wantIndent-indentOf(tmpl[tIdx]))
 
 	siblings := siblingsOf(paths, p)
 	self := indexOfPath(siblings, p)
@@ -289,6 +338,70 @@ func planInsertion(
 		}
 	}
 	return scopeStart, block
+}
+
+// firstChildIndent は、そのキーのブロックの子が書かれている深さを返す。
+//
+// **差し込む行の字下げは、ここで返す深さに合わせる。**親の行どうしを比べても子の深さは
+// 決まらない。**利用者が親を雛形と同じ深さで、子だけ深く書いていることがある**
+// （`tracker:` の子を4スペースで書いた `WORKFLOW.md` がその形である）。
+// 親の行から計算すると、雛形の2スペースのまま差し込まれ、
+// **当てたあとの front matter が YAML として読めなくなる。**
+//
+// **子として数えるのは、最初に見つかった、親より深い行である**（findKeyLine と同じ判断）。
+// 空行とコメント行は飛ばす。
+//
+// lines: 行の並び。
+// parentIdx: 親のキーの行の添字。
+// end: 探す範囲の終わり（含まない）。
+// 戻り値の1つ目: 子の深さ。
+// 戻り値の2つ目: 子が1行も無ければ偽。
+func firstChildIndent(lines []string, parentIdx, end int) (int, bool) {
+	parentIndent := indentOf(lines[parentIdx])
+	for i := parentIdx + 1; i < end; i++ {
+		trimmed := strings.TrimLeft(trimEOL(lines[i]), " \t")
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := indentOf(lines[i])
+		if indent <= parentIndent {
+			return 0, false
+		}
+		return indent, true
+	}
+	return 0, false
+}
+
+// dropLeadingCommentsAlreadyThere は、利用者のファイルに既にある見出しのコメントを
+// ブロックの先頭から落とす。
+//
+// **雛形は `# ===== 後始末・使用量・二重起動の防止 =====` のように、複数の節をまとめて
+// 指す見出しのコメントを持っている。**そのコメントは、すぐ下の節（`naming` など）の
+// ブロックに入ってしまう。**利用者のファイルにその見出しが既にあると、同じ行が2本並ぶ。**
+//
+// **落とすのは、文字が1字も違わない行だけである。**利用者が書き換えた行は残す。
+//
+// block: 差し込む行の並び（最後の行は必ずキーの行なので、全部は落ちない）。
+// user: 利用者の WORKFLOW.md を改行で分けた行の並び。
+// uStart, uEnd: 利用者のファイルの front matter の範囲（uEnd は含まない）。
+// 戻り値: 先頭の重複するコメント行を落としたブロック。
+func dropLeadingCommentsAlreadyThere(block, user []string, uStart, uEnd int) []string {
+	have := make(map[string]bool)
+	for i := uStart; i < uEnd; i++ {
+		line := strings.TrimSpace(trimEOL(user[i]))
+		if strings.HasPrefix(line, "#") {
+			have[line] = true
+		}
+	}
+	i := 0
+	for i < len(block) {
+		line := strings.TrimSpace(trimEOL(block[i]))
+		if !strings.HasPrefix(line, "#") || !have[line] {
+			break
+		}
+		i++
+	}
+	return block[i:]
 }
 
 // siblingsOf は、同じ親を持つキーを雛形の並び順で返す。
