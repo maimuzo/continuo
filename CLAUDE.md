@@ -138,6 +138,14 @@ os.Rename(tmp.Name(), path)
 - **修正の履歴を書かない。**置くのは最新の仕様・選定根拠・比較した案の否定根拠だけ
 - **1つの節は50行以内。**長くなったら要約版を別ファイルに作る（元は残す）
 
+## worktree の片付け
+
+[.claude/rules/worktree.md](.claude/rules/worktree.md) に従うこと。とくに次の3点。
+
+- **使い終わった worktree は、その作業を終える前に消す。**「あとで片付ける」と引き継ぎに書かない
+- **`git worktree prune` は片付けの手段ではない。**実体を消すのは `git worktree remove` である
+- **`.claude/worktrees/` も見る。**scratchpad だけを見て「片付いた」と言わない
+
 ## リリースの手順
 
 [.claude/rules/release.md](.claude/rules/release.md) に従うこと。とくに次の3点。
