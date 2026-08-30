@@ -148,7 +148,13 @@ os.Rename(tmp.Name(), path)
 
 ## 報告のルール
 
-[.claude/rules/reporting.md](.claude/rules/reporting.md) に従うこと。とくに次の3点。
+[.claude/rules/reporting.md](.claude/rules/reporting.md) に従うこと。
+
+**この規則が効くのは「人間への返答」だけである。**
+**worker（subagent / workflow のエージェント）がオーケストレーターへ返す報告には適用しない。**
+worker に求めるのは形ではなく根拠である。
+
+**とくに次の3点。**
 
 - **返答の冒頭に「何が言いたいのか」を置く**
 - **番号だけのラベルを人間に見せない**
