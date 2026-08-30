@@ -4,7 +4,7 @@
 
 **[日本語](README.ja.md)**
 
-continuo turns a GitHub Projects v2 board into a work queue for coding agents. Drop an issue into `Ready` — from any of your repositories — and continuo picks it up, prepares a git worktree, and runs Claude Code on it inside a [herdr](https://github.com/herdrdev/herdr) pane. When the agent is done, the result comes back to the board as a Status change.
+continuo turns a GitHub Projects v2 kanban board into a work queue for coding agents. Drop an issue into `Ready` — from any of your repositories — and continuo picks it up, prepares a git worktree, and runs Claude Code on it inside a [herdr](https://github.com/herdrdev/herdr) pane. When the agent is done, the result comes back to the board as a Status change.
 
 It is written in Go and implements the [openai/symphony](https://github.com/openai/symphony) service specification. You watch the work happen in a real terminal, on your usual Claude subscription.
 
@@ -40,7 +40,7 @@ Start it with `continuo --port 8080` and you get a plain list of what is running
 
 ## One board, many repositories
 
-A single board can hold issues from as many repositories as you like. continuo creates a worktree per issue, under the repository it belongs to:
+A single kanban board can hold issues from as many repositories as you like. continuo creates a worktree per issue, under the repository it belongs to:
 
 ```
 ~/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188/
@@ -76,7 +76,7 @@ How many issues run at once is a setting (two by default).
 | [`git`](https://git-scm.com/) and [`ghq`](https://github.com/x-motemen/ghq) | Creating worktrees, and resolving where a clone lives |
 | [Go](https://go.dev/dl/) 1.26+ | Only if you build from source |
 
-**Your board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
+**Your kanban board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
 
 `continuo doctor` runs fifteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, Claude Code, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, board, Status names, the rewrite table's keys, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
 
@@ -122,7 +122,7 @@ sh scripts/test-like-ci.sh                       # run the tests (~3 min, option
 
 ## Use
 
-**continuo does not create a board.** It attaches to the one you already use.
+**continuo does not create a kanban board.** It attaches to the one you already use.
 
 ```bash
 mkdir -p ~/continuo-work && cd ~/continuo-work
