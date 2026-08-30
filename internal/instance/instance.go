@@ -7,18 +7,22 @@
 // **同じ機械の同じ利用者が、誰も頼んでいないのに別のロックを握る**（3-17）。
 //
 // **`--id <名前>` を付けたときだけ、その名前ごとに別の1本として動く。**
-// **分けるべきもの4つを、この package の Layout 1つから導く**（3-17b）。
+// **分けるべきもの5つを、この package の Layout 1つから導く**（3-17b）。
 //
 //	ロック                  ~/.continuo/id/<名前>/continuo.lock
 //	socket と実行時ディレクトリ  ~/.continuo/id/<名前>/run/
 //	worktree の置き場所      <workspace.root>/<名前>
 //	branch 名               <名前>/<herdr.worktree.branch_template>
+//	herdr の agent 名        continuo-<名前>-<repo>-<番号>
+//
+// **agent 名だけは、この package が組み立てない**（herdr の 32 文字の上限に
+// 収める規則が internal/orchestrator にあるため）。**名前を渡すだけである。**
 //
 // **別々に導いてはならない。**片方だけを直すと食い違い、常駐している側と
 // `continuo abandon` が別の場所を見る。**そのとき abandon は、動いている continuo を
 // 「動いていない」と判定して worktree を消しにいく**（3-17c）。
 //
-// **5つ目（ボード）は名前から導けない。**ボードごとのロックで断る（3-17e。board.go）。
+// **6つ目（ボード）は名前から導けない。**ボードごとのロックで断る（3-17e。board.go）。
 package instance
 
 import (
@@ -86,6 +90,16 @@ func (l Layout) RuntimeDir() string { return l.runtimeDir }
 //   - 名前を足した socket のパスが socketpath.MaxPathLen バイトを超える
 //   - ホームディレクトリを引けない
 func Resolve(id string) (Layout, error) {
+	// **名前の検査を先に通す。**`ValidateID` は外へ1回も出ない純粋な関数であり、
+	// **ホームディレクトリを引くより先に答えが出る。**順序を逆にすると、
+	// `HOME` を引けない環境で `--id ../../etc` が「ホームディレクトリを取得できません」
+	// として報告され、**本当の誤り（名前が使えない）が人間に届かない。**
+	if id != "" {
+		if err := ValidateID(id); err != nil {
+			return Layout{}, err
+		}
+	}
+
 	root, err := Root()
 	if err != nil {
 		return Layout{}, err
@@ -93,10 +107,6 @@ func Resolve(id string) (Layout, error) {
 
 	if id == "" {
 		return Layout{lockPath: filepath.Join(root, socketpath.LockFileName)}, nil
-	}
-
-	if err := ValidateID(id); err != nil {
-		return Layout{}, err
 	}
 
 	base := filepath.Join(root, IDDirName, id)
@@ -222,6 +232,19 @@ func (l Layout) OverridesListen(cfg config.Config) bool {
 		return false
 	}
 	return cfg.Claude.HookBridge.Listen != nil && *cfg.Claude.HookBridge.Listen != ""
+}
+
+// OverridesRuntimeDirEnv は、`--id` が環境変数 `CONTINUO_RUNTIME_DIR` の指定を
+// 使わずに済ませたかを返す。
+//
+// **黙って握り潰さないためだけにある。**呼ぶ側は真なら1行ログに残すこと。
+// **`OverridesListen` と同じ形にしてある。**片方だけ黙ると、
+// 「socket が思った場所にできない」理由を、無人運用のログから引けない。
+//
+// envRuntimeDir: 環境変数 `CONTINUO_RUNTIME_DIR` の値。
+// 戻り値: `--id` があり、かつ環境変数に値が入っていれば true。
+func (l Layout) OverridesRuntimeDirEnv(envRuntimeDir string) bool {
+	return l.runtimeDir != "" && envRuntimeDir != ""
 }
 
 // Apply は `--id` から導く残り2つ（worktree の置き場所と branch 名）を設定へ写す（3-17b）。

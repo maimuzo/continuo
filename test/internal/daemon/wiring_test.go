@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -674,6 +675,8 @@ func wiringShortHome(t *testing.T) string {
 // 目的: 設計 3-17b。**ロックだけを分けると事故になる。**残り3つを分け忘れると、
 // 2本目が1本目の worktree を巡回のたびに閉じ、hook を食べ、branch を出せなくなる。
 // **4つとも internal/instance の Layout 1つから導いていることを、結線の側で確かめる。**
+// **5つ目（herdr の agent 名）は test/internal/orchestrator が固定している**
+// （起動の記録には出ないため、ここでは見られない）。
 //
 // 与える情報: `--id e2e` と、`~/.continuo/id/e2e/continuo.lock` を先に握った別のプロセス。
 // 成功条件: 起動の段のエラーで、**その名前ごとのロックのパスを指して**二重起動と言うこと。
@@ -701,11 +704,16 @@ func TestRun_idを付けると4つが名前ごとに分かれる(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = held.Release() })
 
+	inst, err := instance.Resolve("e2e")
+	if err != nil {
+		t.Fatalf("--id から置き場所を決められない: %v", err)
+	}
+
 	logs := &syncBuffer{}
 	err = daemon.Run(context.Background(), daemon.Options{
 		ConfigPath: path,
 		Logger:     slog.New(slog.NewTextHandler(logs, nil)),
-		ID:         "e2e",
+		Instance:   &inst,
 	})
 
 	if err == nil {
@@ -730,6 +738,64 @@ func TestRun_idを付けると4つが名前ごとに分かれる(t *testing.T) {
 	}
 }
 
+// TestRun_idを付けたらCONTINUO_RUNTIME_DIRを使わないことを名乗る は、
+// 環境変数を黙って捨てないことを固定する（設計 3-17b / 3-23）。
+//
+// 目的: `--id` を付けると socket は `~/.continuo/id/<名前>/run/` に固定され、
+// **`CONTINUO_RUNTIME_DIR` は使われない。**`claude.hook_bridge.listen` の側には
+// 警告があるのに**こちらが黙っていると、環境変数を指定した人は、
+// なぜ socket がそこに出来ないのかを、無人運用のログから引けない。**
+//
+// 与える情報: `CONTINUO_RUNTIME_DIR` と `--id e2e`、および先に握られた名前ごとのロック
+// （警告はロックを取る前に出るので、ここで止めても記録には残る）。
+// 成功条件: 警告に環境変数の名前・渡した値・実際に使う置き場所が出ること。
+func TestRun_idを付けたらCONTINUO_RUNTIME_DIRを使わないことを名乗る(t *testing.T) {
+	root := wiringRoot(t)
+	home := wiringShortHome(t)
+	runtimeDir := filepath.Join(root, "rt")
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		t.Fatalf("実行時ディレクトリを作れません: %v", err)
+	}
+	path := writeWiringWorkflow(t, root, "", "")
+
+	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
+	t.Setenv(daemon.EnvGraphQLEndpoint, "")
+
+	// **ロックを先に握って、起動をすぐ止める。**警告はロックより前に出る。
+	idLock := filepath.Join(home, ".continuo", "id", "e2e", "continuo.lock")
+	if err := os.MkdirAll(filepath.Dir(idLock), 0o700); err != nil {
+		t.Fatalf("名前ごとのロックの置き場所を作れません: %v", err)
+	}
+	held, err := lock.Acquire(idLock)
+	if err != nil {
+		t.Fatalf("名前ごとのロックを先に握れません: %v", err)
+	}
+	t.Cleanup(func() { _ = held.Release() })
+
+	inst, err := instance.Resolve("e2e")
+	if err != nil {
+		t.Fatalf("--id から置き場所を決められない: %v", err)
+	}
+
+	logs := &syncBuffer{}
+	if err := daemon.Run(context.Background(), daemon.Options{
+		ConfigPath: path,
+		Logger:     slog.New(slog.NewTextHandler(logs, nil)),
+		Instance:   &inst,
+	}); err == nil {
+		t.Fatal("ロックを握られているのに起動できてしまった")
+	}
+
+	warned := lineContaining(t, logs.String(), "CONTINUO_RUNTIME_DIR は使いません")
+	// **渡した値と、代わりに使う場所を両方出す。**どちらが欠けても、
+	// 読んだ人はどこを見ればよいのかが分からない。
+	for _, want := range []string{runtimeDir, inst.RuntimeDir()} {
+		if !strings.Contains(warned, want) {
+			t.Fatalf("%q が警告に出ていない\n%s", want, warned)
+		}
+	}
+}
+
 // TestRun_同じボードを見ている2つ目は起動を止める は、ボードごとのロックを固定する。
 //
 // 目的: 設計 3-17e。**同じボードを2つの continuo が見ると、同じ issue を2つが拾う。**
@@ -748,7 +814,7 @@ func TestRun_同じボードを見ている2つ目は起動を止める(t *testi
 	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
 	t.Setenv(daemon.EnvGraphQLEndpoint, "")
 
-	boardLock, err := instance.BoardLockPath("octocat", 3)
+	boardLock, _, err := instance.BoardLockPath("octocat", 3)
 	if err != nil {
 		t.Fatalf("ボードのロックの場所を決められません: %v", err)
 	}
@@ -777,15 +843,19 @@ func TestRun_同じボードを見ている2つ目は起動を止める(t *testi
 	}
 }
 
-// TestRun_ボードのロックを取ったら誰が握っているかを書き残す は、3-17e の段4 を固定する。
+// TestRun_ボードのロックを取ったら書き残し手放すときに消す は、3-17e の段4 を固定する。
 //
 // 目的: **人間が「どの continuo がそのボードを握っているか」を読めるようにする。**
 // **排他の判定には使わない**（判定は flock 1本だけである）。
+// **終わったら消す。**残ると死んだ PID を指したままになり、
+// [docs/FAQ.md](../../../docs/FAQ.md) の案内どおりに読んだ人が、
+// **動いていない continuo を探しに行くことになる。**
 //
 // 与える情報: 返ってこない `gh auth token`（依存の組み立てで止まる。ボードのロックは
-// その手前で取り終えている）。
-// 成功条件: ロックの隣に覚え書きが在り、読み込んだ `WORKFLOW.md` のパスが入っていること。
-func TestRun_ボードのロックを取ったら誰が握っているかを書き残す(t *testing.T) {
+// その手前で取り終えている）。**その間に覚え書きを読む。**
+// 成功条件: 走っている間はロックの隣に覚え書きが在って読み込んだ `WORKFLOW.md` の
+// パスが入っており、**終了したあとには残っていないこと。**
+func TestRun_ボードのロックを取ったら書き残し手放すときに消す(t *testing.T) {
 	root := wiringRoot(t)
 	runtimeDir := filepath.Join(root, "rt")
 	binDir := filepath.Join(root, "bin")
@@ -799,22 +869,28 @@ func TestRun_ボードのロックを取ったら誰が握っているかを書�
 	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
 	t.Setenv(daemon.EnvGraphQLEndpoint, "")
 
-	if err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath:          path,
-		Logger:              slog.New(slog.DiscardHandler),
-		StartupCheckTimeout: 500 * time.Millisecond,
-	}); err == nil {
-		t.Fatal("gh auth token が返らないのに起動できてしまった")
-	}
-
-	boardLock, err := instance.BoardLockPath("octocat", 3)
+	boardLock, _, err := instance.BoardLockPath("octocat", 3)
 	if err != nil {
 		t.Fatalf("ボードのロックの場所を決められません: %v", err)
 	}
-	raw, err := os.ReadFile(instance.BoardInfoPath(boardLock))
-	if err != nil {
-		t.Fatalf("ボードのロックの覚え書きを読めません: %v", err)
+	infoPath := instance.BoardInfoPath(boardLock)
+
+	// **走らせたまま読む。**終了時に消すようになったので、返ってきてからでは読めない。
+	done := make(chan error, 1)
+	go func() {
+		done <- daemon.Run(context.Background(), daemon.Options{
+			ConfigPath:          path,
+			Logger:              slog.New(slog.DiscardHandler),
+			StartupCheckTimeout: 2 * time.Second,
+		})
+	}()
+
+	raw := readWhenAppears(t, infoPath, 5*time.Second)
+
+	if err := <-done; err == nil {
+		t.Fatal("gh auth token が返らないのに起動できてしまった")
 	}
+
 	var info instance.BoardInfo
 	if err := json.Unmarshal(raw, &info); err != nil {
 		t.Fatalf("ボードのロックの覚え書きを読み解けません: %v（中身: %s）", err, raw)
@@ -830,6 +906,34 @@ func TestRun_ボードのロックを取ったら誰が握っているかを書�
 	}
 	if info.StartedAt == "" {
 		t.Error("いつ取ったかが入っていない")
+	}
+
+	if _, err := os.Stat(infoPath); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("ロックを手放したのに覚え書き %s が残っている: %v", infoPath, err)
+	}
+}
+
+// readWhenAppears はファイルが現れるまで待って中身を返す。
+//
+// **走っている continuo の中身を読むために要る。**ボードの覚え書きは終了時に消えるので、
+// 返ってきてからでは読めない。
+//
+// t: 呼び出し元のテスト。
+// path: 読むファイルの絶対パス。
+// timeout: 待つ上限。
+// 戻り値: 読めた中身。
+func readWhenAppears(t *testing.T, path string, timeout time.Duration) []byte {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		raw, err := os.ReadFile(path)
+		if err == nil {
+			return raw
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s が %v 以内に現れません: %v", path, timeout, err)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

@@ -543,6 +543,13 @@ func TestRunTrust_dryRunなら1バイトも書き換えない(t *testing.T) {
 // 与える情報: 空のディレクトリ。
 // 成功条件: 終了コードが 2 ではなく（引数の誤りではない）、報告が出ること。
 func TestRunDoctor_設定を読めなくても検査を続ける(t *testing.T) {
+	// **本物の検査が走るので、実機を触らせない。**
+	// `doctor` は hook の socket を実際に置き（設計 3-23）、
+	// 二重起動防止のロックも実際に取る（3-17）。**閉じ込めないと、
+	// テストが利用者の `~/.continuo` と本番の socket の置き場所に書き込む。**
+	sandbox := shortCLIHome(t)
+	t.Setenv("CONTINUO_RUNTIME_DIR", filepath.Join(sandbox, "run"))
+
 	code, stdout, stderr := runCLI([]string{"doctor", t.TempDir()}, "")
 	if code == 2 {
 		t.Fatalf("引数の誤りとして落ちている: stderr=%s", stderr)
@@ -1389,12 +1396,15 @@ func TestRunMain_idの名前が使えなければ常駐を始めない(t *testin
 // 目的: 設計 3-17b。`--id` は常駐の側で4つの置き場所へ展開される。
 // **CLI で握り潰すと、名前を付けたのに何も分かれない。**
 // 与える情報: `--id e2e`。
-// 成功条件: daemon.Options.ID に `e2e` が渡ること。
+// 成功条件: daemon.Options.Instance に `e2e` で解決した置き場所が渡ること。
 func TestRunMain_idをそのまま常駐へ渡す(t *testing.T) {
 	var got string
 	deps := cli.Deps{
 		DaemonRun: func(_ context.Context, opts daemon.Options) error {
-			got = opts.ID
+			if opts.Instance == nil {
+				return nil
+			}
+			got = opts.Instance.ID()
 			return nil
 		},
 	}
@@ -1408,15 +1418,62 @@ func TestRunMain_idをそのまま常駐へ渡す(t *testing.T) {
 	}
 }
 
+// TestRunDoctor_idをそのまま検査へ渡す は、フラグの受け渡しを確かめる。
+//
+// 目的: 設計 3-17b。**`--id` を付けた起動は、socket もロックも別の場所を使う。**
+// **doctor がその場所を見られないと、全項目 `✓` を出したのに起動だけが落ちる**
+// （issue #9 と同じ形）。
+// 与える情報: `--id e2e`。
+// 成功条件: doctor.Options.Instance に `e2e` で解決した置き場所が渡ること。
+func TestRunDoctor_idをそのまま検査へ渡す(t *testing.T) {
+	var got string
+	deps := cli.Deps{DoctorRun: func(_ context.Context, opts doctor.Options) doctor.Report {
+		if opts.Instance != nil {
+			got = opts.Instance.ID()
+		}
+		return doctor.Report{}
+	}}
+
+	code, _, stderr := runCLIWith(deps, []string{"doctor", "--id", "e2e", writeWorkflowFor(t)}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if got != "e2e" {
+		t.Errorf("--id が検査へ渡っていない: got %q, want %q", got, "e2e")
+	}
+}
+
+// TestRunMain_ホームを引けない失敗をidのせいにしない は、文言の切り分けを固定する。
+//
+// 目的: 設計 3-17d。`instance.Resolve` は名前を先に検査し、そのあとで
+// ホームディレクトリを引く。**名前の検査を通ったあとの失敗を
+// 「--id に渡した名前が使えません」と報告してはならない。**
+// **`--id` を1文字も渡していない人にも、その文言が出る。**
+// 与える情報: `HOME` が空の環境と、`--id` を渡さない起動。
+// 成功条件: 起動できず、**stderr に `--id` が出ないこと。**
+func TestRunMain_ホームを引けない失敗をidのせいにしない(t *testing.T) {
+	t.Setenv("HOME", "")
+
+	code, _, stderr := runCLIWith(cli.Deps{}, []string{writeWorkflowFor(t)}, "")
+	if code == 0 {
+		t.Fatalf("ホームディレクトリを引けないのに起動できてしまった（stderr: %s）", stderr)
+	}
+	if strings.Contains(stderr, "--id") {
+		t.Fatalf("--id を渡していないのに --id のせいにしている: %s", stderr)
+	}
+}
+
 // TestRunAbandon_idをそのまま片付けへ渡す は、フラグの受け渡しを確かめる。
 //
 // 目的: 設計 3-17c。**常駐している側と同じ名前を渡さないと、abandon は別の場所を見る。**
 // 与える情報: `--id e2e` と issue の URL。
-// 成功条件: abandon.Options.ID に `e2e` が渡ること。
+// 成功条件: abandon.Options.Instance に `e2e` で解決した置き場所が渡ること。
 func TestRunAbandon_idをそのまま片付けへ渡す(t *testing.T) {
 	var got string
 	deps := cli.Deps{AbandonRun: func(_ context.Context, opts abandon.Options) int {
-		got = opts.ID
+		if opts.Instance != nil {
+			got = opts.Instance.ID()
+		}
 		return 0
 	}}
 
@@ -1429,4 +1486,33 @@ func TestRunAbandon_idをそのまま片付けへ渡す(t *testing.T) {
 	if got != "e2e" {
 		t.Errorf("--id が片付けへ渡っていない: got %q, want %q", got, "e2e")
 	}
+}
+
+// shortCLIHome は、ホームディレクトリの代わりに使う短い一時ディレクトリを作り、
+// `HOME` をそこへ向ける。
+//
+// **短くなければならない。**`--id` を付けたときの socket は
+// `~/.continuo/id/<名前>/run/hooks.sock` であり、103バイトに収まらないと決められない
+// （設計 3-17d / 3-23）。**`t.TempDir()` は深すぎて上限を超える。**
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 実体のパス（symlink を解決済み）。
+func shortCLIHome(t *testing.T) string {
+	t.Helper()
+
+	for _, base := range []string{"/tmp", ""} {
+		dir, err := os.MkdirTemp(base, "cc")
+		if err != nil {
+			continue
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			resolved = dir
+		}
+		t.Setenv("HOME", resolved)
+		return resolved
+	}
+	t.Fatal("一時ディレクトリを作れません")
+	return ""
 }

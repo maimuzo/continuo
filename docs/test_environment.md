@@ -62,9 +62,10 @@ continuo init --project 10 --owner "$OWNER" --force .
 
 **本番の continuo を動かしたまま回すなら、`--id <名前>` を付ける。**
 **設定は1行も書き換えない。**ロック・socket と実行時ディレクトリ・worktree の置き場所・
-branch 名の4つが、その名前ごとに分かれる。
+branch 名・herdr の agent 名の5つが、その名前ごとに分かれる。
 
 ```bash
+continuo doctor --id e2e .                 # 検査。同じ名前を渡すこと
 continuo --id e2e .                        # 起動
 continuo abandon --id e2e <issue の URL> . # 片付け。同じ名前を渡すこと
 ```
@@ -75,6 +76,7 @@ continuo abandon --id e2e <issue の URL> . # 片付け。同じ名前を渡す�
 | **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
 | **worktree の置き場所** | `<workspace.root>/e2e` |
 | **branch 名** | `e2e/` を先頭に付けたもの |
+| **herdr の agent 名** | `continuo-e2e-<repo>-<番号>` |
 
 **socket を分けてもロックは分かれない。**ロックは `~/.continuo` に固定されている。
 **分けたいなら `--id` である。**手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。

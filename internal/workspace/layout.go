@@ -193,6 +193,30 @@ func BranchPrefix(tmpl string) string {
 	return tmpl[:index]
 }
 
+// BranchPrefixForSweep は、孤児 branch の掃除（3-9 の段6b）に使ってよい接頭辞を返す。
+//
+// **`--id` が足した `<名前>/` だけを接頭辞として使ってはならない。**
+// `--id` は `herdr.worktree.branch_template` の先頭へ `<名前>/` を足す（3-17b）。
+// **元のテンプレートが `{{.issue.repo}}-{{.issue.number}}` のように変数で始まっていると、
+// 接頭辞は空文字（＝掃除しない）だったのに、`--id e2e` を付けた途端に `e2e/` になる。**
+// そのまま掃除を始めると、**人間が自分で切った `e2e/spike` を `git branch -D` で消す。**
+//
+// **`--id` を足す前の接頭辞が空だったかどうかは、この2つだけで判定できる。**
+// 足したあとの接頭辞は `<名前>/` + 足す前の接頭辞なので、
+// **`<名前>/` と等しいことは「足す前が空だった」ことと同じである。**
+//
+// tmpl: `herdr.worktree.branch_template`（**`--id` を足したあとの値**）。
+// instanceID: `--id` に渡された名前。**既定なら空文字。**
+// 戻り値: 掃除に使ってよい接頭辞。**使ってはならない場合は空文字を返す**
+// （呼び出し側は、そのときは1本も消さないこと）。
+func BranchPrefixForSweep(tmpl, instanceID string) string {
+	prefix := BranchPrefix(tmpl)
+	if instanceID != "" && prefix == instanceID+"/" {
+		return ""
+	}
+	return prefix
+}
+
 // Slug は branch 名から置き場所のディレクトリ名を作る（3-22）。
 // スラッシュをハイフンに置き換えるだけである（gwq の naming.sanitize_chars と同じ規則）。
 //

@@ -35,6 +35,15 @@ const (
 	// **これが無かったとき、8項目すべてが ✓ で「足りないものはありません」と出たのに、
 	// 起動だけが `mkdir /run/user/1000: permission denied` で落ちた**（issue #9）。
 	LabelRuntimeDir = i18n.KeyDoctorLabelRuntimeDir
+	// LabelLockFile は二重起動防止のロックを実際に置けるかの検査である（設計 3-17 / 3-17b）。
+	//
+	// **socket の置き場所とは別に見る。**ロックは `~/.continuo`（`--id` を付けたなら
+	// `~/.continuo/id/<名前>`）に機械で固定してあり、**socket の場所からは導かない**（3-17）。
+	// **別の場所なので、片方が書けても、もう片方が書けるとは限らない。**
+	//
+	// **これが無かったとき、`~/.continuo` が書けない（あるいはファイルとして存在する）
+	// 環境で、doctor は全部 `✓` を出すのに `daemon.Run` が落ちた。**issue #9 と同じ形である。
+	LabelLockFile = i18n.KeyDoctorLabelLockFile
 	// LabelGHAuth は `gh auth status` の scope に project が単独で並んでいるかの検査である。
 	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。

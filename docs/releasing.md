@@ -95,7 +95,7 @@ gh workflow run release.yml --ref main
 continuo --id e2e ~/continuo-e2e-work
 ```
 
-**`--id <名前>` は、分けるべきものを4つまとめて分ける。**
+**`--id <名前>` は、分けるべきものを5つまとめて分ける。**
 
 | 分ける対象 | `--id e2e` を付けたとき |
 | --- | --- |
@@ -103,9 +103,11 @@ continuo --id e2e ~/continuo-e2e-work
 | **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
 | **worktree の置き場所** | `<workspace.root>/e2e` |
 | **branch 名** | `e2e/` を先頭に付けたもの |
+| **herdr の agent 名** | `continuo-e2e-<repo>-<番号>` |
 
 **`claude.hook_bridge.listen` は書かない。**`--id` を付けたときは使われない
 （書いてあっても、起動の記録に「使いません」と1行出る）。
+**`CONTINUO_RUNTIME_DIR` も同じで、指定してあれば「使いません」と1行出る。**
 **`workspace.root` も本番と同じままでよい。**末尾に `/e2e` が足される。
 
 **名前に書けるのは、小文字の英数字とハイフンだけである。**先頭は英数字、32文字まで。
@@ -128,14 +130,15 @@ OWNER="$(gh repo view --json owner --jq .owner.login)"
 WORK=~/continuo-e2e-work        # 置き場所は好きにしてよい。本番の作業ディレクトリと分けること
 mkdir -p "$WORK"
 continuo init --project 10 --owner "$OWNER" --force "$WORK"
-continuo doctor "$WORK"
+continuo doctor --id e2e "$WORK"
 ```
 
 **`✗` が0件になること。**
 **ボードに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
 
-**`continuo doctor` は `--id` を取らない。**hook の置き場所の行が見ているのは既定の場所であって、
-`--id` を付けたときの `~/.continuo/id/<名前>/run` ではない。**そこは起動のときに用意される。**
+**`continuo doctor` にも `--id` を渡すこと。**渡さないと既定の場所だけを見る。
+**`--id` を付けた起動は socket もロックも `~/.continuo/id/e2e/` を使う**ので、
+渡し忘れると**全項目 `✓` が出たのに起動だけが落ちることがある。**
 
 **四、起動して、issue を1件通す。**
 

@@ -240,7 +240,7 @@ func TestBoardLockPath_ボード1枚につき1本になる(t *testing.T) {
 	home := shortHome(t)
 	t.Setenv("HOME", home)
 
-	first, err := instance.BoardLockPath("octocat", 10)
+	first, _, err := instance.BoardLockPath("octocat", 10)
 	if err != nil {
 		t.Fatalf("ボードのロックの場所を決められない: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestBoardLockPath_ボード1枚につき1本になる(t *testing.T) {
 		t.Fatalf("ボードのロックの場所が違う: got %q, want %q", first, want)
 	}
 
-	second, err := instance.BoardLockPath("octocat", 3)
+	second, _, err := instance.BoardLockPath("octocat", 3)
 	if err != nil {
 		t.Fatalf("ボードのロックの場所を決められない: %v", err)
 	}
@@ -275,12 +275,151 @@ func TestBoardLockPath_所有者の名前で置き場所の外へ出ない(t *te
 	home := shortHome(t)
 	t.Setenv("HOME", home)
 
-	got, err := instance.BoardLockPath("../../etc/passwd", 3)
+	got, _, err := instance.BoardLockPath("../../etc/passwd", 3)
 	if err != nil {
 		t.Fatalf("ボードのロックの場所を決められない: %v", err)
 	}
 	boardDir := filepath.Join(home, ".continuo", "board")
 	if filepath.Dir(got) != boardDir {
 		t.Fatalf("置き場所の外へ出ている: got %q, want %q の直下", got, boardDir)
+	}
+}
+
+// 目的: 所有者の名前の大文字小文字でボードのロックが分かれないことを確かめる
+// （設計 3-17e）。
+//
+// **GitHub のログイン名は大文字小文字を区別しない。**`owner: Octocat` と
+// `owner: octocat` は同じボードである。**分かれると、同じボードを2つの continuo が見る。**
+//
+// 与える情報: 大文字を混ぜた所有者名と、すべて小文字の所有者名。
+// 成功条件: ロックも覚え書きも同じ1本を指すこと。
+func TestBoardLockPath_所有者の大文字小文字で分かれない(t *testing.T) {
+	home := shortHome(t)
+	t.Setenv("HOME", home)
+
+	upper, _, err := instance.BoardLockPath("Octocat", 10)
+	if err != nil {
+		t.Fatalf("ボードのロックの場所を決められない: %v", err)
+	}
+	lower, _, err := instance.BoardLockPath("octocat", 10)
+	if err != nil {
+		t.Fatalf("ボードのロックの場所を決められない: %v", err)
+	}
+	if upper != lower {
+		t.Fatalf("大文字小文字でロックが分かれている: got %q, want %q", upper, lower)
+	}
+	if instance.BoardInfoPath(upper) != instance.BoardInfoPath(lower) {
+		t.Fatalf("大文字小文字で覚え書きが分かれている: got %q, want %q",
+			instance.BoardInfoPath(upper), instance.BoardInfoPath(lower))
+	}
+}
+
+// 目的: 名前を丸めたことを、呼ぶ側へ渡すことを確かめる（設計 3-7 / 3-17e）。
+//
+// **`owner: "my org"` と `owner: "my_org"` は同じロックになる。**黙って丸めると、
+// **別のボードを見ている2本目が、理由の分からないまま断られる。**
+//
+// 与える情報: 空白を含む所有者名と、丸める必要のない所有者名。
+// 成功条件: 丸めたときだけ警告が返り、丸めていないときは返らないこと。
+func TestBoardLockPath_名前を丸めたら警告を返す(t *testing.T) {
+	home := shortHome(t)
+	t.Setenv("HOME", home)
+
+	_, warnings, err := instance.BoardLockPath("my org", 10)
+	if err != nil {
+		t.Fatalf("ボードのロックの場所を決められない: %v", err)
+	}
+	if len(warnings) == 0 {
+		t.Fatal("名前を丸めたのに警告を返していない")
+	}
+
+	_, none, err := instance.BoardLockPath("octocat", 10)
+	if err != nil {
+		t.Fatalf("ボードのロックの場所を決められない: %v", err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("丸めていないのに警告を返している: %+v", none)
+	}
+}
+
+// 目的: ボードの覚え書きを消せることを確かめる（設計 3-17e の段4）。
+//
+// **消えないと、死んだプロセスの PID を指したまま残る。**
+// [docs/FAQ.md](../../../docs/FAQ.md) は「誰が握っているかを、この覚え書きで読め」と
+// 案内しているので、**残ったままだと、動いていない continuo を探しに行くことになる。**
+//
+// 与える情報: 書いたばかりの覚え書きと、最初から無い覚え書き。
+// 成功条件: 消せること。**最初から無くてもエラーにしないこと**
+// （消えていることが目的であり、誰が消したかは問わない）。
+func TestRemoveBoardInfo_覚え書きを消す(t *testing.T) {
+	home := shortHome(t)
+	t.Setenv("HOME", home)
+
+	lockPath, _, err := instance.BoardLockPath("octocat", 10)
+	if err != nil {
+		t.Fatalf("ボードのロックの場所を決められない: %v", err)
+	}
+	if err := instance.WriteBoardInfo(lockPath, instance.BoardInfo{Owner: "octocat", ProjectNumber: 10}, nil); err != nil {
+		t.Fatalf("覚え書きを書けない: %v", err)
+	}
+	if err := instance.RemoveBoardInfo(lockPath); err != nil {
+		t.Fatalf("覚え書きを消せない: %v", err)
+	}
+	if _, err := os.Stat(instance.BoardInfoPath(lockPath)); !os.IsNotExist(err) {
+		t.Fatalf("覚え書きが残っている: %v", err)
+	}
+	// **2回目もエラーにしない。**
+	if err := instance.RemoveBoardInfo(lockPath); err != nil {
+		t.Fatalf("最初から無い覚え書きでエラーになった: %v", err)
+	}
+}
+
+// 目的: 名前の検査を、ホームディレクトリを引くより先に通すことを確かめる（設計 3-17d）。
+//
+// **順序を逆にすると、`HOME` を引けない環境で `--id ../../etc` が
+// 「ホームディレクトリを取得できません」として報告され、本当の誤りが人間に届かない。**
+//
+// 与える情報: ホームディレクトリを引けない環境と、使えない名前。
+// 成功条件: 名前が使えないことを文言に出すこと。
+func TestResolve_名前の検査をホームより先に通す(t *testing.T) {
+	t.Setenv("HOME", "")
+
+	_, err := instance.Resolve("../../etc")
+	if err == nil {
+		t.Fatal("使えない名前が通ってしまった")
+	}
+	if !strings.Contains(err.Error(), "../../etc") {
+		t.Fatalf("名前の誤りとして報告していない: %v", err)
+	}
+}
+
+// 目的: `--id` が環境変数 `CONTINUO_RUNTIME_DIR` を使わずに済ませたことを名乗るのを
+// 確かめる（設計 3-17b / 3-23）。
+//
+// **黙って捨てると、socket が思った場所にできない理由を、無人運用のログから引けない。**
+//
+// 与える情報: `--id` の有無と、環境変数の値の有無。
+// 成功条件: 両方そろったときだけ真を返すこと。
+func TestOverridesRuntimeDirEnv_idと環境変数がそろったときだけ名乗る(t *testing.T) {
+	home := shortHome(t)
+	t.Setenv("HOME", home)
+
+	withID, err := instance.Resolve("e2e")
+	if err != nil {
+		t.Fatalf("--id から置き場所を決められない: %v", err)
+	}
+	def, err := instance.Resolve("")
+	if err != nil {
+		t.Fatalf("既定の置き場所を決められない: %v", err)
+	}
+
+	if !withID.OverridesRuntimeDirEnv("/tmp/somewhere") {
+		t.Error("--id を付けて環境変数もあるのに名乗っていない")
+	}
+	if withID.OverridesRuntimeDirEnv("") {
+		t.Error("環境変数が空なのに名乗っている")
+	}
+	if def.OverridesRuntimeDirEnv("/tmp/somewhere") {
+		t.Error("--id が無いのに名乗っている（環境変数はいままでどおり効く）")
 	}
 }

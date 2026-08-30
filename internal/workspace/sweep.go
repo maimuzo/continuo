@@ -44,7 +44,9 @@ type OrphanBranchSweepRequest struct {
 //
 //   - `herdr.worktree.branch_template` の接頭辞（既定 `continuo/`）で始まること。
 //     **テンプレートに変数が1つも無ければ接頭辞を決められないので、掃除を1件も行わない**
-//     （全部の branch が対象になってしまう）
+//     （全部の branch が対象になってしまう）。**`--id` が足した `<名前>/` は接頭辞に数えない**
+//     （BranchPrefixForSweep。数えると、`--id` を付けただけで掃除が動き出し、
+//     人間が切った `<名前>/…` の branch を消す）
 //   - その branch をチェックアウトしている worktree が無いこと
 //   - KeepBranches に入っていないこと（＝実行中の issue が無いこと）
 //
@@ -73,8 +75,17 @@ func (m *Manager) SweepOrphanBranches(ctx context.Context, req OrphanBranchSweep
 		return nil, nil
 	}
 
-	prefix := BranchPrefix(m.cfg.Herdr.Worktree.BranchTemplate)
+	prefix := BranchPrefixForSweep(m.cfg.Herdr.Worktree.BranchTemplate, m.instanceID)
 	if prefix == "" {
+		if m.instanceID != "" && BranchPrefix(m.cfg.Herdr.Worktree.BranchTemplate) != "" {
+			// **`--id` を足したことで接頭辞が空から非空へ変わっただけである。**
+			// 足す前が空なら掃除は止まっていた。**`--id` を付けただけで動き出しては
+			// ならない。**動き出すと `<名前>/` で始まる無関係な branch を消す。
+			m.logger.Warn("--id を足す前の branch_template に変数が無いので孤児 branch の掃除を行いません",
+				"id", m.instanceID,
+				"branch_template", m.cfg.Herdr.Worktree.BranchTemplate)
+			return nil, nil
+		}
 		m.logger.Warn("herdr.worktree.branch_template に変数が無いので孤児 branch の掃除を行いません",
 			"branch_template", m.cfg.Herdr.Worktree.BranchTemplate)
 		return nil, nil

@@ -136,7 +136,7 @@ continuo --id e2e ~/continuo-e2e-work
 continuo abandon --id e2e https://github.com/octocat/hello-world/issues/42 ~/continuo-e2e-work
 ```
 
-**付けると、分けるべきものを4つまとめて分けます。**
+**付けると、分けるべきものを5つまとめて分けます。**
 
 | 分ける対象 | `--id e2e` を付けたとき |
 | --- | --- |
@@ -144,15 +144,27 @@ continuo abandon --id e2e https://github.com/octocat/hello-world/issues/42 ~/con
 | **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
 | **worktree の置き場所** | `<workspace.root>/e2e` |
 | **branch 名** | `e2e/` を先頭に付けたもの |
+| **herdr の agent 名** | `continuo-e2e-<repo>-<番号>` |
 
-**`claude.hook_bridge.listen` は使われません。**書いてあっても、起動の記録に1行出て無視されます。
+**`claude.hook_bridge.listen` と `CONTINUO_RUNTIME_DIR` は使われません。**
+書いてあっても、起動の記録に1行出て無視されます。
 **同じ `WORKFLOW.md` から2本立てても、hook の逃がし先が混ざらないようにするためです。**
 
 **名前に書けるのは、小文字の英数字とハイフンだけです。**先頭は英数字、32文字まで。
 **大文字・空白・`.`・`/` は起動する前に弾きます。**
 
-**`continuo abandon` にも同じ名前を渡してください。**渡さないと既定の1本を見に行き、
-**`--id` で作った worktree も branch も見つけられません。**
+**`continuo doctor` と `continuo abandon` にも同じ名前を渡してください。**
+渡さないと既定の1本を見に行き、**`--id` で作った worktree も branch も見つけられません。**
+**`doctor` は既定の場所だけを検査するので、全項目 `✓` でも起動が落ちることがあります。**
+
+```bash
+continuo doctor --id e2e ~/continuo-e2e-work
+```
+
+**孤児 branch の掃除は、`--id` を付けただけでは始まりません。**
+`herdr.worktree.branch_template` が `{{` で始まっている設定では、掃除は元から止まっています。
+**`--id e2e` を足しても `e2e/` を接頭辞として使いません**（あなたが自分で切った
+`e2e/…` の branch を消さないためです）。
 
 ### 同じボードを2つの continuo が見られなくなりました
 
@@ -171,6 +183,11 @@ continuo abandon --id e2e https://github.com/octocat/hello-world/issues/42 ~/con
 ```bash
 cat ~/.continuo/board/<owner>-<番号>.json
 ```
+
+**覚え書きは continuo が終わるときに消します。**電源が落ちるなどして残ったときは、
+書いてある `pid` を `ps` で確かめてください（[docs/FAQ.md](FAQ.md) に手順があります）。
+
+**`owner` の大文字小文字は区別しません。**`Octocat` と `octocat` は同じボードです。
 
 **当てるものはありません。**1台で1つのボードだけを見ているなら、何も変わりません。
 

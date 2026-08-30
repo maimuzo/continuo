@@ -94,6 +94,13 @@ type Deps struct {
 	// LockPath は二重起動防止のロックファイルの絶対パスである。
 	// **空なら常駐している側と同じ関数から決める**（internal/instance の Layout）。
 	LockPath string
+	// BoardLockPath はボード1枚ぶんのロックファイルの絶対パスである（設計 3-17e）。
+	//
+	// **空なら `tracker.provider` から決める**（常駐している側と同じ
+	// `instance.BoardLockPath`）。**`--id` に依らない唯一の合図である。**
+	// `--id` を付け忘れて叩かれたとき、動いている continuo を「止まっている」と
+	// 判定しないために見る。
+	BoardLockPath string
 	// AcquireLock はロックを試みる。nil なら internal/lock を呼ぶ。
 	//
 	// **取れたら continuo は動いていない。**`lock.ErrAlreadyRunning` を包んだエラーが
@@ -174,6 +181,10 @@ func (d Deps) resolve(
 			Herdr:        client,
 			Logger:       logger,
 			SettingsRoot: settingsRoot,
+			// **常駐している側と同じ名前を渡す**（3-17b）。渡さないと、
+			// `--id` の置き場所に目印が置かれず、**既定側の abandon がそこを
+			// 「身元ファイルの無いディレクトリ」として数えて止まる。**
+			InstanceID: inst.ID(),
 		})
 		if err != nil {
 			return d, i18n.Errorf(i18n.KeyAbandonWorkspaceFailed, err)
@@ -188,6 +199,22 @@ func (d Deps) resolve(
 			return d, err
 		}
 		d.LockPath = inst.LockPath()
+	}
+	if d.BoardLockPath == "" {
+		// **常駐している側と同じ関数から取る**（3-17e）。
+		// **`--id` では分けない。**ボードは名前から導けない。
+		path, warnings, err := instance.BoardLockPath(
+			cfg.Tracker.Provider.Owner, cfg.Tracker.Provider.ProjectNumber)
+		if err != nil {
+			return d, err
+		}
+		// **正規化で情報が落ちたら黙らない**（3-7）。`my org` と `my_org` が
+		// 同じロックになる。**理由が分からないまま断られる人が出ないようにする。**
+		for _, w := range warnings {
+			logger.Warn("ボードのロックの名前で正規化が情報を落としました",
+				"owner", cfg.Tracker.Provider.Owner, "message", w.Message, "board_lock_file", path)
+		}
+		d.BoardLockPath = path
 	}
 	if d.NewTracker == nil {
 		d.NewTracker = func(ctx context.Context) (Tracker, error) {

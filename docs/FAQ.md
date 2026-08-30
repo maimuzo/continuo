@@ -68,7 +68,7 @@ pgrep -fl continuo
 continuo --id e2e ~/continuo-work    # 別の1本として動かす
 ```
 
-**`--id` は、分けるべきものを4つまとめて分けます。**
+**`--id` は、分けるべきものを5つまとめて分けます。**
 
 | 分ける対象 | `--id e2e` を付けたとき |
 | --- | --- |
@@ -76,10 +76,24 @@ continuo --id e2e ~/continuo-work    # 別の1本として動かす
 | **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
 | **worktree の置き場所** | `<workspace.root>/e2e` |
 | **branch 名** | `e2e/` を先頭に付けたもの |
+| **herdr の agent 名** | `continuo-e2e-<repo>-<番号>` |
+
+**`--id` を付けると `CONTINUO_RUNTIME_DIR` と `claude.hook_bridge.listen` は使いません。**
+指定してあれば、そのことを起動時のログに1行出します。
 
 **名前は小文字の英数字とハイフンだけです。**先頭は英数字、32文字まで。
 **`continuo abandon` にも同じ名前を渡してください。**渡さないと既定の1本を見に行き、
 `--id` で作った worktree も branch も見つけられません。
+**渡し忘れても、ボードのロック（下の節）で止まります。**
+
+**`continuo doctor` にも同じ名前を渡してください。**
+
+```bash
+continuo doctor --id e2e ~/continuo-work
+```
+
+**渡さないと既定の場所だけを見ます。**`--id` を付けた起動は socket もロックも
+`~/.continuo/id/e2e/` を使うので、**全項目 `✓` が出たのに起動だけが落ちることがあります。**
 
 ### 「同じボード（… の project #…）を見ている continuo が既に動いています」で起動できない
 
@@ -101,8 +115,8 @@ cat ~/.continuo/board/<owner>-<番号>.json
   "project_number": 10,
   "instance_id": "e2e",
   "pid": 12345,
-  "config_path": "/Users/…/continuo-e2e-work/WORKFLOW.md",
-  "lock_file": "/Users/…/.continuo/id/e2e/continuo.lock",
+  "config_path": "~/continuo-e2e-work/WORKFLOW.md",
+  "lock_file": "~/.continuo/id/e2e/continuo.lock",
   "started_at": "2026-08-30T12:00:00+09:00"
 }
 ```
@@ -110,6 +124,17 @@ cat ~/.continuo/board/<owner>-<番号>.json
 **この覚え書きは、人間が読むためだけのものです。**排他の判定には使いません
 （判定は `flock` 1本だけです）。**握っていたプロセスが死ねば、OS がロックを解放します。**
 **残骸を消す必要はありません。**
+
+**覚え書きは、continuo が終わるときに消します。**
+**ただし、覚え書きだけが残ることがあります**（電源が落ちた・`kill -9` された・消せなかった）。
+**残っていても、そのプロセスが生きているとは限りません。**確かめ方は次のとおりです。
+
+```bash
+ps -p "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["pid"])' ~/.continuo/board/<owner>-<番号>.json)"
+```
+
+**`ps` が何も出さなければ、その覚え書きは古いものです。**消して構いません
+（**ロックのほうは消さないでください。**OS が解放するので、消す必要がありません）。
 
 **2本目を動かしたいなら、別のボードを見せてください。**
 
@@ -1268,7 +1293,7 @@ continuo --help
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | ボードの Status を5つの役割へ対応づける（対話） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを14の見出し語で調べる |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかを見出し語ごとに調べる。`--id` で名前ごとの場所を見る |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
@@ -1284,7 +1309,7 @@ continuo ~/continuo-work                   # 1本目（いま動いているも�
 continuo --id e2e ~/continuo-e2e-work      # 2本目
 ```
 
-**`--id` は、分けるべきものを4つまとめて分けます。**
+**`--id` は、分けるべきものを5つまとめて分けます。**
 
 | 分ける対象 | `--id e2e` を付けたとき |
 | --- | --- |
@@ -1292,6 +1317,7 @@ continuo --id e2e ~/continuo-e2e-work      # 2本目
 | **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
 | **worktree の置き場所** | `<workspace.root>/e2e` |
 | **branch 名** | `e2e/` を先頭に付けたもの |
+| **herdr の agent 名** | `continuo-e2e-<repo>-<番号>` |
 
 **設定や環境変数では分かれません。**`runtime.lock_file` は読みません。
 `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` を変えても、ロックは1本のままです。
@@ -1300,8 +1326,14 @@ continuo --id e2e ~/continuo-e2e-work      # 2本目
 **2本目には別のボードを見せてください。**同じボードを2つの continuo が見ると同じ issue を
 2つが拾うので、**2つ目はボードのロックで起動を止められます**（上の「同じボード…」を見てください）。
 
-**`continuo abandon` にも同じ名前を渡してください。**渡さないと既定の1本を見に行き、
-`--id` で作った worktree も branch も見つけられません。
+**`continuo doctor` と `continuo abandon` にも同じ名前を渡してください。**
+渡さないと既定の1本を見に行き、`--id` で作った worktree も branch も見つけられません。
+**`abandon` は、渡し忘れてもボードのロックで止まります。**
+
+**孤児 branch の掃除は、`--id` を付けただけでは始まりません。**
+`herdr.worktree.branch_template` が `{{` で始まっている設定では、掃除は元から止まっています
+（接頭辞を決められないためです）。**`--id e2e` を足しても `e2e/` を接頭辞として使いません。**
+使うと、あなたが自分で切った `e2e/…` の branch を消してしまうからです。
 
 ### フラグを位置引数の後ろに書いてもいい？
 

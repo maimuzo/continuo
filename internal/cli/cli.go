@@ -838,8 +838,17 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	// 揃えて字下げされるので、そのままでは `patch` に渡せない。
 	// **人間が読む差分と、機械へ渡す差分の両方が要る**（設計 3-75）。
 	patchFlag := fs.Bool("missing-keys-patch", false, i18n.T(i18n.KeyCLIDoctorFlagMissingKeysPatch))
+	// **`--id` を付けた起動を検査できるようにする**（設計 3-17b）。
+	// **これが無いと、doctor は既定の socket とロックだけを見て `✓` を出す。**
+	// `--id` を付けた起動は別の場所を使うので、**そこが書けなくても気づけない。**
+	idFlag := fs.String("id", "", i18n.T(i18n.KeyCLIDoctorFlagID))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
+	}
+	// **フラグを読んだ直後に検査する**（設計 3-17d。runMain と同じ）。
+	inst, err := checkInstanceID(*idFlag, stderr)
+	if err != nil {
+		return 2
 	}
 
 	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
@@ -855,9 +864,9 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 		argPath = positional[0]
 	}
 
-	workDir, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGetwd, err))
+	workDir, getwdErr := os.Getwd()
+	if getwdErr != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGetwd, getwdErr))
 		return 1
 	}
 	// **設定ファイルの場所が決まらなくても検査は続ける。**場所が決まらないことは
@@ -893,6 +902,7 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	report := d.DoctorRun(ctx, doctor.Options{
 		ConfigPath:      path,
 		GraphQLEndpoint: endpoint,
+		Instance:        inst,
 	})
 	if err := report.Write(stdout); err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrWriteReport, err))
@@ -983,7 +993,10 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 		return parseErrorExitCode(err)
 	}
 	// **フラグを読んだ直後に検査する**（設計 3-17d。runMain と同じ）。
-	if err := checkInstanceID(*idFlag, stderr); err != nil {
+	// **解決した置き場所はそのまま渡す。**abandon が解決し直すと、
+	// 検査を通ったものと実際に使うものが別々に作られる。
+	inst, err := checkInstanceID(*idFlag, stderr)
+	if err != nil {
 		return 2
 	}
 
@@ -1005,9 +1018,9 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 		argPath = positional[1]
 	}
 
-	workDir, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGetwd, err))
+	workDir, getwdErr := os.Getwd()
+	if getwdErr != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGetwd, getwdErr))
 		return 1
 	}
 	path, err := config.ResolvePath(argPath, workDir)
@@ -1043,7 +1056,7 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 		Force:           *forceFlag,
 		ToState:         *toFlag,
 		ParkState:       *parkFlag,
-		ID:              *idFlag,
+		Instance:        inst,
 		GraphQLEndpoint: endpoint,
 		Out:             stdout,
 		Err:             stderr,
@@ -1064,15 +1077,33 @@ const doctorInternalErrorExitCode = 3
 // socket のパスの長さも、**判定を持つのは1箇所だけにする。**
 // ここに写しを置くと、片方だけを直したときに CLI と常駐で判定が食い違う。
 //
-// id: `--id` に渡された名前。空文字なら既定の1本なので、必ず通る。
+// **解決した結果を返す。**捨てて `daemon.Run` / `abandon.Run` に解決し直させると、
+// **検査を通った結果と実際に使う結果が別々に作られる。**
+//
+// **名前の誤りと、それ以外の誤りを言い分ける。**`instance.Resolve` は名前を先に検査し、
+// そのあとでホームディレクトリを引く（設計 3-17d）。**名前の検査を通ったあとの失敗を
+// 「--id に渡した名前が使えません」と報告してはならない。**
+// `HOME` を引けない環境では `--id` を1文字も渡していない人にもその文言が出る。
+//
+// id: `--id` に渡された名前。空文字なら既定の1本である。
 // stderr: 弾いた理由の出力先。
-// 戻り値: 使えない名前だった場合のエラー（**理由は stderr へ書き出し済みである**）。
-func checkInstanceID(id string, stderr io.Writer) error {
-	if _, err := instance.Resolve(id); err != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrInvalidID, err))
-		return err
+// 戻り値の1つ目: 解決した置き場所（**弾いたときは nil**）。
+// 戻り値の2つ目: 使えない場合のエラー（**理由は stderr へ書き出し済みである**）。
+func checkInstanceID(id string, stderr io.Writer) (*instance.Layout, error) {
+	if id != "" {
+		// **名前そのものの検査を先に通す**（純粋な関数なので費用がかからない）。
+		// ここを通ったあとの失敗は、名前のせいではない。
+		if err := instance.ValidateID(id); err != nil {
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrInvalidID, err))
+			return nil, err
+		}
 	}
-	return nil
+	layout, err := instance.Resolve(id)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrInstanceLayout, err))
+		return nil, err
+	}
+	return &layout, nil
 }
 
 // reorderArgs は、位置引数のあとに書かれたフラグを前へ寄せてから flag へ渡すための並べ替えである。
@@ -1195,7 +1226,8 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	// **フラグを読んだ直後に検査し、弾いたら起動しない**（設計 3-17d）。
 	// **この文字列はパスにも branch 名にも socket のパスにも入る。**あとで検査すると、
 	// 検査より先に `~/.continuo` の外を指すパスが組み上がる。
-	if err := checkInstanceID(*idFlag, stderr); err != nil {
+	inst, err := checkInstanceID(*idFlag, stderr)
+	if err != nil {
 		return 2
 	}
 	var port *int
@@ -1269,7 +1301,7 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 		ConfigPath: path,
 		Logger:     logger,
 		Port:       port,
-		ID:         *idFlag,
+		Instance:   inst,
 	}); err != nil {
 		// **起動できなかったのか、動いていたものが落ちたのかを言い分ける。**
 		// 無人運用のログを後から読む人間が、起動失敗と実行中の異常終了を取り違えないようにする。

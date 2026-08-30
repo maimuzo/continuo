@@ -26,21 +26,37 @@ const agentNameSuffixAttempts = 10
 // **agent 名は「人間が端末で見分けるためのもの」に役割を限定する。**
 // 名前から元の issue を復元しない（復元の主キーは worktree の身元ファイルである。設計 3-18）。
 //
-//  1. repo と番号から continuo-<repo>-<番号> を組み立てる
+//  1. `--id`・repo・番号から continuo-<名前>-<repo>-<番号> を組み立てる
+//     （**`--id` を付けていなければ continuo-<repo>-<番号> である**）
 //  2. 小文字にし、英数字とハイフン以外をハイフンに置き換え、連続するハイフンを1つにまとめる
 //  3. 32文字を超えていたら、repo の部分を後ろから1文字ずつ削って収める
 //     （**番号は削らない。**番号が消えると別の issue と同じ名前になりうる）
 //
+// **`--id` を混ぜるのは、別のボードを見ている continuo と見分けるためである**（設計 3-17b）。
+// 混ぜないと、別のボードの同じ番号の issue が同じ名前になる。
+//
+// **repo を削り切ってもなお収まらないときは、`--id` の名前も後ろから削る。**
+// **一意性はここでは保証しない。**重複は段4（resolveAgentName）が `agent.list` を見て
+// `-2`, `-3` を足して解消する。**この関数が守るのは、herdr の 32 文字の上限だけである。**
+//
+// instanceID: `--id` に渡された名前。**既定なら空文字。**
 // repo: リポジトリ名。
 // number: GitHub issue の番号。
 // 戻り値: 32文字以内に収めた候補の名前。
-func BuildAgentName(repo string, number int) string {
+func BuildAgentName(instanceID, repo string, number int) string {
 	suffix := fmt.Sprintf("-%d", number)
 	body := foldToAgentNameChars(repo)
+	head := foldToAgentNameChars(instanceID)
 
 	// 段3: 番号は削らず、repo の部分を後ろから削って収める。
 	budget := agentNameMaxLen - len(agentNamePrefix) - len(suffix)
+	if head != "" {
+		budget -= len(head) + 1
+	}
 	if budget < 0 {
+		// **repo を全部削ってもなお収まらない。**`--id` の名前を削って上限に合わせる。
+		// **番号だけは残す**（消えると別の issue と同じ名前になりうる）。
+		head = trimToFit(head, len(head)+budget)
 		budget = 0
 	}
 	if len(body) > budget {
@@ -48,12 +64,31 @@ func BuildAgentName(repo string, number int) string {
 	}
 	body = strings.Trim(body, "-")
 
-	name := agentNamePrefix + body + suffix
+	name := agentNamePrefix
+	if head != "" {
+		name += head + "-"
+	}
+	name += body + suffix
 	// repo が空になった場合に "continuo--188" のような連続ハイフンが残らないようにする。
 	for strings.Contains(name, "--") {
 		name = strings.ReplaceAll(name, "--", "-")
 	}
 	return name
+}
+
+// trimToFit は名前を後ろから削って n 文字に収める。
+//
+// s: 削る文字列。
+// n: 収める長さ。**0 以下なら空文字を返す。**
+// 戻り値: n 文字以内に収め、前後のハイフンを落とした文字列。
+func trimToFit(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if len(s) <= n {
+		return strings.Trim(s, "-")
+	}
+	return strings.Trim(s[:n], "-")
 }
 
 // foldToAgentNameChars は文字列を小文字にし、英数字とハイフン以外をハイフンに置き換え、
@@ -92,7 +127,7 @@ func foldToAgentNameChars(raw string) string {
 // 戻り値の1つ目: 使える agent 名（herdr のパターンを満たすことを検査済み）。
 // 戻り値の2つ目: `agent.list` に失敗した場合、または10回試しても空きが無い場合のエラー。
 func (o *Orchestrator) resolveAgentName(ctx context.Context, repo string, number int) (normalize.SafeName, error) {
-	base := BuildAgentName(repo, number)
+	base := BuildAgentName(o.instanceID, repo, number)
 
 	used := map[string]bool{}
 	list, err := o.herdr.AgentList(ctx)

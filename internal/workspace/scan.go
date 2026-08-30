@@ -113,6 +113,16 @@ func (m *Manager) scanLevel(dir string, depth int) ([]string, error) {
 			continue
 		}
 		child := filepath.Join(dir, entry.Name())
+		// **別の continuo（`--id <名前>`）の置き場所へは1階層も入らない**（設計 3-17b）。
+		// **入ると、あちらの worktree が「身元ファイルの無いディレクトリ」として数えられ、
+		// 既定側の `continuo abandon` が判断を保留したまま止まる。**
+		// **見るのは置き場所の直下だけである**（`--id` が足すのは1階層だけなので、
+		// それより深くを見ても、当たるのは worktree の中だけになる）。
+		if depth == scanDepth && isOtherInstanceRoot(child) {
+			m.logger.Debug("別の continuo の置き場所なので走査から外します",
+				"dir", child, "marker", InstanceMarkerName)
+			continue
+		}
 		deeper, err := m.scanLevel(child, depth-1)
 		if err != nil {
 			return nil, err

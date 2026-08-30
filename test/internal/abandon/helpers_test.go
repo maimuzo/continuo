@@ -706,6 +706,11 @@ type fixture struct {
 	Clock *fakeClock
 	// LockPath は二重起動防止のロックファイルの絶対パスである。
 	LockPath string
+	// BoardLockPath はボードのロックファイルの絶対パスである（設計 3-17e）。
+	//
+	// **必ず一時ディレクトリの中に置く。**埋めずに走らせると、abandon が
+	// `~/.continuo/board/` を使い、**テストが利用者の本物のホームへ書き込む。**
+	BoardLockPath string
 	// SettingsRoot は issue ごとの設定ファイルの置き場所である（設計 3-12）。
 	SettingsRoot string
 	// Ghq は `ghq list -p -e` の代わりに返す答えである。
@@ -779,17 +784,18 @@ func newFixtureWithConfig(t *testing.T, extra string) *fixture {
 	}
 
 	return &fixture{
-		Root:         root,
-		Repo:         repo,
-		Herdr:        fake,
-		Manager:      mgr,
-		Config:       loaded.Config,
-		WorkflowPath: workflowPath,
-		Tracker:      newFakeTracker("In Progress"),
-		Clock:        &fakeClock{now: time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)},
-		LockPath:     filepath.Join(root, "continuo.lock"),
-		SettingsRoot: settingsRoot,
-		Ghq:          ghq,
+		Root:          root,
+		Repo:          repo,
+		Herdr:         fake,
+		Manager:       mgr,
+		Config:        loaded.Config,
+		WorkflowPath:  workflowPath,
+		Tracker:       newFakeTracker("In Progress"),
+		Clock:         &fakeClock{now: time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)},
+		LockPath:      filepath.Join(root, "continuo.lock"),
+		BoardLockPath: filepath.Join(root, "board.lock"),
+		SettingsRoot:  settingsRoot,
+		Ghq:           ghq,
 	}
 }
 
@@ -1106,9 +1112,12 @@ func (fx *fixture) Options(number int) abandon.Options {
 		PaneWaitTimeout:  3 * time.Second,
 		PaneWaitInterval: time.Second,
 		Deps: abandon.Deps{
-			LockPath:  fx.LockPath,
-			Herdr:     fx.Herdr.Client(),
-			Workspace: fx.Manager,
+			LockPath: fx.LockPath,
+			// **ボードのロックも一時ディレクトリへ閉じる。**埋めないと
+			// `~/.continuo/board/` を掴み、利用者の本物のホームへ書き込む。
+			BoardLockPath: fx.BoardLockPath,
+			Herdr:         fx.Herdr.Client(),
+			Workspace:     fx.Manager,
 			NewTracker: func(_ context.Context) (abandon.Tracker, error) {
 				fx.trackerBuilds++
 				return fx.Tracker, nil

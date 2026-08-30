@@ -32,6 +32,7 @@ var wantLabels = []i18n.Key{
 	doctor.LabelMissingKeys,
 	doctor.LabelClaude,
 	doctor.LabelRuntimeDir,
+	doctor.LabelLockFile,
 	doctor.LabelClaudeHome,
 	doctor.LabelWorkspaceRoot,
 	doctor.LabelHerdr,

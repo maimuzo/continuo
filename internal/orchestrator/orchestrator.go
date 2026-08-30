@@ -221,6 +221,12 @@ type Options struct {
 	// ContinuoPath は `continuo hook` を起動する実行ファイルの絶対パスである。
 	// 空なら os.Executable() の結果を使う。
 	ContinuoPath string
+	// InstanceID は `--id` に渡された名前である（設計 3-17b）。**既定なら空文字。**
+	//
+	// **herdr の agent 名に混ぜるためだけに持つ。**混ぜないと、別のボードの
+	// 同じ番号の issue が同じ agent 名になり、**人間が端末でどちらの pane かを
+	// 見分けられない。**
+	InstanceID string
 	// Logger はログの出力先である。nil なら slog.Default() を使う。
 	Logger *slog.Logger
 	// Now は現在時刻を返す関数である。nil なら time.Now を使う。
@@ -260,6 +266,9 @@ type Orchestrator struct {
 	socketPath     string
 	runtimeDir     string
 	continuoPath   string
+	// instanceID は `--id` に渡された名前である（設計 3-17b）。**既定なら空文字。**
+	// **agent 名に混ぜる。**
+	instanceID     string
 	transcriptRoot string
 	logger         *slog.Logger
 	now            func() time.Time
@@ -456,6 +465,7 @@ func New(opts Options) (*Orchestrator, error) {
 		socketPath:     opts.HookSocketPath,
 		runtimeDir:     filepath.Dir(opts.HookSocketPath),
 		continuoPath:   continuoPath,
+		instanceID:     opts.InstanceID,
 		transcriptRoot: transcriptRoot,
 		logger:         logger,
 		now:            nowFunc,

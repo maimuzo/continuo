@@ -22,6 +22,8 @@ const (
 
 	// KeyDoctorLabelRuntimeDir は doctor の「hook の置き場所」の見出し語である。
 	KeyDoctorLabelRuntimeDir Key = "doctor.label.runtime_dir"
+	// KeyDoctorLabelLockFile は doctor の「ロックの場所」の見出し語である。
+	KeyDoctorLabelLockFile Key = "doctor.label.lock_file"
 	// KeyDoctorRuntimeDirOK は hook の socket を用意できたときに出る。
 	KeyDoctorRuntimeDirOK Key = "doctor.runtime_dir.ok"
 	// KeyDoctorRuntimeDirFailed は hook の socket を用意できなかったときに出る。
@@ -34,6 +36,14 @@ const (
 	KeyDoctorRuntimeDirStale Key = "doctor.runtime_dir.stale"
 	// KeyDoctorRuntimeDirRemedyStale は残骸を確かめて消す手順である。
 	KeyDoctorRuntimeDirRemedyStale Key = "doctor.runtime_dir.remedy_stale"
+	// KeyDoctorLockFileOK は二重起動防止のロックを置けたときに出る。
+	KeyDoctorLockFileOK Key = "doctor.lock_file.ok"
+	// KeyDoctorLockFileInUse はロックを既に continuo が握っているときに出る。
+	KeyDoctorLockFileInUse Key = "doctor.lock_file.in_use"
+	// KeyDoctorLockFileFailed はロックを置けなかったときに出る。
+	KeyDoctorLockFileFailed Key = "doctor.lock_file.failed"
+	// KeyDoctorLockFileRemedy はロックを置けなかったときの直し方に出る。
+	KeyDoctorLockFileRemedy Key = "doctor.lock_file.remedy"
 
 	// KeyDoctorClaudeNotFound は claude が PATH に無いときの文言である。
 	KeyDoctorClaudeNotFound Key = "doctor.claude.not_found"
@@ -169,6 +179,8 @@ const (
 	KeyDoctorWriteRemedyPermission Key = "doctor.write.remedy_permission"
 	// KeyDoctorDefaultUsed は設定を読めないまま既定値で確かめたときの理由に出る。
 	KeyDoctorDefaultUsed Key = "doctor.default_used"
+	// KeyDoctorInstanceNote は `--id` を付けた置き場所を見たことの内訳に出る。
+	KeyDoctorInstanceNote Key = "doctor.instance_note"
 )
 
 // doctor の検査「Claude の設定」（Claude Code の設定ディレクトリに書けるか）。
@@ -654,6 +666,8 @@ const (
 	KeyCLIDoctorErrWriteReport Key = "cli.doctor.err_write_report"
 	// KeyCLIDoctorFlagMissingKeysPatch は `--missing-keys-patch` の説明に出る。
 	KeyCLIDoctorFlagMissingKeysPatch Key = "cli.doctor.flag_missing_keys_patch"
+	// KeyCLIDoctorFlagID は `continuo doctor --id` の説明に出る。
+	KeyCLIDoctorFlagID Key = "cli.doctor.flag_id"
 	// KeyCLIDoctorErrMissingKeysPatch は足す差分を組み立てられなかったときに出る。
 	KeyCLIDoctorErrMissingKeysPatch Key = "cli.doctor.err_missing_keys_patch"
 )
@@ -742,6 +756,10 @@ const (
 	KeyAbandonErrBuild Key = "abandon.err_build"
 	// KeyAbandonErrLockFile はロックファイルそのものを開けないときに出る。
 	KeyAbandonErrLockFile Key = "abandon.err_lock_file"
+	// KeyAbandonErrBoardInUse は同じボードを見ている continuo が動いているときに出る。
+	KeyAbandonErrBoardInUse Key = "abandon.err_board_in_use"
+	// KeyAbandonErrBoardLockFile はボードのロックファイルそのものを開けないときに出る。
+	KeyAbandonErrBoardLockFile Key = "abandon.err_board_lock_file"
 	// KeyAbandonRunning は、**continuo が動いていて、手を離させる段を通る**ときの1行に出る。
 	KeyAbandonRunning Key = "abandon.running"
 	// KeyAbandonRunningDryRun は、**continuo が動いているが `--dry-run` なので
@@ -994,6 +1012,9 @@ const (
 	KeyCLIMainErrPortRange Key = "cli.main.err_port_range"
 	// KeyCLIErrInvalidID は --id に渡された名前が使えないことを表す。
 	KeyCLIErrInvalidID Key = "cli.err_invalid_id"
+	// KeyCLIErrInstanceLayout は continuo の置き場所そのものを決められないことを表す。
+	// **名前の誤りとは言い分ける**（--id を渡していない人にも出るため）。
+	KeyCLIErrInstanceLayout Key = "cli.err_instance_layout"
 	// KeyCLIMainErrTooManyPositional は位置引数が2つ以上あるときに出る。
 	KeyCLIMainErrTooManyPositional Key = "cli.main.err_too_many_positional"
 	// KeyCLIMainStarting は起動したときの1行に出る。
@@ -1116,6 +1137,8 @@ const (
 	KeyInstanceBoardDirFailed Key = "instance.board_dir.failed"
 	// KeyInstanceBoardInfoMarshalFailed はボードのロックの覚え書きを JSON にできなかったときに出る。
 	KeyInstanceBoardInfoMarshalFailed Key = "instance.board_info.marshal_failed"
+	// KeyInstanceBoardInfoRemoveFailed はボードのロックの覚え書きを消せなかったときに出る。
+	KeyInstanceBoardInfoRemoveFailed Key = "instance.board_info.remove_failed"
 )
 
 // hook を受ける socket の置き場所（internal/socketpath）のエラーの文言。
@@ -2044,6 +2067,8 @@ const (
 	KeyWorkspaceRenderBranchRenderedEmpty Key = "workspace.render_branch.rendered_empty"
 	// KeyWorkspaceScanLevelRootUnreadable は置き場所の最上位を読めなかったときに出る。
 	KeyWorkspaceScanLevelRootUnreadable Key = "workspace.scan_level.root_unreadable"
+	// KeyWorkspaceInstanceMarkerWriteFailed は `--id` の置き場所に目印を書けなかったときに出る。
+	KeyWorkspaceInstanceMarkerWriteFailed Key = "workspace.instance_marker.write_failed"
 	// KeyWorkspaceCheckTrustForClonePathToplevelFailed は clone のパスから信頼を引く鍵を求められなかったときに出る。
 	KeyWorkspaceCheckTrustForClonePathToplevelFailed Key = "workspace.check_trust_for_clone_path.toplevel_failed"
 	// KeyWorkspaceCheckTrustForClonePathConfigUnreadable は `~/.claude.json` を読めなかったときに出る（存在しない場合は除く）。
@@ -2283,12 +2308,17 @@ var allKeys = []Key{
 	KeyDoctorLabelHerdr,
 	KeyDoctorLabelClaude,
 	KeyDoctorLabelRuntimeDir,
+	KeyDoctorLabelLockFile,
 	KeyDoctorRuntimeDirOK,
 	KeyDoctorRuntimeDirFailed,
 	KeyDoctorRuntimeDirRemedy,
 	KeyDoctorRuntimeDirInUse,
 	KeyDoctorRuntimeDirStale,
 	KeyDoctorRuntimeDirRemedyStale,
+	KeyDoctorLockFileOK,
+	KeyDoctorLockFileInUse,
+	KeyDoctorLockFileFailed,
+	KeyDoctorLockFileRemedy,
 	KeyDoctorClaudeNotFound,
 	KeyDoctorClaudeFound,
 	KeyDoctorClaudeRemedyInstall,
@@ -2338,6 +2368,7 @@ var allKeys = []Key{
 	KeyDoctorFilesystemRemedyRestart,
 	KeyDoctorWriteRemedyPermission,
 	KeyDoctorDefaultUsed,
+	KeyDoctorInstanceNote,
 	KeyDoctorClaudeHomeOK,
 	KeyDoctorClaudeHomeFailed,
 	KeyDoctorClaudeHomeReason,
@@ -2540,6 +2571,7 @@ var allKeys = []Key{
 	KeyCLIDoctorWarnPathUnresolved,
 	KeyCLIDoctorErrWriteReport,
 	KeyCLIDoctorFlagMissingKeysPatch,
+	KeyCLIDoctorFlagID,
 	KeyCLIDoctorErrMissingKeysPatch,
 	KeyCLIAllowKeychainAccessErrTooManyPositional,
 	KeyCLIAllowKeychainAccessNotDarwin,
@@ -2576,6 +2608,8 @@ var allKeys = []Key{
 	KeyAbandonErrConfigLoad,
 	KeyAbandonErrBuild,
 	KeyAbandonErrLockFile,
+	KeyAbandonErrBoardInUse,
+	KeyAbandonErrBoardLockFile,
 	KeyAbandonRunning,
 	KeyAbandonRunningDryRun,
 	KeyAbandonNotRunning,
@@ -2664,6 +2698,7 @@ var allKeys = []Key{
 	KeyCLIMainFlagID,
 	KeyCLIMainErrPortRange,
 	KeyCLIErrInvalidID,
+	KeyCLIErrInstanceLayout,
 	KeyCLIMainErrTooManyPositional,
 	KeyCLIMainStarting,
 	KeyCLIHookFlagSocket,
@@ -2715,6 +2750,7 @@ var allKeys = []Key{
 	KeyInstanceEnsureLockDirFailed,
 	KeyInstanceBoardDirFailed,
 	KeyInstanceBoardInfoMarshalFailed,
+	KeyInstanceBoardInfoRemoveFailed,
 	KeySocketpathRuntimeDirHomeDirFailed,
 	KeySocketpathCheckAbsNotAbsolute,
 	KeySocketpathCheckPathLenTooLong,
@@ -3033,6 +3069,7 @@ var allKeys = []Key{
 	KeyWorkspaceRenderBranchTemplateRenderFailed,
 	KeyWorkspaceRenderBranchRenderedEmpty,
 	KeyWorkspaceScanLevelRootUnreadable,
+	KeyWorkspaceInstanceMarkerWriteFailed,
 	KeyWorkspaceCheckTrustForClonePathToplevelFailed,
 	KeyWorkspaceCheckTrustForClonePathConfigUnreadable,
 	KeyWorkspaceCheckTrustForClonePathConfigUnparsable,

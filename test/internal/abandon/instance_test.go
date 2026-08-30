@@ -1,13 +1,17 @@
 package abandon_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/abandon"
 	"github.com/maimuzo/continuo/internal/instance"
+	"github.com/maimuzo/continuo/internal/lock"
+	"github.com/maimuzo/continuo/internal/workspace"
 )
 
 // errLockCaptured は、**ロックをどこに取りに行ったかだけを見て実行を止める**ための番兵である。
@@ -71,7 +75,7 @@ func TestAbandon_idを渡すと常駐している側と同じ場所を見る(t *
 
 	var lockedPath string
 	fx.Run(t, 999, func(opts *abandon.Options) {
-		opts.ID = "e2e"
+		opts.Instance = &layout
 		opts.DryRun = true
 		// **埋めない。**設定から本物を組み立てる経路を通さないと、
 		// 常駐している側と同じ関数を呼んでいるかを確かめられない。
@@ -122,5 +126,121 @@ func TestAbandon_idを渡さなければ既定の1本を見る(t *testing.T) {
 
 	if want := filepath.Join(home, ".continuo", "continuo.lock"); lockedPath != want {
 		t.Errorf("既定のロックを見ていない: got %q, want %q", lockedPath, want)
+	}
+}
+
+// 目的: `--id` を1度使ったあとでも、既定の `continuo abandon` が普通に片付けられることを
+// 確かめる（設計 3-17b / 3-17c）。
+//
+// **`--id e2e` の worktree は `<workspace.root>/e2e/<host>/<owner>/<repo>/<スラグ>` にある。**
+// 既定側の走査は `<workspace.root>` からちょうど4階層を返すので、目印が無ければ
+// `<workspace.root>/e2e/<host>/<owner>/<repo>` を「身元ファイルが無いディレクトリ」として
+// 拾い、**判断を保留したまま `ExitStopped` で止まる。**
+// **そうなると、既定側は二度と何も片付けられない。**
+//
+// 与える情報: `--id e2e` の Manager が用意した worktree と、既定側で用意した worktree。
+// 成功条件: 既定側の実行が `ExitOK` で終わり、保留の文言を出さないこと。
+// **目印を消すと止まること**（消しても通るなら、この検査は何も守っていない）。
+func TestAbandon_idを使ったあとも既定の片付けが動く(t *testing.T) {
+	fx := newFixture(t)
+	abandonShortHome(t)
+
+	// **常駐している側と同じ経路で `--id e2e` の置き場所を作る**（設計 3-17b）。
+	layout, err := instance.Resolve("e2e")
+	if err != nil {
+		t.Fatalf("--id から置き場所を決められない: %v", err)
+	}
+	idCfg := layout.Apply(fx.Config)
+	idMgr, err := workspace.New(workspace.Options{
+		Config:       idCfg,
+		Herdr:        fx.Herdr.Client(),
+		HomeDir:      filepath.Join(fx.Root, "home"),
+		GhqList:      func(_ context.Context, _, _ string) (string, error) { return fx.Repo.Dir, nil },
+		SettingsRoot: filepath.Join(fx.Root, "issues-e2e"),
+		InstanceID:   layout.ID(),
+	})
+	if err != nil {
+		t.Fatalf("--id e2e の worktree の置き場所を作れません: %v", err)
+	}
+	if _, err := idMgr.Prepare(context.Background(), issueRef(777)); err != nil {
+		t.Fatalf("--id e2e の worktree を用意できません: %v", err)
+	}
+
+	// **既定側に worktree が無い issue を片付けさせる。**保留が1件でもあると
+	// 「この issue の worktree はありません」へ進めず、`ExitStopped` で止まる。
+	// **`--id` の置き場所を数えてしまうのは、まさにこの経路である。**
+	code := fx.Run(t, 999, func(opts *abandon.Options) { opts.DryRun = true })
+	if code != abandon.ExitOK {
+		t.Fatalf("--id を使ったあとに既定の片付けが止まった: 終了コード %d\n%s", code, fx.Output())
+	}
+	if strings.Contains(fx.Output(), idCfg.Workspace.Root) {
+		t.Fatalf("--id の置き場所 %s を既定側が数えている:\n%s", idCfg.Workspace.Root, fx.Output())
+	}
+
+	// **目印を消すと止まる。**ここが通ってしまうなら、上の検査は目印を確かめていない。
+	if err := os.Remove(filepath.Join(idCfg.Workspace.Root, workspace.InstanceMarkerName)); err != nil {
+		t.Fatalf("目印を消せません: %v", err)
+	}
+	// **同じ一式でもう一度走らせる。**上の実行は `--dry-run` なので何も消していない。
+	fx.Out.Reset()
+	fx.Err.Reset()
+	if code := fx.Run(t, 999, func(opts *abandon.Options) { opts.DryRun = true }); code != abandon.ExitStopped {
+		t.Fatalf("目印が無いのに止まらなかった（検査が空振りしている）: 終了コード %d\n%s",
+			code, fx.Output())
+	}
+}
+
+// 目的: `--id` を付け忘れた `continuo abandon` を、ボードのロックで止めることを確かめる
+// （設計 3-17e）。
+//
+// **ロックは `--id` ごとに分かれるので、自分のロックが空いていることは
+// 「continuo が動いていない」ことを意味しない。**`--id e2e` で動いている continuo は
+// `~/.continuo/id/e2e/continuo.lock` を握っており、既定の `~/.continuo/continuo.lock` は
+// 空いている。**ボードのロックは `--id` に依らない唯一の合図である。**
+//
+// 与える情報: 先に握られたボードのロック。
+// 成功条件: 何も消さずに `ExitStopped` で止まり、ロックのパスと `--id` の案内を出すこと。
+func TestAbandon_同じボードを見ている継続監視が居たら止まる(t *testing.T) {
+	fx := newFixture(t)
+	abandonShortHome(t)
+
+	held, err := lock.Acquire(fx.BoardLockPath)
+	if err != nil {
+		t.Fatalf("ボードのロックを先に握れません: %v", err)
+	}
+	t.Cleanup(func() { _ = held.Release() })
+
+	prepared := fx.Prepare(t, 42)
+
+	if code := fx.Run(t, 42, nil); code != abandon.ExitStopped {
+		t.Fatalf("同じボードを見ている continuo が居るのに止まらなかった: 終了コード %d\n%s",
+			code, fx.Output())
+	}
+	if !strings.Contains(fx.Output(), fx.BoardLockPath) {
+		t.Fatalf("ボードのロックのパスを出していない:\n%s", fx.Output())
+	}
+	if !strings.Contains(fx.Output(), "--id") {
+		t.Fatalf("同じ --id を付けるよう案内していない:\n%s", fx.Output())
+	}
+	if _, err := os.Stat(prepared.Path); err != nil {
+		t.Fatalf("止まったのに worktree を消している: %v", err)
+	}
+}
+
+// 目的: ボードのロックが空いていれば、いままでどおり片付けが進むことを確かめる
+// （設計 3-17e）。
+//
+// **上の検査だけでは、いつでも止まる実装でも通ってしまう。**
+//
+// 与える情報: 誰も握っていないボードのロック。
+// 成功条件: `--dry-run` が `ExitOK` で終わること。
+func TestAbandon_ボードのロックが空いていれば進む(t *testing.T) {
+	fx := newFixture(t)
+	abandonShortHome(t)
+
+	fx.Prepare(t, 42)
+
+	if code := fx.Run(t, 42, func(opts *abandon.Options) { opts.DryRun = true }); code != abandon.ExitOK {
+		t.Fatalf("ボードのロックが空いているのに止まった: 終了コード %d\n%s", code, fx.Output())
 	}
 }

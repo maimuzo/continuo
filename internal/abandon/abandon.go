@@ -102,12 +102,17 @@ type Options struct {
 	// ParkState は continuo に手を離させるために一時的に動かす先である。
 	// **空なら tracker.failure_state を使う。**
 	ParkState string
-	// ID は `--id` に渡された名前である（設計 3-17b / 3-17c）。
+	// Instance は `--id` から導いた置き場所である（設計 3-17b / 3-17c）。
 	//
-	// **常駐している側に `--id` を付けているなら、同じ名前を渡すこと。**
-	// **空なら既定の1本を見る。**ロック・実行時ディレクトリ・worktree の置き場所・
-	// branch 名の4つが、常駐している側と同じ関数から導かれる。
-	ID string
+	// **常駐している側に `--id` を付けているなら、同じ名前で解決したものを渡すこと。**
+	// **nil なら既定の1本（`instance.Resolve("")`）をここで解決する。**
+	// ロック・実行時ディレクトリ・worktree の置き場所・branch 名・agent 名の5つが、
+	// 常駐している側と同じ関数から導かれる。
+	//
+	// **`internal/cli` は、フラグを読んだ直後の検査で解決したものをそのまま渡す**
+	// （設計 3-17d）。**同じ名前で2度 Resolve しない。**2度呼ぶと、
+	// 検査を通った結果と実際に使う結果が別々に作られることになる。
+	Instance *instance.Layout
 	// GraphQLEndpoint は GitHub の GraphQL API の接続先である。
 	// **空なら本番の GitHub を使う。**テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
@@ -207,14 +212,23 @@ func Run(ctx context.Context, opts Options) int {
 		return ExitStopped
 	}
 
-	// **常駐している側と同じ関数から4つを導く**（設計 3-17c）。
+	// **常駐している側と同じ関数から5つを導く**（設計 3-17c）。
 	// **ロックだけを揃えても足りない。**`--id e2e` で動かしていれば worktree は
 	// `<workspace.root>/e2e/…` にあるのに、既定の置き場所を走査すると0件になり、
 	// **手を離させた run を消せないまま終わる。**
-	inst, err := instance.Resolve(opts.ID)
-	if err != nil {
-		fmt.Fprintln(errOut, i18n.T(i18n.KeyAbandonErrBuild, err))
-		return ExitStopped
+	//
+	// **`internal/cli` が解決済みのものを渡してくる**（設計 3-17d の「フラグを読んだ
+	// 直後に検査する」がそれである）。**渡されていなければ既定の1本を解決する。**
+	inst := instance.Layout{}
+	if opts.Instance != nil {
+		inst = *opts.Instance
+	} else {
+		resolved, err := instance.Resolve("")
+		if err != nil {
+			fmt.Fprintln(errOut, i18n.T(i18n.KeyAbandonErrBuild, err))
+			return ExitStopped
+		}
+		inst = resolved
 	}
 	cfg := inst.Apply(loaded.Config)
 
@@ -256,6 +270,34 @@ func (r *runner) run(ctx context.Context) int {
 			}
 		}()
 	}
+	// 段1a: ボードのロックも見る（設計 3-17e）。**`--id` の付け忘れを、ここで止める。**
+	//
+	// **ロックは `--id` ごとに分かれるので、自分のロックが空いていることは
+	// 「continuo が動いていない」ことを意味しない。**`--id e2e` で動いている continuo は
+	// `~/.continuo/id/e2e/continuo.lock` を握っており、既定の
+	// `~/.continuo/continuo.lock` は空いている。**そのまま進むと、動いている continuo を
+	// 「止まっている」と判定して worktree を消しにいく。**
+	//
+	// **ボードのロックは `--id` に依らない唯一の合図である。**
+	//
+	// **自分のロックが取れなかったとき（＝同じ `--id` の continuo が動いているとき）は
+	// 見に行かない。**そのロックはその continuo が握っているので、必ず取れない。
+	// **それは正しい使い方であり、abandon は手を離させる段へ進む。**
+	if !running {
+		boardUnlocker, code := r.claimBoard()
+		if code != ExitOK {
+			return code
+		}
+		if boardUnlocker != nil {
+			defer func() {
+				if err := boardUnlocker.Release(); err != nil {
+					r.logger.Warn("ボードのロックの解放に失敗しました",
+						"board_lock_file", r.deps.BoardLockPath, "error", err)
+				}
+			}()
+		}
+	}
+
 	// **手を離させる書き込みを済ませたあとで止まったら、そのことを必ず言う。**
 	// どの段で止まっても Status は park の値のまま残る。**どこで止まっても同じ1行が
 	// 出るように、段ごとに書かず、ここで1度だけ仕掛ける**（書き漏らす段が出ない）。
@@ -376,6 +418,37 @@ func (r *runner) isRunning() (bool, Unlocker, error) {
 		return false, nil, err
 	}
 	return false, l, nil
+}
+
+// claimBoard はボード1枚ぶんのロックを取る（段1a。設計 3-17e）。
+//
+// **取れなければ、同じボードを見ている continuo が生きている。**別の `--id` で
+// 動いているので、その worktree は別の置き場所にあり、ここから消しにいってはならない。
+// **人間へ「同じ `--id` を付けて実行し直せ」と言って止まる。**
+//
+// **取れたロックは実行の最後まで握る**（自分のロックと同じ理由である）。手放すと、
+// その隙に起動した継続監視の足元から worktree を消す。
+//
+// 戻り値の1つ目: 取れたロック（**取れなかったときは nil**）。
+// 戻り値の2つ目: 続けてよければ ExitOK、止まるなら ExitStopped。
+// **理由は出力済みである。**
+func (r *runner) claimBoard() (Unlocker, int) {
+	owner := r.cfg.Tracker.Provider.Owner
+	number := r.cfg.Tracker.Provider.ProjectNumber
+
+	l, err := r.deps.AcquireLock(r.deps.BoardLockPath)
+	if err == nil {
+		return l, ExitOK
+	}
+	if errors.Is(err, lock.ErrAlreadyRunning) {
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardInUse,
+			owner, number, r.deps.BoardLockPath, instance.BoardInfoPath(r.deps.BoardLockPath)))
+		return nil, ExitStopped
+	}
+	// **開けなかったときも止まる。**「同じボードを見ている continuo が居ないこと」を
+	// 確かめられていないのに worktree を消すと、動いている run を消しうる。
+	fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardLockFile, r.deps.BoardLockPath, err))
+	return nil, ExitStopped
 }
 
 // find は issue の URL から worktree を1つに絞る（段2）。

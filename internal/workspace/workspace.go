@@ -94,6 +94,15 @@ type Options struct {
 	// **空なら settings_path を消さない**（内側かどうかを確かめられないため。
 	// 消さなかったことは警告としてログに残す）。絶対パスでなければ New がエラーを返す。
 	SettingsRoot string
+	// InstanceID は `--id` に渡された名前である（設計 3-17b）。**既定なら空文字。**
+	//
+	// **New はこれが空でなければ、置き場所の直下に目印を書く**（InstanceMarkerName）。
+	// **書かないと、既定側の `continuo abandon` が、この置き場所を
+	// 「身元ファイルの無いディレクトリ」として数えて止まる。**
+	//
+	// **孤児 branch の掃除も、この値を見る。**`--id` が接頭辞に足した `<名前>/` だけを
+	// 手掛かりに `git branch -D` を始めてはならない（sweep.go）。
+	InstanceID string
 }
 
 // Manager は worktree の用意・再利用・身元ファイルの読み書き・封じ込め検査・後始末を行う。
@@ -119,6 +128,8 @@ type Manager struct {
 	homeDir      string
 	ghqList      GhqListFunc
 	settingsRoot string
+	// instanceID は `--id` に渡された名前である（設計 3-17b）。**既定なら空文字。**
+	instanceID string
 
 	// clonePaths は `ghq list -p -e <owner>/<repo>` の答えを短い間だけ覚える
 	// （clonePathCacheTTL）。信頼の判定と、破壊的な git コマンドの宛先の検算が
@@ -178,6 +189,15 @@ func New(opts Options) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	// **`--id` を付けたなら、置き場所に名乗りを置く**（設計 3-17b）。
+	// **既定側の走査が、ここから下へ入らないようにするためである。**
+	// **書けなければ起動を止める。**書けないまま動かすと、既定の `continuo abandon` が
+	// この置き場所を「身元ファイルの無いディレクトリ」として数え、片付けられなくなる。
+	if opts.InstanceID != "" {
+		if err := WriteInstanceMarker(resolvedRoot, opts.InstanceID); err != nil {
+			return nil, err
+		}
+	}
 
 	logger := opts.Logger
 	if logger == nil {
@@ -218,6 +238,7 @@ func New(opts Options) (*Manager, error) {
 		homeDir:      homeDir,
 		ghqList:      ghqList,
 		settingsRoot: settingsRoot,
+		instanceID:   opts.InstanceID,
 		clonePaths:   newTTLCache[string](clonePathCacheTTL, nowFunc),
 		trustResults: newTTLCache[bool](trustCacheTTL, nowFunc),
 		identityMu:   newKeyedMutex(),

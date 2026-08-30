@@ -2,7 +2,9 @@ package instance
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/socketpath"
 )
 
 // BoardDirName はボードごとのロックを並べるディレクトリの名前である
@@ -31,29 +34,44 @@ const BoardDirName = "board"
 // owner: `tracker.provider.owner`。**正規化を通してからファイル名にする**（3-7）。
 // 設定に何が書かれていても `~/.continuo/board` の外を指さないようにするためである。
 // projectNumber: `tracker.provider.project_number`。
-// 戻り値: ロックファイルの絶対パスと、置き場所を用意できなかった場合のエラー。
+// 戻り値の1つ目: ロックファイルの絶対パス。**置き場所を用意できなかったときも、
+// 組み立てたパスをそのまま返す**（呼ぶ側がエラーの文言にパスを出せるようにするため。
+// ホームディレクトリを引けなかったときだけ空文字である）。
+// 戻り値の2つ目: 正規化で情報が落ちた場合の警告。**呼ぶ側は1行ログに残すこと**（3-7）。
+// 落としたまま黙ると、`my org` と `my_org` が同じロックになった理由を誰も説明できない。
+// 戻り値の3つ目: 置き場所を用意できなかった場合のエラー。
 // **ディレクトリは作られている**（ロックファイルそのものはまだ作らない）。
-func BoardLockPath(owner string, projectNumber int) (string, error) {
+func BoardLockPath(owner string, projectNumber int) (string, []normalize.Warning, error) {
 	root, err := Root()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
+	key, warnings := boardKey(owner, projectNumber)
 	dir := filepath.Join(root, BoardDirName)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", i18n.Errorf(i18n.KeyInstanceBoardDirFailed, dir, err)
+	path := filepath.Join(dir, key+".lock")
+	// **socket の置き場所と同じ検査を通す**（symlink・種類・権限）。
+	// **素の `os.MkdirAll` では、`~/.continuo/board` が symlink に差し替えられていても
+	// 気づかない。**辿った先に flock と覚え書きが落ちる。
+	if err := socketpath.EnsureDir(dir); err != nil {
+		return path, warnings, i18n.Errorf(i18n.KeyInstanceBoardDirFailed, dir, err)
 	}
-	return filepath.Join(dir, boardKey(owner, projectNumber)+".lock"), nil
+	return path, warnings, nil
 }
 
 // boardKey はボード1枚を表すファイル名の幹を作る（`<owner>-<project_number>`）。
 //
+// **owner は小文字へ揃える。**GitHub のログイン名は大文字小文字を区別しないので、
+// **`owner: Octocat` と `owner: octocat` は同じボードである。**揃えないと
+// ロックが2本に分かれ、**同じボードを2つの continuo が見る。**
+//
 // owner: `tracker.provider.owner`。
 // projectNumber: `tracker.provider.project_number`。
-// 戻り値: 正規化を通し、スラッシュをハイフンへ潰した文字列。
-func boardKey(owner string, projectNumber int) string {
-	name, _ := normalize.Normalize(owner)
-	safe := strings.ReplaceAll(name.String(), "/", "-")
-	return fmt.Sprintf("%s-%d", safe, projectNumber)
+// 戻り値の1つ目: 正規化を通し、スラッシュをハイフンへ潰し、小文字へ揃えた文字列。
+// 戻り値の2つ目: 正規化で情報が落ちた場合の警告。
+func boardKey(owner string, projectNumber int) (string, []normalize.Warning) {
+	name, warnings := normalize.Normalize(owner)
+	safe := strings.ToLower(strings.ReplaceAll(name.String(), "/", "-"))
+	return fmt.Sprintf("%s-%d", safe, projectNumber), warnings
 }
 
 // BoardInfo はボードのロックを握っている continuo が名乗る中身である。
@@ -112,4 +130,24 @@ func WriteBoardInfo(lockPath string, info BoardInfo, now func() time.Time) error
 	data = append(data, '\n')
 	// **一時ファイルへ書き切ってから差し替える**（CLAUDE.md の「絶対に守る制約」4）。
 	return atomicfile.Write(BoardInfoPath(lockPath), data, 0o600)
+}
+
+// RemoveBoardInfo は、ロックを手放すときに覚え書きを消す（3-17e の段4）。
+//
+// **ロックを手放す前に呼ぶこと。**手放したあとに消すと、その隙に起動した continuo が
+// 書いた覚え書きを消してしまう。
+//
+// **消えないと、死んだプロセスの PID を指したまま残る。**
+// [docs/FAQ.md](../../docs/FAQ.md) は「誰が握っているかを、この覚え書きで読め」と
+// 案内しているので、**残ったままだと、動いていない continuo を探しに行くことになる。**
+//
+// lockPath: BoardLockPath が返したロックファイルの絶対パス。
+// 戻り値: 消せなかった場合のエラー。**最初から無い場合は nil を返す**
+// （消えていることが目的であり、誰が消したかは問わない）。
+func RemoveBoardInfo(lockPath string) error {
+	path := BoardInfoPath(lockPath)
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return i18n.Errorf(i18n.KeyInstanceBoardInfoRemoveFailed, path, err)
+	}
+	return nil
 }
