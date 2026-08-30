@@ -4,13 +4,13 @@
 
 **[日本語](README.ja.md)**
 
-continuo turns a GitHub Projects v2 kanban board into a work queue for coding agents. Drop an issue into `Ready` — from any of your repositories — and continuo picks it up, prepares a git worktree, and runs Claude Code on it inside a [herdr](https://github.com/herdrdev/herdr) pane. When the agent is done, the result comes back to the board as a Status change.
+continuo turns a GitHub Projects v2 kanban board into a work queue for coding agents. Drop an issue into `Ready` — from any of your repositories — and continuo picks it up, prepares a git worktree, and runs Claude Code on it inside a [herdr](https://github.com/herdrdev/herdr) pane. When the agent is done, the result comes back to the kanban board as a Status change.
 
 It is written in Go and implements the [openai/symphony](https://github.com/openai/symphony) service specification. You watch the work happen in a real terminal, on your usual Claude subscription.
 
 ---
 
-## How the board drives it
+## How the kanban board drives it
 
 Put your task in an issue, move it to `Ready`, and continuo takes it from there. If it lands in `Blocked`, the agent needs something from you — answer in an issue comment. If it lands in `In Review`, the work is done and waiting for you to look at it.
 
@@ -18,7 +18,7 @@ Put your task in an issue, move it to `Ready`, and continuo takes it from there.
 
 | Status | Who moves it | What is happening |
 | --- | --- | --- |
-| `Ready` | **You** | continuo picks these up in board order and starts them in herdr |
+| `Ready` | **You** | continuo picks these up in kanban board order and starts them in herdr |
 | `In Progress` | continuo | Work has started. A feature branch and a git worktree exist for this issue |
 | `In Review` | continuo | The agent finished. Open the issue and check the result — **moving it to `Done` is yours to decide** |
 | `Blocked` | continuo | The agent got stuck or needs an answer. Reply in an issue comment, then move it back to `Ready` |
@@ -38,7 +38,7 @@ herdr agent read continuo-hello-world-188 --source recent-unwrapped --lines 40
 
 Start it with `continuo --port 8080` and you get a plain list of what is running at `http://localhost:8080`.
 
-## One board, many repositories
+## One kanban board, many repositories
 
 A single kanban board can hold issues from as many repositories as you like. continuo creates a worktree per issue, under the repository it belongs to:
 
@@ -76,12 +76,12 @@ How many issues run at once is a setting (two by default).
 | [`git`](https://git-scm.com/) and [`ghq`](https://github.com/x-motemen/ghq) | Creating worktrees, and resolving where a clone lives |
 | [Go](https://go.dev/dl/) 1.26+ | Only if you build from source |
 
-**Your kanban board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
+**Your kanban board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the kanban board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
 
-`continuo doctor` runs fifteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, Claude Code, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, board, Status names, the rewrite table's keys, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
+`continuo doctor` runs fifteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, Claude Code, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, kanban board, Status names, the rewrite table's keys, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
 
 **A `✗` means the exit code is 1; a `!` on its own leaves it at 0.**
-Exit code 0 is not the same as "continuo will start", though. **Failing to read the board**
+Exit code 0 is not the same as "continuo will start", though. **Failing to read the kanban board**
 (rate limiting, or the check running out of time) **also shows up as `!`**, and continuo performs
 the same read every time it starts — so while that `!` is there, it will not start.
 Wait a while and run `continuo doctor` again.
@@ -127,10 +127,10 @@ sh scripts/test-like-ci.sh                       # run the tests (~3 min, option
 ```bash
 mkdir -p ~/continuo-work && cd ~/continuo-work
 
-continuo init      # writes WORKFLOW.md; owner and board number come from gh
+continuo init      # writes WORKFLOW.md; owner and kanban board number come from gh
 ```
 
-**Open `WORKFLOW.md` before you go further.** `trust.repositories` lists every repository it found on the board. Delete the lines you do not want — otherwise Claude Code gets trusted access to repositories that have nothing to do with this.
+**Open `WORKFLOW.md` before you go further.** `trust.repositories` lists every repository it found on the kanban board. Delete the lines you do not want — otherwise Claude Code gets trusted access to repositories that have nothing to do with this.
 
 ```bash
 continuo setup                    # map your Status options to the five roles (interactive)
@@ -161,9 +161,9 @@ continuo abandon https://github.com/octocat/hello-world/issues/42              #
 
 **Run `--dry-run` first.** Before deleting anything it prints the issue's Status, the worktree path, the branch, the herdr pane, **how many files have uncommitted changes**, and **how many commits are not pushed**.
 
-**`--dry-run` writes nothing at all.** It does not touch the board and it does not make continuo let go of the issue — it only tells you which Status the real run would park it at.
+**`--dry-run` writes nothing at all.** It does not touch the kanban board and it does not make continuo let go of the issue — it only tells you which Status the real run would park it at.
 
-**A Status it cannot write is caught before anything is deleted.** `--to` and the park target are checked against the board's own Status options first, and `--park` is refused outright if it names a working state — parking there would not make continuo let go, and the pane would never close. **If no worktree matches, `--to` is not applied**: the command says so instead of dropping it silently, because a URL with a typo would otherwise move some other issue's Status.
+**A Status it cannot write is caught before anything is deleted.** `--to` and the park target are checked against the kanban board's own Status options first, and `--park` is refused outright if it names a working state — parking there would not make continuo let go, and the pane would never close. **If no worktree matches, `--to` is not applied**: the command says so instead of dropping it silently, because a URL with a typo would otherwise move some other issue's Status.
 
 **If there is anything to lose, it deletes nothing and stops.** Add `--force` if you want it gone anyway.
 
@@ -189,13 +189,13 @@ cannot be checked — is it reported as a leftover, as before.
 
 **You can run it while continuo is running.** It makes continuo let go of the issue first: if the issue is still in a working state, it parks the Status at `tracker.failure_state` (`Blocked` by default; use `--park` to send it somewhere else), then waits for the pane to close before deleting anything. **If the pane does not close, nothing is deleted.**
 
-**If it stops after parking, the Status stays at the parked value.** continuo does not move it back — the value it came from is a working state, so restoring it could have continuo pick the issue up again on the spot. **It tells you so in one line**; whether to move it back is your call on the board.
+**If it stops after parking, the Status stays at the parked value.** continuo does not move it back — the value it came from is a working state, so restoring it could have continuo pick the issue up again on the spot. **It tells you so in one line**; whether to move it back is your call on the kanban board.
 
 **If continuo is not running, it still checks the panes before deleting.** The lock file's location depends on your environment (`CONTINUO_RUNTIME_DIR`, `XDG_RUNTIME_DIR`, `TMPDIR`), so a daemon started by launchd and an `abandon` typed into a terminal can disagree about it. **A live pane on that worktree stops the deletion**, whatever the lock file says.
 
-**It leaves the Status where it is.** continuo cannot tell whether you are dropping the issue for good or rewriting it and filing it again, so **that call is yours to make on the board.** If you already know, pass it: `--to "Ice Box"`.
+**It leaves the Status where it is.** continuo cannot tell whether you are dropping the issue for good or rewriting it and filing it again, so **that call is yours to make on the kanban board.** If you already know, pass it: `--to "Ice Box"`.
 
-**You cannot undo a start from the board alone** — which is why this command exists.
+**You cannot undo a start from the kanban board alone** — which is why this command exists.
 
 | What you would reach for | What actually happens |
 | --- | --- |
@@ -212,7 +212,7 @@ The front matter at the top is the configuration. These four are the ones you wi
 tracker:
   provider:
     owner: octocat                # your GitHub account
-    project_number: 3             # the board number
+    project_number: 3             # the kanban board number
 agent:
   max_concurrent_agents: 2        # issues running at once
 claude:
@@ -236,7 +236,7 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 5. continuo reads the transcript; a `CONTINUO-STATUS:` line moves the Status
 6. If the issue is still in a working state, it sends the next turn (up to `agent.max_dispatch_turns`, 20 by default)
 
-**The board is the only source of truth.** An agent saying it is finished means nothing until the Status has actually moved.
+**The kanban board is the only source of truth.** An agent saying it is finished means nothing until the Status has actually moved.
 
 ## Project status
 
