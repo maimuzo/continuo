@@ -55,7 +55,7 @@ var ErrStartupRetryable = errors.New("起動に失敗しましたが、待てば
 // **それでもまだ替えないのは、この文が出る先がログだけだからである**（人間へは渡さない）。
 // **ログは運用者が読むものなので、画面に出す文言と同じ資源には載せていない。**
 // **この package の人間向けの文言をまとめて資源へ移すときに、一緒に見直すこと。**
-var ErrStatusNotWritten = errors.New("ボードの Status を書かなかったので着手しません")
+var ErrStatusNotWritten = errors.New("カンバンの Status を書かなかったので着手しません")
 
 // dispatchBlockedStates は着手の段2 で「この状態なら Status を書かない」一覧を返す。
 //
@@ -421,7 +421,7 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 	// ボードは continuo が触る前の状態のままなので、伝えるべきことが1つも無い。
 	// **ここで failure_state へ落とすと、人間が Blocked に置いた issue を上書きする。**
 	if errors.Is(err, ErrStatusNotWritten) {
-		o.logger.Info(label+"を取りやめました（ボードの Status を書かなかったため）",
+		o.logger.Info(label+"を取りやめました（カンバンの Status を書かなかったため）",
 			"identifier", issue.Identifier, "理由", summaryLine(err.Error()))
 		// **書き戻しが飛んでいたら、終わるまで待ってから印を取る**（設計 3-56）。
 		// 待たずに戻ると、着手を取りやめた run の印が外れないまま残る。

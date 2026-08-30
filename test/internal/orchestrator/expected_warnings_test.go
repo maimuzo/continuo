@@ -154,7 +154,7 @@ var expectedWarnings = map[string][]string{
 	"TestRestore_壊れた身元ファイルは無視してログに出す":                                   {"身元ファイルを読めない worktree を飛ばしました"},
 	"TestRestore_引き継いだ回数が上限ならturnを1回も送らずfailure_stateへ落とす":              {"引き継いだ回数が上限に達したので引き継ぎません"},
 	"TestRestore_身元ファイルの無いworktreeのpaneは閉じずにログへ残す":                      {"身元ファイルの無い worktree に pane がありました"},
-	"TestSignal_ボードに載っていない対象はコメントに残して捨てる":                               {"表明が指す issue がボードに載っていません"},
+	"TestSignal_ボードに載っていない対象はコメントに残して捨てる":                               {"表明が指す issue がカンバンに載っていません"},
 	"TestTick_選択肢名が合わなければその巡回のdispatchだけを飛ばす":                           {"Status の選択肢名が設定と一致しません"},
 	"TestTurn_turnループを起こせなかったらNeedsPromptを立て直す":                         {"turn ループが既に走っているので、次の巡回で起こし直します"},
 }

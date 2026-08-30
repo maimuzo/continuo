@@ -181,11 +181,11 @@ func (o *Orchestrator) holdForAutomatedMove(rs *runState, issue tracker.Issue) b
 	}
 	writtenBy := issue.StatusChangedBy
 	if writtenBy == "" {
-		writtenBy = "ボードの自動化"
+		writtenBy = "カンバンの自動化"
 	}
 	// **黙って遅らせない。**人間がこのあと自分で止めたくなったとき、
 	// 何を待っているのかがログから読める状態にしておく。
-	o.logger.Info("ボードの自動化が Status を動かしましたが turn の終わりを待っています"+
+	o.logger.Info("カンバンの自動化が Status を動かしましたが turn の終わりを待っています"+
 		"（走っている Claude Code をここで止めると、書きかけの turn が捨てられます）",
 		"identifier", issue.Identifier,
 		"状態", issue.State,
@@ -249,7 +249,7 @@ func (o *Orchestrator) claimAutomatedRewrite(
 	if failed >= maxAutomatedRewriteFailures {
 		if rs.noteAutomatedRewriteHandoff(issue.State, handoffByFailures) {
 			o.logger.Warn("自動化が動かした Status を戻せない状態が続いたので、ここからは人間へ渡します"+
-				"（ボードから戻す先の選択肢が消えている可能性があります）",
+				"（カンバンから戻す先の選択肢が消えている可能性があります）",
 				"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
 				"戻す先", target, "戻せなかった回数", failed, "上限", maxAutomatedRewriteFailures)
 		}
@@ -259,7 +259,7 @@ func (o *Orchestrator) claimAutomatedRewrite(
 	if claim == nil {
 		if rs.noteAutomatedRewriteHandoff(issue.State, handoffByPushback) {
 			o.logger.Warn("自動化が動かした Status を書き戻す回数が上限に達しました"+
-				"（continuo とボードの自動化が押し合っています。ここからは人間へ渡します）",
+				"（continuo とカンバンの自動化が押し合っています。ここからは人間へ渡します）",
 				"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
 				"戻す先", target, "書き戻した回数", done, "上限", maxAutomatedRewrites)
 		}
@@ -382,7 +382,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 		// 既にその値だった・item がもう見えない・終わったとみなす状態だった、のいずれか。
 		// **どれもボードは動いていないので、枠を返す。**
 		claim.release()
-		o.logger.Info("自動化が動かした Status は戻しませんでした（ボードは動いていません）",
+		o.logger.Info("自動化が動かした Status は戻しませんでした（カンバンは動いていません）",
 			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
 			"戻す先", target, "取り直した状態", moved.Previous)
 		if !moved.Reached {
@@ -408,7 +408,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 		return moved, nil
 	}
 	rs.clearAutomatedRewriteFailures(issue.State)
-	o.logger.Info("ボードの自動化が動かした Status を、continuo が意図した Status へ戻しました"+
+	o.logger.Info("カンバンの自動化が動かした Status を、continuo が意図した Status へ戻しました"+
 		"（人間が動かしたものは戻しません）",
 		"identifier", issue.Identifier, "何から", moved.Previous, "何へ", target, "書いたのは", by)
 	rs.setLastWrittenState(target)
@@ -426,7 +426,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 // 戻り値: 「〜ためです」で終わる1文。
 func automatedMoveReason(from, by string) string {
 	return fmt.Sprintf(
-		"ボードの組み込みの自動化（`%s`）が Status を `%s` へ動かし、"+
+		"カンバンの組み込みの自動化（`%s`）が Status を `%s` へ動かし、"+
 			"WORKFLOW.md の `tracker.automated_state_rewrite` に戻す先が書かれているためです",
 		by, from)
 }
@@ -615,7 +615,7 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 				"`tracker.active_states` か `tracker.status_signal_map` へ書き足してください。**"+
 				"**`cleanup.on_states` に残したまま `tracker.active_states` へ書き足すと、"+
 				"やはり continuo は起動しません**（走っている worktree を片付けてしまうので、設定の検査が弾きます）。"+
-				"**ボードの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
+				"**カンバンの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
 			state, state, rewriteTarget, state, state)
 	case inRewriteTable:
 		teach = fmt.Sprintf(
@@ -624,7 +624,7 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 				"**`tracker.active_states` や `tracker.status_signal_map` へ書き足す前に、"+
 				"対応表のその行を消してください。**両方に書いた設定では continuo は起動しません"+
 				"（キーは設定の他のどこにも名前が出てこない Status でなければなりません）。"+
-				"**ボードの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
+				"**カンバンの自動化をやめて `%s` を使わなくなったのなら、対応表からその行を消すだけで構いません。**",
 			state, state, rewriteTarget, state)
 	case inCleanup:
 		teach = fmt.Sprintf(
@@ -719,11 +719,11 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, b
 	}
 	by := issue.StatusChangedBy
 	if by == "" {
-		by = "ボードの自動化"
+		by = "カンバンの自動化"
 	}
 	written := fmt.Sprintf(
 		"\n【この Status を書いたのは人間ではありません】`%s` が書いています"+
-			"（ボードの組み込みの自動化です。PR を issue に紐づけた・PR をマージした、"+
+			"（カンバンの組み込みの自動化です。PR を issue に紐づけた・PR をマージした、"+
 			"といった操作で動きます）。", by)
 
 	if target, ok := lookupStateRewrite(o.cfg.Tracker.AutomatedStateRewrite, state); ok {
@@ -736,9 +736,9 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, b
 		if rs.automatedRewriteFailureCount(state) >= maxAutomatedRewriteFailures {
 			return written + fmt.Sprintf(
 				"\n【何が起きたか】continuo が `%s` へ戻そうとして、%d 回続けて書き込めませんでした。"+
-					"\n【いちばんありそうな原因】ボードの Status の選択肢から `%s` が消えています"+
+					"\n【いちばんありそうな原因】カンバンの Status の選択肢から `%s` が消えています"+
 					"（continuo の起動時には在りました）。"+
-					"\n【対処】ボードに `%s` の選択肢を作り直すか、"+
+					"\n【対処】カンバンに `%s` の選択肢を作り直すか、"+
 					"`tracker.automated_state_rewrite` の戻す先を実在する Status に直して、"+
 					"continuo を再起動してください。",
 				target, maxAutomatedRewriteFailures, target, target), false
@@ -746,7 +746,7 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, b
 		return written + fmt.Sprintf(
 			"\n【何が起きたか】continuo が `%s` へ戻すたびに自動化が `%s` を書き直していて、"+
 				"書き戻す回数が上限（%d 回）に達しました。"+
-				"\n【対処】ボードの `Workflows` でこの自動化を切るか、"+
+				"\n【対処】カンバンの `Workflows` でこの自動化を切るか、"+
 				"`%s` を continuo が使わない Status に変えてください。",
 			target, state, maxAutomatedRewrites, state), false
 	}

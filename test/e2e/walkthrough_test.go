@@ -224,7 +224,7 @@ func stage6Doctor(t *testing.T, env *e2eEnv) {
 		t.Fatalf("段6: `continuo doctor` の終了コードが 0 ではありません: %d\n%s", res.Code, res.Out)
 	}
 	mustContain(t, "段6 の `continuo doctor`", res.Out,
-		"✓ 設定ファイル", "✓ herdr", "✓ gh の認証", "✓ ボード")
+		"✓ 設定ファイル", "✓ herdr", "✓ gh の認証", "✓ カンバン")
 	mustHaveNoFailure(t, "段6 の `continuo doctor`", res.Out)
 }
 
@@ -542,7 +542,7 @@ func TestE2E_status_fieldの綴りが違うとボードを読めない(t *testin
 		t.Fatalf("綴りが違うのに `continuo doctor` が %d で終わりました\n%s", res.Code, res.Out)
 	}
 	mustContain(t, "status_field の綴りが違うときの `continuo doctor`", res.Out,
-		"✗ ボード",
+		"✗ カンバン",
 		"Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status",
 		"→ WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください")
 }

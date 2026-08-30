@@ -179,7 +179,7 @@ func TestPrompt_着手してよいことは立場と切り離されている(t *
 
 	for _, want := range []string{
 		"Status が Ready になったからです",
-		"Ready へ動かせるのは、このボードを持っている維持者だけです",
+		"Ready へ動かせるのは、このカンバンを持っている維持者だけです",
 		"issue を立てたのが誰であっても、取り組むこと自体はやめないでください",
 	} {
 		if !strings.Contains(got, want) {

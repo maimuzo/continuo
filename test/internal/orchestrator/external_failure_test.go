@@ -189,7 +189,7 @@ func TestExternalFailure_turnの終わりにissueが消えていたら手放す(
 	// **手放したことをログで確かめる。**手放した run は印に残したままバックオフへ入る
 	// （設計 3-21）ので、**印から外れたかどうかでは確かめられない。**
 	waitFor(t, 20*time.Second, "手放したことがログに出る", func() bool {
-		return strings.Contains(fx.Logs.String(), "ボードから見えなくなりました")
+		return strings.Contains(fx.Logs.String(), "カンバンから見えなくなりました")
 	})
 }
 

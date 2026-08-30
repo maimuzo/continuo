@@ -43,12 +43,12 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	current, ok := o.refreshIssue(ctx, rs, true)
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
-		o.abandonRun(ctx, rs, "この issue がボードから見えなくなりました。"+
-			"**turn が終わったので issue を ID 指定で取り直したところ、ボードから返ってきませんでした。**"+
-			"\n【確かめ方】ボードでこの issue を探してください。archive されているか、"+
-			"ボードから外されているはずです。"+
-			"\n【よくある原因】人間がボードから外した / issue を archive した。"+
-			"\n【対処】続きを進めたいならボードへ戻し、Status を着手待ちにしてください。"+
+		o.abandonRun(ctx, rs, "この issue がカンバンから見えなくなりました。"+
+			"**turn が終わったので issue を ID 指定で取り直したところ、カンバンから返ってきませんでした。**"+
+			"\n【確かめ方】カンバンでこの issue を探してください。archive されているか、"+
+			"カンバンから外されているはずです。"+
+			"\n【よくある原因】人間がカンバンから外した / issue を archive した。"+
+			"\n【対処】続きを進めたいならカンバンへ戻し、Status を着手待ちにしてください。"+
 			"worktree は残してあります（下記）。")
 		return true
 	}
@@ -318,7 +318,7 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 				continue
 			}
 			if !ok {
-				o.logger.Warn("表明が指す issue がボードに載っていません（この行を捨てます）",
+				o.logger.Warn("表明が指す issue がカンバンに載っていません（この行を捨てます）",
 					"identifier", rs.issue().Identifier, "対象", target)
 				missing = append(missing, target)
 				continue
@@ -381,7 +381,7 @@ func (o *Orchestrator) noteSignalTargetsMissing(ctx context.Context, rs *runStat
 	if nodeID == "" {
 		return
 	}
-	body := fmt.Sprintf("表明に書かれた %s は、このボードに載っていないので Status を動かせませんでした。",
+	body := fmt.Sprintf("表明に書かれた %s は、このカンバンに載っていないので Status を動かせませんでした。",
 		strings.Join(targets, " / "))
 	if err := o.postComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("表明の取りこぼしを投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)

@@ -29,10 +29,10 @@ const noOptionInput = 0
 var (
 	// ErrTooFewOptions は、ボードの選択肢が RoleCount 個に満たなかったことを表す。
 	// **尋ねる前に止める。**足りないまま尋ねると、対話は必ず途中で行き止まる。
-	ErrTooFewOptions = errors.New("ボードの Status の選択肢が足りません")
+	ErrTooFewOptions = errors.New("カンバンの Status の選択肢が足りません")
 	// ErrNoSuitableOption は、利用者が 0 を入力したことを表す。
 	// **その役割へ渡せる選択肢がボードに無い**という表明である。
-	ErrNoSuitableOption = errors.New("役割に使える選択肢がボードにありません")
+	ErrNoSuitableOption = errors.New("役割に使える選択肢がカンバンにありません")
 	// ErrInterrupted は、利用者が Ctrl+C で中断したことを表す。
 	ErrInterrupted = errors.New("利用者が中断しました")
 	// ErrInputClosed は、番号を待っている間に入力が終わったことを表す。

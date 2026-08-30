@@ -31,9 +31,9 @@
 | 着手 / 着手する | the start / start | README の "Started the wrong issue?" に合わせる。`kickoff` `initiation` は使わない |
 | 引き渡し / dispatch する | dispatch | 設定のキー `agent.max_dispatch_turns` が既に英語。`hand-off` を作らない |
 | 巡回 | poll | README の "It stops polling"。キーは `polling.interval_ms`。`patrol` `sweep` は使わない |
-| ボード | board | README は一貫して board。日本語が「看板」でも `kanban board` と書かない |
-| Status（ボードのフィールド） | Status | 大文字の S。GitHub のフィールド名そのもの |
-| 状態（herdr の agent の） | status | 小文字。ボードの `Status` と区別するため。`idle` / `done` / `blocked` の値を指す |
+| カンバン | board | 英語は board のまま（英語版 README の判断待ち）。日本語が「カンバン」でも `kanban board` と書かない |
+| Status（カンバンのフィールド） | Status | 大文字の S。GitHub のフィールド名そのもの |
+| 状態（herdr の agent の） | status | 小文字。カンバンの `Status` と区別するため。`idle` / `done` / `blocked` の値を指す |
 | エージェント | the agent | README の "the agent needs something from you"。`worker` `the AI` は使わない |
 | 常駐 | daemon | README の `# start the daemon` |
 | 選択肢（Status の） | option | GitHub 自身が single-select の値をこう呼ぶ |
@@ -95,7 +95,7 @@
 | **既に英語の技術用語** | worktree / branch / commit / clone / pane / hook / socket / issue / run / turn / transcript / session / agent / workspace / project item / backoff / stall |
 | **ファイル名・設定のキー・フラグ・コマンド** | `WORKFLOW.md` / `tracker.active_states` / `--dry-run` / `continuo trust` / `herdr agent read` / `CONTINUO-STATUS:` |
 | **環境変数名・JSON のフィールド名** | `LANG` / `GITHUB_TOKEN` / `hasTrustDialogAccepted` |
-| **大文字を保つ固有名** | `Claude Code` / `GitHub` / `Projects v2` / `Keychain` / `Status`（ボードのフィールド） |
+| **大文字を保つ固有名** | `Claude Code` / `GitHub` / `Projects v2` / `Keychain` / `Status`（カンバンのフィールド） |
 
 **プレースホルダだけは訳す。**利用者が自分で埋める場所だからである。
 

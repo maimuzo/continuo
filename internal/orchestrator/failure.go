@@ -106,7 +106,7 @@ func (o *Orchestrator) skipByFailure(issue tracker.Issue) bool {
 
 	if first {
 		o.logger.Warn("同じ issue が続けて失敗しているので、これ以上は拾いません"+
-			"（ボードの Status を動かすと拾い直します）",
+			"（カンバンの Status を動かすと拾い直します）",
 			"identifier", issue.Identifier, "失敗の回数", count,
 			"max_retries", o.cfg.Agent.MaxRetries, "理由", reason)
 		return true

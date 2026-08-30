@@ -113,7 +113,7 @@ func TestDoctor_ボードを読めなければStatusの名前は確かめられ�
 
 	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
 	res := assertSymbol(t, report, doctor.LabelStatusNames, doctor.SymbolUnknown)
-	if !strings.Contains(res.Detail, "ボードを読めなかったため") {
+	if !strings.Contains(res.Detail, "カンバンを読めなかったため") {
 		t.Fatalf("ボードを読めなかったことが理由に出ていない: %q", res.Detail)
 	}
 }
