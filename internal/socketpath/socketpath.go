@@ -26,13 +26,6 @@ const MaxPathLen = 103
 // HookSocketFileName は hook を受ける socket のファイル名である。
 const HookSocketFileName = "hooks.sock"
 
-// LockFileName は二重起動防止のロックファイル名である（internal/lock が使う）。
-//
-// **置き場所を決めるのは internal/instance であって、この package ではない**（設計 3-17）。
-// **socket の場所から導いてはならない。**socket の場所は環境変数で動くので、
-// そこから導くと、同じ機械の同じ利用者が別のロックを握る。
-const LockFileName = "continuo.lock"
-
 // RuntimeDir は hook を受ける socket を置くディレクトリを、設計 3-23 の探索順で決める。
 //
 // 探索順（上から順に、最初に見つかったものを使う）:
@@ -203,6 +196,11 @@ func ResolveHookSocketPath(explicitListen *string, envRuntimeDir string) (string
 // （設計 3-23。「Go が作る socket の権限は umask 次第で、既定の環境では 0755
 // （誰でも接続できる）になる」ことが実測されているため、ディレクトリの権限を
 // 主たる防御にする）。
+//
+// **socket 以外の置き場所もここを通る。**二重起動防止のロック（`~/.continuo`。設計 3-17）と
+// ボードのロック（`~/.continuo/board`。3-17e）が同じ検査を通る。
+// **返す文言は「何のためのディレクトリか」を名乗らない。**それを名乗るのは呼ぶ側の
+// 文言であり、ここが名乗ると **ロックの失敗が「hook を受ける socket の…」として報告される。**
 //
 // dir: 用意するディレクトリの絶対パス。
 // 戻り値: 次のいずれかの場合にエラーを返す。

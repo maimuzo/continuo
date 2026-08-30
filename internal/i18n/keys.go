@@ -24,6 +24,8 @@ const (
 	KeyDoctorLabelRuntimeDir Key = "doctor.label.runtime_dir"
 	// KeyDoctorLabelLockFile は doctor の「ロックの場所」の見出し語である。
 	KeyDoctorLabelLockFile Key = "doctor.label.lock_file"
+	// KeyDoctorLabelBoardLock は doctor の「ボードのロック」の見出し語である。
+	KeyDoctorLabelBoardLock Key = "doctor.label.board_lock"
 	// KeyDoctorRuntimeDirOK は hook の socket を用意できたときに出る。
 	KeyDoctorRuntimeDirOK Key = "doctor.runtime_dir.ok"
 	// KeyDoctorRuntimeDirFailed は hook の socket を用意できなかったときに出る。
@@ -38,12 +40,20 @@ const (
 	KeyDoctorRuntimeDirRemedyStale Key = "doctor.runtime_dir.remedy_stale"
 	// KeyDoctorLockFileOK は二重起動防止のロックを置けたときに出る。
 	KeyDoctorLockFileOK Key = "doctor.lock_file.ok"
-	// KeyDoctorLockFileInUse はロックを既に continuo が握っているときに出る。
-	KeyDoctorLockFileInUse Key = "doctor.lock_file.in_use"
 	// KeyDoctorLockFileFailed はロックを置けなかったときに出る。
 	KeyDoctorLockFileFailed Key = "doctor.lock_file.failed"
 	// KeyDoctorLockFileRemedy はロックを置けなかったときの直し方に出る。
 	KeyDoctorLockFileRemedy Key = "doctor.lock_file.remedy"
+	// KeyDoctorBoardLockOK はボードのロックを置けたときに出る。
+	KeyDoctorBoardLockOK Key = "doctor.board_lock.ok"
+	// KeyDoctorBoardLockFailed はボードのロックを置けなかったときに出る。
+	KeyDoctorBoardLockFailed Key = "doctor.board_lock.failed"
+	// KeyDoctorBoardLockRemedy はボードのロックを置けなかったときの直し方に出る。
+	KeyDoctorBoardLockRemedy Key = "doctor.board_lock.remedy"
+	// KeyDoctorBoardLockNoConfig は設定を読めずにボードのロックを確かめられないときに出る。
+	KeyDoctorBoardLockNoConfig Key = "doctor.board_lock.no_config"
+	// KeyDoctorBoardLockNormalized はボードのロックの名前で正規化が情報を落としたときに出る。
+	KeyDoctorBoardLockNormalized Key = "doctor.board_lock.normalized"
 
 	// KeyDoctorClaudeNotFound は claude が PATH に無いときの文言である。
 	KeyDoctorClaudeNotFound Key = "doctor.claude.not_found"
@@ -758,6 +768,9 @@ const (
 	KeyAbandonErrLockFile Key = "abandon.err_lock_file"
 	// KeyAbandonErrBoardInUse は同じボードを見ている continuo が動いているときに出る。
 	KeyAbandonErrBoardInUse Key = "abandon.err_board_in_use"
+	// KeyAbandonErrBoardInUseNoInfo は同じボードのロックが握られているのに、
+	// 誰が握っているかの覚え書きが無いときに出る（`continuo abandon` どうしがぶつかった場合）。
+	KeyAbandonErrBoardInUseNoInfo Key = "abandon.err_board_in_use_no_info"
 	// KeyAbandonErrBoardLockFile はボードのロックファイルそのものを開けないときに出る。
 	KeyAbandonErrBoardLockFile Key = "abandon.err_board_lock_file"
 	// KeyAbandonRunning は、**continuo が動いていて、手を離させる段を通る**ときの1行に出る。
@@ -2309,6 +2322,7 @@ var allKeys = []Key{
 	KeyDoctorLabelClaude,
 	KeyDoctorLabelRuntimeDir,
 	KeyDoctorLabelLockFile,
+	KeyDoctorLabelBoardLock,
 	KeyDoctorRuntimeDirOK,
 	KeyDoctorRuntimeDirFailed,
 	KeyDoctorRuntimeDirRemedy,
@@ -2316,9 +2330,13 @@ var allKeys = []Key{
 	KeyDoctorRuntimeDirStale,
 	KeyDoctorRuntimeDirRemedyStale,
 	KeyDoctorLockFileOK,
-	KeyDoctorLockFileInUse,
 	KeyDoctorLockFileFailed,
 	KeyDoctorLockFileRemedy,
+	KeyDoctorBoardLockOK,
+	KeyDoctorBoardLockFailed,
+	KeyDoctorBoardLockRemedy,
+	KeyDoctorBoardLockNoConfig,
+	KeyDoctorBoardLockNormalized,
 	KeyDoctorClaudeNotFound,
 	KeyDoctorClaudeFound,
 	KeyDoctorClaudeRemedyInstall,
@@ -2609,6 +2627,7 @@ var allKeys = []Key{
 	KeyAbandonErrBuild,
 	KeyAbandonErrLockFile,
 	KeyAbandonErrBoardInUse,
+	KeyAbandonErrBoardInUseNoInfo,
 	KeyAbandonErrBoardLockFile,
 	KeyAbandonRunning,
 	KeyAbandonRunningDryRun,

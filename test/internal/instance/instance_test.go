@@ -359,6 +359,10 @@ func TestRemoveBoardInfo_覚え書きを消す(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ボードのロックの場所を決められない: %v", err)
 	}
+	// **`BoardLockPath` は置き場所を作らない**（設計 3-17g）。書く前に用意する。
+	if err := instance.EnsureBoardDir(lockPath); err != nil {
+		t.Fatalf("ボードのロックの置き場所を作れない: %v", err)
+	}
 	if err := instance.WriteBoardInfo(lockPath, instance.BoardInfo{Owner: "octocat", ProjectNumber: 10}, nil); err != nil {
 		t.Fatalf("覚え書きを書けない: %v", err)
 	}

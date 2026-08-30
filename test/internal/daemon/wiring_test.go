@@ -818,6 +818,10 @@ func TestRun_同じボードを見ている2つ目は起動を止める(t *testi
 	if err != nil {
 		t.Fatalf("ボードのロックの場所を決められません: %v", err)
 	}
+	// **`BoardLockPath` は置き場所を作らない**（設計 3-17g）。取る前に用意する。
+	if err := instance.EnsureBoardDir(boardLock); err != nil {
+		t.Fatalf("ボードのロックの置き場所を作れません: %v", err)
+	}
 	held, err := lock.Acquire(boardLock)
 	if err != nil {
 		t.Fatalf("ボードのロックを先に握れません: %v", err)

@@ -150,6 +150,8 @@
 - 3-17c `continuo abandon` は、常駐している側と同じ場所を見る
 - 3-17d `--id` に書ける名前を絞る
 - 3-17e ボードの重なりは、ボードごとのロックで断る
+- 3-17f `--id` の置き場所を、既定側から見えなくする
+- 3-17g `continuo abandon --dry-run` は1バイトも書かない
 - 3-18 worktree の身元を worktree の中に書く
 - 3-19 落ちている間に届かなかった通知を取り戻す
 - 3-20 worktree が置き場所の内側にあることを検査する
@@ -2472,22 +2474,80 @@ abandon が `<workspace.root>` を走査して0件になり、**手を離させ�
 }
 ```
 
+**飛ばすのは、次の3つが揃ったときだけである。**
+
 | 何 | どうするか |
 | --- | --- |
 | **どこを見るか** | **置き場所の直下だけ**（`--id` が足すのは1階層である） |
-| **飛ばす条件** | 目印が読めて、その `id` が**そのディレクトリの名前と一致する**こと |
-| **一致を見る理由** | worktree の中ではエージェントが `--permission-mode dontAsk` で動く。**中身を見ずに飛ばすと、1バイト置くだけで abandon の目から隠せる** |
+| **名乗り** | 目印が読めて、その `id` が**そのディレクトリの名前と一致する**こと |
+| **名前の形** | その `id` が **`--id` として使える形である**こと（3-17d の `ValidateID`） |
+| **外の裏付け** | **`~/.continuo/id/<名前>/` が実在する**こと（`EnsureLockDir` が必ず作る） |
 
-**名前の一覧を持つ形にはしない。**既定側は、どんな `--id` が使われたかを知らない
-（`--id` は起動のたびに人間が付けるフラグであって、どこにも登録されない）。
+**目印1つでは飛ばさない。**目印は `workspace.root` の中にあり、**そこではエージェントが
+`--permission-mode dontAsk` で動く。**worktree から4つ上へ `.continuo-instance` を置いて
+`{"id":"github.com"}` と名乗るだけで、**`github.com` の下の worktree が
+`Scan` / `ScanUnidentified` / `ScanBroken` の3つ全部から消えた。**
+そうなると復元は0件になり、**`continuo abandon` は「worktree が無い」経路に入って、
+生きている worktree の branch を消しにいく。**
+
+**名前の形が、その名乗りを止める。**`github.com` は `.` を含むので `--id` に書けない。
+**外の裏付けが、名乗った名前で continuo が実際に動いたことを、置き場所の外で確かめる。**
+
+| 防げる範囲 | 中身 |
+| --- | --- |
+| **防げる** | **worktree の中から相対パスで書ける範囲**。目印を何バイト置いても、`~/.continuo/id/<名前>/` が無ければ飛ばさない |
+| **防げない** | **`~/.continuo/id/` へ絶対パスでディレクトリを作れる相手**。ただしその相手は flock も覚え書きも置き換えられるので、**`--id` による隔離そのものが既に成立していない** |
+
+**名前の一覧を別に持つ形にはしない。**`~/.continuo/id/<名前>/` は、`--id` を使えば
+**ロックを置くために必ず作られる**（3-17b）。**登録のための書き込みを新しく足さなくても、
+「その名前で動いた」証拠はそこにある。**
 **身元ファイルの有無で当てる形にもしない。**着手の途中で落ちた worktree には身元ファイルが無いので、
-**そのときだけ当たらなくなる。****置いた側が名乗れば、当てる必要そのものが無くなる。**
+**そのときだけ当たらなくなる。**
 
 **孤児 branch の掃除は、`--id` が足した `<名前>/` を接頭辞に数えない。**
 `branch_template` が変数で始まる設定（`{{.issue.repo}}-{{.issue.number}}` など）では接頭辞が空になり、
 **掃除は止まっている**（3-9 の段6b）。**`--id e2e` を付けると接頭辞が `e2e/` になり、掃除が動き出す。**
 そのまま消すと、**人間が自分で切った `e2e/spike` を `git branch -D` する。**
 **足したあとの接頭辞が `<名前>/` と等しいことは、足す前が空だったことと同じである。**そのときは1本も消さない。
+
+### 3-17g. `continuo abandon --dry-run` は1バイトも書かない
+
+**言いたいこと。**下見のつもりの実行が、置き場所を5つ作っていた。
+**とくに `--id` を打ち間違えたときが悪い。**その置き場所に名乗りが残り、**既定側の走査から永久に隠れる。**
+**「決める」と「作る」を分け、`--dry-run` は決めるほうだけを通す。**
+
+**何が起きていたか。**`continuo abandon --dry-run --id typo <issue の URL>` が、これを作っていた。
+
+| 何 | どこで作っていたか |
+| --- | --- |
+| `~/.continuo/id/typo/run` | `HookSocketPath` → `socketpath.EnsureDir` |
+| `<workspace.root>/typo` | `workspace.New` → `EnsureRoot` |
+| `<workspace.root>/typo/.continuo-instance` | `WriteInstanceMarker` |
+| `~/.continuo/id/typo` | `EnsureLockDir` |
+| `~/.continuo/board` | `BoardLockPath` |
+
+**そのうえで「`--dry-run` なので何も消していません」と表示していた。**
+[README.md](../../README.md) は「`--dry-run` writes nothing at all」と書いている。
+
+**採る形。作る関数と決める関数を分け、`--dry-run` は決めるほうだけを呼ぶ。**
+
+| 決める（`--dry-run` はこちら） | 作る（本番だけ） |
+| --- | --- |
+| `instance.Layout.ResolveHookSocketPath` | `instance.Layout.HookSocketPath` |
+| `workspace.ResolveRoot` | `workspace.EnsureRoot` |
+| `instance.BoardLockPath` | `instance.EnsureBoardDir` |
+| `lock.Probe` | `lock.Acquire`（`O_CREATE` でロックファイルを作る） |
+| （名乗りを書かない） | `workspace.WriteInstanceMarker` |
+
+**`workspace.New` の `NoCreate` が、置き場所と名乗りの両方を止める。**
+
+**ロックは握らずに見るだけでよい。**`--dry-run` は1バイトも消さないので、
+**見ているあいだに継続監視が起動しても失うものが無い。**
+**置き場所が無いことは「その `--id` の continuo が1度も動いていない」ことであり、
+`lock.Probe` はそれを「握られていない」と正しく答える。**
+
+**置き場所が無ければ走査は0件である。**`workspace.root` が無いのは「読めない」ではなく
+「worktree が1件も無いことがはっきり分かっている」状態なので、`Scan` はエラーにしない。
 
 ### 3-18. worktree の身元を worktree の中に書く
 

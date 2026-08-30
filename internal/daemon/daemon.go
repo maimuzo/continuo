@@ -256,14 +256,18 @@ func Run(ctx context.Context, opts Options) error {
 	// **環境変数も同じ形で名乗る。**`claude.hook_bridge.listen` の側にだけ警告があって
 	// こちらが黙っていると、**`CONTINUO_RUNTIME_DIR` を指定した人は、
 	// なぜ socket がそこに出来ないのかをログから引けない。**
-	if inst.OverridesRuntimeDirEnv(os.Getenv(EnvRuntimeDir)) {
+	//
+	// **1度だけ読む。**同じ環境変数を判定・ログ・socket の決定で3回引くと、
+	// **その間に書き換えられたとき、警告に出した値と実際に使った値が食い違う。**
+	envRuntimeDir := os.Getenv(EnvRuntimeDir)
+	if inst.OverridesRuntimeDirEnv(envRuntimeDir) {
 		logger.Warn("--id を付けたので CONTINUO_RUNTIME_DIR は使いません",
 			"id", inst.ID(),
 			"env", EnvRuntimeDir,
-			"value", os.Getenv(EnvRuntimeDir),
+			"value", envRuntimeDir,
 			"runtime_dir", inst.RuntimeDir())
 	}
-	sockPath, err := inst.HookSocketPath(os.Getenv(EnvRuntimeDir), cfg.Claude.HookBridge.Listen)
+	sockPath, err := inst.HookSocketPath(envRuntimeDir, cfg.Claude.HookBridge.Listen)
 	if err != nil {
 		return i18n.Errorf(i18n.KeyDaemonRunSocketDirFailed, ErrStartup, err)
 	}
@@ -877,6 +881,12 @@ func acquireBoardLock(
 	for _, w := range warnings {
 		logger.Warn("ボードのロックの名前で正規化が情報を落としました",
 			"owner", owner, "message", w.Message, "board_lock_file", boardLockPath)
+	}
+	// **置き場所は取る直前に用意する。**`BoardLockPath` はパスを決めるだけである
+	// （`continuo abandon --dry-run` が「何も書かない」を守れるようにするため。3-17g）。
+	if err := instance.EnsureBoardDir(boardLockPath); err != nil {
+		return boardClaim{}, i18n.Errorf(i18n.KeyDaemonRunBoardLockFileFailed,
+			ErrStartup, boardLockPath, err)
 	}
 
 	bl, err := lock.Acquire(boardLockPath)

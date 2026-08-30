@@ -690,6 +690,10 @@ func runGit(t *testing.T, dir string, args ...string) string {
 type fixture struct {
 	// Root は一時ディレクトリの根である（socket を短く保つため MkdirTemp で作る）。
 	Root string
+	// Home は `HOME` として使う短い一時ディレクトリである。
+	//
+	// **`~/.continuo/id/<名前>/` を見る経路が、利用者の本物のホームを触らないようにする。**
+	Home string
 	// Repo は本物の git のリポジトリである。
 	Repo *testRepo
 	// Herdr はテスト用herdr mock である。
@@ -770,12 +774,17 @@ func newFixtureWithConfig(t *testing.T, extra string) *fixture {
 		t.Fatalf("WORKFLOW.md を読めません: %v", err)
 	}
 
+	// **ホームディレクトリも一時ディレクトリへ閉じる。**`--id` を付けた経路は
+	// `~/.continuo/id/<名前>/` を見るので、閉じないとテストが利用者の本物のホームを触る。
+	// **`HOME` と Manager に渡す値を同じにする。**別々にすると、走査が
+	// 「別の continuo の置き場所か」を確かめに行く先（`~/.continuo/id/`）だけがずれる。
+	home := shortHome(t)
 	settingsRoot := filepath.Join(root, "issues")
 	ghq := &ghqAnswer{Path: repo.Dir}
 	mgr, err := workspace.New(workspace.Options{
 		Config:       loaded.Config,
 		Herdr:        fake.Client(),
-		HomeDir:      filepath.Join(root, "home"),
+		HomeDir:      home,
 		GhqList:      func(_ context.Context, _, _ string) (string, error) { return ghq.Path, nil },
 		SettingsRoot: settingsRoot,
 	})
@@ -785,6 +794,7 @@ func newFixtureWithConfig(t *testing.T, extra string) *fixture {
 
 	return &fixture{
 		Root:          root,
+		Home:          home,
 		Repo:          repo,
 		Herdr:         fake,
 		Manager:       mgr,
@@ -797,6 +807,35 @@ func newFixtureWithConfig(t *testing.T, extra string) *fixture {
 		SettingsRoot:  settingsRoot,
 		Ghq:           ghq,
 	}
+}
+
+// shortHome は、ホームディレクトリの代わりに使う短い一時ディレクトリを作り、
+// `HOME` をそこへ向ける。
+//
+// **短くなければならない。**`--id` を付けたときの socket は
+// `~/.continuo/id/<名前>/run/hooks.sock` であり、103バイトに収まらないと決められない
+// （設計 3-17d / 3-23）。**macOS の `TMPDIR` はそれだけで66文字前後ある。**
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 実体のパス（symlink を解決済み）。
+func shortHome(t *testing.T) string {
+	t.Helper()
+
+	for _, base := range []string{"/tmp", ""} {
+		dir, err := os.MkdirTemp(base, "ca")
+		if err != nil {
+			continue
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			resolved = dir
+		}
+		t.Setenv("HOME", resolved)
+		return resolved
+	}
+	t.Fatal("一時ディレクトリを作れません")
+	return ""
 }
 
 // writeWorkflow は WORKFLOW.md を書く。

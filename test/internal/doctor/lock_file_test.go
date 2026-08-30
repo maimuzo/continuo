@@ -7,6 +7,7 @@
 package doctor_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,7 +30,7 @@ func TestDoctorLockFile_置ける場所なら通る(t *testing.T) {
 	report := fx.Run(t)
 
 	res := assertSymbol(t, report, doctor.LabelLockFile, doctor.SymbolOK)
-	want := filepath.Join(fx.Home, instance.DirName, socketpath.LockFileName)
+	want := filepath.Join(fx.Home, instance.DirName, instance.LockFileName)
 	if !strings.Contains(res.Detail, want) {
 		t.Fatalf("固定した場所のロックを見ていない: got %q, want %q を含むこと", res.Detail, want)
 	}
@@ -66,11 +67,11 @@ func TestDoctorLockFile_ホームに同じ名前のファイルが在れば落�
 // **握られているのは「動いている」ことであって、場所が使えないことではない。**
 //
 // 与える情報: テストが先に握った `<HOME>/.continuo/continuo.lock`。
-// 成功条件: `✓` で、説明が「既に continuo が握っています」であること。
+// 成功条件: `✓` になり、説明がそのロックのパスを指すこと。
 func TestDoctorLockFile_既にcontinuoが握っていれば通る(t *testing.T) {
 	fx := newFixture(t)
 
-	lockPath := filepath.Join(fx.Home, instance.DirName, socketpath.LockFileName)
+	lockPath := filepath.Join(fx.Home, instance.DirName, instance.LockFileName)
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
 		t.Fatalf("ロックの置き場所を作れません: %v", err)
 	}
@@ -83,8 +84,143 @@ func TestDoctorLockFile_既にcontinuoが握っていれば通る(t *testing.T) 
 	report := fx.Run(t)
 
 	res := assertSymbol(t, report, doctor.LabelLockFile, doctor.SymbolOK)
-	if !strings.Contains(res.Detail, "握っています") && !strings.Contains(res.Detail, "already held") {
-		t.Fatalf("既に握られていることが出ていない: %q", res.Detail)
+	if !strings.Contains(res.Detail, lockPath) {
+		t.Fatalf("固定した場所のロックを見ていない: got %q, want %q を含むこと", res.Detail, lockPath)
+	}
+}
+
+// 目的: doctor がロックを取らないことを確かめる（設計 3-17）。
+//
+// **doctor は「置けるか」を答える道具である。**取っていたときは、doctor が動いている
+// あいだ continuo を起動できなかった。**検査の道具が本番の起動を止めてはならない。**
+//
+// 与える情報: `gh auth status`（ロックの検査より後に走る口）の中でロックを取る差し替え。
+// 成功条件: そのロックが取れること。**取れないなら doctor が握っている。**
+func TestDoctorLockFile_検査の最中でもロックを取れる(t *testing.T) {
+	fx := newFixture(t)
+	lockPath := filepath.Join(fx.Home, instance.DirName, instance.LockFileName)
+
+	var acquireErr error
+	var tried bool
+	opts := fx.Options()
+	// **`gh の認証` はロックの検査より後に走る**（internal/doctor の Run の段の順）。
+	// **そこで取れれば、doctor はロックを握っていない。**
+	opts.GHAuthStatus = func(_ context.Context) (string, error) {
+		tried = true
+		held, err := lock.Acquire(lockPath)
+		if err != nil {
+			acquireErr = err
+			return "", err
+		}
+		_ = held.Release()
+		return ghAuthStatusWithProject, nil
+	}
+	doctor.Run(t.Context(), opts)
+
+	if !tried {
+		t.Fatal("ロックを取りに行く口が呼ばれていない（検査が空振りしている）")
+	}
+	if acquireErr != nil {
+		t.Fatalf("doctor が検査の最中にロックを握っている: %v", acquireErr)
+	}
+}
+
+// 目的: ボードのロックの置き場所も doctor が見ることを確かめる（設計 3-17e）。
+//
+// **`~/.continuo/board` がファイルだと、doctor は全部 `✓` を出すのに起動が落ちた。**
+// **`continuo abandon` も同じところで落ちる。**これは issue #9 と同じ形である。
+//
+// 与える情報: `~/.continuo/board` と同じ名前の**ファイル**。
+// 成功条件: 見出し語 `ボードのロック` が `✗` になり、終了コードが 1 になること。
+func TestDoctorBoardLock_ホームに同じ名前のファイルが在れば落とす(t *testing.T) {
+	fx := newFixture(t)
+
+	blocker := filepath.Join(fx.Home, instance.DirName, instance.BoardDirName)
+	if err := os.MkdirAll(filepath.Dir(blocker), 0o700); err != nil {
+		t.Fatalf("ロックの置き場所を作れません: %v", err)
+	}
+	if err := os.WriteFile(blocker, []byte("これはディレクトリではありません\n"), 0o600); err != nil {
+		t.Fatalf("邪魔をするファイルを置けません: %v", err)
+	}
+
+	report := fx.Run(t)
+
+	assertSymbol(t, report, doctor.LabelBoardLock, doctor.SymbolMissing)
+	if report.ExitCode() != 1 {
+		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
+	}
+}
+
+// 目的: ボードのロックの置き場所が symlink なら落とすことを確かめる（設計 3-17e）。
+//
+// **素の `os.MkdirAll` では、差し替えられていても気づかない。**辿った先へ flock と
+// 覚え書きが落ちる。
+//
+// 与える情報: `~/.continuo/board` を別のディレクトリへ向けた symlink。
+// 成功条件: 見出し語 `ボードのロック` が `✗` になること。
+func TestDoctorBoardLock_置き場所がsymlinkなら落とす(t *testing.T) {
+	fx := newFixture(t)
+
+	target := filepath.Join(fx.Root, "elsewhere")
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatalf("差し替え先を作れません: %v", err)
+	}
+	linkPath := filepath.Join(fx.Home, instance.DirName, instance.BoardDirName)
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0o700); err != nil {
+		t.Fatalf("ロックの置き場所を作れません: %v", err)
+	}
+	if err := os.Symlink(target, linkPath); err != nil {
+		t.Fatalf("symlink を張れません: %v", err)
+	}
+
+	report := fx.Run(t)
+
+	assertSymbol(t, report, doctor.LabelBoardLock, doctor.SymbolMissing)
+}
+
+// 目的: ボードのロックの置き場所が使えれば `✓` になることを確かめる（設計 3-17e）。
+//
+// **落とす側だけを確かめると、いつでも `✗` を出す実装でも通ってしまう。**
+//
+// 与える情報: 何も邪魔をしていないホームディレクトリ。
+// 成功条件: `✓` になり、説明が `<HOME>/.continuo/board/octocat-3.lock` を指すこと。
+func TestDoctorBoardLock_置ける場所なら通る(t *testing.T) {
+	fx := newFixture(t)
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelBoardLock, doctor.SymbolOK)
+	want := filepath.Join(fx.Home, instance.DirName, instance.BoardDirName, "octocat-3.lock")
+	if !strings.Contains(res.Detail, want) {
+		t.Fatalf("ボード1枚ぶんのロックを見ていない: got %q, want %q を含むこと", res.Detail, want)
+	}
+}
+
+// 目的: `~/.continuo` が symlink なら、ロックの置き場所の用意を断ることを確かめる
+// （設計 3-17）。
+//
+// **ロックは「continuo が動いているか」の唯一の判定に使う。**差し替えられた先で
+// flock を取ると、**置き換えた相手の手の中で判定することになる。**
+//
+// 与える情報: `~/.continuo` を別のディレクトリへ向けた symlink。
+// 成功条件: `EnsureLockDir` がエラーを返すこと。
+func TestEnsureLockDir_置き場所がsymlinkなら断る(t *testing.T) {
+	home := shortDoctorHome(t)
+
+	target := filepath.Join(home, "elsewhere")
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatalf("差し替え先を作れません: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(home, instance.DirName)); err != nil {
+		t.Fatalf("symlink を張れません: %v", err)
+	}
+
+	layout, err := instance.Resolve("")
+	if err != nil {
+		t.Fatalf("置き場所を決められない: %v", err)
+	}
+	if err := layout.EnsureLockDir(); err == nil {
+		t.Fatal("symlink に差し替えられているのに通ってしまった")
 	}
 }
 
@@ -124,7 +260,7 @@ func TestDoctor_idを渡すとその名前の場所を見る(t *testing.T) {
 	assertNoteMentionsID(t, sock.Notes, doctor.LabelRuntimeDir)
 
 	lockRes := assertSymbol(t, report, doctor.LabelLockFile, doctor.SymbolOK)
-	wantLock := filepath.Join(base, socketpath.LockFileName)
+	wantLock := filepath.Join(base, instance.LockFileName)
 	if !strings.Contains(lockRes.Detail, wantLock) {
 		t.Fatalf("--id のロックを見ていない: got %q, want %q を含むこと", lockRes.Detail, wantLock)
 	}

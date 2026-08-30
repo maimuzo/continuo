@@ -3,6 +3,7 @@ package lock_test
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -90,4 +91,86 @@ func TestAcquire_二重起動のエラーはErrAlreadyRunningである(t *testin
 	if !errors.Is(err, lock.ErrAlreadyRunning) {
 		t.Fatalf("二重起動のエラーが lock.ErrAlreadyRunning ではない: %v", err)
 	}
+}
+
+// 目的: Probe がロックファイルを作らずに、握られているかだけを答えることを確認する
+// （設計 3-17g）。
+//
+// **`continuo abandon --dry-run` のためにある。**`Acquire` は `O_CREATE` で
+// ロックファイルを作るので、**「何も書かない」という約束を破る。**
+//
+// 与える情報: まだ存在しないロックファイルのパス。
+// 成功条件: 「握られていない」と答え、**ファイルが作られていないこと。**
+func TestProbe_無ければ握られていないと答えファイルも作らない(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "continuo.lock")
+
+	held, err := lock.Probe(path)
+	if err != nil {
+		t.Fatalf("Probe がエラーを返した: %v", err)
+	}
+	if held {
+		t.Fatal("誰も握っていないのに握られていると答えた")
+	}
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		t.Fatalf("Probe がロックファイルを作っている（err=%v）", err)
+	}
+}
+
+// 目的: Probe が、握られているロックを「握られている」と答えることを確認する
+// （設計 3-17g）。
+//
+// **作らないようにしただけで判定まで落ちていないかを確かめる。**
+//
+// 与える情報: 先に Acquire したロックファイル。
+// 成功条件: 「握られている」と答えること。**手放したあとは「握られていない」に戻ること。**
+func TestProbe_握られていれば握られていると答える(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "continuo.lock")
+
+	held, err := lock.Acquire(path)
+	if err != nil {
+		t.Fatalf("Acquire に失敗した: %v", err)
+	}
+
+	got, err := lock.Probe(path)
+	if err != nil {
+		t.Fatalf("Probe がエラーを返した: %v", err)
+	}
+	if !got {
+		t.Fatal("握られているのに握られていないと答えた")
+	}
+
+	if err := held.Release(); err != nil {
+		t.Fatalf("Release に失敗した: %v", err)
+	}
+	got, err = lock.Probe(path)
+	if err != nil {
+		t.Fatalf("Probe がエラーを返した: %v", err)
+	}
+	if got {
+		t.Fatal("手放したあとも握られていると答えた")
+	}
+}
+
+// 目的: Probe が握り続けないことを確認する（設計 3-17g）。
+//
+// **見せるだけの実行は1バイトも消さないので、握り続ける理由が無い。**
+// **握り続けると、下見のあいだ継続監視が起動できなくなる。**
+//
+// 与える情報: 誰も握っていないロックファイル。
+// 成功条件: Probe のあとに Acquire できること。
+func TestProbe_握り続けない(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "continuo.lock")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("ロックファイルを置けません: %v", err)
+	}
+
+	if _, err := lock.Probe(path); err != nil {
+		t.Fatalf("Probe がエラーを返した: %v", err)
+	}
+
+	held, err := lock.Acquire(path)
+	if err != nil {
+		t.Fatalf("Probe のあとに Acquire できない（握り続けている）: %v", err)
+	}
+	_ = held.Release()
 }

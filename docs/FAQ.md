@@ -5,8 +5,9 @@
 **新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 /
-未記入の項目 / claude / hook の置き場所 / Claude の設定 / worktree の場所 / herdr /
-gh の認証 / ボード / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報の15個を調べます。
+未記入の項目 / claude / hook の置き場所 / ロックの場所 / ボードのロック / Claude の設定 /
+worktree の場所 / herdr / gh の認証 / ボード / Status の名前 / 対応表のキー / clone /
+信頼登録 / 資格情報の17個を調べます。
 `✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
@@ -17,7 +18,7 @@ cd ~/continuo-work && continuo doctor
 
 ## 起動できないとき
 
-### 起動した瞬間に「hook を受ける socket のディレクトリの親を作成できません」と出る
+### 起動した瞬間に「… の親ディレクトリを作成できません」と出る
 
 **原因。**`XDG_RUNTIME_DIR` が設定されているのに、そのディレクトリが実在しません。
 `/run/user/<uid>` を作るのは systemd であって、continuo が作ってよい場所ではありません。
@@ -42,10 +43,12 @@ CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo doctor
 CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo
 ```
 
-### 「既にある hook を受ける socket のディレクトリ … の権限が 0755 です」で止まる
+### 「既にある … の権限が 0755 です」で止まる
 
 **原因。**continuo は、自分が作っていないディレクトリの権限を書き換えません。
-symlink も受け付けません（辿った先へ socket とロックファイルが落ちるためです）。
+symlink も受け付けません（辿った先へ socket やロックファイルが落ちるためです）。
+**同じ検査を、hook を受ける socket の置き場所・`~/.continuo`・`~/.continuo/board` の
+3つが通ります。**どこで止まったかは、文言の前半（「〜を用意できません」「〜を作成できません」）で分かります。
 
 **直し方。**
 
@@ -53,6 +56,44 @@ symlink も受け付けません（辿った先へ socket とロックファイ�
 chmod 700 /tmp/continuo-run
 CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo doctor
 ```
+
+### 「ロックファイルを置くディレクトリ ~/.continuo を作成できません」で止まる
+
+**原因。**`~/.continuo` が次のどれかになっています。
+
+| 何 | なぜ断るか |
+| --- | --- |
+| **同じ名前のファイルがある** | ディレクトリを作れません |
+| **symlink になっている** | **辿った先へロックが落ちます。**「continuo が動いているか」の唯一の判定を、差し替えた相手の手で行うことになります |
+| **権限が group / other に開いている**（`0755` など） | continuo は、自分が作っていないディレクトリの権限を書き換えません |
+
+**直し方。**
+
+```bash
+ls -ld ~/.continuo
+chmod 700 ~/.continuo
+continuo doctor
+```
+
+`continuo doctor` の `ロックの場所` が `✓` なら起動できます。
+
+### 「ボードのロックを置くディレクトリ ~/.continuo/board を作成できません」で止まる
+
+**原因。**`~/.continuo/board` が上と同じ状態になっています
+（ファイル・symlink・group / other に開いた権限）。
+**ここは「同じボードを2つの continuo が見ていないか」を確かめる場所です**
+（[README.ja.md](../README.ja.md) の `--id` の説明を見てください）。
+**`continuo abandon` も同じところで止まります。**
+
+**直し方。**
+
+```bash
+ls -ld ~/.continuo/board
+chmod 700 ~/.continuo/board
+continuo doctor
+```
+
+`continuo doctor` の `ボードのロック` が `✓` なら起動できます。
 
 ### 「二重起動を検出しました（ロックファイル …）」で起動できない
 

@@ -44,6 +44,13 @@ const (
 	// **これが無かったとき、`~/.continuo` が書けない（あるいはファイルとして存在する）
 	// 環境で、doctor は全部 `✓` を出すのに `daemon.Run` が落ちた。**issue #9 と同じ形である。
 	LabelLockFile = i18n.KeyDoctorLabelLockFile
+	// LabelBoardLock はボード1枚ぶんのロックを実際に置けるかの検査である（設計 3-17e）。
+	//
+	// **`ロックの場所` とは別の場所である**（`~/.continuo/board/`）。
+	// **片方が置けても、もう片方が置けるとは限らない。**そこがファイル・symlink・
+	// 0755 のディレクトリだと、**doctor が全部 `✓` を出すのに起動だけが落ちる**
+	// （issue #9 と同じ形である）。**`continuo abandon` も同じところで落ちる。**
+	LabelBoardLock = i18n.KeyDoctorLabelBoardLock
 	// LabelGHAuth は `gh auth status` の scope に project が単独で並んでいるかの検査である。
 	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。

@@ -26,6 +26,7 @@
 package instance
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,45 @@ const (
 	// **socket のパスの上限（103 バイト）に収めるための値である。**
 	// 利用者の home のパスが長いと、それだけで上限に近づく。
 	MaxIDLen = 32
+
+	// LockFileName は二重起動防止のロックファイル名である（internal/lock が使う）。
+	//
+	// **置き場所を決めるのはこの package である**（設計 3-17）。
+	// **socket の場所から導いてはならない。**socket の場所は環境変数で動くので、
+	// そこから導くと、同じ機械の同じ利用者が別のロックを握る。
+	LockFileName = "continuo.lock"
 )
+
+// InvalidIDError は `--id` に渡された名前そのものが使えないことを表す（設計 3-17d）。
+//
+// **名前の誤りと、それ以外の誤りを呼ぶ側が言い分けるためにある。**
+// `Resolve` は名前を先に検査し、そのあとでホームディレクトリを引く。
+// **`HOME` を引けなかっただけの失敗を「--id に渡した名前が使えません」と報告すると、
+// `--id` を1文字も渡していない人にその文言が出る。**
+//
+// **これが無かったとき、`internal/cli` は同じ検査を2回走らせていた**
+// （`ValidateID` を呼んでから `Resolve` を呼ぶ）。**判定は1箇所にしか置かない。**
+//
+// **文言は包んだエラーのものをそのまま出す。**この型は目印であって、文言を足さない。
+type InvalidIDError struct {
+	// Err は使えない理由である（長すぎる・使えない文字がある）。
+	Err error
+}
+
+// Error は error インターフェースを満たす。**包んだ理由をそのまま返す。**
+func (e *InvalidIDError) Error() string { return e.Err.Error() }
+
+// Unwrap は包んだ理由を返す（errors.Is / errors.As のため）。
+func (e *InvalidIDError) Unwrap() error { return e.Err }
+
+// IsInvalidID は、エラーが「`--id` に渡された名前そのものが使えない」ものかを返す。
+//
+// err: 判定するエラー。
+// 戻り値: 名前の誤りなら true。
+func IsInvalidID(err error) bool {
+	var invalid *InvalidIDError
+	return errors.As(err, &invalid)
+}
 
 // Layout は continuo 1本ぶんの置き場所である。
 //
@@ -85,6 +124,8 @@ func (l Layout) RuntimeDir() string { return l.runtimeDir }
 //
 // id: `--id` に渡された名前。**空文字なら既定の1本である。**
 // 戻り値: 決まった Layout と、次のいずれかの場合のエラー。
+// **上の3つは `*InvalidIDError` である**（IsInvalidID で見分けられる。渡した名前が悪い）。
+// **最後の1つは違う**（`--id` を1文字も渡していなくても起きる）。
 //   - 名前に使えない文字がある（`[a-z0-9]` で始まり、以降は `[a-z0-9-]` だけ）
 //   - 名前が MaxIDLen 文字を超える
 //   - 名前を足した socket のパスが socketpath.MaxPathLen バイトを超える
@@ -106,7 +147,7 @@ func Resolve(id string) (Layout, error) {
 	}
 
 	if id == "" {
-		return Layout{lockPath: filepath.Join(root, socketpath.LockFileName)}, nil
+		return Layout{lockPath: filepath.Join(root, LockFileName)}, nil
 	}
 
 	base := filepath.Join(root, IDDirName, id)
@@ -115,12 +156,16 @@ func Resolve(id string) (Layout, error) {
 	// **socket のパスの長さを、名前の検査と同じところで見る**（3-17d）。
 	// **ここで見ないと、起動して bind する段で初めて落ちる。**
 	if _, err := socketpath.Resolve(runtimeDir); err != nil {
-		return Layout{}, i18n.Errorf(i18n.KeyInstanceResolveSocketPathTooLong, id, err)
+		// **これも名前の誤りである。**渡した名前が長いほど socket のパスが伸びる。
+		// **呼ぶ側が「名前が使えません」と言えるように、同じ目印を付ける。**
+		return Layout{}, &InvalidIDError{
+			Err: i18n.Errorf(i18n.KeyInstanceResolveSocketPathTooLong, id, err),
+		}
 	}
 
 	return Layout{
 		id:         id,
-		lockPath:   filepath.Join(base, socketpath.LockFileName),
+		lockPath:   filepath.Join(base, LockFileName),
 		runtimeDir: runtimeDir,
 	}, nil
 }
@@ -131,15 +176,18 @@ func Resolve(id string) (Layout, error) {
 // `--id ../../etc` が `~/.continuo/id/../../etc/continuo.lock` を指し、
 // **`~/.continuo` の外へ出る。**空白や `..` は git の ref としても不正になる。
 //
+// **返すエラーは必ず *InvalidIDError である。**呼ぶ側は IsInvalidID でそれを見て、
+// 名前の誤りとそれ以外を言い分ける（同じ検査を2度走らせない）。
+//
 // id: 検査する名前。**空文字は「既定の1本」を表すので、ここへ渡してはならない**
 // （渡すとエラーになる）。
-// 戻り値: 使える形でない場合のエラー。
+// 戻り値: 使える形でない場合のエラー（*InvalidIDError）。
 func ValidateID(id string) error {
 	if len(id) > MaxIDLen {
-		return i18n.Errorf(i18n.KeyInstanceValidateIDTooLong, id, len(id), MaxIDLen)
+		return &InvalidIDError{Err: i18n.Errorf(i18n.KeyInstanceValidateIDTooLong, id, len(id), MaxIDLen)}
 	}
 	if !validIDShape(id) {
-		return i18n.Errorf(i18n.KeyInstanceValidateIDInvalidShape, id)
+		return &InvalidIDError{Err: i18n.Errorf(i18n.KeyInstanceValidateIDInvalidShape, id)}
 	}
 	return nil
 }
@@ -184,14 +232,23 @@ func Root() (string, error) {
 // **`lock.Acquire` を呼ぶ前に必ず通すこと。**親ディレクトリが無いと、
 // 二重起動でもないのに「ロックファイルを開けません」で止まる。
 //
-// **`socketpath.EnsureDir` は使わない。**あちらは socket を置く場所として
-// 権限まで検査するが、ここは `~/.continuo` そのものを作ることがあり、
-// **利用者が自分で作った `~/.continuo` の権限を continuo が拒む理由は無い。**
+// **`socketpath.EnsureDir` を通す**（board.go と同じである）。
+// **素の `os.MkdirAll` では、`~/.continuo` が symlink に差し替えられていても
+// 気づかない。**辿った先へ flock が落ちれば、**「continuo が動いているか」という
+// 唯一の判定が、置き換えた相手の手の中で行われる。**
+// ロックのほうが socket より重い。socket は繋がらなければ気づけるが、
+// **ロックは静かに「動いていない」と答え、`continuo abandon` が worktree を消しにいく。**
 //
-// 戻り値: 作成に失敗した場合のエラー。
+// **既にある `~/.continuo` の権限が group / other に開いていれば断る。**
+// continuo は自分が作っていないディレクトリの権限を書き換えないので、人間に直してもらう
+// （`continuo doctor` の見出し語 `ロックの場所` が同じ検査を通し、直し方を出す）。
+//
+// **`--dry-run` の実行では呼んではならない。**この関数はディレクトリを作る。
+//
+// 戻り値: 作成・検査に失敗した場合のエラー。
 func (l Layout) EnsureLockDir() error {
 	dir := filepath.Dir(l.lockPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := socketpath.EnsureDir(dir); err != nil {
 		return i18n.Errorf(i18n.KeyInstanceEnsureLockDirFailed, dir, err)
 	}
 	return nil
@@ -217,6 +274,27 @@ func (l Layout) HookSocketPath(envRuntimeDir string, explicitListen *string) (st
 	}
 	if err := socketpath.EnsureDir(l.runtimeDir); err != nil {
 		return "", err
+	}
+	return socketpath.Resolve(l.runtimeDir)
+}
+
+// ResolveHookSocketPath は hook を受ける socket の絶対パスを決めるだけで、
+// **置き場所を1つも作らない。**
+//
+// **`continuo abandon --dry-run` のためにある。**あちらは「何も書かない」と
+// README で約束しているのに、`HookSocketPath` は `~/.continuo/id/<名前>/run/` を作る。
+// **見せるだけの実行が置き場所を作ってはならない。**
+//
+// **決め方は `HookSocketPath` と1文字も違わない。**違えば、下見で見せたパスと
+// 本番で使うパスが別々に決まる。
+//
+// envRuntimeDir: 環境変数 `CONTINUO_RUNTIME_DIR` の値（`--id` 無しのときだけ使う）。
+// explicitListen: `claude.hook_bridge.listen`（`--id` 無しのときだけ使う）。
+// 戻り値: socket の絶対パスと、決められなかった場合のエラー。
+// **ディレクトリは作られていない。**
+func (l Layout) ResolveHookSocketPath(envRuntimeDir string, explicitListen *string) (string, error) {
+	if l.runtimeDir == "" {
+		return socketpath.ResolveHookSocketPath(explicitListen, envRuntimeDir)
 	}
 	return socketpath.Resolve(l.runtimeDir)
 }

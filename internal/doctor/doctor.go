@@ -9,6 +9,7 @@
 //
 //	設定ファイル      … WORKFLOW.md が読めて、front matter が検証を通るか
 //	ロックの場所      … 二重起動防止のロックを実際に置けるか（`--id` の場所を含む）
+//	ボードのロック     … ボード1枚ぶんのロックを実際に置けるか（`~/.continuo/board/`）
 //	片付けの状態      … `cleanup.on_states` が `tracker.terminal_states` に収まっているか
 //	未記入の項目      … 雛形にある設定項目が WORKFLOW.md に全部書かれているか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
@@ -85,6 +86,15 @@ type Options struct {
 	// **これを見ないと、`--id` を付けた起動が使う socket とロックの場所を1度も見ずに
 	// `✓` を出す**（`continuo doctor --id <名前>` が渡してくる）。
 	Instance *instance.Layout
+	// InstanceErr は置き場所を決められなかった理由である（決まっていれば nil）。
+	//
+	// **決まらなくても検査は止めない。**決まらなかったことは見出し語
+	// `ロックの場所` の結果（`✗`）として報告する。
+	//
+	// **これが無かったとき、`internal/cli` は `instance.Resolve` の失敗をそのまま
+	// 終了コード 2 にしていた。**`HOME` を引けない環境では、`--id` を1文字も
+	// 渡していない人の `continuo doctor` が**検査を1つも実行せずに落ちた。**
+	InstanceErr error
 	// GraphQLEndpoint は GitHub の GraphQL API の URL である。
 	// **空なら本番の GitHub GraphQL API を使う。**テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
@@ -185,10 +195,11 @@ func Run(ctx context.Context, opts Options) Report {
 	// **`--id` から導く置き場所を、検査より先に1つ決める**（設計 3-17b）。
 	// **決まらなくても検査は続ける。**決まらなかったことは「ロックの場所」の検査結果になる。
 	inst := instance.Layout{}
-	var instErr error
-	if opts.Instance != nil {
+	instErr := opts.InstanceErr
+	switch {
+	case opts.Instance != nil:
 		inst = *opts.Instance
-	} else {
+	case instErr == nil:
 		inst, instErr = instance.Resolve("")
 	}
 
@@ -224,6 +235,10 @@ func Run(ctx context.Context, opts Options) Report {
 	// **ロックの場所も見る。**socket とは別の場所であり（設計 3-17）、
 	// **片方が書けても、もう片方が書けるとは限らない。**
 	report.add(checkLockFile(inst, instErr))
+	// **ボードのロックも見る**（設計 3-17e）。**これも別の場所である**
+	// （`~/.continuo/board/`）。**そこがファイルでも symlink でも 0755 でも、
+	// 見なければ全部 `✓` を出したまま起動だけが落ちる。**
+	report.add(checkBoardLock(cfg, configResult.Symbol))
 	// **Claude Code の設定ディレクトリに書けるかを、設定が読めていなくても確かめる。**
 	// Claude Code は SessionStart hook を走らせる前に `~/.claude/session-env/<session_id>/`
 	// を作り、continuo はその hook を必ず張る。**ここが書けないと issue は1件も始まらない**

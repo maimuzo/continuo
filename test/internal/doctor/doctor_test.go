@@ -33,6 +33,7 @@ var wantLabels = []i18n.Key{
 	doctor.LabelClaude,
 	doctor.LabelRuntimeDir,
 	doctor.LabelLockFile,
+	doctor.LabelBoardLock,
 	doctor.LabelClaudeHome,
 	doctor.LabelWorkspaceRoot,
 	doctor.LabelHerdr,
@@ -118,6 +119,8 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 		t.Fatalf("gh の認証の理由が上流の失敗を指していない: %q", gh.Detail)
 	}
 	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
+	// **ボードのロックも、名前を作る2つのキーが設定にしか無い**（設計 3-17e）。
+	assertSymbol(t, report, doctor.LabelBoardLock, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelClone, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelTrust, doctor.SymbolUnknown)
 	credentials := assertSymbol(t, report, doctor.LabelCredentials, doctor.SymbolUnknown)

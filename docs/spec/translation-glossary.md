@@ -186,11 +186,12 @@
 **言いたいこと。**[internal/doctor/report.go](../../internal/doctor/report.go) の `labelColumn` が 16 である。
 **16桁に満たない語を並べて桁を揃えている。**15桁を超えるラベルを1つ置くと、全部の行の桁が崩れる。
 
-**使ってよいラベルは、この15語だけである。**
+**使ってよいラベルは、この17語だけである。**
 
 `config` / `cleanup states` / `missing keys` / `claude` / `hook socket` /
-`Claude settings` / `worktree root` / `herdr` / `gh auth` / `board` /
-`Status names` / `rewrite keys` / `clones` / `trust` / `credentials`
+`lock file` / `board lock` / `Claude settings` / `worktree root` / `herdr` /
+`gh auth` / `board` / `Status names` / `rewrite keys` / `clones` / `trust` /
+`credentials`
 
 **伸ばすときは、先に `labelColumn` を数え直すこと。**
 

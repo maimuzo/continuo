@@ -1340,13 +1340,16 @@ func TestAbandon_取れたロックを実行の最後まで握る(t *testing.T) 
 //
 // 目的: 継続監視が動いていないと判定したときでも、**その worktree の pane が
 // 生きていれば何も消さずに止まる**ことを確認する（設計 3-4 の段4 の前）。
-// **ロックファイルの場所は環境変数で決まる。**launchd から起動した継続監視と
-// 端末から叩いた abandon で食い違えば、生きた pane ごと worktree を消す。
-// **herdr の socket は設定で決まるので、ロックより信用できる。**
+// **ロックは `--id` ごとに分かれる**（設計 3-17）。`--id` を付けて動かしている
+// continuo に、abandon へ同じ名前を渡し忘れると、空いている既定のロックを見て
+// 「動いていない」と判定する。そのまま進めば生きた pane ごと worktree を消す。
+// **herdr の socket は設定で決まるので、その取り違えの影響を受けない。**
 // 与える情報: 誰も掴んでいないロックファイル（＝動いていないと判定される）と、
 // その worktree を作業ディレクトリに持つ pane を返し続けるテスト用herdr mock。
 // 成功条件: 終了コードが 1、worktree が残っている、herdr へ worktree.remove を
-// 送っていない、残っている pane の ID とロックファイルのパスが出ていること。
+// 送っていない、残っている pane の ID が出ていること。
+// **止まった理由が `--id` の食い違いを疑わせること**（ロックの場所は環境変数では動かないので、
+// 「場所が食い違っていないか」を確かめさせても、確かめようが無い）。
 func TestAbandon_動いていなくてもpaneが生きていれば消さない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -1358,6 +1361,7 @@ func TestAbandon_動いていなくてもpaneが生きていれば消さない(t
 	assertExit(t, fx, code, abandon.ExitStopped)
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonNotRunning))
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrPaneAliveNotRunning, "w1:p1", fx.LockPath))
+	assertContains(t, fx, "--id")
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 }

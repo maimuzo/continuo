@@ -18,7 +18,6 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/instance"
-	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -408,14 +407,17 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol, inst instance.Layout
 // doctor は全部 `✓` を出すのに `daemon.Run` が落ちた。**これは issue #9 と同じ失敗の形で、
 // **「doctor が全項目 ✓ なのに起動だけが落ちる」**である。
 //
-// **取れたロックはその場で手放す。**doctor は検査の道具であって、continuo の代わりに
-// 場所を押さえるものではない。**握っているあいだ（ミリ秒）に起動しようとした continuo は
-// 「既に起動しています」で止まる**ので、続けて起動するなら doctor が終わってからにすること。
+// **`flock` は取らない。**doctor は「置けるか」を答える道具であって、continuo の
+// 代わりに場所を押さえるものではない。**取っていたときは、doctor が動いているあいだ
+// （ミリ秒とはいえ）continuo を起動できなかった。**検査の道具が本番の起動を止めては
+// ならないので、**ロックファイルを開いて閉じるところまでで判定する。**
+//
+// **その結果、「既に別の continuo が握っている」も `✓` になる。**
+// **握られていることは、場所が使えないことではない。**
 //
 // inst: `--id` から導いた置き場所。
 // instErr: 置き場所を決められなかった理由（決まっていれば nil）。
-// 戻り値: 検査結果。**ロックを他のプロセスが握っていたら `✓` である**
-// （continuo が動いているだけであり、場所そのものは使える）。
+// 戻り値: 検査結果。
 func checkLockFile(inst instance.Layout, instErr error) Result {
 	if instErr != nil {
 		return Result{
@@ -442,16 +444,7 @@ func checkLockFile(inst instance.Layout, instErr error) Result {
 		}
 	}
 
-	l, err := lock.Acquire(path)
-	if err != nil {
-		if errors.Is(err, lock.ErrAlreadyRunning) {
-			return Result{
-				Label:  LabelLockFile,
-				Symbol: SymbolOK,
-				Detail: i18n.T(i18n.KeyDoctorLockFileInUse, path),
-				Notes:  notes,
-			}
-		}
+	if err := probeLockFile(path); err != nil {
 		return Result{
 			Label:    LabelLockFile,
 			Symbol:   SymbolMissing,
@@ -460,9 +453,6 @@ func checkLockFile(inst instance.Layout, instErr error) Result {
 			Remedies: []string{i18n.T(i18n.KeyDoctorLockFileRemedy)},
 		}
 	}
-	// **ロックファイルそのものは消さない**（internal/lock の Release と同じ理由である。
-	// 消すと、直後に同名で作った別プロセスのロックを巻き添えで解放しうる）。
-	_ = l.Release()
 
 	return Result{
 		Label:  LabelLockFile,
@@ -470,6 +460,110 @@ func checkLockFile(inst instance.Layout, instErr error) Result {
 		Detail: i18n.T(i18n.KeyDoctorLockFileOK, path),
 		Notes:  notes,
 	}
+}
+
+// checkBoardLock はボード1枚ぶんのロックを実際に置けるかを検査する
+// （見出し語 `ボードのロック`。設計 3-17e）。
+//
+// **`ロックの場所` を見ただけでは分からない。**あちらは `~/.continuo/`（`--id` なら
+// `~/.continuo/id/<名前>/`）を見るが、ボードのロックは `~/.continuo/board/` にある。
+// **そこがファイル・symlink・0755 のディレクトリだと、doctor は全部 `✓` を出すのに
+// 起動が落ちる。**それは issue #9 と同じ形であり、**この PR はまさにその形を避けるために
+// `ロックの場所` を足した。****`continuo abandon` も同じところで落ちる。**
+//
+// **`flock` は取らない**（checkLockFile と同じ理由）。**握られていても `✓` である。**
+// 握っているのは同じボードを見ている continuo であり、場所そのものは使える。
+//
+// **設定が読めなければ確かめられない。**ロックの名前は `tracker.provider.owner` と
+// `tracker.provider.project_number` から作る（`--id` では分けない）。
+//
+// cfg: 読めた設定。
+// configSymbol: 設定ファイルの検査の結果。
+// 戻り値: 検査結果。
+func checkBoardLock(cfg loadedConfig, configSymbol Symbol) Result {
+	if configSymbol != SymbolOK {
+		return Result{
+			Label:  LabelBoardLock,
+			Symbol: SymbolUnknown,
+			Detail: i18n.T(i18n.KeyDoctorBoardLockNoConfig),
+		}
+	}
+
+	owner := cfg.Config.Tracker.Provider.Owner
+	number := cfg.Config.Tracker.Provider.ProjectNumber
+	path, warnings, err := instance.BoardLockPath(owner, number)
+	if err != nil {
+		return boardLockMissing(path, nil, err)
+	}
+	// **正規化で情報が落ちたら黙らない**（設計 3-7）。`my org` と `my_org` は
+	// 同じロックになる。**起動時のログにしか出ないと、doctor しか読まない人には届かない。**
+	var notes []string
+	for _, w := range warnings {
+		notes = append(notes, i18n.T(i18n.KeyDoctorBoardLockNormalized, owner, w.Message))
+	}
+
+	if err := instance.EnsureBoardDir(path); err != nil {
+		return boardLockMissing(path, notes, err)
+	}
+	if err := probeLockFile(path); err != nil {
+		return boardLockMissing(path, notes, err)
+	}
+	return Result{
+		Label:  LabelBoardLock,
+		Symbol: SymbolOK,
+		Detail: i18n.T(i18n.KeyDoctorBoardLockOK, path),
+		Notes:  notes,
+	}
+}
+
+// boardLockMissing はボードのロックを置けなかったときの結果を組み立てる。
+//
+// path: 決まったロックファイルの絶対パス（決まらなければ空文字）。
+// notes: 記号の下に添える内訳。
+// err: 置けなかった理由。
+// 戻り値: 検査の結果。
+func boardLockMissing(path string, notes []string, err error) Result {
+	return Result{
+		Label:    LabelBoardLock,
+		Symbol:   SymbolMissing,
+		Detail:   i18n.T(i18n.KeyDoctorBoardLockFailed, err),
+		Notes:    runtimeDirNotes(notes, err),
+		Remedies: []string{i18n.T(i18n.KeyDoctorBoardLockRemedy, boardLockDirForMessage(path))},
+	}
+}
+
+// boardLockDirForMessage は、直し方に出すボードのロックの置き場所を返す。
+//
+// **空文字を人間に見せない。**パスが決まらないのはホームディレクトリを引けなかった
+// ときだけなので、そのときは置き場所の形（`~/.continuo/board`）を出す。
+//
+// path: BoardLockPath が返したパス（決まらなかったときは空文字）。
+// 戻り値: 文言に出す文字列。
+func boardLockDirForMessage(path string) string {
+	if path != "" {
+		return filepath.Dir(path)
+	}
+	return "~/" + instance.DirName + "/" + instance.BoardDirName
+}
+
+// probeLockFile は、そのパスにロックファイルを置けるかだけを確かめる。
+//
+// **`flock` は取らない。**取ると、doctor が動いているあいだ continuo を起動できない。
+// **検査の道具が本番の起動を止めてはならない。**
+//
+// **ロックファイルそのものは消さない**（internal/lock の Release と同じ理由である。
+// 消すと、直後に同名で作った別プロセスのロックを巻き添えで解放しうる）。
+//
+// **中身も書かない。**`O_TRUNC` を付けないので、既にある中身を空にすることも無い。
+//
+// path: ロックファイルの絶対パス。
+// 戻り値: 開けなかった場合のエラー。
+func probeLockFile(path string) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // runtimeDirInUse は、socket の置き場所が既に使われていたときの結果を組み立てる。

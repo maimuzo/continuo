@@ -846,8 +846,19 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 		return parseErrorExitCode(err)
 	}
 	// **フラグを読んだ直後に検査する**（設計 3-17d。runMain と同じ）。
-	inst, err := checkInstanceID(*idFlag, stderr)
-	if err != nil {
+	//
+	// **止まってよいのは、`--id` に渡された名前そのものが誤っているときだけである。**
+	// **それ以外の理由で検査を1つも行わずに終わってはならない**（設計 3-32）。
+	// `HOME` を引けない環境では `instance.Resolve("")` が失敗するので、
+	// **`--id` を1文字も渡していない人の `continuo doctor` が、15の検査を1つも
+	// 実行しないまま終了コード 2 で落ちていた。**`--missing-keys-patch`
+	// （外部と1度も通信しない口）まで巻き添えになっていた。
+	//
+	// **置き場所を決められなかったことは、検査の結果として報告する**
+	// （見出し語 `ロックの場所` が `✗` になる。doctor 側に仕組みがある）。
+	inst, instErr := instance.Resolve(*idFlag)
+	if instErr != nil && instance.IsInvalidID(instErr) {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrInvalidID, instErr))
 		return 2
 	}
 
@@ -902,7 +913,8 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	report := d.DoctorRun(ctx, doctor.Options{
 		ConfigPath:      path,
 		GraphQLEndpoint: endpoint,
-		Instance:        inst,
+		Instance:        &inst,
+		InstanceErr:     instErr,
 	})
 	if err := report.Write(stdout); err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrWriteReport, err))
@@ -1085,25 +1097,33 @@ const doctorInternalErrorExitCode = 3
 // 「--id に渡した名前が使えません」と報告してはならない。**
 // `HOME` を引けない環境では `--id` を1文字も渡していない人にもその文言が出る。
 //
+// **見分けるのは `instance.Resolve` が返すエラーの型である**（`instance.IsInvalidID`）。
+// **`ValidateID` をここで呼び直さない。**同じ検査が2箇所で走ることになり、
+// **片方だけを直したときに、通るものと通らないものが食い違う。**
+//
 // id: `--id` に渡された名前。空文字なら既定の1本である。
 // stderr: 弾いた理由の出力先。
 // 戻り値の1つ目: 解決した置き場所（**弾いたときは nil**）。
 // 戻り値の2つ目: 使えない場合のエラー（**理由は stderr へ書き出し済みである**）。
 func checkInstanceID(id string, stderr io.Writer) (*instance.Layout, error) {
-	if id != "" {
-		// **名前そのものの検査を先に通す**（純粋な関数なので費用がかからない）。
-		// ここを通ったあとの失敗は、名前のせいではない。
-		if err := instance.ValidateID(id); err != nil {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrInvalidID, err))
-			return nil, err
-		}
-	}
 	layout, err := instance.Resolve(id)
 	if err != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrInstanceLayout, err))
+		fmt.Fprintln(stderr, i18n.T(instanceErrorKey(err), err))
 		return nil, err
 	}
 	return &layout, nil
+}
+
+// instanceErrorKey は、置き場所を決められなかった理由に合う文言のキーを選ぶ。
+//
+// err: `instance.Resolve` が返したエラー。
+// 戻り値: 名前そのものが誤っているなら `--id` を名指しする文言、そうでなければ
+// 置き場所を決められないという文言のキー。
+func instanceErrorKey(err error) i18n.Key {
+	if instance.IsInvalidID(err) {
+		return i18n.KeyCLIErrInvalidID
+	}
+	return i18n.KeyCLIErrInstanceLayout
 }
 
 // reorderArgs は、位置引数のあとに書かれたフラグを前へ寄せてから flag へ渡すための並べ替えである。

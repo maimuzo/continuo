@@ -232,7 +232,7 @@ func Run(ctx context.Context, opts Options) int {
 	}
 	cfg := inst.Apply(loaded.Config)
 
-	deps, err := opts.Deps.resolve(cfg, inst, opts.GraphQLEndpoint, logger)
+	deps, err := opts.Deps.resolve(cfg, inst, opts.GraphQLEndpoint, opts.DryRun, logger)
 	if err != nil {
 		fmt.Fprintln(errOut, i18n.T(i18n.KeyAbandonErrBuild, err))
 		return ExitStopped
@@ -379,10 +379,11 @@ func (r *runner) run(ctx context.Context) int {
 	//
 	// **入らない理由は2つある。**継続監視が動いていなかった場合と、動いてはいるが
 	// ボードの Status が `tracker.active_states` の外だった場合である。
-	// **前者はロックの判定を疑う理由になる。**ロックファイルの場所は環境変数
-	// （CONTINUO_RUNTIME_DIR / XDG_RUNTIME_DIR / TMPDIR）で決まるので、launchd から
-	// 起動した継続監視と端末から叩いた abandon で食い違いうる。
-	// **herdr の socket は設定で決まって環境変数では動かないので、ロックより信用できる。**
+	// **前者はロックの判定を疑う理由になる。**ロックの場所は `~/.continuo`
+	// （`--id` を付けたなら `~/.continuo/id/<名前>/`）に機械で固定してあり、
+	// **環境変数では動かない**（3-17）。**したがって食い違う理由は1つだけで、
+	// `--id` を付けて動かしている continuo に、abandon へ同じ名前を渡し忘れたときである**（3-17c）。
+	// **herdr の socket は設定で決まるので、その取り違えの影響を受けない。**
 	if r.parkedTo == "" {
 		if code := r.stopIfPaneAlive(ctx, found.Path, running); code != ExitOK {
 			return code
@@ -405,11 +406,20 @@ func (r *runner) run(ctx context.Context) int {
 // その足元から worktree を消す。abandon は git と RPC を何度も叩くので窓は秒単位で開く。
 // 握っているあいだに起動しようとした継続監視は「既に起動しています」で止まる。
 //
+// **`--dry-run` では取らずに見るだけである**（3-17g）。取ると `O_CREATE` で
+// ロックファイルを作ることになり、**「何も書かない」という約束を破る。**
+// **握らなくてよいのは、見せるだけの実行が1バイトも消さないからである。**
+//
 // 戻り値の1つ目: 動いていれば true。
-// 戻り値の2つ目: 取れたロック（**動いていたときと開けなかったときは nil**）。
+// 戻り値の2つ目: 取れたロック（**動いていたとき・開けなかったとき・`--dry-run` では nil**）。
 // 戻り値の3つ目: **ロックファイルそのものを開けなかった場合のエラー**
 // （二重起動とは言い分ける。置き場所を作れない・権限が足りないのがこれである）。
 func (r *runner) isRunning() (bool, Unlocker, error) {
+	if r.opts.DryRun {
+		running, err := r.deps.ProbeLock(r.deps.LockPath)
+		return running, nil, err
+	}
+
 	l, err := r.deps.AcquireLock(r.deps.LockPath)
 	if err != nil {
 		if errors.Is(err, lock.ErrAlreadyRunning) {
@@ -429,26 +439,61 @@ func (r *runner) isRunning() (bool, Unlocker, error) {
 // **取れたロックは実行の最後まで握る**（自分のロックと同じ理由である）。手放すと、
 // その隙に起動した継続監視の足元から worktree を消す。
 //
-// 戻り値の1つ目: 取れたロック（**取れなかったときは nil**）。
+// **`--dry-run` では取らずに見るだけである**（3-17g。isRunning と同じ理由）。
+//
+// 戻り値の1つ目: 取れたロック（**取れなかったときと `--dry-run` では nil**）。
 // 戻り値の2つ目: 続けてよければ ExitOK、止まるなら ExitStopped。
 // **理由は出力済みである。**
 func (r *runner) claimBoard() (Unlocker, int) {
-	owner := r.cfg.Tracker.Provider.Owner
-	number := r.cfg.Tracker.Provider.ProjectNumber
+	if r.opts.DryRun {
+		held, err := r.deps.ProbeLock(r.deps.BoardLockPath)
+		if err != nil {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardLockFile, r.deps.BoardLockPath, err))
+			return nil, ExitStopped
+		}
+		if held {
+			r.reportBoardInUse()
+			return nil, ExitStopped
+		}
+		return nil, ExitOK
+	}
 
 	l, err := r.deps.AcquireLock(r.deps.BoardLockPath)
 	if err == nil {
 		return l, ExitOK
 	}
 	if errors.Is(err, lock.ErrAlreadyRunning) {
-		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardInUse,
-			owner, number, r.deps.BoardLockPath, instance.BoardInfoPath(r.deps.BoardLockPath)))
+		r.reportBoardInUse()
 		return nil, ExitStopped
 	}
 	// **開けなかったときも止まる。**「同じボードを見ている continuo が居ないこと」を
 	// 確かめられていないのに worktree を消すと、動いている run を消しうる。
 	fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardLockFile, r.deps.BoardLockPath, err))
 	return nil, ExitStopped
+}
+
+// reportBoardInUse は、同じボードのロックを誰かが握っていて止まったことを出す。
+//
+// **無いファイルを読めと言わない。**覚え書き（ロックの隣の JSON）を書くのは
+// **常駐している continuo だけである**（`internal/daemon` の acquireBoardLock）。
+// **`continuo abandon` どうしがぶつかったときは、そのファイルは存在しない。**
+// それでも「誰が握っているかは %s に書いてあります」と案内していたので、
+// **読みに行った人は、無いファイルを探すことになった。**
+//
+// **在るときだけ名指しする。**在るなら常駐が握っているので、そこに `--id` も PID も
+// 書いてある。**無いなら、もう1つの `continuo abandon` を疑うよう言う。**
+func (r *runner) reportBoardInUse() {
+	owner := r.cfg.Tracker.Provider.Owner
+	number := r.cfg.Tracker.Provider.ProjectNumber
+	infoPath := instance.BoardInfoPath(r.deps.BoardLockPath)
+
+	if _, err := os.Stat(infoPath); err == nil {
+		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardInUse,
+			owner, number, r.deps.BoardLockPath, infoPath))
+		return
+	}
+	fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardInUseNoInfo,
+		owner, number, r.deps.BoardLockPath))
 }
 
 // find は issue の URL から worktree を1つに絞る（段2）。
@@ -806,9 +851,10 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 // **1つの文言で受けると「『continuo は動いていません』と表示されていたなら」のような
 // 条件付きの案内になり、別の文言の文面を直書きすることになる。**
 //
-// **ロックだけを根拠に消しにいかない。**ロックファイルの場所は環境変数で決まるので、
-// launchd から起動した継続監視と端末から叩いた abandon で食い違いうる。食い違えば
-// 「動いていない」と判定したまま、生きた pane ごと worktree を消す。
+// **ロックだけを根拠に消しにいかない。**ロックは `--id` ごとに分かれるので、
+// **`--id` を付けて動かしている continuo に、abandon へ同じ名前を渡し忘れると、
+// 空いている既定のロックを見て「動いていない」と判定する**（3-17c）。
+// そのまま進めば、生きた pane ごと worktree を消す。
 //
 // **待たずに止める。**手を離させていない以上、待っても pane は閉じない。
 //

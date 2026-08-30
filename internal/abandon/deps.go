@@ -108,7 +108,17 @@ type Deps struct {
 	//
 	// **取れたロックは実行の最後まで握る。**握っている間に起動しようとした継続監視は
 	// 「既に起動しています」で止まる。消されるより望ましい。
+	//
+	// **`--dry-run` では呼ばない**（ProbeLock を見よ）。
 	AcquireLock func(path string) (Unlocker, error)
+	// ProbeLock は「誰かがそのロックを握っているか」だけを見る。nil なら internal/lock の Probe。
+	//
+	// **`--dry-run` はこちらを使う。**`AcquireLock` は `O_CREATE` でロックファイルを作り、
+	// その前に置き場所も作らせる。**README は「`--dry-run` は何も書かない」と約束している。**
+	//
+	// **握り続けない。**見せるだけの実行は何も消さないので、その間に継続監視が
+	// 起動しても失うものが無い。
+	ProbeLock func(path string) (bool, error)
 	// Herdr は pane の一覧を取る口である。nil なら設定から本物を組み立てる。
 	Herdr PaneLister
 	// Workspace は worktree の走査・検査・片付けである。nil なら設定から本物を組み立てる。
@@ -130,15 +140,23 @@ type Deps struct {
 // **ここで組み立てるのは、設定を読めたあとでなければ作れないものだけである。**
 // herdr の socket も worktree の置き場所も設定から決まる。
 //
+// **`dryRun` が真なら、ディレクトリもファイルも1つも作らない**（設計 3-17g）。
+// **これが無かったとき、`continuo abandon --dry-run --id typo` は
+// `~/.continuo/id/typo/run`・`~/.continuo/board`・`<workspace.root>/typo` と
+// その直下の名乗りを作ったうえで「--dry-run なので何も消していません」と表示していた。**
+// **とくに名乗りが残ると、打ち間違えた `--id` の置き場所が既定側の走査から永久に隠れる。**
+//
 // cfg: 検証済みの設定（**`--id` の Apply を通したもの**）。
 // inst: `--id` から導いた置き場所。**常駐している側と同じ Layout である**（3-17c）。
 // endpoint: GitHub の GraphQL API の接続先（検査済み）。空なら本番の GitHub。
+// dryRun: `--dry-run` かどうか。**真なら置き場所を1つも作らない。**
 // logger: ログの出力先。
 // 戻り値: すべてのフィールドが埋まった Deps と、組み立てに失敗した場合のエラー。
 func (d Deps) resolve(
 	cfg config.Config,
 	inst instance.Layout,
 	endpoint string,
+	dryRun bool,
 	logger *slog.Logger,
 ) (Deps, error) {
 	if d.Now == nil {
@@ -149,6 +167,9 @@ func (d Deps) resolve(
 	}
 	if d.AcquireLock == nil {
 		d.AcquireLock = func(path string) (Unlocker, error) { return lock.Acquire(path) }
+	}
+	if d.ProbeLock == nil {
+		d.ProbeLock = lock.Probe
 	}
 
 	// **herdr のクライアントは1つだけ作り、pane の一覧と片付けの両方に渡す。**
@@ -172,7 +193,7 @@ func (d Deps) resolve(
 	if d.Workspace == nil {
 		// **issue ごとの設定ファイルの置き場所は、常駐プロセスと同じ決め方にする。**
 		// 違う値を渡すと、片付けが `settings_path` を「置き場所の外側」と判定して消し残す。
-		settingsRoot, err := resolveSettingsRoot(cfg, inst)
+		settingsRoot, err := resolveSettingsRoot(cfg, inst, dryRun)
 		if err != nil {
 			return d, err
 		}
@@ -185,6 +206,8 @@ func (d Deps) resolve(
 			// `--id` の置き場所に目印が置かれず、**既定側の abandon がそこを
 			// 「身元ファイルの無いディレクトリ」として数えて止まる。**
 			InstanceID: inst.ID(),
+			// **見せるだけの実行では、置き場所も名乗りも作らない**（3-17g）。
+			NoCreate: dryRun,
 		})
 		if err != nil {
 			return d, i18n.Errorf(i18n.KeyAbandonWorkspaceFailed, err)
@@ -195,8 +218,14 @@ func (d Deps) resolve(
 		// **常駐している側と同じ Layout から取る**（3-17c）。
 		// **ここが1バイトでもずれると、動いている continuo を「動いていない」と
 		// 判定して worktree を消しにいく。**
-		if err := inst.EnsureLockDir(); err != nil {
-			return d, err
+		//
+		// **見せるだけの実行では置き場所を作らない**（3-17g）。
+		// 置き場所が無いということは、その `--id` の continuo が1度も動いていない
+		// ということであり、**ProbeLock は「握られていない」と正しく答える。**
+		if !dryRun {
+			if err := inst.EnsureLockDir(); err != nil {
+				return d, err
+			}
 		}
 		d.LockPath = inst.LockPath()
 	}
@@ -213,6 +242,12 @@ func (d Deps) resolve(
 		for _, w := range warnings {
 			logger.Warn("ボードのロックの名前で正規化が情報を落としました",
 				"owner", cfg.Tracker.Provider.Owner, "message", w.Message, "board_lock_file", path)
+		}
+		// **見せるだけの実行では `~/.continuo/board` を作らない**（3-17g）。
+		if !dryRun {
+			if err := instance.EnsureBoardDir(path); err != nil {
+				return d, err
+			}
 		}
 		d.BoardLockPath = path
 	}
@@ -231,9 +266,15 @@ func (d Deps) resolve(
 //
 // cfg: 検証済みの設定。
 // inst: `--id` から導いた置き場所。
+// dryRun: 真なら置き場所を作らずにパスだけ決める（3-17g）。
 // 戻り値: socket の絶対パスと、置き場所を用意できなかった場合のエラー。
-func resolveSocketPath(cfg config.Config, inst instance.Layout) (string, error) {
-	sockPath, err := inst.HookSocketPath(os.Getenv(daemon.EnvRuntimeDir), cfg.Claude.HookBridge.Listen)
+func resolveSocketPath(cfg config.Config, inst instance.Layout, dryRun bool) (string, error) {
+	env := os.Getenv(daemon.EnvRuntimeDir)
+	resolve := inst.HookSocketPath
+	if dryRun {
+		resolve = inst.ResolveHookSocketPath
+	}
+	sockPath, err := resolve(env, cfg.Claude.HookBridge.Listen)
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyAbandonRuntimeDirFailed, err)
 	}
@@ -244,9 +285,10 @@ func resolveSocketPath(cfg config.Config, inst instance.Layout) (string, error) 
 //
 // cfg: 検証済みの設定。
 // inst: `--id` から導いた置き場所。
+// dryRun: 真なら置き場所を作らずにパスだけ決める（3-17g）。
 // 戻り値: `<実行時ディレクトリ>/issues` の絶対パスと、決められなかった場合のエラー。
-func resolveSettingsRoot(cfg config.Config, inst instance.Layout) (string, error) {
-	sockPath, err := resolveSocketPath(cfg, inst)
+func resolveSettingsRoot(cfg config.Config, inst instance.Layout, dryRun bool) (string, error) {
+	sockPath, err := resolveSocketPath(cfg, inst, dryRun)
 	if err != nil {
 		return "", err
 	}

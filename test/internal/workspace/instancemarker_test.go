@@ -24,23 +24,79 @@ func TestNew_idを付けると置き場所に名乗りを置く(t *testing.T) {
 	marker := filepath.Join(fx.Manager.ResolvedRoot(), workspace.InstanceMarkerName)
 	raw, err := os.ReadFile(marker)
 	if err != nil {
-		t.Fatalf("目印 %s を読めません: %v", marker, err)
+		t.Fatalf("名乗り %s を読めません: %v", marker, err)
 	}
 	if !strings.Contains(string(raw), `"id": "e2e"`) {
-		t.Fatalf("目印に名前が入っていない: %s", raw)
+		t.Fatalf("名乗りに名前が入っていない: %s", raw)
+	}
+}
+
+// 目的: `NoCreate` を渡したときに、置き場所も名乗りも作らないことを確かめる
+// （設計 3-17g）。
+//
+// **`continuo abandon --dry-run` がこれを渡す。**あちらは「何も書かない」と
+// README で約束している。**打ち間違えた `--id` の置き場所に名乗りが残ると、
+// そこが既定側の走査から永久に隠れる。**
+//
+// 与える情報: まだ無い `workspace.root` と `InstanceID`、そして `NoCreate`。
+// 成功条件: 置き場所も名乗りも作られず、走査が0件で返ること。
+func TestNew_NoCreateなら置き場所も名乗りも作らない(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "worktrees", "typo")
+	cfg := *config.DefaultConfig()
+	cfg.Workspace.Root = root
+
+	mgr, err := workspace.New(workspace.Options{
+		Config:     cfg,
+		HomeDir:    t.TempDir(),
+		InstanceID: "typo",
+		NoCreate:   true,
+	})
+	if err != nil {
+		t.Fatalf("workspace.New に失敗した: %v", err)
+	}
+
+	if _, err := os.Lstat(root); !os.IsNotExist(err) {
+		t.Fatalf("置き場所 %s を作っている（err=%v）", root, err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, workspace.InstanceMarkerName)); !os.IsNotExist(err) {
+		t.Fatalf("名乗りを書いている: %s", filepath.Join(root, workspace.InstanceMarkerName))
+	}
+
+	// **置き場所が無いなら worktree は0件である。**エラーにしない（設計 3-17g）。
+	found, err := mgr.ScanUnidentified()
+	if err != nil {
+		t.Fatalf("置き場所が無いだけで走査がエラーになった: %v", err)
+	}
+	if len(found) != 0 {
+		t.Fatalf("置き場所が無いのに worktree を数えている: %v", found)
+	}
+}
+
+// registerInstance は `~/.continuo/id/<名前>/` を作る。
+//
+// **`--id <名前>` を使った continuo は必ずこれを持つ**（`instance.Layout.EnsureLockDir` が
+// ロックを置く前に作る）。走査はこの実在を、名乗りの裏付けとして見る（設計 3-17f）。
+//
+// t: 呼び出し元のテスト。
+// home: Manager に渡したホームディレクトリ。
+// id: `--id` に渡された名前。
+func registerInstance(t *testing.T, home, id string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(workspace.InstanceRegistryDir(home), id), 0o700); err != nil {
+		t.Fatalf("~/.continuo/id/%s を作れません: %v", id, err)
 	}
 }
 
 // 目的: 既定の continuo が、`--id` を付けた continuo の置き場所へ入らないことを確かめる
-// （設計 3-17b）。
+// （設計 3-17f）。
 //
 // **`--id e2e` の worktree は `<workspace.root>/e2e/<host>/<owner>/<repo>/<スラグ>` にある。**
-// 既定側の走査は `<workspace.root>` からちょうど4階層を返すので、目印が無ければ
+// 既定側の走査は `<workspace.root>` からちょうど4階層を返すので、名乗りが無ければ
 // `<workspace.root>/e2e/<host>/<owner>/<repo>` が「身元ファイルの無いディレクトリ」として
 // 拾われ、**`continuo abandon` が判断を保留したまま止まる。**
 //
-// 与える情報: `<root>/e2e/github.com/octocat/hello-world` の階層と、目印の有無。
-// 成功条件: 目印が無ければ拾い、目印を置けば1件も拾わないこと。
+// 与える情報: `<root>/e2e/github.com/octocat/hello-world` の階層と、名乗りの有無。
+// 成功条件: 名乗りが無ければ拾い、名乗りと `~/.continuo/id/e2e/` が揃えば1件も拾わないこと。
 func TestScanUnidentified_別のinstanceの置き場所へは入らない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	root := fx.Manager.ResolvedRoot()
@@ -51,18 +107,19 @@ func TestScanUnidentified_別のinstanceの置き場所へは入らない(t *tes
 		t.Fatalf("別の instance の置き場所を作れません: %v", err)
 	}
 
-	// **目印を置く前は拾う。**ここが空だと、この検査は何も守っていない。
+	// **名乗りを置く前は拾う。**ここが空だと、この検査は何も守っていない。
 	before, err := fx.Manager.ScanUnidentified()
 	if err != nil {
 		t.Fatalf("ScanUnidentified に失敗した: %v", err)
 	}
 	if len(before) != 1 || before[0] != repoDir {
-		t.Fatalf("目印が無いのに拾っていない（検査が空振りしている）: %v", before)
+		t.Fatalf("名乗りが無いのに拾っていない（検査が空振りしている）: %v", before)
 	}
 
 	if err := workspace.WriteInstanceMarker(other, "e2e"); err != nil {
-		t.Fatalf("目印を書けません: %v", err)
+		t.Fatalf("名乗りを書けません: %v", err)
 	}
+	registerInstance(t, fx.Home, "e2e")
 
 	after, err := fx.Manager.ScanUnidentified()
 	if err != nil {
@@ -73,16 +130,16 @@ func TestScanUnidentified_別のinstanceの置き場所へは入らない(t *tes
 	}
 }
 
-// 目的: 目印の `id` が置き場所の名前と食い違うときは飛ばさないことを確かめる
-// （設計 3-17b）。
+// 目的: 名乗りの `id` が置き場所の名前と食い違うときは飛ばさないことを確かめる
+// （設計 3-17f）。
 //
 // **worktree の中ではエージェントが `--permission-mode dontAsk` で動く。**
-// 目印はそこから書けるので、**中身を見ずに飛ばすと、1バイト置くだけで
+// 名乗りはそこから書けるので、**中身を見ずに飛ばすと、1バイト置くだけで
 // `continuo abandon` の目から隠せる。**
 //
-// 与える情報: ディレクトリ名と食い違う `id` を書いた目印。
+// 与える情報: ディレクトリ名と食い違う `id` を書いた名乗り。
 // 成功条件: いつもどおり数えること。
-func TestScanUnidentified_名前の食い違う目印では飛ばさない(t *testing.T) {
+func TestScanUnidentified_名前の食い違う名乗りでは飛ばさない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	root := fx.Manager.ResolvedRoot()
 
@@ -93,15 +150,96 @@ func TestScanUnidentified_名前の食い違う目印では飛ばさない(t *te
 	}
 	// **`e2e` ではなく `other` と名乗らせる。**
 	if err := workspace.WriteInstanceMarker(other, "other"); err != nil {
-		t.Fatalf("目印を書けません: %v", err)
+		t.Fatalf("名乗りを書けません: %v", err)
 	}
+	registerInstance(t, fx.Home, "other")
+	registerInstance(t, fx.Home, "e2e")
 
 	found, err := fx.Manager.ScanUnidentified()
 	if err != nil {
 		t.Fatalf("ScanUnidentified に失敗した: %v", err)
 	}
 	if len(found) != 1 || found[0] != repoDir {
-		t.Fatalf("名前が食い違う目印で飛ばしてしまった: %v", found)
+		t.Fatalf("名前が食い違う名乗りで飛ばしてしまった: %v", found)
+	}
+}
+
+// 目的: worktree の中から書いた名乗りだけでは、worktree を隠せないことを確かめる
+// （設計 3-17f）。
+//
+// **エージェントは `--permission-mode dontAsk` で、worktree の中に居る。**
+// **`../../../.continuo-instance` に `{"id":"github.com"}` を書くだけで、
+// `github.com` の下の worktree が `Scan` / `ScanUnidentified` / `ScanBroken` の
+// 3つ全部から消えていた。**そうなると復元は0件になり、`continuo abandon` は
+// **「worktree が無い」経路に入って、生きている worktree の branch を消しにいく。**
+//
+// 与える情報: `<root>/github.com/.continuo-instance` に `{"id":"github.com"}` を書いた状態
+// （`~/.continuo/id/github.com/` も作って、裏付けの検査だけに頼っていないことを示す）。
+// 成功条件: 3つの走査がどれも、いつもどおり数えること。
+func TestScan_ホスト名を名乗る名乗りでは隠せない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	root := fx.Manager.ResolvedRoot()
+
+	hostDir := filepath.Join(root, "github.com")
+	worktree := filepath.Join(hostDir, "octocat", "hello-world", "continuo-octocat-hello-world-188")
+	if err := os.MkdirAll(worktree, 0o700); err != nil {
+		t.Fatalf("worktree を作れません: %v", err)
+	}
+	// **エージェントが worktree の中から相対パスで書ける先である。**
+	if err := workspace.WriteInstanceMarker(hostDir, "github.com"); err != nil {
+		t.Fatalf("名乗りを書けません: %v", err)
+	}
+	// **裏付けの側も揃えてみせる。**それでも `--id` に書けない名前なので飛ばさない。
+	registerInstance(t, fx.Home, "e2e")
+	if err := os.MkdirAll(filepath.Join(workspace.InstanceRegistryDir(fx.Home), "github.com"), 0o700); err != nil {
+		t.Fatalf("~/.continuo/id/github.com を作れません: %v", err)
+	}
+
+	found, err := fx.Manager.ScanUnidentified()
+	if err != nil {
+		t.Fatalf("ScanUnidentified に失敗した: %v", err)
+	}
+	if len(found) != 1 || found[0] != worktree {
+		t.Fatalf("ホスト名を名乗る名乗りで隠せてしまった: %v", found)
+	}
+
+	broken, err := fx.Manager.ScanBroken()
+	if err != nil {
+		t.Fatalf("ScanBroken に失敗した: %v", err)
+	}
+	if len(broken) != 1 || broken[0].Path != worktree {
+		t.Fatalf("ScanBroken からも隠せてしまった: %v", broken)
+	}
+}
+
+// 目的: `~/.continuo/id/<名前>/` が無ければ、名乗りがあっても飛ばさないことを確かめる
+// （設計 3-17f）。
+//
+// **名乗りは `workspace.root` の中にあり、エージェントが書ける。**
+// **置き場所の外に「その名前で continuo が動いた」証拠が要る。**
+//
+// 与える情報: 名乗りだけがあり、`~/.continuo/id/e2e/` が無い状態。
+// 成功条件: いつもどおり数えること。
+func TestScanUnidentified_置き場所の外に裏付けが無ければ飛ばさない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	root := fx.Manager.ResolvedRoot()
+
+	other := filepath.Join(root, "e2e")
+	repoDir := filepath.Join(other, "github.com", "octocat", "hello-world")
+	if err := os.MkdirAll(repoDir, 0o700); err != nil {
+		t.Fatalf("別の instance の置き場所を作れません: %v", err)
+	}
+	if err := workspace.WriteInstanceMarker(other, "e2e"); err != nil {
+		t.Fatalf("名乗りを書けません: %v", err)
+	}
+	// **`~/.continuo/id/e2e/` は作らない。**
+
+	found, err := fx.Manager.ScanUnidentified()
+	if err != nil {
+		t.Fatalf("ScanUnidentified に失敗した: %v", err)
+	}
+	if len(found) != 1 || found[0] != repoDir {
+		t.Fatalf("裏付けが無いのに飛ばしてしまった: %v", found)
 	}
 }
 
