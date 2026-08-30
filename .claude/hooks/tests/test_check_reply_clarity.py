@@ -205,10 +205,9 @@ case(
     False,
 )
 case(
-    "backtick で囲んだファイルパスは止まる",
+    "backtick で囲んだファイルパスは通す（機械的に止めない）",
     base("`internal/orchestrator/dispatch.go` を見てください。"),
-    True,
-    "backtick で囲まないこと",
+    False,
 )
 case(
     "ディレクトリは求めない",

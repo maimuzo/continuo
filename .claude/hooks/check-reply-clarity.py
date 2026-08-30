@@ -607,18 +607,6 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0
             "**行番号が無いと、読む側はファイルを開いてから探すことになります。**\n"
         )
 
-    if file_backtick:
-        parts.append("\n%s: %d 件\n" % (FILE_BACKTICK_NAME, int(file_backtick)))
-        parts.append(
-            "\n**ファイルパスを backtick で囲まないこと。**markdown link 形式で書いてください。\n"
-            "  悪い: `docs/plans/continuo_design.md`\n"
-            "  良い: [docs/plans/continuo_design.md:8278-8342](docs/plans/continuo_design.md#L8278-L8342)\n"
-        )
-
-    parts.append(
-        "\n規則は .claude/rules/reporting.md にあります。"
-        "5段構成そのものは別の hook が見ているので、そちらの指示もあれば両方直してください。"
-    )
     return "".join(parts)
 
 
@@ -658,16 +646,16 @@ def main() -> int:
     thin_quote = qchars < MIN_QUOTE_CHARS
     late_blocks = blocks_missing_summary(masked)
     section_refs = bare_section_refs(masked)
-    file_no_lines, file_backtick = file_refs_without_lines(masked)
+    file_no_lines, _unused_backtick = file_refs_without_lines(masked)
 
     if (not bare_refs and not no_category and not thin_quote and not late_blocks
-            and not section_refs and not file_no_lines and not file_backtick):
+            and not section_refs and not file_no_lines):
         return 0
 
     emit({
         "decision": "block",
         "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs,
-                               file_no_lines, file_backtick, qchars),
+                               file_no_lines, 0, qchars),
     })
     return 0
 
