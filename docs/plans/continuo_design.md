@@ -6967,28 +6967,38 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 **branch 名を鍵にしている箇所は6つあり、「問わない」に倒して壊れるのは1つだけである**（片付けの検算が出す文面）。
 置き場所・復元・herdr・`abandon` は、どれも HEAD の branch 名の一致を要求していない。
 
-### 3-70. 名前を付けた `Agent` は teammate として起動し、親の `dontAsk` を継がない
+### 3-70. agent teams には対応しない
 
-**言いたいこと。**サブエージェントの実行中に人間へ引き渡された件（issue #65）の**根本の原因はここにある。**
-**`Agent` に `name` を付けて呼ぶと、agent teams が有効な環境では teammate として起動する。**
-**teammate は `permissionMode: default` で走り、確認の画面を出す。**
-**その画面は親の pane に出るので、continuo が `blocked` と見て esc を送る。**
+**言いたいこと。**agent teams が有効な環境では continuo は正しく動かない。
+**対応しない、と明記して文書に書く。**切る仕組みは持たない。
 
-**公式文書より**（[https://code.claude.com/docs/en/sub-agents.md](https://code.claude.com/docs/en/sub-agents.md)、2026-08-28 取得）。
+**何が起きるか。**`Agent` ツールに `name` を付けて呼ぶと、agent teams が有効な環境では
+**teammate として起動する。**teammate は確認の画面を lead の pane に出す。
+**continuo はそれを `blocked` と読み、esc を送って pane を閉じ、issue を failure_state へ落とす。**
 
-> In an interactive session with agent teams enabled, a subagent that Claude spawns from the main conversation with a `name` launches as a teammate instead
+**確認の画面が親のセッションの記録に残らないのも、これが理由である。**
 
-**訳。**agent teams が有効な対話セッションでは、親の会話から `name` を付けて起こしたサブエージェントは、
-**代わりに teammate として起動する。**
+> Teammate permission prompts appear in the lead session, so approve them there yourself.
 
-**agent teams は既定で無効で、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` を置いた環境でだけ有効になる。**
+**訳。**teammate の許可の確認はリードのセッションに出るので、そこで自分で承認すること。
+**リードの端末には出るが、リードの transcript には書かれない。**
 
-**文書と観測が食い違う。**公式は「teammate は lead の許可設定で始まる」と書いているが、
-**報告された `meta.json` は `permissionMode: "default"` だった。**
-同じセッションで親が断られた文面は「don't ask mode で走っているため」だったのに、
-teammate 側は「The tool use was rejected」という**確認を出したときの文面**だった。
+**なぜ対応しないか。**
 
-**採る形。**continuo が issue ごとに書く settings.json の `env` に1行足す。
+| 何 | 中身 |
+| --- | --- |
+| **既定で無効である** | 公式が「Agent teams are experimental and disabled by default」と書いている |
+| **利用者が自分で切れる** | `settings.json` の `env` に `"0"` を1行 |
+| **切る仕組みを持つと19ファイルを触る** | 設定のキー・判定・doctor の見出し語・相互検査。**文書2つで済むものに見合わない** |
+
+**書く場所。**
+
+| どこ | 何を |
+| --- | --- |
+| [docs/FAQ.md](../FAQ.md) | **症状から引ける形で。**「作業の途中で確認の画面に止まりました」の節に足す |
+| [README.md](../../README.md) / [README.ja.md](../../README.ja.md) | 「始める前に知っておくこと」に1行 |
+
+**利用者へ案内する回避策。**
 
 ```yaml
 claude:
@@ -6996,22 +7006,23 @@ claude:
     CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"
 ```
 
-**公式がこの用途を名指ししている。**
+**`--settings` は対象リポジトリの `.claude/settings.json` より優先順位が上である**
+（Settings precedence: managed / **command line** / project local / shared project / user）。
+**勝てないのは managed settings だけである。**
 
-> An orchestration flow that waits on subagent results can stall. To make named subagents launch as subagents again, turn agent teams off
+**公式が `0` を切る値として名指ししている。**
 
-**訳。**サブエージェントの結果を待つ組み立ては止まりうる。
-名前つきのサブエージェントを**サブエージェントとして起動し直させるには、agent teams を切る。**
+> To make named subagents launch as subagents again, turn agent teams off by setting
+> `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` to `0`
 
-**`--settings` は利用者の `~/.claude/settings.json` に勝つ。**勝てないのは組織の managed settings だけである。
+**セッションの再起動は要らない。**Claude Code はサブエージェントを起こすたびに読み直す。
 
-**ただし、既定では設定しない**（2026-08-28、人間の判断）。
-**agent teams は Claude Code の既定で無効であり、`=1` を書いた環境でだけ有効になる。**
-**無効なものを無効にする設定は、読む人を惑わせるだけである。**
+**採らなかった案。**
 
-**書くのは「利用者が `=1` を設定していた」と分かったときだけにする。**
-**`="0"` で打ち消せるかどうかは確かめていない。**公式が書いているのは「`1` で有効になる」までで、
-`0` を「値がある＝有効」と読む実装の可能性が消せていない。
+| 案 | なぜ採らないか |
+| --- | --- |
+| **設定のキーを足して切る**（`claude.agent_teams.mode`） | **19ファイルを触る。**設計を4版まで書き、3回のレビューで41件を潰したが、対応しないほうが軽い |
+| **有効化を検知して警告だけ出す** | **無人で走るので、警告を読む人がその場にいない** |
 
 ### 3-71. 提供する枠の上限を `WORKFLOW.md` で決める
 

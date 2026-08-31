@@ -65,6 +65,9 @@ How many issues run at once is a setting (two by default).
 
 **Try it on a repository you can throw away.** Do not point it at production work on day one.
 
+**Agent teams are not supported.** They are an experimental Claude Code feature, disabled by default.
+**With them enabled, issues fail** (see "The agent stopped at a permission prompt mid-run" in [docs/FAQ.md](docs/FAQ.md)).
+
 ## Requirements
 
 | | |

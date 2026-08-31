@@ -487,6 +487,55 @@ continuo は Claude Code を `--permission-mode dontAsk` で起動します。
 **許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足し、
 Status を着手待ちへ戻してください。
 
+#### いちばん多い原因は agent teams です
+
+**continuo は agent teams に対応していません。**有効になっていると、この症状が起きます。
+
+**何が起きるか。**エージェントが `Agent` ツールに名前を付けて呼ぶと、
+**サブエージェントではなく teammate として起動します。**
+teammate は確認の画面を出し、**その画面は continuo が見ている pane に出ます。**
+continuo はそれを「人間の入力を待っている」と読み、esc を送って pane を閉じ、issue を失敗にします。
+
+**確認の画面が親のセッションの記録に残らないのも、これが理由です。**
+公式文書がそう書いています。
+
+> Teammate permission prompts appear in the lead session, so approve them there yourself.
+
+**訳。**teammate の許可の確認はリードのセッションに出るので、そこで自分で承認すること。
+**リードの端末には出ますが、リードの記録には書かれません。**
+
+**確かめ方。**次のどれかに `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` があるかを見てください。
+
+```bash
+grep -n 'AGENT_TEAMS' <対象リポジトリ>/.claude/settings.json
+grep -n 'AGENT_TEAMS' <対象リポジトリ>/.claude/settings.local.json
+grep -n 'AGENT_TEAMS' ~/.claude/settings.json
+echo "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-（設定されていません）}"
+```
+
+**`1` か `true` が入っていたら、これが原因です。**
+
+**直し方。**`WORKFLOW.md` の `claude.env` に1行足してください。
+
+```yaml
+claude:
+  env:
+    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"
+```
+
+**continuo が起動するエージェントにだけ効きます。**
+人が自分の手で叩く `claude` には影響しません。
+
+**新しいセッションを始める必要はありません。**Claude Code は、
+サブエージェントを起こすたびにこの値を読み直します。
+
+**なぜ `WORKFLOW.md` に書くのか。**continuo が渡す設定は、
+対象リポジトリの `.claude/settings.json` より優先順位が上だからです。
+**リポジトリ側が `1` にしていても、こちらが勝ちます。**
+
+**組織の managed settings で `1` になっている場合だけは勝てません。**
+その場合は管理者に相談してください。
+
 ### エージェントが叩いたコマンドが「危ない」と断られる
 
 **原因。**v0.1.10 から、**公開リポジトリの issue では、`Bash` の呼び出しを実行の前に検査します**
