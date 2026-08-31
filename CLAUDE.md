@@ -138,6 +138,14 @@ os.Rename(tmp.Name(), path)
 - **修正の履歴を書かない。**置くのは最新の仕様・選定根拠・比較した案の否定根拠だけ
 - **1つの節は50行以内。**長くなったら要約版を別ファイルに作る（元は残す）
 
+## 設計のレビュー
+
+[.claude/rules/design-review.md](.claude/rules/design-review.md) に従うこと。とくに次の3点。
+
+- **設計が固まったら、実装の前に architect のレビューを通す。**飛ばして実装に入らない
+- **設計はファイルに落として渡す。**architect は Bash を持たないので `gh issue view` を読めない
+- **設計を書く前に「そもそも対応するか」を確かめる。**非対応と文書に書くだけで済むことがある
+
 ## リリースの手順
 
 [.claude/rules/release.md](.claude/rules/release.md) に従うこと。とくに次の3点。
