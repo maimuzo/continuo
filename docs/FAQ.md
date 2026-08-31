@@ -487,54 +487,95 @@ continuo は Claude Code を `--permission-mode dontAsk` で起動します。
 **許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足し、
 Status を着手待ちへ戻してください。
 
-#### いちばん多い原因は agent teams です
+### 「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）
 
 **continuo は agent teams に対応していません。**有効になっていると、この症状が起きます。
 
+**agent teams は Claude Code の実験的な機能で、既定では無効です。**
+**`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を `1` にした環境でだけ有効になります。**
+
 **何が起きるか。**エージェントが `Agent` ツールに名前を付けて呼ぶと、
 **サブエージェントではなく teammate として起動します。**
-teammate は確認の画面を出し、**その画面は continuo が見ている pane に出ます。**
+
+**teammate は、独立した Claude Code のセッションです。**
+**それを起こした側を「リード」と呼びます。**continuo が起動したのがリードです。
+
+**teammate が許可を求めると、確認の画面はリードの pane に出ます。**
 continuo はそれを「人間の入力を待っている」と読み、esc を送って pane を閉じ、issue を失敗にします。
 
-**確認の画面が親のセッションの記録に残らないのも、これが理由です。**
-公式文書がそう書いています。
+**公式文書。**
 
 > Teammate permission prompts appear in the lead session, so approve them there yourself.
 
 **訳。**teammate の許可の確認はリードのセッションに出るので、そこで自分で承認すること。
-**リードの端末には出ますが、リードの記録には書かれません。**
 
-**確かめ方。**次のどれかに `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` があるかを見てください。
+出典: [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）
+
+#### 確かめ方
+
+**continuo が起動した Claude Code に、その環境変数が届いているかを見ます。**
+
+**1. continuo の設定を見る。**ここに書いたものが、いちばん強く効きます。
 
 ```bash
-grep -n 'AGENT_TEAMS' <対象リポジトリ>/.claude/settings.json
-grep -n 'AGENT_TEAMS' <対象リポジトリ>/.claude/settings.local.json
-grep -n 'AGENT_TEAMS' ~/.claude/settings.json
+grep -n 'AGENT_TEAMS' <continuo の作業ディレクトリ>/WORKFLOW.md
+```
+
+**2. 対象リポジトリの clone を見る。**チームで有効にしていることがあります。
+
+```bash
+ghq list --full-path | xargs -I{} grep -ln 'AGENT_TEAMS' {}/.claude/settings.json 2>/dev/null
+```
+
+**3. 自分の設定を見る。**
+
+```bash
+grep -n 'AGENT_TEAMS' ~/.claude/settings.json ~/.claude/settings.local.json 2>/dev/null
+```
+
+**4. continuo を起動したシェルの環境変数を見る。**
+
+```bash
 echo "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-（設定されていません）}"
 ```
 
-**`1` か `true` が入っていたら、これが原因です。**
+**`1` が入っていたら、これが原因です。**
 
-**直し方。**`WORKFLOW.md` の `claude.env` に1行足してください。
+#### 直し方
+
+**`WORKFLOW.md` の `claude.env` に1行足してください。**
+
+**雛形には既に `env:` の塊があります。**その中へ1行足します。**塊ごと貼り替えないでください。**
 
 ```yaml
-claude:
-  env:
-    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"
+  env:                                      # Claude Code に渡す環境変数
+    CLAUDE_CODE_RETRY_WATCHDOG: "1"         # 既にある行
+    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"   # ← これを足す
 ```
 
-**continuo が起動するエージェントにだけ効きます。**
-人が自分の手で叩く `claude` には影響しません。
+**直したら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+**すでに動いている issue には届きません。**その issue は Status を着手待ちへ戻してやり直させてください。
 
-**新しいセッションを始める必要はありません。**Claude Code は、
-サブエージェントを起こすたびにこの値を読み直します。
+**上の「確かめ方」の4番（シェルの環境変数）で見つかった場合も、同じ直し方で構いません。**
+**continuo が渡す設定のほうが強いので、シェルの export に勝ちます。**
 
-**なぜ `WORKFLOW.md` に書くのか。**continuo が渡す設定は、
-対象リポジトリの `.claude/settings.json` より優先順位が上だからです。
+#### なぜ `WORKFLOW.md` に書くのか
+
+**continuo は Claude Code を `--settings` 付きで起動します。**
+**その設定は、対象リポジトリの `.claude/settings.json` より優先順位が上です。**
+
+| 順位 | どこ |
+| --- | --- |
+| 1 | 組織の managed settings |
+| **2** | **`claude --settings`**（continuo が渡すもの） |
+| 3 | `.claude/settings.local.json` |
+| 4 | `.claude/settings.json` |
+| 5 | `~/.claude/settings.json` |
+
 **リポジトリ側が `1` にしていても、こちらが勝ちます。**
+**勝てないのは1番の managed settings だけです。**その場合は管理者に相談してください。
 
-**組織の managed settings で `1` になっている場合だけは勝てません。**
-その場合は管理者に相談してください。
+**人が自分の手で叩く `claude` には影響しません。**continuo が起動したセッションにだけ効きます。
 
 ### エージェントが叩いたコマンドが「危ない」と断られる
 

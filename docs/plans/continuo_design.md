@@ -6973,32 +6973,57 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 **対応しない、と明記して文書に書く。**切る仕組みは持たない。
 
 **何が起きるか。**`Agent` ツールに `name` を付けて呼ぶと、agent teams が有効な環境では
-**teammate として起動する。**teammate は確認の画面を lead の pane に出す。
-**continuo はそれを `blocked` と読み、esc を送って pane を閉じ、issue を failure_state へ落とす。**
+**teammate として起動する。**
 
-**確認の画面が親のセッションの記録に残らないのも、これが理由である。**
+> Claude launches a teammate when it calls the Agent tool with a `name` while agent teams are enabled
+
+**訳。**agent teams が有効なとき、Claude が `name` を付けて Agent ツールを呼ぶと teammate を起動する。
+
+**teammate が許可を求めると、確認の画面はリードの pane に出る。**
 
 > Teammate permission prompts appear in the lead session, so approve them there yourself.
 
 **訳。**teammate の許可の確認はリードのセッションに出るので、そこで自分で承認すること。
-**リードの端末には出るが、リードの transcript には書かれない。**
 
-**なぜ対応しないか。**
+**continuo はそれを `blocked` と読み、esc を送って pane を閉じ、issue を failure_state へ落とす。**
+
+**出典。**[Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）。
+
+#### 文書と観測が食い違う点が1つある
+
+**公式は「teammate はリードの許可設定を継ぐ」と書いている。**
+
+> Teammates start with the lead's permission settings.
+
+**訳。**teammate はリードの許可設定で始まる。
+
+**continuo は `--permission-mode dontAsk` で起動する。**継ぐなら確認の画面は出ないはずである。
+**だが報告された `meta.json` は3件とも `permissionMode: "default"` だった**（2026-08-27、外部の利用者の実測）。
+
+**`meta.json` の `permissionMode` が「継いだ実効値」か「spawn 時に明示した値」かは、
+公式文書に記述が無く、こちらでも判断できていない。**
+**Claude Code のバイナリは解析しない**（公式文書と観測できる挙動だけを根拠にする）。
+
+**この食い違いは、対応しない判断には影響しない。**teammate として起動しなければ、この経路そのものが消える。
+
+#### なぜ対応しないか
 
 | 何 | 中身 |
 | --- | --- |
 | **既定で無効である** | 公式が「Agent teams are experimental and disabled by default」と書いている |
-| **利用者が自分で切れる** | `settings.json` の `env` に `"0"` を1行 |
+| **利用者が自分で切れる** | `WORKFLOW.md` の `claude.env` に1行 |
 | **切る仕組みを持つと19ファイルを触る** | 設定のキー・判定・doctor の見出し語・相互検査。**文書2つで済むものに見合わない** |
 
-**書く場所。**
+#### 書く場所
 
 | どこ | 何を |
 | --- | --- |
-| [docs/FAQ.md](../FAQ.md) | **症状から引ける形で。**「作業の途中で確認の画面に止まりました」の節に足す |
+| [docs/FAQ.md](../FAQ.md) | **症状から引ける独立した節。**確かめ方4つと、直し方 |
 | [README.md](../../README.md) / [README.ja.md](../../README.ja.md) | 「始める前に知っておくこと」に1行 |
+| [docs/trying_it_out.md](../trying_it_out.md) | 「先に知っておくこと」の表に1行 |
+| [docs/upgrading.md](../upgrading.md) | v0.1.11 の節 |
 
-**利用者へ案内する回避策。**
+#### 利用者へ案内する回避策
 
 ```yaml
 claude:
@@ -7015,14 +7040,12 @@ claude:
 > To make named subagents launch as subagents again, turn agent teams off by setting
 > `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` to `0`
 
-**セッションの再起動は要らない。**Claude Code はサブエージェントを起こすたびに読み直す。
+**訳。**名前つきのサブエージェントをサブエージェントとして起動し直させるには、
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を `0` にして agent teams を切る。
 
-**採らなかった案。**
-
-| 案 | なぜ採らないか |
-| --- | --- |
-| **設定のキーを足して切る**（`claude.agent_teams.mode`） | **19ファイルを触る。**設計を4版まで書き、3回のレビューで41件を潰したが、対応しないほうが軽い |
-| **有効化を検知して警告だけ出す** | **無人で走るので、警告を読む人がその場にいない** |
+**直したら continuo の再起動が要る。**設定は起動時に1回だけ読む（3-24 の読み直しは未実装）。
+**公式が「新しいセッションを始める必要はない」と書いているのは、
+Claude Code が直接見る `settings.json` を保存した場合である。**`WORKFLOW.md` はそれに当たらない。
 
 ### 3-71. 提供する枠の上限を `WORKFLOW.md` で決める
 
