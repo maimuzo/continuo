@@ -68,30 +68,31 @@ func NearestExisting(path string) (string, error) {
 	}
 }
 
-// ProbeSocketInside は、そのディレクトリに unix socket を本当に置けるかを確かめる。
+// ProbeSocketInside は、その socket を本当に置けるかを、**本番の名前を使わずに**確かめる。
 //
 // **本番の socket の名前では listen しない**（設計 3-17h）。
 // **listen したあとに `os.Remove` すると、その隙に bind し直した常駐の socket を
 // 消しうる。**そうなると hook は1件も届かなくなる。
 //
-// **パスの長さはここでは見ない。**本番のパスの長さは
-// `internal/socketpath` の `checkPathLen` が別に見ている。
-// **使い捨ての名前は本番より短くする**ので、ここが `ENAMETOOLONG` で落ちることはない。
+// **使い捨ての名前は、本番のファイル名と同じ長さにする。**
+// unix socket のパスには上限がある（`socketpath.MaxPathLen`）ので、
+// **長くすると、本番なら収まるパスをここが `ENAMETOOLONG` で落としうる。**
+// **短くすると、上限ちょうどのパスを見逃す。**同じ長さなら、どちらも起きない。
 //
-// dir: 既にあるディレクトリの絶対パス。
+// **名前はプロセスごと・呼び出しごとに変える。**2つの `continuo doctor` が
+// 同時に走っても、互いの使い捨ての socket を消さないようにするためである。
+//
+// sockPath: 本番の socket の絶対パス（**このファイルには一切触れない**）。
 // 戻り値: listen できなかった場合のエラー。
-func ProbeSocketInside(dir string) error {
-	if dir == "" {
+func ProbeSocketInside(sockPath string) error {
+	if sockPath == "" {
 		return i18n.Errorf(i18n.KeyFsprobeDirEmpty)
 	}
-	if !filepath.IsAbs(dir) {
-		return i18n.Errorf(i18n.KeyFsprobeDirNotAbsolute, dir)
+	if !filepath.IsAbs(sockPath) {
+		return i18n.Errorf(i18n.KeyFsprobeDirNotAbsolute, sockPath)
 	}
-	// **短い名前にする。**`hooks.sock`（10文字）より短い9文字までに収める。
-	name := "." + strconv.FormatInt(time.Now().UnixNano()%1_000_000, 36) + ".sock"
-	probe := filepath.Join(dir, name)
-	// **前の検査の残骸があれば先に消す。**消すのは自分の使い捨ての名前だけである。
-	_ = os.Remove(probe)
+	dir := filepath.Dir(sockPath)
+	probe := filepath.Join(dir, probeSocketName(len(filepath.Base(sockPath))))
 	ln, err := net.Listen("unix", probe)
 	if err != nil {
 		return i18n.Errorf(i18n.KeyFsprobeSocketFailed, dir, err)
@@ -103,6 +104,33 @@ func ProbeSocketInside(dir string) error {
 	}
 	return nil
 }
+
+// probeSocketName は、使い捨ての unix socket のファイル名を作る。
+//
+// **本番のファイル名とちょうど同じ長さにする**（ProbeSocketInside を見よ）。
+// **短すぎる長さを渡されたら、その長さを無視して最小の長さにする。**
+// 本番の名前は `hooks.sock`（10文字）なので、実際にはここへ来ない。
+//
+// want: 作りたい長さ（本番のファイル名の長さ）。
+// 戻り値: `.` で始まる、`want` 文字（最小 minProbeSocketNameLen 文字）の名前。
+func probeSocketName(want int) string {
+	if want < minProbeSocketNameLen {
+		want = minProbeSocketNameLen
+	}
+	// **プロセス番号と時刻を混ぜる。**同時に2つの continuo が検査してもぶつからない。
+	seed := strconv.FormatInt(int64(os.Getpid()), 36) + strconv.FormatInt(time.Now().UnixNano(), 36)
+	// 先頭の `.` を除いた分だけ使う。足りなければ 0 で埋める。
+	body := seed
+	for len(body) < want-1 {
+		body += "0"
+	}
+	return "." + body[len(body)-(want-1):]
+}
+
+// minProbeSocketNameLen は使い捨ての socket の名前の最小の長さである。
+//
+// **`.` と、ぶつからない程度の文字数を確保する。**
+const minProbeSocketNameLen = 6
 
 // ProbePlaceable は、そのディレクトリに本当に書けるかを、**作らずに**確かめる。
 //

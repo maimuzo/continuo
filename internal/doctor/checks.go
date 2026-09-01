@@ -430,7 +430,7 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol, inst instance.Layout
 			Notes:  append(notes, i18n.T(i18n.KeyDoctorRuntimeDirNotYet, dir)),
 		}
 	}
-	if perr := fsprobe.ProbeSocketInside(dir); perr != nil {
+	if perr := fsprobe.ProbeSocketInside(sock); perr != nil {
 		return Result{
 			Label:    LabelRuntimeDir,
 			Symbol:   SymbolMissing,
