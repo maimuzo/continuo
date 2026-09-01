@@ -723,7 +723,7 @@ func TestRestore_身元ファイルの無いworktreeのpaneは閉じずにログ
 		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
 	}})
 	fx.AllowLog(
-		"復元のために引いた issue がボードにありません",
+		"復元のために引いた issue がカンバンにありません",
 		"手掛かりから issue を確かめられないので復元できません",
 		"身元を確かめられない worktree があります",
 		"次にこれをしてください",
@@ -760,7 +760,7 @@ func TestRestore_壊れた身元ファイルは無視してログに出す(t *te
 		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
 	}})
 	fx.AllowLog(
-		"復元のために引いた issue がボードにありません",
+		"復元のために引いた issue がカンバンにありません",
 		"手掛かりから issue を確かめられないので復元できません",
 		"身元を確かめられない worktree があります",
 		"次にこれをしてください",
@@ -1181,7 +1181,7 @@ func TestRestore_身元ファイルが無くても置き場所とボードから
 func TestRestore_復元できない壊れたworktreeがあれば起動を止める(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.AllowLog(
-		"復元のために引いた issue がボードにありません",
+		"復元のために引いた issue がカンバンにありません",
 		"手掛かりから issue を確かめられないので復元できません",
 		"身元を確かめられない worktree があります",
 		"次にこれをしてください",
@@ -1226,7 +1226,7 @@ func TestRestore_paneのlabelが置き場所と食い違えば復元しない(t 
 		cfg.Workspace.OnBrokenWorktree = config.OnBrokenWorktreeSkip
 	}})
 	fx.AllowLog(
-		"復元のために引いた issue がボードにありません",
+		"復元のために引いた issue がカンバンにありません",
 		"引き直した issue のスラグが置き場所のディレクトリ名と違うので復元しません",
 		"手掛かりから issue を確かめられないので復元できません",
 		"身元を確かめられない worktree があります",

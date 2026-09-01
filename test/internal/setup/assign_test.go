@@ -150,7 +150,7 @@ func TestAssign_番号0が入ったら打ち切る(t *testing.T) {
 	if a.Statuses().Complete() || a.Name(setup.RoleDispatch) != "" {
 		t.Errorf("打ち切ったのに割り当てが残っている: %+v", a.Statuses())
 	}
-	if !strings.Contains(out, "GitHub の画面でボードを開き") {
+	if !strings.Contains(out, "GitHub の画面でカンバンを開き") {
 		t.Errorf("選択肢を GitHub の画面から足す手順が出ていない:\n%s", out)
 	}
 	if !strings.Contains(out, "設定済みの Status が全部消えます") {
@@ -194,7 +194,7 @@ func TestAssign_選択肢が5個未満なら尋ねる前に止まる(t *testing.
 	if strings.Contains(out, "continuo はここから issue を取ります") {
 		t.Errorf("尋ねる前に止まっていない（役割の説明が出た）:\n%s", out)
 	}
-	if !strings.Contains(out, "GitHub の画面でボードを開き") {
+	if !strings.Contains(out, "GitHub の画面でカンバンを開き") {
 		t.Errorf("選択肢を足す手順が出ていない:\n%s", out)
 	}
 	if !strings.Contains(out, "設定済みの Status が全部消えます") {

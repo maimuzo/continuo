@@ -3749,7 +3749,7 @@ continuo setup         # 既にあるボードの Status の選択肢を、conti
                        # 雛形は作らない。WORKFLOW.md が無ければ continuo init を案内して止まる
                        # **標準入力を握るのはこのサブコマンドだけである**
                        # 役割の説明を先に出し、選択肢を番号付きで並べて番号で選ばせる
-                       # 番号 0 は「この役割に使える選択肢がボードに無い」の入力。入ったら打ち切る
+                       # 番号 0 は「この役割に使える選択肢がカンバンに無い」の入力。入ったら打ち切る
                        # 選択肢が5個未満なら、尋ねる前に止める。Ctrl+C で中断できる
                        # ボードは読むだけである（gh project field-list）。選択肢は足さない
                        # **--force は無い**（上書きしないので、守るものが無い）
@@ -3881,7 +3881,7 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 **上流が `✗` か `!` になったら、下流は `!` にして「なぜ確かめられなかったか」を出す。**
 
 ```text
-! clone            ボードを読めなかったため、対象のリポジトリを特定できませんでした
+! clone            カンバンを読めなかったため、対象のリポジトリを特定できませんでした
 ! 信頼登録         同上
 ```
 
@@ -4082,11 +4082,11 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 
 ```
 $ continuo setup
-使うボードの番号が決まりませんでした（octocat のボードが1件も見つかりませんでした）
-→ --project <番号> を付けて、使うボードを指定して実行し直してください
+使うカンバンの番号が決まりませんでした（octocat のカンバンが1件も見つかりませんでした）
+→ --project <番号> を付けて、使うカンバンを指定して実行し直してください
 
 $ continuo setup --project 6
-ボードの Status フィールドを読めませんでした: … Could not resolve to a ProjectV2 with the number 6. (user.projectV2)
+カンバンの Status フィールドを読めませんでした: … Could not resolve to a ProjectV2 with the number 6. (user.projectV2)
 ```
 
 **`--project` を付けても直らない。**owner がログイン名のままなので、`user.projectV2` を引き続ける。
@@ -4107,8 +4107,8 @@ $ continuo setup --project 6
 **見つからないときは、探した owner を全部見せる。**
 
 ```
-ボードが1件も見つかりませんでした（探した owner: octocat, octodev, another-org）
-→ ボードが別の user / organization にあるなら、`continuo init --owner <名前> --project <番号>` を実行してください
+カンバンが1件も見つかりませんでした（探した owner: octocat, octodev, another-org）
+→ カンバンが別の user / organization にあるなら、`continuo init --owner <名前> --project <番号>` を実行してください
 ```
 
 **「見つかりません」だけでは、どこを探したのかが分からない。**利用者は `--owner` に何を渡せばよいかを判断できない。
@@ -4199,7 +4199,7 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 **画面に出す1行**（`cli.setup.board_using`）。
 
 ```text
-使うボード: owner octocat のボード #42
+使うカンバン: owner octocat のカンバン #42
 ```
 
 **なぜ出すか。**ログイン名のボードがちょうど1件だけあると、gh から引いた別のボードの
@@ -5060,7 +5060,7 @@ Status が park の値のまま残ったことを誰も言わない。**
 | `failure_state`（`Blocked`） | **失敗していないものが失敗として残る。**人間が着手する相手を間違えただけである |
 | `terminal_states`（`Done`） | **やっていないものが完了として残る。**しかも 3-9 の片付けの経路がもう一度走る |
 
-だから既定では「Status は動かしていません。ボードで決めてください。」と1行出して終わる
+だから既定では「Status は動かしていません。カンバンで決めてください。」と1行出して終わる
 （[internal/abandon/abandon.go](../../internal/abandon/abandon.go) の `moveStatus`）。
 **動かす先を知っているのは人間だけなので、`--to` で明示させる。**
 
@@ -8354,7 +8354,7 @@ tracker:
       max: 50                               # 1回の取得で何件ずつ取るか。GitHub は一度に100件までしか返さない。
                                             # 打ち切りの件数ではない。続きがある限り取り直して、コメントは全部読む
       order: oldest_first                   # 読む順番。古いコメントから読む
-    handoff:                                # 同じボードを複数の機械で見張るときの取り決め。担当は issue の担当者で持つ
+    handoff:                                # 同じカンバンを複数の機械で見張るときの取り決め。担当は issue の担当者で持つ
       bid_window_ms: 180000                 # 入札を締め切るまでの待ち時間。180000 なら3分。
                                             # 数えはじめるのは、その issue へ最初の入札が入った時刻である。
                                             # 上の polling.interval_ms より十分長く取ること
@@ -8382,12 +8382,12 @@ tracker:
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
-  verify_states_every: 20                   # 上に書いた Status 名がボードに実在するかを、何巡回ごとに照合するか。
+  verify_states_every: 20                   # 上に書いた Status 名がカンバンに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
   unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。
                                             # turn の途中なら、この長さまで turn の終わりを待ち、エージェントの表明を読んでから判断する。
                                             # 0 なら待たずに止める。待つぶん、人間が止めたいときに止まるのが遅れる
-  automated_state_rewrite: {}               # ボードの組み込みの自動化（PR を issue に紐づけた・PR をマージした等）が
+  automated_state_rewrite: {}               # カンバンの組み込みの自動化（PR を issue に紐づけた・PR をマージした等）が
                                             # Status を動かしたときだけ、その Status を上に書いた Status へ戻す。
                                             # 空なら戻さず、上の猶予を置いてから worker を止める。人間が動かしたものは戻さない。
                                             # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる。
@@ -8397,7 +8397,7 @@ tracker:
                                             # 遷移先）に名前が出てこない Status を書くこと
 
 polling:
-  interval_ms: 30000                        # ボードを読み直す間隔。30000 なら30秒ごと
+  interval_ms: 30000                        # カンバンを読み直す間隔。30000 なら30秒ごと
 
 workspace:
   root: ~/worktrees                         # worktree を作る場所。先頭の ~ はホームディレクトリに展開する。
@@ -8496,7 +8496,7 @@ trust:
   require_repo_trusted: true                # 信頼していないリポジトリではエージェントを起動しない
   on_untrusted: skip_and_comment            # 信頼していないときの扱い。その issue だけ飛ばし、issue にコメントを残す
   repositories: []                          # continuo trust が信頼を登録してよいリポジトリ。owner/repo を1行ずつ書く。
-                                            # continuo init がボードから拾って並べるので、要らない行は消すこと。
+                                            # continuo init がカンバンから拾って並べるので、要らない行は消すこと。
                                             # 巡回のループはここを読まない。continuo trust だけが読む
 
 restart:
@@ -8546,8 +8546,8 @@ language: auto                              # 画面に出す文言の言語。a
 
 ## この issue に着手してよいことは、もう決まっています
 
-**continuo があなたを起動したのは、ボードでこの issue の Status が Ready になったからです。**
-**Ready へ動かせるのは、このボードを持っている維持者だけです。**
+**continuo があなたを起動したのは、カンバンでこの issue の Status が Ready になったからです。**
+**Ready へ動かせるのは、このカンバンを持っている維持者だけです。**
 **つまり「この issue に取り組んでよい」という承認は、もう出ています。**
 
 **issue を立てたのが誰であっても、取り組むこと自体はやめないでください。**
@@ -8592,7 +8592,7 @@ language: auto                              # 画面に出す文言の言語。a
     <!-- continuo:hold -->
     <!-- continuo:released -->
 
-**これは、同じボードを見張っている機械どうしが「この issue を誰が処理するか」を
+**これは、同じカンバンを見張っている機械どうしが「この issue を誰が処理するか」を
 決めるために書いているものです。**中身は枠の使用率と機械の名前だけで、
 **あなたへの指示は1文字も入っていません。**作業の材料にもしないでください。
 

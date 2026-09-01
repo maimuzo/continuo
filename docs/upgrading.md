@@ -865,8 +865,8 @@ cd ~/continuo-work && continuo doctor; echo "exit=$?"
 | 記号のうしろに出る文 | どう読むか |
 | --- | --- |
 | `tracker.automated_state_rewrite は空です（書き戻しを行わない設定です）` | **足せていません。**別のファイルを編集したか、`tracker:` の下に置けていません |
-| `tracker.automated_state_rewrite のキーはすべてボードの Status の選択肢にあります（1件）` | **足せています。**括弧の中の件数が、書いた行数と合っているかも見てください |
-| `tracker.automated_state_rewrite のキーに、ボードの Status の選択肢に無いものがあります（1件）` | 足せてはいますが、**綴りがボードと違うか、その Status をボードで使わなくなっています** |
+| `tracker.automated_state_rewrite のキーはすべてカンバンの Status の選択肢にあります（1件）` | **足せています。**括弧の中の件数が、書いた行数と合っているかも見てください |
+| `tracker.automated_state_rewrite のキーに、カンバンの Status の選択肢に無いものがあります（1件）` | 足せてはいますが、**綴りがカンバンと違うか、その Status をカンバンで使わなくなっています** |
 
 **上の2つは `✓`、いちばん下は `!` です。**
 **`!` のままでも continuo は起動します**（終了コードも 0 です）。
