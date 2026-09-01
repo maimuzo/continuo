@@ -201,7 +201,7 @@ gh project list --owner <ACCOUNT>
 実際に叩いた出力。左端の数字が `<PROJECT>` である。
 
 ```text
-3	<ボードの名前>	open	PVT_...
+3	<カンバンの名前>	open	PVT_...
 ```
 
 **実行する場所: どこでもよい**
@@ -564,9 +564,9 @@ grep -n -A 9 "^  repositories:" WORKFLOW.md    # いま並んでいるものを�
 
 ```yaml
 trust:
-  repositories:                             # continuo trust が信頼を登録してよいリポジトリ。ボードから拾って並べた。
+  repositories:                             # continuo trust が信頼を登録してよいリポジトリ。カンバンから拾って並べた。
                                             # **要らない行は消すこと。**ここに残ったものだけが登録の対象になる
-                                            # **これから issue を作るリポジトリは、まだボードに無いので入っていない。**手で足すこと
+                                            # **これから issue を作るリポジトリは、まだカンバンに無いので入っていない。**手で足すこと
     - "<REPO>"                                # ← 段7 で issue を置くリポジトリ。手で足す
 ```
 

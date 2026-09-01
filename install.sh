@@ -852,7 +852,7 @@ check_deps() {
 		say "$tool がありません。"
 		case "$tool" in
 			git) say "  continuo は worktree の作成に git を使います。" ;;
-			gh) say "  continuo はボードの読み書きに gh を使います。" ;;
+			gh) say "  continuo はカンバンの読み書きに gh を使います。" ;;
 			ghq) say "  continuo は clone の置き場所の解決に ghq を使います。" ;;
 		esac
 		if [ "$SKIP_DEPS" = "1" ]; then
@@ -964,7 +964,7 @@ main() {
 	say ""
 	say "    mkdir -p ~/continuo-work && cd ~/continuo-work"
 	say "    continuo init      # WORKFLOW.md の雛形を置く"
-	say "    continuo setup     # ボードの Status を5つの役割に対応づける"
+	say "    continuo setup     # カンバンの Status を5つの役割に対応づける"
 	say "    continuo doctor    # 前提が揃っているかを調べる"
 	say ""
 	say "詳しくは https://github.com/${REPO}#使う を見てください。"
