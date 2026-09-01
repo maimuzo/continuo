@@ -118,17 +118,20 @@ issue の本文に「作業は既に `feature/x` にあり、draft PR も出て�
 
 ### 差し替え方（branch を切り替えるな）
 
-**`WORKFLOW.md` の「## 終わったらやること」の中を探します。**次の1行がある場所です。
+**`WORKFLOW.md` の「## この issue を読むこと」の行を探します。**その行の「直前」に足します。
+
+**issue を読むより前に置くのが要点です。**エージェントが branch を切り替えるのは、
+issue の本文や、そこから辿った PR のレビューを読んだ結果です。
+**「## 終わったらやること」に置くと、読み終わったあとになって間に合いません。**
+**#142（worktree が別の branch を出していると永久に飛ばされる）の報告では、着手の82秒後に切り替わっていました。**
+
+**次の18行を足します**（見出しの行と、途中の空行6つも含めて18行です。
+**足したあとに空行を1つ入れて、`## この issue を読むこと` の行と離してください**）。
+**その行そのものと、その前後は1文字も変えません。**
 
 ```text
-**push 先は、この issue のために作られた branch です。**
-```
+## worktree と branch は切り替えないこと
 
-**この行の「直前」に、次の15行を足します**（途中の空行4つも含めて15行です。
-**足したあとに空行を1つ入れて、`**push 先は、…**` の行と離してください**）。
-**この行そのものと、その後ろは1文字も変えません。**
-
-```text
 **continuo が用意した worktree と branch のまま作業してください。**
 別の branch へ checkout したり、新しい branch を作ったりしないでください。
 **切り替えると、次の巡回から continuo がこの issue に着手できなくなります。**
@@ -139,32 +142,40 @@ issue の本文に「作業は既に `feature/x` にあり、draft PR も出て�
     git fetch origin <その branch>
     git merge FETCH_HEAD
 
-中身を読むだけなら、別の場所へ一時的に checkout して参照し、読み終わったら消してください。
+**中身を読むだけなら、worktree を作らないでください。**取ってきた ref から直に読めます。
 
     git fetch origin <その branch>
-    git worktree add --detach /tmp/<任意の名前> FETCH_HEAD
-    git worktree remove /tmp/<任意の名前>
+    git show FETCH_HEAD:<見たいファイルのパス>
+
+**worktree を足すと、消し忘れたときに登録だけが残ります。**continuo の片付けでは落ちません。
 ```
 
 **`git fetch` の行を落とさないでください。**continuo は `git fetch` を1回も叩きません。
 **`gh issue develop` が作った branch は GitHub の側にできるだけで、手元の clone には入っていません。**
 `git merge origin/<その branch>` とだけ書くと、その ref が無くて必ず落ちます。
 
+**`git show` を `git worktree add` に書き換えないでください。**読むためだけの worktree は
+消し忘れると登録だけが共有の clone に残り、**`continuo` の片付け（`git worktree prune`）では落ちません。**
+実体が先に消えた登録しか prune の対象にならないためです。
+
 **コマンドの行は4字下げのままにしてください。**この本文はそのままエージェントへ渡ります。
 
 ### 当たったかどうかの確かめ方（branch を切り替えるな）
 
 **`continuo doctor` は本文を検査しません。**`grep` で見てください。
+**入っているかだけでなく、`## この issue を読むこと` より前にあるかも見ます。**
 
 ```bash
-grep -c 'continuo が用意した worktree と branch のまま' ~/continuo-work/WORKFLOW.md
+grep -n 'continuo が用意した worktree と branch のまま' ~/continuo-work/WORKFLOW.md
+grep -n '^## この issue を読むこと' ~/continuo-work/WORKFLOW.md
 ```
 
-| 出た数 | どう読むか |
+| どう出たか | どう読むか |
 | --- | --- |
-| `1` | **当たっています** |
-| `0` | **当たっていません。**「## 終わったらやること」の中を探し直してください |
-| `2` 以上 | **貼りすぎです。**古いほうを消してください |
+| 1つ目が1行だけ出て、その行番号が2つ目より小さい | **当たっています** |
+| 1つ目が1行も出ない | **当たっていません。**`## この issue を読むこと` の行を探し直してください |
+| 1つ目の行番号のほうが大きい | **置き場所が後ろすぎます。**古いほうを消して、`## この issue を読むこと` の直前へ貼り直してください |
+| 1つ目が2行以上出る | **貼りすぎです。**`## この issue を読むこと` より前の1つだけを残してください |
 
 **書き換えたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
 **再起動しても worktree も pane も残ります。**
