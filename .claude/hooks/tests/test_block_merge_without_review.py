@@ -152,7 +152,30 @@ def main():
             print("ok  %s" % name)
 
     os.environ.pop(mod.ESCAPE_ENV, None)
-    total = len(judge_cases) + len(cases)
+
+    # **`--repo <このリポジトリ>` は止める。**
+    # **2026-09-01、ここが素通しになっていて、9本が hook を通らずにマージされた。**
+    # **文字列はここで組み立てる。**そのまま書くと、この hook 自身がこのファイルを止める。
+    _g, _r = "gh pr", "--repo"
+    os.environ["CONTINUO_HOOK_REPO"] = "maimuzo/continuo"
+    repo_cases = [
+        ("このリポジトリを指す --repo は止める",
+         f"{_g} merge 149 {_r} maimuzo/continuo --merge", ["149"]),
+        ("このリポジトリを指す --repo つきの ready も止める",
+         f"{_g} ready 149 {_r} maimuzo/continuo", ["149"]),
+        ("他所を指す --repo は止めない",
+         f"{_g} merge 5 {_r} octocat/hello-world --merge", []),
+    ]
+    for name, command, want in repo_cases:
+        got = mod.target_prs(command)
+        if got != want:
+            ng += 1
+            print("NG  %s: %s（想定は %s）" % (name, got, want))
+        else:
+            print("ok  %s" % name)
+    os.environ.pop("CONTINUO_HOOK_REPO", None)
+
+    total = len(judge_cases) + len(cases) + len(repo_cases)
     print("\n%d 件中 %d 件が想定どおり" % (total, total - ng))
     return 1 if ng else 0
 

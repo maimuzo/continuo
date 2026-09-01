@@ -42,6 +42,8 @@
 
 - **番号を書かない形**（`gh pr merge` だけ）。現在の branch から引く形は、番号を取れないので見送る
 - `gh pr merge --repo <他所>`。**このリポジトリの PR でなければ見ない**
+  （**このリポジトリを指す `--repo` は止める。**2026-09-01、`--repo <このリポジトリ>` を
+  付けたマージが9本とも素通しになっていた）
 - `gh` が使えない・応答しないとき。**検査そのものが落ちたら通す**（作業を止めない）
 
 ## 手で通したいとき
@@ -58,15 +60,49 @@ import sys
 
 # 実行の前に見る Bash のコマンド。番号を取り出す。
 # **`--undo` は止めない。**CLAUDE.md が「draft へ戻してからレビューする」と定めた手順そのものだからである。
-# **`--repo <他所>` も止めない。**このリポジトリの PR ではないので、番号を当てても意味が無い。
+# **`--repo <他所>` は止めない。**このリポジトリの PR ではないので、番号を当てても意味が無い。
+#
+# **ただし `--repo <このリポジトリ>` は止める。**
+# **2026-09-01、`--repo` が付いていれば無条件に素通ししていたため、
+# `gh pr merge <番号> --repo <このリポジトリ>` で9本が hook を通らずにマージされた。**
+# **`--repo` を付けるのは、むしろこのリポジトリを明示する普通の書き方である。**
+#
 # **番号の前に来てよいのはオプションだけにする。**`--repo other/repo 123` の 123 を拾わないため。
 MERGE_RE = re.compile(
     r"\bgh\s+pr\s+(?:merge|ready)\s+"
     r"(?!(?:[-\w=./:]+\s+)*?--undo\b)"
-    r"(?!(?:[-\w=./:]+\s+)*?--repo\b)"
-    r"(?:--?[-\w]+(?:=[-\w./:]+)?\s+)*?"
+    r"(?:--?[-\w]+(?:[= ][-\w./:]+)?\s+)*?"
     r"(\d+)\b"
 )
+
+# **`--repo` が指しているのが他所かどうかを見る。**
+# 他所なら止めない。このリポジトリなら止める。**指定が無ければこのリポジトリである。**
+REPO_RE = re.compile(r"--repo[= ]+([-\w.]+/[-\w.]+)")
+
+
+def targets_other_repo(cmd):
+    """そのコマンドが他所のリポジトリを指しているかを返す。"""
+    m = REPO_RE.search(cmd)
+    if not m:
+        return False
+    named = m.group(1)
+    here = os.environ.get("CONTINUO_HOOK_REPO") or _repo_of_cwd()
+    if not here:
+        # **確かめられないなら止める側へ倒す。**素通しは事故につながる。
+        return False
+    return named.lower() != here.lower()
+
+
+def _repo_of_cwd():
+    """いまのディレクトリの `<owner>/<repo>` を返す。引けなければ空文字。"""
+    try:
+        out = subprocess.run(
+            ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception:
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
 
 # この目印がコメントの先頭にあれば、レビュー結果とみなす。
 # **リリース前の検査（scripts/check-release-ready.sh）と CI（.github/workflows/review-gate.yml）が
@@ -143,8 +179,14 @@ def emit(decision, reason):
 
 
 def target_prs(command):
-    """コマンドから、マージ・ready の対象になる PR 番号を集める。"""
+    """コマンドから、マージ・ready の対象になる PR 番号を集める。
+
+    **`--repo` が他所を指しているときだけ空を返す。**
+    このリポジトリを指す `--repo` は、むしろ普通の書き方なので止める。
+    """
     if "gh" not in command:
+        return []
+    if targets_other_repo(command):
         return []
     return [m.group(1) for m in MERGE_RE.finditer(command)]
 
