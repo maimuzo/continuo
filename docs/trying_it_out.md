@@ -41,8 +41,8 @@ below says which steps were actually executed while writing this document and wh
 実際に人間が本物に対して叩くと、段8 から枠を消費する。
 
 > **出力例は実際に叩いた結果である**（例外は段8b の消す実行だけで、上の表にそう書いてある）。
-> ただし個人のパス・アカウント名・リポジトリ名・ボードの名前だけを
-> `~` と `<ACCOUNT>` / `<PROJECT>` / `<REPO-1>` / `<ボードの名前>` に置き換えてある。
+> ただし個人のパス・アカウント名・リポジトリ名・カンバンの名前だけを
+> `~` と `<ACCOUNT>` / `<PROJECT>` / `<REPO-1>` / `<カンバンの名前>` に置き換えてある。
 
 ---
 
@@ -201,7 +201,7 @@ gh project list --owner <ACCOUNT>
 実際に叩いた出力。左端の数字が `<PROJECT>` である。
 
 ```text
-3	<ボードの名前>	open	PVT_...
+3	<カンバンの名前>	open	PVT_...
 ```
 
 **実行する場所: どこでもよい**
@@ -564,9 +564,9 @@ grep -n -A 9 "^  repositories:" WORKFLOW.md    # いま並んでいるものを�
 
 ```yaml
 trust:
-  repositories:                             # continuo trust が信頼を登録してよいリポジトリ。ボードから拾って並べた。
+  repositories:                             # continuo trust が信頼を登録してよいリポジトリ。カンバンから拾って並べた。
                                             # **要らない行は消すこと。**ここに残ったものだけが登録の対象になる
-                                            # **これから issue を作るリポジトリは、まだボードに無いので入っていない。**手で足すこと
+                                            # **これから issue を作るリポジトリは、まだカンバンに無いので入っていない。**手で足すこと
     - "<REPO>"                                # ← 段7 で issue を置くリポジトリ。手で足す
 ```
 
