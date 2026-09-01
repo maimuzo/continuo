@@ -7,6 +7,11 @@
 対象は maimuzo/continuo の #142（worktree が別の branch を出していると永久に飛ばされる）と
 #144（worktree の branch は変えず push 先だけ分ける運用へ揃え、リンクされた branch を base に使う）である。
 
+**この文書が正なのは #142 の分（0-5、16、17）だけである。**
+**#144 の分（6-14）は [docs/plans/impl/issue144_branch_and_push.md](issue144_branch_and_push.md) に置き換わった。**
+あちらは4つのユースケースを通す形に書き直してあり、base の決め方も push 先の決め方も違う。
+**#144 を実装するときは、この文書の 6-14 ではなくあちらを見ること。**
+
 **前提。**remote の名前は `origin` 1つとする。continuo は remote 名を設定で受け取る仕組みを持っていない
 （`grep -rn 'remote' internal/config/types.go` が0件）。
 
@@ -167,7 +172,7 @@ detached HEAD のときは [docs/upgrading.md:77-108](../../upgrading.md#L77-L10
 
 ---
 
-## 6. #144: 雛形に足す3段落
+## 6. #144: 雛形に足す3段落（**ここから 14 までは置き換わった。**[docs/plans/impl/issue144_branch_and_push.md](issue144_branch_and_push.md) が正）
 
 **言いたいこと。****足すのは「切り替えるな」だけである。**push の話は1文字も足さない（7 を見よ）。
 **見出し（`##`）を新しく作らない。**貼り先は `## 終わったらやること`（
@@ -536,32 +541,6 @@ LinkedBranches []string
 
 ### 16-7. 段7（`/code-review` の結果と対応）
 
-**correctness の欠陥は0件。low が3件。**結果は PR #146 のコメントへ貼った
-（先頭に `<!-- code-review-result -->` を置いてある）。
-https://github.com/maimuzo/continuo/pull/146#issuecomment-5493748609
-
-| 指摘 | 対応 |
-| --- | --- |
-| **段0 側の番兵にテストが無い** | **直した。**`TestCheckWorktreeUsable_別のbranchを段0で断る` を1本足し、段2 側にも引数の取りこぼしの検査を足した |
-| **禁止の指示を置いた見出しが遅い**（`## 終わったらやること` の中） | **直さない。人間の判断へ回す** |
-| **`/tmp` の worktree の登録が残りうる** | **直さない。人間の判断へ回す** |
-
-**なぜ後ろ2件を直さないか。****どちらも設計の 6 が確定させた文面と位置である。**
-動かすなら [docs/plans/continuo_design.md](../continuo_design.md) の 5-3 と同時に変えることになり、
-`TestTemplate_雛形の本文が設計5_3の本文と一致する` が両方を縛る。
-**雛形の本文は1つのプロンプトとして丸ごと渡るので、位置の話は「先に読むか」ではなく
-「同じ入力の中のどこに置くか」である。**判断は人間に任せる。
-
-**足したテストに歯があることは確かめた。**`CheckWorktreeUsable` の引数を1つ落とすと、
-`期待の branch が消えているとき: git -C … switch -c %!s(MISSING)` を掴んで落ちる。
-
-### 16-8. 残っていること
-
-- **draft は外していない。**人間が確かめてから外す
-- **`git worktree` は片付けていない。**PR #146 がマージされるまで使う
-
-### 16-7. 段7（`/code-review` の結果と対応）
-
 **correctness の欠陥は0件、low が3件。**結果は PR #146 のコメントへ貼った
 （先頭に `<!-- code-review-result -->`）。https://github.com/maimuzo/continuo/pull/146#issuecomment-5493858175
 
@@ -586,7 +565,11 @@ https://github.com/maimuzo/continuo/pull/146#issuecomment-5493748609
 
 **どちらも `internal/scaffold/template.go` と 5-3 の本文を同時に直すことになる**
 （`TestTemplate_雛形の本文が設計5_3の本文と一致する` が一致を検査している）。
-**draft は外していない。**
+
+**残っていること。**
+
+- **draft は外していない。**人間が確かめてから外す
+- **`git worktree` は片付けていない。**PR #146（worktree が別の branch を出していると永久に飛ばされるのを断る）がマージされるまで使う
 
 ---
 

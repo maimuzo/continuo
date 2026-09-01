@@ -253,10 +253,15 @@ os.Rename(tmp.Name(), path)
 # 誤り。本文のどこかに含まれていれば1と数える
 gh pr view <番号> --json comments --jq '[.comments[] | select(.body | contains("code-review-result"))] | length'
 
-# 正しい。本文の先頭にあるかを見る
+# 正しい。本文の先頭にあるかを見る（先頭の空白は許す）
 gh api "repos/<owner>/<repo>/issues/<番号>/comments" \
-  --jq '[.[] | select(.body | startswith("<!-- code-review-result -->"))] | length'
+  --jq '[.[] | select(.body | test("^\\s*<!-- code-review-result -->"))] | length'
 ```
+
+**`--json comments` と `gh api …/comments` は返す形が違う。**前者は `{"comments": [...]}`、
+後者は `[...]` である。**述語だけを貼り替えると、数え間違えるのではなく jq が落ちる**
+（`Cannot index array with string "comments"`）。**コマンド全体で貼り替えること。**
+[.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) が使うのは後者である。
 
 **進捗のコメントの本文中に、手順の説明として同じ文字列が入っていた。**
 **それを1件と数えて通した。**

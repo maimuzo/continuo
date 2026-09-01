@@ -105,12 +105,26 @@
 **実例。**「レビュー結果が貼ってあるか」を確かめるコマンドに `contains` を使った。
 **本文の途中に同じ文字列があるコメントを、1件と数えた。**
 
-```
-# 誤り
---jq '[.comments[] | select(.body | contains("<目印>"))] | length'
+**コマンド全体で書く。**述語だけを貼り替えると壊れる。
 
-# 正しい
---jq '[.[] | select(.body | startswith("<目印>"))] | length'
+**下の2つは、jq に渡る JSON の形そのものが違う。**
+`gh pr view --json comments` は `{"comments": [...]}`（オブジェクト）を返し、
+`gh api "…/issues/<番号>/comments"` は `[...]`（配列）を返す。
+**取り違えると、数え間違えるのではなく jq が落ちる**（2026-09-01 に実測）。
+
+| 取り違え方 | jq が出すもの |
+| --- | --- |
+| `.comments[]` を `gh api` の出力に当てる | `jq: error (at <stdin>:3): Cannot index array with string "comments"` |
+| `.[]` を `--json comments` の出力に当てる | `jq: error (at <stdin>:1): Cannot index array with string "body"` |
+
+```bash
+# 誤り。本文のどこかに含まれていれば1と数える
+gh pr view <番号> --json comments \
+  --jq '[.comments[] | select(.body | contains("<目印>"))] | length'
+
+# 正しい。本文の先頭にあるかを見る（先頭の空白は許す）
+gh api "repos/<owner>/<repo>/issues/<番号>/comments" \
+  --jq '[.[] | select(.body | test("^\\s*<目印>"))] | length'
 ```
 
 **渡す前に、期待した答えが返るかを自分で1回叩く。**
@@ -128,3 +142,39 @@
 | release の作成 | メインエージェント |
 
 **worker には、調べること・書くこと・レビューすることを渡す。**
+
+---
+
+## 走っている worker に SendMessage を送ると、実行が二重になる
+
+**実例。**2026-09-01、2人の worker が「割り当てが逆では」と報告してきたので、
+**SendMessage で訂正を返した。**
+
+**その後、2人とも「自分は書いていないのに、ファイルが増え続けている」と報告してきた。**
+
+| 何 | 実測 |
+| --- | --- |
+| `issue144_branch_and_push.md` | 1004 → 1028 → 1085 → 1123 → 1190行 |
+| `issue134_136_140_blocked_notice.md` | 611 → 714行 |
+
+**書いていたのは、その worker 自身の別の実行である。**
+**`SendMessage` は「Resuming agent」と返すが、元の実行が止まっているとは限らない。**
+
+### 守ること
+
+| 何 | どうするか |
+| --- | --- |
+| **走っている worker への訂正** | **送らない。**完了を待ち、返ってきた結果を見て次を投げる |
+| **どうしても止めたいとき** | `TaskStop` で workflow ごと止める |
+| **worker が質問してきたとき** | **答えが要るなら送る。**ただし**送った時点で二重に動きうると織り込む** |
+
+**worker が質問してきたら、まず「答えなくても進めるか」を考える。**
+**進めるなら送らない。**
+
+### 二重に動いたときの見分け方
+
+**worker が「他人が書いている」と報告してくる。**
+**その「他人」は、その worker 自身の別の実行であることが多い。**
+
+**確かめ方。**`lsof <ファイル>` は空を返す（書き込みは一瞬なので掴めない）。
+**`git worktree list` と、走っている workflow の一覧を突き合わせる。**
