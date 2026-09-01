@@ -194,7 +194,7 @@ os.Rename(tmp.Name(), path)
 | どこ | いつ止まるか |
 | --- | --- |
 | [.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) | `gh pr merge <番号>` と `gh pr ready <番号>` を**実行する前** |
-| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・`gh pr ready` を打ったとき。**`review-result` の検査が赤になる |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`review-result` の検査が赤になる |
 | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
 
 **3つとも数える条件は同じである。**
@@ -205,7 +205,11 @@ os.Rename(tmp.Name(), path)
 **CI は hook より確かである。**hook はコマンドの文字列から PR 番号を当てているが、
 **CI は `github.event.pull_request.number` で受け取る。**書き方を変えても外れない。
 
-**結果を貼ったら `gh pr ready <番号>` を打つ。**それで CI の検査が回り直して緑になる。
+**結果を貼ったら `gh pr ready <番号>` を打つ。**`ready_for_review` が飛んで CI の検査が回り直し、緑になる。
+
+**既に draft を外してある PR では、これは効かない。**`ready_for_review` は
+**draft を ready にしたときにしか起きない**ので、`gh pr ready <番号>` を打っても何も回らない。
+**その場合は `gh run rerun` で回し直す**（手順は [.claude/skills/pr-review-and-merge/SKILL.md](.claude/skills/pr-review-and-merge/SKILL.md) の段5）。
 
 **規則に書くだけでは守られなかった**（2026-08-29。12本をレビューせずにマージし、あとから回し直すことになった）。
 **人間が明示的に許すときだけ、環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を置いて通す。**
