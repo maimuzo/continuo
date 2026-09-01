@@ -4153,20 +4153,20 @@ continuo doctor        # 前提が揃っているかを検査する。足りな�
                        #              socket もロックも workspace.root も、その名前の場所を見る
 continuo init          # WORKFLOW.md の雛形を置く。既にあれば止める（--force で上書き）
                        # owner と project_number は gh から引いて自動で埋める
-                       # trust.repositories はボードに載っているリポジトリを並べる（3-33）
+                       # trust.repositories はカンバンに載っているリポジトリを並べる（3-33）
                        # --owner=<名前>   gh を叩かずにこの値を使う
                        # --project=<番号> gh を叩かずにこの値を使う
-continuo setup         # 既にあるボードの Status の選択肢を、continuo の5つの役割へ割り当て、
+continuo setup         # 既にあるカンバンの Status の選択肢を、continuo の5つの役割へ割り当て、
                        # **既にある WORKFLOW.md の Status に関する7行だけを書き換える**
                        # 雛形は作らない。WORKFLOW.md が無ければ continuo init を案内して止まる
                        # **標準入力を握るのはこのサブコマンドだけである**
                        # 役割の説明を先に出し、選択肢を番号付きで並べて番号で選ばせる
                        # 番号 0 は「この役割に使える選択肢がカンバンに無い」の入力。入ったら打ち切る
                        # 選択肢が5個未満なら、尋ねる前に止める。Ctrl+C で中断できる
-                       # ボードは読むだけである（gh project field-list）。選択肢は足さない
+                       # カンバンは読むだけである（gh project field-list）。選択肢は足さない
                        # **--force は無い**（上書きしないので、守るものが無い）
-                       # --owner=<名前>   どのボードを読むか。gh を叩かずにこの値を使う
-                       # --project=<番号> どのボードを読むか。gh を叩かずにこの値を使う
+                       # --owner=<名前>   どのカンバンを読むか。gh を叩かずにこの値を使う
+                       # --project=<番号> どのカンバンを読むか。gh を叩かずにこの値を使う
                        # --status-field=<名前> Status の single-select フィールドの名前（既定 Status）
 continuo trust         # trust.repositories に列挙されたリポジトリの信頼を ~/.claude.json へ登録する（3-33）
                        # --dry-run  何が要求されているかを出すだけで、書き換えない
@@ -4717,9 +4717,9 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 > 3行目に次を残す（`internal/scaffold/fill.go` の `repositoriesFilledComment3`）。
 >
 > ```yaml
->   repositories:                             # continuo trust が信頼を登録してよいリポジトリ。ボードから拾って並べた。
+>   repositories:                             # continuo trust が信頼を登録してよいリポジトリ。カンバンから拾って並べた。
 >                                             # **要らない行は消すこと。**ここに残ったものだけが登録の対象になる
->                                             # **これから issue を作るリポジトリは、まだボードに無いので入っていない。**手で足すこと
+>                                             # **これから issue を作るリポジトリは、まだカンバンに無いので入っていない。**手で足すこと
 > ```
 >
 > **`continuo doctor` の直し方も `continuo trust` を案内する。**
@@ -5022,7 +5022,7 @@ Claude Code の会話の記録（transcript）・continuo が渡した設定フ�
 
 ```json
 {
-  "doctor.label.board": "ボード",
+  "doctor.label.board": "カンバン",
   "doctor.board.ok": "%s の project #%d を読めました（Status の選択肢は設定と一致。active_states の issue %d件／対象リポジトリ %d件）%s",
   "cli.init.created": "WORKFLOW.md を作成しました: %s"
 }
@@ -7838,7 +7838,7 @@ turn の途中でも即座に止まっていた。**エージェントが自分�
 `externalMoveKind`。値は `externalMoveUnknownState` / `externalMoveAutomatedHandoff`）。
 **同時には起きないが、順には起きる。**知らない Status で9分待った run が続けて自動化に
 `Done` へ動かされたとき、起点を繰り越すと残りの猶予が1分しかない。**別の理由で止まりかけた
-のだから、数え直す。**待つあいだは毎回ログに出す（`ボードの自動化が Status を動かしましたが turn の終わりを待っています`）。
+のだから、数え直す。**待つあいだは毎回ログに出す（`カンバンの自動化が Status を動かしましたが turn の終わりを待っています`）。
 
 **待っても run は宙に浮かない。**turn が終われば `decideAfterTurn`（3-5 の図）が同じ Status を
 読んで終端・引き渡しとして畳む。**猶予を過ぎれば巡回が畳む。**どちらの道でも run は必ず終わる。
