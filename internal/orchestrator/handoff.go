@@ -132,7 +132,12 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		// **上の早い戻りで既に処理している。**ここへは来ない。
 		return handoffDecision{}
 	case handoff.ActionSkipHumanAssigned:
-		o.logger.Info("この担当者の hold が1件も無いので触りません（人間が付けた担当です）",
+		// **WARN で出す**（issue #131）。**INFO だと、ログを見ていても異常だと気づけない。**
+		// この issue は Status も動かず、ダッシュボードにも出ず、issue にも何も書かれない。
+		// **人間が「なぜ着手されないのか」を知る手がかりが、この1行しか無い。**
+		// だから「なぜ触らないか」と「どうすれば動くか」の両方をここに書く。
+		o.logger.Warn("担当者が付いているので着手しません（continuo が付けたものではありません）。"+
+			"着手させるには、担当者を外すか、continuo が使うアカウントへ付け替えてください",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee)
 		return handoffDecision{}
 	case handoff.ActionSkipSelfUnknown:
