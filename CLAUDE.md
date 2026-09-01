@@ -137,6 +137,50 @@ os.Rename(tmp.Name(), path)
 
 ---
 
+## 作業の進め方
+
+**次の5本に従うこと。**`.claude/rules/` の下のファイルは自動では読まれない。**ここから辿る。**
+
+### 設計のレビュー
+
+[.claude/rules/design-review.md](.claude/rules/design-review.md) に従うこと。とくに次の3点。
+
+- **設計が固まったら、実装の前にレビューを通す。**段を飛ばさない
+- **レビューは最大3回。**3回で収まらなければ、捨てられる部分を検討して人間に報告する
+- **設計を書く前に、そもそも対応するかを疑う**
+
+### 並列で進める
+
+[.claude/rules/parallel-work.md](.claude/rules/parallel-work.md) に従うこと。とくに次の3点。
+
+- **指示が無いときも、既定で Workflow と git worktree の並列にする**
+- **直列にしてよいのは、依存があるときだけ**
+- **レビューを並列にして、修正を直列にしない**
+
+### worker への指示の書き方
+
+[.claude/rules/worker-instructions.md](.claude/rules/worker-instructions.md) に従うこと。とくに次の3点。
+
+- **worker にも、判断の土台になる文書を読ませる。**指示だけを渡さない
+- **検査するコマンドを渡すときは、自分で試してから渡す**
+- **不可逆な操作**（PR のマージ・削除・本番への書き込み）**は worker に渡さない**
+
+### worktree の片付け
+
+[.claude/rules/worktree.md](.claude/rules/worktree.md) に従うこと。とくに次の3点。
+
+- **使い終わった worktree は、その作業を終える前に消す**
+- **`git worktree prune` は片付けの手段ではない。**`git worktree remove` が要る
+- **消す前に、未コミットの変更・未マージの commit・開いている PR・走っている作業の4つを確かめる**
+
+### プラグイン
+
+[.claude/rules/plugins.md](.claude/rules/plugins.md) に従うこと。
+
+**これは開発者の環境向けである**（絶対に守る制約6）。**このリポジトリを clone した人には当てはまらない。**
+
+---
+
 ## プランファイルの書き方
 
 [.claude/rules/plan-file.md](.claude/rules/plan-file.md) に従うこと。とくに次の3点。

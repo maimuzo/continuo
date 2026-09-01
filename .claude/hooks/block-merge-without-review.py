@@ -115,7 +115,12 @@ def has_review(pr):
     try:
         out = subprocess.run(
             ["gh", "pr", "view", pr, "--json", "comments",
-             "--jq", '[.comments[] | select(.body | contains("%s"))] | length' % MARKER],
+             # **`contains` を使わない。**本文の途中に目印があるコメント
+             # （手順を説明した進捗の報告など）を1件と数えてしまう。
+             # **2026-09-01、それで2本がレビュー未実施のままマージされた。**
+             # `.github/workflows/review-gate.yml` と同じく、先頭にあることを見る。
+             "--jq",
+             '[.comments[] | select(.body | test("^\\s*%s"))] | length' % MARKER],
             capture_output=True, text=True, timeout=GH_TIMEOUT_SEC,
         )
     except Exception:
