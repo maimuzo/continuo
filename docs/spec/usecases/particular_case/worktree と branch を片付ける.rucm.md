@@ -156,8 +156,12 @@ POSTCONDITION: worktree は残っている。branch は残っている。issue �
 | 検査 | 何を見るか | 消してよい条件 |
 | --- | --- | --- |
 | コミットされていない変更 | `git status --porcelain` の出力 | 出力が空である。未追跡のファイルも数に入れる |
-| push されていない成果（upstream がある） | `git rev-list --count @{u}..HEAD` | 出力が 0 である |
-| push されていない成果（upstream が無い） | base からの差分 | 差分が無い |
+| push されていない成果（段1） | `git for-each-ref --count=1 --contains HEAD refs/remotes/` | 1行でも返る。HEAD は remote に載っている |
+| push されていない成果（段3。段1 が偽で upstream が無い） | base からの差分 | 差分が無い |
+
+**段1 が判定の中心である。**`git push origin HEAD:<別名>` は `-u` を付けない限り
+upstream を張り替えないので、upstream だけを見ると push 先を分けた worktree が片付かない。
+**upstream との差の件数（`git rev-list --count @{u}..HEAD`）は、見送る理由の文面を作るためだけに見る。**
 
 **git が答えられないときは「消してよい」に丸めない。**worktree の `.git` が壊れていると
 `git -C <worktree> …` は1つも通らない（issue #23）。**そのときは判定できなかったことを

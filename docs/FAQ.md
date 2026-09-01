@@ -1298,7 +1298,7 @@ git push -u origin HEAD
 差し替える文面は [upgrading.md](upgrading.md) の「v0.1.9 から v0.1.10 へ」にあります。
 **当てたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
 
-### push したのに「push されていない commit が N 件残っている」と言われ、worktree が片付かない
+### push したのに「push されていない commit が N 件残っている」「base との差分が残っている」と言われ、worktree が片付かない
 
 **原因。****`-u` を付けずに、別の名前へ push しました。**
 
@@ -1307,8 +1307,15 @@ git push origin HEAD:pr-2nd      # これだと upstream が張り替わらな�
 ```
 
 **`git push origin HEAD:<別の名前>` は upstream を張り替えません。**
-upstream は worktree を作ったときのまま（あるいは無いまま）なので、
-`git rev-list --count @{u}..HEAD` が実態より多い数を返します。
+upstream は worktree を作ったときのままです。**出るメッセージは、その upstream があるかどうかで違います。**
+
+| その worktree の upstream | 出るメッセージ |
+| --- | --- |
+| **1本目の push で張られている** | `push されていない commit が N 件残っている` |
+| **一度も張られていない** | `upstream が無いまま base <base> との差分が残っている（push されていない成果がある）` |
+
+**どちらも同じ原因です。**片付けが upstream しか見ていなかったので、
+別の名前へ出した成果を見つけられませんでした。
 
 **v0.1.12 から、この形でも片付きます。**判定の最初の段が
 「HEAD が `refs/remotes/` のどれかに載っているか」を見るようになったためです。

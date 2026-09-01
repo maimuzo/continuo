@@ -140,8 +140,10 @@ func (m *Manager) ShouldCleanup(state string) bool {
 // 手順は次のとおりで、**2 と 2b は両方通す**（片方だけでは失うものを見落とす）。
 //
 //	2  git status --porcelain が空でなければ消さない（未追跡も数える）
-//	2b upstream があれば git rev-list --count @{u}..HEAD が 0 なら消してよい。
-//	   upstream が無ければ git diff --quiet <base>...HEAD が真なら消してよい
+//	2b 段1 git for-each-ref --count=1 --contains HEAD refs/remotes/ が1行でも返れば消してよい
+//	   段2 upstream があれば git rev-list --count @{u}..HEAD の件数を、見送る理由の文面に使う
+//	   段3 upstream が無く base があれば git diff --quiet <base>...HEAD が真なら消してよい
+//	   段4 段1 が偽で upstream も base も無ければ、判定できないので消さない
 //	2d workspace_hooks.before_remove を、消す前の worktree を cwd にして実行する
 //	   （失敗しても記録して続ける）
 //	3  herdr の worktree.remove を workspace の ID で呼ぶ（path でも branch でもない）
