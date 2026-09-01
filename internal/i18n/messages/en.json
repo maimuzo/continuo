@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "7bc79140c9174bf60307601d8bacb82c652835661c5937af8121c950215f3254",
+  "_source_sha256": "c8c99770ebb280f66b521e11fb9bc7c78ea8cf7c4e70b9ba9360bfd4c88e5253",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -256,6 +256,7 @@
   "dashboard.ago_seconds": "%ds ago",
   "dashboard.badge_not_noticed": "not written to the issue",
   "dashboard.badge_notice_capped": "too many comments to check",
+  "dashboard.badge_notice_failed": "could not be written to the issue",
   "dashboard.badge_notice_no_body": "no notice text is defined for this reason",
   "dashboard.badge_notice_off": "writing to the issue is turned off",
   "dashboard.badge_notice_unclear_owner": "cannot tell whether another machine owns it",

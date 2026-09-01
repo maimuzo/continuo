@@ -151,6 +151,12 @@ type gateNotice struct {
 	NoticedAt time.Time
 	// Skip は、案内を書かないと決めた理由である。空なら「まだ書いていない」。
 	Skip GateNoticeSkip
+	// Failed は、案内を投稿しようとして失敗したことを表す。
+	//
+	// **NoticedAt は立てたままにする**（8-2）。**そのうえで、画面には別の印を出す。**
+	// 「書いた」と「書こうとして失敗した」が見分けられないと、
+	// **issue に1件も無いのに「案内済み」と読める行がダッシュボードに残る。**
+	Failed bool
 }
 
 // GateNoticeSkip は、案内を書かないと決めた理由である（issue #134 / #140）。
@@ -265,7 +271,7 @@ const noticeMinAge = 60 * time.Second
 
 | いつ消すか | どこで | なぜ |
 | --- | --- | --- |
-| **関門より前で飛ばしたとき** | `dispatchCandidates` の5つの `continue`（下の表） | 止めているのは関門ではない。**古い理由と誤った直し方を出し続けない** |
+| **関門より前で飛ばしたとき** | `dispatchCandidates` の6つの `continue`（下の表） | 止めているのは関門ではない。**古い理由と誤った直し方を出し続けない** |
 | **関門が2つの理由以外で戻ったとき** | `handoffGate`（通した・譲った・入札の待ちと敗北） | 直ったのに残ると、直しても消えない行がダッシュボードに残る |
 | **ボードの候補から消えたとき** | `Tick`（候補の取得が成功したときだけ） | issue を閉じた・Status を動かした・ボードから外した |
 
@@ -277,17 +283,20 @@ const noticeMinAge = 60 * time.Second
 | **枠で止まって `dispatchCandidates` を呼ばなかった** | 同上 |
 | **読み取りの枠を使い切った**（`takeHandoffFetch` が偽） | 関門の判定まで届いていない |
 | **コメントを読めない・gh の持ち主を取れない** | 材料が無い。**判定していない** |
-| **頼んだ Status に無い候補が返った**（[internal/orchestrator/dispatch.go:198](../../../internal/orchestrator/dispatch.go#L198)） | ボードの索引の反映待ちである（設計 3-34）。消すと数え直しになる |
 
-### 6-1. `dispatchCandidates` で消す5箇所
+### 6-1. `dispatchCandidates` で消す6箇所
 
 **言いたいこと。**どれも `handoffGate`（[internal/orchestrator/dispatch.go:273](../../../internal/orchestrator/dispatch.go#L273)）より前にある `continue` である。
 **ここを塞がないと、ボードに残ったまま関門へ到達しなくなった issue の行が、
 古い理由と誤った直し方を付けて永久に残る。**
 
+**`clearGate` は案内を書いた事実を残す**（6-5）ので、**「消すと数え直しになる」は案内には効かない。**
+数え直すのは `Count` と `FirstSeenAt` だけであり、**同じ理由の案内が2件目として書かれることはない。**
+
 | どこ | 何が起きたか |
 | --- | --- |
 | [internal/orchestrator/dispatch.go:191](../../../internal/orchestrator/dispatch.go#L191) の `lookupRunByID` | 既に着手している |
+| [internal/orchestrator/dispatch.go:198](../../../internal/orchestrator/dispatch.go#L198) の `!containsFold(active_states, State)` | 人間が Status を動かした。**索引の反映が追いつくまでここへ落ち続ける** |
 | [internal/orchestrator/dispatch.go:205](../../../internal/orchestrator/dispatch.go#L205) の `skipByFailure` | 同じ理由で失敗し続けている |
 | [internal/orchestrator/dispatch.go:208](../../../internal/orchestrator/dispatch.go#L208) の `!issue.Dispatchable` | 未信頼のリポジトリである |
 | [internal/orchestrator/dispatch.go:219](../../../internal/orchestrator/dispatch.go#L219) の `missingRequiredLabels` | 必須のラベルが足りない |
@@ -410,14 +419,20 @@ func (o *Orchestrator) forgetGatedNotOnBoard(candidates []tracker.Issue)
 
 **採る形。**
 
-| フィールド | 理由が変わったとき | 記録ごと落ちるとき（`clearGate` / `forgetGatedNotOnBoard`） |
-| --- | --- | --- |
-| `Reason` | **新しい理由で置き換える** | 消える |
-| `Count` | **1へ戻す** | 消える |
-| `FirstSeenAt` | **その巡回の時刻で置き換える** | 消える |
-| `LastSeenAt` | その巡回の時刻 | 消える |
-| `Identifier` / `Title` / `URL` / `Assignees` | 上書きする | 消える |
-| **`notices`（理由ごと）** | **持ち越す** | 消える |
+| フィールド | 理由が変わったとき | `clearGate`（関門で止めていない） | `forgetGatedNotOnBoard`（ボードから消えた） |
+| --- | --- | --- | --- |
+| `Reason` | **新しい理由で置き換える** | **空にする**（画面から消える印） | 消える |
+| `Count` | **1へ戻す** | 0 へ戻す | 消える |
+| `FirstSeenAt` | **その巡回の時刻で置き換える** | ゼロ値へ戻す | 消える |
+| `Identifier` / `Title` / `URL` / `Assignees` | 上書きする | `Assignees` だけ落とす | 消える |
+| **`notices`（理由ごと）** | **持ち越す** | **持ち越す** | **消える** |
+
+**`clearGate` が `notices` を残す理由。**issue に書いたコメントは、この機械が
+関門より前で1巡回飛ばしたくらいでは消えない。**消すと、`preflight` が1巡回落ちただけで
+記録が作り直され、同じ本文の案内の2件目が書かれる。**書いたコメントを消す手段は無い（8-1）。
+
+**`Reason` が空の記録は `GateViews` が1件も返さない。**「いまは関門で止めていない」ためである。
+**案内を1件も書いていない記録は、`clearGate` がそのまま落とす**（残すものが無い）。
 
 **`Count` と `FirstSeenAt` を数え直す理由。**新しい理由も、それ自体で3巡回と60秒
 （`noticeMinCount` / `noticeMinAge`。5 節）持ちこたえてから案内する。
@@ -894,12 +909,14 @@ type Gated struct {
 
 | いまの状態 | 引くキー | 出る文言 |
 | --- | --- | --- |
+| **投稿に失敗した**（`Noticed` も真） | `dashboard.badge_notice_failed` | issue へ書けませんでした |
 | **書き終えている**（`Noticed`） | 引かない | 空（印を出さない） |
 | **まだ書いていない** | `dashboard.badge_not_noticed` | issue へは未通知 |
 | **`warn_only` で切ってある** | `dashboard.badge_notice_off` | issue へは書かない設定です |
 | **コメントが上限で切れていた** | `dashboard.badge_notice_capped` | コメントが多すぎて確かめられません |
 | **gh の持ち主が担当者に混じっていた**（8-3） | `dashboard.badge_notice_unclear_owner` | 別の機械の担当かどうかを切り分けられません |
 | **その理由の本文が無い** | `dashboard.badge_notice_no_body` | この理由に書く本文が用意されていません |
+| **投稿に失敗した**（`Noticed` も真） | `dashboard.badge_notice_failed` | issue へ書けませんでした |
 
 **表。**列は4つ。`{{ t "dashboard.caption_gated" }}` を見出しにして、実行中の run の表の**上**に置く。
 **上に置く理由。**「実行中の run はありません」しか出ない画面を見に来た人が探しているのは、こちらである。
@@ -919,11 +936,11 @@ type Gated struct {
 
 ---
 
-## 12. 足す文言（18件）
+## 12. 足す文言（19件）
 
 **言いたいこと。**`internal/server` は文言を全部資源から引く（設計 3-35）。
 **理由と直し方も資源に置く。**`internal/orchestrator` 側の WARN と issue のコメントは、いまどおり日本語を直に書く。
-**18件のうち17件はダッシュボード、1件は設定の検査である**（`on_assignee_gate`。14 節）。
+**19件のうち18件はダッシュボード、1件は設定の検査である**（`on_assignee_gate`。14 節）。
 
 | キー | 何に出るか |
 | --- | --- |
@@ -938,6 +955,7 @@ type Gated struct {
 | `dashboard.badge_notice_capped` | コメントが上限で切れていて確かめられなかった行に添える印 |
 | `dashboard.badge_notice_unclear_owner` | gh の持ち主が担当者に混じっていて切り分けられなかった行に添える印（8-3） |
 | `dashboard.badge_notice_no_body` | その理由に issue へ書く本文が用意されていない行に添える印 |
+| `dashboard.badge_notice_failed` | 案内の投稿に失敗した行に添える印 |
 | `config.validate.handoff_on_assignee_gate` | `on_assignee_gate` に知らない値が入っていたときのエラー |
 
 **`ja.json` の中身。**
@@ -959,7 +977,8 @@ type Gated struct {
   "dashboard.badge_notice_off": "issue へは書かない設定です",
   "dashboard.badge_notice_capped": "コメントが多すぎて確かめられません",
   "dashboard.badge_notice_unclear_owner": "別の機械の担当かどうかを切り分けられません",
-  "dashboard.badge_notice_no_body": "この理由に書く本文が用意されていません"
+  "dashboard.badge_notice_no_body": "この理由に書く本文が用意されていません",
+  "dashboard.badge_notice_failed": "issue へ書けませんでした"
 ```
 
 **`en.json` の中身。**[docs/spec/translation-glossary.md](../../spec/translation-glossary.md) に従う
@@ -983,12 +1002,13 @@ type Gated struct {
   "dashboard.badge_notice_off": "writing to the issue is turned off",
   "dashboard.badge_notice_capped": "too many comments to check",
   "dashboard.badge_notice_unclear_owner": "cannot tell whether another machine owns it",
-  "dashboard.badge_notice_no_body": "no notice text is defined for this reason"
+  "dashboard.badge_notice_no_body": "no notice text is defined for this reason",
+  "dashboard.badge_notice_failed": "could not be written to the issue"
 ```
 
 **この訳が従った決めごと。**
 
-| 決めごと | どこ | ダッシュボードの17件でどう効いたか |
+| 決めごと | どこ | ダッシュボードの18件でどう効いたか |
 | --- | --- | --- |
 | **画面に出る散文は大文字で始め、日本語に `。` があれば `.` を付ける** | 訳語集の「大文字・小文字と句点」 | `caption_gated` と `no_gated` と `note_gated` |
 | **対処の1行は `.` を付ける**（日本語に `。` が無くても） | 同上 | `gate_remedy_*` の3件 |
@@ -1000,7 +1020,7 @@ type Gated struct {
 `what cannot be started`、「案内」＝ `notice`、「印（ダッシュボードの badge）」＝ `badge` の3語である
 （[CONTRIBUTING.md:99](../../../CONTRIBUTING.md#L99) が「そこに無い語を使ったときは、その語を訳語集へ足してください」と決めている）。
 
-**設定の検査の1件は、ダッシュボードの17件とは別の場所へ足す。**
+**設定の検査の1件は、ダッシュボードの18件とは別の場所へ足す。**
 既存の `config.validate.handoff_*` の隣である
 （[internal/i18n/messages/ja.json:223-226](../../../internal/i18n/messages/ja.json#L223-L226)、
 [internal/i18n/keys.go:1185-1199](../../../internal/i18n/keys.go#L1185-L1199) の `KeyConfigValidateHandoff*`）。
@@ -1041,8 +1061,8 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 | 段 | 何を作るか | どの issue が閉じるか |
 | --- | --- | --- |
 | **1** | [internal/orchestrator/gate.go](../../../internal/orchestrator/gate.go)（型・`noteGate` / `clearGate` / `markGateNoticed` / `markGateNoticeSkipped` / `forgetGatedNotOnBoard` / `GateViews`）と `Orchestrator` の1行 | まだ閉じない |
-| **2** | `handoffGate` の `judged` / `noted` と `defer`、2箇所の `noteGate`、`dispatchCandidates` の5箇所の `clearGate`（6-1）、`Tick` の `forgetGatedNotOnBoard` | まだ閉じない |
-| **3** | ダッシュボード（`RunSource` / `NewSnapshot` の引数 / 表 / 並べ替え / 文言17件） | **#134（ダッシュボードに「着手できずに止まっているもの」を出す）** |
+| **2** | `handoffGate` の `judged` / `noted` と `defer`、2箇所の `noteGate`、`dispatchCandidates` の6箇所の `clearGate`（6-1）、`Tick` の `forgetGatedNotOnBoard` | まだ閉じない |
+| **3** | ダッシュボード（`RunSource` / `NewSnapshot` の引数 / 表 / 並べ替え / 文言18件） | **#134（ダッシュボードに「着手できずに止まっているもの」を出す）** |
 | **4** | `gate.go` の `postGateNotice`、`gateNoticedIn`、[internal/orchestrator/prompt.go](../../../internal/orchestrator/prompt.go) の `buildGatedComment`、`FetchAllComments` の `truncated`（7-1）、設定 `on_assignee_gate`（文言1件） | **#140（人間が担当者で着手できないことを、issue のコメントとして1回だけ書く）** |
 | **5** | 担当者が2人以上の経路の `viewerIdentity` の切り分け（8-3）と案内、[docs/FAQ.md](../../FAQ.md) / [docs/upgrading.md](../../upgrading.md) | **#136（担当者が2人以上いる issue も、着手できないことを知らせる）** |
 
@@ -1091,7 +1111,7 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 | [internal/orchestrator/gate.go](../../../internal/orchestrator/gate.go) | **新規。**`GateReason` / `GateNoticeSkip` / `gateNote` / `noteGate` / `clearGate` / `markGateNoticed` / `markGateNoticeSkipped` / `postGateNotice` / `forgetGatedNotOnBoard` / `gateNoticedIn` / `GateView` / `GateViews` |
 | [internal/orchestrator/orchestrator.go](../../../internal/orchestrator/orchestrator.go) | 構造体に `gated` を1行、`New` の初期化に1行、`Tick` に `forgetGatedNotOnBoard`、`Tracker` interface の `FetchAllComments` の署名 |
 | [internal/orchestrator/handoff.go](../../../internal/orchestrator/handoff.go) | `judged` / `noted` と `defer` での後始末（6-2）、2箇所で `noteGate`、`postGateNotice` の**呼び出し**、`viewerIdentity` の切り分け（8-3）、`FetchAllComments` の戻り値を2箇所で受ける |
-| [internal/orchestrator/dispatch.go](../../../internal/orchestrator/dispatch.go) | `handoffGate` より前の5つの `continue` で `clearGate`（6-1） |
+| [internal/orchestrator/dispatch.go](../../../internal/orchestrator/dispatch.go) | `handoffGate` より前の6つの `continue` で `clearGate`（6-1） |
 | [internal/orchestrator/prompt.go](../../../internal/orchestrator/prompt.go) | `buildGatedComment` |
 | [internal/config/types.go](../../../internal/config/types.go) | `OnAssigneeGate` を1行 |
 | [internal/config/default.go](../../../internal/config/default.go) | 既定値 `"warn_and_comment"` を1行 |
@@ -1100,8 +1120,8 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 | [internal/server/server.go](../../../internal/server/server.go) | `RunSource` に `GateViews()`。**`snapshot()`（[internal/server/server.go:374](../../../internal/server/server.go#L374)）が `NewSnapshot` へ第2引数を渡す** |
 | [internal/server/view.go](../../../internal/server/view.go) | `Snapshot.Gated` と `Gated` 型、理由→文言の表、`NewSnapshot` の引数と詰め替え、**並べ替え（`Since` の古い順、同じなら `Identifier` の昇順。10 節）** |
 | [internal/server/template.go](../../../internal/server/template.go) | 表を1つ増やす |
-| [internal/i18n/keys.go](../../../internal/i18n/keys.go) | キー18件（ダッシュボード17件と `KeyConfigValidateHandoffOnAssigneeGate`）と `allKeys` |
-| [internal/i18n/messages/ja.json](../../../internal/i18n/messages/ja.json) / [en.json](../../../internal/i18n/messages/en.json) | 文言18件。**`_source_sha256` を入れ直す** |
+| [internal/i18n/keys.go](../../../internal/i18n/keys.go) | キー19件（ダッシュボード18件と `KeyConfigValidateHandoffOnAssigneeGate`）と `allKeys` |
+| [internal/i18n/messages/ja.json](../../../internal/i18n/messages/ja.json) / [en.json](../../../internal/i18n/messages/en.json) | 文言19件。**`_source_sha256` を入れ直す** |
 | [docs/spec/translation-glossary.md](../../spec/translation-glossary.md) | 新しく使った3語を足す（12 節） |
 | [docs/FAQ.md](../../FAQ.md) / [docs/upgrading.md](../../upgrading.md) | 「担当者が付いた issue が着手されない」に、ダッシュボードと案内のことを足す |
 | [docs/plans/continuo_design.md](../continuo_design.md) | 3-68 に「担当者の経路はこの文書が正」を1行足し、「3回続けて」を「3回以上」に直す（置き換えない）。**5-2 の yaml ブロック（設定の見本）の `handoff:` の下に `on_assignee_gate` を1行** |
@@ -1142,7 +1162,7 @@ func NewSnapshot(views []orchestrator.RunView, gates []orchestrator.GateView, no
 | [test/internal/orchestrator/](../../../test/internal/orchestrator) | 空きスロットが尽きた巡回で記録が減らない／枠で止まった巡回で減らない／候補から消えたら消える／**ラベル不足で飛ばした巡回で消える**（6-1）／**入札に負けた巡回で消える**（6-2）／案内は3回目かつ60秒後に1回だけ／**3回目で60秒に届かなければ4回目に書く**／`warn_only` では書かず `NoticedAt` も立たない／**担当者に gh の持ち主が混じっていたら記録は作るが案内は作らない**（8-3）／**理由が変わったら Count と FirstSeenAt は数え直し、理由ごとの案内の状態は残る**（6-5）／**理由が往復しても、同じ理由の案内は1回しか書かれない**（6-5）／**`truncated` が真なら書かず `too_many_comments` が立つ**／`GateViews` が返したスライスへ書いても `o.gated` が変わらない。**`fakeTracker.FetchAllComments` の戻り値を3つにする** |
 | [test/internal/tracker/](../../../test/internal/tracker) | `FetchAllComments` が `truncated` を返す（20ページを使い切って続きがあるとき真、`hasNextPage` が偽なら偽）。**既存の2件の呼び出しに戻り値を足す** |
 | [test/internal/server/](../../../test/internal/server) | `fakeSource` に `GateViews` を足す。**`view_test.go` の `NewSnapshot` の呼び出し3箇所に引数を足す。**表の行と、1件も無いときの1行、**`Since` が同じ2件が `Identifier` の昇順に並ぶ** |
-| [test/internal/i18n/](../../../test/internal/i18n) | 既存の突き合わせが18件を拾う（新しいテストは要らない） |
+| [test/internal/i18n/](../../../test/internal/i18n) | 既存の突き合わせが19件を拾う（新しいテストは要らない） |
 | [test/internal/scaffold/](../../../test/internal/scaffold) | 既存の `TestTemplate_雛形のキー構成が設計5_2の設定例と一致する` が通る（新しいテストは要らない） |
 
 **[test/internal/orchestrator/expected_warnings_test.go](../../../test/internal/orchestrator/expected_warnings_test.go) に足す。**

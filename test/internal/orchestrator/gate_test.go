@@ -555,3 +555,107 @@ func TestGate_関門より前で飛ばしたら記録が消える(t *testing.T) 
 		t.Errorf("関門より前で飛ばしたのに、担当者の理由が残っている: %+v", v)
 	}
 }
+
+// 目的: 関門より前で1巡回だけ飛ばしても、案内の2件目が書かれないことを確かめる
+// （レビューの指摘1。設計 6-5）。
+//
+// **`clearGate` は「いま止めている」ことだけを取り消し、案内を書いた事実は残す。**
+// `preflight` が1巡回落ちただけで記録が作り直されると、
+// **同じ本文の案内の2件目が issue へ書かれる。書いたコメントを消す手段は無い。**
+//
+// 与える情報: 案内まで進めたあと、`Dispatchable` を1巡回だけ偽にして戻す。
+// 成功条件: 案内が1件のままであること。
+func TestGate_関門より前で1巡回飛ばしても案内は2件目を書かない(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now})
+	holdPrompt(fx)
+	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", humanLogin, anotherHumanLogin))
+	fx.AllowLog("担当者が2人以上いるので触りません")
+	node := issueNode(188)
+
+	tickN(fx, clock, 3, 30*time.Second)
+	if got := len(gatedComments(fx, node)); got != 1 {
+		t.Fatalf("案内が書かれていない: %d 件", got)
+	}
+
+	// **関門へ届かない巡回を1回はさむ。**ダッシュボードからは消える。
+	fx.Tracker.SetDispatchable("PVTI_item188", false)
+	tickN(fx, clock, 1, 30*time.Second)
+	if v, ok := gateViewOf(fx, "octocat/hello-world#188"); ok {
+		t.Errorf("関門より前で飛ばしたのにダッシュボードに残っている: %+v", v)
+	}
+
+	// **戻したら、また止まる。**案内は書き直さない。
+	fx.Tracker.SetDispatchable("PVTI_item188", true)
+	tickN(fx, clock, 5, 30*time.Second)
+
+	if got := len(gatedComments(fx, node)); got != 1 {
+		t.Errorf("関門より前で1巡回飛ばしただけで案内が積まれた: %d 件（1件であるべき）", got)
+	}
+}
+
+// 目的: 頼んだ Status に無い候補が返ったら、ダッシュボードから消えることを確かめる
+// （レビューの指摘2。設計 6-1）。
+//
+// **人間が Status を動かした直後は、索引の反映が追いつくまでこの分岐へ落ち続ける。**
+// 消さないと「担当者を全部外してください」という**いまは効かない直し方**を出し続ける。
+//
+// 与える情報: 人間が担当者の issue 1件と、そのあと `active_states` の外へ動かした状態。
+// 成功条件: その巡回でダッシュボードから消えること。
+func TestGate_頼んだStatusに無い候補が返ったら画面から消える(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now})
+	holdPrompt(fx)
+	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", humanLogin))
+	fx.AllowLog("担当者が付いているので着手しません")
+	fx.AllowLog("頼んだ Status に無い候補が返ったので飛ばします")
+
+	tickN(fx, clock, 1, 30*time.Second)
+	if _, ok := gateViewOf(fx, "octocat/hello-world#188"); !ok {
+		t.Fatal("止めたのに記録が無い")
+	}
+
+	// **候補一覧には載ったまま、Status だけが着手待ちの外になる**（索引の反映待ち）。
+	fx.Tracker.SetExtraCandidates(assignedIssue(188, "Blocked", humanLogin))
+	fx.Tracker.RemoveIssue("PVTI_item188")
+	tickN(fx, clock, 1, 30*time.Second)
+
+	if v, ok := gateViewOf(fx, "octocat/hello-world#188"); ok {
+		t.Errorf("いまは効かない直し方を出し続けている: %+v", v)
+	}
+}
+
+// 目的: 案内の投稿に失敗したことが、ダッシュボードから読めることを確かめる
+// （レビューの指摘3。設計 8-2）。
+//
+// **印は残す**（投稿の成否で分けると、失敗し続ける issue へ巡回のたびに積む）。
+// **そのうえで別の印を出す。**「書いた」と「書こうとして失敗した」が見分けられないと、
+// **issue に1件も無いのに「案内済み」と読める行が残る。**
+//
+// 与える情報: コメントの投稿が必ず失敗するトラッカーと、人間が担当者の issue 1件。
+// 成功条件: 写しが `NoticeFailed` を名乗り、issue には1件も書かれていないこと。
+func TestGate_案内の投稿に失敗したことが画面から読める(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now})
+	holdPrompt(fx)
+	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", humanLogin))
+	fx.Tracker.SetPostError(errors.New("GitHub へ書けません"))
+	fx.AllowLog("担当者が付いているので着手しません")
+	fx.AllowLog("着手できずに止まっていることを issue へ書けませんでした")
+
+	tickN(fx, clock, 5, 30*time.Second)
+
+	if got := len(gatedComments(fx, issueNode(188))); got != 0 {
+		t.Fatalf("投稿は失敗したはずなのにコメントがある: %d 件", got)
+	}
+	v, ok := gateViewOf(fx, "octocat/hello-world#188")
+	if !ok {
+		t.Fatal("記録が消えている")
+	}
+	if !v.NoticeFailed {
+		t.Error("投稿に失敗したことを名乗っていない（画面では「案内済み」に見える）")
+	}
+	if !v.Noticed {
+		t.Error("印を落としている（巡回のたびに投稿を試して積むことになる）")
+	}
+}

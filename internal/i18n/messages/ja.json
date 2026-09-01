@@ -255,6 +255,7 @@
   "dashboard.ago_seconds": "%d秒前",
   "dashboard.badge_not_noticed": "issue へは未通知",
   "dashboard.badge_notice_capped": "コメントが多すぎて確かめられません",
+  "dashboard.badge_notice_failed": "issue へ書けませんでした",
   "dashboard.badge_notice_no_body": "この理由に書く本文が用意されていません",
   "dashboard.badge_notice_off": "issue へは書かない設定です",
   "dashboard.badge_notice_unclear_owner": "別の機械の担当かどうかを切り分けられません",

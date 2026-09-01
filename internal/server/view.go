@@ -60,6 +60,8 @@ type Gated struct {
 	Noticed bool `json:"noticed"`
 	// NoticeSkip は案内を書かないと決めた理由である（機械が読むための値。`"off_by_config"` など）。
 	NoticeSkip string `json:"notice_skip"`
+	// NoticeFailed は案内の投稿に失敗したことを表す。**Noticed も同時に真になる。**
+	NoticeFailed bool `json:"notice_failed"`
 	// NoticeBadge は行に添える印の文言である（資源から引いた文言）。**空なら印を出さない。**
 	// **テンプレートで分岐させない。**どの印を出すかはこのファイルが1箇所で決める。
 	NoticeBadge string `json:"notice_badge"`
@@ -229,18 +231,19 @@ func newGated(v orchestrator.GateView, now time.Time) Gated {
 		remedy = i18n.T(keys.Remedy)
 	}
 	return Gated{
-		Identifier:  v.Identifier,
-		Title:       v.Title,
-		URL:         v.URL,
-		Reason:      string(v.Reason),
-		ReasonText:  reasonText,
-		Remedy:      remedy,
-		Assignees:   assignees,
-		Since:       v.Since,
-		SinceAgo:    humanizeSince(v.Since, now),
-		Noticed:     v.Noticed,
-		NoticeSkip:  string(v.NoticeSkip),
-		NoticeBadge: gateNoticeBadge(v),
+		Identifier:   v.Identifier,
+		Title:        v.Title,
+		URL:          v.URL,
+		Reason:       string(v.Reason),
+		ReasonText:   reasonText,
+		Remedy:       remedy,
+		Assignees:    assignees,
+		Since:        v.Since,
+		SinceAgo:     humanizeSince(v.Since, now),
+		Noticed:      v.Noticed,
+		NoticeSkip:   string(v.NoticeSkip),
+		NoticeFailed: v.NoticeFailed,
+		NoticeBadge:  gateNoticeBadge(v),
 	}
 }
 
@@ -251,6 +254,11 @@ func newGated(v orchestrator.GateView, now time.Time) Gated {
 // v: `orchestrator.GateViews` が返した写しの1件。
 // 戻り値: 印の文言。空なら印を出さない。
 func gateNoticeBadge(v orchestrator.GateView) string {
+	if v.NoticeFailed {
+		// **`Noticed` より先に見る。**印は残したままなので（設計 8-2）、
+		// 後に置くと「書き終えた」の側へ落ちて、issue に1件も無いことが画面から読めなくなる。
+		return i18n.T(i18n.KeyDashboardBadgeNoticeFailed)
+	}
 	if v.Noticed {
 		return ""
 	}

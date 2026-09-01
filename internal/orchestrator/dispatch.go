@@ -202,6 +202,11 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			o.logger.Warn("頼んだ Status に無い候補が返ったので飛ばします（絞り込みの反映待ちの可能性があります）",
 				"identifier", issue.Identifier, "返ってきた Status", issue.State,
 				"頼んだ Status", strings.Join(o.cfg.Tracker.ActiveStates, ", "))
+			// **ここも関門より前である**（設計 6-1）。人間が Status を動かした直後は
+			// この分岐へ落ち続けるので、消さないと「担当者を全部外してください」という
+			// **いまは効かない直し方**をダッシュボードが出し続ける。
+			// **案内を書いた事実は `clearGate` が残す**ので、数え直しで2件目が書かれることはない。
+			o.clearGate(issue.ID)
 			continue
 		}
 		// 同じ理由で失敗し続けている issue は、人間が Status を動かすまで拾わない。

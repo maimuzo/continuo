@@ -1112,6 +1112,8 @@ const (
 	// KeyDashboardBadgeNoticeNoBody は、その理由に issue へ書く本文が
 	// 用意されていない行の印に出る。
 	KeyDashboardBadgeNoticeNoBody Key = "dashboard.badge_notice_no_body"
+	// KeyDashboardBadgeNoticeFailed は、案内の投稿に失敗した行の印に出る。
+	KeyDashboardBadgeNoticeFailed Key = "dashboard.badge_notice_failed"
 )
 
 // 二重起動を防ぐロック（internal/lock）のエラーの文言。
@@ -2734,6 +2736,7 @@ var allKeys = []Key{
 	KeyDashboardBadgeNoticeCapped,
 	KeyDashboardBadgeNoticeUnclearOwner,
 	KeyDashboardBadgeNoticeNoBody,
+	KeyDashboardBadgeNoticeFailed,
 	KeyLockErrAlreadyRunning,
 	KeyLockAcquireOpenFailed,
 	KeyLockAcquireAlreadyRunning,

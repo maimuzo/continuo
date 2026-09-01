@@ -83,6 +83,14 @@ type gateNotice struct {
 	NoticedAt time.Time
 	// Skip は、案内を書かないと決めた理由である。空なら「まだ書いていない」。
 	Skip GateNoticeSkip
+	// Failed は、案内を投稿しようとして失敗したことを表す。
+	//
+	// **NoticedAt は立てたままにする**（設計 8-2）。投稿の成否で印を分けると、
+	// 投稿が失敗し続ける issue へ巡回のたびにコメントを積むことになる。
+	// **そのうえで、画面には別の印を出す。**
+	// 「書いた」と「書こうとして失敗した」が見分けられないと、
+	// **issue に1件も無いのに「案内済み」と読める行がダッシュボードに残る。**
+	Failed bool
 }
 
 // done は、この理由についてもう案内を決め終えているかを返す。
@@ -175,16 +183,36 @@ func (o *Orchestrator) noteGate(issue tracker.Issue, reason GateReason, assignee
 	return n.Count >= noticeMinCount && !now.Before(n.FirstSeenAt.Add(noticeMinAge))
 }
 
-// clearGate は、着手の関門の記録を1件消す（設計 3-68）。
+// clearGate は、着手の関門で止めていることを取り消す（設計 3-68）。
 //
 // **「判定できた」うえで「関門の理由では止めていない」ときだけ呼ぶ。**
 // 「この巡回で見なかった」で呼んではならない（設計 6）。
+//
+// **案内を書いた事実（notices）は残す**（設計 6-5）。
+// **issue に残っているコメントは、この機械が関門より前で飛ばしたくらいでは消えない。**
+// ここで消すと、`preflight` が1巡回だけ落ちただけで記録が作り直され、
+// **同じ本文の案内の2件目が issue へ書かれる。**書いたコメントを消す手段は無い。
+// **notices ごと落ちるのは `forgetGatedNotOnBoard` だけである**（issue がボードから消えたとき）。
 //
 // issueID: project item の ID。
 func (o *Orchestrator) clearGate(issueID string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	delete(o.gated, issueID)
+	n := o.gated[issueID]
+	if n == nil {
+		return
+	}
+	if len(n.notices) == 0 {
+		// **案内を1件も書いていないなら、残すものが無い。**map を膨らませない。
+		delete(o.gated, issueID)
+		return
+	}
+	// **Reason を空にすることが「いまは関門で止めていない」の印である。**
+	// `GateViews` はこの状態を1件も返さないので、ダッシュボードからは消える。
+	n.Reason = ""
+	n.Count = 0
+	n.FirstSeenAt = time.Time{}
+	n.Assignees = nil
 }
 
 // markGateNoticed は、issue に既に案内があったことを記録する。**投稿はしない。**
@@ -257,7 +285,31 @@ func (o *Orchestrator) postGateNotice(ctx context.Context, issue tracker.Issue, 
 	if err := o.postComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("着手できずに止まっていることを issue へ書けませんでした",
 			"identifier", issue.Identifier, "理由", string(reason), "error", err)
+		// **印は残したまま、失敗したことだけを足す**（設計 8-2）。
+		o.markGateNoticeFailed(issue.ID, reason)
 	}
+}
+
+// markGateNoticeFailed は、案内の投稿に失敗したことを記録する。
+//
+// **NoticedAt は消さない。**消すと、投稿が失敗し続ける issue へ
+// 巡回のたびにコメントを積むことになる。
+//
+// issueID: project item の ID。
+// reason: どの理由の案内か。
+func (o *Orchestrator) markGateNoticeFailed(issueID string, reason GateReason) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	n := o.gated[issueID]
+	if n == nil {
+		return
+	}
+	if n.notices == nil {
+		n.notices = map[GateReason]gateNotice{}
+	}
+	notice := n.notices[reason]
+	notice.Failed = true
+	n.notices[reason] = notice
 }
 
 // gateNoticedIn は、手元のコメントの中に continuo が書いた案内があるかを探す（設計 3-65 / 7）。
@@ -330,6 +382,9 @@ type GateView struct {
 	// NoticeSkip は、**いまの Reason について**案内を書かないと決めた理由である
 	// （空なら「まだ書いていない」。`notices[Reason].Skip` の写し）。
 	NoticeSkip GateNoticeSkip
+	// NoticeFailed は、案内を投稿しようとして失敗したことを表す。
+	// **Noticed も同時に真になる**（印は残す。設計 8-2）。
+	NoticeFailed bool
 }
 
 // GateViews は、着手の関門で止めた issue の写しを返す（順序は不定）。
@@ -340,6 +395,11 @@ func (o *Orchestrator) GateViews() []GateView {
 	defer o.mu.Unlock()
 	out := make([]GateView, 0, len(o.gated))
 	for _, n := range o.gated {
+		if n.Reason == "" {
+			// **いまは関門で止めていない**（`clearGate` が案内の記録だけを残した状態）。
+			// **画面には出さない。**止まっていないものを「止まっている」と出さない。
+			continue
+		}
 		notice := n.notices[n.Reason]
 		out = append(out, GateView{
 			Identifier: n.Identifier,
@@ -347,10 +407,11 @@ func (o *Orchestrator) GateViews() []GateView {
 			URL:        n.URL,
 			Reason:     n.Reason,
 			// **スライスは写し直す。**構造体の代入ではヘッダしか写らない（設計 10）。
-			Assignees:  append([]string(nil), n.Assignees...),
-			Since:      n.FirstSeenAt,
-			Noticed:    !notice.NoticedAt.IsZero(),
-			NoticeSkip: notice.Skip,
+			Assignees:    append([]string(nil), n.Assignees...),
+			Since:        n.FirstSeenAt,
+			Noticed:      !notice.NoticedAt.IsZero(),
+			NoticeSkip:   notice.Skip,
+			NoticeFailed: notice.Failed,
 		})
 	}
 	return out

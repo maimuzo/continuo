@@ -130,9 +130,12 @@ func TestIndex_止まった時刻が同じなら識別子の昇順に並べる(t
 //
 // **書き終えている行には印を出さない。**それが正常な状態だからである。
 //
+// **投稿に失敗した行は `Noticed` も真である**（印は残す。設計 8-2）。
+// **それでも印を出す。**出さないと、issue に1件も無いのに「案内済み」と読める。
+//
 // 与える情報: 「書き終えた」「まだ書いていない」「設定で切ってある」
-// 「コメントが多すぎる」「切り分けられない」の5件。
-// 成功条件: 書き終えた1件には印が付かず、残る4件にそれぞれの印が付くこと。
+// 「コメントが多すぎる」「切り分けられない」「投稿に失敗した」の6件。
+// 成功条件: 書き終えた1件には印が付かず、残る5件にそれぞれの印が付くこと。
 func TestIndex_案内の状態ごとに印を変える(t *testing.T) {
 	gates := []orchestrator.GateView{
 		{Identifier: "octocat/hello-world#1", Reason: orchestrator.GateReasonHumanAssigned, Noticed: true},
@@ -148,6 +151,10 @@ func TestIndex_案内の状態ごとに印を変える(t *testing.T) {
 		{
 			Identifier: "octocat/hello-world#5", Reason: orchestrator.GateReasonManyAssigneesWithSelf,
 			NoticeSkip: orchestrator.GateNoticeUnclearOwner,
+		},
+		{
+			Identifier: "octocat/hello-world#6", Reason: orchestrator.GateReasonHumanAssigned,
+			Noticed: true, NoticeFailed: true,
 		},
 	}
 	s, _ := newTestServerWithGates(t, nil, gates)
@@ -171,6 +178,7 @@ func TestIndex_案内の状態ごとに印を変える(t *testing.T) {
 		"octocat/hello-world#3": "issue へは書かない設定です",
 		"octocat/hello-world#4": "コメントが多すぎて確かめられません",
 		"octocat/hello-world#5": "別の機械の担当かどうかを切り分けられません",
+		"octocat/hello-world#6": "issue へ書けませんでした",
 	}
 	for _, g := range snap.Gated {
 		if got := g.NoticeBadge; got != want[g.Identifier] {
