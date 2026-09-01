@@ -72,7 +72,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.11 から v0.1.12 へ
 
-**設定のキーは1つも増えていません。****本文（front matter より下）に足すものが1つあります。**
+**設定のキーは1つも増えていません。****本文（front matter より下）に足すものが2つあります。**
 
 ### 別の branch を出している worktree で出るメッセージが変わりました
 
@@ -179,6 +179,78 @@ grep -n '^## この issue を読むこと' ~/continuo-work/WORKFLOW.md
 
 **書き換えたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
 **再起動しても worktree も pane も残ります。**
+
+### push 先を分けた worktree が片付くようになりました
+
+**当てなくても壊れません。**片付けの判定は continuo の側にあるので、この版に上げた時点で効きます。
+**本文を当てるかどうかは、エージェントに `-u` を付けさせるかどうかの話です。**
+
+**前の版で何が起きていたか。**エージェントが2本目の PR を出すときなどに、
+別の名前へ push することがあります。
+
+```bash
+git push origin HEAD:pr-2nd
+```
+
+**この形は upstream を張り替えません。**upstream は worktree を作ったときのまま
+（あるいは無いまま）なので、片付けは「push されていない commit が残っている」と判定し、
+**その worktree は永久に片付きませんでした。**
+
+**この版から、判定の最初の段が「HEAD が `refs/remotes/` のどれかに載っているか」を見ます。**
+載っていれば、upstream が古くても消してよいと判定します。
+**通信はしません。**`refs/remotes/` は手元にある ref です。
+
+**base との差分で判定する段は残してあります。**remote を1つも持たない clone では
+`refs/remotes/` が空になり、最初の段が常に偽になるためです。
+
+### 差し替え方（push には `-u` を付けろ）
+
+**`WORKFLOW.md` の「## 終わったらやること」の中を探します。**
+**次の2行**（v0.1.11 の本文）を、
+
+```text
+**push 先は、この issue のために作られた branch です。**
+`git push -u origin HEAD` で足ります。branch 名を自分で決める必要はありません。
+```
+
+**次の11行に差し替えます**（途中の空行4つも含めて11行です）。
+**コマンドの行は4字下げのままにしてください。**この本文はそのままエージェントへ渡ります。
+
+```text
+**push 先は、この issue のために作られた branch です。**
+
+    git push -u origin HEAD
+
+**別の名前へ push するときも、必ず -u を付けてください。**
+2本目の PR を出すときや、issue に「この branch へ出せ」と書かれているときです。
+**書かれていなければ、上の git push -u origin HEAD のままで構いません。**
+
+    git push -u origin HEAD:<別の branch 名>
+
+**-u を落とすと、この worktree が片付かなくなることがあります。**
+```
+
+**`-u` の無い push の例を本文に残さないでください。**エージェントはコマンドをそのまま写します。
+
+### 当たったかどうかの確かめ方（push には `-u` を付けろ）
+
+**`continuo doctor` は本文を検査しません。**`grep` で見てください。
+
+```bash
+grep -n 'git push -u origin HEAD:' ~/continuo-work/WORKFLOW.md
+grep -n 'git push origin HEAD' ~/continuo-work/WORKFLOW.md
+```
+
+| どう出たか | どう読むか |
+| --- | --- |
+| 1つ目が1行出て、2つ目が1行も出ない | **当たっています** |
+| 1つ目が1行も出ない | **当たっていません。**上の11行に差し替えてください |
+| 2つ目が1行でも出る | **`-u` の無い例が残っています。**その行を消してください |
+
+**既に `-u` を落として push してしまった worktree の直し方は
+[FAQ.md](FAQ.md) の「push したのに「push されていない commit が N 件残っている」と言われ、worktree が片付かない」にあります。**
+
+**書き換えたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
 
 ---
 
