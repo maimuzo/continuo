@@ -140,11 +140,12 @@ os.Rename(tmp.Name(), path)
 
 ## issue の扱い
 
-[.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の3点。
+[.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の4点。
 
-- **issue を作ることと、着手することは別。**作ったらグループ化して着手順序を出し、**人間の指示を待つ**
+- **issue を作ることと、着手することは別。**作ったらボードへ載せて `Ice Box` を付け、グループ化して着手順序を出し、**人間の指示を待つ**
+- **グループ化したら、代表以外の issue を `Ice Box` へ落とす。**落とさないと continuo が代表とは別に dispatch する
 - **閉じられるものを先に外す。**issue の題名だけで「未修正」と判断せず、現行コードと突き合わせる
-- **同時に進めるのは2か3まで。**人間判断待ちになったらスロットを開けて他を進める
+- **同時に進める issue は2か3まで。**これは continuo の設定 `agent.max_concurrent_agents` とは別物である
 
 ## リリースの手順
 
