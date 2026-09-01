@@ -1058,7 +1058,9 @@ func (a *Adapter) FetchComments(
 	}
 
 	keep := commentsPerFetch(cfg.Max)
-	oldestFirst, err := a.fetchCommentNodes(ctx, issueNodeID, keep, keep)
+	// **切れたかどうかは捨てる。**この経路は `keep` で狙って打ち切るので、
+	// 「古い側を読み切れなかった」は最初から想定どおりである。
+	oldestFirst, _, err := a.fetchCommentNodes(ctx, issueNodeID, keep, keep)
 	if err != nil {
 		return nil, err
 	}
@@ -1145,22 +1147,26 @@ func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker
 // ctx: 呼び出しに適用するコンテキスト。
 // issueNodeID: 下敷きの GitHub issue のノード ID。
 // cfg: tracker.provider.comments の設定。**いまは読まない**（引数は呼び出し側の形に合わせてある）。
-// 戻り値: 正規化したコメントの一覧（**古い順**）。IsAgent / IsSelf / MarkedByOther は
+// 戻り値の1つ目: 正規化したコメントの一覧（**古い順**）。IsAgent / IsSelf / MarkedByOther は
 // 立てない（印の判定は呼び出し側が行う）。
+// 戻り値の2つ目: **ページ数の上限で古い側を読み切れなかったら true**（issue #140）。
+// **件数では当てられない。**1ページが100件に満たないまま20ページを使い切ると、
+// 2000件に届かないまま切れる。逆にちょうど2000件で続きが無いこともある。
+// 戻り値の3つ目: エラー。
 func (a *Adapter) FetchAllComments(
 	ctx context.Context,
 	issueNodeID string,
 	_ config.TrackerProviderCommentsConfig,
-) ([]Comment, error) {
-	nodes, err := a.fetchCommentNodes(ctx, issueNodeID, maxCommentsPerFetch, 0)
+) ([]Comment, bool, error) {
+	nodes, truncated, err := a.fetchCommentNodes(ctx, issueNodeID, maxCommentsPerFetch, 0)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	out := make([]Comment, 0, len(nodes))
 	for _, c := range nodes {
 		out = append(out, rawCommentToComment(c))
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 // commentsPerFetch は `tracker.provider.comments.max` を、実際に使える件数へ丸める。
@@ -1218,17 +1224,21 @@ func keepNewestUnmarked(oldestFirst []rawComment, keep int) []rawComment {
 // issueNodeID: 下敷きの GitHub issue のノード ID。
 // perPage: 1ページで要求する件数（1 以上 maxCommentsPerFetch 以下）。
 // keep: 印の付いていないコメントがこれだけ揃ったら取るのをやめる。**0 以下なら全ページ取る。**
-// 戻り値: 生のコメント（**古い順**）。
+// 戻り値の1つ目: 生のコメント（**古い順**）。
+// 戻り値の2つ目: **ページ数の上限で古い側を読み切れなかったら true**（issue #140）。
+// **`keep` で抜けたときは偽である。**狙って止めたので、読み切れなかったのとは違う。
+// 戻り値の3つ目: エラー。
 func (a *Adapter) fetchCommentNodes(
 	ctx context.Context,
 	issueNodeID string,
 	perPage int,
 	keep int,
-) ([]rawComment, error) {
+) ([]rawComment, bool, error) {
 	// **新しい順に積む。**最後にまとめて反転して古い順へ戻す。
 	var newestFirst []rawComment
 	unmarked := 0
 	after := ""
+	truncated := false
 	for page := 0; page < maxCommentPages; page++ {
 		var resp commentsQueryResponse
 		vars := map[string]any{"issueId": issueNodeID, "first": perPage}
@@ -1236,7 +1246,7 @@ func (a *Adapter) fetchCommentNodes(
 			vars["after"] = after
 		}
 		if err := a.gql.do(ctx, commentsQueryTemplate, vars, &resp); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if resp.Node == nil || resp.Node.Comments == nil {
 			break
@@ -1259,6 +1269,9 @@ func (a *Adapter) fetchCommentNodes(
 		}
 		after = info.EndCursor
 		if page == maxCommentPages-1 {
+			// **続きの cursor を持ったまま、ページ数の上限で抜ける。**
+			// **これが「古い側を読み切れなかった」の唯一の条件である**（issue #140）。
+			truncated = true
 			a.logger.Warn("コメントが多すぎるので途中まででやめました（古いコメントは読めていません）",
 				"issue_node_id", issueNodeID, "読んだ件数", len(newestFirst), "ページ数の上限", maxCommentPages)
 		}
@@ -1268,7 +1281,7 @@ func (a *Adapter) fetchCommentNodes(
 	for i, c := range newestFirst {
 		oldestFirst[len(newestFirst)-1-i] = c
 	}
-	return oldestFirst, nil
+	return oldestFirst, truncated, nil
 }
 
 // FetchViewer は、いま使っているトークンの持ち主を返す（設計 3-77b）。
