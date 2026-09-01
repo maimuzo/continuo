@@ -7012,7 +7012,7 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 | --- | --- |
 | **既定で無効である** | 公式が「Agent teams are experimental and disabled by default」（**訳。**agent teams は実験的な機能で、既定では無効である）と書いている |
 | **利用者が自分で切れる** | `WORKFLOW.md` の `claude.env` に1行。**continuo は黙って切らない** |
-| **自動で切る仕組みは持たない** | 検出には6か所を優先順位どおりに解決する必要があり、**うち3か所は continuo から読めない。**検出は別の issue で設計する |
+| **自動で切る仕組みは持たない** | 検出には6か所を優先順位どおりに解決する必要があり、**組織の managed settings と、シェルの環境変数がどのプロセスのものかは、continuo から確実には読めない。**検出は別の issue で設計する |
 
 #### 書く場所
 
@@ -7046,7 +7046,8 @@ claude:
 **利用者の設定を continuo が上書きすると、「自分が有効にしたはずのものが効かない」という
 別の混乱を生む。**
 
-**シェルの export にも勝つ。**公式がそう書いている。
+**シェルの export にも勝つ。**公式の2つの文から、そう言える。
+**1つの文でそう書いてあるわけではない。**
 
 > Setting the variable to `0` in your user `settings.json` overrides a shell export.
 
@@ -7070,9 +7071,21 @@ user の設定より後に当たる。だからそのどれかに、この変数
 **組織の managed settings・`--settings`・対象リポジトリの2ファイル・利用者の設定・herdr の環境**の
 6か所を優先順位どおりに解決する必要がある。**そのうち3か所は continuo からは読めない。**
 
-**とくに、環境変数を決めるのは herdr の常駐プロセスの環境である。**
-continuo は `claude` を直接起動せず、herdr の `worktree.open` が作った pane の中で起動する。
-**「continuo を起動したシェル」も「doctor を叩いたシェル」も、この連鎖に入っていない。**
+**とくに、シェルの環境変数がどのプロセスのものかが決まらない。**
+continuo は `claude` を直接起動せず、herdr の `worktree.open` が作った pane の中で起動する
+（[internal/orchestrator/orchestrator.go](../../internal/orchestrator/orchestrator.go) の `WorktreeOpen`）。
+**pane が herdr の常駐プロセスの環境をどこまで継ぐかは、確かめられていない**
+（2026-09-01。pane を作る操作が手元で拒否され、実測できなかった）。
+
+**確かめられたのは2つだけである。**
+
+| 何 | 実測（2026-09-01） |
+| --- | --- |
+| herdr の常駐プロセスの環境に `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` があるか | **無い** |
+| herdr にだけある `HERDR_STARTUP_CWD` が、herdr が用意した pane にあるか | **無い**（この機械の pane 1つで確認） |
+
+**したがって「continuo を起動したシェル」も「herdr を起動したシェル」も、
+効くとも効かないとも言い切れない。**doctor が検出するなら、両方を見る必要がある。
 
 ### 3-71. 提供する枠の上限を `WORKFLOW.md` で決める
 

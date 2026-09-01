@@ -543,10 +543,17 @@ ghq list --full-path | xargs -I{} grep -ln 'AGENT_TEAMS' {}/.claude/settings.jso
 grep -n 'AGENT_TEAMS' ~/.claude/settings.json ~/.claude/settings.local.json 2>/dev/null
 ```
 
-**4. continuo を起動したシェルの環境変数を見る。**
+**4. continuo と herdr を起動したシェルの環境変数を見る。**
+
+**continuo は Claude Code を直接起動しません。**herdr が作った pane の中で起動します。
+**だから、この2つは別のプロセスの環境になりえます。**両方見てください。
 
 ```bash
+# いま叩いているシェル
 echo "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-（設定されていません）}"
+
+# herdr の常駐プロセスの環境（macOS / Linux）
+ps eww "$(pgrep -n herdr)" | tr ' ' '\n' | grep '^CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS='
 ```
 
 **`1` が入っていたら、まずこれを疑ってください。**
@@ -582,7 +589,7 @@ claude:
 **すでに動いている issue には届きません。**その issue は Status を着手待ちへ戻してやり直させてください。
 
 **上の「確かめ方」の4番（シェルの環境変数）で見つかった場合も、同じ直し方で構いません。**
-**公式がそう書いています。**
+**公式の2つの文から、そう言えます。**（1つの文でそう書いてあるわけではありません。）
 
 > Setting the variable to `0` in your user `settings.json` overrides a shell export.
 
@@ -595,9 +602,12 @@ claude:
 **訳。**優先順位の高い設定ファイル: プロジェクトの設定・ローカルの設定・`--settings` で渡すものは、
 user の設定より後に当たる。だからそのどれかに、この変数を `1` にする `env` の項目があれば、そちらが勝つ。
 
-**シェルで `unset` しても効きません。**continuo は Claude Code を直接起動せず、
-**herdr が作った pane の中で起動します。**効くのは herdr を起動したときの環境であって、
-continuo を起動したシェルではありません。**`WORKFLOW.md` に書いてください。**
+**シェルで `unset` するだけでは足りないことがあります。**
+**continuo は Claude Code を直接起動せず、herdr が作った pane の中で起動します。**
+**pane が herdr の環境をどこまで継ぐかは、こちらでは確かめられていません。**
+
+**`WORKFLOW.md` に書くのが確実です。**そちらは `--settings` で渡るので、
+**シェルの環境変数より後に当たります。**
 
 **なぜ `WORKFLOW.md` に書くのか。**
 
