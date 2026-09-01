@@ -50,7 +50,7 @@ type handoffDecision struct {
 //	自分1人 ＋ hold が1件も無い                     そのまま着手・引き継ぎへ進む（人間が付けた担当である）
 //	自分1人 ＋ 別の機械の hold ＋ 期限内             触らない。入札もしない
 //	自分1人 ＋ 別の機械の hold ＋ 期限切れ           担当を外し、released を書いてから入札をやり直す
-//	他人1人 ＋ hold が1件も無い                     触らない。人間が付けた担当である
+//	他人1人 ＋ hold が1件も無い                     触らない。人間が付けた担当である。WARN を出す
 //	他人1人 ＋ hold あり ＋ 期限内                   触らない。入札もしない
 //	他人1人 ＋ hold あり ＋ 期限切れ                 担当を外し、released を書いてから入札をやり直す
 //
@@ -136,8 +136,13 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		// この issue は Status も動かず、ダッシュボードにも出ず、issue にも何も書かれない。
 		// **人間が「なぜ着手されないのか」を知る手がかりが、この1行しか無い。**
 		// だから「なぜ触らないか」と「どうすれば動くか」の両方をここに書く。
+		//
+		// **「continuo が使うアカウントへ付け替えてください」とは案内しない**（3-77b）。
+		// 付け替えると「自分のアカウント1人＋hold が1件も無い」の行に落ちて着手へ進むが、
+		// **同じアカウントを使う別の機械も同じ行を読むので、2台が同時に着手できてしまう。**
+		// 安全に着手させる道は「担当者を外す」の1つだけである。
 		o.logger.Warn("担当者が付いているので着手しません（continuo が付けたものではありません）。"+
-			"着手させるには、担当者を外すか、continuo が使うアカウントへ付け替えてください",
+			"着手させるには、GitHub の画面でその担当者を外してください",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee)
 		return handoffDecision{}
 	case handoff.ActionSkipSelfUnknown:

@@ -85,6 +85,10 @@ var expectedWarnings = map[string][]string{
 	"TestExternalFailure_transcriptを読めなくてもturnを終えられる":            {"transcript のパスが分からないので表明を読めません"},
 	"TestExternalFailure_ボードを読めなくても巡回は止まらない":                     {"候補の取得に失敗しました"},
 	"TestHandoff_worktreeを持たない_run_には調べるところを出さない":                {"リポジトリが Claude Code に信頼登録されていません"},
+	// **人間が付けた担当で飛ばすときの WARN**（issue #131）。
+	// **この2本は、その状況をテスト自身が作っている。**担当者を付けたうえで hold を書かせない。
+	"TestHandoff_holdの無い担当は奪わない":                              {"担当者が付いているので着手しません"},
+	"TestHandoff_他の担当者のholdでは人間の担当を外さない":                       {"担当者が付いているので着手しません"},
 	"TestOnHook_worktreeの外のcwdを名乗るhookは捨てる":                      {"hook の cwd がその run の worktree の外なので捨てました"},
 	"TestOnHook_許可された置き場所の外のtranscript_pathは覚えない":                {"hook の transcript_path が許可された置き場所の外なので捨てました"},
 	"TestOnHook_通常のファイルでないtranscript_pathは覚えない":                  {"hook の transcript_path が通常のファイルではないので捨てました"},
