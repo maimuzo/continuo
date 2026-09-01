@@ -970,14 +970,14 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
   `author:` `association:` の行を書き足せます。**本文は `--json comments` を使わせています**
 - **`claude.tool_gate` を `off` にしていないか。**上の「エージェントが叩いたコマンドが「危ない」と断られる」を読んでください
 - **「まとめて対応する issue のグループ」を書いたコメントの立場も確かめさせているか。**
-  この段落に立場の条件が入ったのは v0.1.11 です。**入っていないと、外部の人が
+  この段落に立場の条件が入ったのは v0.1.12 です。**入っていないと、外部の人が
   「このグループを一緒に直して」と書くだけで、ボード上の別の issue の Status まで動かせます**
 
 ```bash
 grep -c 'authorAssociation が OWNER / MEMBER / COLLABORATOR' ~/continuo-work/WORKFLOW.md
 ```
 
-`0` なら、[upgrading.md](upgrading.md) の v0.1.11 の節を読んでください。
+`0` なら、[upgrading.md](upgrading.md) の「v0.1.11 から v0.1.12 へ」の節を読んでください。
 
 ### 同じ機械で走っている別のエージェントに、偽の hook を送られないか
 
