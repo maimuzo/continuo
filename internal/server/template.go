@@ -48,6 +48,42 @@ section { margin-bottom: 2rem; }
 
 <section>
 <table>
+<caption>{{ t "dashboard.caption_gated" }}</caption>
+<thead>
+<tr>
+<th>{{ t "dashboard.col_issue" }}</th>
+<th>{{ t "dashboard.col_gated_reason" }}</th>
+<th>{{ t "dashboard.col_gated_since" }}</th>
+<th>{{ t "dashboard.col_gated_remedy" }}</th>
+</tr>
+</thead>
+<tbody>
+{{- if .Gated }}
+{{- range .Gated }}
+<tr>
+<td>
+{{- if .URL }}<a href="{{ .URL }}" rel="noreferrer noopener">{{ .Identifier }}</a>
+{{- else }}{{ .Identifier }}{{ end }}
+<span class="title">{{ .Title }}</span>
+</td>
+<td>
+{{ .ReasonText }}
+{{- if .NoticeBadge }} <span class="badge">{{ .NoticeBadge }}</span>{{ end }}
+</td>
+<td>{{ formatSince .Since }}<span class="title">{{ .SinceAgo }}</span></td>
+<td>{{ .Remedy }}</td>
+</tr>
+{{- end }}
+{{- else }}
+<tr><td colspan="4" class="empty">{{ t "dashboard.no_gated" }}</td></tr>
+{{- end }}
+</tbody>
+</table>
+<p class="meta">{{ t "dashboard.note_gated" }}</p>
+</section>
+
+<section>
+<table>
 <caption>{{ t "dashboard.caption_runs" }}</caption>
 <thead>
 <tr>
@@ -133,6 +169,7 @@ section { margin-bottom: 2rem; }
 // テンプレートを解釈するのは init の1回きりなので、文言を解釈の時点で焼き付けない。
 var indexTemplate = template.Must(template.New("index").Funcs(template.FuncMap{
 	"formatTime":     formatTime,
+	"formatSince":    formatSinceTime,
 	"formatInt":      formatInt,
 	"refreshSeconds": func() int { return refreshSeconds },
 	"t":              translate,

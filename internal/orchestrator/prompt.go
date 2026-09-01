@@ -147,6 +147,53 @@ func buildUntrustedComment(owner, repo, reason string) string {
 		owner, repo, owner, repo, reason)
 }
 
+// buildGatedComment は、着手の関門で止めたことを人間へ知らせるコメント本文を作る
+// （issue #134 / #136 / #140）。
+//
+// **担当者のログイン名を1文字も書かない**（設計 8-1）。コメントを書き換える経路も
+// 消す経路も無いので、担当者が変わっても書き直せない。**書き直すとは「もう1件足す」ことでしかなく、
+// 担当者を付け替えるたびに古い案内が積まれる。**
+// **やることは担当者が誰であっても同じである**（GitHub の画面で担当者を外す）。
+// いま誰が付いているかは issue の画面の右側に出ているし、
+// WARN の1行とダッシュボードにも常に最新の値が出る。
+//
+// **1行目の印は理由ごとに違う。**再起動をまたいだ照合に使うので、
+// 理由が変わったら別の案内として1回だけ書けるようにする（設計 6-5）。
+// **`<!-- continuo:self -->` は付けない。**`postComment` が先頭に足す。
+//
+// **`internal/i18n` は使わない。**`internal/orchestrator` の人間向けの文言は
+// 「まとめて資源へ移す」と決まっており、この issue だけ先に移すと揃わない。
+//
+// reason: 止めた理由の種類。**`GateReasonManyAssigneesWithSelf` はここへ来ない**
+// （その理由では issue へ1バイトも書かない。設計 8-3）。来たら空文字を返す。
+// 戻り値: コメント本文（2行目以降）。
+func buildGatedComment(reason GateReason) string {
+	switch reason {
+	case GateReasonHumanAssigned:
+		return gateNoticeMarker(reason) + "\n" +
+			"この issue には担当者が付いているため、continuo は着手しません。\n" +
+			"continuo が付けた担当ではないので、人間が作業中だと判断しています。\n\n" +
+			"着手させるには、GitHub の画面でその担当者を外してください。\n\n" +
+			"continuo が使うアカウントへの付け替えは案内しません。付け替えると、\n" +
+			"同じアカウントで動いている別の機械も「自分の担当だ」と読むため、" +
+			"2台が同時に着手できてしまいます。\n\n" +
+			"この案内は、この理由につき1回だけ書きます。\n"
+	case GateReasonManyAssignees:
+		return gateNoticeMarker(reason) + "\n" +
+			"この issue には担当者が2人以上付いているため、continuo は着手しません。\n" +
+			"人間が作業を分担していると判断しています。\n\n" +
+			"着手させるには、GitHub の画面で担当者を1人も付いていない状態にしてください。\n\n" +
+			"この案内は、この理由につき1回だけ書きます。\n" +
+			"ただし、この issue が着手待ちの一覧から一度外れて戻ると、もう一度書くことがあります。\n" +
+			"外れるのは、continuo を再起動したとき、Status を着手待ちから一度外して戻したとき、\n" +
+			"GitHub の検索の反映が遅れて1巡回だけ一覧に出なかったときです。\n" +
+			"この経路は issue のコメントを読まないので、前に書いたことを手元から確かめられません。\n"
+	default:
+		// **知らない理由で issue へ書かない。**空文字なら postGateNotice が投稿を見送る。
+		return ""
+	}
+}
+
 // buildHandoffComment は人間へ引き渡すときの通知のコメント本文を作る。
 //
 // **成果の要約は書かない**（設計 3-29。continuo は代筆しない）。

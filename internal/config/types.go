@@ -141,7 +141,25 @@ type TrackerProviderHandoffConfig struct {
 	// **1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
 	// モデル別の枠は一定量を使うまで現れないので、現れないものは判定に入らない。
 	WeeklyMarginPercent int `yaml:"weekly_margin_percent"`
+	// OnAssigneeGate は、担当者が付いていて着手できないとき（1人でも2人以上でも）の扱いである
+	// （issue #134 / #136 / #140）。想定する値は
+	// OnAssigneeGateWarnAndComment（既定）と OnAssigneeGateWarnOnly の2つだけである。
+	//
+	// **名前に `human` を入れていない。**この設定は案内を投稿する直前の1箇所で見るので、
+	// **人間が付けた担当（1人）と、担当者が2人以上の両方に効く。**
+	//
+	// **記録とダッシュボードには一切効かない。**`warn_only` にしても
+	// WARN の1行とダッシュボードの表はそのまま出る。止まるのは issue への書き込みだけである。
+	OnAssigneeGate string `yaml:"on_assignee_gate"`
 }
+
+// OnAssigneeGateWarnAndComment は、担当者が付いていて着手できないときに
+// WARN を出し、issue へも1回だけ書く値である（issue #134 / #136 / #140）。**既定である。**
+const OnAssigneeGateWarnAndComment = "warn_and_comment"
+
+// OnAssigneeGateWarnOnly は、WARN とダッシュボードには出すが、
+// issue へは1バイトも書かない値である（issue #134 / #136 / #140）。
+const OnAssigneeGateWarnOnly = "warn_only"
 
 // TrackerConfig は GitHub Projects v2 のボードをどう見るかを決める。
 type TrackerConfig struct {

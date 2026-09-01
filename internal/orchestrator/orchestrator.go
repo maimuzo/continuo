@@ -126,7 +126,7 @@ type Tracker interface {
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
 	// FetchAllComments は issue のコメントを1件残らず取る（設計 3-77a）。
 	// **持ち回りの印が付いたコメントも落とさない。**担当の持ち回りの判定はこれを読む。
-	FetchAllComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig) ([]tracker.Comment, error)
+	FetchAllComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig) ([]tracker.Comment, bool, error)
 	// FetchViewer は、いま使っているトークンの持ち主を返す（設計 3-77b）。
 	// **担当者を書き足すにはノード ID が要る。**
 	FetchViewer(ctx context.Context) (tracker.Assignee, error)
@@ -315,6 +315,13 @@ type Orchestrator struct {
 	//
 	// **ログを1回だけにするためだけに持つ。**判定には1度も使わない。
 	labelSkipped map[string]struct{}
+	// gated は、着手の関門で止めた issue の記録である（issue #134 / #136 / #140）。
+	// キーは project item の ID。**mu が守る。**
+	//
+	// **判定には1度も使わない。**ダッシュボードと「案内を1回だけ」のためだけに持つ。
+	// **`runs` に相乗りしない。**あちらは「印＝実行中」であり、入れると
+	// 空きスロットの数え方（`freeSlotBlocker`）と重複判定（`lookupRunByID`）の両方が壊れる。
+	gated map[string]*gateNote
 	// failures は issue（project item の ID）ごとの失敗の記録である。
 	//
 	// **印（runs）の外に置く。**印は run が終わると消えるので、そこに数えていると
@@ -478,6 +485,7 @@ func New(opts Options) (*Orchestrator, error) {
 		sessions:       map[string]*runState{},
 		notified:       map[string]time.Time{},
 		labelSkipped:   map[string]struct{}{},
+		gated:          map[string]*gateNote{},
 		failures:       map[string]*failureNote{},
 		shutdown:       shutdown,
 		shutdownCancel: shutdownCancel,
@@ -561,6 +569,12 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	if err != nil {
 		o.logger.Warn("候補の取得に失敗しました（この巡回の dispatch は行いません）", "error", err)
 		dispatchAllowed = false
+	} else {
+		// **取れた候補一覧に居ないものだけを消す**（設計 3-68 の「通ったら印を消す」の補い）。
+		// **`dispatchCandidates` のループは見ない。**空きスロットが尽きて途中で
+		// 打ち切られた巡回でも、記録は1件も減らない。
+		// **取得に失敗した巡回では呼ばない。**呼ぶと記録が全件消える。
+		o.forgetGatedNotOnBoard(candidates)
 	}
 
 	o.reconcileRunning(ctx)

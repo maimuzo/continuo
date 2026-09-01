@@ -189,6 +189,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		}
 		// 既に印を持っている issue は dispatch しない（設計 3-10 / 4-2）。
 		if _, taken := o.lookupRunByID(issue.ID); taken {
+			// **関門より前で飛ばした**（設計 6-1）。止めているのは担当者の関門ではないので、
+			// 古い理由と誤った直し方をダッシュボードに出し続けない。
+			o.clearGate(issue.ID)
 			continue
 		}
 		// **候補の Status が active_states に入っていることを自分で確かめる。**
@@ -199,10 +202,16 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			o.logger.Warn("頼んだ Status に無い候補が返ったので飛ばします（絞り込みの反映待ちの可能性があります）",
 				"identifier", issue.Identifier, "返ってきた Status", issue.State,
 				"頼んだ Status", strings.Join(o.cfg.Tracker.ActiveStates, ", "))
+			// **ここも関門より前である**（設計 6-1）。人間が Status を動かした直後は
+			// この分岐へ落ち続けるので、消さないと「担当者を全部外してください」という
+			// **いまは効かない直し方**をダッシュボードが出し続ける。
+			// **案内を書いた事実は `clearGate` が残す**ので、数え直しで2件目が書かれることはない。
+			o.clearGate(issue.ID)
 			continue
 		}
 		// 同じ理由で失敗し続けている issue は、人間が Status を動かすまで拾わない。
 		if o.skipByFailure(issue) {
+			o.clearGate(issue.ID)
 			continue
 		}
 		if !issue.Dispatchable {
@@ -214,6 +223,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			if issue.Owner != "" && !o.alreadyNotified(issue.Owner, issue.Repo) {
 				o.preflight(ctx, issue)
 			}
+			o.clearGate(issue.ID)
 			continue
 		}
 		if missing := missingRequiredLabels(issue, o.cfg.Tracker.RequiredLabels); len(missing) > 0 {
@@ -239,6 +249,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 				o.logger.Debug("必須のラベルが揃っていないので飛ばしました（通知は済んでいます）",
 					"identifier", issue.Identifier, "足りないラベル", joined)
 			}
+			o.clearGate(issue.ID)
 			continue
 		}
 
@@ -264,6 +275,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// `idle_timeout_ms`（既定18時間）触らない。**この機械では信頼していないが
 		// 別の機械では信頼しているリポジトリが、そのあいだ塞がる。
 		if !o.preflight(ctx, issue) {
+			o.clearGate(issue.ID)
 			continue
 		}
 
