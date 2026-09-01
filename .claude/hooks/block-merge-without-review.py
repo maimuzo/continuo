@@ -120,7 +120,10 @@ def has_review(pr):
              # **2026-09-01、それで2本がレビュー未実施のままマージされた。**
              # `.github/workflows/review-gate.yml` と同じく、先頭にあることを見る。
              "--jq",
-             '[.comments[] | select(.body | test("^\\s*%s"))] | length' % MARKER],
+             # **`\s` は使えない。**jq の文字列は JSON 文字列なので、
+             # バックスラッシュ1つの `\s` は「不正なエスケープ」で構文エラーになる。
+             # **落ちると has_review が None を返し、hook は全部通してしまう。**
+             '[.comments[] | select(.body | test("^[[:space:]]*%s"))] | length' % MARKER],
             capture_output=True, text=True, timeout=GH_TIMEOUT_SEC,
         )
     except Exception:

@@ -82,11 +82,17 @@ fi
 ng=0
 
 # レビュー結果が貼ってあるかを見る。
-# **目印は `<!-- code-review-result -->` である。**本文に "code-review" と書いただけの
-# コメントを数えると、実施していないものが通ってしまう。
+# **目印は `<!-- code-review-result -->` で、本文の先頭に無ければならない。**
+#
+# **`contains` を使ってはならない。**本文の途中に目印があるコメント
+# （手順を説明した進捗の報告など）を1件と数えてしまう。
+# **2026-09-01、それで2本がレビュー未実施のままマージされた。**
+#
+# **`\s` も使えない。**jq の文字列は JSON 文字列なので、バックスラッシュ1つの
+# `\s` は「不正なエスケープ」で構文エラーになる。`[[:space:]]` を使う。
 review_of() {
 	gh pr view "$1" --json comments \
-		--jq '[.comments[] | select(.body | contains("<!-- code-review-result -->"))] | length'
+		--jq '[.comments[] | select(.body | test("^[[:space:]]*<!-- code-review-result -->"))] | length'
 }
 
 # 対になる issue の番号を並べる。
