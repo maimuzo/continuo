@@ -17,14 +17,26 @@ issueは優先順位を計画して人間確認してから着手すること」
 | **2** | **ボードへ載せ、`Ice Box` を付ける。**載せないと continuo は永久に拾わない |
 | **3** | **止まる。**いまある issue 全部の中でグループ化し、着手順序を出す |
 | **4** | **人間の指示を待つ** |
+| **5** | **着手を決めた issue が `Ice Box` から `Ready` へ上がったことを確かめてから着手する**（グループなら代表だけ）。**上げるのは人間である** |
 
 **段2 を飛ばすと、issue は作られたのにパイプラインから消える。**
 [docs/plans/continuo_design.md:34](../../docs/plans/continuo_design.md#L34) が
 「**ボードへ載せて `Ice Box` を付けるのは人間が1回行う**」「continuo はボードに載っていない issue を見ない」
 と書いているとおり、**continuo 自身はこの操作をしない。**
 
-**段3 の着手順序は、2箇所へ出す。**人間へはチャットで示し、**同じものを代表の issue のコメントへ残す**
-（[docs/plans/continuo_design.md:3294](../../docs/plans/continuo_design.md#L3294)）。
+**段5 を飛ばすと、continuo は何も dispatch しない。**`tracker.active_states` の既定は
+`Ready` と `In Progress` の2つで（[internal/config/default.go:65](../../internal/config/default.go#L65)）、
+**`Ice Box` は入っていない。**段2 で全部を `Ice Box` へ置く以上、上げる段が要る。
+**上げるのは人間で、GitHub の画面から行う**
+（[docs/plans/continuo_design.md:8059](../../docs/plans/continuo_design.md#L8059) の 4-1 の遷移表）。
+
+**段3 の着手順序は、2箇所へ出す。**
+
+| 何を | どこへ |
+| --- | --- |
+| **全 issue の着手順序** | **人間へチャットで示す** |
+| **グループごとの計画** | **そのグループの代表の issue のコメントへ残す**（[docs/plans/continuo_design.md:3294](../../docs/plans/continuo_design.md#L3294) の 3-26） |
+
 **チャットだけに出すと、セッションが終わった時点で消える。**次のセッションが組み直すことになる。
 
 ## 確認を待たずに着手してよい場合
@@ -33,7 +45,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 
 | 条件 | 確かめ方 |
 | --- | --- |
-| **レートリミットに余裕がある** | `maimuzo-dev-core` プラグインの `detect-usage-from-webapi` スキルを叩き、返る `limits` のうち `kind` が `session` のものと `weekly_all` のものの `percent` が、**どちらも50未満**であること |
+| **レートリミットに余裕がある** | `maimuzo-dev-core` プラグインの `detect-usage-from-webapi` スキルを叩き、返る `limits` の `percent` が**全部50未満**であること。**`session` / `weekly_all` / `weekly_scoped` の3つとも見る。**`weekly_scoped` を外すと、モデル別の週次枠が尽きていても門を通る |
 | **下の3つのどれかである** | typo の修正 / 文書だけの変更 / **既に人間が着手を指示したものの続き** |
 
 **この3つに無いものは、余裕があっても着手しない。**
@@ -45,10 +57,10 @@ issueは優先順位を計画して人間確認してから着手すること」
 | --- | --- |
 | **1** | 同一原因・同一ファイル・同一コンポーネントでまとめ、**代表を1つ決める** |
 | **2** | **計画を代表の issue のコメントに書く** |
-| **3** | **グループの他の issue を `Ice Box` へ落とす**（[docs/plans/continuo_design.md:3294](../../docs/plans/continuo_design.md#L3294)） |
+| **3** | **グループの他の issue のうち、`Ready` か `In Progress` に在るものを `Ice Box` へ落とす**（[docs/plans/continuo_design.md:8060](../../docs/plans/continuo_design.md#L8060) の 4-1 の遷移表） |
 
 **段3 を飛ばすと、continuo が代表とは別に dispatch する。**
-[docs/plans/continuo_design.md:3299-3300](../../docs/plans/continuo_design.md#L3299-L3300) が
+[docs/plans/continuo_design.md:3299-3300](../../docs/plans/continuo_design.md#L3299-L3300) の 3-26 が
 「落とさないと `active_states` に残るので、**continuo が代表とは別に dispatch してしまう。**
 『自分が取った』印は代表にしか付かないため、印では防げない」と書いている。
 **印で防げない以上、この規則が唯一の防波堤である。**
@@ -70,8 +82,10 @@ issueは優先順位を計画して人間確認してから着手すること」
 **同時に進める issue は2か3までとする。**レートリミットによって決める。
 
 **これは continuo の設定 `agent.max_concurrent_agents`（既定2）とは別物である。**
-あちらは **continuo が1回の巡回で同時に dispatch する数**であり、
-こちらは**人間と AI が同時に抱える issue の数**である。**片方を変えても、もう片方は変わらない。**
+あちらは **continuo が同時に走らせる Claude Code の数の上限**であり
+（[internal/config/types.go:275](../../internal/config/types.go#L275)）、
+こちらは**人間と AI が同時に抱える issue の数**である。
+**片方を変えても、もう片方は変わらない。**
 **この節を読んで `agent.max_concurrent_agents` に手を入れてはならない。**
 
 | 何 | どうするか |
@@ -102,7 +116,10 @@ issueは優先順位を計画して人間確認してから着手すること」
 
 | 書く | 書いてはいけない |
 | --- | --- |
-| **#80（エージェントが書き間違えた issue 番号で、別のエージェントの作業が止まる）** | エージェントの表明で、別の run が担当中の issue の Status を動かせる |
+| **エージェントが書き間違えた issue 番号で、別のエージェントの作業が止まる** | エージェントの表明で、別の run が担当中の issue の Status を動かせる |
+
+**この見本は #80（エージェントが書き間違えた issue 番号で、別のエージェントの作業が止まる）の題名である。**
+**表には番号を入れない。**題名そのものの見本だからで、番号は GitHub が別に表示する。
 
 **読む人が、題名だけで「何が起きるか」を思い浮かべられる形にする。**
 
