@@ -52,12 +52,26 @@ var ErrBaseUnknown = errors.New("worktree を切る base を決められませ�
 // （detached HEAD。issue #132）。
 //
 // **ErrUnregisteredWorktree では拾えない。**登録はされていて、branch に載っていないだけである。
-// **文面を分けないと、人間は「別の branch にいます: … は "HEAD" をチェックアウトしています」
-// という、原因を伝えない案内を読むことになる。**"HEAD" という名前の branch を探しに行く。
+// **文面を分けないと、人間は「worktree が期待と違う branch に載っています: … は "HEAD" を
+// チェックアウトしています」という、原因を伝えない案内を読むことになる。**
+// "HEAD" という名前の branch を探しに行く。
 //
 // **文言は Error() が呼ばれるたびに資源から引く**（i18n.Sentinel）。
 // errors.New に日本語で書くと、日本語の文言の件数を数える検査に引っかかる。
 var ErrWorktreeDetached = i18n.Sentinel(i18n.KeyWorkspaceErrWorktreeDetached)
+
+// ErrWorktreeBranchMismatch は worktree が期待と違う branch に載っていることを表す
+// （issue #142）。
+//
+// **ErrUnregisteredWorktree では拾えない。**登録はされていて、載っている branch が違うだけである。
+// **文面を分けないと、人間は「登録されていません」を読んで、生きている worktree を消しにいく。**
+//
+// **detached HEAD（ErrWorktreeDetached）とも分ける。**3-68 の通知が
+// 「飛ばした理由の種類」を鍵に含めるので、2つを同じ番兵にすると数え直しが効かない。
+//
+// **文言は Error() が呼ばれるたびに資源から引く**（i18n.Sentinel）。
+// errors.New に日本語で書くと、日本語の文言の件数を数える検査に引っかかる。
+var ErrWorktreeBranchMismatch = i18n.Sentinel(i18n.KeyWorkspaceErrWorktreeBranchMismatch)
 
 // isDetachedHead は、その worktree が detached HEAD かどうかをリポジトリ側に答えさせる。
 //
@@ -136,8 +150,8 @@ type PrepareResult struct {
 // 戻り値の1つ目: 用意した worktree の情報。
 // 戻り値の2つ目: clone を引けない（ErrCloneNotFound）・base を決められない
 // （ErrBaseUnknown）・**どの branch にも載っていない**（ErrWorktreeDetached）・
-// 登録の無い実体がある／**別の branch を出している**
-// （ErrUnregisteredWorktree）・
+// **別の branch を出している**（ErrWorktreeBranchMismatch）・
+// 登録の無い実体がある（ErrUnregisteredWorktree）・
 // 封じ込め検査に落ちた・git や herdr の実行に失敗した場合のエラー。
 func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, error) {
 	loc, warnings, err := Locate(m.resolvedRoot, m.cfg.Herdr.Worktree.BranchTemplate, issue)
@@ -206,9 +220,15 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		}
 		if head != loc.Branch.String() {
 			// 段3 と同じ判断である。**乗っ取らない。**
+			//
+			// **「登録されていません」と名乗ってはならない**（issue #142）。
+			// 登録されていることを確かめた直後であり、読んだ人間は
+			// docs/FAQ.md の別の症状（ディレクトリだけが残っている）へ行き、
+			// 生きている worktree を消しにいく。
 			return nil, i18n.Errorf(
 				i18n.KeyWorkspacePrepareBranchMismatch,
-				ErrUnregisteredWorktree, loc.Path, head, loc.Branch.String())
+				ErrWorktreeBranchMismatch, loc.Path, head, loc.Branch.String(),
+				loc.Path, loc.Path, loc.Branch.String(), loc.Path, loc.Branch.String())
 		}
 		// 既存の身元ファイルを先に読む（3-18）。
 		result.Created = false
@@ -424,7 +444,7 @@ func (m *Manager) logWarnings(warnings []normalize.Warning) {
 // **見るのは4つである。**
 //
 //	目的のパスに実体があるのに git の登録が無い          → ErrUnregisteredWorktree
-//	目的のパスの worktree が別の branch を出している    → ErrUnregisteredWorktree
+//	目的のパスの worktree が別の branch を出している    → ErrWorktreeBranchMismatch
 //	目的のパスの worktree がどの branch にも載っていない  → ErrWorktreeDetached
 //	目的の branch を目的のパス以外の worktree が使っている → ErrBranchInUseElsewhere
 //
@@ -432,8 +452,9 @@ func (m *Manager) logWarnings(warnings []normalize.Warning) {
 //
 // ctx: 実行に適用するコンテキスト。
 // issue: 検査する issue。
-// 戻り値: 上のいずれかに当たった場合の ErrUnregisteredWorktree・ErrWorktreeDetached・
-// ErrBranchInUseElsewhere のいずれか。置き場所を決められない場合と封じ込め検査に落ちた場合は
+// 戻り値: 上のいずれかに当たった場合の ErrUnregisteredWorktree・ErrWorktreeBranchMismatch・
+// ErrWorktreeDetached・ErrBranchInUseElsewhere のいずれか。
+// 置き場所を決められない場合と封じ込め検査に落ちた場合は
 // そのエラー。**それ以外はすべて nil を返す**（まだ何も無い、正しく再利用できる、
 // 判定できない、のいずれか）。
 func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error {
@@ -493,9 +514,11 @@ func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
 			loc.Path, loc.Branch.String(), loc.Path, loc.Branch.String())
 	}
 	if head != loc.Branch.String() {
+		// 3-22 の段2 と同じ判断である（issue #142）。**専用の番兵で断る。**
 		return i18n.Errorf(
 			i18n.KeyWorkspacePrepareBranchMismatch,
-			ErrUnregisteredWorktree, loc.Path, head, loc.Branch.String())
+			ErrWorktreeBranchMismatch, loc.Path, head, loc.Branch.String(),
+			loc.Path, loc.Path, loc.Branch.String(), loc.Path, loc.Branch.String())
 	}
 	return nil
 }
