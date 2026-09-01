@@ -310,6 +310,11 @@ type Orchestrator struct {
 	// **キーは `<owner>/<repo>` である。**issue ごとではない。
 	// 素朴に issue ごとにすると、30秒ごとに永久にコメントが積まれる。
 	notified map[string]time.Time
+	// labelSkipped は、必須のラベルが足りずに飛ばしたことを知らせ済みの issue である
+	// （issue #134。キーは project item の ID）。
+	//
+	// **ログを1回だけにするためだけに持つ。**判定には1度も使わない。
+	labelSkipped map[string]struct{}
 	// failures は issue（project item の ID）ごとの失敗の記録である。
 	//
 	// **印（runs）の外に置く。**印は run が終わると消えるので、そこに数えていると
@@ -472,6 +477,7 @@ func New(opts Options) (*Orchestrator, error) {
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
 		notified:       map[string]time.Time{},
+		labelSkipped:   map[string]struct{}{},
 		failures:       map[string]*failureNote{},
 		shutdown:       shutdown,
 		shutdownCancel: shutdownCancel,
