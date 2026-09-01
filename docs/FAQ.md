@@ -466,10 +466,10 @@ git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 bisect r
 
 ```bash
 # 期待の branch が残っているとき
-git -C ~/worktrees/… switch continuo/<owner>/<repo>/42
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch continuo/<owner>/<repo>/42
 
 # 期待の branch が消えているとき
-git -C ~/worktrees/… switch -c continuo/<owner>/<repo>/42
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
 ```
 
 **3. ボードでその issue を `Ready` へ戻します。**

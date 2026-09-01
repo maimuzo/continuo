@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -394,6 +395,46 @@ func TestCheckWorktreeUsable_detachedHEADを段0で断る(t *testing.T) {
 	err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188))
 	if !errors.Is(err, workspace.ErrWorktreeDetached) {
 		t.Fatalf("段0 が detached HEAD を断っていない: %v", err)
+	}
+}
+
+// 目的: rebase を途中で止めた worktree も detached として断ることを確認する（issue #132）。
+//
+// **文面と docs/FAQ.md は rebase 中を名指しで案内している。**
+// **その前提（rebase の途中は porcelain が detached を出す）を、テストで固定する。**
+// ここが崩れると、案内だけが残って判定が別の分岐へ落ちる。
+//
+// 与える情報: 衝突で止めた rebase の途中にある worktree。
+// 成功条件: ErrWorktreeDetached になること。
+func TestPrepare_rebaseの途中もdetachedとして断る(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	ctx := context.Background()
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	// 同じファイルを別々に変えた2つの commit を作り、rebase で必ず衝突させる。
+	conflict := filepath.Join(prepared.Path, "conflict.txt")
+	base := runGit(t, prepared.Path, "rev-parse", "HEAD")
+	if err := os.WriteFile(conflict, []byte("こちら\n"), 0o644); err != nil {
+		t.Fatalf("ファイルを書けない: %v", err)
+	}
+	runGit(t, prepared.Path, "add", "conflict.txt")
+	runGit(t, prepared.Path, "commit", "--quiet", "-m", "こちら側")
+	runGit(t, prepared.Path, "checkout", "--quiet", "-b", "他方", base)
+	if err := os.WriteFile(conflict, []byte("あちら\n"), 0o644); err != nil {
+		t.Fatalf("ファイルを書けない: %v", err)
+	}
+	runGit(t, prepared.Path, "add", "conflict.txt")
+	runGit(t, prepared.Path, "commit", "--quiet", "-m", "あちら側")
+
+	// **衝突で止まることが目的なので、失敗を許す。**runGit は失敗でテストを止めるので使えない。
+	rebase := exec.Command("git", "-C", prepared.Path, "rebase", prepared.Branch.String())
+	if out, err := rebase.CombinedOutput(); err == nil {
+		t.Fatalf("rebase が衝突せずに通ってしまった:\n%s", out)
+	}
+
+	err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188))
+	if !errors.Is(err, workspace.ErrWorktreeDetached) {
+		t.Fatalf("rebase の途中を detached として断っていない: %v", err)
 	}
 }
 

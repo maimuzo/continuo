@@ -6884,11 +6884,12 @@ level=WARN msg="コメントに印は付いていますが、投稿者が gh の
 
 **採る形。**
 
-| 何を | どうする |
-| --- | --- |
-| 番兵エラー | **`ErrWorktreeBranchMismatch` を新設する。**`ErrUnregisteredWorktree` を `errors.Is` で見ている本番コードは0件なので、替えて壊れるのはテスト1件だけである |
-| 文言 | **他の2つに揃える。**【確かめ方】【よくある原因】【対処】を足す |
-| 直す箇所 | **2箇所とも。**`preflight` 側だけ直しても `Prepare` 側に同じ嘘が残る |
+| 何を | どうする | 状態 |
+| --- | --- | --- |
+| **detached HEAD の番兵** | **`ErrWorktreeDetached` を新設する** | **入った**（issue #132） |
+| **branch の食い違いの番兵** | **専用の番兵を新設する。**`ErrUnregisteredWorktree` を `errors.Is` で見ている本番コードは0件なので、替えて壊れるのはテスト1件だけである | **未着手** |
+| 文言 | **他の2つに揃える。**【確かめ方】【よくある原因】【対処】を足す | **detached だけ入った。**`workspace.prepare.branch_mismatch` は未着手 |
+| 直す箇所 | **2箇所とも。**`preflight` 側だけ直しても `Prepare` 側に同じ嘘が残る | **detached は2箇所とも入った** |
 
 **文言に必ず入れること。**
 

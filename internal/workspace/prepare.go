@@ -421,18 +421,19 @@ func (m *Manager) logWarnings(warnings []normalize.Warning) {
 // ここで落とすと、その issue は候補に残ったままログにしか出ず、人間へ届かない。
 // **この関数がエラーを返すのは「何度やっても必ず失敗する」と言い切れる形だけである。**
 //
-// **見るのは3つである。**
+// **見るのは4つである。**
 //
 //	目的のパスに実体があるのに git の登録が無い          → ErrUnregisteredWorktree
 //	目的のパスの worktree が別の branch を出している    → ErrUnregisteredWorktree
+//	目的のパスの worktree がどの branch にも載っていない  → ErrWorktreeDetached
 //	目的の branch を目的のパス以外の worktree が使っている → ErrBranchInUseElsewhere
 //
-// **3つ目は目的のパスに何も無くても起きる**（実機で1件通して見つかった。設計 3-16b）。
+// **4つ目は目的のパスに何も無くても起きる**（実機で1件通して見つかった。設計 3-16b）。
 //
 // ctx: 実行に適用するコンテキスト。
 // issue: 検査する issue。
-// 戻り値: 上の3つのいずれかに当たった場合の ErrUnregisteredWorktree または
-// ErrBranchInUseElsewhere。置き場所を決められない場合と封じ込め検査に落ちた場合は
+// 戻り値: 上のいずれかに当たった場合の ErrUnregisteredWorktree・ErrWorktreeDetached・
+// ErrBranchInUseElsewhere のいずれか。置き場所を決められない場合と封じ込め検査に落ちた場合は
 // そのエラー。**それ以外はすべて nil を返す**（まだ何も無い、正しく再利用できる、
 // 判定できない、のいずれか）。
 func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error {
