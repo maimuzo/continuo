@@ -268,7 +268,7 @@ func TestBootstrap_ボードに在る対応表のキーは起動も知らせも�
 	}
 	// **`Ice Box` は対応表のキーなので、「continuo が知らない Status」にも数えない**
 	// （キーの Status へ動かされた issue は書き戻されるのであって、worker は止まらない）。
-	if strings.Contains(logs, "ボードには continuo が知らない Status があります") {
+	if strings.Contains(logs, "カンバンには continuo が知らない Status があります") {
 		t.Fatalf("対応表のキーを「知らない Status」として名指ししている:\n%s", logs)
 	}
 }

@@ -782,7 +782,7 @@ func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState,
 	if who == "" {
 		who = i18n.T(i18n.KeyHandoffLostUnknownHost)
 	}
-	o.logger.Warn("担当が移ったので、この turn の終わりで止めます（push しません。ボードへは書きません。after_run も走らせません）",
+	o.logger.Warn("担当が移ったので、この turn の終わりで止めます（push しません。カンバンへは書きません。after_run も走らせません）",
 		"identifier", rs.issue().Identifier, "いまの担当", who,
 		"理由", i18n.T(i18n.KeyHandoffLostReason, who, o.handoffIdleTimeout()))
 

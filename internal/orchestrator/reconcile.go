@@ -143,7 +143,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		if seen[id] {
 			continue
 		}
-		o.logger.Warn("issue がボードから見えなくなったので印から外します（continuo は面倒を見ません）",
+		o.logger.Warn("issue がカンバンから見えなくなったので印から外します（continuo は面倒を見ません）",
 			"identifier", rs.issue().Identifier)
 		o.stopAndReleaseAsync(ctx, rs)
 	}

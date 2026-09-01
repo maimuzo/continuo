@@ -47,7 +47,7 @@ const tokenSourceKeychainComment = "macOS の Keychain から読む。先に con
 //
 // **「要らない行を消すこと」を必ず残す。**ボードから拾った一覧をそのまま信頼させないための
 // 一文であり、これが消えると人間が削る手順そのものが伝わらない（設計 3-33）。
-const repositoriesFilledComment = "continuo trust が信頼を登録してよいリポジトリ。ボードから拾って並べた。"
+const repositoriesFilledComment = "continuo trust が信頼を登録してよいリポジトリ。カンバンから拾って並べた。"
 
 // repositoriesFilledComment2 は trust.repositories を埋めたあとに残すコメントの2行目である。
 const repositoriesFilledComment2 = "**要らない行は消すこと。**ここに残ったものだけが登録の対象になる"
@@ -56,7 +56,7 @@ const repositoriesFilledComment2 = "**要らない行は消すこと。**ここ�
 //
 // **ボードに載っていないリポジトリは自動では入らない。**これから issue を作る
 // リポジトリは、この時点ではボードに無いので拾えない。手で足す必要がある。
-const repositoriesFilledComment3 = "**これから issue を作るリポジトリは、まだボードに無いので入っていない。**手で足すこと"
+const repositoriesFilledComment3 = "**これから issue を作るリポジトリは、まだカンバンに無いので入っていない。**手で足すこと"
 
 // ownerPattern は tracker.provider.owner として受け付ける文字の範囲である。
 //

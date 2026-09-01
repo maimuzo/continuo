@@ -82,17 +82,26 @@ fi
 ng=0
 
 # レビュー結果が貼ってあるかを見る。
-# **目印は `<!-- code-review-result -->` で、本文の先頭に無ければならない。**
 #
-# **`contains` を使ってはならない。**本文の途中に目印があるコメント
-# （手順を説明した進捗の報告など）を1件と数えてしまう。
-# **2026-09-01、それで2本がレビュー未実施のままマージされた。**
+# **数える条件は2つ。**
+#   一、本文の**先頭**に `<!-- code-review-result -->` がある（前に空白文字があってもよい）。
+#       **途中に書いたものは数えない。**本文に "code-review" と書いただけのコメントを数えると、
+#       実施していないものが通ってしまう。
+#   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
+#       **誰でもコメントできるので、外部の人が目印を貼れば通る状態にしない。**
 #
-# **`\s` も使えない。**jq の文字列は JSON 文字列なので、バックスラッシュ1つの
-# `\s` は「不正なエスケープ」で構文エラーになる。`[[:space:]]` を使う。
+# **この条件は3箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
+#   .claude/hooks/block-merge-without-review.py … 手元の gh pr merge / gh pr ready を止める
+#   .github/workflows/review-gate.yml           … PR のマージを止める
+#   ここ                                        … タグを打つのを止める
 review_of() {
-	gh pr view "$1" --json comments \
-		--jq '[.comments[] | select(.body | test("^[[:space:]]*<!-- code-review-result -->"))] | length'
+	gh pr view "$1" --json comments --jq '
+		[ .comments[]
+		  | select((.body // "") | test("^\\s*<!-- code-review-result -->"))
+		  | select(.authorAssociation == "OWNER"
+		           or .authorAssociation == "MEMBER"
+		           or .authorAssociation == "COLLABORATOR")
+		] | length'
 }
 
 # 対になる issue の番号を並べる。

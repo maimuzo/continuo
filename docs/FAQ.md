@@ -6,7 +6,7 @@
 
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 /
 未記入の項目 / claude / hook の置き場所 / Claude の設定 / worktree の場所 / herdr /
-gh の認証 / ボード / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報の15個を調べます。
+gh の認証 / カンバン / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報の15個を調べます。
 `✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
@@ -141,14 +141,14 @@ cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak
 
 ## doctor が通らないとき
 
-### `✗ ボード  Status の選択肢名が設定と一致しません`
+### `✗ カンバン  Status の選択肢名が設定と一致しません`
 
 **原因。**GitHub の既定の Status は `Todo` / `In Progress` / `Done` の3つだけです。
 continuo は5つの役割それぞれに別の選択肢を使います。
 GraphQL はエラーを出さずに0件を返し続けるので、起動時の検査でここで止めています。
 
 **直し方。****足りない選択肢は GitHub の画面から足します。**
-ボードの `Settings` → 左の `Custom fields` の `Status` → `Options` の `Add option...`。名前は何でも構いません。
+カンバンの `Settings` → 左の `Custom fields` の `Status` → `Options` の `Add option...`。名前は何でも構いません。
 足したら役割との対応を付け直します。
 
 ```bash
@@ -343,29 +343,29 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -
 
 **起動は止まりません。**`!` なので終了コードも 0 のままです。
 
-### `! 対応表のキー  tracker.automated_state_rewrite のキーに、ボードの Status の選択肢に無いものがあります`
+### `! 対応表のキー  tracker.automated_state_rewrite のキーに、カンバンの Status の選択肢に無いものがあります`
 
 **原因。**書き戻しの対応表（`tracker.automated_state_rewrite`）のキーに書いた Status が、
-ボードの選択肢にありません。**キーはボードの自動化が書く Status 名なので、
-ボードにその選択肢が無ければ、その行は一度も引かれません。**
+カンバンの選択肢にありません。**キーはカンバンの自動化が書く Status 名なので、
+カンバンにその選択肢が無ければ、その行は一度も引かれません。**
 
 **よくある形は2つです。**
 
 | 形 | どうするか |
 | --- | --- |
-| **綴りを打ち間違えた**（`Todo` を `To Do` と書いた） | キーの綴りを、ボードの選択肢名に合わせる |
-| **その Status をボードで使わなくなった** | 対応表からその行を消す |
+| **綴りを打ち間違えた**（`Todo` を `To Do` と書いた） | キーの綴りを、カンバンの選択肢名に合わせる |
+| **その Status をカンバンで使わなくなった** | 対応表からその行を消す |
 
 ```yaml
 tracker:
   automated_state_rewrite:
-    "Todo": "In Progress"   # 左がボードの選択肢名と1文字ずつ合っているか
+    "Todo": "In Progress"   # 左がカンバンの選択肢名と1文字ずつ合っているか
 ```
 
 **大文字小文字と前後の空白は無視して照合します。**`todo` と書いても `!` にはなりません。
 
 **起動は止まりません。**`!` なので終了コードも 0 のままです。
-**ボードの自動化をやめて選択肢を消した人が、起動できなくなってはならないからです**
+**カンバンの自動化をやめて選択肢を消した人が、起動できなくなってはならないからです**
 （この検査で起動を止めると、抜け出す道が無くなります）。
 **同じ内容の警告が、起動したときにもログへ1行出ます。**
 
@@ -384,10 +384,10 @@ gh issue create --repo <owner>/<repo> --title "…" --body "…"
 gh project item-add <番号> --owner <owner> --url https://github.com/<owner>/<repo>/issues/42
 ```
 
-### `continuo setup` が「使うボードの番号が決まりませんでした」で止まる
+### `continuo setup` が「使うカンバンの番号が決まりませんでした」で止まる
 
-**原因。**ボードが organization にあるのに、以前の版は個人アカウントのログイン名しか見ていませんでした。
-GitHub Enterprise で organization のボードを使っていると必ずこうなります。
+**原因。**カンバンが organization にあるのに、以前の版は個人アカウントのログイン名しか見ていませんでした。
+GitHub Enterprise で organization のカンバンを使っていると必ずこうなります。
 `--project <番号>` を付けても `Could not resolve to a ProjectV2 with the number N. (user.projectV2)` になります。
 
 **直し方。**いまは `gh api user/orgs` を引いて organization も探します。
@@ -479,9 +479,61 @@ git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -
 **`continuo abandon` は使わないでください。**worktree の中の作業が消えます。
 **`--force` を付けなくても、条件が揃うと Status を `failure_state` へ動かします。**
 
-### 着手が「`herdr.worktree.base` が空で、ボードから引いた issue にも既定 branch の情報がありませんでした」で止まる
+### 着手が「worktree が期待と違う branch に載っています」で止まる
 
-**原因。**base を書いていないときはボードが返す既定 branch を使いますが、それが取れませんでした。
+**原因。**worktree が、continuo の作った branch とは別の branch をチェックアウトしています。
+
+**上の2つの節とは違います。**worktree は git に登録されていて、どこかの branch には載っています。
+**載っている branch が違うだけです。**中の作業は残っています。
+
+**よくある原因。**
+
+| 何 | 例 |
+| --- | --- |
+| **issue の本文が別の branch を指していた** | 「作業は既に `feature/x` にあり、draft PR も出ている」と書いてあり、エージェントがそこへ切り替えた |
+| **1つの issue で2本目の PR を出した** | エージェントが新しい branch を切った |
+| **人間が手で切り替えた** | 同じ worktree で別の作業をした |
+
+**直し方。**
+
+**1. 未コミットの変更と、push していない commit があるかを、先に確かめてください。**
+
+```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 status
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 log --oneline @{u}..HEAD
+```
+
+**2つ目のコマンドが `no upstream configured` で落ちたら、その branch は1度も push されていません。**
+**commit は全部この機械の中にしかありません。**
+
+**いまの branch の作業が要るなら、期待の branch へ戻したあとでマージしてください。**
+**先に戻してしまうと、いまの branch を自分で覚えておかない限り引けなくなります。**
+
+**2. 期待の branch へ戻します。**
+
+```bash
+# 期待の branch が残っているとき
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch continuo/<owner>/<repo>/42
+
+# 期待の branch が消えているとき
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
+```
+
+**3. ボードでその issue を `Ready` へ戻します。**
+
+**この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
+
+**`continuo abandon` は使わないでください。**worktree の中の作業が消えます。
+**`--force` を付けなくても、条件が揃うと Status を `failure_state` へ動かします。**
+
+**エージェントに切り替えさせないための指示は、`WORKFLOW.md` の本文にあります。**
+v0.1.12 の雛形から「continuo が用意した worktree と branch のまま作業してください」が入りました。
+**古い版から上げた `WORKFLOW.md` には入っていません。**
+[upgrading.md](upgrading.md) の「v0.1.11 から v0.1.12 へ」を見て、手で足してください。
+
+### 着手が「`herdr.worktree.base` が空で、カンバンから引いた issue にも既定 branch の情報がありませんでした」で止まる
+
+**原因。**base を書いていないときはカンバンが返す既定 branch を使いますが、それが取れませんでした。
 
 **直し方。**`WORKFLOW.md` に branch 名を書きます。
 
@@ -1322,7 +1374,7 @@ continuo abandon --park "Ice Box" https://github.com/<owner>/<repo>/issues/42 ~/
 
 **手を離させたあとで止まった場合、Status はその値のまま残ります。**
 continuo は元へ戻しません（戻す先が作業中の Status なので、戻した瞬間に拾い直しかねないためです）。
-戻すかどうかはボードで決めてください。
+戻すかどうかはカンバンで決めてください。
 
 ### `continuo abandon --dry-run` が「失われるものを調べられません: … invalid gitfile format」で何も出さずに終わる
 
@@ -1486,9 +1538,9 @@ continuo --help
 | コマンド | 何をするか |
 | --- | --- |
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
-| `continuo setup [ディレクトリ]` | ボードの Status を5つの役割へ対応づける（対話） |
+| `continuo setup [ディレクトリ]` | カンバンの Status を5つの役割へ対応づける（対話） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを14の見出し語で調べる |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかを15の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |

@@ -2083,6 +2083,8 @@ const (
 	KeyWorkspacePrepareStatFailed Key = "workspace.prepare.stat_failed"
 	// KeyWorkspacePrepareBranchInUseElsewhere は目的の branch を、目的のパス以外の worktree が既に使っていたときに出る。
 	KeyWorkspacePrepareBranchInUseElsewhere Key = "workspace.prepare.branch_in_use_elsewhere"
+	// KeyWorkspaceErrWorktreeBranchMismatch は worktree が期待と違う branch に載っているときの番兵の文言である（issue #142）。
+	KeyWorkspaceErrWorktreeBranchMismatch Key = "workspace.err.worktree_branch_mismatch"
 	// KeyWorkspacePrepareBranchMismatch は再利用しようとした worktree が別の branch をチェックアウトしていたときに出る。
 	KeyWorkspacePrepareBranchMismatch Key = "workspace.prepare.branch_mismatch"
 	// KeyWorkspaceErrWorktreeDetached は worktree が detached HEAD のときの番兵の文言である（issue #132）。
@@ -3028,6 +3030,7 @@ var allKeys = []Key{
 	KeyWorkspacePrepareCloneNotFound,
 	KeyWorkspacePrepareStatFailed,
 	KeyWorkspacePrepareBranchInUseElsewhere,
+	KeyWorkspaceErrWorktreeBranchMismatch,
 	KeyWorkspacePrepareBranchMismatch,
 	KeyWorkspaceErrWorktreeDetached,
 	KeyWorkspacePrepareDetachedHead,

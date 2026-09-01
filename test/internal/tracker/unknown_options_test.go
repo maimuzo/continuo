@@ -34,7 +34,7 @@ func TestBootstrap_ボードにあって設定に無いStatusを起動時に名�
 	}
 
 	logs := buf.String()
-	if !strings.Contains(logs, "ボードには continuo が知らない Status があります") {
+	if !strings.Contains(logs, "カンバンには continuo が知らない Status があります") {
 		t.Fatalf("知らない Status の知らせが出ていない:\n%s", logs)
 	}
 	if !strings.Contains(logs, "Ice Box") {
@@ -67,7 +67,7 @@ func TestVerifyStatusOptions_知らないStatusの知らせを巡回ごとに繰
 		}
 	}
 
-	if logs := buf.String(); strings.Contains(logs, "ボードには continuo が知らない Status があります") {
+	if logs := buf.String(); strings.Contains(logs, "カンバンには continuo が知らない Status があります") {
 		t.Fatalf("巡回ごとの再照合で知らせを繰り返している:\n%s", logs)
 	}
 }

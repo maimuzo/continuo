@@ -33,7 +33,7 @@ var (
 	// ErrScopeMissing は gh の scope に project が無いことを表す。
 	ErrScopeMissing = errors.New("gh の scope に project がありません")
 	// ErrStatusFieldNotFound は、指定した名前の single-select フィールドがボードに無いことを表す。
-	ErrStatusFieldNotFound = errors.New("ボードに single-select の Status フィールドがありません")
+	ErrStatusFieldNotFound = errors.New("カンバンに single-select の Status フィールドがありません")
 	// ErrRateLimited は GitHub のレートリミットに当たったことを表す。**一時的である。**
 	ErrRateLimited = errors.New("GitHub のレートリミットに当たりました")
 )
