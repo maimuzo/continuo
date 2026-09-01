@@ -167,7 +167,13 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // candidates: `active_states` で取った候補（ボードの並び順）。
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
 	if o.dispatchPaused() {
-		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）",
+		// **INFO のままにする**（issue #134）。
+		// **一度 WARN へ上げたが、8本のテストが落ちた。**どれも正常な動作を作っているもので、
+		// **「異常ではないものを異常として出そうとしている」という信号だった。**
+		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
+		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
+		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）。"+
+			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください",
 			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
 		return
 	}
@@ -210,13 +216,29 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			continue
 		}
 		if !hasRequiredLabels(issue, o.cfg.Tracker.RequiredLabels) {
+			// **黙って飛ばさない**（issue #134）。ここは v0.1.11 まで1行も出さなかった。
+			// **設定した本人でも、どの issue がどのラベル待ちなのかを知る手立てが無かった。**
+			//
+			// **Debug ではなく Info にする。**Status が着手待ちのまま動かないので、
+			// 人間から見ると「止まっている」ようにしか見えない。
+			o.logger.Info("必須のラベルが揃っていないので飛ばします",
+				"identifier", issue.Identifier,
+				"required_labels", strings.Join(o.cfg.Tracker.RequiredLabels, ", "),
+				"この issue のラベル", strings.Join(issue.Labels, ", "))
 			continue
 		}
 
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
 		if !o.hasFreeSlot() {
-			o.logger.Info("空きスロットが尽きたので、この巡回ではこれ以上 dispatch しません",
-				"max_concurrent_agents", o.cfg.Agent.MaxConcurrentAgents)
+			// **INFO のままにする**（issue #134。上の dispatchPaused と同じ理由）。
+			// **同時に動かす数の上限に達しただけで、異常ではない。**
+			// **代わりに、増やし方と、打ち切った issue の識別子を同じ行に足した。**
+			// どこから先が今回の巡回で検査されなかったのかが分かる。
+			o.logger.Info("空きスロットが尽きたので、この巡回ではこれ以上 dispatch しません。"+
+				"走っているものが終われば順に着手します。同時に動かす数を増やすには "+
+				"agent.max_concurrent_agents を上げてください",
+				"max_concurrent_agents", o.cfg.Agent.MaxConcurrentAgents,
+				"ここで打ち切った issue", issue.Identifier)
 			break
 		}
 
