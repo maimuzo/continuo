@@ -146,7 +146,9 @@ sh scripts/test-like-ci.sh
 
 1. レビューを回す
 2. その結果を、その PR のコメントとして貼る（**1行目を `<!-- code-review-result -->` にする**）
-3. `gh pr ready <番号>` を打つ。`ready_for_review` で検査が回り直します
+3. **PR が draft なら** `gh pr ready <番号>` を打つ。`ready_for_review` で検査が回り直します
+4. **PR が draft でないなら `gh pr ready` は効きません。**`ready_for_review` は draft を ready に
+   したときにしか起きないからです。`gh run rerun <run の id>` で回し直してください
 
 **draft のあいだは赤のままでかまいません。**検査は draft でも走り、**job を飛ばしません。**
 **飛ばした job は「成功」として報告され、必須の検査であってもマージを止められないからです。**

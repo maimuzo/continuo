@@ -105,7 +105,12 @@ PR #{pr} のコメントに `{marker}` が1件もありません。
 - **目印が本文の先頭にあること。**途中に書いたものは数えません
 - **投稿者が {assoc} のいずれかであること。**それ以外の人のコメントは数えません
 
-**貼ったあと `gh pr ready {pr}` を打つと、CI の検査（review-gate）も回り直します。**
+**貼ったあと、CI の検査（review-gate）を回し直してください。**
+
+- **PR が draft なら** `gh pr ready {pr}` を打つ。`ready_for_review` が飛んで回り直します
+- **PR が既に draft でないなら、`gh pr ready` は効きません。**`ready_for_review` は
+  draft を ready にしたときにしか起きないので、**`gh run rerun` で回し直してください**
+  （手順は .claude/skills/pr-review-and-merge/SKILL.md の段5）
 
 **なぜ止めているか。**[CLAUDE.md](CLAUDE.md) が「レビュー結果を貼ってあることが、実施したことの唯一の証拠である」と定めています。
 **貼っていないものは、CI（.github/workflows/review-gate.yml）とリリース前の検査（scripts/check-release-ready.sh）も落とします。**
