@@ -141,7 +141,7 @@ cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak
 
 ## doctor が通らないとき
 
-### `✗ ボード  Status の選択肢名が設定と一致しません`
+### `✗ カンバン  Status の選択肢名が設定と一致しません`
 
 **原因。**GitHub の既定の Status は `Todo` / `In Progress` / `Done` の3つだけです。
 continuo は5つの役割それぞれに別の選択肢を使います。
@@ -343,7 +343,7 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -
 
 **起動は止まりません。**`!` なので終了コードも 0 のままです。
 
-### `! 対応表のキー  tracker.automated_state_rewrite のキーに、ボードの Status の選択肢に無いものがあります`
+### `! 対応表のキー  tracker.automated_state_rewrite のキーに、カンバンの Status の選択肢に無いものがあります`
 
 **原因。**書き戻しの対応表（`tracker.automated_state_rewrite`）のキーに書いた Status が、
 ボードの選択肢にありません。**キーはボードの自動化が書く Status 名なので、
@@ -384,7 +384,7 @@ gh issue create --repo <owner>/<repo> --title "…" --body "…"
 gh project item-add <番号> --owner <owner> --url https://github.com/<owner>/<repo>/issues/42
 ```
 
-### `continuo setup` が「使うボードの番号が決まりませんでした」で止まる
+### `continuo setup` が「使うカンバンの番号が決まりませんでした」で止まる
 
 **原因。**ボードが organization にあるのに、以前の版は個人アカウントのログイン名しか見ていませんでした。
 GitHub Enterprise で organization のボードを使っていると必ずこうなります。
@@ -531,7 +531,7 @@ v0.1.12 の雛形から「continuo が用意した worktree と branch のまま
 **古い版から上げた `WORKFLOW.md` には入っていません。**
 [upgrading.md](upgrading.md) の「v0.1.11 から v0.1.12 へ」を見て、手で足してください。
 
-### 着手が「`herdr.worktree.base` が空で、ボードから引いた issue にも既定 branch の情報がありませんでした」で止まる
+### 着手が「`herdr.worktree.base` が空で、カンバンから引いた issue にも既定 branch の情報がありませんでした」で止まる
 
 **原因。**base を書いていないときはボードが返す既定 branch を使いますが、それが取れませんでした。
 
@@ -1323,7 +1323,7 @@ continuo abandon --park "Ice Box" https://github.com/<owner>/<repo>/issues/42 ~/
 
 **手を離させたあとで止まった場合、Status はその値のまま残ります。**
 continuo は元へ戻しません（戻す先が作業中の Status なので、戻した瞬間に拾い直しかねないためです）。
-戻すかどうかはボードで決めてください。
+戻すかどうかはカンバンで決めてください。
 
 ### `continuo abandon --dry-run` が「失われるものを調べられません: … invalid gitfile format」で何も出さずに終わる
 
