@@ -26,6 +26,8 @@ import (
 type fakeSource struct {
 	// views は RunViews が返す写しである。
 	views []orchestrator.RunView
+	// gates は GateViews が返す写しである（issue #134）。
+	gates []orchestrator.GateView
 	// calls は RunViews が呼ばれた回数である。
 	calls int
 }
@@ -36,6 +38,13 @@ type fakeSource struct {
 func (f *fakeSource) RunViews() []orchestrator.RunView {
 	f.calls++
 	return f.views
+}
+
+// GateViews は着手の関門で止めた issue の写しを返す（issue #134）。
+//
+// 戻り値: 設定しておいた写し。
+func (f *fakeSource) GateViews() []orchestrator.GateView {
+	return f.gates
 }
 
 // testTime はテストで使う固定の時刻である（経過の表示を決定的にするため）。
@@ -51,7 +60,22 @@ var testTime = time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
 // 戻り値の2つ目: 供給元（呼ばれた回数の確認に使う）。
 func newTestServer(t *testing.T, views []orchestrator.RunView) (*server.Server, *fakeSource) {
 	t.Helper()
-	src := &fakeSource{views: views}
+	return newTestServerWithGates(t, views, nil)
+}
+
+// newTestServerWithGates は、着手の関門で止めた issue の写しも渡してダッシュボードを組み立てる
+// （issue #134）。
+//
+// t: テストの制御。
+// views: 供給する run の写し。
+// gates: 供給する「着手できずに止まっているもの」の写し。
+// 戻り値の1つ目: 組み立てたダッシュボード。
+// 戻り値の2つ目: 供給元（呼ばれた回数の確認に使う）。
+func newTestServerWithGates(
+	t *testing.T, views []orchestrator.RunView, gates []orchestrator.GateView,
+) (*server.Server, *fakeSource) {
+	t.Helper()
+	src := &fakeSource{views: views, gates: gates}
 	port := 0
 	s, err := server.New(server.Options{
 		Port:   &port,

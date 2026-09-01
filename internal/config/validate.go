@@ -682,6 +682,16 @@ func validateHandoff(h TrackerProviderHandoffConfig) error {
 		return invalidValueError("tracker.provider.handoff.weekly_margin_percent",
 			h.WeeklyMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}
+	// **決められた値だけを通す**（issue #134 / #136 / #140）。
+	// **知らない値を黙って既定へ倒さない。**`warn_only` のつもりで打ち間違えた設定が
+	// 通ってしまうと、切ったはずの案内が issue へ書かれる。**書いたものは消せない。**
+	// **空文字はここへ来ない。**`DefaultConfig` が `warn_and_comment` を入れている。
+	switch h.OnAssigneeGate {
+	case OnAssigneeGateWarnAndComment, OnAssigneeGateWarnOnly:
+	default:
+		return invalidValueError("tracker.provider.handoff.on_assignee_gate", h.OnAssigneeGate,
+			i18n.T(i18n.KeyConfigValidateHandoffOnAssigneeGate))
+	}
 	return nil
 }
 

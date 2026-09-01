@@ -166,6 +166,11 @@ const (
 	// 「人間が2人」と「人間1人＋別の機械が hold を持っている」を
 	// 切り分けられなかったことを表す（8-3）。
 	GateNoticeUnclearOwner GateNoticeSkip = "unclear_owner"
+	// GateNoticeNoBody は、その理由に issue へ書く本文が用意されていないことを表す。
+	//
+	// **いまの3つの理由では立たない。**理由を1つ足して本文（9 節）を書き忘れたときにだけ立つ。
+	// **黙って中身の無い案内を投稿しない。**消す手段が無いので、画面に出すほうがよい。
+	GateNoticeNoBody GateNoticeSkip = "no_body"
 )
 ```
 
@@ -499,7 +504,7 @@ func (o *Orchestrator) forgetGatedNotOnBoard(candidates []tracker.Issue)
 **逆にすると、コメントの多い issue で「前に書いてある」ことが分かっているのに
 `too_many_comments` の印が立ち、ダッシュボードが嘘をつく。**
 
-**投稿するかどうかを決める道は5つあり、決める場所は2つに分かれる。**
+**投稿するかどうかを決める道は6つあり、決める場所は2つに分かれる。**
 **どの道も、書き込む先は `notices[その理由]` の1件である**（6-5）。
 
 | 道 | 決める場所 | `NoticedAt` | `Skip` |
@@ -509,12 +514,13 @@ func (o *Orchestrator) forgetGatedNotOnBoard(candidates []tracker.Issue)
 | **gh の持ち主が担当者に混じっていた**（8-3） | **呼び出し側**の `markGateNoticeSkipped` | 立てない | `"unclear_owner"` |
 | **`warn_and_comment`**（既定） | `postGateNotice` | **立てる**（投稿の前に） | 空 |
 | **`warn_only`** | `postGateNotice` | 立てない | `"off_by_config"` |
+| **その理由の本文が無い**（9 節に書き忘れたとき） | `postGateNotice` | 立てない | `"no_body"` |
 
 **切れの検査を `postGateNotice` の中に置かない。**この関数は `comments` を受け取らないので、
 **切れていたかどうかを知る手段が1つも無い。**
 **`postGateNotice` が見るのは `on_assignee_gate` だけである。**
 
-**5つとも、その理由については次の巡回で `noteGate` が偽を返す。**
+**6つとも、その理由については次の巡回で `noteGate` が偽を返す。**
 `notices[その理由]` の `NoticedAt` と `Skip` のどちらかが入っているからである。
 **別の理由へ変わったら、その理由の `notices` は空なので、また真を返しうる**（6-5）。
 **毎巡回 true を返させない。**返させると、`warn_only` のあいだ `postGateNotice` が
@@ -743,6 +749,10 @@ GitHub の検索の反映が遅れて1巡回だけ一覧に出なかったとき
 この経路は issue のコメントを読まないので、前に書いたことを手元から確かめられません。
 ```
 
+**`many_assignees_with_self` の本文は作らない。**この理由では issue へ1バイトも書かない（8-3）。
+**`buildGatedComment` は知らない理由に空文字を返し、`postGateNotice` はそれを投稿せずに
+`no_body` の印を立てる。**理由を足して本文を書き忘れても、中身の無い案内が issue へ残らない。
+
 **本文は `postComment` を通る。**[internal/orchestrator/comment.go:402-412](../../../internal/orchestrator/comment.go#L402-L412) の `postCommentWithMarker` が
 手元の絶対パスを `~` へ縮める唯一の場所である。**この案内はパスを1つも載せないが、経路は揃える。**
 
@@ -889,6 +899,7 @@ type Gated struct {
 | **`warn_only` で切ってある** | `dashboard.badge_notice_off` | issue へは書かない設定です |
 | **コメントが上限で切れていた** | `dashboard.badge_notice_capped` | コメントが多すぎて確かめられません |
 | **gh の持ち主が担当者に混じっていた**（8-3） | `dashboard.badge_notice_unclear_owner` | 別の機械の担当かどうかを切り分けられません |
+| **その理由の本文が無い** | `dashboard.badge_notice_no_body` | この理由に書く本文が用意されていません |
 
 **表。**列は4つ。`{{ t "dashboard.caption_gated" }}` を見出しにして、実行中の run の表の**上**に置く。
 **上に置く理由。**「実行中の run はありません」しか出ない画面を見に来た人が探しているのは、こちらである。
@@ -908,11 +919,11 @@ type Gated struct {
 
 ---
 
-## 12. 足す文言（17件）
+## 12. 足す文言（18件）
 
 **言いたいこと。**`internal/server` は文言を全部資源から引く（設計 3-35）。
 **理由と直し方も資源に置く。**`internal/orchestrator` 側の WARN と issue のコメントは、いまどおり日本語を直に書く。
-**17件のうち16件はダッシュボード、1件は設定の検査である**（`on_assignee_gate`。14 節）。
+**18件のうち17件はダッシュボード、1件は設定の検査である**（`on_assignee_gate`。14 節）。
 
 | キー | 何に出るか |
 | --- | --- |
@@ -926,6 +937,7 @@ type Gated struct {
 | `dashboard.badge_notice_off` | `warn_only` で切ってある行に添える印 |
 | `dashboard.badge_notice_capped` | コメントが上限で切れていて確かめられなかった行に添える印 |
 | `dashboard.badge_notice_unclear_owner` | gh の持ち主が担当者に混じっていて切り分けられなかった行に添える印（8-3） |
+| `dashboard.badge_notice_no_body` | その理由に issue へ書く本文が用意されていない行に添える印 |
 | `config.validate.handoff_on_assignee_gate` | `on_assignee_gate` に知らない値が入っていたときのエラー |
 
 **`ja.json` の中身。**
@@ -946,7 +958,8 @@ type Gated struct {
   "dashboard.badge_not_noticed": "issue へは未通知",
   "dashboard.badge_notice_off": "issue へは書かない設定です",
   "dashboard.badge_notice_capped": "コメントが多すぎて確かめられません",
-  "dashboard.badge_notice_unclear_owner": "別の機械の担当かどうかを切り分けられません"
+  "dashboard.badge_notice_unclear_owner": "別の機械の担当かどうかを切り分けられません",
+  "dashboard.badge_notice_no_body": "この理由に書く本文が用意されていません"
 ```
 
 **`en.json` の中身。**[docs/spec/translation-glossary.md](../../spec/translation-glossary.md) に従う
@@ -969,12 +982,13 @@ type Gated struct {
   "dashboard.badge_not_noticed": "not written to the issue",
   "dashboard.badge_notice_off": "writing to the issue is turned off",
   "dashboard.badge_notice_capped": "too many comments to check",
-  "dashboard.badge_notice_unclear_owner": "cannot tell whether another machine owns it"
+  "dashboard.badge_notice_unclear_owner": "cannot tell whether another machine owns it",
+  "dashboard.badge_notice_no_body": "no notice text is defined for this reason"
 ```
 
 **この訳が従った決めごと。**
 
-| 決めごと | どこ | ダッシュボードの16件でどう効いたか |
+| 決めごと | どこ | ダッシュボードの17件でどう効いたか |
 | --- | --- | --- |
 | **画面に出る散文は大文字で始め、日本語に `。` があれば `.` を付ける** | 訳語集の「大文字・小文字と句点」 | `caption_gated` と `no_gated` と `note_gated` |
 | **対処の1行は `.` を付ける**（日本語に `。` が無くても） | 同上 | `gate_remedy_*` の3件 |
@@ -986,7 +1000,7 @@ type Gated struct {
 `what cannot be started`、「案内」＝ `notice`、「印（ダッシュボードの badge）」＝ `badge` の3語である
 （[CONTRIBUTING.md:99](../../../CONTRIBUTING.md#L99) が「そこに無い語を使ったときは、その語を訳語集へ足してください」と決めている）。
 
-**設定の検査の1件は、ダッシュボードの16件とは別の場所へ足す。**
+**設定の検査の1件は、ダッシュボードの17件とは別の場所へ足す。**
 既存の `config.validate.handoff_*` の隣である
 （[internal/i18n/messages/ja.json:223-226](../../../internal/i18n/messages/ja.json#L223-L226)、
 [internal/i18n/keys.go:1185-1199](../../../internal/i18n/keys.go#L1185-L1199) の `KeyConfigValidateHandoff*`）。
@@ -1086,8 +1100,8 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 | [internal/server/server.go](../../../internal/server/server.go) | `RunSource` に `GateViews()`。**`snapshot()`（[internal/server/server.go:374](../../../internal/server/server.go#L374)）が `NewSnapshot` へ第2引数を渡す** |
 | [internal/server/view.go](../../../internal/server/view.go) | `Snapshot.Gated` と `Gated` 型、理由→文言の表、`NewSnapshot` の引数と詰め替え、**並べ替え（`Since` の古い順、同じなら `Identifier` の昇順。10 節）** |
 | [internal/server/template.go](../../../internal/server/template.go) | 表を1つ増やす |
-| [internal/i18n/keys.go](../../../internal/i18n/keys.go) | キー17件（ダッシュボード16件と `KeyConfigValidateHandoffOnAssigneeGate`）と `allKeys` |
-| [internal/i18n/messages/ja.json](../../../internal/i18n/messages/ja.json) / [en.json](../../../internal/i18n/messages/en.json) | 文言17件。**`_source_sha256` を入れ直す** |
+| [internal/i18n/keys.go](../../../internal/i18n/keys.go) | キー18件（ダッシュボード17件と `KeyConfigValidateHandoffOnAssigneeGate`）と `allKeys` |
+| [internal/i18n/messages/ja.json](../../../internal/i18n/messages/ja.json) / [en.json](../../../internal/i18n/messages/en.json) | 文言18件。**`_source_sha256` を入れ直す** |
 | [docs/spec/translation-glossary.md](../../spec/translation-glossary.md) | 新しく使った3語を足す（12 節） |
 | [docs/FAQ.md](../../FAQ.md) / [docs/upgrading.md](../../upgrading.md) | 「担当者が付いた issue が着手されない」に、ダッシュボードと案内のことを足す |
 | [docs/plans/continuo_design.md](../continuo_design.md) | 3-68 に「担当者の経路はこの文書が正」を1行足し、「3回続けて」を「3回以上」に直す（置き換えない）。**5-2 の yaml ブロック（設定の見本）の `handoff:` の下に `on_assignee_gate` を1行** |

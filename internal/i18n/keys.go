@@ -1074,6 +1074,44 @@ const (
 	KeyDashboardAgoHours Key = "dashboard.ago_hours"
 	// KeyDashboardNone は値がまだ無いことを表す印に出る。
 	KeyDashboardNone Key = "dashboard.none"
+	// KeyDashboardCaptionGated は着手できずに止まっているものの表の見出しに出る。
+	KeyDashboardCaptionGated Key = "dashboard.caption_gated"
+	// KeyDashboardColGatedReason はなぜ止まっているかの列に出る。
+	KeyDashboardColGatedReason Key = "dashboard.col_gated_reason"
+	// KeyDashboardColGatedSince はいつから止まっているかの列に出る。
+	KeyDashboardColGatedSince Key = "dashboard.col_gated_since"
+	// KeyDashboardColGatedRemedy は直し方の列に出る。
+	KeyDashboardColGatedRemedy Key = "dashboard.col_gated_remedy"
+	// KeyDashboardNoGated は着手できずに止まっているものが1件も無いときに出る。
+	KeyDashboardNoGated Key = "dashboard.no_gated"
+	// KeyDashboardNoteGated は着手できずに止まっているものの表の下の注記に出る。
+	KeyDashboardNoteGated Key = "dashboard.note_gated"
+	// KeyDashboardGateReasonHumanAssigned は担当者が1人付いている行の理由に出る。
+	KeyDashboardGateReasonHumanAssigned Key = "dashboard.gate_reason_human_assigned"
+	// KeyDashboardGateReasonManyAssignees は担当者が2人以上いる行の理由に出る。
+	KeyDashboardGateReasonManyAssignees Key = "dashboard.gate_reason_many_assignees"
+	// KeyDashboardGateReasonManyAssigneesWithSelf は、担当者が2人以上いて
+	// gh の持ち主も混じっている行の理由に出る。
+	KeyDashboardGateReasonManyAssigneesWithSelf Key = "dashboard.gate_reason_many_assignees_with_self"
+	// KeyDashboardGateRemedyHumanAssigned は担当者が1人付いている行の直し方に出る。
+	KeyDashboardGateRemedyHumanAssigned Key = "dashboard.gate_remedy_human_assigned"
+	// KeyDashboardGateRemedyManyAssignees は担当者が2人以上いる行の直し方に出る。
+	KeyDashboardGateRemedyManyAssignees Key = "dashboard.gate_remedy_many_assignees"
+	// KeyDashboardGateRemedyManyAssigneesWithSelf は、担当者が2人以上いて
+	// gh の持ち主も混じっている行の直し方に出る。
+	KeyDashboardGateRemedyManyAssigneesWithSelf Key = "dashboard.gate_remedy_many_assignees_with_self"
+	// KeyDashboardBadgeNotNoticed は案内をまだ書いていない行の印に出る。
+	KeyDashboardBadgeNotNoticed Key = "dashboard.badge_not_noticed"
+	// KeyDashboardBadgeNoticeOff は on_assignee_gate: warn_only で切ってある行の印に出る。
+	KeyDashboardBadgeNoticeOff Key = "dashboard.badge_notice_off"
+	// KeyDashboardBadgeNoticeCapped はコメントが上限で切れていて確かめられなかった行の印に出る。
+	KeyDashboardBadgeNoticeCapped Key = "dashboard.badge_notice_capped"
+	// KeyDashboardBadgeNoticeUnclearOwner は、gh の持ち主が担当者に混じっていて
+	// 切り分けられなかった行の印に出る。
+	KeyDashboardBadgeNoticeUnclearOwner Key = "dashboard.badge_notice_unclear_owner"
+	// KeyDashboardBadgeNoticeNoBody は、その理由に issue へ書く本文が
+	// 用意されていない行の印に出る。
+	KeyDashboardBadgeNoticeNoBody Key = "dashboard.badge_notice_no_body"
 )
 
 // 二重起動を防ぐロック（internal/lock）のエラーの文言。
@@ -1197,6 +1235,9 @@ const (
 	// **5時間と1週間で同じ文言を使う。**求めるものが同じなので、
 	// 2つに分けると同じ日本語を2箇所で直すことになる。
 	KeyConfigValidateHandoffMarginRange Key = "config.validate.handoff_margin_range"
+	// KeyConfigValidateHandoffOnAssigneeGate は
+	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
+	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
 )
 
 // 設定値の環境変数展開・チルダ展開（internal/config の expand）のエラーの文言。
@@ -2676,6 +2717,23 @@ var allKeys = []Key{
 	KeyDashboardAgoMinutes,
 	KeyDashboardAgoHours,
 	KeyDashboardNone,
+	KeyDashboardCaptionGated,
+	KeyDashboardColGatedReason,
+	KeyDashboardColGatedSince,
+	KeyDashboardColGatedRemedy,
+	KeyDashboardNoGated,
+	KeyDashboardNoteGated,
+	KeyDashboardGateReasonHumanAssigned,
+	KeyDashboardGateReasonManyAssignees,
+	KeyDashboardGateReasonManyAssigneesWithSelf,
+	KeyDashboardGateRemedyHumanAssigned,
+	KeyDashboardGateRemedyManyAssignees,
+	KeyDashboardGateRemedyManyAssigneesWithSelf,
+	KeyDashboardBadgeNotNoticed,
+	KeyDashboardBadgeNoticeOff,
+	KeyDashboardBadgeNoticeCapped,
+	KeyDashboardBadgeNoticeUnclearOwner,
+	KeyDashboardBadgeNoticeNoBody,
 	KeyLockErrAlreadyRunning,
 	KeyLockAcquireOpenFailed,
 	KeyLockAcquireAlreadyRunning,
@@ -2712,6 +2770,7 @@ var allKeys = []Key{
 	KeyConfigValidateHandoffIdleTimeoutRange,
 	KeyConfigValidateHandoffRecheckIntervalRange,
 	KeyConfigValidateHandoffMarginRange,
+	KeyConfigValidateHandoffOnAssigneeGate,
 	KeyConfigExpandTrailingDollar,
 	KeyConfigExpandUnclosedBrace,
 	KeyConfigExpandEmptyEnvName,

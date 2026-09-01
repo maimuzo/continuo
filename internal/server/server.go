@@ -103,6 +103,8 @@ const (
 type RunSource interface {
 	// RunViews は印の集合に入っている run の写しを返す（順序は不定）。
 	RunViews() []orchestrator.RunView
+	// GateViews は着手の関門で止めた issue の写しを返す（順序は不定。issue #134）。
+	GateViews() []orchestrator.GateView
 }
 
 // **本番の実装がこのインタフェースを満たすことを、コンパイル時に確かめる。**
@@ -371,7 +373,7 @@ func (s *Server) handleAPIState(w http.ResponseWriter, r *http.Request) {
 //
 // 戻り値: 表示用のスナップショット。
 func (s *Server) snapshot() Snapshot {
-	return NewSnapshot(s.source.RunViews(), s.now())
+	return NewSnapshot(s.source.RunViews(), s.source.GateViews(), s.now())
 }
 
 // withHostCheck は `Host` ヘッダが手元のダッシュボードを指していないリクエストを落とす。

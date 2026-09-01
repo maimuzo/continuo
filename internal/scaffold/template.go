@@ -47,6 +47,9 @@ tracker:
       weekly_margin_percent: 10             # 1週間の枠のうち、continuo のために残しておきたい割合。
                                             # 1週間余裕値 = 100 − 1週間の使用率 − この値。
                                             # どちらかの余裕値がマイナスなら入札しない
+      on_assignee_gate: warn_and_comment    # 担当者が付いていて着手できないとき（1人でも2人以上でも）の扱い。
+                                            # warn_and_comment ならダッシュボードに出し、issue へも1回だけ書く。
+                                            # warn_only にすると issue へは書かない（ダッシュボードには出る）
   comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
     marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
     self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない

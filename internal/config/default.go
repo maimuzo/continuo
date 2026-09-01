@@ -54,6 +54,7 @@ func DefaultConfig() *Config {
 					// 「continuo 以外の作業のために残しておく割合」でもある。
 					FiveHourMarginPercent: 10,
 					WeeklyMarginPercent:   10,
+					OnAssigneeGate:        OnAssigneeGateWarnAndComment,
 				},
 			},
 			Comments: TrackerCommentsConfig{
