@@ -155,13 +155,20 @@ set -eu
 BR=$(gh pr view <番号> --json headRefName --jq .headRefName)
 RUN=$(gh run list --workflow review-gate.yml --branch "$BR" --limit 1 \
   --json databaseId --jq '.[0].databaseId')
+if [ -z "$RUN" ] || [ "$RUN" = "null" ]; then
+  echo "この branch で review-gate がまだ1度も走っていない。commit を push して走らせること" >&2
+  exit 1
+fi
 gh run rerun "$RUN"
 ```
+
+**その run がまだ走っている最中だと、`gh run rerun` は 403 で落ちる。**
+**その場合は再実行しなくてよい。**走っているのが最新の結果だからである。
 
 **待つのは run ではなく、PR に付いた検査のほうである。**
 
 ```bash
-gh pr checks <番号> --required --watch --fail-fast
+gh pr checks <番号> --required --watch
 ```
 
 **run の `status` や `conclusion` を見て待ってはならない。**
@@ -184,7 +191,7 @@ EXIT=1
 ```
 
 **再実行が検査として登録される前に読むと、`--watch` が何も待たずに返ることがある。**
-**そのときは段6の判定で `BLOCKED` として出るので、そこで気づける。**
+**そのときは段6の判定をもう一度叩く。**
 
 ### 段6. draft を外してマージする
 
@@ -197,12 +204,14 @@ draft を ready にすると `ready_for_review` が飛び、review-gate の run 
 **新しく立った run の完了を待たずにマージへ進んではならない。**
 `review-result` は必須の検査なので、**走っている最中はマージが拒否される。**
 
+**`--fail-fast` を付けず、`set -e` も置かない。**
+**赤いときこそ、下の判定の1行を出させたいからである。**
+
 ```bash
-set -eu
 if [ "$(gh pr view <番号> --json isDraft --jq .isDraft)" = "true" ]; then
   gh pr ready <番号>
 fi
-gh pr checks <番号> --required --watch --fail-fast
+gh pr checks <番号> --required --watch
 gh pr view <番号> --json mergeable,mergeStateStatus \
   --jq '"\(.mergeable)/\(.mergeStateStatus)"'
 ```
@@ -213,16 +222,19 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
 **検査の一覧を自分で数えて判断してはならない。**必須の検査が1本も報告していない場合、
 `gh pr checks` の一覧にはそもそも出てこないので、**足りないことに気づけない。**
 
-| 何が返るか | 意味 |
+| 何が返るか | 何をするか |
 | --- | --- |
-| **`MERGEABLE/CLEAN`** | **必須の検査が全部そろって通っている。**マージしてよい |
-| `MERGEABLE/BLOCKED` | **必須の検査が足りないか落ちている。**段5へ戻る |
-| `MERGEABLE/UNSTABLE` | 必須でない検査が落ちている。マージは通るが、中身を見ること |
-| `CONFLICTING/DIRTY` | 競合している。先に解決する |
+| **`MERGEABLE/CLEAN`** | **マージしてよい。**必須の検査が全部そろって通っている |
+| `MERGEABLE/BLOCKED` | **マージしない。**必須の検査が足りないか落ちている。段5へ戻る |
+| `MERGEABLE/UNSTABLE` | **マージしない。**必須でない検査が落ちている。何が落ちたかを確かめ、人間に報告する |
+| `CONFLICTING/DIRTY` | **マージしない。**競合を先に解決する |
 
-**`BLOCKED` のまま返ったら、上の塊をもう一度叩く。**
-再実行が検査として登録される前に `--watch` が返った可能性がある。
-**2回叩いても `BLOCKED` なら、`gh pr checks <番号>` の一覧を出して、何が足りないかを確かめる。**
+**`gh pr ready` を打った直後は、その run が検査として登録される前に読むことがある。**
+**そのときは1つ前の結果が出る。**上の塊をもう一度叩いて、同じ答えが返ることを確かめる。
+
+**取り違えても、レビュー未実施のものが入ることはない。**
+`review-result` は必須の検査なので、**pending か fail のあいだは GitHub がマージそのものを拒む**
+（そのとき `mergeStateStatus` は `BLOCKED` になる）。
 
 ```bash
 gh pr merge <番号> --merge
