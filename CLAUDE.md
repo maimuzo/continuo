@@ -117,6 +117,13 @@ os.Rename(tmp.Name(), path)
 >
 > **既に履歴へ入ってしまったものは、そのままでよい。**書き換えのために履歴を作り直さない。
 
+### 6. 不特定多数の環境と、maimuzo の環境を混同しない
+
+このcontinuoプロジェクトはOSSである。不特定多数の開発環境でコードが利用され、continuoもまた不特定多数に利用される前提。
+一方、開発にはmaimuzoのオリジナルプラグインが使用され、テスト環境もプライベート環境として用意してある。
+この不特定多数の環境と、maimuzoの環境を混同してはならない。要件がある時、それは不特定多数向けなのか、maimuzoの環境向けなのかを常に意識すること。
+何度もAIは混同し、判断を間違っているので、これは重要な前提であることを忘れないで。
+
 ---
 
 ## 共通ガイドライン
@@ -189,6 +196,41 @@ os.Rename(tmp.Name(), path)
 
 **エージェントが作る PR にも同じ規則を当てる。**continuo が作った PR も、
 レビューを通すまで draft のままにする。
+
+### 絶対条件：PR のマージは、メインエージェントが自分で行う
+
+**worker（subagent / Workflow の agent）に `gh pr merge` を実行させてはならない。**
+**マージできる状態かどうかの確認も、メインエージェントが自分で行う。**
+
+**なぜか。**2026-09-01、worker に6本のマージを任せ、**2本をレビュー未実施のままマージした。**
+原因はメインエージェントが渡した確認コマンドで、`contains` を使っていた。
+
+```
+# 誤り。本文のどこかに含まれていれば1と数える
+gh pr view <番号> --json comments --jq '[.comments[] | select(.body | contains("code-review-result"))] | length'
+
+# 正しい。本文の先頭にあるかを見る
+gh api "repos/<owner>/<repo>/issues/<番号>/comments" \
+  --jq '[.[] | select(.body | startswith("<!-- code-review-result -->"))] | length'
+```
+
+**進捗のコメントの本文中に、手順の説明として同じ文字列が入っていた。**
+**それを1件と数えて通した。**
+
+### マージの条件は、なるべく機械で判定する
+
+**AI の判断に頼る部分を減らす。**
+
+| 何を確かめるか | どう確かめるか |
+| --- | --- |
+| **レビュー結果が貼ってあるか** | **GitHub Actions の `review-result`**（`main` の必須の検査。2026-09-01 に追加） |
+| ビルドとテスト | `build` 6本と `test` 2本（必須の検査） |
+| 衝突が無いか | `gh pr view <番号> --json mergeable,mergeStateStatus` |
+
+**必須の検査は `gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks` で見られる。**
+
+**機械で判定できないものだけを AI が見る。**
+**判定できるようにできるなら、issue を立てて機械へ移す。**
 
 ## コードレビュー記録フロー
 
