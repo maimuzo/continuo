@@ -38,6 +38,11 @@
 | [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) | PR のマージ（branch protection の必須の検査） |
 | [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | タグを打つこと |
 
+**「前の空白文字」に何を含めるかも、3箇所で同じにしてある。**
+半角空白・タブ・CR・LF の4つだけで、**全角空白 U+3000 や NBSP U+00A0 は含めない。**
+`\s` は Python の `re` と jq（Oniguruma）で当たる範囲が違うので使わない（下の `MARKER_SPACE_CLASS`）。
+**3箇所が同じであることは [.claude/hooks/tests/test_marker_pattern_parity.py](tests/test_marker_pattern_parity.py) が押さえる。**
+
 ## 止めないもの
 
 - **番号を書かない形**（`gh pr merge` だけ）。現在の branch から引く形は、番号を取れないので見送る
@@ -110,9 +115,22 @@ def _repo_of_cwd():
 MARKER = "<!-- code-review-result -->"
 
 # **先頭にあることを求める。**前に空白文字があってもよい。
-# `re.ASCII` を付けるのは、CI 側の jq（`test("^\\s*…")`）と当たる範囲を揃えるためである。
-# **付けないと Python の `\s` だけが全角空白などにも当たり、ここだけ通って CI で落ちる。**
-MARKER_RE = re.compile(r"\A\s*" + re.escape(MARKER), re.ASCII)
+#
+# **`\s` を使わない。**Python の `re` と jq（Oniguruma）で当たる範囲が違う。
+# 実測（2026-09-02）。全角空白 U+3000 を1文字だけ前に置いた本文で、
+#   jq 1.7.1 `test("^\\s*<!-- code-review-result -->")`          → true
+#   Python `re.compile(r"\A\s*…", re.ASCII)`                     → False
+#   Python `re.compile(r"\A\s*…")`（フラグなし）                  → True
+# **どちらの `\s` に寄せても、もう一方とはずれる。**
+# そこで**当たる文字を並べて書く**（半角空白・タブ・CR・LF の4つだけ）。
+# この4文字は Python の文字クラスでも Oniguruma の文字クラスでも同じ意味になる。
+#
+# **並びは `MARKER_SPACE_CLASS` を正とする。**
+# .github/workflows/review-gate.yml と scripts/check-release-ready.sh が
+# jq へ渡す `[ \t\r\n]*` と、1文字ずつ同じであること。
+# **揃っていることは .claude/hooks/tests/test_marker_pattern_parity.py が押さえる。**
+MARKER_SPACE_CLASS = r"[ \t\r\n]*"
+MARKER_RE = re.compile(r"\A" + MARKER_SPACE_CLASS + re.escape(MARKER))
 
 # レビュー結果として数える投稿者。**それ以外のコメントは数えない。**
 # 誰でもコメントできるので、外部の人が目印を貼れば通る状態にしない。

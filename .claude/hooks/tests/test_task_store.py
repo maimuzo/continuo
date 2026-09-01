@@ -83,6 +83,100 @@ check("counts_from_output は空なら None", tc.counts_from_output(""), None)
 check("counts_from_output は件数の並びを返す",
       tc.counts_from_output("a:0\nb:12"), [0, 12])
 
+# **これも取り逃していた本題である。**標準エラーを「出力」として数えていた。
+# `grep -rc x dir/` が読めないディレクトリに当たると、
+# **終了コード 0・標準出力は空・標準エラーに警告だけ**という結果になり、
+# それを「出力がある」と読んで**0件を「済」にしていた。**
+print("\n【標準エラーを判定に混ぜない】")
+check("標準出力が空で標準エラーだけなら未完了",
+      verdict(0, "", "grep: dir/x: Permission denied"), False)
+check("標準出力が空なら、標準エラーが何行あっても未完了",
+      verdict(0, "", "warning: a\nwarning: b\nwarning: c"), False)
+check("標準出力が 0件なら、標準エラーがあっても未完了",
+      verdict(0, "a/x.go:0", "grep: b: Permission denied"), False)
+check("標準出力に件数があれば、標準エラーがあっても済",
+      verdict(0, "a/x.go:3", "grep: b: Permission denied"), True)
+_, shown = tc.verify_result(0, "", "grep: dir/x: Permission denied")
+check("標準エラーの中身は見せる", "Permission denied" in shown, True)
+_, shown = tc.verify_result(0, "a/x.go:3", "grep: b: Permission denied")
+check("済のときも標準エラーを添える",
+      "a/x.go:3" in shown and "Permission denied" in shown, True)
+
+
+# ------------------------------------------------- 確かめ方を実行してよいか
+#
+# **`verify` は LLM が書いた文字列で、turn を終えるたびに shell で走る。**
+# 読むだけの形しか通さない。
+
+print("\n【確かめ方の形】")
+
+PASS_CASES = [
+    "grep -c 'ユースケース D' docs/plans/impl/issue142_144_branch_mismatch.md",
+    "grep -rc 'WaitingCommentInterval' internal/config/types.go | grep -v '^0$'",
+    "grep -rc -- '--resume' internal/orchestrator/ --include='*.go' | grep -v ':0'",
+    "test -f .claude/hooks/task-store.py && echo 1",
+    "test -f x || true",
+    "gh pr view 112 --repo maimuzo/continuo --json state --jq '.state' | grep -c MERGED",
+    "gh release list --repo maimuzo/continuo --limit 1 | grep -c 'v0.1.12'",
+    "gh api repos/maimuzo/continuo/issues/149/comments --jq '.[].id' | wc -l",
+    "git log --oneline -1 | grep -c fix",
+    "~/.local/bin/continuo version | grep -c v0.1.11",
+    "ls docs | wc -l",
+    # 引用符の中の記号は、演算子ではない。**grep の柄として通す。**
+    "grep -c '>' docs/FAQ.md",
+    "grep -c '|' docs/FAQ.md",
+    "grep -c ';' docs/FAQ.md",
+]
+for c in PASS_CASES:
+    check("通す: %s" % c, tc.verify_rejection(c), None)
+
+REJECT_CASES = [
+    ("消すもの", "rm -rf /"),
+    ("書き込むリダイレクト", "echo x > /tmp/a"),
+    ("追記するリダイレクト", "echo x >> /tmp/a"),
+    ("読み込むリダイレクト", "cat < /tmp/a"),
+    ("バックグラウンド", "grep -c x f &"),
+    ("繋いだ先が書き込む", "grep -c x f && rm -rf /"),
+    ("`;` の先が書き込む", "grep -c x f ; rm -rf /"),
+    ("パイプの先が書き込む", "grep -c x f | tee /tmp/a"),
+    ("任意のコードを走らせる shell", "sh -c 'rm -rf /'"),
+    ("任意のコードを走らせる python3", "python3 -c 'import os'"),
+    ("通信する curl", "curl -s https://example.com"),
+    ("コマンド置換", "echo $(whoami)"),
+    ("二重引用符の中のコマンド置換", 'echo "$(whoami)"'),
+    ("backtick", "echo `id`"),
+    ("変数の展開", "echo ${HOME}"),
+    ("書き込む git", "git commit -m x"),
+    ("送る git", "git push"),
+    ("書き込む gh", "gh issue close 1"),
+    ("POST する gh api", "gh api repos/o/r -X POST"),
+    ("フィールドを送る gh api", "gh api repos/o/r -f a=b"),
+    ("消せる find", "find . -delete"),
+    ("書き換える sed", "sed -i s/a/b/ f"),
+    ("空", ""),
+    # **並べて持たずに「繋ぐもの以外の記号」で落としている。**
+    # 思いつかなかった綴りを取り逃がさないため。
+    ("標準エラーを混ぜる", "grep -c x f 2>&1"),
+    ("パイプに標準エラーを乗せる", "grep -c x f |& cat"),
+    ("括弧で入れ子にする", "( grep -c x f )"),
+    ("知らない綴りの記号", "grep -c x f ;; echo 1"),
+]
+for name, c in REJECT_CASES:
+    check("通さない: %s" % name, tc.verify_rejection(c) is None, False)
+
+# 断るときは、**理由を必ず添える。**「駄目です」だけでは書き直せない。
+check("断る理由に、使えない記号を書く",
+      "`>`" in (tc.verify_rejection("echo x > /tmp/a") or ""), True)
+check("断る理由に、使えないコマンド名を書く",
+      "`rm`" in (tc.verify_rejection("rm -rf /") or ""), True)
+
+# 走らせずに断る。**実行してから断ったのでは遅い。**
+ok, out = tc.run_verify("echo x > /tmp/continuo-should-not-exist")
+check("通らないものは実行せず未完了にする", ok, False)
+check("実行していないと書く", "実行していません" in out, True)
+check("走らせていない（ファイルができていない）",
+      os.path.exists("/tmp/continuo-should-not-exist"), False)
+
 
 # 本物の grep で確かめる。**手で作った文字列だけだと、出力の形を思い違える。**
 def real_grep_case():
@@ -192,6 +286,102 @@ finally:
     shutil.rmtree(root, ignore_errors=True)
 
 
+print("\n【登録のときに確かめ方の形を見る】")
+root = new_root()
+try:
+    rc, so, se = cli(root, "add", "--at", "20260902T0900", "--what", "危ないもの",
+                     "--verify", "echo x > /tmp/continuo-add-should-not-exist")
+    check("通らない確かめ方は登録できない", rc, 1)
+    check("1件も登録しない", len(rows_of(root)), 0)
+    check("断る理由を書く", "`>` は使えません" in se, True)
+    check("書き直し方を添える", "grep -c" in se, True)
+    check("走らせてもいない",
+          os.path.exists("/tmp/continuo-add-should-not-exist"), False)
+
+    rc, so, se = cli(root, "add", "--at", "20260902T0900", "--what", "ふつうのもの",
+                     "--verify", "grep -c x docs/FAQ.md")
+    check("読むだけの確かめ方なら登録できる", rc, 0)
+    check("確かめ方なしでも登録できる",
+          cli(root, "add", "--at", "20260902T0901", "--what", "確かめ方なし")[0], 0)
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+
+
+print("\n【閉じるとき】")
+
+
+def load_store():
+    """task-store.py を module として読み込む。**`_run_verify` を差し替えるため。**"""
+    spec = importlib.util.spec_from_file_location("task_store_cli", STORE_CLI)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class Args:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+root = new_root()
+try:
+    cli(root, "add", "--at", "20260902T1000", "--what", "A", "--verify", "echo 1")
+    tid = rows_of(root)[0]["id"]
+
+    # **ロックを握ったまま確かめ方を走らせない。**
+    # 握ったままだと、確かめ方が終わるまで、ほかのセッションはロックを取れない。
+    # ロックの取得は10秒で諦めるのに確かめ方は30秒まで走るので、**必ず落ちる側が出る。**
+    store = load_store()
+    os.environ["CLAUDE_PROJECT_DIR"] = root
+    seen = {}
+
+    def spy_verify(cmd, timeout=30):
+        try:
+            with store.tc.locked(timeout=1.0):
+                seen["取れた"] = True
+        except TimeoutError:
+            seen["取れた"] = False
+        return True, "1"
+
+    try:
+        store._run_verify = spy_verify
+        rc = store.cmd_close(Args(id=tid, did="やった"))
+    finally:
+        os.environ.pop("CLAUDE_PROJECT_DIR", None)
+    check("確かめている間、ほかからロックを取れる", seen.get("取れた"), True)
+    check("それでも閉じられる", rc, 0)
+    check("閉じたあとは done", rows_of(root)[0]["status"], "done")
+
+    # **閉じたものを上書きしない。**
+    rc, so, se = cli(root, "close", "--id", tid, "--did", "べつのこと")
+    check("done をもう一度閉じようとすると断る", rc, 1)
+    r = rows_of(root)[0]
+    check("did を上書きしない", r["did"], "やった")
+    check("断る理由に「既に閉じています」と書く", "既に閉じています" in se, True)
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+
+
+root = new_root()
+try:
+    # **`merged` を上書きしない。**上書きすると「どこへまとめたか」が消える。
+    cli(root, "add", "--at", "20260902T1100", "--what", "残す")
+    cli(root, "add", "--at", "20260902T1100", "--what", "まとめる")
+    ids = [r["id"] for r in rows_of(root)]
+    cli(root, "merge", "--into", ids[0], "--ids", ids[1])
+    check("まとめた側は merged", rows_of(root)[1]["status"], "merged")
+    did_before = rows_of(root)[1]["did"]
+
+    rc, so, se = cli(root, "close", "--id", ids[1], "--did", "閉じたつもり")
+    check("merged は閉じられない", rc, 1)
+    r = rows_of(root)[1]
+    check("merged のままにする", r["status"], "merged")
+    check("まとめ先を書いた did を消さない", r["did"], did_before)
+    check("断る理由にまとめ先を書く", ids[0] in se, True)
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+
+
 print("\n【壊れた記録に耐える】")
 root = new_root()
 try:
@@ -222,10 +412,32 @@ try:
     os.chmod(path, 0o640)
     cli(root, "add", "--at", "20260901T1200", "--what", "B")
     check("元の権限を引き継ぐ", oct(os.stat(path).st_mode & 0o777), oct(0o640))
-    leftovers = [n for n in os.listdir(d) if n.startswith(".tmp") or n.endswith(".tmp")]
-    check("決め打ちの .tmp を残さない", leftovers, [])
+
+    # **名前を決め打ちで探さない。**`.tmp` で始まるものだけを探していたので、
+    # `tempfile.mkstemp` が付ける名前（`.tasks.jsonl.xxxxxx`）は1つも当たらず、
+    # **実装が何を残しても必ず空になっていた。**
+    # **残っていてよいものを並べて、それ以外が1つでもあれば落とす。**
+    check("書き終えたディレクトリに、余計なファイルを残さない",
+          sorted(os.listdir(d)), ["tasks.jsonl", "tasks.lock"])
     check("ロックファイルを同じディレクトリに置く",
           os.path.exists(os.path.join(d, "tasks.lock")), True)
+
+    # 途中で落ちても、一時ファイルを残さず、元の中身も壊さない。
+    # **JSON にできない値を1つ混ぜて、書いている最中に落とす。**
+    os.environ["CLAUDE_PROJECT_DIR"] = root
+    try:
+        before_text = open(path, encoding="utf-8").read()
+        raised = False
+        try:
+            tc.save([{"id": "X", "bad": object()}])
+        except Exception:  # noqa: BLE001
+            raised = True
+        check("書けない値なら例外を投げる", raised, True)
+        check("落ちても一時ファイルを残さない",
+              sorted(os.listdir(d)), ["tasks.jsonl", "tasks.lock"])
+        check("落ちても元の中身が残る", open(path, encoding="utf-8").read(), before_text)
+    finally:
+        os.environ.pop("CLAUDE_PROJECT_DIR", None)
 
     # ロックは取って返せる（2回続けて取れる）。
     os.environ["CLAUDE_PROJECT_DIR"] = root

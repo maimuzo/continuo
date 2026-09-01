@@ -126,6 +126,12 @@ jobs:
           python3 .claude/hooks/tests/test_check_reply_clarity.py
           python3 .claude/hooks/tests/test_block_merge_without_review.py
 
+      - name: レビュー結果の目印を数える条件が3箇所で揃っているか
+        # **3箇所が「同じ条件である」と互いのコメントで名乗っていたのに、同じでなかった。**
+        # 全角空白を前に置いたコメントを、この CI は数え、hook は数えなかった。
+        # **文字列が同じかと、実際に同じ答えを返すかの両方を見る。**
+        run: python3 .claude/hooks/tests/test_marker_pattern_parity.py
+
       - name: 指示の記録の hook が壊れていないか
         # **この2本は、記録そのものを書き換える。**壊れると人間の指示が消える。
         #

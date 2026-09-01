@@ -115,6 +115,32 @@ check("キーが欠けた行があっても落ちない", rc, 0)
 check("確かめ方なしとして並べる", "確かめ方なし" in reason, True)
 
 
+print("\n【通してよい形かを見る】")
+# **`verify` は LLM が書いた文字列である。**turn を終えるたびに shell で走るので、
+# **通してよい形でないものは走らせない。**走らせないことを、書き込みで確かめる。
+mark = os.path.join(tempfile.gettempdir(), "check-open-tasks-should-not-exist-%d" % os.getpid())
+if os.path.exists(mark):
+    os.unlink(mark)
+try:
+    rc, blocked, reason = run([task("T-9", "危ない確かめ方", "echo pwned > " + mark)])
+    check("書き込むものは実行しない（ファイルができていない）", os.path.exists(mark), False)
+    check("実行しなかったことを AI に見せる", "実行していません" in reason, True)
+    check("断った理由も見せる", "`>` は使えません" in reason, True)
+    check("それは未完了として並べる", "未完了が 1 件あります" in reason, True)
+    check("「済」にはしない", "閉じてから終えてください" in reason, False)
+finally:
+    if os.path.exists(mark):
+        os.unlink(mark)
+
+rc, blocked, reason = run([task("T-10", "任意のコード", "python3 -c 'print(1)'")])
+check("python3 は実行しない", "実行していません" in reason, True)
+
+rc, blocked, reason = run([task("T-11", "読むだけの確かめ方",
+                                "echo 0 | grep -c 0")])
+check("読むだけのものは実行する（実行していませんと言わない）",
+      "実行していません" in reason, False)
+
+
 print("\n【時間】")
 # 通信を伴う確かめ方を模して、1件 3 秒かかるものを6件並べる。
 # 素直に回すと 18 秒。**全体の予算（TOTAL_BUDGET）で打ち切る。**

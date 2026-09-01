@@ -62,6 +62,13 @@ jobs:
           #   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
           #       **誰でもコメントできるので、外部の人が目印を貼れば通る状態にしない。**
           #
+          # **`\s` を使わない。**Python の re と jq（Oniguruma）で当たる範囲が違い、
+          # 全角空白 U+3000 を前に置いた本文が、ここだけ通って hook で落ちる（2026-09-02 に実測）。
+          # **当たる文字を並べて書く。**`[ \t\r\n]*` の4文字だけである。
+          # この並びは .claude/hooks/block-merge-without-review.py の MARKER_SPACE_CLASS と
+          # scripts/check-release-ready.sh の同じ並びに、1文字ずつ揃えてある。
+          # **揃っていることは .claude/hooks/tests/test_marker_pattern_parity.py が押さえる。**
+          #
           # **`--slurp` は `--jq` と併用できない**（gh 2.97 で確認）。
           # そこで `--paginate` で1ページずつ絞り、当たった行をファイルへ落として数える。
           #
@@ -69,7 +76,7 @@ jobs:
           # `gh` が落ちても `wc` の終了状態が返るので、**取れなかったのか無かったのかを区別できなくなる。**
           gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" --jq '
             .[]
-            | select((.body // "") | test("^\\s*<!-- code-review-result -->"))
+            | select((.body // "") | test("^[ \\t\\r\\n]*<!-- code-review-result -->"))
             | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
             | .id' > matched.txt
           count="$(wc -l < matched.txt | tr -d ' ')"

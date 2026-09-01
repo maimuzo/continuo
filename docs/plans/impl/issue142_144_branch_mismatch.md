@@ -491,7 +491,7 @@ LinkedBranches []string
 | --- | --- |
 | [internal/i18n/keys.go](../../../internal/i18n/keys.go) | `KeyWorkspaceErrWorktreeBranchMismatch`（`workspace.err.worktree_branch_mismatch`）を新設し、`AllKeys` にも足した |
 | [internal/i18n/messages/ja.json](../../../internal/i18n/messages/ja.json) | 番兵の文言を新設し、`workspace.prepare.branch_mismatch` を9個の指定子の文面へ差し替えた |
-| [internal/i18n/messages/en.json](../../../internal/i18n/messages/en.json) | 同上を `%[1]w` … `%[9]s` で書き、`_source_sha256` を `e38c61db…` へ入れ直した |
+| [internal/i18n/messages/en.json](../../../internal/i18n/messages/en.json) | 同上を `%[1]w` … `%[9]s` で書き、`_source_sha256` を入れ直した。**値はここに写さない**（[internal/i18n/messages/en.json:2](../../../internal/i18n/messages/en.json#L2) が正。`ja.json` を直すたびに変わるので、写すと必ず古くなる） |
 | [internal/workspace/prepare.go](../../../internal/workspace/prepare.go) | `ErrWorktreeBranchMismatch` を新設。`Prepare` の段2 と `CheckWorktreeUsable` の2箇所を差し替え。doc コメント4箇所を直した |
 | [internal/scaffold/template.go](../../../internal/scaffold/template.go) | 「切り替えるな」の3段落を `**push 先は、…**` の直前へ入れた |
 | [docs/plans/continuo_design.md](../continuo_design.md) | 5-3 の本文へ同じ3段落 |

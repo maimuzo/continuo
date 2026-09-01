@@ -251,28 +251,52 @@
 
 ## 5. いま動いているもの / 動いていないもの
 
-**言いたいこと。****道具は2本できたが、hook に接続していないので1度も自動では動いていない。**
+**言いたいこと。****道具は3本できてテストも付いたが、`Stop` hook に登録していないので、
+1度も自動では動いていない。**登録する前に、走らせる中身の安全を先に決めてある。
 
 ### 5-1. できているもの
 
 | ファイル | 何をするか |
 | --- | --- |
+| [.claude/hooks/task_common.py](../../.claude/hooks/task_common.py) | 記録の読み書き・確かめ方の判定・**確かめ方の形の検査**（`verify_rejection`） |
 | [.claude/hooks/task-store.py](../../.claude/hooks/task-store.py) | 記録の読み書き（`add` / `close` / `merge` / `list`） |
-| [.claude/hooks/check-open-tasks.py](../../.claude/hooks/check-open-tasks.py) | turn を終えるときに走り、確かめ方が通っているのに閉じていないものがあれば終了コード2で止める |
+| [.claude/hooks/check-open-tasks.py](../../.claude/hooks/check-open-tasks.py) | `Stop` で走り、確かめ方が通っているのに閉じていないものがあれば `{"decision": "block"}` を出す |
 
-**どちらも git 上では untracked である。**
+**3本とも git に入っている。**テストは
+[test_task_store.py](../../.claude/hooks/tests/test_task_store.py) と
+[test_check_open_tasks.py](../../.claude/hooks/tests/test_check_open_tasks.py) で、
+[.github/workflows/ci.yml](../../.github/workflows/ci.yml) の「指示の記録の hook が壊れていないか」が回す。
+
+**記録そのものは git に入れない。**[.gitignore:56](../../.gitignore#L56) が `.claude/requests/` を外している。
+人間の発言の原文がそのまま入るためである。
 
 **`check-open-tasks.py` は未完了そのものでは止めない。**まだ着手していない指示が並んでいるだけのことがあるため。
 
-### 5-2. できていないもの
+### 5-2. `verify` は、通してよい形しか走らせない
+
+**`verify` は LLM が書いた文字列で、`Stop` のたびに shell へ渡る。**
+確認も承認も挟まらないので、[task_common.py](../../.claude/hooks/task_common.py) の
+`verify_rejection` が**通してよい形だけを通す。**
+
+| どこで見るか | 通らなかったらどうなるか |
+| --- | --- |
+| **`task-store.py add`**（登録するとき） | **記録に書かずに終了コード 1。**断った理由と、書き直し方の例を出す |
+| **`task_common.run_verify`**（走らせるとき） | **走らせない。**「実行していません」と断った理由を、そのまま AI と人間へ見せる |
+
+**通すもの。**`grep` / `rg` / `test` / `echo` / `cat` / `wc` / `ls` / `jq` などの読むだけのコマンドと、
+`git` の読み取り（`log` / `show` / `diff` / `grep` など）、`gh` の読み取り（`pr view` / `release list` /
+GET だけの `api` など）、`continuo version`。これらを `&&` `||` `|` `;` で繋いだもの。
+
+**通さないもの。**リダイレクト（`>` `<`）・バックグラウンド（`&`）・`$(…)` と backtick・
+`sh` / `python3` / `curl` のような何でも走らせられるもの・`git commit` や `gh pr comment` のような書き込み。
+
+### 5-3. できていないもの
 
 | 何 | 状態 |
 | --- | --- |
 | **`UserPromptSubmit` hook の登録**（`type: "agent"` か `"prompt"`） | **未実施** |
 | **`Stop` hook への `check-open-tasks.py` の登録** | **未実施** |
-| **`.claude/requests/` を `.gitignore` へ** | **未実施** |
 
-**実測。**[.claude/settings.json](../../.claude/settings.json) の hooks は
+**実測**（2026-09-02、[.claude/settings.json](../../.claude/settings.json)）。
 `Stop` 2本（`check-verified-commands.py` / `check-reply-clarity.py`）と
 `PreToolUse` 1本（`block-merge-without-review.py`）のみ。
-`.gitignore` に `requests` は0件。

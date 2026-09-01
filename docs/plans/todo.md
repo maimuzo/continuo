@@ -137,6 +137,18 @@ mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2
 **その run の `GITHUB_SHA` は既定の branch の最新の commit であり、PR の先頭の commit に紐づかない。**
 必須の検査は PR の先頭の commit で通っている必要があるので、いつまでも条件を満たさない。
 
-**残っている作業（人間の手が要る）。**`review-result` を branch protection の必須の検査へ入れること。
-**手順は [CONTRIBUTING.md](../../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。**
-**入れるまでは、赤くてもマージできる。**
+**`review-result` は branch protection の必須の検査に入っている**（2026-09-02 に確認）。
+
+```
+$ gh api repos/<owner>/continuo/branches/main/protection/required_status_checks --jq '.checks[].context'
+test (ubuntu-latest)
+test (macos-latest)
+build (darwin, arm64)
+build (darwin, amd64)
+build (linux, amd64)
+build (linux, arm64)
+review-result
+```
+
+**入れ直す手順は [CONTRIBUTING.md](../../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。**
+**`checks` は全件置き換えである。**一部だけ渡すと、渡さなかった検査が必須から外れる。

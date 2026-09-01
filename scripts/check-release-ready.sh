@@ -94,10 +94,16 @@ ng=0
 #   .claude/hooks/block-merge-without-review.py … 手元の gh pr merge / gh pr ready を止める
 #   .github/workflows/review-gate.yml           … PR のマージを止める
 #   ここ                                        … タグを打つのを止める
+#
+# **`\s` を使わない。**Python の re と jq（Oniguruma）で当たる範囲が違い、
+# 全角空白 U+3000 を前に置いた本文が、jq 側だけ通る（2026-09-02 に実測）。
+# **当たる文字を並べて書く。**`[ \t\r\n]*` の4文字だけである。
+# この並びは block-merge-without-review.py の MARKER_SPACE_CLASS と1文字ずつ同じであること。
+# **揃っていることは .claude/hooks/tests/test_marker_pattern_parity.py が押さえる。**
 review_of() {
 	gh pr view "$1" --json comments --jq '
 		[ .comments[]
-		  | select((.body // "") | test("^\\s*<!-- code-review-result -->"))
+		  | select((.body // "") | test("^[ \\t\\r\\n]*<!-- code-review-result -->"))
 		  | select(.authorAssociation == "OWNER"
 		           or .authorAssociation == "MEMBER"
 		           or .authorAssociation == "COLLABORATOR")

@@ -7608,9 +7608,20 @@ Status を割り当てる8つのキーだけで、**雛形にあって設定に�
 
 | 何 | なぜ重複するか |
 | --- | --- |
-| **WSL のディストリ2つ** | **既定が Windows のホスト名である。**`/etc/wsl.conf` の `[network] hostname=` を書かないかぎり同じ（[公式](https://code.claude.com/docs/en/settings) ではなく [Microsoft Learn](https://learn.microsoft.com/en-us/windows/wsl/wsl-config) の `wsl.conf` の表。2026-09-01 取得） |
+| **WSL のディストリ2つ** | **既定が Windows のホスト名である。**`/etc/wsl.conf` の `[network] hostname=` を書かないかぎり同じ（出典は下） |
 | **社内で命名規則に沿って配られた PC** | 規則が同じなら衝突しうる |
 | **hostname を取れなかった機械** | `unknown-host` に落ちる。2台とも取れないと2台とも同じ |
+
+**WSL の既定の出典。**Microsoft Learn の
+[Advanced settings configuration in WSL](https://learn.microsoft.com/en-us/windows/wsl/wsl-config)。
+`wsl.conf` の `[network]` の表に、次の1行がある（2026-09-02 取得）。
+
+```
+hostname   string   Windows hostname   Sets hostname to be used for WSL distribution.
+```
+
+**訳。**`hostname` は文字列で、**既定は Windows のホスト名**。WSL のディストリビューションが使う
+ホスト名を設定する。
 
 **`os.Hostname()` を設定で上書きする口は持たない。**
 **持たせても「書き忘れたら黙って壊れる」が残るためである。**

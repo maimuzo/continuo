@@ -11,6 +11,10 @@
 **読み書きと「確かめ方が通ったか」の判定は
 [task_common.py](task_common.py) に置いてある。**`check-open-tasks.py` と共有する。
 2つに同じコードを持つと、片方だけを直したときに判定が食い違う。
+
+**`--verify` は、登録の時点で形を検査する**（`task_common.verify_rejection`）。
+登録してしまうと、**turn を終えるたびに `check-open-tasks.py` が shell で走らせる。**
+読むだけのコマンド（`grep` / `test` / `git` と `gh` の読み取りなど）しか通さない。
 """
 import argparse, os, sys
 from datetime import datetime, timezone
@@ -36,6 +40,25 @@ def _now():
 
 
 def cmd_add(a):
+    # **登録の時点で確かめ方の形を見る。**
+    # 記録に入れてしまうと、turn を終えるたびに `check-open-tasks.py` が走らせる。
+    # **走る前ではなく、書く前に断る。**
+    if a.verify:
+        why = tc.verify_rejection(a.verify)
+        if why:
+            print("この確かめ方は登録できません。", file=sys.stderr)
+            print(f"  {a.verify}", file=sys.stderr)
+            print(f"  → {why}", file=sys.stderr)
+            print("", file=sys.stderr)
+            print("**turn を終えるたびに shell で走るので、読むだけの形にしてください。**",
+                  file=sys.stderr)
+            print("  例: grep -c '<文字列>' <パス>", file=sys.stderr)
+            print("      test -f <パス> && echo 1", file=sys.stderr)
+            print("      gh pr view <番号> --json state --jq '.state' | grep -c MERGED",
+                  file=sys.stderr)
+            print("  書けないなら --verify を付けずに登録し、閉じるときに人間へ見せてください。",
+                  file=sys.stderr)
+            return 1
     with tc.locked():
         rows = _load()
         same = [r for r in rows if str(r.get("id", "")).startswith(a.at + "-")]
@@ -69,30 +92,90 @@ def cmd_add(a):
 
 
 def cmd_close(a):
+    """タスクを閉じる。
+
+    **ロックを握ったまま確かめ方を走らせない。**
+    ロックの取得は10秒で諦めるのに、確かめ方は30秒まで走る
+    （[task_common.py](task_common.py) の `locked` と `run_verify` の既定値）。
+    握ったまま走らせると、**もう1つのセッションは必ず取れずに落ちる。**
+    そこで**確かめ方はロックの外で走らせ、握るのは書き換える一瞬だけにする。**
+
+    **外で走らせるぶん、書く直前にもう一度読み直す。**
+    走らせている間に、ほかのセッションが同じ行を閉じたりまとめたりしうる。
+    **`open` でなくなっていたら書かない。**
+    """
+    if not a.did.strip():
+        print("--did が空です。**何をしたかを書かないと閉じられません。**", file=sys.stderr)
+        return 1
+
+    # 段1. ロックを取らずに読み、対象と確かめ方を決める。
+    # **段3 と同じ「最初に当たった行」を採る。**id が重なった記録で別の行を見ないため。
+    before = [r for r in _load() if r.get("id") == a.id]
+    if not before:
+        print(f"そんな id はありません: {a.id}", file=sys.stderr)
+        return 1
+    why = _not_closable(before[0])
+    if why:
+        print(why, file=sys.stderr)
+        return 1
+    verify = before[0].get("verify") or ""
+
+    # 段2. **ロックの外で**確かめ方を走らせる。
+    if verify:
+        ok, out = _run_verify(verify)
+        if not ok:
+            print("閉じられません。確かめ方が通りませんでした。", file=sys.stderr)
+            print(f"  {verify}", file=sys.stderr)
+            print(f"  → {out}", file=sys.stderr)
+            return 1
+        print(f"確かめました: {verify} → {out}")
+
+    # 段3. 握って、読み直して、書く。
     with tc.locked():
         rows = _load()
         hit = [r for r in rows if r.get("id") == a.id]
         if not hit:
-            print(f"そんな id はありません: {a.id}", file=sys.stderr)
+            print(f"確かめている間に {a.id} が記録から消えました。閉じていません。", file=sys.stderr)
             return 1
         r = hit[0]
-        if not a.did.strip():
-            print("--did が空です。**何をしたかを書かないと閉じられません。**", file=sys.stderr)
+        why = _not_closable(r)
+        if why:
+            print("確かめている間に、ほかのセッションが状態を変えました。閉じていません。",
+                  file=sys.stderr)
+            print("  " + why, file=sys.stderr)
             return 1
-        if r.get("verify"):
-            ok, out = _run_verify(r["verify"])
-            if not ok:
-                print("閉じられません。確かめ方が通りませんでした。", file=sys.stderr)
-                print(f"  {r['verify']}", file=sys.stderr)
-                print(f"  → {out}", file=sys.stderr)
-                return 1
-            print(f"確かめました: {r['verify']} → {out}")
+        if (r.get("verify") or "") != verify:
+            print(f"確かめている間に {a.id} の確かめ方が変わりました。閉じていません。",
+                  file=sys.stderr)
+            print(f"  確かめたもの: {verify or '（なし）'}", file=sys.stderr)
+            print(f"  いまのもの  : {r.get('verify') or '（なし）'}", file=sys.stderr)
+            print("  もう一度 close を打ってください。", file=sys.stderr)
+            return 1
         r["status"] = "done"
         r["closed_at"] = _now()
         r["did"] = a.did
         _save(rows)
     print(f"閉じました: {a.id}  {r.get('what')}")
     return 0
+
+
+def _not_closable(r):
+    """閉じてはいけない状態なら、その理由を返す。閉じてよければ None。
+
+    **`open` 以外は上書きしない。**とくに `merged` を上書きすると、
+    「どこへまとめたか」を書いた `did` が消え、**まとめ先を辿れなくなる。**
+    """
+    status = r.get("status")
+    if status == "open":
+        return None
+    if status == "done":
+        return (f"{r.get('id')} は既に閉じています"
+                f"（closed_at={r.get('closed_at') or '不明'} / did={r.get('did') or '（なし）'}）。"
+                "**上書きしません。**")
+    if status == "merged":
+        return (f"{r.get('id')} は他のタスクへまとめられています（{r.get('did') or '（先は不明）'}）。"
+                "**まとめ先のほうを閉じてください。**")
+    return f"{r.get('id')} の status が open ではありません（status={status!r}）。"
 
 
 def cmd_merge(a):
@@ -170,7 +253,10 @@ def main():
                         "同じ文面のタスクを見分ける唯一の手がかりになる")
     a.add_argument("--session", default="",
                    help="発言が入っているセッションの jsonl のパス。原文を辿り直すため")
-    a.add_argument("--verify", default="", help="完了を確かめるコマンド。無ければ省略")
+    a.add_argument("--verify", default="",
+                   help="完了を確かめるコマンド。無ければ省略。"
+                        "**turn を終えるたびに走るので、読むだけの形しか通らない**"
+                        "（grep / test / git と gh の読み取りなど）")
     a.add_argument("--kind", default="once", choices=["once", "standing"],
                    help="once=1回で終わる / standing=ずっと効く規則")
     a.set_defaults(func=cmd_add)

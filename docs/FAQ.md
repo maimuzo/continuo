@@ -472,7 +472,7 @@ git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch c
 git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
 ```
 
-**3. ボードでその issue を `Ready` へ戻します。**
+**3. カンバンでその issue を `Ready` へ戻します。**
 
 **この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
 
@@ -519,7 +519,7 @@ git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch c
 git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
 ```
 
-**3. ボードでその issue を `Ready` へ戻します。**
+**3. カンバンでその issue を `Ready` へ戻します。**
 
 **この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
 
@@ -1204,12 +1204,12 @@ grep '担当者が付いているので着手しません' <ログの出力先>
 
 **1. 2台目用の GitHub アカウントを作る。**組織で使うなら、bot 用のアカウントを1つ用意してください。
 
-**2. そのアカウントを、対象のリポジトリとボードに招く。**
+**2. そのアカウントを、対象のリポジトリとカンバンに招く。**
 
 | 何 | 要る権限 |
 | --- | --- |
 | リポジトリ | **write**（branch を push し、issue にコメントするため） |
-| ボード（Projects v2） | **write**（Status を書き換えるため） |
+| カンバン（Projects v2） | **write**（Status を書き換えるため） |
 
 **3. 2台目で、そのアカウントでログインする。**
 
@@ -1217,8 +1217,8 @@ grep '担当者が付いているので着手しません' <ログの出力先>
 gh auth login -s project
 ```
 
-**4. `WORKFLOW.md` の `tracker.provider.owner` は、ボードの持ち主のままにする。**
-**ログインするアカウントとは別です。**`owner` はボードがぶら下がっている GitHub のユーザーか組織の名前です。
+**4. `WORKFLOW.md` の `tracker.provider.owner` は、カンバンの持ち主のままにする。**
+**ログインするアカウントとは別です。**`owner` はカンバンがぶら下がっている GitHub のユーザーか組織の名前です。
 
 **5. 残りの手順は、1台目と同じです。**
 
