@@ -181,7 +181,10 @@ $
 ## 4. ユースケース「通常」の流れ
 
 **言いたいこと。**いまと1文字も変わらない。**リンクが0本なら、今までどおりに動く。**
-変わるのはプロンプトの push の書き方（`-u` を必ず付ける）だけである。
+変わるのは、**別の名前へ push するときにも `-u` を落とさないよう本文へ書き足す**ことだけである。
+既定の `git push -u origin HEAD` は
+[internal/scaffold/template.go:351-356](../../../internal/scaffold/template.go#L351-L356) に既にあり、
+**`-u` は最初から付いている。**
 
 **例。**issue は `octocat/hello-world#188`。リンクは0本。
 
@@ -204,7 +207,7 @@ git -C ~/ghq/github.com/octocat/hello-world worktree add -b continuo/octocat/hel
 **`git fetch` は叩かない。**リンクが0本なので、base は `main`（ローカルにある）である。
 
 **片付け。**`cleanup.require_pushed` の判定は、
-[9. 片付けを3段にする](#9-片付けを3段にする) の段1で通る（`git push -u origin HEAD` が
+[9. 片付けを4段にする](#9-片付けを4段にする) の段1で通る（`git push -u origin HEAD` が
 upstream を張り、`@{u}..HEAD` が 0 になる）。
 
 ---
@@ -390,13 +393,14 @@ myorg/internal-tasks#42  code=myorg/project  branch=continuo/myorg/internal-task
 「このパスは本当にこの issue のものか」を身元ファイルだけでは言えなくなる。**
 **照合の相手を、身元ファイルからトラッカーへ移す。**
 
-**いま照合している2箇所。**どちらも「パスの `<owner>/<repo>`」を
-**身元ファイルが名乗る issue の `<owner>/<repo>`** と比べている。
+**いま照合している3箇所。**どれも「パスの `<owner>/<repo>`」を
+**issue の `<owner>/<repo>`** と比べている。
 
 | どこ | いま何と比べているか |
 | --- | --- |
 | [internal/abandon/abandon.go:517-531](../../../internal/abandon/abandon.go#L517-L531) | 消す相手の issue の `Owner` / `Repo` |
 | [internal/orchestrator/restore.go:278-295](../../../internal/orchestrator/restore.go#L278-L295) | 身元ファイルの `issue_url` から取り出した `<owner>/<repo>` |
+| [internal/orchestrator/restore.go:311-321](../../../internal/orchestrator/restore.go#L311-L321) の `issueAgreesWithPath` | **取り直した issue の `Owner` / `Repo`**（[:665](../../../internal/orchestrator/restore.go#L665) と [:845](../../../internal/orchestrator/restore.go#L845) から呼ばれる） |
 
 **変えかた。****比べる相手を「トラッカーが答えたコードのリポジトリ」にする。**
 
@@ -406,6 +410,27 @@ myorg/internal-tasks#42  code=myorg/project  branch=continuo/myorg/internal-task
 | パスの最下層のディレクトリ名 | `ExpectedSlugFor(issue)`（**変えない**） |
 | 身元ファイルの `issue_url` | トラッカーが答えた issue の URL（**新しく足す**） |
 
+**`issueAgreesWithPath` も同じ相手に変える。**変えないと、cross-repo の run は
+復元のたびに `strings.EqualFold(issue.Owner, c.Owner)` が偽になり、pane も worktree も残したまま
+**毎回「置き場所と違うリポジトリ」の WARN が出るだけで、一度も引き継がれない。**
+
+**トラッカーが答えられないときは、issue のリポジトリと比べる従来の判定へ落とす。**
+落ちても照合を飛ばさない。**照合そのものを飛ばすと、身元ファイルを差し替えられた worktree が
+素通りする**（restore.go:660-664 が書いているとおり、無関係の issue の pane を閉じてしまう）。
+**それでも合わなければ候補から外す**（消さない）。
+
+**`continuo abandon` は、`pathAgrees` の前にトラッカーを1回だけ引く。**
+いま [internal/abandon/abandon.go:433](../../../internal/abandon/abandon.go#L433) の `pathAgrees` は
+**トラッカーを作る前に走る**（[:1157](../../../internal/abandon/abandon.go#L1157) が
+`NewTracker` を呼ぶ唯一の場所であり、[internal/abandon/deps.go:109-113](../../../internal/abandon/deps.go#L109-L113) が
+「遅延して呼ぶ」と決めている）。**遅延の目的は「worktree が1件も無い実行で `gh` を起動しない」ことなので、
+worktree が1件でも見つかったあとに引くなら目的を損なわない。**
+**引けなければ上のとおり issue のリポジトリと比べる。**abandon は片付けの途中で落ちた後始末に使う道具であり、
+**issue がボードから外れていても動かなければならない。**
+
+**身元ファイルの `code_repo`（11c）は照合に使わない。**エージェントが書き換えられるからである。
+**候補を絞る手掛かりにも使わない。**使うと、書き換えるだけで候補から外せてしまう。
+
 **これは検算を緩めていない。むしろ1段増えている。**
 いまは「パス ↔ 身元ファイルの自称」を比べているが、**身元ファイルは worktree の直下にあり、
 エージェントが書き換えられる。**トラッカーの答えは worktree の外にあり、書き換えられない。
@@ -413,7 +438,7 @@ myorg/internal-tasks#42  code=myorg/project  branch=continuo/myorg/internal-task
 **エージェントが `gh issue develop` でリンクを足したらどうなるか。**
 **次の巡回でコードのリポジトリの答えが変わり、パスと食い違う。**
 **食い違いは「候補から外す」であって「消す」ではない**ので、
-worktree も branch も1バイトも失われない。**人間には1行で知らせる**（11e の文面3）。
+worktree も branch も1バイトも失われない。**人間には1行で知らせる**（11f）。
 
 ---
 
@@ -438,7 +463,27 @@ identifier := fmt.Sprintf("%s/%s#%d", b.Clue.Owner, b.Clue.Repo, number)
 | --- | --- | --- |
 | **pane の label**（`<owner>/<repo>/issues/<番号>`。3-3） | **issue の owner / repo / 番号** | **使う。**herdr が持っており worktree の外にある |
 | **置き場所の2・3階層目** | **コードのリポジトリ** | 裏取りに使う（下の照合） |
-| **スラグ** | 番号（既定のテンプレートなら owner / repo も文字列としては入る） | **owner と repo は取り出さない**（ハイフンで割れて曖昧。3-22 が同じ理由で禁じている） |
+| **スラグ** | **番号だけ。**しかも issue の owner/repo が分かっているときに限る（下） | **owner と repo は取り出さない**（ハイフンで割れて曖昧。3-22 が同じ理由で禁じている） |
+
+**スラグから番号を切り出すには、issue の owner/repo が先に要る。**
+[internal/workspace/broken.go:204-207](../../../internal/workspace/broken.go#L204-L207) の
+`issueNumberFromSlug` は、**渡された owner/repo を `branch_template` に流し込んで**
+番号の前後の固定部分を作り、スラグと突き合わせる。
+[broken.go:184-186](../../../internal/workspace/broken.go#L184-L186) はいま
+**置き場所の2・3階層目（＝8 のあとはコードのリポジトリ）をそのまま渡している。**
+**スラグは issue のリポジトリから作られているので、
+2つが違う「既存 OSS への PR」では突き合わせが必ず外れ、`Number` が 0 になる。**
+
+**変えることは3つ。**
+
+| 何を | どう変えるか |
+| --- | --- |
+| `issueNumberFromSlug` に渡す owner/repo | **pane の label から取った issue の owner/repo にする。**label が無ければ渡さず、`Number` は 0 のままにする |
+| `PathClue.IssueURL()` / `Identifier()`（[broken.go:73-90](../../../internal/workspace/broken.go#L73-L90)） | **置き場所の owner/repo が issue のものだと言えないときは空文字を返す。**コードのリポジトリで `<owner>/<repo>#<番号>` を組み立てると、**実在しない issue を名乗る** |
+| [broken.go:267-269](../../../internal/workspace/broken.go#L267-L269) の「`Number <= 0` なら数えない」 | **「スラグが `branch_template` の固定部分で始まるか」に変える。**番号が取れなくても、continuo が作った置き場所であることは言える |
+
+**3つ目を変えないと、身元ファイルを失った cross-repo の worktree が
+「人間が置いたもの」として数えられず、報告も復元も片付けもされないまま画面から消える。**
 
 **照合。**[internal/orchestrator/restore.go:1310-1330](../../../internal/orchestrator/restore.go#L1310-L1330) の
 `slugAgrees` が比べる相手を変える。
@@ -450,15 +495,13 @@ identifier := fmt.Sprintf("%s/%s#%d", b.Clue.Owner, b.Clue.Repo, number)
 ```
 
 **pane も label も無いときは復元しない。**worktree は残す。
-[docs/FAQ.md](../../FAQ.md) に手順を1節足す（人間が `.continuo.json` を手で書く。
-書く中身は 11 のサンプルと同じ）。
-
+[docs/FAQ.md](../../FAQ.md) に手順を1節足す（人間が `.continuo.json` を手で書く。書く中身は 11c のサンプル）。
 **この穴は「既存 OSS への PR」でしか開かない。**
 コードのリポジトリが issue のリポジトリと同じなら、いまと同じ手順で復元できる。
 
 ---
 
-## 9. 片付けを3段にする
+## 9. 片付けを4段にする
 
 **言いたいこと。**`git push origin HEAD:<別名>` が upstream を張らないことを、
 **プロンプトで直し（`-u` を必ず付けさせる）、判定でも受け止める。**
@@ -475,6 +518,13 @@ push 先を分けた worktree は永久に片付かない。**
 | **1** | `git for-each-ref --count=1 --contains HEAD refs/remotes/` | **1行でも返れば消してよい。**HEAD は remote に載っている |
 | **2** | upstream があれば `git rev-list --count @{u}..HEAD` | **理由を数で言うために見る**（「push されていない commit が n 件残っている」） |
 | **3** | upstream が無く base があれば `git diff --quiet <base>...HEAD` | 差分が無ければ消してよい（**いまの判定をそのまま残す**） |
+| **4** | 段1が偽で、upstream も base も無い | **消さない。**いまの文面（[cleanup.go:767-771](../../../internal/workspace/cleanup.go#L767-L771)）をそのまま出す |
+
+**どの段にも当たらない場合は無い。**段1が偽なら upstream の有無で段2・段3へ、
+そのどちらでもなければ段4へ落ちる。**段4を書かないと、base を復元できなかった worktree
+（[internal/orchestrator/restore.go:1216](../../../internal/orchestrator/restore.go#L1216) が
+「`base` と `settings_path` は復元しない」と決めている）が、見送りの理由を1行も持たないまま
+片付けの対象になる。**
 
 **段1が段2より前にある。**逆にすると、
 「upstream は1本目の PR の branch のままで、2本目を別名へ push した」worktree が
@@ -562,45 +612,61 @@ tag の取得だけで数秒かかる。**`--all` も `--prune` も付けない�
 
 ---
 
-## 11. トラッカーのクエリを広げ、`Issue` に3つ足す
+## 11. トラッカーのクエリを広げ、`Issue` に4つ足す
 
-**言いたいこと。**GraphQL の1行を広げ、`Issue` に3つ足す。
+**言いたいこと。**GraphQL の1行を広げ、`Issue` に4つ足す。
 **`Issue.BranchName` は取られたまま誰も読んでいないので、そこへ入れ直す。**
 
 **取られたまま捨てられている証拠。**検索パターン `BranchName`、
-対象パス `internal/` `cmd/` `test/`（`--include='*.go'`）、対象コミット 73fb41a。
-**4件すべてが代入と型の定義であり、読み出しは0件である。**
-
-```console
-$ grep -rn 'BranchName' --include='*.go' internal/ cmd/ test/
-internal/tracker/query.go:1041:			BranchName:                branchName,
-internal/tracker/query.go:1083:			BranchName:    nil,
-internal/tracker/tracker.go:182:	// BranchName はトラッカーが返す branch のメタデータである（SPEC.md 4.1.1 の branch_name）。
-internal/tracker/tracker.go:185:	BranchName *string
-```
+対象パス `internal/` `cmd/` `test/`（`--include='*.go'`）、対象コミット 73fb41a で **4件。**
+[query.go:1041](../../../internal/tracker/query.go#L1041) と
+[:1083](../../../internal/tracker/query.go#L1083) が代入、
+[tracker.go:182](../../../internal/tracker/tracker.go#L182) と
+[:185](../../../internal/tracker/tracker.go#L185) が型の定義であり、**読み出しは0件である。**
 
 **クエリを広げる。**[internal/tracker/query.go:54](../../../internal/tracker/query.go#L54)
 
 ```graphql
 linkedBranches(first: 5) { nodes { ref { name
-  repository { nameWithOwner defaultBranchRef { name } parent { nameWithOwner } } } } }
+  repository { nameWithOwner url defaultBranchRef { name } parent { nameWithOwner } } } } }
 ```
+
+**`url` を落とさない。**8 の置き場所の1階層目（`<host>`）はここからしか取れない。
+落とすと、コードのリポジトリが別のホストにある形を扱えなくなる。
 
 **`first: 5` にする理由。**1本だけ取ると「2本ある」ことに気づけない。
 **2本以上の扱いを決めるには、2本目が見えていなければならない**（下の表）。
 **5本を超えたら「2本以上」と同じ扱いにする**（数える目的しか無いので取り切る必要が無い）。
 
-**`Issue` に足す3つ。**[internal/tracker/tracker.go:185](../../../internal/tracker/tracker.go#L185) の隣。
+**`Issue` に足す4つ。**[internal/tracker/tracker.go:185](../../../internal/tracker/tracker.go#L185) の隣。
 
 ```go
-// CodeRepo はコードのリポジトリである（`<owner>/<repo>`）。
+// CodeRepoNameWithOwner はコードのリポジトリである（**`<owner>/<repo>` の1本の文字列**）。
 // **リンクが0本なら、issue のリポジトリと同じ値が入る。**空にはしない。
-CodeRepo string
+CodeRepoNameWithOwner string
+// CodeRepoHost はコードのリポジトリの URL のホスト部である（`ref.repository.url` から取る）。
+// **リンクが0本なら、issue の URL のホスト部と同じ値が入る。**空にはしない。
+CodeRepoHost string
 // CodeRepoDefaultBranch はコードのリポジトリの既定 branch である。
 CodeRepoDefaultBranch string
-// PRTarget は PR の宛先である（fork なら派生元）。**fork でなければ CodeRepo と同じ。**
+// PRTarget は PR の宛先である（fork なら派生元。**`<owner>/<repo>`**）。
+// **fork でなければ CodeRepoNameWithOwner と同じ。**
 PRTarget string
 ```
+
+**`CodeRepoNameWithOwner` という長い名前にする理由。**11b の `IssueRef.CodeRepo` は
+**リポジトリ名だけ**（`project`）を指す。同じ `CodeRepo` を両方に置くと、写しで分解を忘れたときに
+置き場所が `~/worktrees/github.com/myorg/myorg-project/…` になる
+（[internal/workspace/layout.go:214-217](../../../internal/workspace/layout.go#L214-L217) の
+`pathComponent` がスラッシュをハイフンへ潰すので、**落ちずに間違った場所へ作られる**）。
+**名前で見分けられる形にして、その間違いを起こせなくする。**
+
+**`BranchName` は、リンクがちょうど1本のときだけ埋める。**
+0本・2本以上では **nil にする。**
+いま [internal/tracker/query.go:968-974](../../../internal/tracker/query.go#L968-L974) は
+`Nodes[0]` を無条件に使っているので、**そこも直す。**
+2本以上で1本目を残すと、11a が「リンクを base に使わない」と決めた場合でも
+11d の `.push_branch` にその1本目が載り、**エージェントが押し付けられた branch へ push する。**
 
 ---
 
@@ -614,7 +680,7 @@ PRTarget string
 | --- | --- | --- |
 | **0本** | issue のリポジトリ | 今までどおり（設定 → 既定 branch） |
 | **1本** | そのリンクの `ref.repository.nameWithOwner` | **そのリンクの `ref.name`** |
-| **2本以上・全部同じリポジトリ** | そのリポジトリ | **リンクを使わない。**コードのリポジトリの既定 branch |
+| **2本以上・全部同じリポジトリ** | そのリポジトリ | **リンクを使わない。**コードのリポジトリの既定 branch（**`BranchName` は nil にする**） |
 | **2本以上・別々のリポジトリ** | **決めない。着手しない**（下） |
 
 **別々のリポジトリを指す2本があったら、その issue に着手しない。**
@@ -627,8 +693,16 @@ Status を1バイトも書かずに飛ばし、issue へ1回だけコメント�
 | --- | --- |
 | 1 | `herdr.worktree.base`（設定に明示があれば、いつでもこれが勝つ） |
 | 2 | リンクが1本のとき、その branch（`origin/<名前>`） |
-| 3 | **コードのリポジトリの既定 branch**（同じなら `NativeRef["default_branch"]`） |
-| 4 | どれも無ければ `ErrBaseUnknown`（**推測しない**） |
+| 3 | `IssueRef.CodeDefaultBranch` が空でなければ、それ |
+| 4 | **コードのリポジトリ＝issue のリポジトリのときに限り** `NativeRef["default_branch"]` |
+| 5 | どれも無ければ `ErrBaseUnknown`（**推測しない**） |
+
+**段4に「同じときに限り」を付ける理由。**`NativeRef["default_branch"]` は
+[internal/tracker/query.go:1008-1010](../../../internal/tracker/query.go#L1008-L1010) が
+**issue のリポジトリの** `defaultBranchRef` から入れている値である。
+コードのリポジトリが違うのにここへ落ちると、**fork の clone で
+「issue のリポジトリの既定 branch」という別物の名前を base にしようとする。**
+**その組み合わせは必ず `ErrBaseUnknown` にする**（[internal/workspace/prepare.go:369-387](../../../internal/workspace/prepare.go#L369-L387) の `resolveBase`）。
 
 **設定の base は、リポジトリをまたいで効いてしまう。**fork を使うボードでは
 `herdr.worktree.base` を null のままにすること（[docs/FAQ.md](../../FAQ.md) に1行足す）。
@@ -643,9 +717,10 @@ Status を1バイトも書かずに飛ばし、issue へ1回だけコメント�
 **`IssueRef` に足すもの。**[internal/workspace/workspace.go:237-256](../../../internal/workspace/workspace.go#L237-L256)
 
 ```go
-// CodeOwner はコードのリポジトリの所有者名である。**空なら Owner を使う。**
+// CodeOwner はコードのリポジトリの所有者名である（**所有者名だけ**）。**空なら Owner を使う。**
 CodeOwner string
-// CodeRepo はコードのリポジトリ名である。**空なら Repo を使う。**
+// CodeRepo はコードのリポジトリ名である（**リポジトリ名だけ。`<owner>/<repo>` ではない**）。
+// **空なら Repo を使う。**
 CodeRepo string
 // CodeHost はコードのリポジトリの URL のホスト部である。**空なら issue の URL から取る。**
 CodeHost string
@@ -660,6 +735,10 @@ CodeDefaultBranch string
 
 **[internal/orchestrator/dispatch.go:1151-1161](../../../internal/orchestrator/dispatch.go#L1151-L1161) の
 `toIssueRef` が、`Issue` から上の5つを写す。**
+**`CodeOwner` と `CodeRepo` は、`Issue.CodeRepoNameWithOwner` を
+最初の `/` 1つだけで割って入れる**（`strings.Cut`）。割れなければ両方とも空にして
+「今までどおり `Owner` / `Repo` を使う」に倒す。**残りの `/` はリポジトリ名の側に含めない**
+（GitHub のリポジトリ名にスラッシュは入らない。入っていれば、それはコードのリポジトリの値ではない）。
 
 ---
 
@@ -683,13 +762,22 @@ CodeDefaultBranch string
   "base": "work/issue-42",
   "project_item_id": "PVTI_lAHNNEjOAYV2fM4N9wYE",
   "herdr_workspace_id": "ws_01H...",
+  "socket_path": "~/.continuo/run/continuo.sock",
+  "settings_path": "~/.continuo/settings/continuo-myorg-internal-tasks-42.json",
+  "agent_name": "continuo-myorg-internal-tasks-42",
+  "session_uuid": "6f1f2c1e-0000-4000-8000-000000000000",
   "created_at": "2026-09-01T12:00:00Z",
   "takeover_count": 0
 }
 ```
 
-**この3つは復元の判断に使わない。**人間が読むためと、`continuo status` の表示のためである
-（判断に使う値は 8b のとおりトラッカーから取る）。
+**これが実際に書かれる全キーである。**
+[internal/workspace/identity.go:53-108](../../../internal/workspace/identity.go#L53-L108) で
+`omitempty` / `omitzero` が付くのは `herdr_repo_workspace_id` と `cleanup_deferred_at` の2つだけで、
+**残りは値が空でも必ず出る。**8c が [docs/FAQ.md](../../FAQ.md) へ足す「人間が手で書く」手順は、このサンプルを指すこと。
+
+**足した3つ（`code_repo` / `pr_target` / `linked_branch`）は復元の判断に使わない。**
+人間が読むためと、`continuo status` の表示のためである（判断に使う値は 8b のとおりトラッカーから取る）。
 
 **`WORKFLOW.md` に足すもの。**1つだけ。
 
@@ -703,6 +791,15 @@ workspace:
 **`continuo init` が書く既定値も同じにする**
 （[internal/scaffold/template.go](../../../internal/scaffold/template.go) の
 front matter と [internal/config/default.go:89-95](../../../internal/config/default.go#L89-L95)）。
+**`internal/config/types.go` の `WorkspaceConfig` にフィールドを足し、validate も足す。**
+
+**[docs/plans/continuo_design.md](../continuo_design.md) 5-2 の ```yaml ブロックにも同じ行を足す。**
+足さないと `TestTemplate_雛形のキー構成が設計5_2の設定例と一致する` が
+「雛形にしか無いキーがある」で必ず落ちる。
+[test/internal/scaffold/design_template_test.go:35-40](../../../test/internal/scaffold/design_template_test.go#L35-L40) が
+**5-2 の ```yaml ブロックと雛形の front matter を、キーの集合として完全一致で突き合わせている**
+（[:149-172](../../../test/internal/scaffold/design_template_test.go#L149-L172) の `assertSameKeySet`）。
+**値は比べないので、コメントの文言は揃えなくてよい。**
 
 ---
 
@@ -721,13 +818,26 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 | `.pr_target` | PR の宛先（`upstream-org/project`） | コードのリポジトリと同じ |
 | `.push_branch` | push 先の既定（`work/issue-42`） | **空文字**（`git push -u origin HEAD` を使う） |
 
-**`missingkey=error` なので、5-3 の一覧にも同時に足す。**
-[docs/plans/continuo_design.md](../continuo_design.md) 5-3 の変数の表を直さないと、
-`TestTemplate_雛形の本文が設計5_3の本文と一致する` が落ちる。
+**`.push_branch` が空文字になるのは「`Issue.BranchName` が nil のとき」である**（11 のとおり、
+リンクが0本のときと2本以上のときの両方が nil になる）。**「リンクが0本のとき」と書かない。**
+
+**5-3 の変数の表は、機械では検査されていない。**
+[test/internal/scaffold/design_template_test.go:99-101](../../../test/internal/scaffold/design_template_test.go#L99-L101) の
+`TestTemplate_雛形の本文が設計5_3の本文と一致する` が突き合わせるのは、
+**5-3 の ```markdown ブロック（本文）だけ**である
+（[:237-240](../../../test/internal/scaffold/design_template_test.go#L237-L240) の
+`readDesignBodyExample` がそのブロックを読む）。表は人間が読むためのものなので、忘れても落ちない。
+**だから 11d の変数を足したときは、表を直したことを PR の説明で名指しして確かめる。**
+
+**`missingkey=error` を理由に挙げない。**この設定
+（[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）が落とすのは
+**テンプレートが `data` に無いキーを参照したとき**であり、**`data` にキーを足すこと自体は
+既存のテンプレートを1つも壊さない。**危ないのは逆で、**本文に `{{.push_branch}}` を入れて
+`data` に足さない側である**（13 の塊1）。
 
 ---
 
-## 11e. 人間に見せる文面（3本）
+## 11e. 人間に見せる文面（着手しない・取ってこられない）
 
 **言いたいこと。****新しく黙って落ちる経路を3つ作る。**その3つに文面を用意する。
 **ログ1行で済ませない。**3-68 が「ログは pane を見ていない限り誰にも届かない」と名指ししている。
@@ -761,9 +871,35 @@ Development のリンクを1本にしてから、Status を Ready に戻して�
 回線か認証を直してから、Status を Ready に戻してください。
 ```
 
-**3. 置き場所とコードのリポジトリが食い違う（候補から外す。消さない）。**
-**ログだけにする。**この状態は人間の操作ではなく、`branch_template` を変えた跡や
-リンクを張り替えた跡である。**worktree は残るので、失われるものが無い。**
+**文面はすべて [internal/i18n/messages/ja.json](../../../internal/i18n/messages/ja.json) と
+[internal/i18n/messages/en.json](../../../internal/i18n/messages/en.json) の両方へ入れ、
+`en.json` の `_source_sha256` を入れ直す。**3本目は 11f。
+
+---
+
+## 11f. 文面3 — 置き場所とコードのリポジトリが食い違う
+
+**言いたいこと。**候補から外すだけで、worktree も branch も消さない。
+**それでも issue へ1回だけ書く。**Status が動かないので、書かないと誰にも届かない。
+
+**issue へのコメントとログの両方を出す。****ログだけにしない。**
+この経路は Status を動かさずに候補から外れ続けるので、**放っておくと
+その issue は永久に着手されないまま、画面のどこにも理由が出ない。**3-68 が名指ししている形そのものである。
+
+**コメントは、issue とこの理由の組につき1回だけ**（文面1 と同じ仕組み。
+`<!-- continuo:path-code-mismatch -->` を目印に、既に書いてあれば以後はログだけにする）。
+
+```text
+<!-- continuo:path-code-mismatch -->
+この issue の worktree の置き場所が、いまリンクされているコードのリポジトリと食い違うので、
+着手していません。**worktree も branch も消していません。**
+
+  worktree      ~/worktrees/github.com/myorg/project/continuo-myorg-internal-tasks-42
+  置き場所       myorg/project
+  リンクの先     other-org/project
+
+Development のリンクを元に戻すか、この worktree を手で片付けてから、Status を Ready に戻してください。
+```
 
 ```text
 level=WARN msg="worktree の置き場所がコードのリポジトリと食い違うので候補にしません（消しません）"
@@ -771,9 +907,7 @@ level=WARN msg="worktree の置き場所がコードのリポジトリと食い�
   置き場所=myorg/project トラッカーが答えたコードのリポジトリ=other-org/project
 ```
 
-**文面はすべて [internal/i18n/messages/ja.json](../../../internal/i18n/messages/ja.json) と
-[internal/i18n/messages/en.json](../../../internal/i18n/messages/en.json) の両方へ入れ、
-`en.json` の `_source_sha256` を入れ直す。**
+**この文面も ja.json と en.json の両方へ入れ、`en.json` の `_source_sha256` を入れ直す**（11e と同じ）。
 
 ---
 
@@ -783,6 +917,18 @@ level=WARN msg="worktree の置き場所がコードのリポジトリと食い�
 「push には `-u` を必ず付けろ」の2つである（PR の探し方は 12b）。
 **同じ本文を [docs/plans/continuo_design.md](../continuo_design.md) 5-3 にも1文字違わず入れる**
 （`TestTemplate_雛形の本文が設計5_3の本文と一致する` が突き合わせる）。
+
+**貼り先1 は、[docs/plans/continuo_design.md](../continuo_design.md) 3-69 の3案のうち
+「切り替えを禁じる」を採るという判断である。**3-69 は
+「**どう扱うかが決まっていない**（2026-08-28 時点。人間の判断待ち）」のまま3案を並べている。
+**この文書が、その1つを採る。**3-69 の節は決定済みに書き換える（未決定の表を消す。13 の塊1）。
+
+**3-69 が「切り替えを禁じる」の損として挙げた「detached HEAD で同じ詰まりが残る」には、
+既に答えがある。**[internal/workspace/prepare.go](../../../internal/workspace/prepare.go) の
+`CheckWorktreeUsable` が detached HEAD を専用の番兵 `ErrWorktreeDetached` で断っており
+（#132（detached HEAD の worktree を永久に飛ばし、実態と違うメッセージを出す））、
+**「黙って詰まる」ではなく「番兵で名指しして止まる」になっている。**
+**この設計では、そこに何も足さない。**
 
 **貼り先1。**`## 終わったらやること` の中、
 `**push 先は、この issue のために作られた branch です。**` の直前
@@ -854,32 +1000,51 @@ push した branch の名前でも引いてください。
 
 ## 13. 触るもの（3つの塊に分ける。前の2つ）
 
-**言いたいこと。**全部で21ファイルになる。**1本の PR にしない。**
+**言いたいこと。**3つの塊の表は**全部で28行**であり、28ファイルではない。**1本の PR にしない。**
 **塊ごとに、それだけで筋の通った状態になるように切る。**順に出す（3つ目は 13b）。
 
-**塊「push と片付け」（6ファイル）。**これだけで「通常」と「1つの issue で PR を複数」が閉じる。
+**数えた単位。****行数であってファイル数ではない。**
+`git.go` / `prepare.go` / `dispatch.go` / `query.go` / `template.go` / `continuo_design.md` / `internal/i18n` は
+**2つ以上の塊にまたがるので重複して数えている。**重複を除くと**20行**になる。
+そのうち `docs/FAQ.md と docs/upgrading.md` の1行は2ファイル、
+`internal/config` / `internal/i18n` / `test/internal/workspace` の3行はディレクトリ（複数ファイル）である。
+**展開すると、実ファイルは25前後になる。**
+
+**塊「push と片付け」（6行）。**これだけで「通常」と「1つの issue で PR を複数」が閉じる。
 
 | ファイル | 何を |
 | --- | --- |
-| [internal/scaffold/template.go](../../../internal/scaffold/template.go) | 12 の貼り先1と2（`{{.push_branch}}` はまだ使わない形で入れる） |
-| [internal/workspace/cleanup.go](../../../internal/workspace/cleanup.go) | 9 の3段 |
-| [internal/workspace/git.go](../../../internal/workspace/git.go) | `gitRemoteRefContainsHead`（`for-each-ref --count=1 --contains HEAD`） |
-| [docs/plans/continuo_design.md](../continuo_design.md) | 3-9 の手順2b、5-3 の本文、5-3b の1行 |
+| [internal/scaffold/template.go](../../../internal/scaffold/template.go) | 12 の貼り先1と2（**`{{.push_branch}}` を含む行はこの塊では入れない。**下） |
+| [internal/workspace/cleanup.go](../../../internal/workspace/cleanup.go) | 9 の4段 |
+| [internal/workspace/git.go](../../../internal/workspace/git.go) | `gitRemoteRefContainsHead`（`for-each-ref --count=1 --contains HEAD`）。**塊2でも触る** |
+| [docs/plans/continuo_design.md](../continuo_design.md) | 3-9 の手順2b、5-3 の本文、5-3b の1行、**3-69 を決定済みに書き換える**（12）。**塊2・塊3でも触る** |
 | [docs/FAQ.md](../../FAQ.md) と [docs/upgrading.md](../../upgrading.md) | 「push したのに片付かない」の節 |
-| [test/internal/workspace](../../../test/internal/workspace) | 3段の分岐 |
+| [test/internal/workspace](../../../test/internal/workspace) | 4段の分岐 |
 
-**塊「リンクを base に使う」（+8ファイル）。**「既存 branch の続き」が閉じる。
+**塊1で入れる本文は、変数を使わない形である。**
+
+```text
+    git push -u origin HEAD:<新しい名前>
+```
+
+**`{{if .push_branch}}` を入れて `prompt.go` の `data` にキーが無い状態にすると、
+`missingkey=error`（[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）で
+全 issue の1回目のプロンプトの描画が失敗する。**
+**変数化は塊3で、`prompt.go` に `.push_branch` を足すのと同じ PR で行う**（12 の末尾の形へ差し替える）。
+
+**塊「リンクを base に使う」（+9行）。**「既存 branch の続き」が閉じる。
 
 | ファイル | 何を |
 | --- | --- |
-| [internal/tracker/query.go](../../../internal/tracker/query.go) | 11 のクエリと写し（[by_identifier.go](../../../internal/tracker/by_identifier.go) は同じ断片を使うので自動で効く） |
-| [internal/tracker/tracker.go](../../../internal/tracker/tracker.go) | `Issue` に3つ |
+| [internal/tracker/query.go](../../../internal/tracker/query.go) | 11 のクエリと写し、`BranchName` を1本のときだけ埋める（[by_identifier.go](../../../internal/tracker/by_identifier.go) は同じ断片を使うので自動で効く） |
+| [internal/tracker/tracker.go](../../../internal/tracker/tracker.go) | `Issue` に4つ |
 | [internal/workspace/workspace.go](../../../internal/workspace/workspace.go) | `IssueRef` に5つ |
-| [internal/workspace/prepare.go](../../../internal/workspace/prepare.go) | `resolveBase` の順番、段4 の fetch |
-| [internal/workspace/git.go](../../../internal/workspace/git.go) | `gitFetchBranch` |
-| [internal/config](../../../internal/config) | `workspace.fetch_timeout_ms`（types / default / validate） |
-| [internal/orchestrator/dispatch.go](../../../internal/orchestrator/dispatch.go) | `toIssueRef` の写し |
-| [internal/i18n](../../../internal/i18n) | 11e の文面2本（keys / ja / en） |
+| [internal/workspace/prepare.go](../../../internal/workspace/prepare.go) | `resolveBase` の5段、段4 の fetch。**塊3でも触る** |
+| [internal/workspace/git.go](../../../internal/workspace/git.go) | `gitFetchBranch`。**塊1でも触る** |
+| [internal/config](../../../internal/config) | `workspace.fetch_timeout_ms`（`types.go` の `WorkspaceConfig` / `default.go` / validate） |
+| [docs/plans/continuo_design.md](../continuo_design.md) | **5-2 の front matter に `fetch_timeout_ms`**（11c）。**塊1・塊3でも触る** |
+| [internal/orchestrator/dispatch.go](../../../internal/orchestrator/dispatch.go) | `toIssueRef` の写し。**塊3でも触る** |
+| [internal/i18n](../../../internal/i18n) | 11e の文面1と2（keys / ja / en）。**塊3でも触る** |
 
 ---
 
@@ -888,25 +1053,46 @@ push した branch の名前でも引いてください。
 **言いたいこと。**3つ目の塊で「既存 OSS への PR」が閉じる。
 **`verifiedRepo` は1行も触らない。**信頼を確かめる相手だけがコード側へ移る。
 
-**塊「コードのリポジトリを別にする」（+7ファイル）。**
+**塊「コードのリポジトリを別にする」（+13行）。**
 
 | ファイル | 何を |
 | --- | --- |
 | [internal/workspace/layout.go](../../../internal/workspace/layout.go) | `Locate` が使う host / owner / repo をコード側へ |
-| [internal/workspace/prepare.go](../../../internal/workspace/prepare.go) | `ghqList` に渡す相手をコード側へ |
+| [internal/workspace/prepare.go](../../../internal/workspace/prepare.go) | `ghqList` に渡す相手をコード側へ。**塊2でも触る** |
 | [internal/workspace/identity.go](../../../internal/workspace/identity.go) | 11c の3キー |
-| [internal/orchestrator/restore.go](../../../internal/orchestrator/restore.go) | `pathAgrees` と `slugAgrees` の相手（8b・8c） |
-| [internal/abandon/abandon.go](../../../internal/abandon/abandon.go) | `pathAgrees` の相手（8b） |
-| [internal/orchestrator/prompt.go](../../../internal/orchestrator/prompt.go) | 11d の変数と 12b の段落 |
-| [internal/orchestrator/dispatch.go](../../../internal/orchestrator/dispatch.go) | 信頼（`CheckTrust`）の相手をコード側へ（下） |
+| [internal/workspace/broken.go](../../../internal/workspace/broken.go) | 8c の3つ（`issueNumberFromSlug` に渡す相手、`IssueURL()` / `Identifier()`、壊れたものを数える条件） |
+| [internal/workspace/issuebranch.go](../../../internal/workspace/issuebranch.go) | `FindIssueBranch` / `DeleteIssueBranch` が引く clone（[:77](../../../internal/workspace/issuebranch.go#L77) の `clonePath`）をコード側へ |
+| [internal/orchestrator/restore.go](../../../internal/orchestrator/restore.go) | `pathAgrees` / `slugAgrees` / `issueAgreesWithPath` の相手（8b・8c） |
+| [internal/abandon/abandon.go](../../../internal/abandon/abandon.go) | `pathAgrees` の相手と、トラッカーを引く順番（8b） |
+| [internal/tracker/query.go](../../../internal/tracker/query.go) | **`Dispatchable` を判定する相手をコード側へ**（下）。**塊2でも触る** |
+| [internal/orchestrator/prompt.go](../../../internal/orchestrator/prompt.go) | 11d の変数 |
+| [internal/scaffold/template.go](../../../internal/scaffold/template.go) | 12b の段落と6本の差し替え、12 の貼り先2を `{{.push_branch}}` の形へ。**塊1でも触る** |
+| [docs/plans/continuo_design.md](../continuo_design.md) | 5-3 の本文を同じ内容へ。**塊1・塊2でも触る** |
+| [internal/orchestrator/dispatch.go](../../../internal/orchestrator/dispatch.go) | 信頼（`CheckTrust`）の相手をコード側へ（下）。**塊2でも触る** |
+| [internal/i18n](../../../internal/i18n) | 11f の文面（keys / ja / en）。**塊2でも触る** |
 
 **[internal/workspace/repo.go](../../../internal/workspace/repo.go) は1行も触らない。**
 `verifiedRepo` は「パス → ghq → git の共通ディレクトリ」の突き合わせであり、
 **パスの意味を揃えれば、そのまま成立する**（8）。
 
-**信頼は、コードのリポジトリに対して確かめる。**
-[internal/orchestrator/dispatch.go:595](../../../internal/orchestrator/dispatch.go#L595) の
-`o.ws.CheckTrust(issue.Owner, issue.Repo)` を、コードのリポジトリで呼ぶ。
+**信頼の関門は2つある。両方をコードのリポジトリへ移す。**
+**片方だけ直しても1件も動かない。**
+
+| どこ | いま何を見ているか | どう変えるか |
+| --- | --- | --- |
+| [internal/orchestrator/dispatch.go:595](../../../internal/orchestrator/dispatch.go#L595) | `o.ws.CheckTrust(issue.Owner, issue.Repo)` | **コードのリポジトリで呼ぶ** |
+| [internal/tracker/query.go:1016-1025](../../../internal/tracker/query.go#L1016-L1025) | `repoTrusted(owner, repo)`（**issue のリポジトリ**）が偽なら `Dispatchable` を偽にする | **コードのリポジトリで呼ぶ** |
+
+**トラッカー側を直さないと、`dispatch.go:595` へ到達しない。**
+`mapRawItemToIssue` はリンクを読んで `CodeRepoNameWithOwner` を決めたあとに
+`repoTrusted` を呼ぶ順に組み替える。**`notDispatchableReason` の文面も、
+コードのリポジトリの名前を出すように直す**（いまは issue のリポジトリ名を出す）。
+
+**`RepoTrustFunc` の型（[internal/tracker/tracker.go:36](../../../internal/tracker/tracker.go#L36)）は変えない。**
+渡す引数を替えるだけである。
+[internal/daemon/daemon.go:666-671](../../../internal/daemon/daemon.go#L666-L671) が
+`trust.require_repo_trusted` が偽のときに nil を渡す形も変えない。
+
 **理由は [internal/workspace/trust.go:69-85](../../../internal/workspace/trust.go#L69-L85) にある。**
 信頼の鍵は clone の実体のパスであり、**Claude Code が開くのは fork の worktree だからである。**
 **issue のリポジトリは信頼登録されていなくてよい。**そこでは1行も実行しない。
@@ -914,7 +1100,7 @@ push した branch の名前でも引いてください。
 **受け入れ（塊ごとに実機で1件通す）。**
 [.claude/rules/release.md](../../../.claude/rules/release.md) が「実機で issue を1件通してから出す」と
 決めている。**3つ目の塊は、開発者の環境の fork（`<ACCOUNT>/oss-project`）と
-テスト用のボード（project #10（実データを持たない検証用のボード））で通す。
+テスト用のボード（project #10（実データを持たない検証用のボード））で通す。**
 **本番のボード（project #3（AI自動進行管理。実データが入っている））では試さない。**
 
 ---
