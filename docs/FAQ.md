@@ -1487,9 +1487,9 @@ continuo --help
 | コマンド | 何をするか |
 | --- | --- |
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
-| `continuo setup [ディレクトリ]` | ボードの Status を5つの役割へ対応づける（対話） |
+| `continuo setup [ディレクトリ]` | カンバンの Status を5つの役割へ対応づける（対話） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを14の見出し語で調べる |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかを15の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
