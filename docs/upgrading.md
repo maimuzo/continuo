@@ -107,6 +107,19 @@ worktree がどの branch にも載っていません（detached HEAD）: …
 **詳しくは [docs/FAQ.md](FAQ.md) の
 「着手が「worktree がどの branch にも載っていません（detached HEAD）」で止まる」にあります。**
 
+### agent teams には対応していません — 知っておくこと
+
+**Claude Code の実験的な機能で、既定では無効です。**
+**`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を `1` にした環境では、issue が失敗することがあります。**
+
+**症状。**「作業の途中で確認の画面に止まりました」と出て、issue が `Blocked` へ落ちます。
+
+**確かめ方と直し方は [docs/FAQ.md](FAQ.md) の
+「「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）」にあります。**
+
+**これは v0.1.11 で新しく起きるようになったものではありません。**
+**前の版でも同じでしたが、原因が分かったので文書に書きました。**
+
 ---
 
 ## v0.1.9 から v0.1.10 へ
