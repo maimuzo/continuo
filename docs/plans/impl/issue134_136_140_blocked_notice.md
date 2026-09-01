@@ -1042,7 +1042,7 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 | --- | --- | --- |
 | **1** | [internal/orchestrator/gate.go](../../../internal/orchestrator/gate.go)（型・`noteGate` / `clearGate` / `markGateNoticed` / `markGateNoticeSkipped` / `forgetGatedNotOnBoard` / `GateViews`）と `Orchestrator` の1行 | まだ閉じない |
 | **2** | `handoffGate` の `judged` / `noted` と `defer`、2箇所の `noteGate`、`dispatchCandidates` の5箇所の `clearGate`（6-1）、`Tick` の `forgetGatedNotOnBoard` | まだ閉じない |
-| **3** | ダッシュボード（`RunSource` / `NewSnapshot` の引数 / 表 / 並べ替え / 文言13件） | **#134（ダッシュボードに「着手できずに止まっているもの」を出す）** |
+| **3** | ダッシュボード（`RunSource` / `NewSnapshot` の引数 / 表 / 並べ替え / 文言17件） | **#134（ダッシュボードに「着手できずに止まっているもの」を出す）** |
 | **4** | `gate.go` の `postGateNotice`、`gateNoticedIn`、[internal/orchestrator/prompt.go](../../../internal/orchestrator/prompt.go) の `buildGatedComment`、`FetchAllComments` の `truncated`（7-1）、設定 `on_assignee_gate`（文言1件） | **#140（人間が担当者で着手できないことを、issue のコメントとして1回だけ書く）** |
 | **5** | 担当者が2人以上の経路の `viewerIdentity` の切り分け（8-3）と案内、[docs/FAQ.md](../../FAQ.md) / [docs/upgrading.md](../../upgrading.md) | **#136（担当者が2人以上いる issue も、着手できないことを知らせる）** |
 
@@ -1142,7 +1142,7 @@ func NewSnapshot(views []orchestrator.RunView, gates []orchestrator.GateView, no
 | [test/internal/orchestrator/](../../../test/internal/orchestrator) | 空きスロットが尽きた巡回で記録が減らない／枠で止まった巡回で減らない／候補から消えたら消える／**ラベル不足で飛ばした巡回で消える**（6-1）／**入札に負けた巡回で消える**（6-2）／案内は3回目かつ60秒後に1回だけ／**3回目で60秒に届かなければ4回目に書く**／`warn_only` では書かず `NoticedAt` も立たない／**担当者に gh の持ち主が混じっていたら記録は作るが案内は作らない**（8-3）／**理由が変わったら Count と FirstSeenAt は数え直し、理由ごとの案内の状態は残る**（6-5）／**理由が往復しても、同じ理由の案内は1回しか書かれない**（6-5）／**`truncated` が真なら書かず `too_many_comments` が立つ**／`GateViews` が返したスライスへ書いても `o.gated` が変わらない。**`fakeTracker.FetchAllComments` の戻り値を3つにする** |
 | [test/internal/tracker/](../../../test/internal/tracker) | `FetchAllComments` が `truncated` を返す（20ページを使い切って続きがあるとき真、`hasNextPage` が偽なら偽）。**既存の2件の呼び出しに戻り値を足す** |
 | [test/internal/server/](../../../test/internal/server) | `fakeSource` に `GateViews` を足す。**`view_test.go` の `NewSnapshot` の呼び出し3箇所に引数を足す。**表の行と、1件も無いときの1行、**`Since` が同じ2件が `Identifier` の昇順に並ぶ** |
-| [test/internal/i18n/](../../../test/internal/i18n) | 既存の突き合わせが14件を拾う（新しいテストは要らない） |
+| [test/internal/i18n/](../../../test/internal/i18n) | 既存の突き合わせが18件を拾う（新しいテストは要らない） |
 | [test/internal/scaffold/](../../../test/internal/scaffold) | 既存の `TestTemplate_雛形のキー構成が設計5_2の設定例と一致する` が通る（新しいテストは要らない） |
 
 **[test/internal/orchestrator/expected_warnings_test.go](../../../test/internal/orchestrator/expected_warnings_test.go) に足す。**
