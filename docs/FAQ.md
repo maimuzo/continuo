@@ -424,6 +424,113 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 
 **この判定は着手の最初に行います。**落ちても Status は1バイトも書きません。
 
+### 着手が「worktree がどの branch にも載っていません（detached HEAD）」で止まる
+
+**原因。**worktree が detached HEAD になっています。**どの branch にも載っていない状態です。**
+
+**上の節（ディレクトリだけが残っている）とは違います。**worktree は git に登録されていて、
+**branch に載っていないだけです。**中の作業は残っています。
+
+**よくある原因。**
+
+| 何 | 例 |
+| --- | --- |
+| **commit を直接チェックアウトした** | `git checkout <SHA>` / `git switch --detach` |
+| **rebase の途中** | `git rebase` が止まっている |
+| **bisect の途中** | `git bisect` を始めたまま |
+
+**直し方。**
+
+**1. 未コミットの変更があるかを、先に確かめてください。**
+
+```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 status
+```
+
+**`rebase in progress` と出たら、先に終わらせるか中止してください。**
+**その状態では `git switch` が git に拒まれます。**
+
+```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 rebase --abort
+```
+
+**`bisecting` と出たら、`git bisect reset` で元に戻してください。**
+**bisect 中の `git switch` は拒まれませんが、警告が出るだけで bisect の途中状態が残ります**
+（`git status` が `You are currently bisecting` を出し続けます）。
+
+```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 bisect reset
+```
+
+**2. 期待の branch へ戻します。**
+
+```bash
+# 期待の branch が残っているとき
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch continuo/<owner>/<repo>/42
+
+# 期待の branch が消えているとき
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
+```
+
+**3. ボードでその issue を `Ready` へ戻します。**
+
+**この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
+
+**`continuo abandon` は使わないでください。**worktree の中の作業が消えます。
+**`--force` を付けなくても、条件が揃うと Status を `failure_state` へ動かします。**
+
+### 着手が「worktree が期待と違う branch に載っています」で止まる
+
+**原因。**worktree が、continuo の作った branch とは別の branch をチェックアウトしています。
+
+**上の2つの節とは違います。**worktree は git に登録されていて、どこかの branch には載っています。
+**載っている branch が違うだけです。**中の作業は残っています。
+
+**よくある原因。**
+
+| 何 | 例 |
+| --- | --- |
+| **issue の本文が別の branch を指していた** | 「作業は既に `feature/x` にあり、draft PR も出ている」と書いてあり、エージェントがそこへ切り替えた |
+| **1つの issue で2本目の PR を出した** | エージェントが新しい branch を切った |
+| **人間が手で切り替えた** | 同じ worktree で別の作業をした |
+
+**直し方。**
+
+**1. 未コミットの変更と、push していない commit があるかを、先に確かめてください。**
+
+```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 status
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 log --oneline @{u}..HEAD
+```
+
+**2つ目のコマンドが `no upstream configured` で落ちたら、その branch は1度も push されていません。**
+**commit は全部この機械の中にしかありません。**
+
+**いまの branch の作業が要るなら、期待の branch へ戻したあとでマージしてください。**
+**先に戻してしまうと、いまの branch を自分で覚えておかない限り引けなくなります。**
+
+**2. 期待の branch へ戻します。**
+
+```bash
+# 期待の branch が残っているとき
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch continuo/<owner>/<repo>/42
+
+# 期待の branch が消えているとき
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
+```
+
+**3. ボードでその issue を `Ready` へ戻します。**
+
+**この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
+
+**`continuo abandon` は使わないでください。**worktree の中の作業が消えます。
+**`--force` を付けなくても、条件が揃うと Status を `failure_state` へ動かします。**
+
+**エージェントに切り替えさせないための指示は、`WORKFLOW.md` の本文にあります。**
+v0.1.12 の雛形から「continuo が用意した worktree と branch のまま作業してください」が入りました。
+**古い版から上げた `WORKFLOW.md` には入っていません。**
+[upgrading.md](upgrading.md) の「v0.1.11 から v0.1.12 へ」を見て、手で足してください。
+
 ### 着手が「`herdr.worktree.base` が空で、ボードから引いた issue にも既定 branch の情報がありませんでした」で止まる
 
 **原因。**base を書いていないときはボードが返す既定 branch を使いますが、それが取れませんでした。
@@ -486,6 +593,146 @@ continuo は Claude Code を `--permission-mode dontAsk` で起動します。
 **直し方。**記録を読んで、何をしようとして止まったのかを確かめます。
 **許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足し、
 Status を着手待ちへ戻してください。
+
+**それでも、何が確認の画面を出したのか分からないときは、次の節を読んでください。**
+**agent teams が有効だと、`dontAsk` で起動していても確認の画面が出ます。**
+
+### 「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）
+
+**continuo は agent teams に対応していません。**有効になっていると、この症状が起きます。
+
+**agent teams は Claude Code の実験的な機能で、既定では無効です。**
+**`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を `1` にした環境でだけ有効になります。**
+
+**何が起きるか。**エージェントが `Agent` ツールに名前を付けて呼ぶと、
+**サブエージェントではなく teammate として起動します。**
+
+**teammate は、独立した Claude Code のセッションです。**
+**それを起こした側を「リード」と呼びます。**continuo が起動したのがリードです。
+
+**teammate が許可を求めると、確認の画面はリードの pane に出ます。**
+continuo はそれを「人間の入力を待っている」と読み、esc を送って pane を閉じ、issue を失敗にします。
+
+**公式文書。**
+
+> Teammate permission prompts appear in the lead session, so approve them there yourself.
+
+**訳。**teammate の許可の確認はリードのセッションに出るので、そこで自分で承認すること。
+
+出典: [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）
+
+**上の節の「`dontAsk` では確認の画面が出ない」と食い違って見えますが、両方とも起きます。**
+continuo は `--permission-mode dontAsk` で起動するので、**リード自身は確認の画面を出しません。**
+**ところが teammate はそれを継がず、`default` で走ることが観測されています**
+（2026-08-27、外部の利用者の実測。報告された `meta.json` が3件とも `permissionMode: "default"` でした）。
+**公式は「teammate はリードの許可設定を継ぐ」と書いており、この観測と食い違っています。**
+**理由は分かっていません。**
+
+**確かめ方。**
+
+**continuo が起動した Claude Code に、その環境変数が届いているかを見ます。**
+
+**1. continuo の設定を見る。**continuo はここに書いたものを `--settings` で渡します。
+
+```bash
+grep -n 'AGENT_TEAMS' ~/continuo-work/WORKFLOW.md
+```
+
+**2. 対象リポジトリの clone を見る。**チームで有効にしていることがあります。
+
+```bash
+ghq list --full-path | xargs -I{} grep -ln 'AGENT_TEAMS' {}/.claude/settings.json {}/.claude/settings.local.json 2>/dev/null
+```
+
+**3. 自分の設定を見る。**
+
+```bash
+grep -n 'AGENT_TEAMS' ~/.claude/settings.json ~/.claude/settings.local.json 2>/dev/null
+```
+
+**4. continuo と herdr を起動したシェルの環境変数を見る。**
+
+**continuo は Claude Code を直接起動しません。**herdr が作った pane の中で起動します。
+**だから、この2つは別のプロセスの環境になりえます。**両方見てください。
+
+```bash
+# いま叩いているシェル
+echo "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-（設定されていません）}"
+
+# herdr の常駐プロセスの環境（macOS / Linux）
+ps eww "$(pgrep -n herdr)" | tr ' ' '\n' | grep '^CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS='
+```
+
+**`1` が入っていたら、まずこれを疑ってください。**
+**ただし、これで原因が確定するわけではありません。**continuo は、何が確認の画面を出したかを持っていません。
+`1` が入っていることは「agent teams が使える状態だった」という意味であって、
+**この停止が teammate のせいだという証明ではありません。**
+記録に teammate が出ていたかどうかは、上の節の【調べるところ】から辿れます。
+
+**5. 4つとも空振りなのに症状が続くなら、組織の managed settings を疑ってください。**
+**managed settings は、他のどの設定よりも後に当たります。**個人の設定では上書きできないので、
+管理者に相談してください。
+
+**直し方。**
+
+**`WORKFLOW.md` の `claude.env` に1行足してください。**
+
+**足す先は `claude:` の下の `env:` の塊です。**雛形には既にあります。**塊ごと貼り替えないでください。**
+**場所は、既にある行から辿れます。**
+
+```bash
+grep -n 'RETRY_WATCHDOG' ~/continuo-work/WORKFLOW.md
+```
+
+```yaml
+claude:
+  # …（ほかの設定）
+  env:                                        # Claude Code に渡す環境変数
+    CLAUDE_CODE_RETRY_WATCHDOG: "1"           # 既にある行
+    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0" # ← これを足す
+```
+
+**直したら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+**すでに動いている issue には届きません。**その issue は Status を着手待ちへ戻してやり直させてください。
+
+**上の「確かめ方」の4番（シェルの環境変数）で見つかった場合も、同じ直し方で構いません。**
+**公式の2つの文から、そう言えます。**（1つの文でそう書いてあるわけではありません。）
+
+> Setting the variable to `0` in your user `settings.json` overrides a shell export.
+
+**訳。**user の `settings.json` でこの変数を `0` にすると、シェルの export を上書きする。
+
+**continuo が渡すのは `--settings` で、user の設定よりさらに後に当たります。**
+
+> **Higher-precedence settings files**: project settings, local settings, and a `--settings` payload apply after user settings, so an `env` entry that sets the variable to `1` in any of them wins.
+
+**訳。**優先順位の高い設定ファイル: プロジェクトの設定・ローカルの設定・`--settings` で渡すものは、
+user の設定より後に当たる。だからそのどれかに、この変数を `1` にする `env` の項目があれば、そちらが勝つ。
+
+**シェルで `unset` するだけでは足りないことがあります。**
+**continuo は Claude Code を直接起動せず、herdr が作った pane の中で起動します。**
+**pane が herdr の環境をどこまで継ぐかは、こちらでは確かめられていません。**
+
+**`WORKFLOW.md` に書くのが確実です。**そちらは `--settings` で渡るので、
+**シェルの環境変数より後に当たります。**
+
+**なぜ `WORKFLOW.md` に書くのか。**
+
+**continuo は Claude Code を `--settings` 付きで起動します。**
+**その設定は、対象リポジトリの `.claude/settings.json` より優先順位が上です。**
+
+| 順位 | どこ |
+| --- | --- |
+| 1 | 組織の managed settings |
+| **2** | **`claude --settings`**（continuo が渡すもの） |
+| 3 | `.claude/settings.local.json` |
+| 4 | `.claude/settings.json` |
+| 5 | `~/.claude/settings.json` |
+
+**リポジトリ側が `1` にしていても、こちらが勝ちます。**
+**勝てないのは1番の managed settings だけです。**その場合は管理者に相談してください。
+
+**人が自分の手で叩く `claude` には影響しません。**continuo が起動したセッションにだけ効きます。
 
 ### エージェントが叩いたコマンドが「危ない」と断られる
 
@@ -580,6 +827,58 @@ herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 ```bash
 grep -n "startup_timeout_ms" ~/continuo-work/WORKFLOW.md
 ```
+
+### ボードに issue があるのに、1件も着手されない
+
+**Status も動かず、issue にも何も書かれないので、止まっているように見えます。**
+**既定の水準（info）で出るのは、次の3つです。**まずこれを探してください。
+
+```bash
+grep -E '枠が閾値を超えている|空きスロットが尽きた|必須のラベルが揃っていない' <ログの出力先>
+```
+
+| 出ている行 | 何が起きているか | どうするか |
+| --- | --- | --- |
+| **枠が閾値を超えているので新規の dispatch を止めます** | 定額プランの枠が `rate_limit.pause_above_percent`（既定95%）を超えました。**走っている turn は止めません** | **待てば自分で再開します。**すぐ動かしたいときは `pause_above_percent` を上げてください |
+| **空きスロットが尽きたので、この巡回ではこれ以上 dispatch しません** | 同時に動かせる数を使い切りました。**上限は2つあります**（全体と、Status ごと） | **走っているものが終われば順に着手します。**増やすには、**ログの `上限に達した設定` に出ている名前**を上げてください |
+| **必須のラベルが揃っていないので飛ばします** | `tracker.required_labels` に書いたラベルが、その issue に付いていません。**足りないラベルの名前が全部、同じ行に出ます** | **ラベルを付けるか、`required_labels` を見直してください**。この行は**足りないラベルの組み合わせごとに1回だけ**出ます（1つ付けて、まだ足りなければもう1回出ます） |
+
+**3つとも出ていないときは、まず入札を疑ってください。**
+
+**枠の余裕が足りないとき、continuo は入札しません。**その判定は `pause_above_percent` より手前で働きます。
+
+**見るのは5時間の枠だけではありません。**1週間の枠も、それぞれ独立に同じ判定を受けます。
+**どれか1つでも下の帯に入れば、そこで止まります。**
+
+| いちばん使っている枠の使用率 | dispatch を止めるか | 入札するか | 既定の水準で見えるか |
+| --- | --- | --- | --- |
+| 〜90% | 止めない | する | 正常に着手します |
+| **91〜95%** | **止めない** | **しない** | **1行も出ません** |
+| 96%〜 | 止める | しない | 上の表の1行目が出ます |
+
+**境界の出どころ。**91% は `five_hour_margin_percent` と `weekly_margin_percent`（どちらも既定10）から、
+96% は `rate_limit.pause_above_percent`（既定95。**`95` ちょうどでは止まりません**）から決まります。
+
+**5時間の枠が30%でも、1週間の枠が92%なら、この帯に入ります。**
+
+**この帯に入っているかは、Debug でしか分かりません。**
+
+```bash
+continuo --log-level debug   # 起動し直して「入札しません」を探す
+```
+
+**判定の中身は、下の「複数の機械で見張っているのに、どの機械も issue を取らない」にあります。**
+**1台で動かしていても当たります。**
+
+**それでも出ないときは、担当者を見てください。**
+**人間が担当者になっていると、continuo は触りません**（下の
+「人間が担当者になっている issue が、いつまでも着手されない」を読んでください）。
+
+**v0.1.10 までは、「必須のラベルが揃っていない」だけ1行も出ていませんでした。**
+**v0.1.11 から出ます。**残る2つは前から INFO で出ています。
+
+**3つとも WARN ではなく INFO です。**どれも異常ではなく、
+**待てば自分で進むか、設定を変えれば済むもの**だからです。
 
 ### issue が急に `Blocked` になった
 
@@ -840,6 +1139,50 @@ cd ~/continuo-work && continuo --log-level debug
 **`recheck_interval_ms`（既定1時間）ごとに担当を確かめ直しており**、他の機械が入札に勝って
 担当者を書き換えた時点で、そのターンの終わりに気づいて止まります。**Status もコメントも書かず、
 `workspace_hooks.after_run` も走らせません。**それより早く止めたい場合は、この値を短くしてください。
+
+### 人間が担当者になっている issue が、いつまでも着手されない
+
+**原因。**その issue に、continuo が使うアカウント以外の担当者が付いています。
+**continuo は、人間が付けた担当には触りません。**
+
+**この判定は、Status が `Ready` でも `In Progress` でも働きます。**
+**ボードの上では、着手待ちのまま止まって見えます。**
+
+**確かめ方。**continuo のログに、この1行が出ています。
+
+```
+WARN 担当者が付いているので着手しません（continuo が付けたものではありません）。
+     着手させるには、GitHub の画面でその担当者を外してください
+     identifier=octocat/hello-world#42 担当者=octocat-human
+```
+
+```bash
+grep '担当者が付いているので着手しません' <ログの出力先>
+```
+
+**issue には何も書かれません。**Status も動きません。**手がかりはこのログだけです。**
+
+**この行は巡回のたびに出続けます**（既定30秒ごと）。**1回だけではありません。**
+
+**直し方。**どちらか1つを行ってください。**Status はどちらの場合も動かさなくて構いません。**
+
+| どうしたいか | 何をするか |
+| --- | --- |
+| **continuo に任せる** | **GitHub の画面で、その担当者を外す。**次の巡回で「担当者が無い」と判定され、入札からやり直します |
+| **人間が自分でやる** | **`tracker.active_states` に入っていない Status へ動かす**（既定は `Ready` と `In Progress` の2つなので、そのどちらでもない Status にする）。**ボードから外しても構いません** |
+
+**`In Progress` へ動かしても止まりません。**既定ではそれも `active_states` に入っているので、
+**候補として返り続け、巡回のたびにコメントを1本読んで WARN を出します。**
+
+**「continuo が使うアカウントへ付け替える」は勧めません。**
+**同じアカウントで2台以上の continuo を動かしていると、2台とも同時に着手できてしまいます。**
+1台しか動かしていないことが確かなら効きますが、**担当者を外すほうが安全です。**
+
+**担当者が2人以上いる場合も同じです。**そのときの文面は
+「担当者が2人以上いるので触りません（人間が触っています）」になります。
+
+**なぜ触らないのか。**担当者は「いま誰がこの issue を持っているか」の印です。
+**人間が付けた印を continuo が上書きすると、人間の作業を横取りすることになります。**
 
 ### 持ち回りを使わずに、1台だけで動かしたい
 

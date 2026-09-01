@@ -138,6 +138,14 @@ os.Rename(tmp.Name(), path)
 - **修正の履歴を書かない。**置くのは最新の仕様・選定根拠・比較した案の否定根拠だけ
 - **1つの節は50行以内。**長くなったら要約版を別ファイルに作る（元は残す）
 
+## issue の扱い
+
+[.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の3点。
+
+- **issue を作ることと、着手することは別。**作ったらグループ化して着手順序を出し、**人間の指示を待つ**
+- **閉じられるものを先に外す。**issue の題名だけで「未修正」と判断せず、現行コードと突き合わせる
+- **同時に進めるのは2か3まで。**人間判断待ちになったらスロットを開けて他を進める
+
 ## リリースの手順
 
 [.claude/rules/release.md](.claude/rules/release.md) に従うこと。とくに次の3点。
@@ -171,7 +179,7 @@ os.Rename(tmp.Name(), path)
 1. **まず draft で作る**（`gh pr create --draft`）
 2. **`/code-review` を通す**
 3. **レビュー結果を、その PR のコメントに貼る。**
-   **コメントの先頭に `<!-- code-review-result -->` を置く**（リリース前の検査がこの目印を数える）
+   **コメントの先頭に `<!-- code-review-result -->` を置く**（CI とリリース前の検査がこの目印を数える）
 4. **指摘に対応する**（下の「コードレビュー記録フロー」に従う）
 5. **`gh pr ready` で draft を外す**
 
@@ -180,12 +188,28 @@ os.Rename(tmp.Name(), path)
 
 **既に draft を外してしまったものは、`gh pr ready --undo` で戻してからレビューする。**
 
-**この規則は機械で止める。**[.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) が
-`gh pr merge <番号>` と `gh pr ready <番号>` を実行の前に見て、**目印が無ければ拒否する。**
+**この規則は機械で止める。3箇所で止まる。**
+
+| どこ | いつ止まるか |
+| --- | --- |
+| [.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) | `gh pr merge <番号>` と `gh pr ready <番号>` を**実行する前** |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・`gh pr ready` を打ったとき。**`review-result` の検査が赤になる |
+| [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
+
+**3つとも数える条件は同じである。**
+
+- **目印がコメントの本文の先頭にあること**（前に空白文字があってもよい）。**途中に書いたものは数えない**
+- **投稿者が `OWNER` / `MEMBER` / `COLLABORATOR` のいずれかであること**
+
+**CI は hook より確かである。**hook はコマンドの文字列から PR 番号を当てているが、
+**CI は `github.event.pull_request.number` で受け取る。**書き方を変えても外れない。
+
+**結果を貼ったら `gh pr ready <番号>` を打つ。**それで CI の検査が回り直して緑になる。
 
 **規則に書くだけでは守られなかった**（2026-08-29。12本をレビューせずにマージし、あとから回し直すことになった）。
 **人間が明示的に許すときだけ、環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を置いて通す。**
 **AI が自分でその環境変数を置いてはならない。**
+**この逃がし口は hook にしか効かない。**CI は環境変数を見ないので、**貼るまで赤のままである。**
 
 **エージェントが作る PR にも同じ規則を当てる。**continuo が作った PR も、
 レビューを通すまで draft のままにする。
