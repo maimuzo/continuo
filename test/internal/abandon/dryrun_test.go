@@ -118,3 +118,84 @@ func containsRunningNotice(out string, running bool) bool {
 	return strings.Contains(out, "continuo is not running") ||
 		strings.Contains(out, "continuo は動いていません")
 }
+
+// 目的: 覚え書きを読めないときに、`--dry-run` が「動いていない」と答えないことを確かめる
+// （設計 3-17i）。
+//
+// **覚え書きは「書けなくても起動を止めない」ものである。**だから読めないことは
+// 「動いていない」の証拠にならない。**3値しか無かったので、ここが `not_running` に
+// 丸められ、生きている continuo の worktree を「消せる」と報告していた。**
+//
+// 与える情報: JSON として壊れているロックの覚え書き。
+// 成功条件: 止まること（`ExitStopped`）と、「動いていません」と言わないこと。
+func TestAbandon_dryRunは覚え書きを読めなければ止まる(t *testing.T) {
+	fx := newFixture(t)
+	fx.Prepare(t, 42)
+
+	if err := os.MkdirAll(filepath.Dir(fx.LockPath), 0o700); err != nil {
+		t.Fatalf("ロックの置き場所を作れません: %v", err)
+	}
+	if err := os.WriteFile(instance.LockInfoPath(fx.LockPath), []byte("{ pid: "), 0o600); err != nil {
+		t.Fatalf("壊れた覚え書きを置けません: %v", err)
+	}
+
+	code := fx.Run(t, 42, func(opts *abandon.Options) { opts.DryRun = true })
+
+	if code != abandon.ExitStopped {
+		t.Fatalf("覚え書きを読めないのに止まらなかった: 終了コード %d\n%s", code, fx.Output())
+	}
+	if containsRunningNotice(fx.Output(), false) {
+		t.Fatalf("覚え書きを読めないのに「動いていません」と言っている:\n%s", fx.Output())
+	}
+}
+
+// 目的: 残骸の覚え書き（死んだ PID）なら進み、残骸があることを画面に出すことを確かめる
+// （設計 3-17i）。
+//
+// **`stale` を `not_running` と同じ言葉で表示しない。**残骸が残っていることは、
+// 前の continuo が正常に終わらなかった合図である。**黙って進むと、次に同じことが起きても
+// 気づけない。**
+//
+// 与える情報: 終了済みのプロセスの PID を書いた覚え書き。
+// 成功条件: 進むこと（`ExitOK`）と、残骸があることが出ていること。
+func TestAbandon_dryRunは残骸の覚え書きを見つけたら言う(t *testing.T) {
+	fx := newFixture(t)
+	fx.Prepare(t, 42)
+
+	if err := os.MkdirAll(filepath.Dir(fx.LockPath), 0o700); err != nil {
+		t.Fatalf("ロックの置き場所を作れません: %v", err)
+	}
+	if err := instance.WriteLockInfo(fx.LockPath, instance.LockInfo{PID: deadPID(t)}, nil); err != nil {
+		t.Fatalf("覚え書きを置けません: %v", err)
+	}
+
+	code := fx.Run(t, 42, func(opts *abandon.Options) { opts.DryRun = true })
+
+	if code != abandon.ExitOK {
+		t.Fatalf("残骸なのに止まった: 終了コード %d\n%s", code, fx.Output())
+	}
+	out := fx.Output()
+	if !strings.Contains(out, "leftover note") && !strings.Contains(out, "正常に終わらなかった跡") {
+		t.Fatalf("残骸があることを出していない:\n%s", out)
+	}
+}
+
+// deadPID は、確実に終了している子プロセスの PID を返す。
+//
+// **`sh -c "exit 0"` を起動して待つ。**終了を待ってから PID を返すので、
+// **そのプロセスは必ず居ない。**
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 終了済みのプロセスの PID。
+func deadPID(t *testing.T) int {
+	t.Helper()
+	proc, err := os.StartProcess("/bin/sh", []string{"sh", "-c", "exit 0"}, &os.ProcAttr{})
+	if err != nil {
+		t.Fatalf("子プロセスを起動できない: %v", err)
+	}
+	pid := proc.Pid
+	if _, err := proc.Wait(); err != nil {
+		t.Fatalf("子プロセスを待てない: %v", err)
+	}
+	return pid
+}

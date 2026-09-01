@@ -261,7 +261,7 @@ func TestAbandon_覚え書きが無ければそれを読めと言わない(t *te
 	}
 	t.Cleanup(func() { _ = held.Release() })
 
-	infoPath := instance.BoardInfoPath(fx.BoardLockPath)
+	infoPath := instance.LockInfoPath(fx.BoardLockPath)
 	if _, err := os.Stat(infoPath); !os.IsNotExist(err) {
 		t.Fatalf("覚え書きが在ってはならない（検査の前提が崩れている）: %v", err)
 	}
@@ -280,8 +280,8 @@ func TestAbandon_覚え書きが無ければそれを読めと言わない(t *te
 
 	// **覚え書きが在るときは、いままでどおり名指しする。**
 	// ここを確かめないと、いつでも案内しない実装でも通ってしまう。
-	if err := instance.WriteBoardInfo(fx.BoardLockPath,
-		instance.BoardInfo{Owner: "octocat", ProjectNumber: 3}, nil); err != nil {
+	if err := instance.WriteLockInfo(fx.BoardLockPath,
+		instance.LockInfo{Owner: "octocat", ProjectNumber: 3}, nil); err != nil {
 		t.Fatalf("覚え書きを書けません: %v", err)
 	}
 	fx.Out.Reset()

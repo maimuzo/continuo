@@ -99,6 +99,12 @@ func TestDoctorLockFile_既にcontinuoが握っていれば通る(t *testing.T) 
 func TestDoctorLockFile_検査の最中でもロックを取れる(t *testing.T) {
 	fx := newFixture(t)
 	lockPath := filepath.Join(fx.Home, instance.DirName, instance.LockFileName)
+	// **置き場所はテストが用意する。**doctor は本番が使う名前を1つも作らない
+	// （設計 3-17h）ので、**用意しないと `lock.Acquire` が「親ディレクトリが無い」で
+	// 落ち、握っているかどうかを確かめられない。**
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
+		t.Fatalf("ロックの置き場所を作れません: %v", err)
+	}
 
 	var acquireErr error
 	var tried bool
@@ -318,4 +324,89 @@ func shortDoctorHome(t *testing.T) string {
 	}
 	t.Fatal("一時ディレクトリを作れません")
 	return ""
+}
+
+// 目的: `continuo doctor` が、本番が使う名前の資源を1つも作らないことを確かめる
+// （設計 3-17h）。
+//
+// **打ち間違えた `--id` の置き場所が残ると、既定側の走査から永久に隠れる**（3-17f）。
+// **さらに悪いのは、`~/.continuo/id/<名前>/` の実在が「その名前で continuo が
+// 実際に動いた裏付け」として使われていることである**（3-17f の表）。
+// **doctor がそれを作れるなら、検査の道具でその裏付けを偽造できる。**
+//
+// **socket も作らない。**前は本番の名前で listen してから `os.Remove` していたので、
+// **その2つのあいだに常駐が bind し直すと、doctor が生きた socket を消していた。**
+//
+// 与える情報: 打ち間違えたつもりの `--id typo` で解決した置き場所。
+// 成功条件: 5つの本番の名前が1つも作られていないこと。
+func TestDoctor_本番が使う名前の資源を作らない(t *testing.T) {
+	fx := newFixture(t)
+	home := shortDoctorHome(t)
+
+	layout, err := instance.Resolve("typo")
+	if err != nil {
+		t.Fatalf("--id から置き場所を決められない: %v", err)
+	}
+
+	opts := fx.Options()
+	opts.Instance = &layout
+	doctor.Run(t.Context(), opts)
+
+	idRoot := filepath.Join(home, instance.DirName, instance.IDDirName, "typo")
+	for _, path := range []string{
+		idRoot,
+		filepath.Join(idRoot, instance.LockFileName),
+		filepath.Join(idRoot, instance.RunDirName),
+		filepath.Join(idRoot, instance.RunDirName, socketpath.HookSocketFileName),
+		filepath.Join(home, instance.DirName, instance.BoardDirName),
+	} {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Errorf("doctor が %s を作っている（err=%v）", path, err)
+		}
+	}
+}
+
+// 目的: 置き場所が無くても、上のディレクトリに書けるなら `✓` にすることを確かめる
+// （設計 3-17h）。
+//
+// **作らないと決めた以上、「まだ無い」は `✗` ではない。**起動のときに作られる。
+// **ここを `✗` にすると、初回の `continuo doctor` が必ず落ちる。**
+//
+// 与える情報: `~/.continuo` がまだ1バイトも無いホームディレクトリ。
+// 成功条件: `ロックの場所` と `ボードのロック` が `✓` になること。
+func TestDoctorLockFile_置き場所がまだ無くても通る(t *testing.T) {
+	fx := newFixture(t)
+
+	if _, err := os.Lstat(filepath.Join(fx.Home, instance.DirName)); !os.IsNotExist(err) {
+		t.Fatalf("前提が崩れている（~/.continuo が既にある。err=%v）", err)
+	}
+
+	report := fx.Run(t)
+
+	assertSymbol(t, report, doctor.LabelLockFile, doctor.SymbolOK)
+	assertSymbol(t, report, doctor.LabelBoardLock, doctor.SymbolOK)
+}
+
+// 目的: `workspace.root` に 0700 を要求しないことを確かめる（設計 3-17h）。
+//
+// **`~/.continuo` は 0700 でなければならないが、`workspace.root` は違う。**
+// あちらは利用者が普通に作るディレクトリで、**0755 が普通である。**
+// **同じ検査を掛けると、いま動いている環境の `worktree の場所` が `✗` になる。**
+//
+// 与える情報: 0755 で作った `workspace.root`。
+// 成功条件: 見出し語 `worktree の場所` が `✓` になること。
+func TestDoctorWorkspaceRoot_権限が0755でも通る(t *testing.T) {
+	fx := newFixture(t)
+
+	root := filepath.Join(fx.Root, "wt")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("worktree の置き場所を作れません: %v", err)
+	}
+	if err := os.Chmod(root, 0o755); err != nil {
+		t.Fatalf("権限を 0755 にできません: %v", err)
+	}
+
+	report := fx.Run(t)
+
+	assertSymbol(t, report, doctor.LabelWorkspaceRoot, doctor.SymbolOK)
 }

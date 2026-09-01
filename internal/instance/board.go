@@ -1,16 +1,10 @@
 package instance
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/socketpath"
@@ -87,82 +81,4 @@ func boardKey(owner string, projectNumber int) (string, []normalize.Warning) {
 	name, warnings := normalize.Normalize(owner)
 	safe := strings.ToLower(strings.ReplaceAll(name.String(), "/", "-"))
 	return fmt.Sprintf("%s-%d", safe, projectNumber), warnings
-}
-
-// BoardInfo はボードのロックを握っている continuo が名乗る中身である。
-//
-// **人間が読むためだけのものである**（3-17e）。**排他の判定には一切使わない。**
-// 判定は `flock` 1本だけで行う。
-type BoardInfo struct {
-	// Owner は `tracker.provider.owner` である。
-	Owner string `json:"owner"`
-	// ProjectNumber は `tracker.provider.project_number` である。
-	ProjectNumber int `json:"project_number"`
-	// InstanceID は `--id` に渡された名前である。**既定なら空文字。**
-	InstanceID string `json:"instance_id"`
-	// PID はロックを握っているプロセスの ID である。
-	PID int `json:"pid"`
-	// ConfigPath は読み込んだ `WORKFLOW.md` の絶対パスである。
-	ConfigPath string `json:"config_path"`
-	// LockFile は、そのプロセスが握っている二重起動防止のロックの絶対パスである。
-	LockFile string `json:"lock_file"`
-	// StartedAt はロックを取った時刻（RFC 3339）である。
-	StartedAt string `json:"started_at"`
-}
-
-// BoardInfoPath はロックファイルの隣に置く情報ファイルの絶対パスを返す。
-//
-// **`board.json` という固定の名前にはしない**（設計 3-17e の「隣に board.json を書く」を、
-// ボードごとに1つになるよう具体化したものである）。**固定にすると、別のボードを見る
-// continuo が互いに上書きし、「誰が握っているか」を読むという目的そのものが果たせない。**
-//
-// lockPath: BoardLockPath が返したロックファイルの絶対パス。
-// 戻り値: 拡張子を `.json` に替えた絶対パス。
-func BoardInfoPath(lockPath string) string {
-	return strings.TrimSuffix(lockPath, ".lock") + ".json"
-}
-
-// WriteBoardInfo は、ロックを握ったことを人間が読める形で残す（3-17e の段4）。
-//
-// **書けなくても起動を止めてはならない。**これは人間のための覚え書きであって、
-// 排他の一部ではない。呼ぶ側は失敗をログに1行残すだけにすること。
-//
-// lockPath: BoardLockPath が返したロックファイルの絶対パス。
-// info: 書き込む中身。**StartedAt が空なら now で埋める。**
-// now: 時刻の取得。**nil なら time.Now。**
-// 戻り値: 書けなかった場合のエラー。
-func WriteBoardInfo(lockPath string, info BoardInfo, now func() time.Time) error {
-	if now == nil {
-		now = time.Now
-	}
-	if info.StartedAt == "" {
-		info.StartedAt = now().Format(time.RFC3339)
-	}
-	data, err := json.MarshalIndent(info, "", "  ")
-	if err != nil {
-		return i18n.Errorf(i18n.KeyInstanceBoardInfoMarshalFailed, err)
-	}
-	data = append(data, '\n')
-	// **一時ファイルへ書き切ってから差し替える**（CLAUDE.md の「絶対に守る制約」4）。
-	return atomicfile.Write(BoardInfoPath(lockPath), data, 0o600)
-}
-
-// RemoveBoardInfo は、ロックを手放すときに覚え書きを消す（3-17e の段4）。
-//
-// **ロックを手放す前に呼ぶこと。**手放したあとに消すと、その隙に起動した continuo が
-// 書いた覚え書きを消してしまう。
-//
-// **消えないと、死んだプロセスの PID を指したまま残る。**
-// [docs/FAQ.md](../../docs/FAQ.md) は「誰が握っているかを、この覚え書きで読め」と
-// 案内しているので、**残ったままだと、動いていない continuo を探しに行くことになる。**
-//
-// lockPath: BoardLockPath が返したロックファイルの絶対パス。
-// 戻り値: 消せなかった場合のエラー。**最初から無い場合は nil を返す**
-// （消えていることが目的であり、誰が消したかは問わない）。
-func RemoveBoardInfo(lockPath string) error {
-	path := BoardInfoPath(lockPath)
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return i18n.Errorf(i18n.KeyInstanceBoardInfoRemoveFailed, path, err)
-	}
-	return nil
 }

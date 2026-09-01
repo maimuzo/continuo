@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
@@ -19,6 +19,7 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -221,7 +222,7 @@ func checkClaudeHome(opts Options) Result {
 // cfg: 読めた場合の設定。
 // configSymbol: 設定ファイルの検査の結果。
 // 戻り値: 検査の結果。
-func checkWorkspaceRoot(opts Options, cfg loadedConfig, configSymbol Symbol) Result {
+func checkWorkspaceRoot(opts Options, cfg loadedConfig, configSymbol Symbol, inst instance.Layout) Result {
 	if configSymbol != SymbolOK {
 		return Result{
 			Label:  LabelWorkspaceRoot,
@@ -230,7 +231,14 @@ func checkWorkspaceRoot(opts Options, cfg loadedConfig, configSymbol Symbol) Res
 		}
 	}
 	root := cfg.Config.Workspace.Root
-	if err := fsprobe.ProbeWritable(root); err != nil {
+	// **置き場所そのものは作らない**（設計 3-17h）。`fsprobe.ProbeWritable` は
+	// `os.MkdirAll` で `root` を作るので、**検査しただけで本番の置き場所ができる。**
+	// **`--id` を付けると `<root>/<名前>` まで作っていた**ので、打ち間違えた名前の
+	// 置き場所が残った。**無ければ、上へ辿って最初に実在するディレクトリに書けるかを見る。**
+	//
+	// **`socketpath.CheckDirPlaceable` は使わない。**あちらは 0700 を要求するが、
+	// **`workspace.root` は利用者が普通に作るディレクトリで、0755 が普通である。**
+	if err := fsprobe.ProbePlaceable(root); err != nil {
 		res := Result{
 			Label:    LabelWorkspaceRoot,
 			Symbol:   SymbolMissing,
@@ -243,7 +251,7 @@ func checkWorkspaceRoot(opts Options, cfg loadedConfig, configSymbol Symbol) Res
 		}
 		return res
 	}
-	return brokenWorktreeResult(opts, cfg, root)
+	return brokenWorktreeResult(opts, cfg, root, inst)
 }
 
 // brokenWorktreeResult は、置き場所に**身元を確かめられない worktree**が残っていないかを
@@ -262,14 +270,19 @@ func checkWorkspaceRoot(opts Options, cfg loadedConfig, configSymbol Symbol) Res
 // cfg: 読めた設定。
 // root: 検査した置き場所。
 // 戻り値: 検査の結果。
-func brokenWorktreeResult(opts Options, cfg loadedConfig, root string) Result {
+func brokenWorktreeResult(opts Options, cfg loadedConfig, root string, inst instance.Layout) Result {
 	ok := Result{
 		Label:  LabelWorkspaceRoot,
 		Symbol: SymbolOK,
 		Detail: i18n.T(i18n.KeyDoctorWorkspaceRootOK, root),
 	}
 
-	manager, err := workspace.New(workspace.Options{Config: cfg.Config, HomeDir: opts.HomeDir})
+	// **置き場所も名乗りも作らない**（設計 3-17h）。**`NoCreate` を渡さないと、
+	// `continuo doctor --id typo` が `<workspace.root>/typo` と、その直下の名乗りを作る。**
+	// **名乗りの無い `--id` の置き場所は、3-17f の不変条件そのものを破る。**
+	manager, err := workspace.New(workspace.Options{
+		Config: cfg.Config, HomeDir: opts.HomeDir, InstanceID: inst.ID(), NoCreate: true,
+	})
 	if err != nil {
 		ok.Notes = append(ok.Notes, i18n.T(i18n.KeyDoctorWorkspaceRootBrokenScanFailed, root, err))
 		return ok
@@ -314,8 +327,10 @@ const runtimeDirDialTimeout = 2 * time.Second
 
 // checkRuntimeDir は、hook を受ける socket を実際に置けるかを検査する。
 //
-// **文字列を組み立てるだけでは足りない。**決めた場所にディレクトリを作り、
-// unix socket を listen して、すぐ閉じるところまで通す。
+// **文字列を組み立てるだけでは足りない。**置き場所が使えるかを見て、
+// **使い捨ての名前で** unix socket を listen し、すぐ閉じるところまで通す。
+//
+// **本番が使う名前は1つも作らないし、1つも消さない**（設計 3-17h）。
 //
 // **これが無かったとき、当時の項目すべてが ✓ で「足りないものはありません」と出たのに、
 // 起動だけが落ちた**（issue #9）。
@@ -353,7 +368,10 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol, inst instance.Layout
 	if inst.ID() != "" {
 		notes = append(notes, i18n.T(i18n.KeyDoctorInstanceNote, inst.ID()))
 	}
-	sock, err := inst.HookSocketPath(os.Getenv(daemonEnvRuntimeDir), listen)
+	// **置き場所は作らない**（設計 3-17h）。`HookSocketPath` は `socketpath.EnsureDir` を
+	// 通すので、**`continuo doctor --id typo` が `~/.continuo/id/typo/run` を作っていた。**
+	// **決めるだけの `ResolveHookSocketPath` を呼ぶ**（パスの長さの上限もこちらが見る）。
+	sock, err := inst.ResolveHookSocketPath(os.Getenv(daemonEnvRuntimeDir), listen)
 	if err != nil {
 		return Result{
 			Label:    LabelRuntimeDir,
@@ -363,20 +381,36 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol, inst instance.Layout
 			Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
 		}
 	}
+	dir := filepath.Dir(sock)
 
-	// **本当に listen できるかまで確かめる。**
-	// パス長の上限、権限、既に使われている、のどれでもここで分かる。
+	// **本番の socket の名前では listen しない**（設計 3-17h）。
 	//
-	// **EADDRINUSE は「既に continuo が動いている」を意味しない。**そのパスに何かが在れば
-	// 必ず返る（通常ファイル・ディレクトリ・listen していない残骸の socket のどれでも
-	// errno 48 が返ることを darwin で実測した）。**繋がるかどうかまで見ないと、
-	// continuo が起動できない状態を `✓` と報告する。**その形は issue #9 と同じで、
-	// **doctor が全項目 ✓ なのに起動だけが落ちる。**
-	ln, lerr := net.Listen("unix", sock)
-	if lerr != nil {
-		if errors.Is(lerr, syscall.EADDRINUSE) {
-			return runtimeDirInUse(sock, notes)
+	// **前はここで `net.Listen(sock)` して `os.Remove(sock)` していた。**
+	// **その2つのあいだに常駐が bind し直すと、doctor が生きた socket を消す。**
+	// そうなると hook は1件も届かず、**turn の終わりを誰も検知しない。**
+	//
+	// **代わりに3つに分ける。**
+	//
+	//	一、置き場所が使えるか  … CheckDirPlaceable（作らない）
+	//	二、本番の socket に何か在るか … 在るなら繋いでみる（在るものは消さない）
+	//	三、unix socket を置けるか   … 使い捨ての名前で listen して消す
+	if derr := socketpath.CheckDirPlaceable(dir); derr != nil {
+		return Result{
+			Label:    LabelRuntimeDir,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorRuntimeDirFailed, derr),
+			Notes:    runtimeDirNotes(notes, derr),
+			Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
 		}
+	}
+
+	// **在るものには触らない。**そのパスに何かが在れば、それは
+	// 「待ち受けている continuo」か「残骸」のどちらかである。**繋がるかどうかで分ける。**
+	// **繋がるかどうかまで見ないと、continuo が起動できない状態を `✓` と報告する。**
+	// その形は issue #9 と同じで、**doctor が全項目 ✓ なのに起動だけが落ちる。**
+	if _, lerr := os.Lstat(sock); lerr == nil {
+		return runtimeDirInUse(sock, notes)
+	} else if !errors.Is(lerr, fs.ErrNotExist) {
 		return Result{
 			Label:    LabelRuntimeDir,
 			Symbol:   SymbolMissing,
@@ -385,10 +419,26 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol, inst instance.Layout
 			Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
 		}
 	}
-	_ = ln.Close()
-	// **作った socket は消す。**残すと、次に起動する continuo が
-	// 「既に動いている」と誤解しかねない。
-	_ = os.Remove(sock)
+
+	// **置き場所がまだ無いなら、listen は試せない。**作らないと決めた以上、
+	// ここで分かるのは「上のディレクトリに作れる」ところまでである。
+	if _, serr := os.Stat(dir); serr != nil {
+		return Result{
+			Label:  LabelRuntimeDir,
+			Symbol: SymbolOK,
+			Detail: i18n.T(i18n.KeyDoctorRuntimeDirOK, sock),
+			Notes:  append(notes, i18n.T(i18n.KeyDoctorRuntimeDirNotYet, dir)),
+		}
+	}
+	if perr := fsprobe.ProbeSocketInside(dir); perr != nil {
+		return Result{
+			Label:    LabelRuntimeDir,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorRuntimeDirFailed, perr),
+			Notes:    runtimeDirNotes(notes, perr),
+			Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
+		}
+	}
 
 	return Result{
 		Label:  LabelRuntimeDir,
@@ -434,7 +484,11 @@ func checkLockFile(inst instance.Layout, instErr error) Result {
 	}
 
 	path := inst.LockPath()
-	if err := inst.EnsureLockDir(); err != nil {
+	// **置き場所もロックファイルも作らない**（設計 3-17h）。
+	// **`EnsureLockDir` を呼んでいたので、`continuo doctor --id typo` が
+	// `~/.continuo/id/typo/` を作って残していた。**そのディレクトリの実在を
+	// 3-17f が「その `--id` で continuo が実際に動いた裏付け」に使っている。
+	if err := socketpath.CheckDirPlaceable(filepath.Dir(path)); err != nil {
 		return Result{
 			Label:    LabelLockFile,
 			Symbol:   SymbolMissing,
@@ -443,8 +497,7 @@ func checkLockFile(inst instance.Layout, instErr error) Result {
 			Remedies: []string{i18n.T(i18n.KeyDoctorLockFileRemedy)},
 		}
 	}
-
-	if err := probeLockFile(path); err != nil {
+	if err := checkExistingLockFile(path); err != nil {
 		return Result{
 			Label:    LabelLockFile,
 			Symbol:   SymbolMissing,
@@ -502,10 +555,11 @@ func checkBoardLock(cfg loadedConfig, configSymbol Symbol) Result {
 		notes = append(notes, i18n.T(i18n.KeyDoctorBoardLockNormalized, owner, w.Message))
 	}
 
-	if err := instance.EnsureBoardDir(path); err != nil {
+	// **`~/.continuo/board` も作らない**（設計 3-17h。checkLockFile と同じ理由）。
+	if err := socketpath.CheckDirPlaceable(filepath.Dir(path)); err != nil {
 		return boardLockMissing(path, notes, err)
 	}
-	if err := probeLockFile(path); err != nil {
+	if err := checkExistingLockFile(path); err != nil {
 		return boardLockMissing(path, notes, err)
 	}
 	return Result{
@@ -546,21 +600,29 @@ func boardLockDirForMessage(path string) string {
 	return "~/" + instance.DirName + "/" + instance.BoardDirName
 }
 
-// probeLockFile は、そのパスにロックファイルを置けるかだけを確かめる。
+// checkExistingLockFile は、既にあるロックファイルが `lock.Acquire` で開けるかを確かめる。
+//
+// **無ければ何も言わない。**`lock.Acquire` が `O_CREATE` で作るので、
+// **無いことは異常ではない。**置き場所に書けるかは CheckDirPlaceable が既に見ている。
+//
+// **作らない**（設計 3-17h）。**`O_CREATE` を付けていたので、`continuo doctor` が
+// 本番のロックファイルを作っていた。**それ自体は害が無かったが、
+// **「検査は本番が使う名前の資源を作らない」という規則を、道具の側で守れなくなる。**
 //
 // **`flock` は取らない。**取ると、doctor が動いているあいだ continuo を起動できない。
 // **検査の道具が本番の起動を止めてはならない。**
 //
-// **ロックファイルそのものは消さない**（internal/lock の Release と同じ理由である。
+// **消さない**（internal/lock の Release と同じ理由である。
 // 消すと、直後に同名で作った別プロセスのロックを巻き添えで解放しうる）。
 //
-// **中身も書かない。**`O_TRUNC` を付けないので、既にある中身を空にすることも無い。
-//
 // path: ロックファイルの絶対パス。
-// 戻り値: 開けなかった場合のエラー。
-func probeLockFile(path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+// 戻り値: 在るのに開けなかった場合のエラー。**無い場合は nil。**
+func checkExistingLockFile(path string) error {
+	f, err := os.OpenFile(path, os.O_RDWR, 0o600)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		return err
 	}
 	return f.Close()

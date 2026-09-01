@@ -28,6 +28,7 @@ import (
 	"github.com/maimuzo/continuo/internal/abandon"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -1277,9 +1278,15 @@ func (fx *fixture) CloseHerdr(t *testing.T) error {
 
 // holdLock は「continuo が動いている」状態を作る。
 //
-// **abandon はロックを取れたかどうかで継続監視の生死を判定する**（設計 3-17）ので、
-// テストが先に掴んでおけば「動いている」側の経路に入る。
-// **掴んだロックはテストの終わりに手放す。**手放さないと、同じロックファイルを使う
+// **本番と同じ2つを揃える。**常駐している continuo は、flock を握った直後に
+// **ロックの隣へ覚え書きを書く**（設計 3-17i）。
+//
+//	flock        … `--dry-run` でない abandon が見る（取れなければ動いている）
+//	覚え書き     … `--dry-run` が見る（flock を掴まないので、これしか手立てが無い）
+//
+// **片方だけを作ると、2つの経路のどちらかが「動いていない」と答える。**
+//
+// **掴んだロックはテストの終わりに手放し、覚え書きも消す。**残すと、同じロックファイルを使う
 // あとのテストが「動いている」状態を引きずる。
 //
 // **1箇所にまとめてある。**同じ前置きを17箇所へ書き写していたので、掴み方を変えると
@@ -1293,7 +1300,13 @@ func holdLock(t *testing.T, fx *fixture) {
 	if err != nil {
 		t.Fatalf("テストがロックを掴めません: %v", err)
 	}
-	t.Cleanup(func() { _ = held.Release() })
+	if err := instance.WriteLockInfo(fx.LockPath, instance.LockInfo{PID: os.Getpid()}, nil); err != nil {
+		t.Fatalf("テストがロックの覚え書きを書けません: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = instance.RemoveLockInfo(fx.LockPath)
+		_ = held.Release()
+	})
 }
 
 // freezeDir はディレクトリから書き込みの権限を落とし、中身を1つも消せなくする。

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -166,9 +167,20 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // ctx: 呼び出しに適用するコンテキスト。
 // candidates: `active_states` で取った候補（ボードの並び順）。
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
-	if o.dispatchPaused() {
-		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）",
-			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
+	// **止まる理由を、必ず1行出す**（設計 3-77j）。
+	// **ここが `Debug` の1行だけだったので、1台で動かしている人には
+	// 「ボードが何時間も進まない」としか見えなかった。**
+	//
+	// **止める判定は入札と同じものである。**別々に持っていたので、
+	// 枠を読めないときに逆を向いていた（newWorkBlocked を見よ）。
+	if skip := o.newWorkBlocked(); skip != handoff.SkipNone {
+		o.logger.Info("新しい issue には着手しません（走行中の turn は止めません）",
+			"理由", skip.String(),
+			"新規着手が止まる使用率", o.newWorkThresholdPercent(),
+			"rate_limit.pause_above_percent", o.cfg.RateLimit.PauseAbovePercent,
+			"five_hour_margin_percent", o.cfg.Tracker.Provider.Handoff.FiveHourMarginPercent,
+			"weekly_margin_percent", o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
+			"候補", len(candidates))
 		return
 	}
 

@@ -34,6 +34,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 | **資格情報を読む** | 定額プランの枠を読むために、`~/.claude/.credentials.json` か macOS の Keychain を読みます |
 | **`continuo abandon` は消す** | worktree と branch と herdr の workspace を消します。**`--force` を付けると、コミットしていない変更と push していない commit ごと消えます**（`--dry-run` で何が消えるかを先に見られます） |
 | **`continuo abandon` はボードも書き換える** | continuo が動いていれば、手を離させるために Status を `--park`（既定は `tracker.failure_state`）へ動かします。`--to` を付ければ片付けたあとにも動かします。**`--dry-run` はどちらも書かず、書く値を予告するだけです** |
+| **同じ機械のエージェントどうしは、互いを名乗れる** | hook の送り主を確かめる手立てがありません。**同じ利用者で走る別のエージェントは、隣の worktree の `.continuo.json` から相手の `session_id` と socket のパスを読み、偽の hook を1本送るだけで、相手の turn を「終わった」ことにできます。**`transcript_path` を差し替えれば表明も偽造できます。**塞ぐなら、run ごとに別の OS 利用者かコンテナで走らせてください**（[docs/FAQ.md](docs/FAQ.md) と設計 3-2b） |
 
 **これらを踏まえたうえで、想定を超える挙動があれば報告してください。**たとえば次のようなものです。
 
@@ -82,6 +83,7 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 | **It reads credentials** | To read your plan's usage window, it reads `~/.claude/.credentials.json` or the macOS Keychain |
 | **`continuo abandon` deletes** | It removes the worktree, the branch, and the herdr workspace. **With `--force` it takes uncommitted changes and unpushed commits with them** (`--dry-run` shows what would go first) |
 | **`continuo abandon` also writes to the board** | If continuo is running, it moves the Status to `--park` (default: `tracker.failure_state`) to make continuo let go of the issue. With `--to` it moves the Status again after cleanup. **`--dry-run` writes neither; it only announces the values it would write** |
+| **Agents on the same machine can impersonate each other** | There is no way to authenticate the sender of a hook. **Another agent running as the same user can read a neighbouring worktree's `.continuo.json` for its `session_id` and socket path, then send one forged hook to mark that run's turn as finished.** Swapping `transcript_path` also forges its status line. **To close this, run each agent as a separate OS user or in its own container** (see `docs/FAQ.md`) |
 
 **With that understood, please report anything beyond it** — for example:
 

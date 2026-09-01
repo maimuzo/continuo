@@ -256,10 +256,10 @@ func TestBoardLockPath_ボード1枚につき1本になる(t *testing.T) {
 	if first == second {
 		t.Fatalf("番号が違うボードで同じロックを指している: %q", first)
 	}
-	if instance.BoardInfoPath(first) == instance.BoardInfoPath(second) {
-		t.Fatalf("番号が違うボードで同じ覚え書きを指している: %q", instance.BoardInfoPath(first))
+	if instance.LockInfoPath(first) == instance.LockInfoPath(second) {
+		t.Fatalf("番号が違うボードで同じ覚え書きを指している: %q", instance.LockInfoPath(first))
 	}
-	if instance.BoardInfoPath(first) == first {
+	if instance.LockInfoPath(first) == first {
 		t.Fatal("覚え書きがロックファイルそのものを指している")
 	}
 }
@@ -308,9 +308,9 @@ func TestBoardLockPath_所有者の大文字小文字で分かれない(t *testi
 	if upper != lower {
 		t.Fatalf("大文字小文字でロックが分かれている: got %q, want %q", upper, lower)
 	}
-	if instance.BoardInfoPath(upper) != instance.BoardInfoPath(lower) {
+	if instance.LockInfoPath(upper) != instance.LockInfoPath(lower) {
 		t.Fatalf("大文字小文字で覚え書きが分かれている: got %q, want %q",
-			instance.BoardInfoPath(upper), instance.BoardInfoPath(lower))
+			instance.LockInfoPath(upper), instance.LockInfoPath(lower))
 	}
 }
 
@@ -351,7 +351,7 @@ func TestBoardLockPath_名前を丸めたら警告を返す(t *testing.T) {
 // 与える情報: 書いたばかりの覚え書きと、最初から無い覚え書き。
 // 成功条件: 消せること。**最初から無くてもエラーにしないこと**
 // （消えていることが目的であり、誰が消したかは問わない）。
-func TestRemoveBoardInfo_覚え書きを消す(t *testing.T) {
+func TestRemoveLockInfo_覚え書きを消す(t *testing.T) {
 	home := shortHome(t)
 	t.Setenv("HOME", home)
 
@@ -363,17 +363,17 @@ func TestRemoveBoardInfo_覚え書きを消す(t *testing.T) {
 	if err := instance.EnsureBoardDir(lockPath); err != nil {
 		t.Fatalf("ボードのロックの置き場所を作れない: %v", err)
 	}
-	if err := instance.WriteBoardInfo(lockPath, instance.BoardInfo{Owner: "octocat", ProjectNumber: 10}, nil); err != nil {
+	if err := instance.WriteLockInfo(lockPath, instance.LockInfo{Owner: "octocat", ProjectNumber: 10}, nil); err != nil {
 		t.Fatalf("覚え書きを書けない: %v", err)
 	}
-	if err := instance.RemoveBoardInfo(lockPath); err != nil {
+	if err := instance.RemoveLockInfo(lockPath); err != nil {
 		t.Fatalf("覚え書きを消せない: %v", err)
 	}
-	if _, err := os.Stat(instance.BoardInfoPath(lockPath)); !os.IsNotExist(err) {
+	if _, err := os.Stat(instance.LockInfoPath(lockPath)); !os.IsNotExist(err) {
 		t.Fatalf("覚え書きが残っている: %v", err)
 	}
 	// **2回目もエラーにしない。**
-	if err := instance.RemoveBoardInfo(lockPath); err != nil {
+	if err := instance.RemoveLockInfo(lockPath); err != nil {
 		t.Fatalf("最初から無い覚え書きでエラーになった: %v", err)
 	}
 }

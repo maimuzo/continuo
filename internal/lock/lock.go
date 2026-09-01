@@ -6,8 +6,6 @@
 package lock
 
 import (
-	"errors"
-	"io/fs"
 	"os"
 	"syscall"
 
@@ -65,44 +63,6 @@ func Acquire(path string) (*Lock, error) {
 	}
 
 	return &Lock{file: f}, nil
-}
-
-// Probe は「いま誰かがこのロックを握っているか」だけを見る。**1バイトも書かない。**
-//
-// **`continuo abandon --dry-run` のためにある。**あちらは「何も書かない」と
-// README で約束しているのに、`Acquire` は `O_CREATE` でロックファイルを作る
-// （そして親ディレクトリを作らせる）。**見せるだけの実行が置き場所を作ってはならない。**
-//
-// **無ければ「握られていない」である。**ロックファイルが無いということは、
-// そのロックを開いたプロセスが1つも居ないということであり、
-// **ファイルを作ってまで確かめる必要は無い。**
-//
-// **取れたロックは即座に手放す。**`Acquire` と違って握り続けない。
-// 見せるだけの実行は何も消さないので、その間に継続監視が起動しても失うものが無い。
-//
-// path: ロックファイルの絶対パス。
-// 戻り値の1つ目: 別のプロセスが握っていれば true。
-// 戻り値の2つ目: **ファイルが在るのに開けなかった場合のエラー**（権限が足りない、
-// パスがディレクトリを指しているなど）。**無い場合はエラーにしない。**
-func Probe(path string) (bool, error) {
-	// **`O_CREATE` を付けない。**付けると、確かめるだけのつもりが置き場所を作る。
-	f, err := os.OpenFile(path, os.O_RDWR, 0o600)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil
-		}
-		return false, i18n.Errorf(i18n.KeyLockAcquireOpenFailed, path, err)
-	}
-	defer func() { _ = f.Close() }()
-
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		// **取れなかったのは、別のプロセスが握っているからである。**
-		// `flock` は「残骸か使用中か」を持たない（それがこれを選ぶ理由である）。
-		return true, nil
-	}
-	// **取れたなら誰も握っていない。**すぐ返す。
-	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-	return false, nil
 }
 
 // Release はロックを解放し、ロックファイルの file descriptor を閉じる。

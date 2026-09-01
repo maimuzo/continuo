@@ -256,19 +256,26 @@ func Run(ctx context.Context, opts Options) int {
 // 戻り値: 終了コード。
 func (r *runner) run(ctx context.Context) int {
 	// 段1 の前半: continuo が動いているかを調べる。
-	running, unlocker, err := r.isRunning()
+	state, unlocker, err := r.lockState()
 	if err != nil {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrLockFile, r.deps.LockPath, err))
 		return ExitStopped
 	}
+	// **「動いている」と「分からない」を同じ扱いにする**（設計 3-17i）。
+	// **覚え書きは「書けなくても起動を止めない」ものなので、読めないことは
+	// 「動いていない」の証拠にならない。**分からないまま進むと、
+	// **生きている continuo の足元から worktree を消す。**
+	running := state.Blocks()
+	if state == instance.LockStateStale {
+		// **黙って進まない。**残骸が残っていることは、前の continuo が
+		// 正常に終わらなかった合図である。
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonStaleLockInfo,
+			instance.LockInfoPath(r.deps.LockPath)))
+	}
 	// **取れたロックは最後まで握る。**手放すと、その隙に起動した継続監視の足元から
 	// worktree を消す。握っている間に起動しようとした継続監視は起動を諦めて止まる。
 	if unlocker != nil {
-		defer func() {
-			if err := unlocker.Release(); err != nil {
-				r.logger.Warn("ロックの解放に失敗しました", "lock_file", r.deps.LockPath, "error", err)
-			}
-		}()
+		defer r.releaseLock(unlocker, r.deps.LockPath, "lock_file")
 	}
 	// 段1a: ボードのロックも見る（設計 3-17e）。**`--id` の付け忘れを、ここで止める。**
 	//
@@ -289,12 +296,7 @@ func (r *runner) run(ctx context.Context) int {
 			return code
 		}
 		if boardUnlocker != nil {
-			defer func() {
-				if err := boardUnlocker.Release(); err != nil {
-					r.logger.Warn("ボードのロックの解放に失敗しました",
-						"board_lock_file", r.deps.BoardLockPath, "error", err)
-				}
-			}()
+			defer r.releaseLock(boardUnlocker, r.deps.BoardLockPath, "board_lock_file")
 		}
 	}
 
@@ -399,35 +401,74 @@ func (r *runner) run(ctx context.Context) int {
 	return r.moveStatus(ctx)
 }
 
-// isRunning は continuo が動いているかを、二重起動防止のロックで調べる（3-17）。
+// lockState は continuo が動いているかを調べる（設計 3-17 / 3-17i）。
 //
-// **ロックを取れたら動いていない。取れたロックは返す。**呼び出し側が実行の最後まで
-// 握り続けること。**その場で手放してはならない。**手放すと直後に継続監視が起動でき、
+// **`--dry-run` かどうかで、道具そのものが違う。**線は「観測かどうか」ではなく
+// **「消すかどうか」で引く**（設計 3-17h）。
+//
+//	--dry-run なし … 本番の獲得である。**flock を取り、最後まで握る**
+//	--dry-run あり … 1バイトも書かない。**覚え書きを読むだけで、flock には触らない**
+//
+// **本番側は、取れたロックを返す。**呼び出し側が実行の最後まで握り続けること。
+// **その場で手放してはならない。**手放すと直後に継続監視が起動でき、
 // その足元から worktree を消す。abandon は git と RPC を何度も叩くので窓は秒単位で開く。
 // 握っているあいだに起動しようとした継続監視は「既に起動しています」で止まる。
 //
-// **`--dry-run` では取らずに見るだけである**（3-17g）。取ると `O_CREATE` で
-// ロックファイルを作ることになり、**「何も書かない」という約束を破る。**
-// **握らなくてよいのは、見せるだけの実行が1バイトも消さないからである。**
+// **`--dry-run` は flock を掴まない。**`Acquire` は `O_CREATE` でロックファイルを作るので
+// 「何も書かない」という約束を破るし、**一瞬でも掴むと、その瞬間に起動した continuo が
+// 「二重起動」で落ちる。**だから覚え書き（ロックの隣の JSON）を読むだけにする（3-17i）。
 //
-// 戻り値の1つ目: 動いていれば true。
+// 戻り値の1つ目: 4値の状態。**Blocks が真なら、動いているものとして扱う。**
 // 戻り値の2つ目: 取れたロック（**動いていたとき・開けなかったとき・`--dry-run` では nil**）。
-// 戻り値の3つ目: **ロックファイルそのものを開けなかった場合のエラー**
-// （二重起動とは言い分ける。置き場所を作れない・権限が足りないのがこれである）。
-func (r *runner) isRunning() (bool, Unlocker, error) {
+// 戻り値の3つ目: **判定そのものができなかった場合のエラー**（二重起動とは言い分ける。
+// 置き場所を作れない・権限が足りない・覚え書きが壊れている、がこれである）。
+func (r *runner) lockState() (instance.LockState, Unlocker, error) {
 	if r.opts.DryRun {
-		running, err := r.deps.ProbeLock(r.deps.LockPath)
-		return running, nil, err
+		state, _, err := r.deps.ReadLockState(r.deps.LockPath)
+		return state, nil, err
 	}
 
 	l, err := r.deps.AcquireLock(r.deps.LockPath)
 	if err != nil {
 		if errors.Is(err, lock.ErrAlreadyRunning) {
-			return true, nil, nil
+			return instance.LockStateRunning, nil, nil
 		}
-		return false, nil, err
+		return instance.LockStateUnknown, nil, err
 	}
-	return false, l, nil
+	// **握った直後に覚え書きを書く**（設計 3-17i）。**例外を作らない。**
+	// 書かないと、もう1つの `continuo abandon --dry-run` が
+	// 「動いていない」と答え、**いま消そうとしている worktree を「消せる」と報告する。**
+	//
+	// **書けなくても止めない。**これは排他の一部ではなく、排他は握った flock が担う。
+	if err := instance.WriteLockInfo(r.deps.LockPath, instance.LockInfo{
+		Owner:         r.cfg.Tracker.Provider.Owner,
+		ProjectNumber: r.cfg.Tracker.Provider.ProjectNumber,
+		InstanceID:    r.deps.InstanceID,
+		PID:           os.Getpid(),
+		LockFile:      r.deps.LockPath,
+	}, r.deps.Now); err != nil {
+		r.logger.Warn("ロックの覚え書きを書けませんでした（片付けは続けます）",
+			"path", instance.LockInfoPath(r.deps.LockPath), "error", err)
+	}
+	return instance.LockStateNotRunning, l, nil
+}
+
+// releaseLock は覚え書きを消してからロックを手放す（設計 3-17i）。
+//
+// **順番が仕様である。**手放してから消すと、その隙に起動した continuo が書いた
+// 覚え書きを消してしまう。**握っているあいだに消せば、書けるのは自分だけである。**
+//
+// unlocker: 握っているロック。
+// path: ロックファイルの絶対パス。
+// what: ログに出すロックの名前（`lock_file` / `board_lock_file`）。
+func (r *runner) releaseLock(unlocker Unlocker, path, what string) {
+	if err := instance.RemoveLockInfo(path); err != nil {
+		r.logger.Warn("ロックの覚え書きを消せませんでした（古い内容が残ります）",
+			"path", instance.LockInfoPath(path), "error", err)
+	}
+	if err := unlocker.Release(); err != nil {
+		r.logger.Warn("ロックの解放に失敗しました", what, path, "error", err)
+	}
 }
 
 // claimBoard はボード1枚ぶんのロックを取る（段1a。設計 3-17e）。
@@ -439,27 +480,45 @@ func (r *runner) isRunning() (bool, Unlocker, error) {
 // **取れたロックは実行の最後まで握る**（自分のロックと同じ理由である）。手放すと、
 // その隙に起動した継続監視の足元から worktree を消す。
 //
-// **`--dry-run` では取らずに見るだけである**（3-17g。isRunning と同じ理由）。
+// **`--dry-run` では取らずに覚え書きを読むだけである**（3-17i。lockState と同じ理由）。
 //
 // 戻り値の1つ目: 取れたロック（**取れなかったときと `--dry-run` では nil**）。
 // 戻り値の2つ目: 続けてよければ ExitOK、止まるなら ExitStopped。
 // **理由は出力済みである。**
 func (r *runner) claimBoard() (Unlocker, int) {
 	if r.opts.DryRun {
-		held, err := r.deps.ProbeLock(r.deps.BoardLockPath)
+		state, _, err := r.deps.ReadLockState(r.deps.BoardLockPath)
 		if err != nil {
 			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardLockFile, r.deps.BoardLockPath, err))
 			return nil, ExitStopped
 		}
-		if held {
+		// **「握られている」と「分からない」を同じ扱いにする**（設計 3-17i）。
+		if state.Blocks() {
 			r.reportBoardInUse()
 			return nil, ExitStopped
+		}
+		if state == instance.LockStateStale {
+			fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonStaleLockInfo,
+				instance.LockInfoPath(r.deps.BoardLockPath)))
 		}
 		return nil, ExitOK
 	}
 
 	l, err := r.deps.AcquireLock(r.deps.BoardLockPath)
 	if err == nil {
+		// **ロックを取る者は必ず覚え書きを書く。例外を作らない**（設計 3-17i）。
+		// **これが無かったので、`continuo abandon` どうしがぶつかると、
+		// 落ちた continuo の古い覚え書きを読んで、死んだ PID を握っている相手として表示していた。**
+		if werr := instance.WriteLockInfo(r.deps.BoardLockPath, instance.LockInfo{
+			Owner:         r.cfg.Tracker.Provider.Owner,
+			ProjectNumber: r.cfg.Tracker.Provider.ProjectNumber,
+			InstanceID:    r.deps.InstanceID,
+			PID:           os.Getpid(),
+			LockFile:      r.deps.LockPath,
+		}, r.deps.Now); werr != nil {
+			r.logger.Warn("ボードのロックの覚え書きを書けませんでした（片付けは続けます）",
+				"path", instance.LockInfoPath(r.deps.BoardLockPath), "error", werr)
+		}
 		return l, ExitOK
 	}
 	if errors.Is(err, lock.ErrAlreadyRunning) {
@@ -474,18 +533,17 @@ func (r *runner) claimBoard() (Unlocker, int) {
 
 // reportBoardInUse は、同じボードのロックを誰かが握っていて止まったことを出す。
 //
-// **無いファイルを読めと言わない。**覚え書き（ロックの隣の JSON）を書くのは
-// **常駐している continuo だけである**（`internal/daemon` の acquireBoardLock）。
-// **`continuo abandon` どうしがぶつかったときは、そのファイルは存在しない。**
-// それでも「誰が握っているかは %s に書いてあります」と案内していたので、
-// **読みに行った人は、無いファイルを探すことになった。**
+// **無いファイルを読めと言わない。**覚え書き（ロックの隣の JSON）は、
+// **ロックを取った側が必ず書く**（設計 3-17i。常駐している continuo も
+// `continuo abandon` も書く）。**それでも無いことがある。**書き込みに失敗しても
+// 起動も片付けも止めない設計だからである（覚え書きは排他の一部ではない）。
 //
-// **在るときだけ名指しする。**在るなら常駐が握っているので、そこに `--id` も PID も
-// 書いてある。**無いなら、もう1つの `continuo abandon` を疑うよう言う。**
+// **在るときだけ名指しする。**在るなら、そこに `--id` も PID も書いてある。
+// **無いなら、覚え書きを書けなかった continuo か、もう1つの `continuo abandon` を疑うよう言う。**
 func (r *runner) reportBoardInUse() {
 	owner := r.cfg.Tracker.Provider.Owner
 	number := r.cfg.Tracker.Provider.ProjectNumber
-	infoPath := instance.BoardInfoPath(r.deps.BoardLockPath)
+	infoPath := instance.LockInfoPath(r.deps.BoardLockPath)
 
 	if _, err := os.Stat(infoPath); err == nil {
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrBoardInUse,

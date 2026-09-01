@@ -877,7 +877,7 @@ func TestRun_ボードのロックを取ったら書き残し手放すときに�
 	if err != nil {
 		t.Fatalf("ボードのロックの場所を決められません: %v", err)
 	}
-	infoPath := instance.BoardInfoPath(boardLock)
+	infoPath := instance.LockInfoPath(boardLock)
 
 	// **走らせたまま読む。**終了時に消すようになったので、返ってきてからでは読めない。
 	done := make(chan error, 1)
@@ -895,7 +895,7 @@ func TestRun_ボードのロックを取ったら書き残し手放すときに�
 		t.Fatal("gh auth token が返らないのに起動できてしまった")
 	}
 
-	var info instance.BoardInfo
+	var info instance.LockInfo
 	if err := json.Unmarshal(raw, &info); err != nil {
 		t.Fatalf("ボードのロックの覚え書きを読み解けません: %v（中身: %s）", err, raw)
 	}

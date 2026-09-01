@@ -109,16 +109,25 @@ type Deps struct {
 	// **取れたロックは実行の最後まで握る。**握っている間に起動しようとした継続監視は
 	// 「既に起動しています」で止まる。消されるより望ましい。
 	//
-	// **`--dry-run` では呼ばない**（ProbeLock を見よ）。
+	// **`--dry-run` では呼ばない**（ReadLockState を見よ）。
 	AcquireLock func(path string) (Unlocker, error)
-	// ProbeLock は「誰かがそのロックを握っているか」だけを見る。nil なら internal/lock の Probe。
+	// ReadLockState は覚え書きを読んで、そのロックを握っている continuo が生きているかを
+	// 答える。nil なら internal/instance の ReadLockState。
 	//
 	// **`--dry-run` はこちらを使う。**`AcquireLock` は `O_CREATE` でロックファイルを作り、
 	// その前に置き場所も作らせる。**README は「`--dry-run` は何も書かない」と約束している。**
 	//
-	// **握り続けない。**見せるだけの実行は何も消さないので、その間に継続監視が
-	// 起動しても失うものが無い。
-	ProbeLock func(path string) (bool, error)
+	// **flock には触らない**（設計 3-17i）。一瞬でも掴むと、**その瞬間に起動した
+	// continuo が「二重起動」で落ちる。**
+	//
+	// **答えは4値である。**「読めなかった」を持たないと、書けなかった覚え書きが
+	// 「動いていない」に丸められ、**生きている continuo の worktree を消しにいく。**
+	ReadLockState func(path string) (instance.LockState, instance.LockInfo, error)
+	// InstanceID は `--id` に渡された名前である（**既定なら空文字**）。
+	//
+	// **ロックの覚え書きに書く**（設計 3-17i）。書かないと、誰が握っているかを読んだ人が
+	// **どの `--id` を止めればよいのか分からない。**
+	InstanceID string
 	// Herdr は pane の一覧を取る口である。nil なら設定から本物を組み立てる。
 	Herdr PaneLister
 	// Workspace は worktree の走査・検査・片付けである。nil なら設定から本物を組み立てる。
@@ -168,8 +177,11 @@ func (d Deps) resolve(
 	if d.AcquireLock == nil {
 		d.AcquireLock = func(path string) (Unlocker, error) { return lock.Acquire(path) }
 	}
-	if d.ProbeLock == nil {
-		d.ProbeLock = lock.Probe
+	if d.ReadLockState == nil {
+		d.ReadLockState = instance.ReadLockState
+	}
+	if d.InstanceID == "" {
+		d.InstanceID = inst.ID()
 	}
 
 	// **herdr のクライアントは1つだけ作り、pane の一覧と片付けの両方に渡す。**
@@ -221,7 +233,8 @@ func (d Deps) resolve(
 		//
 		// **見せるだけの実行では置き場所を作らない**（3-17g）。
 		// 置き場所が無いということは、その `--id` の continuo が1度も動いていない
-		// ということであり、**ProbeLock は「握られていない」と正しく答える。**
+		// ということであり、**ReadLockState は覚え書きが無いことを見て
+		// `LockStateNotRunning` と正しく答える。**
 		if !dryRun {
 			if err := inst.EnsureLockDir(); err != nil {
 				return d, err

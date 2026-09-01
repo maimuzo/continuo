@@ -28,6 +28,8 @@ const (
 	KeyDoctorLabelBoardLock Key = "doctor.label.board_lock"
 	// KeyDoctorRuntimeDirOK は hook の socket を用意できたときに出る。
 	KeyDoctorRuntimeDirOK Key = "doctor.runtime_dir.ok"
+	// KeyDoctorRuntimeDirNotYet は、hook を受ける socket の置き場所がまだ無いことの内訳に出る。
+	KeyDoctorRuntimeDirNotYet Key = "doctor.runtime_dir.not_yet"
 	// KeyDoctorRuntimeDirFailed は hook の socket を用意できなかったときに出る。
 	KeyDoctorRuntimeDirFailed Key = "doctor.runtime_dir.failed"
 	// KeyDoctorRuntimeDirRemedy は hook の socket を用意できなかったときの直し方である。
@@ -252,6 +254,14 @@ const (
 	KeyHandoffLostUnknownHost Key = "handoff.lost.unknown_host"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
+	// KeyFsprobeNotADirectory は、実在するものがディレクトリでなかったときのエラーに出る。
+	KeyFsprobeNotADirectory Key = "fsprobe.not_a_directory"
+	// KeyFsprobeStatFailed は、実在するかを確かめられなかったときのエラーに出る。
+	KeyFsprobeStatFailed Key = "fsprobe.stat_failed"
+	// KeyFsprobeNoExistingAncestor は、上へ辿っても実在するディレクトリが1つも無かったときのエラーに出る。
+	KeyFsprobeNoExistingAncestor Key = "fsprobe.no_existing_ancestor"
+	// KeyFsprobeSocketFailed は使い捨ての unix socket を listen できなかったときのエラーに出る。
+	KeyFsprobeSocketFailed Key = "fsprobe.socket_failed"
 )
 
 // doctor の検査「herdr」。
@@ -783,6 +793,8 @@ const (
 	KeyAbandonRunningDryRun Key = "abandon.running_dry_run"
 	// KeyAbandonNotRunning はcontinuo が動いていないときの1行に出る。
 	KeyAbandonNotRunning Key = "abandon.not_running"
+	// KeyAbandonStaleLockInfo は、ロックの覚え書きが残骸として残っていたときに出る。
+	KeyAbandonStaleLockInfo Key = "abandon.stale_lock_info"
 
 	// KeyAbandonErrScan は置き場所を走査できないときに出る。
 	KeyAbandonErrScan Key = "abandon.err_scan"
@@ -1148,10 +1160,18 @@ const (
 	KeyInstanceEnsureLockDirFailed Key = "instance.ensure_lock_dir.failed"
 	// KeyInstanceBoardDirFailed はボードのロックを置くディレクトリを作れなかったときに出る。
 	KeyInstanceBoardDirFailed Key = "instance.board_dir.failed"
-	// KeyInstanceBoardInfoMarshalFailed はボードのロックの覚え書きを JSON にできなかったときに出る。
-	KeyInstanceBoardInfoMarshalFailed Key = "instance.board_info.marshal_failed"
-	// KeyInstanceBoardInfoRemoveFailed はボードのロックの覚え書きを消せなかったときに出る。
-	KeyInstanceBoardInfoRemoveFailed Key = "instance.board_info.remove_failed"
+	// KeyInstanceLockInfoMarshalFailed はロックの覚え書きを JSON にできなかったときに出る。
+	KeyInstanceLockInfoMarshalFailed Key = "instance.lock_info.marshal_failed"
+	// KeyInstanceLockInfoRemoveFailed はロックの覚え書きを消せなかったときに出る。
+	KeyInstanceLockInfoRemoveFailed Key = "instance.lock_info.remove_failed"
+	// KeyInstanceLockInfoReadFailed はロックの覚え書きを読めなかったときに出る。
+	KeyInstanceLockInfoReadFailed Key = "instance.lock_info.read_failed"
+	// KeyInstanceLockInfoBroken はロックの覚え書きが JSON として壊れていたときに出る。
+	KeyInstanceLockInfoBroken Key = "instance.lock_info.broken"
+	// KeyInstanceLockInfoNoPID はロックの覚え書きに PID が入っていなかったときに出る。
+	KeyInstanceLockInfoNoPID Key = "instance.lock_info.no_pid"
+	// KeyInstanceLockInfoPIDUnknown は覚え書きの PID の生死を確かめられなかったときに出る。
+	KeyInstanceLockInfoPIDUnknown Key = "instance.lock_info.pid_unknown"
 )
 
 // hook を受ける socket の置き場所（internal/socketpath）のエラーの文言。
@@ -2324,6 +2344,7 @@ var allKeys = []Key{
 	KeyDoctorLabelLockFile,
 	KeyDoctorLabelBoardLock,
 	KeyDoctorRuntimeDirOK,
+	KeyDoctorRuntimeDirNotYet,
 	KeyDoctorRuntimeDirFailed,
 	KeyDoctorRuntimeDirRemedy,
 	KeyDoctorRuntimeDirInUse,
@@ -2405,6 +2426,10 @@ var allKeys = []Key{
 	KeyFsprobeHomeDirFailed,
 	KeyFsprobeClaudeHomeFailed,
 	KeyFsprobeWorkspaceRootFailed,
+	KeyFsprobeNotADirectory,
+	KeyFsprobeStatFailed,
+	KeyFsprobeNoExistingAncestor,
+	KeyFsprobeSocketFailed,
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffLostReason,
@@ -2632,6 +2657,7 @@ var allKeys = []Key{
 	KeyAbandonRunning,
 	KeyAbandonRunningDryRun,
 	KeyAbandonNotRunning,
+	KeyAbandonStaleLockInfo,
 	KeyAbandonErrScan,
 	KeyAbandonNotFound,
 	KeyAbandonOwnerRepoMismatch,
@@ -2768,8 +2794,12 @@ var allKeys = []Key{
 	KeyInstanceRootHomeDirFailed,
 	KeyInstanceEnsureLockDirFailed,
 	KeyInstanceBoardDirFailed,
-	KeyInstanceBoardInfoMarshalFailed,
-	KeyInstanceBoardInfoRemoveFailed,
+	KeyInstanceLockInfoMarshalFailed,
+	KeyInstanceLockInfoRemoveFailed,
+	KeyInstanceLockInfoReadFailed,
+	KeyInstanceLockInfoBroken,
+	KeyInstanceLockInfoNoPID,
+	KeyInstanceLockInfoPIDUnknown,
 	KeySocketpathRuntimeDirHomeDirFailed,
 	KeySocketpathCheckAbsNotAbsolute,
 	KeySocketpathCheckPathLenTooLong,

@@ -294,12 +294,41 @@ func Run(ctx context.Context, opts Options) error {
 			i18n.KeyDaemonRunLockFileFailed,
 			ErrStartup, lockPath, err)
 	}
+	// **覚え書きを消してから手放す**（設計 3-17i）。手放してから消すと、
+	// **その隙に起動した continuo が書いた覚え書きを消す。**
+	// **defer は後入れ先出しなので、この defer は Release より後に登録する。**
 	defer func() {
 		if err := l.Release(); err != nil {
 			logger.Warn("ロックの解放に失敗しました", "error", err)
 		}
 	}()
+	defer func() {
+		if err := instance.RemoveLockInfo(lockPath); err != nil {
+			logger.Warn("二重起動防止のロックの覚え書きを消せませんでした（古い内容が残ります）",
+				"path", instance.LockInfoPath(lockPath), "error", err)
+		}
+	}()
 	logger.Info("二重起動防止のロックを獲得しました", "lock_file", lockPath)
+
+	// **握った直後に覚え書きを書く**（設計 3-17i）。
+	// **`continuo abandon --dry-run` と `continuo doctor` は flock を掴めない**
+	// （掴むと、その瞬間に起動した continuo が「二重起動」で落ちる）ので、
+	// **この覚え書きだけが「動いているか」を答える手立てである。**
+	//
+	// **書けなくても起動は止めない。**これは排他の一部ではない。
+	// **止まるのは読む側である**（読めなければ `LockStateUnknown` になり、
+	// あちらが「分からないので何もしない」で止まる）。
+	if err := instance.WriteLockInfo(lockPath, instance.LockInfo{
+		Owner:         cfg.Tracker.Provider.Owner,
+		ProjectNumber: cfg.Tracker.Provider.ProjectNumber,
+		InstanceID:    inst.ID(),
+		PID:           os.Getpid(),
+		ConfigPath:    opts.ConfigPath,
+		LockFile:      lockPath,
+	}, nil); err != nil {
+		logger.Warn("二重起動防止のロックの覚え書きを書けませんでした（起動は続けます）",
+			"path", instance.LockInfoPath(lockPath), "error", err)
+	}
 
 	// 段2a: ボードのロックを取る。**取れなければ起動を止める**（設計 3-17e）。
 	//
@@ -901,7 +930,7 @@ func acquireBoardLock(
 	logger.Info("ボードのロックを獲得しました",
 		"board_lock_file", boardLockPath, "owner", owner, "project_number", number)
 
-	if err := instance.WriteBoardInfo(boardLockPath, instance.BoardInfo{
+	if err := instance.WriteLockInfo(boardLockPath, instance.LockInfo{
 		Owner:         owner,
 		ProjectNumber: number,
 		InstanceID:    inst.ID(),
@@ -911,7 +940,7 @@ func acquireBoardLock(
 	}, nil); err != nil {
 		// **起動は止めない。**これは人間のための覚え書きであって、排他の一部ではない。
 		logger.Warn("ボードのロックの覚え書きを書けませんでした（起動は続けます）",
-			"path", instance.BoardInfoPath(boardLockPath), "error", err)
+			"path", instance.LockInfoPath(boardLockPath), "error", err)
 	}
 	return boardClaim{lock: bl, path: boardLockPath}, nil
 }
@@ -936,10 +965,10 @@ type boardClaim struct {
 // logger: ログの出力先。
 func (c boardClaim) release(logger *slog.Logger) {
 	if c.path != "" {
-		if err := instance.RemoveBoardInfo(c.path); err != nil {
+		if err := instance.RemoveLockInfo(c.path); err != nil {
 			// **消せなかったことを必ず言う。**残った覚え書きは古い PID を指す。
 			logger.Warn("ボードのロックの覚え書きを消せませんでした（古い内容が残ります）",
-				"path", instance.BoardInfoPath(c.path), "error", err)
+				"path", instance.LockInfoPath(c.path), "error", err)
 		}
 	}
 	if c.lock == nil {
