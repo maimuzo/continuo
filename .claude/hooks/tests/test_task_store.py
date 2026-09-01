@@ -126,6 +126,10 @@ PASS_CASES = [
     "grep -c '>' docs/FAQ.md",
     "grep -c '|' docs/FAQ.md",
     "grep -c ';' docs/FAQ.md",
+    # 二重引用符の中のアポストロフィ。**単引用符の対とは数えない。**
+    'grep -c "don\'t stop" docs/FAQ.md',
+    # `gh api` の読み取りの flag。
+    "gh api repos/o/r/comments --paginate -q '.[].id' | wc -l",
 ]
 for c in PASS_CASES:
     check("通す: %s" % c, tc.verify_rejection(c), None)
@@ -160,6 +164,20 @@ REJECT_CASES = [
     ("パイプに標準エラーを乗せる", "grep -c x f |& cat"),
     ("括弧で入れ子にする", "( grep -c x f )"),
     ("知らない綴りの記号", "grep -c x f ;; echo 1"),
+    # **改行は `shlex` にはただの空白に見えるが、shell はそこで別のコマンドを始める。**
+    # これを見落としていたので、改行1つでこの検査が丸ごと素通しになっていた。
+    ("改行で2つ目のコマンドを繋ぐ", "echo 1\ntouch /tmp/continuo-nl"),
+    ("CR で2つ目のコマンドを繋ぐ", "echo 1\rtouch /tmp/continuo-cr"),
+    # **展開の記号はトークンごとに見る。**コマンド全体で見ると、
+    # 単引用符を消す正規表現が語をまたいで対になり、間の backtick を隠した。
+    ("二重引用符のアポストロフィで backtick を隠す",
+     'grep -c "don\'t" f `id` "isn\'t"'),
+    # **`gh api` は通す flag のほうを並べる。**値を続けて書いた形が漏れないように。
+    ("値を続けて書いた -X", "gh api repos/o/r -XPOST"),
+    ("値を続けて書いた -f", "gh api repos/o/r -ffoo=bar"),
+    ("値を続けて書いた -F", "gh api repos/o/r -Ffoo=bar"),
+    ("= で書いた --method", "gh api repos/o/r --method=POST"),
+    ("本文をファイルから送る", "gh api repos/o/r --input body.json"),
 ]
 for name, c in REJECT_CASES:
     check("通さない: %s" % name, tc.verify_rejection(c) is None, False)
@@ -171,11 +189,17 @@ check("断る理由に、使えないコマンド名を書く",
       "`rm`" in (tc.verify_rejection("rm -rf /") or ""), True)
 
 # 走らせずに断る。**実行してから断ったのでは遅い。**
-ok, out = tc.run_verify("echo x > /tmp/continuo-should-not-exist")
-check("通らないものは実行せず未完了にする", ok, False)
-check("実行していないと書く", "実行していません" in out, True)
-check("走らせていない（ファイルができていない）",
-      os.path.exists("/tmp/continuo-should-not-exist"), False)
+_probe = os.path.join(tempfile.gettempdir(), "continuo-verify-probe-%d" % os.getpid())
+for name, cmd in [("リダイレクト", "echo x > " + _probe),
+                  ("改行で繋いだ2つ目", "echo 1\ntouch " + _probe)]:
+    if os.path.exists(_probe):
+        os.unlink(_probe)
+    ok, out = tc.run_verify(cmd)
+    check("通らないものは実行せず未完了にする（%s）" % name, ok, False)
+    check("実行していないと書く（%s）" % name, "実行していません" in out, True)
+    check("走らせていない・ファイルができていない（%s）" % name, os.path.exists(_probe), False)
+if os.path.exists(_probe):
+    os.unlink(_probe)
 
 
 # 本物の grep で確かめる。**手で作った文字列だけだと、出力の形を思い違える。**
@@ -282,6 +306,18 @@ try:
     check("done へはまとめられない", rc, 1)
     check("そのとき D は open のまま",
           [r for r in rows_of(root) if r["id"] == d_id][0]["status"], "open")
+
+    # **まとめる側も open でなければ断る。**
+    # `done` を上書きすると「何をしたか」が、`merged` を上書きすると
+    # 「どこへまとめたか」が消える。**どちらもそこにしか無い。**
+    before = {r["id"]: (r["status"], r["did"]) for r in rows_of(root)}
+    rc, so, se = cli(root, "merge", "--into", d_id, "--ids", ids[0], ids[1])
+    check("open でない id を --ids に入れると断る", rc, 1)
+    after = {r["id"]: (r["status"], r["did"]) for r in rows_of(root)}
+    check("1件も書き換えない", after, before)
+    check("done の did を消さない", after[ids[0]][1], "やった")
+    check("merged の did（まとめ先）を消さない", after[ids[1]][1], f"{ids[0]} にまとめた")
+    check("断る理由に、断った id を書く", ids[0] in se and ids[1] in se, True)
 finally:
     shutil.rmtree(root, ignore_errors=True)
 

@@ -152,3 +152,32 @@ review-result
 
 **入れ直す手順は [CONTRIBUTING.md](../../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。**
 **`checks` は全件置き換えである。**一部だけ渡すと、渡さなかった検査が必須から外れる。
+
+## PR #149（作業の手順をプロジェクトの下へ集め worker にも読ませる形にする）のレビュー2巡目
+
+**言いたいこと。**`verify` の許可リストが3通りの書き方で破れていた。
+**うち1つは改行1文字で、検査が丸ごと素通しになる。**3つとも塞ぎ、テストで押さえた。
+
+### 直したもの（6件中4件）
+
+| 指摘 | どう直したか |
+| --- | --- |
+| **改行で許可リストを抜けられる**（`echo 1\ntouch x`）。`shlex` は空白として読み、shell は2つのコマンドとして走らせる | `verify_rejection` の先頭で、tab 以外の制御文字を断る |
+| **展開の記号をコマンド全体で探していた。**単引用符を消す正規表現が語をまたいで対になり、間の backtick を隠す（`grep -c "don't" f \`id\` "isn't"`） | `_expansion_in` を切り出し、**トークンごとに**見る。`shlex` が引用符を尊重して切るので、対が語をまたがない |
+| **`gh api` の書き込みの flag を並べていたので、値を続けて書いた形が漏れた**（`-XPOST` / `-ffoo=bar`） | `_GH_API_READ_FLAGS` に**通す flag のほうを並べる。**短い flag は先頭2文字でも見る |
+| **`cmd_merge` が `done` / `merged` の行を上書きしていた。**「何をしたか」「どこへまとめたか」が消える | `--ids` に `open` でないものがあれば、**1件も書き換えずに断る** |
+
+**実測**（2026-09-02、塞ぐ前）。
+
+```
+run_verify("echo 1\ntouch <パス>")  →  (True, '1')   ファイルができた
+```
+
+### 直していないもの（2件）。**どちらも [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) の `targets_other_repo` / `target_prs`**
+
+**メインエージェントが直した箇所であり、触らないよう指示されている。**
+
+| 指摘 | 実測 |
+| --- | --- |
+| **他所を指す `--repo` が1つでもあると、同じコマンド行の `gh pr merge` が全部素通しになる。**`targets_other_repo` はコマンドの文字列全体を見て、1つ当たったら空を返す | `CONTINUO_HOOK_REPO=maimuzo/continuo` で `gh release view --repo herdrdev/herdr v1 && gh pr merge 149` を `target_prs` に渡すと `[]` が返る（止まらない） |
+| **`target_prs` が `MERGE_RE` より先に repo を引く。**`gh repo view`（上限5秒）が、マージと無関係な `gh … --repo …` のたびに走る | `_repo_of_cwd` は `PreToolUse` の中で `subprocess.run` する |

@@ -183,6 +183,10 @@ def cmd_merge(a):
 
     **残す側が実在することを先に確かめる。**確かめないと、`--into TYPO-999` と打ったときに
     **まとめる側だけが `merged` になって一覧から消え、どこにも残らない。**
+
+    **まとめる側も `open` でなければ断る。**`done` を上書きすると「何をしたか」が、
+    `merged` を上書きすると「どこへまとめたか」が消える。
+    **どちらも、そこにしか無い。**
     """
     with tc.locked():
         rows = _load()
@@ -201,6 +205,15 @@ def cmd_merge(a):
         missing = sorted(i for i in ids if i not in by_id)
         if missing:
             print(f"--ids に無い id があります: {' '.join(missing)}", file=sys.stderr)
+            return 1
+        # **open でないものが1つでもあれば、1件も書き換えない。**
+        # 途中まで書き換えると、どこまで進んだのかが記録から読めなくなる。
+        blocked = [(i, _not_closable(by_id[i])) for i in sorted(ids) if i != keep]
+        blocked = [(i, why) for i, why in blocked if why]
+        if blocked:
+            print("--ids に open でないものがあります。1件もまとめていません。", file=sys.stderr)
+            for i, why in blocked:
+                print(f"  {i}: {why}", file=sys.stderr)
             return 1
         now = _now()
         n = 0

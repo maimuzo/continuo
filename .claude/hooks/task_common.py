@@ -246,9 +246,14 @@ _GH_SUBCOMMANDS = frozenset({
     ("search", "issues"), ("search", "prs"), ("search", "code"), ("search", "repos"),
 })
 
-# `gh api` は GET だけ通す。**この並びが1つでもあれば書き込みになりうるので通さない。**
-_GH_API_WRITE_FLAGS = frozenset({
-    "-f", "-F", "--field", "--raw-field", "--input", "--method", "-X",
+# `gh api` は GET だけ通す。**通す flag のほうを並べる。**
+# **通さないほうを並べると、値を続けて書いた形（`-XPOST` / `-ffoo=bar`）が漏れる。**
+# `--method` / `-X` / `-f` / `-F` / `--field` / `--raw-field` / `--input` は、
+# ここに無いので通らない。
+_GH_API_READ_FLAGS = frozenset({
+    "--jq", "-q", "--template", "-t", "--paginate", "--slurp",
+    "--cache", "--header", "-H", "--hostname", "--include", "-i",
+    "--verbose", "--preview", "-p",
 })
 
 # コマンドを繋いでよい記号。**これ以外の記号は通さない。**
@@ -272,18 +277,53 @@ def _unquote(token):
     return token
 
 
+def _expansion_in(token):
+    """トークン1つに展開の記号があれば、断る理由を返す。無ければ None。
+
+    **単引用符の中は shell が展開しないので、先に外す。**
+    `grep -v '^0$'` の `$` や `grep -c '\\`' f` の backtick で落とさないため。
+    **外に出ている `$` と backtick だけを見る。**
+    """
+    bare = _SINGLE_QUOTED.sub("''", token)
+    if "`" in bare:
+        return "backtick は使えません（別のコマンドが走ります）: %s" % token
+    if "$" in bare:
+        return ("引用符の外に `$` があります。`$(…)` も `${…}` も別のコマンドや値に化けるので、"
+                "**そのまま書いてください**: %s" % token)
+    return None
+
+
+def _check_gh_api(argv):
+    """`gh api …` の argv を見て、断る理由を返す。
+
+    **並べるのは通す flag のほうである。**通さないほうを並べると、
+    `-XPOST` や `-ffoo=bar` のように**値を続けて書いた形**が漏れる
+    （実測: 2026-09-02。`-X` と `--method` だけを見ていたので `-XPOST` が通った）。
+    """
+    for t in argv[1:]:
+        u = _unquote(t)
+        if not u.startswith("-"):
+            continue          # サブコマンドや flag の値である
+        if u == "--":
+            continue
+        head = u.split("=", 1)[0]
+        if head in _GH_API_READ_FLAGS:
+            continue
+        # 短い flag は値を続けて書ける（`-qxxx`）。**先頭2文字で見る。**
+        if len(head) > 2 and not head.startswith("--") and head[:2] in _GH_API_READ_FLAGS:
+            continue
+        return ("`gh api` は GET だけ通します。`%s` は通す flag に入っていません"
+                "（通るのは %s）" % (head, " / ".join(sorted(_GH_API_READ_FLAGS))))
+    return None
+
+
 def _check_gh(argv):
     """`gh …` の argv を見て、断る理由を返す。通してよければ None。"""
     words = [_unquote(t) for t in argv[1:] if not _unquote(t).startswith("-")]
     if not words:
         return "`gh` にサブコマンドがありません"
     if words[0] == "api":
-        for t in argv[1:]:
-            u = _unquote(t)
-            head = u.split("=", 1)[0]
-            if head in _GH_API_WRITE_FLAGS:
-                return ("`gh api` は GET だけ通します（`%s` は書き込みになりえます）" % head)
-        return None
+        return _check_gh_api(argv)
     pair = tuple(words[:2])
     if pair in _GH_SUBCOMMANDS:
         return None
@@ -327,14 +367,14 @@ def verify_rejection(cmd):
     if not text:
         return "確かめ方が空です"
 
-    # 単引用符の中を外してから、展開の記号を探す。
-    # **`grep -v '^0$'` の `$` で落とさないため。**外に出ている `$` と backtick だけを見る。
-    bare = _SINGLE_QUOTED.sub("''", text)
-    if "`" in bare:
-        return "backtick は使えません（別のコマンドが走ります）"
-    if "$" in bare:
-        return ("引用符の外に `$` があります。`$(…)` も `${…}` も別のコマンドや値に化けるので、"
-                "**そのまま書いてください**")
+    # **改行を先に断る。**`shlex` は改行を「ただの空白」として扱うので、
+    # `echo 1\ntouch x` が1つのコマンドに見える。**shell は2つのコマンドとして走らせる。**
+    # 実測（2026-09-02）。`run_verify("echo 1\ntouch <パス>")` が (True, '1') を返し、
+    # **ファイルができた。**改行1つで、この検査は丸ごと素通しになっていた。
+    bad = [ch for ch in text if ord(ch) < 32 and ch != "\t"]
+    if bad:
+        return ("改行や制御文字は使えません（U+%04X）。"
+                "**shell はそこで別のコマンドを始めます。**1行で書いてください" % ord(bad[0]))
 
     lexer = shlex.shlex(text, posix=False, punctuation_chars=True)
     lexer.whitespace_split = True
@@ -353,6 +393,13 @@ def verify_rejection(cmd):
                 current = []
                 continue
             return "`%s` は使えません（書き込みや別のプロセスにつながります）" % t
+        # 展開の記号は、**トークンごとに**見る。
+        # **コマンド全体で見てはならない。**単引用符を消す正規表現が語をまたいで対になり、
+        # 間の backtick を隠す（実測: 2026-09-02。`grep -c "don't" f `id` "isn't"` が通った）。
+        # `shlex` は引用符を尊重して切るので、トークンに割ったあとなら対をまたがない。
+        why = _expansion_in(t)
+        if why:
+            return why
         current.append(t)
     segments.append(current)
 
