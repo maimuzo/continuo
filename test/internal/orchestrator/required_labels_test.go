@@ -180,3 +180,40 @@ func TestRequiredLabels_足りないラベルをログから探せる(t *testing
 		t.Errorf("2回目の巡回でも出している（1回だけのはず）:\n%s", second)
 	}
 }
+
+// 目的: 足りないラベルが2つ以上あるとき、**全部の名前が出る**ことと、
+// **1つ付けたあとに「まだ足りない」がもう一度出る**ことを確かめる（issue #134）。
+//
+// **最初の1つだけ出して印を付けると、それを付けた人が黙らされる。**
+// 「言われたラベルを付けたのに、まだ動かず、ログに何も出ない」という状態になる。
+//
+// 与える情報: 必須2つのうち1つも持たない issue と、1つ付けたあとの2回目の巡回。
+// 成功条件: 1回目に2つとも名前が出て、ラベルを1つ付けたあとに残りの1つがもう一度出ること。
+func TestRequiredLabels_足りないラベルが2つ以上でも全部出る(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.RequiredLabels = []string{"continuo", "ready-for-ai"}
+		},
+	})
+	fx.Tracker.AddIssue(issueWithLabels(188, "bug"))
+
+	fx.Orc.Tick(context.Background())
+	first := fx.Logs.String()
+	for _, want := range []string{"continuo", "ready-for-ai"} {
+		if !strings.Contains(first, want) {
+			t.Errorf("足りないラベル %q が出ていない:\n%s", want, first)
+		}
+	}
+
+	// **1つ付ける。**残りの1つがまだ足りないので、もう一度出るはず。
+	fx.Tracker.AddIssue(issueWithLabels(188, "bug", "continuo"))
+	before := len(fx.Logs.String())
+	fx.Orc.Tick(context.Background())
+	second := fx.Logs.String()[before:]
+	if !strings.Contains(second, "必須のラベルが揃っていないので飛ばします") {
+		t.Fatalf("1つ足したあとに「まだ足りない」が出ていない:\n%s", second)
+	}
+	if !strings.Contains(second, "ready-for-ai") {
+		t.Errorf("残っている足りないラベルの名前が出ていない:\n%s", second)
+	}
+}

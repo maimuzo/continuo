@@ -216,7 +216,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			}
 			continue
 		}
-		if missing, ok := missingRequiredLabel(issue, o.cfg.Tracker.RequiredLabels); !ok {
+		if missing := missingRequiredLabels(issue, o.cfg.Tracker.RequiredLabels); len(missing) > 0 {
 			// **黙って飛ばさない**（issue #134）。ここは v0.1.10 まで1行も出さなかった。
 			// **設定した本人でも、どの issue がどのラベル待ちなのかを知る手立てが無かった。**
 			//
@@ -226,15 +226,18 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			// **1つの issue につき1回だけ出す**（`noteUntrusted` と同じ形）。
 			// `required_labels` は大量の対象外を除けるための道具なので、
 			// **無制限に出すと、この節が読ませたい残り2つの行が流れて埋まる。**
-			if o.noteLabelSkip(issue.ID) {
-				o.logger.Info("必須のラベルが揃っていないので飛ばします（この issue では1回だけ出します）",
+			// **印は「issue と、足りているラベルの組み合わせ」で持つ。**
+			// issue の ID だけで持つと、1つ足した人が「まだ足りない」を知る手立てを失う。
+			joined := strings.Join(missing, ", ")
+			if o.noteLabelSkip(issue.ID + "\x00" + joined) {
+				o.logger.Info("必須のラベルが揃っていないので飛ばします（この組み合わせでは1回だけ出します）",
 					"identifier", issue.Identifier,
-					"足りないラベル", missing,
+					"足りないラベル", joined,
 					"required_labels", strings.Join(normalizedLabels(o.cfg.Tracker.RequiredLabels), ", "),
 					"この issue のラベル", strings.Join(issue.Labels, ", "))
 			} else {
 				o.logger.Debug("必須のラベルが揃っていないので飛ばしました（通知は済んでいます）",
-					"identifier", issue.Identifier, "足りないラベル", missing)
+					"identifier", issue.Identifier, "足りないラベル", joined)
 			}
 			continue
 		}
@@ -395,21 +398,23 @@ func lookupFolded(m map[string]int, key string) (int, bool) {
 // required: 必須ラベルの一覧。空なら制約なし。
 // 戻り値: すべて持っていれば true。
 func hasRequiredLabels(issue tracker.Issue, required []string) bool {
-	_, ok := missingRequiredLabel(issue, required)
-	return ok
+	return len(missingRequiredLabels(issue, required)) == 0
 }
 
-// missingRequiredLabel は、必須のラベルが揃っているかを返し、揃っていなければ
-// **最初に見つかった足りないラベルの名前**を添える（issue #134）。
+// missingRequiredLabels は、必須のラベルのうち**足りないものを全部**返す（issue #134）。
 //
 // **名前を添える理由。**2つの一覧（required_labels と、その issue のラベル）を
 // 並べるだけだと、差分は人が目で取ることになる。
 //
+// **最初の1つだけ返してはならない。**この関数の結果は「1つの issue につき1回だけ」
+// 出すログに載る。1つ目だけを出すと、それを付けた人が
+// **「言われたラベルを付けたのに、まだ動かず、ログに何も出ない」**という状態に落ちる。
+//
 // issue: 検査する issue。
 // required: 設定の `tracker.required_labels`。
-// 戻り値の1つ目: 足りないラベル（**照合に使う正規化済みの形**。揃っていれば空文字）。
-// 戻り値の2つ目: 揃っているか。
-func missingRequiredLabel(issue tracker.Issue, required []string) (string, bool) {
+// 戻り値: 足りないラベル（**照合に使う正規化済みの形**。揃っていれば長さ0）。
+func missingRequiredLabels(issue tracker.Issue, required []string) []string {
+	var missing []string
 	for _, want := range required {
 		w := strings.ToLower(strings.TrimSpace(want))
 		if w == "" {
@@ -423,10 +428,10 @@ func missingRequiredLabel(issue tracker.Issue, required []string) (string, bool)
 			}
 		}
 		if !found {
-			return w, false
+			missing = append(missing, w)
 		}
 	}
-	return "", true
+	return missing
 }
 
 // normalizedLabels は、設定に書かれたラベルを**照合に使う形**（小文字・前後の空白なし）へ揃える。
@@ -689,28 +694,31 @@ func (o *Orchestrator) alreadyNotified(owner, repo string) bool {
 	return ok
 }
 
-// noteLabelSkip は、必須のラベルが足りない issue について「まだ知らせていない」かを返し、
+// noteLabelSkip は、必須のラベルが足りないことを「まだ知らせていない」かを返し、
 // 初回なら印を付ける（issue #134）。
 //
 // **`required_labels` は大量の対象外を除けるための道具である。**
 // 巡回のたびに INFO を出すと、同じ節が読ませたい残り2つの行が流れて埋まる。
-// **`alreadyNotified` と同じ考え方で、1つの issue につき1回だけにする。**
+// **`alreadyNotified` と同じ考え方で、1回だけにする。**
 //
-// **消す仕組みは持たない。**ラベルが付けば候補に入り、そのまま着手へ進む。
-// **印が残っていても害は無い**（もう二度とこの分岐を通らないため）。
+// **鍵は issue の ID だけにしない。**足りないラベルの並びも混ぜる。
+// **issue の ID だけで持つと、1つ足した人が「まだ足りない」を知る手立てを失う。**
 //
-// issueID: project item の ID。
+// **消す仕組みは持たない。**足りないラベルが変わるたびに新しい鍵になり、そのとき1回出る。
+// 全部揃えば候補に入り、この分岐そのものを通らなくなる。
+//
+// key: project item の ID と、足りないラベルの並びを繋いだもの。
 // 戻り値: 初回なら真。既に知らせていれば偽。
-func (o *Orchestrator) noteLabelSkip(issueID string) bool {
+func (o *Orchestrator) noteLabelSkip(key string) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	if _, ok := o.labelSkipped[issueID]; ok {
+	if _, ok := o.labelSkipped[key]; ok {
 		return false
 	}
 	if o.labelSkipped == nil {
 		o.labelSkipped = make(map[string]struct{})
 	}
-	o.labelSkipped[issueID] = struct{}{}
+	o.labelSkipped[key] = struct{}{}
 	return true
 }
 
