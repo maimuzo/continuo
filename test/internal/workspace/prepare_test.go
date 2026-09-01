@@ -327,8 +327,13 @@ func TestPrepare_cloneが無ければErrCloneNotFoundになる(t *testing.T) {
 // **再利用の前に git へ現物を答えさせないと、**エージェントが意図しない branch の上で
 // 作業し、食い違いに気づくのは片付けのとき（成果が別 branch に積まれたあと）になる。
 //
+// **番兵は専用のものである**（issue #142）。「登録されていません」と名乗ると、
+// 読んだ人間は docs/FAQ.md の別の症状（ディレクトリだけが残っている）へ行き、
+// **生きている worktree を消しにいく。**
+//
 // 与える情報: 用意したあとに別の branch へ切り替えた worktree と、同じ issue の再用意。
-// 成功条件: ErrUnregisteredWorktree になり、worktree が消されずに残ること。
+// 成功条件: ErrWorktreeBranchMismatch になり（ErrUnregisteredWorktree にはならない）、
+// 文面に確かめ方と switch の案内が入り、worktree が消されずに残ること。
 func TestPrepare_別のbranchへ切り替えられたworktreeは再利用しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	ctx := context.Background()
@@ -337,8 +342,22 @@ func TestPrepare_別のbranchへ切り替えられたworktreeは再利用しな�
 	runGit(t, prepared.Path, "checkout", "--quiet", "-b", "人間が切り替えた")
 
 	_, err := fx.Manager.Prepare(ctx, sampleIssue(188))
-	if !errors.Is(err, workspace.ErrUnregisteredWorktree) {
+	if !errors.Is(err, workspace.ErrWorktreeBranchMismatch) {
 		t.Fatalf("別の branch を出している worktree を再利用している: %v", err)
+	}
+	// **登録の無い実体と取り違えていないこと。**登録はされている。
+	if errors.Is(err, workspace.ErrUnregisteredWorktree) {
+		t.Fatalf("別の branch を「登録が無い」と取り違えている: %v", err)
+	}
+	// **detached HEAD とも取り違えていないこと。**原因も直し方も違う。
+	if errors.Is(err, workspace.ErrWorktreeDetached) {
+		t.Fatalf("別の branch を detached HEAD と取り違えている: %v", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"人間が切り替えた", "switch", "【確かめ方】", prepared.Path} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("文面に %q が入っていない: %s", want, msg)
+		}
 	}
 	if _, statErr := os.Stat(prepared.Path); statErr != nil {
 		t.Fatalf("再利用できない worktree を消している: %v", statErr)
@@ -368,6 +387,11 @@ func TestPrepare_detachedHEADのworktreeは専用の番兵で断る(t *testing.T
 	// **別の branch にいる場合と取り違えていないこと。**
 	if errors.Is(err, workspace.ErrUnregisteredWorktree) {
 		t.Fatalf("detached HEAD を「登録が無い」と取り違えている: %v", err)
+	}
+	// **branch の食い違いとも取り違えていないこと**（issue #142）。
+	// 3-68 の通知が「飛ばした理由の種類」を鍵にするので、2つを混ぜると数え直しが効かない。
+	if errors.Is(err, workspace.ErrWorktreeBranchMismatch) {
+		t.Fatalf("detached HEAD を branch の食い違いと取り違えている: %v", err)
 	}
 	msg := err.Error()
 	for _, want := range []string{"detached HEAD", "switch", prepared.Path} {

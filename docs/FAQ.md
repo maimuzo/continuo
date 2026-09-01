@@ -479,6 +479,58 @@ git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -
 **`continuo abandon` は使わないでください。**worktree の中の作業が消えます。
 **`--force` を付けなくても、条件が揃うと Status を `failure_state` へ動かします。**
 
+### 着手が「worktree が期待と違う branch に載っています」で止まる
+
+**原因。**worktree が、continuo の作った branch とは別の branch をチェックアウトしています。
+
+**上の2つの節とは違います。**worktree は git に登録されていて、どこかの branch には載っています。
+**載っている branch が違うだけです。**中の作業は残っています。
+
+**よくある原因。**
+
+| 何 | 例 |
+| --- | --- |
+| **issue の本文が別の branch を指していた** | 「作業は既に `feature/x` にあり、draft PR も出ている」と書いてあり、エージェントがそこへ切り替えた |
+| **1つの issue で2本目の PR を出した** | エージェントが新しい branch を切った |
+| **人間が手で切り替えた** | 同じ worktree で別の作業をした |
+
+**直し方。**
+
+**1. 未コミットの変更と、push していない commit があるかを、先に確かめてください。**
+
+```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 status
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 log --oneline @{u}..HEAD
+```
+
+**2つ目のコマンドが `no upstream configured` で落ちたら、その branch は1度も push されていません。**
+**commit は全部この機械の中にしかありません。**
+
+**いまの branch の作業が要るなら、期待の branch へ戻したあとでマージしてください。**
+**先に戻してしまうと、いまの branch を自分で覚えておかない限り引けなくなります。**
+
+**2. 期待の branch へ戻します。**
+
+```bash
+# 期待の branch が残っているとき
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch continuo/<owner>/<repo>/42
+
+# 期待の branch が消えているとき
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
+```
+
+**3. ボードでその issue を `Ready` へ戻します。**
+
+**この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
+
+**`continuo abandon` は使わないでください。**worktree の中の作業が消えます。
+**`--force` を付けなくても、条件が揃うと Status を `failure_state` へ動かします。**
+
+**エージェントに切り替えさせないための指示は、`WORKFLOW.md` の本文にあります。**
+v0.1.12 の雛形から「continuo が用意した worktree と branch のまま作業してください」が入りました。
+**古い版から上げた `WORKFLOW.md` には入っていません。**
+[upgrading.md](upgrading.md) の「v0.1.11 から v0.1.12 へ」を見て、手で足してください。
+
 ### 着手が「`herdr.worktree.base` が空で、ボードから引いた issue にも既定 branch の情報がありませんでした」で止まる
 
 **原因。**base を書いていないときはボードが返す既定 branch を使いますが、それが取れませんでした。

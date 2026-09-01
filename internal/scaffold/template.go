@@ -348,6 +348,22 @@ push していない作業は、この worktree が片付くときに失われ�
 	"`" +
 	` は人間へ渡す合図なので、そこから先この worktree で作業が続くとは限りません。**
 
+**continuo が用意した worktree と branch のまま作業してください。**
+別の branch へ checkout したり、新しい branch を作ったりしないでください。
+**切り替えると、次の巡回から continuo がこの issue に着手できなくなります。**
+
+**issue やコメントで「別の branch の続きをやれ」と言われた場合も、切り替えないでください。**
+その branch の内容が要るなら、先に取ってきてから、この worktree へマージしてください。
+
+    git fetch origin <その branch>
+    git merge FETCH_HEAD
+
+中身を読むだけなら、別の場所へ一時的に checkout して参照し、読み終わったら消してください。
+
+    git fetch origin <その branch>
+    git worktree add --detach /tmp/<任意の名前> FETCH_HEAD
+    git worktree remove /tmp/<任意の名前>
+
 **push 先は、この issue のために作られた branch です。**
 ` +
 	"`" +
