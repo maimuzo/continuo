@@ -7012,7 +7012,7 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 | --- | --- |
 | **既定で無効である** | 公式が「Agent teams are experimental and disabled by default」（**訳。**agent teams は実験的な機能で、既定では無効である）と書いている |
 | **利用者が自分で切れる** | `WORKFLOW.md` の `claude.env` に1行。**continuo は黙って切らない** |
-| **切る仕組みを持つと、見る先を6か所も推測することになる** | 設定の優先順位・対象リポジトリの clone・組織の managed settings。**どれも確実には読めない。**検出は別の issue で設計し直す |
+| **自動で切る仕組みは持たない** | 検出には6か所を優先順位どおりに解決する必要があり、**うち3か所は continuo から読めない。**検出は別の issue で設計する |
 
 #### 書く場所
 
@@ -7024,22 +7024,55 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 | [docs/upgrading.md](../upgrading.md) | v0.1.11 の節 |
 | [docs/agent_life_cycle.md](../agent_life_cycle.md) | 「サブエージェントが走っている最中に引き渡すとき」に1行。**この症状が起きる経路そのものを説明している節である** |
 
-#### 切る値は案内しない
+#### 切り方は案内する。ただし continuo が黙って切ることはしない
 
-**`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を `"0"` にすれば切れるかどうかは、確かめていない。**
-**公式が書いているのは「`1` で有効になる」までで、`0` を「値がある＝有効」と読む実装の可能性が消せていない。**
+**利用者が自分で切る手順は文書に書く。**公式が `0` を切る値として名指ししている。
 
-**だから文書には「有効だと正しく動かない」までしか書かない。**
-**切り方を案内すると、効かなかったときに利用者が行き止まる。**
+> To make named subagents launch as subagents again, turn agent teams off by setting
+> `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` to `0`
 
-**検出する仕組みは、この節の範囲外である。**別の issue で設計する。
+**訳。**名前つきのサブエージェントをサブエージェントとして起動し直させるには、
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を `0` にして agent teams を切る。
+
+```yaml
+claude:
+  env:
+    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"
+```
+
+**だが continuo がこれを既定で書き込むことはしない**（2026-08-28、人間の判断）。
+**agent teams は Claude Code の既定で無効であり、`=1` を書いた環境でだけ有効になる。**
+**無効なものを無効にする設定は、読む人を惑わせるだけである。**
+**利用者の設定を continuo が上書きすると、「自分が有効にしたはずのものが効かない」という
+別の混乱を生む。**
+
+**シェルの export にも勝つ。**公式がそう書いている。
+
+> Setting the variable to `0` in your user `settings.json` overrides a shell export.
+
+**訳。**user の `settings.json` でこの変数を `0` にすると、シェルの export を上書きする。
+
+**`--settings` は user の設定よりさらに後に当たる。**
+
+> **Higher-precedence settings files**: project settings, local settings, and a `--settings`
+> payload apply after user settings, so an `env` entry that sets the variable to `1` in any of them wins.
+
+**訳。**優先順位の高い設定ファイル: プロジェクトの設定・ローカルの設定・`--settings` で渡すものは、
+user の設定より後に当たる。だからそのどれかに、この変数を `1` にする `env` の項目があれば、そちらが勝つ。
+
+出典: [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）。
+
+#### 有効になっているかを検出する仕組みは、この節の範囲外である
+
+**別の issue で設計する。**
+
 **理由。**「continuo が起動する Claude Code で agent teams が有効になるか」を判定するには、
 **組織の managed settings・`--settings`・対象リポジトリの2ファイル・利用者の設定・herdr の環境**の
 6か所を優先順位どおりに解決する必要がある。**そのうち3か所は continuo からは読めない。**
 
 **とくに、環境変数を決めるのは herdr の常駐プロセスの環境である。**
 continuo は `claude` を直接起動せず、herdr の `worktree.open` が作った pane の中で起動する。
-**「continuo を起動したシェル」はこの連鎖に入っていない。**
+**「continuo を起動したシェル」も「doctor を叩いたシェル」も、この連鎖に入っていない。**
 
 ### 3-71. 提供する枠の上限を `WORKFLOW.md` で決める
 

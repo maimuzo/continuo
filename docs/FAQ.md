@@ -595,11 +595,9 @@ claude:
 **訳。**優先順位の高い設定ファイル: プロジェクトの設定・ローカルの設定・`--settings` で渡すものは、
 user の設定より後に当たる。だからそのどれかに、この変数を `1` にする `env` の項目があれば、そちらが勝つ。
 
-**それでも直らないときは、continuo を起動したシェルで消してから起動し直してください。**
-
-```bash
-unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
-```
+**シェルで `unset` しても効きません。**continuo は Claude Code を直接起動せず、
+**herdr が作った pane の中で起動します。**効くのは herdr を起動したときの環境であって、
+continuo を起動したシェルではありません。**`WORKFLOW.md` に書いてください。**
 
 **なぜ `WORKFLOW.md` に書くのか。**
 
