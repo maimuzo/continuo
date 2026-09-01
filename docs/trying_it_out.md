@@ -71,6 +71,7 @@ below says which steps were actually executed while writing this document and wh
 | **ボードは作らない** | continuo は**既にあるボードに後から足して使う。**足りない選択肢があるときだけ画面で足す（段2） |
 | **段8 から枠を消費する** | 実際に Claude Code が起動し、issue を実装しようとする |
 | **draft item は動かない** | ボードの draft item は**リポジトリを持たないので作業場所を決められない。**continuo は着手せず飛ばす。**リポジトリの issue を載せること** |
+| **agent teams には対応していない** | Claude Code の実験的な機能で、**既定では無効。**有効にしていると issue が失敗することがある。[docs/FAQ.md](FAQ.md) の「「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）」を参照 |
 | **止めるのは `Ctrl+C`** | 巡回を止め、hook の受け口を閉じ、turn ループを畳んで抜ける。**Claude Code はそのまま動き続ける。pane は閉じない**（次の起動で引き継ぐ） |
 
 ---

@@ -130,6 +130,74 @@ sh scripts/test-like-ci.sh
 
 **commit メッセージは `{何を実装したか} {作業内容を簡潔に表現}` の形にしてください。**
 
+## PR にはレビュー結果を貼る
+
+**レビュー結果が貼られていない PR は、CI が落とします。**
+[.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) の `review-result` がそれです。
+
+**数える条件は2つです。**
+
+| 条件 | なぜ |
+| --- | --- |
+| 目印 `<!-- code-review-result -->` が**コメントの本文の先頭**にある | 途中に書いたものまで数えると、**「レビューの話をしただけ」で通ってしまいます** |
+| 投稿者が `OWNER` / `MEMBER` / `COLLABORATOR` のいずれか | **誰でもコメントできます。**外部の人が目印を貼れば通る状態にしません |
+
+**通し方。**
+
+1. レビューを回す
+2. その結果を、その PR のコメントとして貼る（**1行目を `<!-- code-review-result -->` にする**）
+3. `gh pr ready <番号>` を打つ。`ready_for_review` で検査が回り直します
+
+**draft のあいだは赤のままでかまいません。**検査は draft でも走り、**job を飛ばしません。**
+**飛ばした job は「成功」として報告され、必須の検査であってもマージを止められないからです。**
+
+**fork から出す PR では、あなた自身が貼っても数えられません**（投稿者が `CONTRIBUTOR` か `NONE` になるため）。
+**メンテナがレビューし、結果を貼ります。**赤いままで待っていてかまいません。
+
+### この検査をマージの条件にする（メンテナ向け・1回だけ）
+
+**赤いだけではマージを止められません。**branch protection の必須の検査へ入れて、はじめて止まります。
+**リポジトリの管理権限が要ります。**
+
+```bash
+OWNER=<owner>   # 自分のアカウント名に書き換える
+BR=repos/$OWNER/continuo/branches/main/protection/required_status_checks
+
+# 一、いまの必須の検査を読む
+gh api "$BR" --jq '.checks[].context'
+
+# 二、review-result を足した JSON を作る（いまの設定はそのまま持ち越す）
+gh api "$BR" --jq '{
+  strict: .strict,
+  checks: ((.checks | map({context, app_id}))
+           + [{context: "review-result", app_id: (.checks[0].app_id)}]
+           | unique_by(.context))
+}' > "${TMPDIR:-/tmp}/required-status-checks.json"
+
+# 三、入れ替える
+gh api --method PATCH "$BR" --input "${TMPDIR:-/tmp}/required-status-checks.json"
+
+# 四、入ったかを確かめる
+gh api "$BR" --jq '.checks[].context'
+```
+
+**四で `review-result` を含む7つが並べば入っています。**足す前は次の6つです。
+
+```text
+test (ubuntu-latest)
+test (macos-latest)
+build (darwin, arm64)
+build (darwin, amd64)
+build (linux, amd64)
+build (linux, arm64)
+```
+
+| 気をつけること | なぜ |
+| --- | --- |
+| **`checks` は全件置き換えである** | 一部だけ渡すと、**渡さなかった検査が必須から外れます。**二のように、いまの分を読んでから足すこと |
+| **`app_id` を落とさない** | `null` にすると、**どのアプリが報告した検査でも合格として扱われます** |
+| **job の名前を変えない** | 必須の検査は `review-result` という名前で登録されます。名前を変えると設定が宙に浮き、**検査が無いのにマージできる状態になります** |
+
 ## 設計を読む
 
 | 何を知りたいか | どこ |

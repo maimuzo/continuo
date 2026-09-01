@@ -31,7 +31,7 @@
 | 着手 / 着手する | the start / start | README の "Started the wrong issue?" に合わせる。`kickoff` `initiation` は使わない |
 | 引き渡し / dispatch する | dispatch | 設定のキー `agent.max_dispatch_turns` が既に英語。`hand-off` を作らない |
 | 巡回 | poll | README の "It stops polling"。キーは `polling.interval_ms`。`patrol` `sweep` は使わない |
-| カンバン | board | 英語は board のまま（英語版 README の判断待ち）。日本語が「カンバン」でも `kanban board` と書かない |
+| カンバン | kanban board | **英語は2語で `kanban board` に統一する。**単独の `board` は使わない（GitHub 公式文書が "You can create a kanban board by setting your column field to a Status field" と書いている）。**日本語は「カンバン」。**「ボード」と書かない |
 | Status（カンバンのフィールド） | Status | 大文字の S。GitHub のフィールド名そのもの |
 | 状態（herdr の agent の） | status | 小文字。カンバンの `Status` と区別するため。`idle` / `done` / `blocked` の値を指す |
 | エージェント | the agent | README の "the agent needs something from you"。`worker` `the AI` は使わない |
@@ -176,7 +176,8 @@
 | 【なぜ】 | `Why:` | 担当が移った run を止めるときの理由 |
 | 【確かめ方】 | `How to check:` | doctor の10箇所 |
 | 【対処】 | `What to do:` | doctor の9箇所 |
-| 【よくある原因】 | `Common causes:` | doctor の8箇所。**1件でも複数形のまま** |
+| 【よくある原因】 | `Common causes:` |
+| 【注意】 | `Note:` | doctor の8箇所。**1件でも複数形のまま** |
 | `--force` を付ければ消します。 | ``Add `--force` if you want it gone anyway.`` | `continuo abandon` の2箇所 |
 
 ---

@@ -103,3 +103,40 @@ mermaid の図も直し、`mermaid-validate validate-md` で2ファイル・各2
 | [internal/workspace/issuebranch.go](../../internal/workspace/issuebranch.go) | `gitBranchDelete` の呼び出しに `brokenRefPolicy` を渡す |
 | `worktree と branch を片付ける.rucm.md` | BASIC FLOW の 17〜23（実在の検査）と GLOBAL `壊れたref` の両方を持つ形に書き直し、CFG を再生成した |
 | cleanup_test.go / repoworkspace_test.go | 振り直された path ID に `RUCM-PATH` と `RUCM-CFG-SHA256` を貼り直した |
+
+## issue #113 レビュー結果が貼られていない PR を CI で落とす
+
+**言いたいこと。**hook はコマンドの文字列から PR 番号を当てていて、書き方を変えられると外れる。
+**CI なら `github.event.pull_request.number` で確実に取れる。**
+あわせて、判定の条件が3箇所で違っていたのを揃えた。
+
+**作ったもの。**[.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml)。
+
+| 何 | 決め | なぜ |
+| --- | --- | --- |
+| ファイル | **`ci.yml` に足さず、新しい workflow にする** | `types` は workflow 単位でしか書けず、`ready_for_review` を足すと test と build が回り直す。さらに `ci.yml` は PR の run を打ち切るので、`gh pr ready` が走行中の run を殺す |
+| イベント | `opened` / `synchronize` / `reopened` / **`ready_for_review`** | `gh pr ready` で回り直す。「貼る → ready → 緑」が人手なしでつながる |
+| 権限 | `issues: read` と `pull-requests: read` だけ | 叩く先は `/issues/{番号}/comments` だが相手は PR である。**checkout しないので `contents` は要らない** |
+| draft | **落としたままにする**（job を飛ばさない） | **飛ばした job は「成功」として報告され、必須の検査でもマージを止められない** |
+| `concurrency` | **置かない** | 打ち切られた run は success / skipped / neutral のどれでもなく、必須の検査にするとマージを塞ぐ |
+
+**判定の条件を3箇所で揃えた。**片方だけ緩いと、緩いほうが実質の規則になる。
+
+| どこ | 何を止めるか |
+| --- | --- |
+| [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) | 手元の `gh pr merge` / `gh pr ready` |
+| [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) | PR のマージ |
+| [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | タグを打つこと |
+
+**条件は「目印が本文の先頭にある」ことと「投稿者が `OWNER` / `MEMBER` / `COLLABORATOR`」の2つである。**
+
+**hook だけは絞り込みを Python 側に移した。**jq の式に押し込むと、`gh` を叩かない限り条件を確かめられない。
+`counts_as_review` を切り出し、[.claude/hooks/tests/test_block_merge_without_review.py](../../.claude/hooks/tests/test_block_merge_without_review.py) に10件足した。
+
+**採らなかった案。**`issue_comment` で走らせる形。
+**その run の `GITHUB_SHA` は既定の branch の最新の commit であり、PR の先頭の commit に紐づかない。**
+必須の検査は PR の先頭の commit で通っている必要があるので、いつまでも条件を満たさない。
+
+**残っている作業（人間の手が要る）。**`review-result` を branch protection の必須の検査へ入れること。
+**手順は [CONTRIBUTING.md](../../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。**
+**入れるまでは、赤くてもマージできる。**
