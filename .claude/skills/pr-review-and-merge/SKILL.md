@@ -30,14 +30,21 @@ user-invocable: true
 # 誤り。本文のどこかに含まれていれば1と数える
 gh pr view <番号> --json comments \
   --jq '[.comments[] | select(.body | contains("code-review-result"))] | length'
-
-# 正しい。本文の先頭にあるかを見る
-gh api "repos/<owner>/<repo>/issues/<番号>/comments" \
-  --jq '[.[] | select(.body | startswith("<!-- code-review-result -->"))] | length'
 ```
 
 **進捗のコメントの本文中に、手順の説明として同じ文字列が入っていた。**
 **それを1件と数えて通した。**
+
+**数え方を自分で書き直してはならない。**数える条件は3箇所の実装が持っていて
+（一覧は [CLAUDE.md](../../../CLAUDE.md) の「PR を出すときの絶対条件」）、
+**手で書いた jq は、投稿者の絞り込みか、ページ送りか、先頭の空白の扱いのどれかで必ずずれる。**
+
+**見るのは CI が出した結果だけにする。**
+
+```bash
+gh pr checks <番号> --json name,bucket \
+  --jq '.[]|select(.name=="review-result")|"\(.name): \(.bucket)"'
+```
 
 **worker に渡してよいのは段1から段5まで。**段6はメインエージェントが自分で叩く。
 
@@ -64,7 +71,11 @@ gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks \
 
 ## 手順
 
-### 段1. PR の状態と branch 名を取る
+**シェルの変数は、この段からあの段へは持ち越せない。**
+**Bash の呼び出しが1回ごとに別のシェルだからである。**
+**だから下のコードの塊は、それぞれ1回の呼び出しで丸ごと叩く。**`BR` や `RUN` は塊の中で取り直す。
+
+### 段1. PR の状態と branch 名を見る
 
 ```bash
 gh pr view <番号> --json number,title,isDraft,mergeable,mergeStateStatus,headRefName \
@@ -74,11 +85,7 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 
 **`mergeable` が `CONFLICTING` なら、先に競合を解決する。**
 
-**branch 名は段5と段6で使う。**シェルの変数に取っておく。
-
-```bash
-BR=$(gh pr view <番号> --json headRefName --jq .headRefName)
-```
+**branch 名は段5と段6で使う。**`headRefName` を出しているのはそのためである。
 
 ### 段2. レビューを回す
 
@@ -140,34 +147,41 @@ gh pr comment <番号> --body-file <ファイル>
 
 **ここが忘れやすい。**
 
-```bash
-RUN=$(gh run list --workflow review-gate.yml --branch "$BR" --limit 1 \
-  --json databaseId --jq '.[0].databaseId')
-gh run rerun "$RUN"
-```
-
-**待つ。`until` で `status` が `completed` になるのを待ってはならない。**
+**`until` で `status` が `completed` になるのを待ってはならない。**
 `until` は最初の `sleep` より前に条件を1回評価する。
 **`gh run rerun` の直後、`status` はまだ前回の `completed` を返す。**
 その瞬間にループが抜け、**前回の `conclusion` を読む。**
 前回が成功していたら、**まだ走っているのに `success` と出る。**
 
+**待ち切れなかったときは、そこで止める。**黙って次へ進むと、同じ誤読になる。
+
 ```bash
+set -eu
+BR=$(gh pr view <番号> --json headRefName --jq .headRefName)
+RUN=$(gh run list --workflow review-gate.yml --branch "$BR" --limit 1 \
+  --json databaseId --jq '.[0].databaseId')
+gh run rerun "$RUN"
+
 # 前回の completed が消えるまで待つ（最大50秒）
+started=""
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  [ "$(gh run view "$RUN" --json status --jq .status)" = "completed" ] || break
+  if [ "$(gh run view "$RUN" --json status --jq .status)" != "completed" ]; then
+    started=1
+    break
+  fi
   sleep 5
 done
+if [ -z "$started" ]; then
+  echo "再実行が始まらない。gh run view $RUN を見て、手で確かめること" >&2
+  exit 1
+fi
+
 gh run watch "$RUN" --exit-status
-```
-
-**`gh run watch --exit-status` は、完了を待ったうえで、失敗していれば非ゼロで終わる。**
-
-```bash
 gh pr checks <番号> --json name,bucket \
   --jq '.[]|select(.name=="review-result")|"\(.name): \(.bucket)"'
 ```
 
+**`gh run watch --exit-status` は、完了を待ったうえで、失敗していれば非ゼロで終わる。**
 **`review-result: pass` が出れば通っている。**
 
 ### 段6. draft を外してマージする
@@ -178,22 +192,34 @@ gh pr checks <番号> --json name,bucket \
 **その run の完了を待たずにマージへ進んではならない。**
 `review-result` は必須の検査なので、**走っている最中はマージが拒否される。**
 
+**新しい run を掴めなかったときは、そこで止める。**
+**掴めないまま `gh run watch` を呼ぶと、段5で成功済みの run を見て、そのまま通ってしまう。**
+
 ```bash
+set -eu
+BR=$(gh pr view <番号> --json headRefName --jq .headRefName)
 BEFORE=$(gh run list --workflow review-gate.yml --branch "$BR" --limit 1 \
   --json databaseId --jq '.[0].databaseId')
 
 gh pr ready <番号>
 
 # ready_for_review で立った新しい run を掴む（最大50秒）
-NEW="$BEFORE"
+NEW=""
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  NEW=$(gh run list --workflow review-gate.yml --branch "$BR" --limit 1 \
+  id=$(gh run list --workflow review-gate.yml --branch "$BR" --limit 1 \
     --json databaseId --jq '.[0].databaseId')
-  [ "$NEW" = "$BEFORE" ] || break
+  if [ "$id" != "$BEFORE" ]; then
+    NEW="$id"
+    break
+  fi
   sleep 5
 done
-gh run watch "$NEW" --exit-status
+if [ -z "$NEW" ]; then
+  echo "ready_for_review の run が立たない。gh run list --workflow review-gate.yml --branch $BR を見て、手で確かめること" >&2
+  exit 1
+fi
 
+gh run watch "$NEW" --exit-status
 gh pr checks <番号> --required --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 ```
 

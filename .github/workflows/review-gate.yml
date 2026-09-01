@@ -92,8 +92,7 @@ jobs:
             echo "1. \`/code-review\` を回す"
             echo "2. その結果を、この PR のコメントとして貼る"
             echo "3. **目印はコメントの先頭に置く**（1行目が \`<!-- code-review-result -->\`）"
-            echo "4. **この PR が draft なら** \`gh pr ready ${PR_NUMBER}\` を打つ。\`ready_for_review\` が飛んで、この検査が回り直す"
-            echo "5. **draft でないなら \`gh pr ready\` は効かない。**\`ready_for_review\` は draft を ready にしたときにしか起きない。この検査だけを回し直すには \`gh run rerun\` を使う"
+            echo "4. この検査を回し直す（**やり方は下の draft かどうかで違う**）"
             echo ""
             echo "**数える条件。**"
             echo ""
@@ -102,10 +101,14 @@ jobs:
             echo ""
             if [ "${IS_DRAFT}" = "true" ]; then
               echo "**この PR は draft です。**draft のうちは赤のままでかまいません。"
-              echo "レビュー結果を貼ってから \`gh pr ready\` を打ってください（CLAUDE.md「PR を出すときの絶対条件」）。"
+              echo "レビュー結果を貼ってから \`gh pr ready ${PR_NUMBER}\` を打ってください。"
+              echo "\`ready_for_review\` が飛んで、この検査が回り直します（CLAUDE.md「PR を出すときの絶対条件」）。"
             else
               echo "**この PR は draft ではありません。**"
               echo "\`gh pr ready --undo ${PR_NUMBER}\` で draft へ戻してから、レビューを回してください。"
+              echo "**\`gh pr ready\` を打っても、この検査は回り直しません。**"
+              echo "\`ready_for_review\` は draft を ready にしたときにしか起きないからです。"
+              echo "draft へ戻さずに回し直したいときだけ、\`gh run rerun\` を使ってください。"
             fi
           } | tee -a "${GITHUB_STEP_SUMMARY}"
 
