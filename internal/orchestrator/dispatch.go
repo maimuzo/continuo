@@ -168,7 +168,8 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
 	if o.dispatchPaused() {
 		// **INFO のままにする**（issue #134）。
-		// **一度 WARN へ上げたが、8本のテストが落ちた。**どれも正常な動作を作っているもので、
+		// **一度 WARN へ上げたが、8本のテストが落ちた**（v0.1.11 で試した）。
+		// どれも正常な動作を作っているもので、
 		// **「異常ではないものを異常として出そうとしている」という信号だった。**
 		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
 		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
@@ -215,29 +216,41 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			}
 			continue
 		}
-		if !hasRequiredLabels(issue, o.cfg.Tracker.RequiredLabels) {
-			// **黙って飛ばさない**（issue #134）。ここは v0.1.11 まで1行も出さなかった。
+		if missing, ok := missingRequiredLabel(issue, o.cfg.Tracker.RequiredLabels); !ok {
+			// **黙って飛ばさない**（issue #134）。ここは v0.1.10 まで1行も出さなかった。
 			// **設定した本人でも、どの issue がどのラベル待ちなのかを知る手立てが無かった。**
 			//
 			// **Debug ではなく Info にする。**Status が着手待ちのまま動かないので、
 			// 人間から見ると「止まっている」ようにしか見えない。
-			o.logger.Info("必須のラベルが揃っていないので飛ばします",
-				"identifier", issue.Identifier,
-				"required_labels", strings.Join(o.cfg.Tracker.RequiredLabels, ", "),
-				"この issue のラベル", strings.Join(issue.Labels, ", "))
+			//
+			// **1つの issue につき1回だけ出す**（`noteUntrusted` と同じ形）。
+			// `required_labels` は大量の対象外を除けるための道具なので、
+			// **無制限に出すと、この節が読ませたい残り2つの行が流れて埋まる。**
+			if o.noteLabelSkip(issue.ID) {
+				o.logger.Info("必須のラベルが揃っていないので飛ばします（この issue では1回だけ出します）",
+					"identifier", issue.Identifier,
+					"足りないラベル", missing,
+					"required_labels", strings.Join(normalizedLabels(o.cfg.Tracker.RequiredLabels), ", "),
+					"この issue のラベル", strings.Join(issue.Labels, ", "))
+			} else {
+				o.logger.Debug("必須のラベルが揃っていないので飛ばしました（通知は済んでいます）",
+					"identifier", issue.Identifier, "足りないラベル", missing)
+			}
 			continue
 		}
 
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
-		if !o.hasFreeSlot() {
+		if free, blocker, limit := o.freeSlotBlocker(); !free {
 			// **INFO のままにする**（issue #134。上の dispatchPaused と同じ理由）。
 			// **同時に動かす数の上限に達しただけで、異常ではない。**
-			// **代わりに、増やし方と、打ち切った issue の識別子を同じ行に足した。**
-			// どこから先が今回の巡回で検査されなかったのかが分かる。
+			//
+			// **どちらの上限で止まったかを名乗る。**上限は2つあり、
+			// 効かないほうを上げても何も変わらない。
 			o.logger.Info("空きスロットが尽きたので、この巡回ではこれ以上 dispatch しません。"+
 				"走っているものが終われば順に着手します。同時に動かす数を増やすには "+
-				"agent.max_concurrent_agents を上げてください",
-				"max_concurrent_agents", o.cfg.Agent.MaxConcurrentAgents,
+				blocker+" を上げてください",
+				"上限に達した設定", blocker,
+				"その上限", limit,
 				"ここで打ち切った issue", issue.Identifier)
 			break
 		}
@@ -316,19 +329,34 @@ type claimedRun struct {
 //
 // 戻り値: 空きがあれば true。
 func (o *Orchestrator) hasFreeSlot() bool {
+	free, _, _ := o.freeSlotBlocker()
+	return free
+}
+
+// freeSlotBlocker は空きがあるかを返し、無いときは**どちらの上限で止まったか**を添える
+// （issue #134）。
+//
+// **上限は2つある。**全体（`agent.max_concurrent_agents`）と、Status ごと
+// （`agent.max_concurrent_agents_by_state`）である。
+// **どちらで止まったかを言わないと、人間は効かないほうの設定を上げる。**
+//
+// 戻り値の1つ目: 空きがあるか。
+// 戻り値の2つ目: 空きが無いときに上限へ達した設定のキー名（空きがあるときは空文字）。
+// 戻り値の3つ目: そのキーに設定されている値（空きがあるときは0）。
+func (o *Orchestrator) freeSlotBlocker() (bool, string, int) {
 	runs := o.snapshotRuns()
 	if len(runs) >= o.cfg.Agent.MaxConcurrentAgents {
-		return false
+		return false, "agent.max_concurrent_agents", o.cfg.Agent.MaxConcurrentAgents
 	}
 
 	limits := o.cfg.Agent.MaxConcurrentAgentsByState
 	if len(limits) == 0 {
-		return true
+		return true, "", 0
 	}
 	limit, ok := lookupFolded(limits, o.cfg.Tracker.RunningState)
 	if !ok {
 		// 該当するキーが無ければ、その Status には全体の上限だけを適用する。
-		return true
+		return true, "", 0
 	}
 
 	inRunningState := 0
@@ -337,7 +365,10 @@ func (o *Orchestrator) hasFreeSlot() bool {
 			inRunningState++
 		}
 	}
-	return inRunningState < limit
+	if inRunningState >= limit {
+		return false, "agent.max_concurrent_agents_by_state", limit
+	}
+	return true, "", 0
 }
 
 // lookupFolded は Status 名をキーにした写像を、大文字小文字を無視して引く（設計 3-13）。
@@ -364,6 +395,21 @@ func lookupFolded(m map[string]int, key string) (int, bool) {
 // required: 必須ラベルの一覧。空なら制約なし。
 // 戻り値: すべて持っていれば true。
 func hasRequiredLabels(issue tracker.Issue, required []string) bool {
+	_, ok := missingRequiredLabel(issue, required)
+	return ok
+}
+
+// missingRequiredLabel は、必須のラベルが揃っているかを返し、揃っていなければ
+// **最初に見つかった足りないラベルの名前**を添える（issue #134）。
+//
+// **名前を添える理由。**2つの一覧（required_labels と、その issue のラベル）を
+// 並べるだけだと、差分は人が目で取ることになる。
+//
+// issue: 検査する issue。
+// required: 設定の `tracker.required_labels`。
+// 戻り値の1つ目: 足りないラベル（**照合に使う正規化済みの形**。揃っていれば空文字）。
+// 戻り値の2つ目: 揃っているか。
+func missingRequiredLabel(issue tracker.Issue, required []string) (string, bool) {
 	for _, want := range required {
 		w := strings.ToLower(strings.TrimSpace(want))
 		if w == "" {
@@ -377,10 +423,28 @@ func hasRequiredLabels(issue tracker.Issue, required []string) bool {
 			}
 		}
 		if !found {
-			return false
+			return w, false
 		}
 	}
-	return true
+	return "", true
+}
+
+// normalizedLabels は、設定に書かれたラベルを**照合に使う形**（小文字・前後の空白なし）へ揃える。
+//
+// **ログに出すために要る。**issue 側のラベルは取り込みのときに小文字化されているので
+// （`internal/tracker/query.go` の `normalizeLabels`）、設定側を生のまま並べると
+// **照合は通っているのにログだけが不一致に見え、原因を取り違える。**
+//
+// labels: 設定に書かれたラベル。
+// 戻り値: 正規化したもの（空の要素は落とす）。
+func normalizedLabels(labels []string) []string {
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		if w := strings.ToLower(strings.TrimSpace(l)); w != "" {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // dispatchOne は1件の issue に着手する（設計 3-16 の13段を、その順で実行する）。
@@ -623,6 +687,31 @@ func (o *Orchestrator) alreadyNotified(owner, repo string) bool {
 	defer o.mu.Unlock()
 	_, ok := o.notified[owner+"/"+repo]
 	return ok
+}
+
+// noteLabelSkip は、必須のラベルが足りない issue について「まだ知らせていない」かを返し、
+// 初回なら印を付ける（issue #134）。
+//
+// **`required_labels` は大量の対象外を除けるための道具である。**
+// 巡回のたびに INFO を出すと、同じ節が読ませたい残り2つの行が流れて埋まる。
+// **`alreadyNotified` と同じ考え方で、1つの issue につき1回だけにする。**
+//
+// **消す仕組みは持たない。**ラベルが付けば候補に入り、そのまま着手へ進む。
+// **印が残っていても害は無い**（もう二度とこの分岐を通らないため）。
+//
+// issueID: project item の ID。
+// 戻り値: 初回なら真。既に知らせていれば偽。
+func (o *Orchestrator) noteLabelSkip(issueID string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if _, ok := o.labelSkipped[issueID]; ok {
+		return false
+	}
+	if o.labelSkipped == nil {
+		o.labelSkipped = make(map[string]struct{})
+	}
+	o.labelSkipped[issueID] = struct{}{}
+	return true
 }
 
 func (o *Orchestrator) clearUntrusted(owner, repo string) {
