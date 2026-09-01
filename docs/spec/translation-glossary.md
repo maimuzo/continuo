@@ -176,7 +176,8 @@
 | 【なぜ】 | `Why:` | 担当が移った run を止めるときの理由 |
 | 【確かめ方】 | `How to check:` | doctor の10箇所 |
 | 【対処】 | `What to do:` | doctor の9箇所 |
-| 【よくある原因】 | `Common causes:` | doctor の8箇所。**1件でも複数形のまま** |
+| 【よくある原因】 | `Common causes:` |
+| 【注意】 | `Note:` | doctor の8箇所。**1件でも複数形のまま** |
 | `--force` を付ければ消します。 | ``Add `--force` if you want it gone anyway.`` | `continuo abandon` の2箇所 |
 
 ---

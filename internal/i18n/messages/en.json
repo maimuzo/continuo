@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "3076de898231d536eb2c0ad568dff87fce38a75d4e059ec430b49050cfedd7a7",
+  "_source_sha256": "feb8adf09589582d786260ada900033becc7005167e7000c4a2886ccc7ee3b06",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -752,6 +752,7 @@
   "workspace.ensure_root.root_empty": "workspace.root is empty (cannot decide the worktree root)",
   "workspace.ensure_root.root_not_absolute": "workspace.root %q is not an absolute path (a relative path would make the worktree root depend on the directory continuo was started from)",
   "workspace.ensure_root.symlink_unresolvable": "cannot resolve the symlink in workspace.root %q: %w",
+  "workspace.err.worktree_detached": "the worktree is not on any branch (detached HEAD)",
   "workspace.ghq_target.name_invalid": "not a name that can be passed to ghq: %q (a GitHub owner name and repository name must consist only of letters, digits, hyphens, underscores, and dots, and must not start with `-`)",
   "workspace.git_ahead_of_upstream.count_unreadable": "cannot read the output of `git rev-list --count @{u}..HEAD` (%q) as a number: %w",
   "workspace.git_branch_exists.unexpected_exit_code": "could not check whether branch %[1]s exists in repository %[2]s (git show-ref exit code: %[3]d). This is not being treated as \"it does not exist\".",
@@ -790,6 +791,7 @@
   "workspace.prepare.branch_in_use_elsewhere": "%[1]w (branch: %[2]s / worktree currently using it: %[3]s). **Only one worktree can check out a given branch, so starting as-is will always make `git worktree add` fail.**\nHow to check: Run `git -C %[4]s worktree list` to see which worktree has that branch checked out.\nCommon causes: A worktree from a previous run is still left over elsewhere, or a human created a worktree for the same branch by hand.\nWhat to do: Run `continuo abandon %[5]s`. This cleans up that issue's worktree and branch together. If you do not want to lose any work still there, check its contents first with `git -C %[6]s status`.",
   "workspace.prepare.branch_mismatch": "%[1]w: %[2]s has %[3]q checked out (expected %[4]q)",
   "workspace.prepare.clone_not_found": "%[1]w. **The polling loop never clones on its own** (so it never pulls in a repository just because it appeared on the kanban board, without permission).\nHow to check: Run `ghq list -p -e %[2]s/%[3]s`. Zero lines means it is not present locally.\nWhat to do: Make sure `trust.repositories` in WORKFLOW.md includes `%[4]s/%[5]s`, then run `continuo trust`. It fetches the clone and registers trust together.",
+  "workspace.prepare.detached_head": "%[1]w: %[2]s\nHow to check: git -C %[3]s status\n        If it says `rebase in progress`, finish or abort it first (`git rebase --abort`).\n        If it says `bisecting`, run `git bisect reset` to get back.\nCommon causes: a commit was checked out directly / a rebase is in progress / a bisect is in progress\nWhat to do: First check whether there are uncommitted changes.\n        If the expected branch still exists: `git -C %[4]s switch %[5]s`\n        If the expected branch is gone: `git -C %[6]s switch -c %[7]s`\n        git refuses `git switch` during a rebase. Finish that first.\nNote: Do not run `continuo abandon`. It destroys the work inside the worktree.\n        Even without --force it can move Status to failure_state when the conditions line up.",
   "workspace.prepare.parent_dir_create_failed": "cannot create the worktree's parent directory %s: %w",
   "workspace.prepare.stat_failed": "cannot check the worktree path %s: %w",
   "workspace.prepare.unregistered_worktree": "%[1]w (%[2]s). **This may not have been created by continuo, so it stopped rather than taking it over.**\nHow to check: Run `ls -la %[3]s` to see what is inside.\nCommon causes: continuo crashed earlier and only git's registration was lost, or a human created the directory by hand.\nWhat to do: If you don't need what is inside, delete it with `rm -rf %[4]s`. The next poll will recreate it.",

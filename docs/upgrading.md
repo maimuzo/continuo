@@ -74,6 +74,39 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 **当てるものはありません。**設定のキーは1つも増えていません。
 
+### detached HEAD の worktree で出るメッセージが変わりました
+
+**前の版は、こう出ていました。**
+
+```
+目的のパスに実体があるのに git の worktree として登録されていません: <worktree のパス> は
+"HEAD" をチェックアウトしています（期待は "continuo/<owner>/<repo>/42"）
+```
+
+**2つの点で人を迷わせていました。**
+
+| 何 | なぜ迷うか |
+| --- | --- |
+| **`"HEAD"` をチェックアウトしています** | **`"HEAD"` という名前の branch を探しに行った人がいました。**そんな branch はありません |
+| **登録されていません** | **登録はされています。**git に登録されていることを確かめた直後に、この文面が出ていました |
+
+**detached HEAD（どの branch にも載っていない状態）を、別の branch にいる場合と
+同じ番兵・同じ文面で知らせていたためです。**
+
+**この版から、専用の文面が出ます。**確かめ方・よくある原因・直し方が入っています。
+
+```
+worktree がどの branch にも載っていません（detached HEAD）: …
+【確かめ方】git -C … status
+【よくある原因】commit を直接チェックアウトした / rebase の途中 / bisect の途中
+【対処】…
+```
+
+**振る舞いは変わりません。**前の版と同じく、その issue を飛ばして Status は1バイトも書きません。
+
+**詳しくは [docs/FAQ.md](FAQ.md) の
+「着手が「worktree がどの branch にも載っていません（detached HEAD）」で止まる」にあります。**
+
 ### agent teams には対応していません — 知っておくこと
 
 **Claude Code の実験的な機能で、既定では無効です。**
