@@ -95,9 +95,42 @@ case(
 )
 
 
+# コメント1件を「レビュー結果」と数えるかの判定。
+# **CI（.github/workflows/review-gate.yml）と scripts/check-release-ready.sh と同じ条件である。**
+# 3箇所のどれかが緩むと、緩いほうが実質の規則になるので、ここで条件を固定する。
+MARKER = "<!-- code-review-result -->"
+
+judge_cases = [
+    ("先頭に目印があり OWNER なら数える",
+     {"body": MARKER + "\n## code-review の結果", "authorAssociation": "OWNER"}, True),
+    ("MEMBER も数える", {"body": MARKER, "authorAssociation": "MEMBER"}, True),
+    ("COLLABORATOR も数える", {"body": MARKER, "authorAssociation": "COLLABORATOR"}, True),
+    ("先頭の空白は許す",
+     {"body": "\n  " + MARKER + "\n本文", "authorAssociation": "OWNER"}, True),
+    ("途中に書いたものは数えない",
+     {"body": "レビューの話をしました\n" + MARKER, "authorAssociation": "OWNER"}, False),
+    ("投稿者が外部なら数えない", {"body": MARKER, "authorAssociation": "NONE"}, False),
+    ("CONTRIBUTOR も数えない", {"body": MARKER, "authorAssociation": "CONTRIBUTOR"}, False),
+    ("目印が無ければ数えない",
+     {"body": "code-review を回しました", "authorAssociation": "OWNER"}, False),
+    ("本文が無ければ数えない", {"authorAssociation": "OWNER"}, False),
+    ("投稿者が無ければ数えない", {"body": MARKER}, False),
+]
+
+
 def main():
     mod = load_hook()
     ng = 0
+
+    for name, comment, want in judge_cases:
+        got = mod.counts_as_review(comment)
+        if got != want:
+            ng += 1
+            print("NG  %s: %s（想定は %s）"
+                  % (name, "数えた" if got else "数えなかった", "数える" if want else "数えない"))
+        else:
+            print("ok  %s" % name)
+
     for i, (name, command, review, want_block, want_in) in enumerate(cases):
         # 最後の1件だけ、逃がし口の環境変数を置いて試す。
         escape = name.startswith("逃がし口")
@@ -119,7 +152,8 @@ def main():
             print("ok  %s" % name)
 
     os.environ.pop(mod.ESCAPE_ENV, None)
-    print("\n%d 件中 %d 件が想定どおり" % (len(cases), len(cases) - ng))
+    total = len(judge_cases) + len(cases)
+    print("\n%d 件中 %d 件が想定どおり" % (total, total - ng))
     return 1 if ng else 0
 
 

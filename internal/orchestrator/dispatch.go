@@ -56,7 +56,7 @@ var ErrStartupRetryable = errors.New("起動に失敗しましたが、待てば
 // **それでもまだ替えないのは、この文が出る先がログだけだからである**（人間へは渡さない）。
 // **ログは運用者が読むものなので、画面に出す文言と同じ資源には載せていない。**
 // **この package の人間向けの文言をまとめて資源へ移すときに、一緒に見直すこと。**
-var ErrStatusNotWritten = errors.New("ボードの Status を書かなかったので着手しません")
+var ErrStatusNotWritten = errors.New("カンバンの Status を書かなかったので着手しません")
 
 // dispatchBlockedStates は着手の段2 で「この状態なら Status を書かない」一覧を返す。
 //
@@ -173,8 +173,17 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	//
 	// **止める判定は入札と同じものである。**別々に持っていたので、
 	// 枠を読めないときに逆を向いていた（newWorkBlocked を見よ）。
+	//
+	// **INFO のままにする**（issue #134）。
+	// **一度 WARN へ上げたが、8本のテストが落ちた**（v0.1.11 で試した）。
+	// どれも正常な動作を作っているもので、
+	// **「異常ではないものを異常として出そうとしている」という信号だった。**
+	// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
+	// **代わりに、戻し方を同じ行に書く。**探し当てた人が次にすることが分かる。
 	if skip := o.newWorkBlocked(); skip != handoff.SkipNone {
-		o.logger.Info("新しい issue には着手しません（走行中の turn は止めません）",
+		o.logger.Info("新しい issue には着手しません（走行中の turn は止めません）。"+
+			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent と "+
+			"tracker.provider.handoff の2つのマージンを見てください",
 			"理由", skip.String(),
 			"新規着手が止まる使用率", o.newWorkThresholdPercent(),
 			"rate_limit.pause_above_percent", o.cfg.RateLimit.PauseAbovePercent,
@@ -221,14 +230,45 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			}
 			continue
 		}
-		if !hasRequiredLabels(issue, o.cfg.Tracker.RequiredLabels) {
+		if missing := missingRequiredLabels(issue, o.cfg.Tracker.RequiredLabels); len(missing) > 0 {
+			// **黙って飛ばさない**（issue #134）。ここは v0.1.10 まで1行も出さなかった。
+			// **設定した本人でも、どの issue がどのラベル待ちなのかを知る手立てが無かった。**
+			//
+			// **Debug ではなく Info にする。**Status が着手待ちのまま動かないので、
+			// 人間から見ると「止まっている」ようにしか見えない。
+			//
+			// **1つの issue につき1回だけ出す**（`noteUntrusted` と同じ形）。
+			// `required_labels` は大量の対象外を除けるための道具なので、
+			// **無制限に出すと、この節が読ませたい残り2つの行が流れて埋まる。**
+			// **印は「issue と、足りているラベルの組み合わせ」で持つ。**
+			// issue の ID だけで持つと、1つ足した人が「まだ足りない」を知る手立てを失う。
+			joined := strings.Join(missing, ", ")
+			if o.noteLabelSkip(issue.ID + "\x00" + joined) {
+				o.logger.Info("必須のラベルが揃っていないので飛ばします（この組み合わせでは1回だけ出します）",
+					"identifier", issue.Identifier,
+					"足りないラベル", joined,
+					"required_labels", strings.Join(normalizedLabels(o.cfg.Tracker.RequiredLabels), ", "),
+					"この issue のラベル", strings.Join(issue.Labels, ", "))
+			} else {
+				o.logger.Debug("必須のラベルが揃っていないので飛ばしました（通知は済んでいます）",
+					"identifier", issue.Identifier, "足りないラベル", joined)
+			}
 			continue
 		}
 
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
-		if !o.hasFreeSlot() {
-			o.logger.Info("空きスロットが尽きたので、この巡回ではこれ以上 dispatch しません",
-				"max_concurrent_agents", o.cfg.Agent.MaxConcurrentAgents)
+		if free, blocker, limit := o.freeSlotBlocker(); !free {
+			// **INFO のままにする**（issue #134。上の newWorkBlocked と同じ理由）。
+			// **同時に動かす数の上限に達しただけで、異常ではない。**
+			//
+			// **どちらの上限で止まったかを名乗る。**上限は2つあり、
+			// 効かないほうを上げても何も変わらない。
+			o.logger.Info("空きスロットが尽きたので、この巡回ではこれ以上 dispatch しません。"+
+				"走っているものが終われば順に着手します。同時に動かす数を増やすには "+
+				blocker+" を上げてください",
+				"上限に達した設定", blocker,
+				"その上限", limit,
+				"ここで打ち切った issue", issue.Identifier)
 			break
 		}
 
@@ -306,19 +346,34 @@ type claimedRun struct {
 //
 // 戻り値: 空きがあれば true。
 func (o *Orchestrator) hasFreeSlot() bool {
+	free, _, _ := o.freeSlotBlocker()
+	return free
+}
+
+// freeSlotBlocker は空きがあるかを返し、無いときは**どちらの上限で止まったか**を添える
+// （issue #134）。
+//
+// **上限は2つある。**全体（`agent.max_concurrent_agents`）と、Status ごと
+// （`agent.max_concurrent_agents_by_state`）である。
+// **どちらで止まったかを言わないと、人間は効かないほうの設定を上げる。**
+//
+// 戻り値の1つ目: 空きがあるか。
+// 戻り値の2つ目: 空きが無いときに上限へ達した設定のキー名（空きがあるときは空文字）。
+// 戻り値の3つ目: そのキーに設定されている値（空きがあるときは0）。
+func (o *Orchestrator) freeSlotBlocker() (bool, string, int) {
 	runs := o.snapshotRuns()
 	if len(runs) >= o.cfg.Agent.MaxConcurrentAgents {
-		return false
+		return false, "agent.max_concurrent_agents", o.cfg.Agent.MaxConcurrentAgents
 	}
 
 	limits := o.cfg.Agent.MaxConcurrentAgentsByState
 	if len(limits) == 0 {
-		return true
+		return true, "", 0
 	}
 	limit, ok := lookupFolded(limits, o.cfg.Tracker.RunningState)
 	if !ok {
 		// 該当するキーが無ければ、その Status には全体の上限だけを適用する。
-		return true
+		return true, "", 0
 	}
 
 	inRunningState := 0
@@ -327,7 +382,10 @@ func (o *Orchestrator) hasFreeSlot() bool {
 			inRunningState++
 		}
 	}
-	return inRunningState < limit
+	if inRunningState >= limit {
+		return false, "agent.max_concurrent_agents_by_state", limit
+	}
+	return true, "", 0
 }
 
 // lookupFolded は Status 名をキーにした写像を、大文字小文字を無視して引く（設計 3-13）。
@@ -354,6 +412,23 @@ func lookupFolded(m map[string]int, key string) (int, bool) {
 // required: 必須ラベルの一覧。空なら制約なし。
 // 戻り値: すべて持っていれば true。
 func hasRequiredLabels(issue tracker.Issue, required []string) bool {
+	return len(missingRequiredLabels(issue, required)) == 0
+}
+
+// missingRequiredLabels は、必須のラベルのうち**足りないものを全部**返す（issue #134）。
+//
+// **名前を添える理由。**2つの一覧（required_labels と、その issue のラベル）を
+// 並べるだけだと、差分は人が目で取ることになる。
+//
+// **最初の1つだけ返してはならない。**この関数の結果は「1つの issue につき1回だけ」
+// 出すログに載る。1つ目だけを出すと、それを付けた人が
+// **「言われたラベルを付けたのに、まだ動かず、ログに何も出ない」**という状態に落ちる。
+//
+// issue: 検査する issue。
+// required: 設定の `tracker.required_labels`。
+// 戻り値: 足りないラベル（**照合に使う正規化済みの形**。揃っていれば長さ0）。
+func missingRequiredLabels(issue tracker.Issue, required []string) []string {
+	var missing []string
 	for _, want := range required {
 		w := strings.ToLower(strings.TrimSpace(want))
 		if w == "" {
@@ -367,10 +442,28 @@ func hasRequiredLabels(issue tracker.Issue, required []string) bool {
 			}
 		}
 		if !found {
-			return false
+			missing = append(missing, w)
 		}
 	}
-	return true
+	return missing
+}
+
+// normalizedLabels は、設定に書かれたラベルを**照合に使う形**（小文字・前後の空白なし）へ揃える。
+//
+// **ログに出すために要る。**issue 側のラベルは取り込みのときに小文字化されているので
+// （`internal/tracker/query.go` の `normalizeLabels`）、設定側を生のまま並べると
+// **照合は通っているのにログだけが不一致に見え、原因を取り違える。**
+//
+// labels: 設定に書かれたラベル。
+// 戻り値: 正規化したもの（空の要素は落とす）。
+func normalizedLabels(labels []string) []string {
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		if w := strings.ToLower(strings.TrimSpace(l)); w != "" {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // dispatchOne は1件の issue に着手する（設計 3-16 の13段を、その順で実行する）。
@@ -433,7 +526,7 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 	// ボードは continuo が触る前の状態のままなので、伝えるべきことが1つも無い。
 	// **ここで failure_state へ落とすと、人間が Blocked に置いた issue を上書きする。**
 	if errors.Is(err, ErrStatusNotWritten) {
-		o.logger.Info(label+"を取りやめました（ボードの Status を書かなかったため）",
+		o.logger.Info(label+"を取りやめました（カンバンの Status を書かなかったため）",
 			"identifier", issue.Identifier, "理由", summaryLine(err.Error()))
 		// **書き戻しが飛んでいたら、終わるまで待ってから印を取る**（設計 3-56）。
 		// 待たずに戻ると、着手を取りやめた run の印が外れないまま残る。
@@ -613,6 +706,34 @@ func (o *Orchestrator) alreadyNotified(owner, repo string) bool {
 	defer o.mu.Unlock()
 	_, ok := o.notified[owner+"/"+repo]
 	return ok
+}
+
+// noteLabelSkip は、必須のラベルが足りないことを「まだ知らせていない」かを返し、
+// 初回なら印を付ける（issue #134）。
+//
+// **`required_labels` は大量の対象外を除けるための道具である。**
+// 巡回のたびに INFO を出すと、同じ節が読ませたい残り2つの行が流れて埋まる。
+// **`alreadyNotified` と同じ考え方で、1回だけにする。**
+//
+// **鍵は issue の ID だけにしない。**足りないラベルの並びも混ぜる。
+// **issue の ID だけで持つと、1つ足した人が「まだ足りない」を知る手立てを失う。**
+//
+// **消す仕組みは持たない。**足りないラベルが変わるたびに新しい鍵になり、そのとき1回出る。
+// 全部揃えば候補に入り、この分岐そのものを通らなくなる。
+//
+// key: project item の ID と、足りないラベルの並びを繋いだもの。
+// 戻り値: 初回なら真。既に知らせていれば偽。
+func (o *Orchestrator) noteLabelSkip(key string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if _, ok := o.labelSkipped[key]; ok {
+		return false
+	}
+	if o.labelSkipped == nil {
+		o.labelSkipped = make(map[string]struct{})
+	}
+	o.labelSkipped[key] = struct{}{}
+	return true
 }
 
 func (o *Orchestrator) clearUntrusted(owner, repo string) {

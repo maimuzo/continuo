@@ -1193,7 +1193,7 @@ func (o *Orchestrator) recoverIdentity(
 			continue
 		}
 		if !found {
-			o.logger.Warn("復元のために引いた issue がボードにありません（消しません）",
+			o.logger.Warn("復元のために引いた issue がカンバンにありません（消しません）",
 				"path", b.Path, "identifier", identifier)
 			continue
 		}

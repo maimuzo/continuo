@@ -206,9 +206,28 @@ PR #69  レビュー結果=有り（1件）
 | **`説明=閉じていない`** | 直したのに開いたままなら閉じる。**まだ直っていないなら、リリースノートに書かない** |
 | **`対の issue=無し`** | **異常ではない。**issue から生まれない PR はある |
 
-**レビュー結果の目印は `<!-- code-review-result -->` である。**
-**貼るときは、この行をコメントの先頭に置く。**本文に `code-review` と書いただけのコメントは数えない。
-それを数えると、「レビューの話をしただけ」の PR が通ってしまう。
+**レビュー結果の目印は `<!-- code-review-result -->` である。数える条件は2つある。**
+
+| 条件 | なぜ |
+| --- | --- |
+| **目印がコメントの本文の先頭にある**（前に空白文字があってもよい） | 途中に書いたものまで数えると、**「レビューの話をしただけ」の PR が通ってしまう** |
+| **投稿者が `OWNER` / `MEMBER` / `COLLABORATOR` のいずれかである** | **誰でもコメントできる。**外部の人が目印を貼れば通る状態にしない |
+
+**同じ条件で、CI も PR を落とす。**[.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) が
+`pull_request` のたびに走り、**貼られていなければ `review-result` の検査が赤になる。**
+
+**ただし、赤いだけではマージを止められない。**
+**branch protection の必須の検査へ入れて、はじめて止まる。**入れるのは人間の作業である
+（手順は [CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」）。
+**入れるまでは、ここでの `レビュー結果=無し` が最後の関所である。**
+
+**条件は3箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
+
+| どこ | 何を止めるか |
+| --- | --- |
+| [.claude/hooks/block-merge-without-review.py](../.claude/hooks/block-merge-without-review.py) | AI の手元の `gh pr merge` / `gh pr ready` |
+| [.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) | PR のマージ |
+| [scripts/check-release-ready.sh](../scripts/check-release-ready.sh) | タグを打つこと |
 
 **対の issue は、`Closes` / `Fixes` / `Resolves` の後ろの `#N` だけを拾う。**
 本文にただ出てくる `#N` は拾わない。「足すのは issue #53 で扱う」のような参照まで数えてしまうためである。

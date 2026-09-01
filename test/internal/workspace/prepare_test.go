@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -326,8 +327,13 @@ func TestPrepare_cloneが無ければErrCloneNotFoundになる(t *testing.T) {
 // **再利用の前に git へ現物を答えさせないと、**エージェントが意図しない branch の上で
 // 作業し、食い違いに気づくのは片付けのとき（成果が別 branch に積まれたあと）になる。
 //
+// **番兵は専用のものである**（issue #142）。「登録されていません」と名乗ると、
+// 読んだ人間は docs/FAQ.md の別の症状（ディレクトリだけが残っている）へ行き、
+// **生きている worktree を消しにいく。**
+//
 // 与える情報: 用意したあとに別の branch へ切り替えた worktree と、同じ issue の再用意。
-// 成功条件: ErrUnregisteredWorktree になり、worktree が消されずに残ること。
+// 成功条件: ErrWorktreeBranchMismatch になり（ErrUnregisteredWorktree にはならない）、
+// 文面に確かめ方と switch の案内が入り、worktree が消されずに残ること。
 func TestPrepare_別のbranchへ切り替えられたworktreeは再利用しない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	ctx := context.Background()
@@ -336,11 +342,169 @@ func TestPrepare_別のbranchへ切り替えられたworktreeは再利用しな�
 	runGit(t, prepared.Path, "checkout", "--quiet", "-b", "人間が切り替えた")
 
 	_, err := fx.Manager.Prepare(ctx, sampleIssue(188))
-	if !errors.Is(err, workspace.ErrUnregisteredWorktree) {
+	if !errors.Is(err, workspace.ErrWorktreeBranchMismatch) {
 		t.Fatalf("別の branch を出している worktree を再利用している: %v", err)
+	}
+	// **登録の無い実体と取り違えていないこと。**登録はされている。
+	if errors.Is(err, workspace.ErrUnregisteredWorktree) {
+		t.Fatalf("別の branch を「登録が無い」と取り違えている: %v", err)
+	}
+	// **detached HEAD とも取り違えていないこと。**原因も直し方も違う。
+	if errors.Is(err, workspace.ErrWorktreeDetached) {
+		t.Fatalf("別の branch を detached HEAD と取り違えている: %v", err)
+	}
+	msg := err.Error()
+	// **引数の取りこぼしを文面で押さえる。**指定子と引数の数がずれると fmt がここへ書く。
+	for _, bad := range []string{"%!", "(MISSING)", "(EXTRA"} {
+		if strings.Contains(msg, bad) {
+			t.Fatalf("文面に引数の取りこぼしがある（%s）: %s", bad, msg)
+		}
+	}
+	for _, want := range []string{"人間が切り替えた", "switch", "【確かめ方】", prepared.Path} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("文面に %q が入っていない: %s", want, msg)
+		}
 	}
 	if _, statErr := os.Stat(prepared.Path); statErr != nil {
 		t.Fatalf("再利用できない worktree を消している: %v", statErr)
+	}
+}
+
+// 目的: detached HEAD の worktree に、別の branch にいる場合とは違う番兵と文面を返すことを
+// 確認する（issue #132）。
+//
+// **文面を分けないと、人間は「"HEAD" をチェックアウトしています」という案内を読み、**
+// **"HEAD" という名前の branch を探しに行く。**原因も直し方も伝わらない。
+//
+// 与える情報: 用意したあとに commit を直接チェックアウトした worktree と、同じ issue の再用意。
+// 成功条件: ErrWorktreeDetached になり（ErrUnregisteredWorktree にはならない）、
+// 文面に detached HEAD と switch の案内が入り、worktree が消されずに残ること。
+func TestPrepare_detachedHEADのworktreeは専用の番兵で断る(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	ctx := context.Background()
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	runGit(t, prepared.Path, "checkout", "--quiet", "--detach", "HEAD")
+
+	_, err := fx.Manager.Prepare(ctx, sampleIssue(188))
+	if !errors.Is(err, workspace.ErrWorktreeDetached) {
+		t.Fatalf("detached HEAD なのに ErrWorktreeDetached にならない: %v", err)
+	}
+	// **別の branch にいる場合と取り違えていないこと。**
+	if errors.Is(err, workspace.ErrUnregisteredWorktree) {
+		t.Fatalf("detached HEAD を「登録が無い」と取り違えている: %v", err)
+	}
+	// **branch の食い違いとも取り違えていないこと**（issue #142）。
+	// 3-68 の通知が「飛ばした理由の種類」を鍵にするので、2つを混ぜると数え直しが効かない。
+	if errors.Is(err, workspace.ErrWorktreeBranchMismatch) {
+		t.Fatalf("detached HEAD を branch の食い違いと取り違えている: %v", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"detached HEAD", "switch", prepared.Path} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("文面に %q が入っていない: %s", want, msg)
+		}
+	}
+	if _, statErr := os.Stat(prepared.Path); statErr != nil {
+		t.Fatalf("detached HEAD の worktree を消している: %v", statErr)
+	}
+}
+
+// 目的: 着手の段0（CheckWorktreeUsable）でも、detached HEAD を同じ番兵で断ることを確認する
+// （issue #132）。Prepare と段0 で判断が食い違うと、Status を書いてから落ちる。
+//
+// 与える情報: 用意したあとに commit を直接チェックアウトした worktree。
+// 成功条件: CheckWorktreeUsable が ErrWorktreeDetached を返すこと。
+func TestCheckWorktreeUsable_detachedHEADを段0で断る(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	ctx := context.Background()
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	runGit(t, prepared.Path, "checkout", "--quiet", "--detach", "HEAD")
+
+	err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188))
+	if !errors.Is(err, workspace.ErrWorktreeDetached) {
+		t.Fatalf("段0 が detached HEAD を断っていない: %v", err)
+	}
+}
+
+// 目的: 着手の段0（CheckWorktreeUsable）でも、branch の食い違いを専用の番兵で断ることを
+// 確認する（issue #142）。
+//
+// **daemon が実際に通るのはこちらである。**preflight が CheckWorktreeUsable を呼び、
+// ここを通ったものだけが Prepare の段2 へ行く。**9個の引数は2箇所へ手で写してあり、
+// i18n.Errorf は個数を検査しない。**片方だけ直すと、巡回のループが出す本物の文面だけが
+// `%!s(MISSING)` になる。
+//
+// 与える情報: 用意したあとに別の branch へ切り替えた worktree。
+// 成功条件: CheckWorktreeUsable が ErrWorktreeBranchMismatch を返し、
+// 文面に引数の取りこぼしが1つも無いこと。
+func TestCheckWorktreeUsable_別のbranchを段0で断る(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	ctx := context.Background()
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	runGit(t, prepared.Path, "checkout", "--quiet", "-b", "人間が切り替えた")
+
+	err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188))
+	if !errors.Is(err, workspace.ErrWorktreeBranchMismatch) {
+		t.Fatalf("段0 が branch の食い違いを断っていない: %v", err)
+	}
+	// **段2 と同じ番兵であること。**食い違うと、Status を書いてから落ちる。
+	if errors.Is(err, workspace.ErrUnregisteredWorktree) {
+		t.Fatalf("段0 が「登録が無い」と取り違えている: %v", err)
+	}
+	msg := err.Error()
+	// **引数の取りこぼしを文面で押さえる。**指定子と引数の数がずれると fmt がここへ書く。
+	for _, bad := range []string{"%!", "(MISSING)", "(EXTRA"} {
+		if strings.Contains(msg, bad) {
+			t.Fatalf("段0 の文面に引数の取りこぼしがある（%s）: %s", bad, msg)
+		}
+	}
+	for _, want := range []string{"人間が切り替えた", "switch", "【確かめ方】", prepared.Path} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("段0 の文面に %q が入っていない: %s", want, msg)
+		}
+	}
+}
+
+// 目的: rebase を途中で止めた worktree も detached として断ることを確認する（issue #132）。
+//
+// **文面と docs/FAQ.md は rebase 中を名指しで案内している。**
+// **その前提（rebase の途中は porcelain が detached を出す）を、テストで固定する。**
+// ここが崩れると、案内だけが残って判定が別の分岐へ落ちる。
+//
+// 与える情報: 衝突で止めた rebase の途中にある worktree。
+// 成功条件: ErrWorktreeDetached になること。
+func TestPrepare_rebaseの途中もdetachedとして断る(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	ctx := context.Background()
+	prepared := prepareWorktree(t, fx, sampleIssue(188))
+
+	// 同じファイルを別々に変えた2つの commit を作り、rebase で必ず衝突させる。
+	conflict := filepath.Join(prepared.Path, "conflict.txt")
+	base := runGit(t, prepared.Path, "rev-parse", "HEAD")
+	if err := os.WriteFile(conflict, []byte("こちら\n"), 0o644); err != nil {
+		t.Fatalf("ファイルを書けない: %v", err)
+	}
+	runGit(t, prepared.Path, "add", "conflict.txt")
+	runGit(t, prepared.Path, "commit", "--quiet", "-m", "こちら側")
+	runGit(t, prepared.Path, "checkout", "--quiet", "-b", "他方", base)
+	if err := os.WriteFile(conflict, []byte("あちら\n"), 0o644); err != nil {
+		t.Fatalf("ファイルを書けない: %v", err)
+	}
+	runGit(t, prepared.Path, "add", "conflict.txt")
+	runGit(t, prepared.Path, "commit", "--quiet", "-m", "あちら側")
+
+	// **衝突で止まることが目的なので、失敗を許す。**runGit は失敗でテストを止めるので使えない。
+	rebase := exec.Command("git", "-C", prepared.Path, "rebase", prepared.Branch.String())
+	if out, err := rebase.CombinedOutput(); err == nil {
+		t.Fatalf("rebase が衝突せずに通ってしまった:\n%s", out)
+	}
+
+	err := fx.Manager.CheckWorktreeUsable(ctx, sampleIssue(188))
+	if !errors.Is(err, workspace.ErrWorktreeDetached) {
+		t.Fatalf("rebase の途中を detached として断っていない: %v", err)
 	}
 }
 

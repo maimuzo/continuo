@@ -25,7 +25,7 @@ func WriteRequirements(w io.Writer, r *Report) error {
 
 	if len(r.Entries) == 0 {
 		b.WriteString("WORKFLOW.md の trust.repositories が空です。登録する対象がありません。\n")
-		b.WriteString("`continuo init` がボードから拾って並べます。要らない行を消してから、もう一度実行してください。\n")
+		b.WriteString("`continuo init` がカンバンから拾って並べます。要らない行を消してから、もう一度実行してください。\n")
 		_, err := io.WriteString(w, b.String())
 		return err
 	}

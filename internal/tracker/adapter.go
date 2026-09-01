@@ -238,7 +238,7 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 	// **巡回ごとの再照合（VerifyStatusOptions）では出さない。**10分に1回同じ行が流れると
 	// 他の行が埋もれる。
 	if unknown := a.unknownStatusOptions(cfg); len(unknown) > 0 {
-		a.logger.Info("ボードには continuo が知らない Status があります"+
+		a.logger.Info("カンバンには continuo が知らない Status があります"+
 			"（continuo は WORKFLOW.md に書かれた Status だけを扱います。"+
 			"知らない Status へ動かされた issue は worker を止めます）",
 			"件数", len(unknown),
@@ -248,11 +248,11 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 	// **対応表のキーがボードに無くても起動は止めない**（設計 3-57）。
 	// **だが綴りの打ち間違いと見分けが付かない**ので、起動時に1回だけ名前で知らせる。
 	if missing := a.missingRewriteKeys(cfg); len(missing) > 0 {
-		a.logger.Warn("tracker.automated_state_rewrite のキーがボードの Status の選択肢にありません"+
+		a.logger.Warn("tracker.automated_state_rewrite のキーがカンバンの Status の選択肢にありません"+
 			"（その行は一度も効きません。綴りの打ち間違いなら直してください。"+
-			"その Status をボードで使わなくなったのなら、対応表からその行を消してください）",
+			"その Status をカンバンで使わなくなったのなら、対応表からその行を消してください）",
 			"件数", len(missing),
-			"ボードに無いキー", strings.Join(missing, ", "),
+			"カンバンに無いキー", strings.Join(missing, ", "),
 		)
 	}
 	return nil
@@ -392,7 +392,7 @@ func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerCo
 		return &Error{
 			Category: CategoryInvalidConfig,
 			Message: fmt.Sprintf(
-				"Status の選択肢名が設定と一致しません（ボード側に無いか改名されています。"+
+				"Status の選択肢名が設定と一致しません（カンバン側に無いか改名されています。"+
 					"GraphQL はエラーを出さずに0件を返し続けるため、ここで起動を止めます）: %s",
 				strings.Join(missing, ", "),
 			),
@@ -448,7 +448,7 @@ func (a *Adapter) checkStatusFieldIsFilterKey(project *rawProjectForBootstrap) e
 		Category: CategoryInvalidConfig,
 		Message: fmt.Sprintf(
 			"tracker.provider.status_field %q を候補の絞り込みのキーとして使えません"+
-				"（フィールド自体はボードにありますが、items(query:) が名前を解決できていません。"+
+				"（フィールド自体はカンバンにありますが、items(query:) が名前を解決できていません。"+
 				"GitHub はこの場合エラーを出さずに0件を返すため、ここで起動を止めます。"+
 				"フィールド名の綴り・空白の数を画面の表示と揃えてください）"+
 				": 全件=%d, 値あり=%d, 値なし=%d",
@@ -559,8 +559,8 @@ func (a *Adapter) verifyKnownStates(states []string) error {
 	return &Error{
 		Category: CategoryInvalidConfig,
 		Message: fmt.Sprintf(
-			"ボードに無い Status 名が指定されました（GraphQL はエラーを出さずに0件を返すため、"+
-				"0件ではなくエラーとして返します。ボード側で改名された可能性があります）: %s",
+			"カンバンに無い Status 名が指定されました（GraphQL はエラーを出さずに0件を返すため、"+
+				"0件ではなくエラーとして返します。カンバン側で改名された可能性があります）: %s",
 			strings.Join(unknown, ", "),
 		),
 	}
@@ -610,7 +610,7 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 			return nil, &Error{
 				Category: CategoryPagination,
 				Message: fmt.Sprintf(
-					"ボードのページ数が上限 %d を超えました（1ページ100件。ボードが想定外に育っています）",
+					"カンバンのページ数が上限 %d を超えました（1ページ100件。カンバンが想定外に育っています）",
 					maxItemPages,
 				),
 			}

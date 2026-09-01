@@ -71,6 +71,7 @@ below says which steps were actually executed while writing this document and wh
 | **ボードは作らない** | continuo は**既にあるボードに後から足して使う。**足りない選択肢があるときだけ画面で足す（段2） |
 | **段8 から枠を消費する** | 実際に Claude Code が起動し、issue を実装しようとする |
 | **draft item は動かない** | ボードの draft item は**リポジトリを持たないので作業場所を決められない。**continuo は着手せず飛ばす。**リポジトリの issue を載せること** |
+| **agent teams には対応していない** | Claude Code の実験的な機能で、**既定では無効。**有効にしていると issue が失敗することがある。[docs/FAQ.md](FAQ.md) の「「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）」を参照 |
 | **止めるのは `Ctrl+C`** | 巡回を止め、hook の受け口を閉じ、turn ループを畳んで抜ける。**Claude Code はそのまま動き続ける。pane は閉じない**（次の起動で引き継ぐ） |
 
 ---
@@ -117,7 +118,7 @@ Usage of continuo init:
   -owner string
     	tracker.provider.owner に書く GitHub の user / organization 名（省略すると gh から引く）
   -project int
-    	tracker.provider.project_number に書くボードの番号（省略すると gh から引く）
+    	tracker.provider.project_number に書くカンバンの番号（省略すると gh から引く）
 ```
 
 `setup --help` の出力。**`--force` は無い**（段4 で説明する）。
@@ -125,9 +126,9 @@ Usage of continuo init:
 ```text
 Usage of continuo setup:
   -owner string
-    	Status の選択肢を読むボードの GitHub の user / organization 名（省略すると gh から引く）
+    	Status の選択肢を読むカンバンの GitHub の user / organization 名（省略すると gh から引く）
   -project int
-    	Status の選択肢を読むボードの番号（省略すると gh から引く）
+    	Status の選択肢を読むカンバンの番号（省略すると gh から引く）
   -status-field string
     	Status を読み書きする single-select フィールドの名前（既定 Status） (default "Status")
 ```
@@ -256,7 +257,7 @@ Size: XS, S, M, L, XL
 `continuo doctor` を叩いた出力（段6 に全体を載せてある）。
 
 ```text
-✗ ボード          ボードを読めません: tracker エラー [tracker_response]: GraphQL がエラーを返しました: [NOT_FOUND] Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status
+✗ カンバン        カンバンを読めません: tracker エラー [tracker_response]: GraphQL がエラーを返しました: [NOT_FOUND] Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status
                   → WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください
 ```
 
@@ -288,8 +289,8 @@ cd ~/continuo-try
 ```text
 WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 ✓ tracker.provider.owner: <ACCOUNT>（`gh api user` が返した GitHub のログイン名です）
-✓ tracker.provider.project_number: <PROJECT>（`gh project list` の候補が1件だけでした: #<PROJECT> <ボードの名前>）
-✓ trust.repositories: <ACCOUNT>/<REPO-1>, <ACCOUNT>/<REPO-2>, <ACCOUNT>/<REPO-3>, <ACCOUNT>/<REPO-4>, <ACCOUNT>/<REPO-5>（ボード #<PROJECT> に載っている 5 個のリポジトリを並べました）
+✓ tracker.provider.project_number: <PROJECT>（`gh project list` の候補が1件だけでした: #<PROJECT> <カンバンの名前>）
+✓ trust.repositories: <ACCOUNT>/<REPO-1>, <ACCOUNT>/<REPO-2>, <ACCOUNT>/<REPO-3>, <ACCOUNT>/<REPO-4>, <ACCOUNT>/<REPO-5>（カンバン #<PROJECT> に載っている 5 個のリポジトリを並べました）
   → **要らない行は WORKFLOW.md から消してください。**残ったものだけが `continuo trust` の対象になります
   → 何を許すことになるかは `continuo trust --dry-run` で確かめられます
 ```
@@ -321,7 +322,7 @@ cd ~/continuo-try
 WORKFLOW.md を上書きしました: ~/continuo-try/WORKFLOW.md
 ✓ tracker.provider.owner: <ACCOUNT>（--owner で指定された値です）
 ✓ tracker.provider.project_number: <PROJECT>（--project で指定された値です）
-✓ trust.repositories: …（ボード #<PROJECT> に載っている 5 個のリポジトリを並べました）
+✓ trust.repositories: …（カンバン #<PROJECT> に載っている 5 個のリポジトリを並べました）
 ```
 
 **`gh` が無い・認証が無いときも `WORKFLOW.md` は作られ、終了コードは 0 である。**
@@ -335,11 +336,11 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
   → gh を入れて `gh auth login -s project` でログインしてください
   → または `continuo init --owner <名前>` でもう一度実行してください
   → https://github.com/octocat なら octocat の位置が owner です
-! tracker.provider.project_number: 埋められませんでした（owner が決まらないので、ボードの候補を引けませんでした）
+! tracker.provider.project_number: 埋められませんでした（owner が決まらないので、カンバンの候補を引けませんでした）
   → 先に owner を決めてから、もう一度 `continuo init` を実行してください
-  → または `continuo init --project <番号>` でボードの番号を直接指定してください
-! trust.repositories: 埋められませんでした（owner とボードの番号が決まらないので、ボードに載っているリポジトリを引けませんでした）
-  → owner とボードの番号を決めてから、もう一度 `continuo init` を実行してください
+  → または `continuo init --project <番号>` でカンバンの番号を直接指定してください
+! trust.repositories: 埋められませんでした（owner とカンバンの番号が決まらないので、カンバンに載っているリポジトリを引けませんでした）
+  → owner とカンバンの番号を決めてから、もう一度 `continuo init` を実行してください
   → `continuo trust` の対象は WORKFLOW.md の trust.repositories に手で書いても構いません
 埋まらなかった値は WORKFLOW.md の中でプレースホルダのままです。上の案内どおりに書いてください
 ```
@@ -392,7 +393,7 @@ cd ~/continuo-try
 **実際の出力**（このボードの選択肢は段2 で確かめた6つ）。
 
 ```text
-ボードの Status フィールドには次の選択肢があります。
+カンバンの Status フィールドには次の選択肢があります。
   1  Ice Box
   2  Ready
   3  In Progress
@@ -401,7 +402,7 @@ cd ~/continuo-try
   6  Done
 
 これから 5 個の役割について、それぞれどの選択肢を使うかを尋ねます。番号で答えてください。
-その役割に使える選択肢がボードに無い場合は 0 を入力してください。
+その役割に使える選択肢がカンバンに無い場合は 0 を入力してください。
 Ctrl+C で中断できます。中断したときは WORKFLOW.md を書き換えません。
 
 [1/5] dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?
@@ -515,7 +516,7 @@ tracker:
 **段8 の起動時検査が起動を止める**（終了コード 1。実測した出力）。
 
 ```text
-level=ERROR msg="continuo を起動できません" error="起動できませんでした: 起動時の検査に落ちました（生きている pane は閉じずに残します）: ボードの Status の選択肢名が設定と一致しません（対象0件が無言で続くのを防ぎます）: … : Readyyy"
+level=ERROR msg="continuo を起動できません" error="起動できませんでした: 起動時の検査に落ちました（生きている pane は閉じずに残します）: カンバンの Status の選択肢名が設定と一致しません（対象0件が無言で続くのを防ぎます）: … : Readyyy"
 ```
 
 **無言で回り続けることはない。**ただし段6 の `doctor` なら起動する前に気づける。
@@ -832,7 +833,7 @@ cd ~/continuo-try
 ✓ worktree の場所 ~/worktrees に書けます（workspace.root）
 ✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
-✓ ボード          <ACCOUNT> の project #<PROJECT> を読めました（Status の選択肢は設定と一致。active_states の issue 0件／対象リポジトリ 0件）
+✓ カンバン        <ACCOUNT> の project #<PROJECT> を読めました（Status の選択肢は設定と一致。active_states の issue 0件／対象リポジトリ 0件）
 ! clone           active_states の issue が0件なので、検査する対象がありません
 ! 信頼登録        active_states の issue が0件なので、検査する対象がありません
 ✓ 資格情報        Keychain の項目 "Claude Code-credentials" から accessToken を読めます（rate_limit.token_source: keychain）
@@ -866,7 +867,7 @@ Claude Code は SessionStart hook を走らせる前にそこへ書き、continu
 | 症状 | 直し方 |
 | --- | --- |
 | `Could not resolve to a Unions::ProjectV2FieldConfiguration with the name …` | `status_field` に書いた名前のフィールドがボードに無い。段2 で確かめた綴りに合わせる |
-| `ボードの Status の選択肢名が設定と一致しません` | 段4 の書き換えが足りない。**この状態では段8 の起動時検査が止めるので、無言で進むことはない** |
+| `カンバンの Status の選択肢名が設定と一致しません` | 段4 の書き換えが足りない。**この状態では段8 の起動時検査が止めるので、無言で進むことはない** |
 | `gh の scope に "project" がありません` | `gh auth refresh -h github.com -s project` を実行する |
 | `front matter が不正です: unknown field "…"` | **設定のキーが増減したときに出る。**`continuo` を更新したら雛形も変わっている。出たキーの行を `WORKFLOW.md` から消す（**`continuo init --force` は使わない。**段4 の割り当てが消える） |
 | `✗ clone  ghq が PATH にありません` | `ghq` か `git` が入っていない。**この2つは巡回が worktree を作るときに起動する**ので、無いと段8 で必ず落ちる。入れて PATH を通す |
@@ -923,10 +924,10 @@ hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
 ✓ worktree の場所 ~/worktrees に書けます（workspace.root）
 ✓ herdr           protocol 20（設定と一致）／herdr 0.8.2／socket ~/.config/herdr/herdr.sock
 ✓ gh の認証       scope に project が含まれる（github.com の有効なアカウント）
-✗ ボード          ボードを読めません: tracker エラー [tracker_response]: GraphQL がエラーを返しました: [NOT_FOUND] Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status
+✗ カンバン        カンバンを読めません: tracker エラー [tracker_response]: GraphQL がエラーを返しました: [NOT_FOUND] Could not resolve to a Unions::ProjectV2FieldConfiguration with the name continuo Status
                   → WORKFLOW.md の tracker.provider（owner / project_number / status_field）を確認してください
-! clone           ボードを読めなかったため、対象のリポジトリを特定できませんでした
-! 信頼登録        ボードを読めなかったため、対象のリポジトリを特定できませんでした
+! clone           カンバンを読めなかったため、対象のリポジトリを特定できませんでした
+! 信頼登録        カンバンを読めなかったため、対象のリポジトリを特定できませんでした
 ✓ 資格情報        Keychain の項目 "Claude Code-credentials" から accessToken を読めます（rate_limit.token_source: keychain）
 
 3件に問題があります（✗ 1件 / ! 2件）
@@ -950,9 +951,9 @@ hook の socket の場所だけ `$TMPDIR` に置き換えてある）。
 ! herdr           設定ファイルを読めなかったため、照合する herdr.protocol が決まりません
 ! gh の認証       設定ファイルを読めなかったため、gh の認証を検査しませんでした
                   → WORKFLOW.md を直してから `continuo doctor` をもう一度実行してください
-! ボード          設定ファイルを読めなかったため、どの project を見るか決まりません
-! clone           ボードを読めなかったため、対象のリポジトリを特定できませんでした
-! 信頼登録        ボードを読めなかったため、対象のリポジトリを特定できませんでした
+! カンバン        設定ファイルを読めなかったため、どの project を見るか決まりません
+! clone           カンバンを読めなかったため、対象のリポジトリを特定できませんでした
+! 信頼登録        カンバンを読めなかったため、対象のリポジトリを特定できませんでした
 ! 資格情報        rate_limit の設定が読めないので、何を見るべきか決まりません
                   → 設定を直してからもう一度実行してください
 
@@ -1167,7 +1168,7 @@ cd ~/continuo-try
 | **continuo が動いていれば、先に手を離させる** | **まだ作業中の Status なら**、`tracker.failure_state`（既定 `Blocked`）へ一時的に動かし、**その worktree の pane が閉じるのを待つ。**`--park <Status 名>` で動かす先を変えられる |
 | **pane が閉じなければ、何も消さずに止まる** | 上限は `herdr.read_timeout_ms` の10倍（既定50秒）。**終了コードは 1** |
 | **失うものがあれば、何も消さずに止まる** | コミットされていない変更・push されていない commit のこと。**それでも消すなら `--force`。**終了コードは 1 |
-| **片付けたあとの Status は動かさない** | 「Status は動かしていません。ボードで決めてください。」と出る。**動かす先が決まっているなら `--to "<Status 名>"`** |
+| **片付けたあとの Status は動かさない** | 「Status は動かしていません。カンバンで決めてください。」と出る。**動かす先が決まっているなら `--to "<Status 名>"`** |
 | **その issue の worktree が無ければ、何もせずに終わる** | 「この issue の worktree はありません」と出る。**終了コードは 0** |
 
 > **ボードの操作だけでは取り消せない。**`Ready` へ戻しても continuo は止まらない（`Ready` は

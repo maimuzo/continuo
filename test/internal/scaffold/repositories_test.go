@@ -133,7 +133,7 @@ func TestTemplateWithValues_repositoriesを埋めても消せという案内が�
 		}
 	}
 	// 埋めたあとに、プレースホルダのときの説明が残っていてはならない。
-	if strings.Contains(filled, "continuo init がボードから拾って並べるので") {
+	if strings.Contains(filled, "continuo init がカンバンから拾って並べるので") {
 		t.Error("埋めたあとなのに、これから埋める前提の説明が残っている")
 	}
 }

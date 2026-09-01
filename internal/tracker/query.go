@@ -916,7 +916,7 @@ func mapRawItemToIssue(
 		return mapItemResult{
 			Ok:     false,
 			Gone:   true,
-			Reason: "item が archive 済みです（ボード上ではもう見えません）",
+			Reason: "item が archive 済みです（カンバン上ではもう見えません）",
 		}
 	}
 	if raw.Content == nil {

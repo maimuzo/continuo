@@ -296,6 +296,10 @@ flowchart TD
 
 **だから esc の前に待つ。**
 
+**agent teams が有効だと、これがサブエージェントではなく teammate で起きる。**
+**continuo は agent teams に対応していない。**確かめ方と直し方は
+[docs/FAQ.md](FAQ.md) の「「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）」にある。
+
 ```mermaid
 flowchart TD
     A["herdr が blocked を返す<br/>（確認の画面で止まった）"] --> B{"走っている<br/>サブエージェントが<br/>あるか"}

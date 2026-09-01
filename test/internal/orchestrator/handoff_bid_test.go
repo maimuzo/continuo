@@ -230,6 +230,50 @@ func TestHandoff_holdの無い担当は奪わない(t *testing.T) {
 	}
 }
 
+// 目的: 人間が付けた担当で飛ばすとき、**WARN の水準で、直し方を添えて**知らせることを確かめる
+// （issue #131）。
+//
+// **これがこの変更の成果物そのものである。**expectedWarnings への登録は「出てよい」を許すだけで
+// 「出ること」を求めないので、Warn を Info へ戻しても、案内の1文を消しても、それだけでは
+// どのテストも落ちない。**水準と文面の両方を、ここで固定する。**
+//
+// **文面を固定する理由。**[docs/FAQ.md](../../../docs/FAQ.md) が
+// `grep '担当者が付いているので着手しません' <ログの出力先>` を唯一の手がかりとして公開している。
+// 文面が変わると、その案内が空振りする。
+//
+// 与える情報: ほかの人が担当していて、hold のコメントが1件も無い issue。
+// 成功条件: level=WARN の行に、飛ばした理由と直し方と担当者が載っていること。
+func TestHandoff_人間が付けた担当はWARNで直し方つきで知らせる(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	holdPrompt(fx)
+	fx.Tracker.AddIssue(assignedIssue(188, "In Progress", rivalLogin))
+	fx.AllowLog("担当者が付いているので着手しません")
+
+	fx.Orc.Tick(context.Background())
+
+	var line string
+	for _, l := range strings.Split(fx.Logs.String(), "\n") {
+		if strings.Contains(l, "担当者が付いているので着手しません") {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatal("人間が付けた担当で飛ばしたのに、その旨のログが1行も出ていない")
+	}
+	if !strings.Contains(line, "level=WARN") {
+		t.Errorf("WARN で出ていない（INFO だと、ログを見ていても異常だと気づけない）: %s", line)
+	}
+	// **直し方が同じ行にあること。**別の行にあると、grep で拾った人に届かない。
+	if !strings.Contains(line, "その担当者を外してください") {
+		t.Errorf("直し方が同じ行に無い: %s", line)
+	}
+	// **誰が担当者かが分かること。**
+	if !strings.Contains(line, rivalLogin) {
+		t.Errorf("担当者が載っていない: %s", line)
+	}
+}
+
 // {"RUCM-PATH": "P017"}
 //
 // TestHandoff_担当者が2人以上なら触らない は、設計 3-77b の表の1行を確かめる。

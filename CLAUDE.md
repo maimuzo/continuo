@@ -138,6 +138,15 @@ os.Rename(tmp.Name(), path)
 - **修正の履歴を書かない。**置くのは最新の仕様・選定根拠・比較した案の否定根拠だけ
 - **1つの節は50行以内。**長くなったら要約版を別ファイルに作る（元は残す）
 
+## issue の扱い
+
+[.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の4点。
+
+- **issue を作ることと、着手することは別。**作ったらグループ化して着手順序を出し、**人間の指示を待つ。**指示が出たら、その issue が `Ready` へ上がったことを確かめてから着手する（`Ice Box` のままだと continuo は拾わない）
+- **ボードの Status を動かすのは人間である。**ボードへ載せて `Ice Box` を付けるのも、`Ready` へ上げるのも、**グループの代表以外を `Ice Box` へ落とす**のも、人間が GitHub の画面から行う。**AI は対象を名指しして人間へ渡すだけ**（落とさないと continuo が代表とは別に dispatch する）
+- **閉じられるものを先に外す。**issue の題名だけで「未修正」と判断せず、現行コードと突き合わせる
+- **同時に進める issue は2か3まで。**これは continuo の設定 `agent.max_concurrent_agents` とは別物である
+
 ## リリースの手順
 
 [.claude/rules/release.md](.claude/rules/release.md) に従うこと。とくに次の3点。
@@ -171,7 +180,7 @@ os.Rename(tmp.Name(), path)
 1. **まず draft で作る**（`gh pr create --draft`）
 2. **`/code-review` を通す**
 3. **レビュー結果を、その PR のコメントに貼る。**
-   **コメントの先頭に `<!-- code-review-result -->` を置く**（リリース前の検査がこの目印を数える）
+   **コメントの先頭に `<!-- code-review-result -->` を置く**（CI とリリース前の検査がこの目印を数える）
 4. **指摘に対応する**（下の「コードレビュー記録フロー」に従う）
 5. **`gh pr ready` で draft を外す**
 
@@ -180,12 +189,32 @@ os.Rename(tmp.Name(), path)
 
 **既に draft を外してしまったものは、`gh pr ready --undo` で戻してからレビューする。**
 
-**この規則は機械で止める。**[.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) が
-`gh pr merge <番号>` と `gh pr ready <番号>` を実行の前に見て、**目印が無ければ拒否する。**
+**この規則は機械で止める。3箇所で止まる。**
+
+| どこ | いつ止まるか |
+| --- | --- |
+| [.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) | `gh pr merge <番号>` と `gh pr ready <番号>` を**実行する前** |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`review-result` の検査が赤になる |
+| [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
+
+**3つとも数える条件は同じである。**
+
+- **目印がコメントの本文の先頭にあること**（前に空白文字があってもよい）。**途中に書いたものは数えない**
+- **投稿者が `OWNER` / `MEMBER` / `COLLABORATOR` のいずれかであること**
+
+**CI は hook より確かである。**hook はコマンドの文字列から PR 番号を当てているが、
+**CI は `github.event.pull_request.number` で受け取る。**書き方を変えても外れない。
+
+**結果を貼ったら `gh pr ready <番号>` を打つ。**`ready_for_review` が飛んで CI の検査が回り直し、緑になる。
+
+**既に draft を外してある PR では、これは効かない。**`ready_for_review` は
+**draft を ready にしたときにしか起きない**ので、`gh pr ready <番号>` を打っても何も回らない。
+**その場合は `gh run rerun` で回し直す**（手順は [.claude/skills/pr-review-and-merge/SKILL.md](.claude/skills/pr-review-and-merge/SKILL.md) の段5）。
 
 **規則に書くだけでは守られなかった**（2026-08-29。12本をレビューせずにマージし、あとから回し直すことになった）。
 **人間が明示的に許すときだけ、環境変数 `CONTINUO_ALLOW_UNREVIEWED_MERGE=1` を置いて通す。**
 **AI が自分でその環境変数を置いてはならない。**
+**この逃がし口は hook にしか効かない。**CI は環境変数を見ないので、**貼るまで赤のままである。**
 
 **エージェントが作る PR にも同じ規則を当てる。**continuo が作った PR も、
 レビューを通すまで draft のままにする。

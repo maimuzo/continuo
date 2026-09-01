@@ -1,0 +1,115 @@
+# レビュー結果が貼られていない PR を落とす。
+#
+# **[CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」を機械で止める、2枚目の仕掛けである。**
+# 1枚目は [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) で、
+# AI の手元で `gh pr merge` / `gh pr ready` を実行の前に止める。
+#
+# **hook だけでは足りない。**hook に渡ってくるのはコマンドの文字列1本だけで、
+# **そこから PR 番号を当てている。**シェルは同じことを何通りにも書けるので、当て続けることになる。
+# **CI の中なら番号は確実に分かる**（`github.event.pull_request.number`）。
+#
+# **`ci.yml` に足してはならない。**理由は2つある。
+#   一、`types` は workflow 単位でしか書けない。`ready_for_review` を足すと
+#       **test と build の一式が回り直す。**
+#   二、`ci.yml` は `concurrency` で PR の run を打ち切る。**CI が走っている最中に
+#       `gh pr ready` を打つと、走行中の run が打ち切られる。**打ち切られた run は
+#       合格の3種（success / skipped / neutral）に入らないので、一時的にマージが塞がる。
+
+name: review-gate
+
+on:
+  pull_request:
+    # **`ready_for_review` を入れる。**`gh pr ready` がこのイベントを起こすので、
+    # 「結果を貼る → ready にする → 検査が回り直して緑」が人手なしでつながる。
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# **読むだけでよい。**
+# **叩く先は `/issues/{番号}/comments` だが、相手は PR である。**
+# どちらの読み取りで通るかを取り違えると 403 で落ちるので、**読み取りの2つだけを与える。**
+# **`contents` は与えない。**この job は checkout しない（下の理由を読むこと）。
+permissions:
+  issues: read
+  pull-requests: read
+
+# **`concurrency` を置かない。**
+# 打ち切られた run は success / skipped / neutral のどれでもないので、
+# **必須の検査にしたときマージを塞ぐ。**この job は数秒で終わるので、重ねて走っても困らない。
+
+jobs:
+  # **この job の名前を変えないこと。**branch protection の必須の検査は
+  # `review-result` という名前で登録する（手順は CONTRIBUTING.md「この検査をマージの条件にする」）。
+  # **名前を変えると、その設定が宙に浮き、検査が無いのにマージできる状態になる。**
+  review-result:
+    runs-on: ubuntu-latest
+    steps:
+      - name: レビュー結果が貼ってあるか
+        # **checkout しない。**この job はリポジトリの中身を1つも読まない。
+        # **fork から来た PR のコードを、ここでは1行も実行しない。**
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # **番号は当てずに、イベントから受け取る。**
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # **draft でも落としたままにする。**job ごと飛ばすと「成功」として報告され、
+          # 必須の検査であってもマージを止められなくなる。ここでは文面を変えるためだけに使う。
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          set -eu
+
+          # **数える条件は2つ。**
+          #   一、本文の**先頭**に目印がある（前に空白文字があってもよい）。
+          #       本文の途中に目印を書いたコメントは数えない。「レビューの話をしただけ」で通ってしまう。
+          #   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
+          #       **誰でもコメントできるので、外部の人が目印を貼れば通る状態にしない。**
+          #
+          # **`--slurp` は `--jq` と併用できない**（gh 2.97 で確認）。
+          # そこで `--paginate` で1ページずつ絞り、当たった行をファイルへ落として数える。
+          #
+          # **数えるのを `gh` と同じパイプラインに置かないこと。**
+          # `gh` が落ちても `wc` の終了状態が返るので、**取れなかったのか無かったのかを区別できなくなる。**
+          gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" --jq '
+            .[]
+            | select((.body // "") | test("^\\s*<!-- code-review-result -->"))
+            | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
+            | .id' > matched.txt
+          count="$(wc -l < matched.txt | tr -d ' ')"
+
+          if [ "${count}" -gt 0 ]; then
+            echo "レビュー結果=有り（${count}件）"
+            echo "レビュー結果=有り（${count}件）" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          # **落ちたときは、どうすれば通るかを全部書く。**
+          # 「無い」とだけ言われても、貼り方も数え方も分からない。
+          {
+            echo "## レビュー結果が貼られていません"
+            echo ""
+            echo "この PR のコメントに \`<!-- code-review-result -->\` で始まるものが1件もありません。"
+            echo ""
+            echo "**通し方。**"
+            echo ""
+            echo "1. \`/code-review\` を回す"
+            echo "2. その結果を、この PR のコメントとして貼る"
+            echo "3. **目印はコメントの先頭に置く**（1行目が \`<!-- code-review-result -->\`）"
+            echo "4. この検査を回し直す（**やり方は下の draft かどうかで違う**）"
+            echo ""
+            echo "**数える条件。**"
+            echo ""
+            echo "- 目印が**本文の先頭**にあること。途中に書いたものは数えません"
+            echo "- 投稿者が **OWNER / MEMBER / COLLABORATOR** であること。それ以外の人のコメントは数えません"
+            echo ""
+            if [ "${IS_DRAFT}" = "true" ]; then
+              echo "**この PR は draft です。**draft のうちは赤のままでかまいません。"
+              echo "レビュー結果を貼ってから \`gh pr ready ${PR_NUMBER}\` を打ってください。"
+              echo "\`ready_for_review\` が飛んで、この検査が回り直します（CLAUDE.md「PR を出すときの絶対条件」）。"
+            else
+              echo "**この PR は draft ではありません。**"
+              echo "\`gh pr ready --undo ${PR_NUMBER}\` で draft へ戻してから、レビューを回してください。"
+              echo "**\`gh pr ready\` を打っても、この検査は回り直しません。**"
+              echo "\`ready_for_review\` は draft を ready にしたときにしか起きないからです。"
+              echo "draft へ戻さずに回し直したいときだけ、\`gh run rerun\` を使ってください。"
+            fi
+          } | tee -a "${GITHUB_STEP_SUMMARY}"
+
+          exit 1

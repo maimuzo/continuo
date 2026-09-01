@@ -61,7 +61,7 @@ func (a *Adapter) FetchIssueByIdentifier(ctx context.Context, identifier string)
 			return Issue{}, false, &Error{
 				Category: CategoryPagination,
 				Message: fmt.Sprintf(
-					"ボードのページ数が上限 %d を超えました（1ページ100件。ボードが想定外に育っています。"+
+					"カンバンのページ数が上限 %d を超えました（1ページ100件。カンバンが想定外に育っています。"+
 						"1件の表明ごとにこれだけ読むのは GitHub の API 枠に見合いません）",
 					maxItemPages,
 				),
@@ -125,6 +125,6 @@ func (a *Adapter) FetchIssueByIdentifier(ctx context.Context, identifier string)
 		after = conn.PageInfo.EndCursor
 	}
 
-	a.logger.Info("識別子で引いた issue はボードに載っていません", "identifier", target)
+	a.logger.Info("識別子で引いた issue はカンバンに載っていません", "identifier", target)
 	return Issue{}, false, nil
 }
