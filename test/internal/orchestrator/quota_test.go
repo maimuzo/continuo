@@ -508,7 +508,7 @@ func TestQuota_マージンのほうが先に効いて新規着手が止まる(t
 func assertNewWorkBlockedLine(t *testing.T, fx *stubFixture, reason string) {
 	t.Helper()
 	got := fx.Logs.String()
-	if !strings.Contains(got, "level=INFO") || !strings.Contains(got, "新しい issue には着手しません") {
+	if !strings.Contains(got, "level=INFO") || !strings.Contains(got, "入札の要る issue には着手しません") {
 		t.Fatalf("新規着手を止めたことを INFO で出していない:\n%s", got)
 	}
 	if !strings.Contains(got, reason) {
@@ -542,4 +542,86 @@ func TestQuota_source_noneなら枠を読めなくても新規に着手する(t 
 		}
 	}
 	t.Fatalf("rate_limit.source が none なのに新規へ着手していない: %+v", fx.Orc.RunViews())
+}
+
+// TestQuota_枠を読めなくても既に自分が担当の issue には着手する は、
+// 巡回そのものを止めるのが閾値を超えたときだけであることを確かめる（設計 3-77j）。
+//
+// 目的: **枠を読めないだけで巡回を打ち切ってはならない。**
+// 打ち切ると、**この機械が既に担当者になっている issue まで着手されなくなる**
+// （印が無いので、この経路からしか拾えない）。**期限切れの担当を外す経路も通らない**ので、
+// 詰まったカンバンを誰も解けない。
+//
+// **入札が要る issue は、これまでどおり落ちる**（担当者がいないので）。
+//
+// 与える情報: usage API が 500 を返す（枠を読めない）。
+// **この機械（`gh` の持ち主）が担当者になっている `Ready` の issue が1件。**
+// 成功条件: その issue が dispatch されること。
+func TestQuota_枠を読めなくても既に自分が担当のissueには着手する(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_MINE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(assignedIssue(191, "Ready", testGHLogin))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#191" {
+			return
+		}
+	}
+	t.Fatalf("既に自分が担当の issue にまで着手していない（枠を読めないだけで巡回を打ち切っている）:\n%s", fx.Logs.String())
+}
+
+// TestQuota_枠を読めなくても担当が既にこの機械にあるissueには着手する は、
+// 止める範囲を確かめる（設計 3-77j）。
+//
+// 目的: **枠を読めないだけで巡回を打ち切ってはならない。**打ち切ると、
+// **この機械が既に担当者になっている issue まで着手されなくなる**（印が無いので
+// この経路からしか拾えない）。**期限切れの担当を外す経路も通らなくなる。**
+// **止めるのは入札の要る issue だけである。**
+//
+// 与える情報: usage API が 500 を返す（枠を読めない）。
+// **この機械の担当者が既に書かれている** `Ready` の issue が1件。
+// 成功条件: その issue が dispatch されること。
+func TestQuota_枠を読めなくても担当が既にこの機械にあるissueには着手する(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_ASSIGNED")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	// **担当者はこの機械（testGHLogin）である。**入札は要らないので、
+	// 枠を読めなくても着手できなければならない。
+	issue := sampleIssue(191, "Ready")
+	fx.Tracker.AddIssue(issue)
+	fx.Tracker.SetAssignees(issue.ID, testGHLogin)
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#191" {
+			return
+		}
+	}
+	t.Fatalf("担当が既にこの機械にあるのに着手していない:\n%s", fx.Logs.String())
 }

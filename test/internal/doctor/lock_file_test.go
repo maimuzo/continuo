@@ -410,3 +410,75 @@ func TestDoctorWorkspaceRoot_権限が0755でも通る(t *testing.T) {
 
 	assertSymbol(t, report, doctor.LabelWorkspaceRoot, doctor.SymbolOK)
 }
+
+// 目的: 置き場所がまだ無いとき、上のディレクトリが書けなければ落とすことを確かめる
+// （設計 3-17h）。
+//
+// **「まだ無い」を無条件に `✓` にしてはならない。**
+// **macOS の新しい環境では `$TMPDIR/continuo` は初回の起動まで存在しない**ので、
+// 「まだ無い」は例外ではなく普通の経路である。
+//
+// **unix socket を本当に bind できるかは、`internal/fsprobe` の
+// `TestProbeSocketInside_*` が確かめている**（ディレクトリを作れることと、
+// そこに socket を置けることは同じではない）。**doctor はその道具を呼ぶだけである。**
+//
+// 与える情報: 置き場所がまだ無く、**その上のディレクトリが書けない**状態。
+// 成功条件: 見出し語 `hook の置き場所` が `✗` になること。
+func TestDoctorRuntimeDir_置き場所が無くても上に書けなければ落とす(t *testing.T) {
+	fx := newFixture(t)
+
+	// **置き場所の上のディレクトリを書けなくする。**まだ無い置き場所は
+	// ここへ作られるので、使い捨ての socket も置けない。
+	parent := filepath.Dir(fx.RunDir)
+	info, err := os.Stat(parent)
+	if err != nil {
+		t.Fatalf("上のディレクトリを調べられません: %v", err)
+	}
+	if _, err := os.Lstat(fx.RunDir); !os.IsNotExist(err) {
+		t.Fatalf("前提が崩れている（置き場所が既にある。err=%v）", err)
+	}
+	if err := os.Chmod(parent, 0o500); err != nil {
+		t.Fatalf("上のディレクトリの権限を落とせません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, info.Mode().Perm()) })
+
+	report := fx.Run(t)
+
+	assertSymbol(t, report, doctor.LabelRuntimeDir, doctor.SymbolMissing)
+}
+
+// 目的: 置き場所がまだ無いときに `✓` を出しても、跡を1つも残さないことを確かめる
+// （設計 3-17h）。
+//
+// **使い捨ての socket を消し忘れると、次に起動する continuo が
+// 「既に動いている」と誤解しうる。**
+//
+// 与える情報: 置き場所がまだ無いホームディレクトリ。
+// 成功条件: `✓` になり、**本番の socket も、使い捨ての跡も残らないこと。**
+func TestDoctorRuntimeDir_置き場所が無いときも跡を残さない(t *testing.T) {
+	fx := newFixture(t)
+
+	parent := filepath.Dir(fx.RunDir)
+	before, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatalf("上のディレクトリを読めません: %v", err)
+	}
+
+	report := fx.Run(t)
+
+	assertSymbol(t, report, doctor.LabelRuntimeDir, doctor.SymbolOK)
+	if _, err := os.Lstat(fx.RunDir); !os.IsNotExist(err) {
+		t.Fatalf("doctor が置き場所を作っている（err=%v）", err)
+	}
+	after, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatalf("上のディレクトリを読めません: %v", err)
+	}
+	if len(after) != len(before) {
+		names := make([]string, 0, len(after))
+		for _, e := range after {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("使い捨ての跡が残っている: %v", names)
+	}
+}

@@ -71,10 +71,16 @@ type brokenRef struct {
 
 // brokenRefPolicy は Manager の設定から作る。
 //
+// **接頭辞は `BranchPrefixForSweep` から取る**（設計 3-17f）。
+// **素の `BranchPrefix` を使ってはならない。**`branch_template` が変数で始まる設定
+// （`{{.issue.repo}}-{{.issue.number}}` など）では接頭辞が空で、壊れた ref を1つも消さない。
+// **そこへ `--id e2e` を付けると接頭辞が `e2e/` になり、掃除が動き出す。**
+// **人間が自分で切った `e2e/spike` の壊れた ref を消すことになる。**
+//
 // 戻り値: 壊れた ref を消してよいかの判断に使う材料。
 func (m *Manager) brokenRefPolicy() brokenRefPolicy {
 	return brokenRefPolicy{
-		prefix: BranchPrefix(m.cfg.Herdr.Worktree.BranchTemplate),
+		prefix: BranchPrefixForSweep(m.cfg.Herdr.Worktree.BranchTemplate, m.instanceID),
 		logger: m.logger,
 	}
 }

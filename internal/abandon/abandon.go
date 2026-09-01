@@ -312,6 +312,14 @@ func (r *runner) run(ctx context.Context) int {
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRunning, r.deps.LockPath))
 	case running:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonRunningDryRun, r.deps.LockPath))
+	case r.opts.DryRun:
+		// **`--dry-run` の「動いていません」は、本番の実行と同じ強さではない**（設計 3-17i）。
+		// **flock を掴まないので、覚え書きを書けなかった continuo と、
+		// 覚え書きを書かない古い版の continuo を見つけられない。**
+		// **黙って「動いていません」と言い切ると、生きている worktree を
+		// 「消せる」と見せることになる。**
+		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonNotRunningDryRun,
+			instance.LockInfoPath(r.deps.LockPath)))
 	default:
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonNotRunning))
 	}

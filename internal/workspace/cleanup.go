@@ -560,7 +560,10 @@ func (m *Manager) deletableBranch(
 		return "", branchKeep, i18n.T(i18n.KeyWorkspaceLeftoverBranchReasonNormalized, branch.String())
 	}
 
-	prefix := BranchPrefix(m.cfg.Herdr.Worktree.BranchTemplate)
+	// **`BranchPrefixForSweep` から取る**（設計 3-17f。brokenRefPolicy と同じ理由）。
+	// **こちらは branch 名が身元ファイル由来なので及ぶ範囲は狭いが、
+	// 同じ事実を2通りに数えない**（3-17k）。
+	prefix := BranchPrefixForSweep(m.cfg.Herdr.Worktree.BranchTemplate, m.instanceID)
 	if prefix == "" {
 		m.logger.Warn("herdr.worktree.branch_template に変数が無いので branch を消しません",
 			"branch_template", m.cfg.Herdr.Worktree.BranchTemplate, "branch", branch.String())

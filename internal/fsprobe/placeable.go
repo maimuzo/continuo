@@ -118,13 +118,17 @@ func probeSocketName(want int) string {
 		want = minProbeSocketNameLen
 	}
 	// **プロセス番号と時刻を混ぜる。**同時に2つの continuo が検査してもぶつからない。
-	seed := strconv.FormatInt(int64(os.Getpid()), 36) + strconv.FormatInt(time.Now().UnixNano(), 36)
-	// 先頭の `.` を除いた分だけ使う。足りなければ 0 で埋める。
-	body := seed
+	//
+	// **どちらも先頭から採る。**本番の名前は `hooks.sock`（9文字ぶん）なので、
+	// **末尾から採ると、時刻だけが残ってプロセス番号が必ず落ちる。**
+	// 半分ずつ使えば、同じナノ秒に始まった2つの検査も別の名前になる。
+	pid := strconv.FormatInt(int64(os.Getpid()), 36)
+	nano := strconv.FormatInt(time.Now().UnixNano(), 36)
+	body := take(pid, (want-1)/2) + nano
 	for len(body) < want-1 {
 		body += "0"
 	}
-	return "." + body[len(body)-(want-1):]
+	return "." + body[:want-1]
 }
 
 // minProbeSocketNameLen は使い捨ての socket の名前の最小の長さである。
@@ -155,4 +159,18 @@ func ProbePlaceable(dir string) error {
 		return err
 	}
 	return ProbeInside(target)
+}
+
+// take は文字列の先頭から n 文字までを返す。
+//
+// **短ければそのまま返す。**プロセス番号は環境によって桁数が違う。
+//
+// s: 元の文字列。
+// n: 取りたい長さ。
+// 戻り値: 先頭 n 文字（元が短ければ元のまま）。
+func take(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

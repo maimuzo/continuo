@@ -1159,3 +1159,49 @@ func TestCleanup_gitが答えられないときは次にすべきことを添え
 		t.Fatalf("壊れた worktree を消してしまった: %v", statErr)
 	}
 }
+
+// 目的: `--id` を足しただけで branch を消す経路が動き出さないことを確認する
+// （設計 3-17f）。
+//
+// **`--id` は `branch_template` の先頭へ `<名前>/` を足す。**
+// 元のテンプレートが変数で始まっていると、接頭辞は空（＝1本も消さない）だったのに、
+// **`--id e2e` を付けた途端に `e2e/` になる。**
+// **孤児 branch の掃除は `BranchPrefixForSweep` でそれを断っている**（sweep.go）。
+// **片付けと壊れた ref の始末も、同じ規則を通ること**（同じ事実を2通りに数えない。3-17k）。
+//
+// 与える情報: 変数で始まる `branch_template` と `--id e2e`。push 済みで消せる worktree。
+// 成功条件: worktree は消えるが、**branch は残り**、残った理由が返ること。
+func TestCleanup_idを足しただけではbranchを消さない(t *testing.T) {
+	cf := newCleanupFixtureWith(t, fixtureOptions{
+		InstanceID: "e2e",
+		Mutate: func(cfg *config.Config) {
+			// **`--id` を足したあとの値である**（`instance.Layout.Apply` が作る形）。
+			// 足す前は `{{.issue.repo}}-{{.issue.number}}` で、接頭辞は空である。
+			cfg.Herdr.Worktree.BranchTemplate = "e2e/{{.issue.repo}}-{{.issue.number}}"
+		},
+	})
+	if err := os.WriteFile(filepath.Join(cf.Prepared.Path, "成果.md"), []byte("できた\n"), 0o600); err != nil {
+		t.Fatalf("成果のファイルを書けない: %v", err)
+	}
+	runGit(t, cf.Prepared.Path, "add", ".")
+	runGit(t, cf.Prepared.Path, "commit", "--quiet", "-m", "成果")
+	runGit(t, cf.Prepared.Path, "push", "--quiet", "-u", "origin", "HEAD:"+cf.Prepared.Branch.String())
+	runGit(t, cf.Prepared.Path, "branch", "--set-upstream-to=origin/"+cf.Prepared.Branch.String())
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed {
+		t.Fatalf("worktree が消えていない: %+v", *result)
+	}
+	if result.BranchDeleted {
+		t.Fatalf("--id を足しただけなのに branch を消している: %+v", *result)
+	}
+	if branches := runGit(t, cf.Repo.Dir, "branch", "--list", cf.Prepared.Branch.String()); strings.TrimSpace(branches) == "" {
+		t.Fatalf("--id を足しただけなのに branch %s を消している", cf.Prepared.Branch.String())
+	}
+	if len(result.Leftovers) == 0 {
+		t.Fatalf("branch を残したことを人間へ伝えていない: %+v", *result)
+	}
+}

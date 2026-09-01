@@ -793,6 +793,11 @@ const (
 	KeyAbandonRunningDryRun Key = "abandon.running_dry_run"
 	// KeyAbandonNotRunning はcontinuo が動いていないときの1行に出る。
 	KeyAbandonNotRunning Key = "abandon.not_running"
+	// KeyAbandonNotRunningDryRun は、`--dry-run` が「動いていない」と答えたときの1行に出る。
+	//
+	// **本番の実行と言い分ける。**`--dry-run` は flock を掴まず覚え書きだけを見るので、
+	// **覚え書きが無い continuo を見つけられない。**
+	KeyAbandonNotRunningDryRun Key = "abandon.not_running_dry_run"
 	// KeyAbandonStaleLockInfo は、ロックの覚え書きが残骸として残っていたときに出る。
 	KeyAbandonStaleLockInfo Key = "abandon.stale_lock_info"
 
@@ -2663,6 +2668,7 @@ var allKeys = []Key{
 	KeyAbandonRunning,
 	KeyAbandonRunningDryRun,
 	KeyAbandonNotRunning,
+	KeyAbandonNotRunningDryRun,
 	KeyAbandonStaleLockInfo,
 	KeyAbandonErrScan,
 	KeyAbandonNotFound,

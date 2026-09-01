@@ -115,8 +115,12 @@ func containsRunningNotice(out string, running bool) bool {
 		return strings.Contains(out, "continuo is running") ||
 			strings.Contains(out, "continuo が動いています")
 	}
+	// **`--dry-run` は言い切らない**（設計 3-17i）。覚え書きを書けなかった continuo と、
+	// 覚え書きを書かない古い版の continuo は見つけられないので、文言が本番と違う。
 	return strings.Contains(out, "continuo is not running") ||
-		strings.Contains(out, "continuo は動いていません")
+		strings.Contains(out, "continuo は動いていません") ||
+		strings.Contains(out, "continuo does not appear to be running") ||
+		strings.Contains(out, "continuo は動いていないように見えます")
 }
 
 // 目的: 覚え書きを読めないときに、`--dry-run` が「動いていない」と答えないことを確かめる

@@ -180,16 +180,29 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// **「異常ではないものを異常として出そうとしている」という信号だった。**
 	// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
 	// **代わりに、戻し方を同じ行に書く。**探し当てた人が次にすることが分かる。
-	if skip := o.newWorkBlocked(); skip != handoff.SkipNone {
-		o.logger.Info("新しい issue には着手しません（走行中の turn は止めません）。"+
+	skip := o.newWorkBlocked()
+	if skip != handoff.SkipNone {
+		o.logger.Info("枠に余裕が無いので、入札の要る issue には着手しません（走行中の turn は止めません）。"+
 			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent と "+
 			"tracker.provider.handoff の2つのマージンを見てください",
 			"理由", skip.String(),
 			"新規着手が止まる使用率", o.newWorkThresholdPercent(),
+			"巡回そのものを止めるか", skip == handoff.SkipPauseThreshold,
 			"rate_limit.pause_above_percent", o.cfg.RateLimit.PauseAbovePercent,
 			"five_hour_margin_percent", o.cfg.Tracker.Provider.Handoff.FiveHourMarginPercent,
 			"weekly_margin_percent", o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
 			"候補", len(candidates))
+	}
+	// **巡回そのものを止めるのは、閾値を超えたときだけである**（設計 3-77j）。
+	//
+	// **どの理由でも止める形にしてはならない。**枠を読めないだけで巡回を打ち切ると、
+	// **この機械が既に担当者になっている issue まで着手されなくなる**（印が無いので
+	// この経路からしか拾えない）。**期限切れの担当を外す経路も通らなくなる**ので、
+	// 詰まったボードを誰も解けない。
+	//
+	// **残りの理由（枠を読めない・余裕値がマイナス）は、`handoffGate` が issue ごとに効かせる。**
+	// **担当者のいない issue は入札が要るので落ちる。**担当が既にこの機械にある issue は通る。
+	if skip == handoff.SkipPauseThreshold {
 		return
 	}
 

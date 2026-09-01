@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "0e4f9b48a08ee0444c9b025f195082252eca200372f3f02dd5266c5b22150b4d",
+  "_source_sha256": "7c7b711ae2616e81f81495518cce37a91c20f9ea4287c684b0f7d6995135d877",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -43,6 +43,7 @@
   "abandon.multiple_item": "  %[1]s (identity file: %[2]s)",
   "abandon.not_found": "there is no worktree for this issue: %s",
   "abandon.not_running": "continuo is not running.",
+  "abandon.not_running_dry_run": "continuo does not appear to be running (there is no lock note at %s). Note that --dry-run never takes the flock, so it cannot see a continuo that failed to write the note, or one from before v0.1.12. The real run checks the flock, so it will stop if one is running.",
   "abandon.notice": "  What continuo did: %s",
   "abandon.orphan_branch.disabled": "cleanup.delete_branch is false, so branch %[1]s was not deleted. To delete it by hand: git -C %[2]s branch -D %[3]s",
   "abandon.orphan_branch.err_delete_failed": "could not delete branch %[1]s (%[2]v). Delete it by hand: git -C %[3]s branch -D %[4]s",
@@ -246,7 +247,7 @@
   "daemon.build.workspace_failed": "cannot build worktree management: %w",
   "daemon.err.startup": "could not start up",
   "daemon.run.already_running": "%[1]w: detected a duplicate daemon (lock file %[2]s): %[3]w",
-  "daemon.run.board_in_use": "%[1]w: another continuo is already watching the same kanban board (%[2]s project #%[3]d) (kanban board lock %[4]s). The kanban board is the one thing --id cannot split: %[5]w",
+  "daemon.run.board_in_use": "%[1]w: another continuo is already watching the same kanban board (%[2]s project #%[3]d) (kanban board lock %[4]s). The kanban board is the one thing --id cannot split. If no continuo is running, a continuo abandon is holding the lock while it cleans up (the .json file with the same stem says who holds it). Wait for it to finish, then start again: %[5]w",
   "daemon.run.board_lock_file_failed": "%[1]w: cannot prepare the kanban board lock file %[2]s: %[3]w",
   "daemon.run.config_load_failed": "%[1]w: failed to load the config file (%[2]s): %[3]w",
   "daemon.run.instance_failed": "%[1]w: cannot decide the paths from --id: %[2]w",

@@ -420,17 +420,31 @@ func checkRuntimeDir(cfg loadedConfig, configSymbol Symbol, inst instance.Layout
 		}
 	}
 
-	// **置き場所がまだ無いなら、listen は試せない。**作らないと決めた以上、
-	// ここで分かるのは「上のディレクトリに作れる」ところまでである。
+	// **置き場所がまだ無くても、unix socket を置けるかは必ず試す。**
+	//
+	// **`CheckDirPlaceable` はディレクトリを作って消すだけである。**
+	// **ディレクトリを作れることは、そこに unix socket を bind できることを意味しない**
+	// （`$TMPDIR` が socket を作れないファイルシステムに載っていることがある）。
+	// **試さずに `✓` を出すと、doctor は全項目 `✓` なのに起動だけが落ちる**（issue #9 と同じ形）。
+	//
+	// **まだ無いときは、上へ辿って最初に実在するディレクトリで試す。**
+	// **本番の置き場所は作らない**（設計 3-17h）。
+	probeDir := dir
 	if _, serr := os.Stat(dir); serr != nil {
-		return Result{
-			Label:  LabelRuntimeDir,
-			Symbol: SymbolOK,
-			Detail: i18n.T(i18n.KeyDoctorRuntimeDirOK, sock),
-			Notes:  append(notes, i18n.T(i18n.KeyDoctorRuntimeDirNotYet, dir)),
+		notes = append(notes, i18n.T(i18n.KeyDoctorRuntimeDirNotYet, dir))
+		ancestor, aerr := fsprobe.NearestExisting(dir)
+		if aerr != nil {
+			return Result{
+				Label:    LabelRuntimeDir,
+				Symbol:   SymbolMissing,
+				Detail:   i18n.T(i18n.KeyDoctorRuntimeDirFailed, aerr),
+				Notes:    runtimeDirNotes(notes, aerr),
+				Remedies: []string{i18n.T(i18n.KeyDoctorRuntimeDirRemedy)},
+			}
 		}
+		probeDir = ancestor
 	}
-	if perr := fsprobe.ProbeSocketInside(sock); perr != nil {
+	if perr := fsprobe.ProbeSocketInside(filepath.Join(probeDir, filepath.Base(sock))); perr != nil {
 		return Result{
 			Label:    LabelRuntimeDir,
 			Symbol:   SymbolMissing,
