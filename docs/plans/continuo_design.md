@@ -7010,9 +7010,9 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 
 | 何 | 中身 |
 | --- | --- |
-| **既定で無効である** | 公式が「Agent teams are experimental and disabled by default」と書いている |
-| **利用者が自分で切れる** | `WORKFLOW.md` の `claude.env` に1行 |
-| **切る仕組みを持つと19ファイルを触る** | 設定のキー・判定・doctor の見出し語・相互検査。**文書2つで済むものに見合わない** |
+| **既定で無効である** | 公式が「Agent teams are experimental and disabled by default」（**訳。**agent teams は実験的な機能で、既定では無効である）と書いている |
+| **利用者が自分で切れる** | `WORKFLOW.md` の `claude.env` に1行。**continuo は黙って切らない** |
+| **切る仕組みを持つと、見る先を6か所も推測することになる** | 設定の優先順位・対象リポジトリの clone・組織の managed settings。**どれも確実には読めない。**検出は別の issue で設計し直す |
 
 #### 書く場所
 
@@ -7022,30 +7022,24 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 | [README.md](../../README.md) / [README.ja.md](../../README.ja.md) | 「始める前に知っておくこと」に1行 |
 | [docs/trying_it_out.md](../trying_it_out.md) | 「先に知っておくこと」の表に1行 |
 | [docs/upgrading.md](../upgrading.md) | v0.1.11 の節 |
+| [docs/agent_life_cycle.md](../agent_life_cycle.md) | 「サブエージェントが走っている最中に引き渡すとき」に1行。**この症状が起きる経路そのものを説明している節である** |
 
-#### 利用者へ案内する回避策
+#### 切る値は案内しない
 
-```yaml
-claude:
-  env:
-    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"
-```
+**`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を `"0"` にすれば切れるかどうかは、確かめていない。**
+**公式が書いているのは「`1` で有効になる」までで、`0` を「値がある＝有効」と読む実装の可能性が消せていない。**
 
-**`--settings` は対象リポジトリの `.claude/settings.json` より優先順位が上である**
-（Settings precedence: managed / **command line** / project local / shared project / user）。
-**勝てないのは managed settings だけである。**
+**だから文書には「有効だと正しく動かない」までしか書かない。**
+**切り方を案内すると、効かなかったときに利用者が行き止まる。**
 
-**公式が `0` を切る値として名指ししている。**
+**検出する仕組みは、この節の範囲外である。**別の issue で設計する。
+**理由。**「continuo が起動する Claude Code で agent teams が有効になるか」を判定するには、
+**組織の managed settings・`--settings`・対象リポジトリの2ファイル・利用者の設定・herdr の環境**の
+6か所を優先順位どおりに解決する必要がある。**そのうち3か所は continuo からは読めない。**
 
-> To make named subagents launch as subagents again, turn agent teams off by setting
-> `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` to `0`
-
-**訳。**名前つきのサブエージェントをサブエージェントとして起動し直させるには、
-`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を `0` にして agent teams を切る。
-
-**直したら continuo の再起動が要る。**設定は起動時に1回だけ読む（3-24 の読み直しは未実装）。
-**公式が「新しいセッションを始める必要はない」と書いているのは、
-Claude Code が直接見る `settings.json` を保存した場合である。**`WORKFLOW.md` はそれに当たらない。
+**とくに、環境変数を決めるのは herdr の常駐プロセスの環境である。**
+continuo は `claude` を直接起動せず、herdr の `worktree.open` が作った pane の中で起動する。
+**「continuo を起動したシェル」はこの連鎖に入っていない。**
 
 ### 3-71. 提供する枠の上限を `WORKFLOW.md` で決める
 

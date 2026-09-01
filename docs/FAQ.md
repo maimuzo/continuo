@@ -487,6 +487,9 @@ continuo は Claude Code を `--permission-mode dontAsk` で起動します。
 **許してよい操作だと分かったときだけ** `WORKFLOW.md` の `claude.permissions.allow` に足し、
 Status を着手待ちへ戻してください。
 
+**それでも、何が確認の画面を出したのか分からないときは、次の節を読んでください。**
+**agent teams が有効だと、`dontAsk` で起動していても確認の画面が出ます。**
+
 ### 「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）
 
 **continuo は agent teams に対応していません。**有効になっていると、この症状が起きます。
@@ -511,20 +514,27 @@ continuo はそれを「人間の入力を待っている」と読み、esc を�
 
 出典: [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）
 
-#### 確かめ方
+**上の節の「`dontAsk` では確認の画面が出ない」と食い違って見えますが、両方とも起きます。**
+continuo は `--permission-mode dontAsk` で起動するので、**リード自身は確認の画面を出しません。**
+**ところが teammate はそれを継がず、`default` で走ることが観測されています**
+（2026-08-27、外部の利用者の実測。報告された `meta.json` が3件とも `permissionMode: "default"` でした）。
+**公式は「teammate はリードの許可設定を継ぐ」と書いており、この観測と食い違っています。**
+**理由は分かっていません。**
+
+**確かめ方。**
 
 **continuo が起動した Claude Code に、その環境変数が届いているかを見ます。**
 
-**1. continuo の設定を見る。**ここに書いたものが、いちばん強く効きます。
+**1. continuo の設定を見る。**continuo はここに書いたものを `--settings` で渡します。
 
 ```bash
-grep -n 'AGENT_TEAMS' <continuo の作業ディレクトリ>/WORKFLOW.md
+grep -n 'AGENT_TEAMS' ~/continuo-work/WORKFLOW.md
 ```
 
 **2. 対象リポジトリの clone を見る。**チームで有効にしていることがあります。
 
 ```bash
-ghq list --full-path | xargs -I{} grep -ln 'AGENT_TEAMS' {}/.claude/settings.json 2>/dev/null
+ghq list --full-path | xargs -I{} grep -ln 'AGENT_TEAMS' {}/.claude/settings.json {}/.claude/settings.local.json 2>/dev/null
 ```
 
 **3. 自分の設定を見る。**
@@ -539,27 +549,59 @@ grep -n 'AGENT_TEAMS' ~/.claude/settings.json ~/.claude/settings.local.json 2>/d
 echo "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-（設定されていません）}"
 ```
 
-**`1` が入っていたら、これが原因です。**
+**`1` が入っていたら、まずこれを疑ってください。**
+**ただし、これで原因が確定するわけではありません。**continuo は、何が確認の画面を出したかを持っていません。
+`1` が入っていることは「agent teams が使える状態だった」という意味であって、
+**この停止が teammate のせいだという証明ではありません。**
+記録に teammate が出ていたかどうかは、上の節の【調べるところ】から辿れます。
 
-#### 直し方
+**5. 4つとも空振りなのに症状が続くなら、組織の managed settings を疑ってください。**
+**managed settings は、他のどの設定よりも後に当たります。**個人の設定では上書きできないので、
+管理者に相談してください。
+
+**直し方。**
 
 **`WORKFLOW.md` の `claude.env` に1行足してください。**
 
-**雛形には既に `env:` の塊があります。**その中へ1行足します。**塊ごと貼り替えないでください。**
+**足す先は `claude:` の下の `env:` の塊です。**雛形には既にあります。**塊ごと貼り替えないでください。**
+**場所は、既にある行から辿れます。**
+
+```bash
+grep -n 'RETRY_WATCHDOG' ~/continuo-work/WORKFLOW.md
+```
 
 ```yaml
-  env:                                      # Claude Code に渡す環境変数
-    CLAUDE_CODE_RETRY_WATCHDOG: "1"         # 既にある行
-    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"   # ← これを足す
+claude:
+  # …（ほかの設定）
+  env:                                        # Claude Code に渡す環境変数
+    CLAUDE_CODE_RETRY_WATCHDOG: "1"           # 既にある行
+    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0" # ← これを足す
 ```
 
 **直したら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
 **すでに動いている issue には届きません。**その issue は Status を着手待ちへ戻してやり直させてください。
 
 **上の「確かめ方」の4番（シェルの環境変数）で見つかった場合も、同じ直し方で構いません。**
-**continuo が渡す設定のほうが強いので、シェルの export に勝ちます。**
+**公式がそう書いています。**
 
-#### なぜ `WORKFLOW.md` に書くのか
+> Setting the variable to `0` in your user `settings.json` overrides a shell export.
+
+**訳。**user の `settings.json` でこの変数を `0` にすると、シェルの export を上書きする。
+
+**continuo が渡すのは `--settings` で、user の設定よりさらに後に当たります。**
+
+> **Higher-precedence settings files**: project settings, local settings, and a `--settings` payload apply after user settings, so an `env` entry that sets the variable to `1` in any of them wins.
+
+**訳。**優先順位の高い設定ファイル: プロジェクトの設定・ローカルの設定・`--settings` で渡すものは、
+user の設定より後に当たる。だからそのどれかに、この変数を `1` にする `env` の項目があれば、そちらが勝つ。
+
+**それでも直らないときは、continuo を起動したシェルで消してから起動し直してください。**
+
+```bash
+unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+```
+
+**なぜ `WORKFLOW.md` に書くのか。**
 
 **continuo は Claude Code を `--settings` 付きで起動します。**
 **その設定は、対象リポジトリの `.claude/settings.json` より優先順位が上です。**
