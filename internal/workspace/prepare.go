@@ -59,12 +59,23 @@ var ErrBaseUnknown = errors.New("worktree を切る base を決められませ�
 // errors.New に日本語で書くと、日本語の文言の件数を数える検査に引っかかる。
 var ErrWorktreeDetached = i18n.Sentinel(i18n.KeyWorkspaceErrWorktreeDetached)
 
-// detachedHeadName は `git rev-parse --abbrev-ref HEAD` が detached HEAD のときに返す名前である。
+// isDetachedHead は、その worktree が detached HEAD かどうかをリポジトリ側に答えさせる。
 //
-// **branch 名として "HEAD" が実在することはある**（`git switch -c HEAD` で作れる）。
-// **だがそれを作った人は、この文面を読んでも困らない。**逆に detached を取りこぼすと、
-// いちばん多い側が原因を伝えない案内を読むことになる。
-const detachedHeadName = "HEAD"
+// **`git rev-parse --abbrev-ref HEAD` の戻り値を "HEAD" と文字列比較しない。**
+// あちらは detached でも壊れた ref でも同じ答えを返しうるし、
+// **同じ問いに対する答えが package の中で2通りになる。**
+// `gitWorktreeHeadAt` が `worktree list --porcelain` の `detached` の行を読んで
+// 正確に答えるので、それを使う（設計 3-9 の段4 と同じ見分け方）。
+//
+// **判定できないときは false を返す。**判定できないことを理由に着手を止めない
+// （3-34b）。呼び出し元は今までどおり branch 名の食い違いとして扱う。
+func (m *Manager) isDetachedHead(ctx context.Context, repoPath, worktreePath string) bool {
+	_, detached, err := gitWorktreeHeadAt(ctx, repoPath, worktreePath)
+	if err != nil {
+		return false
+	}
+	return detached
+}
 
 // PrepareResult は worktree を用意した結果である。
 type PrepareResult struct {
@@ -124,7 +135,8 @@ type PrepareResult struct {
 // issue: 対象の issue。
 // 戻り値の1つ目: 用意した worktree の情報。
 // 戻り値の2つ目: clone を引けない（ErrCloneNotFound）・base を決められない
-// （ErrBaseUnknown）・登録の無い実体がある／**別の branch を出している**
+// （ErrBaseUnknown）・**どの branch にも載っていない**（ErrWorktreeDetached）・
+// 登録の無い実体がある／**別の branch を出している**
 // （ErrUnregisteredWorktree）・
 // 封じ込め検査に落ちた・git や herdr の実行に失敗した場合のエラー。
 func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, error) {
@@ -184,7 +196,7 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		if err != nil {
 			return nil, err
 		}
-		if head == detachedHeadName {
+		if head != loc.Branch.String() && m.isDetachedHead(ctx, repoPath, loc.Path) {
 			// **detached HEAD は、別の branch にいるのとは原因も直し方も違う**（issue #132）。
 			// 文面を分けないと、人間が "HEAD" という名前の branch を探しに行く。
 			return nil, i18n.Errorf(
@@ -472,7 +484,7 @@ func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
 			"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
 		return nil
 	}
-	if head == detachedHeadName {
+	if head != loc.Branch.String() && m.isDetachedHead(ctx, repoPath, loc.Path) {
 		// 段2 と同じ判断である（issue #132）。
 		return i18n.Errorf(
 			i18n.KeyWorkspacePrepareDetachedHead,

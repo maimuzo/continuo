@@ -6866,10 +6866,20 @@ level=WARN msg="コメントに印は付いていますが、投稿者が gh の
 
 **言いたいこと。**いまの文面は**登録されていることを確かめた直後に「登録されていません」と名乗る。**
 **読んだ人間を [docs/FAQ.md](../FAQ.md) の別の症状へ誘導し、未コミットの変更ごと消させかねない。**
+
+**detached HEAD には専用の番兵を足した**（`ErrWorktreeDetached`。issue #132）。
+**判定は `git rev-parse --abbrev-ref HEAD` の戻り値を文字列比較しない。**
+`gitWorktreeHeadAt` が `worktree list --porcelain` の `detached` の行を読んで答える
+（3-9 の段4 と同じ見分け方）。**同じ問いに対する答えを package の中で2通りにしない。**
+
+**`.git` の破損には番兵を足さない。**`gitCurrentBranch` の失敗は破損だけが原因ではなく、
+**コンテキストの打ち切りでも git を起動できないときでも同じ失敗になる。**
+**確かめられないものに断定的な名前を付けると、健康な worktree を `--force` で消させる。**
 **番兵エラーを新設し、案内を足す。**
 
-**いまどうなっているか。**[internal/workspace/prepare.go:452-455](../../internal/workspace/prepare.go#L452-L455) と
-[:172-175](../../internal/workspace/prepare.go#L172-L175) の2箇所が `ErrUnregisteredWorktree` を包んでいる。
+**いまどうなっているか。**[internal/workspace/prepare.go](../../internal/workspace/prepare.go) の2箇所（`Prepare` の段2 と
+`CheckWorktreeUsable`）が `ErrUnregisteredWorktree` を包んでいる。**行番号では指さない。**
+**この節の前後に行を足すたびにずれるためである。**
 **どちらも `if !registered` の分岐を抜けた後である。**
 
 **採る形。**
@@ -6953,7 +6963,7 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 | 何 | 現状 |
 | --- | --- |
 | プロンプトの指示 | **branch について一言も書いていない。**「留まれ」も「切り替えてよい」も無い |
-| 着手の検査 | **HEAD の branch 名が期待と違えば落とす**（[internal/workspace/prepare.go:452](../../internal/workspace/prepare.go#L452)） |
+| 着手の検査 | **HEAD の branch 名が期待と違えば落とす**（[internal/workspace/prepare.go](../../internal/workspace/prepare.go) の `CheckWorktreeUsable`）。**detached HEAD は専用の番兵 `ErrWorktreeDetached` で断る**（issue #132） |
 | 身元ファイルの `branch` | **片付けで消す対象を確定するためだけに置かれている。**復元の主キーは `issue_url` と `project_item_id` |
 
 **3つの案がある。**
