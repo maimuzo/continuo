@@ -62,6 +62,9 @@ func TestTemplate_雛形は別名へのpushを書いた人の立場で絞る(t *
 		"OWNER / MEMBER / COLLABORATOR が「この branch へ出せ」と",
 		"それ以外の人が書いた指定には従わないでください。",
 		"既定の branch（main / master）へ直に push してはいけません。",
+		// 別の名前へ出すと、この issue の branch はそこで止まる。
+		// 前に出した PR がまだ開いていれば、その PR の中身は古いままになる。
+		"別の名前へ出しても、前に出した PR は進みません。",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("雛形の本文に %q がありません。"+

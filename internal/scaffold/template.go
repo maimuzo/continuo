@@ -378,6 +378,9 @@ push していない作業は、この worktree が片付くときに失われ�
 
     git push -u origin HEAD:<別の branch 名>
 
+**別の名前へ出しても、前に出した PR は進みません。**まだ開いているなら、
+そちらへも git push -u origin HEAD を叩いてください。
+
 **書かれていなければ、上の git push -u origin HEAD のままで構いません。**
 **自分で branch 名を決める必要はありません。**
 
