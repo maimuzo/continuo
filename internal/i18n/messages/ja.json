@@ -788,6 +788,8 @@
   "workspace.owner_repo_from_worktree_path.rel_failed": "worktree のパス %q が置き場所 %q からの相対パスになりません: %w",
   "workspace.prepare.branch_in_use_elsewhere": "%w（branch: %s / いま使っている worktree: %s）。**1つの branch を出せる worktree は1つだけなので、このまま着手すると `git worktree add` が必ず失敗します。**\n【確かめ方】`git -C %s worktree list` を実行すると、その branch をどこが出しているかが並びます。\n【よくある原因】前の run の worktree が別の場所に残っている / 人間が手で同じ branch の worktree を作った。\n【対処】`continuo abandon %s` を実行してください。その issue の worktree と branch をまとめて片付けます。残っている作業を消したくなければ、先に `git -C %s status` で中身を確かめてください。",
   "workspace.prepare.branch_mismatch": "%w: %s は %q をチェックアウトしています（期待は %q）",
+  "workspace.err.worktree_detached": "worktree がどの branch にも載っていません（detached HEAD）",
+  "workspace.prepare.detached_head": "%w: %s\n【確かめ方】git -C %s status\n        rebase 中・bisect 中と出たら、先に終わらせるか中止してください（git rebase --abort など）。\n【よくある原因】commit を直接チェックアウトした / rebase の途中 / bisect の途中\n【対処】未コミットの変更があるかを先に確かめてください。\n        期待の branch が残っているとき: git -C %s switch %s\n        期待の branch が消えているとき: git -C %s switch -c %s\n        rebase 中・bisect 中は git switch が拒まれます。先に終わらせてください。\n【注意】continuo abandon は、--force を付けなくても条件が揃うと Status を failure_state へ動かします。",
   "workspace.prepare.clone_not_found": "%w。**巡回のループは勝手に clone しません**（ボードに載っただけのリポジトリを無断で取ってこないため）。\n【確かめ方】`ghq list -p -e %s/%s` を実行してください。0行なら手元にありません。\n【対処】WORKFLOW.md の `trust.repositories` に `%s/%s` があることを確かめてから、`continuo trust` を実行してください。clone の取得と信頼の登録をまとめて行います。",
   "workspace.prepare.parent_dir_create_failed": "worktree の親ディレクトリ %s を作成できません: %w",
   "workspace.prepare.stat_failed": "worktree のパス %s を確認できません: %w",

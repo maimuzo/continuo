@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "3076de898231d536eb2c0ad568dff87fce38a75d4e059ec430b49050cfedd7a7",
+  "_source_sha256": "e2584411d842ea06c1b2d89411000a5f446aaa1b4e1ae50bae52f122275576c2",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -789,6 +789,8 @@
   "workspace.owner_repo_from_worktree_path.rel_failed": "cannot make the worktree path %[1]q relative to the worktree root %[2]q: %[3]w",
   "workspace.prepare.branch_in_use_elsewhere": "%[1]w (branch: %[2]s / worktree currently using it: %[3]s). **Only one worktree can check out a given branch, so starting as-is will always make `git worktree add` fail.**\nHow to check: Run `git -C %[4]s worktree list` to see which worktree has that branch checked out.\nCommon causes: A worktree from a previous run is still left over elsewhere, or a human created a worktree for the same branch by hand.\nWhat to do: Run `continuo abandon %[5]s`. This cleans up that issue's worktree and branch together. If you do not want to lose any work still there, check its contents first with `git -C %[6]s status`.",
   "workspace.prepare.branch_mismatch": "%[1]w: %[2]s has %[3]q checked out (expected %[4]q)",
+  "workspace.err.worktree_detached": "the worktree is not on any branch (detached HEAD)",
+  "workspace.prepare.detached_head": "%[1]w: %[2]s\n[How to check] git -C %[3]s status\n        If it says a rebase or bisect is in progress, finish or abort it first (git rebase --abort and so on).\n[Common causes] a commit was checked out directly / a rebase is in progress / a bisect is in progress\n[What to do] First check whether there are uncommitted changes.\n        If the expected branch still exists: git -C %[4]s switch %[5]s\n        If the expected branch is gone: git -C %[6]s switch -c %[7]s\n        git switch is refused during a rebase or bisect. Finish that first.\n[Note] continuo abandon can move Status to failure_state even without --force, when the conditions line up.",
   "workspace.prepare.clone_not_found": "%[1]w. **The polling loop never clones on its own** (so it never pulls in a repository just because it appeared on the kanban board, without permission).\nHow to check: Run `ghq list -p -e %[2]s/%[3]s`. Zero lines means it is not present locally.\nWhat to do: Make sure `trust.repositories` in WORKFLOW.md includes `%[4]s/%[5]s`, then run `continuo trust`. It fetches the clone and registers trust together.",
   "workspace.prepare.parent_dir_create_failed": "cannot create the worktree's parent directory %s: %w",
   "workspace.prepare.stat_failed": "cannot check the worktree path %s: %w",

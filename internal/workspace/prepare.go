@@ -48,6 +48,24 @@ var ErrRepoMismatch = errors.New("worktree の .git が指すリポジトリが�
 // herdr.worktree.base が null で、Issue.NativeRef["default_branch"] も無い場合に返る。
 var ErrBaseUnknown = errors.New("worktree を切る base を決められません")
 
+// ErrWorktreeDetached は worktree がどの branch にも載っていないことを表す
+// （detached HEAD。issue #132）。
+//
+// **ErrUnregisteredWorktree では拾えない。**登録はされていて、branch に載っていないだけである。
+// **文面を分けないと、人間は「別の branch にいます: … は "HEAD" をチェックアウトしています」
+// という、原因を伝えない案内を読むことになる。**"HEAD" という名前の branch を探しに行く。
+//
+// **文言は Error() が呼ばれるたびに資源から引く**（i18n.Sentinel）。
+// errors.New に日本語で書くと、日本語の文言の件数を数える検査に引っかかる。
+var ErrWorktreeDetached = i18n.Sentinel(i18n.KeyWorkspaceErrWorktreeDetached)
+
+// detachedHeadName は `git rev-parse --abbrev-ref HEAD` が detached HEAD のときに返す名前である。
+//
+// **branch 名として "HEAD" が実在することはある**（`git switch -c HEAD` で作れる）。
+// **だがそれを作った人は、この文面を読んでも困らない。**逆に detached を取りこぼすと、
+// いちばん多い側が原因を伝えない案内を読むことになる。
+const detachedHeadName = "HEAD"
+
 // PrepareResult は worktree を用意した結果である。
 type PrepareResult struct {
 	// Path は worktree の絶対パスである（シンボリックリンク解決済み）。
@@ -165,6 +183,14 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		head, err := gitCurrentBranch(ctx, loc.Path)
 		if err != nil {
 			return nil, err
+		}
+		if head == detachedHeadName {
+			// **detached HEAD は、別の branch にいるのとは原因も直し方も違う**（issue #132）。
+			// 文面を分けないと、人間が "HEAD" という名前の branch を探しに行く。
+			return nil, i18n.Errorf(
+				i18n.KeyWorkspacePrepareDetachedHead,
+				ErrWorktreeDetached, loc.Path, loc.Path,
+				loc.Path, loc.Branch.String(), loc.Path, loc.Branch.String())
 		}
 		if head != loc.Branch.String() {
 			// 段3 と同じ判断である。**乗っ取らない。**
@@ -445,6 +471,13 @@ func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
 		m.logger.Debug("worktree の branch を段0 で確かめられませんでした（段3 に任せます）",
 			"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
 		return nil
+	}
+	if head == detachedHeadName {
+		// 段2 と同じ判断である（issue #132）。
+		return i18n.Errorf(
+			i18n.KeyWorkspacePrepareDetachedHead,
+			ErrWorktreeDetached, loc.Path, loc.Path,
+			loc.Path, loc.Branch.String(), loc.Path, loc.Branch.String())
 	}
 	if head != loc.Branch.String() {
 		return i18n.Errorf(

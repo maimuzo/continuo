@@ -424,6 +424,53 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 
 **この判定は着手の最初に行います。**落ちても Status は1バイトも書きません。
 
+### 着手が「worktree がどの branch にも載っていません（detached HEAD）」で止まる
+
+**原因。**worktree が detached HEAD になっています。**どの branch にも載っていない状態です。**
+
+**上の節（ディレクトリだけが残っている）とは違います。**worktree は git に登録されていて、
+**branch に載っていないだけです。**中の作業は残っています。
+
+**よくある原因。**
+
+| 何 | 例 |
+| --- | --- |
+| **commit を直接チェックアウトした** | `git checkout <SHA>` / `git switch --detach` |
+| **rebase の途中** | `git rebase` が止まっている |
+| **bisect の途中** | `git bisect` を始めたまま |
+
+**直し方。**
+
+**1. 未コミットの変更があるかを、先に確かめてください。**
+
+```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 status
+```
+
+**`rebase in progress` や `bisecting` と出たら、先に終わらせるか中止してください。**
+**その状態では `git switch` が git に拒まれます。**
+
+```bash
+git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 rebase --abort
+```
+
+**2. 期待の branch へ戻します。**
+
+```bash
+# 期待の branch が残っているとき
+git -C ~/worktrees/… switch continuo/<owner>/<repo>/42
+
+# 期待の branch が消えているとき
+git -C ~/worktrees/… switch -c continuo/<owner>/<repo>/42
+```
+
+**3. ボードでその issue を `Ready` へ戻します。**
+
+**この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
+
+**`continuo abandon` は使わないでください。**worktree の中の作業が消えます。
+**`--force` を付けなくても、条件が揃うと Status を `failure_state` へ動かします。**
+
 ### 着手が「`herdr.worktree.base` が空で、ボードから引いた issue にも既定 branch の情報がありませんでした」で止まる
 
 **原因。**base を書いていないときはボードが返す既定 branch を使いますが、それが取れませんでした。

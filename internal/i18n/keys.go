@@ -2085,6 +2085,10 @@ const (
 	KeyWorkspacePrepareBranchInUseElsewhere Key = "workspace.prepare.branch_in_use_elsewhere"
 	// KeyWorkspacePrepareBranchMismatch は再利用しようとした worktree が別の branch をチェックアウトしていたときに出る。
 	KeyWorkspacePrepareBranchMismatch Key = "workspace.prepare.branch_mismatch"
+	// KeyWorkspaceErrWorktreeDetached は worktree が detached HEAD のときの番兵の文言である（issue #132）。
+	KeyWorkspaceErrWorktreeDetached Key = "workspace.err.worktree_detached"
+	// KeyWorkspacePrepareDetachedHead は worktree が detached HEAD で再利用できないときに出る（issue #132）。
+	KeyWorkspacePrepareDetachedHead Key = "workspace.prepare.detached_head"
 	// KeyWorkspacePrepareUnregisteredWorktree は目的のパスに実体があるのに git の worktree として登録されていなかったときに出る。
 	KeyWorkspacePrepareUnregisteredWorktree Key = "workspace.prepare.unregistered_worktree"
 	// KeyWorkspacePrepareParentDirCreateFailed は worktree の親ディレクトリを作れなかったときに出る。
@@ -3025,6 +3029,8 @@ var allKeys = []Key{
 	KeyWorkspacePrepareStatFailed,
 	KeyWorkspacePrepareBranchInUseElsewhere,
 	KeyWorkspacePrepareBranchMismatch,
+	KeyWorkspaceErrWorktreeDetached,
+	KeyWorkspacePrepareDetachedHead,
 	KeyWorkspacePrepareUnregisteredWorktree,
 	KeyWorkspacePrepareParentDirCreateFailed,
 	KeyWorkspacePrepareWorktreeOpenFailed,

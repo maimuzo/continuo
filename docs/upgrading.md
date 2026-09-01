@@ -70,6 +70,38 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.1.10 から v0.1.11 へ
+
+**当てるものはありません。**設定のキーは1つも増えていません。
+
+### detached HEAD の worktree で出るメッセージが変わりました
+
+**前の版は、こう出ていました。**
+
+```
+worktree が別の branch にいます: … は "HEAD" をチェックアウトしています（期待は "continuo/…"）
+```
+
+**`"HEAD"` という名前の branch を探しに行った人がいました。**そんな branch はありません。
+**detached HEAD（どの branch にも載っていない状態）を、別の branch にいる場合と同じ文面で
+知らせていたためです。**
+
+**この版から、専用の文面が出ます。**確かめ方・よくある原因・直し方が入っています。
+
+```
+worktree がどの branch にも載っていません（detached HEAD）: …
+【確かめ方】git -C … status
+【よくある原因】commit を直接チェックアウトした / rebase の途中 / bisect の途中
+【対処】…
+```
+
+**振る舞いは変わりません。**前の版と同じく、その issue を飛ばして Status は1バイトも書きません。
+
+**詳しくは [docs/FAQ.md](FAQ.md) の
+「着手が「worktree がどの branch にも載っていません（detached HEAD）」で止まる」にあります。**
+
+---
+
 ## v0.1.9 から v0.1.10 へ
 
 **当てるものが4つあります。****設定が2つと、本文（プロンプト）の差し替えが2つです。**
