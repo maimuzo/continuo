@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""レビュー結果が貼られていない PR の merge と ready を、実行の前に止める。
+r"""レビュー結果が貼られていない PR の merge と ready を、実行の前に止める。
 
 **なぜ機械で止めるのか。**[CLAUDE.md](../../CLAUDE.md) に
 「PR を出すときは、必ず `/code-review` でレビューする」と書いてあるが、**守られなかった。**
