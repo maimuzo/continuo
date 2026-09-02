@@ -81,46 +81,44 @@ gh workflow run release.yml --ref main
 ### 実機で issue を1件通す
 
 **言いたいこと。**動いている continuo は止めなくてよい。
-**`--id <名前>` を付ければ、2つ目の continuo を並べて動かせる。**
+**worktree と socket の置き場所を分ければ、2つ目の continuo を並べて動かせる。**
 **AI だけで最後まで回せる。**人間の判断を待つ段ではない。
 
 **ただし Claude Code が実際に動くので、定額プランの枠を消費する。**続けて何度も回さない。
 **本番のボード（project #3）には触れない。**使うのは検証用のボードだけである。
 **その番号・リポジトリ・issue・Status の識別子は [docs/test_environment.md](test_environment.md) にある。**
 
-**一、`--id` を付けて起動する。**それだけで分かれる。
+**一、隔離する設定を2つ変える。**
 
-```bash
-# 起動のときに付ける。abandon にも同じ名前を渡す
-continuo --id e2e ~/continuo-e2e-work
+```yaml
+workspace:
+  root: ~/continuo-e2e-worktrees            # worktree の置き場所を本番と分ける
+claude:
+  hook_bridge:
+    listen: /tmp/continuo-e2e/hooks.sock    # socket を分ける
 ```
 
-**`--id <名前>` は、分けるべきものを5つまとめて分ける。**
+**二重起動を止めるロックは、socket と同じディレクトリに置かれる。**
+**だから socket を分ければ、ロックも一緒に分かれる**
+（[internal/daemon/daemon.go](../internal/daemon/daemon.go) の `ResolveLockFilePath`）。
 
-| 分ける対象 | `--id e2e` を付けたとき |
-| --- | --- |
-| **ロック** | `~/.continuo/id/e2e/continuo.lock` |
-| **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
-| **worktree の置き場所** | `<workspace.root>/e2e` |
-| **branch 名** | `e2e/` を先頭に付けたもの |
-| **herdr の agent 名** | `continuo-e2e-<repo>-<番号>` |
+**二、socket を置くディレクトリの権限を 0700 にする。**
 
-**`claude.hook_bridge.listen` は書かない。**`--id` を付けたときは使われない
-（書いてあっても、起動の記録に「使いません」と1行出る）。
-**`CONTINUO_RUNTIME_DIR` も同じで、指定してあれば「使いません」と1行出る。**
-**`workspace.root` も本番と同じままでよい。**末尾に `/e2e` が足される。
+```bash
+mkdir -p /tmp/continuo-e2e ~/continuo-e2e-worktrees
+chmod 0700 /tmp/continuo-e2e
+```
 
-**名前に書けるのは、小文字の英数字とハイフンだけである。**先頭は英数字、32文字まで。
-**大文字・空白・`..`・`/` は起動する前に弾かれる。**
+**忘れると `doctor` がここで落ちる。**
 
-**socket を分けてもロックは分かれない。**ロックは `~/.continuo` に固定されている
-（[docs/plans/continuo_design.md](plans/continuo_design.md) 3-17）。**分けたいなら `--id` である。**
+```
+✗ hook の置き場所 hook を受ける socket を用意できません: 既にある hook を受ける socket の
+                  ディレクトリ /tmp/continuo-e2e の権限が 0755 です。0700 にしてから起動してください
+                  （continuo は自分が作っていないディレクトリの権限を書き換えません）
+```
 
-**二、名前の長さに気をつける。**
-
-**`--id` を付けたときの socket は `~/.continuo/id/<名前>/run/hooks.sock` である。**
-**ホームディレクトリのパスが長いと、macOS の上限（103バイト）に当たる。**
-そのときは起動する前に、上限のバイト数を添えて弾かれる。**名前を短くすること。**
+**パスは短くする。**macOS の Unix domain socket は104バイト以上で bind に失敗するので、
+**深いディレクトリを指すと、権限とは別の理由でここが `✗` になる。**
 
 **三、検証用のボードで設定を作り、検査を通す。**
 
@@ -130,21 +128,18 @@ OWNER="$(gh repo view --json owner --jq .owner.login)"
 WORK=~/continuo-e2e-work        # 置き場所は好きにしてよい。本番の作業ディレクトリと分けること
 mkdir -p "$WORK"
 continuo init --project 10 --owner "$OWNER" --force "$WORK"
-continuo doctor --id e2e "$WORK"
+# ここで、一の2つの設定を WORKFLOW.md へ書き込む
+continuo doctor "$WORK"
 ```
 
 **`✗` が0件になること。**
 **ボードに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
 
-**`continuo doctor` にも `--id` を渡すこと。**渡さないと既定の場所だけを見る。
-**`--id` を付けた起動は socket もロックも `~/.continuo/id/e2e/` を使う**ので、
-渡し忘れると**全項目 `✓` が出たのに起動だけが落ちることがある。**
-
 **四、起動して、issue を1件通す。**
 
 ```bash
 # どこで実行してもよい
-continuo --id e2e ~/continuo-e2e-work
+continuo ~/continuo-e2e-work
 ```
 
 **着手待ちの issue が拾われ、`In Progress` になり、Claude Code が起動する。**
@@ -152,12 +147,7 @@ continuo --id e2e ~/continuo-e2e-work
 **issue を着手待ちへ動かす手順と、進み方の見方は [docs/test_environment.md](test_environment.md) にある。**
 **各段が何をしているのかは [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 に書いてある。**
 
-**本番の continuo は動いたままでよい。**`--id` を付けたので、ロックも socket も worktree も
-branch も分かれている。互いに触らない。
-
-**ただし、本番と同じボードを見ることはできない。**同じボードを2つの continuo が見ると
-同じ issue を2つが拾うので、**2つ目はボードのロックで起動を止められる**
-（`~/.continuo/board/<owner>-<番号>.lock`）。**検証用のボード（project #10）を使うこと。**
+**本番の continuo は動いたままでよい。**socket もロックも worktree も分かれているので、互いに触らない。
 
 **五、詰まりやすいところ。**前の検証の残り物で止まることがある。
 
@@ -167,9 +157,7 @@ level=WARN msg="目的の worktree をそのまま使えません（Status を�
   【対処】continuo abandon <issue の URL> を実行してください。"
 ```
 
-**案内どおり `continuo abandon --id e2e <issue の URL> <ディレクトリ>` を叩く。**
-**`--id` を落とさないこと。**落とすと abandon は既定の1本を見に行き、
-`--id e2e` で作った worktree も branch も見つけられない。
+**案内どおり `continuo abandon <issue の URL> <ディレクトリ>` を叩く。**
 **それでも消えないなら、git の登録だけが残っている。**
 
 ```bash

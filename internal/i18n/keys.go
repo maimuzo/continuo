@@ -22,14 +22,8 @@ const (
 
 	// KeyDoctorLabelRuntimeDir は doctor の「hook の置き場所」の見出し語である。
 	KeyDoctorLabelRuntimeDir Key = "doctor.label.runtime_dir"
-	// KeyDoctorLabelLockFile は doctor の「ロックの場所」の見出し語である。
-	KeyDoctorLabelLockFile Key = "doctor.label.lock_file"
-	// KeyDoctorLabelBoardLock は doctor の「ボードのロック」の見出し語である。
-	KeyDoctorLabelBoardLock Key = "doctor.label.board_lock"
 	// KeyDoctorRuntimeDirOK は hook の socket を用意できたときに出る。
 	KeyDoctorRuntimeDirOK Key = "doctor.runtime_dir.ok"
-	// KeyDoctorRuntimeDirNotYet は、hook を受ける socket の置き場所がまだ無いことの内訳に出る。
-	KeyDoctorRuntimeDirNotYet Key = "doctor.runtime_dir.not_yet"
 	// KeyDoctorRuntimeDirFailed は hook の socket を用意できなかったときに出る。
 	KeyDoctorRuntimeDirFailed Key = "doctor.runtime_dir.failed"
 	// KeyDoctorRuntimeDirRemedy は hook の socket を用意できなかったときの直し方である。
@@ -40,22 +34,6 @@ const (
 	KeyDoctorRuntimeDirStale Key = "doctor.runtime_dir.stale"
 	// KeyDoctorRuntimeDirRemedyStale は残骸を確かめて消す手順である。
 	KeyDoctorRuntimeDirRemedyStale Key = "doctor.runtime_dir.remedy_stale"
-	// KeyDoctorLockFileOK は二重起動防止のロックを置けたときに出る。
-	KeyDoctorLockFileOK Key = "doctor.lock_file.ok"
-	// KeyDoctorLockFileFailed はロックを置けなかったときに出る。
-	KeyDoctorLockFileFailed Key = "doctor.lock_file.failed"
-	// KeyDoctorLockFileRemedy はロックを置けなかったときの直し方に出る。
-	KeyDoctorLockFileRemedy Key = "doctor.lock_file.remedy"
-	// KeyDoctorBoardLockOK はボードのロックを置けたときに出る。
-	KeyDoctorBoardLockOK Key = "doctor.board_lock.ok"
-	// KeyDoctorBoardLockFailed はボードのロックを置けなかったときに出る。
-	KeyDoctorBoardLockFailed Key = "doctor.board_lock.failed"
-	// KeyDoctorBoardLockRemedy はボードのロックを置けなかったときの直し方に出る。
-	KeyDoctorBoardLockRemedy Key = "doctor.board_lock.remedy"
-	// KeyDoctorBoardLockNoConfig は設定を読めずにボードのロックを確かめられないときに出る。
-	KeyDoctorBoardLockNoConfig Key = "doctor.board_lock.no_config"
-	// KeyDoctorBoardLockNormalized はボードのロックの名前で正規化が情報を落としたときに出る。
-	KeyDoctorBoardLockNormalized Key = "doctor.board_lock.normalized"
 
 	// KeyDoctorClaudeNotFound は claude が PATH に無いときの文言である。
 	KeyDoctorClaudeNotFound Key = "doctor.claude.not_found"
@@ -191,8 +169,6 @@ const (
 	KeyDoctorWriteRemedyPermission Key = "doctor.write.remedy_permission"
 	// KeyDoctorDefaultUsed は設定を読めないまま既定値で確かめたときの理由に出る。
 	KeyDoctorDefaultUsed Key = "doctor.default_used"
-	// KeyDoctorInstanceNote は `--id` を付けた置き場所を見たことの内訳に出る。
-	KeyDoctorInstanceNote Key = "doctor.instance_note"
 )
 
 // doctor の検査「Claude の設定」（Claude Code の設定ディレクトリに書けるか）。
@@ -274,14 +250,6 @@ const (
 	KeyHandoffLostUnknownHost Key = "handoff.lost.unknown_host"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
-	// KeyFsprobeNotADirectory は、実在するものがディレクトリでなかったときのエラーに出る。
-	KeyFsprobeNotADirectory Key = "fsprobe.not_a_directory"
-	// KeyFsprobeStatFailed は、実在するかを確かめられなかったときのエラーに出る。
-	KeyFsprobeStatFailed Key = "fsprobe.stat_failed"
-	// KeyFsprobeNoExistingAncestor は、上へ辿っても実在するディレクトリが1つも無かったときのエラーに出る。
-	KeyFsprobeNoExistingAncestor Key = "fsprobe.no_existing_ancestor"
-	// KeyFsprobeSocketFailed は使い捨ての unix socket を listen できなかったときのエラーに出る。
-	KeyFsprobeSocketFailed Key = "fsprobe.socket_failed"
 )
 
 // doctor の検査「herdr」。
@@ -526,6 +494,10 @@ const (
 	// KeyCLIInitErrSymlink は置き場所が symlink のときに出る。
 	KeyCLIInitErrSymlink Key = "cli.init.err_symlink"
 	// KeyCLIInitErrWriteFailed はそのほかの理由で書き出せないときに出る。
+	//
+	// **1つ目の引数は、書き出せなかったファイルの名前である**（WORKFLOW.md か
+	// PROJECT_SPECIFIC_PROMPT.md）。**文言に名前を埋め込んではならない。**
+	// `continuo init` は2枚を置くので、埋め込むと片方のときに別のファイルを名乗る。
 	KeyCLIInitErrWriteFailed Key = "cli.init.err_write_failed"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
@@ -706,8 +678,6 @@ const (
 	KeyCLIDoctorErrWriteReport Key = "cli.doctor.err_write_report"
 	// KeyCLIDoctorFlagMissingKeysPatch は `--missing-keys-patch` の説明に出る。
 	KeyCLIDoctorFlagMissingKeysPatch Key = "cli.doctor.flag_missing_keys_patch"
-	// KeyCLIDoctorFlagID は `continuo doctor --id` の説明に出る。
-	KeyCLIDoctorFlagID Key = "cli.doctor.flag_id"
 	// KeyCLIDoctorErrMissingKeysPatch は足す差分を組み立てられなかったときに出る。
 	KeyCLIDoctorErrMissingKeysPatch Key = "cli.doctor.err_missing_keys_patch"
 )
@@ -758,8 +728,6 @@ const (
 	KeyCLIAbandonFlagTo Key = "cli.abandon.flag_to"
 	// KeyCLIAbandonFlagPark は--park の説明に出る。
 	KeyCLIAbandonFlagPark Key = "cli.abandon.flag_park"
-	// KeyCLIAbandonFlagID は--id の説明に出る。
-	KeyCLIAbandonFlagID Key = "cli.abandon.flag_id"
 	// KeyCLIAbandonUsage は `continuo abandon --help` の冒頭に出る。
 	KeyCLIAbandonUsage Key = "cli.abandon.usage"
 	// KeyCLIAbandonErrIssueURLRequired はissue の URL が渡されなかったときに出る。
@@ -796,13 +764,6 @@ const (
 	KeyAbandonErrBuild Key = "abandon.err_build"
 	// KeyAbandonErrLockFile はロックファイルそのものを開けないときに出る。
 	KeyAbandonErrLockFile Key = "abandon.err_lock_file"
-	// KeyAbandonErrBoardInUse は同じボードを見ている continuo が動いているときに出る。
-	KeyAbandonErrBoardInUse Key = "abandon.err_board_in_use"
-	// KeyAbandonErrBoardInUseNoInfo は同じボードのロックが握られているのに、
-	// 誰が握っているかの覚え書きが無いときに出る（`continuo abandon` どうしがぶつかった場合）。
-	KeyAbandonErrBoardInUseNoInfo Key = "abandon.err_board_in_use_no_info"
-	// KeyAbandonErrBoardLockFile はボードのロックファイルそのものを開けないときに出る。
-	KeyAbandonErrBoardLockFile Key = "abandon.err_board_lock_file"
 	// KeyAbandonRunning は、**continuo が動いていて、手を離させる段を通る**ときの1行に出る。
 	KeyAbandonRunning Key = "abandon.running"
 	// KeyAbandonRunningDryRun は、**continuo が動いているが `--dry-run` なので
@@ -813,13 +774,6 @@ const (
 	KeyAbandonRunningDryRun Key = "abandon.running_dry_run"
 	// KeyAbandonNotRunning はcontinuo が動いていないときの1行に出る。
 	KeyAbandonNotRunning Key = "abandon.not_running"
-	// KeyAbandonNotRunningDryRun は、`--dry-run` が「動いていない」と答えたときの1行に出る。
-	//
-	// **本番の実行と言い分ける。**`--dry-run` は flock を掴まず覚え書きだけを見るので、
-	// **覚え書きが無い continuo を見つけられない。**
-	KeyAbandonNotRunningDryRun Key = "abandon.not_running_dry_run"
-	// KeyAbandonStaleLockInfo は、ロックの覚え書きが残骸として残っていたときに出る。
-	KeyAbandonStaleLockInfo Key = "abandon.stale_lock_info"
 
 	// KeyAbandonErrScan は置き場所を走査できないときに出る。
 	KeyAbandonErrScan Key = "abandon.err_scan"
@@ -1055,16 +1009,9 @@ const (
 	KeyCLIMainFlagLogLevel Key = "cli.main.flag_log_level"
 	// KeyCLIMainFlagPort は--port の説明に出る。
 	KeyCLIMainFlagPort Key = "cli.main.flag_port"
-	// KeyCLIMainFlagID は--id の説明に出る。
-	KeyCLIMainFlagID Key = "cli.main.flag_id"
 
 	// KeyCLIMainErrPortRange は --port の値が 0〜65535 の外だったことを表す。
 	KeyCLIMainErrPortRange Key = "cli.main.err_port_range"
-	// KeyCLIErrInvalidID は --id に渡された名前が使えないことを表す。
-	KeyCLIErrInvalidID Key = "cli.err_invalid_id"
-	// KeyCLIErrInstanceLayout は continuo の置き場所そのものを決められないことを表す。
-	// **名前の誤りとは言い分ける**（--id を渡していない人にも出るため）。
-	KeyCLIErrInstanceLayout Key = "cli.err_instance_layout"
 	// KeyCLIMainErrTooManyPositional は位置引数が2つ以上あるときに出る。
 	KeyCLIMainErrTooManyPositional Key = "cli.main.err_too_many_positional"
 	// KeyCLIMainStarting は起動したときの1行に出る。
@@ -1209,34 +1156,6 @@ const (
 	KeyLockReleaseUnlockFailed Key = "lock.release.unlock_failed"
 	// KeyLockReleaseCloseFailed はロックファイルのクローズに失敗したときに出る。
 	KeyLockReleaseCloseFailed Key = "lock.release.close_failed"
-)
-
-// 1台で何本動かすかを決める置き場所（internal/instance）のエラーの文言。
-const (
-	// KeyInstanceValidateIDTooLong は `--id` の名前が長すぎるときに出る。
-	KeyInstanceValidateIDTooLong Key = "instance.validate_id.too_long"
-	// KeyInstanceValidateIDInvalidShape は `--id` の名前に使えない文字があるときに出る。
-	KeyInstanceValidateIDInvalidShape Key = "instance.validate_id.invalid_shape"
-	// KeyInstanceResolveSocketPathTooLong は `--id` を足した socket のパスが上限を超えるときに出る。
-	KeyInstanceResolveSocketPathTooLong Key = "instance.resolve.socket_path_too_long"
-	// KeyInstanceRootHomeDirFailed は ~/.continuo を組み立てるためのホームディレクトリを引けなかったときに出る。
-	KeyInstanceRootHomeDirFailed Key = "instance.root.home_dir_failed"
-	// KeyInstanceEnsureLockDirFailed はロックファイルを置くディレクトリを作れなかったときに出る。
-	KeyInstanceEnsureLockDirFailed Key = "instance.ensure_lock_dir.failed"
-	// KeyInstanceBoardDirFailed はボードのロックを置くディレクトリを作れなかったときに出る。
-	KeyInstanceBoardDirFailed Key = "instance.board_dir.failed"
-	// KeyInstanceLockInfoMarshalFailed はロックの覚え書きを JSON にできなかったときに出る。
-	KeyInstanceLockInfoMarshalFailed Key = "instance.lock_info.marshal_failed"
-	// KeyInstanceLockInfoRemoveFailed はロックの覚え書きを消せなかったときに出る。
-	KeyInstanceLockInfoRemoveFailed Key = "instance.lock_info.remove_failed"
-	// KeyInstanceLockInfoReadFailed はロックの覚え書きを読めなかったときに出る。
-	KeyInstanceLockInfoReadFailed Key = "instance.lock_info.read_failed"
-	// KeyInstanceLockInfoBroken はロックの覚え書きが JSON として壊れていたときに出る。
-	KeyInstanceLockInfoBroken Key = "instance.lock_info.broken"
-	// KeyInstanceLockInfoNoPID はロックの覚え書きに PID が入っていなかったときに出る。
-	KeyInstanceLockInfoNoPID Key = "instance.lock_info.no_pid"
-	// KeyInstanceLockInfoPIDUnknown は覚え書きの PID の生死を確かめられなかったときに出る。
-	KeyInstanceLockInfoPIDUnknown Key = "instance.lock_info.pid_unknown"
 )
 
 // hook を受ける socket の置き場所（internal/socketpath）のエラーの文言。
@@ -1699,20 +1618,25 @@ const (
 	KeyServerWriteJSONEncodeFailed Key = "server.write_json.encode_failed"
 )
 
-// WORKFLOW.md の読み書きそのもの（internal/scaffold）の失敗の文言。
+// ファイルの読み書きそのもの（internal/scaffold / internal/atomicfile）の失敗の文言。
 //
 // **`continuo init` と `continuo setup` の両方が同じ文言を使う。**
 // 読む・確かめる・書く・閉じる・作るの5つは、どちらの経路でも同じ失敗である。
+//
+// **文言にファイルの名前を埋め込んではならない。**同じ経路を WORKFLOW.md と
+// PROJECT_SPECIFIC_PROMPT.md と settings.json が通るので、埋め込むと落ちた当のファイルとは
+// 別のファイルを名乗る（実際に `WORKFLOW.md を作成できません: …/PROJECT_SPECIFIC_PROMPT.md`
+// と出た）。**呼ぶ側が filepath.Base(path) を1つ目の引数として渡す。**
 const (
 	// KeyScaffoldFileReadFailed はWORKFLOW.md を読み込めなかったときに出る。
 	KeyScaffoldFileReadFailed Key = "scaffold.file.read_failed"
-	// KeyScaffoldFileStatFailed はWORKFLOW.md の有無を確かめられなかったときに出る。
+	// KeyScaffoldFileStatFailed は書き出す先の有無を確かめられなかったときに出る。
 	KeyScaffoldFileStatFailed Key = "scaffold.file.stat_failed"
-	// KeyScaffoldFileWriteFailed はWORKFLOW.md へ書き込めなかったときに出る。
+	// KeyScaffoldFileWriteFailed は書き出す先へ書き込めなかったときに出る。
 	KeyScaffoldFileWriteFailed Key = "scaffold.file.write_failed"
-	// KeyScaffoldFileCloseFailed はWORKFLOW.md を閉じられなかったときに出る。
+	// KeyScaffoldFileCloseFailed は書き出す先を閉じられなかったときに出る。
 	KeyScaffoldFileCloseFailed Key = "scaffold.file.close_failed"
-	// KeyScaffoldFileCreateFailed はWORKFLOW.md を作成できなかったときに出る。
+	// KeyScaffoldFileCreateFailed は書き出す先を作成できなかったときに出る。
 	KeyScaffoldFileCreateFailed Key = "scaffold.file.create_failed"
 )
 
@@ -1730,7 +1654,11 @@ const (
 
 // `continuo init` が雛形を書き出すとき（internal/scaffold の openError）の文言。
 //
-// **先頭の %w に ErrSymlink を渡す**（errors.Is の切り分けを保つため）。
+// **「ファイルの名前」「絶対パス」の順に2つの値を取る。**
+// **番兵 ErrSymlink の文言は繋がない。**番兵は WORKFLOW.md と
+// PROJECT_SPECIFIC_PROMPT.md の両方から返るので、そこにファイルの名前を書くと、
+// もう片方のときに別のファイルを名乗る。**errors.Is の切り分けは、
+// internal/scaffold の symlinkError が Unwrap で保つ。**
 const (
 	// KeyScaffoldWriteSymlinkNotFollowed は書き出す先が symlink で、辿らずに止めたときに出る。
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
@@ -1744,8 +1672,9 @@ const (
 // issue ごとの settings.json の書き出しからも出る。**文言は WORKFLOW.md を名指ししているが、
 // キーを増やさないことを優先している**（設計 3-59）。
 //
-// **symlink_not_followed と not_regular_file は先頭の %w に ErrSymlink / ErrNotFound を渡す**
-// （errors.Is の切り分けを保つため）。
+// **not_regular_file は先頭の %w に ErrNotFound を渡す**（errors.Is の切り分けを保つため）。
+// **symlink_not_followed は「ファイルの名前」「絶対パス」の順に2つの値を取り、番兵の文言を
+// 繋がない。**切り分けは internal/scaffold の symlinkError が Unwrap で保つ。
 const (
 	// KeyScaffoldUpdateSymlinkNotFollowed は書き換える先が symlink で、辿らずに止めたときに出る。
 	KeyScaffoldUpdateSymlinkNotFollowed Key = "scaffold.update.symlink_not_followed"
@@ -1757,7 +1686,7 @@ const (
 	KeyScaffoldUpdateChmodFailed Key = "scaffold.update.chmod_failed"
 	// KeyScaffoldUpdateSyncFailed は一時ファイルをディスクへ書き出せなかったときに出る。
 	KeyScaffoldUpdateSyncFailed Key = "scaffold.update.sync_failed"
-	// KeyScaffoldUpdateRenameFailed は一時ファイルで WORKFLOW.md を置き換えられなかったときに出る。
+	// KeyScaffoldUpdateRenameFailed は一時ファイルで書き換える先を置き換えられなかったときに出る。
 	KeyScaffoldUpdateRenameFailed Key = "scaffold.update.rename_failed"
 )
 
@@ -1793,7 +1722,11 @@ const (
 	KeyScaffoldErrDirNotFound Key = "scaffold.err.dir_not_found"
 	// KeyScaffoldErrNotADirectory は指定されたパスがディレクトリでないときに出る。
 	KeyScaffoldErrNotADirectory Key = "scaffold.err.not_a_directory"
-	// KeyScaffoldErrSymlink は書き出す先の WORKFLOW.md が symlink だったときに出る。
+	// KeyScaffoldErrSymlink は書き出す先が symlink だったときの番兵の文言である。
+	//
+	// **画面には出ない。**出る文言は KeyScaffoldWriteSymlinkNotFollowed と
+	// KeyScaffoldUpdateSymlinkNotFollowed が組み立てる。ここに特定のファイルの名前を
+	// 書いてはならない（番兵は2枚のどちらからも返る）。
 	KeyScaffoldErrSymlink Key = "scaffold.err.symlink"
 	// KeyScaffoldErrNotFound は書き換える先に WORKFLOW.md が無いときに出る。
 	KeyScaffoldErrNotFound Key = "scaffold.err.not_found"
@@ -2168,8 +2101,6 @@ const (
 	KeyWorkspaceRenderBranchRenderedEmpty Key = "workspace.render_branch.rendered_empty"
 	// KeyWorkspaceScanLevelRootUnreadable は置き場所の最上位を読めなかったときに出る。
 	KeyWorkspaceScanLevelRootUnreadable Key = "workspace.scan_level.root_unreadable"
-	// KeyWorkspaceInstanceMarkerWriteFailed は `--id` の置き場所に目印を書けなかったときに出る。
-	KeyWorkspaceInstanceMarkerWriteFailed Key = "workspace.instance_marker.write_failed"
 	// KeyWorkspaceCheckTrustForClonePathToplevelFailed は clone のパスから信頼を引く鍵を求められなかったときに出る。
 	KeyWorkspaceCheckTrustForClonePathToplevelFailed Key = "workspace.check_trust_for_clone_path.toplevel_failed"
 	// KeyWorkspaceCheckTrustForClonePathConfigUnreadable は `~/.claude.json` を読めなかったときに出る（存在しない場合は除く）。
@@ -2345,12 +2276,6 @@ const (
 	KeyDaemonRunAlreadyRunning Key = "daemon.run.already_running"
 	// KeyDaemonRunLockFileFailed は二重起動ではなく、ロックファイルそのものを用意できなかったときに出る。
 	KeyDaemonRunLockFileFailed Key = "daemon.run.lock_file_failed"
-	// KeyDaemonRunBoardInUse は同じボードを見ている continuo が既に動いているときに出る。
-	KeyDaemonRunBoardInUse Key = "daemon.run.board_in_use"
-	// KeyDaemonRunBoardLockFileFailed はボードのロックファイルそのものを用意できなかったときに出る。
-	KeyDaemonRunBoardLockFileFailed Key = "daemon.run.board_lock_file_failed"
-	// KeyDaemonRunInstanceFailed は `--id` から置き場所を決められなかったときに出る。
-	KeyDaemonRunInstanceFailed Key = "daemon.run.instance_failed"
 	// KeyDaemonRunStartupChecksFailed は起動時の検査に落ちたときに出る（生きている pane は閉じない）。
 	KeyDaemonRunStartupChecksFailed Key = "daemon.run.startup_checks_failed"
 	// KeyDaemonRunRestoreFailed は起動の段4の復元に失敗したときに出る。
@@ -2406,6 +2331,114 @@ const (
 	KeyRedactErrUnusableHome Key = "redact.err.unusable_home"
 )
 
+// 送る指示書を組み立てる（internal/prompt）の文言。
+const (
+	// KeyPromptParseFailed は断片をテンプレートとして解釈できなかったときに出る。
+	KeyPromptParseFailed Key = "prompt.parse_failed"
+	// KeyPromptRenderFailed は断片の変数展開に失敗したときに出る（一覧に無い変数など）。
+	KeyPromptRenderFailed Key = "prompt.render_failed"
+	// KeyPromptIndexSealed は封じた `index` を呼んだときに出る。
+	KeyPromptIndexSealed Key = "prompt.index_sealed"
+)
+
+// 固有のプロンプトを読む（internal/config）の文言。
+const (
+	// KeyConfigLoadProjectPromptReadFailed は PROJECT_SPECIFIC_PROMPT.md が在るのに
+	// 読めなかったときに出る。
+	//
+	// **`config.Load` はこれで落ちない**（`Loaded.ProjectPromptErr` に入れて返す）。
+	// 止めるかどうかを決めるのは、常駐プロセスの起動と doctor だけである。
+	KeyConfigLoadProjectPromptReadFailed Key = "config.load.project_prompt_read_failed"
+)
+
+// 起動時のプロンプトの検査（internal/daemon）の文言。
+const (
+	// KeyDaemonRunProjectPromptUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyDaemonRunProjectPromptUnreadable Key = "daemon.run.project_prompt_unreadable"
+	// KeyDaemonRunPromptInvalid は組み込みか固有のプロンプトの変数が誤っているときに出る。
+	KeyDaemonRunPromptInvalid Key = "daemon.run.prompt_invalid"
+)
+
+// `continuo doctor` のプロンプトの検査の文言。
+const (
+	// KeyDoctorLabelPromptVariables は「プロンプトの変数」の見出し語である。
+	KeyDoctorLabelPromptVariables Key = "doctor.label.prompt_variables"
+	// KeyDoctorLabelLeftoverBody は「残った本文」の見出し語である。
+	KeyDoctorLabelLeftoverBody Key = "doctor.label.leftover_body"
+	// KeyDoctorPromptVariablesOK は固有のプロンプトが在って、検査を通ったときに出る。
+	KeyDoctorPromptVariablesOK Key = "doctor.prompt_variables.ok"
+	// KeyDoctorPromptVariablesOKNoProject は固有のプロンプトが無くて、検査を通ったときに出る。
+	KeyDoctorPromptVariablesOKNoProject Key = "doctor.prompt_variables.ok_no_project"
+	// KeyDoctorPromptVariablesInvalid は変数の名前か構文が誤っているときに出る。
+	KeyDoctorPromptVariablesInvalid Key = "doctor.prompt_variables.invalid"
+	// KeyDoctorPromptVariablesProjectUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyDoctorPromptVariablesProjectUnreadable Key = "doctor.prompt_variables.project_unreadable"
+	// KeyDoctorPromptVariablesUnknown は WORKFLOW.md が読めず、置き場所も決まらないときに出る。
+	KeyDoctorPromptVariablesUnknown Key = "doctor.prompt_variables.unknown"
+	// KeyDoctorPromptVariablesRemedy は変数を直す手順である。
+	KeyDoctorPromptVariablesRemedy Key = "doctor.prompt_variables.remedy"
+	// KeyDoctorPromptVariablesRemedyPermission は固有のプロンプトの権限を確かめる手順である。
+	KeyDoctorPromptVariablesRemedyPermission Key = "doctor.prompt_variables.remedy_permission"
+	// KeyDoctorLeftoverBodyOK は WORKFLOW.md に本文が残っていないときに出る。
+	KeyDoctorLeftoverBodyOK Key = "doctor.leftover_body.ok"
+	// KeyDoctorLeftoverBodyLeft は WORKFLOW.md に本文が残っているときに出る。
+	KeyDoctorLeftoverBodyLeft Key = "doctor.leftover_body.left"
+	// KeyDoctorLeftoverBodyUnknown は WORKFLOW.md が読めないときに出る。
+	KeyDoctorLeftoverBodyUnknown Key = "doctor.leftover_body.unknown"
+	// KeyDoctorLeftoverBodyNoteBuiltinSkipped は組み込みが送られないことを添える1行である。
+	KeyDoctorLeftoverBodyNoteBuiltinSkipped Key = "doctor.leftover_body.note_builtin_skipped"
+	// KeyDoctorLeftoverBodyRemedyShow は組み込みの全文を読む手順である。
+	KeyDoctorLeftoverBodyRemedyShow Key = "doctor.leftover_body.remedy_show"
+	// KeyDoctorLeftoverBodyRemedyMove は書き足した部分を移す手順である。
+	KeyDoctorLeftoverBodyRemedyMove Key = "doctor.leftover_body.remedy_move"
+	// KeyDoctorLeftoverBodyRemedyDelete は移したあとに本文を消す手順である。
+	KeyDoctorLeftoverBodyRemedyDelete Key = "doctor.leftover_body.remedy_delete"
+)
+
+// `continuo prompt` の文言。
+const (
+	// KeyCLIPromptFlagShow は--show の説明に出る。
+	KeyCLIPromptFlagShow Key = "cli.prompt.flag_show"
+	// KeyCLIPromptFlagBuiltin は--builtin の説明に出る。
+	KeyCLIPromptFlagBuiltin Key = "cli.prompt.flag_builtin"
+	// KeyCLIPromptErrShowRequired は--show を付けずに呼んだときに出る。
+	KeyCLIPromptErrShowRequired Key = "cli.prompt.err_show_required"
+	// KeyCLIPromptErrTooManyPositional は位置引数が2つ以上あるときに出る。
+	KeyCLIPromptErrTooManyPositional Key = "cli.prompt.err_too_many_positional"
+	// KeyCLIPromptErrConfigLoad は WORKFLOW.md を読めないときに出る。
+	KeyCLIPromptErrConfigLoad Key = "cli.prompt.err_config_load"
+	// KeyCLIPromptErrProjectUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyCLIPromptErrProjectUnreadable Key = "cli.prompt.err_project_unreadable"
+	// KeyCLIPromptBreakdownHeading は内訳の見出しである。
+	KeyCLIPromptBreakdownHeading Key = "cli.prompt.breakdown_heading"
+	// KeyCLIPromptBreakdownBuiltinHead は組み込みの前半の1行である。
+	KeyCLIPromptBreakdownBuiltinHead Key = "cli.prompt.breakdown_builtin_head"
+	// KeyCLIPromptBreakdownBuiltinTail は組み込みの後半の1行である。
+	KeyCLIPromptBreakdownBuiltinTail Key = "cli.prompt.breakdown_builtin_tail"
+	// KeyCLIPromptBreakdownProject は固有のプロンプトの1行である。
+	KeyCLIPromptBreakdownProject Key = "cli.prompt.breakdown_project"
+	// KeyCLIPromptBreakdownProjectMissing は固有のプロンプトが無いときの1行である。
+	KeyCLIPromptBreakdownProjectMissing Key = "cli.prompt.breakdown_project_missing"
+	// KeyCLIPromptBreakdownWorkflowBody は WORKFLOW.md の本文の1行である。
+	KeyCLIPromptBreakdownWorkflowBody Key = "cli.prompt.breakdown_workflow_body"
+	// KeyCLIPromptWarnLeftoverBody は本文が残っているときの警告である。
+	KeyCLIPromptWarnLeftoverBody Key = "cli.prompt.warn_leftover_body"
+	// KeyCLIPromptBreakdownBuiltinOnly は--builtin のときの内訳の1行である。
+	KeyCLIPromptBreakdownBuiltinOnly Key = "cli.prompt.breakdown_builtin_only"
+)
+
+// `continuo init` が固有のプロンプトも書くときの文言。
+const (
+	// KeyCLIInitProjectPromptCreated は固有のプロンプトを新しく書き出したときに出る。
+	KeyCLIInitProjectPromptCreated Key = "cli.init.project_prompt_created"
+	// KeyCLIInitProjectPromptOverwritten は--force で固有のプロンプトを上書きしたときに出る。
+	KeyCLIInitProjectPromptOverwritten Key = "cli.init.project_prompt_overwritten"
+	// KeyCLIInitProjectPromptKept は固有のプロンプトが既にあって触らなかったときに出る。
+	KeyCLIInitProjectPromptKept Key = "cli.init.project_prompt_kept"
+	// KeyCLIInitWorkflowKept は WORKFLOW.md が既にあって触らなかったときに出る。
+	KeyCLIInitWorkflowKept Key = "cli.init.workflow_kept"
+)
+
 // allKeys は宣言済みのキーを全部並べたものである。
 //
 // **新しいキーを足したらここにも足すこと。**test/internal/i18n がこの一覧と
@@ -2415,23 +2448,12 @@ var allKeys = []Key{
 	KeyDoctorLabelHerdr,
 	KeyDoctorLabelClaude,
 	KeyDoctorLabelRuntimeDir,
-	KeyDoctorLabelLockFile,
-	KeyDoctorLabelBoardLock,
 	KeyDoctorRuntimeDirOK,
-	KeyDoctorRuntimeDirNotYet,
 	KeyDoctorRuntimeDirFailed,
 	KeyDoctorRuntimeDirRemedy,
 	KeyDoctorRuntimeDirInUse,
 	KeyDoctorRuntimeDirStale,
 	KeyDoctorRuntimeDirRemedyStale,
-	KeyDoctorLockFileOK,
-	KeyDoctorLockFileFailed,
-	KeyDoctorLockFileRemedy,
-	KeyDoctorBoardLockOK,
-	KeyDoctorBoardLockFailed,
-	KeyDoctorBoardLockRemedy,
-	KeyDoctorBoardLockNoConfig,
-	KeyDoctorBoardLockNormalized,
 	KeyDoctorClaudeNotFound,
 	KeyDoctorClaudeFound,
 	KeyDoctorClaudeRemedyInstall,
@@ -2481,7 +2503,6 @@ var allKeys = []Key{
 	KeyDoctorFilesystemRemedyRestart,
 	KeyDoctorWriteRemedyPermission,
 	KeyDoctorDefaultUsed,
-	KeyDoctorInstanceNote,
 	KeyDoctorClaudeHomeOK,
 	KeyDoctorClaudeHomeFailed,
 	KeyDoctorClaudeHomeReason,
@@ -2500,10 +2521,6 @@ var allKeys = []Key{
 	KeyFsprobeHomeDirFailed,
 	KeyFsprobeClaudeHomeFailed,
 	KeyFsprobeWorkspaceRootFailed,
-	KeyFsprobeNotADirectory,
-	KeyFsprobeStatFailed,
-	KeyFsprobeNoExistingAncestor,
-	KeyFsprobeSocketFailed,
 	KeyHandoffBidCandidacy,
 	KeyHandoffBidDeadline,
 	KeyHandoffBidDeadlineOne,
@@ -2695,7 +2712,6 @@ var allKeys = []Key{
 	KeyCLIDoctorWarnPathUnresolved,
 	KeyCLIDoctorErrWriteReport,
 	KeyCLIDoctorFlagMissingKeysPatch,
-	KeyCLIDoctorFlagID,
 	KeyCLIDoctorErrMissingKeysPatch,
 	KeyCLIAllowKeychainAccessErrTooManyPositional,
 	KeyCLIAllowKeychainAccessNotDarwin,
@@ -2716,7 +2732,6 @@ var allKeys = []Key{
 	KeyCLIAbandonFlagForce,
 	KeyCLIAbandonFlagTo,
 	KeyCLIAbandonFlagPark,
-	KeyCLIAbandonFlagID,
 	KeyCLIAbandonUsage,
 	KeyCLIAbandonErrIssueURLRequired,
 	KeyCLIAbandonErrTooManyPositional,
@@ -2732,14 +2747,9 @@ var allKeys = []Key{
 	KeyAbandonErrConfigLoad,
 	KeyAbandonErrBuild,
 	KeyAbandonErrLockFile,
-	KeyAbandonErrBoardInUse,
-	KeyAbandonErrBoardInUseNoInfo,
-	KeyAbandonErrBoardLockFile,
 	KeyAbandonRunning,
 	KeyAbandonRunningDryRun,
 	KeyAbandonNotRunning,
-	KeyAbandonNotRunningDryRun,
-	KeyAbandonStaleLockInfo,
 	KeyAbandonErrScan,
 	KeyAbandonNotFound,
 	KeyAbandonOwnerRepoMismatch,
@@ -2822,10 +2832,7 @@ var allKeys = []Key{
 	KeyCLIMainUsage,
 	KeyCLIMainFlagLogLevel,
 	KeyCLIMainFlagPort,
-	KeyCLIMainFlagID,
 	KeyCLIMainErrPortRange,
-	KeyCLIErrInvalidID,
-	KeyCLIErrInstanceLayout,
 	KeyCLIMainErrTooManyPositional,
 	KeyCLIMainStarting,
 	KeyCLIHookFlagSocket,
@@ -2888,18 +2895,6 @@ var allKeys = []Key{
 	KeyLockAcquireAlreadyRunning,
 	KeyLockReleaseUnlockFailed,
 	KeyLockReleaseCloseFailed,
-	KeyInstanceValidateIDTooLong,
-	KeyInstanceValidateIDInvalidShape,
-	KeyInstanceResolveSocketPathTooLong,
-	KeyInstanceRootHomeDirFailed,
-	KeyInstanceEnsureLockDirFailed,
-	KeyInstanceBoardDirFailed,
-	KeyInstanceLockInfoMarshalFailed,
-	KeyInstanceLockInfoRemoveFailed,
-	KeyInstanceLockInfoReadFailed,
-	KeyInstanceLockInfoBroken,
-	KeyInstanceLockInfoNoPID,
-	KeyInstanceLockInfoPIDUnknown,
 	KeySocketpathRuntimeDirHomeDirFailed,
 	KeySocketpathCheckAbsNotAbsolute,
 	KeySocketpathCheckPathLenTooLong,
@@ -3219,7 +3214,6 @@ var allKeys = []Key{
 	KeyWorkspaceRenderBranchTemplateRenderFailed,
 	KeyWorkspaceRenderBranchRenderedEmpty,
 	KeyWorkspaceScanLevelRootUnreadable,
-	KeyWorkspaceInstanceMarkerWriteFailed,
 	KeyWorkspaceCheckTrustForClonePathToplevelFailed,
 	KeyWorkspaceCheckTrustForClonePathConfigUnreadable,
 	KeyWorkspaceCheckTrustForClonePathConfigUnparsable,
@@ -3299,9 +3293,6 @@ var allKeys = []Key{
 	KeyDaemonRunSocketDirFailed,
 	KeyDaemonRunAlreadyRunning,
 	KeyDaemonRunLockFileFailed,
-	KeyDaemonRunBoardInUse,
-	KeyDaemonRunBoardLockFileFailed,
-	KeyDaemonRunInstanceFailed,
 	KeyDaemonRunStartupChecksFailed,
 	KeyDaemonRunRestoreFailed,
 	KeyDaemonRunStartupChecksHerdrUnreachable,
@@ -3321,6 +3312,46 @@ var allKeys = []Key{
 	KeyDaemonBuildDashboardFailed,
 	KeyI18nResolveUnsupportedLanguage,
 	KeyRedactErrUnusableHome,
+	KeyPromptParseFailed,
+	KeyPromptRenderFailed,
+	KeyPromptIndexSealed,
+	KeyConfigLoadProjectPromptReadFailed,
+	KeyDaemonRunProjectPromptUnreadable,
+	KeyDaemonRunPromptInvalid,
+	KeyDoctorLabelPromptVariables,
+	KeyDoctorLabelLeftoverBody,
+	KeyDoctorPromptVariablesOK,
+	KeyDoctorPromptVariablesOKNoProject,
+	KeyDoctorPromptVariablesInvalid,
+	KeyDoctorPromptVariablesProjectUnreadable,
+	KeyDoctorPromptVariablesUnknown,
+	KeyDoctorPromptVariablesRemedy,
+	KeyDoctorPromptVariablesRemedyPermission,
+	KeyDoctorLeftoverBodyOK,
+	KeyDoctorLeftoverBodyLeft,
+	KeyDoctorLeftoverBodyUnknown,
+	KeyDoctorLeftoverBodyNoteBuiltinSkipped,
+	KeyDoctorLeftoverBodyRemedyShow,
+	KeyDoctorLeftoverBodyRemedyMove,
+	KeyDoctorLeftoverBodyRemedyDelete,
+	KeyCLIPromptFlagShow,
+	KeyCLIPromptFlagBuiltin,
+	KeyCLIPromptErrShowRequired,
+	KeyCLIPromptErrTooManyPositional,
+	KeyCLIPromptErrConfigLoad,
+	KeyCLIPromptErrProjectUnreadable,
+	KeyCLIPromptBreakdownHeading,
+	KeyCLIPromptBreakdownBuiltinHead,
+	KeyCLIPromptBreakdownBuiltinTail,
+	KeyCLIPromptBreakdownProject,
+	KeyCLIPromptBreakdownProjectMissing,
+	KeyCLIPromptBreakdownWorkflowBody,
+	KeyCLIPromptWarnLeftoverBody,
+	KeyCLIPromptBreakdownBuiltinOnly,
+	KeyCLIInitProjectPromptCreated,
+	KeyCLIInitProjectPromptOverwritten,
+	KeyCLIInitProjectPromptKept,
+	KeyCLIInitWorkflowKept,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

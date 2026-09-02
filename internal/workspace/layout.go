@@ -2,9 +2,7 @@ package workspace
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -37,8 +35,11 @@ const rootDirPerm os.FileMode = 0o700
 // 戻り値: シンボリックリンクを解決した絶対パス。root が空文字・相対パスの場合、
 // ディレクトリを作れない場合、解決に失敗した場合はエラーを返す。
 func EnsureRoot(root string) (string, error) {
-	if err := checkRootShape(root); err != nil {
-		return "", err
+	if strings.TrimSpace(root) == "" {
+		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootRootEmpty)
+	}
+	if !filepath.IsAbs(root) {
+		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootRootNotAbsolute, root)
 	}
 	if err := os.MkdirAll(root, rootDirPerm); err != nil {
 		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootMkdirFailed, root, err)
@@ -48,49 +49,6 @@ func EnsureRoot(root string) (string, error) {
 		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootSymlinkUnresolvable, root, err)
 	}
 	return filepath.Clean(resolved), nil
-}
-
-// ResolveRoot は workspace.root のシンボリックリンクを解決した絶対パスを返す。
-// **1つもディレクトリを作らない。**
-//
-// **`continuo abandon --dry-run` のためにある。**あちらは「何も書かない」と
-// README で約束しているのに、`EnsureRoot` は `workspace.root` を作る。
-// **見せるだけの実行が置き場所を作ってはならない。**
-//
-// **無ければ、字句の上で整えたパスをそのまま返す。**置き場所が存在しないなら
-// worktree は1つも無く、封じ込め検査（CheckContainment）にかける相手も居ない。
-// **「解決できなかった」を理由に止めると、まだ1度も起動していない環境で
-// `continuo abandon --dry-run` が何も答えられなくなる。**
-//
-// root: 設定の workspace.root（チルダ・環境変数の展開を済ませた値を渡すこと）。
-// 戻り値: 解決した絶対パス。root が空文字・相対パスの場合、
-// **実在するのに解決できなかった場合**はエラーを返す。
-func ResolveRoot(root string) (string, error) {
-	if err := checkRootShape(root); err != nil {
-		return "", err
-	}
-	resolved, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return filepath.Clean(root), nil
-		}
-		return "", i18n.Errorf(i18n.KeyWorkspaceEnsureRootSymlinkUnresolvable, root, err)
-	}
-	return filepath.Clean(resolved), nil
-}
-
-// checkRootShape は workspace.root が値として成立しているかだけを見る。
-//
-// root: 設定の workspace.root。
-// 戻り値: 空文字・相対パスの場合のエラー。
-func checkRootShape(root string) error {
-	if strings.TrimSpace(root) == "" {
-		return i18n.Errorf(i18n.KeyWorkspaceEnsureRootRootEmpty)
-	}
-	if !filepath.IsAbs(root) {
-		return i18n.Errorf(i18n.KeyWorkspaceEnsureRootRootNotAbsolute, root)
-	}
-	return nil
 }
 
 // CheckContainment は path が resolvedRoot の内側にあることを確かめる（3-20）。
@@ -233,30 +191,6 @@ func BranchPrefix(tmpl string) string {
 		return ""
 	}
 	return tmpl[:index]
-}
-
-// BranchPrefixForSweep は、孤児 branch の掃除（3-9 の段6b）に使ってよい接頭辞を返す。
-//
-// **`--id` が足した `<名前>/` だけを接頭辞として使ってはならない。**
-// `--id` は `herdr.worktree.branch_template` の先頭へ `<名前>/` を足す（3-17b）。
-// **元のテンプレートが `{{.issue.repo}}-{{.issue.number}}` のように変数で始まっていると、
-// 接頭辞は空文字（＝掃除しない）だったのに、`--id e2e` を付けた途端に `e2e/` になる。**
-// そのまま掃除を始めると、**人間が自分で切った `e2e/spike` を `git branch -D` で消す。**
-//
-// **`--id` を足す前の接頭辞が空だったかどうかは、この2つだけで判定できる。**
-// 足したあとの接頭辞は `<名前>/` + 足す前の接頭辞なので、
-// **`<名前>/` と等しいことは「足す前が空だった」ことと同じである。**
-//
-// tmpl: `herdr.worktree.branch_template`（**`--id` を足したあとの値**）。
-// instanceID: `--id` に渡された名前。**既定なら空文字。**
-// 戻り値: 掃除に使ってよい接頭辞。**使ってはならない場合は空文字を返す**
-// （呼び出し側は、そのときは1本も消さないこと）。
-func BranchPrefixForSweep(tmpl, instanceID string) string {
-	prefix := BranchPrefix(tmpl)
-	if instanceID != "" && prefix == instanceID+"/" {
-		return ""
-	}
-	return prefix
 }
 
 // Slug は branch 名から置き場所のディレクトリ名を作る（3-22）。

@@ -8,10 +8,10 @@
 // 数を2箇所に書けば必ずずれる。数えられる場所は Label 定数の一覧だけにする。
 //
 //	設定ファイル      … WORKFLOW.md が読めて、front matter が検証を通るか
-//	ロックの場所      … 二重起動防止のロックを実際に置けるか（`--id` の場所を含む）
-//	ボードのロック     … ボード1枚ぶんのロックを実際に置けるか（`~/.continuo/board/`）
 //	片付けの状態      … `cleanup.on_states` が `tracker.terminal_states` に収まっているか
 //	未記入の項目      … 雛形にある設定項目が WORKFLOW.md に全部書かれているか
+//	プロンプトの変数   … 送るプロンプトが、決められた9つの変数だけを使っているか
+//	残った本文        … WORKFLOW.md に、いまは使わない本文が残っていないか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
 //	hook の置き場所    … hook を受ける socket を実際に置けるか
 //	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか
@@ -54,7 +54,6 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
-	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -80,21 +79,6 @@ const (
 type Options struct {
 	// ConfigPath は読み込む WORKFLOW.md の絶対パスである。必須。
 	ConfigPath string
-	// Instance は `--id` から導いた置き場所である（設計 3-17b）。
-	//
-	// **nil なら既定の1本をここで解決する。**
-	// **これを見ないと、`--id` を付けた起動が使う socket とロックの場所を1度も見ずに
-	// `✓` を出す**（`continuo doctor --id <名前>` が渡してくる）。
-	Instance *instance.Layout
-	// InstanceErr は置き場所を決められなかった理由である（決まっていれば nil）。
-	//
-	// **決まらなくても検査は止めない。**決まらなかったことは見出し語
-	// `ロックの場所` の結果（`✗`）として報告する。
-	//
-	// **これが無かったとき、`internal/cli` は `instance.Resolve` の失敗をそのまま
-	// 終了コード 2 にしていた。**`HOME` を引けない環境では、`--id` を1文字も
-	// 渡していない人の `continuo doctor` が**検査を1つも実行せずに落ちた。**
-	InstanceErr error
 	// GraphQLEndpoint は GitHub の GraphQL API の URL である。
 	// **空なら本番の GitHub GraphQL API を使う。**テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
@@ -192,29 +176,11 @@ func Run(ctx context.Context, opts Options) Report {
 	ctx, cancelAll := context.WithTimeout(ctx, opts.Timeout)
 	defer cancelAll()
 
-	// **`--id` から導く置き場所を、検査より先に1つ決める**（設計 3-17b）。
-	// **決まらなくても検査は続ける。**決まらなかったことは「ロックの場所」の検査結果になる。
-	inst := instance.Layout{}
-	instErr := opts.InstanceErr
-	switch {
-	case opts.Instance != nil:
-		inst = *opts.Instance
-	case instErr == nil:
-		inst, instErr = instance.Resolve("")
-	}
-
 	var report Report
 
 	// 段1: 設定ファイル。**ここが落ちても打ち切らない**（設計 3-32 / 08_doctor.md）。
 	configResult, cfg := checkConfig(opts.ConfigPath)
 	report.add(configResult)
-
-	// **`--id` は `workspace.root` と branch 名も動かす**（設計 3-17b）。
-	// **写してから下流の検査へ渡す。**写さないと、`--id` を付けた起動が実際に使う
-	// worktree の置き場所を1度も見ないまま `✓` を出す。
-	if cfg.OK {
-		cfg.Config = inst.Apply(cfg.Config)
-	}
 
 	// 段1b: 片付けの状態。**設定を読むだけで済むので、外へ出る検査より先に置く**（設計 3-9e）。
 	// `config.Validate` は `cleanup.on_states` と `tracker.active_states` の重なりしか
@@ -226,19 +192,17 @@ func Run(ctx context.Context, opts Options) Report {
 	// 読まないかぎり存在に気づけない**（issue #85）。**ここが人間に見せる唯一の場所である。**
 	report.add(checkMissingKeys(opts, cfg, configResult.Symbol))
 
+	// 段1d: プロンプトの変数と、残った本文。**ここもボードを1バイトも読まない。**
+	// **変数の誤りは issue を1件も着手させない**ので、外へ出る検査より先に見せる。
+	report.add(checkPromptVariables(cfg, configResult.Symbol))
+	report.add(checkLeftoverBody(cfg, configResult.Symbol))
+
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。
 	report.add(checkClaude(opts, cfg, configResult.Symbol))
 	// **hook を受ける socket を置けるかを、herdr より先に確かめる。**
 	// **これが無かったとき、8項目すべてが ✓ なのに起動だけが落ちた**（issue #9）。
-	report.add(checkRuntimeDir(cfg, configResult.Symbol, inst))
-	// **ロックの場所も見る。**socket とは別の場所であり（設計 3-17）、
-	// **片方が書けても、もう片方が書けるとは限らない。**
-	report.add(checkLockFile(inst, instErr))
-	// **ボードのロックも見る**（設計 3-17e）。**これも別の場所である**
-	// （`~/.continuo/board/`）。**そこがファイルでも symlink でも 0755 でも、
-	// 見なければ全部 `✓` を出したまま起動だけが落ちる。**
-	report.add(checkBoardLock(cfg, configResult.Symbol))
+	report.add(checkRuntimeDir(cfg, configResult.Symbol))
 	// **Claude Code の設定ディレクトリに書けるかを、設定が読めていなくても確かめる。**
 	// Claude Code は SessionStart hook を走らせる前に `~/.claude/session-env/<session_id>/`
 	// を作り、continuo はその hook を必ず張る。**ここが書けないと issue は1件も始まらない**
@@ -246,7 +210,7 @@ func Run(ctx context.Context, opts Options) Report {
 	report.add(checkClaudeHome(opts))
 	// **worktree の置き場所に書けるかも確かめる。**書けないと着手は段3 で必ず落ちる。
 	// **置き場所は `workspace.root` にしか書いていないので、設定が読めているときだけ走る。**
-	report.add(checkWorkspaceRoot(opts, cfg, configResult.Symbol, inst))
+	report.add(checkWorkspaceRoot(opts, cfg, configResult.Symbol))
 
 	// 段3: herdr。照合する protocol は設定から来るので、設定が読めなければ確かめられない。
 	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
@@ -368,4 +332,8 @@ type loadedConfig struct {
 	OK bool
 	// Config は読めた場合の設定である。OK が偽のときは意味を持たない。
 	Config config.Config
+	// Loaded は読み込み結果そのものである。**OK が偽のときは nil である。**
+	//
+	// **プロンプトの検査が使う**（WORKFLOW.md の本文と、固有のプロンプトの読み込みの結果）。
+	Loaded *config.Loaded
 }

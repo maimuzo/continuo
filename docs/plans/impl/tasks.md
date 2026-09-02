@@ -70,7 +70,7 @@
 | --- | --- |
 | `polling.interval_ms` / `agent.max_concurrent_agents` / `tracker.active_states` などの挙動を決める値 | continuo を再起動する（走行中の issue は再起動時の復元で拾い直す。設計 3-4） |
 | 本文のプロンプトのテンプレート | 同上。次に dispatch する issue から新しい本文になる |
-| `server.port` / `claude.hook_bridge.listen` | **読み直しを実装しても再起動が要る。**自前のリソースを掴んでいるため、仕様 6.2 が再起動を明示的に許している |
+| `server.port` / `claude.hook_bridge.listen` / `runtime.lock_file` | **読み直しを実装しても再起動が要る。**自前のリソースを掴んでいるため、仕様 6.2 が再起動を明示的に許している |
 
 **走行中の run をどう扱うかが決まらない。**読み直しを入れると「走行中の run が見ている設定」と
 「新しく読んだ設定」の2つが同時に存在することになり、どの段でどちらを使うかを決めないと、

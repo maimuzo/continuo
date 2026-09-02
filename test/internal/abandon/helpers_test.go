@@ -28,7 +28,6 @@ import (
 	"github.com/maimuzo/continuo/internal/abandon"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
-	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -691,10 +690,6 @@ func runGit(t *testing.T, dir string, args ...string) string {
 type fixture struct {
 	// Root は一時ディレクトリの根である（socket を短く保つため MkdirTemp で作る）。
 	Root string
-	// Home は `HOME` として使う短い一時ディレクトリである。
-	//
-	// **`~/.continuo/id/<名前>/` を見る経路が、利用者の本物のホームを触らないようにする。**
-	Home string
 	// Repo は本物の git のリポジトリである。
 	Repo *testRepo
 	// Herdr はテスト用herdr mock である。
@@ -711,11 +706,6 @@ type fixture struct {
 	Clock *fakeClock
 	// LockPath は二重起動防止のロックファイルの絶対パスである。
 	LockPath string
-	// BoardLockPath はボードのロックファイルの絶対パスである（設計 3-17e）。
-	//
-	// **必ず一時ディレクトリの中に置く。**埋めずに走らせると、abandon が
-	// `~/.continuo/board/` を使い、**テストが利用者の本物のホームへ書き込む。**
-	BoardLockPath string
 	// SettingsRoot は issue ごとの設定ファイルの置き場所である（設計 3-12）。
 	SettingsRoot string
 	// Ghq は `ghq list -p -e` の代わりに返す答えである。
@@ -775,17 +765,12 @@ func newFixtureWithConfig(t *testing.T, extra string) *fixture {
 		t.Fatalf("WORKFLOW.md を読めません: %v", err)
 	}
 
-	// **ホームディレクトリも一時ディレクトリへ閉じる。**`--id` を付けた経路は
-	// `~/.continuo/id/<名前>/` を見るので、閉じないとテストが利用者の本物のホームを触る。
-	// **`HOME` と Manager に渡す値を同じにする。**別々にすると、走査が
-	// 「別の continuo の置き場所か」を確かめに行く先（`~/.continuo/id/`）だけがずれる。
-	home := shortHome(t)
 	settingsRoot := filepath.Join(root, "issues")
 	ghq := &ghqAnswer{Path: repo.Dir}
 	mgr, err := workspace.New(workspace.Options{
 		Config:       loaded.Config,
 		Herdr:        fake.Client(),
-		HomeDir:      home,
+		HomeDir:      filepath.Join(root, "home"),
 		GhqList:      func(_ context.Context, _, _ string) (string, error) { return ghq.Path, nil },
 		SettingsRoot: settingsRoot,
 	})
@@ -794,49 +779,18 @@ func newFixtureWithConfig(t *testing.T, extra string) *fixture {
 	}
 
 	return &fixture{
-		Root:          root,
-		Home:          home,
-		Repo:          repo,
-		Herdr:         fake,
-		Manager:       mgr,
-		Config:        loaded.Config,
-		WorkflowPath:  workflowPath,
-		Tracker:       newFakeTracker("In Progress"),
-		Clock:         &fakeClock{now: time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)},
-		LockPath:      filepath.Join(root, "continuo.lock"),
-		BoardLockPath: filepath.Join(root, "board.lock"),
-		SettingsRoot:  settingsRoot,
-		Ghq:           ghq,
+		Root:         root,
+		Repo:         repo,
+		Herdr:        fake,
+		Manager:      mgr,
+		Config:       loaded.Config,
+		WorkflowPath: workflowPath,
+		Tracker:      newFakeTracker("In Progress"),
+		Clock:        &fakeClock{now: time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)},
+		LockPath:     filepath.Join(root, "continuo.lock"),
+		SettingsRoot: settingsRoot,
+		Ghq:          ghq,
 	}
-}
-
-// shortHome は、ホームディレクトリの代わりに使う短い一時ディレクトリを作り、
-// `HOME` をそこへ向ける。
-//
-// **短くなければならない。**`--id` を付けたときの socket は
-// `~/.continuo/id/<名前>/run/hooks.sock` であり、103バイトに収まらないと決められない
-// （設計 3-17d / 3-23）。**macOS の `TMPDIR` はそれだけで66文字前後ある。**
-//
-// t: 呼び出し元のテスト。
-// 戻り値: 実体のパス（symlink を解決済み）。
-func shortHome(t *testing.T) string {
-	t.Helper()
-
-	for _, base := range []string{"/tmp", ""} {
-		dir, err := os.MkdirTemp(base, "ca")
-		if err != nil {
-			continue
-		}
-		t.Cleanup(func() { _ = os.RemoveAll(dir) })
-		resolved, err := filepath.EvalSymlinks(dir)
-		if err != nil {
-			resolved = dir
-		}
-		t.Setenv("HOME", resolved)
-		return resolved
-	}
-	t.Fatal("一時ディレクトリを作れません")
-	return ""
 }
 
 // writeWorkflow は WORKFLOW.md を書く。
@@ -1152,12 +1106,9 @@ func (fx *fixture) Options(number int) abandon.Options {
 		PaneWaitTimeout:  3 * time.Second,
 		PaneWaitInterval: time.Second,
 		Deps: abandon.Deps{
-			LockPath: fx.LockPath,
-			// **ボードのロックも一時ディレクトリへ閉じる。**埋めないと
-			// `~/.continuo/board/` を掴み、利用者の本物のホームへ書き込む。
-			BoardLockPath: fx.BoardLockPath,
-			Herdr:         fx.Herdr.Client(),
-			Workspace:     fx.Manager,
+			LockPath:  fx.LockPath,
+			Herdr:     fx.Herdr.Client(),
+			Workspace: fx.Manager,
 			NewTracker: func(_ context.Context) (abandon.Tracker, error) {
 				fx.trackerBuilds++
 				return fx.Tracker, nil
@@ -1278,15 +1229,9 @@ func (fx *fixture) CloseHerdr(t *testing.T) error {
 
 // holdLock は「continuo が動いている」状態を作る。
 //
-// **本番と同じ2つを揃える。**常駐している continuo は、flock を握った直後に
-// **ロックの隣へ覚え書きを書く**（設計 3-17i）。
-//
-//	flock        … `--dry-run` でない abandon が見る（取れなければ動いている）
-//	覚え書き     … `--dry-run` が見る（flock を掴まないので、これしか手立てが無い）
-//
-// **片方だけを作ると、2つの経路のどちらかが「動いていない」と答える。**
-//
-// **掴んだロックはテストの終わりに手放し、覚え書きも消す。**残すと、同じロックファイルを使う
+// **abandon はロックを取れたかどうかで継続監視の生死を判定する**（設計 3-17）ので、
+// テストが先に掴んでおけば「動いている」側の経路に入る。
+// **掴んだロックはテストの終わりに手放す。**手放さないと、同じロックファイルを使う
 // あとのテストが「動いている」状態を引きずる。
 //
 // **1箇所にまとめてある。**同じ前置きを17箇所へ書き写していたので、掴み方を変えると
@@ -1300,13 +1245,7 @@ func holdLock(t *testing.T, fx *fixture) {
 	if err != nil {
 		t.Fatalf("テストがロックを掴めません: %v", err)
 	}
-	if err := instance.WriteLockInfo(fx.LockPath, instance.LockInfo{PID: os.Getpid()}, nil); err != nil {
-		t.Fatalf("テストがロックの覚え書きを書けません: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = instance.RemoveLockInfo(fx.LockPath)
-		_ = held.Release()
-	})
+	t.Cleanup(func() { _ = held.Release() })
 }
 
 // freezeDir はディレクトリから書き込みの権限を落とし、中身を1つも消せなくする。

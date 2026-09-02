@@ -131,9 +131,6 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	// **入札できない機械は、担当者のいない issue のコメントを読まない**（設計 3-77a）。
 	// 枠を読めない・枠を使い過ぎた・余裕値がマイナス、のどれかなら、この issue で
 	// **できることは「黙る」だけである。**読んでから黙るのは、リクエストの無駄でしかない。
-	// **ここは2段目の守りである。**同じ判定は `dispatchCandidates` の冒頭が
-	// 巡回1回につき1度だけ行い、**止まる理由を `Info` で1行出している**（設計 3-77j）。
-	// **だからここは `Debug` でよい。**ここを `Info` にすると、候補の数だけ同じ行が出る。
 	bid, skip := o.evaluateBid()
 	if len(logins) == 0 && skip != handoff.SkipNone {
 		o.logger.Debug("入札しません（この issue は他の機械に任せます）",

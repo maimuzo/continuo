@@ -1,3 +1,4 @@
+// {"RUCM-CFG-SHA256": "3ab1f5f3c605aebef9101a1c036ac0b5982f0fc54c33cd0884c6e52e0fb1a688", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
 package orchestrator_test
 
 import (
@@ -83,9 +84,34 @@ func countPromptHooks(s toolGateSettings) int {
 	return n
 }
 
+// countCommandHooks は `PreToolUse` に載った `type: "command"` の hook の数を数える。
+//
+// **判定を掛けない側でも、これは消えてはならない。**turn の終わりと生存を知る唯一の
+// 手立てだからである（設計 3-2）。
+//
+// s: 読み出した設定ファイルの中身。
+// 戻り値: 生存を知らせる hook の数。
+func countCommandHooks(s toolGateSettings) int {
+	n := 0
+	for _, m := range s.Hooks["PreToolUse"] {
+		for _, h := range m.Hooks {
+			if h.Type == "command" && h.Command != "" {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// {"RUCM-PATH": "P007"}
+//
 // 目的: 公開リポジトリの issue に着手したとき、危ない道具の呼び出しを判定させる hook が
 // `PreToolUse` に載ること、そして **turn の終わりを知るための `command` の hook が
 // 消えていないこと**を確かめる（設計 3-64）。
+//
+// **「本家のリポジトリへ PR を出す」の代替フロー「公開のリポジトリ」もここに載る。**
+// 本家へ PR を出す形は公開のリポジトリでも起こりうる。**そのときは誰でも issue を書けるので、
+// 指示そのものが攻撃になりうる。**判定を掛ける側へ倒す。
 //
 // **`continueOnBlock` が真であることを必ず見る。**偽だと、判定が断った時点で turn が
 // そこで終わり、無人運用が壊れる。
@@ -143,12 +169,18 @@ func TestToolGate_公開リポジトリのissueには判定のhookを足す(t *t
 	}
 }
 
+// {"RUCM-PATH": "P001"}
+//
 // 目的: `public_only` の判定が、リポジトリの公開・非公開でどう分かれるかを固定する（設計 3-64）。
 //
 // **取れなかったとき（nil）は掛ける側へ倒す。**分からないものを「公開ではない」と決めない。
 //
+// **「本家のリポジトリへ PR を出す」の基本フローの段7 もここに載る。**あちらの issue は
+// 非公開のリポジトリにあるので判定が掛からず、**エージェントは fork への push も本家への PR も
+// 待ち時間なしで叩ける。**
+//
 // 与える情報: `mode: public_only` と、公開・非公開・取れなかった、の3通りの issue。
-// 成功条件: 非公開のときだけ判定の hook が載らないこと。
+// 成功条件: 非公開のときだけ判定の hook が載らないこと。**どの場合でも `command` の hook は残ること。**
 func TestToolGate_公開かどうかで判定を掛けるかが決まる(t *testing.T) {
 	private := true
 	public := false
@@ -174,6 +206,9 @@ func TestToolGate_公開かどうかで判定を掛けるかが決まる(t *test
 			}
 			if !c.wantGate && n != 0 {
 				t.Fatalf("判定の hook が載ってしまっています: %d 件", n)
+			}
+			if countCommandHooks(got) == 0 {
+				t.Fatal("turn の終わりを知るための command の hook まで消えています")
 			}
 		})
 	}

@@ -7,29 +7,25 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
-	"github.com/maimuzo/continuo/internal/scaffold"
+	"github.com/maimuzo/continuo/internal/prompt"
 )
 
-// realPromptBody は `continuo init` が置く WORKFLOW.md の本文（front matter より後ろ）を返す。
+// realPromptBody は continuo が実際に送る組み込みのプロンプトの全文を返す。
 //
-// **雛形そのものを使う。**テストの中で本文を書き写すと、雛形を直しても落ちない。
+// **組み込みそのものを使う。**テストの中で文面を書き写すと、組み込みを直しても落ちない。
+//
+// **`continuo init` が置く WORKFLOW.md は本文を持たない**（設計 5-3c）。
+// 送る文面は internal/prompt/builtin.md にある。
 //
 // t: 呼び出し元のテスト。
-// 戻り値: front matter の終端行 "---" より後ろ。
+// 戻り値: 組み込みの前半と後半を連結した全文（固有のプロンプトは挟まない）。
 func realPromptBody(t *testing.T) string {
 	t.Helper()
-	raw := strings.ReplaceAll(scaffold.Template(), "\r\n", "\n")
-	lines := strings.Split(raw, "\n")
-	if len(lines) == 0 || strings.TrimRight(lines[0], " \t") != "---" {
-		t.Fatalf("雛形の1行目が front matter の開始行ではありません")
+	body := prompt.Builtin()
+	if strings.TrimSpace(body) == "" {
+		t.Fatal("組み込みのプロンプトが空です")
 	}
-	for i := 1; i < len(lines); i++ {
-		if strings.TrimRight(lines[i], " \t") == "---" {
-			return strings.Join(lines[i+1:], "\n")
-		}
-	}
-	t.Fatalf("雛形に front matter の終端行がありません")
-	return ""
+	return body
 }
 
 // TestPrompt_雛形の本文はPRのコメントとレビューを読ませる は、issue #34 を確かめる。

@@ -16,6 +16,7 @@ import (
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -168,12 +169,6 @@ type stubFixture struct {
 	Herdr *stubHerdr
 	// Config は Orchestrator に渡した設定である。
 	Config config.Config
-	// Logs は Orchestrator が出したログの写しである。
-	//
-	// **排他つきの syncLog を使う。**run ごとの goroutine とテスト本体が同時に触る。
-	// **「止まったことが人間に見えるか」を確かめる検査が要る**（設計 3-77j）。
-	// 出ているかを見ずに動きだけを確かめると、**黙って止まる実装でも通ってしまう。**
-	Logs *syncLog
 }
 
 // stubFixtureOptions は newStubFixture の任意の入力である。
@@ -222,8 +217,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		opts.Mutate(&cfg)
 	}
 
-	logs := &syncLog{}
-	logger := slog.New(slog.NewTextHandler(io.Writer(logs), &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mgr, err := workspace.New(workspace.Options{
 		Config:  cfg,
 		Logger:  logger,
@@ -236,7 +230,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 
 	orc, err := orchestrator.New(orchestrator.Options{
 		Config:         cfg,
-		PromptTemplate: samplePromptTemplate,
+		Prompt:         prompt.Build(samplePromptTemplate, "", "", false),
 		Tracker:        ft,
 		Herdr:          stub,
 		Workspace:      mgr,
@@ -253,7 +247,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 	if err != nil {
 		t.Fatalf("orchestrator.New に失敗した: %v", err)
 	}
-	return &stubFixture{Orc: orc, Tracker: ft, Herdr: stub, Config: cfg, Logs: logs}
+	return &stubFixture{Orc: orc, Tracker: ft, Herdr: stub, Config: cfg}
 }
 
 // adoptRun は turn を送らずに run を印の集合へ入れる（設計 3-4 の段6 と同じ入口）。
@@ -331,7 +325,7 @@ func TestOrchestratorNew_扱うStatusが1つも無い設定を弾く(t *testing.
 	build := func(c config.Config) error {
 		_, err := orchestrator.New(orchestrator.Options{
 			Config:         c,
-			PromptTemplate: samplePromptTemplate,
+			Prompt:         prompt.Build(samplePromptTemplate, "", "", false),
 			Tracker:        newFakeTracker(nil),
 			Herdr:          newStubHerdr(herdr.AgentStatusIdle),
 			Workspace:      mgr,

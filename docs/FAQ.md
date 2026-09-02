@@ -5,7 +5,7 @@
 **新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 /
-未記入の項目 / claude / hook の置き場所 / ロックの場所 / カンバンロック / Claude の設定 /
+未記入の項目 / プロンプトの変数 / 残った本文 / claude / hook の置き場所 / Claude の設定 /
 worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / clone /
 信頼登録 / 資格情報の17個を調べます。
 `✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
@@ -18,7 +18,7 @@ cd ~/continuo-work && continuo doctor
 
 ## 起動できないとき
 
-### 起動した瞬間に「… の親ディレクトリを作成できません」と出る
+### 起動した瞬間に「hook を受ける socket のディレクトリの親を作成できません」と出る
 
 **原因。**`XDG_RUNTIME_DIR` が設定されているのに、そのディレクトリが実在しません。
 `/run/user/<uid>` を作るのは systemd であって、continuo が作ってよい場所ではありません。
@@ -43,12 +43,10 @@ CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo doctor
 CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo
 ```
 
-### 「既にある … の権限が 0755 です」で止まる
+### 「既にある hook を受ける socket のディレクトリ … の権限が 0755 です」で止まる
 
 **原因。**continuo は、自分が作っていないディレクトリの権限を書き換えません。
-symlink も受け付けません（辿った先へ socket やロックファイルが落ちるためです）。
-**同じ検査を、hook を受ける socket の置き場所・`~/.continuo`・`~/.continuo/board` の
-3つが通ります。**どこで止まったかは、文言の前半（「〜を用意できません」「〜を作成できません」）で分かります。
+symlink も受け付けません（辿った先へ socket とロックファイルが落ちるためです）。
 
 **直し方。**
 
@@ -57,188 +55,26 @@ chmod 700 /tmp/continuo-run
 CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo doctor
 ```
 
-### 「ロックファイルを置くディレクトリ ~/.continuo を作成できません」で止まる
-
-**原因。**`~/.continuo` が次のどれかになっています。
-
-| 何 | なぜ断るか |
-| --- | --- |
-| **同じ名前のファイルがある** | ディレクトリを作れません |
-| **symlink になっている** | **辿った先へロックが落ちます。**「continuo が動いているか」の唯一の判定を、差し替えた相手の手で行うことになります |
-| **権限が group / other に開いている**（`0755` など） | continuo は、自分が作っていないディレクトリの権限を書き換えません |
-
-**直し方。**
-
-```bash
-ls -ld ~/.continuo
-chmod 700 ~/.continuo
-continuo doctor
-```
-
-`continuo doctor` の `ロックの場所` が `✓` なら起動できます。
-
-### 「カンバンのロックを置くディレクトリ ~/.continuo/board を作成できません」で止まる
-
-**原因。**`~/.continuo/board` が上と同じ状態になっています
-（ファイル・symlink・group / other に開いた権限）。
-**ここは「同じボードを2つの continuo が見ていないか」を確かめる場所です**
-（[README.ja.md](../README.ja.md) の `--id` の説明を見てください）。
-**`continuo abandon` も同じところで止まります。**
-
-**直し方。**
-
-```bash
-ls -ld ~/.continuo/board
-chmod 700 ~/.continuo/board
-continuo doctor
-```
-
-`continuo doctor` の `カンバンロック` が `✓` なら起動できます。
-
 ### 「二重起動を検出しました（ロックファイル …）」で起動できない
 
-**原因。**別の continuo が既に動いています。
-**ロックは `~/.continuo/continuo.lock` の1本に固定されています。**
-環境変数（`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR`）では動きません。
-**1台で continuo は1本だけ、と覚えてください。**
+**原因。**別の continuo が動いています。または**ロックファイルの置き場所が食い違っています。**
+置き場所は `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` で決まるので、
+launchd から起動した continuo と、端末で叩いたコマンドが別の場所を見ることがあります。
 
-**直し方。**動いているものを止めるか、**`--id <名前>` を付けて別の1本として動かします。**
+**直し方。**動いている continuo を止めるか、同じ環境変数で叩き直します。
 
 ```bash
 pgrep -fl continuo
-continuo --id e2e ~/continuo-work    # 別の1本として動かす
+CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo
 ```
-
-**`--id` は、分けるべきものを5つまとめて分けます。**
-
-| 分ける対象 | `--id e2e` を付けたとき |
-| --- | --- |
-| **ロック** | `~/.continuo/id/e2e/continuo.lock` |
-| **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
-| **worktree の置き場所** | `<workspace.root>/e2e` |
-| **branch 名** | `e2e/` を先頭に付けたもの |
-| **herdr の agent 名** | `continuo-e2e-<repo>-<番号>` |
-
-**`--id` を付けると `CONTINUO_RUNTIME_DIR` と `claude.hook_bridge.listen` は使いません。**
-指定してあれば、そのことを起動時のログに1行出します。
-
-**名前は小文字の英数字とハイフンだけです。**先頭は英数字、32文字まで。
-**`continuo abandon` にも同じ名前を渡してください。**渡さないと既定の1本を見に行き、
-`--id` で作った worktree も branch も見つけられません。
-**渡し忘れても、ボードのロック（下の節）で止まります。**
-
-**`continuo doctor` にも同じ名前を渡してください。**
-
-```bash
-continuo doctor --id e2e ~/continuo-work
-```
-
-**渡さないと既定の場所だけを見ます。**`--id` を付けた起動は socket もロックも
-`~/.continuo/id/e2e/` を使うので、**全項目 `✓` が出たのに起動だけが落ちることがあります。**
-
-### 「同じカンバン（… の project #…）を見ている continuo が既に動いています」で起動できない
-
-**原因。****同じボードを2つの continuo が見ると、同じ issue を2つが拾います。**
-だから**ボード1枚につきロック1本**を取り、取れなければ起動を止めます
-（`~/.continuo/board/<owner>-<番号>.lock`）。
-
-**`--id` を付けても、これは回避できません。**ボードだけは名前から分けられないからです。
-
-**直し方。**誰が握っているかは、ロックの隣の覚え書きに書いてあります。
-
-```bash
-cat ~/.continuo/board/<owner>-<番号>.json
-```
-
-```json
-{
-  "owner": "octocat",
-  "project_number": 10,
-  "instance_id": "e2e",
-  "pid": 12345,
-  "config_path": "~/continuo-e2e-work/WORKFLOW.md",
-  "lock_file": "~/.continuo/id/e2e/continuo.lock",
-  "started_at": "2026-08-30T12:00:00+09:00"
-}
-```
-
-**この覚え書きは、人間が読むためだけのものです。**排他の判定には使いません
-（判定は `flock` 1本だけです）。**握っていたプロセスが死ねば、OS がロックを解放します。**
-**残骸を消す必要はありません。**
-
-**覚え書きは、continuo が終わるときに消します。**
-**ただし、覚え書きだけが残ることがあります**（電源が落ちた・`kill -9` された・消せなかった）。
-**残っていても、そのプロセスが生きているとは限りません。**確かめ方は次のとおりです。
-
-```bash
-ps -p "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["pid"])' ~/.continuo/board/<owner>-<番号>.json)"
-```
-
-**`ps` が何も出さなければ、その覚え書きは古いものです。**消して構いません
-（**ロックのほうは消さないでください。**OS が解放するので、消す必要がありません）。
-
-**2本目を動かしたいなら、別のボードを見せてください。**
-
-### 「--id に渡した名前が使えません」で起動できない
-
-**原因。**`--id` に書けるのは、**小文字の英数字で始まり、以降が小文字の英数字とハイフンだけ**の
-名前です。**32文字まで。****大文字・空白・`.`・`/` は弾きます。**
-
-**この文字列はパスにも branch 名にも socket のパスにも入ります。**
-絞らないと `--id ../../etc` が `~/.continuo` の外を指し、空白や `..` は git の branch 名として不正になります。
-
-**直し方。**名前を書き直してください。
-
-```bash
-continuo --id e2e ~/continuo-work        # ○
-continuo --id issue-87 ~/continuo-work   # ○
-continuo --id E2E ~/continuo-work        # ×（大文字）
-continuo --id "my id" ~/continuo-work    # ×（空白）
-```
-
-**「hook を受ける socket のパスが長すぎます」と一緒に出たときは、名前が長すぎます。**
-socket は `~/.continuo/id/<名前>/run/hooks.sock` になるので、
-**ホームディレクトリのパスが長いと、それだけで上限（103バイト）に近づきます。**名前を短くしてください。
-
-### `runtime.lock_file` にパスを書いたのに、そこにロックができない
-
-**起動のときに、こう出ているはずです。**
-
-```
-level=WARN msg="runtime.lock_file はもう効きません（この設定は無視して、機械で決めた場所のロックを使います）。
-                1台で2本以上動かしたいなら --id <名前> を使ってください
-                （ロック・実行時ディレクトリ・worktree の置き場所・branch 名が、その名前ごとに分かれます）"
-                runtime.lock_file=/tmp/continuo.lock
-```
-
-**原因。****`runtime.lock_file` は読まなくなりました。**ロックは `~/.continuo/continuo.lock` です。
-設定でロックの場所を変えられると、`continuo abandon` が別の場所を見て「動いていない」と判定し、
-**走っている worktree を消しに行くからです。**
-
-**キーは受け取ります。****書いてあっても起動は止まりません。**
-`lock_file: null` は `continuo init` の雛形が置いていった行なので、
-**キーごと弾くと、これまでに `continuo init` した人が全員、次の起動で落ちます。**
-
-**直し方。****ロックを分けたいのなら、`--id <名前>` を使ってください**
-（上の「二重起動を検出しました」を見てください）。**警告を止めたいだけなら、この2行を消します。**
-
-```bash
-grep -n -A1 "^runtime:" ~/continuo-work/WORKFLOW.md
-```
-
-```yaml
-runtime:
-  lock_file: null                           # ← 消してよい。残しても起動する
-```
-
-**消しても `continuo doctor` は「未記入の項目」として挙げません。**雛形から外してあります。
 
 ### 「front matter が不正です: unknown field "…"」で止まる
 
 **原因。**continuo を更新して設定のキーが増減しました。front matter は未知のキーを弾きます。
 
 **直し方。**出たキーの行を `WORKFLOW.md` から消してください。
-**`continuo init --force` は使わないこと。**`continuo setup` で決めた Status の割り当てが雛形で潰れます。
+**`continuo init --force` は使わないこと。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
+**手で書いた `PROJECT_SPECIFIC_PROMPT.md` も雛形に戻ります**（`--force` は2枚とも上書きします）。
 
 ```bash
 grep -n "消したいキー名" ~/continuo-work/WORKFLOW.md
@@ -534,6 +370,88 @@ tracker:
 **カンバンの自動化をやめて選択肢を消した人が、起動できなくなってはならないからです**
 （この検査で起動を止めると、抜け出す道が無くなります）。
 **同じ内容の警告が、起動したときにもログへ1行出ます。**
+
+**そもそも何を書けばよいのかから知りたいときは、「使い方が分からないとき」の
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」を見てください。**
+
+### `✗ プロンプトの変数  送るプロンプトに誤りがあります`
+
+**原因。**エージェントへ送る指示書に、一覧に無い変数（`{{.issue.nope}}` など）が書かれているか、
+`{{if}}` の閉じ忘れなど、テンプレートとして解釈できない書き方があります。
+
+**この誤りがあると、issue は1件も着手できません。**書けなかった変数を空欄で埋めて送る、
+ということはしません（**書いたつもりの指示が黙って消えるほうが危ないためです**）。
+
+**どこが悪いのかは、内訳に出るファイルの名前と行番号で分かります。**
+
+| 内訳に出る名前 | 何のことか |
+| --- | --- |
+| `PROJECT_SPECIFIC_PROMPT.md` | **あなたが書いた固有のプロンプト。**行番号はそのファイルの行番号です |
+| `WORKFLOW.md#body` | **`WORKFLOW.md` に残っている本文**（[upgrading.md](upgrading.md) の移行がまだのとき） |
+| `builtin.md#head` / `builtin.md#tail` | **continuo の組み込みのプロンプト。**ここが出たら continuo 側の不具合です |
+
+**送る文面の全文は、次のコマンドで読めます。**
+
+```bash
+cd ~/continuo-work && continuo prompt --show
+```
+
+**使える変数は9つです。**
+
+| 変数 | 中身 |
+| --- | --- |
+| `{{.issue.identifier}}` | `<owner>/<repo>#<番号>` |
+| `{{.issue.owner}}` | リポジトリの所有者名 |
+| `{{.issue.repo}}` | リポジトリ名 |
+| `{{.issue.number}}` | issue の番号 |
+| `{{.issue.url}}` | issue の URL |
+| `{{.issue.title}}` | issue の題名 |
+| `{{.issue.state}}` | **カンバンの Status の値**（`Ready` など）。GitHub の open / closed ではありません |
+| `{{.issue.labels}}` | ラベルの並び |
+| `{{.attempt}}` | 試行回数。**1回目は空**なので `{{if .attempt}}` で囲ってください |
+
+**`{{index .issue "title"}}` の形は使えません。**`{{.issue.title}}` と書いてください。
+**この形を許すと、綴りを間違えた名前が誤りにならずに素通りします。**
+
+**検査は完全ではありません。**continuo は作り物の issue で2回試すだけなので、
+`{{if eq .issue.state "Done"}}` のように**値そのもので分かれる枝の中**までは届きません。
+
+### `✗ プロンプトの変数  PROJECT_SPECIFIC_PROMPT.md が在りますが読めません`
+
+**原因。**固有のプロンプトのファイルは在るのに、中身を読めません。
+**権限が足りない**か、**同じ名前のディレクトリがある**かのどちらかです。
+
+```bash
+cd ~/continuo-work && ls -l PROJECT_SPECIFIC_PROMPT.md
+```
+
+**黙って無視はしません。**無視すると、**書いたはずの流儀が効かないまま無人で回り続けます。**
+
+**要らないなら、ファイルごと消してください。**無ければ continuo は起動します。
+
+**この誤りで止まるのは、常駐プロセスの起動だけです。**
+`continuo doctor` / `continuo trust` / `continuo abandon` は、そのまま動きます。
+
+### `! 残った本文  WORKFLOW.md に本文が N 行残っています`
+
+**原因。**v0.1.13 で、エージェントへ送る指示書は `WORKFLOW.md` の外へ出ました。
+**それより前から使っている `WORKFLOW.md` には、本文がそのまま残っています。**
+
+**壊れてはいません。**本文が残っている限り、**いままでと1バイトも同じ文面が送られます。**
+**そのかわり、組み込みのプロンプトは送られません。**
+**これから continuo が直すプロンプトの改良は、1つも届きません。**
+
+**直し方は [upgrading.md](upgrading.md) の「送るプロンプトを移す」にあります。**4段です。
+
+1. `continuo init` を叩く（**`--force` は付けません**。足りない1枚だけが置かれます）
+2. `continuo prompt --show --builtin` で組み込みの全文を読み、自分の本文と見比べる
+3. 自分で書き足した部分だけを `PROJECT_SPECIFIC_PROMPT.md` へ移す
+4. `WORKFLOW.md` の閉じの `---` より下を消す
+
+**差分を出す口はありません。**本文はあなたが書き換えている可能性があり、
+**機械が作った差分で消してよいものではないためです。**
+
+**起動は止まりません。**`!` なので終了コードも 0 のままです。
 
 ---
 
@@ -969,40 +887,6 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 - **`gh issue view --comments` の表示を読ませていないか。**この表示は、外部の人が本文に
   `author:` `association:` の行を書き足せます。**本文は `--json comments` を使わせています**
 - **`claude.tool_gate` を `off` にしていないか。**上の「エージェントが叩いたコマンドが「危ない」と断られる」を読んでください
-- **「まとめて対応する issue のグループ」を書いたコメントの立場も確かめさせているか。**
-  この段落に立場の条件が入ったのは v0.1.12 です。**入っていないと、外部の人が
-  「このグループを一緒に直して」と書くだけで、ボード上の別の issue の Status まで動かせます**
-
-```bash
-grep -c 'authorAssociation が OWNER / MEMBER / COLLABORATOR' ~/continuo-work/WORKFLOW.md
-```
-
-`0` なら、[upgrading.md](upgrading.md) の「v0.1.11 から v0.1.12 へ」の節を読んでください。
-
-### 同じ機械で走っている別のエージェントに、偽の hook を送られないか
-
-**送られます。**いまの作り方では止められません。**前提として知っておいてください。**
-
-**なぜ止められないか。**エージェントは同じ利用者・同じ機械で走り、`Bash` は引数を限定せずに
-許可されています。偽の hook を送るのに要る3つ（相手の `session_id` / socket のパス /
-相手の worktree のパス）は、**隣の worktree の `.continuo.json` に全部書いてあります。**
-**OS から見ると、どちらのプロセスも同じ利用者なので、区別する手立てがありません。**
-
-**何ができてしまうか。**相手の turn を「終わった」ことにできます。
-`transcript_path` を差し替えれば、`CONTINUO-STATUS:` の表明も偽造できます。
-
-**どういう使い方なら問題にならないか。**
-
-| 使い方 | 影響 |
-| --- | --- |
-| **1台・1利用者で、自分の issue だけを回す** | **脅威になりません。**偽の hook を送れるのは、自分が起動したエージェントだけです |
-| **公開の issue を無人で回す** | **脅威になります。**外部の人が書いた本文が、そのエージェントの入力になります |
-
-**塞ぐなら、変えるのは continuo ではなく実行環境です。**
-run ごとに **別の OS 利用者**、または **worktree ごとのコンテナ**でエージェントを走らせてください。
-そうすれば socket のファイル権限で分けられ、隣の `.continuo.json` も読めなくなります。
-
-**設計の該当箇所。**[docs/plans/continuo_design.md](plans/continuo_design.md) の 3-2b。
 
 ### 「Claude Code が起動しませんでした（herdr が返した状態: "unknown"）」と出る
 
@@ -1115,9 +999,10 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 | **書き戻させる** | `WORKFLOW.md` に対応表を書く。自動化が書いた Status を、本来の Status へ戻させる |
 | **自動化を止める** | ボードの `Workflows` から、その自動化を無効にする |
 
-**対応表の書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正です。**
-そのまま貼れる yaml・左と右の決め方・書き戻しの上限・確かめ方が、そこに1箇所だけあります。
-**この文書には写しを置きません**（2箇所にあると、片方だけ直したときに食い違います）。
+**何をどう書くかは、「使い方が分からないとき」の
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
+そのまま貼れる yaml と、書けない5つの形がそこにあります。
+**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
@@ -1161,6 +1046,9 @@ cleanup:
 「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
 そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
 
+**対応表そのものの決め方は、「使い方が分からないとき」の
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
+
 **その worktree が残るかどうかは `cleanup.enabled` で決まります。**
 **止めた理由のコメントに、その設定でどうなるかが書いてあります。**
 
@@ -1195,6 +1083,37 @@ grep -n "CONTINUO-STATUS" ~/continuo-work/WORKFLOW.md
 ```
 
 **書き換えたら continuo を再起動してください。**動いている最中は読み直しません。
+
+### 応答を書き直している最中のエージェントに、continuo が次の指示を送ってしまう
+
+**まず用語です。**Claude Code の `Stop` hook は、`{"decision":"block","reason":"…"}` を返すと
+**エージェントを止めずに、`reason` を指示として渡して応答を書き直させます。**これを以下**差し戻し**と呼びます。
+応答の書式を検査する hook や、コミット前の検査を強制する hook がこれを使います。
+
+**何が起きていたか。**差し戻しは hook の**戻り値**であって、hook そのものではありません。
+**continuo には届きません。**continuo から見えるのは「エージェントが止まってよいか尋ねた」という
+`Stop` だけで、それを「turn が終わった」と読んでいました。**書き直しの中央値は 21 秒、最大 83 秒です。**
+continuo は 2 秒で締め切っていたので、次の3つが起きます。
+
+| 何が起きるか | 見え方 |
+| --- | --- |
+| **差し戻された側の応答で Status が動く** | 書き直している最中に pane が閉じられ、**書きかけの編集が消えます** |
+| **書き直した応答が読まれない** | 正しく書き直した `CONTINUO-STATUS:` が拾われません |
+| **遅れて届いた `Stop` が、次の turn の終わりとして数えられる** | 指示を1文字も読んでいないのに turn が終わったことになり、`max_dispatch_turns`（既定20）を空回りで使い切って `Blocked` へ落ちます。**issue に残る理由は「作業が終わったという表明を出しませんでした」**で、実際とは別の話になります |
+
+**v0.1.13 で直りました。**continuo は締め切りが来た瞬間に herdr へ
+「このエージェントはまだ動いているか」を1回聞き、**動いていれば turn の終わりとせずに待ち直します。**
+**設定は要りません。**`WORKFLOW.md` に足すものもありません。
+
+**この症状が出るのは、差し戻す `Stop` hook を入れている場合だけです。**
+continuo が渡す設定は**追加**であって置き換えではないので、
+`~/.claude/settings.json` と worktree の `.claude/settings.json` に書いた `Stop` hook も一緒に走ります。
+
+**直っているかの確かめ方。**continuo のログに次の行が出ていれば、待ち直しています。
+
+```text
+空の Stop のあともエージェントが動いているので、turn の終わりとせずに待ち直します
+```
 
 ### issue にコメントが残っているのに「この run のコメントが無い」と言われる
 
@@ -1281,33 +1200,25 @@ Windows 側の C ドライブの空き容量も見てください（仮想ディ
 **枠の使用率そのものが偏っているだけなら、これは仕様どおりの動きです。**
 暇な機械に処理を集めることが、この仕組みの目的です。
 
-### issue が1件も着手されない。エラーも出ない（1台でも複数台でも）
+### 複数の機械で見張っているのに、どの機械も issue を取らない
 
-**原因。**枠の状態が次の3つのどれかに当たると、continuo は**入札の要る issue に着手しません。**
-入札が要るのは「担当者がまだいない issue」です。
+**原因。**入札は次の3つのどれかに当たると、**コメントを1件も書かずに黙って見送ります。**
 
-| 理由 | 何が起きているか | 何が止まるか |
-| --- | --- | --- |
-| **枠を読めない** | 直前の枠の読み取りに失敗しています。`rate_limit.source` の資格情報が読めていません | **入札の要る issue だけ。**既にこの機械が担当者の issue には着手します |
-| **枠の使い過ぎ** | 5時間・1週間のどちらかの枠が `rate_limit.pause_above_percent`（既定95）を超えています | **その巡回の候補を1件も見ません** |
-| **余裕値がマイナス** | `100 − 使用率 − マージン` がマイナスです。`five_hour_margin_percent` / `weekly_margin_percent`（既定10）が大きすぎるか、実際の使用率が高すぎます | **入札の要る issue だけ**（上と同じ） |
+| 理由 | 何が起きているか |
+| --- | --- |
+| **枠を読めない** | 直前の枠の読み取りに失敗しています。`rate_limit.source` の資格情報が読めていません |
+| **枠の使い過ぎ** | 5時間・1週間のどちらかの枠が `rate_limit.pause_above_percent`（既定95）を超えています |
+| **余裕値がマイナス** | `100 − 使用率 − マージン` がマイナスです。`five_hour_margin_percent` / `weekly_margin_percent`（既定10）が大きすぎるか、実際の使用率が高すぎます |
 
-**走っている turn は止まりません。**
+**黙って見送るだけなので、issue にも画面にも何も出ません。**Ready のまま何も起きていないように見えます。
 
-**確かめ方。**continuo のログで「入札の要る issue には着手しません」を探してください。
-**既定のログレベル（`info`）で、巡回1回につき1行出ます。**理由も一緒に出ます。
+**確かめ方。**まず、continuo のログで「枠の読み取りに失敗しました」を探してください。
+**これは既定のログレベル（`info`）でも出ます。**
 
-```
-level=INFO msg="枠に余裕が無いので、入札の要る issue には着手しません（走行中の turn は止めません）。枠が戻れば自分で再開します。…" 理由=枠の使い過ぎ 新規着手が止まる使用率=90 巡回そのものを止めるか=true rate_limit.pause_above_percent=95 five_hour_margin_percent=10 weekly_margin_percent=10 候補=7
-```
+出ていなければ、`--log-level debug` で起動し直し、「入札しません」の行を探してください。**理由がそこに出ます。**
 
-**`巡回そのものを止めるか` を見てください。**`true` なら候補を1件も見ていません。
-`false` なら、**担当者のいない issue だけを見送っています。**
-
-**枠を読めないときは、その1つ前にこの行も出ます。**
-
-```
-level=WARN msg="枠の読み取りに失敗しました（読めるまで新しい issue に着手しません。走行中の turn は止めません）"
+```bash
+cd ~/continuo-work && continuo --log-level debug
 ```
 
 **直し方。**
@@ -1315,50 +1226,11 @@ level=WARN msg="枠の読み取りに失敗しました（読めるまで新し�
 | 理由 | 直し方 |
 | --- | --- |
 | **枠を読めない** | `continuo doctor` の `資格情報` の行を確認してください。`✗` ならその行の案内に従ってください |
-| **枠の使い過ぎ** | 待つか、`rate_limit.pause_above_percent` を上げてください。**マージンのほうが先に効くことがあります**（下の項目） |
+| **枠の使い過ぎ** | 待つか、`rate_limit.pause_above_percent` を上げてください。**上げると、枠を使い切る手前まで dispatch も続けます**（この閾値は持ち回りの入札と dispatch の一時停止の両方に効きます） |
 | **余裕値がマイナス** | `WORKFLOW.md` の `five_hour_margin_percent` / `weekly_margin_percent` を下げてください |
 
 **`rate_limit.source: none` にしている場合はここに当たりません。**その設定は「枠で判定しない」という
-運用者の決定として扱われ、使用率0（＝いちばん暇）として常に着手します。
-
-### `pause_above_percent` は 95 なのに、90% で止まる
-
-**原因。**新規着手が止まる本当の使用率は、`rate_limit.pause_above_percent` ではありません。
-**持ち回りの余裕値のマージンのほうが、先に効きます。**
-
-```
-新規着手が止まる使用率 = min(rate_limit.pause_above_percent,
-                              100 − max(five_hour_margin_percent, weekly_margin_percent))
-```
-
-**既定では 90% です**（`pause_above_percent: 95` / マージンはどちらも 10）。
-余裕値は `100 − 使用率 − マージン` なので、**使用率が 90% を超えた時点でマイナスになり、そこで止まります。**
-
-**実際の値はログに出ます。**上の「新しい issue には着手しません」の行の
-`新規着手が止まる使用率` がそれです。
-
-**直し方。**`pause_above_percent` を上げるだけでは変わりません。**マージンも下げてください。**
-
-```yaml
-tracker:
-  provider:
-    handoff:
-      five_hour_margin_percent: 5
-      weekly_margin_percent: 5
-```
-
-### 枠を読めないとき、走っている turn はどうなるのか
-
-**止まりません。**枠を読めないことを理由に、走行中の run を捨てることはしません。
-**止めるのは「入札の要る issue に着手すること」だけです。**
-
-**この向きは、持ち回りの入札と揃えてあります。**
-**「分からないなら入札しない」**に倒しています。読めない枠を0%（＝いちばん暇）とみなして
-入札すると、**必ず勝つのに着手できない機械ができ、その issue は誰にも進みません。**
-
-**巡回そのものは止めません。**止めると、**既にこの機械が担当者になっている issue まで
-着手されなくなり、期限切れの担当を外す経路も通らなくなります。**
-そうなると、詰まったカンバンを誰も解けません。
+運用者の決定として扱われ、使用率0（＝いちばん暇）として常に入札します。
 
 ### 担当が付いたまま、issue がいつまでも進まない
 
@@ -1509,28 +1381,6 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 
 `--dry-run` はボードに1文字も書きません。詳しい振る舞いは [README.ja.md](../README.ja.md) の
 「間違えて着手したとき」にあります。
-
-### `continuo abandon` が、動いている continuo の worktree を消そうとする
-
-**原因。****`--id` の付け忘れです。**`--id e2e` で動かした continuo の worktree を、
-`--id` なしの `continuo abandon` で片付けようとすると、**abandon は既定の1本を見ます。**
-そこにロックは無いので「continuo は動いていない」と判定し、
-**`--id e2e` の continuo がいま使っている worktree を、止まっている残骸として消しに行きます。**
-
-**直し方。****起動に渡した名前を、そのまま `abandon` にも渡してください。**
-
-```bash
-continuo abandon --id e2e https://github.com/octocat/hello-world/issues/42 ~/continuo-e2e-work --dry-run
-continuo abandon --id e2e https://github.com/octocat/hello-world/issues/42 ~/continuo-e2e-work
-```
-
-**`--dry-run` を先に叩いてください。**消えるものが一覧で出ます。
-**`--id` を間違えていると、branch 名の先頭（`e2e/`）と worktree の置き場所が食い違うので、
-そこで気づけます。**
-
-**`runtime.lock_file` で分けようとしないでください。**この設定はもう読みません
-（「起動できないとき」の「`runtime.lock_file` にパスを書いたのに…」を見てください）。
-**この事故が起きうるから読まなくしました。**
 
 ### `continuo abandon` が返ってこない（「pane が閉じるのを待っています」のまま止まって見える）
 
@@ -1713,11 +1563,85 @@ continuo abandon --force   https://github.com/<owner>/<repo>/issues/42 ~/continu
 git -C ~/ghq/github.com/<owner>/<repo> branch --list 'continuo/*'
 ```
 
+### `git worktree list` に、continuo が作った覚えの無い worktree が並ぶ
+
+**原因。**エージェントが自分で `git worktree add` を叩いています。
+**continuo が片付けるのは、その issue のために自分で用意した worktree 1つだけです。**
+片付ける相手はそのパス1つに固定されていて、**一覧から対象を増やすことはありません。**
+
+**残ると何が起きるかは、置かれた場所で3通りに分かれます。**
+
+| エージェントが置いた場所 | どうなるか |
+| --- | --- |
+| **continuo の worktree の中** | **その issue の片付けが止まります**（未追跡のファイルとして数えられるため） |
+| **同じく中だが、そのパスが `.gitignore` に入っている**（`.claude/worktrees/<名前>` など） | **止まりません。**continuo は強制の指定を付けて消すので、**中の worktree ごと、コミットしていない変更も消えます** |
+| **continuo の worktree の外** | **その issue は片付きます。**clone 側に登録と branch だけが黙って残ります |
+
+**消す経路は設定で変わりますが、どれも強制です。**既定（`herdr.worktree.create_via_herdr` が `true`）なら
+herdr の `worktree.remove` を `force` で呼び、`false` なら `git worktree remove --force` を叩きます。
+**それでも実体が残っていたら、最後はディレクトリごと消します。**
+
+**止まったときは、issue に「worktree を片付けずに残しました」というコメントが1回付きます。**
+`cleanup.require_clean_worktree`（既定 `true`）が
+「コミットされていない変更が残っている（未追跡のファイルを含む）」を理由に見送るためです。
+
+**止まらない側は `--ignored` を付けないと見えません。**
+
+```bash
+git -C <その issue の worktree> status --porcelain -uall --ignored
+```
+
+**`!!` で始まる行は `git status` には出ません。**そこに worktree があっても、片付けは止まりません。
+
+**`continuo doctor` は数えません。**`worktree の場所` の検査が見るのは、
+`workspace.root` の直下4階層（`<root>/<host>/<owner>/<repo>/<スラグ>`）にあるものだけです。
+エージェントが足した worktree はそこに当てはまらないので、`✓` のままになります。
+
+**気づく手立ては `git worktree list` です。**
+
+```bash
+git -C ~/ghq/github.com/<owner>/<repo> worktree list
+```
+
+**一覧には、continuo が別の issue のためにいま使っている worktree も並びます。**
+`workspace.root` の下（`<root>/<host>/<owner>/<repo>/<スラグ>`）にあるものが continuo のものです。
+**そちらを消すと、動いているエージェントの作業場所が、確認も警告も無く消えます。**
+
+**登録が残っているあいだは、その branch を `git branch -D` で消せません**
+（下の「`error: cannot delete branch '…' used by worktree at '…'` と出る」）。
+
+**実体が先に消えた登録は、次の着手のときに落ちます。**continuo は worktree を用意するたびに、
+その clone へ `git worktree prune` を1回撃つためです（登録が残ったままだと worktree を作れません）。
+**このとき、利用者がディレクトリごと移しただけの worktree の登録も一緒に落ちます。**
+落ちると git はその branch を守らなくなるので、**移して残すのではなく、消す前に push を済ませてください。**
+
+**直し方。**消す前に、失うものが無いことを確かめます。
+
+```bash
+git -C <消したい worktree> status --short
+git -C <消したい worktree> log --oneline HEAD --not --remotes
+git -C ~/ghq/github.com/<owner>/<repo> worktree remove <消したい worktree>
+```
+
+**1つ目が出たら commit してから、2つ目が出たら push してから消してください。**
+**`--force` は付けないでください。**コミットしていない変更が、確認も警告も無く消えます。
+**`git worktree remove` が断ったのは、消してはいけないものが残っているからです。**
+**lock されているときも断ります**（`cannot remove a locked working tree`）。
+中に何も残っていなくても断るので、そのときは `git worktree unlock <消したい worktree>` を先に叩いてください。
+
+**同じことが起きないように、`WORKFLOW.md` の本文を当ててください。**
+エージェントに自分で片付けさせる文面は [upgrading.md](upgrading.md) の
+「v0.1.12 から v0.1.13 へ」にあります。
+**当てたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+
 ### `error: cannot delete branch '…' used by worktree at '…'` と出る
 
 **原因。**git が、その branch を出している worktree の**登録**を見て守っています。
-**continuo は登録を勝手に外しません。**`git worktree prune` をリポジトリ全体へ撃つと、
-**単に移動しただけの別の worktree まで壊れる**ためです。
+**branch を消すときは、continuo は登録を外しません。**`git worktree prune` は
+リポジトリ全体に効くので、**単に移動しただけの別の worktree まで巻き込む**ためです。
+**片付けでも、実体の無い登録がほかに1つでもあれば撃ちません**（自分が消した1件だけが対象のときは撃ちます）。
+**ただし、次にその clone で worktree を用意するときは、条件なしで1回撃ちます**
+（登録が残ったままだと worktree を作れません）。**移した worktree の登録も、そのとき落ちます。**
 
 **直し方。****prune を撃つかどうかは利用者が決めます。**
 continuo は登録が指すパスを画面に出して止まるので、**そのディレクトリが本当に無いことを確かめてから**叩いてください。
@@ -1836,47 +1760,12 @@ continuo --help
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | カンバンの Status を5つの役割へ対応づける（対話） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを17の見出し語で調べる。`--id` で名前ごとの場所を見る |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかを15の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
 | `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
 
 `continuo hook` は Claude Code の hook から呼ばれるもので、人間が直接叩くものではありません。
-
-### 1台で continuo を2つ動かしたい（本番を止めずに、検証用をもう1本立てたい）
-
-**やること。****2本目に `--id <名前>` を付けます。**設定は1行も書き換えません。
-
-```bash
-continuo ~/continuo-work                   # 1本目（いま動いているもの）。そのままでよい
-continuo --id e2e ~/continuo-e2e-work      # 2本目
-```
-
-**`--id` は、分けるべきものを5つまとめて分けます。**
-
-| 分ける対象 | `--id e2e` を付けたとき |
-| --- | --- |
-| **ロック** | `~/.continuo/id/e2e/continuo.lock` |
-| **socket と実行時ディレクトリ** | `~/.continuo/id/e2e/run/` |
-| **worktree の置き場所** | `<workspace.root>/e2e` |
-| **branch 名** | `e2e/` を先頭に付けたもの |
-| **herdr の agent 名** | `continuo-e2e-<repo>-<番号>` |
-
-**設定や環境変数では分かれません。**`runtime.lock_file` は読みません。
-`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` を変えても、ロックは1本のままです。
-**分ける手段は `--id` だけです。**
-
-**2本目には別のボードを見せてください。**同じボードを2つの continuo が見ると同じ issue を
-2つが拾うので、**2つ目はボードのロックで起動を止められます**（上の「同じボード…」を見てください）。
-
-**`continuo doctor` と `continuo abandon` にも同じ名前を渡してください。**
-渡さないと既定の1本を見に行き、`--id` で作った worktree も branch も見つけられません。
-**`abandon` は、渡し忘れてもボードのロックで止まります。**
-
-**孤児 branch の掃除は、`--id` を付けただけでは始まりません。**
-`herdr.worktree.branch_template` が `{{` で始まっている設定では、掃除は元から止まっています
-（接頭辞を決められないためです）。**`--id e2e` を足しても `e2e/` を接頭辞として使いません。**
-使うと、あなたが自分で切った `e2e/…` の branch を消してしまうからです。
 
 ### フラグを位置引数の後ろに書いてもいい？
 
@@ -1963,7 +1852,8 @@ cd ~/continuo-work && continuo doctor
 | **front matter**（先頭の `---` に挟まれた YAML） | **壊れません。**ただし `claude.tool_gate` は**省略すると既定が効きます。**公開リポジトリの issue で、エージェントが `Bash` を叩くたびに、その中身が危なくないかの検査が1回入ります。**元に戻す1行は [upgrading.md](upgrading.md) にあります** |
 | **本文**（front matter より下） | **エージェントの動きが古いままです。**continuo は本文を読み替えないので、書いていない指示は届きません |
 
-**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れます。
+**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
+**手で書いた `PROJECT_SPECIFIC_PROMPT.md` も雛形に戻ります**（`--force` は2枚とも上書きします）。
 **増えた設定も、変わった本文も、その部分だけを手で当てます。**
 
 **足す場所と中身、当てないと何が起きるか、当てたあとの確かめ方は
@@ -2002,6 +1892,85 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 ```bash
 cd ~/continuo-work && continuo doctor && continuo
 ```
+
+### エージェントが PR を作った直後に止まる（automated_state_rewrite）
+
+**まず、この設定が自分に要るのかを確かめてください。**
+カンバンの `Settings` → `Workflows` を開きます。**Status を書く自動化**
+（`Item added to project` / `Pull request merged` / `Code changes requested` など）が
+1つでも**有効**になっていますか。
+
+| `Workflows` の状態 | どうするか |
+| --- | --- |
+| **1つも有効になっていない** | **この設定は要りません。**`automated_state_rewrite: {}` のままにしてください |
+| **1つでも有効になっている** | **下を読んでください** |
+
+**何が起きるか。**エージェントが PR を作ると、その自動化がカンバンの Status を書き換えます。
+書き換わった先は `tracker.active_states` に無い Status なので、
+**continuo は「人間が引き取った」と読みます。**`tracker.unknown_state_grace_ms`（既定10分）の
+猶予を置いてから、**動いているエージェントを turn の途中で止めます。**
+利用者の環境では、**PR を作った3秒後に自動化が Status を書き、その29秒後の巡回で止まりました。**
+
+**どう解決するか。****Status を書いたのが誰かを見ます。**
+
+| Status を動かしたのが | continuo はどうするか |
+| --- | --- |
+| **カンバンの組み込みの自動化** | **止めません。**対応表にある Status へ書き戻して、作業を続けさせます |
+| **人間** | **いままでどおりです。**猶予を置いてからエージェントを止めます |
+
+**人間が動かしたものは戻しません。**
+**「人間が Status を動かしてエージェントを止める」操作は、そのまま効きます。**
+
+**書かなかったらどうなるか。**空（`{}`）のままでも壊れません。
+自動化が Status を動かしたとき、`tracker.unknown_state_grace_ms` の猶予を置いてからエージェントを止めます。
+**つまり「PR を作ってから CI の直しを続ける」流れでは、途中で止まります。**
+
+**何を書くか。**`tracker:` の下に、`automated_state_rewrite` の対応表を足します。
+**左が、自動化が書き込む Status 名です。右が、戻したい Status 名です。**
+
+```yaml
+tracker:
+  active_states: ["AI Ready", "AI In Progress"]
+  automated_state_rewrite:
+    "In Progress": "AI In Progress"
+    # 左：自動化が書き込む Status 名（カンバンの選択肢と1文字ずつ合わせる）
+    # 右：戻したい Status 名（必ず active_states の中から選ぶ）
+```
+
+**この例は、カンバンの Status を `AI Ready` / `AI In Progress` のように先に改名してある人のものです。**
+`continuo init` が置いた雛形の `active_states: ["Ready", "In Progress"]` のままで、
+**`automated_state_rewrite` の行だけを写しても起動しません。**
+左の `In Progress` が `tracker` の他のキーに出てくる Status だからです（下の表の2行目）。
+
+**書けない形は5つあります。**どれも `continuo doctor` の `設定ファイル` の行が `✗` になり、起動しません。
+**弾く条件の正は [internal/config/validate.go](../internal/config/validate.go) の
+`validateAutomatedStateRewrite` の1箇所です。下の表は、その写しです。**
+
+| 書けない形 | なぜ |
+| --- | --- |
+| **左と右が同じ** | 同じ値の書き込みは省かれるので、巡回のたびに書きに行き続けます |
+| **左が、`tracker` の他のキーに出てくる Status** | その行は一度も引かれません。引くのは continuo が知らない Status になったときだけです |
+| **右が `tracker.active_states` の外** | 書き戻した直後に、continuo 自身がその run を終わらせます |
+| **大文字小文字だけが違う左が2つ** | どちらに当たるかが、実行のたびに変わります |
+| **左が空、または右が空** | Status 名として存在しません |
+
+**「`tracker` の他のキー」は6つです。**`active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `status_signal_map` の遷移先。
+**`tracker` の外（`cleanup` など）は見ません。**
+
+**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」にあります。**
+
+**書き戻しても自動化が書き直す押し合いになると、continuo は途中で書き戻しをやめます。**
+そこから先はいままでどおり、猶予を置いてエージェントを止め、
+issue のコメントで `Workflows` を切る手を案内します。
+**何回でやめるかは、[upgrading.md](upgrading.md) の
+「`tracker.automated_state_rewrite` — 自動化に動かされた Status を戻す」にあります。**
+
+**左に何を書けばよいか分からないときは、書かなくて構いません。**
+次に自動化が Status を動かしたとき、continuo が issue のコメントに
+**「この2行を足してください」とそのまま貼れる形で書きます。**
+
+**書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
 ### 手元の変更が herdr との組み合わせで壊れていないか確かめたい（開発者向け）
 

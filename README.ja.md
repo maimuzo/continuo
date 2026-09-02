@@ -10,6 +10,20 @@ Go で書いており、OpenAI の symphony の仕様を実装しています。
 
 ---
 
+## 何が手に入るか
+
+- **チケットの置き場所は、いま使っている GitHub Projects v2 のカンバンです。**別のサービスを契約する必要はありません
+- **1枚のカンバンに、リポジトリをいくつ混ぜても構いません。**issue ごとに、そのリポジトリの下へ worktree を作ります
+- **Claude Code は対話モードのまま動きます。**herdr の pane を開けば、いつでも様子を読めます
+- **従量課金にはなりません。**`claude -p` も Agent SDK も API の直叩きも使わず、いつもの定額プランのまま動きます
+- **進み具合はカンバンで分かります。**結果は Status の変化として返るので、ほかを見に行く必要はありません
+- **枠を使い切っても待ちます。**枠が回復したら、自分で続きを進めます
+- **1枚のカンバンを複数の機械で分担できます。**残っている枠を入札し、いちばん余裕のある機械がその issue を取ります
+- **他人の指示は、指示書で絞ります。**従うのは `OWNER` / `MEMBER` / `COLLABORATOR` だけです。[始める前に知っておくこと](#始める前に知っておくこと)を先に読んでください
+- **画面に出す文言は英語と日本語を選べます。**`continuo doctor`・コマンドの出力・ダッシュボードが、1つの設定で切り替わります
+- **設定は `continuo setup` が案内します。**カンバンの Status の選択肢を読み、5つの役割へ対応づけます
+- **[openai/symphony](https://github.com/openai/symphony) の仕様を実装しています。**公開されたオーケストレーターの仕様であり、独自の取り決めではありません
+
 ## 想定しているカンバンの運用方法
 
 **タスクを issue にまとめ、`Ready` へ置くだけです。**あとは continuo が進めます。`Blocked` へ移っていたら、エージェントが行き詰まっています。issue のコメントで指示してください。`In Review` へ移っていたら作業は終わっています。内容を確認して、よければ `Done` へ動かしてください。
@@ -46,6 +60,10 @@ herdr agent read continuo-hello-world-188 --source recent-unwrapped --lines 40
 ~/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188/
 ~/worktrees/github.com/octocat/sample-app/continuo-octocat-sample-app-42/
 ```
+
+**並べ方は `<workspace.root>/<ホスト>/<owner>/<repo>/<branch 名のスラグ>` に固定です**（スラグは branch 名の `/` を `-` に置き換えたもの）。
+
+**これは [gwq](https://github.com/d-kuro/gwq) の規則に合わせてあります。**gwq を使っているなら、continuo が作った worktree も `gwq list` に自分の worktree と並んで出ますし、`gwq remove` で消せます。**gwq は必須ではありません。**continuo は gwq を実行しませんし、`continuo doctor` も gwq を探しません。入っていなくても全部動きます。**合わせてあるのは置き場所の規則だけで、同じ場所に並べられるようにするためです。**
 
 **同時に動かす issue の数は設定で決めます**（既定2件）。
 
@@ -86,7 +104,7 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 
 **カンバンには Status の選択肢が5つ要ります。**GitHub の既定は `Todo` / `In Progress` / `Done` の3つなので、**足りない2つは GitHub の画面から足してください** — カンバンの `Settings` を開き、左の `Custom fields` の `Status` を選び、`Options` の下の `Add option...` に名前を入れて `Add`。名前は何でも構いません。役割との対応は `continuo setup` で決めます。
 
-**`continuo doctor` は17の項目を検査します** — 設定ファイル / 片付けの状態 / **未記入の項目** / claude / **hook の置き場所** / **ロックの場所** / **カンバンロック** / Claude の設定 / worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
+**`continuo doctor` は15の項目を検査します** — 設定ファイル / 片付けの状態 / **未記入の項目** / claude / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
 
 **`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。**
 **ただし「終了コードが 0」は「continuo が起動する」という意味ではありません。**
@@ -201,7 +219,7 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 **手を離させたあとで止まった場合、Status はその値のまま残ります。**continuo は元へ戻しません（戻す先は作業中の Status なので、戻した瞬間に continuo がその issue を拾い直しかねないためです）。**そのことを1行でお知らせします。**戻すかどうかはカンバンで決めてください。
 
-**continuo が動いていないと判定したときも、消す前に pane を確かめます。**ロックファイルは `~/.continuo/continuo.lock` の1本に固定されているので、launchd から起動した continuo と端末で叩いた `abandon` が別の場所を見ることはありません。**`--id <名前>` を付けて動かしているときは、`abandon` にも同じ名前を渡してください。****その worktree の pane が生きていれば、ロックが何と言っていても消しません。**
+**continuo が動いていないと判定したときも、消す前に pane を確かめます。**ロックファイルの置き場所は環境変数（`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR`）で決まるので、launchd から起動した continuo と端末で叩いた `abandon` で食い違うことがあります。**その worktree の pane が生きていれば、ロックが何と言っていても消しません。**
 
 **片付けたあとの Status は動かしません。**「もう要らない」のか「書き直して出し直す」のかは continuo には分からないので、**カンバンで決めてください。**決まっているなら `--to "Ice Box"` のように渡せます。
 
@@ -214,7 +232,9 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 ### 設定
 
-`continuo init` が `WORKFLOW.md` を置きます。**この1枚が設定ファイルであり、エージェントへ送る指示書でもあります。**
+`continuo init` が2枚を置きます。**`WORKFLOW.md` が設定で、`PROJECT_SPECIFIC_PROMPT.md` がエージェントへ送る指示書のうち、あなたが書く部分です。**
+
+**指示書の大部分は continuo の実行ファイルの中にあり、版を上げれば自動で新しくなります。**`PROJECT_SPECIFIC_PROMPT.md` は、その真ん中（「終わったらやること」の直前）へ差し込まれます。**送られる全文は `continuo prompt --show` で読めます。**
 
 **先頭の front matter が設定です。**よく触るのは次の4つ。
 
@@ -231,7 +251,14 @@ claude:
 
 **`turn_timeout_ms` は turn の総時間ではありません。**herdr が見ている画面が変わり続けている限り、1つの指示に何時間かかっても打ち切りません。
 
-**front matter より下が、Claude Code へ送る1回目のプロンプトそのものです。**「終わったら `CONTINUO-STATUS: review` と書け」「その前に commit して push しろ」といった依頼が書いてあります。**プロジェクトの流儀に合わせて書き換えてください。**
+**`WORKFLOW.md` の front matter より下は空です。**「終わったら `CONTINUO-STATUS: review` と書け」「その前に commit して push しろ」といった依頼は、continuo が持っている組み込みの指示書に書いてあります。
+
+**プロジェクトの流儀は `PROJECT_SPECIFIC_PROMPT.md` に書いてください。**テストの走らせ方・レビューの手順・書く言語などの雛形が、はじめから入っています。要らない節は消してかまいません。**ファイルごと消しても continuo は動きます。**
+
+```bash
+continuo prompt --show            # 送られる全文（組み込み + あなたが書いたぶん）
+continuo prompt --show --builtin  # 組み込みのぶんだけ
+```
 
 **書き換えたら continuo を再起動してください。**動いている最中は読み直しません。
 
@@ -254,6 +281,9 @@ claude:
 
 **v0.x のうちは、設定の形を変えることがあります。**`WORKFLOW.md` の front matter は未知のキーを弾くので、
 **キーを消したり改名したりすると、古い設定ファイルは起動しなくなります。**その変更は release notes に書きます。
+
+**画面に出す文言は英語と日本語を選べます。**`WORKFLOW.md` の `language` で決めます（既定は `auto`。環境変数 `LANG` から決め、決まらなければ英語になります）。
+**まだ日本語だけのもの。**インストーラーの案内・`continuo init` が書く `WORKFLOW.md` の雛形・continuo が issue へ書くコメント・この README 以外の文書。
 
 ## もっと詳しく
 

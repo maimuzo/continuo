@@ -18,55 +18,10 @@ import (
 // 与える情報: 大文字とアンダースコアを含む repo 名と issue 番号。
 // 成功条件: 小文字のハイフン区切りになり、herdr のパターンを満たす。
 func TestBuildAgentName_repoと番号からcontinuo接頭辞の名前を作る(t *testing.T) {
-	got := orchestrator.BuildAgentName("", "Hello_World", 188)
+	got := orchestrator.BuildAgentName("Hello_World", 188)
 
 	if got != "continuo-hello-world-188" {
 		t.Fatalf("agent 名が想定と違う: got %q, want %q", got, "continuo-hello-world-188")
-	}
-	if err := herdr.ValidateAgentName(normalize.SafeName(got)); err != nil {
-		t.Fatalf("作った agent 名が herdr のパターンを満たさない: %v", err)
-	}
-}
-
-// TestBuildAgentName_idを付けたら名前に混ぜる は、`--id` を agent 名へ混ぜることを確かめる
-// （設計 3-17b）。
-//
-// 目的: **別のボードの同じ番号の issue が、同じ agent 名になってはならない。**
-// agent 名は「人間が端末で見分けるためのもの」なので（設計 3-3）、
-// **見分けられないなら役割を果たしていない。**
-// 与える情報: `--id e2e` と、`--id` を付けていない場合。
-// 成功条件: 名前が分かれ、`e2e` が入り、herdr のパターンを満たすこと。
-func TestBuildAgentName_idを付けたら名前に混ぜる(t *testing.T) {
-	withID := orchestrator.BuildAgentName("e2e", "hello-world", 188)
-	def := orchestrator.BuildAgentName("", "hello-world", 188)
-
-	if withID == def {
-		t.Fatalf("--id を付けても名前が分かれていない: %q", withID)
-	}
-	if withID != "continuo-e2e-hello-world-188" {
-		t.Fatalf("agent 名が想定と違う: got %q, want %q", withID, "continuo-e2e-hello-world-188")
-	}
-	if err := herdr.ValidateAgentName(normalize.SafeName(withID)); err != nil {
-		t.Fatalf("作った agent 名が herdr のパターンを満たさない: %v", err)
-	}
-}
-
-// TestBuildAgentName_idが長くても32文字に収める は、herdr の上限を守ることを確かめる
-// （設計 3-3 / 3-17b）。
-//
-// 目的: `--id` は32文字まで書ける（設計 3-17d）ので、**repo を全部削っても収まらないこと
-// がある。****そのときは `--id` の名前も削る。**一意性は段4（`agent.list` を見て `-2`,
-// `-3` を足す）が担うので、**この関数が守るのは上限だけである。**
-// 与える情報: 32文字の `--id` と長い repo 名。
-// 成功条件: 32文字以内に収まり、番号が残り、herdr のパターンを満たすこと。
-func TestBuildAgentName_idが長くても32文字に収める(t *testing.T) {
-	got := orchestrator.BuildAgentName(strings.Repeat("a", 32), "very-long-repository-name", 188)
-
-	if len(got) > 32 {
-		t.Fatalf("agent 名が32文字を超えている: got %q (%d 文字)", got, len(got))
-	}
-	if !strings.HasSuffix(got, "-188") {
-		t.Fatalf("番号が削られている: got %q", got)
 	}
 	if err := herdr.ValidateAgentName(normalize.SafeName(got)); err != nil {
 		t.Fatalf("作った agent 名が herdr のパターンを満たさない: %v", err)
@@ -80,7 +35,7 @@ func TestBuildAgentName_idが長くても32文字に収める(t *testing.T) {
 // 与える情報: 32文字に収まらないほど長い repo 名。
 // 成功条件: 32文字以内に収まり、末尾の `-188` が残っている。
 func TestBuildAgentName_32文字を超えるときは番号を残してrepoを削る(t *testing.T) {
-	got := orchestrator.BuildAgentName("", "very-long-repository-name-that-never-fits", 188)
+	got := orchestrator.BuildAgentName("very-long-repository-name-that-never-fits", 188)
 
 	if len(got) > 32 {
 		t.Fatalf("agent 名が32文字を超えている: got %q (%d 文字)", got, len(got))

@@ -3,17 +3,17 @@ package orchestrator
 import (
 	"fmt"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// renderFirstPrompt は1回目のプロンプトを描画する（設計 5-3）。
+// renderFirstPrompt は1回目のプロンプトを組み立てる（設計 5-3 / 5-3c）。
 //
+// **3つの断片を別々に変数展開してから連結する**（internal/prompt）。
 // **`missingkey=error` を付ける。**渡す変数は 5-3 の一覧に載っているものだけであり、
-// **未知の変数を書いたテンプレートは描画に失敗させる**（黙って空文字を埋めない）。
+// **未知の変数を書いたテンプレートは変数展開に失敗させる**（黙って空文字を埋めない）。
 // 失敗したらその issue を失敗として扱う。
 //
 // **issue の本文とコメントは入れない**（設計 3-29）。エージェントが
@@ -23,15 +23,10 @@ import (
 // issue: 対象の issue。
 // attempt: 試行回数。**1回目は nil を渡す**（仕様 12.3。`text/template` は nil を偽として
 // 扱うので `{{if .attempt}}` が正しく動く）。**キーごと省いてはならない。**
-// 戻り値の1つ目: 描画したプロンプト本文。
+// 戻り値の1つ目: 組み立てたプロンプト本文。
 // 戻り値の2つ目: テンプレートの構文が誤っている場合、または一覧に無い変数を参照している
-// 場合のエラー。
+// 場合のエラー。**どの断片の何行目かがエラーの文言に入る。**
 func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (string, error) {
-	tmpl, err := template.New("prompt").Option("missingkey=error").Parse(o.promptTemplate)
-	if err != nil {
-		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptTemplateUnparsable, err)
-	}
-
 	url := ""
 	if issue.URL != nil {
 		url = *issue.URL
@@ -50,11 +45,11 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 		"attempt": attemptValue(attempt),
 	}
 
-	var b strings.Builder
-	if err := tmpl.Execute(&b, data); err != nil {
+	out, err := o.promptFragments.Render(data)
+	if err != nil {
 		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptRenderFailed, err)
 	}
-	return b.String(), nil
+	return out, nil
 }
 
 // attemptValue は `.attempt` に入れる値を返す。

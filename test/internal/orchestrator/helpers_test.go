@@ -36,6 +36,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -1820,8 +1821,11 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 
 	var sessionMu sync.Mutex
 	orc, err := orchestrator.New(orchestrator.Options{
-		Config:         cfg,
-		PromptTemplate: promptTemplate,
+		Config: cfg,
+		// **1回目に送る文面は、断片の並びとして渡す**（設計 5-3c）。
+		// テストが与えるのは1枚のテンプレートなので、それを WORKFLOW.md の本文の
+		// 位置に置いた形（互換の経路）で組み立てる。
+		Prompt:         prompt.Build(promptTemplate, "", "", false),
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,
