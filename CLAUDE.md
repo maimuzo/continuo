@@ -218,6 +218,13 @@ git worktree remove "$ROLLBACK"
 `git stash` → `git switch --detach "$OLD"` → ビルド → **`git switch -` で元の branch へ戻る** → `git stash pop`。
 **`git switch -` を書き忘れると、detached HEAD のまま次の作業を始めることになる。**
 
+### 7. 不特定多数の環境と、maimuzo の環境を混同しない
+
+このcontinuoプロジェクトはOSSである。不特定多数の開発環境でコードが利用され、continuoもまた不特定多数に利用される前提。
+一方、開発にはmaimuzoのオリジナルプラグインが使用され、テスト環境もプライベート環境として用意してある。
+この不特定多数の環境と、maimuzoの環境を混同してはならない。要件がある時、それは不特定多数向けなのか、maimuzoの環境向けなのかを常に意識すること。
+何度もAIは混同し、判断を間違っているので、これは重要な前提であることを忘れないで。
+
 ---
 
 ## 共通ガイドライン
@@ -228,6 +235,51 @@ git worktree remove "$ROLLBACK"
 
 **そのファイルが無い環境では、この節は読み飛ばしてよい。**
 このリポジトリの規則は、この CLAUDE.md と [.claude/rules/](.claude/rules/) だけで完結している。
+
+---
+
+## 作業の進め方
+
+**次の5本に従うこと。**`.claude/rules/` と `.claude/skills/` の下のファイルは自動では読まれない。**ここから辿る。**
+
+### 設計のレビュー
+
+[.claude/rules/design-review.md](.claude/rules/design-review.md) に従うこと。とくに次の3点。
+
+- **設計が固まったら、実装の前にレビューを通す。**段を飛ばさない
+- **レビューは最大3回。**3回で収まらなければ、下の「3回で通らなかったとき」へ入る
+- **設計を書く前に、そもそも対応するかを疑う**
+
+### 並列で進める
+
+[.claude/rules/parallel-work.md](.claude/rules/parallel-work.md) に従うこと。とくに次の3点。
+
+- **指示が無いときも、既定で Workflow と git worktree の並列にする**
+- **直列にしてよいのは、依存があるときだけ**
+- **レビューを並列にして、修正を直列にしない**
+
+### worker への指示の書き方
+
+[.claude/skills/worker-briefing/SKILL.md](.claude/skills/worker-briefing/SKILL.md) を worker に
+Read で開かせること。**前置きをプロンプトへ書き写さない。**とくに次の3点。
+
+- **worker のプロンプトは、このスキルへの案内と、その作業に固有の情報の2つだけで組む**
+- **検査するコマンドを渡すときは、自分で試してから渡す**
+- **不可逆な操作**（PR のマージ・削除・本番のカンバンへの書き込み・release の作成）**は worker に渡さない**
+
+### worktree の片付け
+
+[.claude/rules/worktree.md](.claude/rules/worktree.md) に従うこと。とくに次の3点。
+
+- **使い終わった worktree は、その作業を終える前に消す**
+- **`git worktree prune` は片付けの手段ではない。**`git worktree remove` が要る
+- **消す前に、未コミットの変更・未マージの commit・開いている PR・走っている作業の4つを確かめる**
+
+### プラグイン
+
+[.claude/rules/plugins.md](.claude/rules/plugins.md) に従うこと。
+
+**これは開発者の環境向けである**（絶対に守る制約7）。**このリポジトリを clone した人には当てはまらない。**
 
 ---
 
@@ -323,6 +375,36 @@ git worktree remove "$ROLLBACK"
 
 **エージェントが作る PR にも同じ規則を当てる。**continuo が作った PR も、
 レビューを通すまで draft のままにする。
+
+### 絶対条件：PR のマージは、メインエージェントが自分で行う
+
+**worker（subagent / Workflow の agent）に `gh pr merge` を実行させてはならない。**
+**マージできる状態かどうかの確認も、メインエージェントが自分で行う。**
+
+**なぜか。**2026-09-01、worker に6本のマージを任せ、**2本をレビュー未実施のままマージした。**
+原因はメインエージェントが渡した確認コマンドが、目印を**本文のどこかに含むか**で数えていたことである。
+**進捗のコメントの本文中に、手順の説明として同じ文字列が入っていた。**それを1件と数えて通した。
+
+**数え方を自分で書き直してはならない。**数える条件は上の3箇所の実装が持っている。
+**手で書いた jq は、投稿者の絞り込みか、ページ送りか、先頭の空白の扱いのどれかで必ずずれる**
+（実例と、代わりに見るもの（`gh pr view <番号> --json mergeable,mergeStateStatus`）は
+[.claude/skills/pr-review-and-merge/SKILL.md](.claude/skills/pr-review-and-merge/SKILL.md) の
+「絶対条件：段6 は worker にやらせない」にある）。
+
+### マージの条件は、なるべく機械で判定する
+
+**AI の判断に頼る部分を減らす。**
+
+| 何を確かめるか | どう確かめるか |
+| --- | --- |
+| **レビュー結果が貼ってあるか** | **GitHub Actions の `review-result`**（`main` の必須の検査。2026-09-01 に追加） |
+| ビルドとテスト | `build` 6本と `test` 2本（必須の検査） |
+| 衝突が無いか | `gh pr view <番号> --json mergeable,mergeStateStatus` |
+
+**必須の検査は `gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks` で見られる。**
+
+**機械で判定できないものだけを AI が見る。**
+**判定できるようにできるなら、issue を立てて機械へ移す。**
 
 ## コードレビュー記録フロー
 

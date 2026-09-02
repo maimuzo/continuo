@@ -556,7 +556,7 @@ git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch c
 git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
 ```
 
-**3. ボードでその issue を `Ready` へ戻します。**
+**3. カンバンでその issue を `Ready` へ戻します。**
 
 **この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
 
@@ -603,7 +603,7 @@ git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch c
 git -C ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42 switch -c continuo/<owner>/<repo>/42
 ```
 
-**3. ボードでその issue を `Ready` へ戻します。**
+**3. カンバンでその issue を `Ready` へ戻します。**
 
 **この判定も着手の最初に行います。**落ちても Status は1バイトも書きません。
 
@@ -1376,6 +1376,57 @@ tracker:
 
 **なぜ触らないのか。**担当者は「いま誰がこの issue を持っているか」の印です。
 **人間が付けた印を continuo が上書きすると、人間の作業を横取りすることになります。**
+
+### 同じ GitHub アカウントで、複数の PC を動かしたい
+
+**サポートしていません。**機械ごとに別の GitHub アカウントを用意してください。
+
+**なぜか。**担当者（assignee）だけでは、2台を見分けられないためです。
+**同じアカウントなら、どちらが担当しても担当者欄は同じ値になります。**
+
+**見分けるには `hold` のコメントの `host`（機械の名前）に頼るしかありませんが、これは重複します。**
+
+| 何 | なぜ重複するか |
+| --- | --- |
+| **WSL のディストリを2つ動かしている** | **既定が Windows のホスト名です。**`/etc/wsl.conf` に書かないかぎり、2つとも同じ名前になります |
+| **社内で命名規則に沿って配られた PC** | 規則が同じなら衝突します |
+
+**重複すると、2台とも「自分が勝った」と読み、2台とも同じ issue に着手し、同じ branch を押し合います。**
+
+#### 別のアカウントを用意する手順
+
+**1. 2台目用の GitHub アカウントを作る。**組織で使うなら、bot 用のアカウントを1つ用意してください。
+
+**2. そのアカウントを、対象のリポジトリとカンバンに招く。**
+
+| 何 | 要る権限 |
+| --- | --- |
+| リポジトリ | **write**（branch を push し、issue にコメントするため） |
+| カンバン（Projects v2） | **write**（Status を書き換えるため） |
+
+**3. 2台目で、そのアカウントでログインする。**
+
+```bash
+gh auth login -s project
+```
+
+**4. `WORKFLOW.md` の `tracker.provider.owner` は、カンバンの持ち主のままにする。**
+**ログインするアカウントとは別です。**`owner` はカンバンがぶら下がっている GitHub のユーザーか組織の名前です。
+
+**5. 残りの手順は、1台目と同じです。**
+
+**確かめ方。**issue のコメントを見てください。**`hold` の `assignee` が、機械ごとに違う名前になっていれば正しく分かれています。**
+
+```
+<!-- continuo:hold -->
+{"host":"mac-studio","assignee":"octocat-bot-a","branch":"continuo/octocat/hello-world/188","at":"2026-08-29T18:45:00+09:00"}
+```
+
+#### 同じ PC で continuo を複数動かしたい
+
+**これもサポートしていません。**検証のためだけの使い方です。
+
+**同じ PC なら機械の名前も同じになるので、上と同じことが起きます。**
 
 ### 持ち回りを使わずに、1台だけで動かしたい
 
