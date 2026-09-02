@@ -353,7 +353,7 @@ func (o *Orchestrator) bidForIssue(
 	// **前の回の入札は issue に残り続ける**（1回ごとに新しいコメントを書くので消えない）。
 	// 数に入れると、締め切りが常にその古い時刻から数えられ、**次の回が1度も始まらない。**
 	// **巡回のたびに入札のコメントだけが増え、担当者は永久に決まらない。**
-	window := time.Duration(o.cfg.Tracker.Provider.Handoff.BidWindowMs) * time.Millisecond
+	window := o.handoffBidWindow()
 	bids := handoff.RoundBids(comments, o.now(), window)
 	if _, already := handoff.HasBidBy(bids, o.hostName); !already {
 		posted, ok := o.postBid(ctx, issue, nodeID, bid)
@@ -488,7 +488,9 @@ func (o *Orchestrator) undoHandoffAcquire(ctx context.Context, issue tracker.Iss
 func (o *Orchestrator) postBid(
 	ctx context.Context, issue tracker.Issue, nodeID string, bid handoff.Bid,
 ) (handoff.Bid, bool) {
-	if err := o.postOwnMarkedComment(ctx, nodeID, handoff.FormatBid(bid)); err != nil {
+	// **締め切りまでの長さを渡す。**コメントに「担当は約何分後に決まるか」を書くためである
+	// （設計 3-77a）。issue を開いた人が、待てばよいのかを読めるようにする。
+	if err := o.postOwnMarkedComment(ctx, nodeID, handoff.FormatBid(bid, o.handoffBidWindow())); err != nil {
 		o.logger.Warn("入札のコメントを書けません（次の巡回でやり直します）",
 			"identifier", issue.Identifier, "error", err)
 		return handoff.Bid{}, false
@@ -500,6 +502,17 @@ func (o *Orchestrator) postBid(
 	// **この写しを使うのはこの巡回の締め切りの計算だけである。**
 	bid.PostedAt = bid.At
 	return bid, true
+}
+
+// handoffBidWindow は入札を締め切るまでの長さを返す（`tracker.provider.handoff.bid_window_ms`）。
+//
+// **0 のときも 0 のまま返す。**`idle_timeout_ms` と違って、**0 は未設定ではなく
+// 「締め切りを待たずに勝者を決める」という指定である**（設計 3-77 / config の検査もそう書いている）。
+// 既定へ差し替えると、その設定にした人が3分待たされる。
+//
+// 戻り値: 入札を締め切るまでの長さ。
+func (o *Orchestrator) handoffBidWindow() time.Duration {
+	return time.Duration(o.cfg.Tracker.Provider.Handoff.BidWindowMs) * time.Millisecond
 }
 
 // handoffIdleTimeout は担当を外すまでの長さを返す。
