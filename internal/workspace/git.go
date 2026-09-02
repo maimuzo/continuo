@@ -718,6 +718,36 @@ func gitAheadOfUpstream(ctx context.Context, worktreePath string) (int, error) {
 	return n, nil
 }
 
+// gitRemoteRefContainsHead は HEAD を含むリモート追跡 ref が1本でもあるかを返す
+// （#144（worktree の branch は変えず push 先だけ分ける）の片付けの段1）。
+//
+// **upstream にも base にも頼らずに「HEAD が remote に載っているか」を答えられる。**
+// `git push origin HEAD:<別名>` は `-u` を付けない限り upstream を張り替えないが、
+// **リモート追跡 ref（`refs/remotes/…`）は `-u` の有無にかかわらず更新される。**
+// だから push 先を分けた worktree も、この判定なら片付けられる。
+//
+// **通信しない。**`refs/remotes/` は手元にある ref である。
+// `--contains` は history を辿るので ref の数に比例するが、
+// **このリポジトリ（`refs/remotes/` の ref が12本）で 0.010 秒**であった（2026-09-02 実測）。
+// `--count=1` を付けて、出力を1本に抑えている。
+//
+// **見落としが起きる条件。**リモート追跡 ref を記録したあとに remote 側でその commit が
+// 消された場合（force push・branch の削除）、「載っていた」と判定する。
+// **受け入れる。**`@{u}` を使う判定でも同じことが起きる（どちらも fetch した時点の記録である）。
+//
+// ctx: 実行に適用するコンテキスト。
+// worktreePath: 検査する worktree のパス。
+// 戻り値の1つ目: HEAD を含むリモート追跡 ref が1本でもあれば true。
+// 戻り値の2つ目: 実行に失敗した場合のエラー（HEAD を解決できない等）。
+func gitRemoteRefContainsHead(ctx context.Context, worktreePath string) (bool, error) {
+	out, err := runGit(ctx, worktreePath,
+		"for-each-ref", "--count=1", "--contains", "HEAD", "--format=%(refname)", "refs/remotes/")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 // gitNoDiffFromBase は `git diff --quiet <base>...HEAD` が真（差分なし）かを返す
 // （3-9 の段2b の upstream が無い側）。
 //

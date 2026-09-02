@@ -327,6 +327,98 @@ func TestCleanup_push済みでないcommitが残っていれば消さない(t *t
 	}
 }
 
+// upstreamOf は worktree が checkout している branch の upstream の名前を返す。
+//
+// **`git rev-parse @{u}` は upstream が無いと非 0 で終わる**ので、runGit ではテストが落ちる。
+// `for-each-ref` なら upstream が無くても終了コードは 0 で、空文字が返る。
+//
+// t: 呼び出し元のテスト。
+// cf: 片付けの検査に使う状態。
+// 戻り値: upstream の ref 名（無ければ空文字）。
+func upstreamOf(t *testing.T, cf *cleanupFixture) string {
+	t.Helper()
+	return runGit(t, cf.Prepared.Path,
+		"for-each-ref", "--format=%(upstream)", "refs/heads/"+cf.Prepared.Branch.String())
+}
+
+// 目的: `-u` の無い push で別の名前へ出した worktree を片付けられることを確認する
+// （設計 3-9 の手順2b の段1。#144（worktree の branch は変えず push 先だけ分ける））。
+//
+// **`git push origin HEAD:<別名>` は upstream を張らない。**upstream だけを見ると
+// この worktree は base との差分が残ったままなので永久に片付かない。
+// **リモート追跡 ref は `-u` の有無にかかわらず更新される**ので、そちらで判定する。
+//
+// 与える情報: commit を1つ積み、`-u` を付けずに別の名前へ push した worktree。
+// 成功条件: Removed が真になり、worktree の実体が消えること。
+func TestCleanup_uの無いpushで別名へ出していても消す(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	if err := os.WriteFile(filepath.Join(cf.Prepared.Path, "成果.md"), []byte("できた\n"), 0o600); err != nil {
+		t.Fatalf("成果のファイルを書けない: %v", err)
+	}
+	runGit(t, cf.Prepared.Path, "add", ".")
+	runGit(t, cf.Prepared.Path, "commit", "--quiet", "-m", "成果")
+	runGit(t, cf.Prepared.Path, "push", "--quiet", "origin", "HEAD:pr-2nd")
+
+	// 前提の確認。`-u` を付けていないので upstream は張られていない。
+	if upstream := upstreamOf(t, cf); upstream != "" {
+		t.Fatalf("前提が崩れている: `-u` の無い push で upstream %q が張られている", upstream)
+	}
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed || result.Deferred {
+		t.Fatalf("HEAD が remote に載っているのに片付けていない: %+v", *result)
+	}
+	if _, statErr := os.Stat(cf.Prepared.Path); statErr == nil {
+		t.Fatal("worktree の実体が消えていない")
+	}
+}
+
+// 目的: upstream が1本目の push 先のままでも、2本目の push 先で片付けられることを確認する
+// （設計 3-9 の手順2b。**段1 が段2 より前にある**ことの検査）。
+//
+// **段2 を先に見ると見送られる。**upstream は1本目の branch を指したままなので
+// `@{u}..HEAD` は 1 件を返す。**段1 は 2本目の push 先を見つけるので、消してよいと答える。**
+//
+// 与える情報: 1本目を `-u` 付きで push したあと、commit を積んで2本目を `-u` 無しで
+// 別の名前へ push した worktree。
+// 成功条件: Removed が真になること。
+func TestCleanup_upstreamが1本目のままでも2本目のpush先で消す(t *testing.T) {
+	cf := newCleanupFixture(t, nil)
+
+	if err := os.WriteFile(filepath.Join(cf.Prepared.Path, "一本目.md"), []byte("1本目\n"), 0o600); err != nil {
+		t.Fatalf("1本目のファイルを書けない: %v", err)
+	}
+	runGit(t, cf.Prepared.Path, "add", ".")
+	runGit(t, cf.Prepared.Path, "commit", "--quiet", "-m", "1本目")
+	runGit(t, cf.Prepared.Path, "push", "--quiet", "-u", "origin", "HEAD:"+cf.Prepared.Branch.String())
+	runGit(t, cf.Prepared.Path, "branch", "--set-upstream-to=origin/"+cf.Prepared.Branch.String())
+
+	if err := os.WriteFile(filepath.Join(cf.Prepared.Path, "二本目.md"), []byte("2本目\n"), 0o600); err != nil {
+		t.Fatalf("2本目のファイルを書けない: %v", err)
+	}
+	runGit(t, cf.Prepared.Path, "add", ".")
+	runGit(t, cf.Prepared.Path, "commit", "--quiet", "-m", "2本目")
+	runGit(t, cf.Prepared.Path, "push", "--quiet", "origin", "HEAD:pr-2nd")
+
+	// 前提の確認。upstream は1本目のままなので、段2 だけを見ると 1 件先にいる。
+	ahead := runGit(t, cf.Prepared.Path, "rev-list", "--count", "@{u}..HEAD")
+	if ahead != "1" {
+		t.Fatalf("前提が崩れている: upstream より先にある commit の数が %q（1 を期待）", ahead)
+	}
+
+	result, err := cf.Manager.Cleanup(context.Background(), cleanupRequest(cf))
+	if err != nil {
+		t.Fatalf("Cleanup に失敗した: %v", err)
+	}
+	if !result.Removed || result.Deferred {
+		t.Fatalf("2本目の push 先に HEAD が載っているのに片付けていない: %+v", *result)
+	}
+}
+
 // 目的: upstream が無いときに base からの差分で判定することを確認する
 // （設計 3-9 の手順2b の upstream が無い側。**commit の有無では判定しない**）。
 // 与える情報: 一度も push していない worktree に積んだ commit（作業ツリーは clean）。
@@ -370,12 +462,23 @@ func TestCleanup_upstreamが無くbaseと差分が無ければ消す(t *testing.
 
 // {"RUCM-PATH": "P027"}
 //
-// 目的: upstream が無く base も分からないときは、判定できないので消さないことを確認する
-// （設計 3-9 の手順2b。base を推測して消すと成果を失う）。
-// 与える情報: Base を空にした CleanupRequest。
+// 目的: HEAD が remote に載っておらず、upstream も base も無いときは、判定できないので
+// 消さないことを確認する（設計 3-9 の手順2b の段4。base を推測して消すと成果を失う）。
+//
+// **commit を1つ積んでから呼ぶ。**積まないと HEAD が `refs/remotes/origin/main` に載ったままで、
+// 段1 が真になって消してよいと判定される（それは正しい。失うものが無い）。
+// 段4 を通すには、段1 を偽にしておく必要がある。
+//
+// 与える情報: 一度も push していない commit を積み、Base を空にした CleanupRequest。
 // 成功条件: Deferred が真になり、worktree が残ること。
 func TestCleanup_baseが分からなければ消さない(t *testing.T) {
 	cf := newCleanupFixture(t, nil)
+
+	if err := os.WriteFile(filepath.Join(cf.Prepared.Path, "成果.md"), []byte("できた\n"), 0o600); err != nil {
+		t.Fatalf("成果のファイルを書けない: %v", err)
+	}
+	runGit(t, cf.Prepared.Path, "add", ".")
+	runGit(t, cf.Prepared.Path, "commit", "--quiet", "-m", "成果")
 
 	result, err := cf.Manager.Cleanup(context.Background(), workspace.CleanupRequest{
 		WorktreePath: cf.Prepared.Path,

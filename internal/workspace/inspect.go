@@ -36,6 +36,14 @@ type Leftover struct {
 	// 1つも判定できなかったことを表す。
 	// **HasUpstream / UnpushedCommits / DiffFromBase は真ならどれも当てにならない。**
 	UnpushedUnknown bool
+	// OnRemoteRef は HEAD が、リモート追跡 ref のどれかから到達できることを表す
+	// （3-9 の手順2b の段1）。**真なら、押し先の名前が何であれ失うものは無い。**
+	//
+	// **これを見ないと、`git push origin HEAD:<別名>` で押した worktree を
+	// 「push されていない commit が残っている」と誤って判定する**（#144）。
+	// **Cleanup は段1 を見るのに Inspect が見ないと、自動の片付けは消すのに
+	// `continuo abandon` は止まる、という食い違いが起きる。**
+	OnRemoteRef bool
 	// HasUpstream は現在の branch に upstream があるかどうかである。
 	HasUpstream bool
 	// UnpushedCommits は upstream より先にある commit の件数である。
@@ -83,6 +91,11 @@ func (l *Leftover) HasLoss() bool {
 	}
 	if l.DirtyFiles > 0 {
 		return true
+	}
+	// **段1。**HEAD がリモート追跡 ref から到達できるなら、押し先の名前が
+	// 何であれ失うものは無い（3-9 の手順2b）。**Cleanup と同じ順序で見る。**
+	if l.OnRemoteRef {
+		return false
 	}
 	if l.HasUpstream {
 		return l.UnpushedCommits > 0
@@ -150,6 +163,12 @@ func (m *Manager) Inspect(ctx context.Context, req CleanupRequest) (*Leftover, e
 	// **打ち切られたことを落とさない。**落とすと、数千ファイルを失う worktree が
 	// 「200 ファイル」に見える。**見せた数より多く失う**のが、いちばん困る誤りである。
 	result.DirtyFilesTruncated = truncated
+
+	// **段1 を先に引く。**Cleanup（leftoverReasons）と同じ順序にする。
+	// **引けなかったら偽のまま進む。**段2・段3 が判定を続けるので、止まらない。
+	if onRemote, err := gitRemoteRefContainsHead(ctx, resolvedPath); err == nil {
+		result.OnRemoteRef = onRemote
+	}
 
 	hasUpstream, err := gitHasUpstream(ctx, resolvedPath)
 	if err != nil {

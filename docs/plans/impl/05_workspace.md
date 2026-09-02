@@ -112,9 +112,12 @@ type Identity struct {
   - **「clone が無い」と「未信頼」は `reason` で区別する。**真偽値だけの側はどちらも `false`
 - [x] **後始末が `cleanup.on_states` に入った時点で走る**（「active でなくなった時点」ではない）
 - [x] **未コミットの変更があれば消さない**（`require_clean_worktree`）
-- [x] **push されていない成果が残っていれば消さない**（`require_pushed`）。**判定は upstream の有無で分ける**（設計 3-9）
-  - **upstream がある**: `git rev-list --count @{u}..HEAD` が 0 なら消してよい
-  - **upstream が無い**: `git diff --quiet <base>...HEAD` が真（差分なし）なら消してよい。`<base>` は worktree を作ったときの base
+- [x] **push されていない成果が残っていれば消さない**（`require_pushed`）。**判定の中心は「HEAD が remote に載っているか」である**（設計 3-9 の4段）
+  - **段1**: `git for-each-ref --count=1 --contains HEAD refs/remotes/` が1行でも返れば消してよい。
+    **`git push origin HEAD:<別名>` は upstream を張り替えない**ので、upstream だけを見ると片付かない
+  - **段2**: upstream があれば `git rev-list --count @{u}..HEAD`。**見送る理由の件数を作るためだけに見る**
+  - **段3**: upstream が無く base があれば `git diff --quiet <base>...HEAD` が真（差分なし）なら消してよい。`<base>` は worktree を作ったときの base
+  - **段4**: 段1 が偽で upstream も base も無ければ、判定できないので消さない
   - **commit の有無で判定しない。**commit していなくても編集したファイルが残っていれば成果はある（それは1つ上の `require_clean_worktree` で拾う）
   - **エージェントに push させる前提である**（プロンプトに指示がある。設計 5-3）。
     push しないと、この検査で永久に消えない
