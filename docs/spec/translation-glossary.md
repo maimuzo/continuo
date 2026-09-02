@@ -193,7 +193,7 @@
 **使ってよいラベルは、この15語だけである。**
 
 `config` / `cleanup states` / `missing keys` / `claude` / `hook socket` /
-`Claude settings` / `worktree root` / `herdr` / `gh auth` / `board` /
+`Claude settings` / `worktree root` / `herdr` / `gh auth` / `kanban board` /
 `Status names` / `rewrite keys` / `clones` / `trust` / `credentials`
 
 **伸ばすときは、先に `labelColumn` を数え直すこと。**

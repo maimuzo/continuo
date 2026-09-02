@@ -17,9 +17,9 @@ It is written in Go and implements the [openai/symphony](https://github.com/open
 - **Claude Code in interactive mode.** It runs in a herdr pane you can open and read at any time
 - **No metered API calls.** No `claude -p`, no Agent SDK, no HTTP API — it stays on your usual subscription
 - **Progress shows up on the kanban board.** Results come back as a Status change, so there is nowhere else to check
-- **A spent quota is waited out.** When the window resets, continuo picks the work back up on its own
+- **continuo waits out a spent quota.** When the window resets, it picks the work back up on its own
 - **Several machines can share one kanban board.** They bid with the quota they have left, and the one with the most room takes the issue
-- **Instructions from strangers are narrowed down.** Issue text is read as JSON and only `OWNER` / `MEMBER` / `COLLABORATOR` are obeyed — read [Before you start](#before-you-start) before pointing it at a public repository
+- **Instructions from strangers are kept in check.** Only `OWNER` / `MEMBER` / `COLLABORATOR` are obeyed — read [Before you start](#before-you-start) first
 - **English or Japanese.** `continuo doctor`, the command output and the dashboard all follow one setting
 - **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to the five roles
 - **It implements [openai/symphony](https://github.com/openai/symphony)** — a published orchestrator specification, not a protocol invented here
