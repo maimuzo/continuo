@@ -183,18 +183,40 @@ git fetch origin -q
 | **どのファイルのどこを触るか** | 上の `git diff --name-only` の出力と、変える関数名・フラグ名 |
 | **hook のどの経路に効くか** | 上の表のどの行に当たるか。issue ごとの設定ファイルのどこが変わるか |
 | **止まったまま何もしないと何が起きるか** | **その issue が進まないだけである。**動いている continuo は壊れない |
-| **進めて壊れたときの戻し方** | 下の3行。**古い実行ファイルへ戻すところまで書く** |
+| **進めて壊れたときの戻し方** | 下の4段。**古い実行ファイルへ戻すところまで書く** |
 
-**壊れたときの戻し方。**
+**戻す先の commit の見つけ方。****いま入っている実行ファイルを作った時刻から引く。**
+その時刻に HEAD が指していた commit が、hook が動いていた commit である。
+
+```bash
+stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' ~/.local/bin/continuo   # 実行ファイルを作った時刻（macOS の stat）
+git rev-parse "HEAD@{$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' ~/.local/bin/continuo)}"
+```
+
+**reflog は90日で消える。**それより古い実行ファイルだったときは、`git log --oneline` から
+hook の引数を触る前の commit を人が選ぶ。
+
+**壊れたときの戻し方。****いまの作業ディレクトリは触らない。**
+この手順が要る場面では**書きかけの変更が残っている**ので、`git switch` はそれを持ち越せずに拒否することがある。
+**別の worktree を1つ作って、そこでビルドする。**
 
 ```bash
 # 1. 動いている continuo を止める。hook が届かないので1回目の Ctrl+C は待たされる。
 #    待たずに終わらせたいときは、もう一度 Ctrl+C を押す
-# 2. hook が動いていた頃の commit へ戻し、同じパスへ入れ直す
-git switch --detach <hook が動いていた commit> && go build -o ~/.local/bin/continuo ./cmd/continuo
+# 2. hook が動いていた commit を、別の worktree として取り出す
+OLD=$(git rev-parse "HEAD@{$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' ~/.local/bin/continuo)}")
+ROLLBACK="$(mktemp -d)/continuo-rollback"
+git worktree add --detach "$ROLLBACK" "$OLD"
+go build -C "$ROLLBACK" -o ~/.local/bin/continuo ./cmd/continuo
 # 3. 立て直す（pane と Claude Code は生きているので、次の起動が引き継ぐ）
 continuo
+# 4. 使い終わった worktree を消す（prune では消えない）
+git worktree remove "$ROLLBACK"
 ```
+
+**どうしても作業ディレクトリごと切り替えるときは、戻る段を必ず付ける。**
+`git stash` → `git switch --detach "$OLD"` → ビルド → **`git switch -` で元の branch へ戻る** → `git stash pop`。
+**`git switch -` を書き忘れると、detached HEAD のまま次の作業を始めることになる。**
 
 ---
 
@@ -240,7 +262,7 @@ continuo
 
 - **初見の人が分かる形で、問題の定義から書く。例外は無い。**「何が起きているか / なぜそれが困るか / いま何を決めるのか」の3つを毎回書く
 - **返答の冒頭に「何が言いたいのか」を置く**
-- **番号だけのラベルを人間に見せない**
+- **名札は、単独で書かない。**issue と PR の番号 / 設定のキーとコマンドのオプション / 自分が付けた記号 / 自分が付けた略した呼び方 / 起きたことに付けたあだ名 の5つとも、**初出で1行、意味を貼る。2度目以降も貼る**
 - **issue と PR は対で書く。**PR だけを名指ししない
 - **英語の技術用語（worktree / pane / hook / branch / commit）を日本語に直訳しない**
 
@@ -331,7 +353,7 @@ PR のコメントへ残してから直す。**掛け直した回数は数える
 
 | 列 | 中身 |
 | --- | --- |
-| **短縮名** | 指摘に付ける短い名前。**番号だけのラベルを使わない**（[.claude/rules/reporting.md](.claude/rules/reporting.md)） |
+| **短縮名** | 指摘に付ける短い名前。**名札を単独で書かない**（[.claude/rules/reporting.md](.claude/rules/reporting.md) の「絶対条件：名札は、単独で書かない」） |
 | **レベル** | Critical / High / Medium / Low / Info |
 | **指摘内容** | 1〜2行 |
 | **直す / 直さない** | どちらか。**保留は置かない** |
