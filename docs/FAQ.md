@@ -1462,8 +1462,12 @@ git -C ~/ghq/github.com/<owner>/<repo> branch --list 'continuo/*'
 | エージェントが置いた場所 | どうなるか |
 | --- | --- |
 | **continuo の worktree の中** | **その issue の片付けが止まります**（未追跡のファイルとして数えられるため） |
-| **同じく中だが、そのパスが `.gitignore` に入っている**（`.claude/worktrees/<名前>` など） | **止まりません。**continuo は `git worktree remove --force` で消すので、**中の worktree ごと、コミットしていない変更も消えます** |
+| **同じく中だが、そのパスが `.gitignore` に入っている**（`.claude/worktrees/<名前>` など） | **止まりません。**continuo は強制の指定を付けて消すので、**中の worktree ごと、コミットしていない変更も消えます** |
 | **continuo の worktree の外** | **その issue は片付きます。**clone 側に登録と branch だけが黙って残ります |
+
+**消す経路は設定で変わりますが、どれも強制です。**既定（`herdr.worktree.create_via_herdr` が `true`）なら
+herdr の `worktree.remove` を `force` で呼び、`false` なら `git worktree remove --force` を叩きます。
+**それでも実体が残っていたら、最後はディレクトリごと消します。**
 
 **止まったときは、issue に「worktree を片付けずに残しました」というコメントが1回付きます。**
 `cleanup.require_clean_worktree`（既定 `true`）が
@@ -1510,6 +1514,8 @@ git -C ~/ghq/github.com/<owner>/<repo> worktree remove <消したい worktree>
 **1つ目が出たら commit してから、2つ目が出たら push してから消してください。**
 **`--force` は付けないでください。**コミットしていない変更が、確認も警告も無く消えます。
 **`git worktree remove` が断ったのは、消してはいけないものが残っているからです。**
+**lock されているときも断ります**（`cannot remove a locked working tree`）。
+中に何も残っていなくても断るので、そのときは `git worktree unlock <消したい worktree>` を先に叩いてください。
 
 **同じことが起きないように、`WORKFLOW.md` の本文を当ててください。**
 エージェントに自分で片付けさせる文面は [upgrading.md](upgrading.md) の
@@ -1519,9 +1525,10 @@ git -C ~/ghq/github.com/<owner>/<repo> worktree remove <消したい worktree>
 ### `error: cannot delete branch '…' used by worktree at '…'` と出る
 
 **原因。**git が、その branch を出している worktree の**登録**を見て守っています。
-**片付けと branch の削除では、continuo は登録を外しません。**`git worktree prune` は
+**branch を消すときは、continuo は登録を外しません。**`git worktree prune` は
 リポジトリ全体に効くので、**単に移動しただけの別の worktree まで巻き込む**ためです。
-**ただし、次にその clone で worktree を用意するときは1回だけ撃ちます**
+**片付けでも、実体の無い登録がほかに1つでもあれば撃ちません**（自分が消した1件だけが対象のときは撃ちます）。
+**ただし、次にその clone で worktree を用意するときは、条件なしで1回撃ちます**
 （登録が残ったままだと worktree を作れません）。**移した worktree の登録も、そのとき落ちます。**
 
 **直し方。****prune を撃つかどうかは利用者が決めます。**
