@@ -7965,6 +7965,8 @@ tracker:
 **週末や休暇で進捗が止まったら、途中まで進んだ分は捨てて、別の機械が最初からやり直す。**
 
 **生きている機械は、進捗のコメントと一緒に push する。**途中の成果を残さずに落ちると、その分は失われる。
+**その進捗のコメントを書くのはエージェントであり、continuo ではない。**
+**組み込みのプロンプトが1時間ごとに促す**（5-3h）。
 
 **書くコメントの実物。**勝ったとき1件。以後は進捗のコメントが期限を延ばすので、hold を書き直す必要は無い。
 
@@ -9120,6 +9122,23 @@ gh pr view の --comments にも --json comments にも1件も出ません。**�
 
 <!-- continuo:project-specific-prompt -->
 
+## 長くかかるときは、途中でも状況を書くこと
+
+**1時間以上コメントを書かないまま作業を続けないでください。**
+**区切りのいいところで、いま何をしているかを issue のコメントに残してください。**
+
+    gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
+    まだ作業中です。いま <何をしているか>。"
+
+**push できる状態なら、あわせて push してください。**
+
+    git push -u origin HEAD
+
+**なぜ要るか。**同じカンバンを複数の機械で見張っているとき、
+**担当者が最後にコメントを書いてから18時間が経つと、担当が外れて別の機械が入札をやり直します。**
+**あなたが黙っているあいだ、その時計は進みません。**
+**担当が外れた時点で、push していない変更は他の機械から見えなくなります。**
+
 ## 終わったらやること
 
 **作業の区切りがついたら、応答の最後に次のいずれか1行を必ず書いてください。**
@@ -9354,9 +9373,43 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 **決まったら 5-3 の組み込みのプロンプトと 3-9 の「— その前提」を同時に直す。**
 片方だけ直すと、[test/internal/prompt/blocked_push_test.go](../../test/internal/prompt/blocked_push_test.go) と
 `TestTemplate_組み込みのプロンプトが設計5_3と一致する` のどちらかが落ちる。
-**組み込みの文面を見る検査は3本ある**（他に
-[test/internal/prompt/push_upstream_test.go](../../test/internal/prompt/push_upstream_test.go) と
-[test/internal/prompt/worktree_cleanup_test.go](../../test/internal/prompt/worktree_cleanup_test.go)）。
+**組み込みの文面を見る検査は4本ある**（他に
+[test/internal/prompt/push_upstream_test.go](../../test/internal/prompt/push_upstream_test.go)、
+[test/internal/prompt/worktree_cleanup_test.go](../../test/internal/prompt/worktree_cleanup_test.go)、
+[test/internal/prompt/progress_comment_test.go](../../test/internal/prompt/progress_comment_test.go)）。
+
+### 5-3h. 長い作業の途中でも、状況を書かせる
+
+**言いたいこと。**持ち回りの期限（3-77b。既定18時間）を進めるのは、
+**担当者のアカウントが投稿したコメントだけである。**判定する側はあるのに、書く側が無かった。
+**組み込みのプロンプトに1節足してエージェントに書かせる。continuo は何も書かない。**
+
+**採る形。**[internal/prompt/builtin.md](../../internal/prompt/builtin.md) の後半、
+`## 終わったらやること` の直前に `## 長くかかるときは、途中でも状況を書くこと` を置く。
+**1時間以上コメントを書かないまま作業を続けないよう促し、`<!-- continuo:agent -->` の印を先頭に付けさせる。**
+**push できる状態なら、あわせて push させる**（3-77b の「進捗のコメントと一緒に push する」）。
+
+**保証はしない。**プロンプトは指示であって強制ではない。
+**18時間コメントが書かれなかったときは、いままでどおり担当が外れる。**
+
+**なぜ continuo 側に時計を持たせないか。**
+
+| 案 | 採るか | 理由 |
+| --- | --- | --- |
+| **組み込みのプロンプトに1節足す** | **採る** | エージェントは turn の途中で `gh issue comment` を叩ける。**continuo 側に時計も送信の経路も要らない** |
+| continuo が60分ごとにコメントを書き直す | **採らない** | **continuo は「エージェントがいま何をしているか」を知らない。**書けるのは「まだ動いています」だけで、期限を進めるためだけの空のコメントになる |
+| `WORKFLOW.md` の本文（雛形）に書く | **採らない** | **利用者が消せてしまい、既に配ったものには届かない**（5-3d と同じ理由） |
+| 最後の進捗コメントを編集して重ねる | **採らない** | **判定は投稿時刻だけを見る**（[internal/handoff/assess.go](../../internal/handoff/assess.go) の `lastActivityOf`）。**編集しても期限は1秒も延びない** |
+| `idle_timeout_ms` の既定を延ばす | **採らない** | 本当に落ちた機械が抱えた issue が、その分だけ誰にも拾われない。**18時間には「翌朝に再開できる長さ」という根拠がある**（3-77b）が、延ばした先には無い |
+
+**5-3b の「`working` の毎 turn の push」は動かない。**あちらは turn ごとの push を求めるかどうかで、
+**いまも「求めない」のままである。**ここで求めるのは、**1時間ごとの状況コメントに添えて、
+push できる状態のときだけ**である。
+
+**この節の文面を直すときは、5-3 の組み込みのプロンプトも同時に直す。**
+片方だけ直すと `TestTemplate_組み込みのプロンプトが設計5_3と一致する` が落ちる。
+**節そのものの有無は
+[test/internal/prompt/progress_comment_test.go](../../test/internal/prompt/progress_comment_test.go) が見張る。**
 
 ### 5-4. 2回目以降のプロンプト
 
