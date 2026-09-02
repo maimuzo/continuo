@@ -178,8 +178,22 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 
+	// **改行まで読み切れなかったものは、リクエストとして扱わない。**
+	// `bufio.Reader.ReadBytes` は改行を見つけたときだけ err に nil を返すので、
+	// **err が nil でないなら、その時点で中身は必ず途中までである。**
+	//
+	// **continuo は、書いている途中で接続を切ることがある。**herdr のクライアントは
+	// ctx が終わると conn を閉じ（[internal/herdr/client.go](../../../internal/herdr/client.go) の
+	// `context.AfterFunc`）、`conn.SetDeadline` の期限が来ても書き込みを打ち切る。
+	// **macOS では Unix domain socket の送信バッファが 8192 バイトしかないので**
+	// （`sysctl net.local.stream.sendspace`）、**それを超える `agent.prompt` は
+	// 途中まで届いた形になる**（[internal/prompt/builtin.md](../../../internal/prompt/builtin.md) を必ず含むので約15KBある）。
+	// 途中までのものを解析すれば当然「壊れた JSON」に見えるが、**それは送り手の欠陥では
+	// ないので、テストを落としてはならない。**
+	//
+	// **経緯と再現は test/internal/orchestrator/fake_herdr_test.go にある。**
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
-	if err != nil && len(line) == 0 {
+	if err != nil {
 		return
 	}
 	var req struct {

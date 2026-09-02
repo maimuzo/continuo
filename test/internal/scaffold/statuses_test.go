@@ -292,10 +292,11 @@ func TestUpdateStatuses_書き換えたあとも読み込める(t *testing.T) {
 	if loaded.Config.Tracker.DispatchState != jaStatuses.Dispatch {
 		t.Errorf("dispatch_state が違う: %q", loaded.Config.Tracker.DispatchState)
 	}
-	// **本文は持たない**（設計 5-3c）。UpdateStatuses が front matter だけを書き換えて、
-	// 本文の位置に何かを書き足していないことを確かめる。
-	if strings.TrimSpace(loaded.PromptTemplate) != "" {
-		t.Errorf("Status を書き換えたあとに本文が生まれている: %q", loaded.PromptTemplate)
+	// **本文は1文字も触らない**（設計 5-3d）。UpdateStatuses は front matter だけを
+	// 書き換えるので、利用者が書いた固有の指示がそこで消えてはならない。
+	if !strings.Contains(loaded.PromptTemplate, "## テストの走らせ方") {
+		t.Errorf("Status を書き換えたら本文が消えた（利用者が書いた固有の指示が失われる）: %q",
+			loaded.PromptTemplate)
 	}
 }
 

@@ -479,8 +479,27 @@ func (fh *fakeHerdr) serve(t *testing.T, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 
+	// **改行まで読み切れなかったものは、リクエストではない。**
+	// `bufio.Reader.ReadBytes` は改行を見つけたときだけ err に nil を返すので、
+	// **err が nil でないなら、その時点で中身は必ず途中までである。**
+	// 途中までのものを解析すれば、当然「壊れた JSON」に見える。
+	// **それは送り手の欠陥ではないので、テストを落としてはならない。**
+	//
+	// **continuo は、書いている途中で接続を切ることがある。**herdr のクライアントは
+	// ctx が終わると conn を閉じ（[internal/herdr/client.go](../../../internal/herdr/client.go) の
+	// `context.AfterFunc`）、`conn.SetDeadline` の期限が来ても書き込みを打ち切る。
+	// **走行中の run は、テスト本体が終わったあとに `agent.prompt` を送ることがある**ので、
+	// 片付けの `orc.Close` がちょうどその書き込みを切る。
+	//
+	// **macOS では、これが「途中まで届いた」という形で実際に表に出る。**
+	// Unix domain socket の送信バッファが 8192 バイトしかないため
+	// （`sysctl net.local.stream.sendspace`）、**それより大きいリクエストは
+	// 受け手が読み進めるまで書き込みが止まる。**`agent.prompt` は
+	// [internal/prompt/builtin.md](../../../internal/prompt/builtin.md)（14583 バイト）を
+	// 含むので 15119 バイトあり、必ずここで止まる。切られると 8192 バイトだけが届く。
+	// **Linux は既定のバッファがずっと大きく、書き込みが止まらないので同じ commit でも起きない。**
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
-	if err != nil && len(line) == 0 {
+	if err != nil {
 		return
 	}
 	var req struct {
@@ -1824,8 +1843,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Config: cfg,
 		// **1回目に送る文面は、断片の並びとして渡す**（設計 5-3c）。
 		// テストが与えるのは1枚のテンプレートなので、それを WORKFLOW.md の本文の
-		// 位置に置いた形（互換の経路）で組み立てる。
-		Prompt:         prompt.Build(promptTemplate, "", "", false),
+		// 位置に置いた形で組み立てる（組み込みの前半と後半が前後に付く）。
+		Prompt:         prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,

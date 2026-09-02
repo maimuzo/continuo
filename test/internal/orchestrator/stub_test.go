@@ -230,7 +230,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 
 	orc, err := orchestrator.New(orchestrator.Options{
 		Config:         cfg,
-		Prompt:         prompt.Build(samplePromptTemplate, "", "", false),
+		Prompt:         prompt.Build(samplePromptTemplate, "/tmp/WORKFLOW.md"),
 		Tracker:        ft,
 		Herdr:          stub,
 		Workspace:      mgr,
@@ -325,7 +325,7 @@ func TestOrchestratorNew_扱うStatusが1つも無い設定を弾く(t *testing.
 	build := func(c config.Config) error {
 		_, err := orchestrator.New(orchestrator.Options{
 			Config:         c,
-			Prompt:         prompt.Build(samplePromptTemplate, "", "", false),
+			Prompt:         prompt.Build(samplePromptTemplate, "/tmp/WORKFLOW.md"),
 			Tracker:        newFakeTracker(nil),
 			Herdr:          newStubHerdr(herdr.AgentStatusIdle),
 			Workspace:      mgr,

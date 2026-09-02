@@ -31,7 +31,6 @@ var wantLabels = []i18n.Key{
 	doctor.LabelCleanupStates,
 	doctor.LabelMissingKeys,
 	doctor.LabelPromptVariables,
-	doctor.LabelLeftoverBody,
 	doctor.LabelClaude,
 	doctor.LabelRuntimeDir,
 	doctor.LabelClaudeHome,

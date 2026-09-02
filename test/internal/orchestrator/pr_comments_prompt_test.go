@@ -10,22 +10,25 @@ import (
 	"github.com/maimuzo/continuo/internal/prompt"
 )
 
-// realPromptBody は continuo が実際に送る組み込みのプロンプトの全文を返す。
+// builtinOnlyBody は、送る文面が組み込みだけになる WORKFLOW.md の本文を返す。
 //
-// **組み込みそのものを使う。**テストの中で文面を書き写すと、組み込みを直しても落ちない。
+// **返すのは空文字である。**`prompt.Build` は組み込みの前半と後半を必ず前後に付けるので
+// （設計 5-3c）、**本文を空にすれば、送られるのは組み込みの全文そのものになる。**
 //
-// **`continuo init` が置く WORKFLOW.md は本文を持たない**（設計 5-3c）。
-// 送る文面は internal/prompt/builtin.md にある。
+// **ここで組み込みの全文を返してはならない。**返すと、それが本文として真ん中に挟まり、
+// **同じ文面が2回送られる。**コマンドの行を数える検査が、どれも2倍を見ることになる。
+//
+// **組み込みそのものが空でないことは、ここで確かめておく。**空のまま検査が全部通ると、
+// 「コマンドが1本も無い」ことに誰も気づかない。
 //
 // t: 呼び出し元のテスト。
-// 戻り値: 組み込みの前半と後半を連結した全文（固有のプロンプトは挟まない）。
-func realPromptBody(t *testing.T) string {
+// 戻り値: 空文字。
+func builtinOnlyBody(t *testing.T) string {
 	t.Helper()
-	body := prompt.Builtin()
-	if strings.TrimSpace(body) == "" {
+	if strings.TrimSpace(prompt.Builtin()) == "" {
 		t.Fatal("組み込みのプロンプトが空です")
 	}
-	return body
+	return ""
 }
 
 // TestPrompt_雛形の本文はPRのコメントとレビューを読ませる は、issue #34 を確かめる。
@@ -44,7 +47,7 @@ func realPromptBody(t *testing.T) string {
 // 行に紐づくレビューコメントを読むコマンドが、**issue の値に置き換わった形で**入っていること。
 func TestPrompt_雛形の本文はPRのコメントとレビューを読ませる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
-		PromptTemplate: realPromptBody(t),
+		PromptTemplate: builtinOnlyBody(t),
 		Mutate: func(cfg *config.Config) {
 			cfg.Tracker.VerifyStatesEvery = 0
 		},

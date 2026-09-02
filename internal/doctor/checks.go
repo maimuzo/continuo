@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -80,20 +79,7 @@ func checkPromptVariables(cfg loadedConfig, configSymbol Symbol) Result {
 	}
 	loaded := cfg.Loaded
 
-	if loaded.ProjectPromptErr != nil {
-		return Result{
-			Label:  LabelPromptVariables,
-			Symbol: SymbolMissing,
-			Detail: i18n.T(i18n.KeyDoctorPromptVariablesProjectUnreadable,
-				loaded.ProjectPromptPath, loaded.ProjectPromptErr),
-			Remedies: []string{
-				i18n.T(i18n.KeyDoctorPromptVariablesRemedyPermission, loaded.ProjectPromptPath),
-			},
-		}
-	}
-
-	frag := prompt.Build(
-		loaded.PromptTemplate, loaded.ProjectPrompt, loaded.ProjectPromptPath, loaded.ProjectPromptFound)
+	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
 	if err := frag.Validate(); err != nil {
 		return Result{
 			Label:    LabelPromptVariables,
@@ -103,54 +89,14 @@ func checkPromptVariables(cfg loadedConfig, configSymbol Symbol) Result {
 		}
 	}
 
-	key := i18n.KeyDoctorPromptVariablesOKNoProject
-	if loaded.ProjectPromptFound {
+	key := i18n.KeyDoctorPromptVariablesOKNoBody
+	if frag.HasBody() {
 		key = i18n.KeyDoctorPromptVariablesOK
 	}
 	return Result{
 		Label:  LabelPromptVariables,
 		Symbol: SymbolOK,
-		Detail: i18n.T(key, loaded.ProjectPromptPath),
-	}
-}
-
-// checkLeftoverBody は、WORKFLOW.md に本文が残っていないかを見る
-// （見出し語 `残った本文`。設計 5-3d）。
-//
-// **`✗` にしない。**残っていても continuo は動く。いままでと同じ文面が送られるだけである。
-// **`!` にする。**残っている限り、continuo が組み込みの仕組みを直しても届かない。
-//
-// cfg: 設定を読んだ結果。
-// configSymbol: 設定ファイルの検査の記号。
-// 戻り値: 検査結果。
-func checkLeftoverBody(cfg loadedConfig, configSymbol Symbol) Result {
-	if configSymbol != SymbolOK || !cfg.OK || cfg.Loaded == nil {
-		return Result{
-			Label:  LabelLeftoverBody,
-			Symbol: SymbolUnknown,
-			Detail: i18n.T(i18n.KeyDoctorLeftoverBodyUnknown),
-		}
-	}
-
-	body := strings.Trim(strings.ReplaceAll(cfg.Loaded.PromptTemplate, "\r\n", "\n"), "\n")
-	if strings.TrimSpace(body) == "" {
-		return Result{
-			Label:  LabelLeftoverBody,
-			Symbol: SymbolOK,
-			Detail: i18n.T(i18n.KeyDoctorLeftoverBodyOK),
-		}
-	}
-
-	return Result{
-		Label:  LabelLeftoverBody,
-		Symbol: SymbolUnknown,
-		Detail: i18n.T(i18n.KeyDoctorLeftoverBodyLeft, strings.Count(body, "\n")+1),
-		Notes:  []string{i18n.T(i18n.KeyDoctorLeftoverBodyNoteBuiltinSkipped)},
-		Remedies: []string{
-			i18n.T(i18n.KeyDoctorLeftoverBodyRemedyShow),
-			i18n.T(i18n.KeyDoctorLeftoverBodyRemedyMove, prompt.ProjectFileName),
-			i18n.T(i18n.KeyDoctorLeftoverBodyRemedyDelete),
-		},
+		Detail: i18n.T(key, loaded.Path),
 	}
 }
 
