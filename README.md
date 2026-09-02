@@ -19,7 +19,7 @@ It is written in Go and implements the [openai/symphony](https://github.com/open
 - **Progress shows up on the kanban board.** Results come back as a Status change, so there is nowhere else to check
 - **continuo waits out a spent quota.** When the window resets, it picks the work back up on its own
 - **Several machines can share one kanban board.** They bid with the quota they have left, and the one with the most room takes the issue
-- **Instructions from strangers are kept in check.** Only `OWNER` / `MEMBER` / `COLLABORATOR` are obeyed — read [Before you start](#before-you-start) first
+- **Instructions from strangers are limited.** The brief tells the agent to obey only `OWNER` / `MEMBER` / `COLLABORATOR` — read [Before you start](#before-you-start)
 - **English or Japanese.** `continuo doctor`, the command output and the dashboard all follow one setting
 - **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to the five roles
 - **It implements [openai/symphony](https://github.com/openai/symphony)** — a published orchestrator specification, not a protocol invented here
