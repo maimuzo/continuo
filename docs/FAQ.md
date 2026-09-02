@@ -73,7 +73,8 @@ CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo
 **原因。**continuo を更新して設定のキーが増減しました。front matter は未知のキーを弾きます。
 
 **直し方。**出たキーの行を `WORKFLOW.md` から消してください。
-**`continuo init --force` は使わないこと。**`continuo setup` で決めた Status の割り当てが雛形で潰れます。
+**`continuo init --force` は使わないこと。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
+**手で書いた `PROJECT_SPECIFIC_PROMPT.md` も雛形に戻ります**（`--force` は2枚とも上書きします）。
 
 ```bash
 grep -n "消したいキー名" ~/continuo-work/WORKFLOW.md
@@ -1746,7 +1747,8 @@ cd ~/continuo-work && continuo doctor
 | **front matter**（先頭の `---` に挟まれた YAML） | **壊れません。**ただし `claude.tool_gate` は**省略すると既定が効きます。**公開リポジトリの issue で、エージェントが `Bash` を叩くたびに、その中身が危なくないかの検査が1回入ります。**元に戻す1行は [upgrading.md](upgrading.md) にあります** |
 | **本文**（front matter より下） | **エージェントの動きが古いままです。**continuo は本文を読み替えないので、書いていない指示は届きません |
 
-**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れます。
+**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
+**手で書いた `PROJECT_SPECIFIC_PROMPT.md` も雛形に戻ります**（`--force` は2枚とも上書きします）。
 **増えた設定も、変わった本文も、その部分だけを手で当てます。**
 
 **足す場所と中身、当てないと何が起きるか、当てたあとの確かめ方は

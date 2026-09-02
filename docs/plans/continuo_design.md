@@ -9129,6 +9129,17 @@ push していない作業は、この worktree が片付くときに失われ�
 **`--force` で置き換えるときは、同じディレクトリの一時ファイルへ書き切ってから差し替える**
 （[CLAUDE.md](../../CLAUDE.md) の「4. ファイルの書き換えは……」）。
 
+**断る文言は、断った当のファイルを名乗る。**番兵 `ErrSymlink`
+（[internal/scaffold/scaffold.go:84](../../internal/scaffold/scaffold.go#L84)）は
+**2枚のどちらからも返る1つの変数**なので、**その文言にファイルの名前を書いてはならない。**
+書くと、もう片方を断ったときに別のファイルを名乗り、**読む人はそちらを消しに行く。**
+**名前を入れた文言は `symlinkError`
+（[internal/scaffold/scaffold.go:96](../../internal/scaffold/scaffold.go#L96)）が組み立て、
+`errors.Is` の切り分けは `Unwrap` で保つ。**
+
+**`--force` は2枚とも上書きする。**`PROJECT_SPECIFIC_PROMPT.md` は利用者が手で書くファイルなので、
+**消える範囲を [docs/upgrading.md](../upgrading.md) と [docs/FAQ.md](../FAQ.md) の両方に書く。**
+
 ### 5-3b. push の求め方で、まだ人間が決めていないこと
 
 **言いたいこと。**5-3 の本文は「`review` または `blocked` を出す前に必ず commit して push」を

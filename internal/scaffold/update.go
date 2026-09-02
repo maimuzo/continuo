@@ -183,7 +183,7 @@ func statTarget(dir string) (string, fs.FileInfo, error) {
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
 		// WriteTemplateWithValues と同じ判断で、辿らずに止める。
-		return path, nil, i18n.Errorf(i18n.KeyScaffoldUpdateSymlinkNotFollowed, ErrSymlink, path)
+		return path, nil, newSymlinkError(i18n.KeyScaffoldUpdateSymlinkNotFollowed, path)
 	}
 	if !info.Mode().IsRegular() {
 		return path, nil, i18n.Errorf(i18n.KeyScaffoldUpdateNotRegularFile, ErrNotFound, path)

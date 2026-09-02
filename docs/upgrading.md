@@ -25,8 +25,25 @@ continuo が勝手に書き足すことはありません。**あなたが手で
 
 ## `continuo init --force` で作り直さないこと
 
-**`continuo setup` で決めた Status の割り当てが、雛形で潰れます。**
-**下半分に書いたプロンプトも消えます。**増えた設定は、**その行だけを手で足してください。**
+**`--force` は2枚とも雛形で上書きします。**`WORKFLOW.md` と `PROJECT_SPECIFIC_PROMPT.md` の
+両方です。**片方だけを作り直す形はありません。**
+
+| 消えるもの | どこに書いたものか |
+| --- | --- |
+| **`continuo setup` で決めた Status の割り当て** | `WORKFLOW.md` の front matter |
+| **手で足した設定の行** | `WORKFLOW.md` の front matter |
+| **あなたがエージェントへ渡していた指示** | **`PROJECT_SPECIFIC_PROMPT.md` の全文** |
+
+**`PROJECT_SPECIFIC_PROMPT.md` は、あなたが手で書くファイルです。**
+雛形にも「チームで共有するもの」と書いてあるとおり、**中身はあなたのものであって、
+`--force` はそれを1行も残しません。**
+
+**増えた設定は、`--force` ではなく、その行だけを手で足してください**（次の節）。
+**どうしても `--force` を打つなら、先に `PROJECT_SPECIFIC_PROMPT.md` を控えてください。**
+
+```bash
+cd ~/continuo-work && cp PROJECT_SPECIFIC_PROMPT.md PROJECT_SPECIFIC_PROMPT.md.bak
+```
 
 ---
 
@@ -134,13 +151,27 @@ cd ~/continuo-work && continuo init
 
 **段2。組み込みのプロンプトの全文を出して、自分の本文と見比べます。**
 
+**2回叩いて、2つのファイルにしてから比べます。**
+
 ```bash
 cd ~/continuo-work && continuo prompt --show --builtin > /tmp/builtin.md
-diff /tmp/builtin.md /dev/null
+cd ~/continuo-work && continuo prompt --show > /tmp/current.md
+diff /tmp/builtin.md /tmp/current.md
 ```
 
-**`--builtin` を落とさないでください。**`--show` だけだと、
-**いま送られている文面（＝あなたの本文）が出ます。**比べる相手になりません。
+**この2つは別のものです。**
+
+| コマンド | 何が出るか |
+| --- | --- |
+| `continuo prompt --show --builtin` | **組み込みのプロンプト。**`WORKFLOW.md` を読みません |
+| `continuo prompt --show` | **いま送られている文面。**本文が残っているうちは、あなたの本文と、段1 で置かれた `PROJECT_SPECIFIC_PROMPT.md` の雛形です |
+
+**`--builtin` を落とすと、比べる相手が2つとも同じものになります。**
+
+**読み方。****`>` が付いた行が、いま送られている文面のほうです。**
+**そこから、段1 で置かれた雛形の行を除いたものが、あなたが書いた本文です。**
+雛形は `<!-- このファイルの中身は、continuo が Claude Code へ送る指示書の一部になります。 -->` で始まるので、
+**その行から下は雛形だと見分けられます。**残ったものが、段3で移す対象です。
 
 **段3。自分で書き足した部分だけを `PROJECT_SPECIFIC_PROMPT.md` へ移します。**
 **組み込みに同じことが書いてある部分は、移しません。**二重に届きます。

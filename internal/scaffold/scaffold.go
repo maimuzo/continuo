@@ -70,15 +70,54 @@ var (
 	ErrDirNotFound = i18n.Sentinel(i18n.KeyScaffoldErrDirNotFound)
 	// ErrNotADirectory は、指定されたパスが存在するがディレクトリではないことを表す。
 	ErrNotADirectory = i18n.Sentinel(i18n.KeyScaffoldErrNotADirectory)
-	// ErrSymlink は、書き出す先の WORKFLOW.md が symlink だったことを表す。
+	// ErrSymlink は、書き出す先のファイルが symlink だったことを表す。
 	// symlink を辿って書くと、指定されたディレクトリの外にあるリンク先を壊す。
 	// --force であっても辿らずに止める。
+	//
+	// **この番兵の文言は画面に出さない。**出す文言は symlinkError が組み立てる。
+	// **WORKFLOW.md と PROJECT_SPECIFIC_PROMPT.md の両方から返る番兵**なので、
+	// 文言に片方の名前を書くと、もう片方のときに別のファイルを名乗る。
 	//
 	// **--force の経路には隙間がある。**os.Lstat で symlink を見てから os.Rename で
 	// 差し替えるまでの間に symlink へ置き換えられると、これを返さずに差し替える（設計 3-60）。
 	// 新しく作る経路には隙間が無い（O_EXCL と O_NOFOLLOW が kernel の open の時点で見る）。
 	ErrSymlink = i18n.Sentinel(i18n.KeyScaffoldErrSymlink)
 )
+
+// symlinkError は「書き出す先が symlink だった」ことを、そのファイルの名前を名乗って表す。
+//
+// **番兵の文言をそのまま先頭へ繋がない。**ErrSymlink は package の変数1つで、
+// WORKFLOW.md と PROJECT_SPECIFIC_PROMPT.md の両方から返る。番兵の文言に片方の名前を
+// 書くと、もう片方のときに別のファイルを名乗る
+// （実際に `WORKFLOW.md is a symlink: …/PROJECT_SPECIFIC_PROMPT.md` と出た）。
+// **読む人は、名乗られたほうのファイルを消しに行く。**
+//
+// **だから表示は書き出す先の名前で組み立て、errors.Is のための繋がりは Unwrap で保つ。**
+type symlinkError struct {
+	// msg は画面に出す文言である（ファイルの名前と絶対パスを含む）。
+	msg string
+}
+
+// Error は error インターフェースを満たす。
+//
+// 戻り値: 組み立て済みの文言。
+func (e *symlinkError) Error() string { return e.msg }
+
+// Unwrap は errors.Is(err, ErrSymlink) を真に保つ。
+//
+// 戻り値: 番兵 ErrSymlink。
+func (e *symlinkError) Unwrap() error { return ErrSymlink }
+
+// newSymlinkError は、書き出す先が symlink だったときのエラーを作る。
+//
+// key: 文言のキー。書き出すとき（KeyScaffoldWriteSymlinkNotFollowed）と
+// 書き換えるとき（KeyScaffoldUpdateSymlinkNotFollowed）で違う。
+// どちらも「ファイルの名前」「絶対パス」の順に2つの値を取る。
+// path: 書き出す先の絶対パス。名前はこのパスの末尾から取る。
+// 戻り値: errors.Is で ErrSymlink と判定できるエラー。
+func newSymlinkError(key i18n.Key, path string) error {
+	return &symlinkError{msg: i18n.T(key, filepath.Base(path), path)}
+}
 
 // WriteTemplate は dir の直下に WORKFLOW.md の雛形を書く。
 //
@@ -172,7 +211,7 @@ func writeOne(path, content string, force bool) (Result, error) {
 			// os.Rename は symlink を辿らずリンクそのものを置き換えるので、ここで止めないと
 			// 「リンクを雛形で置き換えてしまった」ことになる。
 			if info.Mode()&fs.ModeSymlink != 0 {
-				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
+				return Result{Path: path}, newSymlinkError(i18n.KeyScaffoldWriteSymlinkNotFollowed, path)
 			}
 			// **WORKFLOW.md という名前のディレクトリは、ここで名指しして止める。**
 			// そのまま差し替えに進むと os.Rename が失敗し、利用者には
@@ -271,13 +310,13 @@ func openError(path string, err error) error {
 	// 「シンボリックリンクが多すぎます」という OS の文言のままでは何が起きたか分からないので、
 	// symlink であることを名指しした文言に直す。
 	if errors.Is(err, syscall.ELOOP) {
-		return i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
+		return newSymlinkError(i18n.KeyScaffoldWriteSymlinkNotFollowed, path)
 	}
 	if errors.Is(err, fs.ErrExist) {
 		// O_EXCL は既存の symlink でも EEXIST を返す。--force を勧めても
 		// そちらは ErrSymlink で止まるので、symlink のときは symlink だと言う。
 		if info, lerr := os.Lstat(path); lerr == nil && info.Mode()&fs.ModeSymlink != 0 {
-			return i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
+			return newSymlinkError(i18n.KeyScaffoldWriteSymlinkNotFollowed, path)
 		}
 		return fmt.Errorf("%w: %s", ErrAlreadyExists, path)
 	}

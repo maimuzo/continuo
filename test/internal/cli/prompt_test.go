@@ -207,6 +207,102 @@ func TestInit_2枚とも在るなら終了コード1(t *testing.T) {
 	}
 }
 
+// 目的: `PROJECT_SPECIFIC_PROMPT.md` が symlink のとき、辿らずに止めることを確かめる
+// （設計 5-3c。WORKFLOW.md 側の TestWriteTemplate_書き出す先がsymlinkならリンク先を書き換えずに止まる
+// と対になる検査である）。
+//
+// **いまこれを守っているのは、WriteProjectPrompt が WriteTemplateWithValues と
+// 同じ writeOne を呼んでいるという実装上の都合だけである。**片方だけ別の書き方に
+// 変えた瞬間、指定されたディレクトリの外にあるリンク先を雛形で潰すようになる。
+// **偶然を検査で固定する。**
+//
+// 与える情報: 別のディレクトリにある target.md を指す symlink を
+// `PROJECT_SPECIFIC_PROMPT.md` として置いたディレクトリ。`--force` の有無の両方。
+// 成功条件: どちらも終了コードが 1 で、リンク先の中身が1バイトも変わっておらず、
+// symlink が実体のファイルに置き換わっていないこと。
+func TestInit_固有のプロンプトがsymlinkならリンク先を書き換えずに止まる(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		dir, target, link := dirWithProjectPromptSymlink(t)
+
+		args := []string{"init", "--owner", "octocat", "--project", "3"}
+		if force {
+			args = append(args, "--force")
+		}
+		code, stdout, stderr := runCLI(append(args, dir), "")
+		if code != 1 {
+			t.Errorf("--force=%v: 終了コードが %d です（1 であるべきです）\n  stdout: %s\n  stderr: %s",
+				force, code, stdout, stderr)
+		}
+
+		if got := readFile(t, target); got != symlinkTargetBody {
+			t.Errorf("--force=%v: symlink を辿って指定ディレクトリの外を書き換えています: got %q, want %q",
+				force, got, symlinkTargetBody)
+		}
+
+		info, lstatErr := os.Lstat(link)
+		if lstatErr != nil {
+			t.Fatalf("--force=%v: symlink を確認できません: %v", force, lstatErr)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("--force=%v: symlink が実体のファイルに置き換わっています", force)
+		}
+	}
+}
+
+// 目的: symlink を断る文言が、断った当のファイルを名乗ることを確かめる（設計 5-3c）。
+//
+// **番兵 ErrSymlink は2枚のどちらからも返る。**その文言に片方の名前を書いていたため、
+// `PROJECT_SPECIFIC_PROMPT.md` を断ったのに
+// `WORKFLOW.md is a symlink: …/PROJECT_SPECIFIC_PROMPT.md` と出ていた。
+// **断る動きは正しくても、読む人は WORKFLOW.md を消しに行く。**
+//
+// 与える情報: `PROJECT_SPECIFIC_PROMPT.md` だけを symlink にしたディレクトリ。
+// 成功条件: 標準エラーに `PROJECT_SPECIFIC_PROMPT.md` が出ており、
+// `WORKFLOW.md` が1文字も出ていないこと。
+func TestInit_固有のプロンプトがsymlinkのとき別のファイルを名乗らない(t *testing.T) {
+	dir, _, _ := dirWithProjectPromptSymlink(t)
+
+	_, _, stderr := runCLI([]string{"init", "--owner", "octocat", "--project", "3", dir}, "")
+
+	if !strings.Contains(stderr, prompt.ProjectFileName) {
+		t.Errorf("断ったファイルの名前が出ていません: %q", stderr)
+	}
+	if strings.Contains(stderr, "WORKFLOW.md") {
+		t.Errorf("断っていない WORKFLOW.md を名乗っています（読む人はそちらを消しに行きます）: %q", stderr)
+	}
+}
+
+// symlinkTargetBody は、symlink の先に置くファイルの中身である。
+// **1バイトも変わっていないことを確かめるための目印である。**
+const symlinkTargetBody = "指定ディレクトリの外にある大事なファイル\n"
+
+// dirWithProjectPromptSymlink は、PROJECT_SPECIFIC_PROMPT.md が symlink になっている
+// ディレクトリを作る。WORKFLOW.md は置かない（`continuo init` に作らせる）。
+//
+// t: 呼び出し元のテスト。
+// 戻り値: `continuo init` に渡すディレクトリ、リンク先のパス、symlink 自身のパス。
+func dirWithProjectPromptSymlink(t *testing.T) (dir, target, link string) {
+	t.Helper()
+	base := t.TempDir()
+	dir = filepath.Join(base, "dir")
+	outside := filepath.Join(base, "outside")
+	for _, d := range []string{dir, outside} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatalf("テスト用のディレクトリを作れません: %v", err)
+		}
+	}
+
+	target = filepath.Join(outside, "target.md")
+	if err := os.WriteFile(target, []byte(symlinkTargetBody), 0o644); err != nil {
+		t.Fatalf("テスト用のリンク先を置けません: %v", err)
+	}
+	link = filepath.Join(dir, prompt.ProjectFileName)
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("テスト用の symlink を張れません: %v", err)
+	}
+	return dir, target, link
+}
+
 // writeProjectPrompt は PROJECT_SPECIFIC_PROMPT.md を1つ置く。
 //
 // t: 呼び出し元のテスト。

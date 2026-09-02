@@ -1645,7 +1645,11 @@ const (
 
 // `continuo init` が雛形を書き出すとき（internal/scaffold の openError）の文言。
 //
-// **先頭の %w に ErrSymlink を渡す**（errors.Is の切り分けを保つため）。
+// **「ファイルの名前」「絶対パス」の順に2つの値を取る。**
+// **番兵 ErrSymlink の文言は繋がない。**番兵は WORKFLOW.md と
+// PROJECT_SPECIFIC_PROMPT.md の両方から返るので、そこにファイルの名前を書くと、
+// もう片方のときに別のファイルを名乗る。**errors.Is の切り分けは、
+// internal/scaffold の symlinkError が Unwrap で保つ。**
 const (
 	// KeyScaffoldWriteSymlinkNotFollowed は書き出す先が symlink で、辿らずに止めたときに出る。
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
@@ -1659,8 +1663,9 @@ const (
 // issue ごとの settings.json の書き出しからも出る。**文言は WORKFLOW.md を名指ししているが、
 // キーを増やさないことを優先している**（設計 3-59）。
 //
-// **symlink_not_followed と not_regular_file は先頭の %w に ErrSymlink / ErrNotFound を渡す**
-// （errors.Is の切り分けを保つため）。
+// **not_regular_file は先頭の %w に ErrNotFound を渡す**（errors.Is の切り分けを保つため）。
+// **symlink_not_followed は「ファイルの名前」「絶対パス」の順に2つの値を取り、番兵の文言を
+// 繋がない。**切り分けは internal/scaffold の symlinkError が Unwrap で保つ。
 const (
 	// KeyScaffoldUpdateSymlinkNotFollowed は書き換える先が symlink で、辿らずに止めたときに出る。
 	KeyScaffoldUpdateSymlinkNotFollowed Key = "scaffold.update.symlink_not_followed"
@@ -1708,7 +1713,11 @@ const (
 	KeyScaffoldErrDirNotFound Key = "scaffold.err.dir_not_found"
 	// KeyScaffoldErrNotADirectory は指定されたパスがディレクトリでないときに出る。
 	KeyScaffoldErrNotADirectory Key = "scaffold.err.not_a_directory"
-	// KeyScaffoldErrSymlink は書き出す先の WORKFLOW.md が symlink だったときに出る。
+	// KeyScaffoldErrSymlink は書き出す先が symlink だったときの番兵の文言である。
+	//
+	// **画面には出ない。**出る文言は KeyScaffoldWriteSymlinkNotFollowed と
+	// KeyScaffoldUpdateSymlinkNotFollowed が組み立てる。ここに特定のファイルの名前を
+	// 書いてはならない（番兵は2枚のどちらからも返る）。
 	KeyScaffoldErrSymlink Key = "scaffold.err.symlink"
 	// KeyScaffoldErrNotFound は書き換える先に WORKFLOW.md が無いときに出る。
 	KeyScaffoldErrNotFound Key = "scaffold.err.not_found"
