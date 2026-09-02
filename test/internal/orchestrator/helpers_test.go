@@ -1824,8 +1824,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Config: cfg,
 		// **1回目に送る文面は、断片の並びとして渡す**（設計 5-3c）。
 		// テストが与えるのは1枚のテンプレートなので、それを WORKFLOW.md の本文の
-		// 位置に置いた形（互換の経路）で組み立てる。
-		Prompt:         prompt.Build(promptTemplate, "", "", false),
+		// 位置に置いた形で組み立てる（組み込みの前半と後半が前後に付く）。
+		Prompt:         prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,

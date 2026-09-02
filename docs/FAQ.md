@@ -5,9 +5,9 @@
 **新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 /
-未記入の項目 / プロンプトの変数 / 残った本文 / claude / hook の置き場所 / Claude の設定 /
+未記入の項目 / プロンプトの変数 / claude / hook の置き場所 / Claude の設定 /
 worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / clone /
-信頼登録 / 資格情報の17個を調べます。
+信頼登録 / 資格情報の16個を調べます。
 `✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
@@ -74,7 +74,7 @@ CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo
 
 **直し方。**出たキーの行を `WORKFLOW.md` から消してください。
 **`continuo init --force` は使わないこと。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
-**手で書いた `PROJECT_SPECIFIC_PROMPT.md` も雛形に戻ります**（`--force` は2枚とも上書きします）。
+**手で書いた本文も雛形に戻ります**（`--force` は front matter も本文も上書きします）。
 
 ```bash
 grep -n "消したいキー名" ~/continuo-work/WORKFLOW.md
@@ -386,8 +386,7 @@ tracker:
 
 | 内訳に出る名前 | 何のことか |
 | --- | --- |
-| `PROJECT_SPECIFIC_PROMPT.md` | **あなたが書いた固有のプロンプト。**行番号はそのファイルの行番号です |
-| `WORKFLOW.md#body` | **`WORKFLOW.md` に残っている本文**（[upgrading.md](upgrading.md) の移行がまだのとき） |
+| `WORKFLOW.md#body` | **あなたが書いた本文**（front matter の閉じの `---` より下）。**行番号は、その `---` の次の行を1行目として数えたものです** |
 | `builtin.md#head` / `builtin.md#tail` | **continuo の組み込みのプロンプト。**ここが出たら continuo 側の不具合です |
 
 **送る文面の全文は、次のコマンドで読めます。**
@@ -416,42 +415,56 @@ cd ~/continuo-work && continuo prompt --show
 **検査は完全ではありません。**continuo は作り物の issue で2回試すだけなので、
 `{{if eq .issue.state "Done"}}` のように**値そのもので分かれる枝の中**までは届きません。
 
-### `✗ プロンプトの変数  PROJECT_SPECIFIC_PROMPT.md が在りますが読めません`
+### `WORKFLOW.md` の本文に書いた指示が、組み込みの指示と2回届く
 
-**原因。**固有のプロンプトのファイルは在るのに、中身を読めません。
-**権限が足りない**か、**同じ名前のディレクトリがある**かのどちらかです。
+**原因。**v0.1.13 で、`WORKFLOW.md` の本文の意味が変わりました。
+
+| 版 | 本文に中身があるとき、何が送られるか |
+| --- | --- |
+| **v0.1.12 まで** | **本文だけ。**組み込みのプロンプトは1文字も送られません |
+| **v0.1.13 から** | **組み込みの前半 + 本文 + 組み込みの後半。**本文は真ん中へ挟まります |
+
+**v0.1.12 までの本文には、組み込みと同じ指示を書き写している人がいます。**
+表明の1行（`CONTINUO-STATUS:`）の書き方や、worktree を切り替えるなという指示です。
+**そのまま v0.1.13 へ上げると、同じ指示が2回届きます。**
+
+**直し方。**組み込みに同じことが書いてある部分を、本文から消してください。
+**組み込みの全文は、次のコマンドで読めます。**
 
 ```bash
-cd ~/continuo-work && ls -l PROJECT_SPECIFIC_PROMPT.md
+cd ~/continuo-work && continuo prompt --show --builtin
 ```
 
-**黙って無視はしません。**無視すると、**書いたはずの流儀が効かないまま無人で回り続けます。**
+**送られる文面の全文は、次のコマンドで読めます。**
 
-**要らないなら、ファイルごと消してください。**無ければ continuo は起動します。
+```bash
+cd ~/continuo-work && continuo prompt --show
+```
 
-**この誤りで止まるのは、常駐プロセスの起動だけです。**
-`continuo doctor` / `continuo trust` / `continuo abandon` は、そのまま動きます。
+**手順は [upgrading.md](upgrading.md) の「v0.1.12 から v0.1.13 へ」にあります。**
 
-### `! 残った本文  WORKFLOW.md に本文が N 行残っています`
+### `continuo prompt --show` の内訳に「WORKFLOW.md に本文はありません」と出る
 
-**原因。**v0.1.13 で、エージェントへ送る指示書は `WORKFLOW.md` の外へ出ました。
-**それより前から使っている `WORKFLOW.md` には、本文がそのまま残っています。**
+**原因。**`WORKFLOW.md` の front matter の閉じの `---` より下が、空か空白だけです。
 
-**壊れてはいません。**本文が残っている限り、**いままでと1バイトも同じ文面が送られます。**
-**そのかわり、組み込みのプロンプトは送られません。**
-**これから continuo が直すプロンプトの改良は、1つも届きません。**
+**壊れてはいません。**固有の指示が要らない project では、これが正しい状態です。
+**組み込みのプロンプトだけが送られます。**
 
-**直し方は [upgrading.md](upgrading.md) の「送るプロンプトを移す」にあります。**4段です。
+**書いたつもりなのにこう出るときは、書いた場所を確かめてください。**
+**front matter の中（`---` に挟まれた YAML の側）に書いても、本文にはなりません。**
 
-1. `continuo init` を叩く（**`--force` は付けません**。足りない1枚だけが置かれます）
-2. `continuo prompt --show --builtin` で組み込みの全文を読み、自分の本文と見比べる
-3. 自分で書き足した部分だけを `PROJECT_SPECIFIC_PROMPT.md` へ移す
-4. `WORKFLOW.md` の閉じの `---` より下を消す
+**本文だけを出すコマンドです。**2本目の `---` より下を出します。
 
-**差分を出す口はありません。**本文はあなたが書き換えている可能性があり、
-**機械が作った差分で消してよいものではないためです。**
+```bash
+cd ~/continuo-work && awk 'c>=2{print} /^---$/{c++}' WORKFLOW.md
+```
 
-**起動は止まりません。**`!` なので終了コードも 0 のままです。
+**本文の雛形が要るなら、`continuo init` を別のディレクトリで叩いて写してください。**
+**いまいるディレクトリで `--force` を打つと、front matter も雛形に戻ります。**
+
+```bash
+continuo init /tmp/continuo-template
+```
 
 ---
 
@@ -1944,7 +1957,7 @@ cd ~/continuo-work && continuo doctor
 | **本文**（front matter より下） | **エージェントの動きが古いままです。**continuo は本文を読み替えないので、書いていない指示は届きません |
 
 **`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
-**手で書いた `PROJECT_SPECIFIC_PROMPT.md` も雛形に戻ります**（`--force` は2枚とも上書きします）。
+**手で書いた本文も雛形に戻ります**（`--force` は front matter も本文も上書きします）。
 **増えた設定も、変わった本文も、その部分だけを手で当てます。**
 
 **足す場所と中身、当てないと何が起きるか、当てたあとの確かめ方は
