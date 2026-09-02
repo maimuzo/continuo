@@ -248,6 +248,14 @@ type IssueRef struct {
 	Repo string
 	// Number は GitHub issue の番号である。
 	Number int
+	// LinkedBranch は base に使うリンクされた branch の名前である（設計 3-22d）。
+	//
+	// **`origin/` は付いていない生の名前である**（`work/issue-42`）。base に据えるときに
+	// `origin/` を足す。**空なら今までどおり**（設定の base → 既定 branch）に倒す。
+	//
+	// **トラッカーが「ちょうど1本で、issue と同じリポジトリ」と判定したときだけ入る。**
+	// 0本・2本以上・別のリポジトリを指すリンクでは空である。
+	LinkedBranch string
 	// NativeRef はトラッカーのアダプタが入れた provider 固有の値である。
 	// **このパッケージが読むのは "default_branch" の1キーだけである**
 	// （herdr.worktree.base が null のときの base。3-22 の段4。

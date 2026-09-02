@@ -2066,6 +2066,9 @@ const (
 	// KeyWorkspaceGitUnpushedCountUnreadable は、どの remote にも載っていない commit の数を
 	// 数値として読めなかったときに出る。
 	KeyWorkspaceGitUnpushedCountUnreadable Key = "workspace.git_unpushed_commits.count_unreadable"
+	// KeyWorkspaceGitFetchLinkedBranchFailed は、issue にリンクされた branch を
+	// 手元へ取ってこられなかったときに出る（設計 3-22d）。
+	KeyWorkspaceGitFetchLinkedBranchFailed Key = "workspace.git_fetch_linked_branch.failed"
 	// KeyWorkspaceGhqNameInvalid は ghq へ渡す owner 名またはリポジトリ名が
 	// GitHub の名前として通らない形だったときに出る。**別名に直さずに断る**ためのものである。
 	KeyWorkspaceGhqNameInvalid Key = "workspace.ghq_target.name_invalid"
@@ -2186,6 +2189,8 @@ const (
 	KeyWorkspacePrepareBranchMismatch Key = "workspace.prepare.branch_mismatch"
 	// KeyWorkspaceErrWorktreeDetached は worktree が detached HEAD のときの番兵の文言である（issue #132）。
 	KeyWorkspaceErrWorktreeDetached Key = "workspace.err.worktree_detached"
+	// KeyWorkspaceErrRetryable は「いまは失敗したが、待てば通るかもしれない」ことを表す番兵の文言である（3-22d）。
+	KeyWorkspaceErrRetryable Key = "workspace.err.retryable"
 	// KeyWorkspacePrepareDetachedHead は worktree が detached HEAD で再利用できないときに出る（issue #132）。
 	KeyWorkspacePrepareDetachedHead Key = "workspace.prepare.detached_head"
 	// KeyWorkspacePrepareUnregisteredWorktree は目的のパスに実体があるのに git の worktree として登録されていなかったときに出る。
@@ -3215,6 +3220,7 @@ var allKeys = []Key{
 	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode,
 	KeyWorkspaceGitBranchExistsUnexpectedExitCode,
 	KeyWorkspaceGitUnpushedCountUnreadable,
+	KeyWorkspaceGitFetchLinkedBranchFailed,
 	KeyWorkspaceGhqNameInvalid,
 	KeyWorkspaceRunGhqListStartFailed,
 	KeyWorkspaceRunGhqListExitFailed,
@@ -3274,6 +3280,7 @@ var allKeys = []Key{
 	KeyWorkspaceErrWorktreeBranchMismatch,
 	KeyWorkspacePrepareBranchMismatch,
 	KeyWorkspaceErrWorktreeDetached,
+	KeyWorkspaceErrRetryable,
 	KeyWorkspacePrepareDetachedHead,
 	KeyWorkspacePrepareUnregisteredWorktree,
 	KeyWorkspacePrepareParentDirCreateFailed,

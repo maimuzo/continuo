@@ -71,21 +71,32 @@ func bootstrapProjectPayload(options []map[string]any) map[string]any {
 // testIssueItemOpts は issueItemJSON が組み立てる project item（content が Issue）の
 // パラメータである。ゼロ値のフィールドはそれぞれ「無し」として扱われる。
 type testIssueItemOpts struct {
-	ItemID        string
-	Status        string // 空文字なら Status 未設定（fieldValueByName が null）として組み立てる
-	Archived      bool   // true なら isArchived が真の item（ボード上でもう見えない）を組み立てる
-	Owner         string
-	Repo          string
-	Number        int
-	Title         string
-	Body          string
-	URL           string
-	Labels        []string
-	LinkedBranch  string
-	CommentCount  int
-	AssigneeID    string
-	AssigneeLogin string
-	BlockedBy     []map[string]any
+	ItemID   string
+	Status   string // 空文字なら Status 未設定（fieldValueByName が null）として組み立てる
+	Archived bool   // true なら isArchived が真の item（ボード上でもう見えない）を組み立てる
+	Owner    string
+	Repo     string
+	Number   int
+	Title    string
+	Body     string
+	URL      string
+	Labels   []string
+	// LinkedBranch は「issue と同じリポジトリの branch が、ちょうど1本リンクされている」
+	// 形を組み立てる近道である（`totalCount` は 1、`ref.repository.nameWithOwner` は
+	// Owner/Repo）。**別のリポジトリを指す形や2本以上の形は LinkedBranches で組む。**
+	LinkedBranch string
+	// LinkedBranches は linkedBranches の nodes をそのまま指定する（設計 3-22d の
+	// 「別のリポジトリを指すリンク」「2本以上」を組み立てるためにある）。
+	// **指定したら LinkedBranch は無視される。**linkedBranchNodeJSON で1件ずつ作る。
+	LinkedBranches []map[string]any
+	// LinkedBranchTotalCount は linkedBranches の `totalCount` である。
+	// **0 なら nodes の件数を使う。**「窓（first: 5）の外に6本目がある」形を作るときだけ
+	// 明示する。
+	LinkedBranchTotalCount int
+	CommentCount           int
+	AssigneeID             string
+	AssigneeLogin          string
+	BlockedBy              []map[string]any
 	// StatusEvents は timelineItems（ProjectV2ItemStatusChangedEvent）の nodes である
 	// （設計 3-54）。**nil なら `timelineItems` そのものを付けない**
 	// （候補の取得のクエリが要求していない状態の再現）。statusEventJSON で1件ずつ作る。
@@ -133,9 +144,15 @@ func issueItemJSON(o testIssueItemOpts) map[string]any {
 		labelNodes[i] = map[string]any{"name": l}
 	}
 
-	var linkedBranchNodes []map[string]any
-	if o.LinkedBranch != "" {
-		linkedBranchNodes = []map[string]any{{"ref": map[string]any{"name": o.LinkedBranch}}}
+	linkedBranchNodes := o.LinkedBranches
+	if linkedBranchNodes == nil && o.LinkedBranch != "" {
+		linkedBranchNodes = []map[string]any{
+			linkedBranchNodeJSON(o.LinkedBranch, o.Owner+"/"+o.Repo),
+		}
+	}
+	linkedBranchTotal := o.LinkedBranchTotalCount
+	if linkedBranchTotal == 0 {
+		linkedBranchTotal = len(linkedBranchNodes)
 	}
 
 	var assigneeNodes []map[string]any
@@ -162,11 +179,14 @@ func issueItemJSON(o testIssueItemOpts) map[string]any {
 			"nameWithOwner":    o.Owner + "/" + o.Repo,
 			"defaultBranchRef": map[string]any{"name": "main"},
 		},
-		"labels":         map[string]any{"nodes": labelNodes},
-		"assignees":      map[string]any{"nodes": assigneeNodes},
-		"blockedBy":      map[string]any{"nodes": blockedBy},
-		"linkedBranches": map[string]any{"nodes": linkedBranchNodes},
-		"comments":       map[string]any{"totalCount": o.CommentCount},
+		"labels":    map[string]any{"nodes": labelNodes},
+		"assignees": map[string]any{"nodes": assigneeNodes},
+		"blockedBy": map[string]any{"nodes": blockedBy},
+		"linkedBranches": map[string]any{
+			"totalCount": linkedBranchTotal,
+			"nodes":      linkedBranchNodes,
+		},
+		"comments": map[string]any{"totalCount": o.CommentCount},
 	}
 	if o.StatusEvents != nil {
 		content["timelineItems"] = map[string]any{"nodes": o.StatusEvents}
@@ -178,6 +198,19 @@ func issueItemJSON(o testIssueItemOpts) map[string]any {
 		"fieldValueByName": fieldValue,
 		"content":          content,
 	}
+}
+
+// linkedBranchNodeJSON は linkedBranches の node 1件分の JSON を組み立てる（設計 3-22d）。
+//
+// name: branch の名前（`work/issue-42`）。
+// nameWithOwner: その branch が在るリポジトリ（`octocat/hello-world`）。
+// **空文字なら `repository` そのものを付けない**（リポジトリ名が取れなかった応答の再現）。
+func linkedBranchNodeJSON(name, nameWithOwner string) map[string]any {
+	ref := map[string]any{"name": name}
+	if nameWithOwner != "" {
+		ref["repository"] = map[string]any{"nameWithOwner": nameWithOwner}
+	}
+	return map[string]any{"ref": ref}
 }
 
 // draftItemJSON は content が DraftIssue である project item 1件分の JSON を組み立てる。

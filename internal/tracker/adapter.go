@@ -658,6 +658,16 @@ func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]I
 					"item_id", raw.ID, "identifier", mapped.Issue.Identifier, "理由", mapped.NotDispatchableReason,
 				)
 			}
+			if mapped.LinkedBranchIgnoredReason != "" {
+				// 設計 3-22d: リンクされた branch を起点に使えなかった。**dispatch は止めない**
+				// （既定 branch へ倒して作業は進む）。**だが黙って倒すと、リンクした人は
+				// 「リンクしたのに既定 branch から始まった」を手掛かり無しで見ることになる。**
+				a.logger.Warn("リンクされた branch を worktree の起点に使いませんでした"+
+					"（既定 branch から始めます）",
+					"item_id", raw.ID, "identifier", mapped.Issue.Identifier,
+					"理由", mapped.LinkedBranchIgnoredReason,
+				)
+			}
 			result = append(result, mapped.Issue)
 		}
 
