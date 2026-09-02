@@ -218,8 +218,28 @@ const (
 	// KeyFsprobeClaudeHomeFailed は Claude Code の設定ディレクトリに書けなかったときのエラーに出る。
 	KeyFsprobeClaudeHomeFailed Key = "fsprobe.claude_home_failed"
 
-	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77b / 3-77c）。
+	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77a / 3-77b / 3-77c）。
 
+	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（機械の名前を差し込む）。
+	KeyHandoffBidCandidacy Key = "handoff.bid.candidacy"
+	// KeyHandoffBidDeadline は入札のコメントの2行目に出る（締め切りまでの分数を差し込む）。
+	//
+	// **2分以上のときだけ使う。**1分のときは KeyHandoffBidDeadlineOne を使う。
+	KeyHandoffBidDeadline Key = "handoff.bid.deadline"
+	// KeyHandoffBidDeadlineOne は、締め切りまでが1分のときに入札のコメントの2行目に出る。
+	//
+	// **英語の複数形のために分ける。**KeyHandoffBidDeadline に 1 を差し込むと
+	// "in about 1 minutes" と出る。**英語は DefaultLang なので、既定でこれが出る。**
+	KeyHandoffBidDeadlineOne Key = "handoff.bid.deadline_one"
+	// KeyHandoffBidNoDeadline は、締め切りを待たない設定のときに入札のコメントの2行目に出る。
+	KeyHandoffBidNoDeadline Key = "handoff.bid.no_deadline"
+	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（機械の名前を差し込む）。
+	KeyHandoffHoldAssigned Key = "handoff.hold.assigned"
+	// KeyHandoffHoldStarting は hold のコメントの2行目に出る（branch の名前を差し込む）。
+	KeyHandoffHoldStarting Key = "handoff.hold.starting"
+	// KeyHandoffHoldStartingNoBranch は、branch の名前を組み立てられなかったときに
+	// hold のコメントの2行目に出る。
+	KeyHandoffHoldStartingNoBranch Key = "handoff.hold.starting_no_branch"
 	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
 	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
@@ -2375,6 +2395,13 @@ var allKeys = []Key{
 	KeyFsprobeHomeDirFailed,
 	KeyFsprobeClaudeHomeFailed,
 	KeyFsprobeWorkspaceRootFailed,
+	KeyHandoffBidCandidacy,
+	KeyHandoffBidDeadline,
+	KeyHandoffBidDeadlineOne,
+	KeyHandoffBidNoDeadline,
+	KeyHandoffHoldAssigned,
+	KeyHandoffHoldStarting,
+	KeyHandoffHoldStartingNoBranch,
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffLostReason,

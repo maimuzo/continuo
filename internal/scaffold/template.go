@@ -69,7 +69,10 @@ tracker:
   unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。
                                             # turn の途中なら、この長さまで turn の終わりを待ち、エージェントの表明を読んでから判断する。
                                             # 0 なら待たずに止める。待つぶん、人間が止めたいときに止まるのが遅れる
-  automated_state_rewrite: {}               # カンバンの組み込みの自動化（PR を issue に紐づけた・PR をマージした等）が
+  automated_state_rewrite: {}               # カンバンの自動化に Status を動かされても、エージェントを止めずに続けさせるための設定。
+                                            # カンバンの Settings → Workflows で Status を書く自動化を1つも有効にしていないなら、
+                                            # 空のままでよい。有効にしているなら書く。
+                                            # 組み込みの自動化（PR を issue に紐づけた・PR をマージした等）が
                                             # Status を動かしたときだけ、その Status を上に書いた Status へ戻す。
                                             # 空なら戻さず、上の猶予を置いてから worker を止める。人間が動かしたものは戻さない。
                                             # 書くときは「自動化が書く Status 名: 戻す先の Status 名」を1行ずつ並べる。
@@ -230,6 +233,43 @@ language: auto                              # 画面に出す文言の言語。a
     git show FETCH_HEAD:<見たいファイルのパス>
 
 **worktree を足すと、消し忘れたときに登録だけが残ります。**continuo の片付けでは落ちません。
+
+## 自分で作った worktree は、自分で消すこと
+
+**それでも worktree を足したときは、作業を終える前に自分で消してください。**
+**continuo が片付けるのは、continuo が用意した worktree だけです。**
+あなたが足したものは、消すまで残り続けます。
+
+**消してよいのは、あなた自身が git worktree add で作った worktree だけです。**
+**そのパスは、あなたが git worktree add に渡した文字列そのものです。**
+
+**git worktree list で一覧を出して、そこから消すものを選ばないでください。**
+**一覧には、continuo が別の issue のために用意した worktree も並びます。**
+それらは、いま別のエージェントが使っています。
+**commit していない変更が無ければ、git worktree remove は --force を付けなくても成功します。**
+**確認も警告も出ないまま、別のエージェントの作業場所が消えます。**
+
+**自分で git worktree add した覚えが無いなら、1つも消さないでください。**
+
+**消す前に、その worktree に2つが残っていないかを確かめてください。**
+
+    git -C <自分が git worktree add したパス> status --short
+    git -C <自分が git worktree add したパス> log --oneline HEAD --not --remotes
+
+**1つ目が commit していない変更、2つ目が push していない commit です。**
+**どちらかが出たら、消す前に commit して push してください。**消すと戻せません。
+
+**確かめたら消します。**
+
+    git worktree remove <自分が git worktree add したパス>
+
+**--force を付けないでください。**commit していない変更が、確認も警告も無く消えます。
+**git worktree remove が断ったときは、上の2つをもう一度確かめてください。**
+断っているのは、消してはいけないものが残っているからです。
+
+**git worktree prune は片付けの手段ではありません。**
+**ディレクトリが先に消えたあとで、残った登録だけを掃除するコマンドです。**
+worktree を消したつもりで叩いても、実体は1つも消えません。
 
 ## この issue を読むこと
 
