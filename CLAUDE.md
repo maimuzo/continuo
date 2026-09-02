@@ -157,10 +157,12 @@ os.Rename(tmp.Name(), path)
 
 ## 報告のルール
 
-[.claude/rules/reporting.md](.claude/rules/reporting.md) に従うこと。とくに次の3点。
+[.claude/rules/reporting.md](.claude/rules/reporting.md) に従うこと。とくに次の5点。
 
+- **初見の人が分かる形で、問題の定義から書く。例外は無い。**「何が起きているか / なぜそれが困るか / いま何を決めるのか」の3つを毎回書く
 - **返答の冒頭に「何が言いたいのか」を置く**
 - **番号だけのラベルを人間に見せない**
+- **issue と PR は対で書く。**PR だけを名指ししない
 - **英語の技術用語（worktree / pane / hook / branch / commit）を日本語に直訳しない**
 
 ---
