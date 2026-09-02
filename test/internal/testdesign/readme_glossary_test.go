@@ -1,0 +1,173 @@
+// **2枚の README が、同じ節構成と同じ訳語を保っていることを機械で確かめる。**
+//
+// **人が気をつけるだけでは崩れた。**#104（README の最初に「何が手に入るか」を並べる）と
+// #114（worktree の置き場所が gwq の規則に合わせてあることを README に書く）は、
+// どちらも英語と日本語の両方へ同じ内容を足す作業である。**片方だけ直すと、
+// 読む言語によって書いてあることが違う README になる。**
+//
+// 訳語は [docs/spec/translation-glossary.md] が正である。**カンバンの英語は
+// 2語で `kanban board`、日本語は「カンバン」**と決まっており、
+// **単独の `board` と「ボード」は使わない。**#127（英語版 README と en.json の
+// board を kanban board に統一した変更を、マージ後にレビューする）で
+// 置き換えたばかりなので、戻るのをここで止める。
+//
+// **語そのものを禁じるのではなく、許す形を先に取り除いてから探す。**
+// `dashboard` と `docs/images/board.png` は正しい語なので、取り除いてから残りを見る。
+package testdesign_test
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// readmeEN は英語の README のリポジトリ内のパスである。
+const readmeEN = "README.md"
+
+// readmeJA は日本語の README のリポジトリ内のパスである。
+const readmeJA = "README.ja.md"
+
+// allowedBoardForms は、英語の README で `board` を含んでよい形である。
+//
+// **長いものから先に取り除く。**`kanban board` を先に消さないと、
+// `dashboard` を消しただけでは `kanban board` の `board` が残る。
+var allowedBoardForms = []string{
+	"docs/images/board.png",
+	"kanban board",
+	"Kanban board",
+	"dashboard",
+	"Dashboard",
+	"keyboard",
+}
+
+// allowedKatakanaBoardForms は、日本語の README で「ボード」を含んでよい形である。
+//
+// **どれも別の物の名前である。**カンバンを指す語ではないので、取り除いてから探す。
+var allowedKatakanaBoardForms = []string{
+	"ダッシュボード",
+	"キーボード",
+	"クリップボード",
+}
+
+// TestDesign_英語のREADMEが単独のboardを使っていない は、訳語集の決めごとを機械で守る。
+//
+// 目的: カンバンを指す語が `kanban board` の2語にそろっていること。
+// 与える情報: README.md の全行。
+// 成功条件: 許す形を取り除いたあとに `board` が1つも残らないこと。
+func TestDesign_英語のREADMEが単独のboardを使っていない(t *testing.T) {
+	lines := readmeLines(t, readmeEN)
+	for i, line := range lines {
+		stripped := line
+		for _, form := range allowedBoardForms {
+			stripped = strings.ReplaceAll(stripped, form, "")
+		}
+		if !strings.Contains(strings.ToLower(stripped), "board") {
+			continue
+		}
+		t.Errorf("%s:%d に単独の `board` が残っています。\n  %s\n"+
+			"  **カンバンを指す語は2語で `kanban board` にそろえます**"+
+			"（docs/spec/translation-glossary.md）。",
+			readmeEN, i+1, strings.TrimSpace(line))
+	}
+}
+
+// TestDesign_日本語のREADMEがカンバンをボードと書いていない は、訳語集の決めごとを機械で守る。
+//
+// 目的: カンバンを指す語が「カンバン」にそろっていること。
+// 与える情報: README.ja.md の全行。
+// 成功条件: 許す形を取り除いたあとに「ボード」が1つも残らないこと。
+func TestDesign_日本語のREADMEがカンバンをボードと書いていない(t *testing.T) {
+	lines := readmeLines(t, readmeJA)
+	for i, line := range lines {
+		stripped := line
+		for _, form := range allowedKatakanaBoardForms {
+			stripped = strings.ReplaceAll(stripped, form, "")
+		}
+		if !strings.Contains(stripped, "ボード") {
+			continue
+		}
+		t.Errorf("%s:%d に「ボード」が残っています。\n  %s\n"+
+			"  **カンバンを指す語は「カンバン」にそろえます**"+
+			"（docs/spec/translation-glossary.md）。",
+			readmeJA, i+1, strings.TrimSpace(line))
+	}
+}
+
+// TestDesign_2枚のREADMEの節構成が一致している は、片方だけ直したことを機械で弾く。
+//
+// **見出しの文言は言語ごとに違うので、突き合わせるのは並びと数だけである。**
+// 節を1つ足したのに片方へ入れ忘れると、ここで落ちる。
+//
+// 目的: README.md と README.ja.md が同じ数の節を、同じ深さの並びで持つこと。
+// 与える情報: 2枚の README の見出しの行。
+// 成功条件: `##` と `###` の並びが完全に一致すること。**節が0件でないこと**も確かめる。
+func TestDesign_2枚のREADMEの節構成が一致している(t *testing.T) {
+	en := headingLevels(t, readmeEN)
+	ja := headingLevels(t, readmeJA)
+
+	if len(en) == 0 {
+		t.Fatalf("%s から節を1つも読めませんでした。テストの走査が壊れています。", readmeEN)
+	}
+	if len(en) != len(ja) {
+		t.Fatalf("節の数が食い違います。%s は %d 個、%s は %d 個です。\n"+
+			"  **両方の README へ同じ節を入れてください。**"+
+			"片方だけに足すと、読む言語で書いてあることが変わります。",
+			readmeEN, len(en), readmeJA, len(ja))
+	}
+	for i := range en {
+		if en[i] == ja[i] {
+			continue
+		}
+		t.Errorf("%d 番目の節の深さが食い違います。%s は %s、%s は %s です。",
+			i+1, readmeEN, en[i], readmeJA, ja[i])
+	}
+}
+
+// readmeLines は README を1行ずつ読む。
+//
+// t: テスト。
+// name: リポジトリの直下からのファイル名。
+// 戻り値: 行の並び。
+func readmeLines(t *testing.T, name string) []string {
+	t.Helper()
+
+	path := filepath.Join("..", "..", "..", name)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%s を読めません: %v", name, err)
+	}
+	return strings.Split(string(body), "\n")
+}
+
+// headingLevels は README の見出しの深さを、出てくる順に並べる。
+//
+// **`#` 1つ（題名）は数えない。**両方の README に1つずつしか無く、比較の役に立たない。
+// **コードブロックの中の `#` はコメントなので数えない。**シェルの例に `# start the daemon`
+// のような行があり、見出しと区別が付かない。
+//
+// t: テスト。
+// name: リポジトリの直下からのファイル名。
+// 戻り値: `"##"` / `"###"` の並び。
+func headingLevels(t *testing.T, name string) []string {
+	t.Helper()
+
+	levels := make([]string, 0, 16)
+	inFence := false
+	for _, line := range readmeLines(t, name) {
+		if strings.HasPrefix(line, "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "### "):
+			levels = append(levels, "###")
+		case strings.HasPrefix(line, "## "):
+			levels = append(levels, "##")
+		}
+	}
+	return levels
+}

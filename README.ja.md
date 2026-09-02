@@ -10,6 +10,20 @@ Go で書いており、OpenAI の symphony の仕様を実装しています。
 
 ---
 
+## 何が手に入るか
+
+- **チケットの置き場所は、いま使っている GitHub Projects v2 のカンバンです。**別のサービスを契約する必要はありません
+- **1枚のカンバンに、リポジトリをいくつ混ぜても構いません。**issue ごとに、そのリポジトリの下へ worktree を作ります
+- **Claude Code は対話モードのまま動きます。**herdr の pane を開けば、いつでも様子を読めます
+- **従量課金にはなりません。**`claude -p` も Agent SDK も API の直叩きも使わず、いつもの定額プランのまま動きます
+- **進み具合はカンバンで分かります。**結果は Status の変化として返るので、ほかを見に行く必要はありません
+- **枠を使い切っても待ちます。**枠が回復したら、自分で続きを進めます
+- **1枚のカンバンを複数の機械で分担できます。**残っている枠を入札し、いちばん余裕のある機械がその issue を取ります
+- **他人が書いた指示は、通る範囲を狭めてあります。**issue の本文とコメントは JSON として読み、`OWNER` / `MEMBER` / `COLLABORATOR` が書いたものだけを命令として扱います（public なリポジトリを載せる前に「[始める前に知っておくこと](#始める前に知っておくこと)」を読んでください）
+- **画面に出す文言は英語と日本語を選べます。**`continuo doctor`・コマンドの出力・ダッシュボードが、1つの設定で切り替わります
+- **設定は `continuo setup` が案内します。**カンバンの Status の選択肢を読み、5つの役割へ対応づけます
+- **[openai/symphony](https://github.com/openai/symphony) の仕様を実装しています。**公開されたオーケストレーターの仕様であり、独自の取り決めではありません
+
 ## 想定しているカンバンの運用方法
 
 **タスクを issue にまとめ、`Ready` へ置くだけです。**あとは continuo が進めます。`Blocked` へ移っていたら、エージェントが行き詰まっています。issue のコメントで指示してください。`In Review` へ移っていたら作業は終わっています。内容を確認して、よければ `Done` へ動かしてください。
@@ -46,6 +60,10 @@ herdr agent read continuo-hello-world-188 --source recent-unwrapped --lines 40
 ~/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188/
 ~/worktrees/github.com/octocat/sample-app/continuo-octocat-sample-app-42/
 ```
+
+**並べ方は `<workspace.root>/<ホスト>/<owner>/<repo>/<branch 名のスラグ>` に固定です**（スラグは branch 名の `/` を `-` に置き換えたもの）。
+
+**これは [gwq](https://github.com/d-kuro/gwq) の規則に合わせてあります。**gwq を使っているなら、continuo が作った worktree も `gwq list` に自分の worktree と並んで出ますし、`gwq remove` で消せます。**gwq は必須ではありません。**continuo は gwq を実行しませんし、`continuo doctor` も gwq を探しません。入っていなくても全部動きます。**合わせてあるのは置き場所の規則だけで、同じ場所に並べられるようにするためです。**
 
 **同時に動かす issue の数は設定で決めます**（既定2件）。
 
@@ -254,6 +272,9 @@ claude:
 
 **v0.x のうちは、設定の形を変えることがあります。**`WORKFLOW.md` の front matter は未知のキーを弾くので、
 **キーを消したり改名したりすると、古い設定ファイルは起動しなくなります。**その変更は release notes に書きます。
+
+**画面に出す文言は英語と日本語を選べます。**`WORKFLOW.md` の `language` で決めます（既定は `auto`。環境変数 `LANG` から決め、決まらなければ英語になります）。
+**まだ日本語だけのもの。**インストーラーの案内・`continuo init` が書く `WORKFLOW.md` の雛形・continuo が issue へ書くコメント・この README 以外の文書。
 
 ## もっと詳しく
 

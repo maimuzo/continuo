@@ -10,6 +10,20 @@ It is written in Go and implements the [openai/symphony](https://github.com/open
 
 ---
 
+## What you get
+
+- **A queue you already have.** Your tasks stay on a GitHub Projects v2 kanban board — there is no second service to sign up for
+- **One kanban board, many repositories.** Each issue gets a worktree under the repository it belongs to
+- **Claude Code in interactive mode.** It runs in a herdr pane you can open and read at any time
+- **No metered API calls.** No `claude -p`, no Agent SDK, no HTTP API — it stays on your usual subscription
+- **Progress shows up on the kanban board.** Results come back as a Status change, so there is nowhere else to check
+- **A spent quota is waited out.** When the window resets, continuo picks the work back up on its own
+- **Several machines can share one kanban board.** They bid with the quota they have left, and the one with the most room takes the issue
+- **Instructions from strangers are narrowed down.** Issue text is read as JSON and only `OWNER` / `MEMBER` / `COLLABORATOR` are obeyed — read [Before you start](#before-you-start) before pointing it at a public repository
+- **English or Japanese.** `continuo doctor`, the command output and the dashboard all follow one setting
+- **`continuo setup` walks you through the configuration.** It reads your Status options and maps them to the five roles
+- **It implements [openai/symphony](https://github.com/openai/symphony)** — a published orchestrator specification, not a protocol invented here
+
 ## How the kanban board drives it
 
 Put your task in an issue, move it to `Ready`, and continuo takes it from there. If it lands in `Blocked`, the agent needs something from you — answer in an issue comment. If it lands in `In Review`, the work is done and waiting for you to look at it.
@@ -18,7 +32,7 @@ Put your task in an issue, move it to `Ready`, and continuo takes it from there.
 
 | Status | Who moves it | What is happening |
 | --- | --- | --- |
-| `Ready` | **You** | continuo picks these up in kanban board order and starts them in herdr |
+| `Ready` | **You** | continuo picks these up in the order they sit on the kanban board and starts them in herdr |
 | `In Progress` | continuo | Work has started. A feature branch and a git worktree exist for this issue |
 | `In Review` | continuo | The agent finished. Open the issue and check the result — **moving it to `Done` is yours to decide** |
 | `Blocked` | continuo | The agent got stuck or needs an answer. Reply in an issue comment, then move it back to `Ready` |
@@ -46,6 +60,10 @@ A single kanban board can hold issues from as many repositories as you like. con
 ~/worktrees/github.com/octocat/hello-world/continuo-octocat-hello-world-188/
 ~/worktrees/github.com/octocat/sample-app/continuo-octocat-sample-app-42/
 ```
+
+The shape is always `<workspace.root>/<host>/<owner>/<repo>/<branch slug>`, where the slug is the branch name with `/` replaced by `-`.
+
+**That is [gwq](https://github.com/d-kuro/gwq)'s layout, on purpose.** If you use gwq, continuo's worktrees show up in `gwq list` next to the ones you made yourself, and `gwq remove` cleans them up. **gwq is not a requirement** — continuo never runs it, `continuo doctor` does not look for it, and everything works without it installed. Only the layout is shared, so the two can live under the same root.
 
 How many issues run at once is a setting (two by default).
 
@@ -247,7 +265,9 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 
 **While it is on v0.x, the configuration format may change.** The front matter in `WORKFLOW.md` rejects unknown keys, so **removing or renaming one will stop older config files from starting.** Any such change goes in the release notes.
 
-**Everything except this file is in Japanese** — the installer, the CLI output, `continuo doctor`, the error messages, and all documentation. There is no English UI yet, and a half-translated one would be worse than none: you would get English and Japanese in the same screen. If you do not read Japanese, this is not usable for you today.
+**The CLI speaks English.** `continuo doctor`, the command output and the dashboard all follow `language` in `WORKFLOW.md` — `auto` by default, which reads `LANG` and falls back to English when it says nothing.
+
+**These are still Japanese only:** the installer's prompts, the `WORKFLOW.md` template `continuo init` writes, the comments continuo posts on your issues, and every document except this file.
 
 ## Learn more
 
