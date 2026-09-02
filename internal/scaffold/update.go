@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -168,7 +169,7 @@ func UpdateStatuses(dir string, st Statuses) (Result, error) {
 // エラー: ErrDirNotFound / ErrNotADirectory / ErrNotFound / ErrSymlink、
 // または os.Lstat が失敗した理由。
 func statTarget(dir string) (string, fs.FileInfo, error) {
-	path, err := resolveTarget(dir)
+	path, err := resolveTarget(dir, fileName)
 	if err != nil {
 		return "", nil, err
 	}
@@ -179,11 +180,11 @@ func statTarget(dir string) (string, fs.FileInfo, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return path, nil, fmt.Errorf("%w: %s", ErrNotFound, path)
 		}
-		return path, nil, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, path, err)
+		return path, nil, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, filepath.Base(path), path, err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
 		// WriteTemplateWithValues と同じ判断で、辿らずに止める。
-		return path, nil, i18n.Errorf(i18n.KeyScaffoldUpdateSymlinkNotFollowed, ErrSymlink, path)
+		return path, nil, newSymlinkError(i18n.KeyScaffoldUpdateSymlinkNotFollowed, path)
 	}
 	if !info.Mode().IsRegular() {
 		return path, nil, i18n.Errorf(i18n.KeyScaffoldUpdateNotRegularFile, ErrNotFound, path)

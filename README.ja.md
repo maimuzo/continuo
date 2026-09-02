@@ -232,7 +232,9 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 ### 設定
 
-`continuo init` が `WORKFLOW.md` を置きます。**この1枚が設定ファイルであり、エージェントへ送る指示書でもあります。**
+`continuo init` が2枚を置きます。**`WORKFLOW.md` が設定で、`PROJECT_SPECIFIC_PROMPT.md` がエージェントへ送る指示書のうち、あなたが書く部分です。**
+
+**指示書の大部分は continuo の実行ファイルの中にあり、版を上げれば自動で新しくなります。**`PROJECT_SPECIFIC_PROMPT.md` は、その真ん中（「終わったらやること」の直前）へ差し込まれます。**送られる全文は `continuo prompt --show` で読めます。**
 
 **先頭の front matter が設定です。**よく触るのは次の4つ。
 
@@ -249,7 +251,14 @@ claude:
 
 **`turn_timeout_ms` は turn の総時間ではありません。**herdr が見ている画面が変わり続けている限り、1つの指示に何時間かかっても打ち切りません。
 
-**front matter より下が、Claude Code へ送る1回目のプロンプトそのものです。**「終わったら `CONTINUO-STATUS: review` と書け」「その前に commit して push しろ」といった依頼が書いてあります。**プロジェクトの流儀に合わせて書き換えてください。**
+**`WORKFLOW.md` の front matter より下は空です。**「終わったら `CONTINUO-STATUS: review` と書け」「その前に commit して push しろ」といった依頼は、continuo が持っている組み込みの指示書に書いてあります。
+
+**プロジェクトの流儀は `PROJECT_SPECIFIC_PROMPT.md` に書いてください。**テストの走らせ方・レビューの手順・書く言語などの雛形が、はじめから入っています。要らない節は消してかまいません。**ファイルごと消しても continuo は動きます。**
+
+```bash
+continuo prompt --show            # 送られる全文（組み込み + あなたが書いたぶん）
+continuo prompt --show --builtin  # 組み込みのぶんだけ
+```
 
 **書き換えたら continuo を再起動してください。**動いている最中は読み直しません。
 

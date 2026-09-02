@@ -292,8 +292,10 @@ func TestUpdateStatuses_書き換えたあとも読み込める(t *testing.T) {
 	if loaded.Config.Tracker.DispatchState != jaStatuses.Dispatch {
 		t.Errorf("dispatch_state が違う: %q", loaded.Config.Tracker.DispatchState)
 	}
-	if !strings.Contains(loaded.PromptTemplate, "CONTINUO-STATUS: review") {
-		t.Errorf("本文の表明の行が壊れている")
+	// **本文は持たない**（設計 5-3c）。UpdateStatuses が front matter だけを書き換えて、
+	// 本文の位置に何かを書き足していないことを確かめる。
+	if strings.TrimSpace(loaded.PromptTemplate) != "" {
+		t.Errorf("Status を書き換えたあとに本文が生まれている: %q", loaded.PromptTemplate)
 	}
 }
 

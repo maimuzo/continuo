@@ -3802,7 +3802,9 @@ README には「何が要るか」だけを書き、**「揃っているか」�
 
 ```bash
 continuo doctor        # 前提が揃っているかを検査する。足りないものと直し方を出す
-continuo init          # WORKFLOW.md の雛形を置く。既にあれば止める（--force で上書き）
+continuo init          # WORKFLOW.md と PROJECT_SPECIFIC_PROMPT.md の雛形を置く（5-3g）
+                       # **1枚ずつ独立に扱う。**片方だけ在るなら、無いほうだけを置いて 0 で終わる
+                       # 2枚とも在れば止める（--force で上書き）
                        # owner と project_number は gh から引いて自動で埋める
                        # trust.repositories はカンバンに載っているリポジトリを並べる（3-33）
                        # --owner=<名前>   gh を叩かずにこの値を使う
@@ -3827,6 +3829,9 @@ continuo allow-keychain-access
                        # 設定ファイルを読まない。WORKFLOW.md がまだ無くても叩ける
                        # 出すのは読めた項目の名前だけである。トークンの値は画面にもログにも出さない
                        # 位置引数もフラグも取らない。待つ上限は60秒
+continuo prompt --show # Claude Code へ送るプロンプトの全文を出す（5-3f）
+                       # --builtin を付けると、WORKFLOW.md を読まずに組み込みだけを出す
+
 continuo               # 常駐する（WORKFLOW.md を読んで巡回を始める）
                        # --log-level=debug|info|warn|error（既定 info）
                        # --port=<番号>  ダッシュボードのポート。server.port を上書きする（仕様 13.7）。
@@ -3893,6 +3898,8 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 ```text
 設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる。3-9e）
               ├─ 未記入の項目（雛形と設定の原文を突き合わせる。3-75）
+              ├─ プロンプトの変数（3つの断片を作り物の issue で変数展開する。5-3c）
+              ├─ 残った本文（WORKFLOW.md に本文が残っていないか。5-3d）
               ├─ herdr（設定の protocol と照合する）
               └─ gh の認証 ── ボードを読める ─┬─ Status の名前（選択肢名を照合する）
                                               ├─ 対応表のキー（キーが選択肢にあるか。3-57）
@@ -6484,7 +6491,9 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 **1つだけ直した。****`WORKFLOW.md` という名前のディレクトリ**に `--force` を当てたとき、
 差し替えの失敗がそのまま出ると「一時ファイルの名前と `rename` の失敗」が並ぶだけで読めない。
 `os.Lstat` の結果がディレクトリなら、差し替えに進む前に
-`WORKFLOW.md を作成できません: <パス>: is a directory` で止める（変更前と同じ文言である）。
+`<書き出す先の名前> を作成できません: <パス>: is a directory` で止める。
+**名乗るのは書き出す先の名前である**（5-3g）。`PROJECT_SPECIFIC_PROMPT.md` という名前の
+ディレクトリなら、そちらの名前が出る。
 
 ### 3-61. 「誰が Status を書いたか」は、それを読む2つの呼び出し元でだけ取る
 
@@ -8522,24 +8531,22 @@ tracker:
   ...
 ---
 
-（ここから下が本文。1回目の turn で送るプロンプトのテンプレート。中身は 5-3）
-
-{{.issue.identifier}} を実装してください。
-
-## この issue を読むこと
-...
+（ここから下は空である。**送るプロンプトはここには無い。**5-3c）
 ```
 
 **置き場所の例。**
 
 ```text
-/Users/<user>/continuo/WORKFLOW.md          ← ここで continuo を起動する
+/Users/<user>/continuo/WORKFLOW.md                  ← ここで continuo を起動する
+/Users/<user>/continuo/PROJECT_SPECIFIC_PROMPT.md   ← 固有のプロンプト（無くてもよい。5-3c）
 または
-continuo /path/to/WORKFLOW.md               ← 位置引数で明示する
+continuo /path/to/WORKFLOW.md                       ← 位置引数で明示する
 ```
 
 **このファイル1つで設定が完結する。**ほかに設定ファイルは要らない
 （issue ごとの Claude Code の設定は continuo が自動で作る。3-12）。
+**`PROJECT_SPECIFIC_PROMPT.md` は設定ではない。**送る文面の一部であり、
+`WORKFLOW.md` と同じディレクトリから読む（5-3c）。
 
 **相対パスは、このファイルが置かれているディレクトリを基準に解決する**（`SPEC.md` 5.3.3 / 6.1）。
 **解決の対象は `workspace.root` だけである。**`claude.hook_bridge.listen` は
@@ -8760,12 +8767,17 @@ language: auto                              # 画面に出す文言の言語。a
 | `tracker.provider.comments.marker` / `.self_marker` | `tracker.comments.marker` / `.self_marker` | **マーカーは GitHub 固有ではない。**continuo とエージェントのあいだの取り決めである。`provider.comments` に残すのは GitHub の GraphQL の100件制限に縛られる `max` / `order` だけにする |
 | `claude.read_timeout_ms` / `claude.startup_timeout_ms` | `herdr.read_timeout_ms` / `herdr.startup_timeout_ms` | **どちらも Claude Code に渡す設定ではない。**continuo が herdr と話すときの待ち時間であり、herdr のクライアントへ渡している（8-1） |
 
-### 5-3. 本文（プロンプトのテンプレート）
+### 5-3. 組み込みのプロンプト
 
-**front matter の下が本文で、これが issue ごとのプロンプトになる**（`SPEC.md` 5.2 / 5.4）。
+**言いたいこと。**issue ごとに最初に送る指示書の全文である。
+**置き場所は [internal/prompt/builtin.md](../../internal/prompt/builtin.md) であり、continuo の実行ファイルの中にある。**
+**`WORKFLOW.md` の本文ではない**（本文は空である。組み立て方は 5-3c）。
+
+**目印の行（`<!-- continuo:project-specific-prompt -->`）で前半と後半に切れる。**
+その間に `PROJECT_SPECIFIC_PROMPT.md` が挟まる。**目印の行そのものは送られない。**
 
 ```markdown
-{{.issue.identifier}} を実装してください。
+{{.issue.identifier}} に着手してください。
 
 ## この issue に着手してよいことは、もう決まっています
 
@@ -8943,6 +8955,8 @@ gh pr view の --comments にも --json comments にも1件も出ません。**�
 
 **読んだ指摘は、直すか、直さない理由を issue のコメントに残すかのどちらかにしてください。**
 
+<!-- continuo:project-specific-prompt -->
+
 ## 終わったらやること
 
 **作業の区切りがついたら、応答の最後に次のいずれか1行を必ず書いてください。**
@@ -8976,14 +8990,13 @@ push していない作業は、この worktree が片付くときに失われ�
 
 **push できなかったときは、その理由も `blocked` のコメントに書いてください。**
 
-**読んだコメントに「まとめて対応する issue のグループ」が書かれている場合は、
-同じリポジトリの issue に限り、まとめて直してください。**
-その場合は issue ごとに1行ずつ表明を書いてください。
+**複数の issue をまとめて直した場合は、issue ごとに1行ずつ表明を書いてください。**
 
     CONTINUO-STATUS: review          （いま作業している issue）
     CONTINUO-STATUS: #45 review      （同じグループの別の issue）
 
-**別のリポジトリの issue が含まれている場合は、直さずに次のように書いてください。**
+**別のリポジトリの issue は、この worktree では直せません。**
+まとめて直す指示に別のリポジトリの issue が含まれていたときは、直さずに次のように書いてください。
 
     CONTINUO-STATUS: #99 working     （別リポジトリなので、この worktree では直せない）
 
@@ -9030,6 +9043,157 @@ push していない作業は、この worktree が片付くときに失われ�
 **`CONTRIBUTOR` をこの3つに含めてはならない。**この値は、**そのリポジトリで過去に commit が
 1回 merge されただけで付く。**いまそのリポジトリに対する権限があることを意味しない。
 
+### 5-3c. 送るプロンプトを3つの断片から組み立てる
+
+**言いたいこと。**送る文面は「組み込みの前半」「固有」「組み込みの後半」の3つでできている。
+**固有を真ん中に挟む**ので、仕組みの締めくくり（表明の1行の説明）が必ず最後に来る。
+
+| 順 | 断片 | どこにあるか | 利用者が変えられるか |
+| --- | --- | --- | --- |
+| 1 | 組み込みの前半 | [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の目印の行より上 | **変えられない** |
+| 2 | 固有 | `PROJECT_SPECIFIC_PROMPT.md`（`WORKFLOW.md` と同じディレクトリ） | **変えられる。**無くてもよい |
+| 3 | 組み込みの後半 | 同じファイルの目印の行より下 | **変えられない** |
+
+**3つは別々に解釈し、別々に変数展開してから連結する**（[internal/prompt/prompt.go](../../internal/prompt/prompt.go)）。
+連結してから解釈すると、**誤りの行番号がどのファイルのものか分からなくなり、
+固有の側の `{{if}}` が仕組みの締めくくりを飲み込める。**
+**断片のあいだは必ず空行1つにそろえる**（固有が改行で終わっていないと、次の見出しが前の行にくっつく）。
+
+**固有のファイルの読み方。**
+
+| 状態 | どうするか | なぜ |
+| --- | --- | --- |
+| 無い | そのまま起動する | 固有の指示が要らない project がある |
+| 中身が空白だけ | 在るものとして扱い、何も足さない | 「消したいが、ファイルは残す」を成り立たせる |
+| **在るのに読めない** | **常駐プロセスの起動を止める** | 書いたはずの流儀が効かないまま無人で回る |
+
+**読むのは [internal/config/config.go](../../internal/config/config.go) の `Load` だが、`Load` は落とさない。**
+理由は `Load` を呼ぶのが常駐プロセスの起動だけではないからである（`continuo trust` /
+`continuo abandon` / `continuo doctor` も呼ぶ）。**1枚のプロンプトの権限で、
+プロンプトを1文字も送らないコマンドを巻き添えにしない。**とくに doctor は、設定の検査が `✗` に
+なるとほぼ全部の検査の記号がそれに引きずられ、**原因を調べる道具そのものが使えなくなる。**
+`Loaded.ProjectPromptErr` に理由を入れて返し、**止めるかどうかは起動と doctor が決める。**
+**symlink は辿る**（読むだけである。書く側は辿らない）。
+
+**変数の検査。**起動のたびに、**作り物の issue で2回変数展開する**（1回目は `.attempt` を空、
+2回目は 2）。`{{if .attempt}}` の中は、空のときには一度も解釈されないためである。
+**テンプレートを作る口は [internal/prompt/prompt.go](../../internal/prompt/prompt.go) の
+`newTemplate` だけにし、そこで `missingkey=error` と `index` の封じ込めを掛ける**
+（`missingkey=error` が見るのは `.foo` の形だけで、`{{index .issue "nope"}}` は素通りする）。
+**それでも言い切れない。**値そのもので分かれる枝（`{{if eq .issue.state "Done"}}`）の中までは届かない。
+**doctor の文言も「検査に使った作り物の issue では」と範囲を書く。**
+
+**組み込みだけを差し替える正規の道は無い。**組み込みは実行ファイルの中にあり、
+利用者が置き換えられるのは真ん中の1枚だけである。**全文を置き換えたい利用者は、
+5-3d の互換の経路（`WORKFLOW.md` に本文を書く）を使うことになる。**
+**そこは doctor が `!` で叱り続けるので、意図した置き換えと移し忘れを区別できない。**
+**この区別の印（front matter のキーなど）と、組み込みを言語ごとに持つかどうかは、
+まだ人間が決めていない**（5-3e）。
+
+### 5-3d. 既にある WORKFLOW.md に本文が残っている場合
+
+**言いたいこと。****本文が残っていたら、その本文を今までどおり使い、組み込みは送らない。**
+そのうえで、起動のたびに警告し、`continuo doctor` の見出し語 `残った本文` にも出す。
+
+| 本文 | `PROJECT_SPECIFIC_PROMPT.md` | 送るもの |
+| --- | --- | --- |
+| 空 | 在る | 組み込みの前半 + 固有 + 組み込みの後半 |
+| 空 | 無い | 組み込みの前半 + 組み込みの後半 |
+| **中身がある** | 在る | **本文 + 固有**（組み込みは送らない）。**警告する** |
+| **中身がある** | 無い | **本文だけ**（いままでと完全に同じ）。**警告する** |
+
+**移行の手順。**
+
+1. `continuo init` を叩く。**`--force` は要らない。**既にある `WORKFLOW.md` は触らず、
+   足りない `PROJECT_SPECIFIC_PROMPT.md` だけが置かれる
+2. `continuo prompt --show --builtin` で**組み込みの全文**を出し、自分の本文と見比べる
+3. **自分で書き足した部分だけ**を `PROJECT_SPECIFIC_PROMPT.md` へ移す
+4. `WORKFLOW.md` の閉じの `---` より下を消す
+
+**段2 で `--builtin` を使う。**`--show` だけでは自分の本文が出る（そちらが送られる文面である）。
+**比べる相手を読む道が別に要る。**
+
+**本文の変数の誤りでは、起動を止めない。**いままで本文は着手のたびに解釈されており、
+`{{if .attempt}}` の中の誤りは**やり直しが起きるまで表に出なかった。**
+**その状態の人が版を上げたときに、いままで動いていた continuo が起動しなくなってはいけない。**
+警告に留め、着手の時点ではいままでどおり失敗させる。
+
+**なぜ「本文を無視する」にしないか。**利用者が手で書き足した指示が、黙って消える。
+**なぜ「本文と組み込みを両方送る」にしないか。**表明の1行の説明が、版違いで2回届く。
+**なぜ「起動を止める」にしないか。**版を上げた瞬間に、動いている人の continuo が起動しなくなる。
+
+### 5-3e. プロンプトの分割で、まだ人間が決めていないこと
+
+**言いたいこと。**3つある。**どれも「決めるまではいまの振る舞いのまま」で運用する。**
+
+| 短縮名 | 何を決めてもらうか | 決めるまでの振る舞い |
+| --- | --- | --- |
+| **subagent の許可** | `claude.permissions.allow` に subagent を起動する道具が要るか。**雛形の注記は「要らなくても動く」と書いているが、実機で確かめていない**（#53（着手のプロンプトに、レビューの手順と日本語の指定を足す）の受け入れ条件である）。要るなら雛形の `allow` に足す | **足さない。**雛形の `PROJECT_SPECIFIC_PROMPT.md` には、起動できないときに `allow` へ足す案内を HTML のコメントで書いてある |
+| **全文の差し替えの印** | 5-3d の互換の経路を「意図した差し替え」として使う人と、「移し忘れ」の人を、どう区別するか。**いまは区別できず、doctor が両方に `!` を出す** | **区別しない。**互換の経路は受け付け続ける |
+| **組み込みを言語ごとに持つか** | 組み込みは日本語だけである。`language` に合わせて英語版を持つかどうか。**持たないなら、英語圏の利用者は送られる指示書の大半を日本語のまま受け取り、書き換える手段が互換の経路しかない** | **日本語だけを持つ** |
+
+### 5-3f. `continuo prompt --show`
+
+**言いたいこと。**送る文面をそのまま標準出力へ出す。**内訳は標準エラーへ出す。**
+`continuo prompt --show > out.md` が、送る文面と1バイトも違わないファイルになる。
+
+| 形 | 何が出るか |
+| --- | --- |
+| `continuo prompt --show [ディレクトリ]` | **送る文面の全文**（組み込み + 固有）。変数は展開しない |
+| `continuo prompt --show --builtin` | **組み込みだけ。**`WORKFLOW.md` を1バイトも読まない |
+
+| 場面 | どうするか |
+| --- | --- |
+| `WORKFLOW.md` が無い・読めない | **何も出さずに終了コード 1。**固有の断片が抜けた文面は、送る文面ではない |
+| 固有のファイルが在るのに読めない | **終了コード 1** |
+| 固有のファイルが無い | 組み込みだけを出し、内訳に「固有のプロンプトはありません」と出す |
+| 本文が残っている（5-3d） | **その本文で組み立てたものを出す。**内訳の先頭に警告を出す |
+| `--show` を付けずに `continuo prompt` | **終了コード 2。**`--show` を付けるよう案内する |
+
+**実在の issue の値で埋める形は持たない。**そのためにはカンバンを丸ごと読むことになり
+（[internal/tracker/by_identifier.go](../../internal/tracker/by_identifier.go) の
+`FetchIssueByIdentifier` は104件で2リクエスト・計8ポイントを使う）、
+**移行のために文面を読むという目的に釣り合わない。**
+**`{{if .attempt}}` の中を確かめたいという動機は、起動時の検査が2回変数展開して受け持っている。**
+
+### 5-3g. `continuo init` が置く2枚
+
+**言いたいこと。**`continuo init` は `WORKFLOW.md` と `PROJECT_SPECIFIC_PROMPT.md` を置く。
+**1枚ずつ独立に扱う。**片方が既にあっても、もう片方は書く。
+
+| 状態 | 何をするか | 終了コード |
+| --- | --- | --- |
+| 2枚とも無い | 2枚とも書く | 0 |
+| **片方だけ在る** | **無いほうだけ書く。**在るほうは触らず、そう1行出す | **0** |
+| 2枚とも在る | 何も書かない。`--force` を勧める | 1 |
+| ディレクトリが無い・ディレクトリでない・symlink・書けない | 何も書かない | 1 |
+
+**片方だけ在るときに 0 で終える。**そこが 5-3d の移行の唯一の手順であり、
+**`--force` を要求すると、手で直した `WORKFLOW.md` を潰すフラグを打たせることになる。**
+
+**symlink は2枚とも辿らない。**辿ると、指定されたディレクトリの外にあるリンク先を雛形で潰す。
+**`--force` で置き換えるときは、同じディレクトリの一時ファイルへ書き切ってから差し替える**
+（[CLAUDE.md](../../CLAUDE.md) の「4. ファイルの書き換えは……」）。
+
+**失敗の文言は、落ちた当のファイルを名乗る。symlink に限らない。**
+2枚とも同じ `writeOne`（[internal/scaffold/scaffold.go:200](../../internal/scaffold/scaffold.go#L200)）と
+同じ `atomicfile.Write`（[internal/atomicfile/atomicfile.go:47](../../internal/atomicfile/atomicfile.go#L47)）を通るので、
+**文言の側にファイルの名前を書いてはならない。**書くと、もう片方が落ちたときに別のファイルを名乗り、
+**読む人は無事なほうを消しに行く。**
+
+| どこで組み立てるか | どう名乗るか |
+| --- | --- |
+| 番兵 `ErrSymlink`（[internal/scaffold/scaffold.go:84](../../internal/scaffold/scaffold.go#L84)） | **文言は画面に出さない。**名前入りの文言は `symlinkError`（[internal/scaffold/scaffold.go:96](../../internal/scaffold/scaffold.go#L96)）が組み立て、`errors.Is` の切り分けは `Unwrap` で保つ |
+| `scaffold.file.*` と `scaffold.update.*` の文言 | **1つ目の引数がファイルの名前である。**`writeOne` / `atomicfile.Write` が `filepath.Base(path)` を渡す |
+| `cli.init.err_write_failed` | **1つ目の引数がファイルの名前である。**`printInitFile` は `scaffold.WorkflowFileName()`、`printInitProjectPrompt` は `scaffold.ProjectPromptFileName()` を渡す |
+
+**`atomicfile.Write` が名乗るのは、書き込む先の名前である**（一時ファイルの名前ではない）。
+一時ファイルの名前は利用者が付けたものではないので、名乗られても何のことか分からない。
+**どこで落ちたかは、そのあとに続くパスで分かる。**
+
+**`--force` は2枚とも上書きする。**`PROJECT_SPECIFIC_PROMPT.md` は利用者が手で書くファイルなので、
+**消える範囲を [docs/upgrading.md](../upgrading.md) と [docs/FAQ.md](../FAQ.md) の両方に書く。**
+
 ### 5-3b. push の求め方で、まだ人間が決めていないこと
 
 **言いたいこと。**5-3 の本文は「`review` または `blocked` を出す前に必ず commit して push」を
@@ -9040,15 +9204,18 @@ push していない作業は、この worktree が片付くときに失われ�
 | --- | --- | --- |
 | **push できないときの行き先** | push に失敗したエージェントに、`blocked` を出させるか `working` のままにさせるか。**`blocked` を出させると、その worktree は手順2b（`cleanup.require_pushed`、既定 `true`）に引っかかって片付かず、人間が手で始末することになる**（`continuo abandon --force` で押し切れば、そこで失われる）。**`working` のままにさせると、人間に渡らないまま `agent.max_dispatch_turns` を使い切る** | **`blocked` を出させ、失敗の理由をコメントに書かせる**（いまの本文） |
 | **commit するものが無いとき** | まだ1行も書いていない段階の `blocked` に、push を求めるかどうか。**`git commit` は `nothing to commit, working tree clean` を出して exit 1 で落ちる**（[docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) で実測）。その失敗理由が、人間へ渡す合図のコメントを埋める | **例外を作らない**（いまの本文） |
-| **PR を作らせるか** | `review` を出すエージェントに、push だけをさせるか `gh pr create` までさせるか。**いまの雛形は PR を読ませるだけで、作らせる指示は1つも無い**（`internal/scaffold/template.go` に `gh pr create` は無い）。作らせない場合、人間は branch を自分で見つけて PR を作ることになる。作らせる場合、[CLAUDE.md](../../CLAUDE.md) の「まず draft で作り、`/code-review` を通してから `gh pr ready`」までを雛形に書き足すことになる | **作らせない**（いまの本文） |
+| **PR を作らせるか** | `review` を出すエージェントに、push だけをさせるか `gh pr create` までさせるか。**組み込みのプロンプトには `gh pr create` が1文字も無い。**作らせない場合、人間は branch を自分で見つけて PR を作ることになる。作らせる場合、[CLAUDE.md](../../CLAUDE.md) の「まず draft で作り、`/code-review` を通してから `gh pr ready`」までを書き足すことになる。**行き先だけは `PROJECT_SPECIFIC_PROMPT.md` の雛形の `## PR を作るか` に用意してある**（5-3c）。**既定はいままでどおり「作らせない」であり、この表の答えは1つも動いていない** | **作らせない**（組み込みのプロンプト。雛形の `## PR を作るか` も「作らない」で出す） |
 | **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:75](../../internal/config/default.go#L75)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
 
 **なぜ勝手に決めないか。**4つとも**「人間の手間が増える」と「人間に届かない」のどちらを取るか**の判断である。
 **その issue をどれだけ待てるかで答えが変わる**ので、設計として一方に倒す根拠を continuo の側は持たない。
 
-**決まったら 5-3 の本文と 3-9 の「— その前提」を同時に直す。**
-片方だけ直すと、[test/internal/scaffold/blocked_push_test.go](../../test/internal/scaffold/blocked_push_test.go) と
-`TestTemplate_雛形の本文が設計5_3の本文と一致する` のどちらかが落ちる。
+**決まったら 5-3 の組み込みのプロンプトと 3-9 の「— その前提」を同時に直す。**
+片方だけ直すと、[test/internal/prompt/blocked_push_test.go](../../test/internal/prompt/blocked_push_test.go) と
+`TestTemplate_組み込みのプロンプトが設計5_3と一致する` のどちらかが落ちる。
+**組み込みの文面を見る検査は3本ある**（他に
+[test/internal/prompt/push_upstream_test.go](../../test/internal/prompt/push_upstream_test.go) と
+[test/internal/prompt/worktree_cleanup_test.go](../../test/internal/prompt/worktree_cleanup_test.go)）。
 
 ### 5-4. 2回目以降のプロンプト
 

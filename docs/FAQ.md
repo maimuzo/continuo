@@ -5,8 +5,9 @@
 **新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 /
-未記入の項目 / claude / hook の置き場所 / Claude の設定 / worktree の場所 / herdr /
-gh の認証 / カンバン / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報の15個を調べます。
+未記入の項目 / プロンプトの変数 / 残った本文 / claude / hook の置き場所 / Claude の設定 /
+worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / clone /
+信頼登録 / 資格情報の17個を調べます。
 `✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
@@ -72,7 +73,8 @@ CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo
 **原因。**continuo を更新して設定のキーが増減しました。front matter は未知のキーを弾きます。
 
 **直し方。**出たキーの行を `WORKFLOW.md` から消してください。
-**`continuo init --force` は使わないこと。**`continuo setup` で決めた Status の割り当てが雛形で潰れます。
+**`continuo init --force` は使わないこと。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
+**手で書いた `PROJECT_SPECIFIC_PROMPT.md` も雛形に戻ります**（`--force` は2枚とも上書きします）。
 
 ```bash
 grep -n "消したいキー名" ~/continuo-work/WORKFLOW.md
@@ -371,6 +373,85 @@ tracker:
 
 **そもそも何を書けばよいのかから知りたいときは、「使い方が分からないとき」の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」を見てください。**
+
+### `✗ プロンプトの変数  送るプロンプトに誤りがあります`
+
+**原因。**エージェントへ送る指示書に、一覧に無い変数（`{{.issue.nope}}` など）が書かれているか、
+`{{if}}` の閉じ忘れなど、テンプレートとして解釈できない書き方があります。
+
+**この誤りがあると、issue は1件も着手できません。**書けなかった変数を空欄で埋めて送る、
+ということはしません（**書いたつもりの指示が黙って消えるほうが危ないためです**）。
+
+**どこが悪いのかは、内訳に出るファイルの名前と行番号で分かります。**
+
+| 内訳に出る名前 | 何のことか |
+| --- | --- |
+| `PROJECT_SPECIFIC_PROMPT.md` | **あなたが書いた固有のプロンプト。**行番号はそのファイルの行番号です |
+| `WORKFLOW.md#body` | **`WORKFLOW.md` に残っている本文**（[upgrading.md](upgrading.md) の移行がまだのとき） |
+| `builtin.md#head` / `builtin.md#tail` | **continuo の組み込みのプロンプト。**ここが出たら continuo 側の不具合です |
+
+**送る文面の全文は、次のコマンドで読めます。**
+
+```bash
+cd ~/continuo-work && continuo prompt --show
+```
+
+**使える変数は9つです。**
+
+| 変数 | 中身 |
+| --- | --- |
+| `{{.issue.identifier}}` | `<owner>/<repo>#<番号>` |
+| `{{.issue.owner}}` | リポジトリの所有者名 |
+| `{{.issue.repo}}` | リポジトリ名 |
+| `{{.issue.number}}` | issue の番号 |
+| `{{.issue.url}}` | issue の URL |
+| `{{.issue.title}}` | issue の題名 |
+| `{{.issue.state}}` | **カンバンの Status の値**（`Ready` など）。GitHub の open / closed ではありません |
+| `{{.issue.labels}}` | ラベルの並び |
+| `{{.attempt}}` | 試行回数。**1回目は空**なので `{{if .attempt}}` で囲ってください |
+
+**`{{index .issue "title"}}` の形は使えません。**`{{.issue.title}}` と書いてください。
+**この形を許すと、綴りを間違えた名前が誤りにならずに素通りします。**
+
+**検査は完全ではありません。**continuo は作り物の issue で2回試すだけなので、
+`{{if eq .issue.state "Done"}}` のように**値そのもので分かれる枝の中**までは届きません。
+
+### `✗ プロンプトの変数  PROJECT_SPECIFIC_PROMPT.md が在りますが読めません`
+
+**原因。**固有のプロンプトのファイルは在るのに、中身を読めません。
+**権限が足りない**か、**同じ名前のディレクトリがある**かのどちらかです。
+
+```bash
+cd ~/continuo-work && ls -l PROJECT_SPECIFIC_PROMPT.md
+```
+
+**黙って無視はしません。**無視すると、**書いたはずの流儀が効かないまま無人で回り続けます。**
+
+**要らないなら、ファイルごと消してください。**無ければ continuo は起動します。
+
+**この誤りで止まるのは、常駐プロセスの起動だけです。**
+`continuo doctor` / `continuo trust` / `continuo abandon` は、そのまま動きます。
+
+### `! 残った本文  WORKFLOW.md に本文が N 行残っています`
+
+**原因。**v0.1.13 で、エージェントへ送る指示書は `WORKFLOW.md` の外へ出ました。
+**それより前から使っている `WORKFLOW.md` には、本文がそのまま残っています。**
+
+**壊れてはいません。**本文が残っている限り、**いままでと1バイトも同じ文面が送られます。**
+**そのかわり、組み込みのプロンプトは送られません。**
+**これから continuo が直すプロンプトの改良は、1つも届きません。**
+
+**直し方は [upgrading.md](upgrading.md) の「送るプロンプトを移す」にあります。**4段です。
+
+1. `continuo init` を叩く（**`--force` は付けません**。足りない1枚だけが置かれます）
+2. `continuo prompt --show --builtin` で組み込みの全文を読み、自分の本文と見比べる
+3. 自分で書き足した部分だけを `PROJECT_SPECIFIC_PROMPT.md` へ移す
+4. `WORKFLOW.md` の閉じの `---` より下を消す
+
+**差分を出す口はありません。**本文はあなたが書き換えている可能性があり、
+**機械が作った差分で消してよいものではないためです。**
+
+**起動は止まりません。**`!` なので終了コードも 0 のままです。
 
 ---
 
@@ -1771,7 +1852,8 @@ cd ~/continuo-work && continuo doctor
 | **front matter**（先頭の `---` に挟まれた YAML） | **壊れません。**ただし `claude.tool_gate` は**省略すると既定が効きます。**公開リポジトリの issue で、エージェントが `Bash` を叩くたびに、その中身が危なくないかの検査が1回入ります。**元に戻す1行は [upgrading.md](upgrading.md) にあります** |
 | **本文**（front matter より下） | **エージェントの動きが古いままです。**continuo は本文を読み替えないので、書いていない指示は届きません |
 
-**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れます。
+**`continuo init --force` で作り直さないでください。**`continuo setup` で決めた Status の割り当てが雛形で潰れ、
+**手で書いた `PROJECT_SPECIFIC_PROMPT.md` も雛形に戻ります**（`--force` は2枚とも上書きします）。
 **増えた設定も、変わった本文も、その部分だけを手で当てます。**
 
 **足す場所と中身、当てないと何が起きるか、当てたあとの確かめ方は

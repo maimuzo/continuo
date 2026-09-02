@@ -48,6 +48,7 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/server"
 	"github.com/maimuzo/continuo/internal/socketpath"
@@ -179,6 +180,12 @@ func Run(ctx context.Context, opts Options) error {
 	// **段1 の中に置く。**flock より前なので、二重起動で落ちる経路でも必ず1回出る。
 	WarnCleanupStates(cfg, logger)
 
+	// 段1b: 送るプロンプトを組み立て、変数の名前を確かめる（設計 5-3c / 5-3d）。
+	frag, err := buildPrompt(loaded, logger)
+	if err != nil {
+		return err
+	}
+
 	// **トークンを載せる前に接続先を確かめる**（設計 3-23 の環境変数）。
 	// ここを飛ばすと、環境変数に書かれたどんな宛先へも `Authorization: Bearer` が飛ぶ。
 	endpoint := os.Getenv(EnvGraphQLEndpoint)
@@ -234,7 +241,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// 段2b: 依存を組み立てる。**ここで `gh auth token` が走る**（`token_source` の既定は
 	// `gh_auth`）。外部プロセスを起こす段なので、起動時検査と同じ期限を掛ける。
-	deps, err := build(ctx, cfg, loaded.PromptTemplate, sockPath, runtimeDir, opts.ContinuoPath,
+	deps, err := build(ctx, cfg, frag, sockPath, runtimeDir, opts.ContinuoPath,
 		endpoint, opts.TrackerTimeout, opts.StartupCheckTimeout, logger)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrStartup, err)
@@ -332,6 +339,70 @@ func WarnCleanupStates(cfg config.Config, logger *slog.Logger) {
 		quoteStates(outside), quoteStates(outside)),
 		"cleanup.on_states", quoteStates(cfg.Cleanup.OnStates),
 		"tracker.terminal_states", quoteStates(cfg.Tracker.TerminalStates))
+}
+
+// buildPrompt は、1回目に送る指示書の断片を組み立て、変数の名前を確かめる
+// （設計 5-3c / 5-3d）。
+//
+// **止めるものと、警告に留めるものを分ける。**
+//
+//	固有のプロンプトが在るのに読めない   … 止める。書いたはずの流儀が効かないまま無人で回る
+//	組み込みか固有の変数が誤っている     … 止める。この誤りがあると issue が1件も着手できない
+//	WORKFLOW.md の本文の変数が誤っている … 警告に留める。**版を上げた瞬間に起動しなくなるのを避ける**
+//
+// **本文だけを警告に留める理由。**いままで本文は着手のたびに解釈されており、
+// `{{if .attempt}}` の中の誤りは**やり直しが起きるまで表に出なかった。**
+// その状態の人が版を上げたときに、いままで動いていた continuo が起動しなくなってはいけない。
+// **着手の時点では、いままでどおり失敗する**（renderFirstPrompt が誤りを返す）。
+//
+// loaded: WORKFLOW.md を読み込んだ結果。
+// logger: ログの出力先。**nil を渡してはならない。**
+// 戻り値: 組み立てた断片と、起動を止める理由。
+func buildPrompt(loaded *config.Loaded, logger *slog.Logger) (prompt.Fragments, error) {
+	if loaded.ProjectPromptErr != nil {
+		return prompt.Fragments{}, i18n.Errorf(i18n.KeyDaemonRunProjectPromptUnreadable,
+			ErrStartup, loaded.ProjectPromptPath, loaded.ProjectPromptErr)
+	}
+
+	frag := prompt.Build(
+		loaded.PromptTemplate, loaded.ProjectPrompt, loaded.ProjectPromptPath, loaded.ProjectPromptFound)
+
+	if frag.Compat() {
+		// **本文が残っている。**組み込みは1文字も送らないので、continuo が仕組みを
+		// 直しても、この利用者には届かない。
+		logger.Warn(fmt.Sprintf(
+			"WORKFLOW.md に本文が %d 行残っているので、組み込みのプロンプトは送りません。"+
+				"continuo prompt --show --builtin で組み込みの全文を読み、"+
+				"自分で書き足した部分だけを %s へ移してください",
+			lineCount(loaded.PromptTemplate), prompt.ProjectFileName),
+			"path", loaded.Path)
+		if err := frag.Validate(); err != nil {
+			// **止めない。**この誤りは版を上げる前から在ったものである。
+			logger.Warn(fmt.Sprintf("WORKFLOW.md の本文に誤りがあります: %v", err), "path", loaded.Path)
+		}
+		return frag, nil
+	}
+
+	if err := frag.Validate(); err != nil {
+		return prompt.Fragments{}, i18n.Errorf(i18n.KeyDaemonRunPromptInvalid, ErrStartup, err)
+	}
+	logger.Info("送るプロンプトを組み立てました",
+		"project_prompt", loaded.ProjectPromptPath, "project_prompt_found", loaded.ProjectPromptFound)
+	return frag, nil
+}
+
+// lineCount は、前後の空行を除いた行数を数える。
+//
+// **警告に出す「本文が n 行残っています」の n である。**
+//
+// s: 数える文字列。
+// 戻り値: 空白だけなら 0、そうでなければ前後の空行を落とした行数。
+func lineCount(s string) int {
+	s = strings.Trim(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	if strings.TrimSpace(s) == "" {
+		return 0
+	}
+	return strings.Count(s, "\n") + 1
 }
 
 // quoteStates は Status 名の並びを、引用符で囲んで読点でつないだ1つの文字列にする。
@@ -602,7 +673,7 @@ func isLoopbackHost(host string) bool {
 //
 // ctx: 組み立てに適用するコンテキスト。
 // cfg: 検証済みの設定。
-// promptTemplate: WORKFLOW.md の本文（1回目のプロンプトのテンプレート）。
+// frag: 1回目に送る指示書の断片（組み込みの前半・固有・組み込みの後半）。
 // sockPath: 解決済みの hook の socket の絶対パス。
 // runtimeDir: 実行時ディレクトリ（`filepath.Dir(sockPath)`）。
 // continuoPath: `continuo hook` を起動する実行ファイルのパス。空なら os.Executable()。
@@ -615,7 +686,8 @@ func isLoopbackHost(host string) bool {
 func build(
 	ctx context.Context,
 	cfg config.Config,
-	promptTemplate, sockPath, runtimeDir, continuoPath, graphqlEndpoint string,
+	frag prompt.Fragments,
+	sockPath, runtimeDir, continuoPath, graphqlEndpoint string,
 	trackerTimeout, tokenTimeout time.Duration,
 	logger *slog.Logger,
 ) (*deps, error) {
@@ -680,7 +752,7 @@ func build(
 
 	orc, err := orchestrator.New(orchestrator.Options{
 		Config:         cfg,
-		PromptTemplate: promptTemplate,
+		Prompt:         frag,
 		Tracker:        adapter,
 		Herdr:          hc,
 		Workspace:      ws,

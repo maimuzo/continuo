@@ -1,35 +1,35 @@
-package scaffold_test
+package prompt_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/maimuzo/continuo/internal/scaffold"
+	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // worktreeCleanupHeading は、自分で作った worktree の片付けを教える節の見出しである。
 const worktreeCleanupHeading = "## 自分で作った worktree は、自分で消すこと"
 
-// 目的: `continuo init` が置く WORKFLOW.md が、エージェントに worktree の片付けを教えることを固定する
+// 目的: continuo が送る組み込みのプロンプト が、エージェントに worktree の片付けを教えることを固定する
 // （#147（continuo が起動するエージェントに、worktree の片付けを教える）。設計 5-3）。
 //
 // **設計文書との突き合わせでは、この条件を守れない。**
-// TestTemplate_雛形の本文が設計5_3の本文と一致する は設計 5-3 の markdown ブロックと
-// 雛形を比べるものなので、**両方からこの節が同時に消えても通る。**
-// そこで、設計文書を一切読まず、雛形の本文だけを見て条件を確かめる。
+// TestTemplate_組み込みのプロンプトが設計5_3の本文と一致する は設計 5-3 の markdown ブロックと
+// 組み込みのプロンプトを比べるものなので、**両方からこの節が同時に消えても通る。**
+// そこで、設計文書を一切読まず、組み込みのプロンプトだけを見て条件を確かめる。
 //
 // **なぜ要るか。**continuo が片付けるのは continuo が用意した worktree だけである。
 // エージェントが自分で足したものは消されず、**登録だけが残る。**
 // `--force` で消させると、commit していない変更が確認なしに消える。
 //
-// 与える情報: scaffold.Template() の本文。
+// 与える情報: prompt.Builtin() の全文。
 // 成功条件: 片付けの節があり、その節が消し方・消す前の確認・`--force`・`prune` の4つと、
 // 消してよい範囲（自分が `git worktree add` に渡したパスだけ）を教えていること。
-func TestTemplate_雛形は自分で作ったworktreeを片付けさせる(t *testing.T) {
-	body := bodyOf(t, "雛形", scaffold.Template())
+func TestTemplate_組み込みのプロンプトは自分で作ったworktreeを片付けさせる(t *testing.T) {
+	body := prompt.Builtin()
 
 	if !strings.Contains(body, "\n"+worktreeCleanupHeading+"\n") {
-		t.Fatalf("雛形の本文に %q の節がありません。"+
+		t.Fatalf("組み込みのプロンプトに %q の節がありません。"+
 			"エージェントが足した worktree は continuo の片付けでは落ちないので、"+
 			"自分で消させないと登録だけが残ります", worktreeCleanupHeading)
 	}
