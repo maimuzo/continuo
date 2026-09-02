@@ -168,7 +168,7 @@ func UpdateStatuses(dir string, st Statuses) (Result, error) {
 // エラー: ErrDirNotFound / ErrNotADirectory / ErrNotFound / ErrSymlink、
 // または os.Lstat が失敗した理由。
 func statTarget(dir string) (string, fs.FileInfo, error) {
-	path, err := resolveTarget(dir)
+	path, err := resolveTarget(dir, fileName)
 	if err != nil {
 		return "", nil, err
 	}

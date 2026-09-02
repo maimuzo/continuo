@@ -35,6 +35,7 @@ import (
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -206,8 +207,11 @@ const ghLoginRetryInterval = 5 * time.Minute
 type Options struct {
 	// Config は WORKFLOW.md の front matter である。
 	Config config.Config
-	// PromptTemplate は WORKFLOW.md の本文（1回目のプロンプトのテンプレート。設計 5-3）である。
-	PromptTemplate string
+	// Prompt は1回目に送る指示書の断片である（設計 5-3 / 5-3c）。
+	//
+	// **組み込みの前半・固有・組み込みの後半の3つを、この順に持っている。**
+	// 組み立てるのは internal/prompt の Build であり、**呼ぶのは常駐プロセスの起動である。**
+	Prompt prompt.Fragments
 	// Tracker はボードの読み書きである。必須。
 	Tracker Tracker
 	// Herdr は herdr の socket API のクライアントである。必須。
@@ -251,20 +255,20 @@ type Options struct {
 
 // Orchestrator は巡回・dispatch・turn ループ・照合・リトライ・stall 検知を持つ。
 type Orchestrator struct {
-	cfg            config.Config
-	promptTemplate string
-	tracker        Tracker
-	herdr          HerdrClient
-	ws             *workspace.Manager
-	rl             *ratelimit.Reader
-	socketPath     string
-	runtimeDir     string
-	continuoPath   string
-	transcriptRoot string
-	logger         *slog.Logger
-	now            func() time.Time
-	newSessionUUID func() (string, error)
-	ghAuthCheck    GHAuthCheckFunc
+	cfg             config.Config
+	promptFragments prompt.Fragments
+	tracker         Tracker
+	herdr           HerdrClient
+	ws              *workspace.Manager
+	rl              *ratelimit.Reader
+	socketPath      string
+	runtimeDir      string
+	continuoPath    string
+	transcriptRoot  string
+	logger          *slog.Logger
+	now             func() time.Time
+	newSessionUUID  func() (string, error)
+	ghAuthCheck     GHAuthCheckFunc
 	// ghLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
 	ghLogin tracker.GHLoginFunc
 	// ghLoginAttemptMu は取得そのものを1本に絞る。**外部プロセスを同時に何本も起こさない。**
@@ -459,21 +463,21 @@ func New(opts Options) (*Orchestrator, error) {
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
-		cfg:            opts.Config,
-		promptTemplate: opts.PromptTemplate,
-		tracker:        opts.Tracker,
-		herdr:          opts.Herdr,
-		ws:             opts.Workspace,
-		rl:             opts.RateLimit,
-		socketPath:     opts.HookSocketPath,
-		runtimeDir:     filepath.Dir(opts.HookSocketPath),
-		continuoPath:   continuoPath,
-		transcriptRoot: transcriptRoot,
-		logger:         logger,
-		now:            nowFunc,
-		newSessionUUID: newUUID,
-		ghAuthCheck:    opts.GHAuthCheck,
-		ghLogin:        ghLogin,
+		cfg:             opts.Config,
+		promptFragments: opts.Prompt,
+		tracker:         opts.Tracker,
+		herdr:           opts.Herdr,
+		ws:              opts.Workspace,
+		rl:              opts.RateLimit,
+		socketPath:      opts.HookSocketPath,
+		runtimeDir:      filepath.Dir(opts.HookSocketPath),
+		continuoPath:    continuoPath,
+		transcriptRoot:  transcriptRoot,
+		logger:          logger,
+		now:             nowFunc,
+		newSessionUUID:  newUUID,
+		ghAuthCheck:     opts.GHAuthCheck,
+		ghLogin:         ghLogin,
 		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。
 		// **起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）は、
 		// 同じ関数の戻り値そのものである。**ずれると、起動時に通した設定が実行時には

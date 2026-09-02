@@ -3,7 +3,10 @@
 // **`continuo init` は雛形を書き出し、`continuo setup` は既にある WORKFLOW.md の
 // Status の割り当てだけを書き換える**（update.go）。**setup は雛形を書き直さない。**
 //
-// 置くのは WORKFLOW.md の1ファイルだけである（設計 3-32 / 5-1）。
+// **置くのは2枚である**（設計 3-32 / 5-1 / 5-3c / 5-3g）。
+// `WORKFLOW.md` が設定で、`PROJECT_SPECIFIC_PROMPT.md` がエージェントへ送る指示書のうち
+// 利用者が書く部分である。**1枚ずつ独立に扱い、片方が既にあっても、もう片方は書く。**
+// **送る指示書の残りは internal/prompt が持っている**（実行ファイルの中にある）。
 // CLI（cmd/continuo）はこのパッケージを呼ぶだけにする。エラーの文言と終了コードの
 // 対応は CLI 側で決めるため、区別が要る失敗は sentinel error で返す。
 package scaffold
@@ -19,6 +22,7 @@ import (
 	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // fileName は init が書き出すファイルの名前である（設計 5-1 / SPEC.md 5.1）。
@@ -120,11 +124,41 @@ func WriteTemplate(dir string, force bool) (Result, error) {
 // force: 既に WORKFLOW.md がある場合に上書きするかどうか。
 // values: 埋める値。
 func WriteTemplateWithValues(dir string, force bool, values Values) (Result, error) {
-	path, err := resolveTarget(dir)
+	path, err := resolveTarget(dir, fileName)
 	if err != nil {
 		return Result{}, err
 	}
+	return writeOne(path, TemplateWithValues(values), force)
+}
 
+// WriteProjectPrompt は dir の直下に PROJECT_SPECIFIC_PROMPT.md の雛形を書く（設計 5-3c）。
+//
+// **中身は internal/prompt が持っている。**送る文面の一部になるので、
+// 組み込みのプロンプトと同じ場所に置き、同じ検査に掛ける。
+//
+// **WORKFLOW.md と扱いを揃える。**既にあれば ErrAlreadyExists、symlink なら ErrSymlink で止め、
+// --force のときだけ同じディレクトリの一時ファイルへ書き切ってから差し替える。
+// **読むときは symlink を辿るのに、書くときは辿らない**のは WORKFLOW.md と同じである
+// （辿ると、指定されたディレクトリの外にあるリンク先を雛形で潰す）。
+//
+// dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリに書く。
+// force: 既に PROJECT_SPECIFIC_PROMPT.md がある場合に上書きするかどうか。
+// 戻り値: 書いたファイルの絶対パスと、上書きしたかどうか。エラーは WriteTemplate と同じ種類である。
+func WriteProjectPrompt(dir string, force bool) (Result, error) {
+	path, err := resolveTarget(dir, prompt.ProjectFileName)
+	if err != nil {
+		return Result{}, err
+	}
+	return writeOne(path, prompt.ProjectTemplate(), force)
+}
+
+// writeOne は1つのファイルを書く。force と symlink の扱いは WriteTemplate の説明のとおりである。
+//
+// path: 書き出す絶対パス。
+// content: 書き出す中身。
+// force: 既にある場合に上書きするかどうか。
+// 戻り値: 書いた場所と、上書きしたかどうか。
+func writeOne(path, content string, force bool) (Result, error) {
 	if force {
 		// force のときだけ、既にあるかどうかを先に見る。上書きしたかどうかの報告に使うのと、
 		// 既にあるなら「その場で空にしてから書く」のではなく差し替えるためである。
@@ -153,7 +187,7 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 			// 利用者が手で直した WORKFLOW.md が失われる。
 			// **元のファイルの権限をそのまま渡す。**差し替えは書き込みであって、権限を変える
 			// 操作ではない。
-			if err := atomicfile.Write(path, []byte(TemplateWithValues(values)), info.Mode().Perm()); err != nil {
+			if err := atomicfile.Write(path, []byte(content), info.Mode().Perm()); err != nil {
 				return Result{Path: path}, err
 			}
 			return Result{Path: path, Overwritten: true}, nil
@@ -180,7 +214,7 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 	if err != nil {
 		return Result{Path: path}, openError(path, err)
 	}
-	if _, err := f.WriteString(TemplateWithValues(values)); err != nil {
+	if _, err := f.WriteString(content); err != nil {
 		f.Close()
 		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, path, err)
 	}
@@ -190,12 +224,13 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 	return Result{Path: path, Overwritten: false}, nil
 }
 
-// resolveTarget は受け取ったディレクトリから、書き出す WORKFLOW.md の絶対パスを決める。
+// resolveTarget は受け取ったディレクトリから、書き出すファイルの絶対パスを決める。
 //
 // dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリ。
-// 戻り値: 書き出す WORKFLOW.md の絶対パス（ディレクトリの symlink は辿った先で組み立てる）。
+// name: 書き出すファイルの名前（WORKFLOW.md か PROJECT_SPECIFIC_PROMPT.md）。
+// 戻り値: 書き出すファイルの絶対パス（ディレクトリの symlink は辿った先で組み立てる）。
 // エラー: ErrDirNotFound / ErrNotADirectory を包んだエラー、または実体を辿れなかった理由。
-func resolveTarget(dir string) (string, error) {
+func resolveTarget(dir, name string) (string, error) {
 	absDir, err := resolveDir(dir)
 	if err != nil {
 		return "", err
@@ -223,7 +258,7 @@ func resolveTarget(dir string) (string, error) {
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyScaffoldDirEvalSymlinksFailed, absDir, err)
 	}
-	return filepath.Join(realDir, fileName), nil
+	return filepath.Join(realDir, name), nil
 }
 
 // openError は書き出し先を開けなかったときのエラーを、CLI が文言と終了コードを決められる形に直す。

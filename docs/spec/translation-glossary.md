@@ -53,10 +53,10 @@
 | hook の置き場所 | hook socket location | README が doctor の検査をこの語で並べている。doctor のラベルは `hook socket` に縮める |
 | 置き場所（一般） | location / where X lives | README の "resolving where a clone lives"。`storage location` は使わない |
 | 逃がし先 / `--pending-dir` | pending directory | 利用者が見るフラグが `--pending-dir`。**Go の識別子の `spill` を画面に出さない** |
-| 設定ファイル（WORKFLOW.md） | config | README の "That single file is both the config and the brief" |
+| 設定ファイル（WORKFLOW.md） | config | README の "`WORKFLOW.md` holds the config" |
 | 設定ファイル（issue ごとの Claude Code の） | settings file | WORKFLOW.md と区別する。doctor の検査名は "the Claude settings directory" |
 | 雛形（WORKFLOW.md の） | template | README の "writes WORKFLOW.md"。**package 名の `scaffold` を画面に出さない** |
-| プロンプトの本文 / 指示文 | the brief | README の "the brief you send to the agent" |
+| プロンプトの本文 / 指示文 | the brief | README の "the part of the agent's brief that is yours to write" |
 | front matter | front matter | 既に英語。2語・小文字のまま |
 
 ---
@@ -77,7 +77,7 @@
 | 信頼登録する / 信頼済み / 未承認 | trust / trusted / not trusted | README の "trust those repositories"。**「未承認」は `not trusted`。**`unapproved` は使わない |
 | 資格情報 | credentials | README が doctor の検査をこの語で並べている |
 | 枠 / 枠の判定 | usage window | README の "used to read your plan's usage window"。`quota` `rate limit budget` を混ぜない |
-| 検査 / 前提が揃っている | check / everything is in place | README の "runs fifteen checks" と "# check that everything is in place" |
+| 検査 / 前提が揃っている | check / everything is in place | README の "runs seventeen checks" と "# check that everything is in place" |
 | 表明（`CONTINUO-STATUS:` の行） | the `CONTINUO-STATUS:` line | README が行そのものを名指ししている。抽象名詞に訳さない |
 | 機械 | machine | README の "a machine or container you can discard" |
 | 実行ファイル / 版 | binary / version | README の Install が "the binary" と書く |
@@ -193,11 +193,14 @@
 **言いたいこと。**[internal/doctor/report.go](../../internal/doctor/report.go) の `labelColumn` が 16 である。
 **16桁に満たない語を並べて桁を揃えている。**15桁を超えるラベルを1つ置くと、全部の行の桁が崩れる。
 
-**使ってよいラベルは、この15語だけである。**
+**使ってよいラベルは、この17語だけである。**
 
-`config` / `cleanup states` / `missing keys` / `claude` / `hook socket` /
-`Claude settings` / `worktree root` / `herdr` / `gh auth` / `kanban board` /
-`Status names` / `rewrite keys` / `clones` / `trust` / `credentials`
+`config` / `cleanup states` / `missing keys` / `prompt vars` / `leftover body` /
+`claude` / `hook socket` / `Claude settings` / `worktree root` / `herdr` /
+`gh auth` / `kanban board` / `Status names` / `rewrite keys` / `clones` /
+`trust` / `credentials`
+
+**`prompt vars` を `prompt variables` と書かないこと。**16桁になり、全部の行の桁が崩れる。
 
 **伸ばすときは、先に `labelColumn` を数え直すこと。**
 

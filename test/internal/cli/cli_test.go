@@ -557,9 +557,13 @@ func TestRunDoctor_設定を読めなくても検査を続ける(t *testing.T) {
 // **`continuo init` が既にある WORKFLOW.md を黙って上書きすると、
 // 利用者が手で直した行（`trust.repositories` から消した行など）が全部消える。**
 //
-// 目的: 2度目の `init` が `--force` 無しでは上書きを拒むこと。
-// 与える情報: 既に WORKFLOW.md があるディレクトリ。
-// 成功条件: 終了コードが 0 でなく、ファイルの中身が変わらないこと。
+// **`continuo init` は2枚を置くようになった**（設計 5-3g）。
+// **既にある1枚には触らず、足りないほうだけを置く**ので、終了コードは 0 になりうる。
+// **ここで見るのは「既にある WORKFLOW.md が1バイトも変わらないこと」である。**
+//
+// 目的: 2度目の `init` が、既にある WORKFLOW.md を `--force` 無しでは書き換えないこと。
+// 与える情報: 既に WORKFLOW.md があるディレクトリ（2枚とも在る場合も見る）。
+// 成功条件: WORKFLOW.md の中身が変わらないこと。2枚とも在れば終了コードが 0 でないこと。
 func TestRunInit_雛形を置いてから2度目は上書きしない(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "WORKFLOW.md")
@@ -568,11 +572,21 @@ func TestRunInit_雛形を置いてから2度目は上書きしない(t *testing
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}
 
+	runCLI([]string{"init", dir}, "")
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	if !strings.HasSuffix(string(got), mark) {
+		t.Error("人間が足した行が消えている")
+	}
+
+	// 2回目。**このときは2枚とも在る**ので、いままでどおり `--force` を勧めて止まる。
 	code, _, _ := runCLI([]string{"init", dir}, "")
 	if code == 0 {
-		t.Error("既にあるのに上書きを許している")
+		t.Error("2枚とも既にあるのに上書きを許している")
 	}
-	got, err := os.ReadFile(path)
+	got, err = os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("WORKFLOW.md を読めません: %v", err)
 	}

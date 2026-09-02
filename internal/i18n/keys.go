@@ -2313,6 +2313,114 @@ const (
 	KeyRedactErrUnusableHome Key = "redact.err.unusable_home"
 )
 
+// 送る指示書を組み立てる（internal/prompt）の文言。
+const (
+	// KeyPromptParseFailed は断片をテンプレートとして解釈できなかったときに出る。
+	KeyPromptParseFailed Key = "prompt.parse_failed"
+	// KeyPromptRenderFailed は断片の変数展開に失敗したときに出る（一覧に無い変数など）。
+	KeyPromptRenderFailed Key = "prompt.render_failed"
+	// KeyPromptIndexSealed は封じた `index` を呼んだときに出る。
+	KeyPromptIndexSealed Key = "prompt.index_sealed"
+)
+
+// 固有のプロンプトを読む（internal/config）の文言。
+const (
+	// KeyConfigLoadProjectPromptReadFailed は PROJECT_SPECIFIC_PROMPT.md が在るのに
+	// 読めなかったときに出る。
+	//
+	// **`config.Load` はこれで落ちない**（`Loaded.ProjectPromptErr` に入れて返す）。
+	// 止めるかどうかを決めるのは、常駐プロセスの起動と doctor だけである。
+	KeyConfigLoadProjectPromptReadFailed Key = "config.load.project_prompt_read_failed"
+)
+
+// 起動時のプロンプトの検査（internal/daemon）の文言。
+const (
+	// KeyDaemonRunProjectPromptUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyDaemonRunProjectPromptUnreadable Key = "daemon.run.project_prompt_unreadable"
+	// KeyDaemonRunPromptInvalid は組み込みか固有のプロンプトの変数が誤っているときに出る。
+	KeyDaemonRunPromptInvalid Key = "daemon.run.prompt_invalid"
+)
+
+// `continuo doctor` のプロンプトの検査の文言。
+const (
+	// KeyDoctorLabelPromptVariables は「プロンプトの変数」の見出し語である。
+	KeyDoctorLabelPromptVariables Key = "doctor.label.prompt_variables"
+	// KeyDoctorLabelLeftoverBody は「残った本文」の見出し語である。
+	KeyDoctorLabelLeftoverBody Key = "doctor.label.leftover_body"
+	// KeyDoctorPromptVariablesOK は固有のプロンプトが在って、検査を通ったときに出る。
+	KeyDoctorPromptVariablesOK Key = "doctor.prompt_variables.ok"
+	// KeyDoctorPromptVariablesOKNoProject は固有のプロンプトが無くて、検査を通ったときに出る。
+	KeyDoctorPromptVariablesOKNoProject Key = "doctor.prompt_variables.ok_no_project"
+	// KeyDoctorPromptVariablesInvalid は変数の名前か構文が誤っているときに出る。
+	KeyDoctorPromptVariablesInvalid Key = "doctor.prompt_variables.invalid"
+	// KeyDoctorPromptVariablesProjectUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyDoctorPromptVariablesProjectUnreadable Key = "doctor.prompt_variables.project_unreadable"
+	// KeyDoctorPromptVariablesUnknown は WORKFLOW.md が読めず、置き場所も決まらないときに出る。
+	KeyDoctorPromptVariablesUnknown Key = "doctor.prompt_variables.unknown"
+	// KeyDoctorPromptVariablesRemedy は変数を直す手順である。
+	KeyDoctorPromptVariablesRemedy Key = "doctor.prompt_variables.remedy"
+	// KeyDoctorPromptVariablesRemedyPermission は固有のプロンプトの権限を確かめる手順である。
+	KeyDoctorPromptVariablesRemedyPermission Key = "doctor.prompt_variables.remedy_permission"
+	// KeyDoctorLeftoverBodyOK は WORKFLOW.md に本文が残っていないときに出る。
+	KeyDoctorLeftoverBodyOK Key = "doctor.leftover_body.ok"
+	// KeyDoctorLeftoverBodyLeft は WORKFLOW.md に本文が残っているときに出る。
+	KeyDoctorLeftoverBodyLeft Key = "doctor.leftover_body.left"
+	// KeyDoctorLeftoverBodyUnknown は WORKFLOW.md が読めないときに出る。
+	KeyDoctorLeftoverBodyUnknown Key = "doctor.leftover_body.unknown"
+	// KeyDoctorLeftoverBodyNoteBuiltinSkipped は組み込みが送られないことを添える1行である。
+	KeyDoctorLeftoverBodyNoteBuiltinSkipped Key = "doctor.leftover_body.note_builtin_skipped"
+	// KeyDoctorLeftoverBodyRemedyShow は組み込みの全文を読む手順である。
+	KeyDoctorLeftoverBodyRemedyShow Key = "doctor.leftover_body.remedy_show"
+	// KeyDoctorLeftoverBodyRemedyMove は書き足した部分を移す手順である。
+	KeyDoctorLeftoverBodyRemedyMove Key = "doctor.leftover_body.remedy_move"
+	// KeyDoctorLeftoverBodyRemedyDelete は移したあとに本文を消す手順である。
+	KeyDoctorLeftoverBodyRemedyDelete Key = "doctor.leftover_body.remedy_delete"
+)
+
+// `continuo prompt` の文言。
+const (
+	// KeyCLIPromptFlagShow は--show の説明に出る。
+	KeyCLIPromptFlagShow Key = "cli.prompt.flag_show"
+	// KeyCLIPromptFlagBuiltin は--builtin の説明に出る。
+	KeyCLIPromptFlagBuiltin Key = "cli.prompt.flag_builtin"
+	// KeyCLIPromptErrShowRequired は--show を付けずに呼んだときに出る。
+	KeyCLIPromptErrShowRequired Key = "cli.prompt.err_show_required"
+	// KeyCLIPromptErrTooManyPositional は位置引数が2つ以上あるときに出る。
+	KeyCLIPromptErrTooManyPositional Key = "cli.prompt.err_too_many_positional"
+	// KeyCLIPromptErrConfigLoad は WORKFLOW.md を読めないときに出る。
+	KeyCLIPromptErrConfigLoad Key = "cli.prompt.err_config_load"
+	// KeyCLIPromptErrProjectUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyCLIPromptErrProjectUnreadable Key = "cli.prompt.err_project_unreadable"
+	// KeyCLIPromptBreakdownHeading は内訳の見出しである。
+	KeyCLIPromptBreakdownHeading Key = "cli.prompt.breakdown_heading"
+	// KeyCLIPromptBreakdownBuiltinHead は組み込みの前半の1行である。
+	KeyCLIPromptBreakdownBuiltinHead Key = "cli.prompt.breakdown_builtin_head"
+	// KeyCLIPromptBreakdownBuiltinTail は組み込みの後半の1行である。
+	KeyCLIPromptBreakdownBuiltinTail Key = "cli.prompt.breakdown_builtin_tail"
+	// KeyCLIPromptBreakdownProject は固有のプロンプトの1行である。
+	KeyCLIPromptBreakdownProject Key = "cli.prompt.breakdown_project"
+	// KeyCLIPromptBreakdownProjectMissing は固有のプロンプトが無いときの1行である。
+	KeyCLIPromptBreakdownProjectMissing Key = "cli.prompt.breakdown_project_missing"
+	// KeyCLIPromptBreakdownWorkflowBody は WORKFLOW.md の本文の1行である。
+	KeyCLIPromptBreakdownWorkflowBody Key = "cli.prompt.breakdown_workflow_body"
+	// KeyCLIPromptWarnLeftoverBody は本文が残っているときの警告である。
+	KeyCLIPromptWarnLeftoverBody Key = "cli.prompt.warn_leftover_body"
+	// KeyCLIPromptBreakdownBuiltinOnly は--builtin のときの内訳の1行である。
+	KeyCLIPromptBreakdownBuiltinOnly Key = "cli.prompt.breakdown_builtin_only"
+)
+
+// `continuo init` が固有のプロンプトも書くときの文言。
+const (
+	// KeyCLIInitProjectPromptCreated は固有のプロンプトを新しく書き出したときに出る。
+	KeyCLIInitProjectPromptCreated Key = "cli.init.project_prompt_created"
+	// KeyCLIInitProjectPromptOverwritten は--force で固有のプロンプトを上書きしたときに出る。
+	KeyCLIInitProjectPromptOverwritten Key = "cli.init.project_prompt_overwritten"
+	// KeyCLIInitProjectPromptKept は固有のプロンプトが既にあって触らなかったときに出る。
+	KeyCLIInitProjectPromptKept Key = "cli.init.project_prompt_kept"
+	// KeyCLIInitWorkflowKept は WORKFLOW.md が既にあって触らなかったときに出る。
+	KeyCLIInitWorkflowKept Key = "cli.init.workflow_kept"
+)
+
 // allKeys は宣言済みのキーを全部並べたものである。
 //
 // **新しいキーを足したらここにも足すこと。**test/internal/i18n がこの一覧と
@@ -3186,6 +3294,46 @@ var allKeys = []Key{
 	KeyDaemonBuildDashboardFailed,
 	KeyI18nResolveUnsupportedLanguage,
 	KeyRedactErrUnusableHome,
+	KeyPromptParseFailed,
+	KeyPromptRenderFailed,
+	KeyPromptIndexSealed,
+	KeyConfigLoadProjectPromptReadFailed,
+	KeyDaemonRunProjectPromptUnreadable,
+	KeyDaemonRunPromptInvalid,
+	KeyDoctorLabelPromptVariables,
+	KeyDoctorLabelLeftoverBody,
+	KeyDoctorPromptVariablesOK,
+	KeyDoctorPromptVariablesOKNoProject,
+	KeyDoctorPromptVariablesInvalid,
+	KeyDoctorPromptVariablesProjectUnreadable,
+	KeyDoctorPromptVariablesUnknown,
+	KeyDoctorPromptVariablesRemedy,
+	KeyDoctorPromptVariablesRemedyPermission,
+	KeyDoctorLeftoverBodyOK,
+	KeyDoctorLeftoverBodyLeft,
+	KeyDoctorLeftoverBodyUnknown,
+	KeyDoctorLeftoverBodyNoteBuiltinSkipped,
+	KeyDoctorLeftoverBodyRemedyShow,
+	KeyDoctorLeftoverBodyRemedyMove,
+	KeyDoctorLeftoverBodyRemedyDelete,
+	KeyCLIPromptFlagShow,
+	KeyCLIPromptFlagBuiltin,
+	KeyCLIPromptErrShowRequired,
+	KeyCLIPromptErrTooManyPositional,
+	KeyCLIPromptErrConfigLoad,
+	KeyCLIPromptErrProjectUnreadable,
+	KeyCLIPromptBreakdownHeading,
+	KeyCLIPromptBreakdownBuiltinHead,
+	KeyCLIPromptBreakdownBuiltinTail,
+	KeyCLIPromptBreakdownProject,
+	KeyCLIPromptBreakdownProjectMissing,
+	KeyCLIPromptBreakdownWorkflowBody,
+	KeyCLIPromptWarnLeftoverBody,
+	KeyCLIPromptBreakdownBuiltinOnly,
+	KeyCLIInitProjectPromptCreated,
+	KeyCLIInitProjectPromptOverwritten,
+	KeyCLIInitProjectPromptKept,
+	KeyCLIInitWorkflowKept,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
@@ -435,10 +436,11 @@ func TestWriteTemplate_プレースホルダを埋めれば読み込める(t *te
 	if loaded.Config.Tracker.Provider.ProjectNumber != 3 {
 		t.Errorf("tracker.provider.project_number が反映されていない: got %d, want %d", loaded.Config.Tracker.Provider.ProjectNumber, 3)
 	}
-	if loaded.PromptTemplate == "" {
-		t.Error("雛形の本文（プロンプトのテンプレート）が空になっている")
+	// **雛形は本文を持たない**（設計 5-3c）。送る文面は組み込みのプロンプトにある。
+	if strings.TrimSpace(loaded.PromptTemplate) != "" {
+		t.Errorf("雛形に本文が残っている（本文が在ると組み込みのプロンプトが送られない）: %q", loaded.PromptTemplate)
 	}
-	if !strings.Contains(loaded.PromptTemplate, "{{.issue.identifier}}") {
-		t.Error("雛形の本文に {{.issue.identifier}} が含まれていない（設計 5-3 の本文と食い違っている）")
+	if !strings.Contains(prompt.Builtin(), "{{.issue.identifier}}") {
+		t.Error("組み込みのプロンプトに {{.issue.identifier}} が含まれていない（設計 5-3 と食い違っている）")
 	}
 }
