@@ -44,13 +44,26 @@ func TestTemplate_雛形は自分で作ったworktreeを片付けさせる(t *te
 	}{
 		{"git worktree remove", "消し方を書かないと、エージェントは消す手段を知らないまま終わります"},
 		{"status --short", "commit していない変更を確かめさせないと、消したあとに取り戻せません"},
-		{"--branches --not --remotes", "push していない commit を確かめさせないと、消したあとに取り戻せません"},
+		// --branches にすると、その worktree とは関係の無い別の branch の commit まで出る。
+		// HEAD で絞らないと、完全に push 済みの worktree でも必ず引っかかる。
+		{"log --oneline HEAD --not --remotes", "push していない commit を、その worktree の HEAD だけで確かめさせないと、" +
+			"関係の無い branch に引っかかって消せなくなります"},
 		{"--force を付けないでください", "`--force` は commit していない変更を確認なしに消します"},
 		{"git worktree prune は片付けの手段ではありません", "`prune` を片付けだと思うと、実体が残ったまま終わります"},
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", worktreeCleanupHeading, want.needle, want.why)
 		}
+	}
+
+	// git log --branches は repository の全 local branch を見る。-C でパスを渡しても対象は絞られない。
+	// 完全に push 済みの worktree でも、手元に古い branch が1本あるだけで必ず引っかかり、
+	// エージェントは無関係な branch を push しにいくか、消せないまま作業を終える。
+	if strings.Contains(section, "log --branches") {
+		t.Errorf("%q の節が git log --branches を教えています。"+
+			"これは repository の全 local branch を見るので、その worktree が push 済みでも"+
+			"手元に別の branch が残っているだけで引っかかります。"+
+			"HEAD で絞った log --oneline HEAD --not --remotes を書いてください", worktreeCleanupHeading)
 	}
 }
 

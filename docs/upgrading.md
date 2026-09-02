@@ -119,9 +119,11 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 **消す前に、その worktree に2つが残っていないかを確かめてください。**
 
     git -C <消したい worktree のパス> status --short
-    git -C <消したい worktree のパス> log --branches --not --remotes --oneline
+    git -C <消したい worktree のパス> log --oneline HEAD --not --remotes
 
 **1つ目が commit していない変更、2つ目が push していない commit です。**
+**2つ目は HEAD から辿れる commit だけを見ます。**--branches にすると、
+**その worktree とは関係の無い、手元に残っている別の branch の commit まで出ます。**
 **どちらかが出たら、消す前に commit して push してください。**消すと戻せません。
 
 **確かめたら消します。**
