@@ -524,7 +524,7 @@ func (r *runner) claimBoard() (Unlocker, int) {
 			PID:           os.Getpid(),
 			LockFile:      r.deps.LockPath,
 		}, r.deps.Now); werr != nil {
-			r.logger.Warn("ボードのロックの覚え書きを書けませんでした（片付けは続けます）",
+			r.logger.Warn("カンバンのロックの覚え書きを書けませんでした（片付けは続けます）",
 				"path", instance.LockInfoPath(r.deps.BoardLockPath), "error", werr)
 		}
 		return l, ExitOK

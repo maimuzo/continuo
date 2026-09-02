@@ -77,7 +77,7 @@ continuo doctor
 
 `continuo doctor` の `ロックの場所` が `✓` なら起動できます。
 
-### 「ボードのロックを置くディレクトリ ~/.continuo/board を作成できません」で止まる
+### 「カンバンのロックを置くディレクトリ ~/.continuo/board を作成できません」で止まる
 
 **原因。**`~/.continuo/board` が上と同じ状態になっています
 （ファイル・symlink・group / other に開いた権限）。
@@ -93,7 +93,7 @@ chmod 700 ~/.continuo/board
 continuo doctor
 ```
 
-`continuo doctor` の `ボードのロック` が `✓` なら起動できます。
+`continuo doctor` の `カンバンロック` が `✓` なら起動できます。
 
 ### 「二重起動を検出しました（ロックファイル …）」で起動できない
 
@@ -136,7 +136,7 @@ continuo doctor --id e2e ~/continuo-work
 **渡さないと既定の場所だけを見ます。**`--id` を付けた起動は socket もロックも
 `~/.continuo/id/e2e/` を使うので、**全項目 `✓` が出たのに起動だけが落ちることがあります。**
 
-### 「同じボード（… の project #…）を見ている continuo が既に動いています」で起動できない
+### 「同じカンバン（… の project #…）を見ている continuo が既に動いています」で起動できない
 
 **原因。****同じボードを2つの continuo が見ると、同じ issue を2つが拾います。**
 だから**ボード1枚につきロック1本**を取り、取れなければ起動を止めます

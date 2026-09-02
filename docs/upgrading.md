@@ -514,7 +514,7 @@ chmod 700 ~/.continuo ~/.continuo/board
 continuo doctor
 ```
 
-**`continuo doctor` が先に教えます。**見出し語 `ロックの場所` と `ボードのロック` が
+**`continuo doctor` が先に教えます。**見出し語 `ロックの場所` と `カンバンロック` が
 `✓` なら起動できます。**直し方も出ます。**
 
 ### ロックが `~/.continuo/continuo.lock` に固定されました

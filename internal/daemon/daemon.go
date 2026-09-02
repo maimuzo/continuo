@@ -908,7 +908,7 @@ func acquireBoardLock(
 	// `owner: my_org` は同じロックになる。**落としたことを言わないと、
 	// 別のボードを見ている2本目が、理由の分からないまま断られる。**
 	for _, w := range warnings {
-		logger.Warn("ボードのロックの名前で正規化が情報を落としました",
+		logger.Warn("カンバンのロックの名前で正規化が情報を落としました",
 			"owner", owner, "message", w.Message, "board_lock_file", boardLockPath)
 	}
 	// **置き場所は取る直前に用意する。**`BoardLockPath` はパスを決めるだけである
@@ -927,7 +927,7 @@ func acquireBoardLock(
 		return boardClaim{}, i18n.Errorf(i18n.KeyDaemonRunBoardLockFileFailed,
 			ErrStartup, boardLockPath, err)
 	}
-	logger.Info("ボードのロックを獲得しました",
+	logger.Info("カンバンのロックを獲得しました",
 		"board_lock_file", boardLockPath, "owner", owner, "project_number", number)
 
 	if err := instance.WriteLockInfo(boardLockPath, instance.LockInfo{
@@ -939,7 +939,7 @@ func acquireBoardLock(
 		LockFile:      inst.LockPath(),
 	}, nil); err != nil {
 		// **起動は止めない。**これは人間のための覚え書きであって、排他の一部ではない。
-		logger.Warn("ボードのロックの覚え書きを書けませんでした（起動は続けます）",
+		logger.Warn("カンバンのロックの覚え書きを書けませんでした（起動は続けます）",
 			"path", instance.LockInfoPath(boardLockPath), "error", err)
 	}
 	return boardClaim{lock: bl, path: boardLockPath}, nil
@@ -967,7 +967,7 @@ func (c boardClaim) release(logger *slog.Logger) {
 	if c.path != "" {
 		if err := instance.RemoveLockInfo(c.path); err != nil {
 			// **消せなかったことを必ず言う。**残った覚え書きは古い PID を指す。
-			logger.Warn("ボードのロックの覚え書きを消せませんでした（古い内容が残ります）",
+			logger.Warn("カンバンのロックの覚え書きを消せませんでした（古い内容が残ります）",
 				"path", instance.LockInfoPath(c.path), "error", err)
 		}
 	}
@@ -975,7 +975,7 @@ func (c boardClaim) release(logger *slog.Logger) {
 		return
 	}
 	if err := c.lock.Release(); err != nil {
-		logger.Warn("ボードのロックの解放に失敗しました", "board_lock_file", c.path, "error", err)
+		logger.Warn("カンバンのロックの解放に失敗しました", "board_lock_file", c.path, "error", err)
 	}
 }
 

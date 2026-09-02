@@ -253,7 +253,7 @@ func (d Deps) resolve(
 		// **正規化で情報が落ちたら黙らない**（3-7）。`my org` と `my_org` が
 		// 同じロックになる。**理由が分からないまま断られる人が出ないようにする。**
 		for _, w := range warnings {
-			logger.Warn("ボードのロックの名前で正規化が情報を落としました",
+			logger.Warn("カンバンのロックの名前で正規化が情報を落としました",
 				"owner", cfg.Tracker.Provider.Owner, "message", w.Message, "board_lock_file", path)
 		}
 		// **見せるだけの実行では `~/.continuo/board` を作らない**（3-17g）。
