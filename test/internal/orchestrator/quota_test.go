@@ -299,10 +299,18 @@ func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の�
 	})
 	// 段10（起動の確認）では idle、そのあと（**枠が明けたあと**）は
 	// **Claude Code が自分で継続している** working を返す。
+	//
+	// **空の `Stop` を流したあとは idle へ戻す。**本物の herdr は、書き終えて
+	// `Stop` hook が通ったエージェントを `working` のままにしない
+	// （[docs/evidence/stop_hook_block_20260902.md](../../../docs/evidence/stop_hook_block_20260902.md)
+	// の実測では、最後の `Stop` の 0.09 秒後に `idle` へ落ちた）。
+	// **`working` のままにすると、turn の終わりの裏取り（3-79）が
+	// 「まだ書き直している」と読んで待ち続ける。**それは偽物だけで起きる状態である。
 	var agentGets atomic.Int32
+	var stopped atomic.Bool
 	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
 		status := "working"
-		if agentGets.Add(1) == 1 {
+		if agentGets.Add(1) == 1 || stopped.Load() {
 			status = "idle"
 		}
 		return map[string]any{
@@ -335,6 +343,7 @@ func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の�
 	// hook を待っていること。**Stop を流せば turn が終わる。**
 	fx.Tracker.SetState("PVTI_item188", "Done")
 	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+	stopped.Store(true)
 	fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 
 	waitFor(t, 20*time.Second, "hook を受けて turn が終わる", func() bool {

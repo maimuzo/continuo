@@ -133,6 +133,16 @@ Usage of continuo setup:
     	Status を読み書きする single-select フィールドの名前（既定 Status） (default "Status")
 ```
 
+`prompt --help` の出力。**`--show` は必須である**（付けないと終了コード 2 で案内が出る）。
+
+```text
+Usage of continuo prompt:
+  -builtin
+    	WORKFLOW.md を読まず、組み込みのプロンプトだけを出す
+  -show
+    	送るプロンプトの全文を標準出力へ出す
+```
+
 `trust --help` の出力。
 
 ```text
@@ -165,7 +175,7 @@ continuo abandon — 間違えて着手した issue を、着手する前の状�
 ```
 
 **サブコマンドは次のとおりである。**`init` / `setup` / `trust` / `abandon` /
-`allow-keychain-access` / `doctor` / `version` / `hook` で、
+`allow-keychain-access` / `doctor` / `prompt` / `version` / `hook` で、
 引数に何も渡さなければ常駐する。
 
 **フラグは位置引数の前でも後ろでも書ける。**`git` / `docker` / `gh` と同じである。
@@ -283,11 +293,13 @@ cd ~/continuo-try
 /tmp/continuo init
 ```
 
-`~/continuo-try/WORKFLOW.md` ができる。**`owner` と `project_number` と `trust.repositories` は
-`gh` から引いて自動で入る。**入った値はその場に出る。実際に叩いた出力。
+`~/continuo-try/WORKFLOW.md` と `~/continuo-try/PROJECT_SPECIFIC_PROMPT.md` ができる。
+**`owner` と `project_number` と `trust.repositories` は `gh` から引いて自動で入る。**
+入った値はその場に出る。実際に叩いた出力。
 
 ```text
 WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
+PROJECT_SPECIFIC_PROMPT.md を作成しました: ~/continuo-try/PROJECT_SPECIFIC_PROMPT.md
 ✓ tracker.provider.owner: <ACCOUNT>（`gh api user` が返した GitHub のログイン名です）
 ✓ tracker.provider.project_number: <PROJECT>（`gh project list` の候補が1件だけでした: #<PROJECT> <カンバンの名前>）
 ✓ trust.repositories: <ACCOUNT>/<REPO-1>, <ACCOUNT>/<REPO-2>, <ACCOUNT>/<REPO-3>, <ACCOUNT>/<REPO-4>, <ACCOUNT>/<REPO-5>（カンバン #<PROJECT> に載っている 5 個のリポジトリを並べました）
@@ -320,6 +332,7 @@ cd ~/continuo-try
 
 ```text
 WORKFLOW.md を上書きしました: ~/continuo-try/WORKFLOW.md
+PROJECT_SPECIFIC_PROMPT.md を上書きしました: ~/continuo-try/PROJECT_SPECIFIC_PROMPT.md
 ✓ tracker.provider.owner: <ACCOUNT>（--owner で指定された値です）
 ✓ tracker.provider.project_number: <PROJECT>（--project で指定された値です）
 ✓ trust.repositories: …（カンバン #<PROJECT> に載っている 5 個のリポジトリを並べました）
@@ -332,6 +345,7 @@ WORKFLOW.md を上書きしました: ~/continuo-try/WORKFLOW.md
 
 ```text
 WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
+PROJECT_SPECIFIC_PROMPT.md を作成しました: ~/continuo-try/PROJECT_SPECIFIC_PROMPT.md
 ! tracker.provider.owner: 埋められませんでした（gh コマンドが見つかりませんでした）
   → gh を入れて `gh auth login -s project` でログインしてください
   → または `continuo init --owner <名前>` でもう一度実行してください
@@ -345,10 +359,34 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 埋まらなかった値は WORKFLOW.md の中でプレースホルダのままです。上の案内どおりに書いてください
 ```
 
-**既に `WORKFLOW.md` があると `init` は上書きせずに止まる**（終了コード 1）。
+**2枚とも既にあると `init` は上書きせずに止まる**（終了コード 1）。
 
 ```text
 ~/continuo-try/WORKFLOW.md は既にあります。上書きするなら --force を付けてください
+```
+
+**片方だけ在るときは、無いほうだけを置いて終了コード 0 で終わる。**
+古い版から上げた人が、足りない `PROJECT_SPECIFIC_PROMPT.md` を `--force` 無しで足せるようにしてある。
+
+```text
+WORKFLOW.md は既にあるので触っていません: ~/continuo-try/WORKFLOW.md
+PROJECT_SPECIFIC_PROMPT.md を作成しました: ~/continuo-try/PROJECT_SPECIFIC_PROMPT.md
+```
+
+**`PROJECT_SPECIFIC_PROMPT.md` が、エージェントへ送る指示書のうち人間が書く部分である。**
+残りは continuo の実行ファイルの中にある。**送られる全文はこう読む。**
+
+```bash
+cd ~/continuo-try && /tmp/continuo prompt --show
+```
+
+**内訳は標準エラーへ出る。**実際に叩いた出力（`>` で捨てているのは標準出力の側である）。
+
+```text
+送る文面の内訳:
+  組み込みのプロンプト（前半）  177 行
+  PROJECT_SPECIFIC_PROMPT.md  86 行  ~/continuo-try/PROJECT_SPECIFIC_PROMPT.md
+  組み込みのプロンプト（後半）  56 行
 ```
 
 **`workspace.root` も見ておく。**worktree を置く場所である（既定は `~/worktrees`）。

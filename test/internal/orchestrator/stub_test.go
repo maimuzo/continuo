@@ -16,6 +16,7 @@ import (
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -229,7 +230,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 
 	orc, err := orchestrator.New(orchestrator.Options{
 		Config:         cfg,
-		PromptTemplate: samplePromptTemplate,
+		Prompt:         prompt.Build(samplePromptTemplate, "", "", false),
 		Tracker:        ft,
 		Herdr:          stub,
 		Workspace:      mgr,
@@ -324,7 +325,7 @@ func TestOrchestratorNew_扱うStatusが1つも無い設定を弾く(t *testing.
 	build := func(c config.Config) error {
 		_, err := orchestrator.New(orchestrator.Options{
 			Config:         c,
-			PromptTemplate: samplePromptTemplate,
+			Prompt:         prompt.Build(samplePromptTemplate, "", "", false),
 			Tracker:        newFakeTracker(nil),
 			Herdr:          newStubHerdr(herdr.AgentStatusIdle),
 			Workspace:      mgr,

@@ -103,7 +103,7 @@ func TestWriteTemplate_書き出す先がディレクトリならforceありで�
 	if err == nil {
 		t.Fatal("ディレクトリなのにエラーが返らなかった")
 	}
-	want := i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, path, syscall.EISDIR)
+	want := i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, filepath.Base(path), path, syscall.EISDIR)
 	if err.Error() != want.Error() {
 		t.Errorf("ディレクトリだと名指ししていない: got %q, want %q", err.Error(), want.Error())
 	}

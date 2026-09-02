@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/maimuzo/continuo/internal/fsprobe"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -53,7 +55,103 @@ func checkConfig(path string) (Result, loadedConfig) {
 		Label:  LabelConfig,
 		Symbol: SymbolOK,
 		Detail: i18n.T(i18n.KeyDoctorConfigOK, loaded.Path),
-	}, loadedConfig{OK: true, Config: loaded.Config}
+	}, loadedConfig{OK: true, Config: loaded.Config, Loaded: loaded}
+}
+
+// checkPromptVariables は、送るプロンプトの変数を検査する（見出し語 `プロンプトの変数`。設計 5-3c）。
+//
+// **`✗` にする。**この誤りがあると **issue が1件も着手できない。**
+// `未記入の項目` と違い、既定値で代わりが利かない。
+//
+// **言い切らない。**検査は作り物の issue で2回変数展開するだけなので、
+// `{{if eq .issue.state "Done"}}` のように値そのもので分かれる枝の中までは届かない。
+// 文言も「検査に使った作り物の issue では」と範囲を書く。
+//
+// cfg: 設定を読んだ結果。
+// configSymbol: 設定ファイルの検査の記号。
+// 戻り値: 検査結果。
+func checkPromptVariables(cfg loadedConfig, configSymbol Symbol) Result {
+	if configSymbol != SymbolOK || !cfg.OK || cfg.Loaded == nil {
+		return Result{
+			Label:  LabelPromptVariables,
+			Symbol: SymbolUnknown,
+			Detail: i18n.T(i18n.KeyDoctorPromptVariablesUnknown),
+		}
+	}
+	loaded := cfg.Loaded
+
+	if loaded.ProjectPromptErr != nil {
+		return Result{
+			Label:  LabelPromptVariables,
+			Symbol: SymbolMissing,
+			Detail: i18n.T(i18n.KeyDoctorPromptVariablesProjectUnreadable,
+				loaded.ProjectPromptPath, loaded.ProjectPromptErr),
+			Remedies: []string{
+				i18n.T(i18n.KeyDoctorPromptVariablesRemedyPermission, loaded.ProjectPromptPath),
+			},
+		}
+	}
+
+	frag := prompt.Build(
+		loaded.PromptTemplate, loaded.ProjectPrompt, loaded.ProjectPromptPath, loaded.ProjectPromptFound)
+	if err := frag.Validate(); err != nil {
+		return Result{
+			Label:    LabelPromptVariables,
+			Symbol:   SymbolMissing,
+			Detail:   i18n.T(i18n.KeyDoctorPromptVariablesInvalid, err),
+			Remedies: []string{i18n.T(i18n.KeyDoctorPromptVariablesRemedy)},
+		}
+	}
+
+	key := i18n.KeyDoctorPromptVariablesOKNoProject
+	if loaded.ProjectPromptFound {
+		key = i18n.KeyDoctorPromptVariablesOK
+	}
+	return Result{
+		Label:  LabelPromptVariables,
+		Symbol: SymbolOK,
+		Detail: i18n.T(key, loaded.ProjectPromptPath),
+	}
+}
+
+// checkLeftoverBody は、WORKFLOW.md に本文が残っていないかを見る
+// （見出し語 `残った本文`。設計 5-3d）。
+//
+// **`✗` にしない。**残っていても continuo は動く。いままでと同じ文面が送られるだけである。
+// **`!` にする。**残っている限り、continuo が組み込みの仕組みを直しても届かない。
+//
+// cfg: 設定を読んだ結果。
+// configSymbol: 設定ファイルの検査の記号。
+// 戻り値: 検査結果。
+func checkLeftoverBody(cfg loadedConfig, configSymbol Symbol) Result {
+	if configSymbol != SymbolOK || !cfg.OK || cfg.Loaded == nil {
+		return Result{
+			Label:  LabelLeftoverBody,
+			Symbol: SymbolUnknown,
+			Detail: i18n.T(i18n.KeyDoctorLeftoverBodyUnknown),
+		}
+	}
+
+	body := strings.Trim(strings.ReplaceAll(cfg.Loaded.PromptTemplate, "\r\n", "\n"), "\n")
+	if strings.TrimSpace(body) == "" {
+		return Result{
+			Label:  LabelLeftoverBody,
+			Symbol: SymbolOK,
+			Detail: i18n.T(i18n.KeyDoctorLeftoverBodyOK),
+		}
+	}
+
+	return Result{
+		Label:  LabelLeftoverBody,
+		Symbol: SymbolUnknown,
+		Detail: i18n.T(i18n.KeyDoctorLeftoverBodyLeft, strings.Count(body, "\n")+1),
+		Notes:  []string{i18n.T(i18n.KeyDoctorLeftoverBodyNoteBuiltinSkipped)},
+		Remedies: []string{
+			i18n.T(i18n.KeyDoctorLeftoverBodyRemedyShow),
+			i18n.T(i18n.KeyDoctorLeftoverBodyRemedyMove, prompt.ProjectFileName),
+			i18n.T(i18n.KeyDoctorLeftoverBodyRemedyDelete),
+		},
+	}
 }
 
 // configRemedies は設定ファイルを読めなかった理由ごとの直し方を返す（issue #11）。
