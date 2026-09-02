@@ -1,14 +1,11 @@
 package config
 
 import (
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/goccy/go-yaml"
 	"github.com/maimuzo/continuo/internal/i18n"
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // DefaultFileName は WORKFLOW.md の既定のファイル名である（設計 5-1 / SPEC.md 5.1）。
@@ -20,30 +17,12 @@ type Loaded struct {
 	Config Config
 	// PromptTemplate は front matter の下に続く本文（プロンプトのテンプレート文字列）である。
 	// この段階ではテンプレートとして解釈しない。文字列のまま保持する。
+	//
+	// **これがエージェントへ送る指示書の、利用者が書く部分である**（設計 5-3c / 5-3d）。
+	// 組み込みの前半と後半のあいだへ挟まって送られる。**空でもよい。**
 	PromptTemplate string
 	// Path は実際に読み込んだ WORKFLOW.md の絶対パスである。
 	Path string
-	// ProjectPrompt は PROJECT_SPECIFIC_PROMPT.md の中身である。
-	//
-	// **無ければ空文字である。**中身が空白だけのこともある（在るが何も足さない、を
-	// 成り立たせるため）。
-	ProjectPrompt string
-	// ProjectPromptPath は PROJECT_SPECIFIC_PROMPT.md の絶対パスである。
-	//
-	// **ファイルが無くても埋める。**「どこに置けばよいか」を案内に出すためである。
-	ProjectPromptPath string
-	// ProjectPromptFound は PROJECT_SPECIFIC_PROMPT.md が在ったかどうかである。
-	//
-	// **中身が空白だけでも真である。**
-	ProjectPromptFound bool
-	// ProjectPromptErr は、ファイルが在るのに読めなかった理由である。読めたなら nil。
-	//
-	// **`Load` はこれを理由に落とさない。**`Load` を呼ぶのは常駐プロセスの起動だけではなく、
-	// `continuo trust` / `continuo abandon` / `continuo doctor` も呼ぶ。
-	// **プロンプトと関係の無いコマンドを、1枚のプロンプトの権限で巻き添えにしない。**
-	// とくに doctor は、設定の検査が `✗` になるとほぼ全部の検査の記号がそれに引きずられる。
-	// **止めるかどうかを決めるのは、常駐プロセスの起動と doctor の見出し語だけである。**
-	ProjectPromptErr error
 }
 
 // ResolvePath は CLI の位置引数と作業ディレクトリから、読み込む WORKFLOW.md の
@@ -138,43 +117,11 @@ func Load(path string) (*Loaded, error) {
 		return nil, i18n.Errorf(i18n.KeyConfigLoadFrontMatterInvalid, path, err)
 	}
 
-	loaded := &Loaded{
+	return &Loaded{
 		Config:         *cfg,
 		PromptTemplate: body,
 		Path:           path,
-	}
-	readProjectPrompt(loaded)
-	return loaded, nil
-}
-
-// readProjectPrompt は WORKFLOW.md と同じディレクトリの PROJECT_SPECIFIC_PROMPT.md を読む
-// （設計 5-3c）。
-//
-// **無くても誤りにしない。**固有の指示が要らない project がある。
-// **在るのに読めないときは、理由を `Loaded.ProjectPromptErr` へ入れて返す。**
-// ここで `Load` を落とすと、プロンプトを1文字も送らないコマンド
-// （`continuo trust` / `continuo abandon` / `continuo doctor`）まで止まる。
-//
-// **symlink は辿る。**読むだけだからである（書き込む側は辿らない）。
-//
-// loaded: 読み込み結果。ProjectPrompt / ProjectPromptPath / ProjectPromptFound /
-// ProjectPromptErr の4つを埋める。
-func readProjectPrompt(loaded *Loaded) {
-	path := filepath.Join(filepath.Dir(loaded.Path), prompt.ProjectFileName)
-	loaded.ProjectPromptPath = path
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return
-		}
-		// ディレクトリだった場合もここへ来る（ReadFile が EISDIR で落ちる）。
-		loaded.ProjectPromptFound = true
-		loaded.ProjectPromptErr = i18n.Errorf(i18n.KeyConfigLoadProjectPromptReadFailed, path, err)
-		return
-	}
-	loaded.ProjectPromptFound = true
-	loaded.ProjectPrompt = string(raw)
+	}, nil
 }
 
 // resolveRelativePaths は、相対パスで書かれた設定値を WORKFLOW.md が置かれている

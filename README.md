@@ -225,9 +225,9 @@ cannot be checked — is it reported as a leftover, as before.
 
 ### Configuration
 
-`continuo init` writes two files. `WORKFLOW.md` holds the config; `PROJECT_SPECIFIC_PROMPT.md` holds the part of the agent's brief that is yours to write.
+`continuo init` writes one file, `WORKFLOW.md`. The front matter at the top holds the config; the body below it holds the part of the agent's brief that is yours to write.
 
-Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. `PROJECT_SPECIFIC_PROMPT.md` is spliced into the middle of it, right before the "what to do when you are done" section. Run `continuo prompt --show` to read the whole thing, or `continuo prompt --show --builtin` for the built-in part alone.
+Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced into the middle of it, right before the "what to do when you are done" section. Run `continuo prompt --show` to read the whole thing, or `continuo prompt --show --builtin` for the built-in part alone.
 
 The front matter at the top is the configuration. These four are the ones you will actually touch:
 
@@ -269,7 +269,7 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 
 **The CLI speaks English.** `continuo doctor`, the command output and the dashboard all follow `language` in `WORKFLOW.md` — `auto` by default, which reads `LANG` and falls back to English when it says nothing.
 
-**These are still Japanese only:** the installer's prompts, the `WORKFLOW.md` and `PROJECT_SPECIFIC_PROMPT.md` templates `continuo init` writes, the built-in prompt sent to the agent, the comments continuo posts on your issues, and every document except this file.
+**These are still Japanese only:** the installer's prompts, the `WORKFLOW.md` template `continuo init` writes (front matter comments and body alike), the built-in prompt sent to the agent, the comments continuo posts on your issues, and every document except this file.
 
 ## Learn more
 

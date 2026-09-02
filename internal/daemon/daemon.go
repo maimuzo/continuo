@@ -341,53 +341,23 @@ func WarnCleanupStates(cfg config.Config, logger *slog.Logger) {
 		"tracker.terminal_states", quoteStates(cfg.Tracker.TerminalStates))
 }
 
-// buildPrompt は、1回目に送る指示書の断片を組み立て、変数の名前を確かめる
-// （設計 5-3c / 5-3d）。
+// buildPrompt は、1回目に送る指示書の断片を組み立て、変数の名前を確かめる（設計 5-3c）。
 //
-// **止めるものと、警告に留めるものを分ける。**
-//
-//	固有のプロンプトが在るのに読めない   … 止める。書いたはずの流儀が効かないまま無人で回る
-//	組み込みか固有の変数が誤っている     … 止める。この誤りがあると issue が1件も着手できない
-//	WORKFLOW.md の本文の変数が誤っている … 警告に留める。**版を上げた瞬間に起動しなくなるのを避ける**
-//
-// **本文だけを警告に留める理由。**いままで本文は着手のたびに解釈されており、
-// `{{if .attempt}}` の中の誤りは**やり直しが起きるまで表に出なかった。**
-// その状態の人が版を上げたときに、いままで動いていた continuo が起動しなくなってはいけない。
-// **着手の時点では、いままでどおり失敗する**（renderFirstPrompt が誤りを返す）。
+// **変数の名前が誤っていたら、起動を止める。**この誤りがあると issue が1件も着手できない。
+// **組み込みの側と WORKFLOW.md の本文の側を、同じ扱いにする。**
+// どちらが誤っていても、送る文面は組み立てられないためである。
+// **どのファイルの何行目かは、断片ごとに解釈しているので誤りの文言に入る**（設計 5-3c）。
 //
 // loaded: WORKFLOW.md を読み込んだ結果。
 // logger: ログの出力先。**nil を渡してはならない。**
 // 戻り値: 組み立てた断片と、起動を止める理由。
 func buildPrompt(loaded *config.Loaded, logger *slog.Logger) (prompt.Fragments, error) {
-	if loaded.ProjectPromptErr != nil {
-		return prompt.Fragments{}, i18n.Errorf(i18n.KeyDaemonRunProjectPromptUnreadable,
-			ErrStartup, loaded.ProjectPromptPath, loaded.ProjectPromptErr)
-	}
-
-	frag := prompt.Build(
-		loaded.PromptTemplate, loaded.ProjectPrompt, loaded.ProjectPromptPath, loaded.ProjectPromptFound)
-
-	if frag.Compat() {
-		// **本文が残っている。**組み込みは1文字も送らないので、continuo が仕組みを
-		// 直しても、この利用者には届かない。
-		logger.Warn(fmt.Sprintf(
-			"WORKFLOW.md に本文が %d 行残っているので、組み込みのプロンプトは送りません。"+
-				"continuo prompt --show --builtin で組み込みの全文を読み、"+
-				"自分で書き足した部分だけを %s へ移してください",
-			lineCount(loaded.PromptTemplate), prompt.ProjectFileName),
-			"path", loaded.Path)
-		if err := frag.Validate(); err != nil {
-			// **止めない。**この誤りは版を上げる前から在ったものである。
-			logger.Warn(fmt.Sprintf("WORKFLOW.md の本文に誤りがあります: %v", err), "path", loaded.Path)
-		}
-		return frag, nil
-	}
-
+	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
 	if err := frag.Validate(); err != nil {
 		return prompt.Fragments{}, i18n.Errorf(i18n.KeyDaemonRunPromptInvalid, ErrStartup, err)
 	}
 	logger.Info("送るプロンプトを組み立てました",
-		"project_prompt", loaded.ProjectPromptPath, "project_prompt_found", loaded.ProjectPromptFound)
+		"workflow", loaded.Path, "body_lines", lineCount(loaded.PromptTemplate))
 	return frag, nil
 }
 

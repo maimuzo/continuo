@@ -193,9 +193,9 @@
 **言いたいこと。**[internal/doctor/report.go](../../internal/doctor/report.go) の `labelColumn` が 16 である。
 **16桁に満たない語を並べて桁を揃えている。**15桁を超えるラベルを1つ置くと、全部の行の桁が崩れる。
 
-**使ってよいラベルは、この17語だけである。**
+**使ってよいラベルは、この16語だけである。**
 
-`config` / `cleanup states` / `missing keys` / `prompt vars` / `leftover body` /
+`config` / `cleanup states` / `missing keys` / `prompt vars` /
 `claude` / `hook socket` / `Claude settings` / `worktree root` / `herdr` /
 `gh auth` / `kanban board` / `Status names` / `rewrite keys` / `clones` /
 `trust` / `credentials`

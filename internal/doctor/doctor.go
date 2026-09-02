@@ -195,7 +195,6 @@ func Run(ctx context.Context, opts Options) Report {
 	// 段1d: プロンプトの変数と、残った本文。**ここもボードを1バイトも読まない。**
 	// **変数の誤りは issue を1件も着手させない**ので、外へ出る検査より先に見せる。
 	report.add(checkPromptVariables(cfg, configResult.Symbol))
-	report.add(checkLeftoverBody(cfg, configResult.Symbol))
 
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。

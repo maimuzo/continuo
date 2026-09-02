@@ -4,17 +4,17 @@
 // **送る文面は3つの断片からできている。**
 //
 //	組み込みの前半   builtin.md の、目印の行より上。continuo の実行ファイルの中にある
-//	固有            PROJECT_SPECIFIC_PROMPT.md。利用者が書く。無くてもよい
+//	本文            WORKFLOW.md の閉じの --- より下。利用者が書く。空でもよい
 //	組み込みの後半   builtin.md の、目印の行より下
 //
-// **固有を真ん中に挟む。**仕組みの締めくくり（表明の1行の説明）が必ず最後に来るようにする。
+// **本文を真ん中に挟む。**仕組みの締めくくり（表明の1行の説明）が必ず最後に来るようにする。
 // 末尾に足す形にすると、利用者の文が仕組みの説明より後ろに来て、打ち消しやすくなる。
 //
 // **3つは別々に解釈して、別々に変数展開してから連結する。**1つのテンプレートへ
 // 連結してから解釈しない。理由は2つある。
 //
 //   - **誤りがどのファイルの何行目かを名指しできる。**連結すると行番号が合算されて意味を失う
-//   - **固有の側が `{{if}}` を開いたまま終えても、組み込みの後半を飲み込めない**
+//   - **本文が `{{if}}` を開いたまま終えても、組み込みの後半を飲み込めない**
 //
 // **テンプレートを作る口はこのパッケージの newTemplate だけである。**
 // `missingkey=error` と、未知の変数へ回り込める組み込み関数の封じ込めを、
@@ -37,16 +37,10 @@ import (
 // builtin.md を1枚の指示書として人間が通して読める。
 const Marker = "<!-- continuo:project-specific-prompt -->"
 
-// ProjectFileName は固有のプロンプトのファイル名である（設計 5-3c）。
-//
-// **置き場所は WORKFLOW.md と同じディレクトリである。**カンバン全体で1枚であり、
-// リポジトリごとには持たない。
-const ProjectFileName = "PROJECT_SPECIFIC_PROMPT.md"
-
 // builtinName は組み込みのプロンプトのファイル名である。エラーの文言に出す。
 const builtinName = "builtin.md"
 
-// workflowName は WORKFLOW.md のファイル名である。互換の経路のエラーの文言に出す。
+// workflowName は WORKFLOW.md のファイル名である。本文の誤りの文言に出す。
 const workflowName = "WORKFLOW.md"
 
 // 断片の名前である。テンプレートの名前としてそのまま使うので、
@@ -57,9 +51,10 @@ const (
 	// NameBuiltinTail は組み込みの後半の名前である。
 	// **行番号は目印の行の次を1行目として数えたものである**（builtin.md の行番号ではない）。
 	NameBuiltinTail = builtinName + "#tail"
-	// NameProject は固有のプロンプトの名前である。**行番号はファイルの行番号と一致する。**
-	NameProject = ProjectFileName
-	// NameWorkflowBody は WORKFLOW.md に残っている本文の名前である（互換の経路。設計 5-3d）。
+	// NameWorkflowBody は WORKFLOW.md の本文の名前である（設計 5-3c）。
+	//
+	// **行番号は front matter の閉じの `---` の次を1行目として数えたものである**
+	// （WORKFLOW.md の行番号ではない）。
 	NameWorkflowBody = workflowName + "#body"
 )
 
@@ -105,11 +100,11 @@ func BuiltinHead() string { return builtinHead }
 // 戻り値: builtin.md の、目印の行より下。
 func BuiltinTail() string { return builtinTail }
 
-// Builtin は組み込みだけで組み立てた全文を返す（固有のプロンプトを挟まない形）。
+// Builtin は組み込みだけで組み立てた全文を返す（本文を挟まない形）。
 //
 // **`continuo prompt --show --builtin` が出すのはこれである。**
-// 既にある WORKFLOW.md に本文が残っている利用者が、**自分の本文と見比べる相手**として読む
-// （設計 5-3d の移行の手順）。
+// **利用者が、自分が書いた本文と仕組みの側を見比べる相手**として読む（設計 5-3f）。
+// 組み込みが既に言っていることを、本文に二重に書かずに済む。
 //
 // 戻り値: 前半と後半を連結した、変数展開していない全文。
 func Builtin() string {
@@ -134,42 +129,31 @@ type Fragment struct {
 type Fragments struct {
 	// items は連結する順に並んだ断片である。**空文字の断片は入っていない。**
 	items []Fragment
-	// compat は WORKFLOW.md の本文を使っているかどうかである（設計 5-3d）。
+	// bodyPath は本文が来た WORKFLOW.md の絶対パスである。
 	//
-	// **真なら組み込みは1文字も送っていない。**
-	compat bool
-	// projectFound は固有のプロンプトのファイルが在ったかどうかである。
+	// **本文が空でも埋める。**内訳の「本文はありません」に、どのファイルの話かを添えるためである。
+	bodyPath string
+	// hasBody は本文に中身があったかどうかである。
 	//
-	// **中身が空白だけでも真である。**「消したいが、ファイルは残しておきたい」を
-	// 成り立たせるため、在ることと中身があることを分ける。
-	projectFound bool
-	// projectPath は固有のプロンプトの絶対パスである。**無くても埋める**（案内に出す）。
-	projectPath string
+	// **空白だけなら偽である。**
+	hasBody bool
 }
 
-// Build は、WORKFLOW.md の本文と固有のプロンプトから、送る文面の断片を決める（設計 5-3c / 5-3d）。
+// Build は、WORKFLOW.md の本文から送る文面の断片を決める（設計 5-3c）。
 //
-// **本文が空白だけなら、組み込みの前半 + 固有 + 組み込みの後半になる。**
-// **本文に中身があるなら、その本文 + 固有になる**（互換の経路。組み込みは1文字も送らない）。
-// 版を上げた瞬間に、いままでどおりの文面が届かなくなることを避けるためである。
+// **並びは、組み込みの前半 + 本文 + 組み込みの後半で固定である。**
+// **本文が空白だけなら、組み込みの前半 + 組み込みの後半になる。**
 //
-// body: WORKFLOW.md の front matter より後ろ。
-// project: 固有のプロンプトの中身。ファイルが無ければ空文字。
-// projectPath: 固有のプロンプトの絶対パス。**ファイルが無くても埋める**（案内に出す）。
-// projectFound: 固有のプロンプトのファイルが在ったかどうか。
+// **本文を「全文の差し替え」として扱わない。**そう扱うと、continuo が仕組みの説明を直しても、
+// 本文を書いた利用者には二度と届かない（設計 5-3c）。
+//
+// body: WORKFLOW.md の front matter より後ろ。空でもよい。
+// bodyPath: 本文が来た WORKFLOW.md の絶対パス。**本文が空でも埋める**（内訳に出す）。
 // 戻り値: 連結する順に並んだ断片。
-func Build(body, project, projectPath string, projectFound bool) Fragments {
-	f := Fragments{projectFound: projectFound, projectPath: projectPath}
-
-	if strings.TrimSpace(body) != "" {
-		f.compat = true
-		f.add(NameWorkflowBody, body, "")
-		f.add(NameProject, project, projectPath)
-		return f
-	}
-
+func Build(body, bodyPath string) Fragments {
+	f := Fragments{bodyPath: bodyPath, hasBody: strings.TrimSpace(body) != ""}
 	f.add(NameBuiltinHead, builtinHead, "")
-	f.add(NameProject, project, projectPath)
+	f.add(NameWorkflowBody, body, bodyPath)
 	f.add(NameBuiltinTail, builtinTail, "")
 	return f
 }
@@ -191,20 +175,15 @@ func (f *Fragments) add(name, text, path string) {
 // 戻り値: 断片の並び。**呼び出し側は書き換えてはならない。**
 func (f Fragments) Items() []Fragment { return f.items }
 
-// Compat は WORKFLOW.md の本文を使っているかどうかを返す（設計 5-3d）。
+// HasBody は WORKFLOW.md の本文に中身があったかどうかを返す。
 //
-// 戻り値: 本文が残っていて、組み込みを送っていないなら真。
-func (f Fragments) Compat() bool { return f.compat }
+// 戻り値: 中身があれば真。**空白だけなら偽である。**
+func (f Fragments) HasBody() bool { return f.hasBody }
 
-// ProjectFound は固有のプロンプトのファイルが在ったかどうかを返す。
+// BodyPath は本文が来た WORKFLOW.md の絶対パスを返す。
 //
-// 戻り値: 在ったなら真。**中身が空白だけでも真である。**
-func (f Fragments) ProjectFound() bool { return f.projectFound }
-
-// ProjectPath は固有のプロンプトの絶対パスを返す。
-//
-// 戻り値: 絶対パス。**ファイルが無くても埋まっている。**
-func (f Fragments) ProjectPath() string { return f.projectPath }
+// 戻り値: 絶対パス。**本文が空でも埋まっている。**
+func (f Fragments) BodyPath() string { return f.bodyPath }
 
 // Text は、変数展開していない全文を返す（`continuo prompt --show` が出すもの）。
 //
@@ -219,7 +198,7 @@ func (f Fragments) Text() string {
 
 // join は断片を連結する。
 //
-// **前後の改行の数をそろえてから連結する。**固有のファイルが改行で終わっていないと、
+// **前後の改行の数をそろえてから連結する。**本文が改行で終わっていないと、
 // 次の見出しが前の行にくっついて markdown として壊れる。逆に改行が3つあると、
 // 送る文面が断片の書き方で変わってしまう。**断片のあいだは必ず空行1つにする。**
 //
@@ -278,7 +257,7 @@ func renderOne(it Fragment, data map[string]any) (string, error) {
 	return b.String(), nil
 }
 
-// Validate は、3つの断片が解釈でき、一覧にある変数だけを使っていることを確かめる（設計 5-3c）。
+// Validate は、断片が解釈でき、一覧にある変数だけを使っていることを確かめる（設計 5-3c）。
 //
 // **作り物の issue で2回変数展開する。**1回目は `.attempt` を空、2回目は 2 にする。
 // **`{{if .attempt}}` の中は、空のときには一度も解釈されない**ためである。

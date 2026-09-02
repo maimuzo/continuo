@@ -1,4 +1,4 @@
-// 起動の段で送るプロンプトを組み立て、変数を確かめる部分の検査である（設計 5-3c / 5-3d）。
+// 起動の段で送るプロンプトを組み立て、変数を確かめる部分の検査である（設計 5-3c）。
 package daemon_test
 
 import (
@@ -14,21 +14,20 @@ import (
 	"github.com/maimuzo/continuo/internal/prompt"
 )
 
-// 目的: 固有のプロンプトに知らない変数を書いたら、起動の時点で止まることを確かめる
+// 目的: WORKFLOW.md の本文に知らない変数を書いたら、起動の時点で止まることを確かめる
 // （設計 5-3c）。
 //
-// **いままでは着手の時点で1件ずつ失敗していた。**常駐プロセスは健康に見えたまま、
-// issue が全部落ちる。**起動で止めれば、人間はすぐ気づく。**
+// **本文は「組み込みの真ん中へ挟む固有の指示」であり、組み込みと同じ扱いで検査する。**
+// 着手の時点で1件ずつ失敗させると、常駐プロセスは健康に見えたまま issue が全部落ちる。
+// **起動で止めれば、人間はすぐ気づく。**
 //
-// 与える情報: `{{.issue.nope}}` を書いた PROJECT_SPECIFIC_PROMPT.md。
+// 与える情報: `{{.issue.nope}}` を本文に書いた WORKFLOW.md。
 // 成功条件: 起動の段のエラー（daemon.ErrStartup）で止まり、
-// 文言がファイルの名前と `continuo prompt --show` の案内を含むこと。
-func TestRun_固有のプロンプトに知らない変数があれば起動を止める(t *testing.T) {
+// 文言が本文の断片の名前と `continuo prompt --show` の案内を含むこと。
+func TestRun_本文に知らない変数があれば起動を止める(t *testing.T) {
 	root := wiringRoot(t)
 	path := writeWiringWorkflow(t, root, "", "")
-	// **本文を消す。**本文が残っていると互換の経路になり、検査は警告に留まる（設計 5-3d）。
-	dropBody(t, path)
-	writeProjectPromptAt(t, root, "{{.issue.nope}}\n")
+	setBodyOf(t, path, "{{.issue.nope}}\n")
 	setWiringEnv(t, root)
 
 	err := daemon.Run(context.Background(), daemon.Options{
@@ -41,27 +40,26 @@ func TestRun_固有のプロンプトに知らない変数があれば起動を�
 	if !errors.Is(err, daemon.ErrStartup) {
 		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
 	}
-	if !strings.Contains(err.Error(), prompt.ProjectFileName) {
-		t.Errorf("どのファイルの話かが文言に出ていない: %v", err)
+	if !strings.Contains(err.Error(), prompt.NameWorkflowBody) {
+		t.Errorf("どの断片の話かが文言に出ていない（%s が無い）: %v", prompt.NameWorkflowBody, err)
 	}
 	if !strings.Contains(err.Error(), "continuo prompt --show") {
 		t.Errorf("直し方の案内が文言に出ていない: %v", err)
 	}
 }
 
-// 目的: 固有のプロンプトが在るのに読めなければ、起動を止めることを確かめる（設計 5-3c）。
+// 目的: `{{if .attempt}}` の中だけに書いた誤りでも、起動の時点で止まることを確かめる
+// （設計 5-3c）。
 //
-// **黙って無視しない。**無視すると、書いたはずの流儀が効かないまま無人で回り続ける。
+// **1回しか変数展開しないと、この誤りは見つからない。**`.attempt` は1回目が空なので、
+// 中は一度も解釈されず、**やり直しが起きるまで表に出ない。**
 //
-// 与える情報: PROJECT_SPECIFIC_PROMPT.md という名前のディレクトリ。
-// 成功条件: 起動の段のエラーで止まり、文言がファイルの名前を含むこと。
-func TestRun_固有のプロンプトが読めなければ起動を止める(t *testing.T) {
+// 与える情報: `{{if .attempt}}{{.issue.nope}}{{end}}` を本文に書いた WORKFLOW.md。
+// 成功条件: 起動の段のエラーで止まること。
+func TestRun_attemptの中の誤りでも起動を止める(t *testing.T) {
 	root := wiringRoot(t)
 	path := writeWiringWorkflow(t, root, "", "")
-	dropBody(t, path)
-	if err := os.Mkdir(filepath.Join(root, prompt.ProjectFileName), 0o755); err != nil {
-		t.Fatalf("ディレクトリを作れません: %v", err)
-	}
+	setBodyOf(t, path, "{{if .attempt}}{{.issue.nope}}{{end}}\n")
 	setWiringEnv(t, root)
 
 	err := daemon.Run(context.Background(), daemon.Options{
@@ -69,29 +67,23 @@ func TestRun_固有のプロンプトが読めなければ起動を止める(t *
 		Logger:     slog.New(slog.DiscardHandler),
 	})
 	if err == nil {
-		t.Fatal("読めない固有のプロンプトがあるのに起動できてしまった")
+		t.Fatal("{{if .attempt}} の中の誤りがあるのに起動できてしまった")
 	}
 	if !errors.Is(err, daemon.ErrStartup) {
 		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
 	}
-	if !strings.Contains(err.Error(), prompt.ProjectFileName) {
-		t.Errorf("どのファイルの話かが文言に出ていない: %v", err)
-	}
 }
 
-// 目的: WORKFLOW.md に残っている本文の変数の誤りでは、起動を止めないことを確かめる
-// （設計 5-3d）。
+// 目的: 本文が正しければ、プロンプトを理由に起動が止まらないことを確かめる（設計 5-3c）。
 //
-// **いままで本文は着手のたびに解釈されており、`{{if .attempt}}` の中の誤りは
-// やり直しが起きるまで表に出なかった。**その状態の人が版を上げたときに、
-// **いままで動いていた continuo が起動しなくなってはいけない。**
+// **組み込みそのものが壊れていたら、利用者の側では直しようが無い。**
 //
-// 与える情報: `{{if .attempt}}{{.issue.nope}}{{end}}` を本文に書いた WORKFLOW.md。
+// 与える情報: 一覧にある変数だけを使った本文。
 // 成功条件: プロンプトが理由で止まらないこと（この先の段で別の理由により止まるのは構わない）。
-func TestRun_残った本文の変数の誤りでは起動を止めない(t *testing.T) {
+func TestRun_正しい本文ならプロンプトを理由に止まらない(t *testing.T) {
 	root := wiringRoot(t)
 	path := writeWiringWorkflow(t, root, "", "")
-	appendToFile(t, path, "{{if .attempt}}{{.issue.nope}}{{end}}\n")
+	setBodyOf(t, path, "{{.issue.owner}}/{{.issue.repo}} の決まりに従ってください。\n")
 	setWiringEnv(t, root)
 
 	err := daemon.Run(context.Background(), daemon.Options{
@@ -101,15 +93,18 @@ func TestRun_残った本文の変数の誤りでは起動を止めない(t *tes
 	// **この先の段（herdr への接続など）で止まるのは構わない。**
 	// **プロンプトを理由に止まっていないこと**だけを確かめる。
 	if err != nil && strings.Contains(err.Error(), "送るプロンプトに誤りがあります") {
-		t.Fatalf("残った本文の誤りで起動を止めている（版を上げた瞬間に動かなくなる）: %v", err)
+		t.Fatalf("正しい本文なのにプロンプトを理由に起動を止めている: %v", err)
 	}
 }
 
-// dropBody は WORKFLOW.md の閉じの "---" より下を消す（設計 5-3c の状態にする）。
+// setBodyOf は WORKFLOW.md の本文（front matter の閉じの `---` より下）を置き換える。
+//
+// **front matter は1文字も触らない。**設定を変えずに、送る文面だけを変えるためである。
 //
 // t: 呼び出し元のテスト。
 // path: WORKFLOW.md の絶対パス。
-func dropBody(t *testing.T, path string) {
+// body: 置き換える本文。空文字なら本文を消す。
+func setBodyOf(t *testing.T, path, body string) {
 	t.Helper()
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -117,43 +112,16 @@ func dropBody(t *testing.T, path string) {
 	}
 	lines := strings.Split(string(raw), "\n")
 	for i := 1; i < len(lines); i++ {
-		if strings.TrimRight(lines[i], " \t") == "---" {
-			out := strings.Join(lines[:i+1], "\n") + "\n"
-			if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
-				t.Fatalf("%s を書けません: %v", path, err)
-			}
-			return
+		if strings.TrimRight(lines[i], " \t") != "---" {
+			continue
 		}
+		out := strings.Join(lines[:i+1], "\n") + "\n" + body
+		if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
+			t.Fatalf("%s を書けません: %v", path, err)
+		}
+		return
 	}
 	t.Fatalf("%s に front matter の終端行がありません", path)
-}
-
-// writeProjectPromptAt は root の直下に PROJECT_SPECIFIC_PROMPT.md を置く。
-//
-// t: 呼び出し元のテスト。
-// root: 置く先のディレクトリ。
-// body: 書く中身。
-func writeProjectPromptAt(t *testing.T, root, body string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(root, prompt.ProjectFileName), []byte(body), 0o600); err != nil {
-		t.Fatalf("%s を書けません: %v", prompt.ProjectFileName, err)
-	}
-}
-
-// appendToFile はファイルの末尾へ書き足す。
-//
-// t: 呼び出し元のテスト。
-// path: 書き足す先の絶対パス。
-// body: 書き足す中身。
-func appendToFile(t *testing.T, path, body string) {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("%s を読めません: %v", path, err)
-	}
-	if err := os.WriteFile(path, append(raw, []byte(body)...), 0o600); err != nil {
-		t.Fatalf("%s を書けません: %v", path, err)
-	}
 }
 
 // setWiringEnv は、実行時ディレクトリと GraphQL の接続先の環境変数を、
