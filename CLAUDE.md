@@ -117,6 +117,73 @@ os.Rename(tmp.Name(), path)
 >
 > **既に履歴へ入ってしまったものは、そのままでよい。**書き換えのために履歴を作り直さない。
 
+### 6. continuo で continuo 自身を直すとき、hook の経路に触れたら人間に確認する
+
+**この項目は、continuo に continuo 自身の issue をやらせるときにしか効かない。**
+他のプロジェクトを continuo に任せている人には関係が無い。
+
+**何が起きるか。**continuo は常駐プロセスである。`go build -o ~/.local/bin/continuo ./cmd/continuo` は
+**rename で実行ファイルを差し替える**ので inode が変わり、**動いている continuo は、開いたままの古い実体で最後まで走り切る。**
+**ところが Claude Code の hook は、turn ごとにそのパスを exec する**
+（[internal/orchestrator/settings.go:352](internal/orchestrator/settings.go#L352) が
+`<continuo のパス> hook --socket <パス> --pending-dir <パス>` を組み立て、issue ごとの設定ファイルへ書く）。
+**つまり「本体は古い・hook は新しい」という混ざった状態が、ビルドするたびに必ず起きる。**
+
+**何が壊れるか。**`continuo hook` のフラグ名を変える変更を入れた瞬間、
+新しい実行ファイルの hook は**引数を受け取れずに exit 1 で落ちる**
+（[internal/cli/cli.go:1280-1298](internal/cli/cli.go#L1280-L1298) が
+`--socket` と `--pending-dir` の欠落と相対パスを、それぞれ exit 1 にしている）。
+**古い本体は turn の終わりを永久に受け取れなくなる。**
+**しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
+Claude Code がまだ喋っている最中であることは、本体からは区別できない。
+
+**やること。**
+
+> **この状態を検知したら、人間に必ず確認すること。**
+> **人間が問題ないので進めてと答えたら進めて良い。**
+> **明示的に返答しないケースを含め、それ以外は決して進めないこと。**
+> **（AI が勝手に hook 周りも仕様に含めた場合を含む）**
+
+**最後の括弧が本体である。**issue に hook のことが1行も書いていなくても、
+**作業中に手が hook の経路へ伸びたら、その時点で止まる。**「ついでに直した」を通さない。
+
+**検知のしかた。**判定は変更したファイルのパスだけで行う。中身を読んで迷わない。
+
+```bash
+git diff --name-only main... | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/cli/cli\.go)'
+```
+
+**1行でも返ったら止まる。**それぞれ、なぜ止まるかは次のとおり。
+
+| 触った場所 | なぜ止まるか |
+| --- | --- |
+| [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
+| [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
+| [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
+| [internal/orchestrator/orchestrator.go:1148](internal/orchestrator/orchestrator.go#L1148) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
+| [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
+
+**人間に見せるもの。**次の4つを揃える。1つでも欠けたら、人間は可否を判断できない。
+
+| 何を見せるか | 具体的に何を書くか |
+| --- | --- |
+| **どのファイルのどこを触るか** | 上の `git diff --name-only` の出力と、変える関数名・フラグ名 |
+| **hook のどの経路に効くか** | 上の表のどの行に当たるか。issue ごとの設定ファイルのどこが変わるか |
+| **止まったまま何もしないと何が起きるか** | **その issue が進まないだけである。**動いている continuo は壊れない |
+| **進めて壊れたときの戻し方** | 下の3行。**古い実行ファイルへ戻すところまで書く** |
+
+**壊れたときの戻し方。**
+
+```bash
+# 1. 動いている continuo を止める。hook が届かないので1回目の Ctrl+C は待たされる。
+#    待たずに終わらせたいときは、もう一度 Ctrl+C を押す
+# 2. hook が動いていた頃の commit へ戻し、同じパスへ入れ直す
+git switch --detach <hook が動いていた commit> && go build -o ~/.local/bin/continuo ./cmd/continuo
+# 3. 立て直す（pane と Claude Code は生きているので、次の起動が引き継ぐ）
+continuo
+```
+
 ---
 
 ## 共通ガイドライン
