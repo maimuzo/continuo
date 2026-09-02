@@ -261,17 +261,33 @@ func (o *Orchestrator) scanIdentities() ([]restoreCandidate, []string) {
 // 『捨てた身元』にし、段4 でその生きた pane を閉じる。**以後その issue の run は
 // 書き換えた側の worktree として印に入り、片付けの宛先まで入れ替わる。
 //
-// **検算の根拠は worktree のパスだけである。**置き場所は `<root>/<host>/<owner>/<repo>/<スラグ>` の
-// 固定4階層（設計 3-22）で、封じ込め検査（設計 3-20）を通っている。**エージェントには
-// 書き換えられない。**そこから引いた `<owner>/<repo>` と、身元ファイルが名乗る
-// `issue_identifier` / `issue_url` の `<owner>/<repo>` を、大文字小文字を無視して比べる。
+// **検算の根拠は worktree のパスだけである。**置き場所は
+// `<root>/<host>/<owner>/<repo>/<スラグ>` の固定4階層（設計 3-22）で、
+// 封じ込め検査（設計 3-20）を通っている。**エージェントには書き換えられない。**
+//
+// **比べるのはスラグである**（設計 issue144 の 8b）。置き場所の2・3階層目には
+// **コードのリポジトリ**が入るので、身元ファイルが名乗る issue の `<owner>/<repo>` と
+// 突き合わせても、issue とコードが別のリポジトリにある形では必ず食い違う。
+// **代わりに、身元ファイルが名乗る issue から作り直したスラグと、
+// 最下層のディレクトリ名を比べる。**
+//
+// **弱くなっていない。**既定の `branch_template` は issue の owner・repo・番号の3つを
+// 含むので（`continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}`）、
+// **`issue_url` を別の issue に差し替えると、作り直したスラグがディレクトリ名と合わなくなる。**
+// 同じ形が `continuo abandon` の pathAgrees に既にある。
+//
+// **コードのリポジトリとの照合は、ここではできない。**この関数は `scanIdentities` の中で
+// 呼ばれ、**トラッカーの取り直し（段3）はその結果を入力に取る。**
+// ここでトラッカーを引こうとすると、答えが1件も無いので
+// **issue とコードが別のリポジトリにある worktree は毎回ここで落ち、一度も引き継がれない。**
+// **その照合は段3 のあとの issueAgreesWithPath が行う。**
 //
 // **食い違ったら候補から外す。消さない。**どちらが正しいか continuo には判断できない。
 //
 // worktreePath: worktree の絶対パス。
 // identity: 読めた身元ファイル。
-// 戻り値の1つ目: 置き場所から引いた所有者名。
-// 戻り値の2つ目: 置き場所から引いたリポジトリ名。
+// 戻り値の1つ目: 置き場所から引いた所有者名（**コードのリポジトリのもの**）。
+// 戻り値の2つ目: 置き場所から引いたリポジトリ名（**コードのリポジトリのもの**）。
 // 戻り値の3つ目: 辻褄が合えば true。**引けなかった場合と名乗りが無い場合も false**
 // （分からないものを候補に採らない）。
 func (o *Orchestrator) pathAgrees(worktreePath string, identity *workspace.Identity) (string, string, bool) {
@@ -281,21 +297,81 @@ func (o *Orchestrator) pathAgrees(worktreePath string, identity *workspace.Ident
 			"path", worktreePath, "error", err)
 		return "", "", false
 	}
-	claimedOwner, claimedRepo, ok := identityOwnerRepo(identity)
+	claimed, ok := identityIssueRef(identity)
 	if !ok {
-		o.logger.Warn("身元ファイルが owner/repo を名乗っていないので候補にしません（消しません）",
+		o.logger.Warn("身元ファイルが issue を名乗っていないので候補にしません（消しません）",
 			"path", worktreePath, "issue_identifier", identity.IssueIdentifier, "issue_url", identity.IssueURL)
 		return "", "", false
 	}
-	if !strings.EqualFold(owner, claimedOwner) || !strings.EqualFold(repo, claimedRepo) {
-		o.logger.Warn("身元ファイルの名乗りが worktree の置き場所と食い違うので候補にしません（消しません）",
+	want, err := o.ws.ExpectedSlugFor(claimed)
+	if err != nil {
+		// **組み立てられないなら、裏を取れない。**取れないものを候補に採らない。
+		o.logger.Warn("身元ファイルが名乗る issue のディレクトリ名を組み立てられないので候補にしません（消しません）",
+			"path", worktreePath, "issue_identifier", identity.IssueIdentifier, "error", err)
+		return "", "", false
+	}
+	got := filepath.Base(filepath.Clean(worktreePath))
+	if !strings.EqualFold(got, want) {
+		o.logger.Warn("身元ファイルの名乗りが worktree のディレクトリ名と食い違うので候補にしません（消しません）",
 			"path", worktreePath,
-			"置き場所", owner+"/"+repo,
-			"身元ファイルの名乗り", claimedOwner+"/"+claimedRepo,
+			"ディレクトリ名", got,
+			"身元ファイルの名乗りから作ったディレクトリ名", want,
 			"project_item_id", identity.ProjectItemID)
 		return "", "", false
 	}
 	return owner, repo, true
+}
+
+// identityIssueRef は、身元ファイルが名乗る issue を IssueRef へ組み立てる。
+//
+// **スラグを作り直すのに使う**（pathAgrees）。`branch_template` は issue の
+// owner・repo・番号を参照しうるので、3つとも要る。
+//
+// **ここで取れる値は信用しない。**呼び出し側が、置き場所のディレクトリ名と
+// 突き合わせるための材料である。
+//
+// identity: 読めた身元ファイル。
+// 戻り値の1つ目: 名乗っている issue。
+// 戻り値の2つ目: owner・repo・番号の3つとも取れたら true。
+func identityIssueRef(identity *workspace.Identity) (workspace.IssueRef, bool) {
+	owner, repo, ok := identityOwnerRepo(identity)
+	if !ok {
+		return workspace.IssueRef{}, false
+	}
+	number, ok := identityIssueNumber(identity)
+	if !ok {
+		return workspace.IssueRef{}, false
+	}
+	return workspace.IssueRef{Owner: owner, Repo: repo, Number: number}, true
+}
+
+// identityIssueNumber は、身元ファイルが名乗る issue の番号を取り出す。
+//
+// **`issue_identifier`（`<owner>/<repo>#<番号>`）を先に見て、無ければ `issue_url` の
+// 末尾から取る。**どちらも読めなければ偽を返す。
+//
+// identity: 読めた身元ファイル。
+// 戻り値の1つ目: issue の番号。
+// 戻り値の2つ目: 正の整数として読めたら true。
+func identityIssueNumber(identity *workspace.Identity) (int, bool) {
+	if _, after, found := strings.Cut(identity.IssueIdentifier, "#"); found {
+		if n, err := strconv.Atoi(strings.TrimSpace(after)); err == nil && n > 0 {
+			return n, true
+		}
+	}
+	u, err := url.Parse(strings.TrimSpace(identity.IssueURL))
+	if err != nil || u.Path == "" {
+		return 0, false
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) == 0 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(parts[len(parts)-1])
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // issueAgreesWithPath は、取り直した issue が worktree の置き場所と同じリポジトリのものかを返す。
@@ -308,15 +384,18 @@ func (o *Orchestrator) pathAgrees(worktreePath string, identity *workspace.Ident
 // c: 対象の worktree（`Owner` / `Repo` は置き場所から引いた値）。
 // issue: 段3 で取り直した issue。
 // 戻り値: 同じリポジトリのものなら true。**draft issue（owner が空）は false。**
-func (o *Orchestrator) issueAgreesWithPath(c restoreCandidate, issue tracker.Issue) bool {
-	if strings.EqualFold(issue.Owner, c.Owner) && strings.EqualFold(issue.Repo, c.Repo) {
+func (o *Orchestrator) issueAgreesWithPath(ctx context.Context, c restoreCandidate, issue tracker.Issue) bool {
+	// **比べる相手はコードのリポジトリである**（設計 issue144 の 8b）。
+	// 置き場所の2・3階層目には、issue のリポジトリではなくコードのリポジトリが入る。
+	codeOwner, codeRepo := codeOwnerRepoOf(issue)
+	if strings.EqualFold(codeOwner, c.Owner) && strings.EqualFold(codeRepo, c.Repo) {
+		o.clearRepoIssue(issue.Identifier, RepoNoticeCodeRepoMismatch)
 		return true
 	}
-	o.logger.Warn("取り直した issue が worktree の置き場所と違うリポジトリなので何もしません（pane も worktree も残します）",
-		"path", c.Path,
-		"置き場所", c.Owner+"/"+c.Repo,
-		"取り直した issue", issue.Identifier,
-		"project_item_id", c.Identity.ProjectItemID)
+	// **候補から外すだけで、worktree も branch も1バイトも消さない。**
+	// **それでも issue へ書く**（設計 issue144 の 11f）。Status が動かないので、
+	// 書かないとその issue は永久に着手されないまま、画面のどこにも理由が出ない。
+	o.noteCodeRepoMismatch(ctx, issue, c.Path, c.Owner+"/"+c.Repo)
 	return false
 }
 
@@ -662,7 +741,7 @@ func (o *Orchestrator) decideOne(
 	// **取り直した issue が置き場所と同じリポジトリのものかを確かめる**（設計 3-22）。
 	// 身元ファイルの `project_item_id` だけを別 issue のものへ差し替えられた場合、
 	// ここで止めないと**無関係の issue の pane を閉じ、Status を動かすことになる。**
-	if !o.issueAgreesWithPath(c, issue) {
+	if !o.issueAgreesWithPath(ctx, c, issue) {
 		return adoption{}, false
 	}
 
@@ -842,7 +921,7 @@ func (o *Orchestrator) restoreWithoutPane(
 		return
 	}
 	// **取り直した issue が置き場所と同じリポジトリのものかを確かめる**（設計 3-22）。
-	if !o.issueAgreesWithPath(c, issue) {
+	if !o.issueAgreesWithPath(ctx, c, issue) {
 		return
 	}
 
@@ -1049,7 +1128,9 @@ func containsString(values []string, target string) bool {
 // 1件でもあった場合のエラー。**それ以外は nil である**（置き場所を走査できない場合も
 // 警告を出して起動を続ける）。
 func (o *Orchestrator) handleBrokenWorktrees(ctx context.Context) error {
-	broken, err := o.ws.ScanBroken()
+	// **1回目は手掛かり無しで走査する。**pane を引くのは、壊れた worktree が
+	// 1件でもあったときだけにしたい（herdr への呼び出しを平常時に増やさない）。
+	broken, err := o.ws.ScanBroken(nil)
 	if err != nil {
 		o.logger.Warn("置き場所を走査できないので、壊れた worktree の検査を行いません（起動は続けます）",
 			"error", err)
@@ -1062,6 +1143,16 @@ func (o *Orchestrator) handleBrokenWorktrees(ctx context.Context) error {
 	// **pane を引くのは、壊れた worktree が1件でもあったときだけである。**
 	// herdr への呼び出しを1回増やすので、平常時は1回も呼ばない。
 	panes, agents := o.panesByCwd(ctx)
+
+	// **2回目は pane の label を手掛かりに走査し直す**（設計 issue144 の 8c）。
+	// 置き場所の2・3階層目はコードのリポジトリなので、
+	// **issue が別のリポジトリにある worktree は、label が無いと番号を切り出せない。**
+	if rescanned, rescanErr := o.ws.ScanBroken(paneIssueHint(panes)); rescanErr == nil {
+		broken = rescanned
+	} else {
+		o.logger.Warn("pane の label を手掛かりにした走査に失敗しました（手掛かり無しの結果を使います）",
+			"error", rescanErr)
+	}
 
 	var stillBroken []workspace.BrokenWorktree
 	for _, b := range broken {
@@ -1184,8 +1275,11 @@ func (o *Orchestrator) recoverIdentity(
 	}
 	pane := panes[resolveOrCleanPath(b.Path)]
 
-	for _, number := range recoveryNumbers(b, pane) {
-		identifier := fmt.Sprintf("%s/%s#%d", b.Clue.Owner, b.Clue.Repo, number)
+	for _, clue := range recoveryClues(b, pane) {
+		// **identifier は issue の owner/repo から組み立てる**（設計 issue144 の 8c）。
+		// 置き場所の2・3階層目はコードのリポジトリなので、そこから組むと
+		// **実在しない issue を引きに行く。**
+		identifier := clue.Identifier()
 		issue, found, err := o.tracker.FetchIssueByIdentifier(ctx, identifier)
 		if err != nil {
 			o.logger.Warn("復元のために issue を引けませんでした（消しません）",
@@ -1206,7 +1300,8 @@ func (o *Orchestrator) recoverIdentity(
 		return false
 	}
 	o.logger.Warn("手掛かりから issue を確かめられないので復元できません（消しません）",
-		"path", b.Path, "置き場所", b.Clue.Owner+"/"+b.Clue.Repo, "スラグ", b.Clue.Slug)
+		"path", b.Path, "置き場所", b.Clue.Owner+"/"+b.Clue.Repo, "スラグ", b.Clue.Slug,
+		"pane の label", pane.Label)
 	return false
 }
 
@@ -1278,24 +1373,48 @@ func (o *Orchestrator) writeRecoveredIdentity(
 	return true
 }
 
-// recoveryNumbers は復元で試す issue の番号を、手掛かりの強い順に並べる（設計 3-49）。
+// recoveryClues は復元で試す issue を、手掛かりの強い順に並べる（設計 3-49）。
 //
 // **置き場所のパスが先である。**パスは封じ込め検査（3-20）を通っており、
 // エージェントには書き換えられない。pane の label は herdr の CLI から書き換えられる
 // ので、**パスから切り出せなかったときの補いとしてだけ使う。**
 //
+// **番号だけでなく owner/repo も持つ**（設計 issue144 の 8c）。置き場所の2・3階層目は
+// **コードのリポジトリ**なので、**そこから identifier を組み立てると
+// 実在しない issue を引きに行く。**
+//
 // b: 身元を確かめられない worktree。
 // pane: その worktree を cwd に持つ pane（無ければゼロ値）。
-// 戻り値: 試す番号（重複は除く）。
-func recoveryNumbers(b workspace.BrokenWorktree, pane herdr.Pane) []int {
-	var numbers []int
-	if b.Clue != nil && b.Clue.Number > 0 {
-		numbers = append(numbers, b.Clue.Number)
+// 戻り値: 試す issue（重複は除く）。**手掛かりが1つも無ければ空である。**
+func recoveryClues(b workspace.BrokenWorktree, pane herdr.Pane) []paneIssueClue {
+	var clues []paneIssueClue
+	if b.Clue != nil && b.Clue.Number > 0 && b.Clue.IssueOwner != "" && b.Clue.IssueRepo != "" {
+		clues = append(clues, paneIssueClue{
+			Owner: b.Clue.IssueOwner, Repo: b.Clue.IssueRepo, Number: b.Clue.Number,
+		})
 	}
-	if n, ok := issueNumberFromPaneLabel(pane.Label); ok && !containsInt(numbers, n) {
-		numbers = append(numbers, n)
+	if c, ok := issueClueFromPaneLabel(pane.Label); ok && !containsClue(clues, c) {
+		clues = append(clues, c)
 	}
-	return numbers
+	return clues
+}
+
+// containsClue は、手掛かりの並びに同じものが入っているかを返す。
+//
+// **owner と repo は大文字小文字を無視して比べる**（GitHub が区別しないため）。
+//
+// clues: 探す先。
+// target: 探す値。
+// 戻り値: 入っていれば true。
+func containsClue(clues []paneIssueClue, target paneIssueClue) bool {
+	for _, c := range clues {
+		if c.Number == target.Number &&
+			strings.EqualFold(c.Owner, target.Owner) &&
+			strings.EqualFold(c.Repo, target.Repo) {
+			return true
+		}
+	}
+	return false
 }
 
 // slugAgrees は、引き直した issue から作り直したスラグが、目の前のディレクトリ名と
@@ -1308,9 +1427,13 @@ func recoveryNumbers(b workspace.BrokenWorktree, pane herdr.Pane) []int {
 // issue: 引き直した issue。
 // 戻り値: 一致すれば true。
 func (o *Orchestrator) slugAgrees(b workspace.BrokenWorktree, issue tracker.Issue) bool {
-	if !strings.EqualFold(issue.Owner, b.Clue.Owner) || !strings.EqualFold(issue.Repo, b.Clue.Repo) {
-		o.logger.Warn("引き直した issue が置き場所と違うリポジトリなので復元しません（消しません）",
-			"path", b.Path, "置き場所", b.Clue.Owner+"/"+b.Clue.Repo, "引き直した issue", issue.Identifier)
+	// **比べる相手はコードのリポジトリである**（設計 issue144 の 8c）。
+	// 置き場所の2・3階層目には、issue のリポジトリではなくコードのリポジトリが入る。
+	codeOwner, codeRepo := codeOwnerRepoOf(issue)
+	if !strings.EqualFold(codeOwner, b.Clue.Owner) || !strings.EqualFold(codeRepo, b.Clue.Repo) {
+		o.logger.Warn("引き直した issue のコードのリポジトリが置き場所と違うので復元しません（消しません）",
+			"path", b.Path, "置き場所", b.Clue.Owner+"/"+b.Clue.Repo,
+			"コードのリポジトリ", codeOwner+"/"+codeRepo, "引き直した issue", issue.Identifier)
 		return false
 	}
 	slug, err := o.ws.ExpectedSlugFor(toIssueRef(issue))
@@ -1328,25 +1451,70 @@ func (o *Orchestrator) slugAgrees(b workspace.BrokenWorktree, issue tracker.Issu
 	return true
 }
 
-// issueNumberFromPaneLabel は pane の label（`owner/repo/issues/N`。設計 3-3）から
-// issue の番号を取り出す。
+// issueClueFromPaneLabel は pane の label（`owner/repo/issues/N`。設計 3-3）から
+// issue の owner・repo・番号を取り出す。
 //
 // **herdr.IssueLabel の逆である。**label は herdr の CLI から誰でも書き換えられるので、
-// **ここで取れた番号は候補にすぎない**（slugAgrees が裏を取る）。
+// **ここで取れた値は候補にすぎない**（slugAgrees が裏を取る）。
+//
+// **番号だけでなく owner/repo も返す**（設計 issue144 の 8c）。置き場所の2・3階層目は
+// **コードのリポジトリ**なので、そこから identifier を組み立てると
+// **実在しない issue を引きに行く。**label は issue の側の名前を持っている。
 //
 // label: pane の label。
-// 戻り値の1つ目: issue の番号。
-// 戻り値の2つ目: 形が合って正の整数として読めたら true。
-func issueNumberFromPaneLabel(label string) (int, bool) {
+// 戻り値の1つ目: issue の owner・repo・番号。
+// 戻り値の2つ目: 形が合って番号が正の整数として読めたら true。
+func issueClueFromPaneLabel(label string) (paneIssueClue, bool) {
 	parts := strings.Split(strings.TrimSpace(label), "/")
 	if len(parts) != 4 || parts[2] != "issues" {
-		return 0, false
+		return paneIssueClue{}, false
+	}
+	if parts[0] == "" || parts[1] == "" {
+		return paneIssueClue{}, false
 	}
 	number, err := strconv.Atoi(parts[3])
 	if err != nil || number <= 0 {
-		return 0, false
+		return paneIssueClue{}, false
 	}
-	return number, true
+	return paneIssueClue{Owner: parts[0], Repo: parts[1], Number: number}, true
+}
+
+// paneIssueClue は pane の label から取れた issue の手掛かりである（設計 issue144 の 8c）。
+type paneIssueClue struct {
+	// Owner は issue のリポジトリの所有者名である。
+	Owner string
+	// Repo は issue のリポジトリ名である。
+	Repo string
+	// Number は issue の番号である。
+	Number int
+}
+
+// Identifier は `<owner>/<repo>#<番号>` を返す。
+//
+// 戻り値: issue の識別子。
+func (c paneIssueClue) Identifier() string {
+	return fmt.Sprintf("%s/%s#%d", c.Owner, c.Repo, c.Number)
+}
+
+// paneIssueHint は、pane の label から issue の owner/repo を答える関数を作る
+// （設計 issue144 の 8c）。
+//
+// **workspace は herdr を知らない**ので、走査に手掛かりを渡すのはこちらの仕事である。
+//
+// panes: 解決済みの cwd から引く pane。
+// 戻り値: workspace の走査へ渡す関数。
+func paneIssueHint(panes map[string]herdr.Pane) workspace.IssueHintFunc {
+	return func(worktreePath string) (string, string) {
+		pane, ok := panes[resolveOrCleanPath(worktreePath)]
+		if !ok {
+			return "", ""
+		}
+		clue, ok := issueClueFromPaneLabel(pane.Label)
+		if !ok {
+			return "", ""
+		}
+		return clue.Owner, clue.Repo
+	}
 }
 
 // containsInt は整数の並びに値が入っているかを返す。

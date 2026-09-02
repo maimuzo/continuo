@@ -274,7 +274,9 @@ func brokenWorktreeResult(opts Options, cfg loadedConfig, root string) Result {
 		ok.Notes = append(ok.Notes, i18n.T(i18n.KeyDoctorWorkspaceRootBrokenScanFailed, root, err))
 		return ok
 	}
-	broken, err := manager.ScanBroken()
+	// **doctor は herdr を引かないので、pane の label を手掛かりにできない**
+	// （設計 issue144 の 8c）。番号を切り出せなければ、その worktree は数えない。
+	broken, err := manager.ScanBroken(nil)
 	if err != nil {
 		ok.Notes = append(ok.Notes, i18n.T(i18n.KeyDoctorWorkspaceRootBrokenScanFailed, root, err))
 		return ok

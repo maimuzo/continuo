@@ -61,7 +61,28 @@ type PathClue struct {
 	// Number はスラグから切り出せた issue の番号である。
 	// **切り出せなければ 0 である**（`branch_template` の形と合わなかった）。
 	Number int
+	// IssueOwner は、Number を切り出せたときに使った issue の所有者名である。
+	//
+	// **Owner とは別物である。**Owner は置き場所の2階層目、つまり
+	// **コードのリポジトリ**の所有者名であり、issue のリポジトリとは限らない
+	// （設計 issue144 の 8）。**Number が 0 なら空文字である。**
+	IssueOwner string
+	// IssueRepo は、Number を切り出せたときに使った issue のリポジトリ名である。
+	// **Number が 0 なら空文字である。**
+	IssueRepo string
 }
+
+// IssueHintFunc は、worktree のパスから「その worktree はどの issue のものか」を答える。
+//
+// **置き場所からは引けないので、外から渡してもらう**（設計 issue144 の 8c）。
+// 置き場所の2・3階層目はコードのリポジトリなので、
+// **issue のリポジトリとコードのリポジトリが違う形では、そこから issue を組み立てられない。**
+// いま手掛かりになるのは pane の label（`<owner>/<repo>/issues/<番号>`。3-3）だけである。
+//
+// worktreePath: worktree の絶対パス。
+// 戻り値の1つ目: issue のリポジトリの所有者名。**分からなければ空文字。**
+// 戻り値の2つ目: issue のリポジトリ名。**分からなければ空文字。**
+type IssueHintFunc func(worktreePath string) (string, string)
 
 // IssueURL は手掛かりから組み立てた issue の URL を返す。
 //
@@ -71,10 +92,16 @@ type PathClue struct {
 // 戻り値: `https://<host>/<owner>/<repo>/issues/<番号>`。
 // **番号を切り出せていなければ空文字である。**
 func (c *PathClue) IssueURL() string {
-	if c == nil || c.Number <= 0 || c.Host == "" || c.Owner == "" || c.Repo == "" {
+	if c == nil || c.Number <= 0 || c.Host == "" || c.IssueOwner == "" || c.IssueRepo == "" {
 		return ""
 	}
-	return fmt.Sprintf("https://%s/%s/%s/issues/%d", c.Host, c.Owner, c.Repo, c.Number)
+	// **置き場所の owner/repo が issue のものだと言えないなら、URL を組み立てない**
+	// （設計 issue144 の 8c）。置き場所の1階層目はコードのリポジトリのホストなので、
+	// **issue が別のリポジトリにある形でここを埋めると、実在しない issue を名乗る。**
+	if !strings.EqualFold(c.IssueOwner, c.Owner) || !strings.EqualFold(c.IssueRepo, c.Repo) {
+		return ""
+	}
+	return fmt.Sprintf("https://%s/%s/%s/issues/%d", c.Host, c.IssueOwner, c.IssueRepo, c.Number)
 }
 
 // Identifier は手掛かりから組み立てた `<owner>/<repo>#<番号>` を返す。
@@ -83,10 +110,13 @@ func (c *PathClue) IssueURL() string {
 //
 // 戻り値: `<owner>/<repo>#<番号>`。**番号を切り出せていなければ空文字である。**
 func (c *PathClue) Identifier() string {
-	if c == nil || c.Number <= 0 || c.Owner == "" || c.Repo == "" {
+	if c == nil || c.Number <= 0 || c.IssueOwner == "" || c.IssueRepo == "" {
 		return ""
 	}
-	return fmt.Sprintf("%s/%s#%d", c.Owner, c.Repo, c.Number)
+	// **置き場所の owner/repo ではなく、番号を切り出せたときの issue の owner/repo を使う**
+	// （設計 issue144 の 8c）。置き場所の2・3階層目はコードのリポジトリなので、
+	// **そこから組み立てると実在しない issue を引きに行く。**
+	return fmt.Sprintf("%s/%s#%d", c.IssueOwner, c.IssueRepo, c.Number)
 }
 
 // BrokenWorktree は、身元を確かめられない worktree 1件である（設計 3-49）。
@@ -149,7 +179,10 @@ func (b BrokenWorktree) NextSteps() []string {
 // worktreePath: 対象の worktree の絶対パス。
 // 戻り値: 人間が上から順に実行できる3行。**手掛かりを引けなくても3行返る。**
 func (m *Manager) BrokenWorktreeGuidance(worktreePath string) []string {
-	clue, err := m.PathClueOf(worktreePath)
+	// **pane を持たないので、issue の手掛かりは渡せない**（設計 issue144 の 8c）。
+	// 置き場所の owner/repo で番号を切り出せなければ `Number` は 0 のままになり、
+	// 「URL を捏造しない」分岐（NextSteps）へそのまま落ちる。
+	clue, err := m.PathClueOf(worktreePath, "", "")
 	if err != nil {
 		return NextSteps(worktreePath, "")
 	}
@@ -167,10 +200,22 @@ func (m *Manager) BrokenWorktreeGuidance(worktreePath string) []string {
 // **取れた issue から作り直したスラグが元のディレクトリ名と一致すること**を
 // 必ず確かめること（ExpectedSlugFor）。
 //
+// **番号を切り出すには issue の owner/repo が先に要る。**スラグは issue から作られるが、
+// 置き場所の2・3階層目は**コードのリポジトリ**である（設計 issue144 の 8）。
+// 2つが違う形（issue が private、コードが public の fork）では突き合わせが必ず外れる。
+// **だから pane の label から取った issue の owner/repo を渡してもらう。**
+//
+// **渡されなければ、置き場所の owner/repo で試す。**コードのリポジトリが
+// issue のリポジトリと同じなら（＝リンクを張っていない、いままでどおりの worktree なら）
+// それが正しい値である。**違えば突き合わせが外れて `Number` が 0 になるだけで、
+// 間違った番号を切り出すことはない**（スラグの固定部分が一致しない）。
+//
 // worktreePath: worktree の絶対パス（置き場所の内側であること）。
+// issueOwner: pane の label から取った issue の所有者名。**分からなければ空文字。**
+// issueRepo: pane の label から取った issue のリポジトリ名。**分からなければ空文字。**
 // 戻り値の1つ目: 手掛かり。**番号を切り出せなければ Number は 0 である。**
 // 戻り値の2つ目: 置き場所の規則に合わない場合のエラー。
-func (m *Manager) PathClueOf(worktreePath string) (*PathClue, error) {
+func (m *Manager) PathClueOf(worktreePath, issueOwner, issueRepo string) (*PathClue, error) {
 	rel, err := filepath.Rel(filepath.Clean(m.resolvedRoot), filepath.Clean(worktreePath))
 	if err != nil {
 		return nil, i18n.Errorf(
@@ -182,8 +227,17 @@ func (m *Manager) PathClueOf(worktreePath string) (*PathClue, error) {
 			i18n.KeyWorkspaceOwnerRepoFromWorktreePathLayoutMismatch, worktreePath)
 	}
 	clue := &PathClue{Host: parts[0], Owner: parts[1], Repo: parts[2], Slug: parts[3]}
+	tryOwner, tryRepo := issueOwner, issueRepo
+	if tryOwner == "" || tryRepo == "" {
+		tryOwner, tryRepo = clue.Owner, clue.Repo
+	}
 	clue.Number = issueNumberFromSlug(
-		m.cfg.Herdr.Worktree.BranchTemplate, clue.Owner, clue.Repo, clue.Slug)
+		m.cfg.Herdr.Worktree.BranchTemplate, tryOwner, tryRepo, clue.Slug)
+	if clue.Number > 0 {
+		// **番号を切り出せたということは、この owner/repo でスラグが再現できたということである。**
+		// だから `Identifier()` はこの2つで組み立ててよい。
+		clue.IssueOwner, clue.IssueRepo = tryOwner, tryRepo
+	}
 	return clue, nil
 }
 
@@ -243,9 +297,11 @@ func issueNumberFromSlug(branchTemplate, owner, repo, slug string) int {
 //
 // **1件も消さない。**この関数は読むだけである。
 //
+// hint: worktree のパスから issue の owner/repo を答える関数（設計 issue144 の 8c）。
+// **nil でもよい。**そのときは置き場所の owner/repo で番号を切り出す。
 // 戻り値の1つ目: 身元を確かめられない worktree（パスの昇順）。
 // 戻り値の2つ目: 置き場所そのものを読めない場合のエラー。
-func (m *Manager) ScanBroken() ([]BrokenWorktree, error) {
+func (m *Manager) ScanBroken(hint IssueHintFunc) ([]BrokenWorktree, error) {
 	dirs, err := m.scanLevel(m.resolvedRoot, scanDepth)
 	if err != nil {
 		return nil, err
@@ -257,7 +313,11 @@ func (m *Manager) ScanBroken() ([]BrokenWorktree, error) {
 		if readErr == nil {
 			continue
 		}
-		clue, clueErr := m.PathClueOf(dir)
+		hintOwner, hintRepo := "", ""
+		if hint != nil {
+			hintOwner, hintRepo = hint(dir)
+		}
+		clue, clueErr := m.PathClueOf(dir, hintOwner, hintRepo)
 		if clueErr != nil {
 			clue = nil
 		}

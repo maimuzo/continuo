@@ -197,6 +197,13 @@ func validate(cfg *Config) error {
 		)
 	}
 
+	// **0 も負も断る**（設計 issue144 の 10b）。0 を許すと、その場で締め切られた
+	// コンテキストで fetch を叩くことになり、**リンクされた branch を base に使う形が
+	// 「回線か認証を直してください」で必ず落ちる。**
+	if cfg.Workspace.FetchTimeoutMs <= 0 {
+		return invalidValueError("workspace.fetch_timeout_ms", cfg.Workspace.FetchTimeoutMs, "0より大きい整数にすること")
+	}
+
 	if cfg.Agent.MaxConcurrentAgents <= 0 {
 		return invalidValueError("agent.max_concurrent_agents", cfg.Agent.MaxConcurrentAgents, "0より大きい整数にすること")
 	}

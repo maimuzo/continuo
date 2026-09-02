@@ -34,7 +34,7 @@ func TestScanBroken_身元ファイルを読めないworktreeを数える(t *tes
 	dir := filepath.Join(root, "github.com", "octocat", "hello-world", "continuo-octocat-hello-world-188")
 	putIdentityFile(t, dir, "{壊れている")
 
-	found, err := fx.Manager.ScanBroken()
+	found, err := fx.Manager.ScanBroken(nil)
 	if err != nil {
 		t.Fatalf("ScanBroken に失敗した: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestScanBroken_置き場所の命名に一致するものだけを数える
 	makeDir(t, continuoLike)
 	makeDir(t, human)
 
-	found, err := fx.Manager.ScanBroken()
+	found, err := fx.Manager.ScanBroken(nil)
 	if err != nil {
 		t.Fatalf("ScanBroken に失敗した: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestPathClueOf_置き場所からissueの番号を切り出す(t *testing.T
 	dir := filepath.Join(root, "github.com", "octocat", "hello-world",
 		"continuo-octocat-hello-world-188")
 
-	clue, err := fx.Manager.PathClueOf(dir)
+	clue, err := fx.Manager.PathClueOf(dir, "", "")
 	if err != nil {
 		t.Fatalf("PathClueOf に失敗した: %v", err)
 	}

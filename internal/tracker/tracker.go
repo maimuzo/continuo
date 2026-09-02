@@ -35,6 +35,16 @@ import (
 // 戻り値: 信頼登録されていれば true。
 type RepoTrustFunc func(owner, repo string) bool
 
+// LinkedBranchRef は GitHub の "Development" でリンクされた branch 1本である。
+//
+// **人間へ見せる文面のためだけに持つ**（どのリポジトリのどの branch がリンクされているか）。
+type LinkedBranchRef struct {
+	// NameWithOwner はその branch が在るリポジトリである（`<owner>/<repo>`）。
+	NameWithOwner string
+	// Branch は branch の名前である（`origin/` は付かない生の名前）。
+	Branch string
+}
+
 // BlockerRef は issue をブロックしている別の issue のベストエフォートな参照である
 // （SPEC.md 4.1.1 の blocked_by）。**アダプタが独自のブロック関係の意味づけを作ってはならない**
 // （SPEC.md 11.3: "adapters MUST NOT invent blocker semantics they cannot represent reliably")。
@@ -180,9 +190,38 @@ type Issue struct {
 	// **ログと issue のコメントに出すためだけに持つ。**判定には使わない。取れなければ空文字。
 	StatusChangedBy string
 	// BranchName はトラッカーが返す branch のメタデータである（SPEC.md 4.1.1 の branch_name）。
-	// OPTIONAL。GitHub の "Development" 機能でリンクされた branch があれば、その1本目の名前。
-	// 無ければ nil。
+	// OPTIONAL。GitHub の "Development" 機能でリンクされた branch の名前。
+	//
+	// **リンクがちょうど1本のときだけ埋まる。**0本と2本以上では nil である。
+	// 2本以上で1本目を残すと、「リンクを base に使わない」と決めた場合でも
+	// プロンプトの `.push_branch` にその1本目が載り、
+	// **エージェントが押し付けられた branch へ push する。**
 	BranchName *string
+	// CodeRepoNameWithOwner はコードのリポジトリである（`<owner>/<repo>` の1本の文字列）。
+	//
+	// **issue のリポジトリとは限らない。**issue が private のリポジトリに在り、
+	// コードが public の fork に在る形を、Development のリンクで表せる。
+	// **リンクが0本なら issue のリポジトリと同じ値が入る。空にはしない。**
+	CodeRepoNameWithOwner string
+	// CodeRepoHost はコードのリポジトリの URL のホスト部である。
+	// **リンクが0本なら issue の URL のホスト部と同じ値が入る。空にはしない。**
+	CodeRepoHost string
+	// CodeRepoDefaultBranch はコードのリポジトリの既定 branch である。取れなければ空。
+	CodeRepoDefaultBranch string
+	// PRTarget は PR の宛先である（fork なら派生元。`<owner>/<repo>`）。
+	// **fork でなければ CodeRepoNameWithOwner と同じ値が入る。**
+	PRTarget string
+	// LinkedBranches は Development でリンクされた branch の一覧である。
+	//
+	// **人間へ見せる文面のためだけに持つ。**判断には使わない
+	// （判断に使うのは上の4つと CodeRepoUndecided である）。
+	LinkedBranches []LinkedBranchRef
+	// CodeRepoUndecided は、リンクからコードのリポジトリを1つに決められなかったことを表す。
+	//
+	// **真なら着手しない。**別々のリポジトリの branch が2本以上リンクされているか、
+	// 窓（`linkedBranches(first: 5)`）に収まらない本数がリンクされている。
+	// **勝手にどちらかを選ぶと、別のリポジトリで作業を始めてしまう。**
+	CodeRepoUndecided bool
 	// URL は issue の URL である（SPEC.md 4.1.1 の url）。draft issue は URL を持たないため nil。
 	URL *string
 	// AssigneeID は担当者の ID である（SPEC.md 4.1.1 の assignee_id）。

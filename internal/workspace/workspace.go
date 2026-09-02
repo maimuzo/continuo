@@ -253,4 +253,45 @@ type IssueRef struct {
 	// （herdr.worktree.base が null のときの base。3-22 の段4。
 	// 「orchestrator は NativeRef の中身を解釈しない」の唯一の例外がここである）。
 	NativeRef map[string]any
+	// CodeOwner はコードのリポジトリの所有者名である（**所有者名だけ**）。
+	//
+	// **issue のリポジトリとは限らない。**issue が private のリポジトリに在り、
+	// コードが public の fork に在る形があるためである。**空なら Owner を使う。**
+	CodeOwner string
+	// CodeRepo はコードのリポジトリ名である（**リポジトリ名だけ。`<owner>/<repo>` ではない**）。
+	// **空なら Repo を使う。**
+	CodeRepo string
+	// CodeHost はコードのリポジトリの URL のホスト部である。
+	// **空なら issue の URL から取る。**
+	CodeHost string
+	// LinkedBranch は base に使うリンクされた branch の名前である（`origin/` は付かない）。
+	// **無ければ空。**
+	LinkedBranch string
+	// CodeDefaultBranch はコードのリポジトリの既定 branch である。**無ければ空。**
+	CodeDefaultBranch string
+}
+
+// CodeOwnerRepo は、置き場所と clone を引くのに使う `<owner>` と `<repo>` を返す。
+//
+// **リンクが0本のときは issue のリポジトリと同じ値になる**ので、
+// **既存の worktree は1つも動かない。**
+//
+// 戻り値の1つ目: コードのリポジトリの所有者名。
+// 戻り値の2つ目: コードのリポジトリ名。
+func (r IssueRef) CodeOwnerRepo() (string, string) {
+	owner, repo := r.CodeOwner, r.CodeRepo
+	if owner == "" || repo == "" {
+		return r.Owner, r.Repo
+	}
+	return owner, repo
+}
+
+// CodeHostOrIssueHost は、置き場所の1階層目に使うホスト名を返す。
+//
+// 戻り値: コードのリポジトリのホスト名。**取れなければ issue の URL のホスト部。**
+func (r IssueRef) CodeHostOrIssueHost() string {
+	if r.CodeHost != "" {
+		return r.CodeHost
+	}
+	return HostFromIssueURL(r.URL)
 }

@@ -2,6 +2,9 @@ package orchestrator_test
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -279,6 +282,45 @@ func rewriteIdentityItemID(t *testing.T, fx *fixture, worktreePath, itemID, iden
 	if err := fx.Workspace.WriteIdentity(context.Background(), worktreePath, *identity); err != nil {
 		t.Fatalf("身元ファイルを書けません: %v", err)
 	}
+}
+
+// putStrayWorktree は、置き場所の4階層目にディレクトリと身元ファイルを手で置く。
+//
+// **`Prepare` を使わない。**同じ issue の worktree を2つ作るには、
+// **2つ目を同じ branch でチェックアウトすることになり、git が断る**
+// （1つの branch を出せる worktree は1つだけである）。
+//
+// **ディレクトリ名は issue から作ったスラグにする。**復元の段2 は
+// 「身元ファイルが名乗る issue から作り直したスラグ」と突き合わせるので、
+// ここを変えると候補から外れて、この helper を使うテストが何も試せなくなる。
+//
+// **`WriteIdentity` も使わない。**git の登録が無いディレクトリでは
+// `info/exclude` への登録が失敗し、宣言していない WARN が1行出る。
+//
+// t: 呼び出し元のテスト。
+// fx: 出来合いの環境。
+// codeOwner: 置き場所の2階層目（コードのリポジトリの所有者名）。
+// codeRepo: 置き場所の3階層目（コードのリポジトリ名）。
+// slug: 置き場所の4階層目（issue から作ったスラグ）。
+// identity: 書き込む身元ファイルの中身。
+// 戻り値: 置いたディレクトリの絶対パス。
+func putStrayWorktree(
+	t *testing.T, fx *fixture, codeOwner, codeRepo, slug string, identity workspace.Identity,
+) string {
+	t.Helper()
+	dir := filepath.Join(fx.Workspace.ResolvedRoot(), "github.com", codeOwner, codeRepo, slug)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("テスト用のディレクトリを作れません: %v", err)
+	}
+	data, err := json.MarshalIndent(identity, "", "  ")
+	if err != nil {
+		t.Fatalf("身元ファイルを組み立てられません: %v", err)
+	}
+	path := filepath.Join(dir, fx.Workspace.IdentityFileName())
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("身元ファイルを書けません: %v", err)
+	}
+	return dir
 }
 
 // syncLog は排他つきのログの受け皿である。

@@ -18,6 +18,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/workspace"
 )
 
 // TestRestore_生きているpaneを引き継いで印と実行中の一覧へ入れ直す は、
@@ -387,6 +388,8 @@ func TestRestore_引き継いだ回数が上限ならturnを1回も送らずfail
 // （段2 の時点では誰が生きているかを知らない）。
 //
 // 与える情報: 同じ project item の ID を持つ worktree が2つ。
+// **2つ目は別のコードのリポジトリの下に置いてある**（置き場所の2・3階層目には
+// コードのリポジトリが入るので、同じ issue の worktree が2箇所に立ちうる）。
 // 片方は `created_at` が古く、両方に pane が付いている。
 //
 // 成功条件: 新しいほうを引き継ぎ、古いほうの pane だけを閉じる。
@@ -399,18 +402,23 @@ func TestRestore_同じissueのworktreeが2つあるとき新しいほうを採�
 	newer := prepareWorktree(t, fx, issue, identityOverride{
 		SessionUUID: "sess-new", CreatedAt: time.Now(),
 	})
-	// 古いほうは、別の issue 番号で worktree を作り、身元ファイルだけ同じ ID にする
+	// 古いほうは、**同じ issue のスラグのまま、別のコードのリポジトリの下**へ手で置く
 	// （「同じ issue の worktree が2つある」状態をディスクの上に作る）。
-	other := sampleIssue(999, "In Progress")
-	older := prepareWorktree(t, fx, other, identityOverride{
-		SessionUUID: "sess-old", CreatedAt: time.Now().Add(-2 * time.Hour),
-	})
-	rewriteIdentityItemID(t, fx, older.Path, issue.ID, issue.Identifier)
+	olderPath := putStrayWorktree(t, fx, "octocat", "other-code-repo",
+		filepath.Base(newer.Path), workspace.Identity{
+			IssueURL:        *issue.URL,
+			IssueIdentifier: issue.Identifier,
+			ProjectItemID:   issue.ID,
+			Branch:          newer.Branch,
+			SocketPath:      fx.SocketPath,
+			SessionUUID:     "sess-old",
+			CreatedAt:       time.Now().Add(-2 * time.Hour),
+		})
 
 	installPanes(fx,
 		livePane{PaneID: "p-new", Cwd: newer.Path, AgentName: "continuo-hello-world-188",
 			AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-new"},
-		livePane{PaneID: "p-old", Cwd: older.Path, AgentName: "continuo-hello-world-999",
+		livePane{PaneID: "p-old", Cwd: olderPath, AgentName: "continuo-hello-world-188-old",
 			AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-old"},
 	)
 
@@ -426,7 +434,7 @@ func TestRestore_同じissueのworktreeが2つあるとき新しいほうを採�
 	if indexOf(ids, "p-new") >= 0 {
 		t.Fatalf("採ったほうの pane まで閉じてしまった: %v", ids)
 	}
-	if _, err := os.Stat(older.Path); err != nil {
+	if _, err := os.Stat(olderPath); err != nil {
 		t.Fatalf("採らなかったほうの worktree を消してしまった: %v", err)
 	}
 }

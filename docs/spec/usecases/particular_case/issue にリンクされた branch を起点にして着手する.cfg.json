@@ -1,0 +1,904 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "issue にリンクされた branch を起点にして着手する",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/issue にリンクされた branch を起点にして着手する.rucm.md",
+    "rucm_block_sha256": "42b88ca971769021e58d2a33e0090a67df3b66989bdabd2998f9a3eb3478164c"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "worktree は置き場所にある。worktree が出している branch は continuo が決めた名前である。リンクが1本だった場合、worktree の中身はその branch の先端である。身元ファイルに base とリンクされた branch の名前がある。issue の Status は running_state である。エージェントは起動している。"
+    },
+    "リンクが別々のリポジトリ": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "worktree は作られていない。issue の Status は変わっていない。3回・60秒の条件を満たした場合、issue にリンクの一覧と直し方のコメントが1件ある。同じ起動のあいだ、同じ理由のコメントは増えない。"
+    },
+    "cloneが手元に無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          5
+        ]
+      },
+      "postcondition": "worktree は作られていない。リンクされた branch を取りに行っていない。"
+    },
+    "リンクされたbranchを取ってこられない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          7
+        ]
+      },
+      "postcondition": "worktree は作られていない。issue に実行したコマンドと git が言ったことのコメントがある。issue の Status は failure_state である。利用者が回線か認証を直して Status を戻せば、次の巡回でもう一度取りに行く。"
+    },
+    "設定のbaseが書いてある": {
+      "when": "設定の herdr.worktree.base に branch 名が書いてある場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            6
+          ]
+        }
+      ],
+      "postcondition": "base は設定に書かれた branch である。リンクされた branch を取りに行っていない。"
+    },
+    "既存worktreeの再利用": {
+      "when": "目的の置き場所に、目的の branch を出している worktree が既にある場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            12
+          ]
+        }
+      ],
+      "postcondition": "worktree は作り直されていない。身元ファイルに base がある。片付けの判定が base を使える。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "巡回タイマーはシステムに巡回の開始を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムはカンバンから着手待ちの issue を1件選ぶ。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは worktree の置き場所と branch 名を決める。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "IF リンクされた branch がちょうど1本である THEN"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT リンクされた branch のリモート追跡 ref を手元に用意できる。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは base をそのリンクされた branch のリモート追跡 ref に決める。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは base をコードのリポジトリの既定 branch に決める。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムは base から continuo の branch で worktree を切る。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "システムは身元ファイルに base とリンクされた branch の名前を書く。"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "システムはエージェントへ送るプロンプトにリンクされた branch の名前を入れる。"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 15,
+      "statement": "システムはエージェントを起動する。"
+    },
+    {
+      "id": "BASIC FLOW-16",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 16,
+      "statement": "システムは利用者に着手したことをログで応答する。"
+    },
+    {
+      "id": "リンクが別々のリポジトリ-1",
+      "type": "action",
+      "flow": "リンクが別々のリポジトリ",
+      "step": 1,
+      "statement": "システムは issue に着手しない。"
+    },
+    {
+      "id": "リンクが別々のリポジトリ-2",
+      "type": "action",
+      "flow": "リンクが別々のリポジトリ",
+      "step": 2,
+      "statement": "システムはカンバンの Status を書き換えない。"
+    },
+    {
+      "id": "リンクが別々のリポジトリ-3",
+      "type": "condition",
+      "flow": "リンクが別々のリポジトリ",
+      "step": 3,
+      "statement": "IF 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている THEN"
+    },
+    {
+      "id": "リンクが別々のリポジトリ-4",
+      "type": "action",
+      "flow": "リンクが別々のリポジトリ",
+      "step": 4,
+      "statement": "システムは issue にリンクの一覧と直し方を1件コメントする。"
+    },
+    {
+      "id": "リンクが別々のリポジトリ-6",
+      "type": "action",
+      "flow": "リンクが別々のリポジトリ",
+      "step": 6,
+      "statement": "システムは利用者に着手しない理由をログで応答する。"
+    },
+    {
+      "id": "リンクが別々のリポジトリ-7",
+      "type": "abort",
+      "flow": "リンクが別々のリポジトリ",
+      "step": 7,
+      "statement": "ABORT"
+    },
+    {
+      "id": "cloneが手元に無い-1",
+      "type": "action",
+      "flow": "cloneが手元に無い",
+      "step": 1,
+      "statement": "システムは worktree を作らない。"
+    },
+    {
+      "id": "cloneが手元に無い-2",
+      "type": "action",
+      "flow": "cloneが手元に無い",
+      "step": 2,
+      "statement": "システムは通信を1度も行わない。"
+    },
+    {
+      "id": "cloneが手元に無い-3",
+      "type": "action",
+      "flow": "cloneが手元に無い",
+      "step": 3,
+      "statement": "システムは利用者に clone を置くコマンドを応答する。"
+    },
+    {
+      "id": "cloneが手元に無い-4",
+      "type": "abort",
+      "flow": "cloneが手元に無い",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "リンクされたbranchを取ってこられない-1",
+      "type": "action",
+      "flow": "リンクされたbranchを取ってこられない",
+      "step": 1,
+      "statement": "システムはもう一度だけ取得を試みる。"
+    },
+    {
+      "id": "リンクされたbranchを取ってこられない-2",
+      "type": "action",
+      "flow": "リンクされたbranchを取ってこられない",
+      "step": 2,
+      "statement": "システムは worktree を作らない。"
+    },
+    {
+      "id": "リンクされたbranchを取ってこられない-3",
+      "type": "action",
+      "flow": "リンクされたbranchを取ってこられない",
+      "step": 3,
+      "statement": "システムは issue に、実行したコマンドと git が言ったことと直し方をコメントする。"
+    },
+    {
+      "id": "リンクされたbranchを取ってこられない-4",
+      "type": "action",
+      "flow": "リンクされたbranchを取ってこられない",
+      "step": 4,
+      "statement": "システムはカンバンの Status を failure_state に書き換える。"
+    },
+    {
+      "id": "リンクされたbranchを取ってこられない-5",
+      "type": "abort",
+      "flow": "リンクされたbranchを取ってこられない",
+      "step": 5,
+      "statement": "ABORT"
+    },
+    {
+      "id": "設定のbaseが書いてある-1",
+      "type": "action",
+      "flow": "設定のbaseが書いてある",
+      "step": 1,
+      "statement": "システムは base を設定に書かれた branch に決める。"
+    },
+    {
+      "id": "設定のbaseが書いてある-2",
+      "type": "action",
+      "flow": "設定のbaseが書いてある",
+      "step": 2,
+      "statement": "システムはリンクされた branch を取りに行かない。"
+    },
+    {
+      "id": "設定のbaseが書いてある-3",
+      "type": "resume",
+      "flow": "設定のbaseが書いてある",
+      "step": 3,
+      "statement": "RESUME STEP 12"
+    },
+    {
+      "id": "既存worktreeの再利用-1",
+      "type": "action",
+      "flow": "既存worktreeの再利用",
+      "step": 1,
+      "statement": "システムは worktree を作り直さない。"
+    },
+    {
+      "id": "既存worktreeの再利用-2",
+      "type": "action",
+      "flow": "既存worktreeの再利用",
+      "step": 2,
+      "statement": "システムは既にある身元ファイルを読む。"
+    },
+    {
+      "id": "既存worktreeの再利用-3",
+      "type": "action",
+      "flow": "既存worktreeの再利用",
+      "step": 3,
+      "statement": "システムは base を決め直す。"
+    },
+    {
+      "id": "既存worktreeの再利用-4",
+      "type": "resume",
+      "flow": "既存worktreeの再利用",
+      "step": 4,
+      "statement": "RESUME STEP 13"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "その issue にリンクされた branch が1つのリポジトリだけを指している"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "リンクが別々のリポジトリ-1",
+      "kind": "false",
+      "condition": "NOT その issue にリンクされた branch が1つのリポジトリだけを指している"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "コードのリポジトリの clone が手元にある"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "cloneが手元に無い-1",
+      "kind": "false",
+      "condition": "NOT コードのリポジトリの clone が手元にある"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "true",
+      "condition": "リンクされた branch がちょうど1本である"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-10",
+      "kind": "false",
+      "condition": "NOT リンクされた branch がちょうど1本である"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "設定のbaseが書いてある-1",
+      "kind": "global",
+      "condition": "設定の herdr.worktree.base に branch 名が書いてある場合"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "リンクされた branch のリモート追跡 ref を手元に用意できる"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "リンクされたbranchを取ってこられない-1",
+      "kind": "false",
+      "condition": "NOT リンクされた branch のリモート追跡 ref を手元に用意できる"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "既存worktreeの再利用-1",
+      "kind": "global",
+      "condition": "目的の置き場所に、目的の branch を出している worktree が既にある場合"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
+      "kind": "seq"
+    },
+    {
+      "from": "リンクが別々のリポジトリ-1",
+      "to": "リンクが別々のリポジトリ-2",
+      "kind": "seq"
+    },
+    {
+      "from": "リンクが別々のリポジトリ-2",
+      "to": "リンクが別々のリポジトリ-3",
+      "kind": "seq"
+    },
+    {
+      "from": "リンクが別々のリポジトリ-3",
+      "to": "リンクが別々のリポジトリ-4",
+      "kind": "true",
+      "condition": "同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている"
+    },
+    {
+      "from": "リンクが別々のリポジトリ-3",
+      "to": "リンクが別々のリポジトリ-6",
+      "kind": "false",
+      "condition": "NOT 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている"
+    },
+    {
+      "from": "リンクが別々のリポジトリ-4",
+      "to": "リンクが別々のリポジトリ-6",
+      "kind": "seq"
+    },
+    {
+      "from": "リンクが別々のリポジトリ-6",
+      "to": "リンクが別々のリポジトリ-7",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneが手元に無い-1",
+      "to": "cloneが手元に無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneが手元に無い-2",
+      "to": "cloneが手元に無い-3",
+      "kind": "seq"
+    },
+    {
+      "from": "cloneが手元に無い-3",
+      "to": "cloneが手元に無い-4",
+      "kind": "seq"
+    },
+    {
+      "from": "リンクされたbranchを取ってこられない-1",
+      "to": "リンクされたbranchを取ってこられない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "リンクされたbranchを取ってこられない-2",
+      "to": "リンクされたbranchを取ってこられない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "リンクされたbranchを取ってこられない-3",
+      "to": "リンクされたbranchを取ってこられない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "リンクされたbranchを取ってこられない-4",
+      "to": "リンクされたbranchを取ってこられない-5",
+      "kind": "seq"
+    },
+    {
+      "from": "設定のbaseが書いてある-1",
+      "to": "設定のbaseが書いてある-2",
+      "kind": "seq"
+    },
+    {
+      "from": "設定のbaseが書いてある-2",
+      "to": "設定のbaseが書いてある-3",
+      "kind": "seq"
+    },
+    {
+      "from": "設定のbaseが書いてある-3",
+      "to": "BASIC FLOW-12",
+      "kind": "resume"
+    },
+    {
+      "from": "既存worktreeの再利用-1",
+      "to": "既存worktreeの再利用-2",
+      "kind": "seq"
+    },
+    {
+      "from": "既存worktreeの再利用-2",
+      "to": "既存worktreeの再利用-3",
+      "kind": "seq"
+    },
+    {
+      "from": "既存worktreeの再利用-3",
+      "to": "既存worktreeの再利用-4",
+      "kind": "seq"
+    },
+    {
+      "from": "既存worktreeの再利用-4",
+      "to": "BASIC FLOW-13",
+      "kind": "resume"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所にある。worktree が出している branch は continuo が決めた名前である。リンクが1本だった場合、worktree の中身はその branch の先端である。身元ファイルに base とリンクされた branch の名前がある。issue の Status は running_state である。エージェントは起動している。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "システムは worktree の置き場所と branch 名を決める。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "IF リンクされた branch がちょうど1本である THEN",
+        "システムは VALIDATES THAT リンクされた branch のリモート追跡 ref を手元に用意できる。",
+        "システムは base をそのリンクされた branch のリモート追跡 ref に決める。",
+        "システムは base から continuo の branch で worktree を切る。",
+        "システムは身元ファイルに base とリンクされた branch の名前を書く。",
+        "システムはエージェントへ送るプロンプトにリンクされた branch の名前を入れる。",
+        "システムはエージェントを起動する。",
+        "システムは利用者に着手したことをログで応答する。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所にある。worktree が出している branch は continuo が決めた名前である。リンクが1本だった場合、worktree の中身はその branch の先端である。身元ファイルに base とリンクされた branch の名前がある。issue の Status は running_state である。エージェントは起動している。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-12",
+        "既存worktreeの再利用-1",
+        "既存worktreeの再利用-2",
+        "既存worktreeの再利用-3",
+        "既存worktreeの再利用-4",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "システムは worktree の置き場所と branch 名を決める。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "IF リンクされた branch がちょうど1本である THEN",
+        "システムは VALIDATES THAT リンクされた branch のリモート追跡 ref を手元に用意できる。",
+        "システムは base をそのリンクされた branch のリモート追跡 ref に決める。",
+        "システムは base から continuo の branch で worktree を切る。",
+        "CONDITION: 目的の置き場所に、目的の branch を出している worktree が既にある場合",
+        "システムは worktree を作り直さない。",
+        "システムは既にある身元ファイルを読む。",
+        "システムは base を決め直す。",
+        "RESUME STEP 13",
+        "システムは身元ファイルに base とリンクされた branch の名前を書く。",
+        "システムはエージェントへ送るプロンプトにリンクされた branch の名前を入れる。",
+        "システムはエージェントを起動する。",
+        "システムは利用者に着手したことをログで応答する。"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "リンクされたbranchを取ってこられない",
+      "postcondition": "worktree は作られていない。issue に実行したコマンドと git が言ったことのコメントがある。issue の Status は failure_state である。利用者が回線か認証を直して Status を戻せば、次の巡回でもう一度取りに行く。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "リンクされたbranchを取ってこられない-1",
+        "リンクされたbranchを取ってこられない-2",
+        "リンクされたbranchを取ってこられない-3",
+        "リンクされたbranchを取ってこられない-4",
+        "リンクされたbranchを取ってこられない-5"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "システムは worktree の置き場所と branch 名を決める。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "IF リンクされた branch がちょうど1本である THEN",
+        "システムは VALIDATES THAT リンクされた branch のリモート追跡 ref を手元に用意できる。",
+        "CONDITION: NOT リンクされた branch のリモート追跡 ref を手元に用意できる",
+        "システムはもう一度だけ取得を試みる。",
+        "システムは worktree を作らない。",
+        "システムは issue に、実行したコマンドと git が言ったことと直し方をコメントする。",
+        "システムはカンバンの Status を failure_state に書き換える。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所にある。worktree が出している branch は continuo が決めた名前である。リンクが1本だった場合、worktree の中身はその branch の先端である。身元ファイルに base とリンクされた branch の名前がある。issue の Status は running_state である。エージェントは起動している。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "システムは worktree の置き場所と branch 名を決める。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "IF リンクされた branch がちょうど1本である THEN",
+        "CONDITION: NOT リンクされた branch がちょうど1本である",
+        "システムは base をコードのリポジトリの既定 branch に決める。",
+        "システムは base から continuo の branch で worktree を切る。",
+        "システムは身元ファイルに base とリンクされた branch の名前を書く。",
+        "システムはエージェントへ送るプロンプトにリンクされた branch の名前を入れる。",
+        "システムはエージェントを起動する。",
+        "システムは利用者に着手したことをログで応答する。"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所にある。worktree が出している branch は continuo が決めた名前である。リンクが1本だった場合、worktree の中身はその branch の先端である。身元ファイルに base とリンクされた branch の名前がある。issue の Status は running_state である。エージェントは起動している。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-10",
+        "BASIC FLOW-12",
+        "既存worktreeの再利用-1",
+        "既存worktreeの再利用-2",
+        "既存worktreeの再利用-3",
+        "既存worktreeの再利用-4",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "システムは worktree の置き場所と branch 名を決める。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "IF リンクされた branch がちょうど1本である THEN",
+        "CONDITION: NOT リンクされた branch がちょうど1本である",
+        "システムは base をコードのリポジトリの既定 branch に決める。",
+        "システムは base から continuo の branch で worktree を切る。",
+        "CONDITION: 目的の置き場所に、目的の branch を出している worktree が既にある場合",
+        "システムは worktree を作り直さない。",
+        "システムは既にある身元ファイルを読む。",
+        "システムは base を決め直す。",
+        "RESUME STEP 13",
+        "システムは身元ファイルに base とリンクされた branch の名前を書く。",
+        "システムはエージェントへ送るプロンプトにリンクされた branch の名前を入れる。",
+        "システムはエージェントを起動する。",
+        "システムは利用者に着手したことをログで応答する。"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所にある。worktree が出している branch は continuo が決めた名前である。リンクが1本だった場合、worktree の中身はその branch の先端である。身元ファイルに base とリンクされた branch の名前がある。issue の Status は running_state である。エージェントは起動している。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "設定のbaseが書いてある-1",
+        "設定のbaseが書いてある-2",
+        "設定のbaseが書いてある-3",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "システムは worktree の置き場所と branch 名を決める。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "IF リンクされた branch がちょうど1本である THEN",
+        "CONDITION: 設定の herdr.worktree.base に branch 名が書いてある場合",
+        "システムは base を設定に書かれた branch に決める。",
+        "システムはリンクされた branch を取りに行かない。",
+        "RESUME STEP 12",
+        "システムは base から continuo の branch で worktree を切る。",
+        "システムは身元ファイルに base とリンクされた branch の名前を書く。",
+        "システムはエージェントへ送るプロンプトにリンクされた branch の名前を入れる。",
+        "システムはエージェントを起動する。",
+        "システムは利用者に着手したことをログで応答する。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所にある。worktree が出している branch は continuo が決めた名前である。リンクが1本だった場合、worktree の中身はその branch の先端である。身元ファイルに base とリンクされた branch の名前がある。issue の Status は running_state である。エージェントは起動している。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "設定のbaseが書いてある-1",
+        "設定のbaseが書いてある-2",
+        "設定のbaseが書いてある-3",
+        "BASIC FLOW-12",
+        "既存worktreeの再利用-1",
+        "既存worktreeの再利用-2",
+        "既存worktreeの再利用-3",
+        "既存worktreeの再利用-4",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15",
+        "BASIC FLOW-16"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "システムは worktree の置き場所と branch 名を決める。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "IF リンクされた branch がちょうど1本である THEN",
+        "CONDITION: 設定の herdr.worktree.base に branch 名が書いてある場合",
+        "システムは base を設定に書かれた branch に決める。",
+        "システムはリンクされた branch を取りに行かない。",
+        "RESUME STEP 12",
+        "システムは base から continuo の branch で worktree を切る。",
+        "CONDITION: 目的の置き場所に、目的の branch を出している worktree が既にある場合",
+        "システムは worktree を作り直さない。",
+        "システムは既にある身元ファイルを読む。",
+        "システムは base を決め直す。",
+        "RESUME STEP 13",
+        "システムは身元ファイルに base とリンクされた branch の名前を書く。",
+        "システムはエージェントへ送るプロンプトにリンクされた branch の名前を入れる。",
+        "システムはエージェントを起動する。",
+        "システムは利用者に着手したことをログで応答する。"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "cloneが手元に無い",
+      "postcondition": "worktree は作られていない。リンクされた branch を取りに行っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "cloneが手元に無い-1",
+        "cloneが手元に無い-2",
+        "cloneが手元に無い-3",
+        "cloneが手元に無い-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "システムは worktree の置き場所と branch 名を決める。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "CONDITION: NOT コードのリポジトリの clone が手元にある",
+        "システムは worktree を作らない。",
+        "システムは通信を1度も行わない。",
+        "システムは利用者に clone を置くコマンドを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "リンクが別々のリポジトリ",
+      "postcondition": "worktree は作られていない。issue の Status は変わっていない。3回・60秒の条件を満たした場合、issue にリンクの一覧と直し方のコメントが1件ある。同じ起動のあいだ、同じ理由のコメントは増えない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "リンクが別々のリポジトリ-1",
+        "リンクが別々のリポジトリ-2",
+        "リンクが別々のリポジトリ-3",
+        "リンクが別々のリポジトリ-4",
+        "リンクが別々のリポジトリ-6",
+        "リンクが別々のリポジトリ-7"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "CONDITION: NOT その issue にリンクされた branch が1つのリポジトリだけを指している",
+        "システムは issue に着手しない。",
+        "システムはカンバンの Status を書き換えない。",
+        "IF 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている THEN",
+        "システムは issue にリンクの一覧と直し方を1件コメントする。",
+        "システムは利用者に着手しない理由をログで応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P010",
+      "terminal": "abort",
+      "terminal_flow": "リンクが別々のリポジトリ",
+      "postcondition": "worktree は作られていない。issue の Status は変わっていない。3回・60秒の条件を満たした場合、issue にリンクの一覧と直し方のコメントが1件ある。同じ起動のあいだ、同じ理由のコメントは増えない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "リンクが別々のリポジトリ-1",
+        "リンクが別々のリポジトリ-2",
+        "リンクが別々のリポジトリ-3",
+        "リンクが別々のリポジトリ-6",
+        "リンクが別々のリポジトリ-7"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムは VALIDATES THAT その issue にリンクされた branch が1つのリポジトリだけを指している。",
+        "CONDITION: NOT その issue にリンクされた branch が1つのリポジトリだけを指している",
+        "システムは issue に着手しない。",
+        "システムはカンバンの Status を書き換えない。",
+        "IF 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている THEN",
+        "CONDITION: NOT 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている",
+        "システムは利用者に着手しない理由をログで応答する。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 36,
+    "nodes_covered": 36,
+    "edges_total": 39,
+    "edges_covered": 39
+  }
+}

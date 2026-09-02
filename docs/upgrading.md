@@ -70,6 +70,80 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.1.12 から v0.1.13 へ
+
+**設定のキーが1つ増えました**（`workspace.fetch_timeout_ms`）。
+**本文（front matter より下）に足すものが2つあります。**
+
+### issue にリンクした branch から作業を始められるようになりました
+
+**GitHub の issue 画面の Development で branch をリンクしておくと、
+continuo はその branch を base にして worktree を切ります。**
+
+**worktree が出す branch は今までどおり `continuo/<owner>/<repo>/<番号>` のままです。**
+**リンクした branch は「どこから始めるか」であって「どこへ push するか」ではありません。**
+push 先の既定は今までどおり `git push -u origin HEAD` です。
+
+**リンクを張っていない issue の動きは1文字も変わりません。**
+
+| リンクの本数 | どうなるか |
+| --- | --- |
+| **0本** | 今までどおり。設定の `herdr.worktree.base`、無ければカンバンが返す既定 branch |
+| **1本** | **その branch を base にする**（`origin/<名前>`） |
+| **2本以上・同じリポジトリ** | リンクを base に使わない。そのリポジトリの既定 branch |
+| **2本以上・別々のリポジトリ** | **着手しません。**Status も worktree も1バイトも書き換えず、issue へ1回だけ書きます |
+
+**リンクした branch が手元に無ければ、continuo が1本だけ取ってきます。**
+そのときの上限が新しい設定です。**書かなくても 30000（30秒）で動きます。**
+
+```yaml
+workspace:
+  fetch_timeout_ms: 30000
+```
+
+**取ってこられなかった issue は失敗として扱い、理由を issue へ書きます。**
+回線か認証を直してから、Status を着手待ちへ戻してください。
+
+### issue と、直すコードが別のリポジトリにあってもよくなりました
+
+**issue は private のリポジトリ、コードは public の fork、という形が通ります。**
+**やることは、fork の branch を issue にリンクするだけです。**新しい設定はありません。
+
+```bash
+gh issue develop 42 --repo myorg/internal-tasks --branch-repo myorg/project \
+  --base main --name work/issue-42
+```
+
+**このとき変わるものが3つあります。**
+
+| 何 | どう変わるか |
+| --- | --- |
+| **worktree の置き場所** | `<root>/<host>/<owner>/<repo>/<スラグ>` の `<owner>/<repo>` が**コードのリポジトリ**になります。スラグは今までどおり issue から作ります |
+| **信頼登録** | **コードのリポジトリだけを `continuo trust` に通してください。**Claude Code が開くのはそちらです。issue のリポジトリは通さなくて構いません |
+| **clone** | `ghq` に引かせる相手が**コードのリポジトリ**になります |
+
+**fork を使うカンバンでは、`herdr.worktree.base` を null のままにしてください。**
+**この設定はリポジトリをまたいで効きます。**`main` と書いてあると、リンクした branch より
+そちらが優先され、**fork にしか無い branch から始められません。**
+
+**PR の宛先は fork の派生元（upstream）になります。**プロンプトの中で
+`{{.pr_target}}` として渡すので、エージェントは upstream の PR を読みに行きます。
+
+### 本文（front matter より下）に足すもの
+
+**足さなくても壊れませんが、エージェントの動きは古いままです。**
+
+| どこ | 何を足すか |
+| --- | --- |
+| `## この issue に紐づく PR も読むこと` | **PR を探す相手を `{{.pr_target}}` にする。**別のリポジトリの PR は issue に紐づかないので、push した branch の名前でも引かせる |
+| `## 終わったらやること` の push のところ | **リンクした branch を、push 先の候補として名前で出す**（`{{if .push_branch}}` で囲む） |
+
+**雛形の本文は [internal/scaffold/template.go](https://github.com/maimuzo/continuo/blob/main/internal/scaffold/template.go) にあります。**
+`continuo init` を新しい版で1回叩いて、別のディレクトリに出てきた `WORKFLOW.md` の
+本文と見比べるのがいちばん確実です（**いまの `WORKFLOW.md` を `--force` で上書きしないこと**）。
+
+---
+
 ## v0.1.11 から v0.1.12 へ
 
 **設定のキーが1つ増えました**（`tracker.provider.handoff.on_assignee_gate`）。

@@ -531,6 +531,152 @@ v0.1.12 の雛形から「continuo が用意した worktree と branch のまま
 **古い版から上げた `WORKFLOW.md` には入っていません。**
 [upgrading.md](upgrading.md) の「v0.1.11 から v0.1.12 へ」を見て、手で足してください。
 
+### issue に branch をリンクしたのに、いつもの既定 branch から worktree が切られる
+
+**`herdr.worktree.base` に branch 名が書いてあるからです。**
+
+**この設定はリポジトリをまたいで効き、リンクより先に見ます。**
+
+```yaml
+herdr:
+  worktree:
+    base: main        # ← これが書いてあると、リンクした branch より先に選ばれる
+```
+
+**リンクした branch から始めたいなら、`null` に戻してください。**
+
+```yaml
+herdr:
+  worktree:
+    base: null
+```
+
+**`null` にしても、リンクの無い issue はいままでどおり動きます。**
+カンバンが返す、そのリポジトリの既定 branch から切ります。
+
+**fork を使うカンバンでは、必ず `null` にしてください。**
+`main` と書いてあると、**fork にしか無い branch から始められません。**
+
+---
+
+### 「この issue には、別々のリポジトリの branch が2本以上リンクされています」と issue に書かれた
+
+**continuo が、どのリポジトリで作業すべきかを決められないので着手していません。**
+**Status も worktree も1バイトも書き換えていません。**
+
+**確かめ方。**
+
+```bash
+gh issue develop --list <番号> --repo <owner>/<repo>
+```
+
+**直し方。****Development のリンクを1本にしてから、Status を着手待ちへ戻してください。**
+**同じリポジトリの branch なら2本以上あっても構いません**（そのときはリンクを base に使わず、
+そのリポジトリの既定 branch から切ります）。
+
+**この案内は、continuo の1回の起動につき1回だけ出ます。**
+
+---
+
+### 「リンクされた branch を取ってこられなかったので、この issue に着手できませんでした」と出る
+
+**`git fetch` が通らなかったということです。**メッセージに、叩いたコマンドと
+git が言ったことがそのまま入っています。
+
+**よくある2つ。**
+
+| git が言ったこと | 何が起きているか |
+| --- | --- |
+| `could not read Username for 'https://github.com': terminal prompts disabled` | **認証が切れています。**`gh auth login` か、認証情報ヘルパーを直してください |
+| `Could not resolve host` | **回線です。** |
+
+**直したら、Status を着手待ちへ戻してください。**
+
+**遅い回線で時間切れになるなら、上限を延ばせます**（既定は30000ミリ秒）。
+
+```yaml
+workspace:
+  fetch_timeout_ms: 60000
+```
+
+---
+
+### 「この issue の worktree の置き場所が、いまリンクされているコードのリポジトリと食い違う」と出る
+
+**issue にリンクされた branch のリポジトリが、あとから変わったということです。**
+
+**continuo は候補から外しただけで、worktree も branch も1バイトも消していません。**
+
+**直し方は2つです。どちらでも構いません。**
+
+| どうするか | 何をするか |
+| --- | --- |
+| **リンクを元に戻す** | 前と同じリポジトリの branch をリンクし直す。worktree はそのまま使えます |
+| **worktree を手で片付ける** | 中の成果を push してから `continuo abandon <issue の URL>` |
+
+**どちらかを済ませてから、Status を着手待ちへ戻してください。**
+
+---
+
+### 身元ファイルも pane も無い worktree があり、continuo が復元も報告もしてくれない
+
+**issue とコードが別のリポジトリにある worktree で起こります。**
+
+**なぜか。**復元の手掛かりは2つ（置き場所のディレクトリ名と、pane の label）しかありません。
+**ディレクトリ名は issue から作られますが、その上の階層はコードのリポジトリです。**
+2つが違うので、ディレクトリ名から issue の番号を切り出せません。
+**pane も無ければ、手掛かりが1つも残っていません。**
+
+**そのかわり、continuo の起動は止まりません。**「人間が置いたもの」として数えないので、
+`workspace.on_broken_worktree: stop` のままでも起動できます。
+**worktree も branch も1バイトも消えません。**
+
+**出口は2つです。**
+
+**1. 身元ファイルを手で書く。**次の巡回から、ふつうの worktree として扱われます。
+`<worktree>/.continuo.json`（名前は `workspace.identity_file` で変えられます）に置きます。
+
+```json
+{
+  "issue_url": "https://github.com/myorg/internal-tasks/issues/42",
+  "issue_identifier": "myorg/internal-tasks#42",
+  "code_repo": "myorg/project",
+  "pr_target": "upstream-org/project",
+  "linked_branch": "work/issue-42",
+  "branch": "continuo/myorg/internal-tasks/42",
+  "base": "origin/work/issue-42",
+  "project_item_id": "PVTI_lAHNNEjOAYV2fM4N9wYE",
+  "herdr_workspace_id": "",
+  "socket_path": "",
+  "settings_path": "",
+  "agent_name": "",
+  "session_uuid": "",
+  "created_at": "2026-09-01T12:00:00Z",
+  "takeover_count": 0
+}
+```
+
+**要るのは上4行のうち `issue_url` / `issue_identifier` / `project_item_id` / `branch` です。**
+`project_item_id` は次で引けます。
+
+```bash
+gh api graphql -f query='query { repository(owner:"myorg", name:"internal-tasks") {
+  issue(number:42) { projectItems(first:5) { nodes { id project { number } } } } } }'
+```
+
+**`code_repo` / `pr_target` / `linked_branch` は人間が読むためだけの行です。**
+continuo はここを1度も読みません。**空でも構いません。**
+
+**2. worktree を手で消す。**中の成果を push してから消してください。
+
+```bash
+git -C <worktree> status
+git -C <worktree> push -u origin HEAD
+git -C <ghq の clone> worktree remove <worktree>
+```
+
+---
+
 ### 着手が「`herdr.worktree.base` が空で、カンバンから引いた issue にも既定 branch の情報がありませんでした」で止まる
 
 **原因。**base を書いていないときはカンバンが返す既定 branch を使いますが、それが取れませんでした。

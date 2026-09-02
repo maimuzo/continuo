@@ -755,9 +755,6 @@ const (
 	KeyAbandonErrScan Key = "abandon.err_scan"
 	// KeyAbandonNotFound はその issue の worktree が無いときに出る。
 	KeyAbandonNotFound Key = "abandon.not_found"
-	// KeyAbandonOwnerRepoMismatch は身元ファイルの issue_url が
-	// worktree のパスから取り出した owner とリポジトリ名と食い違うときに出る。
-	KeyAbandonOwnerRepoMismatch Key = "abandon.owner_repo_mismatch"
 	// KeyAbandonOwnerRepoUnreadable はworktree のパスから owner とリポジトリ名を
 	// 取り出せないときに出る。
 	KeyAbandonOwnerRepoUnreadable Key = "abandon.owner_repo_unreadable"
@@ -2145,6 +2142,13 @@ const (
 	KeyWorkspacePrepareWorktreePathMismatch Key = "workspace.prepare.worktree_path_mismatch"
 	// KeyWorkspaceResolveBaseDefaultBranchMissing は base を決める手掛かりが設定にもボードの応答にも無かったときに出る。
 	KeyWorkspaceResolveBaseDefaultBranchMissing Key = "workspace.resolve_base.default_branch_missing"
+	// KeyWorkspaceResolveBaseCodeRepoDefaultBranchMissing は、コードのリポジトリが issue のリポジトリと違うのに、
+	// コードのリポジトリの既定 branch を取れなかったときに出る。
+	KeyWorkspaceResolveBaseCodeRepoDefaultBranchMissing Key = "workspace.resolve_base.code_repo_default_branch_missing"
+	// KeyWorkspaceLinkedBranchFetchFailed は、リンクされた branch を取ってこられなかったときに出る。
+	KeyWorkspaceLinkedBranchFetchFailed Key = "workspace.linked_branch.fetch_failed"
+	// KeyWorkspaceErrLinkedBranchFetch は ErrLinkedBranchFetch の文言である。
+	KeyWorkspaceErrLinkedBranchFetch Key = "workspace.err.linked_branch_fetch"
 	// KeyWorkspaceResolveBaseDefaultBranchNotString はボードが返した既定 branch が文字列でなかったときに出る。
 	KeyWorkspaceResolveBaseDefaultBranchNotString Key = "workspace.resolve_base.default_branch_not_string"
 )
@@ -2599,7 +2603,6 @@ var allKeys = []Key{
 	KeyAbandonNotRunning,
 	KeyAbandonErrScan,
 	KeyAbandonNotFound,
-	KeyAbandonOwnerRepoMismatch,
 	KeyAbandonOwnerRepoUnreadable,
 	KeyAbandonSlugMismatch,
 	KeyAbandonSlugUnknown,
@@ -3101,6 +3104,9 @@ var allKeys = []Key{
 	KeyWorkspacePrepareWorktreeOpenFailed,
 	KeyWorkspacePrepareWorktreePathMismatch,
 	KeyWorkspaceResolveBaseDefaultBranchMissing,
+	KeyWorkspaceResolveBaseCodeRepoDefaultBranchMissing,
+	KeyWorkspaceLinkedBranchFetchFailed,
+	KeyWorkspaceErrLinkedBranchFetch,
 	KeyWorkspaceResolveBaseDefaultBranchNotString,
 	KeyOrchestratorNewExecutablePathUnknown,
 	KeyOrchestratorResolveAgentNameAgentListFailed,

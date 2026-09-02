@@ -220,7 +220,10 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			// **draft issue は owner も repo も持たない**ので、信頼の検査には掛けない。
 			// **通知を出したあとは検査し直さない。**呼ぶたびに git を1プロセス起こす。
 			// 信頼が付けば Dispatchable が真になってここへ来なくなるので、取りこぼさない。
-			if issue.Owner != "" && !o.alreadyNotified(issue.Owner, issue.Repo) {
+			// **未信頼の印はコードのリポジトリで持っている**（設計 issue144 の 13b）ので、
+			// 引き当てる鍵もそちらで組む。
+			notifiedOwner, notifiedRepo := codeOwnerRepoOf(issue)
+			if issue.Owner != "" && !o.alreadyNotified(notifiedOwner, notifiedRepo) {
 				o.preflight(ctx, issue)
 			}
 			o.clearGate(issue.ID)
@@ -603,8 +606,21 @@ func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 // issue: 検査する issue。
 // 戻り値: 検査を通ったら true。
 func (o *Orchestrator) preflight(ctx context.Context, issue tracker.Issue) bool {
+	// **コードのリポジトリを1つに決められないなら、1バイトも書かずに飛ばす**
+	// （設計 issue144 の 11a）。**勝手にどちらかを選ぶと、別のリポジトリで作業を始めてしまう。**
+	if issue.CodeRepoUndecided {
+		o.noteCodeRepoUndecided(ctx, issue)
+		return false
+	}
+	// **決まったなら印を消す。**直したあと再発したら、もう一度知らせる。
+	o.clearRepoIssue(issue.Identifier, RepoNoticeCodeRepoUndecided)
+
+	// **信頼を確かめる相手はコードのリポジトリである**（設計 issue144 の 13b）。
+	// Claude Code が開くのはコードのリポジトリの worktree であり、
+	// **issue のリポジトリでは1行も実行しない。**
+	codeOwner, codeRepo := codeOwnerRepoOf(issue)
 	if o.cfg.Trust.RequireRepoTrusted {
-		trusted, reason, err := o.ws.CheckTrust(issue.Owner, issue.Repo)
+		trusted, reason, err := o.ws.CheckTrust(codeOwner, codeRepo)
 		if err != nil {
 			o.logger.Warn("リポジトリの信頼を検査できません（この issue を飛ばします）",
 				"identifier", issue.Identifier, "error", err)
@@ -614,7 +630,7 @@ func (o *Orchestrator) preflight(ctx context.Context, issue tracker.Issue) bool 
 			o.noteUntrusted(ctx, issue, reason)
 			return false
 		}
-		o.clearUntrusted(issue.Owner, issue.Repo)
+		o.clearUntrusted(codeOwner, codeRepo)
 	}
 
 	loc, warnings, err := workspace.Locate(o.ws.ResolvedRoot(), o.cfg.Herdr.Worktree.BranchTemplate, toIssueRef(issue))
@@ -652,7 +668,10 @@ func (o *Orchestrator) preflight(ctx context.Context, issue tracker.Issue) bool 
 // issue: そのリポジトリで最初に候補に上がった issue。
 // reason: 信頼の検査が返した理由。
 func (o *Orchestrator) noteUntrusted(ctx context.Context, issue tracker.Issue, reason string) {
-	key := issue.Owner + "/" + issue.Repo
+	// **鍵はコードのリポジトリで持つ**（設計 issue144 の 13b）。issue のリポジトリで持つと、
+	// **同じ issue のリポジトリに属する別々の fork の未信頼が1つに潰れ、2つ目が通知されない。**
+	codeOwner, codeRepo := codeOwnerRepoOf(issue)
+	key := codeOwner + "/" + codeRepo
 
 	o.mu.Lock()
 	_, already := o.notified[key]
@@ -678,8 +697,10 @@ func (o *Orchestrator) noteUntrusted(ctx context.Context, issue tracker.Issue, r
 		o.logger.Warn("draft issue にはコメントできないのでログだけにします", "identifier", issue.Identifier)
 		return
 	}
+	// **コードのリポジトリの名前を渡す**（設計 issue144 の 13b）。渡さないと
+	// 「issue のリポジトリが信頼登録されていません」という**間違った直し方**が人間に届く。
 	if err := o.postComment(ctx, nodeID,
-		buildUntrustedComment(issue.Owner, issue.Repo, reason)); err != nil {
+		buildUntrustedComment(codeOwner, codeRepo, reason)); err != nil {
 		o.logger.Warn("未信頼のリポジトリの通知を投稿できませんでした",
 			"identifier", issue.Identifier, "error", err)
 	}
@@ -844,9 +865,14 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 
 	// 段6: worktree の中に身元ファイルを書く。ここまで来れば、落ちても身元が分かる。
 	identity := workspace.Identity{
-		IssueURL:         issueURL(issue),
-		IssueIdentifier:  issue.Identifier,
-		ProjectItemID:    issue.ID,
+		IssueURL:        issueURL(issue),
+		IssueIdentifier: issue.Identifier,
+		ProjectItemID:   issue.ID,
+		// **人間が読むためだけに書く3つ**（設計 issue144 の 11c）。
+		// **continuo はここを1度も読まない。**判断に使う値はトラッカーから取り直す。
+		CodeRepo:         issue.CodeRepoNameWithOwner,
+		PRTarget:         issue.PRTarget,
+		LinkedBranch:     linkedBranchOf(issue),
 		Branch:           prepared.Branch.String(),
 		Base:             prepared.Base.String(),
 		HerdrWorkspaceID: prepared.HerdrWorkspaceID,
@@ -1161,15 +1187,39 @@ func (o *Orchestrator) sendEscape(ctx context.Context, rs *runState) {
 // issue: 元の issue。
 // 戻り値: worktree の用意に要る情報。
 func toIssueRef(issue tracker.Issue) workspace.IssueRef {
+	// **`<owner>/<repo>` は最初の `/` 1つだけで割る**（設計 issue144 の 11b）。
+	// **割れなければ両方とも空にして「今までどおり Owner / Repo を使う」に倒す。**
+	// 分解を忘れて `<owner>/<repo>` をそのまま渡すと、`pathComponent` が
+	// スラッシュをハイフンへ潰すので、**落ちずに間違った場所へ worktree が作られる。**
+	codeOwner, codeRepo := issue.CodeOwnerRepo()
 	return workspace.IssueRef{
-		URL:           issueURL(issue),
-		Identifier:    issue.Identifier,
-		ProjectItemID: issue.ID,
-		Owner:         issue.Owner,
-		Repo:          issue.Repo,
-		Number:        issue.Number,
-		NativeRef:     issue.NativeRef,
+		URL:               issueURL(issue),
+		Identifier:        issue.Identifier,
+		ProjectItemID:     issue.ID,
+		Owner:             issue.Owner,
+		Repo:              issue.Repo,
+		Number:            issue.Number,
+		NativeRef:         issue.NativeRef,
+		CodeOwner:         codeOwner,
+		CodeRepo:          codeRepo,
+		CodeHost:          issue.CodeRepoHost,
+		LinkedBranch:      linkedBranchOf(issue),
+		CodeDefaultBranch: issue.CodeRepoDefaultBranch,
 	}
+}
+
+// linkedBranchOf は base に使うリンクされた branch の名前を返す。
+//
+// **`Issue.BranchName` は、リンクがちょうど1本のときだけ埋まる**（設計 issue144 の 11）。
+// 0本と2本以上では nil なので、この関数は空文字を返す。
+//
+// issue: 対象の issue。
+// 戻り値: リンクされた branch の生の名前（`origin/` は付かない）。無ければ空文字。
+func linkedBranchOf(issue tracker.Issue) string {
+	if issue.BranchName == nil {
+		return ""
+	}
+	return *issue.BranchName
 }
 
 // issueURL は issue の URL を返す。draft issue は URL を持たないので空文字になる。

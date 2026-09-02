@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -746,6 +747,46 @@ func gitRemoteRefContainsHead(ctx context.Context, worktreePath string) (bool, e
 		return false, err
 	}
 	return strings.TrimSpace(out) != "", nil
+}
+
+// gitRemoteBranchRefExists は `refs/remotes/origin/<名前>` が手元にあるかを返す
+// （設計 issue144 の 10）。
+//
+// **これが真なら通信しない。**巡回のたびに fetch を叩くと、遅い回線で巡回が詰まる。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: clone の作業ディレクトリ。
+// branch: リンクされた branch の名前（`origin/` は付けない）。
+// 戻り値の1つ目: リモート追跡 ref があれば true。
+// 戻り値の2つ目: git を起動できなかった場合のエラー。
+func gitRemoteBranchRefExists(ctx context.Context, repoDir, branch string) (bool, error) {
+	code, err := gitExitCode(ctx, repoDir,
+		"show-ref", "--verify", "--quiet", "refs/remotes/origin/"+branch)
+	if err != nil {
+		return false, err
+	}
+	return code == 0, nil
+}
+
+// gitFetchLinkedBranch は、リンクされた branch を1本だけ取ってくる（設計 issue144 の 10）。
+//
+// **refspec を明示した形しか叩かない。**素の `git fetch origin <名前>` は、
+// `--single-branch` で作られた clone では **FETCH_HEAD しか動かさず、
+// リモート追跡 ref を作らない。**その clone では `git worktree add … origin/<名前>` が
+// `fatal: invalid reference` で落ちる（2026-09-01 実測）。
+// **refspec を書けば、素の clone でも同じ結果になる**ので、clone の作られ方で場合分けしない。
+//
+// **`--no-tags` を付ける。**tag は base の解決に要らず、大きなリポジトリでは
+// tag の取得だけで数秒かかる。**`--all` も `--prune` も付けない。**
+//
+// ctx: 実行に適用するコンテキスト（呼び出し側が `workspace.fetch_timeout_ms` を掛ける）。
+// repoDir: clone の作業ディレクトリ。
+// branch: リンクされた branch の名前（`origin/` は付けない）。
+// 戻り値: 取ってこられなかった場合のエラー。
+func gitFetchLinkedBranch(ctx context.Context, repoDir, branch string) error {
+	refspec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
+	_, err := runGit(ctx, repoDir, "fetch", "--no-tags", "origin", refspec)
+	return err
 }
 
 // gitNoDiffFromBase は `git diff --quiet <base>...HEAD` が真（差分なし）かを返す

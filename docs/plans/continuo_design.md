@@ -7025,7 +7025,7 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 `Prepare` の `gitWorktreePrune` は**実体が先に消えた登録しか落とさない**ので、
 `/tmp/<名前>` が在る限り残り続ける。**`git fetch origin <branch>` と `git show FETCH_HEAD:<パス>` なら登録が1つも増えない。**
 **worktree でないと足りないときの逃げ道は置かない。**置き場所を指せる変数が本文に無く
-（渡すのは `.issue.*` と `.attempt` だけである。5-3 の変数の表）、
+（渡すのは `.issue.*` / `.code.*` / `.pr_target` / `.push_branch` / `.attempt` だけである。5-3 の変数の表）、
 **`/tmp` を書けば同じ取り残しに戻るためである。**
 
 **禁じても強制はできない。**エージェントは `git` を直に叩ける。
@@ -8436,6 +8436,8 @@ workspace:
   on_broken_worktree: stop                  # 上のファイルを読めない worktree を見つけたときの振る舞い。
                                             # stop なら起動を止める。skip ならその worktree だけ飛ばして続ける。
                                             # どちらでも worktree は消さない（消すのは continuo abandon --force だけ）
+  fetch_timeout_ms: 30000                   # issue にリンクされた branch を取りに行くときの上限（ミリ秒）。
+                                            # 叩くのは「リンクされた branch が手元に無い」ときだけで、毎回の巡回では通信しない
 
 workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
   after_create: null                        # worktree を作った直後に走る。失敗したらその issue は進めない
@@ -8682,21 +8684,27 @@ language: auto                              # 画面に出す文言の言語。a
 
 **PR ができたあと、レビューの指摘は PR に書かれます。**issue のコメントだけを読むと見落とします。
 
+**PR を探す相手は {{.pr_target}} です。**この issue のリポジトリとは限りません。
+**別のリポジトリの PR は、この issue に紐づきません。**その場合は下の2つで1件も出ないので、
+push した branch の名前でも引いてください。
+
+    gh api "repos/{{.pr_target}}/pulls?state=all&head={{.code.owner}}:<push した branch 名>"
+
 **まず、この issue に紐づく PR の番号を全部出してください。**次の2つを両方実行し、重複を除きます。
 
-    gh pr list --repo {{.issue.owner}}/{{.issue.repo}} --state all --limit 100 --json number,state,title,closingIssuesReferences --jq '.[] | select(any(.closingIssuesReferences[]?; .number == {{.issue.number}})) | {number, state, title}'
+    gh pr list --repo {{.pr_target}} --state all --limit 100 --json number,state,title,closingIssuesReferences --jq '.[] | select(any(.closingIssuesReferences[]?; .number == {{.issue.number}})) | {number, state, title}'
 
     gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}}/timeline --paginate --jq '.[] | select(.event == "cross-referenced") | .source.issue | select(.pull_request != null) | {number, state, title}'
 
 **出てきた PR 1件ずつについて、次の4つを全部読んでください。**<PR番号> は上で出た数字に置き換えます。
 
-    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号> --jq '{author: .user.login, author_association: .author_association, state: .state, title: .title, body: .body}'
+    gh api repos/{{.pr_target}}/pulls/<PR番号> --jq '{author: .user.login, author_association: .author_association, state: .state, title: .title, body: .body}'
 
-    gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --json comments
+    gh pr view <PR番号> --repo {{.pr_target}} --json comments
 
-    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association, path: .path, line: (.line // .original_line), body: .body}'
+    gh api repos/{{.pr_target}}/pulls/<PR番号>/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association, path: .path, line: (.line // .original_line), body: .body}'
 
-    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '.[] | {author: .user.login, author_association: .author_association, state: .state, body: .body}'
+    gh api repos/{{.pr_target}}/pulls/<PR番号>/reviews --paginate --jq '.[] | {author: .user.login, author_association: .author_association, state: .state, body: .body}'
 
 **1つ目が PR の説明、2つ目が会話のコメント、3つ目が行に紐づくレビューコメント、4つ目がレビューの判定と本文です。**
 
@@ -8735,7 +8743,15 @@ push していない作業は、この worktree が片付くときに失われ�
 **既定の branch（main / master）へ直に push してはいけません。**
 
     git push -u origin HEAD:<別の branch 名>
+{{if .push_branch}}
+**この issue には branch がリンクされていて、その続きから作業が始まっています。**
+その branch へ載せろと OWNER / MEMBER / COLLABORATOR が書いているときの push 先は、次のとおりです。
 
+    git push -u origin HEAD:{{.push_branch}}
+
+**書かれていなければ、上の git push -u origin HEAD のままで構いません。**
+**リンクされているというだけでは、そこへ push する理由になりません。**
+{{end}}
 **別の名前へ出しても、前に出した PR は進みません。**まだ開いているなら、
 そちらへも git push -u origin HEAD を叩いてください。
 
@@ -8781,6 +8797,10 @@ push していない作業は、この worktree が片付くときに失われ�
 | `.issue.owner` / `.issue.repo` / `.issue.number` | GitHub Projects v2 アダプタが足す項目（3-13） |
 | `.issue.url` | **issue の URL。**エージェントはこれを `gh issue comment` に渡して、何をしたかを書き残す（3-29）。**中身を読むのは `.issue.owner` / `.issue.repo` / `.issue.number` のほうである** |
 | `.issue.title` / `.issue.state` / `.issue.labels` | 仕様 4.1.1 の項目。**本文はプロンプトに埋め込まない**（3-29） |
+| `.code.name_with_owner` | **コードのリポジトリ**（`<owner>/<repo>`）。issue にリンクされた branch が別のリポジトリに在るときだけ `.issue.owner`/`.issue.repo` と違う値になる。**リンクが0本なら issue のリポジトリと同じ** |
+| `.code.owner` / `.code.repo` | 上を分解したもの。`gh pr create --head <owner>:<branch>` の左側に要る |
+| `.pr_target` | **PR の宛先**（fork なら派生元）。**fork でなければ `.code.name_with_owner` と同じ** |
+| `.push_branch` | **issue にリンクされた branch の生の名前**（`origin/` は付かない）。**push 先の指定ではない**。リンクが0本のときと2本以上のときは空文字 |
 | `.attempt` | 試行回数。**1回目は `null` を渡す**（仕様 12.3 のとおり）。`text/template` は `null` を偽として扱うので `{{if .attempt}}` は正しく動く。**キーごと省いてはならない**（`missingkey=error` で描画が失敗する） |
 
 **なぜ JSON で読ませ、`--jq` でテキストへ潰させないかは 3-72 にある。**

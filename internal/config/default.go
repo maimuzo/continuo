@@ -93,6 +93,9 @@ func DefaultConfig() *Config {
 			// **既定は止める側である**（3-49）。壊れた worktree を飛ばして走り続けると、
 			// その issue はボード上で running_state のまま何時間も放置される。
 			OnBrokenWorktree: OnBrokenWorktreeStop,
+			// **リンクされた branch を1本取ってくるだけなので30秒で足りる**
+			// （設計 issue144 の 10b）。
+			FetchTimeoutMs: 30000,
 		},
 		WorkspaceHooks: WorkspaceHooksConfig{
 			AfterCreate:  nil,

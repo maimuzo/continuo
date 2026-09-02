@@ -51,7 +51,8 @@ const itemFieldsFragmentTemplate = `
       labels(first: 50) { nodes { name } }
       assignees(first: 10) { totalCount nodes { id login } }
       blockedBy(first: 20) { nodes { id number state repository { nameWithOwner } } }
-      linkedBranches(first: 1) { nodes { ref { name } } }
+      linkedBranches(first: 5) { totalCount nodes { ref { name
+        repository { nameWithOwner url defaultBranchRef { name } parent { nameWithOwner } } } } }
       comments { totalCount }%s
     }
     ... on DraftIssue {
@@ -345,11 +346,46 @@ type rawRef struct {
 }
 
 type rawLinkedBranch struct {
-	Ref *rawRef `json:"ref"`
+	Ref *rawLinkedRef `json:"ref"`
 }
 
+// rawLinkedRef は Development でリンクされた branch の ref である。
+//
+// **rawRef とは別の型にする。**リンクの ref だけは `repository` まで読む
+// （設計 issue144 の 2）。`rawRef` は `defaultBranchRef` にも使い回されており、
+// そちらは名前しか要求していない。**同じ型にすると、要求していない応答を
+// 「リポジトリが取れなかった」と読める形になる。**
+type rawLinkedRef struct {
+	Name string `json:"name"`
+	// Repository はリンクされた branch が在るリポジトリである。
+	// **issue のリポジトリとは限らない**（private な issue から public な fork の
+	// branch へリンクできる。設計 issue144 の 2 で実測）。
+	Repository *rawLinkedRepository `json:"repository"`
+}
+
+// rawLinkedRepository はリンクされた branch が在るリポジトリである。
+type rawLinkedRepository struct {
+	NameWithOwner string `json:"nameWithOwner"`
+	// URL は置き場所の1階層目（`<host>`）を取るために読む。
+	// **落とすと、コードのリポジトリが別のホストに在る形を扱えなくなる。**
+	URL              string        `json:"url"`
+	DefaultBranchRef *rawRef       `json:"defaultBranchRef"`
+	Parent           *rawParentRef `json:"parent"`
+}
+
+// rawParentRef は fork の派生元（upstream）である。
+type rawParentRef struct {
+	NameWithOwner string `json:"nameWithOwner"`
+}
+
+// rawLinkedBranchConn はリンクされた branch の connection である。
+//
+// **`totalCount` も読む。**読まないと、**窓（`first: 5`）に入らなかった6本目が
+// 別のリポジトリを指していても気づけない。**先頭5本がたまたま同じリポジトリなら
+// 「別々のリポジトリなら着手しない」が働かず、別のリポジトリで作業を始めてしまう。
 type rawLinkedBranchConn struct {
-	Nodes []rawLinkedBranch `json:"nodes"`
+	TotalCount int               `json:"totalCount"`
+	Nodes      []rawLinkedBranch `json:"nodes"`
 }
 
 type rawLabel struct {
@@ -965,13 +1001,11 @@ func mapRawItemToIssue(
 			url = &u
 		}
 
-		var branchName *string
-		if raw.Content.LinkedBranches != nil && len(raw.Content.LinkedBranches.Nodes) > 0 {
-			if ref := raw.Content.LinkedBranches.Nodes[0].Ref; ref != nil && ref.Name != "" {
-				name := ref.Name
-				branchName = &name
-			}
-		}
+		// **コードのリポジトリと base をリンクから決める**（設計 issue144 の 11 / 11a）。
+		// **リンクが0本なら、今までと1文字も変わらない値になる。**
+		code := resolveCodeRepo(raw.Content.LinkedBranches, owner, repo,
+			raw.Content.Repository, raw.Content.URL)
+		branchName := code.BranchName
 
 		assigneeID, assignees, assigneeCount := mapAssignees(raw.Content.Assignees, nativeRef)
 
@@ -1013,14 +1047,23 @@ func mapRawItemToIssue(
 		// 信頼済み」をすべて集約した1つの真偽値である。ここまで来た時点で前2つは満たしている
 		// ので、残る信頼の判定をここで行う。**受け皿をここに置かないと、GitHub 固有の分岐が
 		// orchestrator へ積み上がる。**
+		//
+		// **信頼を確かめる相手はコードのリポジトリである**（設計 issue144 の 13b）。
+		// 信頼の鍵は clone の実体のパスであり、**Claude Code が開くのは
+		// コードのリポジトリの worktree だからである。**issue のリポジトリは
+		// 信頼登録されていなくてよい（そこでは1行も実行しない）。
 		dispatchable := true
 		notDispatchableReason := ""
-		if repoTrusted != nil && !repoTrusted(owner, repo) {
+		codeOwner, codeRepoName := splitNameWithOwner(code.NameWithOwner)
+		if codeOwner == "" || codeRepoName == "" {
+			codeOwner, codeRepoName = owner, repo
+		}
+		if repoTrusted != nil && !repoTrusted(codeOwner, codeRepoName) {
 			dispatchable = false
 			notDispatchableReason = fmt.Sprintf(
 				"リポジトリ %s/%s が Claude Code に信頼登録されていません"+
 					"（信頼していないフォルダでは hook が1つも動かず、turn 終了の検知が全滅する。設計 3-6 / 4-3）",
-				owner, repo,
+				codeOwner, codeRepoName,
 			)
 		}
 
@@ -1039,6 +1082,12 @@ func mapRawItemToIssue(
 			StatusChangedByAutomation: author.Automated,
 			StatusChangedBy:           author.Login,
 			BranchName:                branchName,
+			CodeRepoNameWithOwner:     code.NameWithOwner,
+			CodeRepoHost:              code.Host,
+			CodeRepoDefaultBranch:     code.DefaultBranch,
+			PRTarget:                  code.PRTarget,
+			LinkedBranches:            code.Links,
+			CodeRepoUndecided:         code.Undecided,
 			URL:                       url,
 			AssigneeID:                assigneeID,
 			Assignees:                 assignees,

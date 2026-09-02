@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -47,6 +49,22 @@ var ErrRepoMismatch = errors.New("worktree の .git が指すリポジトリが�
 // ErrBaseUnknown は base を決められなかったことを表す（3-22 の段4）。
 // herdr.worktree.base が null で、Issue.NativeRef["default_branch"] も無い場合に返る。
 var ErrBaseUnknown = errors.New("worktree を切る base を決められません")
+
+// ErrLinkedBranchFetch は、Development でリンクされた branch を取ってこられなかったことを
+// 表す（設計 issue144 の 10b）。
+//
+// **その issue は failure_state にして、issue へコメントする。**回線か認証の問題であり、
+// **黙ってログだけにすると、Status が動かないまま誰にも届かない。**
+//
+// **文言は Error() が呼ばれるたびに資源から引く**（i18n.Sentinel）。
+var ErrLinkedBranchFetch = i18n.Sentinel(i18n.KeyWorkspaceErrLinkedBranchFetch)
+
+// linkedBranchFetchAttempts は、リンクされた branch を取りに行く回数である
+// （設計 issue144 の 10b）。**やり直しは1回だけである。**
+const linkedBranchFetchAttempts = 2
+
+// linkedBranchFetchRetryWait は、やり直すまでに空ける時間である（設計 issue144 の 10b）。
+const linkedBranchFetchRetryWait = time.Second
 
 // ErrWorktreeDetached は worktree がどの branch にも載っていないことを表す
 // （detached HEAD。issue #132）。
@@ -164,7 +182,10 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		return nil, err
 	}
 
-	repoPath, err := m.ghqList(ctx, issue.Owner, issue.Repo)
+	// **clone を引く相手はコードのリポジトリである**（設計 issue144 の 8）。
+	// リンクが0本なら issue のリポジトリと同じ値になる。
+	codeOwner, codeRepo := issue.CodeOwnerRepo()
+	repoPath, err := m.ghqList(ctx, codeOwner, codeRepo)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +194,7 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		// 人間がコピーしても叩けない（設計 3-34b）。
 		return nil, i18n.Errorf(
 			i18n.KeyWorkspacePrepareCloneNotFound,
-			ErrCloneNotFound, issue.Owner, issue.Repo, issue.Owner, issue.Repo)
+			ErrCloneNotFound, codeOwner, codeRepo, codeOwner, codeRepo)
 	}
 
 	// 段1: 「登録は残っているが実体が消えている」を先に解消する。
@@ -246,7 +267,7 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 			ErrUnregisteredWorktree, loc.Path, loc.Path, loc.Path)
 	default:
 		// 段4・段5。
-		base, err := m.resolveBase(issue)
+		base, err := m.resolveBase(ctx, repoPath, issue)
 		if err != nil {
 			return nil, err
 		}
@@ -264,8 +285,18 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		// 再利用の経路でも、片付けの手順2b が base を要る（3-9）。
 		// ここで決められない場合（default_branch が無い等）は空のままにし、
 		// 片付け側が「判定できないので消さない」と扱う。
-		if base, err := m.resolveBase(issue); err == nil {
+		//
+		// **この枝でも fetch を掛ける**（設計 issue144 の 10）。掛けないと、
+		// **手元に無い ref（`origin/<リンクされた branch>`）が身元ファイルの base に書かれ、**
+		// 片付けの段3（`git diff --quiet <base>...HEAD`）がそれを解決できず、
+		// **判定できないまま永久に見送り続ける。**
+		// **通信の回数は増えない。**「リモート追跡 ref が無いときだけ」なので、
+		// 一度取ったあとは1本も叩かない。
+		if base, err := m.resolveBase(ctx, repoPath, issue); err == nil {
 			result.Base = base
+		} else {
+			m.logger.Warn("再利用する worktree の base を決められませんでした（片付けは見送りになります）",
+				"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
 		}
 	}
 
@@ -378,19 +409,60 @@ func (m *Manager) isRegisteredWorktree(ctx context.Context, repoPath, path strin
 	return false, nil
 }
 
-// resolveBase は worktree を切る base を決める（3-22 の段4）。
+// resolveBase は worktree を切る base を決める（3-22 の段4、設計 issue144 の 11a）。
 //
-// 設定の herdr.worktree.base を使い、null なら Issue.NativeRef["default_branch"] を読む。
-// **そのキーも無ければ ErrBaseUnknown を返す。base を推測しない。**
+// **順番は5段で、上から先に決まったものを使う。推測はしない。**
 //
+//	1 herdr.worktree.base に明示があれば、いつでもそれ
+//	2 リンクが1本なら、その branch（`origin/<名前>`）
+//	3 IssueRef.CodeDefaultBranch が空でなければ、それ
+//	4 **コードのリポジトリ＝issue のリポジトリのときに限り** NativeRef["default_branch"]
+//	5 どれも無ければ ErrBaseUnknown
+//
+// **段4に「同じときに限り」が要る。**`NativeRef["default_branch"]` は
+// **issue のリポジトリの**既定 branch である。コードのリポジトリが別なのにここへ落ちると、
+// **fork の clone で「issue のリポジトリの既定 branch」という別物の名前を base にしようとする。**
+//
+// **段2 は `origin/` を付ける。**返した値は `git worktree add` の起点と
+// `git diff --quiet <base>...HEAD` の両方に渡り、**どちらもローカルには無い名前を解決できない。**
+//
+// ctx: 実行に適用するコンテキスト（段2 の fetch に使う）。
+// repoPath: コードのリポジトリの clone の作業ディレクトリ。
 // issue: 対象の issue。
 // 戻り値の1つ目: 正規化を通った base の名前。
-// 戻り値の2つ目: base を決められない場合の ErrBaseUnknown。
-func (m *Manager) resolveBase(issue IssueRef) (normalize.SafeName, error) {
+// 戻り値の2つ目: base を決められない場合の ErrBaseUnknown、
+// **リンクされた branch を取ってこられなかった場合の ErrLinkedBranchFetch。**
+func (m *Manager) resolveBase(ctx context.Context, repoPath string, issue IssueRef) (normalize.SafeName, error) {
+	// 段1。
 	if configured := m.cfg.Herdr.Worktree.Base; configured != nil && *configured != "" {
 		name, warnings := normalize.Normalize(*configured)
 		m.logWarnings(warnings)
 		return name, nil
+	}
+
+	// 段2。**リンクが1本のときだけ、その branch を base にする。**
+	if issue.LinkedBranch != "" {
+		if err := m.ensureLinkedBranch(ctx, repoPath, issue.LinkedBranch); err != nil {
+			return "", err
+		}
+		name, warnings := normalize.Normalize("origin/" + issue.LinkedBranch)
+		m.logWarnings(warnings)
+		return name, nil
+	}
+
+	// 段3。
+	if issue.CodeDefaultBranch != "" {
+		name, warnings := normalize.Normalize(issue.CodeDefaultBranch)
+		m.logWarnings(warnings)
+		return name, nil
+	}
+
+	// 段4。**コードのリポジトリが issue のリポジトリと違うなら、この値は使えない。**
+	codeOwner, codeRepo := issue.CodeOwnerRepo()
+	if !strings.EqualFold(codeOwner, issue.Owner) || !strings.EqualFold(codeRepo, issue.Repo) {
+		return "", i18n.Errorf(
+			i18n.KeyWorkspaceResolveBaseCodeRepoDefaultBranchMissing,
+			ErrBaseUnknown, issue.Identifier, codeOwner+"/"+codeRepo)
 	}
 	raw, ok := issue.NativeRef[NativeRefDefaultBranch]
 	if !ok {
@@ -406,6 +478,54 @@ func (m *Manager) resolveBase(issue IssueRef) (normalize.SafeName, error) {
 	name, warnings := normalize.Normalize(s)
 	m.logWarnings(warnings)
 	return name, nil
+}
+
+// ensureLinkedBranch は、リンクされた branch のリモート追跡 ref を手元に用意する
+// （設計 issue144 の 10 / 10b）。
+//
+// **既にあれば1バイトも通信しない。**巡回のたびに通信すると、遅い回線で巡回が詰まる。
+//
+// **やり直しは1回だけである。**間隔は1秒。2回落ちたらエラーを返し、
+// 呼び出し側（着手の段3）が `failure_state` と issue のコメントで人間へ渡す（3-34b）。
+// **ログだけにして黙って飛ばさない。**
+//
+// ctx: 実行に適用するコンテキスト。
+// repoPath: コードのリポジトリの clone の作業ディレクトリ。
+// branch: リンクされた branch の名前（`origin/` は付けない）。
+// 戻り値: 取ってこられなかった場合の ErrLinkedBranchFetch。
+func (m *Manager) ensureLinkedBranch(ctx context.Context, repoPath, branch string) error {
+	if repoPath == "" {
+		// **clone を引けていないなら、fetch を叩く先が無い。**
+		// 段4 の `git worktree add` が clone を要るので、そこで断られる。
+		return nil
+	}
+	exists, err := gitRemoteBranchRefExists(ctx, repoPath, branch)
+	if err == nil && exists {
+		return nil
+	}
+
+	timeout := time.Duration(m.cfg.Workspace.FetchTimeoutMs) * time.Millisecond
+	var lastErr error
+	for attempt := range linkedBranchFetchAttempts {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return i18n.Errorf(i18n.KeyWorkspaceLinkedBranchFetchFailed,
+					ErrLinkedBranchFetch, repoPath, branch, branch, ctx.Err())
+			case <-time.After(linkedBranchFetchRetryWait):
+			}
+		}
+		fetchCtx, cancel := context.WithTimeout(ctx, timeout)
+		lastErr = gitFetchLinkedBranch(fetchCtx, repoPath, branch)
+		cancel()
+		if lastErr == nil {
+			return nil
+		}
+		m.logger.Warn("リンクされた branch を取ってこられませんでした",
+			"repo", repoPath, "branch", branch, "試行", attempt+1, "error", lastErr)
+	}
+	return i18n.Errorf(i18n.KeyWorkspaceLinkedBranchFetchFailed,
+		ErrLinkedBranchFetch, repoPath, branch, branch, lastErr)
 }
 
 // logWarnings は識別子の正規化で情報が落ちた警告をログへ出す（3-7）。
@@ -468,7 +588,12 @@ func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
 
 	// **clone の場所は短い間だけ覚える**（clonePath）。判定のたびに ghq のプロセスを
 	// 起こすと、ボードの件数ぶん外部プロセスが立つ。
-	repoPath, err := m.clonePath(ctx, issue.Owner, issue.Repo)
+	// **clone を引く相手はコードのリポジトリである**（設計 issue144 の 8）。
+	// **段0 では fetch を1バイトも叩かない**（設計 issue144 の 10b）。
+	// ここはカンバンの候補ぜんぶに対して毎巡回で走るので、
+	// **1件でも通信すると、候補の数だけ通信が増える。**
+	usableOwner, usableRepo := issue.CodeOwnerRepo()
+	repoPath, err := m.clonePath(ctx, usableOwner, usableRepo)
 	if err != nil || repoPath == "" {
 		m.logger.Debug("着手できるかを段0 で判定できませんでした（段3 に任せます）",
 			"identifier", issue.Identifier, "worktree", loc.Path, "error", err)

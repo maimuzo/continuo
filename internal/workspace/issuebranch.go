@@ -74,14 +74,17 @@ func (m *Manager) FindIssueBranch(ctx context.Context, issue IssueRef) (IssueBra
 	}
 	m.logWarnings(warnings)
 
-	clone, err := m.clonePath(ctx, issue.Owner, issue.Repo)
+	// **branch が在るのはコードのリポジトリの clone である**（設計 issue144 の 8b2）。
+	// **リンクが0本なら issue のリポジトリと同じ値になる。**
+	codeOwner, codeRepo := issue.CodeOwnerRepo()
+	clone, err := m.clonePath(ctx, codeOwner, codeRepo)
 	if err != nil {
 		return IssueBranch{Name: name}, err
 	}
 	if clone == "" {
 		return IssueBranch{Name: name}, i18n.Errorf(
 			i18n.KeyWorkspaceIssueBranchCloneNotFound,
-			ErrCloneNotFound, issue.Owner, issue.Repo)
+			ErrCloneNotFound, codeOwner, codeRepo)
 	}
 
 	found := IssueBranch{Name: name, RepoDir: clone}

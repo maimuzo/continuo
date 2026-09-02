@@ -88,6 +88,8 @@ workspace:
   on_broken_worktree: stop                  # 上のファイルを読めない worktree を見つけたときの振る舞い。
                                             # stop なら起動を止める。skip ならその worktree だけ飛ばして続ける。
                                             # どちらでも worktree は消さない（消すのは continuo abandon --force だけ）
+  fetch_timeout_ms: 30000                   # issue にリンクされた branch を取りに行くときの上限（ミリ秒）。
+                                            # 叩くのは「リンクされた branch が手元に無い」ときだけで、毎回の巡回では通信しない
 
 workspace_hooks:                            # worktree の節目に走らせるコマンド。Claude Code の hook とは別物
   after_create: null                        # worktree を作った直後に走る。失敗したらその issue は進めない
@@ -315,21 +317,27 @@ language: auto                              # 画面に出す文言の言語。a
 
 **PR ができたあと、レビューの指摘は PR に書かれます。**issue のコメントだけを読むと見落とします。
 
+**PR を探す相手は {{.pr_target}} です。**この issue のリポジトリとは限りません。
+**別のリポジトリの PR は、この issue に紐づきません。**その場合は下の2つで1件も出ないので、
+push した branch の名前でも引いてください。
+
+    gh api "repos/{{.pr_target}}/pulls?state=all&head={{.code.owner}}:<push した branch 名>"
+
 **まず、この issue に紐づく PR の番号を全部出してください。**次の2つを両方実行し、重複を除きます。
 
-    gh pr list --repo {{.issue.owner}}/{{.issue.repo}} --state all --limit 100 --json number,state,title,closingIssuesReferences --jq '.[] | select(any(.closingIssuesReferences[]?; .number == {{.issue.number}})) | {number, state, title}'
+    gh pr list --repo {{.pr_target}} --state all --limit 100 --json number,state,title,closingIssuesReferences --jq '.[] | select(any(.closingIssuesReferences[]?; .number == {{.issue.number}})) | {number, state, title}'
 
     gh api repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}}/timeline --paginate --jq '.[] | select(.event == "cross-referenced") | .source.issue | select(.pull_request != null) | {number, state, title}'
 
 **出てきた PR 1件ずつについて、次の4つを全部読んでください。**<PR番号> は上で出た数字に置き換えます。
 
-    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号> --jq '{author: .user.login, author_association: .author_association, state: .state, title: .title, body: .body}'
+    gh api repos/{{.pr_target}}/pulls/<PR番号> --jq '{author: .user.login, author_association: .author_association, state: .state, title: .title, body: .body}'
 
-    gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --json comments
+    gh pr view <PR番号> --repo {{.pr_target}} --json comments
 
-    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association, path: .path, line: (.line // .original_line), body: .body}'
+    gh api repos/{{.pr_target}}/pulls/<PR番号>/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association, path: .path, line: (.line // .original_line), body: .body}'
 
-    gh api repos/{{.issue.owner}}/{{.issue.repo}}/pulls/<PR番号>/reviews --paginate --jq '.[] | {author: .user.login, author_association: .author_association, state: .state, body: .body}'
+    gh api repos/{{.pr_target}}/pulls/<PR番号>/reviews --paginate --jq '.[] | {author: .user.login, author_association: .author_association, state: .state, body: .body}'
 
 **1つ目が PR の説明、2つ目が会話のコメント、3つ目が行に紐づくレビューコメント、4つ目がレビューの判定と本文です。**
 
@@ -380,7 +388,15 @@ push していない作業は、この worktree が片付くときに失われ�
 **既定の branch（main / master）へ直に push してはいけません。**
 
     git push -u origin HEAD:<別の branch 名>
+{{if .push_branch}}
+**この issue には branch がリンクされていて、その続きから作業が始まっています。**
+その branch へ載せろと OWNER / MEMBER / COLLABORATOR が書いているときの push 先は、次のとおりです。
 
+    git push -u origin HEAD:{{.push_branch}}
+
+**書かれていなければ、上の git push -u origin HEAD のままで構いません。**
+**リンクされているというだけでは、そこへ push する理由になりません。**
+{{end}}
 **別の名前へ出しても、前に出した PR は進みません。**まだ開いているなら、
 そちらへも git push -u origin HEAD を叩いてください。
 

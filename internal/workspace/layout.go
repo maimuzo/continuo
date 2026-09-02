@@ -251,11 +251,20 @@ func Locate(resolvedRoot, branchTemplate string, issue IssueRef) (*Location, []n
 		return nil, warnings, err
 	}
 
-	host, w := pathComponent(HostFromIssueURL(issue.URL))
+	// **置き場所の `<host>/<owner>/<repo>` は、コードのリポジトリで切る**
+	// （設計 issue144 の 8）。worktree は fork の clone から切るので、
+	// **パスが issue のリポジトリのままだと `verifiedRepo` の検算が必ず落ちる。**
+	// **スラグは issue から作る**（下の RenderBranch）ので、
+	// 1本のパスに「どのコードの、どの issue か」が両方出る。
+	//
+	// **リンクが0本なら、コードのリポジトリ＝issue のリポジトリである。**
+	// したがって既存の worktree は1つも動かない。
+	codeOwner, codeRepo := issue.CodeOwnerRepo()
+	host, w := pathComponent(issue.CodeHostOrIssueHost())
 	warnings = append(warnings, w...)
-	owner, w := pathComponent(issue.Owner)
+	owner, w := pathComponent(codeOwner)
 	warnings = append(warnings, w...)
-	repo, w := pathComponent(issue.Repo)
+	repo, w := pathComponent(codeRepo)
 	warnings = append(warnings, w...)
 
 	slug := Slug(branch)

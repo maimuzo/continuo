@@ -1,0 +1,939 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "issue とコードが別のリポジトリにある issue に着手する",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/issue とコードが別のリポジトリにある issue に着手する.rucm.md",
+    "rucm_block_sha256": "a7b7d7715fbf8d9dc2ecde88a04aeadc007d1d46954dc4bbbcd1e8b7dc988a49"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "worktree は置き場所の `<host>/<コードのリポジトリの owner>/<コードのリポジトリの repo>/<issue から作ったディレクトリ名>` にある。身元ファイルにコードのリポジトリと PR の宛先がある。成果はコードのリポジトリの branch にある。エージェントは PR の宛先の PR を読める。issue のリポジトリにはコメント以外を1バイトも書き込んでいない。"
+    },
+    "コードのリポジトリが未信頼": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          5
+        ]
+      },
+      "postcondition": "worktree は作られていない。issue に、コードのリポジトリの名前を名指しした案内が1件ある。同じコードのリポジトリでは、その案内は二度書かれない。"
+    },
+    "コードのリポジトリのcloneが無い": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          8
+        ]
+      },
+      "postcondition": "worktree は作られていない。issue のリポジトリの clone は探しに行っていない。"
+    },
+    "置き場所とリンクの食い違い": {
+      "when": "既にある worktree の置き場所が、いまリンクされているコードのリポジトリと違う場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            6
+          ]
+        }
+      ],
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。3回・60秒の条件を満たした場合、issue に直し方のコメントが1件ある。"
+    },
+    "身元ファイルの復元": {
+      "when": "置き場所に身元ファイルを読めない worktree があり、その worktree を cwd に持つ pane が残っている場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            2
+          ]
+        }
+      ],
+      "postcondition": "worktree に身元ファイルがある。worktree も branch も1バイトも消えていない。次の巡回からその worktree はふつうの候補になる。"
+    },
+    "ディレクトリ名が合わない": {
+      "rfs": {
+        "flow": "身元ファイルの復元",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "身元ファイルは無いままである。worktree は残っている。branch は残っている。"
+    },
+    "コードのリポジトリが合わない": {
+      "rfs": {
+        "flow": "身元ファイルの復元",
+        "steps": [
+          4
+        ]
+      },
+      "postcondition": "身元ファイルは無いままである。worktree は残っている。branch は残っている。"
+    },
+    "手掛かりが1つも無い": {
+      "when": "置き場所に身元ファイルを読めない worktree があり、その worktree を cwd に持つ pane も残っていない場合",
+      "branch_from": [
+        {
+          "flow": "BASIC FLOW",
+          "steps": [
+            2
+          ]
+        }
+      ],
+      "postcondition": "worktree は残っている。branch は残っている。システムは起動を続けている。その worktree は報告にも復元にも出ない。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "巡回タイマーはシステムに巡回の開始を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムはカンバンから着手待ちの issue を1件選ぶ。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムはリンクされた branch のリポジトリをコードのリポジトリに決める。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムはコードのリポジトリの派生元を PR の宛先に決める。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは VALIDATES THAT コードのリポジトリが Claude Code に信頼登録されている。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは worktree の置き場所をコードのリポジトリの名前で組み立てる。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは worktree のディレクトリ名を issue から作る。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムはコードのリポジトリの clone から worktree を切る。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは身元ファイルにコードのリポジトリと PR の宛先を書く。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムはエージェントへ送るプロンプトにコードのリポジトリと PR の宛先を入れる。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 12,
+      "statement": "システムはエージェントを起動する。"
+    },
+    {
+      "id": "BASIC FLOW-13",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 13,
+      "statement": "エージェントはコードのリポジトリへ成果を push する。"
+    },
+    {
+      "id": "BASIC FLOW-14",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 14,
+      "statement": "エージェントは PR の宛先のリポジトリを、push した branch の名前で引く。"
+    },
+    {
+      "id": "BASIC FLOW-15",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 15,
+      "statement": "エージェントは見つかった PR の指摘を読む。"
+    },
+    {
+      "id": "コードのリポジトリが未信頼-1",
+      "type": "action",
+      "flow": "コードのリポジトリが未信頼",
+      "step": 1,
+      "statement": "システムは issue に着手しない。"
+    },
+    {
+      "id": "コードのリポジトリが未信頼-2",
+      "type": "action",
+      "flow": "コードのリポジトリが未信頼",
+      "step": 2,
+      "statement": "システムは issue に、コードのリポジトリの名前と信頼登録の手順をコメントする。"
+    },
+    {
+      "id": "コードのリポジトリが未信頼-3",
+      "type": "abort",
+      "flow": "コードのリポジトリが未信頼",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "コードのリポジトリのcloneが無い-1",
+      "type": "action",
+      "flow": "コードのリポジトリのcloneが無い",
+      "step": 1,
+      "statement": "システムは worktree を作らない。"
+    },
+    {
+      "id": "コードのリポジトリのcloneが無い-2",
+      "type": "action",
+      "flow": "コードのリポジトリのcloneが無い",
+      "step": 2,
+      "statement": "システムは利用者にコードのリポジトリの clone を置くコマンドを応答する。"
+    },
+    {
+      "id": "コードのリポジトリのcloneが無い-3",
+      "type": "abort",
+      "flow": "コードのリポジトリのcloneが無い",
+      "step": 3,
+      "statement": "ABORT"
+    },
+    {
+      "id": "置き場所とリンクの食い違い-1",
+      "type": "action",
+      "flow": "置き場所とリンクの食い違い",
+      "step": 1,
+      "statement": "システムはその worktree を候補から外す。"
+    },
+    {
+      "id": "置き場所とリンクの食い違い-2",
+      "type": "action",
+      "flow": "置き場所とリンクの食い違い",
+      "step": 2,
+      "statement": "システムは worktree も branch も消さない。"
+    },
+    {
+      "id": "置き場所とリンクの食い違い-3",
+      "type": "condition",
+      "flow": "置き場所とリンクの食い違い",
+      "step": 3,
+      "statement": "IF 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている THEN"
+    },
+    {
+      "id": "置き場所とリンクの食い違い-4",
+      "type": "action",
+      "flow": "置き場所とリンクの食い違い",
+      "step": 4,
+      "statement": "システムは issue に、置き場所とリンクの先と直し方を1件コメントする。"
+    },
+    {
+      "id": "置き場所とリンクの食い違い-6",
+      "type": "action",
+      "flow": "置き場所とリンクの食い違い",
+      "step": 6,
+      "statement": "システムは利用者に食い違いをログで応答する。"
+    },
+    {
+      "id": "置き場所とリンクの食い違い-7",
+      "type": "abort",
+      "flow": "置き場所とリンクの食い違い",
+      "step": 7,
+      "statement": "ABORT"
+    },
+    {
+      "id": "身元ファイルの復元-1",
+      "type": "action",
+      "flow": "身元ファイルの復元",
+      "step": 1,
+      "statement": "システムは pane の label から issue の owner とリポジトリ名と番号を取り出す。"
+    },
+    {
+      "id": "身元ファイルの復元-2",
+      "type": "action",
+      "flow": "身元ファイルの復元",
+      "step": 2,
+      "statement": "システムはその識別子でカンバンから issue を引き直す。"
+    },
+    {
+      "id": "身元ファイルの復元-3",
+      "type": "condition",
+      "flow": "身元ファイルの復元",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT 引き直した issue から作ったディレクトリ名が、目の前のディレクトリ名と一致する。"
+    },
+    {
+      "id": "身元ファイルの復元-4",
+      "type": "condition",
+      "flow": "身元ファイルの復元",
+      "step": 4,
+      "statement": "システムは VALIDATES THAT 引き直した issue のコードのリポジトリが、置き場所の名前と一致する。"
+    },
+    {
+      "id": "身元ファイルの復元-5",
+      "type": "action",
+      "flow": "身元ファイルの復元",
+      "step": 5,
+      "statement": "システムは身元ファイルを書き直す。"
+    },
+    {
+      "id": "身元ファイルの復元-6",
+      "type": "resume",
+      "flow": "身元ファイルの復元",
+      "step": 6,
+      "statement": "RESUME STEP 2"
+    },
+    {
+      "id": "ディレクトリ名が合わない-1",
+      "type": "action",
+      "flow": "ディレクトリ名が合わない",
+      "step": 1,
+      "statement": "システムは身元ファイルを書かない。"
+    },
+    {
+      "id": "ディレクトリ名が合わない-2",
+      "type": "action",
+      "flow": "ディレクトリ名が合わない",
+      "step": 2,
+      "statement": "システムは worktree を消さない。"
+    },
+    {
+      "id": "ディレクトリ名が合わない-3",
+      "type": "action",
+      "flow": "ディレクトリ名が合わない",
+      "step": 3,
+      "statement": "システムは利用者に、目の前のディレクトリ名と引き直した issue から作った名前をログで応答する。"
+    },
+    {
+      "id": "ディレクトリ名が合わない-4",
+      "type": "abort",
+      "flow": "ディレクトリ名が合わない",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "コードのリポジトリが合わない-1",
+      "type": "action",
+      "flow": "コードのリポジトリが合わない",
+      "step": 1,
+      "statement": "システムは身元ファイルを書かない。"
+    },
+    {
+      "id": "コードのリポジトリが合わない-2",
+      "type": "action",
+      "flow": "コードのリポジトリが合わない",
+      "step": 2,
+      "statement": "システムは worktree を消さない。"
+    },
+    {
+      "id": "コードのリポジトリが合わない-3",
+      "type": "action",
+      "flow": "コードのリポジトリが合わない",
+      "step": 3,
+      "statement": "システムは利用者に、置き場所の名前と引き直した issue のコードのリポジトリをログで応答する。"
+    },
+    {
+      "id": "コードのリポジトリが合わない-4",
+      "type": "abort",
+      "flow": "コードのリポジトリが合わない",
+      "step": 4,
+      "statement": "ABORT"
+    },
+    {
+      "id": "手掛かりが1つも無い-1",
+      "type": "action",
+      "flow": "手掛かりが1つも無い",
+      "step": 1,
+      "statement": "システムはその worktree を壊れたものに数えない。"
+    },
+    {
+      "id": "手掛かりが1つも無い-2",
+      "type": "action",
+      "flow": "手掛かりが1つも無い",
+      "step": 2,
+      "statement": "システムは worktree を消さない。"
+    },
+    {
+      "id": "手掛かりが1つも無い-3",
+      "type": "action",
+      "flow": "手掛かりが1つも無い",
+      "step": 3,
+      "statement": "システムは起動を止めない。"
+    },
+    {
+      "id": "手掛かりが1つも無い-4",
+      "type": "abort",
+      "flow": "手掛かりが1つも無い",
+      "step": 4,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "身元ファイルの復元-1",
+      "kind": "global",
+      "condition": "置き場所に身元ファイルを読めない worktree があり、その worktree を cwd に持つ pane が残っている場合"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "手掛かりが1つも無い-1",
+      "kind": "global",
+      "condition": "置き場所に身元ファイルを読めない worktree があり、その worktree を cwd に持つ pane も残っていない場合"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "コードのリポジトリが Claude Code に信頼登録されている"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "コードのリポジトリが未信頼-1",
+      "kind": "false",
+      "condition": "NOT コードのリポジトリが Claude Code に信頼登録されている"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "置き場所とリンクの食い違い-1",
+      "kind": "global",
+      "condition": "既にある worktree の置き場所が、いまリンクされているコードのリポジトリと違う場合"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "true",
+      "condition": "コードのリポジトリの clone が手元にある"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "コードのリポジトリのcloneが無い-1",
+      "kind": "false",
+      "condition": "NOT コードのリポジトリの clone が手元にある"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "BASIC FLOW-12",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-12",
+      "to": "BASIC FLOW-13",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-13",
+      "to": "BASIC FLOW-14",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-14",
+      "to": "BASIC FLOW-15",
+      "kind": "seq"
+    },
+    {
+      "from": "コードのリポジトリが未信頼-1",
+      "to": "コードのリポジトリが未信頼-2",
+      "kind": "seq"
+    },
+    {
+      "from": "コードのリポジトリが未信頼-2",
+      "to": "コードのリポジトリが未信頼-3",
+      "kind": "seq"
+    },
+    {
+      "from": "コードのリポジトリのcloneが無い-1",
+      "to": "コードのリポジトリのcloneが無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "コードのリポジトリのcloneが無い-2",
+      "to": "コードのリポジトリのcloneが無い-3",
+      "kind": "seq"
+    },
+    {
+      "from": "置き場所とリンクの食い違い-1",
+      "to": "置き場所とリンクの食い違い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "置き場所とリンクの食い違い-2",
+      "to": "置き場所とリンクの食い違い-3",
+      "kind": "seq"
+    },
+    {
+      "from": "置き場所とリンクの食い違い-3",
+      "to": "置き場所とリンクの食い違い-4",
+      "kind": "true",
+      "condition": "同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている"
+    },
+    {
+      "from": "置き場所とリンクの食い違い-3",
+      "to": "置き場所とリンクの食い違い-6",
+      "kind": "false",
+      "condition": "NOT 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている"
+    },
+    {
+      "from": "置き場所とリンクの食い違い-4",
+      "to": "置き場所とリンクの食い違い-6",
+      "kind": "seq"
+    },
+    {
+      "from": "置き場所とリンクの食い違い-6",
+      "to": "置き場所とリンクの食い違い-7",
+      "kind": "seq"
+    },
+    {
+      "from": "身元ファイルの復元-1",
+      "to": "身元ファイルの復元-2",
+      "kind": "seq"
+    },
+    {
+      "from": "身元ファイルの復元-2",
+      "to": "身元ファイルの復元-3",
+      "kind": "seq"
+    },
+    {
+      "from": "身元ファイルの復元-3",
+      "to": "身元ファイルの復元-4",
+      "kind": "true",
+      "condition": "引き直した issue から作ったディレクトリ名が、目の前のディレクトリ名と一致する"
+    },
+    {
+      "from": "身元ファイルの復元-3",
+      "to": "ディレクトリ名が合わない-1",
+      "kind": "false",
+      "condition": "NOT 引き直した issue から作ったディレクトリ名が、目の前のディレクトリ名と一致する"
+    },
+    {
+      "from": "身元ファイルの復元-4",
+      "to": "身元ファイルの復元-5",
+      "kind": "true",
+      "condition": "引き直した issue のコードのリポジトリが、置き場所の名前と一致する"
+    },
+    {
+      "from": "身元ファイルの復元-4",
+      "to": "コードのリポジトリが合わない-1",
+      "kind": "false",
+      "condition": "NOT 引き直した issue のコードのリポジトリが、置き場所の名前と一致する"
+    },
+    {
+      "from": "身元ファイルの復元-5",
+      "to": "身元ファイルの復元-6",
+      "kind": "seq"
+    },
+    {
+      "from": "身元ファイルの復元-6",
+      "to": "BASIC FLOW-2",
+      "kind": "resume"
+    },
+    {
+      "from": "ディレクトリ名が合わない-1",
+      "to": "ディレクトリ名が合わない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "ディレクトリ名が合わない-2",
+      "to": "ディレクトリ名が合わない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "ディレクトリ名が合わない-3",
+      "to": "ディレクトリ名が合わない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "コードのリポジトリが合わない-1",
+      "to": "コードのリポジトリが合わない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "コードのリポジトリが合わない-2",
+      "to": "コードのリポジトリが合わない-3",
+      "kind": "seq"
+    },
+    {
+      "from": "コードのリポジトリが合わない-3",
+      "to": "コードのリポジトリが合わない-4",
+      "kind": "seq"
+    },
+    {
+      "from": "手掛かりが1つも無い-1",
+      "to": "手掛かりが1つも無い-2",
+      "kind": "seq"
+    },
+    {
+      "from": "手掛かりが1つも無い-2",
+      "to": "手掛かりが1つも無い-3",
+      "kind": "seq"
+    },
+    {
+      "from": "手掛かりが1つも無い-3",
+      "to": "手掛かりが1つも無い-4",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "worktree は置き場所の `<host>/<コードのリポジトリの owner>/<コードのリポジトリの repo>/<issue から作ったディレクトリ名>` にある。身元ファイルにコードのリポジトリと PR の宛先がある。成果はコードのリポジトリの branch にある。エージェントは PR の宛先の PR を読める。issue のリポジトリにはコメント以外を1バイトも書き込んでいない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11",
+        "BASIC FLOW-12",
+        "BASIC FLOW-13",
+        "BASIC FLOW-14",
+        "BASIC FLOW-15"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムはリンクされた branch のリポジトリをコードのリポジトリに決める。",
+        "システムはコードのリポジトリの派生元を PR の宛先に決める。",
+        "システムは VALIDATES THAT コードのリポジトリが Claude Code に信頼登録されている。",
+        "システムは worktree の置き場所をコードのリポジトリの名前で組み立てる。",
+        "システムは worktree のディレクトリ名を issue から作る。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "システムはコードのリポジトリの clone から worktree を切る。",
+        "システムは身元ファイルにコードのリポジトリと PR の宛先を書く。",
+        "システムはエージェントへ送るプロンプトにコードのリポジトリと PR の宛先を入れる。",
+        "システムはエージェントを起動する。",
+        "エージェントはコードのリポジトリへ成果を push する。",
+        "エージェントは PR の宛先のリポジトリを、push した branch の名前で引く。",
+        "エージェントは見つかった PR の指摘を読む。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "コードのリポジトリのcloneが無い",
+      "postcondition": "worktree は作られていない。issue のリポジトリの clone は探しに行っていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "コードのリポジトリのcloneが無い-1",
+        "コードのリポジトリのcloneが無い-2",
+        "コードのリポジトリのcloneが無い-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムはリンクされた branch のリポジトリをコードのリポジトリに決める。",
+        "システムはコードのリポジトリの派生元を PR の宛先に決める。",
+        "システムは VALIDATES THAT コードのリポジトリが Claude Code に信頼登録されている。",
+        "システムは worktree の置き場所をコードのリポジトリの名前で組み立てる。",
+        "システムは worktree のディレクトリ名を issue から作る。",
+        "システムは VALIDATES THAT コードのリポジトリの clone が手元にある。",
+        "CONDITION: NOT コードのリポジトリの clone が手元にある",
+        "システムは worktree を作らない。",
+        "システムは利用者にコードのリポジトリの clone を置くコマンドを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "置き場所とリンクの食い違い",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。3回・60秒の条件を満たした場合、issue に直し方のコメントが1件ある。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "置き場所とリンクの食い違い-1",
+        "置き場所とリンクの食い違い-2",
+        "置き場所とリンクの食い違い-3",
+        "置き場所とリンクの食い違い-4",
+        "置き場所とリンクの食い違い-6",
+        "置き場所とリンクの食い違い-7"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムはリンクされた branch のリポジトリをコードのリポジトリに決める。",
+        "システムはコードのリポジトリの派生元を PR の宛先に決める。",
+        "システムは VALIDATES THAT コードのリポジトリが Claude Code に信頼登録されている。",
+        "システムは worktree の置き場所をコードのリポジトリの名前で組み立てる。",
+        "CONDITION: 既にある worktree の置き場所が、いまリンクされているコードのリポジトリと違う場合",
+        "システムはその worktree を候補から外す。",
+        "システムは worktree も branch も消さない。",
+        "IF 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている THEN",
+        "システムは issue に、置き場所とリンクの先と直し方を1件コメントする。",
+        "システムは利用者に食い違いをログで応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "置き場所とリンクの食い違い",
+      "postcondition": "worktree は残っている。branch は残っている。issue の Status は変わっていない。3回・60秒の条件を満たした場合、issue に直し方のコメントが1件ある。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "置き場所とリンクの食い違い-1",
+        "置き場所とリンクの食い違い-2",
+        "置き場所とリンクの食い違い-3",
+        "置き場所とリンクの食い違い-6",
+        "置き場所とリンクの食い違い-7"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムはリンクされた branch のリポジトリをコードのリポジトリに決める。",
+        "システムはコードのリポジトリの派生元を PR の宛先に決める。",
+        "システムは VALIDATES THAT コードのリポジトリが Claude Code に信頼登録されている。",
+        "システムは worktree の置き場所をコードのリポジトリの名前で組み立てる。",
+        "CONDITION: 既にある worktree の置き場所が、いまリンクされているコードのリポジトリと違う場合",
+        "システムはその worktree を候補から外す。",
+        "システムは worktree も branch も消さない。",
+        "IF 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている THEN",
+        "CONDITION: NOT 同じ理由で3回続けて止め、かつ最初に止めてから60秒たっている",
+        "システムは利用者に食い違いをログで応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "コードのリポジトリが未信頼",
+      "postcondition": "worktree は作られていない。issue に、コードのリポジトリの名前を名指しした案内が1件ある。同じコードのリポジトリでは、その案内は二度書かれない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "コードのリポジトリが未信頼-1",
+        "コードのリポジトリが未信頼-2",
+        "コードのリポジトリが未信頼-3"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "システムはリンクされた branch のリポジトリをコードのリポジトリに決める。",
+        "システムはコードのリポジトリの派生元を PR の宛先に決める。",
+        "システムは VALIDATES THAT コードのリポジトリが Claude Code に信頼登録されている。",
+        "CONDITION: NOT コードのリポジトリが Claude Code に信頼登録されている",
+        "システムは issue に着手しない。",
+        "システムは issue に、コードのリポジトリの名前と信頼登録の手順をコメントする。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "cycle",
+      "terminal_flow": "身元ファイルの復元",
+      "postcondition": "worktree に身元ファイルがある。worktree も branch も1バイトも消えていない。次の巡回からその worktree はふつうの候補になる。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "身元ファイルの復元-1",
+        "身元ファイルの復元-2",
+        "身元ファイルの復元-3",
+        "身元ファイルの復元-4",
+        "身元ファイルの復元-5",
+        "身元ファイルの復元-6",
+        "BASIC FLOW-2"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "CONDITION: 置き場所に身元ファイルを読めない worktree があり、その worktree を cwd に持つ pane が残っている場合",
+        "システムは pane の label から issue の owner とリポジトリ名と番号を取り出す。",
+        "システムはその識別子でカンバンから issue を引き直す。",
+        "システムは VALIDATES THAT 引き直した issue から作ったディレクトリ名が、目の前のディレクトリ名と一致する。",
+        "システムは VALIDATES THAT 引き直した issue のコードのリポジトリが、置き場所の名前と一致する。",
+        "システムは身元ファイルを書き直す。",
+        "RESUME STEP 2",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "コードのリポジトリが合わない",
+      "postcondition": "身元ファイルは無いままである。worktree は残っている。branch は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "身元ファイルの復元-1",
+        "身元ファイルの復元-2",
+        "身元ファイルの復元-3",
+        "身元ファイルの復元-4",
+        "コードのリポジトリが合わない-1",
+        "コードのリポジトリが合わない-2",
+        "コードのリポジトリが合わない-3",
+        "コードのリポジトリが合わない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "CONDITION: 置き場所に身元ファイルを読めない worktree があり、その worktree を cwd に持つ pane が残っている場合",
+        "システムは pane の label から issue の owner とリポジトリ名と番号を取り出す。",
+        "システムはその識別子でカンバンから issue を引き直す。",
+        "システムは VALIDATES THAT 引き直した issue から作ったディレクトリ名が、目の前のディレクトリ名と一致する。",
+        "システムは VALIDATES THAT 引き直した issue のコードのリポジトリが、置き場所の名前と一致する。",
+        "CONDITION: NOT 引き直した issue のコードのリポジトリが、置き場所の名前と一致する",
+        "システムは身元ファイルを書かない。",
+        "システムは worktree を消さない。",
+        "システムは利用者に、置き場所の名前と引き直した issue のコードのリポジトリをログで応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P008",
+      "terminal": "abort",
+      "terminal_flow": "ディレクトリ名が合わない",
+      "postcondition": "身元ファイルは無いままである。worktree は残っている。branch は残っている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "身元ファイルの復元-1",
+        "身元ファイルの復元-2",
+        "身元ファイルの復元-3",
+        "ディレクトリ名が合わない-1",
+        "ディレクトリ名が合わない-2",
+        "ディレクトリ名が合わない-3",
+        "ディレクトリ名が合わない-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "CONDITION: 置き場所に身元ファイルを読めない worktree があり、その worktree を cwd に持つ pane が残っている場合",
+        "システムは pane の label から issue の owner とリポジトリ名と番号を取り出す。",
+        "システムはその識別子でカンバンから issue を引き直す。",
+        "システムは VALIDATES THAT 引き直した issue から作ったディレクトリ名が、目の前のディレクトリ名と一致する。",
+        "CONDITION: NOT 引き直した issue から作ったディレクトリ名が、目の前のディレクトリ名と一致する",
+        "システムは身元ファイルを書かない。",
+        "システムは worktree を消さない。",
+        "システムは利用者に、目の前のディレクトリ名と引き直した issue から作った名前をログで応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P009",
+      "terminal": "abort",
+      "terminal_flow": "手掛かりが1つも無い",
+      "postcondition": "worktree は残っている。branch は残っている。システムは起動を続けている。その worktree は報告にも復元にも出ない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "手掛かりが1つも無い-1",
+        "手掛かりが1つも無い-2",
+        "手掛かりが1つも無い-3",
+        "手掛かりが1つも無い-4"
+      ],
+      "steps": [
+        "巡回タイマーはシステムに巡回の開始を要求する。",
+        "システムはカンバンから着手待ちの issue を1件選ぶ。",
+        "CONDITION: 置き場所に身元ファイルを読めない worktree があり、その worktree を cwd に持つ pane も残っていない場合",
+        "システムはその worktree を壊れたものに数えない。",
+        "システムは worktree を消さない。",
+        "システムは起動を止めない。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 45,
+    "nodes_covered": 45,
+    "edges_total": 46,
+    "edges_covered": 46
+  }
+}

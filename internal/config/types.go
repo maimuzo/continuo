@@ -254,6 +254,13 @@ type WorkspaceConfig struct {
 	// **どちらでも worktree は1バイトも消さない。**消すのは人間が
 	// `continuo abandon --force` を打ったときだけである。
 	OnBrokenWorktree string `yaml:"on_broken_worktree"`
+	// FetchTimeoutMs は、リンクされた branch を取りに行くときの上限である
+	// （設計 issue144 の 10b）。
+	//
+	// **上限が無いと、遅い回線で巡回のループごと止まる。**
+	// 叩くのは「Development のリンクされた branch が手元に無い」ときだけであり、
+	// 巡回のたびに通信するわけではない。
+	FetchTimeoutMs int `yaml:"fetch_timeout_ms"`
 }
 
 // workspace.on_broken_worktree に書ける値である（3-49）。

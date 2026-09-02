@@ -36,6 +36,19 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 	if issue.URL != nil {
 		url = *issue.URL
 	}
+	// **エージェントは「どこへ push するか」「PR をどこへ出すか」を
+	// プロンプトからしか知れない**（設計 issue144 の 11d）。
+	// **リンクが0本なら、4つとも今までと同じ値になる**（コードのリポジトリ＝issue の
+	// リポジトリ、PR の宛先＝コードのリポジトリ、`.push_branch` は空文字）。
+	codeOwner, codeRepo := codeOwnerRepoOf(issue)
+	codeNameWithOwner := issue.CodeRepoNameWithOwner
+	if codeNameWithOwner == "" {
+		codeNameWithOwner = codeOwner + "/" + codeRepo
+	}
+	prTarget := issue.PRTarget
+	if prTarget == "" {
+		prTarget = codeNameWithOwner
+	}
 	data := map[string]any{
 		"issue": map[string]any{
 			"identifier": issue.Identifier,
@@ -47,7 +60,22 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 			"state":      issue.State,
 			"labels":     issue.Labels,
 		},
-		"attempt": attemptValue(attempt),
+		"code": map[string]any{
+			"name_with_owner": codeNameWithOwner,
+			"owner":           codeOwner,
+			"repo":            codeRepo,
+		},
+		"pr_target": prTarget,
+		// **`.push_branch` は「base に使ったリンクされた branch の名前」であって、
+		// push 先の指定ではない**（設計 issue144 の 11d / 14）。
+		// **push 先の既定は、いつでも `git push -u origin HEAD` である。**
+		// base と push 先を同じものに固定すると、
+		// 「1つの issue で PR を複数出す」が書けなくなる。
+		//
+		// **空文字になるのは `Issue.BranchName` が nil のときである**
+		// （リンクが0本のときと、2本以上のときの両方）。
+		"push_branch": linkedBranchOf(issue),
+		"attempt":     attemptValue(attempt),
 	}
 
 	var b strings.Builder

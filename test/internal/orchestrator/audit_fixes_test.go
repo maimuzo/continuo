@@ -367,7 +367,7 @@ func TestRestore_置き場所と食い違う身元ファイルを鍵にしない
 		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
 		AgentStatus: herdr.AgentStatusIdle, SessionUUID: "sess-188",
 	})
-	fx.AllowLog("身元ファイルの名乗りが worktree の置き場所と食い違う",
+	fx.AllowLog("身元ファイルの名乗りが worktree のディレクトリ名と食い違う",
 		"身元ファイルの無い worktree に pane がありました")
 
 	result, _ := restore(t, fx)

@@ -166,6 +166,17 @@ type runner struct {
 	// noWorktree は、この issue に一致する worktree が1つも無かったことを表す。
 	// **段2b（残った branch の片付け）へ進む合図である**（issue #27）。
 	noWorktree bool
+
+	// codeOwner / codeRepo は、照合を通った worktree の置き場所の2・3階層目である
+	// （設計 issue144 の 8b2）。**そこには「コードのリポジトリ」が入る。**
+	//
+	// **branch を探す clone は、この2つで引く。**issue のリポジトリで引くと、
+	// issue とコードが別のリポジトリにある形では別の clone を見に行く。
+	// **パスはエージェントが書き換えられない**ので、身元ファイルの `code_repo` は使わない。
+	// **worktree が1件も無いときは空のままである**（手掛かりがパスしか無いのに、
+	// そのパスが無い）。そのときは issue のリポジトリで引く。
+	codeOwner string
+	codeRepo  string
 }
 
 // Run は `continuo abandon` の段1〜段5 を通す。
@@ -484,6 +495,10 @@ func (r *runner) issueRef() workspace.IssueRef {
 		Owner:      r.issue.Owner,
 		Repo:       r.issue.Repo,
 		Number:     r.issue.Number,
+		// **照合を通った worktree のパスから取った「コードのリポジトリ」**
+		// （設計 issue144 の 8b2）。**空なら Owner / Repo が使われる。**
+		CodeOwner: r.codeOwner,
+		CodeRepo:  r.codeRepo,
 	}
 }
 
@@ -521,16 +536,15 @@ func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
 			"worktree", w.Path, "error", err)
 		return false
 	}
-	// **GitHub は owner とリポジトリ名の大文字小文字を区別しない**ので、無視して比べる。
-	if !strings.EqualFold(owner, r.issue.Owner) || !strings.EqualFold(repo, r.issue.Repo) {
-		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonOwnerRepoMismatch,
-			w.Path, owner, repo, w.Identity.IssueURL))
-		r.logger.Warn("身元ファイルの issue_url が置き場所と食い違います（消しません）",
-			"worktree", w.Path, "path_owner", owner, "path_repo", repo,
-			"issue_url", w.Identity.IssueURL)
-		return false
-	}
-
+	// **owner とリポジトリ名は比べない**（設計 issue144 の 8b2）。
+	// 置き場所の2・3階層目には**コードのリポジトリ**が入るので、
+	// issue とコードが別のリポジトリにある形では、人間が打った issue の owner/repo と
+	// 一致しない。**残すスラグの比較のほうが強い**（同じリポジトリの中でも別の issue を
+	// 消せないのは、スラグを比べているからである）。
+	//
+	// **トラッカーは引かない。**abandon は片付けの途中で落ちた後始末に使う道具であり、
+	// **issue がカンバンから外れていても動かなければならない。**
+	// トラッカーを引く設計にすると、カンバンから外れた issue で abandon が使えなくなる。
 	want, err := r.deps.Workspace.ExpectedSlugFor(r.issueRef())
 	if err != nil {
 		// **組み立てられないなら、裏を取れない。**取れないものを消しにいかない。
@@ -541,6 +555,10 @@ func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
 	}
 	got := filepath.Base(filepath.Clean(w.Path))
 	if strings.EqualFold(got, want) {
+		// **照合を通ったパスからだけ、コードのリポジトリを取る**（設計 issue144 の 8b2）。
+		// **通る前に取ってはならない。**候補から外した worktree の置き場所が残り、
+		// branch を別の clone に探しに行く。
+		r.codeOwner, r.codeRepo = owner, repo
 		return true
 	}
 	fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonSlugMismatch,

@@ -55,6 +55,19 @@ type Identity struct {
 	IssueIdentifier string `json:"issue_identifier"`
 	// ProjectItemID は project item の ID である。ボードを ID 指定でまとめて取り直すのに使う。
 	ProjectItemID string `json:"project_item_id"`
+	// CodeRepo はコードのリポジトリである（`<owner>/<repo>`）。
+	//
+	// **人間が読むためだけに書く。**continuo はこの値を1度も読まない
+	// （身元ファイルは worktree の直下にあり、エージェントが書き換えられるので、
+	// 判断に使う値はトラッカーから取り直す。設計 issue144 の 8b）。
+	CodeRepo string `json:"code_repo"`
+	// PRTarget は PR の宛先である（fork なら派生元。`<owner>/<repo>`）。
+	// **CodeRepo と同じく、人間が読むためだけに書く。**
+	PRTarget string `json:"pr_target"`
+	// LinkedBranch は base に使ったリンクされた branch の生の名前である
+	// （`origin/` は付かない。Base とは形が違う）。
+	// **CodeRepo と同じく、人間が読むためだけに書く。**
+	LinkedBranch string `json:"linked_branch"`
 	// Branch は worktree が指す branch 名である。片付けで消す対象を確定するのに使う。
 	Branch string `json:"branch"`
 	// Base は worktree を作ったときの base である（PrepareResult.Base をそのまま書く）。

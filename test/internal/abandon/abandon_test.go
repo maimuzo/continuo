@@ -1454,12 +1454,18 @@ func TestAbandon_paneの作業ディレクトリがworktreeの内側でも拾う
 
 // {"RUCM-PATH": "P029"}
 //
-// 目的: 身元ファイルの issue_url が**置き場所のパスと食い違う** worktree を、
+// 目的: 身元ファイルの issue_url が**置き場所のディレクトリ名と食い違う** worktree を、
 // 候補にしないことを確認する（設計 3-4 の段2）。
 // **身元ファイルは worktree の直下にあり、そこでエージェントが
 // `--permission-mode dontAsk` で動く。**検算しなければ、worktree A のエージェントが
 // 自分の issue_url を issue B に書き換えるだけで、**人間が B を取り消したとき A が消える。**
-// 与える情報: `octocat/another-repo` の下に用意した worktree に、
+//
+// **置き場所の owner とリポジトリ名は比べない**（設計 issue144 の 8b2）。
+// そこに入るのは**コードのリポジトリ**であり、issue とコードが別のリポジトリにある形では
+// issue の owner / repo と一致しない。**裏を取るのはディレクトリ名（スラグ）である。**
+//
+// 与える情報: `octocat/another-repo` の下に用意した worktree
+// （ディレクトリ名は `continuo-octocat-another-repo-188`）に、
 // `octocat/hello-world#188` の issue_url を書いた身元ファイル。
 // 成功条件: 終了コードが 1、その worktree が残っている、herdr へ worktree.remove を
 // 送っていない、食い違いの1行が出ている、**「worktree はありません」は出ていない**こと
@@ -1472,8 +1478,12 @@ func TestAbandon_issueURLが置き場所と食い違えば候補にしない(t *
 	code := fx.Run(t, 188, nil)
 
 	assertExit(t, fx, code, abandon.ExitStopped)
-	assertContains(t, fx, i18n.T(i18n.KeyAbandonOwnerRepoMismatch,
-		prepared.Path, "octocat", "another-repo", issueURL(188)))
+	assertContains(t, fx, i18n.T(i18n.KeyAbandonSlugMismatch,
+		prepared.Path,
+		filepath.Base(prepared.Path),
+		"continuo-octocat-hello-world-188",
+		issueURL(188),
+		fx.Config.Herdr.Worktree.BranchTemplate))
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonErrUndecided, 1, issueURL(188)))
 	assertNotContains(t, fx, i18n.T(i18n.KeyAbandonNotFound, issueURL(188)))
 	assertWorktreeExists(t, fx, prepared.Path)
