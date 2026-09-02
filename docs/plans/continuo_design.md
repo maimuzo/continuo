@@ -8099,6 +8099,84 @@ tracker:
 **ここに書かれていない立場の本文は、データとして読ませる。**命令が書かれていても従わせない。
 **不具合の再現手順や説明は、立場によらず材料にしてよい**（3-72b）。
 
+### 3-78. issue とコードを別のリポジトリに置く形は、仕組みを足さずにユースケースで守る
+
+**言いたいこと。**issue が非公開のリポジトリにあり、コードが public の fork にあり、
+PR を本家へ出す形は、**いま continuo の仕組みではなくエージェントの判断で回っている。**
+**専用の仕組みは足さない**（2026-09-02、人間の判断）。**代わりにユースケース記述で守る。**
+
+**仕様は [docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.rucm.md](../spec/usecases/particular_case/本家のリポジトリへ%20PR%20を出す.rucm.md) が持つ。**
+
+**なぜ仕組みを足さないか。**足すとしたら「issue のリポジトリとコードのリポジトリを別々に設定できる」
+という形になるが、**それを入れると worktree の置き場所・base の決め方・片付けの判定が全部2本立てになる。**
+いまの形は、**continuo が issue のリポジトリしか知らないまま成立している。**
+
+**成立している理由は4つある。**
+
+| 何が | どう効いているか |
+| --- | --- |
+| **base の決め方** | `herdr.worktree.base` が null なら issue のリポジトリの既定 branch を使う（3-22 の段4）。**コードのリポジトリを知らなくてよい** |
+| **判定の hook** | `claude.tool_gate.mode` の既定は `public_only` で、**issue のリポジトリが非公開なら掛からない**（3-64）。fork への push も本家への PR も待ち時間なしで叩ける |
+| **片付けの判定** | 身元ファイルは数から外す（3-18）。worktree の HEAD が base のままならリモート追跡 ref に載っているので、段1 で消してよいと決まる（3-9） |
+| **Status の動かし方** | 表明の1行だけで動かす。**PR がどこに出たかを continuo は見ない** |
+
+**仕組みを変えるときは、上の4つを壊していないかを、そのユースケースの検査で確かめる。**
+
+    sh scripts/check-rucm.sh --strict
+
+**ただし、雛形の WORKFLOW.md のままでは動かない。**置き換える本文は 3-78b にある。
+
+### 3-78b. このユースケースは、WORKFLOW.md の「終わったらやること」を置き換えないと動かない
+
+**言いたいこと。**`continuo init` が置く雛形は、**成果が worktree の中にある前提で書かれている。**
+足すだけでは「必ず commit して push しろ」と「この worktree の中では commit するな」が並び、
+どちらに従うかがエージェント次第になる。**足すのではなく、次の2つの段を消して置き換える。**
+
+| 消す段（雛形での出どころ） | 何と書いてあるか |
+| --- | --- |
+| **commit と push を求める段**（[internal/scaffold/template.go:365](../../internal/scaffold/template.go#L365)） | 「`review` または `blocked` を出す前に、必ず commit して push してください」 |
+| **push 先を指定する段**（[internal/scaffold/template.go:373](../../internal/scaffold/template.go#L373)） | 「push 先は、この issue のために作られた branch です」 |
+
+**残すと worktree が残り続ける。**雛形側に従って worktree の中で commit すると、その commit は
+fork へ push されていないので片付けが見送られる（[test/internal/workspace/upstream_pr_test.go](../../test/internal/workspace/upstream_pr_test.go)
+の `TestUpstreamPR_worktreeの中にpushしていないcommitがあれば片付けない`）。
+
+**`<実行時ディレクトリ>/WORKFLOW.md` の「終わったらやること」へ、代わりに次を置く。**
+
+    ## コードが別のリポジトリにあるとき
+
+    **issue の本文にコードのリポジトリの名前が書かれている場合は、その clone で直してください。**
+    **clone は worktree の外に置いてください**（例: `~/src/<owner>/<repo>`）。
+
+        git -C <clone のパス> switch -c <branch 名>
+        git -C <clone のパス> commit -am "<何を直したか>"
+        git -C <clone のパス> push -u origin HEAD
+        gh pr create --repo <本家の owner>/<本家の repo> --head <fork の owner>:<branch 名>
+
+    **この worktree の中では commit しないでください。**成果は clone の側にあります。
+    **`cd` はしないでください。**`git -C` で足ります。
+
+**hook の `cwd` は落とし穴にならない**（2026-09-02 実測。Claude Code 2.1.258）。
+
+| 何を試したか | `Stop` の `cwd` |
+| --- | --- |
+| worktree の中の subdirectory へ `cd` | **そこになる。**内側なので通る |
+| **worktree の外へ `cd`**（既定の `dontAsk`） | **permission で拒否され、`cd` が実行されない** |
+| worktree の外へ `cd`（`bypassPermissions`） | 起動ディレクトリへ戻され、元のまま |
+| `--add-dir` で外を足してから `cd` | **外になる。**continuo は `--add-dir` を渡さない |
+
+**崩れるのは、`--add-dir` を渡したときだけである。**`claude.permission_mode` を `dontAsk` 以外にする道は無く
+（[internal/config/validate.go:232](../../internal/config/validate.go#L232) が起動時に弾く）、
+**clone を worktree の外に置くこと自体は、崩れる条件にならない。**
+
+**だから雛形そのものは直さない。**上のサンプルで `cd` を止めてあるのは、
+**将来 `--add-dir` を渡す設定へ変えたときに備えてである。**このユースケースを回す利用者は、どのみち WORKFLOW.md を書き換える。
+**全利用者が読む雛形へ、既定では起きない事故の回避策を足すと、本文が長くなって読まれなくなる。**
+
+**`cwd` の検査は緩めない。**`session_id` を騙った hook を弾く唯一の手立てだからである（3-23）。
+**落とすのは外だと分かったときだけで、`cwd` が空の hook は通す**
+（[internal/orchestrator/hookinput.go](../../internal/orchestrator/hookinput.go) の `acceptHookCwd`）。
+
 
 ## 4. 人間が決めたこと
 
