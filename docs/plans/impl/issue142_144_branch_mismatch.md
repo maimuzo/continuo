@@ -91,7 +91,7 @@ var ErrWorktreeBranchMismatch = i18n.Sentinel(i18n.KeyWorkspaceErrWorktreeBranch
 | `workspace.err.worktree_branch_mismatch` | 番兵そのものの文言（**新設**） |
 | `workspace.prepare.branch_mismatch` | 既にある。**中身を差し替える** |
 
-**`internal/i18n/messages/ja.json` に書く実物。**指定子は `%w` 1個・`%q` 2個・`%s` 6個の**計9個で、番号は使わない。**
+**[internal/i18n/messages/ja.json](../../../internal/i18n/messages/ja.json) に書く実物。**指定子は `%w` 1個・`%q` 2個・`%s` 6個の**計9個で、番号は使わない。**
 
 ```json
 "workspace.err.worktree_branch_mismatch": "worktree が期待と違う branch に載っています",
@@ -107,7 +107,7 @@ return nil, i18n.Errorf(
     loc.Path, loc.Path, loc.Branch.String(), loc.Path, loc.Branch.String())
 ```
 
-**`internal/i18n/messages/en.json` 側は `%[1]w` … `%[9]s` の明示の番号で書く**
+**[internal/i18n/messages/en.json](../../../internal/i18n/messages/en.json) 側は `%[1]w` … `%[9]s` の明示の番号で書く**
 （既にある `workspace.prepare.detached_head` の英語と同じ書き方。**番号は1回ずつしか使わない**）。
 **`en.json` を直したら `_source_sha256`（[internal/i18n/messages/en.json:2](../../../internal/i18n/messages/en.json#L2)）も入れ直す。**
 [test/internal/i18n/i18n_test.go:298-302](../../../test/internal/i18n/i18n_test.go#L298-L302) が
@@ -214,7 +214,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 - [test/internal/scaffold/design_template_test.go:111-129](../../../test/internal/scaffold/design_template_test.go#L111-L129) の `assertSameBody`
 - `TestTemplate_雛形の本文が設計5_3の本文と一致する`（[docs/plans/continuo_design.md:8729-8730](../continuo_design.md#L8729-L8730) が名指ししている）
 
-**[test/internal/scaffold/blocked_push_test.go:14-18](../../../test/internal/scaffold/blocked_push_test.go#L14-L18) が探す
+**[test/internal/prompt/blocked_push_test.go:14-18](../../../test/internal/prompt/blocked_push_test.go#L14-L18) が探す
 `を出す前に、必ず commit して push してください。` と `git push -u origin HEAD` は、どちらも1文字も触らない。**
 
 ---
@@ -382,7 +382,7 @@ level=WARN msg="リンクされた branch が手元の clone に無いので bas
 **言いたいこと。**`BranchName` は `SPEC.md` 4.1.1 の項目として残し、
 **base の判断には新しい `LinkedBranches` を使う。**`NativeRef` には入れない。
 
-**`internal/tracker/tracker.go` の `Issue` に1つ足す。**
+**[internal/tracker/tracker.go](../../../internal/tracker/tracker.go) の `Issue` に1つ足す。**
 
 ```go
 // LinkedBranches は GitHub の "Development" でリンクされた branch のうち、
@@ -394,7 +394,7 @@ level=WARN msg="リンクされた branch が手元の clone に無いので bas
 LinkedBranches []string
 ```
 
-**`internal/workspace/workspace.go` の `IssueRef` に1つ足す。**`NativeRef` には入れない。
+**[internal/workspace/workspace.go](../../../internal/workspace/workspace.go) の `IssueRef` に1つ足す。**`NativeRef` には入れない。
 [internal/workspace/workspace.go:251-255](../../../internal/workspace/workspace.go#L251-L255) の注記が
 **「このパッケージが読むのは "default_branch" の1キーだけである … 唯一の例外がここである」**と書いており、
 **2つ目の例外を作るとその注記が嘘になる。**
@@ -511,7 +511,7 @@ LinkedBranches []string
 （「別の branch を出している worktree に、消させない案内を返す」）
 
 **触ったのは9ファイルで、設計の 5 と 12 が数えた9と同じである。**
-`docs/plans/continuo_design.md` は 3-66 の状態・3-68 の前提の一文・3-69・5-3 の本文の4箇所。
+[docs/plans/continuo_design.md](../continuo_design.md) は 3-66 の状態・3-68 の前提の一文・3-69・5-3 の本文の4箇所。
 
 **3-68 の前提の一文も直した。**「いまは branch の食い違いも登録の欠落も同じ番兵で包まれており、
 2つを区別できない」は、この変更で事実でなくなった。**4つの番兵を名指しする文へ置き換えた。**
@@ -535,7 +535,7 @@ LinkedBranches []string
 | GitHub Actions（PR #146） | **build 4つと test 2つが全部 pass** |
 
 **手元の worktree では `mise trust` が要った。**`.claude/worktrees/` の下に作られた worktree の
-`mise.toml` は信頼されておらず、`scripts/test-like-ci.sh` が組み立てる clean PATH の `go` の shim が
+`mise.toml` は信頼されておらず、[scripts/test-like-ci.sh](../../../scripts/test-like-ci.sh) が組み立てる clean PATH の `go` の shim が
 「Config files are not trusted」で落ちる。**テストが1件も走らないまま EXIT=1 になる。**
 `mise trust <worktree>/mise.toml` を1回叩けば通る。
 
@@ -563,7 +563,7 @@ LinkedBranches []string
 | **3段落の置き場所** | `## 終わったらやること` の中（`**push 先は、…**` の直前） | `## この issue に着手してよいことは、もう決まっています` の直後。**見出しを増やさずに、読む順番より先に置ける** |
 | **別の branch の中身を読む手順** | `git worktree add --detach /tmp/<任意の名前> FETCH_HEAD` と `git worktree remove` | worktree の置き場所の下（continuo が prune する場所）を使わせる。あるいは読むだけなら `git show <ref>:<パス>` |
 
-**どちらも `internal/scaffold/template.go` と 5-3 の本文を同時に直すことになる**
+**どちらも [internal/scaffold/template.go](../../../internal/scaffold/template.go) と 5-3 の本文を同時に直すことになる**
 （`TestTemplate_雛形の本文が設計5_3の本文と一致する` が一致を検査している）。
 
 **残っていること。**

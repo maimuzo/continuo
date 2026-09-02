@@ -36,6 +36,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -611,6 +612,9 @@ type fakeTracker struct {
 	// **issue のコメントを読めない状況の再現に使う**（設計 3-25 の段1。
 	// 読めなかったときは「書かれていないもの」として扱う）。
 	commentsErr error
+	// commentsTruncated は FetchAllComments が「古い側を読み切れなかった」と
+	// 名乗るかである（issue #140）。
+	commentsTruncated bool
 	// commentsSelfLogin は FetchComments が最後に受け取った「gh の持ち主」である
 	// （設計 3-65）。**印だけで判定していないことを確かめるために記録する。**
 	commentsSelfLogin string
@@ -779,6 +783,19 @@ func (ft *fakeTracker) CommentsSelfLogin() string {
 // （issue へコメントを書けない状況の再現）。
 //
 // err: 返すエラー。nil なら成功にする。
+// SetCommentsTruncated は、FetchAllComments が「古い側を読み切れなかった」と
+// 名乗るかを決める（issue #140）。
+//
+// **件数では作れない状況である。**1ページが100件に満たないまま20ページを使い切ると、
+// 2000件に届かないまま切れる。そこをアダプタが真偽値で返すので、ここも真偽値で作る。
+//
+// truncated: 真なら「古い側を読み切れなかった」と名乗る。
+func (ft *fakeTracker) SetCommentsTruncated(truncated bool) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.commentsTruncated = truncated
+}
+
 func (ft *fakeTracker) SetPostError(err error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
@@ -1325,18 +1342,21 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 // FetchAllComments は issue のコメントを1件残らず返す（設計 3-77a）。
 //
 // **印で外す処理を1つも通さない。**担当の持ち回りの判定はこれを読む。
+//
+// 戻り値の2つ目は「古い側を読み切れなかったか」である（issue #140）。
+// `commentsTruncated` に真を入れておくと、そのまま返す。
 func (ft *fakeTracker) FetchAllComments(
 	_ context.Context, issueNodeID string, _ config.TrackerProviderCommentsConfig,
-) ([]tracker.Comment, error) {
+) ([]tracker.Comment, bool, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.record("FetchAllComments")
 	if ft.commentsErr != nil {
-		return nil, ft.commentsErr
+		return nil, false, ft.commentsErr
 	}
 	out := make([]tracker.Comment, len(ft.comments[issueNodeID]))
 	copy(out, ft.comments[issueNodeID])
-	return out, nil
+	return out, ft.commentsTruncated, nil
 }
 
 // FetchViewer はこのテスト用トラッカー mock が名乗る「gh の持ち主」を返す（設計 3-77b）。
@@ -1801,8 +1821,11 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 
 	var sessionMu sync.Mutex
 	orc, err := orchestrator.New(orchestrator.Options{
-		Config:         cfg,
-		PromptTemplate: promptTemplate,
+		Config: cfg,
+		// **1回目に送る文面は、断片の並びとして渡す**（設計 5-3c）。
+		// テストが与えるのは1枚のテンプレートなので、それを WORKFLOW.md の本文の
+		// 位置に置いた形（互換の経路）で組み立てる。
+		Prompt:         prompt.Build(promptTemplate, "", "", false),
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,

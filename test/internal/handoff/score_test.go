@@ -284,7 +284,7 @@ func TestDeadline_最初の入札から数える(t *testing.T) {
 // 戻り値: 入札のコメント。
 func bidComment(host string, score int, postedAt time.Time) handoff.CommentView {
 	return handoff.CommentView{
-		Body:      handoff.FormatBid(handoff.Bid{Host: host, Score: score, At: postedAt}),
+		Body:      handoff.FormatBid(handoff.Bid{Host: host, Score: score, At: postedAt}, 3*time.Minute),
 		CreatedAt: postedAt,
 	}
 }

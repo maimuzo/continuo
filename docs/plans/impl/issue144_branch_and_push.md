@@ -938,7 +938,7 @@ workspace:
 **`continuo init` が書く既定値も同じにする**
 （[internal/scaffold/template.go](../../../internal/scaffold/template.go) の
 front matter と [internal/config/default.go:89-95](../../../internal/config/default.go#L89-L95)）。
-**`internal/config/types.go` の `WorkspaceConfig` にフィールドを足し、validate も足す。**
+**[internal/config/types.go](../../../internal/config/types.go) の `WorkspaceConfig` にフィールドを足し、validate も足す。**
 
 **[docs/plans/continuo_design.md](../continuo_design.md) 5-2 の ```yaml ブロックにも同じ行を足す。**
 足さないと `TestTemplate_雛形のキー構成が設計5_2の設定例と一致する` が
@@ -1101,7 +1101,7 @@ level=WARN msg="worktree の置き場所がコードのリポジトリと食い�
 
 ---
 
-## 12. `internal/scaffold/template.go` の本文に足す2つ
+## 12. [internal/scaffold/template.go](../../../internal/scaffold/template.go) の本文に足す2つ
 
 **言いたいこと。**足すのは「branch を切り替えるな」と
 「push には `-u` を必ず付けろ」の2つである（PR の探し方は 12b）。
@@ -1199,7 +1199,7 @@ push した branch の名前でも引いてください。
 
 **数えた単位。****行数であってファイル数ではない。**
 `git.go` / `prepare.go` / `dispatch.go` / `query.go` / `template.go` / `continuo_design.md` /
-`internal/i18n` / `docs/FAQ.md` は
+`internal/i18n` / [docs/FAQ.md](../../FAQ.md) は
 **2つ以上の塊にまたがるので重複して数えている。**重複を除くと**20行**になる。
 そのうち `docs/FAQ.md と docs/upgrading.md` の1行は2ファイル、
 `internal/config` / `internal/i18n` / `test/internal/workspace` の3行はディレクトリ（複数ファイル）である。

@@ -10,8 +10,11 @@
 // internal/scaffold の2箇所と internal/orchestrator の1箇所に増えたので、写しを3つ置く代わりに
 // 1つのパッケージへ寄せた。
 //
-// **i18n のキーも移す前のものを使い続ける。**文言は WORKFLOW.md を名指ししているが、
-// キーを増やさないことを優先している。
+// **i18n のキーは移す前のものを使い続ける。**ただし**文言はファイルの名前を名指ししない。**
+// この関数を通るのは WORKFLOW.md だけではなく、PROJECT_SPECIFIC_PROMPT.md も
+// `<実行時ディレクトリ>/issues/<スラグ>/settings.json` も通る。文言に片方の名前を書くと、
+// 落ちた当のファイルとは別のファイルを名乗る。**名前は呼ぶ側（この関数）が
+// filepath.Base(path) で渡す。**
 package atomicfile
 
 import (
@@ -46,22 +49,26 @@ import (
 // 戻り値: 書き込みに失敗した理由。成功したら nil。
 func Write(path string, data []byte, perm fs.FileMode) error {
 	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*")
+	// **文言が名乗るのは、書き込む先の名前である**（一時ファイルの名前ではない）。
+	// 一時ファイルの名前は利用者が付けたものではないので、名乗られても何のことか分からない。
+	// **どこで落ちたかは、そのあとに続くパスで分かる。**
+	name := filepath.Base(path)
+	f, err := os.CreateTemp(dir, "."+name+".*")
 	if err != nil {
-		return i18n.Errorf(i18n.KeyScaffoldUpdateTempCreateFailed, dir, err)
+		return i18n.Errorf(i18n.KeyScaffoldUpdateTempCreateFailed, name, dir, err)
 	}
 	tmp := f.Name()
 
 	if _, err := f.Write(data); err != nil {
 		f.Close()
 		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, tmp, err)
+		return i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, name, tmp, err)
 	}
 	// os.CreateTemp は 0600 で作るので、渡された権限に戻す。
 	if err := f.Chmod(perm); err != nil {
 		f.Close()
 		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldUpdateChmodFailed, tmp, err)
+		return i18n.Errorf(i18n.KeyScaffoldUpdateChmodFailed, name, tmp, err)
 	}
 	// **rename の前に fsync する。**書き込んだ内容がディスクに届く前に rename が
 	// 先に届くと、電源が落ちたときに中身の無いファイルが残りうる。
@@ -72,15 +79,15 @@ func Write(path string, data []byte, perm fs.FileMode) error {
 	if err := f.Sync(); err != nil {
 		f.Close()
 		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldUpdateSyncFailed, tmp, err)
+		return i18n.Errorf(i18n.KeyScaffoldUpdateSyncFailed, name, tmp, err)
 	}
 	if err := f.Close(); err != nil {
 		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, tmp, err)
+		return i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, name, tmp, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
-		return i18n.Errorf(i18n.KeyScaffoldUpdateRenameFailed, path, err)
+		return i18n.Errorf(i18n.KeyScaffoldUpdateRenameFailed, name, path, err)
 	}
 	return nil
 }

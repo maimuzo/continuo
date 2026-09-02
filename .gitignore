@@ -36,6 +36,10 @@ go.work.sum
 .claude/local-guidelines.md
 .claude/worktrees/
 
+# 人間の指示を取りこぼさないための覚え書き。会話の原文と、そのセッションの
+# 記録ファイルの絶対パスが入る。このリポジトリは PUBLIC なので追跡しない。
+.claude/requests/
+
 # 準拠する仕様（openai/symphony の SPEC.md）。**リポジトリに同梱しない。**
 # Apache-2.0 の再配布になり、ライセンスの扱いが増えるため。
 # 作業に使うときは各自が置く（置き方は CLAUDE.md を見よ）。

@@ -35,6 +35,7 @@ import (
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -126,7 +127,7 @@ type Tracker interface {
 	PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*tracker.Comment, error)
 	// FetchAllComments は issue のコメントを1件残らず取る（設計 3-77a）。
 	// **持ち回りの印が付いたコメントも落とさない。**担当の持ち回りの判定はこれを読む。
-	FetchAllComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig) ([]tracker.Comment, error)
+	FetchAllComments(ctx context.Context, issueNodeID string, cfg config.TrackerProviderCommentsConfig) ([]tracker.Comment, bool, error)
 	// FetchViewer は、いま使っているトークンの持ち主を返す（設計 3-77b）。
 	// **担当者を書き足すにはノード ID が要る。**
 	FetchViewer(ctx context.Context) (tracker.Assignee, error)
@@ -206,8 +207,11 @@ const ghLoginRetryInterval = 5 * time.Minute
 type Options struct {
 	// Config は WORKFLOW.md の front matter である。
 	Config config.Config
-	// PromptTemplate は WORKFLOW.md の本文（1回目のプロンプトのテンプレート。設計 5-3）である。
-	PromptTemplate string
+	// Prompt は1回目に送る指示書の断片である（設計 5-3 / 5-3c）。
+	//
+	// **組み込みの前半・固有・組み込みの後半の3つを、この順に持っている。**
+	// 組み立てるのは internal/prompt の Build であり、**呼ぶのは常駐プロセスの起動である。**
+	Prompt prompt.Fragments
 	// Tracker はボードの読み書きである。必須。
 	Tracker Tracker
 	// Herdr は herdr の socket API のクライアントである。必須。
@@ -251,20 +255,20 @@ type Options struct {
 
 // Orchestrator は巡回・dispatch・turn ループ・照合・リトライ・stall 検知を持つ。
 type Orchestrator struct {
-	cfg            config.Config
-	promptTemplate string
-	tracker        Tracker
-	herdr          HerdrClient
-	ws             *workspace.Manager
-	rl             *ratelimit.Reader
-	socketPath     string
-	runtimeDir     string
-	continuoPath   string
-	transcriptRoot string
-	logger         *slog.Logger
-	now            func() time.Time
-	newSessionUUID func() (string, error)
-	ghAuthCheck    GHAuthCheckFunc
+	cfg             config.Config
+	promptFragments prompt.Fragments
+	tracker         Tracker
+	herdr           HerdrClient
+	ws              *workspace.Manager
+	rl              *ratelimit.Reader
+	socketPath      string
+	runtimeDir      string
+	continuoPath    string
+	transcriptRoot  string
+	logger          *slog.Logger
+	now             func() time.Time
+	newSessionUUID  func() (string, error)
+	ghAuthCheck     GHAuthCheckFunc
 	// ghLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
 	ghLogin tracker.GHLoginFunc
 	// ghLoginAttemptMu は取得そのものを1本に絞る。**外部プロセスを同時に何本も起こさない。**
@@ -315,6 +319,13 @@ type Orchestrator struct {
 	//
 	// **ログを1回だけにするためだけに持つ。**判定には1度も使わない。
 	labelSkipped map[string]struct{}
+	// gated は、着手の関門で止めた issue の記録である（issue #134 / #136 / #140）。
+	// キーは project item の ID。**mu が守る。**
+	//
+	// **判定には1度も使わない。**ダッシュボードと「案内を1回だけ」のためだけに持つ。
+	// **`runs` に相乗りしない。**あちらは「印＝実行中」であり、入れると
+	// 空きスロットの数え方（`freeSlotBlocker`）と重複判定（`lookupRunByID`）の両方が壊れる。
+	gated map[string]*gateNote
 	// failures は issue（project item の ID）ごとの失敗の記録である。
 	//
 	// **印（runs）の外に置く。**印は run が終わると消えるので、そこに数えていると
@@ -452,21 +463,21 @@ func New(opts Options) (*Orchestrator, error) {
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
-		cfg:            opts.Config,
-		promptTemplate: opts.PromptTemplate,
-		tracker:        opts.Tracker,
-		herdr:          opts.Herdr,
-		ws:             opts.Workspace,
-		rl:             opts.RateLimit,
-		socketPath:     opts.HookSocketPath,
-		runtimeDir:     filepath.Dir(opts.HookSocketPath),
-		continuoPath:   continuoPath,
-		transcriptRoot: transcriptRoot,
-		logger:         logger,
-		now:            nowFunc,
-		newSessionUUID: newUUID,
-		ghAuthCheck:    opts.GHAuthCheck,
-		ghLogin:        ghLogin,
+		cfg:             opts.Config,
+		promptFragments: opts.Prompt,
+		tracker:         opts.Tracker,
+		herdr:           opts.Herdr,
+		ws:              opts.Workspace,
+		rl:              opts.RateLimit,
+		socketPath:      opts.HookSocketPath,
+		runtimeDir:      filepath.Dir(opts.HookSocketPath),
+		continuoPath:    continuoPath,
+		transcriptRoot:  transcriptRoot,
+		logger:          logger,
+		now:             nowFunc,
+		newSessionUUID:  newUUID,
+		ghAuthCheck:     opts.GHAuthCheck,
+		ghLogin:         ghLogin,
 		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。
 		// **起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）は、
 		// 同じ関数の戻り値そのものである。**ずれると、起動時に通した設定が実行時には
@@ -478,6 +489,7 @@ func New(opts Options) (*Orchestrator, error) {
 		sessions:       map[string]*runState{},
 		notified:       map[string]time.Time{},
 		labelSkipped:   map[string]struct{}{},
+		gated:          map[string]*gateNote{},
 		failures:       map[string]*failureNote{},
 		shutdown:       shutdown,
 		shutdownCancel: shutdownCancel,
@@ -561,6 +573,12 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 	if err != nil {
 		o.logger.Warn("候補の取得に失敗しました（この巡回の dispatch は行いません）", "error", err)
 		dispatchAllowed = false
+	} else {
+		// **取れた候補一覧に居ないものだけを消す**（設計 3-68 の「通ったら印を消す」の補い）。
+		// **`dispatchCandidates` のループは見ない。**空きスロットが尽きて途中で
+		// 打ち切られた巡回でも、記録は1件も減らない。
+		// **取得に失敗した巡回では呼ばない。**呼ぶと記録が全件消える。
+		o.forgetGatedNotOnBoard(candidates)
 	}
 
 	o.reconcileRunning(ctx)

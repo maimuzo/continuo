@@ -39,17 +39,17 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 
 | 区分 | ファイル | 追加行 | 主な中身 |
 | --- | --- | --- | --- |
-| **`--id` 本体とロックの固定** | 13 | +560 前後 | [internal/instance/instance.go](internal/instance/instance.go)（+350）/ [internal/cli/cli.go](internal/cli/cli.go)（+101）/ [internal/config](internal/config) 5本（+27）/ [internal/i18n](internal/i18n) 3本（+182）/ [internal/socketpath/socketpath.go](internal/socketpath/socketpath.go) |
-| **置き場所と branch 名の派生** | 7 | +626 | [internal/workspace/instancemarker.go](internal/workspace/instancemarker.go)（新規126）/ [internal/workspace/workspace.go](internal/workspace/workspace.go) / [internal/workspace/layout.go](internal/workspace/layout.go) / [internal/workspace/sweep.go](internal/workspace/sweep.go) / [test/internal/workspace/instancemarker_test.go](test/internal/workspace/instancemarker_test.go)（新規335） |
-| **ボードごとのロックと覚え書き** | 4 | +400 前後 | [internal/instance/board.go](internal/instance/board.go)（新規168）と [internal/daemon/daemon.go](internal/daemon/daemon.go) / [internal/abandon/abandon.go](internal/abandon/abandon.go) / [internal/abandon/deps.go](internal/abandon/deps.go) の一部 |
-| **doctor の検査を2つ追加** | 6 | +678 | [internal/doctor/checks.go](internal/doctor/checks.go)（+180）/ [test/internal/doctor/lock_file_test.go](test/internal/doctor/lock_file_test.go)（新規321）/ [test/internal/doctor/no_home_test.go](test/internal/doctor/no_home_test.go)（新規113） |
-| **`--dry-run` が何も作らない一式** | 3 | +244 | [internal/lock/lock.go:87-105](internal/lock/lock.go#L87-L105) の `Probe` / [test/internal/lock/lock_test.go](test/internal/lock/lock_test.go)（新規83）/ [test/internal/abandon/dryrun_test.go](test/internal/abandon/dryrun_test.go)（新規120） |
-| **herdr の agent 名に名前を混ぜる** | 3 | +96 | [internal/orchestrator/agentname.go](internal/orchestrator/agentname.go) / [internal/orchestrator/orchestrator.go](internal/orchestrator/orchestrator.go) |
-| **文書** | 11 | +822 | [docs/plans/continuo_design.md](docs/plans/continuo_design.md)（+318）/ [docs/FAQ.md](docs/FAQ.md)（+234）/ [docs/upgrading.md](docs/upgrading.md)（+149）/ [docs/releasing.md](docs/releasing.md) / [docs/test_environment.md](docs/test_environment.md) |
-| **残りのテスト** | 9 | +1090 前後 | [test/internal/daemon/wiring_test.go](test/internal/daemon/wiring_test.go)（+413）/ [test/internal/instance/instance_test.go](test/internal/instance/instance_test.go)（新規429）/ [test/internal/cli/cli_test.go](test/internal/cli/cli_test.go)（新規161） |
+| **`--id` 本体とロックの固定** | 13 | +560 前後 | [internal/instance/instance.go](../../../internal/instance/instance.go)（+350）/ [internal/cli/cli.go](../../../internal/cli/cli.go)（+101）/ [internal/config](../../../internal/config) 5本（+27）/ [internal/i18n](../../../internal/i18n) 3本（+182）/ [internal/socketpath/socketpath.go](../../../internal/socketpath/socketpath.go) |
+| **置き場所と branch 名の派生** | 7 | +626 | [internal/workspace/instancemarker.go](../../../internal/workspace/instancemarker.go)（新規126）/ [internal/workspace/workspace.go](../../../internal/workspace/workspace.go) / [internal/workspace/layout.go](../../../internal/workspace/layout.go) / [internal/workspace/sweep.go](../../../internal/workspace/sweep.go) / [test/internal/workspace/instancemarker_test.go](../../../test/internal/workspace/instancemarker_test.go)（新規335） |
+| **ボードごとのロックと覚え書き** | 4 | +400 前後 | [internal/instance/board.go](../../../internal/instance/board.go)（新規168）と [internal/daemon/daemon.go](../../../internal/daemon/daemon.go) / [internal/abandon/abandon.go](../../../internal/abandon/abandon.go) / [internal/abandon/deps.go](../../../internal/abandon/deps.go) の一部 |
+| **doctor の検査を2つ追加** | 6 | +678 | [internal/doctor/checks.go](../../../internal/doctor/checks.go)（+180）/ [test/internal/doctor/lock_file_test.go](../../../test/internal/doctor/lock_file_test.go)（新規321）/ [test/internal/doctor/no_home_test.go](../../../test/internal/doctor/no_home_test.go)（新規113） |
+| **`--dry-run` が何も作らない一式** | 3 | +244 | [internal/lock/lock.go:87-105](../../../internal/lock/lock.go#L87-L105) の `Probe` / [test/internal/lock/lock_test.go](../../../test/internal/lock/lock_test.go)（新規83）/ [test/internal/abandon/dryrun_test.go](../../../test/internal/abandon/dryrun_test.go)（新規120） |
+| **herdr の agent 名に名前を混ぜる** | 3 | +96 | [internal/orchestrator/agentname.go](../../../internal/orchestrator/agentname.go) / [internal/orchestrator/orchestrator.go](../../../internal/orchestrator/orchestrator.go) |
+| **文書** | 11 | +822 | [docs/plans/continuo_design.md](../../../docs/plans/continuo_design.md)（+318）/ [docs/FAQ.md](../../../docs/FAQ.md)（+234）/ [docs/upgrading.md](../../../docs/upgrading.md)（+149）/ [docs/releasing.md](../../../docs/releasing.md) / [docs/test_environment.md](../../../docs/test_environment.md) |
+| **残りのテスト** | 9 | +1090 前後 | [test/internal/daemon/wiring_test.go](../../../test/internal/daemon/wiring_test.go)（+413）/ [test/internal/instance/instance_test.go](../../../test/internal/instance/instance_test.go)（新規429）/ [test/internal/cli/cli_test.go](../../../test/internal/cli/cli_test.go)（新規161） |
 
-**区分は重なる。**[internal/daemon/daemon.go](internal/daemon/daemon.go) と
-[internal/abandon/abandon.go](internal/abandon/abandon.go) と [internal/lock/lock.go](internal/lock/lock.go) は
+**区分は重なる。**[internal/daemon/daemon.go](../../../internal/daemon/daemon.go) と
+[internal/abandon/abandon.go](../../../internal/abandon/abandon.go) と [internal/lock/lock.go](../../../internal/lock/lock.go) は
 2つ以上の区分にまたがるので、**ファイル数の縦の合計は55にならない**（重複を除いた実数が55である）。
 
 ---
@@ -71,20 +71,20 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 | **socket と実行時ディレクトリの導出** | **消せる** | 0 | なし |
 | **`--id` の名前の検査** | **消さない** | 0 | `--id ../../etc` が `~/.continuo` の外を指す経路を塞いでいる |
 
-**根の裏付け。**[internal/instance/instance.go:342-350](internal/instance/instance.go#L342-L350) の `Apply` が
+**根の裏付け。**[internal/instance/instance.go:342-350](../../../internal/instance/instance.go#L342-L350) の `Apply` が
 `cfg.Workspace.Root` に `/<名前>` を、`BranchTemplate` の先頭に `<名前>/` を足す。
-**この2行が、[internal/workspace/instancemarker.go](internal/workspace/instancemarker.go)（新規126行）と
-`BranchPrefixForSweep`（[internal/workspace/layout.go:254-260](internal/workspace/layout.go#L254-L260)）と
-[internal/workspace/sweep.go:70-92](internal/workspace/sweep.go#L70-L92) の分岐を全部呼んでいる。**
+**この2行が、[internal/workspace/instancemarker.go](../../../internal/workspace/instancemarker.go)（新規126行）と
+`BranchPrefixForSweep`（[internal/workspace/layout.go:254-260](../../../internal/workspace/layout.go#L254-L260)）と
+[internal/workspace/sweep.go:70-92](../../../internal/workspace/sweep.go#L70-L92) の分岐を全部呼んでいる。**
 
 **ボードのロックは確定仕様と逆を向く。**確定仕様は「使われてなければブロックしない」だが、
-[internal/instance/board.go](internal/instance/board.go) は `--id` が空いていても同じボードなら止める。
-覚え書きには [internal/instance/board.go:127-128](internal/instance/board.go#L127-L128) に
+[internal/instance/board.go](../../../internal/instance/board.go) は `--id` が空いていても同じボードなら止める。
+覚え書きには [internal/instance/board.go:127-128](../../../internal/instance/board.go#L127-L128) に
 「書けなくても起動を止めてはならない。これは人間のための覚え書きであって、排他の一部ではない」とあり、
 **その「無くても動く」ファイルの不在を、設計 3-17i は `not_running` と読む。**
 
-**doctor は「作らない」と書いてあるのに作る。**[internal/doctor/checks.go:436](internal/doctor/checks.go#L436) が
-`EnsureLockDir` を呼び、[internal/doctor/checks.go:561-567](internal/doctor/checks.go#L561-L567) の `probeLockFile` が
+**doctor は「作らない」と書いてあるのに作る。**[internal/doctor/checks.go:436](../../../internal/doctor/checks.go#L436) が
+`EnsureLockDir` を呼び、[internal/doctor/checks.go:561-567](../../../internal/doctor/checks.go#L561-L567) の `probeLockFile` が
 `os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)` でロックファイルを作る。
 
 ---
@@ -107,17 +107,17 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
   ロックは `~/.continuo/continuo.lock` の1本に固定される。`runtime.lock_file` が書いてあっても起動は通り、値は捨てる。
   **worktree と socket の分離は、テスト用の WORKFLOW.md を書き換えて行う**（確定仕様どおり）。
 - **何ができないままか。****置き場所を分け忘れたときに止めてくれない。**2本目が1本目の走行中の pane を巡回のたびに閉じうる
-  （既定30秒ごと）。**確定仕様の「挙動は使用者責任」の範囲だが、危険の中身は [docs/test_environment.md](docs/test_environment.md) に書く必要がある。**
-  `continuo doctor` はロックの場所を検査しない。`--dry-run` は [internal/lock/lock.go:87-105](internal/lock/lock.go#L87-L105) の
+  （既定30秒ごと）。**確定仕様の「挙動は使用者責任」の範囲だが、危険の中身は [docs/test_environment.md](../../../docs/test_environment.md) に書く必要がある。**
+  `continuo doctor` はロックの場所を検査しない。`--dry-run` は [internal/lock/lock.go:87-105](../../../internal/lock/lock.go#L87-L105) の
   `Probe` ごと消えるので、いままでどおりの挙動に戻る。
 - **セキュリティの穴は消えるか。****この PR が開けた穴は消える。**目印ファイルを書けば worktree を隠せる経路
-  （[internal/workspace/instancemarker.go](internal/workspace/instancemarker.go)）は、派生ごと無くなる。
+  （[internal/workspace/instancemarker.go](../../../internal/workspace/instancemarker.go)）は、派生ごと無くなる。
   **ボード全体のセキュリティの Critical 3件（hook の送り主を確かめない／グループ計画の書き手を確かめない／片付けの宛先を身元ファイルから読む）は1件も消えない。**
 
 ### 4-2. 中くらい
 
 - **何ができるようになるか。**いちばん小さい案に加えて、`continuo doctor --id test` が
-  「その名前で起動できるか」を答える（[internal/socketpath/socketpath.go:239-254](internal/socketpath/socketpath.go#L239-L254) と同じく
+  「その名前で起動できるか」を答える（[internal/socketpath/socketpath.go:239-254](../../../internal/socketpath/socketpath.go#L239-L254) と同じく
   `Lstat` で symlink・非ディレクトリ・権限の開きすぎを見るだけで、**作らない・掴まない**形に作り直す）。
   `continuo abandon --dry-run` が1バイトも書かない状態になる。
 - **何ができないままか。**ボードごとのロックは無いので、置き場所の分け忘れは止まらない（いちばん小さい案と同じ）。
@@ -142,14 +142,14 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 
 **根拠1。指摘が名指ししている場所が、追加分の中にしかない。**
 この PR が触っている Critical 2 / High 8 のうち、Critical 2件は設計 3-17h / 3-17i（commit `7f6e0b9`、差し戻し宣言済み）と
-[internal/instance/board.go:127-128](internal/instance/board.go#L127-L128) を指す。High 8件も
-3-17i / 3-17h / [internal/lock/lock.go:87-105](internal/lock/lock.go#L87-L105) /
-[internal/doctor/checks.go:436](internal/doctor/checks.go#L436) と [internal/doctor/checks.go:561-567](internal/doctor/checks.go#L561-L567) /
-[internal/instance/board.go:86-90](internal/instance/board.go#L86-L90) を指す。**確定仕様が求めた部分を指した指摘は1件も無い。**
+[internal/instance/board.go:127-128](../../../internal/instance/board.go#L127-L128) を指す。High 8件も
+3-17i / 3-17h / [internal/lock/lock.go:87-105](../../../internal/lock/lock.go#L87-L105) /
+[internal/doctor/checks.go:436](../../../internal/doctor/checks.go#L436) と [internal/doctor/checks.go:561-567](../../../internal/doctor/checks.go#L561-L567) /
+[internal/instance/board.go:86-90](../../../internal/instance/board.go#L86-L90) を指す。**確定仕様が求めた部分を指した指摘は1件も無い。**
 
 **根拠2。取り下げが記録済みである。**issue #87（1台で continuo を複数動かすことを、正式な形にする）のコメントに
 「**「`workspace.root` の末尾に `/<名前>` を足す」は採りません。**」と書いてあるのに、
-[internal/instance/instance.go:342-350](internal/instance/instance.go#L342-L350) にその実装が残っている。
+[internal/instance/instance.go:342-350](../../../internal/instance/instance.go#L342-L350) にその実装が残っている。
 **消すのは新しい判断ではなく、記録済みの判断を実装へ反映することである。**
 
 **根拠3。中くらいは、いちばん危ない場所を作り直す。**doctor の追加検査は、code-review 3回で毎回指摘が出た場所である
@@ -161,9 +161,9 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 
 | 何を | どこへ | なぜ |
 | --- | --- | --- |
-| **「古いほうを止めてから入れ替える」を書く** | [docs/upgrading.md:75](docs/upgrading.md#L75)（いま「破壊的変更はありません」で始まる節） | ロックの置き場所が変わるので、動かしたまま入れ替えると2つ起動する |
-| **警告を実行ファイルの差し替えより前に出す** | [install.sh:941-975](install.sh#L941-L975) | いまは置いたあとに警告するので、「止めてから」が言えない |
-| **置き場所を分け忘れたときに何が起きるかを書く** | [docs/test_environment.md](docs/test_environment.md) | ボードのロックを消すなら、危険は文書でしか伝えられない |
+| **「古いほうを止めてから入れ替える」を書く** | [docs/upgrading.md:75](../../../docs/upgrading.md#L75)（いま「破壊的変更はありません」で始まる節） | ロックの置き場所が変わるので、動かしたまま入れ替えると2つ起動する |
+| **警告を実行ファイルの差し替えより前に出す** | [install.sh:941-975](../../../install.sh#L941-L975) | いまは置いたあとに警告するので、「止めてから」が言えない |
+| **置き場所を分け忘れたときに何が起きるかを書く** | [docs/test_environment.md](../../../docs/test_environment.md) | ボードのロックを消すなら、危険は文書でしか伝えられない |
 | **main へ rebase する** | branch `feat/issue87-multi-instance` | 分岐点は commit `6a894fb`、main は commit `73fb41a` |
 
 **この PR を縮めても消えないもの。**ボード全体のレビュー90件のうち、この PR が触っていない

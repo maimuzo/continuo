@@ -3,17 +3,17 @@ package orchestrator
 import (
 	"fmt"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// renderFirstPrompt は1回目のプロンプトを描画する（設計 5-3）。
+// renderFirstPrompt は1回目のプロンプトを組み立てる（設計 5-3 / 5-3c）。
 //
+// **3つの断片を別々に変数展開してから連結する**（internal/prompt）。
 // **`missingkey=error` を付ける。**渡す変数は 5-3 の一覧に載っているものだけであり、
-// **未知の変数を書いたテンプレートは描画に失敗させる**（黙って空文字を埋めない）。
+// **未知の変数を書いたテンプレートは変数展開に失敗させる**（黙って空文字を埋めない）。
 // 失敗したらその issue を失敗として扱う。
 //
 // **issue の本文とコメントは入れない**（設計 3-29）。エージェントが
@@ -23,15 +23,10 @@ import (
 // issue: 対象の issue。
 // attempt: 試行回数。**1回目は nil を渡す**（仕様 12.3。`text/template` は nil を偽として
 // 扱うので `{{if .attempt}}` が正しく動く）。**キーごと省いてはならない。**
-// 戻り値の1つ目: 描画したプロンプト本文。
+// 戻り値の1つ目: 組み立てたプロンプト本文。
 // 戻り値の2つ目: テンプレートの構文が誤っている場合、または一覧に無い変数を参照している
-// 場合のエラー。
+// 場合のエラー。**どの断片の何行目かがエラーの文言に入る。**
 func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (string, error) {
-	tmpl, err := template.New("prompt").Option("missingkey=error").Parse(o.promptTemplate)
-	if err != nil {
-		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptTemplateUnparsable, err)
-	}
-
 	url := ""
 	if issue.URL != nil {
 		url = *issue.URL
@@ -47,14 +42,33 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 			"state":      issue.State,
 			"labels":     issue.Labels,
 		},
-		"attempt": attemptValue(attempt),
+		// push_branch は issue にリンクされた branch の生の名前である（設計 3-22d・5-3）。
+		//
+		// **push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
+		// これは「別の名前へ出せと issue に書かれていたときの候補」として渡す。
+		// **base と push 先を同じものに固定すると、1つの issue で PR を複数出す形が書けなくなる。**
+		//
+		// **リンクが1本でないとき（0本・2本以上・別のリポジトリを指すとき）は空文字である。**
+		"push_branch": pushBranchValue(issue),
+		"attempt":     attemptValue(attempt),
 	}
 
-	var b strings.Builder
-	if err := tmpl.Execute(&b, data); err != nil {
+	out, err := o.promptFragments.Render(data)
+	if err != nil {
 		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptRenderFailed, err)
 	}
-	return b.String(), nil
+	return out, nil
+}
+
+// pushBranchValue は `.push_branch` に入れる値を返す（設計 3-22d）。
+//
+// issue: 対象の issue。
+// 戻り値: リンクされた branch の生の名前。リンクが1本でなければ空文字。
+func pushBranchValue(issue tracker.Issue) string {
+	if issue.BranchName == nil {
+		return ""
+	}
+	return *issue.BranchName
 }
 
 // attemptValue は `.attempt` に入れる値を返す。
@@ -145,6 +159,53 @@ func buildUntrustedComment(owner, repo, reason string) string {
 			"検査の結果: %s\n\n"+
 			"この通知は continuo を起動するたびに1回だけです（同じリポジトリの他の issue では出しません）。",
 		owner, repo, owner, repo, reason)
+}
+
+// buildGatedComment は、着手の関門で止めたことを人間へ知らせるコメント本文を作る
+// （issue #134 / #136 / #140）。
+//
+// **担当者のログイン名を1文字も書かない**（設計 8-1）。コメントを書き換える経路も
+// 消す経路も無いので、担当者が変わっても書き直せない。**書き直すとは「もう1件足す」ことでしかなく、
+// 担当者を付け替えるたびに古い案内が積まれる。**
+// **やることは担当者が誰であっても同じである**（GitHub の画面で担当者を外す）。
+// いま誰が付いているかは issue の画面の右側に出ているし、
+// WARN の1行とダッシュボードにも常に最新の値が出る。
+//
+// **1行目の印は理由ごとに違う。**再起動をまたいだ照合に使うので、
+// 理由が変わったら別の案内として1回だけ書けるようにする（設計 6-5）。
+// **`<!-- continuo:self -->` は付けない。**`postComment` が先頭に足す。
+//
+// **`internal/i18n` は使わない。**`internal/orchestrator` の人間向けの文言は
+// 「まとめて資源へ移す」と決まっており、この issue だけ先に移すと揃わない。
+//
+// reason: 止めた理由の種類。**`GateReasonManyAssigneesWithSelf` はここへ来ない**
+// （その理由では issue へ1バイトも書かない。設計 8-3）。来たら空文字を返す。
+// 戻り値: コメント本文（2行目以降）。
+func buildGatedComment(reason GateReason) string {
+	switch reason {
+	case GateReasonHumanAssigned:
+		return gateNoticeMarker(reason) + "\n" +
+			"この issue には担当者が付いているため、continuo は着手しません。\n" +
+			"continuo が付けた担当ではないので、人間が作業中だと判断しています。\n\n" +
+			"着手させるには、GitHub の画面でその担当者を外してください。\n\n" +
+			"continuo が使うアカウントへの付け替えは案内しません。付け替えると、\n" +
+			"同じアカウントで動いている別の機械も「自分の担当だ」と読むため、" +
+			"2台が同時に着手できてしまいます。\n\n" +
+			"この案内は、この理由につき1回だけ書きます。\n"
+	case GateReasonManyAssignees:
+		return gateNoticeMarker(reason) + "\n" +
+			"この issue には担当者が2人以上付いているため、continuo は着手しません。\n" +
+			"人間が作業を分担していると判断しています。\n\n" +
+			"着手させるには、GitHub の画面で担当者を1人も付いていない状態にしてください。\n\n" +
+			"この案内は、この理由につき1回だけ書きます。\n" +
+			"ただし、この issue が着手待ちの一覧から一度外れて戻ると、もう一度書くことがあります。\n" +
+			"外れるのは、continuo を再起動したとき、Status を着手待ちから一度外して戻したとき、\n" +
+			"GitHub の検索の反映が遅れて1巡回だけ一覧に出なかったときです。\n" +
+			"この経路は issue のコメントを読まないので、前に書いたことを手元から確かめられません。\n"
+	default:
+		// **知らない理由で issue へ書かない。**空文字なら postGateNotice が投稿を見送る。
+		return ""
+	}
 }
 
 // buildHandoffComment は人間へ引き渡すときの通知のコメント本文を作る。

@@ -3,7 +3,10 @@
 // **`continuo init` は雛形を書き出し、`continuo setup` は既にある WORKFLOW.md の
 // Status の割り当てだけを書き換える**（update.go）。**setup は雛形を書き直さない。**
 //
-// 置くのは WORKFLOW.md の1ファイルだけである（設計 3-32 / 5-1）。
+// **置くのは2枚である**（設計 3-32 / 5-1 / 5-3c / 5-3g）。
+// `WORKFLOW.md` が設定で、`PROJECT_SPECIFIC_PROMPT.md` がエージェントへ送る指示書のうち
+// 利用者が書く部分である。**1枚ずつ独立に扱い、片方が既にあっても、もう片方は書く。**
+// **送る指示書の残りは internal/prompt が持っている**（実行ファイルの中にある）。
 // CLI（cmd/continuo）はこのパッケージを呼ぶだけにする。エラーの文言と終了コードの
 // 対応は CLI 側で決めるため、区別が要る失敗は sentinel error で返す。
 package scaffold
@@ -19,6 +22,7 @@ import (
 	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // fileName は init が書き出すファイルの名前である（設計 5-1 / SPEC.md 5.1）。
@@ -66,15 +70,54 @@ var (
 	ErrDirNotFound = i18n.Sentinel(i18n.KeyScaffoldErrDirNotFound)
 	// ErrNotADirectory は、指定されたパスが存在するがディレクトリではないことを表す。
 	ErrNotADirectory = i18n.Sentinel(i18n.KeyScaffoldErrNotADirectory)
-	// ErrSymlink は、書き出す先の WORKFLOW.md が symlink だったことを表す。
+	// ErrSymlink は、書き出す先のファイルが symlink だったことを表す。
 	// symlink を辿って書くと、指定されたディレクトリの外にあるリンク先を壊す。
 	// --force であっても辿らずに止める。
+	//
+	// **この番兵の文言は画面に出さない。**出す文言は symlinkError が組み立てる。
+	// **WORKFLOW.md と PROJECT_SPECIFIC_PROMPT.md の両方から返る番兵**なので、
+	// 文言に片方の名前を書くと、もう片方のときに別のファイルを名乗る。
 	//
 	// **--force の経路には隙間がある。**os.Lstat で symlink を見てから os.Rename で
 	// 差し替えるまでの間に symlink へ置き換えられると、これを返さずに差し替える（設計 3-60）。
 	// 新しく作る経路には隙間が無い（O_EXCL と O_NOFOLLOW が kernel の open の時点で見る）。
 	ErrSymlink = i18n.Sentinel(i18n.KeyScaffoldErrSymlink)
 )
+
+// symlinkError は「書き出す先が symlink だった」ことを、そのファイルの名前を名乗って表す。
+//
+// **番兵の文言をそのまま先頭へ繋がない。**ErrSymlink は package の変数1つで、
+// WORKFLOW.md と PROJECT_SPECIFIC_PROMPT.md の両方から返る。番兵の文言に片方の名前を
+// 書くと、もう片方のときに別のファイルを名乗る
+// （実際に `WORKFLOW.md is a symlink: …/PROJECT_SPECIFIC_PROMPT.md` と出た）。
+// **読む人は、名乗られたほうのファイルを消しに行く。**
+//
+// **だから表示は書き出す先の名前で組み立て、errors.Is のための繋がりは Unwrap で保つ。**
+type symlinkError struct {
+	// msg は画面に出す文言である（ファイルの名前と絶対パスを含む）。
+	msg string
+}
+
+// Error は error インターフェースを満たす。
+//
+// 戻り値: 組み立て済みの文言。
+func (e *symlinkError) Error() string { return e.msg }
+
+// Unwrap は errors.Is(err, ErrSymlink) を真に保つ。
+//
+// 戻り値: 番兵 ErrSymlink。
+func (e *symlinkError) Unwrap() error { return ErrSymlink }
+
+// newSymlinkError は、書き出す先が symlink だったときのエラーを作る。
+//
+// key: 文言のキー。書き出すとき（KeyScaffoldWriteSymlinkNotFollowed）と
+// 書き換えるとき（KeyScaffoldUpdateSymlinkNotFollowed）で違う。
+// どちらも「ファイルの名前」「絶対パス」の順に2つの値を取る。
+// path: 書き出す先の絶対パス。名前はこのパスの末尾から取る。
+// 戻り値: errors.Is で ErrSymlink と判定できるエラー。
+func newSymlinkError(key i18n.Key, path string) error {
+	return &symlinkError{msg: i18n.T(key, filepath.Base(path), path)}
+}
 
 // WriteTemplate は dir の直下に WORKFLOW.md の雛形を書く。
 //
@@ -120,25 +163,59 @@ func WriteTemplate(dir string, force bool) (Result, error) {
 // force: 既に WORKFLOW.md がある場合に上書きするかどうか。
 // values: 埋める値。
 func WriteTemplateWithValues(dir string, force bool, values Values) (Result, error) {
-	path, err := resolveTarget(dir)
+	path, err := resolveTarget(dir, fileName)
 	if err != nil {
 		return Result{}, err
 	}
+	return writeOne(path, TemplateWithValues(values), force)
+}
 
+// WriteProjectPrompt は dir の直下に PROJECT_SPECIFIC_PROMPT.md の雛形を書く（設計 5-3c）。
+//
+// **中身は internal/prompt が持っている。**送る文面の一部になるので、
+// 組み込みのプロンプトと同じ場所に置き、同じ検査に掛ける。
+//
+// **WORKFLOW.md と扱いを揃える。**既にあれば ErrAlreadyExists、symlink なら ErrSymlink で止め、
+// --force のときだけ同じディレクトリの一時ファイルへ書き切ってから差し替える。
+// **読むときは symlink を辿るのに、書くときは辿らない**のは WORKFLOW.md と同じである
+// （辿ると、指定されたディレクトリの外にあるリンク先を雛形で潰す）。
+//
+// dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリに書く。
+// force: 既に PROJECT_SPECIFIC_PROMPT.md がある場合に上書きするかどうか。
+// 戻り値: 書いたファイルの絶対パスと、上書きしたかどうか。エラーは WriteTemplate と同じ種類である。
+func WriteProjectPrompt(dir string, force bool) (Result, error) {
+	path, err := resolveTarget(dir, prompt.ProjectFileName)
+	if err != nil {
+		return Result{}, err
+	}
+	return writeOne(path, prompt.ProjectTemplate(), force)
+}
+
+// writeOne は1つのファイルを書く。force と symlink の扱いは WriteTemplate の説明のとおりである。
+//
+// path: 書き出す絶対パス。
+// content: 書き出す中身。
+// force: 既にある場合に上書きするかどうか。
+// 戻り値: 書いた場所と、上書きしたかどうか。
+func writeOne(path, content string, force bool) (Result, error) {
+	// **文言は、いま書こうとしているファイルの名前を名乗る。**writeOne は WORKFLOW.md と
+	// PROJECT_SPECIFIC_PROMPT.md の両方が通るので、文言の側にどちらかの名前を書くと、
+	// もう片方のときに落ちていないファイルを名乗ることになる。読む人はそちらを消しに行く。
+	name := filepath.Base(path)
 	if force {
 		// force のときだけ、既にあるかどうかを先に見る。上書きしたかどうかの報告に使うのと、
 		// 既にあるなら「その場で空にしてから書く」のではなく差し替えるためである。
 		// symlink そのものの有無を見たいので os.Stat ではなく os.Lstat を使う。
 		info, statErr := os.Lstat(path)
 		if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
-			return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, path, statErr)
+			return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, name, path, statErr)
 		}
 		if statErr == nil {
 			// --force であっても symlink は辿らない。辿ると dir の外にあるリンク先を潰す。
 			// os.Rename は symlink を辿らずリンクそのものを置き換えるので、ここで止めないと
 			// 「リンクを雛形で置き換えてしまった」ことになる。
 			if info.Mode()&fs.ModeSymlink != 0 {
-				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
+				return Result{Path: path}, newSymlinkError(i18n.KeyScaffoldWriteSymlinkNotFollowed, path)
 			}
 			// **WORKFLOW.md という名前のディレクトリは、ここで名指しして止める。**
 			// そのまま差し替えに進むと os.Rename が失敗し、利用者には
@@ -146,14 +223,14 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 			// EISDIR を添えて「作成できません: … is a directory」に揃える
 			// （その場で開いて書いていた頃と同じ文言である）。
 			if info.IsDir() {
-				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, path, syscall.EISDIR)
+				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, name, path, syscall.EISDIR)
 			}
 			// **既にある WORKFLOW.md は、その場で空にしてから書かない**（CLAUDE.md の
 			// 「絶対に守る制約」4 / 設計 3-59）。O_TRUNC で開くと、書いている途中で落ちたときに
 			// 利用者が手で直した WORKFLOW.md が失われる。
 			// **元のファイルの権限をそのまま渡す。**差し替えは書き込みであって、権限を変える
 			// 操作ではない。
-			if err := atomicfile.Write(path, []byte(TemplateWithValues(values)), info.Mode().Perm()); err != nil {
+			if err := atomicfile.Write(path, []byte(content), info.Mode().Perm()); err != nil {
 				return Result{Path: path}, err
 			}
 			return Result{Path: path, Overwritten: true}, nil
@@ -180,22 +257,23 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 	if err != nil {
 		return Result{Path: path}, openError(path, err)
 	}
-	if _, err := f.WriteString(TemplateWithValues(values)); err != nil {
+	if _, err := f.WriteString(content); err != nil {
 		f.Close()
-		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, path, err)
+		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, name, path, err)
 	}
 	if err := f.Close(); err != nil {
-		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, path, err)
+		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, name, path, err)
 	}
 	return Result{Path: path, Overwritten: false}, nil
 }
 
-// resolveTarget は受け取ったディレクトリから、書き出す WORKFLOW.md の絶対パスを決める。
+// resolveTarget は受け取ったディレクトリから、書き出すファイルの絶対パスを決める。
 //
 // dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリ。
-// 戻り値: 書き出す WORKFLOW.md の絶対パス（ディレクトリの symlink は辿った先で組み立てる）。
+// name: 書き出すファイルの名前（WORKFLOW.md か PROJECT_SPECIFIC_PROMPT.md）。
+// 戻り値: 書き出すファイルの絶対パス（ディレクトリの symlink は辿った先で組み立てる）。
 // エラー: ErrDirNotFound / ErrNotADirectory を包んだエラー、または実体を辿れなかった理由。
-func resolveTarget(dir string) (string, error) {
+func resolveTarget(dir, name string) (string, error) {
 	absDir, err := resolveDir(dir)
 	if err != nil {
 		return "", err
@@ -223,12 +301,15 @@ func resolveTarget(dir string) (string, error) {
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyScaffoldDirEvalSymlinksFailed, absDir, err)
 	}
-	return filepath.Join(realDir, fileName), nil
+	return filepath.Join(realDir, name), nil
 }
 
 // openError は書き出し先を開けなかったときのエラーを、CLI が文言と終了コードを決められる形に直す。
 //
-// path: 開こうとした WORKFLOW.md の絶対パス。
+// **文言は、開こうとしたファイルの名前を名乗る。**WORKFLOW.md と
+// PROJECT_SPECIFIC_PROMPT.md の両方がここを通るためである。
+//
+// path: 開こうとしたファイルの絶対パス。
 // err: os.OpenFile が返したエラー。
 // 戻り値: ErrSymlink / ErrAlreadyExists を包んだエラー、またはそれ以外の理由を説明するエラー。
 func openError(path string, err error) error {
@@ -236,17 +317,17 @@ func openError(path string, err error) error {
 	// 「シンボリックリンクが多すぎます」という OS の文言のままでは何が起きたか分からないので、
 	// symlink であることを名指しした文言に直す。
 	if errors.Is(err, syscall.ELOOP) {
-		return i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
+		return newSymlinkError(i18n.KeyScaffoldWriteSymlinkNotFollowed, path)
 	}
 	if errors.Is(err, fs.ErrExist) {
 		// O_EXCL は既存の symlink でも EEXIST を返す。--force を勧めても
 		// そちらは ErrSymlink で止まるので、symlink のときは symlink だと言う。
 		if info, lerr := os.Lstat(path); lerr == nil && info.Mode()&fs.ModeSymlink != 0 {
-			return i18n.Errorf(i18n.KeyScaffoldWriteSymlinkNotFollowed, ErrSymlink, path)
+			return newSymlinkError(i18n.KeyScaffoldWriteSymlinkNotFollowed, path)
 		}
 		return fmt.Errorf("%w: %s", ErrAlreadyExists, path)
 	}
-	return i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, path, err)
+	return i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, filepath.Base(path), path, err)
 }
 
 // Template は書き出す雛形の中身を、プレースホルダを埋めずにそのまま返す。

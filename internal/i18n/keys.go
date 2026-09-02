@@ -218,8 +218,28 @@ const (
 	// KeyFsprobeClaudeHomeFailed は Claude Code の設定ディレクトリに書けなかったときのエラーに出る。
 	KeyFsprobeClaudeHomeFailed Key = "fsprobe.claude_home_failed"
 
-	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77b / 3-77c）。
+	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77a / 3-77b / 3-77c）。
 
+	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（機械の名前を差し込む）。
+	KeyHandoffBidCandidacy Key = "handoff.bid.candidacy"
+	// KeyHandoffBidDeadline は入札のコメントの2行目に出る（締め切りまでの分数を差し込む）。
+	//
+	// **2分以上のときだけ使う。**1分のときは KeyHandoffBidDeadlineOne を使う。
+	KeyHandoffBidDeadline Key = "handoff.bid.deadline"
+	// KeyHandoffBidDeadlineOne は、締め切りまでが1分のときに入札のコメントの2行目に出る。
+	//
+	// **英語の複数形のために分ける。**KeyHandoffBidDeadline に 1 を差し込むと
+	// "in about 1 minutes" と出る。**英語は DefaultLang なので、既定でこれが出る。**
+	KeyHandoffBidDeadlineOne Key = "handoff.bid.deadline_one"
+	// KeyHandoffBidNoDeadline は、締め切りを待たない設定のときに入札のコメントの2行目に出る。
+	KeyHandoffBidNoDeadline Key = "handoff.bid.no_deadline"
+	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（機械の名前を差し込む）。
+	KeyHandoffHoldAssigned Key = "handoff.hold.assigned"
+	// KeyHandoffHoldStarting は hold のコメントの2行目に出る（branch の名前を差し込む）。
+	KeyHandoffHoldStarting Key = "handoff.hold.starting"
+	// KeyHandoffHoldStartingNoBranch は、branch の名前を組み立てられなかったときに
+	// hold のコメントの2行目に出る。
+	KeyHandoffHoldStartingNoBranch Key = "handoff.hold.starting_no_branch"
 	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
 	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
@@ -474,6 +494,10 @@ const (
 	// KeyCLIInitErrSymlink は置き場所が symlink のときに出る。
 	KeyCLIInitErrSymlink Key = "cli.init.err_symlink"
 	// KeyCLIInitErrWriteFailed はそのほかの理由で書き出せないときに出る。
+	//
+	// **1つ目の引数は、書き出せなかったファイルの名前である**（WORKFLOW.md か
+	// PROJECT_SPECIFIC_PROMPT.md）。**文言に名前を埋め込んではならない。**
+	// `continuo init` は2枚を置くので、埋め込むと片方のときに別のファイルを名乗る。
 	KeyCLIInitErrWriteFailed Key = "cli.init.err_write_failed"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
@@ -1074,6 +1098,46 @@ const (
 	KeyDashboardAgoHours Key = "dashboard.ago_hours"
 	// KeyDashboardNone は値がまだ無いことを表す印に出る。
 	KeyDashboardNone Key = "dashboard.none"
+	// KeyDashboardCaptionGated は着手できずに止まっているものの表の見出しに出る。
+	KeyDashboardCaptionGated Key = "dashboard.caption_gated"
+	// KeyDashboardColGatedReason はなぜ止まっているかの列に出る。
+	KeyDashboardColGatedReason Key = "dashboard.col_gated_reason"
+	// KeyDashboardColGatedSince はいつから止まっているかの列に出る。
+	KeyDashboardColGatedSince Key = "dashboard.col_gated_since"
+	// KeyDashboardColGatedRemedy は直し方の列に出る。
+	KeyDashboardColGatedRemedy Key = "dashboard.col_gated_remedy"
+	// KeyDashboardNoGated は着手できずに止まっているものが1件も無いときに出る。
+	KeyDashboardNoGated Key = "dashboard.no_gated"
+	// KeyDashboardNoteGated は着手できずに止まっているものの表の下の注記に出る。
+	KeyDashboardNoteGated Key = "dashboard.note_gated"
+	// KeyDashboardGateReasonHumanAssigned は担当者が1人付いている行の理由に出る。
+	KeyDashboardGateReasonHumanAssigned Key = "dashboard.gate_reason_human_assigned"
+	// KeyDashboardGateReasonManyAssignees は担当者が2人以上いる行の理由に出る。
+	KeyDashboardGateReasonManyAssignees Key = "dashboard.gate_reason_many_assignees"
+	// KeyDashboardGateReasonManyAssigneesWithSelf は、担当者が2人以上いて
+	// gh の持ち主も混じっている行の理由に出る。
+	KeyDashboardGateReasonManyAssigneesWithSelf Key = "dashboard.gate_reason_many_assignees_with_self"
+	// KeyDashboardGateRemedyHumanAssigned は担当者が1人付いている行の直し方に出る。
+	KeyDashboardGateRemedyHumanAssigned Key = "dashboard.gate_remedy_human_assigned"
+	// KeyDashboardGateRemedyManyAssignees は担当者が2人以上いる行の直し方に出る。
+	KeyDashboardGateRemedyManyAssignees Key = "dashboard.gate_remedy_many_assignees"
+	// KeyDashboardGateRemedyManyAssigneesWithSelf は、担当者が2人以上いて
+	// gh の持ち主も混じっている行の直し方に出る。
+	KeyDashboardGateRemedyManyAssigneesWithSelf Key = "dashboard.gate_remedy_many_assignees_with_self"
+	// KeyDashboardBadgeNotNoticed は案内をまだ書いていない行の印に出る。
+	KeyDashboardBadgeNotNoticed Key = "dashboard.badge_not_noticed"
+	// KeyDashboardBadgeNoticeOff は on_assignee_gate: warn_only で切ってある行の印に出る。
+	KeyDashboardBadgeNoticeOff Key = "dashboard.badge_notice_off"
+	// KeyDashboardBadgeNoticeCapped はコメントが上限で切れていて確かめられなかった行の印に出る。
+	KeyDashboardBadgeNoticeCapped Key = "dashboard.badge_notice_capped"
+	// KeyDashboardBadgeNoticeUnclearOwner は、gh の持ち主が担当者に混じっていて
+	// 切り分けられなかった行の印に出る。
+	KeyDashboardBadgeNoticeUnclearOwner Key = "dashboard.badge_notice_unclear_owner"
+	// KeyDashboardBadgeNoticeNoBody は、その理由に issue へ書く本文が
+	// 用意されていない行の印に出る。
+	KeyDashboardBadgeNoticeNoBody Key = "dashboard.badge_notice_no_body"
+	// KeyDashboardBadgeNoticeFailed は、案内の投稿に失敗した行の印に出る。
+	KeyDashboardBadgeNoticeFailed Key = "dashboard.badge_notice_failed"
 )
 
 // 二重起動を防ぐロック（internal/lock）のエラーの文言。
@@ -1197,6 +1261,9 @@ const (
 	// **5時間と1週間で同じ文言を使う。**求めるものが同じなので、
 	// 2つに分けると同じ日本語を2箇所で直すことになる。
 	KeyConfigValidateHandoffMarginRange Key = "config.validate.handoff_margin_range"
+	// KeyConfigValidateHandoffOnAssigneeGate は
+	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
+	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
 )
 
 // 設定値の環境変数展開・チルダ展開（internal/config の expand）のエラーの文言。
@@ -1551,20 +1618,25 @@ const (
 	KeyServerWriteJSONEncodeFailed Key = "server.write_json.encode_failed"
 )
 
-// WORKFLOW.md の読み書きそのもの（internal/scaffold）の失敗の文言。
+// ファイルの読み書きそのもの（internal/scaffold / internal/atomicfile）の失敗の文言。
 //
 // **`continuo init` と `continuo setup` の両方が同じ文言を使う。**
 // 読む・確かめる・書く・閉じる・作るの5つは、どちらの経路でも同じ失敗である。
+//
+// **文言にファイルの名前を埋め込んではならない。**同じ経路を WORKFLOW.md と
+// PROJECT_SPECIFIC_PROMPT.md と settings.json が通るので、埋め込むと落ちた当のファイルとは
+// 別のファイルを名乗る（実際に `WORKFLOW.md を作成できません: …/PROJECT_SPECIFIC_PROMPT.md`
+// と出た）。**呼ぶ側が filepath.Base(path) を1つ目の引数として渡す。**
 const (
 	// KeyScaffoldFileReadFailed はWORKFLOW.md を読み込めなかったときに出る。
 	KeyScaffoldFileReadFailed Key = "scaffold.file.read_failed"
-	// KeyScaffoldFileStatFailed はWORKFLOW.md の有無を確かめられなかったときに出る。
+	// KeyScaffoldFileStatFailed は書き出す先の有無を確かめられなかったときに出る。
 	KeyScaffoldFileStatFailed Key = "scaffold.file.stat_failed"
-	// KeyScaffoldFileWriteFailed はWORKFLOW.md へ書き込めなかったときに出る。
+	// KeyScaffoldFileWriteFailed は書き出す先へ書き込めなかったときに出る。
 	KeyScaffoldFileWriteFailed Key = "scaffold.file.write_failed"
-	// KeyScaffoldFileCloseFailed はWORKFLOW.md を閉じられなかったときに出る。
+	// KeyScaffoldFileCloseFailed は書き出す先を閉じられなかったときに出る。
 	KeyScaffoldFileCloseFailed Key = "scaffold.file.close_failed"
-	// KeyScaffoldFileCreateFailed はWORKFLOW.md を作成できなかったときに出る。
+	// KeyScaffoldFileCreateFailed は書き出す先を作成できなかったときに出る。
 	KeyScaffoldFileCreateFailed Key = "scaffold.file.create_failed"
 )
 
@@ -1582,7 +1654,11 @@ const (
 
 // `continuo init` が雛形を書き出すとき（internal/scaffold の openError）の文言。
 //
-// **先頭の %w に ErrSymlink を渡す**（errors.Is の切り分けを保つため）。
+// **「ファイルの名前」「絶対パス」の順に2つの値を取る。**
+// **番兵 ErrSymlink の文言は繋がない。**番兵は WORKFLOW.md と
+// PROJECT_SPECIFIC_PROMPT.md の両方から返るので、そこにファイルの名前を書くと、
+// もう片方のときに別のファイルを名乗る。**errors.Is の切り分けは、
+// internal/scaffold の symlinkError が Unwrap で保つ。**
 const (
 	// KeyScaffoldWriteSymlinkNotFollowed は書き出す先が symlink で、辿らずに止めたときに出る。
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
@@ -1596,8 +1672,9 @@ const (
 // issue ごとの settings.json の書き出しからも出る。**文言は WORKFLOW.md を名指ししているが、
 // キーを増やさないことを優先している**（設計 3-59）。
 //
-// **symlink_not_followed と not_regular_file は先頭の %w に ErrSymlink / ErrNotFound を渡す**
-// （errors.Is の切り分けを保つため）。
+// **not_regular_file は先頭の %w に ErrNotFound を渡す**（errors.Is の切り分けを保つため）。
+// **symlink_not_followed は「ファイルの名前」「絶対パス」の順に2つの値を取り、番兵の文言を
+// 繋がない。**切り分けは internal/scaffold の symlinkError が Unwrap で保つ。
 const (
 	// KeyScaffoldUpdateSymlinkNotFollowed は書き換える先が symlink で、辿らずに止めたときに出る。
 	KeyScaffoldUpdateSymlinkNotFollowed Key = "scaffold.update.symlink_not_followed"
@@ -1609,7 +1686,7 @@ const (
 	KeyScaffoldUpdateChmodFailed Key = "scaffold.update.chmod_failed"
 	// KeyScaffoldUpdateSyncFailed は一時ファイルをディスクへ書き出せなかったときに出る。
 	KeyScaffoldUpdateSyncFailed Key = "scaffold.update.sync_failed"
-	// KeyScaffoldUpdateRenameFailed は一時ファイルで WORKFLOW.md を置き換えられなかったときに出る。
+	// KeyScaffoldUpdateRenameFailed は一時ファイルで書き換える先を置き換えられなかったときに出る。
 	KeyScaffoldUpdateRenameFailed Key = "scaffold.update.rename_failed"
 )
 
@@ -1645,7 +1722,11 @@ const (
 	KeyScaffoldErrDirNotFound Key = "scaffold.err.dir_not_found"
 	// KeyScaffoldErrNotADirectory は指定されたパスがディレクトリでないときに出る。
 	KeyScaffoldErrNotADirectory Key = "scaffold.err.not_a_directory"
-	// KeyScaffoldErrSymlink は書き出す先の WORKFLOW.md が symlink だったときに出る。
+	// KeyScaffoldErrSymlink は書き出す先が symlink だったときの番兵の文言である。
+	//
+	// **画面には出ない。**出る文言は KeyScaffoldWriteSymlinkNotFollowed と
+	// KeyScaffoldUpdateSymlinkNotFollowed が組み立てる。ここに特定のファイルの名前を
+	// 書いてはならない（番兵は2枚のどちらからも返る）。
 	KeyScaffoldErrSymlink Key = "scaffold.err.symlink"
 	// KeyScaffoldErrNotFound は書き換える先に WORKFLOW.md が無いときに出る。
 	KeyScaffoldErrNotFound Key = "scaffold.err.not_found"
@@ -1969,6 +2050,9 @@ const (
 	// KeyWorkspaceGitUnpushedCountUnreadable は、どの remote にも載っていない commit の数を
 	// 数値として読めなかったときに出る。
 	KeyWorkspaceGitUnpushedCountUnreadable Key = "workspace.git_unpushed_commits.count_unreadable"
+	// KeyWorkspaceGitFetchLinkedBranchFailed は、issue にリンクされた branch を
+	// 手元へ取ってこられなかったときに出る（設計 3-22d）。
+	KeyWorkspaceGitFetchLinkedBranchFailed Key = "workspace.git_fetch_linked_branch.failed"
 	// KeyWorkspaceGhqNameInvalid は ghq へ渡す owner 名またはリポジトリ名が
 	// GitHub の名前として通らない形だったときに出る。**別名に直さずに断る**ためのものである。
 	KeyWorkspaceGhqNameInvalid Key = "workspace.ghq_target.name_invalid"
@@ -2089,6 +2173,8 @@ const (
 	KeyWorkspacePrepareBranchMismatch Key = "workspace.prepare.branch_mismatch"
 	// KeyWorkspaceErrWorktreeDetached は worktree が detached HEAD のときの番兵の文言である（issue #132）。
 	KeyWorkspaceErrWorktreeDetached Key = "workspace.err.worktree_detached"
+	// KeyWorkspaceErrRetryable は「いまは失敗したが、待てば通るかもしれない」ことを表す番兵の文言である（3-22d）。
+	KeyWorkspaceErrRetryable Key = "workspace.err.retryable"
 	// KeyWorkspacePrepareDetachedHead は worktree が detached HEAD で再利用できないときに出る（issue #132）。
 	KeyWorkspacePrepareDetachedHead Key = "workspace.prepare.detached_head"
 	// KeyWorkspacePrepareUnregisteredWorktree は目的のパスに実体があるのに git の worktree として登録されていなかったときに出る。
@@ -2250,6 +2336,114 @@ const (
 	KeyRedactErrUnusableHome Key = "redact.err.unusable_home"
 )
 
+// 送る指示書を組み立てる（internal/prompt）の文言。
+const (
+	// KeyPromptParseFailed は断片をテンプレートとして解釈できなかったときに出る。
+	KeyPromptParseFailed Key = "prompt.parse_failed"
+	// KeyPromptRenderFailed は断片の変数展開に失敗したときに出る（一覧に無い変数など）。
+	KeyPromptRenderFailed Key = "prompt.render_failed"
+	// KeyPromptIndexSealed は封じた `index` を呼んだときに出る。
+	KeyPromptIndexSealed Key = "prompt.index_sealed"
+)
+
+// 固有のプロンプトを読む（internal/config）の文言。
+const (
+	// KeyConfigLoadProjectPromptReadFailed は PROJECT_SPECIFIC_PROMPT.md が在るのに
+	// 読めなかったときに出る。
+	//
+	// **`config.Load` はこれで落ちない**（`Loaded.ProjectPromptErr` に入れて返す）。
+	// 止めるかどうかを決めるのは、常駐プロセスの起動と doctor だけである。
+	KeyConfigLoadProjectPromptReadFailed Key = "config.load.project_prompt_read_failed"
+)
+
+// 起動時のプロンプトの検査（internal/daemon）の文言。
+const (
+	// KeyDaemonRunProjectPromptUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyDaemonRunProjectPromptUnreadable Key = "daemon.run.project_prompt_unreadable"
+	// KeyDaemonRunPromptInvalid は組み込みか固有のプロンプトの変数が誤っているときに出る。
+	KeyDaemonRunPromptInvalid Key = "daemon.run.prompt_invalid"
+)
+
+// `continuo doctor` のプロンプトの検査の文言。
+const (
+	// KeyDoctorLabelPromptVariables は「プロンプトの変数」の見出し語である。
+	KeyDoctorLabelPromptVariables Key = "doctor.label.prompt_variables"
+	// KeyDoctorLabelLeftoverBody は「残った本文」の見出し語である。
+	KeyDoctorLabelLeftoverBody Key = "doctor.label.leftover_body"
+	// KeyDoctorPromptVariablesOK は固有のプロンプトが在って、検査を通ったときに出る。
+	KeyDoctorPromptVariablesOK Key = "doctor.prompt_variables.ok"
+	// KeyDoctorPromptVariablesOKNoProject は固有のプロンプトが無くて、検査を通ったときに出る。
+	KeyDoctorPromptVariablesOKNoProject Key = "doctor.prompt_variables.ok_no_project"
+	// KeyDoctorPromptVariablesInvalid は変数の名前か構文が誤っているときに出る。
+	KeyDoctorPromptVariablesInvalid Key = "doctor.prompt_variables.invalid"
+	// KeyDoctorPromptVariablesProjectUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyDoctorPromptVariablesProjectUnreadable Key = "doctor.prompt_variables.project_unreadable"
+	// KeyDoctorPromptVariablesUnknown は WORKFLOW.md が読めず、置き場所も決まらないときに出る。
+	KeyDoctorPromptVariablesUnknown Key = "doctor.prompt_variables.unknown"
+	// KeyDoctorPromptVariablesRemedy は変数を直す手順である。
+	KeyDoctorPromptVariablesRemedy Key = "doctor.prompt_variables.remedy"
+	// KeyDoctorPromptVariablesRemedyPermission は固有のプロンプトの権限を確かめる手順である。
+	KeyDoctorPromptVariablesRemedyPermission Key = "doctor.prompt_variables.remedy_permission"
+	// KeyDoctorLeftoverBodyOK は WORKFLOW.md に本文が残っていないときに出る。
+	KeyDoctorLeftoverBodyOK Key = "doctor.leftover_body.ok"
+	// KeyDoctorLeftoverBodyLeft は WORKFLOW.md に本文が残っているときに出る。
+	KeyDoctorLeftoverBodyLeft Key = "doctor.leftover_body.left"
+	// KeyDoctorLeftoverBodyUnknown は WORKFLOW.md が読めないときに出る。
+	KeyDoctorLeftoverBodyUnknown Key = "doctor.leftover_body.unknown"
+	// KeyDoctorLeftoverBodyNoteBuiltinSkipped は組み込みが送られないことを添える1行である。
+	KeyDoctorLeftoverBodyNoteBuiltinSkipped Key = "doctor.leftover_body.note_builtin_skipped"
+	// KeyDoctorLeftoverBodyRemedyShow は組み込みの全文を読む手順である。
+	KeyDoctorLeftoverBodyRemedyShow Key = "doctor.leftover_body.remedy_show"
+	// KeyDoctorLeftoverBodyRemedyMove は書き足した部分を移す手順である。
+	KeyDoctorLeftoverBodyRemedyMove Key = "doctor.leftover_body.remedy_move"
+	// KeyDoctorLeftoverBodyRemedyDelete は移したあとに本文を消す手順である。
+	KeyDoctorLeftoverBodyRemedyDelete Key = "doctor.leftover_body.remedy_delete"
+)
+
+// `continuo prompt` の文言。
+const (
+	// KeyCLIPromptFlagShow は--show の説明に出る。
+	KeyCLIPromptFlagShow Key = "cli.prompt.flag_show"
+	// KeyCLIPromptFlagBuiltin は--builtin の説明に出る。
+	KeyCLIPromptFlagBuiltin Key = "cli.prompt.flag_builtin"
+	// KeyCLIPromptErrShowRequired は--show を付けずに呼んだときに出る。
+	KeyCLIPromptErrShowRequired Key = "cli.prompt.err_show_required"
+	// KeyCLIPromptErrTooManyPositional は位置引数が2つ以上あるときに出る。
+	KeyCLIPromptErrTooManyPositional Key = "cli.prompt.err_too_many_positional"
+	// KeyCLIPromptErrConfigLoad は WORKFLOW.md を読めないときに出る。
+	KeyCLIPromptErrConfigLoad Key = "cli.prompt.err_config_load"
+	// KeyCLIPromptErrProjectUnreadable は固有のプロンプトが在るのに読めないときに出る。
+	KeyCLIPromptErrProjectUnreadable Key = "cli.prompt.err_project_unreadable"
+	// KeyCLIPromptBreakdownHeading は内訳の見出しである。
+	KeyCLIPromptBreakdownHeading Key = "cli.prompt.breakdown_heading"
+	// KeyCLIPromptBreakdownBuiltinHead は組み込みの前半の1行である。
+	KeyCLIPromptBreakdownBuiltinHead Key = "cli.prompt.breakdown_builtin_head"
+	// KeyCLIPromptBreakdownBuiltinTail は組み込みの後半の1行である。
+	KeyCLIPromptBreakdownBuiltinTail Key = "cli.prompt.breakdown_builtin_tail"
+	// KeyCLIPromptBreakdownProject は固有のプロンプトの1行である。
+	KeyCLIPromptBreakdownProject Key = "cli.prompt.breakdown_project"
+	// KeyCLIPromptBreakdownProjectMissing は固有のプロンプトが無いときの1行である。
+	KeyCLIPromptBreakdownProjectMissing Key = "cli.prompt.breakdown_project_missing"
+	// KeyCLIPromptBreakdownWorkflowBody は WORKFLOW.md の本文の1行である。
+	KeyCLIPromptBreakdownWorkflowBody Key = "cli.prompt.breakdown_workflow_body"
+	// KeyCLIPromptWarnLeftoverBody は本文が残っているときの警告である。
+	KeyCLIPromptWarnLeftoverBody Key = "cli.prompt.warn_leftover_body"
+	// KeyCLIPromptBreakdownBuiltinOnly は--builtin のときの内訳の1行である。
+	KeyCLIPromptBreakdownBuiltinOnly Key = "cli.prompt.breakdown_builtin_only"
+)
+
+// `continuo init` が固有のプロンプトも書くときの文言。
+const (
+	// KeyCLIInitProjectPromptCreated は固有のプロンプトを新しく書き出したときに出る。
+	KeyCLIInitProjectPromptCreated Key = "cli.init.project_prompt_created"
+	// KeyCLIInitProjectPromptOverwritten は--force で固有のプロンプトを上書きしたときに出る。
+	KeyCLIInitProjectPromptOverwritten Key = "cli.init.project_prompt_overwritten"
+	// KeyCLIInitProjectPromptKept は固有のプロンプトが既にあって触らなかったときに出る。
+	KeyCLIInitProjectPromptKept Key = "cli.init.project_prompt_kept"
+	// KeyCLIInitWorkflowKept は WORKFLOW.md が既にあって触らなかったときに出る。
+	KeyCLIInitWorkflowKept Key = "cli.init.workflow_kept"
+)
+
 // allKeys は宣言済みのキーを全部並べたものである。
 //
 // **新しいキーを足したらここにも足すこと。**test/internal/i18n がこの一覧と
@@ -2332,6 +2526,13 @@ var allKeys = []Key{
 	KeyFsprobeHomeDirFailed,
 	KeyFsprobeClaudeHomeFailed,
 	KeyFsprobeWorkspaceRootFailed,
+	KeyHandoffBidCandidacy,
+	KeyHandoffBidDeadline,
+	KeyHandoffBidDeadlineOne,
+	KeyHandoffBidNoDeadline,
+	KeyHandoffHoldAssigned,
+	KeyHandoffHoldStarting,
+	KeyHandoffHoldStartingNoBranch,
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffLostReason,
@@ -2676,6 +2877,24 @@ var allKeys = []Key{
 	KeyDashboardAgoMinutes,
 	KeyDashboardAgoHours,
 	KeyDashboardNone,
+	KeyDashboardCaptionGated,
+	KeyDashboardColGatedReason,
+	KeyDashboardColGatedSince,
+	KeyDashboardColGatedRemedy,
+	KeyDashboardNoGated,
+	KeyDashboardNoteGated,
+	KeyDashboardGateReasonHumanAssigned,
+	KeyDashboardGateReasonManyAssignees,
+	KeyDashboardGateReasonManyAssigneesWithSelf,
+	KeyDashboardGateRemedyHumanAssigned,
+	KeyDashboardGateRemedyManyAssignees,
+	KeyDashboardGateRemedyManyAssigneesWithSelf,
+	KeyDashboardBadgeNotNoticed,
+	KeyDashboardBadgeNoticeOff,
+	KeyDashboardBadgeNoticeCapped,
+	KeyDashboardBadgeNoticeUnclearOwner,
+	KeyDashboardBadgeNoticeNoBody,
+	KeyDashboardBadgeNoticeFailed,
 	KeyLockErrAlreadyRunning,
 	KeyLockAcquireOpenFailed,
 	KeyLockAcquireAlreadyRunning,
@@ -2712,6 +2931,7 @@ var allKeys = []Key{
 	KeyConfigValidateHandoffIdleTimeoutRange,
 	KeyConfigValidateHandoffRecheckIntervalRange,
 	KeyConfigValidateHandoffMarginRange,
+	KeyConfigValidateHandoffOnAssigneeGate,
 	KeyConfigExpandTrailingDollar,
 	KeyConfigExpandUnclosedBrace,
 	KeyConfigExpandEmptyEnvName,
@@ -2974,6 +3194,7 @@ var allKeys = []Key{
 	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode,
 	KeyWorkspaceGitBranchExistsUnexpectedExitCode,
 	KeyWorkspaceGitUnpushedCountUnreadable,
+	KeyWorkspaceGitFetchLinkedBranchFailed,
 	KeyWorkspaceGhqNameInvalid,
 	KeyWorkspaceRunGhqListStartFailed,
 	KeyWorkspaceRunGhqListExitFailed,
@@ -3033,6 +3254,7 @@ var allKeys = []Key{
 	KeyWorkspaceErrWorktreeBranchMismatch,
 	KeyWorkspacePrepareBranchMismatch,
 	KeyWorkspaceErrWorktreeDetached,
+	KeyWorkspaceErrRetryable,
 	KeyWorkspacePrepareDetachedHead,
 	KeyWorkspacePrepareUnregisteredWorktree,
 	KeyWorkspacePrepareParentDirCreateFailed,
@@ -3097,6 +3319,46 @@ var allKeys = []Key{
 	KeyDaemonBuildDashboardFailed,
 	KeyI18nResolveUnsupportedLanguage,
 	KeyRedactErrUnusableHome,
+	KeyPromptParseFailed,
+	KeyPromptRenderFailed,
+	KeyPromptIndexSealed,
+	KeyConfigLoadProjectPromptReadFailed,
+	KeyDaemonRunProjectPromptUnreadable,
+	KeyDaemonRunPromptInvalid,
+	KeyDoctorLabelPromptVariables,
+	KeyDoctorLabelLeftoverBody,
+	KeyDoctorPromptVariablesOK,
+	KeyDoctorPromptVariablesOKNoProject,
+	KeyDoctorPromptVariablesInvalid,
+	KeyDoctorPromptVariablesProjectUnreadable,
+	KeyDoctorPromptVariablesUnknown,
+	KeyDoctorPromptVariablesRemedy,
+	KeyDoctorPromptVariablesRemedyPermission,
+	KeyDoctorLeftoverBodyOK,
+	KeyDoctorLeftoverBodyLeft,
+	KeyDoctorLeftoverBodyUnknown,
+	KeyDoctorLeftoverBodyNoteBuiltinSkipped,
+	KeyDoctorLeftoverBodyRemedyShow,
+	KeyDoctorLeftoverBodyRemedyMove,
+	KeyDoctorLeftoverBodyRemedyDelete,
+	KeyCLIPromptFlagShow,
+	KeyCLIPromptFlagBuiltin,
+	KeyCLIPromptErrShowRequired,
+	KeyCLIPromptErrTooManyPositional,
+	KeyCLIPromptErrConfigLoad,
+	KeyCLIPromptErrProjectUnreadable,
+	KeyCLIPromptBreakdownHeading,
+	KeyCLIPromptBreakdownBuiltinHead,
+	KeyCLIPromptBreakdownBuiltinTail,
+	KeyCLIPromptBreakdownProject,
+	KeyCLIPromptBreakdownProjectMissing,
+	KeyCLIPromptBreakdownWorkflowBody,
+	KeyCLIPromptWarnLeftoverBody,
+	KeyCLIPromptBreakdownBuiltinOnly,
+	KeyCLIInitProjectPromptCreated,
+	KeyCLIInitProjectPromptOverwritten,
+	KeyCLIInitProjectPromptKept,
+	KeyCLIInitWorkflowKept,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

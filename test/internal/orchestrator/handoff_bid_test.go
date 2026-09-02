@@ -23,6 +23,13 @@ const rivalHost = "thinkpad"
 // rivalLogin は別の機械が使っている gh の持ち主である（架空の名前）。
 const rivalLogin = "octocat-bot-b"
 
+// testBidWindow は、別の機械の入札を組み立てるときに渡す締め切りまでの長さである。
+//
+// **判定には効かない。**この値は入札のコメントに書く「担当は約何分後に決まるか」の
+// 1行にしか使われない（設計 3-77a）。締め切りそのものは、コメントに付いた作成時刻と
+// 設定の `bid_window_ms` から continuo が数える。
+const testBidWindow = 3 * time.Minute
+
 // issueNode は sampleIssue が使う issue のノード ID を返す。
 //
 // number: issue 番号。
@@ -158,7 +165,7 @@ func TestHandoff_入札に負けたら担当者にならない(t *testing.T) {
 	// それより大きい入札を、ほかの機械が先に書いてある状態にする。
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatBid(handoff.Bid{
 		Host: rivalHost, FiveHour: 100, Weekly: 100, Score: 300, At: time.Now(),
-	}), time.Now().Add(-time.Minute))
+	}, testBidWindow), time.Now().Add(-time.Minute))
 
 	fx.Orc.Tick(context.Background())
 
@@ -381,7 +388,7 @@ func TestHandoff_古い入札が残っていても締め切りをまたいで担
 	// **終わった回の入札である。**締め切り（3分）にも決着の猶予（さらに3分）にも入らない。
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatBid(handoff.Bid{
 		Host: rivalHost, FiveHour: 100, Weekly: 100, Score: 300, At: clock.Now().Add(-30 * time.Minute),
-	}), clock.Now().Add(-30*time.Minute))
+	}, testBidWindow), clock.Now().Add(-30*time.Minute))
 
 	// 1回目。**次の回を始める入札を1件書き、締め切りを待つ。**
 	fx.Orc.Tick(context.Background())
@@ -438,7 +445,7 @@ func TestHandoff_期限切れの担当を外したあと前の回の入札に負
 	// **前の回の入札。**hold より前にあり、判定スコアはこの機械（270）より大きい。
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatBid(handoff.Bid{
 		Host: rivalHost, FiveHour: 100, Weekly: 100, Score: 300, At: old.Add(-time.Minute),
-	}), old.Add(-time.Minute))
+	}, testBidWindow), old.Add(-time.Minute))
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
 		Host: rivalHost, Assignee: rivalLogin, Branch: "continuo/octocat/hello-world/188", At: old,
 	}), old)

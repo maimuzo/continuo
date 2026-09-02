@@ -10,6 +10,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
@@ -20,8 +21,8 @@ const designDocPath = "../../../docs/plans/continuo_design.md"
 // designSectionHeading は front matter の設定例が載っている節の見出しである。
 const designSectionHeading = "### 5-2. front matter（設定）"
 
-// designBodySectionHeading は本文（プロンプトのテンプレート）が載っている節の見出しである。
-const designBodySectionHeading = "### 5-3. 本文（プロンプトのテンプレート）"
+// designBodySectionHeading は組み込みのプロンプトが載っている節の見出しである。
+const designBodySectionHeading = "### 5-3. 組み込みのプロンプト"
 
 // 目的: 雛形の front matter のキー構成が、設計 5-2 の設定例のキー構成と一致することを確認する。
 //
@@ -87,20 +88,37 @@ func TestTemplate_雛形の片付ける状態が終わったとみなす状態�
 	}
 }
 
-// 目的: 雛形の本文が、設計 5-3 の本文のブロックと一字一句そのまま一致することを確認する。
+// 目的: 組み込みのプロンプトが、設計 5-3 のブロックと一字一句そのまま一致することを確認する。
 //
-// 雛形は設計 5-3 を機械的に写したものであり、本文にはプレースホルダの差し替えが無い
-// （差し替えるのは front matter の値だけである。設計 3-32）。したがって完全一致を求めてよい。
+// **突き合わせる相手は WORKFLOW.md の本文ではない**（設計 5-3c で本文は空になった）。
+// **送る文面は internal/prompt/builtin.md にある。**目印の行も含めて丸ごと比べる。
 // 「{{.issue.identifier}} が入っているか」のような、テスト側に書いた文字列との照合では、
-// 本文が設計から離れても落ちない。設計文書そのものを読んで突き合わせる。
+// 送る文面が設計から離れても落ちない。設計文書そのものを読んで突き合わせる。
 //
-// 与える情報: 設計文書 5-3 の ```markdown ブロックと、scaffold.Template() の本文。
+// 与える情報: 設計文書 5-3 の ```markdown ブロックと、prompt.BuiltinRaw()。
 // 成功条件: 前後の空行を除いた両者が完全に一致すること。
-func TestTemplate_雛形の本文が設計5_3の本文と一致する(t *testing.T) {
-	assertSameBody(t, "雛形", bodyOf(t, "雛形", scaffold.Template()))
+func TestTemplate_組み込みのプロンプトが設計5_3と一致する(t *testing.T) {
+	assertSameBody(t, "internal/prompt/builtin.md", prompt.BuiltinRaw())
 }
 
-// assertSameBody は、渡した WORKFLOW.md の本文が設計 5-3 の本文と一致することを確かめる。
+// 目的: 雛形の WORKFLOW.md が本文を持たないことを固定する（設計 5-3c）。
+//
+// **本文を戻すと、continuo が仕組みの説明を直しても既に配った WORKFLOW.md には届かない。**
+// **しかも本文が在ると組み込みは1文字も送られない**（設計 5-3d の互換の経路）ので、
+// **`continuo init` を叩いた新しい利用者が、いきなり移行の途中の状態で始まることになる。**
+//
+// 与える情報: scaffold.Template() の全文。
+// 成功条件: front matter より後ろが空白だけであること。
+func TestTemplate_雛形は本文を持たない(t *testing.T) {
+	body := bodyOf(t, "雛形", scaffold.Template())
+	if strings.TrimSpace(body) != "" {
+		t.Errorf("雛形の WORKFLOW.md に本文が残っています。"+
+			"本文が在ると組み込みのプロンプトは送られません（設計 5-3d）。"+
+			"送る文面は internal/prompt/builtin.md へ書いてください\n  本文: %q", body)
+	}
+}
+
+// assertSameBody は、渡した文面が設計 5-3 のブロックと一致することを確かめる。
 //
 // 一致しない場合は、最初に食い違った行の番号と、その行の設計側・対象側の中身を出す。
 // 全文を並べても、どこがずれたのかが読み取れないためである。
@@ -185,14 +203,16 @@ func assertTemplateFollowsDesign(t *testing.T, label, raw string) {
 	t.Helper()
 
 	front := frontMatterOf(t, label, raw)
-	body := bodyOf(t, label, raw)
 
 	// 設計 5-2: キー構成が設計文書の設定例と一致すること。
 	wantKeys := flattenYAMLKeys(t, "設計 5-2 の設定例", frontMatterOf(t, "設計 5-2 の設定例", readDesignFrontMatterExample(t)))
 	assertSameKeySet(t, wantKeys, flattenYAMLKeys(t, label, front))
 
-	// 設計 5-3: 本文は front matter が宣言した印をそのまま使うこと。
+	// 設計 5-3: 送る文面は front matter が宣言した印をそのまま使うこと。
 	// 片方だけ書き換えると、continuo が探す印とエージェントに書かせる印がずれる。
+	// **見る先は WORKFLOW.md の本文ではない**（設計 5-3c で本文は空になった）。
+	// **組み込みのプロンプトを見る。**
+	builtin := prompt.Builtin()
 	values := flattenYAMLValues(t, label, front)
 	for _, key := range []string{
 		"tracker.status_signal_prefix",
@@ -203,16 +223,17 @@ func assertTemplateFollowsDesign(t *testing.T, label, raw string) {
 			t.Errorf("%s: front matter の %s が空である", label, key)
 			continue
 		}
-		if !strings.Contains(body, v) {
-			t.Errorf("%s: 本文が front matter の %s（%q）を使っていない。continuo が探す印とエージェントに書かせる印がずれる",
-				label, key, v)
+		if !strings.Contains(builtin, v) {
+			t.Errorf("%s: 組み込みのプロンプトが front matter の %s（%q）を使っていない。"+
+				"continuo が探す印とエージェントに書かせる印がずれる", label, key, v)
 		}
 	}
 
-	// 設計 5-3: 本文は設計文書の本文のブロックと一致すること。
-	// テスト側に書いた文字列（{{.issue.identifier}} など）との照合では、
-	// 本文が設計から離れても落ちないので、設計文書そのものと突き合わせる。
-	assertSameBody(t, label, body)
+	// 設計 5-3c: 雛形は本文を持たないこと。
+	if body := bodyOf(t, label, raw); strings.TrimSpace(body) != "" {
+		t.Errorf("%s: 本文が残っている。本文が在ると組み込みのプロンプトは送られない（設計 5-3d）\n  本文: %q",
+			label, body)
+	}
 }
 
 // readDesignFrontMatterExample は設計文書 5-2 の設定例（```yaml で囲まれたブロック）を

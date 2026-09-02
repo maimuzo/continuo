@@ -132,6 +132,134 @@ func gitExitCode(ctx context.Context, dir string, args ...string) (int, error) {
 	return -1, i18n.Errorf(i18n.KeyWorkspaceGitExitCodeStartFailed, strings.Join(full, " "), err)
 }
 
+// remoteTrackingPrefix は base に据えるリモート追跡 ref の接頭辞である（3-22d）。
+//
+// **`origin` 以外の remote は見ない。**continuo が引く clone は ghq が作ったものであり、
+// そこでは issue のリポジトリが必ず `origin` である。
+const remoteTrackingPrefix = "origin/"
+
+// gitFetchTimeout は、リンクされた branch を1本取りに行くときの上限である（3-22d）。
+//
+// **上限が無いと、遅い回線で巡回のループごと止まる**（trust.go の trustCheckTimeout と
+// 同じ理由）。**設定のキーにはしていない。**着手のたびに1本取るだけで、
+// 巡回の間隔（既定30秒）に収まる作業だからである。
+const gitFetchTimeout = 30 * time.Second
+
+// gitFetchRetryDelay は fetch をやり直すまでの間隔である。やり直しは1回だけ行う。
+const gitFetchRetryDelay = time.Second
+
+// gitEnsureRemoteBranch は、リンクされた branch のリモート追跡 ref が手元に無ければ、
+// **その1本だけ** fetch する（3-22d）。
+//
+// **手元にあるなら1バイトも通信しない。**着手のたびに通信すると、遅い回線で巡回が詰まる。
+//
+// **refspec を明示した形だけを叩く。**素の `git fetch origin <名前>` にすると、
+// `--single-branch` で作られた clone では FETCH_HEAD しか動かず、
+// **リモート追跡 ref ができないので worktree が切れない。**素の clone でも結果は同じなので、
+// clone の作られ方で場合分けしない。
+//
+// **`--no-tags` を付ける。**tag は base の解決に要らず、大きなリポジトリでは
+// tag の取得だけで数秒かかる。**`--all` も `--prune` も付けない。**
+//
+// **やり直しは1回だけである。**2回落ちたらエラーを返し、着手そのものを失敗させる。
+// **黙って既定 branch へ倒さない。**倒すと、人間がリンクした branch とは別の起点で
+// エージェントが作業を始め、食い違いに気づくのは PR を出したあとになる。
+//
+// **2回落ちたエラーには ErrRetryable の印を付ける。**印が無いと、orchestrator は
+// これを人間へ渡す失敗として扱い、**回線が61秒（30秒×2＋1秒）切れただけの issue を
+// `failure_state` に置く。**`failure_state` は `tracker.active_states` に入っていないので、
+// 人間がカンバンで戻すまで continuo は二度と拾わない。
+//
+// **「branch が本当に消えている」場合も同じ印を付ける。**git の失敗の理由は
+// 終了コードにも stderr にも安定した形では出ないので、**「回線が切れた」と
+// 「remote に無い」を、その場で言い分けることはできない。**言い分けようとして
+// stderr の文面を読むと、git の版と言語の設定で外れる。
+// **やり直しは無限ではない**ので、言い分けなくても困らない。orchestrator の
+// `abandonRun` が `agent.max_retries`（既定3回）まで試し、使い切ったら
+// `failure_state` へ落として issue にも理由を書く。**消えた branch は、
+// 数回のやり直しのあとで必ず人間に届く。**遅れるのはそのぶんだけである。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: clone の作業ディレクトリ。
+// branch: リンクされた branch の生の名前（`origin/` は付けない）。
+// logger: やり直しを知らせる先。
+// 戻り値: 取ってこられなかった場合のエラー（**ErrBaseUnknown と ErrRetryable の両方に一致する**）。
+func gitEnsureRemoteBranch(ctx context.Context, repoDir, branch string, logger *slog.Logger) error {
+	if branch == "" {
+		return nil
+	}
+	present, err := gitRemoteRefExists(ctx, repoDir, branch)
+	if err != nil {
+		return err
+	}
+	if present {
+		return nil
+	}
+
+	refspec := "+refs/heads/" + branch + ":refs/remotes/" + remoteTrackingPrefix + branch
+	var lastErr error
+	for attempt := 1; attempt <= 2; attempt++ {
+		fetchCtx, cancel := context.WithTimeout(ctx, gitFetchTimeout)
+		_, lastErr = runGit(fetchCtx, repoDir, "fetch", "--no-tags", "origin", refspec)
+		cancel()
+		if lastErr == nil {
+			return nil
+		}
+		if attempt == 1 {
+			if logger != nil {
+				logger.Warn("リンクされた branch を取ってこられなかったのでやり直します",
+					"repo", repoDir, "branch", branch, "error", lastErr)
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(gitFetchRetryDelay):
+			}
+		}
+	}
+	return markRetryable(i18n.Errorf(
+		i18n.KeyWorkspaceGitFetchLinkedBranchFailed,
+		ErrBaseUnknown, branch, repoDir, repoDir, branch, branch, lastErr))
+}
+
+// gitRemoteRefExists は `refs/remotes/origin/<branch>` が手元にあるかを返す。
+//
+// **`git rev-parse --verify` ではなく `for-each-ref` で引く。**rev-parse は
+// 同名のローカル branch や tag にも当たるので、**リモート追跡 ref があることの証拠にならない。**
+//
+// **返ってきた名前を完全一致で比べる。この比較は外せない。**`for-each-ref` に渡した
+// パターンは、**スラッシュまでの前方一致でも当たる。**
+// 実測（2026-09-02、git 2.51）: `refs/remotes/origin/work` が無い clone で
+// `refs/remotes/origin/work/issue-42` だけを作ると、
+// `for-each-ref --count=1 --format=%(refname) refs/remotes/origin/work` は
+// `refs/remotes/origin/work/issue-42` を返す。同じ状態で
+// `git rev-parse --verify origin/work` は `fatal: Needed a single revision` で落ちる。
+//
+// **「空でなければ在る」と答えると、gitEnsureRemoteBranch が fetch を飛ばす。**
+// そのあと `git worktree add` が `origin/work` を解決できずに落ち、
+// **やり直しも効かない。**「確かめ方」「対処」を添えた文面も出ないまま、
+// 生の git のエラーだけが人間に届く。
+//
+// **`--count=1` を残してよい理由。**git は `refs/x` と `refs/x/y` を同時に持てない
+// （実測: `cannot lock ref 'refs/remotes/origin/work': 'refs/remotes/origin/work/issue-42'
+// exists`）。**当たる集合は「求めた ref だけ」か「その下の子だけ」のどちらかであり、
+// 両方が混ざることはない。**だから1本だけ読めば判別できる。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: clone の作業ディレクトリ。
+// branch: リンクされた branch の生の名前。
+// 戻り値の1つ目: リモート追跡 ref があれば true。
+// 戻り値の2つ目: git の実行に失敗した場合のエラー。
+func gitRemoteRefExists(ctx context.Context, repoDir, branch string) (bool, error) {
+	want := "refs/remotes/" + remoteTrackingPrefix + branch
+	out, err := runGit(ctx, repoDir,
+		"for-each-ref", "--count=1", "--format=%(refname)", want)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) == want, nil
+}
+
 // gitWorktreePrune は `git worktree prune` を実行する（3-22 の段1）。
 //
 // 「登録は残っているが実体が消えている」状態を先に解消しないと、
@@ -716,6 +844,36 @@ func gitAheadOfUpstream(ctx context.Context, worktreePath string) (int, error) {
 		return 0, i18n.Errorf(i18n.KeyWorkspaceGitAheadOfUpstreamCountUnreadable, out, convErr)
 	}
 	return n, nil
+}
+
+// gitRemoteRefContainsHead は HEAD を含むリモート追跡 ref が1本でもあるかを返す
+// （#144（worktree の branch は変えず push 先だけ分ける）の片付けの段1）。
+//
+// **upstream にも base にも頼らずに「HEAD が remote に載っているか」を答えられる。**
+// `git push origin HEAD:<別名>` は `-u` を付けない限り upstream を張り替えないが、
+// **リモート追跡 ref（`refs/remotes/…`）は `-u` の有無にかかわらず更新される。**
+// だから push 先を分けた worktree も、この判定なら片付けられる。
+//
+// **通信しない。**`refs/remotes/` は手元にある ref である。
+// `--contains` は history を辿るので ref の数に比例するが、
+// **このリポジトリ（`refs/remotes/` の ref が12本）で 0.010 秒**であった（2026-09-02 実測）。
+// `--count=1` を付けて、出力を1本に抑えている。
+//
+// **見落としが起きる条件。**リモート追跡 ref を記録したあとに remote 側でその commit が
+// 消された場合（force push・branch の削除）、「載っていた」と判定する。
+// **受け入れる。**`@{u}` を使う判定でも同じことが起きる（どちらも fetch した時点の記録である）。
+//
+// ctx: 実行に適用するコンテキスト。
+// worktreePath: 検査する worktree のパス。
+// 戻り値の1つ目: HEAD を含むリモート追跡 ref が1本でもあれば true。
+// 戻り値の2つ目: 実行に失敗した場合のエラー（HEAD を解決できない等）。
+func gitRemoteRefContainsHead(ctx context.Context, worktreePath string) (bool, error) {
+	out, err := runGit(ctx, worktreePath,
+		"for-each-ref", "--count=1", "--contains", "HEAD", "--format=%(refname)", "refs/remotes/")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
 }
 
 // gitNoDiffFromBase は `git diff --quiet <base>...HEAD` が真（差分なし）かを返す

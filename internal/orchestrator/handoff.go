@@ -73,6 +73,21 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		return handoffDecision{proceed: true}
 	}
 
+	// **戻り口は9つある。1つずつ後始末を書かない**（設計 6-2）。
+	//
+	// judged は「この巡回でこの issue を判定できたか」である。**既定は真。**
+	// **判定できなかった経路だけが偽を入れる**（gh の持ち主を取れない・
+	// 読み取りの枠を使い切った・コメントを読めない）。そこで記録を消すと、
+	// 材料が揃わなかっただけの巡回で数え直しになる。
+	// noted は「担当者の関門で止めたか」である。真なら noteGate が記録を書き直している。
+	judged := true
+	noted := false
+	defer func() {
+		if judged && !noted {
+			o.clearGate(issue.ID)
+		}
+	}()
+
 	logins := assigneeLogins(issue)
 	// **コメントを読まずに答えが出るものを先に処理する。**
 	//
@@ -82,6 +97,34 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		o.logger.Warn("担当者が2人以上いるので触りません（人間が触っています）",
 			"identifier", issue.Identifier, "担当者の人数", issue.AssigneeCount,
 			"担当者", strings.Join(logins, ", "))
+		// **gh の持ち主が混じっていないことを先に確かめる**（設計 8-3）。
+		// **この分岐は hold のコメントを1行も読まない**ので、
+		// 「人間が2人」と「人間1人＋別の機械が hold を持っている」を区別できない。
+		// 後者で「担当者をすべて外してください」と案内すると、人間は走っている
+		// 別の機械の担当を外すことになり、同じ issue に2台が乗る。
+		//
+		// **`viewerIdentity` は一度取れたら覚える**ので、定常状態でリクエストは0本である。
+		// **読み取りの枠（maxHandoffFetchesPerPoll）はコメントの取得だけを数えるので、1件も使わない。**
+		viewer, ok := o.viewerIdentity(ctx)
+		switch {
+		case !ok:
+			// **gh の持ち主が分からない。**別の機械の担当かどうかを切り分けられないので、
+			// 案内も記録も作らない。**記録は消さない**（判定していない。設計 6-2）。
+			judged = false
+		case containsFold(logins, viewer.Login):
+			// **continuo のアカウントが混じっている。**別の機械が担当している見込みなので、
+			// **issue へは1バイトも書かない**（設計 8-3）。
+			// **記録は作る。**いちばん切り分けの難しい状態を、ダッシュボードから消さない。
+			noted = true
+			if o.noteGate(issue, GateReasonManyAssigneesWithSelf, logins) {
+				o.markGateNoticeSkipped(issue.ID, GateReasonManyAssigneesWithSelf, GateNoticeUnclearOwner)
+			}
+		default:
+			noted = true
+			if o.noteGate(issue, GateReasonManyAssignees, logins) {
+				o.postGateNotice(ctx, issue, nodeID, GateReasonManyAssignees)
+			}
+		}
 		return handoffDecision{}
 	}
 
@@ -100,18 +143,21 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		// **自分が誰か分からないまま担当のある issue に触らない**（設計 3-65 と同じ立場）。
 		o.logger.Warn("gh の持ち主を取れないので、この巡回では着手しません（担当の持ち回りを判定できません）",
 			"identifier", issue.Identifier)
+		judged = false
 		return handoffDecision{}
 	}
 
 	if !o.takeHandoffFetch() {
 		o.logger.Info("持ち回りの判定に使うコメントの読み取りが、この巡回の上限に達しました（続きは次の巡回で見ます）",
 			"identifier", issue.Identifier, "1回の巡回の上限", maxHandoffFetchesPerPoll)
+		judged = false
 		return handoffDecision{stop: true}
 	}
-	comments, err := o.tracker.FetchAllComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
+	comments, truncated, err := o.tracker.FetchAllComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
 	if err != nil {
 		o.logger.Warn("コメントを読めないので、この巡回では着手しません（担当の持ち回りを判定できません）",
 			"identifier", issue.Identifier, "error", err)
+		judged = false
 		return handoffDecision{}
 	}
 	views := toCommentViews(comments)
@@ -144,6 +190,27 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		o.logger.Warn("担当者が付いているので着手しません（continuo が付けたものではありません）。"+
 			"着手させるには、GitHub の画面でその担当者を外してください",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee)
+		noted = true
+		if o.noteGate(issue, GateReasonHumanAssigned, logins) {
+			// **手元のコメントも見る**（設計 7）。メモリの印は再起動で消えるが、
+			// この経路はコメントを既に読んでいるので、前の起動で書いた案内を見つけられる。
+			at, found := gateNoticedIn(comments, viewer.Login, GateReasonHumanAssigned)
+			switch {
+			case found:
+				// **前の起動で書いてある。**印だけ立てて、二度と書かない。
+				// **`found` を先に見る。**新しい側に案内が残っているなら、
+				// 古い側が切れていても答えは出ている。
+				o.markGateNoticed(issue.ID, GateReasonHumanAssigned, at)
+			case truncated:
+				// **古い側を読み切れていない。**前に書いたかどうかを確かめられないので書かない。
+				// **書けないことより、同じ案内を2件書くことのほうが困る**（消す手段が無い）。
+				o.logger.Warn("コメントが多すぎて、前に案内を書いたかどうかを確かめられないので書きません",
+					"identifier", issue.Identifier)
+				o.markGateNoticeSkipped(issue.ID, GateReasonHumanAssigned, GateNoticeTooManyComments)
+			default:
+				o.postGateNotice(ctx, issue, nodeID, GateReasonHumanAssigned)
+			}
+		}
 		return handoffDecision{}
 	case handoff.ActionSkipSelfUnknown:
 		o.logger.Warn("gh の持ち主が分からないので、担当の付いた issue には触りません",
@@ -286,7 +353,7 @@ func (o *Orchestrator) bidForIssue(
 	// **前の回の入札は issue に残り続ける**（1回ごとに新しいコメントを書くので消えない）。
 	// 数に入れると、締め切りが常にその古い時刻から数えられ、**次の回が1度も始まらない。**
 	// **巡回のたびに入札のコメントだけが増え、担当者は永久に決まらない。**
-	window := time.Duration(o.cfg.Tracker.Provider.Handoff.BidWindowMs) * time.Millisecond
+	window := o.handoffBidWindow()
 	bids := handoff.RoundBids(comments, o.now(), window)
 	if _, already := handoff.HasBidBy(bids, o.hostName); !already {
 		posted, ok := o.postBid(ctx, issue, nodeID, bid)
@@ -421,7 +488,9 @@ func (o *Orchestrator) undoHandoffAcquire(ctx context.Context, issue tracker.Iss
 func (o *Orchestrator) postBid(
 	ctx context.Context, issue tracker.Issue, nodeID string, bid handoff.Bid,
 ) (handoff.Bid, bool) {
-	if err := o.postOwnMarkedComment(ctx, nodeID, handoff.FormatBid(bid)); err != nil {
+	// **締め切りまでの長さを渡す。**コメントに「担当は約何分後に決まるか」を書くためである
+	// （設計 3-77a）。issue を開いた人が、待てばよいのかを読めるようにする。
+	if err := o.postOwnMarkedComment(ctx, nodeID, handoff.FormatBid(bid, o.handoffBidWindow())); err != nil {
 		o.logger.Warn("入札のコメントを書けません（次の巡回でやり直します）",
 			"identifier", issue.Identifier, "error", err)
 		return handoff.Bid{}, false
@@ -433,6 +502,17 @@ func (o *Orchestrator) postBid(
 	// **この写しを使うのはこの巡回の締め切りの計算だけである。**
 	bid.PostedAt = bid.At
 	return bid, true
+}
+
+// handoffBidWindow は入札を締め切るまでの長さを返す（`tracker.provider.handoff.bid_window_ms`）。
+//
+// **0 のときも 0 のまま返す。**`idle_timeout_ms` と違って、**0 は未設定ではなく
+// 「締め切りを待たずに勝者を決める」という指定である**（設計 3-77 / config の検査もそう書いている）。
+// 既定へ差し替えると、その設定にした人が3分待たされる。
+//
+// 戻り値: 入札を締め切るまでの長さ。
+func (o *Orchestrator) handoffBidWindow() time.Duration {
+	return time.Duration(o.cfg.Tracker.Provider.Handoff.BidWindowMs) * time.Millisecond
 }
 
 // handoffIdleTimeout は担当を外すまでの長さを返す。
@@ -713,7 +793,9 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 	// **誰が引き継いだかを、issue の上から読む。**hold のコメントの `host` が答えである。
 	// **released のコメントも一緒に記録に残す**（RUCM「担当が移った」のステップ1）。
 	// **これが無いと「担当が移った」としか残らず、いつ・どの機械が外されたのかを辿れない。**
-	comments, err := o.tracker.FetchAllComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
+	// **切れたかどうかは捨てる。**ここは「担当が自分のままか」を確かめるだけで、
+	// 案内を1回にするための照合はしない（設計 7-1）。
+	comments, _, err := o.tracker.FetchAllComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
 	if err != nil {
 		// **読めないなら止めない。**判定の材料が揃っていない。**時計も進めない**
 		// （進めると、次の確かめが1時間後になる）。

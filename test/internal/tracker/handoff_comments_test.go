@@ -1,6 +1,7 @@
 package tracker_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -83,9 +84,12 @@ func TestFetchAllComments_印の付いたコメントも落とさない(t *testi
 	})))
 	a := newAdapterForFetch(t, fs)
 
-	comments, err := a.FetchAllComments(t.Context(), "ISSUENODE_1", cfg.Provider.Comments)
+	comments, truncated, err := a.FetchAllComments(t.Context(), "ISSUENODE_1", cfg.Provider.Comments)
 	if err != nil {
 		t.Fatalf("FetchAllComments が失敗した: %v", err)
+	}
+	if truncated {
+		t.Error("1ページで読み切っているのに、切れたと名乗っている")
 	}
 	if len(comments) != 3 {
 		t.Fatalf("件数が想定と違う: got %d, want 3", len(comments))
@@ -136,9 +140,12 @@ func TestFetchAllComments_続きがある限り取り直す(t *testing.T) {
 	})
 	a := newAdapterForFetch(t, fs)
 
-	comments, err := a.FetchAllComments(t.Context(), "ISSUENODE_1", cfg)
+	comments, truncated, err := a.FetchAllComments(t.Context(), "ISSUENODE_1", cfg)
 	if err != nil {
 		t.Fatalf("FetchAllComments が失敗した: %v", err)
+	}
+	if truncated {
+		t.Error("hasNextPage が偽で終わったのに、切れたと名乗っている")
 	}
 
 	reqs := fs.Requests()
@@ -309,5 +316,40 @@ func TestAddAssignees_空なら1リクエストも送らない(t *testing.T) {
 	}
 	if got := fs.RequestCount(); got != 0 {
 		t.Errorf("空なのにリクエストを送っている: %d 本", got)
+	}
+}
+
+// 目的: ページ数の上限で古い側を読み切れなかったことを、戻り値で名乗ることを確認する
+// （#140（人間が担当者で着手できないことを、issue のコメントとして1回だけ書く））。
+//
+// **件数では当てられない。**1ページが100件に満たないまま上限を使い切ると、
+// 2000件に届かないまま切れる。逆にちょうど2000件で続きが無いこともある。
+// **切れているのに気づけないと、前の起動で書いた案内を見落として同じ案内を2件書く。**
+// **コメントを消す手段は無い。**
+//
+// 与える情報: 毎ページ「続きがある」と答え続ける偽サーバ。
+// 成功条件: 2つ目の戻り値が真になること。
+func TestFetchAllComments_ページ数の上限で切れたら真を返す(t *testing.T) {
+	cfg := testTrackerConfig().Provider.Comments
+
+	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
+		return dataResponse(map[string]any{"node": map[string]any{
+			"__typename": "Issue",
+			"comments": map[string]any{
+				"pageInfo": map[string]any{"hasNextPage": true, "endCursor": "CURSOR"},
+				"nodes": []map[string]any{
+					commentNode("c"+strconv.Itoa(n), "本文", "2026-08-01T00:00:00Z", "human-user"),
+				},
+			},
+		}})
+	})
+	a := newAdapterForFetch(t, fs)
+
+	_, truncated, err := a.FetchAllComments(t.Context(), "ISSUENODE_1", cfg)
+	if err != nil {
+		t.Fatalf("FetchAllComments が失敗した: %v", err)
+	}
+	if !truncated {
+		t.Error("上限まで読んでも続きがあるのに、切れたと名乗っていない")
 	}
 }

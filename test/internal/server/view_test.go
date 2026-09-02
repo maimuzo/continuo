@@ -19,7 +19,7 @@ func TestNewSnapshot_時刻が無い項目はnullにする(t *testing.T) {
 		Identifier: "octocat/hello-world#1",
 		Title:      "着手した直後",
 		State:      "In Progress",
-	}}, testTime)
+	}}, nil, testTime)
 
 	if len(snap.Runs) != 1 {
 		t.Fatalf("run の件数が違う: got %d, want 1", len(snap.Runs))
@@ -70,7 +70,7 @@ func TestNewSnapshot_最後にhookを受けてからの経過を出す(t *testin
 	}
 	want := map[string]string{"a": "5秒前", "b": "1分30秒前", "c": "2時間0分前", "d": "0秒前"}
 
-	snap := server.NewSnapshot(views, testTime)
+	snap := server.NewSnapshot(views, nil, testTime)
 	for _, run := range snap.Runs {
 		if run.LastHookAgo != want[run.Identifier] {
 			t.Errorf("%s の経過が違う: got %q, want %q", run.Identifier, run.LastHookAgo, want[run.Identifier])
@@ -87,7 +87,7 @@ func TestNewSnapshot_identifierの昇順に並べる(t *testing.T) {
 		{Identifier: "octocat/hello-world#9"},
 		{Identifier: "octocat/hello-world#12"},
 		{Identifier: "octocat/hello-world#1"},
-	}, testTime)
+	}, nil, testTime)
 
 	got := make([]string, 0, len(snap.Runs))
 	for _, run := range snap.Runs {
