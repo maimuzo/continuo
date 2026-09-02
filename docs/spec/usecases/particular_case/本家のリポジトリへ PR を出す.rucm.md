@@ -25,7 +25,7 @@
 ```rucm
 USE CASE NAME: 本家のリポジトリへ PR を出す
 BRIEF DESCRIPTION: issue は非公開のリポジトリにあり、コードは public の fork にある。システムは issue のリポジトリの既定 branch を base にした worktree を1つ作り、エージェントをそこで起動する。エージェントは issue からコードのリポジトリの名前を読み、worktree の外の clone でコードを直し、fork の origin へ push し、本家のリポジトリへ PR を出す。システムは worktree の中身を見ずに Status を動かし、成果が worktree の外にあるままでも片付けを通す。
-PRECONDITION: システムは常駐している。issue のリポジトリは非公開であり、コードを持たない。コードのリポジトリは public の fork であり、本家のリポジトリを upstream に持つ。claude.tool_gate.mode は既定の public_only である。cleanup.on_states は Done だけを持つ。WORKFLOW.md の本文は worktree の外の clone で直してよいと書いている。
+PRECONDITION: システムは常駐している。issue のリポジトリは非公開であり、コードを持たない。コードのリポジトリは public の fork であり、本家のリポジトリを upstream に持つ。claude.tool_gate.mode は既定の public_only である。claude.permission_mode は既定の dontAsk であり、システムはエージェントに --add-dir を渡さない。cleanup.on_states は Done だけを持つ。WORKFLOW.md の本文は worktree の外の clone で直してよいと書いている。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: エージェント、GitHub Projects v2、利用者
 DEPENDENCY: なし
@@ -51,7 +51,7 @@ BASIC FLOW:
 17. エージェントは clone の中でレビューの指摘を直す。
 18. エージェントは直した commit を fork の origin へ push する。
 19. エージェントはシステムに turn の終わりを Stop hook で知らせる。
-20. システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。
+20. システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。
 21. システムはエージェントの会話の記録から review の表明を読む。
 22. システムはカンバンの issue の Status に In Review を書く。
 23. 利用者はカンバンの issue の Status を Done へ動かす。
@@ -131,7 +131,7 @@ flowchart TD
     B4 --> B5["5. worktree の中に身元ファイルを置く"]
     B5 --> B6["6. 身元ファイルの名前を除外の一覧に加える"]
     B6 --> B7{"7. VALIDATES THAT issue のリポジトリが非公開である"}
-    B7 -- 偽 --> P1["公開のリポジトリ 1. 判定の hook を持つ設定ファイルを作る"]
+    B7 -- 偽 --> P1["公開のリポジトリ 1. 判定の hook を持つ設定ファイルを worktree の外に作る"]
     P1 -. "RESUME STEP 9" .-> B9
     B7 -- 真 --> B8["8. 判定の hook を持たない設定ファイルを worktree の外に作る"]
     B8 --> B9["9. エージェントを worktree で起動する"]
@@ -148,7 +148,7 @@ flowchart TD
     B16 --> B17["17. clone の中でレビューの指摘を直す"]
     B17 --> B18["18. 直した commit を fork の origin へ push する"]
     B18 --> B19["19. turn の終わりを Stop hook で知らせる"]
-    B19 --> B20{"20. VALIDATES THAT Stop hook の cwd が worktree の内側である"}
+    B19 --> B20{"20. VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない"}
     B20 -- 偽 --> O1["作業ディレクトリがworktreeの外 1. Stop hook を捨てる"]
     O1 --> O2["作業ディレクトリがworktreeの外 2. turn の終わりを検知しない"]
     O2 --> O3["作業ディレクトリがworktreeの外 3. 画面の版が増えないことを見つける"]
@@ -196,10 +196,10 @@ sequenceDiagram
     else 既定 branch の名前がある
         SYS->>SYS: 4-6. worktree を作り身元ファイルを置いて除外に加える
         alt issue のリポジトリが公開である
-            SYS->>SYS: 公開のリポジトリ 1. 判定の hook を持つ設定ファイルを作る
+            SYS->>SYS: 公開のリポジトリ 1. 判定の hook を持つ設定ファイルを worktree の外に作る
             Note over SYS: RESUME STEP 9
         else issue のリポジトリが非公開である
-            SYS->>SYS: 8. 判定の hook を持たない設定ファイルを作る
+            SYS->>SYS: 8. 判定の hook を持たない設定ファイルを worktree の外に作る
         end
         SYS->>CC: 9-10. worktree で起動し WORKFLOW.md の本文を送る
     end
@@ -216,12 +216,12 @@ sequenceDiagram
         CC->>FORK: 18. 直した commit を push する
     end
     CC->>SYS: 19. turn の終わりを Stop hook で知らせる
-    alt Stop hook の cwd が worktree の外
+    alt Stop hook の cwd が worktree の外だと分かった
         SYS->>SYS: 作業ディレクトリがworktreeの外 1-3. hook を捨て画面の版を見張る
         SYS->>CC: 作業ディレクトリがworktreeの外 4. エージェントを止める
         SYS->>BOARD: 作業ディレクトリがworktreeの外 5. 打ち切った理由をコメントする
         Note over SYS,BOARD: ABORT worktree は残っている
-    else Stop hook の cwd が worktree の内側
+    else Stop hook の cwd が worktree の外だと分かっていない
         SYS->>SYS: 21. 会話の記録から review の表明を読む
         SYS->>BOARD: 22. Status に In Review を書く
     end

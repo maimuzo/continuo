@@ -3,7 +3,7 @@
   "usecase_name": "本家のリポジトリへ PR を出す",
   "source": {
     "file": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.rucm.md",
-    "rucm_block_sha256": "9209e41c8249b525853c6194113392317d09203ca4c8da74960c7da5716e9137"
+    "rucm_block_sha256": "db515b878183b55ba3ed18e76fa245a61eb8e0171de3a5800cb8f01f771a5880"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -216,7 +216,7 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 20,
-      "statement": "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。"
+      "statement": "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。"
     },
     {
       "id": "BASIC FLOW-21",
@@ -563,13 +563,13 @@
       "from": "BASIC FLOW-20",
       "to": "BASIC FLOW-21",
       "kind": "true",
-      "condition": "Stop hook の cwd が worktree の内側である"
+      "condition": "Stop hook の cwd が worktree の外だと分かっていない"
     },
     {
       "from": "BASIC FLOW-20",
       "to": "作業ディレクトリがworktreeの外-1",
       "kind": "false",
-      "condition": "NOT Stop hook の cwd が worktree の内側である"
+      "condition": "NOT Stop hook の cwd が worktree の外だと分かっていない"
     },
     {
       "from": "BASIC FLOW-21",
@@ -778,7 +778,7 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
@@ -844,7 +844,7 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
@@ -914,7 +914,7 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
@@ -984,7 +984,7 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
@@ -1049,8 +1049,8 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
-        "CONDITION: NOT Stop hook の cwd が worktree の内側である",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
+        "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
         "システムは Stop hook を捨てる。",
         "システムは turn の終わりを検知しない。",
         "システムは画面の版が turn_timeout_ms のあいだ増えないことを見つける。",
@@ -1163,7 +1163,7 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
@@ -1232,7 +1232,7 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
@@ -1305,7 +1305,7 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
@@ -1378,7 +1378,7 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
         "システムはエージェントの会話の記録から review の表明を読む。",
         "システムはカンバンの issue の Status に In Review を書く。",
         "利用者はカンバンの issue の Status を Done へ動かす。",
@@ -1446,8 +1446,8 @@
         "エージェントは clone の中でレビューの指摘を直す。",
         "エージェントは直した commit を fork の origin へ push する。",
         "エージェントはシステムに turn の終わりを Stop hook で知らせる。",
-        "システムは VALIDATES THAT Stop hook の cwd が worktree の内側である。",
-        "CONDITION: NOT Stop hook の cwd が worktree の内側である",
+        "システムは VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない。",
+        "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
         "システムは Stop hook を捨てる。",
         "システムは turn の終わりを検知しない。",
         "システムは画面の版が turn_timeout_ms のあいだ増えないことを見つける。",

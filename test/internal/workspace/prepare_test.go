@@ -1,3 +1,4 @@
+// {"RUCM-CFG-SHA256": "3ab1f5f3c605aebef9101a1c036ac0b5982f0fc54c33cd0884c6e52e0fb1a688", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
 package workspace_test
 
 import (
@@ -286,8 +287,15 @@ func TestPrepare_baseがnullならdefault_branchを使う(t *testing.T) {
 	}
 }
 
+// {"RUCM-PATH": "P013"}
+//
 // 目的: base を決められない issue を失敗として扱う（base を推測しない）ことを確認する
 // （設計 3-22 の段4）。
+//
+// **「本家のリポジトリへ PR を出す」もここに載る。**あちらの issue は非公開のリポジトリにあり、
+// **コードのリポジトリの名前は issue の本文にしか無い。**base を推測されると、continuo は
+// 知りもしないリポジトリの branch を起点にしてしまう。
+//
 // 与える情報: base が null の設定と、NativeRef に default_branch を持たない issue。
 // 成功条件: Prepare が ErrBaseUnknown を返し、worktree も branch も作られないこと。
 func TestPrepare_baseもdefault_branchも無ければ失敗させる(t *testing.T) {

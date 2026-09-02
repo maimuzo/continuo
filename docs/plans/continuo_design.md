@@ -8120,11 +8120,45 @@ PR を本家へ出す形は、**いま continuo の仕組みではなくエー�
 | **片付けの判定** | 身元ファイルは数から外す（3-18）。worktree の HEAD が base のままならリモート追跡 ref に載っているので、段1 で消してよいと決まる（3-9） |
 | **Status の動かし方** | 表明の1行だけで動かす。**PR がどこに出たかを continuo は見ない** |
 
-**唯一の落とし穴は hook の `cwd` である。**`Stop` hook の `cwd` が worktree の外を指すと、
-**その hook ごと捨てる**（3-23）。turn の終わりの判定の起点は `Stop` である（3-2）ので、
-捨てられると画面の版が止まるまで待ち、`turn_timeout_ms` で打ち切られる。
-**この検査は緩めない。**`session_id` を騙った hook を弾く唯一の手立てだからである。
-**エージェント側が `git -C <clone>` や部分シェルを使い、作業ディレクトリを worktree に保つ。**
+**ただし、雛形の WORKFLOW.md のままでは動かない。**`continuo init` が
+`<実行時ディレクトリ>/WORKFLOW.md` へ置く雛形は、**別のリポジトリの issue を「直さずに
+`CONTINUO-STATUS: #99 working` と書け」と指示している**
+（[internal/scaffold/template.go](../../internal/scaffold/template.go) の「別のリポジトリの issue」の段）。
+**そのままではエージェントは clone を用意する段へ進まない。**回すには本文へ次の段を足す。
+
+    ## コードが別のリポジトリにあるとき
+
+    **issue の本文にコードのリポジトリの名前が書かれている場合は、その clone で直してください。**
+    **clone は worktree の外に置いてください**（例: `~/src/<owner>/<repo>`）。
+
+        git -C <clone のパス> switch -c <branch 名>
+        git -C <clone のパス> commit -am "<何を直したか>"
+        git -C <clone のパス> push -u origin HEAD
+        gh pr create --repo <本家の owner>/<本家の repo> --head <fork の owner>:<branch 名>
+
+    **この worktree の中では commit しないでください。**成果は clone の側にあります。
+    **`cd` はしないでください。**`git -C` で足ります。
+
+**hook の `cwd` は落とし穴にならない**（2026-09-02 実測。Claude Code 2.1.258）。
+
+| 何を試したか | `Stop` の `cwd` |
+| --- | --- |
+| worktree の中の subdirectory へ `cd` | **そこになる。**内側なので通る |
+| **worktree の外へ `cd`**（既定の `dontAsk`） | **permission で拒否され、`cd` が実行されない** |
+| worktree の外へ `cd`（`bypassPermissions`） | 起動ディレクトリへ戻され、元のまま |
+| `--add-dir` で外を足してから `cd` | **外になる。**continuo は `--add-dir` を渡さない |
+
+**崩れるのは次の3つのどれかを行ったときだけである。**`--add-dir` を渡す。
+`claude.permission_mode` を `dontAsk` 以外にする。clone を worktree の外に置いたうえで
+エージェントに `cd` させる。**3つとも既定では起きない。**
+
+**だから雛形へは足さない。**上のサンプルの中で `cd` を止めれば足りる。
+**このユースケースを回す利用者は、どのみち WORKFLOW.md を書き換える。**
+**全利用者が読む雛形へ、既定では起きない事故の回避策を足すと、本文が長くなって読まれなくなる。**
+
+**`cwd` の検査は緩めない。**`session_id` を騙った hook を弾く唯一の手立てだからである（3-23）。
+**落とすのは外だと分かったときだけで、`cwd` が空の hook は通す**
+（[internal/orchestrator/hookinput.go](../../internal/orchestrator/hookinput.go) の `acceptHookCwd`）。
 
 **仕組みを変えるときは、上の4つを壊していないかを、そのユースケースの検査で確かめる。**
 
