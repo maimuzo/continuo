@@ -180,8 +180,12 @@ type Issue struct {
 	// **ログと issue のコメントに出すためだけに持つ。**判定には使わない。取れなければ空文字。
 	StatusChangedBy string
 	// BranchName はトラッカーが返す branch のメタデータである（SPEC.md 4.1.1 の branch_name）。
-	// OPTIONAL。GitHub の "Development" 機能でリンクされた branch があれば、その1本目の名前。
-	// 無ければ nil。
+	// OPTIONAL。GitHub の "Development" 機能でリンクされた branch の名前で、
+	// **worktree を切る base に使う**（設計 3-22d）。
+	//
+	// **埋まるのは「ちょうど1本で、issue と同じリポジトリの branch」のときだけである。**
+	// 0本・2本以上・別のリポジトリを指すリンクでは nil になり、base は今までどおり
+	// （設定の `herdr.worktree.base` → issue のリポジトリの既定 branch）で決まる。
 	BranchName *string
 	// URL は issue の URL である（SPEC.md 4.1.1 の url）。draft issue は URL を持たないため nil。
 	URL *string
