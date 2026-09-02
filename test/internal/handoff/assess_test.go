@@ -309,6 +309,8 @@ func TestHasBidBy_自分の入札を見つける(t *testing.T) {
 // 与える情報: 入札1件と、締め切りまでの長さ3分。
 // 成功条件: どちらの言語でも `}` が JSON の分の1つだけで、読み戻すと元の値が全部取れること。
 func TestFormatBid_人間が読む行を足してもJSONが壊れない(t *testing.T) {
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
 	bid := handoff.Bid{Host: "mac-studio", FiveHour: 87, Weekly: 16, Score: 190, At: at()}
 
 	for _, lang := range []i18n.Lang{i18n.LangJA, i18n.LangEN} {
@@ -331,7 +333,6 @@ func TestFormatBid_人間が読む行を足してもJSONが壊れない(t *testi
 			t.Errorf("[%s] 読み戻した入札の時刻が違う: got %s, want %s", lang, got.At, bid.At)
 		}
 	}
-	i18n.Use(i18n.DefaultLang)
 }
 
 // 目的: 入札のコメントが、人間に「いま何が起きていて、いつ決まるか」を伝えることを確認する（設計 3-77a）。
@@ -383,6 +384,36 @@ func TestFormatBid_締め切りの書き方(t *testing.T) {
 	}
 }
 
+// 目的: 締め切りが1分のとき、英語の文言の文法が崩れないことを確認する（設計 3-77a）。
+//
+// **英語は DefaultLang である。**`language:` を書いていない利用者にはこれが出るので、
+// **日本語だけを見ていると、崩れたまま気づけない。**分数を差し込む文言に 1 を渡すと
+// "in about 1 minutes" になるため、1分のときだけ別の文言を引く。
+//
+// 与える情報: 締め切りまでの長さが30秒・1分・2分の3通り。英語で組み立てる。
+// 成功条件: 30秒と1分は "in about a minute"、2分は "in about 2 minutes" になり、
+// **どの場合も "1 minutes" が出ないこと。**
+func TestFormatBid_英語でも1分の締め切りが崩れない(t *testing.T) {
+	i18n.Use(i18n.LangEN)
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
+	bid := handoff.Bid{Host: "mac-studio", Score: 190, At: at()}
+
+	for _, window := range []time.Duration{30 * time.Second, time.Minute} {
+		got := handoff.FormatBid(bid, window)
+		if !strings.Contains(got, "in about a minute") {
+			t.Errorf("締め切り %s の英語が \"in about a minute\" になっていない:\n%s", window, got)
+		}
+		if strings.Contains(got, "1 minutes") {
+			t.Errorf("締め切り %s の英語に \"1 minutes\" が出ている:\n%s", window, got)
+		}
+	}
+
+	if got := handoff.FormatBid(bid, 2*time.Minute); !strings.Contains(got, "in about 2 minutes") {
+		t.Errorf("2分の締め切りが分数の文言になっていない:\n%s", got)
+	}
+}
+
 // 目的: hold のコメントへ人間が読む行を足しても、JSON が壊れないことを確認する（設計 3-77b）。
 //
 // **壊れると担当の判定そのものが落ちる。**hold は「その担当者は機械である」の唯一の証拠なので、
@@ -392,6 +423,8 @@ func TestFormatBid_締め切りの書き方(t *testing.T) {
 // 与える情報: hold 1件。
 // 成功条件: どちらの言語でも `}` が JSON の分の1つだけで、読み戻すと元の値が全部取れること。
 func TestFormatHold_人間が読む行を足してもJSONが壊れない(t *testing.T) {
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
 	hold := handoff.Hold{
 		Host:     "mac-studio",
 		Assignee: selfLogin,
@@ -418,7 +451,6 @@ func TestFormatHold_人間が読む行を足してもJSONが壊れない(t *test
 			t.Errorf("[%s] 読み戻した hold の時刻が違う: got %s, want %s", lang, got.At, hold.At)
 		}
 	}
-	i18n.Use(i18n.DefaultLang)
 }
 
 // 目的: hold のコメントが、担当の決まり方と次に始まることを人間に伝えることを確認する（設計 3-77b）。

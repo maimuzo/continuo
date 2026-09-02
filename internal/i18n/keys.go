@@ -223,7 +223,14 @@ const (
 	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（機械の名前を差し込む）。
 	KeyHandoffBidCandidacy Key = "handoff.bid.candidacy"
 	// KeyHandoffBidDeadline は入札のコメントの2行目に出る（締め切りまでの分数を差し込む）。
+	//
+	// **2分以上のときだけ使う。**1分のときは KeyHandoffBidDeadlineOne を使う。
 	KeyHandoffBidDeadline Key = "handoff.bid.deadline"
+	// KeyHandoffBidDeadlineOne は、締め切りまでが1分のときに入札のコメントの2行目に出る。
+	//
+	// **英語の複数形のために分ける。**KeyHandoffBidDeadline に 1 を差し込むと
+	// "in about 1 minutes" と出る。**英語は DefaultLang なので、既定でこれが出る。**
+	KeyHandoffBidDeadlineOne Key = "handoff.bid.deadline_one"
 	// KeyHandoffBidNoDeadline は、締め切りを待たない設定のときに入札のコメントの2行目に出る。
 	KeyHandoffBidNoDeadline Key = "handoff.bid.no_deadline"
 	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（機械の名前を差し込む）。
@@ -2390,6 +2397,7 @@ var allKeys = []Key{
 	KeyFsprobeWorkspaceRootFailed,
 	KeyHandoffBidCandidacy,
 	KeyHandoffBidDeadline,
+	KeyHandoffBidDeadlineOne,
 	KeyHandoffBidNoDeadline,
 	KeyHandoffHoldAssigned,
 	KeyHandoffHoldStarting,

@@ -483,6 +483,10 @@ func FormatBid(b Bid, window time.Duration) string {
 // **切り捨てにすると、30秒の設定が「約0分後」になる。**読む人が待てばよい長さを
 // 読み取れなくなるので、1分未満は「約1分後」へ寄せる。
 //
+// **1分のときだけ別の文言を引く。**英語には複数形があり、分数を差し込む文言に 1 を渡すと
+// **"in about 1 minutes" と出る。**英語は DefaultLang なので、**言語を選んでいない利用者には
+// これが出る。**日本語には複数形が無いので、どちらの文言でも同じ形になる。
+//
 // window: 入札の締め切りまでの長さ。
 // 戻り値: 人間が読む1行。
 func bidDeadlineLine(window time.Duration) string {
@@ -490,6 +494,9 @@ func bidDeadlineLine(window time.Duration) string {
 		return i18n.T(i18n.KeyHandoffBidNoDeadline)
 	}
 	minutes := int((window + time.Minute - 1) / time.Minute)
+	if minutes == 1 {
+		return i18n.T(i18n.KeyHandoffBidDeadlineOne)
+	}
 	return i18n.T(i18n.KeyHandoffBidDeadline, minutes)
 }
 
