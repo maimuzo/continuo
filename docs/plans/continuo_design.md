@@ -8165,12 +8165,12 @@ fork へ push されていないので片付けが見送られる（[test/intern
 | worktree の外へ `cd`（`bypassPermissions`） | 起動ディレクトリへ戻され、元のまま |
 | `--add-dir` で外を足してから `cd` | **外になる。**continuo は `--add-dir` を渡さない |
 
-**崩れるのは、`--add-dir` を渡したときか、clone を worktree の外に置いたうえで
-エージェントに `cd` させたときだけである。**`claude.permission_mode` を `dontAsk` 以外にする道は無い
-（[internal/config/validate.go:232](../../internal/config/validate.go#L232) が起動時に弾く）。
+**崩れるのは、`--add-dir` を渡したときだけである。**`claude.permission_mode` を `dontAsk` 以外にする道は無く
+（[internal/config/validate.go:232](../../internal/config/validate.go#L232) が起動時に弾く）、
+**clone を worktree の外に置くこと自体は、崩れる条件にならない。**
 
-**だから雛形そのものは直さない。**上のサンプルの中で `cd` を止めれば足りる。
-**このユースケースを回す利用者は、どのみち WORKFLOW.md を書き換える。**
+**だから雛形そのものは直さない。**上のサンプルで `cd` を止めてあるのは、
+**将来 `--add-dir` を渡す設定へ変えたときに備えてである。**このユースケースを回す利用者は、どのみち WORKFLOW.md を書き換える。
 **全利用者が読む雛形へ、既定では起きない事故の回避策を足すと、本文が長くなって読まれなくなる。**
 
 **`cwd` の検査は緩めない。**`session_id` を騙った hook を弾く唯一の手立てだからである（3-23）。
