@@ -1451,6 +1451,64 @@ continuo abandon --force   https://github.com/<owner>/<repo>/issues/42 ~/continu
 git -C ~/ghq/github.com/<owner>/<repo> branch --list 'continuo/*'
 ```
 
+### `git worktree list` に、continuo が作った覚えの無い worktree が並ぶ
+
+**原因。**エージェントが自分で `git worktree add` を叩いています。
+**continuo が片付けるのは、その issue のために自分で用意した worktree 1つだけです。**
+片付ける相手はそのパス1つに固定されていて、`git worktree list` を見て回ることはありません。
+**エージェントが足したものには手を出さないので、clone に登録が残り続けます。**
+
+**残ると何が起きるかは、置かれた場所で2通りに分かれます。**
+
+| エージェントが置いた場所 | どうなるか |
+| --- | --- |
+| **continuo の worktree の中**（`.claude/worktrees/<名前>` など） | **その issue の片付けが止まります** |
+| **continuo の worktree の外** | **その issue は片付きます。**登録と branch だけが黙って残ります |
+
+**中に置かれたときは、`git status --porcelain` に未追跡として出ます。**
+`cleanup.require_clean_worktree`（既定 `true`）がそれを数えるので、
+「コミットされていない変更が残っている（未追跡のファイルを含む）」で片付けを見送り、
+**issue に「worktree を片付けずに残しました」というコメントが1回付きます。**
+
+**外に置かれたときは、どこにも出ません。**その issue の worktree は消え、
+clone 側に worktree の登録と branch だけが残ります。
+
+**`continuo doctor` も言いません。**`worktree の場所` の検査が数えるのは、
+`workspace.root` の直下4階層（`<root>/<host>/<owner>/<repo>/<スラグ>`）にあって、
+**ディレクトリ名から issue の番号を切り出せるもの**だけです。
+エージェントが足した worktree はそこに当てはまらないので、`✓` のままになります。
+
+**気づく手立ては `git worktree list` です。**
+
+```bash
+git -C ~/ghq/github.com/<owner>/<repo> worktree list
+```
+
+**放っておくと、実体が消えたあとに登録だけが残ります。**
+そうなると**その branch は `git branch -D` で消せなくなり**、
+下の「`error: cannot delete branch '…' used by worktree at '…'` と出る」の状態になります。
+**continuo は `git worktree prune` を代行しません。**リポジトリ全体に効くので、
+利用者がディレクトリごと移しただけの別の worktree まで登録を落としてしまうためです。
+
+**直し方。**消す前に、失うものが無いことを確かめます。
+
+```bash
+git -C <消したい worktree> status --short
+git -C <消したい worktree> log --oneline HEAD --not --remotes
+git -C ~/ghq/github.com/<owner>/<repo> worktree remove <消したい worktree>
+```
+
+**1つ目が出たら commit してから、2つ目が出たら push してから消してください。**
+
+**`--force` は付けないでください。**コミットしていない変更が、確認も警告も無く消えます。
+**`git worktree remove` が断ったのは、消してはいけないものが残っているからです。**
+`--force` で黙らせずに、上の2つをもう一度見てください。
+
+**同じことが起きないように、`WORKFLOW.md` の本文を当ててください。**
+エージェントに自分で片付けさせる文面は [upgrading.md](upgrading.md) の
+「v0.1.12 から v0.1.13 へ」にあります。
+**当てたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+
 ### `error: cannot delete branch '…' used by worktree at '…'` と出る
 
 **原因。**git が、その branch を出している worktree の**登録**を見て守っています。
