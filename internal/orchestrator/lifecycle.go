@@ -278,6 +278,9 @@ func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
 // **ボードに載っていなかったら、その行を捨て、issue のコメントに
 // 「ボードに無いので動かせなかった」と書く**（人間が気づけるようにする）。
 //
+// **別の run が印を持っている issue にも書き込まない**（設計 3-26 の「安全のための制約」）。
+// **書き間違えた1行で、別のエージェントが turn の途中で止まる**ためである。
+//
 // **`terminal_states` の issue は動かさない**（UpdateStatus が書く前に取り直して弾く）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -287,8 +290,11 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 	// **ボードに載っていなかった対象は溜めて、1 turn につき1件のコメントにまとめる。**
 	// 対象ごとに投稿すると、表明の行数ぶんだけ issue へコメントを書くことになる。
 	var missing []string
+	// **別の run が担当している対象も同じように溜める。**理由が違うので別のコメントにする。
+	var claimed []string
 	defer func() {
 		o.noteSignalTargetsMissing(ctx, rs, missing)
+		o.noteSignalTargetsClaimed(ctx, rs, claimed)
 	}()
 
 	for target, value := range signals {
@@ -321,6 +327,17 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 				o.logger.Warn("表明が指す issue がカンバンに載っていません（この行を捨てます）",
 					"identifier", rs.issue().Identifier, "対象", target)
 				missing = append(missing, target)
+				continue
+			}
+			// **別の run が印を持っていたら、書かずに捨てる**（設計 3-26 の「安全のための制約」）。
+			// **書き込むと、その run から見て「引き渡しの Status」になり、turn の途中でも
+			// 即座に止められる**（reconcile の既定の枝が stopAndReleaseAsync を呼ぶ）。
+			// **猶予はボードの自動化が書いたときだけ効く**ので、continuo 自身の書き込みは待ってもらえない。
+			if other, held := o.lookupRunByID(found.ID); held && other != rs && !other.isFinished() {
+				o.logger.Warn("表明が指す issue は別の run が担当中です（この行を捨てます）",
+					"identifier", rs.issue().Identifier, "対象", target,
+					"担当中の run", other.issue().Identifier, "遷移先", *next)
+				claimed = append(claimed, target)
 				continue
 			}
 			itemID = found.ID
@@ -385,6 +402,39 @@ func (o *Orchestrator) noteSignalTargetsMissing(ctx context.Context, rs *runStat
 		strings.Join(targets, " / "))
 	if err := o.postComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("表明の取りこぼしを投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
+	}
+}
+
+// noteSignalTargetsClaimed は、表明が指す issue を別の run が担当していたことを
+// issue のコメントに残す（設計 3-26）。
+//
+// **書き込みを止めただけでは、エージェントも人間も気づけない。**
+// 番号を書き間違えたのなら、ここを読んで書き直せる。
+//
+// **書くのは、いま作業している issue のほうである。**担当中の issue へ書くと、
+// 何も起きていない run のコメント欄が、他人の書き間違いで埋まる。
+//
+// **1 turn につき1件にまとめる**（`noteSignalTargetsMissing` と同じ理由）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// targets: 別の run が担当していた識別子の並び。空なら何もしない。
+func (o *Orchestrator) noteSignalTargetsClaimed(ctx context.Context, rs *runState, targets []string) {
+	if len(targets) == 0 {
+		return
+	}
+	nodeID := issueNodeID(rs.issue())
+	if nodeID == "" {
+		return
+	}
+	body := fmt.Sprintf("表明に書かれた %s は、いま別の Claude Code が担当しているので Status を動かしませんでした。"+
+		"\n【なぜ止めたか】担当中の issue の Status を外から動かすと、そのエージェントが turn の途中で止まります。"+
+		"\n【対処】番号の書き間違いなら、正しい番号で表明を書き直してください。"+
+		"意図して動かしたいのであれば、人間がカンバンから動かしてください。",
+		strings.Join(targets, " / "))
+	if err := o.postComment(ctx, nodeID, body); err != nil {
+		o.logger.Warn("担当中の issue への表明を止めたことを投稿できませんでした",
+			"identifier", rs.issue().Identifier, "error", err)
 	}
 }
 

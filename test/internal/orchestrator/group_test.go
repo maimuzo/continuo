@@ -2,10 +2,13 @@ package orchestrator_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
@@ -101,6 +104,117 @@ func TestSignal_ボードに載っていない対象はコメントに残して�
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Review" {
 		t.Fatalf("代表の issue の表明まで捨てている: got %q", got)
 	}
+}
+
+// TestSignal_別のrunが担当中のissueへの表明は弾く は、書き間違えた対象から
+// 走行中の run を守れることを確かめる。
+//
+// 目的: 設計 3-26 の「表明で指せるのは、**別の run が印を持っていない issue だけ**」を
+// 守っていることを示す。**印を引かずに書き込むと、指された issue を担当している run が
+// turn の途中で止められる**（引き渡しの Status とみなされ、reconcile が worker を落とす）。
+//
+// 与える情報: 先に `#189` を dispatch して turn の返事を止めたまま印を持たせ、そのあと
+// `#188` を dispatch する。`#188` のエージェントが `CONTINUO-STATUS: #189 review` と書く。
+// 成功条件:
+//   - `#189` の Status が `In Progress` のまま（`In Review` へ動いていない）
+//   - `#189` の印が残っている（run が止められていない）
+//   - 表明を書いた `#188` に、動かさなかったことを知らせるコメントが付く
+func TestSignal_別のrunが担当中のissueへの表明は弾く(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.Agent.MaxConcurrentAgents = 2 },
+	})
+	fx.AllowLog("別の run が担当中です")
+
+	// **agent 名からセッション UUID を引けるようにする。**`agent.start` の `--session-id`
+	// に渡っているものが、hook が名乗る `session_id` と同じである（設計 3-3）。
+	// **2件を dispatch するので、採番の順番に頼ると取り違える。**
+	var sessionMu sync.Mutex
+	sessionOf := map[string]string{}
+	startBase := fx.Herdr.HandlerOf(herdr.MethodAgentStart)
+	fx.Herdr.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
+		args, _ := params["args"].([]any)
+		for i, a := range args {
+			if fmt.Sprint(a) != "--session-id" || i+1 >= len(args) {
+				continue
+			}
+			sessionMu.Lock()
+			sessionOf[fmt.Sprint(params["name"])] = fmt.Sprint(args[i+1])
+			sessionMu.Unlock()
+		}
+		return startBase(params)
+	})
+
+	// 段1: `#189` を先に dispatch し、turn の返事を返さないまま印を持たせる。
+	fx.Tracker.AddIssue(sampleIssue(189, "Ready"))
+	holdPrompt(fx)
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "#189 の run が立つ", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 1
+	})
+
+	// 段2: `#188` を dispatch し、そのエージェントに `#189` を指す表明を書かせる。
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-188.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1",
+			"直しました。\n\nCONTINUO-STATUS: review\nCONTINUO-STATUS: #189 review", false),
+	})
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		name := fmt.Sprint(params["target"])
+		if !strings.HasSuffix(name, "-188") {
+			// **担当中の run には返事を返さない**（印を持たせ続ける）。
+			return map[string]any{
+				"type":  "agent_prompted",
+				"agent": map[string]any{"name": name, "agent_status": "working"},
+			}, nil
+		}
+		fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n直しました", true, time.Now())
+		sessionMu.Lock()
+		sessionID := sessionOf[name]
+		sessionMu.Unlock()
+		fx.Orc.OnHook(stopEvent(sessionID, path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": name, "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "表明を書いた #188 の run が終わる", func() bool {
+		return !holdsRun(fx, "#188")
+	})
+
+	if got := fx.Tracker.StateOf("PVTI_item189"); got != "In Progress" {
+		t.Fatalf("担当中の issue の Status が別のエージェントの表明で動いた: got %q, want %q",
+			got, "In Progress")
+	}
+	if !holdsRun(fx, "#189") {
+		t.Fatalf("担当中の run の印が消えている: %v", fx.Orc.RunningIdentifiers())
+	}
+	found := false
+	for _, c := range fx.Tracker.CommentsOf("I_node188") {
+		if c.IsSelf && strings.Contains(c.Body, "#189") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("動かさなかったことを知らせるコメントが無い: %+v", fx.Tracker.CommentsOf("I_node188"))
+	}
+}
+
+// holdsRun は、識別子が suffix で終わる issue の印が残っているかを返す。
+//
+// fx: 対象の fixture。
+// suffix: 識別子の末尾（`#188` など）。
+// 戻り値: 印を持っていれば true。
+func holdsRun(fx *fixture, suffix string) bool {
+	for _, id := range fx.Orc.RunningIdentifiers() {
+		if strings.HasSuffix(id, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestComment_runが終わるときにコメントが無ければセッションを復元して書かせる は、
