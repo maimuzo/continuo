@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
 
@@ -176,5 +177,91 @@ func TestPrepare_リンクが無ければ既定branchを起点にする(t *testi
 	}
 	if result.Base.String() != "main" {
 		t.Fatalf("base が既定 branch になっていない: got %q, want %q", result.Base.String(), "main")
+	}
+}
+
+// 目的: リモート追跡 ref の有無を、**スラッシュまでの前方一致で誤判定しない**ことを
+// 確認する（設計 3-22d。git.go の gitRemoteRefExists）。
+//
+// **`git for-each-ref <パターン>` は、スラッシュ区切りの前方一致でも当たる。**
+// `refs/remotes/origin/work` が手元に無くても、`refs/remotes/origin/work/issue-42` が
+// あれば後者が返る。**「出力が空でなければ在る」と数えると、在ると誤答する。**
+// 誤答すると fetch を飛ばし、`git worktree add` が `origin/work` を解決できずに落ちる。
+// **そのとき出るのは生の git のエラーで、対処を添えた文面は出ない。**
+//
+// 与える情報: origin に `work/issue-42` だけを置き、clone にそのリモート追跡 ref を
+// 残したまま、**origin に存在しない `work` をリンクした** issue。
+// 成功条件: Prepare が ErrBaseUnknown を返すこと（fetch を叩いて、それが失敗したこと）。
+func TestPrepare_リモート追跡refを前方一致で在ると誤判定しない(t *testing.T) {
+	repo := newTestRepo(t)
+	// **`work/issue-42` のリモート追跡 ref だけを手元に残す。**
+	// pushLinkedBranch と違い、`update-ref -d` を叩かない。
+	runGit(t, repo.Dir, "checkout", "--quiet", "-b", "work/issue-42")
+	runGit(t, repo.Dir, "push", "--quiet", "origin", "work/issue-42")
+	runGit(t, repo.Dir, "checkout", "--quiet", repo.Base)
+	runGit(t, repo.Dir, "branch", "--quiet", "-D", "work/issue-42")
+
+	// 前提の確認。**子だけが在り、求める ref そのものは無い状態**でなければ、
+	// このテストは前方一致を1バイトも踏まない。
+	refs := runGit(t, repo.Dir, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/")
+	if !strings.Contains(refs, "refs/remotes/origin/work/issue-42") {
+		t.Fatalf("前提が崩れている（子のリモート追跡 ref が無い）: %q", refs)
+	}
+	for _, line := range strings.Split(refs, "\n") {
+		if strings.TrimSpace(line) == "refs/remotes/origin/work" {
+			t.Fatalf("前提が崩れている（refs/remotes/origin/work が既に在る）: %q", refs)
+		}
+	}
+
+	fx := newFixture(t, fixtureOptions{
+		Repo:   repo,
+		Mutate: func(cfg *config.Config) { cfg.Herdr.Worktree.Base = nil },
+	})
+
+	_, err := fx.Manager.Prepare(context.Background(), linkedIssue(42, "work"))
+	if !errors.Is(err, workspace.ErrBaseUnknown) {
+		t.Fatalf("前方一致で「在る」と誤判定して fetch を飛ばしている"+
+			"（ErrBaseUnknown にならない）: %v", err)
+	}
+}
+
+// 目的: リンクされた branch の名前が正規化で変わるときは、そのリンクを捨てて
+// 既定 branch へ倒すことを確認する（設計 3-22d。prepare.go の resolveBase）。
+//
+// **この経路を通るテストが無いと、条件式を消しても全部通ってしまう。**
+// fetch が作るのは `refs/remotes/origin/<生の名前>` なので、正規化した別の名前を
+// base に据えると、取ってきたばかりの ref を解決できずに `git worktree add` が落ちる。
+//
+// **fetch の失敗（ErrBaseUnknown で issue ごと失敗させる）と扱いを変えている理由。**
+// fetch の失敗は回線や権限が戻れば次の巡回で通る。**正規化で変わる名前は、人間が
+// GitHub 側で rename しない限り永久に変わらない。**毎回失敗させても直る見込みが無い。
+//
+// 与える情報: base を null にした設定と、**非 ASCII を含む** `作業/issue-42` を
+// リンクした issue。
+// 成功条件: Prepare が成功し、base が既定 branch（`main`）になっていること。
+func TestPrepare_正規化で名前が変わるリンクは既定branchへ倒す(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.Herdr.Worktree.Base = nil },
+	})
+
+	// 前提の確認。**正規化が本当にこの名前を変えること**を先に押さえる。
+	// 変えないなら、このテストは倒す経路を1バイトも踏まない。
+	const linked = "作業/issue-42"
+	normalized, _ := normalize.Normalize("origin/" + linked)
+	if normalized.String() == "origin/"+linked {
+		t.Fatalf("前提が崩れている（正規化がこの名前を変えない）: %q", normalized.String())
+	}
+
+	result, err := fx.Manager.Prepare(context.Background(), linkedIssue(42, linked))
+	if err != nil {
+		t.Fatalf("正規化で捨てたあと既定 branch へ倒せていない: %v", err)
+	}
+	if result.Base.String() != "main" {
+		t.Fatalf("base が既定 branch になっていない: got %q, want %q", result.Base.String(), "main")
+	}
+	head := runGit(t, result.Path, "rev-parse", "HEAD")
+	mainHead := runGit(t, fx.Repo.Dir, "rev-parse", "main")
+	if head != mainHead {
+		t.Fatalf("worktree の起点が main でない: got %q, want %q", head, mainHead)
 	}
 }

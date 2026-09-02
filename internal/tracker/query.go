@@ -826,24 +826,49 @@ func containsFoldedStatus(states []string, target string) bool {
 // **`totalCount` を見る理由。**`nodes` は `first: 5` の窓なので、6本目が別のリポジトリを
 // 指していても `nodes` には出ない。**件数を `len(nodes)` で数えると、窓の外を見落とす。**
 //
+// **捨てたときは理由も返す。**捨てた事実がどこにも出ないと、別のリポジトリの branch を
+// リンクした人は「リンクしたのに既定 branch から始まった」を、手掛かりが1つも無いまま
+// 見ることになる。**呼び出し側（adapter.go）がこの理由をログへ出す。**
+// 症状と対処は [docs/FAQ.md](../../docs/FAQ.md) にも載せてある。
+//
 // conn: GraphQL が返した linkedBranches の connection（nil でよい）。
 // issueNameWithOwner: issue が在るリポジトリの `<owner>/<repo>`。
-// 戻り値: base に使ってよい branch の名前。使ってよい形でなければ nil。
-func linkedBranchForBase(conn *rawLinkedBranchConn, issueNameWithOwner string) *string {
-	if conn == nil || conn.TotalCount != 1 || len(conn.Nodes) != 1 {
-		return nil
+// 戻り値の1つ目: base に使ってよい branch の名前。使ってよい形でなければ nil。
+// 戻り値の2つ目: リンクが在るのに捨てたときの理由（人間可読）。
+// **リンクがそもそも無いときは空文字である**（捨てていないので出すことが無い）。
+func linkedBranchForBase(conn *rawLinkedBranchConn, issueNameWithOwner string) (*string, string) {
+	if conn == nil || conn.TotalCount == 0 {
+		return nil, ""
+	}
+	if conn.TotalCount != 1 {
+		return nil, fmt.Sprintf(
+			"リンクされた branch が %d 本あるので、どれを起点にするか決められません"+
+				"（1本だけリンクしてください）", conn.TotalCount)
+	}
+	if len(conn.Nodes) != 1 {
+		// **`totalCount` は 1 なのに窓が返らなかった。**権限で見えない branch などが
+		// これに当たる。**「2本以上ある」と同じ文面にしてはならない。**直し方が違う。
+		return nil, fmt.Sprintf(
+			"リンクされた branch が1本あることになっていますが、その中身が返りませんでした"+
+				"（返ってきた件数: %d）", len(conn.Nodes))
 	}
 	ref := conn.Nodes[0].Ref
 	if ref == nil || ref.Name == "" {
-		return nil
+		return nil, "リンクされた branch の名前が空です（provider 側の異常）"
 	}
 	// **リポジトリ名が取れなかったときも無視する。**「同じである」と言い切れない以上、
 	// 今までどおり（既定 branch を base にする）へ倒すほうが安全である。
-	if ref.Repository == nil || ref.Repository.NameWithOwner != issueNameWithOwner {
-		return nil
+	if ref.Repository == nil {
+		return nil, "リンクされた branch がどのリポジトリのものか分からないので起点に使いません"
+	}
+	if ref.Repository.NameWithOwner != issueNameWithOwner {
+		return nil, fmt.Sprintf(
+			"リンクされた branch が別のリポジトリ（%s）のものなので起点に使いません"+
+				"（issue は %s に在ります）",
+			ref.Repository.NameWithOwner, issueNameWithOwner)
 	}
 	name := ref.Name
-	return &name
+	return &name, ""
 }
 
 // mapAssignees は GraphQL の担当者の connection を、正規化した形へ移す（設計 3-77b）。
@@ -930,6 +955,13 @@ type mapItemResult struct {
 	// NotDispatchableReason は Ok が true かつ Issue.Dispatchable が false のときに、
 	// なぜ dispatch できないかを人間可読で示す（設計 3-13: 「ログに残す」）。
 	NotDispatchableReason string
+	// LinkedBranchIgnoredReason は、issue に branch がリンクされているのに、それを
+	// 起点として使わなかったときの理由である（設計 3-22d。linkedBranchForBase が決める）。
+	//
+	// **dispatch は止めない。**既定 branch へ倒して作業は進む。
+	// **だが黙って倒すと、リンクした人は手掛かりを1つも持てない。**だから理由を運ぶ。
+	// 空文字なら「リンクが無い」か「リンクをそのまま採った」のどちらかである。
+	LinkedBranchIgnoredReason string
 }
 
 // mapRawItemToIssue は GraphQL から返ってきた1件の project item を、正規化した Issue へ
@@ -1011,7 +1043,8 @@ func mapRawItemToIssue(
 			url = &u
 		}
 
-		branchName := linkedBranchForBase(raw.Content.LinkedBranches, raw.Content.Repository.NameWithOwner)
+		branchName, linkedBranchIgnoredReason := linkedBranchForBase(
+			raw.Content.LinkedBranches, raw.Content.Repository.NameWithOwner)
 
 		assigneeID, assignees, assigneeCount := mapAssignees(raw.Content.Assignees, nativeRef)
 
@@ -1094,7 +1127,12 @@ func mapRawItemToIssue(
 			Number:                    raw.Content.Number,
 			CommentCount:              commentCount,
 		}
-		return mapItemResult{Ok: true, Issue: issue, NotDispatchableReason: notDispatchableReason}
+		return mapItemResult{
+			Ok:                        true,
+			Issue:                     issue,
+			NotDispatchableReason:     notDispatchableReason,
+			LinkedBranchIgnoredReason: linkedBranchIgnoredReason,
+		}
 
 	case "DraftIssue":
 		// 設計 3-13: draft issue は dispatchable=false にして残す。取得の段では落とさない。

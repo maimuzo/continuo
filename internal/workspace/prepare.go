@@ -397,6 +397,16 @@ func (m *Manager) isRegisteredWorktree(ctx context.Context, repoPath, path strin
 //
 // **どれも無ければ ErrBaseUnknown を返す。base を推測しない。**
 //
+// **段2 のリンクは、正規化で名前が1文字でも変わるなら捨てて段3 へ倒す。**
+// fetch に失敗したとき（ErrBaseUnknown で issue ごと失敗させる）とは扱いを変えている。
+// **分けている理由は「やり直しで直るか」が逆だからである。**
+// fetch の失敗は回線や権限が戻れば次の巡回で通るので、失敗として人間へ渡す価値がある。
+// **正規化で変わる名前は、人間が GitHub 側で branch を rename しない限り永久に変わらない。**
+// 毎回の巡回で同じ issue を失敗させ続けても、やり直しで直る見込みが1つも無い。
+// **代わりに WARN で branch の生の名前と正規化後の名前を並べて出す**（下の logger.Warn）。
+// 症状（リンクしたのに既定 branch から始まる）と対処は
+// [docs/FAQ.md](../../docs/FAQ.md) に載せてある。
+//
 // **段2 に `origin/` を付ける理由。**戻り値は `git worktree add` の起点と、
 // 片付けの `git diff --quiet <base>...HEAD`（git.go の gitNoDiffFromBase）の
 // 両方へ渡る。**どちらもローカルに無い名前を解決できない。**リンクされた branch は

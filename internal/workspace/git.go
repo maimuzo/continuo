@@ -213,19 +213,37 @@ func gitEnsureRemoteBranch(ctx context.Context, repoDir, branch string, logger *
 // **`git rev-parse --verify` ではなく `for-each-ref` で引く。**rev-parse は
 // 同名のローカル branch や tag にも当たるので、**リモート追跡 ref があることの証拠にならない。**
 //
+// **返ってきた名前を完全一致で比べる。この比較は外せない。**`for-each-ref` に渡した
+// パターンは、**スラッシュまでの前方一致でも当たる。**
+// 実測（2026-09-02、git 2.51）: `refs/remotes/origin/work` が無い clone で
+// `refs/remotes/origin/work/issue-42` だけを作ると、
+// `for-each-ref --count=1 --format=%(refname) refs/remotes/origin/work` は
+// `refs/remotes/origin/work/issue-42` を返す。同じ状態で
+// `git rev-parse --verify origin/work` は `fatal: Needed a single revision` で落ちる。
+//
+// **「空でなければ在る」と答えると、gitEnsureRemoteBranch が fetch を飛ばす。**
+// そのあと `git worktree add` が `origin/work` を解決できずに落ち、
+// **やり直しも効かない。**「確かめ方」「対処」を添えた文面も出ないまま、
+// 生の git のエラーだけが人間に届く。
+//
+// **`--count=1` を残してよい理由。**git は `refs/x` と `refs/x/y` を同時に持てない
+// （実測: `cannot lock ref 'refs/remotes/origin/work': 'refs/remotes/origin/work/issue-42'
+// exists`）。**当たる集合は「求めた ref だけ」か「その下の子だけ」のどちらかであり、
+// 両方が混ざることはない。**だから1本だけ読めば判別できる。
+//
 // ctx: 実行に適用するコンテキスト。
 // repoDir: clone の作業ディレクトリ。
 // branch: リンクされた branch の生の名前。
 // 戻り値の1つ目: リモート追跡 ref があれば true。
 // 戻り値の2つ目: git の実行に失敗した場合のエラー。
 func gitRemoteRefExists(ctx context.Context, repoDir, branch string) (bool, error) {
+	want := "refs/remotes/" + remoteTrackingPrefix + branch
 	out, err := runGit(ctx, repoDir,
-		"for-each-ref", "--count=1", "--format=%(refname)",
-		"refs/remotes/"+remoteTrackingPrefix+branch)
+		"for-each-ref", "--count=1", "--format=%(refname)", want)
 	if err != nil {
 		return false, err
 	}
-	return strings.TrimSpace(out) != "", nil
+	return strings.TrimSpace(out) == want, nil
 }
 
 // gitWorktreePrune は `git worktree prune` を実行する（3-22 の段1）。
