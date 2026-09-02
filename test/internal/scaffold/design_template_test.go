@@ -140,21 +140,40 @@ func TestTemplate_雛形の本文に固有の指示の見本がある(t *testing
 // **書き写すと、continuo が説明を直しても、既に配った WORKFLOW.md には二度と届かない。**
 // **しかも同じ指示が2回届く**（組み込みの側にも同じ節がある）。
 //
-// 与える情報: scaffold.Template() の本文と、組み込みのプロンプトの見出し。
+// **見出しをテストに書き並べない。**書き並べると、組み込みに節が増えたときに
+// その節だけが見張られないまま残る。**組み込みの全文から見出しを取り出して、全件を見る。**
+//
+// 与える情報: scaffold.Template() の本文と、prompt.BuiltinRaw() から取った見出しの全部。
 // 成功条件: 組み込みの見出しが、本文に1つも入っていないこと。
 func TestTemplate_雛形の本文に組み込みの説明を書き写していない(t *testing.T) {
 	body := bodyOf(t, "雛形", scaffold.Template())
-	for _, notWant := range []string{
-		"## 終わったらやること",
-		"## worktree と branch は切り替えないこと",
-		"## 書いた人によって扱いを変えること",
-		"## この issue に紐づく PR も読むこと",
-	} {
+	headings := headingsOf(prompt.BuiltinRaw())
+	if len(headings) == 0 {
+		t.Fatal("組み込みのプロンプトに見出しが1つもありません（検査が素通りします）")
+	}
+	for _, notWant := range headings {
 		if strings.Contains(body, notWant) {
 			t.Errorf("雛形の本文に組み込みの節 %q が書き写されています。"+
 				"直しても配った WORKFLOW.md には届かず、同じ指示が2回届きます", notWant)
 		}
 	}
+}
+
+// headingsOf は markdown の文面から `## ` で始まる見出しの行を取り出す。
+//
+// **行頭のものだけを取る。**字下げした行は、組み込みが例として引用しているコードブロックの
+// 中身であり、節の見出しではない。
+//
+// text: 取り出す元の文面。
+// 戻り値: 見出しの行（`## ` を含む。前後の空白は落としてある）。
+func headingsOf(text string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		if strings.HasPrefix(line, "## ") {
+			out = append(out, strings.TrimRight(line, " \t"))
+		}
+	}
+	return out
 }
 
 // assertSameBody は、渡した文面が設計 5-3 のブロックと一致することを確かめる。

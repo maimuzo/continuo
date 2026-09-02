@@ -277,7 +277,8 @@ language: auto                              # 画面に出す文言の言語。a
 **1列目には番号ではなく短い名前を書いてください。**
 
 <!-- subagent を起動する道具の名前は、Claude Code の版によって変わります。 -->
-<!-- 起動できずに止まる場合は、上の claude.permissions.allow に足してください。 -->
+<!-- 起動できずに止まる場合は、この WORKFLOW.md の front matter の -->
+<!-- claude.permissions.allow に足してください。 -->
 
 ## PR を作ったら、レビューしてください
 

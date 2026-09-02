@@ -77,7 +77,7 @@
 | 信頼登録する / 信頼済み / 未承認 | trust / trusted / not trusted | README の "trust those repositories"。**「未承認」は `not trusted`。**`unapproved` は使わない |
 | 資格情報 | credentials | README が doctor の検査をこの語で並べている |
 | 枠 / 枠の判定 | usage window | README の "used to read your plan's usage window"。`quota` `rate limit budget` を混ぜない |
-| 検査 / 前提が揃っている | check / everything is in place | README の "runs seventeen checks" と "# check that everything is in place" |
+| 検査 / 前提が揃っている | check / everything is in place | README の "runs sixteen checks" と "# check that everything is in place" |
 | 表明（`CONTINUO-STATUS:` の行） | the `CONTINUO-STATUS:` line | README が行そのものを名指ししている。抽象名詞に訳さない |
 | 機械 | machine | README の "a machine or container you can discard" |
 | 実行ファイル / 版 | binary / version | README の Install が "the binary" と書く |

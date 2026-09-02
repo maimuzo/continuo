@@ -375,7 +375,7 @@ cd ~/continuo-try && /tmp/continuo prompt --show
 ```text
 送る文面の内訳:
   組み込みのプロンプト（前半）  177 行
-  WORKFLOW.md の本文  86 行  ~/continuo-try/WORKFLOW.md
+  WORKFLOW.md の本文  87 行  ~/continuo-try/WORKFLOW.md
   組み込みのプロンプト（後半）  56 行
 ```
 

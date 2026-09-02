@@ -384,7 +384,9 @@ func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinHead, countLines(it.Text)))
 		case prompt.NameBuiltinTail:
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinTail, countLines(it.Text)))
-		default:
+		case prompt.NameWorkflowBody:
+			// **断片の名前で明示する。`default` に落とさない。**落とすと、断片が増えたときに
+			// 組み込みの断片が WORKFLOW.md の名前で表示され、パスの欄が空になる。
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownWorkflowBody, countLines(it.Text), it.Path))
 		}
 	}

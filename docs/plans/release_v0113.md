@@ -184,8 +184,10 @@ stale の残骸を誰が消すか書かれていない / 打ち間違えた `--i
 > **continuo initで作り直せばすぐ済む。**
 
 **破壊的変更である。**本文に中身がある `WORKFLOW.md` を持つ利用者は、
-**`continuo init --force` で作り直し、自分で書き足した指示を本文へ貼り直す**
-（[docs/upgrading.md](../upgrading.md) の「v0.1.12 から v0.1.13 へ」）。
+**本文だけを書き直す**（組み込みに書いてあることを本文から消し、自分で書き足した指示だけを残す）。
+**front matter は触らない。**`continuo init --force` を案内しない。
+**`--force` は front matter も雛形へ戻すので、`continuo setup` で決めた Status の割り当てが消える**
+（[docs/upgrading.md](../upgrading.md) の「v0.1.12 から v0.1.13 へ」の「どう直すか」）。
 
 **`missingkey=error` は外せない。**準拠する symphony の `SPEC.md` 5.4 が
 *"Unknown variables MUST fail rendering"*（**訳:** 未知の変数はレンダリングを失敗させなければならない）
