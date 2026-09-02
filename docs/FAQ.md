@@ -1451,11 +1451,85 @@ continuo abandon --force   https://github.com/<owner>/<repo>/issues/42 ~/continu
 git -C ~/ghq/github.com/<owner>/<repo> branch --list 'continuo/*'
 ```
 
+### `git worktree list` に、continuo が作った覚えの無い worktree が並ぶ
+
+**原因。**エージェントが自分で `git worktree add` を叩いています。
+**continuo が片付けるのは、その issue のために自分で用意した worktree 1つだけです。**
+片付ける相手はそのパス1つに固定されていて、**一覧から対象を増やすことはありません。**
+
+**残ると何が起きるかは、置かれた場所で3通りに分かれます。**
+
+| エージェントが置いた場所 | どうなるか |
+| --- | --- |
+| **continuo の worktree の中** | **その issue の片付けが止まります**（未追跡のファイルとして数えられるため） |
+| **同じく中だが、そのパスが `.gitignore` に入っている**（`.claude/worktrees/<名前>` など） | **止まりません。**continuo は強制の指定を付けて消すので、**中の worktree ごと、コミットしていない変更も消えます** |
+| **continuo の worktree の外** | **その issue は片付きます。**clone 側に登録と branch だけが黙って残ります |
+
+**消す経路は設定で変わりますが、どれも強制です。**既定（`herdr.worktree.create_via_herdr` が `true`）なら
+herdr の `worktree.remove` を `force` で呼び、`false` なら `git worktree remove --force` を叩きます。
+**それでも実体が残っていたら、最後はディレクトリごと消します。**
+
+**止まったときは、issue に「worktree を片付けずに残しました」というコメントが1回付きます。**
+`cleanup.require_clean_worktree`（既定 `true`）が
+「コミットされていない変更が残っている（未追跡のファイルを含む）」を理由に見送るためです。
+
+**止まらない側は `--ignored` を付けないと見えません。**
+
+```bash
+git -C <その issue の worktree> status --porcelain -uall --ignored
+```
+
+**`!!` で始まる行は `git status` には出ません。**そこに worktree があっても、片付けは止まりません。
+
+**`continuo doctor` は数えません。**`worktree の場所` の検査が見るのは、
+`workspace.root` の直下4階層（`<root>/<host>/<owner>/<repo>/<スラグ>`）にあるものだけです。
+エージェントが足した worktree はそこに当てはまらないので、`✓` のままになります。
+
+**気づく手立ては `git worktree list` です。**
+
+```bash
+git -C ~/ghq/github.com/<owner>/<repo> worktree list
+```
+
+**一覧には、continuo が別の issue のためにいま使っている worktree も並びます。**
+`workspace.root` の下（`<root>/<host>/<owner>/<repo>/<スラグ>`）にあるものが continuo のものです。
+**そちらを消すと、動いているエージェントの作業場所が、確認も警告も無く消えます。**
+
+**登録が残っているあいだは、その branch を `git branch -D` で消せません**
+（下の「`error: cannot delete branch '…' used by worktree at '…'` と出る」）。
+
+**実体が先に消えた登録は、次の着手のときに落ちます。**continuo は worktree を用意するたびに、
+その clone へ `git worktree prune` を1回撃つためです（登録が残ったままだと worktree を作れません）。
+**このとき、利用者がディレクトリごと移しただけの worktree の登録も一緒に落ちます。**
+落ちると git はその branch を守らなくなるので、**移して残すのではなく、消す前に push を済ませてください。**
+
+**直し方。**消す前に、失うものが無いことを確かめます。
+
+```bash
+git -C <消したい worktree> status --short
+git -C <消したい worktree> log --oneline HEAD --not --remotes
+git -C ~/ghq/github.com/<owner>/<repo> worktree remove <消したい worktree>
+```
+
+**1つ目が出たら commit してから、2つ目が出たら push してから消してください。**
+**`--force` は付けないでください。**コミットしていない変更が、確認も警告も無く消えます。
+**`git worktree remove` が断ったのは、消してはいけないものが残っているからです。**
+**lock されているときも断ります**（`cannot remove a locked working tree`）。
+中に何も残っていなくても断るので、そのときは `git worktree unlock <消したい worktree>` を先に叩いてください。
+
+**同じことが起きないように、`WORKFLOW.md` の本文を当ててください。**
+エージェントに自分で片付けさせる文面は [upgrading.md](upgrading.md) の
+「v0.1.12 から v0.1.13 へ」にあります。
+**当てたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+
 ### `error: cannot delete branch '…' used by worktree at '…'` と出る
 
 **原因。**git が、その branch を出している worktree の**登録**を見て守っています。
-**continuo は登録を勝手に外しません。**`git worktree prune` をリポジトリ全体へ撃つと、
-**単に移動しただけの別の worktree まで壊れる**ためです。
+**branch を消すときは、continuo は登録を外しません。**`git worktree prune` は
+リポジトリ全体に効くので、**単に移動しただけの別の worktree まで巻き込む**ためです。
+**片付けでも、実体の無い登録がほかに1つでもあれば撃ちません**（自分が消した1件だけが対象のときは撃ちます）。
+**ただし、次にその clone で worktree を用意するときは、条件なしで1回撃ちます**
+（登録が残ったままだと worktree を作れません）。**移した worktree の登録も、そのとき落ちます。**
 
 **直し方。****prune を撃つかどうかは利用者が決めます。**
 continuo は登録が指すパスを画面に出して止まるので、**そのディレクトリが本当に無いことを確かめてから**叩いてください。
