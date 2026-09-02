@@ -193,7 +193,7 @@ restart:
                                             # もう一度起動する。to_dispatch_state は着手待ちへ戻し、to_failure_state は失敗として落とす
 
 runtime:
-  lock_file: null                           # 二重起動を防ぐロックファイル。null なら hook の socket と同じディレクトリに置く
+  lock_file: null                           # もう読まれません。ロックは ~/.continuo/continuo.lock に固定です（分けたいなら --id <名前>）
 
 server:
   port: null                                # 進み具合を見る HTTP ダッシュボードのポート。null なら起動しない。
