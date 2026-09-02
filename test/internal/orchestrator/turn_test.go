@@ -1094,6 +1094,12 @@ func TestTurn_差し戻して書き直している間はturnの終わりとし�
 		// **settle_ms を広げるのは、テストを通すためではない。**既定の 50ms では
 		// 「窓が閉じる前に裏取りした」のか「たまたま間に合った」のかを区別できない。
 		cfg.Claude.SettleMs = 300
+		// **poll_wait_ms も一緒に広げる。**fixture の既定は 200ms で、settle_ms のほうが
+		// 長くなる。**その大小関係は internal/config/validate.go の
+		// 「claude.settle_ms は claude.poll_wait_ms 以下にすること」が起動時に弾くので、
+		// 利用者の手元では絶対に起きない。**弾かれる設定でテストを走らせると、
+		// **待ち直しを settle_ms で刻んでいるのか poll_wait_ms で刻んでいるのかも測れない。**
+		cfg.Claude.PollWaitMs = 5000
 	}})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
@@ -1180,6 +1186,10 @@ func TestTurn_差し戻して書き直している間はturnの終わりとし�
 func TestTurn_裏取りが読めなければ従来どおりturnを終わらせる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Claude.SettleMs = 300
+		// **poll_wait_ms を settle_ms 以上に置く。**下回ると
+		// internal/config/validate.go が起動時に弾く設定になり、
+		// **利用者の手元では起きない大小関係でテストが走ることになる。**
+		cfg.Claude.PollWaitMs = 5000
 	}})
 	// **わざと herdr を答えなくしているので、その失敗から出る WARN は想定内である。**
 	fx.AllowLog("herdr が答えません")
@@ -1211,7 +1221,7 @@ func TestTurn_裏取りが読めなければ従来どおりturnを終わらせ�
 	waitFor(t, 15*time.Second, "裏取りが読めなくても turn が終わる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
-	// **run が畳まれただけでは足りない。**待ちに倒しても、出口の枝が `poll_wait_ms` の
+	// **run が畳まれただけでは足りない。**待ちに倒しても、出口の枝が `settle_ms` の
 	// 後に拾い直すので、run はいずれ畳まれる。**「すぐ終わった」と「待たされてから
 	// 終わった」を区別できるのは、この1行が出ていないことだけである。**
 	if strings.Contains(fx.Logs.String(), "turn の終わりとせずに待ち直します") {
@@ -1229,6 +1239,10 @@ func TestTurn_裏取りが読めなければ従来どおりturnを終わらせ�
 func TestTurn_裏取りがidleなら空のStopでそのままturnが終わる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Claude.SettleMs = 300
+		// **poll_wait_ms を settle_ms 以上に置く。**下回ると
+		// internal/config/validate.go が起動時に弾く設定になり、
+		// **利用者の手元では起きない大小関係でテストが走ることになる。**
+		cfg.Claude.PollWaitMs = 5000
 	}})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
@@ -1270,14 +1284,22 @@ func TestTurn_裏取りがidleなら空のStopでそのままturnが終わる(t 
 // 目的: **`working` は推測である。**遅い `Stop` hook が走っているだけでも `working` に
 // 見える。**そのとき新しい `Stop` は二度と来ないので、待ち続けると巡回の stall 検知が
 // `turn_timeout_ms`（既定1時間）で拾うまで run が空転する。**
-// `poll_wait_ms` が過ぎてもエージェントが動いていなければ、turn の終わりとして進むことを示す。
+// 待ち直しの1回分（`settle_ms`）が過ぎてもエージェントが動いていなければ、
+// turn の終わりとして進むことを示す。
 //
 // 与える情報: 空の `Stop` が1件届き、そのとき `agent.get` は `working` を返す。
 // **そのあと `Stop` は二度と来ず、`agent.get` は `idle` に変わる。**
-// 成功条件: `poll_wait_ms` を1回過ぎたところで turn が終わり、run が畳まれること。
+// 成功条件: 待ち直しの1回分（`settle_ms`）を過ぎたところで turn が終わり、run が畳まれること。
 func TestTurn_書き直しが来ないまま止まっていれば待ち続けない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
 		cfg.Claude.SettleMs = 300
+		// **poll_wait_ms を settle_ms 以上に置く。**下回ると
+		// internal/config/validate.go が起動時に弾く設定になり、
+		// **利用者の手元では起きない大小関係でテストが走ることになる。**
+		//
+		// **刻みの長さそのものは、このテストでは測っていない**（下の
+		// TestTurn_遅いStophookでもpoll_wait_msを待たない が測る）。
+		cfg.Claude.PollWaitMs = 5000
 	}})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
