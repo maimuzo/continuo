@@ -1,0 +1,501 @@
+{
+  "format": "rucm-cfg/2",
+  "usecase_name": "1台で2本目を動かす",
+  "source": {
+    "file": "docs/spec/usecases/particular_case/1台で2本目を動かす.rucm.md",
+    "rucm_block_sha256": "382edd1a48d1c101667a069e76568c9279b8272b8b4b25d867dd473748b6f76c"
+  },
+  "root": "BASIC FLOW-1",
+  "flows": {
+    "BASIC FLOW": {
+      "postcondition": "名前ごとのロックファイルを握っている。本番の常駐プロセスが握っているロックファイルには触れていない。獲得したロックファイルの場所が出力されている。検証用の設定ファイルが指す hook を受ける socket で待ち受けている。"
+    },
+    "名前が使えない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          2
+        ]
+      },
+      "postcondition": "システムはロックファイルを1つも開いていない。システムはディレクトリを1つも作っていない。渡された名前が使えないことが出力されている。"
+    },
+    "ロックの置き場所を決められない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          3
+        ]
+      },
+      "postcondition": "システムはロックファイルを1つも開いていない。渡された名前が使えないという文言は出力されていない。"
+    },
+    "前提を読めない": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          5,
+          7,
+          10
+        ]
+      },
+      "postcondition": "システムはカンバンの巡回を始めていない。読めなかった対象と理由が出力されている。"
+    },
+    "同じ名前が既に動いている": {
+      "rfs": {
+        "flow": "BASIC FLOW",
+        "steps": [
+          8
+        ]
+      },
+      "postcondition": "システムはカンバンの巡回を始めていない。先に動いていた常駐プロセスはロックファイルを握ったままである。同じ名前の常駐プロセスが既に動いていることが出力されている。"
+    }
+  },
+  "nodes": [
+    {
+      "id": "BASIC FLOW-1",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 1,
+      "statement": "利用者はシステムに検証用の設定ファイルのあるディレクトリと名前を渡して2本目の常駐プロセスの開始を要求する。"
+    },
+    {
+      "id": "BASIC FLOW-2",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 2,
+      "statement": "システムは VALIDATES THAT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である。"
+    },
+    {
+      "id": "BASIC FLOW-3",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 3,
+      "statement": "システムは VALIDATES THAT ロックファイルを置く continuo のディレクトリの場所を決められる。"
+    },
+    {
+      "id": "BASIC FLOW-4",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 4,
+      "statement": "システムは渡された名前から名前ごとのロックファイルの置き場所を決める。"
+    },
+    {
+      "id": "BASIC FLOW-5",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 5,
+      "statement": "システムは VALIDATES THAT 検証用の設定ファイルを読める。"
+    },
+    {
+      "id": "BASIC FLOW-6",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 6,
+      "statement": "システムは名前ごとのロックファイルを置くディレクトリを用意する。"
+    },
+    {
+      "id": "BASIC FLOW-7",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 7,
+      "statement": "システムは VALIDATES THAT 名前ごとのロックファイルを開ける。"
+    },
+    {
+      "id": "BASIC FLOW-8",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 8,
+      "statement": "システムは VALIDATES THAT 名前ごとのロックを別の常駐プロセスが握っていない。"
+    },
+    {
+      "id": "BASIC FLOW-9",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 9,
+      "statement": "システムは利用者に獲得したロックファイルの場所を応答する。"
+    },
+    {
+      "id": "BASIC FLOW-10",
+      "type": "condition",
+      "flow": "BASIC FLOW",
+      "step": 10,
+      "statement": "システムは VALIDATES THAT 検証用の設定ファイルが指す hook を受ける socket で待ち受けを始められる。"
+    },
+    {
+      "id": "BASIC FLOW-11",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは検証用の設定ファイルが指すカンバンの巡回を始める。"
+    },
+    {
+      "id": "名前が使えない-1",
+      "type": "action",
+      "flow": "名前が使えない",
+      "step": 1,
+      "statement": "システムは利用者に渡された名前が使えないことと書ける形を応答する。"
+    },
+    {
+      "id": "名前が使えない-2",
+      "type": "abort",
+      "flow": "名前が使えない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "ロックの置き場所を決められない-1",
+      "type": "action",
+      "flow": "ロックの置き場所を決められない",
+      "step": 1,
+      "statement": "システムは利用者にロックファイルの置き場所を決められないことを応答する。"
+    },
+    {
+      "id": "ロックの置き場所を決められない-2",
+      "type": "abort",
+      "flow": "ロックの置き場所を決められない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "前提を読めない-1",
+      "type": "action",
+      "flow": "前提を読めない",
+      "step": 1,
+      "statement": "システムは利用者に読めなかった対象と理由を応答する。"
+    },
+    {
+      "id": "前提を読めない-2",
+      "type": "abort",
+      "flow": "前提を読めない",
+      "step": 2,
+      "statement": "ABORT"
+    },
+    {
+      "id": "同じ名前が既に動いている-1",
+      "type": "action",
+      "flow": "同じ名前が既に動いている",
+      "step": 1,
+      "statement": "システムは利用者に同じ名前の常駐プロセスが既に動いていることとロックファイルの場所を応答する。"
+    },
+    {
+      "id": "同じ名前が既に動いている-2",
+      "type": "abort",
+      "flow": "同じ名前が既に動いている",
+      "step": 2,
+      "statement": "ABORT"
+    }
+  ],
+  "edges": [
+    {
+      "from": "BASIC FLOW-1",
+      "to": "BASIC FLOW-2",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "BASIC FLOW-3",
+      "kind": "true",
+      "condition": "渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である"
+    },
+    {
+      "from": "BASIC FLOW-2",
+      "to": "名前が使えない-1",
+      "kind": "false",
+      "condition": "NOT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "BASIC FLOW-4",
+      "kind": "true",
+      "condition": "ロックファイルを置く continuo のディレクトリの場所を決められる"
+    },
+    {
+      "from": "BASIC FLOW-3",
+      "to": "ロックの置き場所を決められない-1",
+      "kind": "false",
+      "condition": "NOT ロックファイルを置く continuo のディレクトリの場所を決められる"
+    },
+    {
+      "from": "BASIC FLOW-4",
+      "to": "BASIC FLOW-5",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "BASIC FLOW-6",
+      "kind": "true",
+      "condition": "検証用の設定ファイルを読める"
+    },
+    {
+      "from": "BASIC FLOW-5",
+      "to": "前提を読めない-1",
+      "kind": "false",
+      "condition": "NOT 検証用の設定ファイルを読める"
+    },
+    {
+      "from": "BASIC FLOW-6",
+      "to": "BASIC FLOW-7",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "BASIC FLOW-8",
+      "kind": "true",
+      "condition": "名前ごとのロックファイルを開ける"
+    },
+    {
+      "from": "BASIC FLOW-7",
+      "to": "前提を読めない-1",
+      "kind": "false",
+      "condition": "NOT 名前ごとのロックファイルを開ける"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "BASIC FLOW-9",
+      "kind": "true",
+      "condition": "名前ごとのロックを別の常駐プロセスが握っていない"
+    },
+    {
+      "from": "BASIC FLOW-8",
+      "to": "同じ名前が既に動いている-1",
+      "kind": "false",
+      "condition": "NOT 名前ごとのロックを別の常駐プロセスが握っていない"
+    },
+    {
+      "from": "BASIC FLOW-9",
+      "to": "BASIC FLOW-10",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "BASIC FLOW-11",
+      "kind": "true",
+      "condition": "検証用の設定ファイルが指す hook を受ける socket で待ち受けを始められる"
+    },
+    {
+      "from": "BASIC FLOW-10",
+      "to": "前提を読めない-1",
+      "kind": "false",
+      "condition": "NOT 検証用の設定ファイルが指す hook を受ける socket で待ち受けを始められる"
+    },
+    {
+      "from": "名前が使えない-1",
+      "to": "名前が使えない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "ロックの置き場所を決められない-1",
+      "to": "ロックの置き場所を決められない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "前提を読めない-1",
+      "to": "前提を読めない-2",
+      "kind": "seq"
+    },
+    {
+      "from": "同じ名前が既に動いている-1",
+      "to": "同じ名前が既に動いている-2",
+      "kind": "seq"
+    }
+  ],
+  "paths": [
+    {
+      "id": "P001",
+      "terminal": "end",
+      "terminal_flow": "BASIC FLOW",
+      "postcondition": "名前ごとのロックファイルを握っている。本番の常駐プロセスが握っているロックファイルには触れていない。獲得したロックファイルの場所が出力されている。検証用の設定ファイルが指す hook を受ける socket で待ち受けている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "BASIC FLOW-11"
+      ],
+      "steps": [
+        "利用者はシステムに検証用の設定ファイルのあるディレクトリと名前を渡して2本目の常駐プロセスの開始を要求する。",
+        "システムは VALIDATES THAT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である。",
+        "システムは VALIDATES THAT ロックファイルを置く continuo のディレクトリの場所を決められる。",
+        "システムは渡された名前から名前ごとのロックファイルの置き場所を決める。",
+        "システムは VALIDATES THAT 検証用の設定ファイルを読める。",
+        "システムは名前ごとのロックファイルを置くディレクトリを用意する。",
+        "システムは VALIDATES THAT 名前ごとのロックファイルを開ける。",
+        "システムは VALIDATES THAT 名前ごとのロックを別の常駐プロセスが握っていない。",
+        "システムは利用者に獲得したロックファイルの場所を応答する。",
+        "システムは VALIDATES THAT 検証用の設定ファイルが指す hook を受ける socket で待ち受けを始められる。",
+        "システムは検証用の設定ファイルが指すカンバンの巡回を始める。"
+      ]
+    },
+    {
+      "id": "P002",
+      "terminal": "abort",
+      "terminal_flow": "前提を読めない",
+      "postcondition": "システムはカンバンの巡回を始めていない。読めなかった対象と理由が出力されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "BASIC FLOW-9",
+        "BASIC FLOW-10",
+        "前提を読めない-1",
+        "前提を読めない-2"
+      ],
+      "steps": [
+        "利用者はシステムに検証用の設定ファイルのあるディレクトリと名前を渡して2本目の常駐プロセスの開始を要求する。",
+        "システムは VALIDATES THAT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である。",
+        "システムは VALIDATES THAT ロックファイルを置く continuo のディレクトリの場所を決められる。",
+        "システムは渡された名前から名前ごとのロックファイルの置き場所を決める。",
+        "システムは VALIDATES THAT 検証用の設定ファイルを読める。",
+        "システムは名前ごとのロックファイルを置くディレクトリを用意する。",
+        "システムは VALIDATES THAT 名前ごとのロックファイルを開ける。",
+        "システムは VALIDATES THAT 名前ごとのロックを別の常駐プロセスが握っていない。",
+        "システムは利用者に獲得したロックファイルの場所を応答する。",
+        "システムは VALIDATES THAT 検証用の設定ファイルが指す hook を受ける socket で待ち受けを始められる。",
+        "CONDITION: NOT 検証用の設定ファイルが指す hook を受ける socket で待ち受けを始められる",
+        "システムは利用者に読めなかった対象と理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P003",
+      "terminal": "abort",
+      "terminal_flow": "同じ名前が既に動いている",
+      "postcondition": "システムはカンバンの巡回を始めていない。先に動いていた常駐プロセスはロックファイルを握ったままである。同じ名前の常駐プロセスが既に動いていることが出力されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "BASIC FLOW-8",
+        "同じ名前が既に動いている-1",
+        "同じ名前が既に動いている-2"
+      ],
+      "steps": [
+        "利用者はシステムに検証用の設定ファイルのあるディレクトリと名前を渡して2本目の常駐プロセスの開始を要求する。",
+        "システムは VALIDATES THAT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である。",
+        "システムは VALIDATES THAT ロックファイルを置く continuo のディレクトリの場所を決められる。",
+        "システムは渡された名前から名前ごとのロックファイルの置き場所を決める。",
+        "システムは VALIDATES THAT 検証用の設定ファイルを読める。",
+        "システムは名前ごとのロックファイルを置くディレクトリを用意する。",
+        "システムは VALIDATES THAT 名前ごとのロックファイルを開ける。",
+        "システムは VALIDATES THAT 名前ごとのロックを別の常駐プロセスが握っていない。",
+        "CONDITION: NOT 名前ごとのロックを別の常駐プロセスが握っていない",
+        "システムは利用者に同じ名前の常駐プロセスが既に動いていることとロックファイルの場所を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P004",
+      "terminal": "abort",
+      "terminal_flow": "前提を読めない",
+      "postcondition": "システムはカンバンの巡回を始めていない。読めなかった対象と理由が出力されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "BASIC FLOW-6",
+        "BASIC FLOW-7",
+        "前提を読めない-1",
+        "前提を読めない-2"
+      ],
+      "steps": [
+        "利用者はシステムに検証用の設定ファイルのあるディレクトリと名前を渡して2本目の常駐プロセスの開始を要求する。",
+        "システムは VALIDATES THAT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である。",
+        "システムは VALIDATES THAT ロックファイルを置く continuo のディレクトリの場所を決められる。",
+        "システムは渡された名前から名前ごとのロックファイルの置き場所を決める。",
+        "システムは VALIDATES THAT 検証用の設定ファイルを読める。",
+        "システムは名前ごとのロックファイルを置くディレクトリを用意する。",
+        "システムは VALIDATES THAT 名前ごとのロックファイルを開ける。",
+        "CONDITION: NOT 名前ごとのロックファイルを開ける",
+        "システムは利用者に読めなかった対象と理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P005",
+      "terminal": "abort",
+      "terminal_flow": "前提を読めない",
+      "postcondition": "システムはカンバンの巡回を始めていない。読めなかった対象と理由が出力されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "BASIC FLOW-4",
+        "BASIC FLOW-5",
+        "前提を読めない-1",
+        "前提を読めない-2"
+      ],
+      "steps": [
+        "利用者はシステムに検証用の設定ファイルのあるディレクトリと名前を渡して2本目の常駐プロセスの開始を要求する。",
+        "システムは VALIDATES THAT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である。",
+        "システムは VALIDATES THAT ロックファイルを置く continuo のディレクトリの場所を決められる。",
+        "システムは渡された名前から名前ごとのロックファイルの置き場所を決める。",
+        "システムは VALIDATES THAT 検証用の設定ファイルを読める。",
+        "CONDITION: NOT 検証用の設定ファイルを読める",
+        "システムは利用者に読めなかった対象と理由を応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P006",
+      "terminal": "abort",
+      "terminal_flow": "ロックの置き場所を決められない",
+      "postcondition": "システムはロックファイルを1つも開いていない。渡された名前が使えないという文言は出力されていない。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "BASIC FLOW-3",
+        "ロックの置き場所を決められない-1",
+        "ロックの置き場所を決められない-2"
+      ],
+      "steps": [
+        "利用者はシステムに検証用の設定ファイルのあるディレクトリと名前を渡して2本目の常駐プロセスの開始を要求する。",
+        "システムは VALIDATES THAT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である。",
+        "システムは VALIDATES THAT ロックファイルを置く continuo のディレクトリの場所を決められる。",
+        "CONDITION: NOT ロックファイルを置く continuo のディレクトリの場所を決められる",
+        "システムは利用者にロックファイルの置き場所を決められないことを応答する。",
+        "ABORT"
+      ]
+    },
+    {
+      "id": "P007",
+      "terminal": "abort",
+      "terminal_flow": "名前が使えない",
+      "postcondition": "システムはロックファイルを1つも開いていない。システムはディレクトリを1つも作っていない。渡された名前が使えないことが出力されている。",
+      "node_ids": [
+        "BASIC FLOW-1",
+        "BASIC FLOW-2",
+        "名前が使えない-1",
+        "名前が使えない-2"
+      ],
+      "steps": [
+        "利用者はシステムに検証用の設定ファイルのあるディレクトリと名前を渡して2本目の常駐プロセスの開始を要求する。",
+        "システムは VALIDATES THAT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である。",
+        "CONDITION: NOT 渡された名前が小文字の英数字で始まり以降が小文字の英数字とハイフンだけであり長さが上限以内である",
+        "システムは利用者に渡された名前が使えないことと書ける形を応答する。",
+        "ABORT"
+      ]
+    }
+  ],
+  "coverage": {
+    "nodes_total": 19,
+    "nodes_covered": 19,
+    "edges_total": 20,
+    "edges_covered": 20
+  }
+}
