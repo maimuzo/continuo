@@ -920,6 +920,7 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 
 **対応表の書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正です。**
 そのまま貼れる yaml・左と右の決め方・書き戻しの上限・確かめ方が、そこに1箇所だけあります。
+**雛形の Status 名のまま写すと起動しない理由も、同じ節にあります。**
 **この文書には写しを置きません**（2箇所にあると、片方だけ直したときに食い違います）。
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
@@ -1735,6 +1736,7 @@ cd ~/continuo-work && continuo doctor && continuo
 
 **対応表の書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正です。**
 そのまま貼れる yaml・左と右の決め方・書き戻しの上限・確かめ方が、そこに1箇所だけあります。
+**雛形の Status 名のまま写すと起動しない理由も、同じ節にあります。**
 **この文書には写しを置きません**（2箇所にあると、片方だけ直したときに食い違います）。
 
 **書き戻しても自動化が書き直す押し合いになると、continuo は途中で書き戻しをやめます。**
@@ -1742,12 +1744,6 @@ cd ~/continuo-work && continuo doctor && continuo
 issue のコメントで `Workflows` を切る手を案内します。
 **何回でやめるかは、[upgrading.md](upgrading.md) の
 「`tracker.automated_state_rewrite` — 自動化に動かされた Status を戻す」にあります。**
-
-**雛形の Status 名のまま `"In Progress": "AI In Progress"` を写すと、continuo は起動しません。**
-`In Progress` は雛形の `tracker.active_states` に入っているからです
-（`continuo doctor` の `設定ファイル` の行が `✗` になります）。
-**この形が要るのは、`active_states` を `AI Ready` / `AI In Progress` のように先に改名してある場合だけです。**
-改名していないなら、自動化が `In Progress` を書いても continuo は止まらないので、対応表そのものが要りません。
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
