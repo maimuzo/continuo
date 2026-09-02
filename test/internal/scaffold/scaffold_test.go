@@ -436,9 +436,9 @@ func TestWriteTemplate_プレースホルダを埋めれば読み込める(t *te
 	if loaded.Config.Tracker.Provider.ProjectNumber != 3 {
 		t.Errorf("tracker.provider.project_number が反映されていない: got %d, want %d", loaded.Config.Tracker.Provider.ProjectNumber, 3)
 	}
-	// **雛形は本文を持たない**（設計 5-3c）。送る文面は組み込みのプロンプトにある。
-	if strings.TrimSpace(loaded.PromptTemplate) != "" {
-		t.Errorf("雛形に本文が残っている（本文が在ると組み込みのプロンプトが送られない）: %q", loaded.PromptTemplate)
+	// **雛形は本文に固有の指示の見本を持つ**（設計 5-3d）。仕組みの説明は組み込みにある。
+	if !strings.Contains(loaded.PromptTemplate, "## テストの走らせ方") {
+		t.Errorf("雛形の本文が消えている（利用者が固有の指示を書く場所が無い）: %q", loaded.PromptTemplate)
 	}
 	if !strings.Contains(prompt.Builtin(), "{{.issue.identifier}}") {
 		t.Error("組み込みのプロンプトに {{.issue.identifier}} が含まれていない（設計 5-3 と食い違っている）")

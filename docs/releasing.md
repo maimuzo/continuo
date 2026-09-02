@@ -232,10 +232,25 @@ PR #69  レビュー結果=有り（1件）
 **同じ条件で、CI も PR を落とす。**[.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) が
 `pull_request` のたびに走り、**貼られていなければ `review-result` の検査が赤になる。**
 
-**ただし、赤いだけではマージを止められない。**
-**branch protection の必須の検査へ入れて、はじめて止まる。**入れるのは人間の作業である
-（手順は [CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」）。
-**入れるまでは、ここでの `レビュー結果=無し` が最後の関所である。**
+**`review-result` は、main の branch protection の必須の検査に入っている**（2026-09-02 に確認）。
+**赤いあいだはマージできない。**
+
+```
+$ gh api repos/<owner>/continuo/branches/main/protection/required_status_checks --jq '.checks[].context'
+test (ubuntu-latest)
+test (macos-latest)
+build (darwin, arm64)
+build (darwin, amd64)
+build (linux, amd64)
+build (linux, arm64)
+review-result
+```
+
+**それでも、ここでもう一度数える。**必須の検査は**その PR がマージされる前**しか見ない。
+**タグを打つ時点で見ているのは、既に main へ入ったあとの PR である。**
+**必須の検査に入る前にマージされたものは、CI では拾えない。**
+（**入れ直す手順**は [CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。
+`checks` は全件置き換えなので、いまの分を読んでから足すこと。）
 
 **条件は3箇所で同じにしてある。**片方だけ緩いと、緩いほうが実質の規則になる。
 
@@ -244,6 +259,15 @@ PR #69  レビュー結果=有り（1件）
 | [.claude/hooks/block-merge-without-review.py](../.claude/hooks/block-merge-without-review.py) | AI の手元の `gh pr merge` / `gh pr ready` |
 | [.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) | PR のマージ |
 | [scripts/check-release-ready.sh](../scripts/check-release-ready.sh) | タグを打つこと |
+
+**「前の空白文字」に何を含めるかも、3箇所で同じにしてある。**
+**半角空白・タブ・CR・LF の4つだけである**（`[ \t\r\n]*`）。全角空白 U+3000 や NBSP U+00A0 は含めない。
+`\s` は使わない。**Python の `re` と jq（Oniguruma）で当たる範囲が違う**ので、
+どちらに寄せてももう一方とずれる（実測: 2026-09-02。全角空白を前に置いたコメントを、
+jq は数え、Python は数えなかった）。
+**3箇所が同じであることは
+[.claude/hooks/tests/test_marker_pattern_parity.py](../.claude/hooks/tests/test_marker_pattern_parity.py)
+が CI で押さえる。**
 
 **対の issue は、`Closes` / `Fixes` / `Resolves` の後ろの `#N` だけを拾う。**
 本文にただ出てくる `#N` は拾わない。「足すのは issue #53 で扱う」のような参照まで数えてしまうためである。

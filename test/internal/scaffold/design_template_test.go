@@ -101,21 +101,79 @@ func TestTemplate_組み込みのプロンプトが設計5_3と一致する(t *t
 	assertSameBody(t, "internal/prompt/builtin.md", prompt.BuiltinRaw())
 }
 
-// 目的: 雛形の WORKFLOW.md が本文を持たないことを固定する（設計 5-3c）。
+// 目的: 雛形の WORKFLOW.md が、固有の指示の見本を本文に持つことを固定する（設計 5-3d）。
 //
-// **本文を戻すと、continuo が仕組みの説明を直しても既に配った WORKFLOW.md には届かない。**
-// **しかも本文が在ると組み込みは1文字も送られない**（設計 5-3d の互換の経路）ので、
-// **`continuo init` を叩いた新しい利用者が、いきなり移行の途中の状態で始まることになる。**
+// **本文は、その project でだけ効く指示を書く場所である。**
+// 空で配ると、**利用者はどこに何を書けばよいのかを、文書を読むまで知る手立てが無い。**
+//
+// **仕組みの説明をここへ書き写してはならない。**書き写すと、continuo が説明を直しても
+// 既に配った WORKFLOW.md には届かない。**仕組みの説明は internal/prompt/builtin.md にある。**
 //
 // 与える情報: scaffold.Template() の全文。
-// 成功条件: front matter より後ろが空白だけであること。
-func TestTemplate_雛形は本文を持たない(t *testing.T) {
+// 成功条件: front matter より後ろに、雛形の節が全部あること。
+func TestTemplate_雛形の本文に固有の指示の見本がある(t *testing.T) {
 	body := bodyOf(t, "雛形", scaffold.Template())
-	if strings.TrimSpace(body) != "" {
-		t.Errorf("雛形の WORKFLOW.md に本文が残っています。"+
-			"本文が在ると組み込みのプロンプトは送られません（設計 5-3d）。"+
-			"送る文面は internal/prompt/builtin.md へ書いてください\n  本文: %q", body)
+	if strings.TrimSpace(body) == "" {
+		t.Fatal("雛形の WORKFLOW.md に本文がありません。" +
+			"利用者が固有の指示を書く場所は、雛形の本文です（設計 5-3d）")
 	}
+	// **設計 5-3d の表に並べた節である。**表の「レビューの手順」の行は、
+	// 実装の前と PR のあとの2つの節に分かれている。**消すなら設計の表も同時に直すこと。**
+	for _, want := range []string{
+		"## 何をする作業か",
+		"## このリポジトリの決まり",
+		"## テストの走らせ方",
+		"## まとめて直してよい範囲",
+		"## PR を作るか",
+		"## 実装を始める前に、計画をレビューしてください",
+		"## PR を作ったら、レビューしてください",
+		"## 書く言語",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("雛形の本文に %q がありません（設計 5-3d の表と食い違っています）", want)
+		}
+	}
+}
+
+// 目的: 雛形の本文に、仕組みの説明を書き写していないことを固定する（設計 5-3d）。
+//
+// **書き写すと、continuo が説明を直しても、既に配った WORKFLOW.md には二度と届かない。**
+// **しかも同じ指示が2回届く**（組み込みの側にも同じ節がある）。
+//
+// **見出しをテストに書き並べない。**書き並べると、組み込みに節が増えたときに
+// その節だけが見張られないまま残る。**組み込みの全文から見出しを取り出して、全件を見る。**
+//
+// 与える情報: scaffold.Template() の本文と、prompt.BuiltinRaw() から取った見出しの全部。
+// 成功条件: 組み込みの見出しが、本文に1つも入っていないこと。
+func TestTemplate_雛形の本文に組み込みの説明を書き写していない(t *testing.T) {
+	body := bodyOf(t, "雛形", scaffold.Template())
+	headings := headingsOf(prompt.BuiltinRaw())
+	if len(headings) == 0 {
+		t.Fatal("組み込みのプロンプトに見出しが1つもありません（検査が素通りします）")
+	}
+	for _, notWant := range headings {
+		if strings.Contains(body, notWant) {
+			t.Errorf("雛形の本文に組み込みの節 %q が書き写されています。"+
+				"直しても配った WORKFLOW.md には届かず、同じ指示が2回届きます", notWant)
+		}
+	}
+}
+
+// headingsOf は markdown の文面から `## ` で始まる見出しの行を取り出す。
+//
+// **行頭のものだけを取る。**字下げした行は、組み込みが例として引用しているコードブロックの
+// 中身であり、節の見出しではない。
+//
+// text: 取り出す元の文面。
+// 戻り値: 見出しの行（`## ` を含む。前後の空白は落としてある）。
+func headingsOf(text string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		if strings.HasPrefix(line, "## ") {
+			out = append(out, strings.TrimRight(line, " \t"))
+		}
+	}
+	return out
 }
 
 // assertSameBody は、渡した文面が設計 5-3 のブロックと一致することを確かめる。
@@ -229,10 +287,9 @@ func assertTemplateFollowsDesign(t *testing.T, label, raw string) {
 		}
 	}
 
-	// 設計 5-3c: 雛形は本文を持たないこと。
-	if body := bodyOf(t, label, raw); strings.TrimSpace(body) != "" {
-		t.Errorf("%s: 本文が残っている。本文が在ると組み込みのプロンプトは送られない（設計 5-3d）\n  本文: %q",
-			label, body)
+	// 設計 5-3d: 本文には固有の指示の見本が入っていること。
+	if body := bodyOf(t, label, raw); strings.TrimSpace(body) == "" {
+		t.Errorf("%s: 本文が消えている。利用者が固有の指示を書く場所は本文である（設計 5-3d）", label)
 	}
 }
 

@@ -22,7 +22,7 @@ func renderedPrompt(t *testing.T) string {
 	t.Helper()
 
 	fx := newFixture(t, fixtureOptions{
-		PromptTemplate: realPromptBody(t),
+		PromptTemplate: builtinOnlyBody(t),
 		Mutate: func(cfg *config.Config) {
 			cfg.Tracker.VerifyStatesEvery = 0
 		},

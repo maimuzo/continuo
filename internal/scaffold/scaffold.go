@@ -3,10 +3,10 @@
 // **`continuo init` は雛形を書き出し、`continuo setup` は既にある WORKFLOW.md の
 // Status の割り当てだけを書き換える**（update.go）。**setup は雛形を書き直さない。**
 //
-// **置くのは2枚である**（設計 3-32 / 5-1 / 5-3c / 5-3g）。
-// `WORKFLOW.md` が設定で、`PROJECT_SPECIFIC_PROMPT.md` がエージェントへ送る指示書のうち
-// 利用者が書く部分である。**1枚ずつ独立に扱い、片方が既にあっても、もう片方は書く。**
-// **送る指示書の残りは internal/prompt が持っている**（実行ファイルの中にある）。
+// **置くのは1枚である**（設計 3-32 / 5-1 / 5-3g）。
+// `WORKFLOW.md` の front matter が設定で、本文がエージェントへ送る指示書のうち
+// 利用者が書く部分である。**送る指示書の残りは internal/prompt が持っている**
+// （実行ファイルの中にある）。
 // CLI（cmd/continuo）はこのパッケージを呼ぶだけにする。エラーの文言と終了コードの
 // 対応は CLI 側で決めるため、区別が要る失敗は sentinel error で返す。
 package scaffold
@@ -22,7 +22,6 @@ import (
 	"github.com/maimuzo/continuo/internal/atomicfile"
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
-	"github.com/maimuzo/continuo/internal/prompt"
 )
 
 // fileName は init が書き出すファイルの名前である（設計 5-1 / SPEC.md 5.1）。
@@ -75,8 +74,8 @@ var (
 	// --force であっても辿らずに止める。
 	//
 	// **この番兵の文言は画面に出さない。**出す文言は symlinkError が組み立てる。
-	// **WORKFLOW.md と PROJECT_SPECIFIC_PROMPT.md の両方から返る番兵**なので、
-	// 文言に片方の名前を書くと、もう片方のときに別のファイルを名乗る。
+	// **番兵は package の変数1つで、書き出す先の名前を持てない。**
+	// 文言に特定の名前を書くと、別のファイルが落ちたときにそちらを名乗る。
 	//
 	// **--force の経路には隙間がある。**os.Lstat で symlink を見てから os.Rename で
 	// 差し替えるまでの間に symlink へ置き換えられると、これを返さずに差し替える（設計 3-60）。
@@ -87,9 +86,8 @@ var (
 // symlinkError は「書き出す先が symlink だった」ことを、そのファイルの名前を名乗って表す。
 //
 // **番兵の文言をそのまま先頭へ繋がない。**ErrSymlink は package の変数1つで、
-// WORKFLOW.md と PROJECT_SPECIFIC_PROMPT.md の両方から返る。番兵の文言に片方の名前を
-// 書くと、もう片方のときに別のファイルを名乗る
-// （実際に `WORKFLOW.md is a symlink: …/PROJECT_SPECIFIC_PROMPT.md` と出た）。
+// 書き出す先の名前を持てない。番兵の文言に特定の名前を書くと、
+// 別のファイルが落ちたときにそちらを名乗る。
 // **読む人は、名乗られたほうのファイルを消しに行く。**
 //
 // **だから表示は書き出す先の名前で組み立て、errors.Is のための繋がりは Unwrap で保つ。**
@@ -170,26 +168,12 @@ func WriteTemplateWithValues(dir string, force bool, values Values) (Result, err
 	return writeOne(path, TemplateWithValues(values), force)
 }
 
-// WriteProjectPrompt は dir の直下に PROJECT_SPECIFIC_PROMPT.md の雛形を書く（設計 5-3c）。
+// WorkflowFileName は `continuo init` が置く設定のファイル名である。
 //
-// **中身は internal/prompt が持っている。**送る文面の一部になるので、
-// 組み込みのプロンプトと同じ場所に置き、同じ検査に掛ける。
+// **CLI が失敗の文言で名乗るために要る。**
 //
-// **WORKFLOW.md と扱いを揃える。**既にあれば ErrAlreadyExists、symlink なら ErrSymlink で止め、
-// --force のときだけ同じディレクトリの一時ファイルへ書き切ってから差し替える。
-// **読むときは symlink を辿るのに、書くときは辿らない**のは WORKFLOW.md と同じである
-// （辿ると、指定されたディレクトリの外にあるリンク先を雛形で潰す）。
-//
-// dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリに書く。
-// force: 既に PROJECT_SPECIFIC_PROMPT.md がある場合に上書きするかどうか。
-// 戻り値: 書いたファイルの絶対パスと、上書きしたかどうか。エラーは WriteTemplate と同じ種類である。
-func WriteProjectPrompt(dir string, force bool) (Result, error) {
-	path, err := resolveTarget(dir, prompt.ProjectFileName)
-	if err != nil {
-		return Result{}, err
-	}
-	return writeOne(path, prompt.ProjectTemplate(), force)
-}
+// 戻り値: WORKFLOW.md。
+func WorkflowFileName() string { return fileName }
 
 // writeOne は1つのファイルを書く。force と symlink の扱いは WriteTemplate の説明のとおりである。
 //
@@ -198,9 +182,9 @@ func WriteProjectPrompt(dir string, force bool) (Result, error) {
 // force: 既にある場合に上書きするかどうか。
 // 戻り値: 書いた場所と、上書きしたかどうか。
 func writeOne(path, content string, force bool) (Result, error) {
-	// **文言は、いま書こうとしているファイルの名前を名乗る。**writeOne は WORKFLOW.md と
-	// PROJECT_SPECIFIC_PROMPT.md の両方が通るので、文言の側にどちらかの名前を書くと、
-	// もう片方のときに落ちていないファイルを名乗ることになる。読む人はそちらを消しに行く。
+	// **文言は、いま書こうとしているファイルの名前を名乗る。**文言の側に特定の名前を書くと、
+	// 別のファイルが落ちたときに、落ちていないファイルを名乗ることになる。
+	// 読む人はそちらを消しに行く。
 	name := filepath.Base(path)
 	if force {
 		// force のときだけ、既にあるかどうかを先に見る。上書きしたかどうかの報告に使うのと、
@@ -270,7 +254,7 @@ func writeOne(path, content string, force bool) (Result, error) {
 // resolveTarget は受け取ったディレクトリから、書き出すファイルの絶対パスを決める。
 //
 // dir: 書き出す先のディレクトリ。空文字なら、いまいるディレクトリ。
-// name: 書き出すファイルの名前（WORKFLOW.md か PROJECT_SPECIFIC_PROMPT.md）。
+// name: 書き出すファイルの名前（WORKFLOW.md）。
 // 戻り値: 書き出すファイルの絶対パス（ディレクトリの symlink は辿った先で組み立てる）。
 // エラー: ErrDirNotFound / ErrNotADirectory を包んだエラー、または実体を辿れなかった理由。
 func resolveTarget(dir, name string) (string, error) {
@@ -306,8 +290,7 @@ func resolveTarget(dir, name string) (string, error) {
 
 // openError は書き出し先を開けなかったときのエラーを、CLI が文言と終了コードを決められる形に直す。
 //
-// **文言は、開こうとしたファイルの名前を名乗る。**WORKFLOW.md と
-// PROJECT_SPECIFIC_PROMPT.md の両方がここを通るためである。
+// **文言は、開こうとしたファイルの名前を名乗る。**
 //
 // path: 開こうとしたファイルの絶対パス。
 // err: os.OpenFile が返したエラー。

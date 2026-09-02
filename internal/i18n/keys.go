@@ -495,9 +495,9 @@ const (
 	KeyCLIInitErrSymlink Key = "cli.init.err_symlink"
 	// KeyCLIInitErrWriteFailed はそのほかの理由で書き出せないときに出る。
 	//
-	// **1つ目の引数は、書き出せなかったファイルの名前である**（WORKFLOW.md か
-	// PROJECT_SPECIFIC_PROMPT.md）。**文言に名前を埋め込んではならない。**
-	// `continuo init` は2枚を置くので、埋め込むと片方のときに別のファイルを名乗る。
+	// **1つ目の引数は、書き出せなかったファイルの名前である**（WORKFLOW.md）。
+	// **文言に名前を埋め込んではならない。**同じ文言を使う経路が増えたときに、
+	// 埋め込むと落ちた当のファイルとは別のファイルを名乗る。
 	KeyCLIInitErrWriteFailed Key = "cli.init.err_write_failed"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
@@ -1640,9 +1640,8 @@ const (
 // 読む・確かめる・書く・閉じる・作るの5つは、どちらの経路でも同じ失敗である。
 //
 // **文言にファイルの名前を埋め込んではならない。**同じ経路を WORKFLOW.md と
-// PROJECT_SPECIFIC_PROMPT.md と settings.json が通るので、埋め込むと落ちた当のファイルとは
-// 別のファイルを名乗る（実際に `WORKFLOW.md を作成できません: …/PROJECT_SPECIFIC_PROMPT.md`
-// と出た）。**呼ぶ側が filepath.Base(path) を1つ目の引数として渡す。**
+// `<実行時ディレクトリ>/issues/<スラグ>/settings.json` が通るので、埋め込むと落ちた当の
+// ファイルとは別のファイルを名乗る。**呼ぶ側が filepath.Base(path) を1つ目の引数として渡す。**
 const (
 	// KeyScaffoldFileReadFailed はWORKFLOW.md を読み込めなかったときに出る。
 	KeyScaffoldFileReadFailed Key = "scaffold.file.read_failed"
@@ -1671,10 +1670,9 @@ const (
 // `continuo init` が雛形を書き出すとき（internal/scaffold の openError）の文言。
 //
 // **「ファイルの名前」「絶対パス」の順に2つの値を取る。**
-// **番兵 ErrSymlink の文言は繋がない。**番兵は WORKFLOW.md と
-// PROJECT_SPECIFIC_PROMPT.md の両方から返るので、そこにファイルの名前を書くと、
-// もう片方のときに別のファイルを名乗る。**errors.Is の切り分けは、
-// internal/scaffold の symlinkError が Unwrap で保つ。**
+// **番兵 ErrSymlink の文言は繋がない。**番兵は package の変数1つで、書き出す先の名前を
+// 持てないので、そこにファイルの名前を書くと別のファイルが落ちたときにそちらを名乗る。
+// **errors.Is の切り分けは、internal/scaffold の symlinkError が Unwrap で保つ。**
 const (
 	// KeyScaffoldWriteSymlinkNotFollowed は書き出す先が symlink で、辿らずに止めたときに出る。
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
@@ -2364,21 +2362,9 @@ const (
 	KeyPromptIndexSealed Key = "prompt.index_sealed"
 )
 
-// 固有のプロンプトを読む（internal/config）の文言。
-const (
-	// KeyConfigLoadProjectPromptReadFailed は PROJECT_SPECIFIC_PROMPT.md が在るのに
-	// 読めなかったときに出る。
-	//
-	// **`config.Load` はこれで落ちない**（`Loaded.ProjectPromptErr` に入れて返す）。
-	// 止めるかどうかを決めるのは、常駐プロセスの起動と doctor だけである。
-	KeyConfigLoadProjectPromptReadFailed Key = "config.load.project_prompt_read_failed"
-)
-
 // 起動時のプロンプトの検査（internal/daemon）の文言。
 const (
-	// KeyDaemonRunProjectPromptUnreadable は固有のプロンプトが在るのに読めないときに出る。
-	KeyDaemonRunProjectPromptUnreadable Key = "daemon.run.project_prompt_unreadable"
-	// KeyDaemonRunPromptInvalid は組み込みか固有のプロンプトの変数が誤っているときに出る。
+	// KeyDaemonRunPromptInvalid は組み込みか WORKFLOW.md の本文の変数が誤っているときに出る。
 	KeyDaemonRunPromptInvalid Key = "daemon.run.prompt_invalid"
 )
 
@@ -2386,36 +2372,16 @@ const (
 const (
 	// KeyDoctorLabelPromptVariables は「プロンプトの変数」の見出し語である。
 	KeyDoctorLabelPromptVariables Key = "doctor.label.prompt_variables"
-	// KeyDoctorLabelLeftoverBody は「残った本文」の見出し語である。
-	KeyDoctorLabelLeftoverBody Key = "doctor.label.leftover_body"
-	// KeyDoctorPromptVariablesOK は固有のプロンプトが在って、検査を通ったときに出る。
+	// KeyDoctorPromptVariablesOK は WORKFLOW.md に本文が在って、検査を通ったときに出る。
 	KeyDoctorPromptVariablesOK Key = "doctor.prompt_variables.ok"
-	// KeyDoctorPromptVariablesOKNoProject は固有のプロンプトが無くて、検査を通ったときに出る。
-	KeyDoctorPromptVariablesOKNoProject Key = "doctor.prompt_variables.ok_no_project"
+	// KeyDoctorPromptVariablesOKNoBody は WORKFLOW.md の本文が空で、検査を通ったときに出る。
+	KeyDoctorPromptVariablesOKNoBody Key = "doctor.prompt_variables.ok_no_body"
 	// KeyDoctorPromptVariablesInvalid は変数の名前か構文が誤っているときに出る。
 	KeyDoctorPromptVariablesInvalid Key = "doctor.prompt_variables.invalid"
-	// KeyDoctorPromptVariablesProjectUnreadable は固有のプロンプトが在るのに読めないときに出る。
-	KeyDoctorPromptVariablesProjectUnreadable Key = "doctor.prompt_variables.project_unreadable"
-	// KeyDoctorPromptVariablesUnknown は WORKFLOW.md が読めず、置き場所も決まらないときに出る。
+	// KeyDoctorPromptVariablesUnknown は WORKFLOW.md を読めなかったときに出る。
 	KeyDoctorPromptVariablesUnknown Key = "doctor.prompt_variables.unknown"
 	// KeyDoctorPromptVariablesRemedy は変数を直す手順である。
 	KeyDoctorPromptVariablesRemedy Key = "doctor.prompt_variables.remedy"
-	// KeyDoctorPromptVariablesRemedyPermission は固有のプロンプトの権限を確かめる手順である。
-	KeyDoctorPromptVariablesRemedyPermission Key = "doctor.prompt_variables.remedy_permission"
-	// KeyDoctorLeftoverBodyOK は WORKFLOW.md に本文が残っていないときに出る。
-	KeyDoctorLeftoverBodyOK Key = "doctor.leftover_body.ok"
-	// KeyDoctorLeftoverBodyLeft は WORKFLOW.md に本文が残っているときに出る。
-	KeyDoctorLeftoverBodyLeft Key = "doctor.leftover_body.left"
-	// KeyDoctorLeftoverBodyUnknown は WORKFLOW.md が読めないときに出る。
-	KeyDoctorLeftoverBodyUnknown Key = "doctor.leftover_body.unknown"
-	// KeyDoctorLeftoverBodyNoteBuiltinSkipped は組み込みが送られないことを添える1行である。
-	KeyDoctorLeftoverBodyNoteBuiltinSkipped Key = "doctor.leftover_body.note_builtin_skipped"
-	// KeyDoctorLeftoverBodyRemedyShow は組み込みの全文を読む手順である。
-	KeyDoctorLeftoverBodyRemedyShow Key = "doctor.leftover_body.remedy_show"
-	// KeyDoctorLeftoverBodyRemedyMove は書き足した部分を移す手順である。
-	KeyDoctorLeftoverBodyRemedyMove Key = "doctor.leftover_body.remedy_move"
-	// KeyDoctorLeftoverBodyRemedyDelete は移したあとに本文を消す手順である。
-	KeyDoctorLeftoverBodyRemedyDelete Key = "doctor.leftover_body.remedy_delete"
 )
 
 // `continuo prompt` の文言。
@@ -2430,36 +2396,18 @@ const (
 	KeyCLIPromptErrTooManyPositional Key = "cli.prompt.err_too_many_positional"
 	// KeyCLIPromptErrConfigLoad は WORKFLOW.md を読めないときに出る。
 	KeyCLIPromptErrConfigLoad Key = "cli.prompt.err_config_load"
-	// KeyCLIPromptErrProjectUnreadable は固有のプロンプトが在るのに読めないときに出る。
-	KeyCLIPromptErrProjectUnreadable Key = "cli.prompt.err_project_unreadable"
 	// KeyCLIPromptBreakdownHeading は内訳の見出しである。
 	KeyCLIPromptBreakdownHeading Key = "cli.prompt.breakdown_heading"
 	// KeyCLIPromptBreakdownBuiltinHead は組み込みの前半の1行である。
 	KeyCLIPromptBreakdownBuiltinHead Key = "cli.prompt.breakdown_builtin_head"
 	// KeyCLIPromptBreakdownBuiltinTail は組み込みの後半の1行である。
 	KeyCLIPromptBreakdownBuiltinTail Key = "cli.prompt.breakdown_builtin_tail"
-	// KeyCLIPromptBreakdownProject は固有のプロンプトの1行である。
-	KeyCLIPromptBreakdownProject Key = "cli.prompt.breakdown_project"
-	// KeyCLIPromptBreakdownProjectMissing は固有のプロンプトが無いときの1行である。
-	KeyCLIPromptBreakdownProjectMissing Key = "cli.prompt.breakdown_project_missing"
 	// KeyCLIPromptBreakdownWorkflowBody は WORKFLOW.md の本文の1行である。
 	KeyCLIPromptBreakdownWorkflowBody Key = "cli.prompt.breakdown_workflow_body"
-	// KeyCLIPromptWarnLeftoverBody は本文が残っているときの警告である。
-	KeyCLIPromptWarnLeftoverBody Key = "cli.prompt.warn_leftover_body"
+	// KeyCLIPromptBreakdownBodyMissing は WORKFLOW.md の本文が空のときの1行である。
+	KeyCLIPromptBreakdownBodyMissing Key = "cli.prompt.breakdown_body_missing"
 	// KeyCLIPromptBreakdownBuiltinOnly は--builtin のときの内訳の1行である。
 	KeyCLIPromptBreakdownBuiltinOnly Key = "cli.prompt.breakdown_builtin_only"
-)
-
-// `continuo init` が固有のプロンプトも書くときの文言。
-const (
-	// KeyCLIInitProjectPromptCreated は固有のプロンプトを新しく書き出したときに出る。
-	KeyCLIInitProjectPromptCreated Key = "cli.init.project_prompt_created"
-	// KeyCLIInitProjectPromptOverwritten は--force で固有のプロンプトを上書きしたときに出る。
-	KeyCLIInitProjectPromptOverwritten Key = "cli.init.project_prompt_overwritten"
-	// KeyCLIInitProjectPromptKept は固有のプロンプトが既にあって触らなかったときに出る。
-	KeyCLIInitProjectPromptKept Key = "cli.init.project_prompt_kept"
-	// KeyCLIInitWorkflowKept は WORKFLOW.md が既にあって触らなかったときに出る。
-	KeyCLIInitWorkflowKept Key = "cli.init.workflow_kept"
 )
 
 // allKeys は宣言済みのキーを全部並べたものである。
@@ -3349,43 +3297,24 @@ var allKeys = []Key{
 	KeyPromptParseFailed,
 	KeyPromptRenderFailed,
 	KeyPromptIndexSealed,
-	KeyConfigLoadProjectPromptReadFailed,
-	KeyDaemonRunProjectPromptUnreadable,
 	KeyDaemonRunPromptInvalid,
 	KeyDoctorLabelPromptVariables,
-	KeyDoctorLabelLeftoverBody,
 	KeyDoctorPromptVariablesOK,
-	KeyDoctorPromptVariablesOKNoProject,
+	KeyDoctorPromptVariablesOKNoBody,
 	KeyDoctorPromptVariablesInvalid,
-	KeyDoctorPromptVariablesProjectUnreadable,
 	KeyDoctorPromptVariablesUnknown,
 	KeyDoctorPromptVariablesRemedy,
-	KeyDoctorPromptVariablesRemedyPermission,
-	KeyDoctorLeftoverBodyOK,
-	KeyDoctorLeftoverBodyLeft,
-	KeyDoctorLeftoverBodyUnknown,
-	KeyDoctorLeftoverBodyNoteBuiltinSkipped,
-	KeyDoctorLeftoverBodyRemedyShow,
-	KeyDoctorLeftoverBodyRemedyMove,
-	KeyDoctorLeftoverBodyRemedyDelete,
 	KeyCLIPromptFlagShow,
 	KeyCLIPromptFlagBuiltin,
 	KeyCLIPromptErrShowRequired,
 	KeyCLIPromptErrTooManyPositional,
 	KeyCLIPromptErrConfigLoad,
-	KeyCLIPromptErrProjectUnreadable,
 	KeyCLIPromptBreakdownHeading,
 	KeyCLIPromptBreakdownBuiltinHead,
 	KeyCLIPromptBreakdownBuiltinTail,
-	KeyCLIPromptBreakdownProject,
-	KeyCLIPromptBreakdownProjectMissing,
+	KeyCLIPromptBreakdownBodyMissing,
 	KeyCLIPromptBreakdownWorkflowBody,
-	KeyCLIPromptWarnLeftoverBody,
 	KeyCLIPromptBreakdownBuiltinOnly,
-	KeyCLIInitProjectPromptCreated,
-	KeyCLIInitProjectPromptOverwritten,
-	KeyCLIInitProjectPromptKept,
-	KeyCLIInitWorkflowKept,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

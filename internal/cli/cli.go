@@ -256,104 +256,37 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 		ProjectNumber: *projectFlag,
 	})
 
-	// **書くのは2枚である**（設計 5-3c）。片方が既にあっても、もう片方は書く。
-	// **版を上げた利用者が、足りない PROJECT_SPECIFIC_PROMPT.md だけを足せるようにする。**
-	res := scaffold.WriteAll(dir, *forceFlag, detection.Values)
-
-	if !res.Wrote() && !res.Failed() {
-		// **2枚とも既にあった。**いままでと同じく、上書きするなら --force という案内だけを出す。
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrAlreadyExists, res.Workflow.Path))
-		return 1
-	}
-
-	printInitFile(stdout, stderr, res.Workflow, res.WorkflowErr,
-		i18n.KeyCLIInitCreated, i18n.KeyCLIInitOverwritten, i18n.KeyCLIInitWorkflowKept)
-	printInitProjectPrompt(stdout, stderr, res.ProjectPrompt, res.ProjectPromptErr)
-
-	if res.Failed() {
-		// ディレクトリが無い・symlink・書き込めない、のいずれかである。案内は上で出してある。
-		return 1
-	}
-	printDetection(stdout, detection)
-	// **片方が既にあっただけなら 0 で終える。**もう1枚は置けており、
-	// 「置けなかった」と読ませるのは事実に反する。
-	return 0
-}
-
-// printInitFile は `continuo init` が書いた1枚について、1行だけ出す。
-//
-// stdout / stderr: 出力先。**成功は stdout、失敗は stderr へ出す。**
-// result: scaffold が返した結果。
-// err: scaffold が返したエラー（nil なら成功）。
-// created / overwritten / kept: 新しく作った・上書きした・既にあって触っていない、の文言のキー。
-// 戻り値: 書けたなら真。
-func printInitFile(stdout, stderr io.Writer, result scaffold.Result, err error, created, overwritten, kept i18n.Key) bool {
+	// **書くのは1枚である**（設計 5-3g）。front matter（設定）と本文（固有の指示）が、
+	// 1つのファイルに入っている。
+	result, err := scaffold.WriteTemplateWithValues(dir, *forceFlag, detection.Values)
 	switch {
 	case err == nil:
 		if result.Overwritten {
-			fmt.Fprintln(stdout, i18n.T(overwritten, result.Path))
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitOverwritten, result.Path))
 		} else {
-			fmt.Fprintln(stdout, i18n.T(created, result.Path))
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCreated, result.Path))
 		}
-		return true
+		printDetection(stdout, detection)
+		return 0
 	case errors.Is(err, scaffold.ErrAlreadyExists):
-		// **既にあることは失敗ではない**（もう1枚だけを足す経路がある）。
-		// **どこに在るかは出す。**触っていないことを人間が確かめられるようにする。
-		fmt.Fprintln(stdout, i18n.T(kept, pathOf(result, err)))
-		return false
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrAlreadyExists, result.Path))
+		return 1
 	case errors.Is(err, scaffold.ErrDirNotFound):
 		// ディレクトリは作らない（--force でも作らない）。打ち間違えたパスに
 		// WORKFLOW.md が生まれると、利用者は作ったはずのファイルを見失う。
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrDirNotFound, err))
-		return false
+		return 1
 	case errors.Is(err, scaffold.ErrNotADirectory):
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrNotADirectory, err))
-		return false
+		return 1
 	case errors.Is(err, scaffold.ErrSymlink):
 		// symlink は --force でも辿らない。辿ると指定されたディレクトリの外にある
 		// リンク先を雛形で潰すため、--force を勧めてはならない。
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrSymlink, err))
-		return false
+		return 1
 	default:
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, scaffold.WorkflowFileName(), err))
-		return false
-	}
-}
-
-// printInitProjectPrompt は PROJECT_SPECIFIC_PROMPT.md について1行だけ出す。
-//
-// **WORKFLOW.md と同じ書式にしない。**どちらのファイルの話かが分からなくなるので、
-// ファイル名を文言の中に入れる。
-//
-// stdout / stderr: 出力先。
-// result: scaffold が返した結果。
-// err: scaffold が返したエラー（nil なら成功）。
-// 戻り値: 書けたなら真。
-func printInitProjectPrompt(stdout, stderr io.Writer, result scaffold.Result, err error) bool {
-	name := scaffold.ProjectPromptFileName()
-	switch {
-	case err == nil:
-		if result.Overwritten {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitProjectPromptOverwritten, name, result.Path))
-		} else {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitProjectPromptCreated, name, result.Path))
-		}
-		return true
-	case errors.Is(err, scaffold.ErrAlreadyExists):
-		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitProjectPromptKept, name, pathOf(result, err)))
-		return false
-	default:
-		// ディレクトリが無い・ディレクトリでない、は WORKFLOW.md の側で既に出ている。
-		// **同じ案内を2回出さない。**残りだけを出す。
-		if errors.Is(err, scaffold.ErrDirNotFound) || errors.Is(err, scaffold.ErrNotADirectory) {
-			return false
-		}
-		if errors.Is(err, scaffold.ErrSymlink) {
-			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrSymlink, err))
-			return false
-		}
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, name, err))
-		return false
+		return 1
 	}
 }
 
@@ -365,12 +298,11 @@ func printInitProjectPrompt(stdout, stderr io.Writer, result scaffold.Result, er
 //
 // **2つの形がある。**
 //
-//	continuo prompt --show [ディレクトリ]             送る文面の全文（組み込み + 固有）
+//	continuo prompt --show [ディレクトリ]             送る文面の全文（組み込み + 本文）
 //	continuo prompt --show --builtin                  組み込みだけ。**WORKFLOW.md を読まない**
 //
-// **`--builtin` が移行の入口である。**既にある WORKFLOW.md に本文が残っている利用者は、
-// `--show` だけを叩いても自分の本文しか出てこない（そちらが送られる文面だからである）。
-// **比べる相手を読む道が要る。**
+// **`--builtin` は、自分が書いた本文と仕組みの側を見比べるための道である。**
+// 組み込みが既に言っていることを、本文に二重に書かずに済む。
 //
 // **標準出力には、送る文面だけを出す。**内訳は標準エラーへ出すので、
 // `continuo prompt --show --builtin > builtin.md` が送る文面と1バイトも違わないファイルになる。
@@ -401,7 +333,7 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 
 	if *builtinFlag {
 		// **WORKFLOW.md を1バイトも読まない。**組み込みは実行ファイルの中にあるので、
-		// 設定が壊れている利用者でも読める。**移行の途中の人がここへ辿り着く。**
+		// 設定が壊れている利用者でも読める。**自分が書いた本文と見比べる相手になる。**
 		text := prompt.Builtin()
 		fmt.Fprint(stdout, text)
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
@@ -427,18 +359,12 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 
 	loaded, err := config.Load(path)
 	if err != nil {
-		// **部分的な文面を出さない。**固有の断片が抜けた文面は、送る文面ではない。
+		// **部分的な文面を出さない。**本文が抜けた文面は、送る文面ではない。
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrConfigLoad, err))
 		return 1
 	}
-	if loaded.ProjectPromptErr != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrProjectUnreadable,
-			loaded.ProjectPromptPath, loaded.ProjectPromptErr))
-		return 1
-	}
 
-	frag := prompt.Build(
-		loaded.PromptTemplate, loaded.ProjectPrompt, loaded.ProjectPromptPath, loaded.ProjectPromptFound)
+	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
 	fmt.Fprint(stdout, frag.Text())
 	printPromptBreakdown(stderr, frag)
 	return 0
@@ -452,9 +378,6 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 // w: 出力先（標準エラー）。
 // frag: 組み立てた断片。
 func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
-	if frag.Compat() {
-		fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptWarnLeftoverBody, prompt.ProjectFileName))
-	}
 	fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
 	for _, it := range frag.Items() {
 		switch it.Name {
@@ -463,13 +386,13 @@ func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
 		case prompt.NameBuiltinTail:
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinTail, countLines(it.Text)))
 		case prompt.NameWorkflowBody:
+			// **断片の名前で明示する。`default` に落とさない。**落とすと、断片が増えたときに
+			// 組み込みの断片が WORKFLOW.md の名前で表示され、パスの欄が空になる。
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownWorkflowBody, countLines(it.Text), it.Path))
-		default:
-			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownProject, prompt.ProjectFileName, countLines(it.Text), it.Path))
 		}
 	}
-	if !frag.ProjectFound() {
-		fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownProjectMissing, frag.ProjectPath()))
+	if !frag.HasBody() {
+		fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBodyMissing, frag.BodyPath()))
 	}
 }
 

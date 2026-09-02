@@ -11,7 +11,6 @@
 //	片付けの状態      … `cleanup.on_states` が `tracker.terminal_states` に収まっているか
 //	未記入の項目      … 雛形にある設定項目が WORKFLOW.md に全部書かれているか
 //	プロンプトの変数   … 送るプロンプトが、決められた9つの変数だけを使っているか
-//	残った本文        … WORKFLOW.md に、いまは使わない本文が残っていないか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
 //	hook の置き場所    … hook を受ける socket を実際に置けるか
 //	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか
@@ -192,10 +191,9 @@ func Run(ctx context.Context, opts Options) Report {
 	// 読まないかぎり存在に気づけない**（issue #85）。**ここが人間に見せる唯一の場所である。**
 	report.add(checkMissingKeys(opts, cfg, configResult.Symbol))
 
-	// 段1d: プロンプトの変数と、残った本文。**ここもボードを1バイトも読まない。**
+	// 段1d: プロンプトの変数。**ここもボードを1バイトも読まない。**
 	// **変数の誤りは issue を1件も着手させない**ので、外へ出る検査より先に見せる。
 	report.add(checkPromptVariables(cfg, configResult.Symbol))
-	report.add(checkLeftoverBody(cfg, configResult.Symbol))
 
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。

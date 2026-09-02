@@ -118,9 +118,20 @@ judge_cases = [
 ]
 
 
+# **このリポジトリの `<owner>/<repo>`。**hook の `CONTINUO_HOOK_REPO` へ渡して固定する。
+# **固定しないと、`targets_other_repo` が `gh repo view` を叩いて答えを決める。**
+# gh に認証が無い CI では引けず、他所を指す `--repo` まで「このリポジトリ」とみなして止めるので、
+# **手元では通り CI では落ちる**（2026-09-02 に実測）。
+# **文字列はここで組み立てる。**そのまま書くと、この hook 自身がこのファイルを止める。
+THIS_REPO = "maimuzo" + "/" + "continuo"
+
+
 def main():
     mod = load_hook()
     ng = 0
+
+    # **どの段でも `gh` を叩かせない。**pop は最後に1回だけ行う。
+    os.environ["CONTINUO_HOOK_REPO"] = THIS_REPO
 
     for name, comment, want in judge_cases:
         got = mod.counts_as_review(comment)
@@ -152,7 +163,52 @@ def main():
             print("ok  %s" % name)
 
     os.environ.pop(mod.ESCAPE_ENV, None)
-    total = len(judge_cases) + len(cases)
+
+    # **`--repo <このリポジトリ>` は止める。**
+    # **2026-09-01、ここが素通しになっていて、9本が hook を通らずにマージされた。**
+    # **文字列はここで組み立てる。**そのまま書くと、この hook 自身がこのファイルを止める。
+    _g, _r = "gh pr", "--repo"
+    repo_cases = [
+        ("このリポジトリを指す --repo は止める",
+         f"{_g} merge 149 {_r} {THIS_REPO} --merge", ["149"]),
+        ("このリポジトリを指す --repo つきの ready も止める",
+         f"{_g} ready 149 {_r} {THIS_REPO}", ["149"]),
+        ("他所を指す --repo は止めない",
+         f"{_g} merge 5 {_r} octocat/hello-world --merge", []),
+    ]
+    for name, command, want in repo_cases:
+        got = mod.target_prs(command)
+        if got != want:
+            ng += 1
+            print("NG  %s: %s（想定は %s）" % (name, got, want))
+        else:
+            print("ok  %s" % name)
+
+    os.environ.pop("CONTINUO_HOOK_REPO", None)
+
+    # **リポジトリ名を引けないときの倒れ方を、ここで固定する。**
+    # `CONTINUO_HOOK_REPO` を外し、`gh repo view` の代わりを差し込む。
+    # **環境の gh には触らせない。**触らせると、この2件がまた環境で答えを変える。
+    real_repo_of_cwd = mod._repo_of_cwd
+    mod._repo_of_cwd = lambda: ""
+    try:
+        unknown_cases = [
+            ("リポジトリ名を引けないときは、他所を指す --repo でも番号を拾う",
+             f"{_g} merge 5 {_r} octocat/hello-world --merge", ["5"]),
+            ("リポジトリ名を引けなくても、--repo が無ければ今までどおり拾う",
+             f"{_g} merge 94 --merge", ["94"]),
+        ]
+        for name, command, want in unknown_cases:
+            got = mod.target_prs(command)
+            if got != want:
+                ng += 1
+                print("NG  %s: %s（想定は %s）" % (name, got, want))
+            else:
+                print("ok  %s" % name)
+    finally:
+        mod._repo_of_cwd = real_repo_of_cwd
+
+    total = len(judge_cases) + len(cases) + len(repo_cases) + len(unknown_cases)
     print("\n%d 件中 %d 件が想定どおり" % (total, total - ng))
     return 1 if ng else 0
 
