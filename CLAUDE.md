@@ -150,8 +150,20 @@ Claude Code がまだ喋っている最中であることは、本体からは�
 **検知のしかた。**判定は変更したファイルのパスだけで行う。中身を読んで迷わない。
 
 ```bash
-git diff --name-only main... | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/cli/cli\.go)'
+git fetch origin -q
+{ git diff --name-only origin/main...HEAD   # commit 済みのもの
+  git diff --name-only HEAD                 # まだ commit していないもの（staged / unstaged）
+  git ls-files --others --exclude-standard  # 新しく足して、まだ追跡させていないもの
+} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/cli/cli\.go)'
 ```
+
+**3つとも見るのは、`git diff --name-only origin/main...HEAD` だけでは素通りするからである。**
+三点の `...` は commit 済みの履歴しか読まないので、**hook の引数を書き換えて、まだ commit していない状態では1行も返らない。**
+**止まるべき場面で「触っていない」と読めてしまう**（実測で確認済み）。
+
+**`main` ではなく `origin/main` を見る。**手元の `main` は取り込んでいないことがあり、
+**そもそも手元に `main` が無い checkout では `fatal: ambiguous argument` になって、grep には何も渡らない。**
+これも「触っていない」と見分けが付かない（[docs/releasing.md:284](docs/releasing.md#L284) と同じ理由である）。
 
 **1行でも返ったら止まる。**それぞれ、なぜ止まるかは次のとおり。
 
