@@ -269,8 +269,10 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 ### worktree の片付け
 
-[.claude/rules/worktree.md](.claude/rules/worktree.md) に従うこと。とくに次の3点。
+[.claude/rules/worktree.md](.claude/rules/worktree.md) に従うこと。とくに次の4点。
 
+- **確認の前に `git fetch origin -q` を打つ。**打たないと、`origin/main` を見る検査が
+  **マージ済みの branch を「まだマージされていない」と返す。**見た目は安全側と同じで、区別が付かない
 - **使い終わった worktree は、その作業を終える前に消す**
 - **`git worktree prune` は片付けの手段ではない。**`git worktree remove` が要る
 - **消す前に、未コミットの変更・未マージの commit・開いている PR・走っている作業の4つを確かめる**
