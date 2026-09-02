@@ -90,7 +90,9 @@ func TestBuild_断片のあいだは空行1つになる(t *testing.T) {
 	frag := prompt.Build("## 固有の目印\n最後の行", "/tmp/WORKFLOW.md")
 	got := frag.Text()
 
-	const want = "最後の行\n\n## 終わったらやること"
+	// **見出しを書き写さない。**書き写すと、組み込みの後半の先頭に節が増えるたびに
+	// この検査が落ちる。**見張りたいのは見出しの名前ではなく、あいだの空行の数である。**
+	want := "最後の行\n\n" + firstLineOf(t, prompt.BuiltinTail())
 	if !strings.Contains(got, want) {
 		i := strings.Index(got, "最後の行")
 		end := i + 60
@@ -314,4 +316,23 @@ func TestSampleData_9つの変数がそろっている(t *testing.T) {
 	if _, ok := data["attempt"]; !ok {
 		t.Error("SampleData に .attempt がありません（キーごと省くと missingkey=error で落ちます）")
 	}
+}
+
+// firstLineOf は、断片の前後の改行を落としたうえで最初の1行を返す。
+//
+// **`prompt.Build` は断片の前後の改行を落としてから連結する**（`join`）ので、
+// 連結後に本文の次へ来るのはこの1行である。
+//
+// t: テストコンテキスト。
+// text: 取り出す元の断片。
+// 戻り値: 最初の1行。**空の断片を渡したら、その場で落とす。**
+func firstLineOf(t *testing.T, text string) string {
+	t.Helper()
+
+	trimmed := strings.Trim(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	if trimmed == "" {
+		t.Fatal("組み込みの後半が空です（目印の行が最後にあります）")
+	}
+	line, _, _ := strings.Cut(trimmed, "\n")
+	return line
 }
