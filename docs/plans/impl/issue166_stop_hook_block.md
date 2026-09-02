@@ -16,12 +16,12 @@
 **採る直し方は1つで、それに出口を1つ添える。**
 **`settle_ms` の窓が閉じた瞬間に `agent.get` を1回だけ読み、`working` なら turn の終わりとせずに待ち直す。**
 Go の関数名は `stillWorkingAfterStop` とする（6 節）。
-**待ち直したあと `poll_wait_ms` が過ぎてもエージェントが動いていなければ、推測が外れたものとして turn を終える**（7 節）。
+**待ち直している間は `settle_ms` ごとに `agent.get` を読み直し、`Stop` が来ないままエージェントが動いていなければ、推測が外れたものとして turn を終える**（7 節）。
 
 | 決めたこと | どこに書くか |
 | --- | --- |
 | **`agent.get` の裏取りを足す** | [internal/orchestrator/turn.go](../../../internal/orchestrator/turn.go) の `confirmTurnEnd` |
-| **待ち直しから抜ける出口を1つ置く** | 同じ関数の `poll_wait_ms` が尽きたところ（7 節） |
+| **待ち直しから抜ける出口を1つ置く** | 同じ関数で `settle_ms` ごとに読み直すところ（7 節） |
 | **`stop_hook_active` は判定にも記録にも使わない** | 10 節 |
 | **`settle_ms` を伸ばす案は採らない** | 8 節（測定で否定） |
 
@@ -186,8 +186,8 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 | 次に来るもの | どうなるか |
 | --- | --- |
 | 書き直しが終わって空の `Stop` が来る | `awaitStop` が `stopWaitEmpty` を返し、もう一度 `settle_ms` の窓を開いて裏取りする |
-| 何も来ないまま `poll_wait_ms`（既定30秒）が過ぎ、**エージェントがまだ `working`** | 待ち直す。**総時間では打ち切らない**（打ち切りは巡回の stall 検知だけが決める） |
-| 何も来ないまま `poll_wait_ms` が過ぎ、**エージェントが動いていない** | **`turnEnded` を返す**（下の「外れたとき」） |
+| 何も来ないまま `settle_ms`（既定2秒）が過ぎ、**エージェントがまだ `working`** | 待ち直す。**総時間では打ち切らない**（打ち切りは巡回の stall 検知だけが決める） |
+| 何も来ないまま `settle_ms` が過ぎ、**エージェントが動いていない** | **`turnEnded` を返す**（下の「外れたとき」） |
 
 **`working` は推測である。****`background_tasks` が空でない `Stop` は Claude Code 自身の申告だが、
 こちらは herdr の見え方から当てているだけ**で、重みが違う。**書き直し以外に `working` に見える理由がある。**
@@ -198,14 +198,22 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 | **herdr の画面の見え方が一瞬ずれた** | 版が変わった直後など |
 
 **どちらも「新しい `Stop` は二度と来ない」。**出口を置かないと、ループの先頭 → `awaitStop` が
-`poll_wait_ms` を空振り → 枠待ちでない → `blocked` でもない → `continue` を延々と繰り返し、
+空振り → 枠待ちでない → `blocked` でもない → `continue` を延々と繰り返し、
 **巡回の stall 検知が拾うまで run が空転する。**そのときの上限は
 `turn_timeout_ms`（既定 3600000ms。[internal/config/default.go:137](../../../internal/config/default.go#L137)）で、
 **最大1時間である。**打ち切られると `RetryCount` を1消費し、issue に打ち切りのコメントが残る。
 
-**だから出口を置く。**`poll_wait_ms` が尽きた枝で `agent.get` を1回読み、
-**`working` でなければ `turnEnded` を返す。**代償は**最大1時間から `poll_wait_ms`（既定30秒）へ縮む。**
+**だから出口を置く。**待ち直している間は `settle_ms` ごとに `agent.get` を1回読み、
+**`working` でなければ `turnEnded` を返す。**代償は**最大1時間から `settle_ms`（既定2秒）へ縮む。**
 **この枝は `agent.get` を増やさない。**同じ枝で `blocked` の判定のために既に1回読んでおり、その結果を使い回す。
+
+**刻む長さを `poll_wait_ms` にしてはならない。**上の表の「遅い `Stop` hook がまだ走っている」は、
+**`settle_ms`（既定2秒）を超える `Stop` hook を1本でも持つ利用者なら毎 turn 必ず通る道である。**
+`poll_wait_ms`（既定30秒）で刻むと、**その利用者は毎 turn ちょうど30秒を捨てる。**
+`max_dispatch_turns`（既定20）を掛けると1 run あたり10分である。
+**刻んでも本物の書き直しは取り逃がさない。**
+[docs/evidence/stop_hook_block_20260902.md](../../evidence/stop_hook_block_20260902.md) は
+0.1 秒ごとに `agent.get` を読み、**書き直しの最中に `idle` が返った瞬間は1度も無かった**と記録している。
 
 ---
 
@@ -258,6 +266,10 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 毎回1度も待ち直さない場合）で 20 回 = **合計 23 ミリ秒**である。
 **`settle_ms` の 2000 ミリ秒に対して 0.1% 未満である。**
 
+**待ち直している間は `settle_ms` ごとに1回ずつ足される**（7 節）。
+**既定の2秒で刻むと、書き直しの中央値 21.1 秒に対して 11 回 = 12 ミリ秒である。**
+**費用はここでも無視できる。**
+
 ---
 
 ## 10. 採らなかった案と、その否定の根拠
@@ -307,11 +319,12 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 | テスト | 仕込み | 確かめること |
 | --- | --- | --- |
 | **差し戻して書き直している間はturnの終わりとしない** | 空の `Stop` が1本。`agent.get` は `working`。transcript は応答A（`CONTINUO-STATUS: review`）だけ | **pane が閉じられない。Status が `In Review` へ動かない。次の指示が送られない。**そのあと応答B（`CONTINUO-STATUS: working`）を足して `idle` に戻すと、応答Bの表明が採られる |
-| **裏取りが読めなければ従来どおりturnを終わらせる** | `agent.get` がエラー | **待ち続けない。**turn の終わりとして進む |
+| **裏取りが読めなければ従来どおりturnを終わらせる** | `agent.get` がエラー | **待ち続けない。**turn の終わりとして進み、**待ち直しのログが1行も出ない** |
 | **裏取りがidleなら空のStopでそのままturnが終わる** | `agent.get` は `idle` | `settle_ms` の経過で turn が終わり、**待ち直しのログが1行も出ない** |
-| **書き直しが来ないまま止まっていれば待ち続けない** | `agent.get` が `working` → そのあと `Stop` は来ず `idle` に変わる | `poll_wait_ms` の経過で turn の終わりとして進む（7 節の出口） |
+| **書き直しが来ないまま止まっていれば待ち続けない** | `agent.get` が `working` → そのあと `Stop` は来ず `idle` に変わる | `settle_ms` の経過で turn の終わりとして進む（7 節の出口） |
+| **遅いStophookでもpoll_wait_msを待たない** | 同上。ただし `poll_wait_ms` を `settle_ms` の何十倍にも広げる | **`settle_ms` 数回ぶんで turn が終わる。**`poll_wait_ms` で刻んでいれば必ず間に合わない |
 
-**直す前は、1本目と4本目が落ちる。**裏取りが無いので待ち直しのログが出ず、run が畳まれる。
+**直す前は、1本目と4本目と5本目が落ちる。**裏取りが無いので待ち直しのログが出ず、run が畳まれる。
 
 **`agent.get` の台本は `agentStatusScript` として切り出す。****着手の段では `idle` を返させること。**
 起動の落ち着きを待つところ（`herdr.startup_timeout_ms`）も同じ `agent.get` を読むので、

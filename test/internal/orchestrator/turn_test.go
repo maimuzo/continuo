@@ -1211,6 +1211,12 @@ func TestTurn_裏取りが読めなければ従来どおりturnを終わらせ�
 	waitFor(t, 15*time.Second, "裏取りが読めなくても turn が終わる", func() bool {
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
+	// **run が畳まれただけでは足りない。**待ちに倒しても、出口の枝が `poll_wait_ms` の
+	// 後に拾い直すので、run はいずれ畳まれる。**「すぐ終わった」と「待たされてから
+	// 終わった」を区別できるのは、この1行が出ていないことだけである。**
+	if strings.Contains(fx.Logs.String(), "turn の終わりとせずに待ち直します") {
+		t.Fatalf("裏取りが読めなかったのに待ち直している:\n%s", fx.Logs.String())
+	}
 }
 
 // TestTurn_裏取りがidleなら空のStopでそのままturnが終わる は、既存の挙動を変えていないことを
@@ -1304,6 +1310,70 @@ func TestTurn_書き直しが来ないまま止まっていれば待ち続けな
 	script.Set("idle")
 
 	waitFor(t, 15*time.Second, "待ち続けずに turn の終わりとして進む", func() bool {
+		return strings.Contains(fx.Logs.String(),
+			"書き直しを待ちましたが Stop も来ずエージェントも動いていないので、turn の終わりとします")
+	})
+	waitFor(t, 15*time.Second, "run が畳まれる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+}
+
+// TestTurn_遅いStophookでもpoll_wait_msを待たない は、待ち直しが `settle_ms` で刻まれて
+// いることを確かめる（設計 3-79）。
+//
+// 目的: **`settle_ms`（既定2秒）より遅い `Stop` hook を1本でも持つ利用者は、差し戻して
+// いなくてもこの待ち直しへ毎 turn 入る。**hook が走っている間、herdr から見たエージェントは
+// `working` である。**だが差し戻していないので、新しい `Stop` は二度と来ない。**
+// **刻みが `poll_wait_ms`（既定30秒）だと、その利用者は毎 turn ちょうど30秒を捨てる。**
+// `max_dispatch_turns`（既定20）を掛けると1 run あたり10分である。
+//
+// **1つ上の TestTurn_書き直しが来ないまま止まっていれば待ち続けない とは見ているものが違う。**
+// あちらは「いつかは終わる」ことを見ており、こちらは「**どれだけ待って終わるか**」を見る。
+// あちらは `poll_wait_ms` で刻んでいても通る。
+//
+// 与える情報: `settle_ms` を 100ms、`poll_wait_ms` をその50倍の 5000ms に置く。
+// 空の `Stop` が1件届き、そのとき `agent.get` は `working`（遅い hook がまだ走っている）。
+// **そのあと `Stop` は二度と来ず、`agent.get` は `idle` に変わる。**
+// 成功条件: `idle` に変えてから **2秒以内**に「turn の終わりとします」の1行が出ること。
+// **`poll_wait_ms` で刻んでいれば 5 秒待つので、必ず間に合わない。**
+func TestTurn_遅いStophookでもpoll_wait_msを待たない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		// **この2つの差が、このテストの物差しである。**同じ値にすると、
+		// どちらで刻んでも同じ時間で終わってしまい、何も測れない。
+		cfg.Claude.SettleMs = 100
+		cfg.Claude.PollWaitMs = 5000
+	}})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\nCONTINUO-STATUS: review", false),
+	})
+
+	script := &agentStatusScript{status: "idle"}
+	script.Install(fx)
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **遅い `Stop` hook が走っているだけである。**差し戻してはいない。
+		script.Set("working")
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 10*time.Second, "裏取りで待ち直す", func() bool {
+		return strings.Contains(fx.Logs.String(),
+			"空の Stop のあともエージェントが動いているので、turn の終わりとせずに待ち直します")
+	})
+
+	// 遅い hook が終わった。エージェントは止まっている。
+	script.Set("idle")
+	waitFor(t, 2*time.Second, "poll_wait_ms を待たずに turn の終わりとして進む", func() bool {
 		return strings.Contains(fx.Logs.String(),
 			"書き直しを待ちましたが Stop も来ずエージェントも動いていないので、turn の終わりとします")
 	})

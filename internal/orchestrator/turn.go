@@ -819,7 +819,8 @@ func (o *Orchestrator) confirmTurnEnd(
 	// 申告だが、こちらは herdr の見え方から「差し戻されて書き直している」と当てているだけで、
 	// **書き直し以外の理由で `working` に見えることがありうる**（遅い `Stop` hook が
 	// まだ走っている、など）。**当たっているうちは新しい `Stop` が必ず来る。**
-	// 来ないまま `poll_wait_ms` が過ぎ、そのときエージェントが動いていなければ、
+	// **待ち直している間は `settle_ms` ごとに `agent.get` を読む。**新しい `Stop` が
+	// 来ないまま、そのときエージェントが動いていなければ、
 	// **推測が外れているので turn の終わりとして進む。**
 	rewriteWait := false
 
@@ -830,8 +831,22 @@ func (o *Orchestrator) confirmTurnEnd(
 
 		stopAt, seen := rs.stopSeen()
 		if !seen {
+			// **書き直しを待っている間だけは settle_ms で刻む**（設計 3-79）。
+			//
+			// **ここで `poll_wait_ms`（既定30秒）を待つと、遅い `Stop` hook を持つ
+			// 利用者は毎 turn ちょうど30秒を捨てる。**`settle_ms`（既定2秒）より遅い
+			// hook は、その窓が閉じる時点でまだ走っており、herdr からは `working` に
+			// 見える。**だが差し戻してはいないので、新しい `Stop` は二度と来ない。**
+			// 下の出口（`rewriteWait` が真のまま動いていなかったとき）が回ってくるのを
+			// 待つだけになる。`max_dispatch_turns`（既定20）を掛けると1 run あたり10分である。
+			//
+			// **刻んでも本物の書き直しを取り逃がさない。**
+			// [docs/evidence/stop_hook_block_20260902.md](../../docs/evidence/stop_hook_block_20260902.md)
+			// は 0.1 秒ごとに `agent.get` を読み、**書き直しの最中に `idle` が返った
+			// 瞬間は1度も無かった**と記録している。**費用も無視できる**
+			// （同じ記録で n=168、中央 1.13ms）。
 			patience := settle
-			if !firstWait {
+			if !firstWait && !rewriteWait {
 				// `<task-notification>` を受けたあとは turn が続いている最中である。
 				// ここで settle_ms しか待たないと、正常な turn を stall と誤判定する。
 				patience = pollWait
