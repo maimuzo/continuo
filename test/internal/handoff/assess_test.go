@@ -174,7 +174,7 @@ func TestAssess_担当を外すとき新しいholdの機械の名前を返す(t 
 // 時刻がその機械のタイムゾーンのままであること。読み戻すと同じ値になること。
 func TestFormatBid_コメントの形と読み戻し(t *testing.T) {
 	bid := handoff.Bid{Host: "mac-studio", FiveHour: 87, Weekly: 16, Score: 190, At: at()}
-	body := handoff.FormatBid(bid)
+	body := handoff.FormatBid(bid, 3*time.Minute)
 
 	if !strings.HasPrefix(body, config.HandoffBidMarker+"\n") {
 		t.Fatalf("入札の印で始まっていない:\n%s", body)
@@ -293,5 +293,180 @@ func TestHasBidBy_自分の入札を見つける(t *testing.T) {
 	}
 	if _, ok := handoff.HasBidBy(bids, "mac-studio"); ok {
 		t.Error("書いていない機械の入札を見つけている")
+	}
+}
+
+// 目的: 入札のコメントへ人間が読む行を足しても、JSON が壊れないことを確認する（設計 3-77a）。
+//
+// **足す文に `}` を入れてはならない。**payloadAfterMarker は最初の `{` と
+// **最後の `}`** の間を切り出すので、あとに `}` が現れると JSON がそこまで伸びて壊れる。
+// **壊れた入札は数に入らない**（ParseBid が偽を返す）ので、
+// **その機械は入札しているつもりで、一度も勝てなくなる。**
+//
+// **言語を切り替えて両方見る。**文言は資源から引くので、日本語で守れていても
+// 英語の訳に `}` が入れば同じことが起きる。
+//
+// 与える情報: 入札1件と、締め切りまでの長さ3分。
+// 成功条件: どちらの言語でも `}` が JSON の分の1つだけで、読み戻すと元の値が全部取れること。
+func TestFormatBid_人間が読む行を足してもJSONが壊れない(t *testing.T) {
+	bid := handoff.Bid{Host: "mac-studio", FiveHour: 87, Weekly: 16, Score: 190, At: at()}
+
+	for _, lang := range []i18n.Lang{i18n.LangJA, i18n.LangEN} {
+		i18n.Use(lang)
+
+		body := handoff.FormatBid(bid, 3*time.Minute)
+		if got := strings.Count(body, "}"); got != 1 {
+			t.Errorf("[%s] 人間が読む行に `}` が入っている（JSON がそこまで伸びる）: %d 個\n%s", lang, got, body)
+		}
+
+		got, ok := handoff.ParseBid(body, at())
+		if !ok {
+			t.Fatalf("[%s] 人間が読む行を足した入札を読み戻せない:\n%s", lang, body)
+		}
+		if got.Host != bid.Host || got.FiveHour != bid.FiveHour ||
+			got.Weekly != bid.Weekly || got.Score != bid.Score {
+			t.Errorf("[%s] 読み戻した入札が違う: got %+v, want %+v", lang, got, bid)
+		}
+		if !got.At.Equal(bid.At) {
+			t.Errorf("[%s] 読み戻した入札の時刻が違う: got %s, want %s", lang, got.At, bid.At)
+		}
+	}
+	i18n.Use(i18n.DefaultLang)
+}
+
+// 目的: 入札のコメントが、人間に「いま何が起きていて、いつ決まるか」を伝えることを確認する（設計 3-77a）。
+//
+// **1台で動かしていても、この入札のコメントは必ず出る。**JSON だけだと、
+// issue を開いた人には `five_hour` が何の値なのかも、次に何が起きるのかも読めない。
+//
+// 与える情報: 入札1件と、締め切りまでの長さ3分。
+// 成功条件: 立候補していることと、約3分後に自動で決まることが本文に出ていること。
+func TestFormatBid_立候補と締め切りが人間に読める(t *testing.T) {
+	i18n.Use(i18n.SourceLang)
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
+	body := handoff.FormatBid(handoff.Bid{Host: "mac-studio", Score: 190, At: at()}, 3*time.Minute)
+
+	if !strings.Contains(body, "mac-studio がこの issue の担当に立候補しています") {
+		t.Errorf("立候補していることが人間に読める形で書かれていない:\n%s", body)
+	}
+	if !strings.Contains(body, "約3分後") {
+		t.Errorf("担当がいつ決まるかが書かれていない:\n%s", body)
+	}
+}
+
+// 目的: 締め切りまでの長さが分に収まらないときの書き方を固定する（設計 3-77a）。
+//
+// **切り捨てにすると、30秒の設定が「約0分後」になる。**待てばよい長さが読めなくなるので、
+// 1分未満は「約1分後」へ寄せる。**0 以下は「締め切りを待たない」と書く**
+// （`bid_window_ms` に 0 を書ける。設計 3-77）。
+//
+// 与える情報: 締め切りまでの長さが30秒・0・マイナスの3通り。
+// 成功条件: 30秒は「約1分後」、0 とマイナスは締め切りを待たない文になること。
+func TestFormatBid_締め切りの書き方(t *testing.T) {
+	i18n.Use(i18n.SourceLang)
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
+	bid := handoff.Bid{Host: "mac-studio", Score: 190, At: at()}
+
+	if got := handoff.FormatBid(bid, 30*time.Second); !strings.Contains(got, "約1分後") {
+		t.Errorf("1分未満の締め切りが「約1分後」になっていない:\n%s", got)
+	}
+	for _, window := range []time.Duration{0, -time.Minute} {
+		got := handoff.FormatBid(bid, window)
+		if !strings.Contains(got, "締め切りを待たずに") {
+			t.Errorf("締め切り %s のとき、待たずに決まることが書かれていない:\n%s", window, got)
+		}
+		if strings.Contains(got, "約") {
+			t.Errorf("締め切り %s のとき、待ち時間を書いてしまっている:\n%s", window, got)
+		}
+	}
+}
+
+// 目的: hold のコメントへ人間が読む行を足しても、JSON が壊れないことを確認する（設計 3-77b）。
+//
+// **壊れると担当の判定そのものが落ちる。**hold は「その担当者は機械である」の唯一の証拠なので、
+// 読めなくなると、**別の機械がこの issue を「人間が付けた担当」と読んで触らなくなる**か、
+// 逆に担当を奪う側へ倒れる。
+//
+// 与える情報: hold 1件。
+// 成功条件: どちらの言語でも `}` が JSON の分の1つだけで、読み戻すと元の値が全部取れること。
+func TestFormatHold_人間が読む行を足してもJSONが壊れない(t *testing.T) {
+	hold := handoff.Hold{
+		Host:     "mac-studio",
+		Assignee: selfLogin,
+		Branch:   "continuo/octocat/hello-world/188",
+		At:       at(),
+	}
+
+	for _, lang := range []i18n.Lang{i18n.LangJA, i18n.LangEN} {
+		i18n.Use(lang)
+
+		body := handoff.FormatHold(hold)
+		if got := strings.Count(body, "}"); got != 1 {
+			t.Errorf("[%s] 人間が読む行に `}` が入っている（JSON がそこまで伸びる）: %d 個\n%s", lang, got, body)
+		}
+
+		got, ok := handoff.ParseHold(body)
+		if !ok {
+			t.Fatalf("[%s] 人間が読む行を足した hold を読み戻せない:\n%s", lang, body)
+		}
+		if got.Host != hold.Host || got.Assignee != hold.Assignee || got.Branch != hold.Branch {
+			t.Errorf("[%s] 読み戻した hold が違う: got %+v, want %+v", lang, got, hold)
+		}
+		if !got.At.Equal(hold.At) {
+			t.Errorf("[%s] 読み戻した hold の時刻が違う: got %s, want %s", lang, got.At, hold.At)
+		}
+	}
+	i18n.Use(i18n.DefaultLang)
+}
+
+// 目的: hold のコメントが、担当の決まり方と次に始まることを人間に伝えることを確認する（設計 3-77b）。
+//
+// 与える情報: hold 1件（branch の名前あり）。
+// 成功条件: どの機械が担当になったか・なぜその機械か・どの branch で始まるかが本文に出ていること。
+func TestFormatHold_担当の決まり方が人間に読める(t *testing.T) {
+	i18n.Use(i18n.SourceLang)
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
+	body := handoff.FormatHold(handoff.Hold{
+		Host:     "mac-studio",
+		Assignee: selfLogin,
+		Branch:   "continuo/octocat/hello-world/188",
+		At:       at(),
+	})
+
+	if !strings.Contains(body, "担当は mac-studio に決まりました") {
+		t.Errorf("どの機械が担当になったかが人間に読める形で書かれていない:\n%s", body)
+	}
+	if !strings.Contains(body, "余裕がいちばん大きい") {
+		t.Errorf("なぜその機械が選ばれたのかが書かれていない:\n%s", body)
+	}
+	if !strings.Contains(body, "branch continuo/octocat/hello-world/188 で作業を始めます") {
+		t.Errorf("これから何が始まるかが書かれていない:\n%s", body)
+	}
+}
+
+// 目的: branch の名前を組み立てられなかったときに、空白の穴が開かないことを確認する（設計 3-77b）。
+//
+// **呼び出し側は branch 名を組み立てられないと空文字を渡してくる**（`branchNameFor`）。
+// そのまま差し込むと「これから branch  で作業を始めます」と出る。
+//
+// 与える情報: branch の名前が空の hold 1件。
+// 成功条件: branch の名前を出さない文へ落ちること。JSON は壊れないこと。
+func TestFormatHold_branchの名前が無いとき(t *testing.T) {
+	i18n.Use(i18n.SourceLang)
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
+	body := handoff.FormatHold(handoff.Hold{Host: "mac-studio", Assignee: selfLogin, At: at()})
+
+	if strings.Contains(body, "branch  で") {
+		t.Errorf("branch の名前が空のまま差し込まれている:\n%s", body)
+	}
+	if !strings.Contains(body, "これから作業を始めます") {
+		t.Errorf("branch の名前を出さない文へ落ちていない:\n%s", body)
+	}
+	if _, ok := handoff.ParseHold(body); !ok {
+		t.Errorf("branch の名前が無い hold を読み戻せない:\n%s", body)
 	}
 }
