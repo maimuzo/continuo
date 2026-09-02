@@ -22,14 +22,8 @@ const (
 
 	// KeyDoctorLabelRuntimeDir は doctor の「hook の置き場所」の見出し語である。
 	KeyDoctorLabelRuntimeDir Key = "doctor.label.runtime_dir"
-	// KeyDoctorLabelLockFile は doctor の「ロックの場所」の見出し語である。
-	KeyDoctorLabelLockFile Key = "doctor.label.lock_file"
-	// KeyDoctorLabelBoardLock は doctor の「ボードのロック」の見出し語である。
-	KeyDoctorLabelBoardLock Key = "doctor.label.board_lock"
 	// KeyDoctorRuntimeDirOK は hook の socket を用意できたときに出る。
 	KeyDoctorRuntimeDirOK Key = "doctor.runtime_dir.ok"
-	// KeyDoctorRuntimeDirNotYet は、hook を受ける socket の置き場所がまだ無いことの内訳に出る。
-	KeyDoctorRuntimeDirNotYet Key = "doctor.runtime_dir.not_yet"
 	// KeyDoctorRuntimeDirFailed は hook の socket を用意できなかったときに出る。
 	KeyDoctorRuntimeDirFailed Key = "doctor.runtime_dir.failed"
 	// KeyDoctorRuntimeDirRemedy は hook の socket を用意できなかったときの直し方である。
@@ -40,22 +34,6 @@ const (
 	KeyDoctorRuntimeDirStale Key = "doctor.runtime_dir.stale"
 	// KeyDoctorRuntimeDirRemedyStale は残骸を確かめて消す手順である。
 	KeyDoctorRuntimeDirRemedyStale Key = "doctor.runtime_dir.remedy_stale"
-	// KeyDoctorLockFileOK は二重起動防止のロックを置けたときに出る。
-	KeyDoctorLockFileOK Key = "doctor.lock_file.ok"
-	// KeyDoctorLockFileFailed はロックを置けなかったときに出る。
-	KeyDoctorLockFileFailed Key = "doctor.lock_file.failed"
-	// KeyDoctorLockFileRemedy はロックを置けなかったときの直し方に出る。
-	KeyDoctorLockFileRemedy Key = "doctor.lock_file.remedy"
-	// KeyDoctorBoardLockOK はボードのロックを置けたときに出る。
-	KeyDoctorBoardLockOK Key = "doctor.board_lock.ok"
-	// KeyDoctorBoardLockFailed はボードのロックを置けなかったときに出る。
-	KeyDoctorBoardLockFailed Key = "doctor.board_lock.failed"
-	// KeyDoctorBoardLockRemedy はボードのロックを置けなかったときの直し方に出る。
-	KeyDoctorBoardLockRemedy Key = "doctor.board_lock.remedy"
-	// KeyDoctorBoardLockNoConfig は設定を読めずにボードのロックを確かめられないときに出る。
-	KeyDoctorBoardLockNoConfig Key = "doctor.board_lock.no_config"
-	// KeyDoctorBoardLockNormalized はボードのロックの名前で正規化が情報を落としたときに出る。
-	KeyDoctorBoardLockNormalized Key = "doctor.board_lock.normalized"
 
 	// KeyDoctorClaudeNotFound は claude が PATH に無いときの文言である。
 	KeyDoctorClaudeNotFound Key = "doctor.claude.not_found"
@@ -191,8 +169,6 @@ const (
 	KeyDoctorWriteRemedyPermission Key = "doctor.write.remedy_permission"
 	// KeyDoctorDefaultUsed は設定を読めないまま既定値で確かめたときの理由に出る。
 	KeyDoctorDefaultUsed Key = "doctor.default_used"
-	// KeyDoctorInstanceNote は `--id` を付けた置き場所を見たことの内訳に出る。
-	KeyDoctorInstanceNote Key = "doctor.instance_note"
 )
 
 // doctor の検査「Claude の設定」（Claude Code の設定ディレクトリに書けるか）。
@@ -274,14 +250,6 @@ const (
 	KeyHandoffLostUnknownHost Key = "handoff.lost.unknown_host"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
-	// KeyFsprobeNotADirectory は、実在するものがディレクトリでなかったときのエラーに出る。
-	KeyFsprobeNotADirectory Key = "fsprobe.not_a_directory"
-	// KeyFsprobeStatFailed は、実在するかを確かめられなかったときのエラーに出る。
-	KeyFsprobeStatFailed Key = "fsprobe.stat_failed"
-	// KeyFsprobeNoExistingAncestor は、上へ辿っても実在するディレクトリが1つも無かったときのエラーに出る。
-	KeyFsprobeNoExistingAncestor Key = "fsprobe.no_existing_ancestor"
-	// KeyFsprobeSocketFailed は使い捨ての unix socket を listen できなかったときのエラーに出る。
-	KeyFsprobeSocketFailed Key = "fsprobe.socket_failed"
 )
 
 // doctor の検査「herdr」。
@@ -706,8 +674,6 @@ const (
 	KeyCLIDoctorErrWriteReport Key = "cli.doctor.err_write_report"
 	// KeyCLIDoctorFlagMissingKeysPatch は `--missing-keys-patch` の説明に出る。
 	KeyCLIDoctorFlagMissingKeysPatch Key = "cli.doctor.flag_missing_keys_patch"
-	// KeyCLIDoctorFlagID は `continuo doctor --id` の説明に出る。
-	KeyCLIDoctorFlagID Key = "cli.doctor.flag_id"
 	// KeyCLIDoctorErrMissingKeysPatch は足す差分を組み立てられなかったときに出る。
 	KeyCLIDoctorErrMissingKeysPatch Key = "cli.doctor.err_missing_keys_patch"
 )
@@ -796,13 +762,6 @@ const (
 	KeyAbandonErrBuild Key = "abandon.err_build"
 	// KeyAbandonErrLockFile はロックファイルそのものを開けないときに出る。
 	KeyAbandonErrLockFile Key = "abandon.err_lock_file"
-	// KeyAbandonErrBoardInUse は同じボードを見ている continuo が動いているときに出る。
-	KeyAbandonErrBoardInUse Key = "abandon.err_board_in_use"
-	// KeyAbandonErrBoardInUseNoInfo は同じボードのロックが握られているのに、
-	// 誰が握っているかの覚え書きが無いときに出る（`continuo abandon` どうしがぶつかった場合）。
-	KeyAbandonErrBoardInUseNoInfo Key = "abandon.err_board_in_use_no_info"
-	// KeyAbandonErrBoardLockFile はボードのロックファイルそのものを開けないときに出る。
-	KeyAbandonErrBoardLockFile Key = "abandon.err_board_lock_file"
 	// KeyAbandonRunning は、**continuo が動いていて、手を離させる段を通る**ときの1行に出る。
 	KeyAbandonRunning Key = "abandon.running"
 	// KeyAbandonRunningDryRun は、**continuo が動いているが `--dry-run` なので
@@ -813,13 +772,6 @@ const (
 	KeyAbandonRunningDryRun Key = "abandon.running_dry_run"
 	// KeyAbandonNotRunning はcontinuo が動いていないときの1行に出る。
 	KeyAbandonNotRunning Key = "abandon.not_running"
-	// KeyAbandonNotRunningDryRun は、`--dry-run` が「動いていない」と答えたときの1行に出る。
-	//
-	// **本番の実行と言い分ける。**`--dry-run` は flock を掴まず覚え書きだけを見るので、
-	// **覚え書きが無い continuo を見つけられない。**
-	KeyAbandonNotRunningDryRun Key = "abandon.not_running_dry_run"
-	// KeyAbandonStaleLockInfo は、ロックの覚え書きが残骸として残っていたときに出る。
-	KeyAbandonStaleLockInfo Key = "abandon.stale_lock_info"
 
 	// KeyAbandonErrScan は置き場所を走査できないときに出る。
 	KeyAbandonErrScan Key = "abandon.err_scan"
@@ -1062,7 +1014,7 @@ const (
 	KeyCLIMainErrPortRange Key = "cli.main.err_port_range"
 	// KeyCLIErrInvalidID は --id に渡された名前が使えないことを表す。
 	KeyCLIErrInvalidID Key = "cli.err_invalid_id"
-	// KeyCLIErrInstanceLayout は continuo の置き場所そのものを決められないことを表す。
+	// KeyCLIErrInstanceLayout はロックの置き場所そのものを決められないことを表す。
 	// **名前の誤りとは言い分ける**（--id を渡していない人にも出るため）。
 	KeyCLIErrInstanceLayout Key = "cli.err_instance_layout"
 	// KeyCLIMainErrTooManyPositional は位置引数が2つ以上あるときに出る。
@@ -1211,32 +1163,16 @@ const (
 	KeyLockReleaseCloseFailed Key = "lock.release.close_failed"
 )
 
-// 1台で何本動かすかを決める置き場所（internal/instance）のエラーの文言。
+// 1台で何本動かすかを決めるロックの置き場所（internal/instance）のエラーの文言。
 const (
 	// KeyInstanceValidateIDTooLong は `--id` の名前が長すぎるときに出る。
 	KeyInstanceValidateIDTooLong Key = "instance.validate_id.too_long"
 	// KeyInstanceValidateIDInvalidShape は `--id` の名前に使えない文字があるときに出る。
 	KeyInstanceValidateIDInvalidShape Key = "instance.validate_id.invalid_shape"
-	// KeyInstanceResolveSocketPathTooLong は `--id` を足した socket のパスが上限を超えるときに出る。
-	KeyInstanceResolveSocketPathTooLong Key = "instance.resolve.socket_path_too_long"
 	// KeyInstanceRootHomeDirFailed は ~/.continuo を組み立てるためのホームディレクトリを引けなかったときに出る。
 	KeyInstanceRootHomeDirFailed Key = "instance.root.home_dir_failed"
 	// KeyInstanceEnsureLockDirFailed はロックファイルを置くディレクトリを作れなかったときに出る。
 	KeyInstanceEnsureLockDirFailed Key = "instance.ensure_lock_dir.failed"
-	// KeyInstanceBoardDirFailed はボードのロックを置くディレクトリを作れなかったときに出る。
-	KeyInstanceBoardDirFailed Key = "instance.board_dir.failed"
-	// KeyInstanceLockInfoMarshalFailed はロックの覚え書きを JSON にできなかったときに出る。
-	KeyInstanceLockInfoMarshalFailed Key = "instance.lock_info.marshal_failed"
-	// KeyInstanceLockInfoRemoveFailed はロックの覚え書きを消せなかったときに出る。
-	KeyInstanceLockInfoRemoveFailed Key = "instance.lock_info.remove_failed"
-	// KeyInstanceLockInfoReadFailed はロックの覚え書きを読めなかったときに出る。
-	KeyInstanceLockInfoReadFailed Key = "instance.lock_info.read_failed"
-	// KeyInstanceLockInfoBroken はロックの覚え書きが JSON として壊れていたときに出る。
-	KeyInstanceLockInfoBroken Key = "instance.lock_info.broken"
-	// KeyInstanceLockInfoNoPID はロックの覚え書きに PID が入っていなかったときに出る。
-	KeyInstanceLockInfoNoPID Key = "instance.lock_info.no_pid"
-	// KeyInstanceLockInfoPIDUnknown は覚え書きの PID の生死を確かめられなかったときに出る。
-	KeyInstanceLockInfoPIDUnknown Key = "instance.lock_info.pid_unknown"
 )
 
 // hook を受ける socket の置き場所（internal/socketpath）のエラーの文言。
@@ -2168,8 +2104,6 @@ const (
 	KeyWorkspaceRenderBranchRenderedEmpty Key = "workspace.render_branch.rendered_empty"
 	// KeyWorkspaceScanLevelRootUnreadable は置き場所の最上位を読めなかったときに出る。
 	KeyWorkspaceScanLevelRootUnreadable Key = "workspace.scan_level.root_unreadable"
-	// KeyWorkspaceInstanceMarkerWriteFailed は `--id` の置き場所に目印を書けなかったときに出る。
-	KeyWorkspaceInstanceMarkerWriteFailed Key = "workspace.instance_marker.write_failed"
 	// KeyWorkspaceCheckTrustForClonePathToplevelFailed は clone のパスから信頼を引く鍵を求められなかったときに出る。
 	KeyWorkspaceCheckTrustForClonePathToplevelFailed Key = "workspace.check_trust_for_clone_path.toplevel_failed"
 	// KeyWorkspaceCheckTrustForClonePathConfigUnreadable は `~/.claude.json` を読めなかったときに出る（存在しない場合は除く）。
@@ -2345,11 +2279,7 @@ const (
 	KeyDaemonRunAlreadyRunning Key = "daemon.run.already_running"
 	// KeyDaemonRunLockFileFailed は二重起動ではなく、ロックファイルそのものを用意できなかったときに出る。
 	KeyDaemonRunLockFileFailed Key = "daemon.run.lock_file_failed"
-	// KeyDaemonRunBoardInUse は同じボードを見ている continuo が既に動いているときに出る。
-	KeyDaemonRunBoardInUse Key = "daemon.run.board_in_use"
-	// KeyDaemonRunBoardLockFileFailed はボードのロックファイルそのものを用意できなかったときに出る。
-	KeyDaemonRunBoardLockFileFailed Key = "daemon.run.board_lock_file_failed"
-	// KeyDaemonRunInstanceFailed は `--id` から置き場所を決められなかったときに出る。
+	// KeyDaemonRunInstanceFailed は `--id` からロックの置き場所を決められなかったときに出る。
 	KeyDaemonRunInstanceFailed Key = "daemon.run.instance_failed"
 	// KeyDaemonRunStartupChecksFailed は起動時の検査に落ちたときに出る（生きている pane は閉じない）。
 	KeyDaemonRunStartupChecksFailed Key = "daemon.run.startup_checks_failed"
@@ -2415,23 +2345,12 @@ var allKeys = []Key{
 	KeyDoctorLabelHerdr,
 	KeyDoctorLabelClaude,
 	KeyDoctorLabelRuntimeDir,
-	KeyDoctorLabelLockFile,
-	KeyDoctorLabelBoardLock,
 	KeyDoctorRuntimeDirOK,
-	KeyDoctorRuntimeDirNotYet,
 	KeyDoctorRuntimeDirFailed,
 	KeyDoctorRuntimeDirRemedy,
 	KeyDoctorRuntimeDirInUse,
 	KeyDoctorRuntimeDirStale,
 	KeyDoctorRuntimeDirRemedyStale,
-	KeyDoctorLockFileOK,
-	KeyDoctorLockFileFailed,
-	KeyDoctorLockFileRemedy,
-	KeyDoctorBoardLockOK,
-	KeyDoctorBoardLockFailed,
-	KeyDoctorBoardLockRemedy,
-	KeyDoctorBoardLockNoConfig,
-	KeyDoctorBoardLockNormalized,
 	KeyDoctorClaudeNotFound,
 	KeyDoctorClaudeFound,
 	KeyDoctorClaudeRemedyInstall,
@@ -2481,7 +2400,6 @@ var allKeys = []Key{
 	KeyDoctorFilesystemRemedyRestart,
 	KeyDoctorWriteRemedyPermission,
 	KeyDoctorDefaultUsed,
-	KeyDoctorInstanceNote,
 	KeyDoctorClaudeHomeOK,
 	KeyDoctorClaudeHomeFailed,
 	KeyDoctorClaudeHomeReason,
@@ -2500,10 +2418,6 @@ var allKeys = []Key{
 	KeyFsprobeHomeDirFailed,
 	KeyFsprobeClaudeHomeFailed,
 	KeyFsprobeWorkspaceRootFailed,
-	KeyFsprobeNotADirectory,
-	KeyFsprobeStatFailed,
-	KeyFsprobeNoExistingAncestor,
-	KeyFsprobeSocketFailed,
 	KeyHandoffBidCandidacy,
 	KeyHandoffBidDeadline,
 	KeyHandoffBidDeadlineOne,
@@ -2695,7 +2609,6 @@ var allKeys = []Key{
 	KeyCLIDoctorWarnPathUnresolved,
 	KeyCLIDoctorErrWriteReport,
 	KeyCLIDoctorFlagMissingKeysPatch,
-	KeyCLIDoctorFlagID,
 	KeyCLIDoctorErrMissingKeysPatch,
 	KeyCLIAllowKeychainAccessErrTooManyPositional,
 	KeyCLIAllowKeychainAccessNotDarwin,
@@ -2732,14 +2645,9 @@ var allKeys = []Key{
 	KeyAbandonErrConfigLoad,
 	KeyAbandonErrBuild,
 	KeyAbandonErrLockFile,
-	KeyAbandonErrBoardInUse,
-	KeyAbandonErrBoardInUseNoInfo,
-	KeyAbandonErrBoardLockFile,
 	KeyAbandonRunning,
 	KeyAbandonRunningDryRun,
 	KeyAbandonNotRunning,
-	KeyAbandonNotRunningDryRun,
-	KeyAbandonStaleLockInfo,
 	KeyAbandonErrScan,
 	KeyAbandonNotFound,
 	KeyAbandonOwnerRepoMismatch,
@@ -2890,16 +2798,8 @@ var allKeys = []Key{
 	KeyLockReleaseCloseFailed,
 	KeyInstanceValidateIDTooLong,
 	KeyInstanceValidateIDInvalidShape,
-	KeyInstanceResolveSocketPathTooLong,
 	KeyInstanceRootHomeDirFailed,
 	KeyInstanceEnsureLockDirFailed,
-	KeyInstanceBoardDirFailed,
-	KeyInstanceLockInfoMarshalFailed,
-	KeyInstanceLockInfoRemoveFailed,
-	KeyInstanceLockInfoReadFailed,
-	KeyInstanceLockInfoBroken,
-	KeyInstanceLockInfoNoPID,
-	KeyInstanceLockInfoPIDUnknown,
 	KeySocketpathRuntimeDirHomeDirFailed,
 	KeySocketpathCheckAbsNotAbsolute,
 	KeySocketpathCheckPathLenTooLong,
@@ -3219,7 +3119,6 @@ var allKeys = []Key{
 	KeyWorkspaceRenderBranchTemplateRenderFailed,
 	KeyWorkspaceRenderBranchRenderedEmpty,
 	KeyWorkspaceScanLevelRootUnreadable,
-	KeyWorkspaceInstanceMarkerWriteFailed,
 	KeyWorkspaceCheckTrustForClonePathToplevelFailed,
 	KeyWorkspaceCheckTrustForClonePathConfigUnreadable,
 	KeyWorkspaceCheckTrustForClonePathConfigUnparsable,
@@ -3299,8 +3198,6 @@ var allKeys = []Key{
 	KeyDaemonRunSocketDirFailed,
 	KeyDaemonRunAlreadyRunning,
 	KeyDaemonRunLockFileFailed,
-	KeyDaemonRunBoardInUse,
-	KeyDaemonRunBoardLockFileFailed,
 	KeyDaemonRunInstanceFailed,
 	KeyDaemonRunStartupChecksFailed,
 	KeyDaemonRunRestoreFailed,

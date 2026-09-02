@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -101,14 +100,6 @@ func (m *Manager) scanLevel(dir string, depth int) ([]string, error) {
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		// **「置き場所そのものが無い」は「読めない」ではない。**
-		// **worktree が1件も無いことが、はっきり分かっている状態である。**
-		// `continuo abandon --dry-run` は置き場所を作らない（設計 3-17g）ので、
-		// **まだ1度も起動していない環境ではここが必ず無い。**
-		// エラーにすると、その環境で下見が何も答えられなくなる。
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
-		}
 		if depth == scanDepth {
 			return nil, i18n.Errorf(i18n.KeyWorkspaceScanLevelRootUnreadable, dir, err)
 		}
@@ -122,16 +113,6 @@ func (m *Manager) scanLevel(dir string, depth int) ([]string, error) {
 			continue
 		}
 		child := filepath.Join(dir, entry.Name())
-		// **別の continuo（`--id <名前>`）の置き場所へは1階層も入らない**（設計 3-17f）。
-		// **入ると、あちらの worktree が「身元ファイルの無いディレクトリ」として数えられ、
-		// 既定側の `continuo abandon` が判断を保留したまま止まる。**
-		// **見るのは置き場所の直下だけである**（`--id` が足すのは1階層だけなので、
-		// それより深くを見ても、当たるのは worktree の中だけになる）。
-		if depth == scanDepth && isOtherInstanceRoot(m.idRegistryDir, child) {
-			m.logger.Debug("別の continuo の置き場所なので走査から外します",
-				"dir", child, "marker", InstanceMarkerName)
-			continue
-		}
 		deeper, err := m.scanLevel(child, depth-1)
 		if err != nil {
 			return nil, err

@@ -35,7 +35,7 @@ type Config struct {
 	Trust TrustConfig `yaml:"trust"`
 	// Restart は再起動時に孤児となった実行中 issue をどう扱うかを決める（3-4）。
 	Restart RestartConfig `yaml:"restart"`
-	// Runtime は **もう読まれない**（3-17）。**キーを受け取るためだけに残してある。**
+	// Runtime は二重起動防止のロックファイルの場所を決める（3-17）。
 	Runtime RuntimeConfig `yaml:"runtime"`
 	// Server は任意の HTTP ダッシュボードの起動を決める（SPEC.md 13.7 の任意拡張）。
 	Server ServerConfig `yaml:"server"`
@@ -561,26 +561,20 @@ type RestartConfig struct {
 	OrphanRunningAction string `yaml:"orphan_running_action"`
 }
 
-// RuntimeConfig は **もう読まれない**（設計 3-17）。
-//
-// **ロックの置き場所は `~/.continuo/continuo.lock` に機械で固定してある。**
-// 設定で変えられると、**`continuo abandon` が別の場所を見て「動いていない」と判定し、
-// 走っている worktree を消しにいく**（3-17c）。分けたいなら `--id` を使う。
-// そちらはロック・実行時ディレクトリ・worktree の置き場所・branch 名の4つを
-// まとめて分ける（3-17b）。
-//
-// **それでもキーを残すのは、`lock_file: null` が `continuo init` の雛形に
-// 入っていたからである。**front matter は未知のキーを弾く（8-1。`yaml.Strict()`）ので、
-// キーごと消すと、**過去に `continuo init` した全員が次の起動で落ちる。**
-// **受け取って捨てる。**値が書いてあれば起動時に警告を1行出す
-// （internal/daemon の WarnIgnoredLockFile）。
+// RuntimeConfig は二重起動防止のロックファイルの場所を決める（3-17）。
 type RuntimeConfig struct {
-	// LockFile は **読まれない。**書いてあっても無視して
-	// `~/.continuo/continuo.lock`（`--id` があれば `~/.continuo/id/<名前>/continuo.lock`）
-	// を使う。
+	// LockFile はロックファイルの絶対パスである。**null なら
+	// `~/.continuo/continuo.lock` に置く**（3-17）。
 	//
-	// **展開も検査もしない。**捨てる値のために起動を止める理由が無いためである
-	// （expandConfig と validateExpanded の対象から外してある）。
+	// **hook の socket の置き場所からは導かない。**socket の場所は
+	// `claude.hook_bridge.listen` と環境変数で動くので、そこから導くと
+	// **socket を分けただけで2本目が黙って起動できてしまう。**
+	//
+	// **`--id <名前>` を付けたときは、この値より `--id` が優先される**
+	// （`~/.continuo/id/<名前>/continuo.lock`）。
+	//
+	// **null でないときは、親ディレクトリを continuo が作らない。**
+	// 打ち間違えたパスの下にロックを作ってしまうと、二重起動を検出できなくなる。
 	LockFile *string `yaml:"lock_file"`
 }
 

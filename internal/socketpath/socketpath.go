@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/maimuzo/continuo/internal/fsprobe"
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
@@ -198,11 +197,6 @@ func ResolveHookSocketPath(explicitListen *string, envRuntimeDir string) (string
 // （誰でも接続できる）になる」ことが実測されているため、ディレクトリの権限を
 // 主たる防御にする）。
 //
-// **socket 以外の置き場所もここを通る。**二重起動防止のロック（`~/.continuo`。設計 3-17）と
-// ボードのロック（`~/.continuo/board`。3-17e）が同じ検査を通る。
-// **返す文言は「何のためのディレクトリか」を名乗らない。**それを名乗るのは呼ぶ側の
-// 文言であり、ここが名乗ると **ロックの失敗が「hook を受ける socket の…」として報告される。**
-//
 // dir: 用意するディレクトリの絶対パス。
 // 戻り値: 次のいずれかの場合にエラーを返す。
 //   - 作成に失敗した
@@ -252,36 +246,4 @@ func checkExistingDir(dir string) error {
 		return i18n.Errorf(i18n.KeySocketpathCheckExistingDirPermTooOpen, dir, perm)
 	}
 	return nil
-}
-
-// CheckDirPlaceable は、そのディレクトリを本番で置けるかを、**1つも作らずに**確かめる。
-//
-// **`EnsureDir` の検査だけを行う版である**（設計 3-17h）。
-// **`continuo doctor` はこちらを呼ぶ。**あちらが `EnsureDir` を呼んでいたので、
-// **`continuo doctor --id typo` が `~/.continuo/id/typo/` を作って残していた。**
-// その置き場所の実在を 3-17f が「その `--id` で continuo が実際に動いた裏付け」に
-// 使っているので、**検査の道具が、その裏付けを偽造できる状態になっていた。**
-//
-// **既にあるなら `EnsureDir` と同じ検査を掛け、そのうえで中に使い捨てを作って消す。**
-// **無いなら、上へ辿って最初に実在するディレクトリに書けるかを見る**（そこに作れるなら、
-// 起動時の `EnsureDir` も作れる）。**そちらには権限の検査を掛けない。**
-// ホームディレクトリは 0755 が普通であり、**掛けると起動できる環境を `✗` と答える。**
-//
-// dir: 検査するディレクトリの絶対パス。**実在しなくてよい。**
-// 戻り値: 置けない場合のエラー。
-func CheckDirPlaceable(dir string) error {
-	if _, err := os.Lstat(dir); err == nil {
-		if cerr := checkExistingDir(dir); cerr != nil {
-			return cerr
-		}
-		return fsprobe.ProbeInside(dir)
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return i18n.Errorf(i18n.KeySocketpathCheckExistingDirLstatFailed, dir, err)
-	}
-
-	ancestor, err := fsprobe.NearestExisting(dir)
-	if err != nil {
-		return err
-	}
-	return fsprobe.ProbeInside(ancestor)
 }

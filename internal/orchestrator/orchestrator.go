@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
-	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -222,12 +221,6 @@ type Options struct {
 	// ContinuoPath は `continuo hook` を起動する実行ファイルの絶対パスである。
 	// 空なら os.Executable() の結果を使う。
 	ContinuoPath string
-	// InstanceID は `--id` に渡された名前である（設計 3-17b）。**既定なら空文字。**
-	//
-	// **herdr の agent 名に混ぜるためだけに持つ。**混ぜないと、別のボードの
-	// 同じ番号の issue が同じ agent 名になり、**人間が端末でどちらの pane かを
-	// 見分けられない。**
-	InstanceID string
 	// Logger はログの出力先である。nil なら slog.Default() を使う。
 	Logger *slog.Logger
 	// Now は現在時刻を返す関数である。nil なら time.Now を使う。
@@ -267,9 +260,6 @@ type Orchestrator struct {
 	socketPath     string
 	runtimeDir     string
 	continuoPath   string
-	// instanceID は `--id` に渡された名前である（設計 3-17b）。**既定なら空文字。**
-	// **agent 名に混ぜる。**
-	instanceID     string
 	transcriptRoot string
 	logger         *slog.Logger
 	now            func() time.Time
@@ -478,7 +468,6 @@ func New(opts Options) (*Orchestrator, error) {
 		socketPath:     opts.HookSocketPath,
 		runtimeDir:     filepath.Dir(opts.HookSocketPath),
 		continuoPath:   continuoPath,
-		instanceID:     opts.InstanceID,
 		transcriptRoot: transcriptRoot,
 		logger:         logger,
 		now:            nowFunc,
@@ -758,8 +747,7 @@ func (o *Orchestrator) pollQuota(ctx context.Context) {
 		o.mu.Lock()
 		o.quotaStale = true
 		o.mu.Unlock()
-		o.logger.Warn("枠の読み取りに失敗しました（読めるまで新しい issue に着手しません。走行中の turn は止めません）",
-			"error", err)
+		o.logger.Warn("枠の読み取りに失敗しました（読めるまで入札しません）", "error", err)
 		return
 	}
 
@@ -798,54 +786,18 @@ func (o *Orchestrator) quotaSnapshot() *ratelimit.Snapshot {
 	return o.quota
 }
 
-// newWorkBlocked は「この巡回で新しい issue を1件も取らないか」と、その理由を返す
-// （設計 3-27 / 3-77j）。
+// dispatchPaused は「新規の dispatch を止める」閾値を超えているかを返す（設計 3-27）。
 //
-// **入札の判定と、新規 dispatch の判定を1つの答えに揃える。**
-// **揃っていなかったので、枠を読めないときに2つが逆を向いていた。**
-// 入札は「読めないなら黙る」、新規 dispatch は「読めないなら止めない」で、
-// **入札のほうが先に効くので、後ろの判定は一度も効かなかった。**
-// その結果、**枠を読めない機械はボードを1件も進めないのに、
-// 出るのは `Debug` の1行だけ**だった。
+// **これは「枠待ち」とは別の判定である。**閾値（既定95%）を超えただけでは枠待ちとみなさない。
+// 走行中の turn は止めないし、時計も止めない。
 //
-// **揃える向きは「止める」である。**「分からないなら止まる」に倒す。
-// **読めない枠を0%（＝いちばん暇）とみなして走り続けると、
-// 上限を超えてもそれに気づけない。**
-//
-// **`rate_limit.source: none` は「読めなかった」ではない**（設計 3-27 の逃げ道）。
-// 運用者が枠で判定しないと決めた状態なので、そこでは止めない。
-//
-// **これは「枠待ち」とは別の判定である。**走行中の turn は止めないし、時計も止めない。
-//
-// 戻り値: 止める理由。`handoff.SkipNone` なら新しい issue を取ってよい。
-func (o *Orchestrator) newWorkBlocked() handoff.SkipReason {
-	_, skip := o.evaluateBid()
-	return skip
-}
-
-// newWorkThresholdPercent は、新規着手が止まる実際の使用率を返す（設計 3-77j）。
-//
-// **`rate_limit.pause_above_percent`（既定95）ではない。**
-// **入札の余裕値のマージン**（`handoff.five_hour_margin_percent` /
-// `handoff.weekly_margin_percent`。既定はどちらも10）**のほうが先に効く。**
-// 余裕値は `100 - 使用率 - マージン` なので、**使用率がマージンを引いた残りを
-// 超えた時点でマイナスになり、そこで新規着手が止まる。**
-//
-// **既定では 90% であって 95% ではない。**この2つが違うことを人間へ出さないと、
-// 「95% まで動くはずなのに 90% で止まった」を誰も説明できない。
-//
-// 戻り値: これを超えると新規着手が止まる使用率（%）。
-func (o *Orchestrator) newWorkThresholdPercent() int {
-	h := o.cfg.Tracker.Provider.Handoff
-	margin := h.FiveHourMarginPercent
-	if h.WeeklyMarginPercent > margin {
-		margin = h.WeeklyMarginPercent
+// 戻り値: 新規の dispatch を止めるべきなら true。
+func (o *Orchestrator) dispatchPaused() bool {
+	snap := o.quotaSnapshot()
+	if snap == nil {
+		return false
 	}
-	byMargin := 100 - margin
-	if byMargin < o.cfg.RateLimit.PauseAbovePercent {
-		return byMargin
-	}
-	return o.cfg.RateLimit.PauseAbovePercent
+	return snap.MaxPercent() > o.cfg.RateLimit.PauseAbovePercent
 }
 
 // wakeRuns は turn ループの goroutine を必要な run について起こす（設計 3-8 / 3-4 の段5a2・段5c）。

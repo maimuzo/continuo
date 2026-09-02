@@ -2,7 +2,6 @@ package daemon_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/daemon"
 	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
@@ -63,8 +63,7 @@ rate_limit:
 // wiringRoot は短い一時ディレクトリを1つ作る（socket のパスを103バイト以内に保つため）。
 //
 // **ホームディレクトリもここへ向ける。**二重起動を防ぐロックは
-// `~/.continuo/continuo.lock` に固定されており（設計 3-17）、ボードのロックは
-// `~/.continuo/board/` に置かれる（3-17e）。**向けないと、テストが利用者の
+// `~/.continuo/continuo.lock` に置かれる（設計 3-17）。**向けないと、テストが利用者の
 // 本物の `~/.continuo` を掴み、動いている continuo と取り合いになる。**
 //
 // t: 呼び出し元のテスト。
@@ -644,9 +643,8 @@ func TestHookCLI_socketとpending_dirが相対パスなら受け付けない(t *
 // wiringShortHome は、ホームディレクトリの代わりに使う短い一時ディレクトリを作り、
 // `HOME` をそこへ向ける。
 //
-// **短くなければならない。**`--id` を付けたときの socket は
-// `~/.continuo/id/<名前>/run/hooks.sock` であり、103バイトに収まらないと起動できない
-// （設計 3-17d / 3-23）。**macOS の `TMPDIR` はそれだけで66文字前後ある。**
+// **短くしておく。**hook を受ける socket のパスは103バイトに収まらないと起動できない
+// （設計 3-23）。**macOS の `TMPDIR` はそれだけで66文字前後ある。**
 //
 // t: 呼び出し元のテスト。
 // 戻り値: 実体のパス（symlink を解決済み）。
@@ -670,18 +668,17 @@ func wiringShortHome(t *testing.T) string {
 	return ""
 }
 
-// TestRun_idを付けると4つが名前ごとに分かれる は、`--id` の結線を固定する。
+// TestRun_idを付けるとロックが名前ごとに分かれる は、`--id` の結線を固定する。
 //
-// 目的: 設計 3-17b。**ロックだけを分けると事故になる。**残り3つを分け忘れると、
-// 2本目が1本目の worktree を巡回のたびに閉じ、hook を食べ、branch を出せなくなる。
-// **4つとも internal/instance の Layout 1つから導いていることを、結線の側で確かめる。**
-// **5つ目（herdr の agent 名）は test/internal/orchestrator が固定している**
-// （起動の記録には出ないため、ここでは見られない）。
+// 目的: 設計 3-17b。**`--id` が分けるのはロックだけである。**
+// **CLI が解決した Layout を、常駐の側がそのまま使っていることを結線で確かめる。**
+// worktree の置き場所・hook の socket・branch 名は、検証用の `WORKFLOW.md` で
+// 書き換えるものなので、ここでは分かれない。
 //
 // 与える情報: `--id e2e` と、`~/.continuo/id/e2e/continuo.lock` を先に握った別のプロセス。
 // 成功条件: 起動の段のエラーで、**その名前ごとのロックのパスを指して**二重起動と言うこと。
-// **起動の記録に、名前ごとに分かれた worktree の置き場所と branch 名が出ること。**
-func TestRun_idを付けると4つが名前ごとに分かれる(t *testing.T) {
+// **worktree の置き場所は `workspace.root` のままであること。**
+func TestRun_idを付けるとロックが名前ごとに分かれる(t *testing.T) {
 	root := wiringRoot(t)
 	home := wiringShortHome(t)
 	runtimeDir := filepath.Join(root, "rt")
@@ -729,287 +726,113 @@ func TestRun_idを付けると4つが名前ごとに分かれる(t *testing.T) {
 		t.Fatalf("二重起動として報告していない: %v", err)
 	}
 
-	wantRoot := filepath.Join(root, "wt", "e2e")
-	if !strings.Contains(logs.String(), wantRoot) {
-		t.Fatalf("worktree の置き場所が名前ごとに分かれていない（%q が記録に無い）:\n%s", wantRoot, logs.String())
-	}
-	if !strings.Contains(logs.String(), "e2e/continuo/") {
-		t.Fatalf("branch 名が名前ごとに分かれていない:\n%s", logs.String())
+	// **worktree の置き場所は動かさない。**`--id` から導くと、設定に書いた値と
+	// 実際に使う値が食い違う（設計 3-17b）。
+	notWanted := filepath.Join(root, "wt", "e2e")
+	if strings.Contains(logs.String(), notWanted) {
+		t.Fatalf("--id から worktree の置き場所を導いている（%q が記録に出ている）:\n%s", notWanted, logs.String())
 	}
 }
 
-// TestRun_idを付けたらCONTINUO_RUNTIME_DIRを使わないことを名乗る は、
-// 環境変数を黙って捨てないことを固定する（設計 3-17b / 3-23）。
+// TestResolveLockFilePath_idとlock_fileと既定の優先順位を固定する は、
+// ロックの置き場所の決め方を固定する（設計 3-17）。
 //
-// 目的: `--id` を付けると socket は `~/.continuo/id/<名前>/run/` に固定され、
-// **`CONTINUO_RUNTIME_DIR` は使われない。**`claude.hook_bridge.listen` の側には
-// 警告があるのに**こちらが黙っていると、環境変数を指定した人は、
-// なぜ socket がそこに出来ないのかを、無人運用のログから引けない。**
+// 目的: **hook の socket の置き場所から導かないこと。**socket の場所は設定と環境変数で
+// 動くので、そこから導くと **socket を分けただけで2本目が黙って起動できてしまう。**
+// **`runtime.lock_file` は読み続けること。**このキーは `continuo init` の雛形に入っており、
+// 書いている人が既に居る。**黙って無視すると、その人のロックの場所が予告なく変わる。**
+// **`--id` はその上に立つこと**（設定より、その場で打ったフラグを優先する）。
 //
-// 与える情報: `CONTINUO_RUNTIME_DIR` と `--id e2e`、および先に握られた名前ごとのロック
-// （警告はロックを取る前に出るので、ここで止めても記録には残る）。
-// 成功条件: 警告に環境変数の名前・渡した値・実際に使う置き場所が出ること。
-func TestRun_idを付けたらCONTINUO_RUNTIME_DIRを使わないことを名乗る(t *testing.T) {
-	root := wiringRoot(t)
+// 与える情報: `--id` の有無と、`runtime.lock_file` の有無の組み合わせ。
+// 成功条件: `--id` ＞ `runtime.lock_file` ＞ `~/.continuo/continuo.lock` の順で決まること。
+func TestResolveLockFilePath_idとlock_fileと既定の優先順位を固定する(t *testing.T) {
 	home := wiringShortHome(t)
-	runtimeDir := filepath.Join(root, "rt")
-	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
-		t.Fatalf("実行時ディレクトリを作れません: %v", err)
-	}
-	path := writeWiringWorkflow(t, root, "", "")
+	written := filepath.Join(home, "somewhere-else.lock")
 
-	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
-	t.Setenv(daemon.EnvGraphQLEndpoint, "")
-
-	// **ロックを先に握って、起動をすぐ止める。**警告はロックより前に出る。
-	idLock := filepath.Join(home, ".continuo", "id", "e2e", "continuo.lock")
-	if err := os.MkdirAll(filepath.Dir(idLock), 0o700); err != nil {
-		t.Fatalf("名前ごとのロックの置き場所を作れません: %v", err)
-	}
-	held, err := lock.Acquire(idLock)
+	defaultLayout, err := instance.Resolve("")
 	if err != nil {
-		t.Fatalf("名前ごとのロックを先に握れません: %v", err)
+		t.Fatalf("既定の置き場所を決められない: %v", err)
 	}
-	t.Cleanup(func() { _ = held.Release() })
-
-	inst, err := instance.Resolve("e2e")
+	namedLayout, err := instance.Resolve("e2e")
 	if err != nil {
 		t.Fatalf("--id から置き場所を決められない: %v", err)
 	}
 
-	logs := &syncBuffer{}
-	if err := daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.NewTextHandler(logs, nil)),
-		Instance:   &inst,
-	}); err == nil {
-		t.Fatal("ロックを握られているのに起動できてしまった")
-	}
-
-	warned := lineContaining(t, logs.String(), "CONTINUO_RUNTIME_DIR は使いません")
-	// **渡した値と、代わりに使う場所を両方出す。**どちらが欠けても、
-	// 読んだ人はどこを見ればよいのかが分からない。
-	for _, want := range []string{runtimeDir, inst.RuntimeDir()} {
-		if !strings.Contains(warned, want) {
-			t.Fatalf("%q が警告に出ていない\n%s", want, warned)
-		}
-	}
-}
-
-// TestRun_同じボードを見ている2つ目は起動を止める は、ボードごとのロックを固定する。
-//
-// 目的: 設計 3-17e。**同じボードを2つの continuo が見ると、同じ issue を2つが拾う。**
-// `--id` を付けても、ボードだけは名前から導けない。
-//
-// 与える情報: `~/.continuo/board/octocat-3.lock` を先に握った別のプロセス。
-// 成功条件: 起動の段のエラーで止まり、**ボードのロックのパスを文言に出すこと。**
-func TestRun_同じボードを見ている2つ目は起動を止める(t *testing.T) {
-	root := wiringRoot(t)
-	runtimeDir := filepath.Join(root, "rt")
-	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
-		t.Fatalf("実行時ディレクトリを作れません: %v", err)
-	}
-	path := writeWiringWorkflow(t, root, "", "")
-
-	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
-	t.Setenv(daemon.EnvGraphQLEndpoint, "")
-
-	boardLock, _, err := instance.BoardLockPath("octocat", 3)
-	if err != nil {
-		t.Fatalf("ボードのロックの場所を決められません: %v", err)
-	}
-	// **`BoardLockPath` は置き場所を作らない**（設計 3-17g）。取る前に用意する。
-	if err := instance.EnsureBoardDir(boardLock); err != nil {
-		t.Fatalf("ボードのロックの置き場所を作れません: %v", err)
-	}
-	held, err := lock.Acquire(boardLock)
-	if err != nil {
-		t.Fatalf("ボードのロックを先に握れません: %v", err)
-	}
-	t.Cleanup(func() { _ = held.Release() })
-
-	err = daemon.Run(context.Background(), daemon.Options{
-		ConfigPath: path,
-		Logger:     slog.New(slog.DiscardHandler),
-	})
-
-	if err == nil {
-		t.Fatal("同じボードを見ている continuo が居るのに起動できてしまった")
-	}
-	if !errors.Is(err, daemon.ErrStartup) {
-		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
-	}
-	if !strings.Contains(err.Error(), boardLock) {
-		t.Fatalf("ボードのロックのパスが文言に出ていない: %v", err)
-	}
-	if !strings.Contains(err.Error(), "既に動いています") {
-		t.Fatalf("同じボードを見ている continuo が居ることが文言に出ていない: %v", err)
-	}
-}
-
-// TestRun_ボードのロックを取ったら書き残し手放すときに消す は、3-17e の段4 を固定する。
-//
-// 目的: **人間が「どの continuo がそのボードを握っているか」を読めるようにする。**
-// **排他の判定には使わない**（判定は flock 1本だけである）。
-// **終わったら消す。**残ると死んだ PID を指したままになり、
-// [docs/FAQ.md](../../../docs/FAQ.md) の案内どおりに読んだ人が、
-// **動いていない continuo を探しに行くことになる。**
-//
-// 与える情報: 返ってこない `gh auth token`（依存の組み立てで止まる。ボードのロックは
-// その手前で取り終えている）。**その間に覚え書きを読む。**
-// 成功条件: 走っている間はロックの隣に覚え書きが在って読み込んだ `WORKFLOW.md` の
-// パスが入っており、**終了したあとには残っていないこと。**
-func TestRun_ボードのロックを取ったら書き残し手放すときに消す(t *testing.T) {
-	root := wiringRoot(t)
-	runtimeDir := filepath.Join(root, "rt")
-	binDir := filepath.Join(root, "bin")
-	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
-		t.Fatalf("実行時ディレクトリを作れません: %v", err)
-	}
-	writeHangingGHAuthToken(t, binDir)
-	path := writeWiringWorkflow(t, root, "", "")
-
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
-	t.Setenv(daemon.EnvGraphQLEndpoint, "")
-
-	boardLock, _, err := instance.BoardLockPath("octocat", 3)
-	if err != nil {
-		t.Fatalf("ボードのロックの場所を決められません: %v", err)
-	}
-	infoPath := instance.LockInfoPath(boardLock)
-
-	// **走らせたまま読む。**終了時に消すようになったので、返ってきてからでは読めない。
-	done := make(chan error, 1)
-	go func() {
-		done <- daemon.Run(context.Background(), daemon.Options{
-			ConfigPath:          path,
-			Logger:              slog.New(slog.DiscardHandler),
-			StartupCheckTimeout: 2 * time.Second,
-		})
-	}()
-
-	raw := readWhenAppears(t, infoPath, 5*time.Second)
-
-	if err := <-done; err == nil {
-		t.Fatal("gh auth token が返らないのに起動できてしまった")
-	}
-
-	var info instance.LockInfo
-	if err := json.Unmarshal(raw, &info); err != nil {
-		t.Fatalf("ボードのロックの覚え書きを読み解けません: %v（中身: %s）", err, raw)
-	}
-	if info.ConfigPath != path {
-		t.Errorf("読み込んだ WORKFLOW.md のパスが入っていない: got %q, want %q", info.ConfigPath, path)
-	}
-	if info.Owner != "octocat" || info.ProjectNumber != 3 {
-		t.Errorf("どのボードかが入っていない: got %q / %d", info.Owner, info.ProjectNumber)
-	}
-	if info.PID != os.Getpid() {
-		t.Errorf("握っているプロセスの ID が入っていない: got %d, want %d", info.PID, os.Getpid())
-	}
-	if info.StartedAt == "" {
-		t.Error("いつ取ったかが入っていない")
-	}
-
-	if _, err := os.Stat(infoPath); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("ロックを手放したのに覚え書き %s が残っている: %v", infoPath, err)
-	}
-}
-
-// readWhenAppears はファイルが現れるまで待って中身を返す。
-//
-// **走っている continuo の中身を読むために要る。**ボードの覚え書きは終了時に消えるので、
-// 返ってきてからでは読めない。
-//
-// t: 呼び出し元のテスト。
-// path: 読むファイルの絶対パス。
-// timeout: 待つ上限。
-// 戻り値: 読めた中身。
-func readWhenAppears(t *testing.T, path string, timeout time.Duration) []byte {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for {
-		raw, err := os.ReadFile(path)
-		if err == nil {
-			return raw
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s が %v 以内に現れません: %v", path, timeout, err)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
-// ignoredLockFileWarning は、`runtime.lock_file` に書いた値を捨てたときの警告を
-// 見分ける文字列である。
-//
-// **文言そのもので数える。**slog の出力から「この警告が何件出たか」を数えるには、
-// ほかの行と重ならない一片を持つしかない。
-const ignoredLockFileWarning = "runtime.lock_file はもう効きません"
-
-// TestRun_runtimeのlock_fileは無視して警告を出し起動は続ける は、
-// **キーは受け取り、値だけを捨てる**ことを固定する（設計 3-17）。
-//
-// 目的: `runtime.lock_file` に値を書いた `WORKFLOW.md` で、
-// **起動が止まらないこと**（`lock_file: null` は `continuo init` の雛形に入っていたので、
-// キーごと弾くと過去に `continuo init` した全員が次の起動で落ちる）。
-// **書いた値が使われないこと**（ロックは `~/.continuo/continuo.lock` に固定である）。
-// **黙って捨てないこと**（無人運用では、効いていないことに気づけない）。
-//
-// 与える情報: `runtime.lock_file` に、home の外の書ける場所を書いた front matter。
-// 成功条件: 警告が1件だけ出て、本文に書いた値と `--id` の案内が入り、
-// **獲得したロックは `~/.continuo/continuo.lock` である**こと。
-func TestRun_runtimeのlock_fileは無視して警告を出し起動は続ける(t *testing.T) {
-	written := filepath.Join(t.TempDir(), "somewhere-else.lock")
-	logged := runForStartupLog(t, "runtime:\n  lock_file: \""+written+"\"\n")
-
-	if got := strings.Count(logged, ignoredLockFileWarning); got != 1 {
-		t.Fatalf("警告が1件ではなく %d件だった\n%s", got, logged)
-	}
-	// **書いた値と、代わりに使う手段を両方出す。**どちらが欠けても、
-	// 読んだ人はどの行を直せばよいのかが分からない。
-	for _, want := range []string{written, "--id"} {
-		if !strings.Contains(logged, want) {
-			t.Fatalf("%q が警告に出ていない\n%s", want, logged)
-		}
-	}
-
-	// **ロックは書いた値ではなく `~/.continuo/continuo.lock` である。**
-	// runForStartupLog が HOME を一時ディレクトリへ向けているので、そこから組み立てる。
-	fixed := filepath.Join(os.Getenv("HOME"), instance.DirName, "continuo.lock")
-	acquired := lineContaining(t, logged, "二重起動防止のロックを獲得しました")
-	if !strings.Contains(acquired, fixed) {
-		t.Fatalf("固定した場所 %q のロックを取っていない\n%s", fixed, acquired)
-	}
-	if strings.Contains(acquired, written) {
-		t.Fatalf("書いた値 %q をロックの置き場所に使っている\n%s", written, acquired)
-	}
-}
-
-// TestRun_runtimeのlock_fileがnullなら警告を出さない は、
-// **読み飛ばされる警告を作らない**ことを確かめる（設計 3-17）。
-//
-// 目的: `lock_file: null` は `continuo init` の雛形がそのまま置いていった形である。
-// **雛形どおりに書いてあるだけの人へ、毎回の起動で意味の無い警告を出さないこと。**
-// 与える情報: `runtime.lock_file: null` を書いた front matter と、`runtime:` の節が無い front matter。
-// 成功条件: どちらもこの警告が1件も出ないこと。
-func TestRun_runtimeのlock_fileがnullなら警告を出さない(t *testing.T) {
 	cases := []struct {
-		name  string
-		extra string
+		name     string
+		layout   instance.Layout
+		lockFile *string
+		want     string
 	}{
-		{name: "雛形のままのnull", extra: "runtime:\n  lock_file: null\n"},
-		{name: "節ごと消したあと", extra: ""},
+		{
+			name:   "どちらも無ければ既定の1本",
+			layout: defaultLayout,
+			want:   filepath.Join(home, instance.DirName, instance.LockFileName),
+		},
+		{
+			name:     "lock_fileを書いてあればそれを使う",
+			layout:   defaultLayout,
+			lockFile: &written,
+			want:     written,
+		},
+		{
+			name:   "idを付ければ名前ごとに分かれる",
+			layout: namedLayout,
+			want:   filepath.Join(home, instance.DirName, instance.IDDirName, "e2e", instance.LockFileName),
+		},
+		{
+			name:     "idはlock_fileより強い",
+			layout:   namedLayout,
+			lockFile: &written,
+			want:     filepath.Join(home, instance.DirName, instance.IDDirName, "e2e", instance.LockFileName),
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			logged := runForStartupLog(t, c.extra)
-			if strings.Contains(logged, ignoredLockFileWarning) {
-				t.Fatalf("警告を出す設定ではないのに出ている\n%s", logged)
+			cfg := *config.DefaultConfig()
+			cfg.Runtime.LockFile = c.lockFile
+
+			if got := daemon.ResolveLockFilePath(cfg, c.layout); got != c.want {
+				t.Fatalf("ロックの置き場所が違う: got %q, want %q", got, c.want)
 			}
 		})
+	}
+}
+
+// TestEnsureLockFileDir_人が書いたパスの親は作らない は、
+// 打ち間違いを黙って通さないことを固定する（設計 3-17）。
+//
+// 目的: **`runtime.lock_file` の親ディレクトリを作ってはならない。**作ると、
+// パスを打ち間違えたときに黙って別の場所へロックを置き、**二重起動を検出できなくなる。**
+// **continuo が場所を決めたときは作る**（`~/.continuo/id/<名前>` は誰も作らない）。
+//
+// 与える情報: 親ディレクトリが無い `runtime.lock_file` と、`--id` の置き場所。
+// 成功条件: 前者では親が作られず、後者では作られること。
+func TestEnsureLockFileDir_人が書いたパスの親は作らない(t *testing.T) {
+	home := wiringShortHome(t)
+
+	defaultLayout, err := instance.Resolve("")
+	if err != nil {
+		t.Fatalf("既定の置き場所を決められない: %v", err)
+	}
+	written := filepath.Join(home, "no-such-dir", "continuo.lock")
+	if err := daemon.EnsureLockFileDir(defaultLayout, written); err != nil {
+		t.Fatalf("人が書いたパスでエラーになった: %v", err)
+	}
+	if _, err := os.Stat(filepath.Dir(written)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("人が書いたパスの親を作っている: %v", err)
+	}
+
+	namedLayout, err := instance.Resolve("e2e")
+	if err != nil {
+		t.Fatalf("--id から置き場所を決められない: %v", err)
+	}
+	if err := daemon.EnsureLockFileDir(namedLayout, namedLayout.LockPath()); err != nil {
+		t.Fatalf("--id の置き場所を用意できない: %v", err)
+	}
+	if info, err := os.Stat(filepath.Dir(namedLayout.LockPath())); err != nil || !info.IsDir() {
+		t.Fatalf("--id の置き場所を用意していない: %v", err)
 	}
 }
 

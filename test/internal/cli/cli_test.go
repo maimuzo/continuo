@@ -1365,7 +1365,7 @@ func TestRunAbandon_helpは0で返して本体を呼ばない(t *testing.T) {
 
 // TestRunMain_idの名前が使えなければ常駐を始めない は、フラグを読んだ直後の検査を確かめる。
 //
-// 目的: 設計 3-17d。**この文字列はパスにも branch 名にも socket のパスにも入る。**
+// 目的: 設計 3-17d。**この文字列はロックのパスに入る。**
 // **あとで検査すると、検査より先に `~/.continuo` の外を指すパスが組み上がる。**
 // 与える情報: 大文字・`..`・空白・33文字の名前。
 // 成功条件: 終了コードが 2 で、daemon を1回も呼ばないこと。
@@ -1393,8 +1393,8 @@ func TestRunMain_idの名前が使えなければ常駐を始めない(t *testin
 
 // TestRunMain_idをそのまま常駐へ渡す は、フラグの受け渡しを確かめる。
 //
-// 目的: 設計 3-17b。`--id` は常駐の側で4つの置き場所へ展開される。
-// **CLI で握り潰すと、名前を付けたのに何も分かれない。**
+// 目的: 設計 3-17b。`--id` は常駐の側でロックの置き場所を分ける。
+// **CLI で握り潰すと、名前を付けたのにロックが分かれない。**
 // 与える情報: `--id e2e`。
 // 成功条件: daemon.Options.Instance に `e2e` で解決した置き場所が渡ること。
 func TestRunMain_idをそのまま常駐へ渡す(t *testing.T) {
@@ -1415,31 +1415,6 @@ func TestRunMain_idをそのまま常駐へ渡す(t *testing.T) {
 	}
 	if got != "e2e" {
 		t.Errorf("--id が常駐へ渡っていない: got %q, want %q", got, "e2e")
-	}
-}
-
-// TestRunDoctor_idをそのまま検査へ渡す は、フラグの受け渡しを確かめる。
-//
-// 目的: 設計 3-17b。**`--id` を付けた起動は、socket もロックも別の場所を使う。**
-// **doctor がその場所を見られないと、全項目 `✓` を出したのに起動だけが落ちる**
-// （issue #9 と同じ形）。
-// 与える情報: `--id e2e`。
-// 成功条件: doctor.Options.Instance に `e2e` で解決した置き場所が渡ること。
-func TestRunDoctor_idをそのまま検査へ渡す(t *testing.T) {
-	var got string
-	deps := cli.Deps{DoctorRun: func(_ context.Context, opts doctor.Options) doctor.Report {
-		if opts.Instance != nil {
-			got = opts.Instance.ID()
-		}
-		return doctor.Report{}
-	}}
-
-	code, _, stderr := runCLIWith(deps, []string{"doctor", "--id", "e2e", writeWorkflowFor(t)}, "")
-	if code != 0 {
-		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
-	}
-	if got != "e2e" {
-		t.Errorf("--id が検査へ渡っていない: got %q, want %q", got, "e2e")
 	}
 }
 
@@ -1491,9 +1466,8 @@ func TestRunAbandon_idをそのまま片付けへ渡す(t *testing.T) {
 // shortCLIHome は、ホームディレクトリの代わりに使う短い一時ディレクトリを作り、
 // `HOME` をそこへ向ける。
 //
-// **短くなければならない。**`--id` を付けたときの socket は
-// `~/.continuo/id/<名前>/run/hooks.sock` であり、103バイトに収まらないと決められない
-// （設計 3-17d / 3-23）。**`t.TempDir()` は深すぎて上限を超える。**
+// **短くしておく。**hook を受ける socket のパスは103バイトに収まらないと決められない
+// （設計 3-23）。**`t.TempDir()` は深すぎて上限を超える。**
 //
 // t: 呼び出し元のテスト。
 // 戻り値: 実体のパス（symlink を解決済み）。

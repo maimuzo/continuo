@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -167,42 +166,16 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // ctx: 呼び出しに適用するコンテキスト。
 // candidates: `active_states` で取った候補（ボードの並び順）。
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
-	// **止まる理由を、必ず1行出す**（設計 3-77j）。
-	// **ここが `Debug` の1行だけだったので、1台で動かしている人には
-	// 「ボードが何時間も進まない」としか見えなかった。**
-	//
-	// **止める判定は入札と同じものである。**別々に持っていたので、
-	// 枠を読めないときに逆を向いていた（newWorkBlocked を見よ）。
-	//
-	// **INFO のままにする**（issue #134）。
-	// **一度 WARN へ上げたが、8本のテストが落ちた**（v0.1.11 で試した）。
-	// どれも正常な動作を作っているもので、
-	// **「異常ではないものを異常として出そうとしている」という信号だった。**
-	// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
-	// **代わりに、戻し方を同じ行に書く。**探し当てた人が次にすることが分かる。
-	skip := o.newWorkBlocked()
-	if skip != handoff.SkipNone {
-		o.logger.Info("枠に余裕が無いので、入札の要る issue には着手しません（走行中の turn は止めません）。"+
-			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent と "+
-			"tracker.provider.handoff の2つのマージンを見てください",
-			"理由", skip.String(),
-			"新規着手が止まる使用率", o.newWorkThresholdPercent(),
-			"巡回そのものを止めるか", skip == handoff.SkipPauseThreshold,
-			"rate_limit.pause_above_percent", o.cfg.RateLimit.PauseAbovePercent,
-			"five_hour_margin_percent", o.cfg.Tracker.Provider.Handoff.FiveHourMarginPercent,
-			"weekly_margin_percent", o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
-			"候補", len(candidates))
-	}
-	// **巡回そのものを止めるのは、閾値を超えたときだけである**（設計 3-77j）。
-	//
-	// **どの理由でも止める形にしてはならない。**枠を読めないだけで巡回を打ち切ると、
-	// **この機械が既に担当者になっている issue まで着手されなくなる**（印が無いので
-	// この経路からしか拾えない）。**期限切れの担当を外す経路も通らなくなる**ので、
-	// 詰まったボードを誰も解けない。
-	//
-	// **残りの理由（枠を読めない・余裕値がマイナス）は、`handoffGate` が issue ごとに効かせる。**
-	// **担当者のいない issue は入札が要るので落ちる。**担当が既にこの機械にある issue は通る。
-	if skip == handoff.SkipPauseThreshold {
+	if o.dispatchPaused() {
+		// **INFO のままにする**（issue #134）。
+		// **一度 WARN へ上げたが、8本のテストが落ちた**（v0.1.11 で試した）。
+		// どれも正常な動作を作っているもので、
+		// **「異常ではないものを異常として出そうとしている」という信号だった。**
+		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
+		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
+		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）。"+
+			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください",
+			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
 		return
 	}
 
@@ -282,7 +255,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
 		if free, blocker, limit := o.freeSlotBlocker(); !free {
-			// **INFO のままにする**（issue #134。上の newWorkBlocked と同じ理由）。
+			// **INFO のままにする**（issue #134。上の dispatchPaused と同じ理由）。
 			// **同時に動かす数の上限に達しただけで、異常ではない。**
 			//
 			// **どちらの上限で止まったかを名乗る。**上限は2つあり、

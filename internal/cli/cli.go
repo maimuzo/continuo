@@ -838,28 +838,8 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	// 揃えて字下げされるので、そのままでは `patch` に渡せない。
 	// **人間が読む差分と、機械へ渡す差分の両方が要る**（設計 3-75）。
 	patchFlag := fs.Bool("missing-keys-patch", false, i18n.T(i18n.KeyCLIDoctorFlagMissingKeysPatch))
-	// **`--id` を付けた起動を検査できるようにする**（設計 3-17b）。
-	// **これが無いと、doctor は既定の socket とロックだけを見て `✓` を出す。**
-	// `--id` を付けた起動は別の場所を使うので、**そこが書けなくても気づけない。**
-	idFlag := fs.String("id", "", i18n.T(i18n.KeyCLIDoctorFlagID))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
-	}
-	// **フラグを読んだ直後に検査する**（設計 3-17d。runMain と同じ）。
-	//
-	// **止まってよいのは、`--id` に渡された名前そのものが誤っているときだけである。**
-	// **それ以外の理由で検査を1つも行わずに終わってはならない**（設計 3-32）。
-	// `HOME` を引けない環境では `instance.Resolve("")` が失敗するので、
-	// **`--id` を1文字も渡していない人の `continuo doctor` が、15の検査を1つも
-	// 実行しないまま終了コード 2 で落ちていた。**`--missing-keys-patch`
-	// （外部と1度も通信しない口）まで巻き添えになっていた。
-	//
-	// **置き場所を決められなかったことは、検査の結果として報告する**
-	// （見出し語 `ロックの場所` が `✗` になる。doctor 側に仕組みがある）。
-	inst, instErr := instance.Resolve(*idFlag)
-	if instErr != nil && instance.IsInvalidID(instErr) {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrInvalidID, instErr))
-		return 2
 	}
 
 	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
@@ -875,9 +855,9 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 		argPath = positional[0]
 	}
 
-	workDir, getwdErr := os.Getwd()
-	if getwdErr != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGetwd, getwdErr))
+	workDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGetwd, err))
 		return 1
 	}
 	// **設定ファイルの場所が決まらなくても検査は続ける。**場所が決まらないことは
@@ -913,8 +893,6 @@ func runDoctor(d Deps, args []string, stdout, stderr io.Writer) int {
 	report := d.DoctorRun(ctx, doctor.Options{
 		ConfigPath:      path,
 		GraphQLEndpoint: endpoint,
-		Instance:        &inst,
-		InstanceErr:     instErr,
 	})
 	if err := report.Write(stdout); err != nil {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIDoctorErrWriteReport, err))

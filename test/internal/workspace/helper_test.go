@@ -415,8 +415,6 @@ type fixtureOptions struct {
 	// **ログにしか現れない振る舞い**（孤児 branch を消す前に控えた SHA など）を
 	// 検証するテストが、出力を受け取るために使う。
 	Logger *slog.Logger
-	// InstanceID は `--id` に渡された名前である（設計 3-17b）。空なら既定の1本。
-	InstanceID string
 }
 
 // newFixture はテスト用の Manager を組み立てる。
@@ -470,7 +468,6 @@ func newFixture(t *testing.T, opts fixtureOptions) *managerFixture {
 		GhqList:      ghqList,
 		SettingsRoot: settingsRoot,
 		Logger:       opts.Logger,
-		InstanceID:   opts.InstanceID,
 	})
 	if err != nil {
 		t.Fatalf("workspace.New に失敗した: %v", err)

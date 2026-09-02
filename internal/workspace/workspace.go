@@ -94,26 +94,6 @@ type Options struct {
 	// **空なら settings_path を消さない**（内側かどうかを確かめられないため。
 	// 消さなかったことは警告としてログに残す）。絶対パスでなければ New がエラーを返す。
 	SettingsRoot string
-	// InstanceID は `--id` に渡された名前である（設計 3-17b）。**既定なら空文字。**
-	//
-	// **New はこれが空でなければ、置き場所の直下に名乗りを書く**（InstanceMarkerName）。
-	// **書かないと、既定側の `continuo abandon` が、この置き場所を
-	// 「身元ファイルの無いディレクトリ」として数えて止まる。**
-	// **`NoCreate` が真のときは書かない**（設計 3-17g）。
-	//
-	// **孤児 branch の掃除も、この値を見る。**`--id` が接頭辞に足した `<名前>/` だけを
-	// 手掛かりに `git branch -D` を始めてはならない（sweep.go）。
-	InstanceID string
-	// NoCreate は「1つもディレクトリ・ファイルを作らない」を表す。
-	//
-	// **`continuo abandon --dry-run` が渡す。**あちらは「何も書かない」と
-	// README で約束しているのに、New は `workspace.root` を作り、`--id` があれば
-	// その直下に目印まで書いていた。**打ち間違えた `--id` の置き場所が作られ、
-	// そこへ名乗りが残り、既定側の走査から永久に隠れる。**
-	//
-	// **真のときは `workspace.root` を作らず、目印も書かない。**
-	// 置き場所が実在しなければ走査は0件になる（worktree が1つも無いのだから正しい）。
-	NoCreate bool
 }
 
 // Manager は worktree の用意・再利用・身元ファイルの読み書き・封じ込め検査・後始末を行う。
@@ -139,13 +119,6 @@ type Manager struct {
 	homeDir      string
 	ghqList      GhqListFunc
 	settingsRoot string
-	// instanceID は `--id` に渡された名前である（設計 3-17b）。**既定なら空文字。**
-	instanceID string
-	// idRegistryDir は `--id` ごとの置き場所が並ぶディレクトリ（`~/.continuo/id`）である。
-	//
-	// **別の continuo の置き場所を走査から外してよいかの裏付けに使う**（設計 3-17f）。
-	// **`workspace.root` の中に置かれた名乗りだけでは飛ばさない。**
-	idRegistryDir string
 
 	// clonePaths は `ghq list -p -e <owner>/<repo>` の答えを短い間だけ覚える
 	// （clonePathCacheTTL）。信頼の判定と、破壊的な git コマンドの宛先の検算が
@@ -185,9 +158,6 @@ type Manager struct {
 // **root を作るのは封じ込め検査より前でなければならない。**検査は root を
 // filepath.EvalSymlinks で解決してから比較するので、root が無いと解決に失敗する。
 //
-// **`NoCreate` が真なら1つも作らない**（設計 3-17g）。`continuo abandon --dry-run` が
-// これを渡す。**置き場所が無ければ worktree は0件なので、封じ込め検査にかける相手も居ない。**
-//
 // **workspace.identity_file がファイルの名前かどうかもここで確かめる**（3-18）。
 // パスの区切りや `..` を含む値だと、身元ファイルが worktree の外側へ書かれる。
 //
@@ -195,7 +165,7 @@ type Manager struct {
 // issue ごとの設定ファイルの置き場所。
 // 戻り値: 組み立てた Manager。workspace.root が空・相対パス・作成に失敗・解決に失敗した
 // 場合、workspace.identity_file がファイルの名前でない場合、SettingsRoot が相対パスの
-// 場合はエラーを返す。**`NoCreate` が真なら、置き場所が実在しないことはエラーにしない。**
+// 場合はエラーを返す。
 func New(opts Options) (*Manager, error) {
 	if err := ValidateIdentityFileName(opts.Config.Workspace.IdentityFile); err != nil {
 		return nil, err
@@ -204,27 +174,9 @@ func New(opts Options) (*Manager, error) {
 		return nil, i18n.Errorf(i18n.KeyWorkspaceNewSettingsRootNotAbsolute, opts.SettingsRoot)
 	}
 
-	// **見せるだけの実行では作らない**（NoCreate）。作ると、打ち間違えた `--id` の
-	// 置き場所がそのまま残る。
-	resolveRoot := EnsureRoot
-	if opts.NoCreate {
-		resolveRoot = ResolveRoot
-	}
-	resolvedRoot, err := resolveRoot(opts.Config.Workspace.Root)
+	resolvedRoot, err := EnsureRoot(opts.Config.Workspace.Root)
 	if err != nil {
 		return nil, err
-	}
-	// **`--id` を付けたなら、置き場所に名乗りを置く**（設計 3-17f）。
-	// **既定側の走査が、ここから下へ入らないようにするためである。**
-	// **書けなければ起動を止める。**書けないまま動かすと、既定の `continuo abandon` が
-	// この置き場所を「身元ファイルの無いディレクトリ」として数え、片付けられなくなる。
-	//
-	// **見せるだけの実行では書かない。**書くと、打ち間違えた `--id` の置き場所に
-	// 名乗りが残り、**そこが既定側の走査から永久に隠れる。**
-	if opts.InstanceID != "" && !opts.NoCreate {
-		if err := WriteInstanceMarker(resolvedRoot, opts.InstanceID); err != nil {
-			return nil, err
-		}
 	}
 
 	logger := opts.Logger
@@ -266,15 +218,11 @@ func New(opts Options) (*Manager, error) {
 		homeDir:      homeDir,
 		ghqList:      ghqList,
 		settingsRoot: settingsRoot,
-		instanceID:   opts.InstanceID,
-		// **信頼の判定と同じホームディレクトリを使う**（homeDir）。
-		// 別々に引くと、`HOME` を差し替えた環境で見る場所が2つに割れる。
-		idRegistryDir: InstanceRegistryDir(homeDir),
-		clonePaths:    newTTLCache[string](clonePathCacheTTL, nowFunc),
-		trustResults:  newTTLCache[bool](trustCacheTTL, nowFunc),
-		identityMu:    newKeyedMutex(),
-		resolvedRoot:  resolvedRoot,
-		afterRunDone:  map[string]bool{},
+		clonePaths:   newTTLCache[string](clonePathCacheTTL, nowFunc),
+		trustResults: newTTLCache[bool](trustCacheTTL, nowFunc),
+		identityMu:   newKeyedMutex(),
+		resolvedRoot: resolvedRoot,
+		afterRunDone: map[string]bool{},
 	}, nil
 }
 

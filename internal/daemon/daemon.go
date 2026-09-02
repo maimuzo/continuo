@@ -51,6 +51,7 @@ import (
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/server"
+	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -148,9 +149,10 @@ type Options struct {
 	// Instance は `--id` から導いた置き場所である（設計 3-17b）。
 	//
 	// **nil なら既定の1本である**（ロックは `~/.continuo/continuo.lock`）。
-	// **nil でなければ、ロック・実行時ディレクトリ・worktree の置き場所・branch 名・
-	// herdr の agent 名の5つが、その名前ごとに分かれる。**
-	// 5つとも internal/instance の Layout 1つから導く。
+	// **nil でなければ、ロックだけがその名前ごとに分かれる**
+	// （`~/.continuo/id/<名前>/continuo.lock`）。
+	// **worktree の置き場所・hook の socket・branch 名は分けない。**
+	// それらは検証用の WORKFLOW.md で書き換える。
 	//
 	// **`internal/cli` は、フラグを読んだ直後の検査で解決したものをそのまま渡す**
 	// （設計 3-17d）。**同じ名前で2度 Resolve しない。**
@@ -185,9 +187,9 @@ func Run(ctx context.Context, opts Options) error {
 	cfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
 
-	// **`--id` から導く5つを、ここで1つの Layout にまとめる**（設計 3-17b）。
-	// **別々に導いてはならない。**片方だけを直すと、常駐している側と
-	// `continuo abandon` が別の場所を見る（3-17c）。
+	// **`--id` が分けるのはロックだけである**（設計 3-17b）。
+	// worktree の置き場所も hook の socket も branch 名も、**検証用の WORKFLOW.md で
+	// 書き換える。**`--id` から自動で導かない。
 	//
 	// **`internal/cli` が解決済みのものを渡してくる。**渡されていなければ既定の1本にする。
 	inst := instance.Layout{}
@@ -200,24 +202,15 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		inst = resolved
 	}
-	cfg = inst.Apply(cfg)
 	if inst.ID() != "" {
-		logger.Info("--id で分けて動かします",
+		logger.Info("--id で分けて動かします（分かれるのはロックだけです）",
 			"id", inst.ID(),
-			"lock_file", inst.LockPath(),
-			"runtime_dir", inst.RuntimeDir(),
-			"workspace_root", cfg.Workspace.Root,
-			"branch_template", cfg.Herdr.Worktree.BranchTemplate)
+			"lock_file", inst.LockPath())
 	}
 
 	// **起動は止めずに、噛み合っていない Status の集合だけを知らせる**（設計 3-9e。issue #35）。
 	// **段1 の中に置く。**flock より前なので、二重起動で落ちる経路でも必ず1回出る。
 	WarnCleanupStates(cfg, logger)
-
-	// **`runtime.lock_file` に値が書いてあったら、効いていないことを1行で知らせる**（設計 3-17）。
-	// **ここも flock より前に置く。**二重起動で落ちる経路でも、なぜ思った場所の
-	// ロックにならないのかが記録に残る。
-	WarnIgnoredLockFile(cfg, logger)
 
 	// **トークンを載せる前に接続先を確かめる**（設計 3-23 の環境変数）。
 	// ここを飛ばすと、環境変数に書かれたどんな宛先へも `Authorization: Bearer` が飛ぶ。
@@ -245,29 +238,9 @@ func Run(ctx context.Context, opts Options) error {
 	// 「決める」と「用意する」を別々に呼んでいたときは、その継ぎ目を通すテストが
 	// 1本も無く、実在しない `XDG_RUNTIME_DIR` がそのまま通り抜けた（issue #9）。
 	//
-	// **`--id` を付けたときだけは、Layout が決めた `~/.continuo/id/<名前>/run` に固定する。**
-	// 3-23 の探索順も `claude.hook_bridge.listen` も、そのときは使わない（3-17b）。
-	if inst.OverridesListen(cfg) {
-		logger.Warn("--id を付けたので claude.hook_bridge.listen は使いません",
-			"id", inst.ID(),
-			"listen", *cfg.Claude.HookBridge.Listen,
-			"runtime_dir", inst.RuntimeDir())
-	}
-	// **環境変数も同じ形で名乗る。**`claude.hook_bridge.listen` の側にだけ警告があって
-	// こちらが黙っていると、**`CONTINUO_RUNTIME_DIR` を指定した人は、
-	// なぜ socket がそこに出来ないのかをログから引けない。**
-	//
-	// **1度だけ読む。**同じ環境変数を判定・ログ・socket の決定で3回引くと、
-	// **その間に書き換えられたとき、警告に出した値と実際に使った値が食い違う。**
-	envRuntimeDir := os.Getenv(EnvRuntimeDir)
-	if inst.OverridesRuntimeDirEnv(envRuntimeDir) {
-		logger.Warn("--id を付けたので CONTINUO_RUNTIME_DIR は使いません",
-			"id", inst.ID(),
-			"env", EnvRuntimeDir,
-			"value", envRuntimeDir,
-			"runtime_dir", inst.RuntimeDir())
-	}
-	sockPath, err := inst.HookSocketPath(envRuntimeDir, cfg.Claude.HookBridge.Listen)
+	// **`--id` はここに効かない**（設計 3-17b）。socket を分けたいときは
+	// 検証用の WORKFLOW.md の `claude.hook_bridge.listen` を書き換える。
+	sockPath, err := socketpath.Prepare(os.Getenv(EnvRuntimeDir), cfg.Claude.HookBridge.Listen)
 	if err != nil {
 		return i18n.Errorf(i18n.KeyDaemonRunSocketDirFailed, ErrStartup, err)
 	}
@@ -276,10 +249,10 @@ func Run(ctx context.Context, opts Options) error {
 
 	// 段2: flock を取る。**取れなければ即座に終了する**（設計 3-17）。
 	//
-	// **socket の場所からは導かない。**socket の場所は環境変数で動くので、
-	// そこから導くと、同じ機械の同じ利用者が別のロックを握る（3-17）。
-	lockPath := inst.LockPath()
-	if err := inst.EnsureLockDir(); err != nil {
+	// **socket の場所からは導かない。**socket の場所は設定と環境変数で動くので、
+	// そこから導くと、**socket を分けただけで2本目が黙って起動できてしまう**（3-17）。
+	lockPath := ResolveLockFilePath(cfg, inst)
+	if err := EnsureLockFileDir(inst, lockPath); err != nil {
 		return i18n.Errorf(i18n.KeyDaemonRunLockFileFailed, ErrStartup, lockPath, err)
 	}
 	l, err := lock.Acquire(lockPath)
@@ -294,56 +267,17 @@ func Run(ctx context.Context, opts Options) error {
 			i18n.KeyDaemonRunLockFileFailed,
 			ErrStartup, lockPath, err)
 	}
-	// **覚え書きを消してから手放す**（設計 3-17i）。手放してから消すと、
-	// **その隙に起動した continuo が書いた覚え書きを消す。**
-	// **defer は後入れ先出しなので、この defer は Release より後に登録する。**
 	defer func() {
 		if err := l.Release(); err != nil {
 			logger.Warn("ロックの解放に失敗しました", "error", err)
 		}
 	}()
-	defer func() {
-		if err := instance.RemoveLockInfo(lockPath); err != nil {
-			logger.Warn("二重起動防止のロックの覚え書きを消せませんでした（古い内容が残ります）",
-				"path", instance.LockInfoPath(lockPath), "error", err)
-		}
-	}()
 	logger.Info("二重起動防止のロックを獲得しました", "lock_file", lockPath)
-
-	// **握った直後に覚え書きを書く**（設計 3-17i）。
-	// **`continuo abandon --dry-run` と `continuo doctor` は flock を掴めない**
-	// （掴むと、その瞬間に起動した continuo が「二重起動」で落ちる）ので、
-	// **この覚え書きだけが「動いているか」を答える手立てである。**
-	//
-	// **書けなくても起動は止めない。**これは排他の一部ではない。
-	// **止まるのは読む側である**（読めなければ `LockStateUnknown` になり、
-	// あちらが「分からないので何もしない」で止まる）。
-	if err := instance.WriteLockInfo(lockPath, instance.LockInfo{
-		Owner:         cfg.Tracker.Provider.Owner,
-		ProjectNumber: cfg.Tracker.Provider.ProjectNumber,
-		InstanceID:    inst.ID(),
-		PID:           os.Getpid(),
-		ConfigPath:    opts.ConfigPath,
-		LockFile:      lockPath,
-	}, nil); err != nil {
-		logger.Warn("二重起動防止のロックの覚え書きを書けませんでした（起動は続けます）",
-			"path", instance.LockInfoPath(lockPath), "error", err)
-	}
-
-	// 段2a: ボードのロックを取る。**取れなければ起動を止める**（設計 3-17e）。
-	//
-	// **`--id` を付けてもボードだけは名前から導けない。**同じボードを2つの continuo が
-	// 見ると、**同じ issue を2つが拾う。**
-	boardClaim, err := acquireBoardLock(cfg, inst, opts.ConfigPath, logger)
-	if err != nil {
-		return err
-	}
-	defer boardClaim.release(logger)
 
 	// 段2b: 依存を組み立てる。**ここで `gh auth token` が走る**（`token_source` の既定は
 	// `gh_auth`）。外部プロセスを起こす段なので、起動時検査と同じ期限を掛ける。
 	deps, err := build(ctx, cfg, loaded.PromptTemplate, sockPath, runtimeDir, opts.ContinuoPath,
-		endpoint, inst.ID(), opts.TrackerTimeout, opts.StartupCheckTimeout, logger)
+		endpoint, opts.TrackerTimeout, opts.StartupCheckTimeout, logger)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrStartup, err)
 	}
@@ -440,33 +374,6 @@ func WarnCleanupStates(cfg config.Config, logger *slog.Logger) {
 		quoteStates(outside), quoteStates(outside)),
 		"cleanup.on_states", quoteStates(cfg.Cleanup.OnStates),
 		"tracker.terminal_states", quoteStates(cfg.Tracker.TerminalStates))
-}
-
-// WarnIgnoredLockFile は、`runtime.lock_file` に値が書いてあったら起動時に1行だけ
-// 警告を出す（設計 3-17）。
-//
-// **起動は止めない。**`lock_file: null` は `continuo init` の雛形に入っていたので、
-// **キーを弾くと過去に `continuo init` した全員が次の起動で落ちる。**
-// だからキーは受け取り、値だけを捨てる。
-//
-// **黙って捨ててはならない。**書いた値が効いていないことに、無人運用では気づけない。
-// **分けたいなら `--id` を使う**（3-17b）。そちらはロック・実行時ディレクトリ・
-// worktree の置き場所・branch 名の4つをまとめて分ける。
-//
-// **`null` なら何も出さない。**雛形どおりに書いてあるだけの人へ、毎回の起動で
-// 意味の無い警告を出すことになる。
-//
-// cfg: 検証を通った設定。
-// logger: ログの出力先。**nil を渡してはならない**（呼び出し元が既に解決している）。
-func WarnIgnoredLockFile(cfg config.Config, logger *slog.Logger) {
-	if cfg.Runtime.LockFile == nil || *cfg.Runtime.LockFile == "" {
-		return
-	}
-	logger.Warn(
-		"runtime.lock_file はもう効きません（この設定は無視して、機械で決めた場所のロックを使います）。"+
-			"1台で2本以上動かしたいなら --id <名前> を使ってください"+
-			"（ロック・実行時ディレクトリ・worktree の置き場所・branch 名が、その名前ごとに分かれます）",
-		"runtime.lock_file", *cfg.Runtime.LockFile)
 }
 
 // quoteStates は Status 名の並びを、引用符で囲んで読点でつないだ1つの文字列にする。
@@ -750,7 +657,7 @@ func isLoopbackHost(host string) bool {
 func build(
 	ctx context.Context,
 	cfg config.Config,
-	promptTemplate, sockPath, runtimeDir, continuoPath, graphqlEndpoint, instanceID string,
+	promptTemplate, sockPath, runtimeDir, continuoPath, graphqlEndpoint string,
 	trackerTimeout, tokenTimeout time.Duration,
 	logger *slog.Logger,
 ) (*deps, error) {
@@ -773,7 +680,6 @@ func build(
 		Herdr:        hc,
 		Logger:       logger,
 		SettingsRoot: settingsRoot,
-		InstanceID:   instanceID,
 	})
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildWorkspaceFailed, err)
@@ -823,7 +729,6 @@ func build(
 		RateLimit:      rl,
 		HookSocketPath: sockPath,
 		ContinuoPath:   continuoPath,
-		InstanceID:     instanceID,
 		Logger:         logger,
 		// **巡回ごとの `gh` の認証の検査は `tracker.verify_states_every` の頻度で走る**
 		// （毎巡回で外部プロセスを起動しない。設計 3-6）。
@@ -873,122 +778,52 @@ func newTrackerHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
 
-// acquireBoardLock はボード1枚ぶんのロックを取る（設計 3-17e）。
+// ResolveLockFilePath は二重起動防止のロックファイルの絶対パスを決める（設計 3-17）。
 //
-// **取れなければ、同じボードを見ている continuo が生きている。**起動を止める。
-// **ロックを読み合う形にしてはならない。**同時に起動した2つが、互いに相手の
-// 覚え書きを書き終える前に読んでしまう。**`flock` が同じ瞬間に2つへ渡らないので、
-// ロック1本なら順序も競合も無い。**
+// **優先順位は3段である。**
 //
-// **覚え書き（隣に置く JSON）は人間が読むためだけのものである。**書けなくても起動は止めない。
+//	--id <名前>          ~/.continuo/id/<名前>/continuo.lock
+//	runtime.lock_file    設定に書かれた絶対パスそのもの
+//	どちらも無い         ~/.continuo/continuo.lock
 //
-// cfg: 読み込み・検証済みの設定。
+// **hook の socket の置き場所からは導かない。**socket の場所は
+// `claude.hook_bridge.listen` と環境変数（`CONTINUO_RUNTIME_DIR` /
+// `XDG_RUNTIME_DIR` / `TMPDIR`）で動くので、そこから導くと、
+// **socket を分けただけで2本目が黙って起動できてしまう。**
+// **`--id` を付けない起動は、必ず1本に止める**（これが issue #87 の決定である）。
+//
+// **`runtime.lock_file` は読み続ける。**このキーは `continuo init` の雛形に入っており、
+// 書いてある人が既に居る。**黙って無視すると、その人のロックの場所が予告なく変わる。**
+// **`--id` より下に置くのは、`--id` が明示の指定だからである**（設定より、その場で
+// 打ったフラグを優先する）。
+//
+// cfg: 読み込み済みの設定（5-5 の展開を通したもの）。
+// inst: `--id` から導いた置き場所（`--id` 無しなら既定の1本）。
+// 戻り値: ロックファイルの絶対パス。
+func ResolveLockFilePath(cfg config.Config, inst instance.Layout) string {
+	if inst.ID() != "" {
+		return inst.LockPath()
+	}
+	if cfg.Runtime.LockFile != nil && *cfg.Runtime.LockFile != "" {
+		return *cfg.Runtime.LockFile
+	}
+	return inst.LockPath()
+}
+
+// EnsureLockFileDir はロックファイルの親ディレクトリを用意する（設計 3-17）。
+//
+// **用意するのは、continuo が場所を決めたときだけである**（既定の `~/.continuo` と
+// `--id` の `~/.continuo/id/<名前>`）。**`runtime.lock_file` に人が書いたパスの
+// 親ディレクトリは作らない。**作ると、パスを打ち間違えたときに黙って別の場所へ
+// ロックを置き、**二重起動を検出できなくなる。**打ち間違いは
+// 「ロックファイルを開けません」で止めて、人間に気づかせる。
+//
 // inst: `--id` から導いた置き場所。
-// configPath: 読み込んだ `WORKFLOW.md` の絶対パス（覚え書きに残す）。
-// logger: ログの出力先。
-// 戻り値: 獲得したロックと、取れなかった場合のエラー（`ErrStartup` を包む）。
-func acquireBoardLock(
-	cfg config.Config,
-	inst instance.Layout,
-	configPath string,
-	logger *slog.Logger,
-) (boardClaim, error) {
-	owner := cfg.Tracker.Provider.Owner
-	number := cfg.Tracker.Provider.ProjectNumber
-
-	boardLockPath, warnings, err := instance.BoardLockPath(owner, number)
-	if err != nil {
-		// **パスを出す。**空文字を渡すと、どこを直せばよいのかが人間に伝わらない。
-		// **ホームディレクトリを引けなかったときだけパスが決まらない**ので、
-		// そのときは置き場所の形を出す。
-		return boardClaim{}, i18n.Errorf(i18n.KeyDaemonRunBoardLockFileFailed,
-			ErrStartup, boardLockPathForMessage(boardLockPath), err)
+// lockPath: ResolveLockFilePath が返した実効のパス。
+// 戻り値: 用意に失敗した場合のエラー。
+func EnsureLockFileDir(inst instance.Layout, lockPath string) error {
+	if lockPath != inst.LockPath() {
+		return nil
 	}
-	// **正規化で情報が落ちたら黙らない**（設計 3-7）。`owner: my org` と
-	// `owner: my_org` は同じロックになる。**落としたことを言わないと、
-	// 別のボードを見ている2本目が、理由の分からないまま断られる。**
-	for _, w := range warnings {
-		logger.Warn("カンバンのロックの名前で正規化が情報を落としました",
-			"owner", owner, "message", w.Message, "board_lock_file", boardLockPath)
-	}
-	// **置き場所は取る直前に用意する。**`BoardLockPath` はパスを決めるだけである
-	// （`continuo abandon --dry-run` が「何も書かない」を守れるようにするため。3-17g）。
-	if err := instance.EnsureBoardDir(boardLockPath); err != nil {
-		return boardClaim{}, i18n.Errorf(i18n.KeyDaemonRunBoardLockFileFailed,
-			ErrStartup, boardLockPath, err)
-	}
-
-	bl, err := lock.Acquire(boardLockPath)
-	if err != nil {
-		if errors.Is(err, lock.ErrAlreadyRunning) {
-			return boardClaim{}, i18n.Errorf(i18n.KeyDaemonRunBoardInUse,
-				ErrStartup, owner, number, boardLockPath, err)
-		}
-		return boardClaim{}, i18n.Errorf(i18n.KeyDaemonRunBoardLockFileFailed,
-			ErrStartup, boardLockPath, err)
-	}
-	logger.Info("カンバンのロックを獲得しました",
-		"board_lock_file", boardLockPath, "owner", owner, "project_number", number)
-
-	if err := instance.WriteLockInfo(boardLockPath, instance.LockInfo{
-		Owner:         owner,
-		ProjectNumber: number,
-		InstanceID:    inst.ID(),
-		PID:           os.Getpid(),
-		ConfigPath:    configPath,
-		LockFile:      inst.LockPath(),
-	}, nil); err != nil {
-		// **起動は止めない。**これは人間のための覚え書きであって、排他の一部ではない。
-		logger.Warn("カンバンのロックの覚え書きを書けませんでした（起動は続けます）",
-			"path", instance.LockInfoPath(boardLockPath), "error", err)
-	}
-	return boardClaim{lock: bl, path: boardLockPath}, nil
-}
-
-// boardClaim は獲得したボードのロックと、その置き場所である。
-//
-// **覚え書きを消すためにパスを持つ。**消さないと、終了したあとも死んだ PID を指したまま
-// 残り、[docs/FAQ.md](../../docs/FAQ.md) の案内どおりに読んだ人が、
-// **動いていない continuo を探しに行くことになる。**
-type boardClaim struct {
-	// lock は獲得した flock である。
-	lock *lock.Lock
-	// path はロックファイルの絶対パスである。
-	path string
-}
-
-// release は覚え書きを消してからロックを手放す。
-//
-// **順番が仕様である。**手放してから消すと、その隙に起動した continuo が書いた
-// 覚え書きを消してしまう。**握っているあいだに消せば、書けるのは自分だけである。**
-//
-// logger: ログの出力先。
-func (c boardClaim) release(logger *slog.Logger) {
-	if c.path != "" {
-		if err := instance.RemoveLockInfo(c.path); err != nil {
-			// **消せなかったことを必ず言う。**残った覚え書きは古い PID を指す。
-			logger.Warn("カンバンのロックの覚え書きを消せませんでした（古い内容が残ります）",
-				"path", instance.LockInfoPath(c.path), "error", err)
-		}
-	}
-	if c.lock == nil {
-		return
-	}
-	if err := c.lock.Release(); err != nil {
-		logger.Warn("カンバンのロックの解放に失敗しました", "board_lock_file", c.path, "error", err)
-	}
-}
-
-// boardLockPathForMessage は、エラーの文言に出すボードのロックの置き場所を返す。
-//
-// **空文字を人間に見せない。**パスが決まらないのはホームディレクトリを引けなかった
-// ときだけなので、そのときは置き場所の形（`~/.continuo/board`）を出す。
-//
-// path: BoardLockPath が返したパス（決まらなかったときは空文字）。
-// 戻り値: 文言に出す文字列。
-func boardLockPathForMessage(path string) string {
-	if path != "" {
-		return path
-	}
-	return "~/" + instance.DirName + "/" + instance.BoardDirName
+	return inst.EnsureLockDir()
 }
