@@ -198,13 +198,17 @@ func WriteProjectPrompt(dir string, force bool) (Result, error) {
 // force: 既にある場合に上書きするかどうか。
 // 戻り値: 書いた場所と、上書きしたかどうか。
 func writeOne(path, content string, force bool) (Result, error) {
+	// **文言は、いま書こうとしているファイルの名前を名乗る。**writeOne は WORKFLOW.md と
+	// PROJECT_SPECIFIC_PROMPT.md の両方が通るので、文言の側にどちらかの名前を書くと、
+	// もう片方のときに落ちていないファイルを名乗ることになる。読む人はそちらを消しに行く。
+	name := filepath.Base(path)
 	if force {
 		// force のときだけ、既にあるかどうかを先に見る。上書きしたかどうかの報告に使うのと、
 		// 既にあるなら「その場で空にしてから書く」のではなく差し替えるためである。
 		// symlink そのものの有無を見たいので os.Stat ではなく os.Lstat を使う。
 		info, statErr := os.Lstat(path)
 		if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
-			return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, path, statErr)
+			return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, name, path, statErr)
 		}
 		if statErr == nil {
 			// --force であっても symlink は辿らない。辿ると dir の外にあるリンク先を潰す。
@@ -219,7 +223,7 @@ func writeOne(path, content string, force bool) (Result, error) {
 			// EISDIR を添えて「作成できません: … is a directory」に揃える
 			// （その場で開いて書いていた頃と同じ文言である）。
 			if info.IsDir() {
-				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, path, syscall.EISDIR)
+				return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, name, path, syscall.EISDIR)
 			}
 			// **既にある WORKFLOW.md は、その場で空にしてから書かない**（CLAUDE.md の
 			// 「絶対に守る制約」4 / 設計 3-59）。O_TRUNC で開くと、書いている途中で落ちたときに
@@ -255,10 +259,10 @@ func writeOne(path, content string, force bool) (Result, error) {
 	}
 	if _, err := f.WriteString(content); err != nil {
 		f.Close()
-		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, path, err)
+		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileWriteFailed, name, path, err)
 	}
 	if err := f.Close(); err != nil {
-		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, path, err)
+		return Result{Path: path}, i18n.Errorf(i18n.KeyScaffoldFileCloseFailed, name, path, err)
 	}
 	return Result{Path: path, Overwritten: false}, nil
 }
@@ -302,7 +306,10 @@ func resolveTarget(dir, name string) (string, error) {
 
 // openError は書き出し先を開けなかったときのエラーを、CLI が文言と終了コードを決められる形に直す。
 //
-// path: 開こうとした WORKFLOW.md の絶対パス。
+// **文言は、開こうとしたファイルの名前を名乗る。**WORKFLOW.md と
+// PROJECT_SPECIFIC_PROMPT.md の両方がここを通るためである。
+//
+// path: 開こうとしたファイルの絶対パス。
 // err: os.OpenFile が返したエラー。
 // 戻り値: ErrSymlink / ErrAlreadyExists を包んだエラー、またはそれ以外の理由を説明するエラー。
 func openError(path string, err error) error {
@@ -320,7 +327,7 @@ func openError(path string, err error) error {
 		}
 		return fmt.Errorf("%w: %s", ErrAlreadyExists, path)
 	}
-	return i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, path, err)
+	return i18n.Errorf(i18n.KeyScaffoldFileCreateFailed, filepath.Base(path), path, err)
 }
 
 // Template は書き出す雛形の中身を、プレースホルダを埋めずにそのまま返す。

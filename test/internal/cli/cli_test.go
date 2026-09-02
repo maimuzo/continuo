@@ -572,7 +572,8 @@ func TestRunInit_雛形を置いてから2度目は上書きしない(t *testing
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}
 
-	runCLI([]string{"init", dir}, "")
+	// **gh は叩かせない**（fixedDetection の説明のとおり、叩くと `go test` が github.com へ出る）。
+	runInitOffline(dir)
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("WORKFLOW.md を読めません: %v", err)
@@ -582,7 +583,7 @@ func TestRunInit_雛形を置いてから2度目は上書きしない(t *testing
 	}
 
 	// 2回目。**このときは2枚とも在る**ので、いままでどおり `--force` を勧めて止まる。
-	code, _, _ := runCLI([]string{"init", dir}, "")
+	code, _, _ := runInitOffline(dir)
 	if code == 0 {
 		t.Error("2枚とも既にあるのに上書きを許している")
 	}

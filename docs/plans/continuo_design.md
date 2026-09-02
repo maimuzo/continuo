@@ -6491,7 +6491,9 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 **1つだけ直した。****`WORKFLOW.md` という名前のディレクトリ**に `--force` を当てたとき、
 差し替えの失敗がそのまま出ると「一時ファイルの名前と `rename` の失敗」が並ぶだけで読めない。
 `os.Lstat` の結果がディレクトリなら、差し替えに進む前に
-`WORKFLOW.md を作成できません: <パス>: is a directory` で止める（変更前と同じ文言である）。
+`<書き出す先の名前> を作成できません: <パス>: is a directory` で止める。
+**名乗るのは書き出す先の名前である**（5-3g）。`PROJECT_SPECIFIC_PROMPT.md` という名前の
+ディレクトリなら、そちらの名前が出る。
 
 ### 3-61. 「誰が Status を書いたか」は、それを読む2つの呼び出し元でだけ取る
 
@@ -9129,13 +9131,21 @@ push していない作業は、この worktree が片付くときに失われ�
 **`--force` で置き換えるときは、同じディレクトリの一時ファイルへ書き切ってから差し替える**
 （[CLAUDE.md](../../CLAUDE.md) の「4. ファイルの書き換えは……」）。
 
-**断る文言は、断った当のファイルを名乗る。**番兵 `ErrSymlink`
-（[internal/scaffold/scaffold.go:84](../../internal/scaffold/scaffold.go#L84)）は
-**2枚のどちらからも返る1つの変数**なので、**その文言にファイルの名前を書いてはならない。**
-書くと、もう片方を断ったときに別のファイルを名乗り、**読む人はそちらを消しに行く。**
-**名前を入れた文言は `symlinkError`
-（[internal/scaffold/scaffold.go:96](../../internal/scaffold/scaffold.go#L96)）が組み立て、
-`errors.Is` の切り分けは `Unwrap` で保つ。**
+**失敗の文言は、落ちた当のファイルを名乗る。symlink に限らない。**
+2枚とも同じ `writeOne`（[internal/scaffold/scaffold.go:200](../../internal/scaffold/scaffold.go#L200)）と
+同じ `atomicfile.Write`（[internal/atomicfile/atomicfile.go:47](../../internal/atomicfile/atomicfile.go#L47)）を通るので、
+**文言の側にファイルの名前を書いてはならない。**書くと、もう片方が落ちたときに別のファイルを名乗り、
+**読む人は無事なほうを消しに行く。**
+
+| どこで組み立てるか | どう名乗るか |
+| --- | --- |
+| 番兵 `ErrSymlink`（[internal/scaffold/scaffold.go:84](../../internal/scaffold/scaffold.go#L84)） | **文言は画面に出さない。**名前入りの文言は `symlinkError`（[internal/scaffold/scaffold.go:96](../../internal/scaffold/scaffold.go#L96)）が組み立て、`errors.Is` の切り分けは `Unwrap` で保つ |
+| `scaffold.file.*` と `scaffold.update.*` の文言 | **1つ目の引数がファイルの名前である。**`writeOne` / `atomicfile.Write` が `filepath.Base(path)` を渡す |
+| `cli.init.err_write_failed` | **1つ目の引数がファイルの名前である。**`printInitFile` は `scaffold.WorkflowFileName()`、`printInitProjectPrompt` は `scaffold.ProjectPromptFileName()` を渡す |
+
+**`atomicfile.Write` が名乗るのは、書き込む先の名前である**（一時ファイルの名前ではない）。
+一時ファイルの名前は利用者が付けたものではないので、名乗られても何のことか分からない。
+**どこで落ちたかは、そのあとに続くパスで分かる。**
 
 **`--force` は2枚とも上書きする。**`PROJECT_SPECIFIC_PROMPT.md` は利用者が手で書くファイルなので、
 **消える範囲を [docs/upgrading.md](../upgrading.md) と [docs/FAQ.md](../FAQ.md) の両方に書く。**

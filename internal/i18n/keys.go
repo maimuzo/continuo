@@ -494,6 +494,10 @@ const (
 	// KeyCLIInitErrSymlink は置き場所が symlink のときに出る。
 	KeyCLIInitErrSymlink Key = "cli.init.err_symlink"
 	// KeyCLIInitErrWriteFailed はそのほかの理由で書き出せないときに出る。
+	//
+	// **1つ目の引数は、書き出せなかったファイルの名前である**（WORKFLOW.md か
+	// PROJECT_SPECIFIC_PROMPT.md）。**文言に名前を埋め込んではならない。**
+	// `continuo init` は2枚を置くので、埋め込むと片方のときに別のファイルを名乗る。
 	KeyCLIInitErrWriteFailed Key = "cli.init.err_write_failed"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
@@ -1614,20 +1618,25 @@ const (
 	KeyServerWriteJSONEncodeFailed Key = "server.write_json.encode_failed"
 )
 
-// WORKFLOW.md の読み書きそのもの（internal/scaffold）の失敗の文言。
+// ファイルの読み書きそのもの（internal/scaffold / internal/atomicfile）の失敗の文言。
 //
 // **`continuo init` と `continuo setup` の両方が同じ文言を使う。**
 // 読む・確かめる・書く・閉じる・作るの5つは、どちらの経路でも同じ失敗である。
+//
+// **文言にファイルの名前を埋め込んではならない。**同じ経路を WORKFLOW.md と
+// PROJECT_SPECIFIC_PROMPT.md と settings.json が通るので、埋め込むと落ちた当のファイルとは
+// 別のファイルを名乗る（実際に `WORKFLOW.md を作成できません: …/PROJECT_SPECIFIC_PROMPT.md`
+// と出た）。**呼ぶ側が filepath.Base(path) を1つ目の引数として渡す。**
 const (
 	// KeyScaffoldFileReadFailed はWORKFLOW.md を読み込めなかったときに出る。
 	KeyScaffoldFileReadFailed Key = "scaffold.file.read_failed"
-	// KeyScaffoldFileStatFailed はWORKFLOW.md の有無を確かめられなかったときに出る。
+	// KeyScaffoldFileStatFailed は書き出す先の有無を確かめられなかったときに出る。
 	KeyScaffoldFileStatFailed Key = "scaffold.file.stat_failed"
-	// KeyScaffoldFileWriteFailed はWORKFLOW.md へ書き込めなかったときに出る。
+	// KeyScaffoldFileWriteFailed は書き出す先へ書き込めなかったときに出る。
 	KeyScaffoldFileWriteFailed Key = "scaffold.file.write_failed"
-	// KeyScaffoldFileCloseFailed はWORKFLOW.md を閉じられなかったときに出る。
+	// KeyScaffoldFileCloseFailed は書き出す先を閉じられなかったときに出る。
 	KeyScaffoldFileCloseFailed Key = "scaffold.file.close_failed"
-	// KeyScaffoldFileCreateFailed はWORKFLOW.md を作成できなかったときに出る。
+	// KeyScaffoldFileCreateFailed は書き出す先を作成できなかったときに出る。
 	KeyScaffoldFileCreateFailed Key = "scaffold.file.create_failed"
 )
 
@@ -1677,7 +1686,7 @@ const (
 	KeyScaffoldUpdateChmodFailed Key = "scaffold.update.chmod_failed"
 	// KeyScaffoldUpdateSyncFailed は一時ファイルをディスクへ書き出せなかったときに出る。
 	KeyScaffoldUpdateSyncFailed Key = "scaffold.update.sync_failed"
-	// KeyScaffoldUpdateRenameFailed は一時ファイルで WORKFLOW.md を置き換えられなかったときに出る。
+	// KeyScaffoldUpdateRenameFailed は一時ファイルで書き換える先を置き換えられなかったときに出る。
 	KeyScaffoldUpdateRenameFailed Key = "scaffold.update.rename_failed"
 )
 

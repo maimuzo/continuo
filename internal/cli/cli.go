@@ -314,7 +314,7 @@ func printInitFile(stdout, stderr io.Writer, result scaffold.Result, err error, 
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrSymlink, err))
 		return false
 	default:
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, err))
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, scaffold.WorkflowFileName(), err))
 		return false
 	}
 }
@@ -351,7 +351,7 @@ func printInitProjectPrompt(stdout, stderr io.Writer, result scaffold.Result, er
 			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrSymlink, err))
 			return false
 		}
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, err))
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, name, err))
 		return false
 	}
 }

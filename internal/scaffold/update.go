@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -179,7 +180,7 @@ func statTarget(dir string) (string, fs.FileInfo, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return path, nil, fmt.Errorf("%w: %s", ErrNotFound, path)
 		}
-		return path, nil, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, path, err)
+		return path, nil, i18n.Errorf(i18n.KeyScaffoldFileStatFailed, filepath.Base(path), path, err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
 		// WriteTemplateWithValues と同じ判断で、辿らずに止める。

@@ -68,6 +68,14 @@ func WriteAll(dir string, force bool, values Values) InitResult {
 	return out
 }
 
+// WorkflowFileName は `continuo init` が置く設定のファイル名である。
+//
+// **CLI が失敗の文言で名乗るために要る。**名乗らないと、
+// PROJECT_SPECIFIC_PROMPT.md を書けなかったときにも WORKFLOW.md の名前が出る。
+//
+// 戻り値: WORKFLOW.md。
+func WorkflowFileName() string { return fileName }
+
 // ProjectPromptFileName は `continuo init` が置く固有のプロンプトのファイル名である。
 //
 // **internal/prompt の値をそのまま返す。**書き出す側と読む側で名前がずれると、

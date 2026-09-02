@@ -10,8 +10,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/maimuzo/continuo/internal/cli"
 	"github.com/maimuzo/continuo/internal/prompt"
 )
+
+// runInitOffline は `continuo init` を、gh を1回も起動しない形で呼ぶ。
+//
+// **`--owner` と `--project` を渡しても gh は止まらない。**`continuo init` は
+// `trust.repositories` に並べる owner/repo をカンバンから拾うために
+// `gh project item-list` を叩く（internal/scaffold の detectRepositories）。
+// **差し替えないと `go test` のたびに github.com へ出ていく。**回線が切れれば落ち、
+// このリポジトリを clone した人の API の枠も減る。**同じコードで通ったり落ちたりする。**
+//
+// **差し替え先は fixedDetection である**（cli_test.go にある。`continuo setup` の検査が
+// 同じ理由で既に使っている）。owner に octocat、カンバンの番号に 3 が埋まった検出結果を返す。
+//
+// args: `continuo init` に続けて渡す引数。
+// 戻り値: 終了コードと stdout / stderr。
+func runInitOffline(args ...string) (int, string, string) {
+	deps := cli.Deps{ScaffoldDetect: fixedDetection}
+	return runCLIWith(deps, append([]string{"init"}, args...), "")
+}
 
 // 目的: `continuo prompt --show` が、送る文面だけを標準出力へ出すことを確かめる（設計 5-3f）。
 //
@@ -145,7 +164,7 @@ func TestPrompt_WORKFLOWmdを読めなければ何も出さない(t *testing.T) 
 func TestInit_2枚を置く(t *testing.T) {
 	dir := t.TempDir()
 
-	code, stdout, stderr := runCLI([]string{"init", "--owner", "octocat", "--project", "3", dir}, "")
+	code, stdout, stderr := runInitOffline(dir)
 	if code != 0 {
 		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
 	}
@@ -172,7 +191,7 @@ func TestInit_片方だけ在るなら足りないほうを置く(t *testing.T) 
 	dir := writeWorkflowFor(t)
 	before := readFile(t, filepath.Join(dir, "WORKFLOW.md"))
 
-	code, stdout, stderr := runCLI([]string{"init", "--owner", "octocat", "--project", "3", dir}, "")
+	code, stdout, stderr := runInitOffline(dir)
 	if code != 0 {
 		t.Fatalf("終了コードが %d です（stderr: %s）。"+
 			"足りない %s を --force 無しで置けなければ、移行の手順が成り立ちません",
@@ -198,7 +217,7 @@ func TestInit_2枚とも在るなら終了コード1(t *testing.T) {
 	dir := writeWorkflowFor(t)
 	writeProjectPrompt(t, dir, "## 固有\n")
 
-	code, _, stderr := runCLI([]string{"init", "--owner", "octocat", "--project", "3", dir}, "")
+	code, _, stderr := runInitOffline(dir)
 	if code != 1 {
 		t.Errorf("終了コードが %d です（1 であるべきです）", code)
 	}
@@ -224,11 +243,11 @@ func TestInit_固有のプロンプトがsymlinkならリンク先を書き換�
 	for _, force := range []bool{false, true} {
 		dir, target, link := dirWithProjectPromptSymlink(t)
 
-		args := []string{"init", "--owner", "octocat", "--project", "3"}
+		var args []string
 		if force {
 			args = append(args, "--force")
 		}
-		code, stdout, stderr := runCLI(append(args, dir), "")
+		code, stdout, stderr := runInitOffline(append(args, dir)...)
 		if code != 1 {
 			t.Errorf("--force=%v: 終了コードが %d です（1 であるべきです）\n  stdout: %s\n  stderr: %s",
 				force, code, stdout, stderr)
@@ -262,13 +281,47 @@ func TestInit_固有のプロンプトがsymlinkならリンク先を書き換�
 func TestInit_固有のプロンプトがsymlinkのとき別のファイルを名乗らない(t *testing.T) {
 	dir, _, _ := dirWithProjectPromptSymlink(t)
 
-	_, _, stderr := runCLI([]string{"init", "--owner", "octocat", "--project", "3", dir}, "")
+	_, _, stderr := runInitOffline(dir)
 
 	if !strings.Contains(stderr, prompt.ProjectFileName) {
 		t.Errorf("断ったファイルの名前が出ていません: %q", stderr)
 	}
 	if strings.Contains(stderr, "WORKFLOW.md") {
 		t.Errorf("断っていない WORKFLOW.md を名乗っています（読む人はそちらを消しに行きます）: %q", stderr)
+	}
+}
+
+// 目的: 書き出せなかったときの文言が、書き出せなかった当のファイルを名乗ることを
+// 確かめる（設計 5-3c）。**symlink 以外の失敗も同じでなければならない。**
+//
+// **symlink だけを直したときには、まだこう出ていた。**
+//
+//	エラー: WORKFLOW.md の雛形を書き出せません: WORKFLOW.md を作成できません:
+//	  /…/PROJECT_SPECIFIC_PROMPT.md: is a directory
+//
+// **1行に WORKFLOW.md が2回出て、落ちた当のファイルの名前は1度も出ない。**
+// 読む人は、無事に置けた WORKFLOW.md のほうを消しに行く。
+//
+// 与える情報: `PROJECT_SPECIFIC_PROMPT.md` という名前の**ディレクトリ**を置いた
+// ディレクトリと、`--force`（--force のときだけ writeOne が名指しして止める経路へ入る）。
+// 成功条件: 標準エラーに `PROJECT_SPECIFIC_PROMPT.md` が出ており、
+// `WORKFLOW.md` が1文字も出ていないこと。
+func TestInit_固有のプロンプトを書けないとき別のファイルを名乗らない(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, prompt.ProjectFileName), 0o755); err != nil {
+		t.Fatalf("テスト用のディレクトリを作れません: %v", err)
+	}
+
+	code, _, stderr := runInitOffline("--force", dir)
+
+	if code != 1 {
+		t.Errorf("終了コードが %d です（1 であるべきです）: %q", code, stderr)
+	}
+	if !strings.Contains(stderr, prompt.ProjectFileName) {
+		t.Errorf("書けなかったファイルの名前が出ていません: %q", stderr)
+	}
+	if strings.Contains(stderr, "WORKFLOW.md") {
+		t.Errorf("書けた WORKFLOW.md を名乗っています（読む人はそちらを消しに行きます）: %q", stderr)
 	}
 }
 
