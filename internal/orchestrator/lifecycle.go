@@ -278,8 +278,10 @@ func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
 // **ボードに載っていなかったら、その行を捨て、issue のコメントに
 // 「ボードに無いので動かせなかった」と書く**（人間が気づけるようにする）。
 //
-// **別の run が印を持っている issue にも書き込まない**（設計 3-26 の「安全のための制約」）。
+// **この機械の別の run が印を持っている issue にも書き込まない**（設計 3-26 の「安全のための制約」）。
 // **書き間違えた1行で、別のエージェントが turn の途中で止まる**ためである。
+// **守れるのは1台の中だけである。**別の機械が持ち回り（設計 3-77）で担当している issue は
+// この機械の印を持たないので、この検査を抜ける。
 //
 // **`terminal_states` の issue は動かさない**（UpdateStatus が書く前に取り直して弾く）。
 //
@@ -332,7 +334,13 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 			// **別の run が印を持っていたら、書かずに捨てる**（設計 3-26 の「安全のための制約」）。
 			// **書き込むと、その run から見て「引き渡しの Status」になり、turn の途中でも
 			// 即座に止められる**（reconcile の既定の枝が stopAndReleaseAsync を呼ぶ）。
-			// **猶予はボードの自動化が書いたときだけ効く**ので、continuo 自身の書き込みは待ってもらえない。
+			// **猶予はカンバンの自動化が書いたときだけ効く**ので、continuo 自身の書き込みは待ってもらえない。
+			//
+			// **引くのは、このプロセスの印（`o.runs`）だけである。**別の機械が持ち回り（設計 3-77）で
+			// 担当している issue は印を持たないので、ここを抜けて Status が動く。
+			// **hold のコメントを引けば分かるが、対象1件ごとにコメント全件の取得が要り**
+			// （`FetchAllComments` はページを繰る）、**読んだ次の瞬間に別の機械が入札に勝つ余地も残る。**
+			// **だから1台の中だけを守る**（設計 3-26 の「担当中の issue へは、表明から書かない」）。
 			if other, held := o.lookupRunByID(found.ID); held && other != rs && !other.isFinished() {
 				o.logger.Warn("表明が指す issue は別の run が担当中です（この行を捨てます）",
 					"identifier", rs.issue().Identifier, "対象", target,
