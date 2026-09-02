@@ -918,10 +918,10 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 | **書き戻させる** | `WORKFLOW.md` に対応表を書く。自動化が書いた Status を、本来の Status へ戻させる |
 | **自動化を止める** | ボードの `Workflows` から、その自動化を無効にする |
 
-**対応表の書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正です。**
-そのまま貼れる yaml・左と右の決め方・確かめ方が、そこに1箇所だけあります。
-**雛形の Status 名のまま写すと起動しない理由も、同じ節にあります。**
-**この文書には写しを置きません**（2箇所にあると、片方だけ直したときに食い違います）。
+**何をどう書くかは、「使い方が分からないとき」の
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
+そのまま貼れる yaml と、書けない5つの形がそこにあります。
+**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
@@ -1738,10 +1738,40 @@ cd ~/continuo-work && continuo doctor && continuo
 自動化が Status を動かしたとき、`tracker.unknown_state_grace_ms` の猶予を置いてからエージェントを止めます。
 **つまり「PR を作ってから CI の直しを続ける」流れでは、途中で止まります。**
 
-**対応表の書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正です。**
-そのまま貼れる yaml・左と右の決め方・確かめ方が、そこに1箇所だけあります。
-**雛形の Status 名のまま写すと起動しない理由も、同じ節にあります。**
-**この文書には写しを置きません**（2箇所にあると、片方だけ直したときに食い違います）。
+**何を書くか。**`tracker:` の下に、`automated_state_rewrite` の対応表を足します。
+**左が、自動化が書き込む Status 名です。右が、戻したい Status 名です。**
+
+```yaml
+tracker:
+  active_states: ["AI Ready", "AI In Progress"]
+  automated_state_rewrite:
+    "In Progress": "AI In Progress"
+    # 左：自動化が書き込む Status 名（カンバンの選択肢と1文字ずつ合わせる）
+    # 右：戻したい Status 名（必ず active_states の中から選ぶ）
+```
+
+**この例は、カンバンの Status を `AI Ready` / `AI In Progress` のように先に改名してある人のものです。**
+`continuo init` が置いた雛形の `active_states: ["Ready", "In Progress"]` のままで、
+**`automated_state_rewrite` の行だけを写しても起動しません。**
+左の `In Progress` が `tracker` の他のキーに出てくる Status だからです（下の表の2行目）。
+
+**書けない形は5つあります。**どれも `continuo doctor` の `設定ファイル` の行が `✗` になり、起動しません。
+**弾く条件の正は [internal/config/validate.go](../internal/config/validate.go) の
+`validateAutomatedStateRewrite` の1箇所です。下の表は、その写しです。**
+
+| 書けない形 | なぜ |
+| --- | --- |
+| **左と右が同じ** | 同じ値の書き込みは省かれるので、巡回のたびに書きに行き続けます |
+| **左が、`tracker` の他のキーに出てくる Status** | その行は一度も引かれません。引くのは continuo が知らない Status になったときだけです |
+| **右が `tracker.active_states` の外** | 書き戻した直後に、continuo 自身がその run を終わらせます |
+| **大文字小文字だけが違う左が2つ** | どちらに当たるかが、実行のたびに変わります |
+| **左が空、または右が空** | Status 名として存在しません |
+
+**「`tracker` の他のキー」は6つです。**`active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `status_signal_map` の遷移先。
+**`tracker` の外（`cleanup` など）は見ません。**
+
+**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」にあります。**
 
 **書き戻しても自動化が書き直す押し合いになると、continuo は途中で書き戻しをやめます。**
 そこから先はいままでどおり、猶予を置いてエージェントを止め、
