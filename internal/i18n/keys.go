@@ -2155,6 +2155,8 @@ const (
 	KeyWorkspacePrepareBranchMismatch Key = "workspace.prepare.branch_mismatch"
 	// KeyWorkspaceErrWorktreeDetached は worktree が detached HEAD のときの番兵の文言である（issue #132）。
 	KeyWorkspaceErrWorktreeDetached Key = "workspace.err.worktree_detached"
+	// KeyWorkspaceErrRetryable は「いまは失敗したが、待てば通るかもしれない」ことを表す番兵の文言である（3-22d）。
+	KeyWorkspaceErrRetryable Key = "workspace.err.retryable"
 	// KeyWorkspacePrepareDetachedHead は worktree が detached HEAD で再利用できないときに出る（issue #132）。
 	KeyWorkspacePrepareDetachedHead Key = "workspace.prepare.detached_head"
 	// KeyWorkspacePrepareUnregisteredWorktree は目的のパスに実体があるのに git の worktree として登録されていなかったときに出る。
@@ -3126,6 +3128,7 @@ var allKeys = []Key{
 	KeyWorkspaceErrWorktreeBranchMismatch,
 	KeyWorkspacePrepareBranchMismatch,
 	KeyWorkspaceErrWorktreeDetached,
+	KeyWorkspaceErrRetryable,
 	KeyWorkspacePrepareDetachedHead,
 	KeyWorkspacePrepareUnregisteredWorktree,
 	KeyWorkspacePrepareParentDirCreateFailed,

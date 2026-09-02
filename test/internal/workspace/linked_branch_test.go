@@ -265,3 +265,58 @@ func TestPrepare_正規化で名前が変わるリンクは既定branchへ倒す
 		t.Fatalf("worktree の起点が main でない: got %q, want %q", head, mainHead)
 	}
 }
+
+// 目的: リンクされた branch を取ってこられなかったエラーに「待てば通るかもしれない」印
+// （ErrRetryable）が付いていることを確認する（設計 3-22d）。
+//
+// **印が無いと、orchestrator はこれを人間へ渡す失敗として扱う**（dispatch.go の startRun）。
+// **回線が61秒（30秒×2＋1秒）切れただけの issue が `failure_state` に置かれ、
+// `tracker.active_states` から外れるので、人間がカンバンで戻すまで二度と拾われない。**
+//
+// 与える情報: origin に存在しない branch をリンクした issue。
+// 成功条件: Prepare が返すエラーが ErrRetryable にも一致すること。
+// **ErrBaseUnknown にも一致し続けること**（印を足しただけで、元の見分けを壊していない）。
+func TestPrepare_取ってこられないリンクに待てば通るかもしれない印を付ける(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.Herdr.Worktree.Base = nil },
+	})
+
+	_, err := fx.Manager.Prepare(context.Background(), linkedIssue(42, "work/does-not-exist"))
+	if !errors.Is(err, workspace.ErrRetryable) {
+		t.Fatalf("fetch の失敗に ErrRetryable の印が付いていない"+
+			"（人間へ渡す失敗として扱われ、issue が failure_state に置かれる）: %v", err)
+	}
+	if !errors.Is(err, workspace.ErrBaseUnknown) {
+		t.Fatalf("印を足したことで ErrBaseUnknown が見えなくなっている: %v", err)
+	}
+	// **文面は1文字も変えない。**【確かめ方】【対処】を添えた案内の頭に
+	// 番兵の文言が挟まると、人間が読む順番が崩れる。
+	if !strings.Contains(err.Error(), "【対処】") {
+		t.Fatalf("人間向けの案内が失われている: %v", err)
+	}
+}
+
+// 目的: **やり直しで直る見込みが無い失敗には印を付けない**ことを確認する（設計 3-22d）。
+//
+// **すべての失敗に印を付けると、`agent.max_retries` を使い切るまで同じ issue を
+// 毎回やり直させることになる。**base をそもそも決められない issue は、人間が
+// `default_branch` を直さない限り永久に通らない。
+//
+// 与える情報: base が null の設定と、NativeRef に default_branch を持たない issue。
+// 成功条件: Prepare が ErrBaseUnknown を返し、**ErrRetryable には一致しない**こと。
+func TestPrepare_baseを決められない失敗には印を付けない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.Herdr.Worktree.Base = nil },
+	})
+	issue := sampleIssue(188)
+	issue.NativeRef = map[string]any{}
+
+	_, err := fx.Manager.Prepare(context.Background(), issue)
+	if !errors.Is(err, workspace.ErrBaseUnknown) {
+		t.Fatalf("base を決められないのに ErrBaseUnknown にならない: %v", err)
+	}
+	if errors.Is(err, workspace.ErrRetryable) {
+		t.Fatalf("直る見込みの無い失敗に ErrRetryable の印が付いている"+
+			"（毎回やり直させることになる）: %v", err)
+	}
+}

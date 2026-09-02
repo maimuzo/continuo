@@ -1,6 +1,8 @@
 package tracker_test
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -26,6 +28,37 @@ func fetchOneIssue(t *testing.T, opts testIssueItemOpts) tracker.Issue {
 		t.Fatalf("issue の件数が想定と違う: got %d, want 1", len(issues))
 	}
 	return issues[0]
+}
+
+// fetchOneIssueLog は fetchOneIssue と同じ形を取りに行き、そのあいだのログも返す。
+//
+// **捨てた記録が残っているかを見るためのものである。**リンクを捨てても dispatch は
+// 止めないので、**気づく手掛かりはこのログの1行しかない**（docs/FAQ.md の
+// 「issue に branch をリンクしたのに、worktree が既定 branch から始まる」）。
+//
+// t: テスト。
+// opts: 組み立てる project item のパラメータ。
+// 戻り値の1つ目: FetchIssuesByStates が返した Issue。
+// 戻り値の2つ目: 取得のあいだに出たログの全文。
+func fetchOneIssueLog(t *testing.T, opts testIssueItemOpts) (tracker.Issue, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	nodes := []map[string]any{issueItemJSON(opts)}
+	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nodes, false, ""))))
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, logger, nil)
+	if err != nil {
+		t.Fatalf("NewAdapter が失敗した: %v", err)
+	}
+
+	issues, err := a.FetchIssuesByStates(t.Context(), []string{"Ready"})
+	if err != nil {
+		t.Fatalf("FetchIssuesByStates が失敗した: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("issue の件数が想定と違う: got %d, want 1", len(issues))
+	}
+	return issues[0], buf.String()
 }
 
 // baseOpts は「Ready の issue が1件だけボードに載っている」形の共通のパラメータを返す。
@@ -168,5 +201,54 @@ func TestFetchIssuesByStates_リポジトリ名の無いリンクを無視する
 
 	if issue.BranchName != nil {
 		t.Fatalf("リポジトリ名の無いリンクが base に採られている: %q", *issue.BranchName)
+	}
+}
+
+// 目的: **リンクを捨てたことをログに残す**ことを確認する（設計 3-22d）。
+//
+// **捨てても dispatch は止めない**（既定 branch へ倒して作業は進む）。
+// **だから、リンクした人が気づく手掛かりはこの1行しかない。**
+// docs/FAQ.md の「issue に branch をリンクしたのに、worktree が既定 branch から始まる」は
+// `grep 'リンクされた branch' <ログの出力先>` を案内しているので、
+// **この行が消えると、そこに書いた手順がそのまま空振りする。**
+//
+// 与える情報: `octocat/hello-world` の issue に、fork の `contributor/hello-world` の
+// branch が1本だけリンクされている形。
+// 成功条件: WARN の本文・issue の識別子・捨てた理由（別のリポジトリの名前）が
+// すべてログに出ること。
+func TestFetchIssuesByStates_捨てたリンクの理由をログに残す(t *testing.T) {
+	opts := baseOpts()
+	opts.LinkedBranches = []map[string]any{
+		linkedBranchNodeJSON("work/issue-42", "contributor/hello-world"),
+	}
+
+	issue, logs := fetchOneIssueLog(t, opts)
+
+	if issue.BranchName != nil {
+		t.Fatalf("別のリポジトリを指すリンクが base に採られている: %q", *issue.BranchName)
+	}
+	if !strings.Contains(logs, "リンクされた branch を worktree の起点に使いませんでした") {
+		t.Fatalf("捨てた記録がログに1行も出ていない（気づく手掛かりが無くなる）:\n%s", logs)
+	}
+	if !strings.Contains(logs, "octocat/hello-world#42") {
+		t.Fatalf("どの issue で捨てたのかがログから分からない:\n%s", logs)
+	}
+	if !strings.Contains(logs, "contributor/hello-world") {
+		t.Fatalf("捨てた理由がログから分からない:\n%s", logs)
+	}
+}
+
+// 目的: **リンクが無いときは、捨てた記録を出さない**ことを確認する（設計 3-22d）。
+//
+// **リンクを付けていないカンバンでは、この行が全 issue ぶん毎巡回で流れることになる。**
+// そうなると他の行が埋もれ、本当に捨てたときの1行も読まれなくなる。
+//
+// 与える情報: linkedBranches が0本の issue。
+// 成功条件: 捨てた記録の本文がログに1度も出ないこと。
+func TestFetchIssuesByStates_リンクが無ければ捨てた記録を出さない(t *testing.T) {
+	_, logs := fetchOneIssueLog(t, baseOpts())
+
+	if strings.Contains(logs, "リンクされた branch を worktree の起点に使いませんでした") {
+		t.Fatalf("捨てていないのに捨てた記録が出ている:\n%s", logs)
 	}
 }

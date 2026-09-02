@@ -119,6 +119,41 @@ func TestDispatch_リンクされたbranchを起点に着手する(t *testing.T)
 	}
 }
 
+// 目的: リンクされた branch を取ってこられなかった issue を、**人間へ渡さずに
+// 試し直す**ことを確認する（設計 3-22d / 3-16 の段10）。
+//
+// **fetch の失敗は回線で起きる。**30秒×2＋1秒＝61秒だけ回線が切れた issue を
+// `failure_state` へ置くと、そこは `tracker.active_states` に入っていないので、
+// **人間がカンバンで戻すまで continuo は二度と拾わない。**
+// 同じ形の事故が 2026-08-21 に起きている（dispatch.go の ErrStartupRetryable の説明）。
+//
+// 与える情報: origin に存在しない `work/does-not-exist` をリンクした issue。
+// 成功条件: 着手の失敗が「待って試し直します」として記録され、
+// **Status が failure_state（Blocked）へ落ちないこと。**
+func TestDispatch_リンクされたbranchを取ってこられなくても人間へ渡さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.Tracker.VerifyStatesEvery = 0 },
+	})
+	// **どちらも、このテストがわざと起こしている失敗である。**
+	fx.AllowLog("リンクされた branch を取ってこられなかったのでやり直します")
+	fx.AllowLog("着手に失敗しました（待って試し直します）")
+
+	issue := sampleIssue(188, "Ready")
+	branch := "work/does-not-exist"
+	issue.BranchName = &branch
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 30*time.Second, "着手の失敗が記録される", func() bool {
+		return strings.Contains(fx.Logs.String(), "着手に失敗しました（待って試し直します）")
+	})
+	if got := fx.Tracker.StateOf("PVTI_item188"); got == "Blocked" {
+		t.Fatalf("fetch に失敗しただけの issue を人間へ渡している"+
+			"（failure_state は active_states に無いので、二度と拾われない）: state=%s", got)
+	}
+}
+
 // 目的: リンクが無い issue では `.push_branch` が空文字になることを確認する
 // （設計 3-22d・5-3）。**`{{if .push_branch}}` が偽になる形でなければ、
 // テンプレートを書く側が「リンクが無いとき」を書き分けられない。**

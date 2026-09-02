@@ -48,6 +48,55 @@ var ErrRepoMismatch = errors.New("worktree の .git が指すリポジトリが�
 // herdr.worktree.base が null で、Issue.NativeRef["default_branch"] も無い場合に返る。
 var ErrBaseUnknown = errors.New("worktree を切る base を決められません")
 
+// ErrRetryable は「いまは失敗したが、待てば通るかもしれない」ことを表す（3-22d）。
+//
+// **この印が付いたエラーを受け取った側は、人間へ渡さずに次の巡回で試し直す。**
+// orchestrator は着手の段3 でこれを見て、自分の `ErrStartupRetryable` へ翻訳する
+// （[internal/orchestrator/dispatch.go](../orchestrator/dispatch.go) の startRun）。
+// **翻訳しないと、回線が数十秒切れただけの issue が `failure_state` に置かれ、
+// 人間がカンバンで戻すまで continuo は二度と拾わない**（`failure_state` は
+// `tracker.active_states` に入っていない）。同じ形の事故が 2026-08-21 に起きている
+// （dispatch.go の `ErrStartupRetryable` の説明）。
+//
+// **やり直しは無限ではない。**orchestrator の `abandonRun` が `agent.max_retries`
+// （既定3回）まで指数バックオフで試し、使い切ったら `failure_state` へ落として
+// 人間へ渡す。**だから「branch が本当に消えている」ような直らない失敗も、
+// 数回のやり直しのあとで必ず人間に届く。**
+//
+// **errors.Is の比較対象なので、この値の identity を変えてはならない。**
+//
+// **文言は Error() が呼ばれるたびに資源から引く**（i18n.Sentinel）。
+// errors.New に日本語で書くと、日本語の文言の件数を数える検査に引っかかる。
+var ErrRetryable = i18n.Sentinel(i18n.KeyWorkspaceErrRetryable)
+
+// retryableError は、元のエラーの文面を1文字も変えずに ErrRetryable の印だけを足す。
+//
+// **`fmt.Errorf("%w: %w", …)` で連ねない。**連ねると番兵の文言（「いまは失敗しましたが…」）が
+// 人間向けの文面の頭に挟まり、**【確かめ方】【対処】を添えた案内が読みにくくなる。**
+// Error() は包んだエラーのものをそのまま返し、`errors.Is` だけが2つとも見えるようにする。
+type retryableError struct {
+	// err は印を付ける元のエラーである。
+	err error
+}
+
+// Error は包んだエラーの文面をそのまま返す。
+func (e *retryableError) Error() string { return e.err.Error() }
+
+// Unwrap は包んだエラーと ErrRetryable の両方を返す。
+// **`errors.Is` は両方を辿るので、元の番兵（ErrBaseUnknown など）も見え続ける。**
+func (e *retryableError) Unwrap() []error { return []error{e.err, ErrRetryable} }
+
+// markRetryable は err に「待てば通るかもしれない」印を付ける。
+//
+// err: 印を付けるエラー。nil ならそのまま nil を返す。
+// 戻り値: ErrRetryable にも一致するようになったエラー。
+func markRetryable(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &retryableError{err: err}
+}
+
 // ErrWorktreeDetached は worktree がどの branch にも載っていないことを表す
 // （detached HEAD。issue #132）。
 //
@@ -398,9 +447,9 @@ func (m *Manager) isRegisteredWorktree(ctx context.Context, repoPath, path strin
 // **どれも無ければ ErrBaseUnknown を返す。base を推測しない。**
 //
 // **段2 のリンクは、正規化で名前が1文字でも変わるなら捨てて段3 へ倒す。**
-// fetch に失敗したとき（ErrBaseUnknown で issue ごと失敗させる）とは扱いを変えている。
-// **分けている理由は「やり直しで直るか」が逆だからである。**
-// fetch の失敗は回線や権限が戻れば次の巡回で通るので、失敗として人間へ渡す価値がある。
+// fetch に失敗したとき（ErrBaseUnknown と ErrRetryable で着手ごとやり直させる）とは
+// 扱いを変えている。**分けている理由は「やり直しで直るか」が逆だからである。**
+// fetch の失敗は回線や権限が戻れば次の巡回で通るので、やり直す価値がある。
 // **正規化で変わる名前は、人間が GitHub 側で branch を rename しない限り永久に変わらない。**
 // 毎回の巡回で同じ issue を失敗させ続けても、やり直しで直る見込みが1つも無い。
 // **代わりに WARN で branch の生の名前と正規化後の名前を並べて出す**（下の logger.Warn）。

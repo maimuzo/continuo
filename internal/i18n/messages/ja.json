@@ -777,6 +777,7 @@
   "workspace.ensure_root.root_empty": "workspace.root が空です（worktree の置き場所を決められません）",
   "workspace.ensure_root.root_not_absolute": "workspace.root %q が絶対パスではありません（相対パスだと continuo を起動したディレクトリによって worktree の置き場所が変わる）",
   "workspace.ensure_root.symlink_unresolvable": "workspace.root %q のシンボリックリンクを解決できません: %w",
+  "workspace.err.retryable": "いまは失敗しましたが、待てば通るかもしれません",
   "workspace.err.worktree_branch_mismatch": "worktree が期待と違う branch に載っています",
   "workspace.err.worktree_detached": "worktree がどの branch にも載っていません（detached HEAD）",
   "workspace.ghq_target.name_invalid": "ghq へ渡せない名前です: %q（GitHub の owner 名とリポジトリ名は、英数字・ハイフン・アンダースコア・ドットだけからなり、先頭が `-` でないこと）",

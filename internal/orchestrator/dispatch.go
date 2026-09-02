@@ -784,7 +784,17 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// 段3: worktree を用意し、herdr workspace として開く。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(issue))
 	if err != nil {
-		return i18n.Errorf(i18n.KeyOrchestratorStartRunWorktreePrepareFailed, err)
+		failed := i18n.Errorf(i18n.KeyOrchestratorStartRunWorktreePrepareFailed, err)
+		// **workspace が「待てば通るかもしれない」と言った失敗は、人間へ渡さない**
+		// （設計 3-22d）。リンクされた branch の fetch が回線で落ちただけの issue を
+		// `failure_state` へ置くと、`tracker.active_states` から外れるので
+		// **人間がカンバンで戻すまで continuo は二度と拾わない。**
+		// **やり直しは `agent.max_retries` で頭打ちになる**ので、
+		// 直らない失敗が永久に回り続けることはない（abandonRun）。
+		if errors.Is(err, workspace.ErrRetryable) {
+			return fmt.Errorf("%w: %w", ErrStartupRetryable, failed)
+		}
+		return failed
 	}
 	rs.setWorkspaceInfo(prepared.Path, prepared.Base, prepared.HerdrWorkspaceID)
 

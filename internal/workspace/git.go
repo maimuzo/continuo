@@ -165,11 +165,25 @@ const gitFetchRetryDelay = time.Second
 // **黙って既定 branch へ倒さない。**倒すと、人間がリンクした branch とは別の起点で
 // エージェントが作業を始め、食い違いに気づくのは PR を出したあとになる。
 //
+// **2回落ちたエラーには ErrRetryable の印を付ける。**印が無いと、orchestrator は
+// これを人間へ渡す失敗として扱い、**回線が61秒（30秒×2＋1秒）切れただけの issue を
+// `failure_state` に置く。**`failure_state` は `tracker.active_states` に入っていないので、
+// 人間がカンバンで戻すまで continuo は二度と拾わない。
+//
+// **「branch が本当に消えている」場合も同じ印を付ける。**git の失敗の理由は
+// 終了コードにも stderr にも安定した形では出ないので、**「回線が切れた」と
+// 「remote に無い」を、その場で言い分けることはできない。**言い分けようとして
+// stderr の文面を読むと、git の版と言語の設定で外れる。
+// **やり直しは無限ではない**ので、言い分けなくても困らない。orchestrator の
+// `abandonRun` が `agent.max_retries`（既定3回）まで試し、使い切ったら
+// `failure_state` へ落として issue にも理由を書く。**消えた branch は、
+// 数回のやり直しのあとで必ず人間に届く。**遅れるのはそのぶんだけである。
+//
 // ctx: 実行に適用するコンテキスト。
 // repoDir: clone の作業ディレクトリ。
 // branch: リンクされた branch の生の名前（`origin/` は付けない）。
 // logger: やり直しを知らせる先。
-// 戻り値: 取ってこられなかった場合のエラー。
+// 戻り値: 取ってこられなかった場合のエラー（**ErrBaseUnknown と ErrRetryable の両方に一致する**）。
 func gitEnsureRemoteBranch(ctx context.Context, repoDir, branch string, logger *slog.Logger) error {
 	if branch == "" {
 		return nil
@@ -203,9 +217,9 @@ func gitEnsureRemoteBranch(ctx context.Context, repoDir, branch string, logger *
 			}
 		}
 	}
-	return i18n.Errorf(
+	return markRetryable(i18n.Errorf(
 		i18n.KeyWorkspaceGitFetchLinkedBranchFailed,
-		ErrBaseUnknown, branch, repoDir, repoDir, branch, branch, lastErr)
+		ErrBaseUnknown, branch, repoDir, repoDir, branch, branch, lastErr))
 }
 
 // gitRemoteRefExists は `refs/remotes/origin/<branch>` が手元にあるかを返す。

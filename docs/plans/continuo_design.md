@@ -2945,15 +2945,36 @@ git -C <clone> fetch --no-tags origin '+refs/heads/<名前>:refs/remotes/origin/
 **refspec を明示する。**素の `git fetch origin <名前>` は、`--single-branch` で作られた clone で
 FETCH_HEAD しか動かさず、**リモート追跡 ref ができないので worktree が切れない。**
 **上限は 30 秒、やり直しは1秒あけて1回だけ**（`gitFetchTimeout` / `gitFetchRetryDelay`）。
-**2回落ちたら `ErrBaseUnknown` を返し、その issue を失敗として人間へ渡す。**
 **黙って既定 branch へ倒さない。**倒すと、人間がリンクした branch とは別の起点で
 エージェントが作業を始め、食い違いに気づくのは PR を出したあとになる。
+
+**2回落ちたら `ErrBaseUnknown` に `ErrRetryable` の印を添えて返す**
+（[internal/workspace/prepare.go](../../internal/workspace/prepare.go) の `markRetryable`）。
+**着手の段3 がこれを見て `ErrStartupRetryable` へ翻訳し、人間へ渡さずバックオフして
+次の巡回で試し直す**（[internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go) の `startRun`）。
+**印を付けない形にすると、回線が61秒（30秒×2＋1秒）切れただけの issue が `failure_state` に置かれる。**
+そこは `tracker.active_states` に入っていないので、**人間がカンバンで戻すまで二度と拾われない。**
+
+**「branch が本当に消えている」場合も同じ印を付ける。**git の失敗の理由は終了コードにも
+stderr にも安定した形では出ないので、**「回線が切れた」と「remote に無い」をその場で
+言い分けることはできない**（stderr の文面を読むと、git の版と言語の設定で外れる）。
+**言い分けなくても困らない。**やり直しは `abandonRun` が `agent.max_retries`（既定3回）で
+頭打ちにし、使い切ったら `failure_state` へ落として issue にも理由を書く。
+**消えた branch は、数回のやり直しのあとで必ず人間に届く。**遅れるのはそのぶんだけである。
 
 **プロンプトには `.push_branch` で渡す**（5-3 の変数の表）。
 **`origin/` を付けない生の名前**であり、リンクが1本でないときは空文字である。
 **push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
 `.push_branch` は「別の名前へ出せと issue に書かれていたときの候補」として渡す。
 **base と push 先を同じものに固定すると、1つの issue で PR を複数出す形が書けなくなる。**
+
+**`.push_branch` は base の門とは別の門を通る。**tracker 側の門（ちょうど1本・同じリポジトリ）
+だけを通った値であり、**workspace 側の門（正規化で名前が変わらないこと）は通っていない。**
+そのため `作業/issue-42` をリンクすると、**base は既定 branch へ倒れる一方で
+`.push_branch` には `作業/issue-42` が入る。**これは意図どおりである。
+`.push_branch` は push 先の候補であって base ではなく、**push 先の名前は
+`git worktree add` の起点として解決される必要がない**（git は refname に非 ASCII を許す）。
+**揃えると、正規化を通らない名前へ push したい人が書けなくなる。**
 
 **「issue とコードを別のリポジトリに置ける」は作らない。**
 issue が `<owner>/<repo>` にあり、コードが別のリポジトリ（fork など）にある形は、

@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "2138c8463af46a9160230a3fbc4a1c45adba2b657e6bc12c83aa8038e8aa071f",
+  "_source_sha256": "b01bfa7184720178d35e192adcc27ae099cc54e1629b7969856776c429c66873",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -778,6 +778,7 @@
   "workspace.ensure_root.root_empty": "workspace.root is empty (cannot decide the worktree root)",
   "workspace.ensure_root.root_not_absolute": "workspace.root %q is not an absolute path (a relative path would make the worktree root depend on the directory continuo was started from)",
   "workspace.ensure_root.symlink_unresolvable": "cannot resolve the symlink in workspace.root %q: %w",
+  "workspace.err.retryable": "this failed now, but it may succeed if we wait",
   "workspace.err.worktree_branch_mismatch": "the worktree is on a different branch than expected",
   "workspace.err.worktree_detached": "the worktree is not on any branch (detached HEAD)",
   "workspace.ghq_target.name_invalid": "not a name that can be passed to ghq: %q (a GitHub owner name and repository name must consist only of letters, digits, hyphens, underscores, and dots, and must not start with `-`)",
