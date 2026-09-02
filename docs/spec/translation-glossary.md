@@ -85,6 +85,9 @@
 | 着手できずに止まっているもの | what cannot be started | ダッシュボードの表の見出し（issue #134）。「着手」は上の `start` に揃える。`stuck` `blocked` は使わない（`blocked` はカンバンの Status の値と衝突する） |
 | 案内（issue へ書く1件のコメント） | notice | issue #140 で issue へ1回だけ書くコメントを指す。`notification` は使わない（herdr の通知と紛れる） |
 | 印（ダッシュボードの行に添えるもの） | badge | 既に HTML の class 名が `badge` である（[internal/server/template.go](../../internal/server/template.go)）。`tag` `label` は使わない（`label` は GitHub のラベルと衝突する） |
+| 入札 / 入札する | bid | コメントの印が `<!-- continuo:bid -->` である（`internal/config` の `HandoffBidMarker`）。`auction` `offer` は使わない |
+| 担当（issue の） | assignee | GitHub の issue のフィールド名そのもの。`owner` `holder` は使わない |
+| 枠の余裕 | usage window left | 「枠」は上の行のとおり `usage window`。残っている量なので `left` を添える。`headroom` `budget` は使わない |
 
 ---
 
