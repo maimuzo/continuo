@@ -741,7 +741,7 @@ flowchart TB
 
 | hook | 何のために張るか |
 | --- | --- |
-| **`Stop`** | **turn の終わりの判定の起点。**`background_tasks` と `stop_hook_active` を見る |
+| **`Stop`** | **turn の終わりの判定の起点。**`background_tasks` を見る。**`stop_hook_active` は使わない**（3-79） |
 | **`UserPromptSubmit`** | **`<task-notification>` を検出する。**これが来たら turn は続いている（1-3） |
 | **`SubagentStop`** | 最終 `Stop` の後に来るものを識別する。**`agent_type` が空文字のものは捨てる**（1-3） |
 | **`Notification`** | **`permission_prompt` で、権限の確認で止まったことを記録する**（3-11）。`idle_prompt` は turn 終了の裏取りに使う |
@@ -8176,6 +8176,43 @@ fork へ push されていないので片付けが見送られる（[test/intern
 **`cwd` の検査は緩めない。**`session_id` を騙った hook を弾く唯一の手立てだからである（3-23）。
 **落とすのは外だと分かったときだけで、`cwd` が空の hook は通す**
 （[internal/orchestrator/hookinput.go](../../internal/orchestrator/hookinput.go) の `acceptHookCwd`）。
+
+### 3-79. 空の `Stop` は「止まってよいか尋ねた」であって「終わった」ではない
+
+**言いたいこと。**`Stop` hook が `{"decision":"block"}` を返すと、Claude Code は turn を
+終わらせずに応答を書き直す。**その答えは continuo に届かない。**だから空の `Stop` だけでは
+turn の終わりを決められず、**`settle_ms` の窓が閉じた瞬間に `agent.get` で裏を取る。**
+
+**採る形。**[internal/orchestrator/turn.go](../../internal/orchestrator/turn.go) の `confirmTurnEnd` で、
+`turnEnded` を返す唯一の場所の直前に `stillWorkingAfterStop` を挟む。
+
+| 裏取りの答え | どうするか |
+| --- | --- |
+| **`working`** | **turn の終わりとしない。**`clearStopSeen` して、既にある待ち直しへ合流する |
+| `idle` / `done` / `blocked` / `unknown` | これまでどおり `turnEnded` |
+| **読めなかった** | **`turnEnded`。**待ちに倒すと、herdr が答えない間ずっと turn が終わらない |
+
+**`working` は推測である。**`background_tasks` が空でない `Stop` は Claude Code 自身の申告だが、
+こちらは herdr の見え方から当てているだけで、**遅い `Stop` hook が走っているだけでも `working` に見える。**
+**だから出口を1つ置く。**待ち直したあと `poll_wait_ms` が過ぎても `Stop` が来ず、
+そのときエージェントが動いていなければ、**推測が外れたものとして `turnEnded` を返す。**
+**置かないと、新しい `Stop` が永久に来ないまま、巡回の stall 検知が `turn_timeout_ms`
+（既定1時間）で拾うまで run が空転する。**
+
+**`stop_hook_active` は判定にも記録にも使わない。**1本目の `Stop`（差し戻される側）では偽であり、
+真になるのは書き直しが終わったあとの2本目だけなので、**防ぎたい瞬間には必ず偽である。**
+
+**測ったもの。****差し戻しの最中、herdr は一貫して `working` を返す**
+（[docs/evidence/stop_hook_block_20260902.md](../evidence/stop_hook_block_20260902.md)。
+`Stop` hook が8秒かかる場合も含め、投入から書き直しの終わりまで1度も `idle` にならなかった）。
+**書き直しにかかる時間は中央値 21.1 秒・最大 83.3 秒で、`settle_ms` の既定 2000ms を
+下回ったのは 6.6% だけである**（290件）。**下回った 6.6% では裏取りが空振りするが、
+そのとき transcript には書き直した応答が既に在り、表明は最後に現れたものが勝つので害は無い。**
+
+**詳細と、採らなかった案は
+[docs/plans/impl/issue166_stop_hook_block.md](impl/issue166_stop_hook_block.md) にある。**
+**3-2 と 3-26 は置き換えない。**3-2 は「`background_tasks` をどう読むか」を決めており、
+ここが埋めるのは「**他人の hook が差し戻してきたときにどうするか**」である。
 
 
 ## 4. 人間が決めたこと

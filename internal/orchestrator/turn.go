@@ -812,6 +812,16 @@ func (o *Orchestrator) confirmTurnEnd(
 	pollWait := time.Duration(o.cfg.Claude.PollWaitMs) * time.Millisecond
 	// firstWait が真の間は「待ち受けが返った直後」である。ここで Stop が来なければ stall。
 	firstWait := strictFirstWait
+	// rewriteWait が真の間は「空の `Stop` を受けたが herdr がまだ `working` を返したので
+	// 待ち直している」最中である（設計 3-79）。
+	//
+	// **これは推測である。**`background_tasks` が空でない `Stop` は Claude Code 自身の
+	// 申告だが、こちらは herdr の見え方から「差し戻されて書き直している」と当てているだけで、
+	// **書き直し以外の理由で `working` に見えることがありうる**（遅い `Stop` hook が
+	// まだ走っている、など）。**当たっているうちは新しい `Stop` が必ず来る。**
+	// 来ないまま `poll_wait_ms` が過ぎ、そのときエージェントが動いていなければ、
+	// **推測が外れているので turn の終わりとして進む。**
+	rewriteWait := false
 
 	for {
 		if ctx.Err() != nil {
@@ -839,6 +849,7 @@ func (o *Orchestrator) confirmTurnEnd(
 				o.logger.Info("バックグラウンド処理が残っていると名乗る Stop を受けたので、turn の終わりとせずに待ち直します",
 					"identifier", rs.issue().Identifier)
 				firstWait = false
+				rewriteWait = false
 				continue
 			}
 			if got != stopWaitEmpty {
@@ -856,13 +867,24 @@ func (o *Orchestrator) confirmTurnEnd(
 				if o.isQuotaWaiting(rs) {
 					return o.afterWaitTimeout(ctx, rs)
 				}
-				if st, err := o.agentStatus(ctx, rs); err == nil && st == herdr.AgentStatusBlocked {
+				st, stErr := o.agentStatus(ctx, rs)
+				if stErr == nil && st == herdr.AgentStatusBlocked {
 					return turnBlocked, nil
+				}
+				if rewriteWait && (stErr != nil || st != herdr.AgentStatusWorking) {
+					// **書き直しを当てにいったが、外れていた**（設計 3-79）。
+					// 新しい `Stop` は来ず、エージェントも動いていない。
+					// **ここで待ち続けると、巡回の stall 検知が `turn_timeout_ms`
+					// （既定1時間）で拾うまで run が空転する。**
+					o.logger.Info("書き直しを待ちましたが Stop も来ずエージェントも動いていないので、turn の終わりとします",
+						"identifier", rs.issue().Identifier, "agent_status", string(st))
+					return turnEnded, nil
 				}
 				continue
 			}
 			stopAt, _ = rs.stopSeen()
 		}
+		rewriteWait = false
 
 		// settle_ms のあいだ「turn がまだ続いている」しるしが来ないことを確かめる
 		// （設計 1-3 / 3-2）。
@@ -874,7 +896,18 @@ func (o *Orchestrator) confirmTurnEnd(
 		remaining := settle - o.now().Sub(stopAt)
 		ev, got := o.awaitHook(ctx, rs, remaining, turnContinues)
 		if !got {
-			return turnEnded, nil
+			if !o.stillWorkingAfterStop(ctx, rs) {
+				return turnEnded, nil
+			}
+			// **差し戻されて応答を書き直している最中である**（設計 3-79）。
+			// 空の `Stop` は「turn が終わった」ではなく「止まってよいか hook に尋ねた」で、
+			// **尋ねられた hook の答えは continuo に届かない。**
+			o.logger.Info("空の Stop のあともエージェントが動いているので、turn の終わりとせずに待ち直します",
+				"identifier", rs.issue().Identifier)
+			rs.clearStopSeen()
+			firstWait = false
+			rewriteWait = true
+			continue
 		}
 		// 来た。turn は続いている。待ち直す。
 		if isRunningStop(ev) {
@@ -1055,6 +1088,42 @@ func (o *Orchestrator) agentInfo(ctx context.Context, rs *runState) (herdr.Agent
 func (o *Orchestrator) agentStatus(ctx context.Context, rs *runState) (herdr.AgentStatus, error) {
 	agent, err := o.agentInfo(ctx, rs)
 	return agent.AgentStatus, err
+}
+
+// stillWorkingAfterStop は、空の `Stop` から `settle_ms` 待ったあともエージェントが
+// 動いているかを herdr へ1回だけ尋ねる（設計 3-79）。
+//
+// **空の `Stop` は「turn が終わった」ではない。**「止まってよいか `Stop` hook に尋ねた」
+// である。止まってよいかを決めるのは hook のほうで、**その答えは continuo に届かない。**
+// hook が `{"decision":"block"}` を返すと、Claude Code は turn を終わらせずに応答を
+// 書き直す。**書き直しの間、herdr から見たエージェントは `working` である**
+// （[docs/evidence/stop_hook_block_20260902.md](../../docs/evidence/stop_hook_block_20260902.md)
+// の実測。Stop hook が8秒かかる場合も含め、投入から書き直しの終わりまで `working` のまま）。
+//
+// **`working` のときだけ真を返す。**読めなかったときは偽を返して従来どおり進む。
+// **ここで待ちに倒すと、herdr が答えない間ずっと turn が終わらなくなる。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値: まだ動いていれば true。
+func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) bool {
+	if rs.agentName() == "" {
+		// **agent の名前をまだ持っていない run である**（引き継いだ run で、
+		// 復元が名前を埋める前に `Stop` が届いた場合。3-4 の段5a2）。
+		// **聞く相手がいないので、聞かずに従来どおり進む。**
+		// **WARN では出さない。**答えられないことが分かっているものを毎回警告に出すと、
+		// 本当に herdr が答えなくなったときの1行が埋もれる。
+		o.logger.Debug("agent の名前がまだ無いので、turn の終わりの裏取りをしません",
+			"identifier", rs.issue().Identifier)
+		return false
+	}
+	st, err := o.agentStatus(ctx, rs)
+	if err != nil {
+		o.logger.Warn("turn の終わりの裏取りができませんでした（turn の終わりとして進みます）",
+			"identifier", rs.issue().Identifier, "error", err)
+		return false
+	}
+	return st == herdr.AgentStatusWorking
 }
 
 // waitUntilStatuses は設定の文字列を herdr の状態の並びへ直す。

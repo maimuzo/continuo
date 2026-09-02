@@ -1021,3 +1021,293 @@ func TestTurn_SubagentStartを取りこぼしてもbackground_tasksが走行中�
 		}
 	}
 }
+
+// agentStatusScript は、テスト用herdr mock の `agent.get` が返す状態を後から差し替えられる
+// ようにする小さな台本である（#166 の検査で使う）。
+//
+// **既定の台本を写し取らずに書き直している。**`agent.get` の応答は
+// `name` / `agent_status` / `interactive_ready` の3つで足りており、
+// ここで確かめたいのは `agent_status` の値ひとつだからである。
+type agentStatusScript struct {
+	mu     sync.Mutex
+	status string
+	err    *rpcErr
+}
+
+// Set は次に返す状態を差し替える。
+//
+// status: 返す `agent_status`。
+func (s *agentStatusScript) Set(status string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = status
+	s.err = nil
+}
+
+// SetError は `agent.get` をエラーで返させる。
+//
+// err: 返すエラー。
+func (s *agentStatusScript) SetError(err *rpcErr) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.err = err
+}
+
+// Install はテスト用herdr mock へこの台本を差し込む。
+//
+// fx: 対象の fixture。
+func (s *agentStatusScript) Install(fx *fixture) {
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
+		s.mu.Lock()
+		status, err := s.status, s.err
+		s.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"type": "agent_info",
+			"agent": map[string]any{
+				"name": params["target"], "agent_status": status, "interactive_ready": true,
+			},
+		}, nil
+	})
+}
+
+// TestTurn_差し戻して書き直している間はturnの終わりとしない は、#166 の欠陥そのものを押さえる。
+//
+// 目的: 設計 3-79 の「空の `Stop` は『turn が終わった』ではなく『止まってよいか hook に
+// 尋ねた』である」を守っていることを示す。**`Stop` hook が `{"decision":"block"}` を返すと、
+// Claude Code は turn を終わらせずに応答を書き直すが、その差し戻しは continuo に届かない。**
+//
+// **1つ上の TestTurn_空のStopのあとに来た走行中のStopも捨てない と同じ形の欠陥である。**
+// あちらは Claude Code 自身が「まだ動いています」と申告してくる場合で、こちらは
+// **誰も申告してこない**場合である。だから並べて置いてある。
+//
+// 与える情報: 空の `Stop` が1件届く。**`settle_ms` のあいだ、それ以上は何も届かない。**
+// そのとき herdr は `working` を返す（差し戻された応答を書き直している最中である）。
+// transcript には差し戻された側の応答A（`CONTINUO-STATUS: review`）だけが在る。
+// 成功条件: `settle_ms` を何倍も過ぎても run が生きており、Status が `In Review` へ
+// 動いておらず、次の指示も送られていないこと。書き直しが終わったあとに応答Bの表明
+// （`CONTINUO-STATUS: working` ＝ Status を動かさない）が採られること。
+func TestTurn_差し戻して書き直している間はturnの終わりとしない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		// **settle_ms を広げるのは、テストを通すためではない。**既定の 50ms では
+		// 「窓が閉じる前に裏取りした」のか「たまたま間に合った」のかを区別できない。
+		cfg.Claude.SettleMs = 300
+	}})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	transcriptDir := t.TempDir()
+	// 応答A。**差し戻される側である。**ここで Status を動かすと pane を閉じてしまう。
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\nCONTINUO-STATUS: review", false),
+	})
+
+	// **着手の段では `idle` を返させる。**起動の落ち着きを待つところ（`herdr.startup_timeout_ms`）
+	// も同じ `agent.get` を読むので、最初から `working` にすると着手そのものが失敗する。
+	script := &agentStatusScript{status: "idle"}
+	script.Install(fx)
+
+	var mu sync.Mutex
+	var prompts int
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		mu.Lock()
+		prompts++
+		first := prompts == 1
+		mu.Unlock()
+		if first {
+			// 1回目の応答が差し戻され、書き直している最中である。
+			script.Set("working")
+		}
+		// **hook から見えるのは「空の Stop」だけである。**差し戻しは hook の戻り値なので
+		// continuo には飛んでこない。
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 10*time.Second, "空の Stop のあとに herdr へ裏取りして待ち直す", func() bool {
+		return strings.Contains(fx.Logs.String(),
+			"空の Stop のあともエージェントが動いているので、turn の終わりとせずに待ち直します")
+	})
+
+	// settle_ms（300ms）と poll_wait_ms（200ms）の何倍も待っても、まだ生きていること。
+	time.Sleep(1 * time.Second)
+	if len(fx.Orc.RunningIdentifiers()) == 0 {
+		t.Fatalf("書き直している最中に turn を終わらせて pane を閉じた:\n%s", fx.Logs.String())
+	}
+	if state := fx.Tracker.StateOf("PVTI_item188"); state == "In Review" {
+		t.Fatalf("差し戻された側の応答Aで Status を動かした: %q", state)
+	}
+	mu.Lock()
+	sent := prompts
+	mu.Unlock()
+	if sent != 1 {
+		t.Fatalf("書き直している最中に次の指示を送った: %d 回", sent)
+	}
+
+	// 書き直しが終わった。応答Bが transcript へ足され、herdr は idle に戻り、
+	// 2本目の空の `Stop` が届く。
+	writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\nCONTINUO-STATUS: review", false),
+		assistantLine("req2", "書き直しました。まだ続けます。\nCONTINUO-STATUS: working", false),
+	})
+	script.Set("idle")
+	fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+
+	waitFor(t, 10*time.Second, "書き直しが終わったので次の指示が送られる", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return prompts >= 2
+	})
+	if state := fx.Tracker.StateOf("PVTI_item188"); state == "In Review" {
+		t.Fatalf("応答Bの表明ではなく応答Aの表明が採られた: %q", state)
+	}
+}
+
+// TestTurn_裏取りが読めなければ従来どおりturnを終わらせる は、裏取りの失敗で待ちに倒れないことを
+// 確かめる（設計 3-79）。
+//
+// 目的: **herdr が答えないときに待ちへ倒すと、turn が永久に終わらなくなる。**
+// 読めなかったら偽を返して従来どおり進む、という決めを守っていることを示す。
+// 与える情報: 空の `Stop` が1件届き、`agent.get` はエラーを返す。
+// 成功条件: turn が終わり、run が畳まれること。
+func TestTurn_裏取りが読めなければ従来どおりturnを終わらせる(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Claude.SettleMs = 300
+	}})
+	// **わざと herdr を答えなくしているので、その失敗から出る WARN は想定内である。**
+	fx.AllowLog("herdr が答えません")
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\nCONTINUO-STATUS: review", false),
+	})
+
+	// **着手の段では読める状態にしておく。**起動の落ち着きを待つところも同じ
+	// `agent.get` を読むので、最初からエラーにすると着手そのものが失敗する。
+	script := &agentStatusScript{status: "idle"}
+	script.Install(fx)
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// turn を送ったあとで herdr が答えなくなる。
+		fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+		script.SetError(&rpcErr{Code: "internal_error", Message: "herdr が答えません"})
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "裏取りが読めなくても turn が終わる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+}
+
+// TestTurn_裏取りがidleなら空のStopでそのままturnが終わる は、既存の挙動を変えていないことを
+// 確かめる（設計 3-79）。
+//
+// 目的: **裏取りを足したせいで、差し戻しの無い普通の turn が遅くなったり終わらなくなったり
+// していないこと**を示す。
+// 与える情報: 空の `Stop` が1件届き、`agent.get` は `idle` を返す。
+// 成功条件: `settle_ms` の経過で turn が終わり、応答Aの表明が採られて run が畳まれること。
+func TestTurn_裏取りがidleなら空のStopでそのままturnが終わる(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Claude.SettleMs = 300
+	}})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\nCONTINUO-STATUS: review", false),
+	})
+
+	script := &agentStatusScript{status: "idle"}
+	script.Install(fx)
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **引き渡しのコメントは run が始まったあとに付いていなければならない。**
+		// 先に付けておくと「この run のコメントが無い」と判定され、セッションの復元へ入る。
+		fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "空の Stop で turn が終わり run が畳まれる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+	if state := fx.Tracker.StateOf("PVTI_item188"); state != "In Review" {
+		t.Fatalf("応答Aの表明が採られていない: %q\n%s", state, fx.Logs.String())
+	}
+	if strings.Contains(fx.Logs.String(), "turn の終わりとせずに待ち直します") {
+		t.Fatalf("差し戻しが無いのに待ち直している:\n%s", fx.Logs.String())
+	}
+}
+
+// TestTurn_書き直しが来ないまま止まっていれば待ち続けない は、裏取りが外れたときの代償を
+// 抑えていることを確かめる（設計 3-79）。
+//
+// 目的: **`working` は推測である。**遅い `Stop` hook が走っているだけでも `working` に
+// 見える。**そのとき新しい `Stop` は二度と来ないので、待ち続けると巡回の stall 検知が
+// `turn_timeout_ms`（既定1時間）で拾うまで run が空転する。**
+// `poll_wait_ms` が過ぎてもエージェントが動いていなければ、turn の終わりとして進むことを示す。
+//
+// 与える情報: 空の `Stop` が1件届き、そのとき `agent.get` は `working` を返す。
+// **そのあと `Stop` は二度と来ず、`agent.get` は `idle` に変わる。**
+// 成功条件: `poll_wait_ms` を1回過ぎたところで turn が終わり、run が畳まれること。
+func TestTurn_書き直しが来ないまま止まっていれば待ち続けない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{Mutate: func(cfg *config.Config) {
+		cfg.Claude.SettleMs = 300
+	}})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\nCONTINUO-STATUS: review", false),
+	})
+
+	script := &agentStatusScript{status: "idle"}
+	script.Install(fx)
+
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **遅い `Stop` hook がまだ走っているだけである。**差し戻してはいない。
+		script.Set("working")
+		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 10*time.Second, "裏取りで待ち直す", func() bool {
+		return strings.Contains(fx.Logs.String(),
+			"空の Stop のあともエージェントが動いているので、turn の終わりとせずに待ち直します")
+	})
+	// **書き直しは始まっていなかった。**遅い hook が終わり、エージェントは止まっている。
+	script.Set("idle")
+
+	waitFor(t, 15*time.Second, "待ち続けずに turn の終わりとして進む", func() bool {
+		return strings.Contains(fx.Logs.String(),
+			"書き直しを待ちましたが Stop も来ずエージェントも動いていないので、turn の終わりとします")
+	})
+	waitFor(t, 15*time.Second, "run が畳まれる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
+	})
+}
