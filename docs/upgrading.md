@@ -72,7 +72,84 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.12 から v0.1.13 へ
 
-**足すものはありません。**設定のキーも、本文に足す指示も増えていません。
+**本文（front matter より下）に足すものが1つあります**（「## 自分で作った worktree は、自分で消すこと」）。
+**設定のキーは増えていません。消えてもいません。**
+
+| 何が変わったか | 当てる必要 |
+| --- | --- |
+| **front matter の `tracker.automated_state_rewrite` の説明** | **要りません。**説明のコメントだけが変わりました。設定の意味も既定値も同じです |
+| **本文に「## 自分で作った worktree は、自分で消すこと」の節が増えました** | **当てると、エージェントが自分で足した worktree を消して終わるようになります** |
+| **入札と担当決定のコメントが、人間にも読める形になりました** | **要りません。**continuo が issue へ書く文面が変わっただけです |
+
+### 自分で作った worktree を片付けろという指示 — v0.1.12 の本文には1行もありません
+
+**エージェントは、必要だと思えば worktree を足します。**
+**v0.1.12 までの本文には、足したものをどうするかが1行も書かれていませんでした。**
+
+**continuo が片付けるのは、continuo が用意した worktree だけです。**
+エージェントが足したものは消されず、**登録だけが残ります。**
+`--force` を付けて消させると、**commit していない変更が確認なしに消えます。**
+
+### 差し替え方（自分で作った worktree は自分で消せ）
+
+**`WORKFLOW.md` の「## この issue を読むこと」の行を探します。**その行の「直前」に足します。
+**その行そのものと、その前後は1文字も変えません。**
+**足したあとに空行を1つ入れて、`## この issue を読むこと` の行と離してください。**
+
+```text
+## 自分で作った worktree は、自分で消すこと
+
+**それでも worktree を足したときは、作業を終える前に自分で消してください。**
+**continuo が片付けるのは、continuo が用意した worktree だけです。**
+あなたが足したものは、消すまで残り続けます。
+
+**消してよいのは、あなた自身が git worktree add で作った worktree だけです。**
+**そのパスは、あなたが git worktree add に渡した文字列そのものです。**
+
+**git worktree list で一覧を出して、そこから消すものを選ばないでください。**
+**一覧には、continuo が別の issue のために用意した worktree も並びます。**
+それらは、いま別のエージェントが使っています。
+**commit していない変更が無ければ、git worktree remove は --force を付けなくても成功します。**
+**確認も警告も出ないまま、別のエージェントの作業場所が消えます。**
+
+**自分で git worktree add した覚えが無いなら、1つも消さないでください。**
+
+**消す前に、その worktree に2つが残っていないかを確かめてください。**
+
+    git -C <自分が git worktree add したパス> status --short
+    git -C <自分が git worktree add したパス> log --oneline HEAD --not --remotes
+
+**1つ目が commit していない変更、2つ目が push していない commit です。**
+**どちらかが出たら、消す前に commit して push してください。**消すと戻せません。
+
+**確かめたら消します。**
+
+    git worktree remove <自分が git worktree add したパス>
+
+**--force を付けないでください。**commit していない変更が、確認も警告も無く消えます。
+**git worktree remove が断ったときは、上の2つをもう一度確かめてください。**
+断っているのは、消してはいけないものが残っているからです。
+
+**git worktree prune は片付けの手段ではありません。**
+**ディレクトリが先に消えたあとで、残った登録だけを掃除するコマンドです。**
+worktree を消したつもりで叩いても、実体は1つも消えません。
+```
+
+### 当たったかどうかの確かめ方（自分で作った worktree は自分で消せ）
+
+**`continuo doctor` は本文を検査しません。**`grep` で見ます。
+
+```bash
+grep -c '^## 自分で作った worktree は、自分で消すこと' ~/continuo-work/WORKFLOW.md
+grep -c 'git worktree list で一覧を出して、そこから消すものを選ばないでください' ~/continuo-work/WORKFLOW.md
+grep -c 'git -C <自分が git worktree add したパス> log --oneline HEAD --not --remotes' ~/continuo-work/WORKFLOW.md
+```
+
+**3つとも `1` なら当たっています。**
+
+**見出しだけを数えないでください。**途中で切れて貼られていても、見出しの行は `1` を返します。
+**残りの2つは、別のエージェントが使っている worktree を消させないための行です。**
+**この2つが抜けたままだと、エージェントは `git worktree list` の一覧から選んで消しにいきます。**
 
 ### 入札と担当決定のコメントが、人間にも読める形になりました
 

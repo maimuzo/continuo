@@ -369,6 +369,9 @@ tracker:
 （この検査で起動を止めると、抜け出す道が無くなります）。
 **同じ内容の警告が、起動したときにもログへ1行出ます。**
 
+**そもそも何を書けばよいのかから知りたいときは、「使い方が分からないとき」の
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」を見てください。**
+
 ---
 
 ## issue が動かないとき
@@ -915,9 +918,10 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 | **書き戻させる** | `WORKFLOW.md` に対応表を書く。自動化が書いた Status を、本来の Status へ戻させる |
 | **自動化を止める** | ボードの `Workflows` から、その自動化を無効にする |
 
-**対応表の書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正です。**
-そのまま貼れる yaml・左と右の決め方・書き戻しの上限・確かめ方が、そこに1箇所だけあります。
-**この文書には写しを置きません**（2箇所にあると、片方だけ直したときに食い違います）。
+**何をどう書くかは、「使い方が分からないとき」の
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
+そのまま貼れる yaml と、書けない5つの形がそこにあります。
+**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
@@ -960,6 +964,9 @@ cleanup:
 **まず対応表のその行を消してください。**残したまま `tracker` の他のキーへ書き足すと、
 「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
 そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
+
+**対応表そのものの決め方は、「使い方が分からないとき」の
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
 
 **その worktree が残るかどうかは `cleanup.enabled` で決まります。**
 **止めた理由のコメントに、その設定でどうなるかが書いてあります。**
@@ -1698,6 +1705,85 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 ```bash
 cd ~/continuo-work && continuo doctor && continuo
 ```
+
+### エージェントが PR を作った直後に止まる（automated_state_rewrite）
+
+**まず、この設定が自分に要るのかを確かめてください。**
+カンバンの `Settings` → `Workflows` を開きます。**Status を書く自動化**
+（`Item added to project` / `Pull request merged` / `Code changes requested` など）が
+1つでも**有効**になっていますか。
+
+| `Workflows` の状態 | どうするか |
+| --- | --- |
+| **1つも有効になっていない** | **この設定は要りません。**`automated_state_rewrite: {}` のままにしてください |
+| **1つでも有効になっている** | **下を読んでください** |
+
+**何が起きるか。**エージェントが PR を作ると、その自動化がカンバンの Status を書き換えます。
+書き換わった先は `tracker.active_states` に無い Status なので、
+**continuo は「人間が引き取った」と読みます。**`tracker.unknown_state_grace_ms`（既定10分）の
+猶予を置いてから、**動いているエージェントを turn の途中で止めます。**
+利用者の環境では、**PR を作った3秒後に自動化が Status を書き、その29秒後の巡回で止まりました。**
+
+**どう解決するか。****Status を書いたのが誰かを見ます。**
+
+| Status を動かしたのが | continuo はどうするか |
+| --- | --- |
+| **カンバンの組み込みの自動化** | **止めません。**対応表にある Status へ書き戻して、作業を続けさせます |
+| **人間** | **いままでどおりです。**猶予を置いてからエージェントを止めます |
+
+**人間が動かしたものは戻しません。**
+**「人間が Status を動かしてエージェントを止める」操作は、そのまま効きます。**
+
+**書かなかったらどうなるか。**空（`{}`）のままでも壊れません。
+自動化が Status を動かしたとき、`tracker.unknown_state_grace_ms` の猶予を置いてからエージェントを止めます。
+**つまり「PR を作ってから CI の直しを続ける」流れでは、途中で止まります。**
+
+**何を書くか。**`tracker:` の下に、`automated_state_rewrite` の対応表を足します。
+**左が、自動化が書き込む Status 名です。右が、戻したい Status 名です。**
+
+```yaml
+tracker:
+  active_states: ["AI Ready", "AI In Progress"]
+  automated_state_rewrite:
+    "In Progress": "AI In Progress"
+    # 左：自動化が書き込む Status 名（カンバンの選択肢と1文字ずつ合わせる）
+    # 右：戻したい Status 名（必ず active_states の中から選ぶ）
+```
+
+**この例は、カンバンの Status を `AI Ready` / `AI In Progress` のように先に改名してある人のものです。**
+`continuo init` が置いた雛形の `active_states: ["Ready", "In Progress"]` のままで、
+**`automated_state_rewrite` の行だけを写しても起動しません。**
+左の `In Progress` が `tracker` の他のキーに出てくる Status だからです（下の表の2行目）。
+
+**書けない形は5つあります。**どれも `continuo doctor` の `設定ファイル` の行が `✗` になり、起動しません。
+**弾く条件の正は [internal/config/validate.go](../internal/config/validate.go) の
+`validateAutomatedStateRewrite` の1箇所です。下の表は、その写しです。**
+
+| 書けない形 | なぜ |
+| --- | --- |
+| **左と右が同じ** | 同じ値の書き込みは省かれるので、巡回のたびに書きに行き続けます |
+| **左が、`tracker` の他のキーに出てくる Status** | その行は一度も引かれません。引くのは continuo が知らない Status になったときだけです |
+| **右が `tracker.active_states` の外** | 書き戻した直後に、continuo 自身がその run を終わらせます |
+| **大文字小文字だけが違う左が2つ** | どちらに当たるかが、実行のたびに変わります |
+| **左が空、または右が空** | Status 名として存在しません |
+
+**「`tracker` の他のキー」は6つです。**`active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `status_signal_map` の遷移先。
+**`tracker` の外（`cleanup` など）は見ません。**
+
+**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」にあります。**
+
+**書き戻しても自動化が書き直す押し合いになると、continuo は途中で書き戻しをやめます。**
+そこから先はいままでどおり、猶予を置いてエージェントを止め、
+issue のコメントで `Workflows` を切る手を案内します。
+**何回でやめるかは、[upgrading.md](upgrading.md) の
+「`tracker.automated_state_rewrite` — 自動化に動かされた Status を戻す」にあります。**
+
+**左に何を書けばよいか分からないときは、書かなくて構いません。**
+次に自動化が Status を動かしたとき、continuo が issue のコメントに
+**「この2行を足してください」とそのまま貼れる形で書きます。**
+
+**書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
 ### 手元の変更が herdr との組み合わせで壊れていないか確かめたい（開発者向け）
 
