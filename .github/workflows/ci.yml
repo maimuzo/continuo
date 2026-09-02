@@ -132,18 +132,6 @@ jobs:
         # **文字列が同じかと、実際に同じ答えを返すかの両方を見る。**
         run: python3 .claude/hooks/tests/test_marker_pattern_parity.py
 
-      - name: 指示の記録の hook が壊れていないか
-        # **この2本は、記録そのものを書き換える。**壊れると人間の指示が消える。
-        #
-        # **判定の誤りは、目で読んでも見つからなかった。**
-        # 出力の数字を全部つないでいたので `internal/v2/config.go:0` が `20` になり、
-        # **0件が「済」になっていた。**走らせるまで分からない種類の欠陥である。
-        #
-        # **ロックと打ち切りも、走らせないと確かめられない。**
-        run: |
-          python3 .claude/hooks/tests/test_task_store.py
-          python3 .claude/hooks/tests/test_check_open_tasks.py
-
 
   build:
     # **配布物を作れることを、タグを打つ前に確かめる。**

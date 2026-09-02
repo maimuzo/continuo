@@ -251,31 +251,40 @@
 
 ## 5. いま動いているもの / 動いていないもの
 
-**言いたいこと。****道具は3本できてテストも付いたが、`Stop` hook に登録していないので、
-1度も自動では動いていない。**登録する前に、走らせる中身の安全を先に決めてある。
+**言いたいこと。****道具は3本書けてテストも付いたが、どの hook にも登録しておらず、
+1度も走らない。**そのため、**このリポジトリのどの branch にも置いていない。**
+**取り出し方は下にある。**登録する前に、走らせる中身の安全は先に決めてある。
 
-### 5-1. できているもの
+### 5-1. 書けているもの（このリポジトリには置いていない）
 
 | ファイル | 何をするか |
 | --- | --- |
-| [.claude/hooks/task_common.py](../../.claude/hooks/task_common.py) | 記録の読み書き・確かめ方の判定・**確かめ方の形の検査**（`verify_rejection`） |
-| [.claude/hooks/task-store.py](../../.claude/hooks/task-store.py) | 記録の読み書き（`add` / `close` / `merge` / `list`） |
-| [.claude/hooks/check-open-tasks.py](../../.claude/hooks/check-open-tasks.py) | `Stop` で走り、確かめ方が通っているのに閉じていないものがあれば `{"decision": "block"}` を出す |
+| `.claude/hooks/task_common.py`（426行） | 記録の読み書き・確かめ方の判定・**確かめ方の形の検査**（`verify_rejection`） |
+| `.claude/hooks/task-store.py`（297行） | 記録の読み書き（`add` / `close` / `merge` / `list`） |
+| `.claude/hooks/check-open-tasks.py`（148行） | `Stop` で走り、確かめ方が通っているのに閉じていないものがあれば `{"decision": "block"}` を出す |
+| `.claude/hooks/tests/test_task_store.py`（522行） | 上の2本のテスト |
+| `.claude/hooks/tests/test_check_open_tasks.py`（158行） | `check-open-tasks.py` のテスト |
 
-**3本とも git に入っている。**テストは
-[test_task_store.py](../../.claude/hooks/tests/test_task_store.py) と
-[test_check_open_tasks.py](../../.claude/hooks/tests/test_check_open_tasks.py) で、
-[.github/workflows/ci.yml](../../.github/workflows/ci.yml) の「指示の記録の hook が壊れていないか」が回す。
+**なぜ置いていないか。****どの hook にも登録しておらず、1度も走らないためである。**
+動かないものを置くと、次に読む人が「これは動いている」と読む
+（[.claude/rules/reporting.md](../../.claude/rules/reporting.md) の「事実の扱い」）。
 
-**記録そのものは git に入れない。**[.gitignore:56](../../.gitignore#L56) が `.claude/requests/` を外している。
-人間の発言の原文がそのまま入るためである。
+**取り出し方。**5本とも commit `ea8090db145f1001c7f89cc054b34ca906d2fe91` に入っている。
+
+```bash
+git show ea8090db145f1001c7f89cc054b34ca906d2fe91:.claude/hooks/task_common.py
+```
+
+**記録そのものも git に入れない設計である。**置き場所は `.claude/requests/` で、
+**人間の発言の原文がそのまま入る。**このリポジトリは PUBLIC なので、
+**登録するときに `.gitignore` へ足すこと。**
 
 **`check-open-tasks.py` は未完了そのものでは止めない。**まだ着手していない指示が並んでいるだけのことがあるため。
 
 ### 5-2. `verify` は、通してよい形しか走らせない
 
 **`verify` は LLM が書いた文字列で、`Stop` のたびに shell へ渡る。**
-確認も承認も挟まらないので、[task_common.py](../../.claude/hooks/task_common.py) の
+確認も承認も挟まらないので、`task_common.py` の
 `verify_rejection` が**通してよい形だけを通す。**
 
 | どこで見るか | 通らなかったらどうなるか |
