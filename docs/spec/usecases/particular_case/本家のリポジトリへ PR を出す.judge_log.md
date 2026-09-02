@@ -1,0 +1,62 @@
+# 判断ログ: 本家のリポジトリへ PR を出す
+
+- 対象: `docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.rucm.md`
+- 作成日 / 作成モデル: 2026-09-02 / Claude Opus 5 (1M context)
+- 参照した根拠資料: `docs/plans/continuo_design.md`（3-2 / 3-9 / 3-12 / 3-16 / 3-18 / 3-21 / 3-22 / 3-23 / 3-64 / 4-1）、`internal/workspace/prepare.go`、`internal/workspace/cleanup.go`、`internal/workspace/git.go`、`internal/orchestrator/settings.go`、`internal/orchestrator/hookinput.go`、`internal/orchestrator/reconcile.go`、`internal/scaffold/template.go`、`internal/config/default.go`
+
+## 判断一覧
+
+| # | 判断対象 | 決定した値 | 合理的決定根拠 | 出典 | 自信 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | USE CASE NAME | 本家のリポジトリへ PR を出す | 依頼の言葉（「本家にPRを出すRUCM」）をそのまま使い、動詞で終わる名詞句の規則に合わせた | 依頼文 | 95% |
+| 2 | 配置ディレクトリ | `particular_case/` | 「issue 1件を、コードが別リポジトリにある形で処理する」という単一目的の流れであり、複数ユースケースを跨ぐ時系列ではない | rucm スキルの粒度ガイド | 85% |
+| 3 | BRIEF DESCRIPTION | issue は非公開のリポジトリ、コードは public の fork、PR は本家へ、という3点を先に置いた | このユースケースを他と分けているのは「置き場所が3つに割れていること」だけである。そこを書かないと「issue を1件処理する」と区別が付かない | 依頼文の7段の表 | 90% |
+| 4 | PRECONDITION（リポジトリの割れ方） | issue のリポジトリは非公開でコードを持たない。コードのリポジトリは public の fork で本家を upstream に持つ | 依頼文がこの形を指定している。**この前提を外すと、以下のすべての段が別の話になる** | 依頼文 | 100% |
+| 5 | PRECONDITION（`claude.tool_gate.mode`） | 既定の `public_only` である | 既定値は `public_only` と設計が明記している。基本フローの段7 の分岐がこの値に依存する | `docs/plans/continuo_design.md#3-64`、`internal/config/default.go` | 90% |
+| 6 | PRECONDITION（`cleanup.on_states`） | `Done` だけを持つ | 雛形の既定が `on_states: ["Done"]` である。**この値が基本フローの段23（人間が Done へ動かす）を要求している** | `internal/scaffold/template.go`（`cleanup.on_states` の行）、`internal/config/default.go` の `OnStates` | 95% |
+| 7 | PRECONDITION（WORKFLOW.md の本文） | worktree の外の clone で直してよいと書いている | `continuo init` が置く雛形は「worktree と branch は切り替えないこと」と書くだけで、**worktree の外の clone を禁じてはいない。**とはいえ雛形のままでは「別のリポジトリの issue は直さずに `working` と書け」とも読める。**このユースケースは WORKFLOW.md を書き換えて回す前提である**ことを事前条件に明示した | `internal/scaffold/template.go`（「worktree と branch は切り替えないこと」と「別のリポジトリの issue」の段） | 75% |
+| 8 | PRIMARY ACTOR | 巡回タイマー | 起点は continuo の巡回である。同じ起点を「issue を1件処理する」も採っており、用語を揃えた（R9） | `docs/spec/usecases/particular_case/issue を1件処理する.rucm.md` | 90% |
+| 9 | SECONDARY ACTORS | エージェント、GitHub Projects v2、利用者 | 実際にコードを直すのはエージェント、Status の置き場所はカンバン、`Done` へ動かすのは人間である | `docs/plans/continuo_design.md#4-1` | 90% |
+| 10 | 副アクターの呼び方を「エージェント」にしたこと | `Claude Code` ではなく `エージェント` | **`Claude Code` は空白を含むので、rucm-checker の主語判定（W003）が通らない。**アクター名は空白で分割されて登録されるためである。依頼文の7段の表も「エージェント」と書いており、雛形の本文も「エージェント」と呼んでいる | rucm-checker の W003 の実行結果、依頼文、`internal/scaffold/template.go` | 90% |
+| 11 | DEPENDENCY | なし | 他のユースケースを取り込まない。`INCLUDE` を持つのは scenario 側である | rucm スキルのファイル規約 | 90% |
+| 12 | GENERALIZATION | なし | 「issue を1件処理する」とは前提（リポジトリの割れ方）が違うだけで、汎化の関係にはない。汎化にすると、両方の代替フローを継承した形を書くことになり、確かめたい点が埋もれる | - | 60% |
+| 13 | 基本フローの範囲 | 巡回の開始から、worktree と branch を消すところまで | 依頼文の7段の表が「continuo が worktree を作る」で始まり「continuo が worktree を片付ける」で終わっている。**守りたいのは両端であり、途中を落とすと何を守るのかが分からなくなる** | 依頼文の7段の表 | 90% |
+| 14 | 段3（`VALIDATES THAT` 既定 branch の名前） | issue のリポジトリの既定 branch の名前を持っていること | `resolveBase` は `herdr.worktree.base` が null なら `Issue.NativeRef["default_branch"]` を読み、無ければ `ErrBaseUnknown` を返す。**base を推測しない**と設計が決めている | `internal/workspace/prepare.go` の `resolveBase`、`docs/plans/continuo_design.md#3-22` | 95% |
+| 15 | 段4（base の値） | issue のリポジトリの既定 branch | **コードのリポジトリの名前は issue の本文にしか無く、continuo は知らない。**だから base は issue のリポジトリ側から決まる。この形でこそ worktree は「コードの無い場所」になる | `internal/workspace/prepare.go` の `resolveBase`、`internal/tracker/query.go`（`default_branch` を `defaultBranchRef` から作る箇所） | 90% |
+| 16 | 段5と段6 を分けたこと | 身元ファイルを置く段と、除外の一覧に加える段を別にした | R4（1文1動作）。**除外に入っていないと、身元ファイルが未追跡のファイルとして数えられ、この worktree は永久に片付かない。**その因果を1段として見せたい | `internal/workspace/cleanup.go` の `identityStatusExcludes`、`docs/plans/continuo_design.md#3-18` | 85% |
+| 17 | 段7（`VALIDATES THAT` 非公開） | issue のリポジトリが非公開であること | `toolGateApplies` は `public_only` のとき `repoIsPrivate == nil \|\| !*repoIsPrivate` で掛けるかを決める。**非公開なら掛けない** | `internal/orchestrator/settings.go` の `toolGateApplies` | 95% |
+| 18 | 段8 を「判定の hook を持たない設定ファイルを作る」にしたこと | 設定ファイルを作る段の中に、判定の hook の有無を織り込んだ | 実装は `writeSettingsFile` が hook を組み立ててから1回書く。**「作ってから足す」と書くと、実装に無い順序を仕様にしてしまう** | `internal/orchestrator/settings.go` の `writeSettingsFile` と `toolGateHookMatchers` | 90% |
+| 19 | 段11 を1段にまとめたこと | 「issue の本文とコメントからコードのリポジトリの名前を読む」を1段にした | R4 は1文1動作である。「読む」1つの動詞で収まる。**本文とコメントを別々の段に割ると、continuo 側の段より細かくなり、粒度が揃わない** | rucm スキルの R4 | 80% |
+| 20 | 段12 から段18（エージェントの作業） | worktree の外の clone で直し、fork の origin へ push し、本家へ PR を出し、レビューを読んで直す | 依頼文の7段の表の段3 から段6 をそのまま写した。**これは continuo の仕組みではなく、エージェントの判断で回っている**が、守りたいのはこの流れである | 依頼文の7段の表 | 95% |
+| 21 | エージェントが fork と本家に直接触る段を残したこと | R3（アクター間の直接相互作用の禁止）よりも記述の正しさを採った | continuo は fork への push も本家への PR も仲介しない。**システムに仲介させて書くと、実在しない自動化を仕様にしてしまう。**fork と本家は副アクターに挙げていないので、形式上はアクター間の相互作用にはならない | `internal/scaffold/template.go`（continuo は `gh` を叩かせるだけで、自分では PR を作らない） | 65% |
+| 22 | 段20（`VALIDATES THAT` hook の cwd） | Stop hook の `cwd` が worktree の内側であること | `acceptHookCwd` は `cwd` が worktree の内側でなければ **hook ごと捨てる。**turn の終わりの判定の起点は `Stop` hook である。**このユースケースはエージェントが worktree の外の clone で作業するので、ここが唯一の落とし穴になる** | `internal/orchestrator/hookinput.go` の `acceptHookCwd` と `sanitizeHookEvent`、`docs/plans/continuo_design.md#3-2` | 90% |
+| 23 | 段20 を入れた理由 | 仕組みを変える人に、この検査の存在を知らせるため | **この検査は「session_id を騙った hook」を弾くためにある**（設計 3-23）。緩めると別の穴が開く。**緩めるのではなく、エージェント側が作業ディレクトリを worktree に保つことで両立させる**（`git -C <clone>` や部分シェルを使う） | `internal/orchestrator/hookinput.go` の注釈、`docs/plans/continuo_design.md#3-23` | 70% |
+| 24 | `cwd` が実際に何を指すかを断定しなかったこと | RUCM には「Stop hook の `cwd`」とだけ書いた | **エージェントが `cd` したときに hook の `cwd` がどう変わるかは、実機で測っていない。**continuo 側の判定（外なら捨てる）は実コードで確認できるので、そこだけを書いた | `internal/orchestrator/hookinput.go` の `acceptHookCwd`（判定の側だけを確認した） | 60% |
+| 25 | 段21（表明の読み方） | エージェントの会話の記録から `review` の表明を読む | continuo は transcript の表明を読んで Status を動かす。**エージェントに `gh` を叩かせない** | `docs/plans/continuo_design.md#3-25`、`internal/scaffold/template.go`（「この1行を読んで Status を動かすのは continuo です」） | 90% |
+| 26 | 段22 の Status | `In Review` | 雛形の `status_signal_map` が `review: "In Review"` である | `internal/scaffold/template.go` の `status_signal_map` | 95% |
+| 27 | 段23（人間が `Done` へ動かす）を基本フローに入れたこと | 利用者の操作を1段として置いた | `cleanup.on_states` は `Done` だけである。**`In Review` のままでは片付けが起きない。**この段を落とすと、基本フローが「片付けまで行く」形にならない | `internal/scaffold/template.go`（`cleanup.on_states` と `terminal_states`）、`docs/plans/continuo_design.md#4-1` | 90% |
+| 28 | 段24（`VALIDATES THAT` 変更が残っていない） | 身元ファイル以外の変更が残っていないこと | `leftoverReasons` は `identityStatusExcludes` を `git status --porcelain` から外して数える。**外さないと、このユースケースの worktree は1つも片付かない** | `internal/workspace/cleanup.go` の `leftoverReasons` と `identityStatusExcludes` | 95% |
+| 29 | 段25（`VALIDATES THAT` リモート追跡 ref） | HEAD がリモート追跡 ref のどれかに載っていること | 片付けの段1 は `git for-each-ref --contains HEAD refs/remotes/` である。**このユースケースの worktree は base の commit のままなので、この段で真になり、その先を見ずに消してよいと決まる** | `internal/workspace/git.go` の `gitRemoteRefContainsHead`、`docs/plans/continuo_design.md#3-9` | 90% |
+| 30 | 段25 の偽を代替フローにしたこと | 「リモート追跡refに載っていない」を特定代替フローにし、その中に base との差分の判定を置いた | 実装は段1 が偽のとき upstream を見て、無ければ base との差分を見る。**remote を1つも持たない clone では段1 が常に偽になる**ので、この経路は実在する。**基本フローに2つ並べると、真が2回続く形しか書けない** | `internal/workspace/cleanup.go` の `leftoverReasons`（段1・段3 の分岐） | 80% |
+| 31 | upstream を見る段2 を書かなかったこと | RUCM には段1 と段3 だけを書いた | 実装の段2 は**見送ることが段1 で決まったあとに、理由を数で言うためだけに数える。**判定を分けない段なので、制御フローには現れない | `internal/workspace/cleanup.go` の `leftoverReasons`（段2 の注釈「見送ることは段1 で決まっている」） | 85% |
+| 32 | 「既定branchが分からない」の終端 | `ABORT` | この issue はここで終わる。base を推測して続けてはならない。**戻り先が無い**ので `RESUME STEP` は書けない | rucm スキルの「`ABORT` と `RESUME STEP` の選び方」 | 90% |
+| 33 | 「既定branchが分からない」の POSTCONDITION | worktree は作られていない。Status は着手待ちのまま | `resolveBase` は worktree を作る前に呼ばれるので、実体は1つも残らない。**残るもの・残らないものは終端ではなく POSTCONDITION で表す** | `internal/workspace/prepare.go` の `Prepare`、rucm スキルの R26 | 85% |
+| 34 | 「公開のリポジトリ」の終端 | `RESUME STEP 9` | 判定の hook を足したあとも、起動から先の流れは同じである。**続きがあるので `RESUME STEP` である** | rucm スキルの「`ABORT` と `RESUME STEP` の選び方」 | 90% |
+| 35 | 「作業ディレクトリがworktreeの外」の終端 | `ABORT` | 打ち切られた時点でこのユースケースは途切れる。**worktree も本家の PR も残るが、それは POSTCONDITION に書くことであり、終端の種類とは無関係である** | rucm スキルの「やってはいけない選び方」の表 | 85% |
+| 36 | 「作業ディレクトリがworktreeの外」の段の並べ方 | hook を捨てる → 検知しない → 画面の版が増えない → 止める → コメントする | `sanitizeHookEvent` が捨て、`checkStalls` が画面の版を `turn_timeout_ms` のあいだ見比べ、増えなければ `abandonRunAsync` を呼ぶ。**エージェントが応答を終えて idle に落ちれば画面の版は止まる** | `internal/orchestrator/hookinput.go`、`internal/orchestrator/reconcile.go` の `checkStalls` と `stalledScreenReason` | 80% |
+| 37 | 打ち切りのあとの Status を書かなかったこと | POSTCONDITION に「issue は打ち切られている」とだけ書いた | `abandonRunClaimed` はリトライの回数が残っていれば着手からやり直し、使い切れば人間へ渡す。**どちらになるかは回数次第なので、片方に決めて書くと誤りになる** | `internal/orchestrator/lifecycle.go` の `abandonRunClaimed` | 80% |
+| 38 | 「身元ファイル以外の変更が残っている」の終端 | `ABORT` | 片付けを見送った時点でこのユースケースは終わる。worktree と branch が残ることは POSTCONDITION に書いた | rucm スキルの「`ABORT` と `RESUME STEP` の選び方」 | 90% |
+| 39 | 「リモート追跡refに載っていない」の終端 | `RESUME STEP 26` | base と差分が無ければ、消す段へ進む。**続きがあるので `RESUME STEP` である。**この経路を `ABORT` にすると、remote を持たない clone で片付けが1度も成立しない形になる | rucm スキルの「`ABORT` と `RESUME STEP` の選び方」、`internal/workspace/cleanup.go` の `leftoverReasons` | 85% |
+| 40 | 「baseと差分がある」の `RFS` の指し先 | `RFS リモート追跡refに載っていない 1` | 分岐元は基本フローではなく、代替フローの中の条件ステップである。`RFS` はフロー識別子を取るので、代替フローの名前を指せる | rucm スキルの厳密規則6、`references/rucm_structure.md` のフロー識別子の節 | 85% |
+| 41 | 「本家のPRを出せない」を任意時点代替フローにしたこと | GLOBAL ALTERNATIVE FLOW | 分岐元の段15 は `VALIDATES THAT` を持たないエージェントの操作である。**特定代替フローの `RFS` は条件ステップしか指せない**（rucm-checker の E021） | rucm-checker の E021、rucm スキルのフロー種別の表 | 90% |
+| 42 | 「本家のPRを出せない」の `BRANCH FROM` | `BASIC FLOW 15`（1点だけ） | 選定基準は最悪のタイミングである。**段15 は fork への push が済んだ直後**であり、ここで止まると「commit は外に出ているのに、本家からは見えない」という、いちばん分かりにくい状態が残る。段14 より前で止まれば、まだ何も外へ出ていない。段16 より後なら PR は既にある。原則どおり1点に絞った | rucm スキルの `BRANCH FROM` 選定基準 | 75% |
+| 43 | 「本家のPRを出せない」の終端 | `ABORT` | 人間の判断を仰ぐ合図（`blocked`）を出した時点で、このユースケースは途切れる | rucm スキルの「`ABORT` と `RESUME STEP` の選び方」 | 90% |
+| 44 | 「本家のPRを出せない」の POSTCONDITION | 本家に PR は無い。fork には push した branch がある。worktree は残っている | **片付けは `Done` でしか起きない**ので、`Blocked` になった worktree はそのまま残る。残るものを名指しで書いた | `internal/scaffold/template.go` の `cleanup.on_states`、rucm スキルの R26 | 85% |
+| 45 | 用語の統一 | 「worktree」「branch」「commit」「clone」「fork」「push」「hook」「カンバン」を固定した | 英語の技術用語は日本語に直訳しない。カンバンは日本語で書く、というプロジェクトの規則に従った | プロジェクトの報告ルール、依頼文 | 95% |
+| 46 | 例に実在のリポジトリ名を書かなかったこと | RUCM には具体的なリポジトリ名を1つも書かない | このリポジトリは公開である。**「issue のリポジトリ」「コードのリポジトリ」「本家のリポジトリ」という役割名だけで書けたので、架空の名前すら要らなかった** | `CLAUDE.md`（5. 公開してよい情報かを常に判断する） | 100% |
+| 47 | mermaid 2ブロックの内容 | rucm ブロックの全27段と7つの代替フローを両方の図に写した | flowchart は分岐と復帰を、sequenceDiagram は置き場所が3つに割れていること（issue のリポジトリ・fork・本家）を表す。**割れ方が見えないと、このユースケースの図である意味が無い** | rucm スキルのファイル規約 | 90% |
+| 48 | テストを書いた範囲 | continuo 側の判定だけ | 書いたのは `test/internal/workspace/upstream_pr_test.go` の5本と `test/internal/orchestrator/upstream_pr_test.go` の2本である。**いずれも「continuo がこの流れを妨げないこと」を固定する** | 実装したテストファイル | 95% |
+| 49 | テストを書かなかった範囲 | エージェントの判断に属する段（段11 から段19） | **`gh` を叩いて本家へ PR を出すかどうかは、continuo の仕組みではなくエージェントの判断である。**Claude Code の中で起きることをテストから観測する手立てが無い（`claude -p` は使用禁止）。**実機で1件通して確かめるしかない** | `CLAUDE.md`（1. `claude -p` は使用禁止）、`.claude/rules/release.md`（実機で issue を1件通してから出す） | 90% |
+| 50 | 段20（hook の cwd）にテストを書かなかったこと | 経路 P005 と P011 はテスト未生成のままにした | **`acceptHookCwd` は継続関数であり、外から呼べない。**hook を偽って送り込む仕掛けは orchestrator のテストに無く、作ると「session_id を騙った hook」の検査そのものを迂回する道具を残すことになる。**`check_update_tests.py` の `[W1]`（テスト未生成パス）は警告であって落とす理由にはしない**ので、この状態のまま置ける | `internal/orchestrator/hookinput.go`（非公開関数）、`scripts/check-rucm.sh` の注釈 | 80% |
+| 51 | テストのマーカーの付け方 | ファイル冒頭に CFG のハッシュ、各テストの直前に経路 ID | `check_update_tests.py` のマーカー仕様に合わせた。**CFG を作り直したらハッシュがずれて落ちる**ので、RUCM を直したときにテストの見直しが漏れない | `check_update_tests.py` の冒頭の仕様 | 95% |
+| 52 | 経路1本にテスト1本を対応させなかったこと | 1本のテストが複数の判定を押さえている経路がある | 経路は判定の組み合わせで増えるが、**continuo 側の判定は独立している**（base の決定・判定の hook・変更の有無・HEAD の載り先）。組み合わせを全部並べても、確かめられるものは増えない。同じ考え方を「着手を取り消す」のテストも採っている | `test/internal/abandon/abandon_test.go` の冒頭の注釈 | 75% |
