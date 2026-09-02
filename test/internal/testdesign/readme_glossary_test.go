@@ -28,6 +28,9 @@ const readmeEN = "README.md"
 // readmeJA は日本語の README のリポジトリ内のパスである。
 const readmeJA = "README.ja.md"
 
+// glossaryPath は訳語集のリポジトリ内のパスである。
+const glossaryPath = "docs/spec/translation-glossary.md"
+
 // allowedBoardForms は、英語の README で `board` を含んでよい形である。
 //
 // **長いものから先に取り除く。**`kanban board` を先に消さないと、
@@ -122,6 +125,85 @@ func TestDesign_2枚のREADMEの節構成が一致している(t *testing.T) {
 		t.Errorf("%d 番目の節の深さが食い違います。%s は %s、%s は %s です。",
 			i+1, readmeEN, en[i], readmeJA, ja[i])
 	}
+}
+
+// TestDesign_訳語集が引くREADMEの文が実在する は、README を直したのに訳語集を直し忘れたことを弾く。
+//
+// **訳語集の3列目は README の文を典拠として引いている。**README の文言を変えると、
+// 引いたほうが古いまま残る。**古い典拠は、次に README を書く人を間違った語へ導く。**
+// 実際に #127（英語版 README と en.json の board を kanban board に統一した変更を、
+// マージ後にレビューする）の置き換えで、`board order` を引いた行が取り残された。
+//
+// **引用の実在だけを見る。**訳語そのものが妥当かは人が決めることなので、機械は見ない。
+//
+// 目的: 訳語集が `README の "…"` `README が "…"` の形で引く文が、いまも README にあること。
+// 与える情報: docs/spec/translation-glossary.md の全行と、2枚の README の全文。
+// 成功条件: 引いた文が README.md か README.ja.md のどちらかに現れること。
+func TestDesign_訳語集が引くREADMEの文が実在する(t *testing.T) {
+	glossary := readRepoFile(t, glossaryPath)
+	en := readRepoFile(t, readmeEN)
+	ja := readRepoFile(t, readmeJA)
+
+	found := 0
+	for i, line := range strings.Split(glossary, "\n") {
+		for _, quote := range readmeQuotes(line) {
+			found++
+			if strings.Contains(en, quote) || strings.Contains(ja, quote) {
+				continue
+			}
+			t.Errorf("%s:%d が引く README の文が見つかりません。\n  \"%s\"\n"+
+				"  **README を直したら、その文を引いている訳語集の行も直してください。**",
+				glossaryPath, i+1, quote)
+		}
+	}
+	if found == 0 {
+		t.Fatalf("%s から README の引用を1つも読めませんでした。テストの走査が壊れています。",
+			glossaryPath)
+	}
+}
+
+// readmeQuotes は、1行の中の `README の "…"` `README が "…"` から引用の中身だけを取り出す。
+//
+// **`README の ` に続く `"` から次の `"` までを1つの引用として扱う。**
+// 訳語集はここで必ず半角の `"` を使っている。バッククォートで囲んだ語
+// （`# start the daemon` など）は README の文ではなくコードなので拾わない。
+//
+// line: 訳語集の1行。
+// 戻り値: 引用の中身の並び。1つも無ければ空。
+func readmeQuotes(line string) []string {
+	quotes := make([]string, 0, 2)
+	for _, lead := range []string{`README の "`, `README が "`} {
+		rest := line
+		for {
+			at := strings.Index(rest, lead)
+			if at < 0 {
+				break
+			}
+			rest = rest[at+len(lead):]
+			end := strings.Index(rest, `"`)
+			if end < 0 {
+				break
+			}
+			quotes = append(quotes, rest[:end])
+			rest = rest[end+1:]
+		}
+	}
+	return quotes
+}
+
+// readRepoFile はリポジトリの直下からの相対パスでファイルを読む。
+//
+// t: テスト。
+// name: リポジトリの直下からのパス。
+// 戻り値: ファイルの中身。
+func readRepoFile(t *testing.T, name string) string {
+	t.Helper()
+
+	body, err := os.ReadFile(filepath.Join("..", "..", "..", name))
+	if err != nil {
+		t.Fatalf("%s を読めません: %v", name, err)
+	}
+	return string(body)
 }
 
 // readmeLines は README を1行ずつ読む。
