@@ -8120,11 +8120,20 @@ PR を本家へ出す形は、**いま continuo の仕組みではなくエー�
 | **片付けの判定** | 身元ファイルは数から外す（3-18）。worktree の HEAD が base のままならリモート追跡 ref に載っているので、段1 で消してよいと決まる（3-9） |
 | **Status の動かし方** | 表明の1行だけで動かす。**PR がどこに出たかを continuo は見ない** |
 
-**ただし、雛形の WORKFLOW.md のままでは動かない。**`continuo init` が
-`<実行時ディレクトリ>/WORKFLOW.md` へ置く雛形は、**別のリポジトリの issue を「直さずに
+**仕組みを変えるときは、上の4つを壊していないかを、そのユースケースの検査で確かめる。**
+
+    sh scripts/check-rucm.sh --strict
+
+**ただし、雛形の WORKFLOW.md のままでは動かない。**足す本文は 3-78b にある。
+
+### 3-78b. このユースケースは、WORKFLOW.md の本文を足さないと動かない
+
+**言いたいこと。**`continuo init` が置く雛形は、**別のリポジトリの issue を「直さずに
 `CONTINUO-STATUS: #99 working` と書け」と指示している**
 （[internal/scaffold/template.go](../../internal/scaffold/template.go) の「別のリポジトリの issue」の段）。
-**そのままではエージェントは clone を用意する段へ進まない。**回すには本文へ次の段を足す。
+**そのままではエージェントは clone を用意する段へ進まない。**
+
+**`<実行時ディレクトリ>/WORKFLOW.md` の本文へ、次の段を足す。**
 
     ## コードが別のリポジトリにあるとき
 
@@ -8159,10 +8168,6 @@ PR を本家へ出す形は、**いま continuo の仕組みではなくエー�
 **`cwd` の検査は緩めない。**`session_id` を騙った hook を弾く唯一の手立てだからである（3-23）。
 **落とすのは外だと分かったときだけで、`cwd` が空の hook は通す**
 （[internal/orchestrator/hookinput.go](../../internal/orchestrator/hookinput.go) の `acceptHookCwd`）。
-
-**仕組みを変えるときは、上の4つを壊していないかを、そのユースケースの検査で確かめる。**
-
-    sh scripts/check-rucm.sh --strict
 
 
 ## 4. 人間が決めたこと

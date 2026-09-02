@@ -11,6 +11,7 @@
 - `docs/plans/continuo_design.md#3-22`（base の決め方。`herdr.worktree.base` が null なら既定 branch）
 - `docs/plans/continuo_design.md#3-23`（hook の中身は外部入力であり、そのまま信じない）
 - `docs/plans/continuo_design.md#3-64`（危ない道具の呼び出しの判定。`public_only` の既定）
+- `docs/plans/continuo_design.md#3-78b`（雛形の WORKFLOW.md へ足す本文。hook の cwd の実測）
 - `docs/plans/continuo_design.md#4-1`（誰がどの遷移を起こすか）
 - `internal/workspace/prepare.go` の `resolveBase` と `NativeRefDefaultBranch`
 - `internal/workspace/cleanup.go` の `leftoverReasons` と `identityStatusExcludes`
