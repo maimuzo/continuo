@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
@@ -459,18 +460,75 @@ func IsMarked(body string) bool {
 // **時刻はその機械のタイムゾーンで書く。**`Z`（協定世界時）に直さない。
 // 人間がログと突き合わせるとき、手元の時計と合っているほうが読みやすい。
 //
+// **JSON の下に、人間が読む2行を置く**（released と同じ形。設計 3-77c）。
+// **このコメントは1台で動かしていても必ず出る。**JSON だけだと、issue を開いた人には
+// `five_hour` が何の値なのかも、次に何が起きるのかも読めない。
+//
+// **足す文に `}` を入れてはならない。**payloadAfterMarker が最初の `{` と
+// **最後の `}`** の間を切り出すので、あとから現れる `}` は JSON の終わりとして読まれる。
+//
 // b: 書く入札。
+// window: 入札の締め切りまでの長さ（`tracker.provider.handoff.bid_window_ms`）。
+// **0 以下なら「締め切りを待たない」と書く**（そういう設定にできる）。
 // 戻り値: 印を先頭に置いたコメント本文。
-func FormatBid(b Bid) string {
-	return config.HandoffBidMarker + "\n" + marshalLine(b)
+func FormatBid(b Bid, window time.Duration) string {
+	return config.HandoffBidMarker + "\n" + marshalLine(b) + "\n\n" +
+		i18n.T(i18n.KeyHandoffBidCandidacy, b.Host) + "\n" +
+		bidDeadlineLine(window) + "\n"
+}
+
+// bidDeadlineLine は「担当がいつ決まるか」の1行を返す。
+//
+// **分に丸めて、切り上げる。**既定の 180000 ミリ秒はちょうど3分になる。
+// **切り捨てにすると、30秒の設定が「約0分後」になる。**読む人が待てばよい長さを
+// 読み取れなくなるので、1分未満は「約1分後」へ寄せる。
+//
+// **1分のときだけ別の文言を引く。**英語には複数形があり、分数を差し込む文言に 1 を渡すと
+// **"in about 1 minutes" と出る。**英語は DefaultLang なので、**言語を選んでいない利用者には
+// これが出る。**日本語には複数形が無いので、どちらの文言でも同じ形になる。
+//
+// window: 入札の締め切りまでの長さ。
+// 戻り値: 人間が読む1行。
+func bidDeadlineLine(window time.Duration) string {
+	if window <= 0 {
+		return i18n.T(i18n.KeyHandoffBidNoDeadline)
+	}
+	minutes := int((window + time.Minute - 1) / time.Minute)
+	if minutes == 1 {
+		return i18n.T(i18n.KeyHandoffBidDeadlineOne)
+	}
+	return i18n.T(i18n.KeyHandoffBidDeadline, minutes)
 }
 
 // FormatHold は hold のコメントの本文を組み立てる（設計 3-77b）。
 //
+// **JSON の下に、人間が読む2行を置く**（released と同じ形。設計 3-77c）。
+// 誰が担当になったのか・なぜその機械なのか・これから何が始まるのかを、
+// issue の上だけで読めるようにする。
+//
+// **足す文に `}` を入れてはならない**（FormatBid と同じ理由）。
+//
 // h: 書く hold。
 // 戻り値: 印を先頭に置いたコメント本文。
 func FormatHold(h Hold) string {
-	return config.HandoffHoldMarker + "\n" + marshalLine(h)
+	return config.HandoffHoldMarker + "\n" + marshalLine(h) + "\n\n" +
+		i18n.T(i18n.KeyHandoffHoldAssigned, h.Host) + "\n" +
+		holdStartingLine(h.Branch) + "\n"
+}
+
+// holdStartingLine は「これから何が始まるか」の1行を返す。
+//
+// **branch の名前が空のときは、名前を出さない文へ落とす。**呼び出し側は
+// branch 名を組み立てられなかったときに空文字を渡してくる（`branchNameFor`）ので、
+// **そのまま差し込むと「これから branch  で作業を始めます」と出る。**
+//
+// branch: hold に書いた branch の名前。
+// 戻り値: 人間が読む1行。
+func holdStartingLine(branch string) string {
+	if strings.TrimSpace(branch) == "" {
+		return i18n.T(i18n.KeyHandoffHoldStartingNoBranch)
+	}
+	return i18n.T(i18n.KeyHandoffHoldStarting, branch)
 }
 
 // marshalLine は JSON を1行にして返す。
