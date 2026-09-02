@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "eefc99e89a536a932ea7cdc1079205ad83e8a7a339ba990303706383d9ec17db",
+  "_source_sha256": "2138c8463af46a9160230a3fbc4a1c45adba2b657e6bc12c83aa8038e8aa071f",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -784,6 +784,7 @@
   "workspace.git_ahead_of_upstream.count_unreadable": "cannot read the output of `git rev-list --count @{u}..HEAD` (%q) as a number: %w",
   "workspace.git_branch_exists.unexpected_exit_code": "could not check whether branch %[1]s exists in repository %[2]s (git show-ref exit code: %[3]d). This is not being treated as \"it does not exist\".",
   "workspace.git_exit_code.start_failed": "cannot start `git %s`: %w",
+  "workspace.git_fetch_linked_branch.failed": "%[1]w. Could not fetch the branch `%[2]s` linked to the issue into the clone `%[3]s` (tried twice).\nHow to check: Run `git -C %[4]s fetch --no-tags origin '+refs/heads/%[5]s:refs/remotes/origin/%[6]s'` by hand.\nWhat to do: Make sure that branch exists on the remote. If it does not, unlink it from Development on the GitHub issue and continuo will start from the repository's default branch instead. (git output: %[7]v)",
   "workspace.git_local_branches.output_unreadable": "cannot read the output of `git for-each-ref`: %w",
   "workspace.git_no_diff_from_base.unexpected_exit_code": "`git diff --quiet %s...HEAD` returned an unexpected exit code %d (the base may not have resolved correctly)",
   "workspace.git_unpushed_commits.count_unreadable": "could not read the number of unpushed commits on branch %s (git output: %q): %v",

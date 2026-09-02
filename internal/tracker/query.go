@@ -51,7 +51,7 @@ const itemFieldsFragmentTemplate = `
       labels(first: 50) { nodes { name } }
       assignees(first: 10) { totalCount nodes { id login } }
       blockedBy(first: 20) { nodes { id number state repository { nameWithOwner } } }
-      linkedBranches(first: 1) { nodes { ref { name } } }
+      linkedBranches(first: 5) { totalCount nodes { ref { name repository { nameWithOwner } } } }
       comments { totalCount }%s
     }
     ... on DraftIssue {
@@ -342,6 +342,11 @@ mutation($subjectId: ID!, $body: String!) {
 
 type rawRef struct {
 	Name string `json:"name"`
+	// Repository はその ref が在るリポジトリである。
+	//
+	// **linkedBranches の ref でだけ埋まる。**`defaultBranchRef` は `name` しか
+	// 要求していないので nil のままである。
+	Repository *rawRepository `json:"repository"`
 }
 
 type rawLinkedBranch struct {
@@ -349,7 +354,13 @@ type rawLinkedBranch struct {
 }
 
 type rawLinkedBranchConn struct {
-	Nodes []rawLinkedBranch `json:"nodes"`
+	// TotalCount はリンクされた branch の総数である。
+	//
+	// **`Nodes` の長さと一致するとは限らない。**取得の窓（`linkedBranches(first: 5)`）に
+	// 収まらなかった分はここにしか出ない。**総数を見ないと「窓の外に6本目がある」ことに
+	// 気づけず、1本だけリンクされていると誤って判定する。**
+	TotalCount int               `json:"totalCount"`
+	Nodes      []rawLinkedBranch `json:"nodes"`
 }
 
 type rawLabel struct {
@@ -800,6 +811,41 @@ func containsFoldedStatus(states []string, target string) bool {
 	return false
 }
 
+// linkedBranchForBase は「作業の base に使ってよいリンクされた branch」を1本だけ返す
+// （設計 3-22d）。**使ってよい形でなければ nil を返す。**推測で1本目を選ばない。
+//
+// **使ってよいのは、次を全部満たすときだけである。**
+//
+//   - リンクがちょうど1本であること（`totalCount` が 1）。**2本以上は、どれを選ぶか
+//     決められない。**1本目を勝手に採ると、人間が後から足したリンクで base が変わる
+//   - その1本が issue と同じリポジトリの branch であること。**別のリポジトリを指す
+//     リンクは無視する。**issue のリポジトリの clone には `origin/<その名前>` が
+//     存在しないので、base に据えると `git worktree add` が必ず落ちる
+//   - branch の名前が空でないこと
+//
+// **`totalCount` を見る理由。**`nodes` は `first: 5` の窓なので、6本目が別のリポジトリを
+// 指していても `nodes` には出ない。**件数を `len(nodes)` で数えると、窓の外を見落とす。**
+//
+// conn: GraphQL が返した linkedBranches の connection（nil でよい）。
+// issueNameWithOwner: issue が在るリポジトリの `<owner>/<repo>`。
+// 戻り値: base に使ってよい branch の名前。使ってよい形でなければ nil。
+func linkedBranchForBase(conn *rawLinkedBranchConn, issueNameWithOwner string) *string {
+	if conn == nil || conn.TotalCount != 1 || len(conn.Nodes) != 1 {
+		return nil
+	}
+	ref := conn.Nodes[0].Ref
+	if ref == nil || ref.Name == "" {
+		return nil
+	}
+	// **リポジトリ名が取れなかったときも無視する。**「同じである」と言い切れない以上、
+	// 今までどおり（既定 branch を base にする）へ倒すほうが安全である。
+	if ref.Repository == nil || ref.Repository.NameWithOwner != issueNameWithOwner {
+		return nil
+	}
+	name := ref.Name
+	return &name
+}
+
 // mapAssignees は GraphQL の担当者の connection を、正規化した形へ移す（設計 3-77b）。
 //
 // **`native_ref` の `assignee_login` は先頭の1人のままにする。**既にそこを読んでいる
@@ -965,13 +1011,7 @@ func mapRawItemToIssue(
 			url = &u
 		}
 
-		var branchName *string
-		if raw.Content.LinkedBranches != nil && len(raw.Content.LinkedBranches.Nodes) > 0 {
-			if ref := raw.Content.LinkedBranches.Nodes[0].Ref; ref != nil && ref.Name != "" {
-				name := ref.Name
-				branchName = &name
-			}
-		}
+		branchName := linkedBranchForBase(raw.Content.LinkedBranches, raw.Content.Repository.NameWithOwner)
 
 		assigneeID, assignees, assigneeCount := mapAssignees(raw.Content.Assignees, nativeRef)
 

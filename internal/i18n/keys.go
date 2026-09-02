@@ -2032,6 +2032,9 @@ const (
 	// KeyWorkspaceGitUnpushedCountUnreadable は、どの remote にも載っていない commit の数を
 	// 数値として読めなかったときに出る。
 	KeyWorkspaceGitUnpushedCountUnreadable Key = "workspace.git_unpushed_commits.count_unreadable"
+	// KeyWorkspaceGitFetchLinkedBranchFailed は、issue にリンクされた branch を
+	// 手元へ取ってこられなかったときに出る（設計 3-22d）。
+	KeyWorkspaceGitFetchLinkedBranchFailed Key = "workspace.git_fetch_linked_branch.failed"
 	// KeyWorkspaceGhqNameInvalid は ghq へ渡す owner 名またはリポジトリ名が
 	// GitHub の名前として通らない形だったときに出る。**別名に直さずに断る**ためのものである。
 	KeyWorkspaceGhqNameInvalid Key = "workspace.ghq_target.name_invalid"
@@ -3063,6 +3066,7 @@ var allKeys = []Key{
 	KeyWorkspaceGitNoDiffFromBaseUnexpectedExitCode,
 	KeyWorkspaceGitBranchExistsUnexpectedExitCode,
 	KeyWorkspaceGitUnpushedCountUnreadable,
+	KeyWorkspaceGitFetchLinkedBranchFailed,
 	KeyWorkspaceGhqNameInvalid,
 	KeyWorkspaceRunGhqListStartFailed,
 	KeyWorkspaceRunGhqListExitFailed,

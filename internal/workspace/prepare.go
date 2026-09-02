@@ -246,7 +246,7 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 			ErrUnregisteredWorktree, loc.Path, loc.Path, loc.Path)
 	default:
 		// 段4・段5。
-		base, err := m.resolveBase(issue)
+		base, err := m.resolveBaseFetched(ctx, repoPath, issue)
 		if err != nil {
 			return nil, err
 		}
@@ -264,8 +264,17 @@ func (m *Manager) Prepare(ctx context.Context, issue IssueRef) (*PrepareResult, 
 		// 再利用の経路でも、片付けの手順2b が base を要る（3-9）。
 		// ここで決められない場合（default_branch が無い等）は空のままにし、
 		// 片付け側が「判定できないので消さない」と扱う。
-		if base, err := m.resolveBase(issue); err == nil {
+		//
+		// **リンクされた branch を base にする経路（3-22d）は、ここでも fetch を通す。**
+		// 通さないと、手元に無い `origin/<名前>` が身元ファイルの base に書かれ、
+		// 片付けの段3（`git diff --quiet <base>...HEAD`）がそれを解決できず、
+		// **判定できないまま見送り続ける。**
+		// **一度取れば `refs/remotes/origin/<名前>` が手元に残るので、通信は増えない。**
+		if base, err := m.resolveBaseFetched(ctx, repoPath, issue); err == nil {
 			result.Base = base
+		} else {
+			m.logger.Warn("既存の worktree の base を決められませんでした（片付けは見送りになります）",
+				"identifier", issue.Identifier, "worktree", loc.Path, "error", err)
 		}
 	}
 
@@ -378,34 +387,89 @@ func (m *Manager) isRegisteredWorktree(ctx context.Context, repoPath, path strin
 	return false, nil
 }
 
-// resolveBase は worktree を切る base を決める（3-22 の段4）。
+// resolveBase は worktree を切る base を決める（3-22 の段4、3-22d）。
 //
-// 設定の herdr.worktree.base を使い、null なら Issue.NativeRef["default_branch"] を読む。
-// **そのキーも無ければ ErrBaseUnknown を返す。base を推測しない。**
+// **決める順番は3段である。上から順に、決まった時点で止まる。**
+//
+//  1. 設定の `herdr.worktree.base`（明示があれば、いつでもこれが勝つ）
+//  2. issue にリンクされた branch（`origin/<名前>`。IssueRef.LinkedBranch）
+//  3. Issue.NativeRef["default_branch"]（issue のリポジトリの既定 branch）
+//
+// **どれも無ければ ErrBaseUnknown を返す。base を推測しない。**
+//
+// **段2 に `origin/` を付ける理由。**戻り値は `git worktree add` の起点と、
+// 片付けの `git diff --quiet <base>...HEAD`（git.go の gitNoDiffFromBase）の
+// 両方へ渡る。**どちらもローカルに無い名前を解決できない。**リンクされた branch は
+// 手元の clone に同名のローカル branch を持たないので、リモート追跡 ref を指す。
 //
 // issue: 対象の issue。
 // 戻り値の1つ目: 正規化を通った base の名前。
-// 戻り値の2つ目: base を決められない場合の ErrBaseUnknown。
-func (m *Manager) resolveBase(issue IssueRef) (normalize.SafeName, error) {
+// 戻り値の2つ目: リンクされた branch を採ったなら true（呼び出し側が fetch の要否を決める）。
+// 戻り値の3つ目: base を決められない場合の ErrBaseUnknown。
+func (m *Manager) resolveBase(issue IssueRef) (normalize.SafeName, bool, error) {
 	if configured := m.cfg.Herdr.Worktree.Base; configured != nil && *configured != "" {
 		name, warnings := normalize.Normalize(*configured)
 		m.logWarnings(warnings)
-		return name, nil
+		return name, false, nil
+	}
+	if issue.LinkedBranch != "" {
+		// normalize はスラッシュを通すので、`origin/work/issue-42` はそのまま残る。
+		want := remoteTrackingPrefix + issue.LinkedBranch
+		name, warnings := normalize.Normalize(want)
+		m.logWarnings(warnings)
+		// **正規化で1文字でも変わったら、そのリンクを使わない。**
+		// fetch が作るのは `refs/remotes/origin/<生の名前>` なので、**別の名前を base に
+		// 据えると、取ってきたばかりの ref を解決できずに `git worktree add` が落ちる。**
+		// git は refname に非 ASCII を許すが、normalize は許可した文字以外を "_" へ潰す。
+		if name.String() == want {
+			return name, true, nil
+		}
+		m.logger.Warn("リンクされた branch の名前が正規化で変わるので base に使いません",
+			"identifier", issue.Identifier, "linked_branch", issue.LinkedBranch,
+			"normalized", name.String())
 	}
 	raw, ok := issue.NativeRef[NativeRefDefaultBranch]
 	if !ok {
-		return "", i18n.Errorf(
+		return "", false, i18n.Errorf(
 			i18n.KeyWorkspaceResolveBaseDefaultBranchMissing, ErrBaseUnknown, issue.Identifier)
 	}
 	s, ok := raw.(string)
 	if !ok || s == "" {
-		return "", i18n.Errorf(
+		return "", false, i18n.Errorf(
 			i18n.KeyWorkspaceResolveBaseDefaultBranchNotString,
 			ErrBaseUnknown, NativeRefDefaultBranch, issue.Identifier, raw)
 	}
 	name, warnings := normalize.Normalize(s)
 	m.logWarnings(warnings)
-	return name, nil
+	return name, false, nil
+}
+
+// resolveBaseFetched は resolveBase で base を決め、リンクされた branch を採った場合に
+// 限り、手元に無ければ1本だけ fetch する（3-22d）。
+//
+// **叩くのは3つがそろったときだけである。**リンクされた branch を base にしたとき・
+// `refs/remotes/origin/<名前>` が手元に無いとき・その1本だけ。
+// **巡回のたびに通信しない。**着手のたびに通信すると、遅い回線で巡回のループごと詰まる。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoPath: clone の作業ディレクトリ。
+// issue: 対象の issue。
+// 戻り値の1つ目: 正規化を通った base の名前。
+// 戻り値の2つ目: base を決められない（ErrBaseUnknown）・fetch に失敗した場合のエラー。
+func (m *Manager) resolveBaseFetched(
+	ctx context.Context, repoPath string, issue IssueRef,
+) (normalize.SafeName, error) {
+	base, fromLinked, err := m.resolveBase(issue)
+	if err != nil {
+		return "", err
+	}
+	if !fromLinked {
+		return base, nil
+	}
+	if err := gitEnsureRemoteBranch(ctx, repoPath, issue.LinkedBranch, m.logger); err != nil {
+		return "", err
+	}
+	return base, nil
 }
 
 // logWarnings は識別子の正規化で情報が落ちた警告をログへ出す（3-7）。

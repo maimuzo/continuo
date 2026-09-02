@@ -783,6 +783,7 @@
   "workspace.git_ahead_of_upstream.count_unreadable": "`git rev-list --count @{u}..HEAD` の出力 %q を数値として読めません: %w",
   "workspace.git_branch_exists.unexpected_exit_code": "branch %s がリポジトリ %s にあるかを確かめられませんでした（git show-ref の終了コード: %d）。「無い」とは判断していません。",
   "workspace.git_exit_code.start_failed": "`git %s` を起動できません: %w",
+  "workspace.git_fetch_linked_branch.failed": "%w。issue にリンクされた branch `%s` を clone `%s` へ取ってこられませんでした（2回試しました）。\n【確かめ方】`git -C %s fetch --no-tags origin '+refs/heads/%s:refs/remotes/origin/%s'` を手で実行してください。\n【対処】その branch が remote に在るかを確かめてください。無いなら、GitHub の issue の Development からリンクを外せば、リポジトリの既定 branch を起点に着手します。（git の出力: %v）",
   "workspace.git_local_branches.output_unreadable": "`git for-each-ref` の出力を読めません: %w",
   "workspace.git_no_diff_from_base.unexpected_exit_code": "`git diff --quiet %s...HEAD` が想定外の終了コード %d を返しました（base を解決できていない可能性がある）",
   "workspace.git_unpushed_commits.count_unreadable": "branch %s の未 push の commit の数を読み取れませんでした（git の出力: %q）: %v",

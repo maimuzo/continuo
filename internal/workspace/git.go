@@ -132,6 +132,102 @@ func gitExitCode(ctx context.Context, dir string, args ...string) (int, error) {
 	return -1, i18n.Errorf(i18n.KeyWorkspaceGitExitCodeStartFailed, strings.Join(full, " "), err)
 }
 
+// remoteTrackingPrefix は base に据えるリモート追跡 ref の接頭辞である（3-22d）。
+//
+// **`origin` 以外の remote は見ない。**continuo が引く clone は ghq が作ったものであり、
+// そこでは issue のリポジトリが必ず `origin` である。
+const remoteTrackingPrefix = "origin/"
+
+// gitFetchTimeout は、リンクされた branch を1本取りに行くときの上限である（3-22d）。
+//
+// **上限が無いと、遅い回線で巡回のループごと止まる**（trust.go の trustCheckTimeout と
+// 同じ理由）。**設定のキーにはしていない。**着手のたびに1本取るだけで、
+// 巡回の間隔（既定30秒）に収まる作業だからである。
+const gitFetchTimeout = 30 * time.Second
+
+// gitFetchRetryDelay は fetch をやり直すまでの間隔である。やり直しは1回だけ行う。
+const gitFetchRetryDelay = time.Second
+
+// gitEnsureRemoteBranch は、リンクされた branch のリモート追跡 ref が手元に無ければ、
+// **その1本だけ** fetch する（3-22d）。
+//
+// **手元にあるなら1バイトも通信しない。**着手のたびに通信すると、遅い回線で巡回が詰まる。
+//
+// **refspec を明示した形だけを叩く。**素の `git fetch origin <名前>` にすると、
+// `--single-branch` で作られた clone では FETCH_HEAD しか動かず、
+// **リモート追跡 ref ができないので worktree が切れない。**素の clone でも結果は同じなので、
+// clone の作られ方で場合分けしない。
+//
+// **`--no-tags` を付ける。**tag は base の解決に要らず、大きなリポジトリでは
+// tag の取得だけで数秒かかる。**`--all` も `--prune` も付けない。**
+//
+// **やり直しは1回だけである。**2回落ちたらエラーを返し、着手そのものを失敗させる。
+// **黙って既定 branch へ倒さない。**倒すと、人間がリンクした branch とは別の起点で
+// エージェントが作業を始め、食い違いに気づくのは PR を出したあとになる。
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: clone の作業ディレクトリ。
+// branch: リンクされた branch の生の名前（`origin/` は付けない）。
+// logger: やり直しを知らせる先。
+// 戻り値: 取ってこられなかった場合のエラー。
+func gitEnsureRemoteBranch(ctx context.Context, repoDir, branch string, logger *slog.Logger) error {
+	if branch == "" {
+		return nil
+	}
+	present, err := gitRemoteRefExists(ctx, repoDir, branch)
+	if err != nil {
+		return err
+	}
+	if present {
+		return nil
+	}
+
+	refspec := "+refs/heads/" + branch + ":refs/remotes/" + remoteTrackingPrefix + branch
+	var lastErr error
+	for attempt := 1; attempt <= 2; attempt++ {
+		fetchCtx, cancel := context.WithTimeout(ctx, gitFetchTimeout)
+		_, lastErr = runGit(fetchCtx, repoDir, "fetch", "--no-tags", "origin", refspec)
+		cancel()
+		if lastErr == nil {
+			return nil
+		}
+		if attempt == 1 {
+			if logger != nil {
+				logger.Warn("リンクされた branch を取ってこられなかったのでやり直します",
+					"repo", repoDir, "branch", branch, "error", lastErr)
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(gitFetchRetryDelay):
+			}
+		}
+	}
+	return i18n.Errorf(
+		i18n.KeyWorkspaceGitFetchLinkedBranchFailed,
+		ErrBaseUnknown, branch, repoDir, repoDir, branch, branch, lastErr)
+}
+
+// gitRemoteRefExists は `refs/remotes/origin/<branch>` が手元にあるかを返す。
+//
+// **`git rev-parse --verify` ではなく `for-each-ref` で引く。**rev-parse は
+// 同名のローカル branch や tag にも当たるので、**リモート追跡 ref があることの証拠にならない。**
+//
+// ctx: 実行に適用するコンテキスト。
+// repoDir: clone の作業ディレクトリ。
+// branch: リンクされた branch の生の名前。
+// 戻り値の1つ目: リモート追跡 ref があれば true。
+// 戻り値の2つ目: git の実行に失敗した場合のエラー。
+func gitRemoteRefExists(ctx context.Context, repoDir, branch string) (bool, error) {
+	out, err := runGit(ctx, repoDir,
+		"for-each-ref", "--count=1", "--format=%(refname)",
+		"refs/remotes/"+remoteTrackingPrefix+branch)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 // gitWorktreePrune は `git worktree prune` を実行する（3-22 の段1）。
 //
 // 「登録は残っているが実体が消えている」状態を先に解消しないと、

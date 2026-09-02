@@ -2884,6 +2884,85 @@ git -C <リポジトリ> branch continuo/octocat/hello-world/188 826bf68e8341e40
 `<共通ディレクトリ>/worktrees/*/HEAD` から読んで除外する**（`worktree list` は壊れた ref の
 worktree の branch を答えないので、それだけを見ると生きている worktree の ref を消す）。
 
+### 3-22d. リンクした branch を worktree の起点にする
+
+**言いたいこと。**GitHub の issue の Development にリンクされた branch を、worktree の base に使う。
+**採るのは「ちょうど1本で、issue と同じリポジトリ」のときだけ**で、それ以外は今までどおり既定 branch に倒す。
+**別のリポジトリを指すリンクは無視する。**
+
+**採る形は4つしかない。**
+
+| リンクの形 | base に何を使うか |
+| --- | --- |
+| **0本** | 今までどおり（設定の `herdr.worktree.base` → issue のリポジトリの既定 branch） |
+| **ちょうど1本で、issue と同じリポジトリ** | **`origin/` + そのリンクの `ref.name`** |
+| **ちょうど1本で、別のリポジトリ** | **今までどおり。**そのリンクを無視する |
+| **2本以上**（`totalCount` が 1 でない） | **今までどおり。**どれを選ぶか決められない |
+
+**別のリポジトリを指すリンクを無視する理由。**fork の branch をリンクした瞬間に、
+**issue のリポジトリの clone で `origin/<その名前>` を base にしようとする。**
+その ref はそこに存在しないので fetch と `git worktree add` が落ち、その issue が `failure_state` へ行く。
+**リンクは fork の branch を指せる**ので、これは珍しい形ではない。
+**「着手しない・issue へ1回だけコメントする」経路は作らない。**
+黙って着手しない経路を増やすほうが危険であり、無視すれば今までと同じ結果になる。
+
+**`totalCount` を必ず取る。**取らずに `nodes` の件数で数えると、
+**取得の窓（`linkedBranches(first: 5)`）の外にある6本目に気づけない。**
+先頭5本がたまたま1本に見えても、実際は複数ある。
+
+**クエリはこの形である**（[internal/tracker/query.go:54](../../internal/tracker/query.go#L54)）。
+
+```graphql
+linkedBranches(first: 5) { totalCount nodes { ref { name repository { nameWithOwner } } } }
+```
+
+**判定は [internal/tracker/query.go](../../internal/tracker/query.go) の `linkedBranchForBase` が持ち、
+結果は `Issue.BranchName` に入る**（採れない形では nil）。
+**`toIssueRef`（[internal/orchestrator/dispatch.go](../../internal/orchestrator/dispatch.go)）が
+`IssueRef.LinkedBranch` へ写し**、workspace がそれを base にする。
+
+**base を決める順番**（[internal/workspace/prepare.go](../../internal/workspace/prepare.go) の `resolveBase`）。
+
+| 順 | 何を base にするか |
+| --- | --- |
+| 1 | `herdr.worktree.base`（設定に明示があれば、いつでもこれが勝つ） |
+| 2 | リンクが1本のとき、その branch（**`origin/<名前>`**） |
+| 3 | `NativeRef["default_branch"]`（issue のリポジトリの既定 branch） |
+| 4 | どれも無ければ `ErrBaseUnknown`（**推測しない**） |
+
+**`origin/` を付ける理由。**この値は `git worktree add` の起点と、
+片付けの `git diff --quiet <base>...HEAD` の両方へ渡る。**どちらもローカルに無い名前を解決できない。**
+リンクされた branch は手元の clone に同名のローカル branch を持たないので、リモート追跡 ref を指す。
+
+**`git fetch` は「リンクを base にしたとき」「手元にその ref が無いとき」だけ、その1本を叩く**
+（[internal/workspace/git.go](../../internal/workspace/git.go) の `gitEnsureRemoteBranch`）。
+巡回のたびに通信すると、遅い回線で巡回のループごと止まる。
+
+```bash
+git -C <clone> fetch --no-tags origin '+refs/heads/<名前>:refs/remotes/origin/<名前>'
+```
+
+**refspec を明示する。**素の `git fetch origin <名前>` は、`--single-branch` で作られた clone で
+FETCH_HEAD しか動かさず、**リモート追跡 ref ができないので worktree が切れない。**
+**上限は 30 秒、やり直しは1秒あけて1回だけ**（`gitFetchTimeout` / `gitFetchRetryDelay`）。
+**2回落ちたら `ErrBaseUnknown` を返し、その issue を失敗として人間へ渡す。**
+**黙って既定 branch へ倒さない。**倒すと、人間がリンクした branch とは別の起点で
+エージェントが作業を始め、食い違いに気づくのは PR を出したあとになる。
+
+**プロンプトには `.push_branch` で渡す**（5-3 の変数の表）。
+**`origin/` を付けない生の名前**であり、リンクが1本でないときは空文字である。
+**push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
+`.push_branch` は「別の名前へ出せと issue に書かれていたときの候補」として渡す。
+**base と push 先を同じものに固定すると、1つの issue で PR を複数出す形が書けなくなる。**
+
+**「issue とコードを別のリポジトリに置ける」は作らない。**
+issue が `<owner>/<repo>` にあり、コードが別のリポジトリ（fork など）にある形は、
+**この版でも次の版でも実装しない。**
+理由と、そこで検討した内容は #144（worktree の branch は変えず push 先だけ分ける）のコメントにある。
+**だから 3-22d の門は「別のリポジトリを指すリンクは無視する」で閉じている。**
+無視せずに扱おうとすると、置き場所・信頼の登録・PR の宛先・片付けの検算の4つを
+すべてコードのリポジトリ側へ移すことになり、それがその作らないと決めたものである。
+
 ### 3-23. hook を受ける socket の置き場所
 
 **設定の `/run/continuo/hooks.sock` は macOS で起動できない。**`/run` が存在せず、ルートが読み取り専用なので作ることもできない。
@@ -8849,6 +8928,7 @@ push していない作業は、この worktree が片付くときに失われ�
 | `.issue.owner` / `.issue.repo` / `.issue.number` | GitHub Projects v2 アダプタが足す項目（3-13） |
 | `.issue.url` | **issue の URL。**エージェントはこれを `gh issue comment` に渡して、何をしたかを書き残す（3-29）。**中身を読むのは `.issue.owner` / `.issue.repo` / `.issue.number` のほうである** |
 | `.issue.title` / `.issue.state` / `.issue.labels` | 仕様 4.1.1 の項目。**本文はプロンプトに埋め込まない**（3-29） |
+| `.push_branch` | **issue にリンクされた branch の生の名前**（`work/issue-42`。3-22d）。`origin/` は付かない。**リンクが1本でないときは空文字**なので `{{if .push_branch}}` で書き分けられる。**push 先の既定ではない**（既定はいつでも `git push -u origin HEAD`。5-3b） |
 | `.attempt` | 試行回数。**1回目は `null` を渡す**（仕様 12.3 のとおり）。`text/template` は `null` を偽として扱うので `{{if .attempt}}` は正しく動く。**キーごと省いてはならない**（`missingkey=error` で描画が失敗する） |
 
 **なぜ JSON で読ませ、`--jq` でテキストへ潰させないかは 3-72 にある。**

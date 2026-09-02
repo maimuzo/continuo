@@ -1161,6 +1161,10 @@ func (o *Orchestrator) sendEscape(ctx context.Context, rs *runState) {
 // issue: 元の issue。
 // 戻り値: worktree の用意に要る情報。
 func toIssueRef(issue tracker.Issue) workspace.IssueRef {
+	linkedBranch := ""
+	if issue.BranchName != nil {
+		linkedBranch = *issue.BranchName
+	}
 	return workspace.IssueRef{
 		URL:           issueURL(issue),
 		Identifier:    issue.Identifier,
@@ -1168,6 +1172,7 @@ func toIssueRef(issue tracker.Issue) workspace.IssueRef {
 		Owner:         issue.Owner,
 		Repo:          issue.Repo,
 		Number:        issue.Number,
+		LinkedBranch:  linkedBranch,
 		NativeRef:     issue.NativeRef,
 	}
 }

@@ -47,7 +47,15 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 			"state":      issue.State,
 			"labels":     issue.Labels,
 		},
-		"attempt": attemptValue(attempt),
+		// push_branch は issue にリンクされた branch の生の名前である（設計 3-22d・5-3）。
+		//
+		// **push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
+		// これは「別の名前へ出せと issue に書かれていたときの候補」として渡す。
+		// **base と push 先を同じものに固定すると、1つの issue で PR を複数出す形が書けなくなる。**
+		//
+		// **リンクが1本でないとき（0本・2本以上・別のリポジトリを指すとき）は空文字である。**
+		"push_branch": pushBranchValue(issue),
+		"attempt":     attemptValue(attempt),
 	}
 
 	var b strings.Builder
@@ -55,6 +63,17 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptRenderFailed, err)
 	}
 	return b.String(), nil
+}
+
+// pushBranchValue は `.push_branch` に入れる値を返す（設計 3-22d）。
+//
+// issue: 対象の issue。
+// 戻り値: リンクされた branch の生の名前。リンクが1本でなければ空文字。
+func pushBranchValue(issue tracker.Issue) string {
+	if issue.BranchName == nil {
+		return ""
+	}
+	return *issue.BranchName
 }
 
 // attemptValue は `.attempt` に入れる値を返す。
