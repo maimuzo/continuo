@@ -73,7 +73,7 @@
 | 先頭の commit | tip commit | README の "the tip commit"。`HEAD commit` `latest commit` は使わない |
 | 失うものがある | something to lose | README の "If there is anything to lose, it deletes nothing and stops." |
 | 落ち着く（起動が） | settle | README の "herdr reports that the agent has settled" |
-| 拾う（issue を） / 並び順 | pick up / board order | README の "continuo picks these up in board order" |
+| 拾う（issue を） / 上から順に | pick up / in the order they sit on the kanban board | README の "continuo picks these up in the order they sit on the kanban board"。**`board order` は使わない**（単独の `board` を含む） |
 | 信頼登録する / 信頼済み / 未承認 | trust / trusted / not trusted | README の "trust those repositories"。**「未承認」は `not trusted`。**`unapproved` は使わない |
 | 資格情報 | credentials | README が doctor の検査をこの語で並べている |
 | 枠 / 枠の判定 | usage window | README の "used to read your plan's usage window"。`quota` `rate limit budget` を混ぜない |
@@ -196,7 +196,7 @@
 **使ってよいラベルは、この15語だけである。**
 
 `config` / `cleanup states` / `missing keys` / `claude` / `hook socket` /
-`Claude settings` / `worktree root` / `herdr` / `gh auth` / `board` /
+`Claude settings` / `worktree root` / `herdr` / `gh auth` / `kanban board` /
 `Status names` / `rewrite keys` / `clones` / `trust` / `credentials`
 
 **伸ばすときは、先に `labelColumn` を数え直すこと。**
