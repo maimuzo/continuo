@@ -155,7 +155,9 @@ func TestTemplate_案内が貼らせる文面が雛形の節と一致する(t *t
 			"既存の利用者はこのブロックをそのまま貼ります。片方だけ直すと、"+
 			"上げた利用者のエージェントだけが古い案内で動きます。\n"+
 			"雛形を直して版を上げるのなら、いま指している節は書き換えず、"+
-			"新しい版の節を %s へ足して、upgradingPasteHeading をその見出しへ向けてください",
+			"新しい版の節を %s へ足して、upgradingPasteHeading と upgradingCheckHeading の"+
+			"2つとも、その新しい節の見出しへ向けてください。"+
+			"片方だけ動かすと、貼らせる文面と確かめ方が別の版の節を指したまま緑になります",
 			upgradingDocPath, upgradingPasteHeading, worktreeCleanupHeading, got, want,
 			upgradingDocPath)
 	}
