@@ -103,6 +103,34 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **本文に「## 自分で作った worktree は、自分で消すこと」の節が増えました** | **当てると、エージェントが自分で足した worktree を消して終わるようになります**（下の「送るプロンプトを移す」を済ませるなら、この節は組み込みに入っているので当てる必要はありません） |
 | **入札と担当決定のコメントが、人間にも読める形になりました** | **要りません。**continuo が issue へ書く文面が変わっただけです |
 | **応答を差し戻す `Stop` hook を入れていても、turn の終わりを取り違えなくなりました** | **要りません。**設定も本文も足すものはありません（下の節） |
+| **二重起動を止めるロックが `~/.continuo/continuo.lock` の1本に固定されました** | **要りません。**`runtime.lock_file` を書いていた人は、起動時に警告が1行出ます（下の節） |
+
+### ロックの置き場所が固定され、`--id <名前>` が増えました — 当てるものはありません
+
+**v0.1.12 まで。**二重起動を止めるロックは、hook の socket と同じディレクトリに置かれていました。
+socket の場所は `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` で動くので、
+**launchd から起動した continuo と、端末で叩いた `continuo abandon` が別の場所を見ることがありました。**
+食い違うと、`abandon` は動いている continuo を「動いていません」と判定し、
+**生きている worktree を消しにいきます。**
+
+**v0.1.13 から。**ロックは `~/.continuo/continuo.lock` の1本に固定されます。
+**環境変数でも設定でも動きません。**
+
+**`runtime.lock_file` は受け取り続けますが、値は読みません。**
+書いてあっても起動は止まらず、警告が1行出るだけです。
+**行を消す必要はありません**（消してもかまいません）。
+
+**1台で2本以上動かしたいときは、`--id <名前>` を付けてください。**
+開発中に、本番を止めずにテスト版を動かすためのものです。
+
+```bash
+continuo --id e2e ~/continuo-e2e-work
+continuo abandon --id e2e <issue の URL> ~/continuo-e2e-work
+```
+
+**`--id` が分けるのはロック1本だけです。**worktree の置き場所（`workspace.root`）と
+socket（`claude.hook_bridge.listen`）は分かれないので、
+**テスト用の `WORKFLOW.md` を別のディレクトリに置いて、そちらで書き換えてください。**
 
 ### 応答を差し戻す `Stop` hook との噛み合わせ — 設定は要りません
 

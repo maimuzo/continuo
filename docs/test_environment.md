@@ -70,8 +70,17 @@ mkdir -p ~/continuo-e2e-worktrees
 
 **本番の continuo を動かしたまま回すなら、socket も分ける。**
 `claude.hook_bridge.listen` を `/tmp/continuo-e2e/hooks.sock` のような専用のパスに向け、
-そのディレクトリを `chmod 0700` する。**二重起動を止めるロックは socket と同じディレクトリに置かれるので、
-socket を分ければロックも分かれる。**手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
+そのディレクトリを `chmod 0700` する。
+
+**二重起動を止めるロックは、それでは分かれない。**`~/.continuo/continuo.lock` の1本に
+機械で固定されているので、**起動のときに `--id <名前>` を付けて分ける。**
+
+```bash
+continuo --id e2e .                          # ロックは ~/.continuo/id/e2e/continuo.lock
+continuo abandon --id e2e <issue の URL> .   # 片付けにも同じ名前を渡す
+```
+
+手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
 
 **Status の割り当ては既定のままで合う。**ボードの選択肢を `Ready` / `In Progress` / `In Review` /
 `Blocked` / `Done` の5つにしてあるので、`continuo setup` を回さなくてよい。
@@ -81,7 +90,7 @@ socket を分ければロックも分かれる。**手順は [docs/releasing.md]
 ```bash
 continuo trust --dry-run .    # 何を許すかを見る
 continuo doctor .             # ✗ が0件になること
-continuo                      # 起動（別の端末か背後で）
+continuo --id e2e             # 起動（別の端末か背後で）
 ```
 
 **issue を着手待ちへ動かす。**画面を触らずに API でできる。

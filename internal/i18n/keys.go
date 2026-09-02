@@ -728,6 +728,8 @@ const (
 	KeyCLIAbandonFlagTo Key = "cli.abandon.flag_to"
 	// KeyCLIAbandonFlagPark は--park の説明に出る。
 	KeyCLIAbandonFlagPark Key = "cli.abandon.flag_park"
+	// KeyCLIAbandonFlagID は--id の説明に出る。
+	KeyCLIAbandonFlagID Key = "cli.abandon.flag_id"
 	// KeyCLIAbandonUsage は `continuo abandon --help` の冒頭に出る。
 	KeyCLIAbandonUsage Key = "cli.abandon.usage"
 	// KeyCLIAbandonErrIssueURLRequired はissue の URL が渡されなかったときに出る。
@@ -1009,6 +1011,20 @@ const (
 	KeyCLIMainFlagLogLevel Key = "cli.main.flag_log_level"
 	// KeyCLIMainFlagPort は--port の説明に出る。
 	KeyCLIMainFlagPort Key = "cli.main.flag_port"
+	// KeyCLIMainFlagID は--id の説明に出る。
+	KeyCLIMainFlagID Key = "cli.main.flag_id"
+	// KeyCLIErrInvalidID は --id に渡された名前が使えないことを表す。
+	KeyCLIErrInvalidID Key = "cli.err_invalid_id"
+	// KeyCLIErrInstanceLayout はロックの置き場所そのものを決められないことを表す。
+	KeyCLIErrInstanceLayout Key = "cli.err_instance_layout"
+	// KeyInstanceValidateIDTooLong は `--id` の名前が長すぎるときに出る。
+	KeyInstanceValidateIDTooLong Key = "instance.validate_id.too_long"
+	// KeyInstanceValidateIDInvalidShape は `--id` の名前に使えない文字があるときに出る。
+	KeyInstanceValidateIDInvalidShape Key = "instance.validate_id.invalid_shape"
+	// KeyInstanceRootHomeDirFailed は ~/.continuo を組み立てるためのホームディレクトリを引けなかったときに出る。
+	KeyInstanceRootHomeDirFailed Key = "instance.root.home_dir_failed"
+	// KeyInstanceEnsureLockDirFailed はロックファイルを置くディレクトリを作れなかったときに出る。
+	KeyInstanceEnsureLockDirFailed Key = "instance.ensure_lock_dir.failed"
 
 	// KeyCLIMainErrPortRange は --port の値が 0〜65535 の外だったことを表す。
 	KeyCLIMainErrPortRange Key = "cli.main.err_port_range"
@@ -2276,6 +2292,8 @@ const (
 	KeyDaemonRunAlreadyRunning Key = "daemon.run.already_running"
 	// KeyDaemonRunLockFileFailed は二重起動ではなく、ロックファイルそのものを用意できなかったときに出る。
 	KeyDaemonRunLockFileFailed Key = "daemon.run.lock_file_failed"
+	// KeyDaemonRunInstanceFailed は `--id` からロックの置き場所を決められなかったときに出る。
+	KeyDaemonRunInstanceFailed Key = "daemon.run.instance_failed"
 	// KeyDaemonRunStartupChecksFailed は起動時の検査に落ちたときに出る（生きている pane は閉じない）。
 	KeyDaemonRunStartupChecksFailed Key = "daemon.run.startup_checks_failed"
 	// KeyDaemonRunRestoreFailed は起動の段4の復元に失敗したときに出る。
@@ -2732,6 +2750,7 @@ var allKeys = []Key{
 	KeyCLIAbandonFlagForce,
 	KeyCLIAbandonFlagTo,
 	KeyCLIAbandonFlagPark,
+	KeyCLIAbandonFlagID,
 	KeyCLIAbandonUsage,
 	KeyCLIAbandonErrIssueURLRequired,
 	KeyCLIAbandonErrTooManyPositional,
@@ -2832,6 +2851,13 @@ var allKeys = []Key{
 	KeyCLIMainUsage,
 	KeyCLIMainFlagLogLevel,
 	KeyCLIMainFlagPort,
+	KeyCLIMainFlagID,
+	KeyCLIErrInvalidID,
+	KeyCLIErrInstanceLayout,
+	KeyInstanceValidateIDTooLong,
+	KeyInstanceValidateIDInvalidShape,
+	KeyInstanceRootHomeDirFailed,
+	KeyInstanceEnsureLockDirFailed,
 	KeyCLIMainErrPortRange,
 	KeyCLIMainErrTooManyPositional,
 	KeyCLIMainStarting,
@@ -3293,6 +3319,7 @@ var allKeys = []Key{
 	KeyDaemonRunSocketDirFailed,
 	KeyDaemonRunAlreadyRunning,
 	KeyDaemonRunLockFileFailed,
+	KeyDaemonRunInstanceFailed,
 	KeyDaemonRunStartupChecksFailed,
 	KeyDaemonRunRestoreFailed,
 	KeyDaemonRunStartupChecksHerdrUnreachable,

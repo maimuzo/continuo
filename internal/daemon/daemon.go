@@ -46,6 +46,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/prompt"
@@ -146,6 +147,17 @@ type Options struct {
 	// **`nil` なら `server.port` に従う。**`nil` でなければ `server.port` を上書きし、
 	// 設定に `server.port` が無くてもダッシュボードを開く。
 	Port *int
+	// Instance は `--id` から導いた二重起動防止のロックの置き場所である（設計 3-17b）。
+	//
+	// **nil なら既定の1本である**（ロックは `~/.continuo/continuo.lock`）。
+	// **nil でなければ、ロックだけがその名前ごとに分かれる**
+	// （`~/.continuo/id/<名前>/continuo.lock`）。
+	// **worktree の置き場所も socket も分かれない。**そちらはテスト用の
+	// `WORKFLOW.md` で書き換える前提である。
+	//
+	// **`internal/cli` は、フラグを読んだ直後の検査で解決したものをそのまま渡す。**
+	// **同じ名前で2度 Resolve しない。**
+	Instance *instance.Layout
 	// StartupCheckTimeout は起動時検査（設計 3-6）全体の上限である。
 	// **0 なら DefaultStartupCheckTimeout を使う。**テストが短い期限を与えるための口である。
 	StartupCheckTimeout time.Duration
@@ -176,9 +188,34 @@ func Run(ctx context.Context, opts Options) error {
 	cfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
 
+	// **`--id` から二重起動防止のロックの置き場所を決める**（設計 3-17b）。
+	// **分かれるのはロックだけである。**worktree の置き場所も socket も、
+	// テスト用の `WORKFLOW.md` で書き換える前提であり、ここでは導かない。
+	//
+	// **`internal/cli` が解決済みのものを渡してくる。**渡されていなければ既定の1本にする。
+	inst := instance.Layout{}
+	if opts.Instance != nil {
+		inst = *opts.Instance
+	} else {
+		resolved, err := instance.Resolve("")
+		if err != nil {
+			return i18n.Errorf(i18n.KeyDaemonRunInstanceFailed, ErrStartup, err)
+		}
+		inst = resolved
+	}
+	if inst.ID() != "" {
+		logger.Info("--id で二重起動防止のロックを分けます",
+			"id", inst.ID(), "lock_file", inst.LockPath())
+	}
+
 	// **起動は止めずに、噛み合っていない Status の集合だけを知らせる**（設計 3-9e。issue #35）。
 	// **段1 の中に置く。**flock より前なので、二重起動で落ちる経路でも必ず1回出る。
 	WarnCleanupStates(cfg, logger)
+
+	// **`runtime.lock_file` に値が書いてあったら、効いていないことを1行で知らせる**（設計 3-17）。
+	// **ここも flock より前に置く。**二重起動で落ちる経路でも、なぜ思った場所の
+	// ロックにならないのかが記録に残る。
+	WarnIgnoredLockFile(cfg, logger)
 
 	// 段1b: 送るプロンプトを組み立て、変数の名前を確かめる（設計 5-3c / 5-3d）。
 	frag, err := buildPrompt(loaded, logger)
@@ -219,11 +256,17 @@ func Run(ctx context.Context, opts Options) error {
 	logger.Info("hook を受ける socket の場所を決めました", "socket", sockPath)
 
 	// 段2: flock を取る。**取れなければ即座に終了する**（設計 3-17）。
-	lockPath := ResolveLockFilePath(cfg, sockPath)
+	//
+	// **socket の場所からは導かない。**socket の場所は環境変数で動くので、
+	// そこから導くと、同じ機械の同じ利用者が別のロックを握る（3-17）。
+	lockPath := inst.LockPath()
+	if err := inst.EnsureLockDir(); err != nil {
+		return i18n.Errorf(i18n.KeyDaemonRunLockFileFailed, ErrStartup, lockPath, err)
+	}
 	l, err := lock.Acquire(lockPath)
 	if err != nil {
 		// **「二重起動」と「ロックファイルを開けない」を言い分ける。**
-		// 両方を二重起動と報告すると、`runtime.lock_file` のパスを打ち間違えた運用者が、
+		// 両方を二重起動と報告すると、置き場所を作れていない運用者が、
 		// 動いてもいない2つ目の continuo を探しに行くことになる。
 		if errors.Is(err, lock.ErrAlreadyRunning) {
 			return i18n.Errorf(i18n.KeyDaemonRunAlreadyRunning, ErrStartup, lockPath, err)
@@ -403,6 +446,32 @@ func lineCount(s string) int {
 		return 0
 	}
 	return strings.Count(s, "\n") + 1
+}
+
+// WarnIgnoredLockFile は、`runtime.lock_file` に値が書いてあったら起動時に1行だけ
+// 警告を出す（設計 3-17）。
+//
+// **起動は止めない。**`lock_file: null` は `continuo init` の雛形に入っていたので、
+// **キーを弾くと過去に `continuo init` した全員が次の起動で落ちる。**
+// だからキーは受け取り、値だけを捨てる。
+//
+// **黙って捨ててはならない。**書いた値が効いていないことに、無人運用では気づけない。
+// **分けたいなら `--id` を使う**（3-17b）。
+//
+// **`null` なら何も出さない。**雛形どおりに書いてあるだけの人へ、毎回の起動で
+// 意味の無い警告を出すことになる。
+//
+// cfg: 検証を通った設定。
+// logger: ログの出力先。**nil を渡してはならない**（呼び出し元が既に解決している）。
+func WarnIgnoredLockFile(cfg config.Config, logger *slog.Logger) {
+	if cfg.Runtime.LockFile == nil || *cfg.Runtime.LockFile == "" {
+		return
+	}
+	logger.Warn(
+		"runtime.lock_file はもう効きません（この設定は無視して、機械で決めた場所のロックを使います）。"+
+			"1台で2本以上動かしたいなら --id <名前> を使ってください"+
+			"（二重起動防止のロックが、その名前ごとに分かれます）",
+		"runtime.lock_file", *cfg.Runtime.LockFile)
 }
 
 // quoteStates は Status 名の並びを、引用符で囲んで読点でつないだ1つの文字列にする。
@@ -806,19 +875,4 @@ func newTrackerHTTPClient(timeout time.Duration) *http.Client {
 		timeout = DefaultTrackerTimeout
 	}
 	return &http.Client{Timeout: timeout}
-}
-
-// ResolveLockFilePath は二重起動防止のロックファイルの絶対パスを決める（設計 3-17 / 3-23）。
-//
-// `runtime.lock_file` が明示されていればそれを使い、無ければ hook の socket と同じ
-// ディレクトリ（＝実行時ディレクトリ）に置く。
-//
-// cfg: 読み込み済みの設定（5-5 の展開を通したもの）。
-// sockPath: 解決済みの hook の socket の絶対パス。
-// 戻り値: ロックファイルの絶対パス。
-func ResolveLockFilePath(cfg config.Config, sockPath string) string {
-	if cfg.Runtime.LockFile != nil && *cfg.Runtime.LockFile != "" {
-		return *cfg.Runtime.LockFile
-	}
-	return filepath.Join(filepath.Dir(sockPath), socketpath.LockFileName)
 }

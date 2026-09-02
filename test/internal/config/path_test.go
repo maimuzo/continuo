@@ -1,7 +1,6 @@
 package config_test
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -31,53 +30,38 @@ func TestLoad_hook_bridgeのlistenが相対パスだとエラーになる(t *tes
 	}
 }
 
-// 目的: runtime.lock_file に相対パスを書くと起動を止めることを確認する。
-// 相対パスだと起動したディレクトリごとに別のロックファイルになり、二重起動を防げない
-// （設計 3-17）ためである。
-// 与える情報: runtime.lock_file に相対パス "run/continuo.lock" を書いた front matter。
-// 成功条件: config.Load がエラーを返し、エラーメッセージに設定キー名と書いた値の
-// 両方が含まれること。
-func TestLoad_lock_fileが相対パスだとエラーになる(t *testing.T) {
-	front := validFrontMatter + "runtime:\n  lock_file: \"run/continuo.lock\"\n"
-	path := writeWorkflow(t, front, "")
-
-	_, err := config.Load(path)
-	if err == nil {
-		t.Fatal("相対パスの lock_file なのにエラーが返らなかった")
-	}
-	msg := err.Error()
-	if !strings.Contains(msg, "runtime.lock_file") {
-		t.Errorf("エラーメッセージに設定キー名が含まれていない: %q", msg)
-	}
-	if !strings.Contains(msg, "run/continuo.lock") {
-		t.Errorf("エラーメッセージに書いた値が含まれていない: %q", msg)
-	}
-}
-
-// 目的: 絶対パスの検査が 5-5 の展開のあとに行われることを確認する。
-// チルダで書いたパスは展開前には絶対パスに見えないので、展開より前に検査していると
-// 正しい設定を誤って弾いてしまう。
-// 与える情報: runtime.lock_file に "~/continuo-test.lock" を書いた front matter。
-// 成功条件: config.Load が成功し、値がホームディレクトリ配下の絶対パスへ展開されていること。
-func TestLoad_チルダで書いたlock_fileは展開後に絶対パスとして受け付ける(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skipf("ホームディレクトリを取得できないためスキップする: %v", err)
+// 目的: `runtime.lock_file` を書いた `WORKFLOW.md` が**起動できる**ことを固定する（設計 3-17）。
+//
+// **キーは受け取り、値だけを捨てる。**`lock_file: null` は `continuo init` の雛形に
+// 入っていたので、**キーごと弾くと、過去に `continuo init` した全員が次の起動で落ちる**
+// （8-1 の front matter は未知のキーを弾く）。
+//
+// **値は読まない。**読むと `continuo abandon` が別の場所を見て「動いていない」と判定し、
+// 走っている worktree を消しに行く（3-17c）。**分けたいなら `--id` である**（3-17b）。
+//
+// **展開も検査もしない。**相対パスでも、環境変数を含んでいても、起動を止めない
+// （捨てる値のために起動を止める理由が無い）。
+//
+// 与える情報: `runtime.lock_file` に絶対パス・相対パス・null を書いた front matter の3通り。
+// 成功条件: どれも config.Load がエラーを返さないこと。
+func TestLoad_runtimeのlock_fileを書いても起動できる(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra string
+	}{
+		{name: "絶対パス", extra: "runtime:\n  lock_file: \"/tmp/continuo.lock\"\n"},
+		{name: "相対パス", extra: "runtime:\n  lock_file: \"run/continuo.lock\"\n"},
+		{name: "雛形のままのnull", extra: "runtime:\n  lock_file: null\n"},
 	}
 
-	front := validFrontMatter + "runtime:\n  lock_file: \"~/continuo-test.lock\"\n"
-	path := writeWorkflow(t, front, "")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := writeWorkflow(t, validFrontMatter+c.extra, "")
 
-	loaded, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("チルダで書いた lock_file が受け付けられなかった: %v", err)
-	}
-	if loaded.Config.Runtime.LockFile == nil {
-		t.Fatal("lock_file が null のままになっている")
-	}
-	want := home + "/continuo-test.lock"
-	if *loaded.Config.Runtime.LockFile != want {
-		t.Fatalf("lock_file の展開結果が一致しない: got %q, want %q", *loaded.Config.Runtime.LockFile, want)
+			if _, err := config.Load(path); err != nil {
+				t.Fatalf("runtime.lock_file を書いただけで起動を止めている: %v", err)
+			}
+		})
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/socketpath"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -92,7 +93,7 @@ type Workspace interface {
 // 本番のボード・本物の herdr・利用者の worktree に触らずに検査するためである。**
 type Deps struct {
 	// LockPath は二重起動防止のロックファイルの絶対パスである。
-	// 空なら設定と実行時ディレクトリから決める（daemon.ResolveLockFilePath と同じ経路）。
+	// **空なら常駐している側と同じ関数から決める**（internal/instance の Layout）。
 	LockPath string
 	// AcquireLock はロックを試みる。nil なら internal/lock を呼ぶ。
 	//
@@ -124,10 +125,16 @@ type Deps struct {
 // herdr の socket も worktree の置き場所も設定から決まる。
 //
 // cfg: 検証済みの設定。
+// inst: `--id` から導いたロックの置き場所。**常駐している側と同じ Layout である**（3-17b）。
 // endpoint: GitHub の GraphQL API の接続先（検査済み）。空なら本番の GitHub。
 // logger: ログの出力先。
 // 戻り値: すべてのフィールドが埋まった Deps と、組み立てに失敗した場合のエラー。
-func (d Deps) resolve(cfg config.Config, endpoint string, logger *slog.Logger) (Deps, error) {
+func (d Deps) resolve(
+	cfg config.Config,
+	inst instance.Layout,
+	endpoint string,
+	logger *slog.Logger,
+) (Deps, error) {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
@@ -175,11 +182,7 @@ func (d Deps) resolve(cfg config.Config, endpoint string, logger *slog.Logger) (
 		d.Workspace = ws
 	}
 	if d.LockPath == "" {
-		sockPath, err := resolveSocketPath(cfg)
-		if err != nil {
-			return d, err
-		}
-		d.LockPath = daemon.ResolveLockFilePath(cfg, sockPath)
+		d.LockPath = inst.LockPath()
 	}
 	if d.NewTracker == nil {
 		d.NewTracker = func(ctx context.Context) (Tracker, error) {
