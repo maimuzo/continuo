@@ -75,12 +75,12 @@ func TestTemplate_雛形は自分で作ったworktreeを片付けさせる(t *te
 			"HEAD で絞った log --oneline HEAD --not --remotes を書いてください", worktreeCleanupHeading)
 	}
 
-	// 旧版の言い回し。「一覧から消したいものを選ぶ」という前提がパスの表記に残っている。
-	if strings.Contains(section, oldCleanupPathPlaceholder) {
-		t.Errorf("%q の節に %q が残っています。"+
+	// 「一覧から消したいものを選ぶ」という前提が、パスの表記に出てはならない。
+	if strings.Contains(section, listPickingPathPlaceholder) {
+		t.Errorf("%q の節が %q という表記を使っています。"+
 			"この書き方は「一覧から消したいものを選ぶ」ことを前提にしています。"+
 			"自分が git worktree add に渡したパスだけを指す表記に直してください",
-			worktreeCleanupHeading, oldCleanupPathPlaceholder)
+			worktreeCleanupHeading, listPickingPathPlaceholder)
 	}
 }
 
@@ -116,25 +116,32 @@ func worktreeCleanupSection(t *testing.T, body string) string {
 const upgradingDocPath = "../../../docs/upgrading.md"
 
 // upgradingPasteHeading は、既存の利用者が WORKFLOW.md へ貼る文面が載っている節の見出しである。
+//
+// **版を出すたびに、この定数を差し替える。**docs/upgrading.md は版ごとに節を積む文書であり
+// （docs/releasing.md の「5. 版ごとの節を書く」）、**打った版の節はもう書き換えない。**
+// 雛形のこの節を直したら、新しい版の節を docs/upgrading.md の先頭側へ足し、
+// **この定数と upgradingCheckHeading を、その新しい節の見出しへ向けること。**
+// **古い版の節を書き換えて通してはならない。**その版から上げる利用者が貼る文面が変わる。
 const upgradingPasteHeading = "### 差し替え方（自分で作った worktree は自分で消せ）"
 
 // upgradingCheckHeading は、貼れたかどうかを grep で確かめる手順が載っている節の見出しである。
+// upgradingPasteHeading と同じ版の節にあるので、差し替えるときは2つ一緒に動かす。
 const upgradingCheckHeading = "### 当たったかどうかの確かめ方（自分で作った worktree は自分で消せ）"
 
-// oldCleanupPathPlaceholder は v0.1.12 の案内が使っていたパスの表記である。
-// 「一覧から消したいものを選ぶ」ことを前提にしているので、新しい文面には無い。
-const oldCleanupPathPlaceholder = "<消したい worktree のパス>"
+// listPickingPathPlaceholder は「一覧から消したいものを選ぶ」ことを前提にしたパスの表記である。
+// 消してよいのは自分が git worktree add に渡したパスだけなので、雛形にこの表記を置かない。
+const listPickingPathPlaceholder = "<消したい worktree のパス>"
 
 // 目的: docs/upgrading.md が貼らせる文面と、`continuo init` が置く雛形の当該節が
 // 一字一句そろっていることを固定する（#147（continuo が起動するエージェントに、worktree の片付けを教える））。
 //
 // **なぜ要るか。**docs/upgrading.md の ```text ブロックは、既存の利用者が
 // WORKFLOW.md へそのまま貼る文面である。**雛形だけを直しても、既存の利用者には届かない。**
-// 実際に、雛形へ「一覧から選ばせない」案内を入れた回で、こちらが旧版のまま残った。
-// **旧版を貼った利用者のエージェントは、別のエージェントが使っている worktree を消す。**
+// **食い違ったまま出すと、上げた利用者のエージェントだけが、
+// 別のエージェントが使っている worktree を消しにいく案内で動く。**
 //
 // 与える情報: docs/upgrading.md の ```text ブロックと、scaffold.Template() の当該節。
-// 成功条件: 2つが完全に一致し、確かめ方の grep が新しい文面にしか無い文字列を数えていること。
+// 成功条件: 2つが完全に一致し、確かめ方の grep が、この節でいちばん効く2行を数えていること。
 func TestTemplate_案内が貼らせる文面が雛形の節と一致する(t *testing.T) {
 	body := bodyOf(t, "雛形", scaffold.Template())
 	want := strings.TrimRight(worktreeCleanupHeading+"\n"+worktreeCleanupSection(t, body), "\n")
@@ -143,15 +150,18 @@ func TestTemplate_案内が貼らせる文面が雛形の節と一致する(t *t
 	got := strings.TrimRight(fencedBlockAfter(t, doc, upgradingPasteHeading, "```text"), "\n")
 
 	if got != want {
-		t.Errorf("%s が貼らせる文面が、雛形の %q の節と違います。\n"+
+		t.Errorf("%s の %q が貼らせる文面が、雛形の %q の節と違います。\n"+
 			"貼らせる文面:\n%s\n\n雛形の節:\n%s\n\n"+
 			"既存の利用者はこのブロックをそのまま貼ります。片方だけ直すと、"+
-			"上げた利用者のエージェントだけが古い案内で動きます",
-			upgradingDocPath, worktreeCleanupHeading, got, want)
+			"上げた利用者のエージェントだけが古い案内で動きます。\n"+
+			"雛形を直して版を上げるのなら、いま指している節は書き換えず、"+
+			"新しい版の節を %s へ足して、upgradingPasteHeading をその見出しへ向けてください",
+			upgradingDocPath, upgradingPasteHeading, worktreeCleanupHeading, got, want,
+			upgradingDocPath)
 	}
 
-	// 確かめ方が両方の文面に在る文字列を数えていると、旧版を貼っても「当たっています」になる。
-	// これが今回の食い違いを検知できなかった理由なので、ここも固定する。
+	// 見出しのように、途中で切れて貼られても残る文字列しか数えていないと、
+	// 貼り損ねたままでも「当たっています」になる。だから、この節でいちばん効く2行を数えさせる。
 	check := fencedBlockAfter(t, doc, upgradingCheckHeading, "```bash")
 	for _, needle := range []string{
 		"git worktree list で一覧を出して、そこから消すものを選ばないでください",
@@ -159,7 +169,8 @@ func TestTemplate_案内が貼らせる文面が雛形の節と一致する(t *t
 	} {
 		if !strings.Contains(check, needle) {
 			t.Errorf("%s の確かめ方が %q を数えていません。"+
-				"見出しと prune の行は旧版にも在るので、それだけでは旧版を貼っても 1 を返します",
+				"見出しの行は途中で切れて貼られていても 1 を返すので、"+
+				"それだけでは貼り損ねを見つけられません",
 				upgradingDocPath, needle)
 		}
 	}
