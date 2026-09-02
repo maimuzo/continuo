@@ -53,7 +53,7 @@
 | hook の置き場所 | hook socket location | README が doctor の検査をこの語で並べている。doctor のラベルは `hook socket` に縮める |
 | 置き場所（一般） | location / where X lives | README の "resolving where a clone lives"。`storage location` は使わない |
 | 逃がし先 / `--pending-dir` | pending directory | 利用者が見るフラグが `--pending-dir`。**Go の識別子の `spill` を画面に出さない** |
-| 設定ファイル（WORKFLOW.md） | config | README の "`WORKFLOW.md` holds the config" |
+| 設定ファイル（WORKFLOW.md の front matter） | config | README の "The front matter at the top holds the config" |
 | 設定ファイル（issue ごとの Claude Code の） | settings file | WORKFLOW.md と区別する。doctor の検査名は "the Claude settings directory" |
 | 雛形（WORKFLOW.md の） | template | README の "writes WORKFLOW.md"。**package 名の `scaffold` を画面に出さない** |
 | プロンプトの本文 / 指示文 | the brief | README の "the part of the agent's brief that is yours to write" |

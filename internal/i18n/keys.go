@@ -495,9 +495,9 @@ const (
 	KeyCLIInitErrSymlink Key = "cli.init.err_symlink"
 	// KeyCLIInitErrWriteFailed はそのほかの理由で書き出せないときに出る。
 	//
-	// **1つ目の引数は、書き出せなかったファイルの名前である**（WORKFLOW.md か
-	// PROJECT_SPECIFIC_PROMPT.md）。**文言に名前を埋め込んではならない。**
-	// `continuo init` は2枚を置くので、埋め込むと片方のときに別のファイルを名乗る。
+	// **1つ目の引数は、書き出せなかったファイルの名前である**（WORKFLOW.md）。
+	// **文言に名前を埋め込んではならない。**同じ文言を使う経路が増えたときに、
+	// 埋め込むと落ちた当のファイルとは別のファイルを名乗る。
 	KeyCLIInitErrWriteFailed Key = "cli.init.err_write_failed"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
@@ -1624,9 +1624,8 @@ const (
 // 読む・確かめる・書く・閉じる・作るの5つは、どちらの経路でも同じ失敗である。
 //
 // **文言にファイルの名前を埋め込んではならない。**同じ経路を WORKFLOW.md と
-// PROJECT_SPECIFIC_PROMPT.md と settings.json が通るので、埋め込むと落ちた当のファイルとは
-// 別のファイルを名乗る（実際に `WORKFLOW.md を作成できません: …/PROJECT_SPECIFIC_PROMPT.md`
-// と出た）。**呼ぶ側が filepath.Base(path) を1つ目の引数として渡す。**
+// `<実行時ディレクトリ>/issues/<スラグ>/settings.json` が通るので、埋め込むと落ちた当の
+// ファイルとは別のファイルを名乗る。**呼ぶ側が filepath.Base(path) を1つ目の引数として渡す。**
 const (
 	// KeyScaffoldFileReadFailed はWORKFLOW.md を読み込めなかったときに出る。
 	KeyScaffoldFileReadFailed Key = "scaffold.file.read_failed"
@@ -1655,10 +1654,9 @@ const (
 // `continuo init` が雛形を書き出すとき（internal/scaffold の openError）の文言。
 //
 // **「ファイルの名前」「絶対パス」の順に2つの値を取る。**
-// **番兵 ErrSymlink の文言は繋がない。**番兵は WORKFLOW.md と
-// PROJECT_SPECIFIC_PROMPT.md の両方から返るので、そこにファイルの名前を書くと、
-// もう片方のときに別のファイルを名乗る。**errors.Is の切り分けは、
-// internal/scaffold の symlinkError が Unwrap で保つ。**
+// **番兵 ErrSymlink の文言は繋がない。**番兵は package の変数1つで、書き出す先の名前を
+// 持てないので、そこにファイルの名前を書くと別のファイルが落ちたときにそちらを名乗る。
+// **errors.Is の切り分けは、internal/scaffold の symlinkError が Unwrap で保つ。**
 const (
 	// KeyScaffoldWriteSymlinkNotFollowed は書き出す先が symlink で、辿らずに止めたときに出る。
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
