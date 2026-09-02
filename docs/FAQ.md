@@ -1729,44 +1729,29 @@ cd ~/continuo-work && continuo doctor && continuo
 **人間が動かしたものは戻しません。**
 **「人間が Status を動かしてエージェントを止める」操作は、そのまま効きます。**
 
-**何を書くか。**左が自動化の書き込む Status 名、右が戻したい Status 名です。
-
-```yaml
-tracker:
-  active_states: ["AI Ready", "AI In Progress"]
-  automated_state_rewrite:
-    "In Progress": "AI In Progress"
-    # 左：カンバンの自動化が書き込む Status 名。カンバンの選択肢と1文字ずつ合わせる
-    # 右：戻したい Status 名。必ず active_states の中から選ぶ
-```
-
-**書けない形が5つあります。**どれも起動しません（`continuo doctor` の `設定ファイル` の行が `✗` になります）。
-
-| 書けない形 | なぜ |
-| --- | --- |
-| **左と右が同じ** | 同じ値の書き込みは省かれるので、巡回のたびに書きに行き続けます |
-| **左が、設定の他の場所に出てくる Status** | その行は一度も引かれません。引くのは continuo が知らない Status になったときだけです |
-| **右が `tracker.active_states` の外** | 書き戻した直後に、continuo 自身がその run を終わらせます |
-| **大文字小文字だけが違う左が2つ** | どちらに当たるかが、実行のたびに変わります |
-| **左が空、または右が空** | Status 名として存在しません |
-
-**とくに右です。**`Done` のような終わったとみなす Status へは書き戻せません。
-**「PR がマージされた」と「エージェントがまだ動いている」は別の話で、同じ仕組みには載せていません。**
-
 **書かなかったらどうなるか。**空（`{}`）のままでも壊れません。
 自動化が Status を動かしたとき、`tracker.unknown_state_grace_ms` の猶予を置いてからエージェントを止めます。
 **つまり「PR を作ってから CI の直しを続ける」流れでは、途中で止まります。**
 
-**書いたら確かめてください。**
+**対応表の書き方は [upgrading.md](upgrading.md) の「足す場所と中身」が正です。**
+そのまま貼れる yaml・左と右の決め方・書き戻しの上限・確かめ方が、そこに1箇所だけあります。
+**この文書には写しを置きません**（2箇所にあると、片方だけ直したときに食い違います）。
 
-```bash
-cd ~/continuo-work && continuo doctor
-```
+**書き戻しても自動化が書き直す押し合いになると、continuo は途中で書き戻しをやめます。**
+そこから先はいままでどおり、猶予を置いてエージェントを止め、
+issue のコメントで `Workflows` を切る手を案内します。
+**何回でやめるかは、[upgrading.md](upgrading.md) の
+「`tracker.automated_state_rewrite` — 自動化に動かされた Status を戻す」にあります。**
 
-**左に書いた Status がカンバンの選択肢に無いと、`対応表のキー` の行に `!` が出ます**（起動は止まりません）。
-綴りの直し方は、「doctor が通らないとき」の
-「`! 対応表のキー  tracker.automated_state_rewrite のキーに、カンバンの Status の選択肢に無いものがあります`」
-にあります。
+**雛形の Status 名のまま `"In Progress": "AI In Progress"` を写すと、continuo は起動しません。**
+`In Progress` は雛形の `tracker.active_states` に入っているからです
+（`continuo doctor` の `設定ファイル` の行が `✗` になります）。
+**この形が要るのは、`active_states` を `AI Ready` / `AI In Progress` のように先に改名してある場合だけです。**
+改名していないなら、自動化が `In Progress` を書いても continuo は止まらないので、対応表そのものが要りません。
+
+**左に何を書けばよいか分からないときは、書かなくて構いません。**
+次に自動化が Status を動かしたとき、continuo が issue のコメントに
+**「この2行を足してください」とそのまま貼れる形で書きます。**
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 

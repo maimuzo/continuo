@@ -8615,14 +8615,21 @@ language: auto                              # 画面に出す文言の言語。a
 **continuo が片付けるのは、continuo が用意した worktree だけです。**
 あなたが足したものは、消すまで残り続けます。
 
-**まず、いま何があるかを見ます。**
+**消してよいのは、あなた自身が git worktree add で作った worktree だけです。**
+**そのパスは、あなたが git worktree add に渡した文字列そのものです。**
 
-    git worktree list
+**git worktree list で一覧を出して、そこから消すものを選ばないでください。**
+**一覧には、continuo が別の issue のために用意した worktree も並びます。**
+それらは、いま別のエージェントが使っています。
+**commit していない変更が無ければ、git worktree remove は --force を付けなくても成功します。**
+**確認も警告も出ないまま、別のエージェントの作業場所が消えます。**
+
+**自分で git worktree add した覚えが無いなら、1つも消さないでください。**
 
 **消す前に、その worktree に2つが残っていないかを確かめてください。**
 
-    git -C <消したい worktree のパス> status --short
-    git -C <消したい worktree のパス> log --oneline HEAD --not --remotes
+    git -C <自分が git worktree add したパス> status --short
+    git -C <自分が git worktree add したパス> log --oneline HEAD --not --remotes
 
 **1つ目が commit していない変更、2つ目が push していない commit です。**
 **2つ目は HEAD から辿れる commit だけを見ます。**--branches にすると、
@@ -8631,7 +8638,7 @@ language: auto                              # 画面に出す文言の言語。a
 
 **確かめたら消します。**
 
-    git worktree remove <消したい worktree のパス>
+    git worktree remove <自分が git worktree add したパス>
 
 **--force を付けないでください。**commit していない変更が、確認も警告も無く消えます。
 **git worktree remove が断ったときは、上の2つをもう一度確かめてください。**
