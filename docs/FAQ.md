@@ -453,8 +453,10 @@ cd ~/continuo-work && continuo prompt --show
 **書いたつもりなのにこう出るときは、書いた場所を確かめてください。**
 **front matter の中（`---` に挟まれた YAML の側）に書いても、本文にはなりません。**
 
+**本文だけを出すコマンドです。**2本目の `---` より下を出します。
+
 ```bash
-cd ~/continuo-work && sed -n '/^---$/,$p' WORKFLOW.md | tail -n +2 | sed -n '/^---$/,$p'
+cd ~/continuo-work && awk 'c>=2{print} /^---$/{c++}' WORKFLOW.md
 ```
 
 **本文の雛形が要るなら、`continuo init` を別のディレクトリで叩いて写してください。**

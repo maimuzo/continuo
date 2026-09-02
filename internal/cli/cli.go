@@ -332,7 +332,7 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 
 	if *builtinFlag {
 		// **WORKFLOW.md を1バイトも読まない。**組み込みは実行ファイルの中にあるので、
-		// 設定が壊れている利用者でも読める。**移行の途中の人がここへ辿り着く。**
+		// 設定が壊れている利用者でも読める。**自分が書いた本文と見比べる相手になる。**
 		text := prompt.Builtin()
 		fmt.Fprint(stdout, text)
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
