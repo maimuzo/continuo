@@ -48,9 +48,14 @@
 git fetch origin -q   # 検査の前に必ず打つ
 ```
 
-**同じ落とし穴が [CLAUDE.md](../../CLAUDE.md) の「6. hook の経路」にもある。**
-あちらは「手元の `main` ではなく `origin/main` を見る」だが、
-**`origin/main` に切り替えても、fetch していなければ同じことが起きる。**
+**同じ理由で、[CLAUDE.md](../../CLAUDE.md) の「6. hook の経路」の検知スクリプトも、
+先頭で `git fetch origin -q` を打っている。**あちらは「手元の `main` ではなく `origin/main` を見る」だが、
+**`origin/main` に切り替えても、fetch していなければ同じことが起きる。**だから2つで1組である。
+[docs/releasing.md](../../docs/releasing.md) の版の比較も、先に fetch してから `origin/main` を見る。
+
+**`--merged` は commit の祖先関係で判定する。**squash merge や rebase merge で入った branch は、
+**何度 fetch しても永久に出ない。**そのときは
+`git -C <パス> log --oneline HEAD --not --remotes`（どの remote にも無い commit が残っていないか）で確かめる。
 
 ---
 
@@ -76,17 +81,49 @@ git worktree list
 
 **走っている background のエージェントが、そのディレクトリで動いていないかも見る。**
 
-**branch を消すときも同じである。**
+---
+
+## branch を消してよいかは、`--merged origin/main` だけが決める
+
+**`git branch -d` は判定していない。安全網だと思ってはならない。**
+**判定は fetch のあとの `git branch --merged origin/main` が1つで行う。**
+
+**`-d` が比べる相手は `origin/main` ではない。**git の man がこう書いている。
+
+> The branch must be fully merged in its upstream branch, or in HEAD if no upstream was set
+> with `--track` or `--set-upstream-to`.
+>
+> （訳: **その branch は upstream へ完全にマージされていなければならない。
+> `--track` や `--set-upstream-to` で upstream を設定していない場合は、`HEAD` へマージされていなければならない。**）
+
+| 何 | 何と比べているか |
+| --- | --- |
+| **`git branch --merged origin/main`**（fetch のあと） | **`origin/main`。判定はこれだけが行う** |
+| `git branch -d` | **upstream があれば upstream、無ければ `HEAD`。`origin/main` は見ていない** |
+| `git branch -D` | **何とも比べない** |
+
+**だから `-d` は2通りに外れる**（git 2.50.1 で実測）。
+
+| いつ | 何が起きるか |
+| --- | --- |
+| **`-u` を付けて push した branch**（[docs/upgrading.md](../../docs/upgrading.md) がそう指示している。つまりほぼ全部） | **upstream は branch 自身と同じ commit なので、main へ入っていなくても素通りする。**`warning:` を1行出して消える |
+| **手元の `main` が `origin/main` より遅れている** | **`--merged origin/main` に出ていても `error: the branch '…' is not fully merged` で断る。**git は `-D` を使えと案内する |
+
+**手順。**
 
 ```bash
 git fetch origin -q
-git branch --merged origin/main       # ここに出たものだけ
-git branch -d <branch 名>             # -D ではなく -d で消す
+git branch --merged origin/main                          # ここに出ていなければ、消さない
+git worktree remove <その branch を出している worktree>   # 出しているなら先に消す
+git branch -d <branch 名>                                # 断られたら、上の一覧に出ていることを確かめて -D
 ```
 
-**`-D` を使わない。**`-d` は「マージされていない」と判断したときに断ってくれる。
-**`-D` はその門を素通りするので、fetch を忘れた状態と組み合わさると、
-本当にマージされていない branch を黙って消す。**
+**worktree を先に消す。**branch を出している worktree が在るあいだは、
+**`-d` でも `-D` でも `error: cannot delete branch '…' used by worktree at '…'` で通らない。**
+`git branch --merged` の一覧では、その branch の先頭に `+` が付いている。
+
+**`--merged origin/main` に出ていない branch を `-D` で消さない。**
+**そこだけは、どんな理由があっても曲げない。**
 
 ---
 
