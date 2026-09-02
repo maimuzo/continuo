@@ -28,11 +28,39 @@
 
 ---
 
+## 絶対条件：確認の前に `git fetch origin` を打つ
+
+**打たないと、`origin/main` を見る検査が全部、嘘の答えを返す。**
+
+**手元の `origin/main` は、最後に fetch した時点で止まっている。**
+**その先でマージされたものは、手元から見ると「まだマージされていない」に見える。**
+
+**2026-09-02 に実際に踏んだ。**マージ済みの branch を消そうとしたところ、
+`git branch --merged origin/main` が**その branch を1行も返さなかった。**
+手元の `origin/main` が28分前の commit を指したままで、
+**マージ commit そのものが手元に存在していなかった**（`git cat-file -t` が落ちた）。
+
+**いちばん危ないのは、嘘が「安全側の顔」で出ることである。**
+**返らなかったときの見た目は「まだマージされていないので消さないでおこう」と全く同じで、区別が付かない。**
+**マージした直後の branch ほど当たりやすく、片付けのたびに1本ずつ取り残される。**
+
+```bash
+git fetch origin -q   # 検査の前に必ず打つ
+```
+
+**同じ落とし穴が [CLAUDE.md](../../CLAUDE.md) の「6. hook の経路」にもある。**
+あちらは「手元の `main` ではなく `origin/main` を見る」だが、
+**`origin/main` に切り替えても、fetch していなければ同じことが起きる。**
+
+---
+
 ## 消す前に4つを確認する
 
 **「たぶん使っていない」で消してはならない。**
 
 ```bash
+git fetch origin -q   # 上の絶対条件。これを先に打つ
+
 # 未コミットの変更（untracked も数える）
 git -C <パス> status --porcelain --untracked-files=all
 
@@ -47,6 +75,18 @@ git worktree list
 ```
 
 **走っている background のエージェントが、そのディレクトリで動いていないかも見る。**
+
+**branch を消すときも同じである。**
+
+```bash
+git fetch origin -q
+git branch --merged origin/main       # ここに出たものだけ
+git branch -d <branch 名>             # -D ではなく -d で消す
+```
+
+**`-D` を使わない。**`-d` は「マージされていない」と判断したときに断ってくれる。
+**`-D` はその門を素通りするので、fetch を忘れた状態と組み合わさると、
+本当にマージされていない branch を黙って消す。**
 
 ---
 
