@@ -35,8 +35,10 @@ import (
 // （設計 3-22 の段4）。
 //
 // 与える情報: `herdr.worktree.base` を null にした設定と、`default_branch` が main の issue。
-// worktree の外に別のディレクトリを1つ置き、コードのリポジトリの clone に見立てる。
-// 成功条件: base が main になり、worktree と branch が消え、**worktree の外のディレクトリが残ること。**
+// **worktree のすぐ隣**に別のディレクトリを1つ置き、コードのリポジトリの clone に見立てる。
+// **隣に置くのは、片付けが親ごと消す形や兄弟を巻き込む形へ壊れたときに、この検査が落ちるようにするためである。**
+// 無関係な一時ディレクトリへ置くと、片付けをどう壊しても残ってしまい、検査が空振りする。
+// 成功条件: base が main になり、worktree と branch が消え、**隣のディレクトリが残ること。**
 func TestUpstreamPR_成果がworktreeの外にあっても片付けが通る(t *testing.T) {
 	cf := newCleanupFixtureWith(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) { cfg.Herdr.Worktree.Base = nil },
@@ -47,9 +49,11 @@ func TestUpstreamPR_成果がworktreeの外にあっても片付けが通る(t *
 			cf.Prepared.Base.String(), "main")
 	}
 
-	// worktree の外に置いた「コードのリポジトリの clone」に見立てたディレクトリ。
+	// worktree のすぐ隣に置いた「コードのリポジトリの clone」に見立てたディレクトリ。
 	// **片付けはここに触ってはならない。**
-	forkClone := filepath.Join(t.TempDir(), "fork-clone")
+	// `filepath.Dir(cf.Prepared.Path)` の下へ置くので、片付けが親ごと消す形や
+	// 兄弟を巻き込む形へ壊れると、この検査が落ちる。
+	forkClone := filepath.Join(filepath.Dir(cf.Prepared.Path), "fork-clone")
 	if err := os.MkdirAll(forkClone, 0o755); err != nil {
 		t.Fatalf("コードのリポジトリの clone に見立てたディレクトリを作れない: %v", err)
 	}
@@ -69,7 +73,7 @@ func TestUpstreamPR_成果がworktreeの外にあっても片付けが通る(t *
 		t.Fatal("worktree の実体が消えていない")
 	}
 	if _, statErr := os.Stat(forkFile); statErr != nil {
-		t.Fatalf("worktree の外の clone まで片付けている: %v", statErr)
+		t.Fatalf("worktree の隣の clone まで片付けている: %v", statErr)
 	}
 }
 

@@ -8124,16 +8124,24 @@ PR を本家へ出す形は、**いま continuo の仕組みではなくエー�
 
     sh scripts/check-rucm.sh --strict
 
-**ただし、雛形の WORKFLOW.md のままでは動かない。**足す本文は 3-78b にある。
+**ただし、雛形の WORKFLOW.md のままでは動かない。**置き換える本文は 3-78b にある。
 
-### 3-78b. このユースケースは、WORKFLOW.md の本文を足さないと動かない
+### 3-78b. このユースケースは、WORKFLOW.md の「終わったらやること」を置き換えないと動かない
 
-**言いたいこと。**`continuo init` が置く雛形は、**別のリポジトリの issue を「直さずに
-`CONTINUO-STATUS: #99 working` と書け」と指示している**
-（[internal/scaffold/template.go](../../internal/scaffold/template.go) の「別のリポジトリの issue」の段）。
-**そのままではエージェントは clone を用意する段へ進まない。**
+**言いたいこと。**`continuo init` が置く雛形は、**成果が worktree の中にある前提で書かれている。**
+足すだけでは「必ず commit して push しろ」と「この worktree の中では commit するな」が並び、
+どちらに従うかがエージェント次第になる。**足すのではなく、次の2つの段を消して置き換える。**
 
-**`<実行時ディレクトリ>/WORKFLOW.md` の本文へ、次の段を足す。**
+| 消す段（雛形での出どころ） | 何と書いてあるか |
+| --- | --- |
+| **commit と push を求める段**（[internal/scaffold/template.go:365](../../internal/scaffold/template.go#L365)） | 「`review` または `blocked` を出す前に、必ず commit して push してください」 |
+| **push 先を指定する段**（[internal/scaffold/template.go:373](../../internal/scaffold/template.go#L373)） | 「push 先は、この issue のために作られた branch です」 |
+
+**残すと worktree が残り続ける。**雛形側に従って worktree の中で commit すると、その commit は
+fork へ push されていないので片付けが見送られる（[test/internal/workspace/upstream_pr_test.go](../../test/internal/workspace/upstream_pr_test.go)
+の `TestUpstreamPR_worktreeの中にpushしていないcommitがあれば片付けない`）。
+
+**`<実行時ディレクトリ>/WORKFLOW.md` の「終わったらやること」へ、代わりに次を置く。**
 
     ## コードが別のリポジトリにあるとき
 
@@ -8157,11 +8165,11 @@ PR を本家へ出す形は、**いま continuo の仕組みではなくエー�
 | worktree の外へ `cd`（`bypassPermissions`） | 起動ディレクトリへ戻され、元のまま |
 | `--add-dir` で外を足してから `cd` | **外になる。**continuo は `--add-dir` を渡さない |
 
-**崩れるのは次の3つのどれかを行ったときだけである。**`--add-dir` を渡す。
-`claude.permission_mode` を `dontAsk` 以外にする。clone を worktree の外に置いたうえで
-エージェントに `cd` させる。**3つとも既定では起きない。**
+**崩れるのは、`--add-dir` を渡したときか、clone を worktree の外に置いたうえで
+エージェントに `cd` させたときだけである。**`claude.permission_mode` を `dontAsk` 以外にする道は無い
+（[internal/config/validate.go:232](../../internal/config/validate.go#L232) が起動時に弾く）。
 
-**だから雛形へは足さない。**上のサンプルの中で `cd` を止めれば足りる。
+**だから雛形そのものは直さない。**上のサンプルの中で `cd` を止めれば足りる。
 **このユースケースを回す利用者は、どのみち WORKFLOW.md を書き換える。**
 **全利用者が読む雛形へ、既定では起きない事故の回避策を足すと、本文が長くなって読まれなくなる。**
 
