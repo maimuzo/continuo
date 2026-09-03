@@ -23,7 +23,7 @@ var ErrBranchUsedByWorktree = errors.New("git がこの branch を消しませ�
 // worktree を起点に探す `continuo abandon` は「この issue の worktree はありません」で
 // 終わってしまい、**利用者は手で消すしかなくなる。**
 type IssueBranch struct {
-	// Name は `herdr.worktree.branch_template` を変数展開して正規化した branch 名である。
+	// Name は `herdr.worktree.branch_template` のテンプレートの変数展開を通し、正規化した branch 名である。
 	Name normalize.SafeName
 	// RepoDir は `ghq list -p -e <owner>/<repo>` が答えた clone の作業ディレクトリである。
 	RepoDir string

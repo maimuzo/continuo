@@ -190,7 +190,7 @@ stale の残骸を誰が消すか書かれていない / 打ち間違えた `--i
 （[docs/upgrading.md](../upgrading.md) の「v0.1.12 から v0.1.13 へ」の「どう直すか」）。
 
 **`missingkey=error` は外せない。**準拠する symphony の `SPEC.md` 5.4 が
-*"Unknown variables MUST fail rendering"*（**訳:** 未知の変数はレンダリングを失敗させなければならない）
+*"Unknown variables MUST fail rendering"*（**訳:** 未知の変数は変数展開を失敗させなければならない）
 を要求しており、[docs/plans/continuo_design.md:597](continuo_design.md#L597) がそれを根拠に採っている。
 **だから「起動を止める」のは変えず、`continuo doctor` で起動前に気づける道を足す。**
 
@@ -219,8 +219,11 @@ stale の残骸を誰が消すか書かれていない / 打ち間違えた `--i
 
 ### 8-3. 「描画」は使わない
 
-**`text/template` の `{{...}}` を値に置き換えることを「描画」と呼ばない。**
-**「変数展開」と書く。**「レンダリング」でもよい。
+**`text/template` の `{{...}}` を値に置き換えることを「描画」と呼ばない、とここで決めた。**
+
+**規則の本体は [docs/spec/translation-glossary.md](../spec/translation-glossary.md) の2にある。**
+この節は決定を記録しているだけである。**書き方はそちらを見ること。**
+この節は出し終えた版の計画なので、以後は開かれない。
 
 ---
 

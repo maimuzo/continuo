@@ -272,7 +272,7 @@ func TestDispatch_draft_issue_は信頼の検査に掛けない(t *testing.T) {
 
 // {"RUCM-PATH": "P022"}
 //
-// TestDispatch_テンプレートに一覧に無い変数を書いたらその issue を失敗にする は、
+// TestDispatch_テンプレートに一覧に無い変数を書いたらそのissueを失敗にする は、
 // 変数展開の失敗の扱いを確かめる。
 //
 // 目的: 設計 3-8 の「`missingkey=error` を付ける。**未知の変数を書いたテンプレートは

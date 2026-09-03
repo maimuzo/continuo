@@ -453,7 +453,11 @@ type HerdrWorktreeConfig struct {
 	// CreateViaHerdr は herdr に worktree を workspace として開かせるかどうかである（3-22）。
 	CreateViaHerdr bool `yaml:"create_via_herdr"`
 	// BranchTemplate は branch 名のテンプレートである。区切りにスラッシュを使う（3-22）。
-	// このキーには 5-5 の展開規則を適用しない（テンプレート文字列であり、環境変数展開の対象ではない）。
+	//
+	// **このキーに効く展開は1つだけである。**テンプレートの変数展開
+	// （`text/template` の `{{...}}` を issue の値に置き換える。internal/workspace の
+	// RenderBranch が行う）は受けるが、**設定値の環境変数の展開（`${NAME}`）は受けない。**
+	// 5-5 の展開規則を適用しないキーである。
 	BranchTemplate string `yaml:"branch_template"`
 	// Base は派生元の branch 名である。null ならトラッカーが返す既定 branch を使う。
 	Base *string `yaml:"base"`

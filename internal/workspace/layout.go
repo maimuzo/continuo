@@ -142,6 +142,10 @@ func HostFromIssueURL(rawURL string) string {
 // RenderBranch は herdr.worktree.branch_template を text/template で変数展開し、
 // 正規化した branch 名を返す（3-22 / 3-7）。
 //
+// **ここでいう変数展開はテンプレートの変数展開である**（`{{...}}` を issue の値に
+// 置き換える）。**設定値の環境変数の展開（`${NAME}`。5-5）とは別の仕組みで、
+// このキーはそちらの対象ではない**（internal/config の HerdrWorktreeConfig）。
+//
 // 渡す変数はプロンプト（5-3）と同じ `.issue` である（`.issue.owner` / `.issue.repo` /
 // `.issue.number`）。**未知の変数は変数展開を失敗させる**（missingkey=error）。
 // 変数展開に失敗したら、呼び出し側はその issue を失敗として扱う。
@@ -196,7 +200,7 @@ func BranchPrefix(tmpl string) string {
 // Slug は branch 名から置き場所のディレクトリ名を作る（3-22）。
 // スラッシュをハイフンに置き換えるだけである（gwq の naming.sanitize_chars と同じ規則）。
 //
-// branch: 変数展開済みの branch 名。
+// branch: テンプレートの変数展開を済ませた branch 名。
 // 戻り値: スラッシュをハイフンに置き換えた文字列。
 func Slug(branch normalize.SafeName) string {
 	return strings.ReplaceAll(branch.String(), "/", "-")
@@ -230,13 +234,13 @@ type Location struct {
 	Slug string
 	// Path は worktree の絶対パスである（Root から Slug までを繋いだもの）。
 	Path string
-	// Branch は変数展開・正規化した branch 名である。
+	// Branch はテンプレートの変数展開と正規化を通した branch 名である。
 	Branch normalize.SafeName
 }
 
 // Locate は issue から worktree の置き場所を組み立てる（3-22）。
 //
-// branch 名の変数展開・正規化と、置き場所の各階層の組み立てをまとめて行う。
+// branch 名のテンプレートの変数展開・正規化と、置き場所の各階層の組み立てをまとめて行う。
 // **封じ込め検査はここでは行わない**（呼び出し側が CheckContainment を呼ぶ）。
 //
 // resolvedRoot: EnsureRoot が返した解決済みの置き場所。
@@ -244,7 +248,7 @@ type Location struct {
 // issue: 対象の issue。
 // 戻り値の1つ目: 組み立てた置き場所。
 // 戻り値の2つ目: 正規化で情報が落ちた場合の警告をすべて集めたもの。
-// 戻り値の3つ目: branch 名の変数展開に失敗した場合のエラー。
+// 戻り値の3つ目: branch 名のテンプレートの変数展開に失敗した場合のエラー。
 func Locate(resolvedRoot, branchTemplate string, issue IssueRef) (*Location, []normalize.Warning, error) {
 	branch, warnings, err := RenderBranch(branchTemplate, issue)
 	if err != nil {

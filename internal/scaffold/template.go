@@ -10,7 +10,7 @@ package scaffold
 //
 // **本文は、そのまま送っても害が無く、そのままでも役に立つ形にしてある。**
 // 穴埋めの案内は HTML のコメントで書いてあるので、節ごと消せる。
-// **配る前にテストで変数展開して確かめる**（test/internal/prompt）。
+// **配る前にテストでテンプレートの変数展開をして確かめる**（test/internal/prompt）。
 //
 // front matter のキー構成は docs/plans/continuo_design.md の 5-2 と一致させる
 // （test/internal/scaffold/design_template_test.go が設計文書と直接突き合わせている）。

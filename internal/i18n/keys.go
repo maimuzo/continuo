@@ -789,7 +789,7 @@ const (
 	// ディレクトリ名（既定の branch_template では issue 番号を含む）と食い違うときに出る。
 	KeyAbandonSlugMismatch Key = "abandon.slug_mismatch"
 	// KeyAbandonSlugUnknown は、その issue に期待するディレクトリ名を組み立てられない
-	// ときに出る（`herdr.worktree.branch_template` を変数展開できない場合）。
+	// ときに出る（`herdr.worktree.branch_template` のテンプレートの変数展開に失敗した場合）。
 	KeyAbandonSlugUnknown Key = "abandon.slug_unknown"
 	// KeyAbandonErrUndecided は、候補にできなかった worktree があるために
 	// 「この issue の worktree はありません」と断言できないときに出る。
@@ -1213,7 +1213,7 @@ const (
 	KeyConfigLoadFrontMatterSplitFailed Key = "config.load.front_matter_split_failed"
 	// KeyConfigLoadFrontMatterInvalid は front matter の中身が不正だったときに出る。
 	KeyConfigLoadFrontMatterInvalid Key = "config.load.front_matter_invalid"
-	// KeyConfigLoadExpandFailed は設定値の環境変数展開・チルダ展開に失敗したときに出る。
+	// KeyConfigLoadExpandFailed は設定値の環境変数の展開・チルダの展開に失敗したときに出る。
 	KeyConfigLoadExpandFailed Key = "config.load.expand_failed"
 )
 
@@ -1266,7 +1266,7 @@ const (
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
 )
 
-// 設定値の環境変数展開・チルダ展開（internal/config の expand）のエラーの文言。
+// 設定値の環境変数の展開・チルダの展開（internal/config の expand）のエラーの文言。
 const (
 	// KeyConfigExpandTrailingDollar は値が "$" で終わっているときに出る。
 	KeyConfigExpandTrailingDollar Key = "config.expand.trailing_dollar"
