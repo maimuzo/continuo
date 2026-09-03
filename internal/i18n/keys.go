@@ -1270,6 +1270,12 @@ const (
 	// KeyConfigValidateHandoffIdleTimeoutRange は
 	// tracker.provider.handoff.idle_timeout_ms が負のときに出る。
 	KeyConfigValidateHandoffIdleTimeoutRange Key = "config.validate.handoff_idle_timeout_range"
+	// KeyConfigValidateHandoffProgressIntervalRange は
+	// tracker.provider.handoff.progress_interval_ms が 0 以下のときの理由である。
+	KeyConfigValidateHandoffProgressIntervalRange Key = "config.validate.handoff_progress_interval_range"
+	// KeyConfigValidateHandoffProgressIntervalTooLong は
+	// tracker.provider.handoff.progress_interval_ms が idle_timeout_ms 以上のときの理由である。
+	KeyConfigValidateHandoffProgressIntervalTooLong Key = "config.validate.handoff_progress_interval_too_long"
 	// KeyConfigValidateHandoffRecheckIntervalRange は
 	// tracker.provider.handoff.recheck_interval_ms が負のときに出る。
 	KeyConfigValidateHandoffRecheckIntervalRange Key = "config.validate.handoff_recheck_interval_range"
@@ -2906,6 +2912,8 @@ var allKeys = []Key{
 	KeyConfigValidateBranchTemplateNeedsIssueNumber,
 	KeyConfigValidateHandoffBidWindowRange,
 	KeyConfigValidateHandoffIdleTimeoutRange,
+	KeyConfigValidateHandoffProgressIntervalRange,
+	KeyConfigValidateHandoffProgressIntervalTooLong,
 	KeyConfigValidateHandoffRecheckIntervalRange,
 	KeyConfigValidateHandoffMarginRange,
 	KeyConfigValidateHandoffOnAssigneeGate,

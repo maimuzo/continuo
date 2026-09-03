@@ -659,6 +659,15 @@ func validateHandoff(h TrackerProviderHandoffConfig) error {
 		return invalidValueError("tracker.provider.handoff.idle_timeout_ms", h.IdleTimeoutMs,
 			i18n.T(i18n.KeyConfigValidateHandoffIdleTimeoutRange))
 	}
+	if h.ProgressIntervalMs <= 0 {
+		return invalidValueError("tracker.provider.handoff.progress_interval_ms", h.ProgressIntervalMs,
+			i18n.T(i18n.KeyConfigValidateHandoffProgressIntervalRange))
+	}
+	if h.IdleTimeoutMs > 0 && h.ProgressIntervalMs >= h.IdleTimeoutMs {
+		// **これより長いと、エージェントが指示どおりに書いていても、書く前に担当が外れる。**
+		return invalidValueError("tracker.provider.handoff.progress_interval_ms", h.ProgressIntervalMs,
+			i18n.T(i18n.KeyConfigValidateHandoffProgressIntervalTooLong, h.IdleTimeoutMs))
+	}
 	if h.RecheckIntervalMs < 0 {
 		return invalidValueError("tracker.provider.handoff.recheck_interval_ms", h.RecheckIntervalMs,
 			i18n.T(i18n.KeyConfigValidateHandoffRecheckIntervalRange))

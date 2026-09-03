@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "7891d5e5196ad3375e458d06db09de70cd2de92f437c49a69f3be0f8fee24fad",
+  "_source_sha256": "7d336ee4267089315760362bc75e2f99b9bd8237c27381efa33636002ccb1291",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -238,6 +238,8 @@
   "config.validate.branch_template_needs_issue_number": "Always include %s. Without the issue number, different issues get the same branch name, and cleanup for a missing worktree would delete the branch of a different issue than the one named",
   "config.validate.handoff_bid_window_range": "Use 0 or greater (0 decides the winner without waiting for a deadline)",
   "config.validate.handoff_idle_timeout_range": "Use 0 or greater (0 uses the default of 18 hours)",
+  "config.validate.handoff_progress_interval_range": "Use 1 or greater (this value is handed to the agent as \"write progress at this interval\", so it cannot be 0)",
+  "config.validate.handoff_progress_interval_too_long": "Use a value shorter than tracker.provider.handoff.idle_timeout_ms (%d ms). If it is longer, the assignment is released before the agent writes, even when the agent follows the instruction",
   "config.validate.handoff_margin_range": "Use a value from 0 to 100",
   "config.validate.handoff_on_assignee_gate": "Use \"warn_and_comment\" or \"warn_only\"",
   "config.validate.handoff_recheck_interval_range": "Use 0 or greater (0 never re-checks the assignee while a run is going)",

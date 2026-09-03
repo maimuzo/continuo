@@ -67,9 +67,11 @@ func DefaultConfig() *Config {
 				},
 				// 同じボードを複数の機械で持ち回るときの取り決め（設計 3-77）。
 				Handoff: TrackerProviderHandoffConfig{
-					BidWindowMs:       180000,
-					IdleTimeoutMs:     64800000,
-					RecheckIntervalMs: 3600000,
+					BidWindowMs:   180000,
+					IdleTimeoutMs: 64800000,
+					// **1時間。**送る文面へ「1時間以上黙らない」として埋まる（設計 5-3n）。
+					ProgressIntervalMs: 3600000,
+					RecheckIntervalMs:  3600000,
 					// **既定のマージンは 10%。**枠を使い切る手前で入札をやめさせるための余白であり、
 					// 「continuo 以外の作業のために残しておく割合」でもある。
 					FiveHourMarginPercent: 10,
