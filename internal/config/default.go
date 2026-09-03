@@ -27,6 +27,25 @@ const (
 	HandoffReleasedMarker = "<!-- continuo:released -->"
 )
 
+// DefaultHandoffIdleTimeoutMs は、担当を外すまでの待ち時間の既定である（18時間）。
+//
+// **`tracker.provider.handoff.idle_timeout_ms` に 0 を書くと、この値が使われる。**
+// **検査も、実行時と同じ値で比べる。**0 のまま比べると、
+// 「0 なら既定の18時間」と案内されて 0 を書いた人だけが、`progress_interval_ms` の
+// 大小の検査を失う。
+const DefaultHandoffIdleTimeoutMs = 64800000
+
+// ResolveHandoffIdleTimeoutMs は、実行時に効く担当の期限を返す。
+//
+// ms: 設定に書かれた値。
+// 戻り値: 0 以下なら既定の18時間、そうでなければそのまま。
+func ResolveHandoffIdleTimeoutMs(ms int) int {
+	if ms <= 0 {
+		return DefaultHandoffIdleTimeoutMs
+	}
+	return ms
+}
+
 // ProgressMarker は、エージェントが書く進捗の報告だけに付く印である（設計 5-3j / 5-3l）。
 //
 // **持ち回りの期限（設計 3-77b / 5-3l）を進めるのは、この印が付いたコメントだけである。**
