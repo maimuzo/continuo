@@ -7636,7 +7636,7 @@ sequenceDiagram
     T->>K: 「Status を動かしました」のコメントを投稿
     Note over T,K: ここから、権利を取りに行くまでに<br/>GitHub への往復が2回ある
 
-    rect rgba(230, 60, 60, 0.1)
+    rect rgba(255, 235, 235, 0.1)
         Note over R,K: この隙間に巡回が回ると競合する
         R->>K: 実行中の issue の Status を取り直す
         K-->>R: In Review
@@ -7681,7 +7681,7 @@ sequenceDiagram
     T->>K: Status を In Review へ書く
     T->>T: 書いた Status を控える<br/>（setLastWrittenState）
 
-    rect rgba(60, 180, 60, 0.1)
+    rect rgba(235, 255, 235, 0.1)
         R->>K: Status を取り直す
         K-->>R: In Review
         R->>T: continuo 自身が書いた Status か
