@@ -24,12 +24,7 @@ func TestAssess_進捗を書き足した機械の担当は外さない(t *testin
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
 			holdComment(otherLogin, "thinkpad", now.Add(-20*time.Hour)),
-			{
-				Author:    otherLogin,
-				Body:      "<!-- continuo:agent -->\n<!-- continuo:progress -->\nまだ作業中です。",
-				CreatedAt: now.Add(-19 * time.Hour),
-				UpdatedAt: now.Add(-time.Hour),
-			},
+			progressComment(otherLogin, now.Add(-19*time.Hour), now.Add(-time.Hour)),
 		},
 		SelfLogin:   selfLogin,
 		Now:         now,
@@ -40,9 +35,9 @@ func TestAssess_進捗を書き足した機械の担当は外さない(t *testin
 		t.Fatalf("進捗を書き足している機械の担当を外そうとしている: got %v, want %v",
 			got.Action, handoff.ActionSkipHeld)
 	}
-	if !got.LastActivity.Equal(now.Add(-time.Hour)) {
-		t.Errorf("最後の活動として更新時刻を採っていない: got %v, want %v",
-			got.LastActivity, now.Add(-time.Hour))
+	if !got.LastProgress.Equal(now.Add(-time.Hour)) {
+		t.Errorf("最後の進捗報告として更新時刻を採っていない: got %v, want %v",
+			got.LastProgress, now.Add(-time.Hour))
 	}
 }
 
@@ -52,7 +47,7 @@ func TestAssess_進捗を書き足した機械の担当は外さない(t *testin
 // 偽サーバ、`null`）。**そのときゼロ値をそのまま採ると、期限が西暦1年から数えられ、
 // 生きて働いている担当がその場で外れる。**
 //
-// 与える情報: 担当者のコメントが1時間前に作られ、更新時刻はゼロ値の状況。
+// 与える情報: 担当者の進捗報告が1時間前に作られ、更新時刻はゼロ値の状況。
 // 成功条件: 担当を外さないこと。
 func TestAssess_更新時刻が取れなくても作成時刻で数える(t *testing.T) {
 	now := at()
@@ -60,7 +55,7 @@ func TestAssess_更新時刻が取れなくても作成時刻で数える(t *tes
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
 			holdComment(otherLogin, "thinkpad", now.Add(-20*time.Hour)),
-			{Author: otherLogin, Body: "まだ動いています", CreatedAt: now.Add(-time.Hour)},
+			progressComment(otherLogin, now.Add(-time.Hour), time.Time{}),
 		},
 		SelfLogin:   selfLogin,
 		Now:         now,
@@ -148,12 +143,17 @@ func TestLatestHoldFor_編集しても新しいholdは入れ替わらない(t *t
 	old.UpdatedAt = now
 	recent := holdComment(otherLogin, "thinkpad", now.Add(-50*time.Hour))
 
-	got, ok := handoff.LatestHoldFor([]handoff.CommentView{old, recent}, otherLogin)
+	got, gotAt, ok := handoff.LatestHoldFor([]handoff.CommentView{old, recent}, otherLogin)
 	if !ok {
 		t.Fatal("hold があるのに取れない")
 	}
 	if got.Host != "thinkpad" {
 		t.Errorf("編集で hold の新旧が入れ替わった: got %q, want %q", got.Host, "thinkpad")
+	}
+	// **返す時刻も作成時刻である。**ここが更新時刻になると、期限の下限が編集で未来へ動く。
+	if !gotAt.Equal(now.Add(-50 * time.Hour)) {
+		t.Errorf("hold の時刻が作成時刻になっていない: got %v, want %v",
+			gotAt, now.Add(-50*time.Hour))
 	}
 }
 

@@ -3,7 +3,7 @@
   "usecase_name": "issue の担当を入札で決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue の担当を入札で決める.rucm.md",
-    "rucm_block_sha256": "b6d9c967f63cacb4f5db5de504935947af9cc6c0b8dbc33d8e12f942ce03ef15"
+    "rucm_block_sha256": "9523d81b10dda823686a292783e25afa130f182ac67025a56be7e011fd98d5d0"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -290,7 +290,7 @@
       "type": "condition",
       "flow": "他人の担当",
       "step": 2,
-      "statement": "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。"
+      "statement": "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。"
     },
     {
       "id": "他人の担当-3",
@@ -311,7 +311,7 @@
       "type": "action",
       "flow": "他人の担当",
       "step": 5,
-      "statement": "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。"
+      "statement": "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。"
     },
     {
       "id": "他人の担当-6",
@@ -681,13 +681,13 @@
       "from": "他人の担当-2",
       "to": "他人の担当-3",
       "kind": "true",
-      "condition": "担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている"
+      "condition": "担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている"
     },
     {
       "from": "他人の担当-2",
       "to": "期限内の担当-1",
       "kind": "false",
-      "condition": "NOT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている"
+      "condition": "NOT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている"
     },
     {
       "from": "他人の担当-3",
@@ -1132,10 +1132,10 @@
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
         "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
@@ -1197,10 +1197,10 @@
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
         "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
@@ -1261,10 +1261,10 @@
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
         "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
@@ -1319,10 +1319,10 @@
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
         "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
@@ -1370,10 +1370,10 @@
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
         "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
@@ -1417,10 +1417,10 @@
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
         "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
@@ -1462,10 +1462,10 @@
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
         "システムは担当者を先頭の issue から外す。",
         "システムは外した担当者の機械の名前と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後のコメントの時刻を記録に残す。",
+        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
         "RESUME STEP 6",
         "IF 先頭の issue に担当者が1人もいない THEN",
         "CONDITION: NOT 先頭の issue に担当者が1人もいない",
@@ -1500,8 +1500,8 @@
         "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
         "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
         "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている。",
-        "CONDITION: NOT 担当者が最後に書いたコメントの時刻から idle_timeout_ms を過ぎている",
+        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
+        "CONDITION: NOT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている",
         "システムは先頭の issue を着手の対象から外す。",
         "システムは入札のコメントを1件も書かない。",
         "ABORT"

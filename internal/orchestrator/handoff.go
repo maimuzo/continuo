@@ -219,13 +219,13 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	case handoff.ActionSkipHeld:
 		o.logger.Debug("ほかの機械が期限内で担当しているので触りません（入札もしません）",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee,
-			"担当者の最後のコメント", assessment.LastActivity)
+			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 		return handoffDecision{}
 	case handoff.ActionSkipOtherMachine:
 		o.logger.Info("担当者は自分のアカウントですが、担当しているのは別の機械なので触りません（入札もしません）",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee,
 			"担当している機械", assessment.Hold.Host, "この機械", o.hostName,
-			"担当者の最後のコメント", assessment.LastActivity)
+			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 		return handoffDecision{}
 	case handoff.ActionRelease:
 		released, ok := o.releaseExpiredAssignee(ctx, issue, nodeID, assessment)
@@ -306,7 +306,7 @@ func (o *Orchestrator) releaseExpiredAssignee(
 	o.logger.Info("期限の切れた担当を外しました（入札をやり直します）",
 		"identifier", issue.Identifier, "外した担当者", assessment.Assignee,
 		"外した機械", assessment.Hold.Host,
-		"担当者の最後のコメント", assessment.LastActivity,
+		"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress,
 		"期限", o.handoffIdleTimeout())
 
 	now := o.now()
@@ -831,7 +831,7 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 			"branch", r.Branch, "外した時刻", r.At)
 	}
 
-	hold, hasHold := handoff.LatestHoldFor(views, logins[0])
+	hold, _, hasHold := handoff.LatestHoldFor(views, logins[0])
 	if selfAssigned {
 		// **担当者は自分のアカウントである。**担当しているのがこの機械かどうかは、
 		// **hold のコメントの `host` でしか分からない。**
