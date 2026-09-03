@@ -1224,7 +1224,7 @@ push した branch の名前でも引いてください。
 
 **`{{if .push_branch}}` を入れて `prompt.go` の `data` にキーが無い状態にすると、
 `missingkey=error`（[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）で
-全 issue の1回目のプロンプトの描画が失敗する。**
+全 issue の1回目のプロンプトの変数展開が失敗する。**
 **変数化は塊3で、`prompt.go` に `.push_branch` を足すのと同じ PR で行う**（12 の末尾の形へ差し替える）。
 
 **塊「リンクを base に使う」（+10行）。**「既存 branch の続き」が閉じる。

@@ -422,7 +422,7 @@ POSTCONDITION: 印は残っている。リトライの回数は増えていな�
 
 ## 走っている最中も、担当が自分のままかを確かめる
 
-**言いたいこと。**担当者の最後のコメントから `idle_timeout_ms`（既定18時間）が過ぎると、
+**言いたいこと。**担当者の最後の進捗報告から `idle_timeout_ms`（既定18時間）が過ぎると、
 **ほかの機械がこの issue の担当を外して拾い直す**（設計 [3-77c](../../../plans/continuo_design.md)）。
 **外された機械は、その branch へ push してはならない。**
 
@@ -1082,7 +1082,7 @@ sequenceDiagram
                     loop 表明の値が working でなくなるまで
                         S->>S: turn 数が max_dispatch_turns に達していないことを検証する
                         S->>S: turn の本文を組み立てられることを検証する
-                        alt テンプレートを描画できない
+                        alt テンプレートを変数展開できない
                             S->>GH: Status への failure_state の書き込みを要求する
                             Note over S: ABORT この turn の本文は届いていない
                         end

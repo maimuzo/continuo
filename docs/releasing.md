@@ -81,14 +81,18 @@ gh workflow run release.yml --ref main
 ### 実機で issue を1件通す
 
 **言いたいこと。**動いている continuo は止めなくてよい。
-**worktree と socket の置き場所を分ければ、2つ目の continuo を並べて動かせる。**
+**テスト用の設定ファイルで worktree と socket を分け、`--id <名前>` を付けて起動すれば、
+2つ目の continuo を並べて動かせる。**
 **AI だけで最後まで回せる。**人間の判断を待つ段ではない。
 
 **ただし Claude Code が実際に動くので、定額プランの枠を消費する。**続けて何度も回さない。
 **本番のボード（project #3）には触れない。**使うのは検証用のボードだけである。
 **その番号・リポジトリ・issue・Status の識別子は [docs/test_environment.md](test_environment.md) にある。**
 
-**一、隔離する設定を2つ変える。**
+**一、テスト用の `WORKFLOW.md` で、隔離する設定を2つ変える。**
+
+**本番とは別のディレクトリに `WORKFLOW.md` を1枚置き、そちらだけを書き換える。**
+**本番の `WORKFLOW.md` には触れない。**
 
 ```yaml
 workspace:
@@ -98,9 +102,9 @@ claude:
     listen: /tmp/continuo-e2e/hooks.sock    # socket を分ける
 ```
 
-**二重起動を止めるロックは、socket と同じディレクトリに置かれる。**
-**だから socket を分ければ、ロックも一緒に分かれる**
-（[internal/daemon/daemon.go](../internal/daemon/daemon.go) の `ResolveLockFilePath`）。
+**二重起動を止めるロックは、この2つでは分かれない。**
+**`~/.continuo/continuo.lock` の1本に機械で固定されているので、`--id <名前>` で分ける**
+（下の段四）。**`runtime` の節は無くなった。**書いてあると front matter の検査で弾かれる。
 
 **二、socket を置くディレクトリの権限を 0700 にする。**
 
@@ -135,12 +139,30 @@ continuo doctor "$WORK"
 **`✗` が0件になること。**
 **ボードに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
 
-**四、起動して、issue を1件通す。**
+**四、`--id <名前>` を付けて起動し、issue を1件通す。**
 
 ```bash
-# どこで実行してもよい
-continuo ~/continuo-e2e-work
+continuo --id e2e "$WORK"
 ```
+
+**`--id` を落とすと、本番の continuo が握っている `~/.continuo/continuo.lock` に当たり、
+「二重起動を検出しました」で起動できない。**
+
+**`--id` が分けるのは、二重起動を止めるロック1本だけである。**
+
+| 分ける対象 | どうやって分けるか |
+| --- | --- |
+| **ロック** | **`--id e2e` を付ける。**`~/.continuo/id/e2e/continuo.lock` になる |
+| **worktree の置き場所** | **テスト用の `WORKFLOW.md` の `workspace.root`**（段一） |
+| **socket** | **テスト用の `WORKFLOW.md` の `claude.hook_bridge.listen`**（段一） |
+
+**名前に書けるのは、小文字の英数字とハイフンだけである。**先頭は英数字、32文字まで。
+**大文字・空白・`..`・`/` は起動する前に弾かれる。**
+
+**段一の2つを分け忘れても、continuo は止めない。**`--id` が分けるのはロックだけで、
+**分け忘れは検知できない。****分け忘れると、2本が同じ worktree に Claude Code を二重に立て、
+片方の成果が黙って消える。****さらに、2本目が1本目の worktree を「自分の前の run のもの」と見て、
+走行中の pane を巡回のたびに閉じる**（既定30秒ごと）。
 
 **着手待ちの issue が拾われ、`In Progress` になり、Claude Code が起動する。**
 **`In Review` になれば成功である。**
@@ -148,6 +170,13 @@ continuo ~/continuo-e2e-work
 **各段が何をしているのかは [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 に書いてある。**
 
 **本番の continuo は動いたままでよい。**socket もロックも worktree も分かれているので、互いに触らない。
+
+**片付けるときは、`continuo abandon` にも同じ名前を渡すこと。**渡さないと、空いている既定のロックを見て
+「continuo は動いていません」と判定し、**生きている worktree を消しにいく。**
+
+```bash
+continuo abandon --id e2e <issue の URL> "$WORK"
+```
 
 **五、詰まりやすいところ。**前の検証の残り物で止まることがある。
 
@@ -157,7 +186,9 @@ level=WARN msg="目的の worktree をそのまま使えません（Status を�
   【対処】continuo abandon <issue の URL> を実行してください。"
 ```
 
-**案内どおり `continuo abandon <issue の URL> <ディレクトリ>` を叩く。**
+**案内に出たコマンドへ `--id e2e` を足して叩く**（`continuo abandon --id e2e <issue の URL> <ディレクトリ>`）。
+**案内の文面には `--id` が入らない。**足さないと、空いている既定のロックを見て
+「continuo は動いていません」と判定する。
 **それでも消えないなら、git の登録だけが残っている。**
 
 ```bash

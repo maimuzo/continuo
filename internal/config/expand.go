@@ -7,18 +7,17 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
-// expandKeys は 5-5 の表が「適用するキー」として挙げている4つのキーの一覧である。
+// expandKeys は 5-5 の表が「適用するキー」として挙げている3つのキーの一覧である。
 // パスと接続先を表すものだけに展開を適用し、テンプレート文字列（branch_template）や
 // Claude Code へ渡す環境変数（claude.env）、workspace_hooks の各コマンドには適用しない。
 const (
 	keyHerdrSocket      = "herdr.socket"
 	keyWorkspaceRoot    = "workspace.root"
 	keyClaudeHookListen = "claude.hook_bridge.listen"
-	keyRuntimeLockFile  = "runtime.lock_file"
 )
 
-// expandConfig は Config のうち、5-5 が展開対象と定めた4つのキーだけへ
-// 環境変数展開・チルダ展開を適用する。他のキーは一切変更しない。
+// expandConfig は Config のうち、5-5 が展開対象と定めた3つのキーだけへ
+// 環境変数の展開・チルダの展開を適用する。他のキーは一切変更しない。
 //
 // cfg: front matter をパースした直後の Config（展開前）。呼び出し後、対象キーの値が
 // 展開済みの値へ書き換わる。
@@ -44,18 +43,10 @@ func expandConfig(cfg *Config) error {
 		cfg.Claude.HookBridge.Listen = &expanded
 	}
 
-	if cfg.Runtime.LockFile != nil {
-		expanded, err = expandValue(*cfg.Runtime.LockFile, keyRuntimeLockFile)
-		if err != nil {
-			return err
-		}
-		cfg.Runtime.LockFile = &expanded
-	}
-
 	return nil
 }
 
-// expandValue は1つの設定値へ、環境変数展開（expandDollar）とチルダ展開（expandTilde）を
+// expandValue は1つの設定値へ、環境変数の展開（expandDollar）とチルダの展開（expandTilde）を
 // この順に適用する。
 //
 // raw: 展開前の生の文字列。

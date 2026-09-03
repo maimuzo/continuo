@@ -117,19 +117,18 @@ func TestTemplate_雛形の本文に固有の指示の見本がある(t *testing
 		t.Fatal("雛形の WORKFLOW.md に本文がありません。" +
 			"利用者が固有の指示を書く場所は、雛形の本文です（設計 5-3d）")
 	}
-	// **設計 5-3d の表に並べた節である。**表の「レビューの手順」の行は、
-	// 実装の前と PR のあとの2つの節に分かれている。**消すなら設計の表も同時に直すこと。**
+	// **設計 5-3d の表に並べた節である。**消すなら設計の表も同時に直すこと。
+	// **見出しは `###` である。**組み込みの `## 4-4. このプロジェクトの決まり` の下に入るため。
 	// **並びも見る。**設計 5-3d は「節の並びは、作業の順番に合わせる」と決めている。
 	// **`## 書く言語` を後ろに置くと、下の節が書かせるコメントの言語が揃わない。**
 	want := []string{
-		"## 何をする作業か",
-		"## 書く言語",
-		"## このリポジトリの決まり",
-		"## テストの走らせ方",
-		"## まとめて直してよい範囲",
-		"## 実装を始める前に、計画をレビューしてください",
-		"## PR の決まり",
-		"## PR を作ったら、レビューしてください",
+		"### 何をする作業か",
+		"### 書く言語",
+		"### 始める前に読む文書",
+		"### テストの走らせ方",
+		"### まとめて直してよい範囲",
+		"### pull request の決まり",
+		"### レビューを頼む subagent",
 	}
 	at := make([]int, 0, len(want))
 	for _, w := range want {
@@ -331,7 +330,7 @@ func readDesignFrontMatterExample(t *testing.T) string {
 // 戻り値: ```markdown と ``` に挟まれた中身の文字列（WORKFLOW.md の本文そのもの）。
 func readDesignBodyExample(t *testing.T) string {
 	t.Helper()
-	return readDesignCodeBlock(t, designBodySectionHeading, "```markdown")
+	return readDesignCodeBlock(t, designBodySectionHeading, "````markdown")
 }
 
 // readDesignCodeBlock は設計文書から、指定した見出しの直後にある最初のコードブロックを取り出す。
@@ -375,9 +374,16 @@ func readDesignCodeBlock(t *testing.T, heading, fence string) string {
 		t.Fatalf("見出し %q の直後に %s のブロックが見つかりません", heading, fence)
 	}
 
+	// **閉じ行は、開始行と同じ数のバッククォートで探す。**
+	// 組み込みのプロンプトは中に ```mermaid のブロックを持つので、
+	// 3連で探すと、そこで切れて先が読めない。
+	closer := strings.Repeat("`", len(fence)-len(strings.TrimLeft(fence, "`")))
+	if closer == "" {
+		closer = "```"
+	}
 	fenceEnd := -1
 	for i := fenceStart + 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "```" {
+		if strings.TrimSpace(lines[i]) == closer {
 			fenceEnd = i
 			break
 		}

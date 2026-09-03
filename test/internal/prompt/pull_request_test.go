@@ -8,7 +8,7 @@ import (
 )
 
 // pullRequestHeading は、PR を出させる節の見出しである。
-const pullRequestHeading = "## PR を出すこと"
+const pullRequestHeading = "## 3-5. pull request を出す"
 
 // 目的: 組み込みのプロンプトが、`review` を出す前に PR を作らせることを固定する
 // （#184（エージェントが作業を終えても pull request を作らず、人間が代わりに作ることになっている）。
@@ -54,16 +54,18 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 		{`--head "$(git branch --show-current)"`, "既にある PR を、いま居る branch から引かせないと、" +
 			"turn のたびに2本目・3本目ができます"},
 		{"新しく作らないでください", "既にある PR を使わせないと、turn のたびに2本目・3本目ができます"},
-		{"gh が「どこへ push するか」を対話で聞いてきて", "push していない branch で叩くと、" +
-			"gh が push 先を対話で聞いてきて、そこで止まります"},
-		{"CONTINUO-STATUS: blocked", "作れなかったときの行き先を書かないと、" +
-			"push だけして黙って終わります。人間にはどこを見ればよいのか分かりません"},
-		// **雛形はこの口があることを案内している**（`## PR の決まり` の HTML のコメント）。
-		// **組み込みから消えると、雛形だけが在りもしない逃げ道を約束することになる。**
-		// **調査だけ・レビューだけを頼む運用は、commit する成果が無いので PR を作れない。**
-		// 口が閉じると、その運用は毎回 `blocked` で止まる。
-		{"「PR を作らない」と書いてあるとき", "本文からの打ち消しを受け付けないと、" +
-			"雛形が案内している調査だけ・レビューだけの運用が、毎回 blocked で止まります"},
+		// **`gh` が対話で止まることの説明は、いまも同じ節に在る。**
+		// 落ちていると書いていたのは誤りだった（敵対的レビューが実測で反証した）。
+		{"gh が「どこへ push するか」を対話で聞いてきて", "push していない branch で叩くと " +
+			"gh が対話で止まることを書かないと、エージェントはそこで固まります"},
+		// **2026-09-03、人間が送る文面を書き直した**（issue #188（エージェントへ送る指示書が長く、
+		// 順序も強調も揃っていないため、初見で読み取れない））。
+		// **「本文の『PR を作らない』で作らない」だけが、その文面から落ちている。**
+		// **人間の判断は「よって、これはまったく根拠がないだけでなく、害がある。変更するな」である。**
+		// **勝手に戻さないこと。**戻すなら、先に人間へ確かめる。
+		//
+		// **「作れなかったら blocked」も落ちていない。**7-4 へ移っただけである
+		// （この検査は 3-5 の節だけを見るので、ここでは確かめられない）。
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", pullRequestHeading, want.needle, want.why)
@@ -107,38 +109,25 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 // 与える情報: prompt.Builtin() の全文と、prompt.Build() が組み立てた全文。
 // 成功条件: どちらでも「終わったらやること」より前に在り、
 // 本文を挟んだ側では本文より後ろに在ること。
-func TestTemplate_PRを出させる節は本文より後ろで終わったらやることより前にある(t *testing.T) {
-	const needle = "## 固有の目印"
-
+func TestTemplate_PRを出させる節は終わりを書く節より前にある(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		body string
 	}{
 		{"組み込みだけ", prompt.Builtin()},
-		{"本文を挟んだもの", prompt.Build(needle+"\n", "/tmp/WORKFLOW.md").Text()},
+		// **中身のある本文を渡す。**見出しだけだと、中身が無い節として落ちるので、
+		// 「本文を挟んだ」ことにならず、2つの場合分けが同じものを見ることになる。
+		{"本文を挟んだもの", prompt.Build("### 固有の目印\n\n固有の中身です。\n", "/tmp/WORKFLOW.md").Text()},
 	} {
 		pr := strings.Index(tc.body, "\n"+pullRequestHeading+"\n")
-		finished := strings.Index(tc.body, "\n"+finishedHeading+"\n")
+		finished := strings.Index(tc.body, "\n## 3-7. 終わりを書く\n")
 		if pr < 0 || finished < 0 {
-			t.Fatalf("%s: 見出しが揃っていません（%q=%d / %q=%d）",
-				tc.name, pullRequestHeading, pr, finishedHeading, finished)
+			t.Fatalf("%s: 見出しが揃っていません（%q=%d / 3-7=%d）", tc.name, pullRequestHeading, pr, finished)
 		}
 		if pr > finished {
-			t.Errorf("%s: %q が %q より後ろにあります。"+
-				"表明の1行の書き方を読み終えたあとでは、PR を作らせる指示が間に合いません",
-				tc.name, pullRequestHeading, finishedHeading)
+			t.Errorf("%s: %q が「## 3-7. 終わりを書く」より後ろにあります。"+
+				"表明の1行の書き方を読み終えたあとでは、pull request を作らせる指示が間に合いません",
+				tc.name, pullRequestHeading)
 		}
-	}
-
-	withBody := prompt.Build(needle+"\n", "/tmp/WORKFLOW.md").Text()
-	mid := strings.Index(withBody, needle)
-	pr := strings.Index(withBody, "\n"+pullRequestHeading+"\n")
-	if mid < 0 || pr < 0 {
-		t.Fatalf("見出しが揃っていません（本文=%d / %q=%d）", mid, pullRequestHeading, pr)
-	}
-	if pr < mid {
-		t.Errorf("%q が WORKFLOW.md の本文より前にあります。"+
-			"本文で打ち消せる位置に置くと、雛形を書き換えた人のところだけ PR が出なくなります",
-			pullRequestHeading)
 	}
 }

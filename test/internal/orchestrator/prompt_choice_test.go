@@ -101,7 +101,7 @@ func TestAdopt_復元で引き継いだrunには継続の指示を送る(t *test
 // 成功条件:
 //   - 2回目の `agent.start` に `--session-id` が無く、`--resume` に1回目の UUID が渡る
 //   - 身元ファイルの `session_uuid` が1回目のまま変わっていない
-//   - 2回目に送る本文が1回目の本文（5-3）の描画結果であり、
+//   - 2回目に送る本文が1回目の本文（5-3）の変数展開の結果であり、
 //     **「2 回目の試行です」が入っている**
 func TestResumeBackoff_再着手はセッションに復帰して1回目の本文を送る(t *testing.T) {
 	clock := newTestClock()

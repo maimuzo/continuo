@@ -129,6 +129,10 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 			o.stopAndReleaseAsync(ctx, rs)
 		default:
 			// 引き渡し（`In Review` / `Blocked` など、設定に名前が出てくる Status）。
+			// **continuo 自身が書いた Status なら、turn の終わりの経路が処理中である**（設計 3-74c）。
+			if o.holdForOwnMove(rs, issue) {
+				continue
+			}
 			// **ここも書いたのが自動化なら turn の終わりを待つ**（設計 3-74）。
 			if o.holdForAutomatedMove(rs, issue) {
 				continue

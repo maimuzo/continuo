@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "70c0cff8cba4eaa3f5fac65c98b23adc44a4a52a4332c5e24fae829f94c60af5", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "fe753abb326479a54b57fdfb144ce72406238b073244ff713b29db67ad24490d", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
 // **同じボードを複数の機械で見張るときの、担当の決め方の検査である**（設計 3-77 / 3-77b / 3-77c）。
 //

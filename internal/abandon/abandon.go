@@ -57,6 +57,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -101,6 +102,17 @@ type Options struct {
 	// ParkState は continuo に手を離させるために一時的に動かす先である。
 	// **空なら tracker.failure_state を使う。**
 	ParkState string
+	// Instance は `--id` から導いた二重起動防止のロックの置き場所である（設計 3-17b）。
+	//
+	// **常駐している側に `--id` を付けているなら、同じ名前で解決したものを渡すこと。**
+	// **nil なら既定の1本（`instance.Resolve("")`）をここで解決する。**
+	//
+	// **渡し忘れると、既定の空いているロックを見て「continuo は動いていない」と
+	// 判定する。**そのまま進めば、生きている worktree を消しにいく。
+	//
+	// **`internal/cli` は、フラグを読んだ直後の検査で解決したものをそのまま渡す。**
+	// **同じ名前で2度 Resolve しない。**
+	Instance *instance.Layout
 	// GraphQLEndpoint は GitHub の GraphQL API の接続先である。
 	// **空なら本番の GitHub を使う。**テストは httptest.Server の URL を渡すこと。
 	GraphQLEndpoint string
@@ -200,7 +212,22 @@ func Run(ctx context.Context, opts Options) int {
 		return ExitStopped
 	}
 
-	deps, err := opts.Deps.resolve(loaded.Config, opts.GraphQLEndpoint, logger)
+	// **常駐している側と同じ関数からロックの置き場所を導く**（設計 3-17b）。
+	// **`internal/cli` が解決済みのものを渡してくる。**
+	// 渡されていなければ既定の1本を解決する。
+	inst := instance.Layout{}
+	if opts.Instance != nil {
+		inst = *opts.Instance
+	} else {
+		resolved, rerr := instance.Resolve("")
+		if rerr != nil {
+			fmt.Fprintln(errOut, i18n.T(i18n.KeyAbandonErrBuild, rerr))
+			return ExitStopped
+		}
+		inst = resolved
+	}
+
+	deps, err := opts.Deps.resolve(loaded.Config, inst, opts.GraphQLEndpoint, logger)
 	if err != nil {
 		fmt.Fprintln(errOut, i18n.T(i18n.KeyAbandonErrBuild, err))
 		return ExitStopped
@@ -319,10 +346,11 @@ func (r *runner) run(ctx context.Context) int {
 	//
 	// **入らない理由は2つある。**継続監視が動いていなかった場合と、動いてはいるが
 	// ボードの Status が `tracker.active_states` の外だった場合である。
-	// **前者はロックの判定を疑う理由になる。**ロックファイルの場所は環境変数
-	// （CONTINUO_RUNTIME_DIR / XDG_RUNTIME_DIR / TMPDIR）で決まるので、launchd から
-	// 起動した継続監視と端末から叩いた abandon で食い違いうる。
-	// **herdr の socket は設定で決まって環境変数では動かないので、ロックより信用できる。**
+	// **前者はロックの判定を疑う理由になる。**ロックの場所は `~/.continuo`
+	// （`--id` を付けたなら `~/.continuo/id/<名前>/`）に機械で固定してあり、
+	// **環境変数では動かない**（3-17）。**したがって食い違う理由は1つだけで、
+	// `--id` を付けて動かしている継続監視に、abandon へ同じ名前を渡し忘れたときである。**
+	// **herdr の socket は設定で決まるので、その取り違えの影響を受けない。**
 	if r.parkedTo == "" {
 		if code := r.stopIfPaneAlive(ctx, found.Path, running); code != ExitOK {
 			return code
@@ -348,7 +376,7 @@ func (r *runner) run(ctx context.Context) int {
 // 戻り値の1つ目: 動いていれば true。
 // 戻り値の2つ目: 取れたロック（**動いていたときと開けなかったときは nil**）。
 // 戻り値の3つ目: **ロックファイルそのものを開けなかった場合のエラー**
-// （二重起動とは言い分ける。設定の `runtime.lock_file` の打ち間違いがこれである）。
+// （二重起動とは言い分ける。`~/.continuo` を作れない・権限が足りないがこれである）。
 func (r *runner) isRunning() (bool, Unlocker, error) {
 	l, err := r.deps.AcquireLock(r.deps.LockPath)
 	if err != nil {
@@ -715,9 +743,10 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 // **1つの文言で受けると「『continuo は動いていません』と表示されていたなら」のような
 // 条件付きの案内になり、別の文言の文面を直書きすることになる。**
 //
-// **ロックだけを根拠に消しにいかない。**ロックファイルの場所は環境変数で決まるので、
-// launchd から起動した継続監視と端末から叩いた abandon で食い違いうる。食い違えば
-// 「動いていない」と判定したまま、生きた pane ごと worktree を消す。
+// **ロックだけを根拠に消しにいかない。**ロックは `--id` ごとに分かれるので、
+// **`--id` を付けて動かしている継続監視に、abandon へ同じ名前を渡し忘れると、
+// 空いている既定のロックを見て「動いていない」と判定する**（3-17b）。
+// そのまま進めば、生きた pane ごと worktree を消す。
 //
 // **待たずに止める。**手を離させていない以上、待っても pane は閉じない。
 //

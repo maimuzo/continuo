@@ -3,7 +3,7 @@
   "usecase_name": "夜に機械を落として翌朝に担当を続ける",
   "source": {
     "file": "docs/spec/usecases/scenario/夜に機械を落として翌朝に担当を続ける.rucm.md",
-    "rucm_block_sha256": "92a730f125c7a370303c6bc52ea9e27ff666ce7e39c2b57465bdef30889c8b2d"
+    "rucm_block_sha256": "96ac4a49a1aa9a477722952809ea970683d7b7f8a2ba72472b64e1cea74560dc"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -20,7 +20,7 @@
       "postcondition": "担当者はほかの機械の投稿者である。この機械は branch へ1バイトも push していない。この機械の worktree は残っている。push していない commit は残っている。この機械は issue にコメントを1件も書いていない。"
     },
     "期限をまたぐ": {
-      "when": "電源が落ちているあいだに担当者の最後のコメントから idle_timeout_ms を過ぎた場合",
+      "when": "電源が落ちているあいだに担当者の最後の進捗報告から idle_timeout_ms を過ぎた場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -52,7 +52,7 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 3,
-      "statement": "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後のコメントから idle_timeout_ms を過ぎていないので、この issue に触らない。"
+      "statement": "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後の進捗報告から idle_timeout_ms を過ぎていないので、この issue に触らない。"
     },
     {
       "id": "BASIC FLOW-4",
@@ -203,7 +203,7 @@
       "from": "BASIC FLOW-3",
       "to": "期限をまたぐ-1",
       "kind": "global",
-      "condition": "電源が落ちているあいだに担当者の最後のコメントから idle_timeout_ms を過ぎた場合"
+      "condition": "電源が落ちているあいだに担当者の最後の進捗報告から idle_timeout_ms を過ぎた場合"
     },
     {
       "from": "BASIC FLOW-4",
@@ -309,7 +309,7 @@
       "steps": [
         "利用者は就業時間の終わりに continuo を止める。",
         "利用者は機械の電源を落とす。",
-        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後のコメントから idle_timeout_ms を過ぎていないので、この issue に触らない。",
+        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後の進捗報告から idle_timeout_ms を過ぎていないので、この issue に触らない。",
         "利用者は翌朝に同じ機械の電源を入れる。",
         "利用者はシステムに continuo の常駐の開始を要求する。",
         "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
@@ -341,7 +341,7 @@
       "steps": [
         "利用者は就業時間の終わりに continuo を止める。",
         "利用者は機械の電源を落とす。",
-        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後のコメントから idle_timeout_ms を過ぎていないので、この issue に触らない。",
+        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後の進捗報告から idle_timeout_ms を過ぎていないので、この issue に触らない。",
         "利用者は翌朝に同じ機械の電源を入れる。",
         "利用者はシステムに continuo の常駐の開始を要求する。",
         "INCLUDE USE CASE 再起動して実行中の issue を引き継ぐ",
@@ -373,8 +373,8 @@
       "steps": [
         "利用者は就業時間の終わりに continuo を止める。",
         "利用者は機械の電源を落とす。",
-        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後のコメントから idle_timeout_ms を過ぎていないので、この issue に触らない。",
-        "CONDITION: 電源が落ちているあいだに担当者の最後のコメントから idle_timeout_ms を過ぎた場合",
+        "ほかの機械は夜のあいだ、担当者がほかの機械の投稿者ではなく hold の印のコメントが1件以上あり担当者の最後の進捗報告から idle_timeout_ms を過ぎていないので、この issue に触らない。",
+        "CONDITION: 電源が落ちているあいだに担当者の最後の進捗報告から idle_timeout_ms を過ぎた場合",
         "ほかの機械は担当者を issue から外す。",
         "ほかの機械は released の印を先頭に置いたコメントを issue に1件書く。",
         "ほかの機械は入札をやり直す。",

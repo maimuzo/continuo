@@ -1077,8 +1077,9 @@ continuo は知らない Status になった issue を、
 **直し方は [FAQ.md](FAQ.md) の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にある。**
 
-**PR を作らせたくないなら、`WORKFLOW.md` の本文の `## PR の決まり` に「PR を作らない」と書く。**
-**そうすると段5 は push だけになる。**
+**PR を作らせないようにはできない。**組み込みの指示書が本文に委ねるのは
+**draft にするかどうか・base にする branch・成果がこの worktree の外にあるときの出し方**の3つだけである。
+**「作らない」と書いても作られる。**
 
 **起動に成功したときのログ**（`Ready` が0件の状態で実際に叩いたもの。
 **この状態では Claude Code は起動しないので、枠を消費しない**）。
@@ -1087,7 +1088,7 @@ continuo は知らない Status になった issue を、
 continuo を起動します（設定ファイル: ~/continuo-try/WORKFLOW.md）
 level=INFO msg=設定ファイルを読み込みました path=~/continuo-try/WORKFLOW.md
 level=INFO msg="hook を受ける socket の場所を決めました" socket=/tmp/cnt-run/hooks.sock
-level=INFO msg=二重起動防止のロックを獲得しました lock_file=/tmp/cnt-run/continuo.lock
+level=INFO msg=二重起動防止のロックを獲得しました lock_file=~/.continuo/continuo.lock
 level=INFO msg=リポジトリの信頼はこのファイルで判定します claude_config=~/.claude.json
 level=INFO msg="gh の認証と scope を確かめました" scope=project
 level=INFO msg="herdr の socket に到達しました" protocol=19

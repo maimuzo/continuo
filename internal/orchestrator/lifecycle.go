@@ -581,7 +581,7 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	o.release(rs)
 }
 
-// failRun は着手や描画に失敗した run を失敗として扱う。
+// failRun は着手やテンプレートの変数展開に失敗した run を失敗として扱う。
 //
 // **worktree は残す。**次の巡回に委ねられる場合があるためである。
 //
