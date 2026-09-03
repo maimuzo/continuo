@@ -9018,7 +9018,7 @@ language: auto                              # 画面に出す文言の言語。a
 **目印の行（`<!-- continuo:project-specific-prompt -->`）で前半と後半に切れる。**
 その間に `WORKFLOW.md` の本文が挟まる。**目印の行そのものは送られない。**
 
-```markdown
+````markdown
 {{.issue.identifier}} に着手してください。
 
 # 1. 概要
@@ -9417,7 +9417,7 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 
 前回は完了せずに終わっています。4-1 と 4-2 で、前回どこまで進んだかを確かめてから始めてください。
 {{end}}
-```
+````
 
 **テンプレートに渡す変数。**未知の変数は変数展開を失敗させる（`Option("missingkey=error")`）ので、
 **ここに無い名前を本文に書くと dispatch が止まる。**
