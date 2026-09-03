@@ -556,7 +556,7 @@ func (f Fragments) Validate() error {
 // **値は全部「空でないもの」にする。**空文字だと `{{if .issue.title}}` の中が検査されない。
 // **`.attempt` は呼び出し側が入れ直す**（1回目は nil、2回目は回数）。
 //
-// 戻り値: 9つの名前を全部持つ変数の一覧。
+// 戻り値: 送る文面が使う名前を全部持つ変数の一覧。
 func SampleData() map[string]any {
 	return map[string]any{
 		"issue": map[string]any{
@@ -570,6 +570,10 @@ func SampleData() map[string]any {
 			"labels":     []string{"bug"},
 		},
 		"attempt": nil,
+		// **進捗報告を書かせる間隔（分）**（設計 5-3n）。
+		// 送る文面が `{{.progress_interval_minutes}}` で使うので、ここにも要る。
+		// **入れ忘れると `continuo doctor` の `prompt vars` が赤になる。**
+		"progress_interval_minutes": 60,
 	}
 }
 
