@@ -59,7 +59,6 @@
       "Bash(gh repo delete:*)",
       "Bash(find * -delete *)",
       "Bash(find * -exec rm *)",
-      "Bash(git worktree remove:*)",
       "Bash(rm:*)"
     ]
   },
