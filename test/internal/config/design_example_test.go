@@ -174,7 +174,6 @@ func TestLoad_設計5_2の設定例と既定値が一致する(t *testing.T) {
 		{"rate_limit", loaded.Config.RateLimit, want.RateLimit},
 		{"trust", loaded.Config.Trust, want.Trust},
 		{"restart", loaded.Config.Restart, want.Restart},
-		{"runtime", loaded.Config.Runtime, want.Runtime},
 		{"server", loaded.Config.Server, want.Server},
 	}
 	for _, s := range sections {

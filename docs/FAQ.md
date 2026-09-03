@@ -87,18 +87,27 @@ Claude Code を二重に立て、**片方の成果が黙って消えます。**
 continuo abandon --id e2e <issue の URL> ~/continuo-e2e-work
 ```
 
-### `runtime.lock_file` を書いたのに、そこにロックができない
+### 「front matter が不正です: unknown field "runtime"」で起動できなくなった
 
-**原因。**`runtime.lock_file` は**もう読まれません。**
-ロックは `~/.continuo/continuo.lock` に固定してあります。
+**原因。**`runtime` の節（`runtime.lock_file`）を**消しました。**
+ロックは `~/.continuo/continuo.lock` に固定してあり、設定では動きません。
 **設定で変えられると、`continuo abandon` が別の場所を見て「動いていない」と判定し、
 走っている worktree を消しにいくためです。**
 
-**キー自体は受け取り続けます。**`lock_file: null` は `continuo init` の雛形に入っていたので、
-**キーごと弾くと、過去に `continuo init` した全員が次の起動で落ちます。**
-値が書いてあれば、起動時に1行だけ警告を出します。
+**読まない値を受け取り続ける形は採りませんでした。**
+書いてあるのに効かない項目を残すと、**次に読む人が「効いている」と思って設定します。**
 
-**直し方。**行を消してかまいません（消さなくても起動します）。
+**直し方。`WORKFLOW.md` から `runtime:` の2行を消してください。**それだけです。
+
+```bash
+grep -n -A1 '^runtime:' ~/continuo-work/WORKFLOW.md   # 消す行を確かめる
+```
+
+```yaml
+runtime:
+  lock_file: null    # ← この2行を消す
+```
+
 **1台で2本以上動かしたいなら `--id <名前>` を使ってください。**
 
 ### 「front matter が不正です: unknown field "…"」で止まる

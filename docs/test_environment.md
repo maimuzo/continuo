@@ -80,6 +80,12 @@ continuo --id e2e .                          # ロックは ~/.continuo/id/e2e/c
 continuo abandon --id e2e <issue の URL> .   # 片付けにも同じ名前を渡す
 ```
 
+**`workspace.root` と `claude.hook_bridge.listen` を分け忘れても、continuo は止めない。**
+`--id` が分けるのはロックだけで、**分け忘れは検知できない。**
+**分け忘れると、2本が同じ worktree に Claude Code を二重に立て、片方の成果が黙って消える。**
+**さらに、2本目が1本目の worktree を「自分の前の run のもの」と見て、
+走行中の pane を巡回のたびに閉じる**（既定30秒ごと）。
+
 手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
 
 **Status の割り当ては既定のままで合う。**ボードの選択肢を `Ready` / `In Progress` / `In Review` /

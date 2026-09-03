@@ -30,27 +30,26 @@ func TestLoad_hook_bridgeのlistenが相対パスだとエラーになる(t *tes
 	}
 }
 
-// 目的: `runtime.lock_file` を書いた `WORKFLOW.md` が**起動できる**ことを固定する（設計 3-17）。
+// 目的: `runtime:` の節を書いた `WORKFLOW.md` を**起動時に弾く**ことを固定する（設計 3-17）。
 //
-// **キーは受け取り、値だけを捨てる。**`lock_file: null` は `continuo init` の雛形に
-// 入っていたので、**キーごと弾くと、過去に `continuo init` した全員が次の起動で落ちる**
-// （8-1 の front matter は未知のキーを弾く）。
+// **このキーは消した。**ロックは `~/.continuo/continuo.lock` に機械で固定してあり、
+// 設定では動かない。**読まない値を受け取り続けると、「書いてあるのに効かない」という
+// 状態を製品側が作り出す。**
 //
-// **値は読まない。**読むと `continuo abandon` が別の場所を見て「動いていない」と判定し、
-// 走っている worktree を消しに行く（3-17c）。**分けたいなら `--id` である**（3-17b）。
+// **専用の判定は持たない。**front matter は未知のキーを弾く（8-1。`yaml.Strict()`）ので、
+// キーを消すだけで `unknown field` として落ちる。
 //
-// **展開も検査もしない。**相対パスでも、環境変数を含んでいても、起動を止めない
-// （捨てる値のために起動を止める理由が無い）。
+// **破壊的変更である。**`runtime:` を書いてある `WORKFLOW.md` は、その行を消すまで
+// 起動しない（案内は docs/upgrading.md）。**分けたいなら `--id` である**（3-17b）。
 //
-// 与える情報: `runtime.lock_file` に絶対パス・相対パス・null を書いた front matter の3通り。
-// 成功条件: どれも config.Load がエラーを返さないこと。
-func TestLoad_runtimeのlock_fileを書いても起動できる(t *testing.T) {
+// 与える情報: `runtime.lock_file` に値を書いた front matter と、`lock_file: null` を書いた front matter。
+// 成功条件: どちらも config.Load がエラーを返し、エラーメッセージに `runtime` が含まれること。
+func TestLoad_runtimeの節はもう受け付けない(t *testing.T) {
 	cases := []struct {
 		name  string
 		extra string
 	}{
-		{name: "絶対パス", extra: "runtime:\n  lock_file: \"/tmp/continuo.lock\"\n"},
-		{name: "相対パス", extra: "runtime:\n  lock_file: \"run/continuo.lock\"\n"},
+		{name: "値を書いた場合", extra: "runtime:\n  lock_file: \"/tmp/continuo.lock\"\n"},
 		{name: "雛形のままのnull", extra: "runtime:\n  lock_file: null\n"},
 	}
 
@@ -58,8 +57,12 @@ func TestLoad_runtimeのlock_fileを書いても起動できる(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			path := writeWorkflow(t, validFrontMatter+c.extra, "")
 
-			if _, err := config.Load(path); err != nil {
-				t.Fatalf("runtime.lock_file を書いただけで起動を止めている: %v", err)
+			_, err := config.Load(path)
+			if err == nil {
+				t.Fatal("消したはずの runtime の節が通ってしまった")
+			}
+			if !strings.Contains(err.Error(), "runtime") {
+				t.Fatalf("どのキーが悪いのかを言っていない: %v", err)
 			}
 		})
 	}

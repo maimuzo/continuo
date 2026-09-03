@@ -661,12 +661,6 @@ func TestHookCLI_socketとpending_dirが相対パスなら受け付けない(t *
 	}
 }
 
-// ignoredLockFileWarning は、`runtime.lock_file` を無視したときの警告を見分ける文字列である。
-//
-// **文言そのもので数える。**slog の出力から「この警告が何件出たか」を数えるには、
-// ほかの行と重ならない一片を持つしかない。
-const ignoredLockFileWarning = "runtime.lock_file はもう効きません"
-
 // lineContaining は、ログ全文から want を含む最初の1行を返す。
 //
 // **行で切り出す。**全文に対して `Contains` を当てると、別の行に出ている文字列を
@@ -687,67 +681,34 @@ func lineContaining(t *testing.T, logged, want string) string {
 	return ""
 }
 
-// TestRun_runtimeのlock_fileは無視して警告を出し起動は続ける は、
-// **キーは受け取り、値だけを捨てる**ことを固定する（設計 3-17）。
+// TestRun_ロックはsocketの置き場所ではなくhomeに固定される は、
+// **ロックの置き場所を設定からも環境変数からも切り離した**ことを固定する（設計 3-17）。
 //
-// 目的: **起動が止まらないこと**（`lock_file: null` は `continuo init` の雛形に入っていたので、
-// キーごと弾くと過去に `continuo init` した全員が次の起動で落ちる）。
-// **書いた値が使われないこと**（ロックは `~/.continuo/continuo.lock` に固定である）。
-// **黙って捨てないこと**（無人運用では、効いていないことに気づけない）。
+// 目的: **socket の場所から導いてはならない。**socket の場所は
+// `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` で動くので、そこから導くと、
+// **同じ機械の同じ利用者が、誰も頼んでいないのに別のロックを握る。**
+// 食い違えば `continuo abandon` が「動いていない」と判定し、生きた worktree を消す（3-17c）。
 //
-// 与える情報: `runtime.lock_file` に、home の外の書ける場所を書いた front matter。
-// 成功条件: 警告が1件だけ出て、本文に書いた値と `--id` の案内が入り、
-// **獲得したロックは `~/.continuo/continuo.lock` である**こと。
-func TestRun_runtimeのlock_fileは無視して警告を出し起動は続ける(t *testing.T) {
-	written := filepath.Join(t.TempDir(), "somewhere-else.lock")
-	logged := runForStartupLog(t, "runtime:\n  lock_file: \""+written+"\"\n")
+// 与える情報: `CONTINUO_RUNTIME_DIR` を home の外へ向けた起動（runForStartupLog が設定する）。
+// 成功条件: 獲得したロックが `<HOME>/.continuo/continuo.lock` であり、
+// **socket の実行時ディレクトリを1文字も含まないこと。**
+func TestRun_ロックはsocketの置き場所ではなくhomeに固定される(t *testing.T) {
+	logged := runForStartupLog(t, "")
 
-	if got := strings.Count(logged, ignoredLockFileWarning); got != 1 {
-		t.Fatalf("警告が1件ではなく %d件だった\n%s", got, logged)
-	}
-	// **書いた値と、代わりに使う手段を両方出す。**どちらが欠けても、
-	// 読んだ人はどの行を直せばよいのかが分からない。
-	for _, want := range []string{written, "--id"} {
-		if !strings.Contains(logged, want) {
-			t.Fatalf("%q が警告に出ていない\n%s", want, logged)
-		}
-	}
-
-	// **ロックは書いた値ではなく `~/.continuo/continuo.lock` である。**
-	// runForStartupLog が HOME を一時ディレクトリへ向けているので、そこから組み立てる。
 	fixed := filepath.Join(os.Getenv("HOME"), instance.DirName, instance.LockFileName)
 	acquired := lineContaining(t, logged, "二重起動防止のロックを獲得しました")
 	if !strings.Contains(acquired, fixed) {
 		t.Fatalf("固定した場所 %q のロックを取っていない\n%s", fixed, acquired)
 	}
-	if strings.Contains(acquired, written) {
-		t.Fatalf("書いた値 %q をロックの置き場所に使っている\n%s", written, acquired)
-	}
-}
 
-// TestRun_runtimeのlock_fileがnullなら警告を出さない は、
-// **読み飛ばされる警告を作らない**ことを確かめる（設計 3-17）。
-//
-// 目的: `lock_file: null` は `continuo init` の雛形がそのまま置いていった形である。
-// **雛形どおりに書いてあるだけの人へ、毎回の起動で意味の無い警告を出さないこと。**
-// 与える情報: `runtime.lock_file: null` を書いた front matter と、`runtime:` の節が無い front matter。
-// 成功条件: どちらもこの警告が1件も出ないこと。
-func TestRun_runtimeのlock_fileがnullなら警告を出さない(t *testing.T) {
-	cases := []struct {
-		name  string
-		extra string
-	}{
-		{name: "雛形のままのnull", extra: "runtime:\n  lock_file: null\n"},
-		{name: "節ごと消したあと", extra: ""},
+	// **socket の置き場所には作らせない。**同じ行に実行時ディレクトリが出ていたら、
+	// そちらから導いている。
+	rt := os.Getenv(daemon.EnvRuntimeDir)
+	if rt == "" {
+		t.Fatal("実行時ディレクトリが設定されていない（この試験は socket と分かれていることを見る）")
 	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			logged := runForStartupLog(t, c.extra)
-			if strings.Contains(logged, ignoredLockFileWarning) {
-				t.Fatalf("警告を出す設定ではないのに出ている\n%s", logged)
-			}
-		})
+	if strings.Contains(acquired, rt) {
+		t.Fatalf("socket の置き場所 %q からロックを導いている\n%s", rt, acquired)
 	}
 }
 

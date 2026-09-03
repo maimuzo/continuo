@@ -478,7 +478,7 @@ func validateLanguage(value string) error {
 
 // validateExpanded は 5-5 の展開（環境変数・チルダ）を通したあとの Config を検査する。
 //
-// 展開の前に検査すると "~/run/continuo.lock" のような値を「絶対パスでない」と誤って
+// 展開の前に検査すると "~/run/hooks.sock" のような値を「絶対パスでない」と誤って
 // 弾いてしまうため、絶対パスの検査だけはここに分けてある。
 //
 // 検査するもの:

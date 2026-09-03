@@ -104,7 +104,7 @@ claude:
 
 **二重起動を止めるロックは、この2つでは分かれない。**
 **`~/.continuo/continuo.lock` の1本に機械で固定されているので、`--id <名前>` で分ける**
-（下の段五）。**`runtime.lock_file` は書いても無視される**（キーは受け取るが、値は読まない）。
+（下の段四）。**`runtime` の節は無くなった。**書いてあると front matter の検査で弾かれる。
 
 **二、socket を置くディレクトリの権限を 0700 にする。**
 
@@ -137,12 +137,16 @@ continuo doctor "$WORK"
 ```
 
 **`✗` が0件になること。**
+**ボードに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
 
-**五、`--id <名前>` を付けて起動する。**
+**四、`--id <名前>` を付けて起動し、issue を1件通す。**
 
 ```bash
 continuo --id e2e "$WORK"
 ```
+
+**`--id` を落とすと、本番の continuo が握っている `~/.continuo/continuo.lock` に当たり、
+「二重起動を検出しました」で起動できない。**
 
 **`--id` が分けるのは、二重起動を止めるロック1本だけである。**
 
@@ -155,20 +159,10 @@ continuo --id e2e "$WORK"
 **名前に書けるのは、小文字の英数字とハイフンだけである。**先頭は英数字、32文字まで。
 **大文字・空白・`..`・`/` は起動する前に弾かれる。**
 
-**`continuo abandon` にも同じ名前を渡すこと。**渡さないと、空いている既定のロックを見て
-「continuo は動いていません」と判定し、**生きている worktree を消しにいく。**
-
-```bash
-continuo abandon --id e2e <issue の URL> "$WORK"
-```
-**ボードに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
-
-**四、起動して、issue を1件通す。**
-
-```bash
-# どこで実行してもよい
-continuo ~/continuo-e2e-work
-```
+**段一の2つを分け忘れても、continuo は止めない。**`--id` が分けるのはロックだけで、
+**分け忘れは検知できない。****分け忘れると、2本が同じ worktree に Claude Code を二重に立て、
+片方の成果が黙って消える。****さらに、2本目が1本目の worktree を「自分の前の run のもの」と見て、
+走行中の pane を巡回のたびに閉じる**（既定30秒ごと）。
 
 **着手待ちの issue が拾われ、`In Progress` になり、Claude Code が起動する。**
 **`In Review` になれば成功である。**
@@ -176,6 +170,13 @@ continuo ~/continuo-e2e-work
 **各段が何をしているのかは [docs/trying_it_out.md](trying_it_out.md) の段7〜段9 に書いてある。**
 
 **本番の continuo は動いたままでよい。**socket もロックも worktree も分かれているので、互いに触らない。
+
+**片付けるときは、`continuo abandon` にも同じ名前を渡すこと。**渡さないと、空いている既定のロックを見て
+「continuo は動いていません」と判定し、**生きている worktree を消しにいく。**
+
+```bash
+continuo abandon --id e2e <issue の URL> "$WORK"
+```
 
 **五、詰まりやすいところ。**前の検証の残り物で止まることがある。
 

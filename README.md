@@ -212,7 +212,7 @@ cannot be checked — is it reported as a leftover, as before.
 
 **If it stops after parking, the Status stays at the parked value.** continuo does not move it back — the value it came from is a working state, so restoring it could have continuo pick the issue up again on the spot. **It tells you so in one line**; whether to move it back is your call on the kanban board.
 
-**If continuo is not running, it still checks the panes before deleting.** The lock file is fixed at `~/.continuo/continuo.lock`, so a daemon started by launchd and an `abandon` typed into a terminal can never disagree about it. **If you run continuo with `--id <name>`, pass the same name to `abandon`.** **A live pane on that worktree stops the deletion**, whatever the lock file says.
+**If continuo is not running, it still checks the panes before deleting.** The lock file is fixed at `~/.continuo/continuo.lock`, so **as long as you do not use `--id <name>`**, a daemon started by launchd and an `abandon` typed into a terminal can never disagree about it. **If you do run continuo with `--id <name>`, pass the same name to `abandon`** — forget it and `abandon` looks at the free default lock and concludes nothing is running. **A live pane on that worktree stops the deletion**, whatever the lock file says.
 
 **It leaves the Status where it is.** continuo cannot tell whether you are dropping the issue for good or rewriting it and filing it again, so **that call is yours to make on the kanban board.** If you already know, pass it: `--to "Ice Box"`.
 

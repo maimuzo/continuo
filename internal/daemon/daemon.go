@@ -212,11 +212,6 @@ func Run(ctx context.Context, opts Options) error {
 	// **段1 の中に置く。**flock より前なので、二重起動で落ちる経路でも必ず1回出る。
 	WarnCleanupStates(cfg, logger)
 
-	// **`runtime.lock_file` に値が書いてあったら、効いていないことを1行で知らせる**（設計 3-17）。
-	// **ここも flock より前に置く。**二重起動で落ちる経路でも、なぜ思った場所の
-	// ロックにならないのかが記録に残る。
-	WarnIgnoredLockFile(cfg, logger)
-
 	// 段1b: 送るプロンプトを組み立て、変数の名前を確かめる（設計 5-3c / 5-3d）。
 	frag, err := buildPrompt(loaded, logger)
 	if err != nil {
@@ -416,32 +411,6 @@ func lineCount(s string) int {
 		return 0
 	}
 	return strings.Count(s, "\n") + 1
-}
-
-// WarnIgnoredLockFile は、`runtime.lock_file` に値が書いてあったら起動時に1行だけ
-// 警告を出す（設計 3-17）。
-//
-// **起動は止めない。**`lock_file: null` は `continuo init` の雛形に入っていたので、
-// **キーを弾くと過去に `continuo init` した全員が次の起動で落ちる。**
-// だからキーは受け取り、値だけを捨てる。
-//
-// **黙って捨ててはならない。**書いた値が効いていないことに、無人運用では気づけない。
-// **分けたいなら `--id` を使う**（3-17b）。
-//
-// **`null` なら何も出さない。**雛形どおりに書いてあるだけの人へ、毎回の起動で
-// 意味の無い警告を出すことになる。
-//
-// cfg: 検証を通った設定。
-// logger: ログの出力先。**nil を渡してはならない**（呼び出し元が既に解決している）。
-func WarnIgnoredLockFile(cfg config.Config, logger *slog.Logger) {
-	if cfg.Runtime.LockFile == nil || *cfg.Runtime.LockFile == "" {
-		return
-	}
-	logger.Warn(
-		"runtime.lock_file はもう効きません（この設定は無視して、機械で決めた場所のロックを使います）。"+
-			"1台で2本以上動かしたいなら --id <名前> を使ってください"+
-			"（二重起動防止のロックが、その名前ごとに分かれます）",
-		"runtime.lock_file", *cfg.Runtime.LockFile)
 }
 
 // quoteStates は Status 名の並びを、引用符で囲んで読点でつないだ1つの文字列にする。

@@ -112,7 +112,7 @@ func Load(path string) (*Loaded, error) {
 	resolveRelativePaths(filepath.Dir(path), cfg)
 
 	// 絶対パスの検査は展開・相対パスの解決のあとでなければ成立しない
-	// （"~/run/continuo.lock" は展開前には絶対パスに見えないため）。
+	// （"~/run/hooks.sock" は展開前には絶対パスに見えないため）。
 	if err := validateExpanded(cfg); err != nil {
 		return nil, i18n.Errorf(i18n.KeyConfigLoadFrontMatterInvalid, path, err)
 	}
