@@ -339,19 +339,10 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 
 **worker のプロンプトの1行目に、こう書く。**
 
-> 作業を始める前に `<ここに下のコマンドの出力を貼る>` を Read で開き、書いてあることを全部守れ。
+> 作業を始める前に `<リポジトリの絶対パス>/.claude/skills/worker-briefing/SKILL.md` を Read で開き、書いてあることを全部守れ。
 
 **パスは絶対パスで書く。相対パスで書かない。**
-**worker は、呼ぶ側とは別のディレクトリで走ることがある。**
-Workflow の agent は `.claude/worktrees/<名前>/` の中で走るので、相対パスはそこを起点に解決する。
-**その worktree がこのスキルより前の commit から作られていると、ファイルは在らず、Read は「無い」で返る。**
-**誰も気づかないまま、前置きを1つも知らない worker が走る。**
-
-**呼ぶ側は、渡す前にこれを叩く。**
-
-```bash
-echo "$(git rev-parse --show-toplevel)/.claude/skills/worker-briefing/SKILL.md"
-```
+**理由と、絶対パスの求め方は、そのスキルの冒頭にある。ここには写さない。**
 
 **Read で開かせる。**worker が Skill ツールを持っているとは限らないうえ、
 このスキルは `user-invocable: false` である。**パスを直接渡すのが確実である。**
