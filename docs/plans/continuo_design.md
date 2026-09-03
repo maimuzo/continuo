@@ -7657,6 +7657,20 @@ sequenceDiagram
     T->>T: 後片付けを4つやる
 ```
 
+**終端の Status（`Done` など）には当てない。**理由は、終端ではどちらの経路も同じ本体を通るからである。
+
+| どちらが勝っても | 通る本体 |
+| --- | --- |
+| 巡回（`finishRunAsync`） | **`finishRunClaimed`** |
+| turn の終わり（`finishRun`） | **`finishRunClaimed`** |
+
+**`finishRunClaimed` が後片付けを全部やるので、巡回が勝っても1つも飛ばない。**
+差は理由の文言だけである。**引き渡しの分岐だけが、巡回側で `stopAndReleaseAsync` という
+別の本体へ行く。**だから門はそこにだけ要る。
+
+**知らない Status の分岐にも要らない。**continuo が書きうる値は
+running_state・`status_signal_map` の遷移先・対応表の戻す先の3種で、**3種とも既知の Status である。**
+
 **判定に使う材料は既にある。**
 
 | 何 | 中身 | どこで控えているか |

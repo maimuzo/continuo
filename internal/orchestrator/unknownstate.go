@@ -212,27 +212,68 @@ func (o *Orchestrator) holdForAutomatedMove(rs *runState, issue tracker.Issue) b
 // ログには巡回側の「作業中でも完了でもない状態になったので worker を止めます」だけが出て、
 // turn の終わりの経路が出すはずの「run を終えます」が1行も出なかった。
 //
-// **人間が動かしたときの振る舞いは変えない。**`rs.lastWrittenState()` は
-// continuo が書き込みに成功したときにしか更新されないので、
-// 人間が画面から `In Review` へ動かした場合はここで真にならず、いままでどおり即座に止まる。
+// **人間が動かしたときの振る舞いは、ほぼ変わらない。**`rs.lastWrittenState()` は
+// continuo が **最後に狙った** Status なので、人間が画面から `In Review` へ動かしても、
+// 通常はここで真にならず、いままでどおり即座に止まる。
+//
+// **「ほぼ」と書くのは、1つだけ重なる筋道があるからである。**人間が先に `In Review` へ
+// 動かしたあと、同じ turn でエージェントが `review` を表明すると、continuo は同じ値を
+// 書きにいく。**既にその値なので書き込みは起きないが、`Reached` は真になるので控えてしまう**
+// （[internal/orchestrator/lifecycle.go:364-368]。`Wrote` は見ていない）。
+// **そこは下の猶予が受け止める。**猶予を過ぎれば、巡回がいままでどおり畳む。
+//
+// **猶予に上限を置く。**`tracker.unknown_state_grace_ms`（外から動かされた run を止めるまで
+// 待つ長さ。既定10分）を、`holdForAutomatedMove` と共用する。
+// **上限が無いと、`claude.turn_timeout_ms` を 0 にした利用者**（画面が変わらないまま待てる
+// 時間の上限。0 にすると stall 検知そのものが止まる。SPEC.md 8.4 が認めている設定）
+// **では、この門に入った run へ巡回が二度と手を出せなくなる。**変更前は止まっていた。
 //
 // rs: 見ている run。
 // issue: カンバンから取り直した issue。
 // 戻り値: この巡回では手を出さないなら真。
 func (o *Orchestrator) holdForOwnMove(rs *runState, issue tracker.Issue) bool {
-	if !strings.EqualFold(issue.State, rs.lastWrittenState()) {
-		// **continuo が書いた Status とは違う。**人間か、カンバンの自動化が動かした。
+	// **前後の空白を落として比べる。**設定の `status_signal_map` に `"In Review "` と
+	// 書いた利用者では、カンバンには正式名が入るのに、控える値は設定の綴りのままになる。
+	// **落とさないと、その利用者の環境でだけ門が開き、issue #175 の症状が黙って戻る**
+	// （SPEC.md 11.3。このリポジトリの Status の照合は例外なく前後の空白を落としている）。
+	if !strings.EqualFold(strings.TrimSpace(issue.State), strings.TrimSpace(rs.lastWrittenState())) {
+		return false
+	}
+	if issue.State == "" {
+		// **どちらも空のときに真を返さない。**復元で引き継いだ run は控えた値を持たない。
+		// いまは tracker が Status 未設定の item を落とすのでここへ来ないが、
+		// **その内部の約束にこの門の正しさを預けない。**
 		return false
 	}
 	if !rs.turnLoopActive() {
 		// **turn の終わりの経路はもう動いていない。**待っても誰も畳まないので、巡回が畳む。
 		return false
 	}
-	// **黙って見送らない。**次の巡回でも同じ判定になるので、
-	// 何を待っているのかがログから読める状態にしておく。
-	o.logger.Info("continuo 自身が書いた Status なので turn の終わりの経路に任せます",
-		"identifier", issue.Identifier,
-		"状態", issue.State)
+	grace := time.Duration(o.cfg.Tracker.UnknownStateGraceMs) * time.Millisecond
+	if grace <= 0 {
+		// **猶予を 0 にしてある。**その場で止めると決めた設定なので、待たない。
+		return false
+	}
+	now := o.now()
+	since := rs.noteExternalMove(now, externalMoveOwnHandoff)
+	waited := now.Sub(since)
+	if waited >= grace {
+		// **待ちきった。**turn の終わりの経路が返ってこないので、巡回が畳む。
+		o.logger.Info("turn の終わりの経路を待ちきったので、巡回が run を畳みます",
+			"identifier", issue.Identifier,
+			"状態", issue.State,
+			"待った時間", formatDuration(waited),
+			"猶予の上限", formatDuration(grace))
+		return false
+	}
+	// **黙って見送らない。**ただし巡回は30秒ごとに同じ判定へ来るので、
+	// **同じ行を出し続けると他の行が埋もれる。**猶予の起点を切ったときだけ出す。
+	if since.Equal(now) {
+		o.logger.Info("continuo 自身が書いた Status なので turn の終わりの経路に任せます",
+			"identifier", issue.Identifier,
+			"状態", issue.State,
+			"猶予の上限", formatDuration(grace))
+	}
 	return true
 }
 
