@@ -522,7 +522,7 @@ func (o *Orchestrator) handoffBidWindow() time.Duration {
 //
 // **0 なら既定の18時間を使う**（設定に書かなくても効く）。
 //
-// 戻り値: 担当者の最後のコメントからこれだけ経つと担当を外す長さ。
+// 戻り値: 担当者の最後の進捗報告からこれだけ経つと担当を外す長さ。
 func (o *Orchestrator) handoffIdleTimeout() time.Duration {
 	ms := o.cfg.Tracker.Provider.Handoff.IdleTimeoutMs
 	if ms <= 0 {

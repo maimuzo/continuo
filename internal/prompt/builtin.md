@@ -211,9 +211,25 @@ gh pr view の --comments にも --json comments にも1件も出ません。**�
 
     ID=<段1が返した数字>
     OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-    gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-      -f body="$OLD
+    case "$OLD" in
+      *"<!-- continuo:progress -->"*)
+        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+          -f body="$OLD
     - $(date -u +%Y-%m-%dT%H:%M:%SZ) いま <何をしているか>"
+        ;;
+      *)
+        echo "本文を読めませんでした。段2b で新しく1件投稿します"
+        ;;
+    esac
+
+**`case` で印そのものを確かめてから書き込みます。**
+**中身が空でないかを見るだけでは足りません。**`gh api` は、取得に失敗したとき
+**エラーの JSON を標準出力へ出す**ので、`$OLD` は空になりません。
+そのまま書き込むと、**印ごと本文が消えます。**
+
+**印が消えると何が起きるか。**continuo は進捗報告を1件も見つけられなくなり、
+**18時間の時計を、担当を取った時刻（hold のコメント）まで巻き戻します。**
+20時間走っている run なら、**次の巡回で担当が外れます。**
 
 **段2b。何も返らなかったときは、新しく1件投稿します。**
 

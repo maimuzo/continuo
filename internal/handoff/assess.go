@@ -73,7 +73,8 @@ type Situation struct {
 	SelfHost string
 	// Now はいまの時刻である。
 	Now time.Time
-	// IdleTimeout は担当者の最後のコメントからこれだけ経つと担当を外す長さである。
+	// IdleTimeout は担当者の最後の進捗報告からこれだけ経つと担当を外す長さである。
+	// **数えるのは印の付いたコメントの最終更新日時で、印が1件も無いあいだは hold の時刻から数える。**
 	IdleTimeout time.Duration
 }
 

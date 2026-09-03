@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/prompt"
 )
 
@@ -76,7 +77,11 @@ func TestTemplate_組み込みのプロンプトは進捗報告を書き足さ�
 		needle string
 		why    string
 	}{
-		{"<!-- continuo:progress -->", "進捗の報告だけに付ける印がないと、" +
+		// **リテラルで書かない。**`config.ProgressMarker` を変えただけでは
+		// この検査が落ちず、**エージェントは古い印を書き続けるのに continuo は
+		// 新しい印を探すようになる。**そのとき進捗報告は1件も数えられず、
+		// hold から18時間で担当が全部外れる。
+		{config.ProgressMarker, "進捗の報告だけに付ける印がないと、" +
 			"最後の成果報告と区別できず、成果報告に書き足してしまいます"},
 		{".comments[-1:][]", "いちばん下の1件だけを見る書き方を渡さないと、" +
 			"コメントが0件の issue で jq が落ちます"},

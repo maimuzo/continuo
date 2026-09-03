@@ -9616,8 +9616,21 @@ push できる状態のときだけ**である。
 | `hasRunComment`（[internal/orchestrator/comment.go](../../internal/orchestrator/comment.go)） | この run がコメントを書いたか | worktree を再利用すると、前の run の進捗報告を編集する。**書かれていない成果報告が「書かれた」ことになる** |
 | `gateNoticedIn`（[internal/orchestrator/gate.go](../../internal/orchestrator/gate.go)） | continuo が案内を書いた時刻 | 持ち回りの期限とは無関係である |
 
-**並びは変わらない。**コメント取得のクエリは `orderBy: { field: UPDATED_AT, direction: DESC }` だが、
-**編集するのは「すでにいちばん下にあるコメント」だけなので、位置が動かない。**
+**並びは作成順とは限らない。**コメント取得のクエリは `orderBy: { field: UPDATED_AT, direction: DESC }` なので、
+**編集したコメントは後ろへ動く。**
+
+**反例。**進捗報告 P を10:00に投稿し、11:00に書き足す。人間が10:30に別のコメント Q を書き、編集しない。
+`UPDATED_AT` の降順は `[P(11:00), Q(10:30)]` で、`internal/tracker/adapter.go` が反転して返す
+「古い順」は `[Q, P]` になる。**P のほうが先に作られているのに、後ろに来る。**
+
+**いまは、この並びに依存している判定が1つも無い。**担当の判定（`lastProgressOf` /
+`LatestHoldFor` / `RoundStart` / `CollectBids`）は全部が時刻を比べており、
+`hasRunComment` は全件を回して `CreatedAt` で絞る。
+**依存しているのは `keepNewestUnmarked`（末尾から数件を残す）だけで、
+その先が `hasRunComment` なので影響しない。**
+
+**次にここへ手を入れる人へ。**「作成順に並んでいる」を前提にした判定を足さないこと。
+**この変更が、コメントの編集を1時間に1回の常態にした。**
 
 **残る危なさ。****担当者が古い進捗報告を1文字直しただけでも、18時間の時計は振り出しに戻る。**
 **「新しい進捗報告を1件書く」でも同じことが起きる**ので、同じ種類の危なさである。
