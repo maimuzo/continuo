@@ -27,7 +27,7 @@ flowchart TD
     J --> K["何をしたかを issue へ書く"]
     K --> L["CONTINUO-STATUS を1行書いて終わる"]
     F -. "1時間ごと" .-> M["途中経過を issue へ書く"]
-    M -. .-> F
+    M -.-> F
 ```
 
 # 2. 目的

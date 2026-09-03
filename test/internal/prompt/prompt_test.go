@@ -62,7 +62,7 @@ func TestBuiltin_目印は送る文面に残らない(t *testing.T) {
 // 成功条件: 組み込みの前半の最後の見出し・本文・組み込みの後半の最初の見出しが、この順に並ぶこと。
 func TestBuild_本文は組み込みの真ん中に挟まる(t *testing.T) {
 	const needle = "## 固有の目印"
-	// **見出しだけの本文は落とされる**（prompt.StripComments の dropEmptySections）。中身を持たせる。
+	// **見出しだけの本文は落とされる**（prompt.Build の中の dropEmptySections）。中身を持たせる。
 	frag := prompt.Build(needle+"\n固有の中身\n", "/tmp/WORKFLOW.md")
 	got := frag.Text()
 
@@ -262,15 +262,29 @@ func TestBuild_本文が空白だけなら何も足さない(t *testing.T) {
 //
 // **`continuo prompt --show` の内訳と doctor の文言が、これで分かれる。**
 //
-// 与える情報: 中身のある本文と、空の本文。
-// 成功条件: 中身があるときだけ真になり、パスはどちらでも埋まっていること。
+// **判定は、コメントと空の見出しを落としたあとで行う。**落とす前で決めると、
+// 本文が案内のコメントだけだったときに「本文はあります」と言いながら断片は足されず、
+// **内訳から本文の行が丸ごと消える。**
+//
+// 与える情報: 中身のある本文 / 空の本文 / 見出しだけの本文 / 案内のコメントだけの本文。
+// 成功条件: 中身があるときだけ真になり、パスはどれでも埋まっていること。
 func TestBuild_本文の有無とパスを返す(t *testing.T) {
 	const path = "/tmp/WORKFLOW.md"
-	if got := prompt.Build("## 何か\n", path); !got.HasBody() || got.BodyPath() != path {
+	if got := prompt.Build("## 何か\n\n中身です。\n", path); !got.HasBody() || got.BodyPath() != path {
 		t.Errorf("本文があるのに HasBody=%v BodyPath=%q です", got.HasBody(), got.BodyPath())
 	}
-	if got := prompt.Build("", path); got.HasBody() || got.BodyPath() != path {
-		t.Errorf("本文が無いのに HasBody=%v BodyPath=%q です", got.HasBody(), got.BodyPath())
+	for _, body := range []struct {
+		name string
+		text string
+	}{
+		{"空", ""},
+		{"見出しだけ", "## 何か\n"},
+		{"案内のコメントだけ", "## 何か\n<!-- ここに書いてください -->\n"},
+	} {
+		if got := prompt.Build(body.text, path); got.HasBody() || got.BodyPath() != path {
+			t.Errorf("%s の本文なのに HasBody=%v BodyPath=%q です",
+				body.name, got.HasBody(), got.BodyPath())
+		}
 	}
 }
 
