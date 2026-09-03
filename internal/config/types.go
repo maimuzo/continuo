@@ -35,8 +35,6 @@ type Config struct {
 	Trust TrustConfig `yaml:"trust"`
 	// Restart は再起動時に孤児となった実行中 issue をどう扱うかを決める（3-4）。
 	Restart RestartConfig `yaml:"restart"`
-	// Runtime は二重起動防止のロックファイルの場所を決める（3-17）。
-	Runtime RuntimeConfig `yaml:"runtime"`
 	// Server は任意の HTTP ダッシュボードの起動を決める（SPEC.md 13.7 の任意拡張）。
 	Server ServerConfig `yaml:"server"`
 	// Language は画面に出す文言の言語である（3-35）。
@@ -564,12 +562,6 @@ type TrustConfig struct {
 type RestartConfig struct {
 	// OrphanRunningAction は "redispatch" / "to_dispatch_state" / "to_failure_state" のいずれかである。
 	OrphanRunningAction string `yaml:"orphan_running_action"`
-}
-
-// RuntimeConfig は二重起動防止のロックファイルの場所を決める（3-17）。
-type RuntimeConfig struct {
-	// LockFile はロックファイルの絶対パスである。null なら hook の socket と同じディレクトリに置く。
-	LockFile *string `yaml:"lock_file"`
 }
 
 // ServerConfig は任意の HTTP ダッシュボードの起動を決める（SPEC.md 13.7 の任意拡張）。

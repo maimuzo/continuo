@@ -215,9 +215,6 @@ func DefaultConfig() *Config {
 		Restart: RestartConfig{
 			OrphanRunningAction: "redispatch",
 		},
-		Runtime: RuntimeConfig{
-			LockFile: nil,
-		},
 		Server: ServerConfig{
 			Port: nil,
 		},
