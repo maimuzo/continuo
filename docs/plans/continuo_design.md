@@ -7636,7 +7636,7 @@ sequenceDiagram
     T->>K: 「Status を動かしました」のコメントを投稿
     Note over T,K: ここから、権利を取りに行くまでに<br/>GitHub への往復が2回ある
 
-    rect rgb(255, 235, 235)
+    rect rgba(230, 60, 60, 0.1)
         Note over R,K: この隙間に巡回が回ると競合する
         R->>K: 実行中の issue の Status を取り直す
         K-->>R: In Review
@@ -7681,7 +7681,7 @@ sequenceDiagram
     T->>K: Status を In Review へ書く
     T->>T: 書いた Status を控える<br/>（setLastWrittenState）
 
-    rect rgb(235, 255, 235)
+    rect rgba(60, 180, 60, 0.1)
         R->>K: Status を取り直す
         K-->>R: In Review
         R->>T: continuo 自身が書いた Status か
@@ -10677,20 +10677,20 @@ sequenceDiagram
 
     Outsider->>GH: issue にコメントを書く（誰でもできる）
 
-    rect rgba(150, 150, 150, 0.12)
+    rect rgba(150, 150, 150, 0.1)
     Note over C: 着手の段
     C->>C: settings.json を書く（PreToolUse hook を張る）
     C->>A: 起動。プロンプトに「JSON で読め」と書く
     end
 
-    rect rgba(70, 150, 230, 0.12)
+    rect rgba(70, 150, 230, 0.1)
     Note over A,GH: 守り 1: 立場の札
     A->>GH: gh issue view --json comments
     GH-->>A: authorAssociation つきの JSON
     Note over A: NONE の body は<br/>データとして読む
     end
 
-    rect rgba(230, 130, 60, 0.12)
+    rect rgba(230, 130, 60, 0.1)
     Note over A,J: 守り 2: 道具の判定（Claude Code の中で閉じる）
     A->>J: PreToolUse。危ないコマンドを判定役へ渡す
     J-->>A: deny（理由つき）。turn は続く
@@ -10700,7 +10700,7 @@ sequenceDiagram
     A->>GH: gh issue comment（印つきで報告）
     Outsider->>GH: 同じ印で始まるコメントを書く（誰でもできる）
 
-    rect rgba(70, 190, 90, 0.12)
+    rect rgba(70, 190, 90, 0.1)
     Note over C,GH: 守り 3: 報告を書いたかの判定を守る
     C->>GH: この run が始まったあとのコメントを取る
     GH-->>C: コメントの一覧（投稿者つき）
