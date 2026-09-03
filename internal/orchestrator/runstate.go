@@ -1039,6 +1039,9 @@ const (
 	externalMoveNone externalMoveKind = iota
 	// externalMoveUnknownState は continuo が知らない Status へ動かされたことを表す（設計 3-50）。
 	externalMoveUnknownState
+	// externalMoveOwnHandoff は continuo 自身が引き渡しの Status を書き、turn の終わりの
+	// 経路がまだ処理中であることを表す（設計 3-74c）。
+	externalMoveOwnHandoff externalMoveKind = iota + 100
 	// externalMoveAutomatedHandoff はボードの自動化が終端・引き渡しの Status を書いたことを
 	// 表す（設計 3-74）。
 	externalMoveAutomatedHandoff
