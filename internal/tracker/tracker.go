@@ -79,6 +79,16 @@ type Comment struct {
 	Body string
 	// CreatedAt はコメントが作成された時刻である。
 	CreatedAt time.Time
+	// UpdatedAt は本文が最後に編集された時刻である（設計 5-3k）。
+	//
+	// **編集しても CreatedAt は動かない**（2026-09-03 に実測）。
+	// **エージェントは進捗の報告を、いちばん下にある自分のコメントへ書き足す**（設計 5-3j）ので、
+	// **持ち回りの期限を数えるときは、この時刻も見なければ時計が進まない。**
+	//
+	// **取れなければゼロ値である。**判定に使う側は
+	// `CreatedAt` と比べて新しいほうを採ること（`handoff.CommentView.LastTouched`）。
+	// **ゼロ値をそのまま使うと、期限がゼロ時刻から数えられて、生きている担当が即座に外れる。**
+	UpdatedAt time.Time
 	// IsAgent は、本文の先頭が `tracker.provider.comments.marker` の印で始まっている
 	// （＝エージェントが書いたと判別できる）ことを示す。
 	IsAgent bool

@@ -229,8 +229,14 @@ const commandLinePrefix = "    gh "
 // `--jq` を使わない。**合わせて、読ませる場所は5種類すべてを覆う。**
 const jqCommandCount = 4
 
-// jsonCommentsCommandCount は、`--json comments` で取るコマンドの本数である
-// （issue のコメントと、PR の会話のコメント）。
+// jsonCommentsCommandCount は、**コメントを全件そのまま読ませる** `--json comments` の本数である
+// （issue のコメントと、PR の会話のコメント）。**この2本が authorAssociation を返す。**
+//
+// **`--jq` で絞り込む `--json comments` は、ここに数えない。**
+// 組み込みには、進捗の報告を書き足す先を1件だけ引く
+// `gh issue view … --json comments --jq '.comments[-1:][] …'` がある（設計 5-3j）。
+// **あれは投稿者の立場を1文字も読まないので、authorAssociation の綴りを教える役には立たない。**
+// **数に入れると、立場を読ませる場所が1つ減ったときに、この検査が気づかなくなる。**
 const jsonCommentsCommandCount = 2
 
 // TestPrompt_jqが出すキーの名前を変えていない は、
@@ -306,23 +312,23 @@ func TestPrompt_指示する名前はどれかのコマンドが返す名前で�
 	// 本文に並んだコマンドから、返ってくる名前を集める。
 	produced := map[string]string{}
 	jsonComments := 0
-	for _, line := range lines {
-		if !strings.HasPrefix(line, commandLinePrefix) {
-			continue
-		}
+	for _, cmd := range shellCommandsIn(lines) {
 		switch {
-		case strings.Contains(line, "--jq") && strings.Contains(line, ".author_association"):
-			for _, m := range jqOutputKeyPattern.FindAllStringSubmatch(line, -1) {
-				produced[m[1]] = line
+		case strings.Contains(cmd, "--jq") && strings.Contains(cmd, ".author_association"):
+			for _, m := range jqOutputKeyPattern.FindAllStringSubmatch(cmd, -1) {
+				produced[m[1]] = cmd
 			}
-		case strings.Contains(line, "--json comments"):
+		case strings.Contains(cmd, "--json comments") && !strings.Contains(cmd, "--jq"):
 			// gh issue view / gh pr view の --json comments は authorAssociation で返す。
-			produced["authorAssociation"] = line
+			//
+			// **`--jq` で絞り込むものは数えない。**進捗の報告を書き足す先を1件だけ引く
+			// コマンド（設計 5-3j）は、投稿者の立場を1文字も読まない。
+			produced["authorAssociation"] = cmd
 			jsonComments++
 		}
 	}
 	if jsonComments != jsonCommentsCommandCount {
-		t.Errorf("--json comments で取る行が %d 本しかない（%d 本あるはず: "+
+		t.Errorf("コメントを全件そのまま読ませる --json comments が %d 本しかない（%d 本あるはず: "+
 			"issue のコメント / PR の会話のコメント）", jsonComments, jsonCommentsCommandCount)
 	}
 	if len(produced) == 0 {
@@ -350,4 +356,28 @@ func TestPrompt_指示する名前はどれかのコマンドが返す名前で�
 			t.Errorf("投稿者の立場を %q で返すコマンドが本文にありません", want)
 		}
 	}
+}
+
+// shellCommandsIn は、本文に字下げして並べたコマンドを1本ずつ取り出す。
+//
+// **行末が `\` のものは、次の行とつないで1本として扱う。**
+// つながないと、複数行に分けて書いたコマンドの `--jq` が別の行にあるせいで、
+// **「絞り込んでいない」と読み違える**（設計 5-3j の、進捗の報告を書き足す先を引くコマンドがそれである）。
+//
+// lines: 本文を行に分けたもの。
+// 戻り値: つなぎ終えたコマンドの一覧（前後の空白は落としてある）。
+func shellCommandsIn(lines []string) []string {
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		if !strings.HasPrefix(lines[i], commandLinePrefix) {
+			continue
+		}
+		cmd := strings.TrimSpace(lines[i])
+		for strings.HasSuffix(cmd, `\`) && i+1 < len(lines) {
+			i++
+			cmd = strings.TrimSuffix(cmd, `\`) + " " + strings.TrimSpace(lines[i])
+		}
+		out = append(out, cmd)
+	}
+	return out
 }

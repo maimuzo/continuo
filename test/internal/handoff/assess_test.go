@@ -35,6 +35,23 @@ func holdComment(author, host string, created time.Time) handoff.CommentView {
 	}
 }
 
+// progressComment は、エージェントの進捗報告のコメント1件を組み立てる（設計 5-3j / 5-3l）。
+//
+// **持ち回りの期限を進めるのは、この印が付いたコメントだけである。**
+//
+// author: 書き手のログイン名。
+// created: 作成時刻。
+// updated: 最後に編集された時刻（**ゼロ値なら編集されていない**）。
+// 戻り値: 判定へ渡す形のコメント。
+func progressComment(author string, created, updated time.Time) handoff.CommentView {
+	return handoff.CommentView{
+		Author:    author,
+		Body:      "<!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。",
+		CreatedAt: created,
+		UpdatedAt: updated,
+	}
+}
+
 // 目的: 見えているものと判定の対応が、設計 3-77b の表のとおりであることを確認する。
 //
 // **この表が壊れると、人間が付けた担当を機械が奪う。**
@@ -114,12 +131,12 @@ func TestAssess_見えているものと判定の対応(t *testing.T) {
 	}
 }
 
-// 目的: 期限を「担当者の最後のコメント」から数えることを確認する（設計 3-77b）。
+// 目的: 期限を「担当者の最後の進捗報告」から数えることを確認する（設計 3-77b / 5-3l）。
 //
 // **hold を書いた時刻から数えてはならない。**進捗を書き続けている機械が
 // 18時間で担当を外されることになる。
 //
-// 与える情報: hold は19時間前だが、担当者の進捗のコメントは1時間前にある状況。
+// 与える情報: hold は19時間前だが、担当者の進捗報告は1時間前にある状況。
 // 成功条件: 担当を外さない（`期限内の担当`）こと。
 func TestAssess_進捗を書き続けている機械の担当は外さない(t *testing.T) {
 	now := at()
@@ -127,7 +144,7 @@ func TestAssess_進捗を書き続けている機械の担当は外さない(t *
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
 			holdComment(otherLogin, "thinkpad", now.Add(-19*time.Hour)),
-			{Author: otherLogin, Body: "まだ動いています", CreatedAt: now.Add(-time.Hour)},
+			progressComment(otherLogin, now.Add(-time.Hour), time.Time{}),
 		},
 		SelfLogin:   selfLogin,
 		Now:         now,
@@ -137,6 +154,147 @@ func TestAssess_進捗を書き続けている機械の担当は外さない(t *
 	if got.Action != handoff.ActionSkipHeld {
 		t.Fatalf("進捗を書いている機械の担当を外そうとしている: got %v, want %v",
 			got.Action, handoff.ActionSkipHeld)
+	}
+	if !got.LastProgress.Equal(now.Add(-time.Hour)) {
+		t.Errorf("期限の起点が最後の進捗報告になっていない: got %v, want %v",
+			got.LastProgress, now.Add(-time.Hour))
+	}
+}
+
+// 目的: 進捗報告の印が付いていないコメントでは、持ち回りの期限が1秒も延びないことを固定する
+// （#194（進捗コメントの間隔と重ね方が、人間の決定と逆に実装されている）。設計 5-3l）。
+//
+// **なぜ要るか。**エージェントも continuo も人間も、同じ GitHub アカウントで投稿する
+// （[internal/tracker/ghuser.go:23-25](../../../internal/tracker/ghuser.go#L23-L25)）。
+// **投稿者だけで数えると、人間が無関係なコメントを1件書いただけで期限が18時間先へ延びる。**
+// **黙り込んだエージェントを、別の機械が永久に拾い直せない。**死活確認そのものが成り立たない。
+//
+// 与える情報: hold は19時間前。担当者のアカウントで、印の無いコメントが1分前に投稿されている状況。
+// 成功条件: 担当を外すこと。期限の起点が hold の時刻（19時間前）のままであること。
+func TestAssess_印の無いコメントでは期限が延びない(t *testing.T) {
+	now := at()
+	held := now.Add(-19 * time.Hour)
+
+	got := handoff.Assess(handoff.Situation{
+		Assignees: []string{otherLogin},
+		Comments: []handoff.CommentView{
+			holdComment(otherLogin, "thinkpad", held),
+			// **人間が書いた無関係なコメントである。**投稿者は担当者と同じアカウントになる。
+			{Author: otherLogin, Body: "ここはどうなっていますか", CreatedAt: now.Add(-time.Minute)},
+		},
+		SelfLogin:   selfLogin,
+		Now:         now,
+		IdleTimeout: idleTimeout,
+	})
+
+	if got.Action != handoff.ActionRelease {
+		t.Fatalf("印の無いコメント1件で、黙り込んだ機械の担当が延びている: got %v, want %v",
+			got.Action, handoff.ActionRelease)
+	}
+	if !got.LastProgress.Equal(held) {
+		t.Errorf("期限の起点が印の無いコメントへ動いている: got %v, want %v（hold の時刻）",
+			got.LastProgress, held)
+	}
+}
+
+// 目的: 進捗報告が1件も無いあいだは、hold のコメントが作られた時刻から数えることを固定する
+// （設計 5-3l）。
+//
+// **なぜ要るか。**入札に勝った直後には、進捗報告がまだ1件も無い。
+// **下限を置かないと、その場で「18時間経った」と読まれ、着手する前に担当が外れる。**
+//
+// 与える情報: hold だけがある状況（1時間前と、18時間1分前の2通り）。
+// 成功条件: 1時間前なら触らない。18時間1分前なら担当を外すこと。
+func TestAssess_進捗報告が無ければholdの時刻から数える(t *testing.T) {
+	now := at()
+	for _, c := range []struct {
+		name string
+		held time.Time
+		want handoff.Action
+	}{
+		{"勝った直後", now.Add(-time.Hour), handoff.ActionSkipHeld},
+		{"勝ったまま黙り込んだ", now.Add(-idleTimeout - time.Minute), handoff.ActionRelease},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := handoff.Assess(handoff.Situation{
+				Assignees:   []string{otherLogin},
+				Comments:    []handoff.CommentView{holdComment(otherLogin, "thinkpad", c.held)},
+				SelfLogin:   selfLogin,
+				Now:         now,
+				IdleTimeout: idleTimeout,
+			})
+			if got.Action != c.want {
+				t.Fatalf("判定が違う: got %v, want %v", got.Action, c.want)
+			}
+			if !got.LastProgress.Equal(c.held) {
+				t.Errorf("期限の起点が hold の時刻になっていない: got %v, want %v",
+					got.LastProgress, c.held)
+			}
+		})
+	}
+}
+
+// 目的: 前の担当のときに書かれた古い進捗報告で、始めたばかりの担当を外さないことを固定する
+// （設計 5-3l）。
+//
+// **なぜ要るか。**進捗報告のコメントは、担当が移っても消えない。
+// **hold の時刻を下限に置かないと、古い進捗報告のほうが「最後の進捗」として読まれ、
+// 1分前に担当を取ったばかりの機械がその場で外される。**
+//
+// 与える情報: 100時間前の進捗報告が残っており、hold は1分前に書かれた状況。
+// 成功条件: 担当を外さないこと。期限の起点が hold の時刻であること。
+func TestAssess_前の担当の古い進捗報告では新しい担当を外さない(t *testing.T) {
+	now := at()
+	held := now.Add(-time.Minute)
+
+	got := handoff.Assess(handoff.Situation{
+		Assignees: []string{otherLogin},
+		Comments: []handoff.CommentView{
+			progressComment(otherLogin, now.Add(-100*time.Hour), time.Time{}),
+			holdComment(otherLogin, "thinkpad", held),
+		},
+		SelfLogin:   selfLogin,
+		Now:         now,
+		IdleTimeout: idleTimeout,
+	})
+
+	if got.Action != handoff.ActionSkipHeld {
+		t.Fatalf("担当を取ったばかりの機械を、古い進捗報告を根拠に外している: got %v, want %v",
+			got.Action, handoff.ActionSkipHeld)
+	}
+	if !got.LastProgress.Equal(held) {
+		t.Errorf("期限の起点が古い進捗報告へ落ちている: got %v, want %v（hold の時刻）",
+			got.LastProgress, held)
+	}
+}
+
+// 目的: 進捗報告かどうかの見分け方が、組み込みのプロンプトの見つけ方と揃っていることを固定する
+// （設計 5-3l）。
+//
+// **なぜ要るか。**組み込みのプロンプトは、エージェント自身に
+// `.body | contains("<!-- continuo:progress -->")` で書き足す先を探させる（設計 5-3j の段1）。
+// **Go 側だけを厳しくすると、エージェントは自分の進捗報告だと思って書き足し続けているのに
+// continuo が数えず、生きている担当が18時間で外れる。**
+//
+// 与える情報: 印が2行目にあるコメント・印だけのコメント・印の無いコメント。
+// 成功条件: 印を含むものだけが真になること。
+func TestIsProgressReport_印を含むものだけを数える(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"組み込みが書かせる形", "<!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。", true},
+		{"印だけ", config.ProgressMarker, true},
+		{"エージェントの印だけ", "<!-- continuo:agent -->\n実装しました", false},
+		{"印が無い", "ここはどうなっていますか", false},
+		{"空", "", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := handoff.IsProgressReport(c.body); got != c.want {
+				t.Errorf("判定が違う: got %v, want %v（本文 %q）", got, c.want, c.body)
+			}
+		})
 	}
 }
 

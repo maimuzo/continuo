@@ -1396,10 +1396,18 @@ func (a *Adapter) changeAssignees(
 
 // rawCommentToComment は GraphQL の生の応答を Comment へ変換する。
 // IsAgent / IsSelf の判定はここでは行わない（呼び出し側がマーカーの設定を知っているため）。
+//
+// **`updatedAt` が nil のときは、ゼロ値のまま渡す**（設計 5-3k）。
+// **ここで CreatedAt を埋め戻さない。**「編集されていない」と「取れなかった」は別の状態であり、
+// **埋め戻すと、応答からフィールドが落ちたことに誰も気づけなくなる。**
+// 新しいほうを採るのは、判定する側（`handoff.CommentView.LastTouched`）の仕事である。
 func rawCommentToComment(c rawComment) Comment {
 	comment := Comment{ID: c.ID, URL: c.URL, Body: c.Body}
 	if c.CreatedAt != nil {
 		comment.CreatedAt = *c.CreatedAt
+	}
+	if c.UpdatedAt != nil {
+		comment.UpdatedAt = *c.UpdatedAt
 	}
 	if c.Author != nil {
 		comment.Author = c.Author.Login

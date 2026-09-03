@@ -282,6 +282,12 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 	for _, c := range comments {
 		if !c.CreatedAt.After(snap.StartedAt) {
 			// 前の run のコメントである（worktree を再利用すると残っている）。
+			//
+			// **更新時刻では数えない**（設計 5-3k）。エージェントは進捗の報告を
+			// **いちばん下にある自分のコメントへ書き足す**ので（設計 5-3j）、
+			// **worktree を再利用した run では、前の run の進捗報告が書き足される。**
+			// **更新時刻で数えると「この run は成果を書いた」と読めてしまい、
+			// 書かせ直しをやめる。書かれていないのに、書かれたことになる。**
 			continue
 		}
 		// **「印はあるが投稿者が違う」は、名指しでログに出す**（設計 3-65）。

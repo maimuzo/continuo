@@ -219,13 +219,13 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	case handoff.ActionSkipHeld:
 		o.logger.Debug("ほかの機械が期限内で担当しているので触りません（入札もしません）",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee,
-			"担当者の最後のコメント", assessment.LastActivity)
+			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 		return handoffDecision{}
 	case handoff.ActionSkipOtherMachine:
 		o.logger.Info("担当者は自分のアカウントですが、担当しているのは別の機械なので触りません（入札もしません）",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee,
 			"担当している機械", assessment.Hold.Host, "この機械", o.hostName,
-			"担当者の最後のコメント", assessment.LastActivity)
+			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 		return handoffDecision{}
 	case handoff.ActionRelease:
 		released, ok := o.releaseExpiredAssignee(ctx, issue, nodeID, assessment)
@@ -306,7 +306,7 @@ func (o *Orchestrator) releaseExpiredAssignee(
 	o.logger.Info("期限の切れた担当を外しました（入札をやり直します）",
 		"identifier", issue.Identifier, "外した担当者", assessment.Assignee,
 		"外した機械", assessment.Hold.Host,
-		"担当者の最後のコメント", assessment.LastActivity,
+		"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress,
 		"期限", o.handoffIdleTimeout())
 
 	now := o.now()
@@ -315,7 +315,10 @@ func (o *Orchestrator) releaseExpiredAssignee(
 		Branch: assessment.Hold.Branch,
 		At:     now,
 	})
-	view := handoff.CommentView{Body: body, CreatedAt: now}
+	// **いま書いたばかりなので、作成時刻と更新時刻は同じである。**
+	// **更新時刻を空のままにしない。**この写しは `RoundStart` にしか渡らないが、
+	// **入れ物の一部だけを埋めた値を回すと、別の判定へ回されたときに黙って古い時刻を返す。**
+	view := handoff.CommentView{Body: body, CreatedAt: now, UpdatedAt: now}
 	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
 		// **担当は既に外れている。**コメントを書けなかったことで入札を止めない
 		// （止めると、担当者のいない issue が誰にも拾われなくなる）。
@@ -519,7 +522,7 @@ func (o *Orchestrator) handoffBidWindow() time.Duration {
 //
 // **0 なら既定の18時間を使う**（設定に書かなくても効く）。
 //
-// 戻り値: 担当者の最後のコメントからこれだけ経つと担当を外す長さ。
+// 戻り値: 担当者の最後の進捗報告からこれだけ経つと担当を外す長さ。
 func (o *Orchestrator) handoffIdleTimeout() time.Duration {
 	ms := o.cfg.Tracker.Provider.Handoff.IdleTimeoutMs
 	if ms <= 0 {
@@ -650,12 +653,21 @@ func (o *Orchestrator) branchNameFor(issue tracker.Issue) string {
 
 // toCommentViews は tracker のコメントを、判定に要る形へ写す。
 //
+// **更新時刻も写す**（設計 5-3k）。エージェントは進捗の報告を
+// **いちばん下にある自分のコメントへ書き足す**ので（設計 5-3j）、
+// **これを落とすと、書き続けている機械の持ち回りの期限が1秒も進まない。**
+//
 // comments: issue に付いているコメントの全件。
 // 戻り値: 判定に渡す形の写し。
 func toCommentViews(comments []tracker.Comment) []handoff.CommentView {
 	out := make([]handoff.CommentView, 0, len(comments))
 	for _, c := range comments {
-		out = append(out, handoff.CommentView{Author: c.Author, Body: c.Body, CreatedAt: c.CreatedAt})
+		out = append(out, handoff.CommentView{
+			Author:    c.Author,
+			Body:      c.Body,
+			CreatedAt: c.CreatedAt,
+			UpdatedAt: c.UpdatedAt,
+		})
 	}
 	return out
 }
@@ -819,7 +831,7 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 			"branch", r.Branch, "外した時刻", r.At)
 	}
 
-	hold, hasHold := handoff.LatestHoldFor(views, logins[0])
+	hold, _, hasHold := handoff.LatestHoldFor(views, logins[0])
 	if selfAssigned {
 		// **担当者は自分のアカウントである。**担当しているのがこの機械かどうかは、
 		// **hold のコメントの `host` でしか分からない。**
