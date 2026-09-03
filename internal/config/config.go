@@ -112,7 +112,7 @@ func Load(path string) (*Loaded, error) {
 	resolveRelativePaths(filepath.Dir(path), cfg)
 
 	// 絶対パスの検査は展開・相対パスの解決のあとでなければ成立しない
-	// （"~/run/continuo.lock" は展開前には絶対パスに見えないため）。
+	// （"~/run/hooks.sock" は展開前には絶対パスに見えないため）。
 	if err := validateExpanded(cfg); err != nil {
 		return nil, i18n.Errorf(i18n.KeyConfigLoadFrontMatterInvalid, path, err)
 	}
@@ -127,9 +127,9 @@ func Load(path string) (*Loaded, error) {
 // resolveRelativePaths は、相対パスで書かれた設定値を WORKFLOW.md が置かれている
 // ディレクトリを基準に絶対パスへ直す（設計 5-1。SPEC.md 5.3.3 / 5.4）。
 //
-// **対象は workspace.root だけである。**claude.hook_bridge.listen と runtime.lock_file は
-// 絶対パスのまま要求する（validateExpanded が弾く）。この2つは身元ファイルに書いたパスとの
-// 一致検査（3-23 / 3-18）と flock による排他（3-17）に使うため、書き手が絶対パスで
+// **対象は workspace.root だけである。**claude.hook_bridge.listen は
+// 絶対パスのまま要求する（validateExpanded が弾く）。身元ファイルに書いたパスとの
+// 一致検査（3-23 / 3-18）に使うため、書き手が絶対パスで
 // 1つに決めたことを明示していないと困るからである。
 // herdr.socket は continuo が作るファイルではなく herdr が待ち受けている場所なので、
 // WORKFLOW.md の置き場所を基準にするのは筋が通らない。ここでは触らない。

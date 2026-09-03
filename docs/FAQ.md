@@ -57,16 +57,58 @@ CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo doctor
 
 ### 「二重起動を検出しました（ロックファイル …）」で起動できない
 
-**原因。**別の continuo が動いています。または**ロックファイルの置き場所が食い違っています。**
-置き場所は `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` で決まるので、
-launchd から起動した continuo と、端末で叩いたコマンドが別の場所を見ることがあります。
+**原因。**別の continuo が動いています。
+**ロックは `~/.continuo/continuo.lock` の1本に固定されています。**
+環境変数でも設定でも動かないので、**launchd から起動した continuo と端末で叩いたコマンドが
+別の場所を見ることはありません。**
 
-**直し方。**動いている continuo を止めるか、同じ環境変数で叩き直します。
+**直し方。**動いている continuo を止めます。
 
 ```bash
 pgrep -fl continuo
-CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo
 ```
+
+**わざと2本動かしたいときは、`--id <名前>` を付けます。**
+開発中に、本番を止めずにテスト版を動かすためのものです。
+
+```bash
+continuo --id e2e ~/continuo-e2e-work    # ロックは ~/.continuo/id/e2e/continuo.lock
+```
+
+**`--id` が分けるのはロック1本だけです。**worktree の置き場所（`workspace.root`）と
+socket（`claude.hook_bridge.listen`）は分かれないので、**テスト用の `WORKFLOW.md` を
+別のディレクトリに置いて、そちらで書き換えてください。**分けないと、2本が同じ worktree に
+Claude Code を二重に立て、**片方の成果が黙って消えます。**
+
+**`continuo abandon` にも同じ名前を渡してください。**渡さないと、空いている既定のロックを見て
+「continuo は動いていません」と判定し、**生きている worktree を消しにいきます。**
+
+```bash
+continuo abandon --id e2e <issue の URL> ~/continuo-e2e-work
+```
+
+### 「front matter が不正です: unknown field "runtime"」で起動できなくなった
+
+**原因。**`runtime` の節（`runtime.lock_file`）を**消しました。**
+ロックは `~/.continuo/continuo.lock` に固定してあり、設定では動きません。
+**設定で変えられると、`continuo abandon` が別の場所を見て「動いていない」と判定し、
+走っている worktree を消しにいくためです。**
+
+**読まない値を受け取り続ける形は採りませんでした。**
+書いてあるのに効かない項目を残すと、**次に読む人が「効いている」と思って設定します。**
+
+**直し方。`WORKFLOW.md` から `runtime:` の2行を消してください。**それだけです。
+
+```bash
+grep -n -A1 '^runtime:' ~/continuo-work/WORKFLOW.md   # 消す行を確かめる
+```
+
+```yaml
+runtime:
+  lock_file: null    # ← この2行を消す
+```
+
+**1台で2本以上動かしたいなら `--id <名前>` を使ってください。**
 
 ### 「front matter が不正です: unknown field "…"」で止まる
 
@@ -1123,17 +1165,88 @@ cleanup:
 **`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
+### エージェントが push で終わり、PR が作られない
+
+**まず知っておくこと。**v0.1.14 から、エージェントは `CONTINUO-STATUS: review` を出す前に
+**自分で PR を作ります**（組み込みのプロンプトの `## PR を出すこと`）。
+**作られないのは、それを打ち消す指示が届いているときです。**
+
+**原因は2つあります。順に確かめてください。**
+
+**1つ目。`WORKFLOW.md` の本文に、v0.1.13 の雛形の1行が残っています。**
+
+```bash
+cd ~/continuo-work && continuo prompt --show | grep -n 'PR は作らないでください'
+```
+
+**行番号が出たら、これです。**`WORKFLOW.md` を開いて、その行を消してください
+（`## PR を作るか` の節ごと消してかまいません）。
+**組み込みが「作れ」と言い、あなたの本文が「作るな」と言っている状態です。**
+**どちらに従うかはエージェント次第になります。**
+
+**2つ目。組み込みの側に節が無い。**版が古いままです。
+
+```bash
+continuo prompt --show --builtin | grep -c '^## PR を出すこと'
+```
+
+**`0` なら v0.1.13 以前です。**版を上げてください。
+**`1` で、それでも作られないときは、pane の応答を読んでください。**
+push できていない（`gh` の認証・branch protection）と、`gh pr create` は
+**対話で push 先を聞いてきて、そこで止まります。**
+
+```bash
+herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
+```
+
+**書き換えたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+
+### PR にレビューを書いたのに、エージェントが読まずに終わる
+
+**原因。**その PR の本文に `Closes #<issue の番号>` がありません。
+
+**仕組み。**エージェントは、次の turn で「この issue に紐づく PR」を2つのコマンドで探します。
+**1つ目は `closingIssuesReferences` を見ます。**これは
+**PR の本文に `Closes #42` / `Fixes #42` と書けば確実に埋まります**
+（GitHub の画面の `Development` から手で紐づける道もありますが、本文に書くのが確実です）。
+**2つ目は issue の timeline の相互参照を見ます。**こちらは本文以外からも張られるので、
+**何が返るかを当てにできません。**返らないこともあれば、**この issue とは関係の無い PR が返ることもあります。**
+**どちらにも出てこない PR は、エージェントから見えません。**
+
+**確かめ方。**
+
+```bash
+gh pr view <PR番号> --repo <owner>/<repo> --json closingIssuesReferences --jq '.closingIssuesReferences'
+```
+
+**`[]` が返ったら、結びついていません。**
+
+**直し方。**PR の本文へ1行足します。エージェントが次に起動されたときから見えるようになります。
+
+```bash
+gh pr edit <PR番号> --repo <owner>/<repo> --body "$(gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body)
+
+Closes #<issue の番号>"
+```
+
+**組み込みのプロンプトは、この1行を入れるようエージェントに指示しています。**
+**それでも落ちていたときの直し方が、これです。**
+
 ### issue が `In Review` にならない
 
 **原因。**エージェントが `CONTINUO-STATUS: review` を出していません。
 **continuo が信じるのはカンバンの Status だけです。**エージェントが「終わった」と言っても、Status が動いていなければ終わっていません。
 
-**直し方。**pane で応答を読み、`WORKFLOW.md` の下半分（1回目のプロンプト）に依頼が入っているかを確かめます。
+**直し方。**pane で応答を読み、送られた文面に表明のしかたが入っているかを確かめます。
 
 ```bash
 herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
-grep -n "CONTINUO-STATUS" ~/continuo-work/WORKFLOW.md
+cd ~/continuo-work && continuo prompt --show | grep -n "CONTINUO-STATUS"
 ```
+
+**表明のしかたは組み込みのプロンプトにあります。**`WORKFLOW.md` を grep すると
+front matter の `status_signal_prefix`（continuo が読む側の設定）が引っかかりますが、
+**それはエージェントへの指示ではありません。**送られる文面のほうを見てください。
 
 **書き換えたら continuo を再起動してください。**動いている最中は読み直しません。
 
