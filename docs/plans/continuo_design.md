@@ -9567,7 +9567,7 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 
 **落とす処理は、変化が無くなるまで繰り返す。**子を落とした結果として空になった親が残るためである。
 
-**「本文があるか」は、取り除いたあとで決める**（[internal/prompt/prompt.go:423-433](../../internal/prompt/prompt.go#L423-L433) の `Build`）。
+**「本文があるか」は、取り除いたあとで決める**（[internal/prompt/prompt.go:428-438](../../internal/prompt/prompt.go#L428-L438) の `Build`）。
 取り除く前で決めると、**本文が案内のコメントだけだったときに「本文はあります」と言いながら断片は足されず、
 `continuo prompt --show` の内訳から本文の行が丸ごと消える。**
 

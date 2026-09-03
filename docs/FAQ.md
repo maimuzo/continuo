@@ -1552,10 +1552,14 @@ push できる状態なら push させます。****設定に足すものはあ�
 **節が届いているかの確かめ方。****このコマンドは `WORKFLOW.md` を読まない**ので、どこで叩いても構いません。
 
 ```bash
-continuo prompt --show --builtin | grep -c '^## 長くかかるときは、途中でも状況を書くこと'
+continuo prompt --show --builtin | grep -c '^## 5-3\. '
 ```
 
 **`1` なら入っています。**`0` なら、v0.1.13 より前の continuo が動いています。
+
+**見出しに変数が入っているので、`^## 5-3\. ` で引きます。**
+`continuo prompt --show --builtin` は変数を展開しないため、
+**`## 5-3. {{.progress_interval_minutes}}分以上黙らない` のまま出ます。**
 
 **エージェントが書いているかの確かめ方。**issue に `<!-- continuo:agent -->` で始まるコメントが1件あり、
 **その中に1時間おきの行が増えていれば効いています。**
