@@ -230,3 +230,36 @@ func TestReconcile_知らないStatusで待った時間は自動化の猶予へ�
 	fx.Orc.Tick(context.Background())
 	fx.WaitRunsDrained(t, 10*time.Second)
 }
+
+// TestReconcile_人間がInReviewを書いたらturnの途中でも止める は、設計 3-74c を確かめる。
+//
+// **なぜこの検査が要るか。**設計 3-74c で「**continuo 自身が書いた Status には巡回が反応しない**」
+// という門を1つ足した（`holdForOwnMove`）。**その門が広すぎると、人間が動かしたときも待ってしまう。**
+// 人間が `In Review` にしたのなら、その人は自分の操作の結果を分かっている。
+// **待たされると、止めたい人が turn の終わりまで足止めされる。**
+//
+// **門が狭いことの根拠。**`rs.lastWrittenState()` は、continuo がボードへ**書き込みに成功したとき
+// だけ**更新される（[internal/orchestrator/lifecycle.go:365-368]）。
+// この検査の時点で控えてあるのは、着手のときに書いた `In Progress` である。
+// **人間が書いた `In Review` とは一致しないので、門は開かない。**
+//
+// **「continuo 自身が書いたとき」の側は、この検査では作れない。**
+// その状態を作るには turn の終わりの経路が Status を書き終えている必要があり、
+// 書き終えた直後にその経路は自分で run を畳むので、**巡回と競う窓を狙って止められない。**
+// **そちらは `test/e2e` の `TestE2E_手順書の段1から段9までをmockだけで通す` が押さえている**
+// （設計 3-74c を入れる前は、CI の `-race` を付けたステップで
+// 「段8: run の終わりまで進む」が60秒の上限に届かず落ちていた）。
+//
+// 与える情報: 1回目の turn が `agent.prompt` の待ち受けに入ったままの run。
+// その間に**人間が** Status を `In Review` へ動かす。猶予は1分（掛かれば止まらないはずの長さ）。
+// 成功条件: 時計を進めずに、その巡回で run が終わること。
+func TestReconcile_人間がInReviewを書いたらturnの途中でも止める(t *testing.T) {
+	clock := newTestClock()
+	fx := newFixture(t, fixtureOptions{Now: clock.Now, Mutate: automatedMoveGraceConfig})
+	itemID := startRunAndBlockTurn(t, fx)
+
+	// **SetState は人間が動かした扱いである**（SetStateByAutomation と対になる）。
+	fx.Tracker.SetState(itemID, "In Review")
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 10*time.Second)
+}

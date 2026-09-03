@@ -195,6 +195,47 @@ func (o *Orchestrator) holdForAutomatedMove(rs *runState, issue tracker.Issue) b
 	return true
 }
 
+// holdForOwnMove は「その Status を書いたのは continuo 自身で、turn の終わりの経路が
+// まだ動いている」ときに真を返す（設計 3-74c）。真のあいだ、巡回はこの run に手を出さない。
+//
+// **なぜ要るか。**「エージェントが終えた」に気づく経路は2つある（設計 3-74b）。
+// エージェントの表明を読む経路（`decideAfterTurn` → `finishRun`）と、
+// カンバンを取り直す巡回（`reconcileRunning`）である。
+// **どちらも `beginTerminal` の門を通るので、先に取ったほうだけが run を畳む。**
+//
+// **巡回が勝つと、後片付けが4つとも飛ぶ。**巡回側の `stopAndReleaseAsync` は
+// worker を止めて印を外すだけで、エージェントのコメントの確認も worktree の片付けも行わない。
+// **利用者から見ると、run が何も記録されないまま消える**（issue #175）。
+//
+// **実測（2026-09-03）。**CI の `-race` を付けたステップで、この窓に入った。
+// `TestE2E_手順書の段1から段9までをmockだけで通す` が62.51秒で時間切れになり、
+// ログには巡回側の「作業中でも完了でもない状態になったので worker を止めます」だけが出て、
+// turn の終わりの経路が出すはずの「run を終えます」が1行も出なかった。
+//
+// **人間が動かしたときの振る舞いは変えない。**`rs.lastWrittenState()` は
+// continuo が書き込みに成功したときにしか更新されないので、
+// 人間が画面から `In Review` へ動かした場合はここで真にならず、いままでどおり即座に止まる。
+//
+// rs: 見ている run。
+// issue: カンバンから取り直した issue。
+// 戻り値: この巡回では手を出さないなら真。
+func (o *Orchestrator) holdForOwnMove(rs *runState, issue tracker.Issue) bool {
+	if !strings.EqualFold(issue.State, rs.lastWrittenState()) {
+		// **continuo が書いた Status とは違う。**人間か、カンバンの自動化が動かした。
+		return false
+	}
+	if !rs.turnLoopActive() {
+		// **turn の終わりの経路はもう動いていない。**待っても誰も畳まないので、巡回が畳む。
+		return false
+	}
+	// **黙って見送らない。**次の巡回でも同じ判定になるので、
+	// 何を待っているのかがログから読める状態にしておく。
+	o.logger.Info("continuo 自身が書いた Status なので turn の終わりの経路に任せます",
+		"identifier", issue.Identifier,
+		"状態", issue.State)
+	return true
+}
+
 // claimAutomatedRewrite は「知らない Status を書いたのはボードの自動化で、対応表に
 // 戻す先がある」ときに、その戻す先を返す（設計 3-54）。
 //
