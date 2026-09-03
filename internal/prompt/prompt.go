@@ -67,6 +67,276 @@ var builtinRaw string
 // 着手のときまで表に出ない。
 var builtinHead, builtinTail = splitBuiltin(builtinRaw)
 
+// stripComments は、送る文面から HTML のコメントを取り除く
+// （[docs/plans/continuo_design.md] の 5-3m）。
+//
+// **取り除くのは `<!--` から `-->` までの文字列だけである。行ごとではない。**
+// 行ごと落とすと、`<!-- 方針 --> production へは push しないでください。` のような
+// **1行にまとめた書き方で、コメントの後ろに書いた本文まで消える。**
+//
+// **閉じていない `<!--` は、コメントの始まりとみなさない。**
+// 断片の残りに `-->` が1つも無ければ、その `<!--` はただの文字として残す。
+// **みなしてしまうと、`-->` を1つ打ち忘れただけで、そこから断片の終わりまで全部が消える。**
+// 打ち忘れは markdown を書く人がいちばん踏みやすい誤りで、**プレビューでは何も壊れて見えない。**
+//
+// **バッククォートで囲んだ中は残す。**利用者が「これは送りたい」と決めたものを囲む口である。
+// **囲みの長さも数える。**4連バッククォートで開いた囲みは、3連では閉じない。
+// 数えないと、markdown の入れ子（外を4連、中を3連）で「囲みの中に居るのに外と判定される」。
+//
+// **コメントの中にあるバッククォートの囲みは、コメントとして落とす。**
+// 利用者が `<!--` で囲んだものは「無効にした」ものであり、**囲みがあることを理由に
+// 生かしてはならない。**取り除く仕組みが、取り除くべきものを昇格させることになる。
+//
+// **組み込みが4桁の字下げで見せている印は残る。**
+// エージェントに書かせる `<!-- continuo:agent -->` などは、
+// **囲みの中か、字下げしたコード片として置いてある。**
+//
+// **なぜ取り除くか。**`WORKFLOW.md` の雛形は、利用者へ書き方を説明するために
+// HTML のコメントを使う。**それはエージェントへ送る情報ではない。**
+//
+// s: 取り除く前の文字列。
+// 戻り値: コメントを落とした文字列。**もとから空だった行は残す。**
+// 中身のあった行がコメントだけになったときは、その行ごと落とす。
+func stripComments(s string) string {
+	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	fence := fenceMask(lines)
+
+	// **`-->` がこの行以降に在るかを、先に数えておく。**
+	// 在るかどうかで「コメントの始まり」とみなすかが変わる。
+	closerAfter := make([]bool, len(lines)+1)
+	for i := len(lines) - 1; i >= 0; i-- {
+		closerAfter[i] = closerAfter[i+1] || strings.Contains(lines[i], commentClose)
+	}
+
+	out := make([]string, 0, len(lines))
+	inComment := false
+	for i, line := range lines {
+		if fence[i] && !inComment {
+			// **囲みの中は、コメントも含めてそのまま残す。**
+			out = append(out, line)
+			continue
+		}
+		kept, stillInComment := stripCommentsFromLine(line, inComment, closerAfter[i])
+		inComment = stillInComment
+		if strings.TrimSpace(line) != "" && strings.TrimSpace(kept) == "" {
+			// **中身のあった行が、コメントだけになった。**行ごと落とす。
+			continue
+		}
+		out = append(out, kept)
+	}
+	return squeezeBlank(strings.Join(out, "\n"))
+}
+
+// commentOpen と commentClose は HTML のコメントの開きと閉じである。
+const (
+	commentOpen  = "<!--"
+	commentClose = "-->"
+)
+
+// stripCommentsFromLine は、1行からコメントの部分だけを取り除く。
+//
+// **開きとみなすのは、行頭の `<!--` だけである。**字下げしてあるものは残す。
+// 組み込みのプロンプトは、エージェントに書かせる印（`<!-- continuo:agent -->` など）を
+// **4桁の字下げでコード片として見せており、落とすとエージェントが印を書けなくなる。**
+//
+// **閉じたあとの、同じ行の残りは残す。**`<!-- 方針 --> production へは push しないでください。`
+// のような1行にまとめた書き方で、**コメントの後ろに書いた本文まで消してはならない。**
+//
+// line: 取り除く前の行。
+// inComment: この行の頭が、既にコメントの中かどうか。
+// closerAfter: この行以降のどこかに `-->` が在るかどうか。
+//
+//	**無ければ、この行の `<!--` はコメントの始まりとみなさない。**
+//
+// 戻り値の1つ目: コメントを落とした行。
+// 戻り値の2つ目: この行の終わりでも、まだコメントの中かどうか。
+func stripCommentsFromLine(line string, inComment, closerAfter bool) (string, bool) {
+	if inComment {
+		end := strings.Index(line, commentClose)
+		if end < 0 {
+			// この行は全部コメントの中である。
+			return "", true
+		}
+		// **閉じたあとの残りを、もう一度見る。**行頭の `<!--` がもう1つ在りうる。
+		kept, still := stripCommentsFromLine(line[end+len(commentClose):], false, closerAfter)
+		return kept, still
+	}
+	if !strings.HasPrefix(line, commentOpen) {
+		return line, false
+	}
+	if !closerAfter {
+		// **閉じが1つも無い。**コメントの始まりとみなさず、そのまま残す。
+		return line, false
+	}
+	rest := line[len(commentOpen):]
+	end := strings.Index(rest, commentClose)
+	if end < 0 {
+		return "", true
+	}
+	kept, still := stripCommentsFromLine(rest[end+len(commentClose):], false, closerAfter)
+	return kept, still
+}
+
+// fenceMask は、バッククォートの囲みの中に居る行に印を付ける。
+//
+// **囲みを開いた行と閉じた行にも印を付ける。**どちらも中身として残す。
+//
+// **囲みの長さを数える。**4連で開いた囲みは、3連では閉じない。
+// 数えないと、markdown の入れ子で「囲みの中に居るのに外と判定される」。
+//
+// lines: 見る行の並び。
+// 戻り値: 行ごとに、囲みの中かどうか。
+func fenceMask(lines []string) []bool {
+	mask := make([]bool, len(lines))
+	open := 0
+	for i, line := range lines {
+		n := backtickRun(strings.TrimSpace(line))
+		switch {
+		case open == 0 && n >= 3:
+			open = n
+			mask[i] = true
+		case open > 0 && n >= open:
+			open = 0
+			mask[i] = true
+		case open > 0:
+			mask[i] = true
+		}
+	}
+	return mask
+}
+
+// backtickRun は、行頭に並ぶバッククォートの数を返す。
+//
+// trimmed: 前後の空白を落とした行。
+// 戻り値: 行頭のバッククォートの数。並んでいなければ 0。
+func backtickRun(trimmed string) int {
+	n := 0
+	for n < len(trimmed) && trimmed[n] == '`' {
+		n++
+	}
+	return n
+}
+
+// dropEmptySections は、中身が1行も無くなった見出しを落とす。
+//
+// **当てるのは利用者の本文だけである**（[docs/plans/continuo_design.md] の 5-3m）。
+// 組み込みの側へ当てると、`## 4-4. このプロジェクトの決まり` が落ちる。
+// **利用者の本文が `##` の見出しで始まっていると、4-4 は「中身が無い」と読めるからである。**
+// この版より前の `continuo init` が置いた `WORKFLOW.md` は、本文の見出しが `##` である。
+// **つまり、いま持っている利用者は全員その形である。**
+//
+// **なぜ落とすか。**`WORKFLOW.md` の雛形は「ここに書いてください」を HTML のコメントで案内する。
+// **利用者が何も書かなければ、コメントを落とした時点でその節は見出しだけになる。**
+// 見出しだけの節は、エージェントへ渡す情報を1つも持たない。
+//
+// **変化が無くなるまで繰り返す。**1周では、子を落とした結果として空になった親が残る。
+//
+// **見出しの判定は CommonMark に合わせる。**`#` が1〜6個で、その次が空白か行末のときだけ
+// 見出しとみなす。**`#188 の議論を読んでください` は見出しではなく段落である。**
+// みなしてしまうと、issue の番号を行頭に書いた行が消える
+// （組み込みの文面自身が、pull request の本文へ書く例として井桁つきの番号を載せている）。
+//
+// s: 落とす前の文字列。
+// 戻り値: 中身のある見出しだけを残した文字列。
+func dropEmptySections(s string) string {
+	for {
+		next := dropEmptySectionsOnce(s)
+		if next == s {
+			return s
+		}
+		s = next
+	}
+}
+
+// dropEmptySectionsOnce は、中身が無い見出しを1周ぶん落とす。
+//
+// s: 落とす前の文字列。
+// 戻り値: 1周ぶん落とした文字列。
+func dropEmptySectionsOnce(s string) string {
+	lines := strings.Split(s, "\n")
+	fence := fenceMask(lines)
+	keep := make([]bool, len(lines))
+	for i, line := range lines {
+		keep[i] = true
+		if fence[i] || headingLevel(line) == 0 {
+			continue
+		}
+		level := headingLevel(line)
+		keep[i] = false
+		for j := i + 1; j < len(lines); j++ {
+			if !fence[j] && headingLevel(lines[j]) > 0 {
+				// **深い見出しなら中身とみなす。**同じか浅ければ、この節は終わり。
+				if headingLevel(lines[j]) > level {
+					keep[i] = true
+				}
+				break
+			}
+			if strings.TrimSpace(lines[j]) != "" {
+				keep[i] = true
+				break
+			}
+		}
+	}
+	out := make([]string, 0, len(lines))
+	for i, line := range lines {
+		if keep[i] {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// headingLevel は markdown の見出しの深さを返す。
+//
+// **CommonMark に合わせる。**`#` が1〜6個で、その次が空白か行末のときだけ見出しである。
+// **`#188 …` や `#!/bin/sh` は見出しではない。**
+//
+// line: 見る行。
+// 戻り値: 見出しなら先頭の `#` の数。見出しでなければ 0。
+func headingLevel(line string) int {
+	n := 0
+	for n < len(line) && line[n] == '#' {
+		n++
+	}
+	if n == 0 || n > 6 {
+		return 0
+	}
+	if n == len(line) {
+		return n
+	}
+	if line[n] == ' ' || line[n] == '\t' {
+		return n
+	}
+	return 0
+}
+
+// squeezeBlank は、3つ以上続く改行を2つへ畳む。
+//
+// **コメントを落とした跡に空行が並ぶのを防ぐ。**
+//
+// **1回の走査で畳む。**`strings.ReplaceAll` を繰り返すと、続く改行が N 個のとき
+// 1周で1個しか減らないので、全文の走査を N 回することになる。
+//
+// s: 畳む前の文字列。
+// 戻り値: 空行が2つ以上続かない文字列。
+func squeezeBlank(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	run := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			run++
+			if run > 2 {
+				continue
+			}
+		} else {
+			run = 0
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
 // splitBuiltin は builtin.md を目印の行で前半と後半に切る。
 //
 // raw: builtin.md の全文。
@@ -108,7 +378,7 @@ func BuiltinTail() string { return builtinTail }
 //
 // 戻り値: 前半と後半を連結した、変数展開していない全文。
 func Builtin() string {
-	return join([]string{builtinHead, builtinTail})
+	return join([]string{stripComments(builtinHead), stripComments(builtinTail)})
 }
 
 // Fragment は、送る文面を組み立てる断片1つである。
@@ -151,10 +421,14 @@ type Fragments struct {
 // bodyPath: 本文が来た WORKFLOW.md の絶対パス。**本文が空でも埋める**（内訳に出す）。
 // 戻り値: 連結する順に並んだ断片。
 func Build(body, bodyPath string) Fragments {
-	f := Fragments{bodyPath: bodyPath, hasBody: strings.TrimSpace(body) != ""}
-	f.add(NameBuiltinHead, builtinHead, "")
-	f.add(NameWorkflowBody, body, bodyPath)
-	f.add(NameBuiltinTail, builtinTail, "")
+	// **`hasBody` は、取り除いたあとで決める。**取り除く前で決めると、
+	// 本文が案内のコメントだけだったときに「本文はあります」と言いながら
+	// 断片は足されず、**内訳から本文の行が丸ごと消える。**
+	stripped := dropEmptySections(stripComments(body))
+	f := Fragments{bodyPath: bodyPath, hasBody: strings.TrimSpace(stripped) != ""}
+	f.add(NameBuiltinHead, stripComments(builtinHead), "")
+	f.add(NameWorkflowBody, stripped, bodyPath)
+	f.add(NameBuiltinTail, stripComments(builtinTail), "")
 	return f
 }
 

@@ -9,10 +9,10 @@ import (
 )
 
 // progressCommentHeading は、途中の状況をコメントさせる節の見出しである。
-const progressCommentHeading = "## 長くかかるときは、途中でも状況を書くこと"
+const progressCommentHeading = "## 5-3. 1時間以上黙らない"
 
 // finishedHeading は、turn の終わりにやることを教える節の見出しである。
-const finishedHeading = "## 終わったらやること"
+const finishedHeading = "## 3-7. 終わりを書く"
 
 // 目的: 組み込みのプロンプトが、長い作業の途中でも状況をコメントさせることを固定する
 // （#153（待機中に continuo が定期的にコメントを書く仕組みが無く、18時間の時計が進まない）。設計 5-3h）。
@@ -127,29 +127,28 @@ func TestTemplate_組み込みのプロンプトは進捗報告を書き足さ�
 
 // 目的: 途中の状況を書かせる節が、「終わったらやること」より前に在ることを固定する（設計 5-3h）。
 //
-// **後ろに置くと、turn の終わりの手順を読み終えたあとに目に入る。**
-// **turn の途中で読ませたい指示なので、間に合わない。**
+// **並び順は検査しない。**人間が確定させた文面では、手順（3.）のあとに共通ルール（5.）が来るので、
+// 「1時間以上黙らない」は「終わりを書く」より後ろに在る。**これは意図した並びである。**
+// **検査するのは、どちらの節も消えないことだけである。**
+// 組み込みの前半・本文・後半を継ぎ合わせたあとに空の見出しを落とす処理（prompt.Build）を通しても、
+// **中身を持つこの2つが落ちてはならない。**
 //
 // 与える情報: prompt.Builtin() の全文と、prompt.Build() が組み立てた全文。
-// 成功条件: どちらでも、途中の状況を書かせる節が「終わったらやること」より前に在ること。
-func TestTemplate_途中の状況を書かせる節は終わったらやることより前にある(t *testing.T) {
+// 成功条件: どちらでも、2つの見出しが両方在ること。
+func TestTemplate_途中の状況を書かせる節と終わりの節は本文を挟んでも残る(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		body string
 	}{
 		{"組み込みだけ", prompt.Builtin()},
-		{"本文を挟んだもの", prompt.Build("## 固有の目印\n", "/tmp/WORKFLOW.md").Text()},
+		{"本文を挟んだもの", prompt.Build("## 固有の目印\n\nこのプロジェクト固有の決まりです。\n", "/tmp/WORKFLOW.md").Text()},
 	} {
-		progress := strings.Index(tc.body, "\n"+progressCommentHeading+"\n")
-		finished := strings.Index(tc.body, "\n"+finishedHeading+"\n")
-		if progress < 0 || finished < 0 {
-			t.Fatalf("%s: 見出しが揃っていません（%q=%d / %q=%d）",
-				tc.name, progressCommentHeading, progress, finishedHeading, finished)
-		}
-		if progress > finished {
-			t.Errorf("%s: %q が %q より後ろにあります。"+
-				"turn の終わりの手順を読み終えたあとでは、途中で書かせる指示が間に合いません",
-				tc.name, progressCommentHeading, finishedHeading)
+		for _, heading := range []string{progressCommentHeading, finishedHeading} {
+			if !strings.Contains(tc.body, "\n"+heading+"\n") {
+				t.Errorf("%s: %q の節がありません。"+
+					"組み立ての途中で節が落ちると、エージェントはその指示を受け取れません",
+					tc.name, heading)
+			}
 		}
 	}
 }
