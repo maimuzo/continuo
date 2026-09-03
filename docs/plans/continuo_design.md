@@ -7617,6 +7617,95 @@ turn の途中でも即座に止まっていた。**エージェントが自分�
 | **自動化が書いた終端を無視する** | `Done` を人間が書くまで終わらせない | **人間がマージして終わらせる運用が終わらなくなる。**待つのは turn の終わりまでで足りる |
 | **起点を種類ごとに別の欄で持つ** | `externalMoveSince` を2本に分ける | **同時には起きない**ので2本目は常にゼロ値になる。種類を1つ覚えるだけで足りる |
 
+### 3-74b. エージェントが終えたことに気づく経路は2つある
+
+**言いたいこと。**表明を読む経路と、カンバンを読み直す巡回の2つが、同じ run を終わらせにいく。
+**巡回が先に権利を取ると、後片付けが4つとも飛ぶ。**下の図の赤い枠がその窓である。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as エージェント<br/>（pane の中の Claude Code）
+    participant T as turn の終わりの経路<br/>（decideAfterTurn）
+    participant G as 終わらせる権利の印<br/>（runState.terminating）
+    participant R as 巡回<br/>（reconcileRunning。既定30秒ごと）
+    participant K as カンバン<br/>（GitHub Projects v2）
+
+    A->>T: CONTINUO-STATUS: review
+    T->>K: Status を In Review へ書く
+    T->>K: 「Status を動かしました」のコメントを投稿
+    Note over T,K: ここから、権利を取りに行くまでに<br/>GitHub への往復が2回ある
+
+    rect rgb(255, 235, 235)
+        Note over R,K: この隙間に巡回が回ると競合する
+        R->>K: 実行中の issue の Status を取り直す
+        K-->>R: In Review
+        R->>G: 権利を取る（beginTerminal）
+        G-->>R: 取れた
+        R->>A: pane を閉じる
+        Note over R: 後片付けを1つもしない
+    end
+
+    T->>K: issue を取り直す
+    K-->>T: In Review
+    T->>G: 権利を取る（claimTerminal）
+    G-->>T: 取られている
+    Note over T: 何もせずに戻る
+```
+
+**巡回が後片付けをしないのは、想定している場面が違うからである。**
+
+| 経路 | 想定している場面 |
+| --- | --- |
+| **turn の終わりの経路** | **エージェントが表明した。**continuo が Status を書き、後片付けをする |
+| **巡回** | **人間がカンバンで Status を手で動かした。**Status は既に動いているので、pane を閉じるだけでよい |
+
+**巡回に後片付けを寄せることはできない。**
+[internal/orchestrator/runstate.go:1562-1564](../../internal/orchestrator/runstate.go#L1562-L1564) が
+「終わらせる処理は `agent.prompt` を待ち受けつきで呼ぶことがあり、**既定では最大1時間返らない**」と書いている。
+**巡回のループがそこで止まると、dispatch も stall 検知も全部止まる。**
+
+### 3-74c. 巡回は、continuo 自身が書いた Status に反応しない
+
+**言いたいこと。**巡回が見ているのは Status だけで、それを誰が書いたかを見ていない。
+**continuo 自身が書いたなら、turn の終わりの経路が処理中である。**手を出さない。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant T as turn の終わりの経路
+    participant G as 終わらせる権利の印
+    participant R as 巡回
+    participant K as カンバン
+
+    T->>K: Status を In Review へ書く
+    T->>T: 書いた Status を控える<br/>（setLastWrittenState）
+
+    rect rgb(235, 255, 235)
+        R->>K: Status を取り直す
+        K-->>R: In Review
+        R->>T: continuo 自身が書いた Status か
+        T-->>R: そうだ。turn の終わりの経路が動いている
+        Note over R: この巡回では何もしない<br/>（次の巡回でやり直す）
+    end
+
+    T->>G: 権利を取る
+    G-->>T: 取れた
+    T->>T: 後片付けを4つやる
+```
+
+**判定に使う材料は既にある。**
+
+| 何 | 中身 | どこで控えているか |
+| --- | --- | --- |
+| `rs.lastWrittenState()` | continuo がこの run のためにカンバンへ最後に書いた Status | [internal/orchestrator/lifecycle.go:367](../../internal/orchestrator/lifecycle.go#L367) |
+| `rs.turnLoopActive()` | turn の終わりの経路がまだ動いているか | 既にある |
+
+**3-74 と同じ形である。**あちらは「カンバンの**自動化**が書いたときは待つ」で、
+**「continuo 自身が書いたとき」だけが抜けている。**
+
+**人間が動かしたときの振る舞いは変えない。**人間が `In Review` へ動かしたら、いままでどおり即座に止める。
+
 ### 3-75. 版を上げて増えた設定項目を、doctor が知らせる
 
 **言いたいこと。**版を上げても、利用者の `WORKFLOW.md` に新しい設定項目は増えない。
