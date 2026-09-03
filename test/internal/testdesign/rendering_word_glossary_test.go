@@ -1,12 +1,15 @@
-// **「描画」がリポジトリへ戻ってこないことを機械で確かめる。**
+// **「描画」と「レンダリング」がリポジトリへ戻ってこないことを機械で確かめる。**
 //
 // **`text/template` の `{{...}}` を issue の値に置き換えることを「描画」と呼ばない**、
 // という決めごとがある（[docs/spec/translation-glossary.md](../../../docs/spec/translation-glossary.md) の2）。
-// **「変数展開」と書く。**
+// **「変数展開」と書く。**「レンダリング」も使わない（同じものを2つの呼び方で呼ばない）。
 //
 // **人が気をつけるだけでは崩れた。**#195（「描画」をやめて「変数展開」に統一する決定が、
 // コードと文書に反映されていない）を直した時点で、リポジトリには75箇所の「描画」が残っていた。
 // **決めた当人が書いた文書にも残っていた。**同じことがもう一度起きる。
+//
+// **「レンダリング」も同じ扱いにする。**"render" の直音写なので、日本語を書く人の手が
+// いちばん自然に伸びる。**origin/main には実際に3箇所あった**ので、戻る見込みは実測で分かっている。
 //
 // **語そのものを全部禁じることはできない。**規則そのものが「『描画』と書かない」と
 // 引用しなければならないからである。**引用してよい場所と件数を下の表に書き、
@@ -15,150 +18,165 @@
 // **表の数は上限ではなく実数である。**増えたら「新しく書いた」、減ったら「規則の文を
 // 変えたのに表を直していない」として落ちる（`no_japanese_messages_test.go` の
 // `japaneseAllowance` と同じ扱いである）。
+//
+// **見る対象は `git ls-files` が返すものだけである。**`filepath.WalkDir` でリポジトリ全体を
+// 歩くと、**追跡していない書きかけのメモ1枚で `go test ./...` が落ちる。**
+// この issue に取り組む人は、issue の題名（「描画」を含む）を手元のメモへ貼りがちで、
+// **落ちるのはその人が触ってもいない `./...` 全体になる。**CI は追跡しているものしか
+// checkout しないので緑のまま通り、手元だけが赤くなる。
+// **`git ls-files` に切り替えると、`.gitignore` 済みのものを手で数え上げる表も要らなくなる。**
 package testdesign_test
 
 import (
-	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
 
-// renderingWord は、使ってはならない語である。
-const renderingWord = "描画"
-
-// renderingWordAllowance は、`renderingWord` を書いてよい場所と、そこにある件数である。
+// renderingWordAllowance は、禁じた語を書いてよい場所と、そこにある件数である。
 //
-// **キーはリポジトリの root からの相対パスである。**どちらも「この語を使わない」という
-// 決めごとそのものを書いている文書なので、語を引用せずには書けない。
-var renderingWordAllowance = map[string]int{
-	// 規則の本体。「『描画』と書かない」「『描画』が戻ってこないことは機械が見ている」を含む。
-	"docs/spec/translation-glossary.md": 3,
-	// 決定の記録（8-3）。**出し終えた版の計画なので、規則の本体はここには無い。**
-	// 消すと何を決めたのかが読めなくなるので残してある。
-	"docs/plans/release_v0113.md": 2,
+// **外側のキーが禁じた語、内側のキーがリポジトリの root からの相対パスである。**
+// どれも「この語を使わない」という決めごとそのものを書いている文書なので、
+// 語を引用せずには書けない。
+//
+// **このファイル自身は表に入れない。**下の走査が、自分のパスを完全一致で外す。
+var renderingWordAllowance = map[string]map[string]int{
+	"描画": {
+		// 規則の本体。「『描画』と書かない」「『描画』が戻ってこないことは機械が見ている」を含む。
+		"docs/spec/translation-glossary.md": 3,
+		// 決定の記録（8-3）。**出し終えた版の計画なので、規則の本体はここには無い。**
+		// 消すと何を決めたのかが読めなくなるので残してある。
+		"docs/plans/release_v0113.md": 2,
+	},
+	"レンダリング": {
+		// 規則の本体。「『レンダリング』も使わない」と、その理由。
+		"docs/spec/translation-glossary.md": 2,
+	},
 }
 
-// renderingWordSkipDirs は走査しないディレクトリである（リポジトリの root からの相対パス）。
+// renderingWordSelf は、この検査のファイル自身のパスである。
 //
-// **どれも `.gitignore` 済みか、git の内部である。**手元にしか無いものを見ると、
-// 同じ commit でも人によって結果が変わる。
-var renderingWordSkipDirs = map[string]bool{
-	".git": true,
-	// 準拠する仕様（openai/symphony の SPEC.md）。リポジトリに同梱しない。
-	"docs/spec/symphony": true,
-	// エージェントの並列実行が作る worktree。
-	".claude/worktrees": true,
-	// 人間の指示の原文の覚え書き。**指示そのものに「描画」が出てくる。**
-	".claude/requests": true,
-	// 作業用の一時ファイルと、配布物の組み立て先。
-	"tmp":  true,
-	"dist": true,
-}
-
-// renderingWordSkipFiles は走査しないファイルである（リポジトリの root からの相対パス）。
-//
-// **どちらも `.gitignore` 済みの、個人の環境の設定である。**
-var renderingWordSkipFiles = map[string]bool{
-	".claude/settings.local.json": true,
-	".claude/local-guidelines.md": true,
-}
+// **完全一致で外す。**末尾一致にすると、同じ名前のファイルをどこに置いても見逃す。
+const renderingWordSelf = "test/internal/testdesign/rendering_word_glossary_test.go"
 
 // renderingWordExtensions は走査する拡張子である。
 //
 // **人が読む文字が入るものだけを見る。**実行ファイルや画像を読み込むと、
 // 走査が遅くなるうえに、たまたま同じバイト列が並んだだけで落ちる。
+//
+// **`.jsonl` を入れているのは、`docs/evidence/` の証跡が日本語の散文を持つためである。**
 var renderingWordExtensions = map[string]bool{
-	".go": true, ".md": true, ".json": true, ".yaml": true, ".yml": true,
-	".sh": true, ".toml": true, ".html": true, ".txt": true, ".py": true,
+	".go": true, ".md": true, ".json": true, ".jsonl": true, ".yaml": true,
+	".yml": true, ".sh": true, ".toml": true, ".html": true, ".txt": true,
+	".py": true,
 }
 
-// TestDesign_描画という語がリポジトリに戻っていない は、訳語集の決めごとを機械で守る。
+// renderingWordTrackedFiles は、git が追跡しているファイルのパスを返す。
 //
-// 目的: `renderingWord` が、`renderingWordAllowance` に書いた場所と件数のほかに無いこと。
-// 与える情報: リポジトリの全文書とソース（`.gitignore` 済みのものを除く）。
+// t: 呼び出し元のテスト。
+// root: リポジトリの root への相対パス。
+// 戻り値: root からの相対パスの一覧（`/` 区切り）。
+func renderingWordTrackedFiles(t *testing.T, root string) []string {
+	t.Helper()
+
+	out, err := exec.Command("git", "-C", root, "ls-files", "-z").Output()
+	if err != nil {
+		t.Fatalf("git ls-files を実行できません（対象: %s）: %v", root, err)
+	}
+	trimmed := strings.TrimRight(string(out), "\x00")
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Split(trimmed, "\x00")
+}
+
+// TestDesign_禁じた語がリポジトリに戻っていない は、訳語集の決めごとを機械で守る。
+//
+// 目的: 禁じた2語（「描画」「レンダリング」）が、`renderingWordAllowance` に書いた
+// 場所と件数のほかに無いこと。
+// 与える情報: git が追跡しているファイルのうち、人が読む拡張子のもの。
 // 成功条件: 表に無い場所で1件も見つからず、表の件数がいまの実数と一致すること。
 // **走査したファイルが0件でないこと**も確かめる。
-func TestDesign_描画という語がリポジトリに戻っていない(t *testing.T) {
+func TestDesign_禁じた語がリポジトリに戻っていない(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 
 	checked := 0
-	found := map[string]int{}
+	// found[語][パス] = 件数。
+	found := map[string]map[string]int{}
+	for word := range renderingWordAllowance {
+		found[word] = map[string]int{}
+	}
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, rerr := filepath.Rel(root, path)
-		if rerr != nil {
-			return rerr
-		}
-		rel = filepath.ToSlash(rel)
-
-		if d.IsDir() {
-			if renderingWordSkipDirs[rel] {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if renderingWordSkipFiles[rel] {
-			return nil
-		}
-		// このファイル自身は、禁じた語を表と文言に書いている。
-		if strings.HasSuffix(rel, "rendering_word_glossary_test.go") {
-			return nil
+	for _, rel := range renderingWordTrackedFiles(t, root) {
+		if rel == renderingWordSelf {
+			// このファイル自身は、禁じた語を表と文言に書いている。
+			continue
 		}
 		if !renderingWordExtensions[filepath.Ext(rel)] {
-			return nil
+			continue
 		}
 		checked++
 
-		body, rerr := os.ReadFile(path)
-		if rerr != nil {
-			return rerr
+		body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("%s を読めません: %v", rel, err)
 		}
 		text := string(body)
-		if !strings.Contains(text, renderingWord) {
-			return nil
-		}
-		if _, allowed := renderingWordAllowance[rel]; allowed {
-			found[rel] += strings.Count(text, renderingWord)
-			return nil
-		}
-		for i, line := range strings.Split(text, "\n") {
-			if !strings.Contains(line, renderingWord) {
+
+		for _, word := range sortedKeys2(renderingWordAllowance) {
+			if !strings.Contains(text, word) {
 				continue
 			}
-			t.Errorf("%s:%d に「%s」が書かれています。\n  %s\n"+
-				"  **`text/template` の `{{...}}` を issue の値に置き換えることは"+
-				"「変数展開」と書きます**（docs/spec/translation-glossary.md の2）。\n"+
-				"  設定値の `${NAME}` の置き換えは別の仕組みで、そちらは「環境変数の展開」です。",
-				rel, i+1, renderingWord, strings.TrimSpace(line))
+			if _, allowed := renderingWordAllowance[word][rel]; allowed {
+				found[word][rel] += strings.Count(text, word)
+				continue
+			}
+			for i, line := range strings.Split(text, "\n") {
+				if !strings.Contains(line, word) {
+					continue
+				}
+				t.Errorf("%s:%d に「%s」が書かれています。\n  %s\n"+
+					"  **`text/template` の `{{...}}` を issue の値に置き換えることは"+
+					"「変数展開」と書きます**（docs/spec/translation-glossary.md の2）。\n"+
+					"  設定値の `${NAME}` の置き換えは別の仕組みで、そちらは「環境変数の展開」です。",
+					rel, i+1, word, strings.TrimSpace(line))
+			}
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("%s を走査できません: %v", root, err)
 	}
+
 	if checked == 0 {
 		t.Fatalf("走査したファイルが0件です（対象: %s）。パスを確かめてください", root)
 	}
 
-	for _, rel := range sortedKeys(renderingWordAllowance) {
-		want := renderingWordAllowance[rel]
-		got := found[rel]
-		switch {
-		case got > want:
-			t.Errorf("%s の「%s」が %d 件に増えました（表に書いてあるのは %d 件）。\n"+
-				"  **ここは規則そのものを書いている場所なので、引用は増やさないでください。**\n"+
-				"  規則を説明する文が要るなら、語を引かずに書けないかを先に試してください。",
-				rel, renderingWord, got, want)
-		case got < want:
-			t.Errorf("%s の「%s」が %d 件に減りました（表に書いてあるのは %d 件）。\n"+
-				"  test/internal/testdesign の renderingWordAllowance の数を %d へ下げてください。\n"+
-				"  **0 になったら行ごと消すこと。**",
-				rel, renderingWord, got, want, got)
+	for _, word := range sortedKeys2(renderingWordAllowance) {
+		for _, rel := range sortedKeys(renderingWordAllowance[word]) {
+			want := renderingWordAllowance[word][rel]
+			got := found[word][rel]
+			if got == want {
+				continue
+			}
+			t.Errorf("%s の「%s」が %d 件です（表は %d 件）。"+
+				"**増えたなら新しく書いた、減ったなら規則の文を変えて表を直していない、のどちらかです**",
+				rel, word, got, want)
 		}
 	}
+}
+
+// sortedKeys2 は、外側のキー（禁じた語）を並べ替えて返す。
+//
+// **並べ替えるのは、落ちたときの出力の順番を固定するためである。**
+// map の走査の順番は実行のたびに変わる。
+//
+// m: 禁じた語をキーに持つ map。
+// 戻り値: 並べ替えたキーの一覧。
+func sortedKeys2(m map[string]map[string]int) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

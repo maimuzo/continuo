@@ -42,7 +42,7 @@
 | 作業中の状態（`tracker.active_states`） | working state | README が "if it names a working state" と書く。**キー名が `active_states` でも `active state` と書かない** |
 | 終了状態（`tracker.terminal_states`） | terminal state | キー名 `terminal_states` に合わせる。working state と対になる |
 | 変数展開（`text/template` の `{{...}}` を issue の値に置き換えること） | render | **「描画」と書かない。**「レンダリング」も使わない（同じものを2つの呼び方で呼ばない）。英語は `prompt.render_failed` が `Failed to render` と書いている |
-| 環境変数の展開（設定値の `${NAME}`。5-5） | expand | **「変数展開」と呼ばない。**上の行とは別の仕組みである。英語は `config.load.expand_failed` が `failed to expand` と書いていて、`render` と既に分かれている |
+| 環境変数の展開（設定値の `${NAME}`。[docs/plans/continuo_design.md](../plans/continuo_design.md) の 5-5） | expand | **「変数展開」と呼ばない。**上の行とは別の仕組みである。英語は `config.load.expand_failed` が `failed to expand` と書いていて、`render` と既に分かれている |
 
 ### 「変数展開」と「環境変数の展開」を書き分ける
 
@@ -52,13 +52,13 @@
 | 何を | どの仕組みか | どう書くか |
 | --- | --- | --- |
 | `{{.issue.number}}` を issue の値に置き換える | `text/template`（[internal/workspace](../../internal/workspace) の `RenderBranch`、[internal/prompt](../../internal/prompt) の `Render`） | **「変数展開」。**「描画」「レンダリング」は使わない |
-| `${HOME}` を環境変数の値に置き換える | 設定値の展開（[internal/config](../../internal/config) の `expandConfig`。5-5 が対象の4つのキーを定めている） | **「環境変数の展開」。**単独の「変数展開」とは呼ばない |
+| `${HOME}` を環境変数の値に置き換える | 設定値の展開（[internal/config](../../internal/config) の `expandConfig`。[docs/plans/continuo_design.md](../plans/continuo_design.md) の 5-5 が対象の4つのキーを定めている） | **「環境変数の展開」。**単独の「変数展開」とは呼ばない |
 
 **どちらの仕組みか文から読み取れない場所では、「テンプレートの変数展開」と書く。**
 同じ文に「テンプレート」「`text/template`」「断片」「プロンプト」があれば、短い「変数展開」でよい。
 
 **`herdr.worktree.branch_template` は、テンプレートの変数展開は受けるが、環境変数の展開は受けない。**
-5-5 の展開規則を適用しないキーだからである（[internal/config/types.go](../../internal/config/types.go) の `HerdrWorktreeConfig`）。
+[docs/plans/continuo_design.md](../plans/continuo_design.md) の 5-5 の展開規則を適用しないキーだからである（[internal/config/types.go](../../internal/config/types.go) の `HerdrWorktreeConfig`）。
 
 **「描画」が戻ってこないことは機械が見ている。**
 [test/internal/testdesign/rendering_word_glossary_test.go](../../test/internal/testdesign/rendering_word_glossary_test.go) がそれである。
