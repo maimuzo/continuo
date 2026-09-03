@@ -186,7 +186,9 @@ level=WARN msg="目的の worktree をそのまま使えません（Status を�
   【対処】continuo abandon <issue の URL> を実行してください。"
 ```
 
-**案内どおり `continuo abandon <issue の URL> <ディレクトリ>` を叩く。**
+**案内に出たコマンドへ `--id e2e` を足して叩く**（`continuo abandon --id e2e <issue の URL> <ディレクトリ>`）。
+**案内の文面には `--id` が入らない。**足さないと、空いている既定のロックを見て
+「continuo は動いていません」と判定する。
 **それでも消えないなら、git の登録だけが残っている。**
 
 ```bash

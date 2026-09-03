@@ -182,6 +182,15 @@ func (d Deps) resolve(
 		d.Workspace = ws
 	}
 	if d.LockPath == "" {
+		// **`lock.Acquire` を呼ぶ前に、置き場所を用意する**（internal/instance の
+		// `EnsureLockDir` が「必ず通すこと」と決めている）。
+		//
+		// **用意しないと、`~/.continuo` を一度も作っていない機械で
+		// 「ロックファイルを開けません」で止まり、何も消さない `--dry-run` すら通らない。**
+		// **常駐を1度も起動していない人が、いちばん最初に叩くのがこの経路である。**
+		if err := inst.EnsureLockDir(); err != nil {
+			return d, err
+		}
 		d.LockPath = inst.LockPath()
 	}
 	if d.NewTracker == nil {

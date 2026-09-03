@@ -44,10 +44,15 @@ const (
 	// そこから導くと、同じ機械の同じ利用者が別のロックを握る。
 	LockFileName = "continuo.lock"
 
-	// lockDirPerm は `~/.continuo` と `~/.continuo/id/<名前>` に付ける権限である。
+	// lockDirPerm は `~/.continuo` と `~/.continuo/id/<名前>` を**新しく作るときに**付ける権限である。
 	//
 	// **本人だけが読み書きできる形にする。**ロックファイルの隣に何も置かないとはいえ、
 	// 置き場所そのものが「どの `--id` で動かしているか」を晒す。
+	//
+	// **既にあるディレクトリの権限は変えない**（`os.MkdirAll` の振る舞いであり、
+	// 意図してそのままにしている）。**continuo は、自分が作っていないディレクトリの
+	// 権限を書き換えない。**`continuo doctor` が hook の socket の置き場所について
+	// 出す文言と、同じ立場である。
 	lockDirPerm = 0o700
 )
 
@@ -197,8 +202,17 @@ func Root() (string, error) {
 // **`lock.Acquire` を呼ぶ前に必ず通すこと。**親ディレクトリが無いと、
 // 二重起動でもないのに「ロックファイルを開けません」で止まる。
 //
-// 戻り値: 作成に失敗した場合のエラー。
+// **Resolve を通していない Layout を渡してはならない。**`Layout{}` のゼロ値は
+// `lockPath` が空文字なので、`filepath.Dir("")` が `"."` になり、
+// **カレントディレクトリを `os.MkdirAll` して成功してしまう。**
+// 型は Resolve でしか埋められないが、**フィールドを1つも書かない複合リテラル
+// （`instance.Layout{}`）は package の外からでも書ける。**だからここで弾く。
+//
+// 戻り値: ゼロ値を渡された場合と、作成に失敗した場合のエラー。
 func (l Layout) EnsureLockDir() error {
+	if l.lockPath == "" {
+		return i18n.Errorf(i18n.KeyInstanceEnsureLockDirUnresolved)
+	}
 	dir := filepath.Dir(l.lockPath)
 	if err := os.MkdirAll(dir, lockDirPerm); err != nil {
 		return i18n.Errorf(i18n.KeyInstanceEnsureLockDirFailed, dir, err)

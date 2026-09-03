@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/abandon"
@@ -106,5 +107,54 @@ func TestAbandon_idを渡さなければ既定の1本を見る(t *testing.T) {
 
 	if want := filepath.Join(home, instance.DirName, instance.LockFileName); lockedPath != want {
 		t.Errorf("既定のロックを見ていない: got %q, want %q", lockedPath, want)
+	}
+}
+
+// 目的: `~/.continuo` を一度も作っていない機械でも `continuo abandon` が通ることを確かめる
+// （設計 3-17）。
+//
+// **常駐を1度も起動していない人が、いちばん最初に叩くのがこの経路である。**
+// ロックの置き場所を用意しないと、`lock.Acquire` が「ロックファイルを開けません」で落ち、
+// **何も消さない `--dry-run` すら通らない。**
+//
+// **ロックを掴む関数を差し替えない。**差し替えると、置き場所が無いことに気づけない
+// （置き場所を見に行くだけのテストは、この落ち方を1件も捕まえられなかった）。
+//
+// 与える情報: `.continuo` が1つも無いホームディレクトリと `--dry-run`。
+// 成功条件: 終了コードが 0 で、「ロックファイルを開けません」が出ていないこと。
+func TestAbandon_ロックの置き場所が無い機械でも通る(t *testing.T) {
+	fx := newFixture(t)
+	home := abandonHome(t)
+
+	t.Setenv("PATH", filepath.Join(fx.Root, "no-such-bin"))
+
+	// **何も無いところから始めることを、先に確かめる。**
+	// 既に在ると、この試験は何も見ていないことになる。
+	root := filepath.Join(home, instance.DirName)
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("この試験は %s が無い状態から始める必要がある: %v", root, err)
+	}
+
+	code := fx.Run(t, 999, func(opts *abandon.Options) {
+		opts.DryRun = true
+		// **本物の経路でロックの置き場所を決めさせる。**
+		opts.Deps.LockPath = ""
+	})
+
+	out := fx.Output()
+	if strings.Contains(out, "ロックファイル") && strings.Contains(out, "開けません") {
+		t.Fatalf("ロックの置き場所を用意していない:\n%s", out)
+	}
+	if code != abandon.ExitOK {
+		t.Fatalf("終了コードが 0 でない: %d\n%s", code, out)
+	}
+
+	// **置き場所を作ったことも確かめる。**作らずに通ったなら、次の版で同じ落ち方に戻る。
+	info, err := os.Stat(root)
+	if err != nil {
+		t.Fatalf("ロックの置き場所を作っていない: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("ロックの置き場所の権限が開いている: got %04o, want 0700", got)
 	}
 }

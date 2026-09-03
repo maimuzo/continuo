@@ -1025,6 +1025,8 @@ const (
 	KeyInstanceRootHomeDirFailed Key = "instance.root.home_dir_failed"
 	// KeyInstanceEnsureLockDirFailed はロックファイルを置くディレクトリを作れなかったときに出る。
 	KeyInstanceEnsureLockDirFailed Key = "instance.ensure_lock_dir.failed"
+	// KeyInstanceEnsureLockDirUnresolved は Resolve を通していない Layout を渡されたときに出る。
+	KeyInstanceEnsureLockDirUnresolved Key = "instance.ensure_lock_dir.unresolved"
 
 	// KeyCLIMainErrPortRange は --port の値が 0〜65535 の外だったことを表す。
 	KeyCLIMainErrPortRange Key = "cli.main.err_port_range"
@@ -2811,6 +2813,7 @@ var allKeys = []Key{
 	KeyInstanceValidateIDInvalidShape,
 	KeyInstanceRootHomeDirFailed,
 	KeyInstanceEnsureLockDirFailed,
+	KeyInstanceEnsureLockDirUnresolved,
 	KeyCLIMainErrPortRange,
 	KeyCLIMainErrTooManyPositional,
 	KeyCLIMainStarting,

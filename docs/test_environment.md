@@ -129,8 +129,10 @@ gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.tit
 kill -INT "$(pgrep -f 'continuo$' | head -1)"
 
 # worktree と branch と herdr の workspace をまとめて消す
-continuo abandon https://github.com/<ACCOUNT>/continuo-e2e/issues/1 . --dry-run   # 先に見る
-continuo abandon https://github.com/<ACCOUNT>/continuo-e2e/issues/1 .
+# --id は起動したときと同じ名前を渡す。渡さないと、空いている既定のロックを見て
+# 「continuo は動いていません」と判定し、生きている worktree を消しにいく
+continuo abandon --id e2e https://github.com/<ACCOUNT>/continuo-e2e/issues/1 . --dry-run   # 先に見る
+continuo abandon --id e2e https://github.com/<ACCOUNT>/continuo-e2e/issues/1 .
 
 # ボードの Status を戻す（Ready へ戻すと、次に起動したとき拾われる）
 gh project item-edit --id PVTI_lAHNNEjOAYV2fM4N9wYE --project-id PVT_kwHNNEjOAYV2fA \
