@@ -339,10 +339,14 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 
 **worker のプロンプトの1行目に、こう書く。**
 
-> 作業を始める前に `<リポジトリの絶対パス>/.claude/skills/worker-briefing/SKILL.md` を Read で開き、書いてあることを全部守れ。
+> 作業を始める前に <下のコマンドの出力> を Read で開き、書いてあることを全部守れ。
 
 **パスは絶対パスで書く。相対パスで書かない。**
-**理由と、絶対パスの求め方は、そのスキルの冒頭にある。ここには写さない。**
+**理由は、そのスキルの冒頭にある。ここには写さない。**
+
+```bash
+echo "$(git rev-parse --show-toplevel)/.claude/skills/worker-briefing/SKILL.md"
+```
 
 **Read で開かせる。**worker が Skill ツールを持っているとは限らないうえ、
 このスキルは `user-invocable: false` である。**パスを直接渡すのが確実である。**
