@@ -27,7 +27,7 @@ const pullRequestHeading = "## PR を出すこと"
 //
 // 与える情報: prompt.Builtin() の全文。
 // 成功条件: 節があり、作るコマンド・issue との結びつけ・重複を作らないこと・
-// push が先であること・作れなかったときの行き先の5つを教えていること。
+// push が先であること・作れなかったときの行き先・本文からの打ち消しの6つを教えていること。
 func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.T) {
 	body := prompt.Builtin()
 
@@ -49,15 +49,48 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 		{"Closes #{{.issue.number}}", "この1行が PR と issue を結びつけます。" +
 			"落とすと、次の turn が `## この issue に紐づく PR も読むこと` で拾えず、" +
 			"レビューの指摘を読む先が消えます"},
-		{"\"state\": \"OPEN\"", "既にある PR を使わせないと、turn のたびに2本目・3本目ができます"},
+		// **既にある PR は、いま居る branch から引かせる。**
+		// `## この issue に紐づく PR も読むこと` の一覧から選ばせてはならない（下の否定の検査）。
+		{`--head "$(git branch --show-current)"`, "既にある PR を、いま居る branch から引かせないと、" +
+			"turn のたびに2本目・3本目ができます"},
 		{"新しく作らないでください", "既にある PR を使わせないと、turn のたびに2本目・3本目ができます"},
-		{"push してから叩いてください", "push していない branch で叩くと、" +
+		{"gh が「どこへ push するか」を対話で聞いてきて", "push していない branch で叩くと、" +
 			"gh が push 先を対話で聞いてきて、そこで止まります"},
 		{"CONTINUO-STATUS: blocked", "作れなかったときの行き先を書かないと、" +
 			"push だけして黙って終わります。人間にはどこを見ればよいのか分かりません"},
+		// **雛形はこの口があることを案内している**（`## PR の決まり` の HTML のコメント）。
+		// **組み込みから消えると、雛形だけが在りもしない逃げ道を約束することになる。**
+		// **調査だけ・レビューだけを頼む運用は、commit する成果が無いので PR を作れない。**
+		// 口が閉じると、その運用は毎回 `blocked` で止まる。
+		{"「PR を作らない」と書いてあるとき", "本文からの打ち消しを受け付けないと、" +
+			"雛形が案内している調査だけ・レビューだけの運用が、毎回 blocked で止まります"},
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", pullRequestHeading, want.needle, want.why)
+		}
+	}
+
+	// **`## この issue に紐づく PR も読むこと` の一覧から行き先を選ばせてはならない。**
+	//
+	// **あの一覧は「この issue を閉じる PR」ではなく「この issue に言及があった PR」を返す。**
+	// 実測（2026-09-03、maimuzo/continuo）: issue #60 の timeline は PR #112 を返すが、
+	// `gh pr view 112 --json closingIssuesReferences` は `{"closes":[87]}` であり、
+	// **PR #112 が閉じるのは issue #87 である。**PR #112 の本文に `#60` は0件だった。
+	// **その branch へ push させると、別の issue のために動いているエージェントの作業が消える。**
+	//
+	// **`state` の綴りも2通りある。**同じ PR について
+	// `gh pr list --json state` は `"OPEN"`、`gh api …/timeline` は `"open"` を返す。
+	// **綴りで拾う書き方に戻すと、取りこぼして2本目を作る。**
+	for _, notWant := range []struct {
+		needle string
+		why    string
+	}{
+		{`"state": "OPEN"`, "`state` の綴りは、取り方によって OPEN と open の2通りになります。" +
+			"綴りで拾うと取りこぼして2本目を作ります"},
+		{`"state":"OPEN"`, "同上"},
+	} {
+		if strings.Contains(section, notWant.needle) {
+			t.Errorf("%q の節に %q があります。%s", pullRequestHeading, notWant.needle, notWant.why)
 		}
 	}
 }

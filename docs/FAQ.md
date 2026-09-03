@@ -1165,9 +1165,10 @@ herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 
 **仕組み。**エージェントは、次の turn で「この issue に紐づく PR」を2つのコマンドで探します。
 **1つ目は `closingIssuesReferences` を見ます。**これは
-**PR の本文に `Closes #42` / `Fixes #42` と書かれて初めて埋まる項目です。**
-**2つ目は issue の timeline の相互参照を見ます。**こちらは PR の本文が
-その issue に触れていれば拾いますが、**触れていなければ1件も返りません。**
+**PR の本文に `Closes #42` / `Fixes #42` と書けば確実に埋まります**
+（GitHub の画面の `Development` から手で紐づける道もありますが、本文に書くのが確実です）。
+**2つ目は issue の timeline の相互参照を見ます。**こちらは本文以外からも張られるので、
+**何が返るかを当てにできません。**返らないこともあれば、**この issue とは関係の無い PR が返ることもあります。**
 **どちらにも出てこない PR は、エージェントから見えません。**
 
 **確かめ方。**
@@ -1201,8 +1202,9 @@ herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 cd ~/continuo-work && continuo prompt --show | grep -n "CONTINUO-STATUS"
 ```
 
-**表明のしかたは組み込みのプロンプトにあります。**`WORKFLOW.md` を grep しても出ません。
-**組み込みは continuo の実行ファイルの中にあるので、版を上げる以外に手を入れる道はありません。**
+**表明のしかたは組み込みのプロンプトにあります。**`WORKFLOW.md` を grep すると
+front matter の `status_signal_prefix`（continuo が読む側の設定）が引っかかりますが、
+**それはエージェントへの指示ではありません。**送られる文面のほうを見てください。
 
 **書き換えたら continuo を再起動してください。**動いている最中は読み直しません。
 
