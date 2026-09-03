@@ -116,7 +116,7 @@ type runState struct {
 	// ===== 設計 3-25 の型に無いが、実装に要る項目 =====
 
 	// Issue は dispatch した時点の issue のスナップショットである。
-	// プロンプトの描画・表明の対象の解決・コメントの投稿先に使う。
+	// プロンプトの変数展開・表明の対象の解決・コメントの投稿先に使う。
 	Issue tracker.Issue
 	// LastWrittenState は continuo がこの run のためにボードへ最後に書いた Status である。
 	//

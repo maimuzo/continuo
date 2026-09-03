@@ -593,7 +593,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | --- | --- | --- |
 | YAML front matter | **`github.com/goccy/go-yaml`（MIT、依存ゼロ）を使う** | `gopkg.in/yaml.v3` はリポジトリが archive 済みで更新が止まっている。goccy はエラーに行・桁・ソース抜粋を出すので、`SPEC.md` 6.2 が要求する「オペレータに見えるエラー」を自前の整形コードなしで満たせる |
 | front matter の切り出し | **ライブラリを使わない。**標準の `strings` / `bytes` で足りる | 15行程度で書ける。`SPEC.md` 5.5 のエラー分類を自前の関数境界に対応づけられる |
-| テンプレート | **`text/template` + `Option("missingkey=error")`** | `SPEC.md` 5.4 の *"Unknown variables MUST fail rendering"*（**訳:** 未知の変数はレンダリングを失敗させなければならない）を満たせることを実測で確認済み |
+| テンプレート | **`text/template` + `Option("missingkey=error")`** | `SPEC.md` 5.4 の *"Unknown variables MUST fail rendering"*（**訳:** 未知の変数は変数展開を失敗させなければならない）を満たせることを実測で確認済み |
 | — その穴 | **`index` 組み込み関数だけ素通りする。`Funcs` で上書きして塞ぐ** | テンプレート構築を1つのコンストラクタに閉じ込め、そこ以外で `template.New` を呼ばせない |
 | — 入力の型 | **`map[string]any` に固定する** | struct にすると `text/template` が struct tag を見ないため `{{.issue.title}}` のような小文字表記が書けなくなる |
 | SQLite | **使わない** | `SPEC.md` 14.3 が scheduler の状態を意図的に in-memory と定めている。turn 数・リトライ回数は Go の struct で持つ |
@@ -1363,7 +1363,7 @@ func Normalize(raw string) (SafeName, []Warning)
 `SPEC.md` 7.1 / 16.5 に従う。
 
 ```text
-1 回目の turn : 設定の本文（5-3）を text/template で描画したもの。
+1 回目の turn : 設定の本文（5-3）を text/template で変数展開したもの。
                 issue の URL・識別子・完了の作法が入る。
                 issue の本文と既存コメントは入れない（3-29。エージェントが自分で読む）
 2 回目以降    : 継続の指示のみ（5-4）。1回目の本文は送り直さない
@@ -1374,8 +1374,8 @@ func Normalize(raw string) (SafeName, []Warning)
 正常終了後    : 約1秒おいて issue がまだ active かを再確認する
 ```
 
-**描画の規則。**`text/template` に `Option("missingkey=error")` を付ける。
-**渡す変数は 5-3 の一覧に載っているものだけである。**未知の変数を書いたテンプレートは描画に失敗し、
+**変数展開の規則。**`text/template` に `Option("missingkey=error")` を付ける。
+**渡す変数は 5-3 の一覧に載っているものだけである。**未知の変数を書いたテンプレートは変数展開に失敗し、
 その issue を失敗として扱う（**黙って空文字を埋めない**）。
 
 **残り回数を伝える理由。**書かないと、打ち切りがエージェントにとって予測不能な突然死になる。伝えれば締めに向かう判断ができる。
@@ -2686,11 +2686,11 @@ RevisionAt   time.Time // 版が最後に増えたのを確かめた時刻。人
 | **ハッシュ接尾辞を実装せずに済む。**衝突は branch 名を issue ごとに一意にすることで防ぐ |
 
 **branch 名は continuo が組み立てる。**設定の `herdr.worktree.branch_template` を
-`text/template` で描画する。**渡す変数は 5-3 のプロンプトと同じ `.issue` である**
-（`.issue.owner` / `.issue.repo` / `.issue.number`）。**未知の変数は描画を失敗させる**（`missingkey=error`）。
-**描画に失敗したら、その issue を失敗として扱う。**
+`text/template` で変数展開する。**渡す変数は 5-3 のプロンプトと同じ `.issue` である**
+（`.issue.owner` / `.issue.repo` / `.issue.number`）。**未知の変数は変数展開を失敗させる**（`missingkey=error`）。
+**変数展開に失敗したら、その issue を失敗として扱う。**
 
-**置き場所のスラグは、描画した branch 名のスラッシュをハイフンに置き換えたものである。**
+**置き場所のスラグは、変数展開した branch 名のスラッシュをハイフンに置き換えたものである。**
 
 **衝突を防ぐのは branch 名である。**したがって branch 名のテンプレートは**区切りにスラッシュを使う**。
 
@@ -5798,7 +5798,7 @@ issue に書き残しませんでした」だけが残る。**実際にはエー
 **この検算の届く範囲。**`<owner>/<repo>` までである。
 **同じリポジトリの別 issue へ差し替える経路は止まらない。**置き場所のパスから
 機械的に引けるのがそこまでだからである（`continuo abandon` の `pathAgrees` と同じ限界）。
-**それ以上を求めて `branch_template` を描画し直して照合する案は採らない。**
+**それ以上を求めて `branch_template` を変数展開し直して照合する案は採らない。**
 テンプレートを変えた環境で、走っている worktree が全部「食い違い」になる。
 
 ---
@@ -7341,7 +7341,7 @@ association:	owner
 検査は [test/internal/orchestrator/prompt_author_association_test.go](../../test/internal/orchestrator/prompt_author_association_test.go) の
 `TestPrompt_jqが出すキーの名前を変えていない` と
 `TestPrompt_指示する名前はどれかのコマンドが返す名前である` が固定する。
-**後者は、描画したプロンプトに並んだコマンドから「返る名前の一覧」を組み立て、
+**後者は、変数展開したプロンプトに並んだコマンドから「返る名前の一覧」を組み立て、
 本文がそれ以外の綴りを指示していたら落とす。**
 
 **雛形を直しても、既に `continuo init` を済ませた人には届かない。**
@@ -9327,7 +9327,7 @@ push していない作業は、この worktree が片付くときに失われ�
 {{if .attempt}}この作業は {{.attempt}} 回目の試行です。前回は完了せずに終わっています。{{end}}
 ```
 
-**テンプレートに渡す変数。**未知の変数は描画を失敗させる（`Option("missingkey=error")`）ので、
+**テンプレートに渡す変数。**未知の変数は変数展開を失敗させる（`Option("missingkey=error")`）ので、
 **ここに無い名前を本文に書くと dispatch が止まる。**
 
 | 変数 | 中身 |
@@ -9337,7 +9337,7 @@ push していない作業は、この worktree が片付くときに失われ�
 | `.issue.url` | **issue の URL。**エージェントはこれを `gh issue comment` に渡して、何をしたかを書き残す（3-29）。**中身を読むのは `.issue.owner` / `.issue.repo` / `.issue.number` のほうである** |
 | `.issue.title` / `.issue.state` / `.issue.labels` | 仕様 4.1.1 の項目。**本文はプロンプトに埋め込まない**（3-29） |
 | `.push_branch` | **issue にリンクされた branch の生の名前**（`work/issue-42`。3-22d）。`origin/` は付かない。**リンクが1本でないときは空文字**なので `{{if .push_branch}}` で書き分けられる。**push 先の既定ではない**（既定はいつでも `git push -u origin HEAD`。5-3b） |
-| `.attempt` | 試行回数。**1回目は `null` を渡す**（仕様 12.3 のとおり）。`text/template` は `null` を偽として扱うので `{{if .attempt}}` は正しく動く。**キーごと省いてはならない**（`missingkey=error` で描画が失敗する） |
+| `.attempt` | 試行回数。**1回目は `null` を渡す**（仕様 12.3 のとおり）。`text/template` は `null` を偽として扱うので `{{if .attempt}}` は正しく動く。**キーごと省いてはならない**（`missingkey=error` で変数展開が失敗する） |
 
 **なぜ JSON で読ませ、`--jq` でテキストへ潰させないかは 3-72 にある。**
 **立場の判定を「着手してよいか」に効かせない理由は 3-72b にある。**
@@ -9620,7 +9620,7 @@ push できる状態のときだけ**である。
 
 ### 5-4. 2回目以降のプロンプト
 
-**1回目のプロンプトは本文（5-3）を描画したものだが、2回目以降は本文を送り直さない**（3-8）。
+**1回目のプロンプトは本文（5-3）を変数展開したものだが、2回目以降は本文を送り直さない**（3-8）。
 **これは Go のコードが組み立てる。**利用者が設定で差し替えられるようにはしない。
 
 **理由。**「あと何回で打ち切るか」「Status がまだ作業中のままです」といった内容は、
@@ -9638,7 +9638,7 @@ push できる状態のときだけ**である。
 **なぜテンプレートに載せないのか。**`SPEC.md` 7.1 が
 *"Continuation turns SHOULD send only continuation guidance to the existing thread, not resend the original task prompt that is already present in thread history."*
 （**訳:** 継続の turn は、既にスレッドの履歴にある元のタスクプロンプトを送り直すのではなく、**継続の指示だけ**を既存のスレッドへ送るべきである）
-と定めているためである。**本文のテンプレートに変数で差し込むと、2回目以降も本文ごと再描画して送ることになる。**
+と定めているためである。**本文のテンプレートに変数で差し込むと、2回目以降も本文ごと変数展開し直して送ることになる。**
 
 ### 5-5. 設定値の展開規則
 
@@ -11061,7 +11061,7 @@ timeout で返っても turn は打ち切らず、`agent.prompt` を再送せず
 
 #### issue の中身をプロンプトに埋め込まない
 
-**仕様（12.1）。**プロンプトの描画に issue の本文を渡す。
+**仕様（12.1）。**プロンプトの変数展開に issue の本文を渡す。
 
 **continuo。**プロンプトには **owner / repo / 番号だけ**を渡し、エージェントが `gh` の JSON 出力で読む（3-29）。
 

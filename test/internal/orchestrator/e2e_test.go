@@ -103,10 +103,10 @@ func TestTick_1件のissueが候補に上がってからDoneで片付くまで�
 			renameParams["label"], wantLabel)
 	}
 
-	// 段11: 1回目のプロンプトはテンプレートの描画結果である（**issue の本文は入れない**）。
+	// 段11: 1回目のプロンプトはテンプレートの変数展開の結果である（**issue の本文は入れない**）。
 	if !strings.Contains(promptedText, "octocat/hello-world#188") ||
 		!strings.Contains(promptedText, "gh issue view") {
-		t.Fatalf("1回目のプロンプトがテンプレートの描画結果になっていない: %q", promptedText)
+		t.Fatalf("1回目のプロンプトがテンプレートの変数展開の結果になっていない: %q", promptedText)
 	}
 
 	// worktree と branch が本当に消えている（本物の git で確かめる）。

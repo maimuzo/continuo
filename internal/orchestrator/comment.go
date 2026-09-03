@@ -72,7 +72,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	snap := rs.snapshot()
 	if snap.StartedAt.IsZero() {
 		// **1回も turn を送っていない run には、書かせる材料が無い。**着手そのものに
-		// 失敗した場合（設定ファイルを書けない・pane が引けない・テンプレートの描画に
+		// 失敗した場合（設定ファイルを書けない・pane が引けない・テンプレートの変数展開に
 		// 失敗した）がこれである。復元しても、そのセッションには会話が1つも無い。
 		o.logger.Info("turn を1回も送っていないので、コメントの確認は行いません",
 			"identifier", snap.Identifier)

@@ -107,7 +107,7 @@ func (m *Manager) OwnerRepoOf(worktreePath string) (string, string, error) {
 //
 // issue: 確かめたい issue。
 // 戻り値の1つ目: 期待するディレクトリ名。
-// 戻り値の2つ目: `branch_template` を描画できない場合のエラー。
+// 戻り値の2つ目: `branch_template` のテンプレートの変数展開に失敗した場合のエラー。
 func (m *Manager) ExpectedSlugFor(issue IssueRef) (string, error) {
 	branch, _, err := RenderBranch(m.cfg.Herdr.Worktree.BranchTemplate, issue)
 	if err != nil {
