@@ -791,7 +791,7 @@ const (
 	// ディレクトリ名（既定の branch_template では issue 番号を含む）と食い違うときに出る。
 	KeyAbandonSlugMismatch Key = "abandon.slug_mismatch"
 	// KeyAbandonSlugUnknown は、その issue に期待するディレクトリ名を組み立てられない
-	// ときに出る（`herdr.worktree.branch_template` を描画できない場合）。
+	// ときに出る（`herdr.worktree.branch_template` のテンプレートの変数展開に失敗した場合）。
 	KeyAbandonSlugUnknown Key = "abandon.slug_unknown"
 	// KeyAbandonErrUndecided は、候補にできなかった worktree があるために
 	// 「この issue の worktree はありません」と断言できないときに出る。
@@ -1231,7 +1231,7 @@ const (
 	KeyConfigLoadFrontMatterSplitFailed Key = "config.load.front_matter_split_failed"
 	// KeyConfigLoadFrontMatterInvalid は front matter の中身が不正だったときに出る。
 	KeyConfigLoadFrontMatterInvalid Key = "config.load.front_matter_invalid"
-	// KeyConfigLoadExpandFailed は設定値の環境変数展開・チルダ展開に失敗したときに出る。
+	// KeyConfigLoadExpandFailed は設定値の環境変数の展開・チルダの展開に失敗したときに出る。
 	KeyConfigLoadExpandFailed Key = "config.load.expand_failed"
 )
 
@@ -1284,7 +1284,7 @@ const (
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
 )
 
-// 設定値の環境変数展開・チルダ展開（internal/config の expand）のエラーの文言。
+// 設定値の環境変数の展開・チルダの展開（internal/config の expand）のエラーの文言。
 const (
 	// KeyConfigExpandTrailingDollar は値が "$" で終わっているときに出る。
 	KeyConfigExpandTrailingDollar Key = "config.expand.trailing_dollar"
@@ -2114,9 +2114,9 @@ const (
 	KeyWorkspaceCheckContainmentResolvedOutsideRoot Key = "workspace.check_containment_resolved.outside_root"
 	// KeyWorkspaceRenderBranchTemplateUnparsable は branch 名のテンプレートを解析できなかったときに出る。
 	KeyWorkspaceRenderBranchTemplateUnparsable Key = "workspace.render_branch.template_unparsable"
-	// KeyWorkspaceRenderBranchTemplateRenderFailed は branch 名のテンプレートを描画できなかったときに出る（未知の変数を含む）。
+	// KeyWorkspaceRenderBranchTemplateRenderFailed は branch 名のテンプレートを変数展開できなかったときに出る（未知の変数を含む）。
 	KeyWorkspaceRenderBranchTemplateRenderFailed Key = "workspace.render_branch.template_render_failed"
-	// KeyWorkspaceRenderBranchRenderedEmpty は branch 名のテンプレートの描画結果が空だったときに出る。
+	// KeyWorkspaceRenderBranchRenderedEmpty は branch 名のテンプレートの変数展開の結果が空だったときに出る。
 	KeyWorkspaceRenderBranchRenderedEmpty Key = "workspace.render_branch.rendered_empty"
 	// KeyWorkspaceScanLevelRootUnreadable は置き場所の最上位を読めなかったときに出る。
 	KeyWorkspaceScanLevelRootUnreadable Key = "workspace.scan_level.root_unreadable"
@@ -2222,7 +2222,7 @@ const (
 	KeyOrchestratorNewSessionUUIDRandFailed Key = "orchestrator.new_session_uuid.rand_failed"
 	// KeyOrchestratorRenderFirstPromptTemplateUnparsable は1回目のプロンプトのテンプレートの構文が誤っていたときに出る。
 	KeyOrchestratorRenderFirstPromptTemplateUnparsable Key = "orchestrator.render_first_prompt.template_unparsable"
-	// KeyOrchestratorRenderFirstPromptRenderFailed は1回目のプロンプトの描画に失敗したときに出る（一覧に無い変数を参照している場合を含む）。
+	// KeyOrchestratorRenderFirstPromptRenderFailed は1回目のプロンプトの変数展開に失敗したときに出る（一覧に無い変数を参照している場合を含む）。
 	KeyOrchestratorRenderFirstPromptRenderFailed Key = "orchestrator.render_first_prompt.render_failed"
 	// KeyOrchestratorWriteSettingsFileDirCreateFailed はissue ごとの設定ファイルの置き場所を作れなかったときに出る。
 	KeyOrchestratorWriteSettingsFileDirCreateFailed Key = "orchestrator.write_settings_file.dir_create_failed"

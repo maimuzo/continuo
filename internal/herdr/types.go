@@ -85,7 +85,7 @@ type ReadSource string
 
 // ReadSource の取りうる値である（実スキーマの enum と1対1）。
 const (
-	// ReadSourceVisible は現在描画されている表示範囲である。
+	// ReadSourceVisible は pane にいま表示されている範囲である。
 	ReadSourceVisible ReadSource = "visible"
 	// ReadSourceRecent は直近の出力である（折り返しをそのまま含む）。
 	ReadSourceRecent ReadSource = "recent"

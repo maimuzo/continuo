@@ -144,7 +144,7 @@ func (m *Manager) isDetachedHead(ctx context.Context, repoPath, worktreePath str
 type PrepareResult struct {
 	// Path は worktree の絶対パスである（シンボリックリンク解決済み）。
 	Path string
-	// Branch は描画・正規化した branch 名である。
+	// Branch はテンプレートの変数展開と正規化を通した branch 名である。
 	Branch normalize.SafeName
 	// Base は worktree を作ったときの base である。
 	// **片付けの手順2b（upstream が無い側の判定）で使う**ので、呼び出し側が保持すること。

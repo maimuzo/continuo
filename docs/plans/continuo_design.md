@@ -593,7 +593,7 @@ sample.txt の中身: `alpha` / `bravo` / `charlie` の3行（末尾改行あり
 | --- | --- | --- |
 | YAML front matter | **`github.com/goccy/go-yaml`（MIT、依存ゼロ）を使う** | `gopkg.in/yaml.v3` はリポジトリが archive 済みで更新が止まっている。goccy はエラーに行・桁・ソース抜粋を出すので、`SPEC.md` 6.2 が要求する「オペレータに見えるエラー」を自前の整形コードなしで満たせる |
 | front matter の切り出し | **ライブラリを使わない。**標準の `strings` / `bytes` で足りる | 15行程度で書ける。`SPEC.md` 5.5 のエラー分類を自前の関数境界に対応づけられる |
-| テンプレート | **`text/template` + `Option("missingkey=error")`** | `SPEC.md` 5.4 の *"Unknown variables MUST fail rendering"*（**訳:** 未知の変数はレンダリングを失敗させなければならない）を満たせることを実測で確認済み |
+| テンプレート | **`text/template` + `Option("missingkey=error")`** | `SPEC.md` 5.4 の *"Unknown variables MUST fail rendering"*（**訳:** 未知の変数は変数展開を失敗させなければならない）を満たせることを実測で確認済み |
 | — その穴 | **`index` 組み込み関数だけ素通りする。`Funcs` で上書きして塞ぐ** | テンプレート構築を1つのコンストラクタに閉じ込め、そこ以外で `template.New` を呼ばせない |
 | — 入力の型 | **`map[string]any` に固定する** | struct にすると `text/template` が struct tag を見ないため `{{.issue.title}}` のような小文字表記が書けなくなる |
 | SQLite | **使わない** | `SPEC.md` 14.3 が scheduler の状態を意図的に in-memory と定めている。turn 数・リトライ回数は Go の struct で持つ |
@@ -1363,7 +1363,7 @@ func Normalize(raw string) (SafeName, []Warning)
 `SPEC.md` 7.1 / 16.5 に従う。
 
 ```text
-1 回目の turn : 設定の本文（5-3）を text/template で描画したもの。
+1 回目の turn : 設定の本文（5-3）を text/template で変数展開したもの。
                 issue の URL・識別子・完了の作法が入る。
                 issue の本文と既存コメントは入れない（3-29。エージェントが自分で読む）
 2 回目以降    : 継続の指示のみ（5-4）。1回目の本文は送り直さない
@@ -1374,8 +1374,8 @@ func Normalize(raw string) (SafeName, []Warning)
 正常終了後    : 約1秒おいて issue がまだ active かを再確認する
 ```
 
-**描画の規則。**`text/template` に `Option("missingkey=error")` を付ける。
-**渡す変数は 5-3 の一覧に載っているものだけである。**未知の変数を書いたテンプレートは描画に失敗し、
+**変数展開の規則。**`text/template` に `Option("missingkey=error")` を付ける。
+**渡す変数は 5-3 の一覧に載っているものだけである。**未知の変数を書いたテンプレートは変数展開に失敗し、
 その issue を失敗として扱う（**黙って空文字を埋めない**）。
 
 **残り回数を伝える理由。**書かないと、打ち切りがエージェントにとって予測不能な突然死になる。伝えれば締めに向かう判断ができる。
@@ -2686,11 +2686,11 @@ RevisionAt   time.Time // 版が最後に増えたのを確かめた時刻。人
 | **ハッシュ接尾辞を実装せずに済む。**衝突は branch 名を issue ごとに一意にすることで防ぐ |
 
 **branch 名は continuo が組み立てる。**設定の `herdr.worktree.branch_template` を
-`text/template` で描画する。**渡す変数は 5-3 のプロンプトと同じ `.issue` である**
-（`.issue.owner` / `.issue.repo` / `.issue.number`）。**未知の変数は描画を失敗させる**（`missingkey=error`）。
-**描画に失敗したら、その issue を失敗として扱う。**
+`text/template` で変数展開する。**渡す変数は 5-3 のプロンプトと同じ `.issue` である**
+（`.issue.owner` / `.issue.repo` / `.issue.number`）。**未知の変数は変数展開を失敗させる**（`missingkey=error`）。
+**変数展開に失敗したら、その issue を失敗として扱う。**
 
-**置き場所のスラグは、描画した branch 名のスラッシュをハイフンに置き換えたものである。**
+**置き場所のスラグは、変数展開した branch 名のスラッシュをハイフンに置き換えたものである。**
 
 **衝突を防ぐのは branch 名である。**したがって branch 名のテンプレートは**区切りにスラッシュを使う**。
 
@@ -5798,7 +5798,7 @@ issue に書き残しませんでした」だけが残る。**実際にはエー
 **この検算の届く範囲。**`<owner>/<repo>` までである。
 **同じリポジトリの別 issue へ差し替える経路は止まらない。**置き場所のパスから
 機械的に引けるのがそこまでだからである（`continuo abandon` の `pathAgrees` と同じ限界）。
-**それ以上を求めて `branch_template` を描画し直して照合する案は採らない。**
+**それ以上を求めて `branch_template` を変数展開し直して照合する案は採らない。**
 テンプレートを変えた環境で、走っている worktree が全部「食い違い」になる。
 
 ---
@@ -7341,7 +7341,7 @@ association:	owner
 検査は [test/internal/orchestrator/prompt_author_association_test.go](../../test/internal/orchestrator/prompt_author_association_test.go) の
 `TestPrompt_jqが出すキーの名前を変えていない` と
 `TestPrompt_指示する名前はどれかのコマンドが返す名前である` が固定する。
-**後者は、描画したプロンプトに並んだコマンドから「返る名前の一覧」を組み立て、
+**後者は、変数展開したプロンプトに並んだコマンドから「返る名前の一覧」を組み立て、
 本文がそれ以外の綴りを指示していたら落とす。**
 
 **雛形を直しても、既に `continuo init` を済ませた人には届かない。**
@@ -7579,6 +7579,109 @@ turn の途中でも即座に止まっていた。**エージェントが自分�
 | **`terminal_states` だけ直す** | 引き渡しはそのままにする | **同じ自動化が `In Review` も書く**（PR を issue に紐づけたとき）。片方だけ塞いでも同じ形で殺される |
 | **自動化が書いた終端を無視する** | `Done` を人間が書くまで終わらせない | **人間がマージして終わらせる運用が終わらなくなる。**待つのは turn の終わりまでで足りる |
 | **起点を種類ごとに別の欄で持つ** | `externalMoveSince` を2本に分ける | **同時には起きない**ので2本目は常にゼロ値になる。種類を1つ覚えるだけで足りる |
+
+### 3-74b. エージェントが終えたことに気づく経路は2つある
+
+**言いたいこと。**表明を読む経路と、カンバンを読み直す巡回の2つが、同じ run を終わらせにいく。
+**巡回が先に権利を取ると、後片付けが4つとも飛ぶ。**下の図の赤い枠がその窓である。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as エージェント<br/>（pane の中の Claude Code）
+    participant T as turn の終わりの経路<br/>（decideAfterTurn）
+    participant G as 終わらせる権利の印<br/>（runState.terminating）
+    participant R as 巡回<br/>（reconcileRunning。既定30秒ごと）
+    participant K as カンバン<br/>（GitHub Projects v2）
+
+    A->>T: CONTINUO-STATUS: review
+    T->>K: Status を In Review へ書く
+    T->>K: 「Status を動かしました」のコメントを投稿
+    Note over T,K: ここから、権利を取りに行くまでに<br/>GitHub への往復が2回ある
+
+    rect rgba(255, 235, 235, 0.1)
+        Note over R,K: この隙間に巡回が回ると競合する
+        R->>K: 実行中の issue の Status を取り直す
+        K-->>R: In Review
+        R->>G: 権利を取る（beginTerminal）
+        G-->>R: 取れた
+        R->>A: pane を閉じる
+        Note over R: 後片付けを1つもしない
+    end
+
+    T->>K: issue を取り直す
+    K-->>T: In Review
+    T->>G: 権利を取る（claimTerminal）
+    G-->>T: 取られている
+    Note over T: 何もせずに戻る
+```
+
+**巡回が後片付けをしないのは、想定している場面が違うからである。**
+
+| 経路 | 想定している場面 |
+| --- | --- |
+| **turn の終わりの経路** | **エージェントが表明した。**continuo が Status を書き、後片付けをする |
+| **巡回** | **人間がカンバンで Status を手で動かした。**Status は既に動いているので、pane を閉じるだけでよい |
+
+**巡回に後片付けを寄せることはできない。**
+[internal/orchestrator/runstate.go:1562-1564](../../internal/orchestrator/runstate.go#L1562-L1564) が
+「終わらせる処理は `agent.prompt` を待ち受けつきで呼ぶことがあり、**既定では最大1時間返らない**」と書いている。
+**巡回のループがそこで止まると、dispatch も stall 検知も全部止まる。**
+
+### 3-74c. 巡回は、continuo 自身が書いた Status に反応しない
+
+**言いたいこと。**巡回が見ているのは Status だけで、それを誰が書いたかを見ていない。
+**continuo 自身が書いたなら、turn の終わりの経路が処理中である。**手を出さない。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant T as turn の終わりの経路
+    participant G as 終わらせる権利の印
+    participant R as 巡回
+    participant K as カンバン
+
+    T->>K: Status を In Review へ書く
+    T->>T: 書いた Status を控える<br/>（setLastWrittenState）
+
+    rect rgba(235, 255, 235, 0.1)
+        R->>K: Status を取り直す
+        K-->>R: In Review
+        R->>T: continuo 自身が書いた Status か
+        T-->>R: そうだ。turn の終わりの経路が動いている
+        Note over R: この巡回では何もしない<br/>（次の巡回でやり直す）
+    end
+
+    T->>G: 権利を取る
+    G-->>T: 取れた
+    T->>T: 後片付けを4つやる
+```
+
+**終端の Status（`Done` など）には当てない。**理由は、終端ではどちらの経路も同じ本体を通るからである。
+
+| どちらが勝っても | 通る本体 |
+| --- | --- |
+| 巡回（`finishRunAsync`） | **`finishRunClaimed`** |
+| turn の終わり（`finishRun`） | **`finishRunClaimed`** |
+
+**`finishRunClaimed` が後片付けを全部やるので、巡回が勝っても1つも飛ばない。**
+差は理由の文言だけである。**引き渡しの分岐だけが、巡回側で `stopAndReleaseAsync` という
+別の本体へ行く。**だから門はそこにだけ要る。
+
+**知らない Status の分岐にも要らない。**continuo が書きうる値は
+running_state・`status_signal_map` の遷移先・対応表の戻す先の3種で、**3種とも既知の Status である。**
+
+**判定に使う材料は既にある。**
+
+| 何 | 中身 | どこで控えているか |
+| --- | --- | --- |
+| `rs.lastWrittenState()` | continuo がこの run のためにカンバンへ最後に書いた Status | [internal/orchestrator/lifecycle.go:367](../../internal/orchestrator/lifecycle.go#L367) |
+| `rs.turnLoopActive()` | turn の終わりの経路がまだ動いているか | 既にある |
+
+**3-74 と同じ形である。**あちらは「カンバンの**自動化**が書いたときは待つ」で、
+**「continuo 自身が書いたとき」だけが抜けている。**
+
+**人間が動かしたときの振る舞いは変えない。**人間が `In Review` へ動かしたら、いままでどおり即座に止める。
 
 ### 3-75. 版を上げて増えた設定項目を、doctor が知らせる
 
@@ -9292,7 +9395,7 @@ push していない作業は、この worktree が片付くときに失われ�
 {{if .attempt}}この作業は {{.attempt}} 回目の試行です。前回は完了せずに終わっています。{{end}}
 ```
 
-**テンプレートに渡す変数。**未知の変数は描画を失敗させる（`Option("missingkey=error")`）ので、
+**テンプレートに渡す変数。**未知の変数は変数展開を失敗させる（`Option("missingkey=error")`）ので、
 **ここに無い名前を本文に書くと dispatch が止まる。**
 
 | 変数 | 中身 |
@@ -9302,7 +9405,7 @@ push していない作業は、この worktree が片付くときに失われ�
 | `.issue.url` | **issue の URL。**エージェントはこれを `gh issue comment` に渡して、何をしたかを書き残す（3-29）。**中身を読むのは `.issue.owner` / `.issue.repo` / `.issue.number` のほうである** |
 | `.issue.title` / `.issue.state` / `.issue.labels` | 仕様 4.1.1 の項目。**本文はプロンプトに埋め込まない**（3-29） |
 | `.push_branch` | **issue にリンクされた branch の生の名前**（`work/issue-42`。3-22d）。`origin/` は付かない。**リンクが1本でないときは空文字**なので `{{if .push_branch}}` で書き分けられる。**push 先の既定ではない**（既定はいつでも `git push -u origin HEAD`。5-3b） |
-| `.attempt` | 試行回数。**1回目は `null` を渡す**（仕様 12.3 のとおり）。`text/template` は `null` を偽として扱うので `{{if .attempt}}` は正しく動く。**キーごと省いてはならない**（`missingkey=error` で描画が失敗する） |
+| `.attempt` | 試行回数。**1回目は `null` を渡す**（仕様 12.3 のとおり）。`text/template` は `null` を偽として扱うので `{{if .attempt}}` は正しく動く。**キーごと省いてはならない**（`missingkey=error` で変数展開が失敗する） |
 
 **なぜ JSON で読ませ、`--jq` でテキストへ潰させないかは 3-72 にある。**
 **立場の判定を「着手してよいか」に効かせない理由は 3-72b にある。**
@@ -9720,7 +9823,7 @@ push できる状態のときだけ**である。
 
 ### 5-4. 2回目以降のプロンプト
 
-**1回目のプロンプトは本文（5-3）を描画したものだが、2回目以降は本文を送り直さない**（3-8）。
+**1回目のプロンプトは本文（5-3）を変数展開したものだが、2回目以降は本文を送り直さない**（3-8）。
 **これは Go のコードが組み立てる。**利用者が設定で差し替えられるようにはしない。
 
 **理由。**「あと何回で打ち切るか」「Status がまだ作業中のままです」といった内容は、
@@ -9738,7 +9841,7 @@ push できる状態のときだけ**である。
 **なぜテンプレートに載せないのか。**`SPEC.md` 7.1 が
 *"Continuation turns SHOULD send only continuation guidance to the existing thread, not resend the original task prompt that is already present in thread history."*
 （**訳:** 継続の turn は、既にスレッドの履歴にある元のタスクプロンプトを送り直すのではなく、**継続の指示だけ**を既存のスレッドへ送るべきである）
-と定めているためである。**本文のテンプレートに変数で差し込むと、2回目以降も本文ごと再描画して送ることになる。**
+と定めているためである。**本文のテンプレートに変数で差し込むと、2回目以降も本文ごと変数展開し直して送ることになる。**
 
 ### 5-5. 設定値の展開規則
 
@@ -10880,20 +10983,20 @@ sequenceDiagram
 
     Outsider->>GH: issue にコメントを書く（誰でもできる）
 
-    rect rgba(150, 150, 150, 0.12)
+    rect rgba(150, 150, 150, 0.1)
     Note over C: 着手の段
     C->>C: settings.json を書く（PreToolUse hook を張る）
     C->>A: 起動。プロンプトに「JSON で読め」と書く
     end
 
-    rect rgba(70, 150, 230, 0.12)
+    rect rgba(70, 150, 230, 0.1)
     Note over A,GH: 守り 1: 立場の札
     A->>GH: gh issue view --json comments
     GH-->>A: authorAssociation つきの JSON
     Note over A: NONE の body は<br/>データとして読む
     end
 
-    rect rgba(230, 130, 60, 0.12)
+    rect rgba(230, 130, 60, 0.1)
     Note over A,J: 守り 2: 道具の判定（Claude Code の中で閉じる）
     A->>J: PreToolUse。危ないコマンドを判定役へ渡す
     J-->>A: deny（理由つき）。turn は続く
@@ -10903,7 +11006,7 @@ sequenceDiagram
     A->>GH: gh issue comment（印つきで報告）
     Outsider->>GH: 同じ印で始まるコメントを書く（誰でもできる）
 
-    rect rgba(70, 190, 90, 0.12)
+    rect rgba(70, 190, 90, 0.1)
     Note over C,GH: 守り 3: 報告を書いたかの判定を守る
     C->>GH: この run が始まったあとのコメントを取る
     GH-->>C: コメントの一覧（投稿者つき）
@@ -11161,7 +11264,7 @@ timeout で返っても turn は打ち切らず、`agent.prompt` を再送せず
 
 #### issue の中身をプロンプトに埋め込まない
 
-**仕様（12.1）。**プロンプトの描画に issue の本文を渡す。
+**仕様（12.1）。**プロンプトの変数展開に issue の本文を渡す。
 
 **continuo。**プロンプトには **owner / repo / 番号だけ**を渡し、エージェントが `gh` の JSON 出力で読む（3-29）。
 

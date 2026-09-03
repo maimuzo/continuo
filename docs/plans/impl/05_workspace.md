@@ -146,7 +146,7 @@ git は本物・herdr はテスト用socket mockで通している。
 | ファイル | 何を |
 | --- | --- |
 | [internal/workspace/workspace.go](../../../internal/workspace/workspace.go) | `Manager` / `Options`（`SettingsRoot` を含む）/ `New`（起動時に置き場所を 0700 で作り、`identity_file` を検査する）/ `HerdrClient` / `IssueRef` |
-| [internal/workspace/layout.go](../../../internal/workspace/layout.go) | 置き場所の組み立て（`Locate`）・封じ込め検査・branch 名の描画・`BranchPrefix` |
+| [internal/workspace/layout.go](../../../internal/workspace/layout.go) | 置き場所の組み立て（`Locate`）・封じ込め検査・branch 名の変数展開・`BranchPrefix` |
 | [internal/workspace/git.go](../../../internal/workspace/git.go) | git と ghq の実行（prune / worktree list / add / branch -D / status / rev-list / diff / git-common-dir / show-toplevel / 現在の branch） |
 | [internal/workspace/identity.go](../../../internal/workspace/identity.go) | 身元ファイルの読み書き・`info/exclude` への登録・`MergeForReuse` / `SetAgentName` / `IncrementTakeover` / `MarkCleanupDeferred` |
 | [internal/workspace/prepare.go](../../../internal/workspace/prepare.go) | 用意の手順7段（`Prepare`） |

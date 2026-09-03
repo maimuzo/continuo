@@ -75,10 +75,10 @@ func TestLocate_URLが空ならhostはgithub_comになる(t *testing.T) {
 	}
 }
 
-// 目的: branch_template に未知の変数があれば描画を失敗させることを確認する（設計 3-22）。
+// 目的: branch_template に未知の変数があれば変数展開を失敗させることを確認する（設計 3-22）。
 // 与える情報: `.issue.unknown` を参照するテンプレート。
 // 成功条件: Locate がエラーを返すこと（その issue は失敗として扱う）。
-func TestLocate_未知の変数は描画を失敗させる(t *testing.T) {
+func TestLocate_未知の変数は変数展開を失敗させる(t *testing.T) {
 	_, _, err := workspace.Locate(t.TempDir(), "continuo/{{.issue.unknown}}", sampleIssue(1))
 	if err == nil {
 		t.Fatal("未知の変数を含むテンプレートなのにエラーにならなかった")

@@ -120,7 +120,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
   - **`gh` の認証の検査も同じ頻度で行う**（設計 3-6 の「巡回ごとに検査するもの」）。
     **毎巡回で外部プロセスを起動しない。**失敗したらその巡回の dispatch を飛ばし、実行中の照合は止めない
 - [x] **1回目のプロンプトに issue の本文とコメントを入れない**（設計 3-8 / 3-29）
-- [x] **テンプレートの描画に `missingkey=error` を付ける。**失敗したらその issue を失敗として扱う
+- [x] **テンプレートの変数展開に `missingkey=error` を付ける。**失敗したらその issue を失敗として扱う
 - [x] **turn ループを run ごとの goroutine で動かす。**巡回のループをブロックしない（設計 3-8）
   - **`agent.prompt` を wait つきで呼ぶと turn の終わりまで返らない**（既定1時間）
 - [x] **`runState.NeedsPrompt` が立った run に turn を送る**（復元が立てる。設計 3-4 の段5c）
@@ -163,7 +163,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | `internal/orchestrator` | [transcript.go](../../../internal/orchestrator/transcript.go) | transcript の1回の読み取りで表明とトークンの両方を取る |
 | `internal/orchestrator` | [signal.go](../../../internal/orchestrator/signal.go) | 表明の行の解析（グループの `#45` を含む） |
 | `internal/orchestrator` | [settings.go](../../../internal/orchestrator/settings.go) | issue ごとの Claude Code の設定ファイル（hook 8種 + `permissions` + `env`） |
-| `internal/orchestrator` | [prompt.go](../../../internal/orchestrator/prompt.go) | 1回目のテンプレートの描画と、2回目以降の文面の組み立て |
+| `internal/orchestrator` | [prompt.go](../../../internal/orchestrator/prompt.go) | 1回目のテンプレートの変数展開と、2回目以降の文面の組み立て |
 | `internal/orchestrator` | [agentname.go](../../../internal/orchestrator/agentname.go) | agent 名の4段とセッション UUID の採番 |
 | `internal/ratelimit` | [ratelimit.go](../../../internal/ratelimit/ratelimit.go) | usage API の読み取り。`none` なら1回も叩かない |
 | `internal/tracker` | [by_identifier.go](../../../internal/tracker/by_identifier.go) | `FetchIssueByIdentifier`（3値。Status で絞らない） |
@@ -202,7 +202,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | ファイル | 何を確かめるか |
 | --- | --- |
 | `e2e_test.go` | **1件の issue が候補に上がってから `Done` で片付くまで**／着手の13段の順番／設定ファイルの中身 |
-| `dispatch_test.go` | 候補の取り方・空きスロット・印・巡回のリクエスト本数・検査の頻度・未信頼の通知・描画の失敗・段8 と段10 |
+| `dispatch_test.go` | 候補の取り方・空きスロット・印・巡回のリクエスト本数・検査の頻度・未信頼の通知・変数展開の失敗・段8 と段10 |
 | `turn_test.go` | 空の `Stop` だけで終わりと判定しない／項目が欠けていたら判定不能／表明の促し／`max_dispatch_turns`／`blocked` の `esc`／wait の掛け方 |
 | `group_test.go` | グループの表明（`Ice Box` の issue も動かす）／ボードに無い対象／コメントを書かせ直す9段 |
 | `stall_test.go` | **`testing/synctest` で実時間ゼロ。**画面の版が増えている間は打ち切らない／版が止まったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
