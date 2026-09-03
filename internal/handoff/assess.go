@@ -20,7 +20,32 @@ type CommentView struct {
 	// Body はコメント本文である。**印を剥がさず、そのまま渡すこと。**
 	Body string
 	// CreatedAt は GitHub がそのコメントに付けた作成時刻である。
+	//
+	// **投稿の順番を決めるのはこちらである。**入札・hold・released・回の区切りは、
+	// **編集で動かせてはならない**ので、全部この時刻で比べる（設計 5-3k）。
 	CreatedAt time.Time
+	// UpdatedAt は本文が最後に編集された時刻である（設計 5-3k）。**取れなければゼロ値。**
+	//
+	// **エージェントは進捗の報告を、いちばん下にある自分のコメントへ書き足す**（設計 5-3j）。
+	// **本文を編集しても CreatedAt は動かない**ので、これが無いと
+	// **書き続けている機械の持ち回りの期限が1秒も進まない。**
+	//
+	// **これを見るのは `lastActivityOf` だけである。**
+	UpdatedAt time.Time
+}
+
+// LastTouched は、そのコメントが最後に触られた時刻を返す（設計 5-3k）。
+//
+// **`UpdatedAt` が取れているとは限らない。**GraphQL の応答からフィールドが落ちれば
+// ゼロ値になる。**ゼロ値をそのまま返すと、期限がゼロ時刻から数えられて、
+// 生きている担当がその場で外れる。**だから新しいほうを返す。
+//
+// 戻り値: `CreatedAt` と `UpdatedAt` のうち新しいほう。
+func (c CommentView) LastTouched() time.Time {
+	if c.UpdatedAt.After(c.CreatedAt) {
+		return c.UpdatedAt
+	}
+	return c.CreatedAt
 }
 
 // Situation は「いま issue がどう見えているか」である（設計 3-77b の表の入力）。
@@ -249,6 +274,17 @@ func nonEmpty(logins []string) []string {
 // **数えるのは投稿者が一致するコメント全部である。**進捗のコメントも hold のコメントも、
 // どちらも「その機械はまだ生きている」ことの証拠なので同じに扱う（設計 3-77b）。
 //
+// **書き足しも同じ証拠として数える**（設計 5-3k）。エージェントは進捗の報告を
+// **いちばん下にある自分のコメントへ書き足す**ので（設計 5-3j）、
+// **作成時刻だけを見ると、1時間ごとに書き続けている機械の期限が1秒も進まない。**
+// **だから `LastTouched`（作成時刻と更新時刻の新しいほう）で数える。**
+//
+// **`updatedAt` を見るのは、このパッケージではここだけである。**
+// 入札・hold・released・回の区切りは投稿の順番を決めているので、**編集で動かせてはならない。**
+//
+// **進捗の報告の印で絞り込まない。**印は本文の先頭に置くただの文字列で、誰でも書ける（設計 3-65）。
+// **絞り込むと、印1つで期限の数え方が変わる。**投稿者が一致することは既に上で見ている。
+//
 // comments: issue に付いているコメントの全件。
 // login: 担当者のログイン名。
 // 戻り値の1つ目: いちばん新しい時刻。
@@ -260,8 +296,9 @@ func lastActivityOf(comments []CommentView, login string) (time.Time, bool) {
 		if !strings.EqualFold(strings.TrimSpace(c.Author), strings.TrimSpace(login)) {
 			continue
 		}
-		if !found || c.CreatedAt.After(latest) {
-			latest = c.CreatedAt
+		touched := c.LastTouched()
+		if !found || touched.After(latest) {
+			latest = touched
 			found = true
 		}
 	}
@@ -269,6 +306,10 @@ func lastActivityOf(comments []CommentView, login string) (time.Time, bool) {
 }
 
 // CollectBids は、コメントの全件から入札を拾う（設計 3-77a）。
+//
+// **`Bid.PostedAt` には作成時刻を渡す。更新時刻は使わない**（設計 5-3k）。
+// **入札の締め切りと勝敗は、この時刻で決まる。**編集で動かせるようにすると、
+// **負けた機械が、あとから自分の入札を「新しく」できる。**
 //
 // comments: issue に付いているコメントの全件。
 // 戻り値: 読めた入札（コメントの並び順のまま）。
@@ -295,6 +336,9 @@ func CollectBids(comments []CommentView) []Bid {
 //
 // **いちばん新しいものを採る。**担当が何度か移った issue には hold が複数付いており、
 // **古いほうを読むと、既に居ない機械の名前を released のコメントへ書くことになる。**
+//
+// **新しいかどうかは作成時刻で見る。更新時刻は使わない**（設計 5-3k）。
+// **使うと、古い hold を1文字直すだけで最新の hold に化け、担当している機械の名前が入れ替わる。**
 //
 // comments: issue に付いているコメントの全件。
 // assignee: いま付いている担当者のログイン名。**空文字なら1件も返さない。**
@@ -348,6 +392,8 @@ func ParseReleased(body string) (Released, bool) {
 // これが無いと、ログには「担当が移った」としか残らず、
 // **いつ・どの機械の担当が外されたのかを人間があとから辿れない。**
 //
+// **新しいかどうかは作成時刻で見る。更新時刻は使わない**（`LatestHoldFor` と同じ理由。設計 5-3k）。
+//
 // comments: issue に付いているコメントの全件。
 // 戻り値の1つ目: いちばん新しい released。
 // 戻り値の2つ目: released が1件でもあれば true。
@@ -381,6 +427,9 @@ func LatestReleased(comments []CommentView) (Released, bool) {
 //
 // **時刻はコメントの作成時刻で見る。**入札の JSON の `at` は投稿者が自分で書いた値なので、
 // **時計を戻せば回の区切りを跨げてしまう。**
+//
+// **更新時刻も使わない**（設計 5-3k）。使うと、**古い hold を1文字編集するだけで区切りが未来へ動き、
+// 締め切りが永久に来ず、担当者が決まらなくなる。**
 //
 // comments: issue に付いているコメントの全件。
 // 戻り値の1つ目: いちばん新しい hold か released の作成時刻。

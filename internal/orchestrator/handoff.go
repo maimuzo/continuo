@@ -315,7 +315,10 @@ func (o *Orchestrator) releaseExpiredAssignee(
 		Branch: assessment.Hold.Branch,
 		At:     now,
 	})
-	view := handoff.CommentView{Body: body, CreatedAt: now}
+	// **いま書いたばかりなので、作成時刻と更新時刻は同じである。**
+	// **更新時刻を空のままにしない。**この写しは `RoundStart` にしか渡らないが、
+	// **入れ物の一部だけを埋めた値を回すと、別の判定へ回されたときに黙って古い時刻を返す。**
+	view := handoff.CommentView{Body: body, CreatedAt: now, UpdatedAt: now}
 	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
 		// **担当は既に外れている。**コメントを書けなかったことで入札を止めない
 		// （止めると、担当者のいない issue が誰にも拾われなくなる）。
@@ -650,12 +653,21 @@ func (o *Orchestrator) branchNameFor(issue tracker.Issue) string {
 
 // toCommentViews は tracker のコメントを、判定に要る形へ写す。
 //
+// **更新時刻も写す**（設計 5-3k）。エージェントは進捗の報告を
+// **いちばん下にある自分のコメントへ書き足す**ので（設計 5-3j）、
+// **これを落とすと、書き続けている機械の持ち回りの期限が1秒も進まない。**
+//
 // comments: issue に付いているコメントの全件。
 // 戻り値: 判定に渡す形の写し。
 func toCommentViews(comments []tracker.Comment) []handoff.CommentView {
 	out := make([]handoff.CommentView, 0, len(comments))
 	for _, c := range comments {
-		out = append(out, handoff.CommentView{Author: c.Author, Body: c.Body, CreatedAt: c.CreatedAt})
+		out = append(out, handoff.CommentView{
+			Author:    c.Author,
+			Body:      c.Body,
+			CreatedAt: c.CreatedAt,
+			UpdatedAt: c.UpdatedAt,
+		})
 	}
 	return out
 }

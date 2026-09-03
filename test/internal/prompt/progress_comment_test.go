@@ -58,6 +58,59 @@ func TestTemplate_組み込みのプロンプトは途中でも状況を書か�
 	}
 }
 
+// 目的: 進捗の報告を「いちばん下にある自分のコメントへ書き足す」手順を、組み込みが教えていることを
+// 固定する（#194（進捗コメントの間隔と重ね方が、人間の決定と逆に実装されている）。設計 5-3j）。
+//
+// **なぜ要るか。**毎回新しいコメントを投稿すると、**18時間で18件並んで issue が読めなくなる。**
+// 人間が決めた形は「**いちばん下が自分の進捗報告なら、その1件へ書き足す。
+// 間に別のコメントが入っていたら新しく投稿する**」である。
+// **この分岐はプロンプトにしか無い。**continuo の側は1バイトも書かないので、
+// 節から手順が落ちると、そのまま元の「毎回新規投稿」へ戻る。
+//
+// 与える情報: prompt.Builtin() の、途中の状況を書かせる節。
+// 成功条件: 書き足す先を引くコマンド・書き足すコマンド・新しく投稿する側の印の3つが在ること。
+func TestTemplate_組み込みのプロンプトは進捗報告を書き足させる(t *testing.T) {
+	section := sectionOf(t, prompt.Builtin(), progressCommentHeading)
+
+	for _, want := range []struct {
+		needle string
+		why    string
+	}{
+		{"<!-- continuo:progress -->", "進捗の報告だけに付ける印がないと、" +
+			"最後の成果報告と区別できず、成果報告に書き足してしまいます"},
+		{".comments[-1:][]", "いちばん下の1件だけを見る書き方を渡さないと、" +
+			"コメントが0件の issue で jq が落ちます"},
+		{".viewerDidAuthor", "自分が書いたものかを見ないと、" +
+			"人間が書いたコメントを進捗報告と読み違えて書き潰します"},
+		{"--method PATCH", "書き足すコマンドを渡さないと、" +
+			"エージェントは書き足す手段を知らないまま新しいコメントを投稿します"},
+		{"issues/comments/", "書き足す先の API のパスを渡さないと、" +
+			"エージェントは自分でパスを組み立てることになります"},
+	} {
+		if !strings.Contains(section, want.needle) {
+			t.Errorf("%q の節に %q がありません。%s", progressCommentHeading, want.needle, want.why)
+		}
+	}
+
+	// **`--edit-last` を教えてはならない。**gh の help は
+	// `Edit the last comment of the current user`（訳: いまの利用者の最後のコメントを編集する）で、
+	// **「その issue の最後のコメント」ではない。**エージェント・continuo・人間は
+	// 同じ GitHub アカウントで投稿するので、**進捗報告のあとに人間が書いたコメントを黙って上書きする。**
+	if strings.Contains(section, "--edit-last") {
+		t.Errorf("%q の節が --edit-last を教えています。"+
+			"あれは「いまの利用者の最後のコメント」を編集するので、"+
+			"進捗報告のあとに人間が書いたコメントを上書きします", progressCommentHeading)
+	}
+
+	// **最後の成果報告に進捗の印を付けさせてはならない。**付けると、
+	// **次の進捗報告が成果報告に書き足して、読む人には別の話が1件に混ざって見える。**
+	finished := sectionOf(t, prompt.Builtin(), finishedHeading)
+	if strings.Contains(finished, "<!-- continuo:progress -->") {
+		t.Errorf("%q の節が、最後の成果報告に進捗の印を付けさせています。"+
+			"付けると、次の進捗報告がその成果報告に書き足します", finishedHeading)
+	}
+}
+
 // 目的: 途中の状況を書かせる節が、「終わったらやること」より前に在ることを固定する（設計 5-3h）。
 //
 // **後ろに置くと、turn の終わりの手順を読み終えたあとに目に入る。**
