@@ -11,9 +11,18 @@
 | 何 | プロセス | 何をするか |
 | --- | --- | --- |
 | **continuo 本体** | **1つだけ**（`flock(2)` で二重起動を止める） | 巡回・表明の読み取り・後片付けを、**同じプロセスの中の goroutine で回す** |
-| **`continuo hook`** | **turn ごとに起動して、すぐ終わる** | 標準入力を読んで socket へ1行送るだけ |
+| **`continuo hook`** | **イベントが起きるたびに起動して、すぐ終わる** | 標準入力を読んで socket へ1行送るだけ |
 
-**Claude Code が turn ごとに `continuo hook` を exec する。**
+**Claude Code がイベントのたびに `continuo hook` を exec する。**
+
+**turn ごとではない。**continuo が issue ごとの設定ファイルへ登録する hook は7種類あり
+（[internal/orchestrator/settings.go:97-104](../../internal/orchestrator/settings.go#L97-L104)）、
+**そのうち `PreToolUse` と `PostToolUse` は matcher が `*` である。**
+**つまり、エージェントが道具を1つ叩くたびに2回起動する。**
+
+    Stop / UserPromptSubmit / SubagentStop / Notification / SessionStart   … 節目ごとに1回
+    PreToolUse / PostToolUse（matcher は `*`）                              … 道具を叩くたびに1回ずつ
+
 そのコマンド行は [internal/orchestrator/settings.go:352-353](../../internal/orchestrator/settings.go#L352-L353) が組み立てて、
 issue ごとの設定ファイルへ書く。
 
@@ -38,11 +47,11 @@ flowchart LR
         HS --> T
     end
 
-    subgraph P2["continuo hook（turn ごとに起動して終わる）"]
+    subgraph P2["continuo hook（イベントごとに起動して終わる）"]
         HC["hookclient"]
     end
 
-    A["Claude Code<br/>（pane の中）"] -->|"turn ごとに exec"| P2
+    A["Claude Code<br/>（pane の中）"] -->|"イベントごとに exec<br/>（道具1つにつき2回）"| P2
     HC -->|"Unix domain socket<br/>1行の JSON"| HS
     HC -.->|"socket が死んでいるときだけ<br/>ファイルへ書く"| F[("pending/<br/>&lt;時刻&gt;-&lt;イベント名&gt;.json")]
     F -.->|"次の起動時に読む"| P1
@@ -53,9 +62,15 @@ flowchart LR
 **巡回と表明を読む経路は、`runState` という同じメモリを見ている。**
 **ファイルにも DB にも書いていない**（[internal/orchestrator/runstate.go:47](../../internal/orchestrator/runstate.go#L47)。「プロセスが落ちると消える。永続化層は作らない」）。
 
-**ファイルを使うのは1箇所だけである。**
-**hook が socket へ届かなかったときの逃がし先**（設計 3-19）。
-**そこへ書かれたものは、continuo が次に起動したときに読む。**動いている continuo は読まない。
+**ただし、ファイルに書いているものが2つある。**`runState` の話と混ぜてはならない。
+
+| 何を | どこへ | 誰がいつ読むか |
+| --- | --- | --- |
+| **worktree の身元**（どの issue の worktree か） | **`<worktree>/.continuo.json`**（`workspace.identity_file` で名前を変えられる。既定は [internal/config/default.go:92](../../internal/config/default.go#L92)） | **動いている continuo が、巡回のたびに読み直す**（[internal/workspace/scan.go:45](../../internal/workspace/scan.go#L45) の `ReadIdentity`） |
+| **hook が socket へ届かなかったときの逃がし先**（設計 3-19） | `pending/<時刻>-<イベント名>.json` | **continuo が次に起動したときに読む。**動いている continuo は読まない |
+
+**身元ファイルがあるので、continuo は落ちて上がり直しても、どの worktree がどの issue のものかを取り戻せる。**
+**取り戻せないのは `runState` が持っている途中の状態のほうである**（何回目の試行か、いつ最後にコメントを見たか、など）。
 
 ---
 
@@ -151,4 +166,5 @@ sequenceDiagram
 | **「hook も同じプロセスだから、直接呼べる」** | **別プロセスである。**socket を通る |
 | **「巡回は後片付けができない」** | **終端のときは既にやっている。**引き渡しのときだけやらない |
 | **「巡回に寄せるとループが止まる」** | **止まらない。**`go func()` で逃がしている |
-| **「状態はファイルに書いてある」** | **書いていない。**プロセスが落ちると消える。ファイルは hook の逃がし先だけ |
+| **「状態はファイルに書いてある」** | **`runState` は書いていない。**プロセスが落ちると消える。**ただし worktree の身元は `<worktree>/.continuo.json` に書いてあり、巡回のたびに読み直している** |
+| **「hook は turn ごとに1回だけ起動する」** | **道具を1つ叩くたびに `PreToolUse` と `PostToolUse` で2回起動する。**matcher が `*` である（[internal/orchestrator/settings.go:103-104](../../internal/orchestrator/settings.go#L103-L104)） |
