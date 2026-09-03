@@ -390,3 +390,42 @@ func TestBuild_中身が無くなった見出しは落ちる(t *testing.T) {
 		})
 	}
 }
+
+// 目的: 送る文面が使える変数の一覧が、実装が渡すものと1つも食い違わないことを固定する
+// （設計 5-3c / 5-3n）。
+//
+// **同じ形の欠陥が3回起きている。**
+//
+//	push_branch                … `renderFirstPrompt` が渡すのに `SampleData` に無く、
+//	                             `{{.push_branch}}` を本文に書いた利用者だけが起動できなかった
+//	progress_interval_minutes  … 足したときに `SampleData` へ入れ忘れ、continuo が1台も起動しなくなった
+//
+// **どちらも「渡す側」と「検査する側」が別々に管理されていたからである。**
+// **この検査が、その2つを結ぶ。**
+//
+// 与える情報: prompt.SampleData() が返す最上位の名前。
+// 成功条件: 期待する名前が全部あり、それ以外が無いこと。
+func TestSampleData_送る文面が使える変数の一覧(t *testing.T) {
+	// **`renderFirstPrompt`（internal/orchestrator/prompt.go）が渡すものと同じにする。**
+	// **片方だけを増やしてはならない。**
+	want := map[string]bool{
+		"issue":                     true,
+		"push_branch":               true,
+		"attempt":                   true,
+		"progress_interval_minutes": true,
+	}
+	got := prompt.SampleData()
+
+	for name := range want {
+		if _, ok := got[name]; !ok {
+			t.Errorf("SampleData に %q がありません。"+
+				"渡す側にあって検査する側に無いと、その名前を使った文面で continuo が起動しません", name)
+		}
+	}
+	for name := range got {
+		if !want[name] {
+			t.Errorf("SampleData に %q があります。"+
+				"検査する側にあって渡す側に無いと、検査は通るのに本番で起動しません", name)
+		}
+	}
+}

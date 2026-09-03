@@ -126,6 +126,19 @@ type TrackerProviderHandoffConfig struct {
 	//
 	// **18時間の意味。**終業時に機械を落とした人が翌朝に再開すれば、そのまま続けられる長さである。
 	IdleTimeoutMs int `yaml:"idle_timeout_ms"`
+	// ProgressIntervalMs は、エージェントに進捗報告を書かせる間隔（ミリ秒）である。**既定は1時間。**
+	//
+	// **この値は continuo が使うのではなく、送る文面へ埋めてエージェントへ渡す**
+	// （設計 5-3n。`{{.progress_interval_minutes}}`）。
+	// **エージェントが実際にその間隔で書くかは、エージェント次第である。**
+	// continuo が測っているのは `IdleTimeoutMs` のほうだけである。
+	//
+	// **`IdleTimeoutMs` より短くすること。**長いと、エージェントが指示どおりに書いていても
+	// **書く前に担当が外れる。**検査で弾く。
+	//
+	// **0 以下にはできない。**0 にすると「間隔0分ごとに書け」という文面が送られる。
+	// 進捗報告そのものをやめさせたい利用者は、本文でそう書けばよい。
+	ProgressIntervalMs int `yaml:"progress_interval_ms"`
 	// RecheckIntervalMs は、走っている最中に担当を確かめ直す間隔（ミリ秒）である。**既定は1時間。**
 	//
 	// **担当が自分でなくなっていたら、その turn の終わりで止める。push しない**（設計 3-77c）。

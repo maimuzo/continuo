@@ -51,6 +51,11 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 		// **リンクが1本でないとき（0本・2本以上・別のリポジトリを指すとき）は空文字である。**
 		"push_branch": pushBranchValue(issue),
 		"attempt":     attemptValue(attempt),
+		// progress_interval_minutes は、進捗報告を書かせる間隔（分）である（設計 5-3n）。
+		//
+		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
+		// **「3600000ミリ秒以上黙らないでください」では通じない。**
+		"progress_interval_minutes": o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs / 60000,
 	}
 
 	out, err := o.promptFragments.Render(data)

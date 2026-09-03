@@ -10,7 +10,7 @@
 //	設定ファイル      … WORKFLOW.md が読めて、front matter が検証を通るか
 //	片付けの状態      … `cleanup.on_states` が `tracker.terminal_states` に収まっているか
 //	未記入の項目      … 雛形にある設定項目が WORKFLOW.md に全部書かれているか
-//	プロンプトの変数   … 送るプロンプトが、決められた9つの変数だけを使っているか
+//	プロンプトの変数   … 送るプロンプトが、決められた変数だけを使っているか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
 //	hook の置き場所    … hook を受ける socket を実際に置けるか
 //	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか

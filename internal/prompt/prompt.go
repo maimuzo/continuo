@@ -498,7 +498,7 @@ func join(parts []string) string {
 
 // Render は断片ごとに変数展開してから連結する（設計 5-3c）。
 //
-// data: テンプレートへ渡す変数。**9つの名前だけを持たせること**（設計 5-3）。
+// data: テンプレートへ渡す変数。**`SampleData` が返す名前だけを持たせること**（設計 5-3）。
 // 戻り値の1つ目: 変数展開した全文。
 // 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
 // **どの断片の何行目かがエラーの文言に入る。**
@@ -556,7 +556,7 @@ func (f Fragments) Validate() error {
 // **値は全部「空でないもの」にする。**空文字だと `{{if .issue.title}}` の中が検査されない。
 // **`.attempt` は呼び出し側が入れ直す**（1回目は nil、2回目は回数）。
 //
-// 戻り値: 9つの名前を全部持つ変数の一覧。
+// 戻り値: 送る文面が使う名前を全部持つ変数の一覧。
 func SampleData() map[string]any {
 	return map[string]any{
 		"issue": map[string]any{
@@ -570,6 +570,15 @@ func SampleData() map[string]any {
 			"labels":     []string{"bug"},
 		},
 		"attempt": nil,
+		// **issue にリンクされた branch の名前**（設計 3-22d / 5-3）。
+		// **`renderFirstPrompt` が渡すのに、ここに無かった。**
+		// そのため `{{.push_branch}}` を本文に書いた利用者だけが起動できなかった
+		// （`docs/upgrading.md` は「使えるようになりました」と案内している）。
+		"push_branch": "42-example",
+		// **進捗報告を書かせる間隔（分）**（設計 5-3n）。
+		// 送る文面が `{{.progress_interval_minutes}}` で使うので、ここにも要る。
+		// **入れ忘れると `continuo doctor` の `prompt vars` が赤になる。**
+		"progress_interval_minutes": 60,
 	}
 }
 

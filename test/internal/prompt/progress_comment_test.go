@@ -9,7 +9,9 @@ import (
 )
 
 // progressCommentHeading は、途中の状況をコメントさせる節の見出しである。
-const progressCommentHeading = "## 5-3. 1時間以上黙らない"
+// **見出しに変数が入っている**（設計 5-3n）。`prompt.Builtin()` は変数を展開しないので、
+// 検査もテンプレートの記法のまま探す。
+const progressCommentHeading = "## 5-3. {{.progress_interval_minutes}}分以上黙らない"
 
 // finishedHeading は、turn の終わりにやることを教える節の見出しである。
 const finishedHeading = "## 3-7. 終わりを書く"
