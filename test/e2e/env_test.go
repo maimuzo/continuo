@@ -421,6 +421,31 @@ func buildContinuo(t *testing.T, outDir string) string {
 // d: 待つ長さの上限。
 // message: 失敗したときに出す説明。
 // cond: 判定する関数。
+// 段の待ちの上限。**CI の ubuntu で60秒に届かず落ちたので、倍にした。**
+//
+// **実測（2026-09-03）。**同じ commit を同じ CI で回して、片方は通り、片方は落ちた。
+// 落ちたときは `TestE2E_手順書の段1から段9までをmockだけで通す` が 62.51 秒かかり、
+// `walkthrough_test.go:365` の「段8: run の終わりまで進む」が
+// `1m0s 以内に条件を満たしませんでした` で止まった。
+// **回し直すと通る**（PR #189 と PR #182 の2本で、同じ行・同じ秒数で落ちた）。
+//
+// **手元の macOS では、e2e の全部が 8.7 秒で終わる。**
+// **CI の ubuntu だけが、この1つの待ちで60秒を使い切る。**
+// 落ちたり通ったりするので、待ちが足りていないのであって、条件が永久に満たされないのではない。
+//
+// **なぜ倍にするだけで済ませるか。**この待ちが計るのは
+// 「continuo がログに `run を終えます` を出すまで」であり、**本番の速さとは関係が無い。**
+// 上限を上げても、通るときの実行時間は変わらない（条件を満たした時点で返るため）。
+// **落ちるときだけ、120秒まで粘るようになる。**
+const (
+	// stageTimeout は、1つの段が終わるのを待つ上限である。
+	stageTimeout = 120 * time.Second
+
+	// boardTimeout は、カンバンの Status が変わるのを待つ上限である。
+	// **段の待ちより長いのは、continuo の巡回を1周ぶん余計に挟むためである。**
+	boardTimeout = 180 * time.Second
+)
+
 func waitFor(t *testing.T, d time.Duration, message string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(d)

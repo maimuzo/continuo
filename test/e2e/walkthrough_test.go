@@ -300,12 +300,12 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 		strings.ReplaceAll(branch, "/", "-"))
 
 	// 3: `Ready` の issue を取り、Status を `In Progress` へ書く。
-	waitFor(t, 60*time.Second, "段8: Status が In Progress になる", func() bool {
+	waitFor(t, stageTimeout, "段8: Status が In Progress になる", func() bool {
 		return env.Board.StateOfURL(t, issueURL) == "In Progress"
 	})
 
 	// 4: worktree を作り、pane で Claude Code を起動する。
-	waitFor(t, 60*time.Second, "段8: worktree が作られる", func() bool {
+	waitFor(t, stageTimeout, "段8: worktree が作られる", func() bool {
 		_, err := os.Stat(filepath.Join(worktreePath, ".continuo.json"))
 		return err == nil
 	})
@@ -316,7 +316,7 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 	assertIdentityHasBase(t, worktreePath)
 
 	// 5〜6: エージェントが表明を出し、continuo が Status を `In Review` へ動かす。
-	waitFor(t, 60*time.Second, "段8: Status が In Review になる", func() bool {
+	waitFor(t, stageTimeout, "段8: Status が In Review になる", func() bool {
 		return env.Board.StateOfURL(t, issueURL) == "In Review"
 	})
 
@@ -362,7 +362,7 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 	// **投稿者の照合が本番と食い違っていると、issue にコメントが残っているのに
 	// continuo は「書かれていない」と判定し、セッションを復元して書かせにいく。**
 	// **その道は正常系でも最後まで通ってしまうので、ログを見ないと気づけない。**
-	waitFor(t, 60*time.Second, "段8: run の終わりまで進む", func() bool {
+	waitFor(t, stageTimeout, "段8: run の終わりまで進む", func() bool {
 		return strings.Contains(logs.String(), "run を終えます")
 	})
 	for _, ng := range []string{
@@ -404,7 +404,7 @@ func stage8Run(t *testing.T, env *e2eEnv, issueURL string, logs *syncBuffer) str
 
 	// 7: 人間が `Done` へ動かす。8: continuo が worktree と branch を片付ける。
 	env.Board.SetStateByURL(t, issueURL, "Done")
-	waitFor(t, 60*time.Second, "段8: worktree が片付く", func() bool {
+	waitFor(t, stageTimeout, "段8: worktree が片付く", func() bool {
 		_, err := os.Stat(worktreePath)
 		return os.IsNotExist(err)
 	})
@@ -621,7 +621,7 @@ func TestE2E_逃げ道の環境変数を渡さなくても起動して1件通る
 	// **issue が1件進むこと。**探索順で決めた socket で hook を受け取れなければ、
 	// turn の終わりが分からず `In Review` まで進まない。
 	number := env.Board.Read(t).findIssueByURL(issueURL).Number
-	waitFor(t, 90*time.Second, "issue が In Review になる", func() bool {
+	waitFor(t, boardTimeout, "issue が In Review になる", func() bool {
 		return env.Board.Read(t).findIssueByURL(issueURL).State == "In Review"
 	})
 	if n := env.Herdr.CountMethod("agent.start") - 0; n == 0 {
