@@ -44,7 +44,7 @@ func TestBuiltin_目印は送る文面に残らない(t *testing.T) {
 	if strings.Contains(prompt.Builtin(), prompt.Marker) {
 		t.Error("組み込みだけの全文に目印が残っています")
 	}
-	frag := prompt.Build("## 固有\n", "/tmp/WORKFLOW.md")
+	frag := prompt.Build("## 固有\n中身\n", "/tmp/WORKFLOW.md")
 	if strings.Contains(frag.Text(), prompt.Marker) {
 		t.Error("組み立てた全文に目印が残っています")
 	}
@@ -62,12 +62,13 @@ func TestBuiltin_目印は送る文面に残らない(t *testing.T) {
 // 成功条件: 組み込みの前半の最後の見出し・本文・組み込みの後半の最初の見出しが、この順に並ぶこと。
 func TestBuild_本文は組み込みの真ん中に挟まる(t *testing.T) {
 	const needle = "## 固有の目印"
-	frag := prompt.Build(needle+"\n", "/tmp/WORKFLOW.md")
+	// **見出しだけの本文は落とされる**（prompt.StripComments の dropEmptySections）。中身を持たせる。
+	frag := prompt.Build(needle+"\n固有の中身\n", "/tmp/WORKFLOW.md")
 	got := frag.Text()
 
-	head := strings.Index(got, "## この issue に紐づく PR も読むこと")
+	head := strings.Index(got, "## 4-3. 関連する記録を読む")
 	mid := strings.Index(got, needle)
-	tail := strings.Index(got, "## 終わったらやること")
+	tail := strings.Index(got, "# 5. 共通ルール")
 
 	if head < 0 || mid < 0 || tail < 0 {
 		t.Fatalf("組み立てた文面に見出しが揃っていません: head=%d mid=%d tail=%d", head, mid, tail)
@@ -203,9 +204,9 @@ func TestValidate_雛形の本文はそのまま送れる(t *testing.T) {
 func TestBuild_雛形の本文は組み込みの真ん中に挟まる(t *testing.T) {
 	got := prompt.Build(templateBody(t), "/tmp/WORKFLOW.md").Text()
 
-	head := strings.Index(got, "## この issue に紐づく PR も読むこと")
-	mid := strings.Index(got, "## テストの走らせ方")
-	tail := strings.Index(got, "## 終わったらやること")
+	head := strings.Index(got, "## 4-3. 関連する記録を読む")
+	mid := strings.Index(got, "### 始める前に読む文書")
+	tail := strings.Index(got, "# 5. 共通ルール")
 
 	if head < 0 || mid < 0 || tail < 0 {
 		t.Fatalf("組み立てた文面に見出しが揃っていません: head=%d mid=%d tail=%d", head, mid, tail)
@@ -335,4 +336,43 @@ func firstLineOf(t *testing.T, text string) string {
 	}
 	line, _, _ := strings.Cut(trimmed, "\n")
 	return line
+}
+
+// 目的: 中身が案内のコメントだけになった見出しが、送る文面から落ちることを固定する
+// （#188（エージェントへ送る指示書が長く、順序も強調も揃っていないため、初見で読み取れない）。設計 5-3m）。
+//
+// **なぜ落とすか。**`continuo init` が作る WORKFLOW.md は、節の中身を
+// `<!-- ここに書いてください -->` という案内のコメントで置いている。
+// **人間が書き込む前は、コメントを取り除いた時点でその節が空になる。**
+// 空の見出しだけを送っても、エージェントには何も伝わらない。
+// **それを残すと、この issue が直そうとしている「長くて読み取れない」がそのまま残る。**
+//
+// **落とさないものが2つある。**コードブロックで囲んだコメントと、
+// **深い見出しを従えている見出し**である。後者を落とすと、
+// `# 5. 共通ルール` のような親の見出しが、子を残したまま消える。
+//
+// 与える情報: 4通りの本文。
+// 成功条件: 空になった見出しだけが落ち、残り3つが残ること。
+func TestBuild_中身が無くなった見出しは落ちる(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want bool // 見出しが残るか
+	}{
+		{"中身が案内のコメントだけ", "## 消える節\n<!-- ここに書いてください -->\n", false},
+		{"中身がある", "## 残る節\n\n中身です。\n", true},
+		{"コメントをコードブロックで囲んだ", "## 残る節\n\n```\n<!-- これは送ります -->\n```\n", true},
+		{"深い見出しを従えている", "## 残る節\n\n### 子の見出し\n\n中身です。\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := prompt.Build(tc.body, "/tmp/WORKFLOW.md").Text()
+			heading := "## 消える節"
+			if tc.want {
+				heading = "## 残る節"
+			}
+			if has := strings.Contains(got, heading); has != tc.want {
+				t.Errorf("%q が %v であるべきなのに %v です。全文:\n%s", heading, tc.want, has, got)
+			}
+		})
+	}
 }

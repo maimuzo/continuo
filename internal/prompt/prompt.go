@@ -67,6 +67,136 @@ var builtinRaw string
 // 着手のときまで表に出ない。
 var builtinHead, builtinTail = splitBuiltin(builtinRaw)
 
+// StripComments は、送る文面から HTML のコメントを取り除く（設計 5-3m）。
+//
+// **取り除くのは、行頭が `<!--` で始まる行だけである。**
+// 字下げしてあるものは残す。組み込みのプロンプトは、エージェントに書かせる印
+// （`<!-- continuo:agent -->` など）を4桁の字下げでコード片として見せており、
+// **落とすとエージェントが印を書けなくなる。**
+//
+// **``` で囲んだ中も残す。**利用者が「これは送りたい」と決めたものを囲む口である。
+//
+// **なぜ取り除くか。**`WORKFLOW.md` の雛形は、利用者へ書き方を説明するために
+// HTML のコメントを使う。**それはエージェントへ送る情報ではない。**
+// 送ると、送る文面の1割近くが「利用者向けの説明」で埋まる（実測: 36個 / 410行）。
+//
+// s: 取り除く前の文字列。
+// 戻り値: 行頭のコメントを落とした文字列。**落とした行のぶん、空行は詰めない**
+// （詰めると、節と節のあいだの空行が消えて markdown が壊れる）。
+func StripComments(s string) string {
+	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	out := make([]string, 0, len(lines))
+	inFence := false
+	inComment := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			inFence = !inFence
+			out = append(out, line)
+			continue
+		}
+		if inFence {
+			out = append(out, line)
+			continue
+		}
+		if inComment {
+			if strings.Contains(line, "-->") {
+				inComment = false
+			}
+			continue
+		}
+		// **行頭でなければ落とさない。**字下げしたものはコード片である。
+		if strings.HasPrefix(line, "<!--") {
+			if !strings.Contains(line, "-->") {
+				inComment = true
+			}
+			continue
+		}
+		out = append(out, line)
+	}
+	return squeezeBlank(strings.Join(out, "\n"))
+}
+
+// dropEmptySections は、中身が1行も無くなった見出しを落とす。
+//
+// **コメントを落とすと、見出しだけが残ることがある。**
+// WORKFLOW.md の雛形は「ここに書いてください」を HTML のコメントで案内しており、
+// **利用者が何も書かなければ、その節は見出しだけになる。**
+// **見出しだけの節は、エージェントへ渡す情報を1つも持たない。**
+//
+// **深い見出しを持つ見出しは残す。**`# 5. 共通ルール` の直後が `## 5-1. …` でも、
+// 5 は空ではない。
+//
+// s: 落とす前の文字列。
+// 戻り値: 中身のある見出しだけを残した文字列。
+func dropEmptySections(s string) string {
+	lines := strings.Split(s, "\n")
+	keep := make([]bool, len(lines))
+	inFence := make([]bool, len(lines))
+	fence := false
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			fence = !fence
+			inFence[i] = true
+			continue
+		}
+		inFence[i] = fence
+	}
+	for i, line := range lines {
+		keep[i] = true
+		if inFence[i] || !strings.HasPrefix(line, "#") {
+			continue
+		}
+		level := headingLevel(line)
+		keep[i] = false
+		for j := i + 1; j < len(lines); j++ {
+			if !inFence[j] && strings.HasPrefix(lines[j], "#") {
+				// **深い見出しなら中身とみなす。**同じか浅ければ、この節は終わり。
+				if headingLevel(lines[j]) > level {
+					keep[i] = true
+				}
+				break
+			}
+			if strings.TrimSpace(lines[j]) != "" {
+				keep[i] = true
+				break
+			}
+		}
+	}
+	out := make([]string, 0, len(lines))
+	for i, line := range lines {
+		if keep[i] {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// headingLevel は markdown の見出しの深さを返す。
+//
+// line: 行頭が `#` で始まる行。
+// 戻り値: 先頭の `#` の数。
+func headingLevel(line string) int {
+	n := 0
+	for n < len(line) && line[n] == '#' {
+		n++
+	}
+	return n
+}
+
+// squeezeBlank は、3つ以上続く改行を2つへ畳む。
+//
+// **コメントを落とした跡に空行が並ぶのを防ぐ。**
+//
+// s: 畳む前の文字列。
+// 戻り値: 空行が2つ以上続かない文字列。
+func squeezeBlank(s string) string {
+	for strings.Contains(s, "\n\n\n") {
+		s = strings.ReplaceAll(s, "\n\n\n", "\n\n")
+	}
+	return s
+}
+
 // splitBuiltin は builtin.md を目印の行で前半と後半に切る。
 //
 // raw: builtin.md の全文。
@@ -108,7 +238,7 @@ func BuiltinTail() string { return builtinTail }
 //
 // 戻り値: 前半と後半を連結した、変数展開していない全文。
 func Builtin() string {
-	return join([]string{builtinHead, builtinTail})
+	return join([]string{StripComments(builtinHead), StripComments(builtinTail)})
 }
 
 // Fragment は、送る文面を組み立てる断片1つである。
@@ -152,9 +282,9 @@ type Fragments struct {
 // 戻り値: 連結する順に並んだ断片。
 func Build(body, bodyPath string) Fragments {
 	f := Fragments{bodyPath: bodyPath, hasBody: strings.TrimSpace(body) != ""}
-	f.add(NameBuiltinHead, builtinHead, "")
-	f.add(NameWorkflowBody, body, bodyPath)
-	f.add(NameBuiltinTail, builtinTail, "")
+	f.add(NameBuiltinHead, StripComments(builtinHead), "")
+	f.add(NameWorkflowBody, StripComments(body), bodyPath)
+	f.add(NameBuiltinTail, StripComments(builtinTail), "")
 	return f
 }
 
@@ -219,7 +349,7 @@ func join(parts []string) string {
 	if len(trimmed) == 0 {
 		return ""
 	}
-	return strings.Join(trimmed, "\n\n") + "\n"
+	return dropEmptySections(strings.Join(trimmed, "\n\n") + "\n")
 }
 
 // Render は断片ごとに変数展開してから連結する（設計 5-3c）。
