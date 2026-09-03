@@ -10,7 +10,7 @@ package scaffold
 //
 // **本文は、そのまま送っても害が無く、そのままでも役に立つ形にしてある。**
 // 穴埋めの案内は HTML のコメントで書いてあるので、節ごと消せる。
-// **配る前にテストで変数展開して確かめる**（test/internal/prompt）。
+// **配る前にテストでテンプレートの変数展開をして確かめる**（test/internal/prompt）。
 //
 // front matter のキー構成は docs/plans/continuo_design.md の 5-2 と一致させる
 // （test/internal/scaffold/design_template_test.go が設計文書と直接突き合わせている）。
@@ -47,8 +47,9 @@ tracker:
       bid_window_ms: 180000                 # 入札を締め切るまでの待ち時間。180000 なら3分。
                                             # 数えはじめるのは、その issue へ最初の入札が入った時刻である。
                                             # 上の polling.interval_ms より十分長く取ること
-      idle_timeout_ms: 64800000             # 担当者の最後のコメントからこれだけ経つと担当を外して入札をやり直す。
+      idle_timeout_ms: 64800000             # 担当者の最後の進捗報告からこれだけ経つと担当を外して入札をやり直す。
                                             # 64800000 なら18時間。終業時に機械を落とした人が翌朝に再開できる長さ。
+                                            # 数えるのは <!-- continuo:progress --> が付いたコメントだけである。
                                             # hold のコメントが1件も無い担当は、人間が付けたものなので外さない
       recheck_interval_ms: 3600000          # 走っている最中に担当を確かめ直す間隔。3600000 なら1時間。
                                             # 担当が移っていたら、その turn の終わりで止めて push しない。0 なら確かめ直さない
@@ -195,9 +196,6 @@ trust:
 restart:
   orphan_running_action: redispatch         # 落ちている間に取り残された issue の扱い。redispatch は同じ worktree で
                                             # もう一度起動する。to_dispatch_state は着手待ちへ戻し、to_failure_state は失敗として落とす
-
-runtime:
-  lock_file: null                           # 二重起動を防ぐロックファイル。null なら hook の socket と同じディレクトリに置く
 
 server:
   port: null                                # 進み具合を見る HTTP ダッシュボードのポート。null なら起動しない。

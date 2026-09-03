@@ -27,6 +27,26 @@ const (
 	HandoffReleasedMarker = "<!-- continuo:released -->"
 )
 
+// ProgressMarker は、エージェントが書く進捗の報告だけに付く印である（設計 5-3j / 5-3l）。
+//
+// **持ち回りの期限（設計 3-77b / 5-3l）を進めるのは、この印が付いたコメントだけである。**
+// **エージェントも continuo も人間も、同じ GitHub アカウントで投稿する**
+// （[internal/tracker/ghuser.go](../tracker/ghuser.go) の 23-25行）。
+// **投稿者だけで数えると、人間が無関係なコメントを1件書いただけで期限が延びる。**
+// **黙り込んだエージェントを、別の機械が拾い直せなくなる。**
+//
+// **上の3つと違い、この印が付いたコメントはエージェントへ渡す入力から外さない**
+// （設計 3-77a が外すのは入札・hold・released の3つだけである）。
+// **エージェント自身が、この印で書き足す先のコメントを探す**ので、見えなくなると探せない。
+//
+// **設定キーにしない。**`tracker.provider.comments.marker` は機械ごとに違う値を書けるので、
+// **別の機械が書いた進捗報告を数えられなくなる。**この印は固定である。
+//
+// **組み込みのプロンプト（[internal/prompt/builtin.md](../prompt/builtin.md)）が
+// エージェントへ書かせる文字列と、1文字も違ってはならない。**
+// **違うと、エージェントは書いているのに数えられず、18時間で担当が外れる。**
+const ProgressMarker = "<!-- continuo:progress -->"
+
 // DefaultConfig は front matter に書かれなかったキーへ入る既定値を返す。
 // front matter のパースはこの構造体へ上書きする形で行う（yaml.UnmarshalWithOptions は
 // 与えられた値へフィールド単位で上書きするため、front matter に書かれなかったキーは
@@ -194,9 +214,6 @@ func DefaultConfig() *Config {
 		},
 		Restart: RestartConfig{
 			OrphanRunningAction: "redispatch",
-		},
-		Runtime: RuntimeConfig{
-			LockFile: nil,
 		},
 		Server: ServerConfig{
 			Port: nil,

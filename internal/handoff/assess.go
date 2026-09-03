@@ -20,7 +20,32 @@ type CommentView struct {
 	// Body はコメント本文である。**印を剥がさず、そのまま渡すこと。**
 	Body string
 	// CreatedAt は GitHub がそのコメントに付けた作成時刻である。
+	//
+	// **投稿の順番を決めるのはこちらである。**入札・hold・released・回の区切りは、
+	// **編集で動かせてはならない**ので、全部この時刻で比べる（設計 5-3k）。
 	CreatedAt time.Time
+	// UpdatedAt は本文が最後に編集された時刻である（設計 5-3k）。**取れなければゼロ値。**
+	//
+	// **エージェントは進捗の報告を、いちばん下にある自分のコメントへ書き足す**（設計 5-3j）。
+	// **本文を編集しても CreatedAt は動かない**ので、これが無いと
+	// **書き続けている機械の持ち回りの期限が1秒も進まない。**
+	//
+	// **これを見るのは `lastProgressOf` だけである。**
+	UpdatedAt time.Time
+}
+
+// LastTouched は、そのコメントが最後に触られた時刻を返す（設計 5-3k）。
+//
+// **`UpdatedAt` が取れているとは限らない。**GraphQL の応答からフィールドが落ちれば
+// ゼロ値になる。**ゼロ値をそのまま返すと、期限がゼロ時刻から数えられて、
+// 生きている担当がその場で外れる。**だから新しいほうを返す。
+//
+// 戻り値: `CreatedAt` と `UpdatedAt` のうち新しいほう。
+func (c CommentView) LastTouched() time.Time {
+	if c.UpdatedAt.After(c.CreatedAt) {
+		return c.UpdatedAt
+	}
+	return c.CreatedAt
 }
 
 // Situation は「いま issue がどう見えているか」である（設計 3-77b の表の入力）。
@@ -48,7 +73,8 @@ type Situation struct {
 	SelfHost string
 	// Now はいまの時刻である。
 	Now time.Time
-	// IdleTimeout は担当者の最後のコメントからこれだけ経つと担当を外す長さである。
+	// IdleTimeout は担当者の最後の進捗報告からこれだけ経つと担当を外す長さである。
+	// **数えるのは印の付いたコメントの最終更新日時で、印が1件も無いあいだは hold の時刻から数える。**
 	IdleTimeout time.Duration
 }
 
@@ -117,11 +143,18 @@ type Assessment struct {
 	//
 	// **released のコメントの `from` はここの `Host` から引く**（設計 3-77c）。
 	Hold Hold
-	// LastActivity は担当者が最後にコメントを書いた時刻である（担当者がいるときだけ入る）。
+	// LastProgress は、担当者がまだ生きていることを最後に示した時刻である
+	// （担当者がいるときだけ入る）。
 	//
-	// **hold のコメントも担当者の活動として数える。**勝った直後は hold しか無いので、
-	// 数えないと「最後のコメントが無い＝期限切れ」と読まれて、着手する前に担当を外される。
-	LastActivity time.Time
+	// **中身は2つのうち新しいほうである**（設計 3-77b / 5-3l）。
+	//
+	//	進捗報告の印（config.ProgressMarker）が付いた、その担当者のコメントの LastTouched()
+	//	hold のコメントが作られた時刻（＝その担当が始まった時刻）
+	//
+	// **hold の時刻を下限に置くのは、勝った直後には進捗報告が1件も無いからである。**
+	// 置かないと、着手する前にその場で期限切れと読まれる。
+	// **前の担当のときに書かれた古い進捗報告に引きずられないのも、この下限のおかげである。**
+	LastProgress time.Time
 }
 
 // Assess は、いま見えているものから「次に何をするか」を決める（設計 3-77b の表）。
@@ -147,8 +180,14 @@ type Assessment struct {
 // 自分を担当者にすると、**古い機械の hold が「この担当者は機械である」の証拠に化ける。**
 // **`Hold.Assignee` で担当者を突き合わせて、その化けを止める。**
 //
-// **期限は「hold を書いてから」ではなく「その担当者の最後のコメントが現れてから」で数える**
-// （設計 3-77b）。進捗を書き続けている機械は担当を外されない。
+// **期限は「その担当者の進捗報告が最後に現れてから」で数える**（設計 3-77b / 5-3l）。
+// **数えるのは進捗報告の印（config.ProgressMarker）が付いたコメントだけである。**
+// **投稿者だけで数えてはならない。**エージェントも continuo も人間も同じ GitHub アカウントで
+// 投稿するので（[internal/tracker/ghuser.go](../tracker/ghuser.go) の 23-25行）、
+// **人間が無関係なコメントを1件書いただけで、黙り込んだエージェントの期限が延びてしまう。**
+//
+// **進捗報告が1件も無いあいだは、hold のコメントが作られた時刻から数える。**
+// 勝った直後には進捗報告が無いので、下限を置かないとその場で期限切れになる。
 //
 // s: いま見えているもの。
 // 戻り値: 判定と、その判定に使った値。
@@ -170,26 +209,27 @@ func Assess(s Situation) Assessment {
 
 	// **hold は、いまの担当者が書いたものだけを見る。**別の担当者の古い hold を数えると、
 	// **人間が引き継いだ issue を機械が取り上げる。**
-	hold, hasHold := LatestHoldFor(s.Comments, assignee)
+	hold, holdAt, hasHold := LatestHoldFor(s.Comments, assignee)
 
 	if strings.EqualFold(assignee, strings.TrimSpace(s.SelfLogin)) {
-		return assessSelfAssigned(s, assignee, hold, hasHold)
+		return assessSelfAssigned(s, assignee, hold, holdAt, hasHold)
 	}
 
 	if !hasHold {
 		return Assessment{Action: ActionSkipHumanAssigned, Assignee: assignee}
 	}
 
-	last, hasLast := lastActivityOf(s.Comments, assignee)
+	last, hasLast := lastProgressOf(s.Comments, assignee, holdAt)
 	if !hasLast {
-		// **担当者の書いたコメントが1件も無い。**hold は別の機械が書いたことになるので、
-		// **期限を数える起点が無い。**触らない側へ倒す（奪って良い証拠が無い）。
+		// **期限を数える起点が1つも無い。**hold のコメントに作成時刻が入っておらず、
+		// その担当者の進捗報告も1件も無い状態である。
+		// **触らない側へ倒す**（奪ってよい証拠が無い）。
 		return Assessment{Action: ActionSkipHeld, Assignee: assignee, Hold: hold}
 	}
 	if s.Now.Sub(last) <= s.IdleTimeout {
-		return Assessment{Action: ActionSkipHeld, Assignee: assignee, Hold: hold, LastActivity: last}
+		return Assessment{Action: ActionSkipHeld, Assignee: assignee, Hold: hold, LastProgress: last}
 	}
-	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastActivity: last}
+	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastProgress: last}
 }
 
 // assessSelfAssigned は「担当者が自分のアカウント1人」のときの判定である（設計 3-77b）。
@@ -205,9 +245,12 @@ func Assess(s Situation) Assessment {
 // s: いま見えているもの。
 // assignee: いま付いている担当者のログイン名（自分のアカウント）。
 // hold: その担当者が書いたいちばん新しい hold。
+// holdAt: その hold のコメントが作られた時刻（期限を数える下限）。
 // hasHold: hold が1件でもあれば true。
 // 戻り値: 判定と、その判定に使った値。
-func assessSelfAssigned(s Situation, assignee string, hold Hold, hasHold bool) Assessment {
+func assessSelfAssigned(
+	s Situation, assignee string, hold Hold, holdAt time.Time, hasHold bool,
+) Assessment {
 	selfHost := strings.TrimSpace(s.SelfHost)
 	holdHost := strings.TrimSpace(hold.Host)
 	if !hasHold || selfHost == "" || holdHost == "" {
@@ -220,14 +263,14 @@ func assessSelfAssigned(s Situation, assignee string, hold Hold, hasHold bool) A
 	// **同じアカウントの別の機械が担当している。**
 	// **期限の数え方は他人の担当と揃える**（設計 3-77b）。揃えないと、その機械が落ちたとき
 	// **担当者が自分のアカウントのままなので、どの機械もこの issue を拾えなくなる。**
-	last, hasLast := lastActivityOf(s.Comments, assignee)
+	last, hasLast := lastProgressOf(s.Comments, assignee, holdAt)
 	if !hasLast {
 		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold}
 	}
 	if s.Now.Sub(last) <= s.IdleTimeout {
-		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold, LastActivity: last}
+		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold, LastProgress: last}
 	}
-	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastActivity: last}
+	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastProgress: last}
 }
 
 // nonEmpty は空文字を落としたログイン名の一覧を返す。
@@ -244,24 +287,66 @@ func nonEmpty(logins []string) []string {
 	return out
 }
 
-// lastActivityOf は、その担当者が最後に何かを書いた時刻を返す。
+// IsProgressReport は、そのコメントがエージェントの進捗報告かを返す（設計 5-3j / 5-3l）。
 //
-// **数えるのは投稿者が一致するコメント全部である。**進捗のコメントも hold のコメントも、
-// どちらも「その機械はまだ生きている」ことの証拠なので同じに扱う（設計 3-77b）。
+// **持ち回りの期限を進めてよいのは、これが真になるコメントだけである。**
+//
+// **投稿者は見ない。**呼ぶ側が担当者で絞る（`lastProgressOf`）。
+//
+// **印が本文のどこかに在れば真とする。****組み込みのプロンプトが
+// エージェント自身に使わせている見つけ方（`.body | contains("<!-- continuo:progress -->")`）と
+// 揃えるためである。**Go 側だけを厳しくすると、**エージェントは自分の進捗報告だと思って
+// 書き足し続けているのに continuo が数えず、生きている担当が18時間で外れる。**
+//
+// **人間がこの印を書いても構わない**（2026-09-03 に人間が判断した）。
+// そのコメントのぶん死活確認が効かなくなるだけであり、
+// **印で絞らずに投稿者だけで数えて死活確認そのものを失うほうが重い。**
+//
+// body: コメント本文。
+// 戻り値: 進捗報告の印を含んでいれば true。
+func IsProgressReport(body string) bool {
+	return strings.Contains(body, config.ProgressMarker)
+}
+
+// lastProgressOf は、その担当者がまだ生きていることを最後に示した時刻を返す（設計 3-77b / 5-3l）。
+//
+// **数えるのは、進捗報告の印が付いた、その担当者のコメントだけである。**
+// **投稿者だけで数えてはならない。**エージェントも continuo も人間も、同じ GitHub アカウントで
+// 投稿する（[internal/tracker/ghuser.go](../tracker/ghuser.go) の 23-25行）ので、
+// **人間が無関係なコメントを1件書いただけで、黙り込んだエージェントの期限が延びる。**
+// **それでは死活確認にならない。**
+//
+// **hold のコメントが作られた時刻を下限に置く。**その担当が始まった時刻である。
+//
+//	置かないと、勝った直後（進捗報告がまだ1件も無い）にその場で期限切れになる
+//	置かないと、前の担当のときに書かれた古い進捗報告のほうが新しく見え、始めたばかりの担当が外れる
+//
+// **書き足しも生きている証拠として数える**（設計 5-3k）。エージェントは進捗の報告を
+// **いちばん下にある自分のコメントへ書き足す**ので（設計 5-3j）、
+// **作成時刻だけを見ると、1時間ごとに書き続けている機械の期限が1秒も進まない。**
+// **だから `LastTouched`（作成時刻と更新時刻の新しいほう）で数える。**
+//
+// **`updatedAt` を見るのは、このパッケージではここだけである。**
+// 入札・hold・released・回の区切りは投稿の順番を決めているので、**編集で動かせてはならない。**
 //
 // comments: issue に付いているコメントの全件。
 // login: 担当者のログイン名。
+// holdAt: いまの担当の hold のコメントが作られた時刻。**ゼロ値なら下限を置かない。**
 // 戻り値の1つ目: いちばん新しい時刻。
-// 戻り値の2つ目: その担当者のコメントが1件でもあれば true。
-func lastActivityOf(comments []CommentView, login string) (time.Time, bool) {
-	var latest time.Time
-	found := false
+// 戻り値の2つ目: 起点が1つでもあれば true（**hold の時刻か、その担当者の進捗報告**）。
+func lastProgressOf(comments []CommentView, login string, holdAt time.Time) (time.Time, bool) {
+	latest := holdAt
+	found := !holdAt.IsZero()
 	for _, c := range comments {
 		if !strings.EqualFold(strings.TrimSpace(c.Author), strings.TrimSpace(login)) {
 			continue
 		}
-		if !found || c.CreatedAt.After(latest) {
-			latest = c.CreatedAt
+		if !IsProgressReport(c.Body) {
+			continue
+		}
+		touched := c.LastTouched()
+		if !found || touched.After(latest) {
+			latest = touched
 			found = true
 		}
 	}
@@ -269,6 +354,10 @@ func lastActivityOf(comments []CommentView, login string) (time.Time, bool) {
 }
 
 // CollectBids は、コメントの全件から入札を拾う（設計 3-77a）。
+//
+// **`Bid.PostedAt` には作成時刻を渡す。更新時刻は使わない**（設計 5-3k）。
+// **入札の締め切りと勝敗は、この時刻で決まる。**編集で動かせるようにすると、
+// **負けた機械が、あとから自分の入札を「新しく」できる。**
 //
 // comments: issue に付いているコメントの全件。
 // 戻り値: 読めた入札（コメントの並び順のまま）。
@@ -296,14 +385,22 @@ func CollectBids(comments []CommentView) []Bid {
 // **いちばん新しいものを採る。**担当が何度か移った issue には hold が複数付いており、
 // **古いほうを読むと、既に居ない機械の名前を released のコメントへ書くことになる。**
 //
+// **新しいかどうかは作成時刻で見る。更新時刻は使わない**（設計 5-3k）。
+// **使うと、古い hold を1文字直すだけで最新の hold に化け、担当している機械の名前が入れ替わる。**
+//
+// **作成時刻も返す。**持ち回りの期限は、その担当が始まった時刻を下限にして数える
+// （`lastProgressOf`）。**JSON の中の `at` は投稿者が自分で書いた値なので使わない。**
+// 時計を戻した機械が、自分の担当をいくらでも延ばせてしまう。
+//
 // comments: issue に付いているコメントの全件。
 // assignee: いま付いている担当者のログイン名。**空文字なら1件も返さない。**
 // 戻り値の1つ目: いちばん新しい hold。
-// 戻り値の2つ目: その担当者の hold が1件でもあれば true。
-func LatestHoldFor(comments []CommentView, assignee string) (Hold, bool) {
+// 戻り値の2つ目: その hold のコメントが作られた時刻。
+// 戻り値の3つ目: その担当者の hold が1件でもあれば true。
+func LatestHoldFor(comments []CommentView, assignee string) (Hold, time.Time, bool) {
 	login := strings.TrimSpace(assignee)
 	if login == "" {
-		return Hold{}, false
+		return Hold{}, time.Time{}, false
 	}
 	var latest Hold
 	var latestAt time.Time
@@ -322,7 +419,7 @@ func LatestHoldFor(comments []CommentView, assignee string) (Hold, bool) {
 			found = true
 		}
 	}
-	return latest, found
+	return latest, latestAt, found
 }
 
 // ParseReleased はコメント本文から released を読む（設計 3-77c）。
@@ -347,6 +444,8 @@ func ParseReleased(body string) (Released, bool) {
 // **担当を外された機械が「何が起きたか」を記録に残すために読む。**
 // これが無いと、ログには「担当が移った」としか残らず、
 // **いつ・どの機械の担当が外されたのかを人間があとから辿れない。**
+//
+// **新しいかどうかは作成時刻で見る。更新時刻は使わない**（`LatestHoldFor` と同じ理由。設計 5-3k）。
 //
 // comments: issue に付いているコメントの全件。
 // 戻り値の1つ目: いちばん新しい released。
@@ -381,6 +480,9 @@ func LatestReleased(comments []CommentView) (Released, bool) {
 //
 // **時刻はコメントの作成時刻で見る。**入札の JSON の `at` は投稿者が自分で書いた値なので、
 // **時計を戻せば回の区切りを跨げてしまう。**
+//
+// **更新時刻も使わない**（設計 5-3k）。使うと、**古い hold を1文字編集するだけで区切りが未来へ動き、
+// 締め切りが永久に来ず、担当者が決まらなくなる。**
 //
 // comments: issue に付いているコメントの全件。
 // 戻り値の1つ目: いちばん新しい hold か released の作成時刻。

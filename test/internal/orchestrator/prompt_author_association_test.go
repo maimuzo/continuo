@@ -11,7 +11,7 @@ import (
 )
 
 // renderedPrompt は、`continuo init` が置く雛形の本文をそのまま使って
-// 1回目のプロンプトを描画し、エージェントへ実際に送られた文字列を返す。
+// 1回目のプロンプトを変数展開し、エージェントへ実際に送られた文字列を返す。
 //
 // **テストの中に期待する文面を書き写さない。**書き写すと、雛形を壊しても落ちない。
 // **実際に送られたものを読む**のは pr_comments_prompt_test.go と同じ作法である。
@@ -47,7 +47,7 @@ func renderedPrompt(t *testing.T) string {
 // jq が JSON から平文を組み立てる手段は文字列補間 `\(…)` である。
 // **`--jq` を書いた行に `\(` があれば、その出力はもう JSON ではない。**
 //
-// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
 // 成功条件: `--jq` を含むどの行にも jq の文字列補間が無いこと。
 func TestPrompt_取得したコメントを平文へ潰す指示が本文に無い(t *testing.T) {
 	got := renderedPrompt(t)
@@ -72,7 +72,7 @@ func TestPrompt_取得したコメントを平文へ潰す指示が本文に無�
 // **PR 側も同じ扱いにする。**レビューの指摘は PR に書かれるので、
 // **issue だけ JSON にしても、PR 経由で同じ偽装が通る。**
 //
-// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
 // 成功条件: issue と PR の両方を JSON で取るコマンドが、issue の値に置き換わった形で入っていること。
 func TestPrompt_本文はJSONのまま読ませる(t *testing.T) {
 	got := renderedPrompt(t)
@@ -97,7 +97,7 @@ func TestPrompt_本文はJSONのまま読ませる(t *testing.T) {
 	}
 
 	if strings.Contains(got, "{{") {
-		t.Errorf("描画されなかったテンプレートの記法が本文に残っている:\n%s", got)
+		t.Errorf("変数展開されなかったテンプレートの記法が本文に残っている:\n%s", got)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestPrompt_本文はJSONのまま読ませる(t *testing.T) {
 // 読んだエージェントが自分で `gh issue view --comments` を叩いて
 // 「投稿者は出ている」と判断し、この指示ごと無視する。
 //
-// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
 // 成功条件: 使わせない指示と、偽装できる形の説明が入っていること。
 func TestPrompt_テキスト表示を使わせない(t *testing.T) {
 	got := renderedPrompt(t)
@@ -138,7 +138,7 @@ func TestPrompt_テキスト表示を使わせない(t *testing.T) {
 // 1回 merge されただけで付く。**いまの権限を表していない**ので、
 // 「contributor なら仲間だろう」と読まれると、そこが穴になる。
 //
-// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
 // 成功条件: 信用してよい3つの立場、従わないという言い切り、CONTRIBUTOR への注意が入っていること。
 func TestPrompt_命令として扱う立場を限定している(t *testing.T) {
 	got := renderedPrompt(t)
@@ -176,7 +176,7 @@ func TestPrompt_命令として扱う立場を限定している(t *testing.T) {
 // **人間はその節を「無意味」と判断して落とし、代わりに 6-1 の中へ入れた。**
 // **同じ節の中に並んでいるので、前後関係を測る意味が無い。**
 //
-// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
 // 成功条件: 従わない指示と、材料としては使ってよい説明が、両方入っていること。
 func TestPrompt_外部が立てたissueでも手が止まらない(t *testing.T) {
 	got := renderedPrompt(t)
@@ -225,8 +225,14 @@ const commandLinePrefix = "    gh "
 // `--jq` を使わない。**合わせて、読ませる場所は5種類すべてを覆う。**
 const jqCommandCount = 4
 
-// jsonCommentsCommandCount は、`--json comments` で取るコマンドの本数である
-// （issue のコメントと、PR の会話のコメント）。
+// jsonCommentsCommandCount は、**コメントを全件そのまま読ませる** `--json comments` の本数である
+// （issue のコメントと、PR の会話のコメント）。**この2本が authorAssociation を返す。**
+//
+// **`--jq` で絞り込む `--json comments` は、ここに数えない。**
+// 組み込みには、進捗の報告を書き足す先を1件だけ引く
+// `gh issue view … --json comments --jq '.comments[-1:][] …'` がある（設計 5-3j）。
+// **あれは投稿者の立場を1文字も読まないので、authorAssociation の綴りを教える役には立たない。**
+// **数に入れると、立場を読ませる場所が1つ減ったときに、この検査が気づかなくなる。**
 const jsonCommentsCommandCount = 2
 
 // TestPrompt_jqが出すキーの名前を変えていない は、
@@ -238,7 +244,7 @@ const jsonCommentsCommandCount = 2
 // 見つからなければ、外部の人のコメントを立場の分からないものとして扱うか、
 // 全部止めるかのどちらかになる。**どちらも守りが機能していない状態である。**
 //
-// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
 // **4本それぞれで、キーの名前が1つ以上見つかることを求める。**
 // **名前ごと消えた場合を見逃さないためである。**`--jq \'.author_association\'` のように
 // キーを付けずに値だけを出す形へ変えると、**探す名前が1つも無くなるので
@@ -292,7 +298,7 @@ func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
 // authorAssociation という綴りで返す**（gh 2.97.0 で実測）。
 // **この2つは綴りが違うだけで同じものである。**本文はその違いを説明していなければならない。
 //
-// 与える情報: 雛形の本文をそのまま描画したプロンプト。
+// 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
 // 成功条件: 本文に出る「…association…」の綴りが、どれもコマンドの出力に実在すること。
 // 使わせない表示（`gh issue view --comments`）の見本の行だけは、gh が出す文字列なので除く。
 func TestPrompt_指示する名前はどれかのコマンドが返す名前である(t *testing.T) {
@@ -302,23 +308,23 @@ func TestPrompt_指示する名前はどれかのコマンドが返す名前で�
 	// 本文に並んだコマンドから、返ってくる名前を集める。
 	produced := map[string]string{}
 	jsonComments := 0
-	for _, line := range lines {
-		if !strings.HasPrefix(line, commandLinePrefix) {
-			continue
-		}
+	for _, cmd := range shellCommandsIn(lines) {
 		switch {
-		case strings.Contains(line, "--jq") && strings.Contains(line, ".author_association"):
-			for _, m := range jqOutputKeyPattern.FindAllStringSubmatch(line, -1) {
-				produced[m[1]] = line
+		case strings.Contains(cmd, "--jq") && strings.Contains(cmd, ".author_association"):
+			for _, m := range jqOutputKeyPattern.FindAllStringSubmatch(cmd, -1) {
+				produced[m[1]] = cmd
 			}
-		case strings.Contains(line, "--json comments"):
+		case strings.Contains(cmd, "--json comments") && !strings.Contains(cmd, "--jq"):
 			// gh issue view / gh pr view の --json comments は authorAssociation で返す。
-			produced["authorAssociation"] = line
+			//
+			// **`--jq` で絞り込むものは数えない。**進捗の報告を書き足す先を1件だけ引く
+			// コマンド（設計 5-3j）は、投稿者の立場を1文字も読まない。
+			produced["authorAssociation"] = cmd
 			jsonComments++
 		}
 	}
 	if jsonComments != jsonCommentsCommandCount {
-		t.Errorf("--json comments で取る行が %d 本しかない（%d 本あるはず: "+
+		t.Errorf("コメントを全件そのまま読ませる --json comments が %d 本しかない（%d 本あるはず: "+
 			"issue のコメント / PR の会話のコメント）", jsonComments, jsonCommentsCommandCount)
 	}
 	if len(produced) == 0 {
@@ -346,4 +352,28 @@ func TestPrompt_指示する名前はどれかのコマンドが返す名前で�
 			t.Errorf("投稿者の立場を %q で返すコマンドが本文にありません", want)
 		}
 	}
+}
+
+// shellCommandsIn は、本文に字下げして並べたコマンドを1本ずつ取り出す。
+//
+// **行末が `\` のものは、次の行とつないで1本として扱う。**
+// つながないと、複数行に分けて書いたコマンドの `--jq` が別の行にあるせいで、
+// **「絞り込んでいない」と読み違える**（設計 5-3j の、進捗の報告を書き足す先を引くコマンドがそれである）。
+//
+// lines: 本文を行に分けたもの。
+// 戻り値: つなぎ終えたコマンドの一覧（前後の空白は落としてある）。
+func shellCommandsIn(lines []string) []string {
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		if !strings.HasPrefix(lines[i], commandLinePrefix) {
+			continue
+		}
+		cmd := strings.TrimSpace(lines[i])
+		for strings.HasSuffix(cmd, `\`) && i+1 < len(lines) {
+			i++
+			cmd = strings.TrimSuffix(cmd, `\`) + " " + strings.TrimSpace(lines[i])
+		}
+		out = append(out, cmd)
+	}
+	return out
 }

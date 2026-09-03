@@ -35,8 +35,6 @@ type Config struct {
 	Trust TrustConfig `yaml:"trust"`
 	// Restart は再起動時に孤児となった実行中 issue をどう扱うかを決める（3-4）。
 	Restart RestartConfig `yaml:"restart"`
-	// Runtime は二重起動防止のロックファイルの場所を決める（3-17）。
-	Runtime RuntimeConfig `yaml:"runtime"`
 	// Server は任意の HTTP ダッシュボードの起動を決める（SPEC.md 13.7 の任意拡張）。
 	Server ServerConfig `yaml:"server"`
 	// Language は画面に出す文言の言語である（3-35）。
@@ -115,10 +113,15 @@ type TrackerProviderHandoffConfig struct {
 	// **巡回の間隔（`polling.interval_ms`。既定30秒）より十分長く取ること。**
 	// 位相がずれている機械も、締め切りまでに6回は巡回できる。
 	BidWindowMs int `yaml:"bid_window_ms"`
-	// IdleTimeoutMs は、担当者の最後のコメントからこれだけ経つと担当を外す長さ（ミリ秒）である。
+	// IdleTimeoutMs は、担当者の最後の進捗報告からこれだけ経つと担当を外す長さ（ミリ秒）である。
 	// **既定は18時間。**
 	//
-	// **数えるのは「hold を書いた時刻」ではなく「その担当者の最後のコメントが現れた時刻」である。**
+	// **数えるのは `ProgressMarker` の印が付いたコメントの最終更新日時である**（設計 5-3k）。
+	// **担当者が書いたコメント全部ではない。**エージェントも continuo も人間も同じ
+	// GitHub アカウントで投稿するので、全部を数えると**人間が無関係なコメントを1件書いただけで
+	// 時計が18時間先へ延び、黙り込んだエージェントを永久に見つけられなくなる。**
+	//
+	// **印の付いたコメントが1件も無いあいだは、担当を取った時刻（hold のコメント）から数える。**
 	// 進捗を書き続けている機械は担当を外されないので、hold のコメントは1件で足りる。
 	//
 	// **18時間の意味。**終業時に機械を落とした人が翌朝に再開すれば、そのまま続けられる長さである。
@@ -453,7 +456,11 @@ type HerdrWorktreeConfig struct {
 	// CreateViaHerdr は herdr に worktree を workspace として開かせるかどうかである（3-22）。
 	CreateViaHerdr bool `yaml:"create_via_herdr"`
 	// BranchTemplate は branch 名のテンプレートである。区切りにスラッシュを使う（3-22）。
-	// このキーには 5-5 の展開規則を適用しない（テンプレート文字列であり、環境変数展開の対象ではない）。
+	//
+	// **このキーに効く展開は1つだけである。**テンプレートの変数展開
+	// （`text/template` の `{{...}}` を issue の値に置き換える。internal/workspace の
+	// RenderBranch が行う）は受けるが、**設定値の環境変数の展開（`${NAME}`）は受けない。**
+	// 5-5 の展開規則を適用しないキーである。
 	BranchTemplate string `yaml:"branch_template"`
 	// Base は派生元の branch 名である。null ならトラッカーが返す既定 branch を使う。
 	Base *string `yaml:"base"`
@@ -559,12 +566,6 @@ type TrustConfig struct {
 type RestartConfig struct {
 	// OrphanRunningAction は "redispatch" / "to_dispatch_state" / "to_failure_state" のいずれかである。
 	OrphanRunningAction string `yaml:"orphan_running_action"`
-}
-
-// RuntimeConfig は二重起動防止のロックファイルの場所を決める（3-17）。
-type RuntimeConfig struct {
-	// LockFile はロックファイルの絶対パスである。null なら hook の socket と同じディレクトリに置く。
-	LockFile *string `yaml:"lock_file"`
 }
 
 // ServerConfig は任意の HTTP ダッシュボードの起動を決める（SPEC.md 13.7 の任意拡張）。

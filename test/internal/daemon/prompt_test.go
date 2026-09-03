@@ -124,13 +124,20 @@ func setBodyOf(t *testing.T, path, body string) {
 	t.Fatalf("%s に front matter の終端行がありません", path)
 }
 
-// setWiringEnv は、実行時ディレクトリと GraphQL の接続先の環境変数を、
+// setWiringEnv は、ホームディレクトリ・実行時ディレクトリ・GraphQL の接続先の環境変数を、
 // テストの一時ディレクトリへ向ける。
+//
+// **ホームディレクトリも必ず向ける。**二重起動防止のロックは
+// `~/.continuo/continuo.lock` に固定されている（設計 3-17）ので、向けないと
+// **`go test` を叩いた人の本物のロックを掴み、その人の continuo が起動できなくなる。**
+// **しかもテストは緑のまま通る**（この検査が見ているのはプロンプトの文言だけである）。
+// **daemon.Run を呼ぶテストは、この関数を通すこと。**
 //
 // t: 呼び出し元のテスト。
 // root: 一時ディレクトリ。
 func setWiringEnv(t *testing.T, root string) {
 	t.Helper()
+	wiringHome(t)
 	runtimeDir := filepath.Join(root, "rt")
 	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
 		t.Fatalf("実行時ディレクトリを作れません: %v", err)

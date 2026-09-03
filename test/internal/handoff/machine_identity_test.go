@@ -174,14 +174,18 @@ func TestLatestHoldFor_担当者で絞る(t *testing.T) {
 		holdBy(otherLogin, twinHost, now.Add(-time.Hour)),
 	}
 
-	got, ok := handoff.LatestHoldFor(comments, selfLogin)
+	got, gotAt, ok := handoff.LatestHoldFor(comments, selfLogin)
 	if !ok {
 		t.Fatal("その担当者の hold を見つけられていない")
 	}
 	if got.Host != selfHost {
 		t.Errorf("別の担当者の hold を返している: got %q, want %q", got.Host, selfHost)
 	}
-	if _, ok := handoff.LatestHoldFor(comments, ""); ok {
+	// **作成時刻も返す。**持ち回りの期限は、この時刻を下限にして数える（設計 5-3l）。
+	if !gotAt.Equal(now.Add(-3 * time.Hour)) {
+		t.Errorf("その hold の作成時刻を返していない: got %v, want %v", gotAt, now.Add(-3*time.Hour))
+	}
+	if _, _, ok := handoff.LatestHoldFor(comments, ""); ok {
 		t.Error("担当者の名前が空なのに hold を返している")
 	}
 }

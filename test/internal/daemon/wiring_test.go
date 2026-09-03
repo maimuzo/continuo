@@ -15,8 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/daemon"
+	"github.com/maimuzo/continuo/internal/instance"
+	"github.com/maimuzo/continuo/internal/lock"
 )
 
 // writeWiringWorkflow は、結線だけを確かめるための最小の WORKFLOW.md を書く。
@@ -57,6 +58,30 @@ rate_limit:
 	return path
 }
 
+// wiringHome は、ホームディレクトリの代わりに使う一時ディレクトリを作り、
+// `HOME` をそこへ向ける。
+//
+// **二重起動防止のロックは `~/.continuo/continuo.lock` に固定されている**（設計 3-17）。
+// **向けておかないと、テストが利用者の本物のロックを取り合う。**
+// **動いている continuo があれば、テストが「二重起動」で落ちる。**
+//
+// t: 呼び出し元のテスト。
+// 戻り値: 実体のパス（symlink を解決済み）。
+func wiringHome(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("", "ch")
+	if err != nil {
+		t.Fatalf("一時ディレクトリを作れません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if resolved, rerr := filepath.EvalSymlinks(dir); rerr == nil {
+		dir = resolved
+	}
+	t.Setenv("HOME", dir)
+	return dir
+}
+
 // wiringRoot は短い一時ディレクトリを1つ作る（socket のパスを103バイト以内に保つため）。
 //
 // t: 呼び出し元のテスト。
@@ -73,53 +98,6 @@ func wiringRoot(t *testing.T) string {
 		t.Fatalf("一時ディレクトリを解決できません: %v", err)
 	}
 	return root
-}
-
-// TestResolveLockFilePath_lock_fileの指定があればそれを使い無ければsocketと同じ場所に置く は、
-// 設定の解釈を固定する。
-//
-// 目的: 設計 3-17 / 3-23。`runtime.lock_file` を書いたときと書かないときで、
-// ロックファイルの場所が変わることを確かめる。**この関数は公開されているのに
-// 一度も実行されていなかった。**
-// 与える情報: `runtime.lock_file` が null・空文字・絶対パスの3通りと、hook の socket のパス。
-// 成功条件: 絶対パスを書いたときだけその値になり、ほかは socket と同じディレクトリになること。
-func TestResolveLockFilePath_lock_fileの指定があればそれを使い無ければsocketと同じ場所に置く(t *testing.T) {
-	sockPath := "/tmp/continuo-rt/hooks.sock"
-	empty := ""
-	explicit := "/var/tmp/continuo-elsewhere/continuo.lock"
-
-	cases := []struct {
-		name     string
-		lockFile *string
-		want     string
-	}{
-		{
-			name:     "lock_file が null なら socket と同じディレクトリに置く",
-			lockFile: nil,
-			want:     "/tmp/continuo-rt/continuo.lock",
-		},
-		{
-			name:     "lock_file が空文字でも socket と同じディレクトリに置く",
-			lockFile: &empty,
-			want:     "/tmp/continuo-rt/continuo.lock",
-		},
-		{
-			name:     "lock_file に絶対パスを書いたらそこに置く",
-			lockFile: &explicit,
-			want:     explicit,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var cfg config.Config
-			cfg.Runtime.LockFile = tc.lockFile
-
-			if got := daemon.ResolveLockFilePath(cfg, sockPath); got != tc.want {
-				t.Fatalf("ロックファイルの場所が違う: got %q, want %q", got, tc.want)
-			}
-		})
-	}
 }
 
 // TestValidateGraphQLEndpoint_httpsとループバック宛のhttpだけを受け付ける は、
@@ -185,9 +163,9 @@ func TestWaitWithTimeout_期限内に終わらなければ待つのをやめる(
 // TestRun_ロックファイルを開けないときは二重起動と報告しない は、
 // 起動を止めた理由の言い分けを固定する。
 //
-// 目的: `runtime.lock_file` のパスを打ち間違えた運用者に「二重起動」と報告すると、
+// 目的: 設計 3-17。`~/.continuo` を作れない環境の運用者に「二重起動」と報告すると、
 // 動いてもいない2つ目の continuo を探しに行かせることになる。
-// 与える情報: 親ディレクトリが存在しない `runtime.lock_file`。
+// 与える情報: ホームディレクトリの実体がファイルである環境。
 // 成功条件: 起動の段のエラー（daemon.ErrStartup）で、文言が「ロックファイルを用意できません」
 // であり、**「二重起動」を含まないこと。**
 func TestRun_ロックファイルを開けないときは二重起動と報告しない(t *testing.T) {
@@ -196,8 +174,15 @@ func TestRun_ロックファイルを開けないときは二重起動と報告�
 	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
 		t.Fatalf("実行時ディレクトリを作れません: %v", err)
 	}
-	lockFile := filepath.Join(root, "この階層は存在しない", "continuo.lock")
-	path := writeWiringWorkflow(t, root, "", fmt.Sprintf("runtime:\n  lock_file: %s\n", lockFile))
+	path := writeWiringWorkflow(t, root, "", "")
+
+	// **ホームディレクトリの実体をファイルにする。**`~/.continuo` を作れないので、
+	// 二重起動ではなく「ロックファイルを用意できません」で止まらなければならない。
+	notADir := filepath.Join(root, "home-is-a-file")
+	if err := os.WriteFile(notADir, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("ホームディレクトリの代わりのファイルを作れません: %v", err)
+	}
+	t.Setenv("HOME", notADir)
 
 	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
 	t.Setenv(daemon.EnvGraphQLEndpoint, "")
@@ -269,6 +254,7 @@ func TestRun_接続先の差し替えがループバック以外のhttpなら起
 // 成功条件: 起動の段のエラーで、文言が「PATH にありません」であること。
 func TestRun_ghがPATHに無ければ起動時検査の文言で落ちる(t *testing.T) {
 	root := wiringRoot(t)
+	wiringHome(t)
 	runtimeDir := filepath.Join(root, "rt")
 	emptyBin := filepath.Join(root, "emptybin")
 	for _, dir := range []string{runtimeDir, emptyBin} {
@@ -318,6 +304,7 @@ func runForStartupLog(t *testing.T, extra string) string {
 	t.Helper()
 
 	root := wiringRoot(t)
+	wiringHome(t)
 	runtimeDir := filepath.Join(root, "rt")
 	emptyBin := filepath.Join(root, "emptybin")
 	for _, dir := range []string{runtimeDir, emptyBin} {
@@ -443,6 +430,7 @@ exit 0
 // 成功条件: 30 秒以内に起動の段のエラーで返り、文言がトークンの取得の失敗を指すこと。
 func TestRun_ghauthtokenが返らなければ起動を止める(t *testing.T) {
 	root := wiringRoot(t)
+	wiringHome(t)
 	runtimeDir := filepath.Join(root, "rt")
 	binDir := filepath.Join(root, "bin")
 	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
@@ -556,6 +544,7 @@ func TestWatchInterrupt_stopを2回呼んでも落ちない(t *testing.T) {
 // 成功条件: 30 秒以内に起動の段のエラーで返り、文言が起動時検査の失敗を指すこと。
 func TestRun_起動時検査が期限内に終わらなければ起動を止める(t *testing.T) {
 	root := wiringRoot(t)
+	wiringHome(t)
 	runtimeDir := filepath.Join(root, "rt")
 	binDir := filepath.Join(root, "bin")
 	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
@@ -669,5 +658,120 @@ func TestHookCLI_socketとpending_dirが相対パスなら受け付けない(t *
 				t.Fatal("相対パスの逃がし先を掘ってしまった（worktree の中に作られる）")
 			}
 		})
+	}
+}
+
+// lineContaining は、ログ全文から want を含む最初の1行を返す。
+//
+// **行で切り出す。**全文に対して `Contains` を当てると、別の行に出ている文字列を
+// 拾ってしまい、「どの行の値か」を確かめられない。
+//
+// t: 呼び出し元のテスト。
+// logged: ログ全文。
+// want: 目印にする文字列。
+// 戻り値: want を含む最初の行。見つからなければテストを落とす。
+func lineContaining(t *testing.T, logged, want string) string {
+	t.Helper()
+	for _, line := range strings.Split(logged, "\n") {
+		if strings.Contains(line, want) {
+			return line
+		}
+	}
+	t.Fatalf("%q を含む行がログに無い\n%s", want, logged)
+	return ""
+}
+
+// TestRun_ロックはsocketの置き場所ではなくhomeに固定される は、
+// **ロックの置き場所を設定からも環境変数からも切り離した**ことを固定する（設計 3-17）。
+//
+// 目的: **socket の場所から導いてはならない。**socket の場所は
+// `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` で動くので、そこから導くと、
+// **同じ機械の同じ利用者が、誰も頼んでいないのに別のロックを握る。**
+// 食い違えば `continuo abandon` が「動いていない」と判定し、生きた worktree を消す（3-17c）。
+//
+// 与える情報: `CONTINUO_RUNTIME_DIR` を home の外へ向けた起動（runForStartupLog が設定する）。
+// 成功条件: 獲得したロックが `<HOME>/.continuo/continuo.lock` であり、
+// **socket の実行時ディレクトリを1文字も含まないこと。**
+func TestRun_ロックはsocketの置き場所ではなくhomeに固定される(t *testing.T) {
+	logged := runForStartupLog(t, "")
+
+	fixed := filepath.Join(os.Getenv("HOME"), instance.DirName, instance.LockFileName)
+	acquired := lineContaining(t, logged, "二重起動防止のロックを獲得しました")
+	if !strings.Contains(acquired, fixed) {
+		t.Fatalf("固定した場所 %q のロックを取っていない\n%s", fixed, acquired)
+	}
+
+	// **socket の置き場所には作らせない。**同じ行に実行時ディレクトリが出ていたら、
+	// そちらから導いている。
+	rt := os.Getenv(daemon.EnvRuntimeDir)
+	if rt == "" {
+		t.Fatal("実行時ディレクトリが設定されていない（この試験は socket と分かれていることを見る）")
+	}
+	if strings.Contains(acquired, rt) {
+		t.Fatalf("socket の置き場所 %q からロックを導いている\n%s", rt, acquired)
+	}
+}
+
+// TestRun_idを付けるとロックが名前ごとに分かれる は、`--id` の結線を固定する。
+//
+// 目的: 設計 3-17b。**`--id` の唯一の役目は、二重起動防止のロックを名前ごとに
+// 分けることである。**CLI から常駐まで結線されていなければ、名前を付けても
+// 既定の1本を取り合う。
+//
+// 与える情報: `--id e2e` と、`~/.continuo/id/e2e/continuo.lock` を先に握った別のプロセス。
+// 成功条件: 起動の段のエラーで、**その名前ごとのロックのパスを指して**二重起動と言うこと。
+// **既定の `~/.continuo/continuo.lock` は空いたままであること**（そちらを見ていない証拠）。
+func TestRun_idを付けるとロックが名前ごとに分かれる(t *testing.T) {
+	root := wiringRoot(t)
+	home := wiringHome(t)
+	runtimeDir := filepath.Join(root, "rt")
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		t.Fatalf("実行時ディレクトリを作れません: %v", err)
+	}
+	path := writeWiringWorkflow(t, root, "", "")
+
+	t.Setenv(daemon.EnvRuntimeDir, runtimeDir)
+	t.Setenv(daemon.EnvGraphQLEndpoint, "")
+
+	// **1本目の代わりに、名前ごとのロックを先に握る。**
+	idLock := filepath.Join(home, instance.DirName, instance.IDDirName, "e2e", instance.LockFileName)
+	if err := os.MkdirAll(filepath.Dir(idLock), 0o700); err != nil {
+		t.Fatalf("名前ごとのロックの置き場所を作れません: %v", err)
+	}
+	held, err := lock.Acquire(idLock)
+	if err != nil {
+		t.Fatalf("名前ごとのロックを先に握れません: %v", err)
+	}
+	t.Cleanup(func() { _ = held.Release() })
+
+	inst, err := instance.Resolve("e2e")
+	if err != nil {
+		t.Fatalf("--id から置き場所を決められない: %v", err)
+	}
+
+	err = daemon.Run(context.Background(), daemon.Options{
+		ConfigPath: path,
+		Logger:     slog.New(slog.DiscardHandler),
+		Instance:   &inst,
+	})
+
+	if err == nil {
+		t.Fatal("同じ名前のロックを握られているのに起動できてしまった")
+	}
+	if !errors.Is(err, daemon.ErrStartup) {
+		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+	}
+	if !strings.Contains(err.Error(), idLock) {
+		t.Fatalf("名前ごとのロックを見ていない: %v", err)
+	}
+	if !strings.Contains(err.Error(), "二重起動") {
+		t.Fatalf("二重起動として報告していない: %v", err)
+	}
+
+	// **既定のロックは空いたままでなければならない。**`--id` を付けたのに
+	// そちらを掴んでいたら、2本目は1本目と同じ鍵を取り合うことになる。
+	defaultLock := filepath.Join(home, instance.DirName, instance.LockFileName)
+	if _, statErr := os.Stat(defaultLock); statErr == nil {
+		t.Fatalf("--id を付けたのに既定のロック %q を作っている", defaultLock)
 	}
 }

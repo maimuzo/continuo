@@ -245,6 +245,11 @@ mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
 // **打ち切りの件数ではない。**`pageInfo` を読んで、続きがある限り `after` で取り直す。
 // **持ち回りを始めると入札のコメントが積み上がるので、新しい方から数十件だけを見ていると
 // エージェントが書いた報告が窓から押し出される。**
+//
+// **`updatedAt` も取る**（設計 5-3k）。エージェントは進捗の報告を新しいコメントにせず、
+// **いちばん下にある自分の進捗報告へ書き足す**（設計 5-3j）。
+// **本文を編集しても `createdAt` は動かない**（2026-09-03 に実測）ので、
+// **これを取らないと、書き続けている機械の持ち回りの期限が1秒も進まない。**
 const commentsQueryTemplate = `
 query($issueId: ID!, $first: Int!, $after: String) {
   node(id: $issueId) {
@@ -252,7 +257,7 @@ query($issueId: ID!, $first: Int!, $after: String) {
     ... on Issue {
       comments(first: $first, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
         pageInfo { hasNextPage endCursor }
-        nodes { id url body createdAt author { login } }
+        nodes { id url body createdAt updatedAt author { login } }
       }
     }
   }
@@ -328,11 +333,14 @@ const commentsOrderOldestFirst = "oldest_first"
 // addCommentMutation は continuo がコメントを代筆するときに使うミューテーションである
 // （設計「その7」/ 3-25）。subjectId には Issue.NativeRef["issue_node_id"] を渡す
 // （project item の ID ではなく、下敷きの GitHub issue のノード ID が要る）。
+//
+// **`updatedAt` も取る。**応答は `rawComment` へ読み込むので、
+// **コメント取得のクエリと同じ形にしておかないと、投稿の直後だけ更新時刻が空になる。**
 const addCommentMutation = `
 mutation($subjectId: ID!, $body: String!) {
   addComment(input: { subjectId: $subjectId, body: $body }) {
     commentEdge {
-      node { id url body createdAt author { login } }
+      node { id url body createdAt updatedAt author { login } }
     }
   }
 }
@@ -563,6 +571,15 @@ type rawComment struct {
 	URL       string     `json:"url"`
 	Body      string     `json:"body"`
 	CreatedAt *time.Time `json:"createdAt"`
+	// UpdatedAt は本文が最後に編集された時刻である（設計 5-3k）。
+	//
+	// **編集しても `createdAt` は動かない**（2026-09-03 に実測）。
+	// **進捗の報告は、いちばん下にある自分のコメントへ書き足す**（設計 5-3j）ので、
+	// **これが無いと、書き続けている機械の持ち回りの期限が進まない。**
+	//
+	// **取れなければ nil である。**古い応答を返す偽サーバや、
+	// フィールドを要求していない経路がそうなる。
+	UpdatedAt *time.Time `json:"updatedAt"`
 	Author    *rawUser   `json:"author"`
 }
 
