@@ -1370,3 +1370,146 @@ func TestRunAbandon_helpは0で返して本体を呼ばない(t *testing.T) {
 		t.Errorf("使い方にフラグの説明が出ていない: %s", stderr)
 	}
 }
+
+// tempCLIHome は、ホームディレクトリの代わりに使う一時ディレクトリを作り、
+// `HOME` をそこへ向ける。
+//
+// **本物の `~/.continuo` を触らせないためである。**`--id` の解決は
+// ホームディレクトリを起点にする。
+//
+// t: 呼び出し元のテスト。
+func tempCLIHome(t *testing.T) {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "cc")
+	if err != nil {
+		t.Fatalf("一時ディレクトリを作れません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if resolved, rerr := filepath.EvalSymlinks(dir); rerr == nil {
+		dir = resolved
+	}
+	t.Setenv("HOME", dir)
+}
+
+// TestRunMain_idの名前が使えなければ常駐を始めない は、フラグを読んだ直後の検査を確かめる。
+//
+// 目的: 設計 3-17b。**この文字列はロックファイルのパスに入る。**
+// **あとで検査すると、検査より先に `~/.continuo` の外を指すパスが組み上がる。**
+// 与える情報: 大文字・`..`・空白・33文字の名前。
+// 成功条件: 終了コードが 2 で、daemon を1回も呼ばないこと。
+func TestRunMain_idの名前が使えなければ常駐を始めない(t *testing.T) {
+	tempCLIHome(t)
+
+	var called bool
+	deps := cli.Deps{
+		DaemonRun: func(_ context.Context, _ daemon.Options) error { called = true; return nil },
+	}
+
+	for _, id := range []string{"E2E", "..", "../../etc", "my id", strings.Repeat("a", 33)} {
+		t.Run(id, func(t *testing.T) {
+			code, _, stderr := runCLIWith(deps, []string{"--id", id, writeWorkflowFor(t)}, "")
+			if code != 2 {
+				t.Errorf("--id %q の終了コードが 2 でない: %d（stderr: %s）", id, code, stderr)
+			}
+			if !strings.Contains(stderr, "--id") {
+				t.Errorf("--id が悪いことを言っていない: %s", stderr)
+			}
+		})
+	}
+	if called {
+		t.Error("使えない名前なのに常駐を始めている")
+	}
+}
+
+// TestRunMain_idをそのまま常駐へ渡す は、フラグの受け渡しを確かめる。
+//
+// 目的: 設計 3-17b。`--id` は常駐の側でロックの置き場所へ展開される。
+// **CLI で握り潰すと、名前を付けたのにロックが分かれない。**
+// 与える情報: `--id e2e`。
+// 成功条件: daemon.Options.Instance に `e2e` で解決した置き場所が渡り、
+// **そのロックが `--id` を付けない場合と違う場所を指すこと。**
+func TestRunMain_idをそのまま常駐へ渡す(t *testing.T) {
+	tempCLIHome(t)
+
+	var got, gotLock string
+	deps := cli.Deps{
+		DaemonRun: func(_ context.Context, opts daemon.Options) error {
+			if opts.Instance == nil {
+				return nil
+			}
+			got = opts.Instance.ID()
+			gotLock = opts.Instance.LockPath()
+			return nil
+		},
+	}
+
+	code, _, stderr := runCLIWith(deps, []string{"--id", "e2e", writeWorkflowFor(t)}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if got != "e2e" {
+		t.Errorf("--id が常駐へ渡っていない: got %q, want %q", got, "e2e")
+	}
+
+	var defaultLock string
+	deps.DaemonRun = func(_ context.Context, opts daemon.Options) error {
+		if opts.Instance != nil {
+			defaultLock = opts.Instance.LockPath()
+		}
+		return nil
+	}
+	if code, _, stderr := runCLIWith(deps, []string{writeWorkflowFor(t)}, ""); code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if gotLock == defaultLock {
+		t.Errorf("--id を付けたのに既定と同じロックを指している: %q", gotLock)
+	}
+}
+
+// TestRunMain_ホームを引けない失敗をidのせいにしない は、文言の切り分けを固定する。
+//
+// 目的: 設計 3-17b。`instance.Resolve` は名前を先に検査し、そのあとで
+// ホームディレクトリを引く。**名前の検査を通ったあとの失敗を
+// 「--id に渡した名前が使えません」と報告してはならない。**
+// **`--id` を1文字も渡していない人にも、その文言が出る。**
+// 与える情報: `HOME` が空の環境と、`--id` を渡さない起動。
+// 成功条件: 起動できず、**stderr に `--id` が出ないこと。**
+func TestRunMain_ホームを引けない失敗をidのせいにしない(t *testing.T) {
+	t.Setenv("HOME", "")
+
+	code, _, stderr := runCLIWith(cli.Deps{}, []string{writeWorkflowFor(t)}, "")
+	if code == 0 {
+		t.Fatalf("ホームディレクトリを引けないのに起動できてしまった（stderr: %s）", stderr)
+	}
+	if strings.Contains(stderr, "--id") {
+		t.Fatalf("--id を渡していないのに --id のせいにしている: %s", stderr)
+	}
+}
+
+// TestRunAbandon_idをそのまま片付けへ渡す は、フラグの受け渡しを確かめる。
+//
+// 目的: 設計 3-17b。**常駐している側と同じ名前を渡さないと、abandon は
+// 空いている既定のロックを見て「動いていない」と判定し、生きた worktree を消す。**
+// 与える情報: `--id e2e` と issue の URL。
+// 成功条件: abandon.Options.Instance に `e2e` で解決した置き場所が渡ること。
+func TestRunAbandon_idをそのまま片付けへ渡す(t *testing.T) {
+	tempCLIHome(t)
+
+	var got string
+	deps := cli.Deps{AbandonRun: func(_ context.Context, opts abandon.Options) int {
+		if opts.Instance != nil {
+			got = opts.Instance.ID()
+		}
+		return 0
+	}}
+
+	dir := writeWorkflowFor(t)
+	code, _, stderr := runCLIWith(deps,
+		[]string{"abandon", "https://github.com/octocat/hello-world/issues/42", dir, "--id", "e2e"}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
+	}
+	if got != "e2e" {
+		t.Errorf("--id が片付けへ渡っていない: got %q, want %q", got, "e2e")
+	}
+}

@@ -70,8 +70,23 @@ mkdir -p ~/continuo-e2e-worktrees
 
 **本番の continuo を動かしたまま回すなら、socket も分ける。**
 `claude.hook_bridge.listen` を `/tmp/continuo-e2e/hooks.sock` のような専用のパスに向け、
-そのディレクトリを `chmod 0700` する。**二重起動を止めるロックは socket と同じディレクトリに置かれるので、
-socket を分ければロックも分かれる。**手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
+そのディレクトリを `chmod 0700` する。
+
+**二重起動を止めるロックは、それでは分かれない。**`~/.continuo/continuo.lock` の1本に
+機械で固定されているので、**起動のときに `--id <名前>` を付けて分ける。**
+
+```bash
+continuo --id e2e .                          # ロックは ~/.continuo/id/e2e/continuo.lock
+continuo abandon --id e2e <issue の URL> .   # 片付けにも同じ名前を渡す
+```
+
+**`workspace.root` と `claude.hook_bridge.listen` を分け忘れても、continuo は止めない。**
+`--id` が分けるのはロックだけで、**分け忘れは検知できない。**
+**分け忘れると、2本が同じ worktree に Claude Code を二重に立て、片方の成果が黙って消える。**
+**さらに、2本目が1本目の worktree を「自分の前の run のもの」と見て、
+走行中の pane を巡回のたびに閉じる**（既定30秒ごと）。
+
+手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
 
 **Status の割り当ては既定のままで合う。**ボードの選択肢を `Ready` / `In Progress` / `In Review` /
 `Blocked` / `Done` の5つにしてあるので、`continuo setup` を回さなくてよい。
@@ -81,7 +96,7 @@ socket を分ければロックも分かれる。**手順は [docs/releasing.md]
 ```bash
 continuo trust --dry-run .    # 何を許すかを見る
 continuo doctor .             # ✗ が0件になること
-continuo                      # 起動（別の端末か背後で）
+continuo --id e2e             # 起動（別の端末か背後で）
 ```
 
 **issue を着手待ちへ動かす。**画面を触らずに API でできる。
@@ -114,8 +129,10 @@ gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.tit
 kill -INT "$(pgrep -f 'continuo$' | head -1)"
 
 # worktree と branch と herdr の workspace をまとめて消す
-continuo abandon https://github.com/<ACCOUNT>/continuo-e2e/issues/1 . --dry-run   # 先に見る
-continuo abandon https://github.com/<ACCOUNT>/continuo-e2e/issues/1 .
+# --id は起動したときと同じ名前を渡す。渡さないと、空いている既定のロックを見て
+# 「continuo は動いていません」と判定し、生きている worktree を消しにいく
+continuo abandon --id e2e https://github.com/<ACCOUNT>/continuo-e2e/issues/1 . --dry-run   # 先に見る
+continuo abandon --id e2e https://github.com/<ACCOUNT>/continuo-e2e/issues/1 .
 
 # ボードの Status を戻す（Ready へ戻すと、次に起動したとき拾われる）
 gh project item-edit --id PVTI_lAHNNEjOAYV2fM4N9wYE --project-id PVT_kwHNNEjOAYV2fA \
