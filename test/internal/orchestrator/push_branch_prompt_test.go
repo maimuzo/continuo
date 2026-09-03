@@ -15,7 +15,7 @@ import (
 
 // pushBranchTemplate は `.push_branch` だけを見るテンプレートである。
 //
-// **`{{if}}` を使う。**リンクが無いときに空文字が渡ることを、描画結果で見分けるためである。
+// **`{{if}}` を使う。**リンクが無いときに空文字が渡ることを、変数展開の結果で見分けるためである。
 const pushBranchTemplate = `{{.issue.identifier}} を実装してください。
 {{if .push_branch}}リンクされた branch は {{.push_branch}} です。{{else}}リンクされた branch はありません。{{end}}`
 
@@ -57,7 +57,7 @@ func renderPushBranchPrompt(t *testing.T, issue tracker.Issue) string {
 // push しようとする。
 //
 // 与える情報: BranchName が `work/issue-42` の issue と、`.push_branch` を使うテンプレート。
-// 成功条件: 描画された本文に `work/issue-42` が入り、`origin/` が付いていないこと。
+// 成功条件: 変数展開された本文に `work/issue-42` が入り、`origin/` が付いていないこと。
 func TestPrompt_リンクされたbranchの名前をpush_branchで渡す(t *testing.T) {
 	issue := sampleIssue(188, "Ready")
 	branch := "work/issue-42"
@@ -158,7 +158,7 @@ func TestDispatch_リンクされたbranchを取ってこられなくても人�
 // （設計 3-22d・5-3）。**`{{if .push_branch}}` が偽になる形でなければ、
 // テンプレートを書く側が「リンクが無いとき」を書き分けられない。**
 // 与える情報: BranchName が nil の issue と、`.push_branch` を使うテンプレート。
-// 成功条件: 描画された本文が `{{else}}` の側になること。
+// 成功条件: 変数展開された本文が `{{else}}` の側になること。
 func TestPrompt_リンクが無ければpush_branchは空になる(t *testing.T) {
 	got := renderPushBranchPrompt(t, sampleIssue(188, "Ready"))
 

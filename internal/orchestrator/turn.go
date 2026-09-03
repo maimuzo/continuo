@@ -84,7 +84,7 @@ func (o *Orchestrator) startTurnLoop(ctx context.Context, rs *runState, awaitFir
 
 // turnLoop は1つの run の turn を、終わるまで送り続ける（設計 3-8）。
 //
-//	1回目   … 設定の本文（5-3）を text/template で描画したもの
+//	1回目   … 設定の本文（5-3）を text/template で変数展開したもの
 //	2回目〜 … 継続の指示のみ（5-4）。1回目の本文は送り直さない
 //	打ち切り … max_dispatch_turns（既定20）に達したら failure_state へ落とす
 //
@@ -426,7 +426,7 @@ func blockedHandoffReason(stillRunning []string) string {
 // rs: 対象の run。
 // snap: 判定に使う写し。
 // 戻り値の1つ目: 送る本文。
-// 戻り値の2つ目: 1回目のテンプレートの描画に失敗した場合のエラー
+// 戻り値の2つ目: 1回目のテンプレートの変数展開に失敗した場合のエラー
 // （`missingkey=error` なので、5-3 の一覧に無い変数を書くとここで落ちる）。
 func (o *Orchestrator) buildTurnText(rs *runState, snap runSnapshot) (string, error) {
 	if !snap.SendFirstPrompt {

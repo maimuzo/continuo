@@ -23,7 +23,7 @@ var ErrBranchUsedByWorktree = errors.New("git がこの branch を消しませ�
 // worktree を起点に探す `continuo abandon` は「この issue の worktree はありません」で
 // 終わってしまい、**利用者は手で消すしかなくなる。**
 type IssueBranch struct {
-	// Name は `herdr.worktree.branch_template` を描画して正規化した branch 名である。
+	// Name は `herdr.worktree.branch_template` を変数展開して正規化した branch 名である。
 	Name normalize.SafeName
 	// RepoDir は `ghq list -p -e <owner>/<repo>` が答えた clone の作業ディレクトリである。
 	RepoDir string
@@ -64,7 +64,7 @@ type IssueBranch struct {
 // ctx: 実行に適用するコンテキスト。
 // issue: issue の URL から取り出した owner・リポジトリ名・番号。
 // 戻り値の1つ目: branch 名・clone の場所・実在するか・実在するときの SHA。
-// 戻り値の2つ目: テンプレートを描画できない場合・`ghq` を実行できない場合・
+// 戻り値の2つ目: テンプレートを変数展開できない場合・`ghq` を実行できない場合・
 // **clone が無い場合**（ErrCloneNotFound）・branch の有無を引けない場合のエラー。
 // **エラーのときは「残っている」とも「無い」とも言ってはならない。**
 func (m *Manager) FindIssueBranch(ctx context.Context, issue IssueRef) (IssueBranch, error) {

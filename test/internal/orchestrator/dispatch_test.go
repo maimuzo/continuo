@@ -273,10 +273,10 @@ func TestDispatch_draft_issue_は信頼の検査に掛けない(t *testing.T) {
 // {"RUCM-PATH": "P022"}
 //
 // TestDispatch_テンプレートに一覧に無い変数を書いたらその issue を失敗にする は、
-// 描画の失敗の扱いを確かめる。
+// 変数展開の失敗の扱いを確かめる。
 //
 // 目的: 設計 3-8 の「`missingkey=error` を付ける。**未知の変数を書いたテンプレートは
-// 描画に失敗し、その issue を失敗として扱う**（黙って空文字を埋めない）」を示す。
+// 変数展開に失敗し、その issue を失敗として扱う**（黙って空文字を埋めない）」を示す。
 // 与える情報: 5-3 の一覧に無い変数（`.issue.body`）を書いたテンプレート。
 // 成功条件: Status が `failure_state`（Blocked）へ落ち、印から外れる。
 func TestDispatch_テンプレートに一覧に無い変数を書いたらそのissueを失敗にする(t *testing.T) {
@@ -294,7 +294,7 @@ func TestDispatch_テンプレートに一覧に無い変数を書いたらそ�
 		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
 	if fx.Herdr.CountMethod(herdr.MethodAgentPrompt) != 0 {
-		t.Fatalf("描画に失敗したのにプロンプトを送っている: %v", fx.Herdr.Methods())
+		t.Fatalf("変数展開に失敗したのにプロンプトを送っている: %v", fx.Herdr.Methods())
 	}
 }
 

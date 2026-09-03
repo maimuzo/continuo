@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "17214cc0d9dda9037ca5dfa7c3fd4c90b7692c9e1c8505bd46954a7b2679badd",
+  "_source_sha256": "fae9d02506becd03c1ff410e1f8fc608ca48f9edc8542b78f1be95e01a4b32a8",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",

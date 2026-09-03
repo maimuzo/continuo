@@ -1082,7 +1082,7 @@ sequenceDiagram
                     loop 表明の値が working でなくなるまで
                         S->>S: turn 数が max_dispatch_turns に達していないことを検証する
                         S->>S: turn の本文を組み立てられることを検証する
-                        alt テンプレートを描画できない
+                        alt テンプレートを変数展開できない
                             S->>GH: Status への failure_state の書き込みを要求する
                             Note over S: ABORT この turn の本文は届いていない
                         end
