@@ -1061,12 +1061,24 @@ cd ~/continuo-try
 | 2 | 置き場所を走査して、引き継ぐ run を探す（初回は0件） | 同上 |
 | 3 | `Ready` の issue の処理を開始し、**Status を `In Progress` へ書く** | **ボードで見える** |
 | 4 | worktree を作り、herdr の pane で Claude Code を起動する | **herdr の画面で見える** |
-| 5 | エージェントが作業し、`CONTINUO-STATUS:` の行を出す | herdr の pane |
-| 6 | continuo がその行を読み、**Status を `In Review` へ動かす** | **ボードで見える** |
-| 7 | 人間が確認して **`Done` へ動かす** | 人間の操作 |
-| 8 | continuo が worktree と branch を片付ける | 置き場所から消える |
+| 5 | エージェントが作業し、push して **PR を作る** | **GitHub で見える** |
+| 6 | エージェントが `CONTINUO-STATUS:` の行を出す | herdr の pane |
+| 7 | continuo がその行を読み、**Status を `In Review` へ動かす** | **ボードで見える** |
+| 8 | 人間が PR を確認して **`Done` へ動かす** | 人間の操作 |
+| 9 | continuo が worktree と branch を片付ける | 置き場所から消える |
 
 **巡回の間隔は既定30秒である。**すぐには動かない。
+
+**段5 で Status が勝手に動いたら、ボードの自動化である。**
+ボードの `Settings` → `Workflows` に `Pull request linked to issue` という自動化があり、
+**有効にしていると、PR が issue に紐づいた瞬間に Status を書き換える。**
+continuo は知らない Status になった issue を、
+`tracker.unknown_state_grace_ms`（既定10分）のあと止める。
+**直し方は [FAQ.md](FAQ.md) の
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にある。**
+
+**PR を作らせたくないなら、`WORKFLOW.md` の本文の `## PR の決まり` に「PR を作らない」と書く。**
+**そうすると段5 は push だけになる。**
 
 **起動に成功したときのログ**（`Ready` が0件の状態で実際に叩いたもの。
 **この状態では Claude Code は起動しないので、枠を消費しない**）。
