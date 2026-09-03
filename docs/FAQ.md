@@ -57,16 +57,58 @@ CONTINUO_RUNTIME_DIR=/tmp/continuo-run continuo doctor
 
 ### 「二重起動を検出しました（ロックファイル …）」で起動できない
 
-**原因。**別の continuo が動いています。または**ロックファイルの置き場所が食い違っています。**
-置き場所は `CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR` で決まるので、
-launchd から起動した continuo と、端末で叩いたコマンドが別の場所を見ることがあります。
+**原因。**別の continuo が動いています。
+**ロックは `~/.continuo/continuo.lock` の1本に固定されています。**
+環境変数でも設定でも動かないので、**launchd から起動した continuo と端末で叩いたコマンドが
+別の場所を見ることはありません。**
 
-**直し方。**動いている continuo を止めるか、同じ環境変数で叩き直します。
+**直し方。**動いている continuo を止めます。
 
 ```bash
 pgrep -fl continuo
-CONTINUO_RUNTIME_DIR="$HOME/.continuo/run" continuo
 ```
+
+**わざと2本動かしたいときは、`--id <名前>` を付けます。**
+開発中に、本番を止めずにテスト版を動かすためのものです。
+
+```bash
+continuo --id e2e ~/continuo-e2e-work    # ロックは ~/.continuo/id/e2e/continuo.lock
+```
+
+**`--id` が分けるのはロック1本だけです。**worktree の置き場所（`workspace.root`）と
+socket（`claude.hook_bridge.listen`）は分かれないので、**テスト用の `WORKFLOW.md` を
+別のディレクトリに置いて、そちらで書き換えてください。**分けないと、2本が同じ worktree に
+Claude Code を二重に立て、**片方の成果が黙って消えます。**
+
+**`continuo abandon` にも同じ名前を渡してください。**渡さないと、空いている既定のロックを見て
+「continuo は動いていません」と判定し、**生きている worktree を消しにいきます。**
+
+```bash
+continuo abandon --id e2e <issue の URL> ~/continuo-e2e-work
+```
+
+### 「front matter が不正です: unknown field "runtime"」で起動できなくなった
+
+**原因。**`runtime` の節（`runtime.lock_file`）を**消しました。**
+ロックは `~/.continuo/continuo.lock` に固定してあり、設定では動きません。
+**設定で変えられると、`continuo abandon` が別の場所を見て「動いていない」と判定し、
+走っている worktree を消しにいくためです。**
+
+**読まない値を受け取り続ける形は採りませんでした。**
+書いてあるのに効かない項目を残すと、**次に読む人が「効いている」と思って設定します。**
+
+**直し方。`WORKFLOW.md` から `runtime:` の2行を消してください。**それだけです。
+
+```bash
+grep -n -A1 '^runtime:' ~/continuo-work/WORKFLOW.md   # 消す行を確かめる
+```
+
+```yaml
+runtime:
+  lock_file: null    # ← この2行を消す
+```
+
+**1台で2本以上動かしたいなら `--id <名前>` を使ってください。**
 
 ### 「front matter が不正です: unknown field "…"」で止まる
 

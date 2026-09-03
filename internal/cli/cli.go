@@ -29,6 +29,7 @@ import (
 	"github.com/maimuzo/continuo/internal/doctor"
 	"github.com/maimuzo/continuo/internal/hookclient"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/instance"
 	"github.com/maimuzo/continuo/internal/logging"
 	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -1098,8 +1099,19 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 	forceFlag := fs.Bool("force", false, i18n.T(i18n.KeyCLIAbandonFlagForce))
 	toFlag := fs.String("to", "", i18n.T(i18n.KeyCLIAbandonFlagTo))
 	parkFlag := fs.String("park", "", i18n.T(i18n.KeyCLIAbandonFlagPark))
+	// **常駐している側に `--id` を付けているなら、abandon にも同じ名前を渡す**（設計 3-17b）。
+	// **渡さなければ既定の1本のロックを見る。**そのロックは空いているので、
+	// **`--id` を付けて動いている continuo を「動いていない」と判定してしまう。**
+	idFlag := fs.String("id", "", i18n.T(i18n.KeyCLIAbandonFlagID))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
+	}
+	// **フラグを読んだ直後に検査する。**
+	// **解決した置き場所はそのまま渡す。**abandon が解決し直すと、
+	// 検査を通ったものと実際に使うものが別々に作られる。
+	inst, idErr := checkInstanceID(*idFlag, stderr)
+	if idErr != nil {
+		return 2
 	}
 
 	// **フラグは reorderArgs が前へ寄せ終えている。**ここに残るのは位置引数だけであり、
@@ -1158,6 +1170,7 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 		Force:           *forceFlag,
 		ToState:         *toFlag,
 		ParkState:       *parkFlag,
+		Instance:        inst,
 		GraphQLEndpoint: endpoint,
 		Out:             stdout,
 		Err:             stderr,
@@ -1170,6 +1183,45 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 // **`✗` があったこと（1）と、引数の誤り（2）のどちらとも別の値にする。**
 // スクリプトから「前提が足りない」と「doctor 自体が動けなかった」を区別できるようにする。
 const doctorInternalErrorExitCode = 3
+
+// checkInstanceID は `--id` に渡された名前が使える形かを、フラグを読んだ直後に検査する。
+//
+// **`internal/instance` の Resolve をそのまま呼ぶ。**名前の形も長さも、
+// **判定を持つのは1箇所だけにする。**
+// ここに写しを置くと、片方だけを直したときに CLI と常駐で判定が食い違う。
+//
+// **解決した結果を返す。**捨てて `daemon.Run` / `abandon.Run` に解決し直させると、
+// **検査を通った結果と実際に使う結果が別々に作られる。**
+//
+// **名前の誤りと、それ以外の誤りを言い分ける。**`instance.Resolve` は名前を先に検査し、
+// そのあとでホームディレクトリを引く。**名前の検査を通ったあとの失敗を
+// 「--id に渡した名前が使えません」と報告してはならない。**
+// `HOME` を引けない環境では `--id` を1文字も渡していない人にもその文言が出る。
+//
+// id: `--id` に渡された名前。空文字なら既定の1本である。
+// stderr: 弾いた理由の出力先。
+// 戻り値の1つ目: 解決した置き場所（**弾いたときは nil**）。
+// 戻り値の2つ目: 使えない場合のエラー（**理由は stderr へ書き出し済みである**）。
+func checkInstanceID(id string, stderr io.Writer) (*instance.Layout, error) {
+	layout, err := instance.Resolve(id)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(instanceErrorKey(err), err))
+		return nil, err
+	}
+	return &layout, nil
+}
+
+// instanceErrorKey は、置き場所を決められなかった理由に合う文言のキーを選ぶ。
+//
+// err: `instance.Resolve` が返したエラー。
+// 戻り値: 名前そのものが誤っているなら `--id` を名指しする文言、そうでなければ
+// 置き場所を決められないという文言のキー。
+func instanceErrorKey(err error) i18n.Key {
+	if instance.IsInvalidID(err) {
+		return i18n.KeyCLIErrInvalidID
+	}
+	return i18n.KeyCLIErrInstanceLayout
+}
 
 // reorderArgs は、位置引数のあとに書かれたフラグを前へ寄せてから flag へ渡すための並べ替えである。
 //
@@ -1281,8 +1333,20 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	// （`--port=0` は「OS に空きポートを選ばせる」という意味を持つ指定であり、
 	// 「指定しなかった」と同じ扱いにしてはならない）。
 	portFlag := fs.Int("port", 0, i18n.T(i18n.KeyCLIMainFlagPort))
+	// **`--id` は「1台で何本目か」を表す名前である**（設計 3-17b）。
+	// **付けると、二重起動防止のロックがその名前ごとに分かれる。**
+	// **分かれるのはロックだけである。**worktree と socket の置き場所は
+	// テスト用の `WORKFLOW.md` で書き換えること。
+	idFlag := fs.String("id", "", i18n.T(i18n.KeyCLIMainFlagID))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
+	}
+	// **フラグを読んだ直後に検査し、弾いたら起動しない。**
+	// **この文字列はロックファイルのパスに入る。**あとで検査すると、
+	// 検査より先に `~/.continuo` の外を指すパスが組み上がる。
+	inst, idErr := checkInstanceID(*idFlag, stderr)
+	if idErr != nil {
+		return 2
 	}
 	var port *int
 	fs.Visit(func(f *flag.Flag) {
@@ -1351,7 +1415,12 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	useLanguageFromConfig(path)
 
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIMainStarting, path))
-	if err := d.DaemonRun(ctx, daemon.Options{ConfigPath: path, Logger: logger, Port: port}); err != nil {
+	if err := d.DaemonRun(ctx, daemon.Options{
+		ConfigPath: path,
+		Logger:     logger,
+		Port:       port,
+		Instance:   inst,
+	}); err != nil {
 		// **起動できなかったのか、動いていたものが落ちたのかを言い分ける。**
 		// 無人運用のログを後から読む人間が、起動失敗と実行中の異常終了を取り違えないようにする。
 		if errors.Is(err, daemon.ErrStartup) {

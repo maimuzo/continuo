@@ -160,13 +160,13 @@ func TestDoctor_節ごと書かれていなければ節の名前を1件だけ挙
 //
 // 目的: 足りない項目が上限（10件）を超えたとき、内訳を上限＋まとめの1行までに切ること。
 // **差分をそのまま並べると156行になり、他の14個の検査結果が読めなくなる。**
-// 与える情報: 節を12個落とした WORKFLOW.md（`continuo init` を使わずに手で書いた人の形）。
+// 与える情報: 節を11個落とした WORKFLOW.md（`continuo init` を使わずに手で書いた人の形）。
 // 成功条件: 内訳が11行以内で、最後の行が残りの件数を伝えていること。
 func TestDoctor_足りない項目が多くても内訳は上限で切る(t *testing.T) {
 	fx := newFixture(t)
 	for _, prefix := range []string{
 		"polling:", "workspace_hooks:", "agent:", "naming:", "cleanup:",
-		"rate_limit:", "trust:", "restart:", "runtime:", "server:", "language:",
+		"rate_limit:", "trust:", "restart:", "server:", "language:",
 		"  status_signal_prefix:",
 	} {
 		dropKeyFromWorkflow(t, fx, prefix)
