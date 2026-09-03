@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/ratelimit"
@@ -526,13 +527,13 @@ func (o *Orchestrator) handoffBidWindow() time.Duration {
 func (o *Orchestrator) handoffIdleTimeout() time.Duration {
 	ms := o.cfg.Tracker.Provider.Handoff.IdleTimeoutMs
 	if ms <= 0 {
-		ms = defaultHandoffIdleTimeoutMs
+		ms = config.DefaultHandoffIdleTimeoutMs
 	}
 	return time.Duration(ms) * time.Millisecond
 }
 
-// defaultHandoffIdleTimeoutMs は `idle_timeout_ms` が未設定のときに使う長さである（18時間）。
-const defaultHandoffIdleTimeoutMs = 64800000
+// **既定は `config.DefaultHandoffIdleTimeoutMs` が持つ。**
+// ここで定数を2つ目に置くと、設定の検査と実行時の値がずれる。
 
 // viewerIdentity は、この機械が使っている gh の持ち主（ログイン名とノード ID）を返す。
 //

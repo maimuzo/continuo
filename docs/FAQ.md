@@ -437,7 +437,7 @@ tracker:
 cd ~/continuo-work && continuo prompt --show
 ```
 
-**使える変数は9つです。**
+**使える変数は11個です。**
 
 | 変数 | 中身 |
 | --- | --- |
@@ -450,6 +450,8 @@ cd ~/continuo-work && continuo prompt --show
 | `{{.issue.state}}` | **カンバンの Status の値**（`Ready` など）。GitHub の open / closed ではありません |
 | `{{.issue.labels}}` | ラベルの並び |
 | `{{.attempt}}` | 試行回数。**1回目は空**なので `{{if .attempt}}` で囲ってください |
+| `{{.push_branch}}` | issue にリンクされた branch の名前。**リンクが1本でないときは空** |
+| `{{.progress_interval_minutes}}` | 進捗報告を書かせる間隔（分）。`tracker.provider.handoff.progress_interval_ms` から決まる |
 
 **`{{index .issue "title"}}` の形は使えません。**`{{.issue.title}}` と書いてください。
 **この形を許すと、綴りを間違えた名前が誤りにならずに素通りします。**
@@ -484,6 +486,29 @@ cd ~/continuo-work && continuo prompt --show
 ```
 
 **手順は [upgrading.md](upgrading.md) の「v0.1.12 から v0.1.13 へ」にあります。**
+
+### 進捗報告の間隔を変えたい
+
+**`tracker.provider.handoff.progress_interval_ms`（エージェントに進捗報告を書かせる間隔。ミリ秒。既定 3600000 = 1時間）を変えてください。**
+
+```yaml
+tracker:
+  provider:
+    handoff:
+      progress_interval_ms: 1800000   # 30分
+```
+
+**送る文面へ、分に直して埋まります。**上の例なら「30分以上コメントを書かないまま作業を続けないでください」になります。
+
+**2つの決まりがあります。破ると起動しません。**
+
+| 決まり | なぜ |
+| --- | --- |
+| **60000（1分）以上にすること** | **送る文面へは分に直して埋めるので、59999 までは全部「0分以上黙らない」になる** |
+| **`idle_timeout_ms`（既定18時間）より短くすること** | 長いと、エージェントが指示どおりに書いていても、書く前に担当が外れる。**`idle_timeout_ms: 0` と書いた場合も、実行時に効く18時間と比べます** |
+
+**continuo はこの値を測りません。**送る文面へ埋めるだけです。**測っているのは `idle_timeout_ms` のほうだけです。**
+**つまり、この値を短くしても、担当が外れるまでの18時間は変わりません。**
 
 ### `WORKFLOW.md` に書いた決まりが、エージェントに届いていない
 

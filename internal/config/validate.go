@@ -659,6 +659,20 @@ func validateHandoff(h TrackerProviderHandoffConfig) error {
 		return invalidValueError("tracker.provider.handoff.idle_timeout_ms", h.IdleTimeoutMs,
 			i18n.T(i18n.KeyConfigValidateHandoffIdleTimeoutRange))
 	}
+	// **1分（60000ミリ秒）より短いものを弾く。**送る文面へは分に直して埋めるので、
+	// **59999 までは全部「0分以上黙らない」になる。**
+	// 0 だけを弾いても、防ぎたい状態（0分の文面）は防げない。
+	if h.ProgressIntervalMs < 60000 {
+		return invalidValueError("tracker.provider.handoff.progress_interval_ms", h.ProgressIntervalMs,
+			i18n.T(i18n.KeyConfigValidateHandoffProgressIntervalRange))
+	}
+	// **実行時に効く値と比べる。**`idle_timeout_ms` は 0 なら既定の18時間になるので、
+	// **0 のまま比べると、案内どおり 0 を書いた人だけが、この検査を失う。**
+	if idle := ResolveHandoffIdleTimeoutMs(h.IdleTimeoutMs); h.ProgressIntervalMs >= idle {
+		// **これより長いと、エージェントが指示どおりに書いていても、書く前に担当が外れる。**
+		return invalidValueError("tracker.provider.handoff.progress_interval_ms", h.ProgressIntervalMs,
+			i18n.T(i18n.KeyConfigValidateHandoffProgressIntervalTooLong, idle))
+	}
 	if h.RecheckIntervalMs < 0 {
 		return invalidValueError("tracker.provider.handoff.recheck_interval_ms", h.RecheckIntervalMs,
 			i18n.T(i18n.KeyConfigValidateHandoffRecheckIntervalRange))
