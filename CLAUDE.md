@@ -260,7 +260,7 @@ git worktree remove "$ROLLBACK"
 
 ### worker への指示の書き方
 
-[.claude/skills/worker-briefing/SKILL.md](.claude/skills/worker-briefing/SKILL.md) を、**絶対パスで**worker に
+[.claude/skills/worker-briefing/SKILL.md](.claude/skills/worker-briefing/SKILL.md) を worker に
 Read で開かせること。**前置きをプロンプトへ書き写さない。**とくに次の3点。
 
 - **worker のプロンプトは、このスキルへの案内と、その作業に固有の情報の2つだけで組む**
