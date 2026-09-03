@@ -1123,17 +1123,86 @@ cleanup:
 **`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
+### エージェントが push で終わり、PR が作られない
+
+**まず知っておくこと。**v0.1.14 から、エージェントは `CONTINUO-STATUS: review` を出す前に
+**自分で PR を作ります**（組み込みのプロンプトの `## PR を出すこと`）。
+**作られないのは、それを打ち消す指示が届いているときです。**
+
+**原因は2つあります。順に確かめてください。**
+
+**1つ目。`WORKFLOW.md` の本文に、v0.1.13 の雛形の1行が残っています。**
+
+```bash
+cd ~/continuo-work && continuo prompt --show | grep -n 'PR は作らないでください'
+```
+
+**行番号が出たら、これです。**`WORKFLOW.md` を開いて、その行を消してください
+（`## PR を作るか` の節ごと消してかまいません）。
+**組み込みが「作れ」と言い、あなたの本文が「作るな」と言っている状態です。**
+**どちらに従うかはエージェント次第になります。**
+
+**2つ目。組み込みの側に節が無い。**版が古いままです。
+
+```bash
+continuo prompt --show --builtin | grep -c '^## PR を出すこと'
+```
+
+**`0` なら v0.1.13 以前です。**版を上げてください。
+**`1` で、それでも作られないときは、pane の応答を読んでください。**
+push できていない（`gh` の認証・branch protection）と、`gh pr create` は
+**対話で push 先を聞いてきて、そこで止まります。**
+
+```bash
+herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
+```
+
+**書き換えたら continuo を再起動してください。**動いている最中は `WORKFLOW.md` を読み直しません。
+
+### PR にレビューを書いたのに、エージェントが読まずに終わる
+
+**原因。**その PR の本文に `Closes #<issue の番号>` がありません。
+
+**仕組み。**エージェントは、次の turn で「この issue に紐づく PR」を2つのコマンドで探します。
+**1つ目は `closingIssuesReferences` を見ます。**これは
+**PR の本文に `Closes #42` / `Fixes #42` と書かれて初めて埋まる項目です。**
+**2つ目は issue の timeline の相互参照を見ます。**こちらは PR の本文が
+その issue に触れていれば拾いますが、**触れていなければ1件も返りません。**
+**どちらにも出てこない PR は、エージェントから見えません。**
+
+**確かめ方。**
+
+```bash
+gh pr view <PR番号> --repo <owner>/<repo> --json closingIssuesReferences --jq '.closingIssuesReferences'
+```
+
+**`[]` が返ったら、結びついていません。**
+
+**直し方。**PR の本文へ1行足します。エージェントが次に起動されたときから見えるようになります。
+
+```bash
+gh pr edit <PR番号> --repo <owner>/<repo> --body "$(gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body)
+
+Closes #<issue の番号>"
+```
+
+**組み込みのプロンプトは、この1行を入れるようエージェントに指示しています。**
+**それでも落ちていたときの直し方が、これです。**
+
 ### issue が `In Review` にならない
 
 **原因。**エージェントが `CONTINUO-STATUS: review` を出していません。
 **continuo が信じるのはカンバンの Status だけです。**エージェントが「終わった」と言っても、Status が動いていなければ終わっていません。
 
-**直し方。**pane で応答を読み、`WORKFLOW.md` の下半分（1回目のプロンプト）に依頼が入っているかを確かめます。
+**直し方。**pane で応答を読み、送られた文面に表明のしかたが入っているかを確かめます。
 
 ```bash
 herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
-grep -n "CONTINUO-STATUS" ~/continuo-work/WORKFLOW.md
+cd ~/continuo-work && continuo prompt --show | grep -n "CONTINUO-STATUS"
 ```
+
+**表明のしかたは組み込みのプロンプトにあります。**`WORKFLOW.md` を grep しても出ません。
+**組み込みは continuo の実行ファイルの中にあるので、版を上げる以外に手を入れる道はありません。**
 
 **書き換えたら continuo を再起動してください。**動いている最中は読み直しません。
 
