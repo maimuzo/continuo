@@ -874,9 +874,11 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		// **`記録の置き場所` を落とさない。**この検査が黙って無効になる筋道
 		// （Claude Code が置き場所の形を変えた・利用者が別の場所へ向けている）に気づけるのは、
 		// **この行が出ることと、そこに探した場所が載っていることの2つだけである。**
+		// **`session_uuid` の項目名を、他の3通りと揃える。**揃えないと、
+		// **その項目で絞り込んでいる運用者から、この経路だけが見えなくなる。**
 		o.logger.Info("身元ファイルのセッションへ復帰しないで、新しいセッションで始めます",
-			"identifier", issue.Identifier, "復帰しなかったセッション", skippedResume,
-			"新しいセッション", sessionUUID,
+			"identifier", issue.Identifier, "session_uuid", sessionUUID,
+			"復帰しなかったセッション", skippedResume,
 			"記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
 	default:
 		o.logger.Info("新しいセッションを立てて着手します（会話履歴はありません）",

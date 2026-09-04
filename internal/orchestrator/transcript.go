@@ -236,10 +236,12 @@ func openRegularFile(path string) (*os.File, error) {
 // **根の下に symlink で置かれたディレクトリを丸ごと飛ばすことになる。**
 // 中のファイルを見に行けば、通っていれば当たり、通っていなければ `os.Lstat` が失敗する。
 //
-// **ファイルの側は、解決してから `os.Lstat` で見る。**`acceptTranscriptPath`
-// （hook が渡した `transcript_path` の検査）と同じ順である。**symlink そのものは弾かない。**
-// 置き場所を別のディスクへ移して symlink を残した利用者の会話を、こちらだけが
-// 「無い」と答えることになるためである。**解決の先が通常のファイルであることは確かめる。**
+// **ファイルの側は `os.Stat` で見る。**symlink を辿った先が通常のファイルであれば数える。
+// **symlink そのものを弾かない**のは、置き場所を別のディスクへ移して symlink を残した利用者の
+// 会話を、こちらだけが「無い」と答えることになるためである。
+// **`filepath.EvalSymlinks` は使わない。**あれはパスの構成要素ごとに `lstat` を叩くうえ、
+// **「まだ無い」がほとんどのこの経路では、その全部が無駄になる。**`os.Stat` 1回で同じ答えが出る
+// （symlink を辿る・切れた symlink では失敗する・通常のファイルでなければ弾く）。
 //
 // **大きさは見ない。**「1バイトも書かれていない記録へ `--resume` を投げるとどうなるか」を
 // 測っていないためである。**測っていないものは「判定できない」側であり、
@@ -250,7 +252,10 @@ func openRegularFile(path string) (*os.File, error) {
 // **そこで得たパスを読み手へ渡すからである。**
 //
 // sessionUUID: 復帰しようとしているセッションの UUID。
-// 戻り値: 記録があるか、または判定できなければ true。
+// 戻り値: 記録があるか、または**探した結果として**判定できなければ true。
+// **UUID がパスの部品として使えない形のときだけは false である**（探しにいかない）。
+// **そこを true にしてはならない。**`..` を含む値で「記録がある」と答えることになり、
+// この関数が塞いでいる穴がそのまま開く。
 func (o *Orchestrator) hasTranscriptFor(sessionUUID string) bool {
 	// **身元ファイルは worktree の中にあり、エージェントが書き換えられる**（設計 3-2 / 3-23）。
 	// **`agent_id` と同じ規則で足りる**（英数字と `-` と `_` だけ。セッション UUID はこの形に収まる）。
@@ -273,12 +278,7 @@ func (o *Orchestrator) hasTranscriptFor(sessionUUID string) bool {
 	}
 	name := sessionUUID + transcriptExt
 	for _, e := range entries {
-		path := filepath.Join(o.transcriptRoot, e.Name(), name)
-		// **実在するなら解決してから見る**（`acceptTranscriptPath` と同じ順）。
-		if resolved, ok := resolvePath(path); ok {
-			path = resolved
-		}
-		info, statErr := os.Lstat(path)
+		info, statErr := os.Stat(filepath.Join(o.transcriptRoot, e.Name(), name))
 		if statErr != nil || !info.Mode().IsRegular() {
 			continue
 		}
