@@ -227,7 +227,7 @@ cannot be checked — is it reported as a leftover, as before.
 
 `continuo init` writes one file, `WORKFLOW.md`. The front matter at the top holds the config; the body below it holds the part of the agent's brief that is yours to write.
 
-Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced into the middle of it, right before the "what to do when you are done" section. Run `continuo prompt --show` to read the whole thing, or `continuo prompt --show --builtin` for the built-in part alone.
+Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole thing, or `continuo prompt --show --builtin` for the built-in part alone.
 
 The front matter at the top is the configuration. These four are the ones you will actually touch:
 

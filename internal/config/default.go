@@ -88,7 +88,7 @@ func DefaultConfig() *Config {
 				Handoff: TrackerProviderHandoffConfig{
 					BidWindowMs:   180000,
 					IdleTimeoutMs: 64800000,
-					// **1時間。**送る文面へ「1時間以上黙らない」として埋まる（設計 5-3n）。
+					// **1時間。**送る文面へは分に直して埋まるので、「60分以上黙らない」になる（設計 5-3n）。
 					ProgressIntervalMs: 3600000,
 					RecheckIntervalMs:  3600000,
 					// **既定のマージンは 10%。**枠を使い切る手前で入札をやめさせるための余白であり、
