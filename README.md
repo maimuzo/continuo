@@ -227,7 +227,7 @@ cannot be checked — is it reported as a leftover, as before.
 
 `continuo init` writes one file, `WORKFLOW.md`. The front matter at the top holds the config; the body below it holds the part of the agent's brief that is yours to write.
 
-Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole thing, or `continuo prompt --show --builtin` for the built-in part alone.
+Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole text that gets sent.
 
 The front matter at the top is the configuration. These four are the ones you will actually touch:
 
@@ -244,7 +244,14 @@ claude:
 
 `turn_timeout_ms` is **not** a cap on how long a turn may take. As long as the pane keeps changing, a single instruction can run for hours.
 
-Everything below the front matter is the first prompt sent to Claude Code — "write `CONTINUO-STATUS: review` when you are done", "commit and push before that", and so on. **Rewrite it to match how your project works.**
+**Do not write things like "write `CONTINUO-STATUS: review` when you are done" or "commit and push before that" in the body.** They already live in the brief built into the continuo binary.
+
+**Write how your project works in the body, below the front matter.** The template already ships with sections for how to run tests, how you want reviews done, which language to write in (it ships saying Japanese — change it if you want something else), and so on. Delete any you do not need. **continuo still runs with an empty body.**
+
+```bash
+continuo prompt --show            # the whole text that gets sent (built-in + your body)
+continuo prompt --show --builtin  # the built-in part only
+```
 
 Restart continuo after editing it. It does not reload while running.
 
