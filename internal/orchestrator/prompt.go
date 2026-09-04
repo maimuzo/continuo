@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
@@ -134,6 +135,13 @@ func BuildContinuationPrompt(
 //
 // **この送信は turn 数に数えない。**`max_dispatch_turns` の判定に影響させない。
 //
+// **進捗報告の印を付けるなと明示する**（issue #178）。段1 は
+// `<!-- continuo:progress -->` の付いたコメントを成果の報告として数えない。
+// **一方で組み込みの指示書は「いちばん下のコメントが自分の進捗報告なら、その1件に書き足す」と
+// 頼んでいる**（設計 5-3j）。**言わずに頼むと、エージェントは指示どおり進捗報告へ書き足し、
+// 段8 がまた「書かれていない」と判定して、段9 で `failure_state` へ落ちる。**
+// **書いたのに人間へ引き渡される。**
+//
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
 // 戻り値: 送る本文。
@@ -142,6 +150,11 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
 	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
+	fmt.Fprintf(&b,
+		"\n**新しく1件投稿してください。**途中経過の報告（%s が入っているもの）へ書き足すと、"+
+			"continuo はそれを成果の報告として数えません。\n"+
+			"**この報告に %s を入れないでください。**\n",
+		config.ProgressMarker, config.ProgressMarker)
 	return b.String()
 }
 

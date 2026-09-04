@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/redact"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -256,6 +257,12 @@ func (o *Orchestrator) recordRepoWorkspace(
 // **これがいちばん切り分けの難しい状態である。**issue の画面には印の付いたコメントが
 // 見えているのに、continuo は「書かれていない」と判定してセッションを復元しにいく。
 //
+// **途中経過の報告は数えない**（設計 3-25 の段1。issue #178）。
+// **`<!-- continuo:progress -->` の付いたコメントも `tracker.provider.comments.marker` を
+// 持っているので、数えると「途中経過を1回書いて最後の報告を忘れた run」を
+// 「書いた」と判定してしまう。**issue には「まだ作業中です」だけが残り、
+// **何をしたのかが誰にも分からないまま `In Review` に立つ。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // nodeID: 下敷きの GitHub issue のノード ID。
 // snap: 対象の run の写し。
@@ -300,6 +307,14 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 				"（エージェントが書いたものとして数えません）",
 				"identifier", snap.Identifier, "投稿者", c.Author,
 				"gh の持ち主", o.ghLoginName(), "url", c.URL)
+			continue
+		}
+		// **途中経過の報告は、この run の成果の報告ではない**（issue #178）。
+		//
+		// **判定は書き直さない。**持ち回りの期限を数える側（internal/handoff の
+		// `lastProgressOf`）と同じ関数を呼ぶ。**片方だけを厳しくすると、
+		// エージェントは指示どおり書いているのに、数える側どうしで答えが割れる。**
+		if handoff.IsProgressReport(c.Body) {
 			continue
 		}
 		if c.IsAgent {
