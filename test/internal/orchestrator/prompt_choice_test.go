@@ -105,8 +105,10 @@ func TestAdopt_復元で引き継いだrunには継続の指示を送る(t *test
 //     **「2 回目の試行です」が入っている**
 func TestResumeBackoff_再着手はセッションに復帰して1回目の本文を送る(t *testing.T) {
 	clock := newTestClock()
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
 	fx := newFixture(t, fixtureOptions{
-		Now: clock.Now,
+		Now:            clock.Now,
+		TranscriptRoot: t.TempDir(),
 		Mutate: func(cfg *config.Config) {
 			cfg.Agent.MaxRetryBackoffMs = 10000
 			cfg.Tracker.VerifyStatesEvery = 0

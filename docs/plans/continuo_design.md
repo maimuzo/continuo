@@ -986,7 +986,13 @@ pane（`pane.rename`）と herdr workspace（`worktree.open` の `label` と `wo
 **会話の記録があるかを、投げる前に見る。**`<記録の根>/<cwd を綴り直したもの>/<セッション UUID>.jsonl`
 を、根の直下1階層だけ広げて探す（`hasTranscriptFor`）。**置き場所のディレクトリ名は当てない。**
 Claude Code が cwd を1つのディレクトリ名へ畳むときの綴り直しの規則は確かめきれていない
-（`internal/redact/redact.go` の `homeDashChars`）。**セッション UUID は一意なので、名前を当てなくても足りる。**
+（[internal/redact/redact.go:157-173](../../internal/redact/redact.go#L157-L173) の `homeDashChars`）。
+**セッション UUID は一意なので、名前を当てなくても足りる。**
+
+**そのぶん、残る穴が1つある。**`claude --resume` は cwd のプロジェクトのディレクトリで会話を解決するので、
+**worktree を別のパスへ作り直すと**（`workspace.root` を変えた、`git worktree` を別の場所へ足し直した）、
+**古いパスの記録に当たって `--resume` を渡してしまう。**そこでは元と同じ空回りが起きる。
+**塞ぐにはディレクトリ名を当てる必要があり、その規則が確かめきれていない以上、いまは塞げない。**
 
 **なぜ投げる前に見るのか。着手が段9 の途中で落ちると、身元ファイルには会話が1度も作られていない
 UUID が残るためである。**下の「復帰に失敗したら新しいセッションで始め直す」が採り直した UUID を
@@ -1039,13 +1045,17 @@ pane はシェルのプロンプトへ戻る**（**同じ pane でそのまま�
 ```text
 level=INFO msg="前回のセッションに復帰して再着手します（会話履歴を引き継ぎます）" identifier=octocat/hello-world#188 session_uuid=8aebf7af-… worktree=/…/worktrees/…
 level=INFO msg="新しいセッションを立てて着手します（会話履歴はありません）" identifier=octocat/hello-world#188 session_uuid=e1f2… worktree=/…/worktrees/…
-level=INFO msg="身元ファイルのセッションに会話の記録が無いので、新しいセッションで始めます" identifier=octocat/hello-world#188 session_uuid=b52c16af-… 記録の置き場所=/…/.claude/projects worktree=/…/worktrees/…
+level=INFO msg="身元ファイルのセッションへ復帰しないで、新しいセッションで始めます" identifier=octocat/hello-world#188 session_uuid=b52c16af-… 理由="記録が無い" 記録の置き場所=/…/.claude/projects worktree=/…/worktrees/…
 level=WARN msg="前回のセッションへ復帰できなかったので、新しいセッションで始め直します" identifier=octocat/hello-world#188 復帰しようとしたセッション=8aebf7af-… 新しいセッション=e1f2… error="…"
 ```
 
 **3通り目を落とさない。**落とすと、身元ファイルに UUID が入っていた再着手が
 **「新しいセッションを立てて着手します」と名乗る**ので、運用者から見て新規の着手と見分けが付かない。
 **この症状を報告した利用者は、まさにログの繰り返し回数から原因を突き止めている。**
+
+**3通り目には `理由` を必ず添える。**上の表の4行のうち、復帰しない側は2つある
+（記録が無い / UUID がパスに使えない形である）。**後者はエージェントが身元ファイルを
+書き換えた場合を含む**（3-2 / 3-23）ので、**利用者が置き場所を消しただけの場合と同じ1行に見えてはならない。**
 
 **level は Info である。**記録が無いことは異常ではなく、判定の結果である。
 

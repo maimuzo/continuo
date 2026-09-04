@@ -837,11 +837,18 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	//
 	// **最後は自力で新しいセッションへ倒れるので壊れはしないが、空回りしている間、
 	// その枠は他の issue に使えない。**
-	if resumeUUID != "" && !o.hasTranscriptFor(resumeUUID) {
-		o.logger.Info("身元ファイルのセッションに会話の記録が無いので、新しいセッションで始めます",
-			"identifier", issue.Identifier, "session_uuid", resumeUUID,
-			"記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
-		resumeUUID = ""
+	//
+	// **理由もログに出す。**「記録が無い」と「身元ファイルの UUID が壊れている」は
+	// **原因も対処も違う。**後者はエージェントが身元ファイルを書き換えた場合を含む
+	// （設計 3-2 / 3-23）ので、利用者が `~/.claude/projects` を消しただけの場合と
+	// 同じ1行に見えてはならない。
+	if resumeUUID != "" {
+		if ok, reason := o.hasTranscriptFor(resumeUUID); !ok {
+			o.logger.Info("身元ファイルのセッションへ復帰しないで、新しいセッションで始めます",
+				"identifier", issue.Identifier, "session_uuid", resumeUUID,
+				"理由", reason, "記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
+			resumeUUID = ""
+		}
 	}
 	sessionUUID := resumeUUID
 	if resumeUUID == "" {

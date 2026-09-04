@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -223,7 +224,8 @@ func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue
 //   - 身元ファイルに、起動したセッション UUID が書かれている
 //   - 基本フローの事後条件（Status・コメント・pane・印・worktree と branch）が揃う
 func TestDispatch_新規の着手は新しいセッションを立てる(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
 	issue := sampleIssue(188, "Ready")
 	prompts := finishRunOnPrompt(t, fx, issue, "session-1")
 	fx.Tracker.AddIssue(issue)
@@ -276,7 +278,8 @@ func TestDispatch_新規の着手は新しいセッションを立てる(t *test
 //   - 送られた本文が1回目の本文（5-3）である
 //   - 基本フローの事後条件（Status・コメント・pane・印・worktree と branch）が揃う
 func TestDispatch_既存のworktreeがあれば前回のセッションに復帰する(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
 
 	issue := sampleIssue(188, "In Progress")
 	prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
@@ -347,7 +350,8 @@ func TestDispatch_既存のworktreeがあれば前回のセッションに復帰
 //   - 印は残っている
 //   - worktree は残っている
 func TestDispatch_復帰に失敗したら新しいセッションで始め直す(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
 	fx.AllowLog("前回のセッションへ復帰できなかったので")
 	prompts := recordPrompts(fx)
 
@@ -449,7 +453,7 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	// **hook の引き当ての索引の張り替えを見る。**張り替えていないと、pane に残った前の
 	// Claude Code が前回のセッション UUID を名乗って Stop hook を送り、
 	// **立て直した run の turn が別の会話の transcript で終わる。**
-	stale := writeTranscript(t, t.TempDir(), "sess-188.jsonl", []any{
+	stale := writeTranscript(t, sessionTranscriptDir(t, fx), "sess-188.jsonl", []any{
 		typedUserLine("p-stale", "前のセッションの1行"),
 		assistantLine("req-stale", "CONTINUO-STATUS: review", false),
 	})
@@ -500,7 +504,9 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 //   - **`agent.start` が1回で済んでいる**（空回りしていない）
 //   - 身元ファイルの `session_uuid` が、その新しい UUID へ書き直されている
 func TestDispatch_会話の記録が無いセッションには復帰しない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	// **記録の根は、このテスト専用にする。**既定のままだと、前の実行が残した
+	// `sess-188.jsonl` を拾って「記録がある」と判定し、**この検査が黙って通る。**
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
 	prompts := recordPrompts(fx)
 
 	issue := sampleIssue(188, "In Progress")
@@ -537,5 +543,100 @@ func TestDispatch_会話の記録が無いセッションには復帰しない(t
 	if got := identitySessionUUID(t, fx, 188); got != starts[0] {
 		t.Fatalf("身元ファイルの session_uuid を書き直していない（次の着手もまた復帰を試みる）: got %q, want %q",
 			got, starts[0])
+	}
+}
+
+// TestDispatch_記録の判定は残り3つの場合も設計どおりに倒れる は、設計 3-3b の判定の表の
+// 残り3行を確かめる。
+//
+// 目的: **設計 3-3b の表は4つの結果を並べているのに、検査があるのは「記録が1件も無い」だけ
+// だった。**残り3つは、守りの向きを逆に書き換えても全部緑のまま通る状態にあった。
+//
+//	大きさが0の記録    … 復帰しない（会話が1バイトも書かれていないセッションへ戻っても、引き継げる内容が無い）
+//	UUID がパスに使えない … 復帰しない（身元ファイルはエージェントが書き換えられる。設計 3-2 / 3-23）
+//	記録の置き場所を読めない … **復帰を試す**（判定できないことで着手が止まってはならない）
+//
+// **3つ目だけ倒れる向きが逆である。**そこが逆になると、記録の置き場所を作っていない機械で
+// **再着手が会話履歴を毎回捨てる。**
+//
+// **この検査にも経路の印を付けない**（設計 6-18e）。通る経路は
+// `TestDispatch_既存のworktreeがあれば前回のセッションに復帰する` と同じ P001 である。
+//
+// 与える情報: 身元ファイルつきの worktree と `In Progress` の issue 1件。
+// 記録の置き場所と身元ファイルの UUID を、場合ごとに変える。
+// 成功条件: 復帰しない2つでは `--resume` が1つも渡らず、読めない場合では渡ること。
+func TestDispatch_記録の判定は残り3つの場合も設計どおりに倒れる(t *testing.T) {
+	cases := []struct {
+		name string
+		// uuid は身元ファイルへ書くセッション UUID である。
+		uuid string
+		// missingRoot を真にすると、記録の置き場所として実在しないパスを渡す。
+		missingRoot bool
+		// emptyTranscript を真にすると、大きさが0の記録を置く。
+		emptyTranscript bool
+		// wantResume は `--resume` が渡ることを期待するかである。
+		wantResume bool
+	}{
+		{
+			name:            "大きさが0の記録には復帰しない",
+			uuid:            "sess-188",
+			emptyTranscript: true,
+			wantResume:      false,
+		},
+		{
+			// **`/` はパスの区切りである。**通すと、根の外のファイルを見に行く組み立て方が成立する。
+			name:       "UUIDがパスに使えない形なら復帰しない",
+			uuid:       "sess/../188",
+			wantResume: false,
+		},
+		{
+			// **判定できないので、いままでどおり復帰を試す。**この検査は空回りを減らす
+			// ためのものであり、これが働かないことで着手が止まってはならない。
+			name:        "記録の置き場所を読めないときは復帰を試す",
+			uuid:        "sess-188",
+			missingRoot: true,
+			wantResume:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tc.missingRoot {
+				// **作らないディレクトリを指す。**`os.ReadDir` が失敗する状態である。
+				root = filepath.Join(root, "まだ作られていない置き場所")
+			}
+			fx := newFixture(t, fixtureOptions{TranscriptRoot: root})
+			prompts := recordPrompts(fx)
+
+			issue := sampleIssue(188, "In Progress")
+			prepareWorktree(t, fx, issue, identityOverride{SessionUUID: tc.uuid})
+			if tc.emptyTranscript {
+				// **`seedSessionTranscript` は使えない。**あれは中身のある記録を書く。
+				writeTranscript(t, sessionTranscriptDir(t, fx), tc.uuid+".jsonl", nil)
+			}
+			fx.Tracker.AddIssue(issue)
+
+			fx.Orc.Tick(context.Background())
+			waitFor(t, 10*time.Second, "turn が送られる", func() bool {
+				return len(prompts()) > 0
+			})
+
+			resumes := startResumeUUIDs(fx)
+			if len(resumes) == 0 {
+				t.Fatalf("agent.start が1度も呼ばれていない")
+			}
+			if tc.wantResume {
+				if resumes[0] != tc.uuid {
+					t.Fatalf("判定できないのに復帰していない: --resume=%q, want %q", resumes[0], tc.uuid)
+				}
+				return
+			}
+			for i, uuid := range resumes {
+				if uuid != "" {
+					t.Fatalf("復帰してはならないのに %d 回目の起動へ --resume を渡している: %q", i+1, uuid)
+				}
+			}
+		})
 	}
 }

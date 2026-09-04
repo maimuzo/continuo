@@ -106,8 +106,10 @@ func TestRunViews_turnの終わりの集計がダッシュボードへ届く(t *
 // **1件目を二重に数えて3件ぶんになっていないこと。**
 func TestRunViews_セッションに復帰した再着手でトークンを二重に数えない(t *testing.T) {
 	clock := newTestClock()
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
 	fx := newFixture(t, fixtureOptions{
-		Now: clock.Now,
+		Now:            clock.Now,
+		TranscriptRoot: t.TempDir(),
 		Mutate: func(cfg *config.Config) {
 			cfg.Agent.MaxRetryBackoffMs = 10000
 			cfg.Tracker.VerifyStatesEvery = 0
