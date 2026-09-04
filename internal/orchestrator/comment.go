@@ -102,6 +102,22 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 			"identifier", snap.Identifier)
 		return
 	}
+	// **会話の記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。着手の段5b と同じ検査である。
+	//
+	// **上の `StartedAt` の検査では足りない。**あれが見ているのは run が turn を送ったかで、
+	// **ここで `--resume` に渡すのは、いま読み直した身元ファイルの UUID である。**
+	// 立て直し（`restartWithNewSession`）は身元ファイルの側だけを差し替えるので、
+	// **turn を送り終えた run でも、身元ファイルには会話の無い UUID が入っていることがある。**
+	//
+	// **投げてしまうと、`agent.start` が herdr の待ちを使い切ってから失敗し、
+	// `failCommentRecovery` が issue を `failure_state` へ落として人間へ渡す。**
+	// **書かせるものが最初から無いので、そこまで待つ意味が無い。**
+	if !o.mayResumeSession(identity.SessionUUID) {
+		o.logger.Info("身元ファイルのセッションに会話の記録が無いので、復元しません",
+			"identifier", snap.Identifier, "session_uuid", truncateForLog(identity.SessionUUID),
+			"記録の置き場所", o.transcriptRoot)
+		return
+	}
 
 	// 段4: worktree を herdr の workspace として開き直し、その中の pane を引く。
 	//

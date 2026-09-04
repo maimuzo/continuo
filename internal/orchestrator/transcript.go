@@ -293,7 +293,12 @@ func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 			// **「無い」と「見られない」を分ける。**権限や IO の失敗を「無い」と数えると、
 			// **読めなかっただけの記録を捨てて、会話履歴を失う。**設計 3-3c は
 			// 「判定できないときは復帰を試す」と決めている。
-			if !os.IsNotExist(statErr) {
+			//
+			// **`ENOTDIR` は「無い」の側である。**根の直下にはディレクトリでないものも並ぶ
+			// （実測: 機械全体の一時ディレクトリで522件中24件）。**その下に記録は在りえない。**
+			// **「見られない」に数えると、そういうファイルが1つでもあるだけで
+			// この検査が丸ごと無効になる。**
+			if !os.IsNotExist(statErr) && !errors.Is(statErr, syscall.ENOTDIR) {
 				undecidable = true
 			}
 			continue

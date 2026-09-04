@@ -1840,6 +1840,18 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		transcriptRoot = tempRoot(t)
 	}
 	fx.TranscriptRoot = transcriptRoot
+	// **採番したセッションの記録を置くディレクトリを、記録の根の直下に1つ作る。**
+	// **実機の `~/.claude/projects/<cwd を綴り直したもの>/` に当たる。**
+	//
+	// **作れなくても止めない。**「記録の置き場所を読めないときは復帰を試す」を確かめる
+	// テストは、実在しないパスを根として渡す（設計 3-3c）。**そこで落とすと、
+	// その検査そのものが走らなくなる。**空のままなら記録を置かない。
+	seedDir, seedErr := os.MkdirTemp(transcriptRoot, "continuo-sessions-")
+	if seedErr != nil {
+		seedDir = ""
+	} else {
+		t.Cleanup(func() { _ = os.RemoveAll(seedDir) })
+	}
 	continuoPath := opts.ContinuoPath
 	if continuoPath == "" {
 		continuoPath = "/opt/continuo/bin/continuo"
@@ -1875,6 +1887,20 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 			defer sessionMu.Unlock()
 			id := fmt.Sprintf("session-%d", len(fx.Sessions)+1)
 			fx.Sessions = append(fx.Sessions, id)
+			// **採った UUID の記録を、記録の根の直下1階層へ置く**（設計 3-3c）。
+			//
+			// **実機では Claude Code が書くものである。**着手の段5b と、コメントの取り戻しは、
+			// **記録が無い UUID へ `--resume` を投げない。**置かないと、
+			// **セッションを採番したテストが軒並み「記録が無い」側へ倒れる。**
+			//
+			// **中身は空でよい。**この検査が見るのは、通常のファイルとして在るかだけである。
+			// **hook が渡す `transcript_path` の検査とは別の場所を見ているので、
+			// 既存のテストが `t.TempDir()` の下へ置いている記録には影響しない。**
+			if seedDir != "" {
+				if err := os.WriteFile(filepath.Join(seedDir, id+".jsonl"), []byte("{}\n"), 0o600); err != nil {
+					return "", err
+				}
+			}
 			return id, nil
 		},
 	})
