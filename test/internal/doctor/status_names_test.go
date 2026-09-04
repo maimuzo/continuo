@@ -46,7 +46,7 @@ func TestDoctor_ボードに紛らわしいStatusが並んでいれば注意を�
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
 	// **ボードを読んだときの応答を使い回す。**この検査のためにリクエストを増やさない。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "workflows", "items"}) {
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items", "workflows"}) {
 		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
 	}
 }

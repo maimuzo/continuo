@@ -609,9 +609,10 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 //	1 Bootstrap … project と Status フィールドを解決し、active_states・terminal_states 等の
 //	              選択肢名がボード側に全部あるかを照合する。**不一致は `✗`**（巡回が無言で
 //	              0件を返す原因になる。設計 3-6 / 3-32）
-//	2 自動化の取得 … カンバンの組み込みの自動化を読む（見出し語 `自動化`）。
-//	              **読めなくてもこの見出し語は落とさない**（自動化は起動の前提ではない）
-//	3 候補の取得 … active_states の issue を読み、対象リポジトリを集める
+//	2 候補の取得 … active_states の issue を読み、対象リポジトリを集める
+//	3 自動化の取得 … カンバンの組み込みの自動化を読む（見出し語 `自動化`）。
+//	              **要る2本より後ろに置く。**読めなくてもこの見出し語は落とさない
+//	              （自動化は起動の前提ではないので、期限が足りなければこの1本だけを諦める）
 //
 // **記号は落ち方で分ける**（設計 3-32）。レートリミットだけ `!`（一時的である）、
 // project が見つからない・トークンの取り出しに失敗・選択肢名の不一致は `✗` である。
@@ -685,25 +686,30 @@ func checkBoard(
 	}
 	boardStates := adapter.StatusOptionNames()
 
-	// **自動化はここで別に読む**（見出し語 `自動化`。issue #209）。
+	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
+	if err != nil {
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil, nil, nil
+	}
+
+	// **自動化はいちばん最後に読む**（見出し語 `自動化`。issue #209）。
+	//
 	// **起動時の検査のクエリへ混ぜてはならない。**あちらは GraphQL が `errors` を
 	// 1件でも返した時点で落ちるので、`workflows` を読めない環境
 	// （権限の足りないトークン・この field を持たない GitHub Enterprise Server）では
 	// **常駐プロセスが起動しなくなる。**
 	//
+	// **要る2本（Bootstrap と候補の取得）より後ろに置く。**この見出し語の期限は
+	// 2本ぶんしかないので、**先に置くと、止まったこの1本が候補の取得の残り時間を食い、
+	// 見出し語 `カンバン` が `!` になって clone も信頼登録も巻き添えで `!` になる。**
+	// **自動化は起動の前提ではない。**後ろに置けば、足りなくなるのはこの1本だけで済む。
+	//
 	// **読めなくても、ここでは何もしない。**戻り値は nil のままにして、
 	// 見出し語 `自動化` を `!`（確かめられなかった）にする。
-	// **見出し語 `カンバン` を落とさない。**自動化は起動の前提ではない。
 	workflows, err := adapter.FetchProjectWorkflows(ctx)
 	if err != nil {
 		opts.Logger.Debug("カンバンの自動化を読めませんでした（見出し語 `自動化` は確かめられなかったになります）",
 			"error", err)
 		workflows = nil
-	}
-
-	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
-	if err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil, nil, nil
 	}
 
 	repos := collectRepos(issues)

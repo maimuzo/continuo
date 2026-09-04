@@ -69,7 +69,7 @@ func TestDoctor_自動化が有効なのに対応表が空なら注意を出す(
 	}
 	// **自動化は別のリクエストで読む。**起動時の検査のクエリへ混ぜると、
 	// `workflows` を読めない環境で **常駐プロセスが起動しなくなる**（issue #209）。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "workflows", "items"}) {
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items", "workflows"}) {
 		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
 	}
 }

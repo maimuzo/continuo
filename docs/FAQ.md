@@ -909,9 +909,23 @@ continuo は `--permission-mode dontAsk` で起動するので、**リード自�
 
 **確かめ方。**
 
+**`continuo doctor` の `agent teams` の行が、下の1と4を代わりに見ています。**
+
+```bash
+cd ~/continuo-work && continuo doctor
+```
+
+| 出方 | どう読むか |
+| --- | --- |
+| `✓ agent teams` | **`claude.env` と、doctor を叩いたシェルには有効化がありません。**読んでいない出どころは、その行の下に並びます |
+| `! agent teams` | **どちらかで有効になっています。**その行に、どこで見つけたかと切り方が出ます |
+
+**doctor が見ていない出どころは、2と3と5と、4のうち herdr の側です。**`✓` でも issue が `Blocked` へ落ちるなら、そちらを手で見てください。
+
 **continuo が起動した Claude Code に、その環境変数が届いているかを見ます。**
 
 **1. continuo の設定を見る。**continuo はここに書いたものを `--settings` で渡します。
+**`continuo doctor` の `agent teams` の行が、ここを見ています。**
 
 ```bash
 grep -n 'AGENT_TEAMS' ~/continuo-work/WORKFLOW.md
@@ -930,6 +944,7 @@ grep -n 'AGENT_TEAMS' ~/.claude/settings.json ~/.claude/settings.local.json 2>/d
 ```
 
 **4. continuo と herdr を起動したシェルの環境変数を見る。**
+**`continuo doctor` は、doctor を叩いたシェルだけを見ています**（herdr の pane は見ていません）。
 
 **continuo は Claude Code を直接起動しません。**herdr が作った pane の中で起動します。
 **だから、この2つは別のプロセスの環境になりえます。**両方見てください。
@@ -1043,11 +1058,11 @@ grep -c '"type": "prompt"' "$(jq -r .settings_path .continuo.json)"
 **止めるときは、`claude.tool_gate.mode` の値を書き換えます。**
 
 ```bash
-grep -n 'tool_gate' ~/continuo-work/WORKFLOW.md
+grep -n -A2 'tool_gate' ~/continuo-work/WORKFLOW.md
 ```
 
-**行が出たら、その値を書き換えます。**1行も出なければ、次で足してください
-（v0.1.9 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+**行が出たら、その2行下の `mode:` の値を書き換えます**（`tool_gate:` は親のキーなので、その行に値はありません）。
+**1行も出なければ、次で足してください**（v0.1.9 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
 
 ```bash
 cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
@@ -2456,6 +2471,18 @@ cd ~/continuo-work && continuo doctor && continuo
 ### エージェントが PR を作った直後に止まる（automated_state_rewrite）
 
 **まず、この設定が自分に要るのかを確かめてください。**
+**`continuo doctor` の `自動化` の行が答えます**（v0.1.15 から）。
+
+```bash
+cd ~/continuo-work && continuo doctor
+```
+
+| 出方 | どう読むか |
+| --- | --- |
+| `✓ 自動化` | **この設定は要りません。**Status を書きうる自動化が1つも有効でないか、対応表が既に書かれています |
+| `! 自動化 … tracker.automated_state_rewrite が空です` | **下を読んでください。**その行の下に、有効な自動化の名前が並びます |
+
+**`continuo doctor` を叩けないときは、GitHub の画面で見てください。**
 カンバンの `Settings` → `Workflows` を開きます。**Status を書く自動化**
 （`Item added to project` / `Pull request merged` / `Code changes requested` など）が
 1つでも**有効**になっていますか。

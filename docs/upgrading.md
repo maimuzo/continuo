@@ -106,6 +106,70 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.1.14 から v0.1.15 へ
+
+**破壊的変更はありません。**設定に足すものも、`WORKFLOW.md` を書き換える必要もありません。
+
+| 何が変わったか | 当てる必要 |
+| --- | --- |
+| **`continuo doctor` の項目が16から18に増えました** | **要りません。**増えたのは `自動化` と `agent teams` の2つです（下の節） |
+| **continuo が issue へ出す「対応表を足してください」の案内が変わりました** | **要りません。**貼ると起動しなくなる形だったのを、**雛形に既にある行を書き換える形へ直しました**（下の節） |
+
+### `自動化` — カンバンの自動化が有効なのに、書き戻しの対応表が空
+
+**カンバンの組み込みの自動化が Status を書くと、continuo はそれを「知らない Status」と読んで走行中の run を止めます。**
+**止めずに続けさせる唯一の設定が `tracker.automated_state_rewrite` です。**
+**これが空のままで自動化を有効にしていると、PR を issue へ紐づけた瞬間に run が止まります。**
+
+**いままでは、止まってから初めて気づく状態でした。**この行が、起動する前に知らせます。
+
+```text
+! 自動化          Status を書きうるカンバンの自動化が 2件 有効なのに、tracker.automated_state_rewrite が空です
+```
+
+**記号は `!` までで、`✗` にはなりません。**空でも continuo は起動して走ります。
+**`Auto-add …` で始まる自動化は数えません**（item を載せるだけで Status を書かないためです）。
+**どの自動化がどの Status を書くかは GitHub の API が公開していない**ので、
+**有効な自動化の名前を並べます。**そのどれも Status を書かないなら、この注意は無視して構いません。
+
+**対応表の書き方は、下の「`tracker.automated_state_rewrite` — 自動化に動かされた Status を戻す」にあります。**
+
+### `agent teams` — Claude Code の agent teams が有効になっていないか
+
+**agent teams が有効な環境では、名前つきの `Agent` ツールの呼び出しが teammate として起動し、
+その許可の確認がリードの pane に出ます。**continuo はそれを `blocked` と読み、
+**pane を閉じて issue を `tracker.failure_state` へ落とします。**
+
+**いままでは文書に書いてあるだけでした。**この行が、起動する前に知らせます。
+
+```text
+✓ agent teams     読めた出どころに agent teams を有効にする設定はありません
+                  読んでいない出どころ: 組織の managed settings ／ …
+```
+
+**読むのは2か所だけです。**`claude.env` と、`continuo doctor` を叩いたシェルの環境変数です。
+**残り5か所は読みません**（組織の managed settings・対象リポジトリの2ファイル・
+利用者の `~/.claude/settings.json`・herdr の pane の環境）。
+**読んでいない出どころは、`✓` のときも必ず並びます。**読めた範囲だけを見て断言しないためです。
+
+**書いていないことは警告しません。**agent teams は Claude Code の既定で無効なので、
+**`1` を見つけたときだけ知らせます。**
+
+**詳しくは [docs/FAQ.md](FAQ.md) の「サブエージェントを呼んだ issue だけが `Blocked` に落ちる（agent teams）」にあります。**
+
+### 「この2行を足してください」の案内が変わりました
+
+**continuo が issue へ出していた案内は、`tracker:` の下へ塊を貼らせる形でした。**
+**`continuo init` が置いた雛形には `automated_state_rewrite: {}` の行が既にあるので、
+そのとおりに貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+
+**雛形に既にある行の `{}` を書き換える形へ直しました。**場所を見つける `grep` も一緒に出します。
+**同じ誤りが `docs/FAQ.md` と `docs/upgrading.md` の案内にもあったので、そちらも直しました。**
+
+**当てる必要はありません。**次に自動化が Status を動かしたときから、新しい案内が出ます。
+
+---
+
 ## v0.1.13 から v0.1.14 へ
 
 **破壊的変更が4つあります。****束ねた一文は置きません。**4つで直り方が違うためです。
@@ -1120,11 +1184,11 @@ worktree がどの branch にも載っていません（detached HEAD）: …
 **まず、いまあるかどうかを確かめてください。**
 
 ```bash
-grep -n 'tool_gate' ~/continuo-work/WORKFLOW.md
+grep -n -A2 'tool_gate' ~/continuo-work/WORKFLOW.md
 ```
 
-**行が出たら、その値を書き換えます。**1行も出なければ、次で足してください
-（v0.1.9 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+**行が出たら、その2行下の `mode:` の値を書き換えます**（`tool_gate:` は親のキーなので、その行に値はありません）。
+**1行も出なければ、次で足してください**（v0.1.9 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
 
 ```bash
 cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md

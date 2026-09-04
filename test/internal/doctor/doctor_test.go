@@ -72,11 +72,13 @@ func TestDoctor_前提が揃っていれば全項目すべて通る(t *testing.T
 	if fx.Herdr.Pings() != 1 {
 		t.Fatalf("herdr の ping を呼んだ回数が 1 ではなく %d だった", fx.Herdr.Pings())
 	}
-	// **カンバンへ送るのは3本である**（設計 3-32）。Bootstrap・自動化・候補の取得で
+	// **カンバンへ送るのは3本である**（設計 3-32）。Bootstrap・候補の取得・自動化で
 	// 1リクエストずつ。**自動化を Bootstrap のクエリへ混ぜてはならない。**あちらは
 	// GraphQL が `errors` を1件でも返した時点で落ちるので、`workflows` を読めない環境では
 	// **常駐プロセスが起動しなくなる**（issue #209）。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "workflows", "items"}) {
+	// **自動化はいちばん最後である。**要る2本より前に置くと、止まった自動化の1本が
+	// 候補の取得の残り時間を食い、**見出し語 `カンバン` が巻き添えで `!` になる。**
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items", "workflows"}) {
 		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
 	}
 }
