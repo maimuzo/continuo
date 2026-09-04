@@ -22,15 +22,16 @@ cd ~/continuo-work && continuo doctor
 **直し忘れると、目次だけが古い見出しを指し続けます。**
 **見出しに1文字でも触ったら**（空白の数や `#` の数も含みます）**、目次の項目の文と、飛び先の両方を見直してください。**
 
-**飛び先の id は、GitHub が見出しから作ります。**次のコマンドが、このファイルの id を全部出します。
-`user-content-` を外したものが、目次に書く飛び先です。
+**飛び先の id は、GitHub が見出しから作ります。**
+次のコマンドが、このファイルの id を全部出します。`user-content-` を外したものが、目次に書く飛び先です。
 
 ```bash
 gh api "repos/{owner}/{repo}/contents/docs/FAQ.md?ref={branch}" \
   -H 'Accept: application/vnd.github.html' | grep -o 'id="user-content-[^"]*"'
 ```
 
-**push したあとに叩いてください。**GitHub が公開している版を描画して読むためです。
+**push したあとに叩いてください。**
+GitHub が公開している版を描画して読むためです。
 
 - [起動できないとき](#起動できないとき)
   - [版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった](#版を上げたらprogress_interval_ms-の値-3600000-が不正ですで起動しなくなった)
