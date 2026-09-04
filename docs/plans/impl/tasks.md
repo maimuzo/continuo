@@ -136,7 +136,7 @@ cd /path/to/continuo && \
 **[CLAUDE.md](../../../CLAUDE.md) の再掲。**worker への指示にも必ず含める。
 
 - **`claude -p` は使わない。**提案もしない。Claude Agent SDK と API の直叩きも同じ理由で対象外
-- **GitHub Projects v2 の project #3 は本番のボードである。**読み取りだけ。検証でも書き込まない
+- **GitHub Projects v2 の project #3 は本番のボードである。**検証では書き込まない。**`.claude/rules/issue.md` の手順が求めるボードの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）だけは、この禁止の対象ではない**
 - **`updateProjectV2Field` を呼ばない。**選択肢の指定は全件置き換えとして扱われ、設定済みの Status が全部消える
 - **`~/.claude/projects/` 配下を消さない**
 - **`~/.claude.json` を書き換えない。**読み取るだけ
