@@ -3,13 +3,19 @@
 ## 絶対条件：issue を作ることと、着手することは別
 
 **issue を作ったら、そこで止まる。**
-**いまある issue 全部の中でグループ化し、着手順序を出して、人間の指示を待つ。**
+**いまある issue 全部の中でグループ化し、ボードへ載せ、着手順序へ並べ替えてから、人間の指示を待つ。**
 
 **2026-08-30、README の件で issue を2本作り、確認を待たずに着手した。**
 ユーザー指摘: **「issueを作ることと、そのissueをすぐ進めることは違うからな。
 issueは優先順位を計画して人間確認してから着手すること」**
 
 ## 手順
+
+**ここでいう AI は、人間と直接やりとりしているエージェントである。**
+**continuo が起動したエージェントは、ボードを1バイトも触らない**
+（[docs/plans/continuo_design.md:8535](../../docs/plans/continuo_design.md#L8535) と
+[internal/prompt/builtin.md:119](../../internal/prompt/builtin.md#L119)）。
+そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **ボードの操作は AI が行う。**`Ice Box` から `Ready` へ上げる1つだけが人間である
 （[docs/plans/continuo_design.md:8535-8537](../../docs/plans/continuo_design.md#L8535-L8537) の 4-1 の遷移表）。
@@ -20,7 +26,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 | **1** | **AI** | **issue を作る。**依頼は非同期で来るので、**まとめる部分は workflow で並列に進める** |
 | **2** | **AI** | **いまある issue 全部の中でグループ化し、着手順序を出す** |
 | **3** | **AI** | **ボードへ載せ、`Ice Box` を付ける。**代表も代表以外も `Ice Box` である。載せないと continuo は永久に拾わない |
-| **4** | **AI** | **`Ice Box` の並び順を、段2 で出した着手順序へ並べ替える** |
+| **4** | **AI** | **ボードの並び順を、段2 で出した着手順序へ並べ替える** |
 | **5** | **AI** | **止まる。**着手順序を人間へ示す |
 | **6** | **人間** | **着手する issue を指示する** |
 | **7** | **人間**（GitHub の画面） | **その issue を `Ice Box` から `Ready` へ上げる**（グループなら代表だけ） |
@@ -33,8 +39,8 @@ issueは優先順位を計画して人間確認してから着手すること」
 **やるのは AI である。**人間へ「載せてください」と渡さない。
 
 **段7 を飛ばすと、continuo は何も dispatch しない。**`tracker.active_states` の既定は
-`Ready` と `In Progress` の2つで（[internal/config/default.go:65](../../internal/config/default.go#L65)）、
-**`Ice Box` は入っていない。**段3 で代表を `Ice Box` へ置く以上、上げる段が要る。
+`Ready` と `In Progress` の2つで（[internal/config/default.go:107](../../internal/config/default.go#L107)）、
+**`Ice Box` は入っていない。**段3 で issue を `Ice Box` へ置く以上、上げる段が要る。
 **上げるのは人間で、GitHub の画面から行う**
 （[docs/plans/continuo_design.md:8536](../../docs/plans/continuo_design.md#L8536) の 4-1 の遷移表）。
 **AI がここだけは代行しない。**理由は3つある。
@@ -46,6 +52,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 | **実機が動き出す** | 上がった瞬間に continuo が dispatch し、Claude Code が起動してレートリミットの枠を消費する。**取り違えると、人間が知らないうちに機械が動く** |
 
 **人間が名指しで依頼したときだけ、AI が代行してよい。**「代わりに上げておいて」と言われた場合である。
+**このとき決めているのは人間のままなので、上の約束は空文にならない。**
 **言われていないのに上げてはならない。**
 
 **段4 の並び順は、`updateProjectV2ItemPosition` で動かす**（[docs/plans/continuo_design.md:8579](../../docs/plans/continuo_design.md#L8579) の 4-2）。
@@ -87,7 +94,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 typo1件のために104件のボードを並べ替えるのが、この節の目的から外れるためである。**
 
 **このとき issue は `Ice Box` のままである。**`tracker.active_states` に `Ice Box` は入っていないので
-（[internal/config/default.go:65](../../internal/config/default.go#L65)）、**continuo はこの issue を dispatch しない。**
+（[internal/config/default.go:107](../../internal/config/default.go#L107)）、**continuo はこの issue を dispatch しない。**
 **直すのは、いま動いている AI 自身である。**continuo に回したくなったら、人間が手順の段7 で `Ready` へ上げる。
 
 ## グループ化するときにやること
@@ -97,7 +104,7 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 | **1** | **AI** | 同一原因・同一ファイル・同一コンポーネントでまとめ、**代表を1つ決める** |
 | **2** | **AI** | **計画を代表の issue のコメントに書く** |
 | **3** | **AI** | **グループの代表以外を `Ice Box` へ落とす**（[docs/plans/continuo_design.md:8537](../../docs/plans/continuo_design.md#L8537) の 4-1 の遷移表）。`updateProjectV2ItemFieldValue` を叩く |
-| **4** | **AI** | **代表以外を、代表の sub-issue にする。**`addSubIssue` を叩く（`GraphQL-Features: sub_issues` のヘッダが要る） |
+| **4** | **AI** | **代表以外を、代表の sub-issue にする。**`addSubIssue` を叩く（2026-09-04 時点では `GraphQL-Features: sub_issues` のヘッダ無しでも schema に出る） |
 
 **絶対条件：Status を外してはならない。**`clearProjectV2ItemFieldValue` を使わない。
 
@@ -111,7 +118,7 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 
 **代表と代表以外の見分けは、sub-issue が付ける**（段4）。GitHub の画面で親子として表示される。
 
-**この節の段3 の対象は、いま何らかの Status が付いている issue 全部である。**
+**この節の段3 の対象は、`Ready` か `In Progress` に在る issue である。**
 手順の段2 は「**いまある issue 全部**」を見るので、**前のセッションで `Ready` や `In Progress` へ上がったものがグループに入りうる。**
 
 **この節の段3 を飛ばすと、continuo が代表とは別に dispatch する。**

@@ -3377,7 +3377,7 @@ turn が終わって表明が無かった → 次の turn を送るときに、�
 | 誰が | 何をするか |
 | --- | --- |
 | **continuo の外**（優先度分析の道具を使ってよい） | 同一原因・同一ファイル・同一コンポーネントのバグをグループ化し、修正の順番を決める。**計画を代表の issue のコメントに書き、グループの他の issue を `Ice Box` へ落とし、代表の sub-issue にする**（4-1 の遷移表） |
-| **人間** | ボードの並び順で代表の issue を前へ動かす（3-30 / 4-4） |
+| **continuo の外** | ボードの並び順で代表の issue を前へ動かす（3-30 / 4-4） |
 | **continuo** | **代表の issue を1件 dispatch する。**dispatch を決める時点ではグループを見ない。**表明を受けた時点で初めて、指された issue を1件ずつ照合して Status を動かす** |
 | **エージェント** | `gh issue view` で代表の issue のコメントを読み（3-29）、**グループ全体をまとめて直す。**終わったら**グループの各 issue について表明を書く** |
 
@@ -8534,7 +8534,7 @@ stateDiagram-v2
 | --- | --- | --- | --- |
 | **（ボードに載る）** → `Ice Box` | **continuo の外**（人間、または人間に代わって働く道具） | **issue を作ったあと、ボードへ載せて `Ice Box` を付けるとき。**continuo はボードに載っていない issue を見ない。**continuo が起動したエージェントは、ここを触らない**（5-3 の `CONTINUO-STATUS:` の1行だけを書く） | GitHub の画面／GraphQL |
 | `Ice Box` → `Ready` | 人間 | 着手を決めたとき | GitHub の画面 |
-| `Ready` / `In Progress` → `Ice Box` | **continuo の外** | **グループにまとめた issue のうち、代表以外を退避させるとき**（3-26）。**落とさないと continuo が別々に dispatch する。****Status を外してはならない。**未設定の item は候補の集合から消え、識別子での取り直しにも掛からない | GitHub の画面／GraphQL |
+| `Ready` / `In Progress` → `Ice Box` | **continuo の外** | **グループにまとめた issue のうち、代表以外を退避させるとき**（3-26）。**落とさないと continuo が別々に dispatch する。****Status を外してはならない。**未設定の item は候補の集合から消え、識別子での取り直しにも掛からない。**あわせて代表の sub-issue にする**（代表がどれかを人間が画面で見分けるため） | GitHub の画面／GraphQL |
 | `Ready` → `In Progress` | **continuo** | **dispatch の段2**（3-16。段1 でメモリ上の印を付けた直後） | GraphQL |
 | `In Progress` → `In Review` | **continuo**（きっかけはエージェント） | **その turn の transcript に `CONTINUO-STATUS: review` の行があったとき** | GraphQL（3-25） |
 | `In Progress` → `Blocked` | **continuo**（きっかけはエージェント） | **その turn の transcript に `CONTINUO-STATUS: blocked` の行があったとき** | GraphQL（3-25） |
