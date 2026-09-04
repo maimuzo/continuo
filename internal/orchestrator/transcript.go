@@ -3,9 +3,9 @@ package orchestrator
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -461,7 +461,9 @@ func truncateForLog(s string) string {
 		// **文字の境界が1つも無い。**先頭から続きのバイトだけが並んでいる場合である。
 		// **そのまま捨てると、何が書かれていたかの証拠が1バイトも残らない。**
 		// 16進で出す（この経路へ来る値は、そもそも正規の UUID ではない）。
-		return fmt.Sprintf("%x…（切り詰め・16進）", s[:maxLoggedValueBytes])
+		// **`fmt.Sprintf` に日本語を渡さない。**画面に出す文言を探す検査が、
+		// その形を「資源へ移していない文言」として数える（`TestDesign_画面に出す文言を日本語で直に書いていない`）。
+		return hex.EncodeToString([]byte(s[:maxLoggedValueBytes])) + "…（切り詰め・16進）"
 	}
 	return s[:cut] + "…（切り詰め）"
 }
