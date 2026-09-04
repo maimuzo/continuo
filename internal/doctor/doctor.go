@@ -231,12 +231,15 @@ func Run(ctx context.Context, opts Options) Report {
 	report.add(ghResult)
 
 	// 段5: ボード。設定と gh の認証の両方が通っていないと読めない。
-	// **ここだけ期限を2倍にする。**Bootstrap と候補の取得で2リクエスト送るためである。
+	// **ここだけ期限を3倍にする。**Bootstrap・自動化・候補の取得で3リクエスト送るためである。
+	// **2倍のままにしてはならない。**自動化のリクエストが上限まで待たされると、
+	// **その先の候補の取得が期限切れになり、見出し語 `カンバン` が `!` になる。**
+	// 自動化は起動の前提ではないので、そこで `カンバン` を落としてはならない。
 	var boardResult Result
 	var repos []Repo
 	var boardStates []string
 	var workflows []tracker.ProjectWorkflow
-	boardResult = withCheckTimeout(ctx, 2*opts.CheckTimeout, func(ctx context.Context) Result {
+	boardResult = withCheckTimeout(ctx, 3*opts.CheckTimeout, func(ctx context.Context) Result {
 		var res Result
 		res, repos, boardStates, workflows = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
 		return res
