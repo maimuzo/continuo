@@ -133,14 +133,37 @@ sh scripts/test-like-ci.sh
 ## PR にはレビュー結果を貼る
 
 **レビュー結果が貼られていない PR は、CI が落とします。**
-[.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) の `review-result` がそれです。
+[.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) が、**設計と実装で別々に数えます。**
 
-**数える条件は2つです。**
+| 検査の名前 | 何のレビューか | どこに貼るか | 目印（1行目） |
+| --- | --- | --- | --- |
+| **`design-review-result`** | **設計** | **その PR が閉じる issue のコメント** | `<!-- design-review-result -->` |
+| **`review-result`** | **実装** | **その PR のコメント** | `<!-- code-review-result -->` |
+
+**分けているのは、どちらが欠けているかを検査の名前で分かるようにするためです。**
+
+**数える条件は、どちらも同じ2つです。**
 
 | 条件 | なぜ |
 | --- | --- |
-| 目印 `<!-- code-review-result -->` が**コメントの本文の先頭**にある | 途中に書いたものまで数えると、**「レビューの話をしただけ」で通ってしまいます** |
+| 目印が**コメントの本文の先頭**にある | 途中に書いたものまで数えると、**「レビューの話をしただけ」で通ってしまいます** |
 | 投稿者が `OWNER` / `MEMBER` / `COLLABORATOR` のいずれか | **誰でもコメントできます。**外部の人が目印を貼れば通る状態にしません |
+
+**設計のレビューが要らない変更のとき**（文書だけの変更、他に影響しない1行の修正）**は、
+その PR のコメントに断りを貼ってください。**
+
+```
+<!-- design-review-skipped -->
+文書だけの変更のため
+```
+
+**2行目の理由を落とさないでください。**目印だけでは通りません。
+**PR の本文ではなくコメントに貼ってください。**本文はその PR を出した本人が書くので、
+**エージェントが自分で断りを書けてしまいます。**
+
+**この2つの目印は、利用者へ配る雛形にも同じ形で入っています**
+（[internal/scaffold/ci_template.go](internal/scaffold/ci_template.go) の `continuo-ci.yaml`）。
+**判定の条件を直すときは、両方を同時に直してください。**
 
 **通し方。**
 
@@ -169,11 +192,12 @@ BR=repos/$OWNER/continuo/branches/main/protection/required_status_checks
 # 一、いまの必須の検査を読む
 gh api "$BR" --jq '.checks[].context'
 
-# 二、review-result を足した JSON を作る（いまの設定はそのまま持ち越す）
+# 二、2つの検査を足した JSON を作る（いまの設定はそのまま持ち越す）
 gh api "$BR" --jq '{
   strict: .strict,
   checks: ((.checks | map({context, app_id}))
-           + [{context: "review-result", app_id: (.checks[0].app_id)}]
+           + [{context: "review-result", app_id: (.checks[0].app_id)},
+              {context: "design-review-result", app_id: (.checks[0].app_id)}]
            | unique_by(.context))
 }' > "${TMPDIR:-/tmp}/required-status-checks.json"
 
@@ -184,7 +208,7 @@ gh api --method PATCH "$BR" --input "${TMPDIR:-/tmp}/required-status-checks.json
 gh api "$BR" --jq '.checks[].context'
 ```
 
-**四で `review-result` を含む7つが並べば入っています。**足す前は次の6つです。
+**四で `review-result` と `design-review-result` を含む8つが並べば入っています。**足す前は次の6つです。
 
 ```text
 test (ubuntu-latest)
@@ -199,7 +223,7 @@ build (linux, arm64)
 | --- | --- |
 | **`checks` は全件置き換えである** | 一部だけ渡すと、**渡さなかった検査が必須から外れます。**二のように、いまの分を読んでから足すこと |
 | **`app_id` を落とさない** | `null` にすると、**どのアプリが報告した検査でも合格として扱われます** |
-| **job の名前を変えない** | 必須の検査は `review-result` という名前で登録されます。名前を変えると設定が宙に浮き、**検査が無いのにマージできる状態になります** |
+| **job の名前を変えない** | 必須の検査は `review-result` と `design-review-result` という名前で登録されます。名前を変えると設定が宙に浮き、**検査が無いのにマージできる状態になります** |
 
 ## 設計を読む
 
