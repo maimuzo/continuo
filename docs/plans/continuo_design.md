@@ -3299,8 +3299,10 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 1. issue のコメントを読み、「この run が書いたもの」があるかを見る
    → marker が付いていて、かつ CreatedAt が runState.StartedAt より新しいものだけを数える
      （worktree を再利用すると前の run のコメントが残っているため。3-22 の段2）
-   → **途中経過の報告は数えない**（`<!-- continuo:progress -->` が本文のどこかに在るもの）
+   → **途中経過の報告は数えない**（進捗報告の印が本文のどこかに在るもの）
      判定は internal/handoff の IsProgressReport を呼ぶ。持ち回りの期限を数える側と同じ関数である
+   → **印は本文のどこに在っても数えるので、成果の報告が印を引用しただけでも途中経過と読まれる**
+     組み込みの 5-3 が「この印を、最後の成果報告には付けないでください」と頼んでいるのは、そのためである
    → あれば、ここで終わり。何もしない
 2. 無ければ、まず走行中の worker を止める（pane.close。3-5 の2段）
    → 止めないと、同じセッション UUID が2つ生きることになる。
