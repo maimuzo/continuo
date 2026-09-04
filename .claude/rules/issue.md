@@ -15,7 +15,9 @@ issueは優先順位を計画して人間確認してから着手すること」
 **ここでいう AI は、人間と直接やりとりしているエージェントである。**
 **continuo が起動したエージェントは、この節が言う「ボードの操作」をしない。**
 issue をボードへ載せることも、Status を付けることも、並べ替えることもしない
-（[docs/plans/continuo_design.md:8541](../../docs/plans/continuo_design.md#L8541)）。
+（載せることと Status は [docs/plans/continuo_design.md:8541](../../docs/plans/continuo_design.md#L8541)、
+並べ替えは [docs/plans/continuo_design.md:8728-8732](../../docs/plans/continuo_design.md#L8728-L8732) の 4-4 の表に
+「continuo が起動したエージェント」の行が無いこと）。
 **ただし「1バイトも触らない」ではない。**設計は、そのエージェントが自分で `gh` を叩いて
 `In Progress` → `Blocked` を動かす経路を認めている
 （[docs/plans/continuo_design.md:8547](../../docs/plans/continuo_design.md#L8547)）。
