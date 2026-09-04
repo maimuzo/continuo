@@ -23,7 +23,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 （[internal/prompt/builtin.md:119](../../internal/prompt/builtin.md#L119) は「あなたが `gh` を叩く必要はありません」）。
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
-**ボードの操作は AI が行う。**ただし 4-1 の遷移表で「人間」と書かれた3つは人間である
+**ボードの操作は AI が行う。**ただし 4-1 の遷移表で「誰が」の欄が「人間」だけの3つは人間である
 （[docs/plans/continuo_design.md:8539-8551](../../docs/plans/continuo_design.md#L8539-L8551)）。
 
 | 遷移 | いつ |
@@ -75,7 +75,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 着手順序の逆順に「先頭へ送る」（3つ目の引数 `afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
 **引数名は 2026-09-04 に読み取りだけの introspection で確かめた**（`UpdateProjectV2ItemPositionInput` の入力に `afterId` がある）。
 
-**この書き込みは worker へ渡さない**（[CLAUDE.md](../../CLAUDE.md) の「不可逆な操作は worker に渡さない」）。**メインエージェントが自分で叩く。**
+**この書き込みは worker へ渡さない**（[CLAUDE.md:268](../../CLAUDE.md#L268) の「**不可逆な操作**…**は worker に渡さない**」）。**メインエージェントが自分で叩く。**
 
 **守ること4つ。**
 

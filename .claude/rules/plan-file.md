@@ -114,6 +114,19 @@ git grep -oh 'continuo_design\.md#L[0-9]*' -- '.claude/' 'CLAUDE.md' 'docs/plans
 done
 ```
 
+**`git grep` はリポジトリの追跡ファイルしか見ない。**
+**pull request の本文にも同じリンクを書いているので、そちらは別に検査する。**
+
+```sh
+gh pr view <番号> --json body --jq .body \
+  | grep -o 'continuo_design\.md#L[0-9]*' | sed 's/.*#L//' | sort -un | while read L; do
+  printf 'L%s  %.48s\n' "$L" "$(sed -n "${L}p" docs/plans/continuo_design.md)"
+done
+```
+
+**2026-09-04 に、この2つ目を飛ばして High を1件出した。**
+実ファイルの48本は全部合っていたのに、**本文の2本だけが残った。**
+
 **`空行` と `区切り行` が出たら、そのリンクはずれている。**
 **`ok` でも中身が意図と違うことがある。**行の頭48文字が出るので、目で確かめる。
 
