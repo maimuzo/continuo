@@ -315,8 +315,7 @@ echo "$(git rev-parse --show-toplevel)/.claude/skills/worker-briefing/SKILL.md"
 | **その作業でだけ効く判断** | 「この検証用の仕組みは開発中にしか使わないので、最低限でよい」 |
 | **確かめてほしいこと** | 「別の worker の報告なので、自分で確かめること」 |
 | **数える範囲**（絶対パス） | 「/Users/…/continuo の下全部」「/Users/…/continuo/internal/ と docs/ だけ」（2-5 の段2 で使う。渡さないと worker が別の checkout を数える） |
-
-| **前の周の対応表**（2周目以降のレビュー） | pull request のコメントに貼ってある `<!-- code-review-result -->` のもの。**渡さないと、否定した指摘が毎周また挙がる**（2-6 の段3） |
+| **前の周の対応表**（2周目以降のレビュー） | pull request のコメントに貼ってある `<!-- code-review-result -->` のもの。**渡さないと、否定した指摘が毎周また挙がる**（[.claude/rules/design-review.md](../../rules/design-review.md) の「絶対条件：合理的根拠を否定できるなら、直さない」） |
 
 **この表の行を、序数（2番目 / 4番目）で指さない。**行を1つ足した瞬間にずれる。
 **指すときは行の名前を書く。**

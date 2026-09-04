@@ -505,7 +505,9 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 
 **worker のプロンプトの1行目に、こう書く。**
 
-> 作業を始める前に `.claude/skills/worker-briefing/SKILL.md` を Read で開き、書いてあることを全部守れ。
+> 作業を始める前に `<リポジトリの絶対パス>/.claude/skills/worker-briefing/SKILL.md` を Read で開き、書いてあることを全部守れ。
+
+**`<リポジトリの絶対パス>` は実際の値に置き換える。**相対パスで渡すと、別の worktree で走る worker の Read が「無い」で返り、**前置きを1つも知らない worker が走る。**
 
 **Read で開かせる。**worker が Skill ツールを持っているとは限らないうえ、
 このスキルは `user-invocable: false` である。**パスを直接渡すのが確実である。**
@@ -543,8 +545,9 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 - 根拠が主張を支えていない（引用がずれている）
 - **検証していない強い断定**（「1バイトも無い」「必ず」「絶対に」）
 - 「〜のはず」「たぶん」「不定」で終わっているもの
-- **合理的根拠が「直さなかったときに誰が何を失うか」で書かれていない指摘**（[.claude/skills/worker-briefing/SKILL.md](../skills/worker-briefing/SKILL.md) の 2-6）。**「規約に反する」だけのものは、根拠が無いものとして扱う**
+- **合理的根拠が「直さなかったときに誰が何を失うか」で書かれていない指摘**（[.claude/skills/worker-briefing/SKILL.md](../skills/worker-briefing/SKILL.md) の 2-7）。**「規約に反する」だけのものは、根拠が無いものとして扱う**
 - **2周目以降で、「前の周に既に在ったもの」か「直しが持ち込んだもの」かの分類が無い指摘**（同じ 2-6）
+- **「直しが持ち込んだ」と分類しながら、前の周の commit でその行が違っていたことを示していない指摘**（同じ 2-6）。**示せないものは、レビュワーの見落としと区別が付かない**
 - **同じ誤りが他に無いかを数えていない指摘**（[.claude/skills/worker-briefing/SKILL.md](../skills/worker-briefing/SKILL.md) の 2-5）。**数えた件数と、叩いた検索パターンと範囲（対象パス）を書いていないものは、数えていないものとして扱う。**
   **数えた報告の根拠は、この3点で足りる。**この節の表と、上の「書くものと、持っていなければならないもの」の表の
   「対象コミット」までは求めない
