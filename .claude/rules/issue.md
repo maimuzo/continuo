@@ -24,7 +24,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **ボードの操作は AI が行う。**ただし 4-1 の遷移表で「人間」と書かれた3つは人間である
-（[docs/plans/continuo_design.md:8534-8545](../../docs/plans/continuo_design.md#L8534-L8545)）。
+（[docs/plans/continuo_design.md:8533-8545](../../docs/plans/continuo_design.md#L8533-L8545)）。
 
 | 遷移 | いつ |
 | --- | --- |
@@ -72,7 +72,8 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 **言われていないのに上げてはならない。**
 
 **段4 の並び順は、`updateProjectV2ItemPosition` で動かす**（[docs/plans/continuo_design.md:8579](../../docs/plans/continuo_design.md#L8579) の 4-2）。
-着手順序の逆順に「先頭へ送る」（`afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
+着手順序の逆順に「先頭へ送る」（3つ目の引数 `afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
+**引数名は 2026-09-04 に読み取りだけの introspection で確かめた**（`UpdateProjectV2ItemPositionInput` の入力に `afterId` がある）。
 
 **守ること3つ。**
 
@@ -80,6 +81,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 | --- | --- |
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:8581](../../docs/plans/continuo_design.md#L8581)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える |
+| **段4 のあと、`Ice Box` の item はボード全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
 | **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8612](../../docs/plans/continuo_design.md#L8612)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:3794-3795](../../docs/plans/continuo_design.md#L3794-L3795) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**

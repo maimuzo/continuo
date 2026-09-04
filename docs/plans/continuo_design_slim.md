@@ -69,7 +69,7 @@ flowchart TB
     TRK ==>|"読む（毎巡回）"| BOARD
     TRK ==>|"書く（Status・引き渡しの通知・Status を動かした記録）"| BOARD
     CC -.->|"書く（エージェントが自分で gh を叩いた場合）"| BOARD
-    HUMAN ==>|"書く（着手・並び替え・回答・レビュー完了）"| BOARD
+    HUMAN ==>|"書く（着手・回答・レビュー完了）"| BOARD
 ```
 
 **「Status をどう動かすかの判断はエージェントが持ち、continuo は自分の判断で勝手に動かさない。
