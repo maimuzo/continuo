@@ -11,32 +11,39 @@ issueは優先順位を計画して人間確認してから着手すること」
 
 ## 手順
 
-**ボードの Status を動かすのは人間で、GitHub の画面から行う**
-（[docs/plans/continuo_design.md:8058-8060](../../docs/plans/continuo_design.md#L8058-L8060) の 4-1 の遷移表）。
-**AI はそれを待つ側に立つ。**だから段ごとに「誰がやるか」を書く。
+**ボードの操作は AI が行う。**`Ice Box` から `Ready` へ上げる1つだけが人間である
+（[docs/plans/continuo_design.md:8535-8537](../../docs/plans/continuo_design.md#L8535-L8537) の 4-1 の遷移表）。
+**上げることが「どれに着手するか」の決定そのものだからである。**だから段ごとに「誰がやるか」を書く。
 
 | 順 | 誰がやるか | 何をするか |
 | --- | --- | --- |
 | **1** | **AI** | **issue を作る。**依頼は非同期で来るので、**まとめる部分は workflow で並列に進める** |
-| **2** | **人間**（GitHub の画面） | **ボードへ載せ、`Ice Box` を付ける。**載せないと continuo は永久に拾わない |
-| **3** | **AI** | **止まる。**いまある issue 全部の中でグループ化し、着手順序を出す |
-| **4** | **人間** | **着手する issue を指示する** |
-| **5** | **人間**（GitHub の画面） | **その issue を `Ice Box` から `Ready` へ上げる**（グループなら代表だけ） |
-| **6** | **AI** | **`Ready` へ上がったことを確かめてから着手する。**例外は下の「確認を待たずに着手してよい場合」だけである |
+| **2** | **AI** | **いまある issue 全部の中でグループ化し、着手順序を出す** |
+| **3** | **AI** | **ボードへ載せる。**グループの代表に `Ice Box` を付け、**代表以外は Status を付けない。**載せないと continuo は永久に拾わない |
+| **4** | **AI** | **`Ice Box` の並び順を、段2 で出した着手順序へ並べ替える** |
+| **5** | **AI** | **止まる。**着手順序を人間へ示す |
+| **6** | **人間** | **着手する issue を指示する** |
+| **7** | **人間**（GitHub の画面） | **その issue を `Ice Box` から `Ready` へ上げる**（グループなら代表だけ） |
+| **8** | **AI** | **`Ready` へ上がったことを確かめてから着手する。**例外は下の「確認を待たずに着手してよい場合」だけである |
 
-**段2 を飛ばすと、issue は作られたのにパイプラインから消える。**
+**段3 を飛ばすと、issue は作られたのにパイプラインから消える。**
 [docs/plans/continuo_design.md:34](../../docs/plans/continuo_design.md#L34) が
-「**ボードへ載せて `Ice Box` を付けるのは人間が1回行う**」「continuo はボードに載っていない issue を見ない」
+「**ボードへ載せて `Ice Box` を付けるのは continuo の外で1回行う**」「continuo はボードに載っていない issue を見ない」
 と書いているとおり、**continuo 自身はこの操作をしない。**
-**AI もしない。**AI がやるのは、**ボードに載っていない issue があることを人間へ伝えることだけ**である。
+**やるのは AI である。**人間へ「載せてください」と渡さない。
 
-**段5 を飛ばすと、continuo は何も dispatch しない。**`tracker.active_states` の既定は
+**段7 を飛ばすと、continuo は何も dispatch しない。**`tracker.active_states` の既定は
 `Ready` と `In Progress` の2つで（[internal/config/default.go:65](../../internal/config/default.go#L65)）、
-**`Ice Box` は入っていない。**段2 で全部を `Ice Box` へ置く以上、上げる段が要る。
+**`Ice Box` は入っていない。**段3 で代表を `Ice Box` へ置く以上、上げる段が要る。
 **上げるのは人間で、GitHub の画面から行う**
-（[docs/plans/continuo_design.md:8059](../../docs/plans/continuo_design.md#L8059) の 4-1 の遷移表）。
+（[docs/plans/continuo_design.md:8536](../../docs/plans/continuo_design.md#L8536) の 4-1 の遷移表）。
+**AI がここだけは代行しない。**着手を決めるのは人間だからである。
 
-**段3 の着手順序は、2箇所へ出す。**
+**段4 の並び順は、`updateProjectV2ItemPosition` で動かす。**着手順序の逆順に
+「先頭へ送る」（`afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
+**`updateProjectV2Field` は絶対に呼ばない**（[CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える）。
+
+**段2 の着手順序は、2箇所へ出す。**
 
 | 何を | どこへ |
 | --- | --- |
@@ -57,12 +64,12 @@ issueは優先順位を計画して人間確認してから着手すること」
 **この3つに無いものは、余裕があっても着手しない。**
 **「判断が要らないと思った」で広げてはならない。**広げると、上の絶対条件が3行で無効になる。
 
-**飛ばしてよいのは、手順の段3・段4・段5 と、段6 の「`Ready` へ上がったことを確かめる」だけである。**
-**段1・段2 は飛ばさない。**issue は作り、人間に頼んでボードへ載せてもらう。
+**飛ばしてよいのは、手順の段5・段6・段7 と、段8 の「`Ready` へ上がったことを確かめる」だけである。**
+**段1〜段4 は飛ばさない。**issue を作り、ボードへ載せ、並び順まで入れる。
 
 **このとき issue は `Ice Box` のままである。**`tracker.active_states` に `Ice Box` は入っていないので
 （[internal/config/default.go:65](../../internal/config/default.go#L65)）、**continuo はこの issue を dispatch しない。**
-**直すのは、いま動いている AI 自身である。**continuo に回したくなったら、人間が手順の段5 で `Ready` へ上げる。
+**直すのは、いま動いている AI 自身である。**continuo に回したくなったら、人間が手順の段7 で `Ready` へ上げる。
 
 ## グループ化するときにやること
 
@@ -70,12 +77,14 @@ issueは優先順位を計画して人間確認してから着手すること」
 | --- | --- | --- |
 | **1** | **AI** | 同一原因・同一ファイル・同一コンポーネントでまとめ、**代表を1つ決める** |
 | **2** | **AI** | **計画を代表の issue のコメントに書く** |
-| **3** | **人間**（GitHub の画面） | **グループの他の issue のうち、`Ready` か `In Progress` に在るものを `Ice Box` へ落とす**（[docs/plans/continuo_design.md:8060](../../docs/plans/continuo_design.md#L8060) の 4-1 の遷移表） |
+| **3** | **AI** | **グループの代表以外の Status を外す**（[docs/plans/continuo_design.md:8537](../../docs/plans/continuo_design.md#L8537) の 4-1 の遷移表）。`clearProjectV2ItemFieldValue` を叩く |
 
-**この節の段3 の対象は、前のセッションまでに `Ready` か `In Progress` へ上がっている issue である。**
-手順の段3 は「**いまある issue 全部**」を見るので、**既に上がっているものがグループに入りうる。**
-**このセッションで作ったばかりの issue は、手順の段2 で `Ice Box` に在るから何もしなくてよい。**
-**AI がやるのは、落とす対象を名指しして人間へ渡すことである。**
+**`Ice Box` へ落とすのではなく、Status を外す。**`Ice Box` へ落としても continuo は dispatch しないが、
+**代表と代表以外が同じ `Ice Box` に並ぶと、人間がボードを見たときに見分けられない。**
+
+**この節の段3 の対象は、いま何らかの Status が付いている issue 全部である。**
+手順の段2 は「**いまある issue 全部**」を見るので、**前のセッションで `Ready` や `In Progress` へ上がったものがグループに入りうる。**
+**このセッションで作ったばかりの issue は、手順の段3 で代表以外に Status を付けていないので何もしなくてよい。**
 
 **この節の段3 を飛ばすと、continuo が代表とは別に dispatch する。**
 [docs/plans/continuo_design.md:3299-3300](../../docs/plans/continuo_design.md#L3299-L3300) の 3-26 が
