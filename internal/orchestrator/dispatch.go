@@ -877,9 +877,12 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		// **この行が出ることと、そこに探した場所が載っていることの2つだけである。**
 		// **`session_uuid` の項目名を、他の3通りと揃える。**揃えないと、
 		// **その項目で絞り込んでいる運用者から、この経路だけが見えなくなる。**
+		// **身元ファイルの値をそのままログへ出さない。**この分岐へ来る理由の1つが
+		// 「UUID がパスに使えない形である」で、**そこはエージェントが書いた値である**
+		// （設計 3-2 / 3-23）。長さに上限が無いので、切ってから出す。
 		o.logger.Info("身元ファイルのセッションへ復帰しないで、新しいセッションで始めます",
 			"identifier", issue.Identifier, "session_uuid", sessionUUID,
-			"復帰しなかったセッション", skippedResume,
+			"復帰しなかったセッション", truncateForLog(skippedResume),
 			"記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
 	default:
 		o.logger.Info("新しいセッションを立てて着手します（会話履歴はありません）",

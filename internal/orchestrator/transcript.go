@@ -238,7 +238,12 @@ func openRegularFile(path string) (*os.File, error) {
 //
 // **エントリの種別で絞り込まない。**`os.ReadDir` が返す種別は lstat なので、
 // **根の下に symlink で置かれたディレクトリを丸ごと飛ばすことになる。**
-// 中のファイルを見に行けば、通っていれば当たり、通っていなければ `os.Lstat` が失敗する。
+// 中のファイルを見に行けば、通っていれば当たり、通っていなければ `os.Stat` が失敗する。
+//
+// **同じファイルの `SubagentTranscriptsFor` などとは、わざと逆の規則にしている。**
+// あちらは `os.Lstat` で「シンボリックリンクは通常のファイルとして数えない」。
+// **こちらは辿った先を見る**（理由はすぐ下）。**戻すと、symlink で置かれた記録を
+// 「無い」と答えるようになる。**
 //
 // **ファイルの側は `os.Stat` で見る。**symlink を辿った先が通常のファイルであれば数える。
 // **symlink そのものを弾かない**のは、置き場所を別のディスクへ移して symlink を残した利用者の
@@ -281,14 +286,24 @@ func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 		return true
 	}
 	name := sessionUUID + transcriptExt
+	undecidable := false
 	for _, e := range entries {
 		info, statErr := os.Stat(filepath.Join(o.transcriptRoot, e.Name(), name))
-		if statErr != nil || !info.Mode().IsRegular() {
+		if statErr != nil {
+			// **「無い」と「見られない」を分ける。**権限や IO の失敗を「無い」と数えると、
+			// **読めなかっただけの記録を捨てて、会話履歴を失う。**設計 3-3c は
+			// 「判定できないときは復帰を試す」と決めている。
+			if !os.IsNotExist(statErr) {
+				undecidable = true
+			}
+			continue
+		}
+		if !info.Mode().IsRegular() {
 			continue
 		}
 		return true
 	}
-	return false
+	return undecidable
 }
 
 // subagentDirName は subagent の記録を置くディレクトリの名前である。
@@ -387,6 +402,23 @@ func safeAgentID(id string) bool {
 		}
 	}
 	return true
+}
+
+// truncateForLog は、外部が書ける値をログへ出す前に切る。
+//
+// **身元ファイルの `session_uuid` には長さの上限が無い**（読み込みはファイル全体の大きさしか
+// 見ていない）。**そこはエージェントが書ける**ので（設計 3-2 / 3-23）、
+// **そのままログへ出すと、1回の dispatch でログが何メガバイトにも膨らむ。**
+//
+// **切ったことが分かる形にする。**切った跡が無いと、読む人は「これが全部だ」と受け取る。
+//
+// s: ログへ出す値。
+// 戻り値: `maxAgentIDBytes` に収まる値。切ったときは末尾に `…（切り詰め）` を付ける。
+func truncateForLog(s string) string {
+	if len(s) <= maxAgentIDBytes {
+		return s
+	}
+	return s[:maxAgentIDBytes] + "…（切り詰め）"
 }
 
 // maxAgentIDBytes は `agent_id` をパスの部品に使うときの長さの上限（バイト）である。
