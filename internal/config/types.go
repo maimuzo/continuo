@@ -155,7 +155,8 @@ type TrackerProviderHandoffConfig struct {
 	//	1週間余裕値 = 100 − 1週間の使用率 − WeeklyMarginPercent
 	//
 	// **1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
-	// モデル別の枠は一定量を使うまで現れないので、現れないものは判定に入らない。
+	// **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ使用率0で返るので、
+	// 最大を採れば、使っていない枠は自動的に判定へ効かない。
 	WeeklyMarginPercent int `yaml:"weekly_margin_percent"`
 	// OnAssigneeGate は、担当者が付いていて着手できないとき（1人でも2人以上でも）の扱いである
 	// （issue #134 / #136 / #140）。想定する値は
