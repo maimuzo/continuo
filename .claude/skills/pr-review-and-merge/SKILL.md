@@ -96,6 +96,12 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 /code-review <PR 番号>
 ```
 
+**`/code-review` はプロンプトを足せない。**PR 番号と effort level しか渡せないので、
+**[.claude/skills/worker-briefing/SKILL.md](../worker-briefing/SKILL.md) の 2-6（1回で全部挙げる）と
+2-7（合理的根拠を書く）をレビュワーへ渡せない。**
+**その2つを効かせたいときは、`/code-review` ではなく Agent でレビュワーを立て、
+worker-briefing を Read させる**（[.claude/rules/design-review.md](../../rules/design-review.md) の「誰にレビューさせるか」）。
+
 **`code-review` は Claude Code に同梱されている skill である。このリポジトリの中には無い。**
 （確かめ方: `git ls-tree -r --name-only HEAD -- .claude/commands .claude/skills/code-review` が1件も返さない）
 
