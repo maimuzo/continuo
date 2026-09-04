@@ -97,11 +97,25 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		o.logger.Warn("身元ファイルを読めないので復元できません", "identifier", snap.Identifier, "error", err)
 		return
 	}
-	if identity.SessionUUID == "" || identity.SettingsPath == "" {
-		o.logger.Warn("身元ファイルにセッション UUID か設定ファイルのパスがありません",
+	// **セッション UUID は、run が持っていれば身元ファイルに無くてもよい**（下で先に採る）。
+	// **身元ファイルはエージェントが書き換えられる**ので（設計 3-2 / 3-23）、
+	// **そこを空にされただけで、走り切った run の成果をまとめられなくなってはならない。**
+	if identity.SettingsPath == "" || (snap.SessionUUID == "" && identity.SessionUUID == "") {
+		o.logger.Warn("復帰に使うセッション UUID か、設定ファイルのパスがありません",
 			"identifier", snap.Identifier)
 		return
 	}
+	// **worktree の実体が無ければ、ここで静かに戻る。**記録の検査より前に置く。
+	//
+	// **片付け済みの run を `failure_state` へ落としてはならない。**引き渡しの通知は
+	// 「worktree の中身と git log を見てください」と案内するが、**そのディレクトリはもう無い。**
+	// **人間が見に行く先が存在しない通知を出すくらいなら、何も出さないほうがよい。**
+	if _, statErr := os.Stat(snap.WorktreePath); statErr != nil {
+		o.logger.Warn("worktree の実体が無いので復元しません（作り直しません）",
+			"identifier", snap.Identifier, "path", snap.WorktreePath, "error", statErr)
+		return
+	}
+
 	// **復帰する先は、この run が使っている UUID を先に採る。**
 	//
 	// **身元ファイルの値と食い違うことがある。**`SetSessionUUID` が失敗したとき、
@@ -131,7 +145,9 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		o.logger.Warn("復帰する先のセッションに会話の記録が無いので、コメントを書かせられません",
 			"identifier", snap.Identifier, "session_uuid", truncateForLog(resumeUUID),
 			"記録の置き場所", o.transcriptRoot)
-		o.failCommentRecovery(ctx, rs)
+		o.failCommentRecovery(ctx, rs,
+			"復帰する先の会話の記録が見つからなかった。**エージェントには何も送っていない。**"+
+				"Claude Code の会話の置き場所（既定は `~/.claude/projects`）が消えたか、別の場所へ移っている。")
 		return
 	}
 
@@ -145,13 +161,8 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 開いたものが本当にこの worktree かの検算・**continuo が開かせたリポジトリの親 workspace の
 	// 控え**（issue #19）も、着手のときと同じ1箇所から出る。**2箇所に書くと必ずずれる。**
 	//
-	// **worktree の実体が無ければ呼ばない。**Prepare は無ければ `git worktree add` で
-	// 作り直すので、**片付け済みの worktree をここで復活させてしまう。**
-	if _, statErr := os.Stat(snap.WorktreePath); statErr != nil {
-		o.logger.Warn("worktree の実体が無いので復元しません（作り直しません）",
-			"identifier", snap.Identifier, "path", snap.WorktreePath, "error", statErr)
-		return
-	}
+	// **worktree の実体が無いときは、上で既に戻っている。**Prepare は無ければ
+	// `git worktree add` で作り直すので、**片付け済みの worktree をここで復活させてしまう。**
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(rs.issue()))
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
@@ -194,7 +205,9 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		}
 		o.logger.Warn("セッションを復元できません（No conversation found など）",
 			"identifier", snap.Identifier, "error", err)
-		o.failCommentRecovery(ctx, rs)
+		o.failCommentRecovery(ctx, rs,
+			"セッションを復元できなかった。**エージェントには何も送っていない。**"+
+				"pane か Claude Code の側で起動に失敗している。")
 		return
 	}
 	rs.setAgentName(name)
@@ -205,7 +218,8 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 			return
 		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)
-		o.failCommentRecovery(ctx, rs)
+		o.failCommentRecovery(ctx, rs,
+			"復元した Claude Code が入力を受け付けられる状態にならなかった。**本文は送っていない。**")
 		return
 	}
 
@@ -241,7 +255,10 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	}
 
 	// 段9: それでも書かれなければ人間に渡す。
-	o.failCommentRecovery(ctx, rs)
+	//
+	// **ここだけが「送ったのに書かれなかった」である。**上の3つは本文を1文字も送っていない。
+	o.failCommentRecovery(ctx, rs,
+		"エージェントがコメントの投稿に失敗した / 指示の文面にコメントを書く手順が無い。")
 }
 
 // recordRepoWorkspace は、コメントの復元が開かせたリポジトリの親 workspace を
@@ -343,9 +360,14 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 
 // failCommentRecovery はコメントを書かせられなかった run を人間へ渡す（設計 3-25 の段9）。
 //
+// **「よくある原因」は呼び出し側が渡す。**そこが1文面に固定されていると、
+// **原因の違う経路が同じ案内を出す。**復帰を試さずに落ちた run に
+// 「エージェントがコメントの投稿に失敗した」と案内すると、**人間は起きていないことを調べにいく。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState) {
+// cause: 【よくある原因】の行に載せる文。
+func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, cause string) {
 	o.stopWorker(ctx, rs)
 	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
 	if err != nil {
@@ -357,7 +379,7 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState) {
 	o.postHandoffComment(ctx, rs, "Claude Code は作業を終えたと表明しましたが、**何をしたのかを issue に書き残しませんでした。**"+
 		"continuo は成果の要約を代筆しないので、このままでは何が行われたか誰にも分かりません。"+
 		"\n【確かめ方】worktree の中身（下記）と `git log` を見て、実際に何が変わったかを確かめてください。"+
-		"\n【よくある原因】エージェントがコメントの投稿に失敗した / 指示の文面にコメントを書く手順が無い。"+
+		"\n【よくある原因】"+cause+
 		"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。",
 		newStatusMove(moved, o.cfg.Tracker.FailureState))
 }

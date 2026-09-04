@@ -284,6 +284,11 @@ func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 	}
 	entries, err := os.ReadDir(o.transcriptRoot)
 	if err != nil {
+		// **黙って倒れない。**根が丸ごと読めないのは、下の「1件が読めない」の
+		// いちばん重い形である（全部が見えない）。**倒れたことが分からないと、
+		// この検査が丸ごと無効になっているのに誰も気づけない。**
+		o.logger.Warn("記録の置き場所を読めないので、記録があるかを決められません",
+			"記録の置き場所", o.transcriptRoot, "error", err)
 		return true
 	}
 	name := sessionUUID + transcriptExt
@@ -314,8 +319,9 @@ func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 	}
 	if unreadable > 0 {
 		// **「無い」と言い切れない。**設計 3-3c の「判定できないときは復帰を試す」へ倒す。
+		// **ここでは切らない。**`safeAgentID` が `maxAgentIDBytes` を超える値を既に弾いている。
 		o.logger.Warn("記録の置き場所に読めないものがあるので、記録があるかを決められません",
-			"session_uuid", truncateForLog(sessionUUID),
+			"session_uuid", sessionUUID,
 			"記録の置き場所", o.transcriptRoot, "読めなかった件数", unreadable)
 		return true
 	}
@@ -430,7 +436,8 @@ func safeAgentID(id string) bool {
 // **切ったことが分かる形にする。**切った跡が無いと、読む人は「これが全部だ」と受け取る。
 //
 // s: ログへ出す値。
-// 戻り値: `maxAgentIDBytes` に収まる値。切ったときは末尾に `…（切り詰め）` を付ける。
+// 戻り値: 切っていなければそのまま。**切ったときは `maxLoggedValueBytes` までの部分に
+// `…（切り詰め）` を付けたもの**（その分だけ長くなる）。
 func truncateForLog(s string) string {
 	if len(s) <= maxLoggedValueBytes {
 		return s

@@ -1837,7 +1837,16 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 
 	transcriptRoot := opts.TranscriptRoot
 	if transcriptRoot == "" {
-		transcriptRoot = tempRoot(t)
+		// **機械全体の一時ディレクトリを根にしない。**
+		//
+		// **着手の段5b と、コメントの取り戻しが、この根を `os.ReadDir` で舐める**（設計 3-3c）。
+		// 機械全体の一時ディレクトリには**他人が作った読めないディレクトリが並ぶ**ので、
+		// **「読めないものがある」の警告が出て、宣言していない WARN としてテストが落ちる。**
+		// **落ちるかどうかがその機械の `/tmp` の中身で決まる。**
+		//
+		// **`t.TempDir()` の親を採る。**テストが呼ぶ `t.TempDir()` は同じ親の下の連番なので、
+		// **hook が渡す `transcript_path` の検査（根の内側か）も通り続ける。**
+		transcriptRoot = filepath.Dir(t.TempDir())
 	}
 	fx.TranscriptRoot = transcriptRoot
 	// **採番したセッションの記録を置くディレクトリを、記録の根の直下に1つ作る。**
@@ -2063,8 +2072,8 @@ func taskNotificationEvent(sessionID, taskID string) hookserver.HookEvent {
 // 戻り値: 作ったディレクトリの絶対パス。
 func sessionTranscriptDir(t *testing.T, fx *fixture) string {
 	t.Helper()
-	// **文章の約束を、機械で止める。**既定の根のまま記録を置くと、そのテストは
-	// **前の実行の置き土産で通るようになり、守りの向きを逆にしても気づけない。**
+	// **機械全体の一時ディレクトリを根にしていないことを、機械で止める。**
+	// そこへ置くと、**前の実行の置き土産で通るようになり、守りの向きを逆にしても気づけない。**
 	//
 	// **解決してから比べる。**`tempRoot` は `filepath.EvalSymlinks` を通すので、
 	// macOS では `/private/var/folders/…` になる。**素の `os.TempDir()`（`/var/folders/…`）を
@@ -2074,8 +2083,8 @@ func sessionTranscriptDir(t *testing.T, fx *fixture) string {
 		root = resolved
 	}
 	if root == tempRoot(t) {
-		t.Fatalf("記録の根が機械全体の一時ディレクトリのままです。" +
-			"newFixture へ fixtureOptions{TranscriptRoot: t.TempDir()} を渡してください")
+		t.Fatalf("記録の根が機械全体の一時ディレクトリになっています。" +
+			"newFixture の既定（t.TempDir() の親）を使うか、fixtureOptions{TranscriptRoot: t.TempDir()} を渡してください")
 	}
 	dir, err := os.MkdirTemp(fx.TranscriptRoot, "continuo-transcripts-")
 	if err != nil {

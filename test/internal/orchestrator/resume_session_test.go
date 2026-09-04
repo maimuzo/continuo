@@ -631,6 +631,11 @@ func TestDispatch_記録の判定は残り2つの場合も設計どおりに倒�
 				root = filepath.Join(root, "まだ作られていない置き場所")
 			}
 			fx := newFixture(t, fixtureOptions{TranscriptRoot: root})
+			if tc.missingRoot {
+				// **根を読めないことは、この検査が意図して起こしている状態である。**
+				// 実装はそこで警告を1行出す（黙って倒れると、検査が無効になったことに気づけない）。
+				fx.AllowLog("記録の置き場所を読めないので")
+			}
 			prompts := recordPrompts(fx)
 
 			issue := sampleIssue(188, "In Progress")
