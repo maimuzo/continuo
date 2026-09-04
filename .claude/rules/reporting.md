@@ -543,7 +543,7 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 - 根拠が主張を支えていない（引用がずれている）
 - **検証していない強い断定**（「1バイトも無い」「必ず」「絶対に」）
 - 「〜のはず」「たぶん」「不定」で終わっているもの
-- **同じ誤りが他に無いかを数えていない指摘**（[.claude/skills/worker-briefing/SKILL.md](../skills/worker-briefing/SKILL.md) の 2-5）。**「1件だけだった」と書いていないものは、数えていないものとして扱う**
+- **同じ誤りが他に無いかを数えていない指摘**（[.claude/skills/worker-briefing/SKILL.md](../skills/worker-briefing/SKILL.md) の 2-5）。**数えた件数と、叩いた検索パターンと範囲を書いていないものは、数えていないものとして扱う**
 
 ### 不備があったら
 
