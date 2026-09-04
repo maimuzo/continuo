@@ -16,6 +16,141 @@ cd ~/continuo-work && continuo doctor
 
 ---
 
+## 目次
+
+**見出しを足す・文言を変える・並べ替えるときは、この目次も直してください。**
+直し忘れると、目次だけが古い見出しを指し続けます。確かめ方は、すぐ下の HTML コメントにあります。
+
+<!--
+目次の検算。2本あります。どちらも1行も出なければ合格です。
+
+1. 手元だけで済むほう。push もネットワークも要らないので、commit する前に叩けます。
+   目次のリンクの文と、本文の見出しの原文が1対1かを見ます。
+
+     diff \
+       <(awk '/^## 目次$/{t=1;next} t&&/^---$/{exit} t&&/^ *- \[/' docs/FAQ.md | sed 's/^ *- \[//; s/\](#.*$//') \
+       <(awk '/^```/{f=!f;next} !f && /^#{2,4} /' docs/FAQ.md | sed 's/^#* //' | grep -vx '目次')
+
+2. push したあとに叩くほう。GitHub が見出しへ実際に付けた id を取り、
+   このファイルの中のページ内リンク（いまは目次だけ）が、その中に在るかを見ます。
+
+     ( export LC_ALL=C
+       comm -23 \
+         <(grep -o '](#[^)]*)' docs/FAQ.md | sed 's/^](#//; s/)$//' | sort -u) \
+         <(gh api "repos/{owner}/{repo}/contents/docs/FAQ.md?ref={branch}" -H 'Accept: application/vnd.github.html' \
+           | grep -o 'id="user-content-[^"]*"' | sed 's/id="user-content-//; s/"$//' | sort -u) )
+
+   bash か zsh で叩いてください（<(…) を使っています）。
+   LC_ALL=C を落とさないでください。落とすと macOS の sort が別の id を同じものと見なし、
+   98件が96件に潰れて、飛び先の無いリンクを見逃します。
+   {owner} {repo} {branch} は gh が手元のリポジトリの値へ置き換えます。
+   ?ref={branch} を落とすと、いま押した branch ではなく既定 branch を測ってしまいます。
+
+このコメントは、目次を直す人の手元にしか要りません。GitHub の画面には出ません。
+ただし、見出しを足す人がこの18行目付近まで戻ってくるとは限りません。
+1. のほうは commit する前にいつでも叩けるので、迷ったらそちらを先に叩いてください。
+-->
+
+- [起動できないとき](#起動できないとき)
+  - [版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった](#版を上げたらprogress_interval_ms-の値-3600000-が不正ですで起動しなくなった)
+  - [起動した瞬間に「hook を受ける socket のディレクトリの親を作成できません」と出る](#起動した瞬間にhook-を受ける-socket-のディレクトリの親を作成できませんと出る)
+  - [「hook を受ける socket のパスが長すぎます（… バイト。上限は 103 バイト）」で止まる](#hook-を受ける-socket-のパスが長すぎます-バイト上限は-103-バイトで止まる)
+  - [「既にある hook を受ける socket のディレクトリ … の権限が 0755 です」で止まる](#既にある-hook-を受ける-socket-のディレクトリ--の権限が-0755-ですで止まる)
+  - [「二重起動を検出しました（ロックファイル …）」で起動できない](#二重起動を検出しましたロックファイル-で起動できない)
+  - [「front matter が不正です: unknown field "runtime"」で起動できなくなった](#front-matter-が不正です-unknown-field-runtimeで起動できなくなった)
+  - [「front matter が不正です: unknown field "…"」で止まる](#front-matter-が不正です-unknown-field-で止まる)
+  - [インストーラーが「破壊的変更があります」と出した](#インストーラーが破壊的変更がありますと出した)
+  - [「埋めていない設定が … 件あります（`__FILL_ME__` のままです）」と出る](#埋めていない設定が--件あります__fill_me__-のままですと出る)
+  - [`continuo init --force` が「WORKFLOW.md を書き換える一時ファイルを作れません」で止まる](#continuo-init---force-がworkflowmd-を書き換える一時ファイルを作れませんで止まる)
+- [doctor が通らないとき](#doctor-が通らないとき)
+  - [`✗ カンバン  Status の選択肢名が設定と一致しません`](#-カンバン--status-の選択肢名が設定と一致しません)
+  - [`✗ gh の認証  gh の scope に "project" がありません`](#-gh-の認証--gh-の-scope-に-project-がありません)
+  - [`✗ clone  ghq が PATH にありません`](#-clone--ghq-が-path-にありません)
+  - [`✗ clone  対象 N件のうち M件が見つかりません`](#-clone--対象-n件のうち-m件が見つかりません)
+  - [`✗ 信頼登録  対象 N件のうち M件が未承認です`](#-信頼登録--対象-n件のうち-m件が未承認です)
+  - [`continuo trust` が「~/.claude.json がありません」で終わる](#continuo-trust-がclaudejson-がありませんで終わる)
+  - [`✗ 資格情報  Keychain の項目 "Claude Code-credentials" を読めません`（macOS）](#-資格情報--keychain-の項目-claude-code-credentials-を読めませんmacos)
+  - [`continuo allow-keychain-access` が返ってこない](#continuo-allow-keychain-access-が返ってこない)
+  - [`✗ herdr  herdr の protocol 版が設定と一致しません`](#-herdr--herdr-の-protocol-版が設定と一致しません)
+  - [`! clone` `! 信頼登録` と出るが、何が悪いのか分からない](#-clone--信頼登録-と出るが何が悪いのか分からない)
+  - [`! 片付けの状態  cleanup.on_states に、tracker.terminal_states の外の Status があります`](#-片付けの状態--cleanupon_states-にtrackerterminal_states-の外の-status-があります)
+  - [`! 未記入の項目  WORKFLOW.md に書かれていない設定項目があります`](#-未記入の項目--workflowmd-に書かれていない設定項目があります)
+  - [`! 対応表のキー  tracker.automated_state_rewrite のキーに、カンバンの Status の選択肢に無いものがあります`](#-対応表のキー--trackerautomated_state_rewrite-のキーにカンバンの-status-の選択肢に無いものがあります)
+  - [`✗ プロンプトの変数  送るプロンプトに誤りがあります`](#-プロンプトの変数--送るプロンプトに誤りがあります)
+  - [`WORKFLOW.md` の本文に書いた指示が、組み込みの指示と2回届く](#workflowmd-の本文に書いた指示が組み込みの指示と2回届く)
+  - [進捗報告の間隔を変えたい](#進捗報告の間隔を変えたい)
+  - [`WORKFLOW.md` に書いた決まりが、エージェントに届いていない](#workflowmd-に書いた決まりがエージェントに届いていない)
+  - [`continuo prompt --show` の内訳に「WORKFLOW.md に本文はありません」と出る](#continuo-prompt---show-の内訳にworkflowmd-に本文はありませんと出る)
+- [issue が動かないとき](#issue-が動かないとき)
+  - [ボードに載せた item が1件も処理されない。エラーも出ない](#ボードに載せた-item-が1件も処理されないエラーも出ない)
+  - [`continuo setup` が「使うカンバンの番号が決まりませんでした」で止まる](#continuo-setup-が使うカンバンの番号が決まりませんでしたで止まる)
+  - [着手が「1つの branch を出せる worktree は1つだけなので…」で止まる](#着手が1つの-branch-を出せる-worktree-は1つだけなのでで止まる)
+  - [着手が「目的のパスに実体があるのに git の worktree として登録されていません」で止まる](#着手が目的のパスに実体があるのに-git-の-worktree-として登録されていませんで止まる)
+  - [着手が「worktree がどの branch にも載っていません（detached HEAD）」で止まる](#着手がworktree-がどの-branch-にも載っていませんdetached-headで止まる)
+  - [着手が「worktree が期待と違う branch に載っています」で止まる](#着手がworktree-が期待と違う-branch-に載っていますで止まる)
+  - [着手が「`herdr.worktree.base` が空で、カンバンから引いた issue にも既定 branch の情報がありませんでした」で止まる](#着手がherdrworktreebase-が空でカンバンから引いた-issue-にも既定-branch-の情報がありませんでしたで止まる)
+  - [issue に branch をリンクしたのに、worktree が既定 branch から始まる](#issue-に-branch-をリンクしたのにworktree-が既定-branch-から始まる)
+  - [「起動直後に確認の画面で止まりました」と出る](#起動直後に確認の画面で止まりましたと出る)
+  - [「作業の途中で確認の画面に止まりました」と出る](#作業の途中で確認の画面に止まりましたと出る)
+  - [「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）](#作業の途中で確認の画面に止まりましたと出るagent-teams-が有効な場合)
+  - [エージェントが叩いたコマンドが「危ない」と断られる](#エージェントが叩いたコマンドが危ないと断られる)
+  - [エージェントが、外部の人の書いたコメントを命令として実行してしまう](#エージェントが外部の人の書いたコメントを命令として実行してしまう)
+  - [「Claude Code が起動しませんでした（herdr が返した状態: "unknown"）」と出る](#claude-code-が起動しませんでしたherdr-が返した状態-unknownと出る)
+  - [「Claude Code の起動が N ミリ秒たっても落ち着きませんでした」と出る](#claude-code-の起動が-n-ミリ秒たっても落ち着きませんでしたと出る)
+  - [ボードに issue があるのに、1件も着手されない](#ボードに-issue-があるのに1件も着手されない)
+  - [issue が急に `Blocked` になった](#issue-が急に-blocked-になった)
+  - [人間は何も触っていないのに Status が変わり、issue が止まった](#人間は何も触っていないのに-status-が変わりissue-が止まった)
+  - [片付ける Status へ動かしたら issue が止まり、案内どおりに直したら起動しなくなった](#片付ける-status-へ動かしたら-issue-が止まり案内どおりに直したら起動しなくなった)
+  - [エージェントが push で終わり、PR が作られない](#エージェントが-push-で終わりpr-が作られない)
+  - [PR にレビューを書いたのに、エージェントが読まずに終わる](#pr-にレビューを書いたのにエージェントが読まずに終わる)
+  - [issue が `In Review` にならない](#issue-が-in-review-にならない)
+  - [応答を書き直している最中のエージェントに、continuo が次の指示を送ってしまう](#応答を書き直している最中のエージェントにcontinuo-が次の指示を送ってしまう)
+  - [issue にコメントが残っているのに「この run のコメントが無い」と言われる](#issue-にコメントが残っているのにこの-run-のコメントが無いと言われる)
+  - [Claude Code が `SessionStart:startup hook error / EROFS: read-only file system` で止まり続ける（WSL）](#claude-code-が-sessionstartstartup-hook-error--erofs-read-only-file-system-で止まり続けるwsl)
+  - [複数の機械で見張っているのに、いつも同じ機械しか issue を取らない](#複数の機械で見張っているのにいつも同じ機械しか-issue-を取らない)
+  - [複数の機械で見張っているのに、どの機械も issue を取らない](#複数の機械で見張っているのにどの機械も-issue-を取らない)
+  - [担当が付いたまま、issue がいつまでも進まない](#担当が付いたままissue-がいつまでも進まない)
+  - [作業が続いているのに担当が外れ、別の機械が同じ issue を最初からやり直した](#作業が続いているのに担当が外れ別の機械が同じ-issue-を最初からやり直した)
+  - [進捗のコメントが1件にまとまり、増えなくなりました](#進捗のコメントが1件にまとまり増えなくなりました)
+  - [人間が担当者になっている issue が、いつまでも着手されない](#人間が担当者になっている-issue-がいつまでも着手されない)
+  - [チームで、issue ごとに担当の PC を決めたい](#チームでissue-ごとに担当の-pc-を決めたい)
+    - [成り立つ条件](#成り立つ条件)
+    - [他のメンバーの PC は何をするか](#他のメンバーの-pc-は何をするか)
+    - [担当している PC が壊れたとき](#担当している-pc-が壊れたとき)
+  - [同じ GitHub アカウントで、複数の PC を動かしたい](#同じ-github-アカウントで複数の-pc-を動かしたい)
+    - [別のアカウントを用意する手順](#別のアカウントを用意する手順)
+    - [同じ PC で continuo を複数動かしたい](#同じ-pc-で-continuo-を複数動かしたい)
+  - [持ち回りを使わずに、1台だけで動かしたい](#持ち回りを使わずに1台だけで動かしたい)
+- [片付けたいとき](#片付けたいとき)
+  - [間違えた issue を `Ready` に置いてしまった。ボードで戻せばよい？](#間違えた-issue-を-ready-に置いてしまったボードで戻せばよい)
+  - [`continuo abandon` が返ってこない（「pane が閉じるのを待っています」のまま止まって見える）](#continuo-abandon-が返ってこないpane-が閉じるのを待っていますのまま止まって見える)
+  - [`Blocked` になった issue の worktree に、push していない作業が残っている](#blocked-になった-issue-の-worktree-にpush-していない作業が残っている)
+  - [push したのに「push されていない commit が N 件残っている」「base との差分が残っている」と言われ、worktree が片付かない](#push-したのにpush-されていない-commit-が-n-件残っているbase-との差分が残っていると言われworktree-が片付かない)
+  - [`continuo abandon` が「失うものがあるので何も消しません」で止まる](#continuo-abandon-が失うものがあるので何も消しませんで止まる)
+  - [`continuo abandon` が「`--park` に指定した … は tracker.active_states の値です」で止まる](#continuo-abandon-が--park-に指定した--は-trackeractive_states-の値ですで止まる)
+  - [`continuo abandon --dry-run` が「失われるものを調べられません: … invalid gitfile format」で何も出さずに終わる](#continuo-abandon---dry-run-が失われるものを調べられません--invalid-gitfile-formatで何も出さずに終わる)
+  - [worktree だけ消えて branch が残った](#worktree-だけ消えて-branch-が残った)
+  - [`continuo abandon` が、無いはずの branch を「残っています」と言う](#continuo-abandon-が無いはずの-branch-を残っていますと言う)
+  - [`git worktree list` に、continuo が作った覚えの無い worktree が並ぶ](#git-worktree-list-にcontinuo-が作った覚えの無い-worktree-が並ぶ)
+  - [`error: cannot delete branch '…' used by worktree at '…'` と出る](#error-cannot-delete-branch--used-by-worktree-at--と出る)
+  - [`continuo abandon --force` のあとに「branch … は残っています（消してよい branch だと検算できませんでした）」と出る](#continuo-abandon---force-のあとにbranch--は残っています消してよい-branch-だと検算できませんでしたと出る)
+  - [`fatal: cannot lock ref '…': reference broken` で着手できない。`git branch -D` も通らない](#fatal-cannot-lock-ref--reference-broken-で着手できないgit-branch--d-も通らない)
+- [気にしなくてよいもの](#気にしなくてよいもの)
+  - [ログに「hook の transcript_path を … 捨てました」が WARN で何度も出る](#ログにhook-の-transcript_path-を--捨てましたが-warn-で何度も出る)
+  - [「候補の取得に失敗しました … 絞り込みが効いていません」で巡回が止まる](#候補の取得に失敗しました--絞り込みが効いていませんで巡回が止まる)
+  - [issue を1件処理するたびに herdr の workspace が閉じ残る](#issue-を1件処理するたびに-herdr-の-workspace-が閉じ残る)
+  - [herdr の一覧で pane を見分けられない](#herdr-の一覧で-pane-を見分けられない)
+- [使い方が分からないとき](#使い方が分からないとき)
+  - [`init` / `setup` / `trust` / `doctor` / `abandon` のどれを使えばいい？](#init--setup--trust--doctor--abandon-のどれを使えばいい)
+  - [フラグを位置引数の後ろに書いてもいい？](#フラグを位置引数の後ろに書いてもいい)
+  - [画面に出る文言の言葉を変えたい（英語にしたい・日本語で固定したい）](#画面に出る文言の言葉を変えたい英語にしたい日本語で固定したい)
+  - [continuo を新しい版に入れ替えた。`WORKFLOW.md` は作り直したほうがいい？](#continuo-を新しい版に入れ替えたworkflowmd-は作り直したほうがいい)
+  - [`WORKFLOW.md` を書き換えたのに反映されない](#workflowmd-を書き換えたのに反映されない)
+  - [エージェントが PR を作った直後に止まる（automated_state_rewrite）](#エージェントが-pr-を作った直後に止まるautomated_state_rewrite)
+  - [手元の変更が herdr との組み合わせで壊れていないか確かめたい（開発者向け）](#手元の変更が-herdr-との組み合わせで壊れていないか確かめたい開発者向け)
+
+---
+
 ## 起動できないとき
 
 ### 版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった
