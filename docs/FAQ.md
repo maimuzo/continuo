@@ -2511,7 +2511,7 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -
 tracker:
   # …（ほかの設定）
   active_states: ["AI Ready", "AI In Progress"]   # 既にある行（値はあなたのカンバンに合わせたもの）
-  automated_state_rewrite:                        # 既にある行（雛形では {} が付いています）
+  automated_state_rewrite:                        # 既にある行。末尾の {} を消す
     "In Progress": "AI In Progress"               # ← これを足す
     # 左：自動化が書き込む Status 名（カンバンの選択肢と1文字ずつ合わせる）
     # 右：戻したい Status 名（必ず active_states の中から選ぶ）

@@ -504,7 +504,7 @@ func (a *Adapter) StatusOptionNames() []string {
 	return names
 }
 
-// FetchProjectWorkflows はカンバンの組み込みの自動化を、GitHub が返した順のまま全部返す
+// FetchProjectWorkflows はカンバンの組み込みの自動化を、GitHub が返した順のまま先頭100件まで返す
 // （設計 3-32 の見出し語 `自動化`。issue #209）。
 //
 // **`continuo doctor` だけが呼ぶ。**常駐プロセスはこの値を使わない。
@@ -524,7 +524,10 @@ func (a *Adapter) StatusOptionNames() []string {
 // Adapter が覚えている値を1つも使わない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
-// 戻り値の1つ目: 自動化の一覧（GitHub が返した順）。応答に `workflows` が無ければ nil
+// **`first: 100` で切ってある。**GitHub の組み込みの自動化は2026-09-05 時点で10個前後なので、
+// ページを送る分岐は作っていない。**101件目以降があるカンバンでは、そこを見ていない。**
+//
+// 戻り値の1つ目: 自動化の一覧（GitHub が返した順。先頭100件まで）。応答に `workflows` が無ければ nil
 // （project そのものが返らなかったときも nil である。**その判定は `Bootstrap` が持っている**）。
 // 戻り値の2つ目: 呼び出しそのものが失敗した場合のエラー。
 func (a *Adapter) FetchProjectWorkflows(ctx context.Context) ([]ProjectWorkflow, error) {

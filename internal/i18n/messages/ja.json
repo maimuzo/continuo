@@ -320,7 +320,7 @@
   "doctor.agent_teams.off": "claude.env の %s が \"0\" なので切ってあります（この値は利用者の設定にもシェルの export にも勝ちます）",
   "doctor.agent_teams.on_settings": "claude.env の %s が \"1\" なので、continuo が起動する Claude Code では agent teams が有効になります",
   "doctor.agent_teams.on_shell": "doctor を叩いたシェルで %[1]s に %[2]s が入っています（claude.env には書かれていません。公式が意味を決めているのは \"0\" と \"1\" だけです。herdr の pane がこの環境を継いでいれば、agent teams が有効になります）",
-  "doctor.agent_teams.remedy_off": "切るには WORKFLOW.md の claude.env に %s: \"0\" を書いてください（足す場所は claude: の下の env: の塊です。雛形には既にあります。塊ごと貼り替えないでください）",
+  "doctor.agent_teams.remedy_off": "切るには WORKFLOW.md の claude.env で %s を \"0\" にしてください。grep -n '%s' <WORKFLOW.md のパス> で場所を出し、行が出たらその値を書き換え、1行も出なければ claude: の下の env: の塊へ1行足してください（その塊は雛形に既にあります。塊ごと貼り替えないでください）",
   "doctor.agent_teams.remedy_why": "有効なままだと、名前つきの Agent が teammate として起動し、その許可の確認がリードの pane に出ます。continuo はそれを blocked と読み、pane を閉じて issue を failure_state へ落とします",
   "doctor.agent_teams.unknown_value": "claude.env の %[1]s が %[2]s です（公式が意味を決めているのは \"0\" と \"1\" だけなので、有効になるかどうかを判定できません）",
   "doctor.automations.board_unreadable": "カンバンを読めなかったため、自動化が有効かどうかを確かめられませんでした",

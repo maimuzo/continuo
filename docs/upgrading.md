@@ -1663,7 +1663,7 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -
 ```yaml
 tracker:
   # …（ほかの設定）
-  automated_state_rewrite:            # 既にある行（雛形では {} が付いています）
+  automated_state_rewrite:            # 既にある行。末尾の {} を消す
     "Todo": "In Progress"             # ← これを足す（自動化が書く Status: 戻す先の Status）
 ```
 

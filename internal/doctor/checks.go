@@ -602,14 +602,16 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 	}
 }
 
-// checkBoard はボードを1回読む（見出し語 `ボード`）。
+// checkBoard はボードを読む（見出し語 `ボード`）。
 //
-// 2つのことを行う。
+// 3つのことを行う。**GraphQL のリクエストも3本送る。**
 //
 //	1 Bootstrap … project と Status フィールドを解決し、active_states・terminal_states 等の
 //	              選択肢名がボード側に全部あるかを照合する。**不一致は `✗`**（巡回が無言で
 //	              0件を返す原因になる。設計 3-6 / 3-32）
-//	2 候補の取得 … active_states の issue を読み、対象リポジトリを集める
+//	2 自動化の取得 … カンバンの組み込みの自動化を読む（見出し語 `自動化`）。
+//	              **読めなくてもこの見出し語は落とさない**（自動化は起動の前提ではない）
+//	3 候補の取得 … active_states の issue を読み、対象リポジトリを集める
 //
 // **記号は落ち方で分ける**（設計 3-32）。レートリミットだけ `!`（一時的である）、
 // project が見つからない・トークンの取り出しに失敗・選択肢名の不一致は `✗` である。
@@ -626,10 +628,14 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 // 戻り値の2つ目: ボードから集めた対象リポジトリ（読めなければ nil）。
 // 戻り値の3つ目: ボード側の Status の選択肢名（Bootstrap を通っていなければ nil）。
 // **見出し語 `Status の名前` がこれを使う。**同じ応答から取るので、追加のリクエストは要らない。
-// 戻り値の4つ目: ボードの自動化の一覧（応答に入っていなければ nil）。
-// **見出し語 `自動化` がこれを使う。**これも同じ応答から取るので、リクエストは増えない
-// （`workflows` は `bootstrapQueryTemplate` に載せてある）。
-// **nil は「応答に入っていなかった」である。**長さ0の「1件も無い」と取り違えてはならない。
+// 戻り値の4つ目: ボードの自動化の一覧（読めなければ nil）。
+// **見出し語 `自動化` がこれを使う。**
+// **これだけは別のリクエストで取る**（`FetchProjectWorkflows`）。
+// **起動時の検査のクエリへ混ぜてはならない。**あちらは GraphQL が `errors` を1件でも
+// 返した時点で落ちるので、`workflows` を読めない環境
+// （権限の足りないトークン・この field を持たない GitHub Enterprise Server）では
+// **常駐プロセスが起動しなくなる。**
+// **nil は「読めなかった」である。**長さ0の「1件も無い」と取り違えてはならない。
 func checkBoard(
 	ctx context.Context,
 	cfg loadedConfig,

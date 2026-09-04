@@ -148,6 +148,37 @@ func TestDoctor_agentteamsの値が0でも1でもなければ判定できない�
 	}
 }
 
+// TestDoctor_agentteamsに空の値を書いていればclaudeenvの側で答える は、
+// **既に在るキーを「足してください」と案内しない**ことを確かめる（issue #137）。
+//
+// 目的: `claude.env` にキーが在って値が空のとき、シェルの側の枝へ落ちてはならない。
+// **落ちると「claude.env には書かれていません」と嘘を言い、既に在るキーを足せと案内する。**
+// **その案内どおりに足すと front matter が重複キーになり、continuo が起動しない。**
+// 与える情報: `claude.env` に空の値を書いた WORKFLOW.md と、シェルで `"1"` を張った環境。
+// 成功条件: `agent teams` が `!` で、説明が `claude.env` の話であること
+// （「doctor を叩いたシェル」と言わないこと）。
+func TestDoctor_agentteamsに空の値を書いていればclaudeenvの側で答える(t *testing.T) {
+	fx := newFixture(t)
+	setClaudeEnv(t, fx, doctor.EnvAgentTeams, "")
+	fx.Env[doctor.EnvAgentTeams] = "1"
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelAgentTeams, doctor.SymbolUnknown)
+	if !strings.Contains(res.Detail, "claude.env") {
+		t.Fatalf("claude.env の話になっていない: %q", res.Detail)
+	}
+	if strings.Contains(res.Detail, "doctor を叩いたシェル") {
+		t.Fatalf("キーが在るのにシェルの側の枝へ落ちている（書かれていないと嘘を言う）: %q", res.Detail)
+	}
+	// **直し方は「書き換える」と「足す」の両方を案内すること。**
+	// キーが在るのに「足してください」だけだと、重複キーになって起動しなくなる。
+	remedies := strings.Join(res.Remedies, "\n")
+	if !strings.Contains(remedies, "grep -n") {
+		t.Fatalf("場所を見つける手立てが直し方に無い: %q", remedies)
+	}
+}
+
 // TestDoctor_agentteamsを書いていなければ注意を出さない は、
 // **書いていないことを警告しない**ことを固定する。
 //

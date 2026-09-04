@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "4491527f65def0f39b2fc692e3df607f4296bd5cedae70f4cc3ce490deea1772",
+  "_source_sha256": "36daabe4e18537651afdc71e0e90f235d2a1602c2d192c9260aee2134f3514c8",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -321,7 +321,7 @@
   "doctor.agent_teams.off": "claude.env sets %s to \"0\", so it is turned off (this value beats both your user settings and a shell export)",
   "doctor.agent_teams.on_settings": "claude.env sets %s to \"1\", so agent teams will be enabled in the Claude Code that continuo starts",
   "doctor.agent_teams.on_shell": "The shell that ran doctor has %[1]s set to %[2]s (claude.env does not set it. The official docs only define \"0\" and \"1\". If the herdr pane inherits this environment, agent teams will be enabled.)",
-  "doctor.agent_teams.remedy_off": "To turn it off, set %s: \"0\" in claude.env in WORKFLOW.md (add it inside the env: block under claude:. The scaffold already has that block, so do not paste over the whole block.)",
+  "doctor.agent_teams.remedy_off": "To turn it off, set %[1]s to \"0\" in claude.env in WORKFLOW.md. Run grep -n '%[2]s' <path to WORKFLOW.md> to find it: if a line comes up, change its value; if none does, add one line inside the env: block under claude: (the scaffold already has that block, so do not paste over the whole block).",
   "doctor.agent_teams.remedy_why": "While it is enabled, a named Agent starts as a teammate and its permission prompt appears in the lead pane. continuo reads that as blocked, closes the pane, and moves the issue to failure_state.",
   "doctor.agent_teams.unknown_value": "claude.env sets %[1]s to %[2]s (the official docs only define \"0\" and \"1\", so whether it ends up enabled cannot be decided)",
   "doctor.automations.board_unreadable": "The kanban board could not be read, so whether any automation is enabled could not be checked.",

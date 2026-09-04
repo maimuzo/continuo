@@ -60,6 +60,12 @@ const (
 // 公式が意味を決めていない値なので、有効になるかどうかを判定できない。
 // **片方だけ厳しくすると、同じ設計の中に判定基準が2つできる。**
 //
+// **空文字だけは扱いを分ける。**`claude.env` にキーが在れば、値が空でも `claude.env` の側で答える。
+// **シェルの側へ落とすと「`claude.env` には書かれていません」と嘘を言い、
+// 既に在るキーを足せと案内することになる。**その案内どおりに足すと front matter が
+// 重複キーになり、**continuo が起動しない。**
+// **シェルの空文字は「設定されていない」と同じに扱う**（直す先が無い）。
+//
 // **記号は `✗` ではなく `!` にする。**agent teams を自分の対話用に有効にしている人が
 // 版を上げただけで continuo が起動しなくなる、ということを起こさない
 // （見出し語 `片付けの状態` と `未記入の項目` と同じ理由である）。
@@ -80,7 +86,11 @@ func checkAgentTeams(opts Options, cfg loadedConfig, configSymbol Symbol) Result
 
 	// **`claude.env` を先に見る。**`--settings` で渡すものは、利用者の設定にも
 	// シェルの export にも勝つ（設計 3-70 が引く公式の2文）。
-	if value, ok := cfg.Config.Claude.Env[EnvAgentTeams]; ok && value != "" {
+	//
+	// **キーが在るなら、値が空でもここで答える。**シェルの側へ落とすと、
+	// **「`claude.env` には書かれていません」と嘘を言い、既に在るキーを足せと案内することになる。**
+	// **その案内どおりに足すと front matter が重複キーになり、continuo が起動しない。**
+	if value, ok := cfg.Config.Claude.Env[EnvAgentTeams]; ok {
 		switch value {
 		case agentTeamsOff:
 			return Result{
@@ -97,11 +107,10 @@ func checkAgentTeams(opts Options, cfg loadedConfig, configSymbol Symbol) Result
 		}
 	}
 
-	// **`claude.env` に書かれていない（または空文字である）。**
-	// **空文字は「書かれていない」と同じに扱う。**`1` ではないので agent teams は
-	// 有効にならず、シェル側も空文字を素通りさせている。
-	// **片方だけ厳しくすると、同じ検査の中に判定基準が2つできる。**
-	// このときだけ、doctor を叩いたシェルを見る。
+	// **`claude.env` にキーが1つも無い。**このときだけ、doctor を叩いたシェルを見る。
+	// **シェルの空文字は「設定されていない」と同じに扱う。**`claude.env` の空文字とは
+	// 扱いが違うが、**違うのは直し方だからである。**`claude.env` は書き換える行が
+	// 実在するのに対し、シェルの空文字には直す先が無い。
 	// **herdr の pane と同じ環境とは限らない**ので、文言でそう断る。
 	//
 	// **`0` と空文字以外は、値をそのまま出して `!` にする。**`claude.env` の側と
@@ -134,7 +143,7 @@ func agentTeamsProblem(detail string) Result {
 		Detail: detail,
 		Notes:  []string{i18n.T(i18n.KeyDoctorAgentTeamsNoteUnread)},
 		Remedies: []string{
-			i18n.T(i18n.KeyDoctorAgentTeamsRemedyOff, EnvAgentTeams),
+			i18n.T(i18n.KeyDoctorAgentTeamsRemedyOff, EnvAgentTeams, EnvAgentTeams),
 			i18n.T(i18n.KeyDoctorAgentTeamsRemedyWhy),
 		},
 	}

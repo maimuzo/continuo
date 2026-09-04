@@ -856,7 +856,7 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, b
 			"\n\n場所は、既にある行から辿れます。\n\n"+
 			"```bash\ngrep -n 'automated_state_rewrite' <WORKFLOW.md のパス>\n```\n"+
 			"\n```yaml\ntracker:\n  # …（ほかの設定）\n"+
-			"  automated_state_rewrite:            # 既にある行（雛形では {} が付いています）\n"+
+			"  automated_state_rewrite:            # 既にある行。**末尾の {} を消す**\n"+
 			"    %q: %q   # ← これを足す\n```\n"+
 			"\n1行も出なかったときは、先に `continuo doctor --missing-keys-patch <WORKFLOW.md のパス> "+
 			"| patch -p0 <WORKFLOW.md のパス>` で足してから、上のように書き換えてください。"+
