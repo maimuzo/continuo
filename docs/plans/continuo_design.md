@@ -9103,13 +9103,13 @@ flowchart TD
 
     1. 4-4 に指定があれば、それ
     2. worktree の直下にある continuo の身元ファイル（既定 `.continuo.json`）の "base" の値
-    3. {{.push_branch}} が空でなければ origin/{{.push_branch}}
+    3. {{.push_branch}} が空でなければ、その名前
     4. このリポジトリの既定 branch
 
 段2 の `"base"` は、その JSON のキーの名前です。
 **7-4 が言う「base にする branch」（pull request の分岐元）とは別のものです。**
 
-段2 と段4 の名前が `origin/` で始まっていなければ、`origin/` を前に付けてから取ってきます。
+決まった名前が `origin/` で始まっていなければ、`origin/` を前に付けてから取ってきます。
 段4 の名前は次で引けます。
 
     gh repo view {{.issue.owner}}/{{.issue.repo}} --json defaultBranchRef --jq .defaultBranchRef.name

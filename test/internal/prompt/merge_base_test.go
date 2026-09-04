@@ -71,12 +71,25 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 	for _, want := range []string{
 		"1. 4-4 に指定があれば、それ",
 		`2. worktree の直下にある continuo の身元ファイル（既定 ` + "`.continuo.json`" + `）の "base" の値`,
-		"3. {{.push_branch}} が空でなければ origin/{{.push_branch}}",
+		"3. {{.push_branch}} が空でなければ、その名前",
 		"4. このリポジトリの既定 branch",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("分岐元の決め方に %q がありません（issue #214）", want)
 		}
+	}
+
+	// **`origin/{{.push_branch}}` と書かない。**
+	// **変数展開したあとの本文に `origin/<リンクされた branch>` が現れると、
+	// エージェントが push 先だと読み違える**（`.push_branch` は生の名前で渡す約束である。設計 3-22d）。
+	// `test/internal/orchestrator/push_branch_prompt_test.go` の
+	// `TestPrompt_リンクされたbranchの名前をpush_branchで渡す` が、それを本文の全体で見張っている。
+	if strings.Contains(body, "origin/{{.push_branch}}") {
+		t.Error("分岐元の決め方が `origin/{{.push_branch}}` を組み立てています。" +
+			"変数展開後の本文に origin/<branch> が現れ、push 先と読み違えられます（設計 3-22d）")
+	}
+	if !strings.Contains(body, "決まった名前が `origin/` で始まっていなければ、`origin/` を前に付けてから取ってきます") {
+		t.Error("`origin/` を前に付ける規則がありません（issue #214）")
 	}
 
 	// **`git fetch` へ辿れること。**取り込み方そのものは 7-1 が持っており、
