@@ -13,9 +13,14 @@ issueは優先順位を計画して人間確認してから着手すること」
 ## 手順
 
 **ここでいう AI は、人間と直接やりとりしているエージェントである。**
-**continuo が起動したエージェントは、ボードを1バイトも触らない**
-（[docs/plans/continuo_design.md:8535](../../docs/plans/continuo_design.md#L8535) と
-[internal/prompt/builtin.md:119](../../internal/prompt/builtin.md#L119)）。
+**continuo が起動したエージェントは、この節が言う「ボードの操作」をしない。**
+issue をボードへ載せることも、Status を付けることも、並べ替えることもしない
+（[docs/plans/continuo_design.md:8535](../../docs/plans/continuo_design.md#L8535)）。
+**ただし「1バイトも触らない」ではない。**設計は、そのエージェントが自分で `gh` を叩いて
+`In Progress` → `Blocked` を動かす経路を認めている
+（[docs/plans/continuo_design.md:8541](../../docs/plans/continuo_design.md#L8541)）。
+**組み込みの指示書は、それを勧めてはいない**
+（[internal/prompt/builtin.md:119](../../internal/prompt/builtin.md#L119) は「あなたが `gh` を叩く必要はありません」）。
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **ボードの操作は AI が行う。**ただし 4-1 の遷移表で「人間」と書かれた3つは人間である
@@ -29,7 +34,8 @@ issueは優先順位を計画して人間確認してから着手すること」
 
 **この3つを AI が動かすと、人間が1度も見ていない pull request が `Done` になり、
 人間が答えていない `Blocked` が実行の対象へ戻る。**
-**なぜ人間に残すのかは、下の段7 の説明にある3つの理由である。**だから段ごとに「誰がやるか」を書く。
+**`Ice Box` → `Ready` を人間に残す理由は、下の段7 の説明にある3つである。**
+**残る2つを人間に残す理由は、すぐ上の段落に書いた。**だから段ごとに「誰がやるか」を書く。
 
 | 順 | 誰がやるか | 何をするか |
 | --- | --- | --- |
@@ -74,7 +80,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 | --- | --- |
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:8581](../../docs/plans/continuo_design.md#L8581)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える |
-| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8612](../../docs/plans/continuo_design.md#L8612)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:3792](../../docs/plans/continuo_design.md#L3792) の本文である**） |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8612](../../docs/plans/continuo_design.md#L8612)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:3794-3795](../../docs/plans/continuo_design.md#L3794-L3795) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
@@ -114,7 +120,7 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 | **1** | **AI** | 同一原因・同一ファイル・同一コンポーネントでまとめ、**代表を1つ決める** |
 | **2** | **AI** | **計画を代表の issue のコメントに書く** |
 | **3** | **AI** | **グループの代表以外を `Ice Box` へ落とす**（[docs/plans/continuo_design.md:8537](../../docs/plans/continuo_design.md#L8537) の 4-1 の遷移表）。`updateProjectV2ItemFieldValue` を叩く |
-| **4** | **AI** | **代表以外を、代表の sub-issue にする。**`addSubIssue` を叩く（2026-09-04 時点では `GraphQL-Features: sub_issues` のヘッダ無しでも schema に出る） |
+| **4** | **AI** | **代表以外を、代表の sub-issue にする。**`addSubIssue` を叩く（下の実例のとおり `GraphQL-Features: sub_issues` のヘッダを付ける。2026-09-04 時点では無くても schema に出るが、付けておく） |
 | **5** | **AI** | **代表（とグループを持たない issue）を、リリース管理の issue の sub-issue にする。**無ければ1件立てる（下の「リリースに入れるものを、issue 1件で管理する」） |
 
 **絶対条件：Status を外してはならない。**`clearProjectV2ItemFieldValue` を使わない。
@@ -166,7 +172,7 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 
 **リリース管理の issue の本文には、着手順序をリストで書く。**
 **リストの順番と、ボードの `Ice Box` の中の並び順を揃える。**片方だけ直すと食い違う。
-**`Ready` へ上がったものは、ボードの上では動かせないので揃わない。**
+**`Ready` へ上がったものは動かさないので、そのぶんは揃わない**（上の「守ること3つ」で禁じている。動かす手段はある）。
 
 ### 関連付けのしかた
 
@@ -200,13 +206,12 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 | 1 | 人間が代表を `Ready` へ上げる |
 | 2 | continuo が代表を dispatch する |
 | 3 | **エージェントが、代表と代表以外を1つの worktree でまとめて直す** |
-| 4 | **エージェントが、代表以外の issue へもコメントを1件ずつ書く**（何がどう直ったか） |
-| 5 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
+| 4 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
 
-**この表の段4 は、2026-09-04 時点では起きない。**
+**代表以外には、何が直ったかが1行も残らない。**
 組み込みの指示書（[internal/prompt/builtin.md:361-372](../../internal/prompt/builtin.md#L361-L372) の 7-2）が、
 表明の1行と `Closes #45` しか書かせていないためである。
-**いまは、代表以外に何が直ったかが1行も残らない。**人間が代表の pull request を見て確かめること。
+**人間が代表の pull request を見て確かめること。**
 
 **クローズ後、代表以外の Status がどうなるかは測っていない。**GitHub Projects v2 には、項目を閉じたときに
 Status を動かす組み込みの自動化があり、有効かどうかはボードごとに違う。**GitHub の画面で確かめること。**
