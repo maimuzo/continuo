@@ -345,7 +345,7 @@ continuo は自分の知らない Status になった issue を、
 **エージェントがどちらに従うかは決まらないので、「作られない」を前提にしないでください。**
 
 **直し方は `tracker.automated_state_rewrite` に対応表を書くことです。**
-**そのまま貼れる yaml と、足す場所は [FAQ.md](FAQ.md) の
+**書き換える場所の見つけ方は [FAQ.md](FAQ.md) の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**

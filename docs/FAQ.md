@@ -1215,8 +1215,8 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 
 **何をどう書くかは、「使い方が分からないとき」の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
-そのまま貼れる yaml と、書けない5つの形がそこにあります。
-**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
+書き換える場所の見つけ方と、書けない5つの形がそこにあります。
+**当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
