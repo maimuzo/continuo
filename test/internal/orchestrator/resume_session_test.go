@@ -361,7 +361,7 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	// **`--resume` を1回も渡さないので、この代替フローの分岐元そのものが起きない**（設計 3-3b）。
 	// **ここで再現したいのは「記録はあるのに復帰できない」場合である**
 	// （pane がまだシェルを起動しきっていない、など）。
-	seedSessionTranscript(t, fx, "sess-188", []any{
+	seeded := seedSessionTranscript(t, fx, "sess-188", []any{
 		typedUserLine("p0", "前回の1行"),
 		assistantLine("req0", "作業中です", false),
 	})
@@ -453,7 +453,11 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	// **hook の引き当ての索引の張り替えを見る。**張り替えていないと、pane に残った前の
 	// Claude Code が前回のセッション UUID を名乗って Stop hook を送り、
 	// **立て直した run の turn が別の会話の transcript で終わる。**
-	stale := writeTranscript(t, sessionTranscriptDir(t, fx), "sess-188.jsonl", []any{
+	//
+	// **同じ名前の記録を2つ作らない。**根の下に `sess-188.jsonl` が2つあると、
+	// 着手の段5b がどちらを見つけるかは `os.ReadDir` の並び順（ディレクトリ名）で決まり、
+	// **`os.MkdirTemp` の付ける接尾辞は実行のたびに変わる。**上で置いた1つを書き直す。
+	stale := writeTranscript(t, filepath.Dir(seeded), "sess-188.jsonl", []any{
 		typedUserLine("p-stale", "前のセッションの1行"),
 		assistantLine("req-stale", "CONTINUO-STATUS: review", false),
 	})

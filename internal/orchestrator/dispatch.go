@@ -842,11 +842,14 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **原因も対処も違う。**後者はエージェントが身元ファイルを書き換えた場合を含む
 	// （設計 3-2 / 3-23）ので、利用者が `~/.claude/projects` を消しただけの場合と
 	// 同じ1行に見えてはならない。
+	//
+	// **ここでは書かない。**下の3通りと合わせて1行だけ書く（設計 3-3b の「ログは4通り」）。
+	// **2行出すと、運用者が「新しいセッションを立てて着手します」を数えて新規の着手を
+	// 数えるときに、この経路を二重に数える。**
+	skippedResume, skipReason := "", ""
 	if resumeUUID != "" {
 		if ok, reason := o.hasTranscriptFor(resumeUUID); !ok {
-			o.logger.Info("身元ファイルのセッションへ復帰しないで、新しいセッションで始めます",
-				"identifier", issue.Identifier, "session_uuid", resumeUUID,
-				"理由", reason, "記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
+			skippedResume, skipReason = resumeUUID, reason
 			resumeUUID = ""
 		}
 	}
@@ -867,10 +870,18 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **復帰した場合はトークンの集計の基準を作り直さない。**transcript のファイルが
 	// 同じままなので、作り直すと同じファイルを2回数える（設計 3-15）。
 	rs.beginAttempt(resumeUUID != "")
-	if resumeUUID != "" {
+	switch {
+	case resumeUUID != "":
 		o.logger.Info("前回のセッションに復帰して再着手します（会話履歴を引き継ぎます）",
 			"identifier", issue.Identifier, "session_uuid", resumeUUID, "worktree", prepared.Path)
-	} else {
+	case skippedResume != "":
+		// **上の「新しいセッションを立てて着手します」と混ぜない**（設計 3-3b の「ログは4通り」）。
+		// **身元ファイルに UUID が入っていた再着手であって、新規の着手ではない。**
+		o.logger.Info("身元ファイルのセッションへ復帰しないで、新しいセッションで始めます",
+			"identifier", issue.Identifier, "復帰しなかったセッション", skippedResume,
+			"新しいセッション", sessionUUID, "理由", skipReason,
+			"記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
+	default:
 		o.logger.Info("新しいセッションを立てて着手します（会話履歴はありません）",
 			"identifier", issue.Identifier, "session_uuid", sessionUUID, "worktree", prepared.Path)
 	}

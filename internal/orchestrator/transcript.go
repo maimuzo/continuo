@@ -222,9 +222,14 @@ func openRegularFile(path string) (*os.File, error) {
 const (
 	// transcriptFound は記録が見つかったことを表す。
 	transcriptFound = "記録がある"
-	// transcriptMissing は、その UUID の記録が根の下に1件も無かったことを表す
-	// （大きさが0のものしか無かった場合を含む）。
+	// transcriptMissing は、その UUID の記録が根の下に1件も無かったことを表す。
 	transcriptMissing = "記録が無い"
+	// transcriptEmpty は、記録のファイルはあったが1バイトも書かれていなかったことを表す。
+	//
+	// **`transcriptMissing` と分ける。**片方は「Claude Code が1度も起動しなかった」で、
+	// 見るのは herdr と pane である。もう片方は「起動したが何も書かなかった」で、
+	// 見るのは設定ファイルと最初の turn である。**直す先が違う。**
+	transcriptEmpty = "記録のファイルはあるが1バイトも書かれていない"
 	// transcriptUUIDUnsafe は、身元ファイルの UUID がパスの部品として使えない形だったことを表す。
 	transcriptUUIDUnsafe = "身元ファイルの session_uuid がパスに使えない形である"
 	// transcriptUndecidable は、記録があるかを決められなかったことを表す（根が決まっていない・読めない）。
@@ -252,9 +257,10 @@ const (
 // **根の下に symlink で置かれたディレクトリを丸ごと飛ばすことになる。**
 // 中のファイルを見に行けば、通っていれば当たり、通っていなければ `os.Lstat` が失敗する。
 //
-// **ファイルの側は `os.Lstat` で見る。**同じファイルの他の3箇所と同じ規則である
-// （`SubagentTranscriptsFor` / `ListSubagentTranscripts` / `subagentDirOf`）。
-// **`session_uuid` はエージェントが書き換えられる**ので、symlink を通常のファイルとして数えない。
+// **ファイルの側は、解決してから `os.Lstat` で見る。**`acceptTranscriptPath`
+// （hook が渡した `transcript_path` の検査）と同じ順である。**symlink そのものは弾かない。**
+// 置き場所を別のディスクへ移して symlink を残した利用者の会話を、こちらだけが
+// 「無い」と答えることになるためである。**解決の先が通常のファイルであることは確かめる。**
 //
 // **大きさが0のファイルは「記録が無い」とみなす。**Claude Code は記録を非同期に書くので、
 // 起動直後は1バイトも書かれていないことがある（`acceptTranscriptPath` の説明）。
@@ -279,12 +285,26 @@ func (o *Orchestrator) hasTranscriptFor(sessionUUID string) (bool, string) {
 		return true, transcriptUndecidable
 	}
 	name := sessionUUID + transcriptExt
+	empty := false
 	for _, e := range entries {
-		info, statErr := os.Lstat(filepath.Join(o.transcriptRoot, e.Name(), name))
-		if statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+		path := filepath.Join(o.transcriptRoot, e.Name(), name)
+		// **実在するなら解決してから見る**（`acceptTranscriptPath` と同じ順）。
+		if resolved, ok := resolvePath(path); ok {
+			path = resolved
+		}
+		info, statErr := os.Lstat(path)
+		if statErr != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if info.Size() == 0 {
+			// **「1件も無い」とは分けて覚える。**直す先が違う（`transcriptEmpty` の説明）。
+			empty = true
 			continue
 		}
 		return true, transcriptFound
+	}
+	if empty {
+		return false, transcriptEmpty
 	}
 	return false, transcriptMissing
 }

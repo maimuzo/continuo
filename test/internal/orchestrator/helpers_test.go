@@ -2031,6 +2031,12 @@ func taskNotificationEvent(sessionID, taskID string) hookserver.HookEvent {
 // 戻り値: 作ったディレクトリの絶対パス。
 func sessionTranscriptDir(t *testing.T, fx *fixture) string {
 	t.Helper()
+	// **文章の約束を、機械で止める。**既定の根のまま記録を置くと、そのテストは
+	// **前の実行の置き土産で通るようになり、守りの向きを逆にしても気づけない。**
+	if fx.TranscriptRoot == tempRoot(t) {
+		t.Fatalf("記録の根が機械全体の一時ディレクトリのままです。" +
+			"newFixture へ fixtureOptions{TranscriptRoot: t.TempDir()} を渡してください")
+	}
 	dir, err := os.MkdirTemp(fx.TranscriptRoot, "continuo-transcripts-")
 	if err != nil {
 		t.Fatalf("会話の記録の置き場所を作れません: %v", err)
