@@ -72,13 +72,20 @@ flowchart TD
 **取ってくるところで落ちたとき**（`couldn't find remote ref` など、その名前が remote に無いとき）**は、
 取り込むものがありません。**そのまま次へ進んでください。
 
-**マージで落ちたとき**（衝突・commit していない変更）**は、取り込む前へ戻してから止まります。**
+**マージを始める前に断られたとき**（`Your local changes to the following files would be overwritten by merge`）**は、
+commit していない変更が残っています。**前の試行の作業です。
+**先に commit してから、もう一度取り込んでください。**
+
+**`git merge --abort` は打たないでください。**マージが始まっていないので
+`There is no merge to abort` で落ち、変更も残ったままです。
+
+**マージの途中で衝突したとき**は、取り込む前へ戻してから止まります。
 
     git merge --abort
 
 **戻さずに `blocked` を出さないでください。**3-4 は `blocked` の前に commit と push を求めるので、
 **衝突の印が付いたままのファイルが branch へ push され、そこから pull request が出ます。**
-**戻したあとは、この worktree に commit するものがありません。**push もしません。
+**戻したあとは、この worktree に新しく commit するものがありません。**
 
 戻したら、取り込めなかったことを応答に書いて `CONTINUO-STATUS: blocked` を出してください。
 

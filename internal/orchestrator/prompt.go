@@ -156,9 +156,10 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
 	fmt.Fprintf(&b,
-		"\n**新しく1件投稿してください。**途中経過の報告（本文に %s の印が入っているもの）へ書き足すと、"+
-			"continuo はそれを成果の報告として数えません。\n"+
-			"**この報告には、その印を入れないでください。**説明のために書き写すのも避けてください。\n",
+		"\n**新しく1件投稿してください。**途中経過の報告（本文のいちばん上の印の並びに "+
+			"%s が入っているもの）へ書き足すと、continuo はそれを成果の報告として数えません。\n"+
+			"**この報告の先頭に、その印を置かないでください。**\n"+
+			"**本文の途中でその印について書くのは構いません。**数えるのは、いちばん上の並びだけです。\n",
 		bareProgressMarker())
 	return b.String()
 }

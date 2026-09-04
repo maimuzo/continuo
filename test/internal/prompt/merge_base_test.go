@@ -131,9 +131,20 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 	//
 	// **マージで落ちたら、取り込む前へ戻す。**戻さずに `blocked` を出すと、
 	// **3-4 が `blocked` の前に commit と push を求めるので、衝突の印ごと push される。**
+	// **`git merge --abort` は、マージが始まったときにしか効かない。**
+	// **commit していない変更があると、マージは始まる前に断られる**
+	// （`Your local changes to the following files would be overwritten by merge`）。
+	// そこで `--abort` を打つと `There is no merge to abort` で落ち、**変更も残ったままになる**
+	// （2026-09-05 に、空の remote と clone を作って実測）。
+	// **やり直しの試行は、前の試行が残した変更ごと worktree を使い回す。**
+	// **そこで「commit も push もせずに `blocked`」と言うと、残っている作業を人間へそのまま渡す。**
 	for _, want := range []string{
 		"取ってくるところで落ちたとき",
 		"そのまま次へ進んでください。",
+		"**マージを始める前に断られたとき**",
+		"先に commit してから、もう一度取り込んでください。",
+		"**`git merge --abort` は打たないでください。**",
+		"**マージの途中で衝突したとき**",
 		"git merge --abort",
 		"**戻さずに `blocked` を出さないでください。**",
 	} {
