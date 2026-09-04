@@ -144,6 +144,8 @@ func BuildContinuationPrompt(
 //
 // **印そのものは埋めない**（`bareProgressMarker`）。埋めると、エージェントが
 // 「この印は付けていません」と書き写しただけで、その報告が途中経過として捨てられる。
+// **照合の側も先頭の印の並びだけを見るようにしてあるが**（`handoff.StartsAsProgressReport`）、
+// **送る側でも埋めない。**守りは2つとも要る。
 //
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。

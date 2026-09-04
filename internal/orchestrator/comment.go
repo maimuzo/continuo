@@ -311,10 +311,15 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 		}
 		// **途中経過の報告は、この run の成果の報告ではない**（issue #178）。
 		//
-		// **判定は書き直さない。**持ち回りの期限を数える側（internal/handoff の
-		// `lastProgressOf`）と同じ関数を呼ぶ。**片方だけを厳しくすると、
-		// エージェントは指示どおり書いているのに、数える側どうしで答えが割れる。**
-		if handoff.IsProgressReport(c.Body) {
+		// **見るのは本文の先頭にある印の並びだけである**（`StartsAsProgressReport`）。
+		// **`IsProgressReport` は使わない。**あちらは印が本文のどこかに在れば真で、
+		// **成果の報告が印を引用しただけで捨てられる。**書いてあるのに書かなかったことにされ、
+		// 復元をもう一度通しても同じなら `failure_state` へ落ちる。
+		//
+		// **持ち回りの死活の判定は緩いままでよい**（設計 5-3l）。
+		// **あちらを厳しくすると、書き足し続けている担当が18時間で外れる。**
+		// **同じ緩さをこちらへ持ってくると、書いた run が人間へ渡る。**求める向きが逆である。
+		if handoff.StartsAsProgressReport(c.Body) {
 			continue
 		}
 		if c.IsAgent {

@@ -99,9 +99,22 @@ func TestComment_印の無い成果の報告はいままでどおり数える(t 
 	})
 
 	fx.Orc.Tick(context.Background())
-	// **run が終わるのを待つ。**Status が書かれた時点で、コメントの確認は済んでいる。
-	waitFor(t, 30*time.Second, "In Review が書かれる", func() bool {
-		return fx.Tracker.StateOf("PVTI_item188") == "In Review"
+	// **コメントの確認より「あと」に起きることを待つ。**
+	//
+	// **Status を待ってはならない。**Status を書くのは `applySignals` で、
+	// **コメントの確認（`finishRunClaimed` → `ensureAgentComment`）より前である。**
+	// Status で待つと、確認が走る前にこの検査が終わりうる。
+	// **そうなると「復元が走っていない」は「まだ走っていないだけ」と区別が付かず、
+	// この検査は何も守らなくなる。**
+	//
+	// **`pane.close` でも足りない。**コメントが無いと判定した経路も、復元へ入る前に
+	// `stopWorker` を呼ぶ（同じセッション UUID が2つ生きるのを防ぐため）。
+	// **数えると、復元が始まる前に条件が満たされる。**
+	//
+	// **`finishRunClaimed` の最後の `release` まで待つ。**そこまで来ていれば、
+	// コメントの確認も、復元の経路も、全部終わっている。
+	waitFor(t, 30*time.Second, "run が実行中の一覧から外れる", func() bool {
+		return len(fx.Orc.RunningIdentifiers()) == 0
 	})
 
 	for _, r := range fx.Herdr.Requests() {

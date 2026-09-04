@@ -66,19 +66,32 @@ func TestTemplate_組み込みのプロンプトは読む前に分岐元を取�
 func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 	body := prompt.Builtin()
 
-	// **段2 を落とさないことが、この検査の主目的である。**
-	// 落とすと、`herdr.worktree.base` を設定した利用者で黙って別の branch が混ざる。
+	// **身元ファイルを1番に置くことが、この検査の主目的である。**
+	// **4-4 は issue をまたいで同じ文言だが、身元ファイルは worktree ごとに continuo が書く。**
+	// 4-4 を上に置くと、`herdr.worktree.base` を設定していない利用者が
+	// 「分岐元は develop です」と本文へ書いただけで、**既定 branch から切った worktree へ
+	// develop の履歴が丸ごと入る。**衝突しないので、誰も気づかない。
 	for _, want := range []string{
-		"1. 4-4 に指定があれば、それ",
-		`2. worktree の直下にある continuo の身元ファイル（既定 ` + "`.continuo.json`" + `）の "base" の値`,
-		"3. {{.push_branch}} が空でなければ、その名前",
+		`1. worktree の直下にある continuo の身元ファイル（既定 ` + "`.continuo.json`" + `）の "base" の値`,
+		"2. 4-4 に指定があれば、それ",
 		"4. このリポジトリの既定 branch",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("分岐元の決め方に %q がありません（issue #214）", want)
 		}
 	}
+	if strings.Index(body, "1. worktree の直下にある continuo の身元ファイル") >
+		strings.Index(body, "2. 4-4 に指定があれば、それ") {
+		t.Error("4-4 の指定が身元ファイルより上にあります（issue #214）")
+	}
 
+	// **`{{.push_branch}}` を地の文へ裸で置かない。**
+	// **変数展開したあとに日本語として壊れる。**リンクがあれば
+	// 「work/issue-42 が空でなければ、その名前」、無ければ「 が空でなければ、その名前」になる。
+	if strings.Contains(body, "{{.push_branch}} が空でなければ") {
+		t.Error("`{{.push_branch}}` を地の文へ裸で置いています。" +
+			"展開後に日本語として壊れます。`{{if .push_branch}}` で囲むこと")
+	}
 	// **`origin/{{.push_branch}}` と書かない。**
 	// **変数展開したあとの本文に `origin/<リンクされた branch>` が現れると、
 	// エージェントが push 先だと読み違える**（`.push_branch` は生の名前で渡す約束である。設計 3-22d）。
@@ -110,9 +123,26 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 		t.Error("7-1 に git fetch のコマンドがありません（指す先が消えています）")
 	}
 
-	// **取り込めなかったときの行き先。**衝突したまま続けると、直したものがマージで捨てられる。
-	if !strings.Contains(body, "取り込めなかったときは、直さずに `CONTINUO-STATUS: blocked` を出してください") {
-		t.Error("取り込めなかったときの扱いが書かれていません（issue #214）")
+	// **落ちた場所で扱いを分ける。**
+	//
+	// **取ってくるところで落ちたら、取り込むものが無いだけである。**`blocked` にする理由が無い。
+	// そこで止めると、分岐元が remote に無い利用者（`herdr.worktree.base` にローカルの
+	// branch を書いた人など）は、**着手の1手目で毎回人間へ渡ることになる。**
+	//
+	// **マージで落ちたら、取り込む前へ戻す。**戻さずに `blocked` を出すと、
+	// **3-4 が `blocked` の前に commit と push を求めるので、衝突の印ごと push される。**
+	for _, want := range []string{
+		"取ってくるところで落ちたとき",
+		"そのまま次へ進んでください。",
+		"git merge --abort",
+		"**戻さずに `blocked` を出さないでください。**",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("取り込めなかったときの扱いに %q がありません（issue #214）", want)
+		}
+	}
+	if !strings.Contains(body, "取り込めなかったことを応答に書いて `CONTINUO-STATUS: blocked` を出してください") {
+		t.Error("マージで落ちたときの行き先が書かれていません（issue #214）")
 	}
 }
 

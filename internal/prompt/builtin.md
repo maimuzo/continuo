@@ -46,12 +46,16 @@ flowchart TD
 
 分岐元の名前は、次の順で決まります。上から順に見て、決まった時点で止めてください。
 
-    1. 4-4 に指定があれば、それ
-    2. worktree の直下にある continuo の身元ファイル（既定 `.continuo.json`）の "base" の値
-    3. {{.push_branch}} が空でなければ、その名前
+    1. worktree の直下にある continuo の身元ファイル（既定 `.continuo.json`）の "base" の値
+    2. 4-4 に指定があれば、それ
+    3. {{if .push_branch}}この issue にリンクされた branch（{{.push_branch}}）{{else}}（この issue には branch がリンクされていません）{{end}}
     4. このリポジトリの既定 branch
 
-段2 の `"base"` は、その JSON のキーの名前です。
+**段1 を飛ばさないでください。**この worktree を実際にどこから切ったかは、そこにしか書いてありません。
+**4-4 は issue をまたいで同じ文言ですが、身元ファイルは worktree ごとに continuo が書いています。**
+段2 から段4 は、身元ファイルを読めなかったときの受け皿です。
+
+段1 の `"base"` は、その JSON のキーの名前です。
 **7-4 が言う「base にする branch」（pull request の分岐元）とは別のものです。**
 **身元ファイルの名前を変えている場合は、worktree の直下で `issue_url` と `base` を持つ JSON を探してください。**
 
@@ -63,11 +67,20 @@ flowchart TD
 
     gh repo view {{.issue.owner}}/{{.issue.repo}} --json defaultBranchRef --jq .defaultBranchRef.name
 
-**段2 を飛ばさないでください。**この worktree を実際にどこから切ったかは、そこにしか書いてありません。
-段3 と段4 は、身元ファイルを読めなかったときの当て推量です。
+**落ちたときの扱いは、落ちた場所で分かれます。**
 
-取り込めなかったときは、直さずに `CONTINUO-STATUS: blocked` を出してください。
-衝突したまま作業を続けると、直したものがマージのときに捨てられます。
+**取ってくるところで落ちたとき**（`couldn't find remote ref` など、その名前が remote に無いとき）**は、
+取り込むものがありません。**そのまま次へ進んでください。
+
+**マージで落ちたとき**（衝突・commit していない変更）**は、取り込む前へ戻してから止まります。**
+
+    git merge --abort
+
+**戻さずに `blocked` を出さないでください。**3-4 は `blocked` の前に commit と push を求めるので、
+**衝突の印が付いたままのファイルが branch へ push され、そこから pull request が出ます。**
+**戻したあとは、この worktree に commit するものがありません。**push もしません。
+
+戻したら、取り込めなかったことを応答に書いて `CONTINUO-STATUS: blocked` を出してください。
 
 issue の本文と全てのコメント、そして紐づく pull request、リポジトリ内の関連する設計文書、リポジトリ内またはissue内の関連する作業ログを全部読みます。コマンドは 4-1 と 4-2 にあります。
 

@@ -308,6 +308,46 @@ func IsProgressReport(body string) bool {
 	return strings.Contains(body, config.ProgressMarker)
 }
 
+// StartsAsProgressReport は、そのコメントが途中経過の報告として書き出されたかを返す
+// （issue #178）。
+//
+// **見るのは本文の先頭にある印の並びだけである。**組み込みのプロンプトは
+// `<!-- continuo:agent -->` の次の行に進捗報告の印を書かせており（設計 5-3j の段2b）、
+// **エージェント自身の見つけ方（`.body | startswith(…)`）と同じ位置を見る。**
+//
+// **`IsProgressReport` と使い分ける。**あちらは印が本文のどこかに在れば真であり、
+// **持ち回りの死活の判定はそれでよい**（設計 5-3l。厳しくすると生きている担当が外れる）。
+// **こちらを緩くしてはならない。**
+//
+// **緩くすると何が起きるか。****成果の報告が印を引用しただけで、途中経過として捨てられる。**
+// continuo は「書かれていない」と判定してセッションを復元し、
+// **2度目も引用されれば `failure_state` へ落として人間へ渡す。**
+// **書いてあるのに、書かなかったことにされる。**
+// **印について説明する報告ほど起きやすい**（この判定を足した issue #178 の作業で実際に起きた）。
+//
+// body: コメント本文。
+// 戻り値: 先頭の印の並びに進捗報告の印があれば true。
+func StartsAsProgressReport(body string) bool {
+	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			// **空行では止めない。**印と印のあいだに空行を挟む書き方がありうる。
+			continue
+		}
+		if !strings.HasPrefix(trimmed, commentOpen) {
+			// **本文が始まった。**ここから先の印は、引用であって名乗りではない。
+			return false
+		}
+		if strings.Contains(trimmed, config.ProgressMarker) {
+			return true
+		}
+	}
+	return false
+}
+
+// commentOpen は HTML のコメントの開きである。
+const commentOpen = "<!--"
+
 // lastProgressOf は、その担当者がまだ生きていることを最後に示した時刻を返す（設計 3-77b / 5-3l）。
 //
 // **数えるのは、進捗報告の印が付いた、その担当者のコメントだけである。**
