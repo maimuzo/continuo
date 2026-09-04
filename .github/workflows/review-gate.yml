@@ -1,5 +1,18 @@
 # レビュー結果が貼られていない PR を落とす。
 #
+# **設計と実装で、別々の job が数える。**
+#
+#   design-review-result   設計のレビュー結果が、紐づく issue のコメントに貼られているか
+#   review-result          実装のレビュー結果が、この PR のコメントに貼られているか
+#
+# **分けているのは、どちらが欠けているかを検査の名前で分かるようにするためである。**
+# 1つにまとめると、赤の理由をログまで見に行くことになる。
+#
+# **この2つは、利用者へ配る雛形にも同じ形で入っている**
+# （[internal/scaffold/ci_template.go](../../internal/scaffold/ci_template.go) の `continuo-ci.yaml`）。
+# **判定の条件（正規表現と投稿者の絞り込み）を、雛形と1文字も違えないこと。**
+# 揃っていることは [test/internal/scaffold/ci_template_test.go](../../test/internal/scaffold/ci_template_test.go) が押さえる。
+#
 # **[CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」を機械で止める、2枚目の仕掛けである。**
 # 1枚目は [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) で、
 # AI の手元で `gh pr merge` / `gh pr ready` を実行の前に止める。
@@ -21,7 +34,10 @@ on:
   pull_request:
     # **`ready_for_review` を入れる。**`gh pr ready` がこのイベントを起こすので、
     # 「結果を貼る → ready にする → 検査が回り直して緑」が人手なしでつながる。
-    types: [opened, synchronize, reopened, ready_for_review]
+    #
+    # **`edited` も入れる。**設計のレビューを飛ばす断りを後から貼ったときに、
+    # 回り直させるためである。**題名を直しただけでも回るが、この2つの job は数秒で終わる。**
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 # **読むだけでよい。**
 # **叩く先は `/issues/{番号}/comments` だが、相手は PR である。**
@@ -36,6 +52,148 @@ permissions:
 # **必須の検査にしたときマージを塞ぐ。**この job は数秒で終わるので、重ねて走っても困らない。
 
 jobs:
+  # **設計のレビュー結果が、紐づく issue のコメントに貼られているか。**
+  #
+  # **この job の名前も変えないこと。**理由は下の `review-result` と同じである。
+  #
+  # **貼る先が issue なのは、設計が issue に書かれるからである**
+  # （[.claude/rules/design-review.md](../../.claude/rules/design-review.md) の段2）。
+  # **PR ができる前に設計を書き終えているので、PR のコメントには置けない。**
+  design-review-result:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 設計のレビュー結果が貼ってあるか
+        # **checkout しない。**下の job と同じ理由である。
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          set -eu
+
+          # **数える条件は下の job と同じ2つである。**1文字も違えないこと。
+          #   一、本文の**先頭**に目印がある（前に空白文字があってもよい）。
+          #   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
+
+          # 段1. 設計のレビューを飛ばす断りが貼られているか。
+          #
+          # **PR の本文ではなく、コメントを見る。**本文はその PR を出した本人が書くので、
+          # **エージェントが自分で断りを書けてしまう。**組み込みの指示書は
+          # `gh pr create --body` を本人に打たせている（internal/prompt/builtin.md の 3-5）。
+          # **コメントなら、上の2つの条件をそのまま掛けられる。**
+          #
+          # **理由は目印の次の行に書かせる。**目印の中へ書かせると、
+          # 閉じの `--` を理由と読んでしまい、`<!-- design-review-skipped: -->` が通る。
+          gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" --jq '
+            .[]
+            | select((.body // "") | test("^[ \\t\\r\\n]*<!-- design-review-skipped -->[ \\t\\r\\n]*[^ \\t\\r\\n]"))
+            | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
+            | .id' > skipped.txt
+          if [ "$(wc -l < skipped.txt | tr -d ' ')" -gt 0 ]; then
+            echo "設計のレビューを飛ばす断りが貼られています" | tee -a "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          # 段2. 紐づく issue を引く。
+          #
+          # **取れなかったことと、0件だったことを分ける。**混ぜると、引き方を間違えた日から
+          # 全部の PR が「issue が無い」に落ち、**断りを書くのが正しい手順になる。**
+          #
+          # **`closingIssuesReferences` は REST では返らない。**`gh pr view`（GraphQL）で引く。
+          # **本文の `Closes` / `Fixes` / `Resolves` も拾う。**拾い方は
+          # scripts/check-release-ready.sh の `issues_of` と同じである。
+          # **ただ本文に出てくる `#N` は拾わない。**「足すのは issue #53 で扱う」のような参照まで
+          # 対の issue として数えてしまう（実測: PR #63）。
+          if ! gh pr view "${PR_NUMBER}" --repo "${REPO}" --json body,closingIssuesReferences > pr.json; then
+            echo "紐づく issue を引けませんでした（権限か gh の版を確かめてください）" \
+              | tee -a "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
+
+          # **このリポジトリの issue だけを残す。**別のリポジトリの issue は、この job の
+          # 権限では読めない（private なら 404、public でも投稿者の立場が変わる）。
+          # **組み込みの 7-3 は `Closes owner/repo#N` を認めているので、実際に起こりうる。**
+          jq -r --arg repo "${REPO}" '
+            [ (.closingIssuesReferences[]
+               | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
+               | .number),
+              (.body // "" | scan("(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
+            ] | unique | .[]' pr.json > issues.txt
+          jq -r --arg repo "${REPO}" '
+            .closingIssuesReferences[]
+            | select(.url | startswith("https://github.com/" + $repo + "/issues/") | not)
+            | .url' pr.json > outside.txt
+
+          # 段3. その issue のどれか1件に、設計のレビュー結果が貼られているか。
+          #
+          # **1件でよい。**グループでまとめて直す PR では、代表の issue にだけ設計が書かれる
+          # （[.claude/rules/issue.md](../../.claude/rules/issue.md) の「グループ化するときにやること」）。
+          # **全部に求めると、代表以外へ同じものを貼ることになる。**
+          found=0
+          while read -r n; do
+            [ -n "${n}" ] || continue
+            gh api --paginate "repos/${REPO}/issues/${n}/comments?per_page=100" --jq '
+              .[]
+              | select((.body // "") | test("^[ \\t\\r\\n]*<!-- design-review-result -->"))
+              | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
+              | .id' > matched.txt
+            if [ "$(wc -l < matched.txt | tr -d ' ')" -gt 0 ]; then
+              echo "設計のレビュー結果=有り（issue #${n}）"
+              echo "設計のレビュー結果=有り（issue #${n}）" >> "${GITHUB_STEP_SUMMARY}"
+              found=1
+              break
+            fi
+          done < issues.txt
+          if [ "${found}" -eq 1 ]; then
+            exit 0
+          fi
+
+          # **落ちたときは、どうすれば通るかを全部書く。**
+          {
+            echo "## 設計のレビュー結果が貼られていません"
+            echo ""
+            if [ "$(wc -l < issues.txt | tr -d ' ')" -eq 0 ]; then
+              echo "**この PR に紐づく issue が1件もありません。**"
+              echo ""
+              if [ "$(wc -l < outside.txt | tr -d ' ')" -gt 0 ]; then
+                echo "別のリポジトリの issue は見つかりましたが、この検査は読めません。"
+                sed 's/^/- /' outside.txt
+                echo ""
+              fi
+              echo "本文へ \`Closes #<番号>\` を書くか、下の断りを貼ってください。"
+            else
+              echo "紐づく issue に \`<!-- design-review-result -->\` で始まるコメントが1件もありません。"
+              echo ""
+              sed 's/^/- issue #/' issues.txt
+            fi
+            echo ""
+            echo "**通し方。**"
+            echo ""
+            echo "1. 設計をサブエージェントにレビューさせる（\`.claude/rules/design-review.md\` の段3）"
+            echo "2. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る"
+            echo "3. それを **issue のコメント**として貼る（**1行目を \`<!-- design-review-result -->\` にする**）"
+            echo ""
+            echo "**設計のレビューが要らない変更のとき**（文書だけの変更、他に影響しない1行の修正）**は、"
+            echo "この PR のコメントに断りを貼ってください。**"
+            echo ""
+            echo '    <!-- design-review-skipped -->'
+            echo '    文書だけの変更のため'
+            echo ""
+            echo "**2行目の理由を落とさないでください。**目印だけでは通りません。"
+            echo ""
+            echo "**数える条件。**"
+            echo ""
+            echo "- 目印が**本文の先頭**にあること。途中に書いたものは数えません"
+            echo "- 投稿者が **OWNER / MEMBER / COLLABORATOR** であること"
+            if [ "${IS_DRAFT}" = "true" ]; then
+              echo ""
+              echo "**この PR は draft です。**draft のうちは赤のままでかまいません。"
+            fi
+          } | tee -a "${GITHUB_STEP_SUMMARY}"
+
+          exit 1
+
   # **この job の名前を変えないこと。**branch protection の必須の検査は
   # `review-result` という名前で登録する（手順は CONTRIBUTING.md「この検査をマージの条件にする」）。
   # **名前を変えると、その設定が宙に浮き、検査が無いのにマージできる状態になる。**
