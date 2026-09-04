@@ -193,9 +193,9 @@ func buildGatedComment(reason GateReason) string {
 			"この issue には担当者が付いているため、continuo は着手しません。\n" +
 			"continuo が付けた担当ではないので、人間が作業中だと判断しています。\n\n" +
 			"着手させるには、GitHub の画面でその担当者を外してください。\n\n" +
-			"continuo が使うアカウントへの付け替えは案内しません。付け替えると、\n" +
-			"同じアカウントで動いている別の機械も「自分の担当だ」と読むため、" +
-			"2台が同時に着手できてしまいます。\n\n" +
+			"担当者を、この issue を処理させたい PC の gh の持ち主にしておくと、その PC が着手します。\n" +
+			"ただし、そのアカウントを使う continuo が1台だけのときに限ります。\n" +
+			"同じアカウントで2台以上動かしていると、2台とも「自分の担当だ」と読み、同時に着手します。\n\n" +
 			"この案内は、この理由につき1回だけ書きます。\n"
 	case GateReasonManyAssignees:
 		return gateNoticeMarker(reason) + "\n" +
