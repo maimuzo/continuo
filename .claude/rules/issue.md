@@ -19,7 +19,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 | --- | --- | --- |
 | **1** | **AI** | **issue を作る。**依頼は非同期で来るので、**まとめる部分は workflow で並列に進める** |
 | **2** | **AI** | **いまある issue 全部の中でグループ化し、着手順序を出す** |
-| **3** | **AI** | **ボードへ載せる。**グループの代表に `Ice Box` を付け、**代表以外は Status を付けない。**載せないと continuo は永久に拾わない |
+| **3** | **AI** | **ボードへ載せ、`Ice Box` を付ける。**代表も代表以外も `Ice Box` である。載せないと continuo は永久に拾わない |
 | **4** | **AI** | **`Ice Box` の並び順を、段2 で出した着手順序へ並べ替える** |
 | **5** | **AI** | **止まる。**着手順序を人間へ示す |
 | **6** | **人間** | **着手する issue を指示する** |
@@ -39,16 +39,23 @@ issueは優先順位を計画して人間確認してから着手すること」
 （[docs/plans/continuo_design.md:8536](../../docs/plans/continuo_design.md#L8536) の 4-1 の遷移表）。
 **AI がここだけは代行しない。**着手を決めるのは人間だからである。
 
-**段4 の並び順は、`updateProjectV2ItemPosition` で動かす。**着手順序の逆順に
-「先頭へ送る」（`afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
-**`updateProjectV2Field` は絶対に呼ばない**（[CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える）。
+**段4 の並び順は、`updateProjectV2ItemPosition` で動かす**（[docs/plans/continuo_design.md:8579](../../docs/plans/continuo_design.md#L8579) の 4-2）。
+着手順序の逆順に「先頭へ送る」（`afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
+
+**守ること3つ。**
+
+| 何を | なぜ |
+| --- | --- |
+| **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:8581](../../docs/plans/continuo_design.md#L8581)）。104件の全並べ替えで約2分かかる |
+| **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える |
+| **「`Ice Box` の並び順」は存在しない** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8612](../../docs/plans/continuo_design.md#L8612)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` の item どうしの相対順は変わらないので、走っている dispatch の順序には影響しない** |
 
 **段2 の着手順序は、2箇所へ出す。**
 
 | 何を | どこへ |
 | --- | --- |
 | **全 issue の着手順序** | **人間へチャットで示す** |
-| **グループごとの計画** | **そのグループの代表の issue のコメントへ残す**（[docs/plans/continuo_design.md:3294](../../docs/plans/continuo_design.md#L3294) の 3-26） |
+| **グループごとの計画** | **そのグループの代表の issue のコメントへ残す**（[docs/plans/continuo_design.md:3361](../../docs/plans/continuo_design.md#L3361) の 3-26） |
 
 **チャットだけに出すと、セッションが終わった時点で消える。**次のセッションが組み直すことになる。
 
@@ -64,8 +71,11 @@ issueは優先順位を計画して人間確認してから着手すること」
 **この3つに無いものは、余裕があっても着手しない。**
 **「判断が要らないと思った」で広げてはならない。**広げると、上の絶対条件が3行で無効になる。
 
-**飛ばしてよいのは、手順の段5・段6・段7 と、段8 の「`Ready` へ上がったことを確かめる」だけである。**
-**段1〜段4 は飛ばさない。**issue を作り、ボードへ載せ、並び順まで入れる。
+**飛ばしてよいのは、手順の段2・段4・段5・段6・段7 と、段8 の「`Ready` へ上がったことを確かめる」だけである。**
+**段1・段3 は飛ばさない。**issue は作り、ボードへ載せる。
+
+**段2（グループ化と着手順序）と段4（並び順）を飛ばしてよいのは、
+typo1件のために104件のボードを並べ替えるのが、この節の目的から外れるためである。**
 
 **このとき issue は `Ice Box` のままである。**`tracker.active_states` に `Ice Box` は入っていないので
 （[internal/config/default.go:65](../../internal/config/default.go#L65)）、**continuo はこの issue を dispatch しない。**
@@ -77,17 +87,26 @@ issueは優先順位を計画して人間確認してから着手すること」
 | --- | --- | --- |
 | **1** | **AI** | 同一原因・同一ファイル・同一コンポーネントでまとめ、**代表を1つ決める** |
 | **2** | **AI** | **計画を代表の issue のコメントに書く** |
-| **3** | **AI** | **グループの代表以外の Status を外す**（[docs/plans/continuo_design.md:8537](../../docs/plans/continuo_design.md#L8537) の 4-1 の遷移表）。`clearProjectV2ItemFieldValue` を叩く |
+| **3** | **AI** | **グループの代表以外を `Ice Box` へ落とす**（[docs/plans/continuo_design.md:8537](../../docs/plans/continuo_design.md#L8537) の 4-1 の遷移表）。`updateProjectV2ItemFieldValue` を叩く |
+| **4** | **AI** | **代表以外を、代表の sub-issue にする。**`addSubIssue` を叩く（`GraphQL-Features: sub_issues` のヘッダが要る） |
 
-**`Ice Box` へ落とすのではなく、Status を外す。**`Ice Box` へ落としても continuo は dispatch しないが、
-**代表と代表以外が同じ `Ice Box` に並ぶと、人間がボードを見たときに見分けられない。**
+**絶対条件：Status を外してはならない。**`clearProjectV2ItemFieldValue` を使わない。
+
+**continuo は Status 未設定の item を、issue として組み立てる前に捨てる**
+（[internal/tracker/query.go:1020-1030](../../internal/tracker/query.go#L1020-L1030) が `Gone` を返し、
+[internal/tracker/by_identifier.go:102-104](../../internal/tracker/by_identifier.go#L102-L104) が
+**識別子を照合する前に `continue` する**）。
+**外すと、エージェントが `CONTINUO-STATUS: #45 review` と書いても continuo がその issue を見つけられない。**
+「ボードに無いので動かせなかった」というコメントを残して捨て、
+**グループの代表以外は永久に `In Review` へ上がらない。**
+
+**代表と代表以外の見分けは、sub-issue が付ける**（段4）。GitHub の画面で親子として表示される。
 
 **この節の段3 の対象は、いま何らかの Status が付いている issue 全部である。**
 手順の段2 は「**いまある issue 全部**」を見るので、**前のセッションで `Ready` や `In Progress` へ上がったものがグループに入りうる。**
-**このセッションで作ったばかりの issue は、手順の段3 で代表以外に Status を付けていないので何もしなくてよい。**
 
 **この節の段3 を飛ばすと、continuo が代表とは別に dispatch する。**
-[docs/plans/continuo_design.md:3299-3300](../../docs/plans/continuo_design.md#L3299-L3300) の 3-26 が
+[docs/plans/continuo_design.md:3384-3385](../../docs/plans/continuo_design.md#L3384-L3385) の 3-26 が
 「落とさないと `active_states` に残るので、**continuo が代表とは別に dispatch してしまう。**
 『自分が取った』印は代表にしか付かないため、印では防げない」と書いている。
 **印で防げない以上、この規則が唯一の防波堤である。**
