@@ -41,7 +41,7 @@
 ## 2. 全体はどうつながっているか
 
 **言いたいこと。矢印の向きが設計の要である。**continuo はボードを読み、herdr を動かし、hook で通知を受ける。
-**ボードに書き込む経路は3つある**（continuo・エージェント・人間）。「continuo は読むだけ」ではない。
+**ボードに書き込む経路は4つある**（continuo・エージェント・人間・人間に代わって働く道具）。「continuo は読むだけ」ではない。
 
 ```mermaid
 flowchart TB
@@ -57,6 +57,7 @@ flowchart TB
     HERDR["herdr<br/>socket API"]
     CC["Claude Code<br/>対話モード"]
     HUMAN(["人間"])
+    TOOL(["人間に代わって働く道具"])
 
     ORC --> TRK
     ORC --> WSM
@@ -70,6 +71,7 @@ flowchart TB
     TRK ==>|"書く（Status・引き渡しの通知・Status を動かした記録）"| BOARD
     CC -.->|"書く（エージェントが自分で gh を叩いた場合）"| BOARD
     HUMAN ==>|"書く（着手・回答・レビュー完了）"| BOARD
+    TOOL ==>|"書く（ボードへ載せる・Ice Box・並べ替え・sub-issue）"| BOARD
 ```
 
 **「Status をどう動かすかの判断はエージェントが持ち、continuo は自分の判断で勝手に動かさない。
@@ -548,6 +550,7 @@ claude:
 
 **言いたいこと。continuo はボードの並び順を読むだけである。書き換えない。**
 **並べるのは continuo の外である。**人間が画面でドラッグするか、人間に代わって働く道具が API で並べる。
+**「人間に代わって働く道具」とは、人間の指示で GraphQL を叩くエージェントやスクリプトのことである。continuo 本体ではない。**
 
 **並べ方の指針。`bug` が付いた issue を先に処理する。**
 これは**ボードを並べるときの指針**であって、continuo が実行する規則ではない。

@@ -682,6 +682,7 @@ flowchart TB
     HERDR["herdr<br/>socket API"]
     CC["Claude Code<br/>対話モード"]
     HUMAN(["人間"])
+    TOOL(["人間に代わって働く道具"])
 
     ORC --> TRK
     ORC --> WSM
@@ -695,9 +696,11 @@ flowchart TB
     TRK ==>|"書く（Status とコメント）"| BOARD
     CC -.->|"書く（エージェントが自分で gh を叩いた場合。例外）"| BOARD
     HUMAN ==>|"書く（着手・回答・レビュー完了）"| BOARD
+    TOOL ==>|"書く（ボードへ載せる・Ice Box・並べ替え・sub-issue）"| BOARD
 ```
 
-**ボードに書く経路は3つある。continuo・エージェント・人間である。**
+**ボードに書く経路は4つある。continuo・エージェント・人間・人間に代わって働く道具である。**
+**4つ目が何かは 3-30 に書いてある**（人間の指示で GraphQL を叩くエージェントやスクリプト。continuo 本体ではない）。
 
 **「continuo はボードを読むだけ」ではない。**そう読める要約を先に書いていたが、**仕様の読み違いだった。**
 `SPEC.md` 11.5 の全文を読むと次のようになっている。

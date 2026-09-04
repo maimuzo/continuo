@@ -15,16 +15,16 @@ issueは優先順位を計画して人間確認してから着手すること」
 **ここでいう AI は、人間と直接やりとりしているエージェントである。**
 **continuo が起動したエージェントは、この節が言う「ボードの操作」をしない。**
 issue をボードへ載せることも、Status を付けることも、並べ替えることもしない
-（[docs/plans/continuo_design.md:8535](../../docs/plans/continuo_design.md#L8535)）。
+（[docs/plans/continuo_design.md:8541](../../docs/plans/continuo_design.md#L8541)）。
 **ただし「1バイトも触らない」ではない。**設計は、そのエージェントが自分で `gh` を叩いて
 `In Progress` → `Blocked` を動かす経路を認めている
-（[docs/plans/continuo_design.md:8541](../../docs/plans/continuo_design.md#L8541)）。
+（[docs/plans/continuo_design.md:8547](../../docs/plans/continuo_design.md#L8547)）。
 **組み込みの指示書は、それを勧めてはいない**
 （[internal/prompt/builtin.md:119](../../internal/prompt/builtin.md#L119) は「あなたが `gh` を叩く必要はありません」）。
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **ボードの操作は AI が行う。**ただし 4-1 の遷移表で「人間」と書かれた3つは人間である
-（[docs/plans/continuo_design.md:8533-8545](../../docs/plans/continuo_design.md#L8533-L8545)）。
+（[docs/plans/continuo_design.md:8539-8551](../../docs/plans/continuo_design.md#L8539-L8551)）。
 
 | 遷移 | いつ |
 | --- | --- |
@@ -42,7 +42,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 | **1** | **AI** | **issue を作る。**依頼は非同期で来るので、**まとめる部分は workflow で並列に進める** |
 | **2** | **AI** | **いまある issue 全部の中でグループ化し、着手順序を出す** |
 | **3** | **AI** | **ボードへ載せ、`Ice Box` を付ける。**代表も代表以外も `Ice Box` である。載せないと continuo は永久に拾わない |
-| **4** | **AI** | **`Ice Box` の item の並び順を、段2 で出した着手順序へ並べ替える。**`Ready` と `In Progress` の item は動かさない（下の「守ること3つ」） |
+| **4** | **AI** | **`Ice Box` の item の並び順を、段2 で出した着手順序へ並べ替える。**`Ready` と `In Progress` の item は動かさない（下の「守ること4つ」） |
 | **5** | **AI** | **止まる。**着手順序を人間へ示す |
 | **6** | **人間** | **着手する issue を指示する** |
 | **7** | **人間**（GitHub の画面） | **その issue を `Ice Box` から `Ready` へ上げる**（グループなら代表だけ） |
@@ -58,7 +58,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 `Ready` と `In Progress` の2つで（[internal/config/default.go:107](../../internal/config/default.go#L107)）、
 **`Ice Box` は入っていない。**段3 で issue を `Ice Box` へ置く以上、上げる段が要る。
 **上げるのは人間で、GitHub の画面から行う**
-（[docs/plans/continuo_design.md:8536](../../docs/plans/continuo_design.md#L8536) の 4-1 の遷移表）。
+（[docs/plans/continuo_design.md:8542](../../docs/plans/continuo_design.md#L8542) の 4-1 の遷移表）。
 **AI は、人間に名指しで頼まれない限り、ここを代行しない。**理由は3つある。
 
 | 何が | なぜ |
@@ -71,25 +71,27 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 **このとき決めているのは人間のままなので、上の約束は空文にならない。**
 **言われていないのに上げてはならない。**
 
-**段4 の並び順は、`updateProjectV2ItemPosition` で動かす**（[docs/plans/continuo_design.md:8579](../../docs/plans/continuo_design.md#L8579) の 4-2）。
+**段4 の並び順は、`updateProjectV2ItemPosition` で動かす**（[docs/plans/continuo_design.md:8585](../../docs/plans/continuo_design.md#L8585) の 4-2）。
 着手順序の逆順に「先頭へ送る」（3つ目の引数 `afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
 **引数名は 2026-09-04 に読み取りだけの introspection で確かめた**（`UpdateProjectV2ItemPositionInput` の入力に `afterId` がある）。
 
-**守ること3つ。**
+**この書き込みは worker へ渡さない**（[CLAUDE.md](../../CLAUDE.md) の「不可逆な操作は worker に渡さない」）。**メインエージェントが自分で叩く。**
+
+**守ること4つ。**
 
 | 何を | なぜ |
 | --- | --- |
-| **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:8581](../../docs/plans/continuo_design.md#L8581)）。104件の全並べ替えで約2分かかる |
+| **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:8587](../../docs/plans/continuo_design.md#L8587)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える |
 | **段4 のあと、`Ice Box` の item はボード全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
-| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8612](../../docs/plans/continuo_design.md#L8612)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:3794-3795](../../docs/plans/continuo_design.md#L3794-L3795) の本文である**） |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8618](../../docs/plans/continuo_design.md#L8618)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:3797-3798](../../docs/plans/continuo_design.md#L3797-L3798) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
 | 何を | どこへ |
 | --- | --- |
 | **全 issue の着手順序** | **人間へチャットで示す** |
-| **グループごとの計画** | **そのグループの代表の issue のコメントへ残す**（[docs/plans/continuo_design.md:3361](../../docs/plans/continuo_design.md#L3361) の 3-26） |
+| **グループごとの計画** | **そのグループの代表の issue のコメントへ残す**（[docs/plans/continuo_design.md:3364](../../docs/plans/continuo_design.md#L3364) の 3-26） |
 
 **チャットだけに出すと、セッションが終わった時点で消える。**次のセッションが組み直すことになる。
 
@@ -121,7 +123,7 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 | --- | --- | --- |
 | **1** | **AI** | 同一原因・同一ファイル・同一コンポーネントでまとめ、**代表を1つ決める** |
 | **2** | **AI** | **計画を代表の issue のコメントに書く** |
-| **3** | **AI** | **グループの代表以外を `Ice Box` へ落とす**（[docs/plans/continuo_design.md:8537](../../docs/plans/continuo_design.md#L8537) の 4-1 の遷移表）。`updateProjectV2ItemFieldValue` を叩く |
+| **3** | **AI** | **グループの代表以外のうち、`Ready` か `In Progress` に在るものを `Ice Box` へ落とす**（[docs/plans/continuo_design.md:8543](../../docs/plans/continuo_design.md#L8543) の 4-1 の遷移表）。`updateProjectV2ItemFieldValue` を叩く |
 | **4** | **AI** | **代表以外を、代表の sub-issue にする。**`addSubIssue` を叩く（下の実例のとおり `GraphQL-Features: sub_issues` のヘッダを付ける。2026-09-04 時点では無くても schema に出るが、付けておく） |
 | **5** | **AI** | **代表（とグループを持たない issue）を、リリース管理の issue の sub-issue にする。**無ければ1件立てる（下の「リリースに入れるものを、issue 1件で管理する」） |
 
@@ -141,7 +143,7 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 手順の段2 は「**いまある issue 全部**」を見るので、**前のセッションで `Ready` や `In Progress` へ上がったものがグループに入りうる。**
 
 **この節の段3 を飛ばすと、continuo が代表とは別に dispatch する。**
-[docs/plans/continuo_design.md:3384-3385](../../docs/plans/continuo_design.md#L3384-L3385) の 3-26 が
+[docs/plans/continuo_design.md:3387-3388](../../docs/plans/continuo_design.md#L3387-L3388) の 3-26 が
 「落とさないと `active_states` に残るので、**continuo が代表とは別に dispatch してしまう。**
 『自分が取った』印は代表にしか付かないため、印では防げない」と書いている。
 **印で防げない以上、この規則が唯一の防波堤である。**
@@ -174,7 +176,7 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 
 **リリース管理の issue の本文には、着手順序をリストで書く。**
 **リストの順番と、ボードの `Ice Box` の中の並び順を揃える。**片方だけ直すと食い違う。
-**`Ready` へ上がったものは動かさないので、そのぶんは揃わない**（上の「守ること3つ」で禁じている。動かす手段はある）。
+**`Ready` へ上がったものは動かさないので、そのぶんは揃わない**（上の「守ること4つ」で禁じている。動かす手段はある）。
 
 ### 関連付けのしかた
 
@@ -188,7 +190,7 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
   -f query="mutation { addSubIssue(input: {issueId: \"$PARENT\", subIssueId: \"$CHILD\"}) { subIssue { number } } }"
 ```
 
-**書き込みの間は1秒空ける**（[docs/plans/continuo_design.md:8581](../../docs/plans/continuo_design.md#L8581)）。
+**書き込みの間は1秒空ける**（[docs/plans/continuo_design.md:8587](../../docs/plans/continuo_design.md#L8587)）。
 
 **確かめ方。**
 
