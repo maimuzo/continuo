@@ -170,7 +170,7 @@ type TrackerProviderHandoffConfig struct {
 }
 
 // OnAssigneeGateWarnAndComment は、担当者が付いていて着手できないときに
-// WARN を出し、issue へもそのアカウントにつき1回書く値である（issue #134 / #136 / #140）。**既定である。**
+// WARN を出し、issue へも1回だけ書く値である（issue #134 / #136 / #140）。**既定である。**
 const OnAssigneeGateWarnAndComment = "warn_and_comment"
 
 // OnAssigneeGateWarnOnly は、WARN とダッシュボードには出すが、

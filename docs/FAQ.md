@@ -1677,13 +1677,16 @@ grep '担当者が付いているので着手しません' <ログの出力先>
 
 **書かせたくないときは、`WORKFLOW.md` の `on_assignee_gate` の値を書き換えてください。**
 
-**このキーは雛形に既にあります。**新しく足すと front matter が重複キーになり、
-**continuo が起動しなくなります**（`mapping key "on_assignee_gate" already defined`）。
-**場所は既にある行から辿れます。**
+**まず、いまあるかどうかを確かめてください。**
 
 ```bash
 grep -n 'on_assignee_gate' ~/continuo-work/WORKFLOW.md
 ```
+
+**行が出たら、その値を書き換えます。**1行も出なければ、`handoff:` の下へ足します
+（v0.1.11 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+**既にある行に重ねて足すと front matter が重複キーになり、continuo が起動しなくなります**
+（`mapping key "on_assignee_gate" already defined`）。
 
 ```yaml
 tracker:
@@ -1700,7 +1703,7 @@ tracker:
 
 **ダッシュボードとログは、この設定では止まりません。**止まるのは issue への書き込みだけです。
 
-**直し方。**次のどれかを行ってください。**Status はどの場合も動かさなくて構いません。**
+**直し方。**次のどれかを行ってください。**Status を動かさずに直す道もあります。**
 **3つ目の道は、下の「「continuo が使うアカウントへ付け替える」は、条件を満たすときだけ効きます」にあります。**
 
 | どうしたいか | 何をするか |
@@ -1777,12 +1780,16 @@ INFO gh の持ち主を確認しました（コメントの印と併せて見ま
 
 **書かせたくないときは、全部の PC の `WORKFLOW.md` で `on_assignee_gate` の値を書き換えてください。**
 
-**このキーは雛形に既にあります。**新しく足すと front matter が重複キーになり、
-**その PC の continuo が起動しなくなります。**
+**まず、いまあるかどうかを確かめてください。**
 
 ```bash
 grep -n 'on_assignee_gate' ~/continuo-work/WORKFLOW.md
 ```
+
+**行が出たら、その値を書き換えます。**1行も出なければ、`handoff:` の下へ足します
+（v0.1.11 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+**既にある行に重ねて足すと front matter が重複キーになり、continuo が起動しなくなります**
+（`mapping key "on_assignee_gate" already defined`）。
 
 ```yaml
 tracker:

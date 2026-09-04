@@ -64,7 +64,7 @@ tracker:
                                             # 1週間余裕値 = 100 − 1週間の使用率 − この値。
                                             # どちらかの余裕値がマイナスなら入札しない
       on_assignee_gate: warn_and_comment    # 担当者が付いていて着手できないとき（1人でも2人以上でも）の扱い。
-                                            # warn_and_comment ならダッシュボードに出し、issue へもそのアカウントにつき1回書く。
+                                            # warn_and_comment ならダッシュボードに出し、issue へも1回だけ書く。
                                             # warn_only にすると issue へは書かない（ダッシュボードには出る）
   comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
     marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
