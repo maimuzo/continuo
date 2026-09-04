@@ -20,7 +20,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 
 **ボードの操作は AI が行う。**`Ice Box` から `Ready` へ上げる1つだけが人間である
 （[docs/plans/continuo_design.md:8535-8537](../../docs/plans/continuo_design.md#L8535-L8537) の 4-1 の遷移表）。
-**上げることが「どれに着手するか」の決定そのものだからである。**だから段ごとに「誰がやるか」を書く。
+**なぜ人間に残すのかは、下の段7 の説明にある3つの理由である。**だから段ごとに「誰がやるか」を書く。
 
 | 順 | 誰がやるか | 何をするか |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 **`Ice Box` は入っていない。**段3 で issue を `Ice Box` へ置く以上、上げる段が要る。
 **上げるのは人間で、GitHub の画面から行う**
 （[docs/plans/continuo_design.md:8536](../../docs/plans/continuo_design.md#L8536) の 4-1 の遷移表）。
-**AI がここだけは代行しない。**理由は3つある。
+**AI は、人間に名指しで頼まれない限り、ここを代行しない。**理由は3つある。
 
 | 何が | なぜ |
 | --- | --- |
@@ -65,7 +65,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 | --- | --- |
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:8581](../../docs/plans/continuo_design.md#L8581)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える |
-| **「`Ice Box` の並び順」は存在しない** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8612](../../docs/plans/continuo_design.md#L8612)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` の item どうしの相対順は変わらないので、走っている dispatch の順序には影響しない** |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8612](../../docs/plans/continuo_design.md#L8612)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
@@ -150,11 +150,11 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 | 階層 | 何 | 何を持つか | ボードの Status |
 | --- | --- | --- | --- |
 | **1** | **リリース管理の issue** | **着手順序のリスト。**リストの並び順が、そのまま着手順序である | `Ice Box`。ボードの先頭に置く |
-| **2** | **グループの代表** | そのグループの計画（一緒に直す issue・共通の原因・着手の順番・進め方の8段） | `Ice Box` |
+| **2** | **グループの代表** | そのグループの計画（一緒に直す issue・共通の原因・着手の順番・[.claude/rules/design-review.md:9-17](design-review.md#L9-L17) の9段） | `Ice Box` |
 | **3** | **代表以外** | **何をすべきかのコンテキストだけ。**continuo は処理しない | `Ice Box`。**Status を外してはならない** |
 
 **リリース管理の issue の本文には、着手順序をリストで書く。**
-**リストの順番と、ボードの `Ice Box` の並び順を揃える。**片方だけ直すと食い違う。
+**リストの順番と、ボードの並び順を揃える。**片方だけ直すと食い違う。
 
 ### 関連付けのしかた
 
@@ -191,11 +191,14 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 | 4 | **エージェントが、代表以外の issue へもコメントを1件ずつ書く**（何がどう直ったか） |
 | 5 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
 
-**段4 の指示は、2026-09-04 時点で組み込みの指示書に無い。**
-**足す先は [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の 7-2 である。**
+**この表の段4 は、2026-09-04 時点では起きない。**
+組み込みの指示書（[internal/prompt/builtin.md:361-372](../../internal/prompt/builtin.md#L361-L372) の 7-2）が、
+表明の1行と `Closes #45` しか書かせていないためである。
+**いまは、代表以外に何が直ったかが1行も残らない。**人間が代表の pull request を見て確かめること。
 
-**クローズ後、代表以外は `Ice Box` に残る。**GitHub Projects v2 は、issue を閉じても Status を動かさない
-（自動化を設定していれば別である）。**片付けたいときは、人間がボードの表示でクローズ済みを隠すか、`Done` へ動かす。**
+**クローズ後、代表以外の Status がどうなるかは測っていない。**GitHub Projects v2 には、項目を閉じたときに
+Status を動かす組み込みの自動化があり、有効かどうかはボードごとに違う。**GitHub の画面で確かめること。**
+**`Ice Box` に残るなら、人間がボードの表示でクローズ済みを隠すか、`Done` へ動かす。**
 
 ---
 
