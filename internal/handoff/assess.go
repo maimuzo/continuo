@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -333,9 +334,13 @@ func StartsAsProgressReport(body string) bool {
 	// **落とさないと2つの判定がずれる。**本文の先頭に空白が1つあるだけで、
 	// **進捗報告が「この run の成果の報告」として数えられ、issue #178 がその形で直らない。**
 	//
+	// **落とす文字は `unicode.IsSpace` で揃える。**`strings.TrimLeft(body, " \t\r\n")` では狭い。
+	// **`TrimSpace` は全角空白（U+3000）や NBSP（U+00A0）も落とす**ので、
+	// **日本語で書く利用者がいちばん踏みやすい全角空白で、2つの判定がずれる。**
+	//
 	// **行ごとの字下げは落とさない。**落とすと、4桁字下げしたコード片での引用が
 	// また「印の行」として通る（下の HasPrefix を見よ）。
-	body = strings.TrimLeft(body, " \t\r\n")
+	body = strings.TrimLeftFunc(body, unicode.IsSpace)
 	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
 			// **空行では止めない。**印と印のあいだに空行を挟む書き方がありうる。

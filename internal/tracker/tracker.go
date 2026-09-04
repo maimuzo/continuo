@@ -92,7 +92,7 @@ type Comment struct {
 	// IsAgent は、本文の先頭が `tracker.comments.marker` の印で始まっている
 	// （＝エージェントが書いたと判別できる）ことを示す。
 	IsAgent bool
-	// IsSelf は、本文の先頭が `tracker.provider.comments.self_marker` の印で始まっている
+	// IsSelf は、本文の先頭が `tracker.comments.self_marker` の印で始まっている
 	// （＝continuo 自身が代筆した）ことを示す。IsSelf なコメントは
 	// FetchComments が次の turn の入力から自動的に除外する。
 	IsSelf bool

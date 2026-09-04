@@ -82,6 +82,15 @@ func TestStartsAsProgressReport_先頭の印の並びだけを見る(t *testing.
 			"\n\n<!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。",
 			true,
 		},
+		{
+			// **`IsAgent` は `strings.TrimSpace` で判定する。**あちらは `unicode.IsSpace` なので、
+			// **全角空白も落ちる。**こちらの落とし方が狭いと、全角空白で始まる進捗報告が
+			// 「この run の成果の報告」として数えられ、issue #178 がその形のまま再発する。
+			// **日本語で書く利用者の手元でいちばん起きやすい。**
+			"**本文の先頭が全角空白の進捗報告**",
+			"　<!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。",
+			true,
+		},
 		{"ふつうの成果の報告", "<!-- continuo:agent -->\n実装しました", false},
 		{"印が無い", "ここはどうなっていますか", false},
 		{"空", "", false},
