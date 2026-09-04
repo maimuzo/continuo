@@ -147,6 +147,11 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 		"**マージの途中で衝突したとき**",
 		"git merge --abort",
 		"**戻さずに `blocked` を出さないでください。**",
+		// **戻しても、その手前で作った commit は残る。**
+		// 「commit するものが無い」と言い切ると、エージェントは push を飛ばす。
+		// **push していない commit が残ると `cleanup.require_pushed` が片付けを見送り、
+		// 成果は worktree の中だけに閉じ込められる。**
+		"**残っていたら push してください。**",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("取り込めなかったときの扱いに %q がありません（issue #214）", want)

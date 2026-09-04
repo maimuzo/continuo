@@ -55,6 +55,19 @@ func TestStartsAsProgressReport_先頭の印の並びだけを見る(t *testing.
 				"| 印 | `" + config.ProgressMarker + "` を数えない |",
 			false,
 		},
+		{
+			// **4桁の字下げは、組み込みのプロンプトが印を「見せる」ときの書き方そのものである。**
+			// **印について説明する成果の報告が、いちばん取りやすい形で引用してくる。**
+			// **字下げを許すと、その報告が捨てられて人間へ渡る。**
+			"**成果の報告が字下げしたコード片で引用している**",
+			"<!-- continuo:agent -->\n\n    " + config.ProgressMarker + "\n\nこの印を数えないようにしました。",
+			false,
+		},
+		{
+			"字下げした行のあとに本物の印が来ても、字下げで止まる",
+			"<!-- continuo:agent -->\n    見本です\n" + config.ProgressMarker,
+			false,
+		},
 		{"ふつうの成果の報告", "<!-- continuo:agent -->\n実装しました", false},
 		{"印が無い", "ここはどうなっていますか", false},
 		{"空", "", false},

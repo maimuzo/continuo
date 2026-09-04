@@ -329,16 +329,19 @@ func IsProgressReport(body string) bool {
 // 戻り値: 先頭の印の並びに進捗報告の印があれば true。
 func StartsAsProgressReport(body string) bool {
 	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+		if strings.TrimSpace(line) == "" {
 			// **空行では止めない。**印と印のあいだに空行を挟む書き方がありうる。
 			continue
 		}
-		if !strings.HasPrefix(trimmed, commentOpen) {
+		// **字下げした行は、名乗りではない。**行頭ちょうどの `<!--` だけを見る。
+		// **4桁の字下げは、組み込みのプロンプトが印を「見せる」ときの書き方そのものである**
+		// （internal/prompt の stripComments が、その形を落とさずに残している）。
+		// **字下げを許すと、印について説明する成果の報告が、いちばん起きやすい形で捨てられる。**
+		if !strings.HasPrefix(line, commentOpen) {
 			// **本文が始まった。**ここから先の印は、引用であって名乗りではない。
 			return false
 		}
-		if strings.Contains(trimmed, config.ProgressMarker) {
+		if strings.Contains(line, config.ProgressMarker) {
 			return true
 		}
 	}

@@ -155,12 +155,16 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
 	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
+	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
+	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、
+	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
+	// **2度目も名前を書き切る。**値は `config.ProgressMarker` から作るので、定義は1つのままである。
 	fmt.Fprintf(&b,
 		"\n**新しく1件投稿してください。**途中経過の報告（本文のいちばん上の印の並びに "+
-			"%s が入っているもの）へ書き足すと、continuo はそれを成果の報告として数えません。\n"+
-			"**この報告の先頭に、その印を置かないでください。**\n"+
-			"**本文の途中でその印について書くのは構いません。**数えるのは、いちばん上の並びだけです。\n",
-		bareProgressMarker())
+			"%[1]s が入っているもの）へ書き足すと、continuo はそれを成果の報告として数えません。\n"+
+			"**この報告の先頭に %[1]s を置かないでください。**%[2]s のほうは、上のとおり必ず入れてください。\n"+
+			"**本文の途中で %[1]s について書くのは構いません。**数えるのは、いちばん上の並びだけです。\n",
+		bareProgressMarker(), marker)
 	return b.String()
 }
 
