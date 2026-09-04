@@ -110,7 +110,9 @@ func closedPane(fx *fixture, paneID string) bool {
 func finishRunOnPrompt(t *testing.T, fx *fixture, issue tracker.Issue, sessionUUID string) func() []string {
 	t.Helper()
 	nodeID := nodeIDOf(t, issue)
-	transcriptPath := writeTranscript(t, t.TempDir(), sessionUUID+".jsonl", []any{
+	// **記録は記録の根の直下1階層へ置く**（設計 3-3b）。着手の段5b がここを探し、
+	// **無ければ `--resume` を渡さない。**`t.TempDir()` は2階層下なので当たらない。
+	transcriptPath := seedSessionTranscript(t, fx, sessionUUID, []any{
 		typedUserLine("p1", "実装してください"),
 		assistantLine("req1", "実装して commit と push をしました。\n\nCONTINUO-STATUS: review", false),
 	})
@@ -351,6 +353,14 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 
 	issue := sampleIssue(188, "In Progress")
 	wt := prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
+	// **記録を置いてから走らせる。**置かないと着手の段5b が「会話の記録が無い」と判定し、
+	// **`--resume` を1回も渡さないので、この代替フローの分岐元そのものが起きない**（設計 3-3b）。
+	// **ここで再現したいのは「記録はあるのに復帰できない」場合である**
+	// （pane がまだシェルを起動しきっていない、など）。
+	seedSessionTranscript(t, fx, "sess-188", []any{
+		typedUserLine("p0", "前回の1行"),
+		assistantLine("req0", "作業中です", false),
+	})
 	fx.Tracker.AddIssue(issue)
 
 	var mu sync.Mutex
@@ -458,5 +468,74 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	}
 	if _, err := os.Stat(wt.Path); err != nil {
 		t.Errorf("worktree が残っていない: %s (err=%v)", wt.Path, err)
+	}
+}
+
+// TestDispatch_会話の記録が無いセッションには復帰しない は、設計 3-3b の
+// 「記録が無ければ新しいセッションで始める」を確かめる。
+//
+// 目的: 「**身元ファイルにセッション UUID が入っていても、その会話の記録が
+// 記録の置き場所に1件も無ければ `--resume` を渡さない**」を示す。
+//
+// **なぜ要るか。**着手が段9 の途中で落ちると、身元ファイルには**会話が1度も作られていない
+// UUID** が残る（`restartWithNewSession` が採り直した UUID を書いたあとで、立て直しの
+// `agent.start` も失敗した場合である）。**そのまま復帰しにいくと、
+// `confirmStartupWithRestart` が `herdr.startup_timeout_ms` を使い切るまで
+// `agent.start` をやり直し続ける**（利用者の実測で18回・約60秒）。
+//
+// **`TestDispatch_復帰に失敗したら新しいセッションで始め直す` との違い。**あちらは
+// **記録はあるのに起動できなかった**場合で、`--resume` を1回投げてから立て直す。
+// こちらは**投げる前に決める**ので、`agent.start` は最初から `--session-id` で1回だけである。
+//
+// **この検査には経路の印を付けない**（設計 6-18e）。通る経路は
+// `TestDispatch_既存のworktreeがあれば前回のセッションに復帰する` と同じ P001 である。
+// 起動フラグを決める段は条件ステップではないので CFG に枝が無く、
+// **同じ印を2本に付けると、片方を消しても集計は満たされたままになる。**
+//
+// 与える情報: セッション UUID `sess-188` を書いた身元ファイルつきの worktree と、
+// `In Progress` の issue 1件。**その UUID の会話の記録は1件も置かない。**
+// 成功条件:
+//   - `agent.start` の起動フラグに `--resume` が1つも入らない
+//   - `--session-id` に新しい UUID が渡る（`sess-188` を使い回さない）
+//   - **`agent.start` が1回で済んでいる**（空回りしていない）
+//   - 身元ファイルの `session_uuid` が、その新しい UUID へ書き直されている
+func TestDispatch_会話の記録が無いセッションには復帰しない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	prompts := recordPrompts(fx)
+
+	issue := sampleIssue(188, "In Progress")
+	prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
+	// **記録は置かない。**着手が途中で落ちたあとの身元ファイルを再現している。
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 10*time.Second, "新しいセッションで turn が送られる", func() bool {
+		return len(prompts()) > 0
+	})
+
+	starts := startSessionIDs(fx)
+	resumes := startResumeUUIDs(fx)
+	if len(starts) == 0 {
+		t.Fatalf("agent.start が1度も呼ばれていない")
+	}
+	for i, uuid := range resumes {
+		if uuid != "" {
+			t.Fatalf("会話の記録が無いのに %d 回目の起動へ --resume を渡している: %q", i+1, uuid)
+		}
+	}
+	if starts[0] == "" {
+		t.Fatalf("新しい UUID を --session-id で渡していない: %v", starts)
+	}
+	if starts[0] == "sess-188" {
+		t.Fatalf("記録の無いセッションの UUID を --session-id に使い回している: %q", starts[0])
+	}
+	// **空回りしていないことを、`agent.start` の回数で見る。**死んだ UUID へ復帰しにいくと、
+	// `herdr.startup_timeout_ms` の中でやり直しが積み上がる。
+	if len(starts) != 1 {
+		t.Fatalf("agent.start が1回で済んでいない（空回りしている）: %d 回, %v", len(starts), starts)
+	}
+	if got := identitySessionUUID(t, fx, 188); got != starts[0] {
+		t.Fatalf("身元ファイルの session_uuid を書き直していない（次の着手もまた復帰を試みる）: got %q, want %q",
+			got, starts[0])
 	}
 }

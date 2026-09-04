@@ -1601,6 +1601,12 @@ type fixture struct {
 	SocketPath string
 	// WorktreeRoot は worktree の置き場所である。
 	WorktreeRoot string
+	// TranscriptRoot は会話の記録の置き場所の根である（本番の既定は `~/.claude/projects`）。
+	//
+	// **着手の段5b は、この根の直下1階層に `<セッション UUID>.jsonl` があるかを見る**
+	// （設計 3-3b）。無ければ `--resume` を渡さないので、**再着手が復帰することを
+	// 確かめるテストは、ここへ記録を置いてから走らせる**（`sessionTranscriptDir`）。
+	TranscriptRoot string
 	// Logs はログの出力先である。
 	//
 	// **排他つきの syncLog を使う。**run ごとの goroutine（turn ループ・finishRunAsync・
@@ -1833,6 +1839,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	if transcriptRoot == "" {
 		transcriptRoot = tempRoot(t)
 	}
+	fx.TranscriptRoot = transcriptRoot
 	continuoPath := opts.ContinuoPath
 	if continuoPath == "" {
 		continuoPath = "/opt/continuo/bin/continuo"
@@ -2006,6 +2013,44 @@ func taskNotificationEvent(sessionID, taskID string) hookserver.HookEvent {
 		Prompt: fmt.Sprintf("<task-notification><task-id>%s</task-id><status>completed</status></task-notification>",
 			taskID),
 	}
+}
+
+// sessionTranscriptDir は、会話の記録を置くディレクトリを記録の根の直下に1つ作る。
+//
+// **着手の段5b は `<記録の根>/*/<セッション UUID>.jsonl` を探す**（設計 3-3b）。
+// **`t.TempDir()` は使えない。**あれは根から2階層下（`<根>/<テスト名+乱数>/001`）に掘るので、
+// **直下1階層しか見ない検査には1件も当たらず、再着手が `--resume` を渡さなくなる。**
+//
+// **テストごとに別のディレクトリを作る。**根は機械全体の一時ディレクトリなので
+// （`tempRoot`）、固定の名前にすると別のパッケージのテストと同じ場所を使うことになる。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture（記録の根を持っている）。
+// 戻り値: 作ったディレクトリの絶対パス。
+func sessionTranscriptDir(t *testing.T, fx *fixture) string {
+	t.Helper()
+	dir, err := os.MkdirTemp(fx.TranscriptRoot, "continuo-transcripts-")
+	if err != nil {
+		t.Fatalf("会話の記録の置き場所を作れません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// seedSessionTranscript は、そのセッションの会話の記録を、着手が見つけられる場所へ置く。
+//
+// **着手の段5b は、記録が無い UUID へ `--resume` を投げない**（設計 3-3b）。
+// **再着手が復帰することを確かめるテストは、これを dispatch の前に呼ぶこと。**
+// 呼ばないと、身元ファイルに UUID が入っていても新しいセッションで始まる。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// sessionUUID: 記録を置くセッションの UUID。
+// lines: 記録の中身。**空にしない**（大きさが0のファイルは「記録が無い」とみなされる）。
+// 戻り値: 置いた記録の絶対パス。
+func seedSessionTranscript(t *testing.T, fx *fixture, sessionUUID string, lines []any) string {
+	t.Helper()
+	return writeTranscript(t, sessionTranscriptDir(t, fx), sessionUUID+".jsonl", lines)
 }
 
 // writeTranscript はテスト用の transcript の JSONL を書く。

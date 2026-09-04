@@ -827,6 +827,22 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	if prepared.ExistingIdentity != nil {
 		resumeUUID = prepared.ExistingIdentity.SessionUUID
 	}
+	// **会話の記録が無い UUID へ `--resume` を投げない**（設計 3-3b）。
+	//
+	// **着手が段9 の途中で落ちると、身元ファイルには会話が1度も作られていない UUID が残る。**
+	// `restartWithNewSession` が採り直した UUID を身元ファイルへ書いたあとで、
+	// 立て直しの `agent.start` も失敗した場合である。**そのまま復帰しにいくと、
+	// `confirmStartupWithRestart` が `herdr.startup_timeout_ms` を使い切るまで
+	// `agent.start` をやり直し続ける**（利用者の実測で18回・約60秒）。
+	//
+	// **最後は自力で新しいセッションへ倒れるので壊れはしないが、空回りしている間、
+	// その枠は他の issue に使えない。**
+	if resumeUUID != "" && !o.hasTranscriptFor(resumeUUID) {
+		o.logger.Info("身元ファイルのセッションに会話の記録が無いので、新しいセッションで始めます",
+			"identifier", issue.Identifier, "session_uuid", resumeUUID,
+			"記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
+		resumeUUID = ""
+	}
 	sessionUUID := resumeUUID
 	if resumeUUID == "" {
 		sessionUUID, err = o.newSessionUUID()

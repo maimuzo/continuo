@@ -215,6 +215,66 @@ func openRegularFile(path string) (*os.File, error) {
 	return f, nil
 }
 
+// sessionTranscriptExt はセッションの記録のファイル名の拡張子である。
+//
+// **Claude Code は `<記録の根>/<cwd を綴り直したもの>/<セッション UUID>.jsonl` に書く**
+// （hookinput.go の `defaultTranscriptDirName` と同じ実測。設計 3-15）。
+const sessionTranscriptExt = ".jsonl"
+
+// hasTranscriptFor は、そのセッション UUID の会話の記録が残っているかを返す（設計 3-3b）。
+//
+// **記録の無い UUID へ `--resume` を投げると、`herdr.startup_timeout_ms` をまるごと捨てる。**
+// `claude --resume <無い UUID>` は `No conversation found with session ID:` を出して落ち、
+// herdr 経由では `agent.start` が timeout を返すので、`confirmStartupWithRestart` が
+// 期限まで `agent.start` をやり直し続ける。**着手が段9 の途中で落ちると、身元ファイルには
+// 会話が1度も作られていない UUID が残る**ので、そのまま復帰しにいく道がある。
+//
+// **置き場所のディレクトリ名は当てない。**Claude Code が cwd を1つのディレクトリ名へ畳むときの
+// 綴り直しの規則は確かめきれていない（internal/redact/redact.go の `homeDashChars` が
+// 「`_` が置き換わることは確かめられていない」と書いている）。
+// **セッション UUID は一意なので、根の直下を1階層だけ広げれば足りる。**
+//
+// **判定できないときは真を返す。**この検査は空回りを減らすためのものであり、
+// **これが働かないことで着手が止まってはならない。**根が決まっていない場合と、
+// 根を読めない場合（実在しない・権限が無い）の2つが当たる。
+//
+// **大きさが0のファイルは「記録が無い」とみなす。**Claude Code は記録を非同期に書くので、
+// 起動直後は1バイトも書かれていないことがある（`acceptTranscriptPath` の説明）。
+// **会話が1バイトも書かれていないセッションへ復帰しても、引き継げる内容が無い。**
+//
+// sessionUUID: 復帰しようとしているセッションの UUID。
+// 戻り値: 記録があるか、または判定できなければ true。
+func (o *Orchestrator) hasTranscriptFor(sessionUUID string) bool {
+	if sessionUUID == "" {
+		return false
+	}
+	// **身元ファイルは worktree の中にあり、エージェントが書き換えられる**（設計 3-2 / 3-23）。
+	// **`agent_id` と同じ規則で足りる**（英数字と `-` と `_` だけ。セッション UUID はこの形に収まる）。
+	// `/` も `\` も `.` も通さないので、`..` で根の外へ出る組み立て方が成立しない。
+	if !safeAgentID(sessionUUID) {
+		return false
+	}
+	if o.transcriptRoot == "" {
+		return true
+	}
+	entries, err := os.ReadDir(o.transcriptRoot)
+	if err != nil {
+		return true
+	}
+	name := sessionUUID + sessionTranscriptExt
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		info, statErr := os.Stat(filepath.Join(o.transcriptRoot, e.Name(), name))
+		if statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 // subagentDirName は subagent の記録を置くディレクトリの名前である。
 //
 // **Claude Code は親の記録の隣に掘る。**`<親の記録から `.jsonl` を落としたパス>/subagents/`
@@ -277,6 +337,10 @@ func subagentDirOf(parentPath, root string) (string, bool) {
 }
 
 // safeAgentID は `agent_id` をパスの部品として使ってよいかを判定する。
+//
+// **セッション UUID にも使う**（`hasTranscriptFor`）。どちらも外部が書き換えられる値を
+// ファイル名の部品にするので、通してよい文字は同じでよい。**UUID は英数字と `-` だけなので
+// この規則に収まる。**
 //
 // **`agent_id` は hook から来る外部入力である**（設計 3-2 / 3-23）。
 // **英数字とハイフンとアンダースコアだけを通す。**`/` も `\` も `.` も通さないので、
