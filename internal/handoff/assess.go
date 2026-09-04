@@ -328,6 +328,14 @@ func IsProgressReport(body string) bool {
 // body: コメント本文。
 // 戻り値: 先頭の印の並びに進捗報告の印があれば true。
 func StartsAsProgressReport(body string) bool {
+	// **本文全体の先頭の空白だけを落とす。**`Comment.IsAgent` は
+	// `strings.TrimSpace(body)` してから印を見るので（internal/tracker の `FetchComments`）、
+	// **落とさないと2つの判定がずれる。**本文の先頭に空白が1つあるだけで、
+	// **進捗報告が「この run の成果の報告」として数えられ、issue #178 がその形で直らない。**
+	//
+	// **行ごとの字下げは落とさない。**落とすと、4桁字下げしたコード片での引用が
+	// また「印の行」として通る（下の HasPrefix を見よ）。
+	body = strings.TrimLeft(body, " \t\r\n")
 	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
 			// **空行では止めない。**印と印のあいだに空行を挟む書き方がありうる。

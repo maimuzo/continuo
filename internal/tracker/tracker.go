@@ -89,7 +89,7 @@ type Comment struct {
 	// `CreatedAt` と比べて新しいほうを採ること（`handoff.CommentView.LastTouched`）。
 	// **ゼロ値をそのまま使うと、期限がゼロ時刻から数えられて、生きている担当が即座に外れる。**
 	UpdatedAt time.Time
-	// IsAgent は、本文の先頭が `tracker.provider.comments.marker` の印で始まっている
+	// IsAgent は、本文の先頭が `tracker.comments.marker` の印で始まっている
 	// （＝エージェントが書いたと判別できる）ことを示す。
 	IsAgent bool
 	// IsSelf は、本文の先頭が `tracker.provider.comments.self_marker` の印で始まっている

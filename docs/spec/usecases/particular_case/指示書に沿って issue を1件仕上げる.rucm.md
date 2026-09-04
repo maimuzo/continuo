@@ -75,14 +75,28 @@ RFS BASIC FLOW 4
 3. RESUME STEP 5
 POSTCONDITION: 送る文面は組み込みの前半と後半だけである。本文が無いことが内訳に出ている。
 
+SPECIFIC ALTERNATIVE FLOW 分岐元がremoteに無い:
+RFS BASIC FLOW 9
+1. エージェントは分岐元を取り込まない。
+2. RESUME STEP 10
+POSTCONDITION: 分岐元は取り込まれていない。エージェントは作業を続けている。
+
+SPECIFIC ALTERNATIVE FLOW マージが始まる前に断られる:
+RFS BASIC FLOW 9
+1. エージェントは commit していない変更を commit する。
+2. エージェントは分岐元をもう一度取ってきてマージする。
+3. RESUME STEP 10
+POSTCONDITION: 前の試行が残した変更が commit されている。分岐元が取り込まれている。
+
 SPECIFIC ALTERNATIVE FLOW マージが衝突する:
 RFS BASIC FLOW 9
 1. エージェントはマージを取り込む前へ戻す。
-2. エージェントは衝突したことを issue へコメントする。
-3. エージェントは応答の最後に判断を仰ぐ表明を1行だけ書く。
-4. システムはカンバンの issue の Status に人間へ渡す先を書く。
-5. ABORT
-POSTCONDITION: マージの途中の状態は残っていない。issue に衝突したことが書かれている。issue の Status は人間へ渡す先である。
+2. エージェントは push していない commit を push する。
+3. エージェントは衝突したことを issue へコメントする。
+4. エージェントは応答の最後に判断を仰ぐ表明を1行だけ書く。
+5. システムはカンバンの issue の Status に人間へ渡す先を書く。
+6. ABORT
+POSTCONDITION: マージの途中の状態は残っていない。commit は remote に載っている。issue に衝突したことが書かれている。issue の Status は人間へ渡す先である。
 
 SPECIFIC ALTERNATIVE FLOW 既にあるpullrequestを使う:
 RFS BASIC FLOW 19

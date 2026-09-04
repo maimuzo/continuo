@@ -68,6 +68,20 @@ func TestStartsAsProgressReport_先頭の印の並びだけを見る(t *testing.
 			"<!-- continuo:agent -->\n    見本です\n" + config.ProgressMarker,
 			false,
 		},
+		{
+			// **本文全体の先頭の空白は落とす。**`Comment.IsAgent` は
+			// `strings.TrimSpace(body)` してから印を見るので、落とさないと2つの判定がずれる。
+			// **ずれると、進捗報告が「この run の成果の報告」として数えられ、
+			// issue #178 がその形で直らない。**
+			"**本文の先頭に空白がある進捗報告**",
+			"  <!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。",
+			true,
+		},
+		{
+			"本文の先頭が改行から始まる進捗報告",
+			"\n\n<!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。",
+			true,
+		},
 		{"ふつうの成果の報告", "<!-- continuo:agent -->\n実装しました", false},
 		{"印が無い", "ここはどうなっていますか", false},
 		{"空", "", false},

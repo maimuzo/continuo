@@ -258,7 +258,7 @@ func (o *Orchestrator) recordRepoWorkspace(
 // 見えているのに、continuo は「書かれていない」と判定してセッションを復元しにいく。
 //
 // **途中経過の報告は数えない**（設計 3-25 の段1。issue #178）。
-// **`<!-- continuo:progress -->` の付いたコメントも `tracker.provider.comments.marker` を
+// **`<!-- continuo:progress -->` の付いたコメントも `tracker.comments.marker` を
 // 持っているので、数えると「途中経過を1回書いて最後の報告を忘れた run」を
 // 「書いた」と判定してしまう。**issue には「まだ作業中です」だけが残り、
 // **何をしたのかが誰にも分からないまま `In Review` に立つ。**
