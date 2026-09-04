@@ -111,7 +111,7 @@ func closedPane(fx *fixture, paneID string) bool {
 func finishRunOnPrompt(t *testing.T, fx *fixture, issue tracker.Issue, sessionUUID string) func() []string {
 	t.Helper()
 	nodeID := nodeIDOf(t, issue)
-	// **記録は記録の根の直下1階層へ置く**（設計 3-3b）。着手の段5b がここを探し、
+	// **記録は記録の根の直下1階層へ置く**（設計 3-3c）。着手の段5b がここを探し、
 	// **無ければ `--resume` を渡さない。**`t.TempDir()` は2階層下なので当たらない。
 	transcriptPath := seedSessionTranscript(t, fx, sessionUUID, []any{
 		typedUserLine("p1", "実装してください"),
@@ -358,7 +358,7 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	issue := sampleIssue(188, "In Progress")
 	wt := prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
 	// **記録を置いてから走らせる。**置かないと着手の段5b が「会話の記録が無い」と判定し、
-	// **`--resume` を1回も渡さないので、この代替フローの分岐元そのものが起きない**（設計 3-3b）。
+	// **`--resume` を1回も渡さないので、この代替フローの分岐元そのものが起きない**（設計 3-3c）。
 	// **ここで再現したいのは「記録はあるのに復帰できない」場合である**
 	// （pane がまだシェルを起動しきっていない、など）。
 	seeded := seedSessionTranscript(t, fx, "sess-188", []any{
@@ -479,7 +479,7 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	}
 }
 
-// TestDispatch_会話の記録が無いセッションには復帰しない は、設計 3-3b の
+// TestDispatch_会話の記録が無いセッションには復帰しない は、設計 3-3c の
 // 「記録が無ければ新しいセッションで始める」を確かめる。
 //
 // 目的: 「**身元ファイルにセッション UUID が入っていても、その会話の記録が
@@ -550,47 +550,46 @@ func TestDispatch_会話の記録が無いセッションには復帰しない(t
 	}
 }
 
-// TestDispatch_記録の判定は残り3つの場合も設計どおりに倒れる は、設計 3-3b の判定の表の
-// 残り3行を確かめる。
+// TestDispatch_記録の判定は残り2つの場合も設計どおりに倒れる は、設計 3-3c の判定の表の
+// 残り2行を確かめる。
 //
-// 目的: **設計 3-3b の表は4つの結果を並べているのに、検査があるのは「記録が1件も無い」だけ
-// だった。**残り3つは、守りの向きを逆に書き換えても全部緑のまま通る状態にあった。
+// 目的: **設計 3-3c の表は3つの結果を並べているのに、検査があるのは「記録が1件も無い」だけ
+// だった。**残り2つは、守りの向きを逆に書き換えても緑のまま通る状態にあった。
 //
-//	大きさが0の記録    … 復帰しない（会話が1バイトも書かれていないセッションへ戻っても、引き継げる内容が無い）
 //	UUID がパスに使えない … 復帰しない（身元ファイルはエージェントが書き換えられる。設計 3-2 / 3-23）
 //	記録の置き場所を読めない … **復帰を試す**（判定できないことで着手が止まってはならない）
 //
-// **3つ目だけ倒れる向きが逆である。**そこが逆になると、記録の置き場所を作っていない機械で
+// **2つ目だけ倒れる向きが逆である。**そこが逆になると、記録の置き場所を作っていない機械で
 // **再着手が会話履歴を毎回捨てる。**
+//
+// **1つ目は、当たる記録を置いてから渡す。**置かないと、UUID の検査を消しても
+// 「記録が1件も無い」に倒れて `--resume` が渡らず、**守りを消しても緑のまま通る。**
+// `filepath.Join` は `..` を畳むので、`sess/../188` は `<記録の根>/<ディレクトリ>/188.jsonl` に当たる。
 //
 // **この検査にも経路の印を付けない**（設計 6-18e）。通る経路は
 // `TestDispatch_既存のworktreeがあれば前回のセッションに復帰する` と同じ P001 である。
 //
 // 与える情報: 身元ファイルつきの worktree と `In Progress` の issue 1件。
 // 記録の置き場所と身元ファイルの UUID を、場合ごとに変える。
-// 成功条件: 復帰しない2つでは `--resume` が1つも渡らず、読めない場合では渡ること。
-func TestDispatch_記録の判定は残り3つの場合も設計どおりに倒れる(t *testing.T) {
+// 成功条件: 使えない UUID では `--resume` が1つも渡らず、読めない場合では渡ること。
+func TestDispatch_記録の判定は残り2つの場合も設計どおりに倒れる(t *testing.T) {
 	cases := []struct {
 		name string
 		// uuid は身元ファイルへ書くセッション UUID である。
 		uuid string
+		// seedName は、記録を置くときのファイル名（拡張子を除く）である。空なら置かない。
+		seedName string
 		// missingRoot を真にすると、記録の置き場所として実在しないパスを渡す。
 		missingRoot bool
-		// emptyTranscript を真にすると、大きさが0の記録を置く。
-		emptyTranscript bool
 		// wantResume は `--resume` が渡ることを期待するかである。
 		wantResume bool
 	}{
 		{
-			name:            "大きさが0の記録には復帰しない",
-			uuid:            "sess-188",
-			emptyTranscript: true,
-			wantResume:      false,
-		},
-		{
 			// **`/` はパスの区切りである。**通すと、根の外のファイルを見に行く組み立て方が成立する。
+			// **`..` を畳んだ先へ実際に記録を置く。**置かないと、この検査を消しても緑のまま通る。
 			name:       "UUIDがパスに使えない形なら復帰しない",
 			uuid:       "sess/../188",
+			seedName:   "188",
 			wantResume: false,
 		},
 		{
@@ -615,9 +614,11 @@ func TestDispatch_記録の判定は残り3つの場合も設計どおりに倒�
 
 			issue := sampleIssue(188, "In Progress")
 			prepareWorktree(t, fx, issue, identityOverride{SessionUUID: tc.uuid})
-			if tc.emptyTranscript {
-				// **`seedSessionTranscript` は使えない。**あれは中身のある記録を書く。
-				writeTranscript(t, sessionTranscriptDir(t, fx), tc.uuid+".jsonl", nil)
+			if tc.seedName != "" {
+				seedSessionTranscript(t, fx, tc.seedName, []any{
+					typedUserLine("p0", "別のセッションの1行"),
+					assistantLine("req0", "作業中です", false),
+				})
 			}
 			fx.Tracker.AddIssue(issue)
 

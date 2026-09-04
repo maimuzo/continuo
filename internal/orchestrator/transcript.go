@@ -215,28 +215,7 @@ func openRegularFile(path string) (*os.File, error) {
 	return f, nil
 }
 
-// 会話の記録がどう判定されたかの理由である。**ログに出して、運用者が原因を見分けられるようにする。**
-//
-// **1つの文面で済ませてはならない。**身元ファイルの改竄（設計 3-2 / 3-23）と、
-// 利用者が `~/.claude/projects` を消しただけの場合が、同じ1行に見えることになる。
-const (
-	// transcriptFound は記録が見つかったことを表す。
-	transcriptFound = "記録がある"
-	// transcriptMissing は、その UUID の記録が根の下に1件も無かったことを表す。
-	transcriptMissing = "記録が無い"
-	// transcriptEmpty は、記録のファイルはあったが1バイトも書かれていなかったことを表す。
-	//
-	// **`transcriptMissing` と分ける。**片方は「Claude Code が1度も起動しなかった」で、
-	// 見るのは herdr と pane である。もう片方は「起動したが何も書かなかった」で、
-	// 見るのは設定ファイルと最初の turn である。**直す先が違う。**
-	transcriptEmpty = "記録のファイルはあるが1バイトも書かれていない"
-	// transcriptUUIDUnsafe は、身元ファイルの UUID がパスの部品として使えない形だったことを表す。
-	transcriptUUIDUnsafe = "身元ファイルの session_uuid がパスに使えない形である"
-	// transcriptUndecidable は、記録があるかを決められなかったことを表す（根が決まっていない・読めない）。
-	transcriptUndecidable = "記録の置き場所を読めないので判定できない"
-)
-
-// hasTranscriptFor は、そのセッション UUID の会話の記録が残っているかを返す（設計 3-3b）。
+// hasTranscriptFor は、そのセッション UUID の会話の記録が残っているかを返す（設計 3-3c）。
 //
 // **記録の無い UUID へ `--resume` を投げると、`herdr.startup_timeout_ms` をまるごと捨てる。**
 // `claude --resume <無い UUID>` は `No conversation found with session ID:` を出して落ち、
@@ -251,7 +230,7 @@ const (
 //
 // **そのぶん、残る穴が1つある。**`claude --resume` は cwd のプロジェクトのディレクトリで
 // 会話を解決するので、**worktree を別のパスへ作り直すと、古いパスの記録に当たって
-// `--resume` を渡してしまう。**そこでは元と同じ空回りが起きる（設計 3-3b）。
+// `--resume` を渡してしまう。**そこでは元と同じ空回りが起きる（設計 3-3c）。
 //
 // **エントリの種別で絞り込まない。**`os.ReadDir` が返す種別は lstat なので、
 // **根の下に symlink で置かれたディレクトリを丸ごと飛ばすことになる。**
@@ -262,30 +241,37 @@ const (
 // 置き場所を別のディスクへ移して symlink を残した利用者の会話を、こちらだけが
 // 「無い」と答えることになるためである。**解決の先が通常のファイルであることは確かめる。**
 //
-// **大きさが0のファイルは「記録が無い」とみなす。**Claude Code は記録を非同期に書くので、
-// 起動直後は1バイトも書かれていないことがある（`acceptTranscriptPath` の説明）。
-// **会話が1バイトも書かれていないセッションへ復帰しても、引き継げる内容が無い。**
+// **大きさは見ない。**「1バイトも書かれていない記録へ `--resume` を投げるとどうなるか」を
+// 測っていないためである。**測っていないものは「判定できない」側であり、
+// 判定できないときは復帰を試す**（設計 3-3c）。
+//
+// **根の内側かどうかも見ない。**この関数は**そのパスを1バイトも読まないし、返しもしない。**
+// 返るのは真偽値だけである。同じファイルの `SubagentTranscriptsFor` などが根の検査を持つのは、
+// **そこで得たパスを読み手へ渡すからである。**
 //
 // sessionUUID: 復帰しようとしているセッションの UUID。
-// 戻り値の1つ目: 記録があるか、または判定できなければ true。
-// 戻り値の2つ目: そう決めた理由（`transcriptFound` などのいずれか。ログに出す）。
-func (o *Orchestrator) hasTranscriptFor(sessionUUID string) (bool, string) {
+// 戻り値: 記録があるか、または判定できなければ true。
+func (o *Orchestrator) hasTranscriptFor(sessionUUID string) bool {
 	// **身元ファイルは worktree の中にあり、エージェントが書き換えられる**（設計 3-2 / 3-23）。
 	// **`agent_id` と同じ規則で足りる**（英数字と `-` と `_` だけ。セッション UUID はこの形に収まる）。
 	// `/` も `\` も `.` も通さないので、`..` で根の外へ出る組み立て方が成立しない。
+	//
+	// **この検査を外すと、この issue が消したはずの症状が戻る。**エージェントが自分の worktree に
+	// 中身のある `x.jsonl` を作り、`session_uuid` を `../../<そこへの相対パス>/x` にすると、
+	// **`filepath.Join` が `..` を畳んでその実体に当たり、「記録がある」と答える。**
+	//
 	// **空文字もここで落ちる。**
 	if !safeAgentID(sessionUUID) {
-		return false, transcriptUUIDUnsafe
+		return false
 	}
 	if o.transcriptRoot == "" {
-		return true, transcriptUndecidable
+		return true
 	}
 	entries, err := os.ReadDir(o.transcriptRoot)
 	if err != nil {
-		return true, transcriptUndecidable
+		return true
 	}
 	name := sessionUUID + transcriptExt
-	empty := false
 	for _, e := range entries {
 		path := filepath.Join(o.transcriptRoot, e.Name(), name)
 		// **実在するなら解決してから見る**（`acceptTranscriptPath` と同じ順）。
@@ -296,17 +282,9 @@ func (o *Orchestrator) hasTranscriptFor(sessionUUID string) (bool, string) {
 		if statErr != nil || !info.Mode().IsRegular() {
 			continue
 		}
-		if info.Size() == 0 {
-			// **「1件も無い」とは分けて覚える。**直す先が違う（`transcriptEmpty` の説明）。
-			empty = true
-			continue
-		}
-		return true, transcriptFound
+		return true
 	}
-	if empty {
-		return false, transcriptEmpty
-	}
-	return false, transcriptMissing
+	return false
 }
 
 // subagentDirName は subagent の記録を置くディレクトリの名前である。

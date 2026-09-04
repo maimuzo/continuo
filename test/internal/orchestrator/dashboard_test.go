@@ -117,7 +117,7 @@ func TestRunViews_セッションに復帰した再着手でトークンを二�
 	})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
-	// **記録は記録の根の直下1階層へ置く**（設計 3-3b）。着手の段5b がここを探し、
+	// **記録は記録の根の直下1階層へ置く**（設計 3-3c）。着手の段5b がここを探し、
 	// **無ければ `--resume` を渡さない。**渡らないと、この検査が見たい
 	// 「同じファイルへ復帰する」経路そのものが起きない。
 	transcriptDir := sessionTranscriptDir(t, fx)

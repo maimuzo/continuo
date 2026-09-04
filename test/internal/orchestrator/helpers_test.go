@@ -1604,7 +1604,7 @@ type fixture struct {
 	// TranscriptRoot は会話の記録の置き場所の根である（本番の既定は `~/.claude/projects`）。
 	//
 	// **着手の段5b は、この根の直下1階層に `<セッション UUID>.jsonl` があるかを見る**
-	// （設計 3-3b）。無ければ `--resume` を渡さないので、**再着手が復帰することを
+	// （設計 3-3c）。無ければ `--resume` を渡さないので、**再着手が復帰することを
 	// 確かめるテストは、ここへ記録を置いてから走らせる**（`sessionTranscriptDir`）。
 	TranscriptRoot string
 	// Logs はログの出力先である。
@@ -2017,7 +2017,7 @@ func taskNotificationEvent(sessionID, taskID string) hookserver.HookEvent {
 
 // sessionTranscriptDir は、会話の記録を置くディレクトリを記録の根の直下に1つ作る。
 //
-// **着手の段5b は `<記録の根>/*/<セッション UUID>.jsonl` を探す**（設計 3-3b）。
+// **着手の段5b は `<記録の根>/*/<セッション UUID>.jsonl` を探す**（設計 3-3c）。
 // **`t.TempDir()` は使えない。**あれは根から2階層下（`<根>/<テスト名+乱数>/001`）に掘るので、
 // **直下1階層しか見ない検査には1件も当たらず、再着手が `--resume` を渡さなくなる。**
 //
@@ -2047,14 +2047,14 @@ func sessionTranscriptDir(t *testing.T, fx *fixture) string {
 
 // seedSessionTranscript は、そのセッションの会話の記録を、着手が見つけられる場所へ置く。
 //
-// **着手の段5b は、記録が無い UUID へ `--resume` を投げない**（設計 3-3b）。
+// **着手の段5b は、記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。
 // **再着手が復帰することを確かめるテストは、これを dispatch の前に呼ぶこと。**
 // 呼ばないと、身元ファイルに UUID が入っていても新しいセッションで始まる。
 //
 // t: 呼び出し元のテスト。
 // fx: 対象の fixture。
 // sessionUUID: 記録を置くセッションの UUID。
-// lines: 記録の中身。**空にしない**（大きさが0のファイルは「記録が無い」とみなされる）。
+// lines: 記録の中身。
 // 戻り値: 置いた記録の絶対パス。
 func seedSessionTranscript(t *testing.T, fx *fixture, sessionUUID string, lines []any) string {
 	t.Helper()

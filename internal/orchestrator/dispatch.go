@@ -827,7 +827,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	if prepared.ExistingIdentity != nil {
 		resumeUUID = prepared.ExistingIdentity.SessionUUID
 	}
-	// **会話の記録が無い UUID へ `--resume` を投げない**（設計 3-3b）。
+	// **会話の記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。
 	//
 	// **着手が段9 の途中で落ちると、身元ファイルには会話が1度も作られていない UUID が残る。**
 	// `restartWithNewSession` が採り直した UUID を身元ファイルへ書いたあとで、
@@ -838,20 +838,13 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **最後は自力で新しいセッションへ倒れるので壊れはしないが、空回りしている間、
 	// その枠は他の issue に使えない。**
 	//
-	// **理由もログに出す。**「記録が無い」と「身元ファイルの UUID が壊れている」は
-	// **原因も対処も違う。**後者はエージェントが身元ファイルを書き換えた場合を含む
-	// （設計 3-2 / 3-23）ので、利用者が `~/.claude/projects` を消しただけの場合と
-	// 同じ1行に見えてはならない。
-	//
-	// **ここでは書かない。**下の3通りと合わせて1行だけ書く（設計 3-3b の「ログは4通り」）。
+	// **ここでは書かない。**下の3通りと合わせて1行だけ書く（設計 3-3c の「ログは4通り」）。
 	// **2行出すと、運用者が「新しいセッションを立てて着手します」を数えて新規の着手を
 	// 数えるときに、この経路を二重に数える。**
-	skippedResume, skipReason := "", ""
-	if resumeUUID != "" {
-		if ok, reason := o.hasTranscriptFor(resumeUUID); !ok {
-			skippedResume, skipReason = resumeUUID, reason
-			resumeUUID = ""
-		}
+	skippedResume := ""
+	if resumeUUID != "" && !o.hasTranscriptFor(resumeUUID) {
+		skippedResume = resumeUUID
+		resumeUUID = ""
 	}
 	sessionUUID := resumeUUID
 	if resumeUUID == "" {
@@ -875,11 +868,15 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		o.logger.Info("前回のセッションに復帰して再着手します（会話履歴を引き継ぎます）",
 			"identifier", issue.Identifier, "session_uuid", resumeUUID, "worktree", prepared.Path)
 	case skippedResume != "":
-		// **上の「新しいセッションを立てて着手します」と混ぜない**（設計 3-3b の「ログは4通り」）。
+		// **下の「新しいセッションを立てて着手します」と混ぜない**（設計 3-3c の「ログは4通り」）。
 		// **身元ファイルに UUID が入っていた再着手であって、新規の着手ではない。**
+		//
+		// **`記録の置き場所` を落とさない。**この検査が黙って無効になる筋道
+		// （Claude Code が置き場所の形を変えた・利用者が別の場所へ向けている）に気づけるのは、
+		// **この行が出ることと、そこに探した場所が載っていることの2つだけである。**
 		o.logger.Info("身元ファイルのセッションへ復帰しないで、新しいセッションで始めます",
 			"identifier", issue.Identifier, "復帰しなかったセッション", skippedResume,
-			"新しいセッション", sessionUUID, "理由", skipReason,
+			"新しいセッション", sessionUUID,
 			"記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
 	default:
 		o.logger.Info("新しいセッションを立てて着手します（会話履歴はありません）",
