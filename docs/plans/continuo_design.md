@@ -3929,6 +3929,8 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
 | **片付ける Status が終わったとみなす Status に収まっているか** | **`cleanup.on_states` の値が `tracker.terminal_states` に全部あるかを見る**（3-9e） | **記号は `!`。**ボードを1バイトも読まない（設定の2つのキーを突き合わせるだけである）。**`config.Validate` は `tracker.active_states` との重なりしか見ていない** |
 | **書き戻しの対応表のキーがボードにあるか** | **`tracker.automated_state_rewrite` のキーが、ボードの Status の選択肢にあるかを見る**（3-57） | **記号は `!`。**キーはボードに実在しなくてよい。**綴りを打ち間違えた行は一度も効かないのに、起動時の警告は doctor に出てこない**（doctor は tracker のログを捨てる）。**紛らわしさの検査では拾えない**（`In Progres` と `In Progress` は「同じ綴り」でも「含む」でもない） |
 | **雛形にある設定項目が全部書かれているか** | **雛形（`internal/scaffold/template.go`）の front matter のキーが `WORKFLOW.md` に全部あるかを見る**（3-75） | **記号は `!`。**ボードを1バイトも読まない。**版を上げて増えた項目は、リリースノートを読まないかぎり存在に気づけない。**足りない項目の名前と、差分を読むコマンド・当てるコマンドを出す |
+| **カンバンの自動化が有効なのに書き戻しの対応表が空でないか** | **`ProjectV2.workflows` の `enabled` が真のものを数え、1件でもあるのに `tracker.automated_state_rewrite` が空なら知らせる**（3-54） | **記号は `!`。**空でも continuo は起動して走る。**だが自動化が Status を書いた瞬間に走行中の run が止まり、利用者がそれを知るのは1件止まったあとである**（issue #209）。**どの自動化がどの Status を書くかを GitHub の API は公開していない**ので、有効な自動化の名前を並べて人間に判断させる |
+| **agent teams が有効にならないか** | **`claude.env` と、doctor を叩いたシェルの `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を見る**（3-70） | **記号は `!`。**カンバンを1バイトも読まない。**読める出どころは6か所のうち2つだけ**なので、**読んでいない出どころを `✓` のときも必ず内訳に出す。****書いていないことは警告しない**（3-70 の「continuo は既定で書き込まない」） |
 
 **doctor は Keychain を読む。**
 
@@ -3969,8 +3971,10 @@ continuo hook          # Claude Code の hook から呼ばれる。標準入力�
               ├─ 未記入の項目（雛形と設定の原文を突き合わせる。3-75）
               ├─ プロンプトの変数（3つの断片を作り物の issue で変数展開する。5-3c）
               ├─ herdr（設定の protocol と照合する）
+              ├─ agent teams（claude.env と doctor を叩いたシェルを見る。3-70）
               └─ gh の認証 ── ボードを読める ─┬─ Status の名前（選択肢名を照合する）
                                               ├─ 対応表のキー（キーが選択肢にあるか。3-57）
+                                              ├─ 自動化（有効な自動化と対応表の噛み合い。3-54）
                                               ├─ clone（対象リポジトリが決まる）
                                               └─ 信頼登録（clone のパスが要る）
 資格情報（token_source が指す先だけを見る。ほかの検査に依存しないので飛ばさない）
@@ -7244,13 +7248,38 @@ user の設定より後に当たる。だからそのどれかに、この変数
 
 出典: [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）。
 
-#### 有効になっているかを検出する仕組みは、この節の範囲外である
+#### 有効になっているかは、`continuo doctor` が読める2か所だけを見て正直に報告する
 
-**別の issue で設計する。**
+**見出し語 `agent teams` を足す**（issue #137）。**記号は `!` までで、`✗` にしない。**
+**読める出どころは2つだけで、残り5つは読まない。読んでいない出どころを `✓` のときも内訳に出す。**
 
-**理由。**「continuo が起動する Claude Code で agent teams が有効になるか」を判定するには、
-**組織の managed settings・`--settings`・対象リポジトリの2ファイル・利用者の設定・herdr の環境**の
-6か所を優先順位どおりに解決する必要がある。**そのうち3か所は continuo からは読めない。**
+| 出どころ | 読むか | なぜ |
+| --- | --- | --- |
+| **`claude.env`** | **読む** | continuo が Claude Code へ環境変数を渡す経路はここ1本しかない（3-12） |
+| **doctor を叩いたシェルの環境変数** | **読む** | **herdr の pane と同じとは限らない**ので、文言でそう断る |
+| 組織の managed settings | 読まない | OS ごとに場所が違う |
+| 対象リポジトリの `.claude/settings.json` | 読まない | doctor が見るのは clone で、Claude Code が走るのは worktree。別の branch のことがある |
+| 対象リポジトリの `.claude/settings.local.json` | 読まない | gitignore されるので worktree に出てこない |
+| 利用者の `~/.claude/settings.json` | 読まない | **3-12 が「利用者の `~/.claude/settings.json` は読み書きしない」と決めている** |
+| herdr の pane の環境 | 読まない | continuo は `claude` を直接起動しない |
+
+**判定は、両方の出どころへ同じものさしを当てる。**公式が意味を決めているのは `0` と `1` だけである。
+
+| `claude.env` | シェル | 記号 |
+| --- | --- | --- |
+| `"0"` | 何でもよい | **`✓`**（`--settings` は user の設定にもシェルの export にも勝つ） |
+| `"1"` | 何でもよい | **`!`** |
+| `0` でも `1` でもない値 | 何でもよい | **`!`**（判定できない） |
+| 書いていない | `0` でも空でもない値 | **`!`**（herdr の pane がこの環境を継いでいれば有効になる） |
+| 書いていない | 上記以外 | **`✓`** |
+
+**書いていないことを警告しない。**上の「continuo がこれを既定で書き込むことはしない」と同じ理由である。
+**`1` を見つけたときだけ知らせる。**
+
+**「症状で捕まえる」案は採らない。**`blocked` で打ち切った run のうち、確認の画面と subagent の走行が
+重なっていたら issue のコメントで agent teams を名指しする、という案である。
+**issue #137 の題名が `continuo doctor で agent teams が有効になっているかを検出する` であり、
+doctor の検査を求めている。**症状から当てる仕組みは、必要になったときに別の issue で設計する。
 
 **とくに、シェルの環境変数がどのプロセスのものかが決まらない。**
 continuo は `claude` を直接起動せず、herdr の `worktree.open` が作った pane の中で起動する
@@ -7266,7 +7295,9 @@ continuo は `claude` を直接起動せず、herdr の `worktree.open` が作�
 | herdr にだけある `HERDR_STARTUP_CWD` が、herdr が用意した pane にあるか | **無い**（この機械の pane 1つで確認） |
 
 **したがって「continuo を起動したシェル」も「herdr を起動したシェル」も、
-効くとも効かないとも言い切れない。**doctor が検出するなら、両方を見る必要がある。
+効くとも効かないとも言い切れない。****だから doctor は言い切らない。**
+シェルで見つけたときの文言に「herdr の pane がこの環境を継いでいれば有効になります」と書き、
+**読んでいない出どころを内訳に並べる。**
 
 ### 3-71. 提供する枠の上限を `WORKFLOW.md` で決める
 

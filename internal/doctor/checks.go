@@ -626,18 +626,22 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 // 戻り値の2つ目: ボードから集めた対象リポジトリ（読めなければ nil）。
 // 戻り値の3つ目: ボード側の Status の選択肢名（Bootstrap を通っていなければ nil）。
 // **見出し語 `Status の名前` がこれを使う。**同じ応答から取るので、追加のリクエストは要らない。
+// 戻り値の4つ目: ボードの自動化の一覧（応答に入っていなければ nil）。
+// **見出し語 `自動化` がこれを使う。**これも同じ応答から取るので、リクエストは増えない
+// （`workflows` は `bootstrapQueryTemplate` に載せてある）。
+// **nil は「応答に入っていなかった」である。**長さ0の「1件も無い」と取り違えてはならない。
 func checkBoard(
 	ctx context.Context,
 	cfg loadedConfig,
 	opts Options,
 	configSymbol, ghSymbol Symbol,
-) (Result, []Repo, []string) {
+) (Result, []Repo, []string, []tracker.ProjectWorkflow) {
 	if configSymbol != SymbolOK {
 		return Result{
 			Label:  LabelBoard,
 			Symbol: SymbolUnknown,
 			Detail: i18n.T(i18n.KeyDoctorBoardConfigUnreadable),
-		}, nil, nil
+		}, nil, nil, nil
 	}
 	if ghSymbol != SymbolOK {
 		// **上流の記号によって文言を分ける。**`✗`（足りない）を「確かめられなかった」と
@@ -646,7 +650,7 @@ func checkBoard(
 		if ghSymbol == SymbolUnknown {
 			reason = i18n.T(i18n.KeyDoctorBoardGHUnknown)
 		}
-		return Result{Label: LabelBoard, Symbol: SymbolUnknown, Detail: reason}, nil, nil
+		return Result{Label: LabelBoard, Symbol: SymbolUnknown, Detail: reason}, nil, nil, nil
 	}
 
 	token, err := tracker.ResolveToken(ctx, cfg.Config.Tracker.Provider, opts.GHAuthToken)
@@ -656,7 +660,7 @@ func checkBoard(
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorBoardTokenUnresolved, err),
 			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyTokenSource)},
-		}, nil, nil
+		}, nil, nil, nil
 	}
 
 	adapter, err := tracker.NewAdapter(
@@ -667,17 +671,18 @@ func checkBoard(
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorBoardAdapterFailed, err),
 			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyTracker)},
-		}, nil, nil
+		}, nil, nil, nil
 	}
 
 	if err := adapter.Bootstrap(ctx, cfg.Config.Tracker); err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil, nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil, nil, nil
 	}
 	boardStates := adapter.StatusOptionNames()
+	workflows := adapter.ProjectWorkflows()
 
 	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
 	if err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil, nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil, nil, nil
 	}
 
 	repos := collectRepos(issues)
@@ -687,7 +692,7 @@ func checkBoard(
 		Detail: i18n.T(i18n.KeyDoctorBoardOK,
 			cfg.Config.Tracker.Provider.Owner, cfg.Config.Tracker.Provider.ProjectNumber,
 			len(issues), len(repos), endpointNote(opts.GraphQLEndpoint)),
-	}, repos, boardStates
+	}, repos, boardStates, workflows
 }
 
 // endpointNote は接続先を差し替えているときに添える1行を作る。

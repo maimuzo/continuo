@@ -573,6 +573,9 @@ func bootstrapPayload(b *ghBoard) map[string]any {
 				"totalItems":         map[string]any{"totalCount": len(items)},
 				"itemsWithStatus":    map[string]any{"totalCount": withStatus},
 				"itemsWithoutStatus": map[string]any{"totalCount": len(items) - withStatus},
+				// **自動化は1件も無いボードにする**（`continuo doctor` の見出し語 `自動化`）。
+				// **`workflows` ごと落とすと「読めなかった」になり、`!` が出る。**
+				"workflows": map[string]any{"nodes": []any{}},
 			},
 		},
 	}

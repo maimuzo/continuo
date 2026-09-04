@@ -93,7 +93,7 @@ func checkMissingKeys(opts Options, cfg loadedConfig, configSymbol Symbol) Resul
 // missingKeysNoteLimit は内訳に並べる項目の名前の上限である。
 //
 // **10 にするのは、この検査1つで検査結果の並びを埋めないためである。**
-// `continuo doctor` は15個の検査を出す。**内訳がそれと同じ高さを超えると、
+// `continuo doctor` は18個の検査を出す。**内訳がそれと同じ高さを超えると、
 // 何を見ている画面なのかが分からなくなる。**
 //
 // **版を1つ上げて増える項目は、実測で最大3件である**（v0.1.5 から v0.1.9 まで

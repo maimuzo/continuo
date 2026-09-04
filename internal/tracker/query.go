@@ -192,6 +192,16 @@ query($statusField: String!, $ids: [ID!]!) {
 // **`first: 0` を渡して node を1件も要求しない。**件数だけが要るので、
 // GraphQL の点数計算（設計 3-31）にほとんど乗らない
 // （2026-08-20 に project #3 への読み取り専用クエリで `first: 0` が通ることを実測）。
+//
+// **同じリクエストでボードの自動化も取る**（設計 3-32 の見出し語 `自動化`。issue #209）。
+// **doctor 専用のクエリを別に足さない。**足すと `continuo doctor` がボードへ送る
+// リクエストが3本になり、**「doctor がボードを1回読む」と書いてある3箇所**
+// （設計 3-32・docs/plans/impl/08_doctor.md・`test/internal/doctor` のクエリの並びの検査）
+// が全部食い違う。**常駐プロセスはこの値を読まない**が、応答に数十バイト増えるだけである。
+//
+// **`ProjectV2Workflow` が持つのは名前と有効かどうかだけである**（2026-09-05 に
+// introspection で確認。`createdAt` / `enabled` / `fullDatabaseId` / `id` / `name` /
+// `number` / `project` / `updatedAt`）。**どの Status を書くかは公開されていない。**
 const bootstrapQueryTemplate = `
 query($login: String!, $number: Int!, $statusField: String!, $withStatusQuery: String!, $withoutStatusQuery: String!) {
   repositoryOwner(login: $login) {
@@ -208,6 +218,7 @@ query($login: String!, $number: Int!, $statusField: String!, $withStatusQuery: S
         totalItems: items(first: 0) { totalCount }
         itemsWithStatus: items(first: 0, query: $withStatusQuery) { totalCount }
         itemsWithoutStatus: items(first: 0, query: $withoutStatusQuery) { totalCount }
+        workflows(first: 100) { nodes { number name enabled } }
       }
     }
   }
@@ -540,6 +551,18 @@ type rawItemCount struct {
 	TotalCount int `json:"totalCount"`
 }
 
+// rawWorkflow はボードの自動化1件の応答である（設計 3-32 の見出し語 `自動化`）。
+type rawWorkflow struct {
+	Number  int    `json:"number"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+}
+
+// rawWorkflowConnection はボードの自動化の一覧の応答である。
+type rawWorkflowConnection struct {
+	Nodes []rawWorkflow `json:"nodes"`
+}
+
 type rawProjectForBootstrap struct {
 	ID    string          `json:"id"`
 	Field *rawStatusField `json:"field"`
@@ -548,6 +571,11 @@ type rawProjectForBootstrap struct {
 	TotalItems         *rawItemCount `json:"totalItems"`
 	ItemsWithStatus    *rawItemCount `json:"itemsWithStatus"`
 	ItemsWithoutStatus *rawItemCount `json:"itemsWithoutStatus"`
+	// Workflows はボードの自動化の一覧である（`continuo doctor` の見出し語 `自動化`）。
+	//
+	// **ポインタにしてある。**応答に含まれていなければ nil になり、
+	// **「1件も無い」と「読めなかった」を区別できる**（古い偽サーバ・GHES・権限が足りない場合）。
+	Workflows *rawWorkflowConnection `json:"workflows"`
 }
 
 type rawRepositoryOwnerForBootstrap struct {

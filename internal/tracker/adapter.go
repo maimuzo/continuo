@@ -77,6 +77,27 @@ type Adapter struct {
 	// statusOptionNamesFold は Status の選択肢名を foldStatus した値から、GitHub 側の
 	// 正式な綴りへの対応である。大文字小文字を無視した照合に使う（Bootstrap で解決）。
 	statusOptionNamesFold map[string]string
+	// workflows はボードの自動化の一覧である（Bootstrap で解決。設計 3-32 の見出し語 `自動化`）。
+	//
+	// **nil と長さ0を区別する。**nil は「応答に `workflows` が無かった」（読めなかった）、
+	// 長さ0は「1件も無い」である。`ProjectWorkflows` がその区別をそのまま返す。
+	workflows []ProjectWorkflow
+}
+
+// ProjectWorkflow はボードの組み込みの自動化1件である（設計 3-32 の見出し語 `自動化`）。
+//
+// **持てるのは名前と有効かどうかだけである。**`ProjectV2Workflow` が公開しているのは
+// `createdAt` / `enabled` / `fullDatabaseId` / `id` / `name` / `number` / `project` /
+// `updatedAt` の8つで（2026-09-05 に introspection で確認）、
+// **どの Status を書くかを返すフィールドは1つも無い。**
+// だから `continuo doctor` は「Status を書きうる」までしか言えない。
+type ProjectWorkflow struct {
+	// Number はボードの中での自動化の番号である（GitHub の画面に出る `#1` など）。
+	Number int
+	// Name は自動化の名前である（`Pull request linked to issue` など。GitHub の綴りのまま）。
+	Name string
+	// Enabled はその自動化が有効かどうかである。
+	Enabled bool
 }
 
 // NewAdapter は Adapter を作る。
@@ -405,13 +426,24 @@ func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerCo
 		}
 	}
 
-	// **5つをまとめて1回のロックで差し替える。**読み手（別 goroutine の UpdateStatus →
+	// **応答に `workflows` が無ければ nil のままにする。**「1件も無い」と
+	// 「読めなかった」を取り違えると、doctor が確かめていないことを `✓` で通す。
+	var workflows []ProjectWorkflow
+	if project.Workflows != nil {
+		workflows = make([]ProjectWorkflow, 0, len(project.Workflows.Nodes))
+		for _, w := range project.Workflows.Nodes {
+			workflows = append(workflows, ProjectWorkflow{Number: w.Number, Name: w.Name, Enabled: w.Enabled})
+		}
+	}
+
+	// **6つをまとめて1回のロックで差し替える。**読み手（別 goroutine の UpdateStatus →
 	// lookupOptionID）が、新しい正式名と古い選択肢 ID を混ぜて読まないようにするためである。
 	a.mu.Lock()
 	a.projectID = project.ID
 	a.statusFieldID = project.Field.ID
 	a.statusOptionIDs = optionIDs
 	a.statusOptionNamesFold = optionNamesFold
+	a.workflows = workflows
 	a.bootstrapped = true
 	a.mu.Unlock()
 	return nil
@@ -486,6 +518,34 @@ func (a *Adapter) StatusOptionNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// ProjectWorkflows はボードの組み込みの自動化を、GitHub が返した順のまま全部返す
+// （設計 3-32 の見出し語 `自動化`。issue #209）。
+//
+// **`continuo doctor` だけが呼ぶ。**常駐プロセスはこの値を使わない。
+// **それでも `Bootstrap` の応答から取る。**doctor 専用のクエリを別に足すと、
+// **「doctor がボードを1回読む」と書いてある3箇所**（設計 3-32・
+// docs/plans/impl/08_doctor.md・`test/internal/doctor` のクエリの並びの検査）が食い違う。
+//
+// **戻り値の nil と長さ0を区別すること。**
+//
+//	nil    … 応答に `workflows` が無かった（読めなかった）。**`✓` にしてはならない**
+//	長さ0  … 自動化が1件も無い
+//
+// **`Bootstrap`（または `VerifyStatusOptions`）を通してから呼ぶこと。**
+// 通っていなければ nil を返す。
+//
+// 戻り値: 自動化の一覧（GitHub が返した順）。読めていなければ nil。
+func (a *Adapter) ProjectWorkflows() []ProjectWorkflow {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if !a.bootstrapped || a.workflows == nil {
+		return nil
+	}
+	out := make([]ProjectWorkflow, len(a.workflows))
+	copy(out, a.workflows)
+	return out
 }
 
 // writeTargets は書き込み（updateProjectV2ItemFieldValue）に要る値を、

@@ -99,7 +99,7 @@ How many issues run at once is a setting (two by default).
 
 **Your kanban board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the kanban board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
 
-`continuo doctor` runs sixteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, **prompt variables**, Claude Code, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, kanban board, Status names, the rewrite table's keys, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
+`continuo doctor` runs eighteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, **prompt variables**, Claude Code, **agent teams**, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, kanban board, Status names, the rewrite table's keys, **kanban automations**, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
 
 **A `✗` means the exit code is 1; a `!` on its own leaves it at 0.**
 Exit code 0 is not the same as "continuo will start", though. **Failing to read the kanban board**

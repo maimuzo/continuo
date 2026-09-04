@@ -26,6 +26,7 @@
 | `設定ファイル` | `WORKFLOW.md` が読めて、front matter が検証を通るか |
 | `片付けの状態` | `cleanup.on_states` の値が `tracker.terminal_states` に全部あるか（記号は `!` だけ。設計 3-9e） |
 | `claude` | `claude.kind` の実行ファイルが PATH にあるか |
+| `agent teams` | `claude.env` と doctor を叩いたシェルの `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を見る（記号は `!` だけ。**読んでいない出どころを `✓` のときも内訳に出す。**設計 3-70） |
 | `hook の置き場所` | 決めた場所にディレクトリを作り、unix socket を listen できるか |
 | `Claude の設定` | `~/.claude/session-env` に使い捨てのディレクトリを作って消せるか |
 | `worktree の場所` | `workspace.root` に使い捨てのディレクトリを作って消せるか |
@@ -34,6 +35,7 @@
 | `ボード` | `Bootstrap` が通り、`active_states` の選択肢名が全部あるか |
 | `Status の名前` | 設定に書いた Status と紛らわしい選択肢がボードに無いか（記号は `!` だけ。設計 6-14） |
 | `対応表のキー` | `tracker.automated_state_rewrite` のキーがボードの Status の選択肢にあるか（記号は `!` だけ。設計 3-57） |
+| `自動化` | ボードの自動化が1つでも有効なのに `tracker.automated_state_rewrite` が空でないか（記号は `!` だけ。設計 3-54。issue #209） |
 | `未記入の項目` | 雛形の front matter のキーが `WORKFLOW.md` に全部書かれているか（記号は `!` だけ。内訳は足りない項目の名前だけを10件まで。設計 3-75） |
 | `clone` | 対象リポジトリが `ghq list -p -e` で見つかるか |
 | `信頼登録` | 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか |
@@ -118,6 +120,7 @@
 | ボード | `tracker.ResolveToken` → `tracker.Adapter.Bootstrap` → `FetchIssuesByStates` |
 | Status の名前 | `tracker.Adapter.StatusOptionNames`（ボードを読んだときの応答を使い回す。リクエストは増えない） |
 | 対応表のキー | `config.RewriteKeysOutsideBoard`（**起動時の警告と同じ関数を呼ぶ。**ボードを読んだときの応答を使い回す） |
+| 自動化 | `tracker.Adapter.ProjectWorkflows`（**ボードを読んだときの応答を使い回す。**`workflows` は `bootstrapQueryTemplate` に載せてある。リクエストは増えない） |
 | 未記入の項目 | `scaffold.MissingKeys`（**`continuo doctor --missing-keys-patch` と同じ関数を呼ぶ。**ボードは読まない） |
 | clone | `workspace.RunGhqList`（`ghq list -p -e <owner>/<repo>`） |
 | 信頼登録 | `workspace.CheckTrustForClonePath` |

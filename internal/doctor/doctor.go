@@ -12,6 +12,7 @@
 //	未記入の項目      … 雛形にある設定項目が WORKFLOW.md に全部書かれているか
 //	プロンプトの変数   … 送るプロンプトが、決められた変数だけを使っているか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
+//	agent teams       … Claude Code の agent teams が有効にならないか
 //	hook の置き場所    … hook を受ける socket を実際に置けるか
 //	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか
 //	worktree の場所    … `workspace.root` に実際に書けるか
@@ -20,6 +21,7 @@
 //	ボード            … Bootstrap が通り、active_states の選択肢名が全部あるか
 //	Status の名前      … 設定に書いた Status と紛らわしい選択肢がボードに無いか
 //	対応表のキー       … `tracker.automated_state_rewrite` のキーがボードの選択肢にあるか
+//	自動化            … ボードの自動化が有効なのに書き戻しの対応表が空でないか
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
 //	資格情報          … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
@@ -135,8 +137,10 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //	設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる）
 //	              ├─ 未記入の項目（雛形と設定の原文を突き合わせる）
 //	              ├─ herdr（設定の protocol と照合する）
+//	              ├─ agent teams（`claude.env` と doctor を叩いたシェルを見る）
 //	              └─ gh の認証 ── ボード ─┬─ Status の名前
 //	                                      ├─ 対応表のキー
+//	                                      ├─ 自動化
 //	                                      ├─ clone
 //	                                      └─ 信頼登録
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
@@ -198,6 +202,11 @@ func Run(ctx context.Context, opts Options) Report {
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。
 	report.add(checkClaude(opts, cfg, configResult.Symbol))
+	// 段2b: agent teams。**外部へ接続しない。**`claude.env` と、doctor を叩いたシェルの
+	// 環境変数だけを見る。**有効なままだと issue が failure_state へ落ちる**のに、
+	// いまは文書に書いてあるだけで、読まなかった人は落ちてから気づく（issue #137）。
+	// **claude の次に置くのは、どちらも「これから起動する Claude Code」の話だからである。**
+	report.add(checkAgentTeams(opts, cfg, configResult.Symbol))
 	// **hook を受ける socket を置けるかを、herdr より先に確かめる。**
 	// **これが無かったとき、8項目すべてが ✓ なのに起動だけが落ちた**（issue #9）。
 	report.add(checkRuntimeDir(cfg, configResult.Symbol))
@@ -226,9 +235,10 @@ func Run(ctx context.Context, opts Options) Report {
 	var boardResult Result
 	var repos []Repo
 	var boardStates []string
+	var workflows []tracker.ProjectWorkflow
 	boardResult = withCheckTimeout(ctx, 2*opts.CheckTimeout, func(ctx context.Context) Result {
 		var res Result
-		res, repos, boardStates = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
+		res, repos, boardStates, workflows = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
 		return res
 	})
 	report.add(boardResult)
@@ -244,6 +254,12 @@ func Run(ctx context.Context, opts Options) Report {
 	// doctor は tracker のアダプタへ捨てる logger を渡す（Options.Logger の既定）ので、
 	// **この項目が無いと、キーの綴りの打ち間違いを人間に見せる場所が1つも無い**（issue #67）。
 	report.add(checkRewriteKeys(cfg, boardStates, boardResult.Symbol))
+
+	// 段5d: 自動化。**ここも同じ応答を使い回すので、リクエストは増えない**
+	// （`workflows` は起動時の検査のクエリに載せてある）。
+	// **自動化が Status を書いた瞬間に走行中の run が止まる**のに、
+	// **利用者がそれを知るのは1件止まったあとである**（issue #209）。
+	report.add(checkAutomations(cfg, workflows, boardResult.Symbol))
 
 	// 段6: clone。対象リポジトリはボードを読んで決まる。
 	var cloneResult Result
