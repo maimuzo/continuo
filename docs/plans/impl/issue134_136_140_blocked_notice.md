@@ -8,7 +8,7 @@
 
 **3-68 は残す。置き換えない。**あちらは着手の検査の4つの経路（worktree・信頼・枠・担当者）をまとめて扱い、
 **「重複を抑える鍵は、飛ばす原因の広がりより細かくしない。worktree の経路だけが issue 単位で、残る3つはリポジトリ単位である」**
-という決めごとを持っている（[docs/plans/continuo_design.md:6944-6946](../continuo_design.md#L6944-L6946)）。
+という決めごとを持っている（[docs/plans/continuo_design.md:6987-6989](../continuo_design.md#L6987-L6989)）。
 **置き換えると、この文書が扱わない3つの経路の決定が、文書のどこにも残らなくなる。**
 **3-68 へ足すのは1行だけである。**「担当者の経路は [docs/plans/impl/issue134_136_140_blocked_notice.md](issue134_136_140_blocked_notice.md) が正」（14 節）。
 
