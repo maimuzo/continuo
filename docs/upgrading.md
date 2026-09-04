@@ -148,10 +148,12 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 **`herdr.worktree.base`（worktree を切る分岐元。既定 `null`）を設定している人へ。**
 **段1 がその値を持っているので、何も書かなくても当たります。**
-**書く必要があるのは、`workspace.identity_file` の名前を変えていて、
+**書く必要があるのは、`workspace.identity_file`（記録ファイルの名前。既定 `.continuo.json`）の名前を変えていて、
 かつエージェントがその記録ファイルを見つけられなかったときだけです。**
 そのときは段3 か段4 へ落ちるので、**`develop` から切った worktree に `main` が混ざります。**
-**心配なら、本文に1行書いてください。**
+**その2つに当てはまるときだけ、本文に1行書いてください。**
+**当てはまらないなら書かないでください。**本文は issue をまたいで同じ文言なので、
+**分岐元が issue ごとに違う運用では、書いたほうが外れます。**
 
 ```markdown
 ### 分岐元
