@@ -1683,10 +1683,15 @@ grep '担当者が付いているので着手しません' <ログの出力先>
 grep -n 'on_assignee_gate' ~/continuo-work/WORKFLOW.md
 ```
 
-**行が出たら、その値を書き換えます。**1行も出なければ、`handoff:` の下へ足します
+**行が出たら、その値を書き換えます。**1行も出なければ、次で足してください
 （v0.1.11 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
-**既にある行に重ねて足すと front matter が重複キーになり、continuo が起動しなくなります**
-（`mapping key "on_assignee_gate" already defined`）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
 
 ```yaml
 tracker:
@@ -1704,7 +1709,7 @@ tracker:
 **ダッシュボードとログは、この設定では止まりません。**止まるのは issue への書き込みだけです。
 
 **直し方。**次のどれかを行ってください。**Status を動かさずに直す道もあります。**
-**3つ目の道は、下の「「continuo が使うアカウントへ付け替える」は、条件を満たすときだけ効きます」にあります。**
+**3つ目の道は、下の表のすぐあとに書いてあります。**
 
 | どうしたいか | 何をするか |
 | --- | --- |
@@ -1724,6 +1729,8 @@ tracker:
 
 **担当者が2人以上いる場合も同じです。**そのときの文面は
 「担当者が2人以上いるので触りません（人間が触っています）」になります。
+**ただし、この場合だけは「もう書いた」の記録がメモリにしかありません。**
+continuo を再起動すると、同じ issue へもう一度書くことがあります。
 **ダッシュボードにも同じように出ます。**
 
 **ただし、その2人以上の中に continuo が使うアカウントが混じっているときは、issue へは書きません。**
@@ -1786,10 +1793,15 @@ INFO gh の持ち主を確認しました（コメントの印と併せて見ま
 grep -n 'on_assignee_gate' ~/continuo-work/WORKFLOW.md
 ```
 
-**行が出たら、その値を書き換えます。**1行も出なければ、`handoff:` の下へ足します
+**行が出たら、その値を書き換えます。**1行も出なければ、次で足してください
 （v0.1.11 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
-**既にある行に重ねて足すと front matter が重複キーになり、continuo が起動しなくなります**
-（`mapping key "on_assignee_gate" already defined`）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
 
 ```yaml
 tracker:
