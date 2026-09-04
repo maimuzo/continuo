@@ -4,8 +4,12 @@
 //
 // **設定が主、環境変数 LANG が従である。**この2つが食い違う状況を作らないと、
 // どちらが効いたのかを見分けられない。**package の TestMain（lang_test.go）は
-// LANG を `ja_JP.UTF-8` に固定する**ので、ここでは `t.Setenv` で上書きする。
-// **それが TestMain の固定を打ち消せる唯一の手段である。**
+// LANG を `ja_JP.UTF-8` に固定する**ので、環境変数を英語にしたい検査では
+// `t.Setenv` で置き直す。**`t.Setenv` は検査の終わりに元の値へ戻すので、
+// あとに走る検査へ持ち越さない。**
+//
+// **環境変数を日本語のままにする検査でも `t.Setenv` を呼んでいる。**
+// そちらは置き直しではなく、**その検査が LANG に何を仮定しているかを、その場で読めるようにするため**である。
 package cli_test
 
 import (
@@ -96,5 +100,46 @@ func TestRunSetup_設定が英語なら環境変数が日本語でも英語で�
 	// **日本語の原文が出ないことだけを見る。**
 	if strings.Contains(stdout, "使うカンバン") {
 		t.Errorf("設定が英語なのに日本語の原文が出ている:\n%s", stdout)
+	}
+}
+
+// TestRunSetup_設定を読めなければ理由を出して対話は続ける は、**黙って読み飛ばさない**ことを確かめる。
+//
+// **`continuo setup` は止まらない。**`continuo init` が gh から値を引けず、プレースホルダの
+// 残った WORKFLOW.md に対しても走るコマンドである。止めると、その利用者が Status の
+// 割り当てを1回も終えられなくなる。
+//
+// **だが黙らない。**RUCM の代替フロー「設定ファイルを読み取れない」と「対応していない言語の指定」が、
+// どちらも「コマンドが自分の文言で報告する」「language に書ける値の一覧が出力されている」を
+// 事後条件にしている。**黙ると、`language` の綴りを誤った人が、常駐プロセスを起動するまで気づけない。**
+//
+// 目的: `language` に資源の無い値を書いたとき、理由を出したうえで対話へ進むこと。
+// 与える情報: `language: jp` を書いた WORKFLOW.md と、`LANG=ja_JP.UTF-8`。
+// 成功条件: 書ける値の一覧が出ていて、そのあとどのボードを読むかの1行も出ること。
+// {"RUCM-PATH": "P007"}
+func TestRunSetup_設定を読めなければ理由を出して対話は続ける(t *testing.T) {
+	t.Cleanup(func() { i18n.Use(i18n.SourceLang) })
+	t.Setenv(i18n.EnvLangName, "ja_JP.UTF-8")
+
+	var got scaffold.DetectOptions
+	dir := writeWorkflowWithLanguage(t, "jp")
+
+	_, stdout, stderr := runCLIWith(recordingDetect(&got), []string{"setup", dir}, "")
+
+	if !strings.Contains(stderr, "設定ファイルを読めません") {
+		t.Errorf("設定を読めなかったことを report していない:\n%s", stderr)
+	}
+	// **書ける値の一覧が出ていること。**理由だけでは、何を書けばよいかが分からない。
+	//
+	// **並びを丸ごと相手にしない。**`i18n.Available` は資源のある言語を名前順に返すので、
+	// 3つ目の言語が増えると並びが変わる。**いま資源のある2つが載っていることだけを見る。**
+	for _, want := range []string{`"en"`, `"ja"`, `"auto"`} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("language に書ける値 %s が一覧に出ていない:\n%s", want, stderr)
+		}
+	}
+	// **止まっていないこと。**対話へ進んでいれば、どのボードを読むかの1行が出る。
+	if !strings.Contains(stdout, "使うカンバン") {
+		t.Errorf("設定を読めなかっただけで対話を止めている:\n%s", stdout)
 	}
 }

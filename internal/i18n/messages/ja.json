@@ -204,6 +204,7 @@
   "cli.setup.updated": "WORKFLOW.md の Status の割り当てを書き換えました: %s",
   "cli.setup.updated_key": "  %s",
   "cli.setup.updated_keys_note": "書き換えたキー:",
+  "cli.setup.warn_config_load": "設定ファイルを読めません（画面に出す文言は環境変数 LANG から決めた言語で出します）: %v",
   "cli.trust.dry_run_note": "--dry-run なので何も書き換えていません。登録するなら --dry-run を外して実行してください。",
   "cli.trust.err_apply": "エラー: 信頼を登録できません: %v",
   "cli.trust.err_home_dir": "エラー: ホームディレクトリを取得できません: %v",
