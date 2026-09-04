@@ -45,6 +45,9 @@ section { margin-bottom: 2rem; }
 <body>
 <h1>continuo</h1>
 <p class="meta">{{ t "dashboard.meta" (.GeneratedAt.Format "2006-01-02 15:04:05 MST") .Counts.Running .Counts.Retrying refreshSeconds }}</p>
+{{- if .NewWork.Blocked }}
+<p class="meta"><span class="badge">{{ t "dashboard.new_work_badge" }}</span> {{ .NewWork.Detail }}</p>
+{{- end }}
 
 <section>
 <table>

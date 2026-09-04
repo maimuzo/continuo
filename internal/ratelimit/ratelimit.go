@@ -171,6 +171,31 @@ func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
 	return latest, found
 }
 
+// FullLimitKinds は、使い切っている（`percent` が 100 に達している）枠の `kind` を返す
+// （設計 3-27。issue #197）。
+//
+// **並び順は応答のままである。**呼び出し側は「含まれるか」しか見ない。
+// **重複は取り除かない。**同じ `kind` が2件返る応答を実測していないので、
+// **見ていない形を先回りして畳まない。**
+//
+// **この package は `kind` の意味を知らない。**どれが1週間の枠かを決めるのは
+// `internal/handoff` の `LimitKindWeeklyAll` / `LimitKindWeeklyScoped` であり、
+// **そちらを import すると依存の向きが逆になる。**判定は `internal/orchestrator` が行う。
+//
+// 戻り値: 使い切っている枠の `kind`。1件も無ければ長さ0。
+func (s *Snapshot) FullLimitKinds() []string {
+	if s == nil {
+		return nil
+	}
+	var kinds []string
+	for _, l := range s.Limits {
+		if l.Percent >= 100 {
+			kinds = append(kinds, l.Kind)
+		}
+	}
+	return kinds
+}
+
 // Options は Reader を組み立てるための入力である。
 type Options struct {
 	// Config は WORKFLOW.md の front matter の rate_limit セクションである。

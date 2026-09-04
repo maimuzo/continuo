@@ -105,6 +105,8 @@ type RunSource interface {
 	RunViews() []orchestrator.RunView
 	// GateViews は着手の関門で止めた issue の写しを返す（順序は不定。issue #134）。
 	GateViews() []orchestrator.GateView
+	// NewWorkStatus は「新しい issue を取らない」状態の写しを返す（issue #173）。
+	NewWorkStatus() orchestrator.NewWorkView
 }
 
 // **本番の実装がこのインタフェースを満たすことを、コンパイル時に確かめる。**
@@ -373,7 +375,7 @@ func (s *Server) handleAPIState(w http.ResponseWriter, r *http.Request) {
 //
 // 戻り値: 表示用のスナップショット。
 func (s *Server) snapshot() Snapshot {
-	return NewSnapshot(s.source.RunViews(), s.source.GateViews(), s.now())
+	return NewSnapshot(s.source.RunViews(), s.source.GateViews(), s.source.NewWorkStatus(), s.now())
 }
 
 // withHostCheck は `Host` ヘッダが手元のダッシュボードを指していないリクエストを落とす。
