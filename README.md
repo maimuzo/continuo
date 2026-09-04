@@ -244,7 +244,14 @@ claude:
 
 `turn_timeout_ms` is **not** a cap on how long a turn may take. As long as the pane keeps changing, a single instruction can run for hours.
 
-Everything below the front matter is the first prompt sent to Claude Code — "write `CONTINUO-STATUS: review` when you are done", "commit and push before that", and so on. **Rewrite it to match how your project works.**
+**Do not write things like "say `CONTINUO-STATUS: review` when you are done" or "commit and push first" in the body.** They already live in the brief built into the continuo binary.
+
+**Write how your project works in the body, below the front matter.** The template starts with sections for how to run tests, how you want reviews done, which language to write in, and so on. Delete the ones you do not need. **continuo still runs with an empty body.**
+
+```bash
+continuo prompt --show            # the whole text that gets sent (built-in + your body)
+continuo prompt --show --builtin  # the built-in part only
+```
 
 Restart continuo after editing it. It does not reload while running.
 
