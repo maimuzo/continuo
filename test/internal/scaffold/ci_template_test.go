@@ -129,6 +129,56 @@ func TestCITemplate_目印を数える条件が既存と揃っている(t *testi
 	}
 }
 
+// reviewGatePath はこのリポジトリ自身の CI の場所である。
+// Go のテストはパッケージのディレクトリを作業ディレクトリとして走るので、
+// test/internal/scaffold からの相対パスで指す。
+const reviewGatePath = "../../../.github/workflows/review-gate.yml"
+
+// 目的: 配る雛形と、このリポジトリ自身の CI が、同じ条件で数えていることを確かめる。
+//
+// **2つは別のファイルで、互いのコメントで「同じ条件である」と名乗っている。**
+// **名乗っているだけでは揃わない。**同じことが既に1度起きた（2026-09-02、
+// 目印の前に全角空白を置いたコメントを、CI は数え、hook は数えなかった）。
+//
+// **.claude/hooks/tests/test_marker_pattern_parity.py が3箇所を見張っているが、
+// あちらは code-review-result しか見ない。**雛形は4箇所目であり、
+// design-review-result はあちらの検査の対象に入っていない。**ここで両方を見る。**
+//
+// 与える情報: scaffold.CITemplate() と .github/workflows/review-gate.yml の全文。
+// 成功条件: 3つの判定の式が、どちらのファイルにもそのまま在ること。
+func TestCITemplate_このリポジトリのCIと同じ条件で数えている(t *testing.T) {
+	raw, err := os.ReadFile(reviewGatePath)
+	if err != nil {
+		t.Fatalf("このリポジトリの CI を読めません（%s）: %v", reviewGatePath, err)
+	}
+	gate := string(raw)
+	tmpl := scaffold.CITemplate()
+
+	// **jq のソースの中なので、バックスラッシュは2文字で書かれている。**
+	for _, want := range []string{
+		`test("^[ \\t\\r\\n]*<!-- design-review-result -->")`,
+		`test("^[ \\t\\r\\n]*<!-- code-review-result -->")`,
+		`test("^[ \\t\\r\\n]*<!-- design-review-skipped -->[ \\t\\r\\n]*[^ \\t\\r\\n]")`,
+	} {
+		if !strings.Contains(gate, want) {
+			t.Errorf("このリポジトリの CI に判定 %s がありません", want)
+		}
+		if !strings.Contains(tmpl, want) {
+			t.Errorf("配る雛形に判定 %s がありません", want)
+		}
+	}
+
+	// **job の名前も揃える。**必須の検査として登録する名前である。
+	for _, want := range []string{"design-review-result:", "review-result:"} {
+		if !strings.Contains(gate, "  "+want) {
+			t.Errorf("このリポジトリの CI に job %q がありません", want)
+		}
+		if !strings.Contains(tmpl, "  "+want) {
+			t.Errorf("配る雛形に job %q がありません", want)
+		}
+	}
+}
+
 // 目的: 雛形に backtick が1文字も無いことを固定する。
 //
 // **Go の raw string には backtick を置けない。**書こうとすると文字列を何度も連結することになり、
