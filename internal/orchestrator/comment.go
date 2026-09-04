@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/herdr"
@@ -105,17 +104,6 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 			"identifier", snap.Identifier)
 		return
 	}
-	// **worktree の実体が無ければ、ここで静かに戻る。**記録の検査より前に置く。
-	//
-	// **片付け済みの run を `failure_state` へ落としてはならない。**引き渡しの通知は
-	// 「worktree の中身と git log を見てください」と案内するが、**そのディレクトリはもう無い。**
-	// **人間が見に行く先が存在しない通知を出すくらいなら、何も出さないほうがよい。**
-	if _, statErr := os.Stat(snap.WorktreePath); statErr != nil {
-		o.logger.Warn("worktree の実体が無いので復元しません（作り直しません）",
-			"identifier", snap.Identifier, "path", snap.WorktreePath, "error", statErr)
-		return
-	}
-
 	// **復帰する先は、この run が使っている UUID を先に採る。**
 	//
 	// **身元ファイルの値と食い違うことがある。**`SetSessionUUID` が失敗したとき、
@@ -147,7 +135,9 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 			"記録の置き場所", o.transcriptRoot)
 		o.failCommentRecovery(ctx, rs,
 			"復帰する先の会話の記録が見つからなかった。**エージェントには何も送っていない。**"+
-				"Claude Code の会話の置き場所（既定は `~/.claude/projects`）が消えたか、別の場所へ移っている。")
+				"次のどちらかである。**(1) Claude Code の会話の置き場所（既定は `~/.claude/projects`）が"+
+				"消えたか、別の場所へ移っている。(2) worktree の中の身元ファイルの `session_uuid` が、"+
+				"パスに使えない形に書き換わっている。**")
 		return
 	}
 
@@ -161,8 +151,9 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 開いたものが本当にこの worktree かの検算・**continuo が開かせたリポジトリの親 workspace の
 	// 控え**（issue #19）も、着手のときと同じ1箇所から出る。**2箇所に書くと必ずずれる。**
 	//
-	// **worktree の実体が無いときは、上で既に戻っている。**Prepare は無ければ
-	// `git worktree add` で作り直すので、**片付け済みの worktree をここで復活させてしまう。**
+	// **worktree の実体は、上の `ReadIdentity` が既に確かめている。**
+	// 身元ファイルは worktree の中にあるので、**ディレクトリごと消えていれば読めずに戻っている。**
+	// **ここで `os.Stat` を重ねない。**重ねても、その間に消える窓は `Prepare` 自身も持っている。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(rs.issue()))
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {

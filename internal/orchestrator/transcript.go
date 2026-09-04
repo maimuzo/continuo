@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -284,7 +285,15 @@ func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 	}
 	entries, err := os.ReadDir(o.transcriptRoot)
 	if err != nil {
-		// **黙って倒れない。**根が丸ごと読めないのは、下の「1件が読めない」の
+		if errors.Is(err, os.ErrNotExist) {
+			// **根が無いなら、その下に記録は在りえない。**下の `ENOTDIR` と同じ理屈である。
+			//
+			// **ここを「決められない」に倒してはならない。**Claude Code を1度も起動していない
+			// 機械では `~/.claude/projects` がまだ無く、**再着手のたびに `--resume` を投げて
+			// `herdr.startup_timeout_ms` を捨てることになる。**
+			return false
+		}
+		// **黙って倒れない。**権限や IO で読めないのは、下の「1件が読めない」の
 		// いちばん重い形である（全部が見えない）。**倒れたことが分からないと、
 		// この検査が丸ごと無効になっているのに誰も気づけない。**
 		o.logger.Warn("記録の置き場所を読めないので、記録があるかを決められません",
@@ -447,6 +456,12 @@ func truncateForLog(s string) string {
 	cut := maxLoggedValueBytes
 	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
+	}
+	if cut == 0 {
+		// **文字の境界が1つも無い。**先頭から続きのバイトだけが並んでいる場合である。
+		// **そのまま捨てると、何が書かれていたかの証拠が1バイトも残らない。**
+		// 16進で出す（この経路へ来る値は、そもそも正規の UUID ではない）。
+		return fmt.Sprintf("%x…（切り詰め・16進）", s[:maxLoggedValueBytes])
 	}
 	return s[:cut] + "…（切り詰め）"
 }

@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
@@ -566,22 +567,99 @@ func TestDispatch_会話の記録が無いセッションには復帰しない(t
 	}
 }
 
+// TestComment_記録が無ければ復元せずに人間へ渡す は、設計 3-3c の取り戻し側を確かめる。
+//
+// 目的: 「**コメントの取り戻しも、記録が無い UUID へ `--resume` を投げない。**
+// **ただし黙って抜けてはならない**」を示す。
+//
+// **抜けると、コメントを1件も書いていない run が `failure_state` へ落ちず、
+// 引き渡しの通知も出ないまま `In Review` に並ぶ。**成果がまとめられていないことが
+// 誰にも伝わらない。**変わるのは、herdr の待ちを使い切ってから落ちるか、その前に落ちるかだけである。**
+//
+// **この検査には経路の印を付けない**（設計 6-18e）。通る経路は
+// `TestDispatch_既存のworktreeがあれば前回のセッションに復帰する` と同じ P001 である。
+//
+// 与える情報: 記録の置き場所を空にした状態で、turn を送ってから打ち切られる run。
+// **エージェントはコメントを1件も書かない。**
+// 成功条件:
+//   - 復元のための `agent.start` を1回も呼ばない（記録が無いので投げない）
+//   - issue の Status が `failure_state` になる
+//   - 引き渡しの通知が1件は投稿されている（**黙って抜けていない**）
+//   - 復元を飛ばした理由がログに残っている
+func TestComment_記録が無ければ復元せずに人間へ渡す(t *testing.T) {
+	clock := newTestClock()
+	// **採番したセッションの記録を置かせない。**既定では fixture が置くので
+	// （実機では Claude Code が書く）、**そのままでは「記録が無い」状態を作れない。**
+	fx := newFixture(t, fixtureOptions{
+		Now:                    clock.Now,
+		SkipSessionTranscripts: true,
+		Mutate: func(cfg *config.Config) {
+			cfg.Claude.TurnTimeoutMs = 1000
+			cfg.Agent.MaxRetries = 0
+			cfg.Tracker.VerifyStatesEvery = 0
+		},
+	})
+	blockFirstPrompt(t, fx)
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
+	fx.AllowLog("リトライの回数を使い切りました", "画面が変わらないまま",
+		"turn が終わったことを検知できません", "stall",
+		"復帰する先のセッションに会話の記録が無いので")
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	starts := fx.Herdr.CountMethod(herdr.MethodAgentStart)
+	clock.Advance(5 * time.Second)
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 20*time.Second, "issue が人間へ渡る", func() bool {
+		return fx.Tracker.StateOf(issue.ID) == fx.Config.Tracker.FailureState
+	})
+
+	// **復元のための `agent.start` を呼んでいない。**記録が無いので投げない。
+	if got := fx.Herdr.CountMethod(herdr.MethodAgentStart); got != starts {
+		t.Errorf("記録が無いのに復元のための agent.start を呼んでいる: 着手のとき %d 回 → いま %d 回", starts, got)
+	}
+
+	// **引き渡しの通知が1件は出ている。**黙って抜けると、成果が無いことが誰にも伝わらない。
+	//
+	// **文面までは見ない。**引き渡しの通知は1つの run につき1件しか投稿しないので
+	// （`TestHandoff_引き渡しの通知は1件だけ`）、**先に走った打ち切りの通知が枠を取る。**
+	// **ここで確かめたいのは「復元を飛ばしても、人間へ渡す道は残っている」ことである。**
+	posted := 0
+	for _, c := range fx.Tracker.CommentsOf(nodeIDOf(t, issue)) {
+		if strings.Contains(c.Body, "【対処】") {
+			posted++
+		}
+	}
+	if posted == 0 {
+		t.Errorf("記録が無いことを理由に復元を飛ばしたのに、引き渡しの通知が1件も無い")
+	}
+
+	// **復元を飛ばしたことがログに残っている。**残らないと、なぜ復元しなかったのかが追えない。
+	if !strings.Contains(fx.Logs.String(), "復帰する先のセッションに会話の記録が無い") {
+		t.Errorf("復元を飛ばした理由がログに残っていない:\n%s", fx.Logs.String())
+	}
+}
+
 // TestDispatch_記録の判定は残り2つの場合も設計どおりに倒れる は、設計 3-3c の判定の表の
 // 残り2行を確かめる。
 //
 // 目的: **設計 3-3c の判定の表が並べている場合のうち、検査があるのは「記録が1件も無い」だけ
 // だった。**残り2つは、守りの向きを逆に書き換えても緑のまま通る状態にあった。
 //
-//	UUID がパスに使えない … 復帰しない（身元ファイルはエージェントが書き換えられる。設計 3-2 / 3-23）
-//	記録の置き場所を読めない … **復帰を試す**（判定できないことで着手が止まってはならない）
+//	UUID がパスに使えない   … 復帰しない（身元ファイルはエージェントが書き換えられる。設計 3-2 / 3-23）
+//	記録の置き場所が実在しない … 復帰しない（その下に記録は在りえない）
 //
-// **「読めない」で通るのは `os.ReadDir` が失敗する側だけである。**もう1つの「根が決まっていない」は
-// `os.UserHomeDir` が失敗したときにしか起きず、**fixture からは作れない**
-// （`fixtureOptions.TranscriptRoot` が空なら一時ディレクトリの根が入るため）。
-// **そちらは dispatch を通した検査では届かない。**
+// **2つ目を「決められない」に倒してはならない。**Claude Code を1度も起動していない機械では
+// 記録の置き場所がまだ無く、**再着手のたびに `--resume` を投げて空回りすることになる。**
 //
-// **2つ目だけ倒れる向きが逆である。**そこが逆になると、記録の置き場所を作っていない機械で
-// **再着手が会話履歴を毎回捨てる。**
+// **「根はあるが読めない」（権限・IO の失敗）と「根が決まっていない」は、ここでは通らない。**
+// 前者は権限を落とした状態を作る必要があり、後者は `os.UserHomeDir` が失敗したときにしか起きない
+// （`fixtureOptions.TranscriptRoot` が空なら、そのテスト専用の根が入る）。
+// **どちらも dispatch を通した検査では届かない。**
 //
 // **1つ目は、当たる記録を置いてから渡す。**置かないと、UUID の検査を消しても
 // 「記録が1件も無い」に倒れて `--resume` が渡らず、**守りを消しても緑のまま通る。**
@@ -614,12 +692,11 @@ func TestDispatch_記録の判定は残り2つの場合も設計どおりに倒�
 			wantResume: false,
 		},
 		{
-			// **判定できないので、いままでどおり復帰を試す。**この検査は空回りを減らす
-			// ためのものであり、これが働かないことで着手が止まってはならない。
-			name:        "記録の置き場所を読めないときは復帰を試す",
+			// **根が実在しないなら、その下に記録は在りえない**（設計 3-3c）。
+			name:        "記録の置き場所が実在しないなら復帰しない",
 			uuid:        "sess-188",
 			missingRoot: true,
-			wantResume:  true,
+			wantResume:  false,
 		},
 	}
 
@@ -631,11 +708,6 @@ func TestDispatch_記録の判定は残り2つの場合も設計どおりに倒�
 				root = filepath.Join(root, "まだ作られていない置き場所")
 			}
 			fx := newFixture(t, fixtureOptions{TranscriptRoot: root})
-			if tc.missingRoot {
-				// **根を読めないことは、この検査が意図して起こしている状態である。**
-				// 実装はそこで警告を1行出す（黙って倒れると、検査が無効になったことに気づけない）。
-				fx.AllowLog("記録の置き場所を読めないので")
-			}
 			prompts := recordPrompts(fx)
 
 			issue := sampleIssue(188, "In Progress")

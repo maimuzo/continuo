@@ -1705,6 +1705,12 @@ type fixtureOptions struct {
 	// ContinuoPath は hook のコマンド行に書く実行ファイルのパスである。
 	// 空なら `/opt/continuo/bin/continuo` を使う。
 	ContinuoPath string
+	// SkipSessionTranscripts を真にすると、採番したセッションの記録を置かない。
+	//
+	// **既定では置く。**実機では Claude Code が書くものなので、置かないと
+	// **セッションを採番したテストが軒並み「記録が無い」側へ倒れる**（設計 3-3c）。
+	// **「記録が無いときにどうなるか」を確かめるテストだけが、これを真にする。**
+	SkipSessionTranscripts bool
 }
 
 // newFixture はテスト用の Orchestrator を組み立てる。
@@ -1852,20 +1858,21 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	// **採番したセッションの記録を置くディレクトリを、記録の根の直下に1つ作る。**
 	// **実機の `~/.claude/projects/<cwd を綴り直したもの>/` に当たる。**
 	//
-	// **名前にテストの名前を混ぜる。**既定の根は機械全体の一時ディレクトリなので
-	// （`tempRoot`）、**`go test` が timeout で殺されて `t.Cleanup` が走らなかった前の実行の
-	// 置き土産が、次の実行から見える。**セッション UUID は `session-1` から順に決まるので、
-	// **名前を分けないと、別のテストが書いた記録を自分のものとして拾う。**
+	// **名前にテストの名前を混ぜる。**`fixtureOptions.TranscriptRoot` に共有の場所を渡された
+	// ときの備えである。**セッション UUID は `session-1` から順に決まるので、
+	// 名前を分けないと、別のテストが書いた記録を自分のものとして拾う。**
 	//
 	// **作れなくても止めない。**「記録の置き場所を読めないときは復帰を試す」を確かめる
 	// テストは、実在しないパスを根として渡す（設計 3-3c）。**そこで落とすと、
 	// その検査そのものが走らなくなる。**空のままなら記録を置かない。
-	seedDir, seedErr := os.MkdirTemp(transcriptRoot,
-		"continuo-sessions-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-")
-	if seedErr != nil {
-		seedDir = ""
-	} else {
-		t.Cleanup(func() { _ = os.RemoveAll(seedDir) })
+	seedDir := ""
+	if !opts.SkipSessionTranscripts {
+		dir, seedErr := os.MkdirTemp(transcriptRoot,
+			"continuo-sessions-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-")
+		if seedErr == nil {
+			seedDir = dir
+			t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		}
 	}
 	continuoPath := opts.ContinuoPath
 	if continuoPath == "" {
@@ -2059,11 +2066,12 @@ func taskNotificationEvent(sessionID, taskID string) hookserver.HookEvent {
 // sessionTranscriptDir は、会話の記録を置くディレクトリを記録の根の直下に1つ作る。
 //
 // **着手の段5b は `<記録の根>/*/<セッション UUID>.jsonl` を探す**（設計 3-3c）。
-// **`t.TempDir()` は使えない。**あれは根から2階層下（`<根>/<テスト名+乱数>/001`）に掘るので、
-// **直下1階層しか見ない検査には1件も当たらず、再着手が `--resume` を渡さなくなる。**
+// **既定の根の下では `t.TempDir()` も当たる**（根が `t.TempDir()` の親なので、
+// `t.TempDir()` はその直下1階層である）。**それでもこのヘルパーを通すこと。**
+// 根を明示的に渡したテストでも同じ形になり、**置き場所の決め方が1箇所に集まる。**
 //
-// **記録を置くテストは、`fixtureOptions.TranscriptRoot` に `t.TempDir()` を渡すこと。**
-// **既定の根は機械全体の一時ディレクトリである**（`tempRoot`）。そこを根にすると、
+// **既定の根は、そのテスト専用である**（`newFixture` が `t.TempDir()` の親を採る）。
+// **`fixtureOptions.TranscriptRoot` に共有の場所を渡さないこと。**そこを根にすると、
 // **`go test` が timeout で殺されて `t.Cleanup` が走らなかった前の実行の置き土産が見える。**
 // テストが書いていない記録で `--resume` の判定が変わり、**守りの向きを逆にしても緑のまま通る。**
 //
