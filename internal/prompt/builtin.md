@@ -53,8 +53,12 @@ flowchart TD
 
 段2 の `"base"` は、その JSON のキーの名前です。
 **7-4 が言う「base にする branch」（pull request の分岐元）とは別のものです。**
+**身元ファイルの名前を変えている場合は、worktree の直下で `issue_url` と `base` を持つ JSON を探してください。**
 
-決まった名前が `origin/` で始まっていなければ、`origin/` を前に付けてから取ってきます。
+**決まった名前が `origin/` で始まっていたら、`origin/` を外してから取ってきます。**
+`git fetch origin <名前>` の `<名前>` は remote 側の branch 名なので、
+**`git fetch origin origin/main` は `couldn't find remote ref origin/main` で落ちます。**
+
 段4 の名前は次で引けます。
 
     gh repo view {{.issue.owner}}/{{.issue.repo}} --json defaultBranchRef --jq .defaultBranchRef.name

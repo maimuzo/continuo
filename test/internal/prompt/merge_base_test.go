@@ -88,8 +88,17 @@ func TestTemplate_分岐元の名前は4段で決まる(t *testing.T) {
 		t.Error("分岐元の決め方が `origin/{{.push_branch}}` を組み立てています。" +
 			"変数展開後の本文に origin/<branch> が現れ、push 先と読み違えられます（設計 3-22d）")
 	}
-	if !strings.Contains(body, "決まった名前が `origin/` で始まっていなければ、`origin/` を前に付けてから取ってきます") {
-		t.Error("`origin/` を前に付ける規則がありません（issue #214）")
+	// **付けるのではなく、付いていたら外す。**`git fetch origin <名前>` の `<名前>` は
+	// remote 側の branch 名であり、**`git fetch origin origin/main` は
+	// `couldn't find remote ref origin/main` で落ちる**（2026-09-05 に実測）。
+	// **身元ファイルの `base` は、リンクされた branch のときだけ `origin/` が付く**
+	// （`internal/workspace/prepare.go` の `resolveBase`）。
+	if !strings.Contains(body, "決まった名前が `origin/` で始まっていたら、`origin/` を外してから取ってきます") {
+		t.Error("`origin/` を外す規則がありません（issue #214）。" +
+			"付ける向きで書くと、git fetch origin origin/main が毎回落ちます")
+	}
+	if strings.Contains(body, "`origin/` を前に付けて") {
+		t.Error("`origin/` を前に付ける、と書かれています。向きが逆です（issue #214）")
 	}
 
 	// **`git fetch` へ辿れること。**取り込み方そのものは 7-1 が持っており、

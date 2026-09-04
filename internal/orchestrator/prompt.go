@@ -136,11 +136,14 @@ func BuildContinuationPrompt(
 // **この送信は turn 数に数えない。**`max_dispatch_turns` の判定に影響させない。
 //
 // **進捗報告の印を付けるなと明示する**（issue #178）。段1 は
-// `<!-- continuo:progress -->` の付いたコメントを成果の報告として数えない。
+// 進捗報告の印が付いたコメントを、成果の報告として数えない。
 // **一方で組み込みの指示書は「いちばん下のコメントが自分の進捗報告なら、その1件に書き足す」と
 // 頼んでいる**（設計 5-3j）。**言わずに頼むと、エージェントは指示どおり進捗報告へ書き足し、
 // 段8 がまた「書かれていない」と判定して、段9 で `failure_state` へ落ちる。**
 // **書いたのに人間へ引き渡される。**
+//
+// **印そのものは埋めない**（`bareProgressMarker`）。埋めると、エージェントが
+// 「この印は付けていません」と書き写しただけで、その報告が途中経過として捨てられる。
 //
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
@@ -151,12 +154,34 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
 	fmt.Fprintf(&b,
-		"\n**新しく1件投稿してください。**途中経過の報告（%s が入っているもの）へ書き足すと、"+
+		"\n**新しく1件投稿してください。**途中経過の報告（本文に %s の印が入っているもの）へ書き足すと、"+
 			"continuo はそれを成果の報告として数えません。\n"+
-			"**この報告に %s を入れないでください。**\n",
-		config.ProgressMarker, config.ProgressMarker)
+			"**この報告には、その印を入れないでください。**説明のために書き写すのも避けてください。\n",
+		bareProgressMarker())
 	return b.String()
 }
+
+// bareProgressMarker は、進捗報告の印から HTML のコメントの囲みを外した文字列を返す。
+//
+// **エージェントへ送る文面に、印そのものを埋めてはならない**（issue #178）。
+// `handoff.IsProgressReport` は**本文のどこに在っても数える**ので、
+// **エージェントが「この印は付けていません」と書き写しただけで、その成果の報告が
+// 途中経過として捨てられる。**そのまま段9 へ落ち、**書いたのに人間へ引き渡される。**
+//
+// **値は `config.ProgressMarker` から作る。**印を2箇所で定義すると、片方を直したときにずれる。
+//
+// 戻り値: `continuo:progress` のような、囲みを外した印の中身。
+func bareProgressMarker() string {
+	s := strings.TrimPrefix(config.ProgressMarker, commentOpenMarker)
+	s = strings.TrimSuffix(s, commentCloseMarker)
+	return strings.TrimSpace(s)
+}
+
+// commentOpenMarker と commentCloseMarker は HTML のコメントの囲みである。
+const (
+	commentOpenMarker  = "<!--"
+	commentCloseMarker = "-->"
+)
 
 // buildUntrustedComment は未信頼のリポジトリについて人間へ知らせるコメント本文を作る
 // （設計 3-6）。
