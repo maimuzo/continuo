@@ -75,13 +75,14 @@ RFS BASIC FLOW 4
 3. RESUME STEP 5
 POSTCONDITION: 送る文面は組み込みの前半と後半だけである。本文が無いことが内訳に出ている。
 
-SPECIFIC ALTERNATIVE FLOW 分岐元を取り込めない:
+SPECIFIC ALTERNATIVE FLOW マージが衝突する:
 RFS BASIC FLOW 9
-1. エージェントは分岐元を取り込めなかった理由を issue へコメントする。
-2. エージェントは応答の最後に判断を仰ぐ表明を1行だけ書く。
-3. システムはカンバンの issue の Status に人間へ渡す先を書く。
-4. ABORT
-POSTCONDITION: 分岐元は取り込まれていない。issue に取り込めなかった理由が書かれている。issue の Status は人間へ渡す先である。
+1. エージェントはマージを取り込む前へ戻す。
+2. エージェントは衝突したことを issue へコメントする。
+3. エージェントは応答の最後に判断を仰ぐ表明を1行だけ書く。
+4. システムはカンバンの issue の Status に人間へ渡す先を書く。
+5. ABORT
+POSTCONDITION: マージの途中の状態は残っていない。issue に衝突したことが書かれている。issue の Status は人間へ渡す先である。
 
 SPECIFIC ALTERNATIVE FLOW 既にあるpullrequestを使う:
 RFS BASIC FLOW 19
