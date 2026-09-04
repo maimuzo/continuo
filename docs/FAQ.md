@@ -32,13 +32,17 @@ cd ~/continuo-work && continuo doctor
        <(awk '/^```/{f=!f;next} !f && /^#{2,4} /' docs/FAQ.md | sed 's/^#* //' | grep -vx '目次')
 
 2. push したあとに叩くほう。GitHub が見出しへ実際に付けた id を取り、
-   このファイルの中のページ内リンク（いまは目次だけ）が、その中に在るかを見ます。
+   目次のリンクの飛び先が、その中に在るかを見ます。
 
      ( export LC_ALL=C
        comm -23 \
-         <(grep -o '](#[^)]*)' docs/FAQ.md | sed 's/^](#//; s/)$//' | sort -u) \
+         <(awk '/^## 目次$/{t=1;next} t&&/^---$/{exit} t&&/^ *- \[/' docs/FAQ.md \
+           | grep -o '](#[^)]*)' | sed 's/^](#//; s/)$//' | sort -u) \
          <(gh api "repos/{owner}/{repo}/contents/docs/FAQ.md?ref={branch}" -H 'Accept: application/vnd.github.html' \
            | grep -o 'id="user-content-[^"]*"' | sed 's/id="user-content-//; s/"$//' | sort -u) )
+
+   左を目次の中だけに絞っているのは、このファイル全体を読むと
+   このコメントの中にある上の行そのものを拾ってしまうためです（実際に3件拾いました）。
 
    bash か zsh で叩いてください（<(…) を使っています）。
    LC_ALL=C を落とさないでください。落とすと macOS の sort が別の id を同じものと見なし、
