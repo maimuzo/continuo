@@ -302,6 +302,8 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 		kind = "bootstrap"
 	case strings.Contains(req.Query, "items(first: 100"):
 		kind = "items"
+	case strings.Contains(req.Query, "workflows(first:"):
+		kind = "workflows"
 	}
 	fg.queries = append(fg.queries, kind)
 	fg.mu.Unlock()
@@ -336,6 +338,8 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 		data = fg.bootstrapPayload(failure)
 	case "items":
 		data = fg.itemsPayload(failure)
+	case "workflows":
+		data = fg.workflowsPayload(failure)
 	default:
 		data = map[string]any{}
 	}
@@ -358,15 +362,34 @@ func (fg *fakeGitHub) bootstrapPayload(failure boardFailure) map[string]any {
 	for i, name := range fg.statusOptions {
 		options = append(options, map[string]any{"id": fmt.Sprintf("opt%d", i), "name": name})
 	}
-	project := map[string]any{
-		"id": "PVT_board",
-		"field": map[string]any{
-			"__typename": "ProjectV2SingleSelectField",
-			"id":         "PVTSSF_status",
-			"options":    options,
+	return map[string]any{
+		"repositoryOwner": map[string]any{
+			"projectV2": map[string]any{
+				"id": "PVT_board",
+				"field": map[string]any{
+					"__typename": "ProjectV2SingleSelectField",
+					"id":         "PVTSSF_status",
+					"options":    options,
+				},
+			},
 		},
 	}
-	// **nil のときは `workflows` ごと落とす。**応答に入っていない状態を作るためである。
+}
+
+// workflowsPayload はカンバンの自動化を取るクエリへの応答を組み立てる。
+//
+// **`workflows` が nil のときは、その項目ごと落とす。**応答に入っていない状態
+// （読めなかった状態）を作るためである。
+//
+// failure: 落ち方。
+// 戻り値: 応答の data。
+func (fg *fakeGitHub) workflowsPayload(failure boardFailure) map[string]any {
+	if failure == failureNoProject {
+		return map[string]any{"repositoryOwner": nil}
+	}
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	project := map[string]any{}
 	if fg.workflows != nil {
 		nodes := make([]any, 0, len(fg.workflows))
 		for i, w := range fg.workflows {

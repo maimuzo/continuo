@@ -77,11 +77,6 @@ type Adapter struct {
 	// statusOptionNamesFold は Status の選択肢名を foldStatus した値から、GitHub 側の
 	// 正式な綴りへの対応である。大文字小文字を無視した照合に使う（Bootstrap で解決）。
 	statusOptionNamesFold map[string]string
-	// workflows はボードの自動化の一覧である（Bootstrap で解決。設計 3-32 の見出し語 `自動化`）。
-	//
-	// **nil と長さ0を区別する。**nil は「応答に `workflows` が無かった」（読めなかった）、
-	// 長さ0は「1件も無い」である。`ProjectWorkflows` がその区別をそのまま返す。
-	workflows []ProjectWorkflow
 }
 
 // ProjectWorkflow はボードの組み込みの自動化1件である（設計 3-32 の見出し語 `自動化`）。
@@ -426,24 +421,13 @@ func (a *Adapter) resolveStatusOptions(ctx context.Context, cfg config.TrackerCo
 		}
 	}
 
-	// **応答に `workflows` が無ければ nil のままにする。**「1件も無い」と
-	// 「読めなかった」を取り違えると、doctor が確かめていないことを `✓` で通す。
-	var workflows []ProjectWorkflow
-	if project.Workflows != nil {
-		workflows = make([]ProjectWorkflow, 0, len(project.Workflows.Nodes))
-		for _, w := range project.Workflows.Nodes {
-			workflows = append(workflows, ProjectWorkflow{Number: w.Number, Name: w.Name, Enabled: w.Enabled})
-		}
-	}
-
-	// **6つをまとめて1回のロックで差し替える。**読み手（別 goroutine の UpdateStatus →
+	// **5つをまとめて1回のロックで差し替える。**読み手（別 goroutine の UpdateStatus →
 	// lookupOptionID）が、新しい正式名と古い選択肢 ID を混ぜて読まないようにするためである。
 	a.mu.Lock()
 	a.projectID = project.ID
 	a.statusFieldID = project.Field.ID
 	a.statusOptionIDs = optionIDs
 	a.statusOptionNamesFold = optionNamesFold
-	a.workflows = workflows
 	a.bootstrapped = true
 	a.mu.Unlock()
 	return nil
@@ -520,32 +504,52 @@ func (a *Adapter) StatusOptionNames() []string {
 	return names
 }
 
-// ProjectWorkflows はボードの組み込みの自動化を、GitHub が返した順のまま全部返す
+// FetchProjectWorkflows はカンバンの組み込みの自動化を、GitHub が返した順のまま全部返す
 // （設計 3-32 の見出し語 `自動化`。issue #209）。
 //
 // **`continuo doctor` だけが呼ぶ。**常駐プロセスはこの値を使わない。
-// **それでも `Bootstrap` の応答から取る。**doctor 専用のクエリを別に足すと、
-// **「doctor がボードを1回読む」と書いてある3箇所**（設計 3-32・
-// docs/plans/impl/08_doctor.md・`test/internal/doctor` のクエリの並びの検査）が食い違う。
+//
+// **起動時の検査のクエリへ混ぜてはならない。**あちらは `do`（`allowNotFound` が偽）で
+// 送るので、**GraphQL が `errors` を1件でも返した時点で Bootstrap ごと落ちる。**
+// `workflows` を読む権限が無いトークンや、この field を持たない GitHub Enterprise Server では、
+// **いままで起動していた continuo が起動しなくなる。**
+// **別のリクエストにしておけば、落ちても doctor の見出し語 `自動化` が `!` になるだけで済む。**
 //
 // **戻り値の nil と長さ0を区別すること。**
 //
 //	nil    … 応答に `workflows` が無かった（読めなかった）。**`✓` にしてはならない**
 //	長さ0  … 自動化が1件も無い
 //
-// **`Bootstrap`（または `VerifyStatusOptions`）を通してから呼ぶこと。**
-// 通っていなければ nil を返す。
+// **`Bootstrap` を通していなくても呼べる。**このクエリは project を番号で引くだけで、
+// Adapter が覚えている値を1つも使わない。
 //
-// 戻り値: 自動化の一覧（GitHub が返した順）。読めていなければ nil。
-func (a *Adapter) ProjectWorkflows() []ProjectWorkflow {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if !a.bootstrapped || a.workflows == nil {
-		return nil
+// ctx: 呼び出しに適用するコンテキスト。
+// 戻り値の1つ目: 自動化の一覧（GitHub が返した順）。応答に `workflows` が無ければ nil
+// （project そのものが返らなかったときも nil である。**その判定は `Bootstrap` が持っている**）。
+// 戻り値の2つ目: 呼び出しそのものが失敗した場合のエラー。
+func (a *Adapter) FetchProjectWorkflows(ctx context.Context) ([]ProjectWorkflow, error) {
+	var resp projectWorkflowsQueryResponse
+	vars := map[string]any{"login": a.owner, "number": a.projectNumber}
+	if err := a.gql.do(ctx, projectWorkflowsQueryTemplate, vars, &resp); err != nil {
+		return nil, err
 	}
-	out := make([]ProjectWorkflow, len(a.workflows))
-	copy(out, a.workflows)
-	return out
+	// **project が見つからないときも、ここではエラーにしない。**
+	// **その判定は `Bootstrap` が持っている**（呼び出し元の `continuo doctor` は
+	// 先に `Bootstrap` を通しており、見つからなければ見出し語 `カンバン` が `✗` になる）。
+	// **同じことを2箇所で判定すると、直す先を2つ案内することになる。**
+	// ここは nil を返し、見出し語 `自動化` を `!`（確かめられなかった）に落とす。
+	if resp.RepositoryOwner == nil ||
+		resp.RepositoryOwner.ProjectV2 == nil ||
+		resp.RepositoryOwner.ProjectV2.Workflows == nil {
+		// **「1件も無い」と取り違えると、doctor が確かめていないことを `✓` で通す。**
+		return nil, nil
+	}
+	conn := resp.RepositoryOwner.ProjectV2.Workflows
+	out := make([]ProjectWorkflow, 0, len(conn.Nodes))
+	for _, w := range conn.Nodes {
+		out = append(out, ProjectWorkflow{Number: w.Number, Name: w.Name, Enabled: w.Enabled})
+	}
+	return out, nil
 }
 
 // writeTargets は書き込み（updateProjectV2ItemFieldValue）に要る値を、

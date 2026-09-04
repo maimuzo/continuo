@@ -91,7 +91,7 @@ func TestDoctor_対応表のキーがボードに無ければ注意を出す(t *
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
 	// **ボードを読んだときの応答を使い回す。**この検査のためにリクエストを増やさない。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "workflows", "items"}) {
 		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
 	}
 }

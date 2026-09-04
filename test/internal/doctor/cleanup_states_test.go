@@ -90,7 +90,7 @@ func TestDoctor_片付ける状態が終わったとみなす状態の外にあ�
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
 	// **設定を読むだけの検査である。**この検査のためにボードへリクエストを増やさない。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "workflows", "items"}) {
 		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
 	}
 }

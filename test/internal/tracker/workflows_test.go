@@ -1,64 +1,51 @@
 package tracker_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// bootstrapPayloadWithWorkflows は、Bootstrap の応答へカンバンの自動化を載せたものを作る。
+// workflowsPayload は自動化を取るクエリへの偽サーバ応答を組み立てる。
 //
-// **`bootstrapProjectPayload` を作り直さない。**あちらは他の test が使っている形なので、
-// 返ってきた map の `projectV2` へ1つ足すだけにする。
-//
-// t: 呼び出し元のテスト。
 // workflows: 載せる自動化（`{"number":…, "name":…, "enabled":…}` の並び）。
-// 戻り値: 偽サーバの応答の data。
-func bootstrapPayloadWithWorkflows(t *testing.T, workflows []map[string]any) map[string]any {
-	t.Helper()
-	payload := bootstrapProjectPayload(testStatusOptions)
-	owner, ok := payload["repositoryOwner"].(map[string]any)
-	if !ok {
-		t.Fatalf("偽の応答の形が変わっています: %+v", payload)
+// **nil を渡すと `workflows` ごと落とす**（応答に入っていない状態）。
+// 戻り値: 応答の data。
+func workflowsPayload(workflows []map[string]any) map[string]any {
+	project := map[string]any{}
+	if workflows != nil {
+		nodes := make([]any, 0, len(workflows))
+		for _, w := range workflows {
+			nodes = append(nodes, w)
+		}
+		project["workflows"] = map[string]any{"nodes": nodes}
 	}
-	project, ok := owner["projectV2"].(map[string]any)
-	if !ok {
-		t.Fatalf("偽の応答の形が変わっています: %+v", owner)
+	return map[string]any{
+		"repositoryOwner": map[string]any{"projectV2": project},
 	}
-	nodes := make([]any, 0, len(workflows))
-	for _, w := range workflows {
-		nodes = append(nodes, w)
-	}
-	project["workflows"] = map[string]any{"nodes": nodes}
-	return payload
 }
 
-// 目的: Bootstrap の応答に載ったカンバンの自動化を、`ProjectWorkflows` がそのまま返すことを
-// 確かめる（設計 3-32 の見出し語 `自動化`。issue #209）。
-//
-// **`continuo doctor` だけが使う値だが、起動時の検査の応答から取る。**
-// doctor 専用のクエリを別に足すと、「doctor がカンバンを1回読む」と書いてある3箇所
-// （設計 3-32・docs/plans/impl/08_doctor.md・`test/internal/doctor` のクエリの並びの検査）が
-// 食い違うためである。
+// 目的: カンバンの自動化を、GitHub が返した順のまま返すことを確かめる
+// （設計 3-32 の見出し語 `自動化`。issue #209）。
 //
 // 与える情報: 有効な自動化1件と無効な自動化1件を載せた偽サーバ応答。
 // 成功条件: 2件とも、名前・番号・有効かどうかが GitHub の応答のまま返ること。
-func TestProjectWorkflows_応答に載った自動化をそのまま返す(t *testing.T) {
-	payload := bootstrapPayloadWithWorkflows(t, []map[string]any{
+func TestFetchProjectWorkflows_応答に載った自動化をそのまま返す(t *testing.T) {
+	fs := newFakeGraphQLServer(t, single(dataResponse(workflowsPayload([]map[string]any{
 		{"number": 5, "name": "Pull request linked to issue", "enabled": true},
 		{"number": 2, "name": "Pull request merged", "enabled": false},
-	})
-	fs := newFakeGraphQLServer(t, single(dataResponse(payload)))
+	}))))
 
 	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
-	if err := a.Bootstrap(t.Context(), testTrackerConfig()); err != nil {
-		t.Fatalf("Bootstrap が失敗した: %v", err)
-	}
 
-	got := a.ProjectWorkflows()
+	got, err := a.FetchProjectWorkflows(t.Context())
+	if err != nil {
+		t.Fatalf("FetchProjectWorkflows が失敗した: %v", err)
+	}
 	want := []tracker.ProjectWorkflow{
 		{Number: 5, Name: "Pull request linked to issue", Enabled: true},
 		{Number: 2, Name: "Pull request merged", Enabled: false},
@@ -78,9 +65,63 @@ func TestProjectWorkflows_応答に載った自動化をそのまま返す(t *te
 // **長さ0の「1件も無い」と取り違えてはならない。**取り違えると、
 // `continuo doctor` が確かめていないことを `✓` で通す。
 //
-// 与える情報: `workflows` を含まない偽サーバ応答（既存の `bootstrapProjectPayload`）。
-// 成功条件: `ProjectWorkflows` が nil を返すこと。
-func TestProjectWorkflows_応答に無ければnilを返す(t *testing.T) {
+// 与える情報: `workflows` を含まない偽サーバ応答。
+// 成功条件: エラーを返さず、nil を返すこと。
+func TestFetchProjectWorkflows_応答に無ければnilを返す(t *testing.T) {
+	fs := newFakeGraphQLServer(t, single(dataResponse(workflowsPayload(nil))))
+
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAdapter が失敗した: %v", err)
+	}
+
+	got, err := a.FetchProjectWorkflows(t.Context())
+	if err != nil {
+		t.Fatalf("応答に無いだけなのにエラーを返した: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("応答に無いのに nil ではない: %+v", got)
+	}
+}
+
+// 目的: 自動化が1件も無いカンバンでは、nil ではなく長さ0を返すことを確かめる。
+//
+// **「1件も無い」と「読めなかった」を分けるのがこの戻り値の役目である。**
+//
+// 与える情報: `workflows.nodes` が空の偽サーバ応答。
+// 成功条件: nil ではない長さ0の並びを返すこと。
+func TestFetchProjectWorkflows_1件も無いカンバンでは長さ0を返す(t *testing.T) {
+	fs := newFakeGraphQLServer(t, single(dataResponse(workflowsPayload([]map[string]any{}))))
+
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAdapter が失敗した: %v", err)
+	}
+
+	got, err := a.FetchProjectWorkflows(t.Context())
+	if err != nil {
+		t.Fatalf("FetchProjectWorkflows が失敗した: %v", err)
+	}
+	if got == nil {
+		t.Fatal("1件も無いだけなのに nil を返した（「読めなかった」と区別が付かない）")
+	}
+	if len(got) != 0 {
+		t.Fatalf("1件も無いはずなのに %d件 返った: %+v", len(got), got)
+	}
+}
+
+// 目的: 自動化を取るクエリが、起動時の検査のクエリと別のリクエストであることを固定する
+// （issue #209）。
+//
+// **混ぜてはならない。**起動時の検査のクエリは `allowNotFound` が偽で送るので、
+// **GraphQL が `errors` を1件でも返した時点で Bootstrap ごと落ちる。**
+// `workflows` を読む権限が無いトークンや、この field を持たない GitHub Enterprise Server では、
+// **いままで起動していた continuo が起動しなくなる。**
+// **この test が落ちるようになったら、その回帰が入ったということである。**
+//
+// 与える情報: 選択肢名が設定と一致する偽サーバ応答。
+// 成功条件: Bootstrap が送ったクエリに `workflows` が1文字も入っていないこと。
+func TestBootstrap_起動時の検査のクエリに自動化を混ぜない(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
 
 	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
@@ -91,49 +132,9 @@ func TestProjectWorkflows_応答に無ければnilを返す(t *testing.T) {
 		t.Fatalf("Bootstrap が失敗した: %v", err)
 	}
 
-	if got := a.ProjectWorkflows(); got != nil {
-		t.Fatalf("応答に無いのに nil ではない: %+v", got)
-	}
-}
-
-// 目的: 自動化が1件も無いカンバンでは、nil ではなく長さ0を返すことを確かめる。
-//
-// **「1件も無い」と「読めなかった」を分けるのがこの型の役目である。**
-//
-// 与える情報: `workflows.nodes` が空の偽サーバ応答。
-// 成功条件: `ProjectWorkflows` が nil ではない長さ0の並びを返すこと。
-func TestProjectWorkflows_1件も無いカンバンでは長さ0を返す(t *testing.T) {
-	payload := bootstrapPayloadWithWorkflows(t, nil)
-	fs := newFakeGraphQLServer(t, single(dataResponse(payload)))
-
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
-	if err != nil {
-		t.Fatalf("NewAdapter が失敗した: %v", err)
-	}
-	if err := a.Bootstrap(t.Context(), testTrackerConfig()); err != nil {
-		t.Fatalf("Bootstrap が失敗した: %v", err)
-	}
-
-	got := a.ProjectWorkflows()
-	if got == nil {
-		t.Fatal("1件も無いだけなのに nil を返した（「読めなかった」と区別が付かない）")
-	}
-	if len(got) != 0 {
-		t.Fatalf("1件も無いはずなのに %d件 返った: %+v", len(got), got)
-	}
-}
-
-// 目的: Bootstrap を通していなければ nil を返すことを確かめる。
-//
-// 与える情報: Bootstrap を呼んでいないアダプタ。
-// 成功条件: `ProjectWorkflows` が nil を返すこと。
-func TestProjectWorkflows_Bootstrapを通していなければnilを返す(t *testing.T) {
-	a, err := tracker.NewAdapter(testTrackerConfig(), "http://127.0.0.1:1", "test-token", nil, nil, nil)
-	if err != nil {
-		t.Fatalf("NewAdapter が失敗した: %v", err)
-	}
-
-	if got := a.ProjectWorkflows(); got != nil {
-		t.Fatalf("Bootstrap を通していないのに nil ではない: %+v", got)
+	for _, req := range fs.Requests() {
+		if strings.Contains(req.Query, "workflows") {
+			t.Fatalf("起動時の検査のクエリに自動化が混ざっている:\n%s", req.Query)
+		}
 	}
 }

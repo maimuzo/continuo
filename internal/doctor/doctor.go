@@ -255,8 +255,11 @@ func Run(ctx context.Context, opts Options) Report {
 	// **この項目が無いと、キーの綴りの打ち間違いを人間に見せる場所が1つも無い**（issue #67）。
 	report.add(checkRewriteKeys(cfg, boardStates, boardResult.Symbol))
 
-	// 段5d: 自動化。**ここも同じ応答を使い回すので、リクエストは増えない**
-	// （`workflows` は起動時の検査のクエリに載せてある）。
+	// 段5d: 自動化。**ここだけはリクエストが1本増える**（`FetchProjectWorkflows`）。
+	// **起動時の検査のクエリへ混ぜてはならない。**あちらは GraphQL が `errors` を
+	// 1件でも返した時点で落ちるので、`workflows` を読めない環境
+	// （権限の足りないトークン・この field を持たない GitHub Enterprise Server）では
+	// **常駐プロセスが起動しなくなる。**
 	// **自動化が Status を書いた瞬間に走行中の run が止まる**のに、
 	// **利用者がそれを知るのは1件止まったあとである**（issue #209）。
 	report.add(checkAutomations(cfg, workflows, boardResult.Symbol))

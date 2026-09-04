@@ -80,7 +80,7 @@ func checkAgentTeams(opts Options, cfg loadedConfig, configSymbol Symbol) Result
 
 	// **`claude.env` を先に見る。**`--settings` で渡すものは、利用者の設定にも
 	// シェルの export にも勝つ（設計 3-70 が引く公式の2文）。
-	if value, ok := cfg.Config.Claude.Env[EnvAgentTeams]; ok {
+	if value, ok := cfg.Config.Claude.Env[EnvAgentTeams]; ok && value != "" {
 		switch value {
 		case agentTeamsOff:
 			return Result{
@@ -97,7 +97,11 @@ func checkAgentTeams(opts Options, cfg loadedConfig, configSymbol Symbol) Result
 		}
 	}
 
-	// **`claude.env` に書かれていない。**このときだけ、doctor を叩いたシェルを見る。
+	// **`claude.env` に書かれていない（または空文字である）。**
+	// **空文字は「書かれていない」と同じに扱う。**`1` ではないので agent teams は
+	// 有効にならず、シェル側も空文字を素通りさせている。
+	// **片方だけ厳しくすると、同じ検査の中に判定基準が2つできる。**
+	// このときだけ、doctor を叩いたシェルを見る。
 	// **herdr の pane と同じ環境とは限らない**ので、文言でそう断る。
 	//
 	// **`0` と空文字以外は、値をそのまま出して `!` にする。**`claude.env` の側と

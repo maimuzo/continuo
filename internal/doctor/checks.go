@@ -678,7 +678,22 @@ func checkBoard(
 		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil, nil, nil
 	}
 	boardStates := adapter.StatusOptionNames()
-	workflows := adapter.ProjectWorkflows()
+
+	// **自動化はここで別に読む**（見出し語 `自動化`。issue #209）。
+	// **起動時の検査のクエリへ混ぜてはならない。**あちらは GraphQL が `errors` を
+	// 1件でも返した時点で落ちるので、`workflows` を読めない環境
+	// （権限の足りないトークン・この field を持たない GitHub Enterprise Server）では
+	// **常駐プロセスが起動しなくなる。**
+	//
+	// **読めなくても、ここでは何もしない。**戻り値は nil のままにして、
+	// 見出し語 `自動化` を `!`（確かめられなかった）にする。
+	// **見出し語 `カンバン` を落とさない。**自動化は起動の前提ではない。
+	workflows, err := adapter.FetchProjectWorkflows(ctx)
+	if err != nil {
+		opts.Logger.Debug("カンバンの自動化を読めませんでした（見出し語 `自動化` は確かめられなかったになります）",
+			"error", err)
+		workflows = nil
+	}
 
 	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
 	if err != nil {

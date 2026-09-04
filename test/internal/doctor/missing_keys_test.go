@@ -107,7 +107,7 @@ func TestDoctor_書かれていない設定項目があれば名前と差分の�
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
 	// **ボードを1バイトも読まない。**この検査のためにリクエストを増やさない。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "workflows", "items"}) {
 		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
 	}
 }

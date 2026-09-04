@@ -67,9 +67,58 @@ func TestDoctor_自動化が有効なのに対応表が空なら注意を出す(
 	if report.ExitCode() != 0 {
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
-	// **リクエストを増やさない。**`workflows` は起動時の検査のクエリに載せてある。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
+	// **自動化は別のリクエストで読む。**起動時の検査のクエリへ混ぜると、
+	// `workflows` を読めない環境で **常駐プロセスが起動しなくなる**（issue #209）。
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "workflows", "items"}) {
 		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
+	}
+}
+
+// TestDoctor_item を載せるだけの自動化は数えない は、
+// **直す先の無い注意を作らない**ことを確かめる（issue #209）。
+//
+// 目的: GitHub の `Auto-add to project` と `Auto-add sub-issues to project` は
+// **Status を1文字も書かない。**カンバンへ issue を載せる標準の手段なので、
+// **多くの人が有効にしている。**数えると、この検査はほとんどの利用者に
+// **直す先の無い `!` を出す**（実測: このリポジトリのカンバンで有効な自動化は
+// この2件だけである。2026-09-05）。
+//
+// **除く向きにしか名前を使わない。**「これは Status を書く」と名前で当てにいくと、
+// 外れたときに静かに取りこぼす。
+//
+// 与える情報: `Auto-add` で始まる自動化だけを有効にした偽ボードと、対応表が空の既定の設定。
+// 成功条件: `自動化` が `✓` で、説明が「1つも有効ではありません」であること。
+func TestDoctor_itemを載せるだけの自動化は数えない(t *testing.T) {
+	fx := newFixture(t)
+	fx.GitHub.SetWorkflows([]fakeWorkflow{
+		{Name: "Auto-add to project", Enabled: true},
+		{Name: "Auto-add sub-issues to project", Enabled: true},
+	})
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelAutomations, doctor.SymbolOK)
+	if !strings.Contains(res.Detail, "1つも有効ではありません") {
+		t.Fatalf("item を載せるだけの自動化を数えている: %q", res.Detail)
+	}
+}
+
+// TestDoctor_itemを載せた item に Status を書く自動化は数える は、
+// **除きすぎていない**ことを確かめる。
+//
+// 目的: `Item added to project` は、載せた item に Status を書く自動化である。
+// **`Auto-add` で始まらないので、除かれてはならない。**
+// 与える情報: `Item added to project` だけを有効にした偽ボードと、対応表が空の既定の設定。
+// 成功条件: `自動化` が `!` で、その名前が内訳に出ること。
+func TestDoctor_載せたitemにStatusを書く自動化は数える(t *testing.T) {
+	fx := newFixture(t)
+	fx.GitHub.SetWorkflows([]fakeWorkflow{{Name: "Item added to project", Enabled: true}})
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelAutomations, doctor.SymbolUnknown)
+	if !strings.Contains(strings.Join(res.Notes, "\n"), "Item added to project") {
+		t.Fatalf("Status を書く自動化を除いてしまっている: %+v", res.Notes)
 	}
 }
 
@@ -118,22 +167,24 @@ func TestDoctor_自動化が有効でも対応表が書いてあれば通る(t *
 	}
 }
 
-// TestDoctor_自動化の一覧が応答に無ければ確かめられなかったになる は、
+// TestDoctor_自動化を読めなければ確かめられなかったになる は、
 // **確かめていないものを通さない**ことを固定する。
 //
-// 目的: カンバンの応答に `workflows` が入っていないことがある（GHES や、権限が足りない場合）。
-// **そのとき `✓` にすると、確かめていないことを通したことになる。**
+// 目的: カンバンの自動化を読めないことがある（GitHub Enterprise Server や、
+// 権限が足りないトークン）。**そのとき `✓` にすると、確かめていないことを通したことになる。**
+// **`カンバン` の見出し語は落とさない。**自動化は起動の前提ではない。
 // 与える情報: `workflows` を応答から落とした偽ボード。
-// 成功条件: `自動化` が `!` で、理由が「応答に入っていなかった」であること。
-func TestDoctor_自動化の一覧が応答に無ければ確かめられなかったになる(t *testing.T) {
+// 成功条件: `自動化` だけが `!` で、`カンバン` は `✓` のままであること。
+func TestDoctor_自動化を読めなければ確かめられなかったになる(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetWorkflows(nil)
 
 	report := fx.Run(t)
 
+	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolOK)
 	res := assertSymbol(t, report, doctor.LabelAutomations, doctor.SymbolUnknown)
-	if !strings.Contains(res.Detail, "自動化の一覧が入っていなかった") {
-		t.Fatalf("応答に入っていなかったことが理由に出ていない: %q", res.Detail)
+	if !strings.Contains(res.Detail, "読めなかったので") {
+		t.Fatalf("読めなかったことが理由に出ていない: %q", res.Detail)
 	}
 	if report.ExitCode() != 0 {
 		t.Fatalf("確かめられなかっただけなのに終了コードが %d だった", report.ExitCode())

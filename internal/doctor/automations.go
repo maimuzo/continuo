@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -44,6 +45,9 @@ const automationsNoteLimit = 10
 // 公式に固定されていないので、**名前で当たりを付けると、外れたときに静かに取りこぼす。**
 // **有効な自動化の名前を全部内訳へ出し、判断の材料を人間へ渡す。**
 //
+// **例外は1つだけである。**item を載せるだけで Status を1文字も書かない自動化
+// （`Auto-add …`）は数えない（`addOnlyWorkflowPrefix`）。**除く向きにしか名前を使わない。**
+//
 // **「カンバンの Status の選択肢のうち、設定に名前が無いもの」では判定しない。**
 // その一覧は `Ice Box` や `Backlog` のような、自動化と何の関係も無い Status も拾う。
 // **直す先の無い `!` を毎回出すことになる**（見出し語 `対応表のキー` が
@@ -60,12 +64,14 @@ const automationsNoteLimit = 10
 // **`✗` にすると、自動化を有効にしたまま動かしている人の continuo が、版を上げた瞬間に
 // 起動しなくなる**（見出し語 `片付けの状態` と `未記入の項目` と同じ理由である）。
 //
-// **カンバンを読んだときの応答を使い回すので、リクエストは増えない。**
-// `workflows` は起動時の検査のクエリ（`bootstrapQueryTemplate`）に載せてある。
+// **自動化は、カンバンを読むのとは別のリクエストで取る**（`Adapter.FetchProjectWorkflows`）。
+// **起動時の検査のクエリへ混ぜてはならない。**あちらは GraphQL が `errors` を1件でも
+// 返した時点で落ちるので、`workflows` を読めない環境（権限の足りないトークン・
+// この field を持たない GitHub Enterprise Server）では**常駐プロセスが起動しなくなる。**
 //
 // cfg: 読めた場合の設定。
-// workflows: カンバンの自動化の一覧（`tracker.Adapter.ProjectWorkflows` の戻り値）。
-// **nil は「応答に入っていなかった」である。**長さ0の「1件も無い」と取り違えてはならない。
+// workflows: カンバンの自動化の一覧（`tracker.Adapter.FetchProjectWorkflows` の戻り値）。
+// **nil は「読めなかった」である。**長さ0の「1件も無い」と取り違えてはならない。
 // boardSymbol: 上流（カンバン）の記号。
 // 戻り値: 検査結果。
 func checkAutomations(cfg loadedConfig, workflows []tracker.ProjectWorkflow, boardSymbol Symbol) Result {
@@ -84,8 +90,9 @@ func checkAutomations(cfg loadedConfig, workflows []tracker.ProjectWorkflow, boa
 		}
 	}
 	if workflows == nil {
-		// **応答に `workflows` が入っていなかった。**GHES や、権限が足りない場合に起きうる。
-		// **`✓` にしてはならない。**確かめていないものを通したことになる。
+		// **読めなかった。**リクエストそのものが落ちた場合と、応答に `workflows` が
+		// 入っていなかった場合の両方がここへ来る（GitHub Enterprise Server や、
+		// 権限が足りないトークン）。**`✓` にしてはならない。**確かめていないものを通したことになる。
 		return Result{
 			Label:  LabelAutomations,
 			Symbol: SymbolUnknown,
@@ -127,17 +134,43 @@ func checkAutomations(cfg loadedConfig, workflows []tracker.ProjectWorkflow, boa
 	}
 }
 
-// enabledWorkflowNames は有効な自動化の名前を、GitHub が返した順のまま返す。
+// addOnlyWorkflowPrefix は、item をカンバンへ載せるだけで Status を1文字も書かない
+// 組み込みの自動化の名前の頭である。
+//
+// **2026-09-05 時点で、この頭を持つ組み込みの自動化は2つある。**
+//
+//	Auto-add to project            … 条件に合う issue をカンバンへ載せる
+//	Auto-add sub-issues to project … 親 issue の sub-issue をカンバンへ載せる
+//
+// **どちらも Status を書かない。**載せた item に Status を書くのは、
+// **別の自動化 `Item added to project` である**（この頭を持たないので、除かれない）。
+//
+// **除く向きにしか使わない。**「これは Status を書く」と名前で当てにいくと、
+// 外れたときに**静かに取りこぼす。**「これは書かない」を外すと、余分な `!` が1行出るだけである。
+// **安いほうの誤りに倒してある。**
+const addOnlyWorkflowPrefix = "Auto-add "
+
+// enabledWorkflowNames は Status を書きうる有効な自動化の名前を、GitHub が返した順のまま返す。
 //
 // **並べ替えない。**GitHub の画面に出る順（自動化の番号順）と揃えておくと、
 // 人間が画面と見比べやすい。
 //
+// **item を載せるだけの自動化は数えない**（addOnlyWorkflowPrefix）。
+// **数えると、この検査はほとんどの利用者に直す先の無い `!` を出す。**
+// カンバンへ issue を載せる標準の手段なので、**多くの人が有効にしている。**
+// 実測: このリポジトリのカンバンで有効な自動化は
+// `Auto-add sub-issues to project` と `Auto-add to project` の2件だけで、
+// **どちらも Status を書かない**（2026-09-05）。
+//
 // workflows: カンバンの自動化の一覧。
-// 戻り値: 有効なものの名前（GitHub の綴りのまま）。
+// 戻り値: Status を書きうる有効なものの名前（GitHub の綴りのまま）。
 func enabledWorkflowNames(workflows []tracker.ProjectWorkflow) []string {
 	names := make([]string, 0, len(workflows))
 	for _, w := range workflows {
 		if !w.Enabled {
+			continue
+		}
+		if strings.HasPrefix(w.Name, addOnlyWorkflowPrefix) {
 			continue
 		}
 		names = append(names, w.Name)

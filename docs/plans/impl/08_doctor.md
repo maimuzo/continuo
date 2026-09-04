@@ -120,7 +120,7 @@
 | ボード | `tracker.ResolveToken` → `tracker.Adapter.Bootstrap` → `FetchIssuesByStates` |
 | Status の名前 | `tracker.Adapter.StatusOptionNames`（ボードを読んだときの応答を使い回す。リクエストは増えない） |
 | 対応表のキー | `config.RewriteKeysOutsideBoard`（**起動時の警告と同じ関数を呼ぶ。**ボードを読んだときの応答を使い回す） |
-| 自動化 | `tracker.Adapter.ProjectWorkflows`（**ボードを読んだときの応答を使い回す。**`workflows` は `bootstrapQueryTemplate` に載せてある。リクエストは増えない） |
+| 自動化 | `tracker.Adapter.FetchProjectWorkflows`（**ここだけリクエストが1本増える。**起動時の検査のクエリへ混ぜると、`workflows` を読めない環境で**常駐プロセスが起動しなくなる**） |
 | 未記入の項目 | `scaffold.MissingKeys`（**`continuo doctor --missing-keys-patch` と同じ関数を呼ぶ。**ボードは読まない） |
 | clone | `workspace.RunGhqList`（`ghq list -p -e <owner>/<repo>`） |
 | 信頼登録 | `workspace.CheckTrustForClonePath` |
