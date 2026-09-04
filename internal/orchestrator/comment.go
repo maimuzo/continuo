@@ -102,26 +102,36 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 			"identifier", snap.Identifier)
 		return
 	}
+	// **復帰する先は、この run が使っている UUID を先に採る。**
+	//
+	// **身元ファイルの値と食い違うことがある。**`SetSessionUUID` が失敗したとき、
+	// 立て直し（`restartWithNewSession`）は警告を1行出して**続行する**ので、
+	// **身元ファイルには古い死んだ UUID が残り、run は新しい UUID で走って turn を送り切る。**
+	// **そのとき復帰すべきは run の側である。**身元ファイルを読むのは、
+	// 再起動して引き継いだ run のように、run が UUID を持っていない場合の控えである。
+	resumeUUID := snap.SessionUUID
+	if resumeUUID == "" {
+		resumeUUID = identity.SessionUUID
+	}
+
 	// **会話の記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。着手の段5b と同じ検査である。
 	//
-	// **上の `StartedAt` の検査では足りない。**あれが見ているのは run が turn を送ったかで、
-	// **ここで `--resume` に渡すのは、いま読み直した身元ファイルの UUID である。**
-	// **2つは同じとは限らない。**次の2つで食い違う。
+	// **上の `StartedAt` の検査では足りない。**あれは、この process が turn を送ったかを見ていない。
+	// **再起動して引き継いだ run は、引き継いだ時刻が入るのでゼロにならない**（設計 3-4 の段5）。
+	// そのセッションに会話があるかは、別に確かめるしかない。
 	//
-	//	`SetSessionUUID` が失敗した   … 立て直しは警告を1行出して**続行する**（`restartWithNewSession`）。
-	//	                              身元ファイルには古い死んだ UUID が残り、run は新しい UUID で
-	//	                              走って turn を送り切る
-	//	再起動して引き継いだ run       … 引き継ぎは `StartedAt` に引き継いだ時刻を入れる（設計 3-4 の段5）。
-	//	                              **この process が turn を1回も送っていなくてもゼロにならない。**
-	//	                              UUID は pane から取れなければ身元ファイルへ落ちる
-	//
-	// **投げてしまうと、`agent.start` が herdr の待ちを使い切ってから失敗し、
-	// `failCommentRecovery` が issue を `failure_state` へ落として人間へ渡す。**
+	// **投げてしまうと、`agent.start` が herdr の待ちを使い切ってから失敗する。**
 	// **書かせるものが最初から無いので、そこまで待つ意味が無い。**
-	if !o.mayResumeSession(identity.SessionUUID) {
-		o.logger.Info("身元ファイルのセッションに会話の記録が無いので、復元しません",
-			"identifier", snap.Identifier, "session_uuid", truncateForLog(identity.SessionUUID),
+	//
+	// **ただし、黙って終わってはならない。**ここまで来たということは、
+	// **この run はコメントを1件も書いていない。**下の `failCommentRecovery` と同じく、
+	// **`failure_state` へ落として人間へ渡す。**そうしないと、成果がまとめられていないことが
+	// 誰にも伝わらないまま issue が `In Review` に並ぶ。
+	if !o.mayResumeSession(resumeUUID) {
+		o.logger.Warn("復帰する先のセッションに会話の記録が無いので、コメントを書かせられません",
+			"identifier", snap.Identifier, "session_uuid", truncateForLog(resumeUUID),
 			"記録の置き場所", o.transcriptRoot)
+		o.failCommentRecovery(ctx, rs)
 		return
 	}
 
@@ -177,7 +187,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		Name:   name,
 		Kind:   o.cfg.Claude.Kind,
 		PaneID: paneID,
-		Args:   o.claudeStartArgs(identity.SettingsPath, "", identity.SessionUUID),
+		Args:   o.claudeStartArgs(identity.SettingsPath, "", resumeUUID),
 	}, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return

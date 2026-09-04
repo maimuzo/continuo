@@ -1843,10 +1843,16 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	// **採番したセッションの記録を置くディレクトリを、記録の根の直下に1つ作る。**
 	// **実機の `~/.claude/projects/<cwd を綴り直したもの>/` に当たる。**
 	//
+	// **名前にテストの名前を混ぜる。**既定の根は機械全体の一時ディレクトリなので
+	// （`tempRoot`）、**`go test` が timeout で殺されて `t.Cleanup` が走らなかった前の実行の
+	// 置き土産が、次の実行から見える。**セッション UUID は `session-1` から順に決まるので、
+	// **名前を分けないと、別のテストが書いた記録を自分のものとして拾う。**
+	//
 	// **作れなくても止めない。**「記録の置き場所を読めないときは復帰を試す」を確かめる
 	// テストは、実在しないパスを根として渡す（設計 3-3c）。**そこで落とすと、
 	// その検査そのものが走らなくなる。**空のままなら記録を置かない。
-	seedDir, seedErr := os.MkdirTemp(transcriptRoot, "continuo-sessions-")
+	seedDir, seedErr := os.MkdirTemp(transcriptRoot,
+		"continuo-sessions-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-")
 	if seedErr != nil {
 		seedDir = ""
 	} else {

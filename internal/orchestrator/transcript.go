@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 )
@@ -286,7 +287,10 @@ func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 		return true
 	}
 	name := sessionUUID + transcriptExt
-	undecidable := false
+	// **見られなかったエントリを数える。**1件でもあれば「決められなかった」に倒すが、
+	// **黙って倒してはならない。**倒れたことが分からないと、
+	// **この検査が丸ごと無効になっているのに誰も気づけない。**
+	unreadable := 0
 	for _, e := range entries {
 		info, statErr := os.Stat(filepath.Join(o.transcriptRoot, e.Name(), name))
 		if statErr != nil {
@@ -298,8 +302,8 @@ func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 			// （実測: 機械全体の一時ディレクトリで522件中24件）。**その下に記録は在りえない。**
 			// **「見られない」に数えると、そういうファイルが1つでもあるだけで
 			// この検査が丸ごと無効になる。**
-			if !os.IsNotExist(statErr) && !errors.Is(statErr, syscall.ENOTDIR) {
-				undecidable = true
+			if !errors.Is(statErr, os.ErrNotExist) && !errors.Is(statErr, syscall.ENOTDIR) {
+				unreadable++
 			}
 			continue
 		}
@@ -308,7 +312,14 @@ func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 		}
 		return true
 	}
-	return undecidable
+	if unreadable > 0 {
+		// **「無い」と言い切れない。**設計 3-3c の「判定できないときは復帰を試す」へ倒す。
+		o.logger.Warn("記録の置き場所に読めないものがあるので、記録があるかを決められません",
+			"session_uuid", truncateForLog(sessionUUID),
+			"記録の置き場所", o.transcriptRoot, "読めなかった件数", unreadable)
+		return true
+	}
+	return false
 }
 
 // subagentDirName は subagent の記録を置くディレクトリの名前である。
@@ -336,7 +347,8 @@ const subagentTranscriptPrefix = "agent-"
 //	<記録の根>/<cwd を綴り直したもの>/<セッション UUID>.jsonl
 //	<記録の根>/<cwd を綴り直したもの>/<セッション UUID>/subagents/agent-<agent_id>.jsonl
 //
-// （hookinput.go の `defaultTranscriptDirName` と同じ実測。設計 3-15）
+// **根拠は、すぐ上の `subagentDirName` に引いてある実測の記録である**
+// （`transcript_path` と `agent_transcript_path` が、どちらも `.jsonl` で終わっている）。
 const transcriptExt = ".jsonl"
 
 // subagentMaxCandidates は Glob の結果を見る件数の上限である。
@@ -420,11 +432,24 @@ func safeAgentID(id string) bool {
 // s: ログへ出す値。
 // 戻り値: `maxAgentIDBytes` に収まる値。切ったときは末尾に `…（切り詰め）` を付ける。
 func truncateForLog(s string) string {
-	if len(s) <= maxAgentIDBytes {
+	if len(s) <= maxLoggedValueBytes {
 		return s
 	}
-	return s[:maxAgentIDBytes] + "…（切り詰め）"
+	// **文字の途中で切らない。**切ると壊れた UTF-8 がログへ入り、
+	// **JSON で書き出す経路や、集約する側がその行ごと弾くことがある。**
+	cut := maxLoggedValueBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…（切り詰め）"
 }
+
+// maxLoggedValueBytes は、外部が書ける値をログへ出すときの長さの上限（バイト）である。
+//
+// **`maxAgentIDBytes` とは別に持つ。**あちらはパスの部品として使ってよい長さで、
+// **縮めるとログの側まで一緒に縮む。**セッション UUID は36文字なので、
+// **この上限で切れてはならない。**
+const maxLoggedValueBytes = 128
 
 // maxAgentIDBytes は `agent_id` をパスの部品に使うときの長さの上限（バイト）である。
 //

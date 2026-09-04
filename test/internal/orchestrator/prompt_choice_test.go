@@ -124,17 +124,9 @@ func TestResumeBackoff_再着手はセッションに復帰して1回目の本�
 		return ok && v.RetryCount == 1
 	})
 
-	// **1回目のセッションの記録を置く。**着手の段5b は、記録が無い UUID へ
-	// `--resume` を投げない（設計 3-3c）。**実機では1回目の turn を送った時点で
-	// Claude Code が書いているので、ここで置くのが実機に近い。**
-	first := startSessionIDs(fx)
-	if len(first) == 0 || first[0] == "" {
-		t.Fatalf("1回目の起動に --session-id が無い: %v", first)
-	}
-	seedSessionTranscript(t, fx, first[0], []any{
-		typedUserLine("p1", "1回目の本文"),
-		assistantLine("req1", "作業中です", false),
-	})
+	// **1回目のセッションの記録は、fixture が採番したときに置いている**（`newFixture`）。
+	// **ここで置き直さない。**同じ名前の記録が2つできると、着手の段5b が
+	// **どちらを見つけるかが `os.ReadDir` の並び順で決まる。**
 
 	// バックオフが明けるまで時計を進める。
 	clock.Advance(30 * time.Second)
