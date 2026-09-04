@@ -106,8 +106,14 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	//
 	// **上の `StartedAt` の検査では足りない。**あれが見ているのは run が turn を送ったかで、
 	// **ここで `--resume` に渡すのは、いま読み直した身元ファイルの UUID である。**
-	// 立て直し（`restartWithNewSession`）は身元ファイルの側だけを差し替えるので、
-	// **turn を送り終えた run でも、身元ファイルには会話の無い UUID が入っていることがある。**
+	// **2つは同じとは限らない。**次の2つで食い違う。
+	//
+	//	`SetSessionUUID` が失敗した   … 立て直しは警告を1行出して**続行する**（`restartWithNewSession`）。
+	//	                              身元ファイルには古い死んだ UUID が残り、run は新しい UUID で
+	//	                              走って turn を送り切る
+	//	再起動して引き継いだ run       … 引き継ぎは `StartedAt` に引き継いだ時刻を入れる（設計 3-4 の段5）。
+	//	                              **この process が turn を1回も送っていなくてもゼロにならない。**
+	//	                              UUID は pane から取れなければ身元ファイルへ落ちる
 	//
 	// **投げてしまうと、`agent.start` が herdr の待ちを使い切ってから失敗し、
 	// `failCommentRecovery` が issue を `failure_state` へ落として人間へ渡す。**
