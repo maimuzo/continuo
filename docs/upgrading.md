@@ -757,13 +757,32 @@ Status も動かず、issue にも何も書かれず、**ボードの上では�
 **既定のままでよければ、何も足さなくて構いません。**足さなくても
 `warn_and_comment`（ダッシュボードにも issue にも出す）で動きます。
 
-**issue へ書かせたくないときだけ、front matter の `handoff:` の下へ1行足します。**
+**issue へ書かせたくないときだけ、`on_assignee_gate` の値を書き換えます。**
+
+**まず、いまあるかどうかを確かめてください。**
+
+```bash
+grep -n 'on_assignee_gate' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その値を書き換えます。**1行も出なければ、次で足してください
+（v0.1.11 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
 
 ```yaml
 tracker:
   provider:
     handoff:
-      on_assignee_gate: warn_only
+      # …（ほかの設定）
+      on_assignee_gate: warn_only   # 既定は warn_and_comment。この値を書き換える
 ```
 
 | 値 | ログの WARN | ダッシュボード | issue へのコメント |
@@ -1095,12 +1114,31 @@ worktree がどの branch にも載っていません（detached HEAD）: …
 
 ### 元に戻す1行
 
-**v0.1.9 までと同じ動きにしたいときは、`claude:` の下に3行足します。**
+**v0.1.9 までと同じ動きにしたいときは、`claude.tool_gate.mode` の値を書き換えます。**
+
+**まず、いまあるかどうかを確かめてください。**
+
+```bash
+grep -n 'tool_gate' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その値を書き換えます。**1行も出なければ、次で足してください
+（v0.1.9 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
 
 ```yaml
 claude:
+  # …（ほかの設定）
   tool_gate:
-    mode: off      # 判定を掛けない（v0.1.9 までと同じ動き）
+    mode: off      # 既定は public_only。この値を書き換える（off なら v0.1.9 までと同じ動き）
 ```
 
 **`on` にすると、非公開リポジトリの issue にも掛かります。**
@@ -1319,21 +1357,33 @@ cd ~/continuo-work && continuo doctor
   （v0.1.11 からは、**着手されなくなったこと**を WARN で知らせます。それより前の版では**ログに INFO が1行出るだけ**です。
   詳しくは [docs/FAQ.md](FAQ.md) の「人間が担当者になっている issue が、いつまでも着手されない」を見てください）
 
-### そのまま貼れる yaml
+### 足し方
 
-**雛形の値のままです。**下の値で `continuo init` が書き出す `WORKFLOW.md` の
-`tracker.provider.comments` の下に足せます（実際にこの値で `continuo doctor` を通してあります。
-下の「足したかどうかの確かめ方」）。
+**この5つのキーは、`continuo doctor` に足させてください。**
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
+
+**下の yaml を手で貼らないでください。**`tracker:` と `provider:` と `handoff:` は
+`continuo init` が置いた `WORKFLOW.md` に既にあるので、**塊ごと貼ると front matter が
+重複キーになり、continuo が起動しなくなります。**
+
+**下の yaml は、どこに何が入るかの図です。**値はどれも雛形のままです。
 
 ```yaml
 tracker:
   provider:
     handoff:
-      bid_window_ms: 180000
-      idle_timeout_ms: 64800000
-      recheck_interval_ms: 3600000
-      five_hour_margin_percent: 10
-      weekly_margin_percent: 10
+      # …（ほかの設定）
+      bid_window_ms: 180000              # ← 増えたキー
+      idle_timeout_ms: 64800000          # ← 増えたキー
+      recheck_interval_ms: 3600000       # ← 増えたキー
+      five_hour_margin_percent: 10       # ← 増えたキー
+      weekly_margin_percent: 10          # ← 増えたキー
 ```
 
 ### 足したかどうかの確かめ方
@@ -1346,7 +1396,7 @@ cd ~/continuo-work && continuo doctor
 
 | 出方 | どう読むか |
 | --- | --- |
-| `! 未記入の項目 … tracker.provider.handoff` | まだ足りません。上の yaml をそのまま `WORKFLOW.md` に足すか、`continuo doctor --missing-keys-patch WORKFLOW.md` で差分を作ってください |
+| `! 未記入の項目 … tracker.provider.handoff` | まだ足りません。上の `continuo doctor --missing-keys-patch` をもう一度叩いてください |
 | `✓ 未記入の項目 雛形にある設定項目はすべて書かれています（…件）` | 5つとも足せています |
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
@@ -1590,13 +1640,30 @@ continuo が戻すたびに自動化が書き直す押し合いになったら�
 
 ### 足す場所と中身
 
-**`tracker:` の下に足します。**`continuo init` が置いた雛形の Status 名のままなら、
-次の2行をそのまま貼れば起動します。
+**雛形には `automated_state_rewrite: {}` の行が既にあります。**その `{}` を書き換えます。
+**塊ごと貼り替えないでください。**`tracker:` も `automated_state_rewrite:` も既にあるので、
+**貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+
+**まず、いまあるかどうかを確かめてください。**
+
+```bash
+grep -n 'automated_state_rewrite' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その `{}` を下の図のように書き換えます。**1行も出なければ、次で足してから書き換えてください
+（v0.1.8 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**下の yaml は、どこに何が入るかの図です。**
 
 ```yaml
 tracker:
-  automated_state_rewrite:
-    "Todo": "In Progress"   # 自動化が書く Status: 戻す先の Status
+  # …（ほかの設定）
+  automated_state_rewrite:            # 既にある行（雛形では {} が付いています）
+    "Todo": "In Progress"             # ← これを足す（自動化が書く Status: 戻す先の Status）
 ```
 
 **Status の名前は、あなたのボードと `WORKFLOW.md` に合わせて置き換えてください。**上の例は

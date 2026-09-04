@@ -1040,10 +1040,29 @@ grep -c '"type": "prompt"' "$(jq -r .settings_path .continuo.json)"
 | **そのままにする** | なし | ありません（断ってほしい操作なら、守れています） |
 | **判定を止める** | `claude.tool_gate.mode: off` | **外部の人が書いた指示を止める仕掛けが1つ減ります** |
 
+**止めるときは、`claude.tool_gate.mode` の値を書き換えます。**
+
+```bash
+grep -n 'tool_gate' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その値を書き換えます。**1行も出なければ、次で足してください
+（v0.1.9 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
+
 ```yaml
 claude:
+  # …（ほかの設定）
   tool_gate:
-    mode: off
+    mode: off      # 既定は public_only。この値を書き換える
 ```
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
@@ -1229,11 +1248,18 @@ continuo が知っているのは `tracker` に書いた Status だけなので�
 | **終わったとみなす**（片付けてよい） | `tracker.terminal_states` にその名前を書き足す |
 | **まだ作業を続けさせたい** | **先に `cleanup.on_states` からその行を消してから**、`tracker.active_states` に書き足す |
 
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
+`tracker:` も `cleanup:` も `continuo init` が置いた `WORKFLOW.md` に既にあるので、
+**貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+**一覧に名前を1つ足すだけです。**
+
 ```yaml
 tracker:
-  terminal_states: ["Done", "Archived"]   # 終わったとみなす Status に並べる
+  # …（ほかの設定）
+  terminal_states: ["Done", "Archived"]   # 既にある行。この一覧へ名前を足す
 cleanup:
-  on_states: ["Done", "Archived"]         # 片付けを始める Status は、上の一覧の中から選ぶ
+  # …（ほかの設定）
+  on_states: ["Done", "Archived"]         # 既にある行。片付けを始める Status は、上の一覧の中から選ぶ
 ```
 
 **その名前が `tracker.automated_state_rewrite` のキーにもある場合は、消す先が2つあります。**
@@ -2458,14 +2484,34 @@ cd ~/continuo-work && continuo doctor && continuo
 自動化が Status を動かしたとき、`tracker.unknown_state_grace_ms` の猶予を置いてからエージェントを止めます。
 **つまり「PR を作ってから CI の直しを続ける」流れでは、途中で止まります。**
 
-**何を書くか。**`tracker:` の下に、`automated_state_rewrite` の対応表を足します。
+**何を書くか。**`tracker.automated_state_rewrite` の対応表を書きます。
 **左が、自動化が書き込む Status 名です。右が、戻したい Status 名です。**
+
+**雛形には `automated_state_rewrite: {}` の行が既にあります。**その `{}` を書き換えます。
+**塊ごと貼り替えないでください。**`tracker:` も `active_states:` も `automated_state_rewrite:` も
+既にあるので、**貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+
+**まず、いまあるかどうかを確かめてください。**
+
+```bash
+grep -n 'automated_state_rewrite' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その `{}` を下の図のように書き換えます。**1行も出なければ、次で足してから書き換えてください
+（v0.1.8 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**下の yaml は、どこに何が入るかの図です。**
 
 ```yaml
 tracker:
-  active_states: ["AI Ready", "AI In Progress"]
-  automated_state_rewrite:
-    "In Progress": "AI In Progress"
+  # …（ほかの設定）
+  active_states: ["AI Ready", "AI In Progress"]   # 既にある行（値はあなたのカンバンに合わせたもの）
+  automated_state_rewrite:                        # 既にある行（雛形では {} が付いています）
+    "In Progress": "AI In Progress"               # ← これを足す
     # 左：自動化が書き込む Status 名（カンバンの選択肢と1文字ずつ合わせる）
     # 右：戻したい Status 名（必ず active_states の中から選ぶ）
 ```
