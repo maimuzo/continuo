@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "db39a2d5ca616403cc2be061baac5d42e2b0d168563e9124961f30840be7e4b1",
+  "_source_sha256": "776c870636654f1d1885b766977c569ee6e727a45117cfeb218db4d06ce4d908",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -242,6 +242,7 @@
   "config.validate.handoff_progress_interval_too_long": "Use a value shorter than tracker.provider.handoff.idle_timeout_ms (%d ms). If it is longer, the assignment is released before the agent writes, even when the agent follows the instruction",
   "config.validate.handoff_margin_range": "Use a value from 0 to 100",
   "config.validate.handoff_on_assignee_gate": "Use \"warn_and_comment\" or \"warn_only\"",
+  "config.validate.rate_limit_weekly_wait_range": "Use 0 or a positive number (in minutes; 0 means no limit)",
   "config.validate.handoff_recheck_interval_range": "Use 0 or greater (0 never re-checks the assignee while a run is going)",
   "config.validate.invalid_value": "config key %[1]s value %[2]v is invalid: %[3]s",
   "config.validate.required": "config key %s is required but empty",

@@ -1288,6 +1288,9 @@ const (
 	// KeyConfigValidateHandoffOnAssigneeGate は
 	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
+	// KeyConfigValidateRateLimitWeeklyWaitRange は
+	// rate_limit.weekly_wait_limit_minutes が負のときに出る（issue #197）。
+	KeyConfigValidateRateLimitWeeklyWaitRange Key = "config.validate.rate_limit_weekly_wait_range"
 )
 
 // 設定値の環境変数の展開・チルダの展開（internal/config の expand）のエラーの文言。
@@ -2917,6 +2920,7 @@ var allKeys = []Key{
 	KeyConfigValidateHandoffRecheckIntervalRange,
 	KeyConfigValidateHandoffMarginRange,
 	KeyConfigValidateHandoffOnAssigneeGate,
+	KeyConfigValidateRateLimitWeeklyWaitRange,
 	KeyConfigExpandTrailingDollar,
 	KeyConfigExpandUnclosedBrace,
 	KeyConfigExpandEmptyEnvName,
