@@ -215,13 +215,17 @@ func openRegularFile(path string) (*os.File, error) {
 	return f, nil
 }
 
-// hasTranscriptFor は、そのセッション UUID の会話の記録が残っているかを返す（設計 3-3c）。
+// mayResumeSession は、そのセッション UUID へ `--resume` を投げてよいかを返す（設計 3-3c）。
+//
+// **「記録がある」ではない。**記録があるかを決められなかったときも真を返すので、
+// **名前で名乗れるのは「復帰を試してよい」までである。**
 //
 // **記録の無い UUID へ `--resume` を投げると、`herdr.startup_timeout_ms` をまるごと捨てる。**
 // `claude --resume <無い UUID>` は `No conversation found with session ID:` を出して落ち、
 // herdr 経由では `agent.start` が timeout を返すので、`confirmStartupWithRestart` が
-// 期限まで `agent.start` をやり直し続ける。**着手が段9 の途中で落ちると、身元ファイルには
-// 会話が1度も作られていない UUID が残る**ので、そのまま復帰しにいく道がある。
+// 期限まで `agent.start` をやり直し続ける。**着手が段6 より先で落ちると、身元ファイルには
+// 会話が1度も作られていない UUID が残る**ので、そのまま復帰しにいく道がある
+// （段6 で UUID を書いたあと、段7・段8・段9 のどこで落ちても同じ状態になる）。
 //
 // **置き場所のディレクトリ名は当てない。**Claude Code が cwd を1つのディレクトリ名へ畳むときの
 // 綴り直しの規則は確かめきれていない（[internal/redact/redact.go](../redact/redact.go) の
@@ -256,7 +260,7 @@ func openRegularFile(path string) (*os.File, error) {
 // **UUID がパスの部品として使えない形のときだけは false である**（探しにいかない）。
 // **そこを true にしてはならない。**`..` を含む値で「記録がある」と答えることになり、
 // この関数が塞いでいる穴がそのまま開く。
-func (o *Orchestrator) hasTranscriptFor(sessionUUID string) bool {
+func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
 	// **身元ファイルは worktree の中にあり、エージェントが書き換えられる**（設計 3-2 / 3-23）。
 	// **`agent_id` と同じ規則で足りる**（英数字と `-` と `_` だけ。セッション UUID はこの形に収まる）。
 	// `/` も `\` も `.` も通さないので、`..` で根の外へ出る組み立て方が成立しない。
@@ -355,7 +359,7 @@ func subagentDirOf(parentPath, root string) (string, bool) {
 
 // safeAgentID は `agent_id` をパスの部品として使ってよいかを判定する。
 //
-// **セッション UUID にも使う**（`hasTranscriptFor`）。どちらも外部が書き換えられる値を
+// **セッション UUID にも使う**（`mayResumeSession`）。どちらも外部が書き換えられる値を
 // ファイル名の部品にするので、通してよい文字は同じでよい。**UUID は英数字と `-` だけなので
 // この規則に収まる。**
 //

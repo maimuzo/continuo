@@ -2033,7 +2033,15 @@ func sessionTranscriptDir(t *testing.T, fx *fixture) string {
 	t.Helper()
 	// **文章の約束を、機械で止める。**既定の根のまま記録を置くと、そのテストは
 	// **前の実行の置き土産で通るようになり、守りの向きを逆にしても気づけない。**
-	if fx.TranscriptRoot == tempRoot(t) {
+	//
+	// **解決してから比べる。**`tempRoot` は `filepath.EvalSymlinks` を通すので、
+	// macOS では `/private/var/folders/…` になる。**素の `os.TempDir()`（`/var/folders/…`）を
+	// 渡されると、字句の比較では素通りする。**
+	root := fx.TranscriptRoot
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	if root == tempRoot(t) {
 		t.Fatalf("記録の根が機械全体の一時ディレクトリのままです。" +
 			"newFixture へ fixtureOptions{TranscriptRoot: t.TempDir()} を渡してください")
 	}

@@ -829,11 +829,12 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 	// **会話の記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。
 	//
-	// **着手が段9 の途中で落ちると、身元ファイルには会話が1度も作られていない UUID が残る。**
-	// `restartWithNewSession` が採り直した UUID を身元ファイルへ書いたあとで、
-	// 立て直しの `agent.start` も失敗した場合である。**そのまま復帰しにいくと、
-	// `confirmStartupWithRestart` が `herdr.startup_timeout_ms` を使い切るまで
-	// `agent.start` をやり直し続ける**（利用者の実測で18回・約60秒）。
+	// **着手が段6 より先で落ちると、身元ファイルには会話が1度も作られていない UUID が残る。**
+	// 段6 で UUID を書いたあと、段7（before_run）・段8（pane を引く・pane の rename）・
+	// 段9（`agent.start`）のどこで落ちても同じ状態になる。`restartWithNewSession` が
+	// 採り直した UUID を書いたあとで立て直しの `agent.start` も失敗した場合も、その1つである。
+	// **そのまま復帰しにいくと、`confirmStartupWithRestart` が `herdr.startup_timeout_ms` を
+	// 使い切るまで `agent.start` をやり直し続ける**（利用者の実測で18回・約60秒）。
 	//
 	// **最後は自力で新しいセッションへ倒れるので壊れはしないが、空回りしている間、
 	// その枠は他の issue に使えない。**
@@ -842,7 +843,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **2行出すと、運用者が「新しいセッションを立てて着手します」を数えて新規の着手を
 	// 数えるときに、この経路を二重に数える。**
 	skippedResume := ""
-	if resumeUUID != "" && !o.hasTranscriptFor(resumeUUID) {
+	if resumeUUID != "" && !o.mayResumeSession(resumeUUID) {
 		skippedResume = resumeUUID
 		resumeUUID = ""
 	}
