@@ -129,6 +129,76 @@ typo1件のために104件のボードを並べ替えるのが、この節の目
 **印で防げない以上、この規則が唯一の防波堤である。**
 同じ修正を2つの worktree が並行して行い、片方の成果が黙って失われる。
 
+## リリースに入れるものを、issue 1件で管理する
+
+**次のリリースに何を入れるかは、issue を1件立てて管理する。**
+**そこへ、グループの代表を sub-issue としてぶら下げる。**代表には、その sub-issue をぶら下げる。
+**3階層になる。**
+
+```
+リリース管理の issue（次のリリースに何を入れるかを決め、着手の進みを追う）
+  ├─ グループの代表A
+  │    └─ 代表A と一緒に直す issue
+  ├─ グループの代表B
+  │    ├─ 代表B と一緒に直す issue
+  │    └─ 代表B と一緒に直す issue
+  └─ 単独の issue（グループを持たないもの）
+```
+
+### 各階層が持つもの
+
+| 階層 | 何 | 何を持つか | ボードの Status |
+| --- | --- | --- | --- |
+| **1** | **リリース管理の issue** | **着手順序のリスト。**リストの並び順が、そのまま着手順序である | `Ice Box`。ボードの先頭に置く |
+| **2** | **グループの代表** | そのグループの計画（一緒に直す issue・共通の原因・着手の順番・進め方の8段） | `Ice Box` |
+| **3** | **代表以外** | **何をすべきかのコンテキストだけ。**continuo は処理しない | `Ice Box`。**Status を外してはならない** |
+
+**リリース管理の issue の本文には、着手順序をリストで書く。**
+**リストの順番と、ボードの `Ice Box` の並び順を揃える。**片方だけ直すと食い違う。
+
+### 関連付けのしかた
+
+```bash
+# 親の node id と、子の node id を取る
+PARENT=$(gh issue view <親の番号> --json id --jq .id)
+CHILD=$(gh issue view <子の番号> --json id --jq .id)
+
+# ぶら下げる（GraphQL-Features のヘッダは、2026-09-04 時点では無くても schema に出る）
+gh api graphql -H "GraphQL-Features: sub_issues" \
+  -f query="mutation { addSubIssue(input: {issueId: \"$PARENT\", subIssueId: \"$CHILD\"}) { subIssue { number } } }"
+```
+
+**書き込みの間は1秒空ける**（[docs/plans/continuo_design.md:8581](../../docs/plans/continuo_design.md#L8581)）。
+
+**確かめ方。**
+
+```bash
+gh api graphql -H "GraphQL-Features: sub_issues" \
+  -f query='query { repository(owner:"<owner>", name:"<repo>"){ issue(number:<親の番号>){ subIssues(first:20){ nodes { number } } } } }' \
+  --jq '[.data.repository.issue.subIssues.nodes[].number] | join(", ")'
+```
+
+### 代表以外が処理される流れ
+
+**代表以外は、continuo が dispatch しない。**`Ice Box` は `tracker.active_states` の既定
+（`Ready` と `In Progress`。[internal/config/default.go:107](../../internal/config/default.go#L107)）に入っていないためである。
+
+| 順 | 何が起きるか |
+| --- | --- |
+| 1 | 人間が代表を `Ready` へ上げる |
+| 2 | continuo が代表を dispatch する |
+| 3 | **エージェントが、代表と代表以外を1つの worktree でまとめて直す** |
+| 4 | **エージェントが、代表以外の issue へもコメントを1件ずつ書く**（何がどう直ったか） |
+| 5 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
+
+**段4 の指示は、2026-09-04 時点で組み込みの指示書に無い。**
+**足す先は [internal/prompt/builtin.md](../../internal/prompt/builtin.md) の 7-2 である。**
+
+**クローズ後、代表以外は `Ice Box` に残る。**GitHub Projects v2 は、issue を閉じても Status を動かさない
+（自動化を設定していれば別である）。**片付けたいときは、人間がボードの表示でクローズ済みを隠すか、`Done` へ動かす。**
+
+---
+
 ## 着手順序を組むときの観点（6つ）
 
 | 観点 | 中身 |
