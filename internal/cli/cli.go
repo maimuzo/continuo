@@ -35,6 +35,7 @@ import (
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/setup"
+	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/trust"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -72,6 +73,14 @@ func runVersion(stdout io.Writer) int {
 type Deps struct {
 	// DoctorRun は前提の検査である。
 	DoctorRun func(ctx context.Context, opts doctor.Options) doctor.Report
+	// PromptFetchIssue は `continuo prompt --show --url` が issue を1件引く。
+	//
+	// **GitHub を叩くので、検査では必ず差し替える。**
+	// 戻り値の2つ目は「ボードから issue として組み立てられたか」であり、
+	// **偽になる理由は「載っていない」だけではない**（Status 未設定・archive 済みなど）。
+	PromptFetchIssue func(
+		ctx context.Context, cfg config.TrackerConfig, endpoint, identifier string,
+	) (tracker.Issue, bool, error)
 	// UserHomeDir はホームディレクトリを引く。`~/.claude.json` を書き換える先が決まるので、
 	// **検査では必ず一時ディレクトリへ向ける。**
 	UserHomeDir func() (string, error)
@@ -107,6 +116,9 @@ type Deps struct {
 func (d Deps) withDefaults() Deps {
 	if d.DoctorRun == nil {
 		d.DoctorRun = doctor.Run
+	}
+	if d.PromptFetchIssue == nil {
+		d.PromptFetchIssue = fetchIssueForPrompt
 	}
 	if d.UserHomeDir == nil {
 		d.UserHomeDir = os.UserHomeDir
@@ -180,7 +192,7 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 		case "doctor":
 			return runDoctor(d, args[1:], stdout, stderr)
 		case "prompt":
-			return runPrompt(args[1:], stdout, stderr)
+			return runPrompt(d, args[1:], stdout, stderr)
 		case "trust":
 			return runTrust(d, args[1:], stdout, stderr)
 		case "abandon":
@@ -292,36 +304,64 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 
 // runPrompt は `continuo prompt` サブコマンドである（設計 5-3c / 5-3d）。
 //
-// **送る文面を、変数を展開しないまま標準出力へ出す。**
-// **`{{.issue.identifier}}` はそのまま出る。**実在の issue の値で埋める形は持たない
-// （そのためにはカンバンを丸ごと読むことになり、この目的には釣り合わない）。
+// **3つの形がある。**
 //
-// **2つの形がある。**
-//
-//	continuo prompt --show [ディレクトリ]             送る文面の全文（組み込み + 本文）
+//	continuo prompt --show [ディレクトリ]             送る文面の全文。**変数は展開しない**
 //	continuo prompt --show --builtin                  組み込みだけ。**WORKFLOW.md を読まない**
+//	continuo prompt --show --url <issue の URL>       送る文面の全文。**変数をその issue の値で展開する**
 //
 // **`--builtin` は、自分が書いた本文と仕組みの側を見比べるための道である。**
 // 組み込みが既に言っていることを、本文に二重に書かずに済む。
 //
+// **`--url` は、本当に送られる文面を事前に確かめるための道である**（issue #183）。
+// **番号ではなく URL で指す。**1枚のカンバンに複数のリポジトリの issue が載るので、
+// 番号だけではどのリポジトリの issue か決まらない（人間の判断。設計 5-3f）。
+// **変数は `prompt.RenderData` が組み立てる。**continuo が実際に送る経路と同じ関数であり、
+// **別々に組み立てると、このコマンドは「送られる文面」ではないものを見せることになる。**
+//
+// **`--builtin` と `--url` は同時に指定できない。**`--builtin` の売りは
+// 「`WORKFLOW.md` を1バイトも読まない」ことなのに、`--url` は front matter の
+// `tracker.provider` を読まないと issue を引けない。**同時に許すと、その売りが消えたまま
+// `--builtin` を名乗ることになる。**
+//
 // **標準出力には、送る文面だけを出す。**内訳は標準エラーへ出すので、
 // `continuo prompt --show --builtin > builtin.md` が送る文面と1バイトも違わないファイルになる。
 //
+// d: 外部へ繋ぐ処理。**`--url` を付けたときだけ GitHub を叩く。**
 // args: `continuo prompt` に続く引数。位置引数は WORKFLOW.md があるディレクトリを0個か1個。
 // stdout / stderr: 出力先。
-// 戻り値: 終了コード。0 は出せた（--help / -h も 0）、1 は読めなかった、
+// 戻り値: 終了コード。0 は出せた（--help / -h も 0）、
+// 1 は読めなかった（`WORKFLOW.md` / カンバン / 変数展開のいずれか）、
 // 2 は引数の指定が誤っている（`--show` を付けていない場合を含む）。
-func runPrompt(args []string, stdout, stderr io.Writer) int {
+func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo prompt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	showFlag := fs.Bool("show", false, i18n.T(i18n.KeyCLIPromptFlagShow))
 	builtinFlag := fs.Bool("builtin", false, i18n.T(i18n.KeyCLIPromptFlagBuiltin))
+	urlFlag := fs.String("url", "", i18n.T(i18n.KeyCLIPromptFlagURL))
+	attemptFlag := fs.Int("attempt", 0, i18n.T(i18n.KeyCLIPromptFlagAttempt))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 	if !*showFlag {
 		// **黙って全文を出さない。**将来 `continuo prompt` に別の仕事を足す余地を残す。
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrShowRequired))
+		return 2
+	}
+	if *urlFlag != "" && *builtinFlag {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLWithBuiltin))
+		return 2
+	}
+	// **`--attempt` が指定されたかを、値ではなく `Visit` で見る。**
+	// 既定の 0 と「0 を明示された」を区別しないと、`--attempt 0` が黙って1回目になる。
+	attemptGiven := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "attempt" {
+			attemptGiven = true
+		}
+	})
+	if attemptGiven && *attemptFlag < 1 {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrAttemptPositive, *attemptFlag))
 		return 2
 	}
 
@@ -365,8 +405,92 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 	}
 
 	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
-	fmt.Fprint(stdout, frag.Text())
+
+	if *urlFlag == "" {
+		fmt.Fprint(stdout, frag.Text())
+		printPromptBreakdown(stderr, frag)
+		return 0
+	}
+
+	var attempt *int
+	if attemptGiven {
+		n := *attemptFlag
+		attempt = &n
+	}
+	return runPromptExpanded(d, *urlFlag, attempt, loaded.Config.Tracker, frag, stdout, stderr)
+}
+
+// runPromptExpanded は `continuo prompt --show --url` の後半である（設計 5-3f。issue #183）。
+//
+// **変数が埋まらなかったら、何も出さずに終了コード 1 で断る。**
+// **展開せずに出してはならない。**`--url` を付けたのに付けなかったときと同じものが出ると、
+// **利用者はそれに気づけない。**気づけない出力が、いちばん悪い落ち方である。
+//
+// d: 外部へ繋ぐ処理。
+// rawURL: `--url` に渡された文字列。
+// attempt: 何回目として展開するか。**nil なら1回目。**
+// trackerCfg: front matter の tracker セクション。
+// frag: 組み立てた断片。
+// stdout / stderr: 出力先。
+// 戻り値: 終了コード。0 は出せた、1 は引けなかったか展開できなかった、2 は URL の形が違う。
+func runPromptExpanded(
+	d Deps,
+	rawURL string,
+	attempt *int,
+	trackerCfg config.TrackerConfig,
+	frag prompt.Fragments,
+	stdout, stderr io.Writer,
+) int {
+	identifier, err := promptIssueIdentifier(rawURL)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLInvalid, err))
+		return 2
+	}
+
+	// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（`runDoctor` と同じ）。
+	// **宛先を確かめずにトークンを送らない。**
+	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)
+	if err := daemon.ValidateGraphQLEndpoint(endpoint); err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGeneric, err))
+		return 1
+	}
+
+	// **返らないまま人間を待たせない。**
+	ctx, cancel := context.WithTimeout(context.Background(), promptFetchTimeout)
+	defer cancel()
+
+	issue, ok, err := d.PromptFetchIssue(ctx, trackerCfg, endpoint, identifier)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrFetchFailed, err))
+		return 1
+	}
+	if !ok {
+		// **「載っていません」とだけ言わない。**`FetchIssueByIdentifier` が偽を返す理由は
+		// 5通りあり、Status 未設定は本番のボードでも104件中4件ある通常の状態である。
+		// **`Bootstrap` を通していないので、`status_field` の綴りがずれていると全件がそう見える。**
+		// **唯一の検出手段が `continuo doctor` なので、そこまで案内する。**
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrIssueNotOnBoard, identifier))
+		return 1
+	}
+
+	text, err := frag.Render(prompt.RenderData(issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs))
+	if err != nil {
+		// **`--url` を付けて初めて変数展開が走る。**本文の `{{if}}` の閉じ忘れや
+		// 一覧に無い変数は、ここで初めて表に出る。**部分的な文面を出さない。**
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrRenderFailed, err))
+		return 1
+	}
+
+	fmt.Fprint(stdout, text)
 	printPromptBreakdown(stderr, frag)
+	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownExpanded, issue.Identifier))
+	// **何回目として展開したかを必ず出す。**出さないと、`## 7-5. これは N 回目の試行です` が
+	// 出ないことを「文面から消えた」と読み違える。
+	shown := 1
+	if attempt != nil {
+		shown = *attempt
+	}
+	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownAttempt, shown))
 	return 0
 }
 

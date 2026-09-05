@@ -1,0 +1,259 @@
+// `continuo prompt --show --url` の検査である
+// （issue #183（エージェントへ実際に送られる文面を、事前に確かめられない（変数が展開されない）））。
+//
+// **外部へ1回も接続しない。**issue を引く処理は `cli.Deps` で差し替える。
+package cli_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/maimuzo/continuo/internal/cli"
+	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/tracker"
+)
+
+// promptIssueURL は、検査で使う issue の URL である。
+const promptIssueURL = "https://github.com/octocat/hello-world/issues/42"
+
+// fakePromptIssue は、ボードから引けたことにする issue を1件返す。
+//
+// **`Identifier` は URL から作った識別子と一致させる。**内訳の1行に出るためである。
+//
+// 戻り値: 変数展開に使う issue。
+func fakePromptIssue() tracker.Issue {
+	url := promptIssueURL
+	branch := "work/issue-42"
+	return tracker.Issue{
+		Identifier: "octocat/hello-world#42",
+		Owner:      "octocat",
+		Repo:       "hello-world",
+		Number:     42,
+		URL:        &url,
+		Title:      "検査に使う issue",
+		State:      "Ready",
+		Labels:     []string{"bug"},
+		BranchName: &branch,
+	}
+}
+
+// promptFetchOK は、issue が1件引けたことにする差し替えである。
+//
+// 戻り値: 引けた issue と、組み立てられたことを表す true。
+func promptFetchOK(
+	_ context.Context, _ config.TrackerConfig, _, _ string,
+) (tracker.Issue, bool, error) {
+	return fakePromptIssue(), true, nil
+}
+
+// 目的: `--url` が、変数をその issue の値で展開した文面を標準出力へ出すことを固定する
+// （issue #183）。
+//
+// **なぜ要るか。**`continuo prompt --show` は変数を展開しないので、
+// `{{.issue.identifier}}` や `{{if .attempt}}` がそのまま出る。
+// **`WORKFLOW.md` の本文にテンプレートを書いた人は、それが実際にどう展開されるかを事前に確かめられない。**
+// **間違いに気づくのは、エージェントが動き出したあとになる。**
+//
+// 与える情報: `{{.issue.identifier}}` と `{{.issue.title}}` を使う本文と、`--url`。
+// 成功条件: 終了コードが 0 で、標準出力に展開後の値が入り、`{{` が1つも残っていないこと。
+func TestPromptURL_変数をその_issue_の値で展開する(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	setBody(t, dir, "## 固有\n\n{{.issue.identifier}} / {{.issue.title}} / {{.push_branch}}\n")
+
+	deps := cli.Deps{PromptFetchIssue: promptFetchOK}
+	code, stdout, stderr := runCLIWith(deps,
+		[]string{"prompt", "--show", "--url", promptIssueURL, dir}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
+	}
+	for _, want := range []string{"octocat/hello-world#42", "検査に使う issue", "work/issue-42"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("展開した値 %q が標準出力にありません", want)
+		}
+	}
+	// **`{{` が1つでも残っていたら、確かめたい当のものが確かめられていない。**
+	if strings.Contains(stdout, "{{") {
+		i := strings.Index(stdout, "{{")
+		t.Errorf("変数が展開されずに残っています: %q", stdout[i:min(i+60, len(stdout))])
+	}
+	// **内訳は標準エラーへ出す。**標準出力は送る文面と1バイトも違わないままにする。
+	if !strings.Contains(stderr, "octocat/hello-world#42") {
+		t.Errorf("どの issue の値で展開したかが内訳に出ていません: %q", stderr)
+	}
+}
+
+// 目的: 何回目の試行として展開したかを、内訳へ必ず出すことを固定する（issue #183）。
+//
+// **なぜ要るか。**`--attempt` を省くと1回目として展開するので、
+// 組み込みの `## 7-5. これは {{.attempt}} 回目の試行です` は出ない。
+// **出さないと、利用者はそれを「文面から消えた」と読み違える。**
+//
+// 与える情報: `--url` だけを渡した場合と、`--attempt 3` を足した場合。
+// 成功条件: どちらも内訳に回数が出て、`--attempt 3` では 7-5 の節が本文に現れること。
+func TestPromptURL_何回目として展開したかを内訳に出す(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	setBody(t, dir, "")
+	deps := cli.Deps{PromptFetchIssue: promptFetchOK}
+
+	code, stdout, stderr := runCLIWith(deps,
+		[]string{"prompt", "--show", "--url", promptIssueURL, dir}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
+	}
+	if !strings.Contains(stderr, "1") || !strings.Contains(stderr, "試行") {
+		t.Errorf("1回目として展開したことが内訳に出ていません: %q", stderr)
+	}
+	if strings.Contains(stdout, "回目の試行です") {
+		t.Error("1回目なのに 7-5 の節が出ています（{{if .attempt}} が偽になっていません）")
+	}
+
+	code, stdout, stderr = runCLIWith(deps,
+		[]string{"prompt", "--show", "--url", promptIssueURL, "--attempt", "3", dir}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
+	}
+	if !strings.Contains(stdout, "3 回目の試行です") {
+		t.Error("--attempt 3 なのに 7-5 の節が出ていません")
+	}
+}
+
+// 目的: 引数の誤りを、終了コード 2 で断ることを固定する（issue #183）。
+//
+// **`--builtin` と `--url` を同時に許さない。**`--builtin` の売りは
+// 「`WORKFLOW.md` を1バイトも読まない」ことなのに、`--url` は front matter の
+// `tracker.provider` を読まないと issue を引けない。
+// **同時に許すと、その売りが消えたまま `--builtin` を名乗ることになる。**
+//
+// **pull request の URL は受け付けない。**pull request と issue は番号を共有するので、
+// **受け付けると「pull request の URL を貼ったのに issue の文面が出る」ことになる。**
+//
+// 与える情報: 誤った組み合わせと誤った URL。
+// 成功条件: どれも終了コードが 2 で、標準出力が空であること。
+func TestPromptURL_引数の誤りは終了コード2で断る(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	setBody(t, dir, "")
+	// **GitHub を叩く前に断ることも確かめる。**叩いたら検査が落ちるようにしておく。
+	called := 0
+	deps := cli.Deps{PromptFetchIssue: func(
+		_ context.Context, _ config.TrackerConfig, _, _ string,
+	) (tracker.Issue, bool, error) {
+		called++
+		return fakePromptIssue(), true, nil
+	}}
+
+	for _, c := range []struct {
+		name string
+		args []string
+	}{
+		{"--builtin と同時", []string{"prompt", "--show", "--builtin", "--url", promptIssueURL}},
+		{"pull request の URL", []string{"prompt", "--show", "--url",
+			"https://github.com/octocat/hello-world/pull/42", dir}},
+		{"issue の URL ではない", []string{"prompt", "--show", "--url", "https://example.com/", dir}},
+		{"番号に前置ゼロ", []string{"prompt", "--show", "--url",
+			"https://github.com/octocat/hello-world/issues/042", dir}},
+		{"--attempt が0", []string{"prompt", "--show", "--url", promptIssueURL, "--attempt", "0", dir}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			code, stdout, stderr := runCLIWith(deps, c.args, "")
+			if code != 2 {
+				t.Errorf("終了コードが %d です（2 を期待。stderr: %s）", code, stderr)
+			}
+			if stdout != "" {
+				t.Errorf("断ったのに標準出力へ出しています: %q", stdout)
+			}
+		})
+	}
+	if called != 0 {
+		t.Errorf("引数を断る前に GitHub を叩いています（%d 回）", called)
+	}
+}
+
+// 目的: 引けなかったときに、展開せずに出さないことを固定する（issue #183）。
+//
+// **なぜ要るか。**このコマンドの目的は「本当に送られる文面を確かめる」ことである。
+// **展開に失敗したものを出すと、`--url` を付けたのに付けなかったときと同じものが出て、
+// 利用者はそれに気づけない。**気づけない出力が、いちばん悪い落ち方である。
+//
+// **「載っていません」とだけ言わない。**`FetchIssueByIdentifier` が偽を返す理由は5通りあり、
+// Status 未設定は本番のボードでも104件中4件ある通常の状態である。
+// **`Bootstrap` を通していないので、`status_field` の綴りがずれていると全件がそう見える。**
+// **唯一の検出手段が `continuo doctor` なので、そこまで案内する。**
+//
+// 与える情報: 引けなかった場合と、ボードから組み立てられなかった場合。
+// 成功条件: どちらも終了コードが 1 で、標準出力が空であること。
+func TestPromptURL_引けなかったら何も出さずに断る(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	setBody(t, dir, "")
+
+	t.Run("ボードを読めない", func(t *testing.T) {
+		deps := cli.Deps{PromptFetchIssue: func(
+			_ context.Context, _ config.TrackerConfig, _, _ string,
+		) (tracker.Issue, bool, error) {
+			return tracker.Issue{}, false, errors.New("接続できません")
+		}}
+		code, stdout, stderr := runCLIWith(deps,
+			[]string{"prompt", "--show", "--url", promptIssueURL, dir}, "")
+		if code != 1 {
+			t.Errorf("終了コードが %d です（1 を期待）", code)
+		}
+		if stdout != "" {
+			t.Errorf("断ったのに標準出力へ出しています: %q", stdout)
+		}
+		if !strings.Contains(stderr, "接続できません") {
+			t.Errorf("読めなかった理由が出ていません: %q", stderr)
+		}
+	})
+
+	t.Run("ボードから組み立てられない", func(t *testing.T) {
+		deps := cli.Deps{PromptFetchIssue: func(
+			_ context.Context, _ config.TrackerConfig, _, _ string,
+		) (tracker.Issue, bool, error) {
+			return tracker.Issue{}, false, nil
+		}}
+		code, stdout, stderr := runCLIWith(deps,
+			[]string{"prompt", "--show", "--url", promptIssueURL, dir}, "")
+		if code != 1 {
+			t.Errorf("終了コードが %d です（1 を期待）", code)
+		}
+		if stdout != "" {
+			t.Errorf("断ったのに標準出力へ出しています: %q", stdout)
+		}
+		// **理由を1つに決めつけない。**Status 未設定も archive 済みもここへ来る。
+		for _, want := range []string{"Status", "doctor"} {
+			if !strings.Contains(stderr, want) {
+				t.Errorf("断りの文言に %q がありません（原因を絞り込めません）: %q", want, stderr)
+			}
+		}
+	})
+}
+
+// 目的: `--url` を付けないときは、いままでどおり変数を展開しないことを固定する（issue #183）。
+//
+// **足した道が、既にある道を変えていないことを見る。**
+//
+// 与える情報: `--url` を付けない `continuo prompt --show`。
+// 成功条件: 終了コードが 0 で、`{{.issue.identifier}}` がそのまま出ること。GitHub を叩かないこと。
+func TestPromptURL_urlを付けなければ展開しない(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	setBody(t, dir, "## 固有\n\n{{.issue.identifier}}\n")
+	called := 0
+	deps := cli.Deps{PromptFetchIssue: func(
+		_ context.Context, _ config.TrackerConfig, _, _ string,
+	) (tracker.Issue, bool, error) {
+		called++
+		return fakePromptIssue(), true, nil
+	}}
+
+	code, stdout, stderr := runCLIWith(deps, []string{"prompt", "--show", dir}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
+	}
+	if !strings.Contains(stdout, "{{.issue.identifier}}") {
+		t.Error("--url を付けていないのに変数が展開されています")
+	}
+	if called != 0 {
+		t.Errorf("--url を付けていないのに GitHub を叩いています（%d 回）", called)
+	}
+}

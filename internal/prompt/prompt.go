@@ -27,6 +27,7 @@ import (
 	"text/template"
 
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // Marker は builtin.md を前半と後半に切る目印の行である。
@@ -554,6 +555,68 @@ func (f Fragments) Validate() error {
 		}
 	}
 	return nil
+}
+
+// RenderData は、送る文面へ渡す変数を組み立てる（設計 5-3 / 5-3f）。
+//
+// **組み立てる場所はここだけである。**continuo が実際に送る経路
+// （`internal/orchestrator` の `renderFirstPrompt`）と、人間が事前に確かめる経路
+// （`continuo prompt --show --url`）が、どちらもこの関数を呼ぶ。
+//
+// **別々に組み立ててはならない。**片方を直したときにもう片方がずれる。
+// **ずれた瞬間、`--show --url` は「送られる文面」ではないものを見せることになり、
+// そのコマンドの目的そのものを失う。**
+//
+// **返す名前は `SampleData` と1つも違わないこと。**渡す側と検査する側が食い違うと、
+// **その名前を使った文面で continuo が起動しない**（同じ形の欠陥が3回起きている。
+// test/internal/prompt の `TestSampleData_送る文面が使える変数の一覧` がその2つを結んでいる）。
+//
+// issue: 対象の issue。
+// attempt: 試行回数。**1回目は nil を渡す**（仕様 12.3。`text/template` は nil を偽として
+// 扱うので `{{if .attempt}}` が正しく動く）。**キーごと省いてはならない。**
+// progressIntervalMs: 進捗報告を書かせる間隔（ミリ秒）。
+//
+//	**分へ直すのはこの中である。**呼び出し側で割らせない。
+//	割り算が2箇所に散ると、片方を直したときにずれる。
+//
+// 戻り値: 送る文面が使う名前を全部持つ変数の一覧。
+func RenderData(issue tracker.Issue, attempt *int, progressIntervalMs int) map[string]any {
+	url := ""
+	if issue.URL != nil {
+		url = *issue.URL
+	}
+	// push_branch は issue にリンクされた branch の生の名前である（設計 3-22d・5-3）。
+	//
+	// **push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
+	// これは「別の名前へ出せと issue に書かれていたときの候補」として渡す。
+	//
+	// **リンクが1本でないとき（0本・2本以上・別のリポジトリを指すとき）は空文字である。**
+	branch := ""
+	if issue.BranchName != nil {
+		branch = *issue.BranchName
+	}
+	// **1回目は nil のままにする。**`any` のゼロ値ではなく nil を入れる。
+	var attemptValue any
+	if attempt != nil {
+		attemptValue = *attempt
+	}
+	return map[string]any{
+		"issue": map[string]any{
+			"identifier": issue.Identifier,
+			"owner":      issue.Owner,
+			"repo":       issue.Repo,
+			"number":     issue.Number,
+			"url":        url,
+			"title":      issue.Title,
+			"state":      issue.State,
+			"labels":     issue.Labels,
+		},
+		"push_branch": branch,
+		"attempt":     attemptValue,
+		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
+		// **「3600000ミリ秒以上黙らないでください」では通じない。**
+		"progress_interval_minutes": progressIntervalMs / 60000,
+	}
 }
 
 // SampleData は、検査に使う作り物の issue の変数を返す（設計 5-3c）。

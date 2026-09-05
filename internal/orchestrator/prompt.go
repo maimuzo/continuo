@@ -7,6 +7,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -28,64 +29,16 @@ import (
 // 戻り値の2つ目: テンプレートの構文が誤っている場合、または一覧に無い変数を参照している
 // 場合のエラー。**どの断片の何行目かがエラーの文言に入る。**
 func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (string, error) {
-	url := ""
-	if issue.URL != nil {
-		url = *issue.URL
-	}
-	data := map[string]any{
-		"issue": map[string]any{
-			"identifier": issue.Identifier,
-			"owner":      issue.Owner,
-			"repo":       issue.Repo,
-			"number":     issue.Number,
-			"url":        url,
-			"title":      issue.Title,
-			"state":      issue.State,
-			"labels":     issue.Labels,
-		},
-		// push_branch は issue にリンクされた branch の生の名前である（設計 3-22d・5-3）。
-		//
-		// **push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
-		// これは「別の名前へ出せと issue に書かれていたときの候補」として渡す。
-		// **base と push 先を同じものに固定すると、1つの issue で PR を複数出す形が書けなくなる。**
-		//
-		// **リンクが1本でないとき（0本・2本以上・別のリポジトリを指すとき）は空文字である。**
-		"push_branch": pushBranchValue(issue),
-		"attempt":     attemptValue(attempt),
-		// progress_interval_minutes は、進捗報告を書かせる間隔（分）である（設計 5-3n）。
-		//
-		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
-		// **「3600000ミリ秒以上黙らないでください」では通じない。**
-		"progress_interval_minutes": o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs / 60000,
-	}
+	// **変数はここで組み立てない**（issue #183）。`continuo prompt --show --url` も
+	// **同じ `prompt.RenderData` を呼ぶ。**別々に組み立てると、片方を直したときにずれ、
+	// **あのコマンドが「送られる文面」ではないものを見せることになる。**
+	data := prompt.RenderData(issue, attempt, o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs)
 
 	out, err := o.promptFragments.Render(data)
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptRenderFailed, err)
 	}
 	return out, nil
-}
-
-// pushBranchValue は `.push_branch` に入れる値を返す（設計 3-22d）。
-//
-// issue: 対象の issue。
-// 戻り値: リンクされた branch の生の名前。リンクが1本でなければ空文字。
-func pushBranchValue(issue tracker.Issue) string {
-	if issue.BranchName == nil {
-		return ""
-	}
-	return *issue.BranchName
-}
-
-// attemptValue は `.attempt` に入れる値を返す。
-//
-// attempt: 試行回数。nil なら1回目である。
-// 戻り値: 1回目は nil、それ以外は回数。
-func attemptValue(attempt *int) any {
-	if attempt == nil {
-		return nil
-	}
-	return *attempt
 }
 
 // BuildContinuationPrompt は2回目以降のプロンプトを組み立てる（設計 5-4）。

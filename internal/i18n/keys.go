@@ -2416,6 +2416,26 @@ const (
 	KeyCLIPromptBreakdownBodyMissing Key = "cli.prompt.breakdown_body_missing"
 	// KeyCLIPromptBreakdownBuiltinOnly は--builtin のときの内訳の1行である。
 	KeyCLIPromptBreakdownBuiltinOnly Key = "cli.prompt.breakdown_builtin_only"
+	// KeyCLIPromptFlagURL は--url の説明に出る。
+	KeyCLIPromptFlagURL Key = "cli.prompt.flag_url"
+	// KeyCLIPromptFlagAttempt は--attempt の説明に出る。
+	KeyCLIPromptFlagAttempt Key = "cli.prompt.flag_attempt"
+	// KeyCLIPromptErrURLWithBuiltin は--url と--builtin を同時に指定したときに出る。
+	KeyCLIPromptErrURLWithBuiltin Key = "cli.prompt.err_url_with_builtin"
+	// KeyCLIPromptErrURLInvalid は--url の値を issue の URL として読めないときに出る。
+	KeyCLIPromptErrURLInvalid Key = "cli.prompt.err_url_invalid"
+	// KeyCLIPromptErrAttemptPositive は--attempt が1未満のときに出る。
+	KeyCLIPromptErrAttemptPositive Key = "cli.prompt.err_attempt_positive"
+	// KeyCLIPromptErrFetchFailed はボードを読めないときに出る。
+	KeyCLIPromptErrFetchFailed Key = "cli.prompt.err_fetch_failed"
+	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がボードから組み立てられないときに出る。
+	KeyCLIPromptErrIssueNotOnBoard Key = "cli.prompt.err_issue_not_on_board"
+	// KeyCLIPromptErrRenderFailed は変数展開に失敗したときに出る。
+	KeyCLIPromptErrRenderFailed Key = "cli.prompt.err_render_failed"
+	// KeyCLIPromptBreakdownExpanded は--url で変数を展開したときの内訳の1行である。
+	KeyCLIPromptBreakdownExpanded Key = "cli.prompt.breakdown_expanded"
+	// KeyCLIPromptBreakdownAttempt は--url のときに何回目として展開したかを出す1行である。
+	KeyCLIPromptBreakdownAttempt Key = "cli.prompt.breakdown_attempt"
 )
 
 // allKeys は宣言済みのキーを全部並べたものである。
@@ -3326,6 +3346,16 @@ var allKeys = []Key{
 	KeyCLIPromptBreakdownBodyMissing,
 	KeyCLIPromptBreakdownWorkflowBody,
 	KeyCLIPromptBreakdownBuiltinOnly,
+	KeyCLIPromptFlagURL,
+	KeyCLIPromptFlagAttempt,
+	KeyCLIPromptErrURLWithBuiltin,
+	KeyCLIPromptErrURLInvalid,
+	KeyCLIPromptErrAttemptPositive,
+	KeyCLIPromptErrFetchFailed,
+	KeyCLIPromptErrIssueNotOnBoard,
+	KeyCLIPromptErrRenderFailed,
+	KeyCLIPromptBreakdownExpanded,
+	KeyCLIPromptBreakdownAttempt,
 }
 
 // AllKeys は宣言済みのキーを全部返す。
