@@ -1696,6 +1696,10 @@ type fixtureOptions struct {
 	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
 	// 空なら一時ディレクトリの根（tempRoot）を使う。
 	TranscriptRoot string
+	// ConfigPath は走行中に読み直す WORKFLOW.md の絶対パスである（設計 3-24）。
+	//
+	// **空なら読み直さない。**渡していないテストの挙動は変わらない。
+	ConfigPath string
 	// ContinuoPath は hook のコマンド行に書く実行ファイルのパスである。
 	// 空なら `/opt/continuo/bin/continuo` を使う。
 	ContinuoPath string
@@ -1844,7 +1848,9 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		// **1回目に送る文面は、断片の並びとして渡す**（設計 5-3c）。
 		// テストが与えるのは1枚のテンプレートなので、それを WORKFLOW.md の本文の
 		// 位置に置いた形で組み立てる（組み込みの前半と後半が前後に付く）。
-		Prompt:         prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
+		Prompt: prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
+		// **走行中の読み直しは、渡したテストでだけ走る**（設計 3-24）。
+		ConfigPath:     opts.ConfigPath,
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,

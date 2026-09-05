@@ -179,8 +179,10 @@ func Run(ctx context.Context, opts Options) error {
 
 	// 段1: 設定を読んで検証する。**ここで落ちても pane には触らない**（まだ何も発見していない）。
 	//
-	// **設定ファイルは起動時に1回だけ読む。**読み直しは実装していない（設計 3-24 が求める
-	// 「最後に正常だった設定で動き続ける」仕組みはまだ無い）。編集を反映するには再起動が要る。
+	// **ここで読むのは1回目である。**走っている最中は、巡回の頭で
+	// **差し替えてよいキーだけ**を読み直す（設計 3-24。`internal/config/reload.go` の
+	// `Reloadable` に挙げたものだけ）。**それ以外のキーは、編集しても再起動まで効かない。**
+	// **読み直しに失敗しても落ちない**（最後に正常だった設定のまま動き続ける）。
 	loaded, err := config.Load(opts.ConfigPath)
 	if err != nil {
 		return i18n.Errorf(i18n.KeyDaemonRunConfigLoadFailed, ErrStartup, opts.ConfigPath, err)
@@ -232,9 +234,10 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// **CLI の `--port` は `server.port` を上書きする**（`SPEC.md` 13.7）。
-	// **ここで1回だけ写し取る。**設定の読み直しは実装していないので、起動後に
-	// `server.port` を書き換えても待ち受け先は変わらない（設計 3-24 の「読み直しても
-	// 反映しないもの」に挙がっている3つのうちの1つである）。
+	// **ここで1回だけ写し取る。**`server.port` は走行中に読み直さないので
+	// （`internal/config/reload.go` の `Reloadable` に無い）、起動後に書き換えても
+	// 待ち受け先は変わらない。**`SPEC.md` 6.2 が、自前の listener を持つ拡張には
+	// 再起動を要求してよいと明示している。**
 	if opts.Port != nil {
 		cfg.Server.Port = opts.Port
 		logger.Info("CLI の --port でダッシュボードのポートを上書きしました", "port", *opts.Port)
@@ -279,7 +282,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// 段2b: 依存を組み立てる。**ここで `gh auth token` が走る**（`token_source` の既定は
 	// `gh_auth`）。外部プロセスを起こす段なので、起動時検査と同じ期限を掛ける。
-	deps, err := build(ctx, cfg, frag, sockPath, runtimeDir, opts.ContinuoPath,
+	deps, err := build(ctx, cfg, loaded.Path, frag, sockPath, runtimeDir, opts.ContinuoPath,
 		endpoint, opts.TrackerTimeout, opts.StartupCheckTimeout, logger)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrStartup, err)
@@ -681,6 +684,7 @@ func isLoopbackHost(host string) bool {
 //
 // ctx: 組み立てに適用するコンテキスト。
 // cfg: 検証済みの設定。
+// configPath: 読み込んだ WORKFLOW.md の絶対パス（走行中の読み直しに使う。設計 3-24）。
 // frag: 1回目に送る指示書の断片（組み込みの前半・固有・組み込みの後半）。
 // sockPath: 解決済みの hook の socket の絶対パス。
 // runtimeDir: 実行時ディレクトリ（`filepath.Dir(sockPath)`）。
@@ -694,6 +698,7 @@ func isLoopbackHost(host string) bool {
 func build(
 	ctx context.Context,
 	cfg config.Config,
+	configPath string,
 	frag prompt.Fragments,
 	sockPath, runtimeDir, continuoPath, graphqlEndpoint string,
 	trackerTimeout, tokenTimeout time.Duration,
@@ -759,7 +764,10 @@ func build(
 	}
 
 	orc, err := orchestrator.New(orchestrator.Options{
-		Config:         cfg,
+		Config: cfg,
+		// **走行中に WORKFLOW.md を読み直すために渡す**（設計 3-24）。
+		// **渡さないと読み直しを行わない。**
+		ConfigPath:     configPath,
 		Prompt:         frag,
 		Tracker:        adapter,
 		Herdr:          hc,
