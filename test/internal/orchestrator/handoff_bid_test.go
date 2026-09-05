@@ -313,7 +313,7 @@ func TestHandoff_担当者が2人以上なら触らない(t *testing.T) {
 // 目的: 「担当者の最後のコメントから idle_timeout_ms を過ぎたら、担当を外して入札をやり直す」。
 // 与える情報: ほかの機械が担当していて、その機械の最後のコメントが19時間前にある issue。
 // 成功条件: 担当者からその機械が外れ、released のコメントが1件増え、
-// **その本文に外した機械の名前が入っていて、引き継ぐ機械の名前は入っていない**こと。
+// **その本文に外したアカウントの名前が入っていて、引き継ぐアカウントの名前は入っていない**こと。
 func TestHandoff_期限切れの担当を外してreleasedを書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)

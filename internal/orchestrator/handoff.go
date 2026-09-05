@@ -311,9 +311,10 @@ func (o *Orchestrator) releaseExpiredAssignee(
 	// **いま書いたばかりなので、作成時刻と更新時刻は同じである。**
 	// **欄を空のままにしない。**この写しは `RoundStart` にしか渡らないが、
 	// **入れ物の一部だけを埋めた値を回すと、別の判定へ回されたときに黙って空の値を返す。**
-	// **投稿者も入れる。**この写しを読むのはいま `RoundStart` だけだが、
-	// **`CollectBids` は投稿者の分からないコメントを1件も通さない**（設計 3-77-0）。
-	// **同じ入れ物を回す以上、欄を空にしておく理由が無い。**
+	// **投稿者も入れる。**この写しを読むのはいま `RoundStart` だけで、
+	// **そこは本文と作成時刻しか見ない**ので、投稿者はいま誰も読まない。
+	// **それでも入れるのは、欄を1つだけ空にした値を回さないためである。**
+	// **入れ物の一部だけを埋めた値は、別の判定へ回されたときに黙って空の値を返す。**
 	view := handoff.CommentView{
 		Author: viewer.Login, Body: body, CreatedAt: now, UpdatedAt: now,
 	}
@@ -793,9 +794,18 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 		return false, ""
 	}
 
-	current, found := o.refreshIssue(ctx, rs, false)
+	current, found, fresh := o.refreshIssue(ctx, rs, false)
 	if !found {
 		// **issue が見えない。**別の経路（`handleTurnEnd`）が同じ判定で拾う。
+		return false, ""
+	}
+	if !fresh {
+		// **取り直せなかった。**`refreshIssue` は失敗すると、着手したときの古い写しを返す。
+		// **その写しの担当者はまだ自分なので、見分けずに使うと「担当は自分のまま」と答えてしまう。**
+		// **時計も進めない。**進めると、次の確かめが `recheck_interval_ms` のあとになり
+		// （既定1時間）、そのあいだ担当を外された run が push まで走り切る（設計 3-77c が禁じている）。
+		o.logger.Warn("担当を確かめ直すために issue を取り直せないので、判定しません（この run は止めません）",
+			"identifier", issue.Identifier)
 		return false, ""
 	}
 	logins := assigneeLogins(current)
