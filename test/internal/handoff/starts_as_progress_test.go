@@ -125,3 +125,28 @@ func TestStartsAsProgressReport_死活の判定とは別物である(t *testing.
 			"引用しただけの報告が捨てられ、書いたのに人間へ渡ります（issue #178）")
 	}
 }
+
+// 目的: 印を引用した HTML のコメントの行を、名乗りとして数えないことを固定する（issue #178）。
+//
+// **なぜ要るか。**判定は「行頭が `<!--` で始まる行」を名乗りの並びとして読む。
+// **その行の中に印を文字列として含むだけのものまで数えると、
+// 印について説明した成果の報告が「途中経過」として捨てられる。**
+// 書いてあるのに「書かれていない」と判定され、復元が走り、
+// **2度目も同じなら `failure_state` へ落ちる。**#178 が防ごうとした結末そのものである。
+//
+// 与える情報: 先頭の印の並びの中で、印を引用した HTML のコメントの行。
+// 成功条件: 偽を返すこと。
+func TestStartsAsProgressReport_引用した印は名乗りではない(t *testing.T) {
+	body := "<!-- continuo:agent -->\n" +
+		"<!-- この報告に " + config.ProgressMarker + " は付けていません -->\n" +
+		"この run でやったことを書きました。\n"
+
+	if handoff.StartsAsProgressReport(body) {
+		t.Error("印を引用しただけの行を、名乗りとして数えています（issue #178）。" +
+			"数えると、印について説明した成果の報告が捨てられます")
+	}
+	// **裏を取る。**行そのものが印で始まっていれば、いままでどおり真である。
+	if !handoff.StartsAsProgressReport("<!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。\n") {
+		t.Error("行頭から書かれた印を、名乗りとして数えていません")
+	}
+}

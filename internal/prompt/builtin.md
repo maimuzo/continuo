@@ -47,6 +47,7 @@ flowchart TD
 分岐元の名前は、次の順で決まります。上から順に見て、決まった時点で止めてください。
 
     1. worktree の直下にある continuo の身元ファイル（既定 `.continuo.json`）の "base" の値
+       （キーが無い、または値が空文字なら、決まっていないものとして段2 へ進みます）
     2. 4-4 に指定があれば、それ
     3. {{if .push_branch}}この issue にリンクされた branch（{{.push_branch}}）{{else}}（この issue には branch がリンクされていません）{{end}}
     4. このリポジトリの既定 branch

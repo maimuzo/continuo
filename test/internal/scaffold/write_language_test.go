@@ -83,7 +83,7 @@ func TestTemplate_書く言語はlanguageに連動する(t *testing.T) {
 		want string
 	}{
 		{i18n.LangJA, "すべて日本語で書いてください"},
-		{i18n.LangEN, "Write everything in English"},
+		{i18n.LangEN, "commit messages and code comments in English"},
 	}
 	for _, c := range cases {
 		i18n.Use(c.lang)

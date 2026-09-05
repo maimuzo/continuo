@@ -700,7 +700,7 @@
   "scaffold.update.sync_failed": "%s を書き出せません: %s: %w",
   "scaffold.update.temp_create_failed": "%s を書き換える一時ファイルを作れません: %s: %w",
   "scaffold.write.symlink_not_followed": "%s が symlink です: %s: 辿るとこのディレクトリの外にあるリンク先を壊すため書き込みません",
-  "scaffold.workflow.write_language": "すべて日本語で書いてください。技術用語（worktree / branch / commit / pane / hook など）は英語のまま使い、日本語に直訳しないでください。",
+  "scaffold.workflow.write_language": "issue のコメント・pull request の本文・commit メッセージ・コードのコメントは、すべて日本語で書いてください。技術用語（worktree / branch / commit / pane / hook など）は英語のまま使い、日本語に直訳しないでください。",
   "server.close.shutdown_failed": "ダッシュボードを閉じられません: %w",
   "server.new.port_out_of_range": "server.port が範囲外です（0以上65535以下にすること）: %d",
   "server.start.listen_failed": "ダッシュボードの待ち受けを開始できません（%s）: %w",

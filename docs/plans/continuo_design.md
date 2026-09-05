@@ -9162,6 +9162,7 @@ flowchart TD
 分岐元の名前は、次の順で決まります。上から順に見て、決まった時点で止めてください。
 
     1. worktree の直下にある continuo の身元ファイル（既定 `.continuo.json`）の "base" の値
+       （キーが無い、または値が空文字なら、決まっていないものとして段2 へ進みます）
     2. 4-4 に指定があれば、それ
     3. {{if .push_branch}}この issue にリンクされた branch（{{.push_branch}}）{{else}}（この issue には branch がリンクされていません）{{end}}
     4. このリポジトリの既定 branch
@@ -10143,7 +10144,7 @@ push できる状態のときだけ**である。
 
 **push で止めると、3つ目が人間に生える。**branch を自分で見つけて `gh pr create` を叩く仕事である。
 
-**採る形。**[internal/prompt/builtin.md:147-172](../../internal/prompt/builtin.md#L147-L172) の
+**採る形。**[internal/prompt/builtin.md:148-173](../../internal/prompt/builtin.md#L148-L173) の
 作業の手順の中に `## 3-5. pull request を出す` を置く。
 **ここは組み込みの前半である**（目印の行より上）。**本文より前に読まれる。**
 **`## 3-7. 終わりを書く`（表明の1行）より前に置く。**後ろだと、`review` を出したあとに目に入る。

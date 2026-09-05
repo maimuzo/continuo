@@ -354,7 +354,12 @@ func StartsAsProgressReport(body string) bool {
 			// **本文が始まった。**ここから先の印は、引用であって名乗りではない。
 			return false
 		}
-		if strings.Contains(line, config.ProgressMarker) {
+		// **行そのものが印で始まっていること。**行の途中に現れる印は名乗りではない。
+		// **`Contains` では、印を引用した HTML のコメントの行が真になる。**
+		// 例: `<!-- この報告に <!-- continuo:progress --> は付けていません -->` は、
+		// 行頭が `<!--` で、印を文字列として含む。**書いてあるのに「書かれていない」と
+		// 判定され、復元が走り、2度目も同じなら `failure_state` へ落ちる**（issue #178 の再発）。
+		if strings.HasPrefix(line, config.ProgressMarker) {
 			return true
 		}
 	}

@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "75bfb6851c537df3d14346301445bb0fb13e876aea6ecd6692c5d125d5ec2299",
+  "_source_sha256": "e898031cb15e1a0fca99388f9eff9cb32d32db613af104f9624f1716a36f501a",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -701,7 +701,7 @@
   "scaffold.update.sync_failed": "cannot sync %[1]s to disk: %[2]s: %[3]w",
   "scaffold.update.temp_create_failed": "cannot create the temp file for rewriting %[1]s: %[2]s: %[3]w",
   "scaffold.write.symlink_not_followed": "%[1]s is a symlink: %[2]s: not writing it, since following the symlink would touch a target outside this directory",
-  "scaffold.workflow.write_language": "Write everything in English. Keep code identifiers and file paths as they are.",
+  "scaffold.workflow.write_language": "Write issue comments, pull request bodies, commit messages and code comments in English. Keep code identifiers and file paths as they are.",
   "server.close.shutdown_failed": "cannot close the dashboard: %w",
   "server.new.port_out_of_range": "server.port is out of range (must be between 0 and 65535): %d",
   "server.start.listen_failed": "cannot start listening for the dashboard (%s): %w",
