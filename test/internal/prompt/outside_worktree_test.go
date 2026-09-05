@@ -80,3 +80,41 @@ func TestTemplate_worktreeの外への逃げ道は立場と4_4の両方で絞る
 		}
 	}
 }
+
+// 目的: 3-4 の例外を使ったときに、3-5（pull request を出す段）も 4-4 へ譲ることを固定する
+// （issue #186。設計 3-78b）。
+//
+// **なぜ要るか。**3-4 だけに例外を置いても、次の段で止まる。
+// **4-4 の見本は「この worktree の中では commit しないでください」と命じるので、
+// worktree の branch には commit が1つも無い。**
+// ところが 3-5 は「**先に 3-4 の push を済ませてください**」と言い、
+// `git branch --show-current` で worktree の branch を引く。
+// **push すべきものが無いので、その手順は原理的に済ませられない。**
+// 指示どおり読んだエージェントは「pull request を作れなかった」で `blocked` を出し、
+// **#186 が成立させようとした運用が、最後の1段で人間へ渡る。**
+//
+// 与える情報: prompt.Builtin() の 3-5 の節。
+// 成功条件: 3-4 の例外を使ったときは 4-4 に従うことと、書いていなければ blocked を出すことが書いてあること。
+func TestTemplate_3_5も3_4の例外のときは4_4へ譲る(t *testing.T) {
+	body := prompt.Builtin()
+
+	at := strings.Index(body, "## 3-5. pull request を出す")
+	if at < 0 {
+		t.Fatalf("組み込みのプロンプトに 3-5 の節がありません")
+	}
+	end := strings.Index(body[at+1:], "\n## ")
+	if end < 0 {
+		end = len(body) - at - 1
+	}
+	section := body[at : at+1+end]
+
+	for _, want := range []string{
+		"3-4 の例外を使ったときは、この段も 4-4 の指示に従います",
+		"CONTINUO-STATUS: blocked",
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("3-5 に %q がありません（issue #186）。"+
+				"3-4 にだけ例外を置くと、pull request を出す段で止まります:\n%s", want, section)
+		}
+	}
+}

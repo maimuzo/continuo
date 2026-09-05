@@ -148,6 +148,13 @@ push していない作業は、この worktree が片付くときに失われ�
 
 `review` を出す前に、この issue の pull request を作ります。
 
+**3-4 の例外を使ったときは、この段も 4-4 の指示に従います。**
+成果がこの worktree の外にあるなら、**この worktree の branch には commit が1つも無いので、
+下の手順はどれも当たりません。**pull request の出し方も 4-4 に書いてあります。
+**書いていなければ、理由を書いて `CONTINUO-STATUS: blocked` を出してください。**
+
+**以下は、3-4 のとおり commit して push したときの手順です。**
+
 **先に 3-4 の push を済ませてください。**push していない branch で `gh pr create` を叩くと、
 gh が「どこへ push するか」を対話で聞いてきて、そこで止まります。
 
