@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -293,8 +294,16 @@ func buildHandoffComment(identifier, reason string, hc handoffContext, move stat
 		// **切り捨てたなら、切り捨てたと書く**（設計 3-81b）。**黙って上から数件だけ出すと、
 		// 読んだ人は「道連れになったのはこれで全部だ」と読む。**subagent の記録の側は
 		// 置き場所のディレクトリを併せて出すので追えるが、**こちらには追える先が無い。**
+		//
+		// **`fmt.Sprintf` を使わない。**この package の人間向けの文言はまだ資源へ
+		// 移していないが、**新しく足すぶんは資源に載せる**という決まりがある
+		// （`test/internal/testdesign` の「画面に出す文言を日本語で直に書いていない」）。
+		// **ここだけを資源へ移すと、1つのコメントの中で日本語と英語が混ざる。**
+		// 同じ表の説明が「**中途半端に訳すと、全部日本語であるより読みにくくなる**」と
+		// 書いているので、**この関数の文言はまとめて移すまで日本語のままにし、
+		// 数を差し込むところだけ `strconv` で組み立てる。**
 		if hc.BackgroundTasksOmitted > 0 {
-			line += fmt.Sprintf("（ほかに %d 件）", hc.BackgroundTasksOmitted)
+			line += "（ほかに " + strconv.Itoa(hc.BackgroundTasksOmitted) + " 件）"
 		}
 		lines = append(lines, line)
 	}

@@ -43,7 +43,7 @@
 ## 1. #142: 専用の番兵を作る
 
 **言いたいこと。**いまは `registered == true` を確かめた直後の分岐が「登録されていません」と名乗る。
-**読んだ人間は [docs/FAQ.md:413](../../FAQ.md#L413) の別の症状（ディレクトリだけが残っている）へ行き、
+**読んだ人間は [docs/FAQ.md の「着手が「目的のパスに実体があるのに git の worktree として登録されていません」で止まる」](../../FAQ.md#着手が目的のパスに実体があるのに-git-の-worktree-として登録されていませんで止まる) の別の症状（ディレクトリだけが残っている）へ行き、
 生きている worktree を消しにいく。**
 
 | 何 | 実測 |
@@ -143,7 +143,7 @@ return nil, i18n.Errorf(
 ```
 
 **置く場所は、detached HEAD の節の「後ろ」である。**
-[docs/FAQ.md:431](../../FAQ.md#L431) の `**上の節（ディレクトリだけが残っている）とは違います。**` が
+[docs/FAQ.md の「着手が「worktree がどの branch にも載っていません（detached HEAD）」で止まる」](../../FAQ.md#着手がworktree-がどの-branch-にも載っていませんdetached-headで止まる) の `**上の節（ディレクトリだけが残っている）とは違います。**` が
 指す「上の節」がずれないようにするためである。**前に差し込むと、この案内が新しい節を指してしまう。**
 
 **[docs/upgrading.md](../../upgrading.md) にも節を足す。**
@@ -212,7 +212,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 1行の違いも無く入れる。**通す検査は2つである。
 
 - [test/internal/scaffold/design_template_test.go:111-129](../../../test/internal/scaffold/design_template_test.go#L111-L129) の `assertSameBody`
-- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:9419-9420](../continuo_design.md#L9419-L9420) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
+- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（突き合わせる相手は [docs/plans/continuo_design.md:9466-9467](../continuo_design.md#L9466-L9467) の 5-3 の markdown ブロックである。**いまの名前は `TestTemplate_組み込みのプロンプトが設計5_3と一致する` である**）
 
 **[test/internal/prompt/blocked_push_test.go:14-18](../../../test/internal/prompt/blocked_push_test.go#L14-L18) が探す
 `を出す前に、必ず commit して push してください。` と `git push -u origin HEAD` は、どちらも1文字も触らない。**

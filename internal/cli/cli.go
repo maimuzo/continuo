@@ -755,6 +755,26 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		return printScaffoldError(stderr, check, err)
 	}
 
+	// **設定を読めたら、その言語で対話を出す**（設計 3-35。設定が主、環境変数 LANG が従）。
+	// **ここより前の文言は環境変数の言語のまま出る。**引数の誤りと `--help` の使い方は
+	// 設定を読むより前に出るためである（run の冒頭のコメントを見よ）。
+	//
+	// **読めなくても止めない。**`continuo setup` は、`continuo init` が gh から値を引けず
+	// プレースホルダの残った WORKFLOW.md に対しても走る。止めると、その利用者が
+	// `continuo setup --owner <名前> --project <番号>` を1回も通せなくなる。
+	//
+	// **だが黙らない。**読めなかった理由をそのまま出す。`language` の綴りを誤った人は、
+	// この1行で書ける値の一覧を受け取れる（config.Load が validateLanguage のエラーを包む）。
+	// **黙ると、常駐プロセスを起動するまで綴りの誤りに気づけない。**
+	//
+	// **useLanguageFromConfig を使わないのは、読めなかったことを報告するためである**
+	// （runTrust と同じ形。共有の関数は黙ったままにして、呼ぶ側が報告する）。
+	if loaded, err := config.Load(check.Path); err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLISetupWarnConfigLoad, err))
+	} else {
+		useLanguage(loaded.Config)
+	}
+
 	// **どのボードを読むかは、WORKFLOW.md に書かれた値を先に使う**（設計 6-2）。
 	// `continuo init` で埋めたのに `continuo setup` でもう一度 `--project` を要求するのは
 	// 筋が通らない。**フラグが明示されたときだけフラグを優先する。**

@@ -473,6 +473,28 @@ func (f Fragments) HasBody() bool { return f.hasBody }
 // 戻り値: 絶対パス。**本文が空でも埋まっている。**
 func (f Fragments) BodyPath() string { return f.bodyPath }
 
+// BodyChanged は、渡された本文が、いま持っている本文と違うかを返す（設計 3-24）。
+//
+// **設定の読み直しが「本文は効きません」と知らせるために要る。**
+// 本文は front matter の外にあるので、`config.Config` の差分には1行も出てこない。
+// **知らせないと、本文だけを直した人が「読み直したから効いた」と読む。**
+//
+// **比べるのは、取り除いたあとの本文である。**案内のコメントだけを直したときは
+// 送る文面が1バイトも変わらないので、「変わった」と言わない（`Build` と同じ手順を通す）。
+//
+// body: 読み直した WORKFLOW.md の front matter より後ろ。
+// 戻り値: 送る文面に効く形で違っていれば真。
+func (f Fragments) BodyChanged(body string) bool {
+	stripped := dropEmptySections(stripComments(body))
+	for _, it := range f.items {
+		if it.Name == NameWorkflowBody {
+			return it.Text != stripped
+		}
+	}
+	// **いま本文を持っていない。**新しい本文に中身があれば変わったことになる。
+	return strings.TrimSpace(stripped) != ""
+}
+
 // Text は、変数展開していない全文を返す（`continuo prompt --show` が出すもの）。
 //
 // 戻り値: 断片を連結した文字列。
