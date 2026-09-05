@@ -752,14 +752,17 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 //
 // **待つのは「まだ何かが動いていると分かるとき」だけである。**
 //
-//	申告が空                            … 何もしない
-//	申告があり、hook が settle_ms 以内   … 申告が空になるまで poll_wait_ms を上限に待つ
-//	申告があり、hook が来ていない         … **待たない。**残ったものを WARN に出す
+//	申告が空                              … 何もしない
+//	確認の画面で止まっている               … **待たない**（新しい `Stop` は二度と来ない）
+//	hook が settle_ms より古い             … **待たない**（動いている証拠が無い）
+//	それ以外                              … 申告が空になるまで poll_wait_ms を上限に待つ
 //
-// **hook が来ていないなら待っても変わらない。**申告が入れ替わるのは新しい `Stop` を
-// 受けたときだけであり（`noteHook`）、**`blocked` で止まった Claude Code は
-// `Stop` を二度と出さない。**そこで待つと、直前の `waitForRunningSubagents` と合わせて
+// **待たない条件を2つ置く理由。**申告が入れ替わるのは新しい `Stop` を受けたときだけである
+// （`noteHook`）。**`blocked` で止まった Claude Code は `Stop` を二度と出さない。**
+// そこで待つと、直前の `waitForRunningSubagents`（設計 3-11）と合わせて
 // `claude.poll_wait_ms` を2回ぶん、人間への引き渡しが遅れるだけになる。
+// **`blocked` の道では権限の確認の `Notification` が直前に届くので、
+// hook の新しさだけでは弾けない。**だから「確認の画面で止まっている」を別に見る。
 //
 // **総時間に上限を置く。**turn の終わりの待ちには上限が無いが（設計 3-2）、ここは違う。
 // **run は既に終わったものとして扱われている。**何時間も待つと
@@ -767,6 +770,10 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 //
 // **止められたら待つのをやめる。**pane を閉じるほうは `stopWorker` が
 // 「止められていても閉じる」と決めているので、そちらは続く。
+//
+// **何を道連れにしたかを残すのはここではない。**`stopWorker` が pane を閉じる直前に
+// 残す。**そちらに置かないと、この関数を通らない道**（`abandonRunClaimed` /
+// `stopAndReleaseAsync` / `ensureAgentComment` の段2）**で記録が1行も出ない。**
 //
 // **新しい設定は足さない。**猶予は `claude.poll_wait_ms`、hook の新しさの線は
 // `claude.settle_ms` を使う。
@@ -781,21 +788,18 @@ func (o *Orchestrator) waitForBackgroundTasks(ctx context.Context, rs *runState)
 	identifier := rs.issue().Identifier
 	grace := time.Duration(o.cfg.Claude.PollWaitMs) * time.Millisecond
 	settle := time.Duration(o.cfg.Claude.SettleMs) * time.Millisecond
-	if grace > 0 && settle > 0 && o.now().Sub(rs.snapshot().LastHookAt) <= settle {
+	switch {
+	case rs.blockedHandoff():
+		o.logger.Info("確認の画面で止まっているので、バックグラウンド処理を待ちません（新しい Stop は来ません）",
+			"identifier", identifier, "バックグラウンド処理", running)
+	case grace <= 0 || settle <= 0 || o.now().Sub(rs.snapshot().LastHookAt) > settle:
+		o.logger.Info("hook が来ていないので、バックグラウンド処理を待ちません（待っても申告は変わりません）",
+			"identifier", identifier, "バックグラウンド処理", running)
+	default:
 		o.logger.Info("バックグラウンド処理が残っていると申告されているので、pane を閉じる前に待ちます",
 			"identifier", identifier, "バックグラウンド処理", running, "猶予", grace)
-		if o.awaitBackgroundTasksDone(ctx, rs, grace) {
-			return
-		}
+		o.awaitBackgroundTasksDone(ctx, rs, grace)
 	}
-	// **何を道連れにしたかを残す**（設計 3-81）。**残さないと、次に復帰したときに
-	// 発火する通知の出どころが、人間には辿れない。**
-	left := rs.runningBackgroundTasks()
-	if len(left) == 0 {
-		return
-	}
-	o.logger.Warn("バックグラウンド処理が残ったまま pane を閉じます（走っていたものは途中で終わります）",
-		"identifier", identifier, "バックグラウンド処理", left)
 }
 
 // awaitBackgroundTasksDone は申告が空になるのを猶予いっぱいまで待つ（設計 3-81）。
@@ -807,8 +811,7 @@ func (o *Orchestrator) waitForBackgroundTasks(ctx context.Context, rs *runState)
 // ctx: 待ちを打ち切るコンテキスト。
 // rs: 対象の run。
 // grace: 待つ長さの上限。
-// 戻り値: 申告が空になったら true。猶予が尽きた・止められたら false。
-func (o *Orchestrator) awaitBackgroundTasksDone(ctx context.Context, rs *runState, grace time.Duration) bool {
+func (o *Orchestrator) awaitBackgroundTasksDone(ctx context.Context, rs *runState, grace time.Duration) {
 	deadline := time.NewTimer(grace)
 	defer deadline.Stop()
 	tick := time.NewTicker(subagentPollInterval)
@@ -816,14 +819,14 @@ func (o *Orchestrator) awaitBackgroundTasksDone(ctx context.Context, rs *runStat
 	for {
 		select {
 		case <-ctx.Done():
-			return false
+			return
 		case <-deadline.C:
-			return false
+			return
 		case <-tick.C:
 			if len(rs.runningBackgroundTasks()) == 0 {
 				o.logger.Info("バックグラウンド処理が終わったので pane を閉じます",
 					"identifier", rs.issue().Identifier)
-				return true
+				return
 			}
 		}
 	}
@@ -871,6 +874,18 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	rs.markWorkerStopped()
 	if paneID == "" {
 		return
+	}
+	// **何を道連れにしたかを残す**（設計 3-81）。**残さないと、次に同じセッションへ
+	// 復帰したときに発火する「前のバックグラウンドコマンドに完了の記録が無い」という
+	// 通知の出どころを、人間が辿れない。**
+	//
+	// **`waitForBackgroundTasks` ではなくここに置く。**pane を閉じる道は8つあり
+	// （`finishRunClaimed` / `failRun` / `abandonRunClaimed` / `stopAndReleaseAsync` /
+	// `ensureAgentComment` の段2 / 知らない Status / 担当が移った / 着手をやめた）、
+	// **待つのは1つだけだが、道連れにするのは全部だからである。**
+	if left := rs.runningBackgroundTasks(); len(left) > 0 {
+		o.logger.Warn("バックグラウンド処理が残ったまま pane を閉じます（走っていたものは途中で終わります）",
+			"identifier", rs.issue().Identifier, "バックグラウンド処理", left)
 	}
 	// **止められていても pane は閉じる。**
 	//

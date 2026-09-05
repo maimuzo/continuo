@@ -76,6 +76,55 @@ func TestStartup_hookが届いていれば起動していると扱う(t *testing
 	}
 }
 
+// TestStartup_待った先でworkingを見ても殺さない は、設計 3-80 の
+// 「諦める時計は枝ごとに持たない」を検査する。
+//
+// 目的: hook を待っているうちに入口からの期限は過ぎる。**そのあと herdr がやっと登録して
+// `working` を返した瞬間に run を捨ててはならない。**
+// **待った先で殺すのでは、殺す時点が後ろへずれただけである。**
+// 与える情報: `agent_not_found` → `working` → `idle` と変わる `agent.get` の台本。
+// **`agent_not_found` の期間だけで `herdr.startup_timeout_ms`（2000ミリ秒）を超えさせ、
+// そのあとも hook を流し続ける。**
+// 成功条件: issue が `failure_state`（`Blocked`）へ落ちず、turn が送られること。
+func TestStartup_待った先でworkingを見ても殺さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
+
+	notFoundUntil := time.Now().Add(3 * time.Second)
+	workingUntil := notFoundUntil.Add(1 * time.Second)
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
+		// **どの段でも hook は届き続ける。**Claude Code は走り続けている。
+		fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
+		now := time.Now()
+		if now.Before(notFoundUntil) {
+			return nil, agentNotFoundErr()
+		}
+		status := "idle"
+		if now.Before(workingUntil) {
+			// herdr がやっと登録した。**まだ作業中なので `working` である。**
+			status = "working"
+		}
+		return map[string]any{
+			"type": "agent_info",
+			"agent": map[string]any{
+				"name": params["target"], "agent_status": status, "interactive_ready": true,
+			},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 30*time.Second, "working を見送ったあとに turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	if got := fx.Tracker.StateOf("PVTI_item235"); got == "Blocked" {
+		t.Errorf("hook が届いているのに working の期限切れで人間へ渡している: state=%s", got)
+	}
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 0 {
+		t.Errorf("生きている Claude Code の pane を閉じた: pane.close の回数 %d", n)
+	}
+}
+
 // TestStartup_hookが1件も来なければこれまでどおり諦める は、設計 3-80 が
 // 諦める道を壊していないことを検査する。
 //
@@ -186,22 +235,98 @@ func TestFinish_道連れにしたバックグラウンド処理を通知へ書�
 
 // TestFinish_走っているあいだは待ってから閉じる は、設計 3-81 の待ちそのものを検査する。
 //
-// 目的: 申告が残っていて、**そのうえで hook が来ているなら**、pane を閉じる前に
-// 終わるのを待つこと。**待たずに閉じると、走っていたものが道連れになる。**
-// 与える情報: `shell` を1件載せた `Stop` を流してから `blocked` になる台本と、
-// **esc を送ってから少し遅れて「`background_tasks` が空の `Stop`」を流す goroutine。**
-// `claude.settle_ms` と `claude.poll_wait_ms` は、その遅れを挟めるだけ広げる。
+// 目的: 申告が残っていて、**そのうえで hook が来ていて、確認の画面でも止まっていないなら**、
+// pane を閉じる前に終わるのを待つこと。**待たずに閉じると、走っていたものが道連れになる。**
+// 与える情報: 指示の回数の上限を1回にして打ち切らせ、**turn が終わったあと
+// （`stillWorkingAfterStop` の `agent.get` の中）で `shell` を1件載せた `Stop` を流す**台本。
+// **待ちが始まったのをログで見てから空の `Stop` を流す goroutine** を添える。
 // 成功条件: 「バックグラウンド処理が終わったので pane を閉じます」が出ること。
-// **待たない実装では、空の `Stop` が届く前に閉じてしまうのでこの行は出ない。**
+// **待たない実装では「待ちます」の行が出ないので goroutine が動かず、この行も出ない。**
 func TestFinish_走っているあいだは待ってから閉じる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
-			// **hook の新しさの線。**これを広げないと「hook が来ていない」と見なされて待たない。
+			// **指示の回数の上限を1回にする。**1回目の turn の終わりで打ち切りへ進む。
+			cfg.Agent.MaxDispatchTurns = 1
+			// **hook の新しさの線。**広げないと「hook が来ていない」と見なされて待たない。
 			cfg.Claude.SettleMs = 5000
-			// **待ちの上限。**下の goroutine の遅れ（200ミリ秒）より十分に長く取る。
+			// **待ちの上限。**下の goroutine が動くだけの余裕を取る。
 			cfg.Claude.PollWaitMs = 5000
 		},
 	})
+	// **これは想定して起こしている失敗である。**指示の回数の上限に達したので人間へ渡す。
+	fx.AllowLog("指示の回数が、上限の", "run を終えます")
+	fx.Tracker.AddIssue(sampleIssue(236, "Ready"))
+
+	transcriptDir := t.TempDir()
+	parent := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+	})
+
+	var prompted atomic.Bool
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **turn は普通に終わる**（`background_tasks` が空の `Stop`）。
+		prompted.Store(true)
+		fx.Orc.OnHook(stopEvent("session-1", parent, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+	// **turn が終わったあとにバックグラウンド処理が申告される場面を作る。**
+	// `confirmTurnEnd` は settle の窓が閉じるとき `agent.get` で裏を取る（設計 3-79）。
+	// **そこから先に走る `finishRunClaimed` が、この申告を見ることになる。**
+	//
+	// **turn を送る前の `agent.get`（起動の確認）では流さない。**そこで流すと、
+	// turn を送るときの `beginTurn` が控えを空へ戻してしまう。
+	var injected atomic.Bool
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
+		if prompted.Load() && injected.CompareAndSwap(false, true) {
+			fx.Orc.OnHook(runningShellStopEvent("session-1", parent, "p2"))
+			// **待ちが始まったのを見てから終わらせる。**時間で当てると、
+			// 待ちに入る前に届いて「待たずに閉じた」と見分けが付かなくなる。
+			go func() {
+				deadline := time.Now().Add(20 * time.Second)
+				for time.Now().Before(deadline) {
+					if strings.Contains(fx.Logs.String(), "pane を閉じる前に待ちます") {
+						fx.Orc.OnHook(stopEvent("session-1", parent, "p2"))
+						return
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}()
+		}
+		return map[string]any{
+			"type":  "agent_info",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 40*time.Second)
+
+	if !strings.Contains(fx.Logs.String(), "バックグラウンド処理が終わったので pane を閉じます") {
+		t.Errorf("走っているあいだ待っていない（待ちが終わった記録が無い）:\n%s", fx.Logs.String())
+	}
+}
+
+// TestFinish_確認の画面で止まっているなら待たない は、設計 3-81 の
+// 「待たない条件」を検査する。
+//
+// 目的: `blocked` で止まった Claude Code は新しい `Stop` を二度と出さないので、
+// **待っても申告は1件も減らない。**そこで待つと、直前の `waitForRunningSubagents` と
+// 合わせて `claude.poll_wait_ms` を2回ぶん、人間への引き渡しが遅れるだけになる。
+// 与える情報: `shell` を1件載せた `Stop` を流してから `blocked` になる台本。
+// 成功条件: 「確認の画面で止まっているので、バックグラウンド処理を待ちません」が出て、
+// **「pane を閉じる前に待ちます」が出ないこと。**
+func TestFinish_確認の画面で止まっているなら待たない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			// **hook の新しさでは弾けないことを確かめる。**権限の確認のあと、
+			// `LastHookAt` は真新しいままである。
+			cfg.Claude.SettleMs = 5000
+		},
+	})
+	fx.AllowLog("バックグラウンド処理が残ったまま pane を閉じます")
 	fx.Tracker.AddIssue(sampleIssue(236, "Ready"))
 
 	transcriptDir := t.TempDir()
@@ -216,15 +341,6 @@ func TestFinish_走っているあいだは待ってから閉じる(t *testing.T
 			"agent": map[string]any{"name": params["target"], "agent_status": "blocked"},
 		}, nil
 	})
-	// **esc は `finishRun` の直前に送られる**（設計 3-11）。そこから遅れて空の `Stop` を
-	// 流すことで、**「待っている最中にバックグラウンド処理が終わった」を作る。**
-	fx.Herdr.Handle(herdr.MethodAgentSendKeys, func(map[string]any) (any, *rpcErr) {
-		go func() {
-			time.Sleep(200 * time.Millisecond)
-			fx.Orc.OnHook(stopEvent("session-1", parent, "p1"))
-		}()
-		return map[string]any{"type": "keys_sent"}, nil
-	})
 
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 30*time.Second, "引き渡しの通知が投稿される", func() bool {
@@ -232,8 +348,12 @@ func TestFinish_走っているあいだは待ってから閉じる(t *testing.T
 	})
 	fx.WaitRunsDrained(t, 30*time.Second)
 
-	if !strings.Contains(fx.Logs.String(), "バックグラウンド処理が終わったので pane を閉じます") {
-		t.Errorf("走っているあいだ待っていない（待ちが終わった記録が無い）")
+	logs := fx.Logs.String()
+	if !strings.Contains(logs, "確認の画面で止まっているので、バックグラウンド処理を待ちません") {
+		t.Errorf("確認の画面で止まっているのに待とうとしている:\n%s", logs)
+	}
+	if strings.Contains(logs, "pane を閉じる前に待ちます") {
+		t.Errorf("確認の画面で止まっているのに待った（引き渡しがそのぶん遅れる）")
 	}
 }
 
@@ -254,8 +374,13 @@ func TestFinish_申告が空なら待たずに閉じる(t *testing.T) {
 		typedUserLine("p1", "実装してください"),
 	})
 
+	// **1回目の turn でだけ流す。**コメントを書かせる復元（設計 3-25 の9段）も
+	// `agent.prompt` を通るので、毎回流すと**pane を閉じたあとにまた申告が立つ。**
+	var first atomic.Bool
 	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
-		fx.Orc.OnHook(runningShellStopEvent("session-1", parent, "p1"))
+		if first.CompareAndSwap(false, true) {
+			fx.Orc.OnHook(runningShellStopEvent("session-1", parent, "p1"))
+		}
 		return map[string]any{
 			"type":  "agent_prompted",
 			"agent": map[string]any{"name": params["target"], "agent_status": "blocked"},

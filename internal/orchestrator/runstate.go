@@ -56,8 +56,6 @@ type backgroundTaskNote struct {
 	// Type は `background_tasks[].type` である（`subagent` / `shell`）。
 	Type string
 	// Label は人間が見て何かが分かる文字列である（`agent_type` か `command`）。
-	//
-	// **外部入力なので `sanitizeSubagentField` を通したものを入れる。**
 	Label string
 }
 
@@ -729,10 +727,14 @@ func (rs *runState) setBackgroundTasksLocked(tasks []hookserver.BackgroundTask) 
 			label = t.Command
 		}
 		out = append(out, backgroundTaskNote{
-			// **均すのは、そのまま issue のコメントへ載るからである**（設計 3-23）。
-			ID:    sanitizeSubagentField(t.ID),
-			Type:  sanitizeSubagentField(t.Type),
-			Label: sanitizeSubagentField(label),
+			// **`ID` は均さない。**`SubagentStop` の `agent_id` は均されずに届くので
+			// （`OnHook` は `cwd` と `transcript_path` しか検査しない）、**ここで均すと
+			// backtick や制御文字を含む `id`・48文字を超える `id` が二度と外れなくなる。**
+			// `backgroundSubagents` は「1件も走っていない」と答えているのに、
+			// こちらだけ「走っている」と答え続ける。**均すのは載せるときである。**
+			ID:    t.ID,
+			Type:  t.Type,
+			Label: label,
 		})
 	}
 	if len(out) == 0 {
@@ -748,6 +750,10 @@ func (rs *runState) setBackgroundTasksLocked(tasks []hookserver.BackgroundTask) 
 // **並びは名前順である。**同じ状態なら同じ文面が出るようにするためで、
 // そのままの順だと申告の順に引きずられる。
 //
+// **均すのはここである**（設計 3-23）。`id` も `type` も `command` も hook から来る
+// 外部入力であり、**この戻り値はそのままログと issue のコメントへ載る。**
+// **控えのほうは生のまま持つ**（`SubagentStop` の `agent_id` と突き合わせるため）。
+//
 // 戻り値: `<type>(<id>) <label>` の形の並び。1件も無ければ nil。
 func (rs *runState) runningBackgroundTasks() []string {
 	rs.mu.Lock()
@@ -757,13 +763,13 @@ func (rs *runState) runningBackgroundTasks() []string {
 	}
 	out := make([]string, 0, len(rs.backgroundTasks))
 	for _, t := range rs.backgroundTasks {
-		name := t.Type
+		name := sanitizeSubagentField(t.Type)
 		if name == "" {
 			name = "background"
 		}
-		line := name + "(" + t.ID + ")"
-		if t.Label != "" {
-			line += " " + t.Label
+		line := name + "(" + sanitizeSubagentField(t.ID) + ")"
+		if label := sanitizeSubagentField(t.Label); label != "" {
+			line += " " + label
 		}
 		out = append(out, line)
 	}
@@ -785,6 +791,25 @@ func (rs *runState) freezeHandoffSubagents() []string {
 	rs.handoffSubagents = rs.runningSubagentsLocked()
 	rs.handoffSubagentsFrozen = true
 	return subagentLabels(rs.handoffSubagents)
+}
+
+// blockedHandoff は「確認の画面で止まったまま人間へ渡そうとしている」かを返す（設計 3-81）。
+//
+// **`freezeHandoffSubagents` を呼んだかどうかで判定する。**呼ぶのは `blocked` の道
+// （`turnLoop` の `turnBlocked`）だけであり、esc を送る直前に1度だけ通る。
+//
+// **run を終える前にバックグラウンド処理を待つかどうかの判定に使う。**
+// **確認の画面で止まった Claude Code は新しい `Stop` を出さない**ので、
+// 申告は待っても1件も減らない。**待つと引き渡しが遅れるだけである。**
+//
+// **hook の新しさだけでは弾けない。**この道では権限の確認の `Notification` が
+// 直前に届いており、`LastHookAt` は真新しい。
+//
+// 戻り値: `blocked` の道で引き渡そうとしていれば true。
+func (rs *runState) blockedHandoff() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.handoffSubagentsFrozen
 }
 
 // handoffSubagentsLocked は引き渡しの通知が使う subagent の集合を返す（設計 3-11）。

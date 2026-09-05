@@ -1076,6 +1076,22 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 	startupTimeout := time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond
 	deadline := o.now().Add(startupTimeout)
 	for {
+		// **hook が届いている間は、諦める時計を進めない**（設計 3-80）。
+		//
+		// **`agent_not_found` の枝だけに効かせてはならない。**hook を待っているうちに
+		// 入口からの期限は過ぎるので、そのあと herdr がやっと登録して `working` を返すと、
+		// **その瞬間に「起動の確認が期限まで idle にならなかった」として run を捨てる。**
+		// **待った先で殺すのでは、殺す時点が後ろへずれただけである。**
+		//
+		// **hook が1件も来ていなければ、`deadline` は入口のままである。**
+		// そのときの振る舞いは、この変更の前とまったく同じになる。
+		hookAt, alive := o.startupAliveByHook(rs, since)
+		if alive {
+			if next := hookAt.Add(startupTimeout); next.After(deadline) {
+				deadline = next
+			}
+		}
+
 		got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})
 		switch {
 		case err != nil && herdr.IsCode(err, herdr.ErrCodeAgentNotFound):
@@ -1093,8 +1109,7 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 			// **hook が来ていないときの振る舞いは変えない。**期限を待たずにその場で戻り、
 			// `confirmStartupWithRestart` が `agent.start` をやり直す（設計 3-16 の段10）。
 			// **そこが「pane のシェルが準備できていなかった」からの唯一の復帰の道である。**
-			hookAt, alive := o.startupAliveByHook(rs, since)
-			if !alive || o.now().After(hookAt.Add(startupTimeout)) {
+			if !alive || o.now().After(deadline) {
 				return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
 					i18n.KeyOrchestratorConfirmStartupAgentGetFailed,
 					rs.agentName(), rs.agentName(), err))
