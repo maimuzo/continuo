@@ -38,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -105,6 +106,11 @@ type Limit struct {
 	Severity string `json:"severity"`
 }
 
+// fullPercent は「使い切っている」とみなす使用率である（設計 3-27 の条件その1）。
+//
+// **`>=` で比べる。**API が 100 を超える値を返しても取りこぼさない。
+const fullPercent = 100
+
 // Snapshot は usage API を1回読んだ結果である。
 type Snapshot struct {
 	// Limits は返ってきた枠の一覧である。
@@ -138,7 +144,7 @@ func (s *Snapshot) AtFullPercent() bool {
 		return false
 	}
 	for _, l := range s.Limits {
-		if l.Percent >= 100 {
+		if l.Percent >= fullPercent {
 			return true
 		}
 	}
@@ -160,7 +166,7 @@ func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
 	var latest time.Time
 	found := false
 	for _, l := range s.Limits {
-		if l.Percent < 100 || l.ResetsAt == nil {
+		if l.Percent < fullPercent || l.ResetsAt == nil {
 			continue
 		}
 		if !found || l.ResetsAt.After(latest) {
@@ -179,8 +185,7 @@ func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
 // **見ていない形を先回りして畳まない。**
 //
 // **この package は `kind` の意味を知らない。**どれが1週間の枠かを決めるのは
-// `internal/handoff` の `LimitKindWeeklyAll` / `LimitKindWeeklyScoped` であり、
-// **そちらを import すると依存の向きが逆になる。**判定は `internal/orchestrator` が行う。
+// `internal/handoff` の `IsWeeklyKind` であり、**そちらを import すると依存の向きが逆になる。**
 //
 // 戻り値: 使い切っている枠の `kind`。1件も無ければ長さ0。
 func (s *Snapshot) FullLimitKinds() []string {
@@ -189,11 +194,64 @@ func (s *Snapshot) FullLimitKinds() []string {
 	}
 	var kinds []string
 	for _, l := range s.Limits {
-		if l.Percent >= 100 {
+		if l.Percent >= fullPercent {
 			kinds = append(kinds, l.Kind)
 		}
 	}
 	return kinds
+}
+
+// LatestResetOfKinds は、使い切っている枠のうち指定した種別のものから、
+// `resets_at` がいちばん遅いものを返す（設計 3-27。issue #197）。
+//
+// **1つでも `resets_at` を持たないものがあれば「分からない」と返す。**
+// 持っているものだけで判定すると、**待つ先の分からない枠を無視して、短いほうへ倒れる。**
+// 1週間の枠がいつ明けるか分からないのに「2時間後に明ける」と読むことになる。
+//
+// **`LatestResetOfFullLimits` とは別物である。**あちらは枠待ちの印を外す時刻を決めるもので、
+// **種別を選ばず、`resets_at` の無い枠は黙って飛ばす**（設計 3-27 の「どの枠の時刻を見るか」）。
+// **こちらは「1週間の枠を待つ上限」の判定に使う。**混ぜてはならない。
+//
+// kinds: 数える枠の種別。**1つも渡さなければ、いつも「分からない」を返す。**
+// 戻り値の1つ目: いちばん遅いリセット時刻。
+// 戻り値の2つ目: 該当する枠が1つ以上あり、その全部が `resets_at` を持っていれば true。
+func (s *Snapshot) LatestResetOfKinds(kinds ...string) (time.Time, bool) {
+	if s == nil || len(kinds) == 0 {
+		return time.Time{}, false
+	}
+	var latest time.Time
+	found := false
+	for _, l := range s.Limits {
+		if l.Percent < fullPercent || !matchesAnyKind(l.Kind, kinds) {
+			continue
+		}
+		if l.ResetsAt == nil {
+			// **1つでも待つ先が無ければ、全体として「分からない」である。**
+			return time.Time{}, false
+		}
+		if !found || l.ResetsAt.After(latest) {
+			latest = *l.ResetsAt
+			found = true
+		}
+	}
+	return latest, found
+}
+
+// matchesAnyKind は枠の種別が一覧のどれかと一致するかを返す。
+//
+// **大文字小文字を無視して比べる。**provider が綴りを変えても判定が落ちないようにする
+// （`internal/handoff` の `matchesKind` と同じ扱いである）。
+//
+// kind: 枠の種別。
+// kinds: 探す種別の一覧。
+// 戻り値: 一致すれば true。
+func matchesAnyKind(kind string, kinds []string) bool {
+	for _, k := range kinds {
+		if strings.EqualFold(strings.TrimSpace(kind), strings.TrimSpace(k)) {
+			return true
+		}
+	}
+	return false
 }
 
 // Options は Reader を組み立てるための入力である。

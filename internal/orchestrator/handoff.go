@@ -449,24 +449,50 @@ func (o *Orchestrator) bidForIssue(
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
 func (o *Orchestrator) undoHandoffAcquire(ctx context.Context, issue tracker.Issue) {
+	login, ok := o.releaseOwnAssignee(ctx, issue, "着手を取りやめましたが")
+	if !ok {
+		return
+	}
+	o.logger.Info("着手を取りやめたので、書いた担当者を消し戻しました",
+		"identifier", issue.Identifier, "担当者", login)
+}
+
+// releaseOwnAssignee は、この機械が書いた担当者を外し、`released` のコメントを1件書く
+// （設計 3-77c / 3-77g）。
+//
+// **外すのは自分1人だけである。**人間が別の担当者を足していたら、その人は残る。
+//
+// **`assigneeIDOf` は使えない。**自分のノード ID を引くには結局 `viewerIdentity` を呼ぶので、
+// **そこから同時に取れる。**issue の写しから探すと、写しの新しさに答えが依存してしまう。
+//
+// **`viewerIdentity` を取れなければ、何もせずに戻る。**外す相手を間違えない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// failurePrefix: 外せなかったときの警告の頭に付ける語（呼び出しの文脈で変わる）。
+// 戻り値の1つ目: 外した担当者のログイン名。
+// 戻り値の2つ目: 外せたら true。**外せなければ false**（released も書いていない）。
+func (o *Orchestrator) releaseOwnAssignee(
+	ctx context.Context, issue tracker.Issue, failurePrefix string,
+) (string, bool) {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
-		return
+		return "", false
 	}
 	viewer, ok := o.viewerIdentity(ctx)
 	if !ok {
 		o.logger.Warn("gh の持ち主を取れないので、書いた担当者を消し戻せません",
 			"identifier", issue.Identifier)
-		return
+		return "", false
 	}
 	if _, err := o.tracker.RemoveAssignees(ctx, nodeID, []string{viewer.ID}); err != nil {
 		// **担当者が残る。**hold も released も無いので、次にこの issue を見る機械は
 		// 「hold の無い自分の担当」として待たずに着手を試みる（設計 3-77g / 3-77b）。
 		// **「次の巡回で入札し直す」わけではない。**担当者が消えていない以上、
 		// 入札からはやり直されない。
-		o.logger.Warn("着手を取りやめましたが、書いた担当者を消し戻せません（担当者が残ります）",
+		o.logger.Warn(failurePrefix+"、書いた担当者を消し戻せません（担当者が残ります）",
 			"identifier", issue.Identifier, "error", err)
-		return
+		return "", false
 	}
 	body := handoff.FormatReleased(handoff.Released{
 		From:   o.hostName,
@@ -477,8 +503,145 @@ func (o *Orchestrator) undoHandoffAcquire(ctx context.Context, issue tracker.Iss
 		o.logger.Warn("担当者を消し戻したことを issue へ書けませんでした",
 			"identifier", issue.Identifier, "error", err)
 	}
-	o.logger.Info("着手を取りやめたので、書いた担当者を消し戻しました",
-		"identifier", issue.Identifier, "担当者", viewer.Login)
+	return viewer.Login, true
+}
+
+// weeklyWaitExceeded は「1週間の枠が明けるのを待つ上限を超えたか」を返す
+// （設計 3-27。issue #197）。
+//
+// **満杯の1週間の枠を見た時刻を、この中で記録する。**判定と記録を分けると、
+// **呼ぶ側が記録を忘れたときに、経過が永久に0のままになる。**
+//
+// **測り方は2通りある。**
+//
+//	満杯の1週間の枠が全部 `resets_at` を持つ  … いちばん遅い時刻までの残りで測る
+//	1つでも持たない                            … 満杯になってからの経過で測る
+//
+// **5時間の枠だけが満杯なら、いつまでも待つ**（2026-08-26 の人間の決定
+// 「5時間枠 → 待つ。担当は変えない」）。
+//
+// **`quotaResetAt()` を使ってはならない。**あれは種別を選ばないので、
+// **1週間の枠を待っているのに5時間の枠の時刻で判定してしまう。**
+// 5時間の枠が明けるたびに枠待ちの印が外れるため、上限に届くのがそのぶん遅れる。
+//
+// **判定の軸は「リセットまでの残り時間」である。**人間が決めた表がそう書いている
+// （「週間枠 / 12時間以内 / 待つ」「週間枠 / 12時間より先 / 引き渡す」）。
+//
+// rs: 対象の run。
+// 戻り値: 上限を超えていれば true。
+func (o *Orchestrator) weeklyWaitExceeded(rs *runState) bool {
+	snap := o.quotaSnapshot()
+	weeklyFull := false
+	for _, kind := range snap.FullLimitKinds() {
+		if handoff.IsWeeklyKind(kind) {
+			weeklyFull = true
+			break
+		}
+	}
+	since := rs.noteWeeklyFull(weeklyFull, o.now())
+
+	limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
+	if limit <= 0 || !weeklyFull {
+		// **0 以下は「上限を設けない」**（`claude.turn_timeout_ms` と
+		// `tracker.provider.handoff.recheck_interval_ms` と同じ向き）。
+		// **5時間の枠だけならいつまでも待つ。**
+		return false
+	}
+	if resetAt, ok := snap.LatestResetOfKinds(
+		handoff.LimitKindWeeklyAll, handoff.LimitKindWeeklyScoped); ok {
+		return resetAt.Sub(o.now()) > limit
+	}
+	return !since.IsZero() && o.now().Sub(since) > limit
+}
+
+// releaseBecauseQuotaWaitAsync は、待つ上限を超えた run を止めて担当を手放す
+// （設計 3-27 / 3-77c。issue #197）。
+//
+// **巡回のループから呼んでよいのはこちらである。**`RemoveAssignees` とコメントの投稿と
+// pane を閉じる要求が乗るので、**同じ巡回で複数の run が超えると直列に積まれる。**
+//
+// **印は同期に確保してから goroutine を起こす。**確保できなければ何もしない
+// （書き戻しの最中なら、次の巡回でやり直す）。**二重には走らない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *runState) {
+	if rs.beginTerminal() != terminalClaimed {
+		return
+	}
+	o.wg.Add(1)
+	go func() {
+		defer o.wg.Done()
+		o.releaseBecauseQuotaWaitClaimed(ctx, rs)
+	}()
+}
+
+// releaseBecauseQuotaWait は、待つ上限を超えた run を止めて担当を手放す（turn ループ用）。
+//
+// **turn の goroutine から呼ぶ。**`claimTerminal` は書き戻しの終わりを待つので、
+// **巡回のループから呼んではならない**（設計 3-8）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState) {
+	if !rs.claimTerminal(ctx) {
+		return
+	}
+	o.releaseBecauseQuotaWaitClaimed(ctx, rs)
+}
+
+// releaseBecauseQuotaWaitClaimed は、終わらせる印を確保したあとの本体である。
+//
+// **順番を入れ替えてはならない。**
+//
+//  1. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
+//  2. 自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
+//  3. worker を止める                        … pane を閉じる
+//  4. 印から外す                             … スロットを空ける
+//
+// **段2 を段3 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
+// **pane だけ閉じて担当が残り、18時間だれも動かない issue になる。**
+//
+// **段1 で `after_run` を走らせる。**担当を失ったときの止め方（3-77c）は走らせないが、
+// **あちらは「担当が既に別の機械へ移っている」ので、push すると新しい担当の続きと衝突する。**
+// **こちらは自分から手放す側で、released を書く時点では次の担当が決まっていない。**
+// 衝突する相手がいない。**人間の決定「push して引き渡す」は、この経路で果たす。**
+//
+// **段4 を落としてはならない。**`beginTerminal` は印を立てたまま返らないので、
+// **`release` を呼ばないと、その run は印に残り続けてスロットを永久に埋める。**
+//
+// **カンバンへは1バイトも書かない**（設計 3-77c）。**worktree も消さない。**
+// push していない変更が残っているかもしれず、人間が中身を見て判断できる状態のまま置く。
+//
+// ctx: 呼び出しに適用するコンテキスト。**この中で作り直すので、期限切れでもよい。**
+// rs: 対象の run。
+func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState) {
+	issue := rs.issue()
+	snap := o.quotaSnapshot()
+	o.logger.Info("1週間の枠が明けるのを待つ上限を超えたので、担当を手放します"+
+		"（worktree は残します。カンバンへは書きません）",
+		"identifier", issue.Identifier,
+		"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
+		"使い切っている枠", strings.Join(snap.FullLimitKinds(), ", "))
+
+	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
+	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。
+	cleanupCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
+	defer cancel()
+
+	o.runAfterRun(cleanupCtx, rs)
+	login, ok := o.releaseOwnAssignee(cleanupCtx, issue, "枠の上限で担当を手放そうとしましたが")
+	if !ok {
+		// **pane を閉じない。**閉じてしまうと、担当がこの機械のまま誰も動かなくなる。
+		// **印も外さない。**次の巡回でやり直す。
+		rs.endTerminal()
+		return
+	}
+	o.stopWorker(cleanupCtx, rs)
+	o.release(rs)
+	o.logger.Info("担当を手放しました（次の担当は入札で決め直します）",
+		"identifier", issue.Identifier, "外した担当者", login)
 }
 
 // postBid は入札のコメントを1件書く（設計 3-77a）。

@@ -170,6 +170,20 @@ func SessionPercent(snap *ratelimit.Snapshot) (int, bool) {
 	return maxPercentOfKinds(snap, LimitKindSession)
 }
 
+// IsWeeklyKind は、その枠の種別が1週間の枠かどうかを返す（issue #197）。
+//
+// **どの `kind` が1週間の枠かを知っているのは、この package だけである。**
+// `internal/ratelimit` へ置くと、あちらが `kind` の意味を持つことになり、
+// **同じ知識が2箇所に散る。**
+//
+// **大文字小文字を無視して比べる**（`matchesKind` と同じ扱い）。
+//
+// kind: 枠の種別。
+// 戻り値: `weekly_all` か `weekly_scoped` なら true。
+func IsWeeklyKind(kind string) bool {
+	return matchesKind(kind, []string{LimitKindWeeklyAll, LimitKindWeeklyScoped})
+}
+
 // maxPercentOfKinds は、指定した種別の枠のうちいちばん大きい使用率を返す。
 //
 // snap: 読み取った枠の一覧。

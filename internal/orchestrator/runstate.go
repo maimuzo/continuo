@@ -136,6 +136,16 @@ type runState struct {
 	TranscriptPath string
 	// QuotaResetAt は枠待ちを外す時刻である（設計 3-27）。
 	QuotaResetAt time.Time
+	// WeeklyFullSince は、この run について満杯の1週間の枠を最初に見た時刻である
+	// （設計 3-27。issue #197）。
+	//
+	// **枠待ちの印（WaitingQuota）とは切り離して持つ。**
+	// 印は5時間の枠が明けるたびに外れるので（reconcile.go の checkStalls）、
+	// **印に紐づけると、外れるたびに0へ戻って経過が永久に伸びない。**
+	//
+	// **run ごとに持つ。**機械に1つだけ持つと、**枠が満杯になったあとに着手した run を、
+	// 1分も待たずに手放すことになる。**この run が満杯を見てからの経過を測る。
+	WeeklyFullSince time.Time
 	// Tokens はこの run が始めてからの累計のトークンである（設計 3-15）。
 	//
 	// **中身は「いまのセッションの transcript を `requestId` で重複排除して足した値」＋
@@ -411,6 +421,7 @@ func (rs *runState) snapshot() runSnapshot {
 		BackoffUntil:     rs.BackoffUntil,
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
+		WeeklyFullSince:  rs.WeeklyFullSince,
 		LastRevision:     rs.LastRevision,
 		RevisionAt:       rs.RevisionAt,
 		LastSeenAt:       rs.LastSeenAt,
@@ -444,6 +455,7 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
+	WeeklyFullSince  time.Time
 	LastRevision     uint64
 	RevisionAt       time.Time
 	LastSeenAt       time.Time
@@ -836,6 +848,30 @@ func (rs *runState) setWaitingQuota(resetAt time.Time) {
 	defer rs.mu.Unlock()
 	rs.WaitingQuota = true
 	rs.QuotaResetAt = resetAt
+}
+
+// noteWeeklyFull は、満杯の1週間の枠を見たかどうかを記録する（設計 3-27。issue #197）。
+//
+// **既に立っている時刻を上書きしない。**上書きすると経過が永久に伸びない。
+// **満杯の1週間の枠が1つも無くなったらゼロへ戻す。**戻さないと、枠が空いたあとも
+// 古い時刻が残り、**次に満杯になった run を1分も待たずに手放す。**
+//
+// **枠待ちの印の出し入れとは無関係に動かす。**印は5時間の枠が明けるたびに外れる。
+//
+// full: 満杯の1週間の枠があるか。
+// now: いまの時刻。
+// 戻り値: 満杯になってからの経過を測る起点。**full が偽ならゼロ値。**
+func (rs *runState) noteWeeklyFull(full bool, now time.Time) time.Time {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !full {
+		rs.WeeklyFullSince = time.Time{}
+		return time.Time{}
+	}
+	if rs.WeeklyFullSince.IsZero() {
+		rs.WeeklyFullSince = now
+	}
+	return rs.WeeklyFullSince
 }
 
 // clearWaitingQuota は枠待ちの印を外し、stall の時計を動かし直す（設計 3-27）。

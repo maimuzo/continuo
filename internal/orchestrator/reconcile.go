@@ -320,6 +320,16 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
 		if snap.WaitingQuota {
+			// **1週間の枠を待つ上限を、毎巡回ここで見る**（設計 3-27。issue #197）。
+			// **枠待ちの印が立っている run について、毎巡回で必ず通る唯一の場所である。**
+			// turn 側の待ちループは、herdr が一時的に届かないと
+			// **印を外さずに goroutine を畳む**ので、走っていない窓がある。
+			//
+			// **`continue` が終わらせるのは、この run 1件ぶんの反復である**（`for` ではない）。
+			if o.weeklyWaitExceeded(rs) {
+				o.releaseBecauseQuotaWaitAsync(ctx, rs)
+				continue
+			}
 			// 枠が明けたら印を外す。**外す契機は「resets_at を過ぎたこと」だけである。**
 			if !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt) {
 				rs.clearWaitingQuota(now)
@@ -338,6 +348,12 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 
 		// 1. 枠待ちを先に見る。
 		if o.isQuotaWaiting(rs) {
+			// **待ちに入る前に上限を見る**（設計 3-27。issue #197）。
+			// **超えていたら印を立てない。**立てると、手放したあとに印だけが残る。
+			if o.weeklyWaitExceeded(rs) {
+				o.releaseBecauseQuotaWaitAsync(ctx, rs)
+				continue
+			}
 			resetAt, _ := o.quotaResetAt()
 			rs.setWaitingQuota(resetAt)
 			o.logger.Info("枠待ちと判定したので stall の時計を止めます",

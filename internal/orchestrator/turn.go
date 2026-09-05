@@ -559,6 +559,13 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 		return turnWaitAgain, nil
 	}
 
+	// **待ちに入る前に、1週間の枠を待つ上限を超えていないかを見る**（設計 3-27。issue #197）。
+	// **超えていたら印を立てない。**立てると、手放したあとに枠待ちの印だけが残る。
+	if o.weeklyWaitExceeded(rs) {
+		o.releaseBecauseQuotaWait(ctx, rs)
+		return turnAborted, nil
+	}
+
 	resetAt, ok := o.quotaResetAt()
 	rs.setWaitingQuota(resetAt)
 	o.logger.Info("枠待ちと判定しました（stall の時計と turn の時計を止めます）",
