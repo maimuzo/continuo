@@ -236,7 +236,7 @@ echo "$(git rev-parse --show-toplevel)/.claude/skills/worker-briefing/SKILL.md"
 | **このリポジトリは PUBLIC。**個人の絶対パス・tailnet のホスト名・トークンを書かない | [CLAUDE.md](../../../CLAUDE.md) の「絶対に守る制約」の5 |
 | **英語の技術用語（worktree / branch / commit / hook / pane）を日本語に直訳しない** | [.claude/rules/reporting.md](../../rules/reporting.md) の「英語の技術用語を、自分の判断で日本語に直訳しない」 |
 | **番号には issue か PR かの別と、本物の題名を添える** | [.claude/rules/reporting.md](../../rules/reporting.md) の「絶対条件：名札は、単独で書かない」 |
-| **日本語では「カンバン」と書く**（「カンバン」と書かない） | [docs/spec/translation-glossary.md](../../../docs/spec/translation-glossary.md) の2 |
+| **日本語では「カンバン」と書く**（「ボード」と書かない） | [docs/spec/translation-glossary.md](../../../docs/spec/translation-glossary.md) の2 |
 
 **この5つは、worker が何を作っていても効く。**
 **調査だけの worker にも効く。**報告の文章が成果物だからである。
