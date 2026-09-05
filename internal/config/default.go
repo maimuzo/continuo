@@ -58,7 +58,7 @@ func ResolveHandoffIdleTimeoutMs(ms int) int {
 // （設計 3-77a が外すのは入札・hold・released の3つだけである）。
 // **エージェント自身が、この印で書き足す先のコメントを探す**ので、見えなくなると探せない。
 //
-// **設定キーにしない。**`tracker.provider.comments.marker` は機械ごとに違う値を書けるので、
+// **設定キーにしない。**`tracker.comments.marker` は機械ごとに違う値を書けるので、
 // **別の機械が書いた進捗報告を数えられなくなる。**この印は固定である。
 //
 // **組み込みのプロンプト（[internal/prompt/builtin.md](../prompt/builtin.md)）が

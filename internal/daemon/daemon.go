@@ -394,8 +394,11 @@ func buildPrompt(loaded *config.Loaded, logger *slog.Logger) (prompt.Fragments, 
 	if err := frag.Validate(); err != nil {
 		return prompt.Fragments{}, i18n.Errorf(i18n.KeyDaemonRunPromptInvalid, ErrStartup, err)
 	}
-	logger.Info("送るプロンプトを組み立てました",
-		"workflow", loaded.Path, "body_lines", lineCount(loaded.PromptTemplate))
+	// **数えているのは、取り除く前の本文である。**HTML のコメントも空の見出しも入っている。
+	// **送る文面の本文の行数ではない**（設計 5-3m。取り除いたあとは 0 行になりうる）。
+	// **その数が要る人は `continuo prompt --show` の内訳を見ること。**あちらは展開後を数える。
+	logger.Info("送るプロンプトを組み立てました（本文の行数は、取り除く前の値である）",
+		"workflow", loaded.Path, "body_lines_before_strip", lineCount(loaded.PromptTemplate))
 	return frag, nil
 }
 

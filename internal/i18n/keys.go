@@ -1712,6 +1712,19 @@ const (
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
 )
 
+// `continuo init` が書き出す WORKFLOW.md の本文へ入れる文言。
+//
+// **これだけは、画面に出す文言ではない。**エージェントへ送られる指示そのものである。
+// **それでも資源に置く。**言語ごとに1本ずつ持たせたいものであり、
+// **`language` の設定に連動させる**（issue #187 で人間が決めた）。
+const (
+	// KeyScaffoldWorkflowWriteLanguage は `### 書く言語` の節へ書く1行である。
+	//
+	// **その言語で読み書きする人へ向けた、その言語での指示にする。**
+	// 訳ではなく、その言語の利用者にとって自然な指示を書くこと。
+	KeyScaffoldWorkflowWriteLanguage Key = "scaffold.workflow.write_language"
+)
+
 // 既にあるファイルを差し替えで書き換えるとき（internal/scaffold の statTarget と
 // internal/atomicfile の Write）の文言。
 //
@@ -2442,6 +2455,32 @@ const (
 	KeyCLIPromptBreakdownBodyMissing Key = "cli.prompt.breakdown_body_missing"
 	// KeyCLIPromptBreakdownBuiltinOnly は--builtin のときの内訳の1行である。
 	KeyCLIPromptBreakdownBuiltinOnly Key = "cli.prompt.breakdown_builtin_only"
+	// KeyCLIPromptFlagURL は--url の説明に出る。
+	KeyCLIPromptFlagURL Key = "cli.prompt.flag_url"
+	// KeyCLIPromptFlagAttempt は--attempt の説明に出る。
+	KeyCLIPromptFlagAttempt Key = "cli.prompt.flag_attempt"
+	// KeyCLIPromptErrURLWithBuiltin は--url と--builtin を同時に指定したときに出る。
+	KeyCLIPromptErrURLWithBuiltin Key = "cli.prompt.err_url_with_builtin"
+	// KeyCLIPromptErrURLEmpty は--url に空文字を渡したときに出る。
+	KeyCLIPromptErrURLEmpty Key = "cli.prompt.err_url_empty"
+	// KeyCLIPromptBreakdownFirstAttempt は--url で1回目として展開したときに出る。
+	KeyCLIPromptBreakdownFirstAttempt Key = "cli.prompt.breakdown_first_attempt"
+	// KeyCLIPromptErrURLInvalid は--url の値を issue の URL として読めないときに出る。
+	KeyCLIPromptErrURLInvalid Key = "cli.prompt.err_url_invalid"
+	// KeyCLIPromptErrAttemptPositive は--attempt が1未満のときに出る。
+	KeyCLIPromptErrAttemptPositive Key = "cli.prompt.err_attempt_positive"
+	// KeyCLIPromptErrAttemptNeedsURL は--attempt を--url 無しで渡したときに出る。
+	KeyCLIPromptErrAttemptNeedsURL Key = "cli.prompt.err_attempt_needs_url"
+	// KeyCLIPromptErrFetchFailed はカンバンを読めないときに出る。
+	KeyCLIPromptErrFetchFailed Key = "cli.prompt.err_fetch_failed"
+	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がカンバンから組み立てられないときに出る。
+	KeyCLIPromptErrIssueNotOnBoard Key = "cli.prompt.err_issue_not_on_board"
+	// KeyCLIPromptErrRenderFailed は変数展開に失敗したときに出る。
+	KeyCLIPromptErrRenderFailed Key = "cli.prompt.err_render_failed"
+	// KeyCLIPromptBreakdownExpanded は--url で変数を展開したときの内訳の1行である。
+	KeyCLIPromptBreakdownExpanded Key = "cli.prompt.breakdown_expanded"
+	// KeyCLIPromptBreakdownAttempt は--url のときに何回目として展開したかを出す1行である。
+	KeyCLIPromptBreakdownAttempt Key = "cli.prompt.breakdown_attempt"
 )
 
 // allKeys は宣言済みのキーを全部並べたものである。
@@ -3059,6 +3098,7 @@ var allKeys = []Key{
 	KeyScaffoldDirGetwdFailed,
 	KeyScaffoldDirAbsFailed,
 	KeyScaffoldWriteSymlinkNotFollowed,
+	KeyScaffoldWorkflowWriteLanguage,
 	KeyScaffoldUpdateSymlinkNotFollowed,
 	KeyScaffoldUpdateNotRegularFile,
 	KeyScaffoldUpdateTempCreateFailed,
@@ -3357,6 +3397,19 @@ var allKeys = []Key{
 	KeyCLIPromptBreakdownBodyMissing,
 	KeyCLIPromptBreakdownWorkflowBody,
 	KeyCLIPromptBreakdownBuiltinOnly,
+	KeyCLIPromptFlagURL,
+	KeyCLIPromptFlagAttempt,
+	KeyCLIPromptErrURLWithBuiltin,
+	KeyCLIPromptErrURLEmpty,
+	KeyCLIPromptBreakdownFirstAttempt,
+	KeyCLIPromptErrURLInvalid,
+	KeyCLIPromptErrAttemptPositive,
+	KeyCLIPromptErrAttemptNeedsURL,
+	KeyCLIPromptErrFetchFailed,
+	KeyCLIPromptErrIssueNotOnBoard,
+	KeyCLIPromptErrRenderFailed,
+	KeyCLIPromptBreakdownExpanded,
+	KeyCLIPromptBreakdownAttempt,
 }
 
 // AllKeys は宣言済みのキーを全部返す。
