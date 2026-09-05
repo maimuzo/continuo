@@ -630,6 +630,9 @@ const (
 	KeyCLISetupErrWouldBreakConfig Key = "cli.setup.err_would_break_config"
 	// KeyCLISetupBoardUsing はどのボードの Status の選択肢を読むかを出す。
 	KeyCLISetupBoardUsing Key = "cli.setup.board_using"
+	// KeyCLISetupWarnConfigLoad は、言語を決めるために読んだ設定を読めなかったときに出る。
+	// **対話は止めない。**続けることと、何語で出すことになったかを添える。
+	KeyCLISetupWarnConfigLoad Key = "cli.setup.warn_config_load"
 	// KeyCLISetupErrDirNotFound は置き場所のディレクトリが無いときに出る。
 	KeyCLISetupErrDirNotFound Key = "cli.setup.err_dir_not_found"
 	// KeyCLISetupErrNotADirectory は置き場所がディレクトリでないときに出る。
@@ -2728,6 +2731,7 @@ var allKeys = []Key{
 	KeyCLISetupErrKeysNotRewritableRemedy,
 	KeyCLISetupErrWouldBreakConfig,
 	KeyCLISetupBoardUsing,
+	KeyCLISetupWarnConfigLoad,
 	KeyCLISetupErrDirNotFound,
 	KeyCLISetupErrNotADirectory,
 	KeyCLISetupErrSymlink,
