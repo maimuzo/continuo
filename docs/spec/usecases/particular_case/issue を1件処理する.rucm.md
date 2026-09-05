@@ -254,7 +254,7 @@ POSTCONDITION: turn 数は増えていない。システムは次の Stop hook �
 
 SPECIFIC ALTERNATIVE FLOW 担当が移った:
 RFS BASIC FLOW 39
-1. システムは担当が移った先の機械の名前と、released の印が先頭に付いたコメントの中身を記録に残す。
+1. システムは担当が移った先のアカウント名と、released の印が先頭に付いたコメントの中身を記録に残す。
 2. システムは branch へ1バイトも push しない。
 3. システムは workspace_hooks の after_run を実行する。
 4. システムは herdr の pane を閉じる。
@@ -428,8 +428,8 @@ POSTCONDITION: 印は残っている。リトライの回数は増えていな�
 
 | いつ確かめるか | どうやって | 担当が移っていたら |
 | --- | --- | --- |
-| **turn の終わりごと**（`recheck_interval_ms` を過ぎていれば） | issue のコメントを1件残らず取り直し、担当者を読む | `担当が移った` へ入り、**その turn の終わりで止まる** |
-| 作業を再開するとき | 同じくコメントを全部読み直す | 着手の対象から外す（`夜に機械を落として翌朝に担当を続ける`） |
+| **turn の終わりごと**（`recheck_interval_ms` を過ぎていれば） | issue を取り直し、担当者を読む | `担当が移った` へ入り、**その turn の終わりで止まる** |
+| 作業を再開するとき | 同じく担当者を読む | 着手の対象から外す（`夜に機械を落として翌朝に担当を続ける`） |
 
 **既定は1時間である。**
 
@@ -907,7 +907,7 @@ flowchart TD
     end
 
     subgraph SG36 ["SPECIFIC ALTERNATIVE FLOW 担当が移った / RFS BASIC FLOW 39"]
-        N36S1["1. 担当が移った先の機械の名前と released のコメントを記録に残す"] --> N36S2["2. branch へ1バイトも push しない"] --> N36S3["3. after_run を実行する"] --> N36S4["4. pane を閉じる"] --> N36S5["5. 印を外す"] --> N36S6["6. ABORT"]
+        N36S1["1. 担当が移った先のアカウント名と released のコメントを記録に残す"] --> N36S2["2. branch へ1バイトも push しない"] --> N36S3["3. after_run を実行する"] --> N36S4["4. pane を閉じる"] --> N36S5["5. 印を外す"] --> N36S6["6. ABORT"]
     end
 
     subgraph SG22 ["SPECIFIC ALTERNATIVE FLOW ボードから消えたissue / RFS BASIC FLOW 41"]
