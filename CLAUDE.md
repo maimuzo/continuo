@@ -299,7 +299,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 [.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の4点。
 
 - **issue を作ることと、着手することは別。**作ったらグループ化し、ボードへ載せ、着手順序に並べてから**人間の指示を待つ。**指示が出たら、その issue が `Ready` へ上がったことを確かめてから着手する（`Ice Box` のままだと continuo は拾わない）
-- **ボードの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはボードの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:8547](docs/plans/continuo_design.md#L8547) が認めている）。**ボードへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **ボードの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはボードの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:8679](docs/plans/continuo_design.md#L8679) が認めている）。**ボードへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **閉じられるものを先に外す。**issue の題名だけで「未修正」と判断せず、現行コードと突き合わせる
 - **同時に進める issue は2か3まで。**これは continuo の設定 `agent.max_concurrent_agents` とは別物である
 
@@ -356,7 +356,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 | どこ | いつ止まるか |
 | --- | --- |
 | [.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) | `gh pr merge <番号>` と `gh pr ready <番号>` を**実行する前** |
-| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`review-result` の検査が赤になる |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[.claude/rules/design-review.md](.claude/rules/design-review.md) の段4） |
 | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
 
 **3つとも数える条件は同じである。**
@@ -402,7 +402,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 | 何を確かめるか | どう確かめるか |
 | --- | --- |
-| **レビュー結果が貼ってあるか** | **GitHub Actions の `review-result`**（`main` の必須の検査。2026-09-01 に追加） |
+| **レビュー結果が貼ってあるか** | **GitHub Actions の `code-review-result`**（`main` の必須の検査。2026-09-01 に追加） |
 | ビルドとテスト | `build` 6本と `test` 2本（必須の検査） |
 | 衝突が無いか | `gh pr view <番号> --json mergeable,mergeStateStatus` |
 
