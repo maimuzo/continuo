@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/handoff"
@@ -214,6 +215,22 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 必ず戻る（設計 3-80 は待たずに `ErrStartupBusy` で戻す）。
 	if err := o.confirmStartup(ctx, rs, o.now()); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
+			return
+		}
+		// **`ErrStartupBusy` を「落ち着かなかった」として扱ってはならない**（設計 3-80）。
+		// **復元した Claude Code は生きていて、前の会話の続きを走らせている。**
+		// そこで `failCommentRecovery` を呼ぶと、
+		// **「作業を終えたと表明したのに、何をしたのかを書き残しませんでした」という
+		// 事実と違う理由を issue へ書いたうえで、走っている本人の pane を閉じる。**
+		// **書けていないのではなく、まだ書いている最中かもしれない。**
+		//
+		// **ここは警告1行で戻る。**この関数には同じ形の戻り口が既にいくつもある
+		// （身元ファイルを読めない・pane を引けない・agent 名を決められない）。
+		// **run はこのあと呼び出し側（`finishRunClaimed`）が普通に終える。**
+		if errors.Is(err, ErrStartupBusy) {
+			o.logger.Warn("復元した Claude Code が走っているので、コメントを書かせる指示は送りません"+
+				"（この run の成果は issue に残らないかもしれません）",
+				"identifier", snap.Identifier, "error", err)
 			return
 		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)

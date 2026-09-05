@@ -1149,7 +1149,7 @@ func (o *Orchestrator) resolvePane(ctx context.Context, prepared *workspace.Prep
 //	               まで待ち、超えたら ErrStartupRetryable を包んで返す（設計 3-16 の段10）
 //
 // **`agent_not_found` の間も、hook が届いていれば諦める時計を進めない**（設計 3-80）。
-// 詳しくは `startupAliveByHook` を見よ。
+// 詳しくは `startupBusyByHook` を見よ。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 起動した run。

@@ -10,6 +10,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/hookserver"
 )
 
 // agentNotFoundErr は herdr の `agent_not_found` を返す台本の応答である。
@@ -331,6 +333,142 @@ func TestFinish_確認の画面で止まっているなら待たない(t *testin
 	if strings.Contains(logs, "pane を閉じる前に待ちます") {
 		t.Errorf("確認の画面で止まっているのに待った（引き渡しがそのぶん遅れる）")
 	}
+}
+
+// TestFinish_復元した先が走っていたらコメントの依頼で殺さない は、設計 3-80 の
+// `ErrStartupBusy` を、もう1つの呼び出し側でも守っていることを検査する。
+//
+// 目的: コメントを書かせる復元（設計 3-25 の9段）の段6 も `confirmStartup` を通る。
+// **そこで `ErrStartupBusy` を「落ち着かなかった」として扱うと、
+// 走っている本人の pane を閉じたうえで、「作業を終えたと表明したのに何も書き残さなかった」
+// という事実と違う理由を issue へ書く。**
+// 与える情報: コメントを書かないまま指示の回数の上限に達する run と、
+// **復元の `agent.start` のあとだけ `agent_not_found` を返しながら作業中の hook を流す**
+// `agent.get` の台本。
+// 成功条件: 「復元した Claude Code が走っているので」の警告が出て、
+// **`failCommentRecovery` の文面（「何をしたのかを issue に書き残しませんでした」）が
+// 1件も投稿されないこと。**
+func TestFinish_復元した先が走っていたらコメントの依頼で殺さない(t *testing.T) {
+	transcriptDir := t.TempDir()
+	parent := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+	})
+	fx := newFixture(t, fixtureOptions{
+		// **復帰できる会話の記録がある状態にする。**無いと段3b で先に戻ってしまい、
+		// 段6 まで届かない。
+		TranscriptRoot: transcriptDir,
+		// **1回目の turn の終わりで打ち切らせる。**そこからコメントの確認へ進む。
+		Mutate: func(cfg *config.Config) { cfg.Agent.MaxDispatchTurns = 1 },
+	})
+	// **これは想定して起こしている失敗である。**
+	fx.AllowLog("指示の回数が、上限の", "run を終えます",
+		"復元した Claude Code が走っているので")
+	fx.Tracker.AddIssue(sampleIssue(236, "Ready"))
+
+	var starts atomic.Int32
+	fx.Herdr.Handle(herdr.MethodAgentStart, func(params map[string]any) (any, *rpcErr) {
+		starts.Add(1)
+		return map[string]any{
+			"type": "agent_started",
+			"agent": map[string]any{
+				"name": params["name"], "agent_status": "idle",
+				"interactive_ready": true, "pane_id": params["pane_id"],
+			},
+		}, nil
+	})
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
+		if starts.Load() >= 2 {
+			// **復元した Claude Code が、前の会話の続きを走らせている場面である。**
+			fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
+			return nil, agentNotFoundErr()
+		}
+		return map[string]any{
+			"type":  "agent_info",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		// **エージェントはコメントを書かない。**確認の経路を必ず通す。
+		fx.Orc.OnHook(stopEvent("session-1", parent, "p1"))
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	fx.WaitRunsDrained(t, 40*time.Second)
+
+	if !strings.Contains(fx.Logs.String(), "復元した Claude Code が走っているので") {
+		t.Errorf("走っている Claude Code を「落ち着かない」として扱った:\n%s", fx.Logs.String())
+	}
+	for _, c := range fx.Tracker.CommentsOf("I_node236") {
+		if strings.Contains(c.Body, "何をしたのかを issue に書き残しませんでした") {
+			t.Errorf("走っている最中なのに「書き残さなかった」と issue へ書いた:\n%s", c.Body)
+		}
+	}
+}
+
+// TestFinish_切り捨てたバックグラウンド処理の件数を書く は、設計 3-81b の
+// 「黙って切り捨てない」を検査する。
+//
+// 目的: 通知へ載せるのは `handoffBackgroundTaskLimit`（5件）までである。
+// **黙って上から5件だけ出すと、読んだ人は「道連れになったのはこれで全部だ」と読む。**
+// 与える情報: `shell` を6件載せた `Stop` を流してから `blocked` になる台本。
+// 成功条件: 通知に「ほかに 1 件」が載ること。
+func TestFinish_切り捨てたバックグラウンド処理の件数を書く(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.AllowLog("バックグラウンド処理が残ったまま pane を閉じます")
+	fx.Tracker.AddIssue(sampleIssue(236, "Ready"))
+
+	transcriptDir := t.TempDir()
+	parent := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+	})
+
+	var first atomic.Bool
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		if first.CompareAndSwap(false, true) {
+			fx.Orc.OnHook(manyShellStopEvent("session-1", parent, "p1", 6))
+		}
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "blocked"},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "引き渡しの通知が投稿される", func() bool {
+		return handoffCommentBody(fx, "I_node236") != ""
+	})
+	fx.WaitRunsDrained(t, 20*time.Second)
+
+	body := handoffCommentBody(fx, "I_node236")
+	if !strings.Contains(body, "ほかに 1 件") {
+		t.Errorf("切り捨てた件数が通知に載っていない:\n%s", body)
+	}
+}
+
+// manyShellStopEvent は `type` が `shell` のバックグラウンド処理を n 件載せた `Stop` を作る。
+//
+// sessionID: セッション UUID。
+// transcriptPath: transcript のパス。
+// promptID: prompt_id。
+// n: 載せる件数。
+// 戻り値: hook のイベント。
+func manyShellStopEvent(sessionID, transcriptPath, promptID string, n int) hookserver.HookEvent {
+	running := make([]hookserver.BackgroundTask, 0, n)
+	for i := range n {
+		running = append(running, hookserver.BackgroundTask{
+			ID:      fmt.Sprintf("bg%02d", i),
+			Type:    "shell",
+			Status:  "running",
+			Command: fmt.Sprintf("sleep %d", 10+i),
+		})
+	}
+	ev := stopEvent(sessionID, transcriptPath, promptID)
+	ev.BackgroundTasks = &running
+	return ev
 }
 
 // TestFinish_申告が空なら待たずに閉じる は、設計 3-81 が正常な run を遅らせないことを検査する。

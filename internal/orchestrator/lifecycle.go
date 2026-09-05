@@ -1105,6 +1105,10 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			"identifier", rs.issue().Identifier, "置き場所", subagentDir,
 			"件数", len(subagentTranscripts), "走行中のものか", subagentRunning)
 	}
+	// **切り捨てた件数も渡す**（設計 3-81b）。**黙って上から数件だけ出すと、
+	// 読んだ人は「道連れになったのはこれで全部だ」と読む。**
+	runningBackgroundTasks := rs.runningBackgroundTasks()
+	shownBackgroundTasks := limitStrings(runningBackgroundTasks, handoffBackgroundTaskLimit)
 	if err := o.postComment(ctx, nodeID,
 		buildHandoffComment(rs.issue().Identifier, reason, handoffContext{
 			WorktreePath:        snap.WorktreePath,
@@ -1116,7 +1120,8 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			// **止めた時点で走っていたバックグラウンド処理を載せる**（設計 3-81）。
 			// **凍結しない。**`blocked` の道の subagent と違い、こちらは
 			// `finishRunClaimed` の先頭で待ち終えた直後のものを載せたい。
-			BackgroundTasks: limitStrings(rs.runningBackgroundTasks(), handoffBackgroundTaskLimit),
+			BackgroundTasks:        shownBackgroundTasks,
+			BackgroundTasksOmitted: len(runningBackgroundTasks) - len(shownBackgroundTasks),
 		}, move)); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}

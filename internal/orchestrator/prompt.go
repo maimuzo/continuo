@@ -289,8 +289,14 @@ func buildHandoffComment(identifier, reason string, hc handoffContext, move stat
 		for _, t := range hc.BackgroundTasks {
 			quoted = append(quoted, "`"+t+"`")
 		}
-		lines = append(lines,
-			"- **止めた時点で走っていたバックグラウンド処理**: "+strings.Join(quoted, " / "))
+		line := "- **止めた時点で走っていたバックグラウンド処理**: " + strings.Join(quoted, " / ")
+		// **切り捨てたなら、切り捨てたと書く**（設計 3-81b）。**黙って上から数件だけ出すと、
+		// 読んだ人は「道連れになったのはこれで全部だ」と読む。**subagent の記録の側は
+		// 置き場所のディレクトリを併せて出すので追えるが、**こちらには追える先が無い。**
+		if hc.BackgroundTasksOmitted > 0 {
+			line += fmt.Sprintf("（ほかに %d 件）", hc.BackgroundTasksOmitted)
+		}
+		lines = append(lines, line)
 	}
 	if hc.SettingsPath != "" {
 		lines = append(lines, fmt.Sprintf("- continuo が渡した設定: `%s`", hc.SettingsPath))
@@ -341,6 +347,11 @@ type handoffContext struct {
 	// **件数は `handoffBackgroundTaskLimit` 件までに切ったものを渡すこと。**
 	// 申告は hook から来る外部入力であり、そのまま issue のコメントへ載る（設計 3-23）。
 	BackgroundTasks []string
+	// BackgroundTasksOmitted は、上の切り捨てで落とした件数である（設計 3-81b）。
+	//
+	// **0 でなければ「ほかに N 件」と書く。****黙って上から数件だけ出すと、
+	// 読んだ人は「道連れになったのはこれで全部だ」と読む。**
+	BackgroundTasksOmitted int
 }
 
 // statusMove は continuo がボードの Status を動かした記録である（設計 3-29）。

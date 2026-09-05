@@ -22,7 +22,7 @@ const ErrCodeAgentPaneBusy = "agent_pane_busy"
 // 登録するのは、入力待ちの画面を見分けたときである。**起動直後から作業を始めた
 // Claude Code はその画面を一度も出さないので、**生きていてもこのコードが返り続ける。**
 // **起動しているかどうかは、これに加えて hook の着信で判断すること**
-// （`internal/orchestrator/dispatch.go` の `startupAliveByHook`）。
+// （`internal/orchestrator/dispatch.go` の `startupBusyByHook`）。
 const ErrCodeAgentNotFound = "agent_not_found"
 
 // ErrCodeTimeout は、待ち受けつきの呼び出し（agent.prompt の wait / agent.wait）が
