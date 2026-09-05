@@ -9683,7 +9683,16 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 | **置く先** | `continuo init` を実行したディレクトリの直下の `continuo-ci.yaml` |
 | **雛形の在りか** | [internal/scaffold/ci_template.go](../../internal/scaffold/ci_template.go) の `ciTemplate`（文字列定数） |
 | **書くのは誰か** | `continuo init` が、`WORKFLOW.md` を書いた直後に1回だけ |
-| **中身** | `design-review-result` と `review-result` の2つの job を持つ GitHub Actions の workflow |
+| **中身** | `design-review-result` と `code-review-result` の2つの job を持つ GitHub Actions の workflow |
+
+**実装の在りか。**
+
+| 何 | どこ |
+| --- | --- |
+| **2枚を書く口** | [internal/scaffold/init.go](../../internal/scaffold/init.go) の `WriteAll`。**エラーは戻り値の中に入れる**（片方だけ落ちる状態を1つのエラーで表せない） |
+| **2枚目だけを書く口** | 同じファイルの `WriteCIWorkflowWithValues` |
+| **どちらを失敗として扱うか** | 同じファイルの `WorkflowFailed` / `CIFailed` / `BothExisted` |
+| **画面に出す** | [internal/cli/cli.go](../../internal/cli/cli.go) の `runInit` と `printInitCI` |
 
 **中身の要点。**全文は上の雛形にある。
 
