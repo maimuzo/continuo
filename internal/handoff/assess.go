@@ -333,9 +333,6 @@ func CollectBids(comments []CommentView) []Bid {
 // 担当者のログイン名を持つので、空なのは人間が印だけ真似て書いたときである。
 // **触らない側へ倒す**（奪ってよい証拠として使わない）。
 //
-// **投稿者が `assignee` と食い違う hold も数えない**（`holdFrom`。設計 3-77-0）。
-// **本文だけを信じると、第三者が人間の担当を外させられる。**
-//
 // **いちばん新しいものを採る。**担当が何度か移った issue には hold が複数付いており、
 // **古いほうを読むと、既に使われていない branch の名前を released のコメントへ書くことになる。**
 //
@@ -360,7 +357,7 @@ func LatestHoldFor(comments []CommentView, assignee string) (Hold, time.Time, bo
 	var latestAt time.Time
 	found := false
 	for _, c := range comments {
-		h, ok := holdFrom(c)
+		h, ok := ParseHold(c.Body)
 		if !ok {
 			continue
 		}
@@ -445,7 +442,7 @@ func RoundStart(comments []CommentView) (time.Time, bool) {
 	var latest time.Time
 	found := false
 	for _, c := range comments {
-		if !endsRound(c) {
+		if !endsRound(c.Body) {
 			continue
 		}
 		if !found || c.CreatedAt.After(latest) {
@@ -460,47 +457,14 @@ func RoundStart(comments []CommentView) (time.Time, bool) {
 //
 // **入札の印は数えない。**入札は回を閉じない（回を開くものである）。
 //
-// **hold は `holdFrom` で読む**（設計 3-77-0）。**投稿者と `assignee` が食い違う hold は数えない。**
-// 数えると、**第三者が印だけ真似たコメント1件で、入札の回を好きなときに閉じられる。**
-//
-// **released には同じ検査を掛けられない。**released を書くのは担当を外した側で、
-// **`from` に入るのは外された側なので、投稿者と突き合わせる相手が無い。**
-//
-// c: 判定するコメント。
+// body: コメント本文。
 // 戻り値: hold か released として読めれば true。
-func endsRound(c CommentView) bool {
-	if _, ok := holdFrom(c); ok {
+func endsRound(body string) bool {
+	if _, ok := ParseHold(body); ok {
 		return true
 	}
-	_, ok := ParseReleased(c.Body)
+	_, ok := ParseReleased(body)
 	return ok
-}
-
-// holdFrom は、コメント1件を hold として読む（設計 3-77-0）。
-//
-// **投稿者と `assignee` が一致するものだけを hold として数える。**
-// **continuo が書く hold は、担当を取った当人が自分のログイン名を `assignee` に書く**
-// （`bidForIssue`）ので、正しい hold はこの検査を必ず通る。
-//
-// **なぜ要るか。**hold は「その担当者は機械である」の唯一の証拠であり、
-// **それがあると continuo は担当者を外してよいと判断する。**
-// **本文だけを信じると、リポジトリにコメントできる誰かが
-// `{"assignee":"<人間のログイン名>",…}` と書くだけで、その人間の担当を外させられる。**
-// **GitHub が付ける投稿者は騙れない。**
-//
-// c: 判定するコメント。
-// 戻り値の1つ目: 読み取った hold。
-// 戻り値の2つ目: hold として数えてよければ true。
-func holdFrom(c CommentView) (Hold, bool) {
-	h, ok := ParseHold(c.Body)
-	if !ok {
-		return Hold{}, false
-	}
-	assignee := strings.TrimSpace(h.Assignee)
-	if assignee == "" || !strings.EqualFold(strings.TrimSpace(c.Author), assignee) {
-		return Hold{}, false
-	}
-	return h, true
 }
 
 // HasBidBy は、そのアカウントが既に入札を書いているかを返す。

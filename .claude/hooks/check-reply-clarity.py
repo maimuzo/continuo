@@ -594,7 +594,7 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0
             "読む側は、どのファイルの何行目かを毎回訊き直すことになります。\n"
             "**markdown link 形式で、行番号を含めて書いてください。**\n"
             "  悪い: 設計 6-23b に書きました\n"
-            "  良い: [docs/plans/continuo_design.md:8284-8316](docs/plans/continuo_design.md#L8284-L8316) に書きました\n"
+            "  良い: [docs/plans/continuo_design.md:8280-8312](docs/plans/continuo_design.md#L8280-L8312) に書きました\n"
             "同じ行に markdown link があれば通ります。\n"
         )
 
@@ -603,7 +603,7 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0
         parts.append(
             "\n**ファイルを指すときは、行番号まで書くこと。**\n"
             "  悪い: [docs/plans/continuo_design.md](docs/plans/continuo_design.md)\n"
-            "  良い: [docs/plans/continuo_design.md:8284-8316](docs/plans/continuo_design.md#L8284-L8316)\n"
+            "  良い: [docs/plans/continuo_design.md:8280-8312](docs/plans/continuo_design.md#L8280-L8312)\n"
             "**行番号が無いと、読む側はファイルを開いてから探すことになります。**\n"
         )
 

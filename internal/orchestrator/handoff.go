@@ -145,18 +145,6 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		return handoffDecision{}
 	}
 
-	if len(logins) == 1 && strings.EqualFold(logins[0], viewer.Login) {
-		// **担当者が自分のアカウント1人なら、コメントを読まずに答えが出る**（設計 3-77-0）。
-		// **`Assess` もこの場合は担当者だけで決めるので、答えは同じである。**
-		//
-		// **読む前に返すのが要点である。**下の `takeHandoffFetch` は1回の巡回で10件までしか
-		// 通さず、**使い切ると `stop` を返して候補のループごと打ち切る**
-		// （[dispatch.go](dispatch.go) の `decision.stop`）。
-		// **他人が担当している issue が10件並んでいると、その後ろにある自分の担当へ
-		// 毎回たどり着けなくなる。**
-		return handoffDecision{proceed: true}
-	}
-
 	if !o.takeHandoffFetch() {
 		o.logger.Info("持ち回りの判定に使うコメントの読み取りが、この巡回の上限に達しました（続きは次の巡回で見ます）",
 			"identifier", issue.Identifier, "1回の巡回の上限", maxHandoffFetchesPerPoll)
@@ -512,18 +500,7 @@ func (o *Orchestrator) postBid(
 ) (handoff.Bid, bool) {
 	// **締め切りまでの長さを渡す。**コメントに「担当は約何分後に決まるか」を書くためである
 	// （設計 3-77a）。issue を開いた人が、待てばよいのかを読めるようにする。
-	body := handoff.FormatBid(bid, o.handoffBidWindow())
-	// **投稿する前に、自分で読み戻せるかを確かめる。**
-	// **JSON の組み立てに失敗すると `{}` だけの本文になり**（`marshalLine`）、
-	// **その本文は入札として読めない**（時刻が入っていないため）。
-	// **読めない入札を投稿すると、次の巡回で「まだ入札していない」と読んで、
-	// 巡回のたびにコメントが1件ずつ増え続ける。**
-	if _, ok := handoff.ParseBid(body, bid.Author, o.now()); !ok {
-		o.logger.Warn("入札のコメントを組み立てられません（読み戻せない本文になりました。次の巡回でやり直します）",
-			"identifier", issue.Identifier)
-		return handoff.Bid{}, false
-	}
-	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
+	if err := o.postOwnMarkedComment(ctx, nodeID, handoff.FormatBid(bid, o.handoffBidWindow())); err != nil {
 		o.logger.Warn("入札のコメントを書けません（次の巡回でやり直します）",
 			"identifier", issue.Identifier, "error", err)
 		return handoff.Bid{}, false
@@ -746,8 +723,7 @@ func assigneeIDOf(issue tracker.Issue, login string) (string, bool) {
 // handoffLostOnTurnEnd は、走っている最中に担当が自分でなくなっていないかを確かめる（設計 3-77c）。
 //
 // **確かめるのは `recheck_interval_ms` に1回だけである**（既定1時間）。
-// turn の終わりごとに issue のコメントを全部読み直すと、巡回のリクエストが
-// run の数だけ増える。
+// turn の終わりごとに issue を取り直すと、巡回のリクエストが run の数だけ増える。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
@@ -848,33 +824,14 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 
 	// **担当者が他人のアカウントになっている。**担当が移ったということである。
 	// **いま担当しているのは、その担当者のアカウントで動いている continuo である。**
-	//
-	// **名前を取れなかった担当者の埋め草は返さない。**そのまま返すと、
-	// **`(取得できなかった担当者)` という文字列が「いまの担当」として人間に出る。**
-	// 全部が埋め草なら空文字を返し、文言の側で「どのアカウントかは読めませんでした」に落とす。
+
 	//
 	// **ここまで来てから、はじめてコメントを読む**（設計 3-77f の「巡回を塞がない」）。
 	// **判定には使わない。**外された記録をログへ残すためだけである。
 	// **判定の前に読むと、コメントを読めなかっただけで「担当は自分のまま」と答えることになり、
 	// 担当を外された run が push まで走り切る**（設計 3-77c が禁じている）。
 	o.logReleasedRecord(ctx, issue, nodeID, viewer.Login)
-	return true, firstNamedAssignee(logins)
-}
-
-// firstNamedAssignee は、名前を取れている担当者のうち最初のものを返す。
-//
-// **`assigneeLogins` は、人数には数えられているのに名前を取れていない担当者を
-// `unknownAssigneeLogin` で埋める。**その埋め草を人間へ出さないために外す。
-//
-// logins: 担当者のログイン名（埋め草を含む）。
-// 戻り値: 名前を取れている最初の担当者。1人もいなければ空文字。
-func firstNamedAssignee(logins []string) string {
-	for _, l := range logins {
-		if l != unknownAssigneeLogin {
-			return l
-		}
-	}
-	return ""
+	return true, logins[0]
 }
 
 // logReleasedRecord は、この continuo の担当が外された記録が issue にあればログへ残す
