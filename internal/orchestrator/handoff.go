@@ -358,8 +358,9 @@ func (o *Orchestrator) bidForIssue(
 	// `viewerIdentity` より先に呼ばれるので、入札を組み立てた時点では持ち主が分かっていない。
 	//
 	// **埋め忘れてはならない。**下で `posted` をそのまま勝敗の判定へ混ぜるので、
-	// **空のままだと自分が勝っても「負けた」と読む。**`bid_window_ms: 0` では
-	// 書いた巡回でそのまま勝敗を決めるため、担当者が永久に決まらない。
+	// **空のままだと、その巡回では自分が勝っても「負けた」と読む。**
+	// **次の巡回で GitHub から読み直せば勝てる**（`CollectBids` が投稿者から埋める）が、
+	// **`bid_window_ms: 0` は「締め切りを待たない」設定なのに、1巡回ぶん待たされる。**
 	bid.Author = viewer.Login
 
 	window := o.handoffBidWindow()
