@@ -250,14 +250,14 @@ type runState struct {
 	// hookSeenThisTurn は、この turn で hook を1件でも受けたかどうかである。
 	// 枠待ちの判定の条件その2（この run から hook が来ていない）に使う（設計 3-27）。
 	hookSeenThisTurn bool
-	// lastBusyHookAt は、**`SessionStart` 以外の** hook を最後に受けた時刻である
-	// （設計 3-80）。
+	// LastBusyHookAt は、**turn を処理している間にしか出ない** hook を最後に受けた時刻である
+	// （設計 3-80b。どれを数えるかは `isBusyHook`）。
 	//
 	// **起動の確認が「Claude Code は走っている」と判断する唯一の材料である。**
-	// **`LastHookAt` では代われない。**あちらは `SessionStart` でも進むので、
-	// **起動して入力待ちのまま止まった Claude Code まで「走っている」と読んでしまう。**
-	// そうなると `agent.start` のやり直しが1回も起きず、来ない `Stop` を
-	// `claude.turn_timeout_ms`（既定1時間）待つことになる。
+	// **`LastHookAt` では代われない。**あちらは `SessionStart` でも
+	// `Notification`（`idle_prompt`）でも進むので、**入力待ちのまま止まった Claude Code まで
+	// 「走っている」と読んでしまう。**そうなると `agent.start` のやり直しが1回も起きず、
+	// 来ない `Stop` を `claude.turn_timeout_ms`（既定1時間）待つことになる。
 	//
 	// **turn をまたいで持ち越す。**`beginTurn` では戻さない。見るのは着手の段10 だけであり、
 	// **そこは「この起動の確認を始めてから届いたか」を時刻の比較で決めている。**
@@ -554,11 +554,11 @@ func (rs *runState) noteHook(ev hookserver.HookEvent, now time.Time) {
 	defer rs.mu.Unlock()
 	rs.hookSeenThisTurn = true
 	rs.LastHookAt = now
-	// **`SessionStart` 以外は、turn を処理している間にしか出ない**（設計 3-80）。
-	// **起動の確認は、こちらだけを「走っている証拠」に使う。**
-	// `SessionStart` を混ぜると、**起動して入力待ちのまま止まった Claude Code まで
-	// 「走っている」と読み、来ない `Stop` を `claude.turn_timeout_ms` 待つことになる。**
-	if ev.HookEventName != hookSessionStart {
+	// **turn を処理している間にしか出ない hook だけを「走っている証拠」に使う**（設計 3-80b）。
+	// **入力待ちのまま止まった Claude Code でも出るものを混ぜてはならない。**
+	// 混ぜると、そこで `ErrStartupBusy` へ倒れて `agent.start` のやり直しが1回も起きず、
+	// **来ない `Stop` を `claude.turn_timeout_ms`（既定1時間）待つことになる。**
+	if isBusyHook(ev) {
 		rs.LastBusyHookAt = now
 	}
 	if !rs.WaitingQuota {
@@ -812,7 +812,39 @@ func (rs *runState) freezeHandoffSubagents() []string {
 	return subagentLabels(rs.handoffSubagents)
 }
 
-// lastBusyHookAt は、`SessionStart` 以外の hook を最後に受けた時刻を返す（設計 3-80）。
+// isBusyHook は「turn を処理している間にしか出ない hook」かを判定する（設計 3-80b）。
+//
+// **入力待ちのまま止まった Claude Code でも出るものを、2つ外す。**
+//
+//	SessionStart                  … **起動しただけで出る**
+//	Notification（permission_prompt 以外） … **`idle_prompt` は turn が終わったあとの
+//	                                無音を 60.040〜60.058 秒で破る**（12/12 の実測。設計 1-2）。
+//	                                `herdr.startup_timeout_ms` の既定（60000ミリ秒）と
+//	                                **ほぼ同時に飛ぶ**ので、起動の確認のいちばん危ないところで当たる
+//
+// **`permission_prompt` は残す。**あれは turn の最中に権限の確認で止まったことを表すので、
+// **turn は走っている**（設計 3-11）。
+//
+// **残る6つ**（`UserPromptSubmit` / `PreToolUse` / `PostToolUse` / `SubagentStart` /
+// `SubagentStop` / `Stop`）**は、turn を処理している間にしか出ない。**
+// **`Stop` を数えるのは、turn が終わった直後でも「たったいま走っていた」ことの証拠だからである。**
+// そのときは `stopSeenAt` が既に入っているので、待ちに入ってもすぐ抜ける。
+//
+// ev: 判定する hook。
+// 戻り値: turn を処理している間にしか出ないものなら true。
+func isBusyHook(ev hookserver.HookEvent) bool {
+	switch ev.HookEventName {
+	case hookSessionStart:
+		return false
+	case hookNotification:
+		return ev.NotificationType == "permission_prompt"
+	default:
+		return true
+	}
+}
+
+// lastBusyHookAt は、turn を処理している間にしか出ない hook を最後に受けた時刻を返す
+// （設計 3-80b）。
 //
 // **起動の確認だけが使う。**「Claude Code が走っているか」を、herdr に頼らずに答える。
 //
@@ -1077,6 +1109,28 @@ func (rs *runState) setNeedsPrompt() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	rs.NeedsPrompt = true
+}
+
+// markStartedIfZero は、まだ入っていなければ「この run が働き始めた時刻」を入れる。
+//
+// **`beginTurn` を通らない道のためにある**（設計 3-80）。`ErrStartupBusy` で
+// 「Claude Code は走っている」と判断した run は、1回目の turn を送らずに待ちへ入るので、
+// **`beginTurn` の中の代入を通らない。**
+//
+// **入れないと、成果のコメントを確かめる網が黙って外れる。**
+// `ensureAgentComment` は `StartedAt` がゼロ値の run を「1回も turn を送っていないので
+// 書かせる材料が無い」として抜ける（設計 3-25）。**「走っている」と判断した直後に
+// 「1回も送っていない」と言うことになり、前提が正面から食い違う。**
+//
+// **復元が引き継いだ run も同じ手当てをしている**（`Adopt` が引き継いだ時刻を入れる）。
+//
+// now: 入れる時刻。
+func (rs *runState) markStartedIfZero(now time.Time) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.StartedAt.IsZero() {
+		rs.StartedAt = now
+	}
 }
 
 // setAwaitTurnEnd は「turn を送らずに turn の終わりを待つ」を立てる（設計 3-4 の段5a2）。

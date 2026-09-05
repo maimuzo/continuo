@@ -8813,19 +8813,31 @@ turn の終わりを決められず、**`settle_ms` の窓が閉じた瞬間に 
 **動いている本人の hook が「知らない session_id」として捨てられる**（3-3b）。
 **だから `ErrStartupBusy` は、そちらの枝にも入れない。**
 
-### 3-80b. 走っている証拠に `SessionStart` を数えない
+### 3-80b. 走っている証拠に、入力待ちでも出る hook を数えない
 
-**言いたいこと。**「hook が届いた」では足りない。**`SessionStart` は起動しただけで出る。**
-数えると、入力待ちのまま止まった Claude Code まで「走っている」と読む。
+**言いたいこと。**「hook が届いた」では足りない。**起動しただけ・入力待ちなだけでも出る hook がある。**
+数えると、固まった Claude Code まで「走っている」と読む。
 
-**何が起きるか。**`SessionStart` を数えると、起動して固まった Claude Code に対して
+**何が起きるか。**数えると、起動して固まった Claude Code に対して
 **`agent.start` のやり直しが1回も起きなくなる。**そのうえ `awaitTurnEnd` が立つので、
 **来ない `Stop` を `claude.turn_timeout_ms`（既定1時間）待ってから、ようやく
 `checkStalls` が拾う。**直す前は60秒で見切れていた。
 
-**採る形。**`runState` に「`SessionStart` 以外の hook を最後に受けた時刻」を持たせ、
-段10 はそれだけを見る。**残る7つ**（`UserPromptSubmit` / `PreToolUse` / `PostToolUse` /
-`Notification` / `SubagentStart` / `SubagentStop` / `Stop`）**は、turn を処理している間にしか出ない。**
+**外すのは2つである。**
+
+| 外すもの | なぜ |
+| --- | --- |
+| **`SessionStart`** | **起動しただけで出る** |
+| **`Notification` のうち `permission_prompt` 以外** | **`idle_prompt` は、turn が終わったあとの無音を 60.040〜60.058 秒で破る**（12/12 の実測。1-2）。**`herdr.startup_timeout_ms` の既定（60000ミリ秒）とほぼ同時に飛ぶ**ので、起動の確認のいちばん危ないところで当たる |
+
+**`permission_prompt` は残す。**あれは turn の最中に権限の確認で止まったことを表すので、
+**turn は走っている**（3-11）。
+
+**採る形。**`runState` に「その6つ以外を最後に受けた時刻」を持たせ、段10 はそれだけを見る。
+**残る6つ**（`UserPromptSubmit` / `PreToolUse` / `PostToolUse` / `SubagentStart` /
+`SubagentStop` / `Stop`）**は、turn を処理している間にしか出ない。**
+**`Stop` を数えるのは、turn が終わった直後でも「たったいま走っていた」ことの証拠だからである。**
+そのときは `stopSeenAt` が既に入っているので、待ちに入ってもすぐ抜ける。
 
 **時刻で切る理由。**復帰は前回のセッション UUID をそのまま使う（3-3b。`--resume` は
 `session_id` を変えない）。**切らないと、前の run が残した時刻を証拠に読む。**
@@ -8844,6 +8856,17 @@ hook が届いた直後に取り直した回で証拠が消える。
 **やり直しが1回入ることはある。**起動直後の1回目の `agent.get` は hook より先に走るので
 証拠が成立しない。**その間も hook は届き続けるので、次の確認で拾える。**
 
+### 3-80c. `ErrStartupBusy` を受けた側が、落としてはならないもの
+
+**言いたいこと。**この道は `beginTurn` を通らず、`confirmStartup` の呼び出し側も2つある。
+**どちらも取りこぼすと、直したはずの症状が別の顔で戻る。**
+
+**働き始めた時刻を入れる。**この道は `beginTurn` を通らないので、入れないと
+`ensureAgentComment` が「1回も turn を送っていないので書かせる材料が無い」として抜け、
+**成果のコメントを確かめる網が黙って外れる**（3-25）。
+**「走っている」と判断した直後に「1回も送っていない」と言うことになる。**
+復元が引き継いだ run も、同じ理由で引き継いだ時刻を入れている（3-4 の段5c）。
+
 **コメントを書かせる復元の道でも同じである**（3-25 の9段の段6）。**そこも `confirmStartup` を
 通るので、`ErrStartupBusy` を「落ち着かなかった」として扱ってはならない。**扱うと、
 **走っている本人の pane を閉じたうえで、「作業を終えたと表明したのに何も書き残さなかった」という
@@ -8861,22 +8884,26 @@ run の終わりでは1度も見ずに pane を閉じている。**走ってい�
 | --- | --- |
 | 申告が空 | そのまま進む |
 | **確認の画面で止まっている** | **待たない**（新しい `Stop` は二度と来ない） |
-| **hook が `claude.settle_ms` より古い** | **待たない**（動いている証拠が無い） |
 | それ以外 | 申告が空になるまで `claude.poll_wait_ms` を上限に待つ |
 
-**待たない条件を2つ置く理由。**申告が入れ替わるのは新しい `Stop` を受けたときだけであり
+**待たない条件を1つだけ置く理由。**申告が入れ替わるのは新しい `Stop` を受けたときだけであり
 （`noteHook`）、**`blocked` で止まった Claude Code は `Stop` を二度と出さない。**
 そこで待つと、直前の `waitForRunningSubagents`（3-11）と合わせて `claude.poll_wait_ms` を
-2回ぶん、人間への引き渡しが遅れるだけになる。
-**その道は hook の新しさでは弾けない。**権限の確認の `Notification` が直前に届いており、
-**`LastHookAt` は真新しいからである。**だから「確認の画面で止まっている」を別に見る
-（`freezeHandoffSubagents` を通ったかどうか。通るのは `blocked` の道だけである）。
+2回ぶん、人間への引き渡しが遅れるだけになる。見分けは `freezeHandoffSubagents` を
+通ったかどうかで付く（通るのは `blocked` の道だけである）。
 **新しい設定は足さない。**
 
+**hook の新しさは条件にしない。**一度は `claude.settle_ms` で切ったが、**その線では1回も待たなかった。**
+turn の終わりの判定は「空の `Stop` を受けてから `settle_ms` を使い切る」ところで `turnEnded` を
+返すので（`confirmTurnEnd`）、**ここへ着く時点で必ず `settle_ms` を超えている。**
+そのうえ transcript の読み直しとカンバンへの問い合わせが挟まる。
+**「待つ」を足したのに、足した場面で回らなかった。**
+
 **何を道連れにしたかは `stopWorker` が残す。**待つ場所ではなく、**pane を閉じる場所に置く。**
-閉じる道は8つあり（`finishRunClaimed` / `failRun` / `abandonRunClaimed` /
-`stopAndReleaseAsync` / `ensureAgentComment` の段2 / 知らない Status / 担当が移った /
-着手をやめた）、**待つのは1つだけだが、道連れにするのは全部だからである。**
+`stopWorker` の呼び出しは **11箇所・9関数**である（`finishRunClaimed` / `failRun` /
+`abandonRunClaimed` / `stopAndReleaseAsync` / `ensureAgentComment` の段2 /
+`failCommentRecovery` / コメントが書けたので閉じる道 / 知らない Status / 担当が移った /
+着手をやめた）。**待つのは1つだけだが、道連れにするのは全部だからである。**
 
 **先頭に置く理由。**引き渡しの通知は1つの run につき1件しか出せない（`takeHandoffPost`）。
 **あとに置くと、何を道連れにしたかを書く先が残らない。**

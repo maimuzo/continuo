@@ -1018,7 +1018,11 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		// **1回目の本文は捨てない。**`awaitFirst` の周は `beginTurn` を通らないので
 		// `SendFirstPrompt` は真のまま残り、走っている turn が終わった次の周で送られる。
 		o.logger.Info("Claude Code は走っているので、1回目の指示を送らずに turn の終わりを待ちます",
-			"identifier", issue.Identifier, "理由", summaryLine(startErr.Error()))
+			"identifier", issue.Identifier)
+		// **働き始めた時刻を入れる**（設計 3-80）。**この道は `beginTurn` を通らない。**
+		// 入れないと、`ensureAgentComment` が「1回も turn を送っていないので書かせる材料が無い」
+		// として抜け、**成果のコメントを確かめる網が黙って外れる**（設計 3-25）。
+		rs.markStartedIfZero(o.now())
 		rs.setAwaitTurnEnd()
 		return nil
 	}

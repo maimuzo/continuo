@@ -166,6 +166,95 @@ func TestStartup_SessionStartだけでは走っているとみなさない(t *te
 	}
 }
 
+// TestStartup_idle_promptだけでは走っているとみなさない は、設計 3-80b の
+// 「入力待ちでも出る hook を数えない」の2つ目を検査する。
+//
+// 目的: `Notification` の `idle_prompt` は、**turn が終わったあとの無音を
+// 60.040〜60.058 秒で破る**（12/12 の実測。設計 1-2）。
+// **`herdr.startup_timeout_ms` の既定（60000ミリ秒）とほぼ同時に飛ぶ**ので、
+// **起動の確認のいちばん危ないところで当たる。**数えると、入力待ちで固まった Claude Code を
+// 「走っている」と読み、`agent.start` のやり直しが1回も起きなくなる。
+// 与える情報: `idle_prompt` の `Notification` だけを流し、`agent_not_found` を返し続ける台本。
+// 成功条件: **`agent.start` がやり直されること**と、issue が `failure_state`（`Blocked`）へ
+// 落ちること。
+func TestStartup_idle_promptだけでは走っているとみなさない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 },
+	})
+	fx.AllowLog("agent.get", "起動していない", "run を諦めて")
+	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
+
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(map[string]any) (any, *rpcErr) {
+		// **起動して入力待ちのまま座っているだけの Claude Code である。**
+		fx.Orc.OnHook(hookserver.HookEvent{
+			HookEventName:    "Notification",
+			SessionID:        "session-1",
+			NotificationType: "idle_prompt",
+		})
+		return nil, agentNotFoundErr()
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 40*time.Second, "idle_prompt だけでは走っているとみなさず、人間へ渡す", func() bool {
+		return fx.Tracker.StateOf("PVTI_item235") == "Blocked"
+	})
+	fx.WaitRunsDrained(t, 20*time.Second)
+
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n < 2 {
+		t.Errorf("idle_prompt を「走っている」と読んで agent.start をやり直していない: agent.start の回数 %d", n)
+	}
+	if strings.Contains(fx.Logs.String(), "1回目の指示を送らずに turn の終わりを待ちます") {
+		t.Errorf("idle_prompt だけで「走っている」と判断した")
+	}
+}
+
+// TestStartup_走っていると判断したrunにも働き始めた時刻を入れる は、設計 3-80c を検査する。
+//
+// 目的: `ErrStartupBusy` の道は `beginTurn` を通らないので、**働き始めた時刻を入れないと
+// `ensureAgentComment` が「1回も turn を送っていないので書かせる材料が無い」として抜け、
+// 成果のコメントを確かめる網が黙って外れる。**
+// 与える情報: 起動の確認で `ErrStartupBusy` へ倒れ、そのあと走っていた turn が
+// `In Review` の表明つきで終わる台本。**エージェントは成果のコメントを書かない。**
+// 成功条件: **「セッションを復元して書かせます」の行が出ること。**
+// **時刻を入れない実装では「turn を1回も送っていないので、コメントの確認は行いません」が出る。**
+func TestStartup_走っていると判断したrunにも働き始めた時刻を入れる(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.AllowLog("turn の終わりの裏取りができませんでした", "run を終えます",
+		"セッションを復元できません", "Status を落とせません", "コメントを書かせる",
+		"復帰する先のセッションに会話の記録が無い", "何をしたのかを issue に書き残しませんでした")
+	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
+
+	transcriptDir := t.TempDir()
+	parent := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "終わりました。\nCONTINUO-STATUS: review", false),
+	})
+
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(map[string]any) (any, *rpcErr) {
+		fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
+		return nil, agentNotFoundErr()
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 20*time.Second, "起動の確認が「Claude Code は走っている」で終わる", func() bool {
+		return strings.Contains(fx.Logs.String(), "1回目の指示を送らずに turn の終わりを待ちます")
+	})
+
+	// **走っていた turn が、成果のコメントを書かないまま終わる。**
+	fx.Orc.Tick(context.Background())
+	fx.Orc.OnHook(stopEvent("session-1", parent, "p1"))
+	fx.WaitRunsDrained(t, 40*time.Second)
+
+	logs := fx.Logs.String()
+	if strings.Contains(logs, "turn を1回も送っていないので、コメントの確認は行いません") {
+		t.Errorf("走っていると判断した run で、成果のコメントを確かめる網が外れた:\n%s", logs)
+	}
+	if !strings.Contains(logs, "この run のコメントが無いので、セッションを復元して書かせます") {
+		t.Errorf("成果のコメントを確かめていない:\n%s", logs)
+	}
+}
+
 // TestFinish_道連れにしたバックグラウンド処理を通知へ書く は、設計 3-81 の記録を検査する。
 //
 // 目的: `background_tasks` に処理が載ったまま pane を閉じたなら、**何を道連れにしたかを
@@ -225,9 +314,9 @@ func TestFinish_走っているあいだは待ってから閉じる(t *testing.T
 		Mutate: func(cfg *config.Config) {
 			// **指示の回数の上限を1回にする。**1回目の turn の終わりで打ち切りへ進む。
 			cfg.Agent.MaxDispatchTurns = 1
-			// **hook の新しさの線。**広げないと「hook が来ていない」と見なされて待たない。
-			cfg.Claude.SettleMs = 5000
 			// **待ちの上限。**下の goroutine が動くだけの余裕を取る。
+			// **`claude.settle_ms` は既定のままにする。**広げないと通らない形にしていたが、
+			// **それは「既定では1回も待たない」ことの証拠だった**（設計 3-81）。
 			cfg.Claude.PollWaitMs = 5000
 		},
 	})
@@ -297,13 +386,7 @@ func TestFinish_走っているあいだは待ってから閉じる(t *testing.T
 // 成功条件: 「確認の画面で止まっているので、バックグラウンド処理を待ちません」が出て、
 // **「pane を閉じる前に待ちます」が出ないこと。**
 func TestFinish_確認の画面で止まっているなら待たない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{
-		Mutate: func(cfg *config.Config) {
-			// **hook の新しさでは弾けないことを確かめる。**権限の確認のあと、
-			// `LastHookAt` は真新しいままである。
-			cfg.Claude.SettleMs = 5000
-		},
-	})
+	fx := newFixture(t, fixtureOptions{})
 	fx.AllowLog("バックグラウンド処理が残ったまま pane を閉じます")
 	fx.Tracker.AddIssue(sampleIssue(236, "Ready"))
 
