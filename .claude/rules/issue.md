@@ -16,7 +16,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 **continuo が起動したエージェントは、この節が言う「ボードの操作」をしない。**
 issue をボードへ載せることも、Status を付けることも、並べ替えることもしない
 （載せることと Status は [docs/plans/continuo_design.md:8717](../../docs/plans/continuo_design.md#L8717)、
-並べ替えは [docs/plans/continuo_design.md:8904-8864](../../docs/plans/continuo_design.md#L8904-L8908) の 4-4 の表に
+並べ替えは [docs/plans/continuo_design.md:8904-8908](../../docs/plans/continuo_design.md#L8904-L8908) の 4-4 の表に
 「continuo が起動したエージェント」の行が無いこと）。
 **ただし「1バイトも触らない」ではない。**設計は、そのエージェントが自分で `gh` を叩いて
 `In Progress` → `Blocked` を動かす経路を認めている
@@ -26,7 +26,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **ボードの操作は AI が行う。**ただし 4-1 の遷移表で「誰が」の欄が「人間」だけの3つは人間である
-（[docs/plans/continuo_design.md:8715-8683](../../docs/plans/continuo_design.md#L8715-L8727)）。
+（[docs/plans/continuo_design.md:8715-8727](../../docs/plans/continuo_design.md#L8715-L8727)）。
 
 | 遷移 | いつ |
 | --- | --- |
