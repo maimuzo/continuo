@@ -1700,6 +1700,9 @@ type fixtureOptions struct {
 	//
 	// **空なら読み直さない。**渡していないテストの挙動は変わらない。
 	ConfigPath string
+	// ConfigFile は、ファイルから読んだままの設定である（CLI の上書きが入っていないもの）。
+	// nil なら Config で代用する。
+	ConfigFile *config.Config
 	// ContinuoPath は hook のコマンド行に書く実行ファイルのパスである。
 	// 空なら `/opt/continuo/bin/continuo` を使う。
 	ContinuoPath string
@@ -1851,6 +1854,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Prompt: prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
 		// **走行中の読み直しは、渡したテストでだけ走る**（設計 3-24）。
 		ConfigPath:     opts.ConfigPath,
+		ConfigFile:     opts.ConfigFile,
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,

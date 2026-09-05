@@ -194,7 +194,11 @@ func diffTree(prefix string, a, b map[string]any, out *[]FrozenChange) {
 		bm, bIsMap := bv.(map[string]any)
 		// **両方が入れ子なら、そこへ降りる。**片方だけが入れ子のときは値として比べる
 		// （型が変わることは front matter の検査が通っている以上まず無いが、落とさない）。
-		if aok && bok && aIsMap && bIsMap {
+		//
+		// **値を伏せるキーへは降りない。**降りると `claude.env.ANTHROPIC_AUTH_TOKEN` のような
+		// 子のキーで1件ずつ出てしまい、**伏せる表（maskedKeys）が一度も引かれない。**
+		// **その結果、鍵の前後の値がそのままログへ出る。**
+		if aok && bok && aIsMap && bIsMap && !maskedKeys[path] {
 			diffTree(path, am, bm, out)
 			continue
 		}

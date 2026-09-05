@@ -218,3 +218,38 @@ func Test本文が変わったことを知らせるキーがある(t *testing.T)
 		t.Errorf("キーから、どのファイルの話か読めない: %q", config.PromptBodyKey)
 	}
 }
+
+// Test環境変数の値はログに出さない は、`claude.env` を書き換えたときに値が伏せられることを確かめる。
+//
+// 目的: 利用者が鍵を置く場所の値が、ログを貼り付けただけで外へ出ないようにする。
+// 与える情報: `claude.env` の値だけを書き換えた設定。
+// 成功条件: キーは `claude.env` で出て、前後の値がどちらも伏せられている。
+func Test環境変数の値はログに出さない(t *testing.T) {
+	old := 走行中の設定(t)
+	old.Claude.Env = map[string]string{"ANTHROPIC_AUTH_TOKEN": "ひみつ-旧"}
+	next := old
+	next.Claude.Env = map[string]string{"ANTHROPIC_AUTH_TOKEN": "ひみつ-新"}
+
+	changes, err := config.FrozenChanges(old, next)
+	if err != nil {
+		t.Fatalf("差分を作れなかった: %v", err)
+	}
+	var found bool
+	for _, c := range changes {
+		if strings.Contains(c.From, "ひみつ") || strings.Contains(c.To, "ひみつ") {
+			t.Errorf("環境変数の値がそのまま出ている: %v", c)
+		}
+		if c.Key == "claude.env" {
+			found = true
+			if c.From == c.To && c.From == "" {
+				t.Errorf("伏せた値が空になっている: %v", c)
+			}
+		}
+		if strings.HasPrefix(c.Key, "claude.env.") {
+			t.Errorf("環境変数の中へ降りてしまっている（伏せる表が引かれない）: %v", c)
+		}
+	}
+	if !found {
+		t.Errorf("claude.env が変わったことが出ていない: %v", changes)
+	}
+}

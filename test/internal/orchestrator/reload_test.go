@@ -181,3 +181,75 @@ func Test設定ファイルのパスを渡さなければ読み直さない(t *t
 		t.Errorf("パスを渡していないのに読み直しが走った:\n%s", fx.Logs.String())
 	}
 }
+
+// Test値を元へ戻しても読み直しの記録が出る は、2 → 4 のあと 4 → 2 に戻したときに
+// 記録が黙らないことを確かめる。
+//
+// 目的: 「読み直しが走らなかった」と利用者が読み違えるのを防ぐ。
+// 与える情報: 同じキーを行き来させる WORKFLOW.md。
+// 成功条件: 読み直しの記録が2回とも出る。
+func Test値を元へ戻しても読み直しの記録が出る(t *testing.T) {
+	dir := t.TempDir()
+	path := 読み直し用のWORKFLOW(t, dir,
+		読み直し用のfrontMatter("warn_and_comment", "2", "30000"), "本文\n")
+
+	fx := newFixture(t, fixtureOptions{ConfigPath: path, Mutate: 読み直し用の設定})
+	fx.AllowLog("読み直しただけでは効きません")
+	fx.Orc.Tick(context.Background())
+
+	読み直し用のWORKFLOW(t, dir, 読み直し用のfrontMatter("warn_and_comment", "4", "30000"), "本文\n")
+	fx.Orc.Tick(context.Background())
+	first := strings.Count(fx.Logs.String(), "WORKFLOW.md を読み直しました")
+
+	// **元の値へ戻す。**知らせがキーの名前だけだと、ここで前回と同じ文字列になって黙る。
+	読み直し用のWORKFLOW(t, dir, 読み直し用のfrontMatter("warn_and_comment", "2", "30000"), "本文\n")
+	fx.Orc.Tick(context.Background())
+	second := strings.Count(fx.Logs.String(), "WORKFLOW.md を読み直しました")
+
+	if second <= first {
+		t.Errorf("値を元へ戻したら記録が出なくなった（%d回 → %d回）:\n%s", first, second, fx.Logs.String())
+	}
+}
+
+// Test触っていない項目は効かない一覧に出ない は、利用者が書き換えていないキーが
+// 「効きません」の一覧へ出ないことを確かめる。
+//
+// 目的: CLI の上書き（--port）が混ざって、触っていない server.port が毎回出るのを防ぐ。
+// 与える情報: 差し替えられるキーだけを書き換えた WORKFLOW.md と、Config 側だけ違う server.port。
+// 成功条件: 「効きません」の一覧に server.port が出ない。
+func Test触っていない項目は効かない一覧に出ない(t *testing.T) {
+	dir := t.TempDir()
+	front := 読み直し用のfrontMatter("warn_and_comment", "2", "30000")
+	path := 読み直し用のWORKFLOW(t, dir, front, "本文\n")
+
+	fileCfg := 読み直し用のファイルの設定(t, path)
+	port := 9090
+	fx := newFixture(t, fixtureOptions{
+		ConfigPath: path,
+		ConfigFile: &fileCfg,
+		Mutate: func(cfg *config.Config) {
+			読み直し用の設定(cfg)
+			// **CLI の --port を渡して起動したのと同じ形にする。**
+			cfg.Server.Port = &port
+		},
+	})
+	fx.AllowLog("読み直しただけでは効きません")
+
+	fx.Orc.Tick(context.Background())
+	読み直し用のWORKFLOW(t, dir, 読み直し用のfrontMatter("warn_and_comment", "4", "30000"), "本文\n")
+	fx.Orc.Tick(context.Background())
+
+	if strings.Contains(fx.Logs.String(), "server.port") {
+		t.Errorf("触っていない server.port が「効きません」に出た:\n%s", fx.Logs.String())
+	}
+}
+
+// 読み直し用のファイルの設定 は、書いた WORKFLOW.md を読んだままの設定を返す。
+func 読み直し用のファイルの設定(t *testing.T, path string) config.Config {
+	t.Helper()
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("テスト用の WORKFLOW.md を読めなかった: %v", err)
+	}
+	return loaded.Config
+}

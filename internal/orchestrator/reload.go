@@ -2,6 +2,8 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/config"
@@ -65,7 +67,11 @@ func (o *Orchestrator) reloadConfig(_ context.Context) {
 		return
 	}
 
-	frozen, err := config.FrozenChanges(merged, loaded.Config)
+	// **比べる相手は「前に読んだファイルの中身」である。**
+	// **いま効いている設定と比べてはならない。**`--port` のような CLI の上書きが混ざっており
+	// （daemon が `config.Load` のあとに `cfg.Server.Port` を書き換える）、
+	// **利用者が1バイトも触っていない `server.port` が毎回「効きません」に出る。**
+	frozen, err := config.FrozenChanges(o.configBaseline(), loaded.Config)
 	if err != nil {
 		// **差分を作れなくても差し替えは行う。**報告できないことは、効かせない理由にならない。
 		o.logger.Warn("読み直しても効かない項目を数えられませんでした（差し替えは行います）",
@@ -91,6 +97,7 @@ func (o *Orchestrator) reloadConfig(_ context.Context) {
 	}
 
 	o.reloadable.Store(&after)
+	o.setConfigBaseline(loaded.Config)
 
 	o.noteReload(reloadNoteOf(applied, frozen), func() {
 		if len(applied) > 0 {
@@ -123,28 +130,70 @@ func (o *Orchestrator) promptBodyChanged(body string) bool {
 	return o.promptFragments.BodyChanged(body)
 }
 
-// diffReloadable は、実際に効いた項目をドット区切りのキーで並べる。
+// diffReloadable は、実際に効いた項目を「キー: 前 → 後」で並べる。
 //
 // **キーの名前は front matter と揃える。**利用者が書いた名前で報告する。
 //
+// **前後の値まで入れる。**キーの名前だけだと、2 → 4 にしたあと 4 → 2 に戻したときに
+// **知らせが前回と同じ文字列になり、`noteReload` が黙らせてしまう。**
+// 利用者からは「読み直しが走らなかった」と区別が付かない。
+//
 // before: 差し替える前。
 // after: 差し替えたあと。
-// 戻り値: 変わった項目のキー（名前順）。
+// 戻り値: 変わった項目（名前順）。
 func diffReloadable(before, after config.Reloadable) []string {
 	var out []string
 	if before.OnAssigneeGate != after.OnAssigneeGate {
-		out = append(out, "tracker.provider.handoff.on_assignee_gate")
+		out = append(out, fmt.Sprintf("tracker.provider.handoff.on_assignee_gate: %s → %s",
+			before.OnAssigneeGate, after.OnAssigneeGate))
 	}
 	if !sameStringMap(before.AutomatedStateRewrite, after.AutomatedStateRewrite) {
-		out = append(out, "tracker.automated_state_rewrite")
+		out = append(out, fmt.Sprintf("tracker.automated_state_rewrite: %v → %v",
+			sortedStringMap(before.AutomatedStateRewrite), sortedStringMap(after.AutomatedStateRewrite)))
 	}
 	if before.MaxConcurrentAgents != after.MaxConcurrentAgents {
-		out = append(out, "agent.max_concurrent_agents")
+		out = append(out, fmt.Sprintf("agent.max_concurrent_agents: %d → %d",
+			before.MaxConcurrentAgents, after.MaxConcurrentAgents))
 	}
 	if !sameIntMap(before.MaxConcurrentAgentsByState, after.MaxConcurrentAgentsByState) {
-		out = append(out, "agent.max_concurrent_agents_by_state")
+		out = append(out, fmt.Sprintf("agent.max_concurrent_agents_by_state: %v → %v",
+			sortedIntMap(before.MaxConcurrentAgentsByState), sortedIntMap(after.MaxConcurrentAgentsByState)))
 	}
 	return out
+}
+
+// sortedStringMap は map を名前順の並びへ直す（報告の順序を実行のたびに変えないため）。
+func sortedStringMap(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k, v := range m {
+		out = append(out, fmt.Sprintf("%s=%s", k, v))
+	}
+	sort.Strings(out)
+	return out
+}
+
+// sortedIntMap は map を名前順の並びへ直す（報告の順序を実行のたびに変えないため）。
+func sortedIntMap(m map[string]int) []string {
+	out := make([]string, 0, len(m))
+	for k, v := range m {
+		out = append(out, fmt.Sprintf("%s=%d", k, v))
+	}
+	sort.Strings(out)
+	return out
+}
+
+// configBaseline は、前に読んだファイルの中身を返す（読み直しの比較の相手）。
+func (o *Orchestrator) configBaseline() config.Config {
+	o.reloadMu.Lock()
+	defer o.reloadMu.Unlock()
+	return o.baseline
+}
+
+// setConfigBaseline は、比較の相手を、いま読んだファイルの中身へ進める。
+func (o *Orchestrator) setConfigBaseline(cfg config.Config) {
+	o.reloadMu.Lock()
+	defer o.reloadMu.Unlock()
+	o.baseline = cfg
 }
 
 // sameStringMap は2つの map が同じ中身かを返す。

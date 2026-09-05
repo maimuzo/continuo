@@ -213,6 +213,13 @@ type Options struct {
 	// **空なら読み直さない。**テストは渡さないので、渡していないテストの挙動は変わらない。
 	// **絶対パスでなければ読み直しを行わない**（config.Load が相対パスを受け付けない）。
 	ConfigPath string
+	// ConfigFile は、ファイルから読んだままの設定である（**CLI の上書きが入っていないもの**）。
+	//
+	// **「読み直しても効かない項目」を出すときの比較の相手になる。**
+	// `Config` と比べると、`--port` の上書きのせいで
+	// **利用者が1バイトも触っていない `server.port` が毎回「効きません」に出る。**
+	// **nil なら Config で代用する。**
+	ConfigFile *config.Config
 	// Prompt は1回目に送る指示書の断片である（設計 5-3 / 5-3c）。
 	//
 	// **組み込みの前半・固有・組み込みの後半の3つを、この順に持っている。**
@@ -330,6 +337,13 @@ type Orchestrator struct {
 	reloadMu sync.Mutex
 	// configStamp は最後に読んだ WORKFLOW.md の印である。
 	configStamp config.FileStamp
+	// baseline は、最後に読み込んだ WORKFLOW.md の中身そのものである。
+	//
+	// **「読み直しても効かない項目」は、これと比べて出す。**
+	// **`cfg` と比べてはならない。**あちらは CLI の `--port` の上書きが入っており
+	// （daemon が `config.Load` のあとに書き換える）、**利用者が1バイトも触っていない
+	// `server.port` が毎回「効きません」に出る。**
+	baseline config.Config
 	// reloadNote は、前の巡回で出した読み直しの知らせである（成功・失敗のどちらも）。
 	//
 	// **同じ知らせを出し続けない。**巡回の間隔の既定は30秒であり、壊れたファイルを
@@ -542,6 +556,12 @@ func New(opts Options) (*Orchestrator, error) {
 	// goroutine から引かれるので、**panic はプロセスごと落とす。**
 	reloadable := config.ExtractReloadable(opts.Config)
 	orc.reloadable.Store(&reloadable)
+	// **比較の相手は、ファイルから読んだままの設定である**（CLI の上書きが入っていないもの）。
+	// **渡されていなければ Config で代用する。**テストは渡さないので、そちらは変わらない。
+	orc.baseline = opts.Config
+	if opts.ConfigFile != nil {
+		orc.baseline = *opts.ConfigFile
+	}
 	// **いま渡された設定は、このファイルから読んだものである**（daemon が `config.Load` の
 	// 結果をそのまま渡す）。**印を入れておかないと、最初の巡回が必ず「読み直し」を1回走らせ、
 	// 何も変わっていないのに1行出る。**取れなくても起動は止めない（次の巡回で取り直す）。

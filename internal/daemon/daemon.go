@@ -188,6 +188,9 @@ func Run(ctx context.Context, opts Options) error {
 		return i18n.Errorf(i18n.KeyDaemonRunConfigLoadFailed, ErrStartup, opts.ConfigPath, err)
 	}
 	cfg := loaded.Config
+	// **CLI の上書きを入れる前の写しを取っておく**（設計 3-24）。
+	// 読み直しの「効きません」の一覧は、これと比べて出す。
+	fileCfg := loaded.Config
 	logger.Info("設定ファイルを読み込みました", "path", loaded.Path)
 
 	// **`--id` から二重起動防止のロックの置き場所を決める**（設計 3-17b）。
@@ -282,7 +285,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// 段2b: 依存を組み立てる。**ここで `gh auth token` が走る**（`token_source` の既定は
 	// `gh_auth`）。外部プロセスを起こす段なので、起動時検査と同じ期限を掛ける。
-	deps, err := build(ctx, cfg, loaded.Path, frag, sockPath, runtimeDir, opts.ContinuoPath,
+	deps, err := build(ctx, cfg, &fileCfg, loaded.Path, frag, sockPath, runtimeDir, opts.ContinuoPath,
 		endpoint, opts.TrackerTimeout, opts.StartupCheckTimeout, logger)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrStartup, err)
@@ -684,6 +687,7 @@ func isLoopbackHost(host string) bool {
 //
 // ctx: 組み立てに適用するコンテキスト。
 // cfg: 検証済みの設定。
+// configFile: ファイルから読んだままの設定（**CLI の上書きが入っていないもの**。設計 3-24）。
 // configPath: 読み込んだ WORKFLOW.md の絶対パス（走行中の読み直しに使う。設計 3-24）。
 // frag: 1回目に送る指示書の断片（組み込みの前半・固有・組み込みの後半）。
 // sockPath: 解決済みの hook の socket の絶対パス。
@@ -698,6 +702,7 @@ func isLoopbackHost(host string) bool {
 func build(
 	ctx context.Context,
 	cfg config.Config,
+	configFile *config.Config,
 	configPath string,
 	frag prompt.Fragments,
 	sockPath, runtimeDir, continuoPath, graphqlEndpoint string,
@@ -767,7 +772,10 @@ func build(
 		Config: cfg,
 		// **走行中に WORKFLOW.md を読み直すために渡す**（設計 3-24）。
 		// **渡さないと読み直しを行わない。**
-		ConfigPath:     configPath,
+		ConfigPath: configPath,
+		// **CLI の上書きが入っていない、ファイルのままの設定も渡す**（設計 3-24）。
+		// **「読み直しても効かない項目」は、これと比べて出す。**
+		ConfigFile:     configFile,
 		Prompt:         frag,
 		Tracker:        adapter,
 		Herdr:          hc,
