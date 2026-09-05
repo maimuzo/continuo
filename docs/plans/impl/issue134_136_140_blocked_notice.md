@@ -8,7 +8,7 @@
 
 **3-68 は残す。置き換えない。**あちらは着手の検査の4つの経路（worktree・信頼・枠・担当者）をまとめて扱い、
 **「重複を抑える鍵は、飛ばす原因の広がりより細かくしない。worktree の経路だけが issue 単位で、残る3つはリポジトリ単位である」**
-という決めごとを持っている（[docs/plans/continuo_design.md:7161-7163](../continuo_design.md#L7161-L7163)）。
+という決めごとを持っている（[docs/plans/continuo_design.md:7212-7214](../continuo_design.md#L7212-L7214)）。
 **置き換えると、この文書が扱わない3つの経路の決定が、文書のどこにも残らなくなる。**
 **3-68 へ足すのは1行だけである。**「担当者の経路は [docs/plans/impl/issue134_136_140_blocked_notice.md](issue134_136_140_blocked_notice.md) が正」（14 節）。
 
@@ -38,7 +38,7 @@
 [internal/orchestrator/handoff.go](../../../internal/orchestrator/handoff.go) の `handoffGate` だけを指す。
 
 **`blocked` という語を使わない。**ボードの Status に `Blocked` があり
-（[internal/orchestrator/dispatch.go:71](../../../internal/orchestrator/dispatch.go#L71) の `dispatchBlockedStates`）、
+（[internal/orchestrator/dispatch.go:81](../../../internal/orchestrator/dispatch.go#L81) の `dispatchBlockedStates`）、
 **同じ語が2つの別のものを指すことになる。**
 
 ---
@@ -116,7 +116,7 @@ type gateNote struct {
 	// Title は issue の題名である。**外部から来る文字列である。**
 	Title string
 	// URL は issue の URL である。**draft issue はここへ来ない**
-	// （`handoffGate` の入口 internal/orchestrator/handoff.go:70-73 が
+	// （`handoffGate` の入口 internal/orchestrator/handoff.go:81-84 が
 	// ノード ID の無い issue を `proceed: true` で返して抜ける）。
 	// **空文字になるのは URL を取れなかったときだけで、そのときは画面をリンクにしない。**
 	URL string
@@ -201,8 +201,8 @@ const (
 
 | どこ | いまの動き | 足すもの |
 | --- | --- | --- |
-| **担当者が2人以上**（[internal/orchestrator/handoff.go:81-86](../../../internal/orchestrator/handoff.go#L81-L86)） | WARN を1行出して `handoffDecision{}` | **gh の持ち主が担当者に混じっていないときだけ** `noteGate(…, GateReasonManyAssignees, logins)`（8-3） |
-| **人間が付けた担当**（[internal/orchestrator/handoff.go:134-147](../../../internal/orchestrator/handoff.go#L134-L147)） | WARN を1行出して `handoffDecision{}` | `noteGate(…, GateReasonHumanAssigned, logins)` |
+| **担当者が2人以上**（[internal/orchestrator/handoff.go:92-97](../../../internal/orchestrator/handoff.go#L92-L97)） | WARN を1行出して `handoffDecision{}` | **gh の持ち主が担当者に混じっていないときだけ** `noteGate(…, GateReasonManyAssignees, logins)`（8-3） |
+| **人間が付けた担当**（[internal/orchestrator/handoff.go:145-158](../../../internal/orchestrator/handoff.go#L145-L158)） | WARN を1行出して `handoffDecision{}` | `noteGate(…, GateReasonHumanAssigned, logins)` |
 
 **`noteGate` の形。**
 
@@ -232,7 +232,7 @@ func (o *Orchestrator) noteGate(issue tracker.Issue, reason GateReason, assignee
 **「続けて」ではない。**設計 3-68 は「3回続けて飛ばし」と書いているが、`Count` は
 **この理由で止めた回数の累計**であって、連続の回数ではない。**この文書は累計を採る。**
 **連続にできないからである。**`handoffGate` へ届かないまま終わる巡回がある。
-読み取りの枠を使い切った巡回（[internal/orchestrator/handoff.go:106-110](../../../internal/orchestrator/handoff.go#L106-L110) の
+読み取りの枠を使い切った巡回（[internal/orchestrator/handoff.go:117-121](../../../internal/orchestrator/handoff.go#L117-L121) の
 `takeHandoffFetch` が偽を返して `stop: true` で戻る）と、`dispatchAllowed` が偽で
 `dispatchCandidates` を呼ばなかった巡回である。**そこを「連続が切れた」と数えると、
 止まり続けている issue の案内が永久に書かれない。**
@@ -256,7 +256,7 @@ const noticeMinAge = 60 * time.Second
 ```
 
 **担当者が2人以上の経路では、コメントを読まない。**
-[internal/orchestrator/handoff.go:77-80](../../../internal/orchestrator/handoff.go#L77-L80) の「コメントを読まずに答えが出るものを先に処理する」を崩さない。
+[internal/orchestrator/handoff.go:88-91](../../../internal/orchestrator/handoff.go#L88-L91) の「コメントを読まずに答えが出るものを先に処理する」を崩さない。
 **読み取りの枠（`maxHandoffFetchesPerPoll` は10件）を1件も使わない。**
 #136（担当者が2人以上いる issue も、着手できないことを知らせる）が挙げた2つの道
 （その分岐でもコメントを読む／map だけで判定する）のうち、後者を**回数と時間の条件付きで**採る。
@@ -279,14 +279,14 @@ const noticeMinAge = 60 * time.Second
 
 | 消さない場面 | なぜ |
 | --- | --- |
-| **空きスロットが尽きて `break` した**（[internal/orchestrator/dispatch.go:246](../../../internal/orchestrator/dispatch.go#L246)） | v1 の穴。順番を待っているだけで、状態は変わっていない |
+| **空きスロットが尽きて `break` した**（[internal/orchestrator/dispatch.go:463](../../../internal/orchestrator/dispatch.go#L463)） | v1 の穴。順番を待っているだけで、状態は変わっていない |
 | **枠で止まって `dispatchCandidates` を呼ばなかった** | 同上 |
 | **読み取りの枠を使い切った**（`takeHandoffFetch` が偽） | 関門の判定まで届いていない |
 | **コメントを読めない・gh の持ち主を取れない** | 材料が無い。**判定していない** |
 
 ### 6-1. `dispatchCandidates` で消す6箇所
 
-**言いたいこと。**どれも `handoffGate`（[internal/orchestrator/dispatch.go:273](../../../internal/orchestrator/dispatch.go#L273)）より前にある `continue` である。
+**言いたいこと。**どれも `handoffGate`（[internal/orchestrator/dispatch.go:490](../../../internal/orchestrator/dispatch.go#L490)）より前にある `continue` である。
 **ここを塞がないと、ボードに残ったまま関門へ到達しなくなった issue の行が、
 古い理由と誤った直し方を付けて永久に残る。**
 
@@ -295,12 +295,12 @@ const noticeMinAge = 60 * time.Second
 
 | どこ | 何が起きたか |
 | --- | --- |
-| [internal/orchestrator/dispatch.go:191](../../../internal/orchestrator/dispatch.go#L191) の `lookupRunByID` | 既に着手している |
-| [internal/orchestrator/dispatch.go:198](../../../internal/orchestrator/dispatch.go#L198) の `!containsFold(active_states, State)` | 人間が Status を動かした。**索引の反映が追いつくまでここへ落ち続ける** |
-| [internal/orchestrator/dispatch.go:205](../../../internal/orchestrator/dispatch.go#L205) の `skipByFailure` | 同じ理由で失敗し続けている |
-| [internal/orchestrator/dispatch.go:208](../../../internal/orchestrator/dispatch.go#L208) の `!issue.Dispatchable` | 未信頼のリポジトリである |
-| [internal/orchestrator/dispatch.go:219](../../../internal/orchestrator/dispatch.go#L219) の `missingRequiredLabels` | 必須のラベルが足りない |
-| [internal/orchestrator/dispatch.go:266](../../../internal/orchestrator/dispatch.go#L266) の `preflight` が偽 | 段0 で落ちた |
+| [internal/orchestrator/dispatch.go:408](../../../internal/orchestrator/dispatch.go#L408) の `lookupRunByID` | 既に着手している |
+| [internal/orchestrator/dispatch.go:415](../../../internal/orchestrator/dispatch.go#L415) の `!containsFold(active_states, State)` | 人間が Status を動かした。**索引の反映が追いつくまでここへ落ち続ける** |
+| [internal/orchestrator/dispatch.go:422](../../../internal/orchestrator/dispatch.go#L422) の `skipByFailure` | 同じ理由で失敗し続けている |
+| [internal/orchestrator/dispatch.go:425](../../../internal/orchestrator/dispatch.go#L425) の `!issue.Dispatchable` | 未信頼のリポジトリである |
+| [internal/orchestrator/dispatch.go:436](../../../internal/orchestrator/dispatch.go#L436) の `missingRequiredLabels` | 必須のラベルが足りない |
+| [internal/orchestrator/dispatch.go:483](../../../internal/orchestrator/dispatch.go#L483) の `preflight` が偽 | 段0 で落ちた |
 
 **それぞれの `continue` の直前に `o.clearGate(issue.ID)` を1行足す。**
 **`break`（空きスロット切れ）と `ctx.Err()` には足さない。**足すと v1 の穴が開く。
@@ -338,7 +338,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 | --- | --- | --- | --- |
 | `ActionProceed` / 入札に勝った（`bidForIssue`） | 真 | 偽 | **消す** |
 | `ActionSkipHeld` / `ActionSkipOtherMachine` / `ActionSkipSelfUnknown` | 真 | 偽 | **消す** |
-| 入札の待ちと敗北・[internal/orchestrator/handoff.go:91-96](../../../internal/orchestrator/handoff.go#L91-L96) の早い戻り | 真 | 偽 | **消す** |
+| 入札の待ちと敗北・[internal/orchestrator/handoff.go:102-107](../../../internal/orchestrator/handoff.go#L102-L107) の早い戻り | 真 | 偽 | **消す** |
 | **`ActionSkipHumanAssigned`** / **担当者が2人以上**（gh の持ち主が混じっていてもいなくても。8-3） | 真 | **真** | **`noteGate` が書き直す** |
 | gh の持ち主を取れない・読み取りの枠切れ・コメントを読めない | **偽** | 偽 | **そのまま** |
 
@@ -459,7 +459,7 @@ func (o *Orchestrator) forgetGatedNotOnBoard(candidates []tracker.Issue)
 | **メモリの印**（`gateNote.NoticedAt`） | `o.gated` の記録 | **両方** |
 | **手元のコメント**（`gateNoticedIn`） | `FetchAllComments` が返した全件 | **人間が付けた担当だけ** |
 
-**呼び出しの形。**担当者が2人以上の経路（[internal/orchestrator/handoff.go:81-86](../../../internal/orchestrator/handoff.go#L81-L86)）。
+**呼び出しの形。**担当者が2人以上の経路（[internal/orchestrator/handoff.go:92-97](../../../internal/orchestrator/handoff.go#L92-L97)）。
 **`viewerIdentity` を先に引いて、gh の持ち主が混じっていないことを確かめる**（8-3）。
 
 ```go
@@ -491,7 +491,7 @@ func (o *Orchestrator) forgetGatedNotOnBoard(candidates []tracker.Issue)
 
 **`containsFold` は既にある**（[internal/orchestrator/lifecycle.go:929](../../../internal/orchestrator/lifecycle.go#L929)。大文字小文字を無視して比べる）。
 
-**人間が付けた担当の経路**（[internal/orchestrator/handoff.go:134-147](../../../internal/orchestrator/handoff.go#L134-L147)）。
+**人間が付けた担当の経路**（[internal/orchestrator/handoff.go:145-158](../../../internal/orchestrator/handoff.go#L145-L158)）。
 **`comments` も `truncated` も `viewer` も手元にある**（7-1 で `FetchAllComments` の戻り値に `truncated` を足す）。
 
 ```go
@@ -616,7 +616,7 @@ func (a *Adapter) FetchAllComments(
 | [internal/tracker/adapter.go:1061](../../../internal/tracker/adapter.go#L1061) の `FetchComments` | `_` で捨てる（`keep` で止める経路である） |
 | [internal/tracker/adapter.go:1150](../../../internal/tracker/adapter.go#L1150) の `FetchAllComments` | そのまま返す |
 | [internal/orchestrator/orchestrator.go:129](../../../internal/orchestrator/orchestrator.go#L129) の `Tracker` interface | 署名を揃える |
-| [internal/orchestrator/handoff.go:111](../../../internal/orchestrator/handoff.go#L111) と [:716](../../../internal/orchestrator/handoff.go#L716) | 111 は `truncated` を使う。716（担当を確かめ直す経路）は `_` で捨てる |
+| [internal/orchestrator/handoff.go:122](../../../internal/orchestrator/handoff.go#L122) と [:716](../../../internal/orchestrator/handoff.go#L1025) | 111 は `truncated` を使う。716（担当を確かめ直す経路）は `_` で捨てる |
 
 **continuo 自身が書いたコメントも、切れていなければそのまま返る**（`keep` に0を渡すので
 [internal/tracker/adapter.go:1150-1158](../../../internal/tracker/adapter.go#L1150-L1158) は途中で打ち切らない）。
@@ -679,7 +679,7 @@ tracker:
 > **「投稿が成功したときだけ map に入れる」と「通知を切れる設定」を同時に入れたので、通知を切ると飢餓が戻ります。**
 
 **印は投稿の成否に関わらず付ける**（`noteUntrusted` も
-[internal/orchestrator/dispatch.go:644-649](../../../internal/orchestrator/dispatch.go#L644-L649) で先に印を付けてから投稿する）。
+[internal/orchestrator/dispatch.go:861-866](../../../internal/orchestrator/dispatch.go#L861-L866) で先に印を付けてから投稿する）。
 **読み取りの枠（`maxHandoffFetchesPerPoll`）の消費は、この設計で1件も増減しない。**
 
 ### 8-3. gh の持ち主が担当者に混じっているときは、案内を書かない。**記録は作る**
@@ -695,17 +695,17 @@ tracker:
 人間から見て「なぜ着手されないのか」の手がかりが、WARN の1行だけになる。
 **その1行は、次の巡回のログに流されて埋まる。**
 
-**なぜ。**この分岐は [internal/orchestrator/handoff.go:81-86](../../../internal/orchestrator/handoff.go#L81-L86) にあり、
-`FetchAllComments`（[internal/orchestrator/handoff.go:111](../../../internal/orchestrator/handoff.go#L111)）より25行前である。
+**なぜ。**この分岐は [internal/orchestrator/handoff.go:92-97](../../../internal/orchestrator/handoff.go#L92-L97) にあり、
+`FetchAllComments`（[internal/orchestrator/handoff.go:122](../../../internal/orchestrator/handoff.go#L122)）より25行前である。
 **hold のコメントを1行も読まないので、「人間が2人」と「人間1人＋別の機械が hold を持っている」を区別できない。**
 
 **後者で「担当者をすべて外してください」と案内すると、人間は走っている別の機械の担当を外すことになる。**
-その機械は止まらない（[internal/orchestrator/handoff.go:699-711](../../../internal/orchestrator/handoff.go#L699-L711) が
+その機械は止まらない（[internal/orchestrator/handoff.go:1008-1020](../../../internal/orchestrator/handoff.go#L1008-L1020) が
 「担当者が1人もいないだけでは止めない」と決めている）一方で、担当者が0人になった issue は
 **次の巡回で入札の対象になる。同じ issue に2台が乗る。**
 
 **この切り分けに追加のリクエストは要らない。**`viewerIdentity` は一度取れたら覚える
-（[internal/orchestrator/handoff.go:473-501](../../../internal/orchestrator/handoff.go#L473-L501)）ので、
+（[internal/orchestrator/handoff.go:553-810](../../../internal/orchestrator/handoff.go#L553-L810)）ので、
 定常状態では0本である。**読み取りの枠（`maxHandoffFetchesPerPoll`）はコメントの取得だけを数えるので、1件も使わない。**
 
 **持ち主を取れなかったときは案内しない。**切り分けられないまま書くほうが害が大きい。
@@ -1095,7 +1095,7 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 **どれもファイルの末尾ではなく、中ほどである**
 （`dashboard.*` は [internal/i18n/messages/ja.json:252-278](../../../internal/i18n/messages/ja.json#L252-L278)、
 `KeyDashboard*` は [internal/i18n/keys.go:1023-1076](../../../internal/i18n/keys.go#L1023-L1076)、
-`allKeys` の該当箇所は [internal/i18n/keys.go:2674](../../../internal/i18n/keys.go#L2674) 付近）。
+`allKeys` の該当箇所は [internal/i18n/keys.go:2677](../../../internal/i18n/keys.go#L2677) 付近）。
 **後から main へ入るほうが衝突を解く。先に入ったほうへ rebase してから段3を書くこと。**
 
 ---
@@ -1119,7 +1119,7 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 | [internal/orchestrator/prompt.go](../../../internal/orchestrator/prompt.go) | `buildGatedComment` |
 | [internal/config/types.go](../../../internal/config/types.go) | `OnAssigneeGate` を1行 |
 | [internal/config/default.go](../../../internal/config/default.go) | 既定値 `"warn_and_comment"` を1行 |
-| [internal/config/validate.go](../../../internal/config/validate.go) | `validateHandoff`（[internal/config/validate.go:664-686](../../../internal/config/validate.go#L664-L686)）に `on_assignee_gate` の switch を1つ足す。`"warn_and_comment"` と `"warn_only"` だけを通す |
+| [internal/config/validate.go](../../../internal/config/validate.go) | `validateHandoff`（[internal/config/validate.go:677-699](../../../internal/config/validate.go#L677-L699)）に `on_assignee_gate` の switch を1つ足す。`"warn_and_comment"` と `"warn_only"` だけを通す |
 | [internal/scaffold/template.go](../../../internal/scaffold/template.go) | WORKFLOW.md の雛形に1行 |
 | [internal/server/server.go](../../../internal/server/server.go) | `RunSource` に `GateViews()`。**`snapshot()`（[internal/server/server.go:374](../../../internal/server/server.go#L374)）が `NewSnapshot` へ第2引数を渡す** |
 | [internal/server/view.go](../../../internal/server/view.go) | `Snapshot.Gated` と `Gated` 型、理由→文言の表、`NewSnapshot` の引数と詰め替え、**並べ替え（`Since` の古い順、同じなら `Identifier` の昇順。10 節）** |
@@ -1130,7 +1130,7 @@ var gateReasonKeys = map[orchestrator.GateReason]struct{ Reason, Remedy i18n.Key
 | [docs/FAQ.md](../../FAQ.md) / [docs/upgrading.md](../../upgrading.md) | 「担当者が付いた issue が着手されない」に、ダッシュボードと案内のことを足す |
 | [docs/plans/continuo_design.md](../continuo_design.md) | 3-68 に「担当者の経路はこの文書が正」を1行足し、「3回続けて」を「3回以上」に直す（置き換えない）。**5-2 の yaml ブロック（設定の見本）の `handoff:` の下に `on_assignee_gate` を1行** |
 
-**`trust.on_untrusted` の隣（[internal/config/validate.go:345-349](../../../internal/config/validate.go#L345-L349)）へは書かない。**
+**`trust.on_untrusted` の隣（[internal/config/validate.go:358-362](../../../internal/config/validate.go#L358-L362)）へは書かない。**
 `on_assignee_gate` が入るのは `tracker.provider.handoff` であり、
 **その検査は `validateHandoff` が全部持っている。**別の場所へ書くと handoff の設定の検査が2箇所に散る。
 **エラーの文面も `validateHandoff` に揃える。**あそこの5件はすべて i18n のキー
@@ -1205,21 +1205,21 @@ v1 は全部を出そうとして落ちた。**足すのは呼び出し1行な�
 | **上限で落ちるのは古い側である** | [internal/tracker/query.go:253](../../../internal/tracker/query.go#L253) が `orderBy: { field: UPDATED_AT, direction: DESC }` で取り、[internal/tracker/adapter.go:1267-1270](../../../internal/tracker/adapter.go#L1267-L1270) が最後に反転して古い順へ戻す。**打ち切りは新しい側を読み終えた時点で起きる** |
 | **上限に達したことはログに出るが、戻り値からは分からない** | [internal/tracker/adapter.go:1261-1264](../../../internal/tracker/adapter.go#L1261-L1264) が `Warn("コメントが多すぎるので途中まででやめました（古いコメントは読めていません）", …)` を出すだけで、`FetchAllComments` の戻り値は `([]Comment, error)` のままである（[internal/tracker/adapter.go:1150-1158](../../../internal/tracker/adapter.go#L1150-L1158)）。**だから戻り値に真偽値を1つ足す**（7-1） |
 | **件数では切れを当てられない** | 打ち切りは [internal/tracker/adapter.go:1232](../../../internal/tracker/adapter.go#L1232) の `for page := 0; page < maxCommentPages; page++` を、続きの cursor を持ったまま抜けたかどうかで決まる。**`len(nodes)` は1ページの件数が100に満たなくても増えないので、2000未満のまま切れることがある** |
-| **`FetchAllComments` の呼び出し元は2つだけである** | `grep -rn "FetchAllComments" --include="*.go" .`（`.claude/worktrees/` を除く）で、実装以外は [internal/orchestrator/handoff.go:111](../../../internal/orchestrator/handoff.go#L111) と [internal/orchestrator/handoff.go:716](../../../internal/orchestrator/handoff.go#L716)、interface が [internal/orchestrator/orchestrator.go:129](../../../internal/orchestrator/orchestrator.go#L129)、fake が [test/internal/orchestrator/helpers_test.go:1328](../../../test/internal/orchestrator/helpers_test.go#L1328) |
-| **担当者が2人以上の分岐は `viewerIdentity` より前にある** | [internal/orchestrator/handoff.go:81](../../../internal/orchestrator/handoff.go#L81) の `if len(logins) >= 2` に対し、[internal/orchestrator/handoff.go:98](../../../internal/orchestrator/handoff.go#L98) が `viewer, ok := o.viewerIdentity(ctx)` である。**だから 8-3 はこの分岐の中で自分で引く** |
-| **担当者が0人になっても、走っている run は止まらない** | [internal/orchestrator/handoff.go:699-711](../../../internal/orchestrator/handoff.go#L699-L711) が `if len(logins) == 0 { … return false, "" }` で「担当者が1人もいないだけでは止めない」と決めている |
-| **`handoffGate` へ届かない `continue` が5つある** | [internal/orchestrator/dispatch.go:273](../../../internal/orchestrator/dispatch.go#L273) の `decision := o.handoffGate(ctx, issue)` より前に、[:191](../../../internal/orchestrator/dispatch.go#L191)（`lookupRunByID`）・[:205](../../../internal/orchestrator/dispatch.go#L205)（`skipByFailure`）・[:208](../../../internal/orchestrator/dispatch.go#L208)（`!issue.Dispatchable`）・[:219](../../../internal/orchestrator/dispatch.go#L219)（`missingRequiredLabels`）・[:266](../../../internal/orchestrator/dispatch.go#L266)（`preflight`）がある |
-| **handoff の設定の検査は `validateHandoff` が持っている** | [internal/config/validate.go:664-686](../../../internal/config/validate.go#L664-L686) に5件あり、すべて `i18n.T(i18n.KeyConfigValidateHandoff*)` を引く。`trust.on_untrusted` の検査は [internal/config/validate.go:345-349](../../../internal/config/validate.go#L345-L349) にあり、**日本語を直に書いている**（形が違う） |
+| **`FetchAllComments` の呼び出し元は2つだけである** | `grep -rn "FetchAllComments" --include="*.go" .`（`.claude/worktrees/` を除く）で、実装以外は [internal/orchestrator/handoff.go:122](../../../internal/orchestrator/handoff.go#L122) と [internal/orchestrator/handoff.go:1025](../../../internal/orchestrator/handoff.go#L1025)、interface が [internal/orchestrator/orchestrator.go:129](../../../internal/orchestrator/orchestrator.go#L129)、fake が [test/internal/orchestrator/helpers_test.go:1328](../../../test/internal/orchestrator/helpers_test.go#L1328) |
+| **担当者が2人以上の分岐は `viewerIdentity` より前にある** | [internal/orchestrator/handoff.go:92](../../../internal/orchestrator/handoff.go#L92) の `if len(logins) >= 2` に対し、[internal/orchestrator/handoff.go:109](../../../internal/orchestrator/handoff.go#L109) が `viewer, ok := o.viewerIdentity(ctx)` である。**だから 8-3 はこの分岐の中で自分で引く** |
+| **担当者が0人になっても、走っている run は止まらない** | [internal/orchestrator/handoff.go:1008-1020](../../../internal/orchestrator/handoff.go#L1008-L1020) が `if len(logins) == 0 { … return false, "" }` で「担当者が1人もいないだけでは止めない」と決めている |
+| **`handoffGate` へ届かない `continue` が5つある** | [internal/orchestrator/dispatch.go:490](../../../internal/orchestrator/dispatch.go#L490) の `decision := o.handoffGate(ctx, issue)` より前に、[:191](../../../internal/orchestrator/dispatch.go#L408)（`lookupRunByID`）・[:205](../../../internal/orchestrator/dispatch.go#L422)（`skipByFailure`）・[:208](../../../internal/orchestrator/dispatch.go#L425)（`!issue.Dispatchable`）・[:219](../../../internal/orchestrator/dispatch.go#L436)（`missingRequiredLabels`）・[:266](../../../internal/orchestrator/dispatch.go#L483)（`preflight`）がある |
+| **handoff の設定の検査は `validateHandoff` が持っている** | [internal/config/validate.go:677-699](../../../internal/config/validate.go#L677-L699) に5件あり、すべて `i18n.T(i18n.KeyConfigValidateHandoff*)` を引く。`trust.on_untrusted` の検査は [internal/config/validate.go:358-362](../../../internal/config/validate.go#L358-L362) にあり、**日本語を直に書いている**（形が違う） |
 | **`sort.Slice` は安定ではない** | [internal/server/view.go:142](../../../internal/server/view.go#L142) の `sort.Slice(runs, func(i, j int) bool { return runs[i].Identifier < runs[j].Identifier })` は鍵が一意なので成立している。**`Since` は一意ではない** |
 | **`polling.interval_ms` の既定は30000ミリ秒** | [internal/config/default.go:87](../../../internal/config/default.go#L87) の `IntervalMs: 30000`。**3回目の巡回はちょうど60秒後になり、`noticeMinAge` と同値である** |
-| **`dashboard.*` のキーはファイルの末尾に無い** | [internal/i18n/messages/ja.json:252-278](../../../internal/i18n/messages/ja.json#L252-L278)（ファイルは843行）、[internal/i18n/keys.go:1023-1076](../../../internal/i18n/keys.go#L1023-L1076) の `KeyDashboard*`、`allKeys` の該当は [internal/i18n/keys.go:2674](../../../internal/i18n/keys.go#L2674) 付近 |
+| **`dashboard.*` のキーはファイルの末尾に無い** | [internal/i18n/messages/ja.json:252-278](../../../internal/i18n/messages/ja.json#L252-L278)（ファイルは843行）、[internal/i18n/keys.go:1023-1076](../../../internal/i18n/keys.go#L1023-L1076) の `KeyDashboard*`、`allKeys` の該当は [internal/i18n/keys.go:2677](../../../internal/i18n/keys.go#L2677) 付近 |
 | **`containsFold` は既にある** | [internal/orchestrator/lifecycle.go:929](../../../internal/orchestrator/lifecycle.go#L929) の `func containsFold(states []string, target string) bool` |
 | **`RunView` はスライスを1つも持たない** | [internal/orchestrator/orchestrator.go:1158-1192](../../../internal/orchestrator/orchestrator.go#L1158-L1192) のフィールドは `string` / `int` / `bool` / `time.Time` / `TokenUsage` だけである。**だから [internal/orchestrator/orchestrator.go:1197-1220](../../../internal/orchestrator/orchestrator.go#L1197-L1220) の代入だけで写しが成立している** |
-| **draft issue は関門へ来ない** | [internal/orchestrator/handoff.go:70-73](../../../internal/orchestrator/handoff.go#L70-L73) が `nodeID == ""` のとき `return handoffDecision{proceed: true}` で抜ける |
+| **draft issue は関門へ来ない** | [internal/orchestrator/handoff.go:81-84](../../../internal/orchestrator/handoff.go#L81-L84) が `nodeID == ""` のとき `return handoffDecision{proceed: true}` で抜ける |
 | **`NewSnapshot` は手元で4箇所から呼ばれている** | `grep -rn "NewSnapshot(" --include="*.go" .`（リポジトリの直下で） の出力から `.claude/worktrees/` を除くと、[internal/server/view.go:108](../../../internal/server/view.go#L108) の定義のほか [internal/server/server.go:374](../../../internal/server/server.go#L374) と [test/internal/server/view_test.go:18](../../../test/internal/server/view_test.go#L18) / :73 / :86 の4件 |
 | **コメントを書き換える経路も消す経路も無い** | 検索パターン `updateIssueComment` `deleteIssueComment` `minimizeComment` `UpdateComment` `DeleteComment` の5本を `grep -rniE` で束ね、対象 `internal/` と `cmd/`、commit 73fb41ae で `wc -l` が `0` |
 | **`FetchIssuesByStates` は途中で切れない** | [internal/tracker/adapter.go:609-617](../../../internal/tracker/adapter.go#L609-L617) が上限超過で `CategoryPagination` の `*Error` を返す |
 | **`PostComment` が `self_marker` を先頭に付ける** | [internal/tracker/adapter.go:1110-1113](../../../internal/tracker/adapter.go#L1110-L1113) の `full = selfMarker + "\n" + body` |
-| **担当者が2人以上の経路にコメントは無い** | [internal/orchestrator/handoff.go:81-86](../../../internal/orchestrator/handoff.go#L81-L86) の `return` は、`FetchAllComments`（[internal/orchestrator/handoff.go:111](../../../internal/orchestrator/handoff.go#L111)）より25行前にある |
+| **担当者が2人以上の経路にコメントは無い** | [internal/orchestrator/handoff.go:92-97](../../../internal/orchestrator/handoff.go#L92-L97) の `return` は、`FetchAllComments`（[internal/orchestrator/handoff.go:122](../../../internal/orchestrator/handoff.go#L122)）より25行前にある |
 | **`o.failures` は着手できた run しか持たない** | `noteFailure` の呼び出しは [internal/orchestrator/lifecycle.go:551](../../../internal/orchestrator/lifecycle.go#L551) と [internal/orchestrator/lifecycle.go:625](../../../internal/orchestrator/lifecycle.go#L625) の2箇所だけで、どちらも `rs *runState` を持つ |
 | **`_source_sha256` の入れ直しは規則である** | [CONTRIBUTING.md:100](../../../CONTRIBUTING.md#L100) が「`ja.json` の文言を直したときは、`en.json` の先頭の `_source_sha256` を入れ直してください」と決めている |

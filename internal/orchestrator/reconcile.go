@@ -254,10 +254,52 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 		if !rs.snapshot().WaitingQuota {
 			continue
 		}
-		if o.weeklyWaitExceeded(rs) {
-			o.releaseBecauseQuotaWaitAsync(ctx, rs)
+		if !o.weeklyWaitExceeded(rs) {
+			continue
 		}
+		if o.screenMovedSoDoNotRelease(ctx, rs) {
+			continue
+		}
+		o.releaseBecauseQuotaWaitAsync(ctx, rs)
 	}
+}
+
+// screenMovedSoDoNotRelease は、手放す直前に画面の版を見て「まだ動いている」なら真を返す
+// （設計 3-27。issue #197）。
+//
+// **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
+// これは「枠を待っている」と「長い1つの仕事をしている」を区別できない。**
+// hook はツールが終わってから飛ぶので、**1時間を超える1回のツール呼び出しの最中は1件も来ない。**
+// そこへ `weekly_scoped`（使っていないモデルの週次の枠）が100%だと条件が両方そろい、
+// **正常に走っている run を手放して pane を閉じることになる。**
+//
+// **区別できる道具は画面の版である**（設計 3-21。`checkStalls` の段2 が同じものを見る）。
+// **あちらは枠待ちの枝の後ろにあるので、この経路には届かない。**だからここで1回見る。
+//
+// **読めなかったら手放す側へ倒す。**`checkStalls` の段2 が
+// 「画面の版を読めませんでした（止まったものとして扱います）」と同じ向きに倒している。
+//
+// **見るのは上限を超えた run だけである。**巡回のたびに全部の run へ herdr を叩かない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値: 画面が動いているので手放してはならないなら true。
+func (o *Orchestrator) screenMovedSoDoNotRelease(ctx context.Context, rs *runState) bool {
+	agent, err := o.agentInfo(ctx, rs)
+	if err != nil {
+		o.logger.Warn("手放す前に画面の版を読めませんでした（止まったものとして扱います）",
+			"identifier", rs.issue().Identifier, "error", err)
+		return false
+	}
+	if !rs.noteRevision(agent.Revision, o.now()) {
+		return false
+	}
+	o.logger.Info("画面が変わっているので、1週間の枠の上限を超えていても手放しません"+
+		"（枠待ちではなく、長い1つの turn です）",
+		"identifier", rs.issue().Identifier,
+		"revision", agent.Revision,
+		"agent_status", string(agent.AgentStatus))
+	return true
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
@@ -373,7 +415,11 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		if o.isQuotaWaiting(rs) {
 			// **待ちに入る前に上限を見る**（設計 3-27。issue #197）。
 			// **超えていたら印を立てない。**立てると、手放したあとに印だけが残る。
-			if o.weeklyWaitExceeded(rs) {
+			//
+			// **手放す前に画面の版を見る。**ここは枠待ちと初めて判定する場所で、
+			// **下の段2（画面の版）へは進まない。**見ないと、1時間を超える1回のツール呼び出しの
+			// 最中の run を、使っていないモデルの週次の枠が満杯なだけで殺すことになる。
+			if o.weeklyWaitExceeded(rs) && !o.screenMovedSoDoNotRelease(ctx, rs) {
 				o.releaseBecauseQuotaWaitAsync(ctx, rs)
 				continue
 			}

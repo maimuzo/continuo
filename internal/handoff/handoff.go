@@ -181,8 +181,14 @@ func SessionPercent(snap *ratelimit.Snapshot) (int, bool) {
 // kind: 枠の種別。
 // 戻り値: `weekly_all` か `weekly_scoped` なら true。
 func IsWeeklyKind(kind string) bool {
-	return matchesKind(kind, []string{LimitKindWeeklyAll, LimitKindWeeklyScoped})
+	return matchesKind(kind, weeklyKinds)
 }
+
+// weeklyKinds は1週間の枠の種別である。
+//
+// **その場で組み立てない。**`IsWeeklyKind` は使い切っている枠の数だけ呼ばれるので、
+// **呼ぶたびに slice を作ると、判定1回につき確保が1つ増える。**
+var weeklyKinds = []string{LimitKindWeeklyAll, LimitKindWeeklyScoped}
 
 // maxPercentOfKinds は、指定した種別の枠のうちいちばん大きい使用率を返す。
 //
@@ -217,7 +223,7 @@ func maxPercentOfKinds(snap *ratelimit.Snapshot, kinds ...string) (int, bool) {
 // 戻り値: 一致すれば true。
 func matchesKind(kind string, kinds []string) bool {
 	for _, k := range kinds {
-		if strings.EqualFold(strings.TrimSpace(kind), k) {
+		if strings.EqualFold(strings.TrimSpace(kind), strings.TrimSpace(k)) {
 			return true
 		}
 	}

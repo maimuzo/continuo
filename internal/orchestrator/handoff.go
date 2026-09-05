@@ -613,8 +613,7 @@ func (o *Orchestrator) weeklyWaitExceeded(rs *runState) bool {
 		// **5時間の枠だけならいつまでも待つ。**
 		return false
 	}
-	if resetAt, ok := snap.LatestResetOfKinds(
-		handoff.LimitKindWeeklyAll, handoff.LimitKindWeeklyScoped); ok {
+	if resetAt, ok := snap.LatestResetOfKinds(handoff.IsWeeklyKind); ok {
 		return resetAt.Sub(o.now()) > limit
 	}
 	return !since.IsZero() && o.now().Sub(since) > limit
@@ -698,20 +697,35 @@ func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState
 // rs: 対象の run。
 func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState) bool {
 	issue := rs.issue()
-	snap := o.quotaSnapshot()
-	// **ここでは `Debug` にする。**手放せずに戻る経路が2つあり、そちらは毎巡回で通る。
-	// **`Info` で出すと、1件も進んでいない run について30秒ごとに同じ行が出続ける。**
-	// **結果は下の `Info`（手放しました）と `Warn`（手放せませんでした）で1回ずつ出す。**
-	o.logger.Debug("1週間の枠が明けるのを待つ上限を超えたので、担当を手放します"+
-		"（worktree は残します。カンバンへは書きません）",
-		"identifier", issue.Identifier,
-		"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
-		"使い切っている枠", strings.Join(snap.FullLimitKinds(), ", "))
+	// **どの枠を使い切っているかを控える。**下の `Info` と `Warn` に載せる。
+	// **載せないと、`weekly_scoped`（使っていないモデルの週次の枠）が原因のときに、
+	// 人間が claude.ai の画面と突き合わせても食い違って見える。**
+	// **理由が既定の水準で出ないのは、issue #173 が直そうとしている症状そのものである。**
+	fullKinds := strings.Join(o.quotaSnapshot().FullLimitKinds(), ", ")
 
 	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
 	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。
 	//
-	// **段0。外す相手を先に確かめる。**`after_run` は `RunAfterRunOnce` が実行の前に印を立て、
+	// **段0a。まだ自分が担当かを確かめる。**
+	// **枠待ちのあいだ、担当は自分の意思と無関係に外れる**（設計 3-77c。
+	// `tracker.provider.handoff.idle_timeout_ms` は既定18時間で、
+	// **枠待ち中は hook が来ないので進捗のコメントも増えない**）。
+	// **3-77c は「担当を外された機械は、その branch へ push してはならない」と決めている。**
+	// **確かめずに段1 の `after_run` を走らせると、利用者が書いた `git push` が
+	// 別の機械の branch へ飛ぶ。**
+	//
+	// **既存の確かめでは間に合わない。**`handleTurnEnd` は turn の終わりでしか走らず、
+	// **枠待ちの run には turn の終わりが来ない。**
+	// **`recheck_interval_ms` の間引きも通さない。**ここは巡回のたびではなく、
+	// 上限を超えた run で1回だけ通る場所である。
+	if lost, newHost := o.verifyHandoff(ctx, rs); lost {
+		// **`after_run` を走らせず、カンバンへも書かず、担当者にも触らない**（3-77c）。
+		// **印は確保したまま渡す。**いったん戻すと、その隙に別の goroutine が掴む。
+		o.stopHandoffLostClaimed(ctx, rs, newHost)
+		return true
+	}
+
+	// **段0b。外す相手を先に確かめる。**`after_run` は `RunAfterRunOnce` が実行の前に印を立て、
 	// **印を消すのは着手と片付けだけである。**先に走らせて外す相手が分からなかった場合、
 	// **この run が枠明けに完走しても `finishRun` の `after_run` が印に弾かれて1回も走らない。**
 	// **draft issue と「`gh` の持ち主を取れない」の2つは、走らせる前に分かる。**
@@ -726,13 +740,14 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// **こちらの `git push` が終わる前に、同じ branch で作業を始めうる**
 	// （`workspace_hooks.timeout_ms` を入札の締め切りより長くしている設定で起きる）。
 	//
-	// **ctx を分ける。**`after_run` は利用者が書いた外部コマンドで、上限は
-	// `workspace_hooks.timeout_ms`（既定60秒）である。**`herdr.read_timeout_ms`（既定5秒）で
-	// くくると、`git push` が5秒で切られる。**
-	hookCtx, cancelHook := context.WithTimeout(
-		context.WithoutCancel(ctx), time.Duration(o.cfg.WorkspaceHooks.TimeoutMs)*time.Millisecond)
-	o.runAfterRun(hookCtx, rs)
-	cancelHook()
+	// **止められても走らせる。**ここで `ctx` をそのまま渡すと、Ctrl+C の直後に
+	// **`git push` が1バイトも走らずに終わる。**
+	//
+	// **持ち時間は足さない。**`workspace.RunHook` が `workspace_hooks.timeout_ms`
+	// （既定60秒）を自分で掛ける。**ここで同じ長さをもう1枚重ねると、
+	// 外側のほうが先に始まっているぶん先に切れ、hook の側の後始末を通らずに
+	// `context deadline exceeded` だけが残る。**
+	o.runAfterRun(context.WithoutCancel(ctx), rs)
 
 	// **段2。GitHub への書き込みには、herdr の持ち時間を使わない。**
 	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
@@ -753,7 +768,9 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		// push されないまま残る。**黙って進めない。**次に何を見ればよいかを1行で出す。
 		o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します）。"+
 			"workspace_hooks.after_run は既に実行済みなので、この run が完走しても再実行されません",
-			"identifier", issue.Identifier)
+			"identifier", issue.Identifier,
+			"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
+			"使い切っている枠", fullKinds)
 		rs.endTerminal()
 		return false
 	}
@@ -765,8 +782,11 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	o.stopWorker(cleanupCtx, rs)
 	// **段4。印から外す。**落とすとスロットを永久に埋める。
 	o.release(rs)
-	o.logger.Info("担当を手放しました（次の担当は入札で決め直します）",
-		"identifier", issue.Identifier, "外した担当者", login)
+	o.logger.Info("1週間の枠が明けるのを待つ上限を超えたので、担当を手放しました"+
+		"（次の担当は入札で決め直します。worktree は残します。カンバンへは書きません）",
+		"identifier", issue.Identifier, "外した担当者", login,
+		"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
+		"使い切っている枠", fullKinds)
 	return true
 }
 
@@ -1164,6 +1184,20 @@ func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState,
 	if !rs.claimTerminal(ctx) {
 		return
 	}
+	o.stopHandoffLostClaimed(ctx, rs, newHost)
+}
+
+// stopHandoffLostClaimed は、印を確保済みの run について `stopBecauseHandoffLost` の中身を行う。
+//
+// **印を確保する段だけを外に出したものである。**
+// **枠の上限で手放す経路は、既に印を確保した状態でここへ来る**
+// （いったん `endTerminal` で戻して `stopBecauseHandoffLost` を呼び直すと、
+// **その隙に別の goroutine が同じ run を掴める**）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// newHost: いま担当になっている機械の名前（読めなければ空文字）。
+func (o *Orchestrator) stopHandoffLostClaimed(ctx context.Context, rs *runState, newHost string) {
 	who := newHost
 	if who == "" {
 		who = i18n.T(i18n.KeyHandoffLostUnknownHost)

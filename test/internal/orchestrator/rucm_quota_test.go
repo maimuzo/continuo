@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "6d2cee3d7ee79a21dd6dd067268b133562bf4d63d013d304da63420a2880dfbe", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "d72f02c3b8231759258de036699d606fd2dd8557e7bf6ae08ece28ce591901a3", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「レートリミットで待って再開する」のうち、
 // **枠待ちと turn の打ち切りを取り違えないこと**を見る経路を検査する。
@@ -17,7 +17,7 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// {"RUCM-PATH": "P008"}
+// {"RUCM-PATH": "P010"}
 //
 // TestRUCMQuota_P007_枠を見ない設定なら枠明けを待たない は、代替フロー「応答のあるrun」の前提を検査する。
 //
@@ -56,7 +56,7 @@ func TestRUCMQuota_P007_枠を見ない設定なら枠明けを待たない(t *t
 	}
 }
 
-// {"RUCM-PATH": "P017"}
+// {"RUCM-PATH": "P021"}
 //
 // TestRUCMQuota_P015_枠を読めなければ枠待ちにせず打ち切る は、代替フロー「枠を読めない」を検査する。
 //

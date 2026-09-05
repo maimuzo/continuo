@@ -1156,38 +1156,6 @@ const (
 	KeyDashboardBadgeNoticeNoBody Key = "dashboard.badge_notice_no_body"
 	// KeyDashboardBadgeNoticeFailed は、案内の投稿に失敗した行の印に出る。
 	KeyDashboardBadgeNoticeFailed Key = "dashboard.badge_notice_failed"
-	// KeyDashboardNewWorkDetail は「新しい issue を取らない」状態の1行である（issue #173）。
-	//
-	// **差し込むのは5つ。**理由の1行・5時間の枠の使用率・5時間の枠の閾値・
-	// 1週間の枠の使用率・1週間の枠の閾値。
-	KeyDashboardNewWorkDetail Key = "dashboard.new_work_detail"
-	// KeyDashboardNewWorkPercentUnknown は、枠を読めていないときに使用率の代わりに出る。
-	//
-	// **`0` と書いてはならない。**0 は「1バイトも使っていない」という実在の値である。
-	KeyDashboardNewWorkPercentUnknown Key = "dashboard.new_work_percent_unknown"
-	// KeyDashboardNewWorkReasonQuotaUnreadable は、枠を読めなくて止まっているときの理由に出る。
-	KeyDashboardNewWorkReasonQuotaUnreadable Key = "dashboard.new_work_reason_quota_unreadable"
-	// KeyDashboardNewWorkReasonPauseThreshold は、
-	// rate_limit.pause_above_percent を超えて止まっているときの理由に出る。
-	KeyDashboardNewWorkReasonPauseThreshold Key = "dashboard.new_work_reason_pause_threshold"
-	// KeyDashboardNewWorkReasonNoHeadroom は、入札の余裕値がマイナスで止まっているときの理由に出る。
-	KeyDashboardNewWorkReasonNoHeadroom Key = "dashboard.new_work_reason_no_headroom"
-	// KeyDashboardNewWorkReasonPauseThresholdNoHalt は、閾値の判定が「超えた」と答えたのに
-	// 巡回そのものは止めていないときの理由に出る。
-	//
-	// **2回のロックの間に枠の写しが新しくなったときだけ起きる。**
-	// **止まる範囲が違うので、文言も分ける。**
-	KeyDashboardNewWorkReasonPauseThresholdNoHalt Key = "dashboard.new_work_reason_pause_threshold_no_halt"
-	// KeyDashboardNewWorkThresholdAbove は、閾値を「これを超えたら止まる」の形で出す。
-	KeyDashboardNewWorkThresholdAbove Key = "dashboard.new_work_threshold_above"
-	// KeyDashboardNewWorkThresholdNever は、閾値が 100 のときに数字の代わりに出る。
-	//
-	// **使用率は 100 を超えないので、`100` と出すと「100%で止まる」と読まれる。**
-	KeyDashboardNewWorkThresholdNever Key = "dashboard.new_work_threshold_never"
-	// KeyDashboardNewWorkQuotaStale は、出している使用率が「最後に読めた値」のときに添える。
-	KeyDashboardNewWorkQuotaStale Key = "dashboard.new_work_quota_stale"
-	// KeyDashboardNewWorkBadge は、新しい issue を取らない状態の行の頭に付ける印である。
-	KeyDashboardNewWorkBadge Key = "dashboard.new_work_badge"
 )
 
 // 二重起動を防ぐロック（internal/lock）のエラーの文言。
@@ -2913,16 +2881,6 @@ var allKeys = []Key{
 	KeyDashboardBadgeNoticeUnclearOwner,
 	KeyDashboardBadgeNoticeNoBody,
 	KeyDashboardBadgeNoticeFailed,
-	KeyDashboardNewWorkDetail,
-	KeyDashboardNewWorkPercentUnknown,
-	KeyDashboardNewWorkReasonQuotaUnreadable,
-	KeyDashboardNewWorkReasonPauseThreshold,
-	KeyDashboardNewWorkReasonNoHeadroom,
-	KeyDashboardNewWorkReasonPauseThresholdNoHalt,
-	KeyDashboardNewWorkThresholdAbove,
-	KeyDashboardNewWorkThresholdNever,
-	KeyDashboardNewWorkQuotaStale,
-	KeyDashboardNewWorkBadge,
 	KeyLockErrAlreadyRunning,
 	KeyLockAcquireOpenFailed,
 	KeyLockAcquireAlreadyRunning,

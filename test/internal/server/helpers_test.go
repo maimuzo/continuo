@@ -28,8 +28,6 @@ type fakeSource struct {
 	views []orchestrator.RunView
 	// gates は GateViews が返す写しである（issue #134）。
 	gates []orchestrator.GateView
-	// newWork は NewWorkStatus が返す写しである（issue #173）。
-	newWork orchestrator.NewWorkView
 	// calls は RunViews が呼ばれた回数である。
 	calls int
 }
@@ -47,13 +45,6 @@ func (f *fakeSource) RunViews() []orchestrator.RunView {
 // 戻り値: 設定しておいた写し。
 func (f *fakeSource) GateViews() []orchestrator.GateView {
 	return f.gates
-}
-
-// NewWorkStatus は「新しい issue を取らない」状態の写しを返す（issue #173）。
-//
-// 戻り値: 設定しておいた写し。
-func (f *fakeSource) NewWorkStatus() orchestrator.NewWorkView {
-	return f.newWork
 }
 
 // testTime はテストで使う固定の時刻である（経過の表示を決定的にするため）。

@@ -561,7 +561,12 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 
 	// **待ちに入る前に、1週間の枠を待つ上限を超えていないかを見る**（設計 3-27。issue #197）。
 	// **超えていたら印を立てない。**立てると、手放したあとに枠待ちの印だけが残る。
-	if o.weeklyWaitExceeded(rs) && o.releaseBecauseQuotaWait(ctx, rs) {
+	//
+	// **手放す前に画面の版を見る**（設計 3-27）。`isQuotaWaiting` の条件は
+	// 「使用率が100」と「hook が来ていない」の2つで、**1時間を超える1回のツール呼び出しと
+	// 区別が付かない。**見ないと、正常に走っている run を殺して pane を閉じる。
+	if o.weeklyWaitExceeded(rs) && !o.screenMovedSoDoNotRelease(ctx, rs) &&
+		o.releaseBecauseQuotaWait(ctx, rs) {
 		return turnAborted, nil
 	}
 	// **手放せなかったときは、そのまま枠待ちへ入る。**

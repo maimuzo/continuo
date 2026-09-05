@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -33,61 +32,8 @@ type Snapshot struct {
 	// **Since の古い順、同じなら Identifier の昇順に並べてある。**
 	// `GateViews` の順序は不定で、`sort.Slice` は安定ではない。
 	Gated []Gated `json:"gated"`
-	// NewWork は「新しい issue を取らない」状態である（issue #173）。
-	//
-	// **run 1件ごとではなく、この機械ぜんぶに掛かる状態である。**
-	// だから `Runs` の中ではなく、写しの直下に置く。
-	NewWork NewWork `json:"new_work"`
 	// Totals は Runs のトークンの総和である。
 	Totals Tokens `json:"totals"`
-}
-
-// NewWork は「新しい issue を取らない」状態の表示用の写しである（issue #173）。
-//
-// **止まっていないときも出す。**`Blocked` が偽なら画面は何も描かないが、
-// **JSON を機械で読む人には「止まっていない」も答えである。**
-type NewWork struct {
-	// Blocked は新しい issue を取らない状態かどうかである。
-	Blocked bool `json:"blocked"`
-	// Reason は止めた理由の種類である（機械が読む値。`"no_headroom"` など）。
-	// **Blocked が偽なら空文字である。**
-	Reason string `json:"reason"`
-	// ReasonText は理由の1行である（資源から引いた文言）。**Blocked が偽なら空文字である。**
-	ReasonText string `json:"reason_text"`
-	// HaltsPoll は巡回そのものを止めているかである。
-	HaltsPoll bool `json:"halts_poll"`
-	// SessionPercent は5時間の枠の使用率である。**読めていなければ -1。**
-	SessionPercent int `json:"session_percent"`
-	// WeeklyPercent は1週間の枠の使用率である。**読めていなければ -1。**
-	WeeklyPercent int `json:"weekly_percent"`
-	// SessionThreshold は5時間の枠がこれを超えると新規着手が止まる使用率である。
-	//
-	// **100 は「この設定では止まらない」という意味である**（使用率は 100 を超えない）。
-	SessionThreshold int `json:"session_threshold"`
-	// WeeklyThreshold は1週間の枠がこれを超えると新規着手が止まる使用率である。
-	//
-	// **100 の意味は SessionThreshold と同じである。**
-	WeeklyThreshold int `json:"weekly_threshold"`
-	// QuotaStale は、出している使用率が「最後に読めた値」であることを表す。
-	//
-	// **真なら、直前の読み取りに失敗している。**いまの値ではない。
-	QuotaStale bool `json:"quota_stale"`
-	// Detail は画面に出す1行である（資源から引いた文言）。**Blocked が偽なら空文字である。**
-	//
-	// **テンプレートで組み立てない。**どう書くかはこのファイルが1箇所で決める。
-	Detail string `json:"detail"`
-}
-
-// newWorkReasonKeys は、止めた理由をダッシュボードの文言のキーへ写す表である（issue #173）。
-//
-// **キーを文字列から組み立てない。**組み立てると internal/i18n の `allKeys` に載らない
-// キーが生まれ、日英の突き合わせの検査を素通りする。**表なら、キーは全部ここに書いてある。**
-// **`pause_threshold` は、巡回そのものを止めているときの文言である。**
-// **止めていないときは、この表ではなく `HaltsPoll` の分岐で選ぶ**（`newNewWork`）。
-var newWorkReasonKeys = map[string]i18n.Key{
-	"quota_unreadable": i18n.KeyDashboardNewWorkReasonQuotaUnreadable,
-	"pause_threshold":  i18n.KeyDashboardNewWorkReasonPauseThresholdNoHalt,
-	"no_headroom":      i18n.KeyDashboardNewWorkReasonNoHeadroom,
 }
 
 // Gated は着手の関門で止めた issue 1件の表示用の写しである（issue #134）。
@@ -212,13 +158,9 @@ type Tokens struct {
 //
 // views: `orchestrator.RunViews` が返した写し。
 // gates: `orchestrator.GateViews` が返した写し（issue #134）。
-// newWork: `orchestrator.NewWorkStatus` が返した写し（issue #173）。
 // now: いまの時刻（経過の計算に使う）。
 // 戻り値: 表示用のスナップショット。
-func NewSnapshot(
-	views []orchestrator.RunView, gates []orchestrator.GateView,
-	newWork orchestrator.NewWorkView, now time.Time,
-) Snapshot {
+func NewSnapshot(views []orchestrator.RunView, gates []orchestrator.GateView, now time.Time) Snapshot {
 	runs := make([]Run, 0, len(views))
 	var totals Tokens
 	var counts Counts
@@ -268,92 +210,7 @@ func NewSnapshot(
 		return gated[i].Identifier < gated[j].Identifier
 	})
 
-	return Snapshot{
-		GeneratedAt: now,
-		Counts:      counts,
-		Runs:        runs,
-		Gated:       gated,
-		NewWork:     newNewWork(newWork),
-		Totals:      totals,
-	}
-}
-
-// newNewWork は「新しい issue を取らない」状態の写しを表示用の形へ組み替える（issue #173）。
-//
-// **文言はここで確定させる。**テンプレートで分岐させない（設計 3-35）。
-//
-// v: `orchestrator.NewWorkStatus` が返した写し。
-// 戻り値: 表示用の写し。
-func newNewWork(v orchestrator.NewWorkView) NewWork {
-	out := NewWork{
-		Blocked:          v.Blocked,
-		Reason:           v.Reason,
-		HaltsPoll:        v.HaltsPoll,
-		SessionPercent:   v.SessionPercent,
-		WeeklyPercent:    v.WeeklyPercent,
-		SessionThreshold: v.SessionThreshold,
-		WeeklyThreshold:  v.WeeklyThreshold,
-		QuotaStale:       v.QuotaStale,
-	}
-	if !v.Blocked {
-		return out
-	}
-	// **理由の文言は、止まる範囲で選ぶ。**理由だけで引いてはならない。
-	// **同じ「枠の使い過ぎ」でも、巡回そのものを止めているかどうかで止まる範囲が違う。**
-	// 止めていないのに「この巡回では1件も着手しません」と出すと、画面が嘘をつく。
-	if v.HaltsPoll {
-		out.ReasonText = i18n.T(i18n.KeyDashboardNewWorkReasonPauseThreshold)
-	} else if key, ok := newWorkReasonKeys[v.Reason]; ok {
-		out.ReasonText = i18n.T(key)
-	}
-	// **使用率は、読めているものだけを出す。**読めていないものを 0 と書くと
-	// 「1バイトも使っていない」に見え、**枠を読めない機械が「いちばん暇」に見える。**
-	out.Detail = i18n.T(
-		i18n.KeyDashboardNewWorkDetail,
-		out.ReasonText,
-		percentText(v.SessionPercent), thresholdText(v.SessionThreshold),
-		percentText(v.WeeklyPercent), thresholdText(v.WeeklyThreshold),
-	)
-	if v.QuotaStale {
-		// **いまの値ではないことを添える。**添えないと、読んだ人はいまの値だと思う。
-		out.Detail += i18n.T(i18n.KeyDashboardNewWorkQuotaStale)
-	}
-	return out
-}
-
-// thresholdText は閾値を画面に出す文字列にする（issue #173）。
-//
-// **100 は「この設定では止まらない」という意味である。**使用率は 100 を超えないので、
-// **`100` とだけ出すと「100%で止まる」と読まれる。**
-//
-// **「これを超えると」の意味を、単位と一緒にここで作る。**
-// 書式の側に「を超えると止まる」を置くと、
-// **止まらない設定のときに「この設定では止まりません を超えると止まる」と出る。**
-//
-// threshold: これを超えると新規着手が止まる使用率。
-// 戻り値: 画面に出す文字列。
-func thresholdText(threshold int) string {
-	if threshold >= 100 {
-		return i18n.T(i18n.KeyDashboardNewWorkThresholdNever)
-	}
-	return i18n.T(i18n.KeyDashboardNewWorkThresholdAbove, threshold)
-}
-
-// percentText は使用率を画面に出す文字列にする（issue #173）。
-//
-// **読めていない（負の値）ときは資源から引いた語を返す。**
-// **`0` と書いてはならない。**0 は「1バイトも使っていない」という実在の値である。
-//
-// **単位（`%`）もここで付ける。**書式の側に `%%` を置くと、
-// **読めていないときに「使用率を読めていません%」と出る。**
-//
-// percent: 使用率。負なら読めていない。
-// 戻り値: 画面に出す文字列。
-func percentText(percent int) string {
-	if percent < 0 {
-		return i18n.T(i18n.KeyDashboardNewWorkPercentUnknown)
-	}
-	return strconv.Itoa(percent) + "%"
+	return Snapshot{GeneratedAt: now, Counts: counts, Runs: runs, Gated: gated, Totals: totals}
 }
 
 // newGated は、着手の関門で止めた issue の写しを表示用の形へ組み替える（issue #134）。
