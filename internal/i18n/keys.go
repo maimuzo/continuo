@@ -246,8 +246,6 @@ const (
 	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
-	// KeyHandoffLostUnknownAccount は、担当が移った先のアカウントを読めなかったときに差し込む。
-	KeyHandoffLostUnknownAccount Key = "handoff.lost.unknown_account"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
 )
@@ -2510,7 +2508,6 @@ var allKeys = []Key{
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffLostReason,
-	KeyHandoffLostUnknownAccount,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
 	KeyDoctorHerdrRemedySocketAbs,

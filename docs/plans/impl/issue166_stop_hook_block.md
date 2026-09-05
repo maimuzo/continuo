@@ -301,7 +301,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **案：`UserPromptSubmit` を `<task-notification>` 以外も「turn が続いている」と見る。**
 **採らない。****差し戻しが `UserPromptSubmit` を出すかどうかを確かめられていない。**
 出さないなら1件も拾えず、出すなら
-[internal/orchestrator/orchestrator.go:1092-1100](../../../internal/orchestrator/orchestrator.go#L1092-L1100) の
+[internal/orchestrator/orchestrator.go:1068-1076](../../../internal/orchestrator/orchestrator.go#L1068-L1076) の
 `isTurnBoundaryHook` が広がって、**人間が pane へ直接打った入力まで turn の判定に混ざる。**
 
 ---

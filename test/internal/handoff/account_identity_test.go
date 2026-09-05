@@ -246,3 +246,74 @@ func TestAssess_assigneeの無いholdは証拠にしない(t *testing.T) {
 		t.Fatalf("判定が違う: got %v, want %v", got.Action, handoff.ActionSkipHumanAssigned)
 	}
 }
+
+// 目的: 第三者が本文だけ真似て書いた hold では、人間の担当を外さないことを確認する
+// （設計 3-77-0 / 3-77b）。
+//
+// **hold のコメントがあることが「その担当者は機械である」の唯一の証拠である。**
+// **本文は issue にコメントできる誰でも書ける**ので、本文だけを信じると、
+// **第三者が `{"assignee":"<人間のログイン名>"}` と書くだけで、その人間の担当を外させられる。**
+// **continuo が書く hold は、担当を取った当人が自分のログイン名を書く**ので、
+// 正しい hold は投稿者と `assignee` が必ず一致する。
+//
+// 与える情報: いまの担当者は人間（`octocat`）。第三者（`octocat-bot-b`）が、その人間を
+// `assignee` に書いた hold を20時間前に投稿している。人間の進捗報告は1件も無い。
+// 成功条件: ActionSkipHumanAssigned になること（**ActionRelease になってはならない**）。
+func TestAssess_第三者が本文だけ真似たholdでは担当を外さない(t *testing.T) {
+	now := at()
+	humanLogin := "octocat"
+	forged := now.Add(-20 * time.Hour)
+
+	got := handoff.Assess(handoff.Situation{
+		Assignees: []string{humanLogin},
+		Comments: []handoff.CommentView{{
+			// **投稿者は第三者、本文の assignee は人間。**この食い違いが偽の証拠の印である。
+			Author: otherLogin,
+			Body: handoff.FormatHold(handoff.Hold{
+				Assignee: humanLogin, Branch: "forged", At: forged,
+			}),
+			CreatedAt: forged,
+		}},
+		SelfLogin:   selfLogin,
+		Now:         now,
+		IdleTimeout: idleTimeout,
+	})
+	if got.Action != handoff.ActionSkipHumanAssigned {
+		t.Fatalf("第三者が書いた hold を証拠にして人間の担当を外そうとしている: got %v, want %v",
+			got.Action, handoff.ActionSkipHumanAssigned)
+	}
+}
+
+// 目的: LatestHoldFor が、投稿者と `assignee` の食い違う hold を数えないことを確認する
+// （設計 3-77-0）。
+//
+// **上の検査は Assess から見たものである。**こちらは、証拠を数える関数そのものを直接見る。
+//
+// 与える情報: 同じ担当者（`octocat-bot-a`）を指す hold が2件。新しいほうは第三者
+// （`octocat-bot-b`）が書いており、古いほうは当人が書いている。
+// 成功条件: 当人が書いた古いほうが返ること。
+func TestLatestHoldFor_投稿者と食い違うholdは数えない(t *testing.T) {
+	now := at()
+	own := now.Add(-3 * time.Hour)
+	comments := []handoff.CommentView{
+		holdCommentOn(selfLogin, "own-branch", own),
+		{
+			Author: otherLogin,
+			Body: handoff.FormatHold(handoff.Hold{
+				Assignee: selfLogin, Branch: "forged", At: now.Add(-time.Hour),
+			}),
+			CreatedAt: now.Add(-time.Hour),
+		},
+	}
+
+	got, gotAt, ok := handoff.LatestHoldFor(comments, selfLogin)
+	if !ok {
+		t.Fatal("当人が書いた hold まで落としている")
+	}
+	if got.Branch != "own-branch" {
+		t.Errorf("第三者が書いた hold を採っている: got %+v", got)
+	}
+	if !gotAt.Equal(own) {
+		t.Errorf("当人が書いた hold の作成時刻を返していない: got %v, want %v", gotAt, own)
+	}
+}

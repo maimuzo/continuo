@@ -343,11 +343,21 @@ func CollectBids(comments []CommentView) []Bid {
 // （`lastProgressOf`）。**JSON の中の `at` は投稿者が自分で書いた値なので使わない。**
 // 時計を戻した機械が、自分の担当をいくらでも延ばせてしまう。
 //
+// **投稿者も突き合わせる。**本文は第三者にも書けるので（設計 3-77-0 が入札で挙げているのと同じ理由）、
+// **本文だけを信じると、issue にコメントできる誰かが `{"assignee":"<人間のログイン名>"}` と書くだけで、
+// その人間の担当を外させられる。**3-77b は「hold のコメントがあることが『その担当者は機械である』の
+// 唯一の証拠である」と書いており、**その証拠を第三者が作れてはならない。**
+// **continuo が書く hold は、担当を取った当人が自分のログイン名を書く**ので、正しい hold は必ずこれを通る。
+//
+// **この検査は `endsRound`（入札の回を閉じるかの判定）には掛けない。**あちらはコメント本文しか受け取らず、
+// **アカウントを改名すると、古いコメントの投稿者名だけが書き換わって本文の `assignee` は古いまま残る。**
+// 掛けると、その issue で回が二度と閉じなくなる。
+//
 // comments: issue に付いているコメントの全件。
 // assignee: いま付いている担当者のログイン名。**空文字なら1件も返さない。**
 // 戻り値の1つ目: いちばん新しい hold。
 // 戻り値の2つ目: その hold のコメントが作られた時刻。
-// 戻り値の3つ目: その担当者の hold が1件でもあれば true。
+// 戻り値の3つ目: その担当者が自分で書いた hold が1件でもあれば true。
 func LatestHoldFor(comments []CommentView, assignee string) (Hold, time.Time, bool) {
 	login := strings.TrimSpace(assignee)
 	if login == "" {
@@ -362,6 +372,10 @@ func LatestHoldFor(comments []CommentView, assignee string) (Hold, time.Time, bo
 			continue
 		}
 		if !strings.EqualFold(strings.TrimSpace(h.Assignee), login) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(c.Author), login) {
+			// **第三者が本文だけ真似た hold である。**証拠として数えない。
 			continue
 		}
 		if !found || c.CreatedAt.After(latestAt) {

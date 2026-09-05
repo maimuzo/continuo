@@ -728,7 +728,8 @@ func assigneeIDOf(issue tracker.Issue, login string) (string, bool) {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
-// 戻り値の2つ目: いま担当になっているアカウントのログイン名（読めなければ空文字）。
+// 戻り値の2つ目: いま担当になっているアカウントのログイン名。
+// **1つ目が true のときは必ず1文字以上ある**（issue に付いている担当者から取るため）。1つ目が false なら空文字。
 func (o *Orchestrator) handoffLostOnTurnEnd(ctx context.Context, rs *runState) (bool, string) {
 	interval := time.Duration(o.cfg.Tracker.Provider.Handoff.RecheckIntervalMs) * time.Millisecond
 	if interval <= 0 {
@@ -751,7 +752,8 @@ func (o *Orchestrator) handoffLostOnTurnEnd(ctx context.Context, rs *runState) (
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
-// 戻り値の2つ目: いま担当になっているアカウントのログイン名（読めなければ空文字）。
+// 戻り値の2つ目: いま担当になっているアカウントのログイン名。
+// **1つ目が true のときは必ず1文字以上ある**（issue に付いている担当者から取るため）。1つ目が false なら空文字。
 func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (bool, string) {
 	if !rs.handoffNeverChecked() {
 		return false, ""
@@ -774,7 +776,8 @@ func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (b
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
-// 戻り値の2つ目: いま担当になっているアカウントのログイン名（読めなければ空文字）。
+// 戻り値の2つ目: いま担当になっているアカウントのログイン名。
+// **1つ目が true のときは必ず1文字以上ある**（issue に付いている担当者から取るため）。1つ目が false なら空文字。
 func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, string) {
 	issue := rs.issue()
 	nodeID := issueNodeID(issue)
@@ -824,7 +827,6 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 
 	// **担当者が他人のアカウントになっている。**担当が移ったということである。
 	// **いま担当しているのは、その担当者のアカウントで動いている continuo である。**
-
 	//
 	// **ここまで来てから、はじめてコメントを読む**（設計 3-77f の「巡回を塞がない」）。
 	// **判定には使わない。**外された記録をログへ残すためだけである。
@@ -882,15 +884,16 @@ func (o *Orchestrator) logReleasedRecord(
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// newAccount: いま担当になっているアカウントのログイン名（読めなければ空文字）。
+// newAccount: いま担当になっているアカウントのログイン名。
+// **呼び出し元は `verifyHandoff` が真を返したときだけここへ来る**ので、必ず1文字以上ある。
 func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState, newAccount string) {
 	if !rs.claimTerminal(ctx) {
 		return
 	}
+	// **空のときの差し替えは置かない。**`verifyHandoff` は issue に付いている担当者から
+	// **`logins[0]` をそのまま返す**ので、真のときに空になる経路が1つも無い。
+	// **到達できない差し替えを置くと、読む人が「空になることがある」と読む。**
 	who := newAccount
-	if who == "" {
-		who = i18n.T(i18n.KeyHandoffLostUnknownAccount)
-	}
 	o.logger.Warn("担当が移ったので、この turn の終わりで止めます（push しません。カンバンへは書きません。after_run も走らせません）",
 		"identifier", rs.issue().Identifier, "いまの担当", who,
 		"理由", i18n.T(i18n.KeyHandoffLostReason, who, o.handoffIdleTimeout()))
