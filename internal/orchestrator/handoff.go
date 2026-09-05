@@ -488,11 +488,15 @@ func (o *Orchestrator) releaseOwnAssignee(
 ) (string, bool) {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
+		// **draft issue には担当者もコメントも書けない。****黙って戻らない。**
+		// 呼び出し側は毎巡回でここへ来るので、1行も出さないと理由が分からないまま止まる。
+		o.logger.Warn(failurePrefix+"、この issue には担当者を書けません（draft issue です）",
+			"identifier", issue.Identifier)
 		return "", false
 	}
 	viewer, ok := o.viewerIdentity(ctx)
 	if !ok {
-		o.logger.Warn("gh の持ち主を取れないので、書いた担当者を消し戻せません",
+		o.logger.Warn(failurePrefix+"、gh の持ち主を取れないので担当者を消せません",
 			"identifier", issue.Identifier)
 		return "", false
 	}
@@ -535,6 +539,10 @@ func (o *Orchestrator) releaseOwnAssignee(
 // **1週間の枠を待っているのに5時間の枠の時刻で判定してしまう。**
 // 5時間の枠が明けるたびに枠待ちの印が外れるため、上限に届くのがそのぶん遅れる。
 //
+// **直前の読み取りに失敗しているときは、手放さない。**この判定は GitHub へ2回書き、
+// pane を閉じる。**古い写しで動かすと、既に明けている枠を根拠に担当を外すことになる。**
+// **経過の時計は止めない。**読めるようになった時点で、そのまま効く。
+//
 // **判定の軸は「リセットまでの残り時間」である。**2026-08-26 に人間が承認した表が、
 // 1週間の枠を「上限以内なら待つ／上限より先なら引き渡す」で分けている。
 // **その上限が `rate_limit.weekly_wait_limit_minutes`（既定300分＝5時間）である。**
@@ -551,6 +559,13 @@ func (o *Orchestrator) weeklyWaitExceeded(rs *runState) bool {
 		}
 	}
 	since := rs.noteWeeklyFull(weeklyFull, o.now())
+
+	// **読めなくなった写しで手放さない。**この判定は GitHub へ2回書き、pane を閉じる。
+	// **資格情報が切れた機械は、切れる直前の値を1日中返し続ける**（設計 3-77i）。
+	// **時計は上で進めてある。**読めるようになった時点で、経過はそのまま効く。
+	if o.quotaForBid() == nil {
+		return false
+	}
 
 	limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
 	if limit <= 0 || !weeklyFull {
@@ -607,22 +622,26 @@ func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState
 //
 // **順番を入れ替えてはならない。**
 //
-//  1. 自分の担当者を外し、released を書く   … **失敗したら何もせずに戻る**
-//  2. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
+//  1. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
+//  2. 自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
 //  3. worker を止める                        … pane を閉じる
 //  4. 印から外す                             … スロットを空ける
 //
-// **段1 を段3 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
+// **段2 を段3 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
 // **pane だけ閉じて担当が残り、`idle_timeout_ms` のあいだ誰も動かない issue になる。**
 //
-// **段2 を段1 より先に置いてはならない。**`RunAfterRunOnce` は実行の前に印を立て、
-// **印を消すのは着手と片付けだけである。**先に走らせて段1 が失敗すると、
-// **この run が枠明けに完走しても `finishRun` の `after_run` が印に弾かれて1回も走らない。**
+// **段1 を段2 より先に置く。**逆にすると、`released` を読んだ次の機械が、
+// **こちらの `git push` が終わる前に同じ branch で作業を始めうる**
+// （`workspace_hooks.timeout_ms` を入札の締め切りより長くしている設定で起きる）。
 //
-// **段2 で `after_run` を走らせる。**担当を失ったときの止め方（3-77c）は走らせないが、
+// **段1 で `after_run` を走らせる。**担当を失ったときの止め方（3-77c）は走らせないが、
 // **あちらは「担当が既に別の機械へ移っている」ので、push すると新しい担当の続きと衝突する。**
-// **こちらは自分から手放す側で、released を書いた時点でも次の担当はまだ決まっていない**
-// （入札の締め切りは既定3分）。**人間の決定「push して引き渡す」は、この経路で果たす。**
+// **こちらは自分から手放す側で、まだ担当者である。**衝突する相手がいない。
+// **人間の決定「push して引き渡す」は、この経路で果たす。**
+//
+// **段2 が失敗したときの後始末は無い。**`after_run` は既に走っており、
+// `RunAfterRunOnce` は印を戻さない。**push は済んでいるので、失われるのはそのあとに
+// 積んだ commit だけである。**そのことを `Warn` で1行出す。
 //
 // **段4 を落としてはならない。**`beginTerminal` は印を立てたまま返らないので、
 // **`release` を呼ばないと、その run は印に残り続けてスロットを永久に埋める。**
@@ -635,7 +654,10 @@ func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState
 func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState) bool {
 	issue := rs.issue()
 	snap := o.quotaSnapshot()
-	o.logger.Info("1週間の枠が明けるのを待つ上限を超えたので、担当を手放します"+
+	// **ここでは `Debug` にする。**手放せずに戻る経路が2つあり、そちらは毎巡回で通る。
+	// **`Info` で出すと、1件も進んでいない run について30秒ごとに同じ行が出続ける。**
+	// **結果は下の `Info`（手放しました）と `Warn`（手放せませんでした）で1回ずつ出す。**
+	o.logger.Debug("1週間の枠が明けるのを待つ上限を超えたので、担当を手放します"+
 		"（worktree は残します。カンバンへは書きません）",
 		"identifier", issue.Identifier,
 		"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
@@ -650,7 +672,20 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// くくると、`git push` が5秒で切られる。**しかも `RunAfterRunOnce` は実行の前に印を立てるので、
 	// **次の巡回でやり直しても push は二度と走らない。**
 	// **そのうえ期限切れの ctx が担当者を外す要求へ渡り、`context deadline exceeded` で落ちる。**
-	// **GitHub への書き込みには、herdr の持ち時間を使わない。**
+	// **段1。`after_run` を、担当を外す前に走らせる。**
+	// **順番を入れ替えてはならない。**外してから push すると、`released` を読んだ次の機械が
+	// **こちらの `git push` が終わる前に、同じ branch で作業を始めうる**
+	// （`workspace_hooks.timeout_ms` を入札の締め切りより長くしている設定で起きる）。
+	//
+	// **ctx を分ける。**`after_run` は利用者が書いた外部コマンドで、上限は
+	// `workspace_hooks.timeout_ms`（既定60秒）である。**`herdr.read_timeout_ms`（既定5秒）で
+	// くくると、`git push` が5秒で切られる。**
+	hookCtx, cancelHook := context.WithTimeout(
+		context.WithoutCancel(ctx), time.Duration(o.cfg.WorkspaceHooks.TimeoutMs)*time.Millisecond)
+	o.runAfterRun(hookCtx, rs)
+	cancelHook()
+
+	// **段2。GitHub への書き込みには、herdr の持ち時間を使わない。**
 	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
 	// **担当者を外す・`released` を書くという2本の GraphQL に足りない**（初回は
 	// `gh` の持ち主の取得も乗る）。**足りないと毎巡回でやり直し、run はスロットと pane を
@@ -662,29 +697,24 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	if !ok {
 		// **pane を閉じない。**閉じてしまうと、担当がこの機械のまま誰も動かなくなる。
 		// **印も外さない。**次の巡回でやり直す。
+		//
+		// **`after_run` は既に走っている。**`RunAfterRunOnce` は実行の前に印を立てるので、
+		// **この run が枠明けに完走しても、`finishRun` の `after_run` は走らない。**
+		// **push そのものは、いまの段1 で済んでいる。**そのあとに積んだ commit だけが
+		// push されないまま残る。**黙って進めない。**次に何を見ればよいかを1行で出す。
+		o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します）。"+
+			"workspace_hooks.after_run は既に実行済みなので、この run が完走しても再実行されません",
+			"identifier", issue.Identifier)
 		rs.endTerminal()
 		return false
 	}
 
-	// **`after_run` は、担当を外せたあとに走らせる。**先に走らせてはならない。
-	// **`RunAfterRunOnce` は実行の前に印を立て、印を消すのは着手と片付けだけである。**
-	// 先に走らせて担当を外せなかった場合、この run が枠明けに普通に完走しても、
-	// **`finishRun` の `after_run` が印に弾かれて1回も走らない。**
-	// 利用者が書いた `git push` が、その issue について一度も動かないまま run が終わる。
-	//
-	// **ctx を分ける。**`after_run` は利用者が書いた外部コマンドで、上限は
-	// `workspace_hooks.timeout_ms`（既定60秒）である。**`herdr.read_timeout_ms`（既定5秒）で
-	// くくると、`git push` が5秒で切られる。**
-	hookCtx, cancelHook := context.WithTimeout(
-		context.WithoutCancel(ctx), time.Duration(o.cfg.WorkspaceHooks.TimeoutMs)*time.Millisecond)
-	o.runAfterRun(hookCtx, rs)
-	cancelHook()
-
-	// **pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
+	// **段3。pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
 	cleanupCtx, cancel := context.WithTimeout(
 		context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 	defer cancel()
 	o.stopWorker(cleanupCtx, rs)
+	// **段4。印から外す。**落とすとスロットを永久に埋める。
 	o.release(rs)
 	o.logger.Info("担当を手放しました（次の担当は入札で決め直します）",
 		"identifier", issue.Identifier, "外した担当者", login)

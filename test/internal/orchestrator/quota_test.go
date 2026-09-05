@@ -724,8 +724,10 @@ func TestQuota_1週間の枠のリセットが上限より先なら担当を手�
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {
 		t.Fatalf("担当者が残っている: %v", got)
 	}
-	if got := fx.Logs.String(); !strings.Contains(got, "1週間の枠が明けるのを待つ上限を超えた") {
-		t.Fatalf("手放した理由を出していない:\n%s", got)
+	// **結果の1行が既定の水準で出ること。**
+	// 「上限を超えたので手放します」は `Debug` である（手放せずに戻る経路が毎巡回で通るため）。
+	if got := fx.Logs.String(); !strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("手放したことを出していない:\n%s", got)
 	}
 }
 
