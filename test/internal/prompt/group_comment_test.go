@@ -116,7 +116,7 @@ func TestTemplate_blockedのissueには直したという記録を書かせな�
 		// **書き足す段（段2a）も分ける。**分けるのを新しく投稿する段だけにすると、
 		// **成果報告が1件でも先にある issue では `blocked` でも `review` の書式へ流れ、
 		// 無い pull request の URL が書き足される。**
-		{"`blocked` を出した issue では、pull request の URL を書かないでください",
+		{"pull request の URL を書かないでください",
 			"書き足す段を分けないと、先に成果報告がある issue で無い pull request の URL が足されます"},
 	} {
 		if !strings.Contains(section, want.needle) {
@@ -193,7 +193,10 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 	}
 
 	// **分けた理由が書いてあること。**理由が無いと、あとから「印は1つでよい」と揃えられる。
-	if !strings.Contains(section, "書かせ直し") {
+	//
+	// **裸の「書かせ直し」で数えない。**その語は節の別の場所（対象の絞り込みの説明）にもあるので、
+	// **理由の段落を丸ごと消しても通ってしまう。**理由そのものを名指しで見る。
+	if !strings.Contains(section, "別の Claude Code の書かせ直しが、黙って走らなくなります") {
 		t.Errorf("%q の節が、印を分ける理由を言っていません。"+
 			"理由が無いと、あとから %q へ揃えられ、別の run の書かせ直しが黙って走らなくなります",
 			groupHeading, agentMarker)
@@ -217,10 +220,12 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *testing.T) {
 	section := sectionOf(t, prompt.Builtin(), groupHeading)
 
-	patch := strings.Index(section, "--method PATCH")
-	if patch < 0 {
-		t.Fatalf("%q の節に %q がありません（検査が的を外しています）", groupHeading, "--method PATCH")
+	// **件数で見る。**`Index` は最初の1件しか見ないので、**門の外に2本目を足しても通る。**
+	if n := strings.Count(section, "--method PATCH"); n != 1 {
+		t.Fatalf("%q の節に %q が %d 個あります。1個にしてください。"+
+			"2個目を門の外へ置かれても、この検査は1個目しか見ません", groupHeading, "--method PATCH", n)
 	}
+	patch := strings.Index(section, "--method PATCH")
 
 	// **書き換えの直前に、印を見る枝がある。**`case` の枝は `*"<印>"*)` の形である。
 	gate := strings.LastIndex(section[:patch], `*"`+groupMarker+`"*)`)
@@ -246,6 +251,24 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 			"塊ごとに別のシェルで走るので、`$ID` を作る塊は自分で `$URL` を置かないと空になり、"+
 			"書き足しに失敗して段2b が2件目の成果報告を投稿します",
 			groupHeading, setURL, got, deriveID, want)
+	}
+
+	// **件数がそろっているだけでは足りない。**`$ID` を作る行の直前が `$URL` を置く行であること。
+	// **離れた場所に2つ並べても、件数だけの検査は通る。**
+	for at := 0; ; {
+		i := strings.Index(section[at:], deriveID)
+		if i < 0 {
+			break
+		}
+		i += at
+		if before := strings.LastIndex(section[:i], setURL); before < 0 ||
+			strings.Contains(section[before:i], "```") ||
+			strings.Count(section[before:i], "\n") > 2 {
+			t.Errorf("%q の節で、%q の直前に %q がありません。"+
+				"同じ塊の中で置き直さないと、別のシェルで走ったときに `$ID` が空になります",
+				groupHeading, deriveID, setURL)
+		}
+		at = i + len(deriveID)
 	}
 }
 
@@ -274,6 +297,11 @@ func TestTemplate_グループの成果報告は対象を絞りStatus名を書�
 			"外さないと、3-7 の成果報告と合わせて代表にコメントが2件付きます"},
 		{"`working` を出した issue も書きません",
 			"まだ終わっていない issue に成果報告を書かせると、途中の状態が成果として残ります"},
+		// **段2b の条件に、段2a が落ちた場合が入っていること。**
+		// 「何も返らなかったとき」だけだと、段1 が URL を返したのに段2a が落ちた場合の
+		// **行き先が無くなり、エージェントはその issue へ何も書かないか、2件目を投稿する。**
+		{"または段2a が「段2b で新しく1件投稿します」と出したとき",
+			"段2a が落ちたときの行き先が無いと、その issue に何も残らないか、2件目が積まれます"},
 		// **別のリポジトリの issue を外す行も見る。**段2b は
 		// `--repo {{.issue.owner}}/{{.issue.repo}}` を直に書いているので、
 		// **外れると、同じ番号の別のリポジトリの issue へ書き込む。**
