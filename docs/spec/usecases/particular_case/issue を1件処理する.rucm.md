@@ -514,8 +514,11 @@ worktree のパスを渡すと `linked_worktree_source` で断る（実測: 2026
 ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの断念` だけが、
 新しいセッション UUID の指定つきの起動に限られる（復帰つきなら `復帰の失敗` が先に受け取るためである）。
 
-**見分けているのは `internal/orchestrator/dispatch.go` の `startRun` の1行だけである**
-（`if startErr != nil && resumeUUID != ""`）。**エラーの種類を見ていない。**
+**見分けているのは `internal/orchestrator/dispatch.go` の `startRun` の1行だけである。**
+**その1行はエラーの種類を1つだけ見る。**「herdr は agent を登録していないが Claude Code は
+走っている」を表す番兵（`ErrStartupBusy`。設計 3-80）だけを、この枝から外す。
+**外さないと、復帰そのものは成功しているのに立て直しへ回り、
+動いている本人の hook の宛先が張り替えられる。**それ以外の種類は、これまでどおり見ていない。
 確認の画面で止まっても（`agent_status` が `blocked`）、`herdr.startup_timeout_ms` が経っても、
 前回のセッションが見つからなくても、同じ枝へ入る。
 
@@ -525,11 +528,21 @@ ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの�
 渡す UUID も同じ値である。設計 [3-3](../../../plans/continuo_design.md) は
 「一度使ったセッション UUID をもう一度 `--session-id` に渡すと
 `Session ID ... is already in use.` で起動に失敗する」と実測している。
-**送り直しに入るのは `agent.get` が `agent_not_found` を返したときである**
+**送り直しに入るのは、`agent.get` が `agent_not_found` を返し、
+かつ、その run から hook が1件も届いていないときである**
 （`confirmStartup` がやり直せる形で期限を待たずに戻る唯一の枝。`internal/orchestrator/dispatch.go`。
 `blocked` も期限を待たずに戻るが、そちらはやり直さずにそのまま返る）。
-**`agent_not_found` は「Claude Code が1文字も起動していない」ことを意味するので、
-その UUID のセッションはまだ無く、同じ値を渡し直せる。**
+**そのとき Claude Code は1文字も起動していないので、その UUID のセッションはまだ無く、
+同じ値を渡し直せる。**
+
+**hook が届いていたら送り直さない**（設計 [3-80](../../../plans/continuo_design.md)）。
+**herdr が agent を登録するのは、入力待ちの画面を見分けたときである。**
+起動直後から作業を始めた Claude Code はその画面を出さないので、**生きていても
+`agent_not_found` が返り続ける。**そこへ送り直すと pane を Claude Code が埋めているので
+`agent_pane_busy` が返り続け、**復帰つきの起動では `復帰の失敗` が動いている本人の
+hook の宛先を張り替えてしまう。****待たない。**`ErrStartupBusy` でその場に戻り、`startRun` が1回目の指示を送らずに
+「turn の終わりを待つ」印を立てる。**走っている turn の終わりは turn ループが hook だけで待つ。**
+**ここで待つと、同じ巡回で印を付けた他の issue が1つも着手されないまま止まる**（設計 3-80）。
 
 **`agent_status` が `unknown` のままの場合と `interactive_ready` が偽のままの場合は、
 `agent.start` を送り直さない。**`confirmStartup` が 500 ミリ秒ごとに見直しながら
