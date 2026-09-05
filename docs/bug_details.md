@@ -471,6 +471,8 @@ branch は push してあれば残りますが、エージェントが何を考�
 - **`WORKFLOW.md` を複数の機械で共有するなら、機械ごとに違う値を洗い出してください。**
   とくに `rate_limit.token_source` は OS で違います（macOS は Keychain、
   Linux は `~/.claude/.credentials.json`）。
+  **一覧と、配るときの手順は [FAQ.md](FAQ.md) の
+  「1枚の WORKFLOW.md をチームで共有して、余裕がある機械に処理させたい」にあります。**
 - **身元ファイルはエージェントが書き換えられます。**worktree の直下にあり、
   そこでエージェントが確認なしのモードで動くからです。**この値を宛先にして
   pane を閉じてはいけません**（別の run の Claude Code を turn の途中で殺せます）。

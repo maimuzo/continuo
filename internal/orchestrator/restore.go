@@ -1156,7 +1156,7 @@ func (o *Orchestrator) panesByCwd(ctx context.Context) (map[string]herdr.Pane, m
 //
 //	置き場所のパス  … `<root>/<host>/<owner>/<repo>/<スラグ>` の固定4階層。スラグに issue の番号が入る
 //	pane の label   … `owner/repo/issues/N`（設計 3-3）。スラグから切り出せなかったときに使う
-//	カンバンの issue  … 上の2つで組み立てた `<owner>/<repo>#<番号>` で1件だけ引き直す
+//	カンバンの issue… 上の2つで組み立てた `<owner>/<repo>#<番号>` で1件だけ引き直す
 //
 // **どの手掛かりも、そのままでは信じない。**引き直した issue から**スラグを作り直し、
 // 目の前のディレクトリ名と一致すること**を確かめる（ExpectedSlugFor）。ここを外すと、

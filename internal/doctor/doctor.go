@@ -17,7 +17,7 @@
 //	worktree の場所    … `workspace.root` に実際に書けるか
 //	herdr            … socket の ping の応答の protocol が herdr.protocol と一致するか
 //	gh の認証         … `gh auth status` の Token scopes に project が単独で並んでいるか
-//	カンバン            … Bootstrap が通り、active_states の選択肢名が全部あるか
+//	カンバン           … Bootstrap が通り、active_states の選択肢名が全部あるか
 //	Status の名前      … 設定に書いた Status と紛らわしい選択肢がカンバンに無いか
 //	対応表のキー       … `tracker.automated_state_rewrite` のキーがカンバンの選択肢にあるか
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
@@ -136,9 +136,9 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //	              ├─ 未記入の項目（雛形と設定の原文を突き合わせる）
 //	              ├─ herdr（設定の protocol と照合する）
 //	              └─ gh の認証 ── カンバン ─┬─ Status の名前
-//	                                      ├─ 対応表のキー
-//	                                      ├─ clone
-//	                                      └─ 信頼登録
+//	                                        ├─ 対応表のキー
+//	                                        ├─ clone
+//	                                        └─ 信頼登録
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
 //
 // **この線は設計 3-32 の依存の図そのままである。**`gh の認証` が読む値は設定に無い

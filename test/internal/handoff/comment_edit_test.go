@@ -23,7 +23,7 @@ func TestAssess_進捗を書き足した機械の担当は外さない(t *testin
 	got := handoff.Assess(handoff.Situation{
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
-			holdComment(otherLogin, "thinkpad", now.Add(-20*time.Hour)),
+			holdComment(otherLogin, now.Add(-20*time.Hour)),
 			progressComment(otherLogin, now.Add(-19*time.Hour), now.Add(-time.Hour)),
 		},
 		SelfLogin:   selfLogin,
@@ -54,7 +54,7 @@ func TestAssess_更新時刻が取れなくても作成時刻で数える(t *tes
 	got := handoff.Assess(handoff.Situation{
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
-			holdComment(otherLogin, "thinkpad", now.Add(-20*time.Hour)),
+			holdComment(otherLogin, now.Add(-20*time.Hour)),
 			progressComment(otherLogin, now.Add(-time.Hour), time.Time{}),
 		},
 		SelfLogin:   selfLogin,
@@ -116,7 +116,7 @@ func TestRoundStart_編集しても回の区切りは動かない(t *testing.T) 
 	now := at()
 	created := now.Add(-10 * time.Hour)
 
-	view := holdComment(otherLogin, "thinkpad", created)
+	view := holdComment(otherLogin, created)
 	view.UpdatedAt = now
 
 	got, ok := handoff.RoundStart([]handoff.CommentView{view})
@@ -130,25 +130,25 @@ func TestRoundStart_編集しても回の区切りは動かない(t *testing.T) 
 
 // 目的: いちばん新しい hold の選び方が、編集で入れ替わらないことを固定する（設計 5-3k）。
 //
-// **なぜ要るか。**hold の `host` は「いまどの機械が担当しているか」の唯一の答えである。
-// **更新時刻で選ぶと、古い hold を1文字直すだけで、担当している機械の名前が入れ替わる。**
-// 担当を外すときに書く released のコメントが、居ない機械を名指しすることになる。
+// **なぜ要るか。**いちばん新しい hold は「いまどの branch で作業しているか」の答えである。
+// **更新時刻で選ぶと、古い hold を1文字直すだけで、担当が始まった時刻と branch の名前が入れ替わる。**
+// 担当を外すときに書く released のコメントが、既に使われていない branch を名指しすることになる。
 //
-// 与える情報: 古い hold（`old-host`）がいま編集され、新しい hold（`thinkpad`）は編集されていない状況。
-// 成功条件: 新しく作られたほう（`thinkpad`）が返ること。
+// 与える情報: 古い hold（`old-branch`）がいま編集され、新しい hold（`new-branch`）は編集されていない状況。
+// 成功条件: 新しく作られたほう（`new-branch`）が返ること。
 func TestLatestHoldFor_編集しても新しいholdは入れ替わらない(t *testing.T) {
 	now := at()
 
-	old := holdComment(otherLogin, "old-host", now.Add(-100*time.Hour))
+	old := holdCommentOn(otherLogin, "old-branch", now.Add(-100*time.Hour))
 	old.UpdatedAt = now
-	recent := holdComment(otherLogin, "thinkpad", now.Add(-50*time.Hour))
+	recent := holdCommentOn(otherLogin, "new-branch", now.Add(-50*time.Hour))
 
 	got, gotAt, ok := handoff.LatestHoldFor([]handoff.CommentView{old, recent}, otherLogin)
 	if !ok {
 		t.Fatal("hold があるのに取れない")
 	}
-	if got.Host != "thinkpad" {
-		t.Errorf("編集で hold の新旧が入れ替わった: got %q, want %q", got.Host, "thinkpad")
+	if got.Branch != "new-branch" {
+		t.Errorf("編集で hold の新旧が入れ替わった: got %q, want %q", got.Branch, "new-branch")
 	}
 	// **返す時刻も作成時刻である。**ここが更新時刻になると、期限の下限が編集で未来へ動く。
 	if !gotAt.Equal(now.Add(-50 * time.Hour)) {
@@ -159,8 +159,8 @@ func TestLatestHoldFor_編集しても新しいholdは入れ替わらない(t *t
 
 // 目的: 入札の投稿時刻（`Bid.PostedAt`）が、編集で動かないことを固定する（設計 5-3k / 3-77a）。
 //
-// **なぜ要るか。**同点の決着は「いちばん最初に投稿した機械」で行う（設計 3-77）。
-// **更新時刻を採ると、負けた機械があとから自分の入札を1文字直すだけで、投稿時刻を新しくできる。**
+// **なぜ要るか。**同点の決着は「いちばん最初に投稿した入札」で行う（設計 3-77）。
+// **更新時刻を採ると、負けた continuo があとから自分の入札を1文字直すだけで、投稿時刻を新しくできる。**
 //
 // 与える情報: 入札が3時間前に作られ、いま編集された状況。
 // 成功条件: `PostedAt` が作成時刻（3時間前）のままであること。
@@ -171,7 +171,7 @@ func TestCollectBids_編集しても投稿時刻は動かない(t *testing.T) {
 	bids := handoff.CollectBids([]handoff.CommentView{{
 		Author: otherLogin,
 		Body: handoff.FormatBid(handoff.Bid{
-			Host: "thinkpad", FiveHour: 40, Weekly: 60, Score: 140, At: created,
+			Author: otherLogin, FiveHour: 40, Weekly: 60, Score: 140, At: created,
 		}, time.Minute),
 		CreatedAt: created,
 		UpdatedAt: now,
@@ -187,11 +187,12 @@ func TestCollectBids_編集しても投稿時刻は動かない(t *testing.T) {
 
 // 目的: いちばん新しい released の選び方が、編集で入れ替わらないことを固定する（設計 5-3k）。
 //
-// **なぜ要るか。**released は「いつ・どの機械の担当が外されたか」の記録である。
-// **更新時刻で選ぶと、古い記録が最新に化け、ログに間違った機械の名前が残る。**
+// **なぜ要るか。**released は「いつ・どのアカウントの担当が外されたか」の記録である。
+// **更新時刻で選ぶと、古い記録が最新に化け、ログに間違ったアカウント名が残る。**
 //
-// 与える情報: 古い released（`old-host`）がいま編集され、新しい released（`thinkpad`）は編集されていない状況。
-// 成功条件: 新しく作られたほう（`thinkpad`）が返ること。
+// 与える情報: 古い released（`octocat-bot-b`）がいま編集され、
+// 新しい released（`octocat-bot-a`）は編集されていない状況。
+// 成功条件: 新しく作られたほう（`octocat-bot-a`）が返ること。
 func TestLatestReleased_編集しても新しいreleasedは入れ替わらない(t *testing.T) {
 	now := at()
 
@@ -199,7 +200,7 @@ func TestLatestReleased_編集しても新しいreleasedは入れ替わらない
 		{
 			Author: otherLogin,
 			Body: handoff.FormatReleased(handoff.Released{
-				From: "old-host", Branch: "continuo/octocat/hello-world/188", At: now.Add(-100 * time.Hour),
+				From: otherLogin, Branch: "continuo/octocat/hello-world/188", At: now.Add(-100 * time.Hour),
 			}),
 			CreatedAt: now.Add(-100 * time.Hour),
 			UpdatedAt: now,
@@ -207,7 +208,7 @@ func TestLatestReleased_編集しても新しいreleasedは入れ替わらない
 		{
 			Author: otherLogin,
 			Body: handoff.FormatReleased(handoff.Released{
-				From: "thinkpad", Branch: "continuo/octocat/hello-world/188", At: now.Add(-50 * time.Hour),
+				From: selfLogin, Branch: "continuo/octocat/hello-world/188", At: now.Add(-50 * time.Hour),
 			}),
 			CreatedAt: now.Add(-50 * time.Hour),
 		},
@@ -215,7 +216,7 @@ func TestLatestReleased_編集しても新しいreleasedは入れ替わらない
 	if !ok {
 		t.Fatal("released があるのに取れない")
 	}
-	if got.From != "thinkpad" {
-		t.Errorf("編集で released の新旧が入れ替わった: got %q, want %q", got.From, "thinkpad")
+	if got.From != selfLogin {
+		t.Errorf("編集で released の新旧が入れ替わった: got %q, want %q", got.From, selfLogin)
 	}
 }

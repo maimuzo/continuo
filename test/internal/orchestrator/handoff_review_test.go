@@ -1,8 +1,7 @@
 // **PR #108 のレビューで見つかった穴を塞いだことの検査である**（設計 3-77b / 3-77f 〜 3-77i）。
 //
-// **見張っているのは4点である。**
+// **見張っているのは3点である。**
 //
-//	同じアカウントの2台      … 機械の名前で見分ける。**アカウントだけで比べない**
 //	着手をやめたときの後始末  … 書いた担当者を消し戻す。**残すと18時間塞がる**
 //	枠の写しの寿命           … 読めなくなったら入札しない。**古い値で入札し続けない**
 //	巡回を塞がないこと        … コメントを読む issue の数に上限を置く
@@ -23,73 +22,7 @@ import (
 	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
-// twinHostName は、同じ GitHub アカウントで動いているもう1台の機械の名前である（架空の名前）。
-//
-// **`testHostName` とは別の名前にする。**同じにすると、この検査は何も見ていないことになる。
-const twinHostName = "twin-host"
-
-// 目的: 担当者が自分のアカウントでも、hold を持っているのが別の機械なら着手しないことを
-// 確認する（設計 3-77b）。
-//
-// **1人が2台の機械を1つのアカウントで動かすのが、この機能のいちばん自然な使い方である。**
-// **アカウントだけで比べると、勝った機械と負けた機械の両方が同じ branch の worktree を掴み、
-// 2つ目の Claude Code が立つ。**
-//
-// 与える情報: 担当者は gh の持ち主1人。hold は同じ持ち主として**別の機械**が1時間前に書いたもの。
-// 成功条件: 着手しないこと。入札のコメントも1件も増えないこと。
-func TestHandoff_同じアカウントでも別の機械のholdなら着手しない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	holdPrompt(fx)
-	fx.Tracker.AddIssue(assignedIssue(188, "Ready", testGHLogin))
-
-	node := issueNode(188)
-	recent := time.Now().Add(-time.Hour)
-	fx.Tracker.AddCommentBy(node, testGHLogin, handoff.FormatHold(handoff.Hold{
-		Host: twinHostName, Assignee: testGHLogin,
-		Branch: "continuo/octocat/hello-world/188", At: recent,
-	}), recent)
-
-	fx.Orc.Tick(context.Background())
-
-	if got := len(fx.Orc.RunningIdentifiers()); got != 0 {
-		t.Fatalf("別の機械が担当している issue に着手した: 実行中 %d 件", got)
-	}
-	if got := len(fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffBidMarker)); got != 0 {
-		t.Errorf("別の機械が期限内で担当しているのに入札した: %d 件", got)
-	}
-}
-
-// 目的: 同じアカウントの別の機械が落ちたまま期限を過ぎたら、担当を外して入札をやり直すことを
-// 確認する（設計 3-77b）。
-//
-// **ここが効かないと、担当者が自分のアカウントのままなので、どの機械もその issue を拾えない。**
-//
-// 与える情報: 担当者は gh の持ち主1人。hold は**別の機械**が19時間前に書いたもの。
-// 成功条件: released のコメントが1件増え、その `from` が別の機械の名前であること。
-func TestHandoff_同じアカウントの別の機械が落ちたら期限で外す(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	holdPrompt(fx)
-	fx.Tracker.AddIssue(assignedIssue(188, "Ready", testGHLogin))
-
-	node := issueNode(188)
-	old := time.Now().Add(-19 * time.Hour)
-	fx.Tracker.AddCommentBy(node, testGHLogin, handoff.FormatHold(handoff.Hold{
-		Host: twinHostName, Assignee: testGHLogin,
-		Branch: "continuo/octocat/hello-world/188", At: old,
-	}), old)
-
-	fx.Orc.Tick(context.Background())
-
-	released := fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffReleasedMarker)
-	if len(released) != 1 {
-		t.Fatalf("released のコメントが1件ではない: %d 件", len(released))
-	}
-	if !strings.Contains(released[0].Body, `"from":"`+twinHostName+`"`) {
-		t.Errorf("released に外した機械の名前が入っていない:\n%s", released[0].Body)
-	}
-}
-
-// 目的: 人間が引き継いだ issue を、既に居ない機械の古い hold を根拠に取り上げないことを
+// 目的: 人間が引き継いだ issue を、既に居ない continuo の古い hold を根拠に取り上げないことを
 // 確認する（設計 3-77b）。
 //
 // **hold のコメントは、担当が移っても入札の回が変わっても消えない。**
@@ -109,8 +42,8 @@ func TestHandoff_他の担当者のholdでは人間の担当を外さない(t *t
 	node := issueNode(188)
 	older := time.Now().Add(-20 * time.Hour)
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
-		Host: rivalHost, Assignee: rivalLogin,
-		Branch: "continuo/octocat/hello-world/188", At: older,
+		Assignee: rivalLogin,
+		Branch:   "continuo/octocat/hello-world/188", At: older,
 	}), older)
 	old := time.Now().Add(-19 * time.Hour)
 	fx.Tracker.AddCommentBy(node, humanLogin, "私が引き取ります", old)
@@ -265,7 +198,7 @@ func TestHandoff_holdを書けなかったら担当者を消し戻して着手�
 	if len(released) != 1 {
 		t.Fatalf("released のコメントが1件ではない: %d 件", len(released))
 	}
-	if !strings.Contains(released[0].Body, `"from":"`+testHostName+`"`) {
-		t.Errorf("released に消し戻した機械の名前が入っていない:\n%s", released[0].Body)
+	if !strings.Contains(released[0].Body, `"from":"`+testGHLogin+`"`) {
+		t.Errorf("released に消し戻したアカウントの名前が入っていない:\n%s", released[0].Body)
 	}
 }

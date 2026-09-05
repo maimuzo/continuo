@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある。**
 package orchestrator_test

@@ -998,7 +998,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 
 | 何 | どうする |
 | --- | --- |
-| 印の置き場所 | **メモリだけ**（3-68）。`o.notified`（[internal/orchestrator/orchestrator.go:312](../../../internal/orchestrator/orchestrator.go#L312)）と同じ形 |
+| 印の置き場所 | **メモリだけ**（3-68）。`o.notified`（[internal/orchestrator/orchestrator.go:299](../../../internal/orchestrator/orchestrator.go#L299)）と同じ形 |
 | 鍵 | **issue の identifier ＋ 理由の種類。**理由が変わったら数え直す |
 | いつ書くか | **同じ鍵で3回続けて落ち、かつ最初に落ちてから60秒以上たったとき**（3-68） |
 | 通ったら | **印を消す**（`clearUntrusted` と同じ）。直したあと再発したら、もう一度知らせる |
