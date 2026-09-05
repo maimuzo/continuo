@@ -395,7 +395,7 @@ flowchart TD
     end
 
     subgraph SAF8 ["SPECIFIC ALTERNATIVE FLOW 入札に負けた / RFS BASIC FLOW 17"]
-        A8S1["1. 勝った機械の名前を記録に残す"] --> A8S2["2. 担当者に加えない"] --> A8S3["3. 着手の対象から外す"] --> A8S4["4. ABORT"]
+        A8S1["1. 勝ったアカウント名を記録に残す"] --> A8S2["2. 担当者に加えない"] --> A8S3["3. 着手の対象から外す"] --> A8S4["4. ABORT"]
     end
 
     subgraph GAF1 ["GLOBAL ALTERNATIVE FLOW 締め切り待ちの中断 / BRANCH FROM BASIC FLOW 15"]

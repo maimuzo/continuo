@@ -759,13 +759,14 @@ func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (b
 // **答えを出せたときだけ時計を進める。**進めてしまうと、`gh` に一度届かなかっただけで
 // **次の確かめが `recheck_interval_ms` のあとになる**（既定1時間）。
 //
-// **担当者のアカウントが自分でも、担当しているのは別の機械かもしれない**（設計 3-77b）。
-// **1人が2台の機械を1つのアカウントで動かすと、そうなる。**hold のコメントの `host` で見分ける。
+// **担当者のアカウントが自分なら、担当しているのも自分である**（設計 3-77-0）。
+// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+// **hold を読んで機械を見分ける段は無い。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
-// 戻り値の2つ目: いま担当になっている機械の名前（読めなければ空文字）。
+// 戻り値の2つ目: いま担当になっているアカウントのログイン名（読めなければ空文字）。
 func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, string) {
 	issue := rs.issue()
 	nodeID := issueNodeID(issue)
@@ -799,9 +800,9 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 		return false, ""
 	}
 
-	// **誰が引き継いだかを、issue の上から読む。**hold のコメントの `host` が答えである。
+	// **誰が引き継いだかは、issue の担当者が答える**（設計 3-77-0）。
 	// **released のコメントも一緒に記録に残す**（RUCM「担当が移った」のステップ1）。
-	// **これが無いと「担当が移った」としか残らず、いつ・どの機械が外されたのかを辿れない。**
+	// **これが無いと「担当が移った」としか残らず、いつ・どのアカウントが外されたのかを辿れない。**
 	// **切れたかどうかは捨てる。**ここは「担当が自分のままか」を確かめるだけで、
 	// 案内を1回にするための照合はしない（設計 7-1）。
 	comments, _, err := o.tracker.FetchAllComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
@@ -858,7 +859,7 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// newHost: いま担当になっている機械の名前（読めなければ空文字）。
+// newHost: いま担当になっているアカウントのログイン名（読めなければ空文字）。
 func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState, newHost string) {
 	if !rs.claimTerminal(ctx) {
 		return

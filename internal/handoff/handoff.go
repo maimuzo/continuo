@@ -87,11 +87,11 @@ type Hold struct {
 	// hold を書くのは担当を取った当人なので投稿者と一致するが、
 	// **突き合わせる相手は issue の担当者であって、コメントの投稿者ではない。**
 	//
-	// **`LatestHoldFor` がこれで hold を絞る**（設計 3-77b）。hold のコメントは
-	// **担当が移っても入札の回が変わっても消えない**ので、絞らないと
+	// **絞らないと何が起きるか。**hold のコメントは
+	// **担当が移っても入札の回が変わっても消えない**ので、
 	// **「issue のどこかに hold がある」だけで「いまの担当者は機械である」と読まれる。**
-	// 機械が外れたあとに人間が自分を担当者にすると、
-	// **別の機械が古い機械の hold を証拠にして、人間の担当を外す。**
+	// continuo が外れたあとに人間が自分を担当者にすると、
+	// **別の continuo が古い hold を証拠にして、人間の担当を外す。**
 	Assignee string `json:"assignee"`
 	// Branch はこの issue のために使う branch の名前である。
 	Branch string `json:"branch"`
@@ -112,7 +112,7 @@ type Released struct {
 	// （`releaseExpiredAssignee`）。着手をやめて自分で消し戻すとき（`undoHandoffAcquire`）だけは
 	// 投稿者と同じ値になるが、**片方で代われない以上、欄は要る。**
 	From string `json:"from"`
-	// Branch は担当を外された機械が使っていた branch の名前である。
+	// Branch は担当を外されたアカウントが使っていた branch の名前である。
 	Branch string `json:"branch"`
 	// At は外した時刻である。**外した機械のタイムゾーンで書く。**
 	At time.Time `json:"at"`

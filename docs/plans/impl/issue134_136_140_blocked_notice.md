@@ -337,7 +337,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 | 戻り口 | `judged` | `noted` | 記録 |
 | --- | --- | --- | --- |
 | `ActionProceed` / 入札に勝った（`bidForIssue`） | 真 | 偽 | **消す** |
-| `ActionSkipHeld` / `ActionSkipOtherMachine` / `ActionSkipSelfUnknown` | 真 | 偽 | **消す** |
+| `ActionSkipHeld` / `ActionSkipSelfUnknown` | 真 | 偽 | **消す** |
 | 入札の待ちと敗北・[internal/orchestrator/handoff.go:91-96](../../../internal/orchestrator/handoff.go#L91-L96) の早い戻り | 真 | 偽 | **消す** |
 | **`ActionSkipHumanAssigned`** / **担当者が2人以上**（gh の持ち主が混じっていてもいなくても。8-3） | 真 | **真** | **`noteGate` が書き直す** |
 | gh の持ち主を取れない・読み取りの枠切れ・コメントを読めない | **偽** | 偽 | **そのまま** |
@@ -346,7 +346,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 `judged` が真・`noted` が偽で通るので、この `defer` が消す。
 
 **この表が塞ぐ穴。**人間が担当者を外したあと、この機械が入札に負けて別の機械が担当になると、
-以後は `ActionSkipHeld` / `ActionSkipOtherMachine` へ落ちる。
+以後は `ActionSkipHeld` へ落ちる。
 **そこで消さないと「担当者が付いています（外れた人の名前）」が永久に出続ける。**
 
 ### 6-3. `Tick` に `else` の節を1つ足す
