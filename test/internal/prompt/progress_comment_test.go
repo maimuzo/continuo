@@ -206,7 +206,7 @@ func sectionOf(t *testing.T, body, heading string) string {
 func TestTemplate_進捗報告の見本は印を行頭から書かせる(t *testing.T) {
 	body := prompt.Builtin()
 
-	// **`gh issue comment` は2箇所にある**（3-7 の成果の報告と、5-3 の進捗報告）。
+	// **`gh issue comment` は4箇所にある**（3-7 の成果の報告、5-3 の進捗報告、7-2 の2つの書式）。
 	// **進捗報告の見本は、次の行に進捗報告の印が来るほうである。**
 	lines := strings.Split(body, "\n")
 	found := false
