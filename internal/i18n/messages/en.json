@@ -182,7 +182,7 @@
   "cli.prompt.err_attempt_positive": "Error: --attempt must be 1 or greater (%d given)",
   "cli.prompt.err_config_load": "Error: cannot read WORKFLOW.md: %v",
   "cli.prompt.err_fetch_failed": "Error: cannot read the kanban board: %v",
-  "cli.prompt.err_issue_not_on_board": "Error: could not read %s from the kanban board (it is not on the kanban board, its Status is unset, or it is archived). Run continuo doctor to check the settings and the board",
+  "cli.prompt.err_issue_not_on_board": "Error: could not read %s from the kanban board (it is not on the kanban board, its Status is unset, or it is archived). Run continuo doctor to check the settings and the kanban board",
   "cli.prompt.err_render_failed": "Error: cannot expand the variables: %v",
   "cli.prompt.err_show_required": "Error: continuo prompt requires --show (e.g. continuo prompt --show)",
   "cli.prompt.err_too_many_positional": "Error: continuo prompt accepts only one positional argument, the directory containing WORKFLOW.md (%[1]d given: %[2]v)",

@@ -113,7 +113,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 **段1・段3 は飛ばさない。**issue は作り、カンバンへ載せる。
 
 **段2（グループ化と着手順序）と段4（並び順）を飛ばしてよいのは、
-typo1件のために104件のボードを並べ替えるのが、この節の目的から外れるためである。**
+typo1件のためにカンバンの104件を並べ替えるのが、この節の目的から外れるためである。**
 
 **このとき issue は `Ice Box` のままである。**`tracker.active_states` に `Ice Box` は入っていないので
 （[internal/config/default.go:107](../../internal/config/default.go#L107)）、**continuo はこの issue を dispatch しない。**
