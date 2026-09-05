@@ -178,7 +178,7 @@ case(
 )
 case(
     "markdown link があれば通る",
-    base("**[docs/plans/continuo_design.md:8316-8380](docs/plans/continuo_design.md#L8316-L8380) に書きました。**"),
+    base("**[docs/plans/continuo_design.md:8354-8418](docs/plans/continuo_design.md#L8354-L8418) に書きました。**"),
     False,
 )
 case(
