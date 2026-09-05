@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **再着手でセッションに復帰することの検査である。**
 //
@@ -14,11 +14,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
@@ -110,7 +112,9 @@ func closedPane(fx *fixture, paneID string) bool {
 func finishRunOnPrompt(t *testing.T, fx *fixture, issue tracker.Issue, sessionUUID string) func() []string {
 	t.Helper()
 	nodeID := nodeIDOf(t, issue)
-	transcriptPath := writeTranscript(t, t.TempDir(), sessionUUID+".jsonl", []any{
+	// **記録は記録の根の直下1階層へ置く**（設計 3-3c）。着手の段5b がここを探し、
+	// **無ければ `--resume` を渡さない。**`t.TempDir()` は2階層下なので当たらない。
+	transcriptPath := seedSessionTranscript(t, fx, sessionUUID, []any{
 		typedUserLine("p1", "実装してください"),
 		assistantLine("req1", "実装して commit と push をしました。\n\nCONTINUO-STATUS: review", false),
 	})
@@ -221,7 +225,8 @@ func assertBasicFlowPostcondition(t *testing.T, fx *fixture, issue tracker.Issue
 //   - 身元ファイルに、起動したセッション UUID が書かれている
 //   - 基本フローの事後条件（Status・コメント・pane・印・worktree と branch）が揃う
 func TestDispatch_新規の着手は新しいセッションを立てる(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
 	issue := sampleIssue(188, "Ready")
 	prompts := finishRunOnPrompt(t, fx, issue, "session-1")
 	fx.Tracker.AddIssue(issue)
@@ -274,7 +279,8 @@ func TestDispatch_新規の着手は新しいセッションを立てる(t *test
 //   - 送られた本文が1回目の本文（5-3）である
 //   - 基本フローの事後条件（Status・コメント・pane・印・worktree と branch）が揃う
 func TestDispatch_既存のworktreeがあれば前回のセッションに復帰する(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
 
 	issue := sampleIssue(188, "In Progress")
 	prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
@@ -345,12 +351,21 @@ func TestDispatch_既存のworktreeがあれば前回のセッションに復帰
 //   - 印は残っている
 //   - worktree は残っている
 func TestDispatch_復帰に失敗したら新しいセッションで始め直す(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
 	fx.AllowLog("前回のセッションへ復帰できなかったので")
 	prompts := recordPrompts(fx)
 
 	issue := sampleIssue(188, "In Progress")
 	wt := prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
+	// **記録を置いてから走らせる。**置かないと着手の段5b が「会話の記録が無い」と判定し、
+	// **`--resume` を1回も渡さないので、この代替フローの分岐元そのものが起きない**（設計 3-3c）。
+	// **ここで再現したいのは「記録はあるのに復帰できない」場合である**
+	// （pane がまだシェルを起動しきっていない、など）。
+	seeded := seedSessionTranscript(t, fx, "sess-188", []any{
+		typedUserLine("p0", "前回の1行"),
+		assistantLine("req0", "作業中です", false),
+	})
 	fx.Tracker.AddIssue(issue)
 
 	var mu sync.Mutex
@@ -439,7 +454,11 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	// **hook の引き当ての索引の張り替えを見る。**張り替えていないと、pane に残った前の
 	// Claude Code が前回のセッション UUID を名乗って Stop hook を送り、
 	// **立て直した run の turn が別の会話の transcript で終わる。**
-	stale := writeTranscript(t, t.TempDir(), "sess-188.jsonl", []any{
+	//
+	// **同じ名前の記録を2つ作らない。**根の下に `sess-188.jsonl` が2つあると、
+	// 着手の段5b がどちらを見つけるかは `os.ReadDir` の並び順（ディレクトリ名）で決まり、
+	// **`os.MkdirTemp` の付ける接尾辞は実行のたびに変わる。**上で置いた1つを書き直す。
+	stale := writeTranscript(t, filepath.Dir(seeded), "sess-188.jsonl", []any{
 		typedUserLine("p-stale", "前のセッションの1行"),
 		assistantLine("req-stale", "CONTINUO-STATUS: review", false),
 	})
@@ -458,5 +477,269 @@ func TestDispatch_復帰に失敗したら新しいセッションで始め直�
 	}
 	if _, err := os.Stat(wt.Path); err != nil {
 		t.Errorf("worktree が残っていない: %s (err=%v)", wt.Path, err)
+	}
+}
+
+// TestDispatch_会話の記録が無いセッションには復帰しない は、設計 3-3c の
+// 「記録が無ければ新しいセッションで始める」を確かめる。
+//
+// 目的: 「**身元ファイルにセッション UUID が入っていても、その会話の記録が
+// 記録の置き場所に1件も無ければ `--resume` を渡さない**」を示す。
+//
+// **なぜ要るか。**着手が段6 より先で落ちると、身元ファイルには**会話が1度も作られていない
+// UUID** が残る（`restartWithNewSession` が採り直した UUID を書いたあとで、立て直しの
+// `agent.start` も失敗した場合である）。**そのまま復帰しにいくと、
+// `confirmStartupWithRestart` が `herdr.startup_timeout_ms` を使い切るまで
+// `agent.start` をやり直し続ける**（利用者の実測で18回・約60秒）。
+//
+// **`TestDispatch_復帰に失敗したら新しいセッションで始め直す` との違い。**あちらは
+// **記録はあるのに起動できなかった**場合で、`--resume` を1回投げてから立て直す。
+// こちらは**投げる前に決める**ので、`agent.start` は最初から `--session-id` で1回だけである。
+//
+// **この検査には経路の印を付けない**（設計 6-18e）。通る経路は
+// `TestDispatch_既存のworktreeがあれば前回のセッションに復帰する` と同じ P001 である。
+// 起動フラグを決める段は条件ステップではないので CFG に枝が無く、
+// **同じ印を2本に付けると、片方を消しても集計は満たされたままになる。**
+//
+// 与える情報: セッション UUID `sess-188` を書いた身元ファイルつきの worktree と、
+// `In Progress` の issue 1件。**その UUID の会話の記録は1件も置かない。**
+// 成功条件:
+//   - `agent.start` の起動フラグに `--resume` が1つも入らない
+//   - `--session-id` に新しい UUID が渡る（`sess-188` を使い回さない）
+//   - **`agent.start` が1回で済んでいる**（空回りしていない）
+//   - 身元ファイルの `session_uuid` が、その新しい UUID へ書き直されている
+func TestDispatch_会話の記録が無いセッションには復帰しない(t *testing.T) {
+	// **記録の根は、このテスト専用にする。**既定のままだと、前の実行が残した
+	// `sess-188.jsonl` を拾って「記録がある」と判定し、**この検査が黙って通る。**
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
+	prompts := recordPrompts(fx)
+
+	issue := sampleIssue(188, "In Progress")
+	prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
+	// **記録は置かない。**着手が途中で落ちたあとの身元ファイルを再現している。
+	fx.Tracker.AddIssue(issue)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 10*time.Second, "新しいセッションで turn が送られる", func() bool {
+		return len(prompts()) > 0
+	})
+
+	starts := startSessionIDs(fx)
+	resumes := startResumeUUIDs(fx)
+	if len(starts) == 0 {
+		t.Fatalf("agent.start が1度も呼ばれていない")
+	}
+	for i, uuid := range resumes {
+		if uuid != "" {
+			t.Fatalf("会話の記録が無いのに %d 回目の起動へ --resume を渡している: %q", i+1, uuid)
+		}
+	}
+	if starts[0] == "" {
+		t.Fatalf("新しい UUID を --session-id で渡していない: %v", starts)
+	}
+	if starts[0] == "sess-188" {
+		t.Fatalf("記録の無いセッションの UUID を --session-id に使い回している: %q", starts[0])
+	}
+	// **空回りしていないことを、`agent.start` の回数で見る。**死んだ UUID へ復帰しにいくと、
+	// `herdr.startup_timeout_ms` の中でやり直しが積み上がる。
+	if len(starts) != 1 {
+		t.Fatalf("agent.start が1回で済んでいない（空回りしている）: %d 回, %v", len(starts), starts)
+	}
+	if got := identitySessionUUID(t, fx, 188); got != starts[0] {
+		t.Fatalf("身元ファイルの session_uuid を書き直していない（次の着手もまた復帰を試みる）: got %q, want %q",
+			got, starts[0])
+	}
+
+	// **ログの3通り目を見る**（設計 3-3c）。この行と `記録の置き場所` の項目が、
+	// **検査が黙って無効になったこと**（Claude Code が置き場所の形を変えた・
+	// 根が別の場所を指している）**に気づける唯一の手がかりである。**
+	// **落とすと、この再着手が「新しいセッションを立てて着手します」と名乗り、
+	// 運用者から見て新規の着手と見分けが付かなくなる。**
+	logs := fx.Logs.String()
+	if !strings.Contains(logs, "身元ファイルのセッションへ復帰しないで、新しいセッションで始めます") {
+		t.Errorf("復帰しなかったことを名乗る行が出ていない")
+	}
+	if !strings.Contains(logs, "記録の置き場所") {
+		t.Errorf("探した場所がログに載っていない（検査が無効になったことに気づけない）")
+	}
+	if !strings.Contains(logs, "sess-188") {
+		t.Errorf("復帰しなかったセッションの UUID がログに載っていない（改竄された値の証拠が残らない）")
+	}
+}
+
+// TestComment_記録が無ければ復元せずに人間へ渡す は、設計 3-3c の取り戻し側を確かめる。
+//
+// 目的: 「**コメントの取り戻しも、記録が無い UUID へ `--resume` を投げない。**
+// **ただし黙って抜けてはならない**」を示す。
+//
+// **抜けると、コメントを1件も書いていない run が `failure_state` へ落ちず、
+// 引き渡しの通知も出ないまま `In Review` に並ぶ。**成果がまとめられていないことが
+// 誰にも伝わらない。**変わるのは、herdr の待ちを使い切ってから落ちるか、その前に落ちるかだけである。**
+//
+// **この検査には経路の印を付けない**（設計 6-18e）。通る経路は
+// `TestDispatch_既存のworktreeがあれば前回のセッションに復帰する` と同じ P001 である。
+//
+// 与える情報: 記録の置き場所を空にした状態で、turn を送ってから打ち切られる run。
+// **エージェントはコメントを1件も書かない。**
+// 成功条件:
+//   - 復元のための `agent.start` を1回も呼ばない（記録が無いので投げない）
+//   - issue の Status が `failure_state` になる
+//   - 引き渡しの通知が1件は投稿されている（**黙って抜けていない**）
+//   - 復元を飛ばした理由がログに残っている
+func TestComment_記録が無ければ復元せずに人間へ渡す(t *testing.T) {
+	clock := newTestClock()
+	// **採番したセッションの記録を置かせない。**既定では fixture が置くので
+	// （実機では Claude Code が書く）、**そのままでは「記録が無い」状態を作れない。**
+	fx := newFixture(t, fixtureOptions{
+		Now:                    clock.Now,
+		SkipSessionTranscripts: true,
+		Mutate: func(cfg *config.Config) {
+			cfg.Claude.TurnTimeoutMs = 1000
+			cfg.Agent.MaxRetries = 0
+			cfg.Tracker.VerifyStatesEvery = 0
+		},
+	})
+	blockFirstPrompt(t, fx)
+	issue := sampleIssue(188, "Ready")
+	fx.Tracker.AddIssue(issue)
+	fx.AllowLog("リトライの回数を使い切りました", "画面が変わらないまま",
+		"turn が終わったことを検知できません", "stall",
+		"復帰する先のセッションに会話の記録が無いので")
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 5*time.Second, "1回目の turn が待ち受けに入る", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+	starts := fx.Herdr.CountMethod(herdr.MethodAgentStart)
+	clock.Advance(5 * time.Second)
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 20*time.Second, "issue が人間へ渡る", func() bool {
+		return fx.Tracker.StateOf(issue.ID) == fx.Config.Tracker.FailureState
+	})
+
+	// **復元のための `agent.start` を呼んでいない。**記録が無いので投げない。
+	if got := fx.Herdr.CountMethod(herdr.MethodAgentStart); got != starts {
+		t.Errorf("記録が無いのに復元のための agent.start を呼んでいる: 着手のとき %d 回 → いま %d 回", starts, got)
+	}
+
+	// **引き渡しの通知が1件は出ている。**黙って抜けると、成果が無いことが誰にも伝わらない。
+	//
+	// **文面までは見ない。**引き渡しの通知は1つの run につき1件しか投稿しないので
+	// （`TestHandoff_引き渡しの通知は1件だけ`）、**先に走った打ち切りの通知が枠を取る。**
+	// **ここで確かめたいのは「復元を飛ばしても、人間へ渡す道は残っている」ことである。**
+	posted := 0
+	for _, c := range fx.Tracker.CommentsOf(nodeIDOf(t, issue)) {
+		if strings.Contains(c.Body, "【対処】") {
+			posted++
+		}
+	}
+	if posted == 0 {
+		t.Errorf("記録が無いことを理由に復元を飛ばしたのに、引き渡しの通知が1件も無い")
+	}
+
+	// **復元を飛ばしたことがログに残っている。**残らないと、なぜ復元しなかったのかが追えない。
+	if !strings.Contains(fx.Logs.String(), "復帰する先のセッションに会話の記録が無い") {
+		t.Errorf("復元を飛ばした理由がログに残っていない:\n%s", fx.Logs.String())
+	}
+}
+
+// TestDispatch_記録の判定は残り2つの場合も設計どおりに倒れる は、設計 3-3c の判定の表の
+// 残り2行を確かめる。
+//
+// 目的: **設計 3-3c の判定の表が並べている場合のうち、検査があるのは「記録が1件も無い」だけ
+// だった。**残り2つは、守りの向きを逆に書き換えても緑のまま通る状態にあった。
+//
+//	UUID がパスに使えない   … 復帰しない（身元ファイルはエージェントが書き換えられる。設計 3-2 / 3-23）
+//	記録の置き場所が実在しない … 復帰しない（その下に記録は在りえない）
+//
+// **2つ目を「決められない」に倒してはならない。**Claude Code を1度も起動していない機械では
+// 記録の置き場所がまだ無く、**再着手のたびに `--resume` を投げて空回りすることになる。**
+//
+// **「根はあるが読めない」（権限・IO の失敗）と「根が決まっていない」は、ここでは通らない。**
+// 前者は権限を落とした状態を作る必要があり、後者は `os.UserHomeDir` が失敗したときにしか起きない
+// （`fixtureOptions.TranscriptRoot` が空なら、そのテスト専用の根が入る）。
+// **どちらも dispatch を通した検査では届かない。**
+//
+// **1つ目は、当たる記録を置いてから渡す。**置かないと、UUID の検査を消しても
+// 「記録が1件も無い」に倒れて `--resume` が渡らず、**守りを消しても緑のまま通る。**
+// `filepath.Join` は `..` を畳むので、`sess/../188` は `<記録の根>/<ディレクトリ>/188.jsonl` に当たる。
+//
+// **この検査にも経路の印を付けない**（設計 6-18e）。通る経路は
+// `TestDispatch_既存のworktreeがあれば前回のセッションに復帰する` と同じ P001 である。
+//
+// 与える情報: 身元ファイルつきの worktree と `In Progress` の issue 1件。
+// 記録の置き場所と身元ファイルの UUID を、場合ごとに変える。
+// 成功条件: 使えない UUID では `--resume` が1つも渡らず、読めない場合では渡ること。
+func TestDispatch_記録の判定は残り2つの場合も設計どおりに倒れる(t *testing.T) {
+	cases := []struct {
+		name string
+		// uuid は身元ファイルへ書くセッション UUID である。
+		uuid string
+		// seedName は、記録を置くときのファイル名（拡張子を除く）である。空なら置かない。
+		seedName string
+		// missingRoot を真にすると、記録の置き場所として実在しないパスを渡す。
+		missingRoot bool
+		// wantResume は `--resume` が渡ることを期待するかである。
+		wantResume bool
+	}{
+		{
+			// **`/` はパスの区切りである。**通すと、根の外のファイルを見に行く組み立て方が成立する。
+			// **`..` を畳んだ先へ実際に記録を置く。**置かないと、この検査を消しても緑のまま通る。
+			name:       "UUIDがパスに使えない形なら復帰しない",
+			uuid:       "sess/../188",
+			seedName:   "188",
+			wantResume: false,
+		},
+		{
+			// **根が実在しないなら、その下に記録は在りえない**（設計 3-3c）。
+			name:        "記録の置き場所が実在しないなら復帰しない",
+			uuid:        "sess-188",
+			missingRoot: true,
+			wantResume:  false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tc.missingRoot {
+				// **作らないディレクトリを指す。**`os.ReadDir` が失敗する状態である。
+				root = filepath.Join(root, "まだ作られていない置き場所")
+			}
+			fx := newFixture(t, fixtureOptions{TranscriptRoot: root})
+			prompts := recordPrompts(fx)
+
+			issue := sampleIssue(188, "In Progress")
+			prepareWorktree(t, fx, issue, identityOverride{SessionUUID: tc.uuid})
+			if tc.seedName != "" {
+				seedSessionTranscript(t, fx, tc.seedName, []any{
+					typedUserLine("p0", "別のセッションの1行"),
+					assistantLine("req0", "作業中です", false),
+				})
+			}
+			fx.Tracker.AddIssue(issue)
+
+			fx.Orc.Tick(context.Background())
+			waitFor(t, 10*time.Second, "turn が送られる", func() bool {
+				return len(prompts()) > 0
+			})
+
+			resumes := startResumeUUIDs(fx)
+			if len(resumes) == 0 {
+				t.Fatalf("agent.start が1度も呼ばれていない")
+			}
+			if tc.wantResume {
+				if resumes[0] != tc.uuid {
+					t.Fatalf("判定できないのに復帰していない: --resume=%q, want %q", resumes[0], tc.uuid)
+				}
+				return
+			}
+			for i, uuid := range resumes {
+				if uuid != "" {
+					t.Fatalf("復帰してはならないのに %d 回目の起動へ --resume を渡している: %q", i+1, uuid)
+				}
+			}
+		})
 	}
 }
