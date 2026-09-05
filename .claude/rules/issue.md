@@ -86,7 +86,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:3932](../../docs/plans/continuo_design.md#L3932)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える |
 | **段4 のあと、`Ice Box` の item はボード全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
-| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8797](../../docs/plans/continuo_design.md#L8797)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:3873-3874](../../docs/plans/continuo_design.md#L3873-L3874) の本文である**） |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:8797](../../docs/plans/continuo_design.md#L8797)）。「先頭へ送る」はボード全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:438-439](../../internal/orchestrator/dispatch.go#L438-L439) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:3873-3874](../../docs/plans/continuo_design.md#L3873-L3874) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
@@ -243,7 +243,7 @@ Status を動かす組み込みの自動化があり、有効かどうかはボ�
 
 **これは continuo の設定 `agent.max_concurrent_agents`（既定2）とは別物である。**
 あちらは **continuo が同時に走らせる Claude Code の数の上限**であり
-（[internal/config/types.go:309-310](../../internal/config/types.go#L309-L310)）、
+（[internal/config/types.go:310-311](../../internal/config/types.go#L310-L311)）、
 こちらは**人間と AI が同時に抱える issue の数**である。
 **片方を変えても、もう片方は変わらない。**
 **この節を読んで `agent.max_concurrent_agents` に手を入れてはならない。**

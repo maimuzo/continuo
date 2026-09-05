@@ -326,13 +326,17 @@ func newNewWork(v orchestrator.NewWorkView) NewWork {
 // **100 は「この設定では止まらない」という意味である。**使用率は 100 を超えないので、
 // **`100` とだけ出すと「100%で止まる」と読まれる。**
 //
+// **「これを超えると」の意味を、単位と一緒にここで作る。**
+// 書式の側に「を超えると止まる」を置くと、
+// **止まらない設定のときに「この設定では止まりません を超えると止まる」と出る。**
+//
 // threshold: これを超えると新規着手が止まる使用率。
 // 戻り値: 画面に出す文字列。
 func thresholdText(threshold int) string {
 	if threshold >= 100 {
 		return i18n.T(i18n.KeyDashboardNewWorkThresholdNever)
 	}
-	return strconv.Itoa(threshold)
+	return i18n.T(i18n.KeyDashboardNewWorkThresholdAbove, threshold)
 }
 
 // percentText は使用率を画面に出す文字列にする（issue #173）。
@@ -340,13 +344,16 @@ func thresholdText(threshold int) string {
 // **読めていない（負の値）ときは資源から引いた語を返す。**
 // **`0` と書いてはならない。**0 は「1バイトも使っていない」という実在の値である。
 //
+// **単位（`%`）もここで付ける。**書式の側に `%%` を置くと、
+// **読めていないときに「使用率を読めていません%」と出る。**
+//
 // percent: 使用率。負なら読めていない。
 // 戻り値: 画面に出す文字列。
 func percentText(percent int) string {
 	if percent < 0 {
 		return i18n.T(i18n.KeyDashboardNewWorkPercentUnknown)
 	}
-	return strconv.Itoa(percent)
+	return strconv.Itoa(percent) + "%"
 }
 
 // newGated は、着手の関門で止めた issue の写しを表示用の形へ組み替える（issue #134）。

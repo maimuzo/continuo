@@ -524,8 +524,9 @@ func (o *Orchestrator) releaseOwnAssignee(
 // **1週間の枠を待っているのに5時間の枠の時刻で判定してしまう。**
 // 5時間の枠が明けるたびに枠待ちの印が外れるため、上限に届くのがそのぶん遅れる。
 //
-// **判定の軸は「リセットまでの残り時間」である。**人間が決めた表がそう書いている
-// （「週間枠 / 12時間以内 / 待つ」「週間枠 / 12時間より先 / 引き渡す」）。
+// **判定の軸は「リセットまでの残り時間」である。**2026-08-26 に人間が承認した表が、
+// 1週間の枠を「上限以内なら待つ／上限より先なら引き渡す」で分けている。
+// **その上限が `rate_limit.weekly_wait_limit_minutes`（既定300分＝5時間）である。**
 //
 // rs: 対象の run。
 // 戻り値: 上限を超えていれば true。
@@ -626,11 +627,22 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 
 	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
 	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。
+	//
+	// **ctx を2本に分ける。1本にまとめてはならない。**
+	// `workspace_hooks.after_run` は利用者が書いた外部コマンドで、上限は
+	// `workspace_hooks.timeout_ms`（既定60秒）である。**`herdr.read_timeout_ms`（既定5秒）で
+	// くくると、`git push` が5秒で切られる。**しかも `RunAfterRunOnce` は実行の前に印を立てるので、
+	// **次の巡回でやり直しても push は二度と走らない。**
+	// **そのうえ期限切れの ctx が担当者を外す要求へ渡り、`context deadline exceeded` で落ちる。**
+	hookCtx, cancelHook := context.WithTimeout(
+		context.WithoutCancel(ctx), time.Duration(o.cfg.WorkspaceHooks.TimeoutMs)*time.Millisecond)
+	o.runAfterRun(hookCtx, rs)
+	cancelHook()
+
 	cleanupCtx, cancel := context.WithTimeout(
 		context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 	defer cancel()
 
-	o.runAfterRun(cleanupCtx, rs)
 	login, ok := o.releaseOwnAssignee(cleanupCtx, issue, "枠の上限で担当を手放そうとしましたが")
 	if !ok {
 		// **pane を閉じない。**閉じてしまうと、担当がこの機械のまま誰も動かなくなる。

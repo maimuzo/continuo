@@ -1178,6 +1178,8 @@ const (
 	// **2回のロックの間に枠の写しが新しくなったときだけ起きる。**
 	// **止まる範囲が違うので、文言も分ける。**
 	KeyDashboardNewWorkReasonPauseThresholdNoHalt Key = "dashboard.new_work_reason_pause_threshold_no_halt"
+	// KeyDashboardNewWorkThresholdAbove は、閾値を「これを超えたら止まる」の形で出す。
+	KeyDashboardNewWorkThresholdAbove Key = "dashboard.new_work_threshold_above"
 	// KeyDashboardNewWorkThresholdNever は、閾値が 100 のときに数字の代わりに出る。
 	//
 	// **使用率は 100 を超えないので、`100` と出すと「100%で止まる」と読まれる。**
@@ -2917,6 +2919,7 @@ var allKeys = []Key{
 	KeyDashboardNewWorkReasonPauseThreshold,
 	KeyDashboardNewWorkReasonNoHeadroom,
 	KeyDashboardNewWorkReasonPauseThresholdNoHalt,
+	KeyDashboardNewWorkThresholdAbove,
 	KeyDashboardNewWorkThresholdNever,
 	KeyDashboardNewWorkQuotaStale,
 	KeyDashboardNewWorkBadge,
