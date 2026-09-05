@@ -486,20 +486,59 @@ func (o *Orchestrator) undoHandoffAcquire(ctx context.Context, issue tracker.Iss
 func (o *Orchestrator) releaseOwnAssignee(
 	ctx context.Context, issue tracker.Issue, failurePrefix string,
 ) (string, bool) {
+	nodeID, viewer, ok := o.releaseTargetFor(ctx, issue, failurePrefix)
+	if !ok {
+		return "", false
+	}
+	return o.removeOwnAssignee(ctx, issue, nodeID, viewer, failurePrefix)
+}
+
+// releaseTargetFor は「誰を、どの issue から外すか」を先に決める（設計 3-77c / 3-77g）。
+//
+// **書き込みを1バイトも行わない。**外せるかどうかだけを先に知りたい経路が使う
+// （`after_run` を走らせる前に、外す相手が分かっているかを確かめる）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// failurePrefix: 決められなかったときの警告の頭に付ける語。
+// 戻り値の1つ目: issue のノード ID。
+// 戻り値の2つ目: この機械の担当者。
+// 戻り値の3つ目: 2つとも決まれば true。
+func (o *Orchestrator) releaseTargetFor(
+	ctx context.Context, issue tracker.Issue, failurePrefix string,
+) (string, tracker.Assignee, bool) {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
 		// **draft issue には担当者もコメントも書けない。****黙って戻らない。**
 		// 呼び出し側は毎巡回でここへ来るので、1行も出さないと理由が分からないまま止まる。
 		o.logger.Warn(failurePrefix+"、この issue には担当者を書けません（draft issue です）",
 			"identifier", issue.Identifier)
-		return "", false
+		return "", tracker.Assignee{}, false
 	}
 	viewer, ok := o.viewerIdentity(ctx)
 	if !ok {
 		o.logger.Warn(failurePrefix+"、gh の持ち主を取れないので担当者を消せません",
 			"identifier", issue.Identifier)
-		return "", false
+		return "", tracker.Assignee{}, false
 	}
+	return nodeID, viewer, true
+}
+
+// removeOwnAssignee は担当者を外し、`released` のコメントを1件書く（設計 3-77c / 3-77g）。
+//
+// **外す相手は `releaseTargetFor` が決めてある。**この関数は書き込みだけを行う。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// nodeID: issue のノード ID。
+// viewer: 外す担当者（この機械）。
+// failurePrefix: 外せなかったときの警告の頭に付ける語。
+// 戻り値の1つ目: 外した担当者のログイン名。
+// 戻り値の2つ目: 外せたら true。
+func (o *Orchestrator) removeOwnAssignee(
+	ctx context.Context, issue tracker.Issue, nodeID string, viewer tracker.Assignee,
+	failurePrefix string,
+) (string, bool) {
 	if _, err := o.tracker.RemoveAssignees(ctx, nodeID, []string{viewer.ID}); err != nil {
 		// **担当者が残る。**hold も released も無いので、次にこの issue を見る機械は
 		// 「hold の無い自分の担当」として待たずに着手を試みる（設計 3-77g / 3-77b）。
@@ -622,10 +661,15 @@ func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState
 //
 // **順番を入れ替えてはならない。**
 //
+//  0. 外す相手を確かめる                    … **決まらなければ after_run を走らせずに戻る**
 //  1. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
 //  2. 自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
 //  3. worker を止める                        … pane を閉じる
 //  4. 印から外す                             … スロットを空ける
+//
+// **段0 を置く理由。**`RunAfterRunOnce` は実行の前に印を立て、**印を消すのは着手と片付けだけである。**
+// **draft issue と「`gh` の持ち主を取れない」の2つは、走らせる前に分かる。**
+// 先に確かめれば、**その2つで after_run の印を無駄に消費しない。**
 //
 // **段2 を段3 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
 // **pane だけ閉じて担当が残り、`idle_timeout_ms` のあいだ誰も動かない issue になる。**
@@ -642,6 +686,7 @@ func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState
 // **段2 が失敗したときの後始末は無い。**`after_run` は既に走っており、
 // `RunAfterRunOnce` は印を戻さない。**push は済んでいるので、失われるのはそのあとに
 // 積んだ commit だけである。**そのことを `Warn` で1行出す。
+// **残るのは `RemoveAssignees` が一時的に落ちる場合だけである**（段0 で残り2つを潰した）。
 //
 // **段4 を落としてはならない。**`beginTerminal` は印を立てたまま返らないので、
 // **`release` を呼ばないと、その run は印に残り続けてスロットを永久に埋める。**
@@ -666,12 +711,16 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
 	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。
 	//
-	// **ctx を2本に分ける。1本にまとめてはならない。**
-	// `workspace_hooks.after_run` は利用者が書いた外部コマンドで、上限は
-	// `workspace_hooks.timeout_ms`（既定60秒）である。**`herdr.read_timeout_ms`（既定5秒）で
-	// くくると、`git push` が5秒で切られる。**しかも `RunAfterRunOnce` は実行の前に印を立てるので、
-	// **次の巡回でやり直しても push は二度と走らない。**
-	// **そのうえ期限切れの ctx が担当者を外す要求へ渡り、`context deadline exceeded` で落ちる。**
+	// **段0。外す相手を先に確かめる。**`after_run` は `RunAfterRunOnce` が実行の前に印を立て、
+	// **印を消すのは着手と片付けだけである。**先に走らせて外す相手が分からなかった場合、
+	// **この run が枠明けに完走しても `finishRun` の `after_run` が印に弾かれて1回も走らない。**
+	// **draft issue と「`gh` の持ち主を取れない」の2つは、走らせる前に分かる。**
+	nodeID, viewer, ready := o.releaseTargetFor(ctx, issue, "枠の上限で担当を手放そうとしましたが")
+	if !ready {
+		rs.endTerminal()
+		return false
+	}
+
 	// **段1。`after_run` を、担当を外す前に走らせる。**
 	// **順番を入れ替えてはならない。**外してから push すると、`released` を読んだ次の機械が
 	// **こちらの `git push` が終わる前に、同じ branch で作業を始めうる**
@@ -687,12 +736,12 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 
 	// **段2。GitHub への書き込みには、herdr の持ち時間を使わない。**
 	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
-	// **担当者を外す・`released` を書くという2本の GraphQL に足りない**（初回は
-	// `gh` の持ち主の取得も乗る）。**足りないと毎巡回でやり直し、run はスロットと pane を
-	// 握ったまま残る。**
+	// **担当者を外す・`released` を書くという2本の GraphQL に足りない。**
+	// **足りないと毎巡回でやり直し、run はスロットと pane を握ったまま残る。**
 	writeCtx, cancelWrite := context.WithTimeout(
 		context.WithoutCancel(ctx), quotaReleaseWriteBudget)
-	login, ok := o.releaseOwnAssignee(writeCtx, issue, "枠の上限で担当を手放そうとしましたが")
+	login, ok := o.removeOwnAssignee(writeCtx, issue, nodeID, viewer,
+		"枠の上限で担当を手放そうとしましたが")
 	cancelWrite()
 	if !ok {
 		// **pane を閉じない。**閉じてしまうと、担当がこの機械のまま誰も動かなくなる。

@@ -145,6 +145,9 @@ type runState struct {
 	//
 	// **run ごとに持つ。**機械に1つだけ持つと、**枠が満杯になったあとに着手した run を、
 	// 1分も待たずに手放すことになる。**この run が満杯を見てからの経過を測る。
+	//
+	// **写し（runSnapshot）には載せない。**読むのは `noteWeeklyFull` の戻り値だけであり、
+	// **写しへ載せると、そこを通さない古い値を正だと思って読む人が出る。**
 	WeeklyFullSince time.Time
 	// Tokens はこの run が始めてからの累計のトークンである（設計 3-15）。
 	//
@@ -421,7 +424,6 @@ func (rs *runState) snapshot() runSnapshot {
 		BackoffUntil:     rs.BackoffUntil,
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
-		WeeklyFullSince:  rs.WeeklyFullSince,
 		LastRevision:     rs.LastRevision,
 		RevisionAt:       rs.RevisionAt,
 		LastSeenAt:       rs.LastSeenAt,
@@ -455,7 +457,6 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
-	WeeklyFullSince  time.Time
 	LastRevision     uint64
 	RevisionAt       time.Time
 	LastSeenAt       time.Time
