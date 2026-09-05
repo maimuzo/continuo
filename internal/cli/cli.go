@@ -544,6 +544,9 @@ func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
 // 本文は0行なのに「本文はありません」が出ないことになる。**
 // 同じ内訳の中で、行数だけ展開後・有無だけ展開前、では辻褄が合わない。
 //
+// **展開して空になった本文は、行数の行も出さない。**出すと
+// 「本文 0 行」と「本文はありません」が同じ内訳に並び、**読む人がどちらが本当か決められない。**
+//
 // w: 出力先（標準エラー）。
 // items: 数える断片の並び。
 // frag: **本文のパスを引くためだけに使う。**行数も有無もここから取らない。
@@ -562,6 +565,12 @@ func printPromptBreakdownItems(w io.Writer, items []prompt.Fragment, frag prompt
 		case prompt.NameBuiltinTail:
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinTail, countLines(it.Text)))
 		case prompt.NameWorkflowBody:
+			// **展開して空になったら、行数の行を出さない。**下の「本文はありません」と
+			// **同じ内訳の中で食い違う**（「本文 0 行」と「本文はありません」が並ぶ）。
+			// **`hasBody` と同じ条件で判定する。**片方だけ変えると、また食い違う。
+			if strings.TrimSpace(it.Text) == "" {
+				continue
+			}
 			// **断片の名前で明示する。`default` に落とさない。**落とすと、断片が増えたときに
 			// 組み込みの断片が WORKFLOW.md の名前で表示され、パスの欄が空になる。
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownWorkflowBody, countLines(it.Text), it.Path))

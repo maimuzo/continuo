@@ -364,3 +364,30 @@ func TestPromptURL_urlを付けなければ展開しない(t *testing.T) {
 		t.Errorf("--url を付けていないのに GitHub を叩いています（%d 回）", called)
 	}
 }
+
+// 目的: 本文が丸ごと `{{if .attempt}}` の中にあるとき、内訳が
+// 「本文 0 行」と「本文はありません」を同時に出さないことを固定する（issue #183）。
+//
+// **なぜ要るか。**行数は展開後、有無も展開後で決めているのに、
+// **展開後に空になった本文の断片が並びに残るので、行数の行だけが 0 行で出てしまう。**
+// **読む人は「本文が 0 行ある」と「本文が無い」を同時に見せられ、どちらが本当か決められない。**
+//
+// 与える情報: 本文を丸ごと `{{if .attempt}}` で囲った WORKFLOW.md と、`--attempt` を付けない `--url`。
+// 成功条件: 標準エラーに「本文はありません」だけが出て、「本文  0 行」が出ないこと。
+func TestPromptURL_展開して空になった本文は無いとだけ言う(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	setBody(t, dir, "{{if .attempt}}## やり直しのときだけ読む\n\nここは 2 回目から出ます。\n{{end}}")
+
+	deps := cli.Deps{PromptFetchIssue: promptFetchOK}
+	code, _, stderr := runCLIWith(deps,
+		[]string{"prompt", "--show", "--url", promptIssueURL, dir}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
+	}
+	if !strings.Contains(stderr, "本文はありません") {
+		t.Errorf("本文が空なのに「本文はありません」が出ていません（stderr: %s）", stderr)
+	}
+	if strings.Contains(stderr, "本文  0 行") {
+		t.Errorf("「本文はありません」と「本文  0 行」が同時に出ています（stderr: %s）", stderr)
+	}
+}
