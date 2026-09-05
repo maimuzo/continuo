@@ -74,6 +74,10 @@ func TestTemplate_組み込みのプロンプトはグループの各issueへ成
 				"読む人はどの変更でその issue が直ったのかを辿れません"},
 			{"相対パス", "手元の絶対パスは、エージェントが直接書くコメントでは縮められません。" +
 				"利用者名と worktree の置き場所が、取り消せない形で公開の issue に残ります"},
+			// **段3 を守る。**ここを見ないと、段3 を丸ごと消しても全部緑になり、
+			// **3-7 が「7-2 を先に通せ」と言った先に、並べる手順が無い状態になる。**
+			{"に書きました: ", "代表へリンクを並べる手順が無いと、" +
+				"代表を開いた人は、どの issue に何が書かれたのかを辿れません"},
 		} {
 			if !strings.Contains(section, want.needle) {
 				t.Errorf("%s: %q の節に %q がありません。%s", tc.name, groupHeading, want.needle, want.why)
@@ -109,6 +113,11 @@ func TestTemplate_blockedのissueには直したという記録を書かせな�
 			"エージェントは自分で書式を作ることになり、直したのか直していないのかが読み取れなくなります"},
 		{"なぜ止まったか", "止まった理由を書かせないと、" +
 			"人間はその issue を開いても、何を決めればよいのかが分かりません"},
+		// **書き足す段（段2a）も分ける。**分けるのを新しく投稿する段だけにすると、
+		// **成果報告が1件でも先にある issue では `blocked` でも `review` の書式へ流れ、
+		// 無い pull request の URL が書き足される。**
+		{"`blocked` を出した issue では、pull request の URL を書かないでください",
+			"書き足す段を分けないと、先に成果報告がある issue で無い pull request の URL が足されます"},
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", groupHeading, want.needle, want.why)
@@ -137,11 +146,19 @@ func TestTemplate_blockedのissueには直したという記録を書かせな�
 func TestTemplate_グループの成果報告の印はエージェントの印と分かれている(t *testing.T) {
 	section := sectionOf(t, prompt.Builtin(), groupHeading)
 
-	// **投稿させる本文の先頭は、グループの印である。**
-	if !strings.Contains(section, `--body "`+groupMarker) {
-		t.Errorf("%q の節が、投稿する本文の先頭に %q を置かせていません。"+
+	// **投稿させる本文は2つある**（`review` 用と `blocked` 用）。**両方の先頭がグループの印である。**
+	// **件数で見る。**`Contains` を1回叩くだけだと、**片方を第三の印へ書き換えても通る。**
+	posts := strings.Count(section, `--body "`)
+	marked := strings.Count(section, `--body "`+groupMarker)
+	if posts < 2 {
+		t.Fatalf("%q の節に、投稿する本文が %d 個しかありません。"+
+			"`review` と `blocked` で書式を分けているので2つ以上あるはずです（検査が的を外しています）",
+			groupHeading, posts)
+	}
+	if marked != posts {
+		t.Errorf("%q の節で、投稿する本文 %d 個のうち %d 個しか %q で始まっていません。"+
 			"別の印を付けさせると、その issue を担当している別の Claude Code の書かせ直しが黙って走らなくなります",
-			groupHeading, groupMarker)
+			groupHeading, posts, marked, groupMarker)
 	}
 
 	// **探させる印も、同じものである。**段1 の jq と段2a の門の両方を見る。
@@ -208,6 +225,11 @@ func TestTemplate_グループの成果報告は対象を絞りStatus名を書�
 			"外さないと、3-7 の成果報告と合わせて代表にコメントが2件付きます"},
 		{"`working` を出した issue も書きません",
 			"まだ終わっていない issue に成果報告を書かせると、途中の状態が成果として残ります"},
+		// **別のリポジトリの issue を外す行も見る。**段2b は
+		// `--repo {{.issue.owner}}/{{.issue.repo}}` を直に書いているので、
+		// **外れると、同じ番号の別のリポジトリの issue へ書き込む。**
+		{"別のリポジトリの issue も書きません",
+			"段2b は代表と同じリポジトリを直に指すので、外すのをやめると、同じ番号の別の issue へ書き込みます"},
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", groupHeading, want.needle, want.why)
