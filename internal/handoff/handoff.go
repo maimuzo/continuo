@@ -39,13 +39,16 @@ const (
 // fullPercent は「使い切り」を表す使用率である。余裕値はここから引いて作る。
 const fullPercent = 100
 
-// Bid は1台の機械が書いた入札である（設計 3-77a のコメントの形）。
+// Bid は1つの continuo が書いた入札である（設計 3-77a のコメントの形）。
 //
-// **JSON のキーは issue のコメントに書く形そのものである。**別の機械が読むので、
+// **JSON のキーは issue のコメントに書く形そのものである。**別の continuo が読むので、
 // **キー名を変えると、古い版の continuo が書いた入札を読めなくなる。**
+//
+// **誰が書いたかは JSON に入らない**（設計 3-77-0）。入れると、**自分で名乗った値と
+// GitHub がコメントに付ける投稿者という、同じ事実の出どころが2つできる。**
+// **本文は第三者にも書けるので、他の continuo のログイン名を騙られると、
+// 騙られたほうは `HasBidBy` が真になって以後1度も入札しなくなる。**
 type Bid struct {
-	// Host は入札した機械の名前である（`os.Hostname()` の値）。
-	Host string `json:"host"`
 	// FiveHour は5時間余裕値である（`100 − 5時間の使用率 − 5時間マージン`）。
 	FiveHour int `json:"five_hour"`
 	// Weekly は1週間余裕値である（`100 − 1週間の使用率 − 1週間マージン`）。
@@ -55,7 +58,17 @@ type Bid struct {
 	// At は投稿した時刻である。**その機械のタイムゾーンで書く**（`Z` に直さない。設計 3-77a）。
 	At time.Time `json:"at"`
 
-	// ===== ここから下はコメントの JSON に入らない。読み取った側が埋める =====
+	// ===== ここから下はコメントの JSON に入らない。GitHub 側の値で埋める =====
+
+	// Author は、この入札を書いたアカウントのログイン名である（設計 3-77-0）。
+	//
+	// **持ち回りで参加者を見分ける値そのものである。**読むときは `CollectBids` が
+	// コメントの投稿者から埋め、**書くときは `bidForIssue` が gh の持ち主から埋める。**
+	//
+	// **書く側を忘れてはならない。**`bidForIssue` はその巡回で書いた入札の写しを
+	// そのまま勝敗の判定へ混ぜるので、**空のままだと、自分が勝っても「負けた」と読む。**
+	// `bid_window_ms: 0` では書いた巡回でそのまま勝敗を決めるため、担当者が永久に決まらない。
+	Author string `json:"-"`
 
 	// PostedAt は、そのコメントが GitHub に作られた時刻である。
 	//
@@ -67,12 +80,12 @@ type Bid struct {
 
 // Hold は担当を取ったことを示すコメントである（設計 3-77b）。
 type Hold struct {
-	// Host は担当を取った機械の名前である。
-	//
-	// **released のコメントの `from` はここから引く**（設計 3-77c）。
-	// 担当者のログイン名しか分からないと、どの機械を止めればよいかが人間に読めない。
-	Host string `json:"host"`
 	// Assignee は担当者にしたアカウントのログイン名である。
+	//
+	// **持ち回りで参加者を見分ける値である**（設計 3-77-0）。入札と違って、この欄は JSON に残す。
+	// **`LatestHoldFor` が issue の担当者と突き合わせるためであり、投稿者では代われない。**
+	// hold を書くのは担当を取った当人なので投稿者と一致するが、
+	// **突き合わせる相手は issue の担当者であって、コメントの投稿者ではない。**
 	//
 	// **`LatestHoldFor` がこれで hold を絞る**（設計 3-77b）。hold のコメントは
 	// **担当が移っても入札の回が変わっても消えない**ので、絞らないと
@@ -88,11 +101,16 @@ type Hold struct {
 
 // Released は期限切れの担当を外したことを知らせるコメントである（設計 3-77c）。
 //
-// **引き継ぐ機械の名前は書かない。**外すのは入札をやり直す前であり、
-// **そのとき勝つ機械はまだ決まっていない**（外した機械が負けることもある）。
-// 次に誰が担当になったかは、あとから現れる hold のコメントの `host` で読める。
+// **引き継ぐアカウントは書かない。**外すのは入札をやり直す前であり、
+// **そのとき勝つ continuo はまだ決まっていない**（外した側が負けることもある）。
+// 次に誰が担当になったかは、あとから現れる hold のコメントの `assignee` で読める。
 type Released struct {
-	// From は担当を外された機械の名前である（hold のコメントの `host` から引く）。
+	// From は担当を外されたアカウントのログイン名である。
+	//
+	// **この欄も JSON に残す**（設計 3-77-0）。**投稿者では代われない。**
+	// released を書くのは担当を外した側で、**ここに入るのは外された側だからである**
+	// （`releaseExpiredAssignee`）。着手をやめて自分で消し戻すとき（`undoHandoffAcquire`）だけは
+	// 投稿者と同じ値になるが、**片方で代われない以上、欄は要る。**
 	From string `json:"from"`
 	// Branch は担当を外された機械が使っていた branch の名前である。
 	Branch string `json:"branch"`
@@ -227,16 +245,16 @@ func matchesKind(kind string, kinds []string) bool {
 // **そこで黙ると、その機械は1件も処理しなくなる**（枠の判定を切る逃げ道が塞がる）。
 // margins: 引くマージン（%）。
 // pauseAbovePercent: これを超えている枠が1つでもあれば入札しない（`rate_limit.pause_above_percent`）。
-// host: この機械の名前。
 // at: 入札に書く時刻。**その機械のタイムゾーンのまま渡すこと。**
-// 戻り値の1つ目: 組み立てた入札（入札しないときの中身は使わない）。
+// 戻り値の1つ目: 組み立てた入札（入札しないときの中身は使わない）。**`Author` は空である。**
+// **書く直前に `bidForIssue` が gh の持ち主で埋める**（設計 3-77-0）。ここで埋めないのは、
+// **枠の判定が gh の持ち主を引くより先に走るからである**（`evaluateBid` は `viewerIdentity` より前）。
 // 戻り値の2つ目: 入札しないと決めた理由。SkipNone なら入札してよい。
 func Evaluate(
 	snap *ratelimit.Snapshot,
 	quotaEnabled bool,
 	margins Margins,
 	pauseAbovePercent int,
-	host string,
 	at time.Time,
 ) (Bid, SkipReason) {
 	sessionPercent, weeklyPercent := 0, 0
@@ -265,7 +283,6 @@ func Evaluate(
 		return Bid{}, SkipNoHeadroom
 	}
 	return Bid{
-		Host:     host,
 		FiveHour: fiveHour,
 		Weekly:   weekly,
 		Score:    Score(fiveHour, weekly),
@@ -289,13 +306,13 @@ func Score(fiveHour, weekly int) int {
 
 // Winner は届いた入札から勝者を選ぶ（設計 3-77）。
 //
-// **判定スコアがいちばん大きい機械。同点なら、いちばん最初に投稿した機械。**
-// **同じコメントの列を読んだ機械は同じ勝者に行き着く**ので、担当者を書く前に
+// **判定スコアがいちばん大きい入札。同点なら、いちばん最初に投稿した入札。**
+// **同じコメントの列を読んだ continuo は同じ勝者に行き着く**ので、担当者を書く前に
 // もう一度担当者を読み直す段は置かない。
 //
 // **投稿の時刻は GitHub が付けた `PostedAt` で比べる**（`At` は投稿者が自分で書いた値であり、
-// 時計を戻せば必ず勝ててしまう）。**それも同じなら、機械の名前の小さい順で決める。**
-// 決め手を最後まで用意しないと、機械ごとに違う勝者を選び、2台が同じ issue を掴む。
+// 時計を戻せば必ず勝ててしまう）。**それも同じなら、投稿したアカウントの名前の小さい順で決める。**
+// 決め手を最後まで用意しないと、continuo ごとに違う勝者を選び、2つが同じ issue を掴む。
 //
 // bids: 届いた入札（順不同）。
 // 戻り値の1つ目: 勝った入札。
@@ -315,6 +332,10 @@ func Winner(bids []Bid) (Bid, bool) {
 
 // beats は入札 a が入札 b より強いかを返す。
 //
+// **3段目はアカウントの名前の小さい順である**（設計 3-77d）。
+// **空文字はどのログイン名よりも小さいので、ここへ空が来てはならない。**
+// `CollectBids` が投稿者の空な入札を1件も通さないので、そうならない。
+//
 // a: 比べる入札。
 // b: 比べられる入札。
 // 戻り値: a のほうが強ければ true。
@@ -325,7 +346,7 @@ func beats(a, b Bid) bool {
 	if !a.PostedAt.Equal(b.PostedAt) {
 		return a.PostedAt.Before(b.PostedAt)
 	}
-	return a.Host < b.Host
+	return a.Author < b.Author
 }
 
 // Deadline は入札の締め切りを返す（設計 3-77）。
@@ -467,13 +488,17 @@ func IsMarked(body string) bool {
 // **足す文に `}` を入れてはならない。**payloadAfterMarker が最初の `{` と
 // **最後の `}`** の間を切り出すので、あとから現れる `}` は JSON の終わりとして読まれる。
 //
-// b: 書く入札。
+// **散文にはアカウントの名前を出すが、JSON には入らない**（設計 3-77-0）。
+// **issue を開いた人が、投稿者の欄と本文を見比べずに読めるようにするためである。**
+// **continuo はこの散文を1バイトも読まない。**
+//
+// b: 書く入札。**`Author` を埋めてから渡すこと**（散文に差し込む）。
 // window: 入札の締め切りまでの長さ（`tracker.provider.handoff.bid_window_ms`）。
 // **0 以下なら「締め切りを待たない」と書く**（そういう設定にできる）。
 // 戻り値: 印を先頭に置いたコメント本文。
 func FormatBid(b Bid, window time.Duration) string {
 	return config.HandoffBidMarker + "\n" + marshalLine(b) + "\n\n" +
-		i18n.T(i18n.KeyHandoffBidCandidacy, b.Host) + "\n" +
+		i18n.T(i18n.KeyHandoffBidCandidacy, b.Author) + "\n" +
 		bidDeadlineLine(window) + "\n"
 }
 
@@ -512,7 +537,7 @@ func bidDeadlineLine(window time.Duration) string {
 // 戻り値: 印を先頭に置いたコメント本文。
 func FormatHold(h Hold) string {
 	return config.HandoffHoldMarker + "\n" + marshalLine(h) + "\n\n" +
-		i18n.T(i18n.KeyHandoffHoldAssigned, h.Host) + "\n" +
+		i18n.T(i18n.KeyHandoffHoldAssigned, h.Assignee) + "\n" +
 		holdStartingLine(h.Branch) + "\n"
 }
 
@@ -553,11 +578,21 @@ func marshalLine(v any) string {
 // **JSON を読めないコメントも入札として数えない**（人間が印だけ真似て書いたときに、
 // 使用率0の入札が生まれて必ず勝ってしまう）。
 //
+// **投稿者の分からないコメントも数えない。**GitHub は削除済みアカウントのコメントに
+// 投稿者を付けない（[internal/tracker/tracker.go](../tracker/tracker.go) の `Comment.Author`）。
+// **数えると、同点の3段目で空文字がどのログイン名にも勝ち、
+// その回はどの continuo も着手しなくなる**（勝った入札の投稿者が、どの continuo とも一致しない）。
+//
 // body: コメント本文。
+// author: GitHub がそのコメントに付けた投稿者のログイン名。**空なら入札として読まない。**
 // postedAt: GitHub がそのコメントに付けた作成時刻（同点の決着と締め切りに使う）。
 // 戻り値の1つ目: 読み取った入札。
 // 戻り値の2つ目: 入札として読めれば true。
-func ParseBid(body string, postedAt time.Time) (Bid, bool) {
+func ParseBid(body, author string, postedAt time.Time) (Bid, bool) {
+	login := strings.TrimSpace(author)
+	if login == "" {
+		return Bid{}, false
+	}
 	payload, ok := payloadAfterMarker(body, config.HandoffBidMarker)
 	if !ok {
 		return Bid{}, false
@@ -566,10 +601,7 @@ func ParseBid(body string, postedAt time.Time) (Bid, bool) {
 	if err := json.Unmarshal([]byte(payload), &b); err != nil {
 		return Bid{}, false
 	}
-	if strings.TrimSpace(b.Host) == "" {
-		// **機械の名前の無い入札は数えない。**勝っても誰が担当になったのかを人間が読めない。
-		return Bid{}, false
-	}
+	b.Author = login
 	b.PostedAt = postedAt
 	return b, true
 }

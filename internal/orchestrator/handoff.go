@@ -47,17 +47,14 @@ type handoffDecision struct {
 //
 //	担当者が2人以上                                触らない。WARN を出す
 //	担当者が無い                                   入札する。勝ったら自分を担当者に加えて hold を書く
-//	自分1人 ＋ この機械の hold                      そのまま着手・引き継ぎへ進む（入札しない）
-//	自分1人 ＋ hold が1件も無い                     そのまま着手・引き継ぎへ進む（人間が付けた担当である）
-//	自分1人 ＋ 別の機械の hold ＋ 期限内             触らない。入札もしない
-//	自分1人 ＋ 別の機械の hold ＋ 期限切れ           担当を外し、released を書いてから入札をやり直す
+//	自分のアカウント1人                            そのまま着手・引き継ぎへ進む（入札しない）
 //	他人1人 ＋ hold が1件も無い                     触らない。人間が付けた担当である。WARN を出す
 //	他人1人 ＋ hold あり ＋ 期限内                   触らない。入札もしない
 //	他人1人 ＋ hold あり ＋ 期限切れ                 担当を外し、released を書いてから入札をやり直す
 //
-// **担当者のアカウントだけで「自分の担当」と決めない**（設計 3-77b）。
-// **1人が2台の機械を1つのアカウントで動かすのが、この機能のいちばん自然な使い方である。**
-// **どの機械のものかは hold のコメントの `host` が答える。**
+// **担当者のアカウントが自分なら、担当しているのも自分である**（設計 3-77-0）。
+// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+// **アカウント1つにつき continuo は1つである。**
 //
 // **締め切りを待つあいだ、巡回はブロックしない。**入札を1件書いたら偽を返して次の巡回へ譲り、
 // 締め切りが過ぎた巡回で勝敗を決める。**締め切りは issue のコメントから読める**
@@ -167,7 +164,6 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		Assignees:   logins,
 		Comments:    views,
 		SelfLogin:   viewer.Login,
-		SelfHost:    o.hostName,
 		Now:         o.now(),
 		IdleTimeout: o.handoffIdleTimeout(),
 	})
@@ -186,8 +182,8 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		//
 		// **この1行では「担当者を外す」だけを案内する**（3-77b）。付け替えの道は
 		// **issue へ書くコメントの側にだけ書く**（[prompt.go](prompt.go) の `buildGatedComment`）。
-		// 付け替えると「自分のアカウント1人＋hold が1件も無い」の行に落ちて着手へ進むが、
-		// **同じアカウントを使う別の機械も同じ行を読むので、2台が同時に着手できてしまう。**
+		// 付け替えると「自分のアカウント1人」の行に落ちて着手へ進むが、
+		// **付け替える先は、その continuo が使っている gh の持ち主でなければならない。**
 		// **この条件つきの説明は1行のログに収まらない。**収めようとすると、
 		// **条件が落ちて「付け替えれば動く」だけが残る。**だからログには書かない。
 		o.logger.Warn("担当者が付いているので着手しません（continuo が付けたものではありません）。"+
@@ -222,12 +218,6 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	case handoff.ActionSkipHeld:
 		o.logger.Debug("ほかの機械が期限内で担当しているので触りません（入札もしません）",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee,
-			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
-		return handoffDecision{}
-	case handoff.ActionSkipOtherMachine:
-		o.logger.Info("担当者は自分のアカウントですが、担当しているのは別の機械なので触りません（入札もしません）",
-			"identifier", issue.Identifier, "担当者", assessment.Assignee,
-			"担当している機械", assessment.Hold.Host, "この機械", o.hostName,
 			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 		return handoffDecision{}
 	case handoff.ActionRelease:
@@ -275,7 +265,6 @@ func (o *Orchestrator) evaluateBid() (handoff.Bid, handoff.SkipReason) {
 			Weekly:   o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
 		},
 		o.cfg.RateLimit.PauseAbovePercent,
-		o.hostName,
 		o.now(),
 	)
 }
@@ -283,8 +272,8 @@ func (o *Orchestrator) evaluateBid() (handoff.Bid, handoff.SkipReason) {
 // releaseExpiredAssignee は期限の切れた担当を外し、released のコメントを1件書く（設計 3-77c）。
 //
 // **外すのは名指しした1人だけである。**人間が別の担当者を足していたら、その人は残る。
-// **released のコメントの `from` は hold のコメントの `host` から引く。**担当者のログイン名
-// しか分からないと、どの機械を止めればよいかが人間に読めない。
+// **released のコメントの `from` には、外した担当者のログイン名を書く**（設計 3-77-0）。
+// **投稿者では代われない。**このコメントを書くのは外した側で、`from` に入るのは外された側である。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
@@ -308,13 +297,12 @@ func (o *Orchestrator) releaseExpiredAssignee(
 	}
 	o.logger.Info("期限の切れた担当を外しました（入札をやり直します）",
 		"identifier", issue.Identifier, "外した担当者", assessment.Assignee,
-		"外した機械", assessment.Hold.Host,
 		"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress,
 		"期限", o.handoffIdleTimeout())
 
 	now := o.now()
 	body := handoff.FormatReleased(handoff.Released{
-		From:   assessment.Hold.Host,
+		From:   assessment.Assignee,
 		Branch: assessment.Hold.Branch,
 		At:     now,
 	})
@@ -359,9 +347,17 @@ func (o *Orchestrator) bidForIssue(
 	// **前の回の入札は issue に残り続ける**（1回ごとに新しいコメントを書くので消えない）。
 	// 数に入れると、締め切りが常にその古い時刻から数えられ、**次の回が1度も始まらない。**
 	// **巡回のたびに入札のコメントだけが増え、担当者は永久に決まらない。**
+	// **書く側の識別子は、ここで埋める**（設計 3-77-0）。`evaluateBid` は
+	// `viewerIdentity` より先に呼ばれるので、入札を組み立てた時点では持ち主が分かっていない。
+	//
+	// **埋め忘れてはならない。**下で `posted` をそのまま勝敗の判定へ混ぜるので、
+	// **空のままだと自分が勝っても「負けた」と読む。**`bid_window_ms: 0` では
+	// 書いた巡回でそのまま勝敗を決めるため、担当者が永久に決まらない。
+	bid.Author = viewer.Login
+
 	window := o.handoffBidWindow()
 	bids := handoff.RoundBids(comments, o.now(), window)
-	if _, already := handoff.HasBidBy(bids, o.hostName); !already {
+	if _, already := handoff.HasBidBy(bids, viewer.Login); !already {
 		posted, ok := o.postBid(ctx, issue, nodeID, bid)
 		if !ok {
 			return handoffDecision{}
@@ -384,10 +380,10 @@ func (o *Orchestrator) bidForIssue(
 	if !ok {
 		return handoffDecision{}
 	}
-	if !strings.EqualFold(winner.Host, o.hostName) {
+	if !strings.EqualFold(winner.Author, viewer.Login) {
 		o.logger.Info("入札に負けたので着手しません",
-			"identifier", issue.Identifier, "勝った機械", winner.Host,
-			"勝った判定スコア", winner.Score, "この機械の判定スコア", bid.Score)
+			"identifier", issue.Identifier, "勝ったアカウント", winner.Author,
+			"勝った判定スコア", winner.Score, "この continuo の判定スコア", bid.Score)
 		return handoffDecision{}
 	}
 
@@ -401,7 +397,6 @@ func (o *Orchestrator) bidForIssue(
 		"判定スコア", winner.Score, "届いた入札", len(bids))
 
 	body := handoff.FormatHold(handoff.Hold{
-		Host:     o.hostName,
 		Assignee: viewer.Login,
 		Branch:   o.branchNameFor(issue),
 		At:       o.now(),
@@ -413,11 +408,11 @@ func (o *Orchestrator) bidForIssue(
 		// この issue は既に担当者が付いている（claim 済み）ので、次の巡回では
 		// `dispatchCandidates` 冒頭の `lookupRunByID` で弾かれ、`handoffGate` はもう呼ばれない。
 		//
-		// **「他の機械は触らない」も成り立たない。**担当者はあるが hold が無い状態は、
-		// assess.go の `assessSelfAssigned` の `!hasHold` にそのまま落ちる。あそこは
-		// 「人間が付けた担当」として**待たずに着手へ進む**行であり、同じ GitHub アカウントを
-		// 使う別の機械も同じ行を読む。**アカウントだけで比較していた頃と同じ穴が、
-		// この経路からもう一度開く**（3-77b がまさにそれを塞ぐために hold を持ち込んだ）。
+		// **「18時間で外れるから放っておける」も成り立たない。**担当者はあるが hold が無い状態は、
+		// 別のアカウントの continuo から見ると `ActionSkipHumanAssigned`（人間が付けた担当）に見える
+		// （[assess.go](../handoff/assess.go) の `!hasHold` の行）。
+		// **期限で外れる経路が無いので、人間が担当者を外すまで無期限に止まる。**
+		// しかも他の continuo は、その issue へ「担当者を外してください」の案内を書きに行く。
 		//
 		// **だから着手しない。**`undoHandoffAcquire` で書いた担当者を消し戻し、
 		// 誰も担当していない状態から次の巡回で入札をやり直す。
@@ -441,10 +436,9 @@ func (o *Orchestrator) bidForIssue(
 //
 // **`RemoveAssignees` 自体が失敗したときは、担当者を残したまま何もせず戻る。**released は書かない
 // （担当を外せていないのに外したと書くと嘘になる）。**そのときの扱いは設計 3-77g に書いてある。**
-// 要点だけ言うと、担当者はあるが hold は無い状態のまま残るので、次にこの issue を見る機械
-// （同じ GitHub アカウントを使う機械）は「hold の無い自分の担当」として、
-// 18時間を待たずに着手を試みる。**新しい穴ではない。**3-77b がもともと
-// 「hold の無い自分の担当は待たずに進む」と決めている行へ、そのまま落ちるだけである。
+// 要点だけ言うと、担当者はあるが hold は無い状態のまま残る。
+// **その issue は、人間が担当者を外すまで無期限に止まる。**別のアカウントの continuo からは
+// 「人間が付けた担当」に見えて、期限で外れる経路が無いためである。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
@@ -469,7 +463,7 @@ func (o *Orchestrator) undoHandoffAcquire(ctx context.Context, issue tracker.Iss
 		return
 	}
 	body := handoff.FormatReleased(handoff.Released{
-		From:   o.hostName,
+		From:   viewer.Login,
 		Branch: o.branchNameFor(issue),
 		At:     o.now(),
 	})
@@ -502,7 +496,7 @@ func (o *Orchestrator) postBid(
 		return handoff.Bid{}, false
 	}
 	o.logger.Info("入札しました",
-		"identifier", issue.Identifier, "機械", bid.Host,
+		"identifier", issue.Identifier, "アカウント", bid.Author,
 		"5時間余裕値", bid.FiveHour, "1週間余裕値", bid.Weekly, "判定スコア", bid.Score)
 	// **投稿の時刻は自分の時計で埋める。**GitHub が付けた時刻は次の巡回で読み直す。
 	// **この写しを使うのはこの巡回の締め切りの計算だけである。**
@@ -828,28 +822,22 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 			break
 		}
 	}
-	if r, ok := handoff.LatestReleased(views); ok && strings.EqualFold(strings.TrimSpace(r.From), o.hostName) {
-		o.logger.Info("この機械の担当が外された記録が issue にあります",
-			"identifier", issue.Identifier, "外された機械", r.From,
+	if r, ok := handoff.LatestReleased(views); ok && strings.EqualFold(strings.TrimSpace(r.From), viewer.Login) {
+		o.logger.Info("この continuo の担当が外された記録が issue にあります",
+			"identifier", issue.Identifier, "外されたアカウント", r.From,
 			"branch", r.Branch, "外した時刻", r.At)
 	}
 
-	hold, _, hasHold := handoff.LatestHoldFor(views, logins[0])
 	if selfAssigned {
-		// **担当者は自分のアカウントである。**担当しているのがこの機械かどうかは、
-		// **hold のコメントの `host` でしか分からない。**
-		holdHost := strings.TrimSpace(hold.Host)
-		if !hasHold || holdHost == "" || strings.EqualFold(holdHost, o.hostName) {
-			return false, ""
-		}
-		return true, holdHost
+		// **担当者が自分のアカウントなら、担当しているのも自分である**（設計 3-77-0）。
+		// **hold を読んで機械を見分ける段は無い。**同じ GitHub アカウントを複数の機械で
+		// 使うことはサポートしないので、アカウント1つにつき continuo は1つである。
+		return false, ""
 	}
 
-	newHost := strings.TrimSpace(hold.Host)
-	if newHost == "" {
-		newHost = logins[0]
-	}
-	return true, newHost
+	// **担当者が他人のアカウントになっている。**担当が移ったということである。
+	// **いま担当しているのは、その担当者のアカウントで動いている continuo である。**
+	return true, logins[0]
 }
 
 // stopBecauseHandoffLost は、担当が移った run を止める（設計 3-77c）。
@@ -877,7 +865,7 @@ func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState,
 	}
 	who := newHost
 	if who == "" {
-		who = i18n.T(i18n.KeyHandoffLostUnknownHost)
+		who = i18n.T(i18n.KeyHandoffLostUnknownAccount)
 	}
 	o.logger.Warn("担当が移ったので、この turn の終わりで止めます（push しません。カンバンへは書きません。after_run も走らせません）",
 		"identifier", rs.issue().Identifier, "いまの担当", who,

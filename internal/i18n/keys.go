@@ -220,7 +220,7 @@ const (
 
 	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77a / 3-77b / 3-77c）。
 
-	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（機械の名前を差し込む）。
+	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（入札したアカウントのログイン名を差し込む）。
 	KeyHandoffBidCandidacy Key = "handoff.bid.candidacy"
 	// KeyHandoffBidDeadline は入札のコメントの2行目に出る（締め切りまでの分数を差し込む）。
 	//
@@ -233,7 +233,7 @@ const (
 	KeyHandoffBidDeadlineOne Key = "handoff.bid.deadline_one"
 	// KeyHandoffBidNoDeadline は、締め切りを待たない設定のときに入札のコメントの2行目に出る。
 	KeyHandoffBidNoDeadline Key = "handoff.bid.no_deadline"
-	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（機械の名前を差し込む）。
+	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（担当になったアカウントのログイン名を差し込む）。
 	KeyHandoffHoldAssigned Key = "handoff.hold.assigned"
 	// KeyHandoffHoldStarting は hold のコメントの2行目に出る（branch の名前を差し込む）。
 	KeyHandoffHoldStarting Key = "handoff.hold.starting"
@@ -242,12 +242,12 @@ const (
 	KeyHandoffHoldStartingNoBranch Key = "handoff.hold.starting_no_branch"
 	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
-	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
+	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（担当を外されたアカウントのログイン名を差し込む）。
 	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
-	// KeyHandoffLostUnknownHost は、担当が移った先の機械の名前を読めなかったときに差し込む。
-	KeyHandoffLostUnknownHost Key = "handoff.lost.unknown_host"
+	// KeyHandoffLostUnknownAccount は、担当が移った先のアカウントを読めなかったときに差し込む。
+	KeyHandoffLostUnknownAccount Key = "handoff.lost.unknown_account"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
 )
@@ -2510,7 +2510,7 @@ var allKeys = []Key{
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffLostReason,
-	KeyHandoffLostUnknownHost,
+	KeyHandoffLostUnknownAccount,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
 	KeyDoctorHerdrRemedySocketAbs,

@@ -21,15 +21,28 @@ const idleTimeout = 18 * time.Hour
 
 // holdComment は hold のコメント1件を組み立てる。
 //
-// author: 書き手のログイン名。
-// host: hold に書く機械の名前。
+// author: 書き手のログイン名。**hold の `assignee` にも同じ値が入る。**
 // created: 作成時刻。
 // 戻り値: 判定へ渡す形のコメント。
-func holdComment(author, host string, created time.Time) handoff.CommentView {
+func holdComment(author string, created time.Time) handoff.CommentView {
+	return holdCommentOn(author, "continuo/octocat/hello-world/188", created)
+}
+
+// holdCommentOn は branch の名前を指定して hold のコメント1件を組み立てる。
+//
+// **どの hold を読んだかを見分けるために branch を使う。**
+// 持ち回りで参加者を見分ける値はアカウントのログイン名なので（設計 3-77-0）、
+// **同じ担当者の hold は、branch でしか見分けられない。**
+//
+// author: 書き手のログイン名。
+// branch: hold に書く branch の名前。
+// created: 作成時刻。
+// 戻り値: 判定へ渡す形のコメント。
+func holdCommentOn(author, branch string, created time.Time) handoff.CommentView {
 	return handoff.CommentView{
 		Author: author,
 		Body: handoff.FormatHold(handoff.Hold{
-			Host: host, Assignee: author, Branch: "continuo/octocat/hello-world/188", At: created,
+			Assignee: author, Branch: branch, At: created,
 		}),
 		CreatedAt: created,
 	}
@@ -96,7 +109,7 @@ func TestAssess_見えているものと判定の対応(t *testing.T) {
 			name: "他人1人でholdありで期限内",
 			s: handoff.Situation{
 				Assignees:   []string{otherLogin},
-				Comments:    []handoff.CommentView{holdComment(otherLogin, "thinkpad", fresh)},
+				Comments:    []handoff.CommentView{holdComment(otherLogin, fresh)},
 				SelfLogin:   selfLogin,
 				Now:         now,
 				IdleTimeout: idleTimeout,
@@ -107,7 +120,7 @@ func TestAssess_見えているものと判定の対応(t *testing.T) {
 			name: "他人1人でholdありで期限切れ",
 			s: handoff.Situation{
 				Assignees:   []string{otherLogin},
-				Comments:    []handoff.CommentView{holdComment(otherLogin, "thinkpad", stale)},
+				Comments:    []handoff.CommentView{holdComment(otherLogin, stale)},
 				SelfLogin:   selfLogin,
 				Now:         now,
 				IdleTimeout: idleTimeout,
@@ -143,7 +156,7 @@ func TestAssess_進捗を書き続けている機械の担当は外さない(t *
 	got := handoff.Assess(handoff.Situation{
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
-			holdComment(otherLogin, "thinkpad", now.Add(-19*time.Hour)),
+			holdComment(otherLogin, now.Add(-19*time.Hour)),
 			progressComment(otherLogin, now.Add(-time.Hour), time.Time{}),
 		},
 		SelfLogin:   selfLogin,
@@ -178,7 +191,7 @@ func TestAssess_印の無いコメントでは期限が延びない(t *testing.T
 	got := handoff.Assess(handoff.Situation{
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
-			holdComment(otherLogin, "thinkpad", held),
+			holdComment(otherLogin, held),
 			// **人間が書いた無関係なコメントである。**投稿者は担当者と同じアカウントになる。
 			{Author: otherLogin, Body: "ここはどうなっていますか", CreatedAt: now.Add(-time.Minute)},
 		},
@@ -218,7 +231,7 @@ func TestAssess_進捗報告が無ければholdの時刻から数える(t *testi
 		t.Run(c.name, func(t *testing.T) {
 			got := handoff.Assess(handoff.Situation{
 				Assignees:   []string{otherLogin},
-				Comments:    []handoff.CommentView{holdComment(otherLogin, "thinkpad", c.held)},
+				Comments:    []handoff.CommentView{holdComment(otherLogin, c.held)},
 				SelfLogin:   selfLogin,
 				Now:         now,
 				IdleTimeout: idleTimeout,
@@ -251,7 +264,7 @@ func TestAssess_前の担当の古い進捗報告では新しい担当を外さ�
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
 			progressComment(otherLogin, now.Add(-100*time.Hour), time.Time{}),
-			holdComment(otherLogin, "thinkpad", held),
+			holdComment(otherLogin, held),
 		},
 		SelfLogin:   selfLogin,
 		Now:         now,
@@ -300,17 +313,17 @@ func TestIsProgressReport_印を含むものだけを数える(t *testing.T) {
 
 // 目的: 担当を外すときに読む hold が、いちばん新しいものであることを確認する（設計 3-77c）。
 //
-// **古い hold を読むと、既に居ない機械の名前を released のコメントへ書くことになる。**
+// **古い hold を読むと、既に使われていない branch の名前を released のコメントへ書くことになる。**
 //
-// 与える情報: hold が2件（古いほうの機械の名前が `old-host`、新しいほうが `thinkpad`）ある状況。
-// 成功条件: 新しいほうの機械の名前が返ること。
-func TestAssess_担当を外すとき新しいholdの機械の名前を返す(t *testing.T) {
+// 与える情報: hold が2件（古いほうの branch が `old-branch`、新しいほうが `new-branch`）ある状況。
+// 成功条件: 新しいほうの branch の名前が返ること。
+func TestAssess_担当を外すとき新しいholdのbranchを返す(t *testing.T) {
 	now := at()
 	got := handoff.Assess(handoff.Situation{
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
-			holdComment(otherLogin, "old-host", now.Add(-100*time.Hour)),
-			holdComment(otherLogin, "thinkpad", now.Add(-50*time.Hour)),
+			holdCommentOn(otherLogin, "old-branch", now.Add(-100*time.Hour)),
+			holdCommentOn(otherLogin, "new-branch", now.Add(-50*time.Hour)),
 		},
 		SelfLogin:   selfLogin,
 		Now:         now,
@@ -320,38 +333,44 @@ func TestAssess_担当を外すとき新しいholdの機械の名前を返す(t 
 	if got.Action != handoff.ActionRelease {
 		t.Fatalf("期限切れなのに担当を外さない: got %v", got.Action)
 	}
-	if got.Hold.Host != "thinkpad" {
-		t.Errorf("いちばん新しい hold を読んでいない: got %q, want %q", got.Hold.Host, "thinkpad")
+	if got.Hold.Branch != "new-branch" {
+		t.Errorf("いちばん新しい hold を読んでいない: got %q, want %q", got.Hold.Branch, "new-branch")
 	}
 }
 
 // 目的: 入札のコメントの形が設計 3-77a のとおりであることと、書いたものを読み戻せることを確認する。
 //
 // 与える情報: 入札1件。
-// 成功条件: 印で始まり、JSON のキーが `host` / `five_hour` / `weekly` / `score` / `at` であり、
+// 成功条件: 印で始まり、JSON のキーが `five_hour` / `weekly` / `score` / `at` であり、
+// **`host` のキーが1つも無いこと**（設計 3-77-0。誰が書いたかは投稿者が答える）。
 // 時刻がその機械のタイムゾーンのままであること。読み戻すと同じ値になること。
 func TestFormatBid_コメントの形と読み戻し(t *testing.T) {
-	bid := handoff.Bid{Host: "mac-studio", FiveHour: 87, Weekly: 16, Score: 190, At: at()}
+	bid := handoff.Bid{Author: selfLogin, FiveHour: 87, Weekly: 16, Score: 190, At: at()}
 	body := handoff.FormatBid(bid, 3*time.Minute)
 
 	if !strings.HasPrefix(body, config.HandoffBidMarker+"\n") {
 		t.Fatalf("入札の印で始まっていない:\n%s", body)
 	}
-	for _, key := range []string{`"host":"mac-studio"`, `"five_hour":87`, `"weekly":16`, `"score":190`} {
+	for _, key := range []string{`"five_hour":87`, `"weekly":16`, `"score":190`} {
 		if !strings.Contains(body, key) {
 			t.Errorf("入札の JSON に %s がない:\n%s", key, body)
 		}
+	}
+	// **自分で名乗る欄を本文へ書いてはならない**（設計 3-77-0）。
+	// 書くと、本文の値と GitHub が付ける投稿者という、同じ事実の出どころが2つできる。
+	if strings.Contains(body, `"host"`) {
+		t.Errorf("入札の JSON に機械の名前の欄が残っている:\n%s", body)
 	}
 	if !strings.Contains(body, "+09:00") {
 		t.Errorf("時刻がその機械のタイムゾーンで書かれていない（Z に直してはならない）:\n%s", body)
 	}
 
 	posted := at().Add(time.Second)
-	got, ok := handoff.ParseBid(body, posted)
+	got, ok := handoff.ParseBid(body, selfLogin, posted)
 	if !ok {
 		t.Fatalf("書いた入札を読み戻せない:\n%s", body)
 	}
-	if got.Host != bid.Host || got.Score != bid.Score || got.FiveHour != bid.FiveHour || got.Weekly != bid.Weekly {
+	if got.Author != selfLogin || got.Score != bid.Score || got.FiveHour != bid.FiveHour || got.Weekly != bid.Weekly {
 		t.Errorf("読み戻した入札が違う: got %+v, want %+v", got, bid)
 	}
 	if !got.PostedAt.Equal(posted) {
@@ -363,46 +382,63 @@ func TestFormatBid_コメントの形と読み戻し(t *testing.T) {
 //
 // **数えると、使用率0の入札が生まれて必ず勝ってしまう。**
 //
-// 与える情報: 印はあるが JSON が壊れているコメントと、機械の名前が空のコメント。
+// **投稿者の分からないコメントも数えない**（設計 3-77-0）。GitHub は削除済みアカウントの
+// コメントに投稿者を付けない。**数えると、同点の3段目で空文字がどのログイン名にも勝ち、
+// その回はどの continuo も着手しなくなる。**
+//
+// 与える情報: 印はあるが JSON が壊れているコメントと、投稿者の分からないコメント。
 // 成功条件: どちらも入札として読めないこと。
 func TestParseBid_読めない入札は数えない(t *testing.T) {
 	broken := config.HandoffBidMarker + "\nこれは JSON ではありません {"
-	if _, ok := handoff.ParseBid(broken, at()); ok {
+	if _, ok := handoff.ParseBid(broken, selfLogin, at()); ok {
 		t.Error("JSON でないコメントを入札として読んでいる")
 	}
 
-	noHost := config.HandoffBidMarker + "\n" + `{"five_hour":100,"weekly":100,"score":300}`
-	if _, ok := handoff.ParseBid(noHost, at()); ok {
-		t.Error("機械の名前の無いコメントを入札として読んでいる")
+	valid := config.HandoffBidMarker + "\n" + `{"five_hour":100,"weekly":100,"score":300}`
+	if _, ok := handoff.ParseBid(valid, "", at()); ok {
+		t.Error("投稿者の分からないコメントを入札として読んでいる")
+	}
+	if _, ok := handoff.ParseBid(valid, "   ", at()); ok {
+		t.Error("投稿者が空白だけのコメントを入札として読んでいる")
+	}
+	// **投稿者さえ分かれば、機械の名前が無くても読める**（設計 3-77-0 の入札の形そのものである）。
+	got, ok := handoff.ParseBid(valid, selfLogin, at())
+	if !ok {
+		t.Fatal("いまの形の入札を読めていない")
+	}
+	if got.Author != selfLogin {
+		t.Errorf("入札の識別子に投稿者が入っていない: got %q, want %q", got.Author, selfLogin)
 	}
 }
 
 // 目的: released のコメントに、引き継ぐ機械の名前を書かないことを確認する（設計 3-77c）。
 //
-// **外すのは入札をやり直す前なので、そのとき勝つ機械はまだ決まっていない。**
-// 書くと、外した機械が負けたときに嘘になる。
+// **外すのは入札をやり直す前なので、そのとき勝つ continuo はまだ決まっていない。**
+// 書くと、外した側が負けたときに嘘になる。
+//
+// **`from` には、担当を外されたアカウントのログイン名が入る**（設計 3-77-0）。
 //
 // 与える情報: released 1件。
 // 成功条件: 印で始まり、`from` と `branch` と `at` だけを持ち、`to` を持たないこと。
 // 本文に「push しないでください」にあたる文言が入っていること。
-func TestFormatReleased_引き継ぐ機械の名前は書かない(t *testing.T) {
+func TestFormatReleased_引き継ぐアカウントは書かない(t *testing.T) {
 	i18n.Use(i18n.SourceLang)
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
 
 	body := handoff.FormatReleased(handoff.Released{
-		From: "mac-studio", Branch: "continuo/octocat/hello-world/188", At: at(),
+		From: otherLogin, Branch: "continuo/octocat/hello-world/188", At: at(),
 	})
 
 	if !strings.HasPrefix(body, config.HandoffReleasedMarker+"\n") {
 		t.Fatalf("released の印で始まっていない:\n%s", body)
 	}
-	if !strings.Contains(body, `"from":"mac-studio"`) {
-		t.Errorf("外した機械の名前が入っていない:\n%s", body)
+	if !strings.Contains(body, `"from":"`+otherLogin+`"`) {
+		t.Errorf("外したアカウントの名前が入っていない:\n%s", body)
 	}
 	if strings.Contains(body, `"to":`) {
-		t.Errorf("引き継ぐ機械の名前を書いている（この段では決まっていない）:\n%s", body)
+		t.Errorf("引き継ぐアカウントを書いている（この段では決まっていない）:\n%s", body)
 	}
-	if !strings.Contains(body, "mac-studio で走っていた作業") {
+	if !strings.Contains(body, otherLogin+" のアカウントで走っていた作業") {
 		t.Errorf("push してはならないことが人間に読める形で書かれていない:\n%s", body)
 	}
 }
@@ -433,24 +469,24 @@ func TestIsMarked_外すのは3つの印だけ(t *testing.T) {
 	}
 }
 
-// 目的: 同じ機械が入札を2件書かないための判定が効くことを確認する（設計 3-77a）。
+// 目的: 同じアカウントが入札を2件書かないための判定が効くことを確認する（設計 3-77a）。
 //
 // **これを見ないと、巡回のたびに入札が1件ずつ増える。**
 //
-// 与える情報: 自分の入札を含む入札3件。
-// 成功条件: 自分の入札が見つかること。含まれない機械では見つからないこと。
+// 与える情報: 自分の入札を含む入札2件。
+// 成功条件: 自分の入札が見つかること。書いていないアカウントでは見つからないこと。
 func TestHasBidBy_自分の入札を見つける(t *testing.T) {
 	base := at()
 	bids := []handoff.Bid{
-		{Host: "thinkpad", Score: 100, PostedAt: base},
-		{Host: testHost, Score: 190, PostedAt: base.Add(time.Minute)},
+		{Author: otherLogin, Score: 100, PostedAt: base},
+		{Author: selfLogin, Score: 190, PostedAt: base.Add(time.Minute)},
 	}
 
-	if _, ok := handoff.HasBidBy(bids, testHost); !ok {
+	if _, ok := handoff.HasBidBy(bids, selfLogin); !ok {
 		t.Error("自分の入札を見つけられていない")
 	}
-	if _, ok := handoff.HasBidBy(bids, "mac-studio"); ok {
-		t.Error("書いていない機械の入札を見つけている")
+	if _, ok := handoff.HasBidBy(bids, "octocat-bot-z"); ok {
+		t.Error("書いていないアカウントの入札を見つけている")
 	}
 }
 
@@ -469,7 +505,7 @@ func TestHasBidBy_自分の入札を見つける(t *testing.T) {
 func TestFormatBid_人間が読む行を足してもJSONが壊れない(t *testing.T) {
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
 
-	bid := handoff.Bid{Host: "mac-studio", FiveHour: 87, Weekly: 16, Score: 190, At: at()}
+	bid := handoff.Bid{Author: selfLogin, FiveHour: 87, Weekly: 16, Score: 190, At: at()}
 
 	for _, lang := range []i18n.Lang{i18n.LangJA, i18n.LangEN} {
 		i18n.Use(lang)
@@ -479,11 +515,11 @@ func TestFormatBid_人間が読む行を足してもJSONが壊れない(t *testi
 			t.Errorf("[%s] 人間が読む行に `}` が入っている（JSON がそこまで伸びる）: %d 個\n%s", lang, got, body)
 		}
 
-		got, ok := handoff.ParseBid(body, at())
+		got, ok := handoff.ParseBid(body, selfLogin, at())
 		if !ok {
 			t.Fatalf("[%s] 人間が読む行を足した入札を読み戻せない:\n%s", lang, body)
 		}
-		if got.Host != bid.Host || got.FiveHour != bid.FiveHour ||
+		if got.Author != bid.Author || got.FiveHour != bid.FiveHour ||
 			got.Weekly != bid.Weekly || got.Score != bid.Score {
 			t.Errorf("[%s] 読み戻した入札が違う: got %+v, want %+v", lang, got, bid)
 		}
@@ -504,9 +540,9 @@ func TestFormatBid_立候補と締め切りが人間に読める(t *testing.T) {
 	i18n.Use(i18n.SourceLang)
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
 
-	body := handoff.FormatBid(handoff.Bid{Host: "mac-studio", Score: 190, At: at()}, 3*time.Minute)
+	body := handoff.FormatBid(handoff.Bid{Author: selfLogin, Score: 190, At: at()}, 3*time.Minute)
 
-	if !strings.Contains(body, "mac-studio がこの issue の担当に立候補しています") {
+	if !strings.Contains(body, selfLogin+" がこの issue の担当に立候補しています") {
 		t.Errorf("立候補していることが人間に読める形で書かれていない:\n%s", body)
 	}
 	if !strings.Contains(body, "約3分後") {
@@ -526,7 +562,7 @@ func TestFormatBid_締め切りの書き方(t *testing.T) {
 	i18n.Use(i18n.SourceLang)
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
 
-	bid := handoff.Bid{Host: "mac-studio", Score: 190, At: at()}
+	bid := handoff.Bid{Author: selfLogin, Score: 190, At: at()}
 
 	if got := handoff.FormatBid(bid, 30*time.Second); !strings.Contains(got, "約1分後") {
 		t.Errorf("1分未満の締め切りが「約1分後」になっていない:\n%s", got)
@@ -555,7 +591,7 @@ func TestFormatBid_英語でも1分の締め切りが崩れない(t *testing.T) 
 	i18n.Use(i18n.LangEN)
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
 
-	bid := handoff.Bid{Host: "mac-studio", Score: 190, At: at()}
+	bid := handoff.Bid{Author: selfLogin, Score: 190, At: at()}
 
 	for _, window := range []time.Duration{30 * time.Second, time.Minute} {
 		got := handoff.FormatBid(bid, window)
@@ -584,7 +620,6 @@ func TestFormatHold_人間が読む行を足してもJSONが壊れない(t *test
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
 
 	hold := handoff.Hold{
-		Host:     "mac-studio",
 		Assignee: selfLogin,
 		Branch:   "continuo/octocat/hello-world/188",
 		At:       at(),
@@ -602,7 +637,7 @@ func TestFormatHold_人間が読む行を足してもJSONが壊れない(t *test
 		if !ok {
 			t.Fatalf("[%s] 人間が読む行を足した hold を読み戻せない:\n%s", lang, body)
 		}
-		if got.Host != hold.Host || got.Assignee != hold.Assignee || got.Branch != hold.Branch {
+		if got.Assignee != hold.Assignee || got.Branch != hold.Branch {
 			t.Errorf("[%s] 読み戻した hold が違う: got %+v, want %+v", lang, got, hold)
 		}
 		if !got.At.Equal(hold.At) {
@@ -614,23 +649,23 @@ func TestFormatHold_人間が読む行を足してもJSONが壊れない(t *test
 // 目的: hold のコメントが、担当の決まり方と次に始まることを人間に伝えることを確認する（設計 3-77b）。
 //
 // 与える情報: hold 1件（branch の名前あり）。
-// 成功条件: どの機械が担当になったか・なぜその機械か・どの branch で始まるかが本文に出ていること。
+// 成功条件: どのアカウントが担当になったか・なぜそのアカウントか・どの branch で始まるかが
+// 本文に出ていること。
 func TestFormatHold_担当の決まり方が人間に読める(t *testing.T) {
 	i18n.Use(i18n.SourceLang)
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
 
 	body := handoff.FormatHold(handoff.Hold{
-		Host:     "mac-studio",
 		Assignee: selfLogin,
 		Branch:   "continuo/octocat/hello-world/188",
 		At:       at(),
 	})
 
-	if !strings.Contains(body, "担当は mac-studio に決まりました") {
-		t.Errorf("どの機械が担当になったかが人間に読める形で書かれていない:\n%s", body)
+	if !strings.Contains(body, "担当は "+selfLogin+" に決まりました") {
+		t.Errorf("どのアカウントが担当になったかが人間に読める形で書かれていない:\n%s", body)
 	}
 	if !strings.Contains(body, "余裕がいちばん大きい") {
-		t.Errorf("なぜその機械が選ばれたのかが書かれていない:\n%s", body)
+		t.Errorf("なぜそのアカウントが選ばれたのかが書かれていない:\n%s", body)
 	}
 	if !strings.Contains(body, "branch continuo/octocat/hello-world/188 で作業を始めます") {
 		t.Errorf("これから何が始まるかが書かれていない:\n%s", body)
@@ -648,7 +683,7 @@ func TestFormatHold_branchの名前が無いとき(t *testing.T) {
 	i18n.Use(i18n.SourceLang)
 	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
 
-	body := handoff.FormatHold(handoff.Hold{Host: "mac-studio", Assignee: selfLogin, At: at()})
+	body := handoff.FormatHold(handoff.Hold{Assignee: selfLogin, At: at()})
 
 	if strings.Contains(body, "branch  で") {
 		t.Errorf("branch の名前が空のまま差し込まれている:\n%s", body)

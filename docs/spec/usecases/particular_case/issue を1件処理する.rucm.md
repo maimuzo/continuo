@@ -254,7 +254,7 @@ POSTCONDITION: turn 数は増えていない。システムは次の Stop hook �
 
 SPECIFIC ALTERNATIVE FLOW 担当が移った:
 RFS BASIC FLOW 39
-1. システムは担当が移った先の機械の名前と、released の印が先頭に付いたコメントの中身を記録に残す。
+1. システムは担当が移った先のアカウント名と、released の印が先頭に付いたコメントの中身を記録に残す。
 2. システムは branch へ1バイトも push しない。
 3. システムは workspace_hooks の after_run を実行する。
 4. システムは herdr の pane を閉じる。
@@ -907,7 +907,7 @@ flowchart TD
     end
 
     subgraph SG36 ["SPECIFIC ALTERNATIVE FLOW 担当が移った / RFS BASIC FLOW 39"]
-        N36S1["1. 担当が移った先の機械の名前と released のコメントを記録に残す"] --> N36S2["2. branch へ1バイトも push しない"] --> N36S3["3. after_run を実行する"] --> N36S4["4. pane を閉じる"] --> N36S5["5. 印を外す"] --> N36S6["6. ABORT"]
+        N36S1["1. 担当が移った先のアカウント名と released のコメントを記録に残す"] --> N36S2["2. branch へ1バイトも push しない"] --> N36S3["3. after_run を実行する"] --> N36S4["4. pane を閉じる"] --> N36S5["5. 印を外す"] --> N36S6["6. ABORT"]
     end
 
     subgraph SG22 ["SPECIFIC ALTERNATIVE FLOW ボードから消えたissue / RFS BASIC FLOW 41"]

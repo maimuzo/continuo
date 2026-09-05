@@ -59,18 +59,13 @@ type Situation struct {
 	Comments []CommentView
 	// SelfLogin は continuo が使う gh の持ち主のログイン名である。
 	//
+	// **持ち回りで参加者を見分ける値は、これ1つだけである**（設計 3-77-0）。
+	// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+	// アカウントが自分なら、担当しているのも自分である。
+	//
 	// **空文字なら「自分が誰か分からない」である。**そのときは担当者が付いている issue に
 	// 一切触らない（自分の担当かどうかを言えないので、奪う側にも進む側にも倒せない）。
 	SelfLogin string
-	// SelfHost はこの機械の名前である（`os.Hostname()` の値。設計 3-77）。
-	//
-	// **担当者のアカウントだけでは足りない。**1人が2台の機械を1つの GitHub アカウントで
-	// 動かすのは、この機能のいちばん自然な使い方である。**アカウントだけで比べると、
-	// 勝った機械と負けた機械の両方が「担当者は自分だ」と読み、同じ issue に2台が着手する。**
-	// **だから hold のコメントの `host` と突き合わせる。**
-	//
-	// **空文字なら機械の名前で区別しない**（アカウントだけで判定していた頃と同じ動きになる）。
-	SelfHost string
 	// Now はいまの時刻である。
 	Now time.Time
 	// IdleTimeout は担当者の最後の進捗報告からこれだけ経つと担当を外す長さである。
@@ -99,12 +94,6 @@ const (
 	ActionSkipManyAssignees
 	// ActionSkipSelfUnknown は、gh の持ち主が分からないので担当のある issue に触らないことを表す。
 	ActionSkipSelfUnknown
-	// ActionSkipOtherMachine は、担当者は自分のアカウントだが hold を持っているのは
-	// 同じアカウントの別の機械なので触らないことを表す。**入札もしない。**
-	//
-	// **1人が2台の機械を1つのアカウントで動かすと、ここへ来る**（設計 3-77b）。
-	// 担当者のアカウントだけを見て進むと、同じ issue に2台が着手する。
-	ActionSkipOtherMachine
 )
 
 // String は判定を人間が読める1語で返す（ログに出す）。
@@ -126,8 +115,6 @@ func (a Action) String() string {
 		return "担当者が2人以上"
 	case ActionSkipSelfUnknown:
 		return "gh の持ち主が分からない"
-	case ActionSkipOtherMachine:
-		return "同じアカウントの別の機械の担当"
 	default:
 		return "不明"
 	}
@@ -161,19 +148,14 @@ type Assessment struct {
 //
 //	担当者が2人以上                                触らない。WARN を出す
 //	担当者が無い                                   入札する
-//	自分1人 ＋ この機械の hold                      着手・引き継ぎへ進む（入札しない）
-//	自分1人 ＋ hold が1件も無い                     着手・引き継ぎへ進む（人間が付けた担当である）
-//	自分1人 ＋ 別の機械の hold ＋ 期限内             触らない。入札もしない
-//	自分1人 ＋ 別の機械の hold ＋ 期限切れ           担当を外して入札をやり直す
+//	自分のアカウント1人                            着手・引き継ぎへ進む（入札しない）
 //	他人1人 ＋ hold が1件も無い                     触らない。人間が付けた担当である。WARN を出す
 //	他人1人 ＋ hold あり ＋ 期限内                   触らない。入札もしない
 //	他人1人 ＋ hold あり ＋ 期限切れ                 担当を外して入札をやり直す
 //
-// **担当者のアカウントだけで「自分の担当」と決めてはならない**（設計 3-77b）。
-// **1人が2台の機械を1つの GitHub アカウントで動かすのが、この機能のいちばん自然な使い方である。**
-// アカウントだけで比べると、勝った機械と負けた機械の両方が「担当者は自分だ」と読み、
-// **同じ branch の worktree に2つ目の Claude Code が立つ。**
-// **どの機械のものかは hold のコメントの `host` が答える。**
+// **担当者のアカウントが自分なら、担当しているのも自分である**（設計 3-77-0）。
+// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+// **アカウント1つにつき continuo は1つである。**hold を見て機械を見分ける段は置かない。
 //
 // **hold は「いまの担当者が書いたもの」だけを数える**（設計 3-77b）。
 // **入札の回が変わっても hold のコメントは消えない**ので、機械が外れたあとに人間が
@@ -207,13 +189,15 @@ func Assess(s Situation) Assessment {
 		return Assessment{Action: ActionSkipSelfUnknown, Assignee: assignee}
 	}
 
+	if strings.EqualFold(assignee, strings.TrimSpace(s.SelfLogin)) {
+		// **担当者が自分のアカウントなら、担当しているのも自分である**（設計 3-77-0）。
+		// **hold の有無も、誰が書いたかも見ない。**アカウント1つにつき continuo は1つである。
+		return Assessment{Action: ActionProceed, Assignee: assignee}
+	}
+
 	// **hold は、いまの担当者が書いたものだけを見る。**別の担当者の古い hold を数えると、
 	// **人間が引き継いだ issue を機械が取り上げる。**
 	hold, holdAt, hasHold := LatestHoldFor(s.Comments, assignee)
-
-	if strings.EqualFold(assignee, strings.TrimSpace(s.SelfLogin)) {
-		return assessSelfAssigned(s, assignee, hold, holdAt, hasHold)
-	}
 
 	if !hasHold {
 		return Assessment{Action: ActionSkipHumanAssigned, Assignee: assignee}
@@ -228,47 +212,6 @@ func Assess(s Situation) Assessment {
 	}
 	if s.Now.Sub(last) <= s.IdleTimeout {
 		return Assessment{Action: ActionSkipHeld, Assignee: assignee, Hold: hold, LastProgress: last}
-	}
-	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastProgress: last}
-}
-
-// assessSelfAssigned は「担当者が自分のアカウント1人」のときの判定である（設計 3-77b）。
-//
-// **アカウントが自分でも、この機械の担当だとは限らない。**1つのアカウントで2台の機械を
-// 動かしていると、**勝ったのは別の機械かもしれない。**それは hold のコメントの `host` で分かる。
-//
-// **hold が1件も無いときは進む。**そこは人間が担当者を付けた issue であり、
-// 設計 3-77b の表が「担当者が自分1人なら着手・引き継ぎへ進む」と決めている。
-// **この機械の名前を知らない（`SelfHost` が空）ときも進む。**機械の名前で区別できないので、
-// アカウントだけで判定していた頃と同じ動きへ落とす。
-//
-// s: いま見えているもの。
-// assignee: いま付いている担当者のログイン名（自分のアカウント）。
-// hold: その担当者が書いたいちばん新しい hold。
-// holdAt: その hold のコメントが作られた時刻（期限を数える下限）。
-// hasHold: hold が1件でもあれば true。
-// 戻り値: 判定と、その判定に使った値。
-func assessSelfAssigned(
-	s Situation, assignee string, hold Hold, holdAt time.Time, hasHold bool,
-) Assessment {
-	selfHost := strings.TrimSpace(s.SelfHost)
-	holdHost := strings.TrimSpace(hold.Host)
-	if !hasHold || selfHost == "" || holdHost == "" {
-		return Assessment{Action: ActionProceed, Assignee: assignee}
-	}
-	if strings.EqualFold(holdHost, selfHost) {
-		return Assessment{Action: ActionProceed, Assignee: assignee, Hold: hold}
-	}
-
-	// **同じアカウントの別の機械が担当している。**
-	// **期限の数え方は他人の担当と揃える**（設計 3-77b）。揃えないと、その機械が落ちたとき
-	// **担当者が自分のアカウントのままなので、どの機械もこの issue を拾えなくなる。**
-	last, hasLast := lastProgressOf(s.Comments, assignee, holdAt)
-	if !hasLast {
-		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold}
-	}
-	if s.Now.Sub(last) <= s.IdleTimeout {
-		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold, LastProgress: last}
 	}
 	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastProgress: last}
 }
@@ -355,16 +298,21 @@ func lastProgressOf(comments []CommentView, login string, holdAt time.Time) (tim
 
 // CollectBids は、コメントの全件から入札を拾う（設計 3-77a）。
 //
+// **`Bid.Author` には投稿者を渡す**（設計 3-77-0）。**持ち回りで参加者を見分ける値である。**
+// **本文の JSON からは取らない。**本文は第三者にも書けるので、
+// **他の continuo のログイン名を騙られると、騙られたほうは `HasBidBy` が真になって
+// 以後1度も入札しなくなる。**GitHub が付ける投稿者は騙れない。
+//
 // **`Bid.PostedAt` には作成時刻を渡す。更新時刻は使わない**（設計 5-3k）。
 // **入札の締め切りと勝敗は、この時刻で決まる。**編集で動かせるようにすると、
-// **負けた機械が、あとから自分の入札を「新しく」できる。**
+// **負けた continuo が、あとから自分の入札を「新しく」できる。**
 //
 // comments: issue に付いているコメントの全件。
-// 戻り値: 読めた入札（コメントの並び順のまま）。
+// 戻り値: 読めた入札（コメントの並び順のまま）。**投稿者の分からないものは1件も入らない。**
 func CollectBids(comments []CommentView) []Bid {
 	out := make([]Bid, 0, len(comments))
 	for _, c := range comments {
-		if b, ok := ParseBid(c.Body, c.CreatedAt); ok {
+		if b, ok := ParseBid(c.Body, c.Author, c.CreatedAt); ok {
 			out = append(out, b)
 		}
 	}
@@ -516,20 +464,20 @@ func endsRound(body string) bool {
 	return ok
 }
 
-// HasBidBy は、その機械が既に入札を書いているかを返す。
+// HasBidBy は、そのアカウントが既に入札を書いているかを返す。
 //
 // **書いていれば、締め切りまで待つだけである。**入札のたびに新しいコメントを書くので、
 // **これを見ないと巡回のたびに入札が1件ずつ増える。**
 //
 // bids: その issue に付いている入札。
-// host: この機械の名前。
-// 戻り値の1つ目: この機械が最後に書いた入札。
+// login: gh の持ち主のログイン名（設計 3-77-0）。
+// 戻り値の1つ目: そのアカウントが最後に書いた入札。
 // 戻り値の2つ目: 1件でもあれば true。
-func HasBidBy(bids []Bid, host string) (Bid, bool) {
+func HasBidBy(bids []Bid, login string) (Bid, bool) {
 	var latest Bid
 	found := false
 	for _, b := range bids {
-		if !strings.EqualFold(strings.TrimSpace(b.Host), strings.TrimSpace(host)) {
+		if !strings.EqualFold(strings.TrimSpace(b.Author), strings.TrimSpace(login)) {
 			continue
 		}
 		if !found || b.PostedAt.After(latest.PostedAt) {

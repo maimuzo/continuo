@@ -23,7 +23,7 @@ func TestAssess_進捗を書き足した機械の担当は外さない(t *testin
 	got := handoff.Assess(handoff.Situation{
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
-			holdComment(otherLogin, "thinkpad", now.Add(-20*time.Hour)),
+			holdComment(otherLogin, now.Add(-20*time.Hour)),
 			progressComment(otherLogin, now.Add(-19*time.Hour), now.Add(-time.Hour)),
 		},
 		SelfLogin:   selfLogin,
@@ -54,7 +54,7 @@ func TestAssess_更新時刻が取れなくても作成時刻で数える(t *tes
 	got := handoff.Assess(handoff.Situation{
 		Assignees: []string{otherLogin},
 		Comments: []handoff.CommentView{
-			holdComment(otherLogin, "thinkpad", now.Add(-20*time.Hour)),
+			holdComment(otherLogin, now.Add(-20*time.Hour)),
 			progressComment(otherLogin, now.Add(-time.Hour), time.Time{}),
 		},
 		SelfLogin:   selfLogin,
@@ -116,7 +116,7 @@ func TestRoundStart_編集しても回の区切りは動かない(t *testing.T) 
 	now := at()
 	created := now.Add(-10 * time.Hour)
 
-	view := holdComment(otherLogin, "thinkpad", created)
+	view := holdComment(otherLogin, created)
 	view.UpdatedAt = now
 
 	got, ok := handoff.RoundStart([]handoff.CommentView{view})
@@ -139,16 +139,16 @@ func TestRoundStart_編集しても回の区切りは動かない(t *testing.T) 
 func TestLatestHoldFor_編集しても新しいholdは入れ替わらない(t *testing.T) {
 	now := at()
 
-	old := holdComment(otherLogin, "old-host", now.Add(-100*time.Hour))
+	old := holdCommentOn(otherLogin, "old-branch", now.Add(-100*time.Hour))
 	old.UpdatedAt = now
-	recent := holdComment(otherLogin, "thinkpad", now.Add(-50*time.Hour))
+	recent := holdCommentOn(otherLogin, "new-branch", now.Add(-50*time.Hour))
 
 	got, gotAt, ok := handoff.LatestHoldFor([]handoff.CommentView{old, recent}, otherLogin)
 	if !ok {
 		t.Fatal("hold があるのに取れない")
 	}
-	if got.Host != "thinkpad" {
-		t.Errorf("編集で hold の新旧が入れ替わった: got %q, want %q", got.Host, "thinkpad")
+	if got.Branch != "new-branch" {
+		t.Errorf("編集で hold の新旧が入れ替わった: got %q, want %q", got.Branch, "new-branch")
 	}
 	// **返す時刻も作成時刻である。**ここが更新時刻になると、期限の下限が編集で未来へ動く。
 	if !gotAt.Equal(now.Add(-50 * time.Hour)) {
@@ -159,8 +159,8 @@ func TestLatestHoldFor_編集しても新しいholdは入れ替わらない(t *t
 
 // 目的: 入札の投稿時刻（`Bid.PostedAt`）が、編集で動かないことを固定する（設計 5-3k / 3-77a）。
 //
-// **なぜ要るか。**同点の決着は「いちばん最初に投稿した機械」で行う（設計 3-77）。
-// **更新時刻を採ると、負けた機械があとから自分の入札を1文字直すだけで、投稿時刻を新しくできる。**
+// **なぜ要るか。**同点の決着は「いちばん最初に投稿した入札」で行う（設計 3-77）。
+// **更新時刻を採ると、負けた continuo があとから自分の入札を1文字直すだけで、投稿時刻を新しくできる。**
 //
 // 与える情報: 入札が3時間前に作られ、いま編集された状況。
 // 成功条件: `PostedAt` が作成時刻（3時間前）のままであること。
@@ -171,7 +171,7 @@ func TestCollectBids_編集しても投稿時刻は動かない(t *testing.T) {
 	bids := handoff.CollectBids([]handoff.CommentView{{
 		Author: otherLogin,
 		Body: handoff.FormatBid(handoff.Bid{
-			Host: "thinkpad", FiveHour: 40, Weekly: 60, Score: 140, At: created,
+			Author: otherLogin, FiveHour: 40, Weekly: 60, Score: 140, At: created,
 		}, time.Minute),
 		CreatedAt: created,
 		UpdatedAt: now,

@@ -45,7 +45,7 @@ func TestHandoffRecheck_担当が移っていたらturnの終わりで止める(
 		// **turn が終わる前に、別の機械が担当を取り上げた状態にする。**
 		fx.Tracker.SetAssignees("PVTI_item188", rivalLogin)
 		fx.Tracker.AddCommentBy(issueNode(188), rivalLogin, handoff.FormatHold(handoff.Hold{
-			Host: rivalHost, Assignee: rivalLogin,
+			Assignee: rivalLogin,
 			Branch: "continuo/octocat/hello-world/188", At: time.Now(),
 		}), time.Now())
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
@@ -142,7 +142,7 @@ func TestHandoffRecheck_復元したrunはturnを送る前に担当を確かめ�
 	node := issueNode(188)
 	now := time.Now()
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
-		Host: rivalHost, Assignee: rivalLogin,
+		Assignee: rivalLogin,
 		Branch: "continuo/octocat/hello-world/188", At: now,
 	}), now)
 
