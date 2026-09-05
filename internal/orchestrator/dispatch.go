@@ -1058,8 +1058,26 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 func (o *Orchestrator) launchClaude(
 	ctx context.Context, rs *runState, worktreePath string, params herdr.AgentStartParams,
 ) error {
+	// **`agent.start` の失敗も、hook が届いていれば「走っている」である**（設計 3-80）。
+	//
+	// **ここがいちばん危ない。**pane を生きた Claude Code が埋めていると、
+	// `agent.start` は `agent_pane_busy` を `agentStartBusyBudget`（30秒）ぶん返し続けてから
+	// エラーで返る。**そのエラーは `ErrStartupBusy` ではないので、復帰の道では
+	// `restartWithNewSession` が hook の宛先を新しい UUID へ張り替える。**
+	// **issue #235 の時系列が名指ししたのは、まさにこの経路である**
+	// （19:42:24 やり直し → 19:42:54 `agent_pane_busy` → 19:42:54.645 張り替え）。
+	since := o.now()
 	started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
 	if err != nil {
+		if hookAt, busy := o.startupBusyByHook(rs, since); busy {
+			// **agent 名は控えておく。**控えないと `checkStalls` が
+			// 「agent 名が空」で飛ばし、hook が止まっても誰も拾わなくなる。
+			rs.setAgentName(params.Name)
+			o.logger.Info("agent.start は通りませんでしたが、作業中の hook が届いています（pane を生きた Claude Code が埋めています）",
+				"identifier", rs.issue().Identifier, "agent", params.Name,
+				"最後に作業中の hook を受けた時刻", hookAt, "agent.start の応答", summaryLine(err.Error()))
+			return ErrStartupBusy
+		}
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
 	}
 	rs.setAgentName(params.Name)

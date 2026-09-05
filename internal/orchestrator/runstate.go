@@ -816,14 +816,18 @@ func (rs *runState) freezeHandoffSubagents() []string {
 //
 // **入力待ちのまま止まった Claude Code でも出るものを、2つ外す。**
 //
-//	SessionStart                  … **起動しただけで出る**
-//	Notification（permission_prompt 以外） … **`idle_prompt` は turn が終わったあとの
-//	                                無音を 60.040〜60.058 秒で破る**（12/12 の実測。設計 1-2）。
-//	                                `herdr.startup_timeout_ms` の既定（60000ミリ秒）と
-//	                                **ほぼ同時に飛ぶ**ので、起動の確認のいちばん危ないところで当たる
+//	SessionStart  … **起動しただけで出る**
+//	Notification  … `idle_prompt` は **turn が終わったあとの無音を 60.040〜60.058 秒で破る**
+//	                （12/12 の実測。設計 1-2）。`herdr.startup_timeout_ms` の既定
+//	                （60000ミリ秒）と**ほぼ同時に飛ぶ**ので、起動の確認のいちばん危ない
+//	                ところで当たる。**`permission_prompt` も数えない**（下）
 //
-// **`permission_prompt` は残す。**あれは turn の最中に権限の確認で止まったことを表すので、
-// **turn は走っている**（設計 3-11）。
+// **`permission_prompt` も数えない理由。**turn は走っているが、**この判定へ来るのは
+// herdr が agent を登録していないときだけである。**登録していないので `agent.get` は
+// `blocked` を返せず、esc を送る道（設計 3-11）へ入れない。
+// **数えると、人間が確認の画面に答えるまで来ない `Stop` を
+// `claude.turn_timeout_ms`（既定1時間）待つことになる。**
+// **数えなければ `herdr.startup_timeout_ms`（既定60秒）で人間へ渡る。**
 //
 // **残る6つ**（`UserPromptSubmit` / `PreToolUse` / `PostToolUse` / `SubagentStart` /
 // `SubagentStop` / `Stop`）**は、turn を処理している間にしか出ない。**
@@ -837,7 +841,13 @@ func isBusyHook(ev hookserver.HookEvent) bool {
 	case hookSessionStart:
 		return false
 	case hookNotification:
-		return ev.NotificationType == "permission_prompt"
+		// **`permission_prompt` も数えない。**turn は走っているが、
+		// **この判定へ来るのは herdr が agent を登録していないときだけである。**
+		// 登録していないので `agent.get` は `blocked` を返せず、esc を送る道
+		// （設計 3-11）へ入れない。**数えると、人間が確認の画面に答えるまで
+		// 来ない `Stop` を `claude.turn_timeout_ms`（既定1時間）待つことになる。**
+		// **数えなければ `herdr.startup_timeout_ms`（既定60秒）で人間へ渡る。**
+		return false
 	default:
 		return true
 	}

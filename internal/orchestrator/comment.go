@@ -217,20 +217,23 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
-		// **`ErrStartupBusy` を「落ち着かなかった」として扱ってはならない**（設計 3-80）。
+		// **`ErrStartupBusy` は「落ち着かなかった」ではない**（設計 3-80c）。
 		// **復元した Claude Code は生きていて、前の会話の続きを走らせている。**
-		// そこで `failCommentRecovery` を呼ぶと、
-		// **「作業を終えたと表明したのに、何をしたのかを書き残しませんでした」という
-		// 事実と違う理由を issue へ書いたうえで、走っている本人の pane を閉じる。**
-		// **書けていないのではなく、まだ書いている最中かもしれない。**
+		// **理由を書き分ける。**そのままだと
+		// 「作業を終えたと表明したのに、何をしたのかを書き残しませんでした」という
+		// **事実と違う理由**が issue に残る。**書けていないのではなく、
+		// まだ書いている最中かもしれない。**
 		//
-		// **ここは警告1行で戻る。**この関数には同じ形の戻り口が既にいくつもある
-		// （身元ファイルを読めない・pane を引けない・agent 名を決められない）。
-		// **run はこのあと呼び出し側（`finishRunClaimed`）が普通に終える。**
+		// **黙って戻ってはならない。**この関数から普通に戻っても、呼び出し側
+		// （`finishRunClaimed`）は数行あとで `stopWorker` を呼ぶ。**pane はどのみち閉じる。**
+		// **戻るだけだと、閉じたことも成果が残っていないことも人間に伝わらない。**
 		if errors.Is(err, ErrStartupBusy) {
-			o.logger.Warn("復元した Claude Code が走っているので、コメントを書かせる指示は送りません"+
-				"（この run の成果は issue に残らないかもしれません）",
+			o.logger.Warn("復元した Claude Code が走っているので、コメントを書かせる指示は送れません",
 				"identifier", snap.Identifier, "error", err)
+			o.failCommentRecovery(ctx, rs,
+				"復元した Claude Code がまだ走っていたので、成果を書かせる指示を送れなかった。"+
+					"**本文は送っていない。****書けなかったのではなく、まだ書いている最中かもしれない。**"+
+					"下記の会話の記録を見てから、Status を決めてください。")
 			return
 		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)

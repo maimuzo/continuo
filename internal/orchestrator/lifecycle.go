@@ -568,6 +568,12 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	// **pane を閉じる前に、turn の終わりと同じ判定を1度通す**（設計 3-81）。
 	// **通知より先に置く。**引き渡しの通知は1つの run につき1件しか出せないので
 	// （`takeHandoffPost`）、あとに置くと「何を道連れにしたか」を書く先が残らない。
+	//
+	// **例外が1つある。**`finishRunUnknownState` は通知を投稿してからここへ来るので、
+	// **その道の通知に載る一覧は、待つ前の写しである。**待っている間に終わったものも
+	// 「止めた時点で走っていた」として並ぶ。**そちらを直すには通知の投稿を
+	// この関数へ移すことになり、知らない Status の道が持っている
+	// 「Status を動かした記録を添えない」という決まりと噛み合わない**（設計 3-50）。
 	o.waitForBackgroundTasks(ctx, rs)
 
 	if failureState != "" {

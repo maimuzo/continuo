@@ -255,6 +255,79 @@ func TestStartup_走っていると判断したrunにも働き始めた時刻を
 	}
 }
 
+// TestStartup_agent_startが通らなくても走っていれば殺さない は、設計 3-80 のうち
+// **issue #235 の時系列が名指しした経路**を検査する。
+//
+// 目的: pane を生きた Claude Code が埋めていると、`agent.start` は `agent_pane_busy` を
+// 返し続けてからエラーで返る。**そのエラーは `confirmStartup` を通らない。**
+// **見落とすと、復帰の道で `restartWithNewSession` が hook の宛先を新しいセッション UUID へ
+// 張り替え、動いている本人の hook が「知らない session_id」として捨てられる。**
+// 与える情報: `agent.start` が常に `agent_pane_busy` を返し、その最中にこの run の
+// `PreToolUse` が届く台本。**粘りの上限を短くして、テストの待ち時間に収める。**
+// 成功条件: issue が `failure_state`（`Blocked`）へ落ちず、`pane.close` が1回も呼ばれず、
+// **「turn の終わりを待ちます」まで進むこと。**
+func TestStartup_agent_startが通らなくても走っていれば殺さない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.AllowLog("agent.start は通りませんでした")
+	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
+
+	fx.Herdr.Handle(herdr.MethodAgentStart, func(map[string]any) (any, *rpcErr) {
+		// **pane を生きた Claude Code が埋めている。**その本人が hook を送ってくる。
+		fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
+		return nil, &rpcErr{Code: "agent_pane_busy", Message: "agent target pane is not an available shell"}
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 60*time.Second, "起動の確認が「Claude Code は走っている」で終わる", func() bool {
+		return strings.Contains(fx.Logs.String(), "1回目の指示を送らずに turn の終わりを待ちます")
+	})
+
+	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 0 {
+		t.Errorf("生きている Claude Code の pane を閉じた: pane.close の回数 %d", n)
+	}
+	if got := fx.Tracker.StateOf("PVTI_item235"); got == "Blocked" {
+		t.Errorf("hook が届いているのに人間へ渡している: state=%s", got)
+	}
+}
+
+// TestStartup_permission_promptだけでは走っているとみなさない は、設計 3-80b の
+// 「`Notification` は全部外す」を検査する。
+//
+// 目的: `permission_prompt` のとき turn は走っているが、**この判定へ来るのは herdr が
+// agent を登録していないときだけである。**登録していないので `agent.get` は `blocked` を
+// 返せず、esc を送る道（設計 3-11）へ入れない。
+// **数えると、人間が確認の画面に答えるまで来ない `Stop` を待ち続けることになる。**
+// 与える情報: `permission_prompt` の `Notification` だけを流し、`agent_not_found` を
+// 返し続ける台本。
+// 成功条件: issue が `failure_state`（`Blocked`）へ落ちること。
+func TestStartup_permission_promptだけでは走っているとみなさない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 },
+	})
+	fx.AllowLog("agent.get", "起動していない", "run を諦めて", "権限の確認で止まりました")
+	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
+
+	fx.Herdr.Handle(herdr.MethodAgentGet, func(map[string]any) (any, *rpcErr) {
+		fx.Orc.OnHook(hookserver.HookEvent{
+			HookEventName:    "Notification",
+			SessionID:        "session-1",
+			NotificationType: "permission_prompt",
+		})
+		return nil, agentNotFoundErr()
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 40*time.Second, "permission_prompt だけでは走っているとみなさず、人間へ渡す", func() bool {
+		return fx.Tracker.StateOf("PVTI_item235") == "Blocked"
+	})
+	fx.WaitRunsDrained(t, 20*time.Second)
+
+	if strings.Contains(fx.Logs.String(), "1回目の指示を送らずに turn の終わりを待ちます") {
+		t.Errorf("permission_prompt だけで「走っている」と判断した（esc を送れないので永久に待つ）")
+	}
+}
+
 // TestFinish_道連れにしたバックグラウンド処理を通知へ書く は、設計 3-81 の記録を検査する。
 //
 // 目的: `background_tasks` に処理が載ったまま pane を閉じたなら、**何を道連れにしたかを
@@ -489,6 +562,13 @@ func TestFinish_復元した先が走っていたらコメントの依頼で殺�
 		if strings.Contains(c.Body, "何をしたのかを issue に書き残しませんでした") {
 			t.Errorf("走っている最中なのに「書き残さなかった」と issue へ書いた:\n%s", c.Body)
 		}
+	}
+	// **黙って戻ってはならない。**pane はどのみち閉じるので、
+	// **閉じたことと成果が残っていないことを人間へ渡す道を通る。**
+	// **この台本では引き渡しの通知の枠を打ち切りの理由が先に取っているので**
+	// （1つの run につき1件。`takeHandoffPost`）、**ここで確かめるのはログである。**
+	if !strings.Contains(fx.Logs.String(), "復元した Claude Code が走っているので、コメントを書かせる指示は送れません") {
+		t.Errorf("走っていたことを記録していない:\n%s", fx.Logs.String())
 	}
 }
 
