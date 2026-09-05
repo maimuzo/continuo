@@ -105,8 +105,10 @@ func TestAdopt_復元で引き継いだrunには継続の指示を送る(t *test
 //     **「2 回目の試行です」が入っている**
 func TestResumeBackoff_再着手はセッションに復帰して1回目の本文を送る(t *testing.T) {
 	clock := newTestClock()
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
 	fx := newFixture(t, fixtureOptions{
-		Now: clock.Now,
+		Now:            clock.Now,
+		TranscriptRoot: t.TempDir(),
 		Mutate: func(cfg *config.Config) {
 			cfg.Agent.MaxRetryBackoffMs = 10000
 			cfg.Tracker.VerifyStatesEvery = 0
@@ -121,6 +123,10 @@ func TestResumeBackoff_再着手はセッションに復帰して1回目の本�
 		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
 		return ok && v.RetryCount == 1
 	})
+
+	// **1回目のセッションの記録は、fixture が採番したときに置いている**（`newFixture`）。
+	// **ここで置き直さない。**同じ名前の記録が2つできると、着手の段5b が
+	// **どちらを見つけるかが `os.ReadDir` の並び順で決まる。**
 
 	// バックオフが明けるまで時計を進める。
 	clock.Advance(30 * time.Second)

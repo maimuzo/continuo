@@ -1604,6 +1604,12 @@ type fixture struct {
 	SocketPath string
 	// WorktreeRoot は worktree の置き場所である。
 	WorktreeRoot string
+	// TranscriptRoot は会話の記録の置き場所の根である（本番の既定は `~/.claude/projects`）。
+	//
+	// **着手の段5b は、この根の直下1階層に `<セッション UUID>.jsonl` があるかを見る**
+	// （設計 3-3c）。無ければ `--resume` を渡さないので、**再着手が復帰することを
+	// 確かめるテストは、ここへ記録を置いてから走らせる**（`sessionTranscriptDir`）。
+	TranscriptRoot string
 	// Logs はログの出力先である。
 	//
 	// **排他つきの syncLog を使う。**run ごとの goroutine（turn ループ・finishRunAsync・
@@ -1702,6 +1708,12 @@ type fixtureOptions struct {
 	// ContinuoPath は hook のコマンド行に書く実行ファイルのパスである。
 	// 空なら `/opt/continuo/bin/continuo` を使う。
 	ContinuoPath string
+	// SkipSessionTranscripts を真にすると、採番したセッションの記録を置かない。
+	//
+	// **既定では置く。**実機では Claude Code が書くものなので、置かないと
+	// **セッションを採番したテストが軒並み「記録が無い」側へ倒れる**（設計 3-3c）。
+	// **「記録が無いときにどうなるか」を確かめるテストだけが、これを真にする。**
+	SkipSessionTranscripts bool
 }
 
 // newFixture はテスト用の Orchestrator を組み立てる。
@@ -1834,7 +1846,36 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 
 	transcriptRoot := opts.TranscriptRoot
 	if transcriptRoot == "" {
-		transcriptRoot = tempRoot(t)
+		// **機械全体の一時ディレクトリを根にしない。**
+		//
+		// **着手の段5b と、コメントの取り戻しが、この根を `os.ReadDir` で舐める**（設計 3-3c）。
+		// 機械全体の一時ディレクトリには**他人が作った読めないディレクトリが並ぶ**ので、
+		// **「読めないものがある」の警告が出て、宣言していない WARN としてテストが落ちる。**
+		// **落ちるかどうかがその機械の `/tmp` の中身で決まる。**
+		//
+		// **`t.TempDir()` の親を採る。**テストが呼ぶ `t.TempDir()` は同じ親の下の連番なので、
+		// **hook が渡す `transcript_path` の検査（根の内側か）も通り続ける。**
+		transcriptRoot = filepath.Dir(t.TempDir())
+	}
+	fx.TranscriptRoot = transcriptRoot
+	// **採番したセッションの記録を置くディレクトリを、記録の根の直下に1つ作る。**
+	// **実機の `~/.claude/projects/<cwd を綴り直したもの>/` に当たる。**
+	//
+	// **名前にテストの名前を混ぜる。**`fixtureOptions.TranscriptRoot` に共有の場所を渡された
+	// ときの備えである。**セッション UUID は `session-1` から順に決まるので、
+	// 名前を分けないと、別のテストが書いた記録を自分のものとして拾う。**
+	//
+	// **作れなくても止めない。**「記録の置き場所を読めないときは復帰を試す」を確かめる
+	// テストは、実在しないパスを根として渡す（設計 3-3c）。**そこで落とすと、
+	// その検査そのものが走らなくなる。**空のままなら記録を置かない。
+	seedDir := ""
+	if !opts.SkipSessionTranscripts {
+		dir, seedErr := os.MkdirTemp(transcriptRoot,
+			"continuo-sessions-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-")
+		if seedErr == nil {
+			seedDir = dir
+			t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		}
 	}
 	continuoPath := opts.ContinuoPath
 	if continuoPath == "" {
@@ -1868,6 +1909,20 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 			defer sessionMu.Unlock()
 			id := fmt.Sprintf("session-%d", len(fx.Sessions)+1)
 			fx.Sessions = append(fx.Sessions, id)
+			// **採った UUID の記録を、記録の根の直下1階層へ置く**（設計 3-3c）。
+			//
+			// **実機では Claude Code が書くものである。**着手の段5b と、コメントの取り戻しは、
+			// **記録が無い UUID へ `--resume` を投げない。**置かないと、
+			// **セッションを採番したテストが軒並み「記録が無い」側へ倒れる。**
+			//
+			// **中身は空でよい。**この検査が見るのは、通常のファイルとして在るかだけである。
+			// **hook が渡す `transcript_path` の検査とは別の場所を見ているので、
+			// 既存のテストが `t.TempDir()` の下へ置いている記録には影響しない。**
+			if seedDir != "" {
+				if err := os.WriteFile(filepath.Join(seedDir, id+".jsonl"), []byte("{}\n"), 0o600); err != nil {
+					return "", err
+				}
+			}
 			return id, nil
 		},
 	})
@@ -2006,6 +2061,61 @@ func taskNotificationEvent(sessionID, taskID string) hookserver.HookEvent {
 		Prompt: fmt.Sprintf("<task-notification><task-id>%s</task-id><status>completed</status></task-notification>",
 			taskID),
 	}
+}
+
+// sessionTranscriptDir は、会話の記録を置くディレクトリを記録の根の直下に1つ作る。
+//
+// **着手の段5b は `<記録の根>/*/<セッション UUID>.jsonl` を探す**（設計 3-3c）。
+// **既定の根の下では `t.TempDir()` も当たる**（根が `t.TempDir()` の親なので、
+// `t.TempDir()` はその直下1階層である）。**それでもこのヘルパーを通すこと。**
+// 根を明示的に渡したテストでも同じ形になり、**置き場所の決め方が1箇所に集まる。**
+//
+// **既定の根は、そのテスト専用である**（`newFixture` が `t.TempDir()` の親を採る）。
+// **`fixtureOptions.TranscriptRoot` に共有の場所を渡さないこと。**そこを根にすると、
+// **`go test` が timeout で殺されて `t.Cleanup` が走らなかった前の実行の置き土産が見える。**
+// テストが書いていない記録で `--resume` の判定が変わり、**守りの向きを逆にしても緑のまま通る。**
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture（記録の根を持っている）。
+// 戻り値: 作ったディレクトリの絶対パス。
+func sessionTranscriptDir(t *testing.T, fx *fixture) string {
+	t.Helper()
+	// **機械全体の一時ディレクトリを根にしていないことを、機械で止める。**
+	// そこへ置くと、**前の実行の置き土産で通るようになり、守りの向きを逆にしても気づけない。**
+	//
+	// **解決してから比べる。**`tempRoot` は `filepath.EvalSymlinks` を通すので、
+	// macOS では `/private/var/folders/…` になる。**素の `os.TempDir()`（`/var/folders/…`）を
+	// 渡されると、字句の比較では素通りする。**
+	root := fx.TranscriptRoot
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	if root == tempRoot(t) {
+		t.Fatalf("記録の根が機械全体の一時ディレクトリになっています。" +
+			"newFixture の既定（t.TempDir() の親）を使うか、fixtureOptions{TranscriptRoot: t.TempDir()} を渡してください")
+	}
+	dir, err := os.MkdirTemp(fx.TranscriptRoot, "continuo-transcripts-")
+	if err != nil {
+		t.Fatalf("会話の記録の置き場所を作れません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// seedSessionTranscript は、そのセッションの会話の記録を、着手が見つけられる場所へ置く。
+//
+// **着手の段5b は、記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。
+// **再着手が復帰することを確かめるテストは、これを dispatch の前に呼ぶこと。**
+// 呼ばないと、身元ファイルに UUID が入っていても新しいセッションで始まる。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// sessionUUID: 記録を置くセッションの UUID。
+// lines: 記録の中身。
+// 戻り値: 置いた記録の絶対パス。
+func seedSessionTranscript(t *testing.T, fx *fixture, sessionUUID string, lines []any) string {
+	t.Helper()
+	return writeTranscript(t, sessionTranscriptDir(t, fx), sessionUUID+".jsonl", lines)
 }
 
 // writeTranscript はテスト用の transcript の JSONL を書く。

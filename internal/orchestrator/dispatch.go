@@ -827,6 +827,26 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	if prepared.ExistingIdentity != nil {
 		resumeUUID = prepared.ExistingIdentity.SessionUUID
 	}
+	// **会話の記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。
+	//
+	// **着手が段6 より先で落ちると、身元ファイルには会話が1度も作られていない UUID が残る。**
+	// 段6 で UUID を書いたあと、段7（before_run）・段8（pane を引く・pane の rename）・
+	// 段9（`agent.start`）のどこで落ちても同じ状態になる。`restartWithNewSession` が
+	// 採り直した UUID を書いたあとで立て直しの `agent.start` も失敗した場合も、その1つである。
+	// **そのまま復帰しにいくと、`confirmStartupWithRestart` が `herdr.startup_timeout_ms` を
+	// 使い切るまで `agent.start` をやり直し続ける**（利用者の実測で18回・約60秒）。
+	//
+	// **最後は自力で新しいセッションへ倒れるので壊れはしないが、空回りしている間、
+	// その枠は他の issue に使えない。**
+	//
+	// **ここでは書かない。**下の3通りと合わせて1行だけ書く（設計 3-3c の「ログは4通り」）。
+	// **2行出すと、運用者が「新しいセッションを立てて着手します」を数えて新規の着手を
+	// 数えるときに、この経路を二重に数える。**
+	skippedResume := ""
+	if resumeUUID != "" && !o.mayResumeSession(resumeUUID) {
+		skippedResume = resumeUUID
+		resumeUUID = ""
+	}
 	sessionUUID := resumeUUID
 	if resumeUUID == "" {
 		sessionUUID, err = o.newSessionUUID()
@@ -844,10 +864,27 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// **復帰した場合はトークンの集計の基準を作り直さない。**transcript のファイルが
 	// 同じままなので、作り直すと同じファイルを2回数える（設計 3-15）。
 	rs.beginAttempt(resumeUUID != "")
-	if resumeUUID != "" {
+	switch {
+	case resumeUUID != "":
 		o.logger.Info("前回のセッションに復帰して再着手します（会話履歴を引き継ぎます）",
 			"identifier", issue.Identifier, "session_uuid", resumeUUID, "worktree", prepared.Path)
-	} else {
+	case skippedResume != "":
+		// **下の「新しいセッションを立てて着手します」と混ぜない**（設計 3-3c の「ログは4通り」）。
+		// **身元ファイルに UUID が入っていた再着手であって、新規の着手ではない。**
+		//
+		// **`記録の置き場所` を落とさない。**この検査が黙って無効になる筋道
+		// （Claude Code が置き場所の形を変えた・利用者が別の場所へ向けている）に気づけるのは、
+		// **この行が出ることと、そこに探した場所が載っていることの2つだけである。**
+		// **`session_uuid` の項目名を、他の3通りと揃える。**揃えないと、
+		// **その項目で絞り込んでいる運用者から、この経路だけが見えなくなる。**
+		// **身元ファイルの値をそのままログへ出さない。**この分岐へ来る理由の1つが
+		// 「UUID がパスに使えない形である」で、**そこはエージェントが書いた値である**
+		// （設計 3-2 / 3-23）。長さに上限が無いので、切ってから出す。
+		o.logger.Info("身元ファイルのセッションへ復帰しないで、新しいセッションで始めます",
+			"identifier", issue.Identifier, "session_uuid", sessionUUID,
+			"復帰しなかったセッション", truncateForLog(skippedResume),
+			"記録の置き場所", o.transcriptRoot, "worktree", prepared.Path)
+	default:
 		o.logger.Info("新しいセッションを立てて着手します（会話履歴はありません）",
 			"identifier", issue.Identifier, "session_uuid", sessionUUID, "worktree", prepared.Path)
 	}
