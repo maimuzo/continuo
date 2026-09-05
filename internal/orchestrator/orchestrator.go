@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
@@ -201,6 +202,18 @@ const ghLoginRetryInterval = 5 * time.Minute
 type Options struct {
 	// Config は WORKFLOW.md の front matter である。
 	Config config.Config
+	// ConfigPath は読み直す WORKFLOW.md の絶対パスである（設計 3-24）。
+	//
+	// **空なら読み直さない。**テストは渡さないので、渡していないテストの挙動は変わらない。
+	// **絶対パスでなければ読み直しを行わない**（config.Load が相対パスを受け付けない）。
+	ConfigPath string
+	// ConfigFile は、ファイルから読んだままの設定である（**CLI の上書きが入っていないもの**）。
+	//
+	// **「読み直しても効かない項目」を出すときの比較の相手になる。**
+	// `Config` と比べると、`--port` の上書きのせいで
+	// **利用者が1バイトも触っていない `server.port` が毎回「効きません」に出る。**
+	// **nil なら Config で代用する。**
+	ConfigFile *config.Config
 	// Prompt は1回目に送る指示書の断片である（設計 5-3 / 5-3c）。
 	//
 	// **組み込みの前半・固有・組み込みの後半の3つを、この順に持っている。**
@@ -244,6 +257,11 @@ type Options struct {
 
 // Orchestrator は巡回・dispatch・turn ループ・照合・リトライ・stall 検知を持つ。
 type Orchestrator struct {
+	// cfg は組み立てのときに固まる設定である。**走っている間は1バイトも変わらない。**
+	//
+	// **読み直しでここを差し替えてはならない。**多数の goroutine が錠なしで読んでおり、
+	// `[]string` や `map` を持つので代入は不可分ではない。
+	// **走行中に変えてよいキーは reloadable が持つ**（設計 3-24）。
 	cfg             config.Config
 	promptFragments prompt.Fragments
 	tracker         Tracker
@@ -288,6 +306,36 @@ type Orchestrator struct {
 	// 実行中の run 1件ごとに確保と整列をやり直すことになる（`reconcileRunning` は
 	// run ごとに `isKnownState` を引く）。**組み立てのときに1度だけ計算して持つ。**
 	knownStateNames []string
+
+	// configPath は読み直す WORKFLOW.md の絶対パスである（設計 3-24）。
+	// **空なら読み直さない。**
+	configPath string
+	// reloadable は、走っている最中に差し替える設定である（設計 3-24）。
+	//
+	// **多数の goroutine が読むので atomic で持つ**（internal/i18n の Catalog と同じ形）。
+	// **cfg とは別に持つ。**あちらは組み立てのときに固まり、以後1バイトも変わらない。
+	// **New が必ず初期値を入れる。**入れ忘れると、読む6箇所が nil 参照でプロセスごと落ちる。
+	reloadable atomic.Pointer[config.Reloadable]
+
+	// reloadMu は configStamp と reloadNote を守る。
+	//
+	// **巡回のループだけが触るが、Tick はテストから直に呼ばれる。**
+	// **`mu`（runs / sessions を守るもの）と分けている。**読み直しは `mu` を1度も取らない。
+	reloadMu sync.Mutex
+	// configStamp は最後に読んだ WORKFLOW.md の印である。
+	configStamp config.FileStamp
+	// baseline は、最後に読み込んだ WORKFLOW.md の中身そのものである。
+	//
+	// **「読み直しても効かない項目」は、これと比べて出す。**
+	// **`cfg` と比べてはならない。**あちらは CLI の `--port` の上書きが入っており
+	// （daemon が `config.Load` のあとに書き換える）、**利用者が1バイトも触っていない
+	// `server.port` が毎回「効きません」に出る。**
+	baseline config.Config
+	// reloadNote は、前の巡回で出した読み直しの知らせである（成功・失敗のどちらも）。
+	//
+	// **同じ知らせを出し続けない。**巡回の間隔の既定は30秒であり、壊れたファイルを
+	// 保存したまま席を立つと、同じ WARN が永久に流れる。
+	reloadNote string
 
 	// mu は runs / sessions / notified / tickCount / quota を守る。
 	mu sync.Mutex
@@ -439,7 +487,15 @@ func New(opts Options) (*Orchestrator, error) {
 	}
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
-	return &Orchestrator{
+	// **読み直しは絶対パスのときだけ行う**（設計 3-24）。`config.Load` は相対パスを受け付けない。
+	configPath := opts.ConfigPath
+	if configPath != "" && !filepath.IsAbs(configPath) {
+		logger.Warn("WORKFLOW.md のパスが絶対パスではないので、設定の読み直しを行いません",
+			"config_path", configPath)
+		configPath = ""
+	}
+
+	orc := &Orchestrator{
 		cfg:             opts.Config,
 		promptFragments: opts.Prompt,
 		tracker:         opts.Tracker,
@@ -460,6 +516,7 @@ func New(opts Options) (*Orchestrator, error) {
 		// 同じ関数の戻り値そのものである。**ずれると、起動時に通した設定が実行時には
 		// 別の意味になる（対応表のキーは、どちらにも入れない）。
 		knownStateNames: knownStateNames,
+		configPath:      configPath,
 
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
@@ -469,8 +526,36 @@ func New(opts Options) (*Orchestrator, error) {
 		failures:       map[string]*failureNote{},
 		shutdown:       shutdown,
 		shutdownCancel: shutdownCancel,
-	}, nil
+	}
+	// **読み直せる設定の初期値を、ここで必ず入れる**（設計 3-24）。
+	// **入れ忘れると、読む6箇所が nil 参照で落ちる。**そのうち3箇所は turn ループの
+	// goroutine から引かれるので、**panic はプロセスごと落とす。**
+	reloadable := config.ExtractReloadable(opts.Config)
+	orc.reloadable.Store(&reloadable)
+	// **比較の相手は、ファイルから読んだままの設定である**（CLI の上書きが入っていないもの）。
+	// **渡されていなければ Config で代用する。**テストは渡さないので、そちらは変わらない。
+	orc.baseline = opts.Config
+	if opts.ConfigFile != nil {
+		orc.baseline = *opts.ConfigFile
+	}
+	// **いま渡された設定は、このファイルから読んだものである**（daemon が `config.Load` の
+	// 結果をそのまま渡す）。**印を入れておかないと、最初の巡回が必ず「読み直し」を1回走らせ、
+	// 何も変わっていないのに1行出る。**取れなくても起動は止めない（次の巡回で取り直す）。
+	if configPath != "" {
+		if stamp, err := config.StampOf(configPath); err == nil {
+			orc.configStamp = stamp
+		}
+	}
+	return orc, nil
 }
+
+// reloadableConfig は、いま効いている「読み直せる設定」を返す（設計 3-24）。
+//
+// **cfg と混ぜて読まないこと。**ここにあるキーは走行中に変わり、cfg のほうは変わらない。
+// **New が必ず初期値を入れるので、nil は返らない。**
+//
+// 戻り値: いま効いている読み直せる設定。**書き換えてはならない。**
+func (o *Orchestrator) reloadableConfig() *config.Reloadable { return o.reloadable.Load() }
 
 // Run は巡回のループを回す。ctx が終わるまで返らない。
 //
@@ -528,6 +613,10 @@ func (o *Orchestrator) Close() {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) Tick(ctx context.Context) {
+	// **設定の読み直しは巡回の頭で1回だけ行う**（設計 3-24）。turn の途中では行わない。
+	// **失敗しても巡回は続ける。**最後に正常だった設定のまま動き続ける。
+	o.reloadConfig(ctx)
+
 	o.mu.Lock()
 	o.tickCount++
 	tick := o.tickCount
