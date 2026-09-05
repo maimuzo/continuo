@@ -155,7 +155,8 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 
 **上から `1` `1` `4` なら、3つとも当たっています。**
 そうでなければ [upgrading.md](upgrading.md) の「v0.1.9 から v0.1.10 へ」を見てください。
-**既に `blocked` で止まっている issue があるなら、**「片付けたいとき」の
+**既に `blocked` で止まっている issue があるなら、**「トラブルシューティング」の
+「作業をやめて後片付けしたいとき」にある
 **`Blocked` になった issue の worktree に、push していない作業が残っている** も見てください。
 
 ### 進捗報告の間隔や画面の言語を変えたいとき
@@ -322,7 +323,8 @@ tracker:
 （この検査で起動を止めると、抜け出す道が無くなります）。
 **同じ内容の警告が、起動したときにもログへ1行出ます。**
 
-**そもそも何を書けばよいのかから知りたいときは、「使い方が分からないとき」の
+**そもそも何を書けばよいのかから知りたいときは、「目的別使用例」の
+「カンバンの Status を標準と違う名前にしたいとき」にある
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」を見てください。**
 
 #### エージェントが PR を作った直後に止まる（automated_state_rewrite）
@@ -436,7 +438,8 @@ cleanup:
 「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
 そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
 
-**対応表そのものの決め方は、「使い方が分からないとき」の
+**対応表そのものの決め方は、「目的別使用例」の
+「カンバンの Status を標準と違う名前にしたいとき」にある
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
 
 **その worktree が残るかどうかは `cleanup.enabled` で決まります。**
@@ -616,7 +619,6 @@ tracker:
       bid_window_ms: 0
 ```
 
----
 
 #### 複数の機械で見張っているのに、いつも同じ機械しか issue を取らない
 
@@ -784,7 +786,7 @@ grep -n "消したいキー名" ~/continuo-work/WORKFLOW.md
 **実行ファイルの入れ替えは終わっています。**インストーラーはここで止めません。
 
 **直し方。**出てきた行のとおりに `WORKFLOW.md` を直してから起動してください。
-直さずに起動すると、「front matter が不正です」の節で説明している形で落ちます。
+直さずに起動すると、「「front matter が不正です: unknown field "…"」で止まる」と同じ形で落ちます。
 
 ```bash
 # 直したあとで確かめる
@@ -835,7 +837,6 @@ cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak
 **`WORKFLOW.md` が symlink のときは、`--force` でも辿らずに止まります**
 （リンク先を雛形で潰さないためです）。実体を置き直してください。
 
----
 
 ### hook の置き場所でつまずくとき
 
@@ -911,6 +912,9 @@ continuo abandon --id e2e <issue の URL> ~/continuo-e2e-work
 ```
 
 ### continuo doctor が赤くなるとき
+
+**カンバンの Status の名前にまつわる3つ**（`✗ カンバン`／`! 片付けの状態`／`! 対応表のキー`）**は、「目的別使用例」の
+「カンバンの Status を標準と違う名前にしたいとき」にあります。**
 
 #### `✗ gh の認証  gh の scope に "project" がありません`
 
@@ -1175,7 +1179,7 @@ continuo --log-level debug   # 起動し直して「入札しません」を探�
 **1台で動かしていても当たります。**
 
 **それでも出ないときは、担当者を見てください。**
-**人間が担当者になっていると、continuo は触りません**（下の
+**人間が担当者になっていると、continuo は触りません**（「担当が外れる・別の PC とぶつかるとき」の
 「人間が担当者になっている issue が、いつまでも着手されない」を読んでください）。
 
 **v0.1.10 までは、「必須のラベルが揃っていない」だけ1行も出ていませんでした。**
@@ -1744,7 +1748,6 @@ cd ~/continuo-work && awk 'c>=2{print} /^---$/{c++}' WORKFLOW.md
 continuo init /tmp/continuo-template
 ```
 
----
 
 ### issue が勝手に止まる・戻るとき
 
@@ -1783,7 +1786,8 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 | **書き戻させる** | `WORKFLOW.md` に対応表を書く。自動化が書いた Status を、本来の Status へ戻させる |
 | **自動化を止める** | ボードの `Workflows` から、その自動化を無効にする |
 
-**何をどう書くかは、「使い方が分からないとき」の
+**何をどう書くかは、「目的別使用例」の
+「カンバンの Status を標準と違う名前にしたいとき」にある
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
 そのまま貼れる yaml と、書けない5つの形がそこにあります。
 **足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
@@ -2012,7 +2016,8 @@ push できる状態なら push させます。**
 **その時間は v0.1.13 では1時間で固定、v0.1.14 からは `tracker.provider.handoff.progress_interval_ms`（エージェントに進捗報告を書かせる間隔。ミリ秒。既定 3600000 = 1時間）で決まります。**
 **担当が外れるのが早すぎるなら、この値を短くしてください。**
 **`idle_timeout_ms` を1時間以下にしている人は、書かないと起動しません**
-（「版を上げたら『progress_interval_ms の値 3600000 が不正です』で起動しなくなった」）。
+（「トラブルシューティング」の「インストールした直後、continuo が起動しないとき」にある
+「版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった」）。
 
 **節が届いているかの確かめ方。****このコマンドは `WORKFLOW.md` を読まない**ので、どこで叩いても構いません。
 
@@ -2522,7 +2527,6 @@ worktree の作成をもう一度だけやり直します。**消してよい条
 continuo abandon --dry-run https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 ```
 
----
 
 ### 放っておいてよいメッセージ
 
@@ -2580,5 +2584,3 @@ herdr pane list | tr ',' '\n' | grep '"label"'
 **label は人間が見分けるための表示名で、continuo は読み戻しません。**
 復元の照合は pane の cwd と worktree のパス1本なので、
 古い形式の label が付いた pane が残っていても引き継ぎは壊れません。
-
----
