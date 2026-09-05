@@ -301,7 +301,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **案：`UserPromptSubmit` を `<task-notification>` 以外も「turn が続いている」と見る。**
 **採らない。****差し戻しが `UserPromptSubmit` を出すかどうかを確かめられていない。**
 出さないなら1件も拾えず、出すなら
-[internal/orchestrator/orchestrator.go:1092-1100](../../../internal/orchestrator/orchestrator.go#L1092-L1100) の
+[internal/orchestrator/orchestrator.go:1068-1076](../../../internal/orchestrator/orchestrator.go#L1068-L1076) の
 `isTurnBoundaryHook` が広がって、**人間が pane へ直接打った入力まで turn の判定に混ざる。**
 
 ---
@@ -345,7 +345,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **足す1節。**`### 3-79. 空の Stop は「止まってよいか尋ねた」であって「終わった」ではない`。
 中身はこの文書の 1 節・6 節・7 節を縮めたもので、**測定値の細かい内訳は入れずにこの文書を参照させる。**
 
-**[docs/plans/continuo_design.md:3408](../continuo_design.md#L3408) の周辺は残す。**
+**[docs/plans/continuo_design.md:3540](../continuo_design.md#L3540) の周辺は残す。**
 あちらは「**continuo 自身は差し戻しを使わない**」を決めているだけで、
 **「他人の hook が差し戻してきたときにどうするか」は決めていない。**3-79 がそこを埋める。
 
