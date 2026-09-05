@@ -26,7 +26,7 @@
 ```rucm
 USE CASE NAME: 本家のリポジトリへ PR を出す
 BRIEF DESCRIPTION: issue は非公開のリポジトリにあり、コードは public の fork にある。システムは issue のリポジトリの既定 branch を base にした worktree を1つ作り、エージェントをそこで起動する。エージェントは issue からコードのリポジトリの名前を読み、worktree の外の clone でコードを直し、fork の origin へ push し、本家のリポジトリへ PR を出す。システムは worktree の中身を見ずに Status を動かし、成果が worktree の外にあるままでも片付けを通す。
-PRECONDITION: システムは常駐している。issue のリポジトリは非公開であり、コードを持たない。コードのリポジトリは public の fork であり、本家のリポジトリを upstream に持つ。claude.tool_gate.mode は既定の public_only である。claude.permission_mode は既定の dontAsk であり、システムはエージェントに --add-dir を渡さない。cleanup.on_states は Done だけを持つ。WORKFLOW.md の本文は worktree の外の clone で直してよいと書いている。
+PRECONDITION: システムは常駐している。issue のリポジトリは非公開であり、コードを持たない。コードのリポジトリは public の fork であり、本家のリポジトリを upstream に持つ。claude.tool_gate.mode は既定の public_only である。claude.permission_mode は既定の dontAsk であり、システムはエージェントに --add-dir を渡さない。cleanup.on_states は Done だけを持つ。WORKFLOW.md の本文は worktree の外の clone で直してよいと書いている。issue の本文にコードのリポジトリの名前を書いたのは OWNER である。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: エージェント、GitHub Projects v2、利用者
 DEPENDENCY: なし
@@ -42,7 +42,7 @@ BASIC FLOW:
 7. システムは VALIDATES THAT issue のリポジトリが非公開である。
 8. システムは判定の hook を持たない設定ファイルを worktree の外に作る。
 9. システムはエージェントを worktree で起動する。
-10. システムはエージェントに WORKFLOW.md の本文を turn として送る。
+10. システムはエージェントに組み込みの指示書と WORKFLOW.md の本文を継ぎ合わせた文面を turn として送る。
 11. エージェントは issue の本文とコメントからコードのリポジトリの名前を読む。
 12. エージェントは worktree の外にコードのリポジトリの clone を用意する。
 13. エージェントは clone の中でコードを直す。

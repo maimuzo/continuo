@@ -72,12 +72,6 @@ const (
 	transcriptRetryCount = 5
 )
 
-// unknownHostName は `os.Hostname()` が答えなかったときに入札へ書く名前である（設計 3-77）。
-//
-// **空文字にしない。**空だと入札の JSON の `host` が空になり、
-// **勝った機械の名前が issue から読めなくなる。**
-const unknownHostName = "unknown-host"
-
 // baseRetryBackoff はリトライの指数バックオフの初項である（設計 3-21）。
 // 上限は agent.max_retry_backoff_ms である。
 const baseRetryBackoff = 5 * time.Second
@@ -239,11 +233,6 @@ type Options struct {
 	// **nil なら `gh api user --jq .login`（tracker.RunGHAPIUserLogin）を使う。**
 	// **テストは偽の関数を渡して外部プロセスの起動を避けること。**
 	GHLogin tracker.GHLoginFunc
-	// HostName はこの機械の名前である（設計 3-77）。**入札と hold のコメントに書く。**
-	//
-	// **空なら `os.Hostname()` の結果を使う。**テストは固定の名前を渡して、
-	// 走らせる機械によって結果が変わらないようにすること。
-	HostName string
 	// TranscriptRoot は hook が渡す `transcript_path` を受け入れる根である。
 	//
 	// **空なら `~/.claude/projects` を使う**（Claude Code が transcript を書く場所。設計 3-15）。
@@ -299,8 +288,6 @@ type Orchestrator struct {
 	// 実行中の run 1件ごとに確保と整列をやり直すことになる（`reconcileRunning` は
 	// run ごとに `isKnownState` を引く）。**組み立てのときに1度だけ計算して持つ。**
 	knownStateNames []string
-	// hostName はこの機械の名前である（設計 3-77）。入札と hold のコメントに書く。
-	hostName string
 
 	// mu は runs / sessions / notified / tickCount / quota を守る。
 	mu sync.Mutex
@@ -441,25 +428,15 @@ func New(opts Options) (*Orchestrator, error) {
 	}
 	// **持ち主の取得は既定で本物の `gh` を呼ぶ**（設計 3-65）。`GHAuthCheck` のように
 	// 「nil なら何もしない」にすると、**呼び出し元が渡し忘れた瞬間に印だけの判定へ静かに戻る。**
+	//
+	// **持ち回りで参加者を見分ける値も、この持ち主のログイン名である**（設計 3-77-0）。
+	// **この機械の名前は取らない。**`os.Hostname()` は重複しうるうえ、
+	// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+	// アカウント1つにつき continuo は1つである。
 	ghLogin := opts.GHLogin
 	if ghLogin == nil {
 		ghLogin = tracker.RunGHAPIUserLogin
 	}
-	// **この機械の名前を決める**（設計 3-77）。入札と hold のコメントに書く値である。
-	// **取れなくても起動は止めない。**空のまま入札すると誰が入札したのか読めなくなるので、
-	// そのときだけ固定の名前へ落とす（勝っても、どの機械かは hold の `assignee` で辿れる）。
-	hostName := strings.TrimSpace(opts.HostName)
-	if hostName == "" {
-		name, err := os.Hostname()
-		if err != nil || strings.TrimSpace(name) == "" {
-			logger.Warn("この機械の名前を取れないので、入札には固定の名前を使います",
-				"使う名前", unknownHostName, "error", err)
-			hostName = unknownHostName
-		} else {
-			hostName = strings.TrimSpace(name)
-		}
-	}
-
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
@@ -483,7 +460,6 @@ func New(opts Options) (*Orchestrator, error) {
 		// 同じ関数の戻り値そのものである。**ずれると、起動時に通した設定が実行時には
 		// 別の意味になる（対応表のキーは、どちらにも入れない）。
 		knownStateNames: knownStateNames,
-		hostName:        hostName,
 
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
@@ -825,8 +801,8 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
 		// **効くのは復元した run と、この機能より前に着手した run だけである。**
 		// **確かめずに送ると、担当が既に移っていても丸ごと1回ぶん働く**（`after_run` も走る）。
-		if lost, newHost := o.handoffLostOnResume(ctx, rs); lost {
-			o.stopBecauseHandoffLost(ctx, rs, newHost)
+		if lost, newAccount := o.handoffLostOnResume(ctx, rs); lost {
+			o.stopBecauseHandoffLost(ctx, rs, newAccount)
 			continue
 		}
 		if rs.takeAwaitTurnEnd() {

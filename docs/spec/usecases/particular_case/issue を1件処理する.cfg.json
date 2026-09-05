@@ -3,7 +3,7 @@
   "usecase_name": "issue を1件処理する",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue を1件処理する.rucm.md",
-    "rucm_block_sha256": "5ad18210490d4bf8a265933cabcbe42c3c3caf464fc65bc34d0434985f0d77b8"
+    "rucm_block_sha256": "0d4e792c79090e6c1c1fb165a8e837461b1884c77921e0ec9f249ba09859fb1c"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -1235,7 +1235,7 @@
       "type": "action",
       "flow": "担当が移った",
       "step": 1,
-      "statement": "システムは担当が移った先の機械の名前と、released の印が先頭に付いたコメントの中身を記録に残す。"
+      "statement": "システムは担当が移った先のアカウント名と、released の印が先頭に付いたコメントの中身を記録に残す。"
     },
     {
       "id": "担当が移った-2",
@@ -4344,7 +4344,7 @@
         "システムは、担当を前に確かめてから recheck_interval_ms を過ぎていれば、issue のコメントを1件残らず取り直す。",
         "システムは VALIDATES THAT issue の担当者がこの機械の投稿者のままである。",
         "CONDITION: NOT issue の担当者がこの機械の投稿者のままである",
-        "システムは担当が移った先の機械の名前と、released の印が先頭に付いたコメントの中身を記録に残す。",
+        "システムは担当が移った先のアカウント名と、released の印が先頭に付いたコメントの中身を記録に残す。",
         "システムは branch へ1バイトも push しない。",
         "システムは workspace_hooks の after_run を実行する。",
         "システムは herdr の pane を閉じる。",
