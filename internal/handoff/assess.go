@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -254,6 +255,81 @@ func nonEmpty(logins []string) []string {
 func IsProgressReport(body string) bool {
 	return strings.Contains(body, config.ProgressMarker)
 }
+
+// StartsAsProgressReport は、そのコメントが途中経過の報告として書き出されたかを返す
+// （issue #178）。
+//
+// **見るのは本文の先頭にある印の並びだけである。**組み込みのプロンプトは
+// `<!-- continuo:agent -->` の次の行に進捗報告の印を書かせており（設計 5-3j の段2b）、
+// **エージェント自身の見つけ方（`.body | startswith(…)`）と同じ位置を見る。**
+//
+// **`IsProgressReport` と使い分ける。**あちらは印が本文のどこかに在れば真であり、
+// **持ち回りの死活の判定はそれでよい**（設計 5-3l。厳しくすると生きている担当が外れる）。
+// **こちらを緩くしてはならない。**
+//
+// **緩くすると何が起きるか。****成果の報告が印を引用しただけで、途中経過として捨てられる。**
+// continuo は「書かれていない」と判定してセッションを復元し、
+// **2度目も引用されれば `failure_state` へ落として人間へ渡す。**
+// **書いてあるのに、書かなかったことにされる。**
+// **印について説明する報告ほど起きやすい**（この判定を足した issue #178 の作業で実際に起きた）。
+//
+// body: コメント本文。
+// 戻り値: 先頭の印の並びに進捗報告の印があれば true。
+func StartsAsProgressReport(body string) bool {
+	// **本文全体の先頭の空白だけを落とす。**`Comment.IsAgent` は
+	// `strings.TrimSpace(body)` してから印を見るので（internal/tracker の `FetchComments`）、
+	// **落とさないと2つの判定がずれる。**本文の先頭に空白が1つあるだけで、
+	// **進捗報告が「この run の成果の報告」として数えられ、issue #178 がその形で直らない。**
+	//
+	// **落とす文字は `unicode.IsSpace` で揃える。**`strings.TrimLeft(body, " \t\r\n")` では狭い。
+	// **`TrimSpace` は全角空白（U+3000）や NBSP（U+00A0）も落とす**ので、
+	// **日本語で書く利用者がいちばん踏みやすい全角空白で、2つの判定がずれる。**
+	//
+	// **行ごとの字下げは落とさない。**落とすと、4桁字下げしたコード片での引用が
+	// また「印の行」として通る（下の HasPrefix を見よ）。
+	body = strings.TrimLeftFunc(body, unicode.IsSpace)
+	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
+		if strings.TrimSpace(line) == "" {
+			// **空行では止めない。**印と印のあいだに空行を挟む書き方がありうる。
+			continue
+		}
+		// **字下げした行は、名乗りではない。**行頭ちょうどの `<!--` だけを見る。
+		// **4桁の字下げは、組み込みのプロンプトが印を「見せる」ときの書き方そのものである**
+		// （internal/prompt の stripComments が、その形を落とさずに残している）。
+		// **字下げを許すと、印について説明する成果の報告が、いちばん起きやすい形で捨てられる。**
+		if !strings.HasPrefix(line, commentOpen) {
+			// **本文が始まった。**ここから先の印は、引用であって名乗りではない。
+			return false
+		}
+		// **行そのものが印で始まっていること。**行の途中に現れる印は名乗りではない。
+		// **`Contains` では、印を引用した HTML のコメントの行が真になる。**
+		// 例: `<!-- この報告に <!-- continuo:progress --> は付けていません -->` は、
+		// 行頭が `<!--` で、印を文字列として含む。**書いてあるのに「書かれていない」と
+		// 判定され、復元が走り、2度目も同じなら `failure_state` へ落ちる**（issue #178 の再発）。
+		if strings.HasPrefix(line, config.ProgressMarker) {
+			return true
+		}
+	}
+	return false
+}
+
+// commentOpen は HTML のコメントの開きである。
+//
+// **この判定は「印が HTML のコメントである」ことを前提にしている。**
+// 進捗報告の印（`config.ProgressMarker`）は固定なので前提は崩れないが、
+// **エージェントの印（`tracker.comments.marker`）は設定で変えられ、形を縛る検査が無い。**
+// `marker: "[continuo-agent]"` のような値にすると、成果の報告の1行目が `<!--` で始まらず、
+// `StartsAsProgressReport` は必ず偽を返す。**その利用者では issue #178 の直しが効かない。**
+//
+// **ただし、その利用者は既に別のところで壊れている。**組み込みの指示書は
+// `<!-- continuo:agent -->` を文字列で埋め込んでおり、設定した marker を使っていない。
+// **設定した marker を組み込みへ届ける道ができたときに、ここも見直すこと。**
+//
+// **同じ前提に立つ定数が、他に2つある。**印の形を変えるときは3つとも動かすこと。
+//
+//	[internal/prompt/prompt.go](../prompt/prompt.go) の commentOpen / commentClose
+//	[internal/orchestrator/prompt.go](../orchestrator/prompt.go) の commentOpenMarker / commentCloseMarker
+const commentOpen = "<!--"
 
 // lastProgressOf は、その担当者がまだ生きていることを最後に示した時刻を返す（設計 3-77b / 5-3l）。
 //
