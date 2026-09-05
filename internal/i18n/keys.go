@@ -2426,6 +2426,8 @@ const (
 	KeyCLIPromptErrURLInvalid Key = "cli.prompt.err_url_invalid"
 	// KeyCLIPromptErrAttemptPositive は--attempt が1未満のときに出る。
 	KeyCLIPromptErrAttemptPositive Key = "cli.prompt.err_attempt_positive"
+	// KeyCLIPromptErrAttemptNeedsURL は--attempt を--url 無しで渡したときに出る。
+	KeyCLIPromptErrAttemptNeedsURL Key = "cli.prompt.err_attempt_needs_url"
 	// KeyCLIPromptErrFetchFailed はボードを読めないときに出る。
 	KeyCLIPromptErrFetchFailed Key = "cli.prompt.err_fetch_failed"
 	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がボードから組み立てられないときに出る。
@@ -3351,6 +3353,7 @@ var allKeys = []Key{
 	KeyCLIPromptErrURLWithBuiltin,
 	KeyCLIPromptErrURLInvalid,
 	KeyCLIPromptErrAttemptPositive,
+	KeyCLIPromptErrAttemptNeedsURL,
 	KeyCLIPromptErrFetchFailed,
 	KeyCLIPromptErrIssueNotOnBoard,
 	KeyCLIPromptErrRenderFailed,

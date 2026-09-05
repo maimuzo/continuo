@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "ac9969b854f4776b7218f241bc4d12953458a6c307216b70313289ae8f3ecec0",
+  "_source_sha256": "a34a17c5a1a03f8b12abc4de6691e806ee50fcd08580f865cebe99bb91a4b0a9",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -171,6 +171,7 @@
   "cli.prompt.breakdown_expanded": "  variables expanded with the values of %s",
   "cli.prompt.breakdown_heading": "Breakdown of the text to be sent:",
   "cli.prompt.breakdown_workflow_body": "  WORKFLOW.md body  %[1]d lines  %[2]s",
+  "cli.prompt.err_attempt_needs_url": "Error: --attempt must be given together with --url (without --url the variables are not expanded, so --attempt has no effect)",
   "cli.prompt.err_attempt_positive": "Error: --attempt must be 1 or greater (%d given)",
   "cli.prompt.err_config_load": "Error: cannot read WORKFLOW.md: %v",
   "cli.prompt.err_fetch_failed": "Error: cannot read the kanban board: %v",

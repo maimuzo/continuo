@@ -170,6 +170,7 @@
   "cli.prompt.breakdown_expanded": "  変数は %s の値で展開しました",
   "cli.prompt.breakdown_heading": "送る文面の内訳:",
   "cli.prompt.breakdown_workflow_body": "  WORKFLOW.md の本文  %d 行  %s",
+  "cli.prompt.err_attempt_needs_url": "エラー: --attempt は --url と一緒に指定してください（--url が無いと変数を展開しないので、--attempt は何にも効きません）",
   "cli.prompt.err_attempt_positive": "エラー: --attempt は1以上にしてください（%d が指定されました）",
   "cli.prompt.err_config_load": "エラー: WORKFLOW.md を読めません: %v",
   "cli.prompt.err_fetch_failed": "エラー: カンバンを読めません: %v",

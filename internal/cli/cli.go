@@ -364,6 +364,13 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrAttemptPositive, *attemptFlag))
 		return 2
 	}
+	if attemptGiven && *urlFlag == "" {
+		// **黙って捨てない。**`--attempt` が効くのは変数を展開するときだけである。
+		// **このコマンド自身が「気づけない出力が、いちばん悪い落ち方である」を理由に、
+		// 展開できなかったら断ると決めている。**同じ理由がそのまま当たる。
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrAttemptNeedsURL))
+		return 2
+	}
 
 	positional := fs.Args()
 	if len(positional) > 1 {
@@ -473,7 +480,8 @@ func runPromptExpanded(
 		return 1
 	}
 
-	text, err := frag.Render(prompt.RenderData(issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs))
+	data := prompt.RenderData(issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs)
+	text, err := frag.Render(data)
 	if err != nil {
 		// **`--url` を付けて初めて変数展開が走る。**本文の `{{if}}` の閉じ忘れや
 		// 一覧に無い変数は、ここで初めて表に出る。**部分的な文面を出さない。**
@@ -482,7 +490,15 @@ func runPromptExpanded(
 	}
 
 	fmt.Fprint(stdout, text)
-	printPromptBreakdown(stderr, frag)
+	// **数えるのは、展開したあとの断片である**（issue #183）。
+	// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
+	// **`Render` が通った以上、ここで失敗することは無い**（同じ入力で同じ処理をする）。
+	rendered, err := frag.RenderItems(data)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrRenderFailed, err))
+		return 1
+	}
+	printPromptBreakdownItems(stderr, rendered, frag)
 	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownExpanded, issue.Identifier))
 	// **何回目として展開したかを必ず出す。**出さないと、`## 7-5. これは N 回目の試行です` が
 	// 出ないことを「文面から消えた」と読み違える。
@@ -502,8 +518,21 @@ func runPromptExpanded(
 // w: 出力先（標準エラー）。
 // frag: 組み立てた断片。
 func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
+	printPromptBreakdownItems(w, frag.Items(), frag)
+}
+
+// printPromptBreakdownItems は、渡された断片の並びから内訳を組み立てる。
+//
+// **`--url` のときは、変数展開したあとの断片を渡す**（issue #183）。
+// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
+// 見出しは「送る文面の内訳」なので、**送った文面を数えなければならない。**
+//
+// w: 出力先（標準エラー）。
+// items: 数える断片の並び。
+// frag: 本文の有無とパスを引くための、組み立てた断片。**行数はここから数えない。**
+func printPromptBreakdownItems(w io.Writer, items []prompt.Fragment, frag prompt.Fragments) {
 	fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
-	for _, it := range frag.Items() {
+	for _, it := range items {
 		switch it.Name {
 		case prompt.NameBuiltinHead:
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinHead, countLines(it.Text)))

@@ -509,15 +509,39 @@ func join(parts []string) string {
 // 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
 // **どの断片の何行目かがエラーの文言に入る。**
 func (f Fragments) Render(data map[string]any) (string, error) {
-	parts := make([]string, 0, len(f.items))
-	for _, it := range f.items {
-		out, err := renderOne(it, data)
-		if err != nil {
-			return "", err
-		}
-		parts = append(parts, out)
+	rendered, err := f.RenderItems(data)
+	if err != nil {
+		return "", err
+	}
+	parts := make([]string, 0, len(rendered))
+	for _, it := range rendered {
+		parts = append(parts, it.Text)
 	}
 	return join(parts), nil
+}
+
+// RenderItems は、断片ごとに変数展開した結果を返す（issue #183）。
+//
+// **`continuo prompt --show --url` の内訳が、これを数える。**
+// **展開する前の断片を数えてはならない。**`{{if .attempt}}` のような枝は、
+// **展開すると行が消える。**見出しは「送る文面の内訳」なので、
+// **送った文面を数えなければ、その行数は嘘になる**（実測で6行ずれた）。
+//
+// **並びと名前は元の断片のままである。**中身だけが展開後になる。
+//
+// data: テンプレートへ渡す変数。
+// 戻り値の1つ目: 変数展開した断片。**並びは `Items` と同じ。**
+// 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
+func (f Fragments) RenderItems(data map[string]any) ([]Fragment, error) {
+	out := make([]Fragment, 0, len(f.items))
+	for _, it := range f.items {
+		text, err := renderOne(it, data)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Fragment{Name: it.Name, Text: text, Path: it.Path})
+	}
+	return out, nil
 }
 
 // renderOne は断片1つを変数展開する。

@@ -7,6 +7,7 @@ package cli_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -154,6 +155,11 @@ func TestPromptURL_引数の誤りは終了コード2で断る(t *testing.T) {
 		{"番号に前置ゼロ", []string{"prompt", "--show", "--url",
 			"https://github.com/octocat/hello-world/issues/042", dir}},
 		{"--attempt が0", []string{"prompt", "--show", "--url", promptIssueURL, "--attempt", "0", dir}},
+		// **`--attempt` は変数を展開するときにしか効かない。**
+		// **黙って捨てると、利用者は「効いた」と思ったまま違う文面を読む。**
+		// このコマンド自身が「気づけない出力が、いちばん悪い落ち方である」を理由に、
+		// 展開できなかったら断ると決めている。**同じ理由がそのまま当たる。**
+		{"--attempt を --url 無しで渡す", []string{"prompt", "--show", "--attempt", "3", dir}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			code, stdout, stderr := runCLIWith(deps, c.args, "")
@@ -227,6 +233,64 @@ func TestPromptURL_引けなかったら何も出さずに断る(t *testing.T) {
 			}
 		}
 	})
+}
+
+// 目的: 内訳の行数が、実際に標準出力へ出した行数と一致することを固定する（issue #183）。
+//
+// **なぜ要るか。**内訳の見出しは「送る文面の内訳」である。
+// **`--url` のとき、標準出力へ出るのは変数展開したあとの文面である。**
+// **展開する前の断片を数えると、その行数は嘘になる。**
+//
+// **`{{if .attempt}}` が実際に落ちる。**`--attempt` を付けないと
+// `## 7-5. これは N 回目の試行です` の節が消えるので、**組み込みの後半の行数が変わる。**
+// **直す前は6行ずれていた**（内訳は220行と出し、実際に出たのは214行だった）。
+//
+// 与える情報: `--attempt` を付けない `--url` の出力と、その内訳。
+// 成功条件: 内訳が出した「組み込みのプロンプト（後半）」の行数が、
+// 標準出力の後半の実際の行数と一致すること。
+func TestPromptURL_内訳の行数が出した文面と一致する(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	setBody(t, dir, "")
+
+	deps := cli.Deps{PromptFetchIssue: promptFetchOK}
+	code, stdout, stderr := runCLIWith(deps,
+		[]string{"prompt", "--show", "--url", promptIssueURL, dir}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
+	}
+
+	want := breakdownTailLines(t, stderr)
+	// **組み込みの後半は `# 5. 共通ルール` から始まる。**そこから最後までを数える。
+	at := strings.Index(stdout, "# 5. 共通ルール")
+	if at < 0 {
+		t.Fatalf("標準出力に組み込みの後半が見つかりません")
+	}
+	got := len(strings.Split(strings.Trim(stdout[at:], "\n"), "\n"))
+	if got != want {
+		t.Errorf("内訳の行数が、出した文面と合っていません: 内訳=%d 行 / 実際=%d 行\n"+
+			"見出しは「送る文面の内訳」なので、展開したあとを数えなければ嘘になります", want, got)
+	}
+}
+
+// breakdownTailLines は、内訳から「組み込みのプロンプト（後半）」の行数を取り出す。
+//
+// t: テストコンテキスト。
+// stderr: 内訳が出た標準エラーの中身。
+// 戻り値: 内訳が主張している行数。
+func breakdownTailLines(t *testing.T, stderr string) int {
+	t.Helper()
+	for _, line := range strings.Split(stderr, "\n") {
+		if !strings.Contains(line, "後半") && !strings.Contains(line, "second half") {
+			continue
+		}
+		for _, f := range strings.Fields(line) {
+			if n, err := strconv.Atoi(f); err == nil {
+				return n
+			}
+		}
+	}
+	t.Fatalf("内訳に組み込みの後半の行がありません: %q", stderr)
+	return 0
 }
 
 // 目的: `--url` を付けないときは、いままでどおり変数を展開しないことを固定する（issue #183）。
