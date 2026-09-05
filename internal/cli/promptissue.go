@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -73,8 +75,13 @@ func fetchIssueForPrompt(
 	if err != nil {
 		return tracker.Issue{}, false, err
 	}
+	// **logger を捨てる。**nil を渡すと `NewAdapter` が `slog.Default()` を入れ、
+	// **`runPrompt` が受け取った `stderr` を通らない生の行が `os.Stderr` へ直接出る。**
+	// ボードに載っていない issue では、下の i18n の断りと**同じことを2つの書式で二重に出す。**
+	// **姉妹コマンドは2つとも捨てている**（`internal/abandon` と `internal/doctor`）。
 	adapter, err := tracker.NewAdapter(
-		cfg, endpoint, token, &http.Client{Timeout: daemon.DefaultTrackerTimeout}, nil, nil)
+		cfg, endpoint, token, &http.Client{Timeout: daemon.DefaultTrackerTimeout},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	if err != nil {
 		return tracker.Issue{}, false, err
 	}

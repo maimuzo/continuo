@@ -22,8 +22,13 @@ import (
 // **この2つがずれると、検査は通るのに本番で起動しない**（あるいはその逆になる）。
 // **同じ形の欠陥が3回起きている**（`push_branch` と `progress_interval_minutes`）。
 //
+// **入れ子の中まで比べる。**送る文面が使う11個のうち8個は `issue` の中にある
+// （`identifier` / `owner` / `repo` / `number` / `url` / `title` / `state` / `labels`）。
+// **最上位だけを比べると、片方の入れ子にだけ名前を足しても通ってしまう。**
+// そのときに落ちるのは `{{.issue.<新しい名前>}}` を本文へ書いた利用者の手元だけである。
+//
 // 与える情報: 作り物の issue から作った `RenderData` と、`SampleData`。
-// 成功条件: 最上位の名前の集合が完全に一致すること。
+// 成功条件: 入れ子まで含めた名前の集合が完全に一致すること。
 func TestRenderData_返す名前がSampleDataと一致する(t *testing.T) {
 	got := prompt.RenderData(tracker.Issue{}, nil, 0)
 	want := prompt.SampleData()
@@ -125,26 +130,45 @@ func TestRenderData_組み込みの文面を実際に展開できる(t *testing.
 	}
 }
 
-// nameDiff は2つの変数の一覧の、最上位の名前の食い違いを文にする。
+// nameDiff は2つの変数の一覧の、入れ子まで含めた名前の食い違いを文にする。
+//
+// **最上位だけを比べてはならない。**送る文面が使う名前の大半は `issue` の中にあり、
+// **そこだけを増やしても最上位の集合は変わらない。**
 //
 // a / b: 比べる変数の一覧。
 // 戻り値: 食い違いの説明。一致していれば空文字。
 func nameDiff(a, b map[string]any) string {
-	only := func(x, y map[string]any) []string {
-		var out []string
-		for k := range x {
-			if _, ok := y[k]; !ok {
-				out = append(out, k)
-			}
-		}
-		sort.Strings(out)
-		return out
-	}
-	inA, inB := only(a, b), only(b, a)
+	inA, inB := onlyIn(a, b, ""), onlyIn(b, a, "")
 	if len(inA) == 0 && len(inB) == 0 {
 		return ""
 	}
 	return "RenderData にしかない名前: " + join(inA) + " / SampleData にしかない名前: " + join(inB)
+}
+
+// onlyIn は x にあって y に無い名前を、入れ子まで降りて集める。
+//
+// **両方が入れ子のときだけ降りる。**片方だけが入れ子なら、その名前自体は両方にあるので
+// 食い違いとして数えない（値の型の違いは、この検査が見るものではない）。
+//
+// x / y: 比べる変数の一覧。
+// prefix: ここまでに降りてきた名前（`issue.` のような形。最上位では空文字）。
+// 戻り値: `issue.labels` のように、点で繋いだ名前の並び。
+func onlyIn(x, y map[string]any, prefix string) []string {
+	var out []string
+	for k, xv := range x {
+		yv, ok := y[k]
+		if !ok {
+			out = append(out, prefix+k)
+			continue
+		}
+		xm, xok := xv.(map[string]any)
+		ym, yok := yv.(map[string]any)
+		if xok && yok {
+			out = append(out, onlyIn(xm, ym, prefix+k+".")...)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // join は名前の並びを読める形にする。

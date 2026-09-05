@@ -27,6 +27,13 @@ import (
 	"text/template"
 
 	"github.com/maimuzo/continuo/internal/i18n"
+	// **`internal/tracker` を import している。**`RenderData` を1箇所へ寄せるために要る
+	// （issue #183）。**その代わり、`internal/config` はこの package を import できない。**
+	// `prompt → tracker → config` になるためである。
+	// **つまり `Fragments.Validate()` を `config.Load` の中で呼ぶ道は閉じている。**
+	// いま `Validate` を呼ぶのは `internal/daemon` と `internal/doctor` だけで、
+	// `continuo prompt --show` は呼ばない。**本文の `{{if}}` の閉じ忘れが `--url` で初めて
+	// 表に出るのは、そのためである。**
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 

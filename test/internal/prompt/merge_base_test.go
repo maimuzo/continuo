@@ -184,3 +184,70 @@ func TestTemplate_分岐元とPRのbaseを言い分けている(t *testing.T) {
 		t.Error("7-4 の「base にする branch」が消えています（言い分ける相手が無くなっています）")
 	}
 }
+
+// 目的: 7-4「この指示書が決めていないこと」の一覧に、worktree の分岐元が載っていることを固定する
+// （issue #214）。
+//
+// **なぜ要るか。**3-1 の段2 は「4-4 に指定があれば、それ」と言う。
+// **ところが 7-4 の一覧に載っていないと、その指定がどんな見出しで書かれるかを誰も決めていない。**
+// **7-4 の「base にする branch」は pull request の分岐元で、別のものである**（3-1 が自分でそう書いている）。
+// 載せないと、エージェントは 7-4 の別項目を段2 の指定として拾いかねない。
+//
+// 与える情報: prompt.Builtin() の全文。
+// 成功条件: 7-4 の節の中に「この worktree の分岐元」があり、それが 3-1 の段2 を指していること。
+func TestTemplate_7_4の一覧にworktreeの分岐元が載っている(t *testing.T) {
+	body := prompt.Builtin()
+
+	at := strings.Index(body, "## 7-4. この指示書が決めていないこと")
+	if at < 0 {
+		t.Fatalf("組み込みのプロンプトに 7-4 の節がありません")
+	}
+	end := strings.Index(body[at+1:], "\n## ")
+	if end < 0 {
+		end = len(body) - at - 1
+	}
+	section := body[at : at+1+end]
+
+	if !strings.Contains(section, "この worktree の分岐元") {
+		t.Errorf("7-4 の一覧に worktree の分岐元がありません。"+
+			"3-1 の段2 が 4-4 を見に行かせるのに、どこにも一覧が無いことになります:\n%s", section)
+	}
+	// **「base にする branch」と混ざらないよう、別物だと書いてあること。**
+	if !strings.Contains(section, "別のもの") {
+		t.Errorf("7-4 が、pull request の base と worktree の分岐元を別物だと書いていません:\n%s", section)
+	}
+}
+
+// 目的: 3-7 が、成果の報告を新しく1件投稿させることを固定する
+// （issue #178（途中経過を1回書いたエージェントが最後の報告を忘れても、continuo が書き直させない））。
+//
+// **なぜ要るか。**continuo は、先頭が進捗報告の印で始まるコメントを、この run の成果の報告として
+// 数えない（`handoff.StartsAsProgressReport`）。**一方 5-3 は「コメントは増やさないでください」と言う。**
+// **素直に受け取って進捗報告のコメントへ書き足すと、書いてあるのに「書かれていない」と判定され、**
+// **Claude Code が起動し直されてレートリミットの枠を1回ぶん余計に使う。**
+// 書き直しを頼むときの文面には断りがあるが、**1回目に送る側にも要る。**守りは2つとも要る。
+//
+// 与える情報: prompt.Builtin() の 3-7 の節。
+// 成功条件: 「新しく1件」と、書き足すと数えられないことの両方が書いてあること。
+func TestTemplate_3_7は成果の報告を新しく1件投稿させる(t *testing.T) {
+	body := prompt.Builtin()
+
+	at := strings.Index(body, "## 3-7. 終わりを書く")
+	if at < 0 {
+		t.Fatalf("組み込みのプロンプトに 3-7 の節がありません")
+	}
+	end := strings.Index(body[at+1:], "\n# ")
+	if end < 0 {
+		end = len(body) - at - 1
+	}
+	section := body[at : at+1+end]
+
+	if !strings.Contains(section, "新しく1件投稿してください") {
+		t.Errorf("3-7 が「新しく1件投稿してください」と言っていません。"+
+			"5-3 の「コメントは増やさないでください」を素直に受け取ると、"+
+			"進捗報告へ書き足して、書いたのに数えられません:\n%s", section)
+	}
+	if !strings.Contains(section, "成果の報告として数えません") {
+		t.Errorf("3-7 が、書き足すと数えられないことを言っていません:\n%s", section)
+	}
+}
