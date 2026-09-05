@@ -398,6 +398,20 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	// **URL の形は、`WORKFLOW.md` を読む前に見る**（issue #183）。
+	// **引数の形の誤りは、いちばん安く判定できる。**`--url ""` や `--builtin` との併用と
+	// 同じ場所で断れる。**設定を先に読むと、URL を打ち間違えた人が終了コード 1
+	// （設定を読めない）を受け取り、文書の表（URL の形が違う → 2）と食い違う。**
+	identifier := ""
+	if urlGiven {
+		id, idErr := promptIssueIdentifier(*urlFlag)
+		if idErr != nil {
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLInvalid, idErr))
+			return 2
+		}
+		identifier = id
+	}
+
 	var dir string
 	if len(positional) == 1 {
 		dir = positional[0]
@@ -439,7 +453,7 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 		n := *attemptFlag
 		attempt = &n
 	}
-	return runPromptExpanded(d, *urlFlag, attempt, loaded.Config.Tracker, frag, stdout, stderr)
+	return runPromptExpanded(d, identifier, attempt, loaded.Config.Tracker, frag, stdout, stderr)
 }
 
 // runPromptExpanded は `continuo prompt --show --url` の後半である（設計 5-3f。issue #183）。
@@ -449,26 +463,20 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 // **利用者はそれに気づけない。**気づけない出力が、いちばん悪い落ち方である。
 //
 // d: 外部へ繋ぐ処理。
-// rawURL: `--url` に渡された文字列。
+// identifier: `--url` から作った `<owner>/<repo>#<番号>`。**形の検査は呼び出し側で済んでいる。**
 // attempt: 何回目として展開するか。**nil なら1回目。**
 // trackerCfg: front matter の tracker セクション。
 // frag: 組み立てた断片。
 // stdout / stderr: 出力先。
-// 戻り値: 終了コード。0 は出せた、1 は引けなかったか展開できなかった、2 は URL の形が違う。
+// 戻り値: 終了コード。0 は出せた、1 は引けなかったか展開できなかった、2 は接続先が不正である。
 func runPromptExpanded(
 	d Deps,
-	rawURL string,
+	identifier string,
 	attempt *int,
 	trackerCfg config.TrackerConfig,
 	frag prompt.Fragments,
 	stdout, stderr io.Writer,
 ) int {
-	identifier, err := promptIssueIdentifier(rawURL)
-	if err != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLInvalid, err))
-		return 2
-	}
-
 	// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（`runDoctor` と同じ）。
 	// **宛先を確かめずにトークンを送らない。**
 	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)

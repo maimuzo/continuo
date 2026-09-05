@@ -391,3 +391,37 @@ func TestPromptURL_展開して空になった本文は無いとだけ言う(t *
 		t.Errorf("「本文はありません」と「本文  0 行」が同時に出ています（stderr: %s）", stderr)
 	}
 }
+
+// 目的: URL の形の誤りを、`WORKFLOW.md` を読む前に断ることを固定する（issue #183）。
+//
+// **なぜ要るか。**設定を先に読むと、**設定が壊れている場所で URL を打ち間違えた人は
+// 終了コード 1（設定を読めない）を受け取る。**
+// [docs/FAQ.md](docs/FAQ.md) の表は「URL の形が違う → 2」と書いているので、
+// **文書と振る舞いが食い違う。**引数の形の誤りは、いちばん安く判定できる。
+//
+// 与える情報: `WORKFLOW.md` が1つも無いディレクトリと、URL として読めない `--url`。
+// 成功条件: 終了コードが 2 で、標準出力が空であること。
+func TestPromptURL_URLの形は設定を読む前に断る(t *testing.T) {
+	dir := t.TempDir() // WORKFLOW.md を置かない。config.Load は必ず落ちる
+
+	called := 0
+	deps := cli.Deps{PromptFetchIssue: func(
+		_ context.Context, _ config.TrackerConfig, _, _ string,
+	) (tracker.Issue, bool, error) {
+		called++
+		return tracker.Issue{}, false, nil
+	}}
+
+	code, stdout, stderr := runCLIWith(deps,
+		[]string{"prompt", "--show", "--url", "not-a-url", dir}, "")
+	if code != 2 {
+		t.Errorf("終了コードが %d です（2 のはずです）。"+
+			"設定を先に読むと、URL の打ち間違いが「設定を読めない」に化けます（stderr: %s）", code, stderr)
+	}
+	if stdout != "" {
+		t.Errorf("標準出力に何か出ています: %q", stdout)
+	}
+	if called != 0 {
+		t.Errorf("URL の形が違うのに GitHub を叩いています（%d 回）", called)
+	}
+}

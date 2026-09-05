@@ -507,7 +507,7 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 
 **やり直しのときの文面も見られます。**`--attempt <回数>` を足すと、その回数として展開します。
 **`2` 以上を渡してください。**省いても `1` を渡しても、1回目として展開します（continuo は1回目に試行回数を渡さないので、`## 7-5. これは 1 回目の試行です` は1度も送られません）。
-省くと1回目として展開します。**何回目として展開したかは、内訳（標準エラー）に必ず出ます。**
+**何回目として展開したかは、内訳（標準エラー）に必ず出ます。**
 
 ```bash
 cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/hello-world/issues/42 --attempt 3
@@ -520,7 +520,8 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 
 | 何が起きたか | 終了コード | どうするか |
 | --- | --- | --- |
-| URL の形が違う | **2** | `https://<ホスト>/<owner>/<repo>/issues/<番号>` の形にしてください。**pull request の URL は受け付けません** |
+| **`--url` に空文字を渡した** | **2** | **値を渡してください。**環境変数を組み立てて渡すときに、**その変数が空のままだと起きます。**黙って展開せずに出すと、`--url` を付けなかったときと同じものが出ます |
+| URL の形が違う | **2** | `https://<ホスト>/<owner>/<repo>/issues/<番号>` の形にしてください。**pull request の URL は受け付けません。**この検査は `WORKFLOW.md` を読む前に通ります |
 | `--builtin` と一緒に指定した | **2** | **どちらか片方にしてください。**`--builtin` は `WORKFLOW.md` を読まない道で、`--url` は front matter の `tracker` を読まないと issue を引けません |
 | `--attempt` が0以下 | **2** | 1以上にしてください |
 | **`--attempt` を `--url` 無しで指定した** | **2** | **`--url` と一緒に指定してください。**`--url` が無いと変数を展開しないので、`--attempt` は何にも効きません |

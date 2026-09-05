@@ -362,6 +362,16 @@ func StartsAsProgressReport(body string) bool {
 }
 
 // commentOpen は HTML のコメントの開きである。
+//
+// **この判定は「印が HTML のコメントである」ことを前提にしている。**
+// 進捗報告の印（`config.ProgressMarker`）は固定なので前提は崩れないが、
+// **エージェントの印（`tracker.comments.marker`）は設定で変えられ、形を縛る検査が無い。**
+// `marker: "[continuo-agent]"` のような値にすると、成果の報告の1行目が `<!--` で始まらず、
+// `StartsAsProgressReport` は必ず偽を返す。**その利用者では issue #178 の直しが効かない。**
+//
+// **ただし、その利用者は既に別のところで壊れている。**組み込みの指示書は
+// `<!-- continuo:agent -->` を文字列で埋め込んでおり、設定した marker を使っていない。
+// **設定した marker を組み込みへ届ける道ができたときに、ここも見直すこと。**
 const commentOpen = "<!--"
 
 // lastProgressOf は、その担当者がまだ生きていることを最後に示した時刻を返す（設計 3-77b / 5-3l）。
