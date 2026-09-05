@@ -93,6 +93,18 @@ func hardFailure(err error) bool {
 func WriteAll(dir string, force bool, values Values) InitResult {
 	var out InitResult
 	out.Workflow, out.WorkflowErr = WriteTemplateWithValues(dir, force, values)
+	// **WORKFLOW.md が「既にある」以外で落ちたら、2枚目は書かない。**
+	// **2枚目も同じ理由で落ちるとは限らない。**
+	// **実測: WORKFLOW.md を symlink にすると、`continuo init` は終了コード 1 で
+	// symlink のエラーだけを出しながら、15KB の continuo-ci.yaml を黙って置いていた。**
+	// **落ちたと言いながらファイルが増えるのは、利用者に説明できない。**
+	//
+	// **同じエラーを CIErr にも入れる。**呼ぶ側は WorkflowFailed() で先に終えるので
+	// この値は画面に出ないが、WriteAll を直に使う側が「書けたのか」を取り違えないようにする。
+	if hardFailure(out.WorkflowErr) {
+		out.CIErr = out.WorkflowErr
+		return out
+	}
 	out.CI, out.CIErr = WriteCIWorkflowWithValues(dir, force, values)
 	return out
 }

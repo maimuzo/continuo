@@ -19,6 +19,13 @@
 **設計のレビューを飛ばして実装に入らない。**
 **実装してからの手戻りは、設計を直すより高くつく。**
 
+**continuo が起動したエージェントは、段4 の順序が逆である。**
+**1行目を `<!-- continuo:agent -->`、2行目を `<!-- design-review-result -->` にする。**
+**逆にすると、continuo が「エージェントが成果を書いていない」と判定して、その run を人間へ渡す**
+（[internal/tracker/adapter.go](../../internal/tracker/adapter.go) の `FetchComments` が、
+`<!-- continuo:agent -->` を本文の先頭ちょうどで見ているためである）。
+**CI はどちらの順序でも数える。**
+
 **段4 は機械で止める。**[.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) の
 `design-review-result` が、**その PR が閉じる issue のコメントを数える。**
 貼っていない PR は赤になる。**数える条件は2つで、実装のレビュー（`code-review-result`）と同じである。**

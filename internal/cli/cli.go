@@ -298,8 +298,12 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCreated, res.Workflow.Path))
 		}
 	} else {
-		// **既にあった。**触っていないことを人間が確かめられるよう、どこに在るかを出す。
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrAlreadyExists, res.Workflow.Path))
+		// **既にあった。触っていない。**
+		// **`--force` を勧めてはならない。**あれは本文ごと上書きするので、
+		// **利用者が手で書いた指示が1行も残らない**（docs/upgrading.md）。
+		// **版を上げた利用者は、足りない2枚目を置くためにこの経路を通る。**
+		// そこで破壊的なフラグを勧めると、案内と正面からぶつかる。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitWorkflowKept, scaffold.WorkflowFileName(), res.Workflow.Path))
 	}
 
 	printInitCI(stdout, stderr, res)
@@ -308,12 +312,18 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 	// **`WORKFLOW.md` が既にあり、2枚目が「既にある」以外の理由で落ちた場合**がこれに当たる
 	// （`BothExisted` は上で 1 を返しているので、ここへ来るのはその組み合わせだけである）。
 	// **何も作っていないのに 0 を返すと、`continuo init` の成否で分岐する script が
-	// 「置けた」と読む。**理由は上の2行で標準エラーへ出してある。
+	// 「置けた」と読む。**理由は `printInitCI` が標準エラーへ出してある。
 	if !res.Wrote() {
 		return 1
 	}
 
-	printDetection(stdout, detection)
+	// **検出の結果は、`WORKFLOW.md` を書いたときだけ出す。**
+	// **2枚目にはこの値を1つも埋めない**（`CITemplateWithValues` は `values` を使わない）。
+	// **出すと、触っていない `WORKFLOW.md` に値が入ったと読める。**
+	// 版を上げた利用者は必ずこの経路を通るので、そこで嘘を出さない。
+	if res.WorkflowErr == nil {
+		printDetection(stdout, detection)
+	}
 	return 0
 }
 

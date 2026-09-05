@@ -499,6 +499,13 @@ const (
 	// **文言に名前を埋め込んではならない。**同じ文言を使う経路が増えたときに、
 	// 埋め込むと落ちた当のファイルとは別のファイルを名乗る。
 	KeyCLIInitErrWriteFailed Key = "cli.init.err_write_failed"
+	// KeyCLIInitWorkflowKept は WORKFLOW.md が既にあって触らなかったときに出る。
+	//
+	// **--force を勧めてはならない。**あれは本文ごと上書きするので、
+	// 利用者が手で書いた指示が1行も残らない（docs/upgrading.md）。
+	// **版を上げた利用者は、足りない2枚目を置くためにこの経路を通る。**
+	// **1つ目の引数はファイルの名前、2つ目は絶対パスである。**
+	KeyCLIInitWorkflowKept Key = "cli.init.workflow_kept"
 	// KeyCLIInitCICreated は continuo-ci.yaml を新しく書き出したときに出る。
 	//
 	// **1つ目の引数はファイルの名前、2つ目は絶対パスである。**
@@ -2634,6 +2641,7 @@ var allKeys = []Key{
 	KeyCLIInitErrNotADirectory,
 	KeyCLIInitErrSymlink,
 	KeyCLIInitErrWriteFailed,
+	KeyCLIInitWorkflowKept,
 	KeyCLIInitCICreated,
 	KeyCLIInitCIOverwritten,
 	KeyCLIInitCIKept,

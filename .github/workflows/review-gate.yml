@@ -115,10 +115,15 @@ jobs:
           # 全部の PR が「issue が無い」に落ち、**断りを書くのが正しい手順になる。**
           #
           # **`closingIssuesReferences` は REST では返らない。**`gh pr view`（GraphQL）で引く。
-          # **本文の `Closes` / `Fixes` / `Resolves` も拾う。**拾い方は
-          # scripts/check-release-ready.sh の `issues_of` と同じである。
-          # **ただ本文に出てくる `#N` は拾わない。**「足すのは issue #53 で扱う」のような参照まで
-          # 対の issue として数えてしまう（実測: PR #63）。
+          #
+          # **本文の `Closes` / `Fixes` / `Resolves` は走査しない。**
+          # **走査すると、コードの囲みや表の中の文字列まで拾う。**
+          # **実測: PR #215 の本文の表にある `` `Closes #45` `` を拾い、issue #45 を対象にしていた**
+          # （あの PR の `closingIssuesReferences` は空である）。
+          # **下のループは目印が1件見つかった時点で通すので、無関係の issue に目印があると
+          # 設計のレビューを1度もせずに緑になる。**
+          #
+          # **GitHub が解釈した結果だけを見る。**あれは本文のコードの囲みを対象から外している。
           if ! gh pr view "${PR_NUMBER}" --repo "${REPO}" --json body,closingIssuesReferences > pr.json; then
             echo "紐づく issue を引けませんでした（権限か gh の版を確かめてください）" \
               | tee -a "${GITHUB_STEP_SUMMARY}"
@@ -129,10 +134,9 @@ jobs:
           # 権限では読めない（private なら 404、public でも投稿者の立場が変わる）。
           # **組み込みの 7-3 は `Closes owner/repo#N` を認めているので、実際に起こりうる。**
           jq -r --arg repo "${REPO}" '
-            [ (.closingIssuesReferences[]
-               | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
-               | .number),
-              (.body // "" | scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
+            [ .closingIssuesReferences[]
+              | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
+              | .number
             ] | unique | .[]' pr.json > issues.txt
           jq -r --arg repo "${REPO}" '
             .closingIssuesReferences[]

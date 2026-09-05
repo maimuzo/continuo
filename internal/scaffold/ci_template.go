@@ -128,7 +128,11 @@ jobs:
           # 全部の pull request が「issue が無い」に落ち、**断りを書くのが正しい手順になります。**
           #
           # **closingIssuesReferences は REST では返りません。**gh pr view（GraphQL）で引きます。
-          # **本文の Closes / Fixes / Resolves も拾います。**片方が空でも、もう片方で拾えます。
+          #
+          # **本文の Closes / Fixes / Resolves は走査しません。**
+          # **走査すると、コードの囲みや表の中の文字列まで拾います。**
+          # 下のループは目印が1件見つかった時点で通すので、
+          # **無関係の issue に目印があると、設計のレビューを1度もせずに緑になります。**
           if ! gh pr view "${PR_NUMBER}" --repo "${REPO}" --json body,closingIssuesReferences > pr.json; then
             echo "紐づく issue を引けませんでした（権限か gh の版を確かめてください）" \
               | tee -a "${GITHUB_STEP_SUMMARY}"
@@ -138,10 +142,9 @@ jobs:
           # **このリポジトリの issue だけを残します。**別のリポジトリの issue は、この job の
           # 権限では読めません（private なら 404、public でも投稿者の立場が変わります）。
           jq -r --arg repo "${REPO}" '
-            [ (.closingIssuesReferences[]
-               | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
-               | .number),
-              (.body // "" | scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
+            [ .closingIssuesReferences[]
+              | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
+              | .number
             ] | unique | .[]' pr.json > issues.txt
           jq -r --arg repo "${REPO}" '
             .closingIssuesReferences[]
