@@ -26,6 +26,17 @@ import (
 // **上から順に見ることは保たれる。**次の巡回で続きを見る。
 const maxHandoffFetchesPerPoll = 10
 
+// quotaReleaseWriteBudget は、1週間の枠の上限で担当を手放すときに GitHub へ書く上限である
+// （設計 3-27。issue #197）。
+//
+// **`herdr.read_timeout_ms`（既定5秒）を使い回さない。**あちらは socket の応答を待つ上限で、
+// **GraphQL を2本（担当者を外す・`released` を書く）投げるには足りない。**初回は
+// `gh` の持ち主の取得も乗る。**足りないと毎巡回でやり直し、run はスロットと pane を握ったまま残る。**
+//
+// **30秒にする。**`internal/ratelimit` が HTTP の全体の上限に使っている値と同じで、
+// **GitHub が遅いときの1回ぶんとして実測のある長さである。**
+const quotaReleaseWriteBudget = 30 * time.Second
+
 // handoffDecision は handoffGate の答えである。
 type handoffDecision struct {
 	// proceed は、この機械が着手してよいかである。
@@ -573,7 +584,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		o.releaseBecauseQuotaWaitClaimed(ctx, rs)
+		_ = o.releaseBecauseQuotaWaitClaimed(ctx, rs)
 	}()
 }
 
@@ -584,11 +595,12 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState) {
+func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState) bool {
 	if !rs.claimTerminal(ctx) {
-		return
+		// **別の経路が既に終わらせている。**待ち直させない。
+		return true
 	}
-	o.releaseBecauseQuotaWaitClaimed(ctx, rs)
+	return o.releaseBecauseQuotaWaitClaimed(ctx, rs)
 }
 
 // releaseBecauseQuotaWaitClaimed は、終わらせる印を確保したあとの本体である。
@@ -620,7 +632,7 @@ func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState
 //
 // ctx: 呼び出しに適用するコンテキスト。**この中で作り直すので、期限切れでもよい。**
 // rs: 対象の run。
-func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState) {
+func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState) bool {
 	issue := rs.issue()
 	snap := o.quotaSnapshot()
 	o.logger.Info("1週間の枠が明けるのを待つ上限を超えたので、担当を手放します"+
@@ -638,16 +650,20 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// くくると、`git push` が5秒で切られる。**しかも `RunAfterRunOnce` は実行の前に印を立てるので、
 	// **次の巡回でやり直しても push は二度と走らない。**
 	// **そのうえ期限切れの ctx が担当者を外す要求へ渡り、`context deadline exceeded` で落ちる。**
-	cleanupCtx, cancel := context.WithTimeout(
-		context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
-	defer cancel()
-
-	login, ok := o.releaseOwnAssignee(cleanupCtx, issue, "枠の上限で担当を手放そうとしましたが")
+	// **GitHub への書き込みには、herdr の持ち時間を使わない。**
+	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
+	// **担当者を外す・`released` を書くという2本の GraphQL に足りない**（初回は
+	// `gh` の持ち主の取得も乗る）。**足りないと毎巡回でやり直し、run はスロットと pane を
+	// 握ったまま残る。**
+	writeCtx, cancelWrite := context.WithTimeout(
+		context.WithoutCancel(ctx), quotaReleaseWriteBudget)
+	login, ok := o.releaseOwnAssignee(writeCtx, issue, "枠の上限で担当を手放そうとしましたが")
+	cancelWrite()
 	if !ok {
 		// **pane を閉じない。**閉じてしまうと、担当がこの機械のまま誰も動かなくなる。
 		// **印も外さない。**次の巡回でやり直す。
 		rs.endTerminal()
-		return
+		return false
 	}
 
 	// **`after_run` は、担当を外せたあとに走らせる。**先に走らせてはならない。
@@ -664,10 +680,15 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	o.runAfterRun(hookCtx, rs)
 	cancelHook()
 
+	// **pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
+	cleanupCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
+	defer cancel()
 	o.stopWorker(cleanupCtx, rs)
 	o.release(rs)
 	o.logger.Info("担当を手放しました（次の担当は入札で決め直します）",
 		"identifier", issue.Identifier, "外した担当者", login)
+	return true
 }
 
 // postBid は入札のコメントを1件書く（設計 3-77a）。

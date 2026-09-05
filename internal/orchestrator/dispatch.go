@@ -346,11 +346,14 @@ func (o *Orchestrator) observedPercents() (int, int, bool) {
 //	止めない              … 担当者が1人もいない候補。**他の機械が担当しているものは
 //	                        issue #173 の症状ではない**ので数えない
 //
+// ctx: 候補を数えるのに使う（`gh` の持ち主を引く）。
 // skip: 止めた理由。**`handoff.SkipNone` を渡してはならない。**
 // halts: 巡回そのものを止めるか。
 // candidates: この巡回の候補（カンバンの並び順）。
-func (o *Orchestrator) logNewWorkBlocked(skip handoff.SkipReason, halts bool, candidates []tracker.Issue) {
-	blocked, label := o.countBlockedCandidates(halts, candidates)
+func (o *Orchestrator) logNewWorkBlocked(
+	ctx context.Context, skip handoff.SkipReason, halts bool, candidates []tracker.Issue,
+) {
+	blocked, label := o.countBlockedCandidates(ctx, halts, candidates)
 	if blocked == 0 {
 		return
 	}
@@ -374,8 +377,8 @@ func (o *Orchestrator) logNewWorkBlocked(skip handoff.SkipReason, halts bool, ca
 		args = append(args, "使用率は最後に読めた値", true)
 	}
 	args = append(args,
-		"5時間の枠がこれを超えると止まる", o.thresholdText(h.FiveHourMarginPercent),
-		"1週間の枠がこれを超えると止まる", o.thresholdText(h.WeeklyMarginPercent),
+		"5時間の枠の閾値", o.thresholdText(h.FiveHourMarginPercent),
+		"1週間の枠の閾値", o.thresholdText(h.WeeklyMarginPercent),
 		"rate_limit.pause_above_percent", o.cfg.RateLimit.PauseAbovePercent,
 		"five_hour_margin_percent", h.FiveHourMarginPercent,
 		"weekly_margin_percent", h.WeeklyMarginPercent,
@@ -396,21 +399,44 @@ func (o *Orchestrator) logNewWorkBlocked(skip handoff.SkipReason, halts bool, ca
 // countBlockedCandidates は、この理由で着手できない候補の数と、その数の呼び名を返す
 // （設計 3-77j。issue #173）。
 //
-// **理由で数える対象が変わる。**巡回そのものを止めるときは、担当者の有無に関係なく
-// **まだ run を持っていない候補が全部止まる。**止めないときに止まるのは、
-// **入札が要る issue（担当者が1人もいないもの）だけである。**
+// **数えるのは「枠さえ空いていれば、この機械が取れた候補」だけである。**
 //
+//	巡回そのものを止める  … 担当者がいない候補と、担当者がこの機械の候補
+//	止めない              … 担当者がいない候補だけ（入札が要るもの）
+//
+// **他の機械が担当している候補は、どちらでも数えない。**あれは枠と関係なく
+// `handoffGate` が落とすものであり、**数えると、他の機械のカンバンを見ているだけの機械が
+// 30秒ごとに1行出し続ける。**
+//
+// **`gh` の持ち主を取れないときは、担当者がいない候補だけを数える。**
+// 取れないと「この機械の担当か」を判定できない。**多いほうへ倒さない。**
+//
+// ctx: `gh` の持ち主を引くのに使う（一度取れたら覚えるので、定常状態でリクエストは0本である）。
 // halts: 巡回そのものを止めるか。
 // candidates: この巡回の候補。
 // 戻り値の1つ目: 止められている候補の数。
 // 戻り値の2つ目: ログに出すときのその数の呼び名。
-func (o *Orchestrator) countBlockedCandidates(halts bool, candidates []tracker.Issue) (int, string) {
+func (o *Orchestrator) countBlockedCandidates(
+	ctx context.Context, halts bool, candidates []tracker.Issue,
+) (int, string) {
+	self := ""
+	if halts {
+		if viewer, ok := o.viewerIdentity(ctx); ok {
+			self = viewer.Login
+		}
+	}
 	n := 0
 	for _, issue := range candidates {
 		if _, taken := o.lookupRunByID(issue.ID); taken {
 			continue
 		}
-		if !halts && len(assigneeLogins(issue)) > 0 {
+		logins := assigneeLogins(issue)
+		switch {
+		case len(logins) == 0:
+			// 入札が要る候補。**どちらの理由でも止まる。**
+		case halts && self != "" && len(logins) == 1 && containsFold(logins, self):
+			// **この機械の担当である。**閾値超えのときは、これも止まる。
+		default:
 			continue
 		}
 		n++
@@ -426,6 +452,9 @@ func (o *Orchestrator) countBlockedCandidates(halts bool, candidates []tracker.I
 // **100 は「この設定では止まらない」という意味である。**使用率は 100 を超えないので、
 // **`100` とだけ出すと「100%で止まる」と読まれる。**
 //
+// **「これを超えたら止まる」まで値の側で作る。**属性の名前に入れると、
+// **止まらない設定のときに「これを超えると止まる=この設定では止まりません」と出る。**
+//
 // margin: その枠のマージン（%）。
 // 戻り値: ログに出す値。
 func (o *Orchestrator) thresholdText(margin int) string {
@@ -433,7 +462,7 @@ func (o *Orchestrator) thresholdText(margin int) string {
 	if t >= fullPercentForThreshold {
 		return "この設定では止まりません"
 	}
-	return strconv.Itoa(t)
+	return strconv.Itoa(t) + "% を超えたら止まります"
 }
 
 // dispatchCandidates は候補を並び順のまま、空きスロットが尽きるまで dispatch する
@@ -459,7 +488,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// 「ボードが何時間も進まない」としか見えなかった。**
 	skip, halts := o.newWorkBlocked()
 	if skip != handoff.SkipNone {
-		o.logNewWorkBlocked(skip, halts, candidates)
+		o.logNewWorkBlocked(ctx, skip, halts, candidates)
 	}
 	// **巡回そのものを止めるのは、閾値を超えたときだけである**（設計 3-77j）。
 	//

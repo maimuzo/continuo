@@ -561,10 +561,14 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 
 	// **待ちに入る前に、1週間の枠を待つ上限を超えていないかを見る**（設計 3-27。issue #197）。
 	// **超えていたら印を立てない。**立てると、手放したあとに枠待ちの印だけが残る。
-	if o.weeklyWaitExceeded(rs) {
-		o.releaseBecauseQuotaWait(ctx, rs)
+	if o.weeklyWaitExceeded(rs) && o.releaseBecauseQuotaWait(ctx, rs) {
 		return turnAborted, nil
 	}
+	// **手放せなかったときは、そのまま枠待ちへ入る。**
+	// **`turnAborted` で戻ってはならない。**戻ると、枠待ちの印も次の turn の印も立たないまま
+	// turn の goroutine が終わり、**`claude.turn_timeout_ms` を0以下にしている機械では
+	// 誰も拾い直さない。**その run はスロットと pane を握ったまま残る。
+	// **印を立てておけば、次の巡回が `releaseQuotaWaitExceeded` でやり直す。**
 
 	resetAt, ok := o.quotaResetAt()
 	rs.setWaitingQuota(resetAt)
