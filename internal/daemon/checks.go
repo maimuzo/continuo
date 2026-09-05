@@ -17,7 +17,7 @@ import (
 //
 //	書ける場所があるか              … **ホームが read-only なら着手のたびに落ちる**（issue #11）
 //	gh が使えるか                  … エージェントが `gh issue comment` でコメントを書く（5-3）
-//	gh auth status の scope        … `project` が無いとボードを読めない
+//	gh auth status の scope        … `project` が無いとカンバンを読めない
 //	herdr の socket と protocol     … 通信できない
 //	Status の選択肢名が設定と一致するか … **合わないと GraphQL がエラーを出さずに 0 件を返し、
 //	                                 キューが永久に止まる**
@@ -28,7 +28,7 @@ import (
 // この関数は pane を1つも触らない。
 //
 // **リポジトリの信頼登録はここでは検査しない**（設計 3-6）。対象リポジトリの集合は
-// ボードを読むまで確定しないので、dispatch の直前に issue ごとに検査する。
+// カンバンを読むまで確定しないので、dispatch の直前に issue ごとに検査する。
 //
 // **外向きの呼び出しには必ず期限を与える。**`gh` の起動・herdr の socket・GitHub の
 // GraphQL はどれも応答が返らないことがあり、期限が無いと**起動が無言で止まる**
@@ -57,7 +57,7 @@ func runStartupChecks(
 	//
 	// **doctor と同じ関数（fsprobe）を呼び、落ち方だけを変える。**doctor は記号で並べ、
 	// 起動はここで止める。**外へ出る検査より先に置く。**ホームが read-only なら、
-	// gh も herdr もボードも全部通ったうえで、着手のたびに落ち続けることになる。
+	// gh も herdr もカンバンも全部通ったうえで、着手のたびに落ち続けることになる。
 	if err := fsprobe.CheckWritablePlaces("", cfg.Workspace.Root); err != nil {
 		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksNotWritable, err)
 	}

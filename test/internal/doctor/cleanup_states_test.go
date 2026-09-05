@@ -16,11 +16,11 @@ import (
 // **fixture の WriteWorkflow は使えない。**あちらは `tracker:` ブロックを固定で書くので、
 // `terminal_states` を差し込む口が無い（同じ階層に `tracker:` を2つ書くと YAML のキー重複になる）。
 //
-// **ボードの選択肢と噛み合わせる。**`terminal_states` に書いた名前がボードに無いと
-// Bootstrap が落ち、見出し語 `ボード` が `✗` になる。この検査そのものはボードを読まないが、
+// **カンバンの選択肢と噛み合わせる。**`terminal_states` に書いた名前がカンバンに無いと
+// Bootstrap が落ち、見出し語 `カンバン` が `✗` になる。この検査そのものはカンバンを読まないが、
 // **ほかの見出し語を巻き添えにすると、何を確かめた test なのか分からなくなる。**
 // `cleanup.on_states` は Bootstrap の照合の対象ではない（設計 3-6）ので、
-// ボードに無い名前を書いてよい。
+// カンバンに無い名前を書いてよい。
 //
 // t: 呼び出し元のテスト。
 // fx: 使っている fixture。
@@ -89,9 +89,9 @@ func TestDoctor_片付ける状態が終わったとみなす状態の外にあ�
 	if report.ExitCode() != 0 {
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
-	// **設定を読むだけの検査である。**この検査のためにボードへリクエストを増やさない。
+	// **設定を読むだけの検査である。**この検査のためにカンバンへリクエストを増やさない。
 	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
-		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
+		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestDoctor_片付ける状態が終わったとみなす状態の外にあ�
 // 成功条件: `片付けの状態` が `✓` で、内訳も直し方も1件も無いこと。
 func TestDoctor_片付ける状態が全部終わったとみなす状態に入っていれば通る(t *testing.T) {
 	fx := newFixture(t)
-	// **`AI Done` もボードの選択肢に足す。**Bootstrap は terminal_states を照合する。
+	// **`AI Done` もカンバンの選択肢に足す。**Bootstrap は terminal_states を照合する。
 	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done", "AI Done")
 	writeCleanupStatesWorkflow(t, fx, `["AI Done", "Done"]`, "  enabled: true\n  on_states: [\"Done\"]\n")
 

@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "41499b2b82fc08ecd9392a1dde8a2ba5a412fd79131af8f94e9fee2edb87e07d",
+  "_source_sha256": "190ea77fd7407add1ca8894a2c338b7d513246fd0ce6ea5a2bcda4813c49f7f6",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -182,7 +182,7 @@
   "cli.prompt.err_attempt_positive": "Error: --attempt must be 1 or greater (%d given)",
   "cli.prompt.err_config_load": "Error: cannot read WORKFLOW.md: %v",
   "cli.prompt.err_fetch_failed": "Error: cannot read the kanban board: %v",
-  "cli.prompt.err_issue_not_on_board": "Error: could not read %s from the kanban board (it is not on the board, its Status is unset, or it is archived). Run continuo doctor to check the settings and the board",
+  "cli.prompt.err_issue_not_on_board": "Error: could not read %s from the kanban board (it is not on the kanban board, its Status is unset, or it is archived). Run continuo doctor to check the settings and the board",
   "cli.prompt.err_render_failed": "Error: cannot expand the variables: %v",
   "cli.prompt.err_show_required": "Error: continuo prompt requires --show (e.g. continuo prompt --show)",
   "cli.prompt.err_too_many_positional": "Error: continuo prompt accepts only one positional argument, the directory containing WORKFLOW.md (%[1]d given: %[2]v)",

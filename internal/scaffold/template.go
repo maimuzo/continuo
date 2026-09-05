@@ -27,7 +27,7 @@ package scaffold
 // プレースホルダのまま残り、config.Load が名指しで落とす。
 //
 // trust.repositories も continuo init が埋めるが、こちらは空のままでも起動する。
-// ボードから拾った owner/repo をここへ並べるだけで、**要らない行を消すのは人間である**
+// カンバンから拾った owner/repo をここへ並べるだけで、**要らない行を消すのは人間である**
 // （並べたものをそのまま信頼させないため。設計 3-33）。
 const workflowTemplate = `---
 # ===== どの issue を見張り、どう進めるか =====

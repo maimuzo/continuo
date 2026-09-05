@@ -179,11 +179,11 @@ continuo doctor ~/continuo-work
 
 ### 「埋めていない設定が … 件あります（`__FILL_ME__` のままです）」と出る
 
-**原因。**`continuo init` が gh からボードを引けなかったので、値がプレースホルダのまま残っています。
+**原因。**`continuo init` が gh からカンバンを引けなかったので、値がプレースホルダのまま残っています。
 **ファイルは読めていて、中身が悪いだけです。**
 
 **直し方。**`WORKFLOW.md` の front matter に値を直接書くか、値を渡して作り直します。
-ボードの番号は `gh project list` の左端の数字です。
+カンバンの番号は `gh project list` の左端の数字です。
 
 ```bash
 gh project list --owner <owner>
@@ -269,7 +269,7 @@ cd ~/continuo-work && continuo doctor
 
 ### `✗ clone  対象 N件のうち M件が見つかりません`
 
-**原因。**ボードに載っているだけのリポジトリを、continuo は無断で取ってきません。
+**原因。**カンバンに載っているだけのリポジトリを、continuo は無断で取ってきません。
 着手も `巡回のループは勝手に clone しません` で止まります。
 
 **直し方。**`WORKFLOW.md` の `trust.repositories` にそのリポジトリがあることを確かめてから
@@ -358,7 +358,7 @@ grep -n "protocol:" ~/continuo-work/WORKFLOW.md
 **原因。****異常ではありません。**`!` は「足りない」ではなく「確かめられなかった」です。
 `Ready` / `In Progress` に issue が1件も無いと、どのリポジトリを検査すべきかが決まりません。
 
-**直し方。**ボードに issue を1件載せて `Ready` にしてから、もう一度叩けば判定が出ます。
+**直し方。**カンバンに issue を1件載せて `Ready` にしてから、もう一度叩けば判定が出ます。
 **`!` だけなら終了コードは 0 のままです。**
 
 ```bash
@@ -371,7 +371,7 @@ cd ~/continuo-work && continuo doctor; echo "exit=$?"
 終わったとみなす Status（`tracker.terminal_states`）に入っていません。
 **この状態だと、continuo は同じ issue を「終わっていない」と判定した直後に worktree を片付けます。**
 
-**よくある形。**ボードの組み込みの自動化が PR のマージで `Done` を書くのに、
+**よくある形。**カンバンの組み込みの自動化が PR のマージで `Done` を書くのに、
 `tracker.terminal_states` には `AI Done` しか書いていない、という組み合わせです。
 
 **直し方。**どちらかにそろえます。**同じ内容の警告が、起動したときにもログへ1行出ます。**
@@ -526,7 +526,7 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 | `--attempt` が0以下 | **2** | 1以上にしてください |
 | **`--attempt` を `--url` 無しで指定した** | **2** | **`--url` と一緒に指定してください。**`--url` が無いと変数を展開しないので、`--attempt` は何にも効きません |
 | カンバンを読めない | **1** | `gh auth status` と `tracker.provider` の設定を確かめてください |
-| **その issue をカンバンから読めない** | **1** | **ボードに載っていない・Status が未設定・archive 済みのいずれかです。**`continuo doctor` で設定とボードを確かめてください |
+| **その issue をカンバンから読めない** | **1** | **カンバンに載っていない・Status が未設定・archive 済みのいずれかです。**`continuo doctor` で設定とカンバンを確かめてください |
 | 変数を展開できない | **1** | **本文のテンプレートが壊れています。**どの断片の何行目かがエラーに出ます |
 
 **変数を展開しないまま出すことはしません。**
@@ -651,11 +651,11 @@ continuo init /tmp/continuo-template
 
 ## issue が動かないとき
 
-### ボードに載せた item が1件も処理されない。エラーも出ない
+### カンバンに載せた item が1件も処理されない。エラーも出ない
 
-**原因。**ボードの **draft item** はリポジトリを持たないので、作業場所を決められません。continuo は飛ばします。
+**原因。**カンバンの **draft item** はリポジトリを持たないので、作業場所を決められません。continuo は飛ばします。
 
-**直し方。**draft ではなく、リポジトリの issue をボードに載せます。
+**直し方。**draft ではなく、リポジトリの issue をカンバンに載せます。
 
 ```bash
 gh issue create --repo <owner>/<repo> --title "…" --body "…"
@@ -693,7 +693,7 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 **原因。**worktree の置き場所にディレクトリだけが残っています。
 **continuo が作ったものとは限らないので、乗っ取らずに止めます。**
 
-**直し方。**中身を確かめてから片付け、ボードでその issue を `Ready` へ戻します。
+**直し方。**中身を確かめてから片付け、カンバンでその issue を `Ready` へ戻します。
 
 ```bash
 ls -la ~/worktrees/github.com/<owner>/<repo>/continuo-<owner>-<repo>-42
@@ -1146,7 +1146,7 @@ herdr agent read continuo-hello-world-42 --source recent-unwrapped --lines 40
 grep -n "startup_timeout_ms" ~/continuo-work/WORKFLOW.md
 ```
 
-### ボードに issue があるのに、1件も着手されない
+### カンバンに issue があるのに、1件も着手されない
 
 **Status も動かず、issue にも何も書かれないので、止まっているように見えます。**
 **既定の水準（info）で出るのは、次の3つです。**まずこれを探してください。
@@ -1215,9 +1215,9 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 
 ### 人間は何も触っていないのに Status が変わり、issue が止まった
 
-**原因。****ボードの組み込みの自動化です。**GitHub Projects で新しく作ったボードは、
+**原因。****カンバンの組み込みの自動化です。**GitHub Projects で新しく作ったカンバンは、
 `Item added to project` / `Pull request linked to issue` / `Pull request merged` が有効な状態で作られます。
-**エージェントが PR を作って issue に紐づけた瞬間に、ボードが Status を書き換えます。**
+**エージェントが PR を作って issue に紐づけた瞬間に、カンバンが Status を書き換えます。**
 continuo は自分の知らない Status になった issue を、猶予（`tracker.unknown_state_grace_ms`、既定10分）のあと止めます。
 
 **見分け方。**issue のコメントに **【この Status を書いたのは人間ではありません】** の行があれば、これです。
@@ -1231,7 +1231,7 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 | どうするか | 何をするか |
 | --- | --- |
 | **書き戻させる** | `WORKFLOW.md` に対応表を書く。自動化が書いた Status を、本来の Status へ戻させる |
-| **自動化を止める** | ボードの `Workflows` から、その自動化を無効にする |
+| **自動化を止める** | カンバンの `Workflows` から、その自動化を無効にする |
 
 **何をどう書くかは、「使い方が分からないとき」の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
@@ -1442,7 +1442,7 @@ gh api user --jq .login
 `gh auth switch` で戻し、**continuo を再起動してください**（一度取れた持ち主は取り直さないので、切り替えても古い名前のままです）。
 **投稿者が身に覚えのない名前なら、その issue に第三者が印を騙って書いています。**そのコメントを消してください。
 
-**投稿者が continuo 自身の名前なら、`gh` とボードのトークンが別のアカウントです。**
+**投稿者が continuo 自身の名前なら、`gh` とカンバンのトークンが別のアカウントです。**
 `WORKFLOW.md` の `tracker.provider.token_source` が `env` で、`token_env` に指定した環境変数のトークンが
 `gh` のログインとは別のアカウントのときに起きます。continuo が書いた通知そのものが「第三者の投稿」と読まれ、
 次の turn の入力にも混ざります。**`token_source: gh_auth`（既定）に戻すか、`gh` と同じアカウントのトークンを渡してください。**
@@ -1627,7 +1627,7 @@ Windows 側の C ドライブの空き容量も見てください（仮想ディ
 
 ### 複数の機械で見張っているのに、いつも同じ機械しか issue を取らない
 
-**原因。**同じボードを複数の機械で見張る「持ち回り」は、担当者のいない issue に対して
+**原因。**同じカンバンを複数の機械で見張る「持ち回り」は、担当者のいない issue に対して
 **枠にいちばん余裕がある1台だけが担当者になる**仕組みです（勝者総取り）。
 同じ機械が勝ち続けるのは、その機械の判定スコア（`5時間余裕値 × 2 + 1週間余裕値`）が
 ほかの機械よりずっと大きい状態が続いているからです。**あまり動かしていない機械ほど勝ちやすくなります。**
@@ -1840,7 +1840,7 @@ continuo prompt --show --builtin | grep -c '^## 5-3\. '
 **continuo は、人間が付けた担当には触りません。**
 
 **この判定は、Status が `Ready` でも `In Progress` でも働きます。**
-**ボードの上では、着手待ちのまま止まって見えます。**
+**カンバンの上では、着手待ちのまま止まって見えます。**
 
 **確かめ方。**continuo のログに、この1行が出ています。
 
@@ -1904,7 +1904,7 @@ tracker:
 | どうしたいか | 何をするか |
 | --- | --- |
 | **continuo に任せる** | **GitHub の画面で、その担当者を外す。**次の巡回で「担当者が無い」と判定され、入札からやり直します |
-| **人間が自分でやる** | **`tracker.active_states` に入っていない Status へ動かす**（既定は `Ready` と `In Progress` の2つなので、そのどちらでもない Status にする）。**ボードから外しても構いません** |
+| **人間が自分でやる** | **`tracker.active_states` に入っていない Status へ動かす**（既定は `Ready` と `In Progress` の2つなので、そのどちらでもない Status にする）。**カンバンから外しても構いません** |
 
 **`In Progress` へ動かしても止まりません。**既定ではそれも `active_states` に入っているので、
 **候補として返り続け、巡回のたびにコメントを1本読んで WARN を出します。**
@@ -2222,9 +2222,9 @@ tracker:
 
 ## 片付けたいとき
 
-### 間違えた issue を `Ready` に置いてしまった。ボードで戻せばよい？
+### 間違えた issue を `Ready` に置いてしまった。カンバンで戻せばよい？
 
-**原因。****ボードの操作だけでは取り消せません。**`Ready` は作業中の Status の1つなので止まらず、
+**原因。****カンバンの操作だけでは取り消せません。**`Ready` は作業中の Status の1つなので止まらず、
 もう一度着手されることがあります。`Done` へ動かすと、continuo が片付ける前に
 「この作業のコメントが issue にあるか」を確かめ、無ければセッションを復元して書かせようとするので、
 **Claude Code が起動し直されます。**
@@ -2236,7 +2236,7 @@ continuo abandon --dry-run https://github.com/<owner>/<repo>/issues/42 ~/continu
 continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 ```
 
-`--dry-run` はボードに1文字も書きません。詳しい振る舞いは [README.ja.md](../README.ja.md) の
+`--dry-run` はカンバンに1文字も書きません。詳しい振る舞いは [README.ja.md](../README.ja.md) の
 「間違えて着手したとき」にあります。
 
 ### `continuo abandon` が返ってこない（「pane が閉じるのを待っています」のまま止まって見える）
@@ -2255,7 +2255,7 @@ continuo abandon https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 | 叩き直したときの Status | 2回目の待ち時間 |
 | --- | --- |
 | **`tracker.active_states` の外**（1回目が動かした `Blocked` のまま） | **待ちません**（手を離させる段を通らないので0秒） |
-| **`tracker.active_states` の中**（そのあいだに誰かがボードで戻した） | **もう一度上限まで待ちます**（合わせて上限の2回ぶん） |
+| **`tracker.active_states` の中**（そのあいだに誰かがカンバンで戻した） | **もう一度上限まで待ちます**（合わせて上限の2回ぶん） |
 
 **ふつうは上の行になります。**1回目が Status を `tracker.failure_state`（既定は `Blocked`）へ
 動かしているので、2回目はこう言ってすぐ先へ進みます。
@@ -2562,7 +2562,7 @@ continuo version
 
 **直し方。****対処は要りません。**いまは、頼んだ Status に無い item を落として続けます。
 エラーにするのは**外れた item が大半を占めるとき**だけです。
-それでも出るなら、`tracker.provider.status_field` に書いた名前がボードのフィールド名と一致しているかを確かめます。
+それでも出るなら、`tracker.provider.status_field` に書いた名前がカンバンのフィールド名と一致しているかを確かめます。
 
 ```bash
 grep -n "status_field" ~/continuo-work/WORKFLOW.md
@@ -2718,7 +2718,7 @@ language: ja
 | ログ | いつでも |
 | `continuo init` が書き出す `WORKFLOW.md` の中の説明 | いつでも。**画面ではなくファイルの中です。**設定のキーと値そのものは英語のままなので、読めなくても起動します |
 | `continuo doctor` の `config` の行 | 設定に不正な値を書いたとき。**理由の部分だけが日本語です**（例: `0より大きい整数にすること`）。**値を埋め忘れただけのときは英語で出ます** |
-| `continuo doctor` の `board` の行 | ボードを読めなかったとき。**GitHub と話す層が返すエラーの本文だけが日本語です**（例: `tracker エラー [tracker_response]: …`） |
+| `continuo doctor` の「カンバン」の行 | カンバンを読めなかったとき。**GitHub と話す層が返すエラーの本文だけが日本語です**（例: `tracker エラー [tracker_response]: …`） |
 
 **どれも訳の対象からまだ外れています。**
 **日本語のまま出るところを見つけたときの直し方は

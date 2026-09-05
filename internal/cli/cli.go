@@ -1,4 +1,4 @@
-// continuo は GitHub Projects v2 のボードを見張り、issue ごとに git worktree を用意して
+// continuo は GitHub Projects v2 のカンバンを見張り、issue ごとに git worktree を用意して
 // herdr の pane で Claude Code を起動し、完了までを面倒見る常駐プロセスである。
 // 設計の正は docs/plans/continuo_design.md にある。
 // Package cli は continuo の CLI の実体である。
@@ -76,7 +76,7 @@ type Deps struct {
 	// PromptFetchIssue は `continuo prompt --show --url` が issue を1件引く。
 	//
 	// **GitHub を叩くので、検査では必ず差し替える。**
-	// 戻り値の2つ目は「ボードから issue として組み立てられたか」であり、
+	// 戻り値の2つ目は「カンバンから issue として組み立てられたか」であり、
 	// **偽になる理由は「載っていない」だけではない**（Status 未設定・archive 済みなど）。
 	PromptFetchIssue func(
 		ctx context.Context, cfg config.TrackerConfig, endpoint, identifier string,
@@ -86,7 +86,7 @@ type Deps struct {
 	UserHomeDir func() (string, error)
 	// DaemonRun は常駐の本体である。
 	DaemonRun func(ctx context.Context, opts daemon.Options) error
-	// SetupFetchStatusField はボードの Status のフィールドを読む。
+	// SetupFetchStatusField はカンバンの Status のフィールドを読む。
 	SetupFetchStatusField func(ctx context.Context, opts setup.FetchOptions) (setup.StatusField, error)
 	// TrustPlan は信頼登録の対象を調べる（`git` と `~/.claude.json` を読む）。
 	TrustPlan func(ctx context.Context, opts trust.Options) (*trust.Report, error)
@@ -94,7 +94,7 @@ type Deps struct {
 	TrustApply func(ctx context.Context, opts trust.Options, report *trust.Report) (*trust.ApplyResult, error)
 	// ProbeKeychain は macOS の Keychain を読めるかを確かめる。
 	ProbeKeychain func(ctx context.Context, timeout time.Duration) (ratelimit.KeychainProbe, error)
-	// ScaffoldDetect は owner とボードの番号を `gh` から引く。
+	// ScaffoldDetect は owner とカンバンの番号を `gh` から引く。
 	ScaffoldDetect func(ctx context.Context, opts scaffold.DetectOptions) scaffold.Detection
 	// AbandonRun は着手した issue を着手する前の状態へ戻す。
 	// **worktree と branch と pane を消すので、検査では必ず差し替える。**
@@ -566,7 +566,7 @@ func runPromptExpanded(
 	}
 	if !ok {
 		// **「載っていません」とだけ言わない。**`FetchIssueByIdentifier` が偽を返す理由は
-		// 5通りあり、Status 未設定は本番のボードでも104件中4件ある通常の状態である。
+		// 5通りあり、Status 未設定は本番のカンバンでも104件中4件ある通常の状態である。
 		// **`Bootstrap` を通していないので、`status_field` の綴りがずれていると全件がそう見える。**
 		// **唯一の検出手段が `continuo doctor` なので、そこまで案内する。**
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrIssueNotOnBoard, identifier))
@@ -676,7 +676,7 @@ func countLines(s string) int {
 // runSetup は `continuo setup` サブコマンドである（設計 3-32 / RUCM
 // docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
 //
-// **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**ボードの Status の選択肢を
+// **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**カンバンの Status の選択肢を
 // continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す8つのキーの行を差し替える。
 // **他の行には触れない。**利用者が `continuo init` のあとに手で直した行
 // （`workspace.root`、`trust.repositories` から消した行など）を消さないためである。
@@ -690,21 +690,21 @@ func countLines(s string) int {
 // **標準入力を握るのはこのサブコマンドだけである。**`continuo init` を対話にしないのは、
 // 設定を作り直す自動化の経路を止めないためである。
 //
-// **ボードは読むだけである。**選択肢が足りなければ、GitHub の画面から足すよう案内して打ち切る。
+// **カンバンは読むだけである。**選択肢が足りなければ、GitHub の画面から足すよう案内して打ち切る。
 // **API で足させない**（`updateProjectV2Field` は選択肢の指定を全件の置き換えとして扱うので、
 // 設定済みの Status が全部消える）。
 //
-// **検証はファイルが先、ボードがあとである。**どうせ止まる実行で、先に gh を叩いて
+// **検証はファイルが先、カンバンがあとである。**どうせ止まる実行で、先に gh を叩いて
 // レートリミットを使う理由が無い。
 //
 // args: `continuo setup` に続く引数。位置引数は WORKFLOW.md があるディレクトリを0個か1個。
-// --owner / --project は gh を叩かずにその値を使う（**どのボードを読むかの指定であり、
+// --owner / --project は gh を叩かずにその値を使う（**どのカンバンを読むかの指定であり、
 // WORKFLOW.md には書かない**）。
 // --status-field は Status を読み書きする single-select フィールドの名前を渡す。
 // stdin: 番号を読む先。
 // stdout / stderr: 出力先。対話は stdout へ出す。
 // 戻り値: 終了コード。0 は書き換えられた（--help / -h も 0）、
-// 1 は書き換えずに終わった（WORKFLOW.md が無い・ボードを読めない・選択肢が足りない・中断した）、
+// 1 は書き換えずに終わった（WORKFLOW.md が無い・カンバンを読めない・選択肢が足りない・中断した）、
 // 2 は引数の指定が誤っている。
 func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo setup", flag.ContinueOnError)
@@ -755,11 +755,11 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		return printScaffoldError(stderr, check, err)
 	}
 
-	// **どのボードを読むかは、WORKFLOW.md に書かれた値を先に使う**（設計 6-2）。
+	// **どのカンバンを読むかは、WORKFLOW.md に書かれた値を先に使う**（設計 6-2）。
 	// `continuo init` で埋めたのに `continuo setup` でもう一度 `--project` を要求するのは
 	// 筋が通らない。**フラグが明示されたときだけフラグを優先する。**
 	// ここで拾えなかったぶんだけ、`continuo init` と同じ経路で gh から引く。
-	// **引いた値は WORKFLOW.md へ書かない。**どのボードの Status の選択肢を読むかを
+	// **引いた値は WORKFLOW.md へ書かない。**どのカンバンの Status の選択肢を読むかを
 	// 決めるためだけに使う。
 	owner, projectNumber := *ownerFlag, *projectFlag
 	if owner == "" {
@@ -775,7 +775,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	if code := checkDetectionForSetup(stderr, detection); code != 0 {
 		return code
 	}
-	// **どのボードを読むかを画面に出す。**WORKFLOW.md に書かれた値と gh から引いた値が
+	// **どのカンバンを読むかを画面に出す。**WORKFLOW.md に書かれた値と gh から引いた値が
 	// 食い違っていても、出しておけば利用者がその場で気づける。
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupBoardUsing, detection.Values.Owner, detection.Values.ProjectNumber))
 
@@ -831,9 +831,9 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	return 0
 }
 
-// checkDetectionForSetup は、対話に入れるだけの情報がボードから引けたかを確かめる。
+// checkDetectionForSetup は、対話に入れるだけの情報がカンバンから引けたかを確かめる。
 //
-// **`continuo setup` は owner とボードの番号が両方決まらないと1歩も進めない**
+// **`continuo setup` は owner とカンバンの番号が両方決まらないと1歩も進めない**
 // （`continuo init` は決まらなくても雛形を書けるので、ここだけ扱いが違う）。
 //
 // w: 出力先。
@@ -870,7 +870,7 @@ func fieldReason(d scaffold.Detection, key string) string {
 	return ""
 }
 
-// candidatesOf は、あるキーについて並んだボードの候補を取り出す。
+// candidatesOf は、あるキーについて並んだカンバンの候補を取り出す。
 //
 // d: scaffold.Detect が返した結果。
 // key: scaffold.ProjectKey などのキーのパス。
@@ -1002,7 +1002,7 @@ const trustInternalErrorExitCode = 3
 //
 // **`WORKFLOW.md` の `trust.repositories` に人間が列挙したリポジトリだけを対象に、
 // `~/.claude.json` の `hasTrustDialogAccepted` を `true` にする。**
-// **ボードから自動で集めない。**ボードは他人が編集できるので、そこから集めると
+// **カンバンから自動で集めない。**カンバンは他人が編集できるので、そこから集めると
 // issue を足せる人が信頼させるリポジトリを増やせてしまう。
 //
 // **`--dry-run` は信頼のダイアログの代わりである。**対象の `.claude/settings.json` の
@@ -1411,7 +1411,7 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 	// 「WORKFLOW.md を読めません」を出すので、ここでは環境変数から決めた言語のまま進む。
 	useLanguageFromConfig(path)
 
-	// **トークンを載せる前に接続先を確かめる。**abandon はボードの Status を読み書きするので、
+	// **トークンを載せる前に接続先を確かめる。**abandon はカンバンの Status を読み書きするので、
 	// 常駐プロセスと同じ検査を通す。
 	//
 	// **この検査が拒むのは平文の http だけである**（ループバック宛は通す。

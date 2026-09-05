@@ -1,4 +1,4 @@
-// Package orchestrator は continuo の中心である。ボードを巡回して issue を dispatch し、
+// Package orchestrator は continuo の中心である。カンバンを巡回して issue を dispatch し、
 // run ごとに turn ループを回し、実行中の Status と worktree を照合して片付ける
 // （docs/plans/continuo_design.md 3-4 / 3-5 / 3-8 / 3-16 / 3-21 / 3-25 / 3-27）。
 //
@@ -7,7 +7,7 @@
 //	runs map[string]*runState   キーは project item の ID
 //
 // **これが「自分が取った」印であり、同時に「実行中の一覧」でもある**（設計 3-25）。
-// 2つの集合を持たない。ディスクにもボードにも書かない（設計 3-4）。
+// 2つの集合を持たない。ディスクにもカンバンにも書かない（設計 3-4）。
 //
 // 巡回のループがやることは3つだけである（設計 3-8）。
 //
@@ -206,7 +206,7 @@ type Options struct {
 	// **組み込みの前半・固有・組み込みの後半の3つを、この順に持っている。**
 	// 組み立てるのは internal/prompt の Build であり、**呼ぶのは常駐プロセスの起動である。**
 	Prompt prompt.Fragments
-	// Tracker はボードの読み書きである。必須。
+	// Tracker はカンバンの読み書きである。必須。
 	Tracker Tracker
 	// Herdr は herdr の socket API のクライアントである。必須。
 	Herdr HerdrClient
@@ -382,7 +382,7 @@ func New(opts Options) (*Orchestrator, error) {
 	}
 	// **知っている Status の一覧は組み立てのときに1度だけ計算する**（`knownStateNames`）。
 	// **計算に使う設定が空のまま渡されても、いままでは黙って通っていた。**
-	// 1つも取れないと、continuo は**ボード上のどの Status も「知らない Status」と判定し、
+	// 1つも取れないと、continuo は**カンバン上のどの Status も「知らない Status」と判定し、
 	// 着手した run を片端から止める。**しかも止めた理由には「いま知っているのは です」と
 	// 空欄が出るだけで、原因が読み取れない。
 	// **他の必須の依存と同じく、ここで名前つきのエラーにする。**
@@ -456,7 +456,7 @@ func New(opts Options) (*Orchestrator, error) {
 		ghAuthCheck:     opts.GHAuthCheck,
 		ghLogin:         ghLogin,
 		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。
-		// **起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）は、
+		// **起動時にカンバンと照合する一覧（`tracker` の `requiredStatesForBootstrap`）は、
 		// 同じ関数の戻り値そのものである。**ずれると、起動時に通した設定が実行時には
 		// 別の意味になる（対応表のキーは、どちらにも入れない）。
 		knownStateNames: knownStateNames,
@@ -571,7 +571,7 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 // verifyPeriodically は Status の選択肢名と `gh` の認証を、
 // `tracker.verify_states_every` の頻度で検査する（設計 3-6 の「巡回ごとに検査するもの」）。
 //
-// **毎巡回では行わない。**選択肢名が変わるのは人間がボードを触ったときだけであり、
+// **毎巡回では行わない。**選択肢名が変わるのは人間がカンバンを触ったときだけであり、
 // **毎巡回で外部プロセス（`gh`）を起動しない。**
 //
 // ctx: 呼び出しに適用するコンテキスト。

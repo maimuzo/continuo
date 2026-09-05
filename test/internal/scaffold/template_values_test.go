@@ -26,12 +26,12 @@ func lineWithKey(out, key string) (string, bool) {
 	return "", false
 }
 
-// TestTemplateWithValues_ownerとボードの番号を埋める は、値が入ることを確かめる。
+// TestTemplateWithValues_ownerとカンバンの番号を埋める は、値が入ることを確かめる。
 //
-// 目的: 渡した owner とボードの番号が、対応する行に書かれること。
+// 目的: 渡した owner とカンバンの番号が、対応する行に書かれること。
 // 与える情報: 両方が埋まった Values。
 // 成功条件: それぞれの行に値が入り、プレースホルダが残っていないこと。
-func TestTemplateWithValues_ownerとボードの番号を埋める(t *testing.T) {
+func TestTemplateWithValues_ownerとカンバンの番号を埋める(t *testing.T) {
 	out := scaffold.TemplateWithValues(scaffold.Values{Owner: "octocat", ProjectNumber: 7})
 
 	line, ok := lineWithKey(out, "owner")
@@ -40,7 +40,7 @@ func TestTemplateWithValues_ownerとボードの番号を埋める(t *testing.T)
 	}
 	line, ok = lineWithKey(out, "project_number")
 	if !ok || !strings.Contains(line, "7") {
-		t.Errorf("ボードの番号が入っていない: %q", line)
+		t.Errorf("カンバンの番号が入っていない: %q", line)
 	}
 	if strings.Contains(out, "ここを埋めること") {
 		t.Error("値を渡したのにプレースホルダの案内が残っている")
@@ -82,12 +82,12 @@ func TestTemplateWithValues_ownerの形が不正なら書き込まない(t *test
 	}
 }
 
-// TestTemplateWithValues_ボードの番号が0以下なら書き込まない は、番号の検査を確かめる。
+// TestTemplateWithValues_カンバンの番号が0以下なら書き込まない は、番号の検査を確かめる。
 //
-// 目的: 0 と負の数を書き込まないこと（ボードの番号は1以上である）。
+// 目的: 0 と負の数を書き込まないこと（カンバンの番号は1以上である）。
 // 与える情報: 0 と -1。
 // 成功条件: プレースホルダが残ること。
-func TestTemplateWithValues_ボードの番号が0以下なら書き込まない(t *testing.T) {
+func TestTemplateWithValues_カンバンの番号が0以下なら書き込まない(t *testing.T) {
 	for _, n := range []int{0, -1} {
 		out := scaffold.TemplateWithValues(scaffold.Values{ProjectNumber: n})
 		line, ok := lineWithKey(out, "project_number")

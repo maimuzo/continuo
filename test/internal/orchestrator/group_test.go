@@ -60,16 +60,16 @@ func TestSignal_グループの別issueもIceBoxのまま動かせる(t *testing
 	}
 }
 
-// TestSignal_ボードに載っていない対象はコメントに残して捨てる は、
+// TestSignal_カンバンに載っていない対象はコメントに残して捨てる は、
 // 表明の安全のための制約を確かめる。
 //
-// 目的: 設計 3-26 の「表明で指せるのは、ボードに載っている issue だけ。**指定されたら
-// ログに残して無視する**」と、設計 3-25 の「ボードに載っていなかったら、その行を捨て、
-// issue のコメントに『ボードに無いので動かせなかった』と書く」を守っていることを示す。
+// 目的: 設計 3-26 の「表明で指せるのは、カンバンに載っている issue だけ。**指定されたら
+// ログに残して無視する**」と、設計 3-25 の「カンバンに載っていなかったら、その行を捨て、
+// issue のコメントに『カンバンに無いので動かせなかった』と書く」を守っていることを示す。
 //
-// 与える情報: ボードに無い `#999` を指す表明。
+// 与える情報: カンバンに無い `#999` を指す表明。
 // 成功条件: continuo 自身のコメントが issue に付き、run は普通に終わる。
-func TestSignal_ボードに載っていない対象はコメントに残して捨てる(t *testing.T) {
+func TestSignal_カンバンに載っていない対象はコメントに残して捨てる(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
@@ -99,7 +99,7 @@ func TestSignal_ボードに載っていない対象はコメントに残して�
 		}
 	}
 	if !found {
-		t.Fatalf("ボードに無い対象を人間に知らせるコメントが無い: %+v", fx.Tracker.CommentsOf("I_node188"))
+		t.Fatalf("カンバンに無い対象を人間に知らせるコメントが無い: %+v", fx.Tracker.CommentsOf("I_node188"))
 	}
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Review" {
 		t.Fatalf("代表の issue の表明まで捨てている: got %q", got)

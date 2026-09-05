@@ -181,7 +181,7 @@
   "cli.prompt.err_attempt_positive": "エラー: --attempt は1以上にしてください（%d が指定されました）",
   "cli.prompt.err_config_load": "エラー: WORKFLOW.md を読めません: %v",
   "cli.prompt.err_fetch_failed": "エラー: カンバンを読めません: %v",
-  "cli.prompt.err_issue_not_on_board": "エラー: %s をカンバンから読めませんでした（ボードに載っていない・Status が未設定・archive 済みのいずれかです）。continuo doctor で設定とボードを確かめてください",
+  "cli.prompt.err_issue_not_on_board": "エラー: %s をカンバンから読めませんでした（カンバンに載っていない・Status が未設定・archive 済みのいずれかです）。continuo doctor で設定とカンバンを確かめてください",
   "cli.prompt.err_render_failed": "エラー: 変数を展開できません: %v",
   "cli.prompt.err_show_required": "エラー: continuo prompt には --show を付けてください（例: continuo prompt --show）",
   "cli.prompt.err_too_many_positional": "エラー: continuo prompt の位置引数は、WORKFLOW.md があるディレクトリを1つだけ受け付けます（%d 個指定されました: %v）",

@@ -27,23 +27,23 @@ func (o *Orchestrator) isKnownState(state string) bool {
 // maxAutomatedRewrites は、1つの run が1つの Status について書き戻してよい回数である
 // （設計 3-56）。
 //
-// **上限が無いと止まらない。**書き戻した直後にボードの自動化がまた動く組み合わせがあると、
-// continuo とボードが同じ issue を押し合い続け、**GitHub への書き込みが巡回のたびに増え続ける。**
+// **上限が無いと止まらない。**書き戻した直後にカンバンの自動化がまた動く組み合わせがあると、
+// continuo とカンバンが同じ issue を押し合い続け、**GitHub への書き込みが巡回のたびに増え続ける。**
 // **3回で足りる。**PR を1本作れば自動化は1回動く。CI の直しで PR を作り直しても数回である。
 // **上限に達したら、いままでどおり猶予を置いて worker を止める**（押し合いを人間へ渡す）。
 const maxAutomatedRewrites = 3
 
-// maxAutomatedRewriteFailures は、書き戻しが「ボードを1ミリも動かせないまま終わる」ことを
+// maxAutomatedRewriteFailures は、書き戻しが「カンバンを1ミリも動かせないまま終わる」ことを
 // 続けて何回まで許すかである（設計 3-56）。
 //
-// **押し合いの上限（`maxAutomatedRewrites`）とは別に数える。**ボードが動かなかったぶんは
+// **押し合いの上限（`maxAutomatedRewrites`）とは別に数える。**カンバンが動かなかったぶんは
 // 押し合いの枠を返すので、**返すだけでは上限に永久に届かない。**猶予の時計も、その手前で
 // 戻ってしまうので始まらない。**結果、毎回失敗する書き込みを30秒ごとに永久に打ち続け、
 // worker は止まらず、人間にも渡らない。**
 //
-// **これが起きるのは、人間がボードから戻す先の選択肢を消したときである。**
+// **これが起きるのは、人間がカンバンから戻す先の選択肢を消したときである。**
 // 起動時の照合（`requiredStatesForBootstrap`）は通っていたのだから、設定は正しかった。
-// **走っている最中にボードが変わったのであり、continuo は自力では直せない。**
+// **走っている最中にカンバンが変わったのであり、continuo は自力では直せない。**
 //
 // **3回で足りる。**通信の失敗なら次の巡回で直る。3回続くなら相手側の事情である。
 // **待っても直らないと分かっている失敗は、1回で人間へ渡す**（`rewriteAutomatedState` が
@@ -66,10 +66,10 @@ const automatedRewriteFailureRetryAfter = 5 * time.Minute
 // handleUnknownState は「continuo が知らない Status」になった run をどうするかを決める
 // （設計 3-50 / 3-54）。
 //
-//	書いたのがボードの自動化で、対応表に戻す先がある … **止めない。**本来の Status へ書き戻す
-//	turn が動いていて猶予の内側                      … **止めない。**turn の終わりの表明を読んでから判断する
-//	turn が動いていない                              … その場で止める（待っても表明は出てこない）
-//	猶予を過ぎた                                    … その場で止める（人間が止めたがっている可能性がある）
+//	書いたのがカンバンの自動化で、対応表に戻す先がある … **止めない。**本来の Status へ書き戻す
+//	turn が動いていて猶予の内側                        … **止めない。**turn の終わりの表明を読んでから判断する
+//	turn が動いていない                                … その場で止める（待っても表明は出てこない）
+//	猶予を過ぎた                                      … その場で止める（人間が止めたがっている可能性がある）
 //
 // **`terminal_states` と引き渡しの Status へ動かされた場合はここへ来ない。**
 // そちらは `holdForAutomatedMove` が同じ猶予を掛ける（設計 3-74）。
@@ -79,7 +79,7 @@ const automatedRewriteFailureRetryAfter = 5 * time.Minute
 // issue: 取り直した issue。
 func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, issue tracker.Issue) {
 	if target, claim, ok := o.claimAutomatedRewrite(rs, issue); ok {
-		// **ボードの自動化が動かしただけである**（設計 3-54）。人間の引き渡しではないので
+		// **カンバンの自動化が動かしただけである**（設計 3-54）。人間の引き渡しではないので
 		// worker を止めない。**書き戻しは巡回のループを止めないよう別の goroutine で回す。**
 		o.rewriteAutomatedStateAsync(ctx, rs, issue, target, claim)
 		return
@@ -146,7 +146,7 @@ func (o *Orchestrator) handleUnknownState(ctx context.Context, rs *runState, iss
 // **Status を誰が書いたかは、止める理由と何の関係も無い。**
 //
 // **待つ理由は、走っている Claude Code を continuo 自身が殺さないためである。**
-// エージェントが turn の途中で自分の PR をマージすると、ボードの組み込みの自動化が
+// エージェントが turn の途中で自分の PR をマージすると、カンバンの組み込みの自動化が
 // `Done` を書く。**次の巡回はそれを「終わった」と読み、走っている turn ごと片付けにいく。**
 // 書いたのが人間でないと分かっているのだから、知らない Status と同じく猶予を置く（3-50）。
 //
@@ -277,7 +277,7 @@ func (o *Orchestrator) holdForOwnMove(rs *runState, issue tracker.Issue) bool {
 	return true
 }
 
-// claimAutomatedRewrite は「知らない Status を書いたのはボードの自動化で、対応表に
+// claimAutomatedRewrite は「知らない Status を書いたのはカンバンの自動化で、対応表に
 // 戻す先がある」ときに、その戻す先を返す（設計 3-54）。
 //
 // **4つが揃ったときだけ確保できる。**
@@ -302,7 +302,7 @@ func (o *Orchestrator) holdForOwnMove(rs *runState, issue tracker.Issue) bool {
 // rs: 対象の run。
 // issue: 取り直した issue。
 // 戻り値の1つ目: 戻す先の Status 名。
-// 戻り値の2つ目: 確保した枠（呼び出し側は、ボードが動かなかったら必ず `release` する）。
+// 戻り値の2つ目: 確保した枠（呼び出し側は、カンバンが動かなかったら必ず `release` する）。
 // 戻り値の3つ目: 書き戻してよければ true。
 func (o *Orchestrator) claimAutomatedRewrite(
 	rs *runState, issue tracker.Issue,
@@ -363,7 +363,7 @@ func (o *Orchestrator) claimAutomatedRewrite(
 //
 // **手放した run へは書かない**（`stopForUnknownStateAsync` と同じ守り）。
 // この goroutine が飛んでいる間に turn ループが失敗して run を手放すと、
-// **印が消えたあとに「作業中」の Status がボードへ書かれる。**次の巡回はその issue を
+// **印が消えたあとに「作業中」の Status がカンバンへ書かれる。**次の巡回はその issue を
 // 候補として拾い直し、**同じ worktree に2本目の Claude Code を立てる。**
 // **印を確保できなければ、書かずに戻る。**確保できたぶんは、書き終えたら必ず返す
 // （`endRewrite`）。返さないと、終わらせる処理が書き戻しの終わりを永久に待つ。
@@ -406,17 +406,17 @@ func (o *Orchestrator) rewriteAutomatedStateAsync(
 	}()
 }
 
-// rewriteAutomatedState は、ボードの自動化が動かした Status を本来の Status へ戻す
+// rewriteAutomatedState は、カンバンの自動化が動かした Status を本来の Status へ戻す
 // （設計 3-54）。
 //
-// **書き戻すのは、ボードを見た人間が読み違えないようにするためである。**止めないだけだと、
+// **書き戻すのは、カンバンを見た人間が読み違えないようにするためである。**止めないだけだと、
 // 人間の列（`In Progress`）に continuo が担当中の issue が居座り、列を分けた意味が消える。
 //
 // **失敗しても run は止めない。**Status の書き込みは失敗しうるので、次の巡回で拾い直す。
 //
-// **ボードが動かなかったら、確保した書き戻しの枠を返す**（設計 3-56）。
-// 枠は「continuo とボードの自動化が Status を押し合っている」ことを数えるためにある。
-// **押し合いは、ボードが実際に動いたときにだけ起きる。**通信の失敗や
+// **カンバンが動かなかったら、確保した書き戻しの枠を返す**（設計 3-56）。
+// 枠は「continuo とカンバンの自動化が Status を押し合っている」ことを数えるためにある。
+// **押し合いは、カンバンが実際に動いたときにだけ起きる。**通信の失敗や
 // 「既にその値だった」で枠を食い潰すと、**3回の失敗で上限に達し、押し合いが
 // 1度も起きていない run が人間へ渡されて worker が止まる。**
 //
@@ -424,15 +424,15 @@ func (o *Orchestrator) rewriteAutomatedStateAsync(
 // 枠を返すだけだと、**毎回失敗する書き込みを30秒ごとに永久に打ち続ける**
 // （猶予の時計はその手前で戻ってしまうので始まらない）。
 // **`tracker.CategoryInvalidConfig` は上限をそのまま足して1回で人間へ渡す。**
-// 「戻す先の選択肢がボードに無い」がこれであり、待っても直らない（設計 3-56）。
+// 「戻す先の選択肢がカンバンに無い」がこれであり、待っても直らない（設計 3-56）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // issue: 取り直した issue。
 // target: 戻す先の Status 名。
-// claim: 確保した書き戻しの枠。**ボードが動かなかったら、この関数が返す。**
-// 戻り値の1つ目: `UpdateStatus` の結果。**`Previous` は書きに行く直前のボードの値である**
-// （書いたあとに読み直しはしない）。`Reached` が偽なら、ボードは `target` になっていない。
+// claim: 確保した書き戻しの枠。**カンバンが動かなかったら、この関数が返す。**
+// 戻り値の1つ目: `UpdateStatus` の結果。**`Previous` は書きに行く直前のカンバンの値である**
+// （書いたあとに読み直しはしない）。`Reached` が偽なら、カンバンは `target` になっていない。
 // 戻り値の2つ目: 書き込みそのものが失敗したときのエラー。
 func (o *Orchestrator) rewriteAutomatedState(
 	ctx context.Context, rs *runState, issue tracker.Issue, target string, claim *rewriteClaim,
@@ -445,9 +445,9 @@ func (o *Orchestrator) rewriteAutomatedState(
 	// 書き戻しで巻き戻してはならない（`UpdateStatus` の blockedStates）。
 	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.cfg.Tracker.TerminalStates)
 	if err != nil {
-		// **枠を返す。**ボードは動いていない（押し合いは起きていない）。
+		// **枠を返す。**カンバンは動いていない（押し合いは起きていない）。
 		claim.release()
-		// **待っても直らない失敗は、1回で人間へ渡す。**戻す先の選択肢がボードから
+		// **待っても直らない失敗は、1回で人間へ渡す。**戻す先の選択肢がカンバンから
 		// 消えていると、次の巡回も同じところで落ちる。
 		add := 1
 		if tracker.IsCategory(err, tracker.CategoryInvalidConfig) {
@@ -462,7 +462,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 	}
 	if !moved.Wrote {
 		// 既にその値だった・item がもう見えない・終わったとみなす状態だった、のいずれか。
-		// **どれもボードは動いていないので、枠を返す。**
+		// **どれもカンバンは動いていないので、枠を返す。**
 		claim.release()
 		o.logger.Info("自動化が動かした Status は戻しませんでした（カンバンは動いていません）",
 			"identifier", issue.Identifier, "自動化が書いた Status", issue.State,
@@ -471,7 +471,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 			if moved.Previous != "" {
 				// **人間が `terminal_states` へ動かしていたので断られた。**
 				// **これは「戻せなかった」に数えない。**数えると、
-				// 「ボードから戻す先の選択肢が消えている」という的外れな案内が人間へ出る
+				// 「カンバンから戻す先の選択肢が消えている」という的外れな案内が人間へ出る
 				// （`automatedStateHint` はその文面を出す前提でこの経路を除いている）。
 				// **終わった issue は、このあと終端の判定が拾う**（`rewriteAndDecide`）。
 				return moved, nil
@@ -481,7 +481,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 			rs.noteAutomatedRewriteFailure(issue.State, 1, o.now())
 			return moved, nil
 		}
-		// 既にその値だった。**ボードは目的の Status である。**
+		// 既にその値だった。**カンバンは目的の Status である。**
 		// **「最後に書いた値」を揃える。**揃えないと、あとで人間へ渡すときに
 		// 書いていない値を「continuo が最後に書いた値」として名指しする（`unknownStateReason`）。
 		rs.clearAutomatedRewriteFailures(issue.State)
@@ -614,7 +614,7 @@ func (o *Orchestrator) finishRunUnknownState(ctx context.Context, rs *runState, 
 // 案内を出さないので偽になる）。塞ぎ損ねる道は3本ある。
 //
 //	書き戻す回数が上限に達した … `automatedStateHint` の押し合いの分岐
-//	戻せない失敗が続いた       … 同じく、戻す先がボードから消えたときの分岐
+//	戻せない失敗が続いた       … 同じく、戻す先がカンバンから消えたときの分岐
 //	人間がそのキーの Status へ動かした … `automatedStateHint` は人間には何も返さない
 //
 // **`cleanup.on_states` に書いてある Status でも同じことが起きる**（設計 3-57b。issue #76）。
@@ -760,21 +760,21 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 		hint)
 }
 
-// automatedStateHint は「その Status を書いたのはボードの自動化だった」ことと、
+// automatedStateHint は「その Status を書いたのはカンバンの自動化だった」ことと、
 // 次から止まらなくする1行を、issue のコメントへ足す文を作る（設計 3-54）。
 //
 // **人間が動かしたときは何も足さない。**その場合は止まったことが正しい振る舞いであり、
 // 設定を足す話ではない。
 //
 // **書いたのが自動化なのに対応表に無い、という場合が本題である。**
-// PR を作った・PR がマージされた、といった操作でボードの組み込みの自動化が動くことは、
+// PR を作った・PR がマージされた、といった操作でカンバンの組み込みの自動化が動くことは、
 // 設定の既定のまま起きる（設計 2-6）。**足す2行をそのまま書いて見せる。**
 //
 // **既に対応表にある Status なら、足せとは言わない。**同じ行をもう一度足させても直らない。
 // **この案内に来る道は2本しか無い**（どちらも `claimAutomatedRewrite` で枠を取れなかった道である）。
 //
-//	書き戻す回数が上限に達した … continuo とボードの自動化が押し合っている
-//	戻せない失敗が続いた       … 戻す先の選択肢がボードから消えている可能性が高い
+//	書き戻す回数が上限に達した … continuo とカンバンの自動化が押し合っている
+//	戻せない失敗が続いた       … 戻す先の選択肢がカンバンから消えている可能性が高い
 //
 // **書き込みが1〜2回失敗しただけでは、ここへ来ない。**その場合は run が続き、
 // 次の巡回が同じ判定でもう一度書きに行く。**`terminal_states` に入っていて断られた場合も

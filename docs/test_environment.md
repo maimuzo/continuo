@@ -1,6 +1,6 @@
 # 実機で確かめるための環境
 
-**言いたいこと。**実機の確認は**専用のボードとリポジトリ**で行う。**本番のボードは使わない。**
+**言いたいこと。**実機の確認は**専用のカンバンとリポジトリ**で行う。**本番のカンバンは使わない。**
 **この環境は消さない。**セッションをまたいで何度も使う。
 
 ---
@@ -9,16 +9,16 @@
 
 | 何 | 実体 |
 | --- | --- |
-| **ボード** | `<ACCOUNT>` の **project #10**（`https://github.com/users/<ACCOUNT>/projects/10`） |
+| **カンバン** | `<ACCOUNT>` の **project #10**（`https://github.com/users/<ACCOUNT>/projects/10`） |
 | **リポジトリ** | `<ACCOUNT>/continuo-e2e`（private） |
 | **issue** | `#1 README に1行足す` |
 | **ラベル** | `continuo-test`（実機テスト用）／`continuo-test/keep`（土台。消さない） |
 
 **`<ACCOUNT>` はこのリポジトリの owner と同じである。**`gh repo view --json owner --jq .owner.login` で引ける。
 
-**本番のボード（project #3）と混同しないこと。**あちらには実データが入っており、検証で書き込んではならない。
+**本番のカンバン（project #3）と混同しないこと。**あちらには実データが入っており、検証で書き込んではならない。
 
-## ボードの識別子
+## カンバンの識別子
 
 **API で Status を動かすときに要る。**
 
@@ -50,7 +50,7 @@ gh project item-list 10 --owner "$(gh repo view --json owner --jq .owner.login)"
 
 ## 使い方
 
-**設定は毎回作り直してよい。**`continuo init` がボードから値を引く。
+**設定は毎回作り直してよい。**`continuo init` がカンバンから値を引く。
 
 ```bash
 OWNER="$(gh repo view --json owner --jq .owner.login)"
@@ -88,7 +88,7 @@ continuo abandon --id e2e <issue の URL> .   # 片付けにも同じ名前を�
 
 手順は [docs/releasing.md](releasing.md) の「実機で issue を1件通す」にある。
 
-**Status の割り当ては既定のままで合う。**ボードの選択肢を `Ready` / `In Progress` / `In Review` /
+**Status の割り当ては既定のままで合う。**カンバンの選択肢を `Ready` / `In Progress` / `In Review` /
 `Blocked` / `Done` の5つにしてあるので、`continuo setup` を回さなくてよい。
 
 **前提を確かめてから起動する。**
@@ -120,7 +120,7 @@ gh project item-list 10 --owner "$OWNER" --format json --jq '.items[0] | "\(.tit
 
 ## 終わったあとの片付け
 
-**ボードもリポジトリもラベルも消さない。**次のセッションで再利用する。
+**カンバンもリポジトリもラベルも消さない。**次のセッションで再利用する。
 
 **片付けるのは、その回の実行が作ったものだけである。**
 
@@ -134,7 +134,7 @@ kill -INT "$(pgrep -f 'continuo$' | head -1)"
 continuo abandon --id e2e https://github.com/<ACCOUNT>/continuo-e2e/issues/1 . --dry-run   # 先に見る
 continuo abandon --id e2e https://github.com/<ACCOUNT>/continuo-e2e/issues/1 .
 
-# ボードの Status を戻す（Ready へ戻すと、次に起動したとき拾われる）
+# カンバンの Status を戻す（Ready へ戻すと、次に起動したとき拾われる）
 gh project item-edit --id PVTI_lAHNNEjOAYV2fM4N9wYE --project-id PVT_kwHNNEjOAYV2fA \
   --field-id PVTSSF_lAHNNEjOAYV2fM4YE2aC --single-select-option-id 2d4f2a34   # Blocked（拾わせない）
 ```
@@ -152,7 +152,7 @@ git -C "$(ghq root)/github.com/<ACCOUNT>/continuo-e2e" push origin --delete cont
 | 何 | できるか |
 | --- | --- |
 | issue を着手から `In Review` まで通す | **できる** |
-| `continuo abandon` の全経路（`--dry-run` / `--force` / `--park` / `--to`） | **できる**（このボードなら書き込んでよい） |
+| `continuo abandon` の全経路（`--dry-run` / `--force` / `--park` / `--to`） | **できる**（このカンバンなら書き込んでよい） |
 | リトライとバックオフ | **できる**（`agent_prompt_stalled` は実際に起きる） |
 | 再起動をまたぐ引き継ぎ | **できる** |
 | `EIO` / `EROFS` の経路 | **できない。**root なしに read-only 再マウントや I/O エラーを作れない |
@@ -160,7 +160,7 @@ git -C "$(ghq root)/github.com/<ACCOUNT>/continuo-e2e" push origin --delete cont
 ## 注意
 
 - **Claude Code が実際に動く。**定額プランの枠を消費する。**続けて何度も回さない**
-- **`updateProjectV2Field` は、このボードに対してだけ許される。**本番のボードで呼ぶと**設定済みの Status の値が全部消える**
+- **`updateProjectV2Field` は、このカンバンに対してだけ許される。**本番のカンバンで呼ぶと**設定済みの Status の値が全部消える**
 - **`workspace.root` を本番と同じにしない。**同じにすると、本番の worktree と混ざる
-- **ボードの題名が「continuo 動作確認（使い捨て）」のままである。**作ったときの名前で、実際は恒久である。
+- **カンバンの題名が「continuo 動作確認（使い捨て）」のままである。**作ったときの名前で、実際は恒久である。
   変えるときは `gh project edit 10 --owner "$OWNER" --title "..."`

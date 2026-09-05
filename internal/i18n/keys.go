@@ -45,7 +45,7 @@ const (
 	KeyDoctorClaudeRemedyInstall Key = "doctor.claude.remedy_install"
 	// KeyDoctorLabelGHAuth はgh の scope を見る検査の見出し語に出る。
 	KeyDoctorLabelGHAuth Key = "doctor.label.gh_auth"
-	// KeyDoctorLabelBoard はボードを読む検査の見出し語に出る。
+	// KeyDoctorLabelBoard はカンバンを読む検査の見出し語に出る。
 	KeyDoctorLabelBoard Key = "doctor.label.board"
 	// KeyDoctorLabelStatusNames は紛らわしい Status の組を見る検査の見出し語に出る。
 	KeyDoctorLabelStatusNames Key = "doctor.label.status_names"
@@ -62,7 +62,7 @@ const (
 	// KeyDoctorLabelCleanupStates は片付ける Status と終わったとみなす Status の
 	// 噛み合いを見る検査の見出し語である。
 	KeyDoctorLabelCleanupStates Key = "doctor.label.cleanup_states"
-	// KeyDoctorLabelRewriteKeys は `tracker.automated_state_rewrite` のキーがボードの
+	// KeyDoctorLabelRewriteKeys は `tracker.automated_state_rewrite` のキーがカンバンの
 	// Status の選択肢にあるかを見る検査の見出し語である。
 	KeyDoctorLabelRewriteKeys Key = "doctor.label.rewrite_keys"
 	// KeyDoctorLabelMissingKeys は雛形にあって WORKFLOW.md に書かれていない設定項目を
@@ -96,17 +96,17 @@ const (
 const (
 	// KeyDoctorRewriteKeysConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
 	KeyDoctorRewriteKeysConfigUnreadable Key = "doctor.rewrite_keys.config_unreadable"
-	// KeyDoctorRewriteKeysBoardUnreadable は上流のボードが落ちたときの説明に出る。
+	// KeyDoctorRewriteKeysBoardUnreadable は上流のカンバンが落ちたときの説明に出る。
 	KeyDoctorRewriteKeysBoardUnreadable Key = "doctor.rewrite_keys.board_unreadable"
 	// KeyDoctorRewriteKeysEmpty は対応表そのものが空のときの説明に出る。
 	KeyDoctorRewriteKeysEmpty Key = "doctor.rewrite_keys.empty"
-	// KeyDoctorRewriteKeysOK はキーがすべてボードにあるときの説明に出る。
+	// KeyDoctorRewriteKeysOK はキーがすべてカンバンにあるときの説明に出る。
 	KeyDoctorRewriteKeysOK Key = "doctor.rewrite_keys.ok"
-	// KeyDoctorRewriteKeysMissing はボードに無いキーがあるときの説明に出る。
+	// KeyDoctorRewriteKeysMissing はカンバンに無いキーがあるときの説明に出る。
 	KeyDoctorRewriteKeysMissing Key = "doctor.rewrite_keys.missing"
-	// KeyDoctorRewriteKeysNote はボードに無いキー1つずつの内訳に出る。
+	// KeyDoctorRewriteKeysNote はカンバンに無いキー1つずつの内訳に出る。
 	KeyDoctorRewriteKeysNote Key = "doctor.rewrite_keys.note"
-	// KeyDoctorRewriteKeysRemedy はボードに無いキー1つずつの直し方に出る。
+	// KeyDoctorRewriteKeysRemedy はカンバンに無いキー1つずつの直し方に出る。
 	KeyDoctorRewriteKeysRemedy Key = "doctor.rewrite_keys.remedy"
 )
 
@@ -288,7 +288,7 @@ const (
 	KeyDoctorGHAuthOK Key = "doctor.gh_auth.ok"
 )
 
-// doctor の検査「ボード」。
+// doctor の検査「カンバン」。
 const (
 	// KeyDoctorBoardConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
 	KeyDoctorBoardConfigUnreadable Key = "doctor.board.config_unreadable"
@@ -334,7 +334,7 @@ const (
 const (
 	// KeyDoctorStatusNamesConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
 	KeyDoctorStatusNamesConfigUnreadable Key = "doctor.status_names.config_unreadable"
-	// KeyDoctorStatusNamesBoardUnreadable は上流のボードが落ちたときの説明に出る。
+	// KeyDoctorStatusNamesBoardUnreadable は上流のカンバンが落ちたときの説明に出る。
 	KeyDoctorStatusNamesBoardUnreadable Key = "doctor.status_names.board_unreadable"
 	// KeyDoctorStatusNamesOK は紛らわしい組が無かったときの説明に出る。
 	KeyDoctorStatusNamesOK Key = "doctor.status_names.ok"
@@ -360,9 +360,9 @@ const (
 	KeyDoctorCloneBinNotFound Key = "doctor.clone.bin_not_found"
 	// KeyDoctorCloneRemedyInstallBin は同じときの直し方に出る。
 	KeyDoctorCloneRemedyInstallBin Key = "doctor.clone.remedy_install_bin"
-	// KeyDoctorCloneBoardUnreadable は上流のボードが落ちたときの説明に出る。
+	// KeyDoctorCloneBoardUnreadable は上流のカンバンが落ちたときの説明に出る。
 	KeyDoctorCloneBoardUnreadable Key = "doctor.clone.board_unreadable"
-	// KeyDoctorCloneNoTargets はボードが空のときの説明に出る。
+	// KeyDoctorCloneNoTargets はカンバンが空のときの説明に出る。
 	KeyDoctorCloneNoTargets Key = "doctor.clone.no_targets"
 	// KeyDoctorCloneNoteGhqFailed はghq を起動できなかったリポジトリの内訳に出る。
 	KeyDoctorCloneNoteGhqFailed Key = "doctor.clone.note_ghq_failed"
@@ -388,9 +388,9 @@ const (
 
 // doctor の検査「信頼登録」。
 const (
-	// KeyDoctorTrustBoardUnreadable は上流のボードが落ちたときの説明に出る。
+	// KeyDoctorTrustBoardUnreadable は上流のカンバンが落ちたときの説明に出る。
 	KeyDoctorTrustBoardUnreadable Key = "doctor.trust.board_unreadable"
-	// KeyDoctorTrustNoTargets はボードが空のときの説明に出る。
+	// KeyDoctorTrustNoTargets はカンバンが空のときの説明に出る。
 	KeyDoctorTrustNoTargets Key = "doctor.trust.no_targets"
 	// KeyDoctorTrustHomeUnresolved はホームディレクトリを決められなかったときの説明に出る。
 	KeyDoctorTrustHomeUnresolved Key = "doctor.trust.home_unresolved"
@@ -529,7 +529,7 @@ const (
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
 	// KeyCLIInitDetectUnfilled は雛形の値を埋められなかったときの1行に出る。
 	KeyCLIInitDetectUnfilled Key = "cli.init.detect_unfilled"
-	// KeyCLIInitDetectCandidate は候補のボードを並べる1行に出る。
+	// KeyCLIInitDetectCandidate は候補のカンバンを並べる1行に出る。
 	KeyCLIInitDetectCandidate Key = "cli.init.detect_candidate"
 	// KeyCLIInitDetectAdvice はそのあとに人間がやることの案内に出る。
 	KeyCLIInitDetectAdvice Key = "cli.init.detect_advice"
@@ -628,7 +628,7 @@ const (
 	KeyCLISetupErrKeysNotRewritableRemedy Key = "cli.setup.err_keys_not_rewritable_remedy"
 	// KeyCLISetupErrWouldBreakConfig は書き換えると WORKFLOW.md を読めなくなるときに出る。
 	KeyCLISetupErrWouldBreakConfig Key = "cli.setup.err_would_break_config"
-	// KeyCLISetupBoardUsing はどのボードの Status の選択肢を読むかを出す。
+	// KeyCLISetupBoardUsing はどのカンバンの Status の選択肢を読むかを出す。
 	KeyCLISetupBoardUsing Key = "cli.setup.board_using"
 	// KeyCLISetupErrDirNotFound は置き場所のディレクトリが無いときに出る。
 	KeyCLISetupErrDirNotFound Key = "cli.setup.err_dir_not_found"
@@ -648,13 +648,13 @@ const (
 	KeyCLISetupBoardErrOwner Key = "cli.setup.board_err_owner"
 	// KeyCLISetupBoardRemedyOwner は同じときの直し方に出る。
 	KeyCLISetupBoardRemedyOwner Key = "cli.setup.board_remedy_owner"
-	// KeyCLISetupBoardErrProject はボードの番号が決まらなかったときに出る。
+	// KeyCLISetupBoardErrProject はカンバンの番号が決まらなかったときに出る。
 	KeyCLISetupBoardErrProject Key = "cli.setup.board_err_project"
 	// KeyCLISetupBoardRemedyProject は同じときの直し方に出る。
 	KeyCLISetupBoardRemedyProject Key = "cli.setup.board_remedy_project"
-	// KeyCLISetupBoardCandidate は候補のボードを並べる1行に出る。
+	// KeyCLISetupBoardCandidate は候補のカンバンを並べる1行に出る。
 	KeyCLISetupBoardCandidate Key = "cli.setup.board_candidate"
-	// KeyCLISetupBoardErr はボードの Status フィールドを読めなかった理由に出る。
+	// KeyCLISetupBoardErr はカンバンの Status フィールドを読めなかった理由に出る。
 	KeyCLISetupBoardErr Key = "cli.setup.board_err"
 	// KeyCLISetupBoardRemedyScope はgh の scope に project が無いときの直し方に出る。
 	KeyCLISetupBoardRemedyScope Key = "cli.setup.board_remedy_scope"
@@ -836,9 +836,9 @@ const (
 	// KeyAbandonMultipleItem は同じときに候補を1つずつ並べる行に出る。
 	KeyAbandonMultipleItem Key = "abandon.multiple_item"
 
-	// KeyAbandonErrTracker はボードのアダプタを作れない・Bootstrap を通せないときに出る。
+	// KeyAbandonErrTracker はカンバンのアダプタを作れない・Bootstrap を通せないときに出る。
 	KeyAbandonErrTracker Key = "abandon.err_tracker"
-	// KeyAbandonBoardNotListed はその issue がボードに載っていないときに出る。
+	// KeyAbandonBoardNotListed はその issue がカンバンに載っていないときに出る。
 	KeyAbandonBoardNotListed Key = "abandon.board_not_listed"
 	// KeyAbandonErrParkStateUnknown はcontinuo が動いているのに Status を確かめられないときに出る。
 	KeyAbandonErrParkStateUnknown Key = "abandon.err_park_state_unknown"
@@ -849,7 +849,7 @@ const (
 	// KeyAbandonErrParkActive は `--park` に作業中の状態（tracker.active_states の値）が
 	// 指定されたときに出る。**そこへ動かしても継続監視は手を離さない。**
 	KeyAbandonErrParkActive Key = "abandon.err_park_active"
-	// KeyAbandonErrUnknownState は `--to` や `--park` の値がボードの Status の
+	// KeyAbandonErrUnknownState は `--to` や `--park` の値がカンバンの Status の
 	// 選択肢に無いときに出る。**worktree を消す前に出す。**
 	KeyAbandonErrUnknownState Key = "abandon.err_unknown_state"
 	// KeyAbandonErrParkFailed は手を離させる書き込みに失敗したときに出る。
@@ -887,7 +887,7 @@ const (
 	// （`CONTINUO_RUNTIME_DIR` / `XDG_RUNTIME_DIR` / `TMPDIR`）で決まるので、launchd から
 	// 起動した継続監視と端末から叩いた abandon で食い違いうる。
 	KeyAbandonErrPaneAliveNotRunning Key = "abandon.err_pane_alive_not_running"
-	// KeyAbandonErrPaneAliveRunning は、**継続監視は動いているが、ボードの Status が
+	// KeyAbandonErrPaneAliveRunning は、**継続監視は動いているが、カンバンの Status が
 	// `tracker.active_states` の外だったので手を離させなかった実行で** pane が
 	// 生きているときに出る。
 	//
@@ -1015,7 +1015,7 @@ const (
 
 	// KeyAbandonStatusLeftAlone は--to が無いのでStatus を動かさないときに出る。
 	KeyAbandonStatusLeftAlone Key = "abandon.status_left_alone"
-	// KeyAbandonErrStatusTargetUnknown は--to があるのに issue をボードから引けないときに出る。
+	// KeyAbandonErrStatusTargetUnknown は--to があるのに issue をカンバンから引けないときに出る。
 	KeyAbandonErrStatusTargetUnknown Key = "abandon.err_status_target_unknown"
 	// KeyAbandonStatusMoved はStatus を動かしたときに出る。
 	KeyAbandonStatusMoved Key = "abandon.status_moved"
@@ -1409,7 +1409,7 @@ const (
 	KeyHerdrAgentSendKeysEmpty Key = "herdr.agent.send_keys_empty"
 )
 
-// ボードを読み書きするためのトークンの取得（internal/tracker の RunGHAuthToken）の文言。
+// カンバンを読み書きするためのトークンの取得（internal/tracker の RunGHAuthToken）の文言。
 const (
 	// KeyTrackerGHAuthTokenRunFailed は `gh auth token` の実行そのものが失敗したときに出る。
 	KeyTrackerGHAuthTokenRunFailed Key = "tracker.gh_auth_token.run_failed"
@@ -1809,11 +1809,11 @@ const (
 const (
 	// KeyScaffoldDetectGHNotFound はgh コマンドそのものが見つからなかったときに出る。
 	//
-	// **owner・ボードの番号・リポジトリの一覧の3か所から出る。**同じ状況なので文言も1つにする。
+	// **owner・カンバンの番号・リポジトリの一覧の3か所から出る。**同じ状況なので文言も1つにする。
 	KeyScaffoldDetectGHNotFound Key = "scaffold.detect.gh_not_found"
-	// KeyScaffoldDetectAdviceProjectScope はボードを読む権限が足りないときの案内である。
+	// KeyScaffoldDetectAdviceProjectScope はカンバンを読む権限が足りないときの案内である。
 	//
-	// **ボードの候補とリポジトリの一覧の2か所から出る。**
+	// **カンバンの候補とリポジトリの一覧の2か所から出る。**
 	KeyScaffoldDetectAdviceProjectScope Key = "scaffold.detect.advice_project_scope"
 
 	// KeyScaffoldDetectOwnerFromFlag はowner を `--owner` で渡されたときに出る。
@@ -1826,7 +1826,7 @@ const (
 	KeyScaffoldDetectOwnerAPILogin Key = "scaffold.detect.owner.api_login"
 	// KeyScaffoldDetectOwnerGHFailed はgh を実行できたが値を取れなかったときに出る。
 	KeyScaffoldDetectOwnerGHFailed Key = "scaffold.detect.owner.gh_failed"
-	// KeyScaffoldDetectOwnerFollowedBoard は見つかったボードの持ち主に owner を合わせ直したときに出る。
+	// KeyScaffoldDetectOwnerFollowedBoard は見つかったカンバンの持ち主に owner を合わせ直したときに出る。
 	KeyScaffoldDetectOwnerFollowedBoard Key = "scaffold.detect.owner.followed_board"
 	// KeyScaffoldDetectOwnerAdviceLogin はgh を入れてログインし直す案内である。
 	KeyScaffoldDetectOwnerAdviceLogin Key = "scaffold.detect.owner.advice_login"
@@ -1835,13 +1835,13 @@ const (
 	// KeyScaffoldDetectOwnerAdviceWhere はURL のどの位置が owner なのかを示す案内である。
 	KeyScaffoldDetectOwnerAdviceWhere Key = "scaffold.detect.owner.advice_where"
 
-	// KeyScaffoldDetectProjectFromFlag はボードの番号を `--project` で渡されたときに出る。
+	// KeyScaffoldDetectProjectFromFlag はカンバンの番号を `--project` で渡されたときに出る。
 	KeyScaffoldDetectProjectFromFlag Key = "scaffold.detect.project.from_flag"
-	// KeyScaffoldDetectProjectNoOwner はowner が決まらず、ボードの候補を引けなかったときに出る。
+	// KeyScaffoldDetectProjectNoOwner はowner が決まらず、カンバンの候補を引けなかったときに出る。
 	KeyScaffoldDetectProjectNoOwner Key = "scaffold.detect.project.no_owner"
 	// KeyScaffoldDetectProjectListFailed は`gh project list` が失敗したときに出る。
 	KeyScaffoldDetectProjectListFailed Key = "scaffold.detect.project.list_failed"
-	// KeyScaffoldDetectProjectNone は探した owner のどこにもボードが無かったときに出る。
+	// KeyScaffoldDetectProjectNone は探した owner のどこにもカンバンが無かったときに出る。
 	KeyScaffoldDetectProjectNone Key = "scaffold.detect.project.none"
 	// KeyScaffoldDetectProjectSingle は候補が1件だけで、そのまま埋めたときに出る。
 	KeyScaffoldDetectProjectSingle Key = "scaffold.detect.project.single"
@@ -1851,28 +1851,28 @@ const (
 	KeyScaffoldDetectProjectAdviceOwnerFirst Key = "scaffold.detect.project.advice_owner_first"
 	// KeyScaffoldDetectProjectAdviceFlag は`--project` で直接指定する案内である。
 	KeyScaffoldDetectProjectAdviceFlag Key = "scaffold.detect.project.advice_flag"
-	// KeyScaffoldDetectProjectAdviceCreate はボードの作り方の案内である。
+	// KeyScaffoldDetectProjectAdviceCreate はカンバンの作り方の案内である。
 	KeyScaffoldDetectProjectAdviceCreate Key = "scaffold.detect.project.advice_create"
-	// KeyScaffoldDetectProjectAdviceOtherOwner はボードが別の user / organization にある場合の案内である。
+	// KeyScaffoldDetectProjectAdviceOtherOwner はカンバンが別の user / organization にある場合の案内である。
 	KeyScaffoldDetectProjectAdviceOtherOwner Key = "scaffold.detect.project.advice_other_owner"
-	// KeyScaffoldDetectProjectAdviceRerun はボードを作ったあとに実行し直す案内である。
+	// KeyScaffoldDetectProjectAdviceRerun はカンバンを作ったあとに実行し直す案内である。
 	KeyScaffoldDetectProjectAdviceRerun Key = "scaffold.detect.project.advice_rerun"
 	// KeyScaffoldDetectProjectAdvicePick は候補から1つを選んで実行し直す案内である。
 	KeyScaffoldDetectProjectAdvicePick Key = "scaffold.detect.project.advice_pick"
 	// KeyScaffoldDetectProjectAdvicePickOwner は候補が別の owner のものだった場合の案内である。
 	KeyScaffoldDetectProjectAdvicePickOwner Key = "scaffold.detect.project.advice_pick_owner"
 
-	// KeyScaffoldDetectRepositoriesNoOwnerOrProject はowner かボードの番号が決まらず、一覧を引けなかったときに出る。
+	// KeyScaffoldDetectRepositoriesNoOwnerOrProject はowner かカンバンの番号が決まらず、一覧を引けなかったときに出る。
 	KeyScaffoldDetectRepositoriesNoOwnerOrProject Key = "scaffold.detect.repositories.no_owner_or_project"
 	// KeyScaffoldDetectRepositoriesItemListFailed は`gh project item-list` が失敗したときに出る。
 	KeyScaffoldDetectRepositoriesItemListFailed Key = "scaffold.detect.repositories.item_list_failed"
 	// KeyScaffoldDetectRepositoriesItemListUnparsable は`gh project item-list` の出力を解釈できなかったときに出る。
 	KeyScaffoldDetectRepositoriesItemListUnparsable Key = "scaffold.detect.repositories.item_list_unparsable"
-	// KeyScaffoldDetectRepositoriesNoIssue はボードにリポジトリの issue が1件も載っていなかったときに出る。
+	// KeyScaffoldDetectRepositoriesNoIssue はカンバンにリポジトリの issue が1件も載っていなかったときに出る。
 	KeyScaffoldDetectRepositoriesNoIssue Key = "scaffold.detect.repositories.no_issue"
-	// KeyScaffoldDetectRepositoriesListed はボードから拾ったリポジトリを並べたときに出る。
+	// KeyScaffoldDetectRepositoriesListed はカンバンから拾ったリポジトリを並べたときに出る。
 	KeyScaffoldDetectRepositoriesListed Key = "scaffold.detect.repositories.listed"
-	// KeyScaffoldDetectRepositoriesAdviceDecideFirst はowner とボードの番号を先に決める案内である。
+	// KeyScaffoldDetectRepositoriesAdviceDecideFirst はowner とカンバンの番号を先に決める案内である。
 	KeyScaffoldDetectRepositoriesAdviceDecideFirst Key = "scaffold.detect.repositories.advice_decide_first"
 	// KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional は手で書いてもよいことを伝える案内である。
 	KeyScaffoldDetectRepositoriesAdviceWriteByHandOptional Key = "scaffold.detect.repositories.advice_write_by_hand_optional"
@@ -1886,24 +1886,24 @@ const (
 	KeyScaffoldDetectRepositoriesAdviceRemoveUnneeded Key = "scaffold.detect.repositories.advice_remove_unneeded"
 	// KeyScaffoldDetectRepositoriesAdviceDryRun は`continuo trust --dry-run` で確かめさせる案内である。
 	KeyScaffoldDetectRepositoriesAdviceDryRun Key = "scaffold.detect.repositories.advice_dry_run"
-	// KeyScaffoldDetectRepositoriesAdviceTruncated はボードの項目を打ち切って読んだことを伝える案内である。
+	// KeyScaffoldDetectRepositoriesAdviceTruncated はカンバンの項目を打ち切って読んだことを伝える案内である。
 	KeyScaffoldDetectRepositoriesAdviceTruncated Key = "scaffold.detect.repositories.advice_truncated"
 )
 
-// ボードの Status フィールドを読む処理（internal/setup の FetchStatusField）の文言。
+// カンバンの Status フィールドを読む処理（internal/setup の FetchStatusField）の文言。
 //
 // **field_not_single_select と field_not_found は先頭の %w に ErrStatusFieldNotFound を渡す**
 // （errors.Is の切り分けを保つため）。
 const (
-	// KeySetupBoardOwnerMissing はボードの owner が決まっていないときに出る。
+	// KeySetupBoardOwnerMissing はカンバンの owner が決まっていないときに出る。
 	KeySetupBoardOwnerMissing Key = "setup.board.owner_missing"
-	// KeySetupBoardProjectNumberMissing はボードの番号が決まっていないときに出る。
+	// KeySetupBoardProjectNumberMissing はカンバンの番号が決まっていないときに出る。
 	KeySetupBoardProjectNumberMissing Key = "setup.board.project_number_missing"
 	// KeySetupBoardFieldListUnparsable は`gh project field-list` の出力を解釈できなかったときに出る。
 	KeySetupBoardFieldListUnparsable Key = "setup.board.field_list_unparsable"
 	// KeySetupBoardFieldNotSingleSelect は名前は合っていても single-select でなかったときに出る。
 	KeySetupBoardFieldNotSingleSelect Key = "setup.board.field_not_single_select"
-	// KeySetupBoardFieldNotFound はその名前のフィールドがボードに無かったときに出る。
+	// KeySetupBoardFieldNotFound はその名前のフィールドがカンバンに無かったときに出る。
 	KeySetupBoardFieldNotFound Key = "setup.board.field_not_found"
 )
 
@@ -2247,9 +2247,9 @@ const (
 
 	// KeyWorkspacePrepareWorktreePathMismatch は、herdr が別の場所を開いたことを表す。
 	KeyWorkspacePrepareWorktreePathMismatch Key = "workspace.prepare.worktree_path_mismatch"
-	// KeyWorkspaceResolveBaseDefaultBranchMissing は base を決める手掛かりが設定にもボードの応答にも無かったときに出る。
+	// KeyWorkspaceResolveBaseDefaultBranchMissing は base を決める手掛かりが設定にもカンバンの応答にも無かったときに出る。
 	KeyWorkspaceResolveBaseDefaultBranchMissing Key = "workspace.resolve_base.default_branch_missing"
-	// KeyWorkspaceResolveBaseDefaultBranchNotString はボードが返した既定 branch が文字列でなかったときに出る。
+	// KeyWorkspaceResolveBaseDefaultBranchNotString はカンバンが返した既定 branch が文字列でなかったときに出る。
 	KeyWorkspaceResolveBaseDefaultBranchNotString Key = "workspace.resolve_base.default_branch_not_string"
 )
 
@@ -2285,7 +2285,7 @@ const (
 	KeyOrchestratorOpenRegularFileStatFailed Key = "orchestrator.open_regular_file.stat_failed"
 	// KeyOrchestratorOpenRegularFileNotRegularFile はtranscript が通常のファイルでなかったときに出る（FIFO などを弾く）。
 	KeyOrchestratorOpenRegularFileNotRegularFile Key = "orchestrator.open_regular_file.not_regular_file"
-	// KeyOrchestratorStartRunStatusUpdateFailed は着手のときにボードの Status を running_state へ書けなかったときに出る。
+	// KeyOrchestratorStartRunStatusUpdateFailed は着手のときにカンバンの Status を running_state へ書けなかったときに出る。
 	KeyOrchestratorStartRunStatusUpdateFailed Key = "orchestrator.start_run.status_update_failed"
 	// KeyOrchestratorStartRunWorktreePrepareFailed は作業用の worktree を用意できなかったときに出る。
 	KeyOrchestratorStartRunWorktreePrepareFailed Key = "orchestrator.start_run.worktree_prepare_failed"
@@ -2350,7 +2350,7 @@ const (
 	KeyDaemonRunRestoreFailed Key = "daemon.run.restore_failed"
 	// KeyDaemonRunStartupChecksHerdrUnreachable は起動時の検査で herdr の socket に到達できないか protocol が想定外だったときに出る。
 	KeyDaemonRunStartupChecksHerdrUnreachable Key = "daemon.run_startup_checks.herdr_unreachable"
-	// KeyDaemonRunStartupChecksStatusOptionMismatch は起動時の検査でボードの Status の選択肢名が設定と一致しなかったときに出る。
+	// KeyDaemonRunStartupChecksStatusOptionMismatch は起動時の検査でカンバンの Status の選択肢名が設定と一致しなかったときに出る。
 	KeyDaemonRunStartupChecksStatusOptionMismatch Key = "daemon.run_startup_checks.status_option_mismatch"
 	// KeyDaemonRunStartupChecksNotWritable は起動時の検査で書けなければならない場所に書けなかったときに出る。
 	KeyDaemonRunStartupChecksNotWritable Key = "daemon.run_startup_checks.not_writable"
@@ -2366,7 +2366,7 @@ const (
 	KeyDaemonBuildHerdrSocketUnresolved Key = "daemon.build.herdr_socket_unresolved"
 	// KeyDaemonBuildWorkspaceFailed は依存の組み立てで worktree の管理を作れなかったときに出る。
 	KeyDaemonBuildWorkspaceFailed Key = "daemon.build.workspace_failed"
-	// KeyDaemonBuildTokenFailed は依存の組み立てでボードを読むためのトークンを取れなかったときに出る。
+	// KeyDaemonBuildTokenFailed は依存の組み立てでカンバンを読むためのトークンを取れなかったときに出る。
 	KeyDaemonBuildTokenFailed Key = "daemon.build.token_failed"
 	// KeyDaemonBuildTrackerFailed は依存の組み立てでトラッカーのアダプタを作れなかったときに出る。
 	KeyDaemonBuildTrackerFailed Key = "daemon.build.tracker_failed"
@@ -2471,9 +2471,9 @@ const (
 	KeyCLIPromptErrAttemptPositive Key = "cli.prompt.err_attempt_positive"
 	// KeyCLIPromptErrAttemptNeedsURL は--attempt を--url 無しで渡したときに出る。
 	KeyCLIPromptErrAttemptNeedsURL Key = "cli.prompt.err_attempt_needs_url"
-	// KeyCLIPromptErrFetchFailed はボードを読めないときに出る。
+	// KeyCLIPromptErrFetchFailed はカンバンを読めないときに出る。
 	KeyCLIPromptErrFetchFailed Key = "cli.prompt.err_fetch_failed"
-	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がボードから組み立てられないときに出る。
+	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がカンバンから組み立てられないときに出る。
 	KeyCLIPromptErrIssueNotOnBoard Key = "cli.prompt.err_issue_not_on_board"
 	// KeyCLIPromptErrRenderFailed は変数展開に失敗したときに出る。
 	KeyCLIPromptErrRenderFailed Key = "cli.prompt.err_render_failed"

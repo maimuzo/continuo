@@ -39,7 +39,7 @@ const (
 	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。
 	LabelBoard = i18n.KeyDoctorLabelBoard
-	// LabelStatusNames は、設定に書いた Status 名と紛らわしい選択肢がボードに無いかの検査である。
+	// LabelStatusNames は、設定に書いた Status 名と紛らわしい選択肢がカンバンに無いかの検査である。
 	//
 	// **`✗` にしない。**紛らわしいだけでは continuo は動く。だが取り違えたまま無人で回すと、
 	// **人間が作業中の issue にエージェントが着手する。**
@@ -71,11 +71,11 @@ const (
 	// 動きになる。**起動を止めると、いま動いている人の continuo が版を上げた瞬間に
 	// 起動しなくなる**ので、警告に留める。
 	LabelCleanupStates = i18n.KeyDoctorLabelCleanupStates
-	// LabelRewriteKeys は `tracker.automated_state_rewrite` のキーがボードの Status の
+	// LabelRewriteKeys は `tracker.automated_state_rewrite` のキーがカンバンの Status の
 	// 選択肢にあるかの検査である（設計 3-57。issue #67）。
 	//
-	// **`✗` にしない。**キーはボードに実在しなくてよく、無ければその行が引かれないだけである。
-	// **`✗` にすると、ボードの自動化をやめて選択肢を消した人が抜け出せなくなる。**
+	// **`✗` にしない。**キーはカンバンに実在しなくてよく、無ければその行が引かれないだけである。
+	// **`✗` にすると、カンバンの自動化をやめて選択肢を消した人が抜け出せなくなる。**
 	//
 	// **黙って通してもいけない。**綴りを打ち間違えた行は一度も効かないまま死ぬのに、
 	// **起動時の警告は `continuo doctor` には出てこない**（doctor は tracker のログを捨てる）。
@@ -125,7 +125,7 @@ const (
 
 // worse は2つの記号のうち「重いほう」を返す（✗ > ! > ✓）。
 //
-// **1つの見出し語が対象を複数持つときに使う**（clone と信頼登録はボードに載っている
+// **1つの見出し語が対象を複数持つときに使う**（clone と信頼登録はカンバンに載っている
 // リポジトリの数だけ対象がある）。1件でも足りなければ見出し語全体を ✗ にする。
 //
 // a: 比較する記号。
@@ -246,7 +246,7 @@ func (r Report) Write(w io.Writer) error {
 		b.WriteString(i18n.T(i18n.KeyDoctorSummaryAllOK, len(r.Results)) + "\n")
 	case missing == 0:
 		// **`!` だけのときを「問題があります」と書かない。**対象リポジトリが0件のとき
-		// （ボードが空）もここへ来る。**ボードが空なのは設定の誤りではない**（設計 3-32）。
+		// （カンバンが空）もここへ来る。**カンバンが空なのは設定の誤りではない**（設計 3-32）。
 		b.WriteString(i18n.T(i18n.KeyDoctorSummaryUnknownOnly, unknown, unknown) + "\n")
 	default:
 		b.WriteString(i18n.T(i18n.KeyDoctorSummaryProblems, missing+unknown, missing, unknown) + "\n")

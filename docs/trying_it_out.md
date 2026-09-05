@@ -11,7 +11,7 @@ issue into `Ready`, and watch `continuo` open a worktree and drive Claude Code u
 below says which steps were actually executed while writing this document and which were not.
 
 **言いたいこと。**1件の issue が `Ready` から `Done` まで通るのを、実際に目で見るための手順である。
-**ボードは新しく作らない。いま使っているボードにそのまま足して使う。**
+**カンバンは新しく作らない。いま使っているカンバンにそのまま足して使う。**
 **すべてのコマンドは「どこで実行するか」を書いてあり、そのブロックだけで動く。**
 
 ## この文書のどこを実際に叩いたか
@@ -21,13 +21,13 @@ below says which steps were actually executed while writing this document and wh
 | 段 | 叩いたか | 補足 |
 | --- | --- | --- |
 | 段1 ビルドする | **叩いた** | `go build` と、各サブコマンドの `--help` |
-| 段2 使うボードを確かめる | **叩いた（読むだけ）** | `gh project list` と `gh project field-list`。**本番のボードには読み取りしか行っていない** |
+| 段2 使うカンバンを確かめる | **叩いた（読むだけ）** | `gh project list` と `gh project field-list`。**本番のカンバンには読み取りしか行っていない** |
 | 段3 設定を置く | **叩いた** | 自動で埋まるとき・`--owner` / `--project` を渡すとき・`gh` が無いとき・既にあるときの4通り |
-| 段4 Status の割り当てを合わせる | **叩いた** | `continuo setup` を本番のボードに対して実行した（読み取りのみ） |
+| 段4 Status の割り当てを合わせる | **叩いた** | `continuo setup` を本番のカンバンに対して実行した（読み取りのみ） |
 | 段5 clone して信頼を登録する | **叩いた** | `continuo trust --dry-run` は実物の `~/.claude.json` に対して（読むだけ）。書き込みはテスト用ホームディレクトリで確かめた |
 | 段5b Keychain へのアクセスを許可する | **叩いた** | 実物の Keychain に対して（読むだけ）。**確認のダイアログは出なかった**（2026-08-21、macOS） |
 | 段6 前提を検査する | **叩いた** | 揃っているとき・フィールド名が違うとき・設定が未記入のときの3通り |
-| 段7 issue を1件用意する | **テスト用mock一式で叩いた** | 偽の `gh` とテスト用GitHub GraphQL mock に対して。**本番のボードには1リクエストも送っていない** |
+| 段7 issue を1件用意する | **テスト用mock一式で叩いた** | 偽の `gh` とテスト用GitHub GraphQL mock に対して。**本番のカンバンには1リクエストも送っていない** |
 | 段8 動かす | **両方叩いた** | **本物で起動し、巡回が始まるところまで確かめた**（`Ready` が0件なので Claude Code は起動していない）。1件を `Ready` から `Done` まで通したのはテスト用mock一式のほう |
 | 段8b 着手を取り消す | **`--help` だけ叩いた** | 貼ってある `abandon --help` の出力は実際に叩いたものである（2026-08-24）。**消す実行は、本物にもテスト用mock一式にも叩いていない。**出力例は文言の資源（[internal/i18n/messages/ja.json](../internal/i18n/messages/ja.json)）から組み立てたものである |
 | 段9 止める・片付ける | **両方叩いた** | 本物にもmockにも `Ctrl+C` 相当の `SIGINT` を送り、終了コード 0 で終わることを確かめた |
@@ -53,14 +53,14 @@ below says which steps were actually executed while writing this document and wh
 | 記号 | 何を入れるか | 例 |
 | --- | --- | --- |
 | `<ACCOUNT>` | あなたの GitHub アカウント名 | `octocat` |
-| `<PROJECT>` | **いま使っているボードの番号**（段2 で確かめる） | `3` |
+| `<PROJECT>` | **いま使っているカンバンの番号**（段2 で確かめる） | `3` |
 | `<REPO>` | **試す対象のリポジトリ**（issue を置く場所） | `octocat/sandbox` |
 
 > **`<REPO>` は使い捨てにできるものを選ぶ。**エージェントがそのリポジトリを実際に編集し、
 > commit して push する。**本業のリポジトリを指定しない。**
 >
-> **`<REPO>` が既にボードに載っていれば、段5 の手作業は無くなる。**
-> 段3 の `continuo init` が `trust.repositories` をボードから拾って埋めるので、
+> **`<REPO>` が既にカンバンに載っていれば、段5 の手作業は無くなる。**
+> 段3 の `continuo init` が `trust.repositories` をカンバンから拾って埋めるので、
 > **そこに `<REPO>` が入っていれば、段5 は `continuo trust` を1回叩くだけである。**
 > 新しいリポジトリを使うなら、段5 で1行足す。
 
@@ -68,9 +68,9 @@ below says which steps were actually executed while writing this document and wh
 
 | 何を | なぜ |
 | --- | --- |
-| **ボードは作らない** | continuo は**既にあるボードに後から足して使う。**足りない選択肢があるときだけ画面で足す（段2） |
+| **カンバンは作らない** | continuo は**既にあるカンバンに後から足して使う。**足りない選択肢があるときだけ画面で足す（段2） |
 | **段8 から枠を消費する** | 実際に Claude Code が起動し、issue を実装しようとする |
-| **draft item は動かない** | ボードの draft item は**リポジトリを持たないので作業場所を決められない。**continuo は着手せず飛ばす。**リポジトリの issue を載せること** |
+| **draft item は動かない** | カンバンの draft item は**リポジトリを持たないので作業場所を決められない。**continuo は着手せず飛ばす。**リポジトリの issue を載せること** |
 | **agent teams には対応していない** | Claude Code の実験的な機能で、**既定では無効。**有効にしていると issue が失敗することがある。[docs/FAQ.md](FAQ.md) の「「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）」を参照 |
 | **止めるのは `Ctrl+C`** | 巡回を止め、hook の受け口を閉じ、turn ループを畳んで抜ける。**Claude Code はそのまま動き続ける。pane は閉じない**（次の起動で引き継ぐ） |
 
@@ -196,9 +196,9 @@ Usage of continuo allow-keychain-access:
 
 ---
 
-## 段2. 使うボードを確かめる（作らない）
+## 段2. 使うカンバンを確かめる（作らない）
 
-**言いたいこと。**continuo は**既にあるボードに後から足して使うものである。**
+**言いたいこと。**continuo は**既にあるカンバンに後から足して使うものである。**
 **要るのは `Status` フィールドに5つの選択肢が揃っていることだけで、
 揃っていれば `WORKFLOW.md` は既定のままでよい。**
 
@@ -229,7 +229,7 @@ Priority: P0, P1, P2, P3
 Size: XS, S, M, L, XL
 ```
 
-**`Status` に必要な5つが全部ある。**このボードは**何も足さずにそのまま使える。**
+**`Status` に必要な5つが全部ある。**このカンバンは**何も足さずにそのまま使える。**
 
 | 選択肢 | 何に使うか | `WORKFLOW.md` のどのキーか |
 | --- | --- | --- |
@@ -246,7 +246,7 @@ Size: XS, S, M, L, XL
 
 | 道 | 何をするか | 画面の作業 |
 | --- | --- | --- |
-| **選択肢を足す** | ボードを開く → 右上の `⋯` → `Settings` → 左の `Status` → `+ Add option` | 足す数だけ |
+| **選択肢を足す** | カンバンを開く → 右上の `⋯` → `Settings` → 左の `Status` → `+ Add option` | 足す数だけ |
 | **設定を縮める** | `Status` に実在する名前だけで回るように `WORKFLOW.md` を書き換える（段4） | 無し |
 
 > **選択肢を API で足してはならない。**足す API は `updateProjectV2Field` しか無く、
@@ -257,13 +257,13 @@ Size: XS, S, M, L, XL
 
 **`status_field` に書いた名前のフィールドが、絞り込み・読み取り・書き込みのすべてで使われる。**
 `continuo Status` のように**空白を含む名前でもよい**（設計 3-34。絞り込みのキーは引用符で囲んで組み立てている）。
-組み込みの `Status` を別の目的で使っているボードでは、この道を採る。
+組み込みの `Status` を別の目的で使っているカンバンでは、この道を採る。
 
 **確かめていないこと。**この文書を書くにあたって、専用フィールドを実際には作っていない。
-**本番のボードへ書き込まないためである。**空白を含むフィールド名が絞り込みのキーとして解決されることは、
+**本番のカンバンへ書き込まないためである。**空白を含むフィールド名が絞り込みのキーとして解決されることは、
 設計 3-34 に読み取り専用クエリでの実測が載っている。
 
-**綴りが1文字でも違うとボードを読めない。**実際に、存在しない `continuo Status` を指定して
+**綴りが1文字でも違うとカンバンを読めない。**実際に、存在しない `continuo Status` を指定して
 `continuo doctor` を叩いた出力（段6 に全体を載せてある）。
 
 ```text
@@ -312,13 +312,13 @@ WORKFLOW.md を作成しました: ~/continuo-try/WORKFLOW.md
 
 ### 自動で入らないとき
 
-**ボードが2枚以上あると `project_number` は自動で決まらない。**候補が番号・名前・URL で並ぶので、
+**カンバンが2枚以上あると `project_number` は自動で決まらない。**候補が番号・名前・URL で並ぶので、
 段2 で確かめた番号を指定して置き直す。
 
-> **organization のボードを使うなら `--owner <組織名>` を必ず渡す。**
+> **organization のカンバンを使うなら `--owner <組織名>` を必ず渡す。**
 > `continuo init` は `gh api user` に聞くので、**渡さないと個人のログイン名が入る。**
 > しかもその値は `✓` として報告されるので、**間違っていることが分からない。**
-> 段4 の `continuo setup` も同じ経路でボードを決めるので、そちらにも渡す。
+> 段4 の `continuo setup` も同じ経路でカンバンを決めるので、そちらにも渡す。
 
 **実行する場所: `~/continuo-try`**
 
@@ -392,14 +392,14 @@ cd ~/continuo-try && /tmp/continuo prompt --show --builtin
 
 ## 段4. Status の割り当てを合わせる
 
-**言いたいこと。**`continuo setup` が、ボードの選択肢を continuo の5つの役割へ割り当てる。
+**言いたいこと。**`continuo setup` が、カンバンの選択肢を continuo の5つの役割へ割り当てる。
 **役割の説明が出るので、それを読んで番号で選ぶ。**
 **書き換わるのは `Status` に関する7行だけで、段3 で手を入れた行はそのまま残る。**
 
 **段3 で作った `WORKFLOW.md` に対して実行する。**`continuo setup` は雛形を作らないので、
 `WORKFLOW.md` が無いときは段3 をやり直すよう案内して止まる（終了コード 1）。
 
-> **`continuo setup` は、どのボードを読むかを `WORKFLOW.md` から決めない。**
+> **`continuo setup` は、どのカンバンを読むかを `WORKFLOW.md` から決めない。**
 > `gh` に聞き直す。だから次の3つの場合はフラグで指定する。
 >
 > ```bash
@@ -409,8 +409,8 @@ cd ~/continuo-try && /tmp/continuo prompt --show --builtin
 >
 > | いつフラグが要るか | 指定しないとどうなるか |
 > | --- | --- |
-> | **ボードが2枚以上ある** | ボードを決められず、終了コード 1 で止まる（段3 と同じ） |
-> | **organization のボードを使う** | `gh api user` が返す個人のログイン名で探すので、**別のボードの選択肢を読む** |
+> | **カンバンが2枚以上ある** | カンバンを決められず、終了コード 1 で止まる（段3 と同じ） |
+> | **organization のカンバンを使う** | `gh api user` が返す個人のログイン名で探すので、**別のカンバンの選択肢を読む** |
 > | **`Status` 以外のフィールドを使う**（段2 の「専用のフィールド」） | 既定の `Status` を読む。`--status-field` に段2 で決めた名前を渡す |
 
 ```text
@@ -425,7 +425,7 @@ cd ~/continuo-try
 /tmp/continuo setup
 ```
 
-**実際の出力**（このボードの選択肢は段2 で確かめた6つ）。
+**実際の出力**（このカンバンの選択肢は段2 で確かめた6つ）。
 
 ```text
 カンバンの Status フィールドには次の選択肢があります。
@@ -504,7 +504,7 @@ WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/W
 | **7つのキーのどれかが `WORKFLOW.md` から消されている** | **尋ねる前に止める。**消したキーを名指しする（5問答えさせてから捨てない） |
 | 同じ選択肢を2つの役割に選ぶ | **拒否して同じ役割をもう一度尋ねる**（打ち切らない） |
 | **番号 `0`**（その役割に使える選択肢が無い） | **打ち切る。**`WORKFLOW.md` は書き換えない |
-| 選択肢が5個未満のボード | **尋ねる前に止める。**足す手順を出す |
+| 選択肢が5個未満のカンバン | **尋ねる前に止める。**足す手順を出す |
 | `Ctrl+C` | 中断する。`WORKFLOW.md` は書き換えない |
 
 ### 手で書き換えることもできる
@@ -516,7 +516,7 @@ cd ~/continuo-try
 ${EDITOR:-vi} WORKFLOW.md
 ```
 
-**書き換えるのは front matter の次のキーだけである。**すべて**ボードに実在する選択肢名**を書く。
+**書き換えるのは front matter の次のキーだけである。**すべて**カンバンに実在する選択肢名**を書く。
 
 ```yaml
 tracker:
@@ -532,7 +532,7 @@ tracker:
   failure_state: "Blocked"                   # 打ち切った・失敗したときに書き込む Status
 ```
 
-**選択肢を足せない（足したくない）ボードでの縮め方の例。**
+**選択肢を足せない（足したくない）カンバンでの縮め方の例。**
 組み込みの `Status` が `Todo` / `In Progress` / `Done` の3つだけなら、次のようにする。
 
 ```yaml
@@ -564,14 +564,14 @@ level=ERROR msg="continuo を起動できません" error="起動できません
 取ってきて、`~/.claude.json` に信頼を書き込む。**手で `ghq get` を叩く必要も、`claude` を
 起動して承認する必要も無い。**
 
-**`trust.repositories` は段3 の `continuo init` がボードから拾って埋めている。**
+**`trust.repositories` は段3 の `continuo init` がカンバンから拾って埋めている。**
 **`<REPO>` がそこに入っていれば、この段でファイルを編集する必要は無い。**
 
 ### `<REPO>` が一覧に無ければ書き足す
 
 **言いたいこと。****まず見る。入っていれば何もしなくてよい。**
-段3 の `continuo init` が `trust.repositories` をボードから拾って埋めている。
-**入っていないのは「そのときボードに載っていなかったリポジトリ」だけ**である。
+段3 の `continuo init` が `trust.repositories` をカンバンから拾って埋めている。
+**入っていないのは「そのときカンバンに載っていなかったリポジトリ」だけ**である。
 
 **実行する場所: `~/continuo-try`**
 
@@ -586,7 +586,7 @@ grep -n -A 9 "^  repositories:" WORKFLOW.md    # いま並んでいるものを�
 
 | いつ無いか | どうするか |
 | --- | --- |
-| **これから issue を作るリポジトリで試す** | 段7 で初めてボードに載るので、いま手で足す |
+| **これから issue を作るリポジトリで試す** | 段7 で初めてカンバンに載るので、いま手で足す |
 | 段3 で自分で消した | 消した行を書き戻す |
 | `gh` の認証が無い状態で `init` を叩いた | **手で書き足す**（下記）。**`continuo init --force` は使わない** |
 
@@ -613,7 +613,7 @@ trust:
 | --- | --- |
 | **巡回のループ** | **`~/.claude.json` の `projects["<clone の絶対パス>"].hasTrustDialogAccepted`。**これが唯一の門番 |
 | `continuo trust` | `WORKFLOW.md` の `trust.repositories`。**そこに書かれたものだけ**を `~/.claude.json` へ登録する |
-| `continuo doctor` の `信頼登録` | **ボードに載っている issue のリポジトリ**について `~/.claude.json` を見る |
+| `continuo doctor` の `信頼登録` | **カンバンに載っている issue のリポジトリ**について `~/.claude.json` を見る |
 
 **だから2つのことが起きうる。**
 
@@ -779,8 +779,8 @@ demo/sample-a の clone がないので `ghq get` で取ってきます（時間
 | **列挙していないリポジトリは登録しない** | 対象は `WORKFLOW.md` の `trust.repositories` に残した行だけである |
 | **変えるものが無ければ書き込まない** | 2回目の実行ではバックアップも増えない |
 
-> **`trust.repositories` に書いたものだけが対象である。**ボードから自動で集めない。
-> **issue を足せる人はボードに載るリポジトリを変えられる**ので、そこから自動で登録すると
+> **`trust.repositories` に書いたものだけが対象である。**カンバンから自動で集めない。
+> **issue を足せる人はカンバンに載るリポジトリを変えられる**ので、そこから自動で登録すると
 > 信頼させる先を他人が増やせてしまう（設計 3-33）。
 
 ---
@@ -848,7 +848,7 @@ cd ~/continuo-try
 ```
 
 見出し語ごとに検査して、足りないものと直し方を出す。**`✗` が1つでもあれば終了コードは 1。**
-**既存のボードを既定の設定のまま使って**実際に叩いた出力。
+**既存のカンバンを既定の設定のまま使って**実際に叩いた出力。
 
 > **`資格情報` の行は、段5b を通した macOS で `rate_limit.token_source: keychain` にして
 > 取り直したものである**（2026-08-21）。**`claude` から `worktree の場所` までの4行は、
@@ -901,7 +901,7 @@ Claude Code は SessionStart hook を走らせる前にそこへ書き、continu
 
 | 症状 | 直し方 |
 | --- | --- |
-| `Could not resolve to a Unions::ProjectV2FieldConfiguration with the name …` | `status_field` に書いた名前のフィールドがボードに無い。段2 で確かめた綴りに合わせる |
+| `Could not resolve to a Unions::ProjectV2FieldConfiguration with the name …` | `status_field` に書いた名前のフィールドがカンバンに無い。段2 で確かめた綴りに合わせる |
 | `カンバンの Status の選択肢名が設定と一致しません` | 段4 の書き換えが足りない。**この状態では段8 の起動時検査が止めるので、無言で進むことはない** |
 | `gh の scope に "project" がありません` | `gh auth refresh -h github.com -s project` を実行する |
 | `front matter が不正です: unknown field "…"` | **設定のキーが増減したときに出る。**`continuo` を更新したら雛形も変わっている。出たキーの行を `WORKFLOW.md` から消す（**`continuo init --force` は使わない。**段4 の割り当てが消える） |
@@ -1014,7 +1014,7 @@ gh issue create --repo <REPO> \
   --body "README.md の先頭に、このリポジトリが何かを1行で書いてください。"
 ```
 
-返ってきた issue の URL を控える。**ボードに載せる。**
+返ってきた issue の URL を控える。**カンバンに載せる。**
 
 **実行する場所: どこでもよい**
 
@@ -1022,7 +1022,7 @@ gh issue create --repo <REPO> \
 gh project item-add <PROJECT> --owner <ACCOUNT> --url <issue の URL>
 ```
 
-**`Ready` にするのは画面での作業である。**ボードを開き、その issue の `Status`
+**`Ready` にするのは画面での作業である。**カンバンを開き、その issue の `Status`
 （段4 で `status_field` を変えたなら、そのフィールド）を `Ready` にする。
 
 > **最初に試す issue は小さいものにする。**エージェントは実際にコードを書き、commit して push する。
@@ -1059,18 +1059,18 @@ cd ~/continuo-try
 | --- | --- | --- |
 | 1 | 設定を読み、`flock` を取り、前提を検査する | 標準エラーのログ |
 | 2 | 置き場所を走査して、引き継ぐ run を探す（初回は0件） | 同上 |
-| 3 | `Ready` の issue の処理を開始し、**Status を `In Progress` へ書く** | **ボードで見える** |
+| 3 | `Ready` の issue の処理を開始し、**Status を `In Progress` へ書く** | **カンバンで見える** |
 | 4 | worktree を作り、herdr の pane で Claude Code を起動する | **herdr の画面で見える** |
 | 5 | エージェントが作業し、push して **PR を作る** | **GitHub で見える** |
 | 6 | エージェントが `CONTINUO-STATUS:` の行を出す | herdr の pane |
-| 7 | continuo がその行を読み、**Status を `In Review` へ動かす** | **ボードで見える** |
+| 7 | continuo がその行を読み、**Status を `In Review` へ動かす** | **カンバンで見える** |
 | 8 | 人間が PR を確認して **`Done` へ動かす** | 人間の操作 |
 | 9 | continuo が worktree と branch を片付ける | 置き場所から消える |
 
 **巡回の間隔は既定30秒である。**すぐには動かない。
 
-**段5 で Status が勝手に動いたら、ボードの自動化である。**
-ボードの `Settings` → `Workflows` に `Pull request linked to issue` という自動化があり、
+**段5 で Status が勝手に動いたら、カンバンの自動化である。**
+カンバンの `Settings` → `Workflows` に `Pull request linked to issue` という自動化があり、
 **有効にしていると、PR が issue に紐づいた瞬間に Status を書き換える。**
 continuo は知らない Status になった issue を、
 `tracker.unknown_state_grace_ms`（既定10分）のあと止める。
@@ -1218,7 +1218,7 @@ cd ~/continuo-try
 | **片付けたあとの Status は動かさない** | 「Status は動かしていません。カンバンで決めてください。」と出る。**動かす先が決まっているなら `--to "<Status 名>"`** |
 | **その issue の worktree が無ければ、何もせずに終わる** | 「この issue の worktree はありません」と出る。**終了コードは 0** |
 
-> **ボードの操作だけでは取り消せない。**`Ready` へ戻しても continuo は止まらない（`Ready` は
+> **カンバンの操作だけでは取り消せない。**`Ready` へ戻しても continuo は止まらない（`Ready` は
 > 作業中の Status の1つであり、着手待ちの Status でもあるので**もう一度着手されうる**）。
 > `Done` へ動かすと、片付けの前に「この作業のコメントが issue にあるか」を確かめ、
 > **無ければセッションを復元して Claude Code を起動し直す。**
@@ -1257,7 +1257,7 @@ level=INFO msg=continuo を終了しました
 | --- | --- |
 | worktree と branch | **Status を `Done` にすれば continuo が片付ける。**着手そのものを取り消したいなら段8b の `continuo abandon` を使う。それでも残っていれば `~/worktrees` の下を見て `git worktree remove` と `git branch -D` |
 | push した branch | **GitHub には残る。**continuo が消すのは手元の branch だけである（`cleanup.require_pushed` で push を確かめてから消しているので、成果は GitHub 側に残る）。要らなければ GitHub の画面か `git push origin --delete <branch>` で消す |
-| ボードの item | **ボードは消さない。**試した issue だけを画面から外すか、`Done` に置いたままにする |
+| カンバンの item | **カンバンは消さない。**試した issue だけを画面から外すか、`Done` に置いたままにする |
 | 信頼の登録 | `~/.claude.json.continuo-backup-<日時>` から戻すか、`projects` の該当キーを消す。**バックアップを消すのは人間である** |
 | 作業ディレクトリ | `~/continuo-try` を消す |
 | 実行ファイル | `/tmp/continuo` を消す |
@@ -1269,12 +1269,12 @@ level=INFO msg=continuo を終了しました
 
 | 症状 | 見るところ |
 | --- | --- |
-| **issue の処理が始まらない** | Status が `Ready` か。`doctor` の `ボード` と `信頼登録` が `✓` か。**信頼の門番は `~/.claude.json` である**（`trust.repositories` に書くだけでは足りない。`continuo trust` の実行が要る。段5） |
+| **issue の処理が始まらない** | Status が `Ready` か。`doctor` の `カンバン` と `信頼登録` が `✓` か。**信頼の門番は `~/.claude.json` である**（`trust.repositories` に書くだけでは足りない。`continuo trust` の実行が要る。段5） |
 | **別のフィールドを書き換えている** | `status_field` が段2 で確かめた名前になっているか。continuo は `status_field` に書いた名前のフィールドしか読み書きしない |
 | **信頼していないリポジトリの issue を飛ばしている** | `doctor` の `信頼登録` が `✓` か。**未信頼だと worktree も pane も作られない。**そのリポジトリにつき1回、**issue にコメントが投稿される**（直し方もそこに書いてある） |
 | **`In Review` にならない** | エージェントが `CONTINUO-STATUS: review` を出しているか。herdr の pane で応答を見る |
 | **issue が急に `Blocked` になった** | **issue のコメントを開く。**そこに何が起きたか・どう確かめるか・どう直すかが書いてある。**画面が変わらないまま `claude.turn_timeout_ms` が過ぎると打ち切る**（既定1時間）。**これは turn の総実行時間の上限ではない。**画面が変わり続けている限り、1つの指示に何時間かかっても打ち切らない |
-| **着手する issue を間違えた** | **段8b の `continuo abandon` で着手する前へ戻す。**ボードで `Ready` へ戻しても止まらず、`Done` へ動かすと Claude Code が起動し直される |
+| **着手する issue を間違えた** | **段8b の `continuo abandon` で着手する前へ戻す。**カンバンで `Ready` へ戻しても止まらず、`Done` へ動かすと Claude Code が起動し直される |
 | **片付かない** | **未コミットの変更が残っている**か、**push していない commit がある**と消さない（成果を失わないため）。ログに理由が出る |
 | 枠を使い切った | continuo は待って再開する。Claude Code 2.1.234 以降は Claude Code 自身も継続するので、continuo は `agent_status` を見て二重投入を避ける |
 | **同じ issue に Claude Code が2つ立った** | 起きてはならない。**再現手順を添えて issue を立ててほしい** |

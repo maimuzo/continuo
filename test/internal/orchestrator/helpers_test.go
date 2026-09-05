@@ -12,7 +12,7 @@
 // **Claude Code は起動しない。**turn の終わりは、偽サーバの `agent.prompt` の応答と、
 // テストが Orchestrator.OnHook へ直接流す hook で再現する。
 //
-// **本番のボード（project #3）へは接続しない。**トラッカーは in-memory のmockである。
+// **本番のカンバン（project #3）へは接続しない。**トラッカーは in-memory のmockである。
 package orchestrator_test
 
 import (
@@ -599,10 +599,10 @@ func (fh *fakeHerdr) Client() *herdr.Client {
 
 // ===== テスト用トラッカー mock =====
 
-// fakeTracker は in-memory のボードである。**本番のボードへは接続しない。**
+// fakeTracker は in-memory のカンバンである。**本番のカンバンへは接続しない。**
 type fakeTracker struct {
 	mu sync.Mutex
-	// board はボードの並び順そのままの issue の一覧である。
+	// board はカンバンの並び順そのままの issue の一覧である。
 	board []tracker.Issue
 	// comments は issue のノード ID ごとのコメントである。
 	comments map[string][]tracker.Comment
@@ -662,7 +662,7 @@ type fakeTracker struct {
 	//
 	// **GitHub の `items(query:)` はサーバ側の検索であり、continuo が直前に書いた値が
 	// 索引へ反映される前に取り直すと、古い絞り込みで当たった item がそのまま返る。**
-	// ボード（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
+	// カンバン（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
 	extraCandidates []tracker.Issue
 }
 
@@ -678,7 +678,7 @@ const fakeViewerID = "U_octocat"
 // newFakeTracker はテスト用トラッカー mockを作る。
 //
 // now: 現在時刻を返す関数。nil なら time.Now を使う。
-// 戻り値: 空のボードを持つテスト用トラッカー mock。
+// 戻り値: 空のカンバンを持つテスト用トラッカー mock。
 func newFakeTracker(now func() time.Time) *fakeTracker {
 	if now == nil {
 		now = time.Now
@@ -732,7 +732,7 @@ func (ft *fakeTracker) CountCall(name string) int {
 }
 
 // SetStatesError は FetchIssuesByStates が返すエラーを差し替える
-// （ボードを読めない状況の再現）。
+// （カンバンを読めない状況の再現）。
 //
 // err: 返すエラー。nil なら成功にする。
 func (ft *fakeTracker) SetStatesError(err error) {
@@ -849,7 +849,7 @@ func (ft *fakeTracker) HoldUpdate() (func(), <-chan struct{}) {
 
 // waitAtUpdateGate は、関門が仕掛けられていれば `UpdateStatus` をそこで待たせる。
 //
-// **`ft.mu` を持ったまま待たない。**持ったまま待つと、ボードを読む呼び出しが全部止まり、
+// **`ft.mu` を持ったまま待たない。**持ったまま待つと、カンバンを読む呼び出しが全部止まり、
 // 巡回のループごと固まる。
 func (ft *fakeTracker) waitAtUpdateGate() {
 	ft.mu.Lock()
@@ -865,15 +865,15 @@ func (ft *fakeTracker) waitAtUpdateGate() {
 	<-gate
 }
 
-// AddIssue はボードの末尾に issue を足す。
+// AddIssue はカンバンの末尾に issue を足す。
 func (ft *fakeTracker) AddIssue(issue tracker.Issue) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.board = append(ft.board, issue)
 }
 
-// RemoveIssue はボードから issue を落とす
-// （人間がボードから外した・archive した状況の再現。設計 3-10）。
+// RemoveIssue はカンバンから issue を落とす
+// （人間がカンバンから外した・archive した状況の再現。設計 3-10）。
 //
 // **`FetchIssuesByIDs` からも返らなくなる。**continuo はこれを「もう見えない」として
 // 面倒を見るのをやめる。
@@ -943,7 +943,7 @@ func (ft *fakeTracker) ClearStatusAuthor(id string) {
 	}
 }
 
-// SetStateByAutomation は、ボードの組み込みの自動化が Status を動かした状況を作る
+// SetStateByAutomation は、カンバンの組み込みの自動化が Status を動かした状況を作る
 // （設計 3-54。PR を issue に紐づけた・PR をマージしたときに起きる）。
 //
 // **ID 指定で取り直したときだけ「自動化が書いた」と分かる。**候補の取得では分からない
@@ -1014,7 +1014,7 @@ func (ft *fakeTracker) StateOf(id string) string {
 	return ""
 }
 
-// SetAssignees はボードの issue の担当者を差し替える（設計 3-77b）。
+// SetAssignees はカンバンの issue の担当者を差し替える（設計 3-77b）。
 //
 // **人間や別の機械が担当を書き換えた状況の再現に使う。**
 //
@@ -1037,7 +1037,7 @@ func (ft *fakeTracker) SetAssignees(id string, logins ...string) {
 	}
 }
 
-// IssueByID はボードの issue を1件返す（担当者の変化を確かめるために使う）。
+// IssueByID はカンバンの issue を1件返す（担当者の変化を確かめるために使う）。
 //
 // id: project item の ID。
 // 戻り値の1つ目: 見つかった issue の写し。
@@ -1161,7 +1161,7 @@ func (ft *fakeTracker) MarkedHandoffCommentsOf(nodeID, marker string) []tracker.
 	return out
 }
 
-// FetchIssuesByStates は states に含まれる Status の issue を、ボードの並び順のまま返す。
+// FetchIssuesByStates は states に含まれる Status の issue を、カンバンの並び順のまま返す。
 func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) ([]tracker.Issue, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
@@ -1190,7 +1190,7 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 
 // SetExtraCandidates は「頼んだ Status に無いのに候補として返ってくる item」を差し替える。
 //
-// **ボードの Status は動かさない。**候補の一覧にだけ載る写しである
+// **カンバンの Status は動かさない。**候補の一覧にだけ載る写しである
 // （GitHub の絞り込みの索引が古いまま当たった状況の再現。設計 3-34）。
 //
 // issues: 候補の一覧の末尾へ足す写し。
@@ -1279,8 +1279,8 @@ func (ft *fakeTracker) FetchIssueByIdentifier(_ context.Context, identifier stri
 //
 // **本物と同じ形で返す**（`internal/tracker` の `UpdateStatus`）。
 //
-//	Previous … 書き込む直前のボードの値。**巡回で読んだ値ではない。**
-//	            テストが SetState でボードだけを動かすと、ここに新しい値が入る
+//	Previous … 書き込む直前のカンバンの値。**巡回で読んだ値ではない。**
+//	            テストが SetState でカンバンだけを動かすと、ここに新しい値が入る
 //	Reached … 目的の Status になったか。**既に同じ値で書き込みを省いた場合も真である**
 //	Wrote   … 書き込みを実際に行ったか。**issue へ記録を書いてよいのはこれが真のときだけ**
 func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error) {
@@ -1721,7 +1721,7 @@ type fixtureOptions struct {
 // 組み立てるのは次の4つである。
 //
 //	テスト用herdr mock socket サーバ  … 実 herdr は使わない
-//	テスト用トラッカー mock            … 本番のボードへは接続しない
+//	テスト用トラッカー mock            … 本番のカンバンへは接続しない
 //	本物の git のリポジトリ    … worktree の作成と削除はmockでは確かめられない
 //	`~/.claude.json`         … 信頼の検査が読む（読むだけ。書き換えない）
 //
@@ -1982,7 +1982,7 @@ const samplePromptTemplate = `{{.issue.identifier}} を実装してください�
 // sampleIssue はテストで使う issue を作る。
 //
 // number: issue 番号。
-// state: ボード上の Status。
+// state: カンバン上の Status。
 // 戻り値: `octocat/hello-world#<number>` の issue。
 func sampleIssue(number int, state string) tracker.Issue {
 	url := fmt.Sprintf("https://github.com/octocat/hello-world/issues/%d", number)

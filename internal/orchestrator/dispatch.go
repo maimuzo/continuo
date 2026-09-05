@@ -43,7 +43,7 @@ const agentStatusPollInterval = 500 * time.Millisecond
 // **この package の人間向けの文言をまとめて資源へ移すときに、一緒に替えること。**
 var ErrStartupRetryable = errors.New("起動に失敗しましたが、待てば通るかもしれません")
 
-// ErrStatusNotWritten は、着手の段2 でボードの Status を書かなかったことを表す。
+// ErrStatusNotWritten は、着手の段2 でカンバンの Status を書かなかったことを表す。
 //
 // **これは失敗ではない。**item がもう見えないか、取り直した結果 `terminal_states` か
 // `failure_state` に入っていたということであり、いずれも「いま着手してはいけない」を
@@ -61,7 +61,7 @@ var ErrStatusNotWritten = errors.New("カンバンの Status を書かなかっ�
 //
 // **これは二重の守りの外側であって、主の守りではない。**主の守りは
 // `dispatchStatusAllowed`（許可リスト）である。拒否リストは「設定に名前が出てくる状態」
-// しか並べられず、**ボードにあって設定に出てこない状態（`In Review` など）を1つも
+// しか並べられず、**カンバンにあって設定に出てこない状態（`In Review` など）を1つも
 // 拒否できない**ためである。
 //
 // **並べるのは、設定に名前が出てくるもののうち `active_states` に入っていないもの全部である。**
@@ -106,14 +106,14 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 // **言いたいこと。**拒否リストでは守れない。**書いてよいのは `active_states` に
 // 入っているときだけ**であり、それ以外は全部やめる。
 //
-// **なぜ拒否リストでは守れないか。**ボードの Status は人間が自由に増やせる。
+// **なぜ拒否リストでは守れないか。**カンバンの Status は人間が自由に増やせる。
 // `In Review` は `active_states` にも `terminal_states` にも `failure_state` にも
 // 入らない（設計 3-9 / 3-10。`In Review` を `terminal_states` に入れてはならない）ので、
 // **拒否リストに載らず、人間へ引き渡し済みの issue を `In Progress` で上書きしてしまう。**
 //
 // **なぜここで取り直すか。**候補の一覧は GitHub のサーバ側の検索結果であり、
 // 直前に書いた値が索引へ反映される前は古い写しが返る（設計 3-34）。
-// **ID 指定の取り直しは索引を通らない**ので、いまのボードの値が返る。
+// **ID 指定の取り直しは索引を通らない**ので、いまのカンバンの値が返る。
 // バックオフ明けの再 dispatch でも同じで、印を付けたときの写しは古い。
 //
 // **1回の追加の問い合わせで済ませる。**これは dispatch の直前にだけ通る経路であり、
@@ -161,10 +161,10 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // 1回の巡回が数分返らず、その間 stall 検知も枠の読み取りも止まる。
 //
 // **同じ巡回で印を付けた run は、印を付けた順に1本の goroutine で処理する。**
-// 並行に走らせると、ボードの並び順どおりに着手したことを外から確かめられなくなる。
+// 並行に走らせると、カンバンの並び順どおりに着手したことを外から確かめられなくなる。
 //
 // ctx: 呼び出しに適用するコンテキスト。
-// candidates: `active_states` で取った候補（ボードの並び順）。
+// candidates: `active_states` で取った候補（カンバンの並び順）。
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
 	if o.dispatchPaused() {
 		// **INFO のままにする**（issue #134）。
@@ -284,7 +284,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// **枠が空いていない機械が勝つと、issue は誰にも着手されないまま止まる。**
 		decision := o.handoffGate(ctx, issue)
 		if decision.stop {
-			// **コメントを読む枠を使い切った。**候補はボードの並び順で来るので、
+			// **コメントを読む枠を使い切った。**候補はカンバンの並び順で来るので、
 			// 上から順に見ることは保たれる。**続きは次の巡回で見る。**
 			break
 		}
@@ -521,7 +521,7 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 		label = "再 dispatch"
 	}
 	// **Status を書かなかったときは、人間へ渡さず静かに印を外す。**
-	// ボードは continuo が触る前の状態のままなので、伝えるべきことが1つも無い。
+	// カンバンは continuo が触る前の状態のままなので、伝えるべきことが1つも無い。
 	// **ここで failure_state へ落とすと、人間が Blocked に置いた issue を上書きする。**
 	if errors.Is(err, ErrStatusNotWritten) {
 		o.logger.Info(label+"を取りやめました（カンバンの Status を書かなかったため）",
@@ -532,7 +532,7 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 			o.stopWorker(ctx, rs)
 			o.release(rs)
 		}
-		// **この着手で書いた担当者を消し戻す**（設計 3-77c）。ボードは continuo が
+		// **この着手で書いた担当者を消し戻す**（設計 3-77c）。カンバンは continuo が
 		// 触る前の状態のままなので、issue の担当者も元へ戻す。**残すと、着手しなかった
 		// issue をほかの機械が18時間触らない。**
 		if rs.handoffAcquired() {
@@ -748,7 +748,7 @@ func (o *Orchestrator) clearUntrusted(owner, repo string) {
 // reuse: 再 dispatch かどうか（真なら身元ファイルの takeover_count を1つ増やす）。
 // 戻り値: いずれかの段で失敗した場合のエラー。
 func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker.Issue, reuse bool) error {
-	// 段2: ボードの Status を tracker.running_state へ書く。**ハードコードしない。**
+	// 段2: カンバンの Status を tracker.running_state へ書く。**ハードコードしない。**
 	//
 	// **書く前に ID 指定で取り直し、`active_states` にあるときだけ書く**（許可リスト）。
 	// 拒否リストだけでは `In Review` のような「設定に名前が出てこない状態」を守れず、
