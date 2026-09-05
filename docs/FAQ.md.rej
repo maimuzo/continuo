@@ -1,0 +1,37 @@
+diff a/docs/FAQ.md b/docs/FAQ.md	(rejected hunks)
+@@ -1235,12 +1269,13 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
+ 
+ **何をどう書くかは、「使い方が分からないとき」の
+ 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
+-そのまま貼れる yaml と、書けない5つの形がそこにあります。
+-**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
++書き換える場所の見つけ方と、書けない5つの形がそこにあります。
++**当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
+ 
+ **左に何を書けばよいか分からないときは、書かなくて構いません。**
+ 次に自動化が Status を動かしたとき、continuo が issue のコメントに
+-**「この2行を足してください」とそのまま貼れる形で書きます。**
++**「この行をこう書き換えてください」と、あなたのカンバンの Status 名を当てはめた形で書きます。**
++**場所を見つける `grep` も一緒に書きます。**
+ 
+ **書いたら continuo を再起動してください。**動いている最中は設定を読み直しません。
+ **キーの綴りは `continuo doctor` の `対応表のキー` が照合します。**
+@@ -2825,6 +2867,18 @@ cd ~/continuo-work && continuo doctor && continuo
+ ### エージェントが PR を作った直後に止まる（automated_state_rewrite）
+ 
+ **まず、この設定が自分に要るのかを確かめてください。**
++**`continuo doctor` の `自動化` の行が答えます**（v0.1.15 から）。
++
++```bash
++cd ~/continuo-work && continuo doctor
++```
++
++| 出方 | どう読むか |
++| --- | --- |
++| `✓ 自動化` | **この設定は要りません。**Status を書きうる自動化が1つも有効でないか、対応表が既に書かれています |
++| `! 自動化 … tracker.automated_state_rewrite が空です` | **下を読んでください。**その行の下に、有効な自動化の名前が並びます |
++
++**`continuo doctor` を叩けないときは、GitHub の画面で見てください。**
+ カンバンの `Settings` → `Workflows` を開きます。**Status を書く自動化**
+ （`Item added to project` / `Pull request merged` / `Code changes requested` など）が
+ 1つでも**有効**になっていますか。
