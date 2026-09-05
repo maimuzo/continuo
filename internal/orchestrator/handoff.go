@@ -131,7 +131,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	// **できることは「黙る」だけである。**読んでから黙るのは、リクエストの無駄でしかない。
 	bid, skip := o.evaluateBid()
 	if len(logins) == 0 && skip != handoff.SkipNone {
-		o.logger.Debug("入札しません（この issue は他の機械に任せます）",
+		o.logger.Debug("入札しません（この issue は他のアカウントの continuo に任せます）",
 			"identifier", issue.Identifier, "理由", skip.String())
 		return handoffDecision{}
 	}
@@ -216,7 +216,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 			"identifier", issue.Identifier, "担当者", assessment.Assignee)
 		return handoffDecision{}
 	case handoff.ActionSkipHeld:
-		o.logger.Debug("ほかの機械が期限内で担当しているので触りません（入札もしません）",
+		o.logger.Debug("ほかのアカウントが期限内で担当しているので触りません（入札もしません）",
 			"identifier", issue.Identifier, "担当者", assessment.Assignee,
 			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 		return handoffDecision{}
@@ -239,7 +239,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	if skip != handoff.SkipNone {
 		// **担当を外したあとに、この機械が入札できないことがある。**
 		// 外したこと自体は残るので、次に入札できる機械が拾う。
-		o.logger.Info("入札しません（この issue は他の機械に任せます）",
+		o.logger.Info("入札しません（この issue は他のアカウントの continuo に任せます）",
 			"identifier", issue.Identifier, "理由", skip.String())
 		return handoffDecision{}
 	}
@@ -823,6 +823,24 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 		if strings.EqualFold(l, viewer.Login) {
 			return false, ""
 		}
+	}
+
+	// **名前を取れなかった担当者が1人でもいるなら、止めない。**
+	//
+	// `assigneeLogins` は、人数には数えられているのに名前を取れていない担当者を
+	// `unknownAssigneeLogin` で埋める。**取得の窓は `assignees(first: 10)` なので、
+	// 11人以上が付いている issue では、自分がその窓の外にいても名前が返らない。**
+	// **そこで止めると、まだ自分が担当している run を捨てることになり、
+	// push していない変更が失われる**（設計 3-77c は、担当が移った run に push させない）。
+	//
+	// **「他人が担当している」と「自分が窓の外にいる」を見分けられない以上、触らない側へ倒す。**
+	// **埋め草をそのまま返してもならない。**`(取得できなかった担当者)` が
+	// 「いまの担当」として人間の目に出る。
+	if containsFold(logins, unknownAssigneeLogin) {
+		o.logger.Warn("担当者の名前を全部は読めないので、担当が移ったかを判定しません（この run は止めません）",
+			"identifier", issue.Identifier, "担当者の人数", current.AssigneeCount,
+			"名前を読めた人数", len(current.Assignees))
+		return false, ""
 	}
 
 	// **担当者が他人のアカウントになっている。**担当が移ったということである。

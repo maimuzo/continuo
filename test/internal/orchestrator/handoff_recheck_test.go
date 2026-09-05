@@ -169,3 +169,55 @@ func TestHandoffRecheck_復元したrunはturnを送る前に担当を確かめ�
 		t.Errorf("担当を外された機械がボードを書き換えている: Status が %q", got)
 	}
 }
+
+// TestHandoffRecheck_名前を読めない担当者がいるだけでは止めない は、止めすぎを防ぐ検査である
+// （設計 3-77c）。
+//
+// 目的: **担当者の名前は `assignees(first: 10)` で取るので、11人以上が付いている issue では
+// 名前が10件までしか返らない。**残りは埋め草（`(取得できなかった担当者)`）で埋まる。
+// **自分がその窓の外にいると、名前の突き合わせが1度も当たらず、
+// まだ自分が担当している run を「担当が移った」と読んで捨ててしまう。**
+// **捨てると、push していない変更が失われる。**
+//
+// 与える情報: 走っている run と、**担当者が自分1人のまま人数だけ11人になったボード。**
+// 成功条件: turn の終わりで止まらず、次の turn へ進むこと。
+func TestHandoffRecheck_名前を読めない担当者がいるだけでは止めない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.Provider.Handoff.RecheckIntervalMs = 1
+		},
+	})
+	fx.AllowLog("担当者の名前を全部は読めない")
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "続けます。\nCONTINUO-STATUS: working", false),
+	})
+
+	sent := 0
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		sent++
+		if sent == 1 {
+			// **名前は他人1人ぶんだけ返り、人数は11人。**
+			// 自分は窓の外にいるかもしれず、ここからは見分けられない。
+			fx.Tracker.SetAssignees("PVTI_item188", rivalLogin)
+			fx.Tracker.SetAssigneeCount("PVTI_item188", 11)
+			fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		}
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 10*time.Second, "次の turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) >= 2
+	})
+	if len(fx.Orc.RunningIdentifiers()) != 1 {
+		t.Errorf("名前を読めない担当者がいるだけで run を捨てている")
+	}
+}

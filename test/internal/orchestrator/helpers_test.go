@@ -1037,6 +1037,25 @@ func (ft *fakeTracker) SetAssignees(id string, logins ...string) {
 	}
 }
 
+// SetAssigneeCount は、名前を返さずに担当者の人数だけを差し替える。
+//
+// **本物の GitHub は `assignees(first: 10)` で名前を取る**ので、
+// **11人以上が付いている issue では「人数は分かるが名前は10件まで」という状態が起きる。**
+// その状態を作るために使う。
+//
+// id: project item の ID。
+// n: 名乗らせる担当者の人数。
+func (ft *fakeTracker) SetAssigneeCount(id string, n int) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	for i := range ft.board {
+		if ft.board[i].ID == id {
+			ft.board[i].AssigneeCount = n
+			return
+		}
+	}
+}
+
 // IssueByID はボードの issue を1件返す（担当者の変化を確かめるために使う）。
 //
 // id: project item の ID。
@@ -1351,7 +1370,11 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 		// **投稿者を入れる**（設計 3-77-0）。**本物の GitHub は必ず投稿者を付ける。**
 		// 入れないと、この continuo が書いた入札を次の巡回で自分のものと読めず、
 		// **巡回のたびに入札のコメントが1件ずつ増える。**
-		Author: testGHLogin,
+		//
+		// **定数ではなく、いま名乗っている持ち主を使う。**`SetViewer` で差し替えた検査では、
+		// **定数を入れると、この mock が書いたコメントだけ別のアカウントのものになる。**
+		// そのとき `HasBidBy` が偽に落ち、**本物では起きない入札の増殖が mock の中でだけ起きる。**
+		Author: ft.viewer.Login,
 	}
 	ft.comments[issueNodeID] = append(ft.comments[issueNodeID], c)
 	return &c, nil
