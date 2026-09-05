@@ -289,7 +289,7 @@ continuo asks herdr to send a prompt and wait; herdr watches the pane and return
 | Use case specifications (RUCM) | [docs/spec/usecases/](docs/spec/usecases/) |
 | **How one issue is driven end to end** | [docs/agent_life_cycle.md](docs/agent_life_cycle.md) — the status transitions, how the agent gets its previous conversation back, and how a status taken over by GitHub automation is put back (Japanese, with diagrams) |
 | **Problems that come from the shape of the design** (read before changing code) | [docs/bug_details.md](docs/bug_details.md) — the seven that keep biting, and what to watch for when you touch them (Japanese) |
-| **When it does not work** | [docs/FAQ.md](docs/FAQ.md) — look up the message you saw (Japanese) |
+| **When you are stuck, or want to know how to use it** | [docs/FAQ.md](docs/FAQ.md) — split into three: look up an error message, look up what you want to do, and what continuo can do (Japanese) |
 | **After upgrading to a new version** | [docs/upgrading.md](docs/upgrading.md) — which settings were added, what happens if you leave them out, and how to check (Japanese) |
 | **Development and testing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Third-party software in the binary | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
