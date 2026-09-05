@@ -918,7 +918,7 @@ type Gated struct {
 | **まだ書いていない** | `dashboard.badge_not_noticed` | issue へは未通知 |
 | **`warn_only` で切ってある** | `dashboard.badge_notice_off` | issue へは書かない設定です |
 | **コメントが上限で切れていた** | `dashboard.badge_notice_capped` | コメントが多すぎて確かめられません |
-| **gh の持ち主が担当者に混じっていた**（8-3） | `dashboard.badge_notice_unclear_owner` | 別のアカウントの continuo の担当かどうかを切り分けられません |
+| **gh の持ち主が担当者に混じっていた**（8-3） | `dashboard.badge_notice_unclear_owner` | 別の機械の担当かどうかを切り分けられません |
 | **その理由の本文が無い** | `dashboard.badge_notice_no_body` | この理由に書く本文が用意されていません |
 | **投稿に失敗した**（`Noticed` も真） | `dashboard.badge_notice_failed` | issue へ書けませんでした |
 
@@ -976,11 +976,11 @@ type Gated struct {
   "dashboard.gate_reason_many_assignees_with_self": "担当者が2人以上いて、continuo が使うアカウントも混じっています（%s）",
   "dashboard.gate_remedy_human_assigned": "GitHub の画面でその担当者を外してください",
   "dashboard.gate_remedy_many_assignees": "GitHub の画面で担当者を1人も付いていない状態にしてください",
-  "dashboard.gate_remedy_many_assignees_with_self": "別のアカウントの continuo が担当していないかを先に確かめてください。担当していなければ、GitHub の画面で担当者を1人も付いていない状態にしてください",
+  "dashboard.gate_remedy_many_assignees_with_self": "別の機械が担当していないかを先に確かめてください。担当していなければ、GitHub の画面で担当者を1人も付いていない状態にしてください",
   "dashboard.badge_not_noticed": "issue へは未通知",
   "dashboard.badge_notice_off": "issue へは書かない設定です",
   "dashboard.badge_notice_capped": "コメントが多すぎて確かめられません",
-  "dashboard.badge_notice_unclear_owner": "別のアカウントの continuo の担当かどうかを切り分けられません",
+  "dashboard.badge_notice_unclear_owner": "別の機械の担当かどうかを切り分けられません",
   "dashboard.badge_notice_no_body": "この理由に書く本文が用意されていません",
   "dashboard.badge_notice_failed": "issue へ書けませんでした"
 ```

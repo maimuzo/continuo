@@ -1037,25 +1037,6 @@ func (ft *fakeTracker) SetAssignees(id string, logins ...string) {
 	}
 }
 
-// SetAssigneeCount は、名前を返さずに担当者の人数だけを差し替える。
-//
-// **本物の GitHub は `assignees(first: 10)` で名前を取る**ので、
-// **11人以上が付いている issue では「人数は分かるが名前は10件まで」という状態が起きる。**
-// その状態を作るために使う。
-//
-// id: project item の ID。
-// n: 名乗らせる担当者の人数。
-func (ft *fakeTracker) SetAssigneeCount(id string, n int) {
-	ft.mu.Lock()
-	defer ft.mu.Unlock()
-	for i := range ft.board {
-		if ft.board[i].ID == id {
-			ft.board[i].AssigneeCount = n
-			return
-		}
-	}
-}
-
 // IssueByID はボードの issue を1件返す（担当者の変化を確かめるために使う）。
 //
 // id: project item の ID。
