@@ -305,6 +305,7 @@
   "dashboard.new_work_quota_stale": " ／ この使用率は最後に読めた値です（直前の読み取りに失敗しています）",
   "dashboard.new_work_reason_no_headroom": "入札の余裕値がマイナスなので、担当者のいない issue に着手しません",
   "dashboard.new_work_reason_pause_threshold": "枠が rate_limit.pause_above_percent を超えたので、この巡回では1件も着手しません",
+  "dashboard.new_work_reason_pause_threshold_no_halt": "枠が rate_limit.pause_above_percent を超えたので、担当者のいない issue に着手しません",
   "dashboard.new_work_reason_quota_unreadable": "枠を読めないので、担当者のいない issue に着手しません",
   "dashboard.new_work_threshold_never": "この設定では止まらない値",
   "dashboard.gate_reason_many_assignees": "担当者が2人以上います（%s）",

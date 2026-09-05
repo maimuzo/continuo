@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "84fe18b373fccaaaa45abd54d35647770fded53bfa246c36c3e7178accdb62d7", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "6d2cee3d7ee79a21dd6dd067268b133562bf4d63d013d304da63420a2880dfbe", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
 // 15本のパスは、6通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
@@ -355,7 +355,7 @@ func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の�
 	})
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P006"}
 //
 // TestQuota_枠を使い切っていなければ待ち直さない は、枠待ちの条件その1 を確かめる。
 //

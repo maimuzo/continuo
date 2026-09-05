@@ -82,9 +82,11 @@ type NewWork struct {
 //
 // **キーを文字列から組み立てない。**組み立てると internal/i18n の `allKeys` に載らない
 // キーが生まれ、日英の突き合わせの検査を素通りする。**表なら、キーは全部ここに書いてある。**
+// **`pause_threshold` は、巡回そのものを止めているときの文言である。**
+// **止めていないときは、この表ではなく `HaltsPoll` の分岐で選ぶ**（`newNewWork`）。
 var newWorkReasonKeys = map[string]i18n.Key{
 	"quota_unreadable": i18n.KeyDashboardNewWorkReasonQuotaUnreadable,
-	"pause_threshold":  i18n.KeyDashboardNewWorkReasonPauseThreshold,
+	"pause_threshold":  i18n.KeyDashboardNewWorkReasonPauseThresholdNoHalt,
 	"no_headroom":      i18n.KeyDashboardNewWorkReasonNoHeadroom,
 }
 
@@ -296,7 +298,12 @@ func newNewWork(v orchestrator.NewWorkView) NewWork {
 	if !v.Blocked {
 		return out
 	}
-	if key, ok := newWorkReasonKeys[v.Reason]; ok {
+	// **理由の文言は、止まる範囲で選ぶ。**理由だけで引いてはならない。
+	// **同じ「枠の使い過ぎ」でも、巡回そのものを止めているかどうかで止まる範囲が違う。**
+	// 止めていないのに「この巡回では1件も着手しません」と出すと、画面が嘘をつく。
+	if v.HaltsPoll {
+		out.ReasonText = i18n.T(i18n.KeyDashboardNewWorkReasonPauseThreshold)
+	} else if key, ok := newWorkReasonKeys[v.Reason]; ok {
 		out.ReasonText = i18n.T(key)
 	}
 	// **使用率は、読めているものだけを出す。**読めていないものを 0 と書くと

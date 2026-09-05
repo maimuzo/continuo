@@ -1172,6 +1172,12 @@ const (
 	KeyDashboardNewWorkReasonPauseThreshold Key = "dashboard.new_work_reason_pause_threshold"
 	// KeyDashboardNewWorkReasonNoHeadroom は、入札の余裕値がマイナスで止まっているときの理由に出る。
 	KeyDashboardNewWorkReasonNoHeadroom Key = "dashboard.new_work_reason_no_headroom"
+	// KeyDashboardNewWorkReasonPauseThresholdNoHalt は、閾値の判定が「超えた」と答えたのに
+	// 巡回そのものは止めていないときの理由に出る。
+	//
+	// **2回のロックの間に枠の写しが新しくなったときだけ起きる。**
+	// **止まる範囲が違うので、文言も分ける。**
+	KeyDashboardNewWorkReasonPauseThresholdNoHalt Key = "dashboard.new_work_reason_pause_threshold_no_halt"
 	// KeyDashboardNewWorkThresholdNever は、閾値が 100 のときに数字の代わりに出る。
 	//
 	// **使用率は 100 を超えないので、`100` と出すと「100%で止まる」と読まれる。**
@@ -2910,6 +2916,7 @@ var allKeys = []Key{
 	KeyDashboardNewWorkReasonQuotaUnreadable,
 	KeyDashboardNewWorkReasonPauseThreshold,
 	KeyDashboardNewWorkReasonNoHeadroom,
+	KeyDashboardNewWorkReasonPauseThresholdNoHalt,
 	KeyDashboardNewWorkThresholdNever,
 	KeyDashboardNewWorkQuotaStale,
 	KeyDashboardNewWorkBadge,
