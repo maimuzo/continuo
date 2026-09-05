@@ -2612,7 +2612,7 @@ herdr pane list | tr ',' '\n' | grep '"label"'
 版を上げれば届きます。送られる全文は `continuo prompt --show` で読めます。
 
 ```bash
-continuo prompt --show
+cd ~/continuo-work && continuo prompt --show
 ```
 
 **まとめて直すこと自体をやめたいときは、`WORKFLOW.md` の本文から

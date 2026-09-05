@@ -200,6 +200,44 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 	}
 }
 
+// 目的: 書き換えのコマンドが、印を確かめる門の中に在ることを固定する（#237。設計 6-27）。
+//
+// **なぜ要るか。**`gh api` は取得に失敗したとき、エラーの JSON を標準出力へ出す。
+// **`$OLD` は空にならない。**そのまま書き換えると `<!-- continuo:group -->` の印ごと本文が消え、
+// **段1 の `startswith` がその issue で永久に何も返さなくなる。**
+// **turn のたびに段2b が走り、成果報告が積み上がる。**
+// #237 の受け入れ条件「同じ内容が2回書かれない」を、経路を変えて破る。
+//
+// **`--method PATCH` が節の中に在るかを見るだけでは足りない。**
+// **門の外に置いても、その検査は通る**（実際に3周目の直しで一度そうなった）。
+//
+// 与える情報: prompt.Builtin() の、まとめて直したときの節。
+// 成功条件: `--method PATCH` を含む行より前に印を見る `case` の枝があり、
+// その枝から `esac` までの間に `--method PATCH` が在ること。
+func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *testing.T) {
+	section := sectionOf(t, prompt.Builtin(), groupHeading)
+
+	patch := strings.Index(section, "--method PATCH")
+	if patch < 0 {
+		t.Fatalf("%q の節に %q がありません（検査が的を外しています）", groupHeading, "--method PATCH")
+	}
+
+	// **書き換えの直前に、印を見る枝がある。**`case` の枝は `*"<印>"*)` の形である。
+	gate := strings.LastIndex(section[:patch], `*"`+groupMarker+`"*)`)
+	if gate < 0 {
+		t.Fatalf("%q の節で、書き換えのコマンドより前に %q の枝がありません。"+
+			"読み取りに失敗したまま書き換えると、印ごと本文が消えて、"+
+			"段1 がその成果報告を二度と見つけられなくなります", groupHeading, `*"`+groupMarker+`"*)`)
+	}
+
+	// **その枝が閉じる前に書き換えている。**枝の中に `esac` が挟まっていたら、門の外である。
+	if end := strings.Index(section[gate:], "esac"); end >= 0 && gate+end < patch {
+		t.Errorf("%q の節で、書き換えのコマンドが %q の枝の外にあります。"+
+			"`gh api` は取得に失敗するとエラーの JSON を出すので、"+
+			"門の外で書き換えると印ごと本文が消えます", groupHeading, `*"`+groupMarker+`"*)`)
+	}
+}
+
 // 目的: グループの成果報告の対象から、いま作業している issue と Status の名前を外すことを固定する
 // （#237。設計 6-27）。
 //

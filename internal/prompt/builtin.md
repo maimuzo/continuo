@@ -25,7 +25,8 @@ flowchart TD
     G --> H["pull request を出す"]
     H --> I["敵対的レビューを受ける"]
     I --> J["判断票を pull request へ書き、直す"]
-    J --> K["何をしたかを issue へ書く"]
+    J --> J2["まとめて直した issue ごとに、その issue へ書く（7-2）"]
+    J2 --> K["何をしたかを issue へ書く"]
     K --> L["CONTINUO-STATUS を1行書いて終わる"]
     F -. "{{.progress_interval_minutes}}分ごと" .-> M["途中経過を issue へ書く"]
     M -.-> F
@@ -541,10 +542,22 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 **中身が空でないことだけを見ても足りません。**
 
 **足すものが無ければ、何も書かないでください。**足すときは、次のとおりです。
+**`$ID` と `$OLD` を取り直し、印を確かめる `case` の中で書き換えます。**
+**門の外で書き換えてはいけません。**読み取りに失敗したまま書き換えると、
+**`<!-- continuo:group -->` の印ごと本文が消え、段1 がその成果報告を二度と見つけられなくなります。**
 
-    gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-      -f body="$OLD
+    ID=${URL##*#issuecomment-}
+    OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+    case "$OLD" in
+      *"<!-- continuo:group -->"*)
+        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+          -f body="$OLD
     - <前に書いていない分>"
+        ;;
+      *)
+        echo "本文を読めませんでした。段2b で新しく1件投稿します"
+        ;;
+    esac
 
 **`review` を出した issue では、書き足す行にも pull request の URL を入れてください。**
 そのコメントには前の試行の分が残っていることがあり、
@@ -555,7 +568,8 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 **`blocked` を出した issue では、pull request の URL を書かないでください。**直していないので、
 **指す先がありません。**どこまで見て、なぜ止まったかだけを足します。
 
-**段2b。何も返らなかったときは、新しく1件投稿します。**
+**段2b。段1 が何も返さなかったとき、または段2a が「段2b で新しく1件投稿します」と出したときは、
+新しく1件投稿します。**
 
 **`review` を出した issue には、こう書きます。**
 
@@ -563,7 +577,7 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
     {{.issue.identifier}} とまとめて直しました。この issue の分は次のとおりです。
 
     - 何を直したか: <この issue が書いている症状に対して、何を変えたか>
-    - 触ったファイル: <リポジトリの根からの相対パス（internal/prompt/builtin.md のように）と、そこを変えた理由>
+    - 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
     - pull request: <PR の URL>"
 
 **`blocked` を出した issue には、直せていません。**
