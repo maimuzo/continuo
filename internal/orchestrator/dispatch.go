@@ -360,11 +360,14 @@ func (o *Orchestrator) hasFreeSlot() bool {
 // 戻り値の3つ目: そのキーに設定されている値（空きがあるときは0）。
 func (o *Orchestrator) freeSlotBlocker() (bool, string, int) {
 	runs := o.snapshotRuns()
-	if len(runs) >= o.cfg.Agent.MaxConcurrentAgents {
-		return false, "agent.max_concurrent_agents", o.cfg.Agent.MaxConcurrentAgents
+	// **上限の2つは1組で、どちらも走行中に読み直せる**（設計 3-24）。
+	// **1回だけ読んで、この判定の中で世代がずれないようにする。**
+	rc := o.reloadableConfig()
+	if len(runs) >= rc.MaxConcurrentAgents {
+		return false, "agent.max_concurrent_agents", rc.MaxConcurrentAgents
 	}
 
-	limits := o.cfg.Agent.MaxConcurrentAgentsByState
+	limits := rc.MaxConcurrentAgentsByState
 	if len(limits) == 0 {
 		return true, "", 0
 	}
