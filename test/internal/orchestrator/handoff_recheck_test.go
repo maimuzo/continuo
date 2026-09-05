@@ -46,7 +46,7 @@ func TestHandoffRecheck_担当が移っていたらturnの終わりで止める(
 		fx.Tracker.SetAssignees("PVTI_item188", rivalLogin)
 		fx.Tracker.AddCommentBy(issueNode(188), rivalLogin, handoff.FormatHold(handoff.Hold{
 			Assignee: rivalLogin,
-			Branch: "continuo/octocat/hello-world/188", At: time.Now(),
+			Branch:   "continuo/octocat/hello-world/188", At: time.Now(),
 		}), time.Now())
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
@@ -143,7 +143,7 @@ func TestHandoffRecheck_復元したrunはturnを送る前に担当を確かめ�
 	now := time.Now()
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
 		Assignee: rivalLogin,
-		Branch: "continuo/octocat/hello-world/188", At: now,
+		Branch:   "continuo/octocat/hello-world/188", At: now,
 	}), now)
 
 	// **引き継いだ run として印を付ける。**`NeedsPrompt` を立てるので、
