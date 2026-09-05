@@ -9095,8 +9095,8 @@ Critical と High は原則すべて直します。直さない場合は理由�
 
 判断票の形。**1行目と2行目の並びを変えないでください。**
 
-    <!-- design-review-result -->
     <!-- continuo:agent -->
+    <!-- design-review-result -->
     ## レビューの判断票（計画）
 
     | 指摘 | 深刻さ | 中身 | 直すか | 理由 |
@@ -9106,9 +9106,13 @@ Critical と High は原則すべて直します。直さない場合は理由�
 
 1列目には番号ではなく内容が予想できる短い名前を書いてください。
 
-**1行目の目印は、コメントの本文の先頭に置いてください。**前に1文字でも書くと数えられません。
-CI がこれを数えている project では、**設計のレビューを実施していないものとして扱われ、
-pull request の検査が赤のままになります。**
+**この2行を、コメントの本文の先頭に、この順で置いてください。**前に1文字でも書くと数えられません。
+
+**順番に意味があります。**1行目は continuo が「エージェントが書いたコメントか」を見る印で、
+**本文の先頭に無いと数えません。**2行目は CI が設計のレビューを数える印で、
+**先頭か、1行目の直後に無いと数えません。**
+**入れ替えると、判断票だけを書いて turn を終えたときに、continuo が
+「成果が書かれていない」と判断して、この run を人間へ渡します。**
 
 ## 3-3. 実装する
 
@@ -9699,7 +9703,7 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 | job | 何を数えるか | どこを見るか |
 | --- | --- | --- |
 | `design-review-result` | `<!-- design-review-result -->` | **紐づく issue のコメント** |
-| `review-result` | `<!-- code-review-result -->` | **その pull request のコメント** |
+| `code-review-result` | `<!-- code-review-result -->` | **その pull request のコメント** |
 
 **数える条件は、既存の3箇所と1文字も違えない**（本文の先頭・投稿者が OWNER / MEMBER / COLLABORATOR）。
 **揃っていることは [test/internal/scaffold/ci_template_test.go](../../test/internal/scaffold/ci_template_test.go) が押さえる。**

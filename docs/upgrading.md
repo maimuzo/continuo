@@ -152,7 +152,7 @@ mkdir -p .github/workflows && mv continuo-ci.yaml .github/workflows/
 pull request の検査が赤くなります。**
 
 **赤いだけではマージを止められません。**branch protection の必須の検査へ
-`design-review-result` と `review-result` の2つを入れて、はじめて止まります。
+`design-review-result` と `code-review-result` の2つを入れて、はじめて止まります。
 
 ### 判断票を貼る先が変わりました — 設定に足すものはありません
 

@@ -35,9 +35,11 @@ on:
     # **`ready_for_review` を入れる。**`gh pr ready` がこのイベントを起こすので、
     # 「結果を貼る → ready にする → 検査が回り直して緑」が人手なしでつながる。
     #
-    # **`edited` も入れる。**設計のレビューを飛ばす断りを後から貼ったときに、
-    # 回り直させるためである。**題名を直しただけでも回るが、この2つの job は数秒で終わる。**
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    # **`edited` は入れない。**逃がす断りは PR の**コメント**に貼らせるので、
+    # `edited`（題名・本文・base の変更）では回り直さない。**コメントで回すには
+    # `issue_comment` が要るが、そのイベントでは `github.event.pull_request` が使えない。**
+    # **断りを後から貼ったときは `gh run rerun` で回し直す。**下の案内にそう書いてある。
+    types: [opened, synchronize, reopened, ready_for_review]
 
 # **読むだけでよい。**
 # **叩く先は `/issues/{番号}/comments` だが、相手は PR である。**
@@ -72,16 +74,28 @@ jobs:
         run: |
           set -eu
 
-          # **数える条件は下の job と同じ2つである。**1文字も違えないこと。
-          #   一、本文の**先頭**に目印がある（前に空白文字があってもよい）。
+          # **数える条件は2つである。**
+          #   一、目印が本文の**先頭**か、`<!-- continuo:agent -->` の**直後**にある
+          #       （前に空白文字があってもよい）。
+          #       **直後を許すのは、continuo が「エージェントが書いたか」を本文の先頭ちょうどで
+          #       見ているためである**（internal/tracker/adapter.go の FetchComments）。
+          #       **目印を先頭に置かせると、判断票だけを書いた turn が「成果なし」と判定され、
+          #       その run が人間へ渡される。**
           #   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
+          #
+          # **下の job（実装のレビュー）は先頭ちょうどのままである。**あちらが数えるのは
+          # PR のコメントで、continuo は PR のコメントを読まないため、ぶつからない。
 
           # 段1. 設計のレビューを飛ばす断りが貼られているか。
           #
-          # **PR の本文ではなく、コメントを見る。**本文はその PR を出した本人が書くので、
-          # **エージェントが自分で断りを書けてしまう。**組み込みの指示書は
-          # `gh pr create --body` を本人に打たせている（internal/prompt/builtin.md の 3-5）。
-          # **コメントなら、上の2つの条件をそのまま掛けられる。**
+          # **PR の本文ではなく、コメントを見る。**理由は、上の2つの条件をそのまま掛けられて、
+          # **数え方を1組で済ませられる**ためである。
+          #
+          # **エージェントから守れるわけではない。**エージェントは owner の資格情報で
+          # `gh` を叩くので、その投稿は `author_association == "OWNER"` になり、
+          # **本文でもコメントでも同じように書ける。**
+          # **止めているのは組み込みの指示書の文だけである**（internal/prompt/builtin.md の 3-5)。
+          # **つまりこの逃がし口は自己申告であり、機械では守られていない。**
           #
           # **理由は目印の次の行に書かせる。**目印の中へ書かせると、
           # 閉じの `--` を理由と読んでしまい、`<!-- design-review-skipped: -->` が通る。
@@ -118,7 +132,7 @@ jobs:
             [ (.closingIssuesReferences[]
                | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
                | .number),
-              (.body // "" | scan("(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
+              (.body // "" | scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
             ] | unique | .[]' pr.json > issues.txt
           jq -r --arg repo "${REPO}" '
             .closingIssuesReferences[]
@@ -130,14 +144,23 @@ jobs:
           # **1件でよい。**グループでまとめて直す PR では、代表の issue にだけ設計が書かれる
           # （[.claude/rules/issue.md](../../.claude/rules/issue.md) の「グループ化するときにやること」）。
           # **全部に求めると、代表以外へ同じものを貼ることになる。**
+          # **1件が読めなくても、残りを見に行く。**`set -e` の下で `gh api` が落ちると
+          # step ごと終わるので、**後ろの issue に目印があっても数えない。**
+          # **読めなかったことは数えておき、落ちるときの案内に出す**
+          # （「無かった」と「読めなかった」を人間が見分けられるようにする）。
           found=0
+          unreadable=0
           while read -r n; do
             [ -n "${n}" ] || continue
-            gh api --paginate "repos/${REPO}/issues/${n}/comments?per_page=100" --jq '
+            if ! gh api --paginate "repos/${REPO}/issues/${n}/comments?per_page=100" --jq '
               .[]
-              | select((.body // "") | test("^[ \\t\\r\\n]*<!-- design-review-result -->"))
+              | select((.body // "") | test("^[ \\t\\r\\n]*(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->"))
               | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
-              | .id' > matched.txt
+              | .id' > matched.txt; then
+              echo "issue #${n} のコメントを読めませんでした（飛ばします）"
+              unreadable=$((unreadable + 1))
+              continue
+            fi
             if [ "$(wc -l < matched.txt | tr -d ' ')" -gt 0 ]; then
               echo "設計のレビュー結果=有り（issue #${n}）"
               echo "設計のレビュー結果=有り（issue #${n}）" >> "${GITHUB_STEP_SUMMARY}"
@@ -166,13 +189,20 @@ jobs:
               echo "紐づく issue に \`<!-- design-review-result -->\` で始まるコメントが1件もありません。"
               echo ""
               sed 's/^/- issue #/' issues.txt
+              if [ "${unreadable}" -gt 0 ]; then
+                echo ""
+                echo "**このうち ${unreadable} 件は、コメントを読めませんでした。**"
+                echo "**「貼られていない」ではなく「確かめられなかった」です。**"
+              fi
             fi
             echo ""
             echo "**通し方。**"
             echo ""
             echo "1. 設計をサブエージェントにレビューさせる（\`.claude/rules/design-review.md\` の段3）"
             echo "2. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る"
-            echo "3. それを **issue のコメント**として貼る（**1行目を \`<!-- design-review-result -->\` にする**）"
+            echo "3. それを **issue のコメント**として貼る"
+            echo "   **1行目を \`<!-- continuo:agent -->\`、2行目を \`<!-- design-review-result -->\` にする**"
+            echo "   （1行目を落とすと、continuo がエージェントの成果として数えません）"
             echo ""
             echo "**設計のレビューが要らない変更のとき**（文書だけの変更、他に影響しない1行の修正）**は、"
             echo "この PR のコメントに断りを貼ってください。**"

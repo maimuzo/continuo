@@ -107,7 +107,13 @@ func TestCITemplate_目印を数える条件が既存と揃っている(t *testi
 
 	// **jq のソースの中なので、バックスラッシュは2文字で書かれている。**
 	for _, want := range []string{
-		`test("^[ \\t\\r\\n]*<!-- design-review-result -->")`,
+		// **設計のレビューの目印だけ、`<!-- continuo:agent -->` の直後も許す。**
+		// **continuo は「エージェントが書いたか」を本文の先頭ちょうどで見ている**
+		// （internal/tracker/adapter.go の FetchComments）。目印を先頭に置かせると、
+		// **判断票だけを書いた turn が「成果なし」と判定され、その run が人間へ渡される。**
+		// **実装のレビューの目印（下）は先頭ちょうどのままである。**あちらが数えるのは
+		// pull request のコメントで、continuo は pull request のコメントを読まない。
+		`test("^[ \\t\\r\\n]*(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->")`,
 		`test("^[ \\t\\r\\n]*<!-- code-review-result -->")`,
 	} {
 		if !strings.Contains(got, want) {
@@ -156,7 +162,13 @@ func TestCITemplate_このリポジトリのCIと同じ条件で数えている(
 
 	// **jq のソースの中なので、バックスラッシュは2文字で書かれている。**
 	for _, want := range []string{
-		`test("^[ \\t\\r\\n]*<!-- design-review-result -->")`,
+		// **設計のレビューの目印だけ、`<!-- continuo:agent -->` の直後も許す。**
+		// **continuo は「エージェントが書いたか」を本文の先頭ちょうどで見ている**
+		// （internal/tracker/adapter.go の FetchComments）。目印を先頭に置かせると、
+		// **判断票だけを書いた turn が「成果なし」と判定され、その run が人間へ渡される。**
+		// **実装のレビューの目印（下）は先頭ちょうどのままである。**あちらが数えるのは
+		// pull request のコメントで、continuo は pull request のコメントを読まない。
+		`test("^[ \\t\\r\\n]*(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->")`,
 		`test("^[ \\t\\r\\n]*<!-- code-review-result -->")`,
 		`test("^[ \\t\\r\\n]*<!-- design-review-skipped -->[ \\t\\r\\n]*[^ \\t\\r\\n]")`,
 	} {

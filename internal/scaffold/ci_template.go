@@ -59,9 +59,10 @@ on:
     # **ready_for_review を入れます。**gh pr ready がこのイベントを起こすので、
     # 「結果を貼る → ready にする → 検査が回り直して緑」が人手なしでつながります。
     #
-    # **edited も入れます。**設計のレビューを飛ばす断りを後から貼ったときに、
-    # 回り直させるためです。この2つの job は数秒で終わるので、余分に回っても困りません。
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    # **edited は入れません。**逃がす断りは pull request の**コメント**に貼るので、
+    # edited（題名・本文・base の変更）では回り直しません。
+    # **断りを後から貼ったときは gh run rerun で回し直してください。**
+    types: [opened, synchronize, reopened, ready_for_review]
 
 # **読むだけでよい。**
 # **叩く先は /issues/{番号}/comments ですが、相手は pull request です。**
@@ -92,8 +93,10 @@ jobs:
         run: |
           set -eu
 
-          # **数える条件は2つ。**下の job と1文字も違えないこと。
-          #   一、本文の**先頭**に目印がある（前に空白文字があってもよい）。
+          # **数える条件は2つです。**
+          #   一、目印が本文の**先頭**か、continuo:agent の印の**直後**にある。
+          #       **直後を許すのは、continuo が「エージェントが書いたか」を
+          #       本文の先頭ちょうどで見ているためです。**
           #   二、投稿者が OWNER / MEMBER / COLLABORATOR である。
           #
           # **バックスラッシュ s を使いません。**Python の re と jq（Oniguruma）で
@@ -102,9 +105,10 @@ jobs:
 
           # 段1. 設計のレビューを飛ばす断りが貼られているか。
           #
-          # **pull request の本文ではなく、コメントを見ます。**本文はこの pull request を
-          # 出した本人が書くので、**エージェントが自分で断りを書けてしまいます。**
-          # コメントなら、上の2つの条件をそのまま掛けられます。
+          # **pull request の本文ではなく、コメントを見ます。**上の2つの条件をそのまま掛けられて、
+          # 数え方を1組で済ませられるためです。
+          # **エージェントから守れるわけではありません。**エージェントが owner の資格情報で
+          # 叩けば、その投稿も OWNER になります。**この逃がし口は自己申告です。**
           #
           # **理由は目印の次の行に書かせます。**目印の中へ書かせると、
           # 閉じの2文字を理由と読んでしまい、理由が空でも通ります。
@@ -137,7 +141,7 @@ jobs:
             [ (.closingIssuesReferences[]
                | select(.url | startswith("https://github.com/" + $repo + "/issues/"))
                | .number),
-              (.body // "" | scan("(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
+              (.body // "" | scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
             ] | unique | .[]' pr.json > issues.txt
           jq -r --arg repo "${REPO}" '
             .closingIssuesReferences[]
@@ -148,14 +152,23 @@ jobs:
           #
           # **1件でよい。**グループでまとめて直す pull request では、代表の issue にだけ
           # 設計が書かれます。全部に求めると、代表以外へ同じものを貼ることになります。
+          # **1件が読めなくても、残りを見に行きます。**set -e の下で gh api が落ちると
+          # step ごと終わるので、後ろの issue に目印があっても数えません。
+          # **読めなかったことは数えておき、落ちるときの案内に出します**
+          # （「無かった」と「読めなかった」を人間が見分けられるようにするためです）。
           found=0
+          unreadable=0
           while read -r n; do
             [ -n "${n}" ] || continue
-            gh api --paginate "repos/${REPO}/issues/${n}/comments?per_page=100" --jq '
+            if ! gh api --paginate "repos/${REPO}/issues/${n}/comments?per_page=100" --jq '
               .[]
-              | select((.body // "") | test("^[ \\t\\r\\n]*<!-- design-review-result -->"))
+              | select((.body // "") | test("^[ \\t\\r\\n]*(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->"))
               | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
-              | .id' > matched.txt
+              | .id' > matched.txt; then
+              echo "issue #${n} のコメントを読めませんでした（飛ばします）"
+              unreadable=$((unreadable + 1))
+              continue
+            fi
             if [ "$(wc -l < matched.txt | tr -d ' ')" -gt 0 ]; then
               echo "設計のレビュー結果=有り（issue #${n}）"
               echo "設計のレビュー結果=有り（issue #${n}）" >> "${GITHUB_STEP_SUMMARY}"
@@ -184,13 +197,19 @@ jobs:
               echo "紐づく issue に <!-- design-review-result --> で始まるコメントが1件もありません。"
               echo ""
               sed 's/^/- issue #/' issues.txt
+              if [ "${unreadable}" -gt 0 ]; then
+                echo ""
+                echo "**このうち ${unreadable} 件は、コメントを読めませんでした。**"
+                echo "**「貼られていない」ではなく「確かめられなかった」です。**"
+              fi
             fi
             echo ""
             echo "**通し方。**"
             echo ""
             echo "1. 設計をサブエージェントにレビューさせる"
             echo "2. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る"
-            echo "3. それを **issue のコメント**として貼る（**1行目を <!-- design-review-result --> にする**）"
+            echo "3. それを **issue のコメント**として貼る"
+            echo "   **1行目を <!-- continuo:agent -->、2行目を <!-- design-review-result --> にする**"
             echo ""
             echo "**設計のレビューが要らない変更のとき**（文書だけの変更、他に影響しない1行の修正）**は、"
             echo "この pull request のコメントに断りを貼ってください。**"

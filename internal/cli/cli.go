@@ -303,6 +303,16 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 	}
 
 	printInitCI(stdout, stderr, res)
+
+	// **1枚も書けなかったなら、成功で終えない。**
+	// **`WORKFLOW.md` が既にあり、2枚目が「既にある」以外の理由で落ちた場合**がこれに当たる
+	// （`BothExisted` は上で 1 を返しているので、ここへ来るのはその組み合わせだけである）。
+	// **何も作っていないのに 0 を返すと、`continuo init` の成否で分岐する script が
+	// 「置けた」と読む。**理由は上の2行で標準エラーへ出してある。
+	if !res.Wrote() {
+		return 1
+	}
+
 	printDetection(stdout, detection)
 	return 0
 }
