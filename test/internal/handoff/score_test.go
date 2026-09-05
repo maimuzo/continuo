@@ -17,8 +17,8 @@ import (
 	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
-// testHost はテストで使う機械の名前である（架空の名前）。
-const testHost = "test-host"
+// testAccount はテストで使う「この continuo が使う gh の持ち主」である（架空の名前）。
+const testAccount = "octocat-bot-c"
 
 // at はテストで使う固定の時刻を返す。
 //
@@ -61,7 +61,7 @@ func TestEvaluate_余裕値と判定スコアが式のとおりに出る(t *test
 		[2]any{handoff.LimitKindWeeklyScoped, 80},
 	)
 
-	bid, skip := handoff.Evaluate(snap, true, handoff.Margins{FiveHour: 10, Weekly: 10}, 95, testHost, at())
+	bid, skip := handoff.Evaluate(snap, true, handoff.Margins{FiveHour: 10, Weekly: 10}, 95, at())
 
 	if skip != handoff.SkipNone {
 		t.Fatalf("入札してよいはずなのに黙った: %v", skip)
@@ -75,8 +75,10 @@ func TestEvaluate_余裕値と判定スコアが式のとおりに出る(t *test
 	if bid.Score != 184 {
 		t.Errorf("判定スコアが式と違う: got %d, want 184（87 × 2 + 10）", bid.Score)
 	}
-	if bid.Host != testHost {
-		t.Errorf("機械の名前が入っていない: got %q, want %q", bid.Host, testHost)
+	// **`Evaluate` は識別子を入れない**（設計 3-77-0）。枠の判定は gh の持ち主を引くより
+	// 先に走るので、この時点では持ち主が分かっていない。**埋めるのは `bidForIssue` である。**
+	if bid.Author != "" {
+		t.Errorf("枠の判定が識別子を入れている（持ち主はまだ分かっていない）: got %q", bid.Author)
 	}
 	if _, offset := bid.At.Zone(); offset != 9*60*60 {
 		t.Errorf("時刻がその機械のタイムゾーンで入っていない（Z に直してはならない）: %s", bid.At.Format(time.RFC3339))
@@ -157,7 +159,7 @@ func TestEvaluate_投稿しない3つの条件(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, skip := handoff.Evaluate(c.snap, true, c.margins, c.pauseAbovePercent, testHost, at())
+			_, skip := handoff.Evaluate(c.snap, true, c.margins, c.pauseAbovePercent, at())
 			if skip != c.want {
 				t.Errorf("黙る理由が違う: got %v, want %v", skip, c.want)
 			}
@@ -172,17 +174,17 @@ func TestEvaluate_投稿しない3つの条件(t *testing.T) {
 func TestWinner_判定スコアがいちばん大きい機械が勝つ(t *testing.T) {
 	base := at()
 	bids := []handoff.Bid{
-		{Host: "a", Score: 120, PostedAt: base},
-		{Host: "b", Score: 190, PostedAt: base.Add(time.Minute)},
-		{Host: "c", Score: 150, PostedAt: base.Add(2 * time.Minute)},
+		{Author: "a", Score: 120, PostedAt: base},
+		{Author: "b", Score: 190, PostedAt: base.Add(time.Minute)},
+		{Author: "c", Score: 150, PostedAt: base.Add(2 * time.Minute)},
 	}
 
 	winner, ok := handoff.Winner(bids)
 	if !ok {
 		t.Fatal("入札があるのに勝者が決まらなかった")
 	}
-	if winner.Host != "b" {
-		t.Errorf("判定スコアがいちばん大きい機械が勝っていない: got %q, want %q", winner.Host, "b")
+	if winner.Author != "b" {
+		t.Errorf("判定スコアがいちばん大きいアカウントが勝っていない: got %q, want %q", winner.Author, "b")
 	}
 }
 
@@ -197,17 +199,17 @@ func TestWinner_同点なら最初に投稿した機械が勝つ(t *testing.T) {
 	base := at()
 	bids := []handoff.Bid{
 		// **`at` は未来を指しているが、投稿は2番目である。**
-		{Host: "late", Score: 190, At: base.Add(-time.Hour), PostedAt: base.Add(time.Minute)},
-		{Host: "first", Score: 190, At: base.Add(time.Hour), PostedAt: base},
-		{Host: "last", Score: 190, At: base, PostedAt: base.Add(2 * time.Minute)},
+		{Author: "late", Score: 190, At: base.Add(-time.Hour), PostedAt: base.Add(time.Minute)},
+		{Author: "first", Score: 190, At: base.Add(time.Hour), PostedAt: base},
+		{Author: "last", Score: 190, At: base, PostedAt: base.Add(2 * time.Minute)},
 	}
 
 	winner, ok := handoff.Winner(bids)
 	if !ok {
 		t.Fatal("入札があるのに勝者が決まらなかった")
 	}
-	if winner.Host != "first" {
-		t.Errorf("同点の決着が投稿の時刻になっていない: got %q, want %q", winner.Host, "first")
+	if winner.Author != "first" {
+		t.Errorf("同点の決着が投稿の時刻になっていない: got %q, want %q", winner.Author, "first")
 	}
 }
 
@@ -216,16 +218,16 @@ func TestWinner_同点なら最初に投稿した機械が勝つ(t *testing.T) {
 // **決め手を最後まで用意しないと、2台が同じ issue を掴む。**
 //
 // 与える情報: 判定スコアも投稿の時刻も同じ入札2件を、並び順を変えて2回。
-// 成功条件: どちらの並びでも同じ機械が勝つこと。
+// 成功条件: どちらの並びでも同じアカウントが勝つこと。
 func TestWinner_全部同じでも同じ勝者を選ぶ(t *testing.T) {
 	base := at()
-	a := handoff.Bid{Host: "alpha", Score: 190, PostedAt: base}
-	b := handoff.Bid{Host: "beta", Score: 190, PostedAt: base}
+	a := handoff.Bid{Author: "alpha", Score: 190, PostedAt: base}
+	b := handoff.Bid{Author: "beta", Score: 190, PostedAt: base}
 
 	first, _ := handoff.Winner([]handoff.Bid{a, b})
 	second, _ := handoff.Winner([]handoff.Bid{b, a})
-	if first.Host != second.Host {
-		t.Fatalf("並び順で勝者が変わった: %q と %q", first.Host, second.Host)
+	if first.Author != second.Author {
+		t.Fatalf("並び順で勝者が変わった: %q と %q", first.Author, second.Author)
 	}
 }
 
@@ -240,7 +242,7 @@ func TestWinner_全部同じでも同じ勝者を選ぶ(t *testing.T) {
 func TestEvaluate_使っていない枠が現れなくても黙らない(t *testing.T) {
 	snap := snapshot([2]any{handoff.LimitKindSession, 3})
 
-	bid, skip := handoff.Evaluate(snap, true, handoff.Margins{FiveHour: 10, Weekly: 10}, 95, testHost, at())
+	bid, skip := handoff.Evaluate(snap, true, handoff.Margins{FiveHour: 10, Weekly: 10}, 95, at())
 
 	if skip != handoff.SkipNone {
 		t.Fatalf("使っていない枠が無いだけで黙った: %v", skip)
@@ -258,8 +260,8 @@ func TestEvaluate_使っていない枠が現れなくても黙らない(t *test
 func TestDeadline_最初の入札から数える(t *testing.T) {
 	base := at()
 	bids := []handoff.Bid{
-		{Host: "late", PostedAt: base.Add(3 * time.Minute)},
-		{Host: "first", PostedAt: base},
+		{Author: "late", PostedAt: base.Add(3 * time.Minute)},
+		{Author: "first", PostedAt: base},
 	}
 
 	got, ok := handoff.Deadline(bids, 3*time.Minute)
@@ -278,20 +280,24 @@ func TestDeadline_最初の入札から数える(t *testing.T) {
 // **本文から読み直させる。**Bid の値を直に並べると、印の付け方や JSON の形が
 // 変わったことに気づけない。
 //
-// host: 入札した機械の名前。
+// **投稿者を必ず入れる。**持ち回りで参加者を見分ける値はここである（設計 3-77-0）。
+// 入れないと `CollectBids` が1件も返さない。
+//
+// account: 入札したアカウントのログイン名。
 // score: 判定スコア。
 // postedAt: GitHub がそのコメントに付けた作成時刻。
 // 戻り値: 入札のコメント。
-func bidComment(host string, score int, postedAt time.Time) handoff.CommentView {
+func bidComment(account string, score int, postedAt time.Time) handoff.CommentView {
 	return handoff.CommentView{
-		Body:      handoff.FormatBid(handoff.Bid{Host: host, Score: score, At: postedAt}, 3*time.Minute),
+		Author:    account,
+		Body:      handoff.FormatBid(handoff.Bid{Author: account, Score: score, At: postedAt}, 3*time.Minute),
 		CreatedAt: postedAt,
 	}
 }
 
 // releasedComment は released のコメントを1件組み立てる。
 //
-// from: 担当を外された機械の名前。
+// from: 担当を外されたアカウントのログイン名。
 // postedAt: 作成時刻。
 // 戻り値: released のコメント。
 func releasedComment(from string, postedAt time.Time) handoff.CommentView {
@@ -301,17 +307,17 @@ func releasedComment(from string, postedAt time.Time) handoff.CommentView {
 	}
 }
 
-// hostsOf は入札の一覧から機械の名前を並べる。
+// accountsOf は入札の一覧からアカウントの名前を並べる。
 //
 // bids: 並べる入札。
-// 戻り値: 機械の名前をカンマでつないだもの（読めない失敗表示にしないため）。
-func hostsOf(bids []handoff.Bid) string {
+// 戻り値: アカウントの名前をカンマでつないだもの（読めない失敗表示にしないため）。
+func accountsOf(bids []handoff.Bid) string {
 	out := ""
 	for i, b := range bids {
 		if i > 0 {
 			out += ", "
 		}
-		out += b.Host
+		out += b.Author
 	}
 	return "[" + out + "]"
 }
@@ -331,13 +337,13 @@ func TestRoundBids_古い入札が残っていても次の回が始まる(t *tes
 	base := at()
 	window := 3 * time.Minute
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
-		bidComment(testHost, 190, base.Add(10*time.Minute)),
+		bidComment(otherLogin, 300, base),
+		bidComment(testAccount, 190, base.Add(10*time.Minute)),
 	}
 
 	got := handoff.RoundBids(comments, base.Add(10*time.Minute), window)
-	if len(got) != 1 || got[0].Host != testHost {
-		t.Fatalf("いまの回の入札だけが返っていない: %s", hostsOf(got))
+	if len(got) != 1 || got[0].Author != testAccount {
+		t.Fatalf("いまの回の入札だけが返っていない: %s", accountsOf(got))
 	}
 	deadline, ok := handoff.Deadline(got, window)
 	if !ok || !deadline.Equal(base.Add(13*time.Minute)) {
@@ -347,8 +353,8 @@ func TestRoundBids_古い入札が残っていても次の回が始まる(t *tes
 
 	// **次の巡回。**ここで空が返ると、呼び出し側は入札をもう1件書いてしまう。
 	next := handoff.RoundBids(comments, base.Add(10*time.Minute+30*time.Second), window)
-	if len(next) != 1 || next[0].Host != testHost {
-		t.Errorf("次の巡回でいまの回の入札を落としている: %s", hostsOf(next))
+	if len(next) != 1 || next[0].Author != testAccount {
+		t.Errorf("次の巡回でいまの回の入札を落としている: %s", accountsOf(next))
 	}
 }
 
@@ -362,19 +368,19 @@ func TestRoundBids_古い入札が残っていても次の回が始まる(t *tes
 func TestRoundBids_終わった回の入札は数えない(t *testing.T) {
 	base := at()
 	window := 3 * time.Minute
-	comments := []handoff.CommentView{bidComment("thinkpad", 300, base)}
+	comments := []handoff.CommentView{bidComment(otherLogin, 300, base)}
 
 	// 締め切り（base+3分）からさらに3分。**回は終わっている。**
 	if got := handoff.RoundBids(comments, base.Add(6*time.Minute+time.Second), window); len(got) != 0 {
-		t.Errorf("終わった回の入札を数えている: %s", hostsOf(got))
+		t.Errorf("終わった回の入札を数えている: %s", accountsOf(got))
 	}
 	// 締め切りは過ぎたが、決着の猶予の中である。
 	if got := handoff.RoundBids(comments, base.Add(4*time.Minute), window); len(got) != 1 {
-		t.Errorf("いまの回の入札を落としている: %s", hostsOf(got))
+		t.Errorf("いまの回の入札を落としている: %s", accountsOf(got))
 	}
 	// 締め切りを待たない設定に決着の猶予は無い。
 	if got := handoff.RoundBids(comments, base.Add(365*24*time.Hour), 0); len(got) != 1 {
-		t.Errorf("締め切りを待たない設定で入札を落としている: %s", hostsOf(got))
+		t.Errorf("締め切りを待たない設定で入札を落としている: %s", accountsOf(got))
 	}
 }
 
@@ -389,14 +395,14 @@ func TestRoundBids_終わった回が積まれていても数え直す(t *testin
 	base := at()
 	window := 3 * time.Minute
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
-		bidComment("mac-studio", 280, base.Add(10*time.Minute)),
-		bidComment(testHost, 190, base.Add(20*time.Minute)),
+		bidComment(otherLogin, 300, base),
+		bidComment(selfLogin, 280, base.Add(10*time.Minute)),
+		bidComment(testAccount, 190, base.Add(20*time.Minute)),
 	}
 
 	got := handoff.RoundBids(comments, base.Add(20*time.Minute), window)
-	if len(got) != 1 || got[0].Host != testHost {
-		t.Fatalf("いまの回の入札だけが返っていない: %s", hostsOf(got))
+	if len(got) != 1 || got[0].Author != testAccount {
+		t.Fatalf("いまの回の入札だけが返っていない: %s", accountsOf(got))
 	}
 }
 
@@ -410,16 +416,16 @@ func TestRoundBids_終わった回が積まれていても数え直す(t *testin
 func TestRoundBids_holdより前の入札は前の回のもの(t *testing.T) {
 	base := at()
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
-		holdComment(otherLogin, "thinkpad", base.Add(3*time.Minute)),
-		bidComment(testHost, 190, base.Add(19*time.Hour)),
+		bidComment(otherLogin, 300, base),
+		holdComment(otherLogin, base.Add(3*time.Minute)),
+		bidComment(testAccount, 190, base.Add(19*time.Hour)),
 	}
 	now := base.Add(19 * time.Hour)
 
 	for _, window := range []time.Duration{3 * time.Minute, 0} {
 		got := handoff.RoundBids(comments, now, window)
-		if len(got) != 1 || got[0].Host != testHost {
-			t.Errorf("hold より前の入札を数えている（締め切り %s）: %s", window, hostsOf(got))
+		if len(got) != 1 || got[0].Author != testAccount {
+			t.Errorf("hold より前の入札を数えている（締め切り %s）: %s", window, accountsOf(got))
 		}
 	}
 }
@@ -436,15 +442,15 @@ func TestRoundBids_releasedと同じ時刻の入札は残す(t *testing.T) {
 	base := at()
 	now := base.Add(19 * time.Hour)
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
-		holdComment(otherLogin, "thinkpad", base.Add(3*time.Minute)),
-		releasedComment("thinkpad", now),
-		bidComment(testHost, 190, now),
+		bidComment(otherLogin, 300, base),
+		holdComment(otherLogin, base.Add(3*time.Minute)),
+		releasedComment(otherLogin, now),
+		bidComment(testAccount, 190, now),
 	}
 
 	got := handoff.RoundBids(comments, now, 3*time.Minute)
-	if len(got) != 1 || got[0].Host != testHost {
-		t.Fatalf("released と同じ時刻の入札を落としている: %s", hostsOf(got))
+	if len(got) != 1 || got[0].Author != testAccount {
+		t.Fatalf("released と同じ時刻の入札を落としている: %s", accountsOf(got))
 	}
 }
 
@@ -455,9 +461,9 @@ func TestRoundBids_releasedと同じ時刻の入札は残す(t *testing.T) {
 func TestRoundStart_いちばん新しいholdかreleasedを採る(t *testing.T) {
 	base := at()
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
-		holdComment(otherLogin, "thinkpad", base.Add(3*time.Minute)),
-		releasedComment("thinkpad", base.Add(19*time.Hour)),
+		bidComment(otherLogin, 300, base),
+		holdComment(otherLogin, base.Add(3*time.Minute)),
+		releasedComment(otherLogin, base.Add(19*time.Hour)),
 	}
 
 	got, ok := handoff.RoundStart(comments)
@@ -469,7 +475,7 @@ func TestRoundStart_いちばん新しいholdかreleasedを採る(t *testing.T) 
 			got.Format(time.RFC3339), base.Add(19*time.Hour).Format(time.RFC3339))
 	}
 
-	if _, ok := handoff.RoundStart([]handoff.CommentView{bidComment(testHost, 190, base)}); ok {
+	if _, ok := handoff.RoundStart([]handoff.CommentView{bidComment(testAccount, 190, base)}); ok {
 		t.Error("入札だけの issue で回の区切りが返った（入札は回を閉じない）")
 	}
 }
@@ -482,12 +488,12 @@ func TestBidsBefore_締め切りを過ぎた入札を落とす(t *testing.T) {
 	base := at()
 	deadline := base.Add(3 * time.Minute)
 	bids := []handoff.Bid{
-		{Host: "onTime", PostedAt: deadline},
-		{Host: "late", PostedAt: deadline.Add(time.Second)},
+		{Author: "onTime", PostedAt: deadline},
+		{Author: "late", PostedAt: deadline.Add(time.Second)},
 	}
 
 	got := handoff.BidsBefore(bids, deadline)
-	if len(got) != 1 || got[0].Host != "onTime" {
+	if len(got) != 1 || got[0].Author != "onTime" {
 		t.Fatalf("締め切りの扱いが違う: got %+v, want onTime だけ", got)
 	}
 }

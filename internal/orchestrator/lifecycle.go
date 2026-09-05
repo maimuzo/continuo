@@ -29,8 +29,8 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	// **担当が自分でなくなっていないかを、turn の終わりで確かめる**（設計 3-77c）。
 	// **確かめるのは `recheck_interval_ms` に1回だけである**（既定1時間）。
 	// **移っていたらここで止める。push しない。**
-	if lost, newHost := o.handoffLostOnTurnEnd(ctx, rs); lost {
-		o.stopBecauseHandoffLost(ctx, rs, newHost)
+	if lost, newAccount := o.handoffLostOnTurnEnd(ctx, rs); lost {
+		o.stopBecauseHandoffLost(ctx, rs, newAccount)
 		return true
 	}
 
@@ -40,7 +40,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 
 	// **ここだけは「誰が Status を書いたか」も取る**（設計 3-61）。この写しを `rs.setIssue` で
 	// 控え、`decideAfterTurn` が「ボードの自動化が書いたのか」を判定する。
-	current, ok := o.refreshIssue(ctx, rs, true)
+	current, ok, _ := o.refreshIssue(ctx, rs, true)
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
 		o.abandonRun(ctx, rs, "この issue がカンバンから見えなくなりました。"+
@@ -472,9 +472,18 @@ func lookupSignalTarget(m map[string]*string, value string) (*string, bool) {
 // withTimeline: 記録も取るか。**真で呼ぶのは `handleTurnEnd` だけである。**
 // そこだけが取り直した issue を `rs.setIssue` で控え、知らない Status の判定
 // （`decideAfterTurn` → `claimAutomatedRewrite` / `finishRunUnknownState`）がそれを読む。
-// 戻り値の1つ目: 取り直した issue。
+// 戻り値の1つ目: 取り直した issue。**取り直せなかったときは、控えてある古い写しである。**
 // 戻り値の2つ目: ボードから見えていれば true。
-func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimeline bool) (tracker.Issue, bool) {
+// 戻り値の3つ目: **本当に GitHub から取り直せたなら true。**
+//
+//	**偽のときの1つ目は、着手したときの写しである。**担当者もラベルも Status も、そのあと動いている見込みがある。
+//	**見るのは `verifyHandoff` だけである。**あそこは「担当が自分から他人へ移ったか」を答えるので、
+//	古い写しから答えると、担当を外された run が push まで走り切る（設計 3-77c）。
+//	**`handleTurnEnd` と `finishRunClaimed` は、取り直せなくても古い写しで続ける。**
+//	止めるほうが害が大きいためである（turn の結果を捨てる／片付けを止める）。
+//	**代償は、古い Status からボードへ書く場合があることである**（`handleTurnEnd` は
+//	`decideAfterTurn` を通って Status を書き直しうる）。**`origin/main` から同じ形である。**
+func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimeline bool) (tracker.Issue, bool, bool) {
 	var (
 		issues []tracker.Issue
 		err    error
@@ -486,12 +495,12 @@ func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimel
 	}
 	if err != nil {
 		o.logger.Warn("issue を取り直せません", "identifier", rs.issue().Identifier, "error", err)
-		return rs.issue(), true
+		return rs.issue(), true, false
 	}
 	if len(issues) == 0 {
-		return tracker.Issue{}, false
+		return tracker.Issue{}, false, true
 	}
-	return issues[0], true
+	return issues[0], true, true
 }
 
 // finishRun は run を正常に終える。
@@ -579,7 +588,7 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 
 	// **「誰が Status を書いたか」は取らない**（設計 3-61）。ここで見るのは `State` だけであり、
 	// **`rs.setIssue` でも控えない**ので、記録を読む経路へ空の写しが流れることも無い。
-	current, ok := o.refreshIssue(ctx, rs, false)
+	current, ok, _ := o.refreshIssue(ctx, rs, false)
 	if ok && o.ws.ShouldCleanup(current.State) {
 		o.cleanupWorktree(ctx, rs)
 	}

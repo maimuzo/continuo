@@ -106,8 +106,10 @@ func TestRunViews_turnの終わりの集計がダッシュボードへ届く(t *
 // **1件目を二重に数えて3件ぶんになっていないこと。**
 func TestRunViews_セッションに復帰した再着手でトークンを二重に数えない(t *testing.T) {
 	clock := newTestClock()
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
 	fx := newFixture(t, fixtureOptions{
-		Now: clock.Now,
+		Now:            clock.Now,
+		TranscriptRoot: t.TempDir(),
 		Mutate: func(cfg *config.Config) {
 			cfg.Agent.MaxRetryBackoffMs = 10000
 			cfg.Tracker.VerifyStatesEvery = 0
@@ -115,7 +117,12 @@ func TestRunViews_セッションに復帰した再着手でトークンを二�
 	})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
-	transcriptDir := t.TempDir()
+	// **記録は記録の根の直下1階層へ置く**（設計 3-3c）。着手の段5b がここを探す。
+	//
+	// **fixture が採番のときに置く記録とは、別のディレクトリになる。**
+	// **同じ名前の記録が2つできるが、この検査が見るのは「在るか」だけなので結果は変わらない。**
+	// ここで置くのは、**トークンの集計が読む中身が要るから**である（fixture が置くのは空に近い）。
+	transcriptDir := sessionTranscriptDir(t, fx)
 	transcript := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
 		typedUserLine("p1", "実装してください"),
 		assistantLine("req1", "作業を続けています。\nCONTINUO-STATUS: working", false),

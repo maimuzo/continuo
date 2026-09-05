@@ -220,7 +220,7 @@ const (
 
 	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77a / 3-77b / 3-77c）。
 
-	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（機械の名前を差し込む）。
+	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（入札したアカウントのログイン名を差し込む）。
 	KeyHandoffBidCandidacy Key = "handoff.bid.candidacy"
 	// KeyHandoffBidDeadline は入札のコメントの2行目に出る（締め切りまでの分数を差し込む）。
 	//
@@ -233,7 +233,7 @@ const (
 	KeyHandoffBidDeadlineOne Key = "handoff.bid.deadline_one"
 	// KeyHandoffBidNoDeadline は、締め切りを待たない設定のときに入札のコメントの2行目に出る。
 	KeyHandoffBidNoDeadline Key = "handoff.bid.no_deadline"
-	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（機械の名前を差し込む）。
+	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（担当になったアカウントのログイン名を差し込む）。
 	KeyHandoffHoldAssigned Key = "handoff.hold.assigned"
 	// KeyHandoffHoldStarting は hold のコメントの2行目に出る（branch の名前を差し込む）。
 	KeyHandoffHoldStarting Key = "handoff.hold.starting"
@@ -242,12 +242,10 @@ const (
 	KeyHandoffHoldStartingNoBranch Key = "handoff.hold.starting_no_branch"
 	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
-	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
+	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（担当を外されたアカウントのログイン名を差し込む）。
 	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
-	// KeyHandoffLostUnknownHost は、担当が移った先の機械の名前を読めなかったときに差し込む。
-	KeyHandoffLostUnknownHost Key = "handoff.lost.unknown_host"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
 )
@@ -499,6 +497,34 @@ const (
 	// **文言に名前を埋め込んではならない。**同じ文言を使う経路が増えたときに、
 	// 埋め込むと落ちた当のファイルとは別のファイルを名乗る。
 	KeyCLIInitErrWriteFailed Key = "cli.init.err_write_failed"
+	// KeyCLIInitWorkflowKept は WORKFLOW.md が既にあって触らなかったときに出る。
+	//
+	// **--force を勧めてはならない。**あれは本文ごと上書きするので、
+	// 利用者が手で書いた指示が1行も残らない（docs/upgrading.md）。
+	// **版を上げた利用者は、足りない2枚目を置くためにこの経路を通る。**
+	// **1つ目の引数はファイルの名前、2つ目は絶対パスである。**
+	KeyCLIInitWorkflowKept Key = "cli.init.workflow_kept"
+	// KeyCLIInitCICreated は continuo-ci.yaml を新しく書き出したときに出る。
+	//
+	// **1つ目の引数はファイルの名前、2つ目は絶対パスである。**
+	// WORKFLOW.md の文言と書式を分けてあるのは、**どちらのファイルの話かを
+	// 1行だけ読んで分かるようにするためである。**
+	KeyCLIInitCICreated Key = "cli.init.ci_created"
+	// KeyCLIInitCIOverwritten は --force で continuo-ci.yaml を上書きしたときに出る。
+	KeyCLIInitCIOverwritten Key = "cli.init.ci_overwritten"
+	// KeyCLIInitCIKept は continuo-ci.yaml が既にあって触らなかったときに出る。
+	//
+	// **これは失敗ではない。**足りないほうだけを置く経路があるので、標準出力へ出す。
+	KeyCLIInitCIKept Key = "cli.init.ci_kept"
+	// KeyCLIInitCIAdvice は continuo-ci.yaml を置いたあとの案内に出る。
+	//
+	// **人間がやることを書く。**continuo は .github/workflows/ へ置かない。
+	KeyCLIInitCIAdvice Key = "cli.init.ci_advice"
+	// KeyCLIInitCIWriteFailed は continuo-ci.yaml を書けなかったときに出る。
+	//
+	// **これは continuo init の失敗ではない。**このファイルは設定ではなく、
+	// continuo は起動時に1バイトも読まない。**黙って落とさないために標準エラーへ出す。**
+	KeyCLIInitCIWriteFailed Key = "cli.init.ci_write_failed"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
 	// KeyCLIInitDetectUnfilled は雛形の値を埋められなかったときの1行に出る。
@@ -2510,7 +2536,6 @@ var allKeys = []Key{
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffLostReason,
-	KeyHandoffLostUnknownHost,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
 	KeyDoctorHerdrRemedySocketAbs,
@@ -2613,6 +2638,12 @@ var allKeys = []Key{
 	KeyCLIInitErrNotADirectory,
 	KeyCLIInitErrSymlink,
 	KeyCLIInitErrWriteFailed,
+	KeyCLIInitWorkflowKept,
+	KeyCLIInitCICreated,
+	KeyCLIInitCIOverwritten,
+	KeyCLIInitCIKept,
+	KeyCLIInitCIAdvice,
+	KeyCLIInitCIWriteFailed,
 	KeyCLIInitDetectFilled,
 	KeyCLIInitDetectUnfilled,
 	KeyCLIInitDetectCandidate,

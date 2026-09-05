@@ -172,7 +172,7 @@ git fetch origin -q
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1148](internal/orchestrator/orchestrator.go#L1148) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1124](internal/orchestrator/orchestrator.go#L1124) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
 
@@ -298,7 +298,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 [.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の4点。
 
 - **issue を作ることと、着手することは別。**作ったらグループ化し、ボードへ載せ、着手順序に並べてから**人間の指示を待つ。**指示が出たら、その issue が `Ready` へ上がったことを確かめてから着手する（`Ice Box` のままだと continuo は拾わない）
-- **ボードの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはボードの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:8547](docs/plans/continuo_design.md#L8547) が認めている）。**ボードへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **ボードの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはボードの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:8723](docs/plans/continuo_design.md#L8723) が認めている）。**ボードへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **閉じられるものを先に外す。**issue の題名だけで「未修正」と判断せず、現行コードと突き合わせる
 - **同時に進める issue は2か3まで。**これは continuo の設定 `agent.max_concurrent_agents` とは別物である
 
@@ -319,7 +319,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 - **問題の定義から書く。例外は無い。**「何が起きているか / なぜそれが困るか / いま何を決めるのか」の3つを毎回書く
 - **製品そのものの定義は書かない。**読み手は continuo を作っている当人である。**`## 三行まとめ` の3行は、全部この返答の結論に使う**
 - **返答の冒頭に「何が言いたいのか」を置く**
-- **名札は、単独で書かない。**issue と PR の番号 / 設定のキーとコマンドのオプション / 自分が付けた記号 / 自分が付けた略した呼び方 / 起きたことに付けたあだ名 の5つとも、**初出で1行、意味を貼る。2度目以降も貼る**
+- **名札は、単独で書かない。**issue と PR の番号 / 設定のキーとコマンドのオプション / 自分が付けた記号 / 自分が付けた略した呼び方 / 起きたことに付けたあだ名 の5つとも、**初出で1行、意味を貼る。issue と PR の番号は、節が変わるたびに貼り直す**
 - **issue と PR は対で書く。**PR だけを名指ししない
 - **英語の技術用語（worktree / pane / hook / branch / commit）を日本語に直訳しない**
 
@@ -355,7 +355,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 | どこ | いつ止まるか |
 | --- | --- |
 | [.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) | `gh pr merge <番号>` と `gh pr ready <番号>` を**実行する前** |
-| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`review-result` の検査が赤になる |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[.claude/rules/design-review.md](.claude/rules/design-review.md) の段4） |
 | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
 
 **3つとも数える条件は同じである。**
@@ -401,7 +401,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 | 何を確かめるか | どう確かめるか |
 | --- | --- |
-| **レビュー結果が貼ってあるか** | **GitHub Actions の `review-result`**（`main` の必須の検査。2026-09-01 に追加） |
+| **レビュー結果が貼ってあるか** | **GitHub Actions の `code-review-result`**（`main` の必須の検査。2026-09-01 に追加） |
 | ビルドとテスト | `build` 6本と `test` 2本（必須の検査） |
 | 衝突が無いか | `gh pr view <番号> --json mergeable,mergeStateStatus` |
 
