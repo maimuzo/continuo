@@ -232,8 +232,8 @@ echo "$(git rev-parse --show-toplevel)/.claude/skills/worker-briefing/SKILL.md"
 
 | 何 | どこにあるか |
 | --- | --- |
-| **ファイルの書き換えは、同じディレクトリの一時ファイルへ書いてから `os.Rename` で差し替える** | [CLAUDE.md](../../../CLAUDE.md) の「絶対に守る制約」の4 |
-| **このリポジトリは PUBLIC。**個人の絶対パス・tailnet のホスト名・トークンを書かない | [CLAUDE.md](../../../CLAUDE.md) の「絶対に守る制約」の5 |
+| **ファイルの書き換えは、同じディレクトリの一時ファイルへ書いてから `os.Rename` で差し替える** | [CLAUDE.md](../../../CLAUDE.md) の「ファイルの書き換えは『一時ファイルへ書いてから差し替える』」 |
+| **このリポジトリは PUBLIC。**個人の絶対パス・tailnet のホスト名・トークンを書かない | [CLAUDE.md](../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 |
 | **英語の技術用語（worktree / branch / commit / hook / pane）を日本語に直訳しない** | [.claude/rules/reporting.md](../../rules/reporting.md) の「英語の技術用語を、自分の判断で日本語に直訳しない」 |
 | **番号には issue か PR かの別と、本物の題名を添える** | [.claude/rules/reporting.md](../../rules/reporting.md) の「絶対条件：名札は、単独で書かない」 |
 | **日本語では「カンバン」と書く**（「ボード」と書かない） | [docs/spec/translation-glossary.md](../../../docs/spec/translation-glossary.md) の2 |
@@ -250,7 +250,7 @@ echo "$(git rev-parse --show-toplevel)/.claude/skills/worker-briefing/SKILL.md"
 
 **Claude Code は CLAUDE.md を自動で注入するが、その写しは古いことがある。**
 実際、この節を書いた worker へ注入された写しには、
-同じ pull request が足した「絶対に守る制約」の6（hook の経路に触れたら人間に確認する）が入っていなかった。
+同じ pull request が足した「hook の挙動が変化する変更を実装する前に人間に確認する」の規則が入っていなかった。
 **worker が worktree の中で走るときは、注入されるのもその worktree の写しである。**worktree が古ければ規則も古い。
 **正は作業ディレクトリのファイルであって、注入された写しではない。**
 **だから worker は、上の表のパスを Read で開いて確かめる。**「注入されているから読まない」としない。

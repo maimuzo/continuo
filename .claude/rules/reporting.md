@@ -100,10 +100,10 @@
 
 | 試さないもの | どこが禁じているか |
 | --- | --- |
-| **`claude -p` の実行** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の1。従量課金になる |
-| **本番のカンバンへの、検証目的の書き込み**（GitHub Projects v2 の project #3。104件の実データが入っている） | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。とくに `updateProjectV2Field` は Status の値を全部消す。**[.claude/rules/issue.md](issue.md) の手順が求めるボードの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）は、この禁止の対象ではない** |
+| **`claude -p` の実行** | [CLAUDE.md](../../CLAUDE.md) の「`claude -p` は使用禁止」。**従量課金になる** |
+| **本番のカンバンへの、検証目的の書き込み**（GitHub Projects v2 の project #3。104件の実データが入っている） | [CLAUDE.md](../../CLAUDE.md) の「GitHub Projects v2 の project #3 は本番のボードである」。**とくに `updateProjectV2Field` は Status の値を全部消す**。**[.claude/rules/issue.md](issue.md) の手順が求めるボードの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）は、この禁止の対象ではない** |
 | **レビュー結果を貼っていない pull request の `gh pr merge` と `gh pr ready`** | [CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」 |
-| **`~/.claude/projects/` 配下の変更・削除** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の3 |
+| **`~/.claude/projects/` 配下の変更・削除** | [CLAUDE.md](../../CLAUDE.md) の「`~/.claude/projects/` 配下を消さない」 |
 
 **この節は「試していないのに、できないと決めつけるな」であって、
 「禁止されているものを1回試して確かめろ」ではない。**
