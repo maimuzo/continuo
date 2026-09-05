@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "1a84ffa258fa6e79df21ac322bd0912ba8a9c6e392c3a6268428acb3b3f17f47",
+  "_source_sha256": "61353fb8b51f49aaefd1bbede10bbf7bbcb7a3487b4aa21338f673ed8212049e",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -495,6 +495,7 @@
   "handoff.lost.unknown_host": "(could not read which machine)",
   "handoff.released.do_not_push": "**Do not push the work that was running on %s to this branch.**",
   "handoff.released.reassign": "**The assignee of this issue was removed. The next assignee is decided by a new round of bids.**",
+  "handoff.released.weekly_wait_limit": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.**workspace_hooks.after_run has already run. The next machine that picks up this branch should continue from the remote.",
   "herdr.agent.invalid_name": "The agent name does not fit herdr's allowed pattern (`^[a-z][a-z0-9_-]{0,31}$`; it must start with a lowercase letter and be at most 32 characters): %q",
   "herdr.agent.send_keys_empty": "%s needs at least one key",
   "herdr.call.canceled": "the call to herdr was canceled (method=%s)",

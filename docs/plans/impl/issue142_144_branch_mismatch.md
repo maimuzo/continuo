@@ -212,7 +212,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 1行の違いも無く入れる。**通す検査は2つである。
 
 - [test/internal/scaffold/design_template_test.go:111-129](../../../test/internal/scaffold/design_template_test.go#L111-L129) の `assertSameBody`
-- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（[docs/plans/continuo_design.md:8784-8785](../continuo_design.md#L8784-L8785) が名指ししている）
+- `TestTemplate_雛形の本文が設計5_3の本文と一致する`（[docs/plans/continuo_design.md:8841-8842](../continuo_design.md#L8841-L8842) が名指ししている）
 
 **[test/internal/prompt/blocked_push_test.go:14-18](../../../test/internal/prompt/blocked_push_test.go#L14-L18) が探す
 `を出す前に、必ず commit して push してください。` と `git push -u origin HEAD` は、どちらも1文字も触らない。**

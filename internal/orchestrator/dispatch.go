@@ -280,7 +280,9 @@ func (o *Orchestrator) observedPercents() (int, int, bool) {
 // 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
 // **代わりに、戻し方を同じ行に書く。**
 //
-// **条件を付けずに、巡回のたびに出す。**既定30秒なので1時間で120行になる。
+// **条件を付けずに、この関数へ来るたびに出す。**巡回は既定30秒なので1時間で120行になる。
+// **「巡回のたび」ではない。**この関数は `dispatchCandidates` の中にあり、
+// **候補の取得に失敗した巡回では呼ばれない**（その巡回には別の `Warn` が出る）。
 // **候補の数で黙らせてはならない。**数えられるのは「まだ run を持っていない候補」までで、
 // **必須のラベルが足りない候補・信頼していないリポジトリの候補・バックオフ中の候補・
 // 空きスロットが尽きている場合が、そこへ全部混ざる。**
@@ -314,6 +316,16 @@ func (o *Orchestrator) logNewWorkBlocked(
 	if stale {
 		// **いまの値ではない。**直前の読み取りに失敗している。
 		args = append(args, "使用率は最後に読めた値", true)
+	}
+	// **使い切っている枠の種別を出す**（設計 3-77j）。
+	// **1週間の枠は2つある**（`weekly_all` と `weekly_scoped`）。
+	// **使用率は最大を採って1つに畳むので、それだけでは
+	// `weekly_scoped`（使っていないモデルの週次の枠）が原因のときに読めない。**
+	// claude.ai の画面に出る週次の全体が30%でも、使っていないモデルの枠が100%なら止まる。
+	if snap, _ := o.quotaSnapshotWithStale(); snap != nil {
+		if kinds := snap.FullLimitKinds(); len(kinds) > 0 {
+			args = append(args, "使い切っている枠", strings.Join(kinds, ", "))
+		}
 	}
 	args = append(args,
 		"5時間の枠の閾値", o.thresholdText(h.FiveHourMarginPercent),

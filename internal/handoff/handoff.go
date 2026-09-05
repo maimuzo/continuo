@@ -101,7 +101,26 @@ type Released struct {
 	Branch string `json:"branch"`
 	// At は外した時刻である。**外した機械のタイムゾーンで書く。**
 	At time.Time `json:"at"`
+	// Reason は、自分から手放したときにその理由を入れる（issue #197）。
+	//
+	// **空なら「他の機械に外された」である**（設計 3-77c）。
+	// **`ReleaseReasonWeeklyWaitLimit` なら「1週間の枠を待つ上限を超えて自分で手放した」である**
+	// （設計 3-27）。**この2つで本文が変わる。**
+	// 外された側は「この branch へ push しないでください」だが、
+	// **自分から手放した側は、その直前に `workspace_hooks.after_run` で push している。**
+	// **同じ本文を使うと、push した本人が「push しないでください」と書くことになる。**
+	//
+	// **`omitempty` を付ける。**付けないと、既にある released のコメントと
+	// JSON の形が変わり、古い continuo が読めなくなる。
+	Reason string `json:"reason,omitempty"`
 }
+
+// ReleaseReasonWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したことを表す
+// （issue #197。設計 3-27）。
+//
+// **利用者が issue のコメントを grep する目印でもある。**
+// [docs/FAQ.md](../../docs/FAQ.md) が、この文字列を載せた JSON を見本として出している。
+const ReleaseReasonWeeklyWaitLimit = "weekly_wait_limit"
 
 // Margins は余裕値を作るときに引くマージンである（単位は %）。
 type Margins struct {
@@ -223,7 +242,7 @@ func maxPercentOfKinds(snap *ratelimit.Snapshot, kinds ...string) (int, bool) {
 // 戻り値: 一致すれば true。
 func matchesKind(kind string, kinds []string) bool {
 	for _, k := range kinds {
-		if strings.EqualFold(strings.TrimSpace(kind), strings.TrimSpace(k)) {
+		if strings.EqualFold(strings.TrimSpace(kind), k) {
 			return true
 		}
 	}

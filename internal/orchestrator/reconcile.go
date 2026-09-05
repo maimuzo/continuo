@@ -257,14 +257,14 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 		if !o.weeklyWaitExceeded(rs) {
 			continue
 		}
-		if o.screenMovedSoDoNotRelease(ctx, rs) {
+		if !o.screenStillSoReleaseIsSafe(ctx, rs) {
 			continue
 		}
 		o.releaseBecauseQuotaWaitAsync(ctx, rs)
 	}
 }
 
-// screenMovedSoDoNotRelease は、手放す直前に画面の版を見て「まだ動いている」なら真を返す
+// screenStillSoReleaseIsSafe は、手放してよいかを画面の版から判定する
 // （設計 3-27。issue #197）。
 //
 // **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
@@ -274,31 +274,57 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 // **正常に走っている run を手放して pane を閉じることになる。**
 //
 // **区別できる道具は画面の版である**（設計 3-21。`checkStalls` の段2 が同じものを見る）。
-// **あちらは枠待ちの枝の後ろにあるので、この経路には届かない。**だからここで1回見る。
+// **あちらは枠待ちの枝の後ろにあるので、この経路には届かない。**だからここで見る。
 //
-// **読めなかったら手放す側へ倒す。**`checkStalls` の段2 が
-// 「画面の版を読めませんでした（止まったものとして扱います）」と同じ向きに倒している。
+// **窓は `claude.turn_timeout_ms`（既定1時間）である。巡回の間隔（既定30秒）ではない。**
+// **「前の巡回から版が増えたか」だけで決めてはならない。**根拠にしているのは
+// 「1時間を超える1回のツール呼び出し」なので、**30秒動かない窓を1つ拾っただけで
+// 手放すと、90分のビルドの最中に殺すことになる。**
+// **`agent.get` は `LastSeenAt` を進めるので、静止が続いた長さがそのまま窓になる。**
+//
+// **読めなかったら手放さない側へ倒す。**`checkStalls` の段2 とは向きを変える。
+// **あちらが失うのは「worker を止めてリトライを積む」までで、担当も worktree もこの機械に残る。**
+// **こちらが失うのは `git push`・担当者・pane・会話の文脈で、取り返しがつかない。**
+// **設計 3-27 自身が「herdr が一時的に届かないとき」を前提として書いている。**
 //
 // **見るのは上限を超えた run だけである。**巡回のたびに全部の run へ herdr を叩かない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// 戻り値: 画面が動いているので手放してはならないなら true。
-func (o *Orchestrator) screenMovedSoDoNotRelease(ctx context.Context, rs *runState) bool {
+// 戻り値: 手放してよいなら true。
+func (o *Orchestrator) screenStillSoReleaseIsSafe(ctx context.Context, rs *runState) bool {
+	identifier := rs.issue().Identifier
 	agent, err := o.agentInfo(ctx, rs)
 	if err != nil {
-		o.logger.Warn("手放す前に画面の版を読めませんでした（止まったものとして扱います）",
-			"identifier", rs.issue().Identifier, "error", err)
+		o.logger.Warn("手放す前に画面の版を読めませんでした（手放さずに次の巡回でやり直します）",
+			"identifier", identifier, "error", err)
 		return false
 	}
-	if !rs.noteRevision(agent.Revision, o.now()) {
+	now := o.now()
+	if rs.noteRevision(agent.Revision, now) {
+		o.logger.Info("画面が変わっているので、1週間の枠の上限を超えていても手放しません"+
+			"（枠待ちではなく、長い1つの turn です）",
+			"identifier", identifier,
+			"revision", agent.Revision,
+			"agent_status", string(agent.AgentStatus))
 		return false
 	}
-	o.logger.Info("画面が変わっているので、1週間の枠の上限を超えていても手放しません"+
-		"（枠待ちではなく、長い1つの turn です）",
-		"identifier", rs.issue().Identifier,
-		"revision", agent.Revision,
-		"agent_status", string(agent.AgentStatus))
+
+	// **静止が続いた長さを見る。**`claude.turn_timeout_ms` が0以下なら窓を掛けない
+	// （設計 3-27。**その設定でも上限は効かせると決めている**）。
+	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
+	if silence <= 0 {
+		return true
+	}
+	snap := rs.snapshot()
+	if snap.LastSeenAt.IsZero() || now.Sub(snap.LastSeenAt) < silence {
+		o.logger.Info("画面が止まってからの長さが claude.turn_timeout_ms に届かないので、"+
+			"1週間の枠の上限を超えていても手放しません",
+			"identifier", identifier,
+			"止まってからの長さ", now.Sub(snap.LastSeenAt).Round(time.Second).String(),
+			"claude.turn_timeout_ms", o.cfg.Claude.TurnTimeoutMs)
+		return false
+	}
 	return true
 }
 
@@ -395,8 +421,26 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		if snap.WaitingQuota {
 			// **上限は上の `releaseQuotaWaitExceeded` が見ている。**ここでは見ない。
 			//
-			// 枠が明けたら印を外す。**外す契機は「resets_at を過ぎたこと」だけである。**
-			if !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt) {
+			// 枠が明けたら印を外す。契機は2つある。
+			//
+			// **1つ目は `resets_at` を過ぎたこと。**
+			// **2つ目は、使い切っている枠が1つも無くなったこと。**
+			//
+			// **2つ目を落としてはならない。**`resets_at` が `null` で返る枠だけが満杯だと、
+			// `QuotaResetAt` はゼロ値のままで、**1つ目では永久に外れない。**
+			// turn のループは同じ判定を持っている（`quotaAtFull` を見て外す）が、
+			// **herdr が一時的に届かないと、待ちループは印を外さずに goroutine を畳む**
+			// （設計 3-27）。**そのとき外す者が1人もいなくなり、run はスロットと pane を
+			// continuo の再起動まで握り続ける。**
+			//
+			// **`weekly_wait_limit_minutes: 0`（上限を設けない）で必ず当たる。**
+			// [docs/FAQ.md](../../docs/FAQ.md) が1台で動かす人に勧めている値である。
+			switch {
+			case !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt):
+				rs.clearWaitingQuota(now)
+			case !o.quotaAtFull():
+				o.logger.Info("使い切っている枠が無くなったので、枠待ちの印を外します",
+					"identifier", snap.Identifier)
 				rs.clearWaitingQuota(now)
 			}
 			continue
@@ -419,8 +463,14 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 			// **手放す前に画面の版を見る。**ここは枠待ちと初めて判定する場所で、
 			// **下の段2（画面の版）へは進まない。**見ないと、1時間を超える1回のツール呼び出しの
 			// 最中の run を、使っていないモデルの週次の枠が満杯なだけで殺すことになる。
-			if o.weeklyWaitExceeded(rs) && !o.screenMovedSoDoNotRelease(ctx, rs) {
-				o.releaseBecauseQuotaWaitAsync(ctx, rs)
+			if o.weeklyWaitExceeded(rs) {
+				if o.screenStillSoReleaseIsSafe(ctx, rs) {
+					o.releaseBecauseQuotaWaitAsync(ctx, rs)
+					continue
+				}
+				// **画面が動いているなら、枠待ちの印も立てない。**
+				// **立てると、長い1つの turn を「枠を待っている」と名乗ったまま
+				// stall の時計を止めることになり、そのあと本当に固まっても誰も止めない。**
 				continue
 			}
 			resetAt, _ := o.quotaResetAt()

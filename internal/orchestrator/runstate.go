@@ -884,6 +884,15 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	rs.WaitingQuota = false
 	rs.QuotaResetAt = time.Time{}
 	rs.LastSeenAt = now
+	// **満杯の1週間の枠を最初に見た時刻も消す**（設計 3-27。issue #197）。
+	// **消さないと、次に満杯になった run を1分も待たずに手放す。**
+	//
+	// **`weeklyWaitExceeded` の中の `noteWeeklyFull(false, …)` だけでは足りない。**
+	// あれは枠待ちの印が立っている run しか通らないので、
+	// **ここで印が外れると、以後どこからも呼ばれない。**
+	// 何日か普通に動いたあと1週間の枠がもう一度満杯になると、
+	// **何日も前の時刻との差で上限を超えたと判定される。**
+	rs.WeeklyFullSince = time.Time{}
 }
 
 // noteRevision は画面の版を見た結果を記録する（設計 3-21）。

@@ -565,7 +565,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 	// **手放す前に画面の版を見る**（設計 3-27）。`isQuotaWaiting` の条件は
 	// 「使用率が100」と「hook が来ていない」の2つで、**1時間を超える1回のツール呼び出しと
 	// 区別が付かない。**見ないと、正常に走っている run を殺して pane を閉じる。
-	if o.weeklyWaitExceeded(rs) && !o.screenMovedSoDoNotRelease(ctx, rs) &&
+	if o.weeklyWaitExceeded(rs) && o.screenStillSoReleaseIsSafe(ctx, rs) &&
 		o.releaseBecauseQuotaWait(ctx, rs) {
 		return turnAborted, nil
 	}

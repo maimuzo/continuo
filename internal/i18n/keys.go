@@ -244,6 +244,11 @@ const (
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
 	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
 	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
+	// KeyHandoffReleasedWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したときの
+	// released のコメントの2行目に出る（機械の名前を差し込む。issue #197）。
+	//
+	// **こちらは push 済みである。**手放す直前に `workspace_hooks.after_run` が走っている。
+	KeyHandoffReleasedWeeklyWaitLimit Key = "handoff.released.weekly_wait_limit"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
 	// KeyHandoffLostUnknownHost は、担当が移った先の機械の名前を読めなかったときに差し込む。
@@ -2512,6 +2517,7 @@ var allKeys = []Key{
 	KeyHandoffHoldStartingNoBranch,
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
+	KeyHandoffReleasedWeeklyWaitLimit,
 	KeyHandoffLostReason,
 	KeyHandoffLostUnknownHost,
 	KeyDoctorHerdrConfigUnreadable,
