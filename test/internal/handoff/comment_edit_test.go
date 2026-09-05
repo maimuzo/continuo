@@ -190,8 +190,9 @@ func TestCollectBids_編集しても投稿時刻は動かない(t *testing.T) {
 // **なぜ要るか。**released は「いつ・どのアカウントの担当が外されたか」の記録である。
 // **更新時刻で選ぶと、古い記録が最新に化け、ログに間違ったアカウント名が残る。**
 //
-// 与える情報: 古い released（`old-host`）がいま編集され、新しい released（`thinkpad`）は編集されていない状況。
-// 成功条件: 新しく作られたほう（`thinkpad`）が返ること。
+// 与える情報: 古い released（`octocat-bot-b`）がいま編集され、
+// 新しい released（`octocat-bot-a`）は編集されていない状況。
+// 成功条件: 新しく作られたほう（`octocat-bot-a`）が返ること。
 func TestLatestReleased_編集しても新しいreleasedは入れ替わらない(t *testing.T) {
 	now := at()
 

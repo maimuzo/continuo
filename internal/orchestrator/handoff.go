@@ -312,7 +312,7 @@ func (o *Orchestrator) releaseExpiredAssignee(
 	// **欄を空のままにしない。**この写しは `RoundStart` にしか渡らないが、
 	// **入れ物の一部だけを埋めた値を回すと、別の判定へ回されたときに黙って空の値を返す。**
 	// **投稿者も入れる。**この写しを読むのはいま `RoundStart` だけだが、
-	// **`endsRound` は hold の投稿者を見る**（設計 3-77-0）ので、
+	// **`CollectBids` は投稿者の分からないコメントを1件も通さない**（設計 3-77-0）。
 	// **同じ入れ物を回す以上、欄を空にしておく理由が無い。**
 	view := handoff.CommentView{
 		Author: viewer.Login, Body: body, CreatedAt: now, UpdatedAt: now,

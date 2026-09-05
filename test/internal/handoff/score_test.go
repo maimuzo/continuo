@@ -337,7 +337,7 @@ func TestRoundBids_古い入札が残っていても次の回が始まる(t *tes
 	base := at()
 	window := 3 * time.Minute
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
+		bidComment(otherLogin, 300, base),
 		bidComment(testAccount, 190, base.Add(10*time.Minute)),
 	}
 
@@ -368,7 +368,7 @@ func TestRoundBids_古い入札が残っていても次の回が始まる(t *tes
 func TestRoundBids_終わった回の入札は数えない(t *testing.T) {
 	base := at()
 	window := 3 * time.Minute
-	comments := []handoff.CommentView{bidComment("thinkpad", 300, base)}
+	comments := []handoff.CommentView{bidComment(otherLogin, 300, base)}
 
 	// 締め切り（base+3分）からさらに3分。**回は終わっている。**
 	if got := handoff.RoundBids(comments, base.Add(6*time.Minute+time.Second), window); len(got) != 0 {
@@ -395,8 +395,8 @@ func TestRoundBids_終わった回が積まれていても数え直す(t *testin
 	base := at()
 	window := 3 * time.Minute
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
-		bidComment("mac-studio", 280, base.Add(10*time.Minute)),
+		bidComment(otherLogin, 300, base),
+		bidComment(selfLogin, 280, base.Add(10*time.Minute)),
 		bidComment(testAccount, 190, base.Add(20*time.Minute)),
 	}
 
@@ -416,7 +416,7 @@ func TestRoundBids_終わった回が積まれていても数え直す(t *testin
 func TestRoundBids_holdより前の入札は前の回のもの(t *testing.T) {
 	base := at()
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
+		bidComment(otherLogin, 300, base),
 		holdComment(otherLogin, base.Add(3*time.Minute)),
 		bidComment(testAccount, 190, base.Add(19*time.Hour)),
 	}
@@ -442,9 +442,9 @@ func TestRoundBids_releasedと同じ時刻の入札は残す(t *testing.T) {
 	base := at()
 	now := base.Add(19 * time.Hour)
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
+		bidComment(otherLogin, 300, base),
 		holdComment(otherLogin, base.Add(3*time.Minute)),
-		releasedComment("thinkpad", now),
+		releasedComment(otherLogin, now),
 		bidComment(testAccount, 190, now),
 	}
 
@@ -461,9 +461,9 @@ func TestRoundBids_releasedと同じ時刻の入札は残す(t *testing.T) {
 func TestRoundStart_いちばん新しいholdかreleasedを採る(t *testing.T) {
 	base := at()
 	comments := []handoff.CommentView{
-		bidComment("thinkpad", 300, base),
+		bidComment(otherLogin, 300, base),
 		holdComment(otherLogin, base.Add(3*time.Minute)),
-		releasedComment("thinkpad", base.Add(19*time.Hour)),
+		releasedComment(otherLogin, base.Add(19*time.Hour)),
 	}
 
 	got, ok := handoff.RoundStart(comments)
