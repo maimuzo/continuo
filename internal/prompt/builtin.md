@@ -125,6 +125,9 @@ gh が「どこへ push するか」を対話で聞いてきて、そこで止�
 
 **このコメントを書かずに turn を終えると、continuo はセッションを復元してもう一度あなたに書かせます。**
 
+**グループでまとめて直したときは、7-2 も通してください。**issue ごとの説明の書き方と、
+この成果報告に並べるリンクの書き方が、そこにあります。
+
 # 4. 処理に必要なコンテキスト
 
 ## 4-1. issue を読む
@@ -370,6 +373,80 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 別のリポジトリの issue は、この worktree では直せません。直さずにこう書きます。
 
     CONTINUO-STATUS: #99 working     （別リポジトリなので、この worktree では直せない）
+
+**対象を書いた行で `review` か `blocked` を出した issue には、その issue へ「何をしたか」を書きます。**
+表明の1行だけだと、その issue に残るのは continuo が書く「Status を動かしました」の1行だけです。
+**何が直ったのかを知っているのは、あなただけです。**
+
+**いま作業している issue は、ここでは書きません。**そちらは 3-7 で1件書きます。
+**別のリポジトリの issue も書きません。**直していないので、書く成果がありません。
+**書かせ直しを頼まれたときも、下の段1〜段3 を通してください。**
+
+**段1。その issue に、自分の成果報告が既にあるかを見ます。**
+
+    gh issue view <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --json comments \
+      --jq '[.comments[]
+             | select(.viewerDidAuthor and (.body | startswith("<!-- continuo:group -->")))]
+            | .[-1:][] | .url'
+
+**URL が1つ返ったら、その1件に書いてあります。**新しく1件足さないでください。
+**何も返らなければ、その issue にはまだ1件も書いていません。**
+
+**段2a。URL が返ったときは、その1件へ書き足します。**前に書いていない分だけ足してください。
+**足すものが無ければ、何も書かないでください。**
+
+    URL=<段1が返した URL>
+    ID=${URL##*#issuecomment-}
+    case "$ID" in
+      '' | *[!0-9]*)
+        echo "コメントの ID を取れませんでした。段2b で新しく1件投稿します"
+        ;;
+      *)
+        OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+        case "$OLD" in
+          *"<!-- continuo:group -->"*)
+            gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+              -f body="$OLD
+    - <前に書いていない分>（pull request: <PR の URL>）"
+            ;;
+          *)
+            echo "本文を読めませんでした。段2b で新しく1件投稿します"
+            ;;
+        esac
+        ;;
+    esac
+
+**書き足す行にも pull request の URL を入れてください。**そのコメントには前の試行の分が
+残っていることがあり、**入れないと、読む人はどの pull request の話かを見分けられません。**
+
+**段2b。何も返らなかったときは、新しく1件投稿します。**
+
+    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
+    {{.issue.identifier}} とまとめて直しました。この issue の分は次のとおりです。
+
+    - 何を直したか: <この issue が書いている症状に対して、何を変えたか>
+    - 触ったファイル: <リポジトリの根からの相対パス（internal/prompt/builtin.md のように）と、そこを変えた理由>
+    - pull request: <PR の URL>"
+
+**手元の絶対パスを書かないでください。**利用者名は個人情報で、worktree の置き場所は
+その機械の構成を明かします。**issue のコメントは編集履歴が残るので、書いてしまうと取り消せません。**
+
+**先頭の印は `<!-- continuo:group -->` です。**3-7 や 5-3 の `<!-- continuo:agent -->` を使わないでください。
+**その印は「いま担当している issue のエージェントが書いた」という意味で、continuo が
+書かせ直しの要否を決めるのに使っています。**別の issue へ付けると、
+**その issue を担当している別の Claude Code の書かせ直しが、黙って走らなくなります。**
+
+**`<!-- continuo:progress -->` も付けないでください。**付けると、
+次の進捗報告（5-3）がこのコメントへ書き足して、読む人には別の話が1件に混ざって見えます。
+
+**投稿すると、そのコメントの URL が返ります。控えてください。**段3 で使います。
+
+**段3。3-7 で代表の issue へ書く成果報告の中に、段1 か段2b で分かった URL を並べます。**
+
+    - #45 に書きました: <その issue へ書いたコメントの URL>
+    - #47 に書きました: <その issue へ書いたコメントの URL>
+
+**代表の issue へ、コメントを新しく1件増やさないでください。**3-7 で1件書くので、その中に並べれば足ります。
 
 ## 7-3. 別のリポジトリへ pull request を出すとき
 
