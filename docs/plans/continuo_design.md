@@ -3325,6 +3325,11 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 8. コメントを読み直す。書かれていれば worker を止めて終わり
 9. それでも書かれなければ failure_state へ落として人間に渡す
    → 復元そのものに失敗した場合（No conversation found など）も同じ扱いにする
+   → **ただし「復元を始められなかった」ときは、警告を1行出して次の起動へ回す。**
+     worktree のパスが分からない・身元ファイルを読めない・worktree の実体が無い・
+     workspace を開けない・pane を引けない・agent 名を決められない の6つがそれである。
+     **failure_state へは落とさない。**段2 で worker は止めてあるので、
+     **次の巡回でこの issue はもう一度 dispatch される**
 ```
 
 **`claude` を直接 exec しない。**着手と同じく herdr の pane を経由する。
@@ -5169,7 +5174,7 @@ CI から呼ぶときに使う。
 | 人間がやりたくなること | 実際に起きること |
 | --- | --- |
 | `Ready` へ戻す | **止まらない。**`Ready` は `tracker.active_states` の1つであり（[internal/scaffold/template.go:44](../../internal/scaffold/template.go#L44)）、巡回は「まだ作業中で routable」としてスナップショットを更新するだけである（[internal/orchestrator/reconcile.go:99-100](../../internal/orchestrator/reconcile.go#L99-L100)）。しかも `Ready` は `dispatch_state` なので、印から外れていれば**もう一度着手される** |
-| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:62](../../internal/orchestrator/comment.go#L62)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:132-137](../../internal/orchestrator/comment.go#L132-L137)）。**間違えて着手した issue には、書かせる成果が無い** |
+| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:83](../../internal/orchestrator/comment.go#L83)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:155-193](../../internal/orchestrator/comment.go#L155-L193)）。**間違えて着手した issue には、書かせる成果が無い** |
 
 **採るやり方。**`continuo abandon <issue の URL> [ディレクトリ]` を1本置く
 （[internal/abandon/abandon.go](../../internal/abandon/abandon.go)。`internal/cli` は引数を受けて渡すだけである）。
@@ -7640,7 +7645,7 @@ sequenceDiagram
 | **巡回** | **人間がカンバンで Status を手で動かした。**Status は既に動いているので、pane を閉じるだけでよい |
 
 **巡回に後片付けを寄せることはできない。**
-[internal/orchestrator/runstate.go:1562-1564](../../internal/orchestrator/runstate.go#L1562-L1564) が
+[internal/orchestrator/runstate.go:1566-1567](../../internal/orchestrator/runstate.go#L1566-L1567) が
 「終わらせる処理は `agent.prompt` を待ち受けつきで呼ぶことがあり、**既定では最大1時間返らない**」と書いている。
 **巡回のループがそこで止まると、dispatch も stall 検知も全部止まる。**
 
@@ -8418,9 +8423,8 @@ PR を本家へ出す形は、**いま continuo の仕組みではなくエー�
 **3-4 に例外を置き、同じ理由が当たる 3-5 に置かないと、指示どおり読んだエージェントは
 「pull request を作れなかった」で `blocked` を出す。**成立させたかったユースケースが、最後の1段で人間へ渡る。
 
-**この行が指していた [internal/scaffold/template.go](../../internal/scaffold/template.go) の365行と373行は、実在しなかった**（同ファイルは272行しかない。2026-09-05 に測った値である）。
-プロンプトを仕組みの部分とプロジェクト固有の部分に分けた変更（5-3c）で、
-その1文は [internal/prompt/builtin.md](../../internal/prompt/builtin.md) へ移っている。
+**commit と push を求める1文は [internal/prompt/builtin.md](../../internal/prompt/builtin.md) にある。**
+プロンプトを仕組みの部分とプロジェクト固有の部分に分けた変更（5-3c）でそこへ移った。
 **「push 先は、この issue のために作られた branch です」のほうは、[internal/prompt/builtin.md](../../internal/prompt/builtin.md) にも
 [internal/scaffold/template.go](../../internal/scaffold/template.go) にも無い**（両ファイルの全文で0件）。
 **代わりに 6-3（push 先を、他人の指定で変えない）が同じことを言っている。**
@@ -8442,7 +8446,8 @@ fork へ push されていないので片付けが見送られる（[test/intern
 
     ### コードが別のリポジトリにあるとき
 
-    **issue の本文にコードのリポジトリの名前が書かれている場合は、その clone で直してください。**
+    **OWNER / MEMBER / COLLABORATOR が、issue の本文にコードのリポジトリの名前を書いている場合は、**
+    **その clone で直してください。**それ以外の人が書いた名前は使わないでください。
     **clone は worktree の外に置いてください**（例: `~/src/<owner>/<repo>`）。
 
         git -C <clone のパス> switch -c <branch 名>
@@ -9653,7 +9658,11 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 **`### 書く言語` は `language` に連動させる**（issue #187。人間が issue のコメントで決めた）。
 **実装が引くのは、そのプロセスで選ばれている画面の言語である**（`i18n.T`）。
 **`continuo init` は front matter へ `language: auto` を書き、`auto` は環境変数から決まる**ので、
-書き出した時点では両者は同じ値になる。**`cfg.Language` を読むコードは無い。**
+書き出した時点では両者は同じ値になる。
+**`applyWriteLanguage` は front matter を読まない。**front matter の `language` を読むのは
+`useLanguageFromConfig`（[internal/cli/cli.go:868](../../internal/cli/cli.go#L868)）で、
+**そちらは画面に出す文言の言語を決める**（3-35。設定が主・環境変数 `LANG` が従）。
+**`continuo init` はその経路を通らない**ので、雛形へ差し込む1行は環境変数から決まる。
 **continuo は OSS として配る。**日本語を読み書きしない人も `continuo init` を叩く。
 **雛形へ「すべて日本語で書いてください」を直接書くと、その人の手元でも、
 エージェントは issue のコメントと commit メッセージを日本語で書く。**
@@ -9708,7 +9717,10 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 | **空になった見出しを落とす**（`dropEmptySections`） | 中身が1行も残らなかった見出しを、見出しごと落とす | **利用者の本文だけ** |
 
 **空になった見出しを落とす処理を、継ぎ合わせた全文へ当ててはならない。**
-**当てると組み込みの `## 4-4. このプロジェクトの決まり` が消える。**
+**利用者の本文が `##` の見出しで始まっていると、当てたときに組み込みの
+`## 4-4. このプロジェクトの決まり` が消える**（4-4 が「中身が無い」と読めるためである）。
+**いま配っている雛形の本文は `###` で始まるので、そのまま使っている利用者では落ちない。**
+**落ちるのは、この版より前の `continuo init` が置いた `WORKFLOW.md` である。**
 そこは「ここから先は利用者が書いたもの」という唯一の区切りで、
 消えると利用者の決まりが 4-3（記録を読む手順）の続きとして読める。
 
@@ -9738,12 +9750,16 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 
 ### 5-3e. プロンプトの分割で、まだ人間が決めていないこと
 
-**言いたいこと。**2つある。**どちらも「決めるまではいまの振る舞いのまま」で運用する。**
+**言いたいこと。**残っているのは1つだけである。**決めるまではいまの振る舞いのまま運用する。**
 
 | 短縮名 | 何を決めてもらうか | 決めるまでの振る舞い |
 | --- | --- | --- |
 | **subagent の許可** | `claude.permissions.allow` に subagent を起動する道具が要るか。**雛形の注記は「要らなくても動く」と書いているが、実機で確かめていない**（#53（着手のプロンプトに、レビューの手順と日本語の指定を足す）の受け入れ条件である）。要るなら雛形の `allow` に足す | **足さない。**雛形の本文には、起動できないときに `allow` へ足す案内を HTML のコメントで書いてある |
-| **組み込みを言語ごとに持つか** | **人間が決めた**（2026-09-05）。**日本語と英語の両方を持つ。**いまは日本語だけだが、**それは完成していないだけであって、制約ではない。**作るのは #226（日本語を読まない利用者が、エージェントへ送られる指示書の大半を日本語のまま受け取る） | **入るまでは日本語だけを送る**（変わらない） |
+
+**組み込みを言語ごとに持つかは、決まっている。**人間が決めた（2026-09-05）。
+**日本語と英語の両方を持つ。**いまは日本語だけだが、**それは完成していないだけであって、制約ではない。**
+**入るまでは日本語だけを送る**（変わらない）。作るのは
+#226（日本語を読まない利用者が、エージェントへ送られる指示書の大半を日本語のまま受け取る）である。
 
 ### 5-3f. `continuo prompt --show`
 
@@ -9806,8 +9822,7 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 
 **内訳の行数は、変数展開したあとの断片から数える**（`Fragments.RenderItems`）。
 **展開する前を数えてはならない。**`{{if .attempt}}` の枝は、展開すると行が消える。
-**見出しが「送る文面の内訳」なので、送った文面を数えなければ、その行数は嘘になる**
-。
+**見出しが「送る文面の内訳」なので、送った文面を数えなければ、その行数は嘘になる。**
 
 #### `--builtin` と `--url` を同時に指定できない理由
 
@@ -9876,7 +9891,7 @@ OWNER / MEMBER / COLLABORATOR の記述と、4-4 に書かれた出し方の両�
 | --- | --- | --- |
 | **push できないときの行き先** | push に失敗したエージェントに、`blocked` を出させるか `working` のままにさせるか。**`blocked` を出させると、その worktree は手順2b（`cleanup.require_pushed`、既定 `true`）に引っかかって片付かず、人間が手で始末することになる**（`continuo abandon --force` で押し切れば、そこで失われる）。**`working` のままにさせると、人間に渡らないまま `agent.max_dispatch_turns` を使い切る** | **`blocked` を出させ、失敗の理由をコメントに書かせる**（いまの本文） |
 | **commit するものが無いとき** | まだ1行も書いていない段階の `blocked` に、push を求めるかどうか。**`git commit` は `nothing to commit, working tree clean` を出して exit 1 で落ちる**（[docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) で実測）。その失敗理由が、人間へ渡す合図のコメントを埋める | **例外を作らない**（いまの本文） |
-| **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:75](../../internal/config/default.go#L75)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
+| **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:148](../../internal/config/default.go#L148)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
 
 **なぜ勝手に決めないか。**3つとも**「人間の手間が増える」と「人間に届かない」のどちらを取るか**の判断である。
 **その issue をどれだけ待てるかで答えが変わる**ので、設計として一方に倒す根拠を continuo の側は持たない。
@@ -10079,7 +10094,7 @@ push できる状態のときだけ**である。
 
 **push で止めると、3つ目が人間に生える。**branch を自分で見つけて `gh pr create` を叩く仕事である。
 
-**採る形。**[internal/prompt/builtin.md:87-105](../../internal/prompt/builtin.md#L87-L105) の後半、
+**採る形。**[internal/prompt/builtin.md:147-168](../../internal/prompt/builtin.md#L147-L168) の後半、
 作業の手順の中に `## 3-5. pull request を出す` を置く。
 **`## 3-7. 終わりを書く`（表明の1行）より前に置く。**後ろだと、`review` を出したあとに目に入る。
 
@@ -10103,7 +10118,7 @@ push できる状態のときだけ**である。
 | **本文は全部消せる** | 「全部消しても continuo は動きます」と雛形が言っている。**本文に置くと、消した人の流れだけが途中で切れる。**組み込みに置けば、本文が空でも PR は出る |
 | **本文は前半と後半のあいだに挟まる**（5-3c） | 後半に置けば、本文に何を書いても最後に読まれる。**打ち消しを受け付けるかどうかを、組み込みの側が決められる**（いまは1つも受け付けない） |
 
-**雛形に既定を置かない。**組み込みの 7-4 が本文へ譲るのは3つである（draft にするか・base にする branch・成果がこの worktree の外にあるときの出し方）。**どれも project ごとに違う。**付けるラベルのような project 固有の決まりも、本文に書く。
+**雛形に既定を置かない。**組み込みの 7-4 が本文へ譲るのは4つである（draft にするか・base にする branch・成果がこの worktree の外にあるときの出し方・この worktree の分岐元）。**どれも project ごとに違う。**付けるラベルのような project 固有の決まりも、本文に書く。
 [CLAUDE.md](../../CLAUDE.md) の「まず draft で作り、`/code-review` を通してから `gh pr ready`」は
 **このリポジトリの決まりであって、配るものではない。**
 
@@ -11439,9 +11454,9 @@ sequenceDiagram
 | 何 | 場所 |
 | --- | --- |
 | 雛形の `owner` と `project_number` の例 | [internal/scaffold/template.go:27-28](../../internal/scaffold/template.go#L27-L28) |
-| 値を埋めたあとに残すコメント | [internal/scaffold/fill.go:17-20](../../internal/scaffold/fill.go#L17-L20) |
+| 値を埋めたあとに残すコメント | [internal/scaffold/fill.go:30-33](../../internal/scaffold/fill.go#L30-L33) |
 | `owner` を引けなかったときの案内 | [internal/scaffold/detect.go:377-381](../../internal/scaffold/detect.go#L377-L381) |
-| `trust.repositories` の形が違うときのエラー | [internal/config/validate.go:626-629](../../internal/config/validate.go#L626-L629) |
+| `trust.repositories` の形が違うときのエラー | [internal/config/validate.go:722-726](../../internal/config/validate.go#L722-L726) |
 | 表明の書き方を示す GoDoc | [internal/orchestrator/signal.go:9-13](../../internal/orchestrator/signal.go#L9-L13) |
 
 **触らないもの。**module のパス・`LICENSE` の著作権者・`install.sh` の配布 URL・
