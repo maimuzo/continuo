@@ -124,7 +124,7 @@ jobs:
           # 設計のレビューを1度もせずに緑になる。**
           #
           # **GitHub が解釈した結果だけを見る。**あれは本文のコードの囲みを対象から外している。
-          if ! gh pr view "${PR_NUMBER}" --repo "${REPO}" --json body,closingIssuesReferences > pr.json; then
+          if ! gh pr view "${PR_NUMBER}" --repo "${REPO}" --json closingIssuesReferences > pr.json; then
             echo "紐づく issue を引けませんでした（権限か gh の版を確かめてください）" \
               | tee -a "${GITHUB_STEP_SUMMARY}"
             exit 1

@@ -9754,7 +9754,8 @@ pull request の画面では「まだ走っていない」と見分けが付か�
 
 | 何 | どう決めたか | なぜ |
 | --- | --- | --- |
-| **紐づく issue の引き方** | `gh pr view --json body,closingIssuesReferences`（GraphQL）と、本文の `Closes` / `Fixes` / `Resolves` | **`closingIssuesReferences` は REST では返らない。**拾い方は [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) の `issues_of` と揃える |
+| **紐づく issue の引き方** | `gh pr view --json closingIssuesReferences`（GraphQL）**だけ** | **`closingIssuesReferences` は REST では返らない。****本文の `Closes` / `Fixes` / `Resolves` は走査しない**（下） |
+| **本文を走査しない理由** | **コードの囲みや表の中の文字列まで拾うため** | **実測: PR #215 の本文の表にある `` `Closes #45` `` を拾い、issue #45 を対象にしていた**（あの pull request の `closingIssuesReferences` は空である）。**下のとおり1件でも目印があれば通すので、無関係の issue で緑になる。**[scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) の `issues_of` は本文も走査するが、**あちらは人間が見て捨てられる一覧なので揃えない** |
 | **timeline の `cross-referenced` は使わない** | 使わない | **言及があっただけの issue が混ざる。**そこに目印が1件でもあれば通る |
 | **取得の失敗と0件を分ける** | 別の分岐にする | 混ぜると、引き方を間違えた日から**全部の pull request で断りを書くのが正しい手順になる** |
 | **紐づく issue が複数あるとき** | **1件でも目印があれば通す** | グループでまとめて直すときは、代表の issue にだけ設計が書かれる（3-26） |

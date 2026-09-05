@@ -219,7 +219,9 @@ gh api "$BR" --jq '.checks[].context'
 ```
 
 **五で `code-review-result` と `design-review-result` を含む8つが並べば入っています。**
-**`review-result` が並んでいたら、二の `select` が効いていません。**足す前は次の6つです。
+**`review-result` が並んでいたら、二の `select` が効いていません。**
+
+**入れ替える前は、次の7つです**（2026-09-05 に実測）。**7つ目が改名前の名前です。**
 
 ```text
 test (ubuntu-latest)
@@ -228,6 +230,7 @@ build (darwin, arm64)
 build (darwin, amd64)
 build (linux, amd64)
 build (linux, arm64)
+review-result
 ```
 
 | 気をつけること | なぜ |

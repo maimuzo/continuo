@@ -235,7 +235,7 @@ PR #69  レビュー結果=有り（1件）
 **同じ条件で、CI も PR を落とす。**[.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) が
 `pull_request` のたびに走り、**貼られていなければ `code-review-result` の検査が赤になる。**
 
-**`code-review-result` は、main の branch protection の必須の検査に入っている**（2026-09-02 に確認）。
+**必須の検査に入っている**（2026-09-02 に確認。**そのとき登録されていた名前は `review-result` である**）。
 **赤いあいだはマージできない。**
 
 > **この job は `review-result` から `code-review-result` へ改名した。**
@@ -252,7 +252,7 @@ build (darwin, arm64)
 build (darwin, amd64)
 build (linux, amd64)
 build (linux, arm64)
-code-review-result
+review-result          ← 改名前の名前。入れ替えるまでこのままである
 ```
 
 **それでも、ここでもう一度数える。**必須の検査は**その PR がマージされる前**しか見ない。

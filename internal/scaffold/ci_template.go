@@ -133,7 +133,7 @@ jobs:
           # **走査すると、コードの囲みや表の中の文字列まで拾います。**
           # 下のループは目印が1件見つかった時点で通すので、
           # **無関係の issue に目印があると、設計のレビューを1度もせずに緑になります。**
-          if ! gh pr view "${PR_NUMBER}" --repo "${REPO}" --json body,closingIssuesReferences > pr.json; then
+          if ! gh pr view "${PR_NUMBER}" --repo "${REPO}" --json closingIssuesReferences > pr.json; then
             echo "紐づく issue を引けませんでした（権限か gh の版を確かめてください）" \
               | tee -a "${GITHUB_STEP_SUMMARY}"
             exit 1
@@ -197,7 +197,9 @@ jobs:
               fi
               echo "本文へ Closes #<番号> を書くか、下の断りを貼ってください。"
             else
-              echo "紐づく issue に <!-- design-review-result --> で始まるコメントが1件もありません。"
+              echo "紐づく issue に、次の目印で始まるコメントが1件もありません。"
+              echo ""
+              echo "    <!-- design-review-result -->"
               echo ""
               sed 's/^/- issue #/' issues.txt
               if [ "${unreadable}" -gt 0 ]; then
@@ -211,8 +213,10 @@ jobs:
             echo ""
             echo "1. 設計をサブエージェントにレビューさせる"
             echo "2. 指摘ごとに「直すか / 直さないか」と理由を書いた判断票を作る"
-            echo "3. それを **issue のコメント**として貼る"
-            echo "   **1行目を <!-- continuo:agent -->、2行目を <!-- design-review-result --> にする**"
+            echo "3. それを **issue のコメント**として貼る。**先頭の2行をこの順で置く**"
+            echo ""
+            echo "    <!-- continuo:agent -->"
+            echo "    <!-- design-review-result -->"
             echo ""
             echo "**設計のレビューが要らない変更のとき**（文書だけの変更、他に影響しない1行の修正）**は、"
             echo "この pull request のコメントに断りを貼ってください。**"
@@ -266,13 +270,17 @@ jobs:
           {
             echo "## 実装のレビュー結果が貼られていません"
             echo ""
-            echo "この pull request のコメントに <!-- code-review-result --> で始まるものが1件もありません。"
+            echo "この pull request のコメントに、次の目印で始まるものが1件もありません。"
+            echo ""
+            echo "    <!-- code-review-result -->"
             echo ""
             echo "**通し方。**"
             echo ""
             echo "1. コードのレビューを回す"
             echo "2. その結果を、この pull request のコメントとして貼る"
-            echo "3. **目印はコメントの先頭に置く**（1行目が <!-- code-review-result -->）"
+            echo "3. **目印はコメントの先頭に置く**"
+            echo ""
+            echo "    <!-- code-review-result -->"
             echo ""
             echo "**数える条件。**"
             echo ""
