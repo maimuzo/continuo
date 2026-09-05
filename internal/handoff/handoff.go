@@ -333,6 +333,10 @@ func Winner(bids []Bid) (Bid, bool) {
 // beats は入札 a が入札 b より強いかを返す。
 //
 // **3段目はアカウントの名前の小さい順である**（設計 3-77d）。
+// **大文字小文字は畳む。**GitHub のログイン名は大文字小文字を区別しないので、
+// **畳まないと、同じアカウントを2つと数える経路がここだけ残る**
+// （ほかのログイン名の比較は全部 `strings.EqualFold` である）。
+//
 // **空文字はどのログイン名よりも小さいので、ここへ空が来てはならない。**
 // `CollectBids` が投稿者の空な入札を1件も通さないので、そうならない。
 //
@@ -346,7 +350,7 @@ func beats(a, b Bid) bool {
 	if !a.PostedAt.Equal(b.PostedAt) {
 		return a.PostedAt.Before(b.PostedAt)
 	}
-	return a.Author < b.Author
+	return strings.ToLower(a.Author) < strings.ToLower(b.Author)
 }
 
 // Deadline は入札の締め切りを返す（設計 3-77）。

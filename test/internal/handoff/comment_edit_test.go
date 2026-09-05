@@ -199,7 +199,7 @@ func TestLatestReleased_編集しても新しいreleasedは入れ替わらない
 		{
 			Author: otherLogin,
 			Body: handoff.FormatReleased(handoff.Released{
-				From: "old-host", Branch: "continuo/octocat/hello-world/188", At: now.Add(-100 * time.Hour),
+				From: otherLogin, Branch: "continuo/octocat/hello-world/188", At: now.Add(-100 * time.Hour),
 			}),
 			CreatedAt: now.Add(-100 * time.Hour),
 			UpdatedAt: now,
@@ -207,7 +207,7 @@ func TestLatestReleased_編集しても新しいreleasedは入れ替わらない
 		{
 			Author: otherLogin,
 			Body: handoff.FormatReleased(handoff.Released{
-				From: "thinkpad", Branch: "continuo/octocat/hello-world/188", At: now.Add(-50 * time.Hour),
+				From: selfLogin, Branch: "continuo/octocat/hello-world/188", At: now.Add(-50 * time.Hour),
 			}),
 			CreatedAt: now.Add(-50 * time.Hour),
 		},
@@ -215,7 +215,7 @@ func TestLatestReleased_編集しても新しいreleasedは入れ替わらない
 	if !ok {
 		t.Fatal("released があるのに取れない")
 	}
-	if got.From != "thinkpad" {
-		t.Errorf("編集で released の新旧が入れ替わった: got %q, want %q", got.From, "thinkpad")
+	if got.From != selfLogin {
+		t.Errorf("編集で released の新旧が入れ替わった: got %q, want %q", got.From, selfLogin)
 	}
 }

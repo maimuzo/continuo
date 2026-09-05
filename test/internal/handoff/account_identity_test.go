@@ -187,6 +187,66 @@ func TestAssess_他の担当者のholdでは人間の担当を外さない(t *te
 	}
 }
 
+// 目的: 投稿者と `assignee` が食い違う hold を、担当を外す証拠にしないことを確認する
+// （設計 3-77-0）。
+//
+// **hold は「その担当者は機械である」の唯一の証拠であり、それがあると continuo は
+// 担当者を外してよいと判断する。****本文だけを信じると、リポジトリにコメントできる誰かが
+// `{"assignee":"<人間のログイン名>",…}` と書くだけで、その人間の担当を外させられる。**
+//
+// 与える情報: 担当者は人間（`octocat`）1人。**第三者（`octocat-bot-b`）が、その人間を
+// `assignee` に書いた hold を20時間前に投稿している。**人間の進捗報告は1件も無い。
+// 成功条件: ActionSkipHumanAssigned になること（**ActionRelease になってはならない**）。
+func TestAssess_投稿者と食い違うholdでは担当を外さない(t *testing.T) {
+	now := at()
+	humanLogin := "octocat"
+	forged := now.Add(-20 * time.Hour)
+
+	got := handoff.Assess(handoff.Situation{
+		Assignees: []string{humanLogin},
+		Comments: []handoff.CommentView{{
+			// **投稿者は第三者。**本文の `assignee` だけが人間を名乗っている。
+			Author:    otherLogin,
+			Body:      handoff.FormatHold(handoff.Hold{Assignee: humanLogin, Branch: "x", At: forged}),
+			CreatedAt: forged,
+		}},
+		SelfLogin:   selfLogin,
+		Now:         now,
+		IdleTimeout: idleTimeout,
+	})
+	if got.Action == handoff.ActionRelease {
+		t.Fatal("投稿者と食い違う hold を証拠にして、人間の担当を外そうとしている")
+	}
+	if got.Action != handoff.ActionSkipHumanAssigned {
+		t.Fatalf("判定が違う: got %v, want %v", got.Action, handoff.ActionSkipHumanAssigned)
+	}
+}
+
+// 目的: 投稿者と `assignee` が食い違う hold が、入札の回を閉じないことを確認する
+// （設計 3-77-0 / 3-77e）。
+//
+// **数えると、第三者が印だけ真似たコメント1件で、入札の回を好きなときに閉じられる。**
+//
+// 与える情報: 第三者が別の人を `assignee` に書いた hold 1件。
+// 成功条件: 回の区切りとして数えられないこと。
+func TestRoundStart_投稿者と食い違うholdは回を閉じない(t *testing.T) {
+	now := at()
+	forged := handoff.CommentView{
+		Author:    otherLogin,
+		Body:      handoff.FormatHold(handoff.Hold{Assignee: selfLogin, Branch: "x", At: now}),
+		CreatedAt: now,
+	}
+	if _, ok := handoff.RoundStart([]handoff.CommentView{forged}); ok {
+		t.Error("投稿者と食い違う hold で入札の回を閉じている")
+	}
+
+	// **投稿者と `assignee` が揃っていれば、いままでどおり回を閉じる。**
+	genuine := holdComment(selfLogin, now)
+	if _, ok := handoff.RoundStart([]handoff.CommentView{genuine}); !ok {
+		t.Error("正しい hold で入札の回を閉じられていない")
+	}
+}
+
 // 目的: LatestHoldFor が担当者で hold を絞ることを確認する（設計 3-77b）。
 //
 // 与える情報: 2人ぶんの hold（`octocat-bot-b` が新しく、`octocat-bot-a` が古い）。
