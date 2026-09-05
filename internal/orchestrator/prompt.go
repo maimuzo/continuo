@@ -267,6 +267,17 @@ func buildHandoffComment(identifier, reason string, hc handoffContext, move stat
 	if hc.SubagentDir != "" {
 		lines = append(lines, fmt.Sprintf("- サブエージェントの記録の置き場所: `%s`", hc.SubagentDir))
 	}
+	// **止めた時点で走っていたバックグラウンド処理を出す**（設計 3-81）。
+	// **`shell`（`run_in_background` の Bash）も入る。**pane を閉じると途中で終わるので、
+	// **人間が「何が道連れになったか」を知る唯一の手がかりである。**
+	if len(hc.BackgroundTasks) > 0 {
+		quoted := make([]string, 0, len(hc.BackgroundTasks))
+		for _, t := range hc.BackgroundTasks {
+			quoted = append(quoted, "`"+t+"`")
+		}
+		lines = append(lines,
+			"- **止めた時点で走っていたバックグラウンド処理**: "+strings.Join(quoted, " / "))
+	}
 	if hc.SettingsPath != "" {
 		lines = append(lines, fmt.Sprintf("- continuo が渡した設定: `%s`", hc.SettingsPath))
 	}
@@ -309,6 +320,13 @@ type handoffContext struct {
 	// SettingsPath は continuo が書いた Claude Code の設定ファイルの絶対パスである。
 	// **worktree の中ではない**（設計 3-12）。
 	SettingsPath string
+	// BackgroundTasks は、止めた時点で「まだ走っている」と申告されていた
+	// バックグラウンド処理の名前である（設計 3-81）。
+	//
+	// **種類で絞らない。**`shell`（`run_in_background` の Bash）も入る。
+	// **件数は `handoffBackgroundTaskLimit` 件までに切ったものを渡すこと。**
+	// 申告は hook から来る外部入力であり、そのまま issue のコメントへ載る（設計 3-23）。
+	BackgroundTasks []string
 }
 
 // statusMove は continuo がボードの Status を動かした記録である（設計 3-29）。

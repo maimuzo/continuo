@@ -556,6 +556,11 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failureState, reason string) {
 	o.logger.Info("run を終えます", "identifier", rs.issue().Identifier, "理由", summaryLine(reason))
 
+	// **pane を閉じる前に、turn の終わりと同じ判定を1度通す**（設計 3-81）。
+	// **通知より先に置く。**引き渡しの通知は1つの run につき1件しか出せないので
+	// （`takeHandoffPost`）、あとに置くと「何を道連れにしたか」を書く先が残らない。
+	o.waitForBackgroundTasks(ctx, rs)
+
 	if failureState != "" {
 		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.cfg.Tracker.TerminalStates)
 		if err != nil {
@@ -737,6 +742,93 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 	}()
 }
 
+// waitForBackgroundTasks は run を終える前に、バックグラウンド処理の申告を1度見る
+// （設計 3-81）。
+//
+// **turn の終わりでは同じ判定をしている**（設計 3-2。`background_tasks` が空でない `Stop` を
+// 受けたら turn の終わりとせずに待ち直す）。**run の終わりでは1度も見ずに pane を閉じていた。**
+// 走っていたものは道連れになり、次に同じセッションへ復帰したときに
+// 「前のバックグラウンドコマンドに完了の記録が無い」という通知が発火する。
+//
+// **待つのは「まだ何かが動いていると分かるとき」だけである。**
+//
+//	申告が空                            … 何もしない
+//	申告があり、hook が settle_ms 以内   … 申告が空になるまで poll_wait_ms を上限に待つ
+//	申告があり、hook が来ていない         … **待たない。**残ったものを WARN に出す
+//
+// **hook が来ていないなら待っても変わらない。**申告が入れ替わるのは新しい `Stop` を
+// 受けたときだけであり（`noteHook`）、**`blocked` で止まった Claude Code は
+// `Stop` を二度と出さない。**そこで待つと、直前の `waitForRunningSubagents` と合わせて
+// `claude.poll_wait_ms` を2回ぶん、人間への引き渡しが遅れるだけになる。
+//
+// **総時間に上限を置く。**turn の終わりの待ちには上限が無いが（設計 3-2）、ここは違う。
+// **run は既に終わったものとして扱われている。**何時間も待つと
+// `agent.max_concurrent_agents` の枠が空かず、次の issue が着手できない。
+//
+// **止められたら待つのをやめる。**pane を閉じるほうは `stopWorker` が
+// 「止められていても閉じる」と決めているので、そちらは続く。
+//
+// **新しい設定は足さない。**猶予は `claude.poll_wait_ms`、hook の新しさの線は
+// `claude.settle_ms` を使う。
+//
+// ctx: 待ちを打ち切るコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) waitForBackgroundTasks(ctx context.Context, rs *runState) {
+	running := rs.runningBackgroundTasks()
+	if len(running) == 0 {
+		return
+	}
+	identifier := rs.issue().Identifier
+	grace := time.Duration(o.cfg.Claude.PollWaitMs) * time.Millisecond
+	settle := time.Duration(o.cfg.Claude.SettleMs) * time.Millisecond
+	if grace > 0 && settle > 0 && o.now().Sub(rs.snapshot().LastHookAt) <= settle {
+		o.logger.Info("バックグラウンド処理が残っていると申告されているので、pane を閉じる前に待ちます",
+			"identifier", identifier, "バックグラウンド処理", running, "猶予", grace)
+		if o.awaitBackgroundTasksDone(ctx, rs, grace) {
+			return
+		}
+	}
+	// **何を道連れにしたかを残す**（設計 3-81）。**残さないと、次に復帰したときに
+	// 発火する通知の出どころが、人間には辿れない。**
+	left := rs.runningBackgroundTasks()
+	if len(left) == 0 {
+		return
+	}
+	o.logger.Warn("バックグラウンド処理が残ったまま pane を閉じます（走っていたものは途中で終わります）",
+		"identifier", identifier, "バックグラウンド処理", left)
+}
+
+// awaitBackgroundTasksDone は申告が空になるのを猶予いっぱいまで待つ（設計 3-81）。
+//
+// **覗くだけにする。**受け口（`hookCh`）から読むと、turn の終わりの判定に使う hook を
+// 横取りしてしまう（設計 3-2 の `isTurnBoundaryHook`）。**この時点では turn ループが
+// まだ待ち受けに居ることがある。**
+//
+// ctx: 待ちを打ち切るコンテキスト。
+// rs: 対象の run。
+// grace: 待つ長さの上限。
+// 戻り値: 申告が空になったら true。猶予が尽きた・止められたら false。
+func (o *Orchestrator) awaitBackgroundTasksDone(ctx context.Context, rs *runState, grace time.Duration) bool {
+	deadline := time.NewTimer(grace)
+	defer deadline.Stop()
+	tick := time.NewTicker(subagentPollInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-deadline.C:
+			return false
+		case <-tick.C:
+			if len(rs.runningBackgroundTasks()) == 0 {
+				o.logger.Info("バックグラウンド処理が終わったので pane を閉じます",
+					"identifier", rs.issue().Identifier)
+				return true
+			}
+		}
+	}
+}
+
 // retryBackoff は指数バックオフの待ち時間を求める（設計 3-21）。
 //
 // retryCount: これまでのリトライ回数。
@@ -909,6 +1001,31 @@ func (o *Orchestrator) cleanupPath(
 // 止まった直前に何が動いていたかは辿れる。**
 const handoffSubagentLimit = 3
 
+// handoffBackgroundTaskLimit は引き渡しの通知に載せるバックグラウンド処理の件数の上限である
+// （設計 3-81）。
+//
+// **申告は hook から来る外部入力である**（設計 3-2 / 3-23）。控えのほうは
+// `maxTrackedSubagents`（64件）で切っているが、**64件をコメントへ並べると読めなくなる。**
+// **何が道連れになったかを人間が当たれる件数だけ載せる。**
+const handoffBackgroundTaskLimit = 5
+
+// limitStrings は並びの先頭から n 件までを返す。
+//
+// **元の並びを書き換えない。**呼び出し側が控えをそのまま渡すことがある。
+//
+// in: 元の並び。
+// n: 上限。0以下なら空を返す。
+// 戻り値: 先頭から n 件まで。
+func limitStrings(in []string, n int) []string {
+	if n <= 0 || len(in) == 0 {
+		return nil
+	}
+	if len(in) <= n {
+		return in
+	}
+	return in[:n]
+}
+
 // postHandoffComment は人間へ引き渡すときの通知を issue へ書く。
 //
 // **成果の要約は書かない**（設計 3-29）。continuo が書くのは、この通知と
@@ -972,6 +1089,10 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			SubagentTranscripts: subagentTranscripts,
 			SubagentRunning:     subagentRunning,
 			SettingsPath:        snap.SettingsPath,
+			// **止めた時点で走っていたバックグラウンド処理を載せる**（設計 3-81）。
+			// **凍結しない。**`blocked` の道の subagent と違い、こちらは
+			// `finishRunClaimed` の先頭で待ち終えた直後のものを載せたい。
+			BackgroundTasks: limitStrings(rs.runningBackgroundTasks(), handoffBackgroundTaskLimit),
 		}, move)); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}

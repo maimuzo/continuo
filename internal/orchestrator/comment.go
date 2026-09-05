@@ -168,7 +168,11 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	rs.setAgentName(name)
 
 	// 段6: idle か done になるのを待つ。
-	if err := o.confirmStartup(ctx, rs); err != nil {
+	//
+	// **基準の時刻はここで取る**（設計 3-80）。この run は既に何 turn も回して hook を
+	// 受けているので、**前に受けた `LastHookAt` を「いま生きている証拠」にしてはならない。**
+	// 段5 の `agent.start` より後に届いた hook だけを数える。
+	if err := o.confirmStartup(ctx, rs, o.now()); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
 		}

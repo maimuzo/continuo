@@ -1053,7 +1053,7 @@ func (o *Orchestrator) resolvePane(ctx context.Context, prepared *workspace.Prep
 }
 
 // confirmStartup は agent_status が idle か done になっていることを確かめる
-// （着手の段10。設計 3-16）。
+// （着手の段10。設計 3-16 / 3-80）。
 //
 //	idle / done  … 合格。**done も合格である**（continuo は tab をフォーカスしないため
 //	               実運用ではほぼ常に done 側になる）
@@ -1064,71 +1064,96 @@ func (o *Orchestrator) resolvePane(ctx context.Context, prepared *workspace.Prep
 //	               待たない。2026-08-21 に実測）。`working` と同じく herdr.startup_timeout_ms
 //	               まで待ち、超えたら ErrStartupRetryable を包んで返す（設計 3-16 の段10）
 //
+// **`agent_not_found` の間も、hook が届いていれば諦める時計を進めない**（設計 3-80）。
+// 詳しくは `startupAliveByHook` を見よ。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 起動した run。
+// since: この確認を始めた時刻。**これより後に届いた hook だけを「生きている証拠」に使う**
+// （設計 3-80）。前の run が残した `LastHookAt` を証拠にしないためである。
 // 戻り値: 合格なら nil。それ以外はエラー。
-func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState) error {
-	deadline := o.now().Add(time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond)
+func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since time.Time) error {
+	startupTimeout := time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond
+	deadline := o.now().Add(startupTimeout)
 	for {
 		got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})
-		if err != nil {
-			// **`agent_not_found` は「Claude Code が起動していない」ことを意味する。**
-			// `agent.start` が受け付けられても、pane のシェルが準備できていないと
-			// Claude Code は1文字も起動せず、agent も登録されない（2026-08-21 に E2E で観測）。
-			// **やり直せば通るので、人間へは渡さない。**
-			if herdr.IsCode(err, herdr.ErrCodeAgentNotFound) {
+		switch {
+		case err != nil && herdr.IsCode(err, herdr.ErrCodeAgentNotFound):
+			// **`agent_not_found` は、herdr がその名前の agent を登録していないことしか
+			// 意味しない**（設計 3-80）。**「Claude Code が起動していない」とは限らない。**
+			// herdr が登録するのは入力待ちの画面を見分けたときなので、**復帰した
+			// Claude Code が起動直後から作業を始めると、その画面が一度も出ずに登録されない。**
+			//
+			// **hook が届いているなら、Claude Code は生きている。**諦める時計を進めず、
+			// hook が止まってから `herdr.startup_timeout_ms` ぶん待って初めて諦める。
+			// **ここで合格にはしない。**合格は `idle`/`done` かつ `interactive_ready` の
+			// ときだけである。**herdr が登録し直すのを待つ**（走っている turn が終われば
+			// 入力待ちの画面が出る）。
+			//
+			// **hook が来ていないときの振る舞いは変えない。**期限を待たずにその場で戻り、
+			// `confirmStartupWithRestart` が `agent.start` をやり直す（設計 3-16 の段10）。
+			// **そこが「pane のシェルが準備できていなかった」からの唯一の復帰の道である。**
+			hookAt, alive := o.startupAliveByHook(rs, since)
+			if !alive || o.now().After(hookAt.Add(startupTimeout)) {
 				return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
 					i18n.KeyOrchestratorConfirmStartupAgentGetFailed,
 					rs.agentName(), rs.agentName(), err))
 			}
+			// **待ち直す。**下の待ちで間を空けてから、もう一度 `agent.get` を読む。
+			// **諦めるのは、最後の hook から `herdr.startup_timeout_ms` が経ったときである。**
+			o.logger.Debug("herdr は agent を登録していませんが hook が届いているので、起動の確認を待ち直します",
+				"identifier", rs.issue().Identifier, "agent", rs.agentName(),
+				"最後に hook を受けた時刻", hookAt)
+		case err != nil:
 			return i18n.Errorf(
 				i18n.KeyOrchestratorConfirmStartupAgentGetFailed,
 				rs.agentName(), rs.agentName(), err)
-		}
-		switch got.Agent.AgentStatus {
-		case herdr.AgentStatusIdle, herdr.AgentStatusDone:
-			// **`interactive_ready` が偽なら、まだ入力を受け付けられない。**
-			//
-			// herdr 自身が `agent start` の説明でこう書いている（原文）:
-			// "Success means the expected agent was detected in the same terminal and
-			// is ready for input."（訳: 成功とは、同じ端末で目当ての agent が検知され、
-			// **入力を受け付けられる状態になったことである**）。
-			// **状態だけを見て進むと、`agent.prompt` が `agent_not_ready` で弾かれる**
-			// （2026-08-21 に E2E で観測。設計 6-2）。
-			if !got.Agent.InteractiveReady {
+		default:
+			switch got.Agent.AgentStatus {
+			case herdr.AgentStatusIdle, herdr.AgentStatusDone:
+				// **`interactive_ready` が偽なら、まだ入力を受け付けられない。**
+				//
+				// herdr 自身が `agent start` の説明でこう書いている（原文）:
+				// "Success means the expected agent was detected in the same terminal and
+				// is ready for input."（訳: 成功とは、同じ端末で目当ての agent が検知され、
+				// **入力を受け付けられる状態になったことである**）。
+				// **状態だけを見て進むと、`agent.prompt` が `agent_not_ready` で弾かれる**
+				// （2026-08-21 に E2E で観測。設計 6-2）。
+				if !got.Agent.InteractiveReady {
+					if o.now().After(deadline) {
+						return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
+							i18n.KeyOrchestratorConfirmStartupNotInteractive,
+							rs.agentName(), got.Agent.AgentStatus, rs.agentName()))
+					}
+					break
+				}
+				return nil
+			case herdr.AgentStatusBlocked:
+				o.sendEscape(ctx, rs)
+				return i18n.Errorf(
+					i18n.KeyOrchestratorConfirmStartupBlocked,
+					rs.agentName(), rs.agentName())
+			case herdr.AgentStatusWorking:
+				if o.now().After(deadline) {
+					return i18n.Errorf(
+						i18n.KeyOrchestratorConfirmStartupWorkingTimeout,
+						o.cfg.Herdr.StartupTimeoutMs, rs.agentName(), rs.agentName(), o.cfg.Herdr.StartupTimeoutMs)
+				}
+			default:
+				// **`unknown` は「まだ見分けられていない」であって「壊れている」ではない。**
+				//
+				// **herdr の socket API の `agent.start` は、起動が終わるのを待たずに返る**
+				// （`herdr agent start` の CLI にある `--timeout`（既定30秒。原文:
+				// "Wait for interactive readiness"）は socket 経由では効かない。2026-08-21 に実測）。
+				// **返った直後は必ず `unknown` である。**Claude Code はそのあと数秒かけて立ち上がり、
+				// `idle` になる。**ここで即座に諦めると、正常な起動を毎回「失敗」と呼ぶことになる。**
+				//
+				// したがって `working` と同じ扱いにし、`herdr.startup_timeout_ms` まで待つ。
 				if o.now().After(deadline) {
 					return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
-						i18n.KeyOrchestratorConfirmStartupNotInteractive,
-						rs.agentName(), got.Agent.AgentStatus, rs.agentName()))
+						i18n.KeyOrchestratorConfirmStartupUnknownStatus,
+						rs.agentName(), got.Agent.AgentStatus, rs.agentName(), rs.agentName()))
 				}
-				break
-			}
-			return nil
-		case herdr.AgentStatusBlocked:
-			o.sendEscape(ctx, rs)
-			return i18n.Errorf(
-				i18n.KeyOrchestratorConfirmStartupBlocked,
-				rs.agentName(), rs.agentName())
-		case herdr.AgentStatusWorking:
-			if o.now().After(deadline) {
-				return i18n.Errorf(
-					i18n.KeyOrchestratorConfirmStartupWorkingTimeout,
-					o.cfg.Herdr.StartupTimeoutMs, rs.agentName(), rs.agentName(), o.cfg.Herdr.StartupTimeoutMs)
-			}
-		default:
-			// **`unknown` は「まだ見分けられていない」であって「壊れている」ではない。**
-			//
-			// **herdr の socket API の `agent.start` は、起動が終わるのを待たずに返る**
-			// （`herdr agent start` の CLI にある `--timeout`（既定30秒。原文:
-			// "Wait for interactive readiness"）は socket 経由では効かない。2026-08-21 に実測）。
-			// **返った直後は必ず `unknown` である。**Claude Code はそのあと数秒かけて立ち上がり、
-			// `idle` になる。**ここで即座に諦めると、正常な起動を毎回「失敗」と呼ぶことになる。**
-			//
-			// したがって `working` と同じ扱いにし、`herdr.startup_timeout_ms` まで待つ。
-			if o.now().After(deadline) {
-				return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
-					i18n.KeyOrchestratorConfirmStartupUnknownStatus,
-					rs.agentName(), got.Agent.AgentStatus, rs.agentName(), rs.agentName()))
 			}
 		}
 
@@ -1138,6 +1163,36 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState) error {
 		case <-time.After(agentStatusPollInterval):
 		}
 	}
+}
+
+// startupAliveByHook は「起動の確認をしている間に、その run から hook が届いたか」を返す
+// （設計 3-80）。
+//
+// **hook が届いたことは、Claude Code が生きていることの証拠である。**hook を起こすのは
+// Claude Code 自身であり、continuo は `session_id` でしか run を引けないが（設計 3-2）、
+// その対応は着手の段5b の `bindSession` で**段9（`agent.start`）より前に**作ってある。
+// **だから段9 のあとに届いた hook は、必ずこの run のものである。**
+//
+// **`since` より後のものだけを数える。**復帰の道は前回のセッション UUID をそのまま使うので
+// （設計 3-3b。`--resume` は `session_id` を変えない）、**切らないと前の run が残した
+// `LastHookAt` を今回の起動の証拠として読んでしまう。**
+//
+// **hook の種類では絞らない。**ここが答えるのは「生きているか」だけであり、
+// 「turn が走っているか」ではない。**`SessionStart` しか来ていなくても、生きてはいる。**
+// いつ turn を送ってよいかは `agent.get` が決める（`confirmStartup` は
+// `idle`/`done` かつ `interactive_ready` でしか合格しない）。
+//
+// **`LastHookAt` は受け取った時刻であって、hook が生まれた時刻ではない。**逃がし先から
+// 読み戻した古い hook でも進む（`hookserver.Server.ReplayPending`）。**読み戻しは起動時の
+// 復元で走るので着手より前だが、「`since` より後に生まれた」ことまでは保証しない。**
+//
+// rs: 対象の run。
+// since: 起動の確認を始めた時刻。
+// 戻り値の1つ目: 最後に hook を受けた時刻。
+// 戻り値の2つ目: `since` より後に hook を受けていれば true。
+func (o *Orchestrator) startupAliveByHook(rs *runState, since time.Time) (time.Time, bool) {
+	at := rs.snapshot().LastHookAt
+	return at, at.After(since)
 }
 
 // sendEscape は権限の確認で止まった agent に `["esc"]` を送る（設計 3-11）。
@@ -1221,10 +1276,16 @@ func issueNodeID(issue tracker.Issue) string {
 // 読み込みなど）が終わるまで、コマンドを受け取れない。**herdr はそれを `agent_pane_busy` で
 // 教えてくれることもあれば、教えずに `agent.start` を受け付けてしまうこともある**
 // （2026-08-21 に E2E で観測）。後者では Claude Code が1文字も起動せず、
-// `agent.get` は `agent_not_found`、`agent.prompt` は `agent_not_ready` を返す。
+// `agent.get` も `agent.prompt` も `agent_not_found` を返す。
 //
 // **1回の `agent.start` に賭けない。**`herdr.startup_timeout_ms` の中で、
 // 「起動して確かめる」を繰り返す。
+//
+// **ただし hook が届いていたら、やり直さない**（設計 3-80）。**pane は Claude Code が
+// 埋めているので、`agent.start` は `agent_pane_busy` を返し続ける。**そちらは
+// 「pane がまだシェルのプロンプトに来ていない」という意味なので（設計 2-1）、
+// **シェルではない別のものが居るこの場面では、`agentStartBusyBudget`（30秒）を
+// 使い切るだけである。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 起動した run。
@@ -1233,24 +1294,35 @@ func issueNodeID(issue tracker.Issue) string {
 func (o *Orchestrator) confirmStartupWithRestart(
 	ctx context.Context, rs *runState, params herdr.AgentStartParams,
 ) error {
-	deadline := o.now().Add(time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond)
+	since := o.now()
+	deadline := since.Add(time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond)
 	var lastErr error
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
-			o.logger.Info("Claude Code が起動していないので agent.start をやり直します",
-				"identifier", rs.issue().Identifier, "回数", attempt, "前回の理由", summaryLine(lastErr.Error()))
-			started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
-			if err != nil {
-				// **やり直しの失敗で run を捨てない。**期限まではもう一度試す。
-				// （既に登録されている場合も、ここへ来て次の確認で拾える。）
-				o.logger.Warn("agent.start のやり直しに失敗しました",
-					"identifier", rs.issue().Identifier, "error", err)
+			if hookAt, alive := o.startupAliveByHook(rs, since); alive {
+				// **生きているものへ `agent.start` を投げ直さない**（設計 3-80）。
+				o.logger.Info("hook が届いているので agent.start はやり直しません（herdr が登録し直すのを待ちます）",
+					"identifier", rs.issue().Identifier, "回数", attempt,
+					"最後に hook を受けた時刻", hookAt, "前回の理由", summaryLine(lastErr.Error()))
 			} else {
-				rs.noteRevision(started.Agent.Revision, o.now())
+				o.logger.Info("Claude Code が起動していないので agent.start をやり直します",
+					"identifier", rs.issue().Identifier, "回数", attempt, "前回の理由", summaryLine(lastErr.Error()))
+				started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
+				if err != nil {
+					// **やり直しの失敗で run を捨てない。**期限まではもう一度試す。
+					// （既に登録されている場合も、ここへ来て次の確認で拾える。）
+					o.logger.Warn("agent.start のやり直しに失敗しました",
+						"identifier", rs.issue().Identifier, "error", err)
+				} else {
+					rs.noteRevision(started.Agent.Revision, o.now())
+				}
 			}
 		}
 
-		err := o.confirmStartup(ctx, rs)
+		// **`since` は最初の1回だけ控えたものを使い回す**（設計 3-80）。
+		// **やり直しのたびに取り直すと、hook が届いた直後に取り直した回で証拠が消え、
+		// 下の期限で諦めてしまう。**見たいのは「この起動の確認を始めてから hook が来たか」である。
+		err := o.confirmStartup(ctx, rs, since)
 		if err == nil {
 			return nil
 		}
