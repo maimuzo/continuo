@@ -152,16 +152,16 @@
 **下の「絶対条件：すべてのセクションを5段で書く」と「絶対条件：引用は80文字以上」が、そのまま効き続ける。**
 
 **なぜ念を押すか。****短くしすぎると、検査そのものが働かなくなるためである。**
-[.claude/hooks/check-reply-clarity.py:75](../hooks/check-reply-clarity.py#L75) が
+[.claude/hooks/check-reply-clarity.py:90](../hooks/check-reply-clarity.py#L90) が
 `MIN_LEN_FOR_CHECK = 200` を置き、
-[.claude/hooks/check-reply-clarity.py:838](../hooks/check-reply-clarity.py#L838) が
+[.claude/hooks/check-reply-clarity.py:948](../hooks/check-reply-clarity.py#L948) が
 **コードフェンスを除いた散文が200文字に満たない返答を、1つも検査せずに通す。**
 **引用が0文字でも、名札が裸でも、止まらない。**
 
 **つまり「短くする」は、放っておくといちばん安い逃げ道になる。**
 同じ hook が、引用の閾値を80文字へ上げたときに
 「40文字だけ正直に引く」は止まり「1文字も引かない」は通る状態になった、という記録を残している
-（[.claude/hooks/check-reply-clarity.py:843-847](../hooks/check-reply-clarity.py#L843-L847)）。
+（[.claude/hooks/check-reply-clarity.py:953-957](../hooks/check-reply-clarity.py#L953-L957)）。
 **罰する範囲だけを広げて、逃げ道を残してはならない。**
 
 ---
@@ -354,7 +354,8 @@
 
 ### issue と PR の番号
 
-**`#NNN（本物の題名）` を、1つの塊として扱う。**番号だけを書ける場面は無い。
+**`#NNN（本物の題名）` を、1つの塊として扱う。**
+**節の中で1度も添えていない番号を、裸で書ける場面は無い**（下の「節ごとに、初出で内容を添える」）。
 
 | 書く | 書いてはいけない |
 | --- | --- |
@@ -462,7 +463,7 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 **1つの返答の中で、同じ番号に違う説明を2つ付けたことがある**（2026-09-02）。
 **同じ番号が2つの顔を持つと、読む側は別物だと思う。**
 
-**この線は機械が数えている**（[.claude/hooks/check-reply-clarity.py:351](../hooks/check-reply-clarity.py#L351) の
+**この線は機械が数えている**（[.claude/hooks/check-reply-clarity.py:367](../hooks/check-reply-clarity.py#L367) の
 `bare_issue_refs`）。**見出しに当たると初出扱いへ戻り、その節でまだ内容を添えていない番号だけを数える。**
 
 **毎回添えさせる形は 2026-09-05 にやめた。**
@@ -472,8 +473,10 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 **日本語として自然なのは「初出で正式名、以後は短縮形」である。**
 
 **止められたときは、指示文にその番号の題名が並ぶ。**
-そのまま添えれば足りる（[.claude/hooks/check-reply-clarity.py:498](../hooks/check-reply-clarity.py#L498) の
+そのまま添えれば足りる（[.claude/hooks/check-reply-clarity.py:582](../hooks/check-reply-clarity.py#L582) の
 `lookup_ref_titles` が引いてくる）。**引けなかったときは何も並ばないので、自分で `gh issue view` を叩く。**
+**題名を書き換えたのに古いものが並ぶときは、キャッシュを消す。**
+置き場所は、共有の `.git` の中の `reply-hook-ref-titles.json` である。
 
 ### 書き終えたら数える
 
@@ -481,7 +484,7 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 
 | 何を探すか | 落ちていたら |
 | --- | --- |
-| **`#` で始まる番号** | 同じ文の中に、issue か PR かの別と本物の題名があるか。対になる相手も書いたか |
+| **`#` で始まる番号** | **その節で初めて出すものなら**、同じ文の中に、issue か PR かの別と本物の題名があるか。対になる相手も書いたか |
 | **設定のキー名・コマンドのオプション** | 「何を設定するもので、設定しないと何が起きるか」があるか |
 | **英字1〜2文字＋数字のラベル**（A1 / R1 / 案2） | 消して、内容そのものの名前に置き換える |
 

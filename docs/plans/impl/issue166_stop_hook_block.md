@@ -72,7 +72,7 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 
 | hook | いつ差し戻すか |
 | --- | --- |
-| [.claude/hooks/check-reply-clarity.py:861](../../../.claude/hooks/check-reply-clarity.py#L861) | 200文字以上の応答で、引用が80文字未満のときなど |
+| [.claude/hooks/check-reply-clarity.py:972](../../../.claude/hooks/check-reply-clarity.py#L972) | 200文字以上の応答で、引用が80文字未満のときなど |
 | [.claude/hooks/check-verified-commands.py:339](../../../.claude/hooks/check-verified-commands.py#L339) | 確認していないコマンドを実行したと書いたとき |
 
 **つまり continuo で continuo 自身を開発すると、ほぼ毎 turn 差し戻しが起きる。**
