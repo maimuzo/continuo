@@ -1,6 +1,8 @@
 # よくある質問
 
-画面に出たメッセージから引ける一覧です。使い方は [README.ja.md](../README.ja.md) と
+**困ったときに引く一覧です。**エラーの文言から引くなら「トラブルシューティング」、
+やりたいことから引くなら「目的別使用例」、機能を知りたいなら「continuoで何ができるか」を見てください。
+使い方は [README.ja.md](../README.ja.md) と
 [trying_it_out.md](trying_it_out.md) にあります。
 **新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
@@ -232,7 +234,6 @@ language: ja
 ```bash
 cd ~/continuo-work && continuo doctor
 ```
-
 
 ---
 
@@ -619,7 +620,6 @@ tracker:
       bid_window_ms: 0
 ```
 
-
 #### 複数の機械で見張っているのに、いつも同じ機械しか issue を取らない
 
 **原因。**同じボードを複数の機械で見張る「持ち回り」は、担当者のいない issue に対して
@@ -701,10 +701,14 @@ cd /tmp/continuo-src && go test -count=1 -v ./test/live/
 **`-count=1` を外さないでください**（キャッシュされると本物を叩かなくなります）。
 herdr が無ければ静かに飛びます。開発とテストの全体は [CONTRIBUTING.md](../CONTRIBUTING.md) にあります。
 
-
 ---
 
 ## トラブルシューティング
+
+**ここに無いときは、次の2つも見てください。**
+「目的別使用例」の「会社の GitHub（organization）で使いたいとき」と、
+「continuoで何ができるか」の「エージェントへ渡す指示を変えたいとき」です。
+**設定のしかたを説明する側に置いてあるものが、エラーの形で出ることがあります。**
 
 ### インストールした直後、continuo が起動しないとき
 
@@ -836,7 +840,6 @@ cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak
 
 **`WORKFLOW.md` が symlink のときは、`--force` でも辿らずに止まります**
 （リンク先を雛形で潰さないためです）。実体を置き直してください。
-
 
 ### hook の置き場所でつまずくとき
 
@@ -1748,7 +1751,6 @@ cd ~/continuo-work && awk 'c>=2{print} /^---$/{c++}' WORKFLOW.md
 continuo init /tmp/continuo-template
 ```
 
-
 ### issue が勝手に止まる・戻るとき
 
 #### issue が急に `Blocked` になった
@@ -2526,7 +2528,6 @@ worktree の作成をもう一度だけやり直します。**消してよい条
 ```bash
 continuo abandon --dry-run https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 ```
-
 
 ### 放っておいてよいメッセージ
 
