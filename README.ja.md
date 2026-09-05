@@ -296,7 +296,7 @@ continuo prompt --show --builtin  # 組み込みのぶんだけ
 | ユースケース記述（RUCM） | [docs/spec/usecases/](docs/spec/usecases/) |
 | **作りの形からくる問題**（コードを直す前に読む） | [docs/bug_details.md](docs/bug_details.md)（繰り返し噛みつく7つと、触るときの注意） |
 | **issue 1件が着手から片付けまでどう進むか** | [docs/agent_life_cycle.md](docs/agent_life_cycle.md)（Status の移り変わり・会話の引き継ぎ・自動化に横取りされた Status の戻し方。図つき） |
-| **困ったとき・使い方を知りたいとき** | [docs/FAQ.md](docs/FAQ.md)（エラーの文言から引く・やりたいことから引く・機能を知る の3つに分かれている） |
+| **うまく動かないとき** | [docs/FAQ.md](docs/FAQ.md)（画面のメッセージから引く） |
 | **新しい版に上げたあと** | [docs/upgrading.md](docs/upgrading.md)（増えた設定・書かないとどうなるか・確かめ方） |
 | **開発とテスト** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | 実行ファイルに含まれる第三者のソフトウェア | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
