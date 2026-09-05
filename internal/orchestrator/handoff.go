@@ -279,7 +279,6 @@ func (o *Orchestrator) evaluateBid() (handoff.Bid, handoff.SkipReason) {
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
 // nodeID: 下敷きの GitHub issue のノード ID。
-// viewer: この continuo が使っている gh の持ち主。**書いたコメントの写しの投稿者に入れる。**
 // assessment: 期限切れと判定した結果（外す担当者と、読んだ hold が入っている）。
 // 戻り値の1つ目: 書いた released のコメントの写し（入札の回の区切りに使う）。
 // 戻り値の2つ目: 外せたら true。**外せなければ false**（コメントも書かない）。
@@ -806,6 +805,11 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 		// **その写しの担当者はまだ自分なので、見分けずに使うと「担当は自分のまま」と答えてしまう。**
 		// **時計も進めない。**進めると、次の確かめが `recheck_interval_ms` のあとになり
 		// （既定1時間）、そのあいだ担当を外された run が push まで走り切る（設計 3-77c が禁じている）。
+		//
+		// **代償は分かって選んでいる。**GitHub が落ちているあいだ、この経路は turn の終わりごとに
+		// **1本ずつ取り直しを試み続ける**（時計が進まないので `handoffRecheckDue` が真のままである）。
+		// **それでも進めないほうを採る。**払うのは失敗するリクエスト1本で、
+		// **進めて払うのは、担当を外された run が1時間 push し続けることである。**
 		o.logger.Warn("担当を確かめ直すために issue を取り直せないので、判定しません（この run は止めません）",
 			"identifier", issue.Identifier)
 		return false, ""
