@@ -187,9 +187,6 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		o.logger.Warn("復元のための agent 名を決められません", "identifier", snap.Identifier, "error", err)
 		return
 	}
-	// **証拠の基準は `agent.start` より前で取る**（設計 3-80）。
-	// **あとで取ると、`agent_pane_busy` の粘り（30秒）の間に届いた hook を捨てる。**
-	since := o.now()
 	if _, err := o.herdr.AgentStartWithRetry(ctx, herdr.AgentStartParams{
 		Name:   name,
 		Kind:   o.cfg.Claude.Kind,
@@ -207,6 +204,18 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		return
 	}
 	rs.setAgentName(name)
+	// **証拠の基準は `agent.start` が通ってから取る**（設計 3-80c）。
+	//
+	// **前で取ってはならない。**この関数は段2 で**自分が pane を閉じている**ので、
+	// **そのとき道連れにした Claude Code の hook が、閉じたあとから届く**
+	// （`noteHook` が入れるのは受け取った時刻である）。
+	// **前で取ると、その置き土産を「新しく起こした Claude Code が走っている証拠」と読み、
+	// 成果を書かせる指示を1度も送らないまま `failure_state` へ落とす。**
+	//
+	// **後ろで取っても、本物の証拠は落ちない。**`agent.start` が
+	// `agent_pane_busy` を粘っている間に届く hook は、**段2 で閉じた pane に居た
+	// 誰かのものである。**`agent.start` が失敗したままなら、この行まで来ない。
+	since := o.now()
 
 	// 段6: idle か done になるのを待つ。
 	//
