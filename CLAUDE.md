@@ -14,7 +14,7 @@
 
 ## このプロジェクトは何か
 
-**`continuo` は、GitHub Projects v2 のボード1枚を見張り、issue ごとに git worktree を用意して、[herdr](https://github.com/herdrdev/herdr) の pane で Claude Code を対話モードで起動し、完了までを面倒見る常駐プロセスである。**Go で書く。
+**`continuo` は、GitHub Projects v2 のカンバン1枚を見張り、issue ごとに git worktree を用意して、[herdr](https://github.com/herdrdev/herdr) の pane で Claude Code を対話モードで起動し、完了までを面倒見る常駐プロセスである。**Go で書く。
 
 **名前は通奏低音（basso continuo）に由来する。**バロック音楽で、曲の最初から最後まで途切れず鳴り続け、全体の和声を支える低音パート。
 
@@ -53,18 +53,18 @@ herdr agent read <名前> --source recent-unwrapped --lines 50
 **`herdr wait agent-status …` は存在しない**（herdr 0.8.0 で確認）。待機は `herdr agent wait <名前> --until <status>`。
 **`pane run "claude"` で起動する経路も避ける。**`agent start` と違って起動完了を待たないため、直後に `agent wait` を呼ぶと `agent_not_found` で失敗する。
 
-### 2. GitHub Projects v2 の project #3 は本番のボードである
+### 2. GitHub Projects v2 の project #3 は本番のカンバンである
 
 104件の実データが入っている。**検証で書き込まない。**
 
-**実機で確かめるための専用の環境がある。**ボードもリポジトリも issue もラベルも用意済みで、
+**実機で確かめるための専用の環境がある。**カンバンもリポジトリも issue もラベルも用意済みで、
 **Status は API で動かせる。**在りかと使い方は [docs/test_environment.md](docs/test_environment.md) にある。
 **この環境は消さない。**セッションをまたいで再利用する。
 
-**とくに `updateProjectV2Field` を本番のボードで呼んではならない。**選択肢の指定は全件置き換えとして扱われ、**設定済みの Status の値が全部消える。**
+**とくに `updateProjectV2Field` を本番のカンバンで呼んではならない。**選択肢の指定は全件置き換えとして扱われ、**設定済みの Status の値が全部消える。**
 
-**テスト用のボード（project #10）に対してだけは呼んでよい。**そこは実データを持たないので、選択肢を作り直しても失うものが無い。
-**それ以外のボードでは、選択肢の追加は人間が GitHub の画面から行う。**
+**テスト用のカンバン（project #10）に対してだけは呼んでよい。**そこは実データを持たないので、選択肢を作り直しても失うものが無い。
+**それ以外のカンバンでは、選択肢の追加は人間が GitHub の画面から行う。**
 
 ### 3. `~/.claude/projects/` 配下を消さない
 
@@ -297,8 +297,8 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 [.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の4点。
 
-- **issue を作ることと、着手することは別。**作ったらグループ化し、ボードへ載せ、着手順序に並べてから**人間の指示を待つ。**指示が出たら、その issue が `Ready` へ上がったことを確かめてから着手する（`Ice Box` のままだと continuo は拾わない）
-- **ボードの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはボードの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:8679](docs/plans/continuo_design.md#L8679) が認めている）。**ボードへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **issue を作ることと、着手することは別。**作ったらグループ化し、カンバンへ載せ、着手順序に並べてから**人間の指示を待つ。**指示が出たら、その issue が `Ready` へ上がったことを確かめてから着手する（`Ice Box` のままだと continuo は拾わない）
+- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:8679](docs/plans/continuo_design.md#L8679) が認めている）。**カンバンへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **閉じられるものを先に外す。**issue の題名だけで「未修正」と判断せず、現行コードと突き合わせる
 - **同時に進める issue は2か3まで。**これは continuo の設定 `agent.max_concurrent_agents` とは別物である
 

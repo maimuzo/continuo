@@ -1,10 +1,10 @@
 // {"RUCM-CFG-SHA256": "762f90189ab19708c063eb0bb16a544257768ec0f393e6a6ea44614891b171da", "SOURCE": "docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.cfg.json"}
 //
-// **`continuo setup` がどのボードを読むかを決める経路の検査である。**
+// **`continuo setup` がどのカンバンを読むかを決める経路の検査である。**
 //
 // **WORKFLOW.md に答えが書いてあるのに `--project` を要求してはならない**（設計 6-2）。
-// さらに悪い場合として、ログイン名のボードがちょうど1件だけあると、
-// **WORKFLOW.md に書かれたボードではない別のボードの Status を読み、その名前を書き込む。**
+// さらに悪い場合として、ログイン名のカンバンがちょうど1件だけあると、
+// **WORKFLOW.md に書かれたカンバンではない別のカンバンの Status を読み、その名前を書き込む。**
 // project_number はそのままなので、起動時の照合まで誰も気づけない。
 package cli_test
 
@@ -23,10 +23,10 @@ import (
 
 // recordingDetect は、検出へ渡された値を記録する Deps を組み立てる。
 //
-// **記録するのは「どのボードを読むと決めたか」である。**
+// **記録するのは「どのカンバンを読むと決めたか」である。**
 //
 // got: 渡された値を書き込む先。
-// 戻り値: 検出だけを差し替えた Deps（ボードの読み取りは必ず失敗させ、対話へ入らない）。
+// 戻り値: 検出だけを差し替えた Deps（カンバンの読み取りは必ず失敗させ、対話へ入らない）。
 func recordingDetect(got *scaffold.DetectOptions) cli.Deps {
 	return cli.Deps{
 		ScaffoldDetect: func(_ context.Context, opts scaffold.DetectOptions) scaffold.Detection {
@@ -42,18 +42,18 @@ func recordingDetect(got *scaffold.DetectOptions) cli.Deps {
 			}
 		},
 		SetupFetchStatusField: func(_ context.Context, _ setup.FetchOptions) (setup.StatusField, error) {
-			// **ここから先は、このテストの関心ではない。**どのボードを読むと決めたかは
+			// **ここから先は、このテストの関心ではない。**どのカンバンを読むと決めたかは
 			// もう記録し終えているので、対話に入らずに止める。
-			return setup.StatusField{}, errors.New("検査ではボードを読みません")
+			return setup.StatusField{}, errors.New("検査ではカンバンを読みません")
 		},
 	}
 }
 
-// writeWorkflowWith は、owner とボードの番号を書いた WORKFLOW.md を1つ置く。
+// writeWorkflowWith は、owner とカンバンの番号を書いた WORKFLOW.md を1つ置く。
 //
 // t: 呼び出し元のテスト。
 // owner: 書き込む owner。
-// number: 書き込むボードの番号。
+// number: 書き込むカンバンの番号。
 // 戻り値: 置いたディレクトリ。
 func writeWorkflowWith(t *testing.T, owner string, number int) string {
 	t.Helper()
@@ -65,22 +65,22 @@ func writeWorkflowWith(t *testing.T, owner string, number int) string {
 	return dir
 }
 
-// TestRunSetup_WORKFLOWmdに書かれたボードを使う は、**書いてあるのに聞き直す**のを落とす。
+// TestRunSetup_WORKFLOWmdに書かれたカンバンを使う は、**書いてあるのに聞き直す**のを落とす。
 //
-// 目的: フラグが無いとき、WORKFLOW.md の owner とボードの番号を検出へ渡すこと。
+// 目的: フラグが無いとき、WORKFLOW.md の owner とカンバンの番号を検出へ渡すこと。
 // 与える情報: `owner: octocat` / `project_number: 42` を書いた WORKFLOW.md。
-// 成功条件: 検出がその2つを受け取り、使うボードが画面に出ること。
-func TestRunSetup_WORKFLOWmdに書かれたボードを使う(t *testing.T) {
+// 成功条件: 検出がその2つを受け取り、使うカンバンが画面に出ること。
+func TestRunSetup_WORKFLOWmdに書かれたカンバンを使う(t *testing.T) {
 	var got scaffold.DetectOptions
 	dir := writeWorkflowWith(t, "octocat", 42)
 
 	_, stdout, _ := runCLIWith(recordingDetect(&got), []string{"setup", dir}, "")
 
 	if got.Owner != "octocat" || got.ProjectNumber != 42 {
-		t.Fatalf("WORKFLOW.md に書かれたボードを使っていない: %+v", got)
+		t.Fatalf("WORKFLOW.md に書かれたカンバンを使っていない: %+v", got)
 	}
 	if !strings.Contains(stdout, "42") {
-		t.Errorf("どのボードを読むかが画面に出ていない:\n%s", stdout)
+		t.Errorf("どのカンバンを読むかが画面に出ていない:\n%s", stdout)
 	}
 }
 

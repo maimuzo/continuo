@@ -15,7 +15,7 @@ import (
 
 // fieldListJSON は `gh project field-list --format json` の出力を組み立てる。
 //
-// **本番のボード（project #3）から実際に返ってきた形をそのまま写してある。**
+// **本番のカンバン（project #3）から実際に返ってきた形をそのまま写してある。**
 // single-select には options が付き、それ以外のフィールドには付かない。
 //
 // options: Status フィールドの選択肢の名前。
@@ -32,11 +32,11 @@ func fieldListJSON(options []string) []byte {
 		`],"totalCount":3}`)
 }
 
-// 目的: ボードの Status フィールドの選択肢を、ボードの並び順のまま読めることを確認する。
+// 目的: カンバンの Status フィールドの選択肢を、カンバンの並び順のまま読めることを確認する。
 // 与える情報: 本番と同じ6個の選択肢を返すテスト用gh mock。
 // 成功条件: 選択肢が並び順のまま返ること。**呼んだ gh のサブコマンドが field-list だけであること**
-// （ボードを書き換える field-create / item-edit を呼んでいないこと）。
-func TestFetchStatusField_選択肢をボードの並び順のまま読む(t *testing.T) {
+// （カンバンを書き換える field-create / item-edit を呼んでいないこと）。
+func TestFetchStatusField_選択肢をカンバンの並び順のまま読む(t *testing.T) {
 	var called [][]string
 	got, err := setup.FetchStatusField(context.Background(), setup.FetchOptions{
 		Owner:         "octocat",
@@ -64,9 +64,9 @@ func TestFetchStatusField_選択肢をボードの並び順のまま読む(t *te
 	}
 }
 
-// 目的: 指定した名前の single-select フィールドがボードに無いときの落ち方を確認する
-// （代替フロー「ボードを読めない」の1つ）。
-// 与える情報: Status しか持たないボードに対して --status-field 相当で "State" を渡す。
+// 目的: 指定した名前の single-select フィールドがカンバンに無いときの落ち方を確認する
+// （代替フロー「カンバンを読めない」の1つ）。
+// 与える情報: Status しか持たないカンバンに対して --status-field 相当で "State" を渡す。
 // 成功条件: setup.ErrStatusFieldNotFound を返すこと。
 func TestFetchStatusField_名前の合うフィールドが無ければStatusフィールドが無いと返す(t *testing.T) {
 	_, err := setup.FetchStatusField(context.Background(), setup.FetchOptions{

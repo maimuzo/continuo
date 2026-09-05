@@ -122,7 +122,7 @@ func TestHandoff_他の担当者のholdでは人間の担当を外さない(t *t
 	}
 	issue, ok := fx.Tracker.IssueByID("PVTI_item188")
 	if !ok {
-		t.Fatal("issue がボードから消えた")
+		t.Fatal("issue がカンバンから消えた")
 	}
 	if len(issue.Assignees) != 1 || issue.Assignees[0].Login != humanLogin {
 		t.Errorf("人間の担当が外れている: %+v", issue.Assignees)
@@ -156,7 +156,7 @@ func TestHandoff_信頼していないリポジトリには担当者を書かな
 	}
 	issue, ok := fx.Tracker.IssueByID("PVTI_item188")
 	if !ok {
-		t.Fatal("issue がボードから消えた")
+		t.Fatal("issue がカンバンから消えた")
 	}
 	if len(issue.Assignees) != 0 {
 		t.Errorf("着手できない issue に担当者を書いた（18時間塞がる）: %+v", issue.Assignees)
@@ -255,7 +255,7 @@ func TestHandoff_holdを書けなかったら担当者を消し戻して着手�
 
 	issue, ok := fx.Tracker.IssueByID("PVTI_item188")
 	if !ok {
-		t.Fatal("issue がボードから消えた")
+		t.Fatal("issue がカンバンから消えた")
 	}
 	if len(issue.Assignees) != 0 {
 		t.Errorf("hold を書けなかったのに担当者が残っている（18時間塞がる）: %+v", issue.Assignees)

@@ -602,12 +602,12 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 	}
 }
 
-// checkBoard はボードを1回読む（見出し語 `ボード`）。
+// checkBoard はカンバンを1回読む（見出し語 `カンバン`）。
 //
 // 2つのことを行う。
 //
 //	1 Bootstrap … project と Status フィールドを解決し、active_states・terminal_states 等の
-//	              選択肢名がボード側に全部あるかを照合する。**不一致は `✗`**（巡回が無言で
+//	              選択肢名がカンバン側に全部あるかを照合する。**不一致は `✗`**（巡回が無言で
 //	              0件を返す原因になる。設計 3-6 / 3-32）
 //	2 候補の取得 … active_states の issue を読み、対象リポジトリを集める
 //
@@ -623,8 +623,8 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 // configSymbol: 上流（設定ファイル）の記号。
 // ghSymbol: 上流（gh の認証）の記号。
 // 戻り値の1つ目: 検査結果。
-// 戻り値の2つ目: ボードから集めた対象リポジトリ（読めなければ nil）。
-// 戻り値の3つ目: ボード側の Status の選択肢名（Bootstrap を通っていなければ nil）。
+// 戻り値の2つ目: カンバンから集めた対象リポジトリ（読めなければ nil）。
+// 戻り値の3つ目: カンバン側の Status の選択肢名（Bootstrap を通っていなければ nil）。
 // **見出し語 `Status の名前` がこれを使う。**同じ応答から取るので、追加のリクエストは要らない。
 func checkBoard(
 	ctx context.Context,
@@ -705,7 +705,7 @@ func endpointNote(endpoint string) string {
 	return i18n.T(i18n.KeyDoctorBoardEndpointNote, endpoint)
 }
 
-// boardFailure はボードを読めなかったときの結果を組み立てる（設計 3-32 の「落ち方で分ける」）。
+// boardFailure はカンバンを読めなかったときの結果を組み立てる（設計 3-32 の「落ち方で分ける」）。
 //
 // **レートリミットだけ `!` にする。**時間をおけば通るので、直すものが無い。
 // それ以外（project が見つからない・Status の選択肢名の不一致・通信の失敗）は `✗` である。
@@ -760,8 +760,8 @@ func boardFailure(ctx context.Context, what string, err error, endpoint string) 
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // opts: `ghq list` の差し替え口を含む入力。
-// repos: ボードから集めた対象リポジトリ。
-// boardSymbol: 上流（ボード）の記号。
+// repos: カンバンから集めた対象リポジトリ。
+// boardSymbol: 上流（カンバン）の記号。
 // 戻り値の1つ目: 検査結果。
 // 戻り値の2つ目: リポジトリごとの clone の絶対パス（見つからなかったものは載らない）。
 func checkClone(
@@ -779,7 +779,7 @@ func checkClone(
 	}
 	// **ghq と git が PATH に無ければ、この先を調べても意味が無い。**
 	// continuo は worktree を用意するときにこの2つを起動するので、
-	// 無いまま段8 へ進むと必ず落ちる。**対象が0件でも先に見る。**段6 の時点ではボードに issue が無いので、
+	// 無いまま段8 へ進むと必ず落ちる。**対象が0件でも先に見る。**段6 の時点ではカンバンに issue が無いので、
 	// ここを後回しにすると段7 まで気づけない。
 	for _, bin := range []string{"ghq", "git"} {
 		if _, err := exec.LookPath(bin); err != nil {
@@ -793,7 +793,7 @@ func checkClone(
 	}
 
 	if len(repos) == 0 {
-		// **ボードが空なのは設定の誤りではない**（設計 3-32）。終了コードに影響させない。
+		// **カンバンが空なのは設定の誤りではない**（設計 3-32）。終了コードに影響させない。
 		return Result{
 			Label:  LabelClone,
 			Symbol: SymbolUnknown,
@@ -871,9 +871,9 @@ func countDetail(symbol Symbol, ok, missing, unknown string, unknownCount int) s
 // worktree のパスでは必ず「未承認」になる。**`~/.claude.json` は読むだけである。**
 //
 // opts: ホームディレクトリを含む入力。
-// repos: ボードから集めた対象リポジトリ。
+// repos: カンバンから集めた対象リポジトリ。
 // clonePaths: リポジトリごとの clone の絶対パス（checkClone の戻り値）。
-// boardSymbol: 上流（ボード）の記号。
+// boardSymbol: 上流（カンバン）の記号。
 // 戻り値: 検査結果。
 func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardSymbol Symbol) Result {
 	if boardSymbol != SymbolOK {

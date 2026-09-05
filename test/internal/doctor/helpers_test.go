@@ -1,6 +1,6 @@
 // Package doctor_test は `continuo doctor`（設計 3-32）の検査を確かめる。
 //
-// **本番のボード（project #3）へは1リクエストも送らない。**`httptest.Server` で偽の
+// **本番のカンバン（project #3）へは1リクエストも送らない。**`httptest.Server` で偽の
 // GraphQL サーバを立て、その URL を doctor へ渡す。
 // **実 herdr には繋がない。**`net.Listen("unix", ...)` でテスト用socket mockを立てる。
 // **本物の `gh` と `ghq` も使わない。**PATH の先頭へmockを置き、本物の認証情報を読ませない。
@@ -138,7 +138,7 @@ func (fh *fakeHerdr) serve(conn net.Conn) {
 
 // ===== テスト用GitHub GraphQL mock サーバ =====
 
-// boardItem は偽ボードの project item 1件である。
+// boardItem は偽カンバンの project item 1件である。
 type boardItem struct {
 	// ItemID は project item の ID である。
 	ItemID string
@@ -150,7 +150,7 @@ type boardItem struct {
 	State string
 }
 
-// boardFailure は偽ボードの落ち方である。
+// boardFailure は偽カンバンの落ち方である。
 type boardFailure string
 
 const (
@@ -166,17 +166,17 @@ const (
 
 // fakeGitHub は GitHub の GraphQL API の代わりに使う偽のサーバである。
 //
-// **本番のボードへは1リクエストも送らない。**
+// **本番のカンバンへは1リクエストも送らない。**
 type fakeGitHub struct {
 	// URL は偽サーバのエンドポイントである。
 	URL string
-	// Owner はボードの所有者名である。
+	// Owner はカンバンの所有者名である。
 	Owner string
 
 	mu sync.Mutex
-	// items はボードに載っている item である。
+	// items はカンバンに載っている item である。
 	items []boardItem
-	// statusOptions はボード側の Status の選択肢名である。
+	// statusOptions はカンバン側の Status の選択肢名である。
 	statusOptions []string
 	// failure は落ち方である。
 	failure boardFailure
@@ -189,8 +189,8 @@ type fakeGitHub struct {
 // newFakeGitHub はテスト用GraphQL mockを1本立てる。
 //
 // t: 呼び出し元のテスト。後始末を t.Cleanup に登録する。
-// owner: ボードの所有者名。
-// items: 最初にボードへ載せる item。
+// owner: カンバンの所有者名。
+// items: 最初にカンバンへ載せる item。
 // 戻り値: 起動した偽サーバ。
 func newFakeGitHub(t *testing.T, owner string, items ...boardItem) *fakeGitHub {
 	t.Helper()
@@ -206,7 +206,7 @@ func newFakeGitHub(t *testing.T, owner string, items ...boardItem) *fakeGitHub {
 	return fg
 }
 
-// SetItems はボードに載っている item を差し替える。
+// SetItems はカンバンに載っている item を差し替える。
 //
 // items: 載せる item。
 func (fg *fakeGitHub) SetItems(items ...boardItem) {
@@ -215,7 +215,7 @@ func (fg *fakeGitHub) SetItems(items ...boardItem) {
 	fg.items = items
 }
 
-// SetStatusOptions はボード側の Status の選択肢名を差し替える。
+// SetStatusOptions はカンバン側の Status の選択肢名を差し替える。
 //
 // options: 選択肢名。
 func (fg *fakeGitHub) SetStatusOptions(options ...string) {
@@ -592,7 +592,7 @@ func newFixture(t *testing.T) *fixture {
 
 	// **PATH の先頭をテスト用gh / ghq mock にする。**本物の認証情報を読ませない。
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	// ボードを読むトークンは環境変数から取る設定にしてある（偽サーバは値を見ない）。
+	// カンバンを読むトークンは環境変数から取る設定にしてある（偽サーバは値を見ない）。
 	t.Setenv("CONTINUO_TEST_TOKEN", "dummy-token-for-the-fake-server")
 	// **hook の置き場所をこのテストの一時ディレクトリに閉じる。**
 	//
@@ -659,7 +659,7 @@ func (fx *fixture) WriteWorkflow(t *testing.T, rateLimit string) {
 		path  []string
 		value string
 	}{
-		// **ボードを読むトークンは環境変数から取る。**本物の `gh auth token` を呼ばせない。
+		// **カンバンを読むトークンは環境変数から取る。**本物の `gh auth token` を呼ばせない。
 		{[]string{"tracker", "provider", "token_source"}, "env"},
 		{[]string{"tracker", "provider", "token_env"}, "CONTINUO_TEST_TOKEN"},
 		// **worktree の置き場所も herdr の socket も、テストの一時ディレクトリに閉じる。**

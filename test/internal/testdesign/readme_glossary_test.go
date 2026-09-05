@@ -7,7 +7,7 @@
 //
 // 訳語は [docs/spec/translation-glossary.md] が正である。**カンバンの英語は
 // 2語で `kanban board`、日本語は「カンバン」**と決まっており、
-// **単独の `board` と「ボード」は使わない。**#127（英語版 README と en.json の
+// **単独の `board` と「カンバン」は使わない。**#127（英語版 README と en.json の
 // board を kanban board に統一した変更を、マージ後にレビューする）で
 // 置き換えたばかりなので、戻るのをここで止める。
 //
@@ -44,13 +44,13 @@ var allowedBoardForms = []string{
 	"keyboard",
 }
 
-// allowedKatakanaBoardForms は、日本語の README で「ボード」を含んでよい形である。
+// allowedKatakanaBoardForms は、日本語の README で「カンバン」を含んでよい形である。
 //
 // **どれも別の物の名前である。**カンバンを指す語ではないので、取り除いてから探す。
 var allowedKatakanaBoardForms = []string{
 	"ダッシュボード",
 	"キーボード",
-	"クリップボード",
+	"クリップカンバン",
 }
 
 // TestDesign_英語のREADMEが単独のboardを使っていない は、訳語集の決めごとを機械で守る。
@@ -75,22 +75,22 @@ func TestDesign_英語のREADMEが単独のboardを使っていない(t *testing
 	}
 }
 
-// TestDesign_日本語のREADMEがカンバンをボードと書いていない は、訳語集の決めごとを機械で守る。
+// TestDesign_日本語のREADMEがカンバンをカンバンと書いていない は、訳語集の決めごとを機械で守る。
 //
 // 目的: カンバンを指す語が「カンバン」にそろっていること。
 // 与える情報: README.ja.md の全行。
-// 成功条件: 許す形を取り除いたあとに「ボード」が1つも残らないこと。
-func TestDesign_日本語のREADMEがカンバンをボードと書いていない(t *testing.T) {
+// 成功条件: 許す形を取り除いたあとに「カンバン」が1つも残らないこと。
+func TestDesign_日本語のREADMEがカンバンをカンバンと書いていない(t *testing.T) {
 	lines := readmeLines(t, readmeJA)
 	for i, line := range lines {
 		stripped := line
 		for _, form := range allowedKatakanaBoardForms {
 			stripped = strings.ReplaceAll(stripped, form, "")
 		}
-		if !strings.Contains(stripped, "ボード") {
+		if !strings.Contains(stripped, "カンバン") {
 			continue
 		}
-		t.Errorf("%s:%d に「ボード」が残っています。\n  %s\n"+
+		t.Errorf("%s:%d に「カンバン」が残っています。\n  %s\n"+
 			"  **カンバンを指す語は「カンバン」にそろえます**"+
 			"（docs/spec/translation-glossary.md）。",
 			readmeJA, i+1, strings.TrimSpace(line))

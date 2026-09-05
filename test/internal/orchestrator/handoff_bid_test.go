@@ -1,6 +1,6 @@
 // {"RUCM-CFG-SHA256": "fe753abb326479a54b57fdfb144ce72406238b073244ff713b29db67ad24490d", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
-// **同じボードを複数の機械で見張るときの、担当の決め方の検査である**（設計 3-77 / 3-77b / 3-77c）。
+// **同じカンバンを複数の機械で見張るときの、担当の決め方の検査である**（設計 3-77 / 3-77b / 3-77c）。
 //
 // **見張っているのは1点である。**「2台が同じ issue を掴まない」こと。
 // そのために、担当者（assignee）と hold のコメントだけで判定が閉じているかを確かめる。
@@ -109,7 +109,7 @@ func TestHandoff_勝ったら担当者になり入札とholdを1件ずつ書く(
 
 	issue, ok := fx.Tracker.IssueByID("PVTI_item188")
 	if !ok {
-		t.Fatal("issue がボードから消えた")
+		t.Fatal("issue がカンバンから消えた")
 	}
 	if len(issue.Assignees) != 1 || issue.Assignees[0].Login != testGHLogin {
 		t.Errorf("担当者が gh の持ち主1人になっていない: %+v", issue.Assignees)

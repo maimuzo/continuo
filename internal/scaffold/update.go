@@ -59,7 +59,7 @@ var (
 // CheckUpdatable は、Status の割り当てを書き換えられるかだけを確かめる。
 //
 // **`continuo setup` が対話を始める前に呼ぶためにある**（RUCM の基本フロー2）。
-// どうせ止まる実行で、先に gh を叩いてボードを読む理由が無い。
+// どうせ止まる実行で、先に gh を叩いてカンバンを読む理由が無い。
 //
 // **これは事前の見立てであり、保証ではない。**実際の書き換えは UpdateStatuses が行う。
 //
@@ -90,7 +90,7 @@ func CheckUpdatable(dir string) (Result, error) {
 		return Result{Path: path}, fmt.Errorf("%w: %s: %s", ErrKeysNotRewritable, path, strings.Join(blocked, " / "))
 	}
 
-	// **既に書かれている owner とボードの番号を拾って返す。**
+	// **既に書かれている owner とカンバンの番号を拾って返す。**
 	//
 	// `continuo init` で埋めたのに `continuo setup` でもう一度 `--project` を
 	// 指定させるのは筋が通らない（2026-08-21 に実際に詰まった。設計 6-2）。
@@ -202,11 +202,11 @@ var (
 	providerProjectRe = regexp.MustCompile(`(?m)^[ \t]*project_number:[ \t]*([0-9]+)`)
 )
 
-// readProviderValues は front matter から owner とボードの番号を拾う。
+// readProviderValues は front matter から owner とカンバンの番号を拾う。
 //
 // raw: WORKFLOW.md の全文。
 // 戻り値の1つ目: owner。プレースホルダ（`<` で始まる形）なら空文字。
-// 戻り値の2つ目: ボードの番号。プレースホルダ（0）なら 0。
+// 戻り値の2つ目: カンバンの番号。プレースホルダ（0）なら 0。
 func readProviderValues(raw string) (string, int) {
 	owner := ""
 	if m := providerOwnerRe.FindStringSubmatch(raw); len(m) == 2 {

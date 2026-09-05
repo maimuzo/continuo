@@ -54,20 +54,20 @@ rate_limit:
 	}
 }
 
-// TestDoctor_対応表のキーがボードに無ければ注意を出す は、
+// TestDoctor_対応表のキーがカンバンに無ければ注意を出す は、
 // **綴りを打ち間違えた行が黙って死ぬ**のを捕まえることを確かめる（設計 3-57。issue #67）。
 //
-// 目的: `tracker.automated_state_rewrite` のキーがボードの Status の選択肢に無いとき、
+// 目的: `tracker.automated_state_rewrite` のキーがカンバンの Status の選択肢に無いとき、
 // 見出し語 `対応表のキー` が `!` になり、**どのキーかを名前で**内訳に出すこと。
-// **`✗` にしない**（キーはボードに実在しなくてよい）ので、終了コードは 0 のままであること。
+// **`✗` にしない**（キーはカンバンに実在しなくてよい）ので、終了コードは 0 のままであること。
 //
 // **起動時の警告では代わりにならない。**その警告は tracker のアダプタが logger へ出すが、
 // **`continuo doctor` はその logger を捨てる**（`Options.Logger` の既定は `io.Discard`）。
 //
-// 与える情報: `In Progres`（`s` が1つ足りない）をキーにした対応表と、既定のボード。
+// 与える情報: `In Progres`（`s` が1つ足りない）をキーにした対応表と、既定のカンバン。
 // 成功条件: `対応表のキー` が `!`、内訳にキー名と設定キーが出て、
 // 直し方が両方向（綴りを直す・行を消す）を示し、終了コードが 0 であること。
-func TestDoctor_対応表のキーがボードに無ければ注意を出す(t *testing.T) {
+func TestDoctor_対応表のキーがカンバンに無ければ注意を出す(t *testing.T) {
 	fx := newFixture(t)
 	writeRewriteKeysWorkflow(t, fx, "    \"In Progres\": \"In Progress\"\n")
 
@@ -79,20 +79,20 @@ func TestDoctor_対応表のキーがボードに無ければ注意を出す(t *
 		t.Fatalf("どの設定キーの話かが内訳に出ていない: %q", notes)
 	}
 	if !strings.Contains(notes, `"In Progres"`) {
-		t.Fatalf("ボードに無いキーが名前で内訳に出ていない: %q", notes)
+		t.Fatalf("カンバンに無いキーが名前で内訳に出ていない: %q", notes)
 	}
 	remedies := strings.Join(res.Remedies, "\n")
 	if !strings.Contains(remedies, "綴りの打ち間違いなら") || !strings.Contains(remedies, "行を消してください") {
 		t.Fatalf("直し方が両方向を示していない: %q", remedies)
 	}
-	// **`✗` にしない。**キーはボードに実在しなくてよい（実在を要求すると、
-	// ボードの自動化をやめて選択肢を消した人が抜け出せなくなる）。
+	// **`✗` にしない。**キーはカンバンに実在しなくてよい（実在を要求すると、
+	// カンバンの自動化をやめて選択肢を消した人が抜け出せなくなる）。
 	if report.ExitCode() != 0 {
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
-	// **ボードを読んだときの応答を使い回す。**この検査のためにリクエストを増やさない。
+	// **カンバンを読んだときの応答を使い回す。**この検査のためにリクエストを増やさない。
 	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
-		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
+		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestDoctor_対応表のキーがボードに無ければ注意を出す(t *
 // どちらにも当たらない。**この test が落ちるようになったら、
 // **見出し語 `対応表のキー` を消してよいかを考え直すこと。**
 //
-// 与える情報: `In Progres` をキーにした対応表と、既定のボード。
+// 与える情報: `In Progres` をキーにした対応表と、既定のカンバン。
 // 成功条件: `Status の名前` は `✓` のままで、`対応表のキー` だけが `!` になること。
 func TestDoctor_打ち間違えたキーは紛らわしさの検査では拾えない(t *testing.T) {
 	fx := newFixture(t)
@@ -119,13 +119,13 @@ func TestDoctor_打ち間違えたキーは紛らわしさの検査では拾え�
 	assertSymbol(t, report, doctor.LabelRewriteKeys, doctor.SymbolUnknown)
 }
 
-// TestDoctor_対応表のキーがボードにあれば通る は、**注意を出してはいけない形**を固定する。
+// TestDoctor_対応表のキーがカンバンにあれば通る は、**注意を出してはいけない形**を固定する。
 //
-// 目的: 対応表のキーがすべてボードの Status の選択肢にあるとき、
+// 目的: 対応表のキーがすべてカンバンの Status の選択肢にあるとき、
 // 見出し語 `対応表のキー` が `✓` になり、内訳も直し方も1件も無いこと。
-// 与える情報: ボードにある `Ice Box` をキーにした対応表（戻す先は `Ready`）。
+// 与える情報: カンバンにある `Ice Box` をキーにした対応表（戻す先は `Ready`）。
 // 成功条件: `対応表のキー` が `✓` で、内訳も直し方も1件も無いこと。
-func TestDoctor_対応表のキーがボードにあれば通る(t *testing.T) {
+func TestDoctor_対応表のキーがカンバンにあれば通る(t *testing.T) {
 	fx := newFixture(t)
 	writeRewriteKeysWorkflow(t, fx, "    \"Ice Box\": \"Ready\"\n")
 
@@ -133,7 +133,7 @@ func TestDoctor_対応表のキーがボードにあれば通る(t *testing.T) {
 
 	res := assertSymbol(t, report, doctor.LabelRewriteKeys, doctor.SymbolOK)
 	if len(res.Notes) != 0 || len(res.Remedies) != 0 {
-		t.Fatalf("ボードにあるのに注意が出ている: %+v", res)
+		t.Fatalf("カンバンにあるのに注意が出ている: %+v", res)
 	}
 }
 
@@ -142,7 +142,7 @@ func TestDoctor_対応表のキーがボードにあれば通る(t *testing.T) {
 //
 // 目的: トラッカーは大文字小文字と前後の空白を無視して Status を引き当てる（SPEC.md 11.3）。
 // **ここだけ完全一致で比べると、実行時には引ける行を「一度も効かない」と報告する。**
-// 与える情報: ボードの `Ice Box` に対して `  iCE bOX  ` をキーにした対応表。
+// 与える情報: カンバンの `Ice Box` に対して `  iCE bOX  ` をキーにした対応表。
 // 成功条件: `対応表のキー` が `✓` であること。
 func TestDoctor_対応表のキーは大文字小文字と前後の空白だけの違いを同じ値とみなす(t *testing.T) {
 	fx := newFixture(t)
@@ -171,16 +171,16 @@ func TestDoctor_対応表が空なら対応表のキーの注意を出さない(
 	}
 }
 
-// TestDoctor_ボードを読めなければ対応表のキーは確かめられなかったになる は、
+// TestDoctor_カンバンを読めなければ対応表のキーは確かめられなかったになる は、
 // 上流が落ちたときの記号と理由を固定する。
 //
-// 目的: ボードが `✗` か `!` のとき、`対応表のキー` を `!` にし、
-// **ボードを読めなかったことを理由に出す**こと（照合する選択肢を持っていないため）。
-// **ここで「ボードに無い」と言ってはならない。**読めていないだけである。
-// 与える情報: gh の scope から project を外したテスト用gh mock（ボードは `!` になる）と、
-// ボードに無いキーを持つ対応表。
-// 成功条件: `対応表のキー` が `!` で、理由がボードを読めなかったことであること。
-func TestDoctor_ボードを読めなければ対応表のキーは確かめられなかったになる(t *testing.T) {
+// 目的: カンバンが `✗` か `!` のとき、`対応表のキー` を `!` にし、
+// **カンバンを読めなかったことを理由に出す**こと（照合する選択肢を持っていないため）。
+// **ここで「カンバンに無い」と言ってはならない。**読めていないだけである。
+// 与える情報: gh の scope から project を外したテスト用gh mock（カンバンは `!` になる）と、
+// カンバンに無いキーを持つ対応表。
+// 成功条件: `対応表のキー` が `!` で、理由がカンバンを読めなかったことであること。
+func TestDoctor_カンバンを読めなければ対応表のキーは確かめられなかったになる(t *testing.T) {
 	fx := newFixture(t)
 	writeRewriteKeysWorkflow(t, fx, "    \"In Progres\": \"In Progress\"\n")
 	writeFakeGH(t, fx.BinDir, `github.com
@@ -194,7 +194,7 @@ func TestDoctor_ボードを読めなければ対応表のキーは確かめら�
 	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
 	res := assertSymbol(t, report, doctor.LabelRewriteKeys, doctor.SymbolUnknown)
 	if !strings.Contains(res.Detail, "カンバンを読めなかったため") {
-		t.Fatalf("ボードを読めなかったことが理由に出ていない: %q", res.Detail)
+		t.Fatalf("カンバンを読めなかったことが理由に出ていない: %q", res.Detail)
 	}
 	if len(res.Notes) != 0 {
 		t.Fatalf("読めていないのにキーの内訳を出している: %+v", res.Notes)
@@ -205,7 +205,7 @@ func TestDoctor_ボードを読めなければ対応表のキーは確かめら�
 // 上流の設定ファイルが落ちたときの理由を固定する。
 //
 // 目的: 設定を読めていないときは、**照合するキーそのものが決まらない。**
-// ボードが落ちたときとは直す先が違うので、理由の文言も分けること。
+// カンバンが落ちたときとは直す先が違うので、理由の文言も分けること。
 // 与える情報: WORKFLOW.md を消した状態。
 // 成功条件: `対応表のキー` が `!` で、理由が設定ファイルを読めなかったことであること。
 func TestDoctor_設定ファイルを読めなければ対応表のキーは確かめられなかったになる(t *testing.T) {

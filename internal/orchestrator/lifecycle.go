@@ -39,7 +39,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	o.applySignals(ctx, rs, signals)
 
 	// **ここだけは「誰が Status を書いたか」も取る**（設計 3-61）。この写しを `rs.setIssue` で
-	// 控え、`decideAfterTurn` が「ボードの自動化が書いたのか」を判定する。
+	// 控え、`decideAfterTurn` が「カンバンの自動化が書いたのか」を判定する。
 	current, ok := o.refreshIssue(ctx, rs, true)
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
@@ -62,7 +62,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // current: 取り直した issue。
-// mayRewrite: ボードの自動化が書いた Status を書き戻してよいか。
+// mayRewrite: カンバンの自動化が書いた Status を書き戻してよいか。
 // **書き戻したあとの判定し直しでは偽で呼ぶ**（同じ turn で二度書きに行かないため）。
 // 戻り値: この run が終わったら true（turn ループを止める）。
 func (o *Orchestrator) decideAfterTurn(
@@ -95,7 +95,7 @@ func (o *Orchestrator) decideAfterTurn(
 	}
 }
 
-// rewriteAndDecide は、ボードの自動化が動かした Status を書き戻し、
+// rewriteAndDecide は、カンバンの自動化が動かした Status を書き戻し、
 // **書き込みの結果が示す Status で「終わりかどうか」を判定し直す**（設計 3-56）。
 //
 // **戻す先が `terminal_states` になることはない。**`tracker.automated_state_rewrite` の
@@ -104,10 +104,10 @@ func (o *Orchestrator) decideAfterTurn(
 // **`"Done": "AI Done"` のような終端への書き戻しは、そもそも起動しない。**
 //
 // **`UpdateStatus` は書いたあとに読み直さない。**返る `Previous` は
-// **書きに行く直前**のボードの値である。だから「書いた直後にさらに動かされた値」は、
+// **書きに行く直前**のカンバンの値である。だから「書いた直後にさらに動かされた値」は、
 // この経路のどこにも現れない。**判定し直すのは、書けなかったときのためである。**
 //
-//	書けた（Wrote）             … ボードは target になっている。target は active_states なので次の turn へ
+//	書けた（Wrote）             … カンバンは target になっている。target は active_states なので次の turn へ
 //	既に target だった（Reached）… 同上
 //	Previous が返って Reached が偽 … **人間が `terminal_states` へ動かしていた**ので書き戻しを断られた。
 //	                              **その値で判定し直す**（終わった issue へ次の指示を送らない）
@@ -116,7 +116,7 @@ func (o *Orchestrator) decideAfterTurn(
 // **書き込みのあいだだけ `beginRewrite` で書き戻しの印を取る**（設計 3-56）。
 // turn の終わりの処理は表明を読む1秒ほどの待ちと2往復の書き込みを含む。
 // **その間に巡回が「人間が動かした」と判断して run を手放すと、印が消えたあとに
-// 「作業中」の Status がボードへ書かれる。**次の巡回はそれを候補として拾い直し、
+// 「作業中」の Status がカンバンへ書かれる。**次の巡回はそれを候補として拾い直し、
 // **同じ worktree に2本目の Claude Code を立てる。**
 // **書き終えたら必ず印を返す**（`endRewrite`）。返さないと、このあと続く
 // `decideAfterTurn` の `finishRun` が書き戻しの終わりを永久に待つ。
@@ -174,7 +174,7 @@ func (o *Orchestrator) rewriteAndDecide(
 		rs.clearExternalMove()
 		return false
 	case !moved.Reached:
-		// **書きに行く直前のボードは `terminal_states` に入っていた。**
+		// **書きに行く直前のカンバンは `terminal_states` に入っていた。**
 		// 人間が「終わった」にしたということなので、**その値で判定し直す。**
 		next = moved.Previous
 	}
@@ -183,7 +183,7 @@ func (o *Orchestrator) rewriteAndDecide(
 	movedIssue.State = next
 	if next == target {
 		// **書いたのは continuo である。**自動化が書いたという印を残したままにすると、
-		// このあと止める経路が「ボードの自動化が書きました」という的外れな案内を出す。
+		// このあと止める経路が「カンバンの自動化が書きました」という的外れな案内を出す。
 		movedIssue.StatusChangedBy = ""
 		movedIssue.StatusChangedByAutomation = false
 	}
@@ -275,8 +275,8 @@ func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
 // `FetchIssueByIdentifier` で item を引く（その issue は `Ice Box` にあるので、巡回で
 // 読んだ候補には入っていない）。
 //
-// **ボードに載っていなかったら、その行を捨て、issue のコメントに
-// 「ボードに無いので動かせなかった」と書く**（人間が気づけるようにする）。
+// **カンバンに載っていなかったら、その行を捨て、issue のコメントに
+// 「カンバンに無いので動かせなかった」と書く**（人間が気づけるようにする）。
 //
 // **この機械の別の run が印を持っている issue にも書き込まない**（設計 3-26 の「安全のための制約」）。
 // **書き間違えた1行で、別のエージェントが turn の途中で止まる**ためである。
@@ -289,7 +289,7 @@ func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
 // rs: 対象の run。
 // signals: 拾った表明。
 func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals map[string]string) {
-	// **ボードに載っていなかった対象は溜めて、1 turn につき1件のコメントにまとめる。**
+	// **カンバンに載っていなかった対象は溜めて、1 turn につき1件のコメントにまとめる。**
 	// 対象ごとに投稿すると、表明の行数ぶんだけ issue へコメントを書くことになる。
 	var missing []string
 	// **別の run が担当している対象も同じように溜める。**理由が違うので別のコメントにする。
@@ -389,7 +389,7 @@ func signalMoveReason(identifier, target, value string, self bool) string {
 		identifier, target, value)
 }
 
-// noteSignalTargetsMissing は、表明が指す issue がボードに載っていなかったことを
+// noteSignalTargetsMissing は、表明が指す issue がカンバンに載っていなかったことを
 // issue のコメントに残す（設計 3-25）。
 //
 // **1 turn につき1件にまとめる。**対象ごとに投稿すると、エージェントが印を並べた
@@ -473,7 +473,7 @@ func lookupSignalTarget(m map[string]*string, value string) (*string, bool) {
 // そこだけが取り直した issue を `rs.setIssue` で控え、知らない Status の判定
 // （`decideAfterTurn` → `claimAutomatedRewrite` / `finishRunUnknownState`）がそれを読む。
 // 戻り値の1つ目: 取り直した issue。
-// 戻り値の2つ目: ボードから見えていれば true。
+// 戻り値の2つ目: カンバンから見えていれば true。
 func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimeline bool) (tracker.Issue, bool) {
 	var (
 		issues []tracker.Issue
@@ -723,7 +723,7 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 		// **後片付けは「止めろ」と言われても最後までやる。**
 		//
 		// この run は既に終わったものとして扱われている（Status は動かした、
-		// コメントも投稿した）。**そこで pane だけ閉じ損ねると、ボード上は終わった issue の
+		// コメントも投稿した）。**そこで pane だけ閉じ損ねると、カンバン上は終わった issue の
 		// pane が残り続ける。**`Close` は `wg.Wait()` でここを待つので、
 		// 終わるまで待たせてよい。
 		//
@@ -783,7 +783,7 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	// **止められていても pane は閉じる。**
 	//
 	// ここへ来た run は既に終わったものとして扱われている（Status を動かし、
-	// コメントも投稿した）。**そこで閉じ損ねると、ボード上は終わった issue の pane が
+	// コメントも投稿した）。**そこで閉じ損ねると、カンバン上は終わった issue の pane が
 	// 残り続ける。**`Close` は `wg.Wait()` でここを待つので、終わるまで待たせてよい。
 	//
 	// **期限は付ける。**herdr が応答しないときに停止が永久に返らなくなるのを防ぐ。
@@ -979,7 +979,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 
 // containsFold は states に target が（大文字小文字を無視して）含まれるかを返す。
 //
-// **比較は大文字小文字を無視する**（表示はボードの綴りをそのまま保つ。設計 3-13）。
+// **比較は大文字小文字を無視する**（表示はカンバンの綴りをそのまま保つ。設計 3-13）。
 //
 // states: 照合する Status 名の一覧。
 // target: 探す Status 名。

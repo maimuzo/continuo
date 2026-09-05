@@ -18,25 +18,25 @@ var renamedStatusOptions = []map[string]any{
 	{"id": "opt-done", "name": "Done"},
 }
 
-// 目的: ボード側に存在しない Status 名を渡されたら、0件ではなくエラーを返すことを確認する
+// 目的: カンバン側に存在しない Status 名を渡されたら、0件ではなくエラーを返すことを確認する
 // （設計 2-2 / 3-6: 「選択肢名を間違えると、GraphQL はエラーを出さずに 0 件を返す」。
 // これを素通しすると「対象0件」が無言で永久に続く）。
-// 与える情報: Bootstrap 済みの Adapter に、ボードに無い Status 名 "Redy"（綴り違い）を渡す。
+// 与える情報: Bootstrap 済みの Adapter に、カンバンに無い Status 名 "Redy"（綴り違い）を渡す。
 // 成功条件: CategoryInvalidConfig のエラーになり、空スライスを返さないこと。
 // 候補取得のリクエストが送られないこと（Bootstrap の1件だけであること）。
-func TestFetchIssuesByStates_ボードに無いStatus名はエラーにする(t *testing.T) {
+func TestFetchIssuesByStates_カンバンに無いStatus名はエラーにする(t *testing.T) {
 	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
 		if n == 1 {
 			return dataResponse(bootstrapProjectPayload(testStatusOptions))
 		}
-		t.Errorf("ボードに無い Status 名なのに候補取得のリクエストが送られた: %v", req.Variables)
+		t.Errorf("カンバンに無い Status 名なのに候補取得のリクエストが送られた: %v", req.Variables)
 		return dataResponse(candidateItemsPayload(nil, false, ""))
 	})
 	a := newBootstrappedAdapter(t, fs)
 
 	issues, err := a.FetchIssuesByStates(t.Context(), []string{"Redy", "In Progress"})
 	if err == nil {
-		t.Fatalf("ボードに無い Status 名を渡したのにエラーにならなかった（返り値: %v件）", len(issues))
+		t.Fatalf("カンバンに無い Status 名を渡したのにエラーにならなかった（返り値: %v件）", len(issues))
 	}
 	if issues != nil {
 		t.Fatalf("エラーなのに結果を返している: %v", issues)
@@ -68,7 +68,7 @@ func TestFetchIssuesByStates_Bootstrap前は照合しない(t *testing.T) {
 	}
 }
 
-// 目的: 巡回ごとの再照合（VerifyStatusOptions）が、ボード側で Status を改名されたことを
+// 目的: 巡回ごとの再照合（VerifyStatusOptions）が、カンバン側で Status を改名されたことを
 // 検知することを確認する（設計 3-6 の「巡回ごとに検査するもの」: 「人間が GitHub の画面で
 // 改名すると、無言で『対象0件』になり続けるため」）。
 // 与える情報: Bootstrap の時点では設定どおりの選択肢を返し、2回目（再照合）では
@@ -86,7 +86,7 @@ func TestVerifyStatusOptions_改名を検知する(t *testing.T) {
 
 	err := a.VerifyStatusOptions(t.Context(), testTrackerConfig())
 	if err == nil {
-		t.Fatalf("ボード側で Ready が改名されたのに VerifyStatusOptions が成功した")
+		t.Fatalf("カンバン側で Ready が改名されたのに VerifyStatusOptions が成功した")
 	}
 	if !tracker.IsCategory(err, tracker.CategoryInvalidConfig) {
 		t.Fatalf("エラーのカテゴリが CategoryInvalidConfig ではない: %v", err)

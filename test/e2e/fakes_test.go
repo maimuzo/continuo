@@ -138,7 +138,7 @@ func TestE2E_偽のherdrが着手から片付けまでのメソッドに応答�
 	}
 }
 
-// TestE2E_偽のghと偽のGraphQLが1枚のボードを共有する は、2つのmockが同じ状態を
+// TestE2E_偽のghと偽のGraphQLが1枚のカンバンを共有する は、2つのmockが同じ状態を
 // 読み書きしていることを確かめる。
 //
 // 目的: 手順書を通すのに要る「状態を持つテスト用gh mock」であること。
@@ -148,10 +148,10 @@ func TestE2E_偽のherdrが着手から片付けまでのメソッドに応答�
 //     手順書の段8 を確かめられない）
 //   - `gh issue comment` で書いたコメントが GraphQL のコメント取得から見える
 //
-// 与える情報: 既に issue が1件載っている偽のボードと、そこを向いたテスト用gh mock・テスト用GraphQL mock。
+// 与える情報: 既に issue が1件載っている偽のカンバンと、そこを向いたテスト用gh mock・テスト用GraphQL mock。
 //
 // 成功条件: 上の3つがすべて成り立つこと。
-func TestE2E_偽のghと偽のGraphQLが1枚のボードを共有する(t *testing.T) {
+func TestE2E_偽のghと偽のGraphQLが1枚のカンバンを共有する(t *testing.T) {
 	root, err := os.MkdirTemp("", "ce2eb")
 	if err != nil {
 		t.Fatalf("一時ディレクトリを作れません: %v", err)
@@ -182,14 +182,14 @@ func TestE2E_偽のghと偽のGraphQLが1枚のボードを共有する(t *testi
 	// 足す前は1件だけである。
 	if got := strings.Count(run("project", "item-list", "7", "--owner", "octofake",
 		"--format", "json"), `"number"`); got != 1 {
-		t.Fatalf("ボードに載っている issue の件数が 1 ではありません: %d", got)
+		t.Fatalf("カンバンに載っている issue の件数が 1 ではありません: %d", got)
 	}
 
 	url := strings.TrimSpace(run("issue", "create", "--repo", "octofake/sandbox",
 		"--title", "足す issue", "--body", "本文"))
-	// **作っただけではボードに載らない。**
+	// **作っただけではカンバンに載らない。**
 	if strings.Contains(run("project", "item-list", "7", "--owner", "octofake", "--format", "json"), url) {
-		t.Fatalf("`gh issue create` だけでボードに載ってしまいました: %s", url)
+		t.Fatalf("`gh issue create` だけでカンバンに載ってしまいました: %s", url)
 	}
 
 	run("project", "item-add", "7", "--owner", "octofake", "--url", url)

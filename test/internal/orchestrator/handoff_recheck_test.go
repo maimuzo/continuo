@@ -21,10 +21,10 @@ import (
 //
 // 目的: 「1時間ごとに、走っている最中もコメントを全部読み直す。担当が移っていれば、
 // その turn の終わりで止まる」。
-// 与える情報: 着手して走っている run と、その最中に担当者を別の機械へ書き換えたボード。
+// 与える情報: 着手して走っている run と、その最中に担当者を別の機械へ書き換えたカンバン。
 // 確かめ直す間隔は 1ms にしてある。
 // 成功条件: turn の終わりで run が印から外れること。**Status は動かさないこと**
-// （動かすと、新しい担当の機械が着手しようとしているボードを外された機械が書き換える）。
+// （動かすと、新しい担当の機械が着手しようとしているカンバンを外された機械が書き換える）。
 func TestHandoffRecheck_担当が移っていたらturnの終わりで止める(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
@@ -63,7 +63,7 @@ func TestHandoffRecheck_担当が移っていたらturnの終わりで止める(
 
 	// **Status は動かさない。**着手のときに書いた `In Progress` のままであるべきである。
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
-		t.Errorf("担当を外された機械がボードを書き換えている: Status が %q（In Progress のままであるべき）", got)
+		t.Errorf("担当を外された機械がカンバンを書き換えている: Status が %q（In Progress のままであるべき）", got)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestHandoffRecheck_担当が移っていたらturnの終わりで止める(
 // 目的: **「まだ誰も担当していない」と「担当を外された」は見分けられない。**
 // 復元した run・この機能より前に着手した run・hold を書けなかった run は、
 // どれも担当者が付いていない。**そこで止めると、走っている run が片端から捨てられる。**
-// 与える情報: 着手して走っている run と、その最中に担当者を全部消したボード。
+// 与える情報: 着手して走っている run と、その最中に担当者を全部消したカンバン。
 // 成功条件: turn の終わりで止まらず、次の turn へ進むこと。
 func TestHandoffRecheck_担当者が1人もいないだけでは止めない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
@@ -122,7 +122,7 @@ func TestHandoffRecheck_担当者が1人もいないだけでは止めない(t *
 // **run を組み立てて turn を1回丸ごと送ってしまう**（`workspace_hooks.after_run` も走る）。
 //
 // 与える情報: 引き継いだ（＝1度も担当を確かめていない）run と、
-// **別の機械が担当者になっている**ボード。確かめ直す間隔は 0（走行中は確かめない設定）。
+// **別の機械が担当者になっている**カンバン。確かめ直す間隔は 0（走行中は確かめない設定）。
 // 成功条件: turn が1回も送られず、run が印から外れること。
 // **`recheck_interval_ms` が 0 でも、再開の確かめは行われること。**
 func TestHandoffRecheck_復元したrunはturnを送る前に担当を確かめる(t *testing.T) {
@@ -166,6 +166,6 @@ func TestHandoffRecheck_復元したrunはturnを送る前に担当を確かめ�
 		t.Errorf("担当が移っているのに turn を送った: %d 回", got)
 	}
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
-		t.Errorf("担当を外された機械がボードを書き換えている: Status が %q", got)
+		t.Errorf("担当を外された機械がカンバンを書き換えている: Status が %q", got)
 	}
 }

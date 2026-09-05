@@ -377,7 +377,7 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, ca
 
 // postStatusMove は continuo が Status を動かした記録を issue のコメントに残す（設計 3-29）。
 //
-// **書き込みが起きていなければ何もしない。**ボードが動いていないので書くことがない。
+// **書き込みが起きていなければ何もしない。**カンバンが動いていないので書くことがない。
 // 「動かさない」表明（`status_signal_map` の値が null）と、item が見えない・
 // 書いてはいけない状態だった・既に同じ値だった場合が、これに当たる。
 //

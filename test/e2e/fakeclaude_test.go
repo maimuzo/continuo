@@ -35,7 +35,7 @@ type fakeClaude struct {
 	Home string
 	// BinDir はテスト用gh / ghq mock を置いたディレクトリである。
 	BinDir string
-	// BoardPath は偽のボードの JSON の絶対パスである（テスト用gh mock へ環境変数で渡す）。
+	// BoardPath は偽のカンバンの JSON の絶対パスである（テスト用gh mock へ環境変数で渡す）。
 	BoardPath string
 
 	mu sync.Mutex
@@ -57,7 +57,7 @@ type fakeClaude struct {
 // t: 呼び出し元のテスト。
 // home: テスト用ホームディレクトリ。
 // binDir: テスト用gh / ghq mock を置いたディレクトリ。
-// boardPath: 偽のボードの JSON の絶対パス。
+// boardPath: 偽のカンバンの JSON の絶対パス。
 // 戻り値: テスト用Claude Code mock。
 func newFakeClaude(t *testing.T, home, binDir, boardPath string) *fakeClaude {
 	t.Helper()

@@ -311,10 +311,10 @@ type handoffContext struct {
 	SettingsPath string
 }
 
-// statusMove は continuo がボードの Status を動かした記録である（設計 3-29）。
+// statusMove は continuo がカンバンの Status を動かした記録である（設計 3-29）。
 //
 // **Wrote が偽なら issue に1行も書かない。**item が見えない・書いてはいけない状態だった・
-// 既に同じ値だった、のいずれかであり、**ボードは何も動いていない。**
+// 既に同じ値だった、のいずれかであり、**カンバンは何も動いていない。**
 type statusMove struct {
 	// Wrote は書き込みの mutation を実際に呼んだかどうかである。
 	Wrote bool
