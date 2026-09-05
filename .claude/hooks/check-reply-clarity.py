@@ -113,7 +113,6 @@ FILE_EXTS = (
     ".toml", ".txt", ".jsonl", ".sql", ".html", ".css", ".mod", ".sum",
 )
 FILE_REF_NAME = "ファイルの参照に行番号（#L12-L34）が無い箇所"
-FILE_BACKTICK_NAME = "backtick で囲んだファイルパス"
 
 # 話題の切れ目に入れる区切り線。行頭からこの文字だけが並ぶ行を区切りとみなす。
 # 表の区切り（`| --- |`）は行頭が `|` なので当たらない。
@@ -274,14 +273,30 @@ def inside_parens(text: str, pos: int) -> bool:
     return depth > 0
 
 
-def count_bare_refs(text: str) -> int:
+def count_bare_refs(text: str, introduced=None):
     """1行の中の「内容を添えていない番号の参照」を数える。
 
-    通すのは次の2つだけである。
+    通すのは次の3つである。
         `#60（外部コメントからの実行経路）` — 直後に括弧で内容を添えたもの
         `…の経路（#60）`                     — 内容を書いた文の末尾に括弧で補足したもの
+        **同じ節で既に内容を添えて出した番号**   — 2度目以降は裸でよい
+
+    3つ目は issue #130（返答を検査する hook から backtick の判定を外した変更を、
+    マージ後にレビューする）の実測で決めた。**規則を強めても減らなかった。**
+    2026-08-31 から5日間で261回のやり直しのうち186回（71%）がこの検査で、
+    **PR #124（返答の検査から backtick のファイルパスを外す）の前より割合が増えていた。**
+
+    **日本語として自然なのは「初出で正式名、以後は短縮形」である。**
+    毎回添えさせると、表の同じ列に同じ説明が何度も並び、かえって読みにくくなる。
+
+    text: 1行分の文字列（引用でもコードでもないもの）。
+    introduced: この節で既に内容を添えて出した番号の集合。None なら毎回求める。
+    戻り値: (内容を添えていない件数, この行で内容を添えて出した番号の集合)。
     """
+    if introduced is None:
+        introduced = frozenset()
     bare = 0
+    seen = set()
     i = 0
     n = len(text)
     while i < n:
@@ -294,22 +309,32 @@ def count_bare_refs(text: str) -> int:
         if j == i + 1:  # `#` の後ろが数字でない（見出しや `#L12` など）
             i += 1
             continue
+        num = text[i + 1:j]
         k = j
         while k < n and text[k] in SPACES:
             k += 1
         if k < n and text[k] in OPEN_PARENS:  # 直後に内容を添えている
+            seen.add(num)
             i = j
             continue
         if inside_parens(text, i):  # 括弧の中の補足
+            seen.add(num)
+            i = j
+            continue
+        if num in introduced:  # 同じ節で既に内容を添えて出した
             i = j
             continue
         bare += 1
         i = j
-    return bare
+    return bare, seen
 
 
 def bare_issue_refs(masked: str) -> int:
     """内容を添えていない issue / PR の番号の参照を数える。
+
+    **同じ節で1度でも内容を添えていれば、2度目以降は裸でよい。**
+    **節が変わったら初出扱いに戻す。**読む側が返答の途中から読み始めても、
+    その節の中で1度は内容に出会えるようにするためである。
 
     見ないもの。
         コードフェンスの中（呼ぶ側が masked を渡す）、インラインコードの中、
@@ -317,10 +342,17 @@ def bare_issue_refs(masked: str) -> int:
         引用は人間の原文をそのまま引くところなので、こちらでは直せない。
     """
     count = 0
+    introduced = set()
     for line in masked.split("\n"):
+        if heading_level(line) > 0:
+            # 節が変わった。**初出扱いに戻す。**
+            introduced = set()
+            continue
         if is_quote_line(line):
             continue
-        count += count_bare_refs(strip_urls(strip_inline_code(line)))
+        bare, seen = count_bare_refs(strip_urls(strip_inline_code(line)), introduced)
+        count += bare
+        introduced |= seen
     return count
 
 
@@ -408,7 +440,11 @@ def looks_like_path(text: str) -> bool:
 
 
 def file_refs_without_lines(masked: str):
-    """行番号の無いファイル参照と、backtick で囲んだファイルパスを数える。
+    """行番号の無いファイル参照を数える。
+
+    **backtick で囲んだファイルパスは数えない。**PR #124 で判定から外した。
+    **数える処理も、使わない戻り値も、使わない定数も、この issue #130 で落とした。**
+    残しておくと、コードだけを読む人には「まだ検査している」と読める。
 
     通す形は1つだけである。
         [docs/plans/foo.md:12-34](docs/plans/foo.md#L12-L34)
@@ -418,16 +454,9 @@ def file_refs_without_lines(masked: str):
         ディレクトリ（拡張子が無いもの）。
     """
     no_lines = 0
-    in_backtick = 0
     for line in masked.split("\n"):
         if is_quote_line(line):
             continue
-
-        # backtick で囲んだファイルパス
-        parts = line.split("`")
-        for idx in range(1, len(parts), 2):  # 奇数番目が backtick の中身
-            if looks_like_path(parts[idx]):
-                in_backtick += 1
 
         # markdown link のリンク先
         text = strip_inline_code(line)
@@ -447,7 +476,7 @@ def file_refs_without_lines(masked: str):
                 continue
             if "#l" not in target.lower():
                 no_lines += 1
-    return no_lines, in_backtick
+    return no_lines
 
 
 def is_divider(line: str) -> bool:
@@ -524,7 +553,7 @@ def read_payload():
     return payload if isinstance(payload, dict) else {}
 
 
-def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0, file_no_lines=0, file_backtick=0, qchars=0) -> str:
+def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0, file_no_lines=0, qchars=0) -> str:
     """block したときに Claude へ返す指示文。
 
     入力由来の文字列を混ぜない。件数だけは int に通してから %d で埋める。
@@ -646,7 +675,7 @@ def main() -> int:
     thin_quote = qchars < MIN_QUOTE_CHARS
     late_blocks = blocks_missing_summary(masked)
     section_refs = bare_section_refs(masked)
-    file_no_lines, _unused_backtick = file_refs_without_lines(masked)
+    file_no_lines = file_refs_without_lines(masked)
 
     if (not bare_refs and not no_category and not thin_quote and not late_blocks
             and not section_refs and not file_no_lines):
@@ -655,7 +684,7 @@ def main() -> int:
     emit({
         "decision": "block",
         "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs,
-                               file_no_lines, 0, qchars),
+                               file_no_lines, qchars),
     })
     return 0
 

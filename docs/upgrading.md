@@ -110,7 +110,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 **破壊的変更はありません。****`WORKFLOW.md` も設定も、1文字も直さずに上げられます。**
 
-**ただし、5つ変わります。**1つ目は人間が叩くコマンドの追加で、残る4つはエージェントの振る舞いです。
+**ただし、8 つ変わります。**
 
 | 何が変わったか | 当てる必要 |
 | --- | --- |
@@ -119,6 +119,9 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **途中経過の報告だけで終えた run に、continuo が成果の報告を書かせ直すようになりました** | **要りません**（下の節） |
 | **`continuo init` が置く雛形の「書く言語」が、front matter の `language` に連動するようになりました** | **要りません。**既にある `WORKFLOW.md` は書き換わりません（下の節） |
 | **成果がこの worktree の外にあるとき、commit と push の指示を `WORKFLOW.md` の本文で上書きできるようになりました** | **要りません。**使いたい人だけ書きます（下の節） |
+| **`continuo init` が2枚目（`continuo-ci.yaml`）を置くようになりました** | **もう一度 `continuo init` を叩いてください**（下の節）。**`--force` は要りません** |
+| **エージェントが、実装のレビュー結果を pull request のコメントへ貼るようになりました** | **要りません。**組み込みの指示書が変わっただけです（下の節） |
+| **エージェントが、設計のレビュー結果を issue のコメントへ貼るようになりました** | **要りません。**ただし**その目印を数える CI を置くかどうかは、あなたが決めます**（下の節） |
 
 ### `continuo prompt --show --url` で、実際に送られる文面を先に見られます
 
@@ -305,6 +308,69 @@ pull request は本家へ出す、という運用をしている人だけです�
 **片方でも欠けていれば、いままでどおり commit と push を求めます。**
 
 **本文に書く中身の実物は、`docs/plans/continuo_design.md` の 3-78b にあります。**
+
+### `continuo init` が2枚目を置くようになりました — **もう一度叩いてください**
+
+**v0.1.14 まで。**`continuo init` が置くのは `WORKFLOW.md` の1枚だけでした。
+**CI の設定を配る手段がありませんでした。**
+
+**v0.1.15 から。**同じディレクトリに `continuo-ci.yaml` も置きます。
+**これは設定ではありません。**continuo は起動時に1バイトも読みません。
+**`.github/workflows/` へ移すための見本です。**
+
+**既に `continuo init` を叩いた人は、もう一度叩いてください。**
+
+```bash
+cd ~/continuo-work && continuo init .
+```
+
+**`--force` は要りません。**既にある `WORKFLOW.md` には触らず、
+**足りない `continuo-ci.yaml` だけを置きます。**
+
+> **`--force` を打たないでください。**あれは `WORKFLOW.md` を本文ごと上書きします。
+> **あなたが手で書いた指示が1行も残りません**（上の「`continuo init --force` で作り直さないこと」）。
+
+**置いたあと、中身を確かめてから `.github/workflows/` へ移してください。**
+**既に CI がある場合は、中身を既存の CI へ組み込むよう、お使いの AI に頼んでください。**
+
+```bash
+# 中身を読む
+cd ~/continuo-work && cat continuo-ci.yaml
+
+# 移す（リポジトリの中で叩いてください）
+mkdir -p .github/workflows && mv continuo-ci.yaml .github/workflows/
+```
+
+**移さなくても構いません。**continuo は動きます。**移すと、レビューを飛ばした
+pull request の検査が赤くなります。**
+
+**赤いだけではマージを止められません。**branch protection の必須の検査へ
+`design-review-result` と `code-review-result` の2つを入れて、はじめて止まります。
+
+### 判断票を貼る先が変わりました — 設定に足すものはありません
+
+**v0.1.14 まで。**組み込みの指示書は、実装のレビューの判断票も
+**issue のコメントへ書け**と読める形でした（`3-2 と同じ形で` としか書いていませんでした）。
+
+**v0.1.15 から。****実装のレビューの判断票は、pull request のコメントへ貼らせます。**
+**設計のレビューの判断票は、いままでどおり issue のコメントです。**
+
+| 何のレビューか | 貼る先 | 目印（1行目） |
+| --- | --- | --- |
+| **設計** | **issue のコメント** | `<!-- design-review-result -->` |
+| **実装** | **pull request のコメント** | `<!-- code-review-result -->` |
+
+**なぜ変えたか。**上の `continuo-ci.yaml` が数える場所と、エージェントが書く場所を
+揃えるためです。**揃っていないと、エージェントが指示どおりに書くほど検査が赤のままになります。**
+
+**本文へ足すものはありません。**組み込みの指示書は continuo の実行ファイルの中にあり、
+**版を上げれば自動で新しくなります。**
+
+**送られる文面は次で読めます。**
+
+```bash
+cd ~/continuo-work && continuo prompt --show
+```
 
 ---
 
