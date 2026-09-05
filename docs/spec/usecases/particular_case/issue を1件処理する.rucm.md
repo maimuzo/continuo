@@ -525,11 +525,20 @@ ABORT で抜ける `起動直後の確認画面`・`起動の断念`・`paneの�
 渡す UUID も同じ値である。設計 [3-3](../../../plans/continuo_design.md) は
 「一度使ったセッション UUID をもう一度 `--session-id` に渡すと
 `Session ID ... is already in use.` で起動に失敗する」と実測している。
-**送り直しに入るのは `agent.get` が `agent_not_found` を返したときである**
+**送り直しに入るのは、`agent.get` が `agent_not_found` を返し、
+かつ、その run から hook が1件も届いていないときである**
 （`confirmStartup` がやり直せる形で期限を待たずに戻る唯一の枝。`internal/orchestrator/dispatch.go`。
 `blocked` も期限を待たずに戻るが、そちらはやり直さずにそのまま返る）。
-**`agent_not_found` は「Claude Code が1文字も起動していない」ことを意味するので、
-その UUID のセッションはまだ無く、同じ値を渡し直せる。**
+**そのとき Claude Code は1文字も起動していないので、その UUID のセッションはまだ無く、
+同じ値を渡し直せる。**
+
+**hook が届いていたら送り直さない**（設計 [3-80](../../../plans/continuo_design.md)）。
+**herdr が agent を登録するのは、入力待ちの画面を見分けたときである。**
+起動直後から作業を始めた Claude Code はその画面を出さないので、**生きていても
+`agent_not_found` が返り続ける。**そこへ送り直すと pane を Claude Code が埋めているので
+`agent_pane_busy` が返り続け、**復帰つきの起動では `復帰の失敗` が動いている本人の
+hook の宛先を張り替えてしまう。**hook が届いている間は `agent.get` を読み直して待ち、
+**最後の hook から `herdr.startup_timeout_ms` が経ったときに初めて諦める。**
 
 **`agent_status` が `unknown` のままの場合と `interactive_ready` が偽のままの場合は、
 `agent.start` を送り直さない。**`confirmStartup` が 500 ミリ秒ごとに見直しながら

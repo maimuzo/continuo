@@ -42,6 +42,23 @@ const maxSubagentLabelRunes = 48
 // （docs/evidence/hooks_probe_20260817.jsonl）。
 const backgroundTaskTypeSubagent = "subagent"
 
+// backgroundTaskNote は「まだ走っている」と申告されたバックグラウンド処理1件である
+// （設計 3-81）。
+//
+// **`backgroundSubagents` とは別に持つ。**あちらは設計 3-11 のもので、`type` が
+// `subagent` のものだけを取り、`agent_id` から subagent の記録のパスを組み立てるのに使う。
+// **`shell` を混ぜると、存在しないパスを人間へ案内することになる。**
+// **こちらは設計 3-2 の判定（`background_tasks` が空でなければ未完了）と同じものを
+// run の終わりでも通すために持つので、種類で絞らない。**
+type backgroundTaskNote struct {
+	// ID は `background_tasks[].id` である。`SubagentStop` の `agent_id` と突き合わせる。
+	ID string
+	// Type は `background_tasks[].type` である（`subagent` / `shell`）。
+	Type string
+	// Label は人間が見て何かが分かる文字列である（`agent_type` か `command`）。
+	Label string
+}
+
 // runState は run ごとの実行時状態である（設計 3-25 の型定義）。
 //
 // **プロセスが落ちると消える。**永続化層は作らない（設計 3-4）。
@@ -263,6 +280,19 @@ type runState struct {
 	// **turn を送るときと「`background_tasks` が空の `Stop`」でも空へ戻すが、
 	// `blocked` で終わる turn にはどちらも来ない。**
 	backgroundSubagents map[string]string
+	// backgroundTasks は、直近の `Stop` / `SubagentStop` が申告した走行中の処理である
+	// （設計 3-81）。**種類で絞らない。**`shell`（`run_in_background` の Bash）も入る。
+	//
+	// **`backgroundSubagents` とは目的が違う。**あちらは設計 3-11 のもので、
+	// esc を送る前に「走っている subagent があるか」を見るのと、記録のパスを組み立てるのに使う。
+	// **こちらは run を終える前に「turn の終わりと同じ判定」を1度通すために持つ。**
+	// 設計 3-2 の判定は「`background_tasks` が空でなければ未完了」であり、種類を見ていない。
+	//
+	// **空へ戻る契機は `backgroundSubagents` と同じである**（turn を送るとき、
+	// `background_tasks` が空の `Stop` を受けたとき）。`SubagentStop` の `agent_id` でも外す。
+	//
+	// **件数は `maxTrackedSubagents` で切る。**hook は外部入力である（設計 3-2 / 3-23）。
+	backgroundTasks []backgroundTaskNote
 	// handoffSubagents は **esc を送った時点で**走っていた subagent である（設計 3-11）。
 	// キーと値は `runningSubagents` と同じ（`agent_id` → `agent_type`）。
 	//
@@ -594,6 +624,12 @@ func (rs *runState) noteSubagentStop(agentID string) {
 	defer rs.mu.Unlock()
 	delete(rs.runningSubagents, agentID)
 	delete(rs.backgroundSubagents, agentID)
+	// **種類で絞らない控えからも外す**（設計 3-81）。**外さないと、片方が
+	// 「1件も走っていない」と答えているのに、run を終える前の判定だけが
+	// 「走っている」と答え続ける。**
+	rs.backgroundTasks = slices.DeleteFunc(rs.backgroundTasks, func(t backgroundTaskNote) bool {
+		return t.ID == agentID
+	})
 }
 
 // setBackgroundSubagentsLocked は `background_tasks` の申告を覚え直す（設計 1-7 / 3-2）。
@@ -612,6 +648,7 @@ func (rs *runState) noteSubagentStop(agentID string) {
 //
 // tasks: 受け取った `background_tasks`。
 func (rs *runState) setBackgroundSubagentsLocked(tasks []hookserver.BackgroundTask) {
+	rs.setBackgroundTasksLocked(tasks)
 	if len(tasks) == 0 {
 		rs.backgroundSubagents = nil
 		return
@@ -643,6 +680,101 @@ func (rs *runState) setBackgroundSubagentsLocked(tasks []hookserver.BackgroundTa
 func (rs *runState) resetSubagentsLocked() {
 	rs.runningSubagents = nil
 	rs.backgroundSubagents = nil
+	rs.backgroundTasks = nil
+}
+
+// setBackgroundTasksLocked は `background_tasks` の申告を、種類で絞らずに覚え直す
+// （設計 3-81）。
+//
+// **差分ではなく、丸ごと入れ替える。**`background_tasks` はその時点で走っているものの
+// 一覧であり、載っていないものは走っていない（設計 1-7 / 3-2）。
+//
+// **`type` で絞らない。**run を終える前の判定は、turn の終わりの判定
+// （「`background_tasks` が空でなければ未完了」）と同じでなければならない。
+// **`shell`（`run_in_background` の Bash）も入れる。**
+//
+// **`status` でも絞らない。**設計 3-2 が「空かどうか」だけで決めており、
+// **そこへ新しい判断を足さない。**
+//
+// **件数に上限を置く**（`maxTrackedSubagents`）。hook は外部入力である（設計 3-2 / 3-23）。
+// **`id` が空のものは覚えない。**`SubagentStop` で外す手立てが無くなる。
+//
+// **呼び出し側が `rs.mu` を持っていること。**
+//
+// tasks: 受け取った `background_tasks`。
+func (rs *runState) setBackgroundTasksLocked(tasks []hookserver.BackgroundTask) {
+	if len(tasks) == 0 {
+		rs.backgroundTasks = nil
+		return
+	}
+	out := make([]backgroundTaskNote, 0, min(len(tasks), maxTrackedSubagents))
+	seen := make(map[string]struct{}, len(tasks))
+	for _, t := range tasks {
+		if t.ID == "" {
+			continue
+		}
+		if _, known := seen[t.ID]; known {
+			continue
+		}
+		if len(out) >= maxTrackedSubagents {
+			break
+		}
+		seen[t.ID] = struct{}{}
+		// **人間が見て何かが分かる文字列を1つだけ持つ。**`subagent` なら `agent_type`、
+		// `shell` なら `command` である（docs/evidence/hooks_probe_20260817.jsonl）。
+		label := t.AgentType
+		if label == "" {
+			label = t.Command
+		}
+		out = append(out, backgroundTaskNote{
+			// **`ID` は均さない。**`SubagentStop` の `agent_id` は均されずに届くので
+			// （`OnHook` は `cwd` と `transcript_path` しか検査しない）、**ここで均すと
+			// backtick や制御文字を含む `id`・48文字を超える `id` が二度と外れなくなる。**
+			// `backgroundSubagents` は「1件も走っていない」と答えているのに、
+			// こちらだけ「走っている」と答え続ける。**均すのは載せるときである。**
+			ID:    t.ID,
+			Type:  t.Type,
+			Label: label,
+		})
+	}
+	if len(out) == 0 {
+		rs.backgroundTasks = nil
+		return
+	}
+	rs.backgroundTasks = out
+}
+
+// runningBackgroundTasks は、いま「走っている」と申告されている処理の名前を並べて返す
+// （設計 3-81）。
+//
+// **並びは名前順である。**同じ状態なら同じ文面が出るようにするためで、
+// そのままの順だと申告の順に引きずられる。
+//
+// **均すのはここである**（設計 3-23）。`id` も `type` も `command` も hook から来る
+// 外部入力であり、**この戻り値はそのままログと issue のコメントへ載る。**
+// **控えのほうは生のまま持つ**（`SubagentStop` の `agent_id` と突き合わせるため）。
+//
+// 戻り値: `<type>(<id>) <label>` の形の並び。1件も無ければ nil。
+func (rs *runState) runningBackgroundTasks() []string {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if len(rs.backgroundTasks) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(rs.backgroundTasks))
+	for _, t := range rs.backgroundTasks {
+		name := sanitizeSubagentField(t.Type)
+		if name == "" {
+			name = "background"
+		}
+		line := name + "(" + sanitizeSubagentField(t.ID) + ")"
+		if label := sanitizeSubagentField(t.Label); label != "" {
+			line += " " + label
+		}
+		out = append(out, line)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // freezeHandoffSubagents は「esc を送る時点で走っていた subagent」を凍結する（設計 3-11）。
@@ -659,6 +791,25 @@ func (rs *runState) freezeHandoffSubagents() []string {
 	rs.handoffSubagents = rs.runningSubagentsLocked()
 	rs.handoffSubagentsFrozen = true
 	return subagentLabels(rs.handoffSubagents)
+}
+
+// blockedHandoff は「確認の画面で止まったまま人間へ渡そうとしている」かを返す（設計 3-81）。
+//
+// **`freezeHandoffSubagents` を呼んだかどうかで判定する。**呼ぶのは `blocked` の道
+// （`turnLoop` の `turnBlocked`）だけであり、esc を送る直前に1度だけ通る。
+//
+// **run を終える前にバックグラウンド処理を待つかどうかの判定に使う。**
+// **確認の画面で止まった Claude Code は新しい `Stop` を出さない**ので、
+// 申告は待っても1件も減らない。**待つと引き渡しが遅れるだけである。**
+//
+// **hook の新しさだけでは弾けない。**この道では権限の確認の `Notification` が
+// 直前に届いており、`LastHookAt` は真新しい。
+//
+// 戻り値: `blocked` の道で引き渡そうとしていれば true。
+func (rs *runState) blockedHandoff() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.handoffSubagentsFrozen
 }
 
 // handoffSubagentsLocked は引き渡しの通知が使う subagent の集合を返す（設計 3-11）。
