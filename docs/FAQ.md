@@ -21,7 +21,7 @@ cd ~/continuo-work && continuo doctor
 **この文書は長いので、GitHub の目次から探すのが速いです。**
 ファイルの右上にあるボタンを押すと、見出しの一覧が横に出ます。
 
-![docs/FAQ.md を GitHub で開いた画面。右上の目次のボタンを赤い枠で示している](images/faq_outline.png)
+![ファイルの右上のボタンの並び。いちばん右にある目次のボタンを赤い枠で示している](images/faq_outline.png)
 
 ---
 
