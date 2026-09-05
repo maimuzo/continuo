@@ -128,7 +128,8 @@ type Assessment struct {
 	Assignee string
 	// Hold は、その担当者が書いたいちばん新しい hold である。
 	//
-	// **入るのは `ActionRelease` と `ActionSkipHeld` のときである**（hold を読んだ経路）。
+	// **読むのは `ActionRelease` のときだけである。**`ActionSkipHeld` でも値は入るが、
+	// **その経路の呼び出し側は `Assignee` と `LastProgress` しか見ない。**
 	// **使うのは `Branch` だけである。**担当を外したときに書く released のコメントへ、
 	// その branch の名前を写す（`releaseExpiredAssignee`）。
 	// **`from` に書くアカウントは、この欄ではなく `Assignee` から取る**（設計 3-77-0）。

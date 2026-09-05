@@ -96,10 +96,11 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 			"identifier", issue.Identifier, "担当者の人数", issue.AssigneeCount,
 			"担当者", strings.Join(logins, ", "))
 		// **gh の持ち主が混じっていないことを先に確かめる**（設計 8-3）。
-		// **この分岐は hold のコメントを1行も読まない**ので、
-		// 「人間が2人」と「人間1人＋別の機械が hold を持っている」を区別できない。
-		// 後者で「担当者をすべて外してください」と案内すると、人間は走っている
-		// 別の機械の担当を外すことになり、同じ issue に2台が乗る。
+		// **混じっているなら、その1人はこの continuo が自分で書いた担当者である。**
+		// そこで「担当者をすべて外してください」と案内すると、
+		// **人間は、いま走っているこの continuo の担当まで外すことになる。**
+		// **外れると、この issue はほかのアカウントから「担当者のいない issue」に見え、
+		// 入札で別の continuo が取りに来る。**同じ branch に2つの作業が乗る。
 		//
 		// **`viewerIdentity` は一度取れたら覚える**ので、定常状態でリクエストは0本である。
 		// **読み取りの枠（maxHandoffFetchesPerPoll）はコメントの取得だけを数えるので、1件も使わない。**
@@ -221,7 +222,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 		return handoffDecision{}
 	case handoff.ActionRelease:
-		released, ok := o.releaseExpiredAssignee(ctx, issue, nodeID, viewer, assessment)
+		released, ok := o.releaseExpiredAssignee(ctx, issue, nodeID, assessment)
 		if !ok {
 			return handoffDecision{}
 		}
@@ -284,7 +285,7 @@ func (o *Orchestrator) evaluateBid() (handoff.Bid, handoff.SkipReason) {
 // 戻り値の2つ目: 外せたら true。**外せなければ false**（コメントも書かない）。
 func (o *Orchestrator) releaseExpiredAssignee(
 	ctx context.Context, issue tracker.Issue, nodeID string,
-	viewer tracker.Assignee, assessment handoff.Assessment,
+	assessment handoff.Assessment,
 ) (handoff.CommentView, bool) {
 	id, ok := assigneeIDOf(issue, assessment.Assignee)
 	if !ok {
@@ -309,13 +310,10 @@ func (o *Orchestrator) releaseExpiredAssignee(
 		At:     now,
 	})
 	// **いま書いたばかりなので、作成時刻と更新時刻は同じである。**
-	// **欄を空のままにしない。**この写しを読むのはいま `RoundStart` だけで、
-	// **そこは本文と作成時刻しか見ない**ので、投稿者はいま誰も読まない。
-	// **それでも埋めるのは、入れ物の一部だけを埋めた値が、
-	// 別の判定へ回されたときに黙って空の値を返すからである。**
-	view := handoff.CommentView{
-		Author: viewer.Login, Body: body, CreatedAt: now, UpdatedAt: now,
-	}
+	// **投稿者は入れない。**この写しは回の区切りを決めるためだけのもので、
+	// **`RoundStart` は本文と作成時刻しか見ない。**
+	// **`CollectBids` は印の照合で先に落とす**ので、投稿者まで辿り着かない。
+	view := handoff.CommentView{Body: body, CreatedAt: now, UpdatedAt: now}
 	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
 		// **担当は既に外れている。**コメントを書けなかったことで入札を止めない
 		// （止めると、担当者のいない issue が誰にも拾われなくなる）。
@@ -729,7 +727,9 @@ func assigneeIDOf(issue tracker.Issue, login string) (string, bool) {
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
 // 戻り値の2つ目: いま担当になっているアカウントのログイン名。
-// **1つ目が true のときは必ず1文字以上ある**（issue に付いている担当者から取るため）。1つ目が false なら空文字。
+// 1つ目が false なら空文字。**1つ目が true のときは必ず1文字以上あるが、実在のアカウントとは限らない。**
+// `assigneeLogins` は、人数には数えられているのに名前を取れなかった担当者を
+// `unknownAssigneeLogin` で埋めるので、**その埋め草が返ることがある。**
 func (o *Orchestrator) handoffLostOnTurnEnd(ctx context.Context, rs *runState) (bool, string) {
 	interval := time.Duration(o.cfg.Tracker.Provider.Handoff.RecheckIntervalMs) * time.Millisecond
 	if interval <= 0 {
@@ -753,7 +753,9 @@ func (o *Orchestrator) handoffLostOnTurnEnd(ctx context.Context, rs *runState) (
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
 // 戻り値の2つ目: いま担当になっているアカウントのログイン名。
-// **1つ目が true のときは必ず1文字以上ある**（issue に付いている担当者から取るため）。1つ目が false なら空文字。
+// 1つ目が false なら空文字。**1つ目が true のときは必ず1文字以上あるが、実在のアカウントとは限らない。**
+// `assigneeLogins` は、人数には数えられているのに名前を取れなかった担当者を
+// `unknownAssigneeLogin` で埋めるので、**その埋め草が返ることがある。**
 func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (bool, string) {
 	if !rs.handoffNeverChecked() {
 		return false, ""
@@ -777,7 +779,9 @@ func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (b
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
 // 戻り値の2つ目: いま担当になっているアカウントのログイン名。
-// **1つ目が true のときは必ず1文字以上ある**（issue に付いている担当者から取るため）。1つ目が false なら空文字。
+// 1つ目が false なら空文字。**1つ目が true のときは必ず1文字以上あるが、実在のアカウントとは限らない。**
+// `assigneeLogins` は、人数には数えられているのに名前を取れなかった担当者を
+// `unknownAssigneeLogin` で埋めるので、**その埋め草が返ることがある。**
 func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, string) {
 	issue := rs.issue()
 	nodeID := issueNodeID(issue)
