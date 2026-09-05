@@ -272,7 +272,7 @@ curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/
 | --- | --- |
 | ログ | 常駐して動かしているあいだの出力 |
 | [internal/config/validate.go](internal/config/validate.go) の要件の文（`0より大きい整数にすること` など） | `continuo doctor` の `config` の行。設定に不正な値を書いたとき |
-| [internal/tracker](internal/tracker) のエラーの本文 | `continuo doctor` の `board` の行。カンバンを読めなかったとき |
+| [internal/tracker](internal/tracker) のエラーの本文 | `continuo doctor` の「カンバン」の行。カンバンを読めなかったとき |
 
 **番兵エラー**（`errors.New` で package の変数として持つエラー）**を資源へ移すときは
 `i18n.Sentinel` を使ってください。**`errors.New` に文言を直接書くと、
