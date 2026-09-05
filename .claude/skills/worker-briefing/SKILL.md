@@ -44,13 +44,19 @@ worker のプロンプトは、次の2つだけで組む。
 
 ```bash
 S=".claude/skills/worker-briefing/SKILL.md"
+G="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+case "$G" in /*) MAIN="$(dirname "$G")" ;; *) MAIN="" ;; esac
 P=""
-for d in "$(git rev-parse --show-toplevel)" \
-         "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; do
+for d in "$(git rev-parse --show-toplevel)" "$MAIN"; do
+  [ -n "$d" ] || continue
   if [ -f "$d/$S" ]; then P="$d/$S"; break; fi
 done
 if [ -n "$P" ]; then echo "$P"; else echo "見つからない。渡す前に自分で探すこと"; fi
 ```
+
+**`case` で先頭が `/` かを確かめているのは、`--path-format` が git 2.31 以降にしか無いためである。**
+**古い git では、そこが空になる。**`dirname ""` は `.` を返すので、確かめずに使うと
+**カレントディレクトリを起点にした相対パスが worker へ渡る。**
 
 **2つ目は本体の作業ディレクトリである。**`--git-common-dir` は worktree の中でも本体の `.git` を返すので、
 **その親が本体の作業ディレクトリになる。**
@@ -60,6 +66,8 @@ if [ -n "$P" ]; then echo "$P"; else echo "見つからない。渡す前に自�
 **実測（2026-09-05）。**このスキルが入った commit の親から worktree を作り、その中で叩いた。
 **自分の worktree には無く、本体のパスが返った。**同じ worktree で `ls` を叩くと
 `No such file or directory` である。
+**`--path-format` を失敗させる git を `PATH` の先に置いて、同じ場所でもう一度叩いた。**
+**「見つからない」と出た。**相対パスは1度も出ていない。
 
 **worker 側は、Read に失敗したらそこで止まり、呼ぶ側へ「前置きが読めない」と報告する。**
 **黙って本題へ進まない。**進むと、前置きを1つも知らないまま成果物を作ることになり、

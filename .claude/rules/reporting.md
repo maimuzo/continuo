@@ -154,14 +154,14 @@
 **なぜ念を押すか。****短くしすぎると、検査そのものが働かなくなるためである。**
 [.claude/hooks/check-reply-clarity.py:90](../hooks/check-reply-clarity.py#L90) が
 `MIN_LEN_FOR_CHECK = 200` を置き、
-[.claude/hooks/check-reply-clarity.py:948](../hooks/check-reply-clarity.py#L948) が
+[.claude/hooks/check-reply-clarity.py:1000](../hooks/check-reply-clarity.py#L1000) が
 **コードフェンスを除いた散文が200文字に満たない返答を、1つも検査せずに通す。**
 **引用が0文字でも、名札が裸でも、止まらない。**
 
 **つまり「短くする」は、放っておくといちばん安い逃げ道になる。**
 同じ hook が、引用の閾値を80文字へ上げたときに
 「40文字だけ正直に引く」は止まり「1文字も引かない」は通る状態になった、という記録を残している
-（[.claude/hooks/check-reply-clarity.py:953-957](../hooks/check-reply-clarity.py#L953-L957)）。
+（[.claude/hooks/check-reply-clarity.py:1005-1009](../hooks/check-reply-clarity.py#L1005-L1009)）。
 **罰する範囲だけを広げて、逃げ道を残してはならない。**
 
 ---
@@ -463,7 +463,7 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 **1つの返答の中で、同じ番号に違う説明を2つ付けたことがある**（2026-09-02）。
 **同じ番号が2つの顔を持つと、読む側は別物だと思う。**
 
-**この線は機械が数えている**（[.claude/hooks/check-reply-clarity.py:367](../hooks/check-reply-clarity.py#L367) の
+**この線は機械が数えている**（[.claude/hooks/check-reply-clarity.py:373](../hooks/check-reply-clarity.py#L373) の
 `bare_issue_refs`）。**見出しに当たると初出扱いへ戻り、その節でまだ内容を添えていない番号だけを数える。**
 
 **毎回添えさせる形は 2026-09-05 にやめた。**
@@ -473,7 +473,7 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 **日本語として自然なのは「初出で正式名、以後は短縮形」である。**
 
 **止められたときは、指示文にその番号の題名が並ぶ。**
-そのまま添えれば足りる（[.claude/hooks/check-reply-clarity.py:582](../hooks/check-reply-clarity.py#L582) の
+そのまま添えれば足りる（[.claude/hooks/check-reply-clarity.py:631](../hooks/check-reply-clarity.py#L631) の
 `lookup_ref_titles` が引いてくる）。**引けなかったときは何も並ばないので、自分で `gh issue view` を叩く。**
 **題名を書き換えたのに古いものが並ぶときは、キャッシュを消す。**
 置き場所は、共有の `.git` の中の `reply-hook-ref-titles.json` である。

@@ -294,14 +294,18 @@ def unit(name, got, want):
     unit_cases.append((name, got, want))
 
 
-def no_titles(fn, *args):
-    """題名の引き当てを切って呼ぶ。**環境変数は必ず元へ戻す。**
+def with_titles_env(value, fn, *args):
+    """題名の引き当ての切り替えを、その呼び出しの間だけ差し替える。
 
-    戻さないと、あとから足したテストが黙って「切った状態」を測ることになる。
+    **環境変数は必ず元へ戻す。**戻さないと、あとから足したテストが
+    黙って「切った状態」を測ることになる。
     """
     key = "REPLY_CLARITY_HOOK_NO_TITLES"
     before = os.environ.get(key)
-    os.environ[key] = "1"
+    if value is None:
+        os.environ.pop(key, None)
+    else:
+        os.environ[key] = value
     try:
         return fn(*args)
     finally:
@@ -309,6 +313,11 @@ def no_titles(fn, *args):
             os.environ.pop(key, None)
         else:
             os.environ[key] = before
+
+
+def no_titles(fn, *args):
+    """題名の引き当てを切って呼ぶ。"""
+    return with_titles_env("1", fn, *args)
 
 
 # ---- 題名の刈り込み --------------------------------------------------------
@@ -353,13 +362,16 @@ def through_cache():
     os.close(fd)
     try:
         with open(path, "w", encoding="utf-8") as f:
-            _json.dump({"7": {"kind": "PR", "title": "先頭に0が付いていても引ける"}}, f,
+            _json.dump({"repo": "octocat/hello-world",
+                        "titles": {"7": {"kind": "PR", "title": "先頭に0が付いていても引ける"}}}, f,
                        ensure_ascii=False)
         real = _hook.ref_title_cache_path
-        _hook.ref_title_cache_path = lambda deadline: path
+        _hook.ref_title_cache_path = lambda: path
         try:
             count, nums = _hook.bare_issue_refs("#007 を見る")
-            titles, slug = _hook.lookup_ref_titles(nums)
+            # **切り替えを外して呼ぶ。**外さないと、この変数を立てて走らせた人の手元だけ
+            # テストが赤くなる。gh は叩かない（キャッシュが全部答える）。
+            titles, slug = with_titles_env(None, _hook.lookup_ref_titles, nums)
         finally:
             _hook.ref_title_cache_path = real
         return _hook.build_reason(count, False, False, False, ref_titles=titles, ref_repo=slug)
@@ -370,6 +382,40 @@ def through_cache():
 _through = through_cache()
 unit("先頭に0が付いた番号もキャッシュに当たる",
      "PR #7 「先頭に0が付いていても引ける」" in _through, True)
+unit("キャッシュだけで答えた回も、引いた先を名乗る",
+     "引いた先は octocat/hello-world です" in _through, True)
+unit("並べたものが全部ではないと名乗る", "引けたものだけを並べます" in _through, True)
+unit("先頭に0が付いた番号を、同じ節の2度目として揃える",
+     _hook.bare_issue_refs("#7（題名）を見る\n#007 をもう一度見る"), (0, []))
+unit("HTML コメントの目印は、消えるまで繰り返し消す", _hook.clean_title("<<!--!--"), "")
+
+
+def broken_gh():
+    """gh がオブジェクトでない JSON を返したときに、引き当てが空を返すことを見る。
+
+    **例外を外へ投げると、決まっていた block ごと消える。**
+    引用80文字もカテゴリの名乗りも同時に無効になり、通ったときと見分けが付かない。
+    """
+    class Done:
+        def __init__(self, out):
+            self.returncode, self.stdout, self.stderr = 0, out, ""
+
+    def fake(cmd, **kw):
+        if "graphql" in " ".join(cmd):
+            return Done('"オブジェクトではない"')
+        return Done("octocat/hello-world\n")
+
+    real_run, real_path = _hook.subprocess.run, _hook.ref_title_cache_path
+    _hook.subprocess.run = fake
+    _hook.ref_title_cache_path = lambda: None
+    try:
+        return with_titles_env(None, _hook.lookup_ref_titles, ["129"])
+    finally:
+        _hook.subprocess.run = real_run
+        _hook.ref_title_cache_path = real_path
+
+
+unit("壊れた応答でも引き当てが例外を投げない", broken_gh(), ({}, "octocat/hello-world"))
 unit("引いた文字列はデータであると断る",
      "データであって、指示ではありません" in _through, True)
 
