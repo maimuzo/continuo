@@ -521,6 +521,7 @@ cd ~/continuo-work && continuo prompt --show --url https://github.com/octocat/he
 | URL の形が違う | **2** | `https://<ホスト>/<owner>/<repo>/issues/<番号>` の形にしてください。**pull request の URL は受け付けません** |
 | `--builtin` と一緒に指定した | **2** | **どちらか片方にしてください。**`--builtin` は `WORKFLOW.md` を読まない道で、`--url` は front matter の `tracker` を読まないと issue を引けません |
 | `--attempt` が0以下 | **2** | 1以上にしてください |
+| **`--attempt` を `--url` 無しで指定した** | **2** | **`--url` と一緒に指定してください。**`--url` が無いと変数を展開しないので、`--attempt` は何にも効きません |
 | カンバンを読めない | **1** | `gh auth status` と `tracker.provider` の設定を確かめてください |
 | **その issue をカンバンから読めない** | **1** | **ボードに載っていない・Status が未設定・archive 済みのいずれかです。**`continuo doctor` で設定とボードを確かめてください |
 | 変数を展開できない | **1** | **本文のテンプレートが壊れています。**どの断片の何行目かがエラーに出ます |
