@@ -187,6 +187,9 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		o.logger.Warn("復元のための agent 名を決められません", "identifier", snap.Identifier, "error", err)
 		return
 	}
+	// **証拠の基準は `agent.start` より前で取る**（設計 3-80）。
+	// **あとで取ると、`agent_pane_busy` の粘り（30秒）の間に届いた hook を捨てる。**
+	since := o.now()
 	if _, err := o.herdr.AgentStartWithRetry(ctx, herdr.AgentStartParams{
 		Name:   name,
 		Kind:   o.cfg.Claude.Kind,
@@ -213,7 +216,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	//
 	// **待ちに上限は足さない。**`confirmStartup` は `herdr.startup_timeout_ms` で
 	// 必ず戻る（設計 3-80 は待たずに `ErrStartupBusy` で戻す）。
-	if err := o.confirmStartup(ctx, rs, o.now()); err != nil {
+	if err := o.confirmStartup(ctx, rs, since); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
@@ -230,10 +233,7 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		if errors.Is(err, ErrStartupBusy) {
 			o.logger.Warn("復元した Claude Code が走っているので、コメントを書かせる指示は送れません",
 				"identifier", snap.Identifier, "error", err)
-			o.failCommentRecovery(ctx, rs,
-				"復元した Claude Code がまだ走っていたので、成果を書かせる指示を送れなかった。"+
-					"**本文は送っていない。****書けなかったのではなく、まだ書いている最中かもしれない。**"+
-					"下記の会話の記録を見てから、Status を決めてください。")
+			o.failCommentRecoveryBusy(ctx, rs)
 			return
 		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)
@@ -419,6 +419,40 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, ca
 		"\n【確かめ方】worktree の中身（下記）と `git log` を見て、実際に何が変わったかを確かめてください。"+
 		"\n【よくある原因】"+cause+
 		"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。",
+		newStatusMove(moved, o.cfg.Tracker.FailureState))
+}
+
+// failCommentRecoveryBusy は、**復元した Claude Code がまだ走っていて**成果を書かせられなかった
+// run を人間へ渡す（設計 3-80c）。
+//
+// **`failCommentRecovery` を使ってはならない。**あちらは書き出しを
+// 「作業を終えたと表明しましたが、**何をしたのかを issue に書き残しませんでした。**」で
+// 固定しており、**理由の差し替えでは直らない。**
+// **書けていないのではなく、まだ書いている最中かもしれない。**
+//
+// **黙って戻る道は採らない。**呼び出し側（`finishRunClaimed`）は数行あとで
+// `stopWorker` を呼ぶので、**pane はどのみち閉じる。**
+// **戻るだけだと、閉じたことも成果が残っていないことも人間に伝わらない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) failCommentRecoveryBusy(ctx context.Context, rs *runState) {
+	o.stopWorker(ctx, rs)
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	if err != nil {
+		if o.stoppedWhileRecovering(ctx) {
+			return
+		}
+		o.logger.Warn("Status を落とせません", "identifier", rs.issue().Identifier, "error", err)
+	}
+	o.postHandoffComment(ctx, rs,
+		"**復元した Claude Code がまだ走っていたので、成果を書かせる指示を送れませんでした。**"+
+			"**書き残さなかったのではなく、まだ書いている最中だった可能性があります。**"+
+			"\n【確かめ方】下記の会話の記録と、worktree の中身（同じく下記）と `git log` を見て、"+
+			"実際に何が変わったかを確かめてください。"+
+			"\n【よくある原因】前の turn で始めたバックグラウンドの処理が終わり、"+
+			"その通知で Claude Code が新しい turn を始めていた。"+
+			"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。",
 		newStatusMove(moved, o.cfg.Tracker.FailureState))
 }
 

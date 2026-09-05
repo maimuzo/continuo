@@ -255,41 +255,6 @@ func TestStartup_走っていると判断したrunにも働き始めた時刻を
 	}
 }
 
-// TestStartup_agent_startが通らなくても走っていれば殺さない は、設計 3-80 のうち
-// **issue #235 の時系列が名指しした経路**を検査する。
-//
-// 目的: pane を生きた Claude Code が埋めていると、`agent.start` は `agent_pane_busy` を
-// 返し続けてからエラーで返る。**そのエラーは `confirmStartup` を通らない。**
-// **見落とすと、復帰の道で `restartWithNewSession` が hook の宛先を新しいセッション UUID へ
-// 張り替え、動いている本人の hook が「知らない session_id」として捨てられる。**
-// 与える情報: `agent.start` が常に `agent_pane_busy` を返し、その最中にこの run の
-// `PreToolUse` が届く台本。**粘りの上限を短くして、テストの待ち時間に収める。**
-// 成功条件: issue が `failure_state`（`Blocked`）へ落ちず、`pane.close` が1回も呼ばれず、
-// **「turn の終わりを待ちます」まで進むこと。**
-func TestStartup_agent_startが通らなくても走っていれば殺さない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	fx.AllowLog("agent.start は通りませんでした")
-	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
-
-	fx.Herdr.Handle(herdr.MethodAgentStart, func(map[string]any) (any, *rpcErr) {
-		// **pane を生きた Claude Code が埋めている。**その本人が hook を送ってくる。
-		fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
-		return nil, &rpcErr{Code: "agent_pane_busy", Message: "agent target pane is not an available shell"}
-	})
-
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 60*time.Second, "起動の確認が「Claude Code は走っている」で終わる", func() bool {
-		return strings.Contains(fx.Logs.String(), "1回目の指示を送らずに turn の終わりを待ちます")
-	})
-
-	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 0 {
-		t.Errorf("生きている Claude Code の pane を閉じた: pane.close の回数 %d", n)
-	}
-	if got := fx.Tracker.StateOf("PVTI_item235"); got == "Blocked" {
-		t.Errorf("hook が届いているのに人間へ渡している: state=%s", got)
-	}
-}
-
 // TestStartup_permission_promptだけでは走っているとみなさない は、設計 3-80b の
 // 「`Notification` は全部外す」を検査する。
 //

@@ -880,6 +880,13 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 	rs.setSessionUUID(sessionUUID)
 	o.bindSession(rs, sessionUUID)
+	// **「走っている証拠」を数え始める時刻は、ここで控える**（設計 3-80）。
+	// **`agent.start` の直前ではない。**段6〜段9（身元ファイル・`before_run`・`pane.list`・
+	// `pane.rename`）は数秒かかることがあり、**その間に届いた hook を捨てると、
+	// 生きている Claude Code の証拠を自分で消すことになる。**
+	// **この時刻より前の hook は数えない。**`bindSession` より前に届いたものは、
+	// 前の run が残したものでありうる（`--resume` はセッション UUID を変えない。設計 3-3b）。
+	busySince := o.now()
 	// **worker の世代を1つ進め、次の turn で1回目の本文（5-3）を送るようにする。**
 	// **復帰した場合もそうする**（設計 3-3b）。継続の指示（5-4）には
 	// 「issue を読むこと」「紐づく PR も読むこと」が入っていないので、それだけを送ると
@@ -972,7 +979,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		Kind:   o.cfg.Claude.Kind,
 		PaneID: paneID,
 		Args:   o.claudeStartArgs(settingsPath, sessionUUID, resumeUUID),
-	})
+	}, busySince)
 	if startErr != nil && !errors.Is(startErr, ErrStartupBusy) && resumeUUID != "" {
 		// **`ErrStartupBusy` はここへ入れてはならない**（設計 3-80）。
 		// **復帰そのものは成功していて、Claude Code はもう作業を始めている。**
@@ -1000,7 +1007,7 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 			Kind:   o.cfg.Claude.Kind,
 			PaneID: paneID,
 			Args:   o.claudeStartArgs(settingsPath, rs.sessionUUID(), ""),
-		})
+		}, o.now())
 	}
 	if errors.Is(startErr, ErrStartupBusy) {
 		// **herdr は登録していないが、Claude Code は走っている**（設計 3-80）。
@@ -1056,28 +1063,17 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 // params: `agent.start` の引数。
 // 戻り値: 起動できなかった場合のエラー。
 func (o *Orchestrator) launchClaude(
-	ctx context.Context, rs *runState, worktreePath string, params herdr.AgentStartParams,
+	ctx context.Context, rs *runState, worktreePath string, params herdr.AgentStartParams, since time.Time,
 ) error {
-	// **`agent.start` の失敗も、hook が届いていれば「走っている」である**（設計 3-80）。
-	//
-	// **ここがいちばん危ない。**pane を生きた Claude Code が埋めていると、
-	// `agent.start` は `agent_pane_busy` を `agentStartBusyBudget`（30秒）ぶん返し続けてから
-	// エラーで返る。**そのエラーは `ErrStartupBusy` ではないので、復帰の道では
-	// `restartWithNewSession` が hook の宛先を新しい UUID へ張り替える。**
-	// **issue #235 の時系列が名指ししたのは、まさにこの経路である**
-	// （19:42:24 やり直し → 19:42:54 `agent_pane_busy` → 19:42:54.645 張り替え）。
-	since := o.now()
+	// **`agent.start` そのものが失敗したときは、`ErrStartupBusy` にしない**（設計 3-80）。
+	// **一度そうしたが、取り下げた。**`AgentStartWithRetry` が `agent_pane_busy` を
+	// 30秒返され続けて戻ったなら、**herdr はその名前の agent を1つも登録していない。**
+	// そこで `awaitTurnEnd` を立てても、走っていた turn が終わったあとの `agent.prompt` が
+	// `agent_not_found` で落ち、**その場で殺すのを、1 turn ぶん遅らせるだけになる。**
+	// **issue #235 の時系列が名指しした経路は、`confirmStartup` の側で塞いである**
+	// （19:41:55 の時点で `ErrStartupBusy` に倒れるので、19:42:24 のやり直しへ進まない）。
 	started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
 	if err != nil {
-		if hookAt, busy := o.startupBusyByHook(rs, since); busy {
-			// **agent 名は控えておく。**控えないと `checkStalls` が
-			// 「agent 名が空」で飛ばし、hook が止まっても誰も拾わなくなる。
-			rs.setAgentName(params.Name)
-			o.logger.Info("agent.start は通りませんでしたが、作業中の hook が届いています（pane を生きた Claude Code が埋めています）",
-				"identifier", rs.issue().Identifier, "agent", params.Name,
-				"最後に作業中の hook を受けた時刻", hookAt, "agent.start の応答", summaryLine(err.Error()))
-			return ErrStartupBusy
-		}
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
 	}
 	rs.setAgentName(params.Name)
@@ -1089,7 +1085,7 @@ func (o *Orchestrator) launchClaude(
 		o.logger.Warn("身元ファイルへ agent 名を書けませんでした",
 			"identifier", rs.issue().Identifier, "error", err)
 	}
-	return o.confirmStartupWithRestart(ctx, rs, params)
+	return o.confirmStartupWithRestart(ctx, rs, params, since)
 }
 
 // restartWithNewSession は、復帰に失敗した run を新しいセッションで始め直せる状態にする
@@ -1402,10 +1398,9 @@ func issueNodeID(issue tracker.Issue) string {
 // params: やり直すときに使う `agent.start` の引数（初回と同じものを渡すこと）。
 // 戻り値: 合格なら nil。期限まで通らなければ ErrStartupRetryable を包んだエラー。
 func (o *Orchestrator) confirmStartupWithRestart(
-	ctx context.Context, rs *runState, params herdr.AgentStartParams,
+	ctx context.Context, rs *runState, params herdr.AgentStartParams, since time.Time,
 ) error {
-	since := o.now()
-	deadline := since.Add(time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond)
+	deadline := o.now().Add(time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond)
 	var lastErr error
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {

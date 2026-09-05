@@ -8844,13 +8844,18 @@ turn の終わりを決められず、**`settle_ms` の窓が閉じた瞬間に 
 **動いている本人の hook が「知らない session_id」として捨てられる**（3-3b）。
 **だから `ErrStartupBusy` は、そちらの枝にも入れない。**
 
-**`agent.start` そのものが失敗したときも同じ扱いにする。**`agent_pane_busy` を
-30秒返され続けたあとのエラーは `confirmStartup` を通らないので、**そこを外すと
-issue #235 の時系列が名指しした経路がそのまま残る**（19:42:24 やり直し →
-19:42:54 `agent_pane_busy` → 19:42:54.645 hook の宛先を張り替え）。
-**作業中の hook が届いていれば、`agent.start` の失敗も `ErrStartupBusy` にする。**
-そのとき agent 名は控えておく。**控えないと `checkStalls` が「agent 名が空」で飛ばし、
-hook が止まっても誰も拾わない。**
+**`agent.start` そのものの失敗は、`ErrStartupBusy` にしない。**一度そうしたが取り下げた。
+`AgentStartWithRetry` が `agent_pane_busy` を30秒返され続けて戻ったなら、
+**herdr はその名前の agent を1つも登録していない。**そこで待ちへ倒しても、
+走っていた turn が終わったあとの `agent.prompt` が `agent_not_found` で落ち、
+**その場で殺すのを1 turn ぶん遅らせるだけになる。**
+**時系列が名指しした経路は `confirmStartup` の側で塞がる**
+（19:41:55 の時点で `ErrStartupBusy` に倒れるので、19:42:24 のやり直しへ進まない）。
+
+**証拠を数え始める時刻は、`bindSession`（段5b）の直後で控える。**`agent.start` の直前ではない。
+段6〜段9（身元ファイル・`before_run`・`pane.list`・`pane.rename`）は数秒かかることがあり、
+**その間に届いた hook を捨てると、生きている証拠を自分で消すことになる。**
+**それより前は数えない。**`bindSession` より前の hook は、前の run が残したものでありうる（3-3b）。
 
 ### 3-80b. 走っている証拠に、入力待ちでも出る hook を数えない
 
