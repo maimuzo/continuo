@@ -595,18 +595,22 @@ func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState
 //
 // **順番を入れ替えてはならない。**
 //
-//  1. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
-//  2. 自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
+//  1. 自分の担当者を外し、released を書く   … **失敗したら何もせずに戻る**
+//  2. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
 //  3. worker を止める                        … pane を閉じる
 //  4. 印から外す                             … スロットを空ける
 //
-// **段2 を段3 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
-// **pane だけ閉じて担当が残り、18時間だれも動かない issue になる。**
+// **段1 を段3 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
+// **pane だけ閉じて担当が残り、`idle_timeout_ms` のあいだ誰も動かない issue になる。**
 //
-// **段1 で `after_run` を走らせる。**担当を失ったときの止め方（3-77c）は走らせないが、
+// **段2 を段1 より先に置いてはならない。**`RunAfterRunOnce` は実行の前に印を立て、
+// **印を消すのは着手と片付けだけである。**先に走らせて段1 が失敗すると、
+// **この run が枠明けに完走しても `finishRun` の `after_run` が印に弾かれて1回も走らない。**
+//
+// **段2 で `after_run` を走らせる。**担当を失ったときの止め方（3-77c）は走らせないが、
 // **あちらは「担当が既に別の機械へ移っている」ので、push すると新しい担当の続きと衝突する。**
-// **こちらは自分から手放す側で、released を書く時点では次の担当が決まっていない。**
-// 衝突する相手がいない。**人間の決定「push して引き渡す」は、この経路で果たす。**
+// **こちらは自分から手放す側で、released を書いた時点でも次の担当はまだ決まっていない**
+// （入札の締め切りは既定3分）。**人間の決定「push して引き渡す」は、この経路で果たす。**
 //
 // **段4 を落としてはならない。**`beginTerminal` は印を立てたまま返らないので、
 // **`release` を呼ばないと、その run は印に残り続けてスロットを永久に埋める。**
@@ -634,11 +638,6 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// くくると、`git push` が5秒で切られる。**しかも `RunAfterRunOnce` は実行の前に印を立てるので、
 	// **次の巡回でやり直しても push は二度と走らない。**
 	// **そのうえ期限切れの ctx が担当者を外す要求へ渡り、`context deadline exceeded` で落ちる。**
-	hookCtx, cancelHook := context.WithTimeout(
-		context.WithoutCancel(ctx), time.Duration(o.cfg.WorkspaceHooks.TimeoutMs)*time.Millisecond)
-	o.runAfterRun(hookCtx, rs)
-	cancelHook()
-
 	cleanupCtx, cancel := context.WithTimeout(
 		context.WithoutCancel(ctx), time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 	defer cancel()
@@ -650,6 +649,21 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		rs.endTerminal()
 		return
 	}
+
+	// **`after_run` は、担当を外せたあとに走らせる。**先に走らせてはならない。
+	// **`RunAfterRunOnce` は実行の前に印を立て、印を消すのは着手と片付けだけである。**
+	// 先に走らせて担当を外せなかった場合、この run が枠明けに普通に完走しても、
+	// **`finishRun` の `after_run` が印に弾かれて1回も走らない。**
+	// 利用者が書いた `git push` が、その issue について一度も動かないまま run が終わる。
+	//
+	// **ctx を分ける。**`after_run` は利用者が書いた外部コマンドで、上限は
+	// `workspace_hooks.timeout_ms`（既定60秒）である。**`herdr.read_timeout_ms`（既定5秒）で
+	// くくると、`git push` が5秒で切られる。**
+	hookCtx, cancelHook := context.WithTimeout(
+		context.WithoutCancel(ctx), time.Duration(o.cfg.WorkspaceHooks.TimeoutMs)*time.Millisecond)
+	o.runAfterRun(hookCtx, rs)
+	cancelHook()
+
 	o.stopWorker(cleanupCtx, rs)
 	o.release(rs)
 	o.logger.Info("担当を手放しました（次の担当は入札で決め直します）",

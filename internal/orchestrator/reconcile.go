@@ -303,6 +303,31 @@ func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string,
 //  3. 版が増えていない
 //     → worker を止め、リトライを積む
 //
+// releaseQuotaWaitExceeded は、1週間の枠を待つ上限を超えた run を手放す
+// （設計 3-27。issue #197）。
+//
+// **枠待ちの印が立っている run について、毎巡回で必ず通る唯一の場所である。**
+// turn 側の待ちループは、herdr が一時的に届かないと**印を外さずに goroutine を畳む**ので、
+// 走っていない窓がある。
+//
+// **`checkStalls` の `claude.turn_timeout_ms` の門より前で呼ぶ。**
+// **0 以下でも枠待ちの印は立つ**ので、門のあとに置くとその設定の機械で一度も効かない。
+//
+// **非同期に手放す。**担当者を外す要求とコメントの投稿と pane を閉じる要求が乗るので、
+// **同じ巡回で複数の run が超えると直列に積まれる**（設計 3-8）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
+	for _, rs := range o.snapshotRuns() {
+		if !rs.snapshot().WaitingQuota {
+			continue
+		}
+		if o.weeklyWaitExceeded(rs) {
+			o.releaseBecauseQuotaWaitAsync(ctx, rs)
+		}
+	}
+}
+
 // **枠待ちの run は判定そのものを飛ばす**（`WaitingQuota` が立っている間は時計が止まっている）。
 // **`LastSeenAt` は進めない**（進めると、枠が明けたあとに「最後に動いていた時刻」が分からなくなる）。
 //
@@ -311,6 +336,12 @@ func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string,
 //
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) checkStalls(ctx context.Context) {
+	// **1週間の枠を待つ上限は、打ち切りの判定を切っていても効かせる**（設計 3-27。issue #197）。
+	// **下の `silence <= 0` より前に呼ぶ。**`claude.turn_timeout_ms` が 0 以下でも
+	// **枠待ちの印は立つ**（`isQuotaWaiting` は hook を1件も受けていない run では
+	// 無音の長さを見ない）。**あとに置くと、その設定の機械で上限が一度も効かない。**
+	o.releaseQuotaWaitExceeded(ctx)
+
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	if silence <= 0 {
 		return
@@ -320,16 +351,8 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
 		if snap.WaitingQuota {
-			// **1週間の枠を待つ上限を、毎巡回ここで見る**（設計 3-27。issue #197）。
-			// **枠待ちの印が立っている run について、毎巡回で必ず通る唯一の場所である。**
-			// turn 側の待ちループは、herdr が一時的に届かないと
-			// **印を外さずに goroutine を畳む**ので、走っていない窓がある。
+			// **上限は上の `releaseQuotaWaitExceeded` が見ている。**ここでは見ない。
 			//
-			// **`continue` が終わらせるのは、この run 1件ぶんの反復である**（`for` ではない）。
-			if o.weeklyWaitExceeded(rs) {
-				o.releaseBecauseQuotaWaitAsync(ctx, rs)
-				continue
-			}
 			// 枠が明けたら印を外す。**外す契機は「resets_at を過ぎたこと」だけである。**
 			if !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt) {
 				rs.clearWaitingQuota(now)

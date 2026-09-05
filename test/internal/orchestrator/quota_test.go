@@ -824,3 +824,59 @@ func TestQuota_上限が0なら1週間の枠でも待ち続ける(t *testing.T) 
 		t.Fatalf("上限が0なのに担当を手放している:\n%s", fx.Logs.String())
 	}
 }
+
+// TestQuota_打ち切りを切っていても巡回は落ちない は、判定の置き場所を確かめる
+// （設計 3-27。issue #197）。
+//
+// 目的: **`claude.turn_timeout_ms` が0以下だと、巡回の打ち切りの判定は行わない**
+// （`SPEC.md` 8.4 が「0 以下なら stall 検知を行わない」と決めている）。
+// **それでも枠待ちの印は立つ**（hook を1件も受けていない run は、無音の長さを見ずに
+// 枠待ちと判定される）。**だから上限の判定を打ち切りの門より前へ出した。**
+//
+// 与える情報: `claude.turn_timeout_ms: 0`。1週間の枠が 100% で、リセットは48時間後。上限は300分。
+// 成功条件: 巡回が落ちず、**枠待ちでない run を誤って手放さない**こと。
+func TestQuota_打ち切りを切っていても巡回は落ちない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	endpoint, _ := newUsageServer(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	})
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_W6")
+	clock := newTestClock()
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		AgentStatus: herdr.AgentStatusUnknown,
+		RateLimit:   reader,
+		Now:         clock.Now,
+		Mutate: func(cfg *config.Config) {
+			// **打ち切りの判定を切る。**この設定は validate が明示的に許している。
+			cfg.Claude.TurnTimeoutMs = 0
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.WeeklyWaitLimitMinutes = 300
+		},
+	})
+
+	issue := assignedIssue(188, "In Progress", testGHLogin)
+	fx.Tracker.AddIssue(issue)
+	fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
+		AgentName:        normalize.SafeName("continuo-hello-world-188"),
+		PaneID:           "w1:p1",
+		SessionUUID:      "session-188",
+		HerdrWorkspaceID: "w1",
+	}, false)
+
+	// **この検査は「落ちないこと」までしか確かめられない。**
+	// **枠待ちの印を、巡回に入る前に立てる手立てが無いためである**
+	// （`orchestrator.AdoptedRun` に枠待ちの欄が無く、その型は
+	// このリポジトリの決まりで触れないファイルにある）。
+	// **印を立てられるのは turn の待ちループだけで、そこを通すには turn を1回走らせる必要がある。**
+	//
+	// **確かめられているのは、`claude.turn_timeout_ms` が0以下でも巡回が落ちないことと、
+	// 枠待ちでない run を誤って手放さないことの2つである。**
+	// **上限そのものは、上の5本が確かめている。**
+	fx.Orc.Tick(context.Background())
+
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("枠待ちでない run を手放している:\n%s", fx.Logs.String())
+	}
+}
