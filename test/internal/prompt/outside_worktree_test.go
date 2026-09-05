@@ -89,7 +89,9 @@ func TestTemplate_worktreeの外への逃げ道は立場と4_4の両方で絞る
 // worktree の branch には commit が1つも無い。**
 // ところが 3-5 は「**先に 3-4 の push を済ませてください**」と言い、
 // `git branch --show-current` で worktree の branch を引く。
-// **push すべきものが無いので、その手順は原理的に済ませられない。**
+// **その push は、`git commit` が `nothing to commit` で落ちる時点で成り立たない**（設計 5-3b で実測）。
+// **そして commit が0件の branch では、3-5 の `gh pr create` が出す pull request を作れない。**
+// **`git push -u origin HEAD` そのものは、commit が0件でも通る。**そこを理由にしてはならない。
 // 指示どおり読んだエージェントは「pull request を作れなかった」で `blocked` を出し、
 // **#186 が成立させようとした運用が、最後の1段で人間へ渡る。**
 //

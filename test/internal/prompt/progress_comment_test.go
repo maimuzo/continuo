@@ -39,7 +39,7 @@ func TestTemplate_組み込みのプロンプトは途中でも状況を書か�
 
 	// 節の中身だけを見る。**本文の別の場所に同じ語があっても、この節が教えていることにはならない。**
 	// とくに `gh issue comment` と `git push -u origin HEAD` は
-	// 「## 終わったらやること」にもあるので、全文への contains では素通りする。
+	// 「## 3-7. 終わりを書く」にもあるので、全文への contains では素通りする。
 	section := sectionOf(t, body, progressCommentHeading)
 
 	for _, want := range []struct {

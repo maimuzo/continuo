@@ -22,7 +22,7 @@ const pullRequestHeading = "## 3-5. pull request を出す"
 // **なぜ要るか。**この仕組みで人間がするのは、issue で何をしてほしいかを伝えることと、
 // 出てきたものをレビューすることの2つだけである。
 // **エージェントが push で止まると、branch を自分で見つけて PR を作る仕事が人間に生える。**
-// **組み込みの `## この issue に紐づく PR も読むこと` は、誰かが PR を作っていることを前提にしている。**
+// **組み込みの `## 4-2. 紐づく pull request を読む` は、誰かが PR を作っていることを前提にしている。**
 // 作る指示が無いと、あの節は一度も役に立たない。
 //
 // 与える情報: prompt.Builtin() の全文。
@@ -38,7 +38,7 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 
 	// 節の中身だけを見る。**本文の別の場所に同じ語があっても、この節が教えていることにはならない。**
 	// とくに `git push -u origin HEAD` と `CONTINUO-STATUS: blocked` は
-	// 「## 終わったらやること」にもあるので、全文への contains では素通りする。
+	// 「## 3-7. 終わりを書く」にもあるので、全文への contains では素通りする。
 	section := sectionOf(t, body, pullRequestHeading)
 
 	for _, want := range []struct {
@@ -47,10 +47,10 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 	}{
 		{"gh pr create", "作るコマンドを書かないと、エージェントは作る手段を知らないまま終わります"},
 		{"Closes #{{.issue.number}}", "この1行が PR と issue を結びつけます。" +
-			"落とすと、次の turn が `## この issue に紐づく PR も読むこと` で拾えず、" +
+			"落とすと、次の turn が `## 4-2. 紐づく pull request を読む` で拾えず、" +
 			"レビューの指摘を読む先が消えます"},
 		// **既にある PR は、いま居る branch から引かせる。**
-		// `## この issue に紐づく PR も読むこと` の一覧から選ばせてはならない（下の否定の検査）。
+		// `## 4-2. 紐づく pull request を読む` の一覧から選ばせてはならない（下の否定の検査）。
 		{`--head "$(git branch --show-current)"`, "既にある PR を、いま居る branch から引かせないと、" +
 			"turn のたびに2本目・3本目ができます"},
 		{"新しく作らないでください", "既にある PR を使わせないと、turn のたびに2本目・3本目ができます"},
@@ -72,7 +72,7 @@ func TestTemplate_組み込みのプロンプトはPRを出させる(t *testing.
 		}
 	}
 
-	// **`## この issue に紐づく PR も読むこと` の一覧から行き先を選ばせてはならない。**
+	// **`## 4-2. 紐づく pull request を読む` の一覧から行き先を選ばせてはならない。**
 	//
 	// **あの一覧は「この issue を閉じる PR」ではなく「この issue に言及があった PR」を返す。**
 	// 実測（2026-09-03、maimuzo/continuo）: issue #60 の timeline は PR #112 を返すが、
