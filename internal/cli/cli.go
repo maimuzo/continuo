@@ -539,11 +539,22 @@ func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
 // **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
 // 見出しは「送る文面の内訳」なので、**送った文面を数えなければならない。**
 //
+// **本文の有無も `items` から決める。**`frag.HasBody()` は展開する前の姿である。
+// **本文が丸ごと `{{if .attempt}}` の中にある構成で1回目として展開すると、
+// 本文は0行なのに「本文はありません」が出ないことになる。**
+// 同じ内訳の中で、行数だけ展開後・有無だけ展開前、では辻褄が合わない。
+//
 // w: 出力先（標準エラー）。
 // items: 数える断片の並び。
-// frag: 本文の有無とパスを引くための、組み立てた断片。**行数はここから数えない。**
+// frag: **本文のパスを引くためだけに使う。**行数も有無もここから取らない。
 func printPromptBreakdownItems(w io.Writer, items []prompt.Fragment, frag prompt.Fragments) {
 	fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
+	hasBody := false
+	for _, it := range items {
+		if it.Name == prompt.NameWorkflowBody && strings.TrimSpace(it.Text) != "" {
+			hasBody = true
+		}
+	}
 	for _, it := range items {
 		switch it.Name {
 		case prompt.NameBuiltinHead:
@@ -556,7 +567,7 @@ func printPromptBreakdownItems(w io.Writer, items []prompt.Fragment, frag prompt
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownWorkflowBody, countLines(it.Text), it.Path))
 		}
 	}
-	if !frag.HasBody() {
+	if !hasBody {
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBodyMissing, frag.BodyPath()))
 	}
 }

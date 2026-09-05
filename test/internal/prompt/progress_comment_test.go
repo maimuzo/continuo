@@ -182,3 +182,52 @@ func sectionOf(t *testing.T, body, heading string) string {
 	}
 	return strings.Join(lines[start:], "\n")
 }
+
+// 目的: 進捗報告の見本が、印を行の先頭から書かせることを固定する
+// （issue #178（途中経過を1回書いたエージェントが最後の報告を忘れても、continuo が書き直させない））。
+//
+// **なぜ要るか。**`handoff.StartsAsProgressReport` は、本文の先頭にある
+// **行頭ちょうどの印だけ**を進捗報告の名乗りとして数える。
+// **字下げした印は「本文の中の引用」とみなして数えない**（成果の報告が引用しただけで
+// 捨てられるのを防ぐため。そちらを緩めると、書いた報告が人間へ渡る）。
+//
+// **見本が字下げされていると、それを写して投稿したエージェントの進捗報告が数えられない。**
+// **数えられないと、その run は「まだ作業中です」を成果の報告として扱われ**（#178 が戻る）、
+// **18時間の時計も進まないので担当が外れる。**
+//
+// **散文で「字下げしないでください」と書くだけでは足りない。**
+// **見本そのものを行頭から書ける形にする。**バッククォートの囲みの中は
+// `stripComments` がそのまま残すので、行頭の印が消えずに送れる。
+//
+// 与える情報: prompt.Builtin() の全文。
+// 成功条件: 投稿の見本にある印の2行が、どちらも行頭から始まっていること。
+func TestTemplate_進捗報告の見本は印を行頭から書かせる(t *testing.T) {
+	body := prompt.Builtin()
+
+	// **`gh issue comment` は2箇所にある**（3-7 の成果の報告と、5-3 の進捗報告）。
+	// **進捗報告の見本は、次の行に進捗報告の印が来るほうである。**
+	lines := strings.Split(body, "\n")
+	found := false
+	for i, line := range lines {
+		if !strings.Contains(line, "gh issue comment ") {
+			continue
+		}
+		if i+1 >= len(lines) || !strings.Contains(lines[i+1], "continuo:progress") {
+			continue
+		}
+		found = true
+		// 1行目は `gh issue comment … --body "<!-- continuo:agent -->` である。
+		if !strings.HasSuffix(line, `--body "<!-- continuo:agent -->`) {
+			t.Errorf("見本の1行目が想定と違います: %q", line)
+		}
+		// **2行目が進捗報告の印。行頭から始まっていなければならない。**
+		if lines[i+1] != config.ProgressMarker {
+			t.Errorf("見本の2行目が、行頭から始まる進捗報告の印ではありません: %q\n"+
+				"字下げすると、それを写して投稿したエージェントの進捗報告が数えられません（issue #178）",
+				lines[i+1])
+		}
+	}
+	if !found {
+		t.Fatal("組み込みのプロンプトに、進捗報告を投稿する見本がありません（issue #178）")
+	}
+}
