@@ -1686,6 +1686,19 @@ const (
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
 )
 
+// `continuo init` が書き出す WORKFLOW.md の本文へ入れる文言。
+//
+// **これだけは、画面に出す文言ではない。**エージェントへ送られる指示そのものである。
+// **それでも資源に置く。**言語ごとに1本ずつ持たせたいものであり、
+// **`language` の設定に連動させる**（issue #187 で人間が決めた）。
+const (
+	// KeyScaffoldWorkflowWriteLanguage は `### 書く言語` の節へ書く1行である。
+	//
+	// **その言語で読み書きする人へ向けた、その言語での指示にする。**
+	// 訳ではなく、その言語の利用者にとって自然な指示を書くこと。
+	KeyScaffoldWorkflowWriteLanguage Key = "scaffold.workflow.write_language"
+)
+
 // 既にあるファイルを差し替えで書き換えるとき（internal/scaffold の statTarget と
 // internal/atomicfile の Write）の文言。
 //
@@ -3054,6 +3067,7 @@ var allKeys = []Key{
 	KeyScaffoldDirGetwdFailed,
 	KeyScaffoldDirAbsFailed,
 	KeyScaffoldWriteSymlinkNotFollowed,
+	KeyScaffoldWorkflowWriteLanguage,
 	KeyScaffoldUpdateSymlinkNotFollowed,
 	KeyScaffoldUpdateNotRegularFile,
 	KeyScaffoldUpdateTempCreateFailed,

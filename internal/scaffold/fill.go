@@ -6,7 +6,20 @@ import (
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
+
+// writeLanguageMarker は、`### 書く言語` の1行を差し込む場所の目印である
+// （issue #187（日本語を読まない利用者の手元でも、エージェントが日本語でコメントと
+// commit メッセージを書く））。
+//
+// **雛形そのものは、どの言語の指示も持たない。**書き出すときに、
+// front matter の `language` から決めた1行へ差し替える（applyWriteLanguage）。
+//
+// **差し替えられなかったときは、この行がそのまま残る。**HTML のコメントなので
+// エージェントには害が無く、節は中身が無いものとして送る前に落ちる（設計 5-3m）。
+// **既定の言語が漏れるより、指示が無いほうがまだ良い。**
+const writeLanguageMarker = "<!-- continuo:write-language -->"
 
 // commentColumn は front matter のコメント（`#`）を揃える桁である（0 起点）。
 // 雛形の全行がこの桁でそろっているので、値を埋めたあともここに合わせる。
@@ -104,6 +117,7 @@ func ValidOwner(name string) bool {
 // 戻り値: WORKFLOW.md の全文。
 func TemplateWithValues(values Values) string {
 	out := applyRateLimitTokenSource(workflowTemplate)
+	out = applyWriteLanguage(out)
 	if values.Owner != "" && ValidOwner(values.Owner) {
 		out = replaceLine(out, ownerPlaceholderCode, "    owner: "+values.Owner, ownerFilledComment)
 	}
@@ -121,6 +135,28 @@ func TemplateWithValues(values Values) string {
 		out, _, _ = applyStatuses(out, values.Statuses)
 	}
 	return out
+}
+
+// applyWriteLanguage は `### 書く言語` の1行を、いま選ばれている言語のものへ差し替える
+// （issue #187）。
+//
+// **なぜ雛形へ直接書かないか。**continuo は OSS として配る。
+// **雛形が「すべて日本語で書いてください」を既定にしていると、日本語を読まない人の手元でも、
+// エージェントが issue のコメントと commit メッセージを日本語で書く。**
+// **その人は、その節を消すか書き換えるまで気づけない。**
+//
+// **`language` に連動させる**（issue #187 のコメントで人間が決めた）。
+// `continuo init` は front matter へ `language: auto` を書き、`auto` は環境変数から決まる。
+// **ここで引く文言は、いま continuo が自分の画面に使っているのと同じ言語のものである。**
+//
+// **あとから `language` を変えても、既に書いた WORKFLOW.md は変わらない。**
+// 本文は利用者のものなので、continuo は書き換えない（`continuo setup` も Status の行しか触らない）。
+// **その1行を書き換えるのは利用者である。**すぐ上のコメントがそう案内している。
+//
+// s: 差し替える対象の全文。
+// 戻り値: 差し替えた全文。目印が無ければ、元の全文をそのまま返す。
+func applyWriteLanguage(s string) string {
+	return strings.Replace(s, writeLanguageMarker, i18n.T(i18n.KeyScaffoldWorkflowWriteLanguage), 1)
 }
 
 // applyRateLimitTokenSource は rate_limit.token_source の行を、走っている OS の既定へ差し替える。

@@ -31,9 +31,10 @@ import (
 	// （issue #183）。**その代わり、`internal/config` はこの package を import できない。**
 	// `prompt → tracker → config` になるためである。
 	// **つまり `Fragments.Validate()` を `config.Load` の中で呼ぶ道は閉じている。**
-	// いま `Validate` を呼ぶのは `internal/daemon` と `internal/doctor` だけで、
-	// `continuo prompt --show` は呼ばない。**本文の `{{if}}` の閉じ忘れが `--url` で初めて
-	// 表に出るのは、そのためである。**
+	// いま `Validate` を呼ぶのは `internal/daemon`（常駐の起動）と `internal/doctor` だけで、
+	// **`continuo prompt` はどの形でも呼ばない。**
+	// **それでも、壊れたテンプレートが見過ごされることは無い。**常駐は起動時に落ち、
+	// `continuo doctor` は `prompt vars` を赤にする。
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 

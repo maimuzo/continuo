@@ -500,8 +500,10 @@ func runPromptExpanded(
 	// 同じ解釈と実行を2回することになる。
 	text, rendered, err := frag.RenderAll(data)
 	if err != nil {
-		// **`--url` を付けて初めて変数展開が走る。**本文の `{{if}}` の閉じ忘れや
-		// 一覧に無い変数は、ここで初めて表に出る。**部分的な文面を出さない。**
+		// **`continuo prompt` の3つの形のうち、変数展開が走るのは `--url` だけである。**
+		// 本文の `{{if}}` の閉じ忘れや一覧に無い変数は、ここで落ちる。
+		// **このコマンドが最初の網ではない。**常駐は起動時に `Fragments.Validate()` で落ち、
+		// `continuo doctor` は `prompt vars` を赤にする。**部分的な文面を出さない。**
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrRenderFailed, err))
 		return 1
 	}
