@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/redact"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -296,6 +297,12 @@ func (o *Orchestrator) recordRepoWorkspace(
 // **これがいちばん切り分けの難しい状態である。**issue の画面には印の付いたコメントが
 // 見えているのに、continuo は「書かれていない」と判定してセッションを復元しにいく。
 //
+// **途中経過の報告は数えない**（設計 3-25 の段1。issue #178）。
+// **`<!-- continuo:progress -->` の付いたコメントも `tracker.comments.marker` を
+// 持っているので、数えると「途中経過を1回書いて最後の報告を忘れた run」を
+// 「書いた」と判定してしまう。**issue には「まだ作業中です」だけが残り、
+// **何をしたのかが誰にも分からないまま `In Review` に立つ。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // nodeID: 下敷きの GitHub issue のノード ID。
 // snap: 対象の run の写し。
@@ -340,6 +347,19 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 				"（エージェントが書いたものとして数えません）",
 				"identifier", snap.Identifier, "投稿者", c.Author,
 				"gh の持ち主", o.ghLoginName(), "url", c.URL)
+			continue
+		}
+		// **途中経過の報告は、この run の成果の報告ではない**（issue #178）。
+		//
+		// **見るのは本文の先頭にある印の並びだけである**（`StartsAsProgressReport`）。
+		// **`IsProgressReport` は使わない。**あちらは印が本文のどこかに在れば真で、
+		// **成果の報告が印を引用しただけで捨てられる。**書いてあるのに書かなかったことにされ、
+		// 復元をもう一度通しても同じなら `failure_state` へ落ちる。
+		//
+		// **持ち回りの死活の判定は緩いままでよい**（設計 5-3l）。
+		// **あちらを厳しくすると、書き足し続けている担当が18時間で外れる。**
+		// **同じ緩さをこちらへ持ってくると、書いた run が人間へ渡る。**求める向きが逆である。
+		if handoff.StartsAsProgressReport(c.Body) {
 			continue
 		}
 		if c.IsAgent {
