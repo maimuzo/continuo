@@ -7,9 +7,9 @@
 **新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
 困ったら、まず `continuo doctor` を叩いてください。設定ファイル / 片付けの状態 /
-未記入の項目 / プロンプトの変数 / claude / agent teams / hook の置き場所 / Claude の設定 /
-worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / 自動化 / clone /
-信頼登録 / 資格情報という18個の見出し語を調べます。
+未記入の項目 / プロンプトの変数 / claude / hook の置き場所 / Claude の設定 /
+worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / clone /
+信頼登録 / 資格情報の16個を調べます。
 `✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。
 
 ```bash
@@ -24,17 +24,7 @@ cd ~/continuo-work && continuo doctor
 **GitHub でこのファイルを開くと**、ファイルの右上にボタンが並びます。
 **いちばん右のボタンを押すと、見出しの一覧が横に出ます。**
 
-**このボタンは GitHub の画面にしかありません。**
-手元のエディタや `raw` の表示で読んでいるときは出ないので、
-**下の3つの見出しのどれかを、そのまま検索してください。**
-
-| 何から引きたいか | 検索する見出し |
-| --- | --- |
-| **エラーの文言から** | `## トラブルシューティング` |
-| **やりたいことから** | `## 目的別使用例` |
-| **機能を知りたい** | `## continuoで何ができるか` |
-
-![ファイルの右上のボタンの並び。いちばん右にある目次のボタンを赤い枠で示している](images/faq_outline.png)
+![ファイルの右上のボタンの並び。いちばん右にある目次のボタンを赤い枠で示し、「このボタンを押すと目次が開きます」と書き添えている](images/faq_outline.png)
 
 ---
 
@@ -57,12 +47,10 @@ continuo --help
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | カンバンの Status を5つの役割へ対応づける（対話） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかをまとめて調べる。見出し語はこのページの冒頭に並べてある |
-| `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す。**常駐に `--id <名前>` を付けているなら、こちらにも同じ名前を渡す** |
-| `continuo prompt [ディレクトリ]` | エージェントへ送る指示文を組み立てて見せる。`--show` で内訳も出す |
-| `continuo version` | 版を答える。**`--version` ではない**（バグ報告のときに求められる） |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかを15の見出し語で調べる |
+| `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
-| `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` で記録の細かさ、**`--id <名前>` で1台に2本以上** |
+| `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
 
 `continuo hook` は Claude Code の hook から呼ばれるもので、人間が直接叩くものではありません。
 
@@ -947,8 +935,6 @@ tracker:
       bid_window_ms: 0
 ```
 
----
-
 #### 複数の機械で見張っているのに、いつも同じ機械しか issue を取らない
 
 **原因。**同じボードを複数の機械で見張る「持ち回り」は、担当者のいない issue に対して
@@ -1057,15 +1043,6 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 ---
 
 ## トラブルシューティング
-
-**ここに無いときは、次の4つも見てください。**
-「目的別使用例」の「会社の GitHub（organization）で使いたいとき」と
-「カンバンの Status を標準と違う名前にしたいとき」と「何台かの PC で分担したいとき」、
-そして「continuoで何ができるか」の「エージェントへ渡す指示を変えたいとき」です。
-**設定のしかたを説明する側に置いてあるものが、エラーの形で出ることがあります。**
-**`continuo doctor` の警告のほか、PR を作った直後に止まる件、
-片付ける Status へ動かして起動しなくなる件、
-そして複数の機械で issue の取り合いになる件も、そちらにあります。**
 
 ### 入れたばかり、または版を上げたあとに continuo が起動しないとき
 
@@ -1197,8 +1174,6 @@ cp ~/continuo-work/WORKFLOW.md ~/continuo-work/WORKFLOW.md.bak
 
 **`WORKFLOW.md` が symlink のときは、`--force` でも辿らずに止まります**
 （リンク先を雛形で潰さないためです）。実体を置き直してください。
-
----
 
 ### hook の置き場所でつまずくとき
 
@@ -2033,7 +2008,7 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 
 - **`gh issue view --comments` の表示を読ませていないか。**この表示は、外部の人が本文に
   `author:` `association:` の行を書き足せます。**本文は `--json comments` を使わせています**
-- **`claude.tool_gate` を `off` にしていないか。**『エージェントが叩いたコマンドが「危ない」と断られる』を読んでください
+- **`claude.tool_gate` を `off` にしていないか。**「エージェントが叩いたコマンドが「危ない」と断られる」を読んでください
 
 #### 「Claude Code が起動しませんでした（herdr が返した状態: "unknown"）」と出る
 
@@ -2144,8 +2119,6 @@ cd ~/continuo-work && awk 'c>=2{print} /^---$/{c++}' WORKFLOW.md
 ```bash
 continuo init /tmp/continuo-template
 ```
-
----
 
 ### エージェントの作業の中身がおかしいとき
 
@@ -3025,8 +2998,6 @@ worktree の作成をもう一度だけやり直します。**消してよい条
 continuo abandon --dry-run https://github.com/<owner>/<repo>/issues/42 ~/continuo-work
 ```
 
----
-
 ### 放っておいてよいメッセージ
 
 #### ログに「hook の transcript_path を … 捨てました」が WARN で何度も出る
@@ -3083,5 +3054,3 @@ herdr pane list | tr ',' '\n' | grep '"label"'
 **label は人間が見分けるための表示名で、continuo は読み戻しません。**
 復元の照合は pane の cwd と worktree のパス1本なので、
 古い形式の label が付いた pane が残っていても引き継ぎは壊れません。
-
----
