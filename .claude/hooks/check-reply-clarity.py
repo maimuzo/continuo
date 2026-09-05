@@ -65,7 +65,9 @@ turn を終わらせずに書き直させる。
 
 import json
 import os
+import subprocess
 import sys
+import tempfile
 
 # この文字数以上の返答を検査する。コードフェンスを除いた散文で数える。
 # 短い確認や相槌に構成を求めると、やり取りが冗長になるだけである。
@@ -126,6 +128,11 @@ REQUIRED_AFTER_DIVIDER = (
 )
 
 ISSUE_REF_NAME = "issue / PR の番号に内容が添えられていない箇所"
+# 裸で書かれた番号の題名を引くときの上限と、キャッシュの置き場所。
+REF_TITLE_MAX = 8          # 一度に引く番号の数
+REF_TITLE_MAX_LEN = 120    # 題名を切り詰める長さ
+REF_TITLE_TIMEOUT = 6      # git と gh を待つ秒数
+REF_TITLE_CACHE_NAME = "reply-hook-ref-titles.json"
 CATEGORY_NAME = "`## 何が言いたいのか` の冒頭に、報告 / 質問 / 確認のどれかを名乗っていない"
 QUOTE_THIN_NAME = "引用が短く、何の話への返答かが読み取れない"
 DIVIDER_NAME = "区切り線（`-----`）の先に、三行まとめと何が言いたいのかが無い"
@@ -134,6 +141,15 @@ DIVIDER_NAME = "区切り線（`-----`）の先に、三行まとめと何が言
 def debug_enabled() -> bool:
     """REPLY_CLARITY_HOOK_DEBUG=1 のときだけ stderr に診断を出す。"""
     return os.environ.get("REPLY_CLARITY_HOOK_DEBUG", "") not in ("", "0", "false", "no")
+
+
+def ref_titles_disabled() -> bool:
+    """REPLY_CLARITY_HOOK_NO_TITLES=1 のとき、題名を引きに行かない。
+
+    **テストと、ネットワークの無い場所のためにある。**
+    引けなくても検査は働くが、gh の待ち時間だけ無駄になる。
+    """
+    return os.environ.get("REPLY_CLARITY_HOOK_NO_TITLES", "") not in ("", "0", "false", "no")
 
 
 def emit(obj) -> None:
@@ -291,11 +307,14 @@ def count_bare_refs(text: str, introduced=None):
 
     text: 1行分の文字列（引用でもコードでもないもの）。
     introduced: この節で既に内容を添えて出した番号の集合。None なら毎回求める。
-    戻り値: (内容を添えていない件数, この行で内容を添えて出した番号の集合)。
+    戻り値: (内容を添えていない番号のリスト, この行で内容を添えて出した番号の集合)。
+
+    **番号そのものを返すのは、やり直しの指示文へ題名を載せるためである。**
+    引き当ては lookup_ref_titles が行う。
     """
     if introduced is None:
         introduced = frozenset()
-    bare = 0
+    bare = []
     seen = set()
     i = 0
     n = len(text)
@@ -324,13 +343,16 @@ def count_bare_refs(text: str, introduced=None):
         if num in introduced:  # 同じ節で既に内容を添えて出した
             i = j
             continue
-        bare += 1
+        bare.append(num)
         i = j
     return bare, seen
 
 
-def bare_issue_refs(masked: str) -> int:
+def bare_issue_refs(masked: str):
     """内容を添えていない issue / PR の番号の参照を数える。
+
+    戻り値は (件数, 裸で書かれた番号のリスト) である。
+    **番号を返すのは、やり直しの指示文へ題名を載せるためである。**
 
     **同じ節で1度でも内容を添えていれば、2度目以降は裸でよい。**
     **節が変わったら初出扱いに戻す。**読む側が返答の途中から読み始めても、
@@ -342,6 +364,7 @@ def bare_issue_refs(masked: str) -> int:
         引用は人間の原文をそのまま引くところなので、こちらでは直せない。
     """
     count = 0
+    nums = []
     introduced = set()
     for line in masked.split("\n"):
         if heading_level(line) > 0:
@@ -351,9 +374,150 @@ def bare_issue_refs(masked: str) -> int:
         if is_quote_line(line):
             continue
         bare, seen = count_bare_refs(strip_urls(strip_inline_code(line)), introduced)
-        count += bare
+        count += len(bare)
+        for num in bare:
+            if num not in nums:
+                nums.append(num)
         introduced |= seen
-    return count
+    return count, nums
+
+
+def clean_title(text) -> str:
+    """引いてきた題名を、指示文へ混ぜても安全な1行に刈り込む。
+
+    **題名は外部から書き換えられる文字列である。**公開のリポジトリなら誰でも issue を立てられる。
+    印字できない文字を落とし、HTML コメントの開始と終了を消してから空白を潰し、120文字で切る。
+    **消す順序は、消したあとに空白を潰すほうである。**逆にすると、消した跡の空白が残る。
+    """
+    t = "".join(ch for ch in str(text) if ch.isprintable())
+    for bad in ("<!--", "-->"):
+        t = t.replace(bad, "")
+    return " ".join(t.split())[:REF_TITLE_MAX_LEN]
+
+
+def ref_title_cache_path():
+    """題名のキャッシュの置き場所を返す。取れなければ None を返す。
+
+    **共有の .git の中へ置く。**worktree ごとに引き直すと、同じ番号を何度も取りに行く。
+    `--git-common-dir` は worktree の中でも、元の .git を返す。
+    """
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, timeout=REF_TITLE_TIMEOUT,
+        )
+    except Exception:
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    return os.path.join(os.path.abspath(out.stdout.strip()), REF_TITLE_CACHE_NAME)
+
+
+def load_ref_titles(path):
+    """キャッシュを読む。読めなければ空の dict を返す。"""
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): clean_title(v) for k, v in data.items() if isinstance(v, str)}
+
+
+def save_ref_titles(path, titles) -> None:
+    """キャッシュを書く。**同じディレクトリの一時ファイルへ書いてから差し替える。**
+
+    途中で落ちても、元のキャッシュが空にならないようにするためである。
+    """
+    if not path or not titles:
+        return
+    try:
+        d = os.path.dirname(path) or "."
+        fd, tmp = tempfile.mkstemp(dir=d, prefix="." + os.path.basename(path) + ".")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(titles, f, ensure_ascii=False)
+            os.rename(tmp, path)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def fetch_ref_titles(nums):
+    """gh で題名を引く。引けなければ空の dict を返す。
+
+    **1回の GraphQL でまとめて引く。**番号ごとに叩くと、8件で数秒かかる。
+    `issueOrPullRequest` を使うので、issue でも pull request でも同じ問い合わせで取れる。
+    """
+    if not nums:
+        return {}
+    try:
+        repo = subprocess.run(
+            ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+            capture_output=True, text=True, timeout=REF_TITLE_TIMEOUT,
+        )
+        if repo.returncode != 0:
+            return {}
+        slug = repo.stdout.strip()
+        if "/" not in slug:
+            return {}
+        owner, name = slug.split("/", 1)
+        fields = " ".join(
+            'n%s: issueOrPullRequest(number: %s) '
+            '{ ... on Issue { number title } ... on PullRequest { number title } }' % (n, n)
+            for n in nums
+        )
+        query = 'query { repository(owner: "%s", name: "%s") { %s } }' % (owner, name, fields)
+        out = subprocess.run(
+            ["gh", "api", "graphql", "-f", "query=" + query],
+            capture_output=True, text=True, timeout=REF_TITLE_TIMEOUT,
+        )
+        if out.returncode != 0:
+            return {}
+        payload = json.loads(out.stdout)
+    except Exception:
+        return {}
+    repo_node = ((payload or {}).get("data") or {}).get("repository") or {}
+    found = {}
+    for node in repo_node.values():
+        if not isinstance(node, dict):
+            continue
+        num, title = node.get("number"), node.get("title")
+        if isinstance(num, int) and isinstance(title, str):
+            found[str(num)] = clean_title(title)
+    return found
+
+
+def lookup_ref_titles(nums):
+    """裸で書かれた番号の題名を引いて返す。引けなければ空の dict を返す。
+
+    **失敗しても検査は止めない。**gh が入っていない環境や、ネットワークの無い場所でも
+    この hook はそのまま働かなければならない。**題名は「あれば添える」ものである。**
+
+    issue #129（返答を検査する hook のやり直しが1セッションで210回。根本対策を入れる）の
+    案 C である。**やり直しの回数は減らないが、書き直しの手間が減る。**
+    """
+    if ref_titles_disabled():
+        return {}
+    nums = [n for n in nums if n.isdigit()][:REF_TITLE_MAX]
+    if not nums:
+        return {}
+    path = ref_title_cache_path()
+    cached = load_ref_titles(path)
+    missing = [n for n in nums if n not in cached]
+    if missing:
+        found = fetch_ref_titles(missing)
+        if found:
+            cached.update(found)
+            save_ref_titles(path, cached)
+    return {n: cached[n] for n in nums if n in cached}
 
 
 def quote_chars(masked: str) -> int:
@@ -553,11 +717,16 @@ def read_payload():
     return payload if isinstance(payload, dict) else {}
 
 
-def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0, file_no_lines=0, qchars=0) -> str:
+def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0, file_no_lines=0,
+                 qchars=0, ref_titles=None) -> str:
     """block したときに Claude へ返す指示文。
 
     入力由来の文字列を混ぜない。件数だけは int に通してから %d で埋める。
     ブロックの番号だけは、どこを直せばよいかが分からなくなるので載せる（数値なので安全）。
+
+    ref_titles だけは例外で、**外から引いてきた題名を載せる**（issue #129 の案 C）。
+    **載せる前に clean_title で刈り込んである。**印字できない文字と HTML コメントの
+    開始・終了を落とし、120文字で切っている。
     """
     parts = ["返答が「初見で理解できる形」になっていません。**書き直してください。**\n"]
 
@@ -568,8 +737,13 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0
             "  悪い: #60 を最優先します\n"
             "  良い: #60（外部コメントからの実行経路）を最優先します\n"
             "  良い: 外部コメントからの実行経路（#60）を最優先します\n"
-            "**初出でも2度目以降でも添えること。**表の中でも同じです。\n"
+            "**同じ節で1度添えれば、その節の中では2度目以降は裸でよい。**\n"
+            "**節が変わったら、また添えること。**表の中でも同じです。\n"
         )
+        if ref_titles:
+            parts.append("\n**添える内容は次のとおりです（このリポジトリから引きました）。**\n")
+            for num, title in ref_titles.items():
+                parts.append("  #%d → %s\n" % (int(num), title))
 
     if no_category:
         parts.append("\n%s\n" % CATEGORY_NAME)
@@ -664,7 +838,7 @@ def main() -> int:
     if len(prose) < MIN_LEN_FOR_CHECK:
         return 0
 
-    bare_refs = bare_issue_refs(masked)
+    bare_refs, bare_nums = bare_issue_refs(masked)
     no_category = missing_category(masked)
     # **引用が1文字も無い場合も止める。**
     # 0 を見逃すと、**引用を消すのがいちばん安い逃げ道になる。**
@@ -681,10 +855,13 @@ def main() -> int:
             and not section_refs and not file_no_lines):
         return 0
 
+    # **題名を引くのは、止めると決まってからである。**通る返答で gh を叩かない。
+    ref_titles = lookup_ref_titles(bare_nums) if bare_refs else {}
+
     emit({
         "decision": "block",
         "reason": build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs,
-                               file_no_lines, qchars),
+                               file_no_lines, qchars, ref_titles),
     })
     return 0
 

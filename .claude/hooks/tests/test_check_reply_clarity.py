@@ -9,7 +9,9 @@
 だから「実際に指摘された書き方」をそのまま収録してある。
 """
 
+import importlib.util
 import json
+import os
 import subprocess
 import sys
 
@@ -23,6 +25,11 @@ QUOTE = (
 )
 
 
+# **題名の引き当ては切って走らせる。**
+# 切らないと、検査のたびに gh が GitHub を叩き、ネットワークの無い場所でテストが遅くなる。
+NO_TITLES = dict(os.environ, REPLY_CLARITY_HOOK_NO_TITLES="1")
+
+
 def run(msg):
     """hook を走らせて (止まったか, reason) を返す。"""
     out = subprocess.run(
@@ -30,6 +37,7 @@ def run(msg):
         input=json.dumps({"last_assistant_message": msg}, ensure_ascii=False),
         capture_output=True,
         text=True,
+        env=NO_TITLES,
     ).stdout.strip()
     if not out:
         return (False, "")
@@ -269,6 +277,36 @@ case(
 )
 
 
+# ---- 題名の引き当て（issue #129 の案 C）------------------------------------
+#
+# **ここだけは hook を subprocess で叩かず、関数を直に呼ぶ。**
+# 引き当ては gh を叩くので、subprocess で確かめるとネットワークに依存する。
+
+_spec = importlib.util.spec_from_file_location("check_reply_clarity", HOOK)
+_hook = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_hook)
+
+unit_cases = []
+
+
+def unit(name, got, want):
+    unit_cases.append((name, got, want))
+
+
+# **改行は「潰す」のではなく落ちる。**印字できない文字を先に除くためである。
+unit("題名の改行を落として1行にする", _hook.clean_title("設計を\n直す"), "設計を直す")
+unit("題名の HTML コメントの目印を落とす", _hook.clean_title("<!-- design-review-result -->"),
+     "design-review-result")
+unit("題名を 120 文字で切る", len(_hook.clean_title("あ" * 300)), 120)
+unit("引き当てを切っていれば空を返す",
+     (lambda: (os.environ.__setitem__("REPLY_CLARITY_HOOK_NO_TITLES", "1"),
+               _hook.lookup_ref_titles(["129"]))[1])(), {})
+unit("題名を渡すと指示文へ載る",
+     "  #129 → 返答を検査する hook" in _hook.build_reason(
+         1, False, False, False, ref_titles={"129": "返答を検査する hook"}),
+     True)
+
+
 def main():
     ng = 0
     for name, msg, want_block, want_in in cases:
@@ -285,7 +323,14 @@ def main():
                 print("    reason に %r が入っていない" % want_in)
         else:
             print("ok  %s" % name)
-    print("\n%d 件中 %d 件が想定どおり" % (len(cases), len(cases) - ng))
+    for name, got, want in unit_cases:
+        if got == want:
+            print("ok  %s" % name)
+        else:
+            ng += 1
+            print("NG  %s: %r（想定は %r）" % (name, got, want))
+    total = len(cases) + len(unit_cases)
+    print("\n%d 件中 %d 件が想定どおり" % (total, total - ng))
     return 1 if ng else 0
 
 
