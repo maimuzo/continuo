@@ -232,8 +232,8 @@ echo "$(git rev-parse --show-toplevel)/.claude/skills/worker-briefing/SKILL.md"
 
 | 何 | どこにあるか |
 | --- | --- |
-| **ファイルの書き換えは、同じディレクトリの一時ファイルへ書いてから `os.Rename` で差し替える** | [CLAUDE.md](../../../CLAUDE.md) の「絶対に守る制約」の4 |
-| **このリポジトリは PUBLIC。**個人の絶対パス・tailnet のホスト名・トークンを書かない | [CLAUDE.md](../../../CLAUDE.md) の「絶対に守る制約」の5 |
+| **ファイルの書き換えは、同じディレクトリの一時ファイルへ書いてから `os.Rename` で差し替える** | [CLAUDE.md](../../../CLAUDE.md) の「ファイルの書き換えは『一時ファイルへ書いてから差し替える』」 |
+| **このリポジトリは PUBLIC。**個人の絶対パス・tailnet のホスト名・トークンを書かない | [CLAUDE.md](../../../CLAUDE.md) の「公開してよい情報かを常に判断する」 |
 | **英語の技術用語（worktree / branch / commit / hook / pane）を日本語に直訳しない** | [.claude/rules/reporting.md](../../rules/reporting.md) の「英語の技術用語を、自分の判断で日本語に直訳しない」 |
 | **番号には issue か PR かの別と、本物の題名を添える** | [.claude/rules/reporting.md](../../rules/reporting.md) の「絶対条件：名札は、単独で書かない」 |
 | **日本語では「カンバン」と書く**（「ボード」と書かない） | [docs/spec/translation-glossary.md](../../../docs/spec/translation-glossary.md) の2 |
