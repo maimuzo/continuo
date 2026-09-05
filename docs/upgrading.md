@@ -2183,7 +2183,7 @@ cd ~/continuo-work && continuo doctor; echo "exit=$?"
 **`!` のままでも continuo は起動します**（終了コードも 0 です）。
 直し方は [FAQ.md](FAQ.md) の
 「`! 対応表のキー  tracker.automated_state_rewrite のキーに、カンバンの Status の選択肢に無いものがあります`」
-にあります（「目的別使用例」の「カンバンの Status を標準と違う名前にしたいとき」）。
+にあります（「トラブルシューティング」の「continuo doctor が赤くなるとき」）。
 
 **`✗ 設定ファイル` が出たときは、対応表そのものが弾かれています。**
 左右の決め方をもう一度読んでください。**この場合 continuo は起動しません。**

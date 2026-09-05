@@ -421,55 +421,6 @@ continuo setup ~/continuo-work                      # 5つの役割に、どの�
 **API（`gh project field-create` / `updateProjectV2Field`）で足してはいけません。**
 選択肢の指定は全件の置き換えとして扱われ、GitHub が ID を採番し直すので、**設定済みの Status の値が全部消えます。**
 
-#### `! 片付けの状態  cleanup.on_states に、tracker.terminal_states の外の Status があります`
-
-**原因。**片付けを始める Status（`cleanup.on_states`）が、
-終わったとみなす Status（`tracker.terminal_states`）に入っていません。
-**この状態だと、continuo は同じ issue を「終わっていない」と判定した直後に worktree を片付けます。**
-
-**よくある形。**ボードの組み込みの自動化が PR のマージで `Done` を書くのに、
-`tracker.terminal_states` には `AI Done` しか書いていない、という組み合わせです。
-
-**直し方。**どちらかにそろえます。**同じ内容の警告が、起動したときにもログへ1行出ます。**
-
-```yaml
-tracker:
-  terminal_states: ["AI Done", "Done"]   # 片付ける Status を、こちらにも並べる
-cleanup:
-  on_states: ["AI Done", "Done"]         # あるいは、こちらから外の値を外す
-```
-
-**起動は止まりません。**`!` なので終了コードも 0 のままです。
-
-#### `! 対応表のキー  tracker.automated_state_rewrite のキーに、カンバンの Status の選択肢に無いものがあります`
-
-**原因。**書き戻しの対応表（`tracker.automated_state_rewrite`）のキーに書いた Status が、
-カンバンの選択肢にありません。**キーはカンバンの自動化が書く Status 名なので、
-カンバンにその選択肢が無ければ、その行は一度も引かれません。**
-
-**よくある形は2つです。**
-
-| 形 | どうするか |
-| --- | --- |
-| **綴りを打ち間違えた**（`Todo` を `To Do` と書いた） | キーの綴りを、カンバンの選択肢名に合わせる |
-| **その Status をカンバンで使わなくなった** | 対応表からその行を消す |
-
-```yaml
-tracker:
-  automated_state_rewrite:
-    "Todo": "In Progress"   # 左がカンバンの選択肢名と1文字ずつ合っているか
-```
-
-**大文字小文字と前後の空白は無視して照合します。**`todo` と書いても `!` にはなりません。
-
-**起動は止まりません。**`!` なので終了コードも 0 のままです。
-**カンバンの自動化をやめて選択肢を消した人が、起動できなくなってはならないからです**
-（この検査で起動を止めると、抜け出す道が無くなります）。
-**同じ内容の警告が、起動したときにもログへ1行出ます。**
-
-**そもそも何を書けばよいのかから知りたいときは、この節と同じ並びにある
-「エージェントが PR を作った直後に止まる（automated_state_rewrite）」を見てください。**
-
 #### エージェントが PR を作った直後に止まる（automated_state_rewrite）
 
 **まず、この設定が自分に要るのかを確かめてください。**
@@ -580,69 +531,6 @@ issue のコメントで `Workflows` を切る手を案内します。
 **「この行をこう書き換えてください」と、あなたのカンバンの Status 名を当てはめた形で書きます。**
 **場所を見つける `grep` も一緒に書きます。**
 
-**書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
-
-#### 片付ける Status へ動かしたら issue が止まり、案内どおりに直したら起動しなくなった
-
-**原因。**止まった Status の名前が `cleanup.on_states`（worktree の片付けを始める Status）にあり、
-**`tracker.terminal_states` には無い**という組み合わせです。
-continuo が知っているのは `tracker` に書いた Status だけなので、その名前は「知らない Status」になります。
-
-**`tracker.active_states` へ書き足してはいけません。**次のエラーで起動しなくなります。
-
-```text
-設定キー cleanup.on_states の値 Archived が不正です:
-  tracker.active_states と同じ値を含めないこと（作業中の worktree を片付けてしまう。3-9）
-```
-
-**直し方。**その Status に持たせたい意味で選びます。**どちらもそのまま書いて起動します。**
-
-| その Status の意味 | どう直すか |
-| --- | --- |
-| **終わったとみなす**（片付けてよい） | `tracker.terminal_states` にその名前を書き足す |
-| **まだ作業を続けさせたい** | **先に `cleanup.on_states` からその行を消してから**、`tracker.active_states` に書き足す |
-
-**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
-`tracker:` も `cleanup:` も `continuo init` が置いた `WORKFLOW.md` に既にあるので、
-**貼ると front matter が重複キーになり、continuo が起動しなくなります。**
-**一覧に名前を1つ足すだけです。**
-
-```yaml
-tracker:
-  # …（ほかの設定）
-  terminal_states: ["Done", "Archived"]   # 既にある行。この一覧へ名前を足す
-cleanup:
-  # …（ほかの設定）
-  on_states: ["Done", "Archived"]         # 既にある行。片付けを始める Status は、上の一覧の中から選ぶ
-```
-
-**その名前が `tracker.automated_state_rewrite` のキーにもある場合は、消す先が2つあります。**
-**まず対応表のその行を消してください。**残したまま `tracker` の他のキーへ書き足すと、
-「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
-そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
-
-**対応表そのものの決め方は、この節と同じ並びにある
-「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
-
-**その worktree が残るかどうかは `cleanup.enabled` で決まります。**
-**止めた理由のコメントに、その設定でどうなるかが書いてあります。**
-
-| `cleanup.enabled` | 止めたあとの worktree |
-| --- | --- |
-| **`true`**（既定） | **残りません。**continuo が worktree と branch を片付けます |
-| **`false`** | **残ります。**片付けそのものを行いません |
-
-**片付ける設定でも、次のものが残っていれば片付けを見送ります。**
-どちらも既定は `true` で、`false` にすると見なくなります（見ないので、残っていても片付きます）。
-
-| 設定キー | 残っていれば片付けない |
-| --- | --- |
-| `cleanup.require_clean_worktree` | コミットしていない変更（未追跡のファイルを含む） |
-| `cleanup.require_pushed` | push していない commit |
-
-**成果を残したいなら、片付く前に Status を戻すか、`cleanup.on_states` からその行を消してください。**
-
-**`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
 ### 何台かの PC で分担したいとき
@@ -1044,16 +932,14 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 ## トラブルシューティング
 
+**ここに無いときは、次の3つも見てください。**
+「目的別使用例」の「会社の GitHub（organization）で使いたいとき」と
+「カンバンの Status を標準と違う名前にしたいとき」、
+そして「continuoで何ができるか」の「エージェントへ渡す指示を変えたいとき」です。
 **設定のしかたを説明する側に置いてあるものが、エラーの形で出ることがあります。**
-**ここに無いときは、下のサブセクションの冒頭にある案内を見てください。**
+**`✗ カンバン` の警告と、PR を作った直後に止まる件が、そちらにあります。**
 
 ### 入れたばかり、または版を上げたあとに continuo が起動しないとき
-
-**「`continuo setup` が「使うカンバンの番号が決まりませんでした」で止まる」は、
-「目的別使用例」の「会社の GitHub（organization）で使いたいとき」にあります。**
-
-**「片付ける Status へ動かしたら issue が止まり、案内どおりに直したら起動しなくなった」は、
-「目的別使用例」の「カンバンの Status を標準と違う名前にしたいとき」にあります。**
 
 #### 版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった
 
@@ -1259,8 +1145,8 @@ continuo abandon --id e2e <issue の URL> ~/continuo-e2e-work
 
 ### continuo doctor が赤くなるとき
 
-**カンバンの Status の名前にまつわる3つ**（`✗ カンバン`／`! 片付けの状態`／`! 対応表のキー`）**は、「目的別使用例」の
-「カンバンの Status を標準と違う名前にしたいとき」にあります。**
+**`✗ カンバン  Status の選択肢名が設定と一致しません` は、「目的別使用例」の
+「カンバンの Status を標準と違う名前にしたいとき」にあります。**選択肢の足し方と、役割の割り当て方がそこにあります。
 
 #### `✗ gh の認証  gh の scope に "project" がありません`
 
@@ -1425,6 +1311,56 @@ cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -
 機械には見分けられないので、黙らせる手段はありません。**書けば出なくなります。**
 
 **起動は止まりません。**`!` なので終了コードも 0 のままです。
+
+#### `! 片付けの状態  cleanup.on_states に、tracker.terminal_states の外の Status があります`
+
+**原因。**片付けを始める Status（`cleanup.on_states`）が、
+終わったとみなす Status（`tracker.terminal_states`）に入っていません。
+**この状態だと、continuo は同じ issue を「終わっていない」と判定した直後に worktree を片付けます。**
+
+**よくある形。**ボードの組み込みの自動化が PR のマージで `Done` を書くのに、
+`tracker.terminal_states` には `AI Done` しか書いていない、という組み合わせです。
+
+**直し方。**どちらかにそろえます。**同じ内容の警告が、起動したときにもログへ1行出ます。**
+
+```yaml
+tracker:
+  terminal_states: ["AI Done", "Done"]   # 片付ける Status を、こちらにも並べる
+cleanup:
+  on_states: ["AI Done", "Done"]         # あるいは、こちらから外の値を外す
+```
+
+**起動は止まりません。**`!` なので終了コードも 0 のままです。
+
+#### `! 対応表のキー  tracker.automated_state_rewrite のキーに、カンバンの Status の選択肢に無いものがあります`
+
+**原因。**書き戻しの対応表（`tracker.automated_state_rewrite`）のキーに書いた Status が、
+カンバンの選択肢にありません。**キーはカンバンの自動化が書く Status 名なので、
+カンバンにその選択肢が無ければ、その行は一度も引かれません。**
+
+**よくある形は2つです。**
+
+| 形 | どうするか |
+| --- | --- |
+| **綴りを打ち間違えた**（`Todo` を `To Do` と書いた） | キーの綴りを、カンバンの選択肢名に合わせる |
+| **その Status をカンバンで使わなくなった** | 対応表からその行を消す |
+
+```yaml
+tracker:
+  automated_state_rewrite:
+    "Todo": "In Progress"   # 左がカンバンの選択肢名と1文字ずつ合っているか
+```
+
+**大文字小文字と前後の空白は無視して照合します。**`todo` と書いても `!` にはなりません。
+
+**起動は止まりません。**`!` なので終了コードも 0 のままです。
+**カンバンの自動化をやめて選択肢を消した人が、起動できなくなってはならないからです**
+（この検査で起動を止めると、抜け出す道が無くなります）。
+**同じ内容の警告が、起動したときにもログへ1行出ます。**
+
+**そもそも何を書けばよいのかから知りたいときは、「目的別使用例」の
+「カンバンの Status を標準と違う名前にしたいとき」にある
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」を見てください。**
 
 #### `✗ プロンプトの変数  送るプロンプトに誤りがあります`
 
@@ -2066,10 +2002,6 @@ Windows 側の C ドライブの空き容量も見てください（仮想ディ
 
 ### エージェントへ書いた指示が届かないとき
 
-**「`WORKFLOW.md` を書き換えたのに反映されない」と
-「`WORKFLOW.md` の本文に書いた指示が、組み込みの指示と2回届く」は、
-「continuoで何ができるか」の「エージェントへ渡す指示を変えたいとき」にあります。**
-
 #### `WORKFLOW.md` に書いた決まりが、エージェントに届いていない
 
 **HTML のコメントで書いていませんか。**
@@ -2197,7 +2129,7 @@ jq -r .base <worktree のパス>/.continuo.json
 **commit していない変更で断られたときに `git merge --abort` を打っても効きません**
 （マージが始まっていないので `There is no merge to abort` で落ち、変更も残ります）。
 
-### issue が勝手に止まる・戻るとき
+### issue が止まる・戻るとき
 
 #### issue が急に `Blocked` になった
 
@@ -2249,6 +2181,70 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 
 **仕組み**（誰が Status を動かしたかの見分け方と、戻す先を決める道筋）**は
 [agent_life_cycle.md](agent_life_cycle.md) の「自動化に Status を横取りされたとき」にあります。**
+
+#### 片付ける Status へ動かしたら issue が止まり、案内どおりに直したら起動しなくなった
+
+**原因。**止まった Status の名前が `cleanup.on_states`（worktree の片付けを始める Status）にあり、
+**`tracker.terminal_states` には無い**という組み合わせです。
+continuo が知っているのは `tracker` に書いた Status だけなので、その名前は「知らない Status」になります。
+
+**`tracker.active_states` へ書き足してはいけません。**次のエラーで起動しなくなります。
+
+```text
+設定キー cleanup.on_states の値 Archived が不正です:
+  tracker.active_states と同じ値を含めないこと（作業中の worktree を片付けてしまう。3-9）
+```
+
+**直し方。**その Status に持たせたい意味で選びます。**どちらもそのまま書いて起動します。**
+
+| その Status の意味 | どう直すか |
+| --- | --- |
+| **終わったとみなす**（片付けてよい） | `tracker.terminal_states` にその名前を書き足す |
+| **まだ作業を続けさせたい** | **先に `cleanup.on_states` からその行を消してから**、`tracker.active_states` に書き足す |
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
+`tracker:` も `cleanup:` も `continuo init` が置いた `WORKFLOW.md` に既にあるので、
+**貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+**一覧に名前を1つ足すだけです。**
+
+```yaml
+tracker:
+  # …（ほかの設定）
+  terminal_states: ["Done", "Archived"]   # 既にある行。この一覧へ名前を足す
+cleanup:
+  # …（ほかの設定）
+  on_states: ["Done", "Archived"]         # 既にある行。片付けを始める Status は、上の一覧の中から選ぶ
+```
+
+**その名前が `tracker.automated_state_rewrite` のキーにもある場合は、消す先が2つあります。**
+**まず対応表のその行を消してください。**残したまま `tracker` の他のキーへ書き足すと、
+「キーは設定の他のどこにも名前が出てこない Status にすること」で落ちます。
+そのうえで、上の表のどちらかへ進みます（作業を続けさせたい場合は、`cleanup.on_states` からも消します）。
+
+**対応表そのものの決め方は、「目的別使用例」の
+「カンバンの Status を標準と違う名前にしたいとき」にある
+「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
+
+**その worktree が残るかどうかは `cleanup.enabled` で決まります。**
+**止めた理由のコメントに、その設定でどうなるかが書いてあります。**
+
+| `cleanup.enabled` | 止めたあとの worktree |
+| --- | --- |
+| **`true`**（既定） | **残りません。**continuo が worktree と branch を片付けます |
+| **`false`** | **残ります。**片付けそのものを行いません |
+
+**片付ける設定でも、次のものが残っていれば片付けを見送ります。**
+どちらも既定は `true` で、`false` にすると見なくなります（見ないので、残っていても片付きます）。
+
+| 設定キー | 残っていれば片付けない |
+| --- | --- |
+| `cleanup.require_clean_worktree` | コミットしていない変更（未追跡のファイルを含む） |
+| `cleanup.require_pushed` | push していない commit |
+
+**成果を残したいなら、片付く前に Status を戻すか、`cleanup.on_states` からその行を消してください。**
+
+**`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**
+**書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
 #### 応答を書き直している最中のエージェントに、continuo が次の指示を送ってしまう
 
@@ -2315,9 +2311,6 @@ level=WARN msg="gh の持ち主を取れません（コメントの印だけで�
 ```
 
 ### PR まで進まないとき
-
-**「エージェントが PR を作った直後に止まる（automated_state_rewrite）」は、
-「目的別使用例」の「カンバンの Status を標準と違う名前にしたいとき」にあります。**
 
 #### エージェントが push で終わり、PR が作られない
 
