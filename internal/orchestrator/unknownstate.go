@@ -845,10 +845,28 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string, rewrite ma
 		// **書けない設定を見せない。**`active_states` へ足す案内だけが残る。
 		return written, false
 	}
+	// **「この2行を足してください」と言ってはならない。**`continuo init` が置いた雛形には
+	// `automated_state_rewrite: {}` の行が既にあるので、**塊ごと貼ると front matter が
+	// 重複キーになり、continuo が二度と起動しない**（issue #209）。
+	// **雛形に既にある行の `{}` を書き換えさせる。**
+	//
+	// **場所を見つける `grep` を必ず添える。**添えないと、利用者は front matter の
+	// どこを見ればよいのかが分からず、結局この塊をそのまま貼る。
+	// **書き方は docs/FAQ.md の `claude.env` の案内に揃えてある**（`# 既にある行` と
+	// `# ← これを足す` の注記を付ける）。
 	return written + fmt.Sprintf(
-		"**次からは continuo に戻させることができます。**WORKFLOW.md の `tracker:` の下へ"+
-			"次の2行を足して、continuo を再起動してください。"+
-			"\n```yaml\n  automated_state_rewrite:\n    %q: %q\n```",
+		"**次からは continuo に戻させることができます。**"+
+			"WORKFLOW.md の `tracker.automated_state_rewrite` の `{}` を、次のように書き換えてください"+
+			"（`continuo init` が置いた雛形には、この行が既にあります。"+
+			"**塊ごと貼り替えると front matter が重複キーになり、continuo が起動しません**）。"+
+			"\n\n場所は、既にある行から辿れます。\n\n"+
+			"```bash\ngrep -n 'automated_state_rewrite' <WORKFLOW.md のパス>\n```\n"+
+			"\n```yaml\ntracker:\n  # …（ほかの設定）\n"+
+			"  automated_state_rewrite:            # 既にある行。**末尾の {} を消す**\n"+
+			"    %q: %q   # ← これを足す\n```\n"+
+			"\n1行も出なかったときは、先に `continuo doctor --missing-keys-patch <WORKFLOW.md のパス> "+
+			"| patch -p0 <WORKFLOW.md のパス>` で足してから、上のように書き換えてください。"+
+			"\n書き換えたら continuo を再起動してください。",
 		state, back), true
 }
 

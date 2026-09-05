@@ -192,6 +192,13 @@ query($statusField: String!, $ids: [ID!]!) {
 // **`first: 0` を渡して node を1件も要求しない。**件数だけが要るので、
 // GraphQL の点数計算（設計 3-31）にほとんど乗らない
 // （2026-08-20 に project #3 への読み取り専用クエリで `first: 0` が通ることを実測）。
+//
+// **カンバンの自動化（`workflows`）はここへ載せない**（設計 3-32 の見出し語 `自動化`。issue #209）。
+// **載せると、doctor だけが使う値のために常駐プロセスの起動が落ちうる。**
+// このクエリは `do`（`allowNotFound` が偽）で送るので、**GraphQL が `errors` を1件でも
+// 返した時点で Bootstrap ごと落ちる。**`workflows` を読む権限が無いトークンや、
+// この field を持たない GitHub Enterprise Server では、いままで起動していた continuo が
+// 起動しなくなる。**doctor 専用のクエリを別に送る**（`projectWorkflowsQueryTemplate`）。
 const bootstrapQueryTemplate = `
 query($login: String!, $number: Int!, $statusField: String!, $withStatusQuery: String!, $withoutStatusQuery: String!) {
   repositoryOwner(login: $login) {
@@ -208,6 +215,34 @@ query($login: String!, $number: Int!, $statusField: String!, $withStatusQuery: S
         totalItems: items(first: 0) { totalCount }
         itemsWithStatus: items(first: 0, query: $withStatusQuery) { totalCount }
         itemsWithoutStatus: items(first: 0, query: $withoutStatusQuery) { totalCount }
+      }
+    }
+  }
+}
+`
+
+// projectWorkflowsQueryTemplate はカンバンの組み込みの自動化を取るクエリである
+// （設計 3-32 の見出し語 `自動化`。issue #209）。
+//
+// **`continuo doctor` だけが送る。**常駐プロセスはこの値を使わない。
+//
+// **起動時の検査のクエリへ混ぜてはならない。**混ぜると、`workflows` を読めない環境
+// （権限の足りないトークン・この field を持たない GitHub Enterprise Server）で
+// **Bootstrap ごと落ち、continuo が起動しなくなる。**別のリクエストにしておけば、
+// 落ちても doctor の見出し語 `自動化` が `!` になるだけで済む。
+//
+// **`ProjectV2Workflow` が持つのは名前と有効かどうかだけである**（2026-09-05 に
+// introspection で確認。`createdAt` / `enabled` / `fullDatabaseId` / `id` / `name` /
+// `number` / `project` / `updatedAt`）。**どの Status を書くかは公開されていない。**
+//
+// **`first: 100` で切る。**GitHub の組み込みの自動化は2026-09-05 時点で10個前後であり、
+// 100 を超えるカンバンは無い。**ページを送る分岐を作らない。**
+const projectWorkflowsQueryTemplate = `
+query($login: String!, $number: Int!) {
+  repositoryOwner(login: $login) {
+    ... on ProjectV2Owner {
+      projectV2(number: $number) {
+        workflows(first: 100) { nodes { number name enabled } }
       }
     }
   }
@@ -538,6 +573,37 @@ type rawStatusField struct {
 // rawItemCount は件数だけを取る items 接続の応答である。
 type rawItemCount struct {
 	TotalCount int `json:"totalCount"`
+}
+
+// rawWorkflow はボードの自動化1件の応答である（設計 3-32 の見出し語 `自動化`）。
+type rawWorkflow struct {
+	Number  int    `json:"number"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+}
+
+// rawWorkflowConnection はボードの自動化の一覧の応答である。
+type rawWorkflowConnection struct {
+	Nodes []rawWorkflow `json:"nodes"`
+}
+
+// rawProjectForWorkflows は自動化を取るクエリの `projectV2` の応答である。
+type rawProjectForWorkflows struct {
+	// Workflows は自動化の一覧である。
+	//
+	// **ポインタにしてある。**応答に含まれていなければ nil になり、
+	// **「1件も無い」と「読めなかった」を区別できる。**
+	Workflows *rawWorkflowConnection `json:"workflows"`
+}
+
+// rawRepositoryOwnerForWorkflows は自動化を取るクエリの `repositoryOwner` の応答である。
+type rawRepositoryOwnerForWorkflows struct {
+	ProjectV2 *rawProjectForWorkflows `json:"projectV2"`
+}
+
+// projectWorkflowsQueryResponse は自動化を取るクエリの応答である。
+type projectWorkflowsQueryResponse struct {
+	RepositoryOwner *rawRepositoryOwnerForWorkflows `json:"repositoryOwner"`
 }
 
 type rawProjectForBootstrap struct {
