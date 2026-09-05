@@ -29,100 +29,69 @@ func agentNotFoundErr() *rpcErr {
 
 // TestStartup_hookが届いていれば起動していると扱う は、設計 3-80 の中心を検査する。
 //
-// 目的: `agent.get` が `agent_not_found` を返し続けても、**その run のセッションから
-// hook が届いていれば、continuo が run を諦めないこと。**
-// 与える情報: **`herdr.startup_timeout_ms`（この fixture では2000ミリ秒）より長いあいだ**
-// `agent_not_found` を返し、そのあいだ毎回この run の hook を1件流す `agent.get` の台本。
-// **hook を流すのは `agent.start` より後である**（そこが証拠になる線である）。
-// 成功条件: issue が `failure_state`（`Blocked`）へ落ちず、`pane.close` が1回も呼ばれず、
-// **`agent.start` を1度もやり直さずに**、herdr が登録し直したあとに turn が送られること。
+// 目的: `agent.get` が `agent_not_found` を返しても、**その run のセッションから
+// 作業中の hook が届いていれば、continuo が pane を閉じず、
+// 走っている turn へ1回目の指示も投げないこと。**
+// 与える情報: `agent_not_found` を返しながら、この run の `PreToolUse` を1件流す
+// `agent.get` の台本。**流すのは `agent.start` より後である**（そこが証拠になる線である）。
+// 成功条件（3つ）: issue が `failure_state`（`Blocked`）へ落ちず、`pane.close` が
+// 1回も呼ばれず、**その時点で `agent.prompt` が1回も呼ばれていないこと。**
+// **そのうえで、走っていた turn が終わったら1回目の指示が送られること。**
 func TestStartup_hookが届いていれば起動していると扱う(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
+	// **これは想定して起こしている失敗である。**1回目の指示のあと `blocked` にして、
+	// run を確実に終わらせている。
+	fx.AllowLog("権限の確認で止まりました", "run を終えます")
+	// **herdr がまだ登録していないので、turn の終わりの裏取り（設計 3-79）は答えを得られない。**
+	// **それでよい。**あの裏取りは「読めなかったら従来どおり進む」と決めてあり、
+	// **turn の終わりの判定そのものは hook（`Stop`）だけで足りている。**
+	fx.AllowLog("turn の終わりの裏取りができませんでした")
 	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
 
-	// **登録されない時間を、起動の確認の期限より長く取る。**
-	// **短いと、直していない実装でも「やり直しているうちに間に合った」で通ってしまう。**
-	notFoundUntil := time.Now().Add(3 * time.Second)
+	transcriptDir := t.TempDir()
+	parent := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+	})
+
 	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
-		if time.Now().Before(notFoundUntil) {
-			// **作業中の Claude Code が hook を送ってくる場面である。**
-			// **`agent.start` より後に届いたものだけが証拠になる。**
-			fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
-			return nil, agentNotFoundErr()
-		}
-		// 走っていた turn が終わり、入力待ちの画面が出た。herdr が登録し直す。
+		// **作業中の Claude Code が hook を送ってくる場面である。**
+		// **`agent.start` より後に届いたものだけが証拠になる。**
+		fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
+		return nil, agentNotFoundErr()
+	})
+	// **1回目の指示が送られたことを確かめたら、そこで run を終わらせる。**
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
 		return map[string]any{
-			"type": "agent_info",
-			"agent": map[string]any{
-				"name": params["target"], "agent_status": "idle", "interactive_ready": true,
-			},
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "blocked"},
 		}, nil
 	})
 
 	fx.Orc.Tick(context.Background())
-
-	waitFor(t, 20*time.Second, "herdr が登録し直したあとに turn が送られる", func() bool {
-		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	waitFor(t, 20*time.Second, "起動の確認が「Claude Code は走っている」で終わる", func() bool {
+		return strings.Contains(fx.Logs.String(), "1回目の指示を送らずに turn の終わりを待ちます")
 	})
 
-	if got := fx.Tracker.StateOf("PVTI_item235"); got == "Blocked" {
-		t.Errorf("hook が届いているのに人間へ渡している: state=%s", got)
+	// **ここまでで、走っている turn へ何もしていないことを確かめる。**
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); n != 0 {
+		t.Errorf("走っている turn へ1回目の指示を投げた: agent.prompt の回数 %d", n)
 	}
 	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 0 {
 		t.Errorf("生きている Claude Code の pane を閉じた: pane.close の回数 %d", n)
 	}
 	if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n != 1 {
-		t.Errorf("hook が届いているのに agent.start をやり直した: agent.start の回数 %d", n)
+		t.Errorf("走っている Claude Code へ agent.start をやり直した: agent.start の回数 %d", n)
 	}
-}
+	if got := fx.Tracker.StateOf("PVTI_item235"); got == "Blocked" {
+		t.Errorf("hook が届いているのに人間へ渡している: state=%s", got)
+	}
 
-// TestStartup_待った先でworkingを見ても殺さない は、設計 3-80 の
-// 「諦める時計は枝ごとに持たない」を検査する。
-//
-// 目的: hook を待っているうちに入口からの期限は過ぎる。**そのあと herdr がやっと登録して
-// `working` を返した瞬間に run を捨ててはならない。**
-// **待った先で殺すのでは、殺す時点が後ろへずれただけである。**
-// 与える情報: `agent_not_found` → `working` → `idle` と変わる `agent.get` の台本。
-// **`agent_not_found` の期間だけで `herdr.startup_timeout_ms`（2000ミリ秒）を超えさせ、
-// そのあとも hook を流し続ける。**
-// 成功条件: issue が `failure_state`（`Blocked`）へ落ちず、turn が送られること。
-func TestStartup_待った先でworkingを見ても殺さない(t *testing.T) {
-	fx := newFixture(t, fixtureOptions{})
-	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
-
-	notFoundUntil := time.Now().Add(3 * time.Second)
-	workingUntil := notFoundUntil.Add(1 * time.Second)
-	fx.Herdr.Handle(herdr.MethodAgentGet, func(params map[string]any) (any, *rpcErr) {
-		// **どの段でも hook は届き続ける。**Claude Code は走り続けている。
-		fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
-		now := time.Now()
-		if now.Before(notFoundUntil) {
-			return nil, agentNotFoundErr()
-		}
-		status := "idle"
-		if now.Before(workingUntil) {
-			// herdr がやっと登録した。**まだ作業中なので `working` である。**
-			status = "working"
-		}
-		return map[string]any{
-			"type": "agent_info",
-			"agent": map[string]any{
-				"name": params["target"], "agent_status": status, "interactive_ready": true,
-			},
-		}, nil
-	})
-
+	// **走っていた turn が終わる。**turn ループは hook だけでこれを見分ける。
 	fx.Orc.Tick(context.Background())
-
-	waitFor(t, 30*time.Second, "working を見送ったあとに turn が送られる", func() bool {
+	fx.Orc.OnHook(stopEvent("session-1", parent, "p1"))
+	waitFor(t, 20*time.Second, "turn の終わりのあとに1回目の指示が送られる", func() bool {
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
-	if got := fx.Tracker.StateOf("PVTI_item235"); got == "Blocked" {
-		t.Errorf("hook が届いているのに working の期限切れで人間へ渡している: state=%s", got)
-	}
-	if n := fx.Herdr.CountMethod(herdr.MethodPaneClose); n != 0 {
-		t.Errorf("生きている Claude Code の pane を閉じた: pane.close の回数 %d", n)
-	}
 }
 
 // TestStartup_hookが1件も来なければこれまでどおり諦める は、設計 3-80 が
@@ -156,15 +125,17 @@ func TestStartup_hookが1件も来なければこれまでどおり諦める(t *
 	fx.WaitRunsDrained(t, 20*time.Second)
 }
 
-// TestStartup_hookが止まったら諦める は、設計 3-80 の時計が止まらないことを検査する。
+// TestStartup_SessionStartだけでは走っているとみなさない は、設計 3-80 の
+// 「`SessionStart` は数えない」を検査する。
 //
-// 目的: hook が届いたあとに止まったら、**その最後の hook から
-// `herdr.startup_timeout_ms` ぶん待って諦めること。**
-// **「1件でも届いたら永久に待つ」になってはならない。**
-// 与える情報: 1回目だけ hook を流し、あとは `agent_not_found` を返し続ける
-// `agent.get` の台本。
-// 成功条件: issue が `failure_state`（`Blocked`）へ落ちること。
-func TestStartup_hookが止まったら諦める(t *testing.T) {
+// 目的: `SessionStart` は**起動しただけで出る。**これを「走っている証拠」に数えると、
+// **起動して入力待ちのまま止まった Claude Code まで「走っている」と読み、
+// `agent.start` のやり直しが1回も起きず、来ない `Stop` を待ち続けることになる。**
+// 与える情報: `SessionStart` だけを流し、`agent_not_found` を返し続ける `agent.get` の台本と、
+// リトライを1回で使い切らせる設定。
+// 成功条件: **`agent.start` がやり直されること**と、issue が `failure_state`（`Blocked`）へ
+// 落ちること。**「turn の終わりを待ちます」の行が出ないこと。**
+func TestStartup_SessionStartだけでは走っているとみなさない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) { cfg.Agent.MaxRetries = 0 },
 	})
@@ -172,20 +143,25 @@ func TestStartup_hookが止まったら諦める(t *testing.T) {
 	fx.AllowLog("agent.get", "起動していない", "run を諦めて")
 	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
 
-	var gets atomic.Int32
 	fx.Herdr.Handle(herdr.MethodAgentGet, func(map[string]any) (any, *rpcErr) {
-		if gets.Add(1) == 1 {
-			fx.Orc.OnHook(toolHook("session-1", "PreToolUse"))
-		}
+		// **起動はしたが、入力待ちのまま止まっている。**`SessionStart` しか出ない。
+		fx.Orc.OnHook(toolHook("session-1", "SessionStart"))
 		return nil, agentNotFoundErr()
 	})
 
 	fx.Orc.Tick(context.Background())
 
-	waitFor(t, 40*time.Second, "hook が止まったので人間へ渡す", func() bool {
+	waitFor(t, 40*time.Second, "SessionStart だけでは走っているとみなさず、人間へ渡す", func() bool {
 		return fx.Tracker.StateOf("PVTI_item235") == "Blocked"
 	})
 	fx.WaitRunsDrained(t, 20*time.Second)
+
+	if n := fx.Herdr.CountMethod(herdr.MethodAgentStart); n < 2 {
+		t.Errorf("SessionStart を「走っている」と読んで agent.start をやり直していない: agent.start の回数 %d", n)
+	}
+	if strings.Contains(fx.Logs.String(), "1回目の指示を送らずに turn の終わりを待ちます") {
+		t.Errorf("SessionStart だけで「走っている」と判断した")
+	}
 }
 
 // TestFinish_道連れにしたバックグラウンド処理を通知へ書く は、設計 3-81 の記録を検査する。

@@ -210,18 +210,9 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 受けているので、**前に受けた `LastHookAt` を「いま生きている証拠」にしてはならない。**
 	// 段5 の `agent.start` より後に届いた hook だけを数える。
 	//
-	// **待ちに上限を付ける**（設計 3-80 の「後片付けの道では総時間を切る」）。
-	// **着手の道と違い、ここは `finishRunClaimed` の中である。**hook が届き続ける限り
-	// 待つ形のままだと、**印が外れず（`release`）、`agent.max_concurrent_agents` の枠を
-	// 抱えたまま何十分も止まる。**上限は `herdr.startup_timeout_ms` とし、
-	// **この変更の前と同じ長さで見切る。**
-	confirmCtx, cancelConfirm := context.WithTimeout(
-		ctx, time.Duration(o.cfg.Herdr.StartupTimeoutMs)*time.Millisecond)
-	err = o.confirmStartup(confirmCtx, rs, o.now())
-	cancelConfirm()
-	if err != nil {
-		// **見るのは元の ctx である。**上で被せた期限で `stoppedWhileRecovering` が
-		// 真になると、**止められていないのに「次の起動に回します」と書いて黙る。**
+	// **待ちに上限は足さない。**`confirmStartup` は `herdr.startup_timeout_ms` で
+	// 必ず戻る（設計 3-80 は待たずに `ErrStartupBusy` で戻す）。
+	if err := o.confirmStartup(ctx, rs, o.now()); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
 		}

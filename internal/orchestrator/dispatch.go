@@ -43,6 +43,27 @@ const agentStatusPollInterval = 500 * time.Millisecond
 // **この package の人間向けの文言をまとめて資源へ移すときに、一緒に替えること。**
 var ErrStartupRetryable = errors.New("起動に失敗しましたが、待てば通るかもしれません")
 
+// ErrStartupBusy は、**herdr は agent を登録していないが、Claude Code は生きていて
+// turn を走らせている**ことを表す（設計 3-80）。
+//
+// **これは失敗ではない。**復帰した Claude Code が起動直後から作業を始めると、
+// herdr が見分ける「入力待ちの画面」が一度も出ないので登録されない。
+// **`agent.get` は `agent_not_found` を返し続けるが、hook は届いている。**
+//
+// **受けた側は、pane を閉じてはならない。**代わりに
+// **1回目の turn を送らずに `awaitTurnEnd` を立て、走っている turn の終わりを待つ**
+// （設計 3-4 の段5a2 と同じ道。turn ループは hook だけで turn の終わりを見分けられる）。
+//
+// **`ErrStartupRetryable` とは別のものである。**あちらは「Claude Code が1文字も
+// 起動していないので `agent.start` からやり直す」であり、**やり直しても
+// `agent_pane_busy` が返り続けるこの場面に当ててはならない。**
+//
+// **文言は資源から引く**（`i18n.Sentinel`）。`ErrStartupRetryable` が
+// `errors.New` のままなのは、**この package の人間向けの文言をまとめて移すまで
+// 揃えられないからである。****新しく足すものは資源に載せる**
+// （`test/internal/testdesign` の「画面に出す文言を日本語で直に書いていない」）。
+var ErrStartupBusy = i18n.Sentinel(i18n.KeyOrchestratorErrStartupBusy)
+
 // ErrStatusNotWritten は、着手の段2 でボードの Status を書かなかったことを表す。
 //
 // **これは失敗ではない。**item がもう見えないか、取り直した結果 `terminal_states` か
@@ -949,7 +970,13 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		PaneID: paneID,
 		Args:   o.claudeStartArgs(settingsPath, sessionUUID, resumeUUID),
 	})
-	if startErr != nil && resumeUUID != "" {
+	if startErr != nil && !errors.Is(startErr, ErrStartupBusy) && resumeUUID != "" {
+		// **`ErrStartupBusy` はここへ入れてはならない**（設計 3-80）。
+		// **復帰そのものは成功していて、Claude Code はもう作業を始めている。**
+		// ここへ入れると `restartWithNewSession` が hook の宛先を新しい UUID へ張り替え、
+		// **動いている本人の hook が「知らない session_id」として捨てられる。**
+		// **実際にそれで殺した**（2026-09-05 に2件）。
+		//
 		// **復帰に失敗した。新しいセッションで始め直す**（設計 3-3b）。
 		//
 		// **身元ファイルの UUID のセッションは消えていることがある。**
@@ -971,6 +998,26 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 			PaneID: paneID,
 			Args:   o.claudeStartArgs(settingsPath, rs.sessionUUID(), ""),
 		})
+	}
+	if errors.Is(startErr, ErrStartupBusy) {
+		// **herdr は登録していないが、Claude Code は走っている**（設計 3-80）。
+		//
+		// **1回目の turn を送らない。**走っている turn へ投げると turn が混ざり、
+		// 投げた本文が消える（設計 3-27 と同じ構造）。そもそも herdr が登録していないので
+		// `agent.prompt` は `agent_not_found` で弾かれる。
+		//
+		// **待つのはここではない。**着手の goroutine は、印を付けた他の issue の
+		// 段2以降も順に回すので（`dispatchCandidates`）、**ここで待つと、
+		// 同じ巡回で印を付けた issue が1つも着手されないまま止まる。**
+		// **`awaitTurnEnd` を立てて返り、次の巡回で turn ループに待たせる**
+		// （設計 3-4 の段5a2 と同じ道。turn ループは hook だけで turn の終わりを見分けられる）。
+		//
+		// **1回目の本文は捨てない。**`awaitFirst` の周は `beginTurn` を通らないので
+		// `SendFirstPrompt` は真のまま残り、走っている turn が終わった次の周で送られる。
+		o.logger.Info("Claude Code は走っているので、1回目の指示を送らずに turn の終わりを待ちます",
+			"identifier", issue.Identifier, "理由", summaryLine(startErr.Error()))
+		rs.setAwaitTurnEnd()
+		return nil
 	}
 	if startErr != nil {
 		return startErr
@@ -1110,25 +1157,8 @@ func (o *Orchestrator) resolvePane(ctx context.Context, prepared *workspace.Prep
 // （設計 3-80）。前の run が残した `LastHookAt` を証拠にしないためである。
 // 戻り値: 合格なら nil。それ以外はエラー。
 func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since time.Time) error {
-	startupTimeout := time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond
-	deadline := o.now().Add(startupTimeout)
+	deadline := o.now().Add(time.Duration(o.cfg.Herdr.StartupTimeoutMs) * time.Millisecond)
 	for {
-		// **hook が届いている間は、諦める時計を進めない**（設計 3-80）。
-		//
-		// **`agent_not_found` の枝だけに効かせてはならない。**hook を待っているうちに
-		// 入口からの期限は過ぎるので、そのあと herdr がやっと登録して `working` を返すと、
-		// **その瞬間に「起動の確認が期限まで idle にならなかった」として run を捨てる。**
-		// **待った先で殺すのでは、殺す時点が後ろへずれただけである。**
-		//
-		// **hook が1件も来ていなければ、`deadline` は入口のままである。**
-		// そのときの振る舞いは、この変更の前とまったく同じになる。
-		hookAt, alive := o.startupAliveByHook(rs, since)
-		if alive {
-			if next := hookAt.Add(startupTimeout); next.After(deadline) {
-				deadline = next
-			}
-		}
-
 		got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})
 		switch {
 		case err != nil && herdr.IsCode(err, herdr.ErrCodeAgentNotFound):
@@ -1137,25 +1167,27 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 			// herdr が登録するのは入力待ちの画面を見分けたときなので、**復帰した
 			// Claude Code が起動直後から作業を始めると、その画面が一度も出ずに登録されない。**
 			//
-			// **hook が届いているなら、Claude Code は生きている。**諦める時計を進めず、
-			// hook が止まってから `herdr.startup_timeout_ms` ぶん待って初めて諦める。
-			// **ここで合格にはしない。**合格は `idle`/`done` かつ `interactive_ready` の
-			// ときだけである。**herdr が登録し直すのを待つ**（走っている turn が終われば
-			// 入力待ちの画面が出る）。
+			// **作業中にしか出ない hook が届いているなら、Claude Code は生きていて、
+			// しかも turn を走らせている。**そのときは `ErrStartupBusy` で戻る。
+			// **待たない。**ここで待つと、着手の goroutine が返らなくなり、
+			// **同じ巡回で印を付けた他の issue が1つも着手されないまま止まる**
+			// （`dispatchCandidates` は印を付けた run を1本の goroutine で順に処理する）。
+			// **待つのは turn ループの仕事である**（設計 3-80 の「待ちは turn ループへ渡す」）。
 			//
 			// **hook が来ていないときの振る舞いは変えない。**期限を待たずにその場で戻り、
 			// `confirmStartupWithRestart` が `agent.start` をやり直す（設計 3-16 の段10）。
 			// **そこが「pane のシェルが準備できていなかった」からの唯一の復帰の道である。**
-			if !alive || o.now().After(deadline) {
-				return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
-					i18n.KeyOrchestratorConfirmStartupAgentGetFailed,
-					rs.agentName(), rs.agentName(), err))
+			if hookAt, busy := o.startupBusyByHook(rs, since); busy {
+				// **細かいところはログへ出す。**戻り値は番兵1つにして、
+				// 呼び出し側が `errors.Is` で見分けられる形を保つ。
+				o.logger.Info("herdr は agent を登録していませんが、作業中の hook が届いています（Claude Code は走っています）",
+					"identifier", rs.issue().Identifier, "agent", rs.agentName(),
+					"最後に作業中の hook を受けた時刻", hookAt)
+				return ErrStartupBusy
 			}
-			// **待ち直す。**下の待ちで間を空けてから、もう一度 `agent.get` を読む。
-			// **諦めるのは、最後の hook から `herdr.startup_timeout_ms` が経ったときである。**
-			o.logger.Debug("herdr は agent を登録していませんが hook が届いているので、起動の確認を待ち直します",
-				"identifier", rs.issue().Identifier, "agent", rs.agentName(),
-				"最後に hook を受けた時刻", hookAt)
+			return fmt.Errorf("%w: %s", ErrStartupRetryable, i18n.T(
+				i18n.KeyOrchestratorConfirmStartupAgentGetFailed,
+				rs.agentName(), rs.agentName(), err))
 		case err != nil:
 			return i18n.Errorf(
 				i18n.KeyOrchestratorConfirmStartupAgentGetFailed,
@@ -1217,33 +1249,34 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 	}
 }
 
-// startupAliveByHook は「起動の確認をしている間に、その run から hook が届いたか」を返す
-// （設計 3-80）。
+// startupBusyByHook は「起動の確認をしている間に、その run から**作業中にしか出ない**
+// hook が届いたか」を返す（設計 3-80）。
 //
-// **hook が届いたことは、Claude Code が生きていることの証拠である。**hook を起こすのは
-// Claude Code 自身であり、continuo は `session_id` でしか run を引けないが（設計 3-2）、
-// その対応は着手の段5b の `bindSession` で**段9（`agent.start`）より前に**作ってある。
-// **だから段9 のあとに届いた hook は、必ずこの run のものである。**
+// **届いたことは、Claude Code が生きていて turn を走らせている証拠である。**hook を
+// 起こすのは Claude Code 自身であり、continuo は `session_id` でしか run を引けないが
+// （設計 3-2）、その対応は着手の段5b の `bindSession` で**段9（`agent.start`）より前に**
+// 作ってある。**だから段9 のあとに届いた hook は、必ずこの run のものである。**
+//
+// **`SessionStart` は数えない**（`runState.LastBusyHookAt` が最初から外している）。
+// **あれは起動しただけで出るので、「turn が走っている」の証拠にならない。**
+// 数えると、**起動して入力待ちのまま止まった Claude Code まで「走っている」と読み、
+// 来ない `Stop` を `claude.turn_timeout_ms`（既定1時間）待つことになる。**
+// **`agent.start` のやり直しも、そのあいだ1回も起きない。**
 //
 // **`since` より後のものだけを数える。**復帰の道は前回のセッション UUID をそのまま使うので
 // （設計 3-3b。`--resume` は `session_id` を変えない）、**切らないと前の run が残した
-// `LastHookAt` を今回の起動の証拠として読んでしまう。**
+// 時刻を今回の起動の証拠として読んでしまう。**
 //
-// **hook の種類では絞らない。**ここが答えるのは「生きているか」だけであり、
-// 「turn が走っているか」ではない。**`SessionStart` しか来ていなくても、生きてはいる。**
-// いつ turn を送ってよいかは `agent.get` が決める（`confirmStartup` は
-// `idle`/`done` かつ `interactive_ready` でしか合格しない）。
-//
-// **`LastHookAt` は受け取った時刻であって、hook が生まれた時刻ではない。**逃がし先から
+// **入れるのは受け取った時刻であって、hook が生まれた時刻ではない。**逃がし先から
 // 読み戻した古い hook でも進む（`hookserver.Server.ReplayPending`）。**読み戻しは起動時の
 // 復元で走るので着手より前だが、「`since` より後に生まれた」ことまでは保証しない。**
 //
 // rs: 対象の run。
 // since: 起動の確認を始めた時刻。
-// 戻り値の1つ目: 最後に hook を受けた時刻。
-// 戻り値の2つ目: `since` より後に hook を受けていれば true。
-func (o *Orchestrator) startupAliveByHook(rs *runState, since time.Time) (time.Time, bool) {
-	at := rs.snapshot().LastHookAt
+// 戻り値の1つ目: 最後に作業中の hook を受けた時刻。
+// 戻り値の2つ目: `since` より後に受けていれば true。
+func (o *Orchestrator) startupBusyByHook(rs *runState, since time.Time) (time.Time, bool) {
+	at := rs.lastBusyHookAt()
 	return at, at.After(since)
 }
 
@@ -1351,29 +1384,22 @@ func (o *Orchestrator) confirmStartupWithRestart(
 	var lastErr error
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
-			if hookAt, alive := o.startupAliveByHook(rs, since); alive {
-				// **生きているものへ `agent.start` を投げ直さない**（設計 3-80）。
-				o.logger.Info("hook が届いているので agent.start はやり直しません（herdr が登録し直すのを待ちます）",
-					"identifier", rs.issue().Identifier, "回数", attempt,
-					"最後に hook を受けた時刻", hookAt, "前回の理由", summaryLine(lastErr.Error()))
+			o.logger.Info("Claude Code が起動していないので agent.start をやり直します",
+				"identifier", rs.issue().Identifier, "回数", attempt, "前回の理由", summaryLine(lastErr.Error()))
+			started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
+			if err != nil {
+				// **やり直しの失敗で run を捨てない。**期限まではもう一度試す。
+				// （既に登録されている場合も、ここへ来て次の確認で拾える。）
+				o.logger.Warn("agent.start のやり直しに失敗しました",
+					"identifier", rs.issue().Identifier, "error", err)
 			} else {
-				o.logger.Info("Claude Code が起動していないので agent.start をやり直します",
-					"identifier", rs.issue().Identifier, "回数", attempt, "前回の理由", summaryLine(lastErr.Error()))
-				started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
-				if err != nil {
-					// **やり直しの失敗で run を捨てない。**期限まではもう一度試す。
-					// （既に登録されている場合も、ここへ来て次の確認で拾える。）
-					o.logger.Warn("agent.start のやり直しに失敗しました",
-						"identifier", rs.issue().Identifier, "error", err)
-				} else {
-					rs.noteRevision(started.Agent.Revision, o.now())
-				}
+				rs.noteRevision(started.Agent.Revision, o.now())
 			}
 		}
 
 		// **`since` は最初の1回だけ控えたものを使い回す**（設計 3-80）。
-		// **やり直しのたびに取り直すと、hook が届いた直後に取り直した回で証拠が消え、
-		// 下の期限で諦めてしまう。**見たいのは「この起動の確認を始めてから hook が来たか」である。
+		// **やり直しのたびに取り直すと、hook が届いた直後に取り直した回で証拠が消える。**
+		// 見たいのは「この起動の確認を始めてから、作業中の hook が来たか」である。
 		err := o.confirmStartup(ctx, rs, since)
 		if err == nil {
 			return nil

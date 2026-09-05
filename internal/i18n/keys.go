@@ -2317,6 +2317,12 @@ const (
 	// KeyOrchestratorConfirmStartupNotInteractive は、agent は居るが入力を受け付けられない
 	// ことを表す（`interactive_ready` が偽）。
 	KeyOrchestratorConfirmStartupNotInteractive Key = "orchestrator.confirm_startup.not_interactive"
+	// KeyOrchestratorErrStartupBusy は、herdr は agent を登録していないが、
+	// Claude Code は生きていて turn を走らせていることを表す（設計 3-80）。
+	//
+	// **これは失敗ではない。**受けた側は pane を閉じず、1回目の turn も送らずに、
+	// 走っている turn の終わりを待つ。
+	KeyOrchestratorErrStartupBusy Key = "orchestrator.err_startup_busy"
 	// KeyOrchestratorRestoreBrokenWorktreeStop は、身元を確かめられない worktree を見つけて
 	// 起動を止めるときに出る（3-49。`workspace.on_broken_worktree` が `stop` のとき）。
 	KeyOrchestratorRestoreBrokenWorktreeStop Key = "orchestrator.restore.broken_worktree_stop"
@@ -3348,6 +3354,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupWorkingTimeout,
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,
+	KeyOrchestratorErrStartupBusy,
 	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
 	KeyDaemonErrStartup,

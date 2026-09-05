@@ -250,6 +250,18 @@ type runState struct {
 	// hookSeenThisTurn は、この turn で hook を1件でも受けたかどうかである。
 	// 枠待ちの判定の条件その2（この run から hook が来ていない）に使う（設計 3-27）。
 	hookSeenThisTurn bool
+	// lastBusyHookAt は、**`SessionStart` 以外の** hook を最後に受けた時刻である
+	// （設計 3-80）。
+	//
+	// **起動の確認が「Claude Code は走っている」と判断する唯一の材料である。**
+	// **`LastHookAt` では代われない。**あちらは `SessionStart` でも進むので、
+	// **起動して入力待ちのまま止まった Claude Code まで「走っている」と読んでしまう。**
+	// そうなると `agent.start` のやり直しが1回も起きず、来ない `Stop` を
+	// `claude.turn_timeout_ms`（既定1時間）待つことになる。
+	//
+	// **turn をまたいで持ち越す。**`beginTurn` では戻さない。見るのは着手の段10 だけであり、
+	// **そこは「この起動の確認を始めてから届いたか」を時刻の比較で決めている。**
+	LastBusyHookAt time.Time
 	// runningSubagents は、いま走っている subagent である（キー: `agent_id`、値: `agent_type`）。
 	//
 	// **`blocked` で esc を送る前に「走っているものがあるか」を見るためだけに持つ**
@@ -542,6 +554,13 @@ func (rs *runState) noteHook(ev hookserver.HookEvent, now time.Time) {
 	defer rs.mu.Unlock()
 	rs.hookSeenThisTurn = true
 	rs.LastHookAt = now
+	// **`SessionStart` 以外は、turn を処理している間にしか出ない**（設計 3-80）。
+	// **起動の確認は、こちらだけを「走っている証拠」に使う。**
+	// `SessionStart` を混ぜると、**起動して入力待ちのまま止まった Claude Code まで
+	// 「走っている」と読み、来ない `Stop` を `claude.turn_timeout_ms` 待つことになる。**
+	if ev.HookEventName != hookSessionStart {
+		rs.LastBusyHookAt = now
+	}
 	if !rs.WaitingQuota {
 		// 枠待ちの間は時計を止める（LastSeenAt を進めない。設計 3-27）。
 		// **枠待ち中は hook が来ないので、ここに来ること自体がまれである。**
@@ -791,6 +810,17 @@ func (rs *runState) freezeHandoffSubagents() []string {
 	rs.handoffSubagents = rs.runningSubagentsLocked()
 	rs.handoffSubagentsFrozen = true
 	return subagentLabels(rs.handoffSubagents)
+}
+
+// lastBusyHookAt は、`SessionStart` 以外の hook を最後に受けた時刻を返す（設計 3-80）。
+//
+// **起動の確認だけが使う。**「Claude Code が走っているか」を、herdr に頼らずに答える。
+//
+// 戻り値: 最後に受けた時刻。1件も受けていなければゼロ値。
+func (rs *runState) lastBusyHookAt() time.Time {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.LastBusyHookAt
 }
 
 // blockedHandoff は「確認の画面で止まったまま人間へ渡そうとしている」かを返す（設計 3-81）。

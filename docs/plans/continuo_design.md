@@ -8743,67 +8743,68 @@ turn の終わりを決められず、**`settle_ms` の窓が閉じた瞬間に 
 **3-2 と 3-26 は置き換えない。**3-2 は「`background_tasks` をどう読むか」を決めており、
 ここが埋めるのは「**他人の hook が差し戻してきたときにどうするか**」である。
 
-### 3-80. `agent_not_found` は「起動していない」ではない。hook の着信も見る
+### 3-80. `agent_not_found` は「起動していない」ではない。作業中の hook を見る
 
 **言いたいこと。**herdr が agent を登録するのは、入力待ちの画面を見分けたときである。
 **起動直後から作業を始めた Claude Code は、その画面を一度も出さないので登録されない。**
 `agent.get` は `agent_not_found` を返し続け、continuo は「起動していない」と断定して
-**動いている本人を殺す**（2026-09-05 に2件）。**hook が届いていれば、生きている。**
+**動いている本人を殺す**（2026-09-05 に2件）。**作業中の hook が届いていれば、走っている。**
 
 **採る判定。**着手の段10（`confirmStartup`）の `agent_not_found` の枝だけを、こう変える。
 
-| その run から hook が届いたか | どうするか |
+| その run から作業中の hook が届いたか | どうするか |
 | --- | --- |
 | **届いていない** | **これまでどおり。**期限を待たずに戻り、`agent.start` をやり直す（段10） |
-| **届いている** | **諦める時計を進めない。**`agent.get` を読み直し続ける。**`agent.start` もやり直さない** |
+| **届いている** | **`ErrStartupBusy` で戻る。**pane を閉じない。`agent.start` もやり直さない |
 
-**合格にはしない。**合格は `idle`/`done` かつ `interactive_ready` が真のときだけである。
-**走っている turn が終われば入力待ちの画面が出て、herdr が登録し直す。**そこで初めて
-1回目の turn を送る。**諦めるのは、最後の hook から `herdr.startup_timeout_ms` が経ったときである。**
+**受けた側（`startRun`）は、1回目の turn を送らずに `awaitTurnEnd` を立てて返る。**
+走っている turn の終わりは、次の巡回で turn ループが待つ（3-4 の段5a2 と同じ道）。
+**turn ループは hook だけで turn の終わりを見分けられる**ので、herdr が登録していなくても回る。
+**1回目の本文は捨てない。**`awaitFirst` の周は `beginTurn` を通らないので `SendFirstPrompt` は
+真のまま残り、走っていた turn が終わった次の周で送られる。
+
+**待たない理由。**着手の goroutine は、**同じ巡回で印を付けた issue の段2以降を1本で順に回す**
+（`dispatchCandidates`）。**ここで待つと、後ろに並んだ issue が1つも着手されないまま止まる。**
+印は付いているので枠だけを消費し、`checkStalls` は `AgentName` が空の run を飛ばすので
+**再起動まで誰も拾わない。**
 
 **やり直さない理由。**pane は Claude Code が埋めている。`agent_pane_busy` は
 「pane がまだシェルのプロンプトに来ていない」の意味なので（2-1）、
 **シェルではない別のものが居るこの場面では、`agentStartBusyBudget`（30秒）を使い切るだけである。**
-**復帰の道ではさらに悪い。**やり直しが尽きると `restartWithNewSession` が hook の宛先を
-新しい UUID へ張り替え、**動いている本人の hook が「知らない session_id」として捨てられる**（3-3b）。
+**復帰の道ではさらに悪い。**`restartWithNewSession` が hook の宛先を新しい UUID へ張り替え、
+**動いている本人の hook が「知らない session_id」として捨てられる**（3-3b）。
+**だから `ErrStartupBusy` は、そちらの枝にも入れない。**
+
+### 3-80b. 走っている証拠に `SessionStart` を数えない
+
+**言いたいこと。**「hook が届いた」では足りない。**`SessionStart` は起動しただけで出る。**
+数えると、入力待ちのまま止まった Claude Code まで「走っている」と読む。
+
+**何が起きるか。**`SessionStart` を数えると、起動して固まった Claude Code に対して
+**`agent.start` のやり直しが1回も起きなくなる。**そのうえ `awaitTurnEnd` が立つので、
+**来ない `Stop` を `claude.turn_timeout_ms`（既定1時間）待ってから、ようやく
+`checkStalls` が拾う。**直す前は60秒で見切れていた。
+
+**採る形。**`runState` に「`SessionStart` 以外の hook を最後に受けた時刻」を持たせ、
+段10 はそれだけを見る。**残る7つ**（`UserPromptSubmit` / `PreToolUse` / `PostToolUse` /
+`Notification` / `SubagentStart` / `SubagentStop` / `Stop`）**は、turn を処理している間にしか出ない。**
 
 **時刻で切る理由。**復帰は前回のセッション UUID をそのまま使う（3-3b。`--resume` は
-`session_id` を変えない）。**切らないと、前の run が残した `LastHookAt` を証拠に読む。**
+`session_id` を変えない）。**切らないと、前の run が残した時刻を証拠に読む。**
 **基準は `confirmStartupWithRestart` の入口で1度だけ控える。**やり直しのたびに取り直すと、
 hook が届いた直後に取り直した回で証拠が消える。
 
-**hook の種類では絞らない。**ここが答えるのは「生きているか」だけであり、
-「turn が走っているか」ではない。**`SessionStart` しか来ていなくても生きてはいる。**
-いつ turn を送ってよいかは `agent.get` が決めるので、絞る必要が無い。
-
-**`LastHookAt` は受け取った時刻であって、hook が生まれた時刻ではない。**
+**入るのは受け取った時刻であって、hook が生まれた時刻ではない。**
 逃がし先から読み戻したものでも進む（`hookserver.Server.ReplayPending`）。
 **読み戻しは起動時の復元で走るので着手より前だが、「基準より後に生まれた」ことまでは保証しない。**
 
-### 3-80b. 諦める時計は、枝ごとに持たない
-
-**言いたいこと。**3-80 で `agent_not_found` の枝だけを待たせると、**待った先で殺す。**
-期限そのものを動かす。
-
-**`agent_not_found` の枝だけを待たせるとどうなるか。**hook を待つうちに入口からの期限が過ぎ、
-**herdr がやっと登録して `working` を返した瞬間に「期限まで idle にならなかった」として
-run を捨てる。****殺す時点が後ろへずれただけになる。**
-
-**採る形。**期限を「入口」と「最後の hook」の遅いほうに置く。`working` / `unknown` /
-`interactive_ready` が偽 の枝も、その同じ期限を見る。
-**hook が1件も来ていなければ期限は入口のままで、この変更の前とまったく同じに振る舞う。**
-
-**`blocked` だけは別である。**確認の画面が出ているので、hook が届いていても turn を送っては
-ならない（3-11）。**期限を見ずに esc を送って戻る道は、そのままにする。**
+**効かせない枝。**`blocked` は確認の画面が出ているので、hook が届いていても turn を送っては
+ならない（3-11）。`working` / `unknown` / `interactive_ready` が偽 の期限切れは、
+**`agent.get` が答えている＝herdr は agent を登録している**ので、「起動していない」と
+断定してはいない。**直すのは `agent_not_found` の枝だけである。**
 
 **やり直しが1回入ることはある。**起動直後の1回目の `agent.get` は hook より先に走るので
 証拠が成立しない。**その間も hook は届き続けるので、次の確認で拾える。**
-
-**後片付けの道では総時間を切る。**`ensureAgentComment` の段6 も `confirmStartup` を通るが、
-**そこは `finishRunClaimed` の中である。**hook が届く限り待つ形のままだと、
-**印が外れず（`release`）、`agent.max_concurrent_agents` の枠を抱えたまま何十分も止まる。**
-だから呼ぶ側で `herdr.startup_timeout_ms` の期限を被せ、**この変更の前と同じ長さで見切る。**
-**着手の道には被せない。**そちらは走っている turn が終わるまで待つことが目的である。
 
 ### 3-81. run を終える前に、バックグラウンド処理の申告を1度見る
 
