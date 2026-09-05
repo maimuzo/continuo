@@ -2422,6 +2422,10 @@ const (
 	KeyCLIPromptFlagAttempt Key = "cli.prompt.flag_attempt"
 	// KeyCLIPromptErrURLWithBuiltin は--url と--builtin を同時に指定したときに出る。
 	KeyCLIPromptErrURLWithBuiltin Key = "cli.prompt.err_url_with_builtin"
+	// KeyCLIPromptErrURLEmpty は--url に空文字を渡したときに出る。
+	KeyCLIPromptErrURLEmpty Key = "cli.prompt.err_url_empty"
+	// KeyCLIPromptBreakdownFirstAttempt は--url で1回目として展開したときに出る。
+	KeyCLIPromptBreakdownFirstAttempt Key = "cli.prompt.breakdown_first_attempt"
 	// KeyCLIPromptErrURLInvalid は--url の値を issue の URL として読めないときに出る。
 	KeyCLIPromptErrURLInvalid Key = "cli.prompt.err_url_invalid"
 	// KeyCLIPromptErrAttemptPositive は--attempt が1未満のときに出る。
@@ -3351,6 +3355,8 @@ var allKeys = []Key{
 	KeyCLIPromptFlagURL,
 	KeyCLIPromptFlagAttempt,
 	KeyCLIPromptErrURLWithBuiltin,
+	KeyCLIPromptErrURLEmpty,
+	KeyCLIPromptBreakdownFirstAttempt,
 	KeyCLIPromptErrURLInvalid,
 	KeyCLIPromptErrAttemptPositive,
 	KeyCLIPromptErrAttemptNeedsURL,

@@ -509,15 +509,30 @@ func join(parts []string) string {
 // 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
 // **どの断片の何行目かがエラーの文言に入る。**
 func (f Fragments) Render(data map[string]any) (string, error) {
+	text, _, err := f.RenderAll(data)
+	return text, err
+}
+
+// RenderAll は、変数展開した全文と、その断片の並びを一度に返す（issue #183）。
+//
+// **`continuo prompt --show --url` は、全文を標準出力へ出し、断片の並びから内訳を数える。**
+// **`Render` と `RenderItems` を続けて呼ぶと、同じ解釈と実行を2回することになる。**
+// 人間が待つコマンドなので、1回で済ませる。
+//
+// data: テンプレートへ渡す変数。
+// 戻り値の1つ目: 変数展開して連結した全文。
+// 戻り値の2つ目: 変数展開した断片。**並びは `Items` と同じ。**
+// 戻り値の3つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
+func (f Fragments) RenderAll(data map[string]any) (string, []Fragment, error) {
 	rendered, err := f.RenderItems(data)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	parts := make([]string, 0, len(rendered))
 	for _, it := range rendered {
 		parts = append(parts, it.Text)
 	}
-	return join(parts), nil
+	return join(parts), rendered, nil
 }
 
 // RenderItems は、断片ごとに変数展開した結果を返す（issue #183）。

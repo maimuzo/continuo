@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "a34a17c5a1a03f8b12abc4de6691e806ee50fcd08580f865cebe99bb91a4b0a9",
+  "_source_sha256": "df255224f5e10f0f5591745091f9aa0166cc53960e3c71c2519dfa6a1e90effd",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -169,6 +169,7 @@
   "cli.prompt.breakdown_builtin_only": "  built-in prompt only  %d lines (WORKFLOW.md was not read)",
   "cli.prompt.breakdown_builtin_tail": "  built-in prompt (second half)  %d lines",
   "cli.prompt.breakdown_expanded": "  variables expanded with the values of %s",
+  "cli.prompt.breakdown_first_attempt": "  expanded as the first attempt (continuo passes no attempt count on the first try, so the \"this is attempt N\" section is absent; use --attempt 2 or greater to see it)",
   "cli.prompt.breakdown_heading": "Breakdown of the text to be sent:",
   "cli.prompt.breakdown_workflow_body": "  WORKFLOW.md body  %[1]d lines  %[2]s",
   "cli.prompt.err_attempt_needs_url": "Error: --attempt must be given together with --url (without --url the variables are not expanded, so --attempt has no effect)",
@@ -179,6 +180,7 @@
   "cli.prompt.err_render_failed": "Error: cannot expand the variables: %v",
   "cli.prompt.err_show_required": "Error: continuo prompt requires --show (e.g. continuo prompt --show)",
   "cli.prompt.err_too_many_positional": "Error: continuo prompt accepts only one positional argument, the directory containing WORKFLOW.md (%[1]d given: %[2]v)",
+  "cli.prompt.err_url_empty": "Error: --url is empty (pass the issue URL)",
   "cli.prompt.err_url_invalid": "Error: cannot read --url as an issue URL: %v",
   "cli.prompt.err_url_with_builtin": "Error: --builtin and --url cannot be combined (--builtin is the path that never reads WORKFLOW.md, but --url needs the tracker settings in its front matter to look the issue up)",
   "cli.prompt.flag_attempt": "Which attempt to expand as (defaults to the first). Use together with --url",

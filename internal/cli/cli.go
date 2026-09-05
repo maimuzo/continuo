@@ -348,23 +348,33 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrShowRequired))
 		return 2
 	}
-	if *urlFlag != "" && *builtinFlag {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLWithBuiltin))
-		return 2
-	}
-	// **`--attempt` が指定されたかを、値ではなく `Visit` で見る。**
-	// 既定の 0 と「0 を明示された」を区別しないと、`--attempt 0` が黙って1回目になる。
-	attemptGiven := false
+	// **指定されたかを、値ではなく `Visit` で見る。**
+	// **`--url` を値で見てはならない。**`--url ""` が「指定されていない」と同じ扱いになり、
+	// **変数を展開しないまま終了コード 0 で出す。**環境変数が空のままスクリプトが叩くと、
+	// **成功したのと見分けが付かない。**このコマンドがいちばん嫌う落ち方である。
+	// `--attempt` も同じで、既定の 0 と「0 を明示された」を区別しないと `--attempt 0` が黙って通る。
+	urlGiven, attemptGiven := false, false
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "attempt" {
+		switch f.Name {
+		case "url":
+			urlGiven = true
+		case "attempt":
 			attemptGiven = true
 		}
 	})
+	if urlGiven && *urlFlag == "" {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLEmpty))
+		return 2
+	}
+	if urlGiven && *builtinFlag {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLWithBuiltin))
+		return 2
+	}
 	if attemptGiven && *attemptFlag < 1 {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrAttemptPositive, *attemptFlag))
 		return 2
 	}
-	if attemptGiven && *urlFlag == "" {
+	if attemptGiven && !urlGiven {
 		// **黙って捨てない。**`--attempt` が効くのは変数を展開するときだけである。
 		// **このコマンド自身が「気づけない出力が、いちばん悪い落ち方である」を理由に、
 		// 展開できなかったら断ると決めている。**同じ理由がそのまま当たる。
@@ -413,14 +423,19 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 
 	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
 
-	if *urlFlag == "" {
+	if !urlGiven {
 		fmt.Fprint(stdout, frag.Text())
 		printPromptBreakdown(stderr, frag)
 		return 0
 	}
 
+	// **`--attempt 1` は「試行回数を渡さない」へ写す**（issue #183）。
+	// **本番で `attempt` に入る最小値は 2 である**（`internal/orchestrator/turn.go` が
+	// `RetryCount > 0` のときだけ `RetryCount + 1` を渡す）。
+	// **1 をそのまま渡すと `{{if .attempt}}` が真になり、本番に存在しない文面を見せることになる。**
+	// 「本当に送られる文面」を名乗るコマンドが、送られない文面を見せてはならない。
 	var attempt *int
-	if attemptGiven {
+	if attemptGiven && *attemptFlag > 1 {
 		n := *attemptFlag
 		attempt = &n
 	}
@@ -481,7 +496,9 @@ func runPromptExpanded(
 	}
 
 	data := prompt.RenderData(issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs)
-	text, err := frag.Render(data)
+	// **全文と断片を一度に受け取る。**`Render` と `RenderItems` を続けて呼ぶと、
+	// 同じ解釈と実行を2回することになる。
+	text, rendered, err := frag.RenderAll(data)
 	if err != nil {
 		// **`--url` を付けて初めて変数展開が走る。**本文の `{{if}}` の閉じ忘れや
 		// 一覧に無い変数は、ここで初めて表に出る。**部分的な文面を出さない。**
@@ -492,21 +509,16 @@ func runPromptExpanded(
 	fmt.Fprint(stdout, text)
 	// **数えるのは、展開したあとの断片である**（issue #183）。
 	// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
-	// **`Render` が通った以上、ここで失敗することは無い**（同じ入力で同じ処理をする）。
-	rendered, err := frag.RenderItems(data)
-	if err != nil {
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrRenderFailed, err))
-		return 1
-	}
 	printPromptBreakdownItems(stderr, rendered, frag)
 	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownExpanded, issue.Identifier))
 	// **何回目として展開したかを必ず出す。**出さないと、`## 7-5. これは N 回目の試行です` が
 	// 出ないことを「文面から消えた」と読み違える。
-	shown := 1
-	if attempt != nil {
-		shown = *attempt
+	if attempt == nil {
+		// **1回目は試行回数を渡さない。**`## 7-5.` の節が出ないのはそのためである。
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownFirstAttempt))
+	} else {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownAttempt, *attempt))
 	}
-	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownAttempt, shown))
 	return 0
 }
 

@@ -120,6 +120,45 @@ func TestPromptURL_何回目として展開したかを内訳に出す(t *testin
 	}
 }
 
+// 目的: `--attempt 1` が、本番に存在しない文面を見せないことを固定する（issue #183）。
+//
+// **なぜ要るか。**本番で `attempt` に値が入るのは、やり直しのときだけである。
+// `internal/orchestrator/turn.go` は `snap.RetryCount > 0` のときに `RetryCount + 1` を渡すので、
+// **入りうる最小値は 2 である。****1 が入ることは無い。**
+//
+// **1 をそのまま渡すと `{{if .attempt}}` が真になり、`## 7-5. これは 1 回目の試行です` が出る。**
+// **「本当に送られる文面」を名乗るコマンドが、送られない文面を見せてはならない。**
+//
+// 与える情報: `--attempt 1` と、`--attempt` を省いた場合。
+// 成功条件: どちらも 7-5 の節が出ず、同じ標準出力になること。
+func TestPromptURL_attempt1は試行回数を渡さない(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	setBody(t, dir, "")
+	deps := cli.Deps{PromptFetchIssue: promptFetchOK}
+
+	code, withOne, stderr := runCLIWith(deps,
+		[]string{"prompt", "--show", "--url", promptIssueURL, "--attempt", "1", dir}, "")
+	if code != 0 {
+		t.Fatalf("終了コードが %d です（stderr: %s）", code, stderr)
+	}
+	if strings.Contains(withOne, "回目の試行です") {
+		t.Error("--attempt 1 で 7-5 の節が出ています。本番でその文面が送られることはありません")
+	}
+
+	_, without, _ := runCLIWith(deps,
+		[]string{"prompt", "--show", "--url", promptIssueURL, dir}, "")
+	if withOne != without {
+		t.Error("--attempt 1 と、--attempt を省いた場合で標準出力が違います。" +
+			"どちらも「1回目」なので、同じ文面になるはずです")
+	}
+
+	// **内訳では、7-5 の節が出ない理由を言い切る。**
+	// 出ないことを「文面から消えた」と読み違えさせない。
+	if !strings.Contains(stderr, "1回目") {
+		t.Errorf("1回目として展開したことが内訳に出ていません: %q", stderr)
+	}
+}
+
 // 目的: 引数の誤りを、終了コード 2 で断ることを固定する（issue #183）。
 //
 // **`--builtin` と `--url` を同時に許さない。**`--builtin` の売りは
@@ -160,6 +199,10 @@ func TestPromptURL_引数の誤りは終了コード2で断る(t *testing.T) {
 		// このコマンド自身が「気づけない出力が、いちばん悪い落ち方である」を理由に、
 		// 展開できなかったら断ると決めている。**同じ理由がそのまま当たる。**
 		{"--attempt を --url 無しで渡す", []string{"prompt", "--show", "--attempt", "3", dir}},
+		// **空の `--url` を「指定されていない」と同じ扱いにしてはならない。**
+		// **変数を展開しないまま終了コード 0 で出すことになる。**
+		// 環境変数が空のままスクリプトが叩くと、**成功したのと見分けが付かない。**
+		{"--url が空", []string{"prompt", "--show", "--url", "", dir}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			code, stdout, stderr := runCLIWith(deps, c.args, "")
