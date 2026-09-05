@@ -133,6 +133,14 @@ func TestTemplate_blockedのissueには直したという記録を書かせな�
 		// **受け入れ条件「同じ内容が2回書かれない」を破る。**
 		{"前に書いた分は読めませんでした",
 			"読めていないのに書き直させると、同じ内容が2回書かれます"},
+		// **段2b の見本の pull request の行。**段2a の表にも同じ文字列があるので、
+		// **`pull request: ` だけを見る検査では、見本から消しても通ってしまう。**
+		{"- pull request: <PR の URL>",
+			"段2b の見本から pull request の行を消すと、新しく1件書くときに URL が残りません"},
+		// **`blocked` の足す行に付ける印。**付けないと、上に pull request の行が並んでいる
+		// issue では、読む人が「直った」と読む。
+		{"止まりました: ",
+			"`review` のあとに `blocked` で足す行に印が無いと、止まったことが読み取れません"},
 	} {
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", groupHeading, want.needle, want.why)
@@ -277,6 +285,45 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 			groupHeading, `*"`+groupMarker+`"*)`, n)
 	}
 
+	// **投稿する2つの本文の、印の次の1行が同じであること。**
+	// **分けると、`blocked` で書いた issue が `review` になったとき、
+	// 行を足すだけの段2a では先頭が嘘のまま残る。**
+	// **禁止文の存在だけを見る検査では、見本を戻されても落ちない。**
+	var heads []string
+	for at := 0; ; {
+		i := strings.Index(section[at:], `--body "`+groupMarker)
+		if i < 0 {
+			break
+		}
+		i += at + len(`--body "`+groupMarker)
+		nl := strings.Index(section[i:], "\n")
+		if nl < 0 {
+			break
+		}
+		rest := section[i+nl+1:]
+		end := strings.Index(rest, "\n")
+		if end < 0 {
+			end = len(rest)
+		}
+		heads = append(heads, strings.TrimSpace(rest[:end]))
+		at = i
+	}
+	if len(heads) != 2 {
+		t.Fatalf("%q の節から、投稿する本文の1行目を %d 個しか取り出せません。2個のはずです",
+			groupHeading, len(heads))
+	}
+	if heads[0] != heads[1] {
+		t.Errorf("%q の節で、投稿する2つの本文の1行目が違います（%q と %q）。"+
+			"分けると、逆の表明で行を足したときに先頭だけが嘘になります", groupHeading, heads[0], heads[1])
+	}
+	for _, notWant := range []string{"まとめて直しました", "直していません"} {
+		if strings.Contains(heads[0], notWant) {
+			t.Errorf("%q の節で、投稿する本文の1行目に %q が入っています（%q）。"+
+				"直したかどうかは下の行の中身で分かるので、1行目には書かせません",
+				groupHeading, notWant, heads[0])
+		}
+	}
+
 	// **前に書いた本文を表示させる塊があること。**設計 6-27 が「段2a では、前に書いた本文を
 	// 必ず表示させる」と決めている。**変数へ入れるだけでは、エージェントは前の中身を見られない。**
 	// **書かせ直しはセッションの復元後に走るので、記憶が消えている場面こそが段2a の主戦場である。**
@@ -333,6 +380,10 @@ func TestTemplate_グループの成果報告は対象を絞りStatus名を書�
 			"外さないと、3-7 の成果報告と合わせて代表にコメントが2件付きます"},
 		{"`working` を出した issue も書きません",
 			"まだ終わっていない issue に成果報告を書かせると、途中の状態が成果として残ります"},
+		// **段2a が出す合図の文言が、段2b の条件文と同じであること。**
+		// **`echo` の側だけ書き換えると、エージェントは「段2b へ行け」を受け取れない。**
+		// 4箇所の `echo` と、段2b の条件文の引用で、合わせて5箇所ある。
+		//
 		// **段2b の条件に、段2a が落ちた場合が入っていること。**
 		// 「何も返らなかったとき」だけだと、段1 が URL を返したのに段2a が落ちた場合の
 		// **行き先が無くなり、エージェントはその issue へ何も書かないか、2件目を投稿する。**
@@ -347,6 +398,16 @@ func TestTemplate_グループの成果報告は対象を絞りStatus名を書�
 		if !strings.Contains(section, want.needle) {
 			t.Errorf("%q の節に %q がありません。%s", groupHeading, want.needle, want.why)
 		}
+	}
+
+	// **段2a が出す合図と、段2b の条件文が同じ文字列であること。**
+	// `echo` は4箇所、条件文の引用が1箇所で、合わせて5箇所ある。
+	// **`echo` の側だけ書き換えると、受け渡しが切れる。**
+	if n := strings.Count(section, "段2b で新しく1件投稿します"); n != 5 {
+		t.Errorf("%q の節に %q が %d 個あります。5個のはずです"+
+			"（段2a の echo が4つと、段2b の条件文の引用が1つ）。"+
+			"合図の文言がずれると、エージェントは段2b へ行く合図を受け取れません",
+			groupHeading, "段2b で新しく1件投稿します", n)
 	}
 
 	// **Status の名前を1文字も書かないこと。**既定の値を設定から引いて確かめる。
