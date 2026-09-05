@@ -542,20 +542,32 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 **中身が空でないことだけを見ても足りません。**
 
 **足すものが無ければ、何も書かないでください。**足すときは、次のとおりです。
-**`$ID` と `$OLD` を取り直し、印を確かめる `case` の中で書き換えます。**
-**門の外で書き換えてはいけません。**読み取りに失敗したまま書き換えると、
+**`$URL` から始めて、`$ID` と `$OLD` を取り直します。**
+**上の塊で置いた変数は、ここへ引き継がれません。**道具は塊ごとに別のシェルで走ります。
+**`URL=` を落とすと `ID` が空になり、書き足しに失敗して段2b が2件目を投稿します。**
+
+**そのうえで、印を確かめる `case` の中で書き換えます。門の外で書き換えてはいけません。**
+読み取りに失敗したまま書き換えると、
 **`<!-- continuo:group -->` の印ごと本文が消え、段1 がその成果報告を二度と見つけられなくなります。**
 
+    URL=<段1が返した URL>
     ID=${URL##*#issuecomment-}
-    OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-    case "$OLD" in
-      *"<!-- continuo:group -->"*)
-        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-          -f body="$OLD
-    - <前に書いていない分>"
+    case "$ID" in
+      '' | *[!0-9]*)
+        echo "コメントの ID を取れませんでした。段2b で新しく1件投稿します"
         ;;
       *)
-        echo "本文を読めませんでした。段2b で新しく1件投稿します"
+        OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+        case "$OLD" in
+          *"<!-- continuo:group -->"*)
+            gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+              -f body="$OLD
+    - <前に書いていない分>"
+            ;;
+          *)
+            echo "本文を読めませんでした。段2b で新しく1件投稿します"
+            ;;
+        esac
         ;;
     esac
 

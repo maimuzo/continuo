@@ -236,6 +236,17 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 			"`gh api` は取得に失敗するとエラーの JSON を出すので、"+
 			"門の外で書き換えると印ごと本文が消えます", groupHeading, `*"`+groupMarker+`"*)`)
 	}
+
+	// **`$ID` を作る塊は、どれも `$URL` を自分で置いている。**
+	// **道具は塊ごとに別のシェルで走るので、変数は持ち越されない。**
+	// `URL=` を落とすと `ID` が空になり、`gh api` が失敗して段2b が2件目を投稿する。
+	const setURL, deriveID = "URL=<段1が返した URL>", "ID=${URL##*#issuecomment-}"
+	if got, want := strings.Count(section, setURL), strings.Count(section, deriveID); got != want {
+		t.Errorf("%q の節で、%q が %d 個、%q が %d 個です。"+
+			"塊ごとに別のシェルで走るので、`$ID` を作る塊は自分で `$URL` を置かないと空になり、"+
+			"書き足しに失敗して段2b が2件目の成果報告を投稿します",
+			groupHeading, setURL, got, deriveID, want)
+	}
 }
 
 // 目的: グループの成果報告の対象から、いま作業している issue と Status の名前を外すことを固定する
