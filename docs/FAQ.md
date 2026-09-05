@@ -46,10 +46,12 @@ continuo --help
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | カンバンの Status を5つの役割へ対応づける（対話） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを15の見出し語で調べる |
-| `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかをまとめて調べる。見出し語はこのページの冒頭に並べてある |
+| `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す。**常駐に `--id <名前>` を付けているなら、こちらにも同じ名前を渡す** |
+| `continuo prompt [ディレクトリ]` | エージェントへ送る指示文を組み立てて見せる。`--show` で内訳も出す |
+| `continuo version` | 版を答える。**`--version` ではない**（バグ報告のときに求められる） |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
-| `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
+| `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` で記録の細かさ、**`--id <名前>` で1台に2本以上** |
 
 `continuo hook` は Claude Code の hook から呼ばれるもので、人間が直接叩くものではありません。
 
