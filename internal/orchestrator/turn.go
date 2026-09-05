@@ -559,6 +559,21 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 		return turnWaitAgain, nil
 	}
 
+	// **待ちに入る前に、1週間の枠を待つ上限を超えていないかを見る**（設計 3-27。issue #197）。
+	// **超えていたら標識を立てない。**立てると、手放したあとに枠待ちの標識だけが残る。
+	//
+	// **画面の版は、ここでは見ない**（設計 3-27。issue #197）。
+	// **巡回の `checkStalls` が、枠待ちの判定より前に見ている。**
+	// **同じ判定を2箇所に置くと、片方だけが直る。**
+	if o.weeklyWaitExceeded(rs) && o.releaseBecauseQuotaWait(ctx, rs) {
+		return turnAborted, nil
+	}
+	// **手放せなかったときは、そのまま枠待ちへ入る。**
+	// **`turnAborted` で戻ってはならない。**戻ると、枠待ちの印も次の turn の印も立たないまま
+	// turn の goroutine が終わり、**`claude.turn_timeout_ms` を0以下にしている機械では
+	// 誰も拾い直さない。**その run はスロットと pane を握ったまま残る。
+	// **印を立てておけば、次の巡回が `releaseQuotaWaitExceeded` でやり直す。**
+
 	resetAt, ok := o.quotaResetAt()
 	rs.setWaitingQuota(resetAt)
 	o.logger.Info("枠待ちと判定しました（stall の時計と turn の時計を止めます）",
@@ -616,7 +631,10 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 			return turnSendFailed, err
 		}
 
-		// 枠が明けたか。**印を外す契機は「枠の resets_at を過ぎたこと」だけである**（設計 3-27）。
+		// 枠が明けたか。**標識を外す契機は2つある**（設計 3-27）。
+		// **1つ目は `resets_at` を過ぎたこと。**2つ目は下の `quotaAtFull` で見る。
+		// **2つ目を落としてはならない。**`resets_at` が `null` の枠だけが満杯だと、
+		// **1つ目では永久に外れない。**
 		if ok && !o.now().Before(resetAt) {
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)

@@ -90,6 +90,57 @@ func TestSnapshot_nilに対して安全な既定値を返す(t *testing.T) {
 	if _, ok := snap.LatestResetOfFullLimits(); ok {
 		t.Fatalf("nil の LatestResetOfFullLimits が見つかったと返した")
 	}
+	if got := snap.FullLimitKinds(); len(got) != 0 {
+		t.Fatalf("nil の FullLimitKinds が空でない: got %v", got)
+	}
+}
+
+// 目的: FullLimitKinds が「使い切っている枠の kind だけ」を返すことを確認する（issue #197）。
+//
+// **これを使って「1週間の枠のせいで待っているか」を切り分ける。**
+// 5時間の枠だけで待っているときに担当を手放すと、2026-08-26 の決定
+// 「5時間枠 → 待つ。担当は変えない」を破る。
+//
+// 与える情報: 使い切っている枠が2件（`session` と `weekly_scoped`）、
+// まだ余裕のある枠が1件（`weekly_all`）。
+// 成功条件: 使い切っている2件の kind だけが、応答の並び順のまま返ること。
+func TestSnapshot_使い切った枠のkindだけを並び順のまま返す(t *testing.T) {
+	snap := &ratelimit.Snapshot{
+		Limits: []ratelimit.Limit{
+			{Kind: "session", Percent: 100, ResetsAt: mustTime(t, "2026-08-18T14:09:59Z")},
+			{Kind: "weekly_all", Percent: 42, ResetsAt: mustTime(t, "2026-08-24T18:59:59Z")},
+			{Kind: "weekly_scoped", Percent: 100, ResetsAt: nil},
+		},
+	}
+
+	got := snap.FullLimitKinds()
+	want := []string{"session", "weekly_scoped"}
+	if len(got) != len(want) {
+		t.Fatalf("使い切った枠の件数が想定と違う: got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("使い切った枠の kind が想定と違う: got %v, want %v", got, want)
+		}
+	}
+}
+
+// 目的: 使い切っている枠が1件も無ければ、FullLimitKinds が空を返すことを確認する（issue #197）。
+//
+// **空でないと、待つ上限の判定が「1週間の枠で待っている」と誤って読む。**
+//
+// 与える情報: どれも 100 に達していない枠が2件。
+// 成功条件: 長さ0 が返ること。
+func TestSnapshot_使い切った枠が無ければkindを1件も返さない(t *testing.T) {
+	snap := &ratelimit.Snapshot{
+		Limits: []ratelimit.Limit{
+			{Kind: "session", Percent: 99, ResetsAt: nil},
+			{Kind: "weekly_all", Percent: 42, ResetsAt: nil},
+		},
+	}
+	if got := snap.FullLimitKinds(); len(got) != 0 {
+		t.Fatalf("使い切った枠が無いのに kind を返した: got %v", got)
+	}
 }
 
 // 目的: エラーメッセージへ載せる応答本文が、多バイト文字の途中で割れないことを確認する

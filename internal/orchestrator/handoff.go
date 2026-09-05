@@ -26,6 +26,17 @@ import (
 // **上から順に見ることは保たれる。**次の巡回で続きを見る。
 const maxHandoffFetchesPerPoll = 10
 
+// quotaReleaseWriteBudget は、1週間の枠の上限で担当を手放すときに GitHub へ書く上限である
+// （設計 3-27。issue #197）。
+//
+// **`herdr.read_timeout_ms`（既定5秒）を使い回さない。**あちらは socket の応答を待つ上限で、
+// **GraphQL を2本（担当者を外す・`released` を書く）投げるには足りない。**初回は
+// `gh` の持ち主の取得も乗る。**足りないと毎巡回でやり直し、run はスロットと pane を握ったまま残る。**
+//
+// **30秒にする。**`internal/ratelimit` が HTTP の全体の上限に使っている値と同じで、
+// **GitHub が遅いときの1回ぶんとして実測のある長さである。**
+const quotaReleaseWriteBudget = 30 * time.Second
+
 // handoffDecision は handoffGate の答えである。
 type handoffDecision struct {
 	// proceed は、この機械が着手してよいかである。
@@ -449,36 +460,385 @@ func (o *Orchestrator) bidForIssue(
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
 func (o *Orchestrator) undoHandoffAcquire(ctx context.Context, issue tracker.Issue) {
+	login, ok := o.releaseOwnAssignee(ctx, issue, "着手を取りやめましたが")
+	if !ok {
+		return
+	}
+	o.logger.Info("着手を取りやめたので、書いた担当者を消し戻しました",
+		"identifier", issue.Identifier, "担当者", login)
+}
+
+// releaseOwnAssignee は、この機械が書いた担当者を外し、`released` のコメントを1件書く
+// （設計 3-77c / 3-77g）。
+//
+// **外すのは自分1人だけである。**人間が別の担当者を足していたら、その人は残る。
+//
+// **`assigneeIDOf` は使えない。**自分のノード ID を引くには結局 `viewerIdentity` を呼ぶので、
+// **そこから同時に取れる。**issue の写しから探すと、写しの新しさに答えが依存してしまう。
+//
+// **`viewerIdentity` を取れなければ、何もせずに戻る。**外す相手を間違えない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// failurePrefix: 外せなかったときの警告の頭に付ける語（呼び出しの文脈で変わる）。
+// 戻り値の1つ目: 外した担当者のログイン名。
+// 戻り値の2つ目: 外せたら true。**外せなければ false**（released も書いていない）。
+func (o *Orchestrator) releaseOwnAssignee(
+	ctx context.Context, issue tracker.Issue, failurePrefix string,
+) (string, bool) {
+	nodeID, viewer, ok := o.releaseTargetFor(ctx, issue, failurePrefix)
+	if !ok {
+		return "", false
+	}
+	// **理由は空で渡す。**ここは着手を取りやめる経路で、`workspace_hooks.after_run` を
+	// 走らせていない。**3-77c の「この branch へ push しないでください」がそのまま正しい。**
+	return o.removeOwnAssignee(ctx, issue, nodeID, viewer, failurePrefix, "")
+}
+
+// releaseTargetFor は「誰を、どの issue から外すか」を先に決める（設計 3-77c / 3-77g）。
+//
+// **書き込みを1バイトも行わない。**外せるかどうかだけを先に知りたい経路が使う
+// （`after_run` を走らせる前に、外す相手が分かっているかを確かめる）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// failurePrefix: 決められなかったときの警告の頭に付ける語。
+// 戻り値の1つ目: issue のノード ID。
+// 戻り値の2つ目: この機械の担当者。
+// 戻り値の3つ目: 2つとも決まれば true。
+func (o *Orchestrator) releaseTargetFor(
+	ctx context.Context, issue tracker.Issue, failurePrefix string,
+) (string, tracker.Assignee, bool) {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
-		return
+		// **draft issue には担当者もコメントも書けない。****黙って戻らない。**
+		// 呼び出し側は毎巡回でここへ来るので、1行も出さないと理由が分からないまま止まる。
+		o.logger.Warn(failurePrefix+"、この issue には担当者を書けません（draft issue です）",
+			"identifier", issue.Identifier)
+		return "", tracker.Assignee{}, false
 	}
 	viewer, ok := o.viewerIdentity(ctx)
 	if !ok {
-		o.logger.Warn("gh の持ち主を取れないので、書いた担当者を消し戻せません",
+		o.logger.Warn(failurePrefix+"、gh の持ち主を取れないので担当者を消せません",
 			"identifier", issue.Identifier)
-		return
+		return "", tracker.Assignee{}, false
 	}
+	return nodeID, viewer, true
+}
+
+// removeOwnAssignee は担当者を外し、`released` のコメントを1件書く（設計 3-77c / 3-77g）。
+//
+// **外す相手は `releaseTargetFor` が決めてある。**この関数は書き込みだけを行う。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// nodeID: issue のノード ID。
+// viewer: 外す担当者（この機械）。
+// failurePrefix: 外せなかったときの警告の頭に付ける語。
+// 戻り値の1つ目: 外した担当者のログイン名。
+// 戻り値の2つ目: 外せたら true。
+func (o *Orchestrator) removeOwnAssignee(
+	ctx context.Context, issue tracker.Issue, nodeID string, viewer tracker.Assignee,
+	failurePrefix, reason string,
+) (string, bool) {
 	if _, err := o.tracker.RemoveAssignees(ctx, nodeID, []string{viewer.ID}); err != nil {
 		// **担当者が残る。**hold も released も無いので、次にこの issue を見る機械は
 		// 「hold の無い自分の担当」として待たずに着手を試みる（設計 3-77g / 3-77b）。
 		// **「次の巡回で入札し直す」わけではない。**担当者が消えていない以上、
 		// 入札からはやり直されない。
-		o.logger.Warn("着手を取りやめましたが、書いた担当者を消し戻せません（担当者が残ります）",
+		o.logger.Warn(failurePrefix+"、書いた担当者を消し戻せません（担当者が残ります）",
 			"identifier", issue.Identifier, "error", err)
-		return
+		return "", false
 	}
 	body := handoff.FormatReleased(handoff.Released{
 		From:   o.hostName,
 		Branch: o.branchNameFor(issue),
 		At:     o.now(),
+		Reason: reason,
 	})
 	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
 		o.logger.Warn("担当者を消し戻したことを issue へ書けませんでした",
 			"identifier", issue.Identifier, "error", err)
 	}
-	o.logger.Info("着手を取りやめたので、書いた担当者を消し戻しました",
-		"identifier", issue.Identifier, "担当者", viewer.Login)
+	return viewer.Login, true
+}
+
+// weeklyWaitExceeded は「1週間の枠が明けるのを待つ上限を超えたか」を返す
+// （設計 3-27。issue #197）。
+//
+// **満杯の1週間の枠を見た時刻を、この中で記録する。**判定と記録を分けると、
+// **呼ぶ側が記録を忘れたときに、経過が永久に0のままになる。**
+//
+// **測り方は2通りある。**
+//
+//	満杯の1週間の枠が全部 `resets_at` を持つ  … いちばん遅い時刻までの残りで測る
+//	1つでも持たない                            … 満杯になってからの経過で測る
+//
+// **5時間の枠だけが満杯なら、いつまでも待つ**（2026-08-26 の人間の決定
+// 「5時間枠 → 待つ。担当は変えない」）。
+//
+// **`quotaResetAt()` を使ってはならない。**あれは種別を選ばないので、
+// **1週間の枠を待っているのに5時間の枠の時刻で判定してしまう。**
+// 5時間の枠が明けるたびに枠待ちの印が外れるため、上限に届くのがそのぶん遅れる。
+//
+// **直前の読み取りに失敗しているときは、手放さない。**この判定は GitHub へ2回書き、
+// pane を閉じる。**古い写しで動かすと、既に明けている枠を根拠に担当を外すことになる。**
+// **経過の時計は止めない。**読めるようになった時点で、そのまま効く。
+//
+// **判定の軸は「リセットまでの残り時間」である。**2026-08-26 に人間が承認した表が、
+// 1週間の枠を「上限以内なら待つ／上限より先なら引き渡す」で分けている。
+// **その上限が `rate_limit.weekly_wait_limit_minutes`（既定300分＝5時間）である。**
+//
+// rs: 対象の run。
+// 戻り値: 上限を超えていれば true。
+func (o *Orchestrator) weeklyWaitExceeded(rs *runState) bool {
+	// **1回のロックで取る**（設計 3-77j）。**`quotaSnapshot()` と `quotaForBid()` を
+	// 続けて呼んではならない。**2回のロックの間に `pollQuota` が割り込むと、
+	// **「読めている」と答えた新しい写しではなく、古い写しで手放すことになる。**
+	snap, stale := o.quotaSnapshotWithStale()
+	fullKinds := snap.FullLimitKinds()
+	weeklyFull := false
+	for _, kind := range fullKinds {
+		if handoff.IsWeeklyKind(kind) {
+			weeklyFull = true
+			break
+		}
+	}
+	since := rs.noteWeeklyFull(weeklyFull, o.now())
+
+	// **読めなくなった写しで手放さない。**この判定は GitHub へ2回書き、pane を閉じる。
+	// **資格情報が切れた機械は、切れる直前の値を1日中返し続ける**（設計 3-77i）。
+	// **時計は上で進めてある。**読めるようになった時点で、経過はそのまま効く。
+	//
+	// **同じ読み取りから判定する。**`quotaForBid()` を呼び直すと2回目のロックになり、
+	// **その間に `pollQuota` が新しい写しへ差し替えると、「読めている」と答えたうえで
+	// 古い写しの数字で手放す。**
+	if snap == nil || stale {
+		return false
+	}
+
+	limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
+	if limit <= 0 || !weeklyFull {
+		// **0 以下は「上限を設けない」**（`claude.turn_timeout_ms` と
+		// `tracker.provider.handoff.recheck_interval_ms` と同じ向き）。
+		// **5時間の枠だけならいつまでも待つ。**
+		return false
+	}
+	if resetAt, ok := snap.LatestResetOfKinds(handoff.IsWeeklyKind); ok {
+		return resetAt.Sub(o.now()) > limit
+	}
+	return !since.IsZero() && o.now().Sub(since) > limit
+}
+
+// releaseBecauseQuotaWaitAsync は、待つ上限を超えた run を止めて担当を手放す
+// （設計 3-27 / 3-77c。issue #197）。
+//
+// **巡回のループから呼んでよいのはこちらである。**`RemoveAssignees` とコメントの投稿と
+// pane を閉じる要求が乗るので、**同じ巡回で複数の run が超えると直列に積まれる。**
+//
+// **印は同期に確保してから goroutine を起こす。**確保できなければ何もしない
+// （書き戻しの最中なら、次の巡回でやり直す）。**二重には走らない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *runState) {
+	if rs.beginTerminal() != terminalClaimed {
+		return
+	}
+	o.wg.Add(1)
+	go func() {
+		defer o.wg.Done()
+		_ = o.releaseBecauseQuotaWaitClaimed(ctx, rs)
+	}()
+}
+
+// releaseBecauseQuotaWait は、待つ上限を超えた run を止めて担当を手放す（turn ループ用）。
+//
+// **turn の goroutine から呼ぶ。**`claimTerminal` は書き戻しの終わりを待つので、
+// **巡回のループから呼んではならない**（設計 3-8）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState) bool {
+	if !rs.claimTerminal(ctx) {
+		// **別の経路が既に終わらせている。**待ち直させない。
+		return true
+	}
+	return o.releaseBecauseQuotaWaitClaimed(ctx, rs)
+}
+
+// releaseBecauseQuotaWaitClaimed は、終わらせる印を確保したあとの本体である。
+//
+// **順番を入れ替えてはならない。**
+//
+//  0. 外す相手を確かめる                    … **決まらなければ after_run を走らせずに戻る**
+//  1. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
+//  2. 自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
+//  3. worker を止める                        … pane を閉じる
+//  4. 印から外す                             … スロットを空ける
+//
+// **段0 を置く理由。**`RunAfterRunOnce` は実行の前に印を立て、**印を消すのは着手と片付けだけである。**
+// **draft issue と「`gh` の持ち主を取れない」の2つは、走らせる前に分かる。**
+// 先に確かめれば、**その2つで after_run の印を無駄に消費しない。**
+//
+// **段2 を段3 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
+// **pane だけ閉じて担当が残り、`idle_timeout_ms` のあいだ誰も動かない issue になる。**
+//
+// **段1 を段2 より先に置く。**逆にすると、`released` を読んだ次の機械が、
+// **こちらの `git push` が終わる前に同じ branch で作業を始めうる**
+// （`workspace_hooks.timeout_ms` を入札の締め切りより長くしている設定で起きる）。
+//
+// **段1 で `after_run` を走らせる。**担当を失ったときの止め方（3-77c）は走らせないが、
+// **あちらは「担当が既に別の機械へ移っている」ので、push すると新しい担当の続きと衝突する。**
+// **こちらは自分から手放す側で、まだ担当者である。**衝突する相手がいない。
+// **人間の決定「push して引き渡す」は、この経路で果たす。**
+//
+// **段2 が失敗したときの後始末は無い。**`after_run` は既に走っており、
+// `RunAfterRunOnce` は印を戻さない。**push は済んでいるので、失われるのはそのあとに
+// 積んだ commit だけである。**そのことを `Warn` で1行出す。
+// **残るのは `RemoveAssignees` が一時的に落ちる場合だけである**（段0 で残り2つを潰した）。
+//
+// **段4 を落としてはならない。**`beginTerminal` は印を立てたまま返らないので、
+// **`release` を呼ばないと、その run は印に残り続けてスロットを永久に埋める。**
+//
+// **カンバンへは1バイトも書かない**（設計 3-77c）。**worktree も消さない。**
+// push していない変更が残っているかもしれず、人間が中身を見て判断できる状態のまま置く。
+//
+// ctx: 呼び出しに適用するコンテキスト。**この中で作り直すので、期限切れでもよい。**
+// rs: 対象の run。
+func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState) bool {
+	issue := rs.issue()
+	// **どの枠を使い切っているかを控える。**下の `Info` と `Warn` に載せる。
+	// **載せないと、`weekly_scoped`（1週間のモデル別の枠）が原因のときに、
+	// 人間が claude.ai の画面と突き合わせても食い違って見える。**
+	// **理由が既定の水準で出ないのは、issue #173 が直そうとしている症状そのものである。**
+	fullSnap, _ := o.quotaSnapshotWithStale()
+	fullKinds := strings.Join(fullSnap.FullLimitKinds(), ", ")
+
+	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
+	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。
+	//
+	// **段0 から段4 まで、全部これを使う。**
+	// **段0 だけ生の `ctx` を渡してはならない。**この関数は非同期の goroutine から
+	// 呼ばれるので、**巡回の ctx は先に切れる。**切れた ctx で段0a を呼ぶと
+	// 「確かめられなかった」に落ち、切れた ctx で段0b を呼ぶと毎巡回で `Warn` が出る。
+	keepCtx := context.WithoutCancel(ctx)
+
+	// **段0a。まだ自分が担当かを確かめる。**
+	// **枠待ちのあいだ、担当は自分の意思と無関係に外れる**（設計 3-77c。
+	// `tracker.provider.handoff.idle_timeout_ms` は既定18時間で、
+	// **枠待ち中は hook が来ないので進捗のコメントも増えない**）。
+	// **3-77c は「担当を外された機械は、その branch へ push してはならない」と決めている。**
+	// **確かめずに段1 の `after_run` を走らせると、利用者が書いた `git push` が
+	// 別の機械の branch へ飛ぶ。**
+	//
+	// **既存の確かめでは間に合わない。**`handleTurnEnd` は turn の終わりでしか走らず、
+	// **枠待ちの run には turn の終わりが来ない。**
+	//
+	// **3-77c の穴を塞いだと読んではならない。**この段は `weekly_wait_limit_minutes` の
+	// 内側にしかない。**`0`（上限を設けない）にした機械では、枠待ちの run は
+	// 担当が移ったことに気づかないままである。**塞いだのは
+	// 「自分から手放すときに push 先を間違えない」ことだけである。
+	// **`recheck_interval_ms` の間引きも通さない。**間引くと、間引いた窓のあいだは
+	// 「移っていない」と答えることになり、この段を置いた意味が無くなる。
+	//
+	// **答えは3つある。「移った」「自分のまま」「確かめられなかった」である。**
+	// **3つ目を2つ目へ畳んではならない。**コメントを1回読めなかっただけで
+	// 別の機械の branch へ push することになる。
+	check := o.verifyHandoff(keepCtx, rs)
+	switch {
+	case !check.Known:
+		// **分からないなら手放さない。**次の巡回でやり直す。
+		// **止める側へ倒すと、`gh` に一度届かなかっただけで push 先を間違える。**
+		o.logger.Warn("枠の上限で担当を手放そうとしましたが、いまの担当を確かめられないので見送ります"+
+			"（次の巡回でやり直します）",
+			"identifier", issue.Identifier)
+		rs.endTerminal()
+		return false
+	case check.Lost || !check.Mine:
+		// **担当者に自分が入っていないときも、ここへ来る。**
+		// **`Lost` だけを見てはならない。**あれは「別の機械が担当になった」であり、
+		// **`releaseExpiredAssignee` が担当者を外してから次の入札が決まるまでの窓では、
+		// 担当者が0人になる。**その窓で `after_run` を走らせると、
+		// **もう自分のものではない branch へ利用者の `git push` が飛ぶ。**
+		//
+		// **`after_run` を走らせず、カンバンへも書かず、担当者にも触らない**（3-77c）。
+		// **終わらせる最中の標識は確保したまま渡す。**いったん戻すと、その隙に別の goroutine が掴む。
+		o.stopHandoffLostClaimed(keepCtx, rs, check.NewHost)
+		return true
+	}
+
+	// **段0b。外す相手を先に確かめる。**`after_run` は `RunAfterRunOnce` が実行の前に印を立て、
+	// **印を消すのは着手と片付けだけである。**先に走らせて外す相手が分からなかった場合、
+	// **この run が枠明けに完走しても `finishRun` の `after_run` が印に弾かれて1回も走らない。**
+	// **draft issue と「`gh` の持ち主を取れない」の2つは、走らせる前に分かる。**
+	nodeID, viewer, ready := o.releaseTargetFor(keepCtx, issue, "枠の上限で担当を手放そうとしましたが")
+	if !ready {
+		rs.endTerminal()
+		return false
+	}
+
+	// **段1。`after_run` を、担当を外す前に走らせる。**
+	// **順番を入れ替えてはならない。**外してから push すると、`released` を読んだ次の機械が
+	// **こちらの `git push` が終わる前に、同じ branch で作業を始めうる**
+	// （`workspace_hooks.timeout_ms` を入札の締め切りより長くしている設定で起きる）。
+	//
+	// **止められても走らせる。**ここで `ctx` をそのまま渡すと、Ctrl+C の直後に
+	// **`git push` が1バイトも走らずに終わる。**
+	//
+	// **持ち時間は足さない。**`workspace.RunHook` が `workspace_hooks.timeout_ms`
+	// （既定60秒）を自分で掛ける。**ここで同じ長さをもう1枚重ねると、
+	// 外側のほうが先に始まっているぶん先に切れ、hook の側の後始末を通らずに
+	// `context deadline exceeded` だけが残る。**
+	afterRunOK := o.runAfterRunOK(keepCtx, rs)
+
+	// **段2。GitHub への書き込みには、herdr の持ち時間を使わない。**
+	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
+	// **担当者を外す・`released` を書くという2本の GraphQL に足りない。**
+	// **足りないと毎巡回でやり直し、run はスロットと pane を握ったまま残る。**
+	writeCtx, cancelWrite := context.WithTimeout(keepCtx, quotaReleaseWriteBudget)
+	// **`after_run` が走らなかったときは、理由を分ける。**
+	// **`released` の本文が「実行済みです。remote の続きから始めてください」と断言する**ので、
+	// **走っていないのにその文を出すと、次に拾う機械が入っていない commit の続きから始める。**
+	reason := handoff.ReleaseReasonWeeklyWaitLimit
+	if !afterRunOK {
+		reason = handoff.ReleaseReasonWeeklyWaitLimitNoPush
+	}
+	login, ok := o.removeOwnAssignee(writeCtx, issue, nodeID, viewer,
+		"枠の上限で担当を手放そうとしましたが", reason)
+	cancelWrite()
+	if !ok {
+		// **pane を閉じない。**閉じてしまうと、担当がこの機械のまま誰も動かなくなる。
+		// **印も外さない。**次の巡回でやり直す。
+		//
+		// **`after_run` は既に走っている。**`RunAfterRunOnce` は実行の前に印を立てるので、
+		// **この run が枠明けに完走しても、`finishRun` の `after_run` は走らない。**
+		// **push そのものは、いまの段1 で済んでいる。**そのあとに積んだ commit だけが
+		// push されないまま残る。**黙って進めない。**次に何を見ればよいかを1行で出す。
+		o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します）。"+
+			"workspace_hooks.after_run は既に走らせたので、この run が完走しても再実行されません",
+			"identifier", issue.Identifier,
+			"after_run が成功したか", afterRunOK,
+			"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
+			"使い切っている枠", fullKinds)
+		rs.endTerminal()
+		return false
+	}
+
+	// **段3。pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
+	cleanupCtx, cancel := context.WithTimeout(
+		keepCtx, time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
+	defer cancel()
+	o.stopWorker(cleanupCtx, rs)
+	// **段4。run の登録から外す。**落とすとスロットを永久に埋める。
+	o.release(rs)
+	o.logger.Info("1週間の枠が明けるのを待つ上限を超えたので、担当を手放しました"+
+		"（次の担当は入札で決め直します。worktree は残します。カンバンへは書きません）",
+		"identifier", issue.Identifier, "外した担当者", login,
+		"after_run が成功したか", afterRunOK,
+		"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
+		"使い切っている枠", fullKinds)
+	return true
 }
 
 // postBid は入札のコメントを1件書く（設計 3-77a）。
@@ -734,7 +1094,8 @@ func (o *Orchestrator) handoffLostOnTurnEnd(ctx context.Context, rs *runState) (
 	if !rs.handoffRecheckDue(o.now(), interval) {
 		return false, ""
 	}
-	return o.verifyHandoff(ctx, rs)
+	check := o.verifyHandoff(ctx, rs)
+	return check.Lost, check.NewHost
 }
 
 // handoffLostOnResume は、作業を再開する前に担当が自分のままかを確かめる（設計 3-77c）。
@@ -753,7 +1114,29 @@ func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (b
 	if !rs.handoffNeverChecked() {
 		return false, ""
 	}
-	return o.verifyHandoff(ctx, rs)
+	check := o.verifyHandoff(ctx, rs)
+	return check.Lost, check.NewHost
+}
+
+// handoffCheck は、いまの担当を issue から読み直した結果である（設計 3-77c / 3-27）。
+type handoffCheck struct {
+	// Known は答えを出せたかである。
+	//
+	// **偽なら「移っていない」ではなく「分からない」である。**
+	// **不可逆な操作の前では、これを見て見送ること**（設計 3-27 の段0a）。
+	Known bool
+	// Lost は担当が別の機械へ移っていたかである。
+	//
+	// **担当者が1人もいないときは偽である。**「まだ誰も担当していない」と
+	// 「担当を外された」を見分けられないので、走っている run を止める根拠にしない。
+	Lost bool
+	// Mine は、いまの担当者に自分（`gh` の持ち主）が入っているかである。
+	//
+	// **`Lost` の否定ではない。**担当者が1人もいないときは `Lost` も `Mine` も偽になる。
+	// **push してよいかを決める側は、こちらを見ること。**
+	Mine bool
+	// NewHost はいま担当になっている機械の名前である（読めなければ空文字）。
+	NewHost string
 }
 
 // verifyHandoff は、いま担当が自分（この機械）のままかを issue から読み直す（設計 3-77c）。
@@ -770,27 +1153,35 @@ func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (b
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// 戻り値の1つ目: 担当が移っていれば true。
-// 戻り値の2つ目: いま担当になっている機械の名前（読めなければ空文字）。
-func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, string) {
+// 戻り値: 読み直した結果。**`Known` が偽なら「移っていない」ではなく「分からない」である。**
+func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) handoffCheck {
 	issue := rs.issue()
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
 		// **draft issue には担当者もコメントも書けない。**判定できないものを判定したことにしない。
-		return false, ""
+		return handoffCheck{}
 	}
 	viewer, ok := o.viewerIdentity(ctx)
 	if !ok {
 		// **分からないなら止めない。**止めると、`gh` に一度届かなかっただけで
 		// 走っている run が捨てられる。
-		return false, ""
+		return handoffCheck{}
 	}
 
-	current, found := o.refreshIssue(ctx, rs, false)
-	if !found {
-		// **issue が見えない。**別の経路（`handleTurnEnd`）が同じ判定で拾う。
-		return false, ""
+	// **取り直せたものだけを見る。**`refreshIssue` は取り直せなかったとき
+	// **着手した時点の写しをそのまま返す**ので、そちらを使うと
+	// **「担当は自分のまま」という古い答えを、新しく確かめた答えとして扱うことになる。**
+	fetched, err := o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{rs.IssueID})
+	if err != nil {
+		o.logger.Warn("担当を確かめ直すための issue を取り直せません（この run は止めません）",
+			"identifier", issue.Identifier, "error", err)
+		return handoffCheck{}
 	}
+	if len(fetched) == 0 {
+		// **issue が見えない。**別の経路（`handleTurnEnd`）が同じ判定で拾う。
+		return handoffCheck{}
+	}
+	current := fetched[0]
 	logins := assigneeLogins(current)
 	if len(logins) == 0 {
 		// **担当者が1人もいないだけでは止めない。**
@@ -801,8 +1192,12 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 		//
 		// **担当が本当に移ったなら、次の機械が入札に勝って担当者になる。**
 		// そのときは「他人が担当者」として、この関数が真を返す。
-		rs.markHandoffChecked(o.now())
-		return false, ""
+		//
+		// **見分ける手掛かりが1つだけある。**`released` のコメントに、この機械の名前で
+		// 「担当を外した」という記録が残っていれば、**外されたほうである**（設計 3-77c）。
+		// **その記録が無ければ、この issue の担当は誰のものでもない。**
+		// **`after_run` の `git push` を走らせても、誰の作業とも衝突しない。**
+		return o.checkUnassigned(ctx, rs, issue, nodeID)
 	}
 
 	// **誰が引き継いだかを、issue の上から読む。**hold のコメントの `host` が答えである。
@@ -816,7 +1211,7 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 		// （進めると、次の確かめが1時間後になる）。
 		o.logger.Warn("担当を確かめ直すためのコメントを読めません（この run は止めません）",
 			"identifier", issue.Identifier, "error", err)
-		return false, ""
+		return handoffCheck{}
 	}
 	views := toCommentViews(comments)
 	rs.markHandoffChecked(o.now())
@@ -840,16 +1235,61 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 		// **hold のコメントの `host` でしか分からない。**
 		holdHost := strings.TrimSpace(hold.Host)
 		if !hasHold || holdHost == "" || strings.EqualFold(holdHost, o.hostName) {
-			return false, ""
+			return handoffCheck{Known: true, Mine: true}
 		}
-		return true, holdHost
+		return handoffCheck{Known: true, Lost: true, NewHost: holdHost}
 	}
 
 	newHost := strings.TrimSpace(hold.Host)
 	if newHost == "" {
 		newHost = logins[0]
 	}
-	return true, newHost
+	return handoffCheck{Known: true, Lost: true, NewHost: newHost}
+}
+
+// checkUnassigned は、担当者が1人もいない issue について「自分が手放してよいか」を答える
+// （設計 3-27 の段0a。issue #197）。
+//
+// **担当者が0人になる場面は2つあり、行き先が正反対である。**
+//
+//	別の機械が期限切れの担当を外した直後  … 自分のものではない。push してはならない
+//	復元した run・この機能より前の run    … 誰のものでもない。push してよい
+//
+// **見分けるのは `released` のコメントである。**この機械の名前で「担当を外した」記録が
+// 残っていれば、外されたほうである（3-77c）。
+//
+// **記録が無いほうを「自分のもの」に倒す。**倒さないと、
+// **復元した run が `after_run` も `released` も無しに pane を閉じられる。**
+// **その run の成果は worktree に残るだけで、issue には1行も残らない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// issue: 対象の issue（ログに使う）。
+// nodeID: 下敷きの GitHub issue のノード ID。
+// 戻り値: 読み直した結果。
+func (o *Orchestrator) checkUnassigned(
+	ctx context.Context, rs *runState, issue tracker.Issue, nodeID string,
+) handoffCheck {
+	comments, _, err := o.tracker.FetchAllComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
+	if err != nil {
+		// **読めないなら答えを出さない。**時計も進めない。
+		o.logger.Warn("担当者がいない issue のコメントを読めません（この run は止めません）",
+			"identifier", issue.Identifier, "error", err)
+		return handoffCheck{}
+	}
+	rs.markHandoffChecked(o.now())
+	if r, ok := handoff.LatestReleased(toCommentViews(comments)); ok &&
+		strings.EqualFold(strings.TrimSpace(r.From), o.hostName) {
+		o.logger.Info("この機械の担当が外された記録が issue にあります",
+			"identifier", issue.Identifier, "外された機械", r.From,
+			"branch", r.Branch, "外した時刻", r.At)
+		// **`Lost` は立てない。**走っている run をこれだけで止めると、
+		// **古い記録1件で、いま正常に働いている run が捨てられる。**
+		// **`Mine` を偽にして、手放す経路にだけ効かせる。**
+		return handoffCheck{Known: true}
+	}
+	// **誰のものでもない。**手放してよい（`released` を書けば、次の機械が入札で拾う）。
+	return handoffCheck{Known: true, Mine: true}
 }
 
 // stopBecauseHandoffLost は、担当が移った run を止める（設計 3-77c）。
@@ -875,6 +1315,20 @@ func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState,
 	if !rs.claimTerminal(ctx) {
 		return
 	}
+	o.stopHandoffLostClaimed(ctx, rs, newHost)
+}
+
+// stopHandoffLostClaimed は、印を確保済みの run について `stopBecauseHandoffLost` の中身を行う。
+//
+// **印を確保する段だけを外に出したものである。**
+// **枠の上限で手放す経路は、既に印を確保した状態でここへ来る**
+// （いったん `endTerminal` で戻して `stopBecauseHandoffLost` を呼び直すと、
+// **その隙に別の goroutine が同じ run を掴める**）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// newHost: いま担当になっている機械の名前（読めなければ空文字）。
+func (o *Orchestrator) stopHandoffLostClaimed(ctx context.Context, rs *runState, newHost string) {
 	who := newHost
 	if who == "" {
 		who = i18n.T(i18n.KeyHandoffLostUnknownHost)

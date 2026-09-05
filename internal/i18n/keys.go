@@ -244,6 +244,16 @@ const (
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
 	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
 	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
+	// KeyHandoffReleasedWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したときの
+	// released のコメントの2行目に出る（機械の名前を差し込む。issue #197）。
+	//
+	// **こちらは push 済みである。**手放す直前に `workspace_hooks.after_run` が走っている。
+	KeyHandoffReleasedWeeklyWaitLimit Key = "handoff.released.weekly_wait_limit"
+	// KeyHandoffReleasedWeeklyWaitLimitNoPush は、同じ理由で手放したが
+	// `workspace_hooks.after_run` が走らなかったときの2行目に出る（機械の名前を差し込む）。
+	//
+	// **remote に続きが入っていない可能性がある。**次に拾う機械へそれを伝える。
+	KeyHandoffReleasedWeeklyWaitLimitNoPush Key = "handoff.released.weekly_wait_limit_no_push"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
 	// KeyHandoffLostUnknownHost は、担当が移った先の機械の名前を読めなかったときに差し込む。
@@ -1288,6 +1298,9 @@ const (
 	// KeyConfigValidateHandoffOnAssigneeGate は
 	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
+	// KeyConfigValidateRateLimitWeeklyWaitRange は
+	// rate_limit.weekly_wait_limit_minutes が負のときに出る（issue #197）。
+	KeyConfigValidateRateLimitWeeklyWaitRange Key = "config.validate.rate_limit_weekly_wait_range"
 )
 
 // 設定値の環境変数の展開・チルダの展開（internal/config の expand）のエラーの文言。
@@ -2509,6 +2522,8 @@ var allKeys = []Key{
 	KeyHandoffHoldStartingNoBranch,
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
+	KeyHandoffReleasedWeeklyWaitLimit,
+	KeyHandoffReleasedWeeklyWaitLimitNoPush,
 	KeyHandoffLostReason,
 	KeyHandoffLostUnknownHost,
 	KeyDoctorHerdrConfigUnreadable,
@@ -2917,6 +2932,7 @@ var allKeys = []Key{
 	KeyConfigValidateHandoffRecheckIntervalRange,
 	KeyConfigValidateHandoffMarginRange,
 	KeyConfigValidateHandoffOnAssigneeGate,
+	KeyConfigValidateRateLimitWeeklyWaitRange,
 	KeyConfigExpandTrailingDollar,
 	KeyConfigExpandUnclosedBrace,
 	KeyConfigExpandEmptyEnvName,

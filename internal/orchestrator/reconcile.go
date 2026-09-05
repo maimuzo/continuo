@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -235,6 +236,36 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 	}
 }
 
+// releaseQuotaWaitExceeded は、1週間の枠を待つ上限を超えた run を手放す
+// （設計 3-27。issue #197）。
+//
+// **枠待ちの印が立っている run について、毎巡回で必ず通る唯一の場所である。**
+// turn 側の待ちループは、herdr が一時的に届かないと**印を外さずに goroutine を畳む**ので、
+// 走っていない窓がある。
+//
+// **`checkStalls` の `claude.turn_timeout_ms` の門より前で呼ぶ。**
+// **0 以下でも枠待ちの印は立つ**ので、門のあとに置くとその設定の機械で一度も効かない。
+//
+// **非同期に手放す。**担当者を外す要求とコメントの投稿と pane を閉じる要求が乗るので、
+// **同じ巡回で複数の run が超えると直列に積まれる**（設計 3-8）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
+	for _, rs := range o.snapshotRuns() {
+		if !rs.snapshot().WaitingQuota {
+			continue
+		}
+		if !o.weeklyWaitExceeded(rs) {
+			continue
+		}
+		// **画面の判定は `releaseBecauseQuotaWaitClaimed` の中で行う。**
+		// **ここでやってはならない。**画面は herdr、担当は GitHub と、別々の外部に依存する。
+		// **前に置くと、herdr が落ちているあいだ担当の確認が1回も走らない。**
+		// **枠待ちの run に turn の終わりは来ない**ので、担当を確かめる経路は他に無い。
+		o.releaseBecauseQuotaWaitAsync(ctx, rs)
+	}
+}
+
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
 // （設計 3-9 の手順7b）。
 //
@@ -296,12 +327,16 @@ func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string,
 //
 // **時計が動いていない run について、上から順に見る。**
 //
-//  1. 枠待ちか（percent が 100 かつ この run から hook が来ていない）
-//     → 枠待ちなら「時計を止めている」印を付けて終わり。**殺さない**
-//  2. 画面の版が増えているか（agent.get の `revision`）
+//  1. 画面の版が増えているか（agent.get の `revision`）
 //     → 増えていれば時計を起こし直す。**1つの turn に何時間かかっていても打ち切らない**
-//  3. 版が増えていない
+//  2. 版が増えていない。枠待ちか（percent が 100 かつ この run から hook が来ていない）
+//     → 枠待ちなら「時計を止めている」標識を付けて終わり。**殺さない**
+//  3. 枠待ちでもない
 //     → worker を止め、リトライを積む
+//
+// **段1 を段2 より前に置く。順番を入れ替えてはならない**（設計 3-27。issue #197）。
+// **枠待ちの条件は「長い1つのツール呼び出し」と区別できない。**
+// 後ろに置くと、**正常に走っている run が枠待ちと名乗り、stall の時計が止まったまま戻らない。**
 //
 // **枠待ちの run は判定そのものを飛ばす**（`WaitingQuota` が立っている間は時計が止まっている）。
 // **`LastSeenAt` は進めない**（進めると、枠が明けたあとに「最後に動いていた時刻」が分からなくなる）。
@@ -311,17 +346,66 @@ func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string,
 //
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) checkStalls(ctx context.Context) {
+	// **1週間の枠を待つ上限は、打ち切りの判定を切っていても効かせる**（設計 3-27。issue #197）。
+	// **下の `silence <= 0` より前に呼ぶ。**`claude.turn_timeout_ms` が 0 以下でも
+	// **枠待ちの印は立つ**（`isQuotaWaiting` は hook を1件も受けていない run では
+	// 無音の長さを見ない）。**あとに置くと、その設定の機械で上限が一度も効かない。**
+	o.releaseQuotaWaitExceeded(ctx)
+
+	now := o.now()
+	// **満杯の1週間の枠があるかを、1回のロックで取った写しから見る**（設計 3-27。issue #197）。
+	// **run ごとに取り直さない。**同じ巡回の中で違う写しの答えが混ざる。
+	quotaSnap, _ := o.quotaSnapshotWithStale()
+	weeklyFull := false
+	for _, kind := range quotaSnap.FullLimitKinds() {
+		if handoff.IsWeeklyKind(kind) {
+			weeklyFull = true
+			break
+		}
+	}
+
+	// **満杯を最初に見た時刻は、枠待ちの標識の有無によらず、巡回のたびに控える**（設計 3-27）。
+	// **`weeklyWaitExceeded` の中だけで控えてはならない。**あれは標識が立っている run しか
+	// 通らないので、**標識が別の経路で外れると、以後どこからも消されない。**
+	// **消されないと、何日か普通に動いたあと1週間の枠がもう一度満杯になったときに、
+	// 何日も前の時刻との差で「上限を超えた」と判定し、1分も待たずに手放す。**
+	//
+	// **下の `silence <= 0` の門より前に置く。**`claude.turn_timeout_ms` を0以下にしている
+	// 機械では、あとに置くと**この記録も走らない。**
+	for _, rs := range o.snapshotRuns() {
+		rs.noteWeeklyFull(weeklyFull, now)
+	}
+
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	if silence <= 0 {
 		return
 	}
-	now := o.now()
 
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
 		if snap.WaitingQuota {
-			// 枠が明けたら印を外す。**外す契機は「resets_at を過ぎたこと」だけである。**
-			if !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt) {
+			// **上限は上の `releaseQuotaWaitExceeded` が見ている。**ここでは見ない。
+			//
+			// 枠が明けたら印を外す。契機は2つある。
+			//
+			// **1つ目は `resets_at` を過ぎたこと。**
+			// **2つ目は、使い切っている枠が1つも無くなったこと。**
+			//
+			// **2つ目を落としてはならない。**`resets_at` が `null` で返る枠だけが満杯だと、
+			// `QuotaResetAt` はゼロ値のままで、**1つ目では永久に外れない。**
+			// turn のループは同じ判定を持っている（`quotaAtFull` を見て外す）が、
+			// **herdr が一時的に届かないと、待ちループは印を外さずに goroutine を畳む**
+			// （設計 3-27）。**そのとき外す者が1人もいなくなり、run はスロットと pane を
+			// continuo の再起動まで握り続ける。**
+			//
+			// **`weekly_wait_limit_minutes: 0`（上限を設けない）で必ず当たる。**
+			// [docs/FAQ.md](../../docs/FAQ.md) が1台で動かす人に勧めている値である。
+			switch {
+			case !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt):
+				rs.clearWaitingQuota(now)
+			case !o.quotaAtFull():
+				o.logger.Info("使い切っている枠が無くなったので、枠待ちの印を外します",
+					"identifier", snap.Identifier)
 				rs.clearWaitingQuota(now)
 			}
 			continue
@@ -336,17 +420,20 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 			continue
 		}
 
-		// 1. 枠待ちを先に見る。
-		if o.isQuotaWaiting(rs) {
-			resetAt, _ := o.quotaResetAt()
-			rs.setWaitingQuota(resetAt)
-			o.logger.Info("枠待ちと判定したので stall の時計を止めます",
-				"identifier", snap.Identifier, "resets_at", resetAt)
-			continue
-		}
-
-		// 2. agent.get で状態と画面の版を1回で取る。
+		// 1. agent.get で状態と画面の版を1回で取る。
 		// **版が増えていれば、何時間かかっていても待ち続ける。**
+		//
+		// **枠待ちの判定より前に置く**（設計 3-27。issue #197）。
+		// **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
+		// 「枠を待っている」と「長い1つの仕事をしている」を区別できない。**
+		// hook はツールが終わってから飛ぶので、**1時間を超える1回のツール呼び出しの
+		// 最中は1件も来ない。**そこへ週次の枠が満杯だと条件が両方そろい、
+		// **正常に走っている run を枠待ちと名乗らせて stall の時計を止める。**
+		// **後ろに置くと、その run は本当に固まっても誰にも止められない。**
+		//
+		// **`noteRevision` は版が変わったときだけ `LastSeenAt` を進める。**
+		// **版が変わった run は、そもそも枠待ちではない。**
+		// だから「枠待ちの run は `LastSeenAt` を進めない」という約束は破れない。
 		agent, err := o.agentInfo(ctx, rs)
 		if err == nil && rs.noteRevision(agent.Revision, now) {
 			o.logger.Info("画面が変わっているので待ち続けます（turn の総実行時間では打ち切りません）",
@@ -358,6 +445,21 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		if err != nil {
 			o.logger.Warn("画面の版を読めませんでした（止まったものとして扱います）",
 				"identifier", snap.Identifier, "error", err)
+		}
+
+		// 2. 画面が止まっている。枠待ちかを見る。
+		if o.isQuotaWaiting(rs) {
+			// **待ちに入る前に上限を見る**（設計 3-27。issue #197）。
+			// **超えていたら標識を立てない。**立てると、手放したあとに標識だけが残る。
+			if o.weeklyWaitExceeded(rs) {
+				o.releaseBecauseQuotaWaitAsync(ctx, rs)
+				continue
+			}
+			resetAt, _ := o.quotaResetAt()
+			rs.setWaitingQuota(resetAt)
+			o.logger.Info("枠待ちと判定したので stall の時計を止めます",
+				"identifier", snap.Identifier, "resets_at", resetAt)
+			continue
 		}
 
 		// 3. 版が止まったまま閾値を超えた。worker を止め、リトライを積む。

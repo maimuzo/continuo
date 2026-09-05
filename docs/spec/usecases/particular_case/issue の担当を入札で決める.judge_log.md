@@ -20,7 +20,7 @@
 | 10 | ステップ6（IF-ELSE） | 担当者が1人もいないかどうかで分岐した | **どちらも正常な結末**である（入札して担当になる／担当のまま進む）。`VALIDATES THAT` にすると、正常な「担当者が自分」が代替フロー扱いになる | rucm スキルの厳密規則11、`docs/plans/continuo_design.md#3-77b` | 95% |
 | 11 | 「担当者が自分」を ELSE に置いたこと | ELSE 側で「入札のコメントを1件も書かない」「hold のコメントを1件も書かない」の2ステップを置いた | **書かないことが確かめたい振る舞いそのもの**である。空の ELSE にすると、経路の一覧に「コメントが増えない」検査の置き場が無くなる | `docs/plans/continuo_design.md#3-77c`（コメントは1件も増えない） | 90% |
 | 12 | ステップ7（VALIDATES THAT） | usage API から5時間の枠と1週間の枠の使用率を読める | **読めなかった機械は投稿しない。**読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう | `docs/plans/continuo_design.md#3-77`（枠を読めなかった → 投稿しない） | 100% |
-| 13 | ステップ8 | 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る | モデル別の枠は一定量を使うまで現れない。**最大を採れば、現れない枠は自動的に判定へ入らない** | `docs/plans/continuo_design.md#3-77`、`internal/ratelimit/ratelimit.go` の `Snapshot.MaxPercent` | 95% |
+| 13 | ステップ8 | 1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を採る | **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ使用率0で返るので、**最大を採れば、使っていない枠は自動的に判定へ効かない** | `docs/plans/continuo_design.md#3-77`、`internal/ratelimit/ratelimit.go` の `Snapshot.MaxPercent` | 95% |
 | 14 | ステップ9（VALIDATES THAT） | どの枠の使用率も `rate_limit.pause_above_percent` を超えていない | 依頼で明示された投稿しない条件である。**新規の着手を止めている機械が担当を取ると、取ったまま動かない** | 依頼文、`docs/plans/continuo_design.md#3-27`、`internal/orchestrator/orchestrator.go` の `dispatchPaused` | 90% |
 | 15 | ステップ9 をステップ12 より前に置いたこと | 閾値の検査を先、余裕値の符号の検査をあとにした | **閾値を超えている機械は、マージンの設定にかかわらず投稿しない。**先に置けば、余裕値を計算する段へ来ない | `docs/plans/continuo_design.md#3-27`（新規の dispatch を止める閾値） | 70% |
 | 16 | ステップ10・11 | 100 から使用率とマージンを引いた値 | 設計の式をそのまま写した。**使用率は「0% が未使用、100% が使い切り」で、API が返す値そのものである** | `docs/plans/continuo_design.md#3-77` | 100% |

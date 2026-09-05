@@ -341,6 +341,19 @@ func validate(cfg *Config) error {
 	if cfg.RateLimit.PauseAbovePercent < 0 || cfg.RateLimit.PauseAbovePercent > 100 {
 		return invalidValueError("rate_limit.pause_above_percent", cfg.RateLimit.PauseAbovePercent, "0以上100以下にすること")
 	}
+	// **負の値を通してはならない**（issue #197）。負だと「待つ先の時刻 − いま」が必ず上回るので、
+	// **枠待ちに入った瞬間に担当を手放す。**1週間の枠を1%でも使い切れば、走っている run が全部止まる。
+	//
+	// **上限を切りたい人は 0 を書く**（`claude.turn_timeout_ms` と
+	// `tracker.provider.handoff.recheck_interval_ms` と同じ向き）。
+	//
+	// **`tracker.provider.handoff.idle_timeout_ms` との大小は検査しない。**
+	// 1台で動かしている人には他の機械がいないので、18時間より長くても正しく効く。
+	// **弾くと、その人が起動できなくなる。**案内は雛形のコメントに書いてある。
+	if cfg.RateLimit.WeeklyWaitLimitMinutes < 0 {
+		return invalidValueError("rate_limit.weekly_wait_limit_minutes",
+			cfg.RateLimit.WeeklyWaitLimitMinutes, i18n.T(i18n.KeyConfigValidateRateLimitWeeklyWaitRange))
+	}
 
 	switch cfg.Trust.OnUntrusted {
 	case "skip_and_comment":
