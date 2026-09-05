@@ -231,7 +231,7 @@ language: auto                              # 画面に出す文言の言語。a
 
 ### 書く言語
 
-<!-- 下の1行は continuo init が front matter の language から決めて書きました。 -->
+<!-- 下の1行は continuo init が、そのとき画面に使っていた言語から決めて書きました。 -->
 <!-- 書き換えても消してもかまいません。消すと、エージェントの既定に任されます。 -->
 <!-- continuo:write-language -->
 

@@ -372,6 +372,11 @@ func StartsAsProgressReport(body string) bool {
 // **ただし、その利用者は既に別のところで壊れている。**組み込みの指示書は
 // `<!-- continuo:agent -->` を文字列で埋め込んでおり、設定した marker を使っていない。
 // **設定した marker を組み込みへ届ける道ができたときに、ここも見直すこと。**
+//
+// **同じ前提に立つ定数が、他に2つある。**印の形を変えるときは3つとも動かすこと。
+//
+//	[internal/prompt/prompt.go](../prompt/prompt.go) の commentOpen / commentClose
+//	[internal/orchestrator/prompt.go](../orchestrator/prompt.go) の commentOpenMarker / commentCloseMarker
 const commentOpen = "<!--"
 
 // lastProgressOf は、その担当者がまだ生きていることを最後に示した時刻を返す（設計 3-77b / 5-3l）。

@@ -345,7 +345,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **足す1節。**`### 3-79. 空の Stop は「止まってよいか尋ねた」であって「終わった」ではない`。
 中身はこの文書の 1 節・6 節・7 節を縮めたもので、**測定値の細かい内訳は入れずにこの文書を参照させる。**
 
-**[docs/plans/continuo_design.md:3366](../continuo_design.md#L3366) の周辺は残す。**
+**[docs/plans/continuo_design.md:3374](../continuo_design.md#L3374) の周辺は残す。**
 あちらは「**continuo 自身は差し戻しを使わない**」を決めているだけで、
 **「他人の hook が差し戻してきたときにどうするか」は決めていない。**3-79 がそこを埋める。
 

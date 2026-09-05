@@ -468,7 +468,9 @@ func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 // trackerCfg: front matter の tracker セクション。
 // frag: 組み立てた断片。
 // stdout / stderr: 出力先。
-// 戻り値: 終了コード。0 は出せた、1 は引けなかったか展開できなかった、2 は接続先が不正である。
+// 戻り値: 終了コード。0 は出せた、1 は引けなかったか展開できなかった。**2 は返さない。**
+// **接続先が不正なときも 1 である**（設計 5-3f の表と揃えてある）。
+// 引数の形の誤りは呼び出し側（`runPrompt`）が 2 で断ってから、ここへ来る。
 func runPromptExpanded(
 	d Deps,
 	identifier string,
