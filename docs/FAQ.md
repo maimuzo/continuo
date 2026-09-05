@@ -1553,7 +1553,7 @@ jq -r .base <worktree のパス>/.continuo.json
 
 ### エージェントに、日本語以外でコメントと commit メッセージを書かせたい
 
-**`WORKFLOW.md` の本文の `### 書く言語` の節に、何語で書かせるかを書いてください。**
+**`WORKFLOW.md` の本文の `### 書く言語` の節を、書き換えてください。**
 
 ```markdown
 ### 書く言語
@@ -1561,7 +1561,7 @@ jq -r .base <worktree のパス>/.continuo.json
 Write issue comments, pull request bodies, commit messages and code comments in English.
 ```
 
-**`continuo init` が、この1行を front matter の `language` から決めて書きます。**
+**その節の1行は、`continuo init` が front matter の `language` から決めて書いています。**
 `language` は画面に出す文言の言語です（既定 `auto` で、環境変数 `LANG` から決めます）。
 `ja` なら「すべて日本語で書いてください」、`en` なら英語の指示が入ります。
 
