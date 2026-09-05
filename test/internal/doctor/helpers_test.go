@@ -178,12 +178,37 @@ type fakeGitHub struct {
 	items []boardItem
 	// statusOptions はボード側の Status の選択肢名である。
 	statusOptions []string
+	// workflows はボードの自動化である（名前 → 有効かどうか）。
+	//
+	// **nil にすると、応答から `workflows` ごと落とす。**「読めなかった」を作るためである
+	// （見出し語 `自動化` は、そのとき `!` になる）。
+	// **長さ0は「1件も無い」である。**既定はこちらで、`✓` になる。
+	workflows []fakeWorkflow
 	// failure は落ち方である。
 	failure boardFailure
 	// delay は応答を返すまでにわざと待つ時間である（期限の検査に使う）。
 	delay time.Duration
 	// queries は受け取ったクエリの種別を受け取った順に記録したものである。
 	queries []string
+}
+
+// fakeWorkflow は偽ボードが返す自動化1件である。
+type fakeWorkflow struct {
+	// Name は自動化の名前である（`Pull request linked to issue` など）。
+	Name string
+	// Enabled はその自動化が有効かどうかである。
+	Enabled bool
+}
+
+// SetWorkflows はボードの自動化を差し替える。
+//
+// **nil を渡すと、応答から `workflows` ごと落とす**（読めなかった状態）。
+//
+// workflows: 載せる自動化。
+func (fg *fakeGitHub) SetWorkflows(workflows []fakeWorkflow) {
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	fg.workflows = workflows
 }
 
 // newFakeGitHub はテスト用GraphQL mockを1本立てる。
@@ -198,6 +223,7 @@ func newFakeGitHub(t *testing.T, owner string, items ...boardItem) *fakeGitHub {
 		Owner:         owner,
 		items:         items,
 		statusOptions: []string{"Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done"},
+		workflows:     []fakeWorkflow{},
 		failure:       failureNone,
 	}
 	srv := httptest.NewServer(http.HandlerFunc(fg.handle))
@@ -276,6 +302,8 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 		kind = "bootstrap"
 	case strings.Contains(req.Query, "items(first: 100"):
 		kind = "items"
+	case strings.Contains(req.Query, "workflows(first:"):
+		kind = "workflows"
 	}
 	fg.queries = append(fg.queries, kind)
 	fg.mu.Unlock()
@@ -310,6 +338,8 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 		data = fg.bootstrapPayload(failure)
 	case "items":
 		data = fg.itemsPayload(failure)
+	case "workflows":
+		data = fg.workflowsPayload(failure)
 	default:
 		data = map[string]any{}
 	}
@@ -343,6 +373,32 @@ func (fg *fakeGitHub) bootstrapPayload(failure boardFailure) map[string]any {
 				},
 			},
 		},
+	}
+}
+
+// workflowsPayload はカンバンの自動化を取るクエリへの応答を組み立てる。
+//
+// **`workflows` が nil のときは、その項目ごと落とす。**応答に入っていない状態
+// （読めなかった状態）を作るためである。
+//
+// failure: 落ち方。
+// 戻り値: 応答の data。
+func (fg *fakeGitHub) workflowsPayload(failure boardFailure) map[string]any {
+	if failure == failureNoProject {
+		return map[string]any{"repositoryOwner": nil}
+	}
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	project := map[string]any{}
+	if fg.workflows != nil {
+		nodes := make([]any, 0, len(fg.workflows))
+		for i, w := range fg.workflows {
+			nodes = append(nodes, map[string]any{"number": i + 1, "name": w.Name, "enabled": w.Enabled})
+		}
+		project["workflows"] = map[string]any{"nodes": nodes}
+	}
+	return map[string]any{
+		"repositoryOwner": map[string]any{"projectV2": project},
 	}
 }
 
