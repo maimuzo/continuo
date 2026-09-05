@@ -253,3 +253,46 @@ func 読み直し用のファイルの設定(t *testing.T, path string) config.C
 	}
 	return loaded.Config
 }
+
+// Test効いたキーは効かない一覧に出ない は、いま差し替わったキーが
+// 「読み直しただけでは効きません」にも出てしまわないことを確かめる。
+//
+// 目的: 比較の土台に差し替えるキーを入れ忘れると、**効いたばかりのキーが「効きません」にも出る**
+// （実機で見つけた）。それを固定する。
+// 与える情報: 差し替えられるキーと凍結側のキーを同時に書き換えた WORKFLOW.md。
+// 成功条件: 「効きません」の一覧に、差し替えられるキーが1つも出ない。
+func Test効いたキーは効かない一覧に出ない(t *testing.T) {
+	dir := t.TempDir()
+	path := 読み直し用のWORKFLOW(t, dir,
+		読み直し用のfrontMatter("warn_and_comment", "2", "30000"), "本文\n")
+
+	fx := newFixture(t, fixtureOptions{ConfigPath: path, Mutate: 読み直し用の設定})
+	fx.AllowLog("読み直しただけでは効きません")
+	fx.Orc.Tick(context.Background())
+
+	// **差し替えられるキー2つと、凍結側1つを同時に書き換える。**
+	読み直し用のWORKFLOW(t, dir, 読み直し用のfrontMatter("warn_only", "5", "1000"), "本文\n")
+	fx.Orc.Tick(context.Background())
+
+	logs := fx.Logs.String()
+	frozen := ""
+	for _, line := range strings.Split(logs, "\n") {
+		if strings.Contains(line, "読み直しただけでは効きません") {
+			frozen = line
+		}
+	}
+	if frozen == "" {
+		t.Fatalf("「効きません」の行が出ていない:\n%s", logs)
+	}
+	for _, key := range []string{
+		"tracker.provider.handoff.on_assignee_gate",
+		"agent.max_concurrent_agents",
+	} {
+		if strings.Contains(frozen, key) {
+			t.Errorf("差し替えられたキー %q が「効きません」にも出ている:\n%s", key, frozen)
+		}
+	}
+	if !strings.Contains(frozen, "polling.interval_ms") {
+		t.Errorf("凍結側の polling.interval_ms が「効きません」に出ていない:\n%s", frozen)
+	}
+}

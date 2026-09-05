@@ -76,11 +76,7 @@ func ExtractReloadable(cfg Config) Reloadable {
 // 戻り値: 混ぜた結果と、混ぜた結果が検査に落ちた場合のエラー。
 // **エラーは「利用者のファイルが不正」ではなく「この組み合わせは読み直しでは作れない」を意味する。**
 func MergeReloadable(old, next Config) (Config, error) {
-	merged := old
-	merged.Tracker.Provider.Handoff.OnAssigneeGate = next.Tracker.Provider.Handoff.OnAssigneeGate
-	merged.Tracker.AutomatedStateRewrite = next.Tracker.AutomatedStateRewrite
-	merged.Agent.MaxConcurrentAgents = next.Agent.MaxConcurrentAgents
-	merged.Agent.MaxConcurrentAgentsByState = next.Agent.MaxConcurrentAgentsByState
+	merged := ApplyReloadable(old, next)
 
 	// **展開のあとの値を混ぜているので、展開の検査も掛け直す。**
 	if err := validate(&merged); err != nil {
@@ -90,6 +86,24 @@ func MergeReloadable(old, next Config) (Config, error) {
 		return Config{}, err
 	}
 	return merged, nil
+}
+
+// ApplyReloadable は、差し替えてよいキーだけを src から dst へ写す（**検査は掛けない**）。
+//
+// **差し替えてよいキーの一覧は、この関数1つが持つ。**
+// `MergeReloadable`（実際に効かせる設定を作る）と、
+// 「読み直しても効かない項目」を数えるときの土台作りの、両方がここを通る。
+// **2箇所に一覧を書くと、片方だけ更新されて、効いたキーが「効きません」にも出る。**
+//
+// dst: 写す先（値渡しなので、渡した側は変わらない）。
+// src: 写す元。
+// 戻り値: 差し替えてよいキーだけを src の値にした設定。
+func ApplyReloadable(dst, src Config) Config {
+	dst.Tracker.Provider.Handoff.OnAssigneeGate = src.Tracker.Provider.Handoff.OnAssigneeGate
+	dst.Tracker.AutomatedStateRewrite = src.Tracker.AutomatedStateRewrite
+	dst.Agent.MaxConcurrentAgents = src.Agent.MaxConcurrentAgents
+	dst.Agent.MaxConcurrentAgentsByState = src.Agent.MaxConcurrentAgentsByState
+	return dst
 }
 
 // FrozenChange は、読み直しても効かなかった項目1件である。

@@ -67,11 +67,16 @@ func (o *Orchestrator) reloadConfig(_ context.Context) {
 		return
 	}
 
-	// **比べる相手は「前に読んだファイルの中身」である。**
+	// **比べる相手は「前に読んだファイルの中身に、差し替えるキーだけを入れたもの」である。**
+	//
 	// **いま効いている設定と比べてはならない。**`--port` のような CLI の上書きが混ざっており
 	// （daemon が `config.Load` のあとに `cfg.Server.Port` を書き換える）、
 	// **利用者が1バイトも触っていない `server.port` が毎回「効きません」に出る。**
-	frozen, err := config.FrozenChanges(o.configBaseline(), loaded.Config)
+	//
+	// **差し替えるキーを入れずに比べてもならない。**入れないと、**いま効いたばかりのキーが
+	// そのまま「効きません」にも出る**（実機で確かめた）。
+	frozen, err := config.FrozenChanges(
+		config.ApplyReloadable(o.configBaseline(), loaded.Config), loaded.Config)
 	if err != nil {
 		// **差分を作れなくても差し替えは行う。**報告できないことは、効かせない理由にならない。
 		o.logger.Warn("読み直しても効かない項目を数えられませんでした（差し替えは行います）",
