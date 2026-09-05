@@ -256,37 +256,105 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 		ProjectNumber: *projectFlag,
 	})
 
-	// **書くのは1枚である**（設計 5-3g）。front matter（設定）と本文（固有の指示）が、
-	// 1つのファイルに入っている。
-	result, err := scaffold.WriteTemplateWithValues(dir, *forceFlag, detection.Values)
-	switch {
-	case err == nil:
-		if result.Overwritten {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitOverwritten, result.Path))
-		} else {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCreated, result.Path))
+	// **書くのは2枚である**（設計 5-3o）。
+	// **WORKFLOW.md が設定で、continuo-ci.yaml は CI へ移すための見本である。**
+	// **片方が既にあっても、もう片方は書く。**版を上げた利用者が `continuo init` を叩くと、
+	// 足りない continuo-ci.yaml だけが増える。**これが移行の唯一の手順であり、
+	// `--force` を要求してはならない**（要求すると、手で書いた本文を潰す `--force` を打たせる）。
+	res := scaffold.WriteAll(dir, *forceFlag, detection.Values)
+
+	// **WORKFLOW.md の「既にある」以外の失敗は、`continuo init` の失敗である。**
+	// ディレクトリが無い・ディレクトリでない・symlink・書けない、のいずれかで、
+	// **2枚目も同じ理由で落ちている。**同じ案内を2回出さないよう、ここで終える。
+	if res.WorkflowFailed() {
+		switch {
+		case errors.Is(res.WorkflowErr, scaffold.ErrDirNotFound):
+			// ディレクトリは作らない（--force でも作らない）。打ち間違えたパスに
+			// WORKFLOW.md が生まれると、利用者は作ったはずのファイルを見失う。
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrDirNotFound, res.WorkflowErr))
+		case errors.Is(res.WorkflowErr, scaffold.ErrNotADirectory):
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrNotADirectory, res.WorkflowErr))
+		case errors.Is(res.WorkflowErr, scaffold.ErrSymlink):
+			// symlink は --force でも辿らない。辿ると指定されたディレクトリの外にある
+			// リンク先を雛形で潰すため、--force を勧めてはならない。
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrSymlink, res.WorkflowErr))
+		default:
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, scaffold.WorkflowFileName(), res.WorkflowErr))
 		}
+		return 1
+	}
+
+	// **2枚とも既にあったときだけ、`--force` を勧めて 1 で終える。**
+	// 片方でも置けたなら、置けたことを報告して 0 で終える。
+	if res.BothExisted() {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrAlreadyExists, res.Workflow.Path))
+		return 1
+	}
+
+	if res.WorkflowErr == nil {
+		if res.Workflow.Overwritten {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitOverwritten, res.Workflow.Path))
+		} else {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCreated, res.Workflow.Path))
+		}
+	} else {
+		// **既にあった。触っていない。**
+		// **`--force` を勧めてはならない。**あれは本文ごと上書きするので、
+		// **利用者が手で書いた指示が1行も残らない**（docs/upgrading.md）。
+		// **版を上げた利用者は、足りない2枚目を置くためにこの経路を通る。**
+		// そこで破壊的なフラグを勧めると、案内と正面からぶつかる。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitWorkflowKept, scaffold.WorkflowFileName(), res.Workflow.Path))
+	}
+
+	printInitCI(stdout, stderr, res)
+
+	// **1枚も書けなかったなら、成功で終えない。**
+	// **`WORKFLOW.md` が既にあり、2枚目が「既にある」以外の理由で落ちた場合**がこれに当たる
+	// （`BothExisted` は上で 1 を返しているので、ここへ来るのはその組み合わせだけである）。
+	// **何も作っていないのに 0 を返すと、`continuo init` の成否で分岐する script が
+	// 「置けた」と読む。**理由は `printInitCI` が標準エラーへ出してある。
+	if !res.Wrote() {
+		return 1
+	}
+
+	// **検出の結果は、`WORKFLOW.md` を書いたときだけ出す。**
+	// **2枚目にはこの値を1つも埋めない**（`CITemplateWithValues` は `values` を使わない）。
+	// **出すと、触っていない `WORKFLOW.md` に値が入ったと読める。**
+	// 版を上げた利用者は必ずこの経路を通るので、そこで嘘を出さない。
+	if res.WorkflowErr == nil {
 		printDetection(stdout, detection)
-		return 0
-	case errors.Is(err, scaffold.ErrAlreadyExists):
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrAlreadyExists, result.Path))
-		return 1
-	case errors.Is(err, scaffold.ErrDirNotFound):
-		// ディレクトリは作らない（--force でも作らない）。打ち間違えたパスに
-		// WORKFLOW.md が生まれると、利用者は作ったはずのファイルを見失う。
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrDirNotFound, err))
-		return 1
-	case errors.Is(err, scaffold.ErrNotADirectory):
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrNotADirectory, err))
-		return 1
-	case errors.Is(err, scaffold.ErrSymlink):
-		// symlink は --force でも辿らない。辿ると指定されたディレクトリの外にある
-		// リンク先を雛形で潰すため、--force を勧めてはならない。
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrSymlink, err))
-		return 1
+	}
+	return 0
+}
+
+// printInitCI は continuo-ci.yaml について1行と、置いたときの案内を出す（設計 5-3o）。
+//
+// **WORKFLOW.md と書式を分ける。**どちらのファイルの話かが1行だけ読んで分かるよう、
+// 文言へファイルの名前を渡す。
+//
+// **書けなくても `continuo init` は失敗にしない。**このファイルは設定ではなく、
+// continuo は起動時に1バイトも読まない。**失敗にすると、CI を持たない利用者や、
+// 書き込みを絞ったディレクトリで `continuo init` を通せなくなる。**
+// **ただし黙って落とさない。**理由を標準エラーへ出す。
+//
+// stdout / stderr: 出力先。**置けたことは stdout、書けなかったことは stderr へ出す。**
+// res: WriteAll が返した結果。
+func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
+	name := scaffold.CIFileName()
+	switch {
+	case res.CIErr == nil:
+		if res.CI.Overwritten {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIOverwritten, name, res.CI.Path))
+		} else {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCICreated, name, res.CI.Path))
+		}
+		// **置いたときだけ案内を出す。**既にあるときは、利用者が一度読んでいる。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIAdvice))
+	case errors.Is(res.CIErr, scaffold.ErrAlreadyExists):
+		// **既にあることは失敗ではない。**触っていないことが分かるよう、場所を出す。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIKept, name, res.CI.Path))
 	default:
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, scaffold.WorkflowFileName(), err))
-		return 1
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitCIWriteFailed, name, res.CIErr))
 	}
 }
 

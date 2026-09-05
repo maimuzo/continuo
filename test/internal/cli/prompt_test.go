@@ -6,11 +6,14 @@ package cli_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/cli"
 	"github.com/maimuzo/continuo/internal/prompt"
+	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
 // runInitOffline は `continuo init` を、gh を1回も起動しない形で呼ぶ。
@@ -179,13 +182,19 @@ func TestPrompt_WORKFLOWmdを読めなければ何も出さない(t *testing.T) 
 	}
 }
 
-// 目的: `continuo init` が置くのは1枚だけであることを確かめる（設計 5-3g）。
+// 目的: `continuo init` が置くのはちょうど2枚であることを確かめる（設計 5-3o）。
 //
-// **front matter（設定）と本文（固有の指示）が、1つのファイルに入っている。**
+// **WORKFLOW.md が設定で、continuo-ci.yaml は CI へ移すための見本である。**
+// **設定は1枚のままである**（設計 5-3g）。2枚目は front matter を持たず、
+// **continuo は起動時に1バイトも読まない。**
+//
+// **3枚目が増えていないことも見る。**置くものが増えるたびに、
+// 利用者は「何を .github/workflows/ へ移すのか」を毎回考えることになる。
 //
 // 与える情報: 空のディレクトリ。
-// 成功条件: 終了コードが 0 で、WORKFLOW.md だけが在り、その中に本文が入っていること。
-func TestInit_置くのはWORKFLOWmdの1枚だけ(t *testing.T) {
+// 成功条件: 終了コードが 0 で、2枚だけが在り、WORKFLOW.md に本文が入っており、
+// 画面に配置の案内が出ていること。
+func TestInit_置くのは設定とCIの雛形の2枚(t *testing.T) {
 	dir := t.TempDir()
 
 	code, stdout, stderr := runInitOffline(dir)
@@ -194,6 +203,14 @@ func TestInit_置くのはWORKFLOWmdの1枚だけ(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "WORKFLOW.md") {
 		t.Errorf("標準出力に WORKFLOW.md の行がありません: %q", stdout)
+	}
+	if !strings.Contains(stdout, scaffold.CIFileName()) {
+		t.Errorf("標準出力に %s の行がありません: %q", scaffold.CIFileName(), stdout)
+	}
+	// **配置の案内を出すこと。**置いただけでは何も起きないので、
+	// **移すのは人間である**ことを画面で伝える（設計 5-3o）。
+	if !strings.Contains(stdout, ".github/workflows/") {
+		t.Errorf("標準出力に配置の案内がありません: %q", stdout)
 	}
 
 	entries, err := os.ReadDir(dir)
@@ -204,8 +221,11 @@ func TestInit_置くのはWORKFLOWmdの1枚だけ(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if len(names) != 1 || names[0] != "WORKFLOW.md" {
-		t.Errorf("置かれたファイルが WORKFLOW.md の1枚だけではありません: %v", names)
+	sort.Strings(names)
+	want := []string{scaffold.CIFileName(), "WORKFLOW.md"}
+	sort.Strings(want)
+	if !slices.Equal(names, want) {
+		t.Errorf("置かれたファイルが %v ではありません: %v", want, names)
 	}
 
 	got := readFile(t, filepath.Join(dir, "WORKFLOW.md"))
@@ -246,8 +266,16 @@ func TestInit_置いたWORKFLOWmdはそのまま送れる(t *testing.T) {
 //
 // 与える情報: WORKFLOW.md を置いたディレクトリ。
 // 成功条件: 終了コードが 1 で、`--force` の案内が出ること。
-func TestInit_既に在るなら終了コード1(t *testing.T) {
+//
+// **2枚とも在るときだけ 1 で終える**（設計 5-3o）。
+// **WORKFLOW.md だけが在るときは、足りない continuo-ci.yaml を置いて 0 で終える。**
+// そちらは下の `TestInit_片方だけ在るなら足りないほうを置いて0で終える` が見る。
+func TestInit_2枚とも在るなら終了コード1(t *testing.T) {
 	dir := writeWorkflowFor(t)
+	// **2枚目も置いてから叩く。**1枚目だけだと、足りないほうを置いて 0 で終わる。
+	if _, err := scaffold.WriteCIWorkflowWithValues(dir, false, scaffold.Values{}); err != nil {
+		t.Fatalf("%s を置けません: %v", scaffold.CIFileName(), err)
+	}
 
 	code, _, stderr := runInitOffline(dir)
 	if code != 1 {
@@ -255,6 +283,40 @@ func TestInit_既に在るなら終了コード1(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "--force") {
 		t.Errorf("--force の案内がありません: %q", stderr)
+	}
+}
+
+// 目的: 片方だけ在るときは、足りないほうを置いて 0 で終えることを確かめる（設計 5-3o）。
+//
+// **これが移行の唯一の手順である。**版を上げた利用者が `continuo init` を叩くと、
+// 足りない continuo-ci.yaml だけが増える。
+// **`--force` を要求してはならない。**要求すると、利用者が手で書いた本文を潰す
+// `--force` を打たせることになる（設計 5-3g）。
+//
+// 与える情報: WORKFLOW.md だけを置いたディレクトリ。**本文に人間が足した行を入れておく。**
+// 成功条件: 終了コードが 0 で、continuo-ci.yaml が増え、
+// WORKFLOW.md に足した行が1バイトも消えていないこと。
+func TestInit_片方だけ在るなら足りないほうを置いて0で終える(t *testing.T) {
+	dir := writeWorkflowFor(t)
+	path := filepath.Join(dir, "WORKFLOW.md")
+	const mark = "\n# 人間が手で足した行\n"
+	before := readFile(t, path)
+	if err := os.WriteFile(path, []byte(before+mark), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+
+	code, stdout, stderr := runInitOffline(dir)
+	if code != 0 {
+		t.Fatalf("終了コードが %d です（0 であるべきです。stderr: %s）", code, stderr)
+	}
+	if !strings.Contains(stdout, scaffold.CIFileName()) {
+		t.Errorf("標準出力に %s の行がありません: %q", scaffold.CIFileName(), stdout)
+	}
+	if _, err := os.Stat(filepath.Join(dir, scaffold.CIFileName())); err != nil {
+		t.Errorf("%s が置かれていません: %v", scaffold.CIFileName(), err)
+	}
+	if got := readFile(t, path); !strings.HasSuffix(got, mark) {
+		t.Error("人間が足した行が消えています")
 	}
 }
 

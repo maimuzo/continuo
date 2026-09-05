@@ -46,7 +46,7 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
   --jq '"\(.mergeable)/\(.mergeStateStatus)"'
 ```
 
-**`MERGEABLE/CLEAN` 以外はマージしない。**`review-result` は必須の検査なので、
+**`MERGEABLE/CLEAN` 以外はマージしない。**`code-review-result` は必須の検査なので、
 **レビュー結果が貼られていなければ `BLOCKED` になる。**
 
 **worker に渡してよいのは段1から段5まで。**段6はメインエージェントが自分で叩く。
@@ -64,7 +64,7 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
 **貼ったあとに `gh run rerun` を打つ。**
 **これを忘れると、レビュー結果を貼ったのに赤いまま、マージできない状態になる。**
 
-**赤いままだとマージは本当に止まる。**`review-result` は `main` の branch protection の
+**赤いままだとマージは本当に止まる。**`code-review-result` は `main` の branch protection の
 必須の検査である（2026-09-01 に登録した）。確かめ方。
 
 ```bash
@@ -199,11 +199,11 @@ gh pr checks <番号> --required --watch
 
 ```
 $ gh pr checks <番号> --required --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
-review-result: fail
+code-review-result: fail
 EXIT=0
 
 $ gh pr checks <番号> --required
-review-result	fail	5s	https://github.com/<owner>/<repo>/actions/runs/…
+code-review-result	fail	5s	https://github.com/<owner>/<repo>/actions/runs/…
 EXIT=1
 ```
 
@@ -219,7 +219,7 @@ draft を ready にすると `ready_for_review` が飛び、review-gate の run 
 **既に draft でない PR に打っても、何も起きない。**だから draft かどうかで分ける。
 
 **新しく立った run の完了を待たずにマージへ進んではならない。**
-`review-result` は必須の検査なので、**走っている最中はマージが拒否される。**
+`code-review-result` は必須の検査なので、**走っている最中はマージが拒否される。**
 
 **`--fail-fast` を付けず、`set -e` も置かない。**
 **赤いときこそ、下の判定の1行を出させたいからである。**
@@ -250,7 +250,7 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
 **そのときは1つ前の結果が出る。**上の塊をもう一度叩いて、同じ答えが返ることを確かめる。
 
 **取り違えても、レビュー未実施のものが入ることはない。**
-`review-result` は必須の検査なので、**pending か fail のあいだは GitHub がマージそのものを拒む**
+`code-review-result` は必須の検査なので、**pending か fail のあいだは GitHub がマージそのものを拒む**
 （そのとき `mergeStateStatus` は `BLOCKED` になる）。
 
 ```bash
@@ -264,7 +264,7 @@ gh pr merge <番号> --merge
 
 | 何 | どうなるか |
 | --- | --- |
-| **段5を飛ばす** | **レビュー結果を貼ったのに赤いまま。**`review-result` は必須の検査なのでマージできない |
+| **段5を飛ばす** | **レビュー結果を貼ったのに赤いまま。**`code-review-result` は必須の検査なのでマージできない |
 | **目印を本文の途中に書く** | 数えない。**先頭に置く** |
 | **`--body` で貼る** | **本文の中の `gh pr merge <数字>` の例で、投稿そのものが止まる。**Write ツールで書き出して `--body-file` を使う |
 | **レビュー機能で投稿する** | **数えない。**issue のコメントとして貼る（`gh pr comment`） |
