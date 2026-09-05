@@ -249,6 +249,11 @@ const (
 	//
 	// **こちらは push 済みである。**手放す直前に `workspace_hooks.after_run` が走っている。
 	KeyHandoffReleasedWeeklyWaitLimit Key = "handoff.released.weekly_wait_limit"
+	// KeyHandoffReleasedWeeklyWaitLimitNoPush は、同じ理由で手放したが
+	// `workspace_hooks.after_run` が走らなかったときの2行目に出る（機械の名前を差し込む）。
+	//
+	// **remote に続きが入っていない可能性がある。**次に拾う機械へそれを伝える。
+	KeyHandoffReleasedWeeklyWaitLimitNoPush Key = "handoff.released.weekly_wait_limit_no_push"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
 	// KeyHandoffLostUnknownHost は、担当が移った先の機械の名前を読めなかったときに差し込む。
@@ -2518,6 +2523,7 @@ var allKeys = []Key{
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffReleasedWeeklyWaitLimit,
+	KeyHandoffReleasedWeeklyWaitLimitNoPush,
 	KeyHandoffLostReason,
 	KeyHandoffLostUnknownHost,
 	KeyDoctorHerdrConfigUnreadable,

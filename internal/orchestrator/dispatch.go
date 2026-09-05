@@ -238,28 +238,26 @@ func (o *Orchestrator) quotaSnapshotWithStale() (*ratelimit.Snapshot, bool) {
 	return o.quota, o.quota != nil && o.quotaStale
 }
 
-// observedPercents は、最後に読めた枠から5時間と1週間の使用率を取り出す（設計 3-77j）。
+// observedPercentsOf は、渡された枠の写しから5時間と1週間の使用率を取り出す（設計 3-77j）。
+//
+// **写しは呼び出し側が1回のロックで取る。**ここで取り直すと、
+// **同じ1行の中で違う写しの値が混ざる**（「使用率は最後に読めた値」と、
+// 新しい写しから採った「使い切っている枠」が並ぶ、など）。
 //
 // **読めていなければ percentUnknown を返す。**0 を返すと「1バイトも使っていない」と
 // 読めてしまい、**枠を読めない機械が「いちばん暇」に見える。**
 //
-// **`quotaSnapshot()` を見る。**`quotaForBid()` は読み取りに失敗すると nil を返すので、
-// **最後に読めた値まで消えてしまい、人間が「直前まで何%だったか」を追えない。**
-// **そのぶん「これは最後に読めた値である」を3つ目の戻り値で言う。**
-// 言わないと、読んだ人はいまの値だと思う。
-//
+// snap: 最後に読めた枠。**nil なら読めていない。**
 // 戻り値の1つ目: 5時間の枠の使用率。
 // 戻り値の2つ目: 1週間の枠の使用率。
-// 戻り値の3つ目: その値が「最後に読めた値」（直前の読み取りに失敗している）なら true。
-func (o *Orchestrator) observedPercents() (int, int, bool) {
+func (o *Orchestrator) observedPercentsOf(snap *ratelimit.Snapshot) (int, int) {
 	if o.cfg.RateLimit.Source == ratelimit.SourceNone {
 		// **枠で判定しないと運用者が決めた状態である**（設計 3-27 の逃げ道）。
 		// **読めなかったのではない。**そう見せると、資格情報の直し方を探させることになる。
-		return percentUnknown, percentUnknown, false
+		return percentUnknown, percentUnknown
 	}
-	snap, stale := o.quotaSnapshotWithStale()
 	if snap == nil {
-		return percentUnknown, percentUnknown, false
+		return percentUnknown, percentUnknown
 	}
 	// **返ってきた中にその種別が無いのは「使用率0」である。「読めない」ではない。**
 	// `handoff.Evaluate` が同じ扱いをしている（「**usage API が将来 kind を増やしても、
@@ -268,7 +266,7 @@ func (o *Orchestrator) observedPercents() (int, int, bool) {
 	// 実際には0%の5時間の枠が「使用率を読めていません」と名乗る。**
 	session, _ := handoff.SessionPercent(snap)
 	weekly, _ := handoff.WeeklyPercent(snap)
-	return session, weekly, stale
+	return session, weekly
 }
 
 // logNewWorkBlocked は、新しい issue を取らないことと、その理由を1行出す
@@ -292,12 +290,9 @@ func (o *Orchestrator) observedPercents() (int, int, bool) {
 // **同じ行が続くのが困るなら、それは別の issue である。**そのときの直し方は
 // 「数える」ではなく「理由が変わったときだけ出す」になる。
 //
-// ctx: いまは使っていない（呼び出し側の巡回のコンテキストを受け取る形だけ残す）。
 // skip: 止めた理由。**`handoff.SkipNone` を渡してはならない。**
 // halts: 新規の dispatch をこの巡回で全部やめるか。
-func (o *Orchestrator) logNewWorkBlocked(
-	_ context.Context, skip handoff.SkipReason, halts bool,
-) {
+func (o *Orchestrator) logNewWorkBlocked(skip handoff.SkipReason, halts bool) {
 	h := o.cfg.Tracker.Provider.Handoff
 	args := []any{
 		"理由", skip.String(),
@@ -306,7 +301,8 @@ func (o *Orchestrator) logNewWorkBlocked(
 	// **観測した使用率を出す。**閾値だけでは、
 	// **5時間の枠と1週間の枠のどちらが原因かを人間が読めない。**
 	// **読めていない枠は行ごと出さない。**出すと「使用率0」と読めてしまう。
-	session, weekly, stale := o.observedPercents()
+	snap, stale := o.quotaSnapshotWithStale()
+	session, weekly := o.observedPercentsOf(snap)
 	if session != percentUnknown {
 		args = append(args, "5時間の枠の使用率", session)
 	}
@@ -322,10 +318,8 @@ func (o *Orchestrator) logNewWorkBlocked(
 	// **使用率は最大を採って1つに畳むので、それだけでは
 	// `weekly_scoped`（使っていないモデルの週次の枠）が原因のときに読めない。**
 	// claude.ai の画面に出る週次の全体が30%でも、使っていないモデルの枠が100%なら止まる。
-	if snap, _ := o.quotaSnapshotWithStale(); snap != nil {
-		if kinds := snap.FullLimitKinds(); len(kinds) > 0 {
-			args = append(args, "使い切っている枠", strings.Join(kinds, ", "))
-		}
+	if kinds := snap.FullLimitKinds(); len(kinds) > 0 {
+		args = append(args, "使い切っている枠", strings.Join(kinds, ", "))
 	}
 	args = append(args,
 		"5時間の枠の閾値", o.thresholdText(h.FiveHourMarginPercent),
@@ -393,7 +387,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// 「ボードが何時間も進まない」としか見えなかった。**
 	skip, halts := o.newWorkBlocked()
 	if skip != handoff.SkipNone {
-		o.logNewWorkBlocked(ctx, skip, halts)
+		o.logNewWorkBlocked(skip, halts)
 	}
 	// **新規の dispatch をこの巡回で全部やめるのは、閾値を超えたときだけである**（設計 3-77j）。
 	//

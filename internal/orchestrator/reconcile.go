@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -257,15 +258,54 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 		if !o.weeklyWaitExceeded(rs) {
 			continue
 		}
-		if !o.screenStillSoReleaseIsSafe(ctx, rs) {
-			continue
-		}
+		// **画面の判定は `releaseBecauseQuotaWaitClaimed` の中で行う。**
+		// **ここでやってはならない。**画面は herdr、担当は GitHub と、別々の外部に依存する。
+		// **前に置くと、herdr が落ちているあいだ担当の確認が1回も走らない。**
+		// **枠待ちの run に turn の終わりは来ない**ので、担当を確かめる経路は他に無い。
 		o.releaseBecauseQuotaWaitAsync(ctx, rs)
 	}
 }
 
-// screenStillSoReleaseIsSafe は、手放してよいかを画面の版から判定する
+// screenState は、手放してよいかを画面の版から見た答えである（設計 3-27。issue #197）。
+type screenState int
+
+const (
+	// screenStill は、画面が窓のあいだ止まっていることを表す。**手放してよい。**
+	screenStill screenState = iota
+	// screenMoving は、画面が動いていることを表す。
+	//
+	// **手放さない。**枠を待っているのではなく、長い1つのツール呼び出しの最中である。
+	// **枠待ちの標識も外す。**枠を待っていない run に「枠待ち」と名乗らせたまま
+	// stall の時計を止めると、そのあと本当に固まっても誰も止めない。
+	screenMoving
+	// screenUnknown は、画面の版を読めなかったことを表す。
+	//
+	// **手放さない。**ただし**枠待ちの標識はそのままにする。**
+	// 外すと、その run は枠待ちでも stall の対象でもなくなり、どちらの経路からも見えなくなる。
+	screenUnknown
+)
+
+// screenStillWindow は、手放してよいと判断するために画面が止まっていなければならない長さを返す
 // （設計 3-27。issue #197）。
+//
+// **`claude.turn_timeout_ms`（既定1時間）である。巡回の間隔（既定30秒）ではない。**
+// この段の根拠は「1時間を超える1回のツール呼び出し」なので、
+// **30秒動かない窓を1つ拾っただけで手放すと、90分のビルドの最中に殺すことになる。**
+//
+// **0 以下のときは `rate_limit.weekly_wait_limit_minutes` を使う。**
+// **窓を外してはならない。**外すと、打ち切りの判定を切った機械だけが
+// 「30秒動かない窓を1つ拾って手放す」形になる。
+// **新しい定数を置かない。**運用者が既に決めた長さのうち、この判定に近いのはこちらである。
+//
+// 戻り値: 画面が止まっていなければならない長さ。
+func (o *Orchestrator) screenStillWindow() time.Duration {
+	if ms := o.cfg.Claude.TurnTimeoutMs; ms > 0 {
+		return time.Duration(ms) * time.Millisecond
+	}
+	return time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
+}
+
+// checkScreenForRelease は、手放してよいかを画面の版から判定する（設計 3-27。issue #197）。
 //
 // **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
 // これは「枠を待っている」と「長い1つの仕事をしている」を区別できない。**
@@ -276,56 +316,44 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 // **区別できる道具は画面の版である**（設計 3-21。`checkStalls` の段2 が同じものを見る）。
 // **あちらは枠待ちの枝の後ろにあるので、この経路には届かない。**だからここで見る。
 //
-// **窓は `claude.turn_timeout_ms`（既定1時間）である。巡回の間隔（既定30秒）ではない。**
-// **「前の巡回から版が増えたか」だけで決めてはならない。**根拠にしているのは
-// 「1時間を超える1回のツール呼び出し」なので、**30秒動かない窓を1つ拾っただけで
-// 手放すと、90分のビルドの最中に殺すことになる。**
-// **`agent.get` は `LastSeenAt` を進めるので、静止が続いた長さがそのまま窓になる。**
-//
-// **読めなかったら手放さない側へ倒す。**`checkStalls` の段2 とは向きを変える。
+// **読めなかったときは `screenUnknown` を返す。**`checkStalls` の段2 とは向きを変える。
 // **あちらが失うのは「worker を止めてリトライを積む」までで、担当も worktree もこの機械に残る。**
 // **こちらが失うのは `git push`・担当者・pane・会話の文脈で、取り返しがつかない。**
-// **設計 3-27 自身が「herdr が一時的に届かないとき」を前提として書いている。**
-//
-// **見るのは上限を超えた run だけである。**巡回のたびに全部の run へ herdr を叩かない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// 戻り値: 手放してよいなら true。
-func (o *Orchestrator) screenStillSoReleaseIsSafe(ctx context.Context, rs *runState) bool {
+// 戻り値: 画面から見た答え。
+func (o *Orchestrator) checkScreenForRelease(ctx context.Context, rs *runState) screenState {
 	identifier := rs.issue().Identifier
 	agent, err := o.agentInfo(ctx, rs)
 	if err != nil {
 		o.logger.Warn("手放す前に画面の版を読めませんでした（手放さずに次の巡回でやり直します）",
 			"identifier", identifier, "error", err)
-		return false
+		return screenUnknown
 	}
-	now := o.now()
-	if rs.noteRevision(agent.Revision, now) {
+	still, changed := rs.noteQuotaScreen(agent.Revision, o.now())
+	if changed {
 		o.logger.Info("画面が変わっているので、1週間の枠の上限を超えていても手放しません"+
 			"（枠待ちではなく、長い1つの turn です）",
 			"identifier", identifier,
 			"revision", agent.Revision,
 			"agent_status", string(agent.AgentStatus))
-		return false
+		return screenMoving
 	}
-
-	// **静止が続いた長さを見る。**`claude.turn_timeout_ms` が0以下なら窓を掛けない
-	// （設計 3-27。**その設定でも上限は効かせると決めている**）。
-	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
-	if silence <= 0 {
-		return true
-	}
-	snap := rs.snapshot()
-	if snap.LastSeenAt.IsZero() || now.Sub(snap.LastSeenAt) < silence {
-		o.logger.Info("画面が止まってからの長さが claude.turn_timeout_ms に届かないので、"+
+	window := o.screenStillWindow()
+	if window > 0 && still < window {
+		// **「まだ足りない」であって「動いている」ではない。**
+		// **`screenMoving` を返してはならない。**あちらは枠待ちの標識を外すので、
+		// **初回の観測と、窓に届いていない観測が、待ちに入った run を毎回追い出す。**
+		o.logger.Debug("画面が止まってからの長さが窓に届かないので、"+
 			"1週間の枠の上限を超えていても手放しません",
 			"identifier", identifier,
-			"止まってからの長さ", now.Sub(snap.LastSeenAt).Round(time.Second).String(),
-			"claude.turn_timeout_ms", o.cfg.Claude.TurnTimeoutMs)
-		return false
+			"revision", agent.Revision,
+			"止まってからの長さ", still.Round(time.Second).String(),
+			"窓", window.Round(time.Second).String())
+		return screenUnknown
 	}
-	return true
+	return screenStill
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
@@ -415,8 +443,19 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		return
 	}
 	now := o.now()
+	// **満杯の1週間の枠があるかを、1回のロックで取った写しから見る**（設計 3-27。issue #197）。
+	// **run ごとに取り直さない。**同じ巡回の中で違う写しの答えが混ざる。
+	quotaSnap, _ := o.quotaSnapshotWithStale()
+	weeklyFull := quotaSnap.HasFullKind(handoff.IsWeeklyKind)
 
 	for _, rs := range o.snapshotRuns() {
+		// **満杯を最初に見た時刻は、枠待ちの標識の有無によらず控える**（設計 3-27）。
+		// **`weeklyWaitExceeded` の中だけで控えてはならない。**あれは標識が立っている run しか
+		// 通らないので、**標識が別の経路で外れると、以後どこからも消されない。**
+		// **消されないと、何日か普通に動いたあと1週間の枠がもう一度満杯になったときに、
+		// 何日も前の時刻との差で「上限を超えた」と判定し、1分も待たずに手放す。**
+		rs.noteWeeklyFull(weeklyFull, now)
+
 		snap := rs.snapshot()
 		if snap.WaitingQuota {
 			// **上限は上の `releaseQuotaWaitExceeded` が見ている。**ここでは見ない。
@@ -464,14 +503,20 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 			// **下の段2（画面の版）へは進まない。**見ないと、1時間を超える1回のツール呼び出しの
 			// 最中の run を、使っていないモデルの週次の枠が満杯なだけで殺すことになる。
 			if o.weeklyWaitExceeded(rs) {
-				if o.screenStillSoReleaseIsSafe(ctx, rs) {
+				switch o.checkScreenForRelease(ctx, rs) {
+				case screenStill:
 					o.releaseBecauseQuotaWaitAsync(ctx, rs)
 					continue
+				case screenMoving:
+					// **画面が動いているなら、枠待ちの標識も立てない。**
+					// **立てると、長い1つの turn を「枠を待っている」と名乗ったまま
+					// stall の時計を止めることになり、そのあと本当に固まっても誰も止めない。**
+					continue
+				case screenUnknown:
+					// **読めなかったときは、枠待ちの標識を立てて下へ進む。**
+					// **立てないと、その run は枠待ちでも stall の対象でもなくなり、
+					// どちらの経路からも見えなくなる。**
 				}
-				// **画面が動いているなら、枠待ちの印も立てない。**
-				// **立てると、長い1つの turn を「枠を待っている」と名乗ったまま
-				// stall の時計を止めることになり、そのあと本当に固まっても誰も止めない。**
-				continue
 			}
 			resetAt, _ := o.quotaResetAt()
 			rs.setWaitingQuota(resetAt)

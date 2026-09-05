@@ -110,17 +110,29 @@ type Released struct {
 	// **自分から手放した側は、その直前に `workspace_hooks.after_run` で push している。**
 	// **同じ本文を使うと、push した本人が「push しないでください」と書くことになる。**
 	//
-	// **`omitempty` を付ける。**付けないと、既にある released のコメントと
-	// JSON の形が変わり、古い continuo が読めなくなる。
+	// **`omitempty` を付ける。**外された側の `released` に空の欄を増やさないためである。
+	// **互換のためではない。**`encoding/json` は知らない欄を黙って捨てるので、
+	// **欄を足しただけで古い continuo が読めなくなることは無い**（`ParseReleased` は
+	// `DisallowUnknownFields` を使っていない）。
 	Reason string `json:"reason,omitempty"`
 }
 
-// ReleaseReasonWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したことを表す
-// （issue #197。設計 3-27）。
+// 自分から手放したときの理由である（issue #197。設計 3-27）。
 //
 // **利用者が issue のコメントを grep する目印でもある。**
 // [docs/FAQ.md](../../docs/FAQ.md) が、この文字列を載せた JSON を見本として出している。
-const ReleaseReasonWeeklyWaitLimit = "weekly_wait_limit"
+const (
+	// ReleaseReasonWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したことを表す。
+	//
+	// **`workspace_hooks.after_run` が成功したときだけ使う。**
+	ReleaseReasonWeeklyWaitLimit = "weekly_wait_limit"
+	// ReleaseReasonWeeklyWaitLimitNoPush は、同じ理由で手放したが
+	// **`workspace_hooks.after_run` が走らなかった／失敗したことを表す。**
+	//
+	// **本文を分ける。**「実行済みです。remote の続きから始めてください」と断言すると、
+	// **次に拾う機械が、入っていない commit の続きから始める。**
+	ReleaseReasonWeeklyWaitLimitNoPush = "weekly_wait_limit_no_push"
+)
 
 // Margins は余裕値を作るときに引くマージンである（単位は %）。
 type Margins struct {

@@ -79,7 +79,7 @@ type runState struct {
 	BackoffUntil time.Time
 	// WaitingQuota は枠待ちと判定したことを表す（設計 3-27）。
 	// **真の間は stall と turn_timeout の判定を飛ばす。**
-	// 外す契機は「枠の resets_at を過ぎたこと」だけである。
+	// 外す契機は2つある（枠の resets_at を過ぎたこと／使い切っている枠が無くなったこと）。
 	WaitingQuota bool
 	// NeedsPrompt は次の turn を送るべき状態であることを表す（設計 3-4 の段5b）。
 	// turn ループが拾って agent.prompt を送り、送ったら false へ戻す。
@@ -136,6 +136,19 @@ type runState struct {
 	TranscriptPath string
 	// QuotaResetAt は枠待ちを外す時刻である（設計 3-27）。
 	QuotaResetAt time.Time
+	// QuotaScreenRev は、手放してよいかを決めるために最後に見た画面の版である
+	// （設計 3-27。issue #197）。
+	//
+	// **`LastRevision` とは別に持つ。**あちらを使うと `noteRevision` を呼ぶことになり、
+	// **`LastSeenAt` が進む。****枠待ちの run は `LastSeenAt` を進めないと決めている**
+	// ので、進めると「枠が明けたあとに最後に動いていた時刻が分からなくなる」を自分で起こす。
+	// **静止が続いた長さも測れなくなる**（毎回いまの時刻に揃うので、窓が永久に閉じない）。
+	QuotaScreenRev uint64
+	// QuotaScreenAt は QuotaScreenRev を最後に更新した時刻である。
+	//
+	// **「版が変わった時刻」である。**変わらないあいだは進めないので、
+	// **`now` との差が「静止が続いた長さ」になる。**
+	QuotaScreenAt time.Time
 	// WeeklyFullSince は、この run について満杯の1週間の枠を最初に見た時刻である
 	// （設計 3-27。issue #197）。
 	//
@@ -851,6 +864,37 @@ func (rs *runState) setWaitingQuota(resetAt time.Time) {
 	rs.QuotaResetAt = resetAt
 }
 
+// noteQuotaScreen は、手放してよいかを決めるための画面の版を控え、
+// **その版が変わらずに続いた長さ**を返す（設計 3-27。issue #197）。
+//
+// **`noteRevision` を使ってはならない。**あれは `LastSeenAt` を進めるので、
+// **枠待ちの run について「時計を止める」と決めたことを自分で破る。**
+// **窓も永久に閉じない**（毎回いまの時刻に揃うため）。
+//
+// **「初めて見た」と「版が変わった」を分ける。**分けないと、初回の観測が
+// 「画面が動いている」に化ける。**枠待ちの標識を外す判断がそこにぶら下がっている**ので、
+// 化けると、待ちに入った run が次の巡回で毎回そこから追い出される。
+//
+// rev: `agent.get` が返した画面の版。
+// now: いまの時刻。
+// 戻り値の1つ目: その版が変わらずに続いた長さ。**初回と、変わったときは 0 である。**
+// 戻り値の2つ目: **前に見た版から変わっていれば true。****初回は false である。**
+func (rs *runState) noteQuotaScreen(rev uint64, now time.Time) (time.Duration, bool) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.QuotaScreenAt.IsZero() {
+		rs.QuotaScreenRev = rev
+		rs.QuotaScreenAt = now
+		return 0, false
+	}
+	if rs.QuotaScreenRev != rev {
+		rs.QuotaScreenRev = rev
+		rs.QuotaScreenAt = now
+		return 0, true
+	}
+	return now.Sub(rs.QuotaScreenAt), false
+}
+
 // noteWeeklyFull は、満杯の1週間の枠を見たかどうかを記録する（設計 3-27。issue #197）。
 //
 // **既に立っている時刻を上書きしない。**上書きすると経過が永久に伸びない。
@@ -884,15 +928,16 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	rs.WaitingQuota = false
 	rs.QuotaResetAt = time.Time{}
 	rs.LastSeenAt = now
-	// **満杯の1週間の枠を最初に見た時刻も消す**（設計 3-27。issue #197）。
-	// **消さないと、次に満杯になった run を1分も待たずに手放す。**
+	// **満杯の1週間の枠を最初に見た時刻は、ここでは消さない**（設計 3-27。issue #197）。
+	// **消す契機は「1週間の枠が満杯でなくなったこと」だけである。**
 	//
-	// **`weeklyWaitExceeded` の中の `noteWeeklyFull(false, …)` だけでは足りない。**
-	// あれは枠待ちの印が立っている run しか通らないので、
-	// **ここで印が外れると、以後どこからも呼ばれない。**
-	// 何日か普通に動いたあと1週間の枠がもう一度満杯になると、
-	// **何日も前の時刻との差で上限を超えたと判定される。**
-	rs.WeeklyFullSince = time.Time{}
+	// **ここで消すと、5時間の枠が明けるたびに0へ戻る。**
+	// 標識を外す時刻は種別を選ばないので、**5時間の枠のほうが早く明ければその時刻になる。**
+	// **`weekly_wait_limit_minutes: 300`（既定）を設定した人の待ち時間が、
+	// 「5時間の枠の残り＋`claude.turn_timeout_ms`」ぶん超過する。**
+	// **既定値では約6時間の超過になり、上限が1度も効かないこともある。**
+	//
+	// 消すのは `noteWeeklyFull(false, …)` である。**巡回のたびに、標識の有無によらず呼ぶ。**
 }
 
 // noteRevision は画面の版を見た結果を記録する（設計 3-21）。

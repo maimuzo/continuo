@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "6b08aa74c3e0aa05d9ff3e95c47d0f9912cd32969cd3b5750b8050116a074fbe", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "7f837d15de00deed0141753d225ec2a61b0a7784a242e2ef9260cd550b79e494", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
 // 21本のパスは、9通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
@@ -655,6 +655,43 @@ func weeklyWaitFixture(
 	return fx, issue, clock
 }
 
+// tickPastScreenWindow は、画面が止まった窓（`claude.turn_timeout_ms`）を満たすまで巡回する
+// （設計 3-27 の段0b。issue #197）。
+//
+// **1回の巡回では手放さない。**1回目は画面の版を初めて見た巡回で、
+// **そこからどれだけ止まっていたかは、次の巡回にならないと分からない。**
+// **これは検査の都合ではなく、仕様である**（30秒動かない窓を1つ拾って手放さない）。
+//
+// fx: 対象の一式。
+// clock: 進められる時計。
+func tickPastScreenWindow(fx *stubFixture, clock *testClock) {
+	fx.Orc.Tick(context.Background())
+}
+
+// waitForRelease は、担当を手放して印から外れるまで巡回を回す（issue #197）。
+//
+// **1回の巡回では手放さない。**画面の版を初めて見た巡回では
+// 「そこからどれだけ止まっていたか」が分からないので、**次の巡回まで待つ**
+// （設計 3-27 の段0b）。**手放しは別の goroutine で走る**ので、
+// **巡回を止めて待つのではなく、時計を進めながら巡回を回し続ける。**
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の一式。
+// clock: 進められる時計。
+// identifier: 対象の issue の識別子。
+func waitForRelease(t *testing.T, fx *stubFixture, clock *testClock, identifier string) {
+	t.Helper()
+	for i := 0; i < 60; i++ {
+		if _, ok := viewOf(fx, identifier); !ok {
+			return
+		}
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("担当を手放して印から外れませんでした:\n%s", fx.Logs.String())
+}
+
 // assigneeLoginsOf は、いまボードに載っている担当者のログイン名を返す。
 //
 // fx: 対象の一式。
@@ -686,13 +723,16 @@ func assigneeLoginsOf(fx *stubFixture, id string) []string {
 // 成功条件: 印から外れないこと。担当者が残っていること。理由が既定の水準で出ること。
 func TestQuota_画面が動いていれば上限を超えても手放さない(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
-	fx, issue, _ := weeklyWaitFixture(t, []map[string]any{
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_scoped", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W6")
 
-	// **画面が動いている**（エージェントは長い1つのツール呼び出しの最中である）。
-	fx.Herdr.BumpRevision()
+	// 1回目の巡回で、画面の版を初めて見る。**そこからどれだけ止まっていたかは、まだ分からない。**
+	fx.Orc.Tick(context.Background())
 
+	// **画面が動いた**（エージェントは長い1つのツール呼び出しの最中である）。
+	fx.Herdr.BumpRevision()
+	clock.Advance(2 * time.Minute)
 	fx.Orc.Tick(context.Background())
 	waitFor(t, 10*time.Second, "手放さない理由が出る", func() bool {
 		return strings.Contains(fx.Logs.String(), "画面が変わっているので、1週間の枠の上限を超えていても手放しません")
@@ -721,7 +761,7 @@ func TestQuota_画面が動いていれば上限を超えても手放さない(t
 // 成功条件: 印から外れること。**別の人の担当者が残っていること**（こちらは触らない）。
 func TestQuota_担当が移っていたらafter_runを走らせずに止める(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
-	fx, issue, _ := weeklyWaitFixture(t, []map[string]any{
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W7")
 
@@ -729,11 +769,7 @@ func TestQuota_担当が移っていたらafter_runを走らせずに止める(t
 	// **`testGHLogin` とは違うアカウントにする。**同じにすると「担当は自分のまま」になる。
 	fx.Tracker.SetAssignees(issue.ID, "another-machine")
 
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 10*time.Second, "担当が移ったので止める", func() bool {
-		_, ok := viewOf(fx, issue.Identifier)
-		return !ok
-	})
+	waitForRelease(t, fx, clock, issue.Identifier)
 
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != "another-machine" {
 		t.Fatalf("担当が移っているのに担当者へ触っている: %v", got)
@@ -758,15 +794,12 @@ func TestQuota_担当が移っていたらafter_runを走らせずに止める(t
 // 成功条件: 印から外れ（スロットが空き）、担当者が空になること。
 func TestQuota_1週間の枠のリセットが上限より先なら担当を手放す(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
-	fx, issue, _ := weeklyWaitFixture(t, []map[string]any{
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W1")
 
-	fx.Orc.Tick(context.Background())
-	waitFor(t, 10*time.Second, "担当を手放して印から外れる", func() bool {
-		_, ok := viewOf(fx, issue.Identifier)
-		return !ok
-	})
+	tickPastScreenWindow(fx, clock)
+	waitForRelease(t, fx, clock, issue.Identifier)
 
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {
 		t.Fatalf("担当者が残っている: %v", got)
@@ -797,12 +830,12 @@ func TestQuota_リセット時刻が読めなくても経過が上限を超え�
 		t.Fatalf("満杯を見た直後（経過0）で手放している:\n%s", fx.Logs.String())
 	}
 
+	// **20分進める。**上限（10分）を超える。
 	clock.Advance(20 * time.Minute)
 	fx.Orc.Tick(context.Background())
-	waitFor(t, 10*time.Second, "経過が上限を超えて手放す", func() bool {
-		_, ok := viewOf(fx, issue.Identifier)
-		return !ok
-	})
+	// **この巡回で画面の版を初めて見る。**そこから窓（60秒）ぶん止まっていることを、
+	// **次の巡回で確かめてから手放す**（設計 3-27 の段0b）。
+	waitForRelease(t, fx, clock, issue.Identifier)
 }
 
 // TestQuota_5時間の枠だけなら上限を超えても待ち続ける は、人間が決めた表の1行目を確かめる。
@@ -845,11 +878,8 @@ func TestQuota_5時間の枠の時刻で1週間の枠を判定しない(t *testi
 	fx.Orc.Tick(context.Background())
 	clock.Advance(20 * time.Minute)
 	fx.Orc.Tick(context.Background())
-
-	waitFor(t, 10*time.Second, "1週間の枠の側で判定して手放す", func() bool {
-		_, ok := viewOf(fx, issue.Identifier)
-		return !ok
-	})
+	// **画面の版を初めて見た巡回では手放さない**（設計 3-27 の段0b）。
+	waitForRelease(t, fx, clock, issue.Identifier)
 }
 
 // TestQuota_上限が0なら1週間の枠でも待ち続ける は、逃げ道を確かめる。

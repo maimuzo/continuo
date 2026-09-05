@@ -560,13 +560,12 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 	}
 
 	// **待ちに入る前に、1週間の枠を待つ上限を超えていないかを見る**（設計 3-27。issue #197）。
-	// **超えていたら印を立てない。**立てると、手放したあとに枠待ちの印だけが残る。
+	// **超えていたら標識を立てない。**立てると、手放したあとに枠待ちの標識だけが残る。
 	//
-	// **手放す前に画面の版を見る**（設計 3-27）。`isQuotaWaiting` の条件は
-	// 「使用率が100」と「hook が来ていない」の2つで、**1時間を超える1回のツール呼び出しと
-	// 区別が付かない。**見ないと、正常に走っている run を殺して pane を閉じる。
-	if o.weeklyWaitExceeded(rs) && o.screenStillSoReleaseIsSafe(ctx, rs) &&
-		o.releaseBecauseQuotaWait(ctx, rs) {
+	// **画面の版の判定は `releaseBecauseQuotaWait` の中で行う。**
+	// **ここでやってはならない。**画面は herdr、担当は GitHub と、別々の外部に依存する。
+	// **前に置くと、herdr が落ちているあいだ担当の確認が1回も走らない。**
+	if o.weeklyWaitExceeded(rs) && o.releaseBecauseQuotaWait(ctx, rs) {
 		return turnAborted, nil
 	}
 	// **手放せなかったときは、そのまま枠待ちへ入る。**
@@ -632,7 +631,10 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 			return turnSendFailed, err
 		}
 
-		// 枠が明けたか。**印を外す契機は「枠の resets_at を過ぎたこと」だけである**（設計 3-27）。
+		// 枠が明けたか。**標識を外す契機は2つある**（設計 3-27）。
+		// **1つ目は `resets_at` を過ぎたこと。**2つ目は下の `quotaAtFull` で見る。
+		// **2つ目を落としてはならない。**`resets_at` が `null` の枠だけが満杯だと、
+		// **1つ目では永久に外れない。**
 		if ok && !o.now().Before(resetAt) {
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)

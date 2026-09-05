@@ -808,14 +808,30 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
+	o.runAfterRunOK(ctx, rs)
+}
+
+// runAfterRunOK は `workspace_hooks.after_run` を走らせ、**成功したかどうかを返す。**
+//
+// **`released` のコメントは「`after_run` は実行済みです」と断言する**（設計 3-27）。
+// **失敗したのに断言すると、次に拾う機械が「remote の続きから始めてください」に従い、
+// 入っていない commit の続きから始める。**手元の作業が黙って取り残される。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値: `after_run` が走って成功したら true。
+// **走らせる相手が無かったとき（worktree のパスが空）も false である。**
+func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	snap := rs.snapshot()
 	if snap.WorktreePath == "" {
-		return
+		return false
 	}
 	if _, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath); err != nil {
 		o.logger.Warn("workspace_hooks.after_run に失敗しました（記録して続けます）",
 			"identifier", snap.Identifier, "error", err)
+		return false
 	}
+	return true
 }
 
 // cleanupWorktree は worktree と branch と設定ファイルを片付ける（設計 3-9）。
