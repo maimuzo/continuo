@@ -71,3 +71,17 @@
 | 61 | `中断` の後始末を3段に分けて書いたこと | ダッシュボード → socket → turn ループの順に、段ごとの待ちとして並べた | **順序が仕様である**（読み取り専用のダッシュボードを先に落とし、受け取り済みの hook を書き終えてから、いちばん長い turn ループを待つ）。1ステップにまとめると、どの段で止まっているかを示せない | `docs/plans/continuo_design.md#3-52`、`internal/daemon/daemon.go` の `deps.close` | 90% |
 | 62 | フロー `中断の連打` を別フローにしたこと | GLOBAL ALTERNATIVE FLOW。BRANCH FROM 中断 3。後始末を待たずに終了する | **中断の途中のどの段でも起こりうる**ので任意時点代替フローにした。分岐元をステップ3（ダッシュボードを閉じる）にしたのは、そこが後始末で最初に待ちに入る段だからである | `docs/plans/continuo_design.md#3-52`、`internal/daemon/daemon.go` の `WatchInterrupt` | 85% |
 | 63 | 2回目を「既定の動作へ戻す」で実現しないこと | 自前で signal を数え、2回目で終了コード 130 でプロセスを終わらせる | **`signal.Stop` が戻すのは「既定の動作」ではなく「continuo が起動する前の動作」である。**親が `SIGINT` を無視に設定していると戻る先が「無視」になり、2回目以降が何も起こさない。実測（darwin）で、普通の親からは 1.3 秒で死に、`trap "" INT` を掛けた親からは 10 秒の後始末を最後まで走り切って終了コード 0 で終わった | `internal/daemon/daemon.go` の `WatchInterrupt`、`test/internal/daemon/daemon_test.go` の `TestDaemon_SIGINTを無視に設定した親から起動しても2回目のCtrlCで止まる` | 95% |
+| 64 | 代替フロー『二重起動』の終端 | ABORT | このユースケースはここで終わる。flock を取れなかった2つめのプロセスは終了するので、基本フローの段3 以降を1つも実行しない | - | 100% |
+| 65 | 代替フロー『前提の不足』の終端 | ABORT | このユースケースはここで終わる。起動時の検査に落ちて終了するので、基本フローの段4 以降を1つも実行しない | - | 100% |
+| 66 | 代替フロー『復元できない壊れたworktree』の終端 | ABORT | このユースケースはここで終わる。skip の枝はこの worktree を引き継ぎの候補から外すので、この worktree について基本フローの段7 以降を実行しない。stop の枝はプロセスが終わる。どちらの枝にも戻り先が無い | `internal/orchestrator/restore.go` の `handleBrokenWorktrees` | 90% |
+| 67 | 代替フロー『名乗りの食い違い』の終端 | ABORT | このユースケースはここで終わる。候補から外した worktree について基本フローの段8 以降を実行しない。POSTCONDITION の「continuo は常駐している」は残る状態の記述であって、戻り先があることを意味しない | `internal/orchestrator/restore.go` の `scanIdentities` | 95% |
+| 68 | 代替フロー『issueの取り違え』の終端 | ABORT | このユースケースはここで終わる。候補から外した worktree について基本フローの段10 以降を実行しない | `internal/orchestrator/restore.go` の `refetchByIdentities` | 95% |
+| 69 | 代替フロー『一覧の取得の失敗』の終端 | ABORT | このユースケースはここで終わる。pane の一覧が無いので、どの worktree についても基本フローの段11 以降を実行しない | `internal/orchestrator/restore.go` の `matchPanes` | 90% |
+| 70 | 代替フロー『ボードの取り直しの失敗』の終端 | ABORT | このユースケースはここで終わる。取り直せない run は pane を閉じて引き継がないので、基本フローの段9 以降を実行しない | `internal/orchestrator/restore.go` の `refetchByIdentities` | 95% |
+| 71 | 代替フロー『paneの不在』の終端 | ABORT | このユースケースはここで終わる。引き継ぎをやめて次の巡回に委ねるので、基本フローの段12 以降を実行しない | `internal/orchestrator/restore.go` の `restoreWithoutPane` | 95% |
+| 72 | 代替フロー『引き渡し状態』の終端 | ABORT | このユースケースはここで終わる。印の集合に入れないので、基本フローの段13 以降を実行しない | `internal/orchestrator/restore.go` の `decideOne` | 95% |
+| 73 | 代替フロー『状態の不明』の終端 | ABORT | このユースケースはここで終わる。印の集合に入れないので、基本フローの段14 以降を実行しない | `internal/orchestrator/restore.go` の `decideOne` | 95% |
+| 74 | 代替フロー『権限の確認での停止』の終端 | ABORT | このユースケースはここで終わる。Status に failure_state の選択肢を書いて pane を閉じるので、基本フローの段15 以降を実行しない | `internal/orchestrator/restore.go` の `decideOne` | 95% |
+| 75 | 代替フロー『引き継ぎの上限』の終端 | ABORT | このユースケースはここで終わる。Status に failure_state の選択肢を書いて pane を閉じるので、基本フローの段16 以降を実行しない | `internal/orchestrator/restore.go` の `decideOne` | 95% |
+| 76 | 代替フロー『中断』の終端 | ABORT | このユースケースはここで終わる。プロセスが終了するので、基本フローの段23 以降を実行しない | `internal/daemon/daemon.go` の `WatchInterrupt` | 100% |
+| 77 | 代替フロー『中断の連打』の終端 | ABORT | このユースケースはここで終わる。後始末を待たずに終了するので、参照フロー『中断』の段4 以降を実行しない | `internal/daemon/daemon.go` の `WatchInterrupt` | 100% |
