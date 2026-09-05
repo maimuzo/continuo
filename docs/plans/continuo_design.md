@@ -4913,7 +4913,7 @@ package の変数は `init` の時点で評価されるので、**文言を埋�
 | どこ | いつ出るか |
 | --- | --- |
 | [internal/config/validate.go](../../internal/config/validate.go) の要件の文 | 設定に不正な値を書いたとき。`doctor` の config の行に「0より大きい整数にすること」のような理由だけが混ざる。**値を埋め忘れただけのときは英語で出る** |
-| [internal/tracker](../../internal/tracker) の `Error.Message` と `Error()` の書式 | カンバンを読めなかったとき。`doctor` の board の行に「tracker エラー [tracker_response]: …」が混ざる |
+| [internal/tracker](../../internal/tracker) の `Error.Message` と `Error()` の書式 | カンバンを読めなかったとき。`doctor` の「カンバン」の行に「tracker エラー [tracker_response]: …」が混ざる |
 
 **`continuo init` が書き出す `WORKFLOW.md` の説明は日本語のままである**
 （[internal/scaffold/template.go](../../internal/scaffold/template.go)）。**言語ごとに雛形を分けない。**
