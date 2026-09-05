@@ -127,7 +127,7 @@ func TestRunSetup_設定を読めなければ理由を出して対話は続け�
 	_, stdout, stderr := runCLIWith(recordingDetect(&got), []string{"setup", dir}, "")
 
 	if !strings.Contains(stderr, "設定ファイルを読めません") {
-		t.Errorf("設定を読めなかったことを report していない:\n%s", stderr)
+		t.Errorf("設定を読めなかったことを報告していない:\n%s", stderr)
 	}
 	// **書ける値の一覧が出ていること。**理由だけでは、何を書けばよいかが分からない。
 	//
