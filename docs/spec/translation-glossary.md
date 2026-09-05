@@ -39,6 +39,8 @@
 | 選択肢（Status の） | option | GitHub 自身が single-select の値をこう呼ぶ |
 | 役割（5つの） / 割り当てる | role / map | README の "you map your own option names to these five roles" |
 | 対応表（`tracker.automated_state_rewrite`） | rewrite table | README の "the rewrite table's keys"。`mapping table` は使わない |
+| 自動化（カンバンの `Settings` → `Workflows` で切り替える組み込みの仕掛け） | automation | **英語で `workflow` と書かない。**このリポジトリには `WORKFLOW.md`（設定ファイル）と GitHub Actions の定義が両方あり、同じ語が3つのものを指すことになる。GraphQL の型名だけは `ProjectV2Workflow` のまま書く（GitHub が付けた名前である） |
+| agent teams | agent teams | **訳さない。**Claude Code の機能の名前である（公式文書の題名が "Orchestrate teams of Claude Code sessions"）。「エージェントチーム」と書かない |
 | 作業中の状態（`tracker.active_states`） | working state | README が "if it names a working state" と書く。**キー名が `active_states` でも `active state` と書かない** |
 | 終了状態（`tracker.terminal_states`） | terminal state | キー名 `terminal_states` に合わせる。working state と対になる |
 | 変数展開（`text/template` の `{{...}}` を issue の値に置き換えること） | render | **「描画」と書かない。**「レンダリング」も使わない（同じものを2つの呼び方で呼ばない）。英語は `prompt.render_failed` が `Failed to render` と書いている |
@@ -98,7 +100,7 @@
 | 信頼登録する / 信頼済み / 未承認 | trust / trusted / not trusted | README の "trust those repositories"。**「未承認」は `not trusted`。**`unapproved` は使わない |
 | 資格情報 | credentials | README が doctor の検査をこの語で並べている |
 | 枠 / 枠の判定 | usage window | README の "used to read your plan's usage window"。`quota` `rate limit budget` を混ぜない |
-| 検査 / 前提が揃っている | check / everything is in place | README の "runs sixteen checks" と "# check that everything is in place" |
+| 検査 / 前提が揃っている | check / everything is in place | README の "runs eighteen checks" と "# check that everything is in place" |
 | 表明（`CONTINUO-STATUS:` の行） | the `CONTINUO-STATUS:` line | README が行そのものを名指ししている。抽象名詞に訳さない |
 | 機械 | machine | README の "a machine or container you can discard" |
 | 実行ファイル / 版 | binary / version | README の Install が "the binary" と書く |
@@ -214,11 +216,11 @@
 **言いたいこと。**[internal/doctor/report.go](../../internal/doctor/report.go) の `labelColumn` が 16 である。
 **16桁に満たない語を並べて桁を揃えている。**15桁を超えるラベルを1つ置くと、全部の行の桁が崩れる。
 
-**使ってよいラベルは、この16語だけである。**
+**使ってよいラベルは、この18語だけである。**
 
 `config` / `cleanup states` / `missing keys` / `prompt vars` /
-`claude` / `hook socket` / `Claude settings` / `worktree root` / `herdr` /
-`gh auth` / `kanban board` / `Status names` / `rewrite keys` / `clones` /
+`claude` / `agent teams` / `hook socket` / `Claude settings` / `worktree root` / `herdr` /
+`gh auth` / `kanban board` / `Status names` / `rewrite keys` / `automations` / `clones` /
 `trust` / `credentials`
 
 **`prompt vars` を `prompt variables` と書かないこと。**16桁になり、全部の行の桁が崩れる。

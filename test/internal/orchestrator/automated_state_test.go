@@ -262,6 +262,28 @@ func TestAutomatedState_対応表に無ければいままでどおり止まる(t
 	if strings.Contains(body, "`tracker.status_signal_map` にその名前を書き足して") {
 		t.Errorf("互いを壊す案内を2つ並べている（両方やると起動しない）:\n%s", body)
 	}
+	// **「この塊を足してください」と言ってはならない**（issue #209）。
+	// `continuo init` が置いた雛形には `automated_state_rewrite: {}` の行が既にあるので、
+	// **塊ごと貼ると front matter が重複キーになり、continuo が二度と起動しない。**
+	// **雛形に既にある行を書き換えさせること。**
+	for _, forbidden := range []string{"次の2行を足して", "の下へ次の"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("雛形に既にあるキーを重複させる案内になっている（%q）:\n%s", forbidden, body)
+		}
+	}
+	for _, want := range []string{
+		// 場所を見つける手立て。
+		"grep -n 'automated_state_rewrite'",
+		// どこが既存でどこが追加かの注記。
+		"既にある行",
+		"← これを足す",
+		// 貼り替えると起動しないことの明示。
+		"塊ごと貼り替えると",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("貼っても起動する形の案内に %q が無い:\n%s", want, body)
+		}
+	}
 	if got := fx.Tracker.StateOf(itemID); got != "In Progress" {
 		t.Errorf("対応表に無いのに Status を書き換えている: got %q, want %q", got, "In Progress")
 	}

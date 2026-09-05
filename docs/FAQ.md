@@ -948,9 +948,23 @@ continuo は `--permission-mode dontAsk` で起動するので、**リード自�
 
 **確かめ方。**
 
+**`continuo doctor` の `agent teams` の行が、下の1と4を代わりに見ています。**
+
+```bash
+cd ~/continuo-work && continuo doctor
+```
+
+| 出方 | どう読むか |
+| --- | --- |
+| `✓ agent teams` | **`claude.env` と、doctor を叩いたシェルには有効化がありません。**読んでいない出どころは、その行の下に並びます |
+| `! agent teams` | **どちらかで有効になっています。**その行に、どこで見つけたかと切り方が出ます |
+
+**doctor が見ていない出どころは、2と3と5と、4のうち herdr の側です。**`✓` でも issue が `Blocked` へ落ちるなら、そちらを手で見てください。
+
 **continuo が起動した Claude Code に、その環境変数が届いているかを見ます。**
 
 **1. continuo の設定を見る。**continuo はここに書いたものを `--settings` で渡します。
+**`continuo doctor` の `agent teams` の行が、ここを見ています。**
 
 ```bash
 grep -n 'AGENT_TEAMS' ~/continuo-work/WORKFLOW.md
@@ -969,6 +983,7 @@ grep -n 'AGENT_TEAMS' ~/.claude/settings.json ~/.claude/settings.local.json 2>/d
 ```
 
 **4. continuo と herdr を起動したシェルの環境変数を見る。**
+**`continuo doctor` は、doctor を叩いたシェルだけを見ています**（herdr の pane は見ていません）。
 
 **continuo は Claude Code を直接起動しません。**herdr が作った pane の中で起動します。
 **だから、この2つは別のプロセスの環境になりえます。**両方見てください。
@@ -1079,10 +1094,29 @@ grep -c '"type": "prompt"' "$(jq -r .settings_path .continuo.json)"
 | **そのままにする** | なし | ありません（断ってほしい操作なら、守れています） |
 | **判定を止める** | `claude.tool_gate.mode: off` | **外部の人が書いた指示を止める仕掛けが1つ減ります** |
 
+**止めるときは、`claude.tool_gate.mode` の値を書き換えます。**
+
+```bash
+grep -n -A2 'tool_gate' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その2行下の `mode:` の値を書き換えます**（`tool_gate:` は親のキーなので、その行に値はありません）。
+**1行も出なければ、次で足してください**（v0.1.9 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
+
 ```yaml
 claude:
+  # …（ほかの設定）
   tool_gate:
-    mode: off
+    mode: off      # 既定は public_only。この値を書き換える
 ```
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
@@ -1235,12 +1269,13 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 
 **何をどう書くかは、「使い方が分からないとき」の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
-そのまま貼れる yaml と、書けない5つの形がそこにあります。
-**足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
+書き換える場所の見つけ方と、書けない5つの形がそこにあります。
+**当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
-**「この2行を足してください」とそのまま貼れる形で書きます。**
+**「この行をこう書き換えてください」と、あなたのカンバンの Status 名を当てはめた形で書きます。**
+**場所を見つける `grep` も一緒に書きます。**
 
 **書いたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 **キーの綴りは `continuo doctor` の `対応表のキー` が照合します。**
@@ -1268,11 +1303,18 @@ continuo が知っているのは `tracker` に書いた Status だけなので�
 | **終わったとみなす**（片付けてよい） | `tracker.terminal_states` にその名前を書き足す |
 | **まだ作業を続けさせたい** | **先に `cleanup.on_states` からその行を消してから**、`tracker.active_states` に書き足す |
 
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
+`tracker:` も `cleanup:` も `continuo init` が置いた `WORKFLOW.md` に既にあるので、
+**貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+**一覧に名前を1つ足すだけです。**
+
 ```yaml
 tracker:
-  terminal_states: ["Done", "Archived"]   # 終わったとみなす Status に並べる
+  # …（ほかの設定）
+  terminal_states: ["Done", "Archived"]   # 既にある行。この一覧へ名前を足す
 cleanup:
-  on_states: ["Done", "Archived"]         # 片付けを始める Status は、上の一覧の中から選ぶ
+  # …（ほかの設定）
+  on_states: ["Done", "Archived"]         # 既にある行。片付けを始める Status は、上の一覧の中から選ぶ
 ```
 
 **その名前が `tracker.automated_state_rewrite` のキーにもある場合は、消す先が2つあります。**
@@ -2825,6 +2867,18 @@ cd ~/continuo-work && continuo doctor && continuo
 ### エージェントが PR を作った直後に止まる（automated_state_rewrite）
 
 **まず、この設定が自分に要るのかを確かめてください。**
+**`continuo doctor` の `自動化` の行が答えます**（v0.1.15 から）。
+
+```bash
+cd ~/continuo-work && continuo doctor
+```
+
+| 出方 | どう読むか |
+| --- | --- |
+| `✓ 自動化` | **この設定は要りません。**Status を書きうる自動化が1つも有効でないか、対応表が既に書かれています |
+| `! 自動化 … tracker.automated_state_rewrite が空です` | **下を読んでください。**その行の下に、有効な自動化の名前が並びます |
+
+**`continuo doctor` を叩けないときは、GitHub の画面で見てください。**
 カンバンの `Settings` → `Workflows` を開きます。**Status を書く自動化**
 （`Item added to project` / `Pull request merged` / `Code changes requested` など）が
 1つでも**有効**になっていますか。
@@ -2854,14 +2908,34 @@ cd ~/continuo-work && continuo doctor && continuo
 自動化が Status を動かしたとき、`tracker.unknown_state_grace_ms` の猶予を置いてからエージェントを止めます。
 **つまり「PR を作ってから CI の直しを続ける」流れでは、途中で止まります。**
 
-**何を書くか。**`tracker:` の下に、`automated_state_rewrite` の対応表を足します。
+**何を書くか。**`tracker.automated_state_rewrite` の対応表を書きます。
 **左が、自動化が書き込む Status 名です。右が、戻したい Status 名です。**
+
+**雛形には `automated_state_rewrite: {}` の行が既にあります。**その `{}` を書き換えます。
+**塊ごと貼り替えないでください。**`tracker:` も `active_states:` も `automated_state_rewrite:` も
+既にあるので、**貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+
+**まず、いまあるかどうかを確かめてください。**
+
+```bash
+grep -n 'automated_state_rewrite' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その `{}` を下の図のように書き換えます。**1行も出なければ、次で足してから書き換えてください
+（v0.1.8 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**下の yaml は、どこに何が入るかの図です。**
 
 ```yaml
 tracker:
-  active_states: ["AI Ready", "AI In Progress"]
-  automated_state_rewrite:
-    "In Progress": "AI In Progress"
+  # …（ほかの設定）
+  active_states: ["AI Ready", "AI In Progress"]   # 既にある行（値はあなたのカンバンに合わせたもの）
+  automated_state_rewrite:                        # 既にある行。末尾の {} を消す
+    "In Progress": "AI In Progress"               # ← これを足す
     # 左：自動化が書き込む Status 名（カンバンの選択肢と1文字ずつ合わせる）
     # 右：戻したい Status 名（必ず active_states の中から選ぶ）
 ```
@@ -2897,7 +2971,8 @@ issue のコメントで `Workflows` を切る手を案内します。
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
-**「この2行を足してください」とそのまま貼れる形で書きます。**
+**「この行をこう書き換えてください」と、あなたのカンバンの Status 名を当てはめた形で書きます。**
+**場所を見つける `grep` も一緒に書きます。**
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
