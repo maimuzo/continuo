@@ -1,6 +1,8 @@
 # よくある質問
 
-画面に出たメッセージから引ける一覧です。使い方は [README.ja.md](../README.ja.md) と
+**困ったときに引く一覧です。**エラーの文言から引くなら「トラブルシューティング」、
+やりたいことから引くなら「目的別使用例」、機能を知りたいなら「continuoで何ができるか」を見てください。
+使い方は [README.ja.md](../README.ja.md) と
 [trying_it_out.md](trying_it_out.md) にあります。
 **新しい版に上げたあと何を足せばよいかは [upgrading.md](upgrading.md) にあります。**
 
@@ -44,10 +46,12 @@ continuo --help
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
 | `continuo setup [ディレクトリ]` | カンバンの Status を5つの役割へ対応づける（対話） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
-| `continuo doctor [ディレクトリ]` | 前提が揃っているかを15の見出し語で調べる |
-| `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
+| `continuo doctor [ディレクトリ]` | 前提が揃っているかをまとめて調べる。見出し語はこのページの冒頭に並べてある |
+| `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す。**常駐に `--id <名前>` を付けているなら、こちらにも同じ名前を渡す** |
+| `continuo prompt [ディレクトリ]` | エージェントへ送る指示文を組み立てて見せる。`--show` で内訳も出す |
+| `continuo version` | 版を答える。**`--version` ではない**（バグ報告のときに求められる） |
 | `continuo allow-keychain-access` | macOS だけ。枠を読むために1回 |
-| `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` |
+| `continuo` | 常駐を始める。`--port` でダッシュボード、`--log-level` で記録の細かさ、**`--id <名前>` で1台に2本以上** |
 
 `continuo hook` は Claude Code の hook から呼ばれるもので、人間が直接叩くものではありません。
 
@@ -1003,15 +1007,16 @@ herdr が無ければ静かに飛びます。開発とテストの全体は [CON
 
 ## トラブルシューティング
 
-**ここに無いときは、次の3つも見てください。**
+**ここに無いときは、次の4つも見てください。**
 「目的別使用例」の「会社の GitHub（organization）で使いたいとき」と
-「カンバンの Status を標準と違う名前にしたいとき」、
+「カンバンの Status を標準と違う名前にしたいとき」と「何台かの PC で分担したいとき」、
 そして「continuoで何ができるか」の「エージェントへ渡す指示を変えたいとき」です。
 **設定のしかたを説明する側に置いてあるものが、エラーの形で出ることがあります。**
-**`continuo doctor` の警告のほか、PR を作った直後に止まる件と、
-片付ける Status へ動かして起動しなくなる件も、そちらにあります。**
+**`continuo doctor` の警告のほか、PR を作った直後に止まる件、
+片付ける Status へ動かして起動しなくなる件、
+そして複数の機械で issue の取り合いになる件も、そちらにあります。**
 
-### インストールした直後、continuo が起動しないとき
+### 入れたばかり、または版を上げたあとに continuo が起動しないとき
 
 #### 版を上げたら「progress_interval_ms の値 3600000 が不正です」で起動しなくなった
 
@@ -1942,7 +1947,7 @@ grep -c 'author_association: \.author_association' ~/continuo-work/WORKFLOW.md
 
 - **`gh issue view --comments` の表示を読ませていないか。**この表示は、外部の人が本文に
   `author:` `association:` の行を書き足せます。**本文は `--json comments` を使わせています**
-- **`claude.tool_gate` を `off` にしていないか。**「エージェントが叩いたコマンドが「危ない」と断られる」を読んでください
+- **`claude.tool_gate` を `off` にしていないか。**『エージェントが叩いたコマンドが「危ない」と断られる』を読んでください
 
 #### 「Claude Code が起動しませんでした（herdr が返した状態: "unknown"）」と出る
 
@@ -2157,9 +2162,8 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 | **書き戻させる** | `WORKFLOW.md` に対応表を書く。自動化が書いた Status を、本来の Status へ戻させる |
 | **自動化を止める** | ボードの `Workflows` から、その自動化を無効にする |
 
-**何をどう書くかは、「目的別使用例」の
-「カンバンの Status を標準と違う名前にしたいとき」にある
-「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
+**何をどう書くかは「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります**
+（「目的別使用例」の「カンバンの Status を標準と違う名前にしたいとき」）。
 そのまま貼れる yaml と、書けない5つの形がそこにあります。
 **足す場所と、当てたあとの確かめ方は [upgrading.md](upgrading.md) の「足す場所と中身」です。**
 
