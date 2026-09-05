@@ -2,7 +2,7 @@
 
 - 対象: `docs/spec/usecases/particular_case/issue の担当を入札で決める.rucm.md`
 - 作成日 / 作成モデル: 2026-08-29 / Claude Opus 5 (1M context)
-- 参照した根拠資料: `docs/plans/continuo_design.md`（3-77 / 3-77a / 3-77b / 3-77c / 3-27 / 3-16）、`internal/ratelimit/ratelimit.go`、`internal/orchestrator/orchestrator.go`、`internal/tracker/query.go`、`internal/config/default.go`
+- 参照した根拠資料: `docs/plans/continuo_design.md`（3-77-0 / 3-77 / 3-77a / 3-77b / 3-77c / 3-27 / 3-16）、`internal/ratelimit/ratelimit.go`、`internal/orchestrator/orchestrator.go`、`internal/tracker/query.go`、`internal/config/default.go`
 
 ## 判断一覧
 

@@ -2,6 +2,7 @@
 
 ## 根拠資料
 
+- `docs/plans/continuo_design.md#3-77-0`（持ち回りで参加者を見分ける値。入札は投稿者、hold は本文の `assignee`、released は本文の `from`）
 - `docs/plans/continuo_design.md#3-77`（余裕値の出し方。判定スコア・投稿するかどうか・勝者の決め方・`bid_window_ms`）
 - `docs/plans/continuo_design.md#3-77a`（入札のコメントの形と、エージェントへ渡す前に外すこと）
 - `docs/plans/continuo_design.md#3-77b`（担当は assignee で持ち、期限は hold のコメントで持つ。見えているものと、その扱い）

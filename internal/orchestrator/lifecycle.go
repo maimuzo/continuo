@@ -476,8 +476,11 @@ func lookupSignalTarget(m map[string]*string, value string) (*string, bool) {
 // 戻り値の2つ目: ボードから見えていれば true。
 // 戻り値の3つ目: **本当に GitHub から取り直せたなら true。**
 //
-//	**偽のときの1つ目は、着手したときの写しである。**そこから何かを判定してはならない。
-//	担当者もラベルも Status も、そのあと動いている見込みがある。
+//	**偽のときの1つ目は、着手したときの写しである。**担当者もラベルも Status も、そのあと動いている見込みがある。
+//	**見るのは `verifyHandoff` だけである。**あそこは「担当が自分から他人へ移ったか」を答えるので、
+//	古い写しから答えると、担当を外された run が push まで走り切る（設計 3-77c）。
+//	**`handleTurnEnd` と `finishRunClaimed` は、取り直せなくても古い写しで続ける。**
+//	止めるほうが害が大きいためである（turn の結果を捨てる／片付けを止める）。
 func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimeline bool) (tracker.Issue, bool, bool) {
 	var (
 		issues []tracker.Issue
