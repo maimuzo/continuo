@@ -177,7 +177,7 @@ func TestIndex_案内の状態ごとに印を変える(t *testing.T) {
 		"octocat/hello-world#2": "issue へは未通知",
 		"octocat/hello-world#3": "issue へは書かない設定です",
 		"octocat/hello-world#4": "コメントが多すぎて確かめられません",
-		"octocat/hello-world#5": "別の機械の担当かどうかを切り分けられません",
+		"octocat/hello-world#5": "別のアカウントの continuo の担当かどうかを切り分けられません",
 		"octocat/hello-world#6": "issue へ書けませんでした",
 	}
 	for _, g := range snap.Gated {
