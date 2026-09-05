@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "face7da599ca3279f40d2e3168518b98d335ea3372a6ff4e02c176c3564a7be1",
+  "_source_sha256": "adbb6f8ff8b5b9db0348275043552ecfe973ac352eedc1e6d337e7e56c5326c6",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -224,6 +224,7 @@
   "cli.setup.updated": "Rewrote the Status mapping in WORKFLOW.md: %s",
   "cli.setup.updated_key": "  %s",
   "cli.setup.updated_keys_note": "Keys rewritten:",
+  "cli.setup.warn_config_load": "Cannot read the config file (messages are shown in the language determined from the LANG environment variable): %v",
   "cli.trust.dry_run_note": "Nothing was rewritten, because --dry-run was given. Run again without --dry-run to register trust.",
   "cli.trust.err_apply": "Error: cannot register trust: %v",
   "cli.trust.err_home_dir": "Error: cannot get the home directory: %v",
