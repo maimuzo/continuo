@@ -33,7 +33,24 @@ type Snapshot struct {
 	// `GateViews` の順序は不定で、`sort.Slice` は安定ではない。
 	Gated []Gated `json:"gated"`
 	// Totals は Runs のトークンの総和である。
+	//
+	// **いま走っている run の分しか入っていない。**終わった run は印から外れて消えるので、
+	// **run をまたぐ合計が要るなら CumulativeTotals を見ること**（issue #238）。
 	Totals Tokens `json:"totals"`
+	// CumulativeTotals は run をまたぐトークンの累計である（issue #238）。
+	//
+	// **この continuo が起動してから、turn の終わりに読み取った transcript の合計である。**
+	// **引き継いだ run では、起動より前に書かれた分も含む**（continuo が再起動しても
+	// pane の Claude Code は生きたままなので、その transcript には前の分が残っている）。
+	// **走行中の turn の分はまだ入っていない**（集計は turn の終わりにしか走らない）。
+	// **メモリだけに持つので、continuo を再起動すると0へ戻る。**
+	//
+	// **「continuo を起動してから」でも「continuo の一生ぶん」でもない、中間の値である。**
+	// **鍵の名前を仕様（`SPEC.md` 13.3）の `codex_totals` にしない。**continuo は codex を
+	// 使わない。応答の形が仕様の例と違うことは docs/plans/impl/09_dashboard.md が記録している。
+	//
+	// **Totals より小さくなることは無い**（`Server.snapshot` が読む順序で保証している）。
+	CumulativeTotals Tokens `json:"cumulative_totals"`
 }
 
 // Gated は着手の関門で止めた issue 1件の表示用の写しである（issue #134）。
@@ -158,9 +175,16 @@ type Tokens struct {
 //
 // views: `orchestrator.RunViews` が返した写し。
 // gates: `orchestrator.GateViews` が返した写し（issue #134）。
+// cumulative: `orchestrator.TokenTotals` が返した run をまたぐ累計（issue #238）。
+// **`views` より後に取ったものを渡すこと**（`Server.snapshot` の理由を見よ）。
 // now: いまの時刻（経過の計算に使う）。
 // 戻り値: 表示用のスナップショット。
-func NewSnapshot(views []orchestrator.RunView, gates []orchestrator.GateView, now time.Time) Snapshot {
+func NewSnapshot(
+	views []orchestrator.RunView,
+	gates []orchestrator.GateView,
+	cumulative orchestrator.TokenUsage,
+	now time.Time,
+) Snapshot {
 	runs := make([]Run, 0, len(views))
 	var totals Tokens
 	var counts Counts
@@ -210,7 +234,14 @@ func NewSnapshot(views []orchestrator.RunView, gates []orchestrator.GateView, no
 		return gated[i].Identifier < gated[j].Identifier
 	})
 
-	return Snapshot{GeneratedAt: now, Counts: counts, Runs: runs, Gated: gated, Totals: totals}
+	return Snapshot{
+		GeneratedAt:      now,
+		Counts:           counts,
+		Runs:             runs,
+		Gated:            gated,
+		Totals:           totals,
+		CumulativeTotals: newTokens(cumulative),
+	}
 }
 
 // newGated は、着手の関門で止めた issue の写しを表示用の形へ組み替える（issue #134）。

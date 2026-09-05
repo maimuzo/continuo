@@ -105,6 +105,9 @@ type RunSource interface {
 	RunViews() []orchestrator.RunView
 	// GateViews は着手の関門で止めた issue の写しを返す（順序は不定。issue #134）。
 	GateViews() []orchestrator.GateView
+	// TokenTotals は run をまたぐトークンの累計を返す（issue #238）。
+	// **`RunViews` より後に呼ぶこと**（`Server.snapshot` の理由を見よ）。
+	TokenTotals() orchestrator.TokenUsage
 }
 
 // **本番の実装がこのインタフェースを満たすことを、コンパイル時に確かめる。**
@@ -371,9 +374,17 @@ func (s *Server) handleAPIState(w http.ResponseWriter, r *http.Request) {
 
 // snapshot は run の写しを取り、表示用の形に組み替える。
 //
+// **絶対条件: `RunViews` を先に、`TokenTotals` を後に呼ぶ**（issue #238）。
+// 供給元はこの2つを別々の錠の中で返すので、**間に turn が1つ終わることがある。**
+// **累計は減らない**ので、この順序なら**新しいほうが累計になり、
+// 「累計が走行中の run の合計より小さい」写しは作れない。**
+// **逆順にすると、その瞬間だけ小さく見え、10秒ごとに再読み込みする画面で目に留まる。**
+//
 // 戻り値: 表示用のスナップショット。
 func (s *Server) snapshot() Snapshot {
-	return NewSnapshot(s.source.RunViews(), s.source.GateViews(), s.now())
+	runs := s.source.RunViews()
+	gates := s.source.GateViews()
+	return NewSnapshot(runs, gates, s.source.TokenTotals(), s.now())
 }
 
 // withHostCheck は `Host` ヘッダが手元のダッシュボードを指していないリクエストを落とす。

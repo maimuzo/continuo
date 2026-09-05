@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "db39a2d5ca616403cc2be061baac5d42e2b0d168563e9124961f30840be7e4b1",
+  "_source_sha256": "d05e3cbc919a0fcf846cc6ca7de75c3b633420760884f890ead230a0a1aba620",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -312,6 +312,8 @@
   "dashboard.note_gated": "This table is kept in memory only. It disappears when continuo restarts, and is rebuilt on the next poll.",
   "dashboard.note_last_hook": "\"last hook received\" is the time a hook actually arrived from that run. It shows \"—\" if none has arrived yet. The clock used to judge a stall runs separately (`stall_clock_at` in the JSON).",
   "dashboard.note_tokens": "Tokens are tallied by reading the transcript at the end of each turn (design 3-15). The turn currently running is not counted yet.",
+  "dashboard.caption_cumulative": "Cumulative across runs (includes runs that have finished)",
+  "dashboard.note_cumulative": "The sum of every transcript this continuo has read at the end of a turn since it started. Unlike the table above, runs that have finished are still counted here. For runs it took over on startup, this includes tokens written before continuo started. Restarting continuo resets it to 0.",
   "dashboard.tokens_at": "as of %s",
   "dashboard.tokens_not_counted": "not yet counted",
   "dashboard.total": "total",

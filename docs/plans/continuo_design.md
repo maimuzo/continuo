@@ -2041,6 +2041,10 @@ jq -s '[.[] | select(.type=="assistant")] | unique_by(.requestId) | map(.message
 **満たせる仕様の要求。**4.1.6 / 4.1.8（セッションごと・全体の集計）／13.3・13.7.2（スナップショットと HTTP API）／
 17.6（集計が正しく保たれることのテスト）。**transcript の集計で満たせる。**
 
+**「全体の集計」は run をまたぐ累計であり、`runState` の外（orchestrator）に持つ。作りは
+[docs/plans/impl/09_dashboard.md](impl/09_dashboard.md) の「run をまたぐ累計」が正である**（issue #238）。
+**4.1.8 の `codex_totals` のうち `seconds_running`（走った秒数の累計）は持たない。**
+
 > **transcript が全 API 応答を漏れなく持つことは検証できていない。**突き合わせる相手が transcript 自身になるためである。
 > 確かめられたのは「statusline の出力が1件しか届かなかった区間でも、transcript には9件の応答が残っていた」までである。
 
