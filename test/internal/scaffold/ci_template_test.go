@@ -50,7 +50,7 @@ func TestCITemplate_YAMLとして読める(t *testing.T) {
 // 同じ警告を .github/workflows/review-gate.yml も書いている。
 //
 // 与える情報: scaffold.CITemplate() を YAML として読んだもの。
-// 成功条件: jobs の鍵が design-review-result と review-result のちょうど2つであること。
+// 成功条件: jobs の鍵が design-review-result と code-review-result のちょうど2つであること。
 func TestCITemplate_jobの名前が2つとも変わっていない(t *testing.T) {
 	var parsed struct {
 		Jobs map[string]any `yaml:"jobs"`
@@ -61,7 +61,7 @@ func TestCITemplate_jobの名前が2つとも変わっていない(t *testing.T)
 	if len(parsed.Jobs) != 2 {
 		t.Fatalf("job が %d 個あります（2個であるべきです）: %v", len(parsed.Jobs), keysOf(parsed.Jobs))
 	}
-	for _, want := range []string{"design-review-result", "review-result"} {
+	for _, want := range []string{"design-review-result", "code-review-result"} {
 		if _, ok := parsed.Jobs[want]; !ok {
 			t.Errorf("job %q がありません（必須の検査に登録する名前です）: %v", want, keysOf(parsed.Jobs))
 		}
@@ -169,7 +169,7 @@ func TestCITemplate_このリポジトリのCIと同じ条件で数えている(
 	}
 
 	// **job の名前も揃える。**必須の検査として登録する名前である。
-	for _, want := range []string{"design-review-result:", "review-result:"} {
+	for _, want := range []string{"design-review-result:", "code-review-result:"} {
 		if !strings.Contains(gate, "  "+want) {
 			t.Errorf("このリポジトリの CI に job %q がありません", want)
 		}

@@ -138,7 +138,7 @@ sh scripts/test-like-ci.sh
 | 検査の名前 | 何のレビューか | どこに貼るか | 目印（1行目） |
 | --- | --- | --- | --- |
 | **`design-review-result`** | **設計** | **その PR が閉じる issue のコメント** | `<!-- design-review-result -->` |
-| **`review-result`** | **実装** | **その PR のコメント** | `<!-- code-review-result -->` |
+| **`code-review-result`** | **実装** | **その PR のコメント** | `<!-- code-review-result -->` |
 
 **分けているのは、どちらが欠けているかを検査の名前で分かるようにするためです。**
 
@@ -185,6 +185,12 @@ sh scripts/test-like-ci.sh
 **赤いだけではマージを止められません。**branch protection の必須の検査へ入れて、はじめて止まります。
 **リポジトリの管理権限が要ります。**
 
+> **実装のレビューの job は `review-result` から `code-review-result` へ改名しました。**
+> **既に `review-result` を登録している場合は、下の手順で入れ替えてください。**
+> **入れ替えるまで、GitHub は「必須の検査がまだ報告されていない」と見てマージを塞ぎます。**
+> **危険側ではなく安全側に倒れますが、入れ替えるまで1本もマージできません。**
+> **古い名前は下の二が落とします。**足すだけでは、宙に浮いた `review-result` が残ります。
+
 ```bash
 OWNER=<owner>   # 自分のアカウント名に書き換える
 BR=repos/$OWNER/continuo/branches/main/protection/required_status_checks
@@ -192,23 +198,28 @@ BR=repos/$OWNER/continuo/branches/main/protection/required_status_checks
 # 一、いまの必須の検査を読む
 gh api "$BR" --jq '.checks[].context'
 
-# 二、2つの検査を足した JSON を作る（いまの設定はそのまま持ち越す）
+# 二、2つの検査を足し、改名前の review-result を落とした JSON を作る
+#     （いまの設定はそのまま持ち越す）
 gh api "$BR" --jq '{
   strict: .strict,
-  checks: ((.checks | map({context, app_id}))
-           + [{context: "review-result", app_id: (.checks[0].app_id)},
+  checks: ((.checks | map({context, app_id}) | map(select(.context != "review-result")))
+           + [{context: "code-review-result", app_id: (.checks[0].app_id)},
               {context: "design-review-result", app_id: (.checks[0].app_id)}]
            | unique_by(.context))
 }' > "${TMPDIR:-/tmp}/required-status-checks.json"
 
-# 三、入れ替える
+# 三、当てる前に読む。**古い名前が消え、新しい2つが入っていること**
+cat "${TMPDIR:-/tmp}/required-status-checks.json"
+
+# 四、入れ替える
 gh api --method PATCH "$BR" --input "${TMPDIR:-/tmp}/required-status-checks.json"
 
-# 四、入ったかを確かめる
+# 五、入ったかを確かめる
 gh api "$BR" --jq '.checks[].context'
 ```
 
-**四で `review-result` と `design-review-result` を含む8つが並べば入っています。**足す前は次の6つです。
+**五で `code-review-result` と `design-review-result` を含む8つが並べば入っています。**
+**`review-result` が並んでいたら、二の `select` が効いていません。**足す前は次の6つです。
 
 ```text
 test (ubuntu-latest)
@@ -223,7 +234,7 @@ build (linux, arm64)
 | --- | --- |
 | **`checks` は全件置き換えである** | 一部だけ渡すと、**渡さなかった検査が必須から外れます。**二のように、いまの分を読んでから足すこと |
 | **`app_id` を落とさない** | `null` にすると、**どのアプリが報告した検査でも合格として扱われます** |
-| **job の名前を変えない** | 必須の検査は `review-result` と `design-review-result` という名前で登録されます。名前を変えると設定が宙に浮き、**検査が無いのにマージできる状態になります** |
+| **job の名前を変えない** | 必須の検査は `code-review-result` と `design-review-result` という名前で登録されます。名前を変えると設定が宙に浮き、**検査が無いのにマージできる状態になります** |
 
 ## 設計を読む
 

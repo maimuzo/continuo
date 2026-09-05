@@ -3,7 +3,7 @@
 # **設計と実装で、別々の job が数える。**
 #
 #   design-review-result   設計のレビュー結果が、紐づく issue のコメントに貼られているか
-#   review-result          実装のレビュー結果が、この PR のコメントに貼られているか
+#   code-review-result     実装のレビュー結果が、この PR のコメントに貼られているか
 #
 # **分けているのは、どちらが欠けているかを検査の名前で分かるようにするためである。**
 # 1つにまとめると、赤の理由をログまで見に行くことになる。
@@ -54,7 +54,7 @@ permissions:
 jobs:
   # **設計のレビュー結果が、紐づく issue のコメントに貼られているか。**
   #
-  # **この job の名前も変えないこと。**理由は下の `review-result` と同じである。
+  # **この job の名前も変えないこと。**理由は下の `code-review-result` と同じである。
   #
   # **貼る先が issue なのは、設計が issue に書かれるからである**
   # （[.claude/rules/design-review.md](../../.claude/rules/design-review.md) の段2）。
@@ -195,9 +195,9 @@ jobs:
           exit 1
 
   # **この job の名前を変えないこと。**branch protection の必須の検査は
-  # `review-result` という名前で登録する（手順は CONTRIBUTING.md「この検査をマージの条件にする」）。
+  # `code-review-result` という名前で登録する（手順は CONTRIBUTING.md「この検査をマージの条件にする」）。
   # **名前を変えると、その設定が宙に浮き、検査が無いのにマージできる状態になる。**
-  review-result:
+  code-review-result:
     runs-on: ubuntu-latest
     steps:
       - name: レビュー結果が貼ってあるか

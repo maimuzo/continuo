@@ -36,7 +36,7 @@ const ciTemplate = `# レビュー結果が貼られていない pull request �
 # **2つの検査を持ちます。**
 #
 #   design-review-result   設計のレビュー結果が、紐づく issue のコメントに貼られているか
-#   review-result          実装のレビュー結果が、この pull request のコメントに貼られているか
+#   code-review-result     実装のレビュー結果が、この pull request のコメントに貼られているか
 #
 # **どちらも「レビューを飛ばして先へ進む」ことを止めるためのものです。**
 # **文書に書くだけでは守られません。**continuo の開発で実際に起きました
@@ -213,7 +213,7 @@ jobs:
           exit 1
 
   # **実装のレビュー結果が、この pull request のコメントに貼られているか。**
-  review-result:
+  code-review-result:
     runs-on: ubuntu-latest
     steps:
       - name: 実装のレビュー結果が貼ってあるか

@@ -355,7 +355,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 | どこ | いつ止まるか |
 | --- | --- |
 | [.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) | `gh pr merge <番号>` と `gh pr ready <番号>` を**実行する前** |
-| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[.claude/rules/design-review.md](.claude/rules/design-review.md) の段4） |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[.claude/rules/design-review.md](.claude/rules/design-review.md) の段4） |
 | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
 
 **3つとも数える条件は同じである。**
@@ -401,7 +401,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 | 何を確かめるか | どう確かめるか |
 | --- | --- |
-| **レビュー結果が貼ってあるか** | **GitHub Actions の `review-result`**（`main` の必須の検査。2026-09-01 に追加） |
+| **レビュー結果が貼ってあるか** | **GitHub Actions の `code-review-result`**（`main` の必須の検査。2026-09-01 に追加） |
 | ビルドとテスト | `build` 6本と `test` 2本（必須の検査） |
 | 衝突が無いか | `gh pr view <番号> --json mergeable,mergeStateStatus` |
 
