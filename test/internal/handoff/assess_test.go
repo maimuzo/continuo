@@ -386,20 +386,35 @@ func TestFormatBid_コメントの形と読み戻し(t *testing.T) {
 // コメントに投稿者を付けない。**数えると、同点の3段目で空文字がどのログイン名にも勝ち、
 // その回はどの continuo も着手しなくなる。**
 //
-// 与える情報: 印はあるが JSON が壊れているコメントと、投稿者の分からないコメント。
-// 成功条件: どちらも入札として読めないこと。
+// **時刻の入っていないコメントも数えない。**continuo は入札に必ず `at` を書く。
+// **これが無いと `{}` だけの本文が判定スコア0の入札として通り、
+// `Deadline` の起点（いちばん古い投稿時刻）をその1件が奪う。**
+//
+// 与える情報: 印はあるが JSON が壊れているコメント・投稿者の分からないコメント・
+// 時刻の入っていないコメント。
+// 成功条件: どれも入札として読めないこと。
 func TestParseBid_読めない入札は数えない(t *testing.T) {
 	broken := config.HandoffBidMarker + "\nこれは JSON ではありません {"
 	if _, ok := handoff.ParseBid(broken, selfLogin, at()); ok {
 		t.Error("JSON でないコメントを入札として読んでいる")
 	}
 
-	valid := config.HandoffBidMarker + "\n" + `{"five_hour":100,"weekly":100,"score":300}`
+	valid := config.HandoffBidMarker + "\n" +
+		`{"five_hour":100,"weekly":100,"score":300,"at":"2026-08-29T16:45:00+09:00"}`
 	if _, ok := handoff.ParseBid(valid, "", at()); ok {
 		t.Error("投稿者の分からないコメントを入札として読んでいる")
 	}
 	if _, ok := handoff.ParseBid(valid, "   ", at()); ok {
 		t.Error("投稿者が空白だけのコメントを入札として読んでいる")
+	}
+	// **印だけ真似た本文は数えない。**時刻が入っていないものは continuo が書いたものではない。
+	for _, body := range []string{
+		config.HandoffBidMarker + "\n{}",
+		config.HandoffBidMarker + "\n" + `{"five_hour":100,"weekly":100,"score":300}`,
+	} {
+		if _, ok := handoff.ParseBid(body, selfLogin, at()); ok {
+			t.Errorf("時刻の無いコメントを入札として読んでいる:\n%s", body)
+		}
 	}
 	// **投稿者さえ分かれば、機械の名前が無くても読める**（設計 3-77-0 の入札の形そのものである）。
 	got, ok := handoff.ParseBid(valid, selfLogin, at())

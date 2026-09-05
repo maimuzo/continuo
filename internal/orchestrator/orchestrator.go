@@ -288,6 +288,7 @@ type Orchestrator struct {
 	// 実行中の run 1件ごとに確保と整列をやり直すことになる（`reconcileRunning` は
 	// run ごとに `isKnownState` を引く）。**組み立てのときに1度だけ計算して持つ。**
 	knownStateNames []string
+
 	// mu は runs / sessions / notified / tickCount / quota を守る。
 	mu sync.Mutex
 	// runs は「自分が取った」印であり「実行中の一覧」でもある（設計 3-10 / 3-25）。
@@ -427,15 +428,15 @@ func New(opts Options) (*Orchestrator, error) {
 	}
 	// **持ち主の取得は既定で本物の `gh` を呼ぶ**（設計 3-65）。`GHAuthCheck` のように
 	// 「nil なら何もしない」にすると、**呼び出し元が渡し忘れた瞬間に印だけの判定へ静かに戻る。**
+	//
+	// **持ち回りで参加者を見分ける値も、この持ち主のログイン名である**（設計 3-77-0）。
+	// **この機械の名前は取らない。**`os.Hostname()` は重複しうるうえ、
+	// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+	// アカウント1つにつき continuo は1つである。
 	ghLogin := opts.GHLogin
 	if ghLogin == nil {
 		ghLogin = tracker.RunGHAPIUserLogin
 	}
-	// **持ち回りで参加者を見分ける値は、gh の持ち主のログイン名である**（設計 3-77-0）。
-	// **この機械の名前は取らない。**`os.Hostname()` は重複しうるうえ、
-	// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
-	// アカウント1つにつき continuo は1つである。
-
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
@@ -800,8 +801,8 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
 		// **効くのは復元した run と、この機能より前に着手した run だけである。**
 		// **確かめずに送ると、担当が既に移っていても丸ごと1回ぶん働く**（`after_run` も走る）。
-		if lost, newHost := o.handoffLostOnResume(ctx, rs); lost {
-			o.stopBecauseHandoffLost(ctx, rs, newHost)
+		if lost, newAccount := o.handoffLostOnResume(ctx, rs); lost {
+			o.stopBecauseHandoffLost(ctx, rs, newAccount)
 			continue
 		}
 		if rs.takeAwaitTurnEnd() {

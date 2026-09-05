@@ -102,7 +102,8 @@ func TestCollectBids_識別子は投稿者から取る(t *testing.T) {
 // 成功条件: 投稿者のあるほうだけが返ること。
 func TestCollectBids_投稿者の分からない入札は数えない(t *testing.T) {
 	created := at()
-	body := config.HandoffBidMarker + "\n" + `{"five_hour":100,"weekly":100,"score":300}`
+	body := config.HandoffBidMarker + "\n" +
+		`{"five_hour":100,"weekly":100,"score":300,"at":"2026-08-29T16:45:00+09:00"}`
 
 	bids := handoff.CollectBids([]handoff.CommentView{
 		{Author: "", Body: body, CreatedAt: created},

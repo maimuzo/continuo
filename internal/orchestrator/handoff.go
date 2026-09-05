@@ -221,7 +221,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 			"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 		return handoffDecision{}
 	case handoff.ActionRelease:
-		released, ok := o.releaseExpiredAssignee(ctx, issue, nodeID, assessment)
+		released, ok := o.releaseExpiredAssignee(ctx, issue, nodeID, viewer, assessment)
 		if !ok {
 			return handoffDecision{}
 		}
@@ -278,11 +278,13 @@ func (o *Orchestrator) evaluateBid() (handoff.Bid, handoff.SkipReason) {
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
 // nodeID: 下敷きの GitHub issue のノード ID。
+// viewer: この continuo が使っている gh の持ち主。**書いたコメントの写しの投稿者に入れる。**
 // assessment: 期限切れと判定した結果（外す担当者と、読んだ hold が入っている）。
 // 戻り値の1つ目: 書いた released のコメントの写し（入札の回の区切りに使う）。
 // 戻り値の2つ目: 外せたら true。**外せなければ false**（コメントも書かない）。
 func (o *Orchestrator) releaseExpiredAssignee(
-	ctx context.Context, issue tracker.Issue, nodeID string, assessment handoff.Assessment,
+	ctx context.Context, issue tracker.Issue, nodeID string,
+	viewer tracker.Assignee, assessment handoff.Assessment,
 ) (handoff.CommentView, bool) {
 	id, ok := assigneeIDOf(issue, assessment.Assignee)
 	if !ok {
@@ -307,9 +309,12 @@ func (o *Orchestrator) releaseExpiredAssignee(
 		At:     now,
 	})
 	// **いま書いたばかりなので、作成時刻と更新時刻は同じである。**
-	// **更新時刻を空のままにしない。**この写しは `RoundStart` にしか渡らないが、
-	// **入れ物の一部だけを埋めた値を回すと、別の判定へ回されたときに黙って古い時刻を返す。**
-	view := handoff.CommentView{Body: body, CreatedAt: now, UpdatedAt: now}
+	// **欄を空のままにしない。**この写しは `RoundStart` にしか渡らないが、
+	// **入れ物の一部だけを埋めた値を回すと、別の判定へ回されたときに黙って空の値を返す。**
+	// **投稿者も入れる。**`CollectBids` は投稿者の分からないコメントを1件も通さない（設計 3-77-0）。
+	view := handoff.CommentView{
+		Author: viewer.Login, Body: body, CreatedAt: now, UpdatedAt: now,
+	}
 	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
 		// **担当は既に外れている。**コメントを書けなかったことで入札を止めない
 		// （止めると、担当者のいない issue が誰にも拾われなくなる）。
@@ -408,10 +413,12 @@ func (o *Orchestrator) bidForIssue(
 		// この issue は既に担当者が付いている（claim 済み）ので、次の巡回では
 		// `dispatchCandidates` 冒頭の `lookupRunByID` で弾かれ、`handoffGate` はもう呼ばれない。
 		//
-		// **「18時間で外れるから放っておける」も成り立たない。**担当者はあるが hold が無い状態は、
-		// 別のアカウントの continuo から見ると `ActionSkipHumanAssigned`（人間が付けた担当）に見える
+		// **「hold が無くても、この continuo が続ければよい」も成り立たない。**
+		// 担当者はあるが hold が無い状態は、**別のアカウントの continuo からは
+		// `ActionSkipHumanAssigned`（人間が付けた担当）に見える**
 		// （[assess.go](../handoff/assess.go) の `!hasHold` の行）。
-		// **期限で外れる経路が無いので、人間が担当者を外すまで無期限に止まる。**
+		// **hold は「この担当者は機械である」の唯一の証拠であり、それが無いと期限で外せない。**
+		// **この機械が落ちても、誰も引き継げなくなる。**
 		// しかも他の continuo は、その issue へ「担当者を外してください」の案内を書きに行く。
 		//
 		// **だから着手しない。**`undoHandoffAcquire` で書いた担当者を消し戻し、
@@ -437,8 +444,9 @@ func (o *Orchestrator) bidForIssue(
 // **`RemoveAssignees` 自体が失敗したときは、担当者を残したまま何もせず戻る。**released は書かない
 // （担当を外せていないのに外したと書くと嘘になる）。**そのときの扱いは設計 3-77g に書いてある。**
 // 要点だけ言うと、担当者はあるが hold は無い状態のまま残る。
-// **その issue は、人間が担当者を外すまで無期限に止まる。**別のアカウントの continuo からは
-// 「人間が付けた担当」に見えて、期限で外れる経路が無いためである。
+// **この continuo は次の巡回で「自分のアカウント1人」と読んで着手するが、hold は無いままである。**
+// **だから、この機械が落ちたときに別のアカウントの continuo が引き継げない**
+// （向こうからは「人間が付けた担当」に見えて、期限で外せない）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 対象の issue。
@@ -719,7 +727,7 @@ func assigneeIDOf(issue tracker.Issue, login string) (string, bool) {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
-// 戻り値の2つ目: いま担当になっている機械の名前（読めなければ空文字）。
+// 戻り値の2つ目: いま担当になっているアカウントのログイン名（読めなければ空文字）。
 func (o *Orchestrator) handoffLostOnTurnEnd(ctx context.Context, rs *runState) (bool, string) {
 	interval := time.Duration(o.cfg.Tracker.Provider.Handoff.RecheckIntervalMs) * time.Millisecond
 	if interval <= 0 {
@@ -742,7 +750,7 @@ func (o *Orchestrator) handoffLostOnTurnEnd(ctx context.Context, rs *runState) (
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // 戻り値の1つ目: 担当が移っていれば true。
-// 戻り値の2つ目: いま担当になっている機械の名前（読めなければ空文字）。
+// 戻り値の2つ目: いま担当になっているアカウントのログイン名（読めなければ空文字）。
 func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (bool, string) {
 	if !rs.handoffNeverChecked() {
 		return false, ""
@@ -759,9 +767,8 @@ func (o *Orchestrator) handoffLostOnResume(ctx context.Context, rs *runState) (b
 // **答えを出せたときだけ時計を進める。**進めてしまうと、`gh` に一度届かなかっただけで
 // **次の確かめが `recheck_interval_ms` のあとになる**（既定1時間）。
 //
-// **担当者のアカウントが自分なら、担当しているのも自分である**（設計 3-77-0）。
-// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
-// **hold を読んで機械を見分ける段は無い。**
+// **判定の材料は担当者だけである**（設計 3-77-0）。担当者のアカウントが自分なら、担当も自分である。
+// **コメントは判定に使わない。**担当が移ったと分かったあとで、記録をログへ残すためだけに読む。
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
@@ -800,45 +807,59 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 		return false, ""
 	}
 
-	// **誰が引き継いだかは、issue の担当者が答える**（設計 3-77-0）。
-	// **released のコメントも一緒に記録に残す**（RUCM「担当が移った」のステップ1）。
-	// **これが無いと「担当が移った」としか残らず、いつ・どのアカウントが外されたのかを辿れない。**
-	// **切れたかどうかは捨てる。**ここは「担当が自分のままか」を確かめるだけで、
-	// 案内を1回にするための照合はしない（設計 7-1）。
-	comments, _, err := o.tracker.FetchAllComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
-	if err != nil {
-		// **読めないなら止めない。**判定の材料が揃っていない。**時計も進めない**
-		// （進めると、次の確かめが1時間後になる）。
-		o.logger.Warn("担当を確かめ直すためのコメントを読めません（この run は止めません）",
-			"identifier", issue.Identifier, "error", err)
-		return false, ""
-	}
-	views := toCommentViews(comments)
+	// **判定はここで終わる**（設計 3-77-0）。**材料は担当者だけである。**
+	// 担当者のアカウントが自分なら、担当しているのも自分である。
+	// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+	// hold を読んでどの機械かを見分ける段は無い。
+	//
+	// **答えが出たので時計を進める。**この先でコメントを読むが、
+	// **読めても読めなくても判定は変わらない。**
 	rs.markHandoffChecked(o.now())
-
-	selfAssigned := false
 	for _, l := range logins {
 		if strings.EqualFold(l, viewer.Login) {
-			selfAssigned = true
-			break
+			return false, ""
 		}
-	}
-	if r, ok := handoff.LatestReleased(views); ok && strings.EqualFold(strings.TrimSpace(r.From), viewer.Login) {
-		o.logger.Info("この continuo の担当が外された記録が issue にあります",
-			"identifier", issue.Identifier, "外されたアカウント", r.From,
-			"branch", r.Branch, "外した時刻", r.At)
-	}
-
-	if selfAssigned {
-		// **担当者が自分のアカウントなら、担当しているのも自分である**（設計 3-77-0）。
-		// **hold を読んで機械を見分ける段は無い。**同じ GitHub アカウントを複数の機械で
-		// 使うことはサポートしないので、アカウント1つにつき continuo は1つである。
-		return false, ""
 	}
 
 	// **担当者が他人のアカウントになっている。**担当が移ったということである。
 	// **いま担当しているのは、その担当者のアカウントで動いている continuo である。**
+	//
+	// **ここまで来てから、はじめてコメントを読む**（設計 3-77f の「巡回を塞がない」）。
+	// **判定には使わない。**外された記録をログへ残すためだけである。
+	// **判定の前に読むと、コメントを読めなかっただけで「担当は自分のまま」と答えることになり、
+	// 担当を外された run が push まで走り切る**（設計 3-77c が禁じている）。
+	o.logReleasedRecord(ctx, issue, nodeID, viewer.Login)
 	return true, logins[0]
+}
+
+// logReleasedRecord は、この continuo の担当が外された記録が issue にあればログへ残す
+// （RUCM「担当が移った」のステップ1）。
+//
+// **これが無いと「担当が移った」としか残らず、いつ・どのアカウントが外されたのかを辿れない。**
+//
+// **読めなくても何も止めない。**判定は呼び出し側で既に出ている。
+// **切れたかどうかは捨てる。**案内を1回にするための照合はしない（設計 7-1）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issue: 対象の issue。
+// nodeID: 下敷きの GitHub issue のノード ID。
+// selfLogin: この continuo が使っている gh の持ち主のログイン名。
+func (o *Orchestrator) logReleasedRecord(
+	ctx context.Context, issue tracker.Issue, nodeID, selfLogin string,
+) {
+	comments, _, err := o.tracker.FetchAllComments(ctx, nodeID, o.cfg.Tracker.Provider.Comments)
+	if err != nil {
+		o.logger.Warn("担当が外された記録を読めません（判定は済んでいるので、この run は止めたままです）",
+			"identifier", issue.Identifier, "error", err)
+		return
+	}
+	r, ok := handoff.LatestReleased(toCommentViews(comments))
+	if !ok || !strings.EqualFold(strings.TrimSpace(r.From), selfLogin) {
+		return
+	}
+	o.logger.Info("この continuo の担当が外された記録が issue にあります",
+		"identifier", issue.Identifier, "外されたアカウント", r.From,
+		"branch", r.Branch, "外した時刻", r.At)
 }
 
 // stopBecauseHandoffLost は、担当が移った run を止める（設計 3-77c）。
@@ -859,12 +880,12 @@ func (o *Orchestrator) verifyHandoff(ctx context.Context, rs *runState) (bool, s
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// newHost: いま担当になっているアカウントのログイン名（読めなければ空文字）。
-func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState, newHost string) {
+// newAccount: いま担当になっているアカウントのログイン名（読めなければ空文字）。
+func (o *Orchestrator) stopBecauseHandoffLost(ctx context.Context, rs *runState, newAccount string) {
 	if !rs.claimTerminal(ctx) {
 		return
 	}
-	who := newHost
+	who := newAccount
 	if who == "" {
 		who = i18n.T(i18n.KeyHandoffLostUnknownAccount)
 	}

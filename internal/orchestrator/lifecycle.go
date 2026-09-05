@@ -29,8 +29,8 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	// **担当が自分でなくなっていないかを、turn の終わりで確かめる**（設計 3-77c）。
 	// **確かめるのは `recheck_interval_ms` に1回だけである**（既定1時間）。
 	// **移っていたらここで止める。push しない。**
-	if lost, newHost := o.handoffLostOnTurnEnd(ctx, rs); lost {
-		o.stopBecauseHandoffLost(ctx, rs, newHost)
+	if lost, newAccount := o.handoffLostOnTurnEnd(ctx, rs); lost {
+		o.stopBecauseHandoffLost(ctx, rs, newAccount)
 		return true
 	}
 

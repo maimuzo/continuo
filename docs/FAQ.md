@@ -1905,7 +1905,7 @@ tracker:
 | --- | --- |
 | **`tracker.provider.handoff.bid_window_ms`** | 締め切りの計算がずれ、機械ごとに勝者の判定が食い違います |
 | **`five_hour_margin_percent` / `weekly_margin_percent`** | マージンが大きい機械ほど余裕値が下がり、判定スコアで負け続けます |
-| **`idle_timeout_ms` と `progress_interval_ms`** | **この2つは機械をまたいで組で効きます。**担当している側の `progress_interval_ms` が、見ている側の `idle_timeout_ms` より長いと、**エージェントが指示どおり書いていても担当が外れます。**この組み合わせは起動時に検査されません |
+| **`idle_timeout_ms` と `progress_interval_ms`** | **この2つは機械をまたいで組で効きます。**担当している側の `progress_interval_ms` が、見ている側の `idle_timeout_ms` より長いと、**エージェントが指示どおり書いていても担当が外れます。****1枚の中では検査されます**（`progress_interval_ms` が `idle_timeout_ms` 以上だと起動しません）。**機械をまたいだ組み合わせだけが検査されません** |
 | **`recheck_interval_ms`** | **0 を書いた機械は、走っている最中に担当を取られたことに気づきません** |
 | **`rate_limit.pause_above_percent`** | 入札に参加する条件が機械ごとに変わります |
 | **`rate_limit.source`** | 片方だけ `none` にすると、**その機械が使用率0として常に入札し、勝ち続けます** |
@@ -1950,8 +1950,10 @@ tracker:
 #### `workspace.root` は `~/worktrees` のままでよい
 
 **`~` は各機械のホームディレクトリへ展開されます。**
-**worktree の置き場所に機械の名前は入りません**（`<root>/<host>/<owner>/<repo>/<branch>` の
-`<host>` は issue の URL のホスト部で、普通の GitHub 利用では全機械で `github.com` になります）。
+**worktree の置き場所に機械の名前は入りません。**置き場所は
+`<root>/<host>/<owner>/<repo>/<スラグ>` の4階層に固定されていて、
+`<host>` は issue の URL のホスト部です（普通の GitHub 利用では全機械で `github.com` になります）。
+**`<スラグ>` は branch 名そのままではありません。**`/` をハイフンに置き換えた1階層ぶんの名前です。
 
 ### 同じ GitHub アカウントで、複数の PC を動かしたい
 

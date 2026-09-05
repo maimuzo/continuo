@@ -583,6 +583,12 @@ func marshalLine(v any) string {
 // **数えると、同点の3段目で空文字がどのログイン名にも勝ち、
 // その回はどの continuo も着手しなくなる**（勝った入札の投稿者が、どの continuo とも一致しない）。
 //
+// **時刻の入っていないコメントも数えない。**continuo は入札に必ず `at` を書くので、
+// **入っていないものは continuo が書いたものではない。**
+// **この検査が無いと、`{}` だけの本文が判定スコア0の入札として通る。**
+// `Deadline` はいちばん古い投稿時刻を起点にするので、
+// **手で印だけ真似たコメント1件で、その回の締め切りが早まる。**
+//
 // body: コメント本文。
 // author: GitHub がそのコメントに付けた投稿者のログイン名。**空なら入札として読まない。**
 // postedAt: GitHub がそのコメントに付けた作成時刻（同点の決着と締め切りに使う）。
@@ -599,6 +605,9 @@ func ParseBid(body, author string, postedAt time.Time) (Bid, bool) {
 	}
 	var b Bid
 	if err := json.Unmarshal([]byte(payload), &b); err != nil {
+		return Bid{}, false
+	}
+	if b.At.IsZero() {
 		return Bid{}, false
 	}
 	b.Author = login
