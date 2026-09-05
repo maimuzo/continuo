@@ -35,6 +35,7 @@ import (
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/setup"
+	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/trust"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -72,6 +73,14 @@ func runVersion(stdout io.Writer) int {
 type Deps struct {
 	// DoctorRun は前提の検査である。
 	DoctorRun func(ctx context.Context, opts doctor.Options) doctor.Report
+	// PromptFetchIssue は `continuo prompt --show --url` が issue を1件引く。
+	//
+	// **GitHub を叩くので、検査では必ず差し替える。**
+	// 戻り値の2つ目は「ボードから issue として組み立てられたか」であり、
+	// **偽になる理由は「載っていない」だけではない**（Status 未設定・archive 済みなど）。
+	PromptFetchIssue func(
+		ctx context.Context, cfg config.TrackerConfig, endpoint, identifier string,
+	) (tracker.Issue, bool, error)
 	// UserHomeDir はホームディレクトリを引く。`~/.claude.json` を書き換える先が決まるので、
 	// **検査では必ず一時ディレクトリへ向ける。**
 	UserHomeDir func() (string, error)
@@ -107,6 +116,9 @@ type Deps struct {
 func (d Deps) withDefaults() Deps {
 	if d.DoctorRun == nil {
 		d.DoctorRun = doctor.Run
+	}
+	if d.PromptFetchIssue == nil {
+		d.PromptFetchIssue = fetchIssueForPrompt
 	}
 	if d.UserHomeDir == nil {
 		d.UserHomeDir = os.UserHomeDir
@@ -180,7 +192,7 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 		case "doctor":
 			return runDoctor(d, args[1:], stdout, stderr)
 		case "prompt":
-			return runPrompt(args[1:], stdout, stderr)
+			return runPrompt(d, args[1:], stdout, stderr)
 		case "trust":
 			return runTrust(d, args[1:], stdout, stderr)
 		case "abandon":
@@ -256,72 +268,185 @@ func runInit(d Deps, args []string, stdout, stderr io.Writer) int {
 		ProjectNumber: *projectFlag,
 	})
 
-	// **書くのは1枚である**（設計 5-3g）。front matter（設定）と本文（固有の指示）が、
-	// 1つのファイルに入っている。
-	result, err := scaffold.WriteTemplateWithValues(dir, *forceFlag, detection.Values)
-	switch {
-	case err == nil:
-		if result.Overwritten {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitOverwritten, result.Path))
-		} else {
-			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCreated, result.Path))
+	// **書くのは2枚である**（設計 5-3o）。
+	// **WORKFLOW.md が設定で、continuo-ci.yaml は CI へ移すための見本である。**
+	// **片方が既にあっても、もう片方は書く。**版を上げた利用者が `continuo init` を叩くと、
+	// 足りない continuo-ci.yaml だけが増える。**これが移行の唯一の手順であり、
+	// `--force` を要求してはならない**（要求すると、手で書いた本文を潰す `--force` を打たせる）。
+	res := scaffold.WriteAll(dir, *forceFlag, detection.Values)
+
+	// **WORKFLOW.md の「既にある」以外の失敗は、`continuo init` の失敗である。**
+	// ディレクトリが無い・ディレクトリでない・symlink・書けない、のいずれかで、
+	// **2枚目も同じ理由で落ちている。**同じ案内を2回出さないよう、ここで終える。
+	if res.WorkflowFailed() {
+		switch {
+		case errors.Is(res.WorkflowErr, scaffold.ErrDirNotFound):
+			// ディレクトリは作らない（--force でも作らない）。打ち間違えたパスに
+			// WORKFLOW.md が生まれると、利用者は作ったはずのファイルを見失う。
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrDirNotFound, res.WorkflowErr))
+		case errors.Is(res.WorkflowErr, scaffold.ErrNotADirectory):
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrNotADirectory, res.WorkflowErr))
+		case errors.Is(res.WorkflowErr, scaffold.ErrSymlink):
+			// symlink は --force でも辿らない。辿ると指定されたディレクトリの外にある
+			// リンク先を雛形で潰すため、--force を勧めてはならない。
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrSymlink, res.WorkflowErr))
+		default:
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, scaffold.WorkflowFileName(), res.WorkflowErr))
 		}
+		return 1
+	}
+
+	// **2枚とも既にあったときだけ、`--force` を勧めて 1 で終える。**
+	// 片方でも置けたなら、置けたことを報告して 0 で終える。
+	if res.BothExisted() {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrAlreadyExists, res.Workflow.Path))
+		return 1
+	}
+
+	if res.WorkflowErr == nil {
+		if res.Workflow.Overwritten {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitOverwritten, res.Workflow.Path))
+		} else {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCreated, res.Workflow.Path))
+		}
+	} else {
+		// **既にあった。触っていない。**
+		// **`--force` を勧めてはならない。**あれは本文ごと上書きするので、
+		// **利用者が手で書いた指示が1行も残らない**（docs/upgrading.md）。
+		// **版を上げた利用者は、足りない2枚目を置くためにこの経路を通る。**
+		// そこで破壊的なフラグを勧めると、案内と正面からぶつかる。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitWorkflowKept, scaffold.WorkflowFileName(), res.Workflow.Path))
+	}
+
+	printInitCI(stdout, stderr, res)
+
+	// **1枚も書けなかったなら、成功で終えない。**
+	// **`WORKFLOW.md` が既にあり、2枚目が「既にある」以外の理由で落ちた場合**がこれに当たる
+	// （`BothExisted` は上で 1 を返しているので、ここへ来るのはその組み合わせだけである）。
+	// **何も作っていないのに 0 を返すと、`continuo init` の成否で分岐する script が
+	// 「置けた」と読む。**理由は `printInitCI` が標準エラーへ出してある。
+	if !res.Wrote() {
+		return 1
+	}
+
+	// **検出の結果は、`WORKFLOW.md` を書いたときだけ出す。**
+	// **2枚目にはこの値を1つも埋めない**（`CITemplateWithValues` は `values` を使わない）。
+	// **出すと、触っていない `WORKFLOW.md` に値が入ったと読める。**
+	// 版を上げた利用者は必ずこの経路を通るので、そこで嘘を出さない。
+	if res.WorkflowErr == nil {
 		printDetection(stdout, detection)
-		return 0
-	case errors.Is(err, scaffold.ErrAlreadyExists):
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrAlreadyExists, result.Path))
-		return 1
-	case errors.Is(err, scaffold.ErrDirNotFound):
-		// ディレクトリは作らない（--force でも作らない）。打ち間違えたパスに
-		// WORKFLOW.md が生まれると、利用者は作ったはずのファイルを見失う。
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrDirNotFound, err))
-		return 1
-	case errors.Is(err, scaffold.ErrNotADirectory):
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrNotADirectory, err))
-		return 1
-	case errors.Is(err, scaffold.ErrSymlink):
-		// symlink は --force でも辿らない。辿ると指定されたディレクトリの外にある
-		// リンク先を雛形で潰すため、--force を勧めてはならない。
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrSymlink, err))
-		return 1
+	}
+	return 0
+}
+
+// printInitCI は continuo-ci.yaml について1行と、置いたときの案内を出す（設計 5-3o）。
+//
+// **WORKFLOW.md と書式を分ける。**どちらのファイルの話かが1行だけ読んで分かるよう、
+// 文言へファイルの名前を渡す。
+//
+// **書けなくても `continuo init` は失敗にしない。**このファイルは設定ではなく、
+// continuo は起動時に1バイトも読まない。**失敗にすると、CI を持たない利用者や、
+// 書き込みを絞ったディレクトリで `continuo init` を通せなくなる。**
+// **ただし黙って落とさない。**理由を標準エラーへ出す。
+//
+// stdout / stderr: 出力先。**置けたことは stdout、書けなかったことは stderr へ出す。**
+// res: WriteAll が返した結果。
+func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
+	name := scaffold.CIFileName()
+	switch {
+	case res.CIErr == nil:
+		if res.CI.Overwritten {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIOverwritten, name, res.CI.Path))
+		} else {
+			fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCICreated, name, res.CI.Path))
+		}
+		// **置いたときだけ案内を出す。**既にあるときは、利用者が一度読んでいる。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIAdvice))
+	case errors.Is(res.CIErr, scaffold.ErrAlreadyExists):
+		// **既にあることは失敗ではない。**触っていないことが分かるよう、場所を出す。
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIInitCIKept, name, res.CI.Path))
 	default:
-		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitErrWriteFailed, scaffold.WorkflowFileName(), err))
-		return 1
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIInitCIWriteFailed, name, res.CIErr))
 	}
 }
 
 // runPrompt は `continuo prompt` サブコマンドである（設計 5-3c / 5-3d）。
 //
-// **送る文面を、変数を展開しないまま標準出力へ出す。**
-// **`{{.issue.identifier}}` はそのまま出る。**実在の issue の値で埋める形は持たない
-// （そのためにはカンバンを丸ごと読むことになり、この目的には釣り合わない）。
+// **3つの形がある。**
 //
-// **2つの形がある。**
-//
-//	continuo prompt --show [ディレクトリ]             送る文面の全文（組み込み + 本文）
+//	continuo prompt --show [ディレクトリ]             送る文面の全文。**変数は展開しない**
 //	continuo prompt --show --builtin                  組み込みだけ。**WORKFLOW.md を読まない**
+//	continuo prompt --show --url <issue の URL>       送る文面の全文。**変数をその issue の値で展開する**
 //
 // **`--builtin` は、自分が書いた本文と仕組みの側を見比べるための道である。**
 // 組み込みが既に言っていることを、本文に二重に書かずに済む。
 //
+// **`--url` は、本当に送られる文面を事前に確かめるための道である**（issue #183）。
+// **番号ではなく URL で指す。**1枚のカンバンに複数のリポジトリの issue が載るので、
+// 番号だけではどのリポジトリの issue か決まらない（人間の判断。設計 5-3f）。
+// **変数は `prompt.RenderData` が組み立てる。**continuo が実際に送る経路と同じ関数であり、
+// **別々に組み立てると、このコマンドは「送られる文面」ではないものを見せることになる。**
+//
+// **`--builtin` と `--url` は同時に指定できない。**`--builtin` の売りは
+// 「`WORKFLOW.md` を1バイトも読まない」ことなのに、`--url` は front matter の
+// `tracker.provider` を読まないと issue を引けない。**同時に許すと、その売りが消えたまま
+// `--builtin` を名乗ることになる。**
+//
 // **標準出力には、送る文面だけを出す。**内訳は標準エラーへ出すので、
 // `continuo prompt --show --builtin > builtin.md` が送る文面と1バイトも違わないファイルになる。
 //
+// d: 外部へ繋ぐ処理。**`--url` を付けたときだけ GitHub を叩く。**
 // args: `continuo prompt` に続く引数。位置引数は WORKFLOW.md があるディレクトリを0個か1個。
 // stdout / stderr: 出力先。
-// 戻り値: 終了コード。0 は出せた（--help / -h も 0）、1 は読めなかった、
+// 戻り値: 終了コード。0 は出せた（--help / -h も 0）、
+// 1 は読めなかった（`WORKFLOW.md` / カンバン / 変数展開のいずれか）、
 // 2 は引数の指定が誤っている（`--show` を付けていない場合を含む）。
-func runPrompt(args []string, stdout, stderr io.Writer) int {
+func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo prompt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	showFlag := fs.Bool("show", false, i18n.T(i18n.KeyCLIPromptFlagShow))
 	builtinFlag := fs.Bool("builtin", false, i18n.T(i18n.KeyCLIPromptFlagBuiltin))
+	urlFlag := fs.String("url", "", i18n.T(i18n.KeyCLIPromptFlagURL))
+	attemptFlag := fs.Int("attempt", 0, i18n.T(i18n.KeyCLIPromptFlagAttempt))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 	if !*showFlag {
 		// **黙って全文を出さない。**将来 `continuo prompt` に別の仕事を足す余地を残す。
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrShowRequired))
+		return 2
+	}
+	// **指定されたかを、値ではなく `Visit` で見る。**
+	// **`--url` を値で見てはならない。**`--url ""` が「指定されていない」と同じ扱いになり、
+	// **変数を展開しないまま終了コード 0 で出す。**環境変数が空のままスクリプトが叩くと、
+	// **成功したのと見分けが付かない。**このコマンドがいちばん嫌う落ち方である。
+	// `--attempt` も同じで、既定の 0 と「0 を明示された」を区別しないと `--attempt 0` が黙って通る。
+	urlGiven, attemptGiven := false, false
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "url":
+			urlGiven = true
+		case "attempt":
+			attemptGiven = true
+		}
+	})
+	if urlGiven && *urlFlag == "" {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLEmpty))
+		return 2
+	}
+	if urlGiven && *builtinFlag {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLWithBuiltin))
+		return 2
+	}
+	if attemptGiven && *attemptFlag < 1 {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrAttemptPositive, *attemptFlag))
+		return 2
+	}
+	if attemptGiven && !urlGiven {
+		// **黙って捨てない。**`--attempt` が効くのは変数を展開するときだけである。
+		// **このコマンド自身が「気づけない出力が、いちばん悪い落ち方である」を理由に、
+		// 展開できなかったら断ると決めている。**同じ理由がそのまま当たる。
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrAttemptNeedsURL))
 		return 2
 	}
 
@@ -339,6 +464,20 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinOnly, countLines(text)))
 		return 0
+	}
+
+	// **URL の形は、`WORKFLOW.md` を読む前に見る**（issue #183）。
+	// **引数の形の誤りは、いちばん安く判定できる。**`--url ""` や `--builtin` との併用と
+	// 同じ場所で断れる。**設定を先に読むと、URL を打ち間違えた人が終了コード 1
+	// （設定を読めない）を受け取り、文書の表（URL の形が違う → 2）と食い違う。**
+	identifier := ""
+	if urlGiven {
+		id, idErr := promptIssueIdentifier(*urlFlag)
+		if idErr != nil {
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLInvalid, idErr))
+			return 2
+		}
+		identifier = id
 	}
 
 	var dir string
@@ -365,8 +504,101 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 	}
 
 	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
-	fmt.Fprint(stdout, frag.Text())
-	printPromptBreakdown(stderr, frag)
+
+	if !urlGiven {
+		fmt.Fprint(stdout, frag.Text())
+		printPromptBreakdown(stderr, frag)
+		return 0
+	}
+
+	// **`--attempt 1` は「試行回数を渡さない」へ写す**（issue #183）。
+	// **本番で `attempt` に入る最小値は 2 である**（`internal/orchestrator/turn.go` が
+	// `RetryCount > 0` のときだけ `RetryCount + 1` を渡す）。
+	// **1 をそのまま渡すと `{{if .attempt}}` が真になり、本番に存在しない文面を見せることになる。**
+	// 「本当に送られる文面」を名乗るコマンドが、送られない文面を見せてはならない。
+	var attempt *int
+	if attemptGiven && *attemptFlag > 1 {
+		n := *attemptFlag
+		attempt = &n
+	}
+	return runPromptExpanded(d, identifier, attempt, loaded.Config.Tracker, frag, stdout, stderr)
+}
+
+// runPromptExpanded は `continuo prompt --show --url` の後半である（設計 5-3f。issue #183）。
+//
+// **変数が埋まらなかったら、何も出さずに終了コード 1 で断る。**
+// **展開せずに出してはならない。**`--url` を付けたのに付けなかったときと同じものが出ると、
+// **利用者はそれに気づけない。**気づけない出力が、いちばん悪い落ち方である。
+//
+// d: 外部へ繋ぐ処理。
+// identifier: `--url` から作った `<owner>/<repo>#<番号>`。**形の検査は呼び出し側で済んでいる。**
+// attempt: 何回目として展開するか。**nil なら1回目。**
+// trackerCfg: front matter の tracker セクション。
+// frag: 組み立てた断片。
+// stdout / stderr: 出力先。
+// 戻り値: 終了コード。0 は出せた、1 は引けなかったか展開できなかった。**2 は返さない。**
+// **接続先が不正なときも 1 である**（設計 5-3f の表と揃えてある）。
+// 引数の形の誤りは呼び出し側（`runPrompt`）が 2 で断ってから、ここへ来る。
+func runPromptExpanded(
+	d Deps,
+	identifier string,
+	attempt *int,
+	trackerCfg config.TrackerConfig,
+	frag prompt.Fragments,
+	stdout, stderr io.Writer,
+) int {
+	// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（`runDoctor` と同じ）。
+	// **宛先を確かめずにトークンを送らない。**
+	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)
+	if err := daemon.ValidateGraphQLEndpoint(endpoint); err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGeneric, err))
+		return 1
+	}
+
+	// **返らないまま人間を待たせない。**
+	ctx, cancel := context.WithTimeout(context.Background(), promptFetchTimeout)
+	defer cancel()
+
+	issue, ok, err := d.PromptFetchIssue(ctx, trackerCfg, endpoint, identifier)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrFetchFailed, err))
+		return 1
+	}
+	if !ok {
+		// **「載っていません」とだけ言わない。**`FetchIssueByIdentifier` が偽を返す理由は
+		// 5通りあり、Status 未設定は本番のボードでも104件中4件ある通常の状態である。
+		// **`Bootstrap` を通していないので、`status_field` の綴りがずれていると全件がそう見える。**
+		// **唯一の検出手段が `continuo doctor` なので、そこまで案内する。**
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrIssueNotOnBoard, identifier))
+		return 1
+	}
+
+	data := prompt.RenderData(issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs)
+	// **全文と断片を一度に受け取る。**`Render` と `RenderItems` を続けて呼ぶと、
+	// 同じ解釈と実行を2回することになる。
+	text, rendered, err := frag.RenderAll(data)
+	if err != nil {
+		// **`continuo prompt` の3つの形のうち、変数展開が走るのは `--url` だけである。**
+		// 本文の `{{if}}` の閉じ忘れや一覧に無い変数は、ここで落ちる。
+		// **このコマンドが最初の網ではない。**常駐は起動時に `Fragments.Validate()` で落ち、
+		// `continuo doctor` は `prompt vars` を赤にする。**部分的な文面を出さない。**
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrRenderFailed, err))
+		return 1
+	}
+
+	fmt.Fprint(stdout, text)
+	// **数えるのは、展開したあとの断片である**（issue #183）。
+	// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
+	printPromptBreakdownItems(stderr, rendered, frag)
+	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownExpanded, issue.Identifier))
+	// **何回目として展開したかを必ず出す。**出さないと、`## 7-5. これは N 回目の試行です` が
+	// 出ないことを「文面から消えた」と読み違える。
+	if attempt == nil {
+		// **1回目は試行回数を渡さない。**`## 7-5.` の節が出ないのはそのためである。
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownFirstAttempt))
+	} else {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownAttempt, *attempt))
+	}
 	return 0
 }
 
@@ -378,20 +610,53 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 // w: 出力先（標準エラー）。
 // frag: 組み立てた断片。
 func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
+	printPromptBreakdownItems(w, frag.Items(), frag)
+}
+
+// printPromptBreakdownItems は、渡された断片の並びから内訳を組み立てる。
+//
+// **`--url` のときは、変数展開したあとの断片を渡す**（issue #183）。
+// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
+// 見出しは「送る文面の内訳」なので、**送った文面を数えなければならない。**
+//
+// **本文の有無も `items` から決める。**`frag.HasBody()` は展開する前の姿である。
+// **本文が丸ごと `{{if .attempt}}` の中にある構成で1回目として展開すると、
+// 本文は0行なのに「本文はありません」が出ないことになる。**
+// 同じ内訳の中で、行数だけ展開後・有無だけ展開前、では辻褄が合わない。
+//
+// **展開して空になった本文は、行数の行も出さない。**出すと
+// 「本文 0 行」と「本文はありません」が同じ内訳に並び、**読む人がどちらが本当か決められない。**
+//
+// w: 出力先（標準エラー）。
+// items: 数える断片の並び。
+// frag: **本文のパスを引くためだけに使う。**行数も有無もここから取らない。
+func printPromptBreakdownItems(w io.Writer, items []prompt.Fragment, frag prompt.Fragments) {
 	fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
-	for _, it := range frag.Items() {
+	hasBody := false
+	for _, it := range items {
+		if it.Name == prompt.NameWorkflowBody && strings.TrimSpace(it.Text) != "" {
+			hasBody = true
+		}
+	}
+	for _, it := range items {
 		switch it.Name {
 		case prompt.NameBuiltinHead:
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinHead, countLines(it.Text)))
 		case prompt.NameBuiltinTail:
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinTail, countLines(it.Text)))
 		case prompt.NameWorkflowBody:
+			// **展開して空になったら、行数の行を出さない。**下の「本文はありません」と
+			// **同じ内訳の中で食い違う**（「本文 0 行」と「本文はありません」が並ぶ）。
+			// **`hasBody` と同じ条件で判定する。**片方だけ変えると、また食い違う。
+			if strings.TrimSpace(it.Text) == "" {
+				continue
+			}
 			// **断片の名前で明示する。`default` に落とさない。**落とすと、断片が増えたときに
 			// 組み込みの断片が WORKFLOW.md の名前で表示され、パスの欄が空になる。
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownWorkflowBody, countLines(it.Text), it.Path))
 		}
 	}
-	if !frag.HasBody() {
+	if !hasBody {
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBodyMissing, frag.BodyPath()))
 	}
 }
