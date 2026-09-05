@@ -499,6 +499,27 @@ const (
 	// **文言に名前を埋め込んではならない。**同じ文言を使う経路が増えたときに、
 	// 埋め込むと落ちた当のファイルとは別のファイルを名乗る。
 	KeyCLIInitErrWriteFailed Key = "cli.init.err_write_failed"
+	// KeyCLIInitCICreated は continuo-ci.yaml を新しく書き出したときに出る。
+	//
+	// **1つ目の引数はファイルの名前、2つ目は絶対パスである。**
+	// WORKFLOW.md の文言と書式を分けてあるのは、**どちらのファイルの話かを
+	// 1行だけ読んで分かるようにするためである。**
+	KeyCLIInitCICreated Key = "cli.init.ci_created"
+	// KeyCLIInitCIOverwritten は --force で continuo-ci.yaml を上書きしたときに出る。
+	KeyCLIInitCIOverwritten Key = "cli.init.ci_overwritten"
+	// KeyCLIInitCIKept は continuo-ci.yaml が既にあって触らなかったときに出る。
+	//
+	// **これは失敗ではない。**足りないほうだけを置く経路があるので、標準出力へ出す。
+	KeyCLIInitCIKept Key = "cli.init.ci_kept"
+	// KeyCLIInitCIAdvice は continuo-ci.yaml を置いたあとの案内に出る。
+	//
+	// **人間がやることを書く。**continuo は .github/workflows/ へ置かない。
+	KeyCLIInitCIAdvice Key = "cli.init.ci_advice"
+	// KeyCLIInitCIWriteFailed は continuo-ci.yaml を書けなかったときに出る。
+	//
+	// **これは continuo init の失敗ではない。**このファイルは設定ではなく、
+	// continuo は起動時に1バイトも読まない。**黙って落とさないために標準エラーへ出す。**
+	KeyCLIInitCIWriteFailed Key = "cli.init.ci_write_failed"
 	// KeyCLIInitDetectFilled は雛形の値を埋められたときの1行に出る。
 	KeyCLIInitDetectFilled Key = "cli.init.detect_filled"
 	// KeyCLIInitDetectUnfilled は雛形の値を埋められなかったときの1行に出る。
@@ -2613,6 +2634,11 @@ var allKeys = []Key{
 	KeyCLIInitErrNotADirectory,
 	KeyCLIInitErrSymlink,
 	KeyCLIInitErrWriteFailed,
+	KeyCLIInitCICreated,
+	KeyCLIInitCIOverwritten,
+	KeyCLIInitCIKept,
+	KeyCLIInitCIAdvice,
+	KeyCLIInitCIWriteFailed,
 	KeyCLIInitDetectFilled,
 	KeyCLIInitDetectUnfilled,
 	KeyCLIInitDetectCandidate,
