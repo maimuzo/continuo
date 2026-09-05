@@ -520,10 +520,16 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 
 **worker のプロンプトの1行目に、こう書く。**
 
-> 作業を始める前に `.claude/skills/worker-briefing/SKILL.md` を Read で開き、書いてあることを全部守れ。
+> 作業を始める前に `<絶対パス>/.claude/skills/worker-briefing/SKILL.md` を Read で開き、書いてあることを全部守れ。
 
 **Read で開かせる。**worker が Skill ツールを持っているとは限らないうえ、
 このスキルは `user-invocable: false` である。**パスを直接渡すのが確実である。**
+
+**絶対パスで渡す。**worker は、呼ぶ側とは別の checkout で走ることがある。
+**その絶対パスの求め方は、スキルの冒頭にある。**ここには写さない。写すと食い違う。
+**`git rev-parse --show-toplevel` を単独で使ってはならない。**
+**呼ぶ側も worktree に居るので、それは自分が居る worktree を返す**
+（[.claude/rules/parallel-work.md](parallel-work.md) が「本体では作業しない」と定めている）。
 
 **書き写すと、写した時点の内容で固まる。**スキルを直しても、写したほうは古いまま残る。
 
