@@ -562,9 +562,9 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 	// **待ちに入る前に、1週間の枠を待つ上限を超えていないかを見る**（設計 3-27。issue #197）。
 	// **超えていたら標識を立てない。**立てると、手放したあとに枠待ちの標識だけが残る。
 	//
-	// **画面の版の判定は `releaseBecauseQuotaWait` の中で行う。**
-	// **ここでやってはならない。**画面は herdr、担当は GitHub と、別々の外部に依存する。
-	// **前に置くと、herdr が落ちているあいだ担当の確認が1回も走らない。**
+	// **画面の版は、ここでは見ない**（設計 3-27。issue #197）。
+	// **巡回の `checkStalls` が、枠待ちの判定より前に見ている。**
+	// **同じ判定を2箇所に置くと、片方だけが直る。**
 	if o.weeklyWaitExceeded(rs) && o.releaseBecauseQuotaWait(ctx, rs) {
 		return turnAborted, nil
 	}

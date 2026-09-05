@@ -316,8 +316,8 @@ func (o *Orchestrator) logNewWorkBlocked(skip handoff.SkipReason, halts bool) {
 	// **使い切っている枠の種別を出す**（設計 3-77j）。
 	// **1週間の枠は2つある**（`weekly_all` と `weekly_scoped`）。
 	// **使用率は最大を採って1つに畳むので、それだけでは
-	// `weekly_scoped`（使っていないモデルの週次の枠）が原因のときに読めない。**
-	// claude.ai の画面に出る週次の全体が30%でも、使っていないモデルの枠が100%なら止まる。
+	// `weekly_scoped`（1週間のモデル別の枠）が原因のときに読めない。**
+	// claude.ai の画面に出る週次の全体が30%でも、**よく使っているモデルの枠が100%なら止まる。**
 	if kinds := snap.FullLimitKinds(); len(kinds) > 0 {
 		args = append(args, "使い切っている枠", strings.Join(kinds, ", "))
 	}

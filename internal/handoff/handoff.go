@@ -119,7 +119,9 @@ type Released struct {
 
 // 自分から手放したときの理由である（issue #197。設計 3-27）。
 //
-// **利用者が issue のコメントを grep する目印でもある。**
+// **これは人間が issue のコメントを grep するための目印である。**
+// **機械はこの値で振る舞いを変えない。**読むのは `FormatReleased` が本文を選ぶときだけで、
+// **`LatestReleased` の読み手は `From` しか見ない。**
 // [docs/FAQ.md](../../docs/FAQ.md) が、この文字列を載せた JSON を見本として出している。
 const (
 	// ReleaseReasonWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したことを表す。

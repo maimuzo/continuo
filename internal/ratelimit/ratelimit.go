@@ -186,27 +186,6 @@ func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
 // **この package は `kind` の意味を知らない。**どれが1週間の枠かを決めるのは
 // `internal/handoff` の `IsWeeklyKind` であり、**そちらを import すると依存の向きが逆になる。**
 //
-// **数えるだけなら `HasFullKind` を使う。**あちらは slice を作らない。
-//
-// match: その `kind` を数えるなら true を返す関数。**nil なら常に false。**
-// 戻り値: 使い切っている枠に、その種別のものがあれば true。
-func (s *Snapshot) HasFullKind(match func(kind string) bool) bool {
-	if s == nil || match == nil {
-		return false
-	}
-	for _, l := range s.Limits {
-		if l.Percent >= fullPercent && match(l.Kind) {
-			return true
-		}
-	}
-	return false
-}
-
-// FullLimitKinds は、使い切っている枠の `kind` を返す。
-//
-// **並び順は応答のままである。****重複は取り除かない。**
-// **人間へ見せる1行を組み立てるためのものである。**判定には `HasFullKind` を使う。
-//
 // 戻り値: 使い切っている枠の `kind`。1件も無ければ長さ0。
 func (s *Snapshot) FullLimitKinds() []string {
 	if s == nil {

@@ -136,19 +136,6 @@ type runState struct {
 	TranscriptPath string
 	// QuotaResetAt は枠待ちを外す時刻である（設計 3-27）。
 	QuotaResetAt time.Time
-	// QuotaScreenRev は、手放してよいかを決めるために最後に見た画面の版である
-	// （設計 3-27。issue #197）。
-	//
-	// **`LastRevision` とは別に持つ。**あちらを使うと `noteRevision` を呼ぶことになり、
-	// **`LastSeenAt` が進む。****枠待ちの run は `LastSeenAt` を進めないと決めている**
-	// ので、進めると「枠が明けたあとに最後に動いていた時刻が分からなくなる」を自分で起こす。
-	// **静止が続いた長さも測れなくなる**（毎回いまの時刻に揃うので、窓が永久に閉じない）。
-	QuotaScreenRev uint64
-	// QuotaScreenAt は QuotaScreenRev を最後に更新した時刻である。
-	//
-	// **「版が変わった時刻」である。**変わらないあいだは進めないので、
-	// **`now` との差が「静止が続いた長さ」になる。**
-	QuotaScreenAt time.Time
 	// WeeklyFullSince は、この run について満杯の1週間の枠を最初に見た時刻である
 	// （設計 3-27。issue #197）。
 	//
@@ -862,37 +849,6 @@ func (rs *runState) setWaitingQuota(resetAt time.Time) {
 	defer rs.mu.Unlock()
 	rs.WaitingQuota = true
 	rs.QuotaResetAt = resetAt
-}
-
-// noteQuotaScreen は、手放してよいかを決めるための画面の版を控え、
-// **その版が変わらずに続いた長さ**を返す（設計 3-27。issue #197）。
-//
-// **`noteRevision` を使ってはならない。**あれは `LastSeenAt` を進めるので、
-// **枠待ちの run について「時計を止める」と決めたことを自分で破る。**
-// **窓も永久に閉じない**（毎回いまの時刻に揃うため）。
-//
-// **「初めて見た」と「版が変わった」を分ける。**分けないと、初回の観測が
-// 「画面が動いている」に化ける。**枠待ちの標識を外す判断がそこにぶら下がっている**ので、
-// 化けると、待ちに入った run が次の巡回で毎回そこから追い出される。
-//
-// rev: `agent.get` が返した画面の版。
-// now: いまの時刻。
-// 戻り値の1つ目: その版が変わらずに続いた長さ。**初回と、変わったときは 0 である。**
-// 戻り値の2つ目: **前に見た版から変わっていれば true。****初回は false である。**
-func (rs *runState) noteQuotaScreen(rev uint64, now time.Time) (time.Duration, bool) {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	if rs.QuotaScreenAt.IsZero() {
-		rs.QuotaScreenRev = rev
-		rs.QuotaScreenAt = now
-		return 0, false
-	}
-	if rs.QuotaScreenRev != rev {
-		rs.QuotaScreenRev = rev
-		rs.QuotaScreenAt = now
-		return 0, true
-	}
-	return now.Sub(rs.QuotaScreenAt), false
 }
 
 // noteWeeklyFull は、満杯の1週間の枠を見たかどうかを記録する（設計 3-27。issue #197）。

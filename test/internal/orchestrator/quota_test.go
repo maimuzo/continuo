@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "7f837d15de00deed0141753d225ec2a61b0a7784a242e2ef9260cd550b79e494", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "53dd48decbca8bc73d013ac2bda0b8cd9bd71e2eae6b507365d707a60061586c", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
 // 21本のパスは、9通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
@@ -655,16 +655,14 @@ func weeklyWaitFixture(
 	return fx, issue, clock
 }
 
-// tickPastScreenWindow は、画面が止まった窓（`claude.turn_timeout_ms`）を満たすまで巡回する
-// （設計 3-27 の段0b。issue #197）。
+// tickOnce は巡回を1回だけ回す（issue #197）。
 //
-// **1回の巡回では手放さない。**1回目は画面の版を初めて見た巡回で、
-// **そこからどれだけ止まっていたかは、次の巡回にならないと分からない。**
-// **これは検査の都合ではなく、仕様である**（30秒動かない窓を1つ拾って手放さない）。
+// **1回では手放さない。**画面の版を初めて見た巡回では「そこからどれだけ止まっていたか」が
+// 分からないので、**次の巡回まで待つ**（設計 3-27 の段0b）。
+// **窓を満たすまで回すのは `waitForRelease` である。**
 //
 // fx: 対象の一式。
-// clock: 進められる時計。
-func tickPastScreenWindow(fx *stubFixture, clock *testClock) {
+func tickOnce(fx *stubFixture) {
 	fx.Orc.Tick(context.Background())
 }
 
@@ -709,33 +707,36 @@ func assigneeLoginsOf(fx *stubFixture, id string) []string {
 	return out
 }
 
-// {"RUCM-PATH": "P005"}
-//
-// TestQuota_画面が動いていれば上限を超えても手放さない は、代替フロー「待つ上限を超えた」の
-// 画面の版で引き返す枝を検査する（設計 3-27。issue #197）。
+// TestQuota_画面が動いていれば枠待ちと判定しない は、stall の評価順を確かめる
+// （設計 3-27。issue #197）。
 //
 // 目的: **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
 // 「枠を待っている」と「長い1つの仕事をしている」を区別できない。**
 // hook はツールが終わってから飛ぶので、**1時間を超える1回のツール呼び出しの最中は1件も来ない。**
-// **そこへ使っていないモデルの週次の枠が100%だと条件が両方そろい、正常に走っている run を殺す。**
+// **そこへ1週間のモデル別の枠が100%だと条件が両方そろい、正常に走っている run が枠待ちと名乗る。**
+// **stall の時計が止まったまま戻らないので、そのあと本当に固まっても誰も止められない。**
 //
-// 与える情報: 1週間の枠が 100% で、リセットは48時間後。上限は300分。**画面の版は増えている。**
-// 成功条件: 印から外れないこと。担当者が残っていること。理由が既定の水準で出ること。
-func TestQuota_画面が動いていれば上限を超えても手放さない(t *testing.T) {
+// **専用の仕組みは持たない。**`checkStalls` の評価順で、画面の版を枠待ちの判定より前に置く。
+//
+// 与える情報: 1週間のモデル別の枠が 100% で、リセットは48時間後。上限は300分。**画面の版が増えている。**
+// 成功条件: 枠待ちと判定しないこと。印から外れないこと。担当者が残っていること。
+//
+// **CFG のパスに対応づけない。**この判定は基本フローの stall の評価順であり、
+// 代替フローではない。
+func TestQuota_画面が動いていれば枠待ちと判定しない(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
-	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+	fx, issue, _ := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_scoped", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W6")
 
-	// 1回目の巡回で、画面の版を初めて見る。**そこからどれだけ止まっていたかは、まだ分からない。**
-	fx.Orc.Tick(context.Background())
-
-	// **画面が動いた**（エージェントは長い1つのツール呼び出しの最中である）。
+	// **画面が動いている**（エージェントは長い1つのツール呼び出しの最中である）。
+	// **枠待ちと判定される前に動かす。**判定してからでは、標識が立った run は
+	// 次の巡回で画面を見に行かない（枠が明けたときに標識が外れる）。
 	fx.Herdr.BumpRevision()
-	clock.Advance(2 * time.Minute)
+
 	fx.Orc.Tick(context.Background())
-	waitFor(t, 10*time.Second, "手放さない理由が出る", func() bool {
-		return strings.Contains(fx.Logs.String(), "画面が変わっているので、1週間の枠の上限を超えていても手放しません")
+	waitFor(t, 10*time.Second, "枠待ちと判定しない理由が出る", func() bool {
+		return strings.Contains(fx.Logs.String(), "画面が変わっているので待ち続けます")
 	})
 
 	if _, ok := viewOf(fx, issue.Identifier); !ok {
@@ -743,6 +744,9 @@ func TestQuota_画面が動いていれば上限を超えても手放さない(t
 	}
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
 		t.Fatalf("担当者が変わっている: %v", got)
+	}
+	if got := fx.Logs.String(); strings.Contains(got, "枠待ちと判定したので") {
+		t.Fatalf("画面が動いているのに枠待ちと判定している:\n%s", got)
 	}
 }
 
@@ -798,7 +802,7 @@ func TestQuota_1週間の枠のリセットが上限より先なら担当を手�
 		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W1")
 
-	tickPastScreenWindow(fx, clock)
+	tickOnce(fx)
 	waitForRelease(t, fx, clock, issue.Identifier)
 
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {

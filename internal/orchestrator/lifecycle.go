@@ -826,12 +826,18 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	if snap.WorktreePath == "" {
 		return false
 	}
-	if _, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath); err != nil {
+	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、
+	// いま走らせた」を表す。**偽になるのは、既に走らせたときと、
+	// `workspace_hooks.after_run` が設定されていないときである。**
+	// **後者は既定の設定そのものである。**捨てると、**何も走らせていないのに
+	// 「実行済みです。remote の続きから始めてください」と issue へ書く。**
+	ran, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath)
+	if err != nil {
 		o.logger.Warn("workspace_hooks.after_run に失敗しました（記録して続けます）",
 			"identifier", snap.Identifier, "error", err)
 		return false
 	}
-	return true
+	return ran
 }
 
 // cleanupWorktree は worktree と branch と設定ファイルを片付ける（設計 3-9）。

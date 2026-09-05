@@ -3,7 +3,7 @@
   "usecase_name": "レートリミットで待って再開する",
   "source": {
     "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
-    "rucm_block_sha256": "7e5d23dd70ece8c99f637ba90731fe88fb8a70ad59db64cab1c83ea488c499f3"
+    "rucm_block_sha256": "5c50cc8a36fa97f2ba47ad48be7606546050c28baf664c62dc712985522e8bca"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -47,7 +47,7 @@
       "postcondition": "run の turn 数は増えていない。Claude Code は自分で継続している。投げた本文が消える二重投入は起きていない。"
     },
     "手放さずに待ち続ける": {
-      "when": "使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超えるが、いまの担当を確かめられないか、画面の版が窓のあいだに増えているか、画面の版を読めない場合",
+      "when": "使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超えるが、いまの担当を確かめられない場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -71,7 +71,7 @@
       "postcondition": "herdr の pane は閉じている。issue の担当者は別の機械のままである。worktree は残っている。issue の Status は running_state の選択肢のままである。"
     },
     "待つ上限を超えた": {
-      "when": "使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、issue の担当者に自分が入っており、画面の版が窓のあいだ増えていない場合",
+      "when": "使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、issue の担当者に自分が入っている場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -565,7 +565,7 @@
       "from": "BASIC FLOW-12",
       "to": "手放さずに待ち続ける-1",
       "kind": "global",
-      "condition": "使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超えるが、いまの担当を確かめられないか、画面の版が窓のあいだに増えているか、画面の版を読めない場合"
+      "condition": "使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超えるが、いまの担当を確かめられない場合"
     },
     {
       "from": "BASIC FLOW-12",
@@ -577,7 +577,7 @@
       "from": "BASIC FLOW-12",
       "to": "待つ上限を超えた-1",
       "kind": "global",
-      "condition": "使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、issue の担当者に自分が入っており、画面の版が窓のあいだ増えていない場合"
+      "condition": "使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、issue の担当者に自分が入っている場合"
     },
     {
       "from": "BASIC FLOW-13",
@@ -1009,7 +1009,7 @@
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
         "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
-        "CONDITION: 使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超えるが、いまの担当を確かめられないか、画面の版が窓のあいだに増えているか、画面の版を読めない場合",
+        "CONDITION: 使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超えるが、いまの担当を確かめられない場合",
         "システムは担当を手放さない。",
         "システムは workspace_hooks.after_run を実行しない。",
         "RESUME STEP 12",
@@ -1091,7 +1091,7 @@
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
         "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
-        "CONDITION: 使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、issue の担当者に自分が入っており、画面の版が窓のあいだ増えていない場合",
+        "CONDITION: 使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、issue の担当者に自分が入っている場合",
         "システムは workspace_hooks.after_run を実行する。",
         "システムは issue の担当者から自分を外す。",
         "システムは担当を外したことを issue のコメントに書く。",
@@ -1402,7 +1402,7 @@
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
         "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
-        "CONDITION: 使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超えるが、いまの担当を確かめられないか、画面の版が窓のあいだに増えているか、画面の版を読めない場合",
+        "CONDITION: 使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超えるが、いまの担当を確かめられない場合",
         "システムは担当を手放さない。",
         "システムは workspace_hooks.after_run を実行しない。",
         "RESUME STEP 12",
@@ -1482,7 +1482,7 @@
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
         "システムは枠のリセット時刻と現在時刻を巡回のたびに見比べる。",
-        "CONDITION: 使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、issue の担当者に自分が入っており、画面の版が窓のあいだ増えていない場合",
+        "CONDITION: 使い切っている枠に1週間の枠が含まれ、その枠が明けるまでの待ち時間が weekly_wait_limit_minutes を超え、issue の担当者に自分が入っている場合",
         "システムは workspace_hooks.after_run を実行する。",
         "システムは issue の担当者から自分を外す。",
         "システムは担当を外したことを issue のコメントに書く。",
