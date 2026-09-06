@@ -195,7 +195,34 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 //
 // 戻り値: 止める理由。`handoff.SkipNone` なら入札の要る issue を取ってよい。
 func (o *Orchestrator) newWorkBlocked() handoff.SkipReason {
-	_, skip := o.evaluateBid()
+	snap, stale := o.quotaSnapshotWithStale()
+	return o.newWorkBlockedWith(snap, stale)
+}
+
+// newWorkBlockedWith は、渡された写しで止める理由を返す（設計 3-77j。issue #173）。
+//
+// **巡回はこちらを使う。**`newWorkBlocked` は写しを取り直すので、
+// **ログへ出す数字と、止めた理由が別の読み取りから作られる。**
+// **「余裕値が0以下」と名乗りながら使用率30%を並べる1行が出る。**
+//
+// snap: この巡回で1回だけ読んだ枠の写し。
+// stale: 直前の読み取りに失敗していれば真。
+// 戻り値: 止める理由。`handoff.SkipNone` なら入札の要る issue を取ってよい。
+func (o *Orchestrator) newWorkBlockedWith(
+	snap *ratelimit.Snapshot, stale bool,
+) handoff.SkipReason {
+	// **`quotaForBid()` と同じ扱いにする。**直前の読み取りに失敗していたら、
+	// **その写しは入札には使えない**（設計 3-77i）。
+	forBid := snap
+	if stale {
+		forBid = nil
+	}
+	_, skip := handoff.Evaluate(
+		forBid,
+		o.cfg.RateLimit.Source != ratelimit.SourceNone,
+		o.bidMargins(),
+		o.now(),
+	)
 	return skip
 }
 
@@ -404,8 +431,8 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// **理由とログの数字を、同じ1回の読み取りから作る**（設計 3-77j）。
 	// **`newWorkBlocked()` と `logNewWorkBlocked()` がそれぞれロックを取ると、
 	// 「枠を読めない」と名乗りながら使用率を並べる1行が出る。**
-	blockedSnap, _ := o.quotaSnapshotWithStale()
-	blocked := o.newWorkBlocked()
+	blockedSnap, blockedStale := o.quotaSnapshotWithStale()
+	blocked := o.newWorkBlockedWith(blockedSnap, blockedStale)
 	if blocked != handoff.SkipNone && len(candidates) > 0 {
 		// **候補が0件のときは出さない**（issue #173）。
 		// **枠が何かを止めたわけではない**ので、出すと嘘になる。

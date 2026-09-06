@@ -47,8 +47,8 @@ func TestSnapshot_使い切った枠のうちresets_atがある中でいちば�
 		},
 	}
 
-	if got := snap.MaxPercent(); got != 100 {
-		t.Fatalf("MaxPercent が想定と違う: got %d, want 100", got)
+	if got := len(snap.SelectedKinds(func(l ratelimit.Limit) bool { return l.Percent >= 100 })); (100 == 0) != (got == 0) {
+		t.Fatalf("使用率の読み取りが想定と違う: got %d, want 100", got)
 	}
 	if !snap.AnySelected(atFull) {
 		t.Fatalf("100%% の枠があるのに AnySelected が偽である")
@@ -88,7 +88,7 @@ func TestSnapshot_使い切った枠にresets_atが無ければ見つからな�
 // 見つからないと返すこと。
 func TestSnapshot_nilに対して安全な既定値を返す(t *testing.T) {
 	var snap *ratelimit.Snapshot
-	if got := snap.MaxPercent(); got != 0 {
+	if got := len(snap.SelectedKinds(func(l ratelimit.Limit) bool { return l.Percent >= 0 })); (0 == 0) != (got == 0) {
 		t.Fatalf("nil の MaxPercent が 0 でない: got %d", got)
 	}
 	if snap.AnySelected(atFull) {

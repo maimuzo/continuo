@@ -313,6 +313,19 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 		if !o.weeklyWaitExceededWith(quotaSnap, quotaStale, rs) {
 			continue
 		}
+		// **その run が進んでいないことを確かめる**（issue #197）。
+		// **人間の指示は「今paneの内容が動いていたら止まるまで待って」である。**
+		// **「動いていない」を pane の見た目だけで測ると、turn と turn のあいだの
+		// ふつうの間や、進捗のコメントを書いている最中の run まで拾う。**
+		// **既に一度、印を門にするのをやめている**（印は使用率100でしか立たないので、
+		// 余裕値で判定するという決定が効かなくなる）。**代わりに、印の2つ目の条件だけを使う。**
+		//
+		//	claude.turn_timeout_ms のあいだ hook が1件も来ていない
+		//
+		// **これは「枠が満杯か」を1バイトも見ないので、余裕値の線を壊さない。**
+		if !o.runIdleForTurnTimeout(rs) {
+			continue
+		}
 		if !o.paneStopped(ctx, rs) {
 			// **動いているなら、止まるまで待つ**（人間の決定。2026-09-06。issue #197）。
 			// **次の巡回でやり直す。**

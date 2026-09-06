@@ -786,16 +786,39 @@ func (o *Orchestrator) isQuotaWaitingWith(quotaSnap *ratelimit.Snapshot, rs *run
 	if !quotaSnap.AnySelected(handoff.Full()) {
 		return false
 	}
+	// **条件その2。**枠を使い切っていても、別の run は動いていることがある。
+	// 枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。
+	return o.runIdleForTurnTimeout(rs)
+}
+
+// runIdleForTurnTimeout は「その run から `claude.turn_timeout_ms` のあいだ
+// hook が1件も来ていないか」を返す（設計 3-27。issue #197）。
+//
+// **枠を1バイトも見ない。**「この run は進んでいるか」だけを答える。
+//
+// **2箇所で使う。**
+//
+//	枠待ちの印を立てるか       … isQuotaWaitingWith の条件その2
+//	1週間の枠の上限で手放すか   … releaseQuotaWaitExceeded
+//
+// **手放しの側にも要る。**pane の見た目だけで「止まっている」と決めると、
+// **turn と turn のあいだのふつうの間や、進捗のコメントを書いている最中の run まで拾う。**
+//
+// **この turn で hook を1件も受けていない run は、無音の長さを見ずに真を返す。**
+// **`LastSeenAt` は turn を始めた時刻のままなので、そこから測っても意味が無い。**
+//
+// rs: 判定する run。
+// 戻り値: 進んでいなければ true。
+func (o *Orchestrator) runIdleForTurnTimeout(rs *runState) bool {
 	snap := rs.snapshot()
-	if snap.hookSeenThisTurn {
-		// **条件その2 を入れる理由。**枠を使い切っていても、別の run は動いていることがある。
-		// 枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。
-		silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
-		if silence <= 0 || o.now().Sub(snap.LastSeenAt) < silence {
-			return false
-		}
+	if !snap.hookSeenThisTurn {
+		return true
 	}
-	return true
+	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
+	if silence <= 0 {
+		return false
+	}
+	return o.now().Sub(snap.LastSeenAt) >= silence
 }
 
 // quotaFull は使い切っている枠があるかを返す（設計 3-27 の条件その1）。

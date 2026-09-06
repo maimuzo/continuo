@@ -354,7 +354,7 @@ func validate(cfg *Config) error {
 	if cfg.RateLimit.WeeklyWaitLimitMinutes > weeklyWaitLimitMaxMinutes {
 		return invalidValueError("rate_limit.weekly_wait_limit_minutes",
 			cfg.RateLimit.WeeklyWaitLimitMinutes,
-			"大きすぎる（上限を設けないなら 0 にすること）")
+			i18n.T(i18n.KeyConfigValidateRateLimitWeeklyWaitRange))
 	}
 	// **負の値を通してはならない**（issue #197）。負だと「待つ先の時刻 − いま」が必ず上回るので、
 	// **枠待ちに入った瞬間に担当を手放す。**1週間の枠を1%でも使い切れば、走っている run が全部止まる。
@@ -705,11 +705,16 @@ func validateHandoff(h TrackerProviderHandoffConfig) error {
 		return invalidValueError("tracker.provider.handoff.recheck_interval_ms", h.RecheckIntervalMs,
 			i18n.T(i18n.KeyConfigValidateHandoffRecheckIntervalRange))
 	}
-	if h.FiveHourMarginPercent < 0 || h.FiveHourMarginPercent > 100 {
+	// **100 を弾く**（issue #173 / #197）。
+	// **余裕値は `100 − 使用率 − マージン` で、0以下なら「余裕が無い」である。**
+	// **マージン100 だと、使用率0でも余裕値0になり、その機械は永久に入札しない。**
+	// **さらに、1週間の枠を待つ上限の判定も永久に真になるので、
+	// 枠を1バイトも使っていないのに走っている run を全部手放す。**
+	if h.FiveHourMarginPercent < 0 || h.FiveHourMarginPercent >= 100 {
 		return invalidValueError("tracker.provider.handoff.five_hour_margin_percent",
 			h.FiveHourMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}
-	if h.WeeklyMarginPercent < 0 || h.WeeklyMarginPercent > 100 {
+	if h.WeeklyMarginPercent < 0 || h.WeeklyMarginPercent >= 100 {
 		return invalidValueError("tracker.provider.handoff.weekly_margin_percent",
 			h.WeeklyMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}

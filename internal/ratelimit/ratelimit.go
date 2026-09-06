@@ -120,21 +120,15 @@ type Snapshot struct {
 	FetchedAt time.Time
 }
 
-// MaxPercent は枠の中でいちばん高い使用率を返す。
+// **枠の中でいちばん高い使用率を返す `MaxPercent` は消えた**（issue #173 / #197）。
 //
-// 戻り値: 使用率の最大値。枠が1件も無ければ 0。
-func (s *Snapshot) MaxPercent() int {
-	if s == nil {
-		return 0
-	}
-	max := 0
-	for _, l := range s.Limits {
-		if l.Percent > max {
-			max = l.Percent
-		}
-	}
-	return max
-}
+// **本番側の呼び出し元が0件になった。**使っていたのは
+// `rate_limit.pause_above_percent` の2つの判定で、どちらも設定ごと消えている。
+//
+// **残さない理由。**あれは**マージンを見ずに全部の枠を1つの数へ畳む**見方であり、
+// **この package が線を1本持っているように読める。**
+// **線を決めるのは呼び出し側である**（`AnySelected` などに述語を渡す）。
+// **残すと、次の実装者がそこへ手を伸ばして、消したはずの2本目の閾値を作り直す。**
 
 // AnySelected は、選んだ枠が1つでもあるかを返す（設計 3-27。issue #173 / #197）。
 //
