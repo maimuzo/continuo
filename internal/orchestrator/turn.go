@@ -320,7 +320,7 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 	if grace <= 0 {
 		return
 	}
-	o.logger.Info("走っているサブエージェントが終わるのを待ってから esc を送ります",
+	o.logger.Info("走っているサブエージェントが終わるのを待ちます",
 		"identifier", rs.issue().Identifier, "サブエージェント", running, "猶予", grace)
 
 	deadline := time.NewTimer(grace)
@@ -333,13 +333,13 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 			return
 		case <-deadline.C:
 			if left := rs.runningSubagentList(); len(left) > 0 {
-				o.logger.Warn("猶予のあいだにサブエージェントが終わらなかったので、走行中のまま esc を送ります",
+				o.logger.Warn("猶予のあいだにサブエージェントが終わらなかったので、走行中のまま次へ進みます（書きかけの編集が残っているかもしれません）",
 					"identifier", rs.issue().Identifier, "サブエージェント", left)
 			}
 			return
 		case <-tick.C:
 			if len(rs.runningSubagentList()) == 0 {
-				o.logger.Info("走っていたサブエージェントが終わったので esc を送ります",
+				o.logger.Info("走っていたサブエージェントが終わりました",
 					"identifier", rs.issue().Identifier)
 				return
 			}

@@ -32,6 +32,15 @@ const issueNumberPlaceholder = ".issue.number"
 // cfg: unmarshal 済みの Config（5-5 の展開はまだ行っていない状態でよい）。
 // 戻り値: 最初に見つかった不正な値についてのエラー。複数箇所が不正でも1つずつ直せるよう、
 // エラーメッセージには必ず設定キーの名前と、実際に入っていた値を含める。
+// weeklyWaitLimitMaxMinutes は `rate_limit.weekly_wait_limit_minutes` の上限（分）である
+// （issue #197）。**10年ぶん。**
+//
+// **上限を置く理由。**`time.Duration(n) * time.Minute` は int64 のナノ秒なので、
+// **1.5億分あたりであふれて小さい正の値へ巻き戻る。**
+// **そうなると、枠待ちに入った瞬間に担当を手放す。**
+// **「事実上いつまでも待つ」は 0 で表す**ので、大きな値を書く必要は無い。
+const weeklyWaitLimitMaxMinutes = 10 * 365 * 24 * 60
+
 func validate(cfg *Config) error {
 	if cfg.Tracker.Kind != "github_projects_v2" {
 		return invalidValueError("tracker.kind", cfg.Tracker.Kind, `"github_projects_v2" のみサポートする`)
@@ -337,6 +346,15 @@ func validate(cfg *Config) error {
 	default:
 		return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
 			`"claude_credentials" か "keychain"（macOS のみ）か "env" のいずれか（読み取りだけで書き換えない。3-27）`)
+	}
+	// **大きすぎる値も通してはならない**（issue #197）。
+	// **分をミリ秒へ直すときに int64 があふれ、小さい正の値へ巻き戻ることがある。**
+	// **そうなると、枠待ちに入った瞬間に担当を手放す。**
+	// **上限は10年ぶんにしてある。**「事実上いつまでも待つ」は 0 で表す。
+	if cfg.RateLimit.WeeklyWaitLimitMinutes > weeklyWaitLimitMaxMinutes {
+		return invalidValueError("rate_limit.weekly_wait_limit_minutes",
+			cfg.RateLimit.WeeklyWaitLimitMinutes,
+			"大きすぎる（上限を設けないなら 0 にすること）")
 	}
 	// **負の値を通してはならない**（issue #197）。負だと「待つ先の時刻 − いま」が必ず上回るので、
 	// **枠待ちに入った瞬間に担当を手放す。**1週間の枠を1%でも使い切れば、走っている run が全部止まる。

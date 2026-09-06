@@ -976,11 +976,19 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	if snap.WorktreePath == "" {
 		return false
 	}
-	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、
-	// いま走らせた」を表す。**偽になるのは、既に走らせたときと、
-	// `workspace_hooks.after_run` が設定されていないときである。**
-	// **後者は既定の設定そのものである。**捨てると、**何も走らせていないのに
+	// **設定されていないときは、走らせたと言ってはならない**（issue #197）。
+	// **`RunAfterRunOnce` は「この worktree で初めて呼ばれたか」を返すだけで、
+	// コマンドが空でも真を返す**（`RunHook` は設定が無ければ nil を返して終わる）。
+	// **既定の `WORKFLOW.md` は `after_run` を持たない。**
+	// **そのまま真として扱うと、1バイトも push していないのに
 	// 「実行済みです。remote の続きから始めてください」と issue へ書く。**
+	// **次に拾う機械は remote から worktree を作り直し、push していない commit を全部失う。**
+	if o.cfg.WorkspaceHooks.AfterRun == nil ||
+		strings.TrimSpace(*o.cfg.WorkspaceHooks.AfterRun) == "" {
+		return false
+	}
+	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、
+	// いま走らせた」を表す。**偽になるのは、既に走らせたときである。**
 	// **走らせ切ったことを run が覚えている**（issue #197）。
 	// **やり直しのために要る。**担当を外すのに失敗して次の巡回でやり直すと、
 	// `RunAfterRunOnce` は「走らせていない」を返すので、

@@ -305,7 +305,15 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 	// **写しは1回だけ読む**（設計 3-27）。**run ごとに取り直すと、
 	// 同じ巡回の中で run ごとに違う答えが返る。**
 	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
+	now := o.now()
 	for _, rs := range o.snapshotRuns() {
+		// **バックオフ中の run は手放さない**（issue #197）。
+		// **打ち切られて次の巡回を待っているだけで、枠を待っているのではない。**
+		// **その run の pane はもう閉じているので、`paneStopped` は必ず真を返す。**
+		// **`checkStalls` の本体は同じ理由でバックオフ中を飛ばしている。**
+		if st := rs.snapshot(); !st.BackoffUntil.IsZero() && now.Before(st.BackoffUntil) {
+			continue
+		}
 		// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
 		// **印は「使用率100」で立ち、この判定は「1週間の余裕値が0以下」で効く。**
 		// **印を門にすると、100%でしか手放せなくなり、

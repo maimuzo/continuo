@@ -315,10 +315,6 @@ func (o *Orchestrator) logNewWorkBlocked(
 	if weekly != percentUnknown {
 		args = append(args, "1週間の枠の使用率", weekly)
 	}
-	if stale {
-		// **いまの値ではない。**直前の読み取りに失敗している。
-		args = append(args, "使用率は最後に読めた値", true)
-	}
 	// **余裕の無い枠の種別を出す**（設計 3-77j）。
 	// **1週間の枠は2つある**（`weekly_all` と `weekly_scoped`）。
 	// **使用率は最大を採って1つに畳むので、それだけでは
