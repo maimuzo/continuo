@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
@@ -28,13 +28,13 @@ import (
 // TestDispatch_active_statesに無いStatusのissueを着手が上書きしない は、
 // 着手の段2 の許可リストを確かめる。
 //
-// 目的: **ボードの Status は人間が自由に増やせる。**`In Review` は `active_states` にも
+// 目的: **カンバンの Status は人間が自由に増やせる。**`In Review` は `active_states` にも
 // `terminal_states` にも `failure_state` にも入らない（設計 3-9 / 3-10。`In Review` を
 // `terminal_states` に入れてはならない）し、設定にまったく出てこない Status も作れる。
 // **拒否リストで守ると、そういう Status を全部見落とす。**見落とすと、人間が引き取った
 // issue を continuo が `In Progress` へ上書きし、その worktree で Claude Code を起動し直す。
 //
-// 与える情報: ボードの実体は `active_states` に無い Status なのに、候補の一覧には
+// 与える情報: カンバンの実体は `active_states` に無い Status なのに、候補の一覧には
 // 索引の遅れで `Ready` の写しが載っている issue。**設定に名前が出てくる `In Review` と、
 // 設定のどこにも出てこない `Icebox` の両方を見る。**
 // 成功条件: Status がそのままで、書き込みを1回も試みず、worktree も開かず、印も残らないこと。
@@ -434,7 +434,7 @@ func TestRestore_paneの一覧を取れないだけでStatusを人間へ渡さ�
 // と約束している。**その約束を守る分岐が1つも無いと、herdr を再起動しただけで走行中の run が
 // 諦められる。**リトライを消費し、使い切ると issue が failure_state へ落ち、
 // **herdr が何も答えていないのに「herdr は agent が待機状態になったと答えました」という
-// 文面がボードへ投稿される。**
+// 文面がカンバンへ投稿される。**
 //
 // 与える情報: `agent.prompt` を受け取ったところで応答を書かずに接続を切るテスト用herdr mock
 // （herdr の再起動そのものである。エラー応答では再現できない）。リトライは 0 回にしてあるので、

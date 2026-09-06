@@ -192,7 +192,7 @@ func (o *Orchestrator) noteGate(issue tracker.Issue, reason GateReason, assignee
 // **issue に残っているコメントは、この機械が関門より前で飛ばしたくらいでは消えない。**
 // ここで消すと、`preflight` が1巡回だけ落ちただけで記録が作り直され、
 // **同じ本文の案内の2件目が issue へ書かれる。**書いたコメントを消す手段は無い。
-// **notices ごと落ちるのは `forgetGatedNotOnBoard` だけである**（issue がボードから消えたとき）。
+// **notices ごと落ちるのは `forgetGatedNotOnBoard` だけである**（issue がカンバンから消えたとき）。
 //
 // issueID: project item の ID。
 func (o *Orchestrator) clearGate(issueID string) {
@@ -213,6 +213,33 @@ func (o *Orchestrator) clearGate(issueID string) {
 	n.Count = 0
 	n.FirstSeenAt = time.Time{}
 	n.Assignees = nil
+}
+
+// forgetGateNoticesOffByConfig は、「設定で書かないと決めた」記録だけを捨てる（設計 3-24）。
+//
+// **`tracker.provider.handoff.on_assignee_gate` を読み直しで戻したときに呼ぶ。**
+//
+// **捨てる理由は、ダッシュボードに文言として出ているからである。**
+// `internal/server/view.go` が `GateNoticeOffByConfig` を「設定で書きません」という表示に変える。
+// **捨てないと、`warn_and_comment` へ戻したあとも、いまは嘘になった説明を画面が出し続ける。**
+// **併せて、`warn_only` のあいだに止まっていた issue へ案内が書かれるようになる。**
+//
+// **「読み直しが再起動より弱い」だけでは、この関数の理由にならない。**同じ弱さは
+// 書き戻しの回数（`runState` の `automatedRewrites`）にもあり、そちらは直していない。
+// **違いは、こちらだけが画面に出ていることである。**
+//
+// **`NoticedAt` が入っている記録は捨てない。**捨てると、同じ本文の案内の2件目が issue へ書かれる。
+// **書いたコメントを消す手段は無い。**
+func (o *Orchestrator) forgetGateNoticesOffByConfig() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, n := range o.gated {
+		for reason, notice := range n.notices {
+			if notice.Skip == GateNoticeOffByConfig {
+				delete(n.notices, reason)
+			}
+		}
+	}
 }
 
 // markGateNoticed は、issue に既に案内があったことを記録する。**投稿はしない。**
@@ -263,7 +290,8 @@ func (o *Orchestrator) markGateNoticeSkipped(issueID string, reason GateReason, 
 // nodeID: 下敷きの GitHub issue のノード ID。
 // reason: 止めた理由の種類。
 func (o *Orchestrator) postGateNotice(ctx context.Context, issue tracker.Issue, nodeID string, reason GateReason) {
-	if o.cfg.Tracker.Provider.Handoff.OnAssigneeGate == config.OnAssigneeGateWarnOnly {
+	// **この値は走行中に読み直せる**（設計 3-24）。`o.cfg` から読んではならない。
+	if o.reloadableConfig().OnAssigneeGate == config.OnAssigneeGateWarnOnly {
 		o.logger.Info("着手できずに止まっていますが、設定で issue へは書きません",
 			"identifier", issue.Identifier, "理由", string(reason),
 			"on_assignee_gate", config.OnAssigneeGateWarnOnly)
@@ -338,7 +366,7 @@ func gateNoticedIn(comments []tracker.Comment, selfLogin string, reason GateReas
 	return time.Time{}, false
 }
 
-// forgetGatedNotOnBoard は、いまのボードの候補に居ない issue の記録を外す（設計 3-68）。
+// forgetGatedNotOnBoard は、いまのカンバンの候補に居ない issue の記録を外す（設計 3-68）。
 //
 // **候補の取得が成功した巡回でだけ呼ぶ。**失敗した巡回で呼ぶと全件が消える。
 // **`dispatchCandidates` のループは見ない。**空きスロットが尽きて途中で

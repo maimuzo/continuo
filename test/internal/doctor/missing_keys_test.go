@@ -106,9 +106,9 @@ func TestDoctor_書かれていない設定項目があれば名前と差分の�
 	if report.ExitCode() != 0 {
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
-	// **ボードを1バイトも読まない。**この検査のためにリクエストを増やさない。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
-		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
+	// **カンバンを1バイトも読まない。**この検査のためにリクエストを増やさない。
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items", "workflows"}) {
+		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
 	}
 }
 
@@ -159,7 +159,7 @@ func TestDoctor_節ごと書かれていなければ節の名前を1件だけ挙
 // **1つの検査が検査結果の並びを画面の外へ押し出さない**ことを固定する。
 //
 // 目的: 足りない項目が上限（10件）を超えたとき、内訳を上限＋まとめの1行までに切ること。
-// **差分をそのまま並べると156行になり、他の14個の検査結果が読めなくなる。**
+// **差分をそのまま並べると156行になり、他の17個の検査結果が読めなくなる。**
 // 与える情報: 節を11個落とした WORKFLOW.md（`continuo init` を使わずに手で書いた人の形）。
 // 成功条件: 内訳が11行以内で、最後の行が残りの件数を伝えていること。
 func TestDoctor_足りない項目が多くても内訳は上限で切る(t *testing.T) {

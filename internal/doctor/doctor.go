@@ -12,14 +12,16 @@
 //	未記入の項目      … 雛形にある設定項目が WORKFLOW.md に全部書かれているか
 //	プロンプトの変数   … 送るプロンプトが、決められた変数だけを使っているか
 //	claude           … `claude.kind` の実行ファイルが PATH にあるか
+//	agent teams       … Claude Code の agent teams が有効にならないか
 //	hook の置き場所    … hook を受ける socket を実際に置けるか
 //	Claude の設定      … Claude Code の設定ディレクトリに実際に書けるか
 //	worktree の場所    … `workspace.root` に実際に書けるか
 //	herdr            … socket の ping の応答の protocol が herdr.protocol と一致するか
 //	gh の認証         … `gh auth status` の Token scopes に project が単独で並んでいるか
-//	ボード            … Bootstrap が通り、active_states の選択肢名が全部あるか
-//	Status の名前      … 設定に書いた Status と紛らわしい選択肢がボードに無いか
-//	対応表のキー       … `tracker.automated_state_rewrite` のキーがボードの選択肢にあるか
+//	カンバン            … Bootstrap が通り、active_states の選択肢名が全部あるか
+//	Status の名前      … 設定に書いた Status と紛らわしい選択肢がカンバンに無いか
+//	対応表のキー       … `tracker.automated_state_rewrite` のキーがカンバンの選択肢にあるか
+//	自動化            … カンバンの自動化が有効なのに書き戻しの対応表が空でないか
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
 //	資格情報          … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
@@ -31,13 +33,13 @@
 // **設定が読めないという理由で全部を `!` にすると、本当の原因を1つも指摘できない。**
 //
 // **検査の実体は既にあるものを呼ぶ。**gh は internal/tracker の CheckGHAvailable /
-// CheckGHProjectScope、herdr は internal/herdr の CheckProtocol、ボードは
+// CheckGHProjectScope、herdr は internal/herdr の CheckProtocol、カンバンは
 // internal/tracker の Bootstrap、clone は internal/workspace の RunGhqList、信頼は
 // internal/workspace の CheckTrustForClonePath である。**判定をこのパッケージで書き直さない。**
 // internal/daemon の起動時検査（3-6）も同じ関数を呼んでいる。違うのは落ち方だけで、
 // 起動時検査は最初の失敗で起動を止め、doctor は全部調べて記号で並べる。
 //
-// **本番のボードへ書き込む経路は1つも無い。**このパッケージが呼ぶのは読み取りだけである
+// **本番のカンバンへ書き込む経路は1つも無い。**このパッケージが呼ぶのは読み取りだけである
 // （Bootstrap と FetchIssuesByStates）。テストは httptest.Server で立てたテスト用GraphQL mock
 // サーバに向けること。
 package doctor
@@ -116,7 +118,7 @@ type Options struct {
 
 // Repo は検査の対象になるリポジトリである。
 //
-// **設定には書かれていない。**ボードに載っている issue の nameWithOwner から集める（3-32）。
+// **設定には書かれていない。**カンバンに載っている issue の nameWithOwner から集める（3-32）。
 type Repo struct {
 	// Owner はリポジトリの所有者名である。
 	Owner string
@@ -135,10 +137,12 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //	設定ファイル ─┬─ 片付けの状態（設定の2つのキーを突き合わせる）
 //	              ├─ 未記入の項目（雛形と設定の原文を突き合わせる）
 //	              ├─ herdr（設定の protocol と照合する）
-//	              └─ gh の認証 ── ボード ─┬─ Status の名前
-//	                                      ├─ 対応表のキー
-//	                                      ├─ clone
-//	                                      └─ 信頼登録
+//	              ├─ agent teams（`claude.env` と doctor を叩いたシェルを見る）
+//	              └─ gh の認証 ── カンバン ─┬─ Status の名前
+//	                                        ├─ 対応表のキー
+//	                                        ├─ 自動化
+//	                                        ├─ clone
+//	                                        └─ 信頼登録
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
 //
 // **この線は設計 3-32 の依存の図そのままである。**`gh の認証` が読む値は設定に無い
@@ -186,18 +190,23 @@ func Run(ctx context.Context, opts Options) Report {
 	// 見ておらず、**`tracker.terminal_states` との関係は誰も見ていなかった**（issue #35）。
 	report.add(checkCleanupStates(cfg, configResult.Symbol))
 
-	// 段1c: 未記入の項目。**ここもボードを1バイトも読まない**（雛形と設定の原文を
+	// 段1c: 未記入の項目。**ここもカンバンを1バイトも読まない**（雛形と設定の原文を
 	// 突き合わせるだけである）。**版を上げて増えた設定項目は、リリースノートを
 	// 読まないかぎり存在に気づけない**（issue #85）。**ここが人間に見せる唯一の場所である。**
 	report.add(checkMissingKeys(opts, cfg, configResult.Symbol))
 
-	// 段1d: プロンプトの変数。**ここもボードを1バイトも読まない。**
+	// 段1d: プロンプトの変数。**ここもカンバンを1バイトも読まない。**
 	// **変数の誤りは issue を1件も着手させない**ので、外へ出る検査より先に見せる。
 	report.add(checkPromptVariables(cfg, configResult.Symbol))
 
 	// 段2: claude。**外部へ接続しないので、いちばん軽い検査である。**
 	// **ここで落ちると着手は必ず段10 で失敗する**ので、herdr より前に見せる。
 	report.add(checkClaude(opts, cfg, configResult.Symbol))
+	// 段2b: agent teams。**外部へ接続しない。**`claude.env` と、doctor を叩いたシェルの
+	// 環境変数だけを見る。**有効なままだと issue が failure_state へ落ちる**のに、
+	// いまは文書に書いてあるだけで、読まなかった人は落ちてから気づく（issue #137）。
+	// **claude の次に置くのは、どちらも「これから起動する Claude Code」の話だからである。**
+	report.add(checkAgentTeams(opts, cfg, configResult.Symbol))
 	// **hook を受ける socket を置けるかを、herdr より先に確かめる。**
 	// **これが無かったとき、8項目すべてが ✓ なのに起動だけが落ちた**（issue #9）。
 	report.add(checkRuntimeDir(cfg, configResult.Symbol))
@@ -221,20 +230,27 @@ func Run(ctx context.Context, opts Options) Report {
 	})
 	report.add(ghResult)
 
-	// 段5: ボード。設定と gh の認証の両方が通っていないと読めない。
-	// **ここだけ期限を2倍にする。**Bootstrap と候補の取得で2リクエスト送るためである。
+	// 段5: カンバン。設定と gh の認証の両方が通っていないと読めない。
+	// **ここだけ期限を2倍にする。**要るリクエストが Bootstrap と候補の取得の2本だからである。
+	//
+	// **自動化のぶんを足して3倍にしない。**全体の上限（`DefaultTimeout`）は30秒で、
+	// **3倍にするとこの見出し語1つが全体を使い切れてしまい、clone・信頼登録・資格情報が
+	// 巻き添えで `!` になる。**
+	// **自動化は要る2本より後ろで読む**（`checkBoard`）ので、期限が足りなくなったときに
+	// 諦めるのは自動化の1本だけである。
 	var boardResult Result
 	var repos []Repo
 	var boardStates []string
+	var workflows []tracker.ProjectWorkflow
 	boardResult = withCheckTimeout(ctx, 2*opts.CheckTimeout, func(ctx context.Context) Result {
 		var res Result
-		res, repos, boardStates = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
+		res, repos, boardStates, workflows = checkBoard(ctx, cfg, opts, configResult.Symbol, ghResult.Symbol)
 		return res
 	})
 	report.add(boardResult)
 
-	// 段5b: Status の名前。**ボードを読んだときの応答を使い回すので、リクエストは増えない。**
-	// **Bootstrap は「設定に書いた名前がボードに在るか」しか見ない。**ボードに
+	// 段5b: Status の名前。**カンバンを読んだときの応答を使い回すので、リクエストは増えない。**
+	// **Bootstrap は「設定に書いた名前がカンバンに在るか」しか見ない。**カンバンに
 	// `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。
 	// **取り違えたまま無人で回すと、人間が作業中の issue にエージェントが着手する。**
 	report.add(checkStatusNames(cfg, boardStates, boardResult.Symbol))
@@ -245,7 +261,16 @@ func Run(ctx context.Context, opts Options) Report {
 	// **この項目が無いと、キーの綴りの打ち間違いを人間に見せる場所が1つも無い**（issue #67）。
 	report.add(checkRewriteKeys(cfg, boardStates, boardResult.Symbol))
 
-	// 段6: clone。対象リポジトリはボードを読んで決まる。
+	// 段5d: 自動化。**ここだけはリクエストが1本増える**（`FetchProjectWorkflows`）。
+	// **起動時の検査のクエリへ混ぜてはならない。**あちらは GraphQL が `errors` を
+	// 1件でも返した時点で落ちるので、`workflows` を読めない環境
+	// （権限の足りないトークン・この field を持たない GitHub Enterprise Server）では
+	// **常駐プロセスが起動しなくなる。**
+	// **自動化が Status を書いた瞬間に走行中の run が止まる**のに、
+	// **利用者がそれを知るのは1件止まったあとである**（issue #209）。
+	report.add(checkAutomations(cfg, workflows, boardResult.Symbol))
+
+	// 段6: clone。対象リポジトリはカンバンを読んで決まる。
 	var cloneResult Result
 	var clonePaths map[string]string
 	cloneResult = withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
@@ -296,12 +321,12 @@ func timedOut(ctx context.Context, err error) bool {
 	return errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded)
 }
 
-// collectRepos はボードから返ってきた issue の nameWithOwner を重複なく集める（設計 3-32）。
+// collectRepos はカンバンから返ってきた issue の nameWithOwner を重複なく集める（設計 3-32）。
 //
 // **draft issue は対象から外す。**リポジトリを持たないので Owner と Repo が空になり、
 // clone も信頼登録も引けない（08_doctor.md の受け入れの基準）。
 //
-// issues: ボードから返ってきた issue。
+// issues: カンバンから返ってきた issue。
 // 戻り値: 重複を除いたリポジトリの一覧（`<owner>/<repo>` の昇順。出力の順序を安定させるため）。
 func collectRepos(issues []tracker.Issue) []Repo {
 	seen := make(map[string]bool)

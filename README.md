@@ -99,7 +99,7 @@ How many issues run at once is a setting (two by default).
 
 **Your kanban board needs five Status options.** GitHub gives you three by default (`Todo`, `In Progress`, `Done`), so **add the missing two from the GitHub UI**: open the kanban board's `Settings`, pick `Status` under `Custom fields`, then `Add option...`. The names are up to you — `continuo setup` maps them to roles afterwards.
 
-`continuo doctor` runs sixteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, **prompt variables**, Claude Code, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, kanban board, Status names, the rewrite table's keys, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
+`continuo doctor` runs eighteen checks: config, cleanup states, **settings missing from your `WORKFLOW.md`**, **prompt variables**, Claude Code, **agent teams**, **the hook socket location**, the Claude settings directory, the worktree root, herdr, `gh` auth, kanban board, Status names, the rewrite table's keys, **kanban automations**, clones, trust, and credentials (used to read your plan's usage window). It does **not** check your OS or Go version — that part is on you.
 
 **A `✗` means the exit code is 1; a `!` on its own leaves it at 0.**
 Exit code 0 is not the same as "continuo will start", though. **Failing to read the kanban board**
@@ -148,7 +148,7 @@ sh scripts/test-like-ci.sh                       # run the tests (~3 min, option
 ```bash
 mkdir -p ~/continuo-work && cd ~/continuo-work
 
-continuo init      # writes WORKFLOW.md; owner and kanban board number come from gh
+continuo init      # writes WORKFLOW.md and continuo-ci.yaml; owner and kanban board number come from gh
 ```
 
 **Open `WORKFLOW.md` before you go further.** `trust.repositories` lists every repository it found on the kanban board. Delete the lines you do not want — otherwise Claude Code gets trusted access to repositories that have nothing to do with this.
@@ -225,7 +225,9 @@ cannot be checked — is it reported as a leftover, as before.
 
 ### Configuration
 
-`continuo init` writes one file, `WORKFLOW.md`. The front matter at the top holds the config; the body below it holds the part of the agent's brief that is yours to write.
+`continuo init` writes two files. **Only `WORKFLOW.md` is config.** The front matter at the top holds the config; the body below it holds the part of the agent's brief that is yours to write.
+
+**The second file, `continuo-ci.yaml`, is not config** — continuo never reads it. It is a sample GitHub Actions workflow that fails pull requests whose review results were never posted. Review it, then move it to `.github/workflows/`. continuo works fine if you don't.
 
 Most of the brief lives inside the continuo binary and is refreshed whenever you upgrade. The body is spliced in under its `## 4-4. このプロジェクトの決まり` section (the built-in brief is written in Japanese). Run `continuo prompt --show` to read the whole text that gets sent.
 

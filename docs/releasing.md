@@ -86,7 +86,7 @@ gh workflow run release.yml --ref main
 **AI だけで最後まで回せる。**人間の判断を待つ段ではない。
 
 **ただし Claude Code が実際に動くので、定額プランの枠を消費する。**続けて何度も回さない。
-**本番のボード（project #3）には触れない。**使うのは検証用のボードだけである。
+**本番のカンバン（project #3）には触れない。**使うのは検証用のカンバンだけである。
 **その番号・リポジトリ・issue・Status の識別子は [docs/test_environment.md](test_environment.md) にある。**
 
 **一、テスト用の `WORKFLOW.md` で、隔離する設定を2つ変える。**
@@ -124,7 +124,7 @@ chmod 0700 /tmp/continuo-e2e
 **パスは短くする。**macOS の Unix domain socket は104バイト以上で bind に失敗するので、
 **深いディレクトリを指すと、権限とは別の理由でここが `✗` になる。**
 
-**三、検証用のボードで設定を作り、検査を通す。**
+**三、検証用のカンバンで設定を作り、検査を通す。**
 
 ```bash
 # どこで実行してもよい
@@ -137,7 +137,7 @@ continuo doctor "$WORK"
 ```
 
 **`✗` が0件になること。**
-**ボードに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
+**カンバンに着手待ちの issue が無いうちは、`clone` と `信頼登録` が `!` のまま残る。**それでよい。
 
 **四、`--id <名前>` を付けて起動し、issue を1件通す。**
 
@@ -233,10 +233,16 @@ PR #69  レビュー結果=有り（1件）
 | **投稿者が `OWNER` / `MEMBER` / `COLLABORATOR` のいずれかである** | **誰でもコメントできる。**外部の人が目印を貼れば通る状態にしない |
 
 **同じ条件で、CI も PR を落とす。**[.github/workflows/review-gate.yml](../.github/workflows/review-gate.yml) が
-`pull_request` のたびに走り、**貼られていなければ `review-result` の検査が赤になる。**
+`pull_request` のたびに走り、**貼られていなければ `code-review-result` の検査が赤になる。**
 
-**`review-result` は、main の branch protection の必須の検査に入っている**（2026-09-02 に確認）。
+**必須の検査に入っている**（2026-09-02 に確認。**そのとき登録されていた名前は `review-result` である**）。
 **赤いあいだはマージできない。**
+
+> **この job は `review-result` から `code-review-result` へ改名した。**
+> **改名した時点で、`review-result` の登録は宙に浮く。**
+> **必須の検査を入れ替えるまで、GitHub は「必須の検査がまだ報告されていない」と見てマージを塞ぐ。**
+> **危険側ではなく安全側に倒れるが、入れ替えるまで1本もマージできない。**
+> 手順は [CONTRIBUTING.md](../CONTRIBUTING.md) の「この検査をマージの条件にする」にある。
 
 ```
 $ gh api repos/<owner>/continuo/branches/main/protection/required_status_checks --jq '.checks[].context'
@@ -246,7 +252,7 @@ build (darwin, arm64)
 build (darwin, amd64)
 build (linux, amd64)
 build (linux, arm64)
-review-result
+review-result          ← 改名前の名前。入れ替えるまでこのままである
 ```
 
 **それでも、ここでもう一度数える。**必須の検査は**その PR がマージされる前**しか見ない。
@@ -345,7 +351,7 @@ diff <(git show "$prev":internal/config/types.go     | grep -o 'yaml:"[^"]*"' | 
 | --- | --- |
 | **増えたキー・消えたキー・改名したキー** | 「増えたのは `tracker.automated_state_rewrite` の1つだけ」 |
 | **書かないと何が起きるか** | 「壊れない。いままでどおり猶予を置いて止まるだけ」 |
-| **そのまま貼れる yaml** | **雛形の値のままで起動すること**を、手元で1度確かめてから載せる |
+| **書き足す場所の図と、その見つけ方** | **`grep` で場所を出させ、yaml には `# 既にある行` / `# ← これを足す` の注記を付ける。****「そのまま貼れる yaml」と書かない。**`continuo init` の雛形には親キーが既にあるので、塊ごと貼ると front matter が重複キーになって起動しなくなる（issue #209） |
 | **足したかどうかの確かめ方** | `continuo doctor` のどの行が何と出れば足せているか |
 
 **1つも増えていなければ、「増えたキーはありません」とだけ書く。**節そのものは作る。

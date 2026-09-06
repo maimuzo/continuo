@@ -46,7 +46,7 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
   --jq '"\(.mergeable)/\(.mergeStateStatus)"'
 ```
 
-**`MERGEABLE/CLEAN` 以外はマージしない。**`review-result` は必須の検査なので、
+**`MERGEABLE/CLEAN` 以外はマージしない。**`code-review-result` は必須の検査なので、
 **レビュー結果が貼られていなければ `BLOCKED` になる。**
 
 **worker に渡してよいのは段1から段5まで。**段6はメインエージェントが自分で叩く。
@@ -64,7 +64,7 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
 **貼ったあとに `gh run rerun` を打つ。**
 **これを忘れると、レビュー結果を貼ったのに赤いまま、マージできない状態になる。**
 
-**赤いままだとマージは本当に止まる。**`review-result` は `main` の branch protection の
+**赤いままだとマージは本当に止まる。**`code-review-result` は `main` の branch protection の
 必須の検査である（2026-09-01 に登録した）。確かめ方。
 
 ```bash
@@ -95,6 +95,29 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 ```
 /code-review <PR 番号>
 ```
+
+**`/code-review` は自由なプロンプトを足せない。**受け取るのは PR 番号・branch・path・effort level と、
+`--comment` / `--fix` / `--post` / `--no-post` のようなフラグである
+（確かめ方: `/code-review` を引数なしで叩くと、受け取る形が出る）。
+**そのため [.claude/skills/worker-briefing/SKILL.md](../worker-briefing/SKILL.md) の 2-6（1回で全部挙げる）と
+2-7（合理的根拠を書く）を、レビュワーへ直接は渡せない。**
+
+**それでも `/code-review` を使う。**[CLAUDE.md](../../../CLAUDE.md) の「PR を出すときの絶対条件」が
+**「必ず `/code-review` でレビューする」**と決めているためである。
+**2-6 と 2-7 は、受け取った結果を検査する側（このスキルの段4）で効かせる。**
+
+**ただし `/code-review` の出力へ「検査で落とすもの」をそのまま当ててはならない。**
+**レビュワーへ 2-6 と 2-7 を渡せていない以上、根拠や分類が無いのはレビュワーの落ち度ではない。**
+**落とすのではなく、こちらで補って対応表に載せる。**
+
+| 何が足りないか | どうするか |
+| --- | --- |
+| **合理的根拠が「誰が何を失うか」で書かれていない** | **落とさない。**対応表の「合理的理由」の欄に、**受け取る側が「直さなかったときに何を失うか」を書く** |
+| **分類（前の周に既に在った／直しが持ち込んだ）が無い** | **落とさない。**「前の周に既に在った」として扱う |
+| **同じ誤りが他に無いかを数えていない** | **落とさない。**受け取る側が数え、件数と検索パターンを対応表へ書く |
+
+**「検査で落とすもの」を機械的に当ててよいのは、2-6 と 2-7 を渡した worker のレビューだけである**
+（Agent でレビュワーを立てて worker-briefing を Read させた場合）。
 
 **`code-review` は Claude Code に同梱されている skill である。このリポジトリの中には無い。**
 （確かめ方: `git ls-tree -r --name-only HEAD -- .claude/commands .claude/skills/code-review` が1件も返さない）
@@ -151,6 +174,16 @@ gh pr comment <番号> --body-file <ファイル>
 段3のコメントへ入れること、**掛け直した回数を数えること**（3・6・9回目で issue と実装を突き合わせ直し、連続10回で止まる）、
 **3・6・9回目に通す6段の手順**（[CLAUDE.md](../../../CLAUDE.md) の「回数を数える」にある）。
 
+**要点だけ。****Critical と High が0件になったら、そこから先は最大1周である。**
+Medium と Low を直さないなら、そこで段5 へ進んでよい。直したなら、最後に1回だけ回す。
+**その最後の周でも Critical と High が0件なら、Medium と Low の指摘があってももう直さない。**
+**Critical か High が出たら、直してまた回す。**
+
+**10回目で収まったときは、この「最後の1回」を回さない**（初めてかどうかを問わない）**。**連続10回の上限が優先する
+（[CLAUDE.md](../../../CLAUDE.md) の「絶対条件：3回ごとに issue と実装を突き合わせ直す。連続10回で完全に止まる」）。
+****そのとき、Medium と Low は直さない。**そのまま follow-up の issue へ切り出す。**
+
+
 **収まるまで何回回しても、このスキルの段5と段6は飛ばさない。**3・6・9回目で収まらないときは、
 CLAUDE.md の「回数を数える」にある6段を終えてから段5へ進む。**人間の判断は待たない。**
 **ただし連続10回で収まらなかったときは、段5へ進まずに止まる**
@@ -192,11 +225,11 @@ gh pr checks <番号> --required --watch
 
 ```
 $ gh pr checks <番号> --required --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
-review-result: fail
+code-review-result: fail
 EXIT=0
 
 $ gh pr checks <番号> --required
-review-result	fail	5s	https://github.com/<owner>/<repo>/actions/runs/…
+code-review-result	fail	5s	https://github.com/<owner>/<repo>/actions/runs/…
 EXIT=1
 ```
 
@@ -212,7 +245,7 @@ draft を ready にすると `ready_for_review` が飛び、review-gate の run 
 **既に draft でない PR に打っても、何も起きない。**だから draft かどうかで分ける。
 
 **新しく立った run の完了を待たずにマージへ進んではならない。**
-`review-result` は必須の検査なので、**走っている最中はマージが拒否される。**
+`code-review-result` は必須の検査なので、**走っている最中はマージが拒否される。**
 
 **`--fail-fast` を付けず、`set -e` も置かない。**
 **赤いときこそ、下の判定の1行を出させたいからである。**
@@ -243,7 +276,7 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
 **そのときは1つ前の結果が出る。**上の塊をもう一度叩いて、同じ答えが返ることを確かめる。
 
 **取り違えても、レビュー未実施のものが入ることはない。**
-`review-result` は必須の検査なので、**pending か fail のあいだは GitHub がマージそのものを拒む**
+`code-review-result` は必須の検査なので、**pending か fail のあいだは GitHub がマージそのものを拒む**
 （そのとき `mergeStateStatus` は `BLOCKED` になる）。
 
 ```bash
@@ -257,7 +290,7 @@ gh pr merge <番号> --merge
 
 | 何 | どうなるか |
 | --- | --- |
-| **段5を飛ばす** | **レビュー結果を貼ったのに赤いまま。**`review-result` は必須の検査なのでマージできない |
+| **段5を飛ばす** | **レビュー結果を貼ったのに赤いまま。**`code-review-result` は必須の検査なのでマージできない |
 | **目印を本文の途中に書く** | 数えない。**先頭に置く** |
 | **`--body` で貼る** | **本文の中の `gh pr merge <数字>` の例で、投稿そのものが止まる。**Write ツールで書き出して `--body-file` を使う |
 | **レビュー機能で投稿する** | **数えない。**issue のコメントとして貼る（`gh pr comment`） |

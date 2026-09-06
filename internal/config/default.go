@@ -58,13 +58,27 @@ func ResolveHandoffIdleTimeoutMs(ms int) int {
 // （設計 3-77a が外すのは入札・hold・released の3つだけである）。
 // **エージェント自身が、この印で書き足す先のコメントを探す**ので、見えなくなると探せない。
 //
-// **設定キーにしない。**`tracker.provider.comments.marker` は機械ごとに違う値を書けるので、
+// **設定キーにしない。**`tracker.comments.marker` は機械ごとに違う値を書けるので、
 // **別の機械が書いた進捗報告を数えられなくなる。**この印は固定である。
 //
 // **組み込みのプロンプト（[internal/prompt/builtin.md](../prompt/builtin.md)）が
 // エージェントへ書かせる文字列と、1文字も違ってはならない。**
 // **違うと、エージェントは書いているのに数えられず、18時間で担当が外れる。**
 const ProgressMarker = "<!-- continuo:progress -->"
+
+// PlanMarker は、エージェントが実装の前に書く計画のコメントに付ける印である（設計 5-3）。
+//
+// **この印が要る理由は、成果の報告と見分けるためである。**
+// 計画のコメントも進捗報告も、本文の先頭は `<!-- continuo:agent -->` なので、
+// **印が無いと `hasRunComment` が「この run は成果を書いた」と判定する。**
+// **計画は run の最初に書かれるので、判定はほぼ必ず外れる。**
+// 外れると、turn が途中で終わった run に「何をしたか」を書かせ直す経路が飛ぶ。
+//
+// **設定キーにしない。**理由は ProgressMarker と同じである。
+//
+// **組み込みのプロンプト（[internal/prompt/builtin.md](../prompt/builtin.md)）が
+// エージェントへ書かせる文字列と、1文字も違ってはならない。**
+const PlanMarker = "<!-- continuo:plan -->"
 
 // DefaultConfig は front matter に書かれなかったキーへ入る既定値を返す。
 // front matter のパースはこの構造体へ上書きする形で行う（yaml.UnmarshalWithOptions は
@@ -84,7 +98,7 @@ func DefaultConfig() *Config {
 					Max:   50,
 					Order: "oldest_first",
 				},
-				// 同じボードを複数の機械で持ち回るときの取り決め（設計 3-77）。
+				// 同じカンバンを複数の機械で持ち回るときの取り決め（設計 3-77）。
 				Handoff: TrackerProviderHandoffConfig{
 					BidWindowMs:   180000,
 					IdleTimeoutMs: 64800000,
@@ -113,7 +127,7 @@ func DefaultConfig() *Config {
 			// 知らない Status を見つけてから worker を止めるまでの猶予（設計 3-50）。
 			// **既定は10分。**turn 1回ぶんの表明を読めれば足りる長さにしてある。
 			UnknownStateGraceMs: 600000,
-			// ボードの自動化が動かした Status を戻す先の対応表（設計 3-54）。
+			// カンバンの自動化が動かした Status を戻す先の対応表（設計 3-54）。
 			// **既定は空である。**書かなければ、いままでどおり猶予を置いて worker を止める。
 			AutomatedStateRewrite: map[string]string{},
 			// エージェントが最終応答に書く表明の印と、その値から Status への対応（3-25）。
@@ -132,7 +146,7 @@ func DefaultConfig() *Config {
 			Root:         "~/worktrees",
 			IdentityFile: ".continuo.json",
 			// **既定は止める側である**（3-49）。壊れた worktree を飛ばして走り続けると、
-			// その issue はボード上で running_state のまま何時間も放置される。
+			// その issue はカンバン上で running_state のまま何時間も放置される。
 			OnBrokenWorktree: OnBrokenWorktreeStop,
 		},
 		WorkspaceHooks: WorkspaceHooksConfig{

@@ -14,7 +14,7 @@
 
 ## このプロジェクトは何か
 
-**`continuo` は、GitHub Projects v2 のボード1枚を見張り、issue ごとに git worktree を用意して、[herdr](https://github.com/herdrdev/herdr) の pane で Claude Code を対話モードで起動し、完了までを面倒見る常駐プロセスである。**Go で書く。
+**`continuo` は、GitHub Projects v2 のカンバン1枚を見張り、issue ごとに git worktree を用意して、[herdr](https://github.com/herdrdev/herdr) の pane で Claude Code を対話モードで起動し、完了までを面倒見る常駐プロセスである。**Go で書く。
 
 **名前は通奏低音（basso continuo）に由来する。**バロック音楽で、曲の最初から最後まで途切れず鳴り続け、全体の和声を支える低音パート。
 
@@ -53,18 +53,18 @@ herdr agent read <名前> --source recent-unwrapped --lines 50
 **`herdr wait agent-status …` は存在しない**（herdr 0.8.0 で確認）。待機は `herdr agent wait <名前> --until <status>`。
 **`pane run "claude"` で起動する経路も避ける。**`agent start` と違って起動完了を待たないため、直後に `agent wait` を呼ぶと `agent_not_found` で失敗する。
 
-### 2. GitHub Projects v2 の project #3 は本番のボードである
+### 2. GitHub Projects v2 の project #3 は本番のカンバンである
 
 104件の実データが入っている。**検証で書き込まない。**
 
-**実機で確かめるための専用の環境がある。**ボードもリポジトリも issue もラベルも用意済みで、
+**実機で確かめるための専用の環境がある。**カンバンもリポジトリも issue もラベルも用意済みで、
 **Status は API で動かせる。**在りかと使い方は [docs/test_environment.md](docs/test_environment.md) にある。
 **この環境は消さない。**セッションをまたいで再利用する。
 
-**とくに `updateProjectV2Field` を本番のボードで呼んではならない。**選択肢の指定は全件置き換えとして扱われ、**設定済みの Status の値が全部消える。**
+**とくに `updateProjectV2Field` を本番のカンバンで呼んではならない。**選択肢の指定は全件置き換えとして扱われ、**設定済みの Status の値が全部消える。**
 
-**テスト用のボード（project #10）に対してだけは呼んでよい。**そこは実データを持たないので、選択肢を作り直しても失うものが無い。
-**それ以外のボードでは、選択肢の追加は人間が GitHub の画面から行う。**
+**テスト用のカンバン（project #10）に対してだけは呼んでよい。**そこは実データを持たないので、選択肢を作り直しても失うものが無い。
+**それ以外のカンバンでは、選択肢の追加は人間が GitHub の画面から行う。**
 
 ### 3. `~/.claude/projects/` 配下を消さない
 
@@ -117,7 +117,7 @@ os.Rename(tmp.Name(), path)
 >
 > **既に履歴へ入ってしまったものは、そのままでよい。**書き換えのために履歴を作り直さない。
 
-### 6. continuo で continuo 自身を直すとき、hook の経路に触れたら人間に確認する
+### 6. continuo で continuo 自身を直すとき、hook の挙動が変化する変更を実装する前に、その変更によりどんな影響があるかを深く検討し、実装してよいか人間に確認する
 
 **この項目は、continuo に continuo 自身の issue をやらせるときにしか効かない。**
 他のプロジェクトを continuo に任せている人には関係が無い。
@@ -131,7 +131,7 @@ os.Rename(tmp.Name(), path)
 
 **何が壊れるか。**`continuo hook` のフラグ名を変える変更を入れた瞬間、
 新しい実行ファイルの hook は**引数を受け取れずに exit 1 で落ちる**
-（[internal/cli/cli.go:1280-1298](internal/cli/cli.go#L1280-L1298) が
+（[internal/cli/cli.go:1755-1775](internal/cli/cli.go#L1755-L1775) が
 `--socket` と `--pending-dir` の欠落と相対パスを、それぞれ exit 1 にしている）。
 **古い本体は turn の終わりを永久に受け取れなくなる。**
 **しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
@@ -139,23 +139,82 @@ Claude Code がまだ喋っている最中であることは、本体からは�
 
 **やること。**
 
-> **この状態を検知したら、人間に必ず確認すること。**
+> **hook の挙動が変わる変更は、実装する前に止まること。**
+> **止まったら、その変更でどんな影響が出るかを深く検討すること。**
+> **検討した結果を人間へ見せ、実装してよいかを確認すること。**
 > **人間が問題ないので進めてと答えたら進めて良い。**
 > **明示的に返答しないケースを含め、それ以外は決して進めないこと。**
 > **（AI が勝手に hook 周りも仕様に含めた場合を含む）**
 
 **最後の括弧が本体である。**issue に hook のことが1行も書いていなくても、
-**作業中に手が hook の経路へ伸びたら、その時点で止まる。**「ついでに直した」を通さない。
+**作業中に手が hook の挙動を変えようとしたら、その時点で止まる。**「ついでに直した」を通さない。
 
-**検知のしかた。**判定は変更したファイルのパスだけで行う。中身を読んで迷わない。
+**「挙動が変わる」とは何か。**次の4つのどれかである。
+
+| 何が変わるか | 例 |
+| --- | --- |
+| **hook が受け取る引数** | `--socket` / `--pending-dir` の名前・必須かどうか・値の形 |
+| **hook の宛先** | socket のパスの決め方、逃がし先のディレクトリの場所 |
+| **hook と本体の約束** | 送る内容、受ける側の解釈、ロックの取り方 |
+| **hook が Claude Code へ返すもの** | **サブコマンド名**（`continuo hook` の `hook`）、**終了コード**、標準出力へ返す JSON、張る hook の種類の一覧 |
+
+**4つ目を落としてはならない。**上の3つは continuo の中の話で、**Claude Code との約束が1つも入っていない。**
+
+**実測（2026-09-05）。**サブコマンド名を変えたのと同じ状態を作って叩くと、**終了コード 2 が返る。**
+
+```
+$ go run ./cmd/continuo hook-renamed --socket /tmp/x.sock --pending-dir /tmp/x
+flag provided but not defined: -socket
+continuo — turns a GitHub Projects v2 kanban board into a work queue and has Claude Code work through the issues.
+
+Usage:
+  continuo [flags]               start the daemon (…)
+  continuo <subcommand> [args]
+（Usage とサブコマンド一覧が続く。フラグは -id / -log-level / -port の3本）
+exit status 2
+```
+
+**`switch args[0]` のどれにも当たらない引数は `runMain` へ落ち、`--socket` が未知のフラグとして 2 を返す。**
+**Claude Code は hook の終了コード 2 を「その操作を止めろ」と解釈する。**
+`Stop` hook で 2 が返ると、**エージェントが turn を終えられなくなる**
+（[internal/cli/cli.go:1730-1731](internal/cli/cli.go#L1730-L1731) と
+[docs/plans/impl/04_hook.md:197](docs/plans/impl/04_hook.md#L197)）。
+
+**終了コードを「揃える」cleanup が、いちばん危ない。**
+同じファイルの `parseErrorExitCode` は引数の誤りに 2 を返しており、
+**`runHook` だけが 1 を返す例外である。**「ばらついているので揃える」は自然な思いつきで、
+**上の3つの定義を全部すり抜ける。**
+
+**逆に、これら4つが1つも変わらないなら、下のパスに触れていても止まらない。**
+**例。**`internal/cli/cli.go` の別のサブコマンドへ処理を足す。ログの文言を直す。コメントを直す。
+**そういう変更は、深く検討したうえで「挙動は変わらない」と判断できたなら、そのまま進めてよい。**
+
+**判断した結果は、pull request の本文へ1段落で書くこと。**
+**「触ったが挙動は変わらない」と書いておかないと、次に読む人が同じ検討をやり直す。**
+
+**検知のしかた。**まずパスで拾う。**拾ったものを、上の4つに当てて判定する。**
+
+**この網は、定義そのものではない。**下の grep は「受ける側の解釈」を実装している
+[internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go)（届いた hook を捨てる判定）・
+[internal/orchestrator/turn.go](internal/orchestrator/turn.go)（turn の終わりを決める場所）・
+[internal/orchestrator/runstate.go](internal/orchestrator/runstate.go) も拾うが、
+**拾えるのはファイル単位までである。**その中のどこを触ったかは見ていない。
+**網に掛からないファイルでも、上の4つに当たると思ったら止まること。**
 
 ```bash
 git fetch origin -q
-{ git diff --name-only origin/main...HEAD   # commit 済みのもの
-  git diff --name-only HEAD                 # まだ commit していないもの（staged / unstaged）
-  git ls-files --others --exclude-standard  # 新しく足して、まだ追跡させていないもの
-} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/cli/cli\.go)'
+R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果にする
+{ git -C "$R" diff --name-only origin/main...HEAD   # commit 済みのもの
+  git -C "$R" diff --name-only HEAD                 # まだ commit していないもの（staged / unstaged）
+  git -C "$R" ls-files --others --exclude-standard -- :/  # 新しく足して、まだ追跡させていないもの
+} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/orchestrator/hookinput\.go|internal/orchestrator/turn\.go|internal/orchestrator/runstate\.go|internal/cli/cli\.go)'
 ```
+
+**`git -C "$R"` から叩くのは、cwd の下しか見ない経路を塞ぐためである。**
+`git ls-files --others --exclude-standard` は pathspec を省くと**いまいるディレクトリの下だけ**を列挙する
+（`--full-name` はパスの前置きを直すだけで、走査の範囲は直らない）。
+**`internal/cli/` を cwd にして叩くと、`internal/hookserver/` の下に置いた新しいファイルは1行も出ない。**
+**「触っていない」と見分けが付かないまま門を通る。**
 
 **3つとも見るのは、`git diff --name-only origin/main...HEAD` だけでは素通りするからである。**
 三点の `...` は commit 済みの履歴しか読まないので、**hook の引数を書き換えて、まだ commit していない状態では1行も返らない。**
@@ -163,23 +222,29 @@ git fetch origin -q
 
 **`main` ではなく `origin/main` を見る。**手元の `main` は取り込んでいないことがあり、
 **そもそも手元に `main` が無い checkout では `fatal: ambiguous argument` になって、grep には何も渡らない。**
-これも「触っていない」と見分けが付かない（[docs/releasing.md:284](docs/releasing.md#L284) と同じ理由である）。
+これも「触っていない」と見分けが付かない（[docs/releasing.md:345](docs/releasing.md#L345) と同じ理由である）。
 
-**1行でも返ったら止まる。**それぞれ、なぜ止まるかは次のとおり。
+**1行でも返ったら、上の4つに当てて判定する。当たれば止まる。**
+それぞれ、どの定義に当たりうるかは次のとおり。
 
-| 触った場所 | なぜ止まるか |
+| 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
+| [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1585-1590](internal/cli/cli.go#L1585-L1590) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1148](internal/orchestrator/orchestrator.go#L1148) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1213-1217](internal/orchestrator/orchestrator.go#L1213-L1217) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
+| [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go) | 届いた hook を捨てる判定。**受ける側の解釈そのもの** |
+| [internal/orchestrator/turn.go](internal/orchestrator/turn.go) | turn の終わりを決める場所。**ここが変わると、本体が turn の終わりを受け取れなくなる** |
+| [internal/orchestrator/runstate.go](internal/orchestrator/runstate.go) | hook を受けた run の状態。**新旧で持ち方が違うと、復元した run が hook を取りこぼす** |
 
-**人間に見せるもの。**次の4つを揃える。1つでも欠けたら、人間は可否を判断できない。
+**人間に見せるもの。**次の5つを揃える。1つでも欠けたら、人間は可否を判断できない。
 
 | 何を見せるか | 具体的に何を書くか |
 | --- | --- |
+| **深く検討した影響** | **走っている run のどれが、いつ、どう壊れるか。**既に書かれている issue ごとの設定ファイルが、新しい実行ファイルで通るか。**壊れたときに人間が観測できる症状は何か** |
 | **どのファイルのどこを触るか** | 上の `git diff --name-only` の出力と、変える関数名・フラグ名 |
 | **hook のどの経路に効くか** | 上の表のどの行に当たるか。issue ごとの設定ファイルのどこが変わるか |
 | **止まったまま何もしないと何が起きるか** | **その issue が進まないだけである。**動いている continuo は壊れない |
@@ -244,11 +309,12 @@ git worktree remove "$ROLLBACK"
 
 ### 設計のレビュー
 
-[.claude/rules/design-review.md](.claude/rules/design-review.md) に従うこと。とくに次の3点。
+[.claude/rules/design-review.md](.claude/rules/design-review.md) に従うこと。とくに次の4点。
 
 - **設計が固まったら、実装の前にレビューを通す。**段を飛ばさない
 - **3回ごとに issue と実装を突き合わせ直す。**3・6・9回目で収まらなければ、issue に無い内容の合理的理由を敵対的レビュワーへ説明し、説得できないものを削除する。**そのうえで実装を止め、設計を敵対的レビューしてから実装し直し、次のレビューを回す。**経緯は人間へ報告するが、返事は待たない。設計レビューと実装レビューをそれぞれ別に数え、どちらかが連続10回で収まらなかったら完全に止まる**
 - **設計を書く前に、そもそも対応するかを疑う**
+- **レビュワーには1回で全部挙げさせ、根拠を否定できるなら直さない。**徹底の度合いは [.claude/skills/worker-briefing/SKILL.md](.claude/skills/worker-briefing/SKILL.md) の 2-6、根拠の書き方は 2-7 にある
 
 ### 並列で進める
 
@@ -281,7 +347,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 [.claude/rules/plugins.md](.claude/rules/plugins.md) に従うこと。
 
-**これは開発者の環境向けである**（絶対に守る制約7）。**このリポジトリを clone した人には当てはまらない。**
+**これは開発者の環境向けである**（CLAUDE.md の「不特定多数の環境と、maimuzo の環境を混同しない」）。**このリポジトリを clone した人には当てはまらない。**
 
 ---
 
@@ -297,8 +363,8 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 [.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の4点。
 
-- **issue を作ることと、着手することは別。**作ったらグループ化し、ボードへ載せ、着手順序に並べてから**人間の指示を待つ。**指示が出たら、その issue が `Ready` へ上がったことを確かめてから着手する（`Ice Box` のままだと continuo は拾わない）
-- **ボードの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはボードの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:8547](docs/plans/continuo_design.md#L8547) が認めている）。**ボードへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **issue を作ることと、着手することは別。**作ったらグループ化し、カンバンへ載せ、着手順序に並べてから**人間の指示を待つ。**指示が出たら、その issue が `Ready` へ上がったことを確かめてから着手する（`Ice Box` のままだと continuo は拾わない）
+- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:9072](docs/plans/continuo_design.md#L9072) が認めている）。**カンバンへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **閉じられるものを先に外す。**issue の題名だけで「未修正」と判断せず、現行コードと突き合わせる
 - **同時に進める issue は2か3まで。**これは continuo の設定 `agent.max_concurrent_agents` とは別物である
 
@@ -319,7 +385,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 - **問題の定義から書く。例外は無い。**「何が起きているか / なぜそれが困るか / いま何を決めるのか」の3つを毎回書く
 - **製品そのものの定義は書かない。**読み手は continuo を作っている当人である。**`## 三行まとめ` の3行は、全部この返答の結論に使う**
 - **返答の冒頭に「何が言いたいのか」を置く**
-- **名札は、単独で書かない。**issue と PR の番号 / 設定のキーとコマンドのオプション / 自分が付けた記号 / 自分が付けた略した呼び方 / 起きたことに付けたあだ名 の5つとも、**初出で1行、意味を貼る。2度目以降も貼る**
+- **名札は、単独で書かない。**issue と PR の番号 / 設定のキーとコマンドのオプション / 自分が付けた記号 / 自分が付けた略した呼び方 / 起きたことに付けたあだ名 の5つとも、**初出で1行、意味を貼る。issue と PR の番号は、節が変わるたびに貼り直す**
 - **issue と PR は対で書く。**PR だけを名指ししない
 - **英語の技術用語（worktree / pane / hook / branch / commit）を日本語に直訳しない**
 
@@ -342,7 +408,14 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 3. **レビュー結果と、指摘ごとの対応表を、その PR のコメントに貼る。**
    **コメントの先頭に `<!-- code-review-result -->` を置く**（CI とリリース前の検査がこの目印を数える）。
    **対応表の中身は下の「コードレビュー記録フロー」にある**
-4. **指摘に対応する**（下の「コードレビュー記録フロー」に従う）
+4. **指摘に対応する**（下の「コードレビュー記録フロー」に従う）。
+   **収まるまで 2〜4 を繰り返す。**「収まっている」の定義と、収まったあとに何周回すかは
+   **下の「回数を数える」にある。****Critical と High が0件になったら、そこから先は最大1周である。**
+   **ただし Medium か Low を1件でも直したなら、最後の1回は必ず回す。**「最大1周」は上限であって、
+   **直したのに回さずに段5 へ進んでよい、という意味ではない。**
+   **例外は1つだけ。10回目で収まったときは、その最後の1回を回さない**（連続10回の上限が優先する）。
+   **その場合、Medium と Low は直さず、そのまま follow-up の issue へ切り出す。**
+   **10周回しても Critical か High が残るなら、段5 へ進まずに止まる**（下の「絶対条件：3回ごとに issue と実装を突き合わせ直す。連続10回で完全に止まる」）
 5. **`gh pr ready` で draft を外す**
 
 **3 を飛ばしたものは、レビューを実施していないものとして扱う。**
@@ -355,7 +428,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 | どこ | いつ止まるか |
 | --- | --- |
 | [.claude/hooks/block-merge-without-review.py](.claude/hooks/block-merge-without-review.py) | `gh pr merge <番号>` と `gh pr ready <番号>` を**実行する前** |
-| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`review-result` の検査が赤になる |
+| [.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) | **PR が作られたとき・push したとき・draft を ready にしたとき。**`code-review-result` の検査が赤になる。**あわせて `design-review-result` が、その PR が閉じる issue のコメントに `<!-- design-review-result -->` が貼られているかを数える**（[.claude/rules/design-review.md](.claude/rules/design-review.md) の段4） |
 | [scripts/check-release-ready.sh](scripts/check-release-ready.sh) | **タグを打つ前** |
 
 **3つとも数える条件は同じである。**
@@ -401,7 +474,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 | 何を確かめるか | どう確かめるか |
 | --- | --- |
-| **レビュー結果が貼ってあるか** | **GitHub Actions の `review-result`**（`main` の必須の検査。2026-09-01 に追加） |
+| **レビュー結果が貼ってあるか** | **GitHub Actions の `code-review-result`**（`main` の必須の検査。2026-09-01 に追加） |
 | ビルドとテスト | `build` 6本と `test` 2本（必須の検査） |
 | 衝突が無いか | `gh pr view <番号> --json mergeable,mergeStateStatus` |
 
@@ -431,10 +504,14 @@ PR のコメントへ残してから直す。**掛け直した回数は数える
 | 順 | 何をするか |
 | --- | --- |
 | **1** | **指摘1件ごとに対応表を書く**（列は下）。**書く前に直さない。**表を書く前に、同じ誤りが他に無いかを数える（[.claude/skills/worker-briefing/SKILL.md](.claude/skills/worker-briefing/SKILL.md) の 2-5。**worker だけでなく、自分で直すときも通す**） |
-| **2** | **対応表を、レビュー結果と同じ PR のコメントへ貼る**（先頭の目印は `<!-- code-review-result -->`）。**同じコメントに、短縮名ごとの「数えた件数・叩いた検索パターン・範囲」を1行ずつ添える。**文字列で数えられないものは、その理由を1行。**範囲は `~/` から書く**（公開のコメントに個人の絶対パスを載せない。「絶対に守る制約」の5） |
+| **2** | **対応表を、レビュー結果と同じ PR のコメントへ貼る**（先頭の目印は `<!-- code-review-result -->`）。**同じコメントに、短縮名ごとの「数えた件数・叩いた検索パターン・範囲」を1行ずつ添える。**文字列で数えられないものは、その理由を1行。**範囲は `~/` から書く**（公開のコメントに個人の絶対パスを載せない。「公開してよい情報かを常に判断する」） |
 | **3** | **表のとおりに直す。**表に無いものを直さない。**段1で数えた件数の全部を直す**（1箇所だけ直さない） |
 | **4** | **同じ表をそのまま人間へ報告する。**返事は待たずに次を回す |
 | **5** | **設計そのものが変わったときだけ、プランファイルへ書く** |
+
+**レビュワーへの頼み方と、指摘に従うかどうかの決め方は
+[.claude/rules/design-review.md](.claude/rules/design-review.md) にある。**
+**1回で全部挙げさせること、根拠を否定できるなら直さないことの2つは、実装レビューにも効く。**
 
 ### 対応表の列
 
@@ -444,10 +521,16 @@ PR のコメントへ残してから直す。**掛け直した回数は数える
 | **レベル** | Critical / High / Medium / Low / Info |
 | **指摘内容** | 1〜2行 |
 | **直す / 直さない** | どちらか。**保留は置かない** |
-| **合理的理由** | **なぜ直すか / なぜ直さなくてよいか。**「レビュワーが言ったから」は理由ではない |
+| **合理的理由** | **なぜ直すか / なぜ直さなくてよいか。**「レビュワーが言ったから」は理由ではない。**直さないときは、レビュワーの根拠のどこをどう否定したかを書く** |
+| **分類** | **その指摘が「前の周に既に在ったもの」か「前の周の直しが持ち込んだもの」か**（[.claude/skills/worker-briefing/SKILL.md](.claude/skills/worker-briefing/SKILL.md) の 2-6。1周目は空欄でよい）。**「直しが持ち込んだ」と書くなら、前の周の commit でその行が違っていたことを示すこと。示せないものは「前の周に既に在った」として扱う** |
 
 **Critical と High は直す。**それ以下は、簡単に直るなら直し、設計に触るなら
 follow-up の issue へ切り出す。**切り出した issue を「直さない」の理由欄に書く。**
+
+**唯一の例外は、レビュワーが書いた合理的根拠を否定できたときである**
+（[.claude/rules/design-review.md](.claude/rules/design-review.md) の「絶対条件：合理的根拠を否定できるなら、直さない」）。
+**何をどう否定したかを「合理的理由」の欄へ書く。**
+**「この pull request の範囲外である」は否定ではない。**Critical と High では使えない。
 
 ### なぜ PR のコメントへ残すか
 
@@ -462,16 +545,79 @@ follow-up の issue へ切り出す。**切り出した issue を「直さない
 **掛け直した回数を数え、対応表と同じコメントに「何周目か」を書く。**
 **3回ごとに、issue と実装を突き合わせ直す。**
 
-| 回 | どうするか |
+#### 「収まっている」とは何か
+
+**Critical と High が0件であることをいう。**
+**Medium と Low が何件あっても、収まっている。**
+
+**定義の正はここである。**他の文書は、この節を指すこと。**要点を1行で添えるのはよいが、定義そのものを書き換えてはならない。**正を直したら、要点を添えている側も同じ turn で数え直す。
+
+#### 収まったあと、何周回すか
+
+**Critical と High が0件になったら、そこから先は最大1周である。**
+
+| 状態 | 次に何をするか |
+| --- | --- |
+| **Critical か High が1件以上** | **直して次の周を回す。**そのとき下の「収まらないまま回すときの数え方」も効く（3・6・9回目で6段を通し、連続10回で止まる） |
+| **収まった。Medium と Low を直さないと決めた** | **そこで終わり。**`gh pr ready` へ進んでよい。**その指摘は follow-up の issue へ切り出し、対応表の「直さない」の理由欄に切り出した issue を書く** |
+| **収まった。Medium か Low を直した** | **最後に1回だけ回す** |
+| **その最後の周でも収まっている** | **Medium と Low の指摘があっても、もう直さない。**そこで終わり。**その指摘は follow-up の issue へ切り出し、対応表の「直さない」の理由欄に切り出した issue を書く** |
+| **その最後の周で Critical か High が出た** | **直して、また回す。**この表の1行目へ戻る。**そのとき、下の「収まらないまま回すときの数え方」も同時に効く**（3・6・9回目で6段を通し、連続10回で止まる） |
+
+**Medium と Low を直すかどうかの判断は、上の「Critical と High は直す」に従う。**
+**ただし最後の1周で出た Medium と Low には当てない。**そこでは直さず、follow-up の issue へ切り出す
+（直すと「最後の1回」が発火して、この節が消そうとした周回が復活する）。
+
+**2026-09-05 のユーザー指摘。**
+
+> **criticalとhighが潰れているのに、mediumとlowの修正のたびに再レビューするのは、時間とコストの無駄なのでやめてほしい。**
+>
+> - **criticalとhighが0になったら、mediumとlowを修正するか判断し、修正した場合は最後に一度だけレビューする。**
+> - **その最後のレビューでcriticalとhighが0の場合は、mediumとlowの指摘があってももう修正しない。
+>   そのレビューでcriticalまたはhighが0以上なら修正して再レビューする**
+
+**実例（人間が示したもの）。**2周目で Critical も High も0件になったのに、
+**そこから4周ぶん、Medium と Low のためだけに回していた。**
+
+```
+何周目      Critical  High  Medium  Low
+1周目       0         1     1       5
+2周目       0         0     4       2   ← ここで収まっている
+3周目       0         0     1       2
+4周目       0         0     1       3
+5周目       0         0     1       4
+6周目       0         0     1       3
+```
+
+**回す回数を増やすほど、直しが新しい欠陥を持ち込む機会も増える。**
+別の pull request では、**8周目の Critical が7周目の直しから生まれた。**
+
+#### 収まらないまま回すときの数え方
+
+**どの回のあとでも、まず収まっているかを見る。**収まっていれば上の表へ移る。
+**下の表は、収まっていないときだけ読む。**
+
+| 回 | 収まっていないときに、どうするか |
 | --- | --- |
 | 1回目のあと | **直して2回目を回す。**人間に訊かない |
 | 2回目のあと | **直して3回目を回す。**人間に訊かない |
-| **3回目のあと** | **収まっていれば進む。収まっていなければ、下の6段を通す** |
+| **3回目のあと** | **下の6段を通す**（収まっていれば、そもそもこの表を読まない） |
 | 4・5回目のあと | **直して次を回す。**何もしない |
 | **6回目のあと** | **3回目と同じ。下の6段を通す** |
 | 7・8回目のあと | **直して次を回す。**何もしない |
 | **9回目のあと** | **3回目と同じ。下の6段を通す** |
-| **10回目のあと** | **収まっていれば進む。収まっていなければ止まる。**下の絶対条件を見よ |
+| **10回目のあと** | **止まる。**下の絶対条件を見よ |
+
+**収まったあとの「最後の1回」も、この10回に数える。**
+**10回目で収まったなら、そこで終わる**（初めてかどうかを問わない）**。**Medium と Low を直して11回目を回してはならない。
+****そのとき、Medium と Low は直さない。**そのまま follow-up の issue へ切り出す。**回さずに終えるので、
+**直しが新しい欠陥を持ち込んでいないかを、この pull request では確かめられないためである。**
+**10回目で収まらなかったときも、11回目を回してはならない。**そこで完全に止まり、人間の返事を待つ
+（下の「絶対条件：3回ごとに issue と実装を突き合わせ直す。連続10回で完全に止まる」）。
+**上の表の「直して、また回す」も「最後に1回だけ回す」も、この10回の上限より下である。**10回を超えて回してはならない。
+
+**収まったまま終わるなら、3・6・9回目の6段は通らない。**
+**6段は「収まっていないとき」の手順なので、それでよい。**
 
 **3・6・9回目のあとにやること。**
 
@@ -533,10 +679,12 @@ follow-up の issue へ切り出す。**切り出した issue を「直さない
 **4段のあとに回し直す実装レビューは、実装レビューの側に数える。**
 **6段の段6で回す設計の敵対的レビューは、設計レビューの側に数える。**
 
-| 何回目 | どうするか |
+**この表も、収まっていないときだけ読む。**収まったら「収まったあと、何周回すか」の表へ移る。
+
+| 何回目 | 収まっていないときに、どうするか |
 | --- | --- |
 | 1・2・4・5・7・8回目のあと | **直して次を回す。**何もしない |
-| **3・6・9回目のあと** | **収まっていれば進む。****収まっていなければ、上の6段を通す。**判定は敵対的レビュワーが行い、人間へは経緯を報告する |
+| **3・6・9回目のあと** | **上の6段を通す**（収まっていれば、そもそもこの表を読まない）。判定は敵対的レビュワーが行い、人間へは経緯を報告する |
 | **連続10回目で収まらなかったら** | **止まる。人間に方針を確認する。**そこから先は、人間が決めるまで1回も回さない |
 
 **人間へ見せるもの。**

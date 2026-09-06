@@ -59,7 +59,7 @@ sh scripts/test-live.sh        # 数秒。herdr が無ければ静かに skip �
 | pull request を出す前 | `scripts/test-like-ci.sh` は herdr を隠すので、これは走りません |
 
 **叩くのは herdr だけです。**Claude Code は起動しません（枠を消費するため）。
-GitHub の GraphQL も `gh` も叩きません（認証と本番のボードが要るため）。
+GitHub の GraphQL も `gh` も叩きません（認証と本番のカンバンが要るため）。
 
 **herdr が居なければ静かに skip します。**PATH に `herdr` が無い・socket が無い・
 socket へ繋がらないのいずれかで飛びます。CI では必ず飛びます（runner に herdr は居ません）。
@@ -133,14 +133,37 @@ sh scripts/test-like-ci.sh
 ## PR にはレビュー結果を貼る
 
 **レビュー結果が貼られていない PR は、CI が落とします。**
-[.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) の `review-result` がそれです。
+[.github/workflows/review-gate.yml](.github/workflows/review-gate.yml) が、**設計と実装で別々に数えます。**
 
-**数える条件は2つです。**
+| 検査の名前 | 何のレビューか | どこに貼るか | 目印（1行目） |
+| --- | --- | --- | --- |
+| **`design-review-result`** | **設計** | **その PR が閉じる issue のコメント** | `<!-- design-review-result -->` |
+| **`code-review-result`** | **実装** | **その PR のコメント** | `<!-- code-review-result -->` |
+
+**分けているのは、どちらが欠けているかを検査の名前で分かるようにするためです。**
+
+**数える条件は、どちらも同じ2つです。**
 
 | 条件 | なぜ |
 | --- | --- |
-| 目印 `<!-- code-review-result -->` が**コメントの本文の先頭**にある | 途中に書いたものまで数えると、**「レビューの話をしただけ」で通ってしまいます** |
+| 目印が**コメントの本文の先頭**にある | 途中に書いたものまで数えると、**「レビューの話をしただけ」で通ってしまいます** |
 | 投稿者が `OWNER` / `MEMBER` / `COLLABORATOR` のいずれか | **誰でもコメントできます。**外部の人が目印を貼れば通る状態にしません |
+
+**設計のレビューが要らない変更のとき**（文書だけの変更、他に影響しない1行の修正）**は、
+その PR のコメントに断りを貼ってください。**
+
+```
+<!-- design-review-skipped -->
+文書だけの変更のため
+```
+
+**2行目の理由を落とさないでください。**目印だけでは通りません。
+**PR の本文ではなくコメントに貼ってください。**本文はその PR を出した本人が書くので、
+**エージェントが自分で断りを書けてしまいます。**
+
+**この2つの目印は、利用者へ配る雛形にも同じ形で入っています**
+（[internal/scaffold/ci_template.go](internal/scaffold/ci_template.go) の `continuo-ci.yaml`）。
+**判定の条件を直すときは、両方を同時に直してください。**
 
 **通し方。**
 
@@ -162,6 +185,12 @@ sh scripts/test-like-ci.sh
 **赤いだけではマージを止められません。**branch protection の必須の検査へ入れて、はじめて止まります。
 **リポジトリの管理権限が要ります。**
 
+> **実装のレビューの job は `review-result` から `code-review-result` へ改名しました。**
+> **既に `review-result` を登録している場合は、下の手順で入れ替えてください。**
+> **入れ替えるまで、GitHub は「必須の検査がまだ報告されていない」と見てマージを塞ぎます。**
+> **危険側ではなく安全側に倒れますが、入れ替えるまで1本もマージできません。**
+> **古い名前は下の二が落とします。**足すだけでは、宙に浮いた `review-result` が残ります。
+
 ```bash
 OWNER=<owner>   # 自分のアカウント名に書き換える
 BR=repos/$OWNER/continuo/branches/main/protection/required_status_checks
@@ -169,22 +198,30 @@ BR=repos/$OWNER/continuo/branches/main/protection/required_status_checks
 # 一、いまの必須の検査を読む
 gh api "$BR" --jq '.checks[].context'
 
-# 二、review-result を足した JSON を作る（いまの設定はそのまま持ち越す）
+# 二、2つの検査を足し、改名前の review-result を落とした JSON を作る
+#     （いまの設定はそのまま持ち越す）
 gh api "$BR" --jq '{
   strict: .strict,
-  checks: ((.checks | map({context, app_id}))
-           + [{context: "review-result", app_id: (.checks[0].app_id)}]
+  checks: ((.checks | map({context, app_id}) | map(select(.context != "review-result")))
+           + [{context: "code-review-result", app_id: (.checks[0].app_id)},
+              {context: "design-review-result", app_id: (.checks[0].app_id)}]
            | unique_by(.context))
 }' > "${TMPDIR:-/tmp}/required-status-checks.json"
 
-# 三、入れ替える
+# 三、当てる前に読む。**古い名前が消え、新しい2つが入っていること**
+cat "${TMPDIR:-/tmp}/required-status-checks.json"
+
+# 四、入れ替える
 gh api --method PATCH "$BR" --input "${TMPDIR:-/tmp}/required-status-checks.json"
 
-# 四、入ったかを確かめる
+# 五、入ったかを確かめる
 gh api "$BR" --jq '.checks[].context'
 ```
 
-**四で `review-result` を含む7つが並べば入っています。**足す前は次の6つです。
+**五で `code-review-result` と `design-review-result` を含む8つが並べば入っています。**
+**`review-result` が並んでいたら、二の `select` が効いていません。**
+
+**入れ替える前は、次の7つです**（2026-09-05 に実測）。**7つ目が改名前の名前です。**
 
 ```text
 test (ubuntu-latest)
@@ -193,13 +230,14 @@ build (darwin, arm64)
 build (darwin, amd64)
 build (linux, amd64)
 build (linux, arm64)
+review-result
 ```
 
 | 気をつけること | なぜ |
 | --- | --- |
 | **`checks` は全件置き換えである** | 一部だけ渡すと、**渡さなかった検査が必須から外れます。**二のように、いまの分を読んでから足すこと |
 | **`app_id` を落とさない** | `null` にすると、**どのアプリが報告した検査でも合格として扱われます** |
-| **job の名前を変えない** | 必須の検査は `review-result` という名前で登録されます。名前を変えると設定が宙に浮き、**検査が無いのにマージできる状態になります** |
+| **job の名前を変えない** | 必須の検査は `code-review-result` と `design-review-result` という名前で登録されます。名前を変えると設定が宙に浮き、**検査が無いのにマージできる状態になります** |
 
 ## 設計を読む
 
@@ -234,7 +272,7 @@ curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/
 | --- | --- |
 | ログ | 常駐して動かしているあいだの出力 |
 | [internal/config/validate.go](internal/config/validate.go) の要件の文（`0より大きい整数にすること` など） | `continuo doctor` の `config` の行。設定に不正な値を書いたとき |
-| [internal/tracker](internal/tracker) のエラーの本文 | `continuo doctor` の `board` の行。ボードを読めなかったとき |
+| [internal/tracker](internal/tracker) のエラーの本文 | `continuo doctor` の「カンバン」の行。カンバンを読めなかったとき |
 
 **番兵エラー**（`errors.New` で package の変数として持つエラー）**を資源へ移すときは
 `i18n.Sentinel` を使ってください。**`errors.New` に文言を直接書くと、

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -978,6 +978,10 @@ func TestTurn_SubagentStartを取りこぼしてもbackground_tasksが走行中�
 	// **これは想定して起こしている失敗である。**猶予のあいだ待っても終わらない
 	// subagent を、走行中のまま止める場面をわざと作っている。
 	fx.AllowLog("猶予のあいだにサブエージェントが終わらなかったので")
+	// **run を終える前の判定も、同じものを見つける**（設計 3-81）。
+	// `blocked` で終わる turn には「`background_tasks` が空の `Stop`」が来ないので、
+	// **申告は走行中のまま残る。**道連れにしたことを WARN に残すのが正しい振る舞いである。
+	fx.AllowLog("バックグラウンド処理が残ったまま pane を閉じます")
 	fx.Tracker.AddIssue(sampleIssue(192, "Ready"))
 
 	transcriptDir := t.TempDir()
