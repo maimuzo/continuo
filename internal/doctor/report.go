@@ -91,6 +91,27 @@ const (
 	// **リリースノートを読まないかぎり、存在に気づく手段が1つも無い。**
 	// **ここが、増えた項目を人間に見せる唯一の場所である。**
 	LabelMissingKeys = i18n.KeyDoctorLabelMissingKeys
+	// LabelAutomations は、カンバンの自動化が有効なのに書き戻しの対応表が空でないかの
+	// 検査である（設計 3-32 / 3-54。issue #209）。
+	//
+	// **`✗` にしない。**対応表が空でも continuo は起動し、走る。
+	// **`✗` にすると、自動化を有効にしたまま動かしている人の continuo が、
+	// 版を上げた瞬間に起動しなくなる。**
+	//
+	// **黙って通してもいけない。**自動化が Status を書いた瞬間に走行中の run が止まるのに、
+	// **利用者がそれを知るのは1件止まったあとである。**しかも設定は落ちる
+	// （`WORKFLOW.md` を作り直すと消える）。**ここが、起動する前に見せる唯一の場所である。**
+	LabelAutomations = i18n.KeyDoctorLabelAutomations
+	// LabelAgentTeams は、Claude Code の agent teams が有効にならないかの検査である
+	// （設計 3-70。issue #137）。
+	//
+	// **`✗` にしない。**agent teams を自分の対話用に有効にしている人が版を上げただけで、
+	// continuo が起動しなくなる、ということを起こさない。
+	//
+	// **黙って通してもいけない。**有効なままだと issue が `failure_state` へ落ちるのに、
+	// **いまは文書に「有効だと正しく動きません」と書いてあるだけである。**
+	// **読まなかった人は、落ちてから初めて気づく。**
+	LabelAgentTeams = i18n.KeyDoctorLabelAgentTeams
 	// LabelPromptVariables は、送るプロンプトが決められた変数だけを使っているかの検査である
 	// （設計 5-3c）。
 	//

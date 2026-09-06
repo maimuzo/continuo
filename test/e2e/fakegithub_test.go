@@ -100,6 +100,14 @@ func respond(b *ghBoard, query string, vars map[string]any) (string, map[string]
 			return "bootstrap", nil, fieldNotFoundErrors(name)
 		}
 		return "bootstrap", bootstrapPayload(b), nil
+	case strings.Contains(query, "workflows(first:"):
+		// **カンバンの自動化は1件も無いことにする**（`continuo doctor` の見出し語 `自動化`）。
+		// **`workflows` ごと落とすと「読めなかった」になり、`!` が出る。**
+		return "workflows", map[string]any{
+			"repositoryOwner": map[string]any{
+				"projectV2": map[string]any{"workflows": map[string]any{"nodes": []any{}}},
+			},
+		}, nil
 	case strings.Contains(query, "nodes(ids: $ids)"):
 		return "by_ids", itemsByIDs(b, vars), nil
 	case strings.Contains(query, "items(first: 100"):

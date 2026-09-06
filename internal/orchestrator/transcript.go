@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 )
@@ -249,6 +251,126 @@ func openRegularFile(path string) (*os.File, error) {
 	return f, nil
 }
 
+// mayResumeSession は、そのセッション UUID へ `--resume` を投げてよいかを返す（設計 3-3c）。
+//
+// **「記録がある」ではない。**記録があるかを決められなかったときも真を返すので、
+// **名前で名乗れるのは「復帰を試してよい」までである。**
+//
+// **記録の無い UUID へ `--resume` を投げると、`herdr.startup_timeout_ms` をまるごと捨てる。**
+// `claude --resume <無い UUID>` は `No conversation found with session ID:` を出して落ち、
+// herdr 経由では `agent.start` が timeout を返すので、`confirmStartupWithRestart` が
+// 期限まで `agent.start` をやり直し続ける。**着手が段6 より先で落ちると、身元ファイルには
+// 会話が1度も作られていない UUID が残る**ので、そのまま復帰しにいく道がある
+// （段6 で UUID を書いたあと、段7・段8・段9 のどこで落ちても同じ状態になる）。
+//
+// **置き場所のディレクトリ名は当てない。**Claude Code が cwd を1つのディレクトリ名へ畳むときの
+// 綴り直しの規則は確かめきれていない（[internal/redact/redact.go](../redact/redact.go) の
+// `homeDashChars` が「`_` が置き換わることは確かめられていない」と書いている）。
+// **セッション UUID は一意なので、根の直下を1階層だけ広げれば足りる。**
+//
+// **そのぶん、残る穴が1つある。**`claude --resume` は cwd のプロジェクトのディレクトリで
+// 会話を解決するので、**worktree を別のパスへ作り直すと、古いパスの記録に当たって
+// `--resume` を渡してしまう。**そこでは元と同じ空回りが起きる（設計 3-3c）。
+//
+// **エントリの種別で絞り込まない。**`os.ReadDir` が返す種別は lstat なので、
+// **根の下に symlink で置かれたディレクトリを丸ごと飛ばすことになる。**
+// 中のファイルを見に行けば、通っていれば当たり、通っていなければ `os.Stat` が失敗する。
+//
+// **同じファイルの `SubagentTranscriptsFor` などとは、わざと逆の規則にしている。**
+// あちらは `os.Lstat` で「シンボリックリンクは通常のファイルとして数えない」。
+// **こちらは辿った先を見る**（理由はすぐ下）。**戻すと、symlink で置かれた記録を
+// 「無い」と答えるようになる。**
+//
+// **ファイルの側は `os.Stat` で見る。**symlink を辿った先が通常のファイルであれば数える。
+// **symlink そのものを弾かない**のは、置き場所を別のディスクへ移して symlink を残した利用者の
+// 会話を、こちらだけが「無い」と答えることになるためである。
+// **`filepath.EvalSymlinks` は使わない。**あれはパスの構成要素ごとに `lstat` を叩くうえ、
+// **「まだ無い」がほとんどのこの経路では、その全部が無駄になる。**`os.Stat` 1回で同じ答えが出る
+// （symlink を辿る・切れた symlink では失敗する・通常のファイルでなければ弾く）。
+//
+// **大きさは見ない。**「1バイトも書かれていない記録へ `--resume` を投げるとどうなるか」を
+// 測っていないためである。**測っていないものは「判定できない」側であり、
+// 判定できないときは復帰を試す**（設計 3-3c）。
+//
+// **根の内側かどうかも見ない。**この関数は**そのパスを1バイトも読まないし、返しもしない。**
+// 返るのは真偽値だけである。同じファイルの `SubagentTranscriptsFor` などが根の検査を持つのは、
+// **そこで得たパスを読み手へ渡すからである。**
+//
+// sessionUUID: 復帰しようとしているセッションの UUID。
+// 戻り値: 記録があるか、または**探した結果として**判定できなければ true。
+// **UUID がパスの部品として使えない形のときだけは false である**（探しにいかない）。
+// **そこを true にしてはならない。**`..` を含む値で「記録がある」と答えることになり、
+// この関数が塞いでいる穴がそのまま開く。
+func (o *Orchestrator) mayResumeSession(sessionUUID string) bool {
+	// **身元ファイルは worktree の中にあり、エージェントが書き換えられる**（設計 3-2 / 3-23）。
+	// **`agent_id` と同じ規則で足りる**（英数字と `-` と `_` だけ。セッション UUID はこの形に収まる）。
+	// `/` も `\` も `.` も通さないので、`..` で根の外へ出る組み立て方が成立しない。
+	//
+	// **この検査を外すと、この issue が消したはずの症状が戻る。**エージェントが自分の worktree に
+	// 中身のある `x.jsonl` を作り、`session_uuid` を `../../<そこへの相対パス>/x` にすると、
+	// **`filepath.Join` が `..` を畳んでその実体に当たり、「記録がある」と答える。**
+	//
+	// **空文字もここで落ちる。**
+	if !safeAgentID(sessionUUID) {
+		return false
+	}
+	if o.transcriptRoot == "" {
+		return true
+	}
+	entries, err := os.ReadDir(o.transcriptRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// **根が無いなら、その下に記録は在りえない。**下の `ENOTDIR` と同じ理屈である。
+			//
+			// **ここを「決められない」に倒してはならない。**Claude Code を1度も起動していない
+			// 機械では `~/.claude/projects` がまだ無く、**再着手のたびに `--resume` を投げて
+			// `herdr.startup_timeout_ms` を捨てることになる。**
+			return false
+		}
+		// **黙って倒れない。**権限や IO で読めないのは、下の「1件が読めない」の
+		// いちばん重い形である（全部が見えない）。**倒れたことが分からないと、
+		// この検査が丸ごと無効になっているのに誰も気づけない。**
+		o.logger.Warn("記録の置き場所を読めないので、記録があるかを決められません",
+			"記録の置き場所", o.transcriptRoot, "error", err)
+		return true
+	}
+	name := sessionUUID + transcriptExt
+	// **見られなかったエントリを数える。**1件でもあれば「決められなかった」に倒すが、
+	// **黙って倒してはならない。**倒れたことが分からないと、
+	// **この検査が丸ごと無効になっているのに誰も気づけない。**
+	unreadable := 0
+	for _, e := range entries {
+		info, statErr := os.Stat(filepath.Join(o.transcriptRoot, e.Name(), name))
+		if statErr != nil {
+			// **「無い」と「見られない」を分ける。**権限や IO の失敗を「無い」と数えると、
+			// **読めなかっただけの記録を捨てて、会話履歴を失う。**設計 3-3c は
+			// 「判定できないときは復帰を試す」と決めている。
+			//
+			// **`ENOTDIR` は「無い」の側である。**根の直下にはディレクトリでないものも並ぶ
+			// （実測: 機械全体の一時ディレクトリで522件中24件）。**その下に記録は在りえない。**
+			// **「見られない」に数えると、そういうファイルが1つでもあるだけで
+			// この検査が丸ごと無効になる。**
+			if !errors.Is(statErr, os.ErrNotExist) && !errors.Is(statErr, syscall.ENOTDIR) {
+				unreadable++
+			}
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		return true
+	}
+	if unreadable > 0 {
+		// **「無い」と言い切れない。**設計 3-3c の「判定できないときは復帰を試す」へ倒す。
+		// **ここでは切らない。**`safeAgentID` が `maxAgentIDBytes` を超える値を既に弾いている。
+		o.logger.Warn("記録の置き場所に読めないものがあるので、記録があるかを決められません",
+			"session_uuid", sessionUUID,
+			"記録の置き場所", o.transcriptRoot, "読めなかった件数", unreadable)
+		return true
+	}
+	return false
+}
+
 // subagentDirName は subagent の記録を置くディレクトリの名前である。
 //
 // **Claude Code は親の記録の隣に掘る。**`<親の記録から `.jsonl` を落としたパス>/subagents/`
@@ -261,16 +383,22 @@ const subagentDirName = "subagents"
 // subagentTranscriptGlob は subagent の記録のファイル名の型である。
 //
 // **名前を決め打ちしない。**Glob で拾えば、ファイル名の付け方が変わっても壊れない。
-const subagentTranscriptGlob = subagentTranscriptPrefix + "*" + subagentTranscriptExt
+const subagentTranscriptGlob = subagentTranscriptPrefix + "*" + transcriptExt
 
-// subagentTranscriptPrefix / subagentTranscriptExt は subagent の記録のファイル名の前後である。
+// subagentTranscriptPrefix は subagent の記録のファイル名の前置きである。
 //
 // **`agent_id` を挟むと `agent_transcript_path` になる**（実測記録1件で確認。
 // `SubagentTranscriptsFor` の説明を見ること）。
-const (
-	subagentTranscriptPrefix = "agent-"
-	subagentTranscriptExt    = ".jsonl"
-)
+const subagentTranscriptPrefix = "agent-"
+
+// transcriptExt は記録のファイル名の拡張子である。**セッションの記録も subagent の記録も同じである。**
+//
+//	<記録の根>/<cwd を綴り直したもの>/<セッション UUID>.jsonl
+//	<記録の根>/<cwd を綴り直したもの>/<セッション UUID>/subagents/agent-<agent_id>.jsonl
+//
+// **根拠は、すぐ上の `subagentDirName` に引いてある実測の記録である**
+// （`transcript_path` と `agent_transcript_path` が、どちらも `.jsonl` で終わっている）。
+const transcriptExt = ".jsonl"
 
 // subagentMaxCandidates は Glob の結果を見る件数の上限である。
 //
@@ -289,10 +417,10 @@ const subagentMaxCandidates = 1000
 // 戻り値の1つ目: 解決した置き場所の絶対パス。
 // 戻り値の2つ目: 使ってよければ true。
 func subagentDirOf(parentPath, root string) (string, bool) {
-	if !strings.HasSuffix(parentPath, ".jsonl") {
+	if !strings.HasSuffix(parentPath, transcriptExt) {
 		return "", false
 	}
-	dir := filepath.Clean(filepath.Join(strings.TrimSuffix(parentPath, ".jsonl"), subagentDirName))
+	dir := filepath.Clean(filepath.Join(strings.TrimSuffix(parentPath, transcriptExt), subagentDirName))
 	// **実在するなら解決してから比べる。**実在しなければ字句のままにしておく。
 	if resolved, ok := resolvePath(dir); ok {
 		dir = resolved
@@ -311,6 +439,10 @@ func subagentDirOf(parentPath, root string) (string, bool) {
 }
 
 // safeAgentID は `agent_id` をパスの部品として使ってよいかを判定する。
+//
+// **セッション UUID にも使う**（`mayResumeSession`）。どちらも外部が書き換えられる値を
+// ファイル名の部品にするので、通してよい文字は同じでよい。**UUID は英数字と `-` だけなので
+// この規則に収まる。**
 //
 // **`agent_id` は hook から来る外部入力である**（設計 3-2 / 3-23）。
 // **英数字とハイフンとアンダースコアだけを通す。**`/` も `\` も `.` も通さないので、
@@ -337,6 +469,45 @@ func safeAgentID(id string) bool {
 	}
 	return true
 }
+
+// truncateForLog は、外部が書ける値をログへ出す前に切る。
+//
+// **身元ファイルの `session_uuid` には長さの上限が無い**（読み込みはファイル全体の大きさしか
+// 見ていない）。**そこはエージェントが書ける**ので（設計 3-2 / 3-23）、
+// **そのままログへ出すと、1回の dispatch でログが何メガバイトにも膨らむ。**
+//
+// **切ったことが分かる形にする。**切った跡が無いと、読む人は「これが全部だ」と受け取る。
+//
+// s: ログへ出す値。
+// 戻り値: 切っていなければそのまま。**切ったときは `maxLoggedValueBytes` までの部分に
+// `…（切り詰め）` を付けたもの**（その分だけ長くなる）。
+func truncateForLog(s string) string {
+	if len(s) <= maxLoggedValueBytes {
+		return s
+	}
+	// **文字の途中で切らない。**切ると壊れた UTF-8 がログへ入り、
+	// **JSON で書き出す経路や、集約する側がその行ごと弾くことがある。**
+	cut := maxLoggedValueBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	if cut == 0 {
+		// **文字の境界が1つも無い。**先頭から続きのバイトだけが並んでいる場合である。
+		// **そのまま捨てると、何が書かれていたかの証拠が1バイトも残らない。**
+		// 16進で出す（この経路へ来る値は、そもそも正規の UUID ではない）。
+		// **`fmt.Sprintf` に日本語を渡さない。**画面に出す文言を探す検査が、
+		// その形を「資源へ移していない文言」として数える（`TestDesign_画面に出す文言を日本語で直に書いていない`）。
+		return hex.EncodeToString([]byte(s[:maxLoggedValueBytes])) + "…（切り詰め・16進）"
+	}
+	return s[:cut] + "…（切り詰め）"
+}
+
+// maxLoggedValueBytes は、外部が書ける値をログへ出すときの長さの上限（バイト）である。
+//
+// **`maxAgentIDBytes` とは別に持つ。**あちらはパスの部品として使ってよい長さで、
+// **縮めるとログの側まで一緒に縮む。**セッション UUID は36文字なので、
+// **この上限で切れてはならない。**
+const maxLoggedValueBytes = 128
 
 // maxAgentIDBytes は `agent_id` をパスの部品に使うときの長さの上限（バイト）である。
 //
@@ -383,7 +554,7 @@ func SubagentTranscriptsFor(parentPath, root string, agentIDs []string, limit in
 		if !safeAgentID(id) {
 			continue
 		}
-		path := filepath.Join(dir, subagentTranscriptPrefix+id+subagentTranscriptExt)
+		path := filepath.Join(dir, subagentTranscriptPrefix+id+transcriptExt)
 		// **組み立てたパスも、置き場所の検査を通す**（`acceptTranscriptPath` と同じ順。
 		// まず解決し、次に実在と種別を見て、そのあと内側かを比べる）。
 		// **`safeAgentID` が既に区切り文字を弾いているので、ここは二重の備えである。**

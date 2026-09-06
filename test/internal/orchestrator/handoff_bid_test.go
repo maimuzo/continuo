@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "fe753abb326479a54b57fdfb144ce72406238b073244ff713b29db67ad24490d", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
+// {"RUCM-CFG-SHA256": "27d2025ea571506f5f43b3df70cb19ce8908dba17ea80f0636238815c5b9f3ec", "SOURCE": "docs/spec/usecases/particular_case/issue の担当を入札で決める.cfg.json"}
 //
 // **同じボードを複数の機械で見張るときの、担当の決め方の検査である**（設計 3-77 / 3-77b / 3-77c）。
 //
@@ -16,9 +16,6 @@ import (
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
-
-// rivalHost は入札を競う別の機械の名前である（架空の名前）。
-const rivalHost = "thinkpad"
 
 // rivalLogin は別の機械が使っている gh の持ち主である（架空の名前）。
 const rivalLogin = "octocat-bot-b"
@@ -95,8 +92,12 @@ func TestHandoff_勝ったら担当者になり入札とholdを1件ずつ書く(
 	if len(bids) != 1 {
 		t.Fatalf("入札のコメントが1件ではない: %d 件", len(bids))
 	}
-	if !strings.Contains(bids[0].Body, `"host":"`+testHostName+`"`) {
-		t.Errorf("入札に機械の名前が入っていない:\n%s", bids[0].Body)
+	// **入札の JSON に自分で名乗る欄は無い**（設計 3-77-0）。書いたのは誰かは投稿者が答える。
+	if strings.Contains(bids[0].Body, `"host"`) {
+		t.Errorf("入札の JSON に機械の名前の欄が残っている:\n%s", bids[0].Body)
+	}
+	if bids[0].Author != testGHLogin {
+		t.Errorf("入札の投稿者が gh の持ち主になっていない: got %q, want %q", bids[0].Author, testGHLogin)
 	}
 
 	holds := fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffHoldMarker)
@@ -164,7 +165,7 @@ func TestHandoff_入札に負けたら担当者にならない(t *testing.T) {
 	// **この機械の判定スコアは 270 である**（枠を読まない設定なので余裕値は 100 − マージン 10）。
 	// それより大きい入札を、ほかの機械が先に書いてある状態にする。
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatBid(handoff.Bid{
-		Host: rivalHost, FiveHour: 100, Weekly: 100, Score: 300, At: time.Now(),
+		FiveHour: 100, Weekly: 100, Score: 300, At: time.Now(),
 	}, testBidWindow), time.Now().Add(-time.Minute))
 
 	fx.Orc.Tick(context.Background())
@@ -195,7 +196,7 @@ func TestHandoff_期限内の他人の担当には入札もしない(t *testing.
 
 	node := issueNode(188)
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
-		Host: rivalHost, Assignee: rivalLogin, Branch: "continuo/octocat/hello-world/188", At: time.Now(),
+		Assignee: rivalLogin, Branch: "continuo/octocat/hello-world/188", At: time.Now(),
 	}), time.Now().Add(-time.Hour))
 
 	fx.Orc.Tick(context.Background())
@@ -312,7 +313,7 @@ func TestHandoff_担当者が2人以上なら触らない(t *testing.T) {
 // 目的: 「担当者の最後のコメントから idle_timeout_ms を過ぎたら、担当を外して入札をやり直す」。
 // 与える情報: ほかの機械が担当していて、その機械の最後のコメントが19時間前にある issue。
 // 成功条件: 担当者からその機械が外れ、released のコメントが1件増え、
-// **その本文に外した機械の名前が入っていて、引き継ぐ機械の名前は入っていない**こと。
+// **その本文に外したアカウントの名前が入っていて、引き継ぐアカウントの名前は入っていない**こと。
 func TestHandoff_期限切れの担当を外してreleasedを書く(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
@@ -321,7 +322,7 @@ func TestHandoff_期限切れの担当を外してreleasedを書く(t *testing.T
 	node := issueNode(188)
 	old := time.Now().Add(-19 * time.Hour)
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
-		Host: rivalHost, Assignee: rivalLogin, Branch: "continuo/octocat/hello-world/188", At: old,
+		Assignee: rivalLogin, Branch: "continuo/octocat/hello-world/188", At: old,
 	}), old)
 
 	fx.Orc.Tick(context.Background())
@@ -330,11 +331,11 @@ func TestHandoff_期限切れの担当を外してreleasedを書く(t *testing.T
 	if len(released) != 1 {
 		t.Fatalf("released のコメントが1件ではない: %d 件", len(released))
 	}
-	if !strings.Contains(released[0].Body, `"from":"`+rivalHost+`"`) {
-		t.Errorf("released に外した機械の名前が入っていない:\n%s", released[0].Body)
+	if !strings.Contains(released[0].Body, `"from":"`+rivalLogin+`"`) {
+		t.Errorf("released に外したアカウントの名前が入っていない:\n%s", released[0].Body)
 	}
 	if strings.Contains(released[0].Body, `"to":`) {
-		t.Errorf("released に引き継ぐ機械の名前を書いている（この段では決まっていない）:\n%s", released[0].Body)
+		t.Errorf("released に引き継ぐアカウントを書いている（この段では決まっていない）:\n%s", released[0].Body)
 	}
 
 	issue, _ := fx.Tracker.IssueByID("PVTI_item188")
@@ -347,16 +348,18 @@ func TestHandoff_期限切れの担当を外してreleasedを書く(t *testing.T
 
 // ownBidsOf は、この機械が書いた入札のコメントだけを数える。
 //
-// **ほかの機械の入札と混ぜて数えない。**巡回のたびに増えるのはこの機械の入札であり、
+// **ほかのアカウントの入札と混ぜて数えない。**巡回のたびに増えるのはこの continuo の入札であり、
 // **そこが増えないことが「次の回が始まった」の証拠である。**
+//
+// **投稿者で絞る**（設計 3-77-0）。入札の JSON には、自分で名乗る欄が無い。
 //
 // fx: 検査対象。
 // node: 下敷きの GitHub issue のノード ID。
-// 戻り値: この機械の名前が入った入札のコメント。
+// 戻り値: この continuo が書いた入札のコメント。
 func ownBidsOf(fx *fixture, node string) []tracker.Comment {
 	out := make([]tracker.Comment, 0, 4)
 	for _, c := range fx.Tracker.MarkedHandoffCommentsOf(node, config.HandoffBidMarker) {
-		if strings.Contains(c.Body, `"host":"`+testHostName+`"`) {
+		if strings.EqualFold(c.Author, testGHLogin) {
 			out = append(out, c)
 		}
 	}
@@ -387,13 +390,13 @@ func TestHandoff_古い入札が残っていても締め切りをまたいで担
 	node := issueNode(188)
 	// **終わった回の入札である。**締め切り（3分）にも決着の猶予（さらに3分）にも入らない。
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatBid(handoff.Bid{
-		Host: rivalHost, FiveHour: 100, Weekly: 100, Score: 300, At: clock.Now().Add(-30 * time.Minute),
+		FiveHour: 100, Weekly: 100, Score: 300, At: clock.Now().Add(-30 * time.Minute),
 	}, testBidWindow), clock.Now().Add(-30*time.Minute))
 
 	// 1回目。**次の回を始める入札を1件書き、締め切りを待つ。**
 	fx.Orc.Tick(context.Background())
 	if got := len(ownBidsOf(fx, node)); got != 1 {
-		t.Fatalf("1回目の巡回でこの機械の入札が1件ではない: %d 件", got)
+		t.Fatalf("1回目の巡回でこの continuo の入札が1件ではない: %d 件", got)
 	}
 
 	// 2回目（30秒後）。**締め切りの中なので、入札は増えない。**
@@ -444,10 +447,10 @@ func TestHandoff_期限切れの担当を外したあと前の回の入札に負
 	old := time.Now().Add(-19 * time.Hour)
 	// **前の回の入札。**hold より前にあり、判定スコアはこの機械（270）より大きい。
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatBid(handoff.Bid{
-		Host: rivalHost, FiveHour: 100, Weekly: 100, Score: 300, At: old.Add(-time.Minute),
+		FiveHour: 100, Weekly: 100, Score: 300, At: old.Add(-time.Minute),
 	}, testBidWindow), old.Add(-time.Minute))
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
-		Host: rivalHost, Assignee: rivalLogin, Branch: "continuo/octocat/hello-world/188", At: old,
+		Assignee: rivalLogin, Branch: "continuo/octocat/hello-world/188", At: old,
 	}), old)
 
 	fx.Orc.Tick(context.Background())
@@ -456,7 +459,7 @@ func TestHandoff_期限切れの担当を外したあと前の回の入札に負
 	})
 
 	if got := len(ownBidsOf(fx, node)); got != 1 {
-		t.Errorf("この機械の入札が1件ではない: %d 件", got)
+		t.Errorf("この continuo の入札が1件ではない: %d 件", got)
 	}
 	issue, _ := fx.Tracker.IssueByID("PVTI_item188")
 	if len(issue.Assignees) != 1 || issue.Assignees[0].Login != testGHLogin {
