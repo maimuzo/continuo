@@ -179,8 +179,8 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 	return false
 }
 
-// newWorkBlocked は「この巡回で入札の要る issue を取らないか」と、その理由を返す
-// （設計 3-27 / 3-77i / 3-77j。issue #173）。
+// newWorkBlockedWith は「この巡回で入札の要る issue を取らないか」と、その理由を、
+// 渡された写しから返す（設計 3-27 / 3-77i / 3-77j。issue #173）。
 //
 // **「巡回を止める」とは呼ばない。**止まるのは入札の要る issue だけで、
 // **巡回そのもの（走っている run の面倒・枠の読み直し・期限切れの担当を外す経路）は続く。**
@@ -193,7 +193,6 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // **この巡回を丸ごとやめる戻り値も消えた。**丸ごとやめると、
 // **`handoffGate` の中にある「期限切れの担当を外す」経路まで通らなくなる。**
 //
-// 戻り値: 止める理由。`handoff.SkipNone` なら入札の要る issue を取ってよい。
 // **写しを取り直す版は置かない。**取り直すと、
 // **ログへ出す数字と、止めた理由が別の読み取りから作られる。**
 // **「余裕値が0以下」と名乗りながら使用率30%を並べる1行が出る。**
@@ -204,12 +203,8 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 func (o *Orchestrator) newWorkBlockedWith(
 	snap *ratelimit.Snapshot, stale bool,
 ) handoff.SkipReason {
-	// **`quotaForBid()` と同じ扱いにする。**直前の読み取りに失敗していたら、
-	// **その写しは入札には使えない**（設計 3-77i）。
-	forBid := snap
-	if stale {
-		forBid = nil
-	}
+	// **古い写しは入札に使えない**（設計 3-77i）。規則は `bidSnapshotOf` が1箇所で持つ。
+	forBid := bidSnapshotOf(snap, stale)
 	_, skip := handoff.Evaluate(
 		forBid,
 		o.cfg.RateLimit.Source != ratelimit.SourceNone,
@@ -232,16 +227,15 @@ func (o *Orchestrator) newWorkBlockedWith(
 // margin: その枠のマージン（%）。
 // 戻り値: これに達すると新規着手が止まる使用率（%）。
 func (o *Orchestrator) newWorkThresholdPercent(margin int) int {
-	return fullPercentForThreshold - margin
+	// **100 をここで書かない**（issue #173）。**判定を持っている package から引く。**
+	// **写しを持つと、`handoff.Short` が使う線と、ここが出す数字が別々に動きうる。**
+	return handoff.ThresholdPercent(margin)
 }
-
-// fullPercentForThreshold は「使い切り」を表す使用率である（余裕値はここから引いて作る）。
-const fullPercentForThreshold = 100
 
 // quotaSnapshotWithStale は、最後に読んだ枠と「直前の読み取りに失敗しているか」を、
 // **1回のロックで**取り出す（設計 3-77j）。
 //
-// **`quotaSnapshot()` と `quotaForBid()` を続けて呼んではならない。**
+// **写しと「古いか」を、別々のロックで取ってはならない。**
 // 2回のロックの間に `pollQuota` が割り込むと、**失敗が入れば「新しい写しだ」と誤り、
 // 成功が入れば「古い写しだ」と誤る。**どちらも、人間へ出す1行が事実と違う値になる。
 //
@@ -255,6 +249,27 @@ func (o *Orchestrator) quotaSnapshotWithStale() (*ratelimit.Snapshot, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.quota, o.quota != nil && o.quotaStale
+}
+
+// bidSnapshotOf は、巡回で読んだ写しを、入札の判定に使ってよい形へ落とす（設計 3-77。issue #173）。
+//
+// **古い写しは nil にする。**
+// **`handoff.Evaluate` は nil を「枠を読めなかった」と読み、入札そのものを取りやめる。**
+// **古い写しで入札させない。**資格情報が切れた機械は、切れる直前の「使用率 5%」を
+// 1日中返し続け、**正直に読めている機械に必ず勝つ。**
+//
+// **この規則を持つ場所は、ここ1つだけである**（issue #173）。
+// **自分でロックを取り直して同じ答えを返す口は置かない。**置くと、
+// **同じ巡回の中で `dispatchCandidates` と `handoffGate` が別の写しから判定する。**
+//
+// snap: 巡回で読んだ写し。
+// stale: その写しが古いか。
+// 戻り値: 入札の判定に渡してよい写し。古ければ nil。
+func bidSnapshotOf(snap *ratelimit.Snapshot, stale bool) *ratelimit.Snapshot {
+	if stale {
+		return nil
+	}
+	return snap
 }
 
 // observedPercentsOf は、渡された枠の写しから5時間と1週間の使用率を取り出す（設計 3-77j）。
@@ -273,6 +288,15 @@ func (o *Orchestrator) observedPercentsOf(snap *ratelimit.Snapshot) (int, int) {
 	if o.cfg.RateLimit.Source == ratelimit.SourceNone {
 		// **枠で判定しないと運用者が決めた状態である**（設計 3-27 の逃げ道）。
 		// **読めなかったのではない。**そう見せると、資格情報の直し方を探させることになる。
+		//
+		// **いまこの枝へは来ない。**呼ぶのは `logNewWorkBlocked` だけで、そこへ来るのは
+		// `newWorkBlockedWith` が `SkipNone` 以外を返したときである。
+		// `rate_limit.source: none` では `handoff.Evaluate` が使用率0で計算し、
+		// **マージンは100未満しか通らない**ので（`internal/config/validate.go`）、
+		// **余裕値は必ず1以上になり、`SkipNone` しか返らない。**
+		//
+		// **それでも残す。**消すと、止める理由が1つ増えたときに
+		// **「使用率0」を「1バイトも使っていない」として出す**経路が黙って開く。
 		return percentUnknown, percentUnknown
 	}
 	if snap == nil {
@@ -342,12 +366,18 @@ func (o *Orchestrator) logNewWorkBlocked(
 	if kinds := snap.SelectedKinds(handoff.Short(o.bidMargins())); len(kinds) > 0 {
 		args = append(args, "余裕の無い枠", strings.Join(kinds, ", "))
 	}
-	args = append(args,
-		"5時間の枠の閾値", o.thresholdText(h.FiveHourMarginPercent),
-		"1週間の枠の閾値", o.thresholdText(h.WeeklyMarginPercent),
-		"five_hour_margin_percent", h.FiveHourMarginPercent,
-		"weekly_margin_percent", h.WeeklyMarginPercent,
-	)
+	// **閾値とマージンも、枠を読めなかったときは出さない**（issue #173）。
+	// **下の文面が「マージンを下げても動き出しません」と言っている。**
+	// **その隣に2本のマージンの現在値と閾値を並べると、読む人はそこへ手を伸ばす。**
+	// **数字を消したのと同じ理由である。**言っていることと、並べている値が食い違う。
+	if skip != handoff.SkipQuotaUnreadable {
+		args = append(args,
+			"5時間の枠の閾値", o.thresholdText(h.FiveHourMarginPercent),
+			"1週間の枠の閾値", o.thresholdText(h.WeeklyMarginPercent),
+			"five_hour_margin_percent", h.FiveHourMarginPercent,
+			"weekly_margin_percent", h.WeeklyMarginPercent,
+		)
+	}
 	// **出すのは1行だけにする**（人間の決定。2026-09-06。issue #173）。
 	// **「この巡回では1件も着手しません」は消えた。**丸ごとやめる段が無くなったためである。
 	// 人間の言い分は「**自分以外の状況はどちらにしても入札以外の判断材料がない**」であり、
@@ -562,7 +592,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// 段-0: 担当の持ち回りを決める（設計 3-77）。**空きスロットを数えたあとに行う。**
 		// 入札に勝つのは「いま着手できる機械」でなければならず、
 		// **枠が空いていない機械が勝つと、issue は誰にも着手されないまま止まる。**
-		decision := o.handoffGate(ctx, issue)
+		// **入札の判定にも、この巡回で1回だけ読んだ写しを渡す**（issue #173）。
+		// **`handoffGate` の中で取り直すと、上の `blocked` と別の読み取りになる。**
+		decision := o.handoffGate(ctx, issue, bidSnapshotOf(blockedSnap, blockedStale))
 		if decision.stop {
 			// **コメントを読む枠を使い切った。**候補はカンバンの並び順で来るので、
 			// 上から順に見ることは保たれる。**続きは次の巡回で見る。**

@@ -362,8 +362,11 @@ func validate(cfg *Config) error {
 	// **弾くと、その人が起動できなくなる。**案内は雛形のコメントに書いてある。
 	if cfg.RateLimit.WeeklyWaitLimitMinutes < 0 ||
 		cfg.RateLimit.WeeklyWaitLimitMinutes > weeklyWaitLimitMaxMinutes {
+		// **上限は文言へ埋め込む**（issue #197）。**手で書くと、定数を変えたときに置き去りになり、
+		// 弾いた線と、案内している線が食い違う。**
 		return invalidValueError("rate_limit.weekly_wait_limit_minutes",
-			cfg.RateLimit.WeeklyWaitLimitMinutes, i18n.T(i18n.KeyConfigValidateRateLimitWeeklyWaitRange))
+			cfg.RateLimit.WeeklyWaitLimitMinutes,
+			i18n.T(i18n.KeyConfigValidateRateLimitWeeklyWaitRange, weeklyWaitLimitMaxMinutes))
 	}
 
 	switch cfg.Trust.OnUntrusted {

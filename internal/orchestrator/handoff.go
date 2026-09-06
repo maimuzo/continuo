@@ -85,8 +85,11 @@ type handoffDecision struct {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 着手しようとしている issue。
+// quotaSnap: この巡回で1回だけ読んだ、入札の判定に使ってよい写し（読めていなければ nil）。
 // 戻り値: 着手してよいか・この巡回で担当者になったか・この巡回を打ち切るか。
-func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) handoffDecision {
+func (o *Orchestrator) handoffGate(
+	ctx context.Context, issue tracker.Issue, quotaSnap *ratelimit.Snapshot,
+) handoffDecision {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
 		// **draft issue にはコメントも担当者も書けない。**そもそも Dispatchable が偽なので
@@ -153,7 +156,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	// **入札できない機械は、担当者のいない issue のコメントを読まない**（設計 3-77a）。
 	// 枠を読めない・枠を使い過ぎた・余裕値がマイナス、のどれかなら、この issue で
 	// **できることは「黙る」だけである。**読んでから黙るのは、リクエストの無駄でしかない。
-	bid, skip := o.evaluateBid()
+	bid, skip := o.evaluateBidWith(quotaSnap)
 	if len(logins) == 0 && skip != handoff.SkipNone {
 		o.logger.Debug("入札しません（この issue は他の機械に任せます）",
 			"identifier", issue.Identifier, "理由", skip.String())
@@ -270,16 +273,24 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	return o.bidForIssue(ctx, issue, nodeID, viewer, bid, views)
 }
 
-// evaluateBid は、この機械が書く入札の中身と、入札してよいかを決める（設計 3-77）。
+// evaluateBidWith は、この機械が書く入札の中身と、入札してよいかを、渡された写しで決める
+// （設計 3-77）。
 //
 // **GitHub を1バイトも読まない。**枠の写しだけで決まるので、
 // **コメントを読む前に呼んで、入札できない機械を先に落とせる。**
 //
+// **写しは呼び出し側が1回だけ読む。**ここで写しを取り直してはならない。
+// **同じ巡回の中で `dispatchCandidates` が既に同じ判定をしている**（担当者のいない issue を落とす門）。
+// **2回読むと、`pollQuota` が並行に差し替えた写しで答えが割れ、
+// 「なぜ着手しないか」を出した1行と、実際に落ちた理由が別の読み取りから作られる。**
+// **線を1本にするという、この変更そのものの目的に反する。**
+//
+// snap: この巡回で読んだ、入札の判定に使ってよい写し（読めていなければ nil）。
 // 戻り値の1つ目: 組み立てた入札（入札しないときの中身は使わない）。
 // 戻り値の2つ目: 入札しないと決めた理由。SkipNone なら入札してよい。
-func (o *Orchestrator) evaluateBid() (handoff.Bid, handoff.SkipReason) {
+func (o *Orchestrator) evaluateBidWith(snap *ratelimit.Snapshot) (handoff.Bid, handoff.SkipReason) {
 	return handoff.Evaluate(
-		o.quotaForBid(),
+		snap,
 		// **`rate_limit.source: none` は「読めなかった」ではない**（設計 3-27 の逃げ道）。
 		// 運用者が枠で判定しないと決めた状態なので、そこで黙らせると
 		// **その機械は1件も処理しなくなる。**
@@ -572,8 +583,8 @@ func (o *Orchestrator) removeOwnAssignee(
 	return viewer.Login, true
 }
 
-// weeklyWaitExceeded は「1週間の枠が明けるのを待つ上限を超えたか」を返す
-// （設計 3-27。issue #197）。
+// weeklyWaitExceededWith は「1週間の枠が明けるのを待つ上限を超えたか」を、
+// 渡された写しから返す（設計 3-27。issue #197）。
 //
 // **満杯の1週間の枠を見た時刻を、この中で記録する。**判定と記録を分けると、
 // **呼ぶ側が記録を忘れたときに、経過が永久に0のままになる。**
@@ -598,8 +609,6 @@ func (o *Orchestrator) removeOwnAssignee(
 // 1週間の枠を「上限以内なら待つ／上限より先なら引き渡す」で分けている。
 // **その上限が `rate_limit.weekly_wait_limit_minutes`（既定300分＝5時間）である。**
 //
-// rs: 対象の run。
-// 戻り値: 上限を超えていれば true。
 // **写しを取り直す版は置かない。**run ごとに取り直すと、
 // **同じ巡回の中で run ごとに違う答えが返る**（`pollQuota` は turn の goroutine から
 // 並行に走り、途中で写しを差し替える）。**片方の run の起点が消え、もう片方が進み続ける。**

@@ -46,6 +46,21 @@ const (
 // fullPercent は「使い切り」を表す使用率である。余裕値はここから引いて作る。
 const fullPercent = 100
 
+// ThresholdPercent は「これに達すると余裕値が0以下になる」使用率を返す（設計 3-77j。issue #173）。
+//
+// **人間へ見せる1行を作るためだけにある。**判定そのものは `Short` が行う。
+//
+// **この関数が要るのは、100 という数を2つの package が別々に持たないためである。**
+// **`Short` は `fullPercent - l.Percent - margin <= 0` で判定する。**
+// **同じ 100 を呼ぶ側でもう一度書くと、この定数を変えたときに、
+// ログが「90% に達したら止まります」と言い続けたまま、実際の門は別の値で効く。**
+//
+// margin: その枠のマージン（%）。
+// 戻り値: これに達すると入札が止まる使用率（%）。
+func ThresholdPercent(margin int) int {
+	return fullPercent - margin
+}
+
 // Bid は1つの continuo が書いた入札である（設計 3-77a のコメントの形）。
 //
 // **JSON のキーは issue のコメントに書く形そのものである。**別の continuo が読むので、
@@ -234,7 +249,7 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 		switch {
 		case IsWeeklyKind(l.Kind):
 			return fullPercent-l.Percent-margins.Weekly <= 0
-		case matchesKind(l.Kind, []string{LimitKindSession}):
+		case matchesKind(l.Kind, sessionKinds):
 			return fullPercent-l.Percent-margins.FiveHour <= 0
 		default:
 			return false
@@ -323,6 +338,12 @@ func IsWeeklyKind(kind string) bool {
 // **その場で組み立てない。**`IsWeeklyKind` は使い切っている枠の数だけ呼ばれるので、
 // **呼ぶたびに slice を作ると、判定1回につき確保が1つ増える。**
 var weeklyKinds = []string{LimitKindWeeklyAll, LimitKindWeeklyScoped}
+
+// sessionKinds は5時間の枠の種別である。
+//
+// **1件しか無くても、その場で組み立てない。**理由は `weeklyKinds` と同じである。
+// **`Short` は枠1件につき1回呼ばれ、`Short` 自身が run ごと・巡回ごとに何度も回る。**
+var sessionKinds = []string{LimitKindSession}
 
 // maxPercentOfKinds は、指定した種別の枠のうちいちばん大きい使用率を返す。
 //

@@ -1856,6 +1856,16 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	rs.workerStopped = false
 	rs.terminating = false
 	rs.SendFirstPrompt = true
+	// **`after_run` を走らせ切った覚えも、ここで戻す**（issue #197）。
+	//
+	// **戻さないと、やり直した attempt の `after_run` が1回も走らない。**
+	// worktree の側の「1回だけ」の印は `Prepare` の中の `BeginRun` が消すので、
+	// **`RunAfterRunOnce` は「まだ走らせていない」を返す。**
+	// **ところが `runAfterRunOK` は、この欄が立っていると `RunAfterRunOnce` を呼ばずに真を返す。**
+	// **成果を出したのは、やり直したほうの attempt である。**
+	// 利用者が書いた `git push` が走らないまま「実行済みです。remote の続きから」と issue へ書き、
+	// **次に拾う機械が、push されていない commit を全部失う。**
+	rs.AfterRunDone = false
 	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
 	// 既に終わっているコンテキストを新しい turn ループへ渡すことになり、
 	// 最初の turn を送る前に待ちが打ち切られる。

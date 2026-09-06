@@ -263,7 +263,7 @@
   "config.validate.handoff_on_assignee_gate": "\"warn_and_comment\" か \"warn_only\" にすること",
   "config.validate.handoff_recheck_interval_range": "0以上にすること（0 なら走っている最中に担当を確かめ直さない）",
   "config.validate.invalid_value": "設定キー %s の値 %v が不正です: %s",
-  "config.validate.rate_limit_weekly_wait_range": "0以上5256000以下にすること（単位は分。0 なら上限を設けない。大きすぎると内部の計算があふれる）",
+  "config.validate.rate_limit_weekly_wait_range": "0以上 %d 以下にすること（単位は分。0 なら上限を設けない。大きすぎると内部の計算があふれる）",
   "config.validate.required": "設定キー %s は必須ですが空です",
   "daemon.build.dashboard_failed": "ダッシュボードを組み立てられません: %w",
   "daemon.build.herdr_socket_unresolved": "herdr の socket の場所を決められません: %w",

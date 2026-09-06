@@ -854,22 +854,14 @@ func (o *Orchestrator) pollQuota(ctx context.Context) {
 	o.mu.Unlock()
 }
 
-// quotaForBid は、入札の判定に使ってよい枠の写しを返す（設計 3-77）。
+// **`quotaForBid` は消えた**（issue #173）。
 //
-// **最後の読み取りに失敗していたら nil を返す。**`handoff.Evaluate` は nil を
-// 「枠を読めなかった」と読み、**入札そのものを取りやめる。**
-// **古い写しで入札させない。**資格情報が切れた機械は、切れる直前の「使用率 5%」を
-// 1日中返し続け、**正直に読めている機械に必ず勝つ。**
-//
-// 戻り値: 枠の状態。読めていない・最後の読み取りに失敗していれば nil。
-func (o *Orchestrator) quotaForBid() *ratelimit.Snapshot {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.quotaStale {
-		return nil
-	}
-	return o.quota
-}
+// **入札の判定に使ってよい写しを、自分でロックを取り直して返す関数だった。**
+// **巡回は写しを1回だけ読むと決めたので、取り直す口を残せない。**
+// 残すと、`dispatchCandidates` が読んだ写しと、`handoffGate` が読んだ写しが
+// **同じ巡回の中で食い違う。**
+// **同じ規則は `bidSnapshotOf`**（[dispatch.go](dispatch.go)）**が、
+// 読み終えた写しに当てる形で持っている。**
 
 // quotaSnapshot は最後に読んだ枠の状態を返す。
 //

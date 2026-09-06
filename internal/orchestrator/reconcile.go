@@ -301,11 +301,34 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 // **同じ巡回で複数の run が超えると直列に積まれる**（設計 3-8）。
 //
 // ctx: 呼び出しに適用するコンテキスト。
-func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
-	// **写しは1回だけ読む**（設計 3-27）。**run ごとに取り直すと、
-	// 同じ巡回の中で run ごとに違う答えが返る。**
-	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
+// quotaSnap: この巡回で1回だけ読んだ枠の写し。
+// quotaStale: その写しが古いか。
+// now: この巡回の時刻。
+func (o *Orchestrator) releaseQuotaWaitExceeded(
+	ctx context.Context, quotaSnap *ratelimit.Snapshot, quotaStale bool, now time.Time,
+) {
+	// **写しは呼び出し側が1回だけ読む**（設計 3-27）。**ここで取り直してはならない。**
+	// **`checkStalls` は、このあと同じ run に `noteWeeklyShort` を当てる。**
+	// `pollQuota` は turn の goroutine から並行に走って写しを差し替えるので、
+	// **2回読むと、こちらが「余裕が無い」と控えた時刻を、あちらが「余裕がある」で消しうる。**
+	// **消えると、リセット時刻を読めない枠で上限を測る唯一の道（経過時間）が閉じる。**
 	for _, rs := range o.snapshotRuns() {
+		snap := rs.snapshot()
+		// **画面を持っていない run は、この経路で扱えない**（issue #197）。
+		//
+		// **`paneStopped` は herdr へ問い合わせる。**pane が既に閉じている run では
+		// `agent.get` が誤りを返し、**そのたびに info の1行が出る。**
+		// 1週間の枠の余裕が無いあいだ、**巡回のたびに run の数だけ積む。**
+		// **issue #173 が読めるようにしようとしているログを、こちらが埋めることになる。**
+		//
+		// **手放せないことは変わらない。**確かめられない pane を閉じて担当を外す道は無い。
+		// **打ち切りの経路（`checkStalls` の本体）が、同じ2つを同じ理由で外している。**
+		if snap.AgentName == "" {
+			continue
+		}
+		if !snap.BackoffUntil.IsZero() && now.Before(snap.BackoffUntil) {
+			continue
+		}
 		// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
 		// **印は「使用率100」で立ち、この判定は「1週間の余裕値が0以下」で効く。**
 		// **印を門にすると、100%でしか手放せなくなり、
@@ -479,12 +502,16 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **下の `silence <= 0` より前に呼ぶ。**`claude.turn_timeout_ms` が 0 以下でも
 	// **枠待ちの印は立つ**（`isQuotaWaiting` は hook を1件も受けていない run では
 	// 無音の長さを見ない）。**あとに置くと、その設定の機械で上限が一度も効かない。**
-	o.releaseQuotaWaitExceeded(ctx)
-
+	//
+	// **枠の写しは、この巡回で1回だけ読む**（設計 3-27。issue #197）。
+	// **手放しの側と、下の `noteWeeklyShort` の側で別々に読んではならない。**
+	// `pollQuota` は turn の goroutine から並行に走るので、2回のあいだに写しが差し替わると、
+	// **片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
 	now := o.now()
-	// **余裕の無い1週間の枠があるかを、1回のロックで取った写しから見る**（設計 3-27。issue #197）。
-	// **run ごとに取り直さない。**同じ巡回の中で違う写しの答えが混ざる。
 	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
+	o.releaseQuotaWaitExceeded(ctx, quotaSnap, quotaStale, now)
+
+	// **余裕の無い1週間の枠があるかを、同じ写しから見る。**
 	weeklyShort := quotaSnap.AnySelected(handoff.ShortWeekly(o.bidMargins()))
 
 	// **余裕が無くなった時刻は、枠待ちの印の有無によらず、巡回のたびに控える**（設計 3-27）。
