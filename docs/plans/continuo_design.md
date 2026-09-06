@@ -9054,12 +9054,18 @@ continuo 本体（`continuo:self` ほか）と、continuo が起動したエー�
 #### 印の綴りと置き場所
 
 **綴りは [internal/config/default.go](../../internal/config/default.go) の `AIMarker`**（`ProgressMarker` / `PlanMarker` と同じ場所）。**設定キーにしない。**
-**差し込む処理は [internal/tracker/aimarker.go](../../internal/tracker/aimarker.go) にある。**コメントの本文を編むのは、その package だけである。
+**差し込む処理は [internal/tracker/aimarker.go](../../internal/tracker/aimarker.go) にある。**
+**`internal/config` は利用者の設定を持つ package であり、投稿する本文を組み立てる場所ではない。**
+（本文を組み立てる処理は他にもある。`handoff.FormatBid` や `buildStatusMoveComment`、
+投稿の直前に手元の絶対パスを縮める `redact.Paths` がそうである。**集約はしていない。**）
 `ProgressMarker` と同じ理由である。**機械ごとに違う値にできると、別の機械や別の project が書いた印を読めなくなる。**
 **固定であることが、この印の値打ちそのものである。**
 
-**足す位置は「本文の先頭から連続する HTML コメントの行の、いちばん後ろ」である**（`WithAIMarker`）。
+**足す位置は「本文の先頭から連続する HTML コメントの行の、いちばん後ろ」である**（`withAIMarker`）。
 **既にある印を1つも動かさない。**理由と、数えた判定の一覧は 3-82b にある。
+
+**例外が1つだけある。**`<!-- design-review-skipped -->` の断りには付けない。**理由は 3-82c にある。**
+**この印が何を言わないかは 3-82d にある。**
 
 **成果の報告では、先頭の印が1つしかない。**だから
 [internal/orchestrator/prompt.go](../../internal/orchestrator/prompt.go) が書かせ直しで言う「`marker` の次の行」と、
@@ -9089,6 +9095,12 @@ continuo 本体（`continuo:self` ほか）と、continuo が起動したエー�
 | [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) | `code-review-result` の先頭一致（`\A` の錨） | 1 |
 | [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 同上 | 1 |
 | [internal/handoff/assess.go](../../internal/handoff/assess.go) の `StartsAsProgressReport` | **先頭に並ぶ印を辿って、進捗の印があるか。**印が1行増えても辿り続ける | 1 |
+
+**表の外に、もう1つ踏む場所がある。**[internal/prompt/prompt.go](../../internal/prompt/prompt.go) の
+`stripComments` は、**行頭ちょうどの `<!--` で始まる行を、送る文面から丸ごと落とす。**
+組み込みの指示書が印を見せている場所は、**4桁の字下げか、バッククォートの囲みの中**にある。
+**囲みを字下げへ変えると、写したエージェントの印が字下げされ、`StartsAsProgressReport` から外れる。**
+**どちらへ倒しても壊れるので、印の見せ方を変えるときはここも見ること。**
 
 **CI の行が決め手である。**`continuo init` が置いた `continuo-ci.yaml` は
 **利用者のリポジトリの中にあり、continuo の版を上げても書き換わらない。**
