@@ -982,6 +982,13 @@ func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
 // **そちらは台帳を落としていない。**どちらも起動時にしか走らず、その時点で台帳は空だからである。
 // **巡回の最中に走る片付けを新しく足すなら、そこでも `forgetTokenLedger` を呼ぶこと。**
 //
+// **`reconcileWorktrees` は、巡回の最中に `ws.Cleanup` を直に叩くが、台帳を落としていない。**
+// **これは欠陥ではない。**worktree が消えれば身元ファイルも消え、次の着手は必ず新しい
+// セッションを採番する。**新しいセッションは台帳の別の鍵になるので、落としても落とさなくても
+// 足される額は同じである。**落とすのはメモリのためだけである。
+// **そこへ `forgetTokenLedger` を足すなら、`ws.Cleanup` の戻り値を必ず見ること。**
+// あそこは戻り値を捨てているので、そのまま足すと**見送られたのに落とす**形になる。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) cleanupWorktree(ctx context.Context, rs *runState) {

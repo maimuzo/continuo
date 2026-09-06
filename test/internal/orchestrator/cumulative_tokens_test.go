@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -344,10 +345,18 @@ func resumeLedgerRun(
 			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
 		}, nil
 	})
+	// **dispatch が起きたことを、待ちとは別に確かめる。**
+	// `WaitRunsDrained` は「走行中の run が0件」を待つだけなので、
+	// **dispatch が1件も起きなければ最初から真であり、素通りする。**
+	// 素通りしたまま累計を見ると、**足りない値を「二重に数えた」と読み違える。**
+	before := fx.Herdr.CountMethod(herdr.MethodAgentStart)
 	fx.Orc.Tick(context.Background())
 	// **`Tick` は着手の完了を待たずに返る**（段2以降は別の goroutine）。
 	// **`release` のあとに印から外れるので、そこまで待てば台帳の書き込みも終わっている。**
 	fx.WaitRunsDrained(t, 30*time.Second)
+	if after := fx.Herdr.CountMethod(herdr.MethodAgentStart); after == before {
+		t.Fatalf("dispatch が1件も起きていない（待ちが素通りした）: agent.start の回数が %d のまま", after)
+	}
 }
 
 // assertResumedSameSession は、直近の `agent.start` が同じセッションへ復帰したことを確かめる
@@ -378,17 +387,25 @@ func assertResumedSameSession(t *testing.T, fx *fixture, want string) {
 // ledgerTranscript は、そのセッションの記録を「同じファイル」として書き直す（issue #238）。
 //
 // **`seedSessionTranscript` を2回呼んではならない。**呼ぶたびに新しいディレクトリを作るので、
-// **同じ名前の記録が2つでき、着手がどちらを見つけるかは `os.ReadDir` の並び順で決まる。**
-// **並び順は実行のたびに変わるので、通ったり落ちたりする。**
+// **同じセッションの記録が置き場所ごとに枝分かれし、
+// どれが「伸びた同じファイル」なのかがテストから見えなくなる。**
+// **このテストが見たいのは「同じ transcript が伸びたときに差分だけ足るか」**なので、
+// **伸ばす先が1つに定まっていなければ、何を確かめたのか言えない。**
+//
+// **ファイル名は `seeded` から取る。**別に渡すと、綴りを取り違えたときに
+// **同じディレクトリへ別名の記録が1つ増え、`seeded` は伸びないまま残る。**
 //
 // t: 呼び出し元のテスト。
-// seeded: `seedSessionTranscript` が返した1回目のパス。
-// sessionUUID: セッション UUID（ファイル名になる）。
+// seeded: `seedSessionTranscript` が返した1回目のパス。**ここを書き直す。**
 // lines: 書き直す中身。
-// 戻り値: 書き直したファイルのパス（`seeded` と同じ）。
-func ledgerTranscript(t *testing.T, seeded, sessionUUID string, lines []any) string {
+// 戻り値: 書き直したファイルのパス（**`seeded` と必ず同じ**）。
+func ledgerTranscript(t *testing.T, seeded string, lines []any) string {
 	t.Helper()
-	return writeTranscript(t, filepath.Dir(seeded), sessionUUID+".jsonl", lines)
+	got := writeTranscript(t, filepath.Dir(seeded), filepath.Base(seeded), lines)
+	if got != seeded {
+		t.Fatalf("1回目と違うファイルを書いた（伸ばしたことにならない）: got %q, want %q", got, seeded)
+	}
+	return got
 }
 
 // TestTokenTotals_引き渡しのあと復帰しても二重に数えない は、
@@ -430,7 +447,7 @@ func TestTokenTotals_引き渡しのあと復帰しても二重に数えない(t
 	}
 
 	// **同じファイルを伸ばす。**`requestId` を変えないと、重複排除で2件目が落ちる。
-	ledgerTranscript(t, path, "sess-188", append(append([]any{}, first...),
+	ledgerTranscript(t, path, append(append([]any{}, first...),
 		typedUserLine("p2", "続けてください"),
 		assistantLine("req2", "続きをやりました。\n\nCONTINUO-STATUS: review", false),
 	))
@@ -440,7 +457,7 @@ func TestTokenTotals_引き渡しのあと復帰しても二重に数えない(t
 	resumeLedgerRun(t, fx, issue, "sess-188", path, "p2", nil)
 	assertResumedSameSession(t, fx, "sess-188")
 	if got, want := fx.Orc.TokenTotals(), timesResponse(2); got != want {
-		t.Fatalf("release が台帳を落として二重に数えた: got %+v, want %+v", got, want)
+		t.Fatalf("累計が期待と違う（多ければ release が台帳を落としている。少なければ turn が足りていない）: got %+v, want %+v", got, want)
 	}
 }
 
@@ -499,13 +516,22 @@ func TestTokenTotals_片付けを見送ったあと復帰しても二重に数�
 	})
 	assertResumedSameSession(t, fx, "sess-188")
 	if got := fx.Tracker.StateOf(issue.ID); got != "Done" {
-		t.Fatalf("片付けの経路を通っていない: Status=%q, want %q", got, "Done")
+		t.Fatalf("Status が終端になっていない: Status=%q, want %q", got, "Done")
+	}
+	// **片付けの経路へ実際に入ったことを、ログで確かめる。**
+	// **Status を見るだけでは足りない。**その `Done` はこのテスト自身が書いた値であり、
+	// **`ShouldCleanup` が偽になっても同じように真になる。**
+	// そうなるとこのテストは「`release` だけを見るテスト」へ静かに退化し、
+	// **`cleanupPath` の戻り値を無視する欠陥を誰も止められなくなる。**
+	// **この WARN は、片付けに入って見送ったときにしか出ない。**
+	if logs := fx.Logs.String(); !strings.Contains(logs, "worktree を片付けずに残しました") {
+		t.Fatalf("片付けの経路へ入っていない（Cleanup が呼ばれていない）")
 	}
 	if got, want := fx.Orc.TokenTotals(), oneResponse; got != want {
 		t.Fatalf("1回目の turn の集計が累計に入っていない: got %+v, want %+v", got, want)
 	}
 
-	ledgerTranscript(t, path, "sess-188", append(append([]any{}, first...),
+	ledgerTranscript(t, path, append(append([]any{}, first...),
 		typedUserLine("p2", "続けてください"),
 		assistantLine("req2", "続きをやりました。", false),
 	))
@@ -516,6 +542,6 @@ func TestTokenTotals_片付けを見送ったあと復帰しても二重に数�
 	})
 	assertResumedSameSession(t, fx, "sess-188")
 	if got, want := fx.Orc.TokenTotals(), timesResponse(2); got != want {
-		t.Fatalf("片付けを見送ったのに台帳を落として二重に数えた: got %+v, want %+v", got, want)
+		t.Fatalf("累計が期待と違う（多ければ片付けの見送りで台帳を落としている。少なければ turn が足りていない）: got %+v, want %+v", got, want)
 	}
 }
