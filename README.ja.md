@@ -104,7 +104,7 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 
 **カンバンには Status の選択肢が5つ要ります。**GitHub の既定は `Todo` / `In Progress` / `Done` の3つなので、**足りない2つは GitHub の画面から足してください** — カンバンの `Settings` を開き、左の `Custom fields` の `Status` を選び、`Options` の下の `Add option...` に名前を入れて `Add`。名前は何でも構いません。役割との対応は `continuo setup` で決めます。
 
-**`continuo doctor` は16の項目を検査します** — 設定ファイル / 片付けの状態 / **未記入の項目** / **プロンプトの変数** / claude / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
+**`continuo doctor` は18の項目を検査します** — 設定ファイル / 片付けの状態 / **未記入の項目** / **プロンプトの変数** / claude / **agent teams** / **hook の置き場所** / Claude の設定 / worktree の場所 / herdr / gh の認証 / カンバン / Status の名前 / 対応表のキー / **自動化** / clone / 信頼登録 / 資格情報（定額プランの枠を読むためのもの）。**OS と Go の版は調べないので、そこは自分で確認してください。**
 
 **`✗` が1つでもあれば終了コードは 1、`!` だけなら 0 です。**
 **ただし「終了コードが 0」は「continuo が起動する」という意味ではありません。**
@@ -155,7 +155,7 @@ sh scripts/test-like-ci.sh                       # テストを走らせる（�
 ```bash
 mkdir -p ~/continuo-work && cd ~/continuo-work
 
-continuo init      # WORKFLOW.md を置く。owner とカンバンの番号は gh から引く
+continuo init      # WORKFLOW.md と continuo-ci.yaml を置く。owner とカンバンの番号は gh から引く
 ```
 
 **ここで一度 `WORKFLOW.md` を開いてください。**`trust.repositories` に、カンバンに載っていたリポジトリが全部並んでいます。**要らない行を消さないと、無関係なリポジトリまで Claude Code に信頼登録されます。**
@@ -232,7 +232,9 @@ branch 名を組み立てて探し、残っていれば名前・リポジトリ�
 
 ### 設定
 
-`continuo init` が `WORKFLOW.md` を1枚置きます。**先頭の front matter が設定で、その下の本文がエージェントへ送る指示書のうち、あなたが書く部分です。**
+`continuo init` が2枚置きます。**設定は `WORKFLOW.md` の1枚だけです。**先頭の front matter が設定で、その下の本文がエージェントへ送る指示書のうち、あなたが書く部分です。
+
+**2枚目の `continuo-ci.yaml` は設定ではありません。**continuo は起動時に1バイトも読みません。**レビューを飛ばした pull request を落とす GitHub Actions の見本で、中身を確かめてから `.github/workflows/` へ移してください。**移さなくても continuo は動きます（[docs/FAQ.md](docs/FAQ.md) の「continuo を入れたら、`CLAUDE.md` には何を書けばいい？」）。
 
 **指示書の大部分は continuo の実行ファイルの中にあり、版を上げれば自動で新しくなります。**本文は、その中の `## 4-4. このプロジェクトの決まり` の下へ差し込まれます。**送られる全文は `continuo prompt --show` で読めます。**
 

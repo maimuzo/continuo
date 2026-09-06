@@ -2,9 +2,10 @@ package orchestrator
 
 import (
 	"context"
-	"os"
+	"errors"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/redact"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -97,9 +98,48 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		o.logger.Warn("身元ファイルを読めないので復元できません", "identifier", snap.Identifier, "error", err)
 		return
 	}
-	if identity.SessionUUID == "" || identity.SettingsPath == "" {
-		o.logger.Warn("身元ファイルにセッション UUID か設定ファイルのパスがありません",
+	// **セッション UUID は、run が持っていれば身元ファイルに無くてもよい**（下で先に採る）。
+	// **身元ファイルはエージェントが書き換えられる**ので（設計 3-2 / 3-23）、
+	// **そこを空にされただけで、走り切った run の成果をまとめられなくなってはならない。**
+	if identity.SettingsPath == "" || (snap.SessionUUID == "" && identity.SessionUUID == "") {
+		o.logger.Warn("復帰に使うセッション UUID か、設定ファイルのパスがありません",
 			"identifier", snap.Identifier)
+		return
+	}
+	// **復帰する先は、この run が使っている UUID を先に採る。**
+	//
+	// **身元ファイルの値と食い違うことがある。**`SetSessionUUID` が失敗したとき、
+	// 立て直し（`restartWithNewSession`）は警告を1行出して**続行する**ので、
+	// **身元ファイルには古い死んだ UUID が残り、run は新しい UUID で走って turn を送り切る。**
+	// **そのとき復帰すべきは run の側である。**身元ファイルを読むのは、
+	// 再起動して引き継いだ run のように、run が UUID を持っていない場合の控えである。
+	resumeUUID := snap.SessionUUID
+	if resumeUUID == "" {
+		resumeUUID = identity.SessionUUID
+	}
+
+	// **会話の記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。着手の段5b と同じ検査である。
+	//
+	// **上の `StartedAt` の検査では足りない。**あれは、この process が turn を送ったかを見ていない。
+	// **再起動して引き継いだ run は、引き継いだ時刻が入るのでゼロにならない**（設計 3-4 の段5）。
+	// そのセッションに会話があるかは、別に確かめるしかない。
+	//
+	// **投げてしまうと、`agent.start` が herdr の待ちを使い切ってから失敗する。**
+	// **書かせるものが最初から無いので、そこまで待つ意味が無い。**
+	//
+	// **ただし、黙って終わってはならない。**ここまで来たということは、
+	// **この run はコメントを1件も書いていない。**下の `failCommentRecovery` と同じく、
+	// **`failure_state` へ落として人間へ渡す。**そうしないと、成果がまとめられていないことが
+	// 誰にも伝わらないまま issue が `In Review` に並ぶ。
+	if !o.mayResumeSession(resumeUUID) {
+		o.logger.Warn("復帰する先のセッションに会話の記録が無いので、コメントを書かせられません",
+			"identifier", snap.Identifier, "session_uuid", truncateForLog(resumeUUID),
+			"記録の置き場所", o.transcriptRoot)
+		o.failCommentRecovery(ctx, rs,
+			"復帰する先の会話の記録が見つからなかった。**エージェントには何も送っていない。**"+
+				"次のどちらかである。**(1) Claude Code の会話の置き場所（既定は `~/.claude/projects`）が"+
+				"消えたか、別の場所へ移っている。(2) worktree の中の身元ファイルの `session_uuid` が、"+
+				"パスに使えない形に書き換わっている。**")
 		return
 	}
 
@@ -113,13 +153,9 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// 開いたものが本当にこの worktree かの検算・**continuo が開かせたリポジトリの親 workspace の
 	// 控え**（issue #19）も、着手のときと同じ1箇所から出る。**2箇所に書くと必ずずれる。**
 	//
-	// **worktree の実体が無ければ呼ばない。**Prepare は無ければ `git worktree add` で
-	// 作り直すので、**片付け済みの worktree をここで復活させてしまう。**
-	if _, statErr := os.Stat(snap.WorktreePath); statErr != nil {
-		o.logger.Warn("worktree の実体が無いので復元しません（作り直しません）",
-			"identifier", snap.Identifier, "path", snap.WorktreePath, "error", statErr)
-		return
-	}
+	// **worktree の実体は、上の `ReadIdentity` が既に確かめている。**
+	// 身元ファイルは worktree の中にあるので、**ディレクトリごと消えていれば読めずに戻っている。**
+	// **ここで `os.Stat` を重ねない。**重ねても、その間に消える窓は `Prepare` 自身も持っている。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(rs.issue()))
 	if err != nil {
 		if o.stoppedWhileRecovering(ctx) {
@@ -155,25 +191,63 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		Name:   name,
 		Kind:   o.cfg.Claude.Kind,
 		PaneID: paneID,
-		Args:   o.claudeStartArgs(identity.SettingsPath, "", identity.SessionUUID),
+		Args:   o.claudeStartArgs(identity.SettingsPath, "", resumeUUID),
 	}, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
 		o.logger.Warn("セッションを復元できません（No conversation found など）",
 			"identifier", snap.Identifier, "error", err)
-		o.failCommentRecovery(ctx, rs)
+		o.failCommentRecovery(ctx, rs,
+			"セッションを復元できなかった。**エージェントには何も送っていない。**"+
+				"pane か Claude Code の側で起動に失敗している。")
 		return
 	}
 	rs.setAgentName(name)
+	// **証拠の基準は `agent.start` が通ってから取る**（設計 3-80c）。
+	//
+	// **前で取ってはならない。**この関数は段2 で**自分が pane を閉じている**ので、
+	// **そのとき道連れにした Claude Code の hook が、閉じたあとから届く**
+	// （`noteHook` が入れるのは受け取った時刻である）。
+	// **前で取ると、その置き土産を「新しく起こした Claude Code が走っている証拠」と読み、
+	// 成果を書かせる指示を1度も送らないまま `failure_state` へ落とす。**
+	//
+	// **後ろで取っても、本物の証拠は落ちない。**`agent.start` が
+	// `agent_pane_busy` を粘っている間に届く hook は、**段2 で閉じた pane に居た
+	// 誰かのものである。**`agent.start` が失敗したままなら、この行まで来ない。
+	since := o.now()
 
 	// 段6: idle か done になるのを待つ。
-	if err := o.confirmStartup(ctx, rs); err != nil {
+	//
+	// **基準の時刻はここで取る**（設計 3-80）。この run は既に何 turn も回して hook を
+	// 受けているので、**前に受けた `LastHookAt` を「いま生きている証拠」にしてはならない。**
+	// 段5 の `agent.start` より後に届いた hook だけを数える。
+	//
+	// **待ちに上限は足さない。**`confirmStartup` は `herdr.startup_timeout_ms` で
+	// 必ず戻る（設計 3-80 は待たずに `ErrStartupBusy` で戻す）。
+	if err := o.confirmStartup(ctx, rs, since); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
 			return
 		}
+		// **`ErrStartupBusy` は「落ち着かなかった」ではない**（設計 3-80c）。
+		// **復元した Claude Code は生きていて、前の会話の続きを走らせている。**
+		// **理由を書き分ける。**そのままだと
+		// 「作業を終えたと表明したのに、何をしたのかを書き残しませんでした」という
+		// **事実と違う理由**が issue に残る。**書けていないのではなく、
+		// まだ書いている最中かもしれない。**
+		//
+		// **黙って戻ってはならない。**この関数から普通に戻っても、呼び出し側
+		// （`finishRunClaimed`）は数行あとで `stopWorker` を呼ぶ。**pane はどのみち閉じる。**
+		// **戻るだけだと、閉じたことも成果が残っていないことも人間に伝わらない。**
+		if errors.Is(err, ErrStartupBusy) {
+			o.logger.Warn("復元した Claude Code が走っているので、コメントを書かせる指示は送れません",
+				"identifier", snap.Identifier, "error", err)
+			o.failCommentRecoveryBusy(ctx, rs)
+			return
+		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)
-		o.failCommentRecovery(ctx, rs)
+		o.failCommentRecovery(ctx, rs,
+			"復元した Claude Code が入力を受け付けられる状態にならなかった。**本文は送っていない。**")
 		return
 	}
 
@@ -209,7 +283,10 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	}
 
 	// 段9: それでも書かれなければ人間に渡す。
-	o.failCommentRecovery(ctx, rs)
+	//
+	// **ここだけが「送ったのに書かれなかった」である。**上の3つは本文を1文字も送っていない。
+	o.failCommentRecovery(ctx, rs,
+		"エージェントがコメントの投稿に失敗した / 指示の文面にコメントを書く手順が無い。")
 }
 
 // recordRepoWorkspace は、コメントの復元が開かせたリポジトリの親 workspace を
@@ -255,6 +332,12 @@ func (o *Orchestrator) recordRepoWorkspace(
 // **「印はあるが投稿者が違う」コメントを見つけたら、WARN で名指しする**（設計 3-65）。
 // **これがいちばん切り分けの難しい状態である。**issue の画面には印の付いたコメントが
 // 見えているのに、continuo は「書かれていない」と判定してセッションを復元しにいく。
+//
+// **途中経過の報告は数えない**（設計 3-25 の段1。issue #178）。
+// **`<!-- continuo:progress -->` の付いたコメントも `tracker.comments.marker` を
+// 持っているので、数えると「途中経過を1回書いて最後の報告を忘れた run」を
+// 「書いた」と判定してしまう。**issue には「まだ作業中です」だけが残り、
+// **何をしたのかが誰にも分からないまま `In Review` に立つ。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // nodeID: 下敷きの GitHub issue のノード ID。
@@ -302,6 +385,19 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 				"gh の持ち主", o.ghLoginName(), "url", c.URL)
 			continue
 		}
+		// **途中経過の報告は、この run の成果の報告ではない**（issue #178）。
+		//
+		// **見るのは本文の先頭にある印の並びだけである**（`StartsAsProgressReport`）。
+		// **`IsProgressReport` は使わない。**あちらは印が本文のどこかに在れば真で、
+		// **成果の報告が印を引用しただけで捨てられる。**書いてあるのに書かなかったことにされ、
+		// 復元をもう一度通しても同じなら `failure_state` へ落ちる。
+		//
+		// **持ち回りの死活の判定は緩いままでよい**（設計 5-3l）。
+		// **あちらを厳しくすると、書き足し続けている担当が18時間で外れる。**
+		// **同じ緩さをこちらへ持ってくると、書いた run が人間へ渡る。**求める向きが逆である。
+		if handoff.StartsAsProgressReport(c.Body) {
+			continue
+		}
 		if c.IsAgent {
 			found = true
 		}
@@ -311,9 +407,14 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 
 // failCommentRecovery はコメントを書かせられなかった run を人間へ渡す（設計 3-25 の段9）。
 //
+// **「よくある原因」は呼び出し側が渡す。**そこが1文面に固定されていると、
+// **原因の違う経路が同じ案内を出す。**復帰を試さずに落ちた run に
+// 「エージェントがコメントの投稿に失敗した」と案内すると、**人間は起きていないことを調べにいく。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState) {
+// cause: 【よくある原因】の行に載せる文。
+func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, cause string) {
 	o.stopWorker(ctx, rs)
 	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
 	if err != nil {
@@ -325,8 +426,42 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState) {
 	o.postHandoffComment(ctx, rs, "Claude Code は作業を終えたと表明しましたが、**何をしたのかを issue に書き残しませんでした。**"+
 		"continuo は成果の要約を代筆しないので、このままでは何が行われたか誰にも分かりません。"+
 		"\n【確かめ方】worktree の中身（下記）と `git log` を見て、実際に何が変わったかを確かめてください。"+
-		"\n【よくある原因】エージェントがコメントの投稿に失敗した / 指示の文面にコメントを書く手順が無い。"+
+		"\n【よくある原因】"+cause+
 		"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。",
+		newStatusMove(moved, o.cfg.Tracker.FailureState))
+}
+
+// failCommentRecoveryBusy は、**復元した Claude Code がまだ走っていて**成果を書かせられなかった
+// run を人間へ渡す（設計 3-80c）。
+//
+// **`failCommentRecovery` を使ってはならない。**あちらは書き出しを
+// 「作業を終えたと表明しましたが、**何をしたのかを issue に書き残しませんでした。**」で
+// 固定しており、**理由の差し替えでは直らない。**
+// **書けていないのではなく、まだ書いている最中かもしれない。**
+//
+// **黙って戻る道は採らない。**呼び出し側（`finishRunClaimed`）は数行あとで
+// `stopWorker` を呼ぶので、**pane はどのみち閉じる。**
+// **戻るだけだと、閉じたことも成果が残っていないことも人間に伝わらない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) failCommentRecoveryBusy(ctx context.Context, rs *runState) {
+	o.stopWorker(ctx, rs)
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	if err != nil {
+		if o.stoppedWhileRecovering(ctx) {
+			return
+		}
+		o.logger.Warn("Status を落とせません", "identifier", rs.issue().Identifier, "error", err)
+	}
+	o.postHandoffComment(ctx, rs,
+		"**復元した Claude Code がまだ走っていたので、成果を書かせる指示を送れませんでした。**"+
+			"**書き残さなかったのではなく、まだ書いている最中だった可能性があります。**"+
+			"\n【確かめ方】下記の会話の記録と、worktree の中身（同じく下記）と `git log` を見て、"+
+			"実際に何が変わったかを確かめてください。"+
+			"\n【よくある原因】前の turn で始めたバックグラウンドの処理が終わり、"+
+			"その通知で Claude Code が新しい turn を始めていた。"+
+			"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。",
 		newStatusMove(moved, o.cfg.Tracker.FailureState))
 }
 

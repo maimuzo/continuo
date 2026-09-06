@@ -66,7 +66,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - [x] **環境変数は設定ファイルの `env` に書く。**pane にも `agent.start` にも渡さない（設計 3-12。実測で確認済み）
 - [x] **「実行中の一覧」と「自分が取った印の集合」は同じ `map[string]*runState` 1本である**（設計 3-25）
 - [x] **バックオフが明けた run は、巡回の先頭で印の集合を走査して拾う**（設計 3-21）
-  - 段0 から入り直す。段1 は飛ばす。**セッションは身元ファイルの UUID へ `--resume` で復帰する**（設計 3-3b）
+  - 段0 から入り直す。段1 は飛ばす。**セッションは身元ファイルの UUID へ `--resume` で復帰する**（設計 3-3b）。**ただし、その UUID の会話の記録が1件も無ければ復帰しない**（設計 3-3c）
 - [x] **stall の閾値に達したら、枠待ちの判定を先に見る**（設計 3-27 の評価順）
   - 「時計を止める」は `runState.WaitingQuota` を立てて判定を飛ばすこと。`LastSeenAt` は進めない
 - [x] **枠のトークンの出所は `rate_limit.token_source` で決まる**（`claude_credentials` / `keychain` / `env`。設計 3-15）
@@ -208,7 +208,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | `stall_test.go` | **`testing/synctest` で実時間ゼロ。**画面の版が増えている間は打ち切らない／版が止まったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
 | `quota_test.go` | 枠待ちの2条件／`pause_above_percent` は新規だけ止める／`none` なら1回も叩かない／資格情報が無くても起動は続く／**枠明けに `working` なら継続の指示を送らない** |
 | `prompt_choice_test.go` | **復元で引き継いだ run には継続の指示（5-4）を送る**／**再着手はセッションへ復帰したうえで1回目の本文（5-3）を `.attempt` 付きで送る** |
-| `resume_session_test.go` | **新規の着手は `--session-id`、再着手は `--resume`**／身元ファイルの `session_uuid` を変えない／**復帰に失敗したら新しいセッションで始め直す** |
+| `resume_session_test.go` | **新規の着手は `--session-id`、再着手は `--resume`**／身元ファイルの `session_uuid` を変えない／**復帰に失敗したら新しいセッションで始め直す**／**会話の記録が無い UUID へは `--resume` を投げない**（設計 3-3c）／**UUID がパスに使えない形なら復帰しない・置き場所を読めないときは復帰を試す** |
 | `terminal_test.go` | **巡回のループがコメントの確認でブロックしない**／1回の stall で abandon が2回走らない／打ち切りの前にコメントを確かめる |
 | `signal_test.go` / `transcript_test.go` / `naming_test.go` | 表明の解析／transcript の区切りとトークンの重複排除／agent 名の4段（**連番の段4 を含む**）とスラグ |
 

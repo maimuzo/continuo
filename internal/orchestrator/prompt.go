@@ -2,10 +2,13 @@ package orchestrator
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/prompt"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -27,64 +30,16 @@ import (
 // 戻り値の2つ目: テンプレートの構文が誤っている場合、または一覧に無い変数を参照している
 // 場合のエラー。**どの断片の何行目かがエラーの文言に入る。**
 func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (string, error) {
-	url := ""
-	if issue.URL != nil {
-		url = *issue.URL
-	}
-	data := map[string]any{
-		"issue": map[string]any{
-			"identifier": issue.Identifier,
-			"owner":      issue.Owner,
-			"repo":       issue.Repo,
-			"number":     issue.Number,
-			"url":        url,
-			"title":      issue.Title,
-			"state":      issue.State,
-			"labels":     issue.Labels,
-		},
-		// push_branch は issue にリンクされた branch の生の名前である（設計 3-22d・5-3）。
-		//
-		// **push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
-		// これは「別の名前へ出せと issue に書かれていたときの候補」として渡す。
-		// **base と push 先を同じものに固定すると、1つの issue で PR を複数出す形が書けなくなる。**
-		//
-		// **リンクが1本でないとき（0本・2本以上・別のリポジトリを指すとき）は空文字である。**
-		"push_branch": pushBranchValue(issue),
-		"attempt":     attemptValue(attempt),
-		// progress_interval_minutes は、進捗報告を書かせる間隔（分）である（設計 5-3n）。
-		//
-		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
-		// **「3600000ミリ秒以上黙らないでください」では通じない。**
-		"progress_interval_minutes": o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs / 60000,
-	}
+	// **変数はここで組み立てない**（issue #183）。`continuo prompt --show --url` も
+	// **同じ `prompt.RenderData` を呼ぶ。**別々に組み立てると、片方を直したときにずれ、
+	// **あのコマンドが「送られる文面」ではないものを見せることになる。**
+	data := prompt.RenderData(issue, attempt, o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs)
 
 	out, err := o.promptFragments.Render(data)
 	if err != nil {
 		return "", i18n.Errorf(i18n.KeyOrchestratorRenderFirstPromptRenderFailed, err)
 	}
 	return out, nil
-}
-
-// pushBranchValue は `.push_branch` に入れる値を返す（設計 3-22d）。
-//
-// issue: 対象の issue。
-// 戻り値: リンクされた branch の生の名前。リンクが1本でなければ空文字。
-func pushBranchValue(issue tracker.Issue) string {
-	if issue.BranchName == nil {
-		return ""
-	}
-	return *issue.BranchName
-}
-
-// attemptValue は `.attempt` に入れる値を返す。
-//
-// attempt: 試行回数。nil なら1回目である。
-// 戻り値: 1回目は nil、それ以外は回数。
-func attemptValue(attempt *int) any {
-	if attempt == nil {
-		return nil
-	}
-	return *attempt
 }
 
 // BuildContinuationPrompt は2回目以降のプロンプトを組み立てる（設計 5-4）。
@@ -134,6 +89,26 @@ func BuildContinuationPrompt(
 //
 // **この送信は turn 数に数えない。**`max_dispatch_turns` の判定に影響させない。
 //
+// **進捗報告の印を付けるなと明示する**（issue #178）。段1 は
+// 進捗報告の印が付いたコメントを、成果の報告として数えない。
+// **一方で組み込みの指示書は「いちばん下のコメントが自分の進捗報告なら、その1件に書き足す」と
+// 頼んでいる**（設計 5-3j）。**言わずに頼むと、エージェントは指示どおり進捗報告へ書き足し、
+// 段8 がまた「書かれていない」と判定して、段9 で `failure_state` へ落ちる。**
+// **書いたのに人間へ引き渡される。**
+//
+// **印そのものは埋めない**（`bareProgressMarker`）。埋めると、エージェントが
+// 「この印は付けていません」と書き写しただけで、その報告が途中経過として捨てられる。
+// **照合の側も先頭の印の並びだけを見るようにしてあるが**（`handoff.StartsAsProgressReport`）、
+// **送る側でも埋めない。**守りは2つとも要る。
+//
+// **禁じるのは「囲み付き」のほうである**（issue #178）。報告を捨てるのは
+// `<!` から始まる形で、**囲みを外した形は捨てない。**
+// **囲みを外した形のほうを禁じると、捨てられるほうが1度も禁じられないまま残る。**
+// しかも次の行が「本文の中では囲みを外した形で」と言うので、
+// **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
+// `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
+// 書き分けは [docs/upgrading.md:239-245](docs/upgrading.md#L239-L245) に揃える。
+//
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
 // 戻り値: 送る本文。
@@ -142,8 +117,48 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
 	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
+	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
+	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、
+	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
+	// **2度目も名前を書き切る。**値は `config.ProgressMarker` から作るので、定義は1つのままである。
+	fmt.Fprintf(&b,
+		"\n**新しく1件投稿してください。**途中経過の報告（本文のいちばん上の印の並びに、"+
+			"囲み付きの %[1]s（`<!` から始まるあの形）が入っているもの）へ書き足すと、"+
+			"continuo はそれを成果の報告として数えません。\n"+
+			"**この報告の先頭に、囲み付きの %[1]s を置かないでください。**"+
+			"%[2]s のほうは、上のとおり必ず入れてください。\n"+
+			"**本文の中で %[1]s について書くときは、囲みを外した %[1]s の形で書いてください。**\n"+
+			"囲み付きのまま書くと、次の途中経過の報告が、この報告へ書き足されます。\n"+
+			"**%[2]s のほうは、囲みを外さないでください。**外すと、この報告が数えられません。\n",
+		bareProgressMarker(), marker)
 	return b.String()
 }
+
+// bareProgressMarker は、進捗報告の印から HTML のコメントの囲みを外した文字列を返す。
+//
+// **エージェントへ送る文面に、囲み付きの印そのものを埋めてはならない**（issue #178）。
+//
+// **成果の報告を数えるかどうかは `handoff.StartsAsProgressReport` が決めており、
+// あちらは本文の先頭にある印の並びしか見ない。**書き写しただけでは捨てられない。
+// **埋めてはいけない理由は別にある。**エージェント自身が「書き足す先」を探す問い合わせ
+// （組み込みの 5-3 の段1。`.body | contains("<!-- " + "continuo:progress" + " -->")`）は
+// **印を本文のどこからでも拾う。**囲み付きで引用した成果の報告があると、
+// **次の進捗報告がその成果の報告へ書き足され、読む人には別の話が1件に混ざって見える。**
+//
+// **値は `config.ProgressMarker` から作る。**印を2箇所で定義すると、片方を直したときにずれる。
+//
+// 戻り値: `continuo:progress` のような、囲みを外した印の中身。
+func bareProgressMarker() string {
+	s := strings.TrimPrefix(config.ProgressMarker, commentOpenMarker)
+	s = strings.TrimSuffix(s, commentCloseMarker)
+	return strings.TrimSpace(s)
+}
+
+// commentOpenMarker と commentCloseMarker は HTML のコメントの囲みである。
+const (
+	commentOpenMarker  = "<!--"
+	commentCloseMarker = "-->"
+)
 
 // buildUntrustedComment は未信頼のリポジトリについて人間へ知らせるコメント本文を作る
 // （設計 3-6）。
@@ -267,6 +282,31 @@ func buildHandoffComment(identifier, reason string, hc handoffContext, move stat
 	if hc.SubagentDir != "" {
 		lines = append(lines, fmt.Sprintf("- サブエージェントの記録の置き場所: `%s`", hc.SubagentDir))
 	}
+	// **止めた時点で走っていたバックグラウンド処理を出す**（設計 3-81）。
+	// **`shell`（`run_in_background` の Bash）も入る。**pane を閉じると途中で終わるので、
+	// **人間が「何が道連れになったか」を知る唯一の手がかりである。**
+	if len(hc.BackgroundTasks) > 0 {
+		quoted := make([]string, 0, len(hc.BackgroundTasks))
+		for _, t := range hc.BackgroundTasks {
+			quoted = append(quoted, "`"+t+"`")
+		}
+		line := "- **止めた時点で走っていたバックグラウンド処理**: " + strings.Join(quoted, " / ")
+		// **切り捨てたなら、切り捨てたと書く**（設計 3-81b）。**黙って上から数件だけ出すと、
+		// 読んだ人は「道連れになったのはこれで全部だ」と読む。**subagent の記録の側は
+		// 置き場所のディレクトリを併せて出すので追えるが、**こちらには追える先が無い。**
+		//
+		// **`fmt.Sprintf` を使わない。**この package の人間向けの文言はまだ資源へ
+		// 移していないが、**新しく足すぶんは資源に載せる**という決まりがある
+		// （`test/internal/testdesign` の「画面に出す文言を日本語で直に書いていない」）。
+		// **ここだけを資源へ移すと、1つのコメントの中で日本語と英語が混ざる。**
+		// 同じ表の説明が「**中途半端に訳すと、全部日本語であるより読みにくくなる**」と
+		// 書いているので、**この関数の文言はまとめて移すまで日本語のままにし、
+		// 数を差し込むところだけ `strconv` で組み立てる。**
+		if hc.BackgroundTasksOmitted > 0 {
+			line += "（ほかに " + strconv.Itoa(hc.BackgroundTasksOmitted) + " 件）"
+		}
+		lines = append(lines, line)
+	}
 	if hc.SettingsPath != "" {
 		lines = append(lines, fmt.Sprintf("- continuo が渡した設定: `%s`", hc.SettingsPath))
 	}
@@ -309,6 +349,18 @@ type handoffContext struct {
 	// SettingsPath は continuo が書いた Claude Code の設定ファイルの絶対パスである。
 	// **worktree の中ではない**（設計 3-12）。
 	SettingsPath string
+	// BackgroundTasks は、止めた時点で「まだ走っている」と申告されていた
+	// バックグラウンド処理の名前である（設計 3-81）。
+	//
+	// **種類で絞らない。**`shell`（`run_in_background` の Bash）も入る。
+	// **件数は `handoffBackgroundTaskLimit` 件までに切ったものを渡すこと。**
+	// 申告は hook から来る外部入力であり、そのまま issue のコメントへ載る（設計 3-23）。
+	BackgroundTasks []string
+	// BackgroundTasksOmitted は、上の切り捨てで落とした件数である（設計 3-81b）。
+	//
+	// **0 でなければ「ほかに N 件」と書く。****黙って上から数件だけ出すと、
+	// 読んだ人は「道連れになったのはこれで全部だ」と読む。**
+	BackgroundTasksOmitted int
 }
 
 // statusMove は continuo がボードの Status を動かした記録である（設計 3-29）。

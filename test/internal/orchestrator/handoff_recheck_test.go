@@ -6,6 +6,8 @@ package orchestrator_test
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +21,7 @@ import (
 
 // TestHandoffRecheck_担当が移っていたらturnの終わりで止める は、設計 3-77c を確かめる。
 //
-// 目的: 「1時間ごとに、走っている最中もコメントを全部読み直す。担当が移っていれば、
+// 目的: 「1時間ごとに、走っている最中も issue の担当者を読み直す。担当が移っていれば、
 // その turn の終わりで止まる」。
 // 与える情報: 着手して走っている run と、その最中に担当者を別の機械へ書き換えたボード。
 // 確かめ直す間隔は 1ms にしてある。
@@ -45,8 +47,8 @@ func TestHandoffRecheck_担当が移っていたらturnの終わりで止める(
 		// **turn が終わる前に、別の機械が担当を取り上げた状態にする。**
 		fx.Tracker.SetAssignees("PVTI_item188", rivalLogin)
 		fx.Tracker.AddCommentBy(issueNode(188), rivalLogin, handoff.FormatHold(handoff.Hold{
-			Host: rivalHost, Assignee: rivalLogin,
-			Branch: "continuo/octocat/hello-world/188", At: time.Now(),
+			Assignee: rivalLogin,
+			Branch:   "continuo/octocat/hello-world/188", At: time.Now(),
 		}), time.Now())
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
@@ -115,7 +117,7 @@ func TestHandoffRecheck_担当者が1人もいないだけでは止めない(t *
 
 // TestHandoffRecheck_復元した_run_は_turn_を送る前に担当を確かめる は、設計 3-77h を確かめる。
 //
-// 目的: 「作業を再開するとき、コメントを全部読み直す。担当が自分でなくなっていれば、
+// 目的: 「作業を再開するとき、issue の担当者を読み直す。担当が自分でなくなっていれば、
 // push せずに止まる」。
 //
 // **turn の終わりで確かめるだけでは遅い。**朝、PC を起動したときに担当が既に移っていると、
@@ -142,8 +144,8 @@ func TestHandoffRecheck_復元したrunはturnを送る前に担当を確かめ�
 	node := issueNode(188)
 	now := time.Now()
 	fx.Tracker.AddCommentBy(node, rivalLogin, handoff.FormatHold(handoff.Hold{
-		Host: rivalHost, Assignee: rivalLogin,
-		Branch: "continuo/octocat/hello-world/188", At: now,
+		Assignee: rivalLogin,
+		Branch:   "continuo/octocat/hello-world/188", At: now,
 	}), now)
 
 	// **引き継いだ run として印を付ける。**`NeedsPrompt` を立てるので、
@@ -167,5 +169,56 @@ func TestHandoffRecheck_復元したrunはturnを送る前に担当を確かめ�
 	}
 	if got := fx.Tracker.StateOf("PVTI_item188"); got != "In Progress" {
 		t.Errorf("担当を外された機械がボードを書き換えている: Status が %q", got)
+	}
+}
+
+// TestHandoffRecheck_issueを取り直せないときは判定しない は、判定の材料が古いまま答えを出さないための検査である
+// （設計 3-77c）。
+//
+// 目的: **`refreshIssue` は取り直しに失敗すると、着手したときの古い写しを返す。**
+// **その写しの担当者はまだ自分なので、見分けずに使うと「担当は自分のまま」と答えてしまう。**
+// **答えを出したことにして時計を進めると、次の確かめが `recheck_interval_ms` のあとになる。**
+// 既定は1時間で、**そのあいだ、担当を外された run が push まで走り切る。**
+//
+// 与える情報: 走っている run と、**ID 指定の取り直しが必ず失敗するトラッカー。**
+// 成功条件: **run が止まらないこと**と、**「判定しません」の WARN が出ること。**
+// **WARN が出ないなら、古い写しから「担当は自分のまま」と答えている。**
+func TestHandoffRecheck_issueを取り直せないときは判定しない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) {
+			cfg.Tracker.Provider.Handoff.RecheckIntervalMs = 1
+		},
+	})
+	fx.AllowLog("issue を取り直せません")
+	fx.AllowLog("担当を確かめ直すために issue を取り直せない")
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "続けます。\nCONTINUO-STATUS: working", false),
+	})
+
+	sent := 0
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		sent++
+		if sent == 1 {
+			// **取り直しを失敗させる。**着手したときの古い写しが返る状態である。
+			fx.Tracker.SetIDsError(errors.New("取り直せません"))
+			fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		}
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+
+	waitFor(t, 10*time.Second, "取り直せなかったので判定しない、という WARN が出る", func() bool {
+		return strings.Contains(fx.Logs.String(), "担当を確かめ直すために issue を取り直せない")
+	})
+	if len(fx.Orc.RunningIdentifiers()) != 1 {
+		t.Errorf("取り直せなかっただけで run を捨てている")
 	}
 }
