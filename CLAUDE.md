@@ -131,7 +131,7 @@ os.Rename(tmp.Name(), path)
 
 **何が壊れるか。**`continuo hook` のフラグ名を変える変更を入れた瞬間、
 新しい実行ファイルの hook は**引数を受け取れずに exit 1 で落ちる**
-（[internal/cli/cli.go:1466-1485](internal/cli/cli.go#L1466-L1485) が
+（[internal/cli/cli.go:1755-1775](internal/cli/cli.go#L1755-L1775) が
 `--socket` と `--pending-dir` の欠落と相対パスを、それぞれ exit 1 にしている）。
 **古い本体は turn の終わりを永久に受け取れなくなる。**
 **しかも本体には、自分が黙らされたことが分からない。**hook が1つも届かないことと、
@@ -149,7 +149,7 @@ Claude Code がまだ喋っている最中であることは、本体からは�
 **最後の括弧が本体である。**issue に hook のことが1行も書いていなくても、
 **作業中に手が hook の挙動を変えようとしたら、その時点で止まる。**「ついでに直した」を通さない。
 
-**「挙動が変わる」とは何か。**次の3つのどれかである。
+**「挙動が変わる」とは何か。**次の4つのどれかである。
 
 | 何が変わるか | 例 |
 | --- | --- |
@@ -164,15 +164,20 @@ Claude Code がまだ喋っている最中であることは、本体からは�
 
 ```
 $ go run ./cmd/continuo hook-renamed --socket /tmp/x.sock --pending-dir /tmp/x
-  -log-level string
-    	Log level (debug|info|warn|error) (default "info")
+flag provided but not defined: -socket
+continuo — turns a GitHub Projects v2 kanban board into a work queue and has Claude Code work through the issues.
+
+Usage:
+  continuo [flags]               start the daemon (…)
+  continuo <subcommand> [args]
+（Usage とサブコマンド一覧が続く。フラグは -id / -log-level / -port の3本）
 exit status 2
 ```
 
 **`switch args[0]` のどれにも当たらない引数は `runMain` へ落ち、`--socket` が未知のフラグとして 2 を返す。**
 **Claude Code は hook の終了コード 2 を「その操作を止めろ」と解釈する。**
 `Stop` hook で 2 が返ると、**エージェントが turn を終えられなくなる**
-（[internal/cli/cli.go:1443-1446](internal/cli/cli.go#L1443-L1446) と
+（[internal/cli/cli.go:1730-1731](internal/cli/cli.go#L1730-L1731) と
 [docs/plans/impl/04_hook.md:197](docs/plans/impl/04_hook.md#L197)）。
 
 **終了コードを「揃える」cleanup が、いちばん危ない。**
@@ -209,17 +214,17 @@ git fetch origin -q
 
 **`main` ではなく `origin/main` を見る。**手元の `main` は取り込んでいないことがあり、
 **そもそも手元に `main` が無い checkout では `fatal: ambiguous argument` になって、grep には何も渡らない。**
-これも「触っていない」と見分けが付かない（[docs/releasing.md:284](docs/releasing.md#L284) と同じ理由である）。
+これも「触っていない」と見分けが付かない（[docs/releasing.md:345](docs/releasing.md#L345) と同じ理由である）。
 
 **1行でも返ったら、上の4つに当てて判定する。当たれば止まる。**
 それぞれ、どの定義に当たりうるかは次のとおり。
 
-| 触った場所 | なぜ止まるか |
+| 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
-| [internal/orchestrator/orchestrator.go:1124](internal/orchestrator/orchestrator.go#L1124) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
+| [internal/orchestrator/orchestrator.go:1213-1217](internal/orchestrator/orchestrator.go#L1213-L1217) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
 
