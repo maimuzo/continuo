@@ -202,11 +202,18 @@ exit status 2
 
 ```bash
 git fetch origin -q
-{ git diff --name-only origin/main...HEAD   # commit 済みのもの
-  git diff --name-only HEAD                 # まだ commit していないもの（staged / unstaged）
-  git ls-files --others --exclude-standard --full-name  # 新しく足して、まだ追跡させていないもの
-} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/cli/cli\.go)'
+R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果にする
+{ git -C "$R" diff --name-only origin/main...HEAD   # commit 済みのもの
+  git -C "$R" diff --name-only HEAD                 # まだ commit していないもの（staged / unstaged）
+  git -C "$R" ls-files --others --exclude-standard -- :/  # 新しく足して、まだ追跡させていないもの
+} | sort -u | grep -E '^(internal/socketpath/|internal/hookclient/|internal/hookserver/|internal/lock/|internal/orchestrator/settings\.go|internal/orchestrator/orchestrator\.go|internal/orchestrator/hookinput\.go|internal/orchestrator/turn\.go|internal/orchestrator/runstate\.go|internal/cli/cli\.go)'
 ```
+
+**`git -C "$R"` から叩くのは、cwd の下しか見ない経路を塞ぐためである。**
+`git ls-files --others --exclude-standard` は pathspec を省くと**いまいるディレクトリの下だけ**を列挙する
+（`--full-name` はパスの前置きを直すだけで、走査の範囲は直らない）。
+**`internal/cli/` を cwd にして叩くと、`internal/hookserver/` の下に置いた新しいファイルは1行も出ない。**
+**「触っていない」と見分けが付かないまま門を通る。**
 
 **3つとも見るのは、`git diff --name-only origin/main...HEAD` だけでは素通りするからである。**
 三点の `...` は commit 済みの履歴しか読まないので、**hook の引数を書き換えて、まだ commit していない状態では1行も返らない。**
@@ -334,7 +341,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 
 [.claude/rules/plugins.md](.claude/rules/plugins.md) に従うこと。
 
-**これは開発者の環境向けである**（絶対に守る制約7）。**このリポジトリを clone した人には当てはまらない。**
+**これは開発者の環境向けである**（CLAUDE.md の「不特定多数の環境と、maimuzo の環境を混同しない」）。**このリポジトリを clone した人には当てはまらない。**
 
 ---
 
