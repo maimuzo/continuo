@@ -47,11 +47,6 @@ import (
 // **実在のアカウント名を書かない。**公開リポジトリなので octocat を使う。
 const testGHLogin = "octocat"
 
-// testHostName はテストで使う「この機械の名前」である（設計 3-77）。
-//
-// **架空の名前を使う。**入札と hold のコメントに書かれる値である。
-const testHostName = "test-host"
-
 // ghLoginForTest は「gh の持ち主」を取る偽物を返す（設計 3-65）。
 //
 // **本物を渡すと `gh api user` が起動する。**`testing/synctest` の bubble の中では
@@ -1353,6 +1348,14 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 		ID: fmt.Sprintf("C_self_%d", len(ft.comments[issueNodeID])+1),
 		// PostComment は self_marker を本文の先頭に付けて投稿する。
 		Body: selfMarker + "\n" + body, IsSelf: true, CreatedAt: ft.now(),
+		// **投稿者を入れる**（設計 3-77-0）。**本物の GitHub は必ず投稿者を付ける。**
+		// 入れないと、この continuo が書いた入札を次の巡回で自分のものと読めず、
+		// **巡回のたびに入札のコメントが1件ずつ増える。**
+		//
+		// **定数ではなく、いま名乗っている持ち主を使う。**`SetViewer` で差し替えた検査では、
+		// **定数を入れると、この mock が書いたコメントだけ別のアカウントのものになる。**
+		// そのとき `HasBidBy` が偽に落ち、**本物では起きない入札の増殖が mock の中でだけ起きる。**
+		Author: ft.viewer.Login,
 	}
 	ft.comments[issueNodeID] = append(ft.comments[issueNodeID], c)
 	return &c, nil
@@ -1702,6 +1705,13 @@ type fixtureOptions struct {
 	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
 	// 空なら一時ディレクトリの根（tempRoot）を使う。
 	TranscriptRoot string
+	// ConfigPath は走行中に読み直す WORKFLOW.md の絶対パスである（設計 3-24）。
+	//
+	// **空なら読み直さない。**渡していないテストの挙動は変わらない。
+	ConfigPath string
+	// ConfigFile は、ファイルから読んだままの設定である（CLI の上書きが入っていないもの）。
+	// nil なら Config で代用する。
+	ConfigFile *config.Config
 	// ContinuoPath は hook のコマンド行に書く実行ファイルのパスである。
 	// 空なら `/opt/continuo/bin/continuo` を使う。
 	ContinuoPath string
@@ -1885,16 +1895,16 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		// **1回目に送る文面は、断片の並びとして渡す**（設計 5-3c）。
 		// テストが与えるのは1枚のテンプレートなので、それを WORKFLOW.md の本文の
 		// 位置に置いた形で組み立てる（組み込みの前半と後半が前後に付く）。
-		Prompt:         prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
+		Prompt: prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
+		// **走行中の読み直しは、渡したテストでだけ走る**（設計 3-24）。
+		ConfigPath:     opts.ConfigPath,
+		ConfigFile:     opts.ConfigFile,
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,
 		RateLimit:      opts.RateLimit,
 		HookSocketPath: fx.SocketPath,
 		ContinuoPath:   continuoPath,
-		// **機械の名前を固定する**（設計 3-77）。走らせる機械によって
-		// 入札のコメントの中身が変わらないようにする。
-		HostName: testHostName,
 		// **テストの transcript は一時ディレクトリに置く。**hook が渡す
 		// transcript_path は許可された根の内側だけを受け入れるので、根をそこへ向ける
 		// （本番の既定は `~/.claude/projects`）。

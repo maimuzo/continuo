@@ -310,7 +310,7 @@ func (o *Orchestrator) claimAutomatedRewrite(
 	if !issue.StatusChangedByAutomation {
 		return "", nil, false
 	}
-	target, ok := lookupStateRewrite(o.cfg.Tracker.AutomatedStateRewrite, issue.State)
+	target, ok := lookupStateRewrite(o.reloadableConfig().AutomatedStateRewrite, issue.State)
 	if !ok {
 		// **対応表に無ければ書き戻さない。**いままでどおり猶予を置いて止める。
 		// **足し方は issue のコメントに書く**（unknownStateReason）。ログに毎巡回出すと
@@ -671,8 +671,11 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 	// **貼ると起動しなくなる案内を出さない**（設計 3-57b）。
 	// 対応表に既に書いてある Status なら、`active_states` へ足す案内の代わりに
 	// **「先に対応表のその行を消す」を出す。**それが唯一、貼っても起動する直し方である。
-	hint, proposesRewrite := o.automatedStateHint(rs, state)
-	rewriteTarget, inRewriteTable := lookupStateRewrite(o.cfg.Tracker.AutomatedStateRewrite, state)
+	// **対応表は1回だけ読む**（設計 3-24）。走行中に差し替わるので、
+	// **同じコメントを組み立てる途中で2回読むと、前半と後半で別の対応表を見ることになる。**
+	rewrite := o.reloadableConfig().AutomatedStateRewrite
+	hint, proposesRewrite := o.automatedStateHint(rs, state, rewrite)
+	rewriteTarget, inRewriteTable := lookupStateRewrite(rewrite, state)
 	inCleanup := containsFold(o.cfg.Cleanup.OnStates, state)
 	teach := fmt.Sprintf(
 		"\n【`%s` も continuo に扱わせたいときは】WORKFLOW.md の `tracker.active_states` か "+
@@ -788,13 +791,16 @@ func (o *Orchestrator) unknownStateReason(rs *runState, state string) string {
 //
 // rs: 対象の run（取り直した issue を持っている）。
 // state: 動かされた先の Status 名。
+// rewrite: いま効いている書き戻しの対応表（設計 3-24）。
+// **呼び出し側が1回だけ読んで渡す。**走行中に差し替わるので、
+// **1つのコメントを組み立てる途中で読み直すと、前半と後半で別の対応表を見ることになる。**
 // 戻り値の1つ目: 足す文。足すものが無ければ空文字。
 // 戻り値の2つ目: `automated_state_rewrite` へ1行足す案内を出したなら true
 // （呼び出し側は、そのとき `active_states` へ足す案内を出さない）。
 // **既に対応表にある Status のときは偽である。**その場合に `active_states` の案内を
 // 抑えるかどうかは、**呼び出し側が対応表を自分で引いて決める**（`unknownStateReason`）。
 // ここで決めさせると、人間が動かして早々に戻る道（この関数の1つ目の分岐）を塞げない。
-func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, bool) {
+func (o *Orchestrator) automatedStateHint(rs *runState, state string, rewrite map[string]string) (string, bool) {
 	issue := rs.issue()
 	if !issue.StatusChangedByAutomation {
 		return "", false
@@ -808,7 +814,7 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, b
 			"（カンバンの組み込みの自動化です。PR を issue に紐づけた・PR をマージした、"+
 			"といった操作で動きます）。", by)
 
-	if target, ok := lookupStateRewrite(o.cfg.Tracker.AutomatedStateRewrite, state); ok {
+	if target, ok := lookupStateRewrite(rewrite, state); ok {
 		written += fmt.Sprintf(
 			"**この Status は WORKFLOW.md の `tracker.automated_state_rewrite` に"+
 				"（`%s` → `%s` として）既に書かれています。**それでも止まったので、"+
@@ -839,10 +845,28 @@ func (o *Orchestrator) automatedStateHint(rs *runState, state string) (string, b
 		// **書けない設定を見せない。**`active_states` へ足す案内だけが残る。
 		return written, false
 	}
+	// **「この2行を足してください」と言ってはならない。**`continuo init` が置いた雛形には
+	// `automated_state_rewrite: {}` の行が既にあるので、**塊ごと貼ると front matter が
+	// 重複キーになり、continuo が二度と起動しない**（issue #209）。
+	// **雛形に既にある行の `{}` を書き換えさせる。**
+	//
+	// **場所を見つける `grep` を必ず添える。**添えないと、利用者は front matter の
+	// どこを見ればよいのかが分からず、結局この塊をそのまま貼る。
+	// **書き方は docs/FAQ.md の `claude.env` の案内に揃えてある**（`# 既にある行` と
+	// `# ← これを足す` の注記を付ける）。
 	return written + fmt.Sprintf(
-		"**次からは continuo に戻させることができます。**WORKFLOW.md の `tracker:` の下へ"+
-			"次の2行を足して、continuo を再起動してください。"+
-			"\n```yaml\n  automated_state_rewrite:\n    %q: %q\n```",
+		"**次からは continuo に戻させることができます。**"+
+			"WORKFLOW.md の `tracker.automated_state_rewrite` の `{}` を、次のように書き換えてください"+
+			"（`continuo init` が置いた雛形には、この行が既にあります。"+
+			"**塊ごと貼り替えると front matter が重複キーになり、continuo が起動しません**）。"+
+			"\n\n場所は、既にある行から辿れます。\n\n"+
+			"```bash\ngrep -n 'automated_state_rewrite' <WORKFLOW.md のパス>\n```\n"+
+			"\n```yaml\ntracker:\n  # …（ほかの設定）\n"+
+			"  automated_state_rewrite:            # 既にある行。**末尾の {} を消す**\n"+
+			"    %q: %q   # ← これを足す\n```\n"+
+			"\n1行も出なかったときは、先に `continuo doctor --missing-keys-patch <WORKFLOW.md のパス> "+
+			"| patch -p0 <WORKFLOW.md のパス>` で足してから、上のように書き換えてください。"+
+			"\n書き換えたら continuo を再起動してください。",
 		state, back), true
 }
 
