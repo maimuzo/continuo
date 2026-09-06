@@ -320,7 +320,11 @@ func TestTokenUsage_Sub(t *testing.T) {
 // t: 呼び出し元のテスト。
 // fx: 対象の fixture。
 // issue: 対象の issue。
-// sessionUUID: 復帰先のセッション UUID。
+// sessionUUID: その turn の終わりに hook が名乗るセッション UUID。
+// **復帰先を決めるのはここではない。**身元ファイル（`prepareWorktree` の
+// `identityOverride.SessionUUID`）が決めるので、**同じ値を渡すこと。**
+// 違う値を渡すと hook がどの run にも当たらず、**待ちが時間切れになって
+// 「turn が終わらない」という、原因の分かりにくい落ち方をする。**
 // transcriptPath: その turn の終わりに読ませる transcript のパス。
 // promptID: その turn の `prompt_id`。
 // onPrompt: `agent.prompt` を受けたときに追加で行うこと（Status を動かすなど）。nil なら何もしない。
@@ -394,6 +398,8 @@ func assertResumedSameSession(t *testing.T, fx *fixture, want string) {
 //
 // **ファイル名は `seeded` から取る。**別に渡すと、綴りを取り違えたときに
 // **同じディレクトリへ別名の記録が1つ増え、`seeded` は伸びないまま残る。**
+// **下の一致の検査は、いまの `writeTranscript` では必ず真になる**（同じ `filepath.Join` を通る）。
+// **`writeTranscript` が返すパスを整形し直すようになったときの番兵として置いてある。**
 //
 // t: 呼び出し元のテスト。
 // seeded: `seedSessionTranscript` が返した1回目のパス。**ここを書き直す。**
@@ -482,7 +488,8 @@ func TestTokenTotals_引き渡しのあと復帰しても二重に数えない(t
 // **この2本は「落とさない」側だけを見る。**「消したときに落とす」側は見ない。
 // **`forgetTokenLedger` の呼び出しを丸ごと消しても、この2本は落ちない。**
 // worktree を消すと身元ファイルも消えるので、次の着手は必ず新しいセッションを採番し、
-// **新しいセッションは台帳の別の鍵になるため、足される額は同じだからである。**
+// **台帳の項目に入っている `session` と食い違うので、差分ではなく全額が足されるからである**
+// （**鍵そのものは issue の識別子のままで、変わらない**）。
 // 失うのは台帳の項目1件ぶんのメモリだけである。
 // **同じ理由で、巡回中に worktree を消す `reconcileWorktrees` も台帳を落としていないが、
 // 額は変わらないのでこの2本の対象外である。**
