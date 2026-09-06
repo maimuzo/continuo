@@ -48,6 +48,10 @@ func TestStartup_hookが届いていれば起動していると扱う(t *testing
 	// **それでよい。**あの裏取りは「読めなかったら従来どおり進む」と決めてあり、
 	// **turn の終わりの判定そのものは hook（`Stop`）だけで足りている。**
 	fx.AllowLog("turn の終わりの裏取りができませんでした")
+	// **CI でだけ出ることがある。**herdr の mock が応答を書く前にテストが次へ進むと、
+	// 復元の経路が「agent は登録されていないが Claude Code は生きている」を検知して WARN を出す。
+	// **これは設計どおりの動きで、このテストが確かめたいこと（hook が届いていれば起動と扱う）とは別である。**
+	fx.AllowLog("復元した Claude Code が走っているので、コメントを書かせる指示は送れません")
 	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
 
 	transcriptDir := t.TempDir()
