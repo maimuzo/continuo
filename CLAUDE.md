@@ -194,11 +194,12 @@ exit status 2
 
 **検知のしかた。**まずパスで拾う。**拾ったものを、上の4つに当てて判定する。**
 
-**この網は、定義より狭い。**「受ける側の解釈」を実装している
+**この網は、定義そのものではない。**下の grep は「受ける側の解釈」を実装している
 [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go)（届いた hook を捨てる判定）・
 [internal/orchestrator/turn.go](internal/orchestrator/turn.go)（turn の終わりを決める場所）・
-[internal/orchestrator/runstate.go](internal/orchestrator/runstate.go) は、網に掛からない。
-**網に掛からなくても、上の4つに当たると思ったら止まること。**
+[internal/orchestrator/runstate.go](internal/orchestrator/runstate.go) も拾うが、
+**拾えるのはファイル単位までである。**その中のどこを触ったかは見ていない。
+**網に掛からないファイルでも、上の4つに当たると思ったら止まること。**
 
 ```bash
 git fetch origin -q
@@ -229,11 +230,15 @@ R=$(git rev-parse --show-toplevel)          # cwd がどこでも同じ結果に
 | 触った場所 | どの定義に当たりうるか |
 | --- | --- |
 | [internal/cli/cli.go](internal/cli/cli.go) の `hook` の引数 | `--socket` / `--pending-dir` が変わると、新しい hook が古い本体へ届かなくなる |
+| [internal/cli/cli.go:184-205](internal/cli/cli.go#L184-L205) の `switch args[0]` と [internal/cli/cli.go:1585-1590](internal/cli/cli.go#L1585-L1590) の `parseErrorExitCode` | **4つ目の定義そのものである。**サブコマンド名を変えると、`runMain` へ落ちて終了コード 2 が返る。`Stop` hook で 2 が返ると、エージェントが turn を終えられなくなる |
 | [internal/orchestrator/settings.go](internal/orchestrator/settings.go) | hook のコマンド行を組み立てている場所そのもの |
 | [internal/socketpath/](internal/socketpath/) | socket のパスの決め方。ずれると hook の宛先が消える |
 | [internal/orchestrator/orchestrator.go:1213-1217](internal/orchestrator/orchestrator.go#L1213-L1217) の `pendingDir` | continuo が落ちている間の hook の逃がし先の置き場所 |
 | [internal/hookclient/](internal/hookclient/) と [internal/hookserver/](internal/hookserver/) | hook を送る側と受ける側の約束 |
 | [internal/lock/](internal/lock/) | ロックファイルの扱い。新旧が同じ鍵を取り合う |
+| [internal/orchestrator/hookinput.go](internal/orchestrator/hookinput.go) | 届いた hook を捨てる判定。**受ける側の解釈そのもの** |
+| [internal/orchestrator/turn.go](internal/orchestrator/turn.go) | turn の終わりを決める場所。**ここが変わると、本体が turn の終わりを受け取れなくなる** |
+| [internal/orchestrator/runstate.go](internal/orchestrator/runstate.go) | hook を受けた run の状態。**新旧で持ち方が違うと、復元した run が hook を取りこぼす** |
 
 **人間に見せるもの。**次の5つを揃える。1つでも欠けたら、人間は可否を判断できない。
 
