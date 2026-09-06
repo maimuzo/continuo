@@ -157,6 +157,18 @@ worktree が無ければ復帰する道が無いためである。**`cleanupPath
 **台帳を落としているのは1つ目だけである。**後ろ2つは**起動時にしか走らず、その時点で台帳は空だからである。**
 **巡回の最中に走る片付けを新しく足すなら、そこでも `forgetTokenLedger` を呼ぶこと。**
 
+**巡回中に worktree を消す経路は、`cleanupPath` の外にもう1本ある**（`reconcileWorktrees` が
+`ws.Cleanup` を直に叩く）。**そこも台帳を落としていないが、額は変わらない。**
+worktree が消えれば身元ファイルも消え、次の着手は必ず新しいセッションを採番するためである。
+**失うのは台帳の項目1件ぶんのメモリだけである。**
+
+#### 落とす側は、テストで押さえていない
+
+**押さえてあるのは「落とさない」側の2つだけである**（引き渡しのあとの復帰と、片付けを見送ったあとの復帰）。
+**`forgetTokenLedger` の呼び出しを丸ごと消しても、その2本は落ちない。**
+上と同じ理由で、**落としても落とさなくても、次に足される額は同じだからである。**
+**残るのはメモリの話だけなので、そこは検査していない。**
+
 **上限は無い。**worktree を消さずに手放した issue（引き渡し・失敗）の項目は残る。
 1件あたりは識別子とセッション UUID の文字列2本と int 5本である。
 
@@ -238,7 +250,7 @@ worktree が無ければ復帰する道が無いためである。**`cleanupPath
 | --- | --- |
 | [test/internal/server/](../../../test/internal/server/) | 23件。ループバック以外から接続できないこと（この機材のループバックでない IPv4 へ実際に接続する）、ループバック以外の宛先を 421 で断ること、GET 以外が 405 になること、タイトルと URL のエスケープ |
 | [test/internal/orchestrator/dashboard_test.go](../../../test/internal/orchestrator/dashboard_test.go) | 3件。**本物の供給経路**（transcript を読む → 集計する → `runState` → `RunViews`）が繋がっていること、再 dispatch で累計が巻き戻らないこと、`LastHookAt` が hook でしか進まないこと |
-| [test/internal/orchestrator/cumulative_tokens_test.go](../../../test/internal/orchestrator/cumulative_tokens_test.go) | 5件（issue #238）。turn を重ねても同じ transcript を二重に数えないこと、**同じファイルを違う綴りで名乗られても二重に数えないこと**、**run が終わっても累計に残ること**、引き継いだ run が transcript 全体を累計へ入れること、`TokenUsage.Sub` が負を0へ丸めて知らせること |
+| [test/internal/orchestrator/cumulative_tokens_test.go](../../../test/internal/orchestrator/cumulative_tokens_test.go) | 7件（issue #238）。turn を重ねても同じ transcript を二重に数えないこと、**違うファイル名を名乗られても二重に数えないこと**、**run が終わっても累計に残ること**、引き継いだ run が transcript 全体を累計へ入れること、`TokenUsage.Sub` が負を0へ丸めて知らせること、**引き渡しのあと復帰しても二重に数えないこと**（`release` では台帳を落とさない）、**片付けを見送ったあと復帰しても二重に数えないこと**（`cleanupPath` が偽なら落とさない） |
 | [test/internal/server/cumulative_test.go](../../../test/internal/server/cumulative_test.go) | 3件（issue #238）。JSON に `cumulative_totals` が出て `totals` が変わっていないこと、累計を run の写しより後に取っていること、HTML に累計の表が出て run ごとの表が変わっていないこと |
 | [test/internal/daemon/daemon_test.go](../../../test/internal/daemon/daemon_test.go) | 2件。ダッシュボードが開けなくても巡回まで進むこと、`--port` で開いた口に引き継いだ run が出ること |
 
