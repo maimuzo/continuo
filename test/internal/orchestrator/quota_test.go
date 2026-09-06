@@ -645,10 +645,6 @@ func weeklyWaitFixture(
 		Now:         clock.Now,
 		Mutate: func(cfg *config.Config) {
 			cfg.Claude.TurnTimeoutMs = 60000
-			// **サブエージェントを待つ猶予を短くする**（issue #197）。
-			// **手放す前の待ちは実時間で計るので、既定の30秒では検査が終わらない。**
-			// **0 にはしない。**0 は「待たない」なので、待つ段そのものを検査から外すことになる。
-			cfg.Claude.PollWaitMs = 10
 			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
 			cfg.RateLimit.PollIntervalMs = 1
 			cfg.RateLimit.WeeklyWaitLimitMinutes = limitMinutes

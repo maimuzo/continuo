@@ -21,6 +21,15 @@ import (
 // 波括弧ごと照合すると、正しい設定を弾いてしまう。
 const issueNumberPlaceholder = ".issue.number"
 
+// weeklyWaitLimitMaxMinutes は `rate_limit.weekly_wait_limit_minutes` の上限（分）である
+// （issue #197）。**10年ぶん。**
+//
+// **上限を置く理由。**`time.Duration(n) * time.Minute` は int64 のナノ秒なので、
+// **1.5億分あたりであふれて小さい正の値へ巻き戻る。**
+// **そうなると、枠待ちに入った瞬間に担当を手放す。**
+// **「事実上いつまでも待つ」は 0 で表す**ので、大きな値を書く必要は無い。
+const weeklyWaitLimitMaxMinutes = 10 * 365 * 24 * 60
+
 // validate は front matter をパースした直後の Config に対して、YAML としては正しいが
 // 値として不正なものが無いかを検査する。ここでの不正は「起動を止める」対象である
 // （設計「その2」。CLAUDE.md にも明示されている絶対条件）。
@@ -32,15 +41,6 @@ const issueNumberPlaceholder = ".issue.number"
 // cfg: unmarshal 済みの Config（5-5 の展開はまだ行っていない状態でよい）。
 // 戻り値: 最初に見つかった不正な値についてのエラー。複数箇所が不正でも1つずつ直せるよう、
 // エラーメッセージには必ず設定キーの名前と、実際に入っていた値を含める。
-// weeklyWaitLimitMaxMinutes は `rate_limit.weekly_wait_limit_minutes` の上限（分）である
-// （issue #197）。**10年ぶん。**
-//
-// **上限を置く理由。**`time.Duration(n) * time.Minute` は int64 のナノ秒なので、
-// **1.5億分あたりであふれて小さい正の値へ巻き戻る。**
-// **そうなると、枠待ちに入った瞬間に担当を手放す。**
-// **「事実上いつまでも待つ」は 0 で表す**ので、大きな値を書く必要は無い。
-const weeklyWaitLimitMaxMinutes = 10 * 365 * 24 * 60
-
 func validate(cfg *Config) error {
 	if cfg.Tracker.Kind != "github_projects_v2" {
 		return invalidValueError("tracker.kind", cfg.Tracker.Kind, `"github_projects_v2" のみサポートする`)

@@ -207,7 +207,7 @@ func (r SkipReason) String() string {
 // **「人間のための取り置きへ食い込むか」を問う線である。**次の2箇所で使う。
 //
 //	入札するかどうか              … Evaluate（余裕値が0以下なら入札しない）
-//	1週間の枠を待つ上限を超えたか … Orchestrator.weeklyWaitExceeded
+//	1週間の枠を待つ上限を超えたか … Orchestrator.weeklyWaitExceededWith
 //
 // **枠待ちの印には使わない。**あちらは `Full`（使用率100）である。
 // **問いが違う。**印は「Claude Code が本当に応答できないか」を問うもので、
@@ -234,7 +234,7 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 		switch {
 		case IsWeeklyKind(l.Kind):
 			return fullPercent-l.Percent-margins.Weekly <= 0
-		case matchesKind(l.Kind, sessionKinds):
+		case matchesKind(l.Kind, []string{LimitKindSession}):
 			return fullPercent-l.Percent-margins.FiveHour <= 0
 		default:
 			return false
@@ -265,12 +265,6 @@ func Full() func(l ratelimit.Limit) bool {
 		return l.Percent >= fullPercent
 	}
 }
-
-// sessionKinds は5時間の枠の種別である。
-//
-// **その場で組み立てない。**`Short` は枠1件につき1回呼ばれるので、
-// **呼ぶたびに slice を作ると、判定1回につき確保が1つ増える。**
-var sessionKinds = []string{LimitKindSession}
 
 // ShortWeekly は「1週間の枠のうち、余裕が無いもの」を判定する関数を作る
 // （設計 3-27。issue #197）。

@@ -291,7 +291,7 @@ func (o *Orchestrator) observedPercentsOf(snap *ratelimit.Snapshot) (int, int) {
 //
 // skip: 止めた理由。**`handoff.SkipNone` を渡してはならない。**
 func (o *Orchestrator) logNewWorkBlocked(
-	skip handoff.SkipReason, snap *ratelimit.Snapshot, stale bool,
+	skip handoff.SkipReason, snap *ratelimit.Snapshot,
 ) {
 	h := o.cfg.Tracker.Provider.Handoff
 	args := []any{
@@ -306,7 +306,6 @@ func (o *Orchestrator) logNewWorkBlocked(
 	// **読む人は、どちらが本当かを決められない。**
 	if skip == handoff.SkipQuotaUnreadable {
 		snap = nil
-		stale = false
 	}
 	session, weekly := o.observedPercentsOf(snap)
 	if session != percentUnknown {
@@ -405,13 +404,13 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// **理由とログの数字を、同じ1回の読み取りから作る**（設計 3-77j）。
 	// **`newWorkBlocked()` と `logNewWorkBlocked()` がそれぞれロックを取ると、
 	// 「枠を読めない」と名乗りながら使用率を並べる1行が出る。**
-	blockedSnap, blockedStale := o.quotaSnapshotWithStale()
+	blockedSnap, _ := o.quotaSnapshotWithStale()
 	blocked := o.newWorkBlocked()
 	if blocked != handoff.SkipNone && len(candidates) > 0 {
 		// **候補が0件のときは出さない**（issue #173）。
 		// **枠が何かを止めたわけではない**ので、出すと嘘になる。
 		// **空のカンバンで巡回のたびに1行出し続けることにもなる。**
-		o.logNewWorkBlocked(blocked, blockedSnap, blockedStale)
+		o.logNewWorkBlocked(blocked, blockedSnap)
 	}
 	// **ここで巡回を打ち切ってはならない**（人間の決定。2026-09-06。issue #173）。
 	//
