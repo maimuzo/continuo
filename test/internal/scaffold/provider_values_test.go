@@ -1,4 +1,4 @@
-// `continuo setup` が、既にある WORKFLOW.md から owner とボードの番号を拾えるかの検査である。
+// `continuo setup` が、既にある WORKFLOW.md から owner とカンバンの番号を拾えるかの検査である。
 //
 // **これが無かったために、`continuo init --project 9` で埋めたのに
 // `continuo setup` でもう一度 `--project 9` を指定させられていた**（2026-08-21、設計 6-2）。
@@ -48,12 +48,12 @@ func writeWorkflow(t *testing.T, body string) string {
 	return dir
 }
 
-// TestCheckUpdatable_既に書かれている owner とボードの番号を返す は、setup が読む値を確かめる。
+// TestCheckUpdatable_既に書かれている owner とカンバンの番号を返す は、setup が読む値を確かめる。
 //
 // 目的: front matter に書かれた `owner` と `project_number` を返すこと。
 // 与える情報: 両方が埋まった WORKFLOW.md。
 // 成功条件: Result.Owner と Result.ProjectNumber にその値が入ること。
-func TestCheckUpdatable_既に書かれているownerとボードの番号を返す(t *testing.T) {
+func TestCheckUpdatable_既に書かれているownerとカンバンの番号を返す(t *testing.T) {
 	dir := writeWorkflow(t, "    owner: octocat\n    project_number: 9")
 
 	got, err := scaffold.CheckUpdatable(dir)
@@ -64,14 +64,14 @@ func TestCheckUpdatable_既に書かれているownerとボードの番号を返
 		t.Errorf("owner を読めていない: %q", got.Owner)
 	}
 	if got.ProjectNumber != 9 {
-		t.Errorf("ボードの番号を読めていない: %d", got.ProjectNumber)
+		t.Errorf("カンバンの番号を読めていない: %d", got.ProjectNumber)
 	}
 }
 
 // TestCheckUpdatable_プレースホルダのままなら空で返す は、雛形をそのまま置いた場合を確かめる。
 //
 // **`continuo init` が値を埋められなかったとき、雛形のプレースホルダが残る。**
-// それを「書かれた値」として扱うと、`continuo setup` が存在しないボードを読みに行く。
+// それを「書かれた値」として扱うと、`continuo setup` が存在しないカンバンを読みに行く。
 //
 // 目的: プレースホルダを値として採らないこと。
 // 与える情報: `continuo init` が値を埋める前の雛形そのもの。
@@ -90,7 +90,7 @@ func TestCheckUpdatable_プレースホルダのままなら空で返す(t *test
 		t.Errorf("プレースホルダを owner として採っている: %q", got.Owner)
 	}
 	if got.ProjectNumber != 0 {
-		t.Errorf("プレースホルダをボードの番号として採っている: %d", got.ProjectNumber)
+		t.Errorf("プレースホルダをカンバンの番号として採っている: %d", got.ProjectNumber)
 	}
 }
 

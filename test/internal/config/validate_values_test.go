@@ -28,7 +28,7 @@ func loadWithReplaced(t *testing.T, key, line string) error {
 
 	var b strings.Builder
 	replaced := false
-	// **雛形はプレースホルダのままでは検証を通らない。**owner とボードの番号を埋めてから、
+	// **雛形はプレースホルダのままでは検証を通らない。**owner とカンバンの番号を埋めてから、
 	// 見たい1行だけを壊す（そうしないと、常にプレースホルダのエラーが先に返る）。
 	base := scaffold.TemplateWithValues(scaffold.Values{Owner: "octocat", ProjectNumber: 3})
 	for _, l := range strings.Split(base, "\n") {
@@ -64,8 +64,8 @@ func TestValidate_使えない値は起動する前に弾く(t *testing.T) {
 		line string
 		want string
 	}{
-		{"ボードの番号が0", "project_number", "    project_number: 0", "project_number"},
-		{"ボードの番号が負", "project_number", "    project_number: -1", "project_number"},
+		{"カンバンの番号が0", "project_number", "    project_number: 0", "project_number"},
+		{"カンバンの番号が負", "project_number", "    project_number: -1", "project_number"},
 		{"Status フィールドの名前が空", "status_field", `    status_field: ""`, "status_field"},
 		{"owner が空", "owner", `    owner: ""`, "owner"},
 		{"tracker.kind が知らない値", "kind", "  kind: gitlab_boards", "tracker.kind"},

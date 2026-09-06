@@ -2,7 +2,7 @@
 // 復元 → 巡回 → 終了までを確かめる。
 //
 // **実 herdr には繋がない。**`net.Listen("unix", ...)` でテスト用socket mockを立てる。
-// **本番のボード（project #3）へは接続しない。**`httptest.Server` でテスト用GraphQL mockを
+// **本番のカンバン（project #3）へは接続しない。**`httptest.Server` でテスト用GraphQL mockを
 // 立て、環境変数 `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` でバイナリの接続先をそこへ向ける。
 // **Claude Code は起動しない。**turn の終わりは、テスト用herdr mock の `agent.prompt` の応答と、
 // テストが hook の socket へ直接書き込む `Stop` で再現する。
@@ -361,7 +361,7 @@ func (fh *fakeHerdr) CountMethod(method string) int {
 
 // ===== テスト用GitHub GraphQL mock サーバ =====
 
-// boardItem は偽ボードの project item 1件である。
+// boardItem は偽カンバンの project item 1件である。
 type boardItem struct {
 	// ItemID は project item の ID である。
 	ItemID string
@@ -383,11 +383,11 @@ type boardComment struct {
 
 // fakeGitHub は GitHub の GraphQL API の代わりに使う偽のサーバである。
 //
-// **本番のボードへは1リクエストも送らない。**
+// **本番のカンバンへは1リクエストも送らない。**
 type fakeGitHub struct {
 	// URL は偽サーバのエンドポイントである。
 	URL string
-	// Owner はボードの所有者名である。
+	// Owner はカンバンの所有者名である。
 	Owner string
 
 	mu       sync.Mutex
@@ -398,15 +398,15 @@ type fakeGitHub struct {
 	queries []string
 }
 
-// statusOptions は偽ボードの Status の選択肢である（設定と一致させる）。
+// statusOptions は偽カンバンの Status の選択肢である（設定と一致させる）。
 var statusOptions = []string{"Ready", "In Progress", "In Review", "Blocked", "Done"}
 
 // newFakeGitHub はテスト用GraphQL mockを1本立てる。
 //
 // t: 呼び出し元のテスト。後始末を t.Cleanup に登録する。
-// owner: ボードの所有者名。
+// owner: カンバンの所有者名。
 // tl: 呼び出しの並びの記録。
-// items: 最初にボードへ載せる item。
+// items: 最初にカンバンへ載せる item。
 // 戻り値: 起動した偽サーバ。
 func newFakeGitHub(t *testing.T, owner string, tl *timeline, items ...*boardItem) *fakeGitHub {
 	t.Helper()
@@ -573,7 +573,7 @@ func (fg *fakeGitHub) itemsByQuery(q string) []any {
 	return out
 }
 
-// sortedItems は item を番号の昇順で返す（ボードの並び順の代わり）。
+// sortedItems は item を番号の昇順で返す（カンバンの並び順の代わり）。
 //
 // **呼び出し側が fg.mu を保持していること。**
 func (fg *fakeGitHub) sortedItems() []*boardItem {

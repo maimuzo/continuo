@@ -19,7 +19,7 @@ import (
 // promptIssueURL は、検査で使う issue の URL である。
 const promptIssueURL = "https://github.com/octocat/hello-world/issues/42"
 
-// fakePromptIssue は、ボードから引けたことにする issue を1件返す。
+// fakePromptIssue は、カンバンから引けたことにする issue を1件返す。
 //
 // **`Identifier` は URL から作った識別子と一致させる。**内訳の1行に出るためである。
 //
@@ -226,17 +226,17 @@ func TestPromptURL_引数の誤りは終了コード2で断る(t *testing.T) {
 // 利用者はそれに気づけない。**気づけない出力が、いちばん悪い落ち方である。
 //
 // **「載っていません」とだけ言わない。**`FetchIssueByIdentifier` が偽を返す理由は5通りあり、
-// Status 未設定は本番のボードでも104件中4件ある通常の状態である。
+// Status 未設定は本番のカンバンでも104件中4件ある通常の状態である。
 // **`Bootstrap` を通していないので、`status_field` の綴りがずれていると全件がそう見える。**
 // **唯一の検出手段が `continuo doctor` なので、そこまで案内する。**
 //
-// 与える情報: 引けなかった場合と、ボードから組み立てられなかった場合。
+// 与える情報: 引けなかった場合と、カンバンから組み立てられなかった場合。
 // 成功条件: どちらも終了コードが 1 で、標準出力が空であること。
 func TestPromptURL_引けなかったら何も出さずに断る(t *testing.T) {
 	dir := writeWorkflowFor(t)
 	setBody(t, dir, "")
 
-	t.Run("ボードを読めない", func(t *testing.T) {
+	t.Run("カンバンを読めない", func(t *testing.T) {
 		deps := cli.Deps{PromptFetchIssue: func(
 			_ context.Context, _ config.TrackerConfig, _, _ string,
 		) (tracker.Issue, bool, error) {
@@ -255,7 +255,7 @@ func TestPromptURL_引けなかったら何も出さずに断る(t *testing.T) {
 		}
 	})
 
-	t.Run("ボードから組み立てられない", func(t *testing.T) {
+	t.Run("カンバンから組み立てられない", func(t *testing.T) {
 		deps := cli.Deps{PromptFetchIssue: func(
 			_ context.Context, _ config.TrackerConfig, _, _ string,
 		) (tracker.Issue, bool, error) {

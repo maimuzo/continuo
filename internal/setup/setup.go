@@ -1,10 +1,10 @@
-// Package setup は `continuo setup` の実体である。**既にあるボードの Status の選択肢を、
+// Package setup は `continuo setup` の実体である。**既にあるカンバンの Status の選択肢を、
 // continuo の5つの役割へ割り当てる対話**を行う（RUCM「既存のボードの Status を割り当てる」）。
 //
 // **対話するコマンドは continuo setup の1つだけである。**`continuo init` と `continuo trust` は
 // 標準入力を1度も握らない。対話をここへ切り出してあるので、`init` は自動化から叩ける。
 //
-// **ボードは1文字も書き換えない。**このパッケージが gh へ渡すのは
+// **カンバンは1文字も書き換えない。**このパッケージが gh へ渡すのは
 // `gh project field-list`（読み取り）だけである。**選択肢を足す API は呼ばない**
 // （`updateProjectV2Field` は選択肢の指定を全件の置き換えとして扱うので、設定済みの
 // Status が全部消える）。選択肢が足りないときは、GitHub の画面から足すよう案内して打ち切る。
@@ -16,7 +16,7 @@ package setup
 
 import "github.com/maimuzo/continuo/internal/i18n"
 
-// Role は continuo がボードの Status に与える役割である。
+// Role は continuo がカンバンの Status に与える役割である。
 //
 // **値は尋ねる順序でもある**（issue が実際に通る順）。0 から始まる連番にしてあるので、
 // Assignment の添字にそのまま使える。
@@ -38,11 +38,11 @@ const (
 // RoleCount は割り当てる役割の数である。
 //
 // **選択肢はこの数だけ要る。**1つの選択肢を2つの役割へ割り当てないので、
-// 選択肢がこれより少ないボードでは対話が必ず途中で行き止まる。
+// 選択肢がこれより少ないカンバンでは対話が必ず途中で行き止まる。
 const RoleCount = 5
 
 // roleOrder は尋ねる順序である。**issue が実際に通る順に並べてある。**
-// ボード上の並びと同じ順に尋ねると、利用者は一覧を上から順に消化できる。
+// カンバン上の並びと同じ順に尋ねると、利用者は一覧を上から順に消化できる。
 var roleOrder = [RoleCount]Role{RoleDispatch, RoleRunning, RoleReview, RoleBlocked, RoleDone}
 
 // roleConfigKeys は、その役割が WORKFLOW.md のどのキーに書かれるかである。添字は Role の値。

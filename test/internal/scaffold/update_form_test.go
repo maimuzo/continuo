@@ -22,7 +22,7 @@ import (
 //
 // TestUpdateStatuses_片付けを始めるStatusも書き換える は、**書き落としを落とす。**
 //
-// **ここが雛形の `["Done"]` のまま残ると、ボードの完了の選択肢が別名の環境で
+// **ここが雛形の `["Done"]` のまま残ると、カンバンの完了の選択肢が別名の環境で
 // 片付けが一度も走らない。**worktree と branch が永久に残り、その理由はどこにも出ない
 // （`Done` は active_states に無いので設定の検証を通る）。
 //
@@ -180,7 +180,7 @@ func TestUpdateStatuses_CRLFのファイルでもキーを見つけて書き換�
 	}
 }
 
-// templateFor は、owner とボードの番号を埋めた雛形の全文を返す。
+// templateFor は、owner とカンバンの番号を埋めた雛形の全文を返す。
 //
 // t: 呼び出し元のテスト。
 // 戻り値: WORKFLOW.md の全文。

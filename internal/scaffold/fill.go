@@ -58,7 +58,7 @@ const tokenSourceKeychainComment = "macOS の Keychain から読む。先に con
 
 // repositoriesFilledComment は trust.repositories を埋めたあとに残すコメントの1行目である。
 //
-// **「要らない行を消すこと」を必ず残す。**ボードから拾った一覧をそのまま信頼させないための
+// **「要らない行を消すこと」を必ず残す。**カンバンから拾った一覧をそのまま信頼させないための
 // 一文であり、これが消えると人間が削る手順そのものが伝わらない（設計 3-33）。
 const repositoriesFilledComment = "continuo trust が信頼を登録してよいリポジトリ。カンバンから拾って並べた。"
 
@@ -67,8 +67,8 @@ const repositoriesFilledComment2 = "**要らない行は消すこと。**ここ�
 
 // repositoriesFilledComment3 は trust.repositories を埋めたあとに残すコメントの3行目である。
 //
-// **ボードに載っていないリポジトリは自動では入らない。**これから issue を作る
-// リポジトリは、この時点ではボードに無いので拾えない。手で足す必要がある。
+// **カンバンに載っていないリポジトリは自動では入らない。**これから issue を作る
+// リポジトリは、この時点ではカンバンに無いので拾えない。手で足す必要がある。
 const repositoriesFilledComment3 = "**これから issue を作るリポジトリは、まだカンバンに無いので入っていない。**手で足すこと"
 
 // ownerPattern は tracker.provider.owner として受け付ける文字の範囲である。
@@ -86,14 +86,14 @@ var ownerPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0
 type Values struct {
 	// Owner は tracker.provider.owner に書く GitHub の user / organization 名である。
 	Owner string
-	// ProjectNumber は tracker.provider.project_number に書くボードの番号である。
+	// ProjectNumber は tracker.provider.project_number に書くカンバンの番号である。
 	ProjectNumber int
 	// Repositories は trust.repositories に並べる "owner/repo" である。
 	//
 	// **空なら雛形の `repositories: []` をそのまま残す。**空の一覧を書き下すより、
 	// 何も拾えなかったことが見て取れる形のほうがよい。
 	Repositories []string
-	// Statuses は continuo の5つの役割へ割り当てたボードの Status の選択肢名である。
+	// Statuses は continuo の5つの役割へ割り当てたカンバンの Status の選択肢名である。
 	//
 	// **決めるのは `continuo setup` だけである。**`continuo init` は空のまま渡すので、
 	// 雛形の既定値（`Ready` / `In Progress` / `In Review` / `Blocked` / `Done`）が残る。
@@ -280,7 +280,7 @@ func joinComment(code, rawComment string) string {
 
 // displayWidth は等幅の端末で code が占める桁数を返す。
 //
-// **バイト数では桁がそろわない。**`continuo setup` はボードの選択肢名をそのまま書き込むので、
+// **バイト数では桁がそろわない。**`continuo setup` はカンバンの選択肢名をそのまま書き込むので、
 // 日本語の選択肢名（`レビュー 待ち` など）が入りうる。UTF-8 の日本語は1文字3バイトだが
 // 画面では2桁なので、バイト数で数えるとコメントが左へずれて front matter 全体が崩れる。
 //
@@ -377,7 +377,7 @@ var statusKeys = []statusKey{
 	},
 	{
 		// **片付けを始める Status も割り当てから書く。**ここを雛形の `["Done"]` のまま
-		// 残すと、ボードの完了の選択肢が別名（`完了` など）の環境で片付けが一度も走らず、
+		// 残すと、カンバンの完了の選択肢が別名（`完了` など）の環境で片付けが一度も走らず、
 		// worktree と branch が永久に残る。**その状態は誰も指摘しない**
 		// （`Done` は active_states に無いので config の検証を通り、起動時の Status の
 		// 照合も cleanup を見ない）。利用者からは「Done にしたのに worktree が消えない」
@@ -401,7 +401,7 @@ func StatusKeyNames() []string {
 	return out
 }
 
-// Statuses は continuo の5つの役割へ割り当てたボードの Status の選択肢名である。
+// Statuses は continuo の5つの役割へ割り当てたカンバンの Status の選択肢名である。
 //
 // **決めるのは `continuo setup` である**（利用者に番号で選ばせる）。
 // ここに値が揃っていると、TemplateWithValues が雛形の既定値

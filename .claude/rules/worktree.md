@@ -48,7 +48,7 @@
 git fetch origin -q   # 検査の前に必ず打つ
 ```
 
-**同じ理由で、[CLAUDE.md](../../CLAUDE.md) の「6. hook の経路」の検知スクリプトも、
+**同じ理由で、[CLAUDE.md](../../CLAUDE.md) の「continuo で continuo 自身を直すとき、hook の挙動が変化する変更を実装する前に、その変更によりどんな影響があるかを深く検討し、実装してよいか人間に確認する」の検知スクリプトも、
 先頭で `git fetch origin -q` を打っている。**あちらは「手元の `main` ではなく `origin/main` を見る」だが、
 **`origin/main` に切り替えても、fetch していなければ同じことが起きる。**だから2つで1組である。
 [docs/releasing.md](../../docs/releasing.md) の版の比較も、先に fetch してから `origin/main` を見る。

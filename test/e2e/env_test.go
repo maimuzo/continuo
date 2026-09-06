@@ -19,7 +19,7 @@ import (
 // e2eEnv は docs/trying_it_out.md の段1から段9までを通すための一式である。
 //
 // **すべて一時ディレクトリの中で完結する。**実物のホームディレクトリ・実物の ghq の
-// 置き場所・本番のボード・実 herdr・実物の Claude Code のいずれにも触らない。
+// 置き場所・本番のカンバン・実 herdr・実物の Claude Code のいずれにも触らない。
 type e2eEnv struct {
 	// Root は一時ディレクトリの根である（socket のパスを短く保つため浅くする）。
 	Root string
@@ -50,13 +50,13 @@ type e2eEnv struct {
 	OriginDir string
 	// RepoDir は本物の git の clone である（テスト用ghq mock がこのパスを返す）。
 	RepoDir string
-	// Owner はボードの所有者名である。
+	// Owner はカンバンの所有者名である。
 	Owner string
 	// Repo はリポジトリ名である（`<Owner>/<Repo>` で使う）。
 	Repo string
 	// Binary はビルドした continuo の絶対パスである。
 	Binary string
-	// Board は偽のボードの持ち手である。
+	// Board は偽のカンバンの持ち手である。
 	Board *board
 	// GitHub はテスト用GitHub GraphQL mock サーバである。
 	GitHub *fakeGitHub
@@ -118,7 +118,7 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 	writeFakeGhq(t, env.BinDir, env.FullName(), env.RepoDir)
 	writeFakeClaudeBinary(t, env.BinDir)
 
-	// 偽のボードと、それを読み書きするテスト用GraphQL mock。
+	// 偽のカンバンと、それを読み書きするテスト用GraphQL mock。
 	env.Board = newBoardFile(t, boardPathIn(root), env.Owner, env.Repo)
 	env.GitHub = newFakeGitHub(t, env.Board.Path)
 
@@ -221,7 +221,7 @@ func writeFakeClaudeBinary(t *testing.T, binDir string) {
 // **環境変数は明示的に組み立てる。**実物の `HERDR_SOCKET_PATH` や `GH_TOKEN` を
 // 継承させないためである。
 //
-// **偽のボードとテスト用GraphQL mockがまだ無い時期にも呼べる**
+// **偽のカンバンとテスト用GraphQL mockがまだ無い時期にも呼べる**
 // （newE2EEnv が git のリポジトリを作るときに使う）。その場合は空文字を渡す。
 //
 // 戻り値: 環境変数の並び。
