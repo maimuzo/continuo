@@ -252,12 +252,12 @@ git worktree remove "$ROLLBACK"
 
 ### 並列で進める
 
-[.claude/rules/parallel-work.md](.claude/rules/parallel-work.md) に従うこと。とくに次の4点。
+[.claude/rules/parallel-work.md](.claude/rules/parallel-work.md) に従うこと。とくに次の3点。
 
 - **指示が無いときも、既定で Workflow と git worktree の並列にする**
-- **同じ issue のレビューと、それに対する作業**（実装・修正・設計の書き直し）**は、絶対に同時に走らせない**
 - **直列にしてよいのは、依存があるときだけ**
-- **複数の issue のレビューが返ってきたとき、その修正を1つずつ順番にやらない**
+- **複数の issue のレビューが返ってきたとき、その修正を1つずつ順番にやらない。
+  ただし同じ issue のレビューと修正は、絶対に同時に走らせない**
 
 ### worker への指示の書き方
 
