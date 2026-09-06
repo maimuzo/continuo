@@ -3,7 +3,7 @@
   "usecase_name": "レートリミットで待って再開する",
   "source": {
     "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
-    "rucm_block_sha256": "da7dd153ca75888d66126a720dfaa19388e4a2ba48fe28802648ae772037b463"
+    "rucm_block_sha256": "162cce486c40a62e5b453894278555d62e8d219afa27b0641891c6ace64cd50e"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -122,7 +122,7 @@
       "type": "condition",
       "flow": "BASIC FLOW",
       "step": 4,
-      "statement": "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。"
+      "statement": "システムは VALIDATES THAT 使い切っている枠がある。"
     },
     {
       "id": "BASIC FLOW-5",
@@ -502,13 +502,13 @@
       "from": "BASIC FLOW-4",
       "to": "BASIC FLOW-5",
       "kind": "true",
-      "condition": "余裕値が 0 以下の枠がある"
+      "condition": "使い切っている枠がある"
     },
     {
       "from": "BASIC FLOW-4",
       "to": "枠の残り-1",
       "kind": "false",
-      "condition": "NOT 余裕値が 0 以下の枠がある"
+      "condition": "NOT 使い切っている枠がある"
     },
     {
       "from": "BASIC FLOW-5",
@@ -794,7 +794,7 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
         "システムは run に枠待ちの印を立てる。",
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
@@ -838,7 +838,7 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
         "システムは run に枠待ちの印を立てる。",
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
@@ -883,7 +883,7 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
         "システムは run に枠待ちの印を立てる。",
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
@@ -920,7 +920,7 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
         "システムは run に枠待ちの印を立てる。",
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
@@ -953,7 +953,7 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
         "システムは run に枠待ちの印を立てる。",
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
@@ -989,7 +989,7 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
         "システムは run に枠待ちの印を立てる。",
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
@@ -1027,7 +1027,7 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
         "システムは run に枠待ちの印を立てる。",
         "システムは run の打ち切りの判定を飛ばす。",
         "システムは run の最後に動いていた時刻を進めない。",
@@ -1061,8 +1061,8 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
-        "CONDITION: NOT 余裕値が 0 以下の枠がある",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
+        "CONDITION: NOT 使い切っている枠がある",
         "システムは herdr に run の agent_status と pane の画面の版を要求する。",
         "IF 画面の版が前に見た値から変わっている THEN",
         "システムは run の打ち切りの時計を現在時刻に進める。",
@@ -1091,8 +1091,8 @@
         "巡回タイマーはシステムに巡回の開始を要求する。",
         "システムは VALIDATES THAT Claude の usage API から枠の使用率とリセット時刻を読み取れる。",
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
-        "システムは VALIDATES THAT 余裕値が 0 以下の枠がある。",
-        "CONDITION: NOT 余裕値が 0 以下の枠がある",
+        "システムは VALIDATES THAT 使い切っている枠がある。",
+        "CONDITION: NOT 使い切っている枠がある",
         "システムは herdr に run の agent_status と pane の画面の版を要求する。",
         "IF 画面の版が前に見た値から変わっている THEN",
         "CONDITION: NOT 画面の版が前に見た値から変わっている",

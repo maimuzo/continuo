@@ -261,7 +261,7 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // snap: この巡回で読んだ枠の写し。**nil なら「余裕が無い枠は無い」として扱う。**
 // now: いまの時刻。
 func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time.Time) {
-	short := snap.AnySelected(handoff.Short(o.bidMargins()))
+	full := snap.AnySelected(handoff.Full())
 	for _, rs := range o.snapshotRuns() {
 		st := rs.snapshot()
 		if !st.WaitingQuota {
@@ -270,7 +270,7 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 		switch {
 		case !st.QuotaResetAt.IsZero() && !now.Before(st.QuotaResetAt):
 			rs.clearWaitingQuota(now)
-		case !short:
+		case !full:
 			o.logger.Info("枠に余裕が戻ったので、枠待ちの印を外します",
 				"identifier", st.Identifier)
 			rs.clearWaitingQuota(now)
@@ -302,9 +302,10 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 	for _, rs := range o.snapshotRuns() {
-		if !rs.snapshot().WaitingQuota {
-			continue
-		}
+		// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
+		// **印は「使用率100」で立ち、この判定は「1週間の余裕値が0以下」で効く。**
+		// **印を門にすると、100%でしか手放せなくなり、
+		// 「入札するときの余裕値で判定して」という指示が効かなくなる。**
 		if !o.weeklyWaitExceeded(rs) {
 			continue
 		}
@@ -360,9 +361,12 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) bool {
 		return false
 	}
 	// **版が変わっていれば、まだ何かを書き出している。**
-	// **`noteRevision` は変わったときだけ `LastSeenAt` を進める。**
-	// 進めても構わない。**版が変わった run は、そもそも手放す相手ではない。**
-	return !rs.noteRevision(agent.Revision, o.now())
+	//
+	// **`noteRevision` を呼んではならない。**あれは版を控え直すので、
+	// **このあと `checkStalls` が同じ版を見ても「変わっていない」と答えることになる。**
+	// **画面が動いている run を、動いていないものとして打ち切ることになる。**
+	// **控え直すのは `checkStalls` の仕事である。**ここは読むだけにする。
+	return agent.Revision == rs.snapshot().LastRevision
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる

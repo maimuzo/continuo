@@ -634,7 +634,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 		}
 
 		// 枠が明けたか。**標識を外す契機は2つある**（設計 3-27）。
-		// **1つ目は `resets_at` を過ぎたこと。**2つ目は下の `quotaShort` で見る。
+		// **1つ目は `resets_at` を過ぎたこと。**2つ目は下の `quotaFull` で見る。
 		// **2つ目を落としてはならない。**`resets_at` が `null` の枠だけが満杯だと、
 		// **1つ目では永久に外れない。**
 		if ok && !o.now().Before(resetAt) {
@@ -642,7 +642,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 			return o.afterQuotaReset(ctx, rs)
 		}
 		o.pollQuota(ctx)
-		if !o.quotaShort() {
+		if !o.quotaFull() {
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)
 		}
@@ -752,14 +752,17 @@ const turnStopUnreadable turnOutcome = 103
 //
 // **2条件の連言である。**
 //
-//	条件その1  余裕の無い枠がある（余裕値が0以下。`handoff.Short`）
+//	条件その1  使い切っている枠がある（使用率100。`handoff.Full`）
 //	条件その2  その run から claude.turn_timeout_ms のあいだ hook が1件も来ていない
 //
-// **条件その1 は「percent が 100 に達している」だった**（人間の決定で変えた。2026-09-06。issue #197）。
-// **入札に使う余裕値と同じ線へ揃えてある。**揃えないと、使用率90〜99の帯で
-// **この run は枠待ちにならないのに、1週間の枠を待つ上限の条件だけを満たす。**
-// そこでは打ち切り（retry を積む）と手放し（担当を外す）が競走し、
-// **どちらが勝つかで、枠が足りないだけの issue が `failure_state` へ落ちることがあった。**
+// **条件その1 を「余裕値が0以下」へ移した時期があったが、取り下げた**
+// （2026-09-06。6段の段4 で issue #197 のコメントへ記録した）。
+// **使用率90%では Claude Code は普通に応答する。**そこで打ち切りの時計を止めると、
+// **本当に固まった run が、5時間の枠が90%を割るまで殺されない。**
+// **既定では最大で6時間、スロットと pane を握り続ける。**
+//
+// **1週間の枠を待つ上限の判定は、この印に紐づいていない。**あちらは余裕値で効く
+// （`releaseQuotaWaitExceeded`）。**同じ問いではないので、線も別である。**
 //
 // **`severity` は見ない。**上限を示す値が何かを実測できていない。
 //
@@ -780,7 +783,7 @@ func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
 // rs: 判定する run。
 // 戻り値: 枠待ちなら true。
 func (o *Orchestrator) isQuotaWaitingWith(quotaSnap *ratelimit.Snapshot, rs *runState) bool {
-	if !quotaSnap.AnySelected(handoff.Short(o.bidMargins())) {
+	if !quotaSnap.AnySelected(handoff.Full()) {
 		return false
 	}
 	snap := rs.snapshot()
@@ -795,19 +798,19 @@ func (o *Orchestrator) isQuotaWaitingWith(quotaSnap *ratelimit.Snapshot, rs *run
 	return true
 }
 
-// quotaShort は余裕の無い枠があるかを返す（設計 3-27 の条件その1）。
+// quotaFull は使い切っている枠があるかを返す（設計 3-27 の条件その1）。
 //
-// **線は入札と同じ `handoff.Short` である**（人間の決定。2026-09-06。issue #197）。
-// **マージンは種別ごとに引く**ので、`Snapshot` の側では判定できない。
+// **線は「使用率100」である。**入札の線（余裕値が0以下）とは別物である。
+// **理由は `isQuotaWaiting` の説明にある。**
 //
-// 戻り値: 余裕値が0以下の枠があれば true。枠を読めていなければ false。
-func (o *Orchestrator) quotaShort() bool {
-	return o.quotaSnapshot().AnySelected(handoff.Short(o.bidMargins()))
+// 戻り値: 使用率100の枠があれば true。枠を読めていなければ false。
+func (o *Orchestrator) quotaFull() bool {
+	return o.quotaSnapshot().AnySelected(handoff.Full())
 }
 
 // quotaResetAt は枠待ちの印を外す時刻を返す（設計 3-27 の「どの枠の時刻を見るか」）。
 //
-// **条件その1 を満たした枠のうち、`resets_at` がいちばん遅いものである。**
+// **条件その1（使い切っている枠）を満たしたもののうち、`resets_at` がいちばん遅いものである。**
 // **`resets_at` が null の枠は黙って飛ばす。**印を外す契機はもう1つあり
 // （余裕の無い枠が1つも無くなること）、**そちらが受け持つ。**
 //
@@ -826,7 +829,7 @@ func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
 // 戻り値の1つ目: 外す時刻。
 // 戻り値の2つ目: 時刻が分かれば true。
 func (o *Orchestrator) quotaResetAtOf(quotaSnap *ratelimit.Snapshot) (time.Time, bool) {
-	return quotaSnap.LatestResetForClearing(handoff.Short(o.bidMargins()))
+	return quotaSnap.LatestResetForClearing(handoff.Full())
 }
 
 // confirmTurnEnd は turn の終わりを確定させる（設計 3-2 の hook 側の規則）。

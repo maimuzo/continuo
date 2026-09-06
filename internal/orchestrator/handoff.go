@@ -715,7 +715,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// 人間が claude.ai の画面と突き合わせても食い違って見える。**
 	// **理由が既定の水準で出ないのは、issue #173 が直そうとしている症状そのものである。**
 	shortSnap, _ := o.quotaSnapshotWithStale()
-	shortKinds := strings.Join(shortSnap.SelectedKinds(handoff.Short(o.bidMargins())), ", ")
+	shortKinds := strings.Join(shortSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
 
 	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
 	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。
