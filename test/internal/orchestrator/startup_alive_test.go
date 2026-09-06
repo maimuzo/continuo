@@ -34,11 +34,17 @@ func agentNotFoundErr() *rpcErr {
 // 目的: `agent.get` が `agent_not_found` を返しても、**その run のセッションから
 // 作業中の hook が届いていれば、continuo が pane を閉じず、
 // 走っている turn へ1回目の指示も投げないこと。**
-// 与える情報: `agent_not_found` を返しながら、この run の `PreToolUse` を1件流す
-// `agent.get` の台本。**流すのは `agent.start` より後である**（そこが証拠になる線である）。
+// 与える情報: `agent_not_found` を返しながら、**呼ばれるたびに**この run の
+// `PreToolUse` を1件流す `agent.get` の台本。
+// **流すのは `agent.start` より後である**（そこが証拠になる線である）。
 // 成功条件（3つ）: issue が `failure_state`（`Blocked`）へ落ちず、`pane.close` が
 // 1回も呼ばれず、**その時点で `agent.prompt` が1回も呼ばれていないこと。**
 // **そのうえで、走っていた turn が終わったら1回目の指示が送られること。**
+//
+// **この3つは、run が終わる前の時点を見ている。**そのあと run は成果を書かせられずに
+// 人間へ渡るので、末尾の `WaitRunsDrained` を過ぎた時点では
+// `Status=Blocked` / `pane.close=2` / `agent.start=2` になる。
+// **末尾へ `pane.close == 0` のような検査を足すと落ちる。**実装の欠陥ではない。
 func TestStartup_hookが届いていれば起動していると扱う(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	// **これは想定して起こしている失敗である。**1回目の指示のあと `blocked` にして、
