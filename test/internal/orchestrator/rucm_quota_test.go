@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "53dd48decbca8bc73d013ac2bda0b8cd9bd71e2eae6b507365d707a60061586c", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "b93e1494e785db49e6829871584330f7cffbb630f0c44be8f295124fbc2e6319", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM から生成したテストである。**「レートリミットで待って再開する」のうち、
 // **枠待ちと turn の打ち切りを取り違えないこと**を見る経路を検査する。
@@ -56,9 +56,9 @@ func TestRUCMQuota_P010_枠を見ない設定なら枠明けを待たない(t *t
 	}
 }
 
-// {"RUCM-PATH": "P021"}
+// {"RUCM-PATH": "P011"}
 //
-// TestRUCMQuota_P021_枠を読めなければ枠待ちにせず打ち切る は、代替フロー「枠を読めない」を検査する。
+// TestRUCMQuota_P011_枠を読めなければ枠待ちにせず打ち切る は、代替フロー「枠を読めない」を検査する。
 //
 // **枠を読めないときに「枠待ちかもしれない」と待ち続けると、止まった run を永久に抱える。**
 // 読めないなら枠の判定は諦め、通常の打ち切りとして扱う。
@@ -67,7 +67,7 @@ func TestRUCMQuota_P010_枠を見ない設定なら枠明けを待たない(t *t
 // 与える情報: 枠の判定を無効にした設定（`source: none`）と、hook を1件も送らない run。
 // 成功条件（RUCM の POSTCONDITION）: pane が閉じられ、**印は残り**、
 // Status は `running_state` のままであること（リトライで再開するため）。
-func TestRUCMQuota_P021_枠を読めなければ枠待ちにせず打ち切る(t *testing.T) {
+func TestRUCMQuota_P011_枠を読めなければ枠待ちにせず打ち切る(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
 		Mutate: func(cfg *config.Config) {
 			// **画面の版が止まったら短い時間で打ち切る。**
