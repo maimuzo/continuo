@@ -41,7 +41,7 @@ func RunGHAuthToken(ctx context.Context) (string, error) {
 }
 
 // ResolveToken は tracker.provider.token_source の設定に従って continuo 自身が
-// GitHub Projects v2 のボードを読み書きするためのトークンを取得する（設計「その1」）。
+// GitHub Projects v2 のカンバンを読み書きするためのトークンを取得する（設計「その1」）。
 //
 // ctx: gh コマンドを実行する場合に適用するコンテキスト。
 // provider: tracker.provider の設定（TokenSource / TokenEnv）。

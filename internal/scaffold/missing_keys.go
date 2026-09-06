@@ -37,7 +37,7 @@ var keyNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // freeFormMapPaths は、その下に並ぶ名前を利用者が決める対応表のキーである。
 //
-// **その下の行は設定項目ではない。**名前を決めるのは利用者（または利用者のボード）であり、
+// **その下の行は設定項目ではない。**名前を決めるのは利用者（または利用者のカンバン）であり、
 // **continuo は特定の名前を探さない。**雛形が並べている名前は例にすぎないので、
 // **書いていない人に「足りない」と言ってはならない。**黙らせる手段は無いので、
 // 意図して外した人が永久に `!` を出され続けることになる。
@@ -49,9 +49,9 @@ var keyNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var freeFormMapPaths = [][]string{
 	// 環境変数の名前は利用者が決める（雛形の `CLAUDE_CODE_RETRY_WATCHDOG` は例である）。
 	{"claude", "env"},
-	// キーはボードの Status 名である。
+	// キーはカンバンの Status 名である。
 	{"tracker", "automated_state_rewrite"},
-	// キーはボードの Status 名である。
+	// キーはカンバンの Status 名である。
 	{"agent", "max_concurrent_agents_by_state"},
 }
 

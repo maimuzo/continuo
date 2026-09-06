@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // 外部（GitHub・herdr）が失敗したときの検査である。
 //
@@ -20,12 +20,12 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// TestExternalFailure_ボードを読めなくても巡回は止まらない は、候補の取得の失敗を確かめる。
+// TestExternalFailure_カンバンを読めなくても巡回は止まらない は、候補の取得の失敗を確かめる。
 //
 // 目的: `FetchIssuesByStates` が失敗しても、continuo が落ちないこと。
 // 与える情報: 常に失敗する候補の取得。
 // 成功条件: 巡回が返り、**worktree も pane も作らない**こと。
-func TestExternalFailure_ボードを読めなくても巡回は止まらない(t *testing.T) {
+func TestExternalFailure_カンバンを読めなくても巡回は止まらない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.SetStatesError(errors.New("GitHub へ繋がりません"))
 
@@ -33,13 +33,13 @@ func TestExternalFailure_ボードを読めなくても巡回は止まらない(
 	fx.Orc.Tick(context.Background())
 
 	if got := fx.Herdr.CountMethod(herdr.MethodWorktreeOpen); got != 0 {
-		t.Errorf("ボードを読めないのに worktree を開いている: %d 回", got)
+		t.Errorf("カンバンを読めないのに worktree を開いている: %d 回", got)
 	}
 }
 
 // TestExternalFailure_Statusの選択肢が食い違ったら着手しない は、起動時検査の失敗を確かめる。
 //
-// **人間がボードの Status の選択肢を改名することがある。**
+// **人間がカンバンの Status の選択肢を改名することがある。**
 // **設定と食い違ったまま着手すると、continuo は存在しない選択肢へ書こうとして毎回失敗する。**
 //
 // 目的: 選択肢の照合に失敗したら、その巡回では着手しないこと。
@@ -132,7 +132,7 @@ func TestExternalFailure_paneを引けなければ着手しない(t *testing.T) 
 // TestExternalFailure_Statusを書けなくても着手を続ける は、段2 の失敗の扱いを確かめる。
 //
 // **Status を書けないことは、着手を諦める理由になる。**
-// 書けないまま worktree を作ると、**ボードからは Ready のままに見えるのに実体が動く。**
+// 書けないまま worktree を作ると、**カンバンからは Ready のままに見えるのに実体が動く。**
 // 次の巡回で二重に着手される。
 //
 // 目的: `UpdateStatus` が失敗したら worktree を作らないこと。
@@ -155,11 +155,11 @@ func TestExternalFailure_Statusを書けなければworktreeを作らない(t *t
 //
 // TestExternalFailure_turnの終わりに issue が消えていたら手放す は、設計 3-10 を確かめる。
 //
-// **turn が終わってから issue を取り直したとき、ボードから返ってこないことがある**
-// （人間がボードから外した、archive した）。**continuo はその issue の面倒を見ない。**
+// **turn が終わってから issue を取り直したとき、カンバンから返ってこないことがある**
+// （人間がカンバンから外した、archive した）。**continuo はその issue の面倒を見ない。**
 //
 // 目的: 取り直しで見つからない issue を、印から外して手放すこと。
-// 与える情報: turn の途中でボードから消える issue。
+// 与える情報: turn の途中でカンバンから消える issue。
 // 成功条件: 印から外れ、**worktree は残る**こと（人間が成果を見られる）。
 func TestExternalFailure_turnの終わりにissueが消えていたら手放す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
@@ -174,7 +174,7 @@ func TestExternalFailure_turnの終わりにissueが消えていたら手放す(
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// **ボードから消す。**取り直しは「見つからない」を返す。
+	// **カンバンから消す。**取り直しは「見つからない」を返す。
 	fx.Tracker.RemoveIssue("PVTI_item188")
 
 	transcriptDir := t.TempDir()

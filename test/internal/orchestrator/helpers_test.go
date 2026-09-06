@@ -12,7 +12,7 @@
 // **Claude Code は起動しない。**turn の終わりは、偽サーバの `agent.prompt` の応答と、
 // テストが Orchestrator.OnHook へ直接流す hook で再現する。
 //
-// **本番のボード（project #3）へは接続しない。**トラッカーは in-memory のmockである。
+// **本番のカンバン（project #3）へは接続しない。**トラッカーは in-memory のmockである。
 package orchestrator_test
 
 import (
@@ -46,11 +46,6 @@ import (
 //
 // **実在のアカウント名を書かない。**公開リポジトリなので octocat を使う。
 const testGHLogin = "octocat"
-
-// testHostName はテストで使う「この機械の名前」である（設計 3-77）。
-//
-// **架空の名前を使う。**入札と hold のコメントに書かれる値である。
-const testHostName = "test-host"
 
 // ghLoginForTest は「gh の持ち主」を取る偽物を返す（設計 3-65）。
 //
@@ -604,10 +599,10 @@ func (fh *fakeHerdr) Client() *herdr.Client {
 
 // ===== テスト用トラッカー mock =====
 
-// fakeTracker は in-memory のボードである。**本番のボードへは接続しない。**
+// fakeTracker は in-memory のカンバンである。**本番のカンバンへは接続しない。**
 type fakeTracker struct {
 	mu sync.Mutex
-	// board はボードの並び順そのままの issue の一覧である。
+	// board はカンバンの並び順そのままの issue の一覧である。
 	board []tracker.Issue
 	// comments は issue のノード ID ごとのコメントである。
 	comments map[string][]tracker.Comment
@@ -667,7 +662,7 @@ type fakeTracker struct {
 	//
 	// **GitHub の `items(query:)` はサーバ側の検索であり、continuo が直前に書いた値が
 	// 索引へ反映される前に取り直すと、古い絞り込みで当たった item がそのまま返る。**
-	// ボード（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
+	// カンバン（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
 	extraCandidates []tracker.Issue
 }
 
@@ -683,7 +678,7 @@ const fakeViewerID = "U_octocat"
 // newFakeTracker はテスト用トラッカー mockを作る。
 //
 // now: 現在時刻を返す関数。nil なら time.Now を使う。
-// 戻り値: 空のボードを持つテスト用トラッカー mock。
+// 戻り値: 空のカンバンを持つテスト用トラッカー mock。
 func newFakeTracker(now func() time.Time) *fakeTracker {
 	if now == nil {
 		now = time.Now
@@ -737,7 +732,7 @@ func (ft *fakeTracker) CountCall(name string) int {
 }
 
 // SetStatesError は FetchIssuesByStates が返すエラーを差し替える
-// （ボードを読めない状況の再現）。
+// （カンバンを読めない状況の再現）。
 //
 // err: 返すエラー。nil なら成功にする。
 func (ft *fakeTracker) SetStatesError(err error) {
@@ -854,7 +849,7 @@ func (ft *fakeTracker) HoldUpdate() (func(), <-chan struct{}) {
 
 // waitAtUpdateGate は、関門が仕掛けられていれば `UpdateStatus` をそこで待たせる。
 //
-// **`ft.mu` を持ったまま待たない。**持ったまま待つと、ボードを読む呼び出しが全部止まり、
+// **`ft.mu` を持ったまま待たない。**持ったまま待つと、カンバンを読む呼び出しが全部止まり、
 // 巡回のループごと固まる。
 func (ft *fakeTracker) waitAtUpdateGate() {
 	ft.mu.Lock()
@@ -870,15 +865,15 @@ func (ft *fakeTracker) waitAtUpdateGate() {
 	<-gate
 }
 
-// AddIssue はボードの末尾に issue を足す。
+// AddIssue はカンバンの末尾に issue を足す。
 func (ft *fakeTracker) AddIssue(issue tracker.Issue) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.board = append(ft.board, issue)
 }
 
-// RemoveIssue はボードから issue を落とす
-// （人間がボードから外した・archive した状況の再現。設計 3-10）。
+// RemoveIssue はカンバンから issue を落とす
+// （人間がカンバンから外した・archive した状況の再現。設計 3-10）。
 //
 // **`FetchIssuesByIDs` からも返らなくなる。**continuo はこれを「もう見えない」として
 // 面倒を見るのをやめる。
@@ -948,7 +943,7 @@ func (ft *fakeTracker) ClearStatusAuthor(id string) {
 	}
 }
 
-// SetStateByAutomation は、ボードの組み込みの自動化が Status を動かした状況を作る
+// SetStateByAutomation は、カンバンの組み込みの自動化が Status を動かした状況を作る
 // （設計 3-54。PR を issue に紐づけた・PR をマージしたときに起きる）。
 //
 // **ID 指定で取り直したときだけ「自動化が書いた」と分かる。**候補の取得では分からない
@@ -1019,7 +1014,7 @@ func (ft *fakeTracker) StateOf(id string) string {
 	return ""
 }
 
-// SetAssignees はボードの issue の担当者を差し替える（設計 3-77b）。
+// SetAssignees はカンバンの issue の担当者を差し替える（設計 3-77b）。
 //
 // **人間や別の機械が担当を書き換えた状況の再現に使う。**
 //
@@ -1042,7 +1037,7 @@ func (ft *fakeTracker) SetAssignees(id string, logins ...string) {
 	}
 }
 
-// IssueByID はボードの issue を1件返す（担当者の変化を確かめるために使う）。
+// IssueByID はカンバンの issue を1件返す（担当者の変化を確かめるために使う）。
 //
 // id: project item の ID。
 // 戻り値の1つ目: 見つかった issue の写し。
@@ -1166,7 +1161,7 @@ func (ft *fakeTracker) MarkedHandoffCommentsOf(nodeID, marker string) []tracker.
 	return out
 }
 
-// FetchIssuesByStates は states に含まれる Status の issue を、ボードの並び順のまま返す。
+// FetchIssuesByStates は states に含まれる Status の issue を、カンバンの並び順のまま返す。
 func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) ([]tracker.Issue, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
@@ -1195,7 +1190,7 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 
 // SetExtraCandidates は「頼んだ Status に無いのに候補として返ってくる item」を差し替える。
 //
-// **ボードの Status は動かさない。**候補の一覧にだけ載る写しである
+// **カンバンの Status は動かさない。**候補の一覧にだけ載る写しである
 // （GitHub の絞り込みの索引が古いまま当たった状況の再現。設計 3-34）。
 //
 // issues: 候補の一覧の末尾へ足す写し。
@@ -1284,8 +1279,8 @@ func (ft *fakeTracker) FetchIssueByIdentifier(_ context.Context, identifier stri
 //
 // **本物と同じ形で返す**（`internal/tracker` の `UpdateStatus`）。
 //
-//	Previous … 書き込む直前のボードの値。**巡回で読んだ値ではない。**
-//	            テストが SetState でボードだけを動かすと、ここに新しい値が入る
+//	Previous … 書き込む直前のカンバンの値。**巡回で読んだ値ではない。**
+//	            テストが SetState でカンバンだけを動かすと、ここに新しい値が入る
 //	Reached … 目的の Status になったか。**既に同じ値で書き込みを省いた場合も真である**
 //	Wrote   … 書き込みを実際に行ったか。**issue へ記録を書いてよいのはこれが真のときだけ**
 func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error) {
@@ -1353,6 +1348,14 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 		ID: fmt.Sprintf("C_self_%d", len(ft.comments[issueNodeID])+1),
 		// PostComment は self_marker を本文の先頭に付けて投稿する。
 		Body: selfMarker + "\n" + body, IsSelf: true, CreatedAt: ft.now(),
+		// **投稿者を入れる**（設計 3-77-0）。**本物の GitHub は必ず投稿者を付ける。**
+		// 入れないと、この continuo が書いた入札を次の巡回で自分のものと読めず、
+		// **巡回のたびに入札のコメントが1件ずつ増える。**
+		//
+		// **定数ではなく、いま名乗っている持ち主を使う。**`SetViewer` で差し替えた検査では、
+		// **定数を入れると、この mock が書いたコメントだけ別のアカウントのものになる。**
+		// そのとき `HasBidBy` が偽に落ち、**本物では起きない入札の増殖が mock の中でだけ起きる。**
+		Author: ft.viewer.Login,
 	}
 	ft.comments[issueNodeID] = append(ft.comments[issueNodeID], c)
 	return &c, nil
@@ -1702,6 +1705,13 @@ type fixtureOptions struct {
 	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
 	// 空なら一時ディレクトリの根（tempRoot）を使う。
 	TranscriptRoot string
+	// ConfigPath は走行中に読み直す WORKFLOW.md の絶対パスである（設計 3-24）。
+	//
+	// **空なら読み直さない。**渡していないテストの挙動は変わらない。
+	ConfigPath string
+	// ConfigFile は、ファイルから読んだままの設定である（CLI の上書きが入っていないもの）。
+	// nil なら Config で代用する。
+	ConfigFile *config.Config
 	// ContinuoPath は hook のコマンド行に書く実行ファイルのパスである。
 	// 空なら `/opt/continuo/bin/continuo` を使う。
 	ContinuoPath string
@@ -1718,7 +1728,7 @@ type fixtureOptions struct {
 // 組み立てるのは次の4つである。
 //
 //	テスト用herdr mock socket サーバ  … 実 herdr は使わない
-//	テスト用トラッカー mock            … 本番のボードへは接続しない
+//	テスト用トラッカー mock            … 本番のカンバンへは接続しない
 //	本物の git のリポジトリ    … worktree の作成と削除はmockでは確かめられない
 //	`~/.claude.json`         … 信頼の検査が読む（読むだけ。書き換えない）
 //
@@ -1885,16 +1895,16 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		// **1回目に送る文面は、断片の並びとして渡す**（設計 5-3c）。
 		// テストが与えるのは1枚のテンプレートなので、それを WORKFLOW.md の本文の
 		// 位置に置いた形で組み立てる（組み込みの前半と後半が前後に付く）。
-		Prompt:         prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
+		Prompt: prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
+		// **走行中の読み直しは、渡したテストでだけ走る**（設計 3-24）。
+		ConfigPath:     opts.ConfigPath,
+		ConfigFile:     opts.ConfigFile,
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,
 		RateLimit:      opts.RateLimit,
 		HookSocketPath: fx.SocketPath,
 		ContinuoPath:   continuoPath,
-		// **機械の名前を固定する**（設計 3-77）。走らせる機械によって
-		// 入札のコメントの中身が変わらないようにする。
-		HostName: testHostName,
 		// **テストの transcript は一時ディレクトリに置く。**hook が渡す
 		// transcript_path は許可された根の内側だけを受け入れるので、根をそこへ向ける
 		// （本番の既定は `~/.claude/projects`）。
@@ -1982,7 +1992,7 @@ const samplePromptTemplate = `{{.issue.identifier}} を実装してください�
 // sampleIssue はテストで使う issue を作る。
 //
 // number: issue 番号。
-// state: ボード上の Status。
+// state: カンバン上の Status。
 // 戻り値: `octocat/hello-world#<number>` の issue。
 func sampleIssue(number int, state string) tracker.Issue {
 	url := fmt.Sprintf("https://github.com/octocat/hello-world/issues/%d", number)

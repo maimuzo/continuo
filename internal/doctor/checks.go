@@ -602,14 +602,17 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 	}
 }
 
-// checkBoard はボードを1回読む（見出し語 `ボード`）。
+// checkBoard はカンバンを読む（見出し語 `カンバン`）。
 //
-// 2つのことを行う。
+// 3つのことを行う。**GraphQL のリクエストも3本送る。**
 //
 //	1 Bootstrap … project と Status フィールドを解決し、active_states・terminal_states 等の
-//	              選択肢名がボード側に全部あるかを照合する。**不一致は `✗`**（巡回が無言で
+//	              選択肢名がカンバン側に全部あるかを照合する。**不一致は `✗`**（巡回が無言で
 //	              0件を返す原因になる。設計 3-6 / 3-32）
 //	2 候補の取得 … active_states の issue を読み、対象リポジトリを集める
+//	3 自動化の取得 … カンバンの組み込みの自動化を読む（見出し語 `自動化`）。
+//	              **要る2本より後ろに置く。**読めなくてもこの見出し語は落とさない
+//	              （自動化は起動の前提ではないので、期限が足りなければこの1本だけを諦める）
 //
 // **記号は落ち方で分ける**（設計 3-32）。レートリミットだけ `!`（一時的である）、
 // project が見つからない・トークンの取り出しに失敗・選択肢名の不一致は `✗` である。
@@ -623,21 +626,29 @@ func checkGHAuth(ctx context.Context, opts Options, configSymbol Symbol) Result 
 // configSymbol: 上流（設定ファイル）の記号。
 // ghSymbol: 上流（gh の認証）の記号。
 // 戻り値の1つ目: 検査結果。
-// 戻り値の2つ目: ボードから集めた対象リポジトリ（読めなければ nil）。
-// 戻り値の3つ目: ボード側の Status の選択肢名（Bootstrap を通っていなければ nil）。
+// 戻り値の2つ目: カンバンから集めた対象リポジトリ（読めなければ nil）。
+// 戻り値の3つ目: カンバン側の Status の選択肢名（Bootstrap を通っていなければ nil）。
 // **見出し語 `Status の名前` がこれを使う。**同じ応答から取るので、追加のリクエストは要らない。
+// 戻り値の4つ目: カンバンの自動化の一覧（読めなければ nil）。
+// **見出し語 `自動化` がこれを使う。**
+// **これだけは別のリクエストで取る**（`FetchProjectWorkflows`）。
+// **起動時の検査のクエリへ混ぜてはならない。**あちらは GraphQL が `errors` を1件でも
+// 返した時点で落ちるので、`workflows` を読めない環境
+// （権限の足りないトークン・この field を持たない GitHub Enterprise Server）では
+// **常駐プロセスが起動しなくなる。**
+// **nil は「読めなかった」である。**長さ0の「1件も無い」と取り違えてはならない。
 func checkBoard(
 	ctx context.Context,
 	cfg loadedConfig,
 	opts Options,
 	configSymbol, ghSymbol Symbol,
-) (Result, []Repo, []string) {
+) (Result, []Repo, []string, []tracker.ProjectWorkflow) {
 	if configSymbol != SymbolOK {
 		return Result{
 			Label:  LabelBoard,
 			Symbol: SymbolUnknown,
 			Detail: i18n.T(i18n.KeyDoctorBoardConfigUnreadable),
-		}, nil, nil
+		}, nil, nil, nil
 	}
 	if ghSymbol != SymbolOK {
 		// **上流の記号によって文言を分ける。**`✗`（足りない）を「確かめられなかった」と
@@ -646,7 +657,7 @@ func checkBoard(
 		if ghSymbol == SymbolUnknown {
 			reason = i18n.T(i18n.KeyDoctorBoardGHUnknown)
 		}
-		return Result{Label: LabelBoard, Symbol: SymbolUnknown, Detail: reason}, nil, nil
+		return Result{Label: LabelBoard, Symbol: SymbolUnknown, Detail: reason}, nil, nil, nil
 	}
 
 	token, err := tracker.ResolveToken(ctx, cfg.Config.Tracker.Provider, opts.GHAuthToken)
@@ -656,7 +667,7 @@ func checkBoard(
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorBoardTokenUnresolved, err),
 			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyTokenSource)},
-		}, nil, nil
+		}, nil, nil, nil
 	}
 
 	adapter, err := tracker.NewAdapter(
@@ -667,17 +678,38 @@ func checkBoard(
 			Symbol:   SymbolMissing,
 			Detail:   i18n.T(i18n.KeyDoctorBoardAdapterFailed, err),
 			Remedies: []string{i18n.T(i18n.KeyDoctorBoardRemedyTracker)},
-		}, nil, nil
+		}, nil, nil, nil
 	}
 
 	if err := adapter.Bootstrap(ctx, cfg.Config.Tracker); err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil, nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatBootstrap), err, opts.GraphQLEndpoint), nil, nil, nil
 	}
 	boardStates := adapter.StatusOptionNames()
 
 	issues, err := adapter.FetchIssuesByStates(ctx, cfg.Config.Tracker.ActiveStates)
 	if err != nil {
-		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil, nil
+		return boardFailure(ctx, i18n.T(i18n.KeyDoctorBoardWhatFetchIssues), err, opts.GraphQLEndpoint), nil, nil, nil
+	}
+
+	// **自動化はいちばん最後に読む**（見出し語 `自動化`。issue #209）。
+	//
+	// **起動時の検査のクエリへ混ぜてはならない。**あちらは GraphQL が `errors` を
+	// 1件でも返した時点で落ちるので、`workflows` を読めない環境
+	// （権限の足りないトークン・この field を持たない GitHub Enterprise Server）では
+	// **常駐プロセスが起動しなくなる。**
+	//
+	// **要る2本（Bootstrap と候補の取得）より後ろに置く。**この見出し語の期限は
+	// 2本ぶんしかないので、**先に置くと、止まったこの1本が候補の取得の残り時間を食い、
+	// 見出し語 `カンバン` が `!` になって clone も信頼登録も巻き添えで `!` になる。**
+	// **自動化は起動の前提ではない。**後ろに置けば、足りなくなるのはこの1本だけで済む。
+	//
+	// **読めなくても、ここでは何もしない。**戻り値は nil のままにして、
+	// 見出し語 `自動化` を `!`（確かめられなかった）にする。
+	workflows, err := adapter.FetchProjectWorkflows(ctx)
+	if err != nil {
+		opts.Logger.Debug("カンバンの自動化を読めませんでした（見出し語 `自動化` は確かめられなかったになります）",
+			"error", err)
+		workflows = nil
 	}
 
 	repos := collectRepos(issues)
@@ -687,7 +719,7 @@ func checkBoard(
 		Detail: i18n.T(i18n.KeyDoctorBoardOK,
 			cfg.Config.Tracker.Provider.Owner, cfg.Config.Tracker.Provider.ProjectNumber,
 			len(issues), len(repos), endpointNote(opts.GraphQLEndpoint)),
-	}, repos, boardStates
+	}, repos, boardStates, workflows
 }
 
 // endpointNote は接続先を差し替えているときに添える1行を作る。
@@ -705,7 +737,7 @@ func endpointNote(endpoint string) string {
 	return i18n.T(i18n.KeyDoctorBoardEndpointNote, endpoint)
 }
 
-// boardFailure はボードを読めなかったときの結果を組み立てる（設計 3-32 の「落ち方で分ける」）。
+// boardFailure はカンバンを読めなかったときの結果を組み立てる（設計 3-32 の「落ち方で分ける」）。
 //
 // **レートリミットだけ `!` にする。**時間をおけば通るので、直すものが無い。
 // それ以外（project が見つからない・Status の選択肢名の不一致・通信の失敗）は `✗` である。
@@ -760,8 +792,8 @@ func boardFailure(ctx context.Context, what string, err error, endpoint string) 
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // opts: `ghq list` の差し替え口を含む入力。
-// repos: ボードから集めた対象リポジトリ。
-// boardSymbol: 上流（ボード）の記号。
+// repos: カンバンから集めた対象リポジトリ。
+// boardSymbol: 上流（カンバン）の記号。
 // 戻り値の1つ目: 検査結果。
 // 戻り値の2つ目: リポジトリごとの clone の絶対パス（見つからなかったものは載らない）。
 func checkClone(
@@ -779,7 +811,7 @@ func checkClone(
 	}
 	// **ghq と git が PATH に無ければ、この先を調べても意味が無い。**
 	// continuo は worktree を用意するときにこの2つを起動するので、
-	// 無いまま段8 へ進むと必ず落ちる。**対象が0件でも先に見る。**段6 の時点ではボードに issue が無いので、
+	// 無いまま段8 へ進むと必ず落ちる。**対象が0件でも先に見る。**段6 の時点ではカンバンに issue が無いので、
 	// ここを後回しにすると段7 まで気づけない。
 	for _, bin := range []string{"ghq", "git"} {
 		if _, err := exec.LookPath(bin); err != nil {
@@ -793,7 +825,7 @@ func checkClone(
 	}
 
 	if len(repos) == 0 {
-		// **ボードが空なのは設定の誤りではない**（設計 3-32）。終了コードに影響させない。
+		// **カンバンが空なのは設定の誤りではない**（設計 3-32）。終了コードに影響させない。
 		return Result{
 			Label:  LabelClone,
 			Symbol: SymbolUnknown,
@@ -871,9 +903,9 @@ func countDetail(symbol Symbol, ok, missing, unknown string, unknownCount int) s
 // worktree のパスでは必ず「未承認」になる。**`~/.claude.json` は読むだけである。**
 //
 // opts: ホームディレクトリを含む入力。
-// repos: ボードから集めた対象リポジトリ。
+// repos: カンバンから集めた対象リポジトリ。
 // clonePaths: リポジトリごとの clone の絶対パス（checkClone の戻り値）。
-// boardSymbol: 上流（ボード）の記号。
+// boardSymbol: 上流（カンバン）の記号。
 // 戻り値: 検査結果。
 func checkTrust(opts Options, repos []Repo, clonePaths map[string]string, boardSymbol Symbol) Result {
 	if boardSymbol != SymbolOK {

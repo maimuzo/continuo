@@ -1,4 +1,4 @@
-// Package orchestrator は continuo の中心である。ボードを巡回して issue を dispatch し、
+// Package orchestrator は continuo の中心である。カンバンを巡回して issue を dispatch し、
 // run ごとに turn ループを回し、実行中の Status と worktree を照合して片付ける
 // （docs/plans/continuo_design.md 3-4 / 3-5 / 3-8 / 3-16 / 3-21 / 3-25 / 3-27）。
 //
@@ -7,7 +7,7 @@
 //	runs map[string]*runState   キーは project item の ID
 //
 // **これが「自分が取った」印であり、同時に「実行中の一覧」でもある**（設計 3-25）。
-// 2つの集合を持たない。ディスクにもボードにも書かない（設計 3-4）。
+// 2つの集合を持たない。ディスクにもカンバンにも書かない（設計 3-4）。
 //
 // 巡回のループがやることは3つだけである（設計 3-8）。
 //
@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
@@ -71,12 +72,6 @@ const (
 	// 扱い、次の turn で促す。
 	transcriptRetryCount = 5
 )
-
-// unknownHostName は `os.Hostname()` が答えなかったときに入札へ書く名前である（設計 3-77）。
-//
-// **空文字にしない。**空だと入札の JSON の `host` が空になり、
-// **勝った機械の名前が issue から読めなくなる。**
-const unknownHostName = "unknown-host"
 
 // baseRetryBackoff はリトライの指数バックオフの初項である（設計 3-21）。
 // 上限は agent.max_retry_backoff_ms である。
@@ -207,12 +202,24 @@ const ghLoginRetryInterval = 5 * time.Minute
 type Options struct {
 	// Config は WORKFLOW.md の front matter である。
 	Config config.Config
+	// ConfigPath は読み直す WORKFLOW.md の絶対パスである（設計 3-24）。
+	//
+	// **空なら読み直さない。**テストは渡さないので、渡していないテストの挙動は変わらない。
+	// **絶対パスでなければ読み直しを行わない**（config.Load が相対パスを受け付けない）。
+	ConfigPath string
+	// ConfigFile は、ファイルから読んだままの設定である（**CLI の上書きが入っていないもの**）。
+	//
+	// **「読み直しても効かない項目」を出すときの比較の相手になる。**
+	// `Config` と比べると、`--port` の上書きのせいで
+	// **利用者が1バイトも触っていない `server.port` が毎回「効きません」に出る。**
+	// **nil なら Config で代用する。**
+	ConfigFile *config.Config
 	// Prompt は1回目に送る指示書の断片である（設計 5-3 / 5-3c）。
 	//
 	// **組み込みの前半・固有・組み込みの後半の3つを、この順に持っている。**
 	// 組み立てるのは internal/prompt の Build であり、**呼ぶのは常駐プロセスの起動である。**
 	Prompt prompt.Fragments
-	// Tracker はボードの読み書きである。必須。
+	// Tracker はカンバンの読み書きである。必須。
 	Tracker Tracker
 	// Herdr は herdr の socket API のクライアントである。必須。
 	Herdr HerdrClient
@@ -239,11 +246,6 @@ type Options struct {
 	// **nil なら `gh api user --jq .login`（tracker.RunGHAPIUserLogin）を使う。**
 	// **テストは偽の関数を渡して外部プロセスの起動を避けること。**
 	GHLogin tracker.GHLoginFunc
-	// HostName はこの機械の名前である（設計 3-77）。**入札と hold のコメントに書く。**
-	//
-	// **空なら `os.Hostname()` の結果を使う。**テストは固定の名前を渡して、
-	// 走らせる機械によって結果が変わらないようにすること。
-	HostName string
 	// TranscriptRoot は hook が渡す `transcript_path` を受け入れる根である。
 	//
 	// **空なら `~/.claude/projects` を使う**（Claude Code が transcript を書く場所。設計 3-15）。
@@ -255,6 +257,11 @@ type Options struct {
 
 // Orchestrator は巡回・dispatch・turn ループ・照合・リトライ・stall 検知を持つ。
 type Orchestrator struct {
+	// cfg は組み立てのときに固まる設定である。**走っている間は1バイトも変わらない。**
+	//
+	// **読み直しでここを差し替えてはならない。**多数の goroutine が錠なしで読んでおり、
+	// `[]string` や `map` を持つので代入は不可分ではない。
+	// **走行中に変えてよいキーは reloadable が持つ**（設計 3-24）。
 	cfg             config.Config
 	promptFragments prompt.Fragments
 	tracker         Tracker
@@ -299,8 +306,36 @@ type Orchestrator struct {
 	// 実行中の run 1件ごとに確保と整列をやり直すことになる（`reconcileRunning` は
 	// run ごとに `isKnownState` を引く）。**組み立てのときに1度だけ計算して持つ。**
 	knownStateNames []string
-	// hostName はこの機械の名前である（設計 3-77）。入札と hold のコメントに書く。
-	hostName string
+
+	// configPath は読み直す WORKFLOW.md の絶対パスである（設計 3-24）。
+	// **空なら読み直さない。**
+	configPath string
+	// reloadable は、走っている最中に差し替える設定である（設計 3-24）。
+	//
+	// **多数の goroutine が読むので atomic で持つ**（internal/i18n の Catalog と同じ形）。
+	// **cfg とは別に持つ。**あちらは組み立てのときに固まり、以後1バイトも変わらない。
+	// **New が必ず初期値を入れる。**入れ忘れると、読む6箇所が nil 参照でプロセスごと落ちる。
+	reloadable atomic.Pointer[config.Reloadable]
+
+	// reloadMu は configStamp と reloadNote を守る。
+	//
+	// **巡回のループだけが触るが、Tick はテストから直に呼ばれる。**
+	// **`mu`（runs / sessions を守るもの）と分けている。**読み直しは `mu` を1度も取らない。
+	reloadMu sync.Mutex
+	// configStamp は最後に読んだ WORKFLOW.md の印である。
+	configStamp config.FileStamp
+	// baseline は、最後に読み込んだ WORKFLOW.md の中身そのものである。
+	//
+	// **「読み直しても効かない項目」は、これと比べて出す。**
+	// **`cfg` と比べてはならない。**あちらは CLI の `--port` の上書きが入っており
+	// （daemon が `config.Load` のあとに書き換える）、**利用者が1バイトも触っていない
+	// `server.port` が毎回「効きません」に出る。**
+	baseline config.Config
+	// reloadNote は、前の巡回で出した読み直しの知らせである（成功・失敗のどちらも）。
+	//
+	// **同じ知らせを出し続けない。**巡回の間隔の既定は30秒であり、壊れたファイルを
+	// 保存したまま席を立つと、同じ WARN が永久に流れる。
+	reloadNote string
 
 	// mu は runs / sessions / notified / tickCount / quota を守る。
 	mu sync.Mutex
@@ -395,7 +430,7 @@ func New(opts Options) (*Orchestrator, error) {
 	}
 	// **知っている Status の一覧は組み立てのときに1度だけ計算する**（`knownStateNames`）。
 	// **計算に使う設定が空のまま渡されても、いままでは黙って通っていた。**
-	// 1つも取れないと、continuo は**ボード上のどの Status も「知らない Status」と判定し、
+	// 1つも取れないと、continuo は**カンバン上のどの Status も「知らない Status」と判定し、
 	// 着手した run を片端から止める。**しかも止めた理由には「いま知っているのは です」と
 	// 空欄が出るだけで、原因が読み取れない。
 	// **他の必須の依存と同じく、ここで名前つきのエラーにする。**
@@ -441,28 +476,26 @@ func New(opts Options) (*Orchestrator, error) {
 	}
 	// **持ち主の取得は既定で本物の `gh` を呼ぶ**（設計 3-65）。`GHAuthCheck` のように
 	// 「nil なら何もしない」にすると、**呼び出し元が渡し忘れた瞬間に印だけの判定へ静かに戻る。**
+	//
+	// **持ち回りで参加者を見分ける値も、この持ち主のログイン名である**（設計 3-77-0）。
+	// **この機械の名前は取らない。**`os.Hostname()` は重複しうるうえ、
+	// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+	// アカウント1つにつき continuo は1つである。
 	ghLogin := opts.GHLogin
 	if ghLogin == nil {
 		ghLogin = tracker.RunGHAPIUserLogin
 	}
-	// **この機械の名前を決める**（設計 3-77）。入札と hold のコメントに書く値である。
-	// **取れなくても起動は止めない。**空のまま入札すると誰が入札したのか読めなくなるので、
-	// そのときだけ固定の名前へ落とす（勝っても、どの機械かは hold の `assignee` で辿れる）。
-	hostName := strings.TrimSpace(opts.HostName)
-	if hostName == "" {
-		name, err := os.Hostname()
-		if err != nil || strings.TrimSpace(name) == "" {
-			logger.Warn("この機械の名前を取れないので、入札には固定の名前を使います",
-				"使う名前", unknownHostName, "error", err)
-			hostName = unknownHostName
-		} else {
-			hostName = strings.TrimSpace(name)
-		}
-	}
-
 	shutdown, shutdownCancel := context.WithCancel(context.Background())
 
-	return &Orchestrator{
+	// **読み直しは絶対パスのときだけ行う**（設計 3-24）。`config.Load` は相対パスを受け付けない。
+	configPath := opts.ConfigPath
+	if configPath != "" && !filepath.IsAbs(configPath) {
+		logger.Warn("WORKFLOW.md のパスが絶対パスではないので、設定の読み直しを行いません",
+			"config_path", configPath)
+		configPath = ""
+	}
+
+	orc := &Orchestrator{
 		cfg:             opts.Config,
 		promptFragments: opts.Prompt,
 		tracker:         opts.Tracker,
@@ -479,11 +512,11 @@ func New(opts Options) (*Orchestrator, error) {
 		ghAuthCheck:     opts.GHAuthCheck,
 		ghLogin:         ghLogin,
 		// **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。
-		// **起動時にボードと照合する一覧（`tracker` の `requiredStatesForBootstrap`）は、
+		// **起動時にカンバンと照合する一覧（`tracker` の `requiredStatesForBootstrap`）は、
 		// 同じ関数の戻り値そのものである。**ずれると、起動時に通した設定が実行時には
 		// 別の意味になる（対応表のキーは、どちらにも入れない）。
 		knownStateNames: knownStateNames,
-		hostName:        hostName,
+		configPath:      configPath,
 
 		runs:           map[string]*runState{},
 		sessions:       map[string]*runState{},
@@ -493,8 +526,36 @@ func New(opts Options) (*Orchestrator, error) {
 		failures:       map[string]*failureNote{},
 		shutdown:       shutdown,
 		shutdownCancel: shutdownCancel,
-	}, nil
+	}
+	// **読み直せる設定の初期値を、ここで必ず入れる**（設計 3-24）。
+	// **入れ忘れると、読む6箇所が nil 参照で落ちる。**そのうち3箇所は turn ループの
+	// goroutine から引かれるので、**panic はプロセスごと落とす。**
+	reloadable := config.ExtractReloadable(opts.Config)
+	orc.reloadable.Store(&reloadable)
+	// **比較の相手は、ファイルから読んだままの設定である**（CLI の上書きが入っていないもの）。
+	// **渡されていなければ Config で代用する。**テストは渡さないので、そちらは変わらない。
+	orc.baseline = opts.Config
+	if opts.ConfigFile != nil {
+		orc.baseline = *opts.ConfigFile
+	}
+	// **いま渡された設定は、このファイルから読んだものである**（daemon が `config.Load` の
+	// 結果をそのまま渡す）。**印を入れておかないと、最初の巡回が必ず「読み直し」を1回走らせ、
+	// 何も変わっていないのに1行出る。**取れなくても起動は止めない（次の巡回で取り直す）。
+	if configPath != "" {
+		if stamp, err := config.StampOf(configPath); err == nil {
+			orc.configStamp = stamp
+		}
+	}
+	return orc, nil
 }
+
+// reloadableConfig は、いま効いている「読み直せる設定」を返す（設計 3-24）。
+//
+// **cfg と混ぜて読まないこと。**ここにあるキーは走行中に変わり、cfg のほうは変わらない。
+// **New が必ず初期値を入れるので、nil は返らない。**
+//
+// 戻り値: いま効いている読み直せる設定。**書き換えてはならない。**
+func (o *Orchestrator) reloadableConfig() *config.Reloadable { return o.reloadable.Load() }
 
 // Run は巡回のループを回す。ctx が終わるまで返らない。
 //
@@ -552,6 +613,10 @@ func (o *Orchestrator) Close() {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) Tick(ctx context.Context) {
+	// **設定の読み直しは巡回の頭で1回だけ行う**（設計 3-24）。turn の途中では行わない。
+	// **失敗しても巡回は続ける。**最後に正常だった設定のまま動き続ける。
+	o.reloadConfig(ctx)
+
 	o.mu.Lock()
 	o.tickCount++
 	tick := o.tickCount
@@ -595,7 +660,7 @@ func (o *Orchestrator) Tick(ctx context.Context) {
 // verifyPeriodically は Status の選択肢名と `gh` の認証を、
 // `tracker.verify_states_every` の頻度で検査する（設計 3-6 の「巡回ごとに検査するもの」）。
 //
-// **毎巡回では行わない。**選択肢名が変わるのは人間がボードを触ったときだけであり、
+// **毎巡回では行わない。**選択肢名が変わるのは人間がカンバンを触ったときだけであり、
 // **毎巡回で外部プロセス（`gh`）を起動しない。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -825,8 +890,8 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
 		// **効くのは復元した run と、この機能より前に着手した run だけである。**
 		// **確かめずに送ると、担当が既に移っていても丸ごと1回ぶん働く**（`after_run` も走る）。
-		if lost, newHost := o.handoffLostOnResume(ctx, rs); lost {
-			o.stopBecauseHandoffLost(ctx, rs, newHost)
+		if lost, newAccount := o.handoffLostOnResume(ctx, rs); lost {
+			o.stopBecauseHandoffLost(ctx, rs, newAccount)
 			continue
 		}
 		if rs.takeAwaitTurnEnd() {

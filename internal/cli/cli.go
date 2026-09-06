@@ -1,4 +1,4 @@
-// continuo は GitHub Projects v2 のボードを見張り、issue ごとに git worktree を用意して
+// continuo は GitHub Projects v2 のカンバンを見張り、issue ごとに git worktree を用意して
 // herdr の pane で Claude Code を起動し、完了までを面倒見る常駐プロセスである。
 // 設計の正は docs/plans/continuo_design.md にある。
 // Package cli は continuo の CLI の実体である。
@@ -35,6 +35,7 @@ import (
 	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/scaffold"
 	"github.com/maimuzo/continuo/internal/setup"
+	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/trust"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -72,12 +73,20 @@ func runVersion(stdout io.Writer) int {
 type Deps struct {
 	// DoctorRun は前提の検査である。
 	DoctorRun func(ctx context.Context, opts doctor.Options) doctor.Report
+	// PromptFetchIssue は `continuo prompt --show --url` が issue を1件引く。
+	//
+	// **GitHub を叩くので、検査では必ず差し替える。**
+	// 戻り値の2つ目は「カンバンから issue として組み立てられたか」であり、
+	// **偽になる理由は「載っていない」だけではない**（Status 未設定・archive 済みなど）。
+	PromptFetchIssue func(
+		ctx context.Context, cfg config.TrackerConfig, endpoint, identifier string,
+	) (tracker.Issue, bool, error)
 	// UserHomeDir はホームディレクトリを引く。`~/.claude.json` を書き換える先が決まるので、
 	// **検査では必ず一時ディレクトリへ向ける。**
 	UserHomeDir func() (string, error)
 	// DaemonRun は常駐の本体である。
 	DaemonRun func(ctx context.Context, opts daemon.Options) error
-	// SetupFetchStatusField はボードの Status のフィールドを読む。
+	// SetupFetchStatusField はカンバンの Status のフィールドを読む。
 	SetupFetchStatusField func(ctx context.Context, opts setup.FetchOptions) (setup.StatusField, error)
 	// TrustPlan は信頼登録の対象を調べる（`git` と `~/.claude.json` を読む）。
 	TrustPlan func(ctx context.Context, opts trust.Options) (*trust.Report, error)
@@ -85,7 +94,7 @@ type Deps struct {
 	TrustApply func(ctx context.Context, opts trust.Options, report *trust.Report) (*trust.ApplyResult, error)
 	// ProbeKeychain は macOS の Keychain を読めるかを確かめる。
 	ProbeKeychain func(ctx context.Context, timeout time.Duration) (ratelimit.KeychainProbe, error)
-	// ScaffoldDetect は owner とボードの番号を `gh` から引く。
+	// ScaffoldDetect は owner とカンバンの番号を `gh` から引く。
 	ScaffoldDetect func(ctx context.Context, opts scaffold.DetectOptions) scaffold.Detection
 	// AbandonRun は着手した issue を着手する前の状態へ戻す。
 	// **worktree と branch と pane を消すので、検査では必ず差し替える。**
@@ -107,6 +116,9 @@ type Deps struct {
 func (d Deps) withDefaults() Deps {
 	if d.DoctorRun == nil {
 		d.DoctorRun = doctor.Run
+	}
+	if d.PromptFetchIssue == nil {
+		d.PromptFetchIssue = fetchIssueForPrompt
 	}
 	if d.UserHomeDir == nil {
 		d.UserHomeDir = os.UserHomeDir
@@ -180,7 +192,7 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 		case "doctor":
 			return runDoctor(d, args[1:], stdout, stderr)
 		case "prompt":
-			return runPrompt(args[1:], stdout, stderr)
+			return runPrompt(d, args[1:], stdout, stderr)
 		case "trust":
 			return runTrust(d, args[1:], stdout, stderr)
 		case "abandon":
@@ -360,36 +372,81 @@ func printInitCI(stdout, stderr io.Writer, res scaffold.InitResult) {
 
 // runPrompt は `continuo prompt` サブコマンドである（設計 5-3c / 5-3d）。
 //
-// **送る文面を、変数を展開しないまま標準出力へ出す。**
-// **`{{.issue.identifier}}` はそのまま出る。**実在の issue の値で埋める形は持たない
-// （そのためにはカンバンを丸ごと読むことになり、この目的には釣り合わない）。
+// **3つの形がある。**
 //
-// **2つの形がある。**
-//
-//	continuo prompt --show [ディレクトリ]             送る文面の全文（組み込み + 本文）
+//	continuo prompt --show [ディレクトリ]             送る文面の全文。**変数は展開しない**
 //	continuo prompt --show --builtin                  組み込みだけ。**WORKFLOW.md を読まない**
+//	continuo prompt --show --url <issue の URL>       送る文面の全文。**変数をその issue の値で展開する**
 //
 // **`--builtin` は、自分が書いた本文と仕組みの側を見比べるための道である。**
 // 組み込みが既に言っていることを、本文に二重に書かずに済む。
 //
+// **`--url` は、本当に送られる文面を事前に確かめるための道である**（issue #183）。
+// **番号ではなく URL で指す。**1枚のカンバンに複数のリポジトリの issue が載るので、
+// 番号だけではどのリポジトリの issue か決まらない（人間の判断。設計 5-3f）。
+// **変数は `prompt.RenderData` が組み立てる。**continuo が実際に送る経路と同じ関数であり、
+// **別々に組み立てると、このコマンドは「送られる文面」ではないものを見せることになる。**
+//
+// **`--builtin` と `--url` は同時に指定できない。**`--builtin` の売りは
+// 「`WORKFLOW.md` を1バイトも読まない」ことなのに、`--url` は front matter の
+// `tracker.provider` を読まないと issue を引けない。**同時に許すと、その売りが消えたまま
+// `--builtin` を名乗ることになる。**
+//
 // **標準出力には、送る文面だけを出す。**内訳は標準エラーへ出すので、
 // `continuo prompt --show --builtin > builtin.md` が送る文面と1バイトも違わないファイルになる。
 //
+// d: 外部へ繋ぐ処理。**`--url` を付けたときだけ GitHub を叩く。**
 // args: `continuo prompt` に続く引数。位置引数は WORKFLOW.md があるディレクトリを0個か1個。
 // stdout / stderr: 出力先。
-// 戻り値: 終了コード。0 は出せた（--help / -h も 0）、1 は読めなかった、
+// 戻り値: 終了コード。0 は出せた（--help / -h も 0）、
+// 1 は読めなかった（`WORKFLOW.md` / カンバン / 変数展開のいずれか）、
 // 2 は引数の指定が誤っている（`--show` を付けていない場合を含む）。
-func runPrompt(args []string, stdout, stderr io.Writer) int {
+func runPrompt(d Deps, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo prompt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	showFlag := fs.Bool("show", false, i18n.T(i18n.KeyCLIPromptFlagShow))
 	builtinFlag := fs.Bool("builtin", false, i18n.T(i18n.KeyCLIPromptFlagBuiltin))
+	urlFlag := fs.String("url", "", i18n.T(i18n.KeyCLIPromptFlagURL))
+	attemptFlag := fs.Int("attempt", 0, i18n.T(i18n.KeyCLIPromptFlagAttempt))
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return parseErrorExitCode(err)
 	}
 	if !*showFlag {
 		// **黙って全文を出さない。**将来 `continuo prompt` に別の仕事を足す余地を残す。
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrShowRequired))
+		return 2
+	}
+	// **指定されたかを、値ではなく `Visit` で見る。**
+	// **`--url` を値で見てはならない。**`--url ""` が「指定されていない」と同じ扱いになり、
+	// **変数を展開しないまま終了コード 0 で出す。**環境変数が空のままスクリプトが叩くと、
+	// **成功したのと見分けが付かない。**このコマンドがいちばん嫌う落ち方である。
+	// `--attempt` も同じで、既定の 0 と「0 を明示された」を区別しないと `--attempt 0` が黙って通る。
+	urlGiven, attemptGiven := false, false
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "url":
+			urlGiven = true
+		case "attempt":
+			attemptGiven = true
+		}
+	})
+	if urlGiven && *urlFlag == "" {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLEmpty))
+		return 2
+	}
+	if urlGiven && *builtinFlag {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLWithBuiltin))
+		return 2
+	}
+	if attemptGiven && *attemptFlag < 1 {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrAttemptPositive, *attemptFlag))
+		return 2
+	}
+	if attemptGiven && !urlGiven {
+		// **黙って捨てない。**`--attempt` が効くのは変数を展開するときだけである。
+		// **このコマンド自身が「気づけない出力が、いちばん悪い落ち方である」を理由に、
+		// 展開できなかったら断ると決めている。**同じ理由がそのまま当たる。
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrAttemptNeedsURL))
 		return 2
 	}
 
@@ -407,6 +464,20 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
 		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinOnly, countLines(text)))
 		return 0
+	}
+
+	// **URL の形は、`WORKFLOW.md` を読む前に見る**（issue #183）。
+	// **引数の形の誤りは、いちばん安く判定できる。**`--url ""` や `--builtin` との併用と
+	// 同じ場所で断れる。**設定を先に読むと、URL を打ち間違えた人が終了コード 1
+	// （設定を読めない）を受け取り、文書の表（URL の形が違う → 2）と食い違う。**
+	identifier := ""
+	if urlGiven {
+		id, idErr := promptIssueIdentifier(*urlFlag)
+		if idErr != nil {
+			fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrURLInvalid, idErr))
+			return 2
+		}
+		identifier = id
 	}
 
 	var dir string
@@ -433,8 +504,101 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 	}
 
 	frag := prompt.Build(loaded.PromptTemplate, loaded.Path)
-	fmt.Fprint(stdout, frag.Text())
-	printPromptBreakdown(stderr, frag)
+
+	if !urlGiven {
+		fmt.Fprint(stdout, frag.Text())
+		printPromptBreakdown(stderr, frag)
+		return 0
+	}
+
+	// **`--attempt 1` は「試行回数を渡さない」へ写す**（issue #183）。
+	// **本番で `attempt` に入る最小値は 2 である**（`internal/orchestrator/turn.go` が
+	// `RetryCount > 0` のときだけ `RetryCount + 1` を渡す）。
+	// **1 をそのまま渡すと `{{if .attempt}}` が真になり、本番に存在しない文面を見せることになる。**
+	// 「本当に送られる文面」を名乗るコマンドが、送られない文面を見せてはならない。
+	var attempt *int
+	if attemptGiven && *attemptFlag > 1 {
+		n := *attemptFlag
+		attempt = &n
+	}
+	return runPromptExpanded(d, identifier, attempt, loaded.Config.Tracker, frag, stdout, stderr)
+}
+
+// runPromptExpanded は `continuo prompt --show --url` の後半である（設計 5-3f。issue #183）。
+//
+// **変数が埋まらなかったら、何も出さずに終了コード 1 で断る。**
+// **展開せずに出してはならない。**`--url` を付けたのに付けなかったときと同じものが出ると、
+// **利用者はそれに気づけない。**気づけない出力が、いちばん悪い落ち方である。
+//
+// d: 外部へ繋ぐ処理。
+// identifier: `--url` から作った `<owner>/<repo>#<番号>`。**形の検査は呼び出し側で済んでいる。**
+// attempt: 何回目として展開するか。**nil なら1回目。**
+// trackerCfg: front matter の tracker セクション。
+// frag: 組み立てた断片。
+// stdout / stderr: 出力先。
+// 戻り値: 終了コード。0 は出せた、1 は引けなかったか展開できなかった。**2 は返さない。**
+// **接続先が不正なときも 1 である**（設計 5-3f の表と揃えてある）。
+// 引数の形の誤りは呼び出し側（`runPrompt`）が 2 で断ってから、ここへ来る。
+func runPromptExpanded(
+	d Deps,
+	identifier string,
+	attempt *int,
+	trackerCfg config.TrackerConfig,
+	frag prompt.Fragments,
+	stdout, stderr io.Writer,
+) int {
+	// **接続先の差し替えは常駐プロセスと同じ環境変数で行う**（`runDoctor` と同じ）。
+	// **宛先を確かめずにトークンを送らない。**
+	endpoint := os.Getenv(daemon.EnvGraphQLEndpoint)
+	if err := daemon.ValidateGraphQLEndpoint(endpoint); err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGeneric, err))
+		return 1
+	}
+
+	// **返らないまま人間を待たせない。**
+	ctx, cancel := context.WithTimeout(context.Background(), promptFetchTimeout)
+	defer cancel()
+
+	issue, ok, err := d.PromptFetchIssue(ctx, trackerCfg, endpoint, identifier)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrFetchFailed, err))
+		return 1
+	}
+	if !ok {
+		// **「載っていません」とだけ言わない。**`FetchIssueByIdentifier` が偽を返す理由は
+		// 5通りあり、Status 未設定は本番のカンバンでも104件中4件ある通常の状態である。
+		// **`Bootstrap` を通していないので、`status_field` の綴りがずれていると全件がそう見える。**
+		// **唯一の検出手段が `continuo doctor` なので、そこまで案内する。**
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrIssueNotOnBoard, identifier))
+		return 1
+	}
+
+	data := prompt.RenderData(issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs)
+	// **全文と断片を一度に受け取る。**`Render` と `RenderItems` を続けて呼ぶと、
+	// 同じ解釈と実行を2回することになる。
+	text, rendered, err := frag.RenderAll(data)
+	if err != nil {
+		// **`continuo prompt` の3つの形のうち、変数展開が走るのは `--url` だけである。**
+		// 本文の `{{if}}` の閉じ忘れや一覧に無い変数は、ここで落ちる。
+		// **このコマンドが最初の網ではない。**常駐は起動時に `Fragments.Validate()` で落ち、
+		// `continuo doctor` は `prompt vars` を赤にする。**部分的な文面を出さない。**
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptErrRenderFailed, err))
+		return 1
+	}
+
+	fmt.Fprint(stdout, text)
+	// **数えるのは、展開したあとの断片である**（issue #183）。
+	// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
+	printPromptBreakdownItems(stderr, rendered, frag)
+	fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownExpanded, issue.Identifier))
+	// **何回目として展開したかを必ず出す。**出さないと、`## 7-5. これは N 回目の試行です` が
+	// 出ないことを「文面から消えた」と読み違える。
+	if attempt == nil {
+		// **1回目は試行回数を渡さない。**`## 7-5.` の節が出ないのはそのためである。
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownFirstAttempt))
+	} else {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIPromptBreakdownAttempt, *attempt))
+	}
 	return 0
 }
 
@@ -446,20 +610,53 @@ func runPrompt(args []string, stdout, stderr io.Writer) int {
 // w: 出力先（標準エラー）。
 // frag: 組み立てた断片。
 func printPromptBreakdown(w io.Writer, frag prompt.Fragments) {
+	printPromptBreakdownItems(w, frag.Items(), frag)
+}
+
+// printPromptBreakdownItems は、渡された断片の並びから内訳を組み立てる。
+//
+// **`--url` のときは、変数展開したあとの断片を渡す**（issue #183）。
+// **展開する前を数えると、`{{if .attempt}}` が落ちるぶんだけ行数が嘘になる。**
+// 見出しは「送る文面の内訳」なので、**送った文面を数えなければならない。**
+//
+// **本文の有無も `items` から決める。**`frag.HasBody()` は展開する前の姿である。
+// **本文が丸ごと `{{if .attempt}}` の中にある構成で1回目として展開すると、
+// 本文は0行なのに「本文はありません」が出ないことになる。**
+// 同じ内訳の中で、行数だけ展開後・有無だけ展開前、では辻褄が合わない。
+//
+// **展開して空になった本文は、行数の行も出さない。**出すと
+// 「本文 0 行」と「本文はありません」が同じ内訳に並び、**読む人がどちらが本当か決められない。**
+//
+// w: 出力先（標準エラー）。
+// items: 数える断片の並び。
+// frag: **本文のパスを引くためだけに使う。**行数も有無もここから取らない。
+func printPromptBreakdownItems(w io.Writer, items []prompt.Fragment, frag prompt.Fragments) {
 	fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownHeading))
-	for _, it := range frag.Items() {
+	hasBody := false
+	for _, it := range items {
+		if it.Name == prompt.NameWorkflowBody && strings.TrimSpace(it.Text) != "" {
+			hasBody = true
+		}
+	}
+	for _, it := range items {
 		switch it.Name {
 		case prompt.NameBuiltinHead:
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinHead, countLines(it.Text)))
 		case prompt.NameBuiltinTail:
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBuiltinTail, countLines(it.Text)))
 		case prompt.NameWorkflowBody:
+			// **展開して空になったら、行数の行を出さない。**下の「本文はありません」と
+			// **同じ内訳の中で食い違う**（「本文 0 行」と「本文はありません」が並ぶ）。
+			// **`hasBody` と同じ条件で判定する。**片方だけ変えると、また食い違う。
+			if strings.TrimSpace(it.Text) == "" {
+				continue
+			}
 			// **断片の名前で明示する。`default` に落とさない。**落とすと、断片が増えたときに
 			// 組み込みの断片が WORKFLOW.md の名前で表示され、パスの欄が空になる。
 			fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownWorkflowBody, countLines(it.Text), it.Path))
 		}
 	}
-	if !frag.HasBody() {
+	if !hasBody {
 		fmt.Fprintln(w, i18n.T(i18n.KeyCLIPromptBreakdownBodyMissing, frag.BodyPath()))
 	}
 }
@@ -479,7 +676,7 @@ func countLines(s string) int {
 // runSetup は `continuo setup` サブコマンドである（設計 3-32 / RUCM
 // docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md）。
 //
-// **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**ボードの Status の選択肢を
+// **既にある WORKFLOW.md の Status の割り当てだけを書き換える。**カンバンの Status の選択肢を
 // continuo の5つの役割へ割り当て、`scaffold.StatusKeyNames` が返す8つのキーの行を差し替える。
 // **他の行には触れない。**利用者が `continuo init` のあとに手で直した行
 // （`workspace.root`、`trust.repositories` から消した行など）を消さないためである。
@@ -493,21 +690,21 @@ func countLines(s string) int {
 // **標準入力を握るのはこのサブコマンドだけである。**`continuo init` を対話にしないのは、
 // 設定を作り直す自動化の経路を止めないためである。
 //
-// **ボードは読むだけである。**選択肢が足りなければ、GitHub の画面から足すよう案内して打ち切る。
+// **カンバンは読むだけである。**選択肢が足りなければ、GitHub の画面から足すよう案内して打ち切る。
 // **API で足させない**（`updateProjectV2Field` は選択肢の指定を全件の置き換えとして扱うので、
 // 設定済みの Status が全部消える）。
 //
-// **検証はファイルが先、ボードがあとである。**どうせ止まる実行で、先に gh を叩いて
+// **検証はファイルが先、カンバンがあとである。**どうせ止まる実行で、先に gh を叩いて
 // レートリミットを使う理由が無い。
 //
 // args: `continuo setup` に続く引数。位置引数は WORKFLOW.md があるディレクトリを0個か1個。
-// --owner / --project は gh を叩かずにその値を使う（**どのボードを読むかの指定であり、
+// --owner / --project は gh を叩かずにその値を使う（**どのカンバンを読むかの指定であり、
 // WORKFLOW.md には書かない**）。
 // --status-field は Status を読み書きする single-select フィールドの名前を渡す。
 // stdin: 番号を読む先。
 // stdout / stderr: 出力先。対話は stdout へ出す。
 // 戻り値: 終了コード。0 は書き換えられた（--help / -h も 0）、
-// 1 は書き換えずに終わった（WORKFLOW.md が無い・ボードを読めない・選択肢が足りない・中断した）、
+// 1 は書き換えずに終わった（WORKFLOW.md が無い・カンバンを読めない・選択肢が足りない・中断した）、
 // 2 は引数の指定が誤っている。
 func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("continuo setup", flag.ContinueOnError)
@@ -558,11 +755,31 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 		return printScaffoldError(stderr, check, err)
 	}
 
-	// **どのボードを読むかは、WORKFLOW.md に書かれた値を先に使う**（設計 6-2）。
+	// **設定を読めたら、その言語で対話を出す**（設計 3-35。設定が主、環境変数 LANG が従）。
+	// **ここより前の文言は環境変数の言語のまま出る。**引数の誤りと `--help` の使い方は
+	// 設定を読むより前に出るためである（run の冒頭のコメントを見よ）。
+	//
+	// **読めなくても止めない。**`continuo setup` は、`continuo init` が gh から値を引けず
+	// プレースホルダの残った WORKFLOW.md に対しても走る。止めると、その利用者が
+	// `continuo setup --owner <名前> --project <番号>` を1回も通せなくなる。
+	//
+	// **だが黙らない。**読めなかった理由をそのまま出す。`language` の綴りを誤った人は、
+	// この1行で書ける値の一覧を受け取れる（config.Load が validateLanguage のエラーを包む）。
+	// **黙ると、常駐プロセスを起動するまで綴りの誤りに気づけない。**
+	//
+	// **useLanguageFromConfig を使わないのは、読めなかったことを報告するためである**
+	// （runTrust と同じ形。共有の関数は黙ったままにして、呼ぶ側が報告する）。
+	if loaded, err := config.Load(check.Path); err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLISetupWarnConfigLoad, err))
+	} else {
+		useLanguage(loaded.Config)
+	}
+
+	// **どのカンバンを読むかは、WORKFLOW.md に書かれた値を先に使う**（設計 6-2）。
 	// `continuo init` で埋めたのに `continuo setup` でもう一度 `--project` を要求するのは
 	// 筋が通らない。**フラグが明示されたときだけフラグを優先する。**
 	// ここで拾えなかったぶんだけ、`continuo init` と同じ経路で gh から引く。
-	// **引いた値は WORKFLOW.md へ書かない。**どのボードの Status の選択肢を読むかを
+	// **引いた値は WORKFLOW.md へ書かない。**どのカンバンの Status の選択肢を読むかを
 	// 決めるためだけに使う。
 	owner, projectNumber := *ownerFlag, *projectFlag
 	if owner == "" {
@@ -578,7 +795,7 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	if code := checkDetectionForSetup(stderr, detection); code != 0 {
 		return code
 	}
-	// **どのボードを読むかを画面に出す。**WORKFLOW.md に書かれた値と gh から引いた値が
+	// **どのカンバンを読むかを画面に出す。**WORKFLOW.md に書かれた値と gh から引いた値が
 	// 食い違っていても、出しておけば利用者がその場で気づける。
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupBoardUsing, detection.Values.Owner, detection.Values.ProjectNumber))
 
@@ -634,9 +851,9 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	return 0
 }
 
-// checkDetectionForSetup は、対話に入れるだけの情報がボードから引けたかを確かめる。
+// checkDetectionForSetup は、対話に入れるだけの情報がカンバンから引けたかを確かめる。
 //
-// **`continuo setup` は owner とボードの番号が両方決まらないと1歩も進めない**
+// **`continuo setup` は owner とカンバンの番号が両方決まらないと1歩も進めない**
 // （`continuo init` は決まらなくても雛形を書けるので、ここだけ扱いが違う）。
 //
 // w: 出力先。
@@ -673,7 +890,7 @@ func fieldReason(d scaffold.Detection, key string) string {
 	return ""
 }
 
-// candidatesOf は、あるキーについて並んだボードの候補を取り出す。
+// candidatesOf は、あるキーについて並んだカンバンの候補を取り出す。
 //
 // d: scaffold.Detect が返した結果。
 // key: scaffold.ProjectKey などのキーのパス。
@@ -805,7 +1022,7 @@ const trustInternalErrorExitCode = 3
 //
 // **`WORKFLOW.md` の `trust.repositories` に人間が列挙したリポジトリだけを対象に、
 // `~/.claude.json` の `hasTrustDialogAccepted` を `true` にする。**
-// **ボードから自動で集めない。**ボードは他人が編集できるので、そこから集めると
+// **カンバンから自動で集めない。**カンバンは他人が編集できるので、そこから集めると
 // issue を足せる人が信頼させるリポジトリを増やせてしまう。
 //
 // **`--dry-run` は信頼のダイアログの代わりである。**対象の `.claude/settings.json` の
@@ -1214,7 +1431,7 @@ func runAbandon(d Deps, args []string, stdout, stderr io.Writer) int {
 	// 「WORKFLOW.md を読めません」を出すので、ここでは環境変数から決めた言語のまま進む。
 	useLanguageFromConfig(path)
 
-	// **トークンを載せる前に接続先を確かめる。**abandon はボードの Status を読み書きするので、
+	// **トークンを載せる前に接続先を確かめる。**abandon はカンバンの Status を読み書きするので、
 	// 常駐プロセスと同じ検査を通す。
 	//
 	// **この検査が拒むのは平文の http だけである**（ループバック宛は通す。

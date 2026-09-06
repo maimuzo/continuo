@@ -50,7 +50,7 @@ type Result struct {
 	Overwritten bool
 	// Owner は、既にある WORKFLOW.md に書かれていた `tracker.provider.owner` である。
 	//
-	// **CheckUpdatable だけが埋める。**`continuo setup` が「どのボードを読むか」を
+	// **CheckUpdatable だけが埋める。**`continuo setup` が「どのカンバンを読むか」を
 	// 決めるために使う。**プレースホルダのままなら空文字である。**
 	Owner string
 	// ProjectNumber は、既にある WORKFLOW.md に書かれていた

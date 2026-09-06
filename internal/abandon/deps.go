@@ -30,20 +30,20 @@ type Unlocker interface {
 	Release() error
 }
 
-// Tracker は abandon が使うボードの読み書きの部分集合である。
+// Tracker は abandon が使うカンバンの読み書きの部分集合である。
 //
 // **`*tracker.Adapter` がこれを満たす。**Status を読む・動かす以外は使わない。
 type Tracker interface {
 	// Bootstrap は project と Status フィールドの ID を解決する。
 	// **UpdateStatus を呼ぶ前に必ず通す。**
 	Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
-	// FetchIssueByIdentifier は `<owner>/<repo>#<番号>` でボードの issue を1件引く。
+	// FetchIssueByIdentifier は `<owner>/<repo>#<番号>` でカンバンの issue を1件引く。
 	FetchIssueByIdentifier(ctx context.Context, identifier string) (tracker.Issue, bool, error)
 	// UpdateStatus は project item の Status を書き換える。
 	// **見るのは Reached（目的の Status になったか）だけである。**abandon は issue へ
 	// コメントを書かないので、Wrote と Previous は使わない。
 	UpdateStatus(ctx context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error)
-	// VerifyKnownStates は、渡した Status 名がすべてボードの選択肢にあるかを確かめる。
+	// VerifyKnownStates は、渡した Status 名がすべてカンバンの選択肢にあるかを確かめる。
 	// **Bootstrap を通してから呼ぶこと。**
 	VerifyKnownStates(states []string) error
 }
@@ -90,7 +90,7 @@ type Workspace interface {
 //
 // **ゼロ値のフィールドは設定から本物を組み立てる**（resolve）。
 // 検査は差し替えたいものだけを埋めればよい。**この形にしてあるのは、
-// 本番のボード・本物の herdr・利用者の worktree に触らずに検査するためである。**
+// 本番のカンバン・本物の herdr・利用者の worktree に触らずに検査するためである。**
 type Deps struct {
 	// LockPath は二重起動防止のロックファイルの絶対パスである。
 	// **空なら常駐している側と同じ関数から決める**（internal/instance の Layout）。
@@ -107,9 +107,9 @@ type Deps struct {
 	Herdr PaneLister
 	// Workspace は worktree の走査・検査・片付けである。nil なら設定から本物を組み立てる。
 	Workspace Workspace
-	// NewTracker はボードのアダプタを作る。nil なら本物を組み立てる（`gh` のトークンを引く）。
+	// NewTracker はカンバンのアダプタを作る。nil なら本物を組み立てる（`gh` のトークンを引く）。
 	//
-	// **遅延して呼ぶ。**ボードを読まずに済む実行（worktree が無かった場合）で、
+	// **遅延して呼ぶ。**カンバンを読まずに済む実行（worktree が無かった場合）で、
 	// `gh` を起動して API 枠を使わないためである。
 	NewTracker func(ctx context.Context) (Tracker, error)
 	// Now は現在時刻を返す。nil なら time.Now。
@@ -228,9 +228,9 @@ func resolveSettingsRoot(cfg config.Config) (string, error) {
 	return filepath.Join(filepath.Dir(sockPath), hookserver.IssuesDirName), nil
 }
 
-// newTracker はボードを読み書きするアダプタを本物として組み立てる。
+// newTracker はカンバンを読み書きするアダプタを本物として組み立てる。
 //
-// **`gh` のトークンを引くので、ボードを読む必要が確定してから呼ぶこと。**
+// **`gh` のトークンを引くので、カンバンを読む必要が確定してから呼ぶこと。**
 //
 // ctx: トークンの取得に適用するコンテキスト。
 // cfg: 検証済みの設定。

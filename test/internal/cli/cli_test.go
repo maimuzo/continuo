@@ -422,9 +422,9 @@ func TestRunInit_ownerの形が不正なら外部へ接続する前に落とす(
 	}
 }
 
-// TestRunInit_projectが0以下なら落とす は、ボードの番号の検査を確かめる。
+// TestRunInit_projectが0以下なら落とす は、カンバンの番号の検査を確かめる。
 //
-// 目的: `--project 0` や負の数を、ボードを引きに行く前に弾くこと。
+// 目的: `--project 0` や負の数を、カンバンを引きに行く前に弾くこと。
 // 与える情報: 0 と -1。
 // 成功条件: 終了コードが 2。
 func TestRunInit_projectが0以下なら落とす(t *testing.T) {
@@ -442,7 +442,7 @@ func TestRunInit_projectが0以下なら落とす(t *testing.T) {
 //
 // **5問すべて答えさせたあとで落とすと、入力が全部捨てられる**（設計 3-32）。
 //
-// 目的: `--status-field ""` を、ボードを読みに行く前に弾くこと。
+// 目的: `--status-field ""` を、カンバンを読みに行く前に弾くこと。
 // 与える情報: 空文字と空白だけの文字列。
 // 成功条件: 終了コードが 2。
 func TestRunSetup_statusFieldが空なら落とす(t *testing.T) {
@@ -518,7 +518,7 @@ func TestRunHook_相対パスのソケットは受け付けない(t *testing.T) 
 // `~/.claude.json` を書き換えてはならない。
 //
 // 目的: `--dry-run` を付けたとき、対象の一覧を出して終わること。
-// 与える情報: owner とボードの番号を埋めた WORKFLOW.md。
+// 与える情報: owner とカンバンの番号を埋めた WORKFLOW.md。
 // 成功条件: 落ちずに終わり、stdout か stderr に何か出ること
 // （clone が無い環境でも「調べられなかった」まで進む）。
 func TestRunTrust_dryRunなら1バイトも書き換えない(t *testing.T) {
@@ -820,16 +820,16 @@ func TestRunMain_portの指定が範囲外なら落とす(t *testing.T) {
 	}
 }
 
-// TestRunSetup_ボードを読めなければ尋ねずに落とす は、RUCM の基本フロー3 を確かめる。
+// TestRunSetup_カンバンを読めなければ尋ねずに落とす は、RUCM の基本フロー3 を確かめる。
 //
-// **5問すべて答えさせたあとで「ボードを読めません」と落とすと、入力が全部捨てられる。**
+// **5問すべて答えさせたあとで「カンバンを読めません」と落とすと、入力が全部捨てられる。**
 //
-// 目的: ボードの Status を読めないとき、役割の割り当てを1つも尋ねないこと。
+// 目的: カンバンの Status を読めないとき、役割の割り当てを1つも尋ねないこと。
 // 与える情報: 常に失敗する setupFetchStatusField。
 // 成功条件: 終了コードが 1 で、stdout に質問（`[1/5]`）が出ないこと。
-func TestRunSetup_ボードを読めなければ尋ねずに落とす(t *testing.T) {
+func TestRunSetup_カンバンを読めなければ尋ねずに落とす(t *testing.T) {
 	deps := cli.Deps{ScaffoldDetect: fixedDetection, SetupFetchStatusField: func(_ context.Context, _ setup.FetchOptions) (setup.StatusField, error) {
-		return setup.StatusField{}, errors.New("ボードを読めません")
+		return setup.StatusField{}, errors.New("カンバンを読めません")
 	}}
 
 	code, stdout, stderr := runCLIWith(deps, []string{"setup", writeWorkflowFor(t)}, "")
@@ -837,16 +837,16 @@ func TestRunSetup_ボードを読めなければ尋ねずに落とす(t *testing
 		t.Errorf("終了コードが 1 でない: %d", code)
 	}
 	if strings.Contains(stdout, "[1/5]") {
-		t.Error("ボードを読めないのに役割を尋ねている")
+		t.Error("カンバンを読めないのに役割を尋ねている")
 	}
-	if !strings.Contains(stderr, "ボードを読めません") {
+	if !strings.Contains(stderr, "カンバンを読めません") {
 		t.Errorf("なぜ止まったかを出していない: %s", stderr)
 	}
 }
 
 // TestRunSetup_選択肢が5つ未満なら尋ねずに落とす は、尋ねる前の検査を確かめる。
 //
-// **1つの選択肢を2つの役割へ割り当てないので、選択肢が5つ未満のボードでは
+// **1つの選択肢を2つの役割へ割り当てないので、選択肢が5つ未満のカンバンでは
 // 対話が必ず途中で行き止まる。**尋ねる前に落として、GitHub の画面で足すよう案内する。
 //
 // 目的: 選択肢が4つ以下のとき、質問を1つも出さないこと。
@@ -868,7 +868,7 @@ func TestRunSetup_選択肢が5つ未満なら尋ねずに落とす(t *testing.T
 
 // TestRunSetup_5つ答えれば WORKFLOW.md へ書き込む は、`continuo setup` の本筋を確かめる。
 //
-// 目的: 選択肢が5つあるボードで、5問に答えたら7つのキーを書き換えること。
+// 目的: 選択肢が5つあるカンバンで、5問に答えたら7つのキーを書き換えること。
 // 与える情報: 選択肢を5つ返す setupFetchStatusField と、番号の入力。
 // 成功条件: 終了コードが 0 で、WORKFLOW.md に割り当てた選択肢名が入ること。
 func TestRunSetup_5つ答えればWORKFLOWmdへ書き込む(t *testing.T) {
@@ -1065,10 +1065,10 @@ func TestRunAllowKeychainAccess_期限内に返らなければ直し方を出す
 	}
 }
 
-// fixedDetection は `gh` を叩かずに owner とボードの番号を返す。
+// fixedDetection は `gh` を叩かずに owner とカンバンの番号を返す。
 //
-// **`continuo setup` は本物の `gh` からボードの一覧を引く。**検査で差し替えないと、
-// 実行した人のアカウントにあるボードの数で結果が変わる（2026-08-21 に実際に起きた）。
+// **`continuo setup` は本物の `gh` からカンバンの一覧を引く。**検査で差し替えないと、
+// 実行した人のアカウントにあるカンバンの数で結果が変わる（2026-08-21 に実際に起きた）。
 //
 // 戻り値: owner と番号が埋まった検出結果。
 func fixedDetection(_ context.Context, _ scaffold.DetectOptions) scaffold.Detection {
@@ -1088,7 +1088,7 @@ func fixedDetection(_ context.Context, _ scaffold.DetectOptions) scaffold.Detect
 // ままのファイルを渡されて途方に暮れる。
 //
 // 目的: 埋まったキーの値と理由、埋まらなかったキーの理由と直し方を出すこと。
-// 与える情報: owner は埋まり、ボードの番号は候補が複数で埋まらない検出結果。
+// 与える情報: owner は埋まり、カンバンの番号は候補が複数で埋まらない検出結果。
 // 成功条件: 両方の理由と、候補の一覧と、プレースホルダが残っている旨が出ること。
 func TestRunInit_引けた値と引けなかった理由を両方出す(t *testing.T) {
 	deps := cli.Deps{ScaffoldDetect: func(_ context.Context, _ scaffold.DetectOptions) scaffold.Detection {
@@ -1098,9 +1098,9 @@ func TestRunInit_引けた値と引けなかった理由を両方出す(t *testi
 				{Key: scaffold.OwnerKey, Filled: true, Value: "octocat", Reason: "gh api user が返しました"},
 				{
 					Key:    scaffold.ProjectKey,
-					Reason: "ボードの候補が2件あります",
+					Reason: "カンバンの候補が2件あります",
 					Candidates: []scaffold.Project{
-						{Number: 3, Title: "開発ボード", URL: "https://github.com/users/octocat/projects/3"},
+						{Number: 3, Title: "開発カンバン", URL: "https://github.com/users/octocat/projects/3"},
 						{Number: 9, Title: "検証用", URL: "https://github.com/users/octocat/projects/9"},
 					},
 					Advice: []string{"`continuo init --project <番号>` で指定してください"},
@@ -1114,10 +1114,10 @@ func TestRunInit_引けた値と引けなかった理由を両方出す(t *testi
 		t.Fatalf("終了コードが 0 でない: %d（stderr: %s）", code, stderr)
 	}
 	for _, want := range []string{
-		"octocat",       // 埋まった値
-		"gh api user",   // 埋まった理由
-		"ボードの候補が2件あります", // 埋まらなかった理由
-		"開発ボード",         // 候補の一覧
+		"octocat",     // 埋まった値
+		"gh api user", // 埋まった理由
+		"カンバンの候補が2件あります", // 埋まらなかった理由
+		"開発カンバン",         // 候補の一覧
 		"検証用",
 		"--project", // 直し方
 	} {
@@ -1127,15 +1127,15 @@ func TestRunInit_引けた値と引けなかった理由を両方出す(t *testi
 	}
 }
 
-// TestRunSetup_ボードの番号が決まらなければ候補を出して落とす は、setup の案内を確かめる。
+// TestRunSetup_カンバンの番号が決まらなければ候補を出して落とす は、setup の案内を確かめる。
 //
-// **`continuo setup` はどのボードの Status を読むかを決められないと進めない。**
+// **`continuo setup` はどのカンバンの Status を読むかを決められないと進めない。**
 // **候補を出さずに落とすと、人間は何を指定すればよいか分からない。**
 //
-// 目的: ボードの番号が決まらないとき、候補の一覧と直し方を出して落ちること。
+// 目的: カンバンの番号が決まらないとき、候補の一覧と直し方を出して落ちること。
 // 与える情報: 候補が3件あって決まらない検出結果。
 // 成功条件: 終了コードが 0 でなく、候補の名前と `--project` の案内が出ること。
-func TestRunSetup_ボードの番号が決まらなければ候補を出して落とす(t *testing.T) {
+func TestRunSetup_カンバンの番号が決まらなければ候補を出して落とす(t *testing.T) {
 	deps := cli.Deps{ScaffoldDetect: func(_ context.Context, _ scaffold.DetectOptions) scaffold.Detection {
 		return scaffold.Detection{
 			Values: scaffold.Values{Owner: "octocat"},
@@ -1143,9 +1143,9 @@ func TestRunSetup_ボードの番号が決まらなければ候補を出して�
 				{Key: scaffold.OwnerKey, Filled: true, Value: "octocat", Reason: "gh api user が返しました"},
 				{
 					Key:    scaffold.ProjectKey,
-					Reason: "ボードの候補が3件あります",
+					Reason: "カンバンの候補が3件あります",
 					Candidates: []scaffold.Project{
-						{Number: 3, Title: "開発ボード", URL: "https://github.com/users/octocat/projects/3"},
+						{Number: 3, Title: "開発カンバン", URL: "https://github.com/users/octocat/projects/3"},
 						{Number: 8, Title: "検証用", URL: "https://github.com/users/octocat/projects/8"},
 						{Number: 9, Title: "使い捨て", URL: "https://github.com/users/octocat/projects/9"},
 					},
@@ -1156,16 +1156,16 @@ func TestRunSetup_ボードの番号が決まらなければ候補を出して�
 
 	code, stdout, stderr := runCLIWith(deps, []string{"setup", writeWorkflowFor(t)}, "")
 	if code == 0 {
-		t.Error("ボードが決まらないのに成功として終わっている")
+		t.Error("カンバンが決まらないのに成功として終わっている")
 	}
 	out := stdout + stderr
-	for _, want := range []string{"開発ボード", "検証用", "使い捨て", "--project"} {
+	for _, want := range []string{"開発カンバン", "検証用", "使い捨て", "--project"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("%q を出していない:\n%s", want, out)
 		}
 	}
 	if strings.Contains(stdout, "[1/5]") {
-		t.Error("ボードが決まらないのに役割を尋ねている")
+		t.Error("カンバンが決まらないのに役割を尋ねている")
 	}
 }
 

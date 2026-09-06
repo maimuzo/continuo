@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -64,7 +64,7 @@ func blockFirstPrompt(t *testing.T, fx *fixture) func() {
 // 全部止まる。**
 //
 // 与える情報: 1回目の turn が `agent.prompt` の待ちに入ったままの run。
-// その間にボードの Status が `Done` へ動く。コメントは1件も付いていない。
+// その間にカンバンの Status が `Done` へ動く。コメントは1件も付いていない。
 // 成功条件:
 //   - `Done` を見つけた巡回が**すぐ返る**（コメントの確認を待たない）
 //   - そのあと別の goroutine でコメントの確認が走り、2回目の `agent.prompt` が出る
@@ -79,7 +79,7 @@ func TestTick_巡回のループはコメントの確認でブロックしない
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// エージェントが自分で `gh` を叩いて Done へ動かした状況を作る（完了の真実の源はボード）。
+	// エージェントが自分で `gh` を叩いて Done へ動かした状況を作る（完了の真実の源はカンバン）。
 	fx.Tracker.SetState(issue.ID, "Done")
 
 	started := time.Now()
