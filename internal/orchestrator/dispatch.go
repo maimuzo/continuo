@@ -422,8 +422,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// **ここが `Debug` の1行だけだったので、1台で動かしている人には
 	// 「ボードが何時間も進まない」としか見えなかった。**
 	// **理由とログの数字を、同じ1回の読み取りから作る**（設計 3-77j）。
-	// **`newWorkBlocked()` と `logNewWorkBlocked()` がそれぞれロックを取ると、
+	// **判定とログがそれぞれロックを取ると、
 	// 「枠を読めない」と名乗りながら使用率を並べる1行が出る。**
+	// **だから写しは、ここで1回だけ取って両方へ渡す。**
 	blockedSnap, blockedStale := o.quotaSnapshotWithStale()
 	blocked := o.newWorkBlockedWith(blockedSnap, blockedStale)
 	if blocked != handoff.SkipNone && len(candidates) > 0 {

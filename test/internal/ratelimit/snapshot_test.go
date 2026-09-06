@@ -29,14 +29,14 @@ func mustTime(t *testing.T, s string) *time.Time {
 	return &v
 }
 
-// 目的: 複数の枠を突き合わせる判定（MaxPercent / AnySelected /
+// 目的: 複数の枠を突き合わせる判定（SelectedKinds / AnySelected /
 // LatestResetForClearing）が設計 3-27 のとおりであることを確認する。
 //
 // **`resets_at` が null の枠は判定から外す。**外さないと、リセット時刻が分からない枠に
 // 引きずられて「いつまで待つか」を決められない。
 //
 // 与える情報: 使い切っている枠が2件（片方は resets_at が null）、まだ余裕のある枠が1件。
-// 成功条件: MaxPercent が最大値を返し、AnySelected が真になり、
+// 成功条件: SelectedKinds が使い切っている2件の種別を返し、AnySelected が真になり、
 // LatestResetForClearing が **resets_at が入っている枠の中で** いちばん遅い時刻を返すこと。
 func TestSnapshot_使い切った枠のうちresets_atがある中でいちばん遅い時刻を返す(t *testing.T) {
 	snap := &ratelimit.Snapshot{
