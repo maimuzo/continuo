@@ -96,11 +96,16 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 /code-review <PR 番号>
 ```
 
-**`/code-review` はプロンプトを足せない。**PR 番号と effort level しか渡せないので、
-**[.claude/skills/worker-briefing/SKILL.md](../worker-briefing/SKILL.md) の 2-6（1回で全部挙げる）と
-2-7（合理的根拠を書く）をレビュワーへ渡せない。**
-**その2つを効かせたいときは、`/code-review` ではなく Agent でレビュワーを立て、
-worker-briefing を Read させる**（[.claude/rules/design-review.md](../../rules/design-review.md) の「誰にレビューさせるか」）。
+**`/code-review` は自由なプロンプトを足せない。**受け取るのは PR 番号・branch・path・effort level と、
+`--comment` / `--fix` / `--post` / `--no-post` のようなフラグである。
+**そのため [.claude/skills/worker-briefing/SKILL.md](../worker-briefing/SKILL.md) の 2-6（1回で全部挙げる）と
+2-7（合理的根拠を書く）を、レビュワーへ直接は渡せない。**
+
+**それでも `/code-review` を使う。**[CLAUDE.md](../../../CLAUDE.md) の「PR を出すときの絶対条件」が
+**「必ず `/code-review` でレビューする」**と決めているためである。
+**2-6 と 2-7 は、受け取った結果を検査する側（このスキルの段4）で効かせる。**
+根拠の無い指摘や、分類の無い指摘を落とすのは、[.claude/rules/reporting.md](../../rules/reporting.md) の
+「検査で落とすもの」が受け持つ。
 
 **`code-review` は Claude Code に同梱されている skill である。このリポジトリの中には無い。**
 （確かめ方: `git ls-tree -r --name-only HEAD -- .claude/commands .claude/skills/code-review` が1件も返さない）
