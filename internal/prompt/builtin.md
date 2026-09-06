@@ -547,9 +547,11 @@ gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
 
 骨組み。**印の行は、そのコメントの節の見本のものをそのまま使ってください。**
 下の見本が置いているのは、3-2 の計画のコメントの印です。
+**3行目の `<!-- continuo:ai -->` は、どのコメントにも入ります**（5-6）。
 
     <!-- continuo:agent -->
     <!-- continuo:plan -->
+    <!-- continuo:ai -->
     ## 計画
 
     ### 何に対する返答か

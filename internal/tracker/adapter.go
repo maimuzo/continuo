@@ -1189,7 +1189,7 @@ func ComposeCommentBody(body, selfMarker string) string {
 	//
 	// **`self_marker` は利用者が設定で決める文字列であり、形を縛る検査が無い**
 	// （`tracker.comments.self_marker`）。`[continuo-self]` のような値にできる。
-	// **`config.WithAIMarker` は `<!--` で始まる行だけを印の行とみなす**ので、
+	// **`withAIMarker` は `<!--` で始まる行だけを印の行とみなす**ので、
 	// **そういう値を先に足すと、印がその行より前へ入る。**
 	// そうなると `FetchComments` の先頭一致が外れ、
 	// **continuo 自身の通知が、次の turn の入力から外れなくなる。**
@@ -1198,7 +1198,7 @@ func ComposeCommentBody(body, selfMarker string) string {
 	// **先に印を足せば、`self_marker` の形を問わない。**
 	// 持ち回りのコメント（入札・hold・released）は `selfMarker` が空で渡ってくるので、
 	// **本文が自分で持っている印の後ろへ入る。**そちらは固定の `<!--` の印である。
-	full := config.WithAIMarker(body)
+	full := withAIMarker(body)
 	if selfMarker != "" {
 		full = selfMarker + "\n" + full
 	}

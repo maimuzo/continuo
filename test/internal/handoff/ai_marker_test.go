@@ -15,6 +15,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // 目的: 印を足した入札のコメントを、そのまま読めることを固定する（設計 3-82）。
@@ -23,13 +24,13 @@ import (
 // **`ParseBid` は印の後ろの最初の `{` から最後の `}` を取る。**
 // 印を先頭へ割り込ませると前者が、印が中括弧を持つと後者が壊れる。
 //
-// 与える情報: FormatBid の本文を config.WithAIMarker へ通したもの。
+// 与える情報: FormatBid の本文を tracker.ComposeCommentBody へ通したもの。
 // 成功条件: IsMarked が真で、ParseBid が元の値を返すこと。
 func TestWithAIMarker_入札のコメントをそのまま読める(t *testing.T) {
 	posted := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	want := handoff.Bid{Author: "octocat-bot-a", FiveHour: 87, Weekly: 16, Score: 190, At: posted}
 
-	body := config.WithAIMarker(handoff.FormatBid(want, 3*time.Minute))
+	body := tracker.ComposeCommentBody(handoff.FormatBid(want, 3*time.Minute), "")
 
 	if !handoff.IsMarked(body) {
 		t.Fatalf("印を足したら、入札のコメントとして数えられなくなりました:\n%s", body)
@@ -48,7 +49,7 @@ func TestWithAIMarker_入札のコメントをそのまま読める(t *testing.T
 // **hold は「その担当者は機械である」ことの唯一の証拠である**（設計 3-77b）。
 // **読めなくなると、continuo は自分が取った担当を人間のものと読み、二度と奪わない。**
 //
-// 与える情報: FormatHold の本文を config.WithAIMarker へ通したもの。
+// 与える情報: FormatHold の本文を tracker.ComposeCommentBody へ通したもの。
 // 成功条件: IsMarked が真で、ParseHold が元の値を返すこと。
 func TestWithAIMarker_holdのコメントをそのまま読める(t *testing.T) {
 	want := handoff.Hold{
@@ -57,7 +58,7 @@ func TestWithAIMarker_holdのコメントをそのまま読める(t *testing.T) 
 		At:       time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC),
 	}
 
-	body := config.WithAIMarker(handoff.FormatHold(want))
+	body := tracker.ComposeCommentBody(handoff.FormatHold(want), "")
 
 	if !handoff.IsMarked(body) {
 		t.Fatalf("印を足したら、hold のコメントとして数えられなくなりました:\n%s", body)
@@ -73,7 +74,7 @@ func TestWithAIMarker_holdのコメントをそのまま読める(t *testing.T) 
 
 // 目的: 印を足した released のコメントを、そのまま読めることを固定する（設計 3-82）。
 //
-// 与える情報: FormatReleased の本文を config.WithAIMarker へ通したもの。
+// 与える情報: FormatReleased の本文を tracker.ComposeCommentBody へ通したもの。
 // 成功条件: IsMarked が真で、ParseReleased が元の値を返すこと。
 func TestWithAIMarker_releasedのコメントをそのまま読める(t *testing.T) {
 	want := handoff.Released{
@@ -82,7 +83,7 @@ func TestWithAIMarker_releasedのコメントをそのまま読める(t *testing
 		At:     time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC),
 	}
 
-	body := config.WithAIMarker(handoff.FormatReleased(want))
+	body := tracker.ComposeCommentBody(handoff.FormatReleased(want), "")
 
 	if !handoff.IsMarked(body) {
 		t.Fatalf("印を足したら、released のコメントとして数えられなくなりました:\n%s", body)

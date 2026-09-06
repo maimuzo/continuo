@@ -28,8 +28,12 @@ var markersThatMustComeFirst = []string{
 	"<!-- code-review-result -->",
 	"<!-- design-review-result -->",
 	config.PlanMarker,
-	config.ProgressMarker,
 }
+
+// **進捗の印は、この一覧に入れない。**
+// `handoff.StartsAsProgressReport` は先頭に並ぶ印を全部辿るので、
+// **進捗の印と機械の印は、どちらが先でも判定は変わらない**（組み込みの 5-3 がそう書いている）。
+// **見本の並びは、[progress_comment_test.go](progress_comment_test.go) が行の位置で固定している。**
 
 // 目的: エージェントがコメントを書く節すべてに、印を書かせていることを固定する（設計 3-82）。
 //
@@ -47,6 +51,9 @@ func TestTemplate_コメントを書かせる節すべてに機械の印があ�
 		"## 3-6. pull request のレビューを受ける",
 		"## 3-7. 終わりを書く",
 		"## 5-3. {{.progress_interval_minutes}}分以上黙らない",
+		// **5-5 は、人間へ読ませるコメントの骨組みを決めている節である。**
+		// **その骨組みに印が無いと、骨組みから書いたコメントだけ印が落ちる。**
+		"## 5-5. 人間へ質問・報告するコメントの書き方",
 		"## 5-6. あなたが書くコメントには、機械が書いた印を付ける",
 		"## 7-2. まとめて直したとき",
 	} {
@@ -92,8 +99,8 @@ func TestTemplate_機械の印は既存の目印より後ろに書かせる(t *t
 			// **本文が始まったら止める**（空行でも印の行でもない行）。
 			usedAfter := false
 			for j := i + 1; j < len(lines); j++ {
-				t := strings.TrimSpace(lines[j])
-				if t != "" && !strings.HasPrefix(t, "<!--") {
+				trimmed := strings.TrimSpace(lines[j])
+				if trimmed != "" && !strings.HasPrefix(trimmed, "<!--") {
 					break
 				}
 				if strings.Contains(lines[j], marker) {
