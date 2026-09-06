@@ -22,7 +22,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 `In Progress` → `Blocked` を動かす経路を認めている
 （[docs/plans/continuo_design.md:9135](../../docs/plans/continuo_design.md#L9135)）。
 **組み込みの指示書は、それを勧めてはいない**
-（[internal/prompt/builtin.md:280](../../internal/prompt/builtin.md#L280) は「あなたが `gh` を叩く必要はありません」）。
+（[internal/prompt/builtin.md:301](../../internal/prompt/builtin.md#L301) は「あなたが `gh` を叩く必要はありません」）。
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **カンバンの操作は AI が行う。**ただし 4-1 の遷移表で「誰が」の欄が「人間」だけの3つは人間である
@@ -215,7 +215,7 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 | 4 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
 
 **代表以外には、何が直ったかが1行も残らない。**
-組み込みの指示書（[internal/prompt/builtin.md:614-778](../../internal/prompt/builtin.md#L614-L778) の 7-2）が、
+組み込みの指示書（[internal/prompt/builtin.md:691-706](../../internal/prompt/builtin.md#L691-L706) の 7-2）が、
 表明の1行と `Closes #45` しか書かせていないためである。
 **人間が代表の pull request を見て確かめること。**
 
