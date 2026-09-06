@@ -216,17 +216,6 @@ func spliceAIMarker(body string, at int) string {
 	return prefix + config.AIMarker + eol + suffix
 }
 
-// skipNoticeMarker は、設計のレビューを飛ばす断りの目印である。
-//
-// **この目印で始まる本文にだけは、印を足さない**（設計 3-82c）。
-// **CI がこの目印の直後の1文字で「理由を書いたか」を数えている**ので、
-// **印を足すと、理由を1文字も書かない断りが通る。**
-//
-// **continuo はこのコメントを書かない。**組み込みの指示書もエージェントへ書かせない。
-// **それでも門を置くのは、決まりを散文だけで守らないためである。**
-// 呼び出し元が増えたときに、この1行が最後に残る守りになる。
-const skipNoticeMarker = "<!-- design-review-skipped -->"
-
 // ComposeCommentBody は、continuo が投稿する本文を組み立てる（設計 3-82）。
 //
 // **`PostComment` から切り出してある。**検査の偽の tracker
@@ -256,14 +245,16 @@ func ComposeCommentBody(body, selfMarker string) string {
 	// **先に印を足せば、`self_marker` の形を問わない。**
 	// 持ち回りのコメント（入札・hold・released）は `selfMarker` が空で渡ってくるので、
 	// **本文が自分で持っている印の後ろへ入る。**そちらは固定の `<!--` の印である。
-	if strings.HasPrefix(strings.TrimSpace(body), skipNoticeMarker) {
-		// **飛ばす断りには足さない**（設計 3-82c）。
-		// 足すと、理由を1文字も書かない断りが CI を通る。
-		if selfMarker != "" {
-			return selfMarker + "\n" + body
-		}
-		return body
-	}
+	//
+	// **`<!-- design-review-skipped -->` の断りを、ここで外すことはしない**（設計 3-82c）。
+	// **この経路からは、その断りへ届かないためである。**`PostComment` が投稿する先は
+	// カンバンに載った issue であり（pull request は `Gone` として捨てる。
+	// [internal/tracker/query.go](query.go) の `classify`）、
+	// **その例外が守っている CI は pull request のコメントを読む**
+	// （[.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) の
+	// `repos/${REPO}/issues/${PR_NUMBER}/comments`）。
+	// **断りを実際に書くのは人間かエージェントの `gh pr comment` で、この関数を1度も通らない。**
+	// **例外を守っているのは組み込みの指示書の 5-6 と、その検査と、CI の案内文の3つである。**
 	full := withAIMarker(body)
 	if selfMarker != "" {
 		full = selfMarker + "\n" + full
