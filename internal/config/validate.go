@@ -21,6 +21,15 @@ import (
 // 波括弧ごと照合すると、正しい設定を弾いてしまう。
 const issueNumberPlaceholder = ".issue.number"
 
+// weeklyWaitLimitMaxMinutes は `rate_limit.weekly_wait_limit_minutes` の上限（分）である
+// （issue #197）。**10年ぶん。**
+//
+// **上限を置く理由。**`time.Duration(n) * time.Minute` は int64 のナノ秒なので、
+// **1.5億分あたりであふれて小さい正の値へ巻き戻る。**
+// **そうなると、枠待ちに入った瞬間に担当を手放す。**
+// **「事実上いつまでも待つ」は 0 で表す**ので、大きな値を書く必要は無い。
+const weeklyWaitLimitMaxMinutes = 10 * 365 * 24 * 60
+
 // validate は front matter をパースした直後の Config に対して、YAML としては正しいが
 // 値として不正なものが無いかを検査する。ここでの不正は「起動を止める」対象である
 // （設計「その2」。CLAUDE.md にも明示されている絶対条件）。
@@ -338,8 +347,26 @@ func validate(cfg *Config) error {
 		return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
 			`"claude_credentials" か "keychain"（macOS のみ）か "env" のいずれか（読み取りだけで書き換えない。3-27）`)
 	}
-	if cfg.RateLimit.PauseAbovePercent < 0 || cfg.RateLimit.PauseAbovePercent > 100 {
-		return invalidValueError("rate_limit.pause_above_percent", cfg.RateLimit.PauseAbovePercent, "0以上100以下にすること")
+	// **大きすぎる値も通してはならない**（issue #197）。
+	// **分をミリ秒へ直すときに int64 があふれ、小さい正の値へ巻き戻ることがある。**
+	// **そうなると、枠待ちに入った瞬間に担当を手放す。**
+	// **上限は10年ぶんにしてある。**「事実上いつまでも待つ」は 0 で表す。
+	// **負の値を通してはならない**（issue #197）。負だと「待つ先の時刻 − いま」が必ず上回るので、
+	// **枠待ちに入った瞬間に担当を手放す。**1週間の枠を1%でも使い切れば、走っている run が全部止まる。
+	//
+	// **上限を切りたい人は 0 を書く**（`claude.turn_timeout_ms` と
+	// `tracker.provider.handoff.recheck_interval_ms` と同じ向き）。
+	//
+	// **`tracker.provider.handoff.idle_timeout_ms` との大小は検査しない。**
+	// 1台で動かしている人には他の機械がいないので、18時間より長くても正しく効く。
+	// **弾くと、その人が起動できなくなる。**案内は雛形のコメントに書いてある。
+	if cfg.RateLimit.WeeklyWaitLimitMinutes < 0 ||
+		cfg.RateLimit.WeeklyWaitLimitMinutes > weeklyWaitLimitMaxMinutes {
+		// **上限は文言へ埋め込む**（issue #197）。**手で書くと、定数を変えたときに置き去りになり、
+		// 弾いた線と、案内している線が食い違う。**
+		return invalidValueError("rate_limit.weekly_wait_limit_minutes",
+			cfg.RateLimit.WeeklyWaitLimitMinutes,
+			i18n.T(i18n.KeyConfigValidateRateLimitWeeklyWaitRange, weeklyWaitLimitMaxMinutes))
 	}
 
 	switch cfg.Trust.OnUntrusted {
@@ -677,11 +704,16 @@ func validateHandoff(h TrackerProviderHandoffConfig) error {
 		return invalidValueError("tracker.provider.handoff.recheck_interval_ms", h.RecheckIntervalMs,
 			i18n.T(i18n.KeyConfigValidateHandoffRecheckIntervalRange))
 	}
-	if h.FiveHourMarginPercent < 0 || h.FiveHourMarginPercent > 100 {
+	// **100 を弾く**（issue #173 / #197）。
+	// **余裕値は `100 − 使用率 − マージン` で、0以下なら「余裕が無い」である。**
+	// **マージン100 だと、使用率0でも余裕値0になり、その機械は永久に入札しない。**
+	// **さらに、1週間の枠を待つ上限の判定も永久に真になるので、
+	// 枠を1バイトも使っていないのに走っている run を全部手放す。**
+	if h.FiveHourMarginPercent < 0 || h.FiveHourMarginPercent >= 100 {
 		return invalidValueError("tracker.provider.handoff.five_hour_margin_percent",
 			h.FiveHourMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}
-	if h.WeeklyMarginPercent < 0 || h.WeeklyMarginPercent > 100 {
+	if h.WeeklyMarginPercent < 0 || h.WeeklyMarginPercent >= 100 {
 		return invalidValueError("tracker.provider.handoff.weekly_margin_percent",
 			h.WeeklyMarginPercent, i18n.T(i18n.KeyConfigValidateHandoffMarginRange))
 	}

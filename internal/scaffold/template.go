@@ -187,8 +187,19 @@ rate_limit:
   source: oauth_usage_api                   # Claude の使用量 API から枠の残りを読む。none なら枠を見ない
   token_source: claude_credentials          # ~/.claude/.credentials.json から読む。macOS なら keychain（Keychain から読む）にできる。env なら下の token_env から読む
   token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数の名前
-  pause_above_percent: 95                   # 枠の使用率がこれを超えたら新しい issue に着手しない。動いている turn は止めない
   poll_interval_ms: 300000                  # 枠の残りを読み直す間隔
+  weekly_wait_limit_minutes: 300            # 1週間の枠が明けるのを待つ上限。単位は分。300 なら5時間。
+                                            # これを超えて待つことになる issue は、待たずに担当を手放し、
+                                            # 入札からやり直させる。worktree は残し、Status も動かさない。
+                                            # 「何分待つか」ではなく「あと何分以内にリセットされるなら待つか」。
+                                            # 1週間の枠は最長7日先までリセットされないので、
+                                            # 余裕が無くなったらほとんど待たずに手放す。
+                                            # この分数だけ待つのは、リセット時刻を読めないときだけ。
+                                            # 5時間の枠には効かない（5時間の枠だけならいつまでも待つ）。
+                                            # 0 なら上限を設けず、いつまでも待つ。
+                                            # 上の idle_timeout_ms とは 0 の意味が逆なので注意すること。
+                                            # 複数の機械で見張るなら idle_timeout_ms より短くすること。
+                                            # 長いと別の機械が先に担当を外すので、この値は一度も効かない
 
 trust:
   require_repo_trusted: true                # 信頼していないリポジトリではエージェントを起動しない

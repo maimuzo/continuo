@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -235,6 +237,187 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 	}
 }
 
+// clearQuotaWaitWhenBack は、枠が明けた run から枠待ちの印を外す（設計 3-27）。
+//
+// **外す契機は2つある。**
+//
+//	一、`resets_at` を過ぎたこと
+//	二、使い切っている枠が1つも無くなったこと
+//
+// **二を落としてはならない。**`resets_at` が `null` で返る枠だけを使い切っていると、
+// `QuotaResetAt` はゼロ値のままで、**一では永久に外れない。**
+// turn のループは同じ判定を持っているが、
+// **herdr が一時的に届かないと、待ちループは印を外さずに goroutine を畳む**（設計 3-27）。
+// **そのとき外す者が1人もいなくなり、run はスロットと pane を continuo の再起動まで握り続ける。**
+//
+// **`checkStalls` の `claude.turn_timeout_ms` の門より前で呼ぶ。**
+// **0 以下でも枠待ちの印は立つ**ので、門のあとに置くと、その設定の機械で一度も外れない。
+// **`weekly_wait_limit_minutes: 0`（上限を設けない）と組み合わさると必ず当たる。**
+// [docs/FAQ.md](../../docs/FAQ.md) が1台で動かす人に勧めている値である。
+//
+// **枠の写しは呼び出し側が1回のロックで取ったものを受け取る。**
+// **ここで取り直すと、同じ巡回の中で run ごとに違う写しの答えが混ざる。**
+//
+// snap: この巡回で読んだ枠の写し。**nil なら「余裕が無い枠は無い」として扱う。**
+// now: いまの時刻。
+func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time.Time) {
+	full := snap.AnySelected(handoff.Full())
+	for _, rs := range o.snapshotRuns() {
+		st := rs.snapshot()
+		if !st.WaitingQuota {
+			continue
+		}
+		switch {
+		case !st.QuotaResetAt.IsZero() && !now.Before(st.QuotaResetAt):
+			rs.clearWaitingQuota(now)
+		case !full:
+			o.logger.Info("使い切っている枠が無くなったので、枠待ちの印を外します"+
+				"（入札できるとは限りません。余裕値はマージンのぶん手前で尽きます）",
+				"identifier", st.Identifier)
+			rs.clearWaitingQuota(now)
+		}
+	}
+}
+
+// releaseQuotaWaitExceeded は、1週間の枠を待つ上限を超えた run を手放す
+// （設計 3-27。issue #197）。
+//
+// **手放しの入口はここ1本だけである**（人間の決定。2026-09-06）。
+// turn 側の待ちループからは手放さない。**判断に要る材料を読むのが、この経路しかないためである。**
+//
+// **`checkStalls` の `claude.turn_timeout_ms` の門より前で呼ぶ。**
+// **0 以下でも枠待ちの印は立つ**ので、門のあとに置くとその設定の機械で一度も効かない。
+//
+// **見る順序を入れ替えてはならない。**herdr へ問い合わせるのはいちばん最後である。
+//
+//  1. 枠待ちの印が立っているか                 … メモリ上の値。ただ
+//  2. 1週間の枠の余裕が無く、待っても明けないか … 最後に読めた枠の写し。ただ
+//  3. pane が止まっているか                    … **herdr へ1回問い合わせる**（既定5秒の持ち時間）
+//
+// **段3 を先に置くと、巡回のたびに走っている run の数だけ herdr を叩くことになる。**
+// その間、stall 検知も枠の読み直しも止まる。
+//
+// **非同期に手放す。**担当者を外す要求とコメントの投稿と pane を閉じる要求が乗るので、
+// **同じ巡回で複数の run が超えると直列に積まれる**（設計 3-8）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// quotaSnap: この巡回で1回だけ読んだ枠の写し。
+// quotaStale: その写しが古いか。
+// now: この巡回の時刻。
+func (o *Orchestrator) releaseQuotaWaitExceeded(
+	ctx context.Context, quotaSnap *ratelimit.Snapshot, quotaStale bool, now time.Time,
+) {
+	// **写しは呼び出し側が1回だけ読む**（設計 3-27）。**ここで取り直してはならない。**
+	// **`checkStalls` は、このあと同じ run に `noteWeeklyShort` を当てる。**
+	// `pollQuota` は turn の goroutine から並行に走って写しを差し替えるので、
+	// **2回読むと、こちらが「余裕が無い」と控えた時刻を、あちらが「余裕がある」で消しうる。**
+	// **消えると、リセット時刻を読めない枠で上限を測る唯一の道（経過時間）が閉じる。**
+	for _, rs := range o.snapshotRuns() {
+		snap := rs.snapshot()
+		// **画面を持っていない run は、この経路で扱えない**（issue #197）。
+		//
+		// **`paneStopped` は herdr へ問い合わせる。**pane が既に閉じている run では
+		// `agent.get` が誤りを返し、**そのたびに info の1行が出る。**
+		// 1週間の枠の余裕が無いあいだ、**巡回のたびに run の数だけ積む。**
+		// **issue #173 が読めるようにしようとしているログを、こちらが埋めることになる。**
+		//
+		// **手放せないことは変わらない。**確かめられない pane を閉じて担当を外す道は無い。
+		// **打ち切りの経路（`checkStalls` の本体）が、同じ2つを同じ理由で外している。**
+		if snap.AgentName == "" {
+			continue
+		}
+		if !snap.BackoffUntil.IsZero() && now.Before(snap.BackoffUntil) {
+			continue
+		}
+		// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
+		// **印は「使用率100」で立ち、この判定は「1週間の余裕値が0以下」で効く。**
+		// **印を門にすると、100%でしか手放せなくなり、
+		// 「入札するときの余裕値で判定して」という指示が効かなくなる。**
+		if !o.weeklyWaitExceededWith(quotaSnap, quotaStale, rs) {
+			continue
+		}
+		// **その run が進んでいないことを確かめる**（issue #197）。
+		// **人間の指示は「今paneの内容が動いていたら止まるまで待って」である。**
+		// **「動いていない」を pane の見た目だけで測ると、turn と turn のあいだの
+		// ふつうの間や、進捗のコメントを書いている最中の run まで拾う。**
+		// **既に一度、印を門にするのをやめている**（印は使用率100でしか立たないので、
+		// 余裕値で判定するという決定が効かなくなる）。**代わりに、印の2つ目の条件だけを使う。**
+		//
+		//	claude.turn_timeout_ms のあいだ hook が1件も来ていない
+		//
+		// **これは「枠が満杯か」を1バイトも見ないので、余裕値の線を壊さない。**
+		// **打ち切りを切っている機械では、この物差しが無い。**
+		// **そのときは画面の版と `agent_status` だけで判断する**（`paneStopped`）。
+		// **言えないことを理由に手放さないと、上限がその設定の機械で一度も効かない。**
+		if !o.stallDetectionOff() && !o.runIdleForTurnTimeout(rs) {
+			continue
+		}
+		if !o.paneStopped(ctx, rs) {
+			// **動いているなら、止まるまで待つ**（人間の決定。2026-09-06。issue #197）。
+			// **次の巡回でやり直す。**
+			continue
+		}
+		o.releaseBecauseQuotaWaitAsync(ctx, rs)
+	}
+}
+
+// paneStopped は「この run の pane が完全に止まっているか」を返す
+// （設計 3-27。issue #197）。
+//
+// **人間の指示は「そのセッションのサブエージェントを含め完全停止するまで待って」である**
+// （2026-09-06）。**2つとも満たしたときだけ「止まっている」とする。**
+//
+//	画面の版     … 前に見た値から変わっていない
+//	agent_status … idle か done である
+//
+// **`agent_status` で `working` だけを弾くのでは足りない。**`unknown` は
+// 「**agent は居るが herdr が状態を判定できない**」という意味であり（`internal/herdr/types.go`）、
+// **確かめられていない。**`blocked` は人間の入力待ちなので、閉じると確認の画面ごと消える。
+// **だから「止まっている」と言えるのは `idle` と `done` の2つだけである。**
+//
+// **`runningSubagentList()` は使えない。**一度は3つ目の条件にしたが、取り下げた。
+// **あの一覧を空にする経路は、次の turn を始めるときと `SubagentStop` を受けたときの2つしか無い**
+// （`runState.beginTurn` と `noteSubagentStop`）。
+// **枠待ちの最中は、どちらも起きない。**次の turn は枠が明けるまで送られず、hook も来ない。
+// **つまり、枠が尽きた瞬間にサブエージェントが走っていた run は、一覧が永久に空にならず、
+// この関数が二度と真を返さない。**手放しの仕組みが、いちばん効いてほしい場面で1回も動かなくなる。
+//
+// **サブエージェントは `agent_status` が受け持つ。**サブエージェントの出力も同じ pane へ出るので、
+// **何かが動いているあいだ herdr は `working` を返す。**
+// **ただし、これは herdr の実装を読んで確かめたものではない**（`working` の決め方は測っていない）。
+// **測れていないので、`unknown` を「止まっている」に入れない形で安全側へ倒してある。**
+//
+// **herdr へ届かなければ「止まっていない」を返す。**確かめられないときは手放さない側へ倒す。
+// この判定の先には GitHub への2回の書き込みと pane を閉じる操作がある。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値: 完全に止まっていれば true。
+func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) bool {
+	agent, err := o.agentInfo(ctx, rs)
+	if err != nil {
+		o.logger.Info("画面の状態を読めないので、1週間の枠の上限を超えていても手放しません（次の巡回でやり直します）",
+			"identifier", rs.issue().Identifier, "error", err)
+		return false
+	}
+	if agent.AgentStatus != herdr.AgentStatusIdle && agent.AgentStatus != herdr.AgentStatusDone {
+		return false
+	}
+	// **版が変わっていれば、まだ何かを書き出している。**
+	//
+	// **`LastRevision` と比べてはならない。**あれを書くのは着手のときと巡回の stall 検知だけで、
+	// **枠待ちの印が立っている run と `claude.turn_timeout_ms` が0以下の機械では stall 検知が走らない。**
+	// **凍りついた値と比べることになり、画面が1度でも動いたあとは永久に一致しない。**
+	//
+	// **`noteRevision` を呼ぶのも駄目である。**版を控え直すので、
+	// **このあと `checkStalls` が同じ版を見て「変わっていない」と答え、
+	// 画面が動いている run を打ち切ることになる。**
+	//
+	// **だから、この判定は自分が読んだ版だけを覚える。**
+	// **2回続けて同じなら止まっている。**初回は必ず偽を返す。
+	return rs.noteQuotaProbe(agent.Revision)
+}
+
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
 // （設計 3-9 の手順7b）。
 //
@@ -296,12 +479,16 @@ func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string,
 //
 // **時計が動いていない run について、上から順に見る。**
 //
-//  1. 枠待ちか（percent が 100 かつ この run から hook が来ていない）
-//     → 枠待ちなら「時計を止めている」印を付けて終わり。**殺さない**
-//  2. 画面の版が増えているか（agent.get の `revision`）
+//  1. 画面の版が増えているか（agent.get の `revision`）
 //     → 増えていれば時計を起こし直す。**1つの turn に何時間かかっていても打ち切らない**
-//  3. 版が増えていない
+//  2. 版が増えていない。枠待ちか（percent が 100 かつ この run から hook が来ていない）
+//     → 枠待ちなら「時計を止めている」標識を付けて終わり。**殺さない**
+//  3. 枠待ちでもない
 //     → worker を止め、リトライを積む
+//
+// **段1 を段2 より前に置く。順番を入れ替えてはならない**（設計 3-27。issue #197）。
+// **枠待ちの条件は「長い1つのツール呼び出し」と区別できない。**
+// 後ろに置くと、**正常に走っている run が枠待ちと名乗り、stall の時計が止まったまま戻らない。**
 //
 // **枠待ちの run は判定そのものを飛ばす**（`WaitingQuota` が立っている間は時計が止まっている）。
 // **`LastSeenAt` は進めない**（進めると、枠が明けたあとに「最後に動いていた時刻」が分からなくなる）。
@@ -311,19 +498,55 @@ func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string,
 //
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) checkStalls(ctx context.Context) {
+	// **1週間の枠を待つ上限は、打ち切りの判定を切っていても効かせる**（設計 3-27。issue #197）。
+	// **下の `silence <= 0` より前に呼ぶ。**`claude.turn_timeout_ms` が 0 以下でも
+	// **枠待ちの印は立つ**（`isQuotaWaiting` は hook を1件も受けていない run では
+	// 無音の長さを見ない）。**あとに置くと、その設定の機械で上限が一度も効かない。**
+	//
+	// **枠の写しは、この巡回で1回だけ読む**（設計 3-27。issue #197）。
+	// **手放しの側と、下の `noteWeeklyShort` の側で別々に読んではならない。**
+	// `pollQuota` は turn の goroutine から並行に走るので、2回のあいだに写しが差し替わると、
+	// **片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
+	now := o.now()
+	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
+	o.releaseQuotaWaitExceeded(ctx, quotaSnap, quotaStale, now)
+
+	// **余裕の無い1週間の枠があるかを、同じ写しから見る。**
+	weeklyShort := quotaSnap.AnySelected(handoff.ShortWeekly(o.bidMargins()))
+
+	// **余裕が無くなった時刻は、枠待ちの印の有無によらず、巡回のたびに控える**（設計 3-27）。
+	// **`weeklyWaitExceeded` の中だけで控えてはならない。**あれは印が立っている run しか
+	// 通らないので、**印が別の経路で外れると、以後どこからも消されない。**
+	// **消されないと、何日か普通に動いたあと1週間の枠の余裕がもう一度無くなったときに、
+	// 何日も前の時刻との差で「上限を超えた」と判定し、1分も待たずに手放す。**
+	//
+	// **下の `silence <= 0` の門より前に置く。**`claude.turn_timeout_ms` を0以下にしている
+	// 機械では、あとに置くと**この記録も走らない。**
+	// **読めなくなった写しでは控えない**（issue #197）。
+	// **nil や古い写しは「余裕がある」と答えるので、そのまま控えると
+	// `WeeklyShortSince` がゼロへ戻り、経過で測る道が閉じる。**
+	// **手放しの側が同じ理由で拒んでいるものを、こちらだけ受け入れてはならない。**
+	if quotaSnap != nil && !quotaStale {
+		for _, rs := range o.snapshotRuns() {
+			rs.noteWeeklyShort(weeklyShort, now)
+		}
+	}
+
+	// **枠が明けた run の印を外すのも、`silence <= 0` より前で行う。**
+	// **あとに置くと、`claude.turn_timeout_ms` を0以下にしている機械では、
+	// 一度立った印を外す者が1人もいなくなる**（下の `clearQuotaWaitWhenBack` の説明）。
+	o.clearQuotaWaitWhenBack(quotaSnap, now)
+
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	if silence <= 0 {
 		return
 	}
-	now := o.now()
 
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
 		if snap.WaitingQuota {
-			// 枠が明けたら印を外す。**外す契機は「resets_at を過ぎたこと」だけである。**
-			if !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt) {
-				rs.clearWaitingQuota(now)
-			}
+			// **印の出し入れは、上の `clearQuotaWaitWhenBack` が済ませている。**
+			// **上限は上の `releaseQuotaWaitExceeded` が見ている。**ここでは見ない。
 			continue
 		}
 		if !snap.BackoffUntil.IsZero() && now.Before(snap.BackoffUntil) {
@@ -336,17 +559,20 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 			continue
 		}
 
-		// 1. 枠待ちを先に見る。
-		if o.isQuotaWaiting(rs) {
-			resetAt, _ := o.quotaResetAt()
-			rs.setWaitingQuota(resetAt)
-			o.logger.Info("枠待ちと判定したので stall の時計を止めます",
-				"identifier", snap.Identifier, "resets_at", resetAt)
-			continue
-		}
-
-		// 2. agent.get で状態と画面の版を1回で取る。
+		// 1. agent.get で状態と画面の版を1回で取る。
 		// **版が増えていれば、何時間かかっていても待ち続ける。**
+		//
+		// **枠待ちの判定より前に置く**（設計 3-27。issue #197）。
+		// **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
+		// 「枠を待っている」と「長い1つの仕事をしている」を区別できない。**
+		// hook はツールが終わってから飛ぶので、**1時間を超える1回のツール呼び出しの
+		// 最中は1件も来ない。**そこへ週次の枠が満杯だと条件が両方そろい、
+		// **正常に走っている run を枠待ちと名乗らせて stall の時計を止める。**
+		// **後ろに置くと、その run は本当に固まっても誰にも止められない。**
+		//
+		// **`noteRevision` は版が変わったときだけ `LastSeenAt` を進める。**
+		// **版が変わった run は、そもそも枠待ちではない。**
+		// だから「枠待ちの run は `LastSeenAt` を進めない」という約束は破れない。
 		agent, err := o.agentInfo(ctx, rs)
 		if err == nil && rs.noteRevision(agent.Revision, now) {
 			o.logger.Info("画面が変わっているので待ち続けます（turn の総実行時間では打ち切りません）",
@@ -358,6 +584,22 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		if err != nil {
 			o.logger.Warn("画面の版を読めませんでした（止まったものとして扱います）",
 				"identifier", snap.Identifier, "error", err)
+		}
+
+		// 2. 画面が止まっている。枠待ちかを見る。
+		if o.isQuotaWaitingWith(quotaSnap, rs) {
+			// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
+			// **手放しの入口は `releaseQuotaWaitExceeded` の1本だけである。**
+			// **印を立てるだけにしておけば、次の巡回の先頭でそちらが拾う。**
+			// **遅れるのは巡回1回ぶん（既定30秒）である。**
+			//
+			// **2箇所に置いてはならない。**片方だけが直る形になり、
+			// **同じ問いに違う答えが返る**（それがこの issue の元の症状である）。
+			resetAt, _ := o.quotaResetAtOf(quotaSnap)
+			rs.setWaitingQuota(resetAt)
+			o.logger.Info("枠待ちと判定したので stall の時計を止めます",
+				"identifier", snap.Identifier, "resets_at", resetAt)
+			continue
 		}
 
 		// 3. 版が止まったまま閾値を超えた。worker を止め、リトライを積む。

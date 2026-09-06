@@ -36,12 +36,30 @@ const (
 	LimitKindWeeklyAll = "weekly_all"
 	// LimitKindWeeklyScoped は1週間のモデル別の枠である。
 	//
-	// **一定量を使うまで現れない。**現れないものは判定に入らない（最大を採れば自動的にそうなる）。
+	// **最初から返ってくる。**「一定量を使うまで現れる」ではない（issue #199）。
+	// **使っていなければ `percent: 0` で返り、`resets_at` は `null` である**
+	// （2026-08-29 の実測。設計 3-15 のサンプルも同じ形である）。
+	// **だから「現れたら判定に入れる」という書き方をしてはならない。**その判定は永久に発火しない。
 	LimitKindWeeklyScoped = "weekly_scoped"
 )
 
 // fullPercent は「使い切り」を表す使用率である。余裕値はここから引いて作る。
 const fullPercent = 100
+
+// ThresholdPercent は「これに達すると余裕値が0以下になる」使用率を返す（設計 3-77j。issue #173）。
+//
+// **人間へ見せる1行を作るためだけにある。**判定そのものは `Short` が行う。
+//
+// **この関数が要るのは、100 という数を2つの package が別々に持たないためである。**
+// **`Short` は `fullPercent - l.Percent - margin <= 0` で判定する。**
+// **同じ 100 を呼ぶ側でもう一度書くと、この定数を変えたときに、
+// ログが「90% に達したら止まります」と言い続けたまま、実際の門は別の値で効く。**
+//
+// margin: その枠のマージン（%）。
+// 戻り値: これに達すると入札が止まる使用率（%）。
+func ThresholdPercent(margin int) int {
+	return fullPercent - margin
+}
 
 // Bid は1つの continuo が書いた入札である（設計 3-77a のコメントの形）。
 //
@@ -121,7 +139,40 @@ type Released struct {
 	Branch string `json:"branch"`
 	// At は外した時刻である。**外した機械のタイムゾーンで書く。**
 	At time.Time `json:"at"`
+	// Reason は、自分から手放したときにその理由を入れる（issue #197）。
+	//
+	// **空なら「他の機械に外された」である**（設計 3-77c）。
+	// **`ReleaseReasonWeeklyWaitLimit` なら「1週間の枠を待つ上限を超えて自分で手放した」である**
+	// （設計 3-27）。**この2つで本文が変わる。**
+	// 外された側は「この branch へ push しないでください」だが、
+	// **自分から手放した側は、その直前に `workspace_hooks.after_run` で push している。**
+	// **同じ本文を使うと、push した本人が「push しないでください」と書くことになる。**
+	//
+	// **`omitempty` を付ける。**外された側の `released` に空の欄を増やさないためである。
+	// **互換のためではない。**`encoding/json` は知らない欄を黙って捨てるので、
+	// **欄を足しただけで古い continuo が読めなくなることは無い**（`ParseReleased` は
+	// `DisallowUnknownFields` を使っていない）。
+	Reason string `json:"reason,omitempty"`
 }
+
+// 自分から手放したときの理由である（issue #197。設計 3-27）。
+//
+// **これは人間が issue のコメントを grep するための目印である。**
+// **機械はこの値で振る舞いを変えない。**読むのは `FormatReleased` が本文を選ぶときだけで、
+// **`LatestReleased` の読み手は `From` しか見ない。**
+// [docs/FAQ.md](../../docs/FAQ.md) が、この文字列を載せた JSON を見本として出している。
+const (
+	// ReleaseReasonWeeklyWaitLimit は、1週間の枠を待つ上限を超えて自分で手放したことを表す。
+	//
+	// **`workspace_hooks.after_run` が成功したときだけ使う。**
+	ReleaseReasonWeeklyWaitLimit = "weekly_wait_limit"
+	// ReleaseReasonWeeklyWaitLimitNoPush は、同じ理由で手放したが
+	// **`workspace_hooks.after_run` が走らなかった／失敗したことを表す。**
+	//
+	// **本文を分ける。**「実行済みです。remote の続きから始めてください」と断言すると、
+	// **次に拾う機械が、入っていない commit の続きから始める。**
+	ReleaseReasonWeeklyWaitLimitNoPush = "weekly_wait_limit_no_push"
+)
 
 // Margins は余裕値を作るときに引くマージンである（単位は %）。
 type Margins struct {
@@ -141,12 +192,12 @@ const (
 	//
 	// **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**だから黙る。
 	SkipQuotaUnreadable
-	// SkipPauseThreshold は、どれかの枠が `rate_limit.pause_above_percent` を超えたことを表す。
+	// SkipNoHeadroom は5時間余裕値と1週間余裕値のどちらかが0以下であることを表す。
 	//
-	// **この機械は入札に勝っても着手しない**（新規の dispatch を止める仕組みが別に効いている）。
-	// 揃えないと、勝ったのに動かない機械が出て issue が誰にも着手されないまま止まる。
-	SkipPauseThreshold
-	// SkipNoHeadroom は5時間余裕値と1週間余裕値のどちらかがマイナスであることを表す。
+	// **`rate_limit.pause_above_percent` は消えた**（人間の決定。2026-09-06。issue #173）。
+	// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
+	// 既定（マージン10）では余裕値のほうが低い使用率で先に効くので、
+	// **あちらは一度も発火していなかった。**
 	SkipNoHeadroom
 )
 
@@ -159,20 +210,98 @@ func (r SkipReason) String() string {
 		return "入札してよい"
 	case SkipQuotaUnreadable:
 		return "枠を読めない"
-	case SkipPauseThreshold:
-		return "枠の使い過ぎ"
 	case SkipNoHeadroom:
-		return "余裕値がマイナス"
+		return "余裕値が0以下"
 	default:
 		return "不明"
+	}
+}
+
+// Short は「その枠に余裕が無いか」を判定する関数を作る（設計 3-27 / 3-77。issue #173 / #197）。
+//
+// **「人間のための取り置きへ食い込むか」を問う線である。**次の2箇所で使う。
+//
+//	入札するかどうか              … Evaluate（余裕値が0以下なら入札しない）
+//	1週間の枠を待つ上限を超えたか … Orchestrator.weeklyWaitExceededWith
+//
+// **枠待ちの印には使わない。**あちらは `Full`（使用率100）である。
+// **問いが違う。**印は「Claude Code が本当に応答できないか」を問うもので、
+// **使用率90%では普通に応答する。**そこで打ち切りの時計を止めると、
+// **本当に固まった run が、5時間の枠が90%を割るまで殺されない。**
+// **既定では最大で6時間、スロットと pane を握り続ける**（2026-09-06 の6段の段4）。
+//
+//	その枠の余裕値 = 100 − その枠の使用率 − その種別のマージン
+//	余裕が無い枠   = 余裕値 <= 0
+//
+// **マージンは種別ごとに引く。**5時間の枠には `five_hour_margin_percent`、
+// 1週間の枠（`weekly_all` と `weekly_scoped`）には `weekly_margin_percent` を引く。
+//
+// **知らない種別は数えない。**`Evaluate` は `SessionPercent` と `WeeklyPercent` から
+// 余裕値を作るので、**その2つが見ない種別をここで数えると、線がまた2本に割れる。**
+// usage API が種別を増やしたとき、**この関数だけが真を返して枠待ちの印が立ち、
+// 入札の側は素通しで新しい issue を取り続ける**という食い違いが起きる。
+// **種別を増やすときは、`SessionPercent` か `WeeklyPercent` のどちらかへ足すこと。**
+//
+// margins: 引くマージン（%）。
+// 戻り値: その枠に余裕が無ければ true を返す関数。**`Snapshot` の選別に渡す。**
+func Short(margins Margins) func(l ratelimit.Limit) bool {
+	return func(l ratelimit.Limit) bool {
+		switch {
+		case IsWeeklyKind(l.Kind):
+			return fullPercent-l.Percent-margins.Weekly <= 0
+		case matchesKind(l.Kind, sessionKinds):
+			return fullPercent-l.Percent-margins.FiveHour <= 0
+		default:
+			return false
+		}
+	}
+}
+
+// Full は「その枠を使い切っているか」を判定する関数を作る（設計 3-27）。
+//
+// **枠待ちの印を立てる／外す判定は、こちらを使う。**「余裕が無い」ではない。
+//
+// **線を2つ持つ理由。**この2つは違う問いだからである。
+//
+//	使い切っている（100） … **Claude Code が本当に応答できない。**打ち切りの時計を止めてよい
+//	余裕が無い（0以下）   … **人間のための取り置きへ食い込む。**新しい仕事を取らない
+//
+// **枠待ちの印に「余裕が無い」を使ってはならない**（人間の決定を広げすぎた。2026-09-06 に取り下げた）。
+// **使用率90%では Claude Code は普通に応答する。**そこで打ち切りの時計を止めると、
+// **本当に固まった run が、5時間の枠が90%を割るまで殺されない。**
+// 印が外れたあと `LastSeenAt` が現在時刻へ進むので、**さらに `claude.turn_timeout_ms` を待つ。**
+// **既定では最大で6時間、スロットと pane を握り続ける。**
+//
+// **`>=` で比べる。**API が 100 を超える値を返しても取りこぼさない。
+//
+// 戻り値: その枠を使い切っていれば true を返す関数。**`Snapshot` の選別に渡す。**
+func Full() func(l ratelimit.Limit) bool {
+	return func(l ratelimit.Limit) bool {
+		return l.Percent >= fullPercent
+	}
+}
+
+// ShortWeekly は「1週間の枠のうち、余裕が無いもの」を判定する関数を作る
+// （設計 3-27。issue #197）。
+//
+// **`Short` と種別の判定を掛け合わせただけである。**
+// **呼び出し側で毎回組み立てさせない。**組み立て方が2通りになると、
+// **1週間の枠を待つ上限の判定と、その待ち先の時刻を引く判定がずれる。**
+//
+// margins: 引くマージン（%）。
+// 戻り値: 1週間の枠で、かつ余裕が無ければ true を返す関数。
+func ShortWeekly(margins Margins) func(l ratelimit.Limit) bool {
+	short := Short(margins)
+	return func(l ratelimit.Limit) bool {
+		return IsWeeklyKind(l.Kind) && short(l)
 	}
 }
 
 // WeeklyPercent は1週間の使用率を返す（設計 3-77）。
 //
 // **1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
-// モデル別の枠は一定量を使うまで現れないので、**現れないものは判定に入らない**
-// （最大を採れば自動的にそうなる）。
+// **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ `percent: 0` なので、
+// **最大を採れば、使っていない枠は自動的に判定へ効かない。**
 //
 // snap: 読み取った枠の一覧。
 // 戻り値の1つ目: いちばん大きい1週間の使用率。
@@ -189,6 +318,32 @@ func WeeklyPercent(snap *ratelimit.Snapshot) (int, bool) {
 func SessionPercent(snap *ratelimit.Snapshot) (int, bool) {
 	return maxPercentOfKinds(snap, LimitKindSession)
 }
+
+// IsWeeklyKind は、その枠の種別が1週間の枠かどうかを返す（issue #197）。
+//
+// **どの `kind` が1週間の枠かを知っているのは、この package だけである。**
+// `internal/ratelimit` へ置くと、あちらが `kind` の意味を持つことになり、
+// **同じ知識が2箇所に散る。**
+//
+// **大文字小文字を無視して比べる**（`matchesKind` と同じ扱い）。
+//
+// kind: 枠の種別。
+// 戻り値: `weekly_all` か `weekly_scoped` なら true。
+func IsWeeklyKind(kind string) bool {
+	return matchesKind(kind, weeklyKinds)
+}
+
+// weeklyKinds は1週間の枠の種別である。
+//
+// **その場で組み立てない。**`IsWeeklyKind` は使い切っている枠の数だけ呼ばれるので、
+// **呼ぶたびに slice を作ると、判定1回につき確保が1つ増える。**
+var weeklyKinds = []string{LimitKindWeeklyAll, LimitKindWeeklyScoped}
+
+// sessionKinds は5時間の枠の種別である。
+//
+// **1件しか無くても、その場で組み立てない。**理由は `weeklyKinds` と同じである。
+// **`Short` は枠1件につき1回呼ばれ、`Short` 自身が run ごと・巡回ごとに何度も回る。**
+var sessionKinds = []string{LimitKindSession}
 
 // maxPercentOfKinds は、指定した種別の枠のうちいちばん大きい使用率を返す。
 //
@@ -236,12 +391,15 @@ func matchesKind(kind string, kinds []string) bool {
 //	1週間余裕値 = 100 − 1週間の使用率 − 1週間マージン
 //	判定スコア  = 5時間余裕値 × 2 + 1週間余裕値
 //
-// **投稿しない条件は3つある。**枠を読めなかった・どれかの枠が pauseAbovePercent を超えた・
-// どちらかの余裕値がマイナス。**どれも「黙る」だけで、ほかの機械はこの機械を待たない。**
+// **投稿しない条件は2つある。**枠を読めなかった・どちらかの余裕値が0以下。
+// **どちらも「黙る」だけで、ほかの機械はこの機械を待たない。**
+//
+// **`rate_limit.pause_above_percent` の判定は消えた**（人間の決定。2026-09-06。issue #173）。
+// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
 //
 // **「読めなかった」は「枠が1件も返ってこなかった」である。**返ってきた中に
-// 特定の種別が無いのは、その枠をまだ使っていないという意味なので、使用率0として扱う
-// （モデル別の枠は一定量を使うまで現れない）。
+// 特定の種別が無いのは、使用率0として扱う。
+// **usage API が将来 kind を増やしても、知らない kind が1つ欠けただけで黙らないためである。**
 //
 // snap: 読み取った枠の一覧。**nil なら「枠を読めなかった」である。**
 // quotaEnabled: 枠を読む設定になっているか（`rate_limit.source` が `none` でないか）。
@@ -249,7 +407,6 @@ func matchesKind(kind string, kinds []string) bool {
 // **「読めなかった」と言い分ける。**`none` は運用者が「枠で判定しない」と決めた状態であり、
 // **そこで黙ると、その機械は1件も処理しなくなる**（枠の判定を切る逃げ道が塞がる）。
 // margins: 引くマージン（%）。
-// pauseAbovePercent: これを超えている枠が1つでもあれば入札しない（`rate_limit.pause_above_percent`）。
 // at: 入札に書く時刻。**その機械のタイムゾーンのまま渡すこと。**
 // 戻り値の1つ目: 組み立てた入札（入札しないときの中身は使わない）。**`Author` は空である。**
 // **書く直前に `bidForIssue` が gh の持ち主で埋める**（設計 3-77-0）。ここで埋めないのは、
@@ -259,7 +416,6 @@ func Evaluate(
 	snap *ratelimit.Snapshot,
 	quotaEnabled bool,
 	margins Margins,
-	pauseAbovePercent int,
 	at time.Time,
 ) (Bid, SkipReason) {
 	sessionPercent, weeklyPercent := 0, 0
@@ -268,23 +424,25 @@ func Evaluate(
 		// **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**
 		//
 		// **写しがあって特定の種別が載っていないのは、別の話である。**
-		// この API は、使い始めるまで現れない枠を持つ（モデル別の枠がそれである）。
-		// **現れないものは「まだ使っていない」であって「読めなかった」ではない。**
+		// **その1件が欠けていることは「読めなかった」ではない。**
+		// **usage API が将来 kind を増やしたとき、知らない kind が1つ欠けただけで
+		// 黙る機械が出ると、その issue は誰にも進まない。**
 		if snap == nil || len(snap.Limits) == 0 {
 			return Bid{}, SkipQuotaUnreadable
 		}
 		sessionPercent, _ = SessionPercent(snap)
 		weeklyPercent, _ = WeeklyPercent(snap)
-		// **閾値の判定は余裕値より先に行う。**閾値を超えた機械は入札に勝っても着手しないので、
-		// 余裕値が正でも黙らせる（設計 3-77）。
-		if snap.MaxPercent() > pauseAbovePercent {
-			return Bid{}, SkipPauseThreshold
-		}
 	}
 
 	fiveHour := fullPercent - sessionPercent - margins.FiveHour
 	weekly := fullPercent - weeklyPercent - margins.Weekly
-	if fiveHour < 0 || weekly < 0 {
+	// **0 も「余裕が無い」に含める**（人間の決定。2026-09-06。issue #173）。
+	// **余裕値0 は、マージンをちょうど食い潰した状態である。**そこから着手すると、
+	// **人間のために取り置いた分へ食い込む。**
+	//
+	// **`Short` と同じ線にしてある。**枠待ちの印を立てる線・1週間の枠を待つ上限の線と
+	// **1点でもずれると、同じ帯で run の扱いが2通りに分かれる。**
+	if fiveHour <= 0 || weekly <= 0 {
 		return Bid{}, SkipNoHeadroom
 	}
 	return Bid{

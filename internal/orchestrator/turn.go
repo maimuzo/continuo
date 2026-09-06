@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
 // turnOutcome は1つの turn を送って待った結果である。
@@ -561,6 +563,19 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 		return turnWaitAgain, nil
 	}
 
+	// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
+	// **手放しの入口は巡回の1本だけである。**
+	//
+	// **なぜ待ちループから外したか。**手放すかどうかを決めるには、
+	// **pane が止まっているか**（画面の版・`agent_status`・走っているサブエージェント）を読む必要がある。
+	// **それを読むのは巡回だけである。**読まない側に手放させると、
+	// **動いている run を、動いていることを確かめないまま止めることになる。**
+	//
+	// **待ちが遅れることはない。**ここでは枠待ちの印を立てるだけで、
+	// **巡回は既定30秒ごとに回り、印の立った run を `releaseQuotaWaitExceeded` が拾う。**
+	// **`claude.turn_timeout_ms` を0以下にしている機械でも取り残されない。**
+	// `checkStalls` は無音の閾値による早い戻りより**前**に `releaseQuotaWaitExceeded` を呼ぶ。
+
 	resetAt, ok := o.quotaResetAt()
 	rs.setWaitingQuota(resetAt)
 	o.logger.Info("枠待ちと判定しました（stall の時計と turn の時計を止めます）",
@@ -618,13 +633,16 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 			return turnSendFailed, err
 		}
 
-		// 枠が明けたか。**印を外す契機は「枠の resets_at を過ぎたこと」だけである**（設計 3-27）。
+		// 枠が明けたか。**標識を外す契機は2つある**（設計 3-27）。
+		// **1つ目は `resets_at` を過ぎたこと。**2つ目は下の `quotaFull` で見る。
+		// **2つ目を落としてはならない。**`resets_at` が `null` の枠だけが満杯だと、
+		// **1つ目では永久に外れない。**
 		if ok && !o.now().Before(resetAt) {
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)
 		}
 		o.pollQuota(ctx)
-		if !o.quotaAtFull() {
+		if !o.quotaFull() {
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)
 		}
@@ -734,47 +752,121 @@ const turnStopUnreadable turnOutcome = 103
 //
 // **2条件の連言である。**
 //
-//	条件その1  percent が 100 に達している
+//	条件その1  使い切っている枠がある（使用率100。`handoff.Full`）
 //	条件その2  その run から claude.turn_timeout_ms のあいだ hook が1件も来ていない
 //
+// **条件その1 を「余裕値が0以下」へ移した時期があったが、取り下げた**
+// （2026-09-06。6段の段4 で issue #197 のコメントへ記録した）。
+// **使用率90%では Claude Code は普通に応答する。**そこで打ち切りの時計を止めると、
+// **本当に固まった run が、5時間の枠が90%を割るまで殺されない。**
+// **既定では最大で6時間、スロットと pane を握り続ける。**
+//
+// **1週間の枠を待つ上限の判定は、この印に紐づいていない。**あちらは余裕値で効く
+// （`releaseQuotaWaitExceeded`）。**同じ問いではないので、線も別である。**
+//
 // **`severity` は見ない。**上限を示す値が何かを実測できていない。
-// **`pause_above_percent`（既定95%）を超えただけでは枠待ちとみなさない**（95%は枠がまだ
-// 残っている状態で、走行中の worker は普通に動ける）。
 //
 // rs: 判定する run。
 // 戻り値: 枠待ちなら true。
 func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
-	if !o.quotaAtFull() {
+	snap, _ := o.quotaSnapshotWithStale()
+	return o.isQuotaWaitingWith(snap, rs)
+}
+
+// isQuotaWaitingWith は、渡された写しで枠待ちかどうかを判定する（設計 3-27。issue #197）。
+//
+// **巡回はこちらを使う。**`isQuotaWaiting` は run ごとに写しを取り直すので、
+// **同じ巡回の中で run ごとに違う答えが返る**（`pollQuota` は turn の goroutine から
+// 並行に走り、途中で `o.quota` を差し替える）。
+//
+// quotaSnap: この巡回で1回だけ読んだ枠の写し。
+// rs: 判定する run。
+// 戻り値: 枠待ちなら true。
+func (o *Orchestrator) isQuotaWaitingWith(quotaSnap *ratelimit.Snapshot, rs *runState) bool {
+	if !quotaSnap.AnySelected(handoff.Full()) {
 		return false
 	}
+	// **条件その2。**枠を使い切っていても、別の run は動いていることがある。
+	// 枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。
+	return o.runIdleForTurnTimeout(rs)
+}
+
+// runIdleForTurnTimeout は「その run から `claude.turn_timeout_ms` のあいだ
+// hook が1件も来ていないか」を返す（設計 3-27。issue #197）。
+//
+// **枠を1バイトも見ない。**「この run は進んでいるか」だけを答える。
+//
+// **2箇所で使う。**
+//
+//	枠待ちの印を立てるか       … isQuotaWaitingWith の条件その2
+//	1週間の枠の上限で手放すか   … releaseQuotaWaitExceeded
+//
+// **手放しの側にも要る。**pane の見た目だけで「止まっている」と決めると、
+// **turn と turn のあいだのふつうの間や、進捗のコメントを書いている最中の run まで拾う。**
+//
+// **この turn で hook を1件も受けていない run は、無音の長さを見ずに真を返す。**
+// **`LastSeenAt` は turn を始めた時刻のままなので、そこから測っても意味が無い。**
+//
+// rs: 判定する run。
+// 戻り値: 進んでいなければ true。
+func (o *Orchestrator) runIdleForTurnTimeout(rs *runState) bool {
 	snap := rs.snapshot()
-	if snap.hookSeenThisTurn {
-		// **条件その2 を入れる理由。**枠を使い切っていても、別の run は動いていることがある。
-		// 枠の状態だけで全部の run の時計を止めると、固まった run を見逃す。
-		silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
-		if silence <= 0 || o.now().Sub(snap.LastSeenAt) < silence {
-			return false
-		}
+	if !snap.hookSeenThisTurn {
+		return true
 	}
-	return true
+	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
+	if silence <= 0 {
+		// **0 以下は「無音では打ち切らない」という設定である**（`SPEC.md` 8.4）。
+		// **測る物差しが無いので、この関数は「進んでいない」と言えない。**
+		return false
+	}
+	return o.now().Sub(snap.LastSeenAt) >= silence
 }
 
-// quotaAtFull は使い切っている枠があるかを返す（設計 3-27 の条件その1）。
+// stallDetectionOff は、無音による打ち切りを切っているかを返す（issue #197）。
 //
-// 戻り値: `percent` が 100 に達している枠があれば true。枠を読めていなければ false。
-func (o *Orchestrator) quotaAtFull() bool {
-	return o.quotaSnapshot().AtFullPercent()
+// **切っている機械では `runIdleForTurnTimeout` が「進んでいない」を言えない。**
+// **手放しの側は、そのとき画面の版と `agent_status` だけで判断する。**
+// **言えないことを理由に手放さないでいると、`weekly_wait_limit_minutes` が
+// その設定の機械で一度も効かない。**
+//
+// 戻り値: 打ち切りを切っていれば true。
+func (o *Orchestrator) stallDetectionOff() bool {
+	return time.Duration(o.cfg.Claude.TurnTimeoutMs)*time.Millisecond <= 0
 }
 
-// quotaResetAt は枠待ちを外す時刻を返す（設計 3-27 の「どの枠の時刻を見るか」）。
+// quotaFull は使い切っている枠があるかを返す（設計 3-27 の条件その1）。
 //
-// **条件その1 を満たした枠のうち、`resets_at` がいちばん遅いものである。**
-// `resets_at` が null の枠は判定から外す。
+// **線は「使用率100」である。**入札の線（余裕値が0以下）とは別物である。
+// **理由は `isQuotaWaiting` の説明にある。**
+//
+// 戻り値: 使用率100の枠があれば true。枠を読めていなければ false。
+func (o *Orchestrator) quotaFull() bool {
+	return o.quotaSnapshot().AnySelected(handoff.Full())
+}
+
+// quotaResetAt は枠待ちの印を外す時刻を返す（設計 3-27 の「どの枠の時刻を見るか」）。
+//
+// **条件その1（使い切っている枠）を満たしたもののうち、`resets_at` がいちばん遅いものである。**
+// **`resets_at` が null の枠は黙って飛ばす。**印を外す契機はもう1つあり
+// （余裕の無い枠が1つも無くなること）、**そちらが受け持つ。**
 //
 // 戻り値の1つ目: 外す時刻。
 // 戻り値の2つ目: 時刻が分かれば true。
 func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
-	return o.quotaSnapshot().LatestResetOfFullLimits()
+	snap, _ := o.quotaSnapshotWithStale()
+	return o.quotaResetAtOf(snap)
+}
+
+// quotaResetAtOf は、渡された写しから枠待ちの印を外す時刻を返す（設計 3-27）。
+//
+// **巡回はこちらを使う。**理由は `isQuotaWaitingWith` と同じである。
+//
+// quotaSnap: この巡回で1回だけ読んだ枠の写し。
+// 戻り値の1つ目: 外す時刻。
+// 戻り値の2つ目: 時刻が分かれば true。
+func (o *Orchestrator) quotaResetAtOf(quotaSnap *ratelimit.Snapshot) (time.Time, bool) {
+	return quotaSnap.LatestResetForClearing(handoff.Full())
 }
 
 // confirmTurnEnd は turn の終わりを確定させる（設計 3-2 の hook 側の規則）。

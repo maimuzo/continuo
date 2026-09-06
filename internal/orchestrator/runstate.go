@@ -96,7 +96,7 @@ type runState struct {
 	BackoffUntil time.Time
 	// WaitingQuota は枠待ちと判定したことを表す（設計 3-27）。
 	// **真の間は stall と turn_timeout の判定を飛ばす。**
-	// 外す契機は「枠の resets_at を過ぎたこと」だけである。
+	// 外す契機は2つある（枠の resets_at を過ぎたこと／使い切っている枠が無くなったこと）。
 	WaitingQuota bool
 	// NeedsPrompt は次の turn を送るべき状態であることを表す（設計 3-4 の段5b）。
 	// turn ループが拾って agent.prompt を送り、送ったら false へ戻す。
@@ -153,6 +153,43 @@ type runState struct {
 	TranscriptPath string
 	// QuotaResetAt は枠待ちを外す時刻である（設計 3-27）。
 	QuotaResetAt time.Time
+	// WeeklyShortSince は、この run について余裕の無い1週間の枠を最初に見た時刻である
+	// （設計 3-27。issue #197）。
+	//
+	// **枠待ちの印（WaitingQuota）とは切り離して持つ。**
+	// 印は5時間の枠に余裕が戻るたびに外れるので（reconcile.go の checkStalls）、
+	// **印に紐づけると、外れるたびに0へ戻って経過が永久に伸びない。**
+	//
+	// **run ごとに持つ。**機械に1つだけ持つと、**枠の余裕が無くなったあとに着手した run を、
+	// 1分も待たずに手放すことになる。**この run が余裕の無さを見てからの経過を測る。
+	//
+	// **写し（runSnapshot）には載せない。**読むのは `noteWeeklyShort` の戻り値だけであり、
+	// **写しへ載せると、そこを通さない古い値を正だと思って読む人が出る。**
+	WeeklyShortSince time.Time
+	// QuotaProbeRevision は、手放してよいかを見るときに読んだ画面の版である
+	// （設計 3-27。issue #197）。
+	//
+	// **`LastRevision` を使ってはならない。**あちらを書くのは、着手のときと
+	// 巡回の stall 検知だけである。**枠待ちの印が立っている run と、
+	// `claude.turn_timeout_ms` を0以下にしている機械では、stall 検知が走らない。**
+	// **そのため `LastRevision` は着手のときの値のまま凍りつき、
+	// 画面が1度でも動いたあとは永久に一致しなくなる。**手放しが1回も起きない。
+	//
+	// **この項目は、手放しの判定が自分で読んだ版だけを覚える。**
+	// **2回続けて同じ版なら「止まっている」である。**
+	QuotaProbeRevision uint64
+	// QuotaProbeSeen は、上の版を1度でも読んだかを表す。
+	//
+	// **版は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
+	// **初回は必ず「止まっていない」と答える**（そこからどれだけ止まっていたかが分からない）。
+	QuotaProbeSeen bool
+	// AfterRunDone は、この run で `workspace_hooks.after_run` を走らせ切ったかを表す
+	// （issue #197）。
+	//
+	// **やり直しのために持つ。**`RunAfterRunOnce` は2回目以降「走らせていない」を返すので、
+	// **担当を外すのに失敗して次の巡回でやり直すと、既に push してあるのに
+	// 「remote に続きが入っていないことがあります」と issue へ書くことになる。**
+	AfterRunDone bool
 	// Tokens はこの run が始めてからの累計のトークンである（設計 3-15）。
 	//
 	// **中身は「いまのセッションの transcript を `requestId` で重複排除して足した値」＋
@@ -1061,6 +1098,61 @@ func (rs *runState) setWaitingQuota(resetAt time.Time) {
 	rs.QuotaResetAt = resetAt
 }
 
+// noteWeeklyShort は、余裕の無い1週間の枠を見たかどうかを記録する（設計 3-27。issue #197）。
+//
+// **既に立っている時刻を上書きしない。**上書きすると経過が永久に伸びない。
+// **余裕の無い1週間の枠が1つも無くなったらゼロへ戻す。**戻さないと、枠が空いたあとも
+// 古い時刻が残り、**次に余裕が無くなった run を1分も待たずに手放す。**
+//
+// **枠待ちの印の出し入れとは無関係に動かす。**印は5時間の枠が明けるたびに外れる。
+//
+// short: 余裕の無い1週間の枠があるか。
+// now: いまの時刻。
+// 戻り値: 余裕が無くなってからの経過を測る起点。**short が偽ならゼロ値。**
+func (rs *runState) noteWeeklyShort(short bool, now time.Time) time.Time {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !short {
+		rs.WeeklyShortSince = time.Time{}
+		return time.Time{}
+	}
+	if rs.WeeklyShortSince.IsZero() {
+		rs.WeeklyShortSince = now
+	}
+	return rs.WeeklyShortSince
+}
+
+// noteQuotaProbe は、手放しの判定が読んだ画面の版を控え、止まっているかを返す
+// （設計 3-27。issue #197）。
+//
+// **2回続けて同じ版なら「止まっている」である。**
+// **初回は必ず偽を返す。**そこからどれだけ止まっていたかが分からないためである。
+//
+// rev: いま読んだ画面の版。
+// 戻り値: 前に読んだ版と同じなら true。
+func (rs *runState) noteQuotaProbe(rev uint64) bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	same := rs.QuotaProbeSeen && rs.QuotaProbeRevision == rev
+	rs.QuotaProbeRevision = rev
+	rs.QuotaProbeSeen = true
+	return same
+}
+
+// markAfterRunDone は `workspace_hooks.after_run` を走らせ切ったことを覚える（issue #197）。
+func (rs *runState) markAfterRunDone() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.AfterRunDone = true
+}
+
+// afterRunDone は `workspace_hooks.after_run` を走らせ切ったかを返す（issue #197）。
+func (rs *runState) afterRunDone() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.AfterRunDone
+}
+
 // clearWaitingQuota は枠待ちの印を外し、stall の時計を動かし直す（設計 3-27）。
 //
 // now: いまの時刻。
@@ -1070,6 +1162,16 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	rs.WaitingQuota = false
 	rs.QuotaResetAt = time.Time{}
 	rs.LastSeenAt = now
+	// **余裕の無い1週間の枠を最初に見た時刻は、ここでは消さない**（設計 3-27。issue #197）。
+	// **消す契機は「1週間の枠に余裕が戻ったこと」だけである。**
+	//
+	// **ここで消すと、5時間の枠が明けるたびに0へ戻る。**
+	// 標識を外す時刻は種別を選ばないので、**5時間の枠のほうが早く明ければその時刻になる。**
+	// **`weekly_wait_limit_minutes: 300`（既定）を設定した人の待ち時間が、
+	// 「5時間の枠の残り＋`claude.turn_timeout_ms`」ぶん超過する。**
+	// **既定値では約6時間の超過になり、上限が1度も効かないこともある。**
+	//
+	// 消すのは `noteWeeklyShort(false, …)` である。**巡回のたびに、印の有無によらず呼ぶ。**
 }
 
 // noteRevision は画面の版を見た結果を記録する（設計 3-21）。
@@ -1754,6 +1856,16 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	rs.workerStopped = false
 	rs.terminating = false
 	rs.SendFirstPrompt = true
+	// **`after_run` を走らせ切った覚えも、ここで戻す**（issue #197）。
+	//
+	// **戻さないと、やり直した attempt の `after_run` が1回も走らない。**
+	// worktree の側の「1回だけ」の印は `Prepare` の中の `BeginRun` が消すので、
+	// **`RunAfterRunOnce` は「まだ走らせていない」を返す。**
+	// **ところが `runAfterRunOK` は、この欄が立っていると `RunAfterRunOnce` を呼ばずに真を返す。**
+	// **成果を出したのは、やり直したほうの attempt である。**
+	// 利用者が書いた `git push` が走らないまま「実行済みです。remote の続きから」と issue へ書き、
+	// **次に拾う機械が、push されていない commit を全部失う。**
+	rs.AfterRunDone = false
 	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
 	// 既に終わっているコンテキストを新しい turn ループへ渡すことになり、
 	// 最初の turn を送る前に待ちが打ち切られる。
@@ -1783,7 +1895,13 @@ func (rs *runState) workerGeneration() int {
 func (rs *runState) currentWorker(epoch int) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return !rs.Finished && !rs.workerStopped && rs.workerEpoch == epoch
+	// **`terminating` も見る**（issue #197）。
+	// **終わらせる処理が走っている最中に、turn ループが新しい指示を送ってはならない。**
+	// 1週間の枠の上限で手放す経路は、印を取ってから `after_run`（利用者の `git push`）と
+	// GitHub への書き込みで最大90秒かかる。**その間に5時間の枠が明けると、
+	// 待ちループが枠待ちを解いて指示を送り、push の最中に worktree が書き換わる。**
+	// **書きかけの木を push したうえで、そのあと殺されることになる。**
+	return !rs.Finished && !rs.workerStopped && !rs.terminating && rs.workerEpoch == epoch
 }
 
 // terminalGate は `beginTerminal` が印を確保できたかどうかと、確保できなかった理由である

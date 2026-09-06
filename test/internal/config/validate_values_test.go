@@ -226,8 +226,21 @@ func TestValidate_数値の範囲を外れたら弾く(t *testing.T) {
 		{"同時実行数が負", "max_concurrent_agents", "  max_concurrent_agents: -1", "max_concurrent_agents"},
 		{"巡回の間隔が0", "poll_interval_ms", "  poll_interval_ms: 0", "poll_interval_ms"},
 		{"指示の上限が0", "max_dispatch_turns", "  max_dispatch_turns: 0", "max_dispatch_turns"},
-		{"枠の閾値が101", "pause_above_percent", "  pause_above_percent: 101", "pause_above_percent"},
-		{"枠の閾値が負", "pause_above_percent", "  pause_above_percent: -1", "pause_above_percent"},
+		// **1週間の枠を待つ上限が負**（issue #197）。
+		// **負だと「リセット時刻 − いま」が必ず上回るので、枠待ちに入った瞬間に担当を手放す。**
+		// **1週間の枠を1%でも使えば、走っている run が全部止まる。**
+		{"1週間の枠を待つ上限が負", "weekly_wait_limit_minutes",
+			"  weekly_wait_limit_minutes: -1", "weekly_wait_limit_minutes"},
+		// **大きすぎる値も弾く**（issue #197）。
+		// **分をミリ秒へ直すときに int64 があふれ、小さい正の値へ巻き戻ることがある。**
+		// **そうなると、枠待ちに入った瞬間に担当を手放す。**
+		{"1週間の枠を待つ上限が大きすぎる", "weekly_wait_limit_minutes",
+			"  weekly_wait_limit_minutes: 999999999", "weekly_wait_limit_minutes"},
+		// **マージン100 を弾く**（issue #173）。
+		// **余裕値は `100 − 使用率 − マージン` なので、100 だと使用率0でも0になる。**
+		// **その機械は永久に入札せず、走っている run も全部手放す。**
+		{"5時間のマージンが100", "five_hour_margin_percent",
+			"      five_hour_margin_percent: 100", "five_hour_margin_percent"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := loadWithReplaced(t, tc.key, tc.line)

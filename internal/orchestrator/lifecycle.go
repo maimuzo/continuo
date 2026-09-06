@@ -958,14 +958,60 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
+	o.runAfterRunOK(ctx, rs)
+}
+
+// runAfterRunOK は `workspace_hooks.after_run` を走らせ、**成功したかどうかを返す。**
+//
+// **`released` のコメントは「`after_run` は実行済みです」と断言する**（設計 3-27）。
+// **失敗したのに断言すると、次に拾う機械が「remote の続きから始めてください」に従い、
+// 入っていない commit の続きから始める。**手元の作業が黙って取り残される。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+// 戻り値: `after_run` が走って成功したら true。
+// **走らせる相手が無かったとき（worktree のパスが空）も false である。**
+func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	snap := rs.snapshot()
 	if snap.WorktreePath == "" {
-		return
+		return false
 	}
-	if _, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath); err != nil {
-		o.logger.Warn("workspace_hooks.after_run に失敗しました（記録して続けます）",
+	// **設定されていないときは、走らせたと言ってはならない**（issue #197）。
+	// **`RunAfterRunOnce` は「この worktree で初めて呼ばれたか」を返すだけで、
+	// コマンドが空でも真を返す**（`RunHook` は設定が無ければ nil を返して終わる）。
+	// **既定の `WORKFLOW.md` は `after_run` を持たない。**
+	// **そのまま真として扱うと、1バイトも push していないのに
+	// 「実行済みです。remote の続きから始めてください」と issue へ書く。**
+	// **次に拾う機械は remote から worktree を作り直し、push していない commit を全部失う。**
+	if o.cfg.WorkspaceHooks.AfterRun == nil ||
+		strings.TrimSpace(*o.cfg.WorkspaceHooks.AfterRun) == "" {
+		return false
+	}
+	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、
+	// いま走らせた」を表す。**偽になるのは、既に走らせたときである。**
+	// **走らせ切ったことを run が覚えている**（issue #197）。
+	// **やり直しのために要る。**担当を外すのに失敗して次の巡回でやり直すと、
+	// `RunAfterRunOnce` は「走らせていない」を返すので、
+	// **既に push してあるのに「remote に続きが入っていないことがあります」と issue へ書く。**
+	if rs.afterRunDone() {
+		return true
+	}
+	// **`ran` は「この worktree で初めて呼ばれたか」であって、成否ではない。**
+	// **走って失敗したときも真が返る。**
+	ran, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath)
+	if err != nil {
+		// **走ったが失敗した。**「走りませんでした」とは書けないが、
+		// **remote に続きが入っていない恐れは同じである**ので、偽を返す。
+		// **文面の1文目が事実と違う点は、この1行で人間へ渡す。**
+		o.logger.Warn("workspace_hooks.after_run は走りましたが失敗しました"+
+			"（issue のコメントには「走りませんでした」と出ます。remote の中身を確かめてください）",
 			"identifier", snap.Identifier, "error", err)
+		return false
 	}
+	if ran {
+		rs.markAfterRunDone()
+	}
+	return ran
 }
 
 // cleanupWorktree は worktree と branch と設定ファイルを片付ける（設計 3-9）。

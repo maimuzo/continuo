@@ -854,22 +854,14 @@ func (o *Orchestrator) pollQuota(ctx context.Context) {
 	o.mu.Unlock()
 }
 
-// quotaForBid は、入札の判定に使ってよい枠の写しを返す（設計 3-77）。
+// **`quotaForBid` は消えた**（issue #173）。
 //
-// **最後の読み取りに失敗していたら nil を返す。**`handoff.Evaluate` は nil を
-// 「枠を読めなかった」と読み、**入札そのものを取りやめる。**
-// **古い写しで入札させない。**資格情報が切れた機械は、切れる直前の「使用率 5%」を
-// 1日中返し続け、**正直に読めている機械に必ず勝つ。**
-//
-// 戻り値: 枠の状態。読めていない・最後の読み取りに失敗していれば nil。
-func (o *Orchestrator) quotaForBid() *ratelimit.Snapshot {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.quotaStale {
-		return nil
-	}
-	return o.quota
-}
+// **入札の判定に使ってよい写しを、自分でロックを取り直して返す関数だった。**
+// **巡回は写しを1回だけ読むと決めたので、取り直す口を残せない。**
+// 残すと、`dispatchCandidates` が読んだ写しと、`handoffGate` が読んだ写しが
+// **同じ巡回の中で食い違う。**
+// **同じ規則は `bidSnapshotOf`**（[dispatch.go](dispatch.go)）**が、
+// 読み終えた写しに当てる形で持っている。**
 
 // quotaSnapshot は最後に読んだ枠の状態を返す。
 //
@@ -880,19 +872,19 @@ func (o *Orchestrator) quotaSnapshot() *ratelimit.Snapshot {
 	return o.quota
 }
 
-// dispatchPaused は「新規の dispatch を止める」閾値を超えているかを返す（設計 3-27）。
+// **`dispatchPaused` は消えた**（人間の決定。2026-09-06。issue #173）。
 //
-// **これは「枠待ち」とは別の判定である。**閾値（既定95%）を超えただけでは枠待ちとみなさない。
-// 走行中の turn は止めないし、時計も止めない。
+// **`rate_limit.pause_above_percent` を超えたら、この巡回の dispatch を丸ごとやめる段だった。**
+// **消した理由は3つある。**
 //
-// 戻り値: 新規の dispatch を止めるべきなら true。
-func (o *Orchestrator) dispatchPaused() bool {
-	snap := o.quotaSnapshot()
-	if snap == nil {
-		return false
-	}
-	return snap.MaxPercent() > o.cfg.RateLimit.PauseAbovePercent
-}
+//	一、余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。
+//	    既定（マージン10）では余裕値が使用率90で先に効くので、あちら（96から）は一度も発火しない
+//	二、丸ごとやめると、`handoffGate` の中にある「期限切れの担当を外す」経路も通らない。
+//	    詰まったカンバンを誰も解けなくなる
+//	三、マージンは5時間と1週間で別々に持てる。あちらは全部の枠の最大値ひとつでしか判定できない
+//
+// **止めるのは `handoffGate` の中の余裕値の判定だけになった。**issue ごとに落とすので、
+// **巡回のループは最後まで回る。**
 
 // wakeRuns は turn ループの goroutine を必要な run について起こす（設計 3-8 / 3-4 の段5a2・段5c）。
 //

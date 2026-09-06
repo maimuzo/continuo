@@ -235,10 +235,12 @@ func DefaultConfig() *Config {
 		RateLimit: RateLimitConfig{
 			Source: "oauth_usage_api",
 			// **既定は OS で分かれる。**分かれるのはこのキーだけである（defaultRateLimitTokenSource）。
-			TokenSource:       defaultRateLimitTokenSource(),
-			TokenEnv:          "CLAUDE_CODE_OAUTH_TOKEN",
-			PauseAbovePercent: 95,
-			PollIntervalMs:    300000,
+			TokenSource:    defaultRateLimitTokenSource(),
+			TokenEnv:       "CLAUDE_CODE_OAUTH_TOKEN",
+			PollIntervalMs: 300000,
+			// **1週間の枠が明けるのを待つ上限。300 分（5時間）**（2026-08-26 の人間の決定）。
+			// **0 以下なら上限を設けない。**書かなかった人にはこの既定が入る。
+			WeeklyWaitLimitMinutes: 300,
 		},
 		Trust: TrustConfig{
 			RequireRepoTrusted: true,

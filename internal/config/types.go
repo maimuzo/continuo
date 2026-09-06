@@ -155,7 +155,8 @@ type TrackerProviderHandoffConfig struct {
 	//	1週間余裕値 = 100 − 1週間の使用率 − WeeklyMarginPercent
 	//
 	// **1週間の使用率は、1週間全体の枠とモデル別の枠のうち、いちばん大きいものを採る。**
-	// モデル別の枠は一定量を使うまで現れないので、現れないものは判定に入らない。
+	// **モデル別の枠は最初から返ってくる**（issue #199）。使っていなければ使用率0で返るので、
+	// 最大を採れば、使っていない枠は自動的に判定へ効かない。
 	WeeklyMarginPercent int `yaml:"weekly_margin_percent"`
 	// OnAssigneeGate は、担当者が付いていて着手できないとき（1人でも2人以上でも）の扱いである
 	// （issue #134 / #136 / #140）。想定する値は
@@ -551,10 +552,36 @@ type RateLimitConfig struct {
 	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。
 	// "env" のとき必須。空だとどこからトークンを取ればよいか決まらない。
 	TokenEnv string `yaml:"token_env"`
-	// PauseAbovePercent はこの割合を超えたら新規の dispatch を止める閾値（0〜100）である。
-	PauseAbovePercent int `yaml:"pause_above_percent"`
 	// PollIntervalMs はレートリミットの値を確認する間隔（ミリ秒）である。
 	PollIntervalMs int `yaml:"poll_interval_ms"`
+	// WeeklyWaitLimitMinutes は1週間の枠が明けるのを待つ上限（分）である（設計 3-27。issue #197）。
+	//
+	// **単位は分である。**ミリ秒ではない（人間が「分数を指定できることとし」と決めた。2026-08-26）。
+	// **既定は 300（5時間）。**
+	//
+	// **これを超えて待つことになる run は、待たずに担当を手放す。**worker を止め、
+	// 自分の assignee を外し、`<!-- continuo:released -->` を1件書く（3-77c の引き渡し）。
+	// **worktree は残す。カンバンの Status も動かさない。**
+	//
+	// **「何分待つか」ではない。**「**あと何分以内にリセットされるなら待つか**」の線である。
+	// 判定は `リセット時刻 − いま > この値` で、**1週間の枠は最長7日先までリセットされない**ので、
+	// **余裕が無くなった時点でこの式はたいてい真になる。**つまり**ほとんど待たずに手放す。**
+	// **それが人間の決定である**（2026-09-06。「待ってもリセットされない時は…止まったらすぐに担当を変更して」）。
+	// **実際に「この分数だけ待つ」ように働くのは、リセット時刻を1つも読めないときだけである**
+	// （`weekly_scoped` の `resets_at` は `null` で返る。issue #199）。
+	// **そのときは、余裕が無くなってからの経過がこの値を超えたら手放す。**
+	//
+	// **5時間の枠には効かない。**使い切っている枠が `session` だけなら、いつまでも待つ
+	// （2026-08-26 の人間の決定「5時間枠 → 待つ。担当は変えない」）。
+	//
+	// **0 以下なら上限を設けない。**`claude.turn_timeout_ms` と
+	// `tracker.provider.handoff.recheck_interval_ms` と同じ向きである
+	// （`idle_timeout_ms` の「0 なら既定へ倒す」とは逆なので、雛形のコメントで断っている）。
+	//
+	// **複数の機械で見張るなら `tracker.provider.handoff.idle_timeout_ms`（既定18時間）より
+	// 短くすること。**長いと、別の機械が先に担当を外すので、この値は一度も効かない。
+	// **弾かないのは、1台で動かしている人には他の機械がいないためである。**
+	WeeklyWaitLimitMinutes int `yaml:"weekly_wait_limit_minutes"`
 }
 
 // TrustConfig はリポジトリの信頼確認をどう扱うかを決める（3-11 / 3-33 / 4-3）。

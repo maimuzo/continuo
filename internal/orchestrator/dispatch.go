@@ -4,14 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
+
+// percentUnknown は「枠を読めていないので使用率が分からない」ことを表す値である
+// （設計 3-77j。issue #173）。
+//
+// **0 を使ってはならない。**0 は「1バイトも使っていない」という実在の値であり、
+// **読めていないことと取り違えると、ダッシュボードが「いちばん暇」と表示する。**
+const percentUnknown = -1
 
 // agentStartBusyBudget は agent.start が `agent_pane_busy` を返したときに粘る時間である
 // （設計 2-1 / 3-16 の段9）。
@@ -169,6 +179,266 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 	return false
 }
 
+// newWorkBlockedWith は「この巡回で入札の要る issue を取らないか」と、その理由を、
+// 渡された写しから返す（設計 3-27 / 3-77i / 3-77j。issue #173）。
+//
+// **「巡回を止める」とは呼ばない。**止まるのは入札の要る issue だけで、
+// **巡回そのもの（走っている run の面倒・枠の読み直し・期限切れの担当を外す経路）は続く。**
+// **担当が既にこの機械にある issue も着手する。**
+//
+// **判定は1段だけになった**（人間の決定。2026-09-06）。
+// **`rate_limit.pause_above_percent` を見る段は消えた。**理由は
+// [orchestrator.go](orchestrator.go) の `dispatchPaused` を消した箇所に3つ書いてある。
+//
+// **この巡回を丸ごとやめる戻り値も消えた。**丸ごとやめると、
+// **`handoffGate` の中にある「期限切れの担当を外す」経路まで通らなくなる。**
+//
+// **写しを取り直す版は置かない。**取り直すと、
+// **ログへ出す数字と、止めた理由が別の読み取りから作られる。**
+// **「余裕値が0以下」と名乗りながら使用率30%を並べる1行が出る。**
+//
+// snap: この巡回で1回だけ読んだ枠の写し。
+// stale: 直前の読み取りに失敗していれば真。
+// 戻り値: 止める理由。`handoff.SkipNone` なら入札の要る issue を取ってよい。
+func (o *Orchestrator) newWorkBlockedWith(
+	snap *ratelimit.Snapshot, stale bool,
+) handoff.SkipReason {
+	// **古い写しは入札に使えない**（設計 3-77i）。規則は `bidSnapshotOf` が1箇所で持つ。
+	forBid := bidSnapshotOf(snap, stale)
+	_, skip := handoff.Evaluate(
+		forBid,
+		o.cfg.RateLimit.Source != ratelimit.SourceNone,
+		o.bidMargins(),
+		o.now(),
+	)
+	return skip
+}
+
+// newWorkThresholdPercent は、その枠がこれに達すると新規着手が止まる使用率を返す
+// （設計 3-77j）。
+//
+// **「これを超えたら」ではなく「これに達したら」である**（人間の決定。2026-09-06）。
+// 余裕値は `100 − 使用率 − マージン` で、**0 も「余裕が無い」に含める。**
+// 既定のマージン10なら、使用率90で余裕値0なので**止まるのは90からである。**
+//
+// **枠ごとに呼ぶ。**5時間と1週間でマージンが違う設定にできるので、
+// **1つにまとめると、どちらの枠にも当たらない値を出すことになる。**
+//
+// margin: その枠のマージン（%）。
+// 戻り値: これに達すると新規着手が止まる使用率（%）。
+func (o *Orchestrator) newWorkThresholdPercent(margin int) int {
+	// **100 をここで書かない**（issue #173）。**判定を持っている package から引く。**
+	// **写しを持つと、`handoff.Short` が使う線と、ここが出す数字が別々に動きうる。**
+	return handoff.ThresholdPercent(margin)
+}
+
+// quotaSnapshotWithStale は、最後に読んだ枠と「直前の読み取りに失敗しているか」を、
+// **1回のロックで**取り出す（設計 3-77j）。
+//
+// **写しと「古いか」を、別々のロックで取ってはならない。**
+// 2回のロックの間に `pollQuota` が割り込むと、**失敗が入れば「新しい写しだ」と誤り、
+// 成功が入れば「古い写しだ」と誤る。**どちらも、人間へ出す1行が事実と違う値になる。
+//
+// **[orchestrator.go](orchestrator.go) へ置かない。**あちらは hook の経路のファイルで、
+// 触ると人間の確認が要る（[CLAUDE.md](../../CLAUDE.md) の「continuo で continuo 自身を直すとき」）。
+// **同じ package なので、ここから `o.mu` を取れる。**
+//
+// 戻り値の1つ目: 最後に読んだ枠。1度も読めていなければ nil。
+// 戻り値の2つ目: 直前の読み取りに失敗していれば true。
+func (o *Orchestrator) quotaSnapshotWithStale() (*ratelimit.Snapshot, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.quota, o.quota != nil && o.quotaStale
+}
+
+// bidSnapshotOf は、巡回で読んだ写しを、入札の判定に使ってよい形へ落とす（設計 3-77。issue #173）。
+//
+// **古い写しは nil にする。**
+// **`handoff.Evaluate` は nil を「枠を読めなかった」と読み、入札そのものを取りやめる。**
+// **古い写しで入札させない。**資格情報が切れた機械は、切れる直前の「使用率 5%」を
+// 1日中返し続け、**正直に読めている機械に必ず勝つ。**
+//
+// **この規則を持つ場所は、ここ1つだけである**（issue #173）。
+// **自分でロックを取り直して同じ答えを返す口は置かない。**置くと、
+// **同じ巡回の中で `dispatchCandidates` と `handoffGate` が別の写しから判定する。**
+//
+// snap: 巡回で読んだ写し。
+// stale: その写しが古いか。
+// 戻り値: 入札の判定に渡してよい写し。古ければ nil。
+func bidSnapshotOf(snap *ratelimit.Snapshot, stale bool) *ratelimit.Snapshot {
+	if stale {
+		return nil
+	}
+	return snap
+}
+
+// observedPercentsOf は、渡された枠の写しから5時間と1週間の使用率を取り出す（設計 3-77j）。
+//
+// **写しは呼び出し側が1回のロックで取る。**ここで取り直すと、
+// **同じ1行の中で違う写しの値が混ざる**（「使用率は最後に読めた値」と、
+// 新しい写しから採った「使い切っている枠」が並ぶ、など）。
+//
+// **読めていなければ percentUnknown を返す。**0 を返すと「1バイトも使っていない」と
+// 読めてしまい、**枠を読めない機械が「いちばん暇」に見える。**
+//
+// snap: 最後に読めた枠。**nil なら読めていない。**
+// 戻り値の1つ目: 5時間の枠の使用率。
+// 戻り値の2つ目: 1週間の枠の使用率。
+func (o *Orchestrator) observedPercentsOf(snap *ratelimit.Snapshot) (int, int) {
+	if o.cfg.RateLimit.Source == ratelimit.SourceNone {
+		// **枠で判定しないと運用者が決めた状態である**（設計 3-27 の逃げ道）。
+		// **読めなかったのではない。**そう見せると、資格情報の直し方を探させることになる。
+		//
+		// **いまこの枝へは来ない。**呼ぶのは `logNewWorkBlocked` だけで、そこへ来るのは
+		// `newWorkBlockedWith` が `SkipNone` 以外を返したときである。
+		// `rate_limit.source: none` では `handoff.Evaluate` が使用率0で計算し、
+		// **マージンは100未満しか通らない**ので（`internal/config/validate.go`）、
+		// **余裕値は必ず1以上になり、`SkipNone` しか返らない。**
+		//
+		// **それでも残す。**消すと、止める理由が1つ増えたときに
+		// **「使用率0」を「1バイトも使っていない」として出す**経路が黙って開く。
+		return percentUnknown, percentUnknown
+	}
+	if snap == nil {
+		return percentUnknown, percentUnknown
+	}
+	// **返ってきた中にその種別が無いのは「使用率0」である。「読めない」ではない。**
+	// `handoff.Evaluate` が同じ扱いをしている（「**usage API が将来 kind を増やしても、
+	// 知らない kind が1つ欠けただけで黙らないためである**」）。
+	// **ここだけ「読めない」と出すと、`weekly_all` しか返さない provider の機械で、
+	// 実際には0%の5時間の枠が「使用率を読めていません」と名乗る。**
+	session, _ := handoff.SessionPercent(snap)
+	weekly, _ := handoff.WeeklyPercent(snap)
+	return session, weekly
+}
+
+// logNewWorkBlocked は、新しい issue を取らないことと、その理由を1行出す
+// （設計 3-77j。issue #173）。
+//
+// **`Warn` ではなく `Info` にする。**issue #134 で一度 `Warn` へ上げたところ、
+// **8本のテストが落ちた**（v0.1.11 で実測）。どれも正常な動作を作っているもので、
+// **「異常ではないものを異常として出そうとしている」という信号だった。**
+// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
+// **代わりに、戻し方を同じ行に書く。**
+//
+// **条件を付けずに、この関数へ来るたびに出す。**巡回は既定30秒なので1時間で120行になる。
+// **「巡回のたび」ではない。**この関数は `dispatchCandidates` の中にあり、
+// **候補の取得に失敗した巡回では呼ばれない**（その巡回には別の `Warn` が出る）。
+// **門にしてよい数と、してはいけない数がある。**混同すると、
+// **枠で止まっている機械が永久に黙る**という、issue #173 が直したい症状を作り直す。
+//
+//	門にしてよい   … `active_states` から返ってきた候補の生の件数（`len(candidates)`）
+//	門にしてはだめ … そこから絞り込んだあとの件数
+//
+// **生の件数が0なら、カンバンに issue が1件も無い。**枠は何も止めていないので、
+// **「枠に余裕が無いので着手しません」は嘘になる。**呼び出し側がこれで黙らせている。
+//
+// **絞り込んだあとの件数で黙らせてはならない。**そこには
+// **必須のラベルが足りない候補・信頼していないリポジトリの候補・バックオフ中の候補・
+// 空きスロットが尽きている場合が全部混ざる。**枠と関係ない理由で候補が全部落ちる機械は、
+// **枠で止まっていても永久に黙ることになる。**
+//
+// **生の件数が1件以上あるかぎり、この関数は巡回のたびに出す。**
+// **同じ行が続くのが困るなら、それは別の issue である。**そのときの直し方は
+// 「数える」ではなく「理由が変わったときだけ出す」になる。
+//
+// skip: 止めた理由。**`handoff.SkipNone` を渡してはならない。**
+func (o *Orchestrator) logNewWorkBlocked(
+	skip handoff.SkipReason, snap *ratelimit.Snapshot,
+) {
+	h := o.cfg.Tracker.Provider.Handoff
+	args := []any{
+		"理由", skip.String(),
+	}
+	// **観測した使用率を出す。**閾値だけでは、
+	// **5時間の枠と1週間の枠のどちらが原因かを人間が読めない。**
+	// **読めていない枠は行ごと出さない。**出すと「使用率0」と読めてしまう。
+	// **枠を読めなかったときは、数字を1つも出さない**（issue #173）。
+	// **最後に読めた写しは残っているが、それを並べると
+	// 「枠を読めない」と名乗りながら使用率を出す1行になる。**
+	// **読む人は、どちらが本当かを決められない。**
+	if skip == handoff.SkipQuotaUnreadable {
+		snap = nil
+	}
+	session, weekly := o.observedPercentsOf(snap)
+	if session != percentUnknown {
+		args = append(args, "5時間の枠の使用率", session)
+	}
+	if weekly != percentUnknown {
+		args = append(args, "1週間の枠の使用率", weekly)
+	}
+	// **余裕の無い枠の種別を出す**（設計 3-77j）。
+	// **1週間の枠は2つある**（`weekly_all` と `weekly_scoped`）。
+	// **使用率は最大を採って1つに畳むので、それだけでは
+	// `weekly_scoped`（1週間のモデル別の枠）が原因のときに読めない。**
+	// claude.ai の画面に出る週次の全体が30%でも、**よく使っているモデルの枠に余裕が無ければ止まる。**
+	if kinds := snap.SelectedKinds(handoff.Short(o.bidMargins())); len(kinds) > 0 {
+		args = append(args, "余裕の無い枠", strings.Join(kinds, ", "))
+	}
+	// **閾値とマージンも、枠を読めなかったときは出さない**（issue #173）。
+	// **下の文面が「マージンを下げても動き出しません」と言っている。**
+	// **その隣に2本のマージンの現在値と閾値を並べると、読む人はそこへ手を伸ばす。**
+	// **数字を消したのと同じ理由である。**言っていることと、並べている値が食い違う。
+	if skip != handoff.SkipQuotaUnreadable {
+		args = append(args,
+			"5時間の枠の閾値", o.thresholdText(h.FiveHourMarginPercent),
+			"1週間の枠の閾値", o.thresholdText(h.WeeklyMarginPercent),
+			"five_hour_margin_percent", h.FiveHourMarginPercent,
+			"weekly_margin_percent", h.WeeklyMarginPercent,
+		)
+	}
+	// **出すのは1行だけにする**（人間の決定。2026-09-06。issue #173）。
+	// **「この巡回では1件も着手しません」は消えた。**丸ごとやめる段が無くなったためである。
+	// 人間の言い分は「**自分以外の状況はどちらにしても入札以外の判断材料がない**」であり、
+	// **ログで全体を追わせる形にしない。**`Ready` から進まないときに人間が見るのは issue のコメントで、
+	// **そこに誰の入札も無ければ「どの機械にも余裕が無い」と読める。**
+	//
+	// **ただし、直し方は理由で分ける。**枠を読めないのは資格情報の話であって、
+	// **マージンをいくら下げても動き出さない。**同じ文面にすると、
+	// **人間はマージンを触って、効かないまま原因を探し続ける。**
+	msg := "枠に余裕が無いので、入札の要る issue には着手しません" +
+		"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+		"枠が戻れば自分で再開します。すぐ動かしたいときは " +
+		"tracker.provider.handoff の2つのマージンを見てください"
+	if skip == handoff.SkipQuotaUnreadable {
+		msg = "枠を読めないので、入札の要る issue には着手しません" +
+			"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
+			"**マージンを下げても動き出しません。**rate_limit.token_source と資格情報を確かめてください"
+	}
+	o.logger.Info(msg, args...)
+}
+
+// thresholdText は閾値をログに出す形にする（設計 3-77j。issue #173）。
+//
+// **100 は「この設定では止まらない」という意味である。**
+// **`100` とだけ出すと「100%で止まる」と読まれる。**
+//
+// **「止まらない」という文面は持たない。**マージンは0以上100未満しか通らないので
+// （`internal/config/validate.go` が弾く）、**閾値は必ず1から100の範囲に入る。**
+// **マージン0なら閾値は100で、使用率100に達したときだけ止まる。**それは「止まらない」ではない。
+//
+// **「これに達したら止まる」まで値の側で作る。**属性の名前に入れると、
+// **読む側が名前と値をつなげて読むことになり、閾値の意味が名前へ漏れる。**
+//
+// margin: その枠のマージン（%）。
+// 戻り値: ログに出す値。
+func (o *Orchestrator) thresholdText(margin int) string {
+	return strconv.Itoa(o.newWorkThresholdPercent(margin)) + "% に達したら止まります"
+}
+
+// bidMargins は入札の余裕値を作るときに引くマージンを返す（設計 3-77。issue #173）。
+//
+// **1箇所にまとめてある。**同じ2つのキーを各所で組み立てると、
+// **入札の線と、枠待ちの線と、1週間の枠を待つ上限の線がずれる。**
+//
+// 戻り値: 5時間と1週間のマージン（%）。
+func (o *Orchestrator) bidMargins() handoff.Margins {
+	return handoff.Margins{
+		FiveHour: o.cfg.Tracker.Provider.Handoff.FiveHourMarginPercent,
+		Weekly:   o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
+	}
+}
+
 // dispatchCandidates は候補を並び順のまま、空きスロットが尽きるまで dispatch する
 // （設計 4-2 / 3-16 の段-1）。
 //
@@ -187,18 +457,30 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // ctx: 呼び出しに適用するコンテキスト。
 // candidates: `active_states` で取った候補（カンバンの並び順）。
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
-	if o.dispatchPaused() {
-		// **INFO のままにする**（issue #134）。
-		// **一度 WARN へ上げたが、8本のテストが落ちた**（v0.1.11 で試した）。
-		// どれも正常な動作を作っているもので、
-		// **「異常ではないものを異常として出そうとしている」という信号だった。**
-		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
-		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
-		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）。"+
-			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください",
-			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
-		return
+	// **止めた理由を、既定のログの水準で1行出す**（設計 3-77j。issue #173）。
+	// **ここが `Debug` の1行だけだったので、1台で動かしている人には
+	// 「ボードが何時間も進まない」としか見えなかった。**
+	// **理由とログの数字を、同じ1回の読み取りから作る**（設計 3-77j）。
+	// **判定とログがそれぞれロックを取ると、
+	// 「枠を読めない」と名乗りながら使用率を並べる1行が出る。**
+	// **だから写しは、ここで1回だけ取って両方へ渡す。**
+	blockedSnap, blockedStale := o.quotaSnapshotWithStale()
+	blocked := o.newWorkBlockedWith(blockedSnap, blockedStale)
+	if blocked != handoff.SkipNone && len(candidates) > 0 {
+		// **候補が0件のときは出さない**（issue #173）。
+		// **枠が何かを止めたわけではない**ので、出すと嘘になる。
+		// **空のカンバンで巡回のたびに1行出し続けることにもなる。**
+		o.logNewWorkBlocked(blocked, blockedSnap)
 	}
+	// **ここで巡回を打ち切ってはならない**（人間の決定。2026-09-06。issue #173）。
+	//
+	// **以前は `rate_limit.pause_above_percent` を超えると `return` していた。**
+	// **打ち切ると、この機械が既に担当者になっている issue まで着手されなくなる**（印が無いので
+	// この経路からしか拾えない）。**`handoffGate` の中にある「期限切れの担当を外す」経路も
+	// 通らなくなる**ので、詰まったカンバンを誰も解けない。
+	//
+	// **止めるのは `handoffGate` が issue ごとに行う。**
+	// **担当者のいない issue は入札が要るので落ちる。担当が既にこの機械にある issue は通る。**
 
 	// **持ち回りの判定でコメントを読む枠を、巡回1回ぶんに戻す**（設計 3-77a）。
 	o.resetHandoffFetchBudget()
@@ -276,7 +558,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
 		if free, blocker, limit := o.freeSlotBlocker(); !free {
-			// **INFO のままにする**（issue #134。上の dispatchPaused と同じ理由）。
+			// **INFO のままにする**（issue #134。`logNewWorkBlocked` と同じ理由）。
 			// **同時に動かす数の上限に達しただけで、異常ではない。**
 			//
 			// **どちらの上限で止まったかを名乗る。**上限は2つあり、
@@ -288,6 +570,22 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 				"その上限", limit,
 				"ここで打ち切った issue", issue.Identifier)
 			break
+		}
+
+		// **枠に余裕が無いなら、担当者のいない issue はここで落とす**（issue #173）。
+		// **`preflight` より前に置く。**あちらは issue ごとに git を2プロセス起こす。
+		// **どうせ下の `handoffGate` が入札しないと答えるので、その全部が捨てられる。**
+		//
+		// **節約できるのは、担当者のいない issue のぶんだけである。**
+		// **担当者のいる issue は通す**ので、そこでは `preflight` が走り続ける。
+		// **通す理由は下にある**（期限切れの担当を外す経路が `handoffGate` の中にある）。
+		//
+		// **担当が既に自分にある issue は落とさない。**入札が要らないので、
+		// **枠に余裕が無くても着手する**（走っている run の面倒を見る経路がここしかない）。
+		// **`handoffGate` の中の「期限切れの担当を外す」経路も、担当者がいる issue しか通らない。**
+		if blocked != handoff.SkipNone && len(assigneeLogins(issue)) == 0 {
+			o.clearGate(issue.ID)
+			continue
 		}
 
 		// 段0: dispatch の直前の検査（設計 3-6 の「issue ごと」の表）。
@@ -303,7 +601,9 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// 段-0: 担当の持ち回りを決める（設計 3-77）。**空きスロットを数えたあとに行う。**
 		// 入札に勝つのは「いま着手できる機械」でなければならず、
 		// **枠が空いていない機械が勝つと、issue は誰にも着手されないまま止まる。**
-		decision := o.handoffGate(ctx, issue)
+		// **入札の判定にも、この巡回で1回だけ読んだ写しを渡す**（issue #173）。
+		// **`handoffGate` の中で取り直すと、上の `blocked` と別の読み取りになる。**
+		decision := o.handoffGate(ctx, issue, bidSnapshotOf(blockedSnap, blockedStale))
 		if decision.stop {
 			// **コメントを読む枠を使い切った。**候補はカンバンの並び順で来るので、
 			// 上から順に見ることは保たれる。**続きは次の巡回で見る。**

@@ -490,7 +490,7 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 // （設計 3-27）。**その待ち直しの最中に herdr が再起動すると、run を捨ててはならない。**
 // 捨てると、枠が明けるのを待っていただけの issue が failure_state へ落ちる。
 //
-// 与える情報: 着手のときは枠が空いていて（`pause_above_percent` に掛からない）、
+// 与える情報: 着手のときは枠が空いていて（入札の余裕値が残っている）、
 // turn を送った瞬間に 100% になる偽の usage API。`agent.prompt` は herdr の `timeout` を返し、
 // `agent.wait` は応答を書かずに接続を切る。リトライは 0 回。
 // 成功条件: Status が `In Progress` のままで、issue にコメントが1件も残らず、
@@ -498,7 +498,7 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 // 先に stall として諦めることになる）。
 func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨てない(t *testing.T) {
 	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
-	// **着手が済むまでは枠を空けておく。**100% のままだと `pause_above_percent` で
+	// **着手が済むまでは枠を空けておく。**100% のままだと余裕値の判定で
 	// dispatch が止まり、turn の経路に1度も入れない。
 	var full atomic.Bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
