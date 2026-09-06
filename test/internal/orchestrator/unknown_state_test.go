@@ -81,7 +81,7 @@ func selfCommentBody(fx *fixture, nodeID string) string {
 // TestRUCMHandoff_P013_知らないStatusで止めるときはissueに理由を書く は、設計 3-50 を確かめる。
 //
 // 目的: 設定に名前が出てこない Status へ動かされた issue を、continuo は黙って止めていた。
-// **その issue は `active_states` に入らないので二度と拾われず、ボードにも issue にも
+// **その issue は `active_states` に入らないので二度と拾われず、カンバンにも issue にも
 // 何も残らない。**人間には「なぜか止まった issue」だけが残る。
 //
 // 与える情報: 着手済みの issue を、設定のどこにも名前が出てこない `Icebox` へ動かす。
@@ -106,7 +106,7 @@ func TestRUCMHandoff_P013_知らないStatusで止めるときはissueに理由�
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// 人間（またはボードの自動化）が、continuo の知らない Status へ動かした。
+	// 人間（またはカンバンの自動化）が、continuo の知らない Status へ動かした。
 	fx.Tracker.SetState(issue.ID, "Icebox")
 	fx.Orc.Tick(context.Background())
 	fx.WaitRunsDrained(t, 10*time.Second)
@@ -142,7 +142,7 @@ func TestRUCMHandoff_P013_知らないStatusで止めるときはissueに理由�
 // 戻す（3-25）。**turn が終わる前に殺すと、その表明が読まれずに捨てられる。**
 //
 // 与える情報: 1回目の turn が `agent.prompt` の待ち受けに入ったままの run。
-// その間にボードの Status が `Icebox`（設定のどこにも名前が出てこない）へ動く。猶予は1分。
+// その間にカンバンの Status が `Icebox`（設定のどこにも名前が出てこない）へ動く。猶予は1分。
 // 成功条件:
 //   - 猶予の内側では worker を止めない（pane も閉じない。コメントも書かない）
 //   - 待っていることをログに出す（人間が止めたいときに遅れることを黙って隠さない）
@@ -201,7 +201,7 @@ func TestRUCMHandoff_P014_turnが動いている間は知らないStatusでも�
 // WARN で出すと、読んだ人は herdr か Claude Code を疑って原因を探しにいく。
 //
 // 与える情報: 1回目の `agent.prompt` は pane が閉じられるまで返らず、閉じられたら
-// `agent_not_found` を返す。その間にボードの Status が `In Review` へ動き、
+// `agent_not_found` を返す。その間にカンバンの Status が `In Review` へ動き、
 // continuo が worker を止める。
 // 成功条件:
 //   - `turn を送れませんでした` が1行も出ないこと
@@ -242,7 +242,7 @@ func TestStopWorker_自分で止めた直後のturnの失敗をWARNにしない(
 // **その待ちには期限が無い。**
 //
 // 与える情報: 1回目の `agent.prompt` が**何があっても返らない**（pane を閉じても返らない）
-// テスト用herdr mock。その間にボードの Status が `In Review` へ動き、continuo が worker を止める。
+// テスト用herdr mock。その間にカンバンの Status が `In Review` へ動き、continuo が worker を止める。
 // 成功条件: 待ち受けが解け、止めたことと結び付けた1行が出ること。
 func TestStopWorker_止めたらherdrの待ち受けの中のturnループも解ける(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{

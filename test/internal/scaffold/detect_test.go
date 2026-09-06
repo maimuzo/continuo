@@ -13,7 +13,7 @@ import (
 
 // fakeGH は gh の呼び出しを記録し、あらかじめ決めた応答を返す差し替え用の実行関数を作る。
 //
-// 本物の gh を叩くと、その場のログイン状態とボードの数でテストの結果が変わる。
+// 本物の gh を叩くと、その場のログイン状態とカンバンの数でテストの結果が変わる。
 // 検査したいのは「返ってきた内容をどう解釈するか」なので、コマンドの実行は差し替える。
 //
 // t: テストコンテキスト。
@@ -78,7 +78,7 @@ const twoRepoItemsJSON = `{"items":[` +
 	`{"content":{"number":2,"repository":"acme/anvil","type":"Issue"}},` +
 	`{"content":{"title":"下書き","type":"DraftIssue"}}],"totalCount":4}`
 
-// 目的: gh から owner とボードの番号を引いて、雛形の2つのプレースホルダが埋まることを確認する。
+// 目的: gh から owner とカンバンの番号を引いて、雛形の2つのプレースホルダが埋まることを確認する。
 // 与える情報: `gh api user` が octocat を返し、`gh project list` が候補1件を返す差し替え。
 // 成功条件: Values に octocat と 3 が入り、どちらの Field も Filled であること。
 // あわせて、gh の呼び出しが api user / project list / project item-list の3件であること。
@@ -107,19 +107,19 @@ func TestDetect_ghから引いた値でownerとproject_numberが埋まる(t *tes
 		t.Errorf("gh の呼び出しは api user / project list / project item-list の3件であるべき: %v", *calls)
 	}
 	if !strings.HasPrefix((*calls)[1], "project list --owner octocat ") {
-		t.Errorf("ボードの候補を引くとき、引いた owner を渡していない: %q", (*calls)[1])
+		t.Errorf("カンバンの候補を引くとき、引いた owner を渡していない: %q", (*calls)[1])
 	}
 }
 
 // 目的: --owner と --project が渡されたら、その2つを引くために gh を起動しないことを確認する。
 //
-// **ボードに載っているリポジトリの一覧だけは、フラグで渡されていても引く。**
-// これはフラグが決めるのは「どのボードか」であって「そのボードを読むかどうか」ではないからである
-// （trust.repositories はボードの中身を読まないと並べられない。設計 3-33）。
+// **カンバンに載っているリポジトリの一覧だけは、フラグで渡されていても引く。**
+// これはフラグが決めるのは「どのカンバンか」であって「そのカンバンを読むかどうか」ではないからである
+// （trust.repositories はカンバンの中身を読まないと並べられない。設計 3-33）。
 //
 // 与える情報: 両方のフラグ相当の値と、item-list にだけ答える差し替え。
 // 成功条件: gh の呼び出しが project item-list の1件だけで、渡した値がそのまま Values に入ること。
-func TestDetect_フラグで渡されたらownerとボードの番号はghに聞かない(t *testing.T) {
+func TestDetect_フラグで渡されたらownerとカンバンの番号はghに聞かない(t *testing.T) {
 	run, calls := fakeGH(t, map[string]struct {
 		out []byte
 		err error
@@ -141,11 +141,11 @@ func TestDetect_フラグで渡されたらownerとボードの番号はghに聞
 	}
 }
 
-// 目的: ボードの候補が複数あるとき、勝手に選ばずに候補と再実行の案内を返すことを確認する。
+// 目的: カンバンの候補が複数あるとき、勝手に選ばずに候補と再実行の案内を返すことを確認する。
 // 与える情報: `gh project list` が候補2件を返す差し替え。
 // 成功条件: project_number が埋まらず、候補2件が Candidates に入り、
 // 案内に --project が含まれること。owner のほうは埋まっていること。
-func TestDetect_ボードの候補が複数なら選ばずに一覧を返す(t *testing.T) {
+func TestDetect_カンバンの候補が複数なら選ばずに一覧を返す(t *testing.T) {
 	run, _ := fakeGH(t, map[string]struct {
 		out []byte
 		err error
@@ -174,10 +174,10 @@ func TestDetect_ボードの候補が複数なら選ばずに一覧を返す(t *
 	}
 }
 
-// 目的: ボードが1件も無いとき、プレースホルダを残したうえで作り方を案内することを確認する。
+// 目的: カンバンが1件も無いとき、プレースホルダを残したうえで作り方を案内することを確認する。
 // 与える情報: `gh project list` が空の一覧を返す差し替え。
-// 成功条件: project_number が埋まらず、案内にボードの作り方（gh project create）が含まれること。
-func TestDetect_ボードが0件ならプレースホルダを残して作り方を案内する(t *testing.T) {
+// 成功条件: project_number が埋まらず、案内にカンバンの作り方（gh project create）が含まれること。
+func TestDetect_カンバンが0件ならプレースホルダを残して作り方を案内する(t *testing.T) {
 	run, _ := fakeGH(t, map[string]struct {
 		out []byte
 		err error
@@ -196,14 +196,14 @@ func TestDetect_ボードが0件ならプレースホルダを残して作り方
 	}
 	project := fieldOf(t, got, scaffold.ProjectKey)
 	if !containsSubstring(project.Advice, "gh project create") {
-		t.Errorf("ボードの作り方を案内していない: %v", project.Advice)
+		t.Errorf("カンバンの作り方を案内していない: %v", project.Advice)
 	}
 }
 
-// 目的: 閉じたボードを候補に数えないことを確認する。
-// 与える情報: 閉じたボード1件と開いているボード1件を返す差し替え。
+// 目的: 閉じたカンバンを候補に数えないことを確認する。
+// 与える情報: 閉じたカンバン1件と開いているカンバン1件を返す差し替え。
 // 成功条件: 開いている1件だけが候補になり、その番号が自動で埋まること。
-func TestDetect_閉じたボードは候補に数えない(t *testing.T) {
+func TestDetect_閉じたカンバンは候補に数えない(t *testing.T) {
 	closedAndOpen := `{"projects":[` +
 		`{"closed":true,"number":1,"title":"終わった板","url":"https://example.invalid/1"},` +
 		`{"closed":false,"number":9,"title":"いま使う板","url":"https://example.invalid/9"}],"totalCount":2}`
@@ -219,7 +219,7 @@ func TestDetect_閉じたボードは候補に数えない(t *testing.T) {
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
 
 	if got.Values.ProjectNumber != 9 {
-		t.Errorf("閉じていないボードの番号が選ばれていない: got %d, want %d", got.Values.ProjectNumber, 9)
+		t.Errorf("閉じていないカンバンの番号が選ばれていない: got %d, want %d", got.Values.ProjectNumber, 9)
 	}
 }
 
@@ -268,7 +268,7 @@ func TestRunGH_ghが無ければErrGHNotFoundを返す(t *testing.T) {
 
 // 目的: gh が user / organization 名として使えない文字列を返したら、雛形に書かないことを確認する。
 // 与える情報: 改行と引用符を含む文字列を `gh api user` が返す差し替え。
-// 成功条件: owner が埋まらず、ボードの候補も引きに行かないこと。
+// 成功条件: owner が埋まらず、カンバンの候補も引きに行かないこと。
 func TestDetect_ownerに使えない文字列は書き込まない(t *testing.T) {
 	var calls []string
 	run := func(_ context.Context, args ...string) ([]byte, error) {
@@ -282,7 +282,7 @@ func TestDetect_ownerに使えない文字列は書き込まない(t *testing.T)
 		t.Errorf("受け付けてはならない owner が入っている: %q", got.Values.Owner)
 	}
 	if len(calls) != 1 {
-		t.Errorf("owner が決まっていないのにボードの候補を引きに行っている: %v", calls)
+		t.Errorf("owner が決まっていないのにカンバンの候補を引きに行っている: %v", calls)
 	}
 }
 
@@ -406,7 +406,7 @@ func containsSubstring(lines []string, sub string) bool {
 // emptyProjectJSON は候補が1件も無いときの出力である。
 const emptyProjectJSON = `{"projects":[],"totalCount":0}`
 
-// orgProjectJSON は organization が持つボード1件の出力である。
+// orgProjectJSON は organization が持つカンバン1件の出力である。
 const orgProjectJSON = `{"projects":[{"closed":false,"number":6,"owner":{"login":"octodev","type":"Organization"},` +
 	`"title":"チームの看板","url":"https://github.com/orgs/octodev/projects/6"}],"totalCount":1}`
 
@@ -450,28 +450,28 @@ func ownerAwareGH(t *testing.T, login string, orgs []string, byOwner map[string]
 	return run, &calls
 }
 
-// TestDetect_ログイン名にボードが無ければorganizationも探す は、issue #7 の状況を確かめる。
+// TestDetect_ログイン名にカンバンが無ければorganizationも探す は、issue #7 の状況を確かめる。
 //
-// **`gh api user` はログイン名しか返さない。**organization に置いたボードは、
-// ログイン名で探しても1件も出ない。**GitHub Enterprise で organization にボードを
+// **`gh api user` はログイン名しか返さない。**organization に置いたカンバンは、
+// ログイン名で探しても1件も出ない。**GitHub Enterprise で organization にカンバンを
 // 置いていた利用者が、`continuo setup` で1歩も進めなかった。**
 //
-// 目的: ログイン名のボードが0件なら、所属する organization のボードも探すこと。
+// 目的: ログイン名のカンバンが0件なら、所属する organization のカンバンも探すこと。
 // 与える情報: ログイン名では0件、organization `octodev` では1件を返す gh。
-// 成功条件: ボードの番号が埋まり、**owner も organization に決め直される**こと。
-func TestDetect_ログイン名にボードが無ければorganizationも探す(t *testing.T) {
+// 成功条件: カンバンの番号が埋まり、**owner も organization に決め直される**こと。
+func TestDetect_ログイン名にカンバンが無ければorganizationも探す(t *testing.T) {
 	run, calls := ownerAwareGH(t, "octocat", []string{"octodev"},
 		map[string]string{"octodev": orgProjectJSON}, twoRepoItemsJSON)
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
 
 	if got.Values.ProjectNumber != 6 {
-		t.Errorf("organization のボードを拾えていない: got %d, want 6", got.Values.ProjectNumber)
+		t.Errorf("organization のカンバンを拾えていない: got %d, want 6", got.Values.ProjectNumber)
 	}
 	// **owner を決め直さないと、どこにも存在しない組み合わせが書かれる。**
-	// `project_number` は organization のボードを指すのに、`owner` はログイン名のまま、という状態。
+	// `project_number` は organization のカンバンを指すのに、`owner` はログイン名のまま、という状態。
 	if got.Values.Owner != "octodev" {
-		t.Errorf("owner をボードの持ち主に合わせていない: got %q, want %q", got.Values.Owner, "octodev")
+		t.Errorf("owner をカンバンの持ち主に合わせていない: got %q, want %q", got.Values.Owner, "octodev")
 	}
 	if !got.AllFilled() {
 		t.Errorf("両方埋まったのに AllFilled が偽である: %+v", got.Fields)
@@ -489,21 +489,21 @@ func TestDetect_ログイン名にボードが無ければorganizationも探す(
 	}
 }
 
-// TestDetect_ログイン名にボードがあればorganizationを探さない は、余計な呼び出しをしないことを確かめる。
+// TestDetect_ログイン名にカンバンがあればorganizationを探さない は、余計な呼び出しをしないことを確かめる。
 //
 // **見つかっているのに所属を引くと、無駄にレートリミットを使う。**
 //
-// 目的: ログイン名のボードが1件あれば、`api user/orgs` を呼ばないこと。
+// 目的: ログイン名のカンバンが1件あれば、`api user/orgs` を呼ばないこと。
 // 与える情報: ログイン名で1件を返す gh。
 // 成功条件: `api user/orgs` を1度も呼ばないこと。
-func TestDetect_ログイン名にボードがあればorganizationを探さない(t *testing.T) {
+func TestDetect_ログイン名にカンバンがあればorganizationを探さない(t *testing.T) {
 	run, calls := ownerAwareGH(t, "octocat", []string{"some-org"},
 		map[string]string{"octocat": oneProjectJSON}, twoRepoItemsJSON)
 
 	got := scaffold.Detect(context.Background(), scaffold.DetectOptions{RunGH: run})
 
 	if got.Values.Owner != "octocat" || got.Values.ProjectNumber != 3 {
-		t.Errorf("ログイン名のボードを使っていない: owner=%q number=%d", got.Values.Owner, got.Values.ProjectNumber)
+		t.Errorf("ログイン名のカンバンを使っていない: owner=%q number=%d", got.Values.Owner, got.Values.ProjectNumber)
 	}
 	for _, c := range *calls {
 		if strings.HasPrefix(c, "api user/orgs") {
@@ -512,7 +512,7 @@ func TestDetect_ログイン名にボードがあればorganizationを探さな�
 	}
 }
 
-// TestDetect_どこにもボードが無ければ探した先を全部出す は、案内の中身を確かめる。
+// TestDetect_どこにもカンバンが無ければ探した先を全部出す は、案内の中身を確かめる。
 //
 // **「見つかりません」だけでは、どこを探したのかが分からない。**
 // 利用者は `--owner` に何を渡せばよいかを判断できない。
@@ -520,7 +520,7 @@ func TestDetect_ログイン名にボードがあればorganizationを探さな�
 // 目的: ログイン名でも organization でも0件のとき、探した owner を全部示すこと。
 // 与える情報: どの owner でも0件を返す gh。
 // 成功条件: 理由にログイン名と organization の両方が出て、`--owner` の案内があること。
-func TestDetect_どこにもボードが無ければ探した先を全部出す(t *testing.T) {
+func TestDetect_どこにもカンバンが無ければ探した先を全部出す(t *testing.T) {
 	run, _ := ownerAwareGH(t, "octocat", []string{"octodev", "another-org"},
 		map[string]string{}, twoRepoItemsJSON)
 

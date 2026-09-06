@@ -3,8 +3,10 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/redact"
@@ -399,6 +401,17 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 			continue
 		}
 		if c.IsAgent {
+			// **途中で書かせるコメントは、成果の報告ではない。**
+			// 計画（設計 5-3 の 3-2）も進捗報告（同 5-3）も、本文の先頭は
+			// `<!-- continuo:agent -->` なので、ここで除かないと `IsAgent` が真になる。
+			//
+			// **除かないと、turn が途中で終わった run で書かせ直しが飛ぶ。**
+			// とくに計画は run の最初に書かれるので、判定はほぼ必ず外れる。
+			// 「何をしたか」が1行も残らないまま、issue が次へ進む。
+			if strings.Contains(c.Body, config.PlanMarker) ||
+				strings.Contains(c.Body, config.ProgressMarker) {
+				continue
+			}
 			found = true
 		}
 	}
@@ -467,7 +480,7 @@ func (o *Orchestrator) failCommentRecoveryBusy(ctx context.Context, rs *runState
 
 // postStatusMove は continuo が Status を動かした記録を issue のコメントに残す（設計 3-29）。
 //
-// **書き込みが起きていなければ何もしない。**ボードが動いていないので書くことがない。
+// **書き込みが起きていなければ何もしない。**カンバンが動いていないので書くことがない。
 // 「動かさない」表明（`status_signal_map` の値が null）と、item が見えない・
 // 書いてはいけない状態だった・既に同じ値だった場合が、これに当たる。
 //

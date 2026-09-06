@@ -52,7 +52,7 @@ var wantLabels = []i18n.Key{
 // TestDoctor_前提が揃っていれば全項目すべて通る は、揃っている状態の基準線を作る。
 //
 // 目的: 全項目を固定した見出し語で出し、すべて `✓` になり、終了コードが 0 になること。
-// 与える情報: テスト用herdr mock（protocol 19）・偽ボード（Ready の issue が1件）・
+// 与える情報: テスト用herdr mock（protocol 19）・偽カンバン（Ready の issue が1件）・
 // テスト用gh mock（project の scope あり）・信頼登録済みの `~/.claude.json`・`rate_limit.source: none`。
 // 成功条件: 見出し語が設計どおりの順序で並び、全部 `✓` で、終了コードが 0 であること。
 func TestDoctor_前提が揃っていれば全項目すべて通る(t *testing.T) {
@@ -79,7 +79,7 @@ func TestDoctor_前提が揃っていれば全項目すべて通る(t *testing.T
 	// **自動化はいちばん最後である。**要る2本より前に置くと、止まった自動化の1本が
 	// 候補の取得の残り時間を食い、**見出し語 `カンバン` が巻き添えで `!` になる。**
 	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items", "workflows"}) {
-		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
+		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestDoctor_設定ファイルを読めなければ設定に依存する検�
 // 「`gh auth login -s project` を実行してください」と出すこと。
 // 与える情報: `gh auth status` が未ログインの出力を返し、終了コード 1 で終わる。
 // 成功条件: `gh の認証` が `✗`、直し方に `gh auth login -s project` が入り、
-// 下流（ボード・clone・信頼登録）が `!` になり、終了コードが 1 になること。
+// 下流（カンバン・clone・信頼登録）が `!` になり、終了コードが 1 になること。
 func TestDoctor_ghが未ログインなら足りないと出しログインの手順を出す(t *testing.T) {
 	fx := newFixture(t)
 	writeFakeGH(t, fx.BinDir, "You are not logged into any GitHub hosts. To log in, run: gh auth login", 1)
@@ -163,7 +163,7 @@ func TestDoctor_ghが未ログインなら足りないと出しログインの�
 	assertSymbol(t, report, doctor.LabelClone, doctor.SymbolUnknown)
 	assertSymbol(t, report, doctor.LabelTrust, doctor.SymbolUnknown)
 	if len(fx.GitHub.Queries()) != 0 {
-		t.Fatalf("gh の認証が落ちたのにボードを読んでいる: %v", fx.GitHub.Queries())
+		t.Fatalf("gh の認証が落ちたのにカンバンを読んでいる: %v", fx.GitHub.Queries())
 	}
 	if report.ExitCode() != 1 {
 		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
@@ -281,10 +281,10 @@ func TestDoctor_herdrへ繋がらなければ足りない(t *testing.T) {
 
 // TestDoctor_Statusの選択肢名が設定と一致しなければ足りない は、無言の0件を防ぐ検査である。
 //
-// 目的: `active_states` の選択肢名がボードに無ければ `✗` にすること
+// 目的: `active_states` の選択肢名がカンバンに無ければ `✗` にすること
 // （巡回が無言で0件を返す原因になる）。
-// 与える情報: ボード側の Status の選択肢から `In Progress` を落とした偽ボード。
-// 成功条件: `ボード` が `✗` になり、説明に落とした名前が入り、clone と信頼登録が `!` になること。
+// 与える情報: カンバン側の Status の選択肢から `In Progress` を落とした偽カンバン。
+// 成功条件: `カンバン` が `✗` になり、説明に落とした名前が入り、clone と信頼登録が `!` になること。
 func TestDoctor_Statusの選択肢名が設定と一致しなければ足りない(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "Blocked", "In Review", "Done")
@@ -305,8 +305,8 @@ func TestDoctor_Statusの選択肢名が設定と一致しなければ足りな�
 // TestDoctor_projectが見つからなければ足りない は、設定の誤りを検出する。
 //
 // 目的: project が見つからないときに `✗` にすること（設計 3-32 の「落ち方で分ける」）。
-// 与える情報: `repositoryOwner` に null を返す偽ボード。
-// 成功条件: `ボード` が `✗` になり、終了コードが 1 になること。
+// 与える情報: `repositoryOwner` に null を返す偽カンバン。
+// 成功条件: `カンバン` が `✗` になり、終了コードが 1 になること。
 func TestDoctor_projectが見つからなければ足りない(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetFailure(failureNoProject)
@@ -326,9 +326,9 @@ func TestDoctor_projectが見つからなければ足りない(t *testing.T) {
 //
 // TestDoctor_トークンを取り出せなければ足りない は、認証の取り出しの失敗を検出する。
 //
-// 目的: ボードを読むトークンを取り出せないときに `✗` にすること（設計 3-32）。
+// 目的: カンバンを読むトークンを取り出せないときに `✗` にすること（設計 3-32）。
 // 与える情報: `tracker.provider.token_source` が指す環境変数を空にした状態。
-// 成功条件: `ボード` が `✗` になり、ボードへ1リクエストも送らず、終了コードが 1 になること。
+// 成功条件: `カンバン` が `✗` になり、カンバンへ1リクエストも送らず、終了コードが 1 になること。
 func TestDoctor_トークンを取り出せなければ足りない(t *testing.T) {
 	fx := newFixture(t)
 	t.Setenv("CONTINUO_TEST_TOKEN", "")
@@ -340,7 +340,7 @@ func TestDoctor_トークンを取り出せなければ足りない(t *testing.T
 		t.Fatalf("説明がトークンの取り出しの失敗を指していない: %q", board.Detail)
 	}
 	if len(fx.GitHub.Queries()) != 0 {
-		t.Fatalf("トークンが無いのにボードを読んでいる: %v", fx.GitHub.Queries())
+		t.Fatalf("トークンが無いのにカンバンを読んでいる: %v", fx.GitHub.Queries())
 	}
 	if report.ExitCode() != 1 {
 		t.Fatalf("✗ があるのに終了コードが %d だった", report.ExitCode())
@@ -350,8 +350,8 @@ func TestDoctor_トークンを取り出せなければ足りない(t *testing.T
 // TestDoctor_レートリミットは確かめられなかったにする は、一時的な失敗を区別する。
 //
 // 目的: レートリミットに当たったときだけ `!` にし、終了コードを 0 のままにすること。
-// 与える情報: 429 と `Retry-After` を返す偽ボード。
-// 成功条件: `ボード` が `!`、clone と信頼登録が `!`、終了コードが 0 であること。
+// 与える情報: 429 と `Retry-After` を返す偽カンバン。
+// 成功条件: `カンバン` が `!`、clone と信頼登録が `!`、終了コードが 0 であること。
 func TestDoctor_レートリミットは確かめられなかったにする(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetFailure(failureRateLimit)
@@ -372,11 +372,11 @@ func TestDoctor_レートリミットは確かめられなかったにする(t *
 // {"RUCM-PATH": "P007"}
 //
 // TestDoctor_対象リポジトリが0件ならcloneと信頼登録は確かめられなかったになる は、
-// ボードが空の場合の扱いを確かめる。
+// カンバンが空の場合の扱いを確かめる。
 //
 // 目的: 対象が0件のとき、clone と信頼登録を `!` にして**終了コードに影響させない**こと
-// （ボードが空なのは設定の誤りではない。設計 3-32）。
-// 与える情報: item が1件も無い偽ボード。
+// （カンバンが空なのは設定の誤りではない。設計 3-32）。
+// 与える情報: item が1件も無い偽カンバン。
 // 成功条件: clone と信頼登録が `!` で理由が「対象がありません」であり、終了コードが 0 であること。
 func TestDoctor_対象リポジトリが0件ならcloneと信頼登録は確かめられなかったになる(t *testing.T) {
 	fx := newFixture(t)
@@ -393,14 +393,14 @@ func TestDoctor_対象リポジトリが0件ならcloneと信頼登録は確か�
 		}
 	}
 	if report.ExitCode() != 0 {
-		t.Fatalf("ボードが空なだけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
+		t.Fatalf("カンバンが空なだけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
 }
 
 // TestDoctor_draft_issueは対象から外す は、リポジトリを持たない item の扱いを確かめる。
 //
 // 目的: draft issue（`Owner` / `Repo` が空）を対象リポジトリに含めないこと。
-// 与える情報: draft issue だけが載っている偽ボード。
+// 与える情報: draft issue だけが載っている偽カンバン。
 // 成功条件: 対象0件として clone と信頼登録が `!` になり、終了コードが 0 であること。
 func TestDoctor_draft_issueは対象から外す(t *testing.T) {
 	fx := newFixture(t)
@@ -419,12 +419,12 @@ func TestDoctor_draft_issueは対象から外す(t *testing.T) {
 	}
 }
 
-// TestDoctor_ボードに載る全リポジトリを重複なく検査する は、対象の集め方を確かめる。
+// TestDoctor_カンバンに載る全リポジトリを重複なく検査する は、対象の集め方を確かめる。
 //
 // 目的: 返ってきた issue の `nameWithOwner` を重複なく集め、**集まった全件**を検査すること。
-// 与える情報: 2つのリポジトリの issue が3件（うち2件は同じリポジトリ）載った偽ボード。
+// 与える情報: 2つのリポジトリの issue が3件（うち2件は同じリポジトリ）載った偽カンバン。
 // 成功条件: clone の内訳が2件で、両方のリポジトリ名が出ること。
-func TestDoctor_ボードに載る全リポジトリを重複なく検査する(t *testing.T) {
+func TestDoctor_カンバンに載る全リポジトリを重複なく検査する(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetItems(
 		boardItem{ItemID: "PVTI_1", NameWithOwner: "octocat/hello-world", Number: 188, State: "Ready"},
@@ -658,7 +658,7 @@ func TestDoctor_資格情報_claude_credentialsはファイルの有無で分け
 // 目的: 複数の前提が同時に欠けても、全項目を検査して結果を並べること。
 // 与える情報: herdr の protocol が食い違い、clone が無く、gh の scope も足りない状態。
 // 成功条件: 全項目に結果があり、`herdr` / `gh の認証` が `✗`、
-// ボードと clone と信頼登録が `!`、終了コードが 1 であること。
+// カンバンと clone と信頼登録が `!`、終了コードが 1 であること。
 func TestDoctor_1つ失敗しても残りを全部検査する(t *testing.T) {
 	fx := newFixture(t)
 	fx.Herdr.SetProtocol(18)
@@ -754,9 +754,9 @@ func TestDoctor_確かめられなかった検査の説明に件数の見出し�
 
 // TestDoctor_対象が0件のときの集計は問題ありと読ませない は、集計の行の文言を確かめる。
 //
-// 目的: **ボードが空なのは設定の誤りではない**（設計 3-32）ので、`!` だけのときの集計を
+// 目的: **カンバンが空なのは設定の誤りではない**（設計 3-32）ので、`!` だけのときの集計を
 // 「問題があります」と書かないこと。
-// 与える情報: item が1件も無い偽ボード（clone と信頼登録が `!` になる）。
+// 与える情報: item が1件も無い偽カンバン（clone と信頼登録が `!` になる）。
 // 成功条件: 集計の行が「足りないものはありません」を含み、「件に問題があります」を含まないこと。
 func TestDoctor_対象が0件のときの集計は問題ありと読ませない(t *testing.T) {
 	fx := newFixture(t)
@@ -815,8 +815,8 @@ func equalStrings(a, b []string) bool {
 // 目的: 401（トークンが無効・失効）なのに「owner / project_number / status_field を
 // 確認してください」と案内すると、人間が直す先を取り違える（設計 3-32 は落ち方で
 // 分けることを求めている）。
-// 与える情報: 401 を返す偽ボード。ほかの前提は揃っている。
-// 成功条件: ボードが `✗` になり、直し方が `gh auth refresh` か token_env を指すこと。
+// 与える情報: 401 を返す偽カンバン。ほかの前提は揃っている。
+// 成功条件: カンバンが `✗` になり、直し方が `gh auth refresh` か token_env を指すこと。
 // **owner / project_number を確認せよという案内を出さないこと。**
 func TestDoctor_トークンが失効していれば認証の直し方を出す(t *testing.T) {
 	fx := newFixture(t)
@@ -836,21 +836,21 @@ func TestDoctor_トークンが失効していれば認証の直し方を出す(
 
 // {"RUCM-PATH": "P022"}
 //
-// TestDoctor_ボードが時間内に応答しなければ確かめられなかったとして残りを続ける は、
+// TestDoctor_カンバンが時間内に応答しなければ確かめられなかったとして残りを続ける は、
 // 検査に期限があることを確かめる。
 //
 // 目的: doctor は「使い始める前に前提を機械的に検査する」道具である。**1項目が返らない
 // だけで道具そのものが固まると、人間の手が止まる。**
-// 与える情報: 期限より長く待ってから応答する偽ボードと、1項目 200ms の期限。
-// 成功条件: ボードが `!`（確かめられなかった）になり、説明が「時間内に応答がありません
+// 与える情報: 期限より長く待ってから応答する偽カンバンと、1項目 200ms の期限。
+// 成功条件: カンバンが `!`（確かめられなかった）になり、説明が「時間内に応答がありません
 // でした」であること。**全項目が結果を持ち、終了コードが 1 にならないこと。**
-func TestDoctor_ボードが時間内に応答しなければ確かめられなかったとして残りを続ける(t *testing.T) {
+func TestDoctor_カンバンが時間内に応答しなければ確かめられなかったとして残りを続ける(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetDelay(30 * time.Second)
 
 	opts := fx.Options()
 	// **固定 200ms にしてはならない。**`go test -coverpkg=./...` は全パッケージを
-	// instrument するので実行が遅くなり、**期限切れにしたい「ボード」より先に
+	// instrument するので実行が遅くなり、**期限切れにしたい「カンバン」より先に
 	// 「gh の認証」が期限切れになる**（2026-08-21 に実際に起きた）。
 	// ここで見たいのは「1項目が固まっても残りを続けること」であって、期限の短さではない。
 	opts.CheckTimeout = 2 * time.Second
@@ -875,13 +875,13 @@ func TestDoctor_ボードが時間内に応答しなければ確かめられな�
 	}
 }
 
-// TestDoctor_接続先を差し替えているとボードの説明に出す は、繋ぎ先の秘匿を防ぐ。
+// TestDoctor_接続先を差し替えているとカンバンの説明に出す は、繋ぎ先の秘匿を防ぐ。
 //
 // 目的: 接続先は環境変数1つで差し替わり、そこへ GitHub のトークンが送られる。
 // **本物の GitHub でない宛先に繋いだことが出力に出ないと、人間が気づけない。**
-// 与える情報: 偽ボード（httptest の 127.0.0.1）を接続先にした doctor。
-// 成功条件: ボードの説明に「接続先を差し替えています」と、その URL が出ること。
-func TestDoctor_接続先を差し替えているとボードの説明に出す(t *testing.T) {
+// 与える情報: 偽カンバン（httptest の 127.0.0.1）を接続先にした doctor。
+// 成功条件: カンバンの説明に「接続先を差し替えています」と、その URL が出ること。
+func TestDoctor_接続先を差し替えているとカンバンの説明に出す(t *testing.T) {
 	fx := newFixture(t)
 
 	report := fx.Run(t)

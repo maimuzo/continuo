@@ -117,6 +117,41 @@ func (u TokenUsage) Add(other TokenUsage) TokenUsage {
 	}
 }
 
+// Sub は自分から other を引いた新しい値を返す（レシーバは書き換えない）。
+//
+// **run をまたぐ累計を、差分で足すためのものである**（設計 3-15 が指す
+// docs/plans/impl/09_dashboard.md の「run をまたぐ累計」）。
+// `SPEC.md` 13.5 が「絶対値の合計を扱うときは、二重計上を避けるため、最後に報告した
+// 合計との差分を追うこと」と求めている。
+//
+// **項目ごとに引き、負になったら0へ丸める。**同じ transcript を追記だけで伸ばしているなら、
+// 負にはならない（`scanTranscript` は毎回先頭から読み直す）。
+// **ただし2つとも測っていない。**transcript が書き換えられないことも、
+// **`addUsage` が符号を見ていないこと**（JSON に負の値が書いてあればそのまま足す）もである。
+// **丸めたことを戻り値で知らせる。**知らせないと、累計が静かに実際より小さくなったことを、
+// あとから確かめる手立てが無くなる。
+//
+// other: 引く集計（前回この transcript から読んだ絶対値）。
+// 戻り値の1つ目: 項目ごとに引いた集計（負の項目は0）。
+// 戻り値の2つ目: 1項目でも0へ丸めたら true。
+func (u TokenUsage) Sub(other TokenUsage) (TokenUsage, bool) {
+	clamped := false
+	sub := func(a, b int) int {
+		if a-b < 0 {
+			clamped = true
+			return 0
+		}
+		return a - b
+	}
+	return TokenUsage{
+		APICalls:      sub(u.APICalls, other.APICalls),
+		Input:         sub(u.Input, other.Input),
+		CacheCreation: sub(u.CacheCreation, other.CacheCreation),
+		CacheRead:     sub(u.CacheRead, other.CacheRead),
+		Output:        sub(u.Output, other.Output),
+	}, clamped
+}
+
 // TranscriptReadResult は transcript を1回読んだ結果である。
 //
 // **表明とトークンの両方を、同じ1回の読み取りで取る**（設計 3-15。2回開かない）。

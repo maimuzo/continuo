@@ -112,7 +112,7 @@ ok  github.com/maimuzo/continuo/test/internal/tracker    1.431s
 | medium/low | `require_pushed` に対応する手順が 3-9 に無かった | upstream への到達の検査と、upstream が無い branch の扱いを足した |
 | medium | `HERDR_SOCKET_PATH` が未定義だと起動できない既定値だった | 素の既定パスに変え、実装とテストも合わせた |
 | medium | hook の逃がし先の形式が書かれていなかった | パス・1件1ファイル・読む順序・削除・壊れた JSON の扱いを書いた |
-| medium | issue がボードに載る経路と、`Ice Box` へ落とす担い手が無かった | 4-1 の遷移表に2行足した |
+| medium | issue がカンバンに載る経路と、`Ice Box` へ落とす担い手が無かった | 4-1 の遷移表に2行足した |
 | medium | 要約版に、詳細版に無い遷移と機能が書かれていた | 詳細版に合わせた |
 | medium | 観測が 2.1.233 と 2.1.234 の2回に分かれているのに1つの表にまとめていた | 分けて書き、**2026-08-18 の生ログが残っていない**ことも明記した |
 | medium | `dontAsk` / `auto` / `CLAUDE_CODE_RETRY_WATCHDOG` の根拠に原文の引用が無かった | 公式ドキュメントの原文と訳を足した。**「唯一の公式手段」という断定は外した** |
@@ -176,7 +176,7 @@ ok  github.com/maimuzo/continuo/test/internal/tracker    1.431s
 **[CLAUDE.md](../../CLAUDE.md) の再掲。**worker への指示にも必ず含める。
 
 - **`claude -p` は使わない。**提案もしない。Claude Agent SDK と API の直叩きも同じ理由で対象外
-- **GitHub Projects v2 の project #3 は本番のボードである。**検証では書き込まない。**`.claude/rules/issue.md` の手順が求めるボードの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）だけは、この禁止の対象ではない**
+- **GitHub Projects v2 の project #3 は本番のカンバンである。**検証では書き込まない。**`.claude/rules/issue.md` の手順が求めるカンバンの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）だけは、この禁止の対象ではない**
 - **`updateProjectV2Field` を呼ばない。**選択肢の指定は全件置き換えとして扱われ、設定済みの Status が全部消える
 - **`~/.claude/projects/` 配下を消さない**
 - **`~/.claude.json` を書き換えない。**読み取るだけ

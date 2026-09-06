@@ -28,8 +28,16 @@ type fakeSource struct {
 	views []orchestrator.RunView
 	// gates は GateViews が返す写しである（issue #134）。
 	gates []orchestrator.GateView
+	// cumulative は TokenTotals が返す run をまたぐ累計である（issue #238）。
+	cumulative orchestrator.TokenUsage
 	// calls は RunViews が呼ばれた回数である。
 	calls int
+	// tokenCallOrder は TokenTotals を呼んだ時点の calls の値である（issue #238）。
+	//
+	// **`RunViews` より後に呼ばれていることを確かめるために持つ。**
+	// 逆順だと「累計が走行中の run の合計より小さい」写しが作れる。
+	// **呼ばれていなければ -1 のままである。**
+	tokenCallOrder int
 }
 
 // RunViews は写しを返す。
@@ -45,6 +53,17 @@ func (f *fakeSource) RunViews() []orchestrator.RunView {
 // 戻り値: 設定しておいた写し。
 func (f *fakeSource) GateViews() []orchestrator.GateView {
 	return f.gates
+}
+
+// TokenTotals は run をまたぐトークンの累計を返す（issue #238）。
+//
+// **呼ばれた時点の `calls` を控える。**`RunViews` より後に呼ばれていることを、
+// テストが確かめられるようにするためである。
+//
+// 戻り値: 設定しておいた累計。
+func (f *fakeSource) TokenTotals() orchestrator.TokenUsage {
+	f.tokenCallOrder = f.calls
+	return f.cumulative
 }
 
 // testTime はテストで使う固定の時刻である（経過の表示を決定的にするため）。
@@ -63,6 +82,21 @@ func newTestServer(t *testing.T, views []orchestrator.RunView) (*server.Server, 
 	return newTestServerWithGates(t, views, nil)
 }
 
+// newTestServerWithCumulative は、run をまたぐ累計も渡してダッシュボードを組み立てる
+// （issue #238）。
+//
+// t: テストの制御。
+// views: 供給する run の写し。
+// cumulative: 供給する run をまたぐ累計。
+// 戻り値の1つ目: 組み立てたダッシュボード。
+// 戻り値の2つ目: 供給元。
+func newTestServerWithCumulative(
+	t *testing.T, views []orchestrator.RunView, cumulative orchestrator.TokenUsage,
+) (*server.Server, *fakeSource) {
+	t.Helper()
+	return newTestServerFrom(t, &fakeSource{views: views, cumulative: cumulative, tokenCallOrder: -1})
+}
+
 // newTestServerWithGates は、着手の関門で止めた issue の写しも渡してダッシュボードを組み立てる
 // （issue #134）。
 //
@@ -75,7 +109,19 @@ func newTestServerWithGates(
 	t *testing.T, views []orchestrator.RunView, gates []orchestrator.GateView,
 ) (*server.Server, *fakeSource) {
 	t.Helper()
-	src := &fakeSource{views: views, gates: gates}
+	return newTestServerFrom(t, &fakeSource{views: views, gates: gates, tokenCallOrder: -1})
+}
+
+// newTestServerFrom は、供給元を指定してダッシュボードを組み立てる。
+//
+// **listen はしない。**`Handler` を通して `httptest` から叩く。
+//
+// t: テストの制御。
+// src: 供給元。
+// 戻り値の1つ目: 組み立てたダッシュボード。
+// 戻り値の2つ目: 渡した供給元（呼ばれた回数の確認に使う）。
+func newTestServerFrom(t *testing.T, src *fakeSource) (*server.Server, *fakeSource) {
+	t.Helper()
 	port := 0
 	s, err := server.New(server.Options{
 		Port:   &port,

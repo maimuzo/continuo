@@ -54,7 +54,7 @@ func (o *Orchestrator) SweepOnStartup(ctx context.Context, restored *RestoreResu
 // sweepFinishedWorktrees は cleanup.on_states の issue に対応する worktree を片付ける
 // （設計 3-9 の手順6）。
 //
-// **ボードから取るのは `cleanup.on_states` である**（`terminal_states` ではない。
+// **カンバンから取るのは `cleanup.on_states` である**（`terminal_states` ではない。
 // 既定値はどちらも `["Done"]` だが別のキーである）。
 //
 // ctx: 呼び出しに適用するコンテキスト。

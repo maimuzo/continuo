@@ -34,11 +34,17 @@ func agentNotFoundErr() *rpcErr {
 // 目的: `agent.get` が `agent_not_found` を返しても、**その run のセッションから
 // 作業中の hook が届いていれば、continuo が pane を閉じず、
 // 走っている turn へ1回目の指示も投げないこと。**
-// 与える情報: `agent_not_found` を返しながら、この run の `PreToolUse` を1件流す
-// `agent.get` の台本。**流すのは `agent.start` より後である**（そこが証拠になる線である）。
+// 与える情報: `agent_not_found` を返しながら、**呼ばれるたびに**この run の
+// `PreToolUse` を1件流す `agent.get` の台本。
+// **流すのは `agent.start` より後である**（そこが証拠になる線である）。
 // 成功条件（3つ）: issue が `failure_state`（`Blocked`）へ落ちず、`pane.close` が
 // 1回も呼ばれず、**その時点で `agent.prompt` が1回も呼ばれていないこと。**
 // **そのうえで、走っていた turn が終わったら1回目の指示が送られること。**
+//
+// **この3つは、run が終わる前の時点を見ている。**そのあと run は成果を書かせられずに
+// 人間へ渡るので、末尾の `WaitRunsDrained` を過ぎた時点では
+// `Status=Blocked` / `pane.close=2` / `agent.start=2` になる。
+// **末尾へ `pane.close == 0` のような検査を足すと落ちる。**実装の欠陥ではない。
 func TestStartup_hookが届いていれば起動していると扱う(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	// **これは想定して起こしている失敗である。**1回目の指示のあと `blocked` にして、
@@ -48,6 +54,11 @@ func TestStartup_hookが届いていれば起動していると扱う(t *testing
 	// **それでよい。**あの裏取りは「読めなかったら従来どおり進む」と決めてあり、
 	// **turn の終わりの判定そのものは hook（`Stop`）だけで足りている。**
 	fx.AllowLog("turn の終わりの裏取りができませんでした")
+	// **run の終わりで、コメントを書かせる復元が必ず ErrStartupBusy になる。**
+	// 下の `agent.get` の handler は呼ばれるたびに hook を注ぎ込むので、
+	// **復元が起動を確かめる `confirmStartup` から見ても、常に `since` より新しい hook がある。**
+	// **これは設計どおりの動きで、このテストが確かめたいこと（hook が届いていれば起動と扱う）とは別である。**
+	fx.AllowLog("復元した Claude Code が走っているので、コメントを書かせる指示は送れません")
 	fx.Tracker.AddIssue(sampleIssue(235, "Ready"))
 
 	transcriptDir := t.TempDir()
@@ -94,6 +105,11 @@ func TestStartup_hookが届いていれば起動していると扱う(t *testing
 	waitFor(t, 20*time.Second, "turn の終わりのあとに1回目の指示が送られる", func() bool {
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
+
+	// **run が終わりきるのを待つ。**待たずに返すと、run が
+	// `finishRunClaimed` の途中にいるまま `t.Cleanup` が context を切る。
+	// **そこまで進めたかどうかが機械の速さで変わるので、出るログも変わる。**
+	fx.WaitRunsDrained(t, 20*time.Second)
 }
 
 // TestStartup_hookが1件も来なければこれまでどおり諦める は、設計 3-80 が
