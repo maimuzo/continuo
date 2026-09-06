@@ -210,6 +210,10 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 	rs.mu.Lock()
 	path := rs.TranscriptPath
 	promptID := rs.PromptID
+	// **セッション UUID を、パスと同じ区間で写し取る**（issue #238）。
+	// **別々に読むと、その間に `restartWithNewSession` がセッションを採り直したときに、
+	// 別のセッションのパスと UUID の対を台帳へ入れることになる。**
+	sessionUUID := rs.SessionUUID
 	rs.mu.Unlock()
 
 	if path == "" {
@@ -238,35 +242,55 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 		}
 		last = result
 		if len(result.Signals) > 0 {
-			o.logTokens(rs, result.Usage)
+			o.logTokens(rs, path, sessionUUID, result.Usage)
 			return result.Signals
 		}
 	}
 
 	if last != nil {
-		o.logTokens(rs, last.Usage)
+		o.logTokens(rs, path, sessionUUID, last.Usage)
 	}
 	o.logger.Info("この turn には表明がありませんでした（次の turn で促します）", "identifier", snap.Identifier)
 	return nil
 }
 
-// logTokens は集計したトークンをログに出し、`runState` に控える（設計 3-15）。
+// logTokens は集計したトークンをログに出し、`runState` と run をまたぐ累計に控える
+// （設計 3-15 / issue #238）。
 //
 // **控えるのはダッシュボード（第9段階）が読むためだけである。**判断には使わない。
 // **HTTP の要求ごとに transcript を開き直さない**ので、turn の終わりに1回だけ書く。
 //
+// **書き込みは `addTokenUsage` が1つの `o.mu` の区間でまとめて行う。**
+// 累計と run ごとの値を別々に書くと、その隙間にダッシュボードが両方を読み切ったときに
+// **「累計が走行中の run の合計より小さい」写しができる。**
+// **ここで順序を守る必要は無い**（`addTokenUsage` の doc コメントを見よ）。
+//
+// **`addTokenUsage` は `rs.mu` の外で呼ぶ。**中で `o.mu` → `rs.mu` の順に取るので、
+// `rs.mu` を持ったまま呼ぶと逆向きの入れ子ができる。
+//
+// **`path` は、ログに出すためだけに受け取る。**台帳が使うのはセッション UUID である
+// （hook の `transcript_path` はエージェントが書き換えられる外部入力なので、鍵にしない）。
+//
 // rs: 対象の run。
-// usage: 集計したトークン。
-func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
-	rs.setTokens(usage, o.now())
+// path: `usage` を読み出した transcript のパス（ログに出す）。
+// sessionUUID: そのパスのセッション UUID。**`readSignals` がパスと同じ区間で写し取ったもの。**
+// usage: 集計したトークン（その transcript 1ファイルの絶対値）。
+func (o *Orchestrator) logTokens(rs *runState, path, sessionUUID string, usage TokenUsage) {
+	identifier := rs.issue().Identifier
+	clamped := o.addTokenUsage(rs, identifier, sessionUUID, usage, o.now())
 	o.logger.Info("トークンを集計しました",
-		"identifier", rs.issue().Identifier,
+		"identifier", identifier,
 		"api_calls", usage.APICalls,
 		"input", usage.Input,
 		"cache_creation", usage.CacheCreation,
 		"cache_read", usage.CacheRead,
 		"output", usage.Output,
 	)
+	if clamped {
+		// **黙って丸めない。**累計が実際より小さくなったことを、あとから確かめられるようにする。
+		o.logger.Warn("transcript の集計のうち、前回より小さかった項目の差分を0にしました",
+			"identifier", identifier, "transcript_path", path)
+	}
 }
 
 // applySignals は拾った表明どおりに Status を動かす（設計 3-25 / 3-26）。
@@ -949,6 +973,15 @@ func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
 // **見送った理由は、身元ファイルの cleanup_deferred_at がゼロ値のときだけ issue へ書く**
 // （毎巡回で警告を積まない。設計 3-9 の手順2c）。
 //
+// **実際に消えたときだけ、トークンの台帳からもこの issue を落とす**（issue #238）。
+// **worktree が残っているうちは落とせない。**残っていると、人間が Status を戻したときに
+// 同じセッションへ `--resume` で復帰し、**同じ transcript が最初から全部足される。**
+// **消えなかったとき（`cleanupPath` が false）は落とさない**ので、見送りでも二重に数えない。
+//
+// **`cleanupPath` を呼ぶ場所は他にも2つある**（`SweepOnStartup` と復元の `cleanupInto`）。
+// **そちらは台帳を落としていない。**どちらも起動時にしか走らず、その時点で台帳は空だからである。
+// **巡回の最中に走る片付けを新しく足すなら、そこでも `forgetTokenLedger` を呼ぶこと。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) cleanupWorktree(ctx context.Context, rs *runState) {
@@ -956,7 +989,9 @@ func (o *Orchestrator) cleanupWorktree(ctx context.Context, rs *runState) {
 	if snap.WorktreePath == "" {
 		return
 	}
-	o.cleanupPath(ctx, snap.Identifier, snap.WorktreePath, snap.Base, issueNodeID(rs.issue()))
+	if o.cleanupPath(ctx, snap.Identifier, snap.WorktreePath, snap.Base, issueNodeID(rs.issue())) {
+		o.forgetTokenLedger(snap.Identifier)
+	}
 }
 
 // cleanupPath は worktree と branch と設定ファイルを、パスを指定して片付ける（設計 3-9）。
