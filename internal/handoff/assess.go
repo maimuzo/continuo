@@ -581,7 +581,7 @@ func HasBidBy(bids []Bid, login string) (Bid, bool) {
 // 戻り値: 印を先頭に置いたコメント本文。
 //
 // **GitHub に載る本文とは1行違う。**投稿する直前に
-// `config.WithAIMarker` が印の直後へ `<!-- continuo:ai -->` を足すためである（設計 3-82）。
+// [internal/tracker](../tracker) の `ComposeCommentBody` が、印の直後へ `<!-- continuo:ai -->` を足すためである（設計 3-82）。
 // **先頭の印は動かないので、`IsMarked` も `payloadAfterMarker` もそのまま通る。**
 func FormatReleased(r Released) string {
 	return config.HandoffReleasedMarker + "\n" + marshalLine(r) + "\n\n" +

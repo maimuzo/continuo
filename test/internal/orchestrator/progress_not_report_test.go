@@ -202,7 +202,7 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 	}
 	// **エージェントの印より後ろに置かせる。**先に置かせると `c.IsAgent` が偽になり、
 	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
-	marker := "<!-- continuo:agent -->"
+	marker := fx.Config.Tracker.Comments.Marker
 	if i, j := strings.Index(sent, marker), strings.Index(sent, config.AIMarker); i < 0 || j < 0 || j < i {
 		t.Errorf("機械が書いた印が、エージェントの印より前にあります（%d と %d）:\n%s", i, j, sent)
 	}

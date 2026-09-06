@@ -9053,7 +9053,8 @@ continuo 本体（`continuo:self` ほか）と、continuo が起動したエー�
 
 #### 印の綴りと置き場所
 
-**[internal/config/aimarker.go](../../internal/config/aimarker.go) の `AIMarker`。設定キーにしない。**
+**綴りは [internal/config/default.go](../../internal/config/default.go) の `AIMarker`**（`ProgressMarker` / `PlanMarker` と同じ場所）。**設定キーにしない。**
+**差し込む処理は [internal/tracker/aimarker.go](../../internal/tracker/aimarker.go) にある。**コメントの本文を編むのは、その package だけである。
 `ProgressMarker` と同じ理由である。**機械ごとに違う値にできると、別の機械や別の project が書いた印を読めなくなる。**
 **固定であることが、この印の値打ちそのものである。**
 

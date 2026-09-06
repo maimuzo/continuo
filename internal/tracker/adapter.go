@@ -1199,7 +1199,11 @@ func ComposeCommentBody(body, selfMarker string) string {
 	// 持ち回りのコメント（入札・hold・released）は `selfMarker` が空で渡ってくるので、
 	// **本文が自分で持っている印の後ろへ入る。**そちらは固定の `<!--` の印である。
 	full := withAIMarker(body)
-	if selfMarker != "" {
+	// **`self_marker` が印と同じ値でも、二重にしない。**
+	// **`self_marker` は利用者が設定で決める文字列で、形も値も縛られていない。**
+	// 同じ値を書かれると、印が2行並んだ本文を毎回投稿することになる。
+	// **落としても `FetchComments` の判定は変わらない。**先頭は同じ文字列のままである。
+	if selfMarker != "" && strings.TrimSpace(selfMarker) != config.AIMarker {
 		full = selfMarker + "\n" + full
 	}
 	return full

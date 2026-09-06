@@ -107,7 +107,7 @@ func BuildContinuationPrompt(
 // しかも次の行が「本文の中では囲みを外した形で」と言うので、
 // **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
-// 書き分けは [docs/upgrading.md:239-245](docs/upgrading.md#L239-L245) に揃える。
+// 書き分けは [docs/upgrading.md:325-331](docs/upgrading.md#L325-L331) に揃える。
 //
 // **機械が書いた印（`config.AIMarker`）も書かせる**（設計 3-82）。
 // **`marker` の次の行に置かせる。**先に置かせると `c.IsAgent` が偽になり、
@@ -124,7 +124,11 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	// `handoff.StartsAsProgressReport`（[internal/handoff/assess.go](../handoff/assess.go)）も、
 	// 行頭ちょうどの印しか数えない。**
 	// **字下げした見本を送ると、写したエージェントが違う形の本文を書く。**
-	fmt.Fprintf(&b, "gh issue comment %s --body \"%s\n%s\nここに何をしたかを書く\"\n\n",
+	// **囲みの中へ入れる。**行頭の `<!--` は、送る文面を組み立てる経路（`prompt.Build`）が
+	// **コメントとして落とす。**いまこの文面はその経路を通らないが、
+	// **通す形へ変わったときに、印の行だけが黙って消える。**
+	// [internal/prompt/builtin.md](../prompt/builtin.md) の 5-3 も、同じ理由で囲みに入れている。
+	fmt.Fprintf(&b, "```bash\ngh issue comment %s --body \"%s\n%s\nここに何をしたかを書く\"\n```\n\n",
 		issueURL, marker, config.AIMarker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
 	// **印の順序を名指しする**（設計 3-82）。**`marker` を先に、`AIMarker` をその次に置く。**

@@ -146,6 +146,24 @@ func isMarkerLine(line string) bool {
 	return strings.Contains(line[len(commentOpen):], commentClose)
 }
 
+// lineEndingAt は、差し込む位置で使う改行の綴りを返す。
+//
+// **直前の行が CRLF で終わっていれば CRLF。**
+// **先頭へ差し込むときは、続く最初の行の終わり方に合わせる。**
+//
+// prefix: 差し込む位置より前の部分。
+// suffix: 差し込む位置より後ろの部分。
+// 戻り値: `\n` か `\r\n`。
+func lineEndingAt(prefix, suffix string) string {
+	if strings.HasSuffix(prefix, "\r\n") {
+		return "\r\n"
+	}
+	if i := strings.IndexByte(suffix, '\n'); i > 0 && suffix[i-1] == '\r' {
+		return "\r\n"
+	}
+	return "\n"
+}
+
 // spliceAIMarker は、本文の指定の位置へ config.AIMarker を1行差し込む。
 //
 // body: 差し込む前の本文。
@@ -153,13 +171,11 @@ func isMarkerLine(line string) bool {
 // 戻り値: 差し込んだ本文。
 func spliceAIMarker(body string, at int) string {
 	prefix, suffix := body[:at], body[at:]
-	// **改行の綴りは本文全体から見る。**差し込む位置が先頭でも、
-	// **本文が CRLF なら CRLF で足す。**直前の行だけを見ると、
-	// **先頭に印が1つも無い本文（git の失敗をそのまま貼ったものなど）で LF が混ざる。**
-	eol := "\n"
-	if strings.Contains(body, "\r\n") {
-		eol = "\r\n"
-	}
+	// **改行の綴りは、差し込む位置の行から決める。**
+	// **直前の行だけを見ると、差し込む位置が先頭のときに LF が混ざる。**
+	// **本文のどこかに CRLF があれば CRLF、では広すぎる。**
+	// 末尾の1行だけが CRLF の本文で、LF の場所へ CRLF を足すことになる。
+	eol := lineEndingAt(prefix, suffix)
 	// **空白だけの前置きは、空行にして残さない。**
 	// `"  素の本文"` のような本文で、1行目が空白だけの行になる。
 	if strings.TrimSpace(prefix) == "" {
