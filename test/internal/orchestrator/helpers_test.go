@@ -304,7 +304,24 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 	if err != nil {
 		t.Fatalf("テスト用herdr mock の socket を bind できません（%s）: %v", socketPath, err)
 	}
-	t.Cleanup(func() { _ = ln.Close() })
+	// **serve の goroutine を、テストが終わる前に待ち切る。**
+	//
+	// **`serve` はテスト本体が終わったあとにも動く。**走行中の run は、テストが返ったあとにも
+	// `agent.prompt` を送るためである（`serve` の冒頭のコメント）。
+	// **その goroutine が `t.Logf` を叩くと、`-race` がデータ競合として落とす。**
+	// 終わった `*testing.T` の内部状態を、testing のほうが書き換えているところへ読みに行くためである。
+	// **実測（2026-09-06。CI の ubuntu-latest）。**`helpers_test.go` の
+	// 「テスト用herdr mock が応答を書けません」の `t.Logf` で `WARNING: DATA RACE` が出て、
+	// **そのとき走っていた別のテストが落ちた。**
+	//
+	// **待ち受けを閉じてから待つ。**閉じれば新しい接続は増えず、`serve` は1件のリクエストで返る。
+	// **`orc.Close` はこれより先に走る**（`t.Cleanup` は後入れ先出しで、`orc.Close` の登録は
+	// `newFakeHerdr` の呼び出しより後である）。**だから待ち始めた時点で、続きの接続はもう無い。**
+	var serving sync.WaitGroup
+	t.Cleanup(func() {
+		_ = ln.Close()
+		serving.Wait()
+	})
 
 	fh := &fakeHerdr{
 		socketPath: socketPath,
@@ -320,7 +337,11 @@ func newFakeHerdr(t *testing.T) *fakeHerdr {
 			if err != nil {
 				return
 			}
-			go fh.serve(t, conn)
+			serving.Add(1)
+			go func(c net.Conn) {
+				defer serving.Done()
+				fh.serve(t, c)
+			}(conn)
 		}
 	}()
 	return fh
