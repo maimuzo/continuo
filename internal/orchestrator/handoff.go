@@ -690,17 +690,18 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 //
 // **順番を入れ替えてはならない。**
 //
-//  0. 外す相手を確かめる                    … **決まらなければ after_run を走らせずに戻る**
-//  1. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
-//  2. 自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
-//  3. worker を止める                        … pane を閉じる
-//  4. 印から外す                             … スロットを空ける
+//  0. 外す相手を確かめる                      … **決まらなければ after_run を走らせずに戻る**
+//  1. 走っているサブエージェントを待つ        … **push より前。書きかけの木を push しない**
+//  2. workspace_hooks.after_run を走らせる   … 利用者が書いた push がここで動く
+//  3. 自分の担当者を外し、released を書く     … **失敗したら pane を閉じずに戻る**
+//  4. worker を止める                          … pane を閉じる
+//  5. 印から外す                               … スロットを空ける
 //
 // **段0 を置く理由。**`RunAfterRunOnce` は実行の前に印を立て、**印を消すのは着手と片付けだけである。**
 // **draft issue と「`gh` の持ち主を取れない」の2つは、走らせる前に分かる。**
 // 先に確かめれば、**その2つで after_run の印を無駄に消費しない。**
 //
-// **段2 を段3 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
+// **段3 を段4 より先に置く。**逆にすると、`viewerIdentity` を取れなかったときに
 // **pane だけ閉じて担当が残り、`idle_timeout_ms` のあいだ誰も動かない issue になる。**
 //
 // **段1 を段2 より先に置く。**逆にすると、`released` を読んだ次の機械が、
@@ -762,6 +763,10 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// **ここで上限を置かないと `gh` が固まったときに誰も止められない。**
 	checkCtx, cancelCheck := context.WithTimeout(keepCtx, quotaReleaseCheckBudget)
 	defer cancelCheck()
+	// **確かめられない run は、しばらく置く**（issue #197）。
+	// **issue がカンバンから見えなくなった run は、ここで永久に確かめられない。**
+	// **毎巡回で herdr と `gh` を叩き、`Warn` を1行出し続けることになる。**
+	// **見えなくなった run は `reconcileRunning` が止める。**そちらへ任せる。
 	mine, known, newAccount := o.mayReleaseOwnWork(checkCtx, rs)
 	switch {
 	case !known:
@@ -791,7 +796,28 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		return false
 	}
 
-	// **段1。`after_run` を、担当を外す前に走らせる。**
+	// **段1。走っているサブエージェントが終わるのを、猶予いっぱいまで待つ**（issue #197）。
+	//
+	// **`after_run` より前に置く。順番を入れ替えてはならない。**
+	// 人間の指示は「そのセッションのサブエージェントを含め完全停止するまで待って、
+	// **止まったら**すぐに担当を変更して**push や進捗内容を整理して**引き継ぐ」である（2026-09-06）。
+	// **あとに置くと、書きかけの木を push し、そのうえで担当を渡すことになる。**
+	// **次に拾う機械は、途中まで書かれた状態から始める。**
+	//
+	// **これは待つだけで、手放すかどうかの門にはしない。**
+	// **走っているサブエージェントの一覧は、枠待ちの最中は更新されない**（次の turn を
+	// 始めるときと `SubagentStop` を受けたときにしか空にならず、どちらも起きない）。
+	// **門にすると、手放しが1回も起きなくなる**（6段の段4 で issue #197 のコメントへ記録した）。
+	//
+	// **持ち時間は猶予の2倍にする。**同じ値にすると ctx のほうが先に切れて、
+	// **`waitForRunningSubagents` の「猶予のあいだに終わらなかった」という `Warn` が一度も出ない。**
+	// その1行が、書きかけの編集が残っているかもしれないことを人間へ伝える唯一の合図である。
+	waitCtx, cancelWait := context.WithTimeout(
+		keepCtx, 2*time.Duration(o.cfg.Claude.PollWaitMs)*time.Millisecond)
+	o.waitForRunningSubagents(waitCtx, rs)
+	cancelWait()
+
+	// **段2。`after_run` を、担当を外す前に走らせる。**
 	// **順番を入れ替えてはならない。**外してから push すると、`released` を読んだ次の機械が
 	// **こちらの `git push` が終わる前に、同じ branch で作業を始めうる**
 	// （`workspace_hooks.timeout_ms` を入札の締め切りより長くしている設定で起きる）。
@@ -805,7 +831,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// `context deadline exceeded` だけが残る。**
 	afterRunOK := o.runAfterRunOK(keepCtx, rs)
 
-	// **段2。GitHub への書き込みには、herdr の持ち時間を使わない。**
+	// **段3。GitHub への書き込みには、herdr の持ち時間を使わない。**
 	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
 	// **担当者を外す・`released` を書くという2本の GraphQL に足りない。**
 	// **足りないと毎巡回でやり直し、run はスロットと pane を握ったまま残る。**
@@ -837,20 +863,6 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		rs.endTerminal()
 		return false
 	}
-
-	// **段3。走っているサブエージェントが終わるのを、猶予いっぱいまで待つ**（issue #197）。
-	// **人間の指示は「そのセッションのサブエージェントを含め完全停止するまで待って」である**
-	// （2026-09-06）。**待たずに閉じると、そのとき書きかけだった編集がまるごと消える。**
-	//
-	// **これは待つだけで、手放すかどうかの門にはしない。**
-	// **走っているサブエージェントの一覧は、枠待ちの最中は更新されない**（次の turn を
-	// 始めるときと `SubagentStop` を受けたときにしか空にならず、どちらも起きない）。
-	// **門にすると、手放しが1回も起きなくなる**（6段の段4 で issue #197 のコメントへ記録した）。
-	// **待つだけなら `claude.poll_wait_ms` で必ず打ち切られるので、止まらない。**
-	waitCtx, cancelWait := context.WithTimeout(
-		keepCtx, time.Duration(o.cfg.Claude.PollWaitMs)*time.Millisecond)
-	o.waitForRunningSubagents(waitCtx, rs)
-	cancelWait()
 
 	// **段4。pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
 	cleanupCtx, cancel := context.WithTimeout(

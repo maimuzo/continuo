@@ -607,7 +607,7 @@ pane が残っていればそちらから引けるが、**pane が無ければ�
 **この穴が開くのは「落ちたあとに人間が pane を閉じた」場合に限られる。**
 
 **`on_broken_worktree: skip` を選べば、この worktree があっても起動は続く**
-（[internal/config/types.go:252-255](../../../internal/config/types.go#L252-L255)）。
+（[internal/config/types.go:249-252](../../../internal/config/types.go#L249-L252)）。
 **既定を変えることは、この設計では提案しない。**
 
 ---
@@ -874,7 +874,7 @@ CodeDefaultBranch string
 **`NativeRef` には入れない。**あそこは「orchestrator が中身を解釈しない」場所であり、
 `default_branch` の1キーだけが例外だと 3-22 が明記している。**例外を増やさない。**
 
-**[internal/orchestrator/dispatch.go:1591-1601](../../../internal/orchestrator/dispatch.go#L1591-L1601) の
+**[internal/orchestrator/dispatch.go:1151-1161](../../../internal/orchestrator/dispatch.go#L1151-L1161) の
 `toIssueRef` が、`Issue` から上の5つを写す。**
 **`CodeOwner` と `CodeRepo` は、`Issue.CodeRepoNameWithOwner` を
 最初の `/` 1つだけで割って入れる**（`strings.Cut`）。割れなければ両方とも空にして
@@ -1074,7 +1074,7 @@ Development のリンクを1本にしてから、Status を Ready に戻して�
 鍵は identifier ＋ 理由、3回・60秒、メモリだけ）。
 **ここで3回・60秒を待つ意味は大きい。**カンバンの候補一覧は GitHub のサーバ側の検索結果であり、
 **索引の反映が遅れて1巡回だけ答えが揺れることがある**（3-34。
-[internal/orchestrator/dispatch.go:861-863](../../../internal/orchestrator/dispatch.go#L861-L863) が
+[internal/orchestrator/dispatch.go:198-200](../../../internal/orchestrator/dispatch.go#L198-L200) が
 「直前に書いた値が索引へ反映される前に取り直すと」と書いて、同じ揺れに守りを置いている）。
 **1回目で書くと、揺れただけの issue に誤った案内が付く。**
 
@@ -1278,12 +1278,12 @@ push した branch の名前でも引いてください。
 | どこ | いま何を見ているか | どう変えるか |
 | --- | --- | --- |
 | [internal/tracker/query.go:1018](../../../internal/tracker/query.go#L1018) | `repoTrusted(owner, repo)`（**issue のリポジトリ**）が偽なら `Dispatchable` を偽にする | **コードのリポジトリで呼ぶ** |
-| [internal/orchestrator/dispatch.go:1258](../../../internal/orchestrator/dispatch.go#L1258) | `o.ws.CheckTrust(issue.Owner, issue.Repo)` | **コードのリポジトリで呼ぶ** |
-| [internal/orchestrator/dispatch.go:1306](../../../internal/orchestrator/dispatch.go#L1306) | `key := issue.Owner + "/" + issue.Repo`（重複を抑える鍵） | **コードのリポジトリで持つ。**issue のリポジトリで持つと、**同じ issue のリポジトリに属する別々の fork の未信頼が1つに潰れ、2つ目が通知されない** |
-| [internal/orchestrator/dispatch.go:1333](../../../internal/orchestrator/dispatch.go#L1333) | `buildUntrustedComment(issue.Owner, issue.Repo, reason)` | **コードのリポジトリを渡す。**渡さないと「issue のリポジトリが信頼登録されていません」という**間違った直し方**が人間に届く |
-| [internal/orchestrator/dispatch.go:1268](../../../internal/orchestrator/dispatch.go#L1268) | `o.clearUntrusted(issue.Owner, issue.Repo)`（印を消す） | **鍵と同じくコードのリポジトリで呼ぶ。**揃えないと印が二度と消えず、**信頼を付け直しても再通知できない** |
+| [internal/orchestrator/dispatch.go:595](../../../internal/orchestrator/dispatch.go#L595) | `o.ws.CheckTrust(issue.Owner, issue.Repo)` | **コードのリポジトリで呼ぶ** |
+| [internal/orchestrator/dispatch.go:643](../../../internal/orchestrator/dispatch.go#L643) | `key := issue.Owner + "/" + issue.Repo`（重複を抑える鍵） | **コードのリポジトリで持つ。**issue のリポジトリで持つと、**同じ issue のリポジトリに属する別々の fork の未信頼が1つに潰れ、2つ目が通知されない** |
+| [internal/orchestrator/dispatch.go:670](../../../internal/orchestrator/dispatch.go#L670) | `buildUntrustedComment(issue.Owner, issue.Repo, reason)` | **コードのリポジトリを渡す。**渡さないと「issue のリポジトリが信頼登録されていません」という**間違った直し方**が人間に届く |
+| [internal/orchestrator/dispatch.go:605](../../../internal/orchestrator/dispatch.go#L605) | `o.clearUntrusted(issue.Owner, issue.Repo)`（印を消す） | **鍵と同じくコードのリポジトリで呼ぶ。**揃えないと印が二度と消えず、**信頼を付け直しても再通知できない** |
 
-**トラッカー側を直さないと、`dispatch.go:1041` へ到達しない。**
+**トラッカー側を直さないと、`dispatch.go:595` へ到達しない。**
 `mapRawItemToIssue` はリンクを読んで `CodeRepoNameWithOwner` を決めたあとに
 `repoTrusted` を呼ぶ順に組み替える。**`notDispatchableReason` の文面も、
 コードのリポジトリの名前を出すように直す**（いまは issue のリポジトリ名を出す）。

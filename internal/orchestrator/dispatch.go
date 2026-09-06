@@ -300,6 +300,14 @@ func (o *Orchestrator) logNewWorkBlocked(
 	// **観測した使用率を出す。**閾値だけでは、
 	// **5時間の枠と1週間の枠のどちらが原因かを人間が読めない。**
 	// **読めていない枠は行ごと出さない。**出すと「使用率0」と読めてしまう。
+	// **枠を読めなかったときは、数字を1つも出さない**（issue #173）。
+	// **最後に読めた写しは残っているが、それを並べると
+	// 「枠を読めない」と名乗りながら使用率を出す1行になる。**
+	// **読む人は、どちらが本当かを決められない。**
+	if skip == handoff.SkipQuotaUnreadable {
+		snap = nil
+		stale = false
+	}
 	session, weekly := o.observedPercentsOf(snap)
 	if session != percentUnknown {
 		args = append(args, "5時間の枠の使用率", session)
@@ -510,9 +518,12 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		}
 
 		// **枠に余裕が無いなら、担当者のいない issue はここで落とす**（issue #173）。
-		// **`preflight` より前に置く。**あちらは issue ごとに git を2プロセス起こすので、
-		// **104件のカンバンでは巡回1回あたり約200プロセスになる。**
+		// **`preflight` より前に置く。**あちらは issue ごとに git を2プロセス起こす。
 		// **どうせ下の `handoffGate` が入札しないと答えるので、その全部が捨てられる。**
+		//
+		// **節約できるのは、担当者のいない issue のぶんだけである。**
+		// **担当者のいる issue は通す**ので、そこでは `preflight` が走り続ける。
+		// **通す理由は下にある**（期限切れの担当を外す経路が `handoffGate` の中にある）。
 		//
 		// **担当が既に自分にある issue は落とさない。**入札が要らないので、
 		// **枠に余裕が無くても着手する**（走っている run の面倒を見る経路がここしかない）。

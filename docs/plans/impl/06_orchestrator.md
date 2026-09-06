@@ -206,7 +206,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | `turn_test.go` | 空の `Stop` だけで終わりと判定しない／項目が欠けていたら判定不能／表明の促し／`max_dispatch_turns`／`blocked` の `esc`／wait の掛け方 |
 | `group_test.go` | グループの表明（`Ice Box` の issue も動かす）／カンバンに無い対象／コメントを書かせ直す9段 |
 | `stall_test.go` | **`testing/synctest` で実時間ゼロ。**画面の版が増えている間は打ち切らない／版が止まったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
-| `quota_test.go` | 枠待ちの2条件／`pause_above_percent` は新規だけ止める／`none` なら1回も叩かない／資格情報が無くても起動は続く／**枠明けに `working` なら継続の指示を送らない** |
+| `quota_test.go` | 枠待ちの2条件／余裕値が0以下なら入札の要る issue だけ止める／`none` なら1回も叩かない／資格情報が無くても起動は続く／**枠明けに `working` なら継続の指示を送らない** |
 | `prompt_choice_test.go` | **復元で引き継いだ run には継続の指示（5-4）を送る**／**再着手はセッションへ復帰したうえで1回目の本文（5-3）を `.attempt` 付きで送る** |
 | `resume_session_test.go` | **新規の着手は `--session-id`、再着手は `--resume`**／身元ファイルの `session_uuid` を変えない／**復帰に失敗したら新しいセッションで始め直す**／**会話の記録が無い UUID へは `--resume` を投げない**（設計 3-3c）／**UUID がパスに使えない形なら復帰しない・置き場所を読めないときは復帰を試す** |
 | `terminal_test.go` | **巡回のループがコメントの確認でブロックしない**／1回の stall で abandon が2回走らない／打ち切りの前にコメントを確かめる |

@@ -242,7 +242,7 @@ backtick を入れるために `"`" + `review` + "`" +` の形で文字列を毎
 
 **両方向とも壊れる。**[internal/workspace/prepare.go:243-250](../../../internal/workspace/prepare.go#L243-L250) は
 再利用でも `resolveBase` を呼び、その値が
-[internal/orchestrator/dispatch.go:1502](../../../internal/orchestrator/dispatch.go#L1502) の `Base: prepared.Base.String()` から
+[internal/orchestrator/dispatch.go:839](../../../internal/orchestrator/dispatch.go#L839) の `Base: prepared.Base.String()` から
 [internal/workspace/identity.go:457-462](../../../internal/workspace/identity.go#L457-L462) へ流れる。
 
 | 向き | 何が起きるか |
