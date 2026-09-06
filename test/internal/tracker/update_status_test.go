@@ -84,7 +84,7 @@ func countStatusMutations(fs *fakeGraphQLServer) int {
 // 与える情報: 取り直し応答の State が "In Review"（目的の値と同じ）である偽サーバ。
 // 成功条件: 書き込みミューテーションのリクエストが送られないこと（Bootstrap + 取り直しの
 // 2リクエストだけで終わること）。UpdateStatus が Reached だけ真、Wrote は偽を返すこと
-// （**目的の Status にはなっているが、ボードは動いていない**）。
+// （**目的の Status にはなっているが、カンバンは動いていない**）。
 func TestUpdateStatus_既に同じ値なら書きに行かない(t *testing.T) {
 	refetched := asProjectV2ItemNode(issueItemJSON(testIssueItemOpts{
 		ItemID: "item-1", Status: "In Review", Owner: "octocat", Repo: "hello-world", Number: 1, Title: "t",

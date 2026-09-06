@@ -9,18 +9,18 @@ import (
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// TestBootstrap_ボードにあって設定に無いStatusを起動時に名前で知らせる は、
+// TestBootstrap_カンバンにあって設定に無いStatusを起動時に名前で知らせる は、
 // 設計 3-50 の「起動時に1回だけ知らせる」を確かめる。
 //
-// 目的: 起動時の照合は「設定の名前がボードに在るか」の一方向だけである。
-// **ボードにあって設定に無いものは件数（`status_options=6`）にしか出ない。**
+// 目的: 起動時の照合は「設定の名前がカンバンに在るか」の一方向だけである。
+// **カンバンにあって設定に無いものは件数（`status_options=6`）にしか出ない。**
 // 知らない Status へ動かされた issue は worker を止められるので、名前を先に見せておく。
 //
-// 与える情報: ボードの選択肢は Ice Box / Ready / In Progress / Blocked / In Review / Done。
+// 与える情報: カンバンの選択肢は Ice Box / Ready / In Progress / Blocked / In Review / Done。
 // 設定が名前を持つのは Ready / In Progress / Done / Blocked / In Review の5つで、
 // **`Ice Box` だけが設定のどこにも出てこない。**
 // 成功条件: Bootstrap のログに `Ice Box` が名前で出ること。件数だけで済ませないこと。
-func TestBootstrap_ボードにあって設定に無いStatusを起動時に名前で知らせる(t *testing.T) {
+func TestBootstrap_カンバンにあって設定に無いStatusを起動時に名前で知らせる(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))

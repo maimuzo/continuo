@@ -355,7 +355,7 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 // **代表にコメントが2件付く。**設計 6-27 が決めた「代表へは新しいコメントを1件も増やさない」が崩れる。
 //
 // **2つ。**`In Review` と `Blocked` は `tracker.status_signal_map` と `tracker.failure_state` で
-// 変えられる名前である。**節がその名前を書くと、列名を変えたボードで指示だけが古いまま残る。**
+// 変えられる名前である。**節がその名前を書くと、列名を変えたカンバンで指示だけが古いまま残る。**
 // エージェントが見るのは自分の表明の値（`review` / `blocked`）だけでよい。
 //
 // 与える情報: prompt.Builtin() の、まとめて直したときの節。
@@ -420,7 +420,7 @@ func TestTemplate_グループの成果報告は対象を絞りStatus名を書�
 		if strings.Contains(section, notWant) {
 			t.Errorf("%q の節に Status の名前 %q が書かれています。"+
 				"その名前は tracker.status_signal_map と tracker.failure_state で変えられるので、"+
-				"列名を変えたボードでは指示だけが古いまま残ります", groupHeading, notWant)
+				"列名を変えたカンバンでは指示だけが古いまま残ります", groupHeading, notWant)
 		}
 	}
 }

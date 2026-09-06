@@ -122,7 +122,7 @@ type Run struct {
 	Title string `json:"title"`
 	// URL は issue の URL である。draft issue は持たないので空文字になる。
 	URL string `json:"url"`
-	// State はボード上の Status である。
+	// State はカンバン上の Status である。
 	State string `json:"state"`
 	// TurnCount は continuo が送った turn の回数である（設計 3-14）。
 	TurnCount int `json:"turn_count"`

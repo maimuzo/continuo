@@ -100,8 +100,8 @@ func runDoctorBinaryWithEndpoint(t *testing.T, fx *fixture, bin, endpoint string
 // **ビルドしたバイナリを実際に起動して**出力と終了コードを確かめる。
 //
 // 目的: `continuo doctor` が固定の見出し語を並べて出し、すべて通れば 0 で終わること。
-// 与える情報: テスト用herdr mock・偽ボード・テスト用gh / ghq mock・一時ディレクトリのホーム
-// （**本番のボードにも実 herdr にも繋がない**）。
+// 与える情報: テスト用herdr mock・偽カンバン・テスト用gh / ghq mock・一時ディレクトリのホーム
+// （**本番のカンバンにも実 herdr にも繋がない**）。
 // 成功条件: 出力に見出し語と `✓` が並び、終了コードが 0 であること。
 func TestDoctorCLI_前提が揃っていれば全項目を出して終了コードは0(t *testing.T) {
 	fx := newFixture(t)
@@ -198,7 +198,7 @@ func TestDoctorCLI_位置引数を2つ以上渡したら使い方の誤りとし
 // TestDoctorCLI_接続先がループバック以外のhttpなら検査せずに止まる は、
 // トークンの送り先の検査が `continuo doctor` にも入っていることを確かめる。
 //
-// 目的: doctor もボードを読むために `gh auth token` のトークンを送る。**常駐プロセスと
+// 目的: doctor もカンバンを読むために `gh auth token` のトークンを送る。**常駐プロセスと
 // 同じ検査を通していないと、doctor だけが平文で外部へトークンを送る経路になる。**
 // 与える情報: `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` に `http://example.com/graphql`。
 // 成功条件: 検査結果を出さずに止まり、終了コードが `✗` の 1 とも引数の誤りの 2 とも

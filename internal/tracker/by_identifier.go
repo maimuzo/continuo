@@ -11,9 +11,9 @@ import (
 // **Status で絞らない**（設計 3-25）。グループの他の issue は `Ice Box` に置かれるので、
 // `active_states` で絞ると表明が1件も反映されない。
 // `items(query:)` の検索構文で識別子だけを絞る書き方が確認できていないため、
-// ボードを丸ごと読んで照合する。
+// カンバンを丸ごと読んで照合する。
 //
-// **費用は「2リクエスト・計 8 point」である**（104件のボード。設計 3-31 の式
+// **費用は「2リクエスト・計 8 point」である**（104件のカンバン。設計 3-31 の式
 // `cost = (1 + 親の件数 × ネストした connection の本数) ÷ 100`）。
 // このクエリは itemFieldsFragment を埋め込んでおり、その下に labels / assignees /
 // blockedBy / linkedBranches の**4本**のネストした connection を持つので
@@ -47,7 +47,7 @@ query($login: String!, $number: Int!, $statusField: String!, $after: String) {
 // ctx: 呼び出しに適用するコンテキスト。
 // identifier: `<owner>/<repo>#<番号>` の形の識別子。大文字小文字は無視して照合する。
 // 戻り値の1つ目: 見つかった Issue。見つからなければゼロ値。
-// 戻り値の2つ目: ボードに載っていれば true。載っていなければ false。
+// 戻り値の2つ目: カンバンに載っていれば true。載っていなければ false。
 // 戻り値の3つ目: GraphQL 呼び出しが失敗した場合、または project が見つからない場合のエラー。
 func (a *Adapter) FetchIssueByIdentifier(ctx context.Context, identifier string) (Issue, bool, error) {
 	target := strings.TrimSpace(identifier)
@@ -97,7 +97,7 @@ func (a *Adapter) FetchIssueByIdentifier(ctx context.Context, identifier string)
 			raw := &conn.Nodes[i]
 			// **信頼の判定関数をここでは渡さない。**判定は ghq と git を毎回起動して
 			// `~/.claude.json` を読み直すので（約56ミリ秒／件）、識別子が一致するか見る前に
-			// 全件へ掛けると、表明1行あたりボード104件ぶん・外部プロセス208回になる。
+			// 全件へ掛けると、表明1行あたりカンバン104件ぶん・外部プロセス208回になる。
 			// 一致した1件にだけ掛け直す（下）。
 			mapped := mapRawItemToIssue(raw, a.statusField, nil, a.projectNumber)
 			if !mapped.Ok {
