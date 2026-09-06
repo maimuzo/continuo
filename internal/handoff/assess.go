@@ -329,7 +329,7 @@ func StartsAsProgressReport(body string) bool {
 //
 //	[internal/prompt/prompt.go](../prompt/prompt.go) の commentOpen / commentClose
 //	[internal/orchestrator/prompt.go](../orchestrator/prompt.go) の commentOpenMarker / commentCloseMarker
-//	[internal/config/aimarker.go](../config/aimarker.go) の aiMarkerCommentOpen / aiMarkerCommentClose
+//	[internal/tracker/aimarker.go](../tracker/aimarker.go) の commentOpen / commentClose
 const commentOpen = "<!--"
 
 // lastProgressOf は、その担当者がまだ生きていることを最後に示した時刻を返す（設計 3-77b / 5-3l）。
