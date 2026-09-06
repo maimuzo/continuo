@@ -367,7 +367,7 @@ type Orchestrator struct {
 	// 「同じ理由で必ず失敗する issue」を次の巡回が0回目として拾い直してしまう。
 	// **永続化はしない**（再起動したら数え直す。設計の方針）。
 	failures map[string]*failureNote
-	// tokenTotals は run をまたぐトークンの累計である（issue #238）。
+	// tokenTotals は run をまたぐトークンの累計である（issue #238）。**mu が守る。**
 	//
 	// **「この continuo が起動してから、turn の終わりに読み取った transcript の合計」である。**
 	// **引き継いだ run（`Adopt`）では、起動より前に書かれた分も含む。**
@@ -378,7 +378,7 @@ type Orchestrator struct {
 	// 一緒に消える。**そのため、いままで画面の合計は「いま走っている run」だけを足していた。**
 	// 作りは docs/plans/impl/09_dashboard.md の「run をまたぐ累計」にある。
 	tokenTotals TokenUsage
-	// tokenLedger は「最後に累計へ計上した内容」である（issue #238）。
+	// tokenLedger は「最後に累計へ計上した内容」である（issue #238）。**mu が守る。**
 	// **キーは issue の識別子（`<owner>/<repo>#<番号>`）である。project item の ID ではない。**
 	//
 	// **item の ID にすると、ボードから外して載せ直したときに鍵が変わりうる。**
@@ -992,68 +992,68 @@ func (o *Orchestrator) release(rs *runState) {
 // **パスと絶対値を対で持つ。**`ReadTranscript` が返すのは「その transcript 1ファイルの
 // 絶対値」なので、**どのファイルから読んだ値なのかが分からないと差分を取れない。**
 type tokenLedgerEntry struct {
-	// path は最後に計上した transcript のパスである。
-	path string
-	// usage は path から最後に読み取った絶対値である。
+	// session は最後に計上した transcript のセッション UUID である。
+	//
+	// **パスではなくセッション UUID にする。**transcript のファイル名はセッション UUID で、
+	// **`--resume` で復帰しても同じファイルのままである**（設計 3-3b の実測）。
+	// **hook が名乗る `transcript_path` は使わない。**あれはエージェントが書き換えられる
+	// 外部入力で（`hookinput.go` の「hook の中身はエージェントが書き換えられる外部入力である」）、
+	// **毎 turn 違うファイル名を名乗るだけで、同じ中身を何度でも新しい鍵として全額計上させられる。**
+	// **セッション UUID は continuo が `newSessionUUID` で採るか、pane から読んだ値である。**
+	session string
+	// usage は session の transcript について、ここまで累計へ計上した合計である。
+	//
+	// **「最後に読んだ絶対値」ではない。**丸めが起きたときは、項目ごとに大きいほうを残す
+	// （`addTokenUsage`）。**残さないと、次に伸びたときに丸めたぶんを二重に足す。**
 	usage TokenUsage
 }
 
-// addTokenUsage は、transcript から読み取った絶対値を run をまたぐ累計へ差分で足す
-// （issue #238）。
+// addTokenUsage は、transcript から読み取った絶対値を run をまたぐ累計へ差分で足し、
+// あわせて run ごとの値も更新する（issue #238）。
 //
 // **`SPEC.md` 13.5 が「絶対値の合計を扱うときは、二重計上を避けるため、最後に報告した
 // 合計との差分を追うこと」と求めている。**`usage` は turn を重ねるたびに単調に増えるので、
 // **そのまま毎回足すと、10 turn 回った run は10回ぶん足される。**
 //
-// **絶対条件: `rs.mu` を持ったまま呼んではならない。**
-// このリポジトリのロックの順序は `o.mu` → `rs.mu` である（`RunViews` が `o.mu` の中で
-// `rs.snapshot()` を呼ぶ）。**`setTokens` の中へ入れると `rs.mu` → `o.mu` ができ、
-// ダッシュボードを開いた HTTP のハンドラと turn の終わりが噛み合うと continuo 全体が固まる。**
+// **累計と run ごとの値を、1つの `o.mu` の区間で書く。**
+// **分けて書くと、その隙間にダッシュボードが両方を読み切ったときに
+// 「累計が走行中の run の合計より小さい」写しができる。**
+// **1つにまとめれば、どの瞬間を切り取っても累計のほうが大きいか等しい。**
+// `rs.setTokens` は中で `rs.mu` を取るが、**このリポジトリの順序は `o.mu` → `rs.mu` なので
+// 入れ子にしてよい**（`RunViews` が `o.mu` の中で `rs.snapshot()` を呼ぶのと同じ形である）。
+//
+// **絶対条件: `rs.mu` を持ったまま呼んではならない。**逆向きの入れ子ができ、
+// **ダッシュボードを開いた HTTP のハンドラと turn の終わりが噛み合うと continuo 全体が固まる。**
 // **巡回も turn ループも `o.mu` を通るので、固まったことは外から「無音」としてしか見えない。**
 //
+// **丸めたときは、台帳へ小さいほうを書かない。**項目ごとに大きいほうを残す
+// （`prev.usage.Add(delta)` は項目ごとの最大値になる）。
+// **小さいほうを書くと、次にファイルが伸びたときに丸めたぶんをもう一度足す。**
+//
+// rs: 対象の run（`setTokens` を呼ぶ相手）。
 // identifier: issue の識別子（`<owner>/<repo>#<番号>`）。**project item の ID ではない**
 // （`tokenLedger` のコメントを見よ）。
-// path: `usage` を読み出した transcript のパス。**呼ぶ側が、実際に読んだパスを渡すこと。**
-// `rs.TranscriptPath` を読み直してはならない（`noteHook` が待っている間に上書きしうる）。
+// sessionUUID: `usage` を読み出した transcript のセッション UUID。
+// **呼ぶ側が、パスを写し取ったのと同じ `rs.mu` の区間で取ること。**
 // usage: その transcript 1ファイルから読んだ絶対値。
+// now: 集計した時刻。
 // 戻り値: 差分の1項目でも0へ丸めたら true（呼ぶ側が WARN を出す）。
-func (o *Orchestrator) addTokenUsage(identifier, path string, usage TokenUsage) bool {
-	// **鍵にする前に綴りを揃える。**`o.mu` を取る前に済ませる（ファイルシステムを引くため）。
-	key := normalizeTranscriptPath(path)
+func (o *Orchestrator) addTokenUsage(
+	rs *runState, identifier, sessionUUID string, usage TokenUsage, now time.Time,
+) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	delta, clamped := usage, false
-	if prev, ok := o.tokenLedger[identifier]; ok && prev.path == key {
+	counted := usage
+	if prev, ok := o.tokenLedger[identifier]; ok && prev.session == sessionUUID {
 		delta, clamped = usage.Sub(prev.usage)
+		// **項目ごとに大きいほうを残す。**`prev.usage + delta` がちょうどそれになる。
+		counted = prev.usage.Add(delta)
 	}
 	o.tokenTotals = o.tokenTotals.Add(delta)
-	o.tokenLedger[identifier] = tokenLedgerEntry{path: key, usage: usage}
+	o.tokenLedger[identifier] = tokenLedgerEntry{session: sessionUUID, usage: counted}
+	rs.setTokens(usage, now)
 	return clamped
-}
-
-// normalizeTranscriptPath は、台帳の鍵に使う transcript のパスの綴りを揃える（issue #238）。
-//
-// **同じファイルを2通りの綴りで名乗られても、同じ鍵にするためである。**
-// 台帳は「前に計上したのと同じファイルか」を**文字列の一致だけ**で判定しており、
-// **揃えないと `/a/b.jsonl` と `/a/./b.jsonl` が別のファイルとして扱われ、
-// そのファイルの絶対値がもう一度まるごと累計へ足される。**
-//
-// **揃えるのは、この値が外部入力だからである。**hook の `transcript_path` は
-// エージェントが書き換えられる（`hookinput.go` の「hook の中身はエージェントが
-// 書き換えられる外部入力である」）。`acceptTranscriptPath` は**解決した写しで検査するだけで、
-// 元の綴りを書き戻さない。**
-//
-// **`runState.TranscriptPath` は書き換えない。**あちらは人間へ見せるコメント（`prompt.go`）と
-// 突き合わせ（`reconcile.go`）が同じ値を使っている。**揃えるのは台帳の鍵だけでよい。**
-//
-// path: hook が名乗った transcript のパス。
-// 戻り値: 解決できたらその絶対パス。解決できなければ `filepath.Clean` だけを当てたもの。
-func normalizeTranscriptPath(path string) string {
-	cleaned := filepath.Clean(path)
-	if resolved, ok := resolvePath(cleaned); ok {
-		return resolved
-	}
-	return cleaned
 }
 
 // forgetTokenLedger は台帳からこの issue の項目を落とす（issue #238）。

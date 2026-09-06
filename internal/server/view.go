@@ -49,7 +49,9 @@ type Snapshot struct {
 	// **鍵の名前を仕様（`SPEC.md` 13.3）の `codex_totals` にしない。**continuo は codex を
 	// 使わない。応答の形が仕様の例と違うことは docs/plans/impl/09_dashboard.md が記録している。
 	//
-	// **Totals より小さくなることは無い**（`Server.snapshot` が読む順序で保証している）。
+	// **Totals より小さくなることは無い。**保証しているのは2つである。
+	// `addTokenUsage` が累計と run ごとの値を1つの錠の区間で書くことと、
+	// `Server.snapshot` が run の写しを先に、累計を後に読むことである。
 	CumulativeTotals Tokens `json:"cumulative_totals"`
 }
 

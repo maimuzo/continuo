@@ -2,7 +2,6 @@ package orchestrator_test
 
 import (
 	"context"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -95,32 +94,37 @@ func TestTokenTotals_turnを重ねても同じtranscriptを二重に数えない
 	}
 }
 
-// TestTokenTotals_同じファイルを違う綴りで名乗られても二重に数えない は、
-// 台帳の鍵を綴りで揺らせないことを確かめる（issue #238 のセキュリティレビューの指摘）。
+// TestTokenTotals_違うファイル名を名乗られても二重に数えない は、
+// 台帳の判定に hook の値を使っていないことを確かめる（issue #238 のレビューの指摘）。
 //
-// 目的: **台帳は「前に計上したのと同じファイルか」を文字列の一致だけで判定している。**
-// **hook の `transcript_path` はエージェントが書き換えられる外部入力である**
-// （`internal/orchestrator/hookinput.go` が「hook の中身はエージェントが書き換えられる
-// 外部入力である」と書いている）。**綴りを1文字変えるだけで「別のファイル」と判定されると、
-// そのファイルの絶対値がもう一度まるごと足され、累計を何度でも水増しできる。**
+// 目的: **台帳は「前に計上したのと同じ transcript か」を判定して差分を取る。**
+// **その判定に hook の `transcript_path` を使うと、エージェントが毎 turn 違うファイル名を
+// 名乗るだけで、同じ中身を何度でも新しい鍵として全額計上させられる。**
+// hook の中身はエージェントが書き換えられる外部入力であり
+// （`internal/orchestrator/hookinput.go` がそう書いている）、
+// **`acceptTranscriptPath` はセッション UUID との突き合わせを1行も行っていない。**
+// **判定はセッション UUID で行う。**あれは continuo が決める値である。
 //
-// 与える情報: 1回目の turn は `<dir>/session-1.jsonl` で終わり、2回目の turn は
-// **同じファイルを `<dir>/./session-1.jsonl` と名乗って**終わる。中身は2件目まで伸びている。
+// 与える情報: 1回目の turn は `session-1.jsonl` で終わり、2回目の turn は
+// **同じ中身を写した別名のファイル `decoy.jsonl` を名乗って**終わる。
+// **どちらも同じセッション UUID の hook である。**
 //
-// 成功条件: 累計が API 応答2件ぶんであること。**綴りを変えた分を二重に数えて
-// 3件ぶんになっていないこと。**
-func TestTokenTotals_同じファイルを違う綴りで名乗られても二重に数えない(t *testing.T) {
+// 成功条件: 累計が API 応答2件ぶんであること。**別名を名乗った分を二重に数えて
+// 4件ぶんになっていないこと。**
+func TestTokenTotals_違うファイル名を名乗られても二重に数えない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
 
 	transcriptDir := t.TempDir()
-	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+	lines := []any{
 		typedUserLine("p1", "実装してください"),
 		assistantLine("req1", "作業を続けています。\nCONTINUO-STATUS: working", false),
-	})
-	// **同じファイルを指す別の綴り。**`filepath.Clean` を当てれば同じになる。
-	wobbled := filepath.Join(transcriptDir, ".", "session-1.jsonl")
-	wobbled = filepath.Dir(wobbled) + "/./" + filepath.Base(wobbled)
+		typedUserLine("p2", "続けてください"),
+		assistantLine("req2", "まだ作業しています。\nCONTINUO-STATUS: working", false),
+	}
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", lines[:2])
+	// **中身が同じで名前だけ違うファイル。**エージェントが用意できる。
+	decoy := writeTranscript(t, transcriptDir, "decoy.jsonl", lines)
 
 	var mu sync.Mutex
 	calls := 0
@@ -133,14 +137,8 @@ func TestTokenTotals_同じファイルを違う綴りで名乗られても二�
 		case 1:
 			fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		case 2:
-			writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
-				typedUserLine("p1", "実装してください"),
-				assistantLine("req1", "作業を続けています。\nCONTINUO-STATUS: working", false),
-				typedUserLine("p2", "続けてください"),
-				assistantLine("req2", "まだ作業しています。\nCONTINUO-STATUS: working", false),
-			})
-			// **綴りだけを変えて名乗る。**
-			fx.Orc.OnHook(stopEvent("session-1", wobbled, "p2"))
+			// **同じセッションのまま、別名のファイルを名乗る。**
+			fx.Orc.OnHook(stopEvent("session-1", decoy, "p2"))
 		default:
 		}
 		return map[string]any{
@@ -156,7 +154,7 @@ func TestTokenTotals_同じファイルを違う綴りで名乗られても二�
 	})
 
 	if got, want := fx.Orc.TokenTotals(), timesResponse(2); got != want {
-		t.Fatalf("綴りを変えられて二重に数えた: got %+v, want %+v", got, want)
+		t.Fatalf("別のファイル名を名乗られて二重に数えた: got %+v, want %+v", got, want)
 	}
 }
 

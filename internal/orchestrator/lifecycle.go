@@ -210,6 +210,10 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 	rs.mu.Lock()
 	path := rs.TranscriptPath
 	promptID := rs.PromptID
+	// **セッション UUID を、パスと同じ区間で写し取る**（issue #238）。
+	// **別々に読むと、その間に `restartWithNewSession` がセッションを採り直したときに、
+	// 別のセッションのパスと UUID の対を台帳へ入れることになる。**
+	sessionUUID := rs.SessionUUID
 	rs.mu.Unlock()
 
 	if path == "" {
@@ -238,13 +242,13 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 		}
 		last = result
 		if len(result.Signals) > 0 {
-			o.logTokens(rs, path, result.Usage)
+			o.logTokens(rs, path, sessionUUID, result.Usage)
 			return result.Signals
 		}
 	}
 
 	if last != nil {
-		o.logTokens(rs, path, last.Usage)
+		o.logTokens(rs, path, sessionUUID, last.Usage)
 	}
 	o.logger.Info("この turn には表明がありませんでした（次の turn で促します）", "identifier", snap.Identifier)
 	return nil
@@ -256,29 +260,24 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 // **控えるのはダッシュボード（第9段階）が読むためだけである。**判断には使わない。
 // **HTTP の要求ごとに transcript を開き直さない**ので、turn の終わりに1回だけ書く。
 //
-// **`path` を引数で受け取る。`rs.TranscriptPath` を読み直してはならない。**
-// `noteHook` が `transcript_path` を上書きし、`readSignals` は読む前に最大1.0秒待つので、
-// **読み直すと `usage` を読んだファイルと違うパスを台帳へ入れることがある。**
-// **ずれた対を入れると、次の turn の終わりに「別のファイル」と判定され、そのファイルの
-// 全部をもう一度累計へ足す**（`addTokenUsage`）。
+// **書き込みは `addTokenUsage` が1つの `o.mu` の区間でまとめて行う。**
+// 累計と run ごとの値を別々に書くと、その隙間にダッシュボードが両方を読み切ったときに
+// **「累計が走行中の run の合計より小さい」写しができる。**
+// **ここで順序を守る必要は無い**（`addTokenUsage` の doc コメントを見よ）。
 //
-// **`addTokenUsage` は `rs.mu` の外で呼ぶ**（`addTokenUsage` の doc コメントを見よ）。
-// `setTokens` は中で `rs.mu` を取って解くので、並べても入れ子にならない。
+// **`addTokenUsage` は `rs.mu` の外で呼ぶ。**中で `o.mu` → `rs.mu` の順に取るので、
+// `rs.mu` を持ったまま呼ぶと逆向きの入れ子ができる。
 //
-// **絶対条件: 累計（`addTokenUsage`）を先に、run ごとの値（`setTokens`）を後に書く。**
-// **逆にすると、ダッシュボードが「累計が走行中の run の合計より小さい」写しを作れる。**
-// あちらは2つを別々の錠の中で読むので（internal/server の `Server.snapshot`）、
-// **この2行の隙間に読み切られると、run ごとの値にはこの turn の分が入り、
-// 累計には入っていない状態が見える。**
-// **読む順序（run が先、累計が後）と、この書く順序の両方が要る。片方だけでは保証にならない。**
+// **`path` は、ログに出すためだけに受け取る。**台帳が使うのはセッション UUID である
+// （hook の `transcript_path` はエージェントが書き換えられる外部入力なので、鍵にしない）。
 //
 // rs: 対象の run。
-// path: `usage` を読み出した transcript のパス。
+// path: `usage` を読み出した transcript のパス（ログに出す）。
+// sessionUUID: そのパスのセッション UUID。**`readSignals` がパスと同じ区間で写し取ったもの。**
 // usage: 集計したトークン（その transcript 1ファイルの絶対値）。
-func (o *Orchestrator) logTokens(rs *runState, path string, usage TokenUsage) {
+func (o *Orchestrator) logTokens(rs *runState, path, sessionUUID string, usage TokenUsage) {
 	identifier := rs.issue().Identifier
-	clamped := o.addTokenUsage(identifier, path, usage)
-	rs.setTokens(usage, o.now())
+	clamped := o.addTokenUsage(rs, identifier, sessionUUID, usage, o.now())
 	o.logger.Info("トークンを集計しました",
 		"identifier", identifier,
 		"api_calls", usage.APICalls,
@@ -289,7 +288,7 @@ func (o *Orchestrator) logTokens(rs *runState, path string, usage TokenUsage) {
 	)
 	if clamped {
 		// **黙って丸めない。**累計が実際より小さくなったことを、あとから確かめられるようにする。
-		o.logger.Warn("transcript の集計が前回より小さかったので、累計への差分を0にしました",
+		o.logger.Warn("transcript の集計のうち、前回より小さかった項目の差分を0にしました",
 			"identifier", identifier, "transcript_path", path)
 	}
 }
