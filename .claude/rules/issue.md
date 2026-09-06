@@ -22,7 +22,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 `In Progress` → `Blocked` を動かす経路を認めている
 （[docs/plans/continuo_design.md:9072](../../docs/plans/continuo_design.md#L9072)）。
 **組み込みの指示書は、それを勧めてはいない**
-（[internal/prompt/builtin.md:119](../../internal/prompt/builtin.md#L119) は「あなたが `gh` を叩く必要はありません」）。
+（[internal/prompt/builtin.md:218](../../internal/prompt/builtin.md#L218) は「あなたが `gh` を叩く必要はありません」）。
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **カンバンの操作は AI が行う。**ただし 4-1 の遷移表で「誰が」の欄が「人間」だけの3つは人間である
@@ -77,14 +77,14 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 着手順序の逆順に「先頭へ送る」（3つ目の引数 `afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
 **引数名は 2026-09-04 に読み取りだけの introspection で確かめた**（`UpdateProjectV2ItemPositionInput` の入力に `afterId` がある）。
 
-**この書き込みは worker へ渡さない**（[CLAUDE.md:269](../../CLAUDE.md#L269) の「**不可逆な操作**…**は worker に渡さない**」）。**メインエージェントが自分で叩く。**
+**この書き込みは worker へ渡さない**（[CLAUDE.md:334](../../CLAUDE.md#L334) の「**不可逆な操作**…**は worker に渡さない**」）。**メインエージェントが自分で叩く。**
 
 **守ること4つ。**
 
 | 何を | なぜ |
 | --- | --- |
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:9112](../../docs/plans/continuo_design.md#L9112)）。104件の全並べ替えで約2分かかる |
-| **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。Status の値が全部消える |
+| **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「GitHub Projects v2 の project #3 は本番のカンバンである」。**Status の値が全部消える** |
 | **段4 のあと、`Ice Box` の item はカンバン全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
 | **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9143](../../docs/plans/continuo_design.md#L9143)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:151-155](../../internal/orchestrator/dispatch.go#L151-L155) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4010-4011](../../docs/plans/continuo_design.md#L4010-L4011) の本文である**） |
 
