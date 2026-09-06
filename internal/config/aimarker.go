@@ -18,7 +18,7 @@ import (
 // **人間が打鍵したか、continuo の外の Claude Code が書いたか、この仕組みより前のものか、のどれかである。**
 //
 // **なぜ要るか。**エージェントも continuo も人間も、同じ GitHub アカウントで投稿する
-// （[internal/tracker/ghuser.go](../tracker/ghuser.go) の 24-25行）。
+// （[internal/tracker/ghuser.go](../tracker/ghuser.go) の 23-25行）。
 // **投稿者でも `author_association` でも見分けられない。**
 // **人間が前に出した指示を探して、その下から読み直す**という読み方が、いまはできない。
 //
@@ -56,9 +56,9 @@ const (
 // WithAIMarker は、本文の先頭に並ぶ印の、いちばん後ろへ AIMarker を1行足す（設計 3-82）。
 //
 // **既にある印を1つも動かさない。**先頭へ割り込ませてはならない。
-// **本文の先頭から読む判定が、本番に10ある**（設計 3-82 の表で数えた）。
-// **9つは「先頭が特定の印で始まるか」、1つは「先頭に並ぶ印の中に進捗の印があるか」である。**
-// とくに CI の2本（`design-review-result` と `code-review-result`）は
+// **本文の先頭から読む判定が、本番に11ある**（設計 3-82 の表で数えた）。
+// **10が「先頭が特定の印で始まるか」、1つが「先頭に並ぶ印の中に進捗の印があるか」である。**
+// とくに CI の3本（`design-review-result` / `code-review-result` / `design-review-skipped`）は
 // `continuo init` が利用者のリポジトリへ置いたきりで、**continuo の版を上げても書き換わらない。**
 // **先頭へ入れると、その project の pull request が全部赤になる。**
 //
@@ -132,6 +132,10 @@ func WithAIMarker(body string) string {
 // **複数行の HTML コメントの開きである。**印の行として数えると、
 // **その中へ印を差し込むことになる。**issue の画面では見えず、
 // 本文は `<!--` で始まったまま残る。
+//
+// **いまの経路では、その本文は作れない。**`WithAIMarker` を呼ぶのは
+// `tracker.ComposeCommentBody` 1つで、そこへ来る本文は continuo 自身の文言か、
+// 持ち回りの印そのもので始まる。**この判定は、呼び出し元が増えたときのための備えである。**
 //
 // **閉じも見るのは、[internal/prompt/prompt.go](../prompt/prompt.go) の
 // `stripCommentsFromLine` が既にそうしているからである。**

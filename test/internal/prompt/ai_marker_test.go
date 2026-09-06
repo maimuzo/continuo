@@ -20,7 +20,7 @@ import (
 //
 // **どれも「本文の先頭がこの目印で始まっているか」で数えられている。**
 // **前へ1行入れると、その数え方が外れる。**
-// CI の2本（`design-review-result` / `code-review-result`）は
+// CI の3本（`design-review-result` / `code-review-result` / `design-review-skipped`）は
 // `continuo init` が利用者のリポジトリへ置いたきりで、**continuo の版を上げても書き換わらない。**
 var markersThatMustComeFirst = []string{
 	"<!-- continuo:agent -->",
@@ -62,7 +62,7 @@ func TestTemplate_コメントを書かせる節すべてに機械の印があ�
 // 目的: 印を、既にある目印より前へ書かせていないことを固定する（設計 3-82）。
 //
 // **これがこの issue でいちばん壊しやすいところである。**
-// 印を先頭へ置くと、continuo の先頭一致も、CI の2本の正規表現も同時に外れる。
+// 印を先頭へ置くと、continuo の先頭一致も、CI の3本の正規表現も同時に外れる。
 // **CI は利用者のリポジトリの中にあり、continuo の版を上げても書き換わらない。**
 // **その project の pull request が全部赤になる。**
 //
