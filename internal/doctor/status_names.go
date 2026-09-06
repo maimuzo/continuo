@@ -27,7 +27,7 @@ const (
 	// stateOriginStatusSignalMap は `tracker.status_signal_map` の遷移先に書いた名前である。
 	stateOriginStatusSignalMap = "tracker.status_signal_map"
 	// stateOriginAutomatedStateRewrite は `tracker.automated_state_rewrite` の**キー**
-	// （ボードの自動化が書く Status 名）に書いた名前である。
+	// （カンバンの自動化が書く Status 名）に書いた名前である。
 	stateOriginAutomatedStateRewrite = "tracker.automated_state_rewrite"
 	// stateOriginCleanupOnStates は `cleanup.on_states` に書いた名前である。
 	stateOriginCleanupOnStates = "cleanup.on_states"
@@ -53,17 +53,17 @@ const (
 	confusionContains
 )
 
-// confusingPair は「設定に書いた名前」と「ボードの別の選択肢」の紛らわしい組である。
+// confusingPair は「設定に書いた名前」と「カンバンの別の選択肢」の紛らわしい組である。
 type confusingPair struct {
 	// Configured は設定に書いた名前とその出どころである。
 	Configured configuredState
-	// BoardOption はボード側の選択肢名（GitHub の綴りそのまま）である。
+	// BoardOption はカンバン側の選択肢名（GitHub の綴りそのまま）である。
 	BoardOption string
 	// Kind はなぜ紛らわしいのかの種別である。
 	Kind confusionKind
 }
 
-// checkStatusNames は、設定に書いた Status 名と紛らわしい選択肢がボードに無いかを見る
+// checkStatusNames は、設定に書いた Status 名と紛らわしい選択肢がカンバンに無いかを見る
 // （見出し語 `Status の名前`）。
 //
 // **記号は `✗` ではなく `!` にする。**紛らわしいだけでは continuo は動く。
@@ -71,15 +71,15 @@ type confusingPair struct {
 // エージェントが着手する**ので、黙って通してもいけない。
 //
 // **なぜ既にある検査では捕まらないのか。**Bootstrap が照合するのは
-// 「設定に書いた名前がボード側に在るか」だけである。ボードに `In Progress` と
+// 「設定に書いた名前がカンバン側に在るか」だけである。カンバンに `In Progress` と
 // `AI In Progress` が並んでいても、設定に書いたほうが在れば通る。
 // **設定どうしの重なり（`terminal_states` や `cleanup.on_states` と同じ名前）は
 // config.Validate が起動前に落とす**が、落とせるのは**綴りが同じとき**だけである。
 // **紛らわしい組は綴りが違うので、どちらの検査も素通りする。**
 //
 // cfg: 読めた場合の設定。
-// boardOptions: ボード側の Status の選択肢名（tracker.Adapter.StatusOptionNames の戻り値）。
-// boardSymbol: 上流（ボード）の記号。
+// boardOptions: カンバン側の Status の選択肢名（tracker.Adapter.StatusOptionNames の戻り値）。
+// boardSymbol: 上流（カンバン）の記号。
 // 戻り値: 検査結果。
 func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbol) Result {
 	if !cfg.OK {
@@ -135,7 +135,7 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 //
 // **`tracker.automated_state_rewrite` のキーも含める**（設計 3-55）。
 // **キーは「continuo が知らない Status」なので、実行時の照合には一度も掛からない。**
-// 紛らわしい選択肢がボードにあると（`In Progress` と `AI In Progress` など）、
+// 紛らわしい選択肢がカンバンにあると（`In Progress` と `AI In Progress` など）、
 // **書き戻しが一度も動かないのに、その理由がどこにも出ない。**
 //
 // 同じ名前が複数のキーに書いてあるときは、**先に見たキーだけを残す。**
@@ -194,15 +194,15 @@ func configuredStates(cfg config.Config) []configuredState {
 	return result
 }
 
-// findConfusingPairs は、設定に書いた名前と紛らわしいボードの選択肢を全部拾う。
+// findConfusingPairs は、設定に書いた名前と紛らわしいカンバンの選択肢を全部拾う。
 //
-// **同じ選択肢を指している組は数えない。**設定の `in progress` とボードの `In Progress` は
+// **同じ選択肢を指している組は数えない。**設定の `in progress` とカンバンの `In Progress` は
 // 前後の空白と大文字小文字を無視すれば同じ選択肢であり（tracker がその規則で引き当てる）、
 // 取り違えようがない。
 //
 // states: 設定に書いた Status 名。
-// boardOptions: ボード側の選択肢名。
-// 戻り値: 紛らわしい組（設定に書いた順・ボードの選択肢名の昇順）。
+// boardOptions: カンバン側の選択肢名。
+// 戻り値: 紛らわしい組（設定に書いた順・カンバンの選択肢名の昇順）。
 func findConfusingPairs(states []configuredState, boardOptions []string) []confusingPair {
 	sorted := append([]string(nil), boardOptions...)
 	sort.Strings(sorted)
@@ -234,7 +234,7 @@ func findConfusingPairs(states []configuredState, boardOptions []string) []confu
 //	              （`In Progress` ⊂ `AI In Progress`、`Ready` ⊂ `Ready for Review`）
 //
 // **含む・含まれるを、ただの部分文字列で見てはならない。**`Abandoned` は文字の並びとして
-// `Done` を含む（a-b-a-n-**d-o-n-e**-d）。ボードに `Done` と `Abandoned` を並べるのは
+// `Done` を含む（a-b-a-n-**d-o-n-e**-d）。カンバンに `Done` と `Abandoned` を並べるのは
 // ごく普通で、そこを警告すると、警告そのものが読まれなくなる。
 // **語の並びとして含むかどうかで見る。**
 //

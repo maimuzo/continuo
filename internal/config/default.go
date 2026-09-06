@@ -84,7 +84,7 @@ func DefaultConfig() *Config {
 					Max:   50,
 					Order: "oldest_first",
 				},
-				// 同じボードを複数の機械で持ち回るときの取り決め（設計 3-77）。
+				// 同じカンバンを複数の機械で持ち回るときの取り決め（設計 3-77）。
 				Handoff: TrackerProviderHandoffConfig{
 					BidWindowMs:   180000,
 					IdleTimeoutMs: 64800000,
@@ -113,7 +113,7 @@ func DefaultConfig() *Config {
 			// 知らない Status を見つけてから worker を止めるまでの猶予（設計 3-50）。
 			// **既定は10分。**turn 1回ぶんの表明を読めれば足りる長さにしてある。
 			UnknownStateGraceMs: 600000,
-			// ボードの自動化が動かした Status を戻す先の対応表（設計 3-54）。
+			// カンバンの自動化が動かした Status を戻す先の対応表（設計 3-54）。
 			// **既定は空である。**書かなければ、いままでどおり猶予を置いて worker を止める。
 			AutomatedStateRewrite: map[string]string{},
 			// エージェントが最終応答に書く表明の印と、その値から Status への対応（3-25）。
@@ -132,7 +132,7 @@ func DefaultConfig() *Config {
 			Root:         "~/worktrees",
 			IdentityFile: ".continuo.json",
 			// **既定は止める側である**（3-49）。壊れた worktree を飛ばして走り続けると、
-			// その issue はボード上で running_state のまま何時間も放置される。
+			// その issue はカンバン上で running_state のまま何時間も放置される。
 			OnBrokenWorktree: OnBrokenWorktreeStop,
 		},
 		WorkspaceHooks: WorkspaceHooksConfig{

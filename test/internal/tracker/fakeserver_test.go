@@ -1,6 +1,6 @@
 // Package tracker_test は internal/tracker の GitHub Projects v2 アダプタを検証する。
 //
-// **本番のボード（project #3）へは絶対に接続しない。**httptest.Server でテスト用GraphQL mock
+// **本番のカンバン（project #3）へは絶対に接続しない。**httptest.Server でテスト用GraphQL mock
 // サーバを立て、決まった JSON を返させることでアダプタの挙動を検証する
 // （タスクの絶対制約。CLAUDE.md も同じ制約を課している）。
 package tracker_test

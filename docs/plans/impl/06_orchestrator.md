@@ -38,7 +38,7 @@
 FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
   → グループの表明（CONTINUO-STATUS: #45 review）から item を引くのに要る（設計 3-25）。
     その issue は Ice Box にあるので、巡回で読んだ候補には入っていない
-  → bool は「ボードに載っているか」である。載っていなければ (ゼロ値, false, nil) を返す。
+  → bool は「カンバンに載っているか」である。載っていなければ (ゼロ値, false, nil) を返す。
     エージェントが存在しない issue 番号を書くことはありうるので、それをエラーにしない
 ```
 
@@ -204,7 +204,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | `e2e_test.go` | **1件の issue が候補に上がってから `Done` で片付くまで**／着手の13段の順番／設定ファイルの中身 |
 | `dispatch_test.go` | 候補の取り方・空きスロット・印・巡回のリクエスト本数・検査の頻度・未信頼の通知・変数展開の失敗・段8 と段10 |
 | `turn_test.go` | 空の `Stop` だけで終わりと判定しない／項目が欠けていたら判定不能／表明の促し／`max_dispatch_turns`／`blocked` の `esc`／wait の掛け方 |
-| `group_test.go` | グループの表明（`Ice Box` の issue も動かす）／ボードに無い対象／コメントを書かせ直す9段 |
+| `group_test.go` | グループの表明（`Ice Box` の issue も動かす）／カンバンに無い対象／コメントを書かせ直す9段 |
 | `stall_test.go` | **`testing/synctest` で実時間ゼロ。**画面の版が増えている間は打ち切らない／版が止まったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
 | `quota_test.go` | 枠待ちの2条件／`pause_above_percent` は新規だけ止める／`none` なら1回も叩かない／資格情報が無くても起動は続く／**枠明けに `working` なら継続の指示を送らない** |
 | `prompt_choice_test.go` | **復元で引き継いだ run には継続の指示（5-4）を送る**／**再着手はセッションへ復帰したうえで1回目の本文（5-3）を `.attempt` 付きで送る** |

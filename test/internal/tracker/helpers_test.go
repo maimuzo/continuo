@@ -73,7 +73,7 @@ func bootstrapProjectPayload(options []map[string]any) map[string]any {
 type testIssueItemOpts struct {
 	ItemID   string
 	Status   string // 空文字なら Status 未設定（fieldValueByName が null）として組み立てる
-	Archived bool   // true なら isArchived が真の item（ボード上でもう見えない）を組み立てる
+	Archived bool   // true なら isArchived が真の item（カンバン上でもう見えない）を組み立てる
 	Owner    string
 	Repo     string
 	Number   int
@@ -111,7 +111,7 @@ type testIssueItemOpts struct {
 // 空文字なら actor そのものを付けない。
 // actorLogin: `actor.login`。
 // wasAutomated: `wasAutomated` の値。**組み込みの自動化でも false が返る**（設計 2-6）。
-// projectNumber: そのイベントが起きたボードの番号。
+// projectNumber: そのイベントが起きたカンバンの番号。
 func statusEventJSON(
 	createdAt, status, actorType, actorLogin string, wasAutomated bool, projectNumber int,
 ) map[string]any {

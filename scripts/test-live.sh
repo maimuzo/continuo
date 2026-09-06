@@ -14,7 +14,7 @@
 #   - PR を出す前（`sh scripts/test-like-ci.sh` は herdr を隠すので、こちらは走らない）
 #
 # **叩くのは herdr だけである。**Claude Code は起動しない（枠を消費するため）。
-# GitHub の GraphQL / gh も叩かない（認証と本番のボードが要るため）。
+# GitHub の GraphQL / gh も叩かない（認証と本番のカンバンが要るため）。
 #
 # **herdr が居なければ静かに飛ぶ。**PATH に herdr が無い・socket が無い・socket へ
 # 繋がらないのいずれかなら t.Skip になる。CI では必ず飛ぶ（runner に herdr が居ない）。

@@ -1,9 +1,9 @@
 // Package scaffold_test のうち、このファイルは `continuo init` が
-// trust.repositories をボードから拾って並べる部分を検証する（設計 3-33）。
+// trust.repositories をカンバンから拾って並べる部分を検証する（設計 3-33）。
 //
 // **拾うだけである。信頼は登録しない。**登録するのは `continuo trust` であり、
 // その対象は人間がこの一覧から要らない行を消したあとに残ったものである。
-// **ボードは他人が編集できる**ので、拾った一覧をそのまま信頼させてはならない。
+// **カンバンは他人が編集できる**ので、拾った一覧をそのまま信頼させてはならない。
 package scaffold_test
 
 import (
@@ -16,14 +16,14 @@ import (
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
-// 目的: ボードに載っているリポジトリを、重複なく辞書順で拾うことを確認する。
+// 目的: カンバンに載っているリポジトリを、重複なく辞書順で拾うことを確認する。
 // あわせて draft issue を数えないことを見る（リポジトリに属していないので、
 // 信頼させる対象が存在しない）。
 //
 // 与える情報: 同じリポジトリの issue を2件、別のリポジトリの issue を1件、
 // draft issue を1件返す `gh project item-list` の差し替え。
 // 成功条件: 2件が辞書順で並び、draft issue が数えられていないこと。
-func TestDetect_ボードに載っているリポジトリを重複なく並べる(t *testing.T) {
+func TestDetect_カンバンに載っているリポジトリを重複なく並べる(t *testing.T) {
 	run, calls := fakeGH(t, map[string]struct {
 		out []byte
 		err error
@@ -40,7 +40,7 @@ func TestDetect_ボードに載っているリポジトリを重複なく並べ�
 		t.Errorf("拾ったリポジトリが想定と違う: got %v, want %v", got.Values.Repositories, want)
 	}
 	if !strings.Contains((*calls)[2], "project item-list 3 --owner octocat ") {
-		t.Errorf("決まったボードの番号と owner で項目を引いていない: %q", (*calls)[2])
+		t.Errorf("決まったカンバンの番号と owner で項目を引いていない: %q", (*calls)[2])
 	}
 }
 
@@ -75,13 +75,13 @@ func TestDetect_拾ったあとに要らない行を消せと案内する(t *tes
 	}
 }
 
-// 目的: ボードの項目を引けなくても失敗せず、手で書ける案内を出すことを確認する。
+// 目的: カンバンの項目を引けなくても失敗せず、手で書ける案内を出すことを確認する。
 //
 // **雛形そのものは書けるので、ここで止めない。**
 //
 // 与える情報: `gh project item-list` がエラーを返す差し替え。
 // 成功条件: repositories が埋まらず、案内に trust.repositories が含まれること。
-func TestDetect_ボードの項目を引けなくても失敗しない(t *testing.T) {
+func TestDetect_カンバンの項目を引けなくても失敗しない(t *testing.T) {
 	run, _ := fakeGH(t, map[string]struct {
 		out []byte
 		err error

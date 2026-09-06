@@ -1,8 +1,8 @@
 // {"RUCM-CFG-SHA256": "2131e9a8ee86af8fdba4d479fe94444550b398f19e23439716928ec0c7ee73eb", "SOURCE": "docs/spec/usecases/particular_case/人間に判断を渡す.cfg.json"}
 //
-// **ボードの組み込みの自動化が Status を動かしたときの検査である**（設計 3-54。issue #33）。
+// **カンバンの組み込みの自動化が Status を動かしたときの検査である**（設計 3-54。issue #33）。
 //
-// **エージェントが PR を作ると、ボードの自動化が Status を動かす。**それを「人間が
+// **エージェントが PR を作ると、カンバンの自動化が Status を動かす。**それを「人間が
 // 引き渡した」と読んで、continuo が自分のエージェントを turn の途中で殺していた。
 // **止めないこと**と、**本来の Status へ戻すこと**、そして
 // **人間が動かしたときの扱いを変えていないこと**を見る。
@@ -64,7 +64,7 @@ func startRunForAutomation(t *testing.T, fx *fixture) string {
 // tickUntil は、条件が満たされるまで巡回を打ち直す。
 //
 // **巡回を1回打てば必ず効く、と思ってはならない。**巡回からの書き戻しは別の goroutine で
-// 走り、**ボードへ書いて記録を投稿したあとで書き戻しの印を返す**（`endRewrite`）。
+// 走り、**カンバンへ書いて記録を投稿したあとで書き戻しの印を返す**（`endRewrite`）。
 // 印が返る前に次の巡回が来ると、continuo はその巡回では何もしない
 // （書き戻しは `beginRewrite` が `rewriteBusy`、終わらせる処理は `beginTerminal` が
 // `terminalRewriting` を返す）。**実運用では30秒後の巡回が拾い直すので何も起きないが、
@@ -147,10 +147,10 @@ func waitRunsDrainedByTick(t *testing.T, fx *fixture, d time.Duration) {
 	})
 }
 
-// waitRewriteSettled は、巡回に書き戻しを1回走らせ、それがボードへ着地して
+// waitRewriteSettled は、巡回に書き戻しを1回走らせ、それがカンバンへ着地して
 // 記録の投稿まで終わるのを待つ。
 //
-// **ボードの Status だけを見て待ってはならない。**書き戻しの goroutine は Status を書いたあと
+// **カンバンの Status だけを見て待ってはならない。**書き戻しの goroutine は Status を書いたあと
 // 「戻した」をログに出し、**そのあとで「何から何へ動かしたか」を投稿する。**
 // **Status だけで待つと、ログも記録もまだ無いうちに次の検査へ進む。**
 //
@@ -181,11 +181,11 @@ func waitRewriteSettled(t *testing.T, fx *fixture, itemID, nodeID, want string) 
 // TestRUCMHandoff_P015_自動化が動かした知らないStatusではworkerを止めない は、
 // 設計 3-54 を確かめる（issue #33 の本体）。
 //
-// 目的: エージェントが PR を作った3秒後に、ボードの組み込みの自動化が Status を
+// 目的: エージェントが PR を作った3秒後に、カンバンの組み込みの自動化が Status を
 // `In Progress` へ動かす。**continuo はそれを「人間が引き渡した」と読んで、
 // 自分のエージェントを turn の途中で殺していた。**
 //
-// 与える情報: 1回目の turn が待ち受けに入ったままの run。その間にボードの自動化が
+// 与える情報: 1回目の turn が待ち受けに入ったままの run。その間にカンバンの自動化が
 // Status を `In Progress`（設定のどこにも出てこない）へ動かす。猶予は 0。
 // 成功条件:
 //   - worker を止めない（pane を閉じない・印を外さない）
@@ -196,7 +196,7 @@ func TestRUCMHandoff_P015_自動化が動かした知らないStatusではworker
 	itemID := startRunForAutomation(t, fx)
 	closesBefore := fx.Herdr.CountMethod(herdr.MethodPaneClose)
 
-	// ★ エージェントが PR を作り、ボードの組み込みの自動化が Status を動かした。
+	// ★ エージェントが PR を作り、カンバンの組み込みの自動化が Status を動かした。
 	fx.Tracker.SetStateByAutomation(itemID, "In Progress")
 	waitRewriteSettled(t, fx, itemID, "I_node188", "In Progress (AI)")
 	if got := len(fx.Orc.RunningIdentifiers()); got != 1 {
@@ -229,7 +229,7 @@ func TestRUCMHandoff_P015_自動化が動かした知らないStatusではworker
 // 目的: **書き戻し先が対応表に無ければ書き戻さない。**勝手に元へ戻すと、
 // 「人間の操作を巻き戻さない」という土台（設計 3-4）を破る作りに近づく。
 //
-// 与える情報: 対応表が空の設定。ボードの自動化が Status を `In Progress` へ動かす。
+// 与える情報: 対応表が空の設定。カンバンの自動化が Status を `In Progress` へ動かす。
 // 成功条件: いままでどおり worker を止め、止めた理由を issue へ書くこと。
 // **あわせて「自動化が書いた」ことと、足す1行が書かれていること。**
 func TestAutomatedState_対応表に無ければいままでどおり止まる(t *testing.T) {
@@ -343,8 +343,8 @@ func TestAutomatedState_誰が動かしたか分からなければいままで�
 
 // TestAutomatedState_書き戻しを繰り返しても上限で止まる は、設計 3-54 を確かめる。
 //
-// 目的: **書き戻した直後にボードの自動化がまた動く組み合わせがある。**上限が無いと、
-// continuo とボードが同じ issue を押し合い続け、GitHub への書き込みが巡回のたびに増える。
+// 目的: **書き戻した直後にカンバンの自動化がまた動く組み合わせがある。**上限が無いと、
+// continuo とカンバンが同じ issue を押し合い続け、GitHub への書き込みが巡回のたびに増える。
 //
 // 与える情報: 自動化が `In Progress` を書くたびに continuo が戻す、を繰り返す。
 // 成功条件: 上限（3回）を超えたところで書き戻しをやめ、worker を止めて理由を issue へ書くこと。
@@ -378,7 +378,7 @@ func TestAutomatedState_書き戻しを繰り返しても上限で止まる(t *t
 //
 // 目的: **戻す先は `active_states` に限られる**（設計 3-55）ので、書き戻しが成功したときの
 // 行き先は必ず「次の turn へ」である。**判定し直しが要るのは、書き戻せなかったときである。**
-// `UpdateStatus` は書く前にボードを取り直し、**`terminal_states` に入っていたら書かずに返す。**
+// `UpdateStatus` は書く前にカンバンを取り直し、**`terminal_states` に入っていたら書かずに返す。**
 // そのとき返る「取り直した Status」を捨てると、**人間が終わりにした issue へ次の指示を送る。**
 //
 // 与える情報: 書き戻しの `UpdateStatus` をテストが放すまで返さないようにしたうえで、
@@ -403,7 +403,7 @@ func TestAutomatedState_書き戻せなかったときは書き込みが見たSt
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// ★ エージェントが PR を作り、ボードの組み込みの自動化が `In Progress` を書いた。
+	// ★ エージェントが PR を作り、カンバンの組み込みの自動化が `In Progress` を書いた。
 	fx.Tracker.SetStateByAutomation("PVTI_item188", "In Progress")
 	// **エージェントのコメントを置いておく。**無いと run を終えるときに
 	// 「コメントの取り戻し」（設計 3-25 の9段）へ入り、そこでも `agent.prompt` を呼ぶ。
@@ -446,8 +446,8 @@ func TestAutomatedState_書き戻せなかったときは書き込みが見たSt
 
 // TestAutomatedState_書き込みが失敗しても書き戻しの回数を食い潰さない は、設計 3-56 を確かめる。
 //
-// 目的: **押し合いの上限は「continuo とボードが押し合っている」ことを数えるためにある。**
-// 押し合いはボードが実際に動いたときにだけ起きる。**通信の失敗で数えてしまうと、
+// 目的: **押し合いの上限は「continuo とカンバンが押し合っている」ことを数えるためにある。**
+// 押し合いはカンバンが実際に動いたときにだけ起きる。**通信の失敗で数えてしまうと、
 // GitHub へ書けなかったぶんだけ押し合いの枠が減り、押し合いが1度も起きていない run が
 // 早々に止まる。**
 //
@@ -490,7 +490,7 @@ func TestAutomatedState_書き込みが失敗しても書き戻しの回数を�
 
 // TestAutomatedState_戻せない状態が続いたら人間へ渡す は、設計 3-56 を確かめる。
 //
-// 目的: **人間がボードから戻す先の選択肢を消すと、書き込みが毎回失敗する。**
+// 目的: **人間がカンバンから戻す先の選択肢を消すと、書き込みが毎回失敗する。**
 // 押し合いの枠は失敗のたびに返るので上限には届かず、猶予の時計もその手前で戻るので始まらない。
 // **止める仕組みが1つも無いと、30秒ごとに失敗する書き込みを永久に打ち続け、
 // worker は止まらず、人間にも渡らない。**
@@ -506,7 +506,7 @@ func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *test
 	fx.AllowLog("自動化が動かした Status を戻せませんでした")
 	itemID := startRunForAutomation(t, fx)
 
-	// **ボードから戻す先の選択肢が消えた状況である。**次の巡回でも直らない。
+	// **カンバンから戻す先の選択肢が消えた状況である。**次の巡回でも直らない。
 	fx.Tracker.SetUpdateError(errors.New("Status の選択肢 \"In Progress (AI)\" が見つかりません"))
 
 	// 上限は3回である（internal/orchestrator の maxAutomatedRewriteFailures）。
@@ -533,7 +533,7 @@ func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *test
 	for _, want := range []string{
 		// 何が起きたか。
 		"書き込めませんでした",
-		// どうすればよいか（ボードの選択肢を作り直す）。
+		// どうすればよいか（カンバンの選択肢を作り直す）。
 		"In Progress (AI)",
 	} {
 		if !strings.Contains(body, want) {
@@ -557,7 +557,7 @@ func TestAutomatedState_戻せない状態が続いたら人間へ渡す(t *test
 //
 // 目的: **書き戻しは巡回からも turn の終わりからも走る。**turn の終わりの処理は
 // 表明を読む1秒ほどの待ちと2往復の書き込みを含む。**その間に巡回が「人間が動かした」と
-// 判断して run を手放すと、印が消えたあとに「作業中」の Status がボードへ書かれる。**
+// 判断して run を手放すと、印が消えたあとに「作業中」の Status がカンバンへ書かれる。**
 // 次の巡回はそれを候補として拾い直し、**同じ worktree に2本目の Claude Code を立てる。**
 //
 // 与える情報: turn の終わりから走る書き戻しの `UpdateStatus` を、テストが放すまで
@@ -578,7 +578,7 @@ func TestAutomatedState_turnの終わりから書き戻すあいだもrunを手�
 	})
 	startsBefore := fx.Herdr.CountMethod(herdr.MethodAgentStart)
 
-	// ★ エージェントが PR を作り、ボードの組み込みの自動化が `In Progress` を書いた。
+	// ★ エージェントが PR を作り、カンバンの組み込みの自動化が `In Progress` を書いた。
 	fx.Tracker.SetStateByAutomation("PVTI_item188", "In Progress")
 
 	// ★ 書き戻しの書き込みを、テストが放すまで返さないようにする。
@@ -629,7 +629,7 @@ func TestAutomatedState_turnの終わりから書き戻すあいだもrunを手�
 // TestAutomatedState_手放した run へは書き戻さない は、設計 3-56 を確かめる。
 //
 // 目的: **巡回からの書き戻しは別の goroutine で走る。**その最中に run を手放すと、
-// **印が消えたあとに「作業中」の Status がボードへ書かれる。**次の巡回はそれを候補として
+// **印が消えたあとに「作業中」の Status がカンバンへ書かれる。**次の巡回はそれを候補として
 // 拾い直し、**同じ worktree に2本目の Claude Code を立てる。**
 //
 // 与える情報: 書き戻しの `UpdateStatus` をテストが放すまで返さないようにしたうえで、
@@ -702,7 +702,7 @@ func TestAutomatedState_巡回の書き戻しが飛んでいてもturnループ�
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
 	})
 
-	// ★ エージェントが PR を作り、ボードの組み込みの自動化が `In Progress` を書いた。
+	// ★ エージェントが PR を作り、カンバンの組み込みの自動化が `In Progress` を書いた。
 	fx.Tracker.SetStateByAutomation("PVTI_item188", "In Progress")
 
 	// ★ 巡回からの書き戻しを、テストが放すまで返さないようにする。
@@ -763,7 +763,7 @@ func TestAutomatedState_書き戻しが飛んでいても終わらせる処理�
 	// 「コメントの取り戻し」（設計 3-25 の9段）へ入り、そこでも `agent.prompt` を呼ぶ。
 	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
 
-	// ★ ボードの組み込みの自動化が `In Progress` を書いた。
+	// ★ カンバンの組み込みの自動化が `In Progress` を書いた。
 	fx.Tracker.SetStateByAutomation("PVTI_item188", "In Progress")
 
 	// ★ 巡回からの書き戻しを、テストが放すまで返さないようにする。
@@ -815,7 +815,7 @@ func TestAutomatedState_書き戻しが飛んでいても終わらせる処理�
 // **書き足した時点で `config.Validate` がその行を弾く＝continuo が起動しなくなる。**
 //
 // **代わりに「先に対応表のその行を消す」が出ていること。**それが唯一、貼っても起動する直し方であり、
-// **ボードの自動化をやめた人が抜け出す道でもある。**
+// **カンバンの自動化をやめた人が抜け出す道でもある。**
 //
 // t: 呼び出し元のテスト。
 // body: issue へ書いた「止めた理由」のコメント本文。
@@ -867,7 +867,7 @@ func TestAutomatedState_押し合いで止めても貼ると起動しない案�
 // （issue #67 の1件目）。
 //
 // 目的: 押し合いの道と同じ欠陥が、**戻せない失敗が続いて止めた道**にもある。
-// こちらは「ボードから戻す先の選択肢が消えた」状況であり、**設定を書き足しても直らない。**
+// こちらは「カンバンから戻す先の選択肢が消えた」状況であり、**設定を書き足しても直らない。**
 // それなのに `active_states` へ足す案内が出ていて、しかも貼ると起動しなくなる。
 //
 // 与える情報: `UpdateStatus` がずっと失敗する状況で、「戻せない」の上限（3回）を超えさせる。
@@ -879,7 +879,7 @@ func TestAutomatedState_戻せないまま止めても貼ると起動しない�
 	fx.AllowLog("自動化が動かした Status を戻せませんでした")
 	itemID := startRunForAutomation(t, fx)
 
-	// **ボードから戻す先の選択肢が消えた状況である。**次の巡回でも直らない。
+	// **カンバンから戻す先の選択肢が消えた状況である。**次の巡回でも直らない。
 	fx.Tracker.SetUpdateError(errors.New("Status の選択肢 \"In Progress (AI)\" が見つかりません"))
 
 	// 上限は3回である（internal/orchestrator の maxAutomatedRewriteFailures）。

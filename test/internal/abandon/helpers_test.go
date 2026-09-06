@@ -1,6 +1,6 @@
 // Package abandon_test は `continuo abandon`（設計 3-4 の段1〜段5）の振る舞いを確かめる。
 //
-// **本番のボード（project #3）へは1リクエストも送らない。**ボードは
+// **本番のカンバン（project #3）へは1リクエストも送らない。**カンバンは
 // abandon.Tracker を満たす偽の実装（fakeTracker）に差し替え、GraphQL の口は使わない。
 // **実 herdr には繋がない。**`net.Listen("unix", ...)` でテスト用herdr mock を立て、
 // pane の一覧・worktree の open / remove をそこに答えさせる。
@@ -371,9 +371,9 @@ func (fh *fakeHerdr) worktreeRemove(params map[string]any) map[string]any {
 	}
 }
 
-// ===== 偽のボード =====
+// ===== 偽のカンバン =====
 
-// statusUpdate はボードへの Status の書き込み1件である。
+// statusUpdate はカンバンへの Status の書き込み1件である。
 type statusUpdate struct {
 	// ItemID は書き込み先の project item の ID である。
 	ItemID string
@@ -381,9 +381,9 @@ type statusUpdate struct {
 	State string
 }
 
-// fakeTracker は abandon.Tracker を満たす偽のボードである。
+// fakeTracker は abandon.Tracker を満たす偽のカンバンである。
 //
-// **本番のボードへ1リクエストも送らないためにこれを使う。**Status の読み書きが
+// **本番のカンバンへ1リクエストも送らないためにこれを使う。**Status の読み書きが
 // 何回・どの値で起きたかを記録する。
 type fakeTracker struct {
 	mu sync.Mutex
@@ -391,7 +391,7 @@ type fakeTracker struct {
 	state string
 	// itemID は FetchIssueByIdentifier が返す project item の ID である。
 	itemID string
-	// found は issue がボードに載っているかどうかである。
+	// found は issue がカンバンに載っているかどうかである。
 	found bool
 	// written は UpdateStatus が返す「書けたかどうか」である。
 	written bool
@@ -404,31 +404,31 @@ type fakeTracker struct {
 	fetches []string
 	// updates は UpdateStatus で書き込んだ内容である。
 	updates []statusUpdate
-	// options は VerifyKnownStates が「ボードにある」と答える Status の選択肢である。
+	// options は VerifyKnownStates が「カンバンにある」と答える Status の選択肢である。
 	options []string
 	// verifies は VerifyKnownStates が受け取った値を受け取った順に並べたものである。
 	verifies [][]string
 }
 
-// newFakeTracker は「ボードに載っていて、Status を書ける」偽のボードを作る。
+// newFakeTracker は「カンバンに載っていて、Status を書ける」偽のカンバンを作る。
 //
 // state: FetchIssueByIdentifier が返す現在の Status。
-// 戻り値: 偽のボード。
+// 戻り値: 偽のカンバン。
 func newFakeTracker(state string) *fakeTracker {
 	return &fakeTracker{
 		state:   state,
 		itemID:  "PVTI_test",
 		found:   true,
 		written: true,
-		// **本物のボードと同じく、選択肢に無い値は断る。**ここを「何でも通す」に
+		// **本物のカンバンと同じく、選択肢に無い値は断る。**ここを「何でも通す」に
 		// しておくと、`--to` の綴り違いを消す前に弾く検査が空振りする。
 		options: []string{"Ice Box", "Ready", "In Progress", "Blocked", "Done"},
 	}
 }
 
-// SetStatusOptions は VerifyKnownStates が「ボードにある」と答える選択肢を差し替える。
+// SetStatusOptions は VerifyKnownStates が「カンバンにある」と答える選択肢を差し替える。
 //
-// options: ボードにある Status の選択肢。
+// options: カンバンにある Status の選択肢。
 func (ft *fakeTracker) SetStatusOptions(options ...string) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
@@ -459,7 +459,7 @@ func (ft *fakeTracker) VerifyKnownStates(states []string) error {
 	if len(unknown) == 0 {
 		return nil
 	}
-	return fmt.Errorf("ボードに無い Status 名です: %s", strings.Join(unknown, ", "))
+	return fmt.Errorf("カンバンに無い Status 名です: %s", strings.Join(unknown, ", "))
 }
 
 // Verifies は VerifyKnownStates が受け取った値を受け取った順に返す。
@@ -482,7 +482,7 @@ func (ft *fakeTracker) SetState(state string) {
 	ft.state = state
 }
 
-// SetNotListed は「その issue はボードに載っていない」状態にする。
+// SetNotListed は「その issue はカンバンに載っていない」状態にする。
 //
 // **Status を確かめられない状態を作るために要る。**
 func (ft *fakeTracker) SetNotListed() {
@@ -493,7 +493,7 @@ func (ft *fakeTracker) SetNotListed() {
 
 // SetWriteRejected は UpdateStatus が「書けなかった」を返す状態にする。
 //
-// **エラーではなく「書かれなかった」である。**ボードから item が見えないときに
+// **エラーではなく「書かれなかった」である。**カンバンから item が見えないときに
 // トラッカーがこれを返す。
 func (ft *fakeTracker) SetWriteRejected() {
 	ft.mu.Lock()
@@ -525,12 +525,12 @@ func (ft *fakeTracker) Bootstrap(_ context.Context, _ config.TrackerConfig) erro
 	return nil
 }
 
-// FetchIssueByIdentifier はボードから issue を1件引いたことにする。
+// FetchIssueByIdentifier はカンバンから issue を1件引いたことにする。
 //
 // ctx: 実行に適用するコンテキスト（使わない）。
 // identifier: `<owner>/<repo>#<番号>` の形の名前。
 // 戻り値の1つ目: 現在の Status を載せた issue。
-// 戻り値の2つ目: ボードに載っていれば true。
+// 戻り値の2つ目: カンバンに載っていれば true。
 // 戻り値の3つ目: 常に nil。
 func (ft *fakeTracker) FetchIssueByIdentifier(
 	_ context.Context, identifier string,
@@ -580,7 +580,7 @@ func (ft *fakeTracker) Updates() []statusUpdate {
 	return out
 }
 
-// Fetches はボードから issue を引いた回数を返す。
+// Fetches はカンバンから issue を引いた回数を返す。
 //
 // 戻り値: 引いた回数。
 func (ft *fakeTracker) Fetches() int {
@@ -700,7 +700,7 @@ type fixture struct {
 	Config config.Config
 	// WorkflowPath は WORKFLOW.md の絶対パスである。
 	WorkflowPath string
-	// Tracker は偽のボードである。
+	// Tracker は偽のカンバンである。
 	Tracker *fakeTracker
 	// Clock は進まない時計である。
 	Clock *fakeClock
@@ -716,7 +716,7 @@ type fixture struct {
 	// Err は abandon が止まった理由の出力である。
 	Err bytes.Buffer
 
-	// trackerBuilds はボードのアダプタを作った回数である。
+	// trackerBuilds はカンバンのアダプタを作った回数である。
 	// **worktree が無い実行で `gh` を起動しないことを確かめるのに使う。**
 	trackerBuilds int
 }
@@ -1090,7 +1090,7 @@ func (fx *fixture) RemoveIdentity(t *testing.T, prepared *workspace.PrepareResul
 
 // Options は abandon.Run へ渡す入力を組み立てる。
 //
-// **外部へ繋ぐ処理は全部差し替える。**ボードは偽のボード、herdr はテスト用herdr mock、
+// **外部へ繋ぐ処理は全部差し替える。**カンバンは偽のカンバン、herdr はテスト用herdr mock、
 // worktree は一時ディレクトリの下のものだけを見る。**二重起動の判定だけは本物**
 // （`internal/lock` の flock）で、一時ディレクトリのロックファイルを使う。
 //
@@ -1144,7 +1144,7 @@ func (fx *fixture) Output() string {
 	return fx.Out.String() + fx.Err.String()
 }
 
-// TrackerBuilds はボードのアダプタを作った回数を返す。
+// TrackerBuilds はカンバンのアダプタを作った回数を返す。
 //
 // 戻り値: 作った回数。
 func (fx *fixture) TrackerBuilds() int {

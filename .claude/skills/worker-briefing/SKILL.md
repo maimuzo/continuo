@@ -82,7 +82,7 @@ if [ -n "$P" ]; then echo "$P"; else echo "見つからない。渡す前に自�
 **この段落をそのまま worker へ渡す。要約しない。**
 **worker は前提知識を持っていない。**これが無いと、何を作っているのか分からないまま手を動かす。
 
-> **continuo は、GitHub のカンバン（Projects v2 のボード）1枚を見張り、
+> **continuo は、GitHub のカンバン（GitHub Projects v2）1枚を見張り、
 > issue ごとに git worktree を用意して、その中で Claude Code を対話モードで起動し、
 > 完了までを面倒見る常駐プロセスです。Go で書かれています。**
 >
