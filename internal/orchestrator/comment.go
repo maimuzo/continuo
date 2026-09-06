@@ -2,8 +2,10 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/redact"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -202,10 +204,45 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 		return
 	}
 	rs.setAgentName(name)
+	// **証拠の基準は `agent.start` が通ってから取る**（設計 3-80c）。
+	//
+	// **前で取ってはならない。**この関数は段2 で**自分が pane を閉じている**ので、
+	// **そのとき道連れにした Claude Code の hook が、閉じたあとから届く**
+	// （`noteHook` が入れるのは受け取った時刻である）。
+	// **前で取ると、その置き土産を「新しく起こした Claude Code が走っている証拠」と読み、
+	// 成果を書かせる指示を1度も送らないまま `failure_state` へ落とす。**
+	//
+	// **後ろで取っても、本物の証拠は落ちない。**`agent.start` が
+	// `agent_pane_busy` を粘っている間に届く hook は、**段2 で閉じた pane に居た
+	// 誰かのものである。**`agent.start` が失敗したままなら、この行まで来ない。
+	since := o.now()
 
 	// 段6: idle か done になるのを待つ。
-	if err := o.confirmStartup(ctx, rs); err != nil {
+	//
+	// **基準の時刻はここで取る**（設計 3-80）。この run は既に何 turn も回して hook を
+	// 受けているので、**前に受けた `LastHookAt` を「いま生きている証拠」にしてはならない。**
+	// 段5 の `agent.start` より後に届いた hook だけを数える。
+	//
+	// **待ちに上限は足さない。**`confirmStartup` は `herdr.startup_timeout_ms` で
+	// 必ず戻る（設計 3-80 は待たずに `ErrStartupBusy` で戻す）。
+	if err := o.confirmStartup(ctx, rs, since); err != nil {
 		if o.stoppedWhileRecovering(ctx) {
+			return
+		}
+		// **`ErrStartupBusy` は「落ち着かなかった」ではない**（設計 3-80c）。
+		// **復元した Claude Code は生きていて、前の会話の続きを走らせている。**
+		// **理由を書き分ける。**そのままだと
+		// 「作業を終えたと表明したのに、何をしたのかを書き残しませんでした」という
+		// **事実と違う理由**が issue に残る。**書けていないのではなく、
+		// まだ書いている最中かもしれない。**
+		//
+		// **黙って戻ってはならない。**この関数から普通に戻っても、呼び出し側
+		// （`finishRunClaimed`）は数行あとで `stopWorker` を呼ぶ。**pane はどのみち閉じる。**
+		// **戻るだけだと、閉じたことも成果が残っていないことも人間に伝わらない。**
+		if errors.Is(err, ErrStartupBusy) {
+			o.logger.Warn("復元した Claude Code が走っているので、コメントを書かせる指示は送れません",
+				"identifier", snap.Identifier, "error", err)
+			o.failCommentRecoveryBusy(ctx, rs)
 			return
 		}
 		o.logger.Warn("復元した agent が落ち着きません", "identifier", snap.Identifier, "error", err)
@@ -296,6 +333,12 @@ func (o *Orchestrator) recordRepoWorkspace(
 // **これがいちばん切り分けの難しい状態である。**issue の画面には印の付いたコメントが
 // 見えているのに、continuo は「書かれていない」と判定してセッションを復元しにいく。
 //
+// **途中経過の報告は数えない**（設計 3-25 の段1。issue #178）。
+// **`<!-- continuo:progress -->` の付いたコメントも `tracker.comments.marker` を
+// 持っているので、数えると「途中経過を1回書いて最後の報告を忘れた run」を
+// 「書いた」と判定してしまう。**issue には「まだ作業中です」だけが残り、
+// **何をしたのかが誰にも分からないまま `In Review` に立つ。**
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // nodeID: 下敷きの GitHub issue のノード ID。
 // snap: 対象の run の写し。
@@ -342,6 +385,19 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 				"gh の持ち主", o.ghLoginName(), "url", c.URL)
 			continue
 		}
+		// **途中経過の報告は、この run の成果の報告ではない**（issue #178）。
+		//
+		// **見るのは本文の先頭にある印の並びだけである**（`StartsAsProgressReport`）。
+		// **`IsProgressReport` は使わない。**あちらは印が本文のどこかに在れば真で、
+		// **成果の報告が印を引用しただけで捨てられる。**書いてあるのに書かなかったことにされ、
+		// 復元をもう一度通しても同じなら `failure_state` へ落ちる。
+		//
+		// **持ち回りの死活の判定は緩いままでよい**（設計 5-3l）。
+		// **あちらを厳しくすると、書き足し続けている担当が18時間で外れる。**
+		// **同じ緩さをこちらへ持ってくると、書いた run が人間へ渡る。**求める向きが逆である。
+		if handoff.StartsAsProgressReport(c.Body) {
+			continue
+		}
 		if c.IsAgent {
 			found = true
 		}
@@ -372,6 +428,40 @@ func (o *Orchestrator) failCommentRecovery(ctx context.Context, rs *runState, ca
 		"\n【確かめ方】worktree の中身（下記）と `git log` を見て、実際に何が変わったかを確かめてください。"+
 		"\n【よくある原因】"+cause+
 		"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。",
+		newStatusMove(moved, o.cfg.Tracker.FailureState))
+}
+
+// failCommentRecoveryBusy は、**復元した Claude Code がまだ走っていて**成果を書かせられなかった
+// run を人間へ渡す（設計 3-80c）。
+//
+// **`failCommentRecovery` を使ってはならない。**あちらは書き出しを
+// 「作業を終えたと表明しましたが、**何をしたのかを issue に書き残しませんでした。**」で
+// 固定しており、**理由の差し替えでは直らない。**
+// **書けていないのではなく、まだ書いている最中かもしれない。**
+//
+// **黙って戻る道は採らない。**呼び出し側（`finishRunClaimed`）は数行あとで
+// `stopWorker` を呼ぶので、**pane はどのみち閉じる。**
+// **戻るだけだと、閉じたことも成果が残っていないことも人間に伝わらない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) failCommentRecoveryBusy(ctx context.Context, rs *runState) {
+	o.stopWorker(ctx, rs)
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	if err != nil {
+		if o.stoppedWhileRecovering(ctx) {
+			return
+		}
+		o.logger.Warn("Status を落とせません", "identifier", rs.issue().Identifier, "error", err)
+	}
+	o.postHandoffComment(ctx, rs,
+		"**復元した Claude Code がまだ走っていたので、成果を書かせる指示を送れませんでした。**"+
+			"**書き残さなかったのではなく、まだ書いている最中だった可能性があります。**"+
+			"\n【確かめ方】下記の会話の記録と、worktree の中身（同じく下記）と `git log` を見て、"+
+			"実際に何が変わったかを確かめてください。"+
+			"\n【よくある原因】前の turn で始めたバックグラウンドの処理が終わり、"+
+			"その通知で Claude Code が新しい turn を始めていた。"+
+			"\n【対処】成果を確かめたうえで、この issue を完了にするか着手待ちへ戻すかを決めてください。",
 		newStatusMove(moved, o.cfg.Tracker.FailureState))
 }
 

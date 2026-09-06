@@ -29,8 +29,8 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	// **担当が自分でなくなっていないかを、turn の終わりで確かめる**（設計 3-77c）。
 	// **確かめるのは `recheck_interval_ms` に1回だけである**（既定1時間）。
 	// **移っていたらここで止める。push しない。**
-	if lost, newHost := o.handoffLostOnTurnEnd(ctx, rs); lost {
-		o.stopBecauseHandoffLost(ctx, rs, newHost)
+	if lost, newAccount := o.handoffLostOnTurnEnd(ctx, rs); lost {
+		o.stopBecauseHandoffLost(ctx, rs, newAccount)
 		return true
 	}
 
@@ -40,7 +40,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 
 	// **ここだけは「誰が Status を書いたか」も取る**（設計 3-61）。この写しを `rs.setIssue` で
 	// 控え、`decideAfterTurn` が「ボードの自動化が書いたのか」を判定する。
-	current, ok := o.refreshIssue(ctx, rs, true)
+	current, ok, _ := o.refreshIssue(ctx, rs, true)
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
 		o.abandonRun(ctx, rs, "この issue がカンバンから見えなくなりました。"+
@@ -472,9 +472,18 @@ func lookupSignalTarget(m map[string]*string, value string) (*string, bool) {
 // withTimeline: 記録も取るか。**真で呼ぶのは `handleTurnEnd` だけである。**
 // そこだけが取り直した issue を `rs.setIssue` で控え、知らない Status の判定
 // （`decideAfterTurn` → `claimAutomatedRewrite` / `finishRunUnknownState`）がそれを読む。
-// 戻り値の1つ目: 取り直した issue。
+// 戻り値の1つ目: 取り直した issue。**取り直せなかったときは、控えてある古い写しである。**
 // 戻り値の2つ目: ボードから見えていれば true。
-func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimeline bool) (tracker.Issue, bool) {
+// 戻り値の3つ目: **本当に GitHub から取り直せたなら true。**
+//
+//	**偽のときの1つ目は、着手したときの写しである。**担当者もラベルも Status も、そのあと動いている見込みがある。
+//	**見るのは `verifyHandoff` だけである。**あそこは「担当が自分から他人へ移ったか」を答えるので、
+//	古い写しから答えると、担当を外された run が push まで走り切る（設計 3-77c）。
+//	**`handleTurnEnd` と `finishRunClaimed` は、取り直せなくても古い写しで続ける。**
+//	止めるほうが害が大きいためである（turn の結果を捨てる／片付けを止める）。
+//	**代償は、古い Status からボードへ書く場合があることである**（`handleTurnEnd` は
+//	`decideAfterTurn` を通って Status を書き直しうる）。**`origin/main` から同じ形である。**
+func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimeline bool) (tracker.Issue, bool, bool) {
 	var (
 		issues []tracker.Issue
 		err    error
@@ -486,12 +495,12 @@ func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimel
 	}
 	if err != nil {
 		o.logger.Warn("issue を取り直せません", "identifier", rs.issue().Identifier, "error", err)
-		return rs.issue(), true
+		return rs.issue(), true, false
 	}
 	if len(issues) == 0 {
-		return tracker.Issue{}, false
+		return tracker.Issue{}, false, true
 	}
-	return issues[0], true
+	return issues[0], true, true
 }
 
 // finishRun は run を正常に終える。
@@ -556,6 +565,17 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failureState, reason string) {
 	o.logger.Info("run を終えます", "identifier", rs.issue().Identifier, "理由", summaryLine(reason))
 
+	// **pane を閉じる前に、turn の終わりと同じ判定を1度通す**（設計 3-81）。
+	// **通知より先に置く。**引き渡しの通知は1つの run につき1件しか出せないので
+	// （`takeHandoffPost`）、あとに置くと「何を道連れにしたか」を書く先が残らない。
+	//
+	// **例外が1つある。**`finishRunUnknownState` は通知を投稿してからここへ来るので、
+	// **その道の通知に載る一覧は、待つ前の写しである。**待っている間に終わったものも
+	// 「止めた時点で走っていた」として並ぶ。**そちらを直すには通知の投稿を
+	// この関数へ移すことになり、知らない Status の道が持っている
+	// 「Status を動かした記録を添えない」という決まりと噛み合わない**（設計 3-50）。
+	o.waitForBackgroundTasks(ctx, rs)
+
 	if failureState != "" {
 		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.cfg.Tracker.TerminalStates)
 		if err != nil {
@@ -574,7 +594,7 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 
 	// **「誰が Status を書いたか」は取らない**（設計 3-61）。ここで見るのは `State` だけであり、
 	// **`rs.setIssue` でも控えない**ので、記録を読む経路へ空の写しが流れることも無い。
-	current, ok := o.refreshIssue(ctx, rs, false)
+	current, ok, _ := o.refreshIssue(ctx, rs, false)
 	if ok && o.ws.ShouldCleanup(current.State) {
 		o.cleanupWorktree(ctx, rs)
 	}
@@ -737,6 +757,98 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 	}()
 }
 
+// waitForBackgroundTasks は run を終える前に、バックグラウンド処理の申告を1度見る
+// （設計 3-81）。
+//
+// **turn の終わりでは同じ判定をしている**（設計 3-2。`background_tasks` が空でない `Stop` を
+// 受けたら turn の終わりとせずに待ち直す）。**run の終わりでは1度も見ずに pane を閉じていた。**
+// 走っていたものは道連れになり、次に同じセッションへ復帰したときに
+// 「前のバックグラウンドコマンドに完了の記録が無い」という通知が発火する。
+//
+// **待つのは「まだ何かが動いていると分かるとき」だけである。**
+//
+//	申告が空                  … 何もしない
+//	確認の画面で止まっている   … **待たない**（新しい `Stop` は二度と来ない）
+//	それ以外                  … 申告が空になるまで poll_wait_ms を上限に待つ
+//
+// **待たない条件を1つだけ置く理由。**申告が入れ替わるのは新しい `Stop` を受けたときだけである
+// （`noteHook`）。**`blocked` で止まった Claude Code は `Stop` を二度と出さない。**
+// そこで待つと、直前の `waitForRunningSubagents`（設計 3-11）と合わせて
+// `claude.poll_wait_ms` を2回ぶん、人間への引き渡しが遅れるだけになる。
+//
+// **hook の新しさは条件にしない。**一度は `claude.settle_ms` で切っていたが、
+// **その線では1回も待たなかった。**turn の終わりの判定は「空の `Stop` を受けてから
+// `settle_ms` を使い切る」ところで `turnEnded` を返すので（`confirmTurnEnd`）、
+// **ここへ着く時点で必ず `settle_ms` を超えている。**そのうえ transcript の読み直しと
+// カンバンへの問い合わせが挟まる。**「待つ」を足したのに、足した場面で回らなかった。**
+//
+// **総時間に上限を置く。**turn の終わりの待ちには上限が無いが（設計 3-2）、ここは違う。
+// **run は既に終わったものとして扱われている。**何時間も待つと
+// `agent.max_concurrent_agents` の枠が空かず、次の issue が着手できない。
+//
+// **止められたら待つのをやめる。**pane を閉じるほうは `stopWorker` が
+// 「止められていても閉じる」と決めているので、そちらは続く。
+//
+// **何を道連れにしたかを残すのはここではない。**`stopWorker` が pane を閉じる直前に
+// 残す。**そちらに置かないと、この関数を通らない道**（`abandonRunClaimed` /
+// `stopAndReleaseAsync` / `ensureAgentComment` の段2）**で記録が1行も出ない。**
+//
+// **新しい設定は足さない。**猶予は `claude.poll_wait_ms`、hook の新しさの線は
+// `claude.settle_ms` を使う。
+//
+// ctx: 待ちを打ち切るコンテキスト。
+// rs: 対象の run。
+func (o *Orchestrator) waitForBackgroundTasks(ctx context.Context, rs *runState) {
+	running := rs.runningBackgroundTasks()
+	if len(running) == 0 {
+		return
+	}
+	identifier := rs.issue().Identifier
+	grace := time.Duration(o.cfg.Claude.PollWaitMs) * time.Millisecond
+	switch {
+	case rs.blockedHandoff():
+		o.logger.Info("確認の画面で止まっているので、バックグラウンド処理を待ちません（新しい Stop は来ません）",
+			"identifier", identifier, "バックグラウンド処理", running)
+	case grace <= 0:
+		o.logger.Info("猶予が0なので、バックグラウンド処理を待ちません",
+			"identifier", identifier, "バックグラウンド処理", running)
+	default:
+		o.logger.Info("バックグラウンド処理が残っていると申告されているので、pane を閉じる前に待ちます",
+			"identifier", identifier, "バックグラウンド処理", running, "猶予", grace)
+		o.awaitBackgroundTasksDone(ctx, rs, grace)
+	}
+}
+
+// awaitBackgroundTasksDone は申告が空になるのを猶予いっぱいまで待つ（設計 3-81）。
+//
+// **覗くだけにする。**受け口（`hookCh`）から読むと、turn の終わりの判定に使う hook を
+// 横取りしてしまう（設計 3-2 の `isTurnBoundaryHook`）。**この時点では turn ループが
+// まだ待ち受けに居ることがある。**
+//
+// ctx: 待ちを打ち切るコンテキスト。
+// rs: 対象の run。
+// grace: 待つ長さの上限。
+func (o *Orchestrator) awaitBackgroundTasksDone(ctx context.Context, rs *runState, grace time.Duration) {
+	deadline := time.NewTimer(grace)
+	defer deadline.Stop()
+	tick := time.NewTicker(subagentPollInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-deadline.C:
+			return
+		case <-tick.C:
+			if len(rs.runningBackgroundTasks()) == 0 {
+				o.logger.Info("バックグラウンド処理が終わったので pane を閉じます",
+					"identifier", rs.issue().Identifier)
+				return
+			}
+		}
+	}
+}
+
 // retryBackoff は指数バックオフの待ち時間を求める（設計 3-21）。
 //
 // retryCount: これまでのリトライ回数。
@@ -779,6 +891,20 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	rs.markWorkerStopped()
 	if paneID == "" {
 		return
+	}
+	// **何を道連れにしたかを残す**（設計 3-81）。**残さないと、次に同じセッションへ
+	// 復帰したときに発火する「前のバックグラウンドコマンドに完了の記録が無い」という
+	// 通知の出どころを、人間が辿れない。**
+	//
+	// **`waitForBackgroundTasks` ではなくここに置く。**`stopWorker` の呼び出しは
+	// **11箇所・9関数**である（`git grep -n 'o\.stopWorker(' -- internal/`。
+	// `finishRunClaimed` / `failRun` / `abandonRunClaimed` / `stopAndReleaseAsync` /
+	// `ensureAgentComment` の段2 / `failCommentRecovery` / コメントが書けたので閉じる道 /
+	// 知らない Status / 担当が移った / 着手をやめた）。
+	// **待つのは1つだけだが、道連れにするのは全部だからである。**
+	if left := rs.runningBackgroundTasks(); len(left) > 0 {
+		o.logger.Warn("バックグラウンド処理が残ったまま pane を閉じます（走っていたものは途中で終わります）",
+			"identifier", rs.issue().Identifier, "バックグラウンド処理", left)
 	}
 	// **止められていても pane は閉じる。**
 	//
@@ -909,6 +1035,31 @@ func (o *Orchestrator) cleanupPath(
 // 止まった直前に何が動いていたかは辿れる。**
 const handoffSubagentLimit = 3
 
+// handoffBackgroundTaskLimit は引き渡しの通知に載せるバックグラウンド処理の件数の上限である
+// （設計 3-81）。
+//
+// **申告は hook から来る外部入力である**（設計 3-2 / 3-23）。控えのほうは
+// `maxTrackedSubagents`（64件）で切っているが、**64件をコメントへ並べると読めなくなる。**
+// **何が道連れになったかを人間が当たれる件数だけ載せる。**
+const handoffBackgroundTaskLimit = 5
+
+// limitStrings は並びの先頭から n 件までを返す。
+//
+// **元の並びを書き換えない。**呼び出し側が控えをそのまま渡すことがある。
+//
+// in: 元の並び。
+// n: 上限。0以下なら空を返す。
+// 戻り値: 先頭から n 件まで。
+func limitStrings(in []string, n int) []string {
+	if n <= 0 || len(in) == 0 {
+		return nil
+	}
+	if len(in) <= n {
+		return in
+	}
+	return in[:n]
+}
+
 // postHandoffComment は人間へ引き渡すときの通知を issue へ書く。
 //
 // **成果の要約は書かない**（設計 3-29）。continuo が書くのは、この通知と
@@ -964,6 +1115,10 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			"identifier", rs.issue().Identifier, "置き場所", subagentDir,
 			"件数", len(subagentTranscripts), "走行中のものか", subagentRunning)
 	}
+	// **切り捨てた件数も渡す**（設計 3-81b）。**黙って上から数件だけ出すと、
+	// 読んだ人は「道連れになったのはこれで全部だ」と読む。**
+	runningBackgroundTasks := rs.runningBackgroundTasks()
+	shownBackgroundTasks := limitStrings(runningBackgroundTasks, handoffBackgroundTaskLimit)
 	if err := o.postComment(ctx, nodeID,
 		buildHandoffComment(rs.issue().Identifier, reason, handoffContext{
 			WorktreePath:        snap.WorktreePath,
@@ -972,6 +1127,11 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 			SubagentTranscripts: subagentTranscripts,
 			SubagentRunning:     subagentRunning,
 			SettingsPath:        snap.SettingsPath,
+			// **止めた時点で走っていたバックグラウンド処理を載せる**（設計 3-81）。
+			// **凍結しない。**`blocked` の道の subagent と違い、こちらは
+			// `finishRunClaimed` の先頭で待ち終えた直後のものを載せたい。
+			BackgroundTasks:        shownBackgroundTasks,
+			BackgroundTasksOmitted: len(runningBackgroundTasks) - len(shownBackgroundTasks),
 		}, move)); err != nil {
 		o.logger.Warn("引き渡しの通知を投稿できませんでした", "identifier", rs.issue().Identifier, "error", err)
 	}

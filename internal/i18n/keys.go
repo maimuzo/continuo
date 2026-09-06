@@ -68,6 +68,62 @@ const (
 	// KeyDoctorLabelMissingKeys は雛形にあって WORKFLOW.md に書かれていない設定項目を
 	// 見る検査の見出し語である。
 	KeyDoctorLabelMissingKeys Key = "doctor.label.missing_keys"
+	// KeyDoctorLabelAutomations はカンバンの自動化と書き戻しの対応表の噛み合いを
+	// 見る検査の見出し語である（設計 3-32。issue #209）。
+	KeyDoctorLabelAutomations Key = "doctor.label.automations"
+	// KeyDoctorLabelAgentTeams は Claude Code の agent teams が有効になっていないかを
+	// 見る検査の見出し語である（設計 3-70。issue #137）。
+	KeyDoctorLabelAgentTeams Key = "doctor.label.agent_teams"
+)
+
+// doctor の検査「自動化」（設計 3-32 / 3-54。issue #209）。
+const (
+	// KeyDoctorAutomationsConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorAutomationsConfigUnreadable Key = "doctor.automations.config_unreadable"
+	// KeyDoctorAutomationsBoardUnreadable は上流のカンバンが落ちたときの説明に出る。
+	KeyDoctorAutomationsBoardUnreadable Key = "doctor.automations.board_unreadable"
+	// KeyDoctorAutomationsUnreadable は応答に自動化の一覧が無かったときの説明に出る。
+	KeyDoctorAutomationsUnreadable Key = "doctor.automations.unreadable"
+	// KeyDoctorAutomationsNoneEnabled は有効な自動化が1つも無いときの説明に出る。
+	KeyDoctorAutomationsNoneEnabled Key = "doctor.automations.none_enabled"
+	// KeyDoctorAutomationsOK は有効な自動化があり、対応表も書かれているときの説明に出る。
+	KeyDoctorAutomationsOK Key = "doctor.automations.ok"
+	// KeyDoctorAutomationsEmptyTable は有効な自動化があるのに対応表が空のときの説明に出る。
+	KeyDoctorAutomationsEmptyTable Key = "doctor.automations.empty_table"
+	// KeyDoctorAutomationsNoteWorkflow は有効な自動化1件ずつの内訳に出る。
+	KeyDoctorAutomationsNoteWorkflow Key = "doctor.automations.note_workflow"
+	// KeyDoctorAutomationsNoteMore は内訳の上限を超えたぶんの件数に出る。
+	KeyDoctorAutomationsNoteMore Key = "doctor.automations.note_more"
+	// KeyDoctorAutomationsNoteScope はこの検査が見ていない範囲の説明に出る。
+	KeyDoctorAutomationsNoteScope Key = "doctor.automations.note_scope"
+	// KeyDoctorAutomationsRemedyRewrite は対応表を書く直し方に出る。
+	KeyDoctorAutomationsRemedyRewrite Key = "doctor.automations.remedy_rewrite"
+	// KeyDoctorAutomationsRemedyDisable は自動化を切る直し方に出る。
+	KeyDoctorAutomationsRemedyDisable Key = "doctor.automations.remedy_disable"
+	// KeyDoctorAutomationsRemedyIgnore は無視してよい場合の案内に出る。
+	KeyDoctorAutomationsRemedyIgnore Key = "doctor.automations.remedy_ignore"
+)
+
+// doctor の検査「agent teams」（設計 3-70。issue #137）。
+const (
+	// KeyDoctorAgentTeamsConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorAgentTeamsConfigUnreadable Key = "doctor.agent_teams.config_unreadable"
+	// KeyDoctorAgentTeamsOff は claude.env で明示的に切ってあるときの説明に出る。
+	KeyDoctorAgentTeamsOff Key = "doctor.agent_teams.off"
+	// KeyDoctorAgentTeamsOnSettings は claude.env で有効にしているときの説明に出る。
+	KeyDoctorAgentTeamsOnSettings Key = "doctor.agent_teams.on_settings"
+	// KeyDoctorAgentTeamsOnShell は doctor を叩いたシェルで有効になっているときの説明に出る。
+	KeyDoctorAgentTeamsOnShell Key = "doctor.agent_teams.on_shell"
+	// KeyDoctorAgentTeamsUnknownValue は 0 でも 1 でもない値が書かれているときの説明に出る。
+	KeyDoctorAgentTeamsUnknownValue Key = "doctor.agent_teams.unknown_value"
+	// KeyDoctorAgentTeamsNotFound は読めた出どころに有効化が無かったときの説明に出る。
+	KeyDoctorAgentTeamsNotFound Key = "doctor.agent_teams.not_found"
+	// KeyDoctorAgentTeamsNoteUnread は読んでいない出どころの内訳に出る。
+	KeyDoctorAgentTeamsNoteUnread Key = "doctor.agent_teams.note_unread"
+	// KeyDoctorAgentTeamsRemedyOff は agent teams を切る直し方に出る。
+	KeyDoctorAgentTeamsRemedyOff Key = "doctor.agent_teams.remedy_off"
+	// KeyDoctorAgentTeamsRemedyWhy は切らないとどうなるかの説明に出る。
+	KeyDoctorAgentTeamsRemedyWhy Key = "doctor.agent_teams.remedy_why"
 )
 
 // doctor の検査「未記入の項目」（設計 3-75。issue #85）。
@@ -220,7 +276,7 @@ const (
 
 	// 複数の機械で担当を持ち回るときに issue へ書く文言である（設計 3-77a / 3-77b / 3-77c）。
 
-	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（機械の名前を差し込む）。
+	// KeyHandoffBidCandidacy は入札のコメントの1行目に出る（入札したアカウントのログイン名を差し込む）。
 	KeyHandoffBidCandidacy Key = "handoff.bid.candidacy"
 	// KeyHandoffBidDeadline は入札のコメントの2行目に出る（締め切りまでの分数を差し込む）。
 	//
@@ -233,7 +289,7 @@ const (
 	KeyHandoffBidDeadlineOne Key = "handoff.bid.deadline_one"
 	// KeyHandoffBidNoDeadline は、締め切りを待たない設定のときに入札のコメントの2行目に出る。
 	KeyHandoffBidNoDeadline Key = "handoff.bid.no_deadline"
-	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（機械の名前を差し込む）。
+	// KeyHandoffHoldAssigned は hold のコメントの1行目に出る（担当になったアカウントのログイン名を差し込む）。
 	KeyHandoffHoldAssigned Key = "handoff.hold.assigned"
 	// KeyHandoffHoldStarting は hold のコメントの2行目に出る（branch の名前を差し込む）。
 	KeyHandoffHoldStarting Key = "handoff.hold.starting"
@@ -242,12 +298,10 @@ const (
 	KeyHandoffHoldStartingNoBranch Key = "handoff.hold.starting_no_branch"
 	// KeyHandoffReleasedReassign は released のコメントの1行目に出る。
 	KeyHandoffReleasedReassign Key = "handoff.released.reassign"
-	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（機械の名前を差し込む）。
+	// KeyHandoffReleasedDoNotPush は released のコメントの2行目に出る（担当を外されたアカウントのログイン名を差し込む）。
 	KeyHandoffReleasedDoNotPush Key = "handoff.released.do_not_push"
 	// KeyHandoffLostReason は、走っている最中に担当が移っていた run を止めるときの理由に出る。
 	KeyHandoffLostReason Key = "handoff.lost.reason"
-	// KeyHandoffLostUnknownHost は、担当が移った先の機械の名前を読めなかったときに差し込む。
-	KeyHandoffLostUnknownHost Key = "handoff.lost.unknown_host"
 	// KeyFsprobeWorkspaceRootFailed は worktree の置き場所に書けなかったときのエラーに出る。
 	KeyFsprobeWorkspaceRootFailed Key = "fsprobe.workspace_root_failed"
 )
@@ -632,6 +686,9 @@ const (
 	KeyCLISetupErrWouldBreakConfig Key = "cli.setup.err_would_break_config"
 	// KeyCLISetupBoardUsing はどのボードの Status の選択肢を読むかを出す。
 	KeyCLISetupBoardUsing Key = "cli.setup.board_using"
+	// KeyCLISetupWarnConfigLoad は、言語を決めるために読んだ設定を読めなかったときに出る。
+	// **対話は止めない。**続けることと、何語で出すことになったかを添える。
+	KeyCLISetupWarnConfigLoad Key = "cli.setup.warn_config_load"
 	// KeyCLISetupErrDirNotFound は置き場所のディレクトリが無いときに出る。
 	KeyCLISetupErrDirNotFound Key = "cli.setup.err_dir_not_found"
 	// KeyCLISetupErrNotADirectory は置き場所がディレクトリでないときに出る。
@@ -1714,6 +1771,19 @@ const (
 	KeyScaffoldWriteSymlinkNotFollowed Key = "scaffold.write.symlink_not_followed"
 )
 
+// `continuo init` が書き出す WORKFLOW.md の本文へ入れる文言。
+//
+// **これだけは、画面に出す文言ではない。**エージェントへ送られる指示そのものである。
+// **それでも資源に置く。**言語ごとに1本ずつ持たせたいものであり、
+// **`language` の設定に連動させる**（issue #187 で人間が決めた）。
+const (
+	// KeyScaffoldWorkflowWriteLanguage は `### 書く言語` の節へ書く1行である。
+	//
+	// **その言語で読み書きする人へ向けた、その言語での指示にする。**
+	// 訳ではなく、その言語の利用者にとって自然な指示を書くこと。
+	KeyScaffoldWorkflowWriteLanguage Key = "scaffold.workflow.write_language"
+)
+
 // 既にあるファイルを差し替えで書き換えるとき（internal/scaffold の statTarget と
 // internal/atomicfile の Write）の文言。
 //
@@ -2306,6 +2376,12 @@ const (
 	// KeyOrchestratorConfirmStartupNotInteractive は、agent は居るが入力を受け付けられない
 	// ことを表す（`interactive_ready` が偽）。
 	KeyOrchestratorConfirmStartupNotInteractive Key = "orchestrator.confirm_startup.not_interactive"
+	// KeyOrchestratorErrStartupBusy は、herdr は agent を登録していないが、
+	// Claude Code は生きていて turn を走らせていることを表す（設計 3-80）。
+	//
+	// **これは失敗ではない。**受けた側は pane を閉じず、1回目の turn も送らずに、
+	// 走っている turn の終わりを待つ。
+	KeyOrchestratorErrStartupBusy Key = "orchestrator.err_startup_busy"
 	// KeyOrchestratorRestoreBrokenWorktreeStop は、身元を確かめられない worktree を見つけて
 	// 起動を止めるときに出る（3-49。`workspace.on_broken_worktree` が `stop` のとき）。
 	KeyOrchestratorRestoreBrokenWorktreeStop Key = "orchestrator.restore.broken_worktree_stop"
@@ -2444,6 +2520,32 @@ const (
 	KeyCLIPromptBreakdownBodyMissing Key = "cli.prompt.breakdown_body_missing"
 	// KeyCLIPromptBreakdownBuiltinOnly は--builtin のときの内訳の1行である。
 	KeyCLIPromptBreakdownBuiltinOnly Key = "cli.prompt.breakdown_builtin_only"
+	// KeyCLIPromptFlagURL は--url の説明に出る。
+	KeyCLIPromptFlagURL Key = "cli.prompt.flag_url"
+	// KeyCLIPromptFlagAttempt は--attempt の説明に出る。
+	KeyCLIPromptFlagAttempt Key = "cli.prompt.flag_attempt"
+	// KeyCLIPromptErrURLWithBuiltin は--url と--builtin を同時に指定したときに出る。
+	KeyCLIPromptErrURLWithBuiltin Key = "cli.prompt.err_url_with_builtin"
+	// KeyCLIPromptErrURLEmpty は--url に空文字を渡したときに出る。
+	KeyCLIPromptErrURLEmpty Key = "cli.prompt.err_url_empty"
+	// KeyCLIPromptBreakdownFirstAttempt は--url で1回目として展開したときに出る。
+	KeyCLIPromptBreakdownFirstAttempt Key = "cli.prompt.breakdown_first_attempt"
+	// KeyCLIPromptErrURLInvalid は--url の値を issue の URL として読めないときに出る。
+	KeyCLIPromptErrURLInvalid Key = "cli.prompt.err_url_invalid"
+	// KeyCLIPromptErrAttemptPositive は--attempt が1未満のときに出る。
+	KeyCLIPromptErrAttemptPositive Key = "cli.prompt.err_attempt_positive"
+	// KeyCLIPromptErrAttemptNeedsURL は--attempt を--url 無しで渡したときに出る。
+	KeyCLIPromptErrAttemptNeedsURL Key = "cli.prompt.err_attempt_needs_url"
+	// KeyCLIPromptErrFetchFailed はボードを読めないときに出る。
+	KeyCLIPromptErrFetchFailed Key = "cli.prompt.err_fetch_failed"
+	// KeyCLIPromptErrIssueNotOnBoard は識別子の issue がボードから組み立てられないときに出る。
+	KeyCLIPromptErrIssueNotOnBoard Key = "cli.prompt.err_issue_not_on_board"
+	// KeyCLIPromptErrRenderFailed は変数展開に失敗したときに出る。
+	KeyCLIPromptErrRenderFailed Key = "cli.prompt.err_render_failed"
+	// KeyCLIPromptBreakdownExpanded は--url で変数を展開したときの内訳の1行である。
+	KeyCLIPromptBreakdownExpanded Key = "cli.prompt.breakdown_expanded"
+	// KeyCLIPromptBreakdownAttempt は--url のときに何回目として展開したかを出す1行である。
+	KeyCLIPromptBreakdownAttempt Key = "cli.prompt.breakdown_attempt"
 )
 
 // allKeys は宣言済みのキーを全部並べたものである。
@@ -2497,6 +2599,29 @@ var allKeys = []Key{
 	KeyDoctorRewriteKeysMissing,
 	KeyDoctorRewriteKeysNote,
 	KeyDoctorRewriteKeysRemedy,
+	KeyDoctorLabelAutomations,
+	KeyDoctorAutomationsConfigUnreadable,
+	KeyDoctorAutomationsBoardUnreadable,
+	KeyDoctorAutomationsUnreadable,
+	KeyDoctorAutomationsNoneEnabled,
+	KeyDoctorAutomationsOK,
+	KeyDoctorAutomationsEmptyTable,
+	KeyDoctorAutomationsNoteWorkflow,
+	KeyDoctorAutomationsNoteMore,
+	KeyDoctorAutomationsNoteScope,
+	KeyDoctorAutomationsRemedyRewrite,
+	KeyDoctorAutomationsRemedyDisable,
+	KeyDoctorAutomationsRemedyIgnore,
+	KeyDoctorLabelAgentTeams,
+	KeyDoctorAgentTeamsConfigUnreadable,
+	KeyDoctorAgentTeamsOff,
+	KeyDoctorAgentTeamsOnSettings,
+	KeyDoctorAgentTeamsOnShell,
+	KeyDoctorAgentTeamsUnknownValue,
+	KeyDoctorAgentTeamsNotFound,
+	KeyDoctorAgentTeamsNoteUnread,
+	KeyDoctorAgentTeamsRemedyOff,
+	KeyDoctorAgentTeamsRemedyWhy,
 	KeyDoctorCleanupStatesConfigUnreadable,
 	KeyDoctorCleanupStatesDisabled,
 	KeyDoctorCleanupStatesOK,
@@ -2538,7 +2663,6 @@ var allKeys = []Key{
 	KeyHandoffReleasedReassign,
 	KeyHandoffReleasedDoNotPush,
 	KeyHandoffLostReason,
-	KeyHandoffLostUnknownHost,
 	KeyDoctorHerdrConfigUnreadable,
 	KeyDoctorHerdrSocketUnresolved,
 	KeyDoctorHerdrRemedySocketAbs,
@@ -2692,6 +2816,7 @@ var allKeys = []Key{
 	KeyCLISetupErrKeysNotRewritableRemedy,
 	KeyCLISetupErrWouldBreakConfig,
 	KeyCLISetupBoardUsing,
+	KeyCLISetupWarnConfigLoad,
 	KeyCLISetupErrDirNotFound,
 	KeyCLISetupErrNotADirectory,
 	KeyCLISetupErrSymlink,
@@ -3062,6 +3187,7 @@ var allKeys = []Key{
 	KeyScaffoldDirGetwdFailed,
 	KeyScaffoldDirAbsFailed,
 	KeyScaffoldWriteSymlinkNotFollowed,
+	KeyScaffoldWorkflowWriteLanguage,
 	KeyScaffoldUpdateSymlinkNotFollowed,
 	KeyScaffoldUpdateNotRegularFile,
 	KeyScaffoldUpdateTempCreateFailed,
@@ -3311,6 +3437,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupWorkingTimeout,
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,
+	KeyOrchestratorErrStartupBusy,
 	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
 	KeyDaemonErrStartup,
@@ -3360,6 +3487,19 @@ var allKeys = []Key{
 	KeyCLIPromptBreakdownBodyMissing,
 	KeyCLIPromptBreakdownWorkflowBody,
 	KeyCLIPromptBreakdownBuiltinOnly,
+	KeyCLIPromptFlagURL,
+	KeyCLIPromptFlagAttempt,
+	KeyCLIPromptErrURLWithBuiltin,
+	KeyCLIPromptErrURLEmpty,
+	KeyCLIPromptBreakdownFirstAttempt,
+	KeyCLIPromptErrURLInvalid,
+	KeyCLIPromptErrAttemptPositive,
+	KeyCLIPromptErrAttemptNeedsURL,
+	KeyCLIPromptErrFetchFailed,
+	KeyCLIPromptErrIssueNotOnBoard,
+	KeyCLIPromptErrRenderFailed,
+	KeyCLIPromptBreakdownExpanded,
+	KeyCLIPromptBreakdownAttempt,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

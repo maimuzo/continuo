@@ -27,6 +27,15 @@ import (
 	"text/template"
 
 	"github.com/maimuzo/continuo/internal/i18n"
+	// **`internal/tracker` を import している。**`RenderData` を1箇所へ寄せるために要る
+	// （issue #183）。**その代わり、`internal/config` はこの package を import できない。**
+	// `prompt → tracker → config` になるためである。
+	// **つまり `Fragments.Validate()` を `config.Load` の中で呼ぶ道は閉じている。**
+	// いま `Validate` を呼ぶのは `internal/daemon`（常駐の起動）と `internal/doctor` だけで、
+	// **`continuo prompt` はどの形でも呼ばない。**
+	// **それでも、壊れたテンプレートが見過ごされることは無い。**常駐は起動時に落ち、
+	// `continuo doctor` は `prompt vars` を赤にする。
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // Marker は builtin.md を前半と後半に切る目印の行である。
@@ -464,6 +473,28 @@ func (f Fragments) HasBody() bool { return f.hasBody }
 // 戻り値: 絶対パス。**本文が空でも埋まっている。**
 func (f Fragments) BodyPath() string { return f.bodyPath }
 
+// BodyChanged は、渡された本文が、いま持っている本文と違うかを返す（設計 3-24）。
+//
+// **設定の読み直しが「本文は効きません」と知らせるために要る。**
+// 本文は front matter の外にあるので、`config.Config` の差分には1行も出てこない。
+// **知らせないと、本文だけを直した人が「読み直したから効いた」と読む。**
+//
+// **比べるのは、取り除いたあとの本文である。**案内のコメントだけを直したときは
+// 送る文面が1バイトも変わらないので、「変わった」と言わない（`Build` と同じ手順を通す）。
+//
+// body: 読み直した WORKFLOW.md の front matter より後ろ。
+// 戻り値: 送る文面に効く形で違っていれば真。
+func (f Fragments) BodyChanged(body string) bool {
+	stripped := dropEmptySections(stripComments(body))
+	for _, it := range f.items {
+		if it.Name == NameWorkflowBody {
+			return it.Text != stripped
+		}
+	}
+	// **いま本文を持っていない。**新しい本文に中身があれば変わったことになる。
+	return strings.TrimSpace(stripped) != ""
+}
+
 // Text は、変数展開していない全文を返す（`continuo prompt --show` が出すもの）。
 //
 // 戻り値: 断片を連結した文字列。
@@ -508,15 +539,54 @@ func join(parts []string) string {
 // 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
 // **どの断片の何行目かがエラーの文言に入る。**
 func (f Fragments) Render(data map[string]any) (string, error) {
-	parts := make([]string, 0, len(f.items))
-	for _, it := range f.items {
-		out, err := renderOne(it, data)
-		if err != nil {
-			return "", err
-		}
-		parts = append(parts, out)
+	text, _, err := f.RenderAll(data)
+	return text, err
+}
+
+// RenderAll は、変数展開した全文と、その断片の並びを一度に返す（issue #183）。
+//
+// **`continuo prompt --show --url` は、全文を標準出力へ出し、断片の並びから内訳を数える。**
+// **`Render` と `RenderItems` を続けて呼ぶと、同じ解釈と実行を2回することになる。**
+// 人間が待つコマンドなので、1回で済ませる。
+//
+// data: テンプレートへ渡す変数。
+// 戻り値の1つ目: 変数展開して連結した全文。
+// 戻り値の2つ目: 変数展開した断片。**並びは `Items` と同じ。**
+// 戻り値の3つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
+func (f Fragments) RenderAll(data map[string]any) (string, []Fragment, error) {
+	rendered, err := f.RenderItems(data)
+	if err != nil {
+		return "", nil, err
 	}
-	return join(parts), nil
+	parts := make([]string, 0, len(rendered))
+	for _, it := range rendered {
+		parts = append(parts, it.Text)
+	}
+	return join(parts), rendered, nil
+}
+
+// RenderItems は、断片ごとに変数展開した結果を返す（issue #183）。
+//
+// **`continuo prompt --show --url` の内訳が、これを数える。**
+// **展開する前の断片を数えてはならない。**`{{if .attempt}}` のような枝は、
+// **展開すると行が消える。**見出しは「送る文面の内訳」なので、
+// **送った文面を数えなければ、その行数は嘘になる**（実測で6行ずれた）。
+//
+// **並びと名前は元の断片のままである。**中身だけが展開後になる。
+//
+// data: テンプレートへ渡す変数。
+// 戻り値の1つ目: 変数展開した断片。**並びは `Items` と同じ。**
+// 戻り値の2つ目: 解釈できなかった、または一覧に無い変数を参照していた断片のエラー。
+func (f Fragments) RenderItems(data map[string]any) ([]Fragment, error) {
+	out := make([]Fragment, 0, len(f.items))
+	for _, it := range f.items {
+		text, err := renderOne(it, data)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Fragment{Name: it.Name, Text: text, Path: it.Path})
+	}
+	return out, nil
 }
 
 // renderOne は断片1つを変数展開する。
@@ -554,6 +624,68 @@ func (f Fragments) Validate() error {
 		}
 	}
 	return nil
+}
+
+// RenderData は、送る文面へ渡す変数を組み立てる（設計 5-3 / 5-3f）。
+//
+// **組み立てる場所はここだけである。**continuo が実際に送る経路
+// （`internal/orchestrator` の `renderFirstPrompt`）と、人間が事前に確かめる経路
+// （`continuo prompt --show --url`）が、どちらもこの関数を呼ぶ。
+//
+// **別々に組み立ててはならない。**片方を直したときにもう片方がずれる。
+// **ずれた瞬間、`--show --url` は「送られる文面」ではないものを見せることになり、
+// そのコマンドの目的そのものを失う。**
+//
+// **返す名前は `SampleData` と1つも違わないこと。**渡す側と検査する側が食い違うと、
+// **その名前を使った文面で continuo が起動しない**（同じ形の欠陥が3回起きている。
+// test/internal/prompt の `TestSampleData_送る文面が使える変数の一覧` がその2つを結んでいる）。
+//
+// issue: 対象の issue。
+// attempt: 試行回数。**1回目は nil を渡す**（仕様 12.3。`text/template` は nil を偽として
+// 扱うので `{{if .attempt}}` が正しく動く）。**キーごと省いてはならない。**
+// progressIntervalMs: 進捗報告を書かせる間隔（ミリ秒）。
+//
+//	**分へ直すのはこの中である。**呼び出し側で割らせない。
+//	割り算が2箇所に散ると、片方を直したときにずれる。
+//
+// 戻り値: 送る文面が使う名前を全部持つ変数の一覧。
+func RenderData(issue tracker.Issue, attempt *int, progressIntervalMs int) map[string]any {
+	url := ""
+	if issue.URL != nil {
+		url = *issue.URL
+	}
+	// push_branch は issue にリンクされた branch の生の名前である（設計 3-22d・5-3）。
+	//
+	// **push 先の既定ではない。**既定はいつでも `git push -u origin HEAD` であり、
+	// これは「別の名前へ出せと issue に書かれていたときの候補」として渡す。
+	//
+	// **リンクが1本でないとき（0本・2本以上・別のリポジトリを指すとき）は空文字である。**
+	branch := ""
+	if issue.BranchName != nil {
+		branch = *issue.BranchName
+	}
+	// **1回目は nil のままにする。**`any` のゼロ値ではなく nil を入れる。
+	var attemptValue any
+	if attempt != nil {
+		attemptValue = *attempt
+	}
+	return map[string]any{
+		"issue": map[string]any{
+			"identifier": issue.Identifier,
+			"owner":      issue.Owner,
+			"repo":       issue.Repo,
+			"number":     issue.Number,
+			"url":        url,
+			"title":      issue.Title,
+			"state":      issue.State,
+			"labels":     issue.Labels,
+		},
+		"push_branch": branch,
+		"attempt":     attemptValue,
+		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
+		// **「3600000ミリ秒以上黙らないでください」では通じない。**
+		"progress_interval_minutes": progressIntervalMs / 60000,
+	}
 }
 
 // SampleData は、検査に使う作り物の issue の変数を返す（設計 5-3c）。
