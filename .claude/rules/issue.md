@@ -215,7 +215,7 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 | 4 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
 
 **代表以外には、何が直ったかが1行も残らない。**
-組み込みの指示書（[internal/prompt/builtin.md:691-706](../../internal/prompt/builtin.md#L691-L706) の 7-2）が、
+組み込みの指示書（[internal/prompt/builtin.md:694-858](../../internal/prompt/builtin.md#L694-L858) の 7-2）が、
 表明の1行と `Closes #45` しか書かせていないためである。
 **人間が代表の pull request を見て確かめること。**
 

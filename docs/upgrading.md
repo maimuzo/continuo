@@ -640,6 +640,7 @@ cd ~/continuo-work && continuo prompt --show | grep -c '^## 5-5\. '
 ```
 
 **`1` が返れば入っています。**
+
 ### 機械が書いたコメントに印が付きます — 設定に足すものはありません
 
 **何が変わったか。**continuo 本体が書くコメントと、continuo が起動した Claude Code が書くコメントに、

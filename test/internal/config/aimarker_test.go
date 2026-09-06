@@ -275,6 +275,53 @@ func TestAIMarker_中括弧を含まない(t *testing.T) {
 	}
 }
 
+// 目的: 閉じの後ろに本文が続く1行の、前へ印を入れないことを固定する（設計 3-82）。
+//
+// **読む側は `TrimSpace(body)` してから先頭を見る。**
+// `<!-- continuo:bid --> 立候補` のような1行を先頭に持つ本文は、
+// **`handoff.IsMarked` からは持ち回りのコメントに見える。**
+// **そこへ印を先に入れると、先頭一致が全部外れる。**
+//
+// 与える情報: 閉じの後ろに本文が続く1行で始まる本文。
+// 成功条件: TrimSpace したあとの先頭が、元の印のままであること。
+func TestWithAIMarker_閉じの後ろに本文が続く行の前へ入れない(t *testing.T) {
+	body := config.HandoffBidMarker + " 立候補しています。\n{\"score\":190}\n"
+	got := config.WithAIMarker(body)
+	if !strings.HasPrefix(strings.TrimSpace(got), config.HandoffBidMarker) {
+		t.Fatalf("印が持ち回りの印より前に入りました:\n%q", got)
+	}
+}
+
+// 目的: 先頭の空白だけの行を作らないことを固定する（設計 3-82）。
+//
+// **`元の本文は1文字も書き換えない` という約束のうち、行の増やし方に当たる。**
+// 空白だけの1行目が残ると、issue の画面で空行から始まるコメントになる。
+//
+// 与える情報: 先頭に空白があり、印を1つも持たない本文。
+// 成功条件: 1行目が印であること。
+func TestWithAIMarker_空白だけの行を残さない(t *testing.T) {
+	got := config.WithAIMarker("  素の本文")
+	want := config.AIMarker + "\n素の本文"
+	if got != want {
+		t.Fatalf("空白だけの行が残りました:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: CRLF の本文へ足す行も CRLF で終わることを固定する（設計 3-82）。
+//
+// **git の失敗をそのまま貼る経路があるので、CRLF が混じりうる。**
+// **1行だけ LF になると、投稿した本文の改行が揃わない。**
+//
+// 与える情報: CRLF の本文。
+// 成功条件: 印の行が CRLF で終わり、先頭の1行が変わらないこと。
+func TestWithAIMarker_CRLFの本文にはCRLFで足す(t *testing.T) {
+	body := config.HandoffBidMarker + "\r\n{\"score\":190}\r\n"
+	want := config.HandoffBidMarker + "\r\n" + config.AIMarker + "\r\n{\"score\":190}\r\n"
+	if got := config.WithAIMarker(body); got != want {
+		t.Fatalf("改行の綴りが揃いません:\n got %q\nwant %q", got, want)
+	}
+}
+
 // 目的: 複数行の HTML コメントの中へ印を差し込まないことを固定する（設計 3-82）。
 //
 // **`<!--` で始まり、同じ行に `-->` が無い行は、複数行のコメントの開きである。**

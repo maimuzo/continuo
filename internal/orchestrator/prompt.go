@@ -119,8 +119,10 @@ func BuildContinuationPrompt(
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	// **印の2行は字下げしない。**組み込みの指示書（5-3 の段2b）が
-	// 「印の3行は、行の先頭から書きます」と教えており、
+	// **印の2行は字下げしない。**印は本文の行頭から始まらなければならない。
+	// **`FetchComments`（[internal/tracker/adapter.go](../tracker/adapter.go)）の先頭一致も、
+	// `handoff.StartsAsProgressReport`（[internal/handoff/assess.go](../handoff/assess.go)）も、
+	// 行頭ちょうどの印しか数えない。**
 	// **字下げした見本を送ると、写したエージェントが違う形の本文を書く。**
 	fmt.Fprintf(&b, "gh issue comment %s --body \"%s\n%s\nここに何をしたかを書く\"\n\n",
 		issueURL, marker, config.AIMarker)

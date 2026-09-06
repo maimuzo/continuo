@@ -73,7 +73,7 @@ func TestTemplate_機械の印は既存の目印より後ろに書かせる(t *t
 
 	found := 0
 	for i, line := range lines {
-		// **注釈が付いた行も見る。**5-5 の図は `<!-- continuo:ai -->         ← ここへ足す` と書いており、
+		// **注釈が付いた行も見る。**5-6 の図は `<!-- continuo:ai -->         ← ここへ足す` と書いており、
 		// **完全一致で絞ると、置き場所を教えている唯一の図が検査から漏れる。**
 		if !strings.HasPrefix(strings.TrimSpace(line), config.AIMarker) {
 			continue
@@ -87,8 +87,15 @@ func TestTemplate_機械の印は既存の目印より後ろに書かせる(t *t
 		}
 		for _, marker := range markersThatMustComeFirst {
 			// この見本がその目印を後ろで使っていなければ、順序を問わない。
+			// **空行で止めない。**印と印のあいだに空行を挟む書き方があり、
+			// **止めると、その並びが検査から漏れる。**
+			// **本文が始まったら止める**（空行でも印の行でもない行）。
 			usedAfter := false
-			for j := i + 1; j < len(lines) && strings.TrimSpace(lines[j]) != ""; j++ {
+			for j := i + 1; j < len(lines); j++ {
+				t := strings.TrimSpace(lines[j])
+				if t != "" && !strings.HasPrefix(t, "<!--") {
+					break
+				}
 				if strings.Contains(lines[j], marker) {
 					usedAfter = true
 					break

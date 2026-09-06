@@ -99,14 +99,18 @@ const (
 func WithAIMarker(body string) string {
 	// **先頭の空白を読み飛ばす。**読む側が `TrimSpace` するので、ここも同じところから見る。
 	head := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
-	offset, insert := head, head
-	for rest := body[head:]; rest != ""; {
+	insert := head
+	// **位置は offset 1本で持つ。**`rest` を別に持つと、行を読み飛ばすたびに
+	// **2つを揃えて進める義務が増え、片方を忘れても コンパイラは教えてくれない。**
+	for offset := head; offset < len(body); {
+		rest := body[offset:]
 		line := rest
 		advance := len(rest)
 		if i := strings.IndexByte(rest, '\n'); i >= 0 {
 			line = rest[:i]
 			advance = i + 1
 		}
+		offset += advance
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case trimmed == "":
@@ -119,10 +123,8 @@ func WithAIMarker(body string) string {
 			return body
 		default:
 			// 印の行。**この行の直後を、いまの挿入位置とする。**
-			insert = offset + advance
+			insert = offset
 		}
-		offset += advance
-		rest = rest[advance:]
 	}
 	return spliceAIMarker(body, insert)
 }
@@ -141,23 +143,24 @@ func WithAIMarker(body string) string {
 // **閉じも見るのは、[internal/prompt/prompt.go](../prompt/prompt.go) の
 // `stripCommentsFromLine` が既にそうしているからである。**
 //
-// **閉じの後ろに本文が続く行も、印の行ではない。**
+// **閉じの後ろに本文が続く行も、印の行として数える。**
 // `<!-- 方針 --> production へは push しないでください。` のような1行の書き方があり
 // （[internal/prompt/prompt.go](../prompt/prompt.go) の `stripCommentsFromLine` がそう書いている）、
-// **数えると、印が本文の1行の下へ入る。**
+// **その形だと、印は本文の1行の下へ入る。**見た目は良くない。
+//
+// **それでも数えるほうを採る。**数えないと、その行より**前**へ印を入れることになるからである。
+// **読む側は `TrimSpace(body)` してから先頭を見るので、`<!-- continuo:bid --> 立候補` のような
+// 1行を先頭に持つ本文は、`IsMarked` からは持ち回りのコメントに見える。**
+// **そこへ印を先に入れると、`IsMarked` も `FetchComments` も CI の正規表現も同時に外れる。**
+// **見た目が悪いことと、先頭一致が全部外れることを比べて、後者を避ける。**
 //
 // line: 見る行（行末の改行は含まない）。
-// 戻り値: 行頭ちょうどの `<!--` で始まり、`-->` で終わっていれば真。
+// 戻り値: 行頭ちょうどの `<!--` で始まり、同じ行に `-->` があれば真。
 func isMarkerLine(line string) bool {
-	trimmed := strings.TrimSpace(line)
 	if !strings.HasPrefix(line, aiMarkerCommentOpen) {
 		return false
 	}
-	if !strings.HasSuffix(trimmed, aiMarkerCommentClose) {
-		return false
-	}
-	// **開きと閉じが同じものでないこと。**`<!--` だけの行は複数行コメントの開きである。
-	return len(trimmed) >= len(aiMarkerCommentOpen)+len(aiMarkerCommentClose)
+	return strings.Contains(line[len(aiMarkerCommentOpen):], aiMarkerCommentClose)
 }
 
 // spliceAIMarker は、本文の指定の位置へ AIMarker を1行差し込む。
@@ -167,13 +170,23 @@ func isMarkerLine(line string) bool {
 // 戻り値: 差し込んだ本文。
 func spliceAIMarker(body string, at int) string {
 	prefix, suffix := body[:at], body[at:]
+	// **空白だけの前置きは、空行にして残さない。**
+	// `"  素の本文"` のような本文で、1行目が空白だけの行になる。
+	if strings.TrimSpace(prefix) == "" {
+		prefix = ""
+	}
 	// **行の途中へ足さない。**末尾に改行の無い本文では、印が前の行に繋がる。
+	// **改行の綴りは、直前の行に合わせる。**CRLF の本文へ LF を混ぜない。
+	eol := "\n"
+	if strings.HasSuffix(prefix, "\r\n") {
+		eol = "\r\n"
+	}
 	if prefix != "" && !strings.HasSuffix(prefix, "\n") {
-		prefix += "\n"
+		prefix += eol
 	}
 	// **本文の末尾へ足すときは、改行を増やさない。**
 	if suffix == "" {
 		return prefix + AIMarker
 	}
-	return prefix + AIMarker + "\n" + suffix
+	return prefix + AIMarker + eol + suffix
 }
