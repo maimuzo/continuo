@@ -236,6 +236,11 @@ func TestValidate_数値の範囲を外れたら弾く(t *testing.T) {
 		// **そうなると、枠待ちに入った瞬間に担当を手放す。**
 		{"1週間の枠を待つ上限が大きすぎる", "weekly_wait_limit_minutes",
 			"  weekly_wait_limit_minutes: 999999999", "weekly_wait_limit_minutes"},
+		// **マージン100 を弾く**（issue #173）。
+		// **余裕値は `100 − 使用率 − マージン` なので、100 だと使用率0でも0になる。**
+		// **その機械は永久に入札せず、走っている run も全部手放す。**
+		{"5時間のマージンが100", "five_hour_margin_percent",
+			"      five_hour_margin_percent: 100", "five_hour_margin_percent"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := loadWithReplaced(t, tc.key, tc.line)

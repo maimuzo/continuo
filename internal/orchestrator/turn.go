@@ -320,7 +320,7 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 	if grace <= 0 {
 		return
 	}
-	o.logger.Info("走っているサブエージェントが終わるのを待ちます",
+	o.logger.Info("走っているサブエージェントが終わるのを待ってから esc を送ります",
 		"identifier", rs.issue().Identifier, "サブエージェント", running, "猶予", grace)
 
 	deadline := time.NewTimer(grace)
@@ -333,13 +333,13 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 			return
 		case <-deadline.C:
 			if left := rs.runningSubagentList(); len(left) > 0 {
-				o.logger.Warn("猶予のあいだにサブエージェントが終わらなかったので、走行中のまま次へ進みます（書きかけの編集が残っているかもしれません）",
+				o.logger.Warn("猶予のあいだにサブエージェントが終わらなかったので、走行中のまま esc を送ります",
 					"identifier", rs.issue().Identifier, "サブエージェント", left)
 			}
 			return
 		case <-tick.C:
 			if len(rs.runningSubagentList()) == 0 {
-				o.logger.Info("走っていたサブエージェントが終わりました",
+				o.logger.Info("走っていたサブエージェントが終わったので esc を送ります",
 					"identifier", rs.issue().Identifier)
 				return
 			}
@@ -816,9 +816,23 @@ func (o *Orchestrator) runIdleForTurnTimeout(rs *runState) bool {
 	}
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	if silence <= 0 {
+		// **0 以下は「無音では打ち切らない」という設定である**（`SPEC.md` 8.4）。
+		// **測る物差しが無いので、この関数は「進んでいない」と言えない。**
 		return false
 	}
 	return o.now().Sub(snap.LastSeenAt) >= silence
+}
+
+// stallDetectionOff は、無音による打ち切りを切っているかを返す（issue #197）。
+//
+// **切っている機械では `runIdleForTurnTimeout` が「進んでいない」を言えない。**
+// **手放しの側は、そのとき画面の版と `agent_status` だけで判断する。**
+// **言えないことを理由に手放さないでいると、`weekly_wait_limit_minutes` が
+// その設定の機械で一度も効かない。**
+//
+// 戻り値: 打ち切りを切っていれば true。
+func (o *Orchestrator) stallDetectionOff() bool {
+	return time.Duration(o.cfg.Claude.TurnTimeoutMs)*time.Millisecond <= 0
 }
 
 // quotaFull は使い切っている枠があるかを返す（設計 3-27 の条件その1）。

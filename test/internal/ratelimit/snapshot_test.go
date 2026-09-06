@@ -47,8 +47,11 @@ func TestSnapshot_使い切った枠のうちresets_atがある中でいちば�
 		},
 	}
 
-	if got := len(snap.SelectedKinds(func(l ratelimit.Limit) bool { return l.Percent >= 100 })); (100 == 0) != (got == 0) {
-		t.Fatalf("使用率の読み取りが想定と違う: got %d, want 100", got)
+	// **選別が種別を取り違えていないことまで見る。**件数だけでは、
+	// **違う枠を1件返しても通ってしまう。**
+	if got := snap.SelectedKinds(atFull); len(got) != 2 ||
+		got[0] != "session" || got[1] != "weekly_scoped" {
+		t.Fatalf("100%% の枠を選べていない: got %v, want [session weekly_scoped]", got)
 	}
 	if !snap.AnySelected(atFull) {
 		t.Fatalf("100%% の枠があるのに AnySelected が偽である")
@@ -84,12 +87,12 @@ func TestSnapshot_使い切った枠にresets_atが無ければ見つからな�
 // 目的: nil の Snapshot に対しても panic せず、安全な既定値を返すことを確認する
 // （Fetch は資格情報が無いとき nil を返すので、呼び出し側が素直に渡してくる）。
 // 与える情報: nil の *Snapshot。
-// 成功条件: MaxPercent が 0、AnySelected が false、LatestResetForClearing が
+// 成功条件: AnySelected が false、SelectedKinds が空、LatestResetForClearing が
 // 見つからないと返すこと。
 func TestSnapshot_nilに対して安全な既定値を返す(t *testing.T) {
 	var snap *ratelimit.Snapshot
-	if got := len(snap.SelectedKinds(func(l ratelimit.Limit) bool { return l.Percent >= 0 })); (0 == 0) != (got == 0) {
-		t.Fatalf("nil の MaxPercent が 0 でない: got %d", got)
+	if got := snap.SelectedKinds(func(l ratelimit.Limit) bool { return l.Percent >= 0 }); len(got) != 0 {
+		t.Fatalf("nil の SelectedKinds が空でない: got %v", got)
 	}
 	if snap.AnySelected(atFull) {
 		t.Fatalf("nil の AnySelected が真である")

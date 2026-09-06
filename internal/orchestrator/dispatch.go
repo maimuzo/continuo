@@ -194,14 +194,7 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // **`handoffGate` の中にある「期限切れの担当を外す」経路まで通らなくなる。**
 //
 // 戻り値: 止める理由。`handoff.SkipNone` なら入札の要る issue を取ってよい。
-func (o *Orchestrator) newWorkBlocked() handoff.SkipReason {
-	snap, stale := o.quotaSnapshotWithStale()
-	return o.newWorkBlockedWith(snap, stale)
-}
-
-// newWorkBlockedWith は、渡された写しで止める理由を返す（設計 3-77j。issue #173）。
-//
-// **巡回はこちらを使う。**`newWorkBlocked` は写しを取り直すので、
+// **写しを取り直す版は置かない。**取り直すと、
 // **ログへ出す数字と、止めた理由が別の読み取りから作られる。**
 // **「余裕値が0以下」と名乗りながら使用率30%を並べる1行が出る。**
 //
@@ -381,8 +374,8 @@ func (o *Orchestrator) logNewWorkBlocked(
 // **100 は「この設定では止まらない」という意味である。**
 // **`100` とだけ出すと「100%で止まる」と読まれる。**
 //
-// **「止まらない」という文面は持たない。**マージンは0以上100以下しか通らないので
-// （`internal/config/validate.go` が弾く）、**閾値は必ず0から100の範囲に入る。**
+// **「止まらない」という文面は持たない。**マージンは0以上100未満しか通らないので
+// （`internal/config/validate.go` が弾く）、**閾値は必ず1から100の範囲に入る。**
 // **マージン0なら閾値は100で、使用率100に達したときだけ止まる。**それは「止まらない」ではない。
 //
 // **「これに達したら止まる」まで値の側で作る。**属性の名前に入れると、
@@ -550,7 +543,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// **担当が既に自分にある issue は落とさない。**入札が要らないので、
 		// **枠に余裕が無くても着手する**（走っている run の面倒を見る経路がここしかない）。
 		// **`handoffGate` の中の「期限切れの担当を外す」経路も、担当者がいる issue しか通らない。**
-		if blocked != handoff.SkipNone && len(issue.Assignees) == 0 {
+		if blocked != handoff.SkipNone && len(assigneeLogins(issue)) == 0 {
 			o.clearGate(issue.ID)
 			continue
 		}

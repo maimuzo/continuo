@@ -679,10 +679,14 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 // **順番を入れ替えてはならない。**
 //
 //  0. 外す相手を確かめる                    … **決まらなければ after_run を走らせずに戻る**
-//  1. worker を止める                        … **先に止める。**turn ループが再開して割り込むのを防ぐ
-//  2. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
-//  3. 自分の担当者を外し、released を書く   … **失敗しても pane は閉じたまま次の巡回でやり直す**
+//  1. workspace_hooks.after_run を走らせる … 利用者が書いた push がここで動く
+//  2. 自分の担当者を外し、released を書く   … **失敗したら pane を閉じずに戻る**
+//  3. worker を止める                        … pane を閉じる
 //  4. 印から外す                             … スロットを空ける
+//
+// **worker を先に止めてはならない。**止めると `paneStopped` が二度と真を返さず
+// （`agent.get` が「居ない」で誤りを返す）、**段2 に失敗したときのやり直しが永久に来ない。**
+// **割り込みは `currentWorker` が `terminating` を見ることで防いでいる。**
 //
 // **走っているサブエージェントを待つ段は置かない**（6段の段4 で issue #197 へ記録した）。
 // **`paneStopped` が `agent_status` と画面の版で「完全に止まっている」を確かめてから来る。**
@@ -789,29 +793,13 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		return false
 	}
 
-	// **段1。worker を先に止める。**
+	// **段1。`after_run` を、担当を外す前に走らせる。**
 	//
-	// **順番を入れ替えてはならない。**turn ループは「終わらせる印」を見ていない
-	// （`currentWorker` が見るのは `Finished` と `workerStopped` と epoch だけである）。
-	// **止めずに先へ進むと、段2 の `after_run` と段3 の書き込みで最大90秒かかる間に、
-	// 5時間の枠が明けて turn ループが枠待ちを解き、新しい指示を送りうる。**
-	// **利用者の `git push` が走っている最中に Claude Code が worktree を書き換え、
-	// 書きかけの木を push したうえで、そのあと殺される。**
-	// **担当を失ったときの経路（`stopHandoffLostClaimed`）は、最初から止めてから進んでいる。**
-	//
-	// **`after_run` は pane を使わない。**worktree でシェルを起こすので、
-	// **pane を閉じても push は走る。**
-	//
-	// **代わりに引き受けるもの。**段3 の書き込みが失敗すると、
-	// **pane を閉じたのに担当が残った状態で次の巡回へ回る。**
-	// **そこへ来るのは、`paneStopped` が「2回続けて画面が動かず、`idle` か `done`」と
-	// 確かめた run だけである。**閉じて失うものは無い。
-	cleanupCtx, cancelCleanup := context.WithTimeout(
-		keepCtx, time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
-	o.stopWorker(cleanupCtx, rs)
-	cancelCleanup()
-
-	// **段2。`after_run` を、担当を外す前に走らせる。**
+	// **turn ループが割り込むことは無い。**`currentWorker` が `terminating` を見るので、
+	// **印を取った時点で、待ちループは新しい指示を送らなくなる**（issue #197）。
+	// **worker を先に止める形にしてはならない。**止めると `paneStopped` が
+	// **二度と真を返さなくなり**（`agent.get` が「居ない」で誤りを返す）、
+	// **段3 の書き込みに失敗したときのやり直しが永久に来ない。**
 	// **順番を入れ替えてはならない。**外してから push すると、`released` を読んだ次の機械が
 	// **こちらの `git push` が終わる前に、同じ branch で作業を始めうる**
 	// （`workspace_hooks.timeout_ms` を入札の締め切りより長くしている設定で起きる）。
@@ -825,7 +813,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// `context deadline exceeded` だけが残る。**
 	afterRunOK := o.runAfterRunOK(keepCtx, rs)
 
-	// **段3。GitHub への書き込みには、herdr の持ち時間を使わない。**
+	// **段2。GitHub への書き込みには、herdr の持ち時間を使わない。**
 	// `herdr.read_timeout_ms`（既定5秒）は**socket の応答を待つ上限**であり、
 	// **担当者を外す・`released` を書くという2本の GraphQL に足りない。**
 	// **足りないと毎巡回でやり直し、run はスロットと pane を握ったまま残る。**
@@ -841,13 +829,14 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		"枠の上限で担当を手放そうとしましたが", reason)
 	cancelWrite()
 	if !ok {
-		// **印は外さない。**次の巡回でやり直す。**pane は段1 で閉じてある。**
+		// **pane を閉じない。**閉じると `paneStopped` が二度と真を返さず、やり直しが来ない。
+		// **印も外さない。**次の巡回でやり直す。
 		//
 		// **`after_run` は既に走っている。**`RunAfterRunOnce` は実行の前に印を立てるので、
 		// **この run が枠明けに完走しても、`finishRun` の `after_run` は走らない。**
-		// **push そのものは、いまの段2 で済んでいる。**そのあとに積んだ commit だけが
+		// **push そのものは、いまの段1 で済んでいる。**そのあとに積んだ commit だけが
 		// push されないまま残る。**黙って進めない。**次に何を見ればよいかを1行で出す。
-		o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します。pane は閉じてあります）。"+
+		o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します）。"+
 			"workspace_hooks.after_run は既に走らせたので、この run が完走しても再実行されません",
 			"identifier", issue.Identifier,
 			"after_run が成功したか", afterRunOK,
@@ -857,8 +846,12 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		return false
 	}
 
+	// **段3。pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
+	cleanupCtx, cancel := context.WithTimeout(
+		keepCtx, time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
+	defer cancel()
+	o.stopWorker(cleanupCtx, rs)
 	// **段4。run の登録から外す。**落とすとスロットを永久に埋める。
-	// **pane は段1 で閉じてある。**
 	o.release(rs)
 	o.logger.Info("1週間の枠が明けるのを待つ上限を超えたので、担当を手放しました"+
 		"（次の担当は入札で決め直します。worktree は残します。カンバンへは書きません）",

@@ -996,9 +996,15 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	if rs.afterRunDone() {
 		return true
 	}
+	// **`ran` は「この worktree で初めて呼ばれたか」であって、成否ではない。**
+	// **走って失敗したときも真が返る。**
 	ran, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath)
 	if err != nil {
-		o.logger.Warn("workspace_hooks.after_run に失敗しました（記録して続けます）",
+		// **走ったが失敗した。**「走りませんでした」とは書けないが、
+		// **remote に続きが入っていない恐れは同じである**ので、偽を返す。
+		// **文面の1文目が事実と違う点は、この1行で人間へ渡す。**
+		o.logger.Warn("workspace_hooks.after_run は走りましたが失敗しました"+
+			"（issue のコメントには「走りませんでした」と出ます。remote の中身を確かめてください）",
 			"identifier", snap.Identifier, "error", err)
 		return false
 	}

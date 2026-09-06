@@ -1885,7 +1885,13 @@ func (rs *runState) workerGeneration() int {
 func (rs *runState) currentWorker(epoch int) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return !rs.Finished && !rs.workerStopped && rs.workerEpoch == epoch
+	// **`terminating` も見る**（issue #197）。
+	// **終わらせる処理が走っている最中に、turn ループが新しい指示を送ってはならない。**
+	// 1週間の枠の上限で手放す経路は、印を取ってから `after_run`（利用者の `git push`）と
+	// GitHub への書き込みで最大90秒かかる。**その間に5時間の枠が明けると、
+	// 待ちループが枠待ちを解いて指示を送り、push の最中に worktree が書き換わる。**
+	// **書きかけの木を push したうえで、そのあと殺されることになる。**
+	return !rs.Finished && !rs.workerStopped && !rs.terminating && rs.workerEpoch == epoch
 }
 
 // terminalGate は `beginTerminal` が印を確保できたかどうかと、確保できなかった理由である

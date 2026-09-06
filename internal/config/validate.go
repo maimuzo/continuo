@@ -351,11 +351,6 @@ func validate(cfg *Config) error {
 	// **分をミリ秒へ直すときに int64 があふれ、小さい正の値へ巻き戻ることがある。**
 	// **そうなると、枠待ちに入った瞬間に担当を手放す。**
 	// **上限は10年ぶんにしてある。**「事実上いつまでも待つ」は 0 で表す。
-	if cfg.RateLimit.WeeklyWaitLimitMinutes > weeklyWaitLimitMaxMinutes {
-		return invalidValueError("rate_limit.weekly_wait_limit_minutes",
-			cfg.RateLimit.WeeklyWaitLimitMinutes,
-			i18n.T(i18n.KeyConfigValidateRateLimitWeeklyWaitRange))
-	}
 	// **負の値を通してはならない**（issue #197）。負だと「待つ先の時刻 − いま」が必ず上回るので、
 	// **枠待ちに入った瞬間に担当を手放す。**1週間の枠を1%でも使い切れば、走っている run が全部止まる。
 	//
@@ -365,7 +360,8 @@ func validate(cfg *Config) error {
 	// **`tracker.provider.handoff.idle_timeout_ms` との大小は検査しない。**
 	// 1台で動かしている人には他の機械がいないので、18時間より長くても正しく効く。
 	// **弾くと、その人が起動できなくなる。**案内は雛形のコメントに書いてある。
-	if cfg.RateLimit.WeeklyWaitLimitMinutes < 0 {
+	if cfg.RateLimit.WeeklyWaitLimitMinutes < 0 ||
+		cfg.RateLimit.WeeklyWaitLimitMinutes > weeklyWaitLimitMaxMinutes {
 		return invalidValueError("rate_limit.weekly_wait_limit_minutes",
 			cfg.RateLimit.WeeklyWaitLimitMinutes, i18n.T(i18n.KeyConfigValidateRateLimitWeeklyWaitRange))
 	}

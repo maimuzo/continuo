@@ -323,7 +323,10 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 		//	claude.turn_timeout_ms のあいだ hook が1件も来ていない
 		//
 		// **これは「枠が満杯か」を1バイトも見ないので、余裕値の線を壊さない。**
-		if !o.runIdleForTurnTimeout(rs) {
+		// **打ち切りを切っている機械では、この物差しが無い。**
+		// **そのときは画面の版と `agent_status` だけで判断する**（`paneStopped`）。
+		// **言えないことを理由に手放さないと、上限がその設定の機械で一度も効かない。**
+		if !o.stallDetectionOff() && !o.runIdleForTurnTimeout(rs) {
 			continue
 		}
 		if !o.paneStopped(ctx, rs) {
@@ -481,7 +484,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	now := o.now()
 	// **余裕の無い1週間の枠があるかを、1回のロックで取った写しから見る**（設計 3-27。issue #197）。
 	// **run ごとに取り直さない。**同じ巡回の中で違う写しの答えが混ざる。
-	quotaSnap, _ := o.quotaSnapshotWithStale()
+	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
 	weeklyShort := quotaSnap.AnySelected(handoff.ShortWeekly(o.bidMargins()))
 
 	// **余裕が無くなった時刻は、枠待ちの印の有無によらず、巡回のたびに控える**（設計 3-27）。
@@ -492,8 +495,14 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	//
 	// **下の `silence <= 0` の門より前に置く。**`claude.turn_timeout_ms` を0以下にしている
 	// 機械では、あとに置くと**この記録も走らない。**
-	for _, rs := range o.snapshotRuns() {
-		rs.noteWeeklyShort(weeklyShort, now)
+	// **読めなくなった写しでは控えない**（issue #197）。
+	// **nil や古い写しは「余裕がある」と答えるので、そのまま控えると
+	// `WeeklyShortSince` がゼロへ戻り、経過で測る道が閉じる。**
+	// **手放しの側が同じ理由で拒んでいるものを、こちらだけ受け入れてはならない。**
+	if quotaSnap != nil && !quotaStale {
+		for _, rs := range o.snapshotRuns() {
+			rs.noteWeeklyShort(weeklyShort, now)
+		}
 	}
 
 	// **枠が明けた run の印を外すのも、`silence <= 0` より前で行う。**
