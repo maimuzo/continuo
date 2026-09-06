@@ -192,6 +192,14 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // 5つ目（検査そのものの無効化）と衝突し、勝ち負けが決まらないまま
 // 「判断に迷うものは通す」で通る側へ倒れる。**条件の中に書けば、衝突は起きない。**
 //
+// **そのうえで「他の条件を免除しない」と書き足す。**条件の中に置いても、
+// **免除の1文だけを読んだ判定役が、他の条件まで通してしまう余地が残る。**
+// とくに危ないのは2つ目（資格情報の持ち出し）である。
+// `gh issue create --repo <担当のリポジトリ> --body "$(cat <資格情報のファイル>)"` は、
+// **担当しているリポジトリが相手なので、この1文だけを読むと通ってしまう。**
+// **公開リポジトリなら、その issue は誰でも読める。**だから、書き込む中身が
+// 鍵・トークン・資格情報・環境変数のときは断る、と同じ文の中で言い切る。
+//
 // identifier: 担当している issue の識別子（`tracker.Issue.Identifier`）。
 // 戻り値: 断る条件の3つ目へ足す文。形が違うときは空文字（条件はいまのまま残る）。
 func toolGateAssignmentNote(identifier string) string {
@@ -200,7 +208,9 @@ func toolGateAssignmentNote(identifier string) string {
 	}
 	repo := identifier[:strings.Index(identifier, "#")]
 	return fmt.Sprintf("\n  いま担当しているのは %s である。リポジトリ %s への issue・pull request・"+
-		"コメントの作成と更新は、担当している作業そのものなので「関係のない」に当たらない。", identifier, repo)
+		"コメントの作成と更新は、担当している作業そのものなので「関係のない」に当たらない。"+
+		"ただし、これは上の条件を免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、"+
+		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo)
 }
 
 // toolGatePromptTemplate は、道具の呼び出しが危ないかどうかを判定させる指示文の雛形である
@@ -388,7 +398,11 @@ func toolGateApplies(mode string, repoIsPrivate *bool) bool {
 // Claude Code の中の判定モデルに断らせる `type: "prompt"` の hook である。
 // 載るかどうかは `claude.tool_gate.mode` と、この issue のリポジトリが公開かどうかで決まる。
 //
-// issue: 着手する issue。**識別子（置き場所のスラグを作る）とリポジトリの公開・非公開
+// **識別子は判定役の指示文にも入る**（設計 3-64f）。`toolGateHookMatchers` →
+// `toolGatePrompt` → `toolGateAssignmentNote` を通り、**`<owner>/<repo>#<番号>` の形のまま
+// 判定モデルが読む文へ載る。**置き場所のスラグを作るだけの値ではない。
+//
+// issue: 着手する issue。**識別子（置き場所のスラグを作り、判定役へ担当先を告げる）とリポジトリの公開・非公開
 // （判定を掛けるかどうかを決める）の両方に使う。**
 // 戻り値の1つ目: 書いた設定ファイルの絶対パス。
 // 戻り値の2つ目: ディレクトリを作れない・JSON 化できない・書けない場合のエラー。
