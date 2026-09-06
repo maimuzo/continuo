@@ -159,9 +159,15 @@ func isMarkerLine(line string) bool {
 // suffix: 差し込む位置より後ろの部分。
 // 戻り値: `\n` か `\r\n`。
 func lineEndingAt(prefix, suffix string) string {
-	if strings.HasSuffix(prefix, "\r\n") {
-		return "\r\n"
+	if prefix != "" {
+		// **行の途中には差し込まない**（`spliceAIMarker` が改行を補う）ので、
+		// **直前の行の終わり方が、そのまま足す行の終わり方になる。**
+		if strings.HasSuffix(prefix, "\r\n") {
+			return "\r\n"
+		}
+		return "\n"
 	}
+	// **先頭へ差し込むときだけ、続く最初の行の終わり方に合わせる。**
 	if i := strings.IndexByte(suffix, '\n'); i > 0 && suffix[i-1] == '\r' {
 		return "\r\n"
 	}
@@ -180,10 +186,12 @@ func spliceAIMarker(body string, at int) string {
 	// **本文のどこかに CRLF があれば CRLF、では広すぎる。**
 	// 末尾の1行だけが CRLF の本文で、LF の場所へ CRLF を足すことになる。
 	eol := lineEndingAt(prefix, suffix)
-	// **空白だけの前置きは、空行にして残さない。**
-	// `"  素の本文"` のような本文で、1行目が空白だけの行になる。
-	if strings.TrimSpace(prefix) == "" {
-		prefix = ""
+	// **本文の先頭の空白は落とす。**
+	// 残すと、1行目が空白だけの行になるか、**4桁字下げの1行目が GitHub の画面で
+	// コード片として描かれる**（先頭に並ぶ印が、隠れずに文字として出る）。
+	// **読む側は `TrimSpace(body)` してから先頭を見るので、落としても判定は変わらない。**
+	if t := strings.TrimLeftFunc(prefix, unicode.IsSpace); t != prefix {
+		prefix = t
 	}
 	// **行の途中へ足さない。**末尾に改行の無い本文では、印が前の行に繋がる。
 	if prefix != "" && !strings.HasSuffix(prefix, "\n") {

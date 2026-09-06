@@ -531,3 +531,34 @@ func TestComposeCommentBody_印の後ろに文が付いていても二重に付�
 		t.Fatalf("印が2つになりました:\n got %q\nwant %q", got, body)
 	}
 }
+
+// 目的: 字下げした1行目の空白を落とすことを固定する（設計 3-82）。
+//
+// **残すと、GitHub の画面で1行目がコード片として描かれる。**
+// **先頭に並ぶ印が、隠れずに文字として出る。**
+// **読む側は `TrimSpace(body)` してから先頭を見るので、落としても判定は変わらない。**
+//
+// 与える情報: 1行目が4桁字下げの持ち回りの印である本文。
+// 成功条件: 字下げが落ち、1行目が印そのものになること。
+func TestComposeCommentBody_1行目の字下げを落とす(t *testing.T) {
+	body := "    " + config.HandoffBidMarker + "\n{\"score\":190}\n"
+	want := config.HandoffBidMarker + "\n" + config.AIMarker + "\n{\"score\":190}\n"
+	if got := tracker.ComposeCommentBody(body, ""); got != want {
+		t.Fatalf("字下げが残りました:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: 行の途中で、続く行の綴りに引きずられないことを固定する（設計 3-82）。
+//
+// **直前の行が LF で終わっているのに、続く行が CRLF だからといって CRLF で足さない。**
+// **足す行は、直前の行に続けて書くものである。**
+//
+// 与える情報: 1行目が LF、2行目が CRLF の本文。
+// 成功条件: 足す行が LF で終わること。
+func TestComposeCommentBody_続く行の綴りに引きずられない(t *testing.T) {
+	body := config.HandoffBidMarker + "\n{\"score\":190}\r\n"
+	want := config.HandoffBidMarker + "\n" + config.AIMarker + "\n{\"score\":190}\r\n"
+	if got := tracker.ComposeCommentBody(body, ""); got != want {
+		t.Fatalf("続く行の綴りに引きずられました:\n got %q\nwant %q", got, want)
+	}
+}

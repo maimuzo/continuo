@@ -9067,6 +9067,12 @@ continuo 本体（`continuo:self` ほか）と、continuo が起動したエー�
 **例外が1つだけある。**`<!-- design-review-skipped -->` の断りには付けない。**理由は 3-82c にある。**
 **この印が何を言わないかは 3-82d にある。**
 
+**`tracker.comments.self_marker` に HTML のコメントでない値を書いた project では、
+continuo 自身のコメントの1行目が HTML のコメントでなくなる**（印は2行目に来る）。
+**組み込みの指示書は「先頭に並ぶ印の中に出ます」と教えているので、そこだけ当たらない。**
+**エージェントには実害が無い。**continuo 自身のコメントは `FetchComments` が入力から外すためである。
+**issue の画面を読む人だけが、1行ずれた場所で印を見つけることになる。**
+
 **成果の報告では、先頭の印が1つしかない。**だから
 [internal/orchestrator/prompt.go](../../internal/orchestrator/prompt.go) が書かせ直しで言う「`marker` の次の行」と、
 ここで言う「いちばん後ろ」は同じ場所を指す。**印が2つ以上並ぶ本文では、この2つは別の場所になる。**
