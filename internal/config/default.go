@@ -66,6 +66,20 @@ func ResolveHandoffIdleTimeoutMs(ms int) int {
 // **違うと、エージェントは書いているのに数えられず、18時間で担当が外れる。**
 const ProgressMarker = "<!-- continuo:progress -->"
 
+// PlanMarker は、エージェントが実装の前に書く計画のコメントに付ける印である（設計 5-3）。
+//
+// **この印が要る理由は、成果の報告と見分けるためである。**
+// 計画のコメントも進捗報告も、本文の先頭は `<!-- continuo:agent -->` なので、
+// **印が無いと `hasRunComment` が「この run は成果を書いた」と判定する。**
+// **計画は run の最初に書かれるので、判定はほぼ必ず外れる。**
+// 外れると、turn が途中で終わった run に「何をしたか」を書かせ直す経路が飛ぶ。
+//
+// **設定キーにしない。**理由は ProgressMarker と同じである。
+//
+// **組み込みのプロンプト（[internal/prompt/builtin.md](../prompt/builtin.md)）が
+// エージェントへ書かせる文字列と、1文字も違ってはならない。**
+const PlanMarker = "<!-- continuo:plan -->"
+
 // DefaultConfig は front matter に書かれなかったキーへ入る既定値を返す。
 // front matter のパースはこの構造体へ上書きする形で行う（yaml.UnmarshalWithOptions は
 // 与えられた値へフィールド単位で上書きするため、front matter に書かれなかったキーは

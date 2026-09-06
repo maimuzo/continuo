@@ -28,7 +28,7 @@
 
 ```rucm
 USE CASE NAME: 指示書に沿って issue を1件仕上げる
-BRIEF DESCRIPTION: システムは組み込みの指示書の前半と、利用者が WORKFLOW.md に書いた本文と、組み込みの指示書の後半を継ぎ合わせて1つの文面にし、エージェントへ送る。エージェントは issue と紐づく pull request と関連する記録を読み、計画を敵対的レビューに掛けてから実装し、commit して push し、pull request を出し、そのレビューを受けてから、何をしたかを issue へ書いて表明の1行で終わる。
+BRIEF DESCRIPTION: システムは組み込みの指示書の前半と、利用者が WORKFLOW.md に書いた本文と、組み込みの指示書の後半を継ぎ合わせて1つの文面にし、エージェントへ送る。エージェントは issue と紐づく pull request と関連する記録を読み、計画を issue へ書いてから敵対的レビューに掛け、実装し、commit して push し、pull request を出し、そのレビューを受けてから、何をしたかを issue へ書いて表明の1行で終わる。
 PRECONDITION: システムは常駐している。issue はカンバンの active_states に在り、システムはその issue の worktree を用意してエージェントを起動している。WORKFLOW.md は front matter と本文を持つ。
 PRIMARY ACTOR: エージェント
 SECONDARY ACTORS: システム、GitHub、利用者
@@ -137,8 +137,9 @@ sequenceDiagram
     S->>CC: 継ぎ合わせた文面を turn として送る
     CC->>GH: issue と紐づく pull request を JSON で読む
     GH-->>CC: 本文・コメント・立場
-    CC->>CC: 計画を書き、敵対的レビューを受ける
+    CC->>CC: 計画を書く
     CC->>GH: 計画を issue へコメントする
+    CC->>CC: 敵対的レビューを受ける
     CC->>GH: 判断票を issue へコメントする
     CC->>CC: 実装する
     loop 1時間ごと

@@ -3,7 +3,7 @@
   "usecase_name": "指示書に沿って issue を1件仕上げる",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書に沿って issue を1件仕上げる.rucm.md",
-    "rucm_block_sha256": "68777b54de219f00533569a31b86d9e7c7be8208ff426449a253077875b15838"
+    "rucm_block_sha256": "cbec283bdfaf62bbef1aa83c62f4c98a853edebe04992b17df5d572fd1a9adc5"
   },
   "root": "BASIC FLOW-1",
   "flows": {
