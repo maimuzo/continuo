@@ -11092,7 +11092,7 @@ OWNER / MEMBER / COLLABORATOR の記述と、4-4 に書かれた出し方の両�
 | --- | --- | --- |
 | **push できないときの行き先** | push に失敗したエージェントに、`blocked` を出させるか `working` のままにさせるか。**`blocked` を出させると、その worktree は手順2b（`cleanup.require_pushed`、既定 `true`）に引っかかって片付かず、人間が手で始末することになる**（`continuo abandon --force` で押し切れば、そこで失われる）。**`working` のままにさせると、人間に渡らないまま `agent.max_dispatch_turns` を使い切る** | **`blocked` を出させ、失敗の理由をコメントに書かせる**（いまの本文） |
 | **commit するものが無いとき** | まだ1行も書いていない段階の `blocked` に、push を求めるかどうか。**`git commit` は `nothing to commit, working tree clean` を出して exit 1 で落ちる**（[docs/evidence/push_u_origin_head.md](../evidence/push_u_origin_head.md) で実測）。その失敗理由が、人間へ渡す合図のコメントを埋める | **例外を作らない**（いまの本文） |
-| **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:148](../../internal/config/default.go#L148)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
+| **`working` の毎 turn の push** | 続きがある状態のエージェントに、turn ごとの push を求めるかどうか。**求めないと、`agent.max_dispatch_turns`（既定 20、[internal/config/default.go:180](../../internal/config/default.go#L180)）を使い切るまでのあいだにその機械が落ちたとき、途中の commit は他の機械から見えない。**求めると、まだ人に見せる形になっていない途中の commit が remote の branch に並ぶ | **求めない**（いまの本文） |
 
 **なぜ勝手に決めないか。**3つとも**「人間の手間が増える」と「人間に届かない」のどちらを取るか**の判断である。
 **その issue をどれだけ待てるかで答えが変わる**ので、設計として一方に倒す根拠を continuo の側は持たない。

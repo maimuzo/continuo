@@ -106,7 +106,10 @@ func withAIMarker(body string) string {
 			// **`<!-- continuo:ai --> 補足` のように後ろへ書き足した行も数える。**
 			// `isMarkerLine` がその形を印の行として通すので、
 			// **完全一致で見ると、印が2つ並ぶ本文を作ってしまう。**
-			return body
+			//
+			// **先頭の空白だけは、ここでも落とす。**落とさないと、
+			// **既に印を持つ本文だけ、4桁字下げの1行目がコード片として描かれる。**
+			return body[head:]
 		default:
 			// 印の行。**この行の直後を、いまの挿入位置とする。**
 			insert = offset
@@ -181,18 +184,19 @@ func lineEndingAt(prefix, suffix string) string {
 // 戻り値: 差し込んだ本文。
 func spliceAIMarker(body string, at int) string {
 	prefix, suffix := body[:at], body[at:]
+	// **本文の先頭の空白は落とす。**
+	// 残すと、1行目が空白だけの行になるか、**4桁字下げの1行目が GitHub の画面で
+	// コード片として描かれる**（先頭に並ぶ印が、隠れずに文字として出る）。
+	// **読む側は `TrimSpace(body)` してから先頭を見るので、落としても判定は変わらない。**
+	//
+	// **落としてから改行の綴りを決める。**順序を逆にすると、
+	// **先頭に空白がある本文で「先頭へ差し込む」の枝へ入らない。**
+	prefix = strings.TrimLeftFunc(prefix, unicode.IsSpace)
 	// **改行の綴りは、差し込む位置の行から決める。**
 	// **直前の行だけを見ると、差し込む位置が先頭のときに LF が混ざる。**
 	// **本文のどこかに CRLF があれば CRLF、では広すぎる。**
 	// 末尾の1行だけが CRLF の本文で、LF の場所へ CRLF を足すことになる。
 	eol := lineEndingAt(prefix, suffix)
-	// **本文の先頭の空白は落とす。**
-	// 残すと、1行目が空白だけの行になるか、**4桁字下げの1行目が GitHub の画面で
-	// コード片として描かれる**（先頭に並ぶ印が、隠れずに文字として出る）。
-	// **読む側は `TrimSpace(body)` してから先頭を見るので、落としても判定は変わらない。**
-	if t := strings.TrimLeftFunc(prefix, unicode.IsSpace); t != prefix {
-		prefix = t
-	}
 	// **行の途中へ足さない。**末尾に改行の無い本文では、印が前の行に繋がる。
 	if prefix != "" && !strings.HasSuffix(prefix, "\n") {
 		prefix += eol

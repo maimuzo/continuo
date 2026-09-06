@@ -177,14 +177,21 @@ func TestTemplate_設計レビューの判断票は印を3行目に置く(t *tes
 // 成功条件: 飛ばす断りの目印の次の行が、機械の印になっていないこと。
 func TestTemplate_飛ばす断りには印を付けさせない(t *testing.T) {
 	lines := strings.Split(prompt.Builtin(), "\n")
+	found := false
 	for i, line := range lines {
 		if strings.TrimSpace(line) != "<!-- design-review-skipped -->" {
 			continue
 		}
+		found = true
 		if i+1 < len(lines) && strings.TrimSpace(lines[i+1]) == config.AIMarker {
 			t.Errorf("%d 行目で、飛ばす断りに %s を付けさせています。"+
 				"CI は目印の直後の1文字で理由の有無を数えているので、"+
 				"理由を1文字も書かない断りが通ります", i+1, config.AIMarker)
 		}
+	}
+	// **見本が見つからなければ、この検査は何も守っていない。**
+	// 見本の形が変わったときに、黙って通り続けるのを防ぐ。
+	if !found {
+		t.Fatal("飛ばす断りの見本が見つかりません（検査が的を外しています）")
 	}
 }

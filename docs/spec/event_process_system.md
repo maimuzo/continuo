@@ -66,7 +66,7 @@ flowchart LR
 
 | 何を | どこへ | 誰がいつ読むか |
 | --- | --- | --- |
-| **worktree の身元**（どの issue の worktree か） | **`<worktree>/.continuo.json`**（`workspace.identity_file` で名前を変えられる。既定は [internal/config/default.go:92](../../internal/config/default.go#L92)） | **動いている continuo が、巡回のたびに読み直す**（[internal/workspace/scan.go:45](../../internal/workspace/scan.go#L45) の `ReadIdentity`） |
+| **worktree の身元**（どの issue の worktree か） | **`<worktree>/.continuo.json`**（`workspace.identity_file` で名前を変えられる。既定は [internal/config/default.go:124](../../internal/config/default.go#L124)） | **動いている continuo が、巡回のたびに読み直す**（[internal/workspace/scan.go:45](../../internal/workspace/scan.go#L45) の `ReadIdentity`） |
 | **hook が socket へ届かなかったときの逃がし先**（設計 3-19） | `pending/<時刻>-<イベント名>.json` | **continuo が次に起動したときに読む。**動いている continuo は読まない |
 
 **身元ファイルがあるので、continuo は落ちて上がり直しても、どの worktree がどの issue のものかを取り戻せる。**

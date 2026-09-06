@@ -107,7 +107,7 @@ func BuildContinuationPrompt(
 // しかも次の行が「本文の中では囲みを外した形で」と言うので、
 // **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
-// 書き分けは [docs/upgrading.md:325-331](docs/upgrading.md#L325-L331) に揃える。
+// 書き分けは [docs/upgrading.md:242-248](docs/upgrading.md#L242-L248) に揃える。
 //
 // **機械が書いた印（`config.AIMarker`）も書かせる**（設計 3-82）。
 // **`marker` の次の行に置かせる。**先に置かせると `c.IsAgent` が偽になり、
