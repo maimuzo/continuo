@@ -101,7 +101,7 @@
 | 試さないもの | どこが禁じているか |
 | --- | --- |
 | **`claude -p` の実行** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の1。従量課金になる |
-| **本番のカンバンへの、検証目的の書き込み**（GitHub Projects v2 の project #3。104件の実データが入っている） | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。とくに `updateProjectV2Field` は Status の値を全部消す。**[.claude/rules/issue.md](issue.md) の手順が求めるボードの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）は、この禁止の対象ではない** |
+| **本番のカンバンへの、検証目的の書き込み**（GitHub Projects v2 の project #3。104件の実データが入っている） | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の2。とくに `updateProjectV2Field` は Status の値を全部消す。**[.claude/rules/issue.md](issue.md) の手順が求めるカンバンの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）は、この禁止の対象ではない** |
 | **レビュー結果を貼っていない pull request の `gh pr merge` と `gh pr ready`** | [CLAUDE.md](../../CLAUDE.md) の「PR を出すときの絶対条件」 |
 | **`~/.claude/projects/` 配下の変更・削除** | [CLAUDE.md](../../CLAUDE.md) の「絶対に守る制約」の3 |
 
@@ -360,7 +360,7 @@
 | 書く | 書いてはいけない |
 | --- | --- |
 | **#80（エージェントが書き間違えた issue 番号で、別のエージェントの作業が止まる）** | #80 |
-| **PR #112（1台で continuo を複数動かす（--id とボードごとのロック。runtime.lock_file は受け取って捨てる））** | PR #112 |
+| **PR #112（1台で continuo を複数動かす（--id はロック1本だけを分ける。runtime.lock_file はキーごと消す））** | PR #112 |
 | **書き間違えた issue 番号で別のエージェントが止まるのを防ぐ（PR #158）** | 番号を先に出しても、内容が無ければ同じ |
 
 ### issue と PR は対で書く
@@ -387,7 +387,7 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 
 実際に書いてしまった悪い例（2026-09-02）。
 
-> PR #112（1台で continuo を複数動かす（--id とボードごとのロック。runtime.lock_file は受け取って捨てる））
+> PR #112（1台で continuo を複数動かす（--id はロック1本だけを分ける。runtime.lock_file はキーごと消す））
 
 **題名は正しく引けているが、`--id` も `runtime.lock_file` も開いていない。**
 **そのまま読めるのは、この PR を書いた本人だけである。**
@@ -395,13 +395,13 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 良い例。
 
 > issue #87（1台で continuo を複数動かすことを、正式な形にする）に対する
-> PR #112（1台で continuo を複数動かす（--id とボードごとのロック。runtime.lock_file は受け取って捨てる））は、
+> PR #112（1台で continuo を複数動かす（--id はロック1本だけを分ける。runtime.lock_file はキーごと消す））は、
 > 1台のマシンで continuo を2つ動かせるようにする変更です。
 > いまは、動いている continuo が「自分が動いている」印のファイル（ロック）を1つしか作らないので、
 > 2つ目を起動すると、1つ目と同じ worktree に Claude Code をもう1つ立ててしまいます。
 > この変更では、起動時に `--id <名前>` という名札を付けられるようにし、**名札ごとに別のロックを作ります。**
 > `runtime.lock_file` は、ロックの置き場所を設定ファイルから指せた既存のキーです。
-> **値は読まなくなりますが、キー自体は受け取り続けます。**弾くと、これまでに設定を作った人が全員、次の起動で落ちるためです。
+> **このキーは、値ごと消しました。**読まない値を受け取り続ける形は採っていません。**`WORKFLOW.md` に `runtime:` を書いてある人は、その2行を消す必要があります**（[docs/upgrading.md](../../docs/upgrading.md) が手順を持っています）。
 
 **題名を1文字も縮めていない。**そのうえで `--id` と `runtime.lock_file` を次の行で開き、
 **対になる issue も同じ文に置いている**（上の「issue と PR は対で書く」）。
@@ -657,7 +657,7 @@ gh pr view    <番号> --json number,title --jq '"PR #\(.number)（\(.title)）"
 
 ### そのほか
 
-- **数える前に、何をどう数えたかを名前で示す。**「複数ボード監視が改修扱いになった」のように、動いた項目を名指しする
+- **数える前に、何をどう数えたかを名前で示す。**「複数カンバン監視が改修扱いになった」のように、動いた項目を名指しする
 - 内訳を示せないなら、その集計表は報告に載せない
 - 集計の件数を順位づけの根拠にしない
 

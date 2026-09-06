@@ -21,7 +21,7 @@ import (
 // 与える情報: Bootstrap 済みの Adapter。片方の goroutine が VerifyStatusOptions を、
 // もう片方が UpdateStatus を繰り返し呼ぶ。偽サーバは呼ばれたクエリの種類で応答を切り替える。
 // 成功条件: どちらもエラーを返さないこと（-race を付けた実行で競合が報告されないこと）。
-// 書き込まれた optionId が、ボードが返した選択肢 ID と必ず一致していること。
+// 書き込まれた optionId が、カンバンが返した選択肢 ID と必ず一致していること。
 func TestAdapter_巡回とturnから同時に呼んでも競合しない(t *testing.T) {
 	const itemID = "item-188"
 
@@ -31,7 +31,7 @@ func TestAdapter_巡回とturnから同時に呼んでも競合しない(t *test
 	fs := newFakeGraphQLServer(t, func(n int, req capturedRequest) fakeGraphQLResponse {
 		switch {
 		case strings.Contains(req.Query, "updateProjectV2ItemFieldValue"):
-			// 書き込まれた optionId が、ボードが返した選択肢 ID の集合に入っているかを見る。
+			// 書き込まれた optionId が、カンバンが返した選択肢 ID の集合に入っているかを見る。
 			optionID, _ := req.Variables["optionId"].(string)
 			known := false
 			for _, opt := range testStatusOptions {
@@ -100,6 +100,6 @@ func TestAdapter_巡回とturnから同時に呼んでも競合しない(t *test
 	mu.Lock()
 	defer mu.Unlock()
 	if len(badOptionIDs) > 0 {
-		t.Fatalf("ボードに無い選択肢 ID を書き込んだ（名前と ID を別の世代から読んでいる）: %v", badOptionIDs)
+		t.Fatalf("カンバンに無い選択肢 ID を書き込んだ（名前と ID を別の世代から読んでいる）: %v", badOptionIDs)
 	}
 }
