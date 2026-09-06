@@ -7,7 +7,7 @@ body:
       value: |
         **脆弱性は、ここではなく [Security タブ](https://github.com/maimuzo/continuo/security/advisories/new) から報告してください。**
 
-        continuo が動くかどうかは、herdr / Claude Code / gh / ボードの Status 名という
+        continuo が動くかどうかは、herdr / Claude Code / gh / カンバンの Status 名という
         **外部の組み合わせ**でほぼ決まります。どれが崩れても、症状は「issue が拾われない」に見えます。
         **下の5つが揃っていないと、切り分けられません。**
 

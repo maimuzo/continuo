@@ -1,6 +1,6 @@
-// **終端と引き渡しの Status をボードの自動化が書いたときの検査である**（設計 3-74。issue #79）。
+// **終端と引き渡しの Status をカンバンの自動化が書いたときの検査である**（設計 3-74。issue #79）。
 //
-// **エージェントが turn の途中で自分の PR をマージすると、ボードの組み込みの自動化が
+// **エージェントが turn の途中で自分の PR をマージすると、カンバンの組み込みの自動化が
 // `Done` を書く。**それを「人間が終わったと言っている」と読んで、continuo は走っている
 // Claude Code を殺し、worktree を消しにいっていた。**自分の足元が消える。**
 //
@@ -57,7 +57,7 @@ func startRunAndBlockTurn(t *testing.T, fx *fixture) string {
 // continuo 自身が殺す。**書いたのが人間でないと分かっているのだから、待つ。
 //
 // 与える情報: 1回目の turn が `agent.prompt` の待ち受けに入ったままの run。
-// その間にボードの自動化が Status を `Done` へ動かす。猶予は1分。
+// その間にカンバンの自動化が Status を `Done` へ動かす。猶予は1分。
 // 成功条件:
 //   - 猶予の内側では印を外さない（pane も閉じない）
 //   - 待っていることをログに出す
@@ -68,7 +68,7 @@ func TestReconcile_自動化がDoneを書いてもturnの終わりまでは止�
 	itemID := startRunAndBlockTurn(t, fx)
 	closesBefore := fx.Herdr.CountMethod(herdr.MethodPaneClose)
 
-	// エージェントが自分の PR をマージし、ボードの組み込みの自動化が `Done` を書いた。
+	// エージェントが自分の PR をマージし、カンバンの組み込みの自動化が `Done` を書いた。
 	fx.Tracker.SetStateByAutomation(itemID, "Done")
 	fx.Orc.Tick(context.Background())
 	// **終わらせる処理は別の goroutine で走る。**走らないことを見たいので、少し待つ。
@@ -115,7 +115,7 @@ func TestReconcile_人間がDoneを書いたらturnの途中でも止める(t *t
 // **終端だけ塞いでも、同じ形でエージェントが殺される。**
 //
 // 与える情報: 1回目の turn が `agent.prompt` の待ち受けに入ったままの run。
-// その間にボードの自動化が Status を `In Review` へ動かす。猶予は1分。
+// その間にカンバンの自動化が Status を `In Review` へ動かす。猶予は1分。
 // 成功条件:
 //   - 猶予の内側では印を外さない（pane も閉じない）
 //   - 猶予を過ぎたら worker を止める
@@ -147,7 +147,7 @@ func TestReconcile_自動化がInReviewを書いてもturnの終わりまでは�
 // **知らない Status でそう決めた設定が、終端と引き渡しでだけ効かない、を作らない。**
 //
 // 与える情報: 猶予 0 の設定で、turn の待ち受けに入ったままの run。
-// その間にボードの自動化が Status を `Done` へ動かす。
+// その間にカンバンの自動化が Status を `Done` へ動かす。
 // 成功条件: その巡回で run が終わること。
 func TestReconcile_猶予が0なら自動化が書いた終端でもその場で止める(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{
@@ -171,7 +171,7 @@ func TestReconcile_猶予が0なら自動化が書いた終端でもその場で
 // 猶予ぶん止まらなくなる。**
 //
 // 与える情報: turn の待ち受けに入ったままの run。Status は `In Progress` のままで、
-// **書いたのはボードの自動化**、`Dispatchable` だけが偽になる。猶予は1分。
+// **書いたのはカンバンの自動化**、`Dispatchable` だけが偽になる。猶予は1分。
 // 成功条件: 時計を進めずに、その巡回で run が終わること。
 func TestReconcile_作業中のままdispatchできなくなったら待たずに止める(t *testing.T) {
 	clock := newTestClock()
@@ -192,7 +192,7 @@ func TestReconcile_作業中のままdispatchできなくなったら待たず�
 // 自動化に `Done` へ動かされたとき、起点を繰り越すと猶予が前回ぶんだけ短くなる。
 //
 // 与える情報: 猶予1分。turn の待ち受けに入ったままの run へ、
-// まず人間が知らない Status（`Icebox`）を書き、50秒後にボードの自動化が `Done` を書く。
+// まず人間が知らない Status（`Icebox`）を書き、50秒後にカンバンの自動化が `Done` を書く。
 // 成功条件: `Done` から50秒（最初の動きからは100秒）経っても、まだ止まっていないこと。
 // **起点を繰り越していれば、この時点で猶予（1分）を過ぎて止まっている。**
 func TestReconcile_知らないStatusで待った時間は自動化の猶予へ持ち越さない(t *testing.T) {
@@ -209,7 +209,7 @@ func TestReconcile_知らないStatusで待った時間は自動化の猶予へ�
 		t.Fatalf("知らない Status の猶予の内側なのに印を外している: 印は %d 件", got)
 	}
 
-	// 50秒後、ボードの自動化が `Done` を書いた。**ここで猶予を数え直す。**
+	// 50秒後、カンバンの自動化が `Done` を書いた。**ここで猶予を数え直す。**
 	clock.Advance(50 * time.Second)
 	fx.Tracker.SetStateByAutomation(itemID, "Done")
 	fx.Orc.Tick(context.Background())
@@ -240,7 +240,7 @@ func TestReconcile_知らないStatusで待った時間は自動化の猶予へ�
 // 人間が `In Review` にしたのなら、その人は自分の操作の結果を分かっている。
 // **待たされると、止めたい人が turn の終わりまで足止めされる。**
 //
-// **門が狭いことの根拠。**`rs.lastWrittenState()` は、continuo がボードへ**書き込みに成功したとき
+// **門が狭いことの根拠。**`rs.lastWrittenState()` は、continuo がカンバンへ**書き込みに成功したとき
 // だけ**更新される（[internal/orchestrator/lifecycle.go:365-368]）。
 // この検査の時点で控えてあるのは、着手のときに書いた `In Progress` である。
 // **人間が書いた `In Review` とは一致しないので、門は開かない。**
@@ -352,7 +352,7 @@ func TestReconcile_continuoが書いたInReviewには巡回が反応しない(t 
 		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) >= 2
 	})
 
-	// **ここから巡回を1回回す。**取り直しは元に戻す（戻さないと巡回もボードを読めない）。
+	// **ここから巡回を1回回す。**取り直しは元に戻す（戻さないと巡回もカンバンを読めない）。
 	fx.Tracker.SetIDsError(nil)
 	fx.Orc.Tick(context.Background())
 	time.Sleep(500 * time.Millisecond)

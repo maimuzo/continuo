@@ -1,7 +1,7 @@
 // Package e2e_test は docs/trying_it_out.md の段1から段9までを、**mockだけを相手に**
 // 最初から最後まで通す。
 //
-// **本番の GitHub には1リクエストも送らない。**ボードは JSON ファイル1枚で作ったmockで、
+// **本番の GitHub には1リクエストも送らない。**カンバンは JSON ファイル1枚で作ったmockで、
 // `gh`（PATH の先頭に置いた偽の実行ファイル）とテスト用GraphQL mock（httptest）が
 // 同じファイルを読み書きする。**project #3 には読み取りも行わない。**
 //
@@ -30,7 +30,7 @@ import (
 	"time"
 )
 
-// ===== 偽のボードの状態（テスト用gh mock とテスト用GraphQL mockが共有する1枚の JSON） =====
+// ===== 偽のカンバンの状態（テスト用gh mock とテスト用GraphQL mockが共有する1枚の JSON） =====
 
 // ghComment は issue に付いたコメント1件である。
 type ghComment struct {
@@ -46,7 +46,7 @@ type ghComment struct {
 
 // ghIssue はリポジトリの issue 1件である。
 //
-// **ボードに載っているかどうかもここに持つ。**`gh project item-add` で載せると OnBoard が
+// **カンバンに載っているかどうかもここに持つ。**`gh project item-add` で載せると OnBoard が
 // 真になり、`gh project item-list` と GraphQL の候補の取得の両方に出るようになる。
 type ghIssue struct {
 	// NodeID は GitHub issue のノード ID である（コメントの投稿先）。
@@ -63,11 +63,11 @@ type ghIssue struct {
 	URL string `json:"url"`
 	// DefaultBranch はリポジトリの既定 branch 名である（worktree の base になる）。
 	DefaultBranch string `json:"default_branch"`
-	// OnBoard はボードに載っているかどうかである。
+	// OnBoard はカンバンに載っているかどうかである。
 	OnBoard bool `json:"on_board"`
-	// ItemID は project item の ID である（ボードに載っているときだけ埋まる）。
+	// ItemID は project item の ID である（カンバンに載っているときだけ埋まる）。
 	ItemID string `json:"item_id"`
-	// State は Status の値である（ボードに載っているときだけ埋まる）。
+	// State は Status の値である（カンバンに載っているときだけ埋まる）。
 	State string `json:"state"`
 	// CreatedAt は作成時刻である（RFC3339 の文字列）。
 	CreatedAt string `json:"created_at"`
@@ -77,7 +77,7 @@ type ghIssue struct {
 	Assignees []string `json:"assignees"`
 }
 
-// ghBoard は偽のボード1枚ぶんの状態である。
+// ghBoard は偽のカンバン1枚ぶんの状態である。
 //
 // **このファイルが唯一の正である。**テスト用gh mock（別プロセス）とテスト用GraphQL mock（テストの
 // プロセス）が同じファイルを flock で排他しながら読み書きするので、
@@ -86,21 +86,21 @@ type ghIssue struct {
 type ghBoard struct {
 	// Login は `gh api user --jq .login` が返すログイン名である。
 	Login string `json:"login"`
-	// Owner はボードの所有者名である。
+	// Owner はカンバンの所有者名である。
 	Owner string `json:"owner"`
-	// ProjectNumber はボードの番号である。
+	// ProjectNumber はカンバンの番号である。
 	ProjectNumber int `json:"project_number"`
-	// ProjectTitle はボードの表示名である。
+	// ProjectTitle はカンバンの表示名である。
 	ProjectTitle string `json:"project_title"`
-	// ProjectURL はボードの URL である。
+	// ProjectURL はカンバンの URL である。
 	ProjectURL string `json:"project_url"`
-	// ProjectID はボードのノード ID である。
+	// ProjectID はカンバンのノード ID である。
 	ProjectID string `json:"project_id"`
 	// StatusField は Status を読み書きする single-select フィールドの名前である。
 	StatusField string `json:"status_field"`
 	// StatusOptions はそのフィールドの選択肢名である（並び順が画面の並び順になる）。
 	StatusOptions []string `json:"status_options"`
-	// Issues はリポジトリの issue の全件である（ボードに載っていないものも持つ）。
+	// Issues はリポジトリの issue の全件である（カンバンに載っていないものも持つ）。
 	Issues []*ghIssue `json:"issues"`
 	// Comments は issue のノード ID から、そこに付いたコメントを引く写像である。
 	Comments map[string][]ghComment `json:"comments"`
@@ -141,7 +141,7 @@ func (b *ghBoard) findIssueByItemID(itemID string) *ghIssue {
 	return nil
 }
 
-// onBoard はボードに載っている issue を、載せた順に返す。
+// onBoard はカンバンに載っている issue を、載せた順に返す。
 func (b *ghBoard) onBoard() []*ghIssue {
 	var out []*ghIssue
 	for _, is := range b.Issues {
@@ -165,13 +165,13 @@ func (b *ghBoard) optionIndex(name string) int {
 	return -1
 }
 
-// ===== ボードのファイルの読み書き（プロセスをまたぐので flock で排他する） =====
+// ===== カンバンのファイルの読み書き（プロセスをまたぐので flock で排他する） =====
 
-// lockBoardFile はボードのファイルに排他ロックを掛ける。
+// lockBoardFile はカンバンのファイルに排他ロックを掛ける。
 //
 // **テスト用gh mock は別プロセスである。**Go の Mutex では守れないので、ファイルロックを使う。
 //
-// path: ボードの JSON のパス（ロックは `<path>.lock` に取る）。
+// path: カンバンの JSON のパス（ロックは `<path>.lock` に取る）。
 // 戻り値の1つ目: ロックを保持しているファイル（unlockBoardFile へ渡すこと）。
 // 戻り値の2つ目: 開けない・ロックできない場合のエラー。
 func lockBoardFile(path string) (*os.File, error) {
@@ -194,10 +194,10 @@ func unlockBoardFile(f *os.File) {
 	_ = f.Close()
 }
 
-// loadBoardFile はボードの JSON を読む。
+// loadBoardFile はカンバンの JSON を読む。
 //
-// path: ボードの JSON のパス。
-// 戻り値: 読み取ったボード。読めない場合はエラー。
+// path: カンバンの JSON のパス。
+// 戻り値: 読み取ったカンバン。読めない場合はエラー。
 func loadBoardFile(path string) (*ghBoard, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -213,12 +213,12 @@ func loadBoardFile(path string) (*ghBoard, error) {
 	return &b, nil
 }
 
-// saveBoardFile はボードの JSON を書く。
+// saveBoardFile はカンバンの JSON を書く。
 //
 // **一時ファイルへ書いてから rename する。**読み手が途中の中身を見ないようにする。
 //
-// path: ボードの JSON のパス。
-// b: 書き出すボード。
+// path: カンバンの JSON のパス。
+// b: 書き出すカンバン。
 // 戻り値: 書けない場合のエラー。
 func saveBoardFile(path string, b *ghBoard) error {
 	encoded, err := json.MarshalIndent(b, "", "  ")
@@ -232,10 +232,10 @@ func saveBoardFile(path string, b *ghBoard) error {
 	return os.Rename(tmp, path)
 }
 
-// withBoardFile はロックを取ってボードを読み、fn を適用してから書き戻す。
+// withBoardFile はロックを取ってカンバンを読み、fn を適用してから書き戻す。
 //
-// path: ボードの JSON のパス。
-// fn: ボードに適用する処理。**この中でファイルを読み書きしないこと**（二重ロックになる）。
+// path: カンバンの JSON のパス。
+// fn: カンバンに適用する処理。**この中でファイルを読み書きしないこと**（二重ロックになる）。
 // 戻り値: 読み書きに失敗した場合、または fn がエラーを返した場合のエラー。
 func withBoardFile(path string, fn func(*ghBoard) error) error {
 	lock, err := lockBoardFile(path)
@@ -254,33 +254,33 @@ func withBoardFile(path string, fn func(*ghBoard) error) error {
 	return saveBoardFile(path, b)
 }
 
-// ===== テストからボードを触る入口 =====
+// ===== テストからカンバンを触る入口 =====
 
-// board はテストの中からボードを読み書きするための持ち手である。
+// board はテストの中からカンバンを読み書きするための持ち手である。
 type board struct {
-	// Path はボードの JSON の絶対パスである。
+	// Path はカンバンの JSON の絶対パスである。
 	Path string
 }
 
-// Read はいまのボードを読む。
+// Read はいまのカンバンを読む。
 //
 // t: 呼び出し元のテスト。
-// 戻り値: 読み取ったボード（写しである。書き換えても反映されない）。
+// 戻り値: 読み取ったカンバン（写しである。書き換えても反映されない）。
 func (bd *board) Read(t *testing.T) *ghBoard {
 	t.Helper()
 	lock, err := lockBoardFile(bd.Path)
 	if err != nil {
-		t.Fatalf("ボードのロックを取れません: %v", err)
+		t.Fatalf("カンバンのロックを取れません: %v", err)
 	}
 	defer unlockBoardFile(lock)
 	b, err := loadBoardFile(bd.Path)
 	if err != nil {
-		t.Fatalf("ボードを読めません: %v", err)
+		t.Fatalf("カンバンを読めません: %v", err)
 	}
 	return b
 }
 
-// Mutate はボードを書き換える。
+// Mutate はカンバンを書き換える。
 //
 // t: 呼び出し元のテスト。
 // fn: 書き換える処理。
@@ -290,13 +290,13 @@ func (bd *board) Mutate(t *testing.T, fn func(*ghBoard)) {
 		fn(b)
 		return nil
 	}); err != nil {
-		t.Fatalf("ボードを書き換えられません: %v", err)
+		t.Fatalf("カンバンを書き換えられません: %v", err)
 	}
 }
 
 // SetStateByURL は issue の Status を書き換える。
 //
-// **人間がボードの画面で Status を動かす操作の代わりである。**continuo は
+// **人間がカンバンの画面で Status を動かす操作の代わりである。**continuo は
 // GraphQL 経由でしか書かないので、画面の操作はここでしか起こせない。
 //
 // t: 呼び出し元のテスト。
@@ -307,7 +307,7 @@ func (bd *board) SetStateByURL(t *testing.T, url, state string) {
 	bd.Mutate(t, func(b *ghBoard) {
 		is := b.findIssueByURL(url)
 		if is == nil {
-			t.Errorf("ボードに %s という issue がありません", url)
+			t.Errorf("カンバンに %s という issue がありません", url)
 			return
 		}
 		is.State = state
@@ -318,7 +318,7 @@ func (bd *board) SetStateByURL(t *testing.T, url, state string) {
 //
 // t: 呼び出し元のテスト。
 // url: 対象の issue の URL。
-// 戻り値: Status。ボードに無ければ空文字。
+// 戻り値: Status。カンバンに無ければ空文字。
 func (bd *board) StateOfURL(t *testing.T, url string) string {
 	t.Helper()
 	is := bd.Read(t).findIssueByURL(url)
@@ -351,17 +351,17 @@ func (bd *board) GHCalls(t *testing.T) []string {
 	return bd.Read(t).Calls
 }
 
-// newBoardFile は偽のボードを1枚作る。
+// newBoardFile は偽のカンバンを1枚作る。
 //
-// **既に issue が1件載っている状態で始める。**continuo は「いま使っているボードに
-// 後から足して使う」ものなので、空のボードから始めると `continuo init` が
+// **既に issue が1件載っている状態で始める。**continuo は「いま使っているカンバンに
+// 後から足して使う」ものなので、空のカンバンから始めると `continuo init` が
 // `trust.repositories` を埋められず、手順書のとおりに進まない。
 //
 // t: 呼び出し元のテスト。
-// path: 書き出すボードの JSON の絶対パス。
-// owner: ボードの所有者名。
+// path: 書き出すカンバンの JSON の絶対パス。
+// owner: カンバンの所有者名。
 // repo: `<owner>/<repo>` の repo の部分。
-// 戻り値: ボードの持ち手。
+// 戻り値: カンバンの持ち手。
 func newBoardFile(t *testing.T, path, owner, repo string) *board {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -369,7 +369,7 @@ func newBoardFile(t *testing.T, path, owner, repo string) *board {
 		Login:         owner,
 		Owner:         owner,
 		ProjectNumber: 7,
-		ProjectTitle:  "continuo 試用ボード",
+		ProjectTitle:  "continuo 試用カンバン",
 		ProjectURL:    fmt.Sprintf("https://github.com/users/%s/projects/7", owner),
 		ProjectID:     "PVT_board",
 		StatusField:   "Status",
@@ -394,7 +394,7 @@ func newBoardFile(t *testing.T, path, owner, repo string) *board {
 		NextComment: 1,
 	}
 	if err := saveBoardFile(path, b); err != nil {
-		t.Fatalf("偽のボードを書けません: %v", err)
+		t.Fatalf("偽のカンバンを書けません: %v", err)
 	}
 	return &board{Path: path}
 }
@@ -406,7 +406,7 @@ func newBoardFile(t *testing.T, path, owner, repo string) *board {
 // **形は internal/tracker/query.go の itemFieldsFragment に合わせてある。**
 // 足りない項目があると、その item は「壊れている」として候補から落ちる。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // is: 対象の issue。
 // withTypename: `nodes(ids:)` 経由なら真（`__typename` が要る）。
 // 戻り値: item 1件の応答。
@@ -464,15 +464,15 @@ func assigneesPayload(is *ghIssue) map[string]any {
 
 // viewerPayload は「いまのトークンの持ち主」を返す（設計 3-77b）。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // 戻り値: 応答の data。
 func viewerPayload(b *ghBoard) map[string]any {
 	return map[string]any{"viewer": map[string]any{"id": "U_" + b.Login, "login": b.Login}}
 }
 
-// changeAssigneesPayload は担当者の書き足し／取り外しに答える（**ボードも書き換える**）。
+// changeAssigneesPayload は担当者の書き足し／取り外しに答える（**カンバンも書き換える**）。
 //
-// b: いまのボード。書き換える。
+// b: いまのカンバン。書き換える。
 // vars: 受け取った変数。
 // key: 応答のキー（`addAssigneesToAssignable` か `removeAssigneesFromAssignable`）。
 // add: 書き足しなら真、取り外しなら偽。
@@ -547,7 +547,7 @@ func fieldNotFoundErrors(name string) []any {
 // 全件・値が入っている件数・値が空の件数を正しく返さないと、
 // 「status_field を絞り込みのキーとして使えていない」と判定されて起動が止まる。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // 戻り値: 応答の data。
 func bootstrapPayload(b *ghBoard) map[string]any {
 	options := make([]any, 0, len(b.StatusOptions))
@@ -581,7 +581,7 @@ func bootstrapPayload(b *ghBoard) map[string]any {
 // itemsByQuery は候補の取得のクエリへの応答を組み立てる。
 //
 // q: `items(query:)` に渡された検索クエリ（`"Status":"Ready","In Progress"` の形）。
-// b: いまのボード。
+// b: いまのカンバン。
 // 戻り値: 応答の data。
 func itemsByQuery(b *ghBoard, q string) map[string]any {
 	nodes := []any{}
@@ -607,7 +607,7 @@ func itemsByQuery(b *ghBoard, q string) map[string]any {
 //
 // **見つからない ID には null を返す**（本物と同じ。「もう見えない」を表す）。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // vars: 受け取った変数。
 // 戻り値: 応答の data。
 func itemsByIDs(b *ghBoard, vars map[string]any) map[string]any {
@@ -625,9 +625,9 @@ func itemsByIDs(b *ghBoard, vars map[string]any) map[string]any {
 	return map[string]any{"nodes": nodes}
 }
 
-// updateStatusPayload は Status の書き込みに答える（**ボードの中身も書き換える**）。
+// updateStatusPayload は Status の書き込みに答える（**カンバンの中身も書き換える**）。
 //
-// b: いまのボード。書き換える。
+// b: いまのカンバン。書き換える。
 // vars: 受け取った変数。
 // 戻り値: 応答の data。
 func updateStatusPayload(b *ghBoard, vars map[string]any) map[string]any {
@@ -650,7 +650,7 @@ func updateStatusPayload(b *ghBoard, vars map[string]any) map[string]any {
 
 // commentsPayload はコメントの取得に答える（**新しい順で返す。**本物と同じ）。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // vars: 受け取った変数。
 // 戻り値: 応答の data。
 func commentsPayload(b *ghBoard, vars map[string]any) map[string]any {
@@ -670,9 +670,9 @@ func commentsPayload(b *ghBoard, vars map[string]any) map[string]any {
 		"comments": map[string]any{"nodes": nodes}}}
 }
 
-// addCommentPayload はコメントの投稿に答える（**ボードにも積む**）。
+// addCommentPayload はコメントの投稿に答える（**カンバンにも積む**）。
 //
-// b: いまのボード。書き換える。
+// b: いまのカンバン。書き換える。
 // vars: 受け取った変数。
 // 戻り値: 応答の data。
 func addCommentPayload(b *ghBoard, vars map[string]any) map[string]any {
@@ -741,10 +741,10 @@ func (q *queryLog) Count(kind string) int {
 	return n
 }
 
-// boardPathIn は一時ディレクトリの中のボードの JSON のパスを返す。
+// boardPathIn は一時ディレクトリの中のカンバンの JSON のパスを返す。
 //
 // root: 一時ディレクトリの根。
-// 戻り値: ボードの JSON の絶対パス。
+// 戻り値: カンバンの JSON の絶対パス。
 func boardPathIn(root string) string {
 	return filepath.Join(root, "board.json")
 }

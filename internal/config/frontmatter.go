@@ -63,7 +63,7 @@ func splitFrontMatter(content string) (frontMatter string, body string, err erro
 
 // CheckFrontMatterSyntax は、WORKFLOW.md の全文の front matter が YAML として読めるかだけを見る。
 //
-// **値の妥当性は見ない。**プレースホルダが残っていても、Status の名前がボードに無くても通る。
+// **値の妥当性は見ない。**プレースホルダが残っていても、Status の名前がカンバンに無くても通る。
 // ここで答えるのは「この全文を continuo が読み始められるか」だけである。
 //
 // **`continuo setup` が書き込む前に自分の組み立てを確かめるためにある。**行を1本だけ

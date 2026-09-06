@@ -19,7 +19,7 @@ import (
 // 端末へ流し込まれた巨大な1行をそのまま全部読んでしまう。
 const maxInputLine = 4096
 
-// noOptionInput は「この役割に使える選択肢がボードに無い」を表す入力である。
+// noOptionInput は「この役割に使える選択肢がカンバンに無い」を表す入力である。
 //
 // **一覧の番号は1から振るので、0 は既存の選択肢と衝突しない。**
 const noOptionInput = 0
@@ -27,11 +27,11 @@ const noOptionInput = 0
 // 対話が最後まで進まなかった理由は sentinel error で返す。cmd/continuo はこれを見て
 // 終了コードを決める。**理由の説明そのものは Assign が Out へ出し終えている。**
 var (
-	// ErrTooFewOptions は、ボードの選択肢が RoleCount 個に満たなかったことを表す。
+	// ErrTooFewOptions は、カンバンの選択肢が RoleCount 個に満たなかったことを表す。
 	// **尋ねる前に止める。**足りないまま尋ねると、対話は必ず途中で行き止まる。
 	ErrTooFewOptions = errors.New("カンバンの Status の選択肢が足りません")
 	// ErrNoSuitableOption は、利用者が 0 を入力したことを表す。
-	// **その役割へ渡せる選択肢がボードに無い**という表明である。
+	// **その役割へ渡せる選択肢がカンバンに無い**という表明である。
 	ErrNoSuitableOption = errors.New("役割に使える選択肢がカンバンにありません")
 	// ErrInterrupted は、利用者が Ctrl+C で中断したことを表す。
 	ErrInterrupted = errors.New("利用者が中断しました")
@@ -79,7 +79,7 @@ func (a Assignment) Statuses() scaffold.Statuses {
 type AssignOptions struct {
 	// FieldName は選択肢を読んだフィールドの名前である（画面に出すためだけに使う）。
 	FieldName string
-	// Options はボードから読んだ選択肢名である。**ボードの並び順のまま渡すこと。**
+	// Options はカンバンから読んだ選択肢名である。**カンバンの並び順のまま渡すこと。**
 	Options []string
 	// In は番号を読む先である（本番では os.Stdin）。
 	In io.Reader
@@ -87,7 +87,7 @@ type AssignOptions struct {
 	Out io.Writer
 }
 
-// Assign は5つの役割それぞれに、ボードの Status の選択肢を1つずつ割り当てる。
+// Assign は5つの役割それぞれに、カンバンの Status の選択肢を1つずつ割り当てる。
 //
 // **役割の名前より先に「continuo がその Status で何をするか」を出してから番号を待つ。**
 // 初見の利用者は、どの Status がどの役割かを知らないためである。
@@ -98,7 +98,7 @@ type AssignOptions struct {
 // **重なったときは打ち切らず、同じ役割を尋ね直す。**打ち間違いはその場で直せるので、
 // それまでの回答をすべて入れ直させる理由が無い。
 //
-// **ボードへは1文字も書かない。**選択肢が足りないとき・役割に渡せる選択肢が無いときは、
+// **カンバンへは1文字も書かない。**選択肢が足りないとき・役割に渡せる選択肢が無いときは、
 // GitHub の画面から足すよう案内して打ち切る。
 //
 // ctx: 中断を受け取るコンテキスト。**Ctrl+C はこれを取り消して伝える**
@@ -203,7 +203,7 @@ func Assign(ctx context.Context, opts AssignOptions) (Assignment, error) {
 //
 // out: 出力先。
 // fieldName: 選択肢を読んだフィールドの名前。
-// options: 選択肢の名前（ボードの並び順）。
+// options: 選択肢の名前（カンバンの並び順）。
 func writeOptionList(out io.Writer, fieldName string, options []string) {
 	fmt.Fprintln(out, i18n.T(i18n.KeySetupPromptOptionsHeader, fieldName))
 	for i, name := range options {

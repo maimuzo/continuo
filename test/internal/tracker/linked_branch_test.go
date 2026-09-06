@@ -61,7 +61,7 @@ func fetchOneIssueLog(t *testing.T, opts testIssueItemOpts) (tracker.Issue, stri
 	return issues[0], buf.String()
 }
 
-// baseOpts は「Ready の issue が1件だけボードに載っている」形の共通のパラメータを返す。
+// baseOpts は「Ready の issue が1件だけカンバンに載っている」形の共通のパラメータを返す。
 func baseOpts() testIssueItemOpts {
 	return testIssueItemOpts{
 		ItemID: "item-42",

@@ -716,7 +716,7 @@ const turnWaitAgain turnOutcome = 101
 // **`turnSendFailed` と混ぜてはならない。**混ぜると、herdr を再起動しただけで
 // 走行中の run が諦められ、リトライを消費し、使い切ると issue が failure_state へ落ちる。
 // herdr は何も答えていないのに「herdr は agent が待機状態になったと答えました」という
-// 文面がボードへ投稿される。
+// 文面がカンバンへ投稿される。
 //
 // **turnLoop はこれを受けても run を諦めない。**`awaitTurnEnd` を立てて抜け、
 // 次の巡回で「turn を送らずに turn の終わりを待つ」ところから入り直す（設計 3-48）。

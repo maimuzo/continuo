@@ -230,7 +230,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("%w: %w", ErrStartup, err)
 	}
 	if endpoint != "" {
-		// **差し替えたことを必ず1行残す。**本番のボードへ繋いだのかどうかを、
+		// **差し替えたことを必ず1行残す。**本番のカンバンへ繋いだのかどうかを、
 		// ログを読む人間が判断できるようにする。
 		logger.Warn("GitHub の GraphQL の接続先を差し替えています（本番の GitHub ではありません）",
 			"env", EnvGraphQLEndpoint, "endpoint", endpoint)
