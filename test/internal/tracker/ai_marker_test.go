@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // 目的: PostComment が「人間ではなく機械が書いた」の印を、
@@ -134,5 +135,40 @@ func TestFetchComments_機械の印を足しても判別が変わらない(t *te
 	}
 	if !strings.Contains(got[0].Body, config.AIMarker) {
 		t.Errorf("本文から機械の印が消えています: %q", got[0].Body)
+	}
+}
+
+// 目的: `self_marker` が HTML のコメントでなくても、先頭に来ることを固定する（設計 3-82）。
+//
+// **`self_marker` は利用者が設定で決める文字列であり、形を縛る検査が無い**
+// （`tracker.comments.self_marker`）。`[continuo-self]` のような値にできる。
+// **`config.WithAIMarker` は `<!--` で始まる行だけを印の行とみなす**ので、
+// **`self_marker` を先に足してから通すと、印がその行より前へ入る。**
+//
+// **そうなると `FetchComments` の先頭一致が外れる。**
+// continuo 自身の通知が次の turn の入力から外れなくなり、
+// **人間が書いたコメントとして、毎 turn エージェントへ渡り続ける。**
+//
+// 与える情報: HTML のコメントではない self_marker。
+// 成功条件: 本文が self_marker で始まり、その次の行が機械の印であること。
+func TestComposeCommentBody_HTMLのコメントでないselfMarkerでも先頭に来る(t *testing.T) {
+	const selfMarker = "[continuo-self]"
+	got := tracker.ComposeCommentBody("Status を動かしました", selfMarker)
+	want := selfMarker + "\n" + config.AIMarker + "\nStatus を動かしました"
+	if got != want {
+		t.Fatalf("self_marker が先頭から外れました:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: 持ち回りのコメント（self_marker が空）でも、印が先頭に来ないことを固定する（設計 3-82）。
+//
+// 与える情報: 先頭に持ち回りの印を持つ本文と、空の self_marker。
+// 成功条件: 持ち回りの印 → 機械の印 → JSON の順であること。
+func TestComposeCommentBody_持ち回りの印は先頭のまま(t *testing.T) {
+	body := config.HandoffBidMarker + "\n{\"score\":190}\n"
+	got := tracker.ComposeCommentBody(body, "")
+	want := config.HandoffBidMarker + "\n" + config.AIMarker + "\n{\"score\":190}\n"
+	if got != want {
+		t.Fatalf("持ち回りの印が先頭から外れました:\n got %q\nwant %q", got, want)
 	}
 }

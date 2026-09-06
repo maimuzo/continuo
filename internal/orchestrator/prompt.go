@@ -119,8 +119,10 @@ func BuildContinuationPrompt(
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    %s\n    ここに何をしたかを書く\"\n\n",
-		issueURL, marker, config.AIMarker)
+	// **印の2行は字下げしない。**組み込みの指示書（5-5）は「行の先頭から書く」と教えており、
+	// **字下げした見本を送ると、写したエージェントが違う形の本文を書く。**
+	fmt.Fprintf(&b, "%s --body \"%s\n%s\nここに何をしたかを書く\"\n\n",
+		"gh issue comment "+issueURL, marker, config.AIMarker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
 	// **印の順序を名指しする**（設計 3-82）。**`marker` を先に、`AIMarker` をその次に置く。**
 	// 逆にすると `c.IsAgent` が偽になり、**書いたのに `failure_state` へ落ちる。**

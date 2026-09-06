@@ -30,7 +30,7 @@ import (
 // エージェントへ書かせる文字列と、1文字も違ってはならない。**
 const AIMarker = "<!-- continuo:ai -->"
 
-// aiMarkerCommentOpen は HTML のコメントの開きである。
+// aiMarkerCommentOpen と aiMarkerCommentClose は HTML のコメントの囲みである。
 //
 // **行頭ちょうどの `<!--` だけを印の行とみなす。**字下げした行は本文である
 // （[internal/handoff/assess.go](../handoff/assess.go) の `StartsAsProgressReport` と同じ決まり）。
@@ -39,17 +39,26 @@ const AIMarker = "<!-- continuo:ai -->"
 // **字下げした1行目の印は、印として通る。**
 // **`handoff.IsMarked` も `FetchComments` も `TrimSpace(body)` してから先頭を見るので、
 // そちらでも同じように通る。**ここだけ通さないと、その2つと判定がずれる。
-const aiMarkerCommentOpen = "<!--"
+//
+// **同じ前提に立つ定数が、他に3つある**（`StartsAsProgressReport` の説明にある一覧）。
+// **印の形を変えるときは4つとも動かすこと。**
+const (
+	aiMarkerCommentOpen  = "<!--"
+	aiMarkerCommentClose = "-->"
+)
 
 // WithAIMarker は、本文の先頭に並ぶ印の、いちばん後ろへ AIMarker を1行足す（設計 3-82）。
 //
 // **既にある印を1つも動かさない。**先頭へ割り込ませてはならない。
-// **先頭が特定の印であることを見ている判定が、本番に7箇所ある。**
+// **本文の先頭から読む判定が、本番に10ある**（設計 3-82 の表で数えた）。
+// **9つは「先頭が特定の印で始まるか」、1つは「先頭に並ぶ印の中に進捗の印があるか」である。**
 // とくに CI の2本（`design-review-result` と `code-review-result`）は
 // `continuo init` が利用者のリポジトリへ置いたきりで、**continuo の版を上げても書き換わらない。**
 // **先頭へ入れると、その project の pull request が全部赤になる。**
 //
-// **既に印を持っている本文は、そのまま返す。**二重に付けない。
+// **先頭の印の並びに既に印があれば、そのまま返す。**二重に付けない。
+// **字下げして引用した印は、この並びに数えない。**そちらは本文であり、
+// **印について説明する報告には、名乗りの印を別に足す。**
 //
 // 例。
 //
@@ -90,11 +99,11 @@ func WithAIMarker(body string) string {
 		switch {
 		case trimmed == "":
 			// 空行。印の並びはまだ続きうるので、止めずに読み進める。
-		case !strings.HasPrefix(line, aiMarkerCommentOpen):
+		case !isMarkerLine(line):
 			// **本文が始まった。**ここから先の `<!--` は引用であって名乗りではない。
 			return spliceAIMarker(body, insert)
 		case trimmed == AIMarker:
-			// 既に付いている。二重に付けない。
+			// **先頭の印の並びに、既に印がある。**二重に付けない。
 			return body
 		default:
 			// 印の行。**この行の直後を、いまの挿入位置とする。**
@@ -104,6 +113,25 @@ func WithAIMarker(body string) string {
 		rest = rest[advance:]
 	}
 	return spliceAIMarker(body, insert)
+}
+
+// isMarkerLine は、その行が1行で閉じた HTML のコメント（＝印の行）かを返す。
+//
+// **開きだけでは足りない。**`<!--` で始まり、同じ行に `-->` が無い行は、
+// **複数行の HTML コメントの開きである。**印の行として数えると、
+// **その中へ印を差し込むことになる。**issue の画面では見えず、
+// 本文は `<!--` で始まったまま残る。
+//
+// **閉じも見るのは、[internal/prompt/prompt.go](../prompt/prompt.go) の
+// `stripCommentsFromLine` が既にそうしているからである。**
+//
+// line: 見る行（行末の改行は含まない）。
+// 戻り値: 行頭ちょうどの `<!--` で始まり、同じ行に `-->` があれば真。
+func isMarkerLine(line string) bool {
+	if !strings.HasPrefix(line, aiMarkerCommentOpen) {
+		return false
+	}
+	return strings.Contains(line[len(aiMarkerCommentOpen):], aiMarkerCommentClose)
 }
 
 // spliceAIMarker は、本文の指定の位置へ AIMarker を1行差し込む。

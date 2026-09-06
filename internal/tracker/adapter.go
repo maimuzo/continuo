@@ -1185,15 +1185,24 @@ func (a *Adapter) FetchComments(
 // 戻り値: 投稿する本文。**`self_marker` の次に `config.AIMarker` が入り、
 // 先頭に並ぶ印は1つも動かない。**
 func ComposeCommentBody(body, selfMarker string) string {
-	full := body
+	// **`self_marker` を足す前に印を足す。**順序を逆にしてはならない。
+	//
+	// **`self_marker` は利用者が設定で決める文字列であり、形を縛る検査が無い**
+	// （`tracker.comments.self_marker`）。`[continuo-self]` のような値にできる。
+	// **`config.WithAIMarker` は `<!--` で始まる行だけを印の行とみなす**ので、
+	// **そういう値を先に足すと、印がその行より前へ入る。**
+	// そうなると `FetchComments` の先頭一致が外れ、
+	// **continuo 自身の通知が、次の turn の入力から外れなくなる。**
+	// 人間が書いたコメントとして、毎 turn エージェントへ渡り続ける。
+	//
+	// **先に印を足せば、`self_marker` の形を問わない。**
+	// 持ち回りのコメント（入札・hold・released）は `selfMarker` が空で渡ってくるので、
+	// **本文が自分で持っている印の後ろへ入る。**そちらは固定の `<!--` の印である。
+	full := config.WithAIMarker(body)
 	if selfMarker != "" {
-		full = selfMarker + "\n" + body
+		full = selfMarker + "\n" + full
 	}
-	// **人間ではなく機械が書いたことを名乗る**（設計 3-82）。
-	// **先頭に並ぶ印のいちばん後ろへ足すので、`self_marker` も、本文が自分で持っている
-	// 持ち回りの印（入札・hold・released）も、先頭のまま動かない。**
-	// 動かすと、`FetchComments` の先頭一致と `handoff.IsMarked` が同時に外れる。
-	return config.WithAIMarker(full)
+	return full
 }
 
 // PostComment は continuo 自身が issue へコメントを投稿する。

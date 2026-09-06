@@ -9020,7 +9020,8 @@ turn の終わりと同じでなければならないので、それでは足り
 ### 3-82. 人間が書いたのか機械が書いたのかを、コメントの印で見分ける
 
 **言いたいこと。**1つの issue に4種類の書き手が現れ、**4種類とも同じ GitHub アカウントで投稿する。**
-**機械が書いたものへ `<!-- continuo:ai -->` を1行足し、印が無いものを人間が打鍵したものとする。**
+**機械が書いたものへ `<!-- continuo:ai -->` を1行足し、印があるものを機械が書いたものとする。**
+**印が無いことは、人間が打鍵したことの証拠にはならない**（下の表の3行目と4行目が混ざる）。
 **印は先頭へ置かない。**先頭に並ぶ印の、いちばん後ろへ足す。
 
 **何が起きていたか**（issue #245）。**投稿者でも `author_association` でも見分けられない。**
@@ -9043,14 +9044,16 @@ continuo 本体（`continuo:self` ほか）と、continuo が起動したエー�
 **足す位置は「本文の先頭から連続する HTML コメントの行の、いちばん後ろ」である**（`WithAIMarker`）。
 **既にある印を1つも動かさない。**
 
-**先頭へ置かない理由。**先頭が特定の印であることを見ている判定が本番に7箇所ある。
+**先頭へ置かない理由。本文の先頭から読む判定が、本番に10ある。**
+**下の表で数えた**（9つが「先頭が特定の印で始まるか」、1つが「先頭に並ぶ印の中に進捗の印があるか」）。
 
 | どこ | 何を見ているか |
 | --- | --- |
 | [internal/tracker/adapter.go](../../internal/tracker/adapter.go) の `FetchComments` | `self_marker` / `marker` の先頭一致 |
 | [internal/handoff/handoff.go](../../internal/handoff/handoff.go) の `IsMarked` / `payloadAfterMarker` | 入札・hold・released の先頭一致 |
 | 組み込みの 5-3 と 7-2 の `jq` | `startswith("<!-- continuo:agent -->")` / `startswith("<!-- continuo:group -->")` |
-| [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) と [internal/scaffold/ci_template.go](../../internal/scaffold/ci_template.go) | `design-review-result` / `code-review-result` / `design-review-skipped` の先頭一致 |
+| [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) と [internal/scaffold/ci_template.go](../../internal/scaffold/ci_template.go) | `design-review-result` / `code-review-result` / `design-review-skipped` の先頭一致（3つ） |
+| [internal/handoff/assess.go](../../internal/handoff/assess.go) の `StartsAsProgressReport` | **先頭に並ぶ印を辿って、進捗の印があるか。**印が1行増えても辿り続けるが、**この一覧から落とすと、印の形を変える人が見落とす** |
 
 **最後の1行が決め手である。**`continuo init` が置いた CI は**利用者のリポジトリの中にあり、
 continuo の版を上げても書き換わらない。**先頭へ入れた瞬間に、その project の pull request が全部赤になる。

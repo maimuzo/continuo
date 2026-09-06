@@ -4,7 +4,7 @@
 //
 // **なぜ要るか。**エージェントも continuo も人間も、同じ GitHub アカウントで投稿する。
 // **投稿者でも `author_association` でも見分けられない。**
-// **印を先頭へ割り込ませてはならない。**先頭が特定の印であることを見ている判定が本番に7箇所あり、
+// **印を先頭へ割り込ませてはならない。**本文の先頭から読む判定が本番に10あり、
 // うち CI の2本は利用者のリポジトリへ置いたきりで、continuo の版を上げても書き換わらない。
 package config_test
 
@@ -29,7 +29,12 @@ func TestAIMarker_綴りが固定されている(t *testing.T) {
 	}
 	// **既存の印と食い違っていること。**同じ綴りにすると、continuo の判定が変わる
 	// （issue #245 の本文が「既にある2つを流用してはいけません」と決めている）。
+	// **issue #245 が名指ししたのは、この2つである。**
+	// `<!-- continuo:agent -->` を流用すると `FetchComments` が `IsAgent` を立て、
+	// `<!-- continuo:self -->` を流用すると、そのコメントが次の turn の入力から丸ごと外れる。
+	defaults := config.DefaultConfig().Tracker.Comments
 	for _, other := range []string{
+		defaults.Marker, defaults.SelfMarker,
 		config.ProgressMarker, config.PlanMarker,
 		config.HandoffBidMarker, config.HandoffHoldMarker, config.HandoffReleasedMarker,
 	} {
@@ -208,6 +213,53 @@ func TestWithAIMarker_1行目の字下げは読む側と同じように落ちる
 	}
 }
 
+// 目的: どんな本文でも「TrimSpace したあとの先頭の1行」が変わらないことを固定する（設計 3-82）。
+//
+// **これがこの印のいちばん大事な約束である。**
+// 読む側（`handoff.IsMarked` / `payloadAfterMarker` / `FetchComments`）は
+// **どれも `TrimSpace(body)` してから先頭を見る。**
+// **その1行が変われば、その全部が同時に外れる。**
+//
+// **1件ずつの検査では、この約束を守り切れない。**空行・空白・字下げ・改行の有無の
+// 組み合わせは、思いつくたびに増える。**組み合わせて全部に当てる。**
+//
+// 与える情報: 印の並び・空白・改行の有無を組み合わせた本文。
+// 成功条件: 元の本文が印で始まっていたなら、印を足したあとも同じ印で始まっていること。
+func TestWithAIMarker_先頭の1行を変えない(t *testing.T) {
+	heads := []string{
+		"<!-- continuo:self -->",
+		config.HandoffBidMarker,
+		config.HandoffHoldMarker,
+		config.HandoffReleasedMarker,
+		"<!-- continuo:agent -->",
+	}
+	prefixes := []string{"", " ", "  ", "\n", "\n\n", "　", "    ", "\t"}
+	bodies := []string{"本文", "{\"score\":190}\n\n散文。\n", "", "本文\n"}
+
+	for _, head := range heads {
+		for _, prefix := range prefixes {
+			for _, body := range bodies {
+				src := prefix + head
+				if body != "" {
+					src += "\n" + body
+				}
+				got := config.WithAIMarker(src)
+				if !strings.HasPrefix(strings.TrimSpace(got), head) {
+					t.Errorf("先頭の1行が変わりました。読む側の先頭一致が全部外れます\n"+
+						" 入力 %q\n 出力 %q", src, got)
+				}
+				if !strings.Contains(got, config.AIMarker) {
+					t.Errorf("印が入っていません\n 入力 %q\n 出力 %q", src, got)
+				}
+				// **二度通しても増えない。**
+				if again := config.WithAIMarker(got); again != got {
+					t.Errorf("二度通すと印が増えました\n 1回目 %q\n 2回目 %q", got, again)
+				}
+			}
+		}
+	}
+}
+
 // 目的: 印を足しても、入札の JSON を切り出す側が壊れないことを固定する（設計 3-82）。
 //
 // **`payloadAfterMarker`（internal/handoff）は、印の後ろの最初の `{` から最後の `}` を取る。**
@@ -220,5 +272,56 @@ func TestAIMarker_中括弧を含まない(t *testing.T) {
 	if strings.ContainsAny(config.AIMarker, "{}") {
 		t.Fatalf("印が中括弧を含んでいます（%q）。"+
 			"入札のコメントから JSON を切り出す処理が壊れます", config.AIMarker)
+	}
+}
+
+// 目的: 複数行の HTML コメントの中へ印を差し込まないことを固定する（設計 3-82）。
+//
+// **`<!--` で始まり、同じ行に `-->` が無い行は、複数行のコメントの開きである。**
+// 印の行として数えると、**その中へ印を入れてしまう。**
+// **issue の画面には出ず、本文は `<!--` で始まったまま残る。**
+//
+// 与える情報: 複数行の HTML コメントで始まる本文。
+// 成功条件: 印がコメントの中へ入らず、本文の先頭に来ること。
+func TestWithAIMarker_複数行のコメントの中へ入れない(t *testing.T) {
+	body := "<!--\n覚え書き\n-->\n本文"
+	want := config.AIMarker + "\n" + body
+	if got := config.WithAIMarker(body); got != want {
+		t.Fatalf("複数行のコメントの中へ印を入れました:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: 字下げして引用した印は、名乗りとして数えないことを固定する（設計 3-82）。
+//
+// **組み込みの指示書は、印を4桁字下げのコード片として見せている。**
+// **それを引用した報告に名乗りの印が付かないと、その報告だけ人間が書いたものと見分けが付かない。**
+// **だから、字下げした印は「既に付いている」と数えない。**
+//
+// 与える情報: 2行目に字下げした印がある本文。
+// 成功条件: 名乗りの印が1行目の直後に入り、字下げした行はそのまま残ること。
+func TestWithAIMarker_字下げした印は名乗りに数えない(t *testing.T) {
+	body := "<!-- continuo:self -->\n  " + config.AIMarker + "\n本文"
+	want := "<!-- continuo:self -->\n" + config.AIMarker + "\n  " + config.AIMarker + "\n本文"
+	if got := config.WithAIMarker(body); got != want {
+		t.Fatalf("字下げした引用を名乗りとして数えました:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: 改行が CRLF でも、先頭の1行が変わらないことを固定する（設計 3-82）。
+//
+// **git の失敗をそのまま貼る経路があるので、CRLF が混じりうる**
+// （`internal/orchestrator` の `postComment`）。
+// **先頭の1行さえ変わらなければ、読む側の先頭一致は全部通る。**
+//
+// 与える情報: CRLF の本文。
+// 成功条件: TrimSpace したあとの先頭が、元の印のままであること。
+func TestWithAIMarker_CRLFでも先頭の1行を変えない(t *testing.T) {
+	body := config.HandoffBidMarker + "\r\n{\"score\":190}\r\n"
+	got := config.WithAIMarker(body)
+	if !strings.HasPrefix(strings.TrimSpace(got), config.HandoffBidMarker) {
+		t.Fatalf("先頭の1行が変わりました:\n%q", got)
+	}
+	if !strings.Contains(got, config.AIMarker) {
+		t.Fatalf("印が入っていません:\n%q", got)
 	}
 }
