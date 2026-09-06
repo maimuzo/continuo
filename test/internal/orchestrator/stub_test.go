@@ -278,8 +278,6 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		GHAuthCheck:    opts.GHAuthCheck,
 		// **本物の `gh` を起動させない**（設計 3-65）。
 		GHLogin: ghLoginForTest(opts.GHLogin),
-		// **機械の名前を固定する**（設計 3-77）。走らせる機械によって結果が変わらないようにする。
-		HostName: testHostName,
 	})
 	if err != nil {
 		t.Fatalf("orchestrator.New に失敗した: %v", err)
@@ -336,7 +334,7 @@ func toolHook(sessionID, name string) hookserver.HookEvent {
 //
 // 目的: **知っている Status の一覧は組み立てのときに1度だけ計算する。**
 // その計算に使う設定が空のまま渡されても、いままでは黙って通っていた。
-// **1つも取れないと、continuo はボード上のどの Status も「知らない Status」と判定し、
+// **1つも取れないと、continuo はカンバン上のどの Status も「知らない Status」と判定し、
 // 着手した run を片端から止める。**しかも止めた理由には「いま知っているのは です」と
 // 空欄が出るだけで、人間には原因が読み取れない。
 // **他の必須の依存（Tracker / Herdr / Workspace）と同じく、名前つきのエラーで弾く。**

@@ -39,7 +39,7 @@ const (
 	LabelGHAuth = i18n.KeyDoctorLabelGHAuth
 	// LabelBoard は Bootstrap が通り、active_states の選択肢名が全部あるかの検査である。
 	LabelBoard = i18n.KeyDoctorLabelBoard
-	// LabelStatusNames は、設定に書いた Status 名と紛らわしい選択肢がボードに無いかの検査である。
+	// LabelStatusNames は、設定に書いた Status 名と紛らわしい選択肢がカンバンに無いかの検査である。
 	//
 	// **`✗` にしない。**紛らわしいだけでは continuo は動く。だが取り違えたまま無人で回すと、
 	// **人間が作業中の issue にエージェントが着手する。**
@@ -71,11 +71,11 @@ const (
 	// 動きになる。**起動を止めると、いま動いている人の continuo が版を上げた瞬間に
 	// 起動しなくなる**ので、警告に留める。
 	LabelCleanupStates = i18n.KeyDoctorLabelCleanupStates
-	// LabelRewriteKeys は `tracker.automated_state_rewrite` のキーがボードの Status の
+	// LabelRewriteKeys は `tracker.automated_state_rewrite` のキーがカンバンの Status の
 	// 選択肢にあるかの検査である（設計 3-57。issue #67）。
 	//
-	// **`✗` にしない。**キーはボードに実在しなくてよく、無ければその行が引かれないだけである。
-	// **`✗` にすると、ボードの自動化をやめて選択肢を消した人が抜け出せなくなる。**
+	// **`✗` にしない。**キーはカンバンに実在しなくてよく、無ければその行が引かれないだけである。
+	// **`✗` にすると、カンバンの自動化をやめて選択肢を消した人が抜け出せなくなる。**
 	//
 	// **黙って通してもいけない。**綴りを打ち間違えた行は一度も効かないまま死ぬのに、
 	// **起動時の警告は `continuo doctor` には出てこない**（doctor は tracker のログを捨てる）。
@@ -91,6 +91,27 @@ const (
 	// **リリースノートを読まないかぎり、存在に気づく手段が1つも無い。**
 	// **ここが、増えた項目を人間に見せる唯一の場所である。**
 	LabelMissingKeys = i18n.KeyDoctorLabelMissingKeys
+	// LabelAutomations は、カンバンの自動化が有効なのに書き戻しの対応表が空でないかの
+	// 検査である（設計 3-32 / 3-54。issue #209）。
+	//
+	// **`✗` にしない。**対応表が空でも continuo は起動し、走る。
+	// **`✗` にすると、自動化を有効にしたまま動かしている人の continuo が、
+	// 版を上げた瞬間に起動しなくなる。**
+	//
+	// **黙って通してもいけない。**自動化が Status を書いた瞬間に走行中の run が止まるのに、
+	// **利用者がそれを知るのは1件止まったあとである。**しかも設定は落ちる
+	// （`WORKFLOW.md` を作り直すと消える）。**ここが、起動する前に見せる唯一の場所である。**
+	LabelAutomations = i18n.KeyDoctorLabelAutomations
+	// LabelAgentTeams は、Claude Code の agent teams が有効にならないかの検査である
+	// （設計 3-70。issue #137）。
+	//
+	// **`✗` にしない。**agent teams を自分の対話用に有効にしている人が版を上げただけで、
+	// continuo が起動しなくなる、ということを起こさない。
+	//
+	// **黙って通してもいけない。**有効なままだと issue が `failure_state` へ落ちるのに、
+	// **いまは文書に「有効だと正しく動きません」と書いてあるだけである。**
+	// **読まなかった人は、落ちてから初めて気づく。**
+	LabelAgentTeams = i18n.KeyDoctorLabelAgentTeams
 	// LabelPromptVariables は、送るプロンプトが決められた変数だけを使っているかの検査である
 	// （設計 5-3c）。
 	//
@@ -125,7 +146,7 @@ const (
 
 // worse は2つの記号のうち「重いほう」を返す（✗ > ! > ✓）。
 //
-// **1つの見出し語が対象を複数持つときに使う**（clone と信頼登録はボードに載っている
+// **1つの見出し語が対象を複数持つときに使う**（clone と信頼登録はカンバンに載っている
 // リポジトリの数だけ対象がある）。1件でも足りなければ見出し語全体を ✗ にする。
 //
 // a: 比較する記号。
@@ -246,7 +267,7 @@ func (r Report) Write(w io.Writer) error {
 		b.WriteString(i18n.T(i18n.KeyDoctorSummaryAllOK, len(r.Results)) + "\n")
 	case missing == 0:
 		// **`!` だけのときを「問題があります」と書かない。**対象リポジトリが0件のとき
-		// （ボードが空）もここへ来る。**ボードが空なのは設定の誤りではない**（設計 3-32）。
+		// （カンバンが空）もここへ来る。**カンバンが空なのは設定の誤りではない**（設計 3-32）。
 		b.WriteString(i18n.T(i18n.KeyDoctorSummaryUnknownOnly, unknown, unknown) + "\n")
 	default:
 		b.WriteString(i18n.T(i18n.KeyDoctorSummaryProblems, missing+unknown, missing, unknown) + "\n")

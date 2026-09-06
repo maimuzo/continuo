@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **候補の取り方と、着手を取りやめる経路の検査である。**
 //
@@ -616,15 +616,15 @@ func TestDispatch_unknownのまま期限を過ぎたら人間へ渡さず試し�
 // そのまま候補として返る。段2 が取り直しをしないと、
 // **人間が Blocked に置いた issue を continuo が In Progress へ上書きしてしまう。**
 //
-// 目的: ボードの Status が failure_state にある issue へ running_state を書かないこと。
+// 目的: カンバンの Status が failure_state にある issue へ running_state を書かないこと。
 // また、書かなかったときに段3 へ進まず、印を静かに外すこと。
-// 与える情報: ボードでは Blocked にあるのに、候補の写しでは Ready を名乗る issue。
+// 与える情報: カンバンでは Blocked にあるのに、候補の写しでは Ready を名乗る issue。
 // 成功条件: Status が Blocked のままで、書き込みそのものを試みず、worktree も開かず、
 // 印が残らないこと。
 func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	holdPrompt(fx)
-	// ボードの実体は Blocked である（人間が置いた、あるいは直前に落とした）。
+	// カンバンの実体は Blocked である（人間が置いた、あるいは直前に落とした）。
 	fx.Tracker.AddIssue(sampleIssue(188, "Blocked"))
 	// 候補の一覧にだけ、反映が追いついていない Ready の写しが載る。
 	fx.Tracker.SetExtraCandidates(sampleIssue(188, "Ready"))
@@ -666,7 +666,7 @@ func TestDispatch_failure_stateのissueをrunning_stateへ上書きしない(t *
 // 次の巡回が0回目として拾い直し、同じ失敗を30秒ごとに繰り返す。
 //
 // 目的: 同じ issue が `agent.max_retries` を超えて失敗したら、それ以上拾わないこと。
-// 与える情報: ボードへ1バイトも書けない状況（failure_state へも落とせないので、
+// 与える情報: カンバンへ1バイトも書けない状況（failure_state へも落とせないので、
 // issue は Ready のまま候補に上がり続ける）と、`agent.max_retries: 1`。
 // 成功条件: 3回目以降の巡回で着手を試みなくなり、そのことが人間へ1度だけ知らされること。
 func TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら拾わない(t *testing.T) {
@@ -675,7 +675,7 @@ func TestDispatch_同じ理由で失敗し続けるissueは上限を超えたら
 	}})
 	fx.AllowLog("Status を落とせません", "着手に失敗しました", "これ以上は拾いません")
 	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
-	fx.Tracker.SetUpdateError(errors.New("テストが起こしたボードへの書き込みの失敗"))
+	fx.Tracker.SetUpdateError(errors.New("テストが起こしたカンバンへの書き込みの失敗"))
 
 	tick := func() {
 		fx.Orc.Tick(context.Background())

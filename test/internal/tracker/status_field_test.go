@@ -22,7 +22,7 @@ func customStatusFieldConfig() config.TrackerConfig {
 // bootstrapProjectPayloadWithCounts は Bootstrap の応答に、絞り込みキーの検査に使う
 // 3つの件数（全件・値あり・値なし）を載せたものを組み立てる。
 //
-// total: ボード上の item の全件数（totalItems）。
+// total: カンバン上の item の全件数（totalItems）。
 // withValue: `-no:"<status_field>"` が返す件数（itemsWithStatus）。
 // withoutValue: `no:"<status_field>"` が返す件数（itemsWithoutStatus）。
 func bootstrapProjectPayloadWithCounts(
@@ -100,7 +100,7 @@ func TestFetchIssuesByStates_既定以外なら組み込みのstatusキーを使
 // 目的: 頼んだ Status に無い item が**大半を占めた**ら、設定の誤りとしてエラーにすることを
 // 確認する（設計 3-34 の「無言の失敗を無くす」）。
 // **絞り込みのキーが別のフィールドに解決されると、GraphQL は条件ごと無かったことにして
-// ボードのほぼ全件を返す。**気づかないと Ice Box の issue を着手可能とみなして走らせる。
+// カンバンのほぼ全件を返す。**気づかないと Ice Box の issue を着手可能とみなして走らせる。
 // 与える情報: Ready / In Progress を頼んだのに、4件のうち3件が "Ice Box" の item を返す偽サーバ。
 // 成功条件: FetchIssuesByStates がエラーを返し、カテゴリが CategoryResponse であり、
 // メッセージに返ってきた Status 名（"Ice Box"）が含まれること。
@@ -195,7 +195,7 @@ func TestBootstrap_絞り込みキーの検査クエリを同じリクエスト�
 // 目的: status_field が絞り込みのキーとして解決できない場合、Bootstrap で起動を止めることを
 // 確認する（設計 3-34 の「無言の失敗を無くす」）。
 // **GitHub は知らないキーを見ると条件ごと無視するので、`no:` と `-no:` が両方とも
-// 全件を返す。**この形を見たら、フィールド自体はボードにあっても絞り込みには使えない。
+// 全件を返す。**この形を見たら、フィールド自体はカンバンにあっても絞り込みには使えない。
 // 与える情報: 全件105・値あり105・値なし105（＝キーが無視されている形）を返す偽サーバ。
 // 成功条件: Bootstrap がエラーを返し、カテゴリが CategoryInvalidConfig であり、
 // メッセージに status_field の名前が含まれること。
@@ -239,7 +239,7 @@ func TestBootstrap_絞り込みのキーに使えるなら通す(t *testing.T) {
 
 // 目的: 全件が値ありでも（値なしが0なら）誤検知しないことを確認する。
 // **「両方が全件と一致するか」で判定しているので、値ありだけが全件と一致する場合は通す。**
-// 与える情報: 全件105・値あり105・値なし0（全部の item に Status が入っているボード）。
+// 与える情報: 全件105・値あり105・値なし0（全部の item に Status が入っているカンバン）。
 // 成功条件: Bootstrap がエラーを返さないこと。
 func TestBootstrap_全件に値が入っていても誤検知しない(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(
@@ -254,12 +254,12 @@ func TestBootstrap_全件に値が入っていても誤検知しない(t *testin
 	}
 }
 
-// 目的: item が1件も無いボードでは絞り込みキーの検査をしないことを確認する。
+// 目的: item が1件も無いカンバンでは絞り込みキーの検査をしないことを確認する。
 // **全件0のときは、キーを解決できていても件数が全部0になり、区別が付かない。**
-// 判定できないものを落とすと、空のボードで起動できなくなる。
+// 判定できないものを落とすと、空のカンバンで起動できなくなる。
 // 与える情報: 全件0・値あり0・値なし0。
 // 成功条件: Bootstrap がエラーを返さないこと。
-func TestBootstrap_item0件のボードでは絞り込みキーを検査しない(t *testing.T) {
+func TestBootstrap_item0件のカンバンでは絞り込みキーを検査しない(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		bootstrapProjectPayloadWithCounts(testStatusOptions, 0, 0, 0),
 	)))
@@ -273,7 +273,7 @@ func TestBootstrap_item0件のボードでは絞り込みキーを検査しな�
 }
 
 // 目的: 巡回ごとの検査（VerifyStatusOptions）では絞り込みキーの判定をしないことを確認する。
-// **数えている最中に人間がボードへ item を足すと件数がずれる。**30秒ごとの巡回でこれを
+// **数えている最中に人間がカンバンへ item を足すと件数がずれる。**30秒ごとの巡回でこれを
 // 判定に使うと、設定は正しいのに巡回が止まる。起動時に1回見れば足りる。
 // 与える情報: 起動時なら弾かれる形（全件105・値あり105・値なし105）を返す偽サーバ。
 // 成功条件: VerifyStatusOptions がエラーを返さないこと。

@@ -1114,7 +1114,7 @@ func gitWorktreeBranches(ctx context.Context, repoDir string) (map[string]bool, 
 //
 // **これは書き込みを伴う唯一の ghq の呼び出しである。**呼ぶのは `continuo trust` の
 // 本番実行だけで、`--dry-run` と巡回のループからは呼ばない（設計 3-22 / 3-33）。
-// **巡回から呼ぶと、ボードに載っただけのリポジトリを無断で clone することになる。**
+// **巡回から呼ぶと、カンバンに載っただけのリポジトリを無断で clone することになる。**
 //
 // ctx: 呼び出しに適用するコンテキスト（タイムアウトを含める）。
 // owner: リポジトリの所有者名。

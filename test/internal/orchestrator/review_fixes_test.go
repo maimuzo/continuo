@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "4a61db11c52f5ba42b23b7180d4dfe2d79b39f257e065f54fe735fd3e48d11e6", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のパスから生成したものではないが、対応するテストパスには印を付けてある。**
 package orchestrator_test
@@ -235,7 +235,7 @@ func TestParseSignals_行頭の空白は許す(t *testing.T) {
 
 // TestParseSignals_1つのturnで受け付ける表明の件数に上限がある は、増幅の防止を確かめる。
 //
-// 目的: 表明1件につきボードを全ページ走査する GraphQL 呼び出しが1回走るので、上限が
+// 目的: 表明1件につきカンバンを全ページ走査する GraphQL 呼び出しが1回走るので、上限が
 // 無いと1回の応答で GitHub API の枠を使い切らせられる（**他の run まで巻き添えになる**）。
 // 与える情報: 別々の issue を指す表明を50行。
 // 成功条件: 受け付けるのは10件までである。
@@ -384,7 +384,7 @@ func TestTick_巡回のループはworkspace_hooksの間もブロックしない
 //
 // 目的: 「Status の選択肢名か `gh` の認証が検査に落ちたら、その巡回の dispatch を飛ばす」
 // の対象に**再 dispatch も入る**ことを示す。再 dispatch も着手の段0 から入り直す
-// dispatch であり、段2 でボードの Status を書きに行く。
+// dispatch であり、段2 でカンバンの Status を書きに行く。
 // 与える情報: 認証の検査が必ず失敗する巡回と、バックオフが明けた run。
 // 成功条件: 再 dispatch が走らない（バックオフの期限が残ったままになる）。
 //

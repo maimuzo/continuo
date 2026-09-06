@@ -119,7 +119,7 @@ issues_of() {
 	# shellcheck disable=SC2016  # jq の中の記法である。シェルに展開させない。
 	gh pr view "$1" --json body,closingIssuesReferences --jq '
 		[ .closingIssuesReferences[].number,
-		  (.body // "" | scan("(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
+		  (.body // "" | scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[ :]*#([0-9]+)") | .[0] | tonumber)
 		] | unique | .[] | tostring'
 }
 

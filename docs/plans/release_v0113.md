@@ -197,7 +197,7 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 
 **`missingkey=error` は外せない。**準拠する symphony の `SPEC.md` 5.4 が
 *"Unknown variables MUST fail rendering"*（**訳:** 未知の変数は変数展開を失敗させなければならない）
-を要求しており、[docs/plans/continuo_design.md:597](continuo_design.md#L597) がそれを根拠に採っている。
+を要求しており、[docs/plans/continuo_design.md:598](continuo_design.md#L598) がそれを根拠に採っている。
 **だから「起動を止める」のは変えず、`continuo doctor` で起動前に気づける道を足す。**
 
 **いま使える変数は9つ**（[internal/orchestrator/prompt.go:36-48](../../internal/orchestrator/prompt.go#L36-L48)）。
@@ -323,7 +323,7 @@ PR #112 のマージは v0.1.13 のタグより後である。**v0.1.13 は `run
 | 止まりそうな場所 | 実際にどうなっているか |
 | --- | --- |
 | 権限 | [internal/config/default.go:113-129](../../internal/config/default.go#L113-L129)。`dontAsk` / `Bash` は引数を絞らない / `Deny` は空 |
-| 雛形の禁止事項 | [internal/scaffold/template.go:223-232](../../internal/scaffold/template.go#L223-L232) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
+| 雛形の禁止事項 | [internal/scaffold/template.go:239-248](../../internal/scaffold/template.go#L239-L248) が禁じるのは「**この worktree の** branch を切り替えること」だけ |
 | tool_gate | 既定は `public_only`。**issue のリポジトリが private なら hook を足さない**（[internal/orchestrator/settings.go:299-306](../../internal/orchestrator/settings.go#L299-L306)） |
 
 ### 作らない理由（3つ）

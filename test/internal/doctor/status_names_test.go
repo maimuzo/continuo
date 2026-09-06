@@ -8,19 +8,19 @@ import (
 	"github.com/maimuzo/continuo/internal/doctor"
 )
 
-// TestDoctor_ボードに紛らわしいStatusが並んでいれば注意を出す は、
+// TestDoctor_カンバンに紛らわしいStatusが並んでいれば注意を出す は、
 // **Bootstrap を通ってしまう取り違えを捕まえる**ことを確かめる。
 //
-// 目的: ボードに `In Progress` と `AI In Progress` が並んでいるとき、
+// 目的: カンバンに `In Progress` と `AI In Progress` が並んでいるとき、
 // 見出し語 `Status の名前` が `!` になり、どの設定キーのどの名前と、
-// ボードのどの選択肢が紛らわしいのかを内訳に出すこと。
+// カンバンのどの選択肢が紛らわしいのかを内訳に出すこと。
 // **`✗` にしない**（continuo は動く）ので、終了コードは 0 のままであること。
 //
 // 与える情報: 既定の設定（`active_states` は `Ready` と `In Progress`）と、
-// `AI In Progress` を足したボード。
+// `AI In Progress` を足したカンバン。
 // 成功条件: `Status の名前` が `!`、内訳に両方の名前が出て、
 // 直し方に `active_states` の副作用が出て、終了コードが 0 であること。
-func TestDoctor_ボードに紛らわしいStatusが並んでいれば注意を出す(t *testing.T) {
+func TestDoctor_カンバンに紛らわしいStatusが並んでいれば注意を出す(t *testing.T) {
 	fx := newFixture(t)
 	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "AI In Progress", "In Progress", "Blocked", "In Review", "Done")
 
@@ -45,18 +45,18 @@ func TestDoctor_ボードに紛らわしいStatusが並んでいれば注意を�
 	if report.ExitCode() != 0 {
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
-	// **ボードを読んだときの応答を使い回す。**この検査のためにリクエストを増やさない。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
-		t.Fatalf("ボードへ送ったクエリが想定と違う: %v", got)
+	// **カンバンを読んだときの応答を使い回す。**この検査のためにリクエストを増やさない。
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items", "workflows"}) {
+		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
 	}
 }
 
 // TestDoctor_区切りと大文字小文字だけが違うStatusも注意を出す は、
 // **見た目が同じ選択肢**を捕まえることを確かめる。
 //
-// 目的: ボードに `In Progress` と `InProgress` が並んでいるとき、
+// 目的: カンバンに `In Progress` と `InProgress` が並んでいるとき、
 // 見出し語 `Status の名前` が `!` になり、理由が「同じ綴り」であること。
-// 与える情報: `InProgress` を足したボード。
+// 与える情報: `InProgress` を足したカンバン。
 // 成功条件: `Status の名前` が `!` で、内訳の理由が「大文字小文字と空白・記号を無視すると同じ綴り」であること。
 func TestDoctor_区切りと大文字小文字だけが違うStatusも注意を出す(t *testing.T) {
 	fx := newFixture(t)
@@ -70,7 +70,7 @@ func TestDoctor_区切りと大文字小文字だけが違うStatusも注意を�
 		t.Fatalf("同じ綴りであることが理由に出ていない: %q", notes)
 	}
 	if !strings.Contains(notes, `"InProgress"`) {
-		t.Fatalf("ボード側の選択肢名が内訳に出ていない: %q", notes)
+		t.Fatalf("カンバン側の選択肢名が内訳に出ていない: %q", notes)
 	}
 }
 
@@ -78,9 +78,9 @@ func TestDoctor_区切りと大文字小文字だけが違うStatusも注意を�
 // **警告そのものが読まれなくなる形**を弾く。
 //
 // 目的: `Abandoned` は文字の並びとして `Done` を含む（a-b-a-n-**d-o-n-e**-d）が、
-// **語としては別物である。**ボードに `Done` と `Abandoned` を並べるのはごく普通なので、
+// **語としては別物である。**カンバンに `Done` と `Abandoned` を並べるのはごく普通なので、
 // ここを警告してはならない。
-// 与える情報: `Abandoned` と `Ready for Review` を足したボード（`terminal_states` は `Done`）。
+// 与える情報: `Abandoned` と `Ready for Review` を足したカンバン（`terminal_states` は `Done`）。
 // 成功条件: `Status の名前` が `✓` であること。
 func TestDoctor_語の途中でたまたま一致するStatusは注意を出さない(t *testing.T) {
 	fx := newFixture(t)
@@ -94,14 +94,14 @@ func TestDoctor_語の途中でたまたま一致するStatusは注意を出さ�
 	}
 }
 
-// TestDoctor_ボードを読めなければStatusの名前は確かめられなかったになる は、
+// TestDoctor_カンバンを読めなければStatusの名前は確かめられなかったになる は、
 // 上流が落ちたときの記号と理由を固定する。
 //
-// 目的: ボードが `✗` か `!` のとき、`Status の名前` を `!` にし、
-// **ボードを読めなかったことを理由に出す**こと（照合する選択肢を持っていないため）。
-// 与える情報: gh の scope から project を外したテスト用gh mock（ボードは `!` になる）。
-// 成功条件: `Status の名前` が `!` で、理由がボードを読めなかったことであること。
-func TestDoctor_ボードを読めなければStatusの名前は確かめられなかったになる(t *testing.T) {
+// 目的: カンバンが `✗` か `!` のとき、`Status の名前` を `!` にし、
+// **カンバンを読めなかったことを理由に出す**こと（照合する選択肢を持っていないため）。
+// 与える情報: gh の scope から project を外したテスト用gh mock（カンバンは `!` になる）。
+// 成功条件: `Status の名前` が `!` で、理由がカンバンを読めなかったことであること。
+func TestDoctor_カンバンを読めなければStatusの名前は確かめられなかったになる(t *testing.T) {
 	fx := newFixture(t)
 	writeFakeGH(t, fx.BinDir, `github.com
   ✓ Logged in to github.com account tester (keyring)
@@ -114,7 +114,7 @@ func TestDoctor_ボードを読めなければStatusの名前は確かめられ�
 	assertSymbol(t, report, doctor.LabelBoard, doctor.SymbolUnknown)
 	res := assertSymbol(t, report, doctor.LabelStatusNames, doctor.SymbolUnknown)
 	if !strings.Contains(res.Detail, "カンバンを読めなかったため") {
-		t.Fatalf("ボードを読めなかったことが理由に出ていない: %q", res.Detail)
+		t.Fatalf("カンバンを読めなかったことが理由に出ていない: %q", res.Detail)
 	}
 }
 
@@ -122,7 +122,7 @@ func TestDoctor_ボードを読めなければStatusの名前は確かめられ�
 // 上流の設定ファイルが落ちたときの理由を固定する。
 //
 // 目的: 設定を読めていないときは、**照合する Status 名そのものが決まらない。**
-// ボードが落ちたときとは直す先が違うので、理由の文言も分けること。
+// カンバンが落ちたときとは直す先が違うので、理由の文言も分けること。
 // 与える情報: WORKFLOW.md を消した状態。
 // 成功条件: `Status の名前` が `!` で、理由が設定ファイルを読めなかったことであること。
 func TestDoctor_設定ファイルを読めなければStatusの名前は確かめられなかったになる(t *testing.T) {

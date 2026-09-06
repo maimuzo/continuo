@@ -49,7 +49,7 @@ func (o *Orchestrator) resumeBackoff(ctx context.Context, dispatchAllowed bool) 
 //	active_states だが routable でない … **workspace を掃除せずに** worker を止める
 //	それ以外（引き渡し・見えない） … **workspace を掃除せずに** worker を止める
 //
-// **終端と引き渡しは、書いたのがボードの自動化なら turn の終わりを待つ**
+// **終端と引き渡しは、書いたのがカンバンの自動化なら turn の終わりを待つ**
 // （`holdForAutomatedMove`。設計 3-74）。**人間が動かしたときはいままでどおり即座に止める。**
 //
 // **`active_states` のまま routable でなくなった run は、その待ちの対象にしない。**
@@ -102,7 +102,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 
 		switch {
 		case containsFold(o.cfg.Tracker.TerminalStates, issue.State):
-			// **書いたのがボードの自動化なら、turn の終わりを待つ**（設計 3-74）。
+			// **書いたのがカンバンの自動化なら、turn の終わりを待つ**（設計 3-74）。
 			// 「PR がマージされたら Done」の自動化が turn の途中で走ると、
 			// **走っている Claude Code を continuo 自身が殺してしまう。**
 			if o.holdForAutomatedMove(rs, issue) {

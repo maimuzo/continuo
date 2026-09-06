@@ -16,7 +16,7 @@ import (
 
 // jaStatuses は日本語の選択肢名で埋めた割り当てである。
 //
-// **ボードの選択肢名は英語とは限らない。**引用符の付け方が壊れていないかを、
+// **カンバンの選択肢名は英語とは限らない。**引用符の付け方が壊れていないかを、
 // 空白を含む名前（`レビュー 待ち`）で確かめる。
 var jaStatuses = scaffold.Statuses{
 	Dispatch: "着手待ち",
@@ -27,7 +27,7 @@ var jaStatuses = scaffold.Statuses{
 }
 
 // 目的: `continuo setup` が決めた割り当てが WORKFLOW.md の7つのキーへ書かれることを確認する。
-// 与える情報: 本番のボードの選択肢名で埋めた Statuses。
+// 与える情報: 本番のカンバンの選択肢名で埋めた Statuses。
 // 成功条件: dispatch_state / running_state / failure_state / active_states / terminal_states /
 // status_signal_map.review / status_signal_map.blocked に、割り当てた選択肢名が入ること。
 // 雛形の既定値（`Ready` など）が残っていないこと。
@@ -113,7 +113,7 @@ func TestWriteTemplateWithValues_日本語の選択肢名でも読み込める(t
 // 目的: 5つの役割のうち1つでも欠けたら、雛形の既定値をそのまま残すことを確認する。
 //
 // **一部だけ差し替えると、割り当てた Status と既定値のままの Status が混ざる。**
-// その WORKFLOW.md は起動時の照合で「ボードに無い Status」として落ちる。
+// その WORKFLOW.md は起動時の照合で「カンバンに無い Status」として落ちる。
 //
 // 与える情報: 完了だけ空にした Statuses。
 // 成功条件: 雛形の既定値（`Ready` / `In Progress` / `Done`）がそのまま残ること。

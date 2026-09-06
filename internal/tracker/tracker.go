@@ -1,4 +1,4 @@
-// Package tracker は GitHub Projects v2 のボードをトラッカーとして読み書きするアダプタである
+// Package tracker は GitHub Projects v2 のカンバンをトラッカーとして読み書きするアダプタである
 // （docs/plans/continuo_design.md 3-13、SPEC.md 第11節）。
 //
 // 実測で確定した性質は次の3点である（設計 2-2）。
@@ -8,9 +8,9 @@
 //   - `gh project` サブコマンドは1回 102 point かかるため使わない。
 //     すべて GraphQL を net/http で直接叩く
 //
-// このパッケージは本番のボード（project #3）へ絶対に書き込まない設計にはなっていない
+// このパッケージは本番のカンバン（project #3）へ絶対に書き込まない設計にはなっていない
 // （UpdateStatus / PostComment は書き込みそのものである）。**書き込みを検証するテストは
-// 必ず httptest.Server で立てたテスト用GraphQL mockに対して行い、本番のボードへは
+// 必ず httptest.Server で立てたテスト用GraphQL mockに対して行い、本番のカンバンへは
 // 接続しないこと。**
 package tracker
 
@@ -89,10 +89,10 @@ type Comment struct {
 	// `CreatedAt` と比べて新しいほうを採ること（`handoff.CommentView.LastTouched`）。
 	// **ゼロ値をそのまま使うと、期限がゼロ時刻から数えられて、生きている担当が即座に外れる。**
 	UpdatedAt time.Time
-	// IsAgent は、本文の先頭が `tracker.provider.comments.marker` の印で始まっている
+	// IsAgent は、本文の先頭が `tracker.comments.marker` の印で始まっている
 	// （＝エージェントが書いたと判別できる）ことを示す。
 	IsAgent bool
-	// IsSelf は、本文の先頭が `tracker.provider.comments.self_marker` の印で始まっている
+	// IsSelf は、本文の先頭が `tracker.comments.self_marker` の印で始まっている
 	// （＝continuo 自身が代筆した）ことを示す。IsSelf なコメントは
 	// FetchComments が次の turn の入力から自動的に除外する。
 	IsSelf bool
@@ -155,7 +155,7 @@ type Issue struct {
 	//   - "github_issue_state": 下敷きの GitHub issue の OPEN / CLOSED（draft issue には無い）
 	NativeRef map[string]any
 	// Identifier は人間可読な一意の名前である（SPEC.md 4.1.1 の identifier）。REQUIRED。
-	// **`<owner>/<repo>#<番号>` の形にする**（設計 3-13）。1枚のボードに複数リポジトリが
+	// **`<owner>/<repo>#<番号>` の形にする**（設計 3-13）。1枚のカンバンに複数リポジトリが
 	// 載るため `#188` だけでは一意にならない。draft issue はリポジトリを持たないため
 	// `draft:<project item の ID>` にする。
 	Identifier string
@@ -171,12 +171,12 @@ type Issue struct {
 	// （その値は NativeRef["github_issue_state"] に入る）。GitHub の綴りをそのまま保つ
 	// （比較のときだけ大文字小文字を無視する。SPEC.md 11.3）。
 	State string
-	// StatusChangedByAutomation は、いまの State を書いたのがボードの組み込みの自動化
+	// StatusChangedByAutomation は、いまの State を書いたのがカンバンの組み込みの自動化
 	// （`Pull request linked to issue` など）かどうかである（設計 2-6 / 3-54）。
 	//
 	// **ID 指定の取り直し（FetchIssuesByIDs）でだけ埋まる。**候補の取得
 	// （FetchIssuesByStates）と識別子での照合（FetchIssueByIdentifier）では常に false である。
-	// そちらは100件単位でボードを読むので、1件ずつにしか意味の無い timeline を要求しない。
+	// そちらは100件単位でカンバンを読むので、1件ずつにしか意味の無い timeline を要求しない。
 	//
 	// **判定は「`actor.__typename` が `Bot`、または `wasAutomated` が真」である。**
 	// `wasAutomated` は組み込みの自動化でも `false` を返すため、単独では使えない（設計 2-6）。

@@ -9,7 +9,7 @@ package config
 // フィールドは docs/plans/continuo_design.md の 5-2 に定義された YAML キーと1対1に対応する。
 // 各サブ構造体のコメントも同じ節の説明をそのまま転記している。
 type Config struct {
-	// Tracker は GitHub Projects v2 のボードをどう見るかを決める（SPEC.md 5.3 由来。名前は変えない）。
+	// Tracker は GitHub Projects v2 のカンバンをどう見るかを決める（SPEC.md 5.3 由来。名前は変えない）。
 	Tracker TrackerConfig `yaml:"tracker"`
 	// Polling は巡回の間隔を決める。
 	Polling PollingConfig `yaml:"polling"`
@@ -82,23 +82,23 @@ type TrackerProviderConfig struct {
 	Owner string `yaml:"owner"`
 	// ProjectNumber は project #3 のような番号である。
 	ProjectNumber int `yaml:"project_number"`
-	// StatusField はボード上の Status フィールドの名前である。
+	// StatusField はカンバン上の Status フィールドの名前である。
 	StatusField string `yaml:"status_field"`
-	// TokenSource は continuo 自身がボードを読むための認証の取り方である。"gh_auth" か "env" のどちらか。
+	// TokenSource は continuo 自身がカンバンを読むための認証の取り方である。"gh_auth" か "env" のどちらか。
 	TokenSource string `yaml:"token_source"`
 	// TokenEnv は TokenSource が "env" のときだけ使う、トークンを格納した環境変数名である。
 	TokenEnv string `yaml:"token_env"`
 	// Comments は GitHub からコメントを取ってくるときの件数と並び順である。
 	Comments TrackerProviderCommentsConfig `yaml:"comments"`
-	// Handoff は同じボードを複数の機械で持ち回るときの取り決めである（設計 3-77 / 3-77b / 3-77c）。
+	// Handoff は同じカンバンを複数の機械で持ち回るときの取り決めである（設計 3-77 / 3-77b / 3-77c）。
 	Handoff TrackerProviderHandoffConfig `yaml:"handoff"`
 }
 
-// TrackerProviderHandoffConfig は、同じボードを複数の機械が見張るときに
+// TrackerProviderHandoffConfig は、同じカンバンを複数の機械が見張るときに
 // 「どの機械が1件を処理するか」を決めるための設定である（設計 3-77 / 3-77b / 3-77c）。
 //
 // **担当は issue の担当者（assignee）で持ち、期限は hold のコメントで持つ。**
-// ボードに新しい欄は足さない。
+// カンバンに新しい欄は足さない。
 //
 // **1台でしか動かしていなくても、この設定は効く。**担当者のいない issue には必ず入札の
 // コメントを1件書き、締め切りを待ってから自分を担当者に加える。
@@ -178,7 +178,7 @@ const OnAssigneeGateWarnAndComment = "warn_and_comment"
 // issue へは1バイトも書かない値である（issue #134 / #136 / #140）。
 const OnAssigneeGateWarnOnly = "warn_only"
 
-// TrackerConfig は GitHub Projects v2 のボードをどう見るかを決める。
+// TrackerConfig は GitHub Projects v2 のカンバンをどう見るかを決める。
 type TrackerConfig struct {
 	// Kind はトラッカーの種別である。想定する値は "github_projects_v2" のみ。
 	Kind string `yaml:"kind"`
@@ -201,7 +201,7 @@ type TrackerConfig struct {
 	// FailureState は打ち切り・失敗のときに落とす先の状態である（4-1）。
 	FailureState string `yaml:"failure_state"`
 	// VerifyStatesEvery は Status の選択肢名を照合する間隔（巡回の回数）である（設計 3-6）。
-	// 毎巡回では行わない。選択肢名が変わるのは人間がボードを触ったときだけなので、
+	// 毎巡回では行わない。選択肢名が変わるのは人間がカンバンを触ったときだけなので、
 	// 20 巡回に1回で足りる。0 なら起動時の1回だけ行う。
 	VerifyStatesEvery int `yaml:"verify_states_every"`
 	// UnknownStateGraceMs は「continuo が知らない Status」を見つけてから worker を止めるまでに
@@ -214,7 +214,7 @@ type TrackerConfig struct {
 	// **0 以下なら猶予を置かない**（見つけた巡回でそのまま止める）。
 	// **turn が動いていなければ猶予は使わない**（待っても表明は出てこない）。
 	UnknownStateGraceMs int `yaml:"unknown_state_grace_ms"`
-	// AutomatedStateRewrite は、ボードの組み込みの自動化が動かした Status を、
+	// AutomatedStateRewrite は、カンバンの組み込みの自動化が動かした Status を、
 	// continuo が意図した Status へ戻すための対応表である（設計 3-54）。
 	//
 	// **キーが「自動化が書いた Status」、値が「戻す先の Status」。**
@@ -278,7 +278,7 @@ const (
 	// OnBrokenWorktreeStop は、壊れた worktree を1件でも見つけたら起動を止める。**既定である。**
 	//
 	// **止めることで被害の悪化を防ぎ、壊れていることを早く知れる。**続けると、
-	// その issue はボード上で running_state のまま誰にも触られず、
+	// その issue はカンバン上で running_state のまま誰にも触られず、
 	// **人間が気づくのは何時間も後になる。**
 	OnBrokenWorktreeStop = "stop"
 	// OnBrokenWorktreeSkip は、壊れた worktree をログに出して飛ばし、起動を続ける。
@@ -316,7 +316,7 @@ type AgentConfig struct {
 	// それ以外の Status 名を書いても参照されない（設計 3-16 の段-1）。
 	//
 	// **0 以下の値は起動時に弾く。**`In Progress: 0` と書くと空きスロットの判定が常に偽になり、
-	// ボード全体の dispatch が永久に止まる。無人運用では、止まっていることに誰も気づけない。
+	// カンバン全体の dispatch が永久に止まる。無人運用では、止まっていることに誰も気づけない。
 	MaxConcurrentAgentsByState map[string]int `yaml:"max_concurrent_agents_by_state"`
 	// MaxDispatchTurns は continuo が指示を送った回数の上限である（3-14）。
 	//
@@ -587,8 +587,8 @@ type TrustConfig struct {
 	// Repositories は `continuo trust` が信頼を登録してよいリポジトリの列挙である（3-33）。
 	// 要素は "owner/repo" の形で書く。
 	//
-	// **人間が書いたものだけを対象にする。**`continuo init` はボードから拾った一覧をここへ
-	// 並べるが、**要らない行を消すのは人間である。**ボードは他人が編集できるので、
+	// **人間が書いたものだけを対象にする。**`continuo init` はカンバンから拾った一覧をここへ
+	// 並べるが、**要らない行を消すのは人間である。**カンバンは他人が編集できるので、
 	// 拾った一覧をそのまま登録すると、issue を足せる人が信頼させるリポジトリを増やせてしまう。
 	//
 	// **巡回のループはここを読まない。**dispatch の直前の検査は `~/.claude.json` を

@@ -12,7 +12,7 @@
 // **Claude Code は起動しない。**turn の終わりは、偽サーバの `agent.prompt` の応答と、
 // テストが Orchestrator.OnHook へ直接流す hook で再現する。
 //
-// **本番のボード（project #3）へは接続しない。**トラッカーは in-memory のmockである。
+// **本番のカンバン（project #3）へは接続しない。**トラッカーは in-memory のmockである。
 package orchestrator_test
 
 import (
@@ -46,11 +46,6 @@ import (
 //
 // **実在のアカウント名を書かない。**公開リポジトリなので octocat を使う。
 const testGHLogin = "octocat"
-
-// testHostName はテストで使う「この機械の名前」である（設計 3-77）。
-//
-// **架空の名前を使う。**入札と hold のコメントに書かれる値である。
-const testHostName = "test-host"
 
 // ghLoginForTest は「gh の持ち主」を取る偽物を返す（設計 3-65）。
 //
@@ -604,10 +599,10 @@ func (fh *fakeHerdr) Client() *herdr.Client {
 
 // ===== テスト用トラッカー mock =====
 
-// fakeTracker は in-memory のボードである。**本番のボードへは接続しない。**
+// fakeTracker は in-memory のカンバンである。**本番のカンバンへは接続しない。**
 type fakeTracker struct {
 	mu sync.Mutex
-	// board はボードの並び順そのままの issue の一覧である。
+	// board はカンバンの並び順そのままの issue の一覧である。
 	board []tracker.Issue
 	// comments は issue のノード ID ごとのコメントである。
 	comments map[string][]tracker.Comment
@@ -667,7 +662,7 @@ type fakeTracker struct {
 	//
 	// **GitHub の `items(query:)` はサーバ側の検索であり、continuo が直前に書いた値が
 	// 索引へ反映される前に取り直すと、古い絞り込みで当たった item がそのまま返る。**
-	// ボード（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
+	// カンバン（board）の Status とは別に、候補の一覧にだけ載る写しを持たせる。
 	extraCandidates []tracker.Issue
 }
 
@@ -683,7 +678,7 @@ const fakeViewerID = "U_octocat"
 // newFakeTracker はテスト用トラッカー mockを作る。
 //
 // now: 現在時刻を返す関数。nil なら time.Now を使う。
-// 戻り値: 空のボードを持つテスト用トラッカー mock。
+// 戻り値: 空のカンバンを持つテスト用トラッカー mock。
 func newFakeTracker(now func() time.Time) *fakeTracker {
 	if now == nil {
 		now = time.Now
@@ -737,7 +732,7 @@ func (ft *fakeTracker) CountCall(name string) int {
 }
 
 // SetStatesError は FetchIssuesByStates が返すエラーを差し替える
-// （ボードを読めない状況の再現）。
+// （カンバンを読めない状況の再現）。
 //
 // err: 返すエラー。nil なら成功にする。
 func (ft *fakeTracker) SetStatesError(err error) {
@@ -854,7 +849,7 @@ func (ft *fakeTracker) HoldUpdate() (func(), <-chan struct{}) {
 
 // waitAtUpdateGate は、関門が仕掛けられていれば `UpdateStatus` をそこで待たせる。
 //
-// **`ft.mu` を持ったまま待たない。**持ったまま待つと、ボードを読む呼び出しが全部止まり、
+// **`ft.mu` を持ったまま待たない。**持ったまま待つと、カンバンを読む呼び出しが全部止まり、
 // 巡回のループごと固まる。
 func (ft *fakeTracker) waitAtUpdateGate() {
 	ft.mu.Lock()
@@ -870,15 +865,15 @@ func (ft *fakeTracker) waitAtUpdateGate() {
 	<-gate
 }
 
-// AddIssue はボードの末尾に issue を足す。
+// AddIssue はカンバンの末尾に issue を足す。
 func (ft *fakeTracker) AddIssue(issue tracker.Issue) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	ft.board = append(ft.board, issue)
 }
 
-// RemoveIssue はボードから issue を落とす
-// （人間がボードから外した・archive した状況の再現。設計 3-10）。
+// RemoveIssue はカンバンから issue を落とす
+// （人間がカンバンから外した・archive した状況の再現。設計 3-10）。
 //
 // **`FetchIssuesByIDs` からも返らなくなる。**continuo はこれを「もう見えない」として
 // 面倒を見るのをやめる。
@@ -948,7 +943,7 @@ func (ft *fakeTracker) ClearStatusAuthor(id string) {
 	}
 }
 
-// SetStateByAutomation は、ボードの組み込みの自動化が Status を動かした状況を作る
+// SetStateByAutomation は、カンバンの組み込みの自動化が Status を動かした状況を作る
 // （設計 3-54。PR を issue に紐づけた・PR をマージしたときに起きる）。
 //
 // **ID 指定で取り直したときだけ「自動化が書いた」と分かる。**候補の取得では分からない
@@ -1019,7 +1014,7 @@ func (ft *fakeTracker) StateOf(id string) string {
 	return ""
 }
 
-// SetAssignees はボードの issue の担当者を差し替える（設計 3-77b）。
+// SetAssignees はカンバンの issue の担当者を差し替える（設計 3-77b）。
 //
 // **人間や別の機械が担当を書き換えた状況の再現に使う。**
 //
@@ -1042,7 +1037,7 @@ func (ft *fakeTracker) SetAssignees(id string, logins ...string) {
 	}
 }
 
-// IssueByID はボードの issue を1件返す（担当者の変化を確かめるために使う）。
+// IssueByID はカンバンの issue を1件返す（担当者の変化を確かめるために使う）。
 //
 // id: project item の ID。
 // 戻り値の1つ目: 見つかった issue の写し。
@@ -1166,7 +1161,7 @@ func (ft *fakeTracker) MarkedHandoffCommentsOf(nodeID, marker string) []tracker.
 	return out
 }
 
-// FetchIssuesByStates は states に含まれる Status の issue を、ボードの並び順のまま返す。
+// FetchIssuesByStates は states に含まれる Status の issue を、カンバンの並び順のまま返す。
 func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) ([]tracker.Issue, error) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
@@ -1195,7 +1190,7 @@ func (ft *fakeTracker) FetchIssuesByStates(_ context.Context, states []string) (
 
 // SetExtraCandidates は「頼んだ Status に無いのに候補として返ってくる item」を差し替える。
 //
-// **ボードの Status は動かさない。**候補の一覧にだけ載る写しである
+// **カンバンの Status は動かさない。**候補の一覧にだけ載る写しである
 // （GitHub の絞り込みの索引が古いまま当たった状況の再現。設計 3-34）。
 //
 // issues: 候補の一覧の末尾へ足す写し。
@@ -1284,8 +1279,8 @@ func (ft *fakeTracker) FetchIssueByIdentifier(_ context.Context, identifier stri
 //
 // **本物と同じ形で返す**（`internal/tracker` の `UpdateStatus`）。
 //
-//	Previous … 書き込む直前のボードの値。**巡回で読んだ値ではない。**
-//	            テストが SetState でボードだけを動かすと、ここに新しい値が入る
+//	Previous … 書き込む直前のカンバンの値。**巡回で読んだ値ではない。**
+//	            テストが SetState でカンバンだけを動かすと、ここに新しい値が入る
 //	Reached … 目的の Status になったか。**既に同じ値で書き込みを省いた場合も真である**
 //	Wrote   … 書き込みを実際に行ったか。**issue へ記録を書いてよいのはこれが真のときだけ**
 func (ft *fakeTracker) UpdateStatus(_ context.Context, itemID, targetState string, blockedStates []string) (tracker.StatusWrite, error) {
@@ -1353,6 +1348,14 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 		ID: fmt.Sprintf("C_self_%d", len(ft.comments[issueNodeID])+1),
 		// PostComment は self_marker を本文の先頭に付けて投稿する。
 		Body: selfMarker + "\n" + body, IsSelf: true, CreatedAt: ft.now(),
+		// **投稿者を入れる**（設計 3-77-0）。**本物の GitHub は必ず投稿者を付ける。**
+		// 入れないと、この continuo が書いた入札を次の巡回で自分のものと読めず、
+		// **巡回のたびに入札のコメントが1件ずつ増える。**
+		//
+		// **定数ではなく、いま名乗っている持ち主を使う。**`SetViewer` で差し替えた検査では、
+		// **定数を入れると、この mock が書いたコメントだけ別のアカウントのものになる。**
+		// そのとき `HasBidBy` が偽に落ち、**本物では起きない入札の増殖が mock の中でだけ起きる。**
+		Author: ft.viewer.Login,
 	}
 	ft.comments[issueNodeID] = append(ft.comments[issueNodeID], c)
 	return &c, nil
@@ -1601,6 +1604,12 @@ type fixture struct {
 	SocketPath string
 	// WorktreeRoot は worktree の置き場所である。
 	WorktreeRoot string
+	// TranscriptRoot は会話の記録の置き場所の根である（本番の既定は `~/.claude/projects`）。
+	//
+	// **着手の段5b は、この根の直下1階層に `<セッション UUID>.jsonl` があるかを見る**
+	// （設計 3-3c）。無ければ `--resume` を渡さないので、**再着手が復帰することを
+	// 確かめるテストは、ここへ記録を置いてから走らせる**（`sessionTranscriptDir`）。
+	TranscriptRoot string
 	// Logs はログの出力先である。
 	//
 	// **排他つきの syncLog を使う。**run ごとの goroutine（turn ループ・finishRunAsync・
@@ -1696,9 +1705,22 @@ type fixtureOptions struct {
 	// TranscriptRoot は hook が渡す transcript_path を受け入れる根である。
 	// 空なら一時ディレクトリの根（tempRoot）を使う。
 	TranscriptRoot string
+	// ConfigPath は走行中に読み直す WORKFLOW.md の絶対パスである（設計 3-24）。
+	//
+	// **空なら読み直さない。**渡していないテストの挙動は変わらない。
+	ConfigPath string
+	// ConfigFile は、ファイルから読んだままの設定である（CLI の上書きが入っていないもの）。
+	// nil なら Config で代用する。
+	ConfigFile *config.Config
 	// ContinuoPath は hook のコマンド行に書く実行ファイルのパスである。
 	// 空なら `/opt/continuo/bin/continuo` を使う。
 	ContinuoPath string
+	// SkipSessionTranscripts を真にすると、採番したセッションの記録を置かない。
+	//
+	// **既定では置く。**実機では Claude Code が書くものなので、置かないと
+	// **セッションを採番したテストが軒並み「記録が無い」側へ倒れる**（設計 3-3c）。
+	// **「記録が無いときにどうなるか」を確かめるテストだけが、これを真にする。**
+	SkipSessionTranscripts bool
 }
 
 // newFixture はテスト用の Orchestrator を組み立てる。
@@ -1706,7 +1728,7 @@ type fixtureOptions struct {
 // 組み立てるのは次の4つである。
 //
 //	テスト用herdr mock socket サーバ  … 実 herdr は使わない
-//	テスト用トラッカー mock            … 本番のボードへは接続しない
+//	テスト用トラッカー mock            … 本番のカンバンへは接続しない
 //	本物の git のリポジトリ    … worktree の作成と削除はmockでは確かめられない
 //	`~/.claude.json`         … 信頼の検査が読む（読むだけ。書き換えない）
 //
@@ -1831,7 +1853,36 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 
 	transcriptRoot := opts.TranscriptRoot
 	if transcriptRoot == "" {
-		transcriptRoot = tempRoot(t)
+		// **機械全体の一時ディレクトリを根にしない。**
+		//
+		// **着手の段5b と、コメントの取り戻しが、この根を `os.ReadDir` で舐める**（設計 3-3c）。
+		// 機械全体の一時ディレクトリには**他人が作った読めないディレクトリが並ぶ**ので、
+		// **「読めないものがある」の警告が出て、宣言していない WARN としてテストが落ちる。**
+		// **落ちるかどうかがその機械の `/tmp` の中身で決まる。**
+		//
+		// **`t.TempDir()` の親を採る。**テストが呼ぶ `t.TempDir()` は同じ親の下の連番なので、
+		// **hook が渡す `transcript_path` の検査（根の内側か）も通り続ける。**
+		transcriptRoot = filepath.Dir(t.TempDir())
+	}
+	fx.TranscriptRoot = transcriptRoot
+	// **採番したセッションの記録を置くディレクトリを、記録の根の直下に1つ作る。**
+	// **実機の `~/.claude/projects/<cwd を綴り直したもの>/` に当たる。**
+	//
+	// **名前にテストの名前を混ぜる。**`fixtureOptions.TranscriptRoot` に共有の場所を渡された
+	// ときの備えである。**セッション UUID は `session-1` から順に決まるので、
+	// 名前を分けないと、別のテストが書いた記録を自分のものとして拾う。**
+	//
+	// **作れなくても止めない。**「記録の置き場所を読めないときは復帰を試す」を確かめる
+	// テストは、実在しないパスを根として渡す（設計 3-3c）。**そこで落とすと、
+	// その検査そのものが走らなくなる。**空のままなら記録を置かない。
+	seedDir := ""
+	if !opts.SkipSessionTranscripts {
+		dir, seedErr := os.MkdirTemp(transcriptRoot,
+			"continuo-sessions-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-")
+		if seedErr == nil {
+			seedDir = dir
+			t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		}
 	}
 	continuoPath := opts.ContinuoPath
 	if continuoPath == "" {
@@ -1844,16 +1895,16 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		// **1回目に送る文面は、断片の並びとして渡す**（設計 5-3c）。
 		// テストが与えるのは1枚のテンプレートなので、それを WORKFLOW.md の本文の
 		// 位置に置いた形で組み立てる（組み込みの前半と後半が前後に付く）。
-		Prompt:         prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
+		Prompt: prompt.Build(promptTemplate, "/tmp/WORKFLOW.md"),
+		// **走行中の読み直しは、渡したテストでだけ走る**（設計 3-24）。
+		ConfigPath:     opts.ConfigPath,
+		ConfigFile:     opts.ConfigFile,
 		Tracker:        ft,
 		Herdr:          fake.Client(),
 		Workspace:      mgr,
 		RateLimit:      opts.RateLimit,
 		HookSocketPath: fx.SocketPath,
 		ContinuoPath:   continuoPath,
-		// **機械の名前を固定する**（設計 3-77）。走らせる機械によって
-		// 入札のコメントの中身が変わらないようにする。
-		HostName: testHostName,
 		// **テストの transcript は一時ディレクトリに置く。**hook が渡す
 		// transcript_path は許可された根の内側だけを受け入れるので、根をそこへ向ける
 		// （本番の既定は `~/.claude/projects`）。
@@ -1868,6 +1919,20 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 			defer sessionMu.Unlock()
 			id := fmt.Sprintf("session-%d", len(fx.Sessions)+1)
 			fx.Sessions = append(fx.Sessions, id)
+			// **採った UUID の記録を、記録の根の直下1階層へ置く**（設計 3-3c）。
+			//
+			// **実機では Claude Code が書くものである。**着手の段5b と、コメントの取り戻しは、
+			// **記録が無い UUID へ `--resume` を投げない。**置かないと、
+			// **セッションを採番したテストが軒並み「記録が無い」側へ倒れる。**
+			//
+			// **中身は空でよい。**この検査が見るのは、通常のファイルとして在るかだけである。
+			// **hook が渡す `transcript_path` の検査とは別の場所を見ているので、
+			// 既存のテストが `t.TempDir()` の下へ置いている記録には影響しない。**
+			if seedDir != "" {
+				if err := os.WriteFile(filepath.Join(seedDir, id+".jsonl"), []byte("{}\n"), 0o600); err != nil {
+					return "", err
+				}
+			}
 			return id, nil
 		},
 	})
@@ -1927,7 +1992,7 @@ const samplePromptTemplate = `{{.issue.identifier}} を実装してください�
 // sampleIssue はテストで使う issue を作る。
 //
 // number: issue 番号。
-// state: ボード上の Status。
+// state: カンバン上の Status。
 // 戻り値: `octocat/hello-world#<number>` の issue。
 func sampleIssue(number int, state string) tracker.Issue {
 	url := fmt.Sprintf("https://github.com/octocat/hello-world/issues/%d", number)
@@ -2006,6 +2071,61 @@ func taskNotificationEvent(sessionID, taskID string) hookserver.HookEvent {
 		Prompt: fmt.Sprintf("<task-notification><task-id>%s</task-id><status>completed</status></task-notification>",
 			taskID),
 	}
+}
+
+// sessionTranscriptDir は、会話の記録を置くディレクトリを記録の根の直下に1つ作る。
+//
+// **着手の段5b は `<記録の根>/*/<セッション UUID>.jsonl` を探す**（設計 3-3c）。
+// **既定の根の下では `t.TempDir()` も当たる**（根が `t.TempDir()` の親なので、
+// `t.TempDir()` はその直下1階層である）。**それでもこのヘルパーを通すこと。**
+// 根を明示的に渡したテストでも同じ形になり、**置き場所の決め方が1箇所に集まる。**
+//
+// **既定の根は、そのテスト専用である**（`newFixture` が `t.TempDir()` の親を採る）。
+// **`fixtureOptions.TranscriptRoot` に共有の場所を渡さないこと。**そこを根にすると、
+// **`go test` が timeout で殺されて `t.Cleanup` が走らなかった前の実行の置き土産が見える。**
+// テストが書いていない記録で `--resume` の判定が変わり、**守りの向きを逆にしても緑のまま通る。**
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture（記録の根を持っている）。
+// 戻り値: 作ったディレクトリの絶対パス。
+func sessionTranscriptDir(t *testing.T, fx *fixture) string {
+	t.Helper()
+	// **機械全体の一時ディレクトリを根にしていないことを、機械で止める。**
+	// そこへ置くと、**前の実行の置き土産で通るようになり、守りの向きを逆にしても気づけない。**
+	//
+	// **解決してから比べる。**`tempRoot` は `filepath.EvalSymlinks` を通すので、
+	// macOS では `/private/var/folders/…` になる。**素の `os.TempDir()`（`/var/folders/…`）を
+	// 渡されると、字句の比較では素通りする。**
+	root := fx.TranscriptRoot
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	if root == tempRoot(t) {
+		t.Fatalf("記録の根が機械全体の一時ディレクトリになっています。" +
+			"newFixture の既定（t.TempDir() の親）を使うか、fixtureOptions{TranscriptRoot: t.TempDir()} を渡してください")
+	}
+	dir, err := os.MkdirTemp(fx.TranscriptRoot, "continuo-transcripts-")
+	if err != nil {
+		t.Fatalf("会話の記録の置き場所を作れません: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// seedSessionTranscript は、そのセッションの会話の記録を、着手が見つけられる場所へ置く。
+//
+// **着手の段5b は、記録が無い UUID へ `--resume` を投げない**（設計 3-3c）。
+// **再着手が復帰することを確かめるテストは、これを dispatch の前に呼ぶこと。**
+// 呼ばないと、身元ファイルに UUID が入っていても新しいセッションで始まる。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// sessionUUID: 記録を置くセッションの UUID。
+// lines: 記録の中身。
+// 戻り値: 置いた記録の絶対パス。
+func seedSessionTranscript(t *testing.T, fx *fixture, sessionUUID string, lines []any) string {
+	t.Helper()
+	return writeTranscript(t, sessionTranscriptDir(t, fx), sessionUUID+".jsonl", lines)
 }
 
 // writeTranscript はテスト用の transcript の JSONL を書く。

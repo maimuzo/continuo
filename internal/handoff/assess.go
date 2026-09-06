@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -59,18 +60,13 @@ type Situation struct {
 	Comments []CommentView
 	// SelfLogin は continuo が使う gh の持ち主のログイン名である。
 	//
+	// **持ち回りで参加者を見分ける値は、これ1つだけである**（設計 3-77-0）。
+	// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+	// アカウントが自分なら、担当しているのも自分である。
+	//
 	// **空文字なら「自分が誰か分からない」である。**そのときは担当者が付いている issue に
 	// 一切触らない（自分の担当かどうかを言えないので、奪う側にも進む側にも倒せない）。
 	SelfLogin string
-	// SelfHost はこの機械の名前である（`os.Hostname()` の値。設計 3-77）。
-	//
-	// **担当者のアカウントだけでは足りない。**1人が2台の機械を1つの GitHub アカウントで
-	// 動かすのは、この機能のいちばん自然な使い方である。**アカウントだけで比べると、
-	// 勝った機械と負けた機械の両方が「担当者は自分だ」と読み、同じ issue に2台が着手する。**
-	// **だから hold のコメントの `host` と突き合わせる。**
-	//
-	// **空文字なら機械の名前で区別しない**（アカウントだけで判定していた頃と同じ動きになる）。
-	SelfHost string
 	// Now はいまの時刻である。
 	Now time.Time
 	// IdleTimeout は担当者の最後の進捗報告からこれだけ経つと担当を外す長さである。
@@ -99,12 +95,6 @@ const (
 	ActionSkipManyAssignees
 	// ActionSkipSelfUnknown は、gh の持ち主が分からないので担当のある issue に触らないことを表す。
 	ActionSkipSelfUnknown
-	// ActionSkipOtherMachine は、担当者は自分のアカウントだが hold を持っているのは
-	// 同じアカウントの別の機械なので触らないことを表す。**入札もしない。**
-	//
-	// **1人が2台の機械を1つのアカウントで動かすと、ここへ来る**（設計 3-77b）。
-	// 担当者のアカウントだけを見て進むと、同じ issue に2台が着手する。
-	ActionSkipOtherMachine
 )
 
 // String は判定を人間が読める1語で返す（ログに出す）。
@@ -126,8 +116,6 @@ func (a Action) String() string {
 		return "担当者が2人以上"
 	case ActionSkipSelfUnknown:
 		return "gh の持ち主が分からない"
-	case ActionSkipOtherMachine:
-		return "同じアカウントの別の機械の担当"
 	default:
 		return "不明"
 	}
@@ -139,9 +127,13 @@ type Assessment struct {
 	Action Action
 	// Assignee は、いま付いている担当者のログイン名である（1人のときだけ入る）。
 	Assignee string
-	// Hold は、担当を外すときに読んだ hold のコメントである（ActionRelease のときだけ入る）。
+	// Hold は、その担当者が書いたいちばん新しい hold である。
 	//
-	// **released のコメントの `from` はここの `Host` から引く**（設計 3-77c）。
+	// **読むのは `ActionRelease` のときだけである。**`ActionSkipHeld` でも値は入るが、
+	// **その経路の呼び出し側は `Assignee` と `LastProgress` しか見ない。**
+	// **使うのは `Branch` だけである。**担当を外したときに書く released のコメントへ、
+	// その branch の名前を写す（`releaseExpiredAssignee`）。
+	// **`from` に書くアカウントは、この欄ではなく `Assignee` から取る**（設計 3-77-0）。
 	Hold Hold
 	// LastProgress は、担当者がまだ生きていることを最後に示した時刻である
 	// （担当者がいるときだけ入る）。
@@ -161,19 +153,14 @@ type Assessment struct {
 //
 //	担当者が2人以上                                触らない。WARN を出す
 //	担当者が無い                                   入札する
-//	自分1人 ＋ この機械の hold                      着手・引き継ぎへ進む（入札しない）
-//	自分1人 ＋ hold が1件も無い                     着手・引き継ぎへ進む（人間が付けた担当である）
-//	自分1人 ＋ 別の機械の hold ＋ 期限内             触らない。入札もしない
-//	自分1人 ＋ 別の機械の hold ＋ 期限切れ           担当を外して入札をやり直す
+//	自分のアカウント1人                            着手・引き継ぎへ進む（入札しない）
 //	他人1人 ＋ hold が1件も無い                     触らない。人間が付けた担当である。WARN を出す
 //	他人1人 ＋ hold あり ＋ 期限内                   触らない。入札もしない
 //	他人1人 ＋ hold あり ＋ 期限切れ                 担当を外して入札をやり直す
 //
-// **担当者のアカウントだけで「自分の担当」と決めてはならない**（設計 3-77b）。
-// **1人が2台の機械を1つの GitHub アカウントで動かすのが、この機能のいちばん自然な使い方である。**
-// アカウントだけで比べると、勝った機械と負けた機械の両方が「担当者は自分だ」と読み、
-// **同じ branch の worktree に2つ目の Claude Code が立つ。**
-// **どの機械のものかは hold のコメントの `host` が答える。**
+// **担当者のアカウントが自分なら、担当しているのも自分である**（設計 3-77-0）。
+// **同じ GitHub アカウントを複数の機械で使うことはサポートしない**ので、
+// **アカウント1つにつき continuo は1つである。**hold を見て機械を見分ける段は置かない。
 //
 // **hold は「いまの担当者が書いたもの」だけを数える**（設計 3-77b）。
 // **入札の回が変わっても hold のコメントは消えない**ので、機械が外れたあとに人間が
@@ -207,13 +194,15 @@ func Assess(s Situation) Assessment {
 		return Assessment{Action: ActionSkipSelfUnknown, Assignee: assignee}
 	}
 
+	if strings.EqualFold(assignee, strings.TrimSpace(s.SelfLogin)) {
+		// **担当者が自分のアカウントなら、担当しているのも自分である**（設計 3-77-0）。
+		// **hold の有無も、誰が書いたかも見ない。**アカウント1つにつき continuo は1つである。
+		return Assessment{Action: ActionProceed, Assignee: assignee}
+	}
+
 	// **hold は、いまの担当者が書いたものだけを見る。**別の担当者の古い hold を数えると、
 	// **人間が引き継いだ issue を機械が取り上げる。**
 	hold, holdAt, hasHold := LatestHoldFor(s.Comments, assignee)
-
-	if strings.EqualFold(assignee, strings.TrimSpace(s.SelfLogin)) {
-		return assessSelfAssigned(s, assignee, hold, holdAt, hasHold)
-	}
 
 	if !hasHold {
 		return Assessment{Action: ActionSkipHumanAssigned, Assignee: assignee}
@@ -228,47 +217,6 @@ func Assess(s Situation) Assessment {
 	}
 	if s.Now.Sub(last) <= s.IdleTimeout {
 		return Assessment{Action: ActionSkipHeld, Assignee: assignee, Hold: hold, LastProgress: last}
-	}
-	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastProgress: last}
-}
-
-// assessSelfAssigned は「担当者が自分のアカウント1人」のときの判定である（設計 3-77b）。
-//
-// **アカウントが自分でも、この機械の担当だとは限らない。**1つのアカウントで2台の機械を
-// 動かしていると、**勝ったのは別の機械かもしれない。**それは hold のコメントの `host` で分かる。
-//
-// **hold が1件も無いときは進む。**そこは人間が担当者を付けた issue であり、
-// 設計 3-77b の表が「担当者が自分1人なら着手・引き継ぎへ進む」と決めている。
-// **この機械の名前を知らない（`SelfHost` が空）ときも進む。**機械の名前で区別できないので、
-// アカウントだけで判定していた頃と同じ動きへ落とす。
-//
-// s: いま見えているもの。
-// assignee: いま付いている担当者のログイン名（自分のアカウント）。
-// hold: その担当者が書いたいちばん新しい hold。
-// holdAt: その hold のコメントが作られた時刻（期限を数える下限）。
-// hasHold: hold が1件でもあれば true。
-// 戻り値: 判定と、その判定に使った値。
-func assessSelfAssigned(
-	s Situation, assignee string, hold Hold, holdAt time.Time, hasHold bool,
-) Assessment {
-	selfHost := strings.TrimSpace(s.SelfHost)
-	holdHost := strings.TrimSpace(hold.Host)
-	if !hasHold || selfHost == "" || holdHost == "" {
-		return Assessment{Action: ActionProceed, Assignee: assignee}
-	}
-	if strings.EqualFold(holdHost, selfHost) {
-		return Assessment{Action: ActionProceed, Assignee: assignee, Hold: hold}
-	}
-
-	// **同じアカウントの別の機械が担当している。**
-	// **期限の数え方は他人の担当と揃える**（設計 3-77b）。揃えないと、その機械が落ちたとき
-	// **担当者が自分のアカウントのままなので、どの機械もこの issue を拾えなくなる。**
-	last, hasLast := lastProgressOf(s.Comments, assignee, holdAt)
-	if !hasLast {
-		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold}
-	}
-	if s.Now.Sub(last) <= s.IdleTimeout {
-		return Assessment{Action: ActionSkipOtherMachine, Assignee: assignee, Hold: hold, LastProgress: last}
 	}
 	return Assessment{Action: ActionRelease, Assignee: assignee, Hold: hold, LastProgress: last}
 }
@@ -307,6 +255,81 @@ func nonEmpty(logins []string) []string {
 func IsProgressReport(body string) bool {
 	return strings.Contains(body, config.ProgressMarker)
 }
+
+// StartsAsProgressReport は、そのコメントが途中経過の報告として書き出されたかを返す
+// （issue #178）。
+//
+// **見るのは本文の先頭にある印の並びだけである。**組み込みのプロンプトは
+// `<!-- continuo:agent -->` の次の行に進捗報告の印を書かせており（設計 5-3j の段2b）、
+// **エージェント自身の見つけ方（`.body | startswith(…)`）と同じ位置を見る。**
+//
+// **`IsProgressReport` と使い分ける。**あちらは印が本文のどこかに在れば真であり、
+// **持ち回りの死活の判定はそれでよい**（設計 5-3l。厳しくすると生きている担当が外れる）。
+// **こちらを緩くしてはならない。**
+//
+// **緩くすると何が起きるか。****成果の報告が印を引用しただけで、途中経過として捨てられる。**
+// continuo は「書かれていない」と判定してセッションを復元し、
+// **2度目も引用されれば `failure_state` へ落として人間へ渡す。**
+// **書いてあるのに、書かなかったことにされる。**
+// **印について説明する報告ほど起きやすい**（この判定を足した issue #178 の作業で実際に起きた）。
+//
+// body: コメント本文。
+// 戻り値: 先頭の印の並びに進捗報告の印があれば true。
+func StartsAsProgressReport(body string) bool {
+	// **本文全体の先頭の空白だけを落とす。**`Comment.IsAgent` は
+	// `strings.TrimSpace(body)` してから印を見るので（internal/tracker の `FetchComments`）、
+	// **落とさないと2つの判定がずれる。**本文の先頭に空白が1つあるだけで、
+	// **進捗報告が「この run の成果の報告」として数えられ、issue #178 がその形で直らない。**
+	//
+	// **落とす文字は `unicode.IsSpace` で揃える。**`strings.TrimLeft(body, " \t\r\n")` では狭い。
+	// **`TrimSpace` は全角空白（U+3000）や NBSP（U+00A0）も落とす**ので、
+	// **日本語で書く利用者がいちばん踏みやすい全角空白で、2つの判定がずれる。**
+	//
+	// **行ごとの字下げは落とさない。**落とすと、4桁字下げしたコード片での引用が
+	// また「印の行」として通る（下の HasPrefix を見よ）。
+	body = strings.TrimLeftFunc(body, unicode.IsSpace)
+	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
+		if strings.TrimSpace(line) == "" {
+			// **空行では止めない。**印と印のあいだに空行を挟む書き方がありうる。
+			continue
+		}
+		// **字下げした行は、名乗りではない。**行頭ちょうどの `<!--` だけを見る。
+		// **4桁の字下げは、組み込みのプロンプトが印を「見せる」ときの書き方そのものである**
+		// （internal/prompt の stripComments が、その形を落とさずに残している）。
+		// **字下げを許すと、印について説明する成果の報告が、いちばん起きやすい形で捨てられる。**
+		if !strings.HasPrefix(line, commentOpen) {
+			// **本文が始まった。**ここから先の印は、引用であって名乗りではない。
+			return false
+		}
+		// **行そのものが印で始まっていること。**行の途中に現れる印は名乗りではない。
+		// **`Contains` では、印を引用した HTML のコメントの行が真になる。**
+		// 例: `<!-- この報告に <!-- continuo:progress --> は付けていません -->` は、
+		// 行頭が `<!--` で、印を文字列として含む。**書いてあるのに「書かれていない」と
+		// 判定され、復元が走り、2度目も同じなら `failure_state` へ落ちる**（issue #178 の再発）。
+		if strings.HasPrefix(line, config.ProgressMarker) {
+			return true
+		}
+	}
+	return false
+}
+
+// commentOpen は HTML のコメントの開きである。
+//
+// **この判定は「印が HTML のコメントである」ことを前提にしている。**
+// 進捗報告の印（`config.ProgressMarker`）は固定なので前提は崩れないが、
+// **エージェントの印（`tracker.comments.marker`）は設定で変えられ、形を縛る検査が無い。**
+// `marker: "[continuo-agent]"` のような値にすると、成果の報告の1行目が `<!--` で始まらず、
+// `StartsAsProgressReport` は必ず偽を返す。**その利用者では issue #178 の直しが効かない。**
+//
+// **ただし、その利用者は既に別のところで壊れている。**組み込みの指示書は
+// `<!-- continuo:agent -->` を文字列で埋め込んでおり、設定した marker を使っていない。
+// **設定した marker を組み込みへ届ける道ができたときに、ここも見直すこと。**
+//
+// **同じ前提に立つ定数が、他に2つある。**印の形を変えるときは3つとも動かすこと。
+//
+//	[internal/prompt/prompt.go](../prompt/prompt.go) の commentOpen / commentClose
+//	[internal/orchestrator/prompt.go](../orchestrator/prompt.go) の commentOpenMarker / commentCloseMarker
+const commentOpen = "<!--"
 
 // lastProgressOf は、その担当者がまだ生きていることを最後に示した時刻を返す（設計 3-77b / 5-3l）。
 //
@@ -355,16 +378,21 @@ func lastProgressOf(comments []CommentView, login string, holdAt time.Time) (tim
 
 // CollectBids は、コメントの全件から入札を拾う（設計 3-77a）。
 //
+// **`Bid.Author` には投稿者を渡す**（設計 3-77-0）。**持ち回りで参加者を見分ける値である。**
+// **本文の JSON からは取らない。**本文は第三者にも書けるので、
+// **他の continuo のログイン名を騙られると、騙られたほうは `HasBidBy` が真になって
+// その回は入札しない。**GitHub が付ける投稿者は騙れない。
+//
 // **`Bid.PostedAt` には作成時刻を渡す。更新時刻は使わない**（設計 5-3k）。
 // **入札の締め切りと勝敗は、この時刻で決まる。**編集で動かせるようにすると、
-// **負けた機械が、あとから自分の入札を「新しく」できる。**
+// **負けた continuo が、あとから自分の入札を「新しく」できる。**
 //
 // comments: issue に付いているコメントの全件。
-// 戻り値: 読めた入札（コメントの並び順のまま）。
+// 戻り値: 読めた入札（コメントの並び順のまま）。**投稿者の分からないものは1件も入らない。**
 func CollectBids(comments []CommentView) []Bid {
 	out := make([]Bid, 0, len(comments))
 	for _, c := range comments {
-		if b, ok := ParseBid(c.Body, c.CreatedAt); ok {
+		if b, ok := ParseBid(c.Body, c.Author, c.CreatedAt); ok {
 			out = append(out, b)
 		}
 	}
@@ -383,10 +411,10 @@ func CollectBids(comments []CommentView) []Bid {
 // **触らない側へ倒す**（奪ってよい証拠として使わない）。
 //
 // **いちばん新しいものを採る。**担当が何度か移った issue には hold が複数付いており、
-// **古いほうを読むと、既に居ない機械の名前を released のコメントへ書くことになる。**
+// **古いほうを読むと、既に使われていない branch の名前を released のコメントへ書くことになる。**
 //
 // **新しいかどうかは作成時刻で見る。更新時刻は使わない**（設計 5-3k）。
-// **使うと、古い hold を1文字直すだけで最新の hold に化け、担当している機械の名前が入れ替わる。**
+// **使うと、古い hold を1文字直すだけで最新の hold に化け、担当が始まった時刻と branch の名前が入れ替わる。**
 //
 // **作成時刻も返す。**持ち回りの期限は、その担当が始まった時刻を下限にして数える
 // （`lastProgressOf`）。**JSON の中の `at` は投稿者が自分で書いた値なので使わない。**
@@ -443,7 +471,7 @@ func ParseReleased(body string) (Released, bool) {
 //
 // **担当を外された機械が「何が起きたか」を記録に残すために読む。**
 // これが無いと、ログには「担当が移った」としか残らず、
-// **いつ・どの機械の担当が外されたのかを人間があとから辿れない。**
+// **いつ・どのアカウントの担当が外されたのかを人間があとから辿れない。**
 //
 // **新しいかどうかは作成時刻で見る。更新時刻は使わない**（`LatestHoldFor` と同じ理由。設計 5-3k）。
 //
@@ -516,20 +544,20 @@ func endsRound(body string) bool {
 	return ok
 }
 
-// HasBidBy は、その機械が既に入札を書いているかを返す。
+// HasBidBy は、そのアカウントが既に入札を書いているかを返す。
 //
 // **書いていれば、締め切りまで待つだけである。**入札のたびに新しいコメントを書くので、
 // **これを見ないと巡回のたびに入札が1件ずつ増える。**
 //
 // bids: その issue に付いている入札。
-// host: この機械の名前。
-// 戻り値の1つ目: この機械が最後に書いた入札。
+// login: gh の持ち主のログイン名（設計 3-77-0）。
+// 戻り値の1つ目: そのアカウントが最後に書いた入札。
 // 戻り値の2つ目: 1件でもあれば true。
-func HasBidBy(bids []Bid, host string) (Bid, bool) {
+func HasBidBy(bids []Bid, login string) (Bid, bool) {
 	var latest Bid
 	found := false
 	for _, b := range bids {
-		if !strings.EqualFold(strings.TrimSpace(b.Host), strings.TrimSpace(host)) {
+		if !strings.EqualFold(strings.TrimSpace(b.Author), strings.TrimSpace(login)) {
 			continue
 		}
 		if !found || b.PostedAt.After(latest.PostedAt) {
@@ -545,8 +573,8 @@ func HasBidBy(bids []Bid, host string) (Bid, bool) {
 // **JSON の下に、人間が読む2行を置く。**issue を開いた人が、何が起きたのかと
 // 「その branch へ push してはならない」ことを、issue の上だけで読めるようにする。
 //
-// **引き継ぐ機械の名前は書かない。**外すのは入札をやり直す前なので、
-// そのとき勝つ機械はまだ決まっていない（設計 3-77c）。
+// **引き継ぐアカウントは書かない。**外すのは入札をやり直す前なので、
+// そのとき勝つ continuo はまだ決まっていない（設計 3-77c）。
 //
 // r: 書く released。
 // 戻り値: 印を先頭に置いたコメント本文。

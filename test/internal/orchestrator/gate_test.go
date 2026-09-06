@@ -475,11 +475,11 @@ func TestGate_担当者を外したら記録が消える(t *testing.T) {
 	}
 }
 
-// 目的: ボードの候補から消えたら記録も消えることを確かめる（設計 6-3）。
+// 目的: カンバンの候補から消えたら記録も消えることを確かめる（設計 6-3）。
 //
-// 与える情報: 人間が担当者の issue 1件と、そのあとボードから外した状態。
+// 与える情報: 人間が担当者の issue 1件と、そのあとカンバンから外した状態。
 // 成功条件: 外した巡回で記録が0件になること。
-func TestGate_ボードから外れたら記録が消える(t *testing.T) {
+func TestGate_カンバンから外れたら記録が消える(t *testing.T) {
 	clock := newTestClock()
 	fx := newFixture(t, fixtureOptions{Now: clock.Now})
 	holdPrompt(fx)
@@ -495,7 +495,7 @@ func TestGate_ボードから外れたら記録が消える(t *testing.T) {
 	tickN(fx, clock, 1, 30*time.Second)
 
 	if v, ok := gateViewOf(fx, "octocat/hello-world#188"); ok {
-		t.Errorf("ボードから消えたのに記録が残っている: %+v", v)
+		t.Errorf("カンバンから消えたのに記録が残っている: %+v", v)
 	}
 }
 

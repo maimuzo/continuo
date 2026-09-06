@@ -43,7 +43,7 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 > （訳）`decision` に `"block"` を入れると Claude が止まるのを妨げ、`"allow"` か項目なしなら止まらせる。
 
 **hook は並行して走り、互いの答えを見られない。**continuo が張る `Stop` hook
-（[docs/plans/continuo_design.md:744](../continuo_design.md#L744)）は、
+（[docs/plans/continuo_design.md:745](../continuo_design.md#L745)）は、
 **他の hook が差し戻したかどうかを知る手立てを持たない。**
 
 **差し戻しは transcript には残る。**手元の記録で確認した1行の形（`message.content` は文字列）。
@@ -72,7 +72,7 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 
 | hook | いつ差し戻すか |
 | --- | --- |
-| [.claude/hooks/check-reply-clarity.py:656](../../../.claude/hooks/check-reply-clarity.py#L656) | 200文字以上の応答で、引用が80文字未満のときなど |
+| [.claude/hooks/check-reply-clarity.py:1032](../../../.claude/hooks/check-reply-clarity.py#L1032) | 200文字以上の応答で、引用が80文字未満のときなど |
 | [.claude/hooks/check-verified-commands.py:339](../../../.claude/hooks/check-verified-commands.py#L339) | 確認していないコマンドを実行したと書いたとき |
 
 **つまり continuo で continuo 自身を開発すると、ほぼ毎 turn 差し戻しが起きる。**
@@ -115,7 +115,7 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 | --- | --- |
 | **差し戻された側の応答Aで Status が動き、書き直し中の pane を閉じる** | [internal/orchestrator/lifecycle.go:37-39](../../../internal/orchestrator/lifecycle.go#L37-L39) が応答Aから表明を読み、[internal/orchestrator/lifecycle.go:91-93](../../../internal/orchestrator/lifecycle.go#L91-L93) の default の枝が `finishRun` へ進む |
 | **書き直した応答Bが、どこからも読まれない** | 読み取り範囲は「`typed` の user 行から次の `typed` の user 行まで」（[internal/orchestrator/transcript.go:521-546](../../../internal/orchestrator/transcript.go#L521-L546)）。差し戻しの行は `typed` ではないので応答Bは応答Aと同じ範囲に入り、**その範囲は読み終わっている** |
-| **遅れて届く2本目の空の `Stop` が、次の turn の終わりとして数えられる** | [internal/orchestrator/runstate.go:555](../../../internal/orchestrator/runstate.go#L555) が `stopSeenAt` を立て、次の `confirmTurnEnd` が即座に `turnEnded` を返す。連鎖して `max_dispatch_turns`（既定20）を空回りで食い潰し、[internal/orchestrator/turn.go:130-140](../../../internal/orchestrator/turn.go#L130-L140) が `failure_state` へ落とす |
+| **遅れて届く2本目の空の `Stop` が、次の turn の終わりとして数えられる** | [internal/orchestrator/runstate.go:581](../../../internal/orchestrator/runstate.go#L581) が `stopSeenAt` を立て、次の `confirmTurnEnd` が即座に `turnEnded` を返す。連鎖して `max_dispatch_turns`（既定20）を空回りで食い潰し、[internal/orchestrator/turn.go:130-140](../../../internal/orchestrator/turn.go#L130-L140) が `failure_state` へ落とす |
 
 **3つ目がいちばん見えにくい。**issue に残る理由は
 **「作業が終わったという表明を出しませんでした」**になり、実際に起きたこととは別の話になる。
@@ -301,7 +301,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **案：`UserPromptSubmit` を `<task-notification>` 以外も「turn が続いている」と見る。**
 **採らない。****差し戻しが `UserPromptSubmit` を出すかどうかを確かめられていない。**
 出さないなら1件も拾えず、出すなら
-[internal/orchestrator/orchestrator.go:1092-1100](../../../internal/orchestrator/orchestrator.go#L1092-L1100) の
+[internal/orchestrator/orchestrator.go:1068-1076](../../../internal/orchestrator/orchestrator.go#L1068-L1076) の
 `isTurnBoundaryHook` が広がって、**人間が pane へ直接打った入力まで turn の判定に混ざる。**
 
 ---
@@ -336,7 +336,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 
 **言いたいこと。**1行を直し、1節を足す。**3-2 と 3-26 は触らない。**
 
-**直す1行。**[docs/plans/continuo_design.md:744](../continuo_design.md#L744) を、いまの実装と合わせる。
+**直す1行。**[docs/plans/continuo_design.md:745](../continuo_design.md#L745) を、いまの実装と合わせる。
 
 ```markdown
 | **`Stop`** | **turn の終わりの判定の起点。**`background_tasks` を見る。**`stop_hook_active` は使わない**（3-79） |
@@ -345,7 +345,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **足す1節。**`### 3-79. 空の Stop は「止まってよいか尋ねた」であって「終わった」ではない`。
 中身はこの文書の 1 節・6 節・7 節を縮めたもので、**測定値の細かい内訳は入れずにこの文書を参照させる。**
 
-**[docs/plans/continuo_design.md:3342](../continuo_design.md#L3342) の周辺は残す。**
+**[docs/plans/continuo_design.md:3621](../continuo_design.md#L3621) の周辺は残す。**
 あちらは「**continuo 自身は差し戻しを使わない**」を決めているだけで、
 **「他人の hook が差し戻してきたときにどうするか」は決めていない。**3-79 がそこを埋める。
 

@@ -44,7 +44,7 @@ var _ HookServer = (*hookserver.Server)(nil)
 // ログ・テストのための観測口である。
 type RestoreResult struct {
 	// Worktrees は置き場所の走査で見つかり、消さずに残った worktree の絶対パスである。
-	// **孤児 branch の掃除の対象のリポジトリはここから引く**（ボードを読まずに決まる）。
+	// **孤児 branch の掃除の対象のリポジトリはここから引く**（カンバンを読まずに決まる）。
 	Worktrees []string
 	// Adopted は引き継いだ issue の識別子である。
 	Adopted []string
@@ -104,12 +104,12 @@ type adoption struct {
 // hs: hook の受け口。**nil を渡してはならない**（段5d で listen を始められない）。
 // 戻り値の1つ目: 復元の記録。**起動時の掃除（SweepOnStartup）へそのまま渡す。**
 // 戻り値の2つ目: hook の受け口の listen を始められなかった場合のエラー。
-// **それ以外はエラーにしない**（置き場所を読めない・ボードを取り直せない・herdr から
+// **それ以外はエラーにしない**（置き場所を読めない・カンバンを取り直せない・herdr から
 // 一覧を取れない、はいずれも警告を出して起動を続ける。設計 3-4 の段3）。
 func (o *Orchestrator) Restore(ctx context.Context, hs HookServer) (*RestoreResult, error) {
 	result := &RestoreResult{}
 
-	// 段1b: 身元ファイルを読めない worktree を、置き場所と pane の label とボードから
+	// 段1b: 身元ファイルを読めない worktree を、置き場所と pane の label とカンバンから
 	// 復元する（設計 3-49）。**段2 より先に行う。**復元できれば、段2 以降は
 	// ふつうの引き継ぎの候補として扱える。
 	// **復元できないものが残ったら、`workspace.on_broken_worktree` に従う**（既定は止める）。
@@ -120,7 +120,7 @@ func (o *Orchestrator) Restore(ctx context.Context, hs HookServer) (*RestoreResu
 	// 段2: 置き場所を固定の4階層で走査し、身元ファイルを読む。
 	candidates, discarded := o.scanIdentities()
 
-	// 段3: 身元ファイルの project item の ID で、ボードを ID 指定でまとめて取り直す（1リクエスト）。
+	// 段3: 身元ファイルの project item の ID で、カンバンを ID 指定でまとめて取り直す（1リクエスト）。
 	issues, fetchFailed := o.refetchByIdentities(ctx, candidates)
 
 	// 段4: herdr から pane と agent の一覧を取り、cwd と worktree のパスで突き合わせる。
@@ -365,7 +365,7 @@ func splitOwnerRepo(raw string) (string, string, bool) {
 	return owner, repo, true
 }
 
-// refetchByIdentities は身元ファイルの project item の ID で、ボードを ID 指定で
+// refetchByIdentities は身元ファイルの project item の ID で、カンバンを ID 指定で
 // まとめて取り直す（設計 3-4 の段3。**1リクエストで済ませる**）。
 //
 // **この1回が「落ちている間に届かなかった Stop の取り戻し」も兼ねる**（設計 3-19）。
@@ -1038,10 +1038,10 @@ func containsString(values []string, target string) bool {
 //
 // **復元を先に試す理由。**着手は worktree を作ってから身元ファイルを書く（3-16 の段6〜段9）
 // ので、**その間で落ちると身元ファイルの無い worktree ができる。**それは「壊れた」のでは
-// なく「書き終える前に落ちた」だけであり、置き場所とボードから元どおりに組み立て直せる。
+// なく「書き終える前に落ちた」だけであり、置き場所とカンバンから元どおりに組み立て直せる。
 //
 // **復元できなかったものは、既定では起動を止める。**飛ばして走り続けると、その issue は
-// ボードの上で running_state のまま誰にも触られず、**人間が気づくのは何時間も後になる。**
+// カンバンの上で running_state のまま誰にも触られず、**人間が気づくのは何時間も後になる。**
 // 止まれば、被害はその時点で止まり、壊れていることをすぐ知れる。
 //
 // ctx: 呼び出しに適用するコンテキスト。
@@ -1156,7 +1156,7 @@ func (o *Orchestrator) panesByCwd(ctx context.Context) (map[string]herdr.Pane, m
 //
 //	置き場所のパス  … `<root>/<host>/<owner>/<repo>/<スラグ>` の固定4階層。スラグに issue の番号が入る
 //	pane の label   … `owner/repo/issues/N`（設計 3-3）。スラグから切り出せなかったときに使う
-//	ボードの issue  … 上の2つで組み立てた `<owner>/<repo>#<番号>` で1件だけ引き直す
+//	カンバンの issue… 上の2つで組み立てた `<owner>/<repo>#<番号>` で1件だけ引き直す
 //
 // **どの手掛かりも、そのままでは信じない。**引き直した issue から**スラグを作り直し、
 // 目の前のディレクトリ名と一致すること**を確かめる（ExpectedSlugFor）。ここを外すと、
@@ -1212,7 +1212,7 @@ func (o *Orchestrator) recoverIdentity(
 
 // writeRecoveredIdentity は、裏の取れた issue から身元ファイルを組み立てて書く（設計 3-49）。
 //
-// **書くのは、置き場所とボードと pane から確かめられたものだけである。**
+// **書くのは、置き場所とカンバンと pane から確かめられたものだけである。**
 // `base` と `settings_path` は復元しない（どの手掛かりにも残っていない）。
 // **takeover_count は 0 から数え直す。**引き継いだ回数は身元ファイルにしか無く、
 // それが読めなかったのだから、**復元した値を推測で埋めてはならない。**
