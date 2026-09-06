@@ -220,18 +220,25 @@ func (r SkipReason) String() string {
 //
 // **マージンは種別ごとに引く。**5時間の枠には `five_hour_margin_percent`、
 // 1週間の枠（`weekly_all` と `weekly_scoped`）には `weekly_margin_percent` を引く。
-// **知らない種別には5時間のマージンを当てる。**usage API が種別を増やしたとき、
-// **マージン0（＝使用率100でしか止まらない）へ倒れるより、取り置きを守るほうが安全である。**
+//
+// **知らない種別は数えない。**`Evaluate` は `SessionPercent` と `WeeklyPercent` から
+// 余裕値を作るので、**その2つが見ない種別をここで数えると、線がまた2本に割れる。**
+// usage API が種別を増やしたとき、**この関数だけが真を返して枠待ちの印が立ち、
+// 入札の側は素通しで新しい issue を取り続ける**という食い違いが起きる。
+// **種別を増やすときは、`SessionPercent` か `WeeklyPercent` のどちらかへ足すこと。**
 //
 // margins: 引くマージン（%）。
 // 戻り値: その枠に余裕が無ければ true を返す関数。**`Snapshot` の選別に渡す。**
 func Short(margins Margins) func(l ratelimit.Limit) bool {
 	return func(l ratelimit.Limit) bool {
-		margin := margins.FiveHour
-		if IsWeeklyKind(l.Kind) {
-			margin = margins.Weekly
+		switch {
+		case IsWeeklyKind(l.Kind):
+			return fullPercent-l.Percent-margins.Weekly <= 0
+		case strings.EqualFold(l.Kind, LimitKindSession):
+			return fullPercent-l.Percent-margins.FiveHour <= 0
+		default:
+			return false
 		}
-		return fullPercent-l.Percent-margin <= 0
 	}
 }
 

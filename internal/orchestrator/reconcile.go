@@ -8,6 +8,7 @@ import (
 
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
 )
@@ -236,6 +237,47 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 	}
 }
 
+// clearQuotaWaitWhenBack は、枠が明けた run から枠待ちの印を外す（設計 3-27）。
+//
+// **外す契機は2つある。**
+//
+//	一、`resets_at` を過ぎたこと
+//	二、余裕の無い枠が1つも無くなったこと
+//
+// **二を落としてはならない。**`resets_at` が `null` で返る枠だけに余裕が無いと、
+// `QuotaResetAt` はゼロ値のままで、**一では永久に外れない。**
+// turn のループは同じ判定を持っているが、
+// **herdr が一時的に届かないと、待ちループは印を外さずに goroutine を畳む**（設計 3-27）。
+// **そのとき外す者が1人もいなくなり、run はスロットと pane を continuo の再起動まで握り続ける。**
+//
+// **`checkStalls` の `claude.turn_timeout_ms` の門より前で呼ぶ。**
+// **0 以下でも枠待ちの印は立つ**ので、門のあとに置くと、その設定の機械で一度も外れない。
+// **`weekly_wait_limit_minutes: 0`（上限を設けない）と組み合わさると必ず当たる。**
+// [docs/FAQ.md](../../docs/FAQ.md) が1台で動かす人に勧めている値である。
+//
+// **枠の写しは呼び出し側が1回のロックで取ったものを受け取る。**
+// **ここで取り直すと、同じ巡回の中で run ごとに違う写しの答えが混ざる。**
+//
+// snap: この巡回で読んだ枠の写し。**nil なら「余裕が無い枠は無い」として扱う。**
+// now: いまの時刻。
+func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time.Time) {
+	short := snap.AnySelected(handoff.Short(o.bidMargins()))
+	for _, rs := range o.snapshotRuns() {
+		st := rs.snapshot()
+		if !st.WaitingQuota {
+			continue
+		}
+		switch {
+		case !st.QuotaResetAt.IsZero() && !now.Before(st.QuotaResetAt):
+			rs.clearWaitingQuota(now)
+		case !short:
+			o.logger.Info("枠に余裕が戻ったので、枠待ちの印を外します",
+				"identifier", st.Identifier)
+			rs.clearWaitingQuota(now)
+		}
+	}
+}
+
 // releaseQuotaWaitExceeded は、1週間の枠を待つ上限を超えた run を手放す
 // （設計 3-27。issue #197）。
 //
@@ -425,6 +467,11 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		rs.noteWeeklyShort(weeklyShort, now)
 	}
 
+	// **枠が明けた run の印を外すのも、`silence <= 0` より前で行う。**
+	// **あとに置くと、`claude.turn_timeout_ms` を0以下にしている機械では、
+	// 一度立った印を外す者が1人もいなくなる**（下の `clearQuotaWaitWhenBack` の説明）。
+	o.clearQuotaWaitWhenBack(quotaSnap, now)
+
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	if silence <= 0 {
 		return
@@ -433,30 +480,8 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
 		if snap.WaitingQuota {
+			// **印の出し入れは、上の `clearQuotaWaitWhenBack` が済ませている。**
 			// **上限は上の `releaseQuotaWaitExceeded` が見ている。**ここでは見ない。
-			//
-			// 枠が明けたら印を外す。契機は2つある。
-			//
-			// **1つ目は `resets_at` を過ぎたこと。**
-			// **2つ目は、使い切っている枠が1つも無くなったこと。**
-			//
-			// **2つ目を落としてはならない。**`resets_at` が `null` で返る枠だけが満杯だと、
-			// `QuotaResetAt` はゼロ値のままで、**1つ目では永久に外れない。**
-			// turn のループは同じ判定を持っている（`quotaAtFull` を見て外す）が、
-			// **herdr が一時的に届かないと、待ちループは印を外さずに goroutine を畳む**
-			// （設計 3-27）。**そのとき外す者が1人もいなくなり、run はスロットと pane を
-			// continuo の再起動まで握り続ける。**
-			//
-			// **`weekly_wait_limit_minutes: 0`（上限を設けない）で必ず当たる。**
-			// [docs/FAQ.md](../../docs/FAQ.md) が1台で動かす人に勧めている値である。
-			switch {
-			case !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt):
-				rs.clearWaitingQuota(now)
-			case !o.quotaShort():
-				o.logger.Info("枠に余裕が戻ったので、枠待ちの印を外します",
-					"identifier", snap.Identifier)
-				rs.clearWaitingQuota(now)
-			}
 			continue
 		}
 		if !snap.BackoffUntil.IsZero() && now.Before(snap.BackoffUntil) {

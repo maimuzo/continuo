@@ -129,15 +129,16 @@ func TestQuota_100パーセントかつhookが来ていないrunだけを枠待�
 
 // {"RUCM-PATH": "P004"}
 //
-// TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める は、
-// 「新規を止める閾値」と「この run は枠待ちである」を分けていることを確かめる。
+// TestQuota_余裕値が0以下でも走行中のrunの時計は止めない は、
+// 「新規の着手を止めること」と「この run は枠待ちである」を分けていることを確かめる。
 //
-// 目的: 設計 3-27 の「`pause_above_percent`（既定95%）を超えただけでは、枠待ちとみなさない。
-// **走行中の turn は止めないし、時計も止めない**」を守っていることを示す。
+// 目的: 設計 3-27 の「**走行中の turn は止めないし、時計も止めない**」を守っていることを示す。
+// **枠待ちの条件は2つの連言である**ので、余裕値が0以下でも、
+// **hook が来ている run の時計は止まらない。**
 //
-// 与える情報: 枠が 96%（100 には達していない）。`Ready` の issue が1件。
+// 与える情報: 5時間の枠が 96%（マージン10なので余裕値は −6）。`Ready` の issue が1件。
 // 成功条件: 新規の dispatch が起きず、既にある run は枠待ちにならない。
-func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める(t *testing.T) {
+func TestQuota_余裕値が0以下でも走行中のrunの時計は止めない(t *testing.T) {
 	endpoint, _ := newUsageServer(t, []map[string]any{
 		{"kind": "session", "percent": 96, "resets_at": nil, "severity": "normal"},
 	})
@@ -158,10 +159,10 @@ func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止�
 
 	for _, v := range fx.Orc.RunViews() {
 		if v.Identifier == "octocat/hello-world#190" {
-			t.Fatalf("閾値を超えているのに新規を dispatch している: %+v", v)
+			t.Fatalf("余裕値が0以下なのに新規を dispatch している: %+v", v)
 		}
 		if v.Identifier == running.Identifier && v.WaitingQuota {
-			t.Fatalf("95%%を超えただけで走行中の run の時計を止めている: %+v", v)
+			t.Fatalf("hook が来ている走行中の run の時計を止めている: %+v", v)
 		}
 	}
 }
@@ -463,11 +464,16 @@ func TestQuota_枠を読めなければ入札の要るissueには着手しない
 	}
 	// **止まったことが人間に見えなければ、直したことにならない。**
 	got := fx.Logs.String()
-	if !strings.Contains(got, "level=INFO") || !strings.Contains(got, "枠に余裕が無いので") {
+	if !strings.Contains(got, "level=INFO") || !strings.Contains(got, "枠を読めないので") {
 		t.Fatalf("止めたことを INFO で出していない:\n%s", got)
 	}
 	if !strings.Contains(got, "枠を読めない") {
 		t.Fatalf("止めた理由を出していない:\n%s", got)
+	}
+	// **直し方を取り違えさせない。**枠を読めないのは資格情報の話であって、
+	// **マージンをいくら下げても動き出さない。**
+	if !strings.Contains(got, "マージンを下げても動き出しません") {
+		t.Fatalf("枠を読めないときに、マージンでは直らないと書いていない:\n%s", got)
 	}
 }
 

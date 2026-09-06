@@ -657,21 +657,6 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 	}()
 }
 
-// releaseBecauseQuotaWait は、待つ上限を超えた run を止めて担当を手放す（turn ループ用）。
-//
-// **turn の goroutine から呼ぶ。**`claimTerminal` は書き戻しの終わりを待つので、
-// **巡回のループから呼んではならない**（設計 3-8）。
-//
-// ctx: 呼び出しに適用するコンテキスト。
-// rs: 対象の run。
-func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState) bool {
-	if !rs.claimTerminal(ctx) {
-		// **別の経路が既に終わらせている。**待ち直させない。
-		return true
-	}
-	return o.releaseBecauseQuotaWaitClaimed(ctx, rs)
-}
-
 // releaseBecauseQuotaWaitClaimed は、終わらせる印を確保したあとの本体である。
 //
 // **順番を入れ替えてはならない。**
@@ -718,7 +703,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// 人間が claude.ai の画面と突き合わせても食い違って見える。**
 	// **理由が既定の水準で出ないのは、issue #173 が直そうとしている症状そのものである。**
 	shortSnap, _ := o.quotaSnapshotWithStale()
-	fullKinds := strings.Join(shortSnap.SelectedKinds(handoff.Short(o.bidMargins())), ", ")
+	shortKinds := strings.Join(shortSnap.SelectedKinds(handoff.Short(o.bidMargins())), ", ")
 
 	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
 	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。
@@ -815,7 +800,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 			"identifier", issue.Identifier,
 			"after_run が成功したか", afterRunOK,
 			"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
-			"使い切っている枠", fullKinds)
+			"余裕の無い枠", shortKinds)
 		rs.endTerminal()
 		return false
 	}
@@ -832,7 +817,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		"identifier", issue.Identifier, "外した担当者", login,
 		"after_run が成功したか", afterRunOK,
 		"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
-		"使い切っている枠", fullKinds)
+		"余裕の無い枠", shortKinds)
 	return true
 }
 

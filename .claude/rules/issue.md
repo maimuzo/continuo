@@ -16,7 +16,7 @@ issueは優先順位を計画して人間確認してから着手すること」
 **continuo が起動したエージェントは、この節が言う「カンバンの操作」をしない。**
 issue をカンバンへ載せることも、Status を付けることも、並べ替えることもしない
 （載せることと Status は [docs/plans/continuo_design.md:9434](../../docs/plans/continuo_design.md#L9434)、
-並べ替えは [docs/plans/continuo_design.md:9623-9621](../../docs/plans/continuo_design.md#L9623-L9621) の 4-4 の表に
+並べ替えは [docs/plans/continuo_design.md:9619-9626](../../docs/plans/continuo_design.md#L9619-L9626) の 4-4 の表に
 「continuo が起動したエージェント」の行が無いこと）。
 **ただし「1バイトも触らない」ではない。**設計は、そのエージェントが自分で `gh` を叩いて
 `In Progress` → `Blocked` を動かす経路を認めている
@@ -86,7 +86,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:4320](../../docs/plans/continuo_design.md#L4320)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「GitHub Projects v2 の project #3 は本番のカンバンである」。**Status の値が全部消える** |
 | **段4 のあと、`Ice Box` の item はカンバン全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
-| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9511](../../docs/plans/continuo_design.md#L9511)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:171-175](../../internal/orchestrator/dispatch.go#L171-L175) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4261](../../docs/plans/continuo_design.md#L4261) の本文である**） |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9511](../../docs/plans/continuo_design.md#L9511)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:386-388](../../internal/orchestrator/dispatch.go#L386-L388) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4261](../../docs/plans/continuo_design.md#L4261) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
@@ -145,7 +145,7 @@ typo1件のために104件のカンバンを並べ替えるのが、この節の
 手順の段2 は「**いまある issue 全部**」を見るので、**前のセッションで `Ready` や `In Progress` へ上がったものがグループに入りうる。**
 
 **この節の段3 を飛ばすと、continuo が代表とは別に dispatch する。**
-[docs/plans/continuo_design.md:3604-3601](../../docs/plans/continuo_design.md#L3604-L3601) の 3-26 が
+[docs/plans/continuo_design.md:3604-3605](../../docs/plans/continuo_design.md#L3604-L3605) の 3-26 が
 「落とさないと `active_states` に残るので、**continuo が代表とは別に dispatch してしまう。**
 『自分が取った』印は代表にしか付かないため、印では防げない」と書いている。
 **印で防げない以上、この規則が唯一の防波堤である。**

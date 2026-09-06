@@ -105,10 +105,12 @@ type Limit struct {
 	Severity string `json:"severity"`
 }
 
-// fullPercent は「使い切っている」とみなす使用率である（設計 3-27 の条件その1）。
+// **「使い切っている」を表す定数は、この package から消えた**（issue #173 / #197）。
 //
-// **`>=` で比べる。**API が 100 を超える値を返しても取りこぼさない。
-const fullPercent = 100
+// **線を決めるのは呼び出し側である。**判定は「使用率100」から
+// **「余裕値が0以下」**へ移り、**余裕値はマージンを引いた残りで、マージンは種別ごとに違う。**
+// **この package はマージンを知らない**ので、線そのものを述語として受け取る
+// （`AnySelected` / `SelectedKinds` / `LatestResetForClearing` / `LatestResetForWaitLimit`）。
 
 // Snapshot は usage API を1回読んだ結果である。
 type Snapshot struct {
