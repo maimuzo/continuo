@@ -8,8 +8,14 @@ import (
 // AIMarker は、人間ではなく機械が書いたコメントに付ける印である（設計 3-82）。
 //
 // **この印が言うのは「この本文を打鍵したのは機械である」ことだけである。**
-// continuo 本体（Go のプログラム）も、continuo が起動した Claude Code も、
-// **人間と直接やりとりしている Claude Code も、同じこの印を付ける。**
+// **continuo が付けるのは2つの経路である。**continuo 本体（Go のプログラム）が書くコメントと、
+// continuo が起動した Claude Code が書くコメント（組み込みの指示書が書かせる）。
+//
+// **人間が自分で動かした Claude Code には、continuo は届かない。**
+// そちらへ同じ印を付けさせたい project は、`CLAUDE.md` へ規則を書く
+// （文面は [docs/FAQ.md](../../docs/FAQ.md) にある）。
+// **だから「印が無ければ人間」は成り立たない。**印が無いことは、
+// **人間が打鍵したか、continuo の外の Claude Code が書いたか、この仕組みより前のものか、のどれかである。**
 //
 // **なぜ要るか。**エージェントも continuo も人間も、同じ GitHub アカウントで投稿する
 // （[internal/tracker/ghuser.go](../tracker/ghuser.go) の 24-25行）。
@@ -57,8 +63,10 @@ const (
 // **先頭へ入れると、その project の pull request が全部赤になる。**
 //
 // **先頭の印の並びに既に印があれば、そのまま返す。**二重に付けない。
-// **字下げして引用した印は、この並びに数えない。**そちらは本文であり、
+// **2行目以降で字下げして引用した印は、この並びに数えない。**そちらは本文であり、
 // **印について説明する報告には、名乗りの印を別に足す。**
+// **1行目だけは字下げしていても数える。**本文全体の先頭の空白を先に落とすためで、
+// **読む側（`TrimSpace` してから先頭を見る）と同じ扱いである。**
 //
 // 例。
 //
@@ -81,9 +89,12 @@ const (
 // **ただし挿入するのは、最後に見つけた印の行の直後である。**後ろの空行までは越えない。
 //
 // body: 印を足す前の本文。
-// 戻り値: 印を1行足した本文。**改行の綴りは変えない**（元の位置へ差し込むだけである）。
+// 戻り値: 印を1行足した本文。**元の本文は1文字も書き換えない**（差し込むだけである）。
 // **足す先の直前が改行でなければ、改行を1つ補う。**補わないと、
 // 末尾に改行の無い本文（印だけのコメント）で、2つの印が1行に繋がる。
+// **足す行の改行は LF である。**CRLF の本文へ足すと、その1行だけ LF になる。
+// **読む側は先頭の1行しか見ないので、判定は変わらない。**
+// **行の区切りは LF だけで数える。**CR だけで改行する本文は、continuo のどの経路も作らない。
 func WithAIMarker(body string) string {
 	// **先頭の空白を読み飛ばす。**読む側が `TrimSpace` するので、ここも同じところから見る。
 	head := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
@@ -125,13 +136,23 @@ func WithAIMarker(body string) string {
 // **閉じも見るのは、[internal/prompt/prompt.go](../prompt/prompt.go) の
 // `stripCommentsFromLine` が既にそうしているからである。**
 //
+// **閉じの後ろに本文が続く行も、印の行ではない。**
+// `<!-- 方針 --> production へは push しないでください。` のような1行の書き方があり
+// （[internal/prompt/prompt.go](../prompt/prompt.go) の `stripCommentsFromLine` がそう書いている）、
+// **数えると、印が本文の1行の下へ入る。**
+//
 // line: 見る行（行末の改行は含まない）。
-// 戻り値: 行頭ちょうどの `<!--` で始まり、同じ行に `-->` があれば真。
+// 戻り値: 行頭ちょうどの `<!--` で始まり、`-->` で終わっていれば真。
 func isMarkerLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
 	if !strings.HasPrefix(line, aiMarkerCommentOpen) {
 		return false
 	}
-	return strings.Contains(line[len(aiMarkerCommentOpen):], aiMarkerCommentClose)
+	if !strings.HasSuffix(trimmed, aiMarkerCommentClose) {
+		return false
+	}
+	// **開きと閉じが同じものでないこと。**`<!--` だけの行は複数行コメントの開きである。
+	return len(trimmed) >= len(aiMarkerCommentOpen)+len(aiMarkerCommentClose)
 }
 
 // spliceAIMarker は、本文の指定の位置へ AIMarker を1行差し込む。

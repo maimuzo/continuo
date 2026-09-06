@@ -73,7 +73,9 @@ func TestTemplate_機械の印は既存の目印より後ろに書かせる(t *t
 
 	found := 0
 	for i, line := range lines {
-		if strings.TrimSpace(line) != config.AIMarker {
+		// **注釈が付いた行も見る。**5-5 の図は `<!-- continuo:ai -->         ← ここへ足す` と書いており、
+		// **完全一致で絞ると、置き場所を教えている唯一の図が検査から漏れる。**
+		if !strings.HasPrefix(strings.TrimSpace(line), config.AIMarker) {
 			continue
 		}
 		found++
@@ -115,8 +117,11 @@ func TestTemplate_機械の印は既存の目印より後ろに書かせる(t *t
 
 // 目的: 設計のレビューの判断票の並びを、行の位置で固定する（設計 3-82）。
 //
-// **CI は `<!-- continuo:agent -->` の直後にしか `<!-- design-review-result -->` を許さない。**
-// **あいだへ印を入れると、その pull request の検査が永久に赤になる。**
+// **CI の正規表現は `<!-- continuo:agent -->` を任意の1つとして許すだけで、
+// あいだに別の行が入ることは許さない**（`^[ \t\r\n]*(<!-- continuo:agent -->[ \t\r\n]*)?<!-- design-review-result -->`）。
+// **つまり印を2行目へ入れると、その pull request の検査が永久に赤になる。**
+// **`<!-- design-review-result -->` が1行目でも CI は通る**（人間と直接やりとりする AI 向けの形）。
+// **ここが縛っているのは、組み込みの指示書が見せる見本のほうである。**
 //
 // 与える情報: prompt.Builtin() の、計画を書かせる節。
 // 成功条件: `<!-- continuo:agent -->` → `<!-- design-review-result -->` → 機械の印 の順であること。
