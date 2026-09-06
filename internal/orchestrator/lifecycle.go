@@ -981,11 +981,21 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	// `workspace_hooks.after_run` が設定されていないときである。**
 	// **後者は既定の設定そのものである。**捨てると、**何も走らせていないのに
 	// 「実行済みです。remote の続きから始めてください」と issue へ書く。**
+	// **走らせ切ったことを run が覚えている**（issue #197）。
+	// **やり直しのために要る。**担当を外すのに失敗して次の巡回でやり直すと、
+	// `RunAfterRunOnce` は「走らせていない」を返すので、
+	// **既に push してあるのに「remote に続きが入っていないことがあります」と issue へ書く。**
+	if rs.afterRunDone() {
+		return true
+	}
 	ran, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath)
 	if err != nil {
 		o.logger.Warn("workspace_hooks.after_run に失敗しました（記録して続けます）",
 			"identifier", snap.Identifier, "error", err)
 		return false
+	}
+	if ran {
+		rs.markAfterRunDone()
 	}
 	return ran
 }

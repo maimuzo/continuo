@@ -204,16 +204,16 @@ func (r SkipReason) String() string {
 
 // Short は「その枠に余裕が無いか」を判定する関数を作る（設計 3-27 / 3-77。issue #173 / #197）。
 //
-// **これが唯一の線である。**次の3箇所は、全部この関数で判定する。
+// **「人間のための取り置きへ食い込むか」を問う線である。**次の2箇所で使う。
 //
-//	入札するかどうか                    … Evaluate（余裕値が0以下なら入札しない）
-//	この run は枠待ちか                 … Orchestrator.isQuotaWaiting
-//	1週間の枠を待つ上限を超えたか       … Orchestrator.weeklyWaitExceeded
+//	入札するかどうか              … Evaluate（余裕値が0以下なら入札しない）
+//	1週間の枠を待つ上限を超えたか … Orchestrator.weeklyWaitExceeded
 //
-// **線を1本にする理由。**以前は「使用率100」と「余裕値がマイナス」の2本があり、
-// **使用率90〜99の帯では、同じ run が枠待ちにならないまま手放しの条件だけ満たした。**
-// そこでは打ち切り（retry を積む）と手放し（担当を外す）が競走し、
-// **どちらが勝つかで、枠が足りないだけの issue が `failure_state` へ落ちることがあった。**
+// **枠待ちの印には使わない。**あちらは `Full`（使用率100）である。
+// **問いが違う。**印は「Claude Code が本当に応答できないか」を問うもので、
+// **使用率90%では普通に応答する。**そこで打ち切りの時計を止めると、
+// **本当に固まった run が、5時間の枠が90%を割るまで殺されない。**
+// **既定では最大で6時間、スロットと pane を握り続ける**（2026-09-06 の6段の段4）。
 //
 //	その枠の余裕値 = 100 − その枠の使用率 − その種別のマージン
 //	余裕が無い枠   = 余裕値 <= 0
@@ -234,7 +234,7 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 		switch {
 		case IsWeeklyKind(l.Kind):
 			return fullPercent-l.Percent-margins.Weekly <= 0
-		case matchesKind(l.Kind, []string{LimitKindSession}):
+		case matchesKind(l.Kind, sessionKinds):
 			return fullPercent-l.Percent-margins.FiveHour <= 0
 		default:
 			return false
@@ -265,6 +265,12 @@ func Full() func(l ratelimit.Limit) bool {
 		return l.Percent >= fullPercent
 	}
 }
+
+// sessionKinds は5時間の枠の種別である。
+//
+// **その場で組み立てない。**`Short` は枠1件につき1回呼ばれるので、
+// **呼ぶたびに slice を作ると、判定1回につき確保が1つ増える。**
+var sessionKinds = []string{LimitKindSession}
 
 // ShortWeekly は「1週間の枠のうち、余裕が無いもの」を判定する関数を作る
 // （設計 3-27。issue #197）。

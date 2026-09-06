@@ -166,6 +166,30 @@ type runState struct {
 	// **写し（runSnapshot）には載せない。**読むのは `noteWeeklyShort` の戻り値だけであり、
 	// **写しへ載せると、そこを通さない古い値を正だと思って読む人が出る。**
 	WeeklyShortSince time.Time
+	// QuotaProbeRevision は、手放してよいかを見るときに読んだ画面の版である
+	// （設計 3-27。issue #197）。
+	//
+	// **`LastRevision` を使ってはならない。**あちらを書くのは、着手のときと
+	// 巡回の stall 検知だけである。**枠待ちの印が立っている run と、
+	// `claude.turn_timeout_ms` を0以下にしている機械では、stall 検知が走らない。**
+	// **そのため `LastRevision` は着手のときの値のまま凍りつき、
+	// 画面が1度でも動いたあとは永久に一致しなくなる。**手放しが1回も起きない。
+	//
+	// **この項目は、手放しの判定が自分で読んだ版だけを覚える。**
+	// **2回続けて同じ版なら「止まっている」である。**
+	QuotaProbeRevision uint64
+	// QuotaProbeSeen は、上の版を1度でも読んだかを表す。
+	//
+	// **版は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
+	// **初回は必ず「止まっていない」と答える**（そこからどれだけ止まっていたかが分からない）。
+	QuotaProbeSeen bool
+	// AfterRunDone は、この run で `workspace_hooks.after_run` を走らせ切ったかを表す
+	// （issue #197）。
+	//
+	// **やり直しのために持つ。**`RunAfterRunOnce` は2回目以降「走らせていない」を返すので、
+	// **担当を外すのに失敗して次の巡回でやり直すと、既に push してあるのに
+	// 「remote に続きが入っていないことがあります」と issue へ書くことになる。**
+	AfterRunDone bool
 	// Tokens はこの run が始めてからの累計のトークンである（設計 3-15）。
 	//
 	// **中身は「いまのセッションの transcript を `requestId` で重複排除して足した値」＋
@@ -1096,6 +1120,37 @@ func (rs *runState) noteWeeklyShort(short bool, now time.Time) time.Time {
 		rs.WeeklyShortSince = now
 	}
 	return rs.WeeklyShortSince
+}
+
+// noteQuotaProbe は、手放しの判定が読んだ画面の版を控え、止まっているかを返す
+// （設計 3-27。issue #197）。
+//
+// **2回続けて同じ版なら「止まっている」である。**
+// **初回は必ず偽を返す。**そこからどれだけ止まっていたかが分からないためである。
+//
+// rev: いま読んだ画面の版。
+// 戻り値: 前に読んだ版と同じなら true。
+func (rs *runState) noteQuotaProbe(rev uint64) bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	same := rs.QuotaProbeSeen && rs.QuotaProbeRevision == rev
+	rs.QuotaProbeRevision = rev
+	rs.QuotaProbeSeen = true
+	return same
+}
+
+// markAfterRunDone は `workspace_hooks.after_run` を走らせ切ったことを覚える（issue #197）。
+func (rs *runState) markAfterRunDone() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.AfterRunDone = true
+}
+
+// afterRunDone は `workspace_hooks.after_run` を走らせ切ったかを返す（issue #197）。
+func (rs *runState) afterRunDone() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.AfterRunDone
 }
 
 // clearWaitingQuota は枠待ちの印を外し、stall の時計を動かし直す（設計 3-27）。

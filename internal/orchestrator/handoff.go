@@ -605,6 +605,23 @@ func (o *Orchestrator) weeklyWaitExceeded(rs *runState) bool {
 	// 続けて呼んではならない。**2回のロックの間に `pollQuota` が割り込むと、
 	// **「読めている」と答えた新しい写しではなく、古い写しで手放すことになる。**
 	snap, stale := o.quotaSnapshotWithStale()
+	return o.weeklyWaitExceededWith(snap, stale, rs)
+}
+
+// weeklyWaitExceededWith は、渡された写しで1週間の枠を待つ上限を超えたかを判定する
+// （設計 3-27。issue #197）。
+//
+// **巡回はこちらを使う。**`weeklyWaitExceeded` は run ごとに写しを取り直すので、
+// **同じ巡回の中で run ごとに違う答えが返る**（`pollQuota` は turn の goroutine から
+// 並行に走り、途中で写しを差し替える）。**片方の run の起点が消え、もう片方が進み続ける。**
+//
+// snap: この巡回で1回だけ読んだ枠の写し。
+// stale: 直前の読み取りに失敗していれば真。
+// rs: 判定する run。
+// 戻り値: 上限を超えていれば true。
+func (o *Orchestrator) weeklyWaitExceededWith(
+	snap *ratelimit.Snapshot, stale bool, rs *runState,
+) bool {
 	// **「使い切っている」ではなく「余裕が無い」で数える**（人間の決定。2026-09-06。issue #197）。
 	// **入札に使う余裕値と同じ線である**（`handoff.Short`）。
 	// **線を1本にしないと、使用率90〜99の帯で run が枠待ちにならないまま
@@ -821,12 +838,26 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		return false
 	}
 
-	// **段3。pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
+	// **段3。走っているサブエージェントが終わるのを、猶予いっぱいまで待つ**（issue #197）。
+	// **人間の指示は「そのセッションのサブエージェントを含め完全停止するまで待って」である**
+	// （2026-09-06）。**待たずに閉じると、そのとき書きかけだった編集がまるごと消える。**
+	//
+	// **これは待つだけで、手放すかどうかの門にはしない。**
+	// **走っているサブエージェントの一覧は、枠待ちの最中は更新されない**（次の turn を
+	// 始めるときと `SubagentStop` を受けたときにしか空にならず、どちらも起きない）。
+	// **門にすると、手放しが1回も起きなくなる**（6段の段4 で issue #197 のコメントへ記録した）。
+	// **待つだけなら `claude.poll_wait_ms` で必ず打ち切られるので、止まらない。**
+	waitCtx, cancelWait := context.WithTimeout(
+		keepCtx, time.Duration(o.cfg.Claude.PollWaitMs)*time.Millisecond)
+	o.waitForRunningSubagents(waitCtx, rs)
+	cancelWait()
+
+	// **段4。pane を閉じるのは herdr の持ち時間で足りる。**socket の応答を1回待つだけである。
 	cleanupCtx, cancel := context.WithTimeout(
 		keepCtx, time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
 	defer cancel()
 	o.stopWorker(cleanupCtx, rs)
-	// **段4。run の登録から外す。**落とすとスロットを永久に埋める。
+	// **段5。run の登録から外す。**落とすとスロットを永久に埋める。
 	o.release(rs)
 	o.logger.Info("1週間の枠が明けるのを待つ上限を超えたので、担当を手放しました"+
 		"（次の担当は入札で決め直します。worktree は残します。カンバンへは書きません）",

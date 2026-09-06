@@ -405,10 +405,11 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 flowchart TB
     poll["巡回（30秒ごと）"] --> usage["usage API を読む<br/>5分に1回"]
     usage --> over{"余裕値が0以下の<br/>枠があるか"}
-    over -->|"超えた"| stop["新規の dispatch を止める<br/>走行中の turn は止めない"]
-    over -->|"超えていない"| normal["ふつうに dispatch する"]
+    over -->|"0以下"| stop["入札の要る issue を取らない<br/>担当が自分の issue は取る<br/>走行中の turn は止めない"]
+    over -->|"余裕あり"| normal["ふつうに dispatch する"]
 
-    stop --> waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
+    usage --> full{"使い切っている枠が<br/>あるか（使用率100）"}
+    full -->|"ある"| waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
     waiting --> reset{"resets_at を過ぎたか"}
     reset -->|"まだ"| waiting
     reset -->|"過ぎた"| probe["走行中の run へ<br/>継続の指示を1回送る"]

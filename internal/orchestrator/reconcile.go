@@ -242,9 +242,9 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // **外す契機は2つある。**
 //
 //	一、`resets_at` を過ぎたこと
-//	二、余裕の無い枠が1つも無くなったこと
+//	二、使い切っている枠が1つも無くなったこと
 //
-// **二を落としてはならない。**`resets_at` が `null` で返る枠だけに余裕が無いと、
+// **二を落としてはならない。**`resets_at` が `null` で返る枠だけを使い切っていると、
 // `QuotaResetAt` はゼロ値のままで、**一では永久に外れない。**
 // turn のループは同じ判定を持っているが、
 // **herdr が一時的に届かないと、待ちループは印を外さずに goroutine を畳む**（設計 3-27）。
@@ -271,7 +271,8 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 		case !st.QuotaResetAt.IsZero() && !now.Before(st.QuotaResetAt):
 			rs.clearWaitingQuota(now)
 		case !full:
-			o.logger.Info("枠に余裕が戻ったので、枠待ちの印を外します",
+			o.logger.Info("使い切っている枠が無くなったので、枠待ちの印を外します"+
+				"（入札できるとは限りません。余裕値はマージンのぶん手前で尽きます）",
 				"identifier", st.Identifier)
 			rs.clearWaitingQuota(now)
 		}
@@ -301,12 +302,15 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 //
 // ctx: 呼び出しに適用するコンテキスト。
 func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
+	// **写しは1回だけ読む**（設計 3-27）。**run ごとに取り直すと、
+	// 同じ巡回の中で run ごとに違う答えが返る。**
+	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
 	for _, rs := range o.snapshotRuns() {
 		// **枠待ちの印は見ない**（人間の決定。2026-09-06。issue #197）。
 		// **印は「使用率100」で立ち、この判定は「1週間の余裕値が0以下」で効く。**
 		// **印を門にすると、100%でしか手放せなくなり、
 		// 「入札するときの余裕値で判定して」という指示が効かなくなる。**
-		if !o.weeklyWaitExceeded(rs) {
+		if !o.weeklyWaitExceededWith(quotaSnap, quotaStale, rs) {
 			continue
 		}
 		if !o.paneStopped(ctx, rs) {
@@ -362,11 +366,17 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) bool {
 	}
 	// **版が変わっていれば、まだ何かを書き出している。**
 	//
-	// **`noteRevision` を呼んではならない。**あれは版を控え直すので、
-	// **このあと `checkStalls` が同じ版を見ても「変わっていない」と答えることになる。**
-	// **画面が動いている run を、動いていないものとして打ち切ることになる。**
-	// **控え直すのは `checkStalls` の仕事である。**ここは読むだけにする。
-	return agent.Revision == rs.snapshot().LastRevision
+	// **`LastRevision` と比べてはならない。**あれを書くのは着手のときと巡回の stall 検知だけで、
+	// **枠待ちの印が立っている run と `claude.turn_timeout_ms` が0以下の機械では stall 検知が走らない。**
+	// **凍りついた値と比べることになり、画面が1度でも動いたあとは永久に一致しない。**
+	//
+	// **`noteRevision` を呼ぶのも駄目である。**版を控え直すので、
+	// **このあと `checkStalls` が同じ版を見て「変わっていない」と答え、
+	// 画面が動いている run を打ち切ることになる。**
+	//
+	// **だから、この判定は自分が読んだ版だけを覚える。**
+	// **2回続けて同じなら止まっている。**初回は必ず偽を返す。
+	return rs.noteQuotaProbe(agent.Revision)
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
