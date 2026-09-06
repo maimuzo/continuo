@@ -108,11 +108,12 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.14 から v0.1.15 へ
 
-**破壊的変更が1つあります。**
+**破壊的変更が1つあります。****表のいちばん上の1行だけです。**
+**残る8つは、上げるだけで届きます。**当てるものはありません。
 
 | 何が変わったか | 当てる必要 |
 | --- | --- |
-| **持ち回りで機械を見分ける値が、機械の名前から GitHub のアカウント名に変わりました** | **同じカンバンを複数の機械で見張っている人だけ**（下の節）。**設定に足すものはありませんが、全部の機械を同時に入れ替えてください** |
+| **破壊的変更。持ち回りで機械を見分ける値が、機械の名前から GitHub のアカウント名に変わりました** | **同じカンバンを複数の機械で見張っている人だけ**（下の節）。**設定に足すものはありませんが、全部の機械を同時に入れ替えてください** |
 | **`continuo prompt --show` に `--url` が増えました** | **要りません。**付けなければ、いままでと1つも変わりません（下の節） |
 | **エージェントが、作業を始める前に worktree の分岐元を取り込むようになりました** | **要りません。**分岐元は continuo が worktree に書き残した記録から決まります（下の節） |
 | **途中経過の報告だけで終えた run に、continuo が成果の報告を書かせ直すようになりました** | **要りません**（下の節） |
@@ -121,8 +122,11 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **`continuo init` が2枚目（`continuo-ci.yaml`）を置くようになりました** | **もう一度 `continuo init` を叩いてください**（下の節）。**`--force` は要りません** |
 | **エージェントが、実装のレビュー結果を pull request のコメントへ貼るようになりました** | **要りません。**組み込みの指示書が変わっただけです（下の節） |
 | **エージェントが、設計のレビュー結果を issue のコメントへ貼るようになりました** | **要りません。**ただし**その目印を数える CI を置くかどうかは、あなたが決めます**（下の節） |
+| **`continuo doctor` の項目が16から18に増えました** | **要りません。**増えたのは `自動化` と `agent teams` の2つです（下の節） |
+| **continuo が issue へ出す「対応表を足してください」の案内が変わりました** | **要りません。**貼ると起動しなくなる形だったのを、**雛形に既にある行を書き換える形へ直しました**（下の節） |
+| **グループでまとめて直したとき、代表以外の issue にもコメントが付くようになりました** | **要りません。**設定にも `WORKFLOW.md` にも足すものはありません（下の節） |
 
-**1台だけで動かしているなら、1行目は読み飛ばしてかまいません。**
+**1台だけで動かしているなら、表のいちばん上の1行は読み飛ばしてかまいません。**
 **`WORKFLOW.md` に足すキーも、消すキーもありません。**
 
 ### 同じカンバンを複数の機械で見張っている場合 — 全部同時に入れ替えてください
@@ -445,6 +449,108 @@ pull request の検査が赤くなります。**
 cd ~/continuo-work && continuo prompt --show
 ```
 
+### `自動化` — カンバンの自動化が有効なのに、書き戻しの対応表が空
+
+**カンバンの組み込みの自動化が Status を書くと、continuo はそれを「知らない Status」と読んで走行中の run を止めます。**
+**止めずに続けさせる唯一の設定が `tracker.automated_state_rewrite` です。**
+**これが空のままで自動化を有効にしていると、PR を issue へ紐づけた瞬間に run が止まります。**
+
+**いままでは、止まってから初めて気づく状態でした。**この行が、起動する前に知らせます。
+
+```text
+! 自動化          Status を書きうるカンバンの自動化が 2件 有効なのに、tracker.automated_state_rewrite が空です
+```
+
+**記号は `!` までで、`✗` にはなりません。**空でも continuo は起動して走ります。
+**`Auto-add …` で始まる自動化は数えません**（item を載せるだけで Status を書かないためです）。
+**どの自動化がどの Status を書くかは GitHub の API が公開していない**ので、
+**有効な自動化の名前を並べます。**そのどれも Status を書かないなら、この注意は無視して構いません。
+
+**対応表の書き方は、下の「`tracker.automated_state_rewrite` — 自動化に動かされた Status を戻す」にあります。**
+
+### `agent teams` — Claude Code の agent teams が有効になっていないか
+
+**agent teams が有効な環境では、名前つきの `Agent` ツールの呼び出しが teammate として起動し、
+その許可の確認がリードの pane に出ます。**continuo はそれを `blocked` と読み、
+**pane を閉じて issue を `tracker.failure_state` へ落とします。**
+
+**いままでは文書に書いてあるだけでした。**この行が、起動する前に知らせます。
+
+```text
+✓ agent teams     読めた出どころに agent teams を有効にする設定はありません
+                  読んでいない出どころ: 組織の managed settings ／ …
+```
+
+**読むのは2か所だけです。**`claude.env` と、`continuo doctor` を叩いたシェルの環境変数です。
+**残り5か所は読みません**（組織の managed settings・対象リポジトリの2ファイル・
+利用者の `~/.claude/settings.json`・herdr の pane の環境）。
+**読んでいない出どころは、`✓` のときも必ず並びます。**読めた範囲だけを見て断言しないためです。
+
+**書いていないことは警告しません。**agent teams は Claude Code の既定で無効なので、
+**`1` を見つけたときだけ知らせます。**
+
+**詳しくは [docs/FAQ.md](FAQ.md) の「サブエージェントを呼んだ issue だけが `Blocked` に落ちる（agent teams）」にあります。**
+
+### 「この2行を足してください」の案内が変わりました
+
+**continuo が issue へ出していた案内は、`tracker:` の下へ塊を貼らせる形でした。**
+**`continuo init` が置いた雛形には `automated_state_rewrite: {}` の行が既にあるので、
+そのとおりに貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+
+**雛形に既にある行の `{}` を書き換える形へ直しました。**場所を見つける `grep` も一緒に出します。
+**同じ誤りが `docs/FAQ.md` と `docs/upgrading.md` の案内にもあったので、そちらも直しました。**
+
+**当てる必要はありません。**次に自動化が Status を動かしたときから、新しい案内が出ます。
+### 代表以外の issue にもコメントが付きます — 設定に足すものはありません
+
+**同じ原因の issue をグループにまとめ、代表を1件だけカンバンへ載せている人にだけ関わる話です。**
+グループを使っていないなら、見た目は何も変わりません。
+
+**v0.1.14 まで。**エージェントは代表の issue にだけ成果報告を書き、
+**代表以外に残るのは continuo が書く1行だけでした。**
+
+```
+<!-- continuo:self -->
+Status を **Ice Box → In Review** へ動かしました。
+
+- なぜ: `<owner>/<repo>#183` を担当している Claude Code が
+        `CONTINUO-STATUS: <owner>/<repo>#186 review` と表明したためです
+- いつ: 2026-09-05 06:55 (JST)
+- 書いたのは continuo です（人間の操作ではありません）
+```
+
+**何が直ったのかは1文字もありません。**その issue を報告した人は、代表を探して、
+その中から自分の分を読み分けることになっていました。
+
+**v0.1.15 から。**エージェントは、**表明で `review` か `blocked` を出した issue ごとに、
+その issue へ1件書きます。**
+
+```
+<!-- continuo:group -->
+<owner>/<repo>#183 と一緒に見ました。この issue の分は次のとおりです。
+
+- 何を直したか: …
+- 触ったファイル: …
+- pull request: …
+```
+
+**代表の側には、書いた先の URL が並びます。**代表に付くコメントの件数は増えません
+（エージェントが元から1件書いている成果報告の中に並べます）。
+
+**知っておくこと。**
+
+| 何 | 中身 |
+| --- | --- |
+| **先頭の印が違います** | `<!-- continuo:group -->` です。**`<!-- continuo:agent -->` ではありません。**あの印は「いま担当している issue のエージェントが書いた」という意味で、continuo が書かせ直しの要否を決めるのに使っています |
+| **18時間の時計は進みません** | 進めるのは `<!-- continuo:progress -->` が付いたコメントだけです。**この印では1秒も進みません** |
+| **`blocked` のときは中身が違います** | **先頭の1文は同じです。**直していないので、pull request の URL は書きません。**どこまで見て、なぜ止まったかを書きます。**先頭を分けないのは、あとから逆の表明で行が足されたときに**先頭だけが嘘になる**のを防ぐためです |
+| **このコメントだけを止めるつまみはありません** | `WORKFLOW.md` の本文から `### まとめて直してよい範囲` を消すと、まとめて直す指示は届かなくなります。**ただし組み込みの手順（表明の書き方と、直した issue ごとにその issue へ書かせる段）は残り、計画は代表の issue のコメント側にもあります。**節を消したときの振る舞いは測っていません |
+| **書かれたかどうかを continuo は見ていません** | **書かれていなければ、代表の pull request を見て確かめてください** |
+| **2件以上になることがあります** | **経路は2つです。**一、書き換える先を読めなかったとき（**1件も足さないより、重ねて残すほうを選んでいます**）。二、同じカンバンを別のアカウントの機械で見張っていて**担当が引き継がれたとき**（新しい機械は、前の機械が書いたコメントを自分のものとして見つけられません）。**一は1台で動かしていても起きます** |
+
+**症状から引きたいときは [FAQ.md](FAQ.md) の
+「グループでまとめて直したら、代表以外の issue にもコメントが増えた」を見てください。**
+
 ---
 
 ## v0.1.13 から v0.1.14 へ
@@ -686,12 +792,13 @@ continuo は自分の知らない Status になった issue を、
 **エージェントがどちらに従うかは決まらないので、「作られない」を前提にしないでください。**
 
 **直し方は `tracker.automated_state_rewrite` に対応表を書くことです。**
-**そのまま貼れる yaml と、足す場所は [FAQ.md](FAQ.md) の
+**書き換える場所の見つけ方は [FAQ.md](FAQ.md) の
 「エージェントが PR を作った直後に止まる（automated_state_rewrite）」にあります。**
 
 **左に何を書けばよいか分からないときは、書かなくて構いません。**
 次に自動化が Status を動かしたとき、continuo が issue のコメントに
-**「この2行を足してください」とそのまま貼れる形で書きます。**
+**「この行をこう書き換えてください」と、あなたのカンバンの Status 名を当てはめた形で書きます。**
+**場所を見つける `grep` も一緒に書きます。**
 
 ### 送られる文面が作り直されました — 本文の見出しを `###` へ下げることを勧めます
 
@@ -1098,13 +1205,32 @@ Status も動かず、issue にも何も書かれず、**カンバンの上で�
 **既定のままでよければ、何も足さなくて構いません。**足さなくても
 `warn_and_comment`（ダッシュボードにも issue にも出す）で動きます。
 
-**issue へ書かせたくないときだけ、front matter の `handoff:` の下へ1行足します。**
+**issue へ書かせたくないときだけ、`on_assignee_gate` の値を書き換えます。**
+
+**まず、いまあるかどうかを確かめてください。**
+
+```bash
+grep -n 'on_assignee_gate' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その値を書き換えます。**1行も出なければ、次で足してください
+（v0.1.11 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
 
 ```yaml
 tracker:
   provider:
     handoff:
-      on_assignee_gate: warn_only
+      # …（ほかの設定）
+      on_assignee_gate: warn_only   # 既定は warn_and_comment。この値を書き換える
 ```
 
 | 値 | ログの WARN | ダッシュボード | issue へのコメント |
@@ -1436,12 +1562,31 @@ worktree がどの branch にも載っていません（detached HEAD）: …
 
 ### 元に戻す1行
 
-**v0.1.9 までと同じ動きにしたいときは、`claude:` の下に3行足します。**
+**v0.1.9 までと同じ動きにしたいときは、`claude.tool_gate.mode` の値を書き換えます。**
+
+**まず、いまあるかどうかを確かめてください。**
+
+```bash
+grep -n -A2 'tool_gate' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その2行下の `mode:` の値を書き換えます**（`tool_gate:` は親のキーなので、その行に値はありません）。
+**1行も出なければ、次で足してください**（v0.1.9 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
 
 ```yaml
 claude:
+  # …（ほかの設定）
   tool_gate:
-    mode: off      # 判定を掛けない（v0.1.9 までと同じ動き）
+    mode: off      # 既定は public_only。この値を書き換える（off なら v0.1.9 までと同じ動き）
 ```
 
 **`on` にすると、非公開リポジトリの issue にも掛かります。**
@@ -1603,7 +1748,7 @@ language: ja
 | ログ | いつでも |
 | `continuo init` が書き出す `WORKFLOW.md` の中の説明 | いつでも。**画面ではなくファイルの中です。**設定のキーと値そのものは英語のままなので、読めなくても起動します |
 | `continuo doctor` の `config` の行 | 設定に不正な値を書いたとき。**理由の部分だけが日本語です**（例: `0より大きい整数にすること`）。**値を埋め忘れただけのときは英語で出ます** |
-| `continuo doctor` の「カンバン」の行 | カンバンを読めなかったとき。**GitHub と話す層が返すエラーの本文だけが日本語です**（例: `tracker エラー [tracker_response]: …`） |
+| `continuo doctor` の `board` の行 | カンバンを読めなかったとき。**GitHub と話す層が返すエラーの本文だけが日本語です**（例: `tracker エラー [tracker_response]: …`） |
 
 **確かめ方。**
 
@@ -1660,21 +1805,33 @@ cd ~/continuo-work && continuo doctor
   （v0.1.11 からは、**着手されなくなったこと**を WARN で知らせます。それより前の版では**ログに INFO が1行出るだけ**です。
   詳しくは [docs/FAQ.md](FAQ.md) の「人間が担当者になっている issue が、いつまでも着手されない」を見てください）
 
-### そのまま貼れる yaml
+### 足し方
 
-**雛形の値のままです。**下の値で `continuo init` が書き出す `WORKFLOW.md` の
-`tracker.provider.comments` の下に足せます（実際にこの値で `continuo doctor` を通してあります。
-下の「足したかどうかの確かめ方」）。
+**この5つのキーは、`continuo doctor` に足させてください。**
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**足りないキーだけを、正しい位置へ入れます。**既にあるキーには触らないので、
+front matter が重複キーになることはありません。
+
+**下の yaml を手で貼らないでください。**`tracker:` と `provider:` と `handoff:` は
+`continuo init` が置いた `WORKFLOW.md` に既にあるので、**塊ごと貼ると front matter が
+重複キーになり、continuo が起動しなくなります。**
+
+**下の yaml は、どこに何が入るかの図です。**値はどれも雛形のままです。
 
 ```yaml
 tracker:
   provider:
     handoff:
-      bid_window_ms: 180000
-      idle_timeout_ms: 64800000
-      recheck_interval_ms: 3600000
-      five_hour_margin_percent: 10
-      weekly_margin_percent: 10
+      # …（ほかの設定）
+      bid_window_ms: 180000              # ← 増えたキー
+      idle_timeout_ms: 64800000          # ← 増えたキー
+      recheck_interval_ms: 3600000       # ← 増えたキー
+      five_hour_margin_percent: 10       # ← 増えたキー
+      weekly_margin_percent: 10          # ← 増えたキー
 ```
 
 ### 足したかどうかの確かめ方
@@ -1687,7 +1844,7 @@ cd ~/continuo-work && continuo doctor
 
 | 出方 | どう読むか |
 | --- | --- |
-| `! 未記入の項目 … tracker.provider.handoff` | まだ足りません。上の yaml をそのまま `WORKFLOW.md` に足すか、`continuo doctor --missing-keys-patch WORKFLOW.md` で差分を作ってください |
+| `! 未記入の項目 … tracker.provider.handoff` | まだ足りません。上の `continuo doctor --missing-keys-patch` をもう一度叩いてください |
 | `✓ 未記入の項目 雛形にある設定項目はすべて書かれています（…件）` | 5つとも足せています |
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
@@ -1931,13 +2088,30 @@ continuo が戻すたびに自動化が書き直す押し合いになったら�
 
 ### 足す場所と中身
 
-**`tracker:` の下に足します。**`continuo init` が置いた雛形の Status 名のままなら、
-次の2行をそのまま貼れば起動します。
+**雛形には `automated_state_rewrite: {}` の行が既にあります。**その `{}` を書き換えます。
+**塊ごと貼り替えないでください。**`tracker:` も `automated_state_rewrite:` も既にあるので、
+**貼ると front matter が重複キーになり、continuo が起動しなくなります。**
+
+**まず、いまあるかどうかを確かめてください。**
+
+```bash
+grep -n 'automated_state_rewrite' ~/continuo-work/WORKFLOW.md
+```
+
+**行が出たら、その `{}` を下の図のように書き換えます。**1行も出なければ、次で足してから書き換えてください
+（v0.1.8 以前の `continuo init` が置いた `WORKFLOW.md` には、このキーがありません）。
+
+```bash
+cd ~/continuo-work && continuo doctor --missing-keys-patch WORKFLOW.md | patch -p0 WORKFLOW.md
+```
+
+**下の yaml は、どこに何が入るかの図です。**
 
 ```yaml
 tracker:
-  automated_state_rewrite:
-    "Todo": "In Progress"   # 自動化が書く Status: 戻す先の Status
+  # …（ほかの設定）
+  automated_state_rewrite:            # 既にある行。末尾の {} を消す
+    "Todo": "In Progress"             # ← これを足す（自動化が書く Status: 戻す先の Status）
 ```
 
 **Status の名前は、あなたのカンバンと `WORKFLOW.md` に合わせて置き換えてください。**上の例は
@@ -1980,7 +2154,8 @@ continuo が知っている Status なので、そもそも止まらないから
 **書かなくて構いません。**空のままにしておいてください。
 
 **次に自動化が Status を動かしたとき、continuo がその issue のコメントに
-「この2行を足してください」と、そのまま貼れる形で書きます。**
+「この行をこう書き換えてください」と、あなたのカンバンの Status 名を当てはめた形で書きます。**
+**場所を見つける `grep` も一緒に書きます。**
 誰が Status を書いたか（人間か、カンバンの自動化か）は continuo が見分けるので、
 **自動化だったときだけ、その案内が出ます。**
 
@@ -2006,7 +2181,7 @@ cd ~/continuo-work && continuo doctor; echo "exit=$?"
 
 **上の2つは `✓`、いちばん下は `!` です。**
 **`!` のままでも continuo は起動します**（終了コードも 0 です）。
-直し方は [FAQ.md](FAQ.md) の「doctor が通らないとき」にあります。
+直し方は [FAQ.md](FAQ.md) の「continuo doctor が赤くなるとき」にあります。
 
 **`✗ 設定ファイル` が出たときは、対応表そのものが弾かれています。**
 左右の決め方をもう一度読んでください。**この場合 continuo は起動しません。**

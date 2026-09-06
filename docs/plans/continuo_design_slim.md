@@ -638,9 +638,11 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 
 **そもそも適用外。**第10節（Codex のプロトコル）／5.3.6 の `codex` セクション／Appendix A（SSH の worker 拡張）。
 
-**REQUIRED だが作らないと決めたもの。**6.2 の設定の読み直し。**`WORKFLOW.md` を書き換えたら再起動する。**
-再起動は安全に作ってあり（`restart.orphan_running_action`。worktree も pane も残る）、
-実行中の run へ反映すると turn の途中で判断の基準が食い違うため。
+**REQUIRED だが一部だけ実装しているもの。**6.2 の設定の読み直し（3-24）。
+**走行中に差し替えるのは4キーだけである**（`on_assignee_gate` / `automated_state_rewrite` /
+`max_concurrent_agents` / `max_concurrent_agents_by_state`）。**残りは凍結し、変わっていたら「効きません」と知らせる。**
+**理由。**新しい Status 名を持ち込むとカンバンへ Status を書けなくなり、
+走っている run が起動時の値を前提に外部（プロンプト・worktree・branch）へ既に書いているため。
 
 **設定キーとして持たないもの。**書けば未知のキーとして起動を止める（詳細は [continuo_design.md](continuo_design.md) の 8-4）。
 

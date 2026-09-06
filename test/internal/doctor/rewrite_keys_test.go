@@ -91,7 +91,7 @@ func TestDoctor_対応表のキーがカンバンに無ければ注意を出す(
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
 	// **カンバンを読んだときの応答を使い回す。**この検査のためにリクエストを増やさない。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items", "workflows"}) {
 		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
 	}
 }

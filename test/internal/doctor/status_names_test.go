@@ -46,7 +46,7 @@ func TestDoctor_カンバンに紛らわしいStatusが並んでいれば注意�
 		t.Fatalf("注意だけなのに終了コードが %d だった\n%s", report.ExitCode(), renderReport(t, report))
 	}
 	// **カンバンを読んだときの応答を使い回す。**この検査のためにリクエストを増やさない。
-	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items"}) {
+	if got := fx.GitHub.Queries(); !equalStrings(got, []string{"bootstrap", "items", "workflows"}) {
 		t.Fatalf("カンバンへ送ったクエリが想定と違う: %v", got)
 	}
 }

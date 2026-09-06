@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -281,6 +282,31 @@ func buildHandoffComment(identifier, reason string, hc handoffContext, move stat
 	if hc.SubagentDir != "" {
 		lines = append(lines, fmt.Sprintf("- サブエージェントの記録の置き場所: `%s`", hc.SubagentDir))
 	}
+	// **止めた時点で走っていたバックグラウンド処理を出す**（設計 3-81）。
+	// **`shell`（`run_in_background` の Bash）も入る。**pane を閉じると途中で終わるので、
+	// **人間が「何が道連れになったか」を知る唯一の手がかりである。**
+	if len(hc.BackgroundTasks) > 0 {
+		quoted := make([]string, 0, len(hc.BackgroundTasks))
+		for _, t := range hc.BackgroundTasks {
+			quoted = append(quoted, "`"+t+"`")
+		}
+		line := "- **止めた時点で走っていたバックグラウンド処理**: " + strings.Join(quoted, " / ")
+		// **切り捨てたなら、切り捨てたと書く**（設計 3-81b）。**黙って上から数件だけ出すと、
+		// 読んだ人は「道連れになったのはこれで全部だ」と読む。**subagent の記録の側は
+		// 置き場所のディレクトリを併せて出すので追えるが、**こちらには追える先が無い。**
+		//
+		// **`fmt.Sprintf` を使わない。**この package の人間向けの文言はまだ資源へ
+		// 移していないが、**新しく足すぶんは資源に載せる**という決まりがある
+		// （`test/internal/testdesign` の「画面に出す文言を日本語で直に書いていない」）。
+		// **ここだけを資源へ移すと、1つのコメントの中で日本語と英語が混ざる。**
+		// 同じ表の説明が「**中途半端に訳すと、全部日本語であるより読みにくくなる**」と
+		// 書いているので、**この関数の文言はまとめて移すまで日本語のままにし、
+		// 数を差し込むところだけ `strconv` で組み立てる。**
+		if hc.BackgroundTasksOmitted > 0 {
+			line += "（ほかに " + strconv.Itoa(hc.BackgroundTasksOmitted) + " 件）"
+		}
+		lines = append(lines, line)
+	}
 	if hc.SettingsPath != "" {
 		lines = append(lines, fmt.Sprintf("- continuo が渡した設定: `%s`", hc.SettingsPath))
 	}
@@ -323,6 +349,18 @@ type handoffContext struct {
 	// SettingsPath は continuo が書いた Claude Code の設定ファイルの絶対パスである。
 	// **worktree の中ではない**（設計 3-12）。
 	SettingsPath string
+	// BackgroundTasks は、止めた時点で「まだ走っている」と申告されていた
+	// バックグラウンド処理の名前である（設計 3-81）。
+	//
+	// **種類で絞らない。**`shell`（`run_in_background` の Bash）も入る。
+	// **件数は `handoffBackgroundTaskLimit` 件までに切ったものを渡すこと。**
+	// 申告は hook から来る外部入力であり、そのまま issue のコメントへ載る（設計 3-23）。
+	BackgroundTasks []string
+	// BackgroundTasksOmitted は、上の切り捨てで落とした件数である（設計 3-81b）。
+	//
+	// **0 でなければ「ほかに N 件」と書く。****黙って上から数件だけ出すと、
+	// 読んだ人は「道連れになったのはこれで全部だ」と読む。**
+	BackgroundTasksOmitted int
 }
 
 // statusMove は continuo がカンバンの Status を動かした記録である（設計 3-29）。

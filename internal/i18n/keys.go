@@ -68,6 +68,62 @@ const (
 	// KeyDoctorLabelMissingKeys は雛形にあって WORKFLOW.md に書かれていない設定項目を
 	// 見る検査の見出し語である。
 	KeyDoctorLabelMissingKeys Key = "doctor.label.missing_keys"
+	// KeyDoctorLabelAutomations はカンバンの自動化と書き戻しの対応表の噛み合いを
+	// 見る検査の見出し語である（設計 3-32。issue #209）。
+	KeyDoctorLabelAutomations Key = "doctor.label.automations"
+	// KeyDoctorLabelAgentTeams は Claude Code の agent teams が有効になっていないかを
+	// 見る検査の見出し語である（設計 3-70。issue #137）。
+	KeyDoctorLabelAgentTeams Key = "doctor.label.agent_teams"
+)
+
+// doctor の検査「自動化」（設計 3-32 / 3-54。issue #209）。
+const (
+	// KeyDoctorAutomationsConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorAutomationsConfigUnreadable Key = "doctor.automations.config_unreadable"
+	// KeyDoctorAutomationsBoardUnreadable は上流のカンバンが落ちたときの説明に出る。
+	KeyDoctorAutomationsBoardUnreadable Key = "doctor.automations.board_unreadable"
+	// KeyDoctorAutomationsUnreadable は応答に自動化の一覧が無かったときの説明に出る。
+	KeyDoctorAutomationsUnreadable Key = "doctor.automations.unreadable"
+	// KeyDoctorAutomationsNoneEnabled は有効な自動化が1つも無いときの説明に出る。
+	KeyDoctorAutomationsNoneEnabled Key = "doctor.automations.none_enabled"
+	// KeyDoctorAutomationsOK は有効な自動化があり、対応表も書かれているときの説明に出る。
+	KeyDoctorAutomationsOK Key = "doctor.automations.ok"
+	// KeyDoctorAutomationsEmptyTable は有効な自動化があるのに対応表が空のときの説明に出る。
+	KeyDoctorAutomationsEmptyTable Key = "doctor.automations.empty_table"
+	// KeyDoctorAutomationsNoteWorkflow は有効な自動化1件ずつの内訳に出る。
+	KeyDoctorAutomationsNoteWorkflow Key = "doctor.automations.note_workflow"
+	// KeyDoctorAutomationsNoteMore は内訳の上限を超えたぶんの件数に出る。
+	KeyDoctorAutomationsNoteMore Key = "doctor.automations.note_more"
+	// KeyDoctorAutomationsNoteScope はこの検査が見ていない範囲の説明に出る。
+	KeyDoctorAutomationsNoteScope Key = "doctor.automations.note_scope"
+	// KeyDoctorAutomationsRemedyRewrite は対応表を書く直し方に出る。
+	KeyDoctorAutomationsRemedyRewrite Key = "doctor.automations.remedy_rewrite"
+	// KeyDoctorAutomationsRemedyDisable は自動化を切る直し方に出る。
+	KeyDoctorAutomationsRemedyDisable Key = "doctor.automations.remedy_disable"
+	// KeyDoctorAutomationsRemedyIgnore は無視してよい場合の案内に出る。
+	KeyDoctorAutomationsRemedyIgnore Key = "doctor.automations.remedy_ignore"
+)
+
+// doctor の検査「agent teams」（設計 3-70。issue #137）。
+const (
+	// KeyDoctorAgentTeamsConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorAgentTeamsConfigUnreadable Key = "doctor.agent_teams.config_unreadable"
+	// KeyDoctorAgentTeamsOff は claude.env で明示的に切ってあるときの説明に出る。
+	KeyDoctorAgentTeamsOff Key = "doctor.agent_teams.off"
+	// KeyDoctorAgentTeamsOnSettings は claude.env で有効にしているときの説明に出る。
+	KeyDoctorAgentTeamsOnSettings Key = "doctor.agent_teams.on_settings"
+	// KeyDoctorAgentTeamsOnShell は doctor を叩いたシェルで有効になっているときの説明に出る。
+	KeyDoctorAgentTeamsOnShell Key = "doctor.agent_teams.on_shell"
+	// KeyDoctorAgentTeamsUnknownValue は 0 でも 1 でもない値が書かれているときの説明に出る。
+	KeyDoctorAgentTeamsUnknownValue Key = "doctor.agent_teams.unknown_value"
+	// KeyDoctorAgentTeamsNotFound は読めた出どころに有効化が無かったときの説明に出る。
+	KeyDoctorAgentTeamsNotFound Key = "doctor.agent_teams.not_found"
+	// KeyDoctorAgentTeamsNoteUnread は読んでいない出どころの内訳に出る。
+	KeyDoctorAgentTeamsNoteUnread Key = "doctor.agent_teams.note_unread"
+	// KeyDoctorAgentTeamsRemedyOff は agent teams を切る直し方に出る。
+	KeyDoctorAgentTeamsRemedyOff Key = "doctor.agent_teams.remedy_off"
+	// KeyDoctorAgentTeamsRemedyWhy は切らないとどうなるかの説明に出る。
+	KeyDoctorAgentTeamsRemedyWhy Key = "doctor.agent_teams.remedy_why"
 )
 
 // doctor の検査「未記入の項目」（設計 3-75。issue #85）。
@@ -630,6 +686,9 @@ const (
 	KeyCLISetupErrWouldBreakConfig Key = "cli.setup.err_would_break_config"
 	// KeyCLISetupBoardUsing はどのカンバンの Status の選択肢を読むかを出す。
 	KeyCLISetupBoardUsing Key = "cli.setup.board_using"
+	// KeyCLISetupWarnConfigLoad は、言語を決めるために読んだ設定を読めなかったときに出る。
+	// **対話は止めない。**続けることと、何語で出すことになったかを添える。
+	KeyCLISetupWarnConfigLoad Key = "cli.setup.warn_config_load"
 	// KeyCLISetupErrDirNotFound は置き場所のディレクトリが無いときに出る。
 	KeyCLISetupErrDirNotFound Key = "cli.setup.err_dir_not_found"
 	// KeyCLISetupErrNotADirectory は置き場所がディレクトリでないときに出る。
@@ -2317,6 +2376,12 @@ const (
 	// KeyOrchestratorConfirmStartupNotInteractive は、agent は居るが入力を受け付けられない
 	// ことを表す（`interactive_ready` が偽）。
 	KeyOrchestratorConfirmStartupNotInteractive Key = "orchestrator.confirm_startup.not_interactive"
+	// KeyOrchestratorErrStartupBusy は、herdr は agent を登録していないが、
+	// Claude Code は生きていて turn を走らせていることを表す（設計 3-80）。
+	//
+	// **これは失敗ではない。**受けた側は pane を閉じず、1回目の turn も送らずに、
+	// 走っている turn の終わりを待つ。
+	KeyOrchestratorErrStartupBusy Key = "orchestrator.err_startup_busy"
 	// KeyOrchestratorRestoreBrokenWorktreeStop は、身元を確かめられない worktree を見つけて
 	// 起動を止めるときに出る（3-49。`workspace.on_broken_worktree` が `stop` のとき）。
 	KeyOrchestratorRestoreBrokenWorktreeStop Key = "orchestrator.restore.broken_worktree_stop"
@@ -2534,6 +2599,29 @@ var allKeys = []Key{
 	KeyDoctorRewriteKeysMissing,
 	KeyDoctorRewriteKeysNote,
 	KeyDoctorRewriteKeysRemedy,
+	KeyDoctorLabelAutomations,
+	KeyDoctorAutomationsConfigUnreadable,
+	KeyDoctorAutomationsBoardUnreadable,
+	KeyDoctorAutomationsUnreadable,
+	KeyDoctorAutomationsNoneEnabled,
+	KeyDoctorAutomationsOK,
+	KeyDoctorAutomationsEmptyTable,
+	KeyDoctorAutomationsNoteWorkflow,
+	KeyDoctorAutomationsNoteMore,
+	KeyDoctorAutomationsNoteScope,
+	KeyDoctorAutomationsRemedyRewrite,
+	KeyDoctorAutomationsRemedyDisable,
+	KeyDoctorAutomationsRemedyIgnore,
+	KeyDoctorLabelAgentTeams,
+	KeyDoctorAgentTeamsConfigUnreadable,
+	KeyDoctorAgentTeamsOff,
+	KeyDoctorAgentTeamsOnSettings,
+	KeyDoctorAgentTeamsOnShell,
+	KeyDoctorAgentTeamsUnknownValue,
+	KeyDoctorAgentTeamsNotFound,
+	KeyDoctorAgentTeamsNoteUnread,
+	KeyDoctorAgentTeamsRemedyOff,
+	KeyDoctorAgentTeamsRemedyWhy,
 	KeyDoctorCleanupStatesConfigUnreadable,
 	KeyDoctorCleanupStatesDisabled,
 	KeyDoctorCleanupStatesOK,
@@ -2728,6 +2816,7 @@ var allKeys = []Key{
 	KeyCLISetupErrKeysNotRewritableRemedy,
 	KeyCLISetupErrWouldBreakConfig,
 	KeyCLISetupBoardUsing,
+	KeyCLISetupWarnConfigLoad,
 	KeyCLISetupErrDirNotFound,
 	KeyCLISetupErrNotADirectory,
 	KeyCLISetupErrSymlink,
@@ -3348,6 +3437,7 @@ var allKeys = []Key{
 	KeyOrchestratorConfirmStartupWorkingTimeout,
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,
+	KeyOrchestratorErrStartupBusy,
 	KeyOrchestratorRestoreBrokenWorktreeStop,
 	KeyOrchestratorRestoreHookListenFailed,
 	KeyDaemonErrStartup,

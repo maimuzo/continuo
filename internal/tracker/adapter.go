@@ -79,6 +79,22 @@ type Adapter struct {
 	statusOptionNamesFold map[string]string
 }
 
+// ProjectWorkflow はカンバンの組み込みの自動化1件である（設計 3-32 の見出し語 `自動化`）。
+//
+// **持てるのは名前と有効かどうかだけである。**`ProjectV2Workflow` が公開しているのは
+// `createdAt` / `enabled` / `fullDatabaseId` / `id` / `name` / `number` / `project` /
+// `updatedAt` の8つで（2026-09-05 に introspection で確認）、
+// **どの Status を書くかを返すフィールドは1つも無い。**
+// だから `continuo doctor` は「Status を書きうる」までしか言えない。
+type ProjectWorkflow struct {
+	// Number はカンバンの中での自動化の番号である（GitHub の画面に出る `#1` など）。
+	Number int
+	// Name は自動化の名前である（`Pull request linked to issue` など。GitHub の綴りのまま）。
+	Name string
+	// Enabled はその自動化が有効かどうかである。
+	Enabled bool
+}
+
 // NewAdapter は Adapter を作る。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション（設計 5-2）。
@@ -486,6 +502,57 @@ func (a *Adapter) StatusOptionNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// FetchProjectWorkflows はカンバンの組み込みの自動化を、GitHub が返した順のまま先頭100件まで返す
+// （設計 3-32 の見出し語 `自動化`。issue #209）。
+//
+// **`continuo doctor` だけが呼ぶ。**常駐プロセスはこの値を使わない。
+//
+// **起動時の検査のクエリへ混ぜてはならない。**あちらは `do`（`allowNotFound` が偽）で
+// 送るので、**GraphQL が `errors` を1件でも返した時点で Bootstrap ごと落ちる。**
+// `workflows` を読む権限が無いトークンや、この field を持たない GitHub Enterprise Server では、
+// **いままで起動していた continuo が起動しなくなる。**
+// **別のリクエストにしておけば、落ちても doctor の見出し語 `自動化` が `!` になるだけで済む。**
+//
+// **戻り値の nil と長さ0を区別すること。**
+//
+//	nil    … 応答に `workflows` が無かった（読めなかった）。**`✓` にしてはならない**
+//	長さ0  … 自動化が1件も無い
+//
+// **`Bootstrap` を通していなくても呼べる。**このクエリは project を番号で引くだけで、
+// Adapter が覚えている値を1つも使わない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// **`first: 100` で切ってある。**GitHub の組み込みの自動化は2026-09-05 時点で10個前後なので、
+// ページを送る分岐は作っていない。**101件目以降があるカンバンでは、そこを見ていない。**
+//
+// 戻り値の1つ目: 自動化の一覧（GitHub が返した順。先頭100件まで）。応答に `workflows` が無ければ nil
+// （project そのものが返らなかったときも nil である。**その判定は `Bootstrap` が持っている**）。
+// 戻り値の2つ目: 呼び出しそのものが失敗した場合のエラー。
+func (a *Adapter) FetchProjectWorkflows(ctx context.Context) ([]ProjectWorkflow, error) {
+	var resp projectWorkflowsQueryResponse
+	vars := map[string]any{"login": a.owner, "number": a.projectNumber}
+	if err := a.gql.do(ctx, projectWorkflowsQueryTemplate, vars, &resp); err != nil {
+		return nil, err
+	}
+	// **project が見つからないときも、ここではエラーにしない。**
+	// **その判定は `Bootstrap` が持っている**（呼び出し元の `continuo doctor` は
+	// 先に `Bootstrap` を通しており、見つからなければ見出し語 `カンバン` が `✗` になる）。
+	// **同じことを2箇所で判定すると、直す先を2つ案内することになる。**
+	// ここは nil を返し、見出し語 `自動化` を `!`（確かめられなかった）に落とす。
+	if resp.RepositoryOwner == nil ||
+		resp.RepositoryOwner.ProjectV2 == nil ||
+		resp.RepositoryOwner.ProjectV2.Workflows == nil {
+		// **「1件も無い」と取り違えると、doctor が確かめていないことを `✓` で通す。**
+		return nil, nil
+	}
+	conn := resp.RepositoryOwner.ProjectV2.Workflows
+	out := make([]ProjectWorkflow, 0, len(conn.Nodes))
+	for _, w := range conn.Nodes {
+		out = append(out, ProjectWorkflow{Number: w.Number, Name: w.Name, Enabled: w.Enabled})
+	}
+	return out, nil
 }
 
 // writeTargets は書き込み（updateProjectV2ItemFieldValue）に要る値を、
