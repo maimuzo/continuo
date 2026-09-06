@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
@@ -192,5 +193,28 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 	bare := "continuo:progress"
 	if strings.Contains(sent, "<!-- "+bare+" -->") {
 		t.Errorf("進捗報告の印そのものが送る文面に埋まっています:\n%s", sent)
+	}
+
+	// **機械が書いた印も書かせる**（設計 3-82。issue #245）。
+	// **落とすと、書かせ直した報告だけ人間が書いたものと見分けが付かなくなる。**
+	if !strings.Contains(sent, config.AIMarker) {
+		t.Errorf("機械が書いた印（%s）を書かせていません:\n%s", config.AIMarker, sent)
+	}
+	// **エージェントの印より後ろに置かせる。**先に置かせると `c.IsAgent` が偽になり、
+	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
+	marker := fx.Config.Tracker.Comments.Marker
+	if i, j := strings.Index(sent, marker), strings.Index(sent, config.AIMarker); i < 0 || j < 0 || j < i {
+		t.Errorf("機械が書いた印が、エージェントの印より前にあります（%d と %d）:\n%s", i, j, sent)
+	}
+	// **見本の印は行頭から始めさせる。**字下げした見本を写すと、印が本文の一部になる。
+	// `FetchComments` の先頭一致も `handoff.StartsAsProgressReport` も、行頭の印しか数えない。
+	for _, line := range strings.Split(sent, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != config.AIMarker && trimmed != marker {
+			continue
+		}
+		if line != trimmed {
+			t.Errorf("見本の印が字下げされています: %q", line)
+		}
 	}
 }

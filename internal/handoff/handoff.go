@@ -511,6 +511,10 @@ func IsMarked(body string) bool {
 // window: 入札の締め切りまでの長さ（`tracker.provider.handoff.bid_window_ms`）。
 // **0 以下なら「締め切りを待たない」と書く**（そういう設定にできる）。
 // 戻り値: 印を先頭に置いたコメント本文。
+//
+// **GitHub に載る本文とは1行違う。**投稿する直前に
+// [internal/tracker](../tracker) の `ComposeCommentBody` が、印の直後へ `<!-- continuo:ai -->` を足すためである（設計 3-82）。
+// **先頭の印は動かないので、`IsMarked` も `payloadAfterMarker` もそのまま通る。**
 func FormatBid(b Bid, window time.Duration) string {
 	return config.HandoffBidMarker + "\n" + marshalLine(b) + "\n\n" +
 		i18n.T(i18n.KeyHandoffBidCandidacy, b.Author) + "\n" +
@@ -550,6 +554,10 @@ func bidDeadlineLine(window time.Duration) string {
 //
 // h: 書く hold。
 // 戻り値: 印を先頭に置いたコメント本文。
+//
+// **GitHub に載る本文とは1行違う。**投稿する直前に
+// [internal/tracker](../tracker) の `ComposeCommentBody` が、印の直後へ `<!-- continuo:ai -->` を足すためである（設計 3-82）。
+// **先頭の印は動かないので、`IsMarked` も `payloadAfterMarker` もそのまま通る。**
 func FormatHold(h Hold) string {
 	return config.HandoffHoldMarker + "\n" + marshalLine(h) + "\n\n" +
 		i18n.T(i18n.KeyHandoffHoldAssigned, h.Assignee) + "\n" +

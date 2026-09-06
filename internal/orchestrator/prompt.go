@@ -107,7 +107,11 @@ func BuildContinuationPrompt(
 // しかも次の行が「本文の中では囲みを外した形で」と言うので、
 // **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
-// 書き分けは [docs/upgrading.md:239-245](docs/upgrading.md#L239-L245) に揃える。
+// 書き分けは [docs/upgrading.md:242-248](docs/upgrading.md#L242-L248) に揃える。
+//
+// **機械が書いた印（`config.AIMarker`）も書かせる**（設計 3-82）。
+// **`marker` の次の行に置かせる。**先に置かせると `c.IsAgent` が偽になり、
+// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
 //
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
@@ -115,8 +119,22 @@ func BuildContinuationPrompt(
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
+	// **印の2行は字下げしない。**印は本文の行頭から始まらなければならない。
+	// **`FetchComments`（[internal/tracker/adapter.go](../tracker/adapter.go)）の先頭一致も、
+	// `handoff.StartsAsProgressReport`（[internal/handoff/assess.go](../handoff/assess.go)）も、
+	// 行頭ちょうどの印しか数えない。**
+	// **字下げした見本を送ると、写したエージェントが違う形の本文を書く。**
+	// **囲みの中へ入れる。**行頭の `<!--` は、送る文面を組み立てる経路（`prompt.Build`）が
+	// **コメントとして落とす。**いまこの文面はその経路を通らないが、
+	// **通す形へ変わったときに、印の行だけが黙って消える。**
+	// [internal/prompt/builtin.md](../prompt/builtin.md) の 5-3 も、同じ理由で囲みに入れている。
+	fmt.Fprintf(&b, "```bash\ngh issue comment %s --body \"%s\n%s\nここに何をしたかを書く\"\n```\n\n",
+		issueURL, marker, config.AIMarker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
+	// **印の順序を名指しする**（設計 3-82）。**`marker` を先に、`AIMarker` をその次に置く。**
+	// 逆にすると `c.IsAgent` が偽になり、**書いたのに `failure_state` へ落ちる。**
+	fmt.Fprintf(&b, "その次の行に %s を入れてください（人間ではなく機械が書いた、という印です）。"+
+		"**%s より前へ置かないでください。**\n", config.AIMarker, marker)
 	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
 	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、
 	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。

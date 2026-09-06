@@ -387,7 +387,7 @@ worktree は fork の clone から切るので、**パスが issue のリポジ�
 **「どの issue か」は、パスの最下層が既に持っている。新しいコマンドは作らない。**
 スラグは issue から作るので（`herdr.worktree.branch_template` の既定は
 `continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}`。
-[internal/config/default.go:164](../../../internal/config/default.go#L164)）、
+[internal/config/default.go:196](../../../internal/config/default.go#L196)）、
 `~/worktrees/github.com/myorg/project/continuo-myorg-internal-tasks-42` は
 **2・3階層目がコードのリポジトリ、最下層が issue** である。**両方が1本のパスに出ている。**
 
@@ -438,7 +438,7 @@ cross-repo の worktree は毎回そこで落ち、一度も引き継がれな�
 
 **そこで `pathAgrees` から owner/repo の比較を外し、スラグの比較に置き換える。**
 既定の `branch_template` は issue の owner・repo・番号の3つを含むので
-（[internal/config/default.go:164](../../../internal/config/default.go#L164)）、
+（[internal/config/default.go:196](../../../internal/config/default.go#L196)）、
 **`issue_url` を別の issue に差し替えると、作り直したスラグがディレクトリ名と合わなくなる。**
 `pathAgrees` が守っているのはそこである（restore.go:660-664 の「無関係の issue の pane を閉じる」）。
 **弱くなっていない。**同じ形が [internal/abandon/abandon.go:534-551](../../../internal/abandon/abandon.go#L534-L551) に既にあり、
@@ -588,7 +588,7 @@ continuo が起動しなくなる。**だから広げない。
 pane が残っていればそちらから引けるが、**pane が無ければ手掛かりが1つも無い。**
 数える条件を広げると、その worktree が「壊れたもの」に積まれ、
 **復元できないまま [internal/orchestrator/restore.go:1043-1045](../../../internal/orchestrator/restore.go#L1043-L1045) が
-起動を止める**（[internal/config/default.go:92-94](../../../internal/config/default.go#L92-L94) の
+起動を止める**（[internal/config/default.go:124-126](../../../internal/config/default.go#L124-L126) の
 `OnBrokenWorktree: OnBrokenWorktreeStop`）。
 
 **残る帰結を書いておく。**条件を広げないので、
@@ -721,7 +721,7 @@ tag の取得だけで数秒かかる。**`--all` も `--prune` も付けない�
 同時に決める。**ログだけにして黙って飛ばす経路を作らない。**
 
 **頻度の見積り。**worktree を作るのは issue 1件につき1回である。
-巡回（既定 30 秒。[internal/config/default.go:87](../../../internal/config/default.go#L87)）の
+巡回（既定 30 秒。[internal/config/default.go:119](../../../internal/config/default.go#L119)）の
 うち、**新しく着手する issue が無い回は0回**になる。
 
 **上限。**`workspace.fetch_timeout_ms`（新設。既定 30000）。
@@ -937,7 +937,7 @@ workspace:
 
 **`continuo init` が書く既定値も同じにする**
 （[internal/scaffold/template.go](../../../internal/scaffold/template.go) の
-front matter と [internal/config/default.go:89-95](../../../internal/config/default.go#L89-L95)）。
+front matter と [internal/config/default.go:121-127](../../../internal/config/default.go#L121-L127)）。
 **[internal/config/types.go](../../../internal/config/types.go) の `WorkspaceConfig` にフィールドを足し、validate も足す。**
 
 **[docs/plans/continuo_design.md](../continuo_design.md) 5-2 の ```yaml ブロックにも同じ行を足す。**
@@ -1016,7 +1016,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **引き合いに出さない。**
 
 **`<!-- continuo:agent -->` も本文に書かない。**あれは
-[internal/orchestrator/prompt.go:282](../../../internal/orchestrator/prompt.go#L282) が書いているとおり
+[internal/orchestrator/prompt.go:300](../../../internal/orchestrator/prompt.go#L300) が書いているとおり
 `PostComment` が自分で付けるものであり、**本文に書くと二重になる。**
 
 **依存する別の作業。**#134（ダッシュボードに「着手できずに止まっているもの」を出す）の設計が

@@ -100,7 +100,7 @@ Go の関数名は `stillWorkingAfterStop` とする（6 節）。
 | **引き継いだ run** | [internal/orchestrator/turn.go:128](../../../internal/orchestrator/turn.go#L128)。`agent.prompt` を送らずに `confirmTurnEnd` から入る（3-4 の段5a2） |
 
 **そのときの時刻。**continuo は **2.0 秒**で窓を閉じ、**2.5 秒**で transcript を読む
-（`settle_ms` の既定 2000ms は [internal/config/default.go:134](../../../internal/config/default.go#L134)、
+（`settle_ms` の既定 2000ms は [internal/config/default.go:166](../../../internal/config/default.go#L166)、
 `transcriptFirstWait` の 500ms は [internal/orchestrator/orchestrator.go:65](../../../internal/orchestrator/orchestrator.go#L65)）。
 **書き直しの中央値は 21.1 秒である**（8 節）。**間に合っていない。**
 
@@ -200,7 +200,7 @@ func (o *Orchestrator) stillWorkingAfterStop(ctx context.Context, rs *runState) 
 **どちらも「新しい `Stop` は二度と来ない」。**出口を置かないと、ループの先頭 → `awaitStop` が
 空振り → 枠待ちでない → `blocked` でもない → `continue` を延々と繰り返し、
 **巡回の stall 検知が拾うまで run が空転する。**そのときの上限は
-`turn_timeout_ms`（既定 3600000ms。[internal/config/default.go:137](../../../internal/config/default.go#L137)）で、
+`turn_timeout_ms`（既定 3600000ms。[internal/config/default.go:169](../../../internal/config/default.go#L169)）で、
 **最大1時間である。**打ち切られると `RetryCount` を1消費し、issue に打ち切りのコメントが残る。
 
 **だから出口を置く。**待ち直している間は `settle_ms` ごとに `agent.get` を1回読み、

@@ -84,8 +84,11 @@ func TestFetchComments_設定がゼロ値でも取得を止めない(t *testing.
 // IsSelf が true になることを確認する（設計 3-25: 「代筆したものには self_marker の印を
 // 付けて、エージェントが書いたものと区別する」）。
 // 与える情報: 素の本文 "作業内容の要約" と self_marker。
-// 成功条件: 偽サーバが受け取ったミューテーションの body 変数が
-// "<self_marker>\n作業内容の要約" になっていること。戻り値の IsSelf が true であること。
+// 成功条件: 偽サーバが受け取ったミューテーションの body 変数が self_marker で始まり、
+// 素の本文を含むこと。戻り値の IsSelf が true であること。
+// **`self_marker` と素の本文のあいだには `config.AIMarker` の1行が入る**（設計 3-82）。
+// **その並びちょうどを見るのは
+// [test/internal/tracker/ai_marker_test.go](ai_marker_test.go) である。**
 func TestPostComment_selfMarkerを付けて投稿する(t *testing.T) {
 	const selfMarker = "<!-- continuo:self -->"
 	const rawBody = "作業内容の要約"

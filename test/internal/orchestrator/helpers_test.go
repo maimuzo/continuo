@@ -1365,10 +1365,13 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 	if ft.postErr != nil {
 		return nil, ft.postErr
 	}
+	// **本物と同じ関数で組み立てる**（`tracker.ComposeCommentBody`。設計 3-82）。
+	// **写して持ってはならない。**片方を直したときに黙ってずれ、
+	// **ずれても orchestrator の検査は通り続けるので、誰も気づけない。**
+	full := tracker.ComposeCommentBody(body, selfMarker)
 	c := tracker.Comment{
-		ID: fmt.Sprintf("C_self_%d", len(ft.comments[issueNodeID])+1),
-		// PostComment は self_marker を本文の先頭に付けて投稿する。
-		Body: selfMarker + "\n" + body, IsSelf: true, CreatedAt: ft.now(),
+		ID:   fmt.Sprintf("C_self_%d", len(ft.comments[issueNodeID])+1),
+		Body: full, IsSelf: true, CreatedAt: ft.now(),
 		// **投稿者を入れる**（設計 3-77-0）。**本物の GitHub は必ず投稿者を付ける。**
 		// 入れないと、この continuo が書いた入札を次の巡回で自分のものと読めず、
 		// **巡回のたびに入札のコメントが1件ずつ増える。**

@@ -325,10 +325,11 @@ func StartsAsProgressReport(body string) bool {
 // `<!-- continuo:agent -->` を文字列で埋め込んでおり、設定した marker を使っていない。
 // **設定した marker を組み込みへ届ける道ができたときに、ここも見直すこと。**
 //
-// **同じ前提に立つ定数が、他に2つある。**印の形を変えるときは3つとも動かすこと。
+// **同じ前提に立つ定数が、他に3つある。**印の形を変えるときは4つとも動かすこと。
 //
 //	[internal/prompt/prompt.go](../prompt/prompt.go) の commentOpen / commentClose
 //	[internal/orchestrator/prompt.go](../orchestrator/prompt.go) の commentOpenMarker / commentCloseMarker
+//	[internal/tracker/aimarker.go](../tracker/aimarker.go) の commentOpen / commentClose
 const commentOpen = "<!--"
 
 // lastProgressOf は、その担当者がまだ生きていることを最後に示した時刻を返す（設計 3-77b / 5-3l）。
@@ -578,6 +579,10 @@ func HasBidBy(bids []Bid, login string) (Bid, bool) {
 //
 // r: 書く released。
 // 戻り値: 印を先頭に置いたコメント本文。
+//
+// **GitHub に載る本文とは1行違う。**投稿する直前に
+// [internal/tracker](../tracker) の `ComposeCommentBody` が、印の直後へ `<!-- continuo:ai -->` を足すためである（設計 3-82）。
+// **先頭の印は動かないので、`IsMarked` も `payloadAfterMarker` もそのまま通る。**
 func FormatReleased(r Released) string {
 	return config.HandoffReleasedMarker + "\n" + marshalLine(r) + "\n\n" +
 		i18n.T(i18n.KeyHandoffReleasedReassign) + "\n" +
