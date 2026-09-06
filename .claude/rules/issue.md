@@ -22,7 +22,7 @@ issue をボードへ載せることも、Status を付けることも、並べ�
 `In Progress` → `Blocked` を動かす経路を認めている
 （[docs/plans/continuo_design.md:9072](../../docs/plans/continuo_design.md#L9072)）。
 **組み込みの指示書は、それを勧めてはいない**
-（[internal/prompt/builtin.md:119](../../internal/prompt/builtin.md#L119) は「あなたが `gh` を叩く必要はありません」）。
+（[internal/prompt/builtin.md:218](../../internal/prompt/builtin.md#L218) は「あなたが `gh` を叩く必要はありません」）。
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **ボードの操作は AI が行う。**ただし 4-1 の遷移表で「誰が」の欄が「人間」だけの3つは人間である
