@@ -1203,6 +1203,10 @@ const (
 	KeyDashboardTotal Key = "dashboard.total"
 	// KeyDashboardNoteTokens はトークンの表の下の注記に出る。
 	KeyDashboardNoteTokens Key = "dashboard.note_tokens"
+	// KeyDashboardCaptionCumulative は run をまたぐ累計の表の見出しに出る（issue #238）。
+	KeyDashboardCaptionCumulative Key = "dashboard.caption_cumulative"
+	// KeyDashboardNoteCumulative は run をまたぐ累計の表の下の注記に出る（issue #238）。
+	KeyDashboardNoteCumulative Key = "dashboard.note_cumulative"
 	// KeyDashboardAgoSeconds は1分未満の経過に出る。
 	KeyDashboardAgoSeconds Key = "dashboard.ago_seconds"
 	// KeyDashboardAgoMinutes は1時間未満の経過に出る。
@@ -3030,6 +3034,8 @@ var allKeys = []Key{
 	KeyDashboardColOutput,
 	KeyDashboardTotal,
 	KeyDashboardNoteTokens,
+	KeyDashboardCaptionCumulative,
+	KeyDashboardNoteCumulative,
 	KeyDashboardAgoSeconds,
 	KeyDashboardAgoMinutes,
 	KeyDashboardAgoHours,

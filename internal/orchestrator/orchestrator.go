@@ -367,6 +367,30 @@ type Orchestrator struct {
 	// 「同じ理由で必ず失敗する issue」を次の巡回が0回目として拾い直してしまう。
 	// **永続化はしない**（再起動したら数え直す。設計の方針）。
 	failures map[string]*failureNote
+	// tokenTotals は run をまたぐトークンの累計である（issue #238）。**mu が守る。**
+	//
+	// **「この continuo が起動してから、turn の終わりに読み取った transcript の合計」である。**
+	// **引き継いだ run（`Adopt`）では、起動より前に書かれた分も含む。**
+	// **走行中の turn の分はまだ入っていない**（集計は turn の終わりにしか走らない）。
+	// **メモリだけに持つ。**再起動すると0へ戻る。
+	//
+	// **`runs` に相乗りできない。**印は run が終わると `release` で消え、そのトークンも
+	// 一緒に消える。**そのため、いままで画面の合計は「いま走っている run」だけを足していた。**
+	// 作りは docs/plans/impl/09_dashboard.md の「run をまたぐ累計」にある。
+	tokenTotals TokenUsage
+	// tokenLedger は「最後に累計へ計上した内容」である（issue #238）。**mu が守る。**
+	// **キーは issue の識別子（`<owner>/<repo>#<番号>`）である。project item の ID ではない。**
+	//
+	// **item の ID にすると、ボードから外して載せ直したときに鍵が変わりうる。**
+	// continuo 自身が「続きを進めたいならカンバンへ戻してください。worktree は残してあります」と
+	// 案内している（lifecycle.go の `noteMissingItem`）ので、その操作は起きる。
+	// **鍵が変われば台帳の項目が孤児になり、同じ transcript が最初から全部足される。**
+	//
+	// **`release` では消さない。**引き渡しのあと同じセッションへ `--resume` で復帰する経路が
+	// あり、消すと二重に数える。**消すのは worktree を消したときだけである**
+	// （`forgetTokenLedger`）。**したがって上限は無い。**worktree を消さずに手放した issue
+	// （引き渡し・失敗）の数だけ増える。1件あたりは識別子とパスの文字列2本と int 5本である。
+	tokenLedger map[string]tokenLedgerEntry
 	// tickCount は巡回した回数である（verify_states_every の判定に使う）。
 	tickCount int
 	// quota は最後に読んだ枠の状態である。nil なら読めていない。
@@ -524,6 +548,7 @@ func New(opts Options) (*Orchestrator, error) {
 		labelSkipped:   map[string]struct{}{},
 		gated:          map[string]*gateNote{},
 		failures:       map[string]*failureNote{},
+		tokenLedger:    map[string]tokenLedgerEntry{},
 		shutdown:       shutdown,
 		shutdownCancel: shutdownCancel,
 	}
@@ -960,6 +985,105 @@ func (o *Orchestrator) release(rs *runState) {
 			delete(o.sessions, uuid)
 		}
 	}
+}
+
+// tokenLedgerEntry は、1つの issue について最後に累計へ計上した内容である（issue #238）。
+//
+// **パスと絶対値を対で持つ。**`ReadTranscript` が返すのは「その transcript 1ファイルの
+// 絶対値」なので、**どのファイルから読んだ値なのかが分からないと差分を取れない。**
+type tokenLedgerEntry struct {
+	// session は最後に計上した transcript のセッション UUID である。
+	//
+	// **パスではなくセッション UUID にする。**transcript のファイル名はセッション UUID で、
+	// **`--resume` で復帰しても同じファイルのままである**（設計 3-3b の実測）。
+	// **hook が名乗る `transcript_path` は使わない。**あれはエージェントが書き換えられる
+	// 外部入力で（`hookinput.go` の「hook の中身はエージェントが書き換えられる外部入力である」）、
+	// **毎 turn 違うファイル名を名乗るだけで、同じ中身を何度でも新しい鍵として全額計上させられる。**
+	// **セッション UUID は continuo が `newSessionUUID` で採るか、pane から読んだ値である。**
+	session string
+	// usage は session の transcript について、ここまで累計へ計上した合計である。
+	//
+	// **「最後に読んだ絶対値」ではない。**丸めが起きたときは、項目ごとに大きいほうを残す
+	// （`addTokenUsage`）。**残さないと、次に伸びたときに丸めたぶんを二重に足す。**
+	usage TokenUsage
+}
+
+// addTokenUsage は、transcript から読み取った絶対値を run をまたぐ累計へ差分で足し、
+// あわせて run ごとの値も更新する（issue #238）。
+//
+// **`SPEC.md` 13.5 が「絶対値の合計を扱うときは、二重計上を避けるため、最後に報告した
+// 合計との差分を追うこと」と求めている。**`usage` は turn を重ねるたびに単調に増えるので、
+// **そのまま毎回足すと、10 turn 回った run は10回ぶん足される。**
+//
+// **累計と run ごとの値を、1つの `o.mu` の区間で書く。**
+// **分けて書くと、その隙間にダッシュボードが両方を読み切ったときに
+// 「累計が走行中の run の合計より小さい」写しができる。**
+// **1つにまとめれば、どの瞬間を切り取っても累計のほうが大きいか等しい。**
+// `rs.setTokens` は中で `rs.mu` を取るが、**このリポジトリの順序は `o.mu` → `rs.mu` なので
+// 入れ子にしてよい**（`RunViews` が `o.mu` の中で `rs.snapshot()` を呼ぶのと同じ形である）。
+//
+// **絶対条件: `rs.mu` を持ったまま呼んではならない。**逆向きの入れ子ができ、
+// **ダッシュボードを開いた HTTP のハンドラと turn の終わりが噛み合うと continuo 全体が固まる。**
+// **巡回も turn ループも `o.mu` を通るので、固まったことは外から「無音」としてしか見えない。**
+//
+// **丸めたときは、台帳へ小さいほうを書かない。**項目ごとに大きいほうを残す
+// （`prev.usage.Add(delta)` は項目ごとの最大値になる）。
+// **小さいほうを書くと、次にファイルが伸びたときに丸めたぶんをもう一度足す。**
+//
+// rs: 対象の run（`setTokens` を呼ぶ相手）。
+// identifier: issue の識別子（`<owner>/<repo>#<番号>`）。**project item の ID ではない**
+// （`tokenLedger` のコメントを見よ）。
+// sessionUUID: `usage` を読み出した transcript のセッション UUID。
+// **呼ぶ側が、パスを写し取ったのと同じ `rs.mu` の区間で取ること。**
+// usage: その transcript 1ファイルから読んだ絶対値。
+// now: 集計した時刻。
+// 戻り値: 差分の1項目でも0へ丸めたら true（呼ぶ側が WARN を出す）。
+func (o *Orchestrator) addTokenUsage(
+	rs *runState, identifier, sessionUUID string, usage TokenUsage, now time.Time,
+) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delta, clamped := usage, false
+	counted := usage
+	if prev, ok := o.tokenLedger[identifier]; ok && prev.session == sessionUUID {
+		delta, clamped = usage.Sub(prev.usage)
+		// **項目ごとに大きいほうを残す。**`prev.usage + delta` がちょうどそれになる。
+		counted = prev.usage.Add(delta)
+	}
+	o.tokenTotals = o.tokenTotals.Add(delta)
+	o.tokenLedger[identifier] = tokenLedgerEntry{session: sessionUUID, usage: counted}
+	rs.setTokens(usage, now)
+	return clamped
+}
+
+// forgetTokenLedger は台帳からこの issue の項目を落とす（issue #238）。
+//
+// **worktree を消したときだけ呼ぶこと。**worktree が無ければ、同じセッションへ
+// `--resume` で復帰する道が無い（復帰の条件は身元ファイルの読み取りである）。
+// **worktree を残したまま落とすと、復帰した run が transcript 全体をもう一度計上する。**
+//
+// **累計（`tokenTotals`）は減らさない。**落とすのは「次に来る値との差分の相手」だけである。
+//
+// identifier: issue の識別子。
+func (o *Orchestrator) forgetTokenLedger(identifier string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.tokenLedger, identifier)
+}
+
+// TokenTotals は run をまたぐトークンの累計を返す（issue #238）。
+//
+// **ダッシュボード（第9段階）が読む。**判断には使わない。
+// 意味は `tokenTotals` のコメントにある。
+//
+// **`RunViews` より後に呼ぶこと。**累計は減らないので、この順序なら
+// 「累計が走行中の run の合計より小さい」写しは作れない（internal/server の `snapshot`）。
+//
+// 戻り値: 累計。
+func (o *Orchestrator) TokenTotals() TokenUsage {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.tokenTotals
 }
 
 // bindSession はセッション UUID から run を引ける状態にする。

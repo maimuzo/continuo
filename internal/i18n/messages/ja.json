@@ -332,6 +332,8 @@
   "dashboard.note_gated": "この表はメモリだけに持っています。continuo を再起動すると消え、次の巡回で作り直されます。",
   "dashboard.note_last_hook": "「最後に hook を受けた時刻」は、その run から実際に hook が届いた時刻である。届いていなければ「—」になる。stall の判定に使う時計はこれとは別に進む（JSON の stall_clock_at）。",
   "dashboard.note_tokens": "トークンは turn の終わりに transcript を読んで集計する（設計 3-15）。走行中の turn の分はまだ入っていない。",
+  "dashboard.caption_cumulative": "run をまたぐ累計（終わった run の分も含む）",
+  "dashboard.note_cumulative": "この continuo が起動してから、turn の終わりに読み取った transcript の合計。上の表と違い、終わった run の分も残る。引き継いだ run では、起動より前に書かれた分も含む。continuo を再起動すると 0 に戻る。",
   "dashboard.tokens_at": "%s 時点",
   "dashboard.tokens_not_counted": "未集計",
   "dashboard.total": "合計",
