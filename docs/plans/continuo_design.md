@@ -8456,7 +8456,7 @@ os.Hostname() だけで決まり、重複しても検知しない）の範囲外
 | 何 | 分かっていること |
 | --- | --- |
 | **Claude Code の statusline の `seven_day_opus` / `seven_day_sonnet`** | **2026-07-02 以降、恒久的に `null` である**（2026-08-29 の人間の言明）。**「使えば現れる」ではない** |
-| **usage API の `weekly_scoped` の `resets_at`** | **使っていない状態で `null` だった**（同日の実測）。**使い切ったときにどうなるかは測っていない** |
+| **usage API の `weekly_scoped` の `resets_at`** | **使っていない状態で `null` だった**（同日の実測）。**使い切ったときにどうなるかは測っていない。**issue #199 の本文は「恒久的に `null`」と書いているが、**それは statusline の項目についての言明であり、usage API の `kind` を測ったものではない** |
 
 **前者は statusline の項目名、後者は usage API の `kind` である。**
 **根拠の URL は、このリポジトリに1行も記録されていない。**
