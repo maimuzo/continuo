@@ -1365,10 +1365,23 @@ func (ft *fakeTracker) PostComment(_ context.Context, issueNodeID, body, selfMar
 	if ft.postErr != nil {
 		return nil, ft.postErr
 	}
+	// PostComment は self_marker を本文の先頭に付けて投稿する。
+	// **本物と同じ順序で組み立てる**（internal/tracker の `Adapter.PostComment`）。
+	//
+	// **`selfMarker` が空のときに `"\n" + body` としてはならない。**
+	// 持ち回りのコメント（入札・hold・released）は `selfMarker` を空で渡してくるので、
+	// **先頭に空行が1つ入り、`config.WithAIMarker` が印を本文の先頭へ置いてしまう。**
+	// そうなると `handoff.IsMarked` の先頭一致が外れ、**本物では起きない失敗が mock の中でだけ起きる。**
+	full := body
+	if selfMarker != "" {
+		full = selfMarker + "\n" + body
+	}
+	// **本物と同じく `config.WithAIMarker` も通す**（設計 3-82）。
+	// **通さないと、印が付いた本文で orchestrator が壊れないことを、ここで1件も確かめられない。**
+	full = config.WithAIMarker(full)
 	c := tracker.Comment{
-		ID: fmt.Sprintf("C_self_%d", len(ft.comments[issueNodeID])+1),
-		// PostComment は self_marker を本文の先頭に付けて投稿する。
-		Body: selfMarker + "\n" + body, IsSelf: true, CreatedAt: ft.now(),
+		ID:   fmt.Sprintf("C_self_%d", len(ft.comments[issueNodeID])+1),
+		Body: full, IsSelf: true, CreatedAt: ft.now(),
 		// **投稿者を入れる**（設計 3-77-0）。**本物の GitHub は必ず投稿者を付ける。**
 		// 入れないと、この continuo が書いた入札を次の巡回で自分のものと読めず、
 		// **巡回のたびに入札のコメントが1件ずつ増える。**

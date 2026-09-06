@@ -109,14 +109,23 @@ func BuildContinuationPrompt(
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
 // 書き分けは [docs/upgrading.md:239-245](docs/upgrading.md#L239-L245) に揃える。
 //
+// **機械が書いた印（`config.AIMarker`）も書かせる**（設計 3-82）。
+// **`marker` の次の行に置かせる。**先に置かせると `c.IsAgent` が偽になり、
+// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
+//
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
 // 戻り値: 送る本文。
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
+	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    %s\n    ここに何をしたかを書く\"\n\n",
+		issueURL, marker, config.AIMarker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
+	// **印の順序を名指しする**（設計 3-82）。**`marker` を先に、`AIMarker` をその次に置く。**
+	// 逆にすると `c.IsAgent` が偽になり、**書いたのに `failure_state` へ落ちる。**
+	fmt.Fprintf(&b, "その次の行に %s を入れてください（人間ではなく機械が書いた、という印です）。"+
+		"**%s より前へ置かないでください。**\n", config.AIMarker, marker)
 	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
 	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、
 	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
