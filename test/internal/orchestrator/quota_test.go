@@ -55,11 +55,10 @@ func newUsageReader(t *testing.T, endpoint, tokenEnv string) *ratelimit.Reader {
 	t.Setenv(tokenEnv, "test-token")
 	reader, err := ratelimit.NewReader(ratelimit.Options{
 		Config: config.RateLimitConfig{
-			Source:            ratelimit.SourceOAuthUsageAPI,
-			TokenSource:       ratelimit.TokenSourceEnv,
-			TokenEnv:          tokenEnv,
-			PauseAbovePercent: 95,
-			PollIntervalMs:    1,
+			Source:         ratelimit.SourceOAuthUsageAPI,
+			TokenSource:    ratelimit.TokenSourceEnv,
+			TokenEnv:       tokenEnv,
+			PollIntervalMs: 1,
 		},
 		Endpoint: endpoint,
 	})
@@ -149,7 +148,6 @@ func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止�
 		Mutate: func(cfg *config.Config) {
 			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
 			cfg.RateLimit.PollIntervalMs = 1
-			cfg.RateLimit.PauseAbovePercent = 95
 			cfg.Trust.RequireRepoTrusted = false
 		},
 	})
@@ -510,16 +508,21 @@ func TestQuota_枠を読めなくても自分が担当のissueには着手する
 		fx.Logs.String())
 }
 
-// TestQuota_枠を読めなくなっても閾値を超えていれば巡回を止める は、判定の1段目が
-// 古さを見ない写しを使い続けることを確かめる（設計 3-77i / 3-77j。issue #173）。
+// TestQuota_枠が逼迫していても担当が自分のissueには着手する は、
+// 止める範囲が入札の要る issue だけであることを確かめる（設計 3-27。issue #173）。
 //
-// 目的: **1段目を入札の写しへ寄せてはならない。**あちらは読み取りに失敗すると nil を返すので、
-// **使用率99%で資格情報が切れた機械が、新規 dispatch を止めなくなる。**
+// 目的: **巡回を丸ごと打ち切ってはならない。**
+// **以前は `rate_limit.pause_above_percent` を超えると `dispatchCandidates` が即 `return` していた。**
+// **その設定は消えた**（人間の決定。2026-09-06）。**打ち切ると、この機械が既に担当者に
+// なっている issue まで着手されなくなる**（印が無いのでこの経路からしか拾えない）。
+// **再起動で復元した run も拾えない**（`restart.orphan_running_action` の既定 `redispatch` は
+// 復元では何もせず、次の巡回に委ねる）。**`handoffGate` の中にある「期限切れの担当を外す」
+// 経路も通らなくなる**ので、詰まったカンバンを誰も解けない。
 //
 // 与える情報: 1回目は 99% を返し、2回目以降は 500 を返す usage API。
-// **この機械が担当者の `Ready` の issue が1件**（入札を要さない経路でも止まることを見る）。
-// 成功条件: その issue が dispatch されないこと。
-func TestQuota_枠を読めなくなっても閾値を超えていれば巡回を止める(t *testing.T) {
+// **この機械が担当者の `Ready` の issue が1件**（入札を要さない経路）。
+// 成功条件: その issue に着手すること。
+func TestQuota_枠が逼迫していても担当が自分のissueには着手する(t *testing.T) {
 	var reads atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if reads.Add(1) > 1 {
@@ -542,7 +545,6 @@ func TestQuota_枠を読めなくなっても閾値を超えていれば巡回�
 		Mutate: func(cfg *config.Config) {
 			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
 			cfg.RateLimit.PollIntervalMs = 1
-			cfg.RateLimit.PauseAbovePercent = 95
 			cfg.Trust.RequireRepoTrusted = false
 		},
 	})
@@ -554,20 +556,21 @@ func TestQuota_枠を読めなくなっても閾値を超えていれば巡回�
 
 	for _, v := range fx.Orc.RunViews() {
 		if v.Identifier == "octocat/hello-world#192" {
-			t.Fatalf("最後に読めた 99%% を捨てて着手している（設計 3-77i を破っている）: %+v", v)
+			return
 		}
 	}
+	t.Fatalf("担当が自分の issue にまで着手していない（巡回を丸ごと打ち切っている）:\n%s",
+		fx.Logs.String())
 }
 
 // TestQuota_マージンが先に効いて止まり使用率と閾値が出る は、出す1行の中身を確かめる
 // （設計 3-77j。issue #173）。
 //
-// 目的: **新規着手が止まる本当の使用率は `100 − マージン` である。**
-// 既定（`pause_above_percent: 95` / マージン10）では **91% から**であって 96% からではない。
+// 目的: **新規着手が止まる使用率は `100 − マージン` である。**
+// マージン10なら **90% から**である（`rate_limit.pause_above_percent` は消えた。issue #173）。
 // **観測した使用率と、枠ごとの閾値の両方を出さないと、どちらの枠が原因かを読めない。**
 //
-// 与える情報: 1週間の枠が 92%（`pause_above_percent` の 95 には届いていない）。
-// 担当者のいない `Ready` の issue が1件。
+// 与える情報: 1週間の枠が 92%。担当者のいない `Ready` の issue が1件。
 // 成功条件: dispatch されず、使用率と閾値が1行に出ること。
 func TestQuota_マージンが先に効いて止まり使用率と閾値が出る(t *testing.T) {
 	endpoint, _ := newUsageServer(t, []map[string]any{
@@ -581,7 +584,6 @@ func TestQuota_マージンが先に効いて止まり使用率と閾値が出�
 		Mutate: func(cfg *config.Config) {
 			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
 			cfg.RateLimit.PollIntervalMs = 1
-			cfg.RateLimit.PauseAbovePercent = 95
 			cfg.Tracker.Provider.Handoff.FiveHourMarginPercent = 10
 			cfg.Tracker.Provider.Handoff.WeeklyMarginPercent = 10
 			cfg.Trust.RequireRepoTrusted = false
@@ -598,11 +600,11 @@ func TestQuota_マージンが先に効いて止まり使用率と閾値が出�
 	}
 	got := fx.Logs.String()
 	for _, want := range []string{
-		"余裕値がマイナス",
+		"余裕値が0以下",
 		"1週間の枠の使用率=92",
 		"5時間の枠の使用率=30",
-		`1週間の枠の閾値="90% を超えたら止まります"`,
-		`5時間の枠の閾値="90% を超えたら止まります"`,
+		`1週間の枠の閾値="90% に達したら止まります"`,
+		`5時間の枠の閾値="90% に達したら止まります"`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("1行に %q が入っていない:\n%s", want, got)
@@ -629,7 +631,10 @@ func weeklyWaitFixture(
 	clock := newTestClock()
 
 	fx := newStubFixture(t, stubFixtureOptions{
-		AgentStatus: herdr.AgentStatusUnknown,
+		// **「止まっている」を表す状態にする**（issue #197）。
+		// **`unknown` では手放さない。**herdr が状態を判定できないという意味であり、
+		// **確かめられていないのに pane を閉じて担当を外すことになる。**
+		AgentStatus: herdr.AgentStatusIdle,
 		RateLimit:   reader,
 		Now:         clock.Now,
 		Mutate: func(cfg *config.Config) {
@@ -864,9 +869,64 @@ func TestQuota_5時間の枠だけなら上限を超えても待ち続ける(t *
 	}
 }
 
+// TestQuota_画面の状態を判定できないうちは手放さない は、確かめられないときの倒し方を確かめる
+// （設計 3-27。issue #197）。
+//
+// 目的: **herdr の `unknown` は「agent は居るが状態を判定できない」である。**
+// **確かめられていないのに手放してはならない。**この判定の先には GitHub への2回の書き込みと
+// pane を閉じる操作があり、**書きかけの編集を持ったまま閉じると、その編集は戻らない。**
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。
+// **`agent_status` は `unknown`。**
+// 成功条件: 上限を超えていても手放さないこと。
+func TestQuota_画面の状態を判定できないうちは手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_UNKNOWN")
+	fx.Herdr.SetStatus(herdr.AgentStatusUnknown)
+
+	for i := 0; i < 5; i++ {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+	}
+
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("画面の状態を判定できないのに担当を手放した:\n%s", fx.Logs.String())
+	}
+}
+
+// TestQuota_サブエージェントが走っているうちは手放さない は、
+// 「完全停止するまで待つ」を確かめる（設計 3-27。issue #197）。
+//
+// 目的: **人間の指示は「そのセッションのサブエージェントを含め完全停止するまで待って」である**
+// （2026-09-06）。**herdr の `agent_status` はサブエージェントを知らない。**
+// continuo は `SubagentStart` / `SubagentStop` を自分で数えている。
+// **待たずに閉じると、そのとき書きかけだった編集がまるごと消える。**
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。
+// **`agent_status` は `idle` だが、サブエージェントが1つ走っている。**
+// 成功条件: 上限を超えていても手放さないこと。
+func TestQuota_サブエージェントが走っているうちは手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_SUBAGENT")
+	fx.Orc.OnHook(subagentStartEvent("session-188", "", "a1f9f743842d397e1", "Explore"))
+
+	for i := 0; i < 5; i++ {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+	}
+
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("サブエージェントが走っているのに担当を手放した:\n%s", fx.Logs.String())
+	}
+}
+
 // TestQuota_5時間の枠の時刻で1週間の枠を判定しない は、待つ先の取り方を確かめる。
 //
-// 目的: **`LatestResetOfFullLimits` は種別を選ばない。**1週間の枠が `resets_at` を持たず、
+// 目的: **`LatestResetForClearing` は種別を選ばない。**1週間の枠が `resets_at` を持たず、
 // 5時間の枠が2時間後に明けるとき、**あれを使うと「2時間後」で判定してしまい、
 // 上限（10分）を超えないので手放さない。**
 //

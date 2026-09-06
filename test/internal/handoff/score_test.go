@@ -61,7 +61,7 @@ func TestEvaluate_余裕値と判定スコアが式のとおりに出る(t *test
 		[2]any{handoff.LimitKindWeeklyScoped, 80},
 	)
 
-	bid, skip := handoff.Evaluate(snap, true, handoff.Margins{FiveHour: 10, Weekly: 10}, 95, at())
+	bid, skip := handoff.Evaluate(snap, true, handoff.Margins{FiveHour: 10, Weekly: 10}, at())
 
 	if skip != handoff.SkipNone {
 		t.Fatalf("入札してよいはずなのに黙った: %v", skip)
@@ -107,44 +107,34 @@ func TestWeeklyPercent_いちばん大きい1週間の枠を採る(t *testing.T)
 	}
 }
 
-// 目的: 投稿しない3つの条件が、そのとおりに黙ることを確認する（設計 3-77 の表）。
+// 目的: 投稿しない2つの条件が、そのとおりに黙ることを確認する（設計 3-77 の表）。
 //
-// **黙る理由を取り違えてはならない。**枠を読めないのに「余裕値がマイナス」と記録すると、
+// **黙る理由を取り違えてはならない。**枠を読めないのに「余裕値が0以下」と記録すると、
 // 人間は資格情報ではなく使用率を疑うことになる。
 //
-// 与える情報: 3つの条件それぞれを満たす写しと設定。
+// **`rate_limit.pause_above_percent` の条件は消えた**（人間の決定。2026-09-06。issue #173）。
+// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
+//
+// 与える情報: 2つの条件それぞれを満たす写しと設定。
 // 成功条件: それぞれの理由で黙ること。
-func TestEvaluate_投稿しない3つの条件(t *testing.T) {
+func TestEvaluate_投稿しない2つの条件(t *testing.T) {
 	cases := []struct {
-		name              string
-		snap              *ratelimit.Snapshot
-		margins           handoff.Margins
-		pauseAbovePercent int
-		want              handoff.SkipReason
+		name    string
+		snap    *ratelimit.Snapshot
+		margins handoff.Margins
+		want    handoff.SkipReason
 	}{
 		{
-			name:              "枠を読めない",
-			snap:              nil,
-			margins:           handoff.Margins{FiveHour: 10, Weekly: 10},
-			pauseAbovePercent: 95,
-			want:              handoff.SkipQuotaUnreadable,
+			name:    "枠を読めない",
+			snap:    nil,
+			margins: handoff.Margins{FiveHour: 10, Weekly: 10},
+			want:    handoff.SkipQuotaUnreadable,
 		},
 		{
-			name:              "枠が1件も返らない",
-			snap:              snapshot(),
-			margins:           handoff.Margins{FiveHour: 10, Weekly: 10},
-			pauseAbovePercent: 95,
-			want:              handoff.SkipQuotaUnreadable,
-		},
-		{
-			name: "枠の使い過ぎ",
-			snap: snapshot(
-				[2]any{handoff.LimitKindSession, 96},
-				[2]any{handoff.LimitKindWeeklyAll, 10},
-			),
-			margins:           handoff.Margins{},
-			pauseAbovePercent: 95,
-			want:              handoff.SkipPauseThreshold,
+			name:    "枠が1件も返らない",
+			snap:    snapshot(),
+			margins: handoff.Margins{FiveHour: 10, Weekly: 10},
+			want:    handoff.SkipQuotaUnreadable,
 		},
 		{
 			name: "余裕値がマイナス",
@@ -152,15 +142,26 @@ func TestEvaluate_投稿しない3つの条件(t *testing.T) {
 				[2]any{handoff.LimitKindSession, 92},
 				[2]any{handoff.LimitKindWeeklyAll, 10},
 			),
-			margins:           handoff.Margins{FiveHour: 10, Weekly: 10},
-			pauseAbovePercent: 95,
-			want:              handoff.SkipNoHeadroom,
+			margins: handoff.Margins{FiveHour: 10, Weekly: 10},
+			want:    handoff.SkipNoHeadroom,
+		},
+		{
+			// **余裕値ちょうど0も「余裕が無い」である**（人間の決定。2026-09-06）。
+			// **マージンをちょうど食い潰した状態であり、そこから着手すると
+			// 人間のために取り置いた分へ食い込む。**
+			name: "余裕値がちょうど0",
+			snap: snapshot(
+				[2]any{handoff.LimitKindSession, 90},
+				[2]any{handoff.LimitKindWeeklyAll, 10},
+			),
+			margins: handoff.Margins{FiveHour: 10, Weekly: 10},
+			want:    handoff.SkipNoHeadroom,
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, skip := handoff.Evaluate(c.snap, true, c.margins, c.pauseAbovePercent, at())
+			_, skip := handoff.Evaluate(c.snap, true, c.margins, at())
 			if skip != c.want {
 				t.Errorf("黙る理由が違う: got %v, want %v", skip, c.want)
 			}
@@ -242,7 +243,7 @@ func TestWinner_全部同じでも同じ勝者を選ぶ(t *testing.T) {
 func TestEvaluate_種別が1つ欠けても黙らない(t *testing.T) {
 	snap := snapshot([2]any{handoff.LimitKindSession, 3})
 
-	bid, skip := handoff.Evaluate(snap, true, handoff.Margins{FiveHour: 10, Weekly: 10}, 95, at())
+	bid, skip := handoff.Evaluate(snap, true, handoff.Margins{FiveHour: 10, Weekly: 10}, at())
 
 	if skip != handoff.SkipNone {
 		t.Fatalf("1週間の枠が載っていないだけで黙った: %v", skip)

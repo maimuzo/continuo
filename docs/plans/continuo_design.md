@@ -9851,7 +9851,6 @@ rate_limit:
                                             # 既定は macOS が keychain、ほかの OS が claude_credentials。
                                             # この設定例は、どの OS でも読める claude_credentials を書いてある（3-15）
   token_env: CLAUDE_CODE_OAUTH_TOKEN        # token_source が env のときに読む環境変数の名前
-  pause_above_percent: 95                   # 枠の使用率がこれを超えたら新しい issue に着手しない。動いている turn は止めない
   poll_interval_ms: 300000                  # 枠の残りを読み直す間隔
   weekly_wait_limit_minutes: 300            # 1週間の枠が明けるのを待つ上限。単位は分。300 なら5時間。
                                             # これを超えて待つことになる issue は、待たずに担当を手放し、

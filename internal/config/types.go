@@ -552,8 +552,6 @@ type RateLimitConfig struct {
 	// TokenEnv は TokenSource が "env" のときに読む環境変数の名前である（設計 3-27）。
 	// "env" のとき必須。空だとどこからトークンを取ればよいか決まらない。
 	TokenEnv string `yaml:"token_env"`
-	// PauseAbovePercent はこの割合を超えたら新規の dispatch を止める閾値（0〜100）である。
-	PauseAbovePercent int `yaml:"pause_above_percent"`
 	// PollIntervalMs はレートリミットの値を確認する間隔（ミリ秒）である。
 	PollIntervalMs int `yaml:"poll_interval_ms"`
 	// WeeklyWaitLimitMinutes は1週間の枠が明けるのを待つ上限（分）である（設計 3-27。issue #197）。

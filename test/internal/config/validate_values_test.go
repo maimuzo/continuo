@@ -226,8 +226,6 @@ func TestValidate_数値の範囲を外れたら弾く(t *testing.T) {
 		{"同時実行数が負", "max_concurrent_agents", "  max_concurrent_agents: -1", "max_concurrent_agents"},
 		{"巡回の間隔が0", "poll_interval_ms", "  poll_interval_ms: 0", "poll_interval_ms"},
 		{"指示の上限が0", "max_dispatch_turns", "  max_dispatch_turns: 0", "max_dispatch_turns"},
-		{"枠の閾値が101", "pause_above_percent", "  pause_above_percent: 101", "pause_above_percent"},
-		{"枠の閾値が負", "pause_above_percent", "  pause_above_percent: -1", "pause_above_percent"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := loadWithReplaced(t, tc.key, tc.line)

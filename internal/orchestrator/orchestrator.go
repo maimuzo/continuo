@@ -855,19 +855,19 @@ func (o *Orchestrator) quotaSnapshot() *ratelimit.Snapshot {
 	return o.quota
 }
 
-// dispatchPaused は「新規の dispatch を止める」閾値を超えているかを返す（設計 3-27）。
+// **`dispatchPaused` は消えた**（人間の決定。2026-09-06。issue #173）。
 //
-// **これは「枠待ち」とは別の判定である。**閾値（既定95%）を超えただけでは枠待ちとみなさない。
-// 走行中の turn は止めないし、時計も止めない。
+// **`rate_limit.pause_above_percent` を超えたら、この巡回の dispatch を丸ごとやめる段だった。**
+// **消した理由は3つある。**
 //
-// 戻り値: 新規の dispatch を止めるべきなら true。
-func (o *Orchestrator) dispatchPaused() bool {
-	snap := o.quotaSnapshot()
-	if snap == nil {
-		return false
-	}
-	return snap.MaxPercent() > o.cfg.RateLimit.PauseAbovePercent
-}
+//	一、余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。
+//	    既定（マージン10）では余裕値が使用率90で先に効くので、あちら（96から）は一度も発火しない
+//	二、丸ごとやめると、`handoffGate` の中にある「期限切れの担当を外す」経路も通らない。
+//	    詰まったカンバンを誰も解けなくなる
+//	三、マージンは5時間と1週間で別々に持てる。あちらは全部の枠の最大値ひとつでしか判定できない
+//
+// **止めるのは `handoffGate` の中の余裕値の判定だけになった。**issue ごとに落とすので、
+// **巡回のループは最後まで回る。**
 
 // wakeRuns は turn ループの goroutine を必要な run について起こす（設計 3-8 / 3-4 の段5a2・段5c）。
 //

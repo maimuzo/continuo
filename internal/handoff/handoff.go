@@ -177,12 +177,12 @@ const (
 	//
 	// **読めないと使用率0（＝いちばん暇）に見え、必ず勝ってしまう。**だから黙る。
 	SkipQuotaUnreadable
-	// SkipPauseThreshold は、どれかの枠が `rate_limit.pause_above_percent` を超えたことを表す。
+	// SkipNoHeadroom は5時間余裕値と1週間余裕値のどちらかが0以下であることを表す。
 	//
-	// **この機械は入札に勝っても着手しない**（新規の dispatch を止める仕組みが別に効いている）。
-	// 揃えないと、勝ったのに動かない機械が出て issue が誰にも着手されないまま止まる。
-	SkipPauseThreshold
-	// SkipNoHeadroom は5時間余裕値と1週間余裕値のどちらかがマイナスであることを表す。
+	// **`rate_limit.pause_above_percent` は消えた**（人間の決定。2026-09-06。issue #173）。
+	// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
+	// 既定（マージン10）では余裕値のほうが低い使用率で先に効くので、
+	// **あちらは一度も発火していなかった。**
 	SkipNoHeadroom
 )
 
@@ -195,12 +195,59 @@ func (r SkipReason) String() string {
 		return "入札してよい"
 	case SkipQuotaUnreadable:
 		return "枠を読めない"
-	case SkipPauseThreshold:
-		return "枠の使い過ぎ"
 	case SkipNoHeadroom:
-		return "余裕値がマイナス"
+		return "余裕値が0以下"
 	default:
 		return "不明"
+	}
+}
+
+// Short は「その枠に余裕が無いか」を判定する関数を作る（設計 3-27 / 3-77。issue #173 / #197）。
+//
+// **これが唯一の線である。**次の3箇所は、全部この関数で判定する。
+//
+//	入札するかどうか                    … Evaluate（余裕値が0以下なら入札しない）
+//	この run は枠待ちか                 … Orchestrator.isQuotaWaiting
+//	1週間の枠を待つ上限を超えたか       … Orchestrator.weeklyWaitExceeded
+//
+// **線を1本にする理由。**以前は「使用率100」と「余裕値がマイナス」の2本があり、
+// **使用率90〜99の帯では、同じ run が枠待ちにならないまま手放しの条件だけ満たした。**
+// そこでは打ち切り（retry を積む）と手放し（担当を外す）が競走し、
+// **どちらが勝つかで、枠が足りないだけの issue が `failure_state` へ落ちることがあった。**
+//
+//	その枠の余裕値 = 100 − その枠の使用率 − その種別のマージン
+//	余裕が無い枠   = 余裕値 <= 0
+//
+// **マージンは種別ごとに引く。**5時間の枠には `five_hour_margin_percent`、
+// 1週間の枠（`weekly_all` と `weekly_scoped`）には `weekly_margin_percent` を引く。
+// **知らない種別には5時間のマージンを当てる。**usage API が種別を増やしたとき、
+// **マージン0（＝使用率100でしか止まらない）へ倒れるより、取り置きを守るほうが安全である。**
+//
+// margins: 引くマージン（%）。
+// 戻り値: その枠に余裕が無ければ true を返す関数。**`Snapshot` の選別に渡す。**
+func Short(margins Margins) func(l ratelimit.Limit) bool {
+	return func(l ratelimit.Limit) bool {
+		margin := margins.FiveHour
+		if IsWeeklyKind(l.Kind) {
+			margin = margins.Weekly
+		}
+		return fullPercent-l.Percent-margin <= 0
+	}
+}
+
+// ShortWeekly は「1週間の枠のうち、余裕が無いもの」を判定する関数を作る
+// （設計 3-27。issue #197）。
+//
+// **`Short` と種別の判定を掛け合わせただけである。**
+// **呼び出し側で毎回組み立てさせない。**組み立て方が2通りになると、
+// **1週間の枠を待つ上限の判定と、その待ち先の時刻を引く判定がずれる。**
+//
+// margins: 引くマージン（%）。
+// 戻り値: 1週間の枠で、かつ余裕が無ければ true を返す関数。
+func ShortWeekly(margins Margins) func(l ratelimit.Limit) bool {
+	short := Short(margins)
+	return func(l ratelimit.Limit) bool {
+		return IsWeeklyKind(l.Kind) && short(l)
 	}
 }
 
@@ -292,8 +339,11 @@ func matchesKind(kind string, kinds []string) bool {
 //	1週間余裕値 = 100 − 1週間の使用率 − 1週間マージン
 //	判定スコア  = 5時間余裕値 × 2 + 1週間余裕値
 //
-// **投稿しない条件は3つある。**枠を読めなかった・どれかの枠が pauseAbovePercent を超えた・
-// どちらかの余裕値がマイナス。**どれも「黙る」だけで、ほかの機械はこの機械を待たない。**
+// **投稿しない条件は2つある。**枠を読めなかった・どちらかの余裕値が0以下。
+// **どちらも「黙る」だけで、ほかの機械はこの機械を待たない。**
+//
+// **`rate_limit.pause_above_percent` の判定は消えた**（人間の決定。2026-09-06。issue #173）。
+// **余裕値と同じことを2つの閾値で言っていて、使い分けができていなかった。**
 //
 // **「読めなかった」は「枠が1件も返ってこなかった」である。**返ってきた中に
 // 特定の種別が無いのは、使用率0として扱う。
@@ -305,7 +355,6 @@ func matchesKind(kind string, kinds []string) bool {
 // **「読めなかった」と言い分ける。**`none` は運用者が「枠で判定しない」と決めた状態であり、
 // **そこで黙ると、その機械は1件も処理しなくなる**（枠の判定を切る逃げ道が塞がる）。
 // margins: 引くマージン（%）。
-// pauseAbovePercent: これを超えている枠が1つでもあれば入札しない（`rate_limit.pause_above_percent`）。
 // at: 入札に書く時刻。**その機械のタイムゾーンのまま渡すこと。**
 // 戻り値の1つ目: 組み立てた入札（入札しないときの中身は使わない）。**`Author` は空である。**
 // **書く直前に `bidForIssue` が gh の持ち主で埋める**（設計 3-77-0）。ここで埋めないのは、
@@ -315,7 +364,6 @@ func Evaluate(
 	snap *ratelimit.Snapshot,
 	quotaEnabled bool,
 	margins Margins,
-	pauseAbovePercent int,
 	at time.Time,
 ) (Bid, SkipReason) {
 	sessionPercent, weeklyPercent := 0, 0
@@ -332,16 +380,17 @@ func Evaluate(
 		}
 		sessionPercent, _ = SessionPercent(snap)
 		weeklyPercent, _ = WeeklyPercent(snap)
-		// **閾値の判定は余裕値より先に行う。**閾値を超えた機械は入札に勝っても着手しないので、
-		// 余裕値が正でも黙らせる（設計 3-77）。
-		if snap.MaxPercent() > pauseAbovePercent {
-			return Bid{}, SkipPauseThreshold
-		}
 	}
 
 	fiveHour := fullPercent - sessionPercent - margins.FiveHour
 	weekly := fullPercent - weeklyPercent - margins.Weekly
-	if fiveHour < 0 || weekly < 0 {
+	// **0 も「余裕が無い」に含める**（人間の決定。2026-09-06。issue #173）。
+	// **余裕値0 は、マージンをちょうど食い潰した状態である。**そこから着手すると、
+	// **人間のために取り置いた分へ食い込む。**
+	//
+	// **`Short` と同じ線にしてある。**枠待ちの印を立てる線・1週間の枠を待つ上限の線と
+	// **1点でもずれると、同じ帯で run の扱いが2通りに分かれる。**
+	if fiveHour <= 0 || weekly <= 0 {
 		return Bid{}, SkipNoHeadroom
 	}
 	return Bid{

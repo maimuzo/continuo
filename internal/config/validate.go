@@ -338,9 +338,6 @@ func validate(cfg *Config) error {
 		return invalidValueError("rate_limit.token_source", cfg.RateLimit.TokenSource,
 			`"claude_credentials" か "keychain"（macOS のみ）か "env" のいずれか（読み取りだけで書き換えない。3-27）`)
 	}
-	if cfg.RateLimit.PauseAbovePercent < 0 || cfg.RateLimit.PauseAbovePercent > 100 {
-		return invalidValueError("rate_limit.pause_above_percent", cfg.RateLimit.PauseAbovePercent, "0以上100以下にすること")
-	}
 	// **負の値を通してはならない**（issue #197）。負だと「待つ先の時刻 − いま」が必ず上回るので、
 	// **枠待ちに入った瞬間に担当を手放す。**1週間の枠を1%でも使い切れば、走っている run が全部止まる。
 	//

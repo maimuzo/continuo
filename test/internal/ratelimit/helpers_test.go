@@ -51,10 +51,9 @@ func writeCredentials(t *testing.T, home, body string) string {
 // usageConfig は usage API を読む設定（資格情報はファイルから）を返す。
 func usageConfig() config.RateLimitConfig {
 	return config.RateLimitConfig{
-		Source:            ratelimit.SourceOAuthUsageAPI,
-		TokenSource:       ratelimit.TokenSourceClaudeCredentials,
-		PauseAbovePercent: 90,
-		PollIntervalMs:    300000,
+		Source:         ratelimit.SourceOAuthUsageAPI,
+		TokenSource:    ratelimit.TokenSourceClaudeCredentials,
+		PollIntervalMs: 300000,
 	}
 }
 

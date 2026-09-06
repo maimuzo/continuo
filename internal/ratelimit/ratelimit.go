@@ -134,38 +134,71 @@ func (s *Snapshot) MaxPercent() int {
 	return max
 }
 
-// AtFullPercent は、使い切っている（`percent` が 100 に達している）枠が1つでもあるかを返す
-// （設計 3-27 の「この run は枠待ちである」の条件その1）。
+// AnySelected は、選んだ枠が1つでもあるかを返す（設計 3-27。issue #173 / #197）。
 //
-// 戻り値: 100 に達している枠があれば true。
-func (s *Snapshot) AtFullPercent() bool {
-	if s == nil {
+// **「使い切っている」を数えるのをやめ、選ぶ関数を受け取る形にした。**
+// 人間の決定（2026-09-06）で、判定の線が「使用率100」から
+// **「余裕値が0以下」**へ移ったためである。**余裕値はマージンを引いた残りで、
+// マージンは種別ごとに違う**（5時間と1週間で別々の設定を持つ）。
+// **この package はマージンを知らないので、線そのものを呼び出し側から受け取る。**
+//
+// sel: その枠を数えるなら true を返す関数。**nil なら偽を返す。**
+// 戻り値: 選ばれた枠が1つでもあれば true。
+func (s *Snapshot) AnySelected(sel func(l Limit) bool) bool {
+	if s == nil || sel == nil {
 		return false
 	}
 	for _, l := range s.Limits {
-		if l.Percent >= fullPercent {
+		if sel(l) {
 			return true
 		}
 	}
 	return false
 }
 
-// LatestResetOfFullLimits は、使い切っている枠のうち `resets_at` がいちばん遅いものを返す
-// （設計 3-27 の「どの枠の時刻を見るか」）。
+// SelectedKinds は、選んだ枠の `kind` を返す（設計 3-27。issue #197）。
 //
-// **`resets_at` が null の枠は判定から外す。**`weekly_scoped` も、モデルを判別せず
-// そのまま見る（continuo は Claude Code が使うモデルを知らない）。
+// **並び順は応答のままである。**呼び出し側は「含まれるか」しか見ない。
+// **重複は取り除かない。**同じ `kind` が2件返る応答を実測していないので、
+// **見ていない形を先回りして畳まない。**
 //
+// **この package は `kind` の意味を知らない。**どれが1週間の枠かを決めるのは
+// `internal/handoff` の `IsWeeklyKind` であり、**そちらを import すると依存の向きが逆になる。**
+//
+// sel: その枠を数えるなら true を返す関数。**nil なら長さ0を返す。**
+// 戻り値: 選ばれた枠の `kind`。1件も無ければ長さ0。
+func (s *Snapshot) SelectedKinds(sel func(l Limit) bool) []string {
+	if s == nil || sel == nil {
+		return nil
+	}
+	var kinds []string
+	for _, l := range s.Limits {
+		if sel(l) {
+			kinds = append(kinds, l.Kind)
+		}
+	}
+	return kinds
+}
+
+// LatestResetForClearing は、選んだ枠のうち `resets_at` がいちばん遅いものを返す
+// （設計 3-27 の「どの枠の時刻を見るか」）。**枠待ちの印を外す時刻を決めるのに使う。**
+//
+// **`resets_at` が null の枠は黙って飛ばす。**印を外す契機はもう1つあり
+// （余裕の無い枠が1つも無くなること）、**そちらが受け持つ。**
+//
+// **`LatestResetForWaitLimit` とは別物である。**混ぜてはならない。
+//
+// sel: その枠を数えるなら true を返す関数。**nil なら「分からない」を返す。**
 // 戻り値の1つ目: いちばん遅いリセット時刻。
-// 戻り値の2つ目: 該当する枠が1つでもあれば true。
-func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
-	if s == nil {
+// 戻り値の2つ目: `resets_at` を持つ枠が1つでもあれば true。
+func (s *Snapshot) LatestResetForClearing(sel func(l Limit) bool) (time.Time, bool) {
+	if s == nil || sel == nil {
 		return time.Time{}, false
 	}
 	var latest time.Time
 	found := false
 	for _, l := range s.Limits {
-		if l.Percent < fullPercent || l.ResetsAt == nil {
+		if !sel(l) || l.ResetsAt == nil {
 			continue
 		}
 		if !found || l.ResetsAt.After(latest) {
@@ -176,56 +209,30 @@ func (s *Snapshot) LatestResetOfFullLimits() (time.Time, bool) {
 	return latest, found
 }
 
-// FullLimitKinds は、使い切っている（`percent` が 100 に達している）枠の `kind` を返す
-// （設計 3-27。issue #197）。
-//
-// **並び順は応答のままである。**呼び出し側は「含まれるか」しか見ない。
-// **重複は取り除かない。**同じ `kind` が2件返る応答を実測していないので、
-// **見ていない形を先回りして畳まない。**
-//
-// **この package は `kind` の意味を知らない。**どれが1週間の枠かを決めるのは
-// `internal/handoff` の `IsWeeklyKind` であり、**そちらを import すると依存の向きが逆になる。**
-//
-// 戻り値: 使い切っている枠の `kind`。1件も無ければ長さ0。
-func (s *Snapshot) FullLimitKinds() []string {
-	if s == nil {
-		return nil
-	}
-	var kinds []string
-	for _, l := range s.Limits {
-		if l.Percent >= fullPercent {
-			kinds = append(kinds, l.Kind)
-		}
-	}
-	return kinds
-}
-
-// LatestResetOfKinds は、使い切っている枠のうち指定した種別のものから、
-// `resets_at` がいちばん遅いものを返す（設計 3-27。issue #197）。
+// LatestResetForWaitLimit は、選んだ枠のうち `resets_at` がいちばん遅いものを返す
+// （設計 3-27。issue #197）。**「1週間の枠を待つ上限」の判定に使う。**
 //
 // **1つでも `resets_at` を持たないものがあれば「分からない」と返す。**
 // 持っているものだけで判定すると、**待つ先の分からない枠を無視して、短いほうへ倒れる。**
 // 1週間の枠がいつ明けるか分からないのに「2時間後に明ける」と読むことになる。
 //
-// **`LatestResetOfFullLimits` とは別物である。**あちらは枠待ちの印を外す時刻を決めるもので、
-// **種別を選ばず、`resets_at` の無い枠は黙って飛ばす**（設計 3-27 の「どの枠の時刻を見るか」）。
-// **こちらは「1週間の枠を待つ上限」の判定に使う。**混ぜてはならない。
+// **`LatestResetForClearing` とは別物である。**あちらは枠待ちの印を外す時刻を決めるもので、
+// **`resets_at` の無い枠は黙って飛ばす。**混ぜてはならない。
 //
-// **`kind` の比べ方は呼び出し側が持つ。**この package は `kind` の意味を知らないので、
+// **種別で絞るのも `sel` の仕事である。**この package は `kind` の意味を知らないので、
 // **種別の一覧を受け取ると、大文字小文字と前後の空白の扱いを2箇所で決めることになる。**
-// **判定する関数を1つ受け取れば、その写しがそもそも要らない。**
 //
-// match: その `kind` を数えるなら true を返す関数。**nil なら、いつも「分からない」を返す。**
+// sel: その枠を数えるなら true を返す関数。**nil なら「分からない」を返す。**
 // 戻り値の1つ目: いちばん遅いリセット時刻。
 // 戻り値の2つ目: 該当する枠が1つ以上あり、その全部が `resets_at` を持っていれば true。
-func (s *Snapshot) LatestResetOfKinds(match func(kind string) bool) (time.Time, bool) {
-	if s == nil || match == nil {
+func (s *Snapshot) LatestResetForWaitLimit(sel func(l Limit) bool) (time.Time, bool) {
+	if s == nil || sel == nil {
 		return time.Time{}, false
 	}
 	var latest time.Time
 	found := false
 	for _, l := range s.Limits {
-		if l.Percent < fullPercent || !match(l.Kind) {
+		if !sel(l) {
 			continue
 		}
 		if l.ResetsAt == nil {

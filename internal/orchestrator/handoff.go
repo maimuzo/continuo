@@ -272,11 +272,7 @@ func (o *Orchestrator) evaluateBid() (handoff.Bid, handoff.SkipReason) {
 		// 運用者が枠で判定しないと決めた状態なので、そこで黙らせると
 		// **その機械は1件も処理しなくなる。**
 		o.cfg.RateLimit.Source != ratelimit.SourceNone,
-		handoff.Margins{
-			FiveHour: o.cfg.Tracker.Provider.Handoff.FiveHourMarginPercent,
-			Weekly:   o.cfg.Tracker.Provider.Handoff.WeeklyMarginPercent,
-		},
-		o.cfg.RateLimit.PauseAbovePercent,
+		o.bidMargins(),
 		o.now(),
 	)
 }
@@ -597,15 +593,13 @@ func (o *Orchestrator) weeklyWaitExceeded(rs *runState) bool {
 	// 続けて呼んではならない。**2回のロックの間に `pollQuota` が割り込むと、
 	// **「読めている」と答えた新しい写しではなく、古い写しで手放すことになる。**
 	snap, stale := o.quotaSnapshotWithStale()
-	fullKinds := snap.FullLimitKinds()
-	weeklyFull := false
-	for _, kind := range fullKinds {
-		if handoff.IsWeeklyKind(kind) {
-			weeklyFull = true
-			break
-		}
-	}
-	since := rs.noteWeeklyFull(weeklyFull, o.now())
+	// **「使い切っている」ではなく「余裕が無い」で数える**（人間の決定。2026-09-06。issue #197）。
+	// **入札に使う余裕値と同じ線である**（`handoff.Short`）。
+	// **線を1本にしないと、使用率90〜99の帯で run が枠待ちにならないまま
+	// 手放しの条件だけを満たし、打ち切りと手放しが競走する。**
+	shortWeekly := handoff.ShortWeekly(o.bidMargins())
+	weeklyShort := snap.AnySelected(shortWeekly)
+	since := rs.noteWeeklyShort(weeklyShort, o.now())
 
 	// **読めなくなった写しで手放さない。**この判定は GitHub へ2回書き、pane を閉じる。
 	// **資格情報が切れた機械は、切れる直前の値を1日中返し続ける**（設計 3-77i）。
@@ -619,15 +613,25 @@ func (o *Orchestrator) weeklyWaitExceeded(rs *runState) bool {
 	}
 
 	limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
-	if limit <= 0 || !weeklyFull {
+	if limit <= 0 || !weeklyShort {
 		// **0 以下は「上限を設けない」**（`claude.turn_timeout_ms` と
 		// `tracker.provider.handoff.recheck_interval_ms` と同じ向き）。
 		// **5時間の枠だけならいつまでも待つ。**
 		return false
 	}
-	if resetAt, ok := snap.LatestResetOfKinds(handoff.IsWeeklyKind); ok {
+	// **人間が書いた式そのものである**（2026-08-26 / 2026-09-06）。
+	//
+	//	現在時刻 + weekly_wait_limit_minutes < 1週間の枠のリセット時刻
+	//
+	// 移項すると `リセット時刻 − 現在時刻 > 上限` になる。**待っても明けないという意味である。**
+	//
+	// **選ぶ枠は `shortWeekly` と同じものにする。**`weeklyShort` を数えた集合と
+	// **リセット時刻を引く集合がずれると、「余裕が無い」と答えた枠の明ける時刻を見ないまま手放す。**
+	if resetAt, ok := snap.LatestResetForWaitLimit(shortWeekly); ok {
 		return resetAt.Sub(o.now()) > limit
 	}
+	// **リセット時刻を1つでも読めないときは、経過で測る。**
+	// **消してはならない。**`resets_at` が `null` の枠だけが逼迫している機械は、永久に待つことになる。
 	return !since.IsZero() && o.now().Sub(since) > limit
 }
 
@@ -709,12 +713,12 @@ func (o *Orchestrator) releaseBecauseQuotaWait(ctx context.Context, rs *runState
 // rs: 対象の run。
 func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState) bool {
 	issue := rs.issue()
-	// **どの枠を使い切っているかを控える。**下の `Info` と `Warn` に載せる。
+	// **どの枠に余裕が無いかを控える。**下の `Info` と `Warn` に載せる。
 	// **載せないと、`weekly_scoped`（1週間のモデル別の枠）が原因のときに、
 	// 人間が claude.ai の画面と突き合わせても食い違って見える。**
 	// **理由が既定の水準で出ないのは、issue #173 が直そうとしている症状そのものである。**
-	fullSnap, _ := o.quotaSnapshotWithStale()
-	fullKinds := strings.Join(fullSnap.FullLimitKinds(), ", ")
+	shortSnap, _ := o.quotaSnapshotWithStale()
+	fullKinds := strings.Join(shortSnap.SelectedKinds(handoff.Short(o.bidMargins())), ", ")
 
 	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
 	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。

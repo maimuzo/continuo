@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 )
@@ -561,20 +562,18 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 		return turnWaitAgain, nil
 	}
 
-	// **待ちに入る前に、1週間の枠を待つ上限を超えていないかを見る**（設計 3-27。issue #197）。
-	// **超えていたら標識を立てない。**立てると、手放したあとに枠待ちの標識だけが残る。
+	// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
+	// **手放しの入口は巡回の1本だけである。**
 	//
-	// **画面の版は、ここでは見ない**（設計 3-27。issue #197）。
-	// **巡回の `checkStalls` が、枠待ちの判定より前に見ている。**
-	// **同じ判定を2箇所に置くと、片方だけが直る。**
-	if o.weeklyWaitExceeded(rs) && o.releaseBecauseQuotaWait(ctx, rs) {
-		return turnAborted, nil
-	}
-	// **手放せなかったときは、そのまま枠待ちへ入る。**
-	// **`turnAborted` で戻ってはならない。**戻ると、枠待ちの印も次の turn の印も立たないまま
-	// turn の goroutine が終わり、**`claude.turn_timeout_ms` を0以下にしている機械では
-	// 誰も拾い直さない。**その run はスロットと pane を握ったまま残る。
-	// **印を立てておけば、次の巡回が `releaseQuotaWaitExceeded` でやり直す。**
+	// **なぜ待ちループから外したか。**手放すかどうかを決めるには、
+	// **pane が止まっているか**（画面の版・`agent_status`・走っているサブエージェント）を読む必要がある。
+	// **それを読むのは巡回だけである。**読まない側に手放させると、
+	// **動いている run を、動いていることを確かめないまま止めることになる。**
+	//
+	// **待ちが遅れることはない。**ここでは枠待ちの印を立てるだけで、
+	// **巡回は既定30秒ごとに回り、印の立った run を `releaseQuotaWaitExceeded` が拾う。**
+	// **`claude.turn_timeout_ms` を0以下にしている機械でも取り残されない。**
+	// `checkStalls` は無音の閾値による早い戻りより**前**に `releaseQuotaWaitExceeded` を呼ぶ。
 
 	resetAt, ok := o.quotaResetAt()
 	rs.setWaitingQuota(resetAt)
@@ -642,7 +641,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 			return o.afterQuotaReset(ctx, rs)
 		}
 		o.pollQuota(ctx)
-		if !o.quotaAtFull() {
+		if !o.quotaShort() {
 			rs.clearWaitingQuota(o.now())
 			return o.afterQuotaReset(ctx, rs)
 		}
@@ -752,17 +751,21 @@ const turnStopUnreadable turnOutcome = 103
 //
 // **2条件の連言である。**
 //
-//	条件その1  percent が 100 に達している
+//	条件その1  余裕の無い枠がある（余裕値が0以下。`handoff.Short`）
 //	条件その2  その run から claude.turn_timeout_ms のあいだ hook が1件も来ていない
 //
+// **条件その1 は「percent が 100 に達している」だった**（人間の決定で変えた。2026-09-06。issue #197）。
+// **入札に使う余裕値と同じ線へ揃えてある。**揃えないと、使用率90〜99の帯で
+// **この run は枠待ちにならないのに、1週間の枠を待つ上限の条件だけを満たす。**
+// そこでは打ち切り（retry を積む）と手放し（担当を外す）が競走し、
+// **どちらが勝つかで、枠が足りないだけの issue が `failure_state` へ落ちることがあった。**
+//
 // **`severity` は見ない。**上限を示す値が何かを実測できていない。
-// **`pause_above_percent`（既定95%）を超えただけでは枠待ちとみなさない**（95%は枠がまだ
-// 残っている状態で、走行中の worker は普通に動ける）。
 //
 // rs: 判定する run。
 // 戻り値: 枠待ちなら true。
 func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
-	if !o.quotaAtFull() {
+	if !o.quotaShort() {
 		return false
 	}
 	snap := rs.snapshot()
@@ -777,22 +780,26 @@ func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
 	return true
 }
 
-// quotaAtFull は使い切っている枠があるかを返す（設計 3-27 の条件その1）。
+// quotaShort は余裕の無い枠があるかを返す（設計 3-27 の条件その1）。
 //
-// 戻り値: `percent` が 100 に達している枠があれば true。枠を読めていなければ false。
-func (o *Orchestrator) quotaAtFull() bool {
-	return o.quotaSnapshot().AtFullPercent()
+// **線は入札と同じ `handoff.Short` である**（人間の決定。2026-09-06。issue #197）。
+// **マージンは種別ごとに引く**ので、`Snapshot` の側では判定できない。
+//
+// 戻り値: 余裕値が0以下の枠があれば true。枠を読めていなければ false。
+func (o *Orchestrator) quotaShort() bool {
+	return o.quotaSnapshot().AnySelected(handoff.Short(o.bidMargins()))
 }
 
-// quotaResetAt は枠待ちを外す時刻を返す（設計 3-27 の「どの枠の時刻を見るか」）。
+// quotaResetAt は枠待ちの印を外す時刻を返す（設計 3-27 の「どの枠の時刻を見るか」）。
 //
 // **条件その1 を満たした枠のうち、`resets_at` がいちばん遅いものである。**
-// `resets_at` が null の枠は判定から外す。
+// **`resets_at` が null の枠は黙って飛ばす。**印を外す契機はもう1つあり
+// （余裕の無い枠が1つも無くなること）、**そちらが受け持つ。**
 //
 // 戻り値の1つ目: 外す時刻。
 // 戻り値の2つ目: 時刻が分かれば true。
 func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
-	return o.quotaSnapshot().LatestResetOfFullLimits()
+	return o.quotaSnapshot().LatestResetForClearing(handoff.Short(o.bidMargins()))
 }
 
 // confirmTurnEnd は turn の終わりを確定させる（設計 3-2 の hook 側の規則）。

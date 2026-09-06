@@ -153,19 +153,19 @@ type runState struct {
 	TranscriptPath string
 	// QuotaResetAt は枠待ちを外す時刻である（設計 3-27）。
 	QuotaResetAt time.Time
-	// WeeklyFullSince は、この run について満杯の1週間の枠を最初に見た時刻である
+	// WeeklyShortSince は、この run について余裕の無い1週間の枠を最初に見た時刻である
 	// （設計 3-27。issue #197）。
 	//
 	// **枠待ちの印（WaitingQuota）とは切り離して持つ。**
-	// 印は5時間の枠が明けるたびに外れるので（reconcile.go の checkStalls）、
+	// 印は5時間の枠に余裕が戻るたびに外れるので（reconcile.go の checkStalls）、
 	// **印に紐づけると、外れるたびに0へ戻って経過が永久に伸びない。**
 	//
-	// **run ごとに持つ。**機械に1つだけ持つと、**枠が満杯になったあとに着手した run を、
-	// 1分も待たずに手放すことになる。**この run が満杯を見てからの経過を測る。
+	// **run ごとに持つ。**機械に1つだけ持つと、**枠の余裕が無くなったあとに着手した run を、
+	// 1分も待たずに手放すことになる。**この run が余裕の無さを見てからの経過を測る。
 	//
 	// **写し（runSnapshot）には載せない。**読むのは `noteWeeklyFull` の戻り値だけであり、
 	// **写しへ載せると、そこを通さない古い値を正だと思って読む人が出る。**
-	WeeklyFullSince time.Time
+	WeeklyShortSince time.Time
 	// Tokens はこの run が始めてからの累計のトークンである（設計 3-15）。
 	//
 	// **中身は「いまのセッションの transcript を `requestId` で重複排除して足した値」＋
@@ -1074,28 +1074,28 @@ func (rs *runState) setWaitingQuota(resetAt time.Time) {
 	rs.QuotaResetAt = resetAt
 }
 
-// noteWeeklyFull は、満杯の1週間の枠を見たかどうかを記録する（設計 3-27。issue #197）。
+// noteWeeklyShort は、余裕の無い1週間の枠を見たかどうかを記録する（設計 3-27。issue #197）。
 //
 // **既に立っている時刻を上書きしない。**上書きすると経過が永久に伸びない。
-// **満杯の1週間の枠が1つも無くなったらゼロへ戻す。**戻さないと、枠が空いたあとも
-// 古い時刻が残り、**次に満杯になった run を1分も待たずに手放す。**
+// **余裕の無い1週間の枠が1つも無くなったらゼロへ戻す。**戻さないと、枠が空いたあとも
+// 古い時刻が残り、**次に余裕が無くなった run を1分も待たずに手放す。**
 //
 // **枠待ちの印の出し入れとは無関係に動かす。**印は5時間の枠が明けるたびに外れる。
 //
-// full: 満杯の1週間の枠があるか。
+// short: 余裕の無い1週間の枠があるか。
 // now: いまの時刻。
-// 戻り値: 満杯になってからの経過を測る起点。**full が偽ならゼロ値。**
-func (rs *runState) noteWeeklyFull(full bool, now time.Time) time.Time {
+// 戻り値: 余裕が無くなってからの経過を測る起点。**short が偽ならゼロ値。**
+func (rs *runState) noteWeeklyShort(short bool, now time.Time) time.Time {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if !full {
-		rs.WeeklyFullSince = time.Time{}
+	if !short {
+		rs.WeeklyShortSince = time.Time{}
 		return time.Time{}
 	}
-	if rs.WeeklyFullSince.IsZero() {
-		rs.WeeklyFullSince = now
+	if rs.WeeklyShortSince.IsZero() {
+		rs.WeeklyShortSince = now
 	}
-	return rs.WeeklyFullSince
+	return rs.WeeklyShortSince
 }
 
 // clearWaitingQuota は枠待ちの印を外し、stall の時計を動かし直す（設計 3-27）。
@@ -1107,8 +1107,8 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	rs.WaitingQuota = false
 	rs.QuotaResetAt = time.Time{}
 	rs.LastSeenAt = now
-	// **満杯の1週間の枠を最初に見た時刻は、ここでは消さない**（設計 3-27。issue #197）。
-	// **消す契機は「1週間の枠が満杯でなくなったこと」だけである。**
+	// **余裕の無い1週間の枠を最初に見た時刻は、ここでは消さない**（設計 3-27。issue #197）。
+	// **消す契機は「1週間の枠に余裕が戻ったこと」だけである。**
 	//
 	// **ここで消すと、5時間の枠が明けるたびに0へ戻る。**
 	// 標識を外す時刻は種別を選ばないので、**5時間の枠のほうが早く明ければその時刻になる。**
@@ -1116,7 +1116,7 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	// 「5時間の枠の残り＋`claude.turn_timeout_ms`」ぶん超過する。**
 	// **既定値では約6時間の超過になり、上限が1度も効かないこともある。**
 	//
-	// 消すのは `noteWeeklyFull(false, …)` である。**巡回のたびに、標識の有無によらず呼ぶ。**
+	// 消すのは `noteWeeklyShort(false, …)` である。**巡回のたびに、印の有無によらず呼ぶ。**
 }
 
 // noteRevision は画面の版を見た結果を記録する（設計 3-21）。
