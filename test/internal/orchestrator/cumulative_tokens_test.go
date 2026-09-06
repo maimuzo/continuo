@@ -2,14 +2,18 @@ package orchestrator_test
 
 import (
 	"context"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // oneResponse は assistantLine 1件ぶんのトークンである。
@@ -300,5 +304,251 @@ func TestTokenUsage_Sub(t *testing.T) {
 	}
 	if !clamped {
 		t.Error("丸めたのに知らせていない")
+	}
+}
+
+// resumeLedgerRun は「復帰して turn を1回終える」を1回ぶん組み立てる（issue #238）。
+//
+// **台帳を落とす条件を確かめるテストは、1つの fixture の中で2回 dispatch する。**
+// 台帳は `Orchestrator` の中にあるので、**fixture を作り直すと空になり、何も確かめられない。**
+//
+// **毎回コメントを書く。**エージェントのコメントは **run ごとに数え直す**（`StartedAt` より
+// 後のものだけを数える）ので、**1回目に書いたものは2回目には数えられない。**
+// 数えられないと「この run のコメントが無いので、セッションを復元して書かせます」の経路へ落ち、
+// 余計な herdr の呼び出しと WARN が出る。
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// issue: 対象の issue。
+// sessionUUID: その turn の終わりに hook が名乗るセッション UUID。
+// **復帰先を決めるのはここではない。**身元ファイル（`prepareWorktree` の
+// `identityOverride.SessionUUID`）が決めるので、**同じ値を渡すこと。**
+// 違う値を渡すと hook がどの run にも当たらず、**待ちが時間切れになって
+// 「turn が終わらない」という、原因の分かりにくい落ち方をする。**
+// transcriptPath: その turn の終わりに読ませる transcript のパス。
+// promptID: その turn の `prompt_id`。
+// onPrompt: `agent.prompt` を受けたときに追加で行うこと（Status を動かすなど）。nil なら何もしない。
+func resumeLedgerRun(
+	t *testing.T, fx *fixture, issue tracker.Issue,
+	sessionUUID, transcriptPath, promptID string, onPrompt func(),
+) {
+	t.Helper()
+	nodeID := nodeIDOf(t, issue)
+	var once sync.Once
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		once.Do(func() {
+			// **何をしたかはエージェントが書く**（continuo は代筆しない。設計 3-25 / 3-29）。
+			fx.Tracker.AddComment(nodeID, "<!-- continuo:agent -->\n実装しました", true, time.Now())
+			if onPrompt != nil {
+				onPrompt()
+			}
+			fx.Orc.OnHook(stopEvent(sessionUUID, transcriptPath, promptID))
+		})
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+	// **dispatch が起きたことを、待ちとは別に確かめる。**
+	// `WaitRunsDrained` は「走行中の run が0件」を待つだけなので、
+	// **dispatch が1件も起きなければ最初から真であり、素通りする。**
+	// 素通りしたまま累計を見ると、**足りない値を「二重に数えた」と読み違える。**
+	before := fx.Herdr.CountMethod(herdr.MethodAgentStart)
+	fx.Orc.Tick(context.Background())
+	// **`Tick` は着手の完了を待たずに返る**（段2以降は別の goroutine）。
+	// **`release` のあとに印から外れるので、そこまで待てば台帳の書き込みも終わっている。**
+	fx.WaitRunsDrained(t, 30*time.Second)
+	if after := fx.Herdr.CountMethod(herdr.MethodAgentStart); after == before {
+		t.Fatalf("dispatch が1件も起きていない（待ちが素通りした）: agent.start の回数が %d のまま", after)
+	}
+}
+
+// assertResumedSameSession は、直近の `agent.start` が同じセッションへ復帰したことを確かめる
+// （issue #238）。
+//
+// **これを見ないと、落ちた原因を取り違える。**復帰が壊れると鍵（セッション UUID）が変わり、
+// `addTokenUsage` は差分ではなく全額を足す。**台帳を落とす欠陥が入ったときと、
+// まったく同じ値が出る。**
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の fixture。
+// want: 復帰先として期待するセッション UUID。
+func assertResumedSameSession(t *testing.T, fx *fixture, want string) {
+	t.Helper()
+	resumes := startResumeUUIDs(fx)
+	starts := startSessionIDs(fx)
+	if len(resumes) == 0 {
+		t.Fatalf("agent.start が1度も呼ばれていない")
+	}
+	if got := resumes[len(resumes)-1]; got != want {
+		t.Fatalf("同じセッションへ復帰していない（累計の検査より前に落とす）: --resume=%q, want %q", got, want)
+	}
+	if got := starts[len(starts)-1]; got != "" {
+		t.Fatalf("復帰するのに新しい UUID を採番している: --session-id=%q", got)
+	}
+}
+
+// ledgerTranscript は、そのセッションの記録を「同じファイル」として書き直す（issue #238）。
+//
+// **`seedSessionTranscript` を2回呼んではならない。**呼ぶたびに新しいディレクトリを作るので、
+// **同じセッションの記録が置き場所ごとに枝分かれし、
+// どれが「伸びた同じファイル」なのかがテストから見えなくなる。**
+// **このテストが見たいのは「同じ transcript が伸びたときに差分だけ足るか」**なので、
+// **伸ばす先が1つに定まっていなければ、何を確かめたのか言えない。**
+//
+// **ファイル名は `seeded` から取る。**別に渡すと、綴りを取り違えたときに
+// **同じディレクトリへ別名の記録が1つ増え、`seeded` は伸びないまま残る。**
+// **下の一致の検査は、いまの `writeTranscript` では必ず真になる**（同じ `filepath.Join` を通る）。
+// **`writeTranscript` が返すパスを整形し直すようになったときの番兵として置いてある。**
+//
+// t: 呼び出し元のテスト。
+// seeded: `seedSessionTranscript` が返した1回目のパス。**ここを書き直す。**
+// lines: 書き直す中身。
+// 戻り値: 書き直したファイルのパス（**`seeded` と必ず同じ**）。
+func ledgerTranscript(t *testing.T, seeded string, lines []any) string {
+	t.Helper()
+	got := writeTranscript(t, filepath.Dir(seeded), filepath.Base(seeded), lines)
+	if got != seeded {
+		t.Fatalf("1回目と違うファイルを書いた（伸ばしたことにならない）: got %q, want %q", got, seeded)
+	}
+	return got
+}
+
+// TestTokenTotals_引き渡しのあと復帰しても二重に数えない は、
+// **`release` では台帳を落とさない**という決めごとを確かめる（issue #238）。
+//
+// 目的: **引き渡し（`In Review` / `Blocked`）は worktree を消さない。**
+// 人間が Status を戻すと、continuo は**同じセッションへ `--resume` で復帰する。**
+// **そのとき台帳を落としていると、その transcript が最初から全部もう一度足される。**
+// `SPEC.md` 13.5 の「二重計上を避けるため、最後に報告した合計との差分を追うこと」が破れる。
+//
+// **この経路は、片付けを1度も通らない。**`cleanup.on_states` の既定は `["Done"]` なので、
+// `In Review` では `ShouldCleanup` が偽になり、`release` だけが走る。
+//
+// 与える情報: 身元ファイルつきの worktree と、API 応答1件の記録。
+// 1回目の turn で `review` を表明して `In Review` へ渡し、Status を戻してもう一度 dispatch する。
+// **2回目の turn では、同じファイルが2件目まで伸びている。**
+//
+// 成功条件: 累計が API 応答2件ぶんであること。**3件ぶんなら、`release` が台帳を落としている。**
+func TestTokenTotals_引き渡しのあと復帰しても二重に数えない(t *testing.T) {
+	// **記録の根は、このテスト専用にする**（`sessionTranscriptDir` の説明）。
+	fx := newFixture(t, fixtureOptions{TranscriptRoot: t.TempDir()})
+	issue := sampleIssue(188, "In Progress")
+	prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
+	fx.Tracker.AddIssue(issue)
+
+	first := []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "実装しました。\n\nCONTINUO-STATUS: review", false),
+	}
+	path := seedSessionTranscript(t, fx, "sess-188", first)
+
+	resumeLedgerRun(t, fx, issue, "sess-188", path, "p1", nil)
+	assertResumedSameSession(t, fx, "sess-188")
+	if got, want := fx.Orc.TokenTotals(), oneResponse; got != want {
+		t.Fatalf("1回目の turn の集計が累計に入っていない: got %+v, want %+v", got, want)
+	}
+	if got := fx.Tracker.StateOf(issue.ID); got != "In Review" {
+		t.Fatalf("引き渡しの経路を通っていない: Status=%q, want %q", got, "In Review")
+	}
+
+	// **同じファイルを伸ばす。**`requestId` を変えないと、重複排除で2件目が落ちる。
+	ledgerTranscript(t, path, append(append([]any{}, first...),
+		typedUserLine("p2", "続けてください"),
+		assistantLine("req2", "続きをやりました。\n\nCONTINUO-STATUS: review", false),
+	))
+	// **人間が Status を戻した、という状況を作る。**
+	fx.Tracker.SetState(issue.ID, "In Progress")
+
+	resumeLedgerRun(t, fx, issue, "sess-188", path, "p2", nil)
+	assertResumedSameSession(t, fx, "sess-188")
+	if got, want := fx.Orc.TokenTotals(), timesResponse(2); got != want {
+		t.Fatalf("累計が期待と違う（多ければ release が台帳を落としている。少なければ turn が足りていない）: got %+v, want %+v", got, want)
+	}
+}
+
+// TestTokenTotals_片付けを見送ったあと復帰しても二重に数えない は、
+// **`cleanupPath` が偽（見送り・失敗）なら台帳を落とさない**という決めごとを確かめる
+// （issue #238）。
+//
+// 目的: **片付けを見送ると worktree は残る。**残っていれば同じセッションへ復帰できるので、
+// **台帳を落としていると、その transcript が最初から全部もう一度足される。**
+//
+// **上のテストとの違いは、片付けの経路を通るかどうかである。**
+// あちら（`In Review`）は `ShouldCleanup` が偽で `cleanupWorktree` へ1度も入らない。
+// こちら（`Done`）は入るが、`cleanup.enabled` が偽なので `Cleanup` が「消していない」を返し、
+// **`cleanupPath` が偽を返して `forgetTokenLedger` へ届かない。**
+//
+// **変異の検出という尺度では、このテストが上のテストを包含する**（`release` で落とす欠陥も、
+// `cleanupPath` の戻り値を見ない欠陥も、どちらもここで落ちる）。
+// **それでも上のテストを残すのは、あちらが引き渡しという実際の経路そのものであり、
+// レビューで指摘された症状の再現だからである。**こちらは `cleanup.enabled` を偽にした
+// 人工的な設定で、実運用では既定ではない。
+//
+// **この2本は「落とさない」側だけを見る。**「消したときに落とす」側は見ない。
+// **`forgetTokenLedger` の呼び出しを丸ごと消しても、この2本は落ちない。**
+// worktree を消すと身元ファイルも消えるので、次の着手は必ず新しいセッションを採番し、
+// **台帳の項目に入っている `session` と食い違うので、差分ではなく全額が足されるからである**
+// （**鍵そのものは issue の識別子のままで、変わらない**）。
+// 失うのは台帳の項目1件ぶんのメモリだけである。
+// **同じ理由で、巡回中に worktree を消す `reconcileWorktrees` も台帳を落としていないが、
+// 額は変わらないのでこの2本の対象外である。**
+//
+// 与える情報: `cleanup.enabled` を偽にした fixture と、身元ファイルつきの worktree。
+// 1回目の turn で Status が `Done`（`terminal_states`）になり、片付けが見送られる。
+//
+// 成功条件: 累計が API 応答2件ぶんであること。**3件ぶんなら、台帳を落としている。**
+func TestTokenTotals_片付けを見送ったあと復帰しても二重に数えない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		TranscriptRoot: t.TempDir(),
+		Mutate:         func(cfg *config.Config) { cfg.Cleanup.Enabled = false },
+	})
+	// **見送りは必ず WARN を1行出す。**宣言しないと、fixture がテストを落とす。
+	fx.AllowLog("worktree を片付けずに残しました")
+
+	issue := sampleIssue(188, "In Progress")
+	prepareWorktree(t, fx, issue, identityOverride{SessionUUID: "sess-188"})
+	fx.Tracker.AddIssue(issue)
+
+	// **表明で `Done` にはできない。**既定の対応表に `Done` へ落ちる値が1つも無い
+	// （`review` / `blocked` / `working` の3つだけ）。**台本の中でカンバンを動かす。**
+	first := []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "実装しました。", false),
+	}
+	path := seedSessionTranscript(t, fx, "sess-188", first)
+
+	resumeLedgerRun(t, fx, issue, "sess-188", path, "p1", func() {
+		fx.Tracker.SetState(issue.ID, "Done")
+	})
+	assertResumedSameSession(t, fx, "sess-188")
+	if got := fx.Tracker.StateOf(issue.ID); got != "Done" {
+		t.Fatalf("Status が終端になっていない: Status=%q, want %q", got, "Done")
+	}
+	// **片付けの経路へ実際に入ったことを、ログで確かめる。**
+	// **Status を見るだけでは足りない。**その `Done` はこのテスト自身が書いた値であり、
+	// **`ShouldCleanup` が偽になっても同じように真になる。**
+	// そうなるとこのテストは「`release` だけを見るテスト」へ静かに退化し、
+	// **`cleanupPath` の戻り値を無視する欠陥を誰も止められなくなる。**
+	// **この WARN は、片付けに入って見送ったときにしか出ない。**
+	if logs := fx.Logs.String(); !strings.Contains(logs, "worktree を片付けずに残しました") {
+		t.Fatalf("片付けの経路へ入っていない（Cleanup が呼ばれていない）")
+	}
+	if got, want := fx.Orc.TokenTotals(), oneResponse; got != want {
+		t.Fatalf("1回目の turn の集計が累計に入っていない: got %+v, want %+v", got, want)
+	}
+
+	ledgerTranscript(t, path, append(append([]any{}, first...),
+		typedUserLine("p2", "続けてください"),
+		assistantLine("req2", "続きをやりました。", false),
+	))
+	fx.Tracker.SetState(issue.ID, "In Progress")
+
+	resumeLedgerRun(t, fx, issue, "sess-188", path, "p2", func() {
+		fx.Tracker.SetState(issue.ID, "Done")
+	})
+	assertResumedSameSession(t, fx, "sess-188")
+	if got, want := fx.Orc.TokenTotals(), timesResponse(2); got != want {
+		t.Fatalf("累計が期待と違う（多ければ片付けの見送りで台帳を落としている。少なければ turn が足りていない）: got %+v, want %+v", got, want)
 	}
 }

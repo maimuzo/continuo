@@ -982,6 +982,10 @@ func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
 // **そちらは台帳を落としていない。**どちらも起動時にしか走らず、その時点で台帳は空だからである。
 // **巡回の最中に走る片付けを新しく足すなら、そこでも `forgetTokenLedger` を呼ぶこと。**
 //
+// **`reconcileWorktrees` も巡回の最中に worktree を消すが、台帳を落としていない。**
+// **これは欠陥ではない。**理由と、そこへ足すときの注意は
+// docs/plans/impl/09_dashboard.md の「いつ台帳を消すか」にある（**そちらが正である**）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) cleanupWorktree(ctx context.Context, rs *runState) {
