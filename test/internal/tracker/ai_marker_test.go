@@ -562,3 +562,26 @@ func TestComposeCommentBody_続く行の綴りに引きずられない(t *testin
 		t.Fatalf("続く行の綴りに引きずられました:\n got %q\nwant %q", got, want)
 	}
 }
+
+// 目的: 飛ばす断りには印を足さないことを、コードの側で固定する（設計 3-82c）。
+//
+// **CI はこの目印の直後の1文字で「理由を書いたか」を数えている。**
+// **印を足すと、印そのものがその1文字に当たり、理由を1文字も書かない断りが通る。**
+//
+// **continuo はこのコメントを書かない。**組み込みの指示書もエージェントへ書かせない。
+// **それでもここで止めるのは、決まりを散文だけで守らないためである。**
+//
+// 与える情報: 飛ばす断りで始まる本文。
+// 成功条件: 1文字も変わらないこと。
+func TestComposeCommentBody_飛ばす断りには足さない(t *testing.T) {
+	body := "<!-- design-review-skipped -->\n文書だけの変更のため\n"
+	if got := tracker.ComposeCommentBody(body, ""); got != body {
+		t.Fatalf("飛ばす断りへ印を足しました:\n got %q\nwant %q", got, body)
+	}
+	// **`self_marker` が付く経路でも足さない。**
+	const self = "<!-- continuo:self -->"
+	want := self + "\n" + body
+	if got := tracker.ComposeCommentBody(body, self); got != want {
+		t.Fatalf("飛ばす断りへ印を足しました:\n got %q\nwant %q", got, want)
+	}
+}

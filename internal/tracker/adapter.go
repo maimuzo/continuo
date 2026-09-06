@@ -1171,40 +1171,6 @@ func (a *Adapter) FetchComments(
 	return result, nil
 }
 
-// ComposeCommentBody は、continuo が投稿する本文を組み立てる（設計 3-82）。
-//
-// **`PostComment` から切り出してある。**検査の偽の tracker
-// （`test/internal/orchestrator` の `fakeTracker`）も、これを呼ぶ。
-// **写して持つと、片方を直したときに黙ってずれる。**
-// ずれても orchestrator の検査は通り続けるので、**誰も気づけない。**
-//
-// body: 素の本文。
-// selfMarker: 本文の先頭に付ける印（`tracker.comments.self_marker`）。
-// **空文字なら付けない。**持ち回りのコメント（入札・hold・released）は、
-// 本文が自分で印を持っているので空文字で渡ってくる。
-// 戻り値: 投稿する本文。**`self_marker` の次に `config.AIMarker` が入り、
-// 先頭に並ぶ印は1つも動かない。**
-func ComposeCommentBody(body, selfMarker string) string {
-	// **`self_marker` を足す前に印を足す。**順序を逆にしてはならない。
-	//
-	// **`self_marker` は利用者が設定で決める文字列であり、形を縛る検査が無い**
-	// （`tracker.comments.self_marker`）。`[continuo-self]` のような値にできる。
-	// **`withAIMarker` は `<!--` で始まる行だけを印の行とみなす**ので、
-	// **そういう値を先に足すと、印がその行より前へ入る。**
-	// そうなると `FetchComments` の先頭一致が外れ、
-	// **continuo 自身の通知が、次の turn の入力から外れなくなる。**
-	// 人間が書いたコメントとして、毎 turn エージェントへ渡り続ける。
-	//
-	// **先に印を足せば、`self_marker` の形を問わない。**
-	// 持ち回りのコメント（入札・hold・released）は `selfMarker` が空で渡ってくるので、
-	// **本文が自分で持っている印の後ろへ入る。**そちらは固定の `<!--` の印である。
-	full := withAIMarker(body)
-	if selfMarker != "" {
-		full = selfMarker + "\n" + full
-	}
-	return full
-}
-
 // PostComment は continuo 自身が issue へコメントを投稿する。
 //
 // 投稿するのは人間への引き渡しの通知と、Status を動かした記録の2つだけである（設計 3-29）。

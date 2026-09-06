@@ -149,6 +149,10 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 			"囲み付きのまま書くと、次の途中経過の報告が、この報告へ書き足されます。\n"+
 			"**%[2]s のほうは、囲みを外さないでください。**外すと、この報告が数えられません。\n",
 		bareProgressMarker(), marker)
+	// **印にも同じ決まりを書く**（設計 3-82）。**囲みを外させない。**
+	// 直前の段落が「本文の中では囲みを外して書く」と言っているので、
+	// **書かないと、そちらへ引きずられて印まで外される。**
+	fmt.Fprintf(&b, "**%s も、囲みを外さないでください。**外すと、誰が書いたのかを見分ける印になりません。\n", config.AIMarker)
 	return b.String()
 }
 

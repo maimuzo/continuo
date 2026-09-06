@@ -23,7 +23,10 @@ import (
 // CI の3本（`design-review-result` / `code-review-result` / `design-review-skipped`）は
 // `continuo init` が利用者のリポジトリへ置いたきりで、**continuo の版を上げても書き換わらない。**
 var markersThatMustComeFirst = []string{
-	"<!-- continuo:agent -->",
+	// **既定値から取る。**リテラルで書くと、既定を変えたときに
+	// **組み込みの指示書は古い印を書き続けるのに、この検査は落ちない。**
+	config.DefaultConfig().Tracker.Comments.Marker,
+	// **`continuo:group` と CI の2つは、設定に無い固定の目印である。**
 	"<!-- continuo:group -->",
 	"<!-- code-review-result -->",
 	"<!-- design-review-result -->",

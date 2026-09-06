@@ -19,8 +19,11 @@ import (
 
 // commentOpen と commentClose は HTML のコメントの囲みである。
 //
-// **行頭ちょうどの `<!--` だけを印の行とみなす。**字下げした行は本文である
-// （[internal/handoff/assess.go](../handoff/assess.go) の `StartsAsProgressReport` と同じ決まり）。
+// **行頭ちょうどの `<!--` だけを印の行とみなす。**字下げした行は本文である。
+// **[internal/handoff/assess.go](../handoff/assess.go) の `StartsAsProgressReport` とは、
+// そこまでが同じで、1つ違う。**あちらは `<!--` で始まれば印の行と数えるが、
+// **こちらは同じ行に `-->` があることも見る**（`isMarkerLine`）。
+// **複数行の HTML コメントの開きで、2つの判定が分かれる。**
 //
 // **1行目だけは例外になる。**本文全体の先頭の空白を先に落とすので、
 // **字下げした1行目の印は、印として通る。**
@@ -168,6 +171,11 @@ func lineEndingAt(prefix, suffix string) string {
 		if strings.HasSuffix(prefix, "\r\n") {
 			return "\r\n"
 		}
+		// **末尾に改行が無い本文では、直前の行に終わり方が無い。**
+		// **1つ手前の改行を見る。**見ないと、CRLF の本文の最後だけ LF になる。
+		if !strings.HasSuffix(prefix, "\n") && strings.Contains(prefix, "\r\n") {
+			return "\r\n"
+		}
 		return "\n"
 	}
 	// **先頭へ差し込むときだけ、続く最初の行の終わり方に合わせる。**
@@ -206,4 +214,59 @@ func spliceAIMarker(body string, at int) string {
 		return prefix + config.AIMarker
 	}
 	return prefix + config.AIMarker + eol + suffix
+}
+
+// skipNoticeMarker は、設計のレビューを飛ばす断りの目印である。
+//
+// **この目印で始まる本文にだけは、印を足さない**（設計 3-82c）。
+// **CI がこの目印の直後の1文字で「理由を書いたか」を数えている**ので、
+// **印を足すと、理由を1文字も書かない断りが通る。**
+//
+// **continuo はこのコメントを書かない。**組み込みの指示書もエージェントへ書かせない。
+// **それでも門を置くのは、決まりを散文だけで守らないためである。**
+// 呼び出し元が増えたときに、この1行が最後に残る守りになる。
+const skipNoticeMarker = "<!-- design-review-skipped -->"
+
+// ComposeCommentBody は、continuo が投稿する本文を組み立てる（設計 3-82）。
+//
+// **`PostComment` から切り出してある。**検査の偽の tracker
+// （`test/internal/orchestrator` の `fakeTracker`）も、これを呼ぶ。
+// **写して持つと、片方を直したときに黙ってずれる。**
+// ずれても orchestrator の検査は通り続けるので、**誰も気づけない。**
+//
+// body: 素の本文。
+// selfMarker: 本文の先頭に付ける印（`tracker.comments.self_marker`）。
+// **空文字なら付けない。**持ち回りのコメント（入札・hold・released）は、
+// 本文が自分で印を持っているので空文字で渡ってくる。
+// 戻り値: 投稿する本文。**先頭に並ぶ印の、いちばん後ろに `config.AIMarker` が入る。**
+// **既にある印は1つも動かない。**
+// **`self_marker` の次とは限らない。**本文が自分で印を持っていれば、その後ろになる
+// （関門の案内は `self_marker` → `continuo:gated:*` → 印 の3行になる）。
+func ComposeCommentBody(body, selfMarker string) string {
+	// **`self_marker` を足す前に印を足す。**順序を逆にしてはならない。
+	//
+	// **`self_marker` は利用者が設定で決める文字列であり、形を縛る検査が無い**
+	// （`tracker.comments.self_marker`）。`[continuo-self]` のような値にできる。
+	// **`withAIMarker` は `<!--` で始まる行だけを印の行とみなす**ので、
+	// **そういう値を先に足すと、印がその行より前へ入る。**
+	// そうなると `FetchComments` の先頭一致が外れ、
+	// **continuo 自身の通知が、次の turn の入力から外れなくなる。**
+	// 人間が書いたコメントとして、毎 turn エージェントへ渡り続ける。
+	//
+	// **先に印を足せば、`self_marker` の形を問わない。**
+	// 持ち回りのコメント（入札・hold・released）は `selfMarker` が空で渡ってくるので、
+	// **本文が自分で持っている印の後ろへ入る。**そちらは固定の `<!--` の印である。
+	if strings.HasPrefix(strings.TrimSpace(body), skipNoticeMarker) {
+		// **飛ばす断りには足さない**（設計 3-82c）。
+		// 足すと、理由を1文字も書かない断りが CI を通る。
+		if selfMarker != "" {
+			return selfMarker + "\n" + body
+		}
+		return body
+	}
+	full := withAIMarker(body)
+	if selfMarker != "" {
+		full = selfMarker + "\n" + full
+	}
+	return full
 }
