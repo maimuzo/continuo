@@ -321,22 +321,27 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 // （設計 3-27。issue #197）。
 //
 // **人間の指示は「そのセッションのサブエージェントを含め完全停止するまで待って」である**
-// （2026-09-06）。**3つとも満たしたときだけ「止まっている」とする。**
+// （2026-09-06）。**2つとも満たしたときだけ「止まっている」とする。**
 //
-//	画面の版             … 前に見た値から変わっていない
-//	agent_status         … idle か done である
-//	走っているサブエージェント … 1つも無い
+//	画面の版     … 前に見た値から変わっていない
+//	agent_status … idle か done である
 //
 // **`agent_status` で `working` だけを弾くのでは足りない。**`unknown` は
 // 「**agent は居るが herdr が状態を判定できない**」という意味であり（`internal/herdr/types.go`）、
 // **確かめられていない。**`blocked` は人間の入力待ちなので、閉じると確認の画面ごと消える。
 // **だから「止まっている」と言えるのは `idle` と `done` の2つだけである。**
 //
-// **走っているサブエージェントは continuo が自分で数えている。**herdr の `agent_status` は
-// サブエージェントを知らない（状態は5つで、どれもサブエージェントに触れていない）。
-// **枠待ちの最中は hook が来ないので、枠が尽きた瞬間に走っていたサブエージェントは
-// `SubagentStop` を送れず、一覧に残り続ける。**それがまさに「まだ止まっていない」の信号である。
-// **待たずに閉じると、そのとき書きかけだった編集がまるごと消える。**
+// **`runningSubagentList()` は使えない。**一度は3つ目の条件にしたが、取り下げた。
+// **あの一覧を空にする経路は、次の turn を始めるときと `SubagentStop` を受けたときの2つしか無い**
+// （`runState.beginTurn` と `noteSubagentStop`）。
+// **枠待ちの最中は、どちらも起きない。**次の turn は枠が明けるまで送られず、hook も来ない。
+// **つまり、枠が尽きた瞬間にサブエージェントが走っていた run は、一覧が永久に空にならず、
+// この関数が二度と真を返さない。**手放しの仕組みが、いちばん効いてほしい場面で1回も動かなくなる。
+//
+// **サブエージェントは `agent_status` が受け持つ。**サブエージェントの出力も同じ pane へ出るので、
+// **何かが動いているあいだ herdr は `working` を返す。**
+// **ただし、これは herdr の実装を読んで確かめたものではない**（`working` の決め方は測っていない）。
+// **測れていないので、`unknown` を「止まっている」に入れない形で安全側へ倒してある。**
 //
 // **herdr へ届かなければ「止まっていない」を返す。**確かめられないときは手放さない側へ倒す。
 // この判定の先には GitHub への2回の書き込みと pane を閉じる操作がある。
@@ -345,9 +350,6 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 // rs: 対象の run。
 // 戻り値: 完全に止まっていれば true。
 func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) bool {
-	if len(rs.runningSubagentList()) > 0 {
-		return false
-	}
 	agent, err := o.agentInfo(ctx, rs)
 	if err != nil {
 		o.logger.Info("画面の状態を読めないので、1週間の枠の上限を超えていても手放しません（次の巡回でやり直します）",
@@ -522,7 +524,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		}
 
 		// 2. 画面が止まっている。枠待ちかを見る。
-		if o.isQuotaWaiting(rs) {
+		if o.isQuotaWaitingWith(quotaSnap, rs) {
 			// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
 			// **手放しの入口は `releaseQuotaWaitExceeded` の1本だけである。**
 			// **印を立てるだけにしておけば、次の巡回の先頭でそちらが拾う。**
@@ -530,7 +532,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 			//
 			// **2箇所に置いてはならない。**片方だけが直る形になり、
 			// **同じ問いに違う答えが返る**（それがこの issue の元の症状である）。
-			resetAt, _ := o.quotaResetAt()
+			resetAt, _ := o.quotaResetAtOf(quotaSnap)
 			rs.setWaitingQuota(resetAt)
 			o.logger.Info("枠待ちと判定したので stall の時計を止めます",
 				"identifier", snap.Identifier, "resets_at", resetAt)

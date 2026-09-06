@@ -37,6 +37,18 @@ const maxHandoffFetchesPerPoll = 10
 // **GitHub が遅いときの1回ぶんとして実測のある長さである。**
 const quotaReleaseWriteBudget = 30 * time.Second
 
+// quotaReleaseCheckBudget は、手放してよいかを確かめるあいだの上限である（issue #197）。
+//
+// **段0 は `gh` を2回叩く**（`viewerIdentity` と `refreshIssue`）。
+// **`context.WithoutCancel` で切られないようにしてあるので、上限を付けないと期限が1つも無くなる。**
+// **`gh` が死んだ回線で固まると、この goroutine は永久に返らない。**
+// `releaseBecauseQuotaWaitAsync` が `wg.Add(1)` しているので、
+// **`Close` の `wg.Wait()` もそこで永久に止まり、continuo が終われなくなる。**
+//
+// **書き込みの側（`quotaReleaseWriteBudget`）と同じ値にしてある。**
+// 読み取り2回なので、書き込み2回より長くかかる理由が無い。
+const quotaReleaseCheckBudget = 30 * time.Second
+
 // handoffDecision は handoffGate の答えである。
 type handoffDecision struct {
 	// proceed は、この機械が着手してよいかである。
@@ -729,7 +741,11 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// 内側にしかない。**`0`（上限を設けない）にした機械では、枠待ちの run は
 	// 担当が移ったことに気づかないままである。**塞いだのは
 	// 「自分から手放すときに push 先を間違えない」ことだけである。
-	mine, known, newAccount := o.mayReleaseOwnWork(keepCtx, rs)
+	// **期限を付ける**（issue #197）。`keepCtx` は切られないので、
+	// **ここで上限を置かないと `gh` が固まったときに誰も止められない。**
+	checkCtx, cancelCheck := context.WithTimeout(keepCtx, quotaReleaseCheckBudget)
+	defer cancelCheck()
+	mine, known, newAccount := o.mayReleaseOwnWork(checkCtx, rs)
 	switch {
 	case !known:
 		// **分からないなら手放さない。**次の巡回でやり直す。
@@ -752,7 +768,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// **印を消すのは着手と片付けだけである。**先に走らせて外す相手が分からなかった場合、
 	// **この run が枠明けに完走しても `finishRun` の `after_run` が印に弾かれて1回も走らない。**
 	// **draft issue と「`gh` の持ち主を取れない」の2つは、走らせる前に分かる。**
-	nodeID, viewer, ready := o.releaseTargetFor(keepCtx, issue, "枠の上限で担当を手放そうとしましたが")
+	nodeID, viewer, ready := o.releaseTargetFor(checkCtx, issue, "枠の上限で担当を手放そうとしましたが")
 	if !ready {
 		rs.endTerminal()
 		return false

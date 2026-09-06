@@ -234,7 +234,7 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 		switch {
 		case IsWeeklyKind(l.Kind):
 			return fullPercent-l.Percent-margins.Weekly <= 0
-		case strings.EqualFold(l.Kind, LimitKindSession):
+		case matchesKind(l.Kind, []string{LimitKindSession}):
 			return fullPercent-l.Percent-margins.FiveHour <= 0
 		default:
 			return false

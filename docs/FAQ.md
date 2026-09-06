@@ -1009,12 +1009,13 @@ cd ~/continuo-work && continuo --log-level debug
 1週間の枠が明けるのを待つ上限を超えたので、担当を手放しました（次の担当は入札で決め直します。
 worktree は残します。カンバンへは書きません）
   identifier=octocat/hello-world#188 外した担当者=octocat
-  weekly_wait_limit_minutes=300 使い切っている枠=weekly_scoped
+  weekly_wait_limit_minutes=300 余裕の無い枠=weekly_scoped
 ```
 
-**`使い切っている枠` を見てください。**`weekly_scoped` は**モデル別の週次の枠**です。
+**`余裕の無い枠` を見てください。**`weekly_scoped` は**モデル別の週次の枠**です。
 **claude.ai の画面に出る週次の全体（`weekly_all`）が30%でも、
-よく使っているモデルの `weekly_scoped` が100%なら、こちらで止まります。**
+よく使っているモデルの `weekly_scoped` に余裕が無ければ、こちらで止まります。**
+**「余裕が無い」は `100 − 使用率 − マージン` が0以下のことです。**マージンが既定の10なら使用率90%からです。
 **モデル別の枠は、使った分だけ増えます。**使っていないモデルの枠は `percent: 0` のままです（issue #199）。
 
 **外せなかったときは、`warn` でこう出ます。**
@@ -1028,10 +1029,10 @@ worktree は残します。カンバンへは書きません）
 
 ```
 <!-- continuo:released -->
-{"from":"mac-studio","branch":"continuo/octocat/hello-world/188","at":"2026-08-30T09:00:00+09:00","reason":"weekly_wait_limit"}
+{"from":"octocat","branch":"continuo/octocat/hello-world/188","at":"2026-08-30T09:00:00+09:00","reason":"weekly_wait_limit"}
 
 **この issue の担当は外れました。次の担当は入札で決め直します。**
-**mac-studio が1週間の枠を待つ上限を超えたので、自分で担当を手放しました。**workspace_hooks.after_run は実行済みです。この branch を次に取る機械は、remote の続きから始めてください。
+**octocat が1週間の枠を待つ上限を超えたので、自分で担当を手放しました。**workspace_hooks.after_run は実行済みです。この branch を次に取る機械は、remote の続きから始めてください。
 ```
 
 **`"reason":"weekly_wait_limit"` が目印です。**

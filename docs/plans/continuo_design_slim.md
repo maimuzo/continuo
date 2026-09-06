@@ -404,7 +404,7 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 ```mermaid
 flowchart TB
     poll["巡回（30秒ごと）"] --> usage["usage API を読む<br/>5分に1回"]
-    usage --> over{"どれかの枠が<br/>pause_above_percent を超えたか"}
+    usage --> over{"余裕値が0以下の<br/>枠があるか"}
     over -->|"超えた"| stop["新規の dispatch を止める<br/>走行中の turn は止めない"]
     over -->|"超えていない"| normal["ふつうに dispatch する"]
 

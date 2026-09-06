@@ -9,6 +9,7 @@ import (
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/ratelimit"
 )
 
 // turnOutcome は1つの turn を送って待った結果である。
@@ -633,7 +634,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 		}
 
 		// 枠が明けたか。**標識を外す契機は2つある**（設計 3-27）。
-		// **1つ目は `resets_at` を過ぎたこと。**2つ目は下の `quotaAtFull` で見る。
+		// **1つ目は `resets_at` を過ぎたこと。**2つ目は下の `quotaShort` で見る。
 		// **2つ目を落としてはならない。**`resets_at` が `null` の枠だけが満杯だと、
 		// **1つ目では永久に外れない。**
 		if ok && !o.now().Before(resetAt) {
@@ -765,7 +766,21 @@ const turnStopUnreadable turnOutcome = 103
 // rs: 判定する run。
 // 戻り値: 枠待ちなら true。
 func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
-	if !o.quotaShort() {
+	snap, _ := o.quotaSnapshotWithStale()
+	return o.isQuotaWaitingWith(snap, rs)
+}
+
+// isQuotaWaitingWith は、渡された写しで枠待ちかどうかを判定する（設計 3-27。issue #197）。
+//
+// **巡回はこちらを使う。**`isQuotaWaiting` は run ごとに写しを取り直すので、
+// **同じ巡回の中で run ごとに違う答えが返る**（`pollQuota` は turn の goroutine から
+// 並行に走り、途中で `o.quota` を差し替える）。
+//
+// quotaSnap: この巡回で1回だけ読んだ枠の写し。
+// rs: 判定する run。
+// 戻り値: 枠待ちなら true。
+func (o *Orchestrator) isQuotaWaitingWith(quotaSnap *ratelimit.Snapshot, rs *runState) bool {
+	if !quotaSnap.AnySelected(handoff.Short(o.bidMargins())) {
 		return false
 	}
 	snap := rs.snapshot()
@@ -799,7 +814,19 @@ func (o *Orchestrator) quotaShort() bool {
 // 戻り値の1つ目: 外す時刻。
 // 戻り値の2つ目: 時刻が分かれば true。
 func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
-	return o.quotaSnapshot().LatestResetForClearing(handoff.Short(o.bidMargins()))
+	snap, _ := o.quotaSnapshotWithStale()
+	return o.quotaResetAtOf(snap)
+}
+
+// quotaResetAtOf は、渡された写しから枠待ちの印を外す時刻を返す（設計 3-27）。
+//
+// **巡回はこちらを使う。**理由は `isQuotaWaitingWith` と同じである。
+//
+// quotaSnap: この巡回で1回だけ読んだ枠の写し。
+// 戻り値の1つ目: 外す時刻。
+// 戻り値の2つ目: 時刻が分かれば true。
+func (o *Orchestrator) quotaResetAtOf(quotaSnap *ratelimit.Snapshot) (time.Time, bool) {
+	return quotaSnap.LatestResetForClearing(handoff.Short(o.bidMargins()))
 }
 
 // confirmTurnEnd は turn の終わりを確定させる（設計 3-2 の hook 側の規則）。

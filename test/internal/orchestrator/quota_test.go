@@ -902,32 +902,31 @@ func TestQuota_画面の状態を判定できないうちは手放さない(t *t
 	}
 }
 
-// TestQuota_サブエージェントが走っているうちは手放さない は、
-// 「完全停止するまで待つ」を確かめる（設計 3-27。issue #197）。
+// TestQuota_走っている印が残っていても止まっていれば手放す は、
+// 「サブエージェントの一覧を手放しの条件にしない」を確かめる（設計 3-27。issue #197）。
 //
-// 目的: **人間の指示は「そのセッションのサブエージェントを含め完全停止するまで待って」である**
-// （2026-09-06）。**herdr の `agent_status` はサブエージェントを知らない。**
-// continuo は `SubagentStart` / `SubagentStop` を自分で数えている。
-// **待たずに閉じると、そのとき書きかけだった編集がまるごと消える。**
+// 目的: **`runningSubagentList()` を条件にすると、この仕組みが1回も動かなくなる。**
+// **あの一覧を空にする経路は、次の turn を始めるときと `SubagentStop` を受けたときの2つしか無い。**
+// **枠待ちの最中は、どちらも起きない。**次の turn は枠が明けるまで送られず、hook も来ない。
+// **つまり、枠が尽きた瞬間にサブエージェントが走っていた run は、一覧が永久に空にならない。**
+// **手放しの仕組みが、いちばん効いてほしい場面で1回も動かなくなる。**
+//
+// **人間の指示（2026-09-06）は「サブエージェントを含め完全停止するまで待って」である。**
+// **それは `agent_status` が受け持つ。**サブエージェントの出力も同じ pane へ出るので、
+// 何かが動いているあいだ herdr は `working` を返す。
 //
 // 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。
-// **`agent_status` は `idle` だが、サブエージェントが1つ走っている。**
-// 成功条件: 上限を超えていても手放さないこと。
-func TestQuota_サブエージェントが走っているうちは手放さない(t *testing.T) {
+// **走っているサブエージェントの印が1つ残っているが、`agent_status` は `idle`。**
+// 成功条件: 手放すこと。
+func TestQuota_走っている印が残っていても止まっていれば手放す(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
 	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_SUBAGENT")
+	// **`SubagentStop` が来ないまま枠が尽きた状態を作る。**
 	fx.Orc.OnHook(subagentStartEvent("session-188", "", "a1f9f743842d397e1", "Explore"))
 
-	for i := 0; i < 5; i++ {
-		clock.Advance(2 * time.Minute)
-		fx.Orc.Tick(context.Background())
-	}
-
-	if _, ok := viewOf(fx, issue.Identifier); !ok {
-		t.Fatalf("サブエージェントが走っているのに担当を手放した:\n%s", fx.Logs.String())
-	}
+	waitForRelease(t, fx, clock, issue.Identifier)
 }
 
 // TestQuota_5時間の枠の時刻で1週間の枠を判定しない は、待つ先の取り方を確かめる。

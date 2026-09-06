@@ -226,6 +226,11 @@ func TestValidate_数値の範囲を外れたら弾く(t *testing.T) {
 		{"同時実行数が負", "max_concurrent_agents", "  max_concurrent_agents: -1", "max_concurrent_agents"},
 		{"巡回の間隔が0", "poll_interval_ms", "  poll_interval_ms: 0", "poll_interval_ms"},
 		{"指示の上限が0", "max_dispatch_turns", "  max_dispatch_turns: 0", "max_dispatch_turns"},
+		// **1週間の枠を待つ上限が負**（issue #197）。
+		// **負だと「リセット時刻 − いま」が必ず上回るので、枠待ちに入った瞬間に担当を手放す。**
+		// **1週間の枠を1%でも使えば、走っている run が全部止まる。**
+		{"1週間の枠を待つ上限が負", "weekly_wait_limit_minutes",
+			"  weekly_wait_limit_minutes: -1", "weekly_wait_limit_minutes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := loadWithReplaced(t, tc.key, tc.line)

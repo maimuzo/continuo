@@ -350,21 +350,17 @@ func (o *Orchestrator) logNewWorkBlocked(skip handoff.SkipReason) {
 // **100 は「この設定では止まらない」という意味である。**
 // **`100` とだけ出すと「100%で止まる」と読まれる。**
 //
-// **`>` で比べる。**マージン0なら閾値は100で、**使用率100に達したときだけ止まる。**
-// **それは「止まらない」ではないので、そう名乗ってはならない。**
-// **マージンを負にはできない**（`validate` が弾く）ので、閾値が100を超えることは無い。
+// **「止まらない」という文面は持たない。**マージンは0以上100以下しか通らないので
+// （`internal/config/validate.go` が弾く）、**閾値は必ず0から100の範囲に入る。**
+// **マージン0なら閾値は100で、使用率100に達したときだけ止まる。**それは「止まらない」ではない。
 //
 // **「これに達したら止まる」まで値の側で作る。**属性の名前に入れると、
-// **止まらない設定のときに「これに達すると止まる=この設定では止まりません」と出る。**
+// **読む側が名前と値をつなげて読むことになり、閾値の意味が名前へ漏れる。**
 //
 // margin: その枠のマージン（%）。
 // 戻り値: ログに出す値。
 func (o *Orchestrator) thresholdText(margin int) string {
-	t := o.newWorkThresholdPercent(margin)
-	if t > fullPercentForThreshold {
-		return "この設定では止まりません"
-	}
-	return strconv.Itoa(t) + "% に達したら止まります"
+	return strconv.Itoa(o.newWorkThresholdPercent(margin)) + "% に達したら止まります"
 }
 
 // bidMargins は入札の余裕値を作るときに引くマージンを返す（設計 3-77。issue #173）。
@@ -401,8 +397,12 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// **止めた理由を、既定のログの水準で1行出す**（設計 3-77j。issue #173）。
 	// **ここが `Debug` の1行だけだったので、1台で動かしている人には
 	// 「ボードが何時間も進まない」としか見えなかった。**
-	if skip := o.newWorkBlocked(); skip != handoff.SkipNone {
-		o.logNewWorkBlocked(skip)
+	blocked := o.newWorkBlocked()
+	if blocked != handoff.SkipNone && len(candidates) > 0 {
+		// **候補が0件のときは出さない**（issue #173）。
+		// **枠が何かを止めたわけではない**ので、出すと嘘になる。
+		// **空のカンバンで巡回のたびに1行出し続けることにもなる。**
+		o.logNewWorkBlocked(blocked)
 	}
 	// **ここで巡回を打ち切ってはならない**（人間の決定。2026-09-06。issue #173）。
 	//
@@ -490,7 +490,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
 		if free, blocker, limit := o.freeSlotBlocker(); !free {
-			// **INFO のままにする**（issue #134。上の dispatchPaused と同じ理由）。
+			// **INFO のままにする**（issue #134。`logNewWorkBlocked` と同じ理由）。
 			// **同時に動かす数の上限に達しただけで、異常ではない。**
 			//
 			// **どちらの上限で止まったかを名乗る。**上限は2つあり、
@@ -502,6 +502,19 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 				"その上限", limit,
 				"ここで打ち切った issue", issue.Identifier)
 			break
+		}
+
+		// **枠に余裕が無いなら、担当者のいない issue はここで落とす**（issue #173）。
+		// **`preflight` より前に置く。**あちらは issue ごとに git を2プロセス起こすので、
+		// **104件のカンバンでは巡回1回あたり約200プロセスになる。**
+		// **どうせ下の `handoffGate` が入札しないと答えるので、その全部が捨てられる。**
+		//
+		// **担当が既に自分にある issue は落とさない。**入札が要らないので、
+		// **枠に余裕が無くても着手する**（走っている run の面倒を見る経路がここしかない）。
+		// **`handoffGate` の中の「期限切れの担当を外す」経路も、担当者がいる issue しか通らない。**
+		if blocked != handoff.SkipNone && len(issue.Assignees) == 0 {
+			o.clearGate(issue.ID)
+			continue
 		}
 
 		// 段0: dispatch の直前の検査（設計 3-6 の「issue ごと」の表）。
