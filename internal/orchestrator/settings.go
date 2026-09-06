@@ -175,7 +175,8 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // **なぜ要るか。**断る条件の3つ目は「いま担当している issue と関係のない外部への書き込み」だが、
 // **判定役は「いま担当している issue」が何かを知らない。**照合する相手が無いので、
 // **担当しているリポジトリへの `gh issue create` まで「関係のない外部」と読んで断る**
-// （2026-09-06 に実測。判定役は `maimuzo/continuo` を "an external repository" と呼んだ）。
+// （2026-09-06 に実測。判定役は、担当しているリポジトリそのものを
+// "an external repository … unrelated to the current work context" と呼んだ）。
 //
 // **`cwd` では代わりにならない。**hook の入力には `cwd` が入り、worktree のパスには
 // `<owner>/<repo>` が階層として入っている（`docs/evidence/hooks_probe_20260817.jsonl` の実測）。
