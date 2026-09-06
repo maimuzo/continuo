@@ -3,7 +3,7 @@
   "usecase_name": "指示書に沿って issue を1件仕上げる",
   "source": {
     "file": "docs/spec/usecases/particular_case/指示書に沿って issue を1件仕上げる.rucm.md",
-    "rucm_block_sha256": "226112a31230b33adeca8ffe0c18bd8bf73e4431438062eb78c3e9e8dd3a7085"
+    "rucm_block_sha256": "68777b54de219f00533569a31b86d9e7c7be8208ff426449a253077875b15838"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -23,7 +23,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          17
+          18
         ]
       },
       "postcondition": "pull request は1本のままである。"
@@ -34,7 +34,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            15
+            16
           ]
         }
       ],
@@ -64,7 +64,7 @@
         {
           "flow": "BASIC FLOW",
           "steps": [
-            15
+            16
           ]
         }
       ],
@@ -173,111 +173,118 @@
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "エージェントは計画を敵対的レビューの subagent へ渡す。"
+      "statement": "エージェントは計画を issue へコメントする。"
     },
     {
       "id": "BASIC FLOW-14",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "エージェントは計画とレビューの判断票を issue へコメントする。"
+      "statement": "エージェントは計画を敵対的レビューの subagent へ渡す。"
     },
     {
       "id": "BASIC FLOW-15",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "エージェントは実装する。"
+      "statement": "エージェントはレビューの判断票を issue へコメントする。"
     },
     {
       "id": "BASIC FLOW-16",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 16,
-      "statement": "エージェントは commit して push する。"
+      "statement": "エージェントは実装する。"
     },
     {
       "id": "BASIC FLOW-17",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 17,
-      "statement": "エージェントは VALIDATES THAT この issue の pull request がまだ無い。"
+      "statement": "エージェントは commit して push する。"
     },
     {
       "id": "BASIC FLOW-18",
-      "type": "action",
+      "type": "condition",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "エージェントは pull request を出す。"
+      "statement": "エージェントは VALIDATES THAT この issue の pull request がまだ無い。"
     },
     {
       "id": "BASIC FLOW-19",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 19,
-      "statement": "エージェントは pull request を敵対的レビューの subagent へ渡す。"
+      "statement": "エージェントは pull request を出す。"
     },
     {
       "id": "BASIC FLOW-20",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 20,
-      "statement": "エージェントは指摘ごとの判断票を pull request へコメントする。"
+      "statement": "エージェントは pull request を敵対的レビューの subagent へ渡す。"
     },
     {
       "id": "BASIC FLOW-21",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "エージェントは指摘を直して push する。"
+      "statement": "エージェントは指摘ごとの判断票を pull request へコメントする。"
     },
     {
       "id": "BASIC FLOW-22",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 22,
-      "statement": "エージェントは何をしたかを issue へコメントする。"
+      "statement": "エージェントは指摘を直して push する。"
     },
     {
       "id": "BASIC FLOW-23",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 23,
-      "statement": "エージェントは応答の最後に完了の表明を1行だけ書く。"
+      "statement": "エージェントは何をしたかを issue へコメントする。"
     },
     {
       "id": "BASIC FLOW-24",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "エージェントはシステムに turn の終わりを Stop hook で知らせる。"
+      "statement": "エージェントは応答の最後に完了の表明を1行だけ書く。"
     },
     {
       "id": "BASIC FLOW-25",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 25,
-      "statement": "システムはエージェントの会話の記録から表明を読む。"
+      "statement": "エージェントはシステムに turn の終わりを Stop hook で知らせる。"
     },
     {
       "id": "BASIC FLOW-26",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 26,
-      "statement": "システムはカンバンの issue の Status に引き渡し先を書く。"
+      "statement": "システムはエージェントの会話の記録から表明を読む。"
     },
     {
       "id": "BASIC FLOW-27",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 27,
-      "statement": "システムは書いた Status を控える。"
+      "statement": "システムはカンバンの issue の Status に引き渡し先を書く。"
     },
     {
       "id": "BASIC FLOW-28",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 28,
+      "statement": "システムは書いた Status を控える。"
+    },
+    {
+      "id": "BASIC FLOW-29",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 29,
       "statement": "システムは run を終える。"
     },
     {
@@ -313,7 +320,7 @@
       "type": "resume",
       "flow": "既にあるpullrequestを使う",
       "step": 2,
-      "statement": "RESUME STEP 19"
+      "statement": "RESUME STEP 20"
     },
     {
       "id": "進捗報告を書く-1",
@@ -355,7 +362,7 @@
       "type": "resume",
       "flow": "進捗報告を書く",
       "step": 6,
-      "statement": "RESUME STEP 15"
+      "statement": "RESUME STEP 16"
     },
     {
       "id": "進捗報告を新しく投稿する-1",
@@ -532,38 +539,38 @@
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-15",
-      "to": "進捗報告を書く-1",
-      "kind": "global",
-      "condition": "エージェントが1時間以上コメントを書かないまま作業を続けている場合"
-    },
-    {
-      "from": "BASIC FLOW-15",
-      "to": "判断に迷って止まる-1",
-      "kind": "global",
-      "condition": "エージェントが指示書の決めていないことに当たった場合"
-    },
-    {
       "from": "BASIC FLOW-16",
       "to": "BASIC FLOW-17",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-17",
-      "to": "BASIC FLOW-18",
-      "kind": "true",
-      "condition": "この issue の pull request がまだ無い"
+      "from": "BASIC FLOW-16",
+      "to": "進捗報告を書く-1",
+      "kind": "global",
+      "condition": "エージェントが1時間以上コメントを書かないまま作業を続けている場合"
+    },
+    {
+      "from": "BASIC FLOW-16",
+      "to": "判断に迷って止まる-1",
+      "kind": "global",
+      "condition": "エージェントが指示書の決めていないことに当たった場合"
     },
     {
       "from": "BASIC FLOW-17",
-      "to": "既にあるpullrequestを使う-1",
-      "kind": "false",
-      "condition": "NOT この issue の pull request がまだ無い"
+      "to": "BASIC FLOW-18",
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-18",
       "to": "BASIC FLOW-19",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "この issue の pull request がまだ無い"
+    },
+    {
+      "from": "BASIC FLOW-18",
+      "to": "既にあるpullrequestを使う-1",
+      "kind": "false",
+      "condition": "NOT この issue の pull request がまだ無い"
     },
     {
       "from": "BASIC FLOW-19",
@@ -611,6 +618,11 @@
       "kind": "seq"
     },
     {
+      "from": "BASIC FLOW-28",
+      "to": "BASIC FLOW-29",
+      "kind": "seq"
+    },
+    {
       "from": "本文が空になる-1",
       "to": "本文が空になる-2",
       "kind": "seq"
@@ -632,7 +644,7 @@
     },
     {
       "from": "既にあるpullrequestを使う-2",
-      "to": "BASIC FLOW-19",
+      "to": "BASIC FLOW-20",
       "kind": "resume"
     },
     {
@@ -676,7 +688,7 @@
     },
     {
       "from": "進捗報告を書く-6",
-      "to": "BASIC FLOW-15",
+      "to": "BASIC FLOW-16",
       "kind": "resume"
     },
     {
@@ -769,7 +781,8 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -784,8 +797,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "エージェントは commit して push する。",
         "エージェントは VALIDATES THAT この issue の pull request がまだ無い。",
@@ -825,9 +839,9 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "既にあるpullrequestを使う-1",
         "既にあるpullrequestを使う-2",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
@@ -836,7 +850,8 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -851,14 +866,15 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "エージェントは commit して push する。",
         "エージェントは VALIDATES THAT この issue の pull request がまだ無い。",
         "CONDITION: NOT この issue の pull request がまだ無い",
         "エージェントは既にある pull request の番号を、いま居る branch から引く。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "エージェントは pull request を敵対的レビューの subagent へ渡す。",
         "エージェントは指摘ごとの判断票を pull request へコメントする。",
         "エージェントは指摘を直して push する。",
@@ -892,13 +908,14 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を書く-3",
         "進捗報告を書く-4",
         "進捗報告を書く-5",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -913,8 +930,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -922,7 +940,7 @@
         "エージェントは進捗報告の本文を読む。",
         "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。",
         "エージェントは読んだ本文の末尾に1行足して書き戻す。",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -947,6 +965,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を書く-3",
@@ -955,7 +974,7 @@
         "進捗報告の本文を読めない-2",
         "進捗報告の本文を読めない-3",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -970,8 +989,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -982,7 +1002,7 @@
         "エージェントは書き戻さない。",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
         "RESUME STEP 6",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -1007,12 +1027,13 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を新しく投稿する-1",
         "進捗報告を新しく投稿する-2",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1027,8 +1048,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -1036,7 +1058,7 @@
         "CONDITION: NOT いちばん下のコメントが自分の進捗報告である",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
         "RESUME STEP 6",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -1061,6 +1083,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "判断に迷って止まる-1",
         "判断に迷って止まる-2",
         "判断に迷って止まる-3",
@@ -1079,8 +1102,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが指示書の決めていないことに当たった場合",
         "エージェントは何に迷ったかを issue へコメントする。",
@@ -1125,7 +1149,8 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1144,8 +1169,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "エージェントは commit して push する。",
         "エージェントは VALIDATES THAT この issue の pull request がまだ無い。",
@@ -1188,9 +1214,9 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "既にあるpullrequestを使う-1",
         "既にあるpullrequestを使う-2",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
@@ -1199,7 +1225,8 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1218,14 +1245,15 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "エージェントは commit して push する。",
         "エージェントは VALIDATES THAT この issue の pull request がまだ無い。",
         "CONDITION: NOT この issue の pull request がまだ無い",
         "エージェントは既にある pull request の番号を、いま居る branch から引く。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "エージェントは pull request を敵対的レビューの subagent へ渡す。",
         "エージェントは指摘ごとの判断票を pull request へコメントする。",
         "エージェントは指摘を直して push する。",
@@ -1262,13 +1290,14 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を書く-3",
         "進捗報告を書く-4",
         "進捗報告を書く-5",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1287,8 +1316,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -1296,7 +1326,7 @@
         "エージェントは進捗報告の本文を読む。",
         "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。",
         "エージェントは読んだ本文の末尾に1行足して書き戻す。",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -1324,6 +1354,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を書く-3",
@@ -1332,7 +1363,7 @@
         "進捗報告の本文を読めない-2",
         "進捗報告の本文を読めない-3",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1351,8 +1382,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -1363,7 +1395,7 @@
         "エージェントは書き戻さない。",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
         "RESUME STEP 6",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -1391,12 +1423,13 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を新しく投稿する-1",
         "進捗報告を新しく投稿する-2",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1415,8 +1448,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -1424,7 +1458,7 @@
         "CONDITION: NOT いちばん下のコメントが自分の進捗報告である",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
         "RESUME STEP 6",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -1452,6 +1486,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "判断に迷って止まる-1",
         "判断に迷って止まる-2",
         "判断に迷って止まる-3",
@@ -1474,8 +1509,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが指示書の決めていないことに当たった場合",
         "エージェントは何に迷ったかを issue へコメントする。",
@@ -1520,7 +1556,8 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1539,8 +1576,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "エージェントは commit して push する。",
         "エージェントは VALIDATES THAT この issue の pull request がまだ無い。",
@@ -1583,9 +1621,9 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "既にあるpullrequestを使う-1",
         "既にあるpullrequestを使う-2",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
@@ -1594,7 +1632,8 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1613,14 +1652,15 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "エージェントは commit して push する。",
         "エージェントは VALIDATES THAT この issue の pull request がまだ無い。",
         "CONDITION: NOT この issue の pull request がまだ無い",
         "エージェントは既にある pull request の番号を、いま居る branch から引く。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "エージェントは pull request を敵対的レビューの subagent へ渡す。",
         "エージェントは指摘ごとの判断票を pull request へコメントする。",
         "エージェントは指摘を直して push する。",
@@ -1657,13 +1697,14 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を書く-3",
         "進捗報告を書く-4",
         "進捗報告を書く-5",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1682,8 +1723,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -1691,7 +1733,7 @@
         "エージェントは進捗報告の本文を読む。",
         "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。",
         "エージェントは読んだ本文の末尾に1行足して書き戻す。",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -1719,6 +1761,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を書く-3",
@@ -1727,7 +1770,7 @@
         "進捗報告の本文を読めない-2",
         "進捗報告の本文を読めない-3",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1746,8 +1789,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -1758,7 +1802,7 @@
         "エージェントは書き戻さない。",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
         "RESUME STEP 6",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -1786,12 +1830,13 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を新しく投稿する-1",
         "進捗報告を新しく投稿する-2",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1810,8 +1855,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -1819,7 +1865,7 @@
         "CONDITION: NOT いちばん下のコメントが自分の進捗報告である",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
         "RESUME STEP 6",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -1847,6 +1893,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "判断に迷って止まる-1",
         "判断に迷って止まる-2",
         "判断に迷って止まる-3",
@@ -1869,8 +1916,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが指示書の決めていないことに当たった場合",
         "エージェントは何に迷ったかを issue へコメントする。",
@@ -1918,7 +1966,8 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -1941,8 +1990,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "エージェントは commit して push する。",
         "エージェントは VALIDATES THAT この issue の pull request がまだ無い。",
@@ -1988,9 +2038,9 @@
         "BASIC FLOW-15",
         "BASIC FLOW-16",
         "BASIC FLOW-17",
+        "BASIC FLOW-18",
         "既にあるpullrequestを使う-1",
         "既にあるpullrequestを使う-2",
-        "BASIC FLOW-19",
         "BASIC FLOW-20",
         "BASIC FLOW-21",
         "BASIC FLOW-22",
@@ -1999,7 +2049,8 @@
         "BASIC FLOW-25",
         "BASIC FLOW-26",
         "BASIC FLOW-27",
-        "BASIC FLOW-28"
+        "BASIC FLOW-28",
+        "BASIC FLOW-29"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -2022,14 +2073,15 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "エージェントは commit して push する。",
         "エージェントは VALIDATES THAT この issue の pull request がまだ無い。",
         "CONDITION: NOT この issue の pull request がまだ無い",
         "エージェントは既にある pull request の番号を、いま居る branch から引く。",
-        "RESUME STEP 19",
+        "RESUME STEP 20",
         "エージェントは pull request を敵対的レビューの subagent へ渡す。",
         "エージェントは指摘ごとの判断票を pull request へコメントする。",
         "エージェントは指摘を直して push する。",
@@ -2069,13 +2121,14 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を書く-3",
         "進捗報告を書く-4",
         "進捗報告を書く-5",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -2098,8 +2151,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -2107,7 +2161,7 @@
         "エージェントは進捗報告の本文を読む。",
         "エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。",
         "エージェントは読んだ本文の末尾に1行足して書き戻す。",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -2138,6 +2192,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を書く-3",
@@ -2146,7 +2201,7 @@
         "進捗報告の本文を読めない-2",
         "進捗報告の本文を読めない-3",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -2169,8 +2224,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -2181,7 +2237,7 @@
         "エージェントは書き戻さない。",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
         "RESUME STEP 6",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -2212,12 +2268,13 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "進捗報告を書く-1",
         "進捗報告を書く-2",
         "進捗報告を新しく投稿する-1",
         "進捗報告を新しく投稿する-2",
         "進捗報告を書く-6",
-        "BASIC FLOW-15"
+        "BASIC FLOW-16"
       ],
       "steps": [
         "システムは組み込みの指示書を目印の行で前半と後半に切る。",
@@ -2240,8 +2297,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが1時間以上コメントを書かないまま作業を続けている場合",
         "エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。",
@@ -2249,7 +2307,7 @@
         "CONDITION: NOT いちばん下のコメントが自分の進捗報告である",
         "エージェントは進捗報告の印を付けたコメントを新しく投稿する。",
         "RESUME STEP 6",
-        "RESUME STEP 15",
+        "RESUME STEP 16",
         "エージェントは実装する。"
       ]
     },
@@ -2280,6 +2338,7 @@
         "BASIC FLOW-13",
         "BASIC FLOW-14",
         "BASIC FLOW-15",
+        "BASIC FLOW-16",
         "判断に迷って止まる-1",
         "判断に迷って止まる-2",
         "判断に迷って止まる-3",
@@ -2306,8 +2365,9 @@
         "エージェントは issue から辿れるプランファイルと過去の issue を読む。",
         "エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。",
         "エージェントは実装の計画を書く。",
+        "エージェントは計画を issue へコメントする。",
         "エージェントは計画を敵対的レビューの subagent へ渡す。",
-        "エージェントは計画とレビューの判断票を issue へコメントする。",
+        "エージェントはレビューの判断票を issue へコメントする。",
         "エージェントは実装する。",
         "CONDITION: エージェントが指示書の決めていないことに当たった場合",
         "エージェントは何に迷ったかを issue へコメントする。",
@@ -2318,9 +2378,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 51,
-    "nodes_covered": 51,
-    "edges_total": 56,
-    "edges_covered": 56
+    "nodes_total": 52,
+    "nodes_covered": 52,
+    "edges_total": 57,
+    "edges_covered": 57
   }
 }
