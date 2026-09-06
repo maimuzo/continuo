@@ -290,7 +290,7 @@ func (o *Orchestrator) logTokens(rs *runState, path string, usage TokenUsage) {
 	if clamped {
 		// **黙って丸めない。**累計が実際より小さくなったことを、あとから確かめられるようにする。
 		o.logger.Warn("transcript の集計が前回より小さかったので、累計への差分を0にしました",
-			"identifier", identifier, "transcript", path)
+			"identifier", identifier, "transcript_path", path)
 	}
 }
 

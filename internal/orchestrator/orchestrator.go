@@ -1018,15 +1018,42 @@ type tokenLedgerEntry struct {
 // usage: その transcript 1ファイルから読んだ絶対値。
 // 戻り値: 差分の1項目でも0へ丸めたら true（呼ぶ側が WARN を出す）。
 func (o *Orchestrator) addTokenUsage(identifier, path string, usage TokenUsage) bool {
+	// **鍵にする前に綴りを揃える。**`o.mu` を取る前に済ませる（ファイルシステムを引くため）。
+	key := normalizeTranscriptPath(path)
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	delta, clamped := usage, false
-	if prev, ok := o.tokenLedger[identifier]; ok && prev.path == path {
+	if prev, ok := o.tokenLedger[identifier]; ok && prev.path == key {
 		delta, clamped = usage.Sub(prev.usage)
 	}
 	o.tokenTotals = o.tokenTotals.Add(delta)
-	o.tokenLedger[identifier] = tokenLedgerEntry{path: path, usage: usage}
+	o.tokenLedger[identifier] = tokenLedgerEntry{path: key, usage: usage}
 	return clamped
+}
+
+// normalizeTranscriptPath は、台帳の鍵に使う transcript のパスの綴りを揃える（issue #238）。
+//
+// **同じファイルを2通りの綴りで名乗られても、同じ鍵にするためである。**
+// 台帳は「前に計上したのと同じファイルか」を**文字列の一致だけ**で判定しており、
+// **揃えないと `/a/b.jsonl` と `/a/./b.jsonl` が別のファイルとして扱われ、
+// そのファイルの絶対値がもう一度まるごと累計へ足される。**
+//
+// **揃えるのは、この値が外部入力だからである。**hook の `transcript_path` は
+// エージェントが書き換えられる（`hookinput.go` の「hook の中身はエージェントが
+// 書き換えられる外部入力である」）。`acceptTranscriptPath` は**解決した写しで検査するだけで、
+// 元の綴りを書き戻さない。**
+//
+// **`runState.TranscriptPath` は書き換えない。**あちらは人間へ見せるコメント（`prompt.go`）と
+// 突き合わせ（`reconcile.go`）が同じ値を使っている。**揃えるのは台帳の鍵だけでよい。**
+//
+// path: hook が名乗った transcript のパス。
+// 戻り値: 解決できたらその絶対パス。解決できなければ `filepath.Clean` だけを当てたもの。
+func normalizeTranscriptPath(path string) string {
+	cleaned := filepath.Clean(path)
+	if resolved, ok := resolvePath(cleaned); ok {
+		return resolved
+	}
+	return cleaned
 }
 
 // forgetTokenLedger は台帳からこの issue の項目を落とす（issue #238）。

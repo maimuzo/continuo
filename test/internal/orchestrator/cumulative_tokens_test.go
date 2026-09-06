@@ -2,6 +2,7 @@ package orchestrator_test
 
 import (
 	"context"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -91,6 +92,71 @@ func TestTokenTotals_turnを重ねても同じtranscriptを二重に数えない
 
 	if got, want := fx.Orc.TokenTotals(), timesResponse(2); got != want {
 		t.Fatalf("同じ transcript を二重に数えている: got %+v, want %+v", got, want)
+	}
+}
+
+// TestTokenTotals_同じファイルを違う綴りで名乗られても二重に数えない は、
+// 台帳の鍵を綴りで揺らせないことを確かめる（issue #238 のセキュリティレビューの指摘）。
+//
+// 目的: **台帳は「前に計上したのと同じファイルか」を文字列の一致だけで判定している。**
+// **hook の `transcript_path` はエージェントが書き換えられる外部入力である**
+// （`internal/orchestrator/hookinput.go` が「hook の中身はエージェントが書き換えられる
+// 外部入力である」と書いている）。**綴りを1文字変えるだけで「別のファイル」と判定されると、
+// そのファイルの絶対値がもう一度まるごと足され、累計を何度でも水増しできる。**
+//
+// 与える情報: 1回目の turn は `<dir>/session-1.jsonl` で終わり、2回目の turn は
+// **同じファイルを `<dir>/./session-1.jsonl` と名乗って**終わる。中身は2件目まで伸びている。
+//
+// 成功条件: 累計が API 応答2件ぶんであること。**綴りを変えた分を二重に数えて
+// 3件ぶんになっていないこと。**
+func TestTokenTotals_同じファイルを違う綴りで名乗られても二重に数えない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "実装してください"),
+		assistantLine("req1", "作業を続けています。\nCONTINUO-STATUS: working", false),
+	})
+	// **同じファイルを指す別の綴り。**`filepath.Clean` を当てれば同じになる。
+	wobbled := filepath.Join(transcriptDir, ".", "session-1.jsonl")
+	wobbled = filepath.Dir(wobbled) + "/./" + filepath.Base(wobbled)
+
+	var mu sync.Mutex
+	calls := 0
+	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		switch n {
+		case 1:
+			fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
+		case 2:
+			writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+				typedUserLine("p1", "実装してください"),
+				assistantLine("req1", "作業を続けています。\nCONTINUO-STATUS: working", false),
+				typedUserLine("p2", "続けてください"),
+				assistantLine("req2", "まだ作業しています。\nCONTINUO-STATUS: working", false),
+			})
+			// **綴りだけを変えて名乗る。**
+			fx.Orc.OnHook(stopEvent("session-1", wobbled, "p2"))
+		default:
+		}
+		return map[string]any{
+			"type":  "agent_prompted",
+			"agent": map[string]any{"name": params["target"], "agent_status": "idle", "interactive_ready": true},
+		}, nil
+	})
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 30*time.Second, "2回目の turn の集計が載る", func() bool {
+		v, ok := viewOfFixture(fx, "octocat/hello-world#188")
+		return ok && v.Tokens.APICalls >= 2
+	})
+
+	if got, want := fx.Orc.TokenTotals(), timesResponse(2); got != want {
+		t.Fatalf("綴りを変えられて二重に数えた: got %+v, want %+v", got, want)
 	}
 }
 
