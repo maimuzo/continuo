@@ -258,10 +258,14 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(ctx context.Context) {
 		if !o.weeklyWaitExceeded(rs) {
 			continue
 		}
-		// **画面の判定は `releaseBecauseQuotaWaitClaimed` の中で行う。**
-		// **ここでやってはならない。**画面は herdr、担当は GitHub と、別々の外部に依存する。
-		// **前に置くと、herdr が落ちているあいだ担当の確認が1回も走らない。**
-		// **枠待ちの run に turn の終わりは来ない**ので、担当を確かめる経路は他に無い。
+		// **ここには画面の版の確認が無い。**`releaseBecauseQuotaWaitClaimed` にも無い
+		// （検索パターン `agentInfo|Revision`、対象パス `internal/orchestrator/handoff.go` の
+		// 710行から840行。0件）。
+		//
+		// **持っていない守りを、持っていると書いてはならない。**
+		// **枠待ちの標識が立っているかどうかを答えるのは `isQuotaWaiting` である。**
+		// **そこが画面を見ていないので、標識は画面が動いている run にも立つ。**
+		// **直す位置はこの行ではなく `isQuotaWaiting` である**（issue #197）。
 		o.releaseBecauseQuotaWaitAsync(ctx, rs)
 	}
 }
