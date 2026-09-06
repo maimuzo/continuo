@@ -170,7 +170,7 @@ type Assessment struct {
 // **期限は「その担当者の進捗報告が最後に現れてから」で数える**（設計 3-77b / 5-3l）。
 // **数えるのは進捗報告の印（config.ProgressMarker）が付いたコメントだけである。**
 // **投稿者だけで数えてはならない。**エージェントも continuo も人間も同じ GitHub アカウントで
-// 投稿するので（[internal/tracker/ghuser.go](../tracker/ghuser.go) の 23-25行）、
+// 投稿するので（[internal/tracker/ghuser.go](../tracker/ghuser.go) の 24-25行）、
 // **人間が無関係なコメントを1件書いただけで、黙り込んだエージェントの期限が延びてしまう。**
 //
 // **進捗報告が1件も無いあいだは、hold のコメントが作られた時刻から数える。**
@@ -335,7 +335,7 @@ const commentOpen = "<!--"
 //
 // **数えるのは、進捗報告の印が付いた、その担当者のコメントだけである。**
 // **投稿者だけで数えてはならない。**エージェントも continuo も人間も、同じ GitHub アカウントで
-// 投稿する（[internal/tracker/ghuser.go](../tracker/ghuser.go) の 23-25行）ので、
+// 投稿する（[internal/tracker/ghuser.go](../tracker/ghuser.go) の 24-25行）ので、
 // **人間が無関係なコメントを1件書いただけで、黙り込んだエージェントの期限が延びる。**
 // **それでは死活確認にならない。**
 //

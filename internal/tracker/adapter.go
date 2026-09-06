@@ -1171,6 +1171,31 @@ func (a *Adapter) FetchComments(
 	return result, nil
 }
 
+// ComposeCommentBody は、continuo が投稿する本文を組み立てる（設計 3-82）。
+//
+// **`PostComment` から切り出してある。**検査の偽の tracker
+// （`test/internal/orchestrator` の `fakeTracker`）も、これを呼ぶ。
+// **写して持つと、片方を直したときに黙ってずれる。**
+// ずれても orchestrator の検査は通り続けるので、**誰も気づけない。**
+//
+// body: 素の本文。
+// selfMarker: 本文の先頭に付ける印（`tracker.comments.self_marker`）。
+// **空文字なら付けない。**持ち回りのコメント（入札・hold・released）は、
+// 本文が自分で印を持っているので空文字で渡ってくる。
+// 戻り値: 投稿する本文。**`self_marker` の次に `config.AIMarker` が入り、
+// 先頭に並ぶ印は1つも動かない。**
+func ComposeCommentBody(body, selfMarker string) string {
+	full := body
+	if selfMarker != "" {
+		full = selfMarker + "\n" + body
+	}
+	// **人間ではなく機械が書いたことを名乗る**（設計 3-82）。
+	// **先頭に並ぶ印のいちばん後ろへ足すので、`self_marker` も、本文が自分で持っている
+	// 持ち回りの印（入札・hold・released）も、先頭のまま動かない。**
+	// 動かすと、`FetchComments` の先頭一致と `handoff.IsMarked` が同時に外れる。
+	return config.WithAIMarker(full)
+}
+
 // PostComment は continuo 自身が issue へコメントを投稿する。
 //
 // 投稿するのは人間への引き渡しの通知と、Status を動かした記録の2つだけである（設計 3-29）。
@@ -1192,15 +1217,7 @@ func (a *Adapter) FetchComments(
 // 戻り値: 投稿したコメント（IsSelf は常に true）。GraphQL 呼び出しが失敗した場合、または
 // 応答にコメントが含まれていない場合はエラーを返す。
 func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*Comment, error) {
-	full := body
-	if selfMarker != "" {
-		full = selfMarker + "\n" + body
-	}
-	// **人間ではなく機械が書いたことを名乗る**（設計 3-82）。
-	// **先頭に並ぶ印のいちばん後ろへ足すので、`self_marker` も、本文が自分で持っている
-	// 持ち回りの印（入札・hold・released）も、先頭のまま動かない。**
-	// 動かすと、`FetchComments` の先頭一致と `handoff.IsMarked` が同時に外れる。
-	full = config.WithAIMarker(full)
+	full := ComposeCommentBody(body, selfMarker)
 
 	var resp addCommentResponse
 	vars := map[string]any{"subjectId": issueNodeID, "body": full}

@@ -77,15 +77,14 @@ func TestTemplate_機械の印は既存の目印より後ろに書かせる(t *t
 			continue
 		}
 		found++
-		// **同じ見本の中で、この行より前に出ている目印を数える。**
+		// **同じ見本の中で、この行より後ろに出ている目印を探す。**
 		// 見本は空行で切れるので、直前の空行までを1つの見本とみなす。
 		start := i
 		for start > 0 && strings.TrimSpace(lines[start-1]) != "" {
 			start--
 		}
-		block := lines[start:i]
 		for _, marker := range markersThatMustComeFirst {
-			// この見本がその目印を使っていなければ、順序を問わない。
+			// この見本がその目印を後ろで使っていなければ、順序を問わない。
 			usedAfter := false
 			for j := i + 1; j < len(lines) && strings.TrimSpace(lines[j]) != ""; j++ {
 				if strings.Contains(lines[j], marker) {
@@ -96,10 +95,11 @@ func TestTemplate_機械の印は既存の目印より後ろに書かせる(t *t
 			if !usedAfter {
 				continue
 			}
+			// **末尾を越えて切らない。**印が最後の3行に入っていると panic する。
+			end := min(i+3, len(lines))
 			t.Errorf("%d 行目の %s が %s より前にあります。"+
 				"先頭の目印を数えている continuo と CI が、同時に外れます\n見本:\n%s",
-				i+1, config.AIMarker, marker, strings.Join(lines[start:i+3], "\n"))
-			_ = block
+				i+1, config.AIMarker, marker, strings.Join(lines[start:end], "\n"))
 		}
 	}
 	if found == 0 {
@@ -107,39 +107,11 @@ func TestTemplate_機械の印は既存の目印より後ろに書かせる(t *t
 	}
 }
 
-// 目的: 進捗報告の見本の並びを、行の位置で固定する（設計 3-82。issue #178 の直しを守る）。
-//
-// **continuo は「1行目の直後が進捗の印か」を見て、途中経過かどうかを決める**
-// （`handoff.StartsAsProgressReport` は先頭から `<!--` の行を辿るので入れ替えても真になるが、
-// **見本の並びを崩すと、印について説明する報告との区別が付きにくくなる**）。
-// **印は3行目に置く。**
-//
-// 与える情報: prompt.Builtin() の、進捗を書かせる節。
-// 成功条件: `<!-- continuo:agent -->` → 進捗の印 → 機械の印 の順で、連続した3行になっていること。
-func TestTemplate_進捗報告の見本は印を3行目に置く(t *testing.T) {
-	section := sectionOf(t, prompt.Builtin(), "## 5-3. {{.progress_interval_minutes}}分以上黙らない")
-	lines := strings.Split(section, "\n")
-
-	found := false
-	for i, line := range lines {
-		if !strings.HasSuffix(line, `--body "<!-- continuo:agent -->`) {
-			continue
-		}
-		found = true
-		if i+2 >= len(lines) {
-			t.Fatalf("進捗報告の見本が3行に足りません:\n%s", strings.Join(lines[i:], "\n"))
-		}
-		if lines[i+1] != config.ProgressMarker {
-			t.Errorf("進捗報告の見本の2行目が進捗の印ではありません: %q", lines[i+1])
-		}
-		if lines[i+2] != config.AIMarker {
-			t.Errorf("進捗報告の見本の3行目が %s ではありません: %q", config.AIMarker, lines[i+2])
-		}
-	}
-	if !found {
-		t.Fatal("進捗報告の見本が見つかりません（検査が的を外しています）")
-	}
-}
+// **進捗報告の見本の3行目を見る検査は、ここには置かない。**
+// 1行目と2行目を見る検査が
+// [test/internal/prompt/progress_comment_test.go](progress_comment_test.go) に既にあり、
+// **同じ走査を2つ持つと、見本が動いたときに両方を直すことになる。**
+// あちらの `TestTemplate_進捗報告の見本は印を行頭から書かせる` へ、3行目の1行を足してある。
 
 // 目的: 設計のレビューの判断票の並びを、行の位置で固定する（設計 3-82）。
 //
@@ -158,7 +130,12 @@ func TestTemplate_設計レビューの判断票は印を3行目に置く(t *tes
 			continue
 		}
 		found = true
-		if i == 0 || strings.TrimSpace(lines[i-1]) != "<!-- continuo:agent -->" {
+		// **`i == 0` を先に返す。**あとで `lines[i-1]` を読むので、
+		// まとめて書くと、見本が節の先頭へ動いたときに範囲外で落ちる。
+		if i == 0 {
+			t.Errorf("判断票の見本で、設計のレビューの目印が節の先頭にあります。" +
+				"直前に <!-- continuo:agent --> が要ります")
+		} else if strings.TrimSpace(lines[i-1]) != "<!-- continuo:agent -->" {
 			t.Errorf("判断票の見本で、設計のレビューの目印の直前が "+
 				"<!-- continuo:agent --> ではありません: %q", lines[i-1])
 		}

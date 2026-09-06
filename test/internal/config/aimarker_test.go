@@ -100,19 +100,111 @@ func TestWithAIMarker_既に印があれば足さない(t *testing.T) {
 	}
 }
 
-// 目的: 字下げした行を印の並びとみなさないことを固定する（設計 3-82）。
+// 目的: 先頭に空白があっても、印を本物の印より前へ置かないことを固定する（設計 3-82）。
+//
+// **読む側は全部 `strings.TrimSpace(body)` してから先頭を見る**
+// （`handoff.IsMarked` / `payloadAfterMarker` / `FetchComments`）。
+// **ここで落とさないと、先頭に空行が1つあるだけで印が本物の印より前に入る。**
+// そのとき `IsMarked` が偽になり、**continuo は自分が書いた入札も hold も読み戻せない。**
+// **担当を人間のものと読み、その issue を二度と拾わない。**
+//
+// 与える情報: 先頭に空行や空白がある本文。
+// 成功条件: 印が持ち回りの印の後ろに入り、TrimSpace したあとの先頭が持ち回りの印のままであること。
+func TestWithAIMarker_先頭に空白があっても印を前へ置かない(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"先頭に空行", "\n" + config.HandoffBidMarker + "\n{\"score\":190}\n"},
+		{"先頭に空白", "  " + config.HandoffBidMarker + "\n{\"score\":190}\n"},
+		{"先頭に全角空白", "　" + config.HandoffBidMarker + "\n{\"score\":190}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := config.WithAIMarker(tc.body)
+			if !strings.HasPrefix(strings.TrimSpace(got), config.HandoffBidMarker) {
+				t.Fatalf("印が持ち回りの印より前に入りました:\n%q", got)
+			}
+			if !strings.Contains(got, config.AIMarker) {
+				t.Fatalf("印が入っていません:\n%q", got)
+			}
+		})
+	}
+}
+
+// 目的: 末尾に改行が無い本文でも、印が前の行に繋がらないことを固定する（設計 3-82）。
+//
+// **繋がると、1行目が印そのものでなくなる。**
+// `FetchComments` の先頭一致も `handoff.IsMarked` も、そこで外れる。
+//
+// 与える情報: 印だけで、末尾に改行が無い本文。
+// 成功条件: 2行になり、1行目が元の印、2行目が機械の印であること。
+func TestWithAIMarker_末尾に改行が無くても行を分ける(t *testing.T) {
+	const self = "<!-- continuo:self -->"
+	want := self + "\n" + config.AIMarker
+	if got := config.WithAIMarker(self); got != want {
+		t.Fatalf("印が前の行に繋がりました:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: 印と印のあいだに空行があっても、いちばん後ろの印の直後へ足すことを固定する（設計 3-82）。
+//
+// **`handoff.StartsAsProgressReport` は空行では止めない。**そちらと決まりを揃える。
+// **ただし、後ろの空行までは越えない。**越えると、本文の1行目が印になる。
+//
+// 与える情報: 印のあいだに空行がある本文と、印のあとに空行がある本文。
+// 成功条件: どちらも、最後の印の行の直後に入ること。
+func TestWithAIMarker_印のあいだの空行では止めない(t *testing.T) {
+	const self = "<!-- continuo:self -->"
+	const gated = "<!-- continuo:gated:human_assigned -->"
+
+	got := config.WithAIMarker(self + "\n\n" + gated + "\n担当者が付いています")
+	want := self + "\n\n" + gated + "\n" + config.AIMarker + "\n担当者が付いています"
+	if got != want {
+		t.Errorf("印のあいだの空行で止まりました:\n got %q\nwant %q", got, want)
+	}
+
+	// **印のあとに空行が続くときは、その空行を越えない。**
+	got = config.WithAIMarker(self + "\n\n本文")
+	want = self + "\n" + config.AIMarker + "\n\n本文"
+	if got != want {
+		t.Errorf("印のあとの空行を越えました:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: 2行目以降の字下げした行を、印の並びとみなさないことを固定する（設計 3-82）。
 //
 // **`handoff.StartsAsProgressReport` と同じ決まりに揃える。**
-// 字下げした `<!--` は、印について説明する本文であって、名乗りではない。
-// **揃えないと、印について書いた成果の報告の途中へ、印が差し込まれる。**
+// あちらは本文全体の先頭の空白だけを落とし、**そのあとは行頭ちょうどの `<!--` だけを見る。**
+// **だから1行目の字下げは落ち、2行目以降の字下げは落ちない。**
+// 読む側（`handoff.IsMarked` / `FetchComments`）も `TrimSpace(body)` してから
+// 先頭を見るので、**1行目の字下げは、その3つで同じように落ちる。**
 //
-// 与える情報: 1行目が4桁字下げの HTML コメントである本文。
-// 成功条件: 印が本文の先頭（1行目）に入ること。
-func TestWithAIMarker_字下げした行は印とみなさない(t *testing.T) {
-	body := "    <!-- continuo:agent -->\nこれは見本です"
-	want := config.AIMarker + "\n" + body
+// **2行目以降を印とみなすと、印について説明する成果の報告の途中へ、印が差し込まれる。**
+//
+// 与える情報: 1行目だけが印で、2行目が字下げした HTML コメントである本文。
+// 成功条件: 印が1行目の直後に入り、字下げした2行目は本文として扱われること。
+func TestWithAIMarker_2行目以降の字下げは印とみなさない(t *testing.T) {
+	body := "<!-- continuo:agent -->\n    <!-- continuo:progress -->\nこれは見本です"
+	want := "<!-- continuo:agent -->\n" + config.AIMarker +
+		"\n    <!-- continuo:progress -->\nこれは見本です"
 	if got := config.WithAIMarker(body); got != want {
-		t.Fatalf("字下げした行を印として数えています:\n got %q\nwant %q", got, want)
+		t.Fatalf("字下げした2行目を印として数えています:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: 1行目の字下げは、読む側と同じように落ちることを固定する（設計 3-82）。
+//
+// **`handoff.IsMarked` も `FetchComments` も `TrimSpace(body)` してから先頭を見る。**
+// **つまり、字下げした1行目の印は、その2つでは印として通る。**
+// **ここだけ通さないと、印がその行より前に入り、2つの判定が同時に外れる。**
+//
+// 与える情報: 1行目が4桁字下げの持ち回りの印である本文。
+// 成功条件: 印がその行の後ろに入り、TrimSpace したあとの先頭が持ち回りの印のままであること。
+func TestWithAIMarker_1行目の字下げは読む側と同じように落ちる(t *testing.T) {
+	body := "    " + config.HandoffBidMarker + "\n{\"score\":190}\n"
+	got := config.WithAIMarker(body)
+	if !strings.HasPrefix(strings.TrimSpace(got), config.HandoffBidMarker) {
+		t.Fatalf("印が持ち回りの印より前に入りました:\n%q", got)
 	}
 }
 

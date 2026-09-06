@@ -50,7 +50,7 @@ func ResolveHandoffIdleTimeoutMs(ms int) int {
 //
 // **持ち回りの期限（設計 3-77b / 5-3l）を進めるのは、この印が付いたコメントだけである。**
 // **エージェントも continuo も人間も、同じ GitHub アカウントで投稿する**
-// （[internal/tracker/ghuser.go](../tracker/ghuser.go) の 23-25行）。
+// （[internal/tracker/ghuser.go](../tracker/ghuser.go) の 24-25行）。
 // **投稿者だけで数えると、人間が無関係なコメントを1件書いただけで期限が延びる。**
 // **黙り込んだエージェントを、別の機械が拾い直せなくなる。**
 //
