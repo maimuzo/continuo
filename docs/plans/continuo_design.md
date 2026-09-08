@@ -9025,10 +9025,20 @@ turn の終わりと同じでなければならないので、それでは足り
 
 **採る経路。****App が人間の代理として投稿する経路（user-to-server token）である。**
 
-| 経路 | 投稿者 | 画面に何が出るか |
+**2つの経路を、専用の App を1つ作って実測した**（2026-09-08。検証用の `continuo-e2e` の
+issue #1 へ、経路ごとに1件ずつ投稿して読み直した）。
+
+| 何 | **user-to-server（採る）** | installation（採らない） |
 | --- | --- | --- |
-| **user-to-server token（採る）** | **人間本人のまま** | 人間のアバターと、**App の identicon のバッジ** |
-| installation token（採らない） | `<app>[bot]` | bot のバッジ |
+| `user.login` | **人間本人** | `<app>[bot]` |
+| `user.type` | **`User`** | `Bot` |
+| **`author_association`** | **`OWNER` のまま** | **`NONE`** |
+| `performed_via_github_app` | **非 null** | 非 null |
+| GraphQL の `viewer` | **人間本人** | `<app>[bot]` |
+
+**`author_association` の行が、この設計の分かれ目である。**
+レビュー結果を数える門は `OWNER` / `MEMBER` / `COLLABORATOR` しか通さないので、
+**`NONE` になる経路を採ると、このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（3-82d）。
 
 **GitHub の公式ドキュメントの原文**（`apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user`）。
 
@@ -9049,9 +9059,16 @@ turn の終わりと同じでなければならないので、それでは足り
 | **持ち回りで機械を見分ける識別子** | 3-77-0。[internal/handoff/assess.go:382](../../internal/handoff/assess.go#L382) |
 | **レビュー結果を数える門** | [.github/workflows/review-gate.yml:162](../../.github/workflows/review-gate.yml#L162) |
 
-**`performed_via_github_app` は判定の根拠に使わない。**
-**この経路でその欄が非 null になるという記述は、GitHub の公式ドキュメントに見つからなかった。**
-**見分けの根拠は、公式に裏付けの取れた画面のバッジのほうに置く。**
+**`performed_via_github_app` は、この経路でも非 null になる**（上の実測）。
+**公式ドキュメントにその記述は無いが、実際に測ると App の slug が入る。**
+
+**ただし GraphQL からは読めない。**`IssueComment` 型に App を示す欄が無く、
+持っているのは `author` / `authorAssociation` / `createdViaEmail` / `viewerDidAuthor` の4つだけである。
+**機械が読むなら REST が要る。**continuo がコメントを読むのは GraphQL なので
+（[internal/tracker/query.go:293](../../internal/tracker/query.go#L293)）、
+**この欄を continuo の判定に使うなら、読む経路を1本足すことになる。**
+**この設計では足さない。**issue #245 が求めているのは人間が見分けられることで、
+**人間は GitHub の画面のバッジで見分けられる。**
 
 **continuo の外で走るセッション**（人間と直接やりとりしている Claude Code）**には、これを強制できない。**
 **そのセッションが App の設定を見るようにするのは利用者の環境の作り方であって、continuo が保証できることではない。**
@@ -9086,9 +9103,16 @@ turn の終わりと同じでなければならないので、それでは足り
 **差し替えは一時ファイルからの `os.Rename` で行う**（[CLAUDE.md](../../CLAUDE.md) の「ファイルの書き換えは『一時ファイルへ書いてから差し替える』」）。
 **書き換えの途中で `gh` が読むと、その turn の投稿が落ちる。**
 
-**確かめていないこと。**`gh` が設定ファイルのトークンを keyring より先に読むことは、
-**cli/cli の source で追っただけで、実測していない。**keyring が勝つなら、この経路は成立しない。
-**実機で1度試してから実装すること。**
+**実測で確かめた**（2026-09-08）。**設定ファイルのトークンが keyring より先に読まれる。**
+
+**見分け方。**この機械の `gh` は keyring で人間としてログインしている。
+そこへ `GH_CONFIG_DIR` を別のディレクトリへ向け、その `hosts.yml` の `oauth_token` に
+**App の installation token を置いた。**keyring が勝つなら人間として振る舞うはずだが、
+**`gh api user` は `Resource not accessible by integration`（App のトークンでは叩けない endpoint）を返した。**
+**続けて `gh issue comment` を叩くと投稿が通り、その投稿者は `<app>[bot]` だった。**
+
+**つまり `gh` は、環境変数を置かなくても、設定ファイルだけでトークンを差し替えられる。**
+**8時間で失効しても、continuo がそのファイルを差し替えれば、次の `gh` から新しいトークンで動く。**
 
 ### 3-82c. カンバンは App へ移さない。トークンは2本になる
 
@@ -9114,10 +9138,15 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 **この分け方だと、投稿者は2本とも人間本人である。**
 **3-77-0 の入札の識別子も、3-65 の照合も、1つも変わらない。**
 
-**確かめていないこと。**上の引用は REST の endpoint についてのもので、
-**continuo が使っているのは GraphQL である**（[internal/tracker/query.go:128](../../internal/tracker/query.go#L128)）。
-**GraphQL の `projectV2` を App のトークンで叩いたときの公式の言明は見つからなかった。**
-**この節は「カンバンを移さない」と決めているので、その未確認は設計の判断に効かない。**
+**GraphQL でも同じであることを実測した**（2026-09-08）。
+上の引用は REST の endpoint についてのものだが、**continuo が使っているのは GraphQL である**
+（[internal/tracker/query.go:128](../../internal/tracker/query.go#L128)）。
+**その GraphQL を App の user-to-server token で叩くと、`FORBIDDEN` が返る。**
+
+> `{"type": "FORBIDDEN", "path": ["repositoryOwner", "projectV2"], "message": "Resource not accessible by integration"}`
+
+**同じトークンで、issue のコメントは読めた。**カンバンだけが通らない。
+**この節の「カンバンを移さない」は、選択ではなく制約である。**
 
 ### 3-82d. installation token の経路を採らない根拠
 
@@ -9138,12 +9167,13 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 **App は、その「騙れない投稿者」を、全機械で共有される1つの名前に変えてしまう。**
 機械ごとに App を分ければ避けられるが、**それは「App を1つ作っておく」という形から外れる。**
 
-**`author_association` は、公式ドキュメントが App について何も書いていない。**
-取りうる値の一覧と意味は在るが、**App の bot がどれになるかの記述は無い。**
-**上の表の「`OWNER` でなくなる見込み」は、実測と、値の定義からの推論である。**
-**実測**（2026-09-08。公開リポジトリの `user.type` が `Bot` のコメント）**では `NONE` か `CONTRIBUTOR` で、`OWNER` は1件も無かった。**
-**値の定義**（`OWNER` は「作者がそのリポジトリの所有者である」）**からも、bot が `OWNER` になる筋は無い。**
-**この2つは仕様の裏付けではない。**この設計の App で実測して確かめること。
+**`author_association` は、専用の App を作って実測した**（2026-09-08）。
+**リポジトリの所有者のアカウントに install した App で、その所有者のリポジトリへ投稿しても `NONE` だった。**
+
+**公式ドキュメントは、App について何も書いていない。**取りうる値の一覧と意味は在るが、
+**App の bot がどれになるかの記述は無い。**だから実測が唯一の根拠である。
+**値の定義**（`OWNER` は "Author is the owner of the repository."、訳: **作者がそのリポジトリの所有者である**）
+**とも矛盾しない。**bot はリポジトリの所有者ではない。
 
 ## 4. 人間が決めたこと
 
