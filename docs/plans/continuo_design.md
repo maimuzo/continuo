@@ -9021,12 +9021,14 @@ turn の終わりと同じでなければならないので、それでは足り
 
 **言いたいこと。**issue のコメントは、**人間もエージェントも continuo も同じ GitHub アカウントで投稿する。**
 投稿者でも `author_association` でも見分けられない。
-**GitHub App 経由で投稿すると、GitHub の画面に App のバッジが付き、投稿者の側から騙れなくなる。**
+**GitHub App 経由で投稿すると、GitHub の画面にその印が並び、人間が書いたものと見分けられるようになる。**
+**「偽れない」ことまでは名乗らない。**印を付けずに投稿することも、人間が付けることもできる。
+**issue #245 の本文が「偽れないことまで求めるなら、それは別の issue です」と範囲を切っている。**
 
 **採る経路。****App が人間の代理として投稿する経路（user-to-server token）である。**
 
-**2つの経路を、専用の App を1つ作って実測した**（2026-09-08。検証用の `continuo-e2e` の
-issue #1 へ、経路ごとに1件ずつ投稿して読み直した）。
+**2つの経路を、専用の App を1つ作って実測した**（2026-09-08。検証用のリポジトリの
+issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [docs/test_environment.md](../test_environment.md)）。
 
 | 何 | **user-to-server（採る）** | installation（採らない） |
 | --- | --- | --- |
@@ -9038,7 +9040,7 @@ issue #1 へ、経路ごとに1件ずつ投稿して読み直した）。
 
 **`author_association` の行が、この設計の分かれ目である。**
 レビュー結果を数える門は `OWNER` / `MEMBER` / `COLLABORATOR` しか通さないので、
-**`NONE` になる経路を採ると、このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（3-82d）。
+**`NONE` になる経路を採ると、このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（3-82e）。
 
 **GitHub の公式ドキュメントの原文**（`apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user`）。
 
@@ -9050,24 +9052,28 @@ issue #1 へ、経路ごとに1件ずつ投稿して読み直した）。
 >
 > 訳: **App がユーザーの代理として行った API リクエストは、そのユーザーに帰属する。**
 
-**画面に実際に出るもの**（2026-09-08。上の実測で投稿した3件を、人間が画面で確かめた）。
+**画面に実際に出るもの**（2026-09-08。上の実測で投稿した3件を、人間が画面で確かめて書き写した）。
 
 | どちらの経路で書いたか | 画面に並ぶもの |
 | --- | --- |
-| **人間の代理（採る）** | `maimuzo` / **`13m ago – with AI can post issues`** / `Author` |
-| App 自身（採らない） | `ai-can-post-issues` / **`bot`** / `9m ago – with AI can post issues` |
+| **人間の代理（採る）** | **人間本人のログイン名** / **`– with <App の表示名>`** / **`Author`** |
+| App 自身（採らない） | `<App の slug>` / **`bot`** / **`– with <App の表示名>`** |
 
-**両方に `– with <App の表示名>` が付く。**公式ドキュメントは "identicon badge" と書いているが、
-**実際に出るのは App の表示名を添えた1行である。**
-**人間の代理で書いたほうには `Author` も並ぶ**（`author_association` が `OWNER` であることの画面上の現れ）。
+**両方に `– with <App の表示名>` が付く。****これが、人間が画面で見分ける手がかりである。**
+**App 自身で書いたほうには `bot` のバッジが付き、人間の代理で書いたほうには `Author` が並ぶ**
+（`author_association` が `OWNER` であることの、画面上の現れ）。
+
+**identicon のバッジが出ているかは、確かめていない。**上の表は人間が画面から書き写した文字列で、
+**画像として何が並ぶかは、その文字列からは読み取れない。**
+**公式ドキュメントの "identicon badge" を否定する根拠は持っていない。**
 
 **この表示は API から取れない。**REST の `application/vnd.github.html+json` が返すのは
 本文の HTML（`body_html`）だけで、投稿者の表示は入らない。
 **GraphQL の `IssueComment` の37個の欄にも無い**（2026-09-08 に introspection で全件を見た）。
-**機械が判定するなら REST の `performed_via_github_app` を見る。人間は画面のこの1行を見る。**
+**機械が判定するなら REST の `performed_via_github_app` を見る。人間は画面のこの行を見る。**
 
 **なぜ投稿者が変わらない経路を採るか。**投稿者は、continuo の中で**身元そのもの**として使われている。
-**3つが同時にそこへぶら下がっている**（外した場合の帰結は 3-82c）。
+**3つが同時にそこへぶら下がっている**（外した場合の帰結は 3-82e）。
 
 | 何が投稿者を見ているか | どこ |
 | --- | --- |
@@ -9079,7 +9085,7 @@ issue #1 へ、経路ごとに1件ずつ投稿して読み直した）。
 **公式ドキュメントにその記述は無いが、実際に測ると App の slug が入る。**
 
 **ただし GraphQL からは読めない。**`IssueComment` 型に App を示す欄が無く、
-持っているのは `author` / `authorAssociation` / `createdViaEmail` / `viewerDidAuthor` の4つだけである。
+**App を示す欄が1つも無い**（37個の欄を introspection で全件見た）。
 **機械が読むなら REST が要る。**continuo がコメントを読むのは GraphQL なので
 （[internal/tracker/query.go:293](../../internal/tracker/query.go#L293)）、
 **この欄を continuo の判定に使うなら、読む経路を1本足すことになる。**
@@ -9090,47 +9096,98 @@ issue #1 へ、経路ごとに1件ずつ投稿して読み直した）。
 **そのセッションが App の設定を見るようにするのは利用者の環境の作り方であって、continuo が保証できることではない。**
 **文書で案内する**（[docs/FAQ.md](../FAQ.md)）。
 
-### 3-82b. App のトークンは continuo が注ぐ。`claude.env` へ書かせない
+### 3-82b. トークンは `continuo githubapp` が標準出力へ返す。ファイルへ書かない
 
-**言いたいこと。**トークンを `claude.env` へ書かせると、**利用者がリポジトリへ置く WORKFLOW.md に平文で載る。**
-**continuo が issue ごとの設定ファイルへ自分で注ぐ。**利用者が書くのは App の識別子と鍵の置き場所だけである。
+**言いたいこと。**アクセストークンはディスクに残さない。
+**`continuo githubapp` を叩くと標準出力へ1行返る。**`gh auth token` と同じ形である。
+**continuo もエージェントも、そのつど叩いて使う。**
 
-**なぜ `claude.env` では駄目か。**[internal/config/expand.go:11-12](../../internal/config/expand.go#L11-L12) が、
-**`claude.env` を展開の対象から名指しで外している。**`${GH_APP_TOKEN}` と書いてもその文字列がそのまま渡るので、
-**トークンの実体を書くほかに手が無い。**
+**人間の決定（2026-09-08）。**
 
-**どこへ注ぐか。**[internal/orchestrator/settings.go:373](../../internal/orchestrator/settings.go#L373) が
-`Env: o.cfg.Claude.Env` を issue ごとの設定ファイルへ書いている。**ここで continuo 自身の値を混ぜる。**
-書き先は 0600、置くディレクトリは 0700 である（[internal/orchestrator/settings.go:24-29](../../internal/orchestrator/settings.go#L24-L29)）。
+> 要は、github app用の秘密鍵を~/.continuo/以下に格納しておき、それが揃っている時にcontinuo githubapp を実行するとアクセストークンが標準出力に返される。このアクセストークンはファイルには出力しない。それを使ってcontinuoやエージェントがissueに投稿すればいいのでは?
 
-**注ぐのは `GH_CONFIG_DIR` である。`GH_TOKEN` ではない。**
+**この形が効くのは、失効の面倒が消えるからである。**トークンは叩くたびに作り直される。
+**8時間の期限も、ファイルの差し替えも、書き換えの途中で読まれる事故も、まとめて無くなる。**
 
-| どちらを注ぐか | 期限が切れたときにどうなるか |
+**使い方。**
+
+    GH_TOKEN=$(continuo githubapp) gh issue comment <URL> --body-file done.md
+
+**この形なら、効く範囲を1つのコマンドに絞れる。**`git push` も `gh pr create` も、いままでの認証のまま通る。
+**環境変数を pane 全体へ注ぐと、`gh` の用途が全部そちらへ移ってしまう。**
+**そちらは採らない。**
+
+**ディスクに残るもの。**
+
+| 何 | 置き場所（既定） | `--id <名前>` を付けたとき | 権限 |
+| --- | --- | --- | --- |
+| **App の秘密鍵** | `~/.continuo/app.pem` | `~/.continuo/id/<名前>/app.pem` | `0600` |
+| **更新用のトークン** | `~/.continuo/app-refresh.json` | `~/.continuo/id/<名前>/app-refresh.json` | `0600` |
+| **アクセストークン** | **残さない** | **残さない** | — |
+
+**`~/.continuo/` へ置く理由。**continuo は WORKFLOW.md のあるディレクトリで起動する。
+**その WORKFLOW.md は「共有するリポジトリへ commit して配る」ものである**（[docs/FAQ.md:730](../FAQ.md#L730)）。
+**隣へ秘密鍵を置くと、`git add -A` で入る。**
+`~/.continuo/` は二重起動を止めるロックが既に使っており、`--id` で分ける仕組みも在る
+（[internal/instance/instance.go:101](../../internal/instance/instance.go#L101)）。**置き場所の決め方を新しく作らない。**
+ディレクトリの権限は、既にある `lockDirPerm` と同じ `0700` である（[internal/instance/instance.go:57](../../internal/instance/instance.go#L57)）。
+
+**更新用のトークンだけは、ファイルへ置くほかに手が無い。**
+**秘密鍵だけで無人に作れるのは、投稿者が `<app>[bot]` になるトークンである**（3-82e が採らないと決めたほう）。
+**投稿者を人間のままにする経路は、人間が1度ブラウザで承認したことの証（更新用のトークン）を必要とし、
+それは6か月有効なので、プロセスが終わっても残さなければならない。**
+**アクセストークンを残さないという決定は、ここには当たらない。**残すのは、それを作るための鍵である。
+
+### 3-82c. `continuo githubapp` が何を返すか
+
+**言いたいこと。**標準出力へアクセストークンを1行。**それ以外は何も出さない。**
+**`gh auth token` と同じ形にする。**`$(...)` で受けるものが増えると、呼ぶ側が壊れる。
+
+    $ continuo githubapp
+    ghu_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+**中でやること。**
+
+| 順 | 何をするか |
 | --- | --- |
-| `GH_TOKEN` | **差し替えられない。**pane を作ったあとに環境変数を変える手段が herdr に無い |
-| **`GH_CONFIG_DIR`（採る）** | **continuo がその先のファイルを差し替えれば、次の `gh` から新しいトークンで動く** |
+| 1 | `~/.continuo/app-refresh.json` を読む。**無ければ device flow を回す**（下） |
+| 2 | 更新用のトークンで、新しいアクセストークンを取る |
+| 3 | **返ってきた新しい更新用のトークンを書き戻す**（GitHub は1回使うごとに入れ替える） |
+| 4 | **アクセストークンを標準出力へ1行出す。ファイルへは書かない** |
 
-**`gh` はその環境変数を読む**（`gh help environment` の原文）。
+**書き戻しは一時ファイルからの `os.Rename` で行う**（[CLAUDE.md](../../CLAUDE.md) の「ファイルの書き換えは『一時ファイルへ書いてから差し替える』」）。
+**書き戻しに失敗したら、そのトークンは二度と使えない。**GitHub が古いほうを無効にするためである。
+**だから書き戻してから標準出力へ出す。**順序を逆にすると、使えるトークンを配ったあとに次回が壊れる。
 
-> `GH_CONFIG_DIR`: the directory where gh will store configuration files.
->
-> 訳: **`GH_CONFIG_DIR`: gh が設定ファイルを置くディレクトリ。**
+**最初の1回だけ、人間の承認が要る。**更新用のトークンが無いとき、`continuo githubapp` は
+**8文字のコードと `https://github.com/login/device` を標準エラーへ出して待つ。**
+**標準出力へは出さない。**`$(...)` で受けている呼び出し側へ混ざるためである。
+**この経路を採るのは、常駐プロセスが web のリダイレクトを受ける口を持たないからである。**
 
-**差し替えは一時ファイルからの `os.Rename` で行う**（[CLAUDE.md](../../CLAUDE.md) の「ファイルの書き換えは『一時ファイルへ書いてから差し替える』」）。
-**書き換えの途中で `gh` が読むと、その turn の投稿が落ちる。**
+**失敗したときに何を返すか。**
 
-**実測で確かめた**（2026-09-08）。**設定ファイルのトークンが keyring より先に読まれる。**
+| 何が起きたか | どうするか |
+| --- | --- |
+| **鍵も更新用のトークンも無い** | **終了コード 1。**標準エラーへ「`client_id` が設定されていません」と出す |
+| **更新用のトークンが6か月で切れた** | **終了コード 1。**標準エラーへ device flow のやり直しを案内する |
+| **GitHub が落ちている** | **終了コード 1。**標準出力は空 |
 
-**見分け方。**この機械の `gh` は keyring で人間としてログインしている。
-そこへ `GH_CONFIG_DIR` を別のディレクトリへ向け、その `hosts.yml` の `oauth_token` に
-**App の installation token を置いた。**keyring が勝つなら人間として振る舞うはずだが、
-**`gh api user` は `Resource not accessible by integration`（App のトークンでは叩けない endpoint）を返した。**
-**続けて `gh issue comment` を叩くと投稿が通り、その投稿者は `<app>[bot]` だった。**
+**呼ぶ側は、空が返ったら投稿を止めない。**いままでのトークンで投稿し、**WARN を1行残す。**
+**止めると、成果報告が投稿できず、continuo 自身が「エージェントが書いていない」と判定して
+run を `failure_state` へ落とす**（[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383)）。
+**印が付かないことより、run が失われることのほうが重い。**
 
-**つまり `gh` は、環境変数を置かなくても、設定ファイルだけでトークンを差し替えられる。**
-**8時間で失効しても、continuo がそのファイルを差し替えれば、次の `gh` から新しいトークンで動く。**
+**利用者が WORKFLOW.md へ書くのは1つだけである。**
 
-### 3-82c. カンバンは App へ移さない。トークンは2本になる
+    tracker:
+      provider:
+        app:
+          client_id: Iv23li…    # GitHub App の Client ID。画面から写す
+
+**書かなければ、この仕組みは動かない。**書かない利用者の continuo は、
+**いままでどおりカンバンのトークンで投稿する。**印は付かないが、1つも壊れない。
+
+### 3-82d. カンバンは App へ移さない。トークンは2本になる
 
 **言いたいこと。**GitHub App は、**user が所有する Projects v2 へ届かない。**
 continuo のカンバンは user 所有である。**だから App は「コメントを書く口」としてだけ使い、カンバンは今までのトークンで読み書きする。**
@@ -9164,7 +9221,7 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 **同じトークンで、issue のコメントは読めた。**カンバンだけが通らない。
 **この節の「カンバンを移さない」は、選択ではなく制約である。**
 
-### 3-82d. installation token の経路を採らない根拠
+### 3-82e. installation token の経路を採らない根拠
 
 **言いたいこと。**投稿者が `<app>[bot]` に変わると、**4つが同時に壊れる。**
 **どれも「見分けが付かない」ではなく「continuo が動かなくなる」側の壊れ方である。**
@@ -9173,7 +9230,7 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 | --- | --- |
 | **エージェントの成果の判定** | [internal/tracker/adapter.go:1164](../../internal/tracker/adapter.go#L1164) の `IsAgent` が立たず、[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383) が捨てる。**画面には成果報告が立っているのに、continuo は「書かれていない」と判定して書かせ直す** |
 | **持ち回りの入札** | **同じカンバンを見張る機械が全部おなじ bot 名になる。**[internal/orchestrator/handoff.go:364](../../internal/orchestrator/handoff.go#L364) が他機械の入札を自分のものと数え、同 387行が自分の入札に負けたと判定する |
-| **レビュー結果を数える門** | `author_association` が `OWNER` でなくなる見込み。**このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか2箇所） |
+| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか2箇所） |
 | **死活の時計** | [internal/handoff/assess.go:364](../../internal/handoff/assess.go#L364) が進捗報告の投稿者を担当者と突き合わせる。**止まった機械と見分けが付かなくなる** |
 
 **入札の壊れ方がいちばん直しにくい。**3-77-0 が識別子を投稿者から取る理由を、こう書いている。
