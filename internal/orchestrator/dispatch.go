@@ -462,26 +462,18 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	//
 	// **判定は下の門と同じにする**（`len(assigneeLogins(issue)) == 0` で落とすもの）。
 	// **ずれると、落とした issue と数えた issue が別物になる。**
-	// **枠と関係のない理由で落ちる候補は数えない**（issue #173）。
-	// **`Dispatchable` が偽の issue**（信頼していないリポジトリ・必須のラベルが無い）**や、
-	// 失敗のバックオフ中の issue は、枠に余裕があっても着手しない。**
-	// **数えると、枠が原因でないのに「枠に余裕が無いので着手しません」を毎巡回出すことになる。**
-	needsBid := false
-	for _, issue := range candidates {
-		if _, running := o.lookupRunByID(issue.ID); running {
-			continue
-		}
-		if !issue.Dispatchable || o.skipByFailure(issue) {
-			continue
-		}
-		if len(assigneeLogins(issue)) == 0 {
-			needsBid = true
-			break
-		}
-	}
-	if blocked != handoff.SkipNone && needsBid {
-		o.logNewWorkBlocked(blocked, blockedSnap)
-	}
+	// **数える前置きは置かない**（issue #173）。
+	//
+	// **2周目に「候補が0件なら出さない」、4周目に「走っている／担当者がいる／
+	// `Dispatchable` が偽／失敗のバックオフ中を除く」と足したが、どちらも足りなかった。**
+	// **必須のラベルが無い issue も、`active_states` の外の issue も、
+	// 枠とは関係なく落ちる。**数え直すたびに、下の門の写しが1つ増える。
+	// **そのうえ `skipByFailure` は純粋な判定ではない**（失敗の記録を消し、
+	// 一度きりの `Warn` を使い切る）**ので、数えるだけの繰り返しから呼んではならない。**
+	//
+	// **だから数えない。**下の門が実際に落とした最初の1件で、その場で1回だけ出す。
+	// **落とした issue が1件も無ければ、枠は何も止めていないので出ない。**
+	blockedLogged := false
 	// **ここで巡回を打ち切ってはならない**（人間の決定。2026-09-06。issue #173）。
 	//
 	// **以前は `rate_limit.pause_above_percent` を超えると `return` していた。**
@@ -594,6 +586,11 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// **枠に余裕が無くても着手する**（走っている run の面倒を見る経路がここしかない）。
 		// **`handoffGate` の中の「期限切れの担当を外す」経路も、担当者がいる issue しか通らない。**
 		if blocked != handoff.SkipNone && len(assigneeLogins(issue)) == 0 {
+			// **枠が実際に落とした1件目で、この巡回の理由を1回だけ出す**（issue #173）。
+			if !blockedLogged {
+				blockedLogged = true
+				o.logNewWorkBlocked(blocked, blockedSnap)
+			}
 			o.clearGate(issue.ID)
 			continue
 		}

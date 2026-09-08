@@ -805,7 +805,12 @@ const turnStopUnreadable turnOutcome = 103
 // rs: 判定する run。
 // 戻り値: 枠待ちなら true。
 func (o *Orchestrator) isQuotaWaiting(rs *runState) bool {
-	snap, _ := o.quotaSnapshotWithStale()
+	// **古い写しでは印を立てない**（issue #173。巡回の側と揃える）。
+	// **立てると打ち切りの時計が止まり、外す側は古い写しを信じないので誰も外せない。**
+	snap, stale := o.quotaSnapshotWithStale()
+	if snap == nil || stale {
+		return false
+	}
 	return o.isQuotaWaitingWith(snap, rs)
 }
 
@@ -878,7 +883,13 @@ func (o *Orchestrator) stallDetectionOff() bool {
 //
 // 戻り値: 使用率100の枠があれば true。枠を読めていなければ false。
 func (o *Orchestrator) quotaFull() bool {
-	return o.quotaSnapshot().AnySelected(handoff.Full())
+	// **古い写しでは「使い切っている」と答えない**（issue #173。巡回の側と揃える）。
+	// **答えると、資格情報が切れた機械で待ちループが永久に抜けない。**
+	snap, stale := o.quotaSnapshotWithStale()
+	if snap == nil || stale {
+		return false
+	}
+	return snap.AnySelected(handoff.Full())
 }
 
 // quotaResetAt は枠待ちの印を外す時刻を返す（設計 3-27 の「どの枠の時刻を見るか」）。
@@ -890,7 +901,11 @@ func (o *Orchestrator) quotaFull() bool {
 // 戻り値の1つ目: 外す時刻。
 // 戻り値の2つ目: 時刻が分かれば true。
 func (o *Orchestrator) quotaResetAt() (time.Time, bool) {
-	snap, _ := o.quotaSnapshotWithStale()
+	// **古い写しからは時刻を取らない**（issue #173。上の2つと揃える）。
+	snap, stale := o.quotaSnapshotWithStale()
+	if snap == nil || stale {
+		return time.Time{}, false
+	}
 	return o.quotaResetAtOf(snap)
 }
 

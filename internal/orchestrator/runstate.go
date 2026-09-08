@@ -509,6 +509,7 @@ func (rs *runState) snapshot() runSnapshot {
 		BackoffUntil:     rs.BackoffUntil,
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
+		AfterRunDone:     rs.AfterRunDone,
 		WeeklyShortSince: rs.WeeklyShortSince,
 		LastSeenAt:       rs.LastSeenAt,
 		LastHookAt:       rs.LastHookAt,
@@ -541,6 +542,7 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
+	AfterRunDone     bool
 	WeeklyShortSince time.Time
 	LastSeenAt       time.Time
 	LastHookAt       time.Time

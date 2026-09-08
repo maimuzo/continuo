@@ -252,13 +252,19 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 		case matchesKind(l.Kind, sessionKinds):
 			return fullPercent-l.Percent-margins.FiveHour <= 0
 		default:
-			// **知らない種別も数える**（issue #173）。
-			// **落とすと、使用量 API が種別を増やしたときに、
-			// その枠が尽きていても入札を続けることになる。**
-			// **マージンは1週間のものを使う。**どちらか選ぶなら、
-			// **長いほうの枠のマージンを当てるのが安全側である**
-			// （5時間の枠は待てば必ず明けるが、1週間の枠は明けない）。
-			return fullPercent-l.Percent-margins.Weekly <= 0
+			// **知らない種別は数えない。**
+			//
+			// **4周目に「数える」へ変えたが、5周目に戻した。**効かなかったためである。
+			// **入札の可否を決める `Evaluate` は、この関数を1度も呼ばない。**
+			// あちらは `SessionPercent` と `WeeklyPercent` から余裕値を出しており、
+			// **どちらも `session` / `weekly_all` / `weekly_scoped` しか見ない。**
+			// **だからここで数えても、入札は1ミリも変わらない。**
+			// **変わるのはログの「余裕の無い枠」の一覧だけで、
+			// 判定に加わっていない枠を並べることになる。**読む人を別の枠へ走らせる。
+			//
+			// **「使用量 API が種別を増やしたら入札が止まらない」は、いまも残っている。**
+			// **塞ぐなら `Evaluate` の側である。**この関数ではない。
+			return false
 		}
 	}
 }
