@@ -716,6 +716,14 @@ func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now ti
 	if status == "" {
 		status = string(herdr.AgentStatusUnknown)
 	}
+	// **「一度も working になりませんでした」と書いてはならない**
+	// （[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 4-1）。
+	// **`agent.get` を読むのは、無音が閾値を超えた巡回だけである。**`working` が返れば
+	// `noteWorking` が時計を起こし直して巡回を抜けるので、**ここへ落ちてくる run は
+	// 「閾値を超えたあと、初めて `working` 以外を読んだ」1サンプルしか持っていない。**
+	// **持っていない観測を文面に書くと、読んだ人は herdr か Claude Code の側を疑って原因を探す**
+	// （5-1 の 2026-08-27 と同じ形の誤りである）。
+	//
 	// **そのままコピーして叩けるコマンドにする。**worktree のパスを埋め込まないと、
 	// 読んだ人はまず「どこで叩くのか」を探すところから始めることになる。
 	// **持っていないものは案内しない。**着手の途中で落ちた run は worktree も
@@ -740,8 +748,9 @@ func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now ti
 	}
 	return fmt.Sprintf(
 		"continuo は herdr へ `agent.get` を投げて Claude Code の状態（`agent_status`）を見ています。"+
-			"%s のあいだ、hook が1件も届かず、`agent_status` も一度も `working` になりませんでした"+
-			"（最後に見た状態: %s）。**止まったものと判断して打ち切りました。**"+
+			"%s のあいだ hook が1件も届かなかったので、herdr へ状態を聞いたところ "+
+			"`working` ではありませんでした（そのとき見た状態: %s）。"+
+			"**止まったものと判断して打ち切りました。**"+
 			"\n【確かめ方】%s"+
 			"\n【よくある原因】確認の画面が出て人間の入力を待っていた / "+
 			"応答の来ない相手を待ち続けていた / エージェントが応答を返し終えたまま次の指示を待っていた。"+
