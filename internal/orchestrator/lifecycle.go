@@ -1000,11 +1000,14 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	// **走って失敗したときも真が返る。**
 	ran, err := o.ws.RunAfterRunOnce(ctx, snap.WorktreePath)
 	if err != nil {
-		// **走ったが失敗した。**「走りませんでした」とは書けないが、
-		// **remote に続きが入っていない恐れは同じである**ので、偽を返す。
-		// **文面の1文目が事実と違う点は、この1行で人間へ渡す。**
+		// **走ったが失敗した。**偽を返す。**remote に続きが入っていない恐れがあるためである。**
+		//
+		// **「issue のコメントにこう出ます」とは書かない**（issue #173）。
+		// **この関数は2つの経路から呼ばれる。**枠の上限で手放す経路はコメントを書くが、
+		// **ふつうの完了の経路（`finishRun`）は書かない。**
+		// **書いてあると、利用者が存在しない文字列を issue の中で探すことになる。**
 		o.logger.Warn("workspace_hooks.after_run は走りましたが失敗しました"+
-			"（issue のコメントには「走りませんでした」と出ます。remote の中身を確かめてください）",
+			"（remote の中身を確かめてください）",
 			"identifier", snap.Identifier, "error", err)
 		return false
 	}
