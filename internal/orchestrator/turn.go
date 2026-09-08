@@ -188,10 +188,15 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 
 			outcome, sendErr = o.sendTurn(waitCtx, rs, text)
 		}
-		if !rs.currentWorker(epoch) {
+		if rs.workerRetired(epoch) {
 			// **待っている間に、巡回の stall 検知などが先にこの run を諦めていた。**
 			// ここで諦め直すと RetryCount が2倍の速さで消費され、引き渡しのコメントも
 			// 二重に投稿される（設計 3-21）。
+			//
+			// **`currentWorker` ではなく `workerRetired` を見る**（issue #173）。
+			// **`terminating` は一時的な印なので、それで抜けると
+			// 手放しを見送ったときに指示を送る者がいなくなる。**
+			// **待つのはループの先頭が受け持つ。**
 			o.logger.Debug("待ち受けから戻ったときには別の経路が run を終わらせていました",
 				"identifier", snap.Identifier)
 			return
@@ -220,8 +225,9 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// 待っても解けない。引き渡しは直後に pane を閉じる（`finishRun`）ので、
 			// 待たずに esc を送ると、そのとき書きかけだった編集がまるごと消える。
 			o.waitForRunningSubagents(waitCtx, rs)
-			if ctx.Err() != nil || !rs.currentWorker(epoch) {
+			if ctx.Err() != nil || rs.workerRetired(epoch) {
 				// **待っている間に、別の経路がこの run を終わらせていた**（上の分岐と同じ理由）。
+				// **`workerRetired` を見る理由も同じである**（issue #173）。
 				// ここで諦め直すと RetryCount が2倍の速さで消費され、引き渡しの
 				// コメントも二重に投稿される（設計 3-21）。
 				o.logger.Debug("サブエージェントを待っている間に、別の経路が run を終わらせていました",

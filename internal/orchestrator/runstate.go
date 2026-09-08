@@ -1152,7 +1152,9 @@ func (rs *runState) noteWeeklyShort(short bool, now time.Time) {
 // 戻り値: 前に読んだ連番と同じなら true。
 // 戻り値の2つ目は「この呼び出しが1回目の観測だったか」である（issue #173）。
 //
-// **打ち切りから守ってよいのは、1回目を取った直後の1巡回だけである。**
+// **2つ目の戻り値は、いまどこも読んでいない**（issue #173）。
+// **`paneStopped` は「連番を読めたなら守る」へ変えたので、1回目かどうかを見ない。**
+// **残してあるのは、`beginAttempt` が控えを戻す理由の説明が、この値の意味に乗っているためである。**
 // **2回目以降も守ると、状態が往復する run**（巡回のたびに `idle` → `working` → `idle`）**が
 // 永久に守られる。**手放しは2回続けて同じ連番を見ないと成立しないので、
 // **その run は手放されもせず打ち切られもせず、pane とスロットを握ったまま残る。**
@@ -1224,6 +1226,15 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	defer rs.mu.Unlock()
 	rs.WaitingQuota = false
 	rs.QuotaResetAt = time.Time{}
+	// **打ち切りの時計は進めるが、手放しの側の門はここで再武装させたくない**（issue #173）。
+	//
+	// **進めるのは、枠待ちのあいだ止めていた時計を、明けた時点から測り直すためである。**
+	// **止めた時点からの経過をそのまま使うと、明けた瞬間に閾値を超えて打ち切られる。**
+	//
+	// **`WeeklyShortSince` は消さない**（下の説明）。
+	// **手放しの上限は、そちらの経過で測る。**
+	// **`LastSeenAt` を進めると手放しの無音の門が1時間ぶん再武装するが、
+	// 5時間の枠が明けるたびにそれが起きても、1週間の枠の経過は `WeeklyShortSince` が持ち続ける。**
 	rs.LastSeenAt = now
 	// **余裕の無い1週間の枠を最初に見た時刻は、ここでは消さない**（設計 3-27。issue #197）。
 	// **消す契機は「1週間の枠に余裕が戻ったこと」だけである。**
@@ -1985,6 +1996,18 @@ func (rs *runState) currentWorker(epoch int) bool {
 	// 待ちループが枠待ちを解いて指示を送り、push の最中に worktree が書き換わる。**
 	// **書きかけの木を push したうえで、そのあと殺されることになる。**
 	return !rs.Finished && !rs.workerStopped && !rs.terminating && rs.workerEpoch == epoch
+}
+
+// terminalBusy は「この run は、もう終わりに向かっているか」を読むだけで返す（issue #173）。
+//
+// **印を立てない。**`beginTerminal` で確かめると、立てた印を turn ループが見て
+// **500ms 待つ**ことになる（`turn.go` の `terminatingPollInterval`）。
+//
+// 戻り値: 終わっている・終わらせている最中・書き戻しが飛んでいる、のどれかなら true。
+func (rs *runState) terminalBusy() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.Finished || rs.terminating || rs.rewriting
 }
 
 // workerRetired は「この turn ループは、もう二度と回してはならないか」を返す（issue #173）。

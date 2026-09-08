@@ -252,7 +252,13 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 		case matchesKind(l.Kind, sessionKinds):
 			return fullPercent-l.Percent-margins.FiveHour <= 0
 		default:
-			return false
+			// **知らない種別も数える**（issue #173）。
+			// **落とすと、使用量 API が種別を増やしたときに、
+			// その枠が尽きていても入札を続けることになる。**
+			// **マージンは1週間のものを使う。**どちらか選ぶなら、
+			// **長いほうの枠のマージンを当てるのが安全側である**
+			// （5時間の枠は待てば必ず明けるが、1週間の枠は明けない）。
+			return fullPercent-l.Percent-margins.Weekly <= 0
 		}
 	}
 }
@@ -277,16 +283,18 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 // 戻り値: その枠を使い切っていれば true を返す関数。**`Snapshot` の選別に渡す。**
 func Full() func(l ratelimit.Limit) bool {
 	return func(l ratelimit.Limit) bool {
-		// **知らない種別は数えない**（issue #173）。
-		// **`Short` と同じ集合にする。**`Short` の説明が「片方だけが真を返すと、
-		// 枠待ちの印が立つのに入札の側は素通しで新しい issue を取り続ける」と
-		// 警告しているのは、まさにこの形である。
-		// **使用量 API が種別を増やしたとき、ここだけが真を返すと、
-		// 走っている run の打ち切りの時計が全部止まり、
-		// そのあいだ新しい issue を取り続けることになる。**
-		if !IsWeeklyKind(l.Kind) && !matchesKind(l.Kind, sessionKinds) {
-			return false
-		}
+		// **知らない種別も数える**（issue #173）。
+		//
+		// **一度、`Short` と同じ集合へ狭めたが、戻した。**
+		// **狭めると、使用量 API が種別を増やしたときに、100% のその枠で
+		// 本当に止まっている run が「枠待ちではない」と読まれて打ち切られる。**
+		// **リトライを焼き、いずれ `failure_state` へ落ちる。**
+		//
+		// **こちらは広いほうが安全である。**この判定が真になると打ち切りの時計が止まる。
+		// **間違えて止めたときに失うのは「固まった run の片付けが遅れる」ことだけで、
+		// 打ち切りを切っている機械と同じ状態にすぎない。**
+		//
+		// **`Short` との食い違いは、`Short` の側で塞いだ**（そちらも知らない種別を拾う）。
 		return l.Percent >= fullPercent
 	}
 }

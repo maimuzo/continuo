@@ -462,9 +462,16 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	//
 	// **判定は下の門と同じにする**（`len(assigneeLogins(issue)) == 0` で落とすもの）。
 	// **ずれると、落とした issue と数えた issue が別物になる。**
+	// **枠と関係のない理由で落ちる候補は数えない**（issue #173）。
+	// **`Dispatchable` が偽の issue**（信頼していないリポジトリ・必須のラベルが無い）**や、
+	// 失敗のバックオフ中の issue は、枠に余裕があっても着手しない。**
+	// **数えると、枠が原因でないのに「枠に余裕が無いので着手しません」を毎巡回出すことになる。**
 	needsBid := false
 	for _, issue := range candidates {
 		if _, running := o.lookupRunByID(issue.ID); running {
+			continue
+		}
+		if !issue.Dispatchable || o.skipByFailure(issue) {
 			continue
 		}
 		if len(assigneeLogins(issue)) == 0 {

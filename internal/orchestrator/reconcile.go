@@ -313,7 +313,7 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 // now: この巡回の時刻。
 func (o *Orchestrator) releaseQuotaWaitExceeded(
 	ctx context.Context, quotaSnap *ratelimit.Snapshot, quotaStale bool, now time.Time,
-) map[*runState]bool {
+) (map[*runState]bool, map[*runState]herdr.Agent) {
 	// **手放しの対象だと判定した run を返す**（issue #173）。
 	// **打ち切りの側は、この集合を飛ばす。**
 	//
@@ -323,7 +323,13 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	// **手放しは2回続けて同じ連番を見る必要があるため、1回目の観測では必ず「まだ」と答える。**
 	// **つまり、打ち切りが毎回勝つ。**
 	// **入札と手放しの線を余裕値へ移した意味が、既定の設定で丸ごと消える。**
+	// **読んだ `agent.get` の結果を、この巡回のあいだ持ち回す**（issue #173）。
+	// **手放しの判定と打ち切りの段1 が、同じ run に2回叩いていた。**
+	// **`herdr.read_timeout_ms`（既定5000ミリ秒）まで待つ呼び出しなので、
+	// run が12件あれば1巡回で最大120秒になる。**
+	// **そのうえ、2回のあいだに状態が変わると、手放しと打ち切りが違う写しで判断する。**
 	handling := map[*runState]bool{}
+	probed := map[*runState]herdr.Agent{}
 	// **どの枠に余裕が無いかは、run ごとに変わらない**（issue #173）。
 	// **ループの中で作ると、run の数だけ枠の一覧を走査して文字列を作り直すことになる。**
 	shortKinds := strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
@@ -344,6 +350,17 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// **手放せないことは変わらない。**確かめられない pane を閉じて担当を外す道は無い。
 		// **打ち切りの経路（`checkStalls` の本体）が、同じ2つを同じ理由で外している。**
 		if snap.AgentName == "" {
+			continue
+		}
+		// **終わりに向かっている run は飛ばす**（issue #173）。
+		// **別の goroutine が `finishRunClaimed` の途中で、pane を閉じたところかもしれない。**
+		// **そこへ `agent.get` を投げると誤りが返り、run ごとに1回だけの info を1つ使い切る。**
+		// **その run はそもそも手放しの候補ではない。**
+		//
+		// **`beginTerminal` で確かめてはならない。**あれは印を立てるので、
+		// **turn ループが `terminating` を見て 500ms 待つことになる**（`turn.go`）。
+		// **読むだけの `terminalBusy` を使う。**
+		if rs.terminalBusy() {
 			continue
 		}
 		if !snap.BackoffUntil.IsZero() && now.Before(snap.BackoffUntil) {
@@ -410,7 +427,10 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 				continue
 			}
 		}
-		stopped, mine := o.paneStopped(ctx, rs)
+		stopped, mine, agent := o.paneStopped(ctx, rs)
+		if agent != nil {
+			probed[rs] = *agent
+		}
 		if !mine {
 			// **この経路では二度と進まない run である**（`agent.get` を読めない、
 			// または `working` / `blocked` / `unknown`）。**打ち切りに任せる。**
@@ -432,7 +452,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// **手放しの本体で読み直すと、判定した写しとログに出す数字が別々になる。**
 		o.releaseBecauseQuotaWaitAsync(ctx, rs, shortKinds)
 	}
-	return handling
+	return handling, probed
 }
 
 // paneStopped は「この run の pane が完全に止まっているか」を返す
@@ -487,7 +507,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 //
 // **真になるのは `idle` か `done` を読めたときだけである。**
 // **守りたいのは「1回目の観測は必ず偽を返す」という2巡回ぶんの隙間だけであり、それで足りる。**
-func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, bool) {
+func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, bool, *herdr.Agent) {
 	agent, err := o.agentInfo(ctx, rs)
 	if err != nil {
 		// **run ごとに1回だけ出す**（issue #173。見送りの `Warn` と同じ理由）。
@@ -500,10 +520,11 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 				"（次の巡回でやり直します。この行は run ごとに1回だけ出します）",
 				"identifier", rs.issue().Identifier, "error", err)
 		}
-		return false, false
+		return false, false, nil
 	}
 	if agent.AgentStatus != herdr.AgentStatusIdle && agent.AgentStatus != herdr.AgentStatusDone {
-		return false, false
+		// **読んだ結果は返す**（issue #173）。**打ち切りの段1 が同じ巡回で使い回す。**
+		return false, false, &agent
 	}
 	// **状態が変わっていれば、まだ動いている。**
 	//
@@ -528,7 +549,9 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 		// **面倒を見ていると名乗ってはならない。**名乗ると打ち切りからも守ることになり、
 		// **止める者が1人もいなくなる。**pane とスロットを握ったまま、continuo を再起動するまで残る。
 		// **判定できないときは、打ち切りに任せる。**
-		return false, false
+		//
+		// **読んだ結果は返す**（issue #173）。**打ち切りの段1 が同じ巡回で使い回す。**
+		return false, false, &agent
 	}
 	stopped, _ := rs.noteQuotaProbe(agent.StateChangeSeq)
 	// **連番を読めたなら、この巡回は守る**（issue #173）。
@@ -546,7 +569,7 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 	//
 	// **`idle`/`done` を読めなかった run と、連番が 0 の run は、ここへ来ない。**
 	// 上の2つの門が `(false, false)` で返している。**そちらは打ち切りに任せる。**
-	return stopped, true
+	return stopped, true, &agent
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
@@ -642,7 +665,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
 	now := o.now()
 	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
-	releasing := o.releaseQuotaWaitExceeded(ctx, quotaSnap, quotaStale, now)
+	releasing, probed := o.releaseQuotaWaitExceeded(ctx, quotaSnap, quotaStale, now)
 	// **時刻を取り直す**（issue #173）。
 	// **`releaseQuotaWaitExceeded` は run ごとに herdr を1回叩く。**
 	// `herdr.read_timeout_ms`（既定5000ミリ秒）まで待つので、
@@ -674,14 +697,17 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **枠が明けた run の印を外すのも、`silence <= 0` より前で行う。**
 	// **あとに置くと、`claude.turn_timeout_ms` を0以下にしている機械では、
 	// 一度立った印を外す者が1人もいなくなる**（下の `clearQuotaWaitWhenBack` の説明）。
-	// **読めない写しでは印を外さない**（issue #173）。
-	// **同じ巡回の `weeklyWaitExceededWith` と `noteWeeklyShort` は、既にそう倒している。**
-	// **1つの写しを3人が使うのに、使ってよいかの判定が食い違ってはならない。**
-	// **古い写しがたまたま全部100%未満だと、待っている run の印を全部外して
-	// `LastSeenAt` を進めてしまう。**資格情報が切れた機械は、切れる直前の値を1日中返す。
-	if quotaSnap != nil && !quotaStale {
-		o.clearQuotaWaitWhenBack(quotaSnap, now)
-	}
+	// **印を外す側は、写しが古くても走らせる**（issue #173）。
+	//
+	// **立てる側と外す側で、非対称にしてはならない。**
+	// **立てるのは `isQuotaWaitingWith` で、そちらへ古い写しを渡さない形にした**（下の段2）。
+	// **外す側まで止めると、古い写しで立った印を誰も外せなくなる。**
+	// **資格情報が切れた機械は、切れる直前の値を1日中返す。**
+	// **その値が100%だったら、待っている run の打ち切りの時計が永久に止まる。**
+	//
+	// **外すのは安全な向きである。**外して困るのは「まだ枠が尽きているのに時計が動く」ことだけで、
+	// **そのとき run は打ち切られてリトライを積む。**握ったまま残るよりはるかに軽い。
+	o.clearQuotaWaitWhenBack(quotaSnap, now)
 
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	if silence <= 0 {
@@ -742,7 +768,14 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		// **時計を進めるのは `working` のときだけである。**
 		// **`working` の run は、そもそも枠待ちではない。**
 		// だから「枠待ちの run は `LastSeenAt` を進めない」という約束は破れない。
-		agent, err := o.agentInfo(ctx, rs)
+		// **手放しの判定が読んでいれば、それを使う**（issue #173）。
+		// **同じ巡回で2回叩くと、`herdr.read_timeout_ms` ぶんの待ちが2倍になり、
+		// 2回のあいだに状態が変われば、手放しと打ち切りが違う写しで判断することになる。**
+		agent, ok := probed[rs]
+		var err error
+		if !ok {
+			agent, err = o.agentInfo(ctx, rs)
+		}
 		if err == nil && agent.AgentStatus == herdr.AgentStatusWorking {
 			rs.noteWorking(now)
 			o.logger.Info("agent が working なので待ち続けます（turn の総実行時間では打ち切りません）",
@@ -756,7 +789,10 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		}
 
 		// 2. 動いていない。枠待ちかを見る。
-		if o.isQuotaWaitingWith(quotaSnap, rs) {
+		// **古い写しでは印を立てない**（issue #173）。
+		// **立てると打ち切りの時計が止まり、外す側が古い写しを信じない限り誰も外せない。**
+		// **同じ巡回の `weeklyWaitExceededWith` と `noteWeeklyShort` も、そう倒している。**
+		if quotaSnap != nil && !quotaStale && o.isQuotaWaitingWith(quotaSnap, rs) {
 			// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
 			// **手放しの入口は `releaseQuotaWaitExceeded` の1本だけである。**
 			// **印を立てるだけにしておけば、次の巡回の先頭でそちらが拾う。**
