@@ -9149,16 +9149,13 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
       "client_secret": "…",
       "refresh_token": "ghr_…",
       "refresh_token_expires_at": "2027-03-09T00:00:00Z",
-      "authorized_login": "octocat",
-      "app_id": 4873474
+      "authorized_login": "octocat"
     }
 
 **`authorized_login` は、認可を通したときに引いた `viewer` のログイン名である。**
 **これが無いと、`continuo doctor` は認可した人を知るためにトークンを取ることになり、
 更新用のトークンが回る**（3-82k）。**doctor は1度も回さない約束なので、ここへ持つ。**
-**`app_id` は、コメントに付いた印がこの App のものかを見分けるために持つ**（3-82j）。
-**slug ではなく id を持つ。**slug は表示名から作られるので、名前を変えると変わる。
-**App ID は変わらない。**
+
 
 **WORKFLOW.md には資格情報を書かない。**そこは利用者が commit する場所であり
 （[docs/FAQ.md:730](../FAQ.md#L730)）、**エージェントの worktree からは読めない**
@@ -9190,7 +9187,11 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
     ghu_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 **中でやること。**`~/.continuo/github-app-credentials.json` を読み、更新用のトークンで
-新しいアクセストークンを取り、**返ってきた新しい更新用のトークンを書き戻してから**標準出力へ出す。
+新しいアクセストークンを取り、**返ってきた新しい更新用のトークンと、その新しい期限を書き戻してから**標準出力へ出す。
+**期限を書き戻さないと、最初の認可から181日目に、資格情報が生きているのに全部止まる。**
+**GitHub は更新のたびに新しい6か月の期限を返す。**
+**doctor は `✗`、巡回は WARN、このコマンドは終了コード 1 を返す。**
+**資格情報は有効なので、人間は原因に辿り着けない。**
 **逆にすると、配ったあとに次回が壊れる。書き戻しは一時ファイルからの `os.Rename` で行う。**
 
 **毎回 GitHub を叩くことの危険を、そのまま引き受ける。**
@@ -9235,7 +9236,6 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **3-82b が `--id` で複数動かす形を明示的に許している。**
 **資格情報は人間1人につき1つなので、`~/.continuo/` のロックは全部で1本を取り合う。**
 **「往復の実測 × 主体の数」を上限にし、主体の数は `agent.max_concurrent_agents` から計算する。**
-**測るまでは仮に30秒を置くが、その値に根拠は無い。**
 
 **実測**（2026-09-09。専用の App で web flow を1回通した）。
 
@@ -9253,7 +9253,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **呼ぶ側は、返ってきた文字列の形を `case` で確かめてから使う。**
 
-    TOKEN=$(<実行ファイルの絶対パス> github-app token 2>/dev/null)
+    TOKEN=$(<実行ファイルの絶対パス> github-app token)
     case "$TOKEN" in
       ghu_*) ;;
       *) echo "トークンを取れませんでした" >&2; exit 1 ;;
@@ -9402,14 +9402,30 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 [internal/cli/cli.go:1620](../../internal/cli/cli.go#L1620) の `--port` が
 [internal/daemon/daemon.go:239](../../internal/daemon/daemon.go#L239) で `server.port` を上書きする。
 
-**人間が触るのは4回だけである。**
+**人間が触るのは5回である。**
 
-| 順 | 何をするか |
-| --- | --- |
-| 1 | **`continuo github-app setup` を叩き、出た URL をブラウザで開く** |
-| 2 | **説明を読んで「App を作る」を押す** |
-| 3 | GitHub の画面で **`Create GitHub App` を押す** |
-| 4 | **install するリポジトリを選び、認可する** |
+| 順 | 何をするか | どの口が受ける |
+| --- | --- | --- |
+| 1 | **`continuo github-app setup` を叩き、出た URL をブラウザで開く** | — |
+| 2 | **説明を読んで「App を作る」を押す** | GitHub の作成画面へ飛ぶ |
+| 3 | GitHub の画面で **`Create GitHub App` を押す** | **`/github-app/created`**（`state` を確かめ、`code` を資格情報へ交換する） |
+| 4 | **install の説明を読んで「install する」を押す** | continuo が `state` を載せた install の URL を組み立て、そこへ送る |
+| 5 | **install するリポジトリを選び、認可する** | **`/github-app/authorized`**（`state` を確かめる） |
+
+**段4 を落としてはならない。**2つの理由がある。
+
+**一つ。install の前の説明を出す段が、そこにしか無い。**
+**上の表の「install の前」の列は、いちばん怖い1行**（その App が、選んだリポジトリの issue へ書けるようになる）**を運ぶ。**
+**人間が「installするときも同様」と名指しで求めたのは、この画面である。**
+
+**二つ。`state` を運ぶ場所が、そこにしか無い。**
+**`request_oauth_on_install: true` の流れでは、認可のリクエストを組み立てるのは install の URL を開いた側である。**
+**continuo が組み立てて渡さないと、`code` は `state` 無しで戻る。**
+**`state` を必須にした実装は正規の redirect を弾き、setup が二度と完了しない。**
+**必須にしない実装は、上で塞いだ穴をそのまま開ける。**
+
+**組み立てる URL は `https://github.com/apps/<slug>/installations/new?state=<値>` である。**
+**`<slug>` は、段3 で `code` を交換したときに返る。**
 
 **ふつうは入力する欄が1つもない。**権限は continuo が入れる（3-82b）。**選ぶのは install するリポジトリだけである。**
 
@@ -9505,12 +9521,6 @@ doctor が continuo を起動不能にしうる**（下の表）。
 `tracker.provider.comments`（GitHub から何件どの順で取るか）で、
 **29行しか離れていない。****足すのは下の `tracker.comments` のほうである。**
 
-**足したら、そこより後ろを指すリンクを検算する。**
-[.claude/rules/plan-file.md](../../.claude/rules/plan-file.md) の
-「**設計文書へ1行でも足したら、そこを指すリンクを全部検算する**」が求めている。
-**5-2 は文書の後ろ寄りにあるので、数行足すだけで、それより後ろを指すリンクが全部ずれる。**
-**2026-09-04 には3行足して13本がずれ、うち3本が「主張の逆」を書いた行に着地した。**
-
 **チームで WORKFLOW.md を共有する形は、この設計では非対応とする。**
 WORKFLOW.md は commit されるので、**1人が `true` にすると、資格情報を持たない同僚の continuo は次の起動で止まる**
 （[docs/FAQ.md:726-730](../FAQ.md#L726-L730) が共有の使い方を案内している）。
@@ -9549,32 +9559,20 @@ continuo が「エージェントが書いていない」と判定して run を
 `internal/` の下で数えた）。**引き渡しの通知・Status を動かした記録・着手の門の案内・dispatch の案内・
 復元の案内が、そこに含まれる。**
 
-**それでも、issue へ例外を作らない。**
-**「引き渡しの通知だけは印の無い1本で書く」という形は採らない。**
+**issue へ例外を作らない。**
+**投稿の口は12箇所あり、[internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の
+`PostComment` が唯一の出口なので、1件だけ別のトークンへ振ることはできない。**
 
-**理由は2つある。**
+**代わりに、止まった理由をログへ `Error` で出す。**
+**どの issue の、どの投稿が、なぜ落ちたか。**そのリポジトリ名も入れる。
+**「そのリポジトリへ App が install されていますか」の一言を添える。**
 
-**一つ。実装できない。**Orchestrator から tracker へ出る口は
-[internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の `PostComment` の1本しかなく、
-12箇所の投稿が全部そこへ集まる。**1件だけ別のトークンへ振るには、引数を増やすか別名のメソッドを足すしかない。**
-**別名は下の 3-82i が禁じている**（絶対パスを縮める関門が名前ちょうどを見ているため）。
-**引数を増やすと、3-82i の「interface も検査の偽物も1文字も変わらない」が崩れる。**
-
-**二つ。その例外は、この設計が捨てた案と同じものになる。**
-**「continuo 自身の印が付いているから分かる」は成り立たない。**
-**その印は `<!-- continuo:self -->` という HTML のコメントで、画面には描画されない**
-（[internal/config/default.go:117](../../internal/config/default.go#L117)）。
-**3-82a は、まさにそれを理由に本文へマーカーを書く案を捨てている。**
-**例外を作ると、人間がいちばん読む必要があるコメントだけが、いつも画面上で人間の書き込みと区別が付かなくなる。**
-
-**代わりに、止まった理由をログとダッシュボードへ出す。**
-**そこは印の話と無関係で、interface も1文字も変わらない。**
-**issue には出ないが、人間が `Blocked` を見て continuo の画面を開けば、そこに理由がある。**
-
-| どこへ | 何を出すか |
-| --- | --- |
-| **ログ** | どの issue の、どの投稿が、なぜ落ちたか。**`Warn` ではなく `Error` で出す** |
-| **ダッシュボード** | その run の欄に「投稿できず人間へ渡した」と、理由の1行 |
+**ダッシュボードへは出さない。**
+**既定では開かず**（[internal/config/default.go:253-255](../../internal/config/default.go#L253-L255) の `Port: nil`）**、
+開いていても終わった run の欄は消える**
+（[internal/server/view.go:36-38](../../internal/server/view.go#L36-L38) が
+「**終わった run は印から外れて消える**」と書いている）。
+**投稿に失敗して人間へ渡った run は、まさにその「終わった run」である。**
 
 **起動のときなら、その機械が抱えていた run が全部、誰にも見張られないまま pane の中に残る**
 （[internal/daemon/daemon.go:302](../../internal/daemon/daemon.go#L302) の検査は復元より前にあり、
@@ -9590,6 +9588,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | **資格情報が在るか** | `~/.continuo/github-app-credentials.json`。**権限が `0600` かも見る** |
 | **資格情報が揃っているか** | **回さずに確かめる。**更新用のトークンが在り、期限内で、`client_id` と `client_secret` が揃っていることを見る。**実際に叩くと資格情報が回り、doctor が continuo を起動不能にしうる**。**「トークンが取れるか」は doctor では確かめられない。**App を消した／install を外した／secret を作り直したときも、ファイルは無傷なのでここは通る。**そこは起動時の検査が捕まえる** |
 | **更新用のトークンの残り** | **30日を切っていたら警告する。**切れてから気づくと、その場で作業が止まる |
+| **認可した人が `gh` の持ち主と同じか** | **`authorized_login` と `gh api user` を突き合わせる**（3-82k）。**トークンは1度も取らない** |
 
 
 **`continuo doctor` は既に外へ出ている**
@@ -9597,37 +9596,10 @@ continuo が「エージェントが書いていない」と判定して run を
 **だから既にある枠組みへ嵌める。**差し替え口を `Options` へ足し、**`Label` の定数と i18n のキーも足す**（[internal/doctor/report.go:20](../../internal/doctor/report.go#L20) が全項目を定数で持ち、`Run` は同じ数を返す）、
 （足さないとテストが本物の GitHub を叩く。同 [78-79行](../../internal/doctor/doctor.go#L78-L79)）、
 位置は設定と `gh` の認証の下流に置く（上流が `✗` か `!` ならこの検査は `!`。同 [148-150行](../../internal/doctor/doctor.go#L148-L150)）。
-**更新用のトークンを回転させてはならない**（doctor は読み取りだけである。同 [42-44行](../../internal/doctor/doctor.go#L42-L44)）。
-
 **更新用のトークンの残りは、起動時と巡回時にも見る。**30日を切っていたら WARN を1行出す。
 **doctor でしか見ないと、doctor を叩かない利用者が181日後に突然止まる。**
 
 **起動時の検査は1回だけで、巡回のたびには叩かない。**確かめるのは「取り直せる状態か」であって、トークンそのものではない。
-
-**install の網羅は、巡回時に見る。**起動時でも doctor でもない。
-
-**トークンは、install したリポジトリが1つでもあれば取れる。**
-**continuo のカンバンは複数のリポジトリの issue を載せられるので、
-カンバンに新しいリポジトリの issue が1件載った日、そこへの投稿だけが権限不足で落ちる。**
-**上の決まりにより run は止まる。**
-**3-82f が「install するときに全部を選ばない」と勧めているので、その日は早く来る。**
-
-**起動時に見ても捕まらない。**その日はもう起動が終わっている。
-**「昨日まで動いていたのに」という形で来るので、再起動は挟まらない。**
-
-**doctor でも見ない。**引くにはトークンが要り、doctor は1度も回さない約束である（3-82k）。
-
-**巡回時なら、両方を満たす。**
-
-| 何が要るか | 巡回時にどうなっているか |
-| --- | --- |
-| カンバンのリポジトリの一覧 | **巡回のたびに手に入る。**issue を引くときに `nameWithOwner` が返る |
-| App の install の一覧 | **本体はメモリにトークンを持っている**（3-82i）。**回転しない** |
-
-**毎回引くのではない。**
-**カンバンで初めて見る `nameWithOwner` が出たときだけ引く。**
-**見たものは覚えておき、2回目からは引かない。**
-**足りなければ、その名前を挙げて WARN を1行出す。**
 
 ### 3-82h. 漏れたときに何ができるか。何で止めるか
 
@@ -9654,20 +9626,19 @@ continuo が「エージェントが書いていない」と判定して run を
 **`Issues` だけなら、漏れても「issue へ勝手にコメントが付く」だけである。
 `Pull requests: write` を足していたら、レビューを通していない pull request をマージされうる。**
 
-**漏れたと分かったときにやること。**
+**漏れたときの復旧手順は [docs/FAQ.md](../FAQ.md) へ置く。**設計には置かない
+（[.claude/rules/plan-file.md](../../.claude/rules/plan-file.md) の「同じことを2箇所に書かない」）。
 
-| 順 | 何をするか | 何が止まるか |
-| --- | --- | --- |
-| **1** | **GitHub の画面で App の client secret を作り直し、古いほうを削除する** | **削除するまで古いものは生きている**（GitHub App は client secret を複数本持てる）。**作り直すだけでは止まらない。****自分の continuo も同時に止まる。**手元のファイルに入っているのも古いほうなので、段3 を終えるまで投稿は全部落ち、run は全部人間へ渡る |
-| **2** | `~/.continuo/github-app-credentials.json` を消す | 手元から資格情報が消える |
-| **3** | **`continuo github-app setup` で認可をやり直す** | 新しい更新用のトークンが入る |
-| **4** | **急ぐなら、App の install を外す** | **既に配ったアクセストークンも即座に効かなくなる** |
+**FAQ へ書くときに、次の3つを落としてはならない。**
 
-**既に配られたアクセストークンだけは、段1〜3では止まらない。**
-**8時間で切れるのを待つか、段4 で install を外す。**
+| 何 | なぜ落とせないか |
+| --- | --- |
+| **client secret は作り直すだけでは止まらない。古いほうを削除する** | GitHub App は client secret を複数本持てる。**作り直して安心する人が出る** |
+| **古いほうを消すと、自分の continuo も同時に止まる** | 手元のファイルに入っているのも古いほうである。**認可をやり直すまで投稿は全部落ち、run は全部人間へ渡る** |
+| **既に配られたアクセストークンは、secret を消しても止まらない** | **8時間で切れるのを待つか、App の install を外す** |
 
-**この手順を [docs/FAQ.md](../FAQ.md) へ書く。**
-**利用者が「漏れたかもしれない」と思ったときに、探して見つかる場所へ置く。**
+**`continuo doctor` の「資格情報が在るか」は、消したことを検知できる。**
+**その1行を、FAQ から辿れるようにする。**
 
 
 ### 3-82i. 投稿する GraphQL のクライアントを2本に分ける
@@ -9708,10 +9679,7 @@ continuo が「エージェントが書いていない」と判定して run を
 `o.postCommentWithMarker(` を `internal/` の下で数えた）。**巡回のたびに複数が走る。**
 **使い回せば、本体の側の危険は8時間に1回まで下がる。**
 
-**エージェントの側は下がらない。**
-**上に数えた7本と進捗報告は `continuo github-app token` を叩くので、そちらは毎回回る**（3-82c）。
-**回転の主因はエージェント側であり、この節はそこを直していない。**
-**「使い回すので8時間に1回」と読んではならない。**下がるのは本体の投稿だけである。
+**下がるのは本体の投稿だけである。**エージェント側は毎回回る（3-82c）。
 
 **これは「ファイルへは出力しない」という人間の決定（2026-09-08）に反しない。**
 **禁じられたのは資格情報のファイルへ書くことであって、常駐している Go のプロセスが
@@ -9734,7 +9702,8 @@ interface も、検査の偽物も、1文字も変わらない。
 [internal/tracker/adapter.go:115](../../internal/tracker/adapter.go#L115) はいま `token string` を1回受け取るだけである。
 **関数にすると、テストが本物の GitHub と本物の資格情報を叩かずに済む。**
 **ただし呼び出しは42箇所ある**（本番4・テスト38）。**そのうち3つは `PostComment` を1度も呼ばない。**
-**署名を変えずに、2本目のトークンだけを別の口で渡す案と比べてから決める。**
+**それでも関数を渡す形を採る。**別の口で渡す案は、`Adapter` が2つの経路で状態を持つことになり、
+**テストが「どちらの口から入ったか」で分岐する。**42箇所のうち38はテストなので、そこが複雑になるほうが高い。
 
 **`internal/lock/` に触るので、hook の門の検知に掛かる**（[CLAUDE.md](../../CLAUDE.md) が名指ししている）。
 **掛かるが、hook の4つの定義のどれにも当たらない。**`continuo hook` の引数も宛先も約束も終了コードも変わらない。
@@ -9755,7 +9724,7 @@ interface も、検査の偽物も、1文字も変わらない。
 **資格情報を持たない利用者の投稿が全部落ちる。****指示書はテンプレートなので `{{if}}` で分けられる。**
 
     {{if .github_app_attribution}}
-    TOKEN=$({{.continuo.command}} github-app token 2>/dev/null)
+    TOKEN=$({{.continuo.command}} github-app token)
     case "$TOKEN" in
       ghu_*) GH_TOKEN="$TOKEN" gh issue comment <URL> --body-file done.md ;;
       *)     echo "トークンを取れませんでした。投稿しません" >&2; exit 1 ;;
@@ -9787,16 +9756,8 @@ interface も、検査の偽物も、1文字も変わらない。
 **判定は REST で行う。**GraphQL には App を示す欄が無いので（3-82 の実測）、
 **書き足す直前に、その1件を REST で引いて印の有無を見る。**
 
-**本文を取る `--jq` を、JSON のオブジェクトへ変えてはならない。**
-**書き足しは、既存の本文を変数へ取ってから `printf` で継ぎ足す形で書かれている。**
-
-    OLD=$(gh api "repos/…/issues/comments/$ID" --jq .body)
-
-**ここを `--jq '{body:.body, app:.performed_via_github_app}'` にすると、`$OLD` に JSON が入る。**
-**そのまま継ぎ足すと、コメントの本文が `{"body":"…","app":…}` という1行に化ける。**
-**元の本文は復元できない。**編集履歴からしか読めなくなる。
-
-**だから、印を見る呼び出しを1行足す。**
+**既存の `OLD=$(gh api … --jq .body)` は1文字も変えない。**
+**印を見る呼び出しを、その手前へ1行足す。**
 
     APP=$(gh api "repos/…/issues/comments/$ID" --jq '.performed_via_github_app.id // ""')
     OLD=$(gh api "repos/…/issues/comments/$ID" --jq .body)
@@ -9824,23 +9785,32 @@ interface も、検査の偽物も、1文字も変わらない。
 | **7-2** | [internal/prompt/builtin.md:702](../prompt/builtin.md#L702) | **グループの成果報告へ書き足す**（`--method PATCH` は705行） | **要る** |
 
 **書き込むのは2箇所である。**上の表の「既存の `case` の中の `PATCH` | 2本」と同じ数になる。
+
+**落ちた先の文面も、同じ turn で直す。**
+**新しい門は「本文は読めたが、印が無い」で落ちるのに、
+いま用意されている文面は「読めませんでした」しか言わない。**
+
+| どこ | いまの文面 | どう直すか |
+| --- | --- | --- |
+| [internal/prompt/builtin.md:419](../prompt/builtin.md#L419) | `本文を読めませんでした。段2b で新しく1件投稿します` | **「読めなかったか、印が無かった」の2通りを言う** |
+| [internal/prompt/builtin.md:710](../prompt/builtin.md#L710) | 同上 | 同上 |
+| **[internal/prompt/builtin.md:724](../prompt/builtin.md#L724)** | **`前に書いた分は読めませんでした。` を1行足してください** | **ここは公開の issue へ書かせる文である。****設定を `true` にした日、エージェントは読めた本文について「前に書いた分は読めませんでした。」と書く。****読む人間は、前の報告が失われたと誤読する。**実際には残っている。編集履歴は消せない |
+
+**[internal/prompt/builtin.md:668](../prompt/builtin.md#L668) は直さない。**そこは読むだけの経路なので、門を足さない。
 **662 は1バイトも書き込まないので、門を足さない。**
 **足すと、実装者が「なぜここに要るのか」を読み取れない。**
 **ただし `OLD=$(gh api …)` の形は3箇所とも同じなので、
 `--jq` をオブジェクトへ変えてはならないという上の決まりは3箇所とも当たる。**
 
-**最上位の名前を2つ、その下に3つの値を足す**（`github_app_attribution` と、`continuo` の下の `command` と `app_id`）。
-**3つとも `RenderData` と `SampleData` の両方へ登録し、**
-**[test/internal/prompt/prompt_test.go:411](../../test/internal/prompt/prompt_test.go#L411) の一覧も直す。**
-[internal/prompt/prompt.go:639-641](../../internal/prompt/prompt.go#L639-L641) が
-**「返す名前は `SampleData` と1つも違わないこと。食い違うと、その名前を使った文面で continuo が起動しない」**
-**と書いており、同じ形の欠陥が既に3回起きている。**
+**最上位の名前を2つ足す**（`github_app_attribution` と、`continuo` の下に `command`）。
+**`RenderData` と `SampleData` の両方へ登録し、`Validate` の枝を `.attempt` と同じく2通りへ振る。**
+**理由は [internal/prompt/prompt.go:614-615](../../internal/prompt/prompt.go#L614-L615) と
+[639-641行](../../internal/prompt/prompt.go#L639-L641) が持っているので、ここには写さない。**
 
 | 変数 | 中身 | どこから来るか |
 | --- | --- | --- |
 | `.github_app_attribution` | 真偽 | `tracker.comments.github_app_attribution` |
 | `.continuo.command` | **実行ファイルの絶対パスを `shellQuote` で囲ったもの。**登録する最上位の名前は `continuo` で、その中に `command` を持つ。**`SampleData` には空でない見本を入れる**（[internal/prompt/prompt.go:693](../../internal/prompt/prompt.go#L693)） | [internal/orchestrator/orchestrator.go:469](../../internal/orchestrator/orchestrator.go#L469) の `continuoPath` |
-| `.continuo.app_id` | **この continuo が使う App の ID。**印がこの App のものかを見分ける | `~/.continuo/github-app-credentials.json` の `app_id`（3-82b） |
 
 **`continuo` を裸で書かない。**pane の PATH に無いことがある。
 **[internal/orchestrator/orchestrator.go:471-478](../../internal/orchestrator/orchestrator.go#L471-L478) が `os.Executable()` で
@@ -9863,7 +9833,18 @@ interface も、検査の偽物も、1文字も変わらない。
 **local のパスは1つも無い。**
 **縮める仕組み（`redact.Paths`）は `PostComment` の中にあるので、
 エージェントが `gh` で直接書くコメントには効かない。**
-**だから指示書へ1行足す。**「**このコマンドのパスを issue のコメントへ書かないでください**」。
+**だから指示書へ2行足す。**
+
+| 何を書かせるか | なぜ |
+| --- | --- |
+| **「トークンを取れなかったとき、`GH_TOKEN=` を外して投稿し直さないでください。投稿せずに `blocked` で返してください」** | **これが無いと、失敗した `Bash` を前にしたエージェントの、いちばん自然な直し方が「`GH_TOKEN=` を落として叩き直す」になる。**`Bash` は引数を限定せずに許可されている（[internal/config/default.go:171-182](../../internal/config/default.go#L171-L182)）。**印の無い機械のコメントが1件できた瞬間、「印が無い＝人間が書いた」がその issue で成り立たなくなる** |
+| **「失敗したときは『トークンを取れませんでした』とだけ書き、コマンド行を書かないでください」** | **指示書の別の場所が「何が問題なのかを書いてください」と求めており、素直に書くと絶対パスが公開の issue へ出る。**縮める仕組みは `PostComment` の中にあるので、エージェントが `gh` で直接書くコメントには効かない |
+
+**2つ目は「お願い」で塞ぐ形なので、完全ではない。**
+**それでも採る。**パスを pane の環境変数へ移す案は、
+**`continuo prompt --show` が実物と同じ文面を見せられなくなる**（環境変数は文面に現れない）。
+**[internal/prompt/prompt.go:631-637](../../internal/prompt/prompt.go#L631-L637) が
+「ずれた瞬間、`--show --url` は『送られる文面』ではないものを見せる」と書いている。**
 **止まったエージェントが「`/Users/alice/.local/bin/continuo github-app token` が失敗しました」と書くのは、
 指示書の「何が問題なのか」を素直に書いた結果である。**編集履歴は消せない。
 
