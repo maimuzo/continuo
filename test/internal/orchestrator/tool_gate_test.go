@@ -544,6 +544,20 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	if noteAt < 0 {
 		t.Fatalf("担当している issue の識別子が指示文にありません（判定役は照合できません）:\n%s", prompt)
 	}
+	// **担当している branch への push を、肯定の形で免除していること。**
+	// **「push は及ばない」とだけ書くと、`git push -u origin HEAD` まで断られると読まれる。**
+	// それは組み込みの指示書が pull request を出す前に必ず叩かせる段で、
+	// **断られると pull request が1本も出ず、issue が黙って止まる。**
+	// **force push は断る条件の1つ目が受け持つ**ので、ここで免除しても抜けない。
+	if !strings.Contains(prompt, "担当している branch へ push することは") {
+		t.Errorf("担当している branch への push を、肯定の形で免除していません:\n"+
+			"`git push -u origin HEAD` が断られると、pull request が1本も出ません:\n%s", prompt)
+	}
+	// **承認を、及ばないものとして名指ししていること。**
+	// 必須のレビューや自動マージが設定されたリポジトリでは、**承認がそのままコードを入れる。**
+	if !strings.Contains(prompt, "merge、close、approve") {
+		t.Errorf("pull request の承認が、及ばないものとして名指しされていません:\n%s", prompt)
+	}
 	if !strings.Contains(prompt, "リポジトリ octocat/hello-world へ issue と pull request を作ること") {
 		t.Errorf("担当しているリポジトリへの書き込みが「関係のない」に当たらないと書いていません:\n%s", prompt)
 	}
@@ -646,11 +660,12 @@ func TestToolGate_担当先の外への起票を免除する(t *testing.T) {
 		"別のリポジトリへ切り出したい作業の起票",
 		// **列挙に無いものが断られる側へ落ちるのを防ぐ。**
 		// **push を免除するのではなく、免除が及ばないことを言い切る。**
-		"この免除が及ぶのは、issue と pull request を作ること、その本文とコメントを書くことだけである",
+		"issue と pull request を作ること、その本文とコメントを書くことは「関係のない」に当たらない",
+		"免除はそこまでである",
 		"いまの作業と関係があるかどうかで、この条件のとおりに判断する",
 		// **及ばないものを名指しする。**「pull request への書き込み」とだけ書くと、
 		// `gh pr merge --repo <別のリポジトリ> N` が免除に読める。
-		"merge、close",
+		"merge、close、approve",
 		"パッケージの公開",
 		// **免除は他の条件に勝たない。**
 		"この免除も、他のどの条件も免除しない",
