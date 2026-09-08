@@ -9150,13 +9150,15 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
       "refresh_token": "ghr_…",
       "refresh_token_expires_at": "2027-03-09T00:00:00Z",
       "authorized_login": "octocat",
-      "app_slug": "ai-can-post-issues"
+      "app_id": 4873474
     }
 
 **`authorized_login` は、認可を通したときに引いた `viewer` のログイン名である。**
 **これが無いと、`continuo doctor` は認可した人を知るためにトークンを取ることになり、
 更新用のトークンが回る**（3-82k）。**doctor は1度も回さない約束なので、ここへ持つ。**
-**`app_slug` は、コメントに付いた印がこの App のものかを見分けるために持つ**（3-82j）。
+**`app_id` は、コメントに付いた印がこの App のものかを見分けるために持つ**（3-82j）。
+**slug ではなく id を持つ。**slug は表示名から作られるので、名前を変えると変わる。
+**App ID は変わらない。**
 
 **WORKFLOW.md には資格情報を書かない。**そこは利用者が commit する場所であり
 （[docs/FAQ.md:730](../FAQ.md#L730)）、**エージェントの worktree からは読めない**
@@ -9336,7 +9338,13 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 **送る中身も画面に出す。**利用者が読めない JSON を、読まずに送らせない。
 **2026-09-08 の実測でも、送る manifest を画面へ並べてから押してもらった。**
 
-**認可の口には `state` を付け、設定が済んだら閉じる。**
+**2つの口の両方に `state` を付け、設定が済んだら閉じる。**
+**`/github-app/created`**（App を作った直後に GitHub が `code` を返す口）**にも付ける。**
+**そちらが受け取る `code` は、`client_id` と `client_secret` と秘密鍵に交換される。**
+**認可の口が受け取るものより重い。**
+**付け忘れると、同じ機械で走るプロセスが、自分で作った App の `code` を投げ込める。**
+**continuo はそれを資格情報のファイルへ書き、人間は続く画面で、その App を自分のリポジトリへ install する。**
+**相手は秘密鍵を持っているので、期限なしで `Issues` を読み書きできる**（3-82h の「秘密鍵が漏れた」行と同じ状態になる）。
 **このサーバは認証を持たず、同じ機械のどのプロセスからでも接続できる**
 （[internal/server/server.go:180-181](../../internal/server/server.go#L180-L181)）。
 **その中には continuo 自身が起動した Claude Code も含まれる。**
@@ -9398,7 +9406,7 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 
 | 順 | 何をするか |
 | --- | --- |
-| 1 | **`continuo github-app` を叩き、出た URL をブラウザで開く** |
+| 1 | **`continuo github-app setup` を叩き、出た URL をブラウザで開く** |
 | 2 | **説明を読んで「App を作る」を押す** |
 | 3 | GitHub の画面で **`Create GitHub App` を押す** |
 | 4 | **install するリポジトリを選び、認可する** |
@@ -9416,6 +9424,11 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 
 > **この名前が既に使われていたときは、GitHub の画面で別の名前を打つように言われます。**
 > **好きな名前で構いません。**continuo は App ID で見分けるので、名前は何でも動きます。
+
+**そう言う以上、照合も App ID で行う。**
+**`app_slug` では照合しない。**slug は表示名から作られるので、**名前を変えると変わる。**
+**衝突して人間が別の名前を打った場合と、あとから画面で名前を変えた場合の2つで、照合が永久に当たらなくなる。**
+**当たらないと、書き足す先が見つからず、進捗報告が1時間ごとに新しいコメントとして積まれる**（18時間の run で18件）。
 
 **この1行を落とすと、2人目以降の利用者が案内と食い違う画面に出る。**
 **この設計が解こうとした「怖がって人間がボタンを押せない」が、まさにその場所で再発する。**
@@ -9437,8 +9450,17 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 **「Hook url is not supported because it isn't reachable over the public Internet」**で拒む。
 **公式の一覧では省略できる項目なので、丸ごと落とす。**落としたら作成の画面が開いた。
 
-**measured していないことが1つある。**
-**manifest で作った App の user-to-server token が、8時間で切れるかを測っていない。**
+**測っていないことが2つある。両方とも、実装の前に測ること。**
+
+**一つ目。GraphQL の `addComment` で投稿したコメントに、画面のバッジが出るか。**
+**API の返り値は測ってあり、REST と同じだった**（3-82 の実測の表）。
+**画面の表示は測っていない。**
+**continuo 本体は GraphQL でしか投稿しない**
+（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。
+**バッジが出ないなら、本体の投稿は1件も見分けられない。**この設計の目的の半分がそこで消える。
+**1件投稿して画面を見ること。**
+
+**二つ目。manifest で作った App の user-to-server token が、8時間で切れるか。**
 **2026-09-09 の実測（`expires_in` が 28800）は、人間が画面から作った App でのものである。**
 **その設定が無効なら、期限なしのトークンが出て更新用のトークンが出ず、
 3-82c（更新用のトークンで取り直す）も 3-82g（8時間で切れる）も同時に成り立たなくなる。**
@@ -9477,9 +9499,9 @@ doctor が continuo を起動不能にしうる**（下の表）。
 | --- | --- |
 | **WORKFLOW.md の雛形**（[internal/scaffold/template.go:69-71](../../internal/scaffold/template.go#L69-L71) の `comments:` の下） | **足さないと存在に気づく経路が0本になる。**doctor の「未記入の項目」は雛形と突き合わせるので（[internal/doctor/missing_keys.go:61](../../internal/doctor/missing_keys.go#L61)）、**雛形に無い項目は1度も出ない** |
 | **[docs/upgrading.md](../upgrading.md)** | front matter は未知のキーで起動を止めるので（[internal/config/config.go:157](../../internal/config/config.go#L157) の `yaml.Strict()`）、**まだ版を上げていない同僚は、資格情報の話に到達する前に落ちる** |
-| **この設計文書の 5-2 の設定例**（[docs/plans/continuo_design.md:10095](continuo_design.md#L10095) の `tracker.comments` の下） | **雛形だけに足すと、実装者が「どの階層に置くキーか」をここから読めない** |
+| **この設計文書の 5-2 の設定例**（`tracker.comments` の下。**行番号は書かない**） | **雛形だけに足すと、実装者が「どの階層に置くキーか」をここから読めない** |
 
-**5-2 には `comments:` が2つある。**[docs/plans/continuo_design.md:10066](continuo_design.md#L10066) が
+**5-2 には `comments:` が2つある。**先に出るのが
 `tracker.provider.comments`（GitHub から何件どの順で取るか）で、
 **29行しか離れていない。****足すのは下の `tracker.comments` のほうである。**
 
@@ -9527,10 +9549,32 @@ continuo が「エージェントが書いていない」と判定して run を
 `internal/` の下で数えた）。**引き渡しの通知・Status を動かした記録・着手の門の案内・dispatch の案内・
 復元の案内が、そこに含まれる。**
 
-**引き渡しの通知だけは、印の無いいままでの1本で書く。**
-**「印が無いコメントを2種類にしない」という上の原則とはぶつかるが、
-その通知には continuo 自身の印が付いていて、機械が書いたことは本文から分かる。**
-**止まった理由が1行も残らないほうが重い。**
+**それでも、issue へ例外を作らない。**
+**「引き渡しの通知だけは印の無い1本で書く」という形は採らない。**
+
+**理由は2つある。**
+
+**一つ。実装できない。**Orchestrator から tracker へ出る口は
+[internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の `PostComment` の1本しかなく、
+12箇所の投稿が全部そこへ集まる。**1件だけ別のトークンへ振るには、引数を増やすか別名のメソッドを足すしかない。**
+**別名は下の 3-82i が禁じている**（絶対パスを縮める関門が名前ちょうどを見ているため）。
+**引数を増やすと、3-82i の「interface も検査の偽物も1文字も変わらない」が崩れる。**
+
+**二つ。その例外は、この設計が捨てた案と同じものになる。**
+**「continuo 自身の印が付いているから分かる」は成り立たない。**
+**その印は `<!-- continuo:self -->` という HTML のコメントで、画面には描画されない**
+（[internal/config/default.go:117](../../internal/config/default.go#L117)）。
+**3-82a は、まさにそれを理由に本文へマーカーを書く案を捨てている。**
+**例外を作ると、人間がいちばん読む必要があるコメントだけが、いつも画面上で人間の書き込みと区別が付かなくなる。**
+
+**代わりに、止まった理由をログとダッシュボードへ出す。**
+**そこは印の話と無関係で、interface も1文字も変わらない。**
+**issue には出ないが、人間が `Blocked` を見て continuo の画面を開けば、そこに理由がある。**
+
+| どこへ | 何を出すか |
+| --- | --- |
+| **ログ** | どの issue の、どの投稿が、なぜ落ちたか。**`Warn` ではなく `Error` で出す** |
+| **ダッシュボード** | その run の欄に「投稿できず人間へ渡した」と、理由の1行 |
 
 **起動のときなら、その機械が抱えていた run が全部、誰にも見張られないまま pane の中に残る**
 （[internal/daemon/daemon.go:302](../../internal/daemon/daemon.go#L302) の検査は復元より前にあり、
@@ -9546,7 +9590,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | **資格情報が在るか** | `~/.continuo/github-app-credentials.json`。**権限が `0600` かも見る** |
 | **資格情報が揃っているか** | **回さずに確かめる。**更新用のトークンが在り、期限内で、`client_id` と `client_secret` が揃っていることを見る。**実際に叩くと資格情報が回り、doctor が continuo を起動不能にしうる**。**「トークンが取れるか」は doctor では確かめられない。**App を消した／install を外した／secret を作り直したときも、ファイルは無傷なのでここは通る。**そこは起動時の検査が捕まえる** |
 | **更新用のトークンの残り** | **30日を切っていたら警告する。**切れてから気づくと、その場で作業が止まる |
-| **install がカンバンの全リポジトリに及ぶか** | **カンバンから集めた `nameWithOwner` の一覧と、App の install が及ぶ一覧を突き合わせる。**足りないものを名指しで出す |
+
 
 **`continuo doctor` は既に外へ出ている**
 （[internal/doctor/doctor.go:177-178](../../internal/doctor/doctor.go#L177-L178) が「gh / ghq / herdr / GitHub に触る」と書いている）。
@@ -9560,14 +9604,30 @@ continuo が「エージェントが書いていない」と判定して run を
 
 **起動時の検査は1回だけで、巡回のたびには叩かない。**確かめるのは「取り直せる状態か」であって、トークンそのものではない。
 
-**install の網羅も、起動時に見る。**
+**install の網羅は、巡回時に見る。**起動時でも doctor でもない。
+
 **トークンは、install したリポジトリが1つでもあれば取れる。**
 **continuo のカンバンは複数のリポジトリの issue を載せられるので、
 カンバンに新しいリポジトリの issue が1件載った日、そこへの投稿だけが権限不足で落ちる。**
-**上の決まりにより run は止まるのに、doctor も起動時の検査も緑のままである。**
-**人間は「昨日まで動いていたのに」から始めることになる。**
+**上の決まりにより run は止まる。**
 **3-82f が「install するときに全部を選ばない」と勧めているので、その日は早く来る。**
-**トークンを取った直後なら往復1回で引けるので、そこで突き合わせる。**
+
+**起動時に見ても捕まらない。**その日はもう起動が終わっている。
+**「昨日まで動いていたのに」という形で来るので、再起動は挟まらない。**
+
+**doctor でも見ない。**引くにはトークンが要り、doctor は1度も回さない約束である（3-82k）。
+
+**巡回時なら、両方を満たす。**
+
+| 何が要るか | 巡回時にどうなっているか |
+| --- | --- |
+| カンバンのリポジトリの一覧 | **巡回のたびに手に入る。**issue を引くときに `nameWithOwner` が返る |
+| App の install の一覧 | **本体はメモリにトークンを持っている**（3-82i）。**回転しない** |
+
+**毎回引くのではない。**
+**カンバンで初めて見る `nameWithOwner` が出たときだけ引く。**
+**見たものは覚えておき、2回目からは引かない。**
+**足りなければ、その名前を挙げて WARN を1行出す。**
 
 ### 3-82h. 漏れたときに何ができるか。何で止めるか
 
@@ -9585,7 +9645,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | --- | --- | --- |
 | **秘密鍵** | App 自身として動くトークンを作り放題 | **鍵を作り直すまで、無期限** |
 | **`client_secret` と更新用のトークン**（この設計が置くもの） | 人間の代理として動くトークンを作り放題 | **約6か月** |
-| アクセストークンだけ | 同上 | **8時間** |
+| アクセストークンだけ | **そのトークンで issue へ書ける。**新しいトークンは作れない | **8時間** |
 
 **どれも App の権限の範囲を超えない。**
 **だから、権限を `Issues` の読み書きだけにすることが、いちばん効く守りである**（3-82b）。
@@ -9598,7 +9658,7 @@ continuo が「エージェントが書いていない」と判定して run を
 
 | 順 | 何をするか | 何が止まるか |
 | --- | --- | --- |
-| **1** | **GitHub の画面で App の client secret を作り直し、古いほうを削除する** | **削除するまで古いものは生きている**（GitHub App は client secret を複数本持てる）。**作り直すだけでは止まらない** |
+| **1** | **GitHub の画面で App の client secret を作り直し、古いほうを削除する** | **削除するまで古いものは生きている**（GitHub App は client secret を複数本持てる）。**作り直すだけでは止まらない。****自分の continuo も同時に止まる。**手元のファイルに入っているのも古いほうなので、段3 を終えるまで投稿は全部落ち、run は全部人間へ渡る |
 | **2** | `~/.continuo/github-app-credentials.json` を消す | 手元から資格情報が消える |
 | **3** | **`continuo github-app setup` で認可をやり直す** | 新しい更新用のトークンが入る |
 | **4** | **急ぐなら、App の install を外す** | **既に配ったアクセストークンも即座に効かなくなる** |
@@ -9738,13 +9798,13 @@ interface も、検査の偽物も、1文字も変わらない。
 
 **だから、印を見る呼び出しを1行足す。**
 
-    APP=$(gh api "repos/…/issues/comments/$ID" --jq '.performed_via_github_app.slug // ""')
+    APP=$(gh api "repos/…/issues/comments/$ID" --jq '.performed_via_github_app.id // ""')
     OLD=$(gh api "repos/…/issues/comments/$ID" --jq .body)
 
 **`APP` は、空でないことだけを見てはならない。**
 **別の App が付けた印でも「機械が書いた」と読んでしまう。**
-**資格情報のファイルの `app_slug`**（3-82b）**と突き合わせる。**
-**その値は `.continuo.app_slug` としてテンプレートへ渡す**（下の変数の表）。
+**資格情報のファイルの `app_id`**（3-82b）**と突き合わせる。**
+**その値は `.continuo.app_id` としてテンプレートへ渡す**（下の変数の表）。
 
 **`// ""` を落としてはならない。**印の無いコメントに対して
 **`null` という4文字が標準出力へ出るので、空かどうかで見ると必ず真になる。**
@@ -9769,7 +9829,8 @@ interface も、検査の偽物も、1文字も変わらない。
 **ただし `OLD=$(gh api …)` の形は3箇所とも同じなので、
 `--jq` をオブジェクトへ変えてはならないという上の決まりは3箇所とも当たる。**
 
-**変数を2つ足す。**どちらも `RenderData` と `SampleData` の両方へ登録し、
+**最上位の名前を2つ、その下に3つの値を足す**（`github_app_attribution` と、`continuo` の下の `command` と `app_id`）。
+**3つとも `RenderData` と `SampleData` の両方へ登録し、**
 **[test/internal/prompt/prompt_test.go:411](../../test/internal/prompt/prompt_test.go#L411) の一覧も直す。**
 [internal/prompt/prompt.go:639-641](../../internal/prompt/prompt.go#L639-L641) が
 **「返す名前は `SampleData` と1つも違わないこと。食い違うと、その名前を使った文面で continuo が起動しない」**
@@ -9779,7 +9840,7 @@ interface も、検査の偽物も、1文字も変わらない。
 | --- | --- | --- |
 | `.github_app_attribution` | 真偽 | `tracker.comments.github_app_attribution` |
 | `.continuo.command` | **実行ファイルの絶対パスを `shellQuote` で囲ったもの。**登録する最上位の名前は `continuo` で、その中に `command` を持つ。**`SampleData` には空でない見本を入れる**（[internal/prompt/prompt.go:693](../../internal/prompt/prompt.go#L693)） | [internal/orchestrator/orchestrator.go:469](../../internal/orchestrator/orchestrator.go#L469) の `continuoPath` |
-| `.continuo.app_slug` | **この continuo が使う App の slug。**印がこの App のものかを見分ける | `~/.continuo/github-app-credentials.json` の `app_slug`（3-82b） |
+| `.continuo.app_id` | **この continuo が使う App の ID。**印がこの App のものかを見分ける | `~/.continuo/github-app-credentials.json` の `app_id`（3-82b） |
 
 **`continuo` を裸で書かない。**pane の PATH に無いことがある。
 **[internal/orchestrator/orchestrator.go:471-478](../../internal/orchestrator/orchestrator.go#L471-L478) が `os.Executable()` で
@@ -10214,10 +10275,6 @@ tracker:
       max: 50                               # 1回の取得で何件ずつ取るか。GitHub は一度に100件までしか返さない。
                                             # 打ち切りの件数ではない。続きがある限り取り直して、コメントは全部読む
       order: oldest_first                   # 読む順番。古いコメントから読む
-      github_app_attribution: false         # true にすると、機械が書くコメントに GitHub App の印が付き、
-                                            # 人間が書いたのか機械が書いたのかを画面で見分けられる（3-82）。
-                                            # true にする前に `continuo github-app setup` で資格情報を用意すること。
-                                            # 用意せずに true にすると、continuo は起動しない
     handoff:                                # 同じカンバンを複数の機械で見張るときの取り決め。担当は issue の担当者で持つ
       bid_window_ms: 180000                 # 入札を締め切るまでの待ち時間。180000 なら3分。
                                             # 数えはじめるのは、その issue へ最初の入札が入った時刻である。
@@ -10240,6 +10297,10 @@ tracker:
                                             # warn_and_comment ならダッシュボードに出し、issue へも1回だけ書く。
                                             # warn_only にすると issue へは書かない（ダッシュボードには出る）
   comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
+    github_app_attribution: false           # true にすると、機械が書くコメントに GitHub App の印が付き、
+                                            # 人間が書いたのか機械が書いたのかを画面で見分けられる（3-82）。
+                                            # true にする前に `continuo github-app setup` で資格情報を用意すること。
+                                            # 用意せずに true にすると、continuo は起動しない
     marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
     self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
   status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが応答の最後に書く1行の先頭。continuo はこの行を読んで Status を動かす
