@@ -9112,47 +9112,58 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **それでよい。**この設計が守るのは「見分けられること」であって「偽れないこと」ではない。
 **文書で案内する**（[docs/FAQ.md](../FAQ.md)）。
 
-### 3-82b. トークンは `continuo githubapp` が標準出力へ返す。ファイルへ書かない
+### 3-82b. 鍵は `~/.continuo/` に置き、App の権限は2つだけにする
 
-**言いたいこと。**アクセストークンはディスクに残さない。
-**`continuo githubapp` を叩くと標準出力へ1行返る。**`gh auth token` と同じ形である。
-**continuo もエージェントも、そのつど叩いて使う。**
+**言いたいこと。**アクセストークンはディスクに残さない。**残すのは、それを作るための鍵2つだけである。**
+**App に与える権限は `Issues` の読み書きと `Metadata` の読み取りだけ。**
+**`Contents` も `Pull requests` も要らない。**トークンを渡す範囲を1つのコマンドに絞ったからである。
 
 **人間の決定（2026-09-08）。**
 
-> 要は、github app用の秘密鍵を~/.continuo/以下に格納しておき、それが揃っている時にcontinuo githubapp を実行するとアクセストークンが標準出力に返される。このアクセストークンはファイルには出力しない。それを使ってcontinuoやエージェントがissueに投稿すればいいのでは?
-
-**この形が効くのは、失効の面倒が消えるからである。**トークンは叩くたびに作り直される。
-**8時間の期限も、ファイルの差し替えも、書き換えの途中で読まれる事故も、まとめて無くなる。**
-
-**使い方。**
-
-    GH_TOKEN=$(continuo githubapp) gh issue comment <URL> --body-file done.md
-
-**この形なら、効く範囲を1つのコマンドに絞れる。**`git push` も `gh pr create` も、いままでの認証のまま通る。
-**環境変数を pane 全体へ注ぐと、`gh` の用途が全部そちらへ移ってしまう。**
-**そちらは採らない。**
+> 要は、github app用の秘密鍵を~/.continuo/以下に格納しておき、それが揃っている時にcontinuo githubapp を実行するとアクセストークンが標準出力に返される。このアクセストークンはファイルには出力しない。
 
 **ディスクに残るもの。**
 
 | 何 | 置き場所（既定） | `--id <名前>` を付けたとき | 権限 |
 | --- | --- | --- | --- |
-| **App の秘密鍵** | `~/.continuo/github-app-private-key.pem` | `~/.continuo/id/<名前>/github-app-private-key.pem` | `0600` |
-| **更新用のトークン** | `~/.continuo/github-app-refresh-token.json` | `~/.continuo/id/<名前>/github-app-refresh-token.json` | `0600` |
+| **App の秘密鍵** | `~/.continuo/github-app-private-key.pem` | `~/.continuo/id/<名前>/…` | `0600` |
+| **更新用のトークン** | `~/.continuo/github-app-refresh-token.json` | `~/.continuo/id/<名前>/…` | `0600` |
 | **アクセストークン** | **残さない** | **残さない** | — |
 
-**`~/.continuo/` へ置く理由。**continuo は WORKFLOW.md のあるディレクトリで起動する。
-**その WORKFLOW.md は「共有するリポジトリへ commit して配る」ものである**（[docs/FAQ.md:730](../FAQ.md#L730)）。
-**隣へ秘密鍵を置くと、`git add -A` で入る。**
-`~/.continuo/` は二重起動を止めるロックが既に使っており、`--id` で分ける仕組みも在る
-（[internal/instance/instance.go:101](../../internal/instance/instance.go#L101)）。**置き場所の決め方を新しく作らない。**
-ディレクトリの権限は、既にある `lockDirPerm` と同じ `0700` である（[internal/instance/instance.go:57](../../internal/instance/instance.go#L57)）。
+**`github-app-refresh-token.json` の中身。**
 
-**更新用のトークンだけは、ファイルへ置くほかに手が無い。**
-**秘密鍵だけで無人に作れるのは、投稿者が `<app>[bot]` になるトークンである**（3-82e が採らないと決めたほう）。
-**投稿者を人間のままにする経路は、人間が1度ブラウザで承認したことの証（更新用のトークン）を必要とし、
-それは6か月有効なので、プロセスが終わっても残さなければならない。**
-**アクセストークンを残さないという決定は、ここには当たらない。**残すのは、それを作るための鍵である。
+    {
+      "client_id": "Iv23li…",
+      "refresh_token": "ghr_…",
+      "refresh_token_expires_at": "2027-03-08T15:24:26Z"
+    }
+
+**`client_id` はここに入れる。WORKFLOW.md には書かない。**
+**エージェントの cwd は issue ごとの worktree で、そこに WORKFLOW.md は無い。**
+[internal/config/config.go:43-53](../../internal/config/config.go#L43-L53) の `ResolvePath` は
+**いまいるディレクトリの直下しか見ず、上へ1段も遡らない。**
+**設定を WORKFLOW.md へ置くと、エージェントが叩いた `continuo githubapp` は必ず落ちる。**
+
+**`~/.continuo/` へ置く理由。**continuo が起動するのは WORKFLOW.md のあるディレクトリで、
+**その WORKFLOW.md は「共有するリポジトリへ commit して配る」ものである**（[docs/FAQ.md:730](../FAQ.md#L730)）。
+**隣へ秘密鍵を置くと `git add -A` で入る。**`~/.continuo/` はロックが既に使っており、
+`--id` で分ける仕組みも、ディレクトリの権限 `0700` もそこに在る
+（[internal/instance/instance.go:101](../../internal/instance/instance.go#L101) と
+[internal/instance/instance.go:56](../../internal/instance/instance.go#L56)）。
+
+**App に与える権限。**
+
+| 権限 | なぜ要るか |
+| --- | --- |
+| **Issues: Read and write** | **issue のコメントを書く。**この設計が使う唯一の書き込みである |
+| **Metadata: Read-only** | **GitHub App が必ず持つ。**外せない |
+
+**`Contents: write` を入れてはならない。**入れると、そのトークンでリポジトリの中身を書き換えられる。
+`git push` はこのトークンを1度も使わない。**使わない力を持たせない。**
+
+**pull request のコメントは、この設計の範囲外である。**[internal/prompt/builtin.md](../prompt/builtin.md) の
+`gh pr comment` はいままでの認証のまま投稿し、**印は付かない。**含めるなら `Pull requests` の権限が要る。
+**この2つで足りることは、まだ実測していない。**
 
 ### 3-82c. `continuo githubapp` が何を返すか
 
@@ -9305,56 +9316,55 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 既存の `hook` の名前も引数も終了コードも標準出力も、1つも変わらない。
 **同じ文書が「`internal/cli/cli.go` の別のサブコマンドへ処理を足す」を、止まらなくてよい例として挙げている。**
 
-### 3-82g. App の作成は `continuo setup-app` が用意する。人間はボタンを1回押す
+### 3-82g. App の作成と install は、押す前に画面で説明する
 
-**言いたいこと。**App の名前・権限・install の範囲を**人間に手で入れさせない。**
-**continuo が JSON で組み立てて GitHub へ渡し、人間は「Create GitHub App」を1回押すだけにする。**
-**押した瞬間に App ID・秘密鍵・client secret が返るので、continuo がそのまま `~/.continuo/` へ置く。**
+**言いたいこと。**押した先で何が起きるかが分からないと、人間はボタンを押せない。
+**「App を作る」と「install する」の2つとも、押す前に画面で説明する。**
+**説明を読まずに押せる形にしない。**ボタンは説明の下に置く。
 
-**人間の要望（2026-09-08）。**
+**人間の指摘（2026-09-09）。**
 
-> github app自体の作成をもっと自動化できないの?
-> 人間が操作すると設定間違いする場合もあるので、自動化したい
+> この時点で、ボタンを押すと何が起こるのか、どういう仕組なのかを人間に提示しておかないと、怖がって人間がボタンを押せない。画面上で説明するようにして。
+> installするときも同様
 
-**使うのは GitHub の公式の仕組みである**（App Manifest flow）。**自作の手順ではない。**
+**App を作る前に、画面へ書くこと。**
 
-**何が自動になるか。**
+| 何を | 中身 |
+| --- | --- |
+| **何が作られるか** | あなたのアカウントに GitHub App が1つ。**公開されない** |
+| **何ができる App か** | **issue のコメントを読み書きするだけ。**コードは読めないし、書けない |
+| **押すと何が起きるか** | **GitHub の作成画面へ飛ぶ。**そこで中身を確かめてから、もう1度押す。**2段ある** |
+| **この機械に何が残るか** | 秘密鍵と更新用のトークンが `~/.continuo/` へ。**本人だけが読める形で置く** |
+| **やめたくなったら** | **GitHub の画面から App を削除できる。**置いたファイルも消せる |
 
-| 何 | 手で作る場合 | `continuo setup-app` |
-| --- | --- | --- |
-| **App の名前** | 人間が入力 | **continuo が入れる** |
-| **権限**（Issues / Pull requests / Contents） | 人間が3つとも選ぶ | **continuo が入れる** |
-| **Device Flow の有効化** | 人間がチェックする。**外すと 3-82c が動かない** | **continuo が入れる** |
-| **Webhook の Active** | 人間が外す。**外し忘れると URL を求められる** | **continuo が省く** |
-| **install できる範囲** | 人間が選ぶ | **continuo が入れる** |
-| **秘密鍵の生成とダウンロード** | 人間が押して、ファイルを移す | **continuo が受け取って `~/.continuo/github-app-private-key.pem` へ 0600 で置く** |
-| **App の install 先を選ぶ** | 人間が選ぶ | **人間が選ぶ**（GitHub の仕様。ここだけは自動にできない） |
+**install の前に、画面へ書くこと。**
 
-**手順は3段である。**
+| 何を | 中身 |
+| --- | --- |
+| **install とは何か** | **その App が、選んだリポジトリの issue へ書けるようになること** |
+| **どこを選ぶか** | **カンバンに載っているリポジトリだけ。**「全部のリポジトリ」を選ばない |
+| **そのあと何が起きるか** | **認可の画面が1つ出る。**許すと、この機械へ戻ってくる |
+| **何を許すことになるか** | **あなたの代理として issue のコメントを書くこと。**それだけ |
+| **やめたくなったら** | GitHub の画面から install を外せる |
 
-| 順 | 誰が | 何をするか |
-| --- | --- | --- |
-| **1** | continuo | 受け口を1つ開き、**その URL を画面に出す** |
-| **2** | 人間 | その URL を開き、**「Create GitHub App」を1回押す** |
-| **3** | continuo | 返ってきた JSON から App ID・秘密鍵・client secret を取り、`~/.continuo/` へ置く |
+**送る中身も画面に出す。**利用者が読めない JSON を、読まずに送らせない。
+**2026-09-08 の実測でも、送る manifest を画面へ並べてから押してもらった。**
 
-**`hook_attributes` は省く。**公式ドキュメントは、この欄そのものを optional と書いている。
-**書くと、その中の URL が必須になり、公開インターネットから届かない URL は弾かれる。**
+**画面は continuo が既に持っている HTTP サーバに置く。**新しいサーバを立てない。
+[internal/server/server.go:182](../../internal/server/server.go#L182) が `http.Server` を立てており、
+[internal/cli/cli.go:1620](../../internal/cli/cli.go#L1620) の `--port` が
+[internal/daemon/daemon.go:239](../../internal/daemon/daemon.go#L239) で `server.port` を上書きする。
 
-**2026-09-08 に実測した。**受け口を `127.0.0.1` に置いて `hook_attributes` を書いたところ、GitHub がこう返した。
+**人間が触るのは4回だけである。**
 
-    Error Hook url is not supported because it isn't reachable over the public Internet (127.0.0.1)
-    Error Hook is invalid
+| 順 | 何をするか |
+| --- | --- |
+| 1 | `continuo --port <番号>` で起動し、ブラウザで開く |
+| 2 | **説明を読んで「App を作る」を押す** |
+| 3 | GitHub の画面で **`Create GitHub App` を押す** |
+| 4 | **install するリポジトリを選び、認可する** |
 
-**`active: false` を書いても検査される。**欄ごと省くのが正しい。
-**`redirect_url` のほうは同じ `127.0.0.1` で1度も咎められなかった。**受け口はそのままでよい。
-
-**受け口は、この作業のあいだだけ開く。**`continuo setup-app` が終わったら閉じる。
-**常駐しない。**待つのは、GitHub がその URL へ1回返してくるまでである。
-
-**install だけは人間が選ぶ。**GitHub は、どのリポジトリへ入れるかを App の作成者に選ばせる。
-**continuo は、install の画面の URL を出して案内する。**
-**「全部のリポジトリ」ではなく、カンバンに載っているリポジトリだけを選ぶよう書く。**
+**入力する欄は1つもない。**名前も権限も continuo が入れる（3-82b）。
 
 ## 4. 人間が決めたこと
 
