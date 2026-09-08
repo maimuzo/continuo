@@ -9433,7 +9433,20 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 | 2 | **説明を読んで「App を作る」を押す** | GitHub の作成画面へ飛ぶ |
 | 3 | GitHub の画面で **`Create GitHub App` を押す** | **`/github-app/created`**（`state` を確かめ、`code` を資格情報へ交換する） |
 | 4 | **install の説明を読んで「install する」を押す** | continuo が `state` を載せた install の URL を組み立て、そこへ送る |
-| 5 | **install するリポジトリを選び、認可する** | **`/github-app/authorized`**（`state` を確かめる） |
+| 5 | **install するリポジトリを選び、認可する** | **`/github-app/authorized`。**`state` を確かめ、`code` を更新用のトークンへ交換し、`viewer` を引いて `authorized_login` を書く |
+
+**資格情報のファイルは2回書かれる。**
+
+| いつ | 何を書くか |
+| --- | --- |
+| **段3 のあと** | `client_id` と `client_secret`（App を作った `code` を交換して得る） |
+| **段5 のあと** | `refresh_token` と `refresh_token_expires_at` と `authorized_login` |
+
+**どちらも一時ファイルへ書いてから `os.Rename` で差し替える**（[CLAUDE.md](../../CLAUDE.md) の「一時ファイルへ書いてから差し替える」）。
+
+**段3 と段5 のあいだで落ちると、`refresh_token` の無いファイルが残る。**
+**doctor の「揃っているか」はそれを `✗` にするので、利用者は `setup` へ送られる。**
+**そのとき App を作り直させてはならない**（下の「やり直すとき」）。
 
 **段4 を落としてはならない。**2つの理由がある。
 
@@ -9449,6 +9462,12 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 
 **組み立てる URL は `https://github.com/apps/<slug>/installations/new?state=<値>` である。**
 **`<slug>` は、段3 で `code` を交換したときに返る。**
+
+**やり直すときは、App を作り直さない。**
+**`~/.continuo/github-app-credentials.json` に `client_id` と `client_secret` が在れば、段4 から始める。**
+**認可のやり直しに落ちる経路は3つある**（起動時の取得で書き戻しの直前に落ちた・漏洩で secret を作り直した・181日使わなかった）。
+**どれも App は生きている。**
+**作り直させると、名前が GitHub 全体で一意なので必ず衝突し、install もやり直しになる。**
 
 **ふつうは入力する欄が1つもない。**権限は continuo が入れる（3-82b）。**選ぶのは install するリポジトリだけである。**
 
@@ -9483,7 +9502,7 @@ manifest に載せた名前が使われていれば、GitHub の作成画面は�
 **「Hook url is not supported because it isn't reachable over the public Internet」**で拒む。
 **公式の一覧では省略できる項目なので、丸ごと落とす。**落としたら作成の画面が開いた。
 
-**測っていないことが4つある。どれも実装の前に測ること。**
+**測っていないことが5つある。どれも実装の前に測ること。**
 
 **一つ目。GraphQL の `addComment` で投稿したコメントに、画面のバッジが出るか。**
 **API の返り値は測ってあり、REST と同じだった**（3-82 の実測の表）。
@@ -9493,18 +9512,30 @@ manifest に載せた名前が使われていれば、GitHub の作成画面は�
 **バッジが出ないなら、本体の投稿は1件も見分けられない。**この設計の目的の半分がそこで消える。
 **1件投稿して画面を見ること。**
 
+**あわせて、`gh issue comment` が REST と GraphQL のどちらを叩くかも確かめる。**
+**エージェント側の5本はこのコマンドを使う。**
+**GraphQL なら、バッジが出なかったときに失うのは半分ではなく全部である。**
+**同じ1回の測定で、`gh issue comment` で投稿した1件も並べれば済む。**
+
 **二つ目。manifest で作った App の user-to-server token が、8時間で切れるか。**
-
-**三つ目。ロックを取ってから GitHub との往復が終わるまでの実測値**（3-82c の待ち時間の上限に使う）。
-
-**四つ目。`public: false` の App を、自分が所有していない organization のリポジトリへ install できるか。**
-**カンバンには、利用者が所有していないリポジトリの issue が載ることがある。**
-**できないなら、そのリポジトリの issue への投稿だけが権限不足で落ちる。**
-**落ちたときに何が残るかは 3-82g にある**（ログへ `Error` で、issue と worktree と会話の記録のパスを出す）。
 **2026-09-09 の実測（`expires_in` が 28800）は、人間が画面から作った App でのものである。**
 **その設定が無効なら、期限なしのトークンが出て更新用のトークンが出ず、
 3-82c（更新用のトークンで取り直す）も 3-82g（8時間で切れる）も同時に成り立たなくなる。**
-**実装の前に、manifest で1つ作って測ること。**
+**manifest で1つ作って測ること。**
+
+**三つ目。`state` を、install 経由の redirect まで運べるか。**
+**`request_oauth_on_install: true` の流れで、continuo が組み立てた install の URL に載せた `state` が、
+`/github-app/authorized` へ戻ってくるかを測る。**
+**あわせて、`redirect_url` に既に `?state=` が付いているとき、GitHub が `code` を `&` で繋ぐかも見る。**
+**外すと `code` を取り出せず、どちらも「setup が二度と完了しない」に落ちる。**
+**4つのどれよりも重い。**
+
+**四つ目。ロックを取ってから GitHub との往復が終わるまでの実測値**（3-82c の待ち時間の上限に使う）。
+
+**五つ目。`public: false` の App を、自分が所有していない organization のリポジトリへ install できるか。**
+**カンバンには、利用者が所有していないリポジトリの issue が載ることがある。**
+**できないなら、そのリポジトリの issue への投稿だけが権限不足で落ちる。**
+**落ちたときに何が残るかは 3-82g にある**（ログへ `Error` で、issue と worktree と会話の記録のパスを出す）。
 
 ### 3-82g. 印を付けるかは WORKFLOW.md で決める。付けると決めたら、取れないときは止まる
 
@@ -9548,7 +9579,10 @@ doctor が continuo を起動不能にしうる**（下の表）。
 **5-2 には `comments:` が2つある。**先に出るのが
 `tracker.provider.comments`（GitHub から何件どの順で取るか）で、
 **25行しか離れていない。****足すのは下の `tracker.comments` のほうである。**
-**5-2 への追加は済んでいる。**残っているのは雛形と [docs/upgrading.md](../upgrading.md) の2つである。
+**4箇所とも、まだ足していない。**設計だけの段階で足すとテストが赤になるためである
+（[test/internal/scaffold/design_template_test.go:36-41](../../test/internal/scaffold/design_template_test.go#L36-L41) が
+5-2 の `yaml` ブロックと雛形のキー集合を突き合わせている。**片方だけ足すと3本落ちる。**実測した）。
+**実装の最初の commit で、4箇所を同時に足す。**
 
 **チームで WORKFLOW.md を共有する形は、この設計では非対応とする。**
 WORKFLOW.md は commit されるので、**1人が `true` にすると、資格情報を持たない同僚の continuo は次の起動で止まる**
@@ -9591,11 +9625,14 @@ continuo が「エージェントが書いていない」と判定して run を
 なぜ止まったのか・worktree はどこか・会話の記録はどこかを書いた通知が1件も無い。**pane は生きたまま残る。
 
 **投稿の口は12箇所ある**（`o.postComment(` / `o.postOwnMarkedComment(` / `o.postCommentWithMarker(` を
-`internal/` の下で数えた）。**引き渡しの通知・Status を動かした記録・着手の門の案内・dispatch の案内・
+`internal/` の下で数えると14行返り、**うち2行は
+[internal/orchestrator/comment.go:528](../../internal/orchestrator/comment.go#L528) と
+[544行](../../internal/orchestrator/comment.go#L544) の委譲なので、引いて12である**）。
+**引き渡しの通知・Status を動かした記録・着手の門の案内・dispatch の案内・
 復元の案内が、そこに含まれる。**
 
 **issue へ例外を作らない。**
-**投稿の口は12箇所あり、[internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の
+**投稿の口は12箇所あり**（数え方はこの節の上）**、[internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の
 `PostComment` が唯一の出口なので、1件だけ別のトークンへ振ることはできない。**
 
 **代わりに、失われる3つをログへ `Error` で出す。**
@@ -9627,7 +9664,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | --- | --- |
 | **設定が `true` か** | `false` なら、以下は検査しない |
 | **資格情報が在るか** | `~/.continuo/github-app-credentials.json`。**権限が `0600` かも見る** |
-| **資格情報が揃っているか** | **回さずに確かめる。**更新用のトークンが在り、期限内で、`client_id` と `client_secret` が揃っていることを見る。**実際に叩くと資格情報が回り、doctor が continuo を起動不能にしうる**。**「トークンが取れるか」は doctor では確かめられない。**App を消した／install を外した／secret を作り直したときも、ファイルは無傷なのでここは通る。**そこは起動時の検査が捕まえる** |
+| **資格情報が揃っているか** | **回さずに確かめる。**更新用のトークンが在り、期限内で、`client_id` と `client_secret` と `authorized_login` が揃っていることを見る。**`authorized_login` が欠けていたら `✗` にする。**次の行の突き合わせが比べる相手が無いためである。**実際に叩くと資格情報が回り、doctor が continuo を起動不能にしうる**。**「トークンが取れるか」は doctor では確かめられない。**App を消した／install を外した／secret を作り直したときも、ファイルは無傷なのでここは通る。**そこは起動時の検査が捕まえる** |
 | **更新用のトークンの残り** | **30日を切っていたら警告する。**切れてから気づくと、その場で作業が止まる |
 | **認可した人が `gh` の持ち主と同じか** | **`authorized_login` と `gh api user` を突き合わせる**（3-82k）。**トークンは1度も取らない** |
 
@@ -9788,12 +9825,15 @@ interface も、検査の偽物も、1文字も変わらない。
     {{if .github_app_attribution}}
     TOKEN=$({{.continuo.command}} github-app token)
     case "$TOKEN" in
-      ghu_*) GH_TOKEN="$TOKEN" gh issue comment <URL> --body-file done.md ;;
-      *)     echo "トークンを取れませんでした。投稿しません" >&2; exit 1 ;;
+      ghu_*) ;;
+      *) echo "トークンを取れませんでした。投稿しません" >&2; exit 1 ;;
     esac
-    {{else}}
-    gh issue comment <URL> --body-file done.md
     {{end}}
+    GH_TOKEN="${TOKEN:-}" gh issue comment <URL> --body-file done.md
+
+**`gh` の行は1本にする。**`{{if}}/{{else}}` でコマンド全体を2回書かない（この節の下）。
+**`export` しない。**export すると、同じ塊で後から叩く `gh` にも印が付く（3-82a）。
+**`false` のときは `$TOKEN` が空なので、`GH_TOKEN=""` になって `gh` は既定の認証を使う。**
 
 #### 一、指示書のどこに分岐を掛けるか
 
@@ -9818,7 +9858,7 @@ interface も、検査の偽物も、1文字も変わらない。
 | どの検査 | 何を見ているか | どう壊れるか |
 | --- | --- | --- |
 | [test/internal/prompt/progress_comment_test.go:226](../../test/internal/prompt/progress_comment_test.go#L226) | **行頭を `!=` で見ている** | **空白1つで落ちる。**字下げすると進捗報告が成果の報告として数えられ、**issue #178 が戻る** |
-| **[test/internal/prompt/group_comment_test.go:302](../../test/internal/prompt/group_comment_test.go#L302)** | **`--body "<!-- continuo:group -->` で始まる行を数え、2件でなければ `Fatalf`** | **7-2 の2本を `{{if}}/{{else}}` にすると4件になる。**`prompt.Builtin()` はテンプレートを展開しないので、両方の枝が数えられる |
+| **[test/internal/prompt/group_comment_test.go:283-309](../../test/internal/prompt/group_comment_test.go#L283-L309)** | **`--body "<!-- continuo:group -->` という部分文字列を `strings.Index` で探し、その次の行を `TrimSpace` して集める。**2件でなければ `Fatalf`。**そのあと2件が同じ文字列かも見る** | **7-2 の2本を `{{if}}/{{else}}` にすると4件になる。**`prompt.Builtin()` はテンプレートを展開しないので、両方の枝が数えられる。**あわせて、`--body` の行と次の行のあいだへ何も差し込めない。**`{{if}}` の塊は、その2行の外へ置く |
 
 **2つ目を避ける形。**`{{if}}/{{else}}` でコマンド全体を2回書かない。
 **環境変数の代入だけを分岐させ、`gh` の行は1本にする。**
@@ -9829,14 +9869,15 @@ interface も、検査の偽物も、1文字も変わらない。
       ghu_*) ;;
       *) echo "トークンを取れませんでした。投稿しません" >&2; exit 1 ;;
     esac
-    export GH_TOKEN="$TOKEN"
     {{end}}
     gh issue comment <URL> --body "<!-- continuo:group -->
     …"
 
 **`gh` の行が1本になるので、数える検査は2件のまま通る。**
 **`false` のときは `GH_TOKEN` を設定しないので、いままでどおり `gh` の認証で投稿する。**
-**この形を9本の全部に当てる。**
+**この形を当てるのは、issue へ新しく投稿する5本だけである。**
+**pull request の2本には当てない**（権限が `Issues` だけなので、掛けると run が死ぬ。この節の上）。
+**書き足しの2本にも当てない**（`PATCH` では印が動かない。同じく上）。
 
 **[internal/prompt/builtin.md](../prompt/builtin.md) を直したら、5-3 の写しも同じ commit で直す。**
 [test/internal/scaffold/design_template_test.go:100-102](../../test/internal/scaffold/design_template_test.go#L100-L102) が
@@ -9873,7 +9914,17 @@ interface も、検査の偽物も、1文字も変わらない。
     {{end}}
     OLD=$(gh api "repos/…/issues/comments/$ID" --jq .body)
 
-**`APP` は、空でなければ書き足す。**空なら段2b で新しく1件投稿する。
+**`APP` は `case` で形を確かめる。**空かどうかで見てはならない。
+
+    case "$APP" in
+      skip|[0-9]*) ;;                      # 印が在る（`skip` は false のとき）
+      *) echo "印がありません。新しく1件投稿します"; APP="" ;;
+    esac
+
+**`gh api` は、取得に失敗するとエラーの JSON を標準出力へ出す。**
+**空かどうかで見ると、失敗した瞬間に門が開く**
+（[internal/prompt/builtin.md:423-425](../prompt/builtin.md#L423-L425) が同じ罠を既に文書化している）。
+**App ID は数字なので、`[0-9]*` で足りる。**
 
 **`{{if}}` の外へ出してはならない。**
 **`false` のときは、機械が書いたコメントにも印が付かない。**
@@ -9918,7 +9969,7 @@ interface も、検査の偽物も、1文字も変わらない。
 | --- | --- | --- |
 | [internal/prompt/builtin.md:419](../prompt/builtin.md#L419) | `本文を読めませんでした。段2b で新しく1件投稿します` | **「読めなかったか、印が無かった」の2通りを言う** |
 | [internal/prompt/builtin.md:710](../prompt/builtin.md#L710) | 同上 | 同上 |
-| **[internal/prompt/builtin.md:724](../prompt/builtin.md#L724)** | **`前に書いた分は読めませんでした。` を1行足してください** | **ここは公開の issue へ書かせる文である。****設定を `true` にした日、エージェントは読めた本文について「前に書いた分は読めませんでした。」と書く。****読む人間は、前の報告が失われたと誤読する。**実際には残っている。編集履歴は消せない |
+| **[internal/prompt/builtin.md:724](../prompt/builtin.md#L724)** | **`前に書いた分は読めませんでした。` を1行足してください** | **「`前に書いた分へ書き足せませんでした。上のコメントに残っています。`」へ変える。****ここは公開の issue へ書かせる文である。****設定を `true` にした日、エージェントは読めた本文について「前に書いた分は読めませんでした。」と書く。****読む人間は、前の報告が失われたと誤読する。**実際には残っている。編集履歴は消せない |
 
 **[internal/prompt/builtin.md:668](../prompt/builtin.md#L668) は直さない。**そこは読むだけの経路なので、門を足さない。
 **662 は1バイトも書き込まないので、門を足さない。**
@@ -10025,6 +10076,12 @@ interface も、検査の偽物も、1文字も変わらない。
 **ファイルの名前と実際の認可がずれる場合**（人が手でファイルを編集した、など）**は、起動時の検査が捕まえる。**
 
 **認可の直後だけでは足りない。**`gh auth switch` を1回叩くと、そこから恒久的にずれる。
+
+**走っている最中に切り替えられた場合も、拾う。**
+**巡回のたびに `gh api user` を引き直し、`authorized_login` と違っていたら、その巡回では dispatch しない。**
+**既にある [internal/orchestrator/handoff.go:604](../../internal/orchestrator/handoff.go#L604) の `warnIfViewerDiffers` は
+WARN を1行出すだけで、走り続ける。**
+**ここでは止める。**止めないと、切り替えた人の手元では**再起動するまで run が全部、黙って人間へ渡り続ける。**
 
 **continuo には既に、同じ形の突き合わせが在る。**
 [internal/orchestrator/handoff.go:604](../../internal/orchestrator/handoff.go#L604) の `warnIfViewerDiffers` が、
