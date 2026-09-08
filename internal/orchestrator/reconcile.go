@@ -414,7 +414,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 // **だから「止まっている」と言えるのは `idle` と `done` の2つだけである。**
 //
 // **`runningSubagentList()` は使えない。**一度は3つ目の条件にしたが、取り下げた。
-// **あの一覧を空にする経路は、次の turn を始めるときと `SubagentStop` を受けたときの2つしか無い**
+// **あの一覧を空にする経路は4つあり、4つとも hook か次の turn で駆動する**
+// （`docs/spec/turn_end_detect_mechanizm.md` の 3-8 に並べてある）**
 // （`runState.beginTurn` と `noteSubagentStop`）。
 // **正しくは4つある**（`docs/spec/turn_end_detect_mechanizm.md` の 3-8）。
 // 上の2つに加えて、`Stop` が `background_tasks` を空で載せて届いたときと、
