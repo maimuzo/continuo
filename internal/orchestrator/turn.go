@@ -567,7 +567,7 @@ func (o *Orchestrator) afterWaitTimeout(ctx context.Context, rs *runState) (turn
 	// **手放しの入口は巡回の1本だけである。**
 	//
 	// **なぜ待ちループから外したか。**手放すかどうかを決めるには、
-	// **pane が止まっているか**（画面の版・`agent_status`・走っているサブエージェント）を読む必要がある。
+	// **pane が止まっているか**（`agent_status`・`state_change_seq`）を読む必要がある。
 	// **それを読むのは巡回だけである。**読まない側に手放させると、
 	// **動いている run を、動いていることを確かめないまま止めることになる。**
 	//
@@ -826,7 +826,7 @@ func (o *Orchestrator) runIdleForTurnTimeout(rs *runState) bool {
 // stallDetectionOff は、無音による打ち切りを切っているかを返す（issue #197）。
 //
 // **切っている機械では `runIdleForTurnTimeout` が「進んでいない」を言えない。**
-// **手放しの側は、そのとき画面の版と `agent_status` だけで判断する。**
+// **手放しの側は、そのとき `agent_status` と `state_change_seq` だけで判断する。**
 // **言えないことを理由に手放さないでいると、`weekly_wait_limit_minutes` が
 // その設定の機械で一度も効かない。**
 //
@@ -1173,12 +1173,13 @@ func isTaskNotification(ev hookserver.HookEvent) bool {
 
 // agentInfo は agent.get を1回呼び、agent の情報をまるごと返す。
 //
-// **状態と画面の版（`revision`）を1回の呼び出しで取るためにある。**stall の判定は
-// 両方を要る（設計 3-21）ので、2回に分けて呼ぶと別の時点の値を突き合わせることになる。
+// **`agent_status` と `state_change_seq` を1回の呼び出しで取るためにある。**
+// 打ち切りは前者を、手放しは両方を見る（3-21。issue #173）ので、
+// **2回に分けて呼ぶと別の時点の値を突き合わせることになる。**
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-// 戻り値の1つ目: agent の情報（状態は AgentStatus、画面の版は Revision）。
+// 戻り値の1つ目: agent の情報（状態は AgentStatus、状態が変わった連番は StateChangeSeq）。
 // 戻り値の2つ目: 読めなかった場合のエラー。
 func (o *Orchestrator) agentInfo(ctx context.Context, rs *runState) (herdr.Agent, error) {
 	got, err := o.herdr.AgentGet(ctx, herdr.AgentGetParams{Target: rs.agentName()})

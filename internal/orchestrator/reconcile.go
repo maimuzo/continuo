@@ -405,8 +405,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 // **人間の指示は「そのセッションのサブエージェントを含め完全停止するまで待って」である**
 // （2026-09-06）。**2つとも満たしたときだけ「止まっている」とする。**
 //
-//	画面の版     … 前に見た値から変わっていない
-//	agent_status … idle か done である
+//	state_change_seq … 前に見た値から変わっていない（連番が 0 でない）
+//	agent_status     … idle か done である
 //
 // **`agent_status` で `working` だけを弾くのでは足りない。**`unknown` は
 // 「**agent は居るが herdr が状態を判定できない**」という意味であり（`internal/herdr/types.go`）、
@@ -462,9 +462,9 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 	// **`state_change_seq` は、その agent の状態が変わったときだけ刻み直される。**
 	// **30秒あけた2回の読み取りの間に `working` の山が入っていれば、値が動くので気づける。**
 	//
-	// **`checkStalls` の側の控え（`noteRevision`）を呼んではならない。**控え直すので、
-	// **このあと `checkStalls` が同じ値を見て「変わっていない」と答え、
-	// 動いている run を打ち切ることになる。**
+	// **`checkStalls` の側の時計（`LastSeenAt`）を進めてはならない。**進めると、
+	// **手放しの門も打ち切りも「まだ閾値に達していない」と答え続け、
+	// 止まった run を誰も片付けなくなる。**
 	//
 	// **だから、この判定は自分が読んだ連番だけを覚える。**
 	// **2回続けて同じなら止まっている。**初回は必ず偽を返す。
@@ -541,13 +541,15 @@ func (o *Orchestrator) closeOrphanPane(ctx context.Context, worktreePath string,
 // active; each app-server output resets it, so it is not a total turn runtime cap"*
 // （turn の流れが動いている間の最大の沈黙の間隔。app-server の出力ごとにリセットされる。
 // 総実行時間の上限ではない）と定めている。continuo には app-server が無いので、
-// **「app-server の出力」に相当するものを herdr の pane の `revision`（画面の版）で測る。**
+// **「app-server の出力」に相当するものを herdr の `agent_status` で測る**
+// （[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 4-1。issue #173）。
+// **`revision`（画面の版）ではない。**あれは continuo の pane では永久に動かない（3-2）。
 //
 // **時計が動いていない run について、上から順に見る。**
 //
-//  1. 画面の版が増えているか（agent.get の `revision`）
-//     → 増えていれば時計を起こし直す。**1つの turn に何時間かかっていても打ち切らない**
-//  2. 版が増えていない。枠待ちか（percent が 100 かつ この run から hook が来ていない）
+//  1. `agent_status` が `working` か（agent.get）
+//     → `working` なら時計を起こし直す。**1つの turn に何時間かかっていても打ち切らない**
+//  2. `working` ではない。枠待ちか（percent が 100 かつ この run から hook が来ていない）
 //     → 枠待ちなら「時計を止めている」標識を付けて終わり。**殺さない**
 //  3. 枠待ちでもない
 //     → worker を止め、リトライを積む
@@ -634,8 +636,22 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 			continue
 		}
 
-		// 1. agent.get で状態と画面の版を1回で取る。
-		// **版が増えていれば、何時間かかっていても待ち続ける。**
+		// 1. agent.get で agent の状態を取り、`working` なら待ち続ける。
+		//
+		// **`working` は、長い1回のツール呼び出しの最中でも返る**
+		// （[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 4-1。
+		// `go test` を走らせながら2秒おきに60回読み、**60サンプル全部が `working` だった**）。
+		// **「1つの指示に何時間かかっても打ち切らない」という約束を果たす唯一の信号である。**
+		//
+		// **`revision`（pane の版）を見てはならない**（issue #173）。
+		// **あれは画面を1バイトも見ていない。**herdr が増やすのは端末タイトルの本文が変わったときだけで、
+		// **continuo の pane では issue の識別子で固定されるので永久に動かない。**
+		// **実測で、働いている3つの pane が2分間ずっと `revision: 1` だった。**
+		// **つまり、この段は1度も発火していなかった。**
+		//
+		// **`state_change_seq` も見てはならない。**`working` が続く間は動かないので、
+		// **長いツール呼び出しでは `revision` と同じく発火しない。**
+		// **そのうえ、状態が往復する run では毎回動くので、永久に打ち切れなくなる。**
 		//
 		// **枠待ちの判定より前に置く**（設計 3-27。issue #197）。
 		// **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
@@ -645,23 +661,23 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		// **正常に走っている run を枠待ちと名乗らせて stall の時計を止める。**
 		// **後ろに置くと、その run は本当に固まっても誰にも止められない。**
 		//
-		// **`noteRevision` は版が変わったときだけ `LastSeenAt` を進める。**
-		// **版が変わった run は、そもそも枠待ちではない。**
+		// **時計を進めるのは `working` のときだけである。**
+		// **`working` の run は、そもそも枠待ちではない。**
 		// だから「枠待ちの run は `LastSeenAt` を進めない」という約束は破れない。
 		agent, err := o.agentInfo(ctx, rs)
-		if err == nil && rs.noteRevision(agent.Revision, now) {
-			o.logger.Info("画面が変わっているので待ち続けます（turn の総実行時間では打ち切りません）",
+		if err == nil && agent.AgentStatus == herdr.AgentStatusWorking {
+			rs.noteWorking(now)
+			o.logger.Info("agent が working なので待ち続けます（turn の総実行時間では打ち切りません）",
 				"identifier", snap.Identifier,
-				"revision", agent.Revision,
 				"agent_status", string(agent.AgentStatus))
 			continue
 		}
 		if err != nil {
-			o.logger.Warn("画面の版を読めませんでした（止まったものとして扱います）",
+			o.logger.Warn("agent の状態を読めませんでした（止まったものとして扱います）",
 				"identifier", snap.Identifier, "error", err)
 		}
 
-		// 2. 画面が止まっている。枠待ちかを見る。
+		// 2. 動いていない。枠待ちかを見る。
 		if o.isQuotaWaitingWith(quotaSnap, rs) {
 			// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
 			// **手放しの入口は `releaseQuotaWaitExceeded` の1本だけである。**
@@ -680,11 +696,12 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		// 3. 版が止まったまま閾値を超えた。worker を止め、リトライを積む。
 		// **同期で呼んではならない**（設計 3-8）。打ち切りになった場合は 3-25 の9段を
 		// 通り、`agent.prompt` の待ち受けで既定1時間返らない。
-		o.abandonRunAsync(ctx, rs, o.stalledScreenReason(snap, agent, now))
+		o.abandonRunAsync(ctx, rs, o.stalledReason(snap, agent, now))
 	}
 }
 
-// stalledScreenReason は「画面が止まったまま閾値を超えた」ときに人間へ見せる文面を作る
+// stalledReason は「`agent_status` が `working` にならないまま閾値を超えた」ときに
+// 人間へ見せる文面を作る
 // （設計 3-34b の形。何が起きたか →【確かめ方】→【よくある原因】→【対処】）。
 //
 // **`herdr agent read` を案内してはならない**（設計 3-34b）。この文面を載せたコメントの
@@ -694,7 +711,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 // agent: agent.get が返した情報（読めなかった場合はゼロ値に近い）。
 // now: いまの時刻。
 // 戻り値: issue のコメントとログに載せる理由の文字列。
-func (o *Orchestrator) stalledScreenReason(snap runSnapshot, agent herdr.Agent, now time.Time) string {
+func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now time.Time) string {
 	status := string(agent.AgentStatus)
 	if status == "" {
 		status = string(herdr.AgentStatusUnknown)
@@ -722,17 +739,17 @@ func (o *Orchestrator) stalledScreenReason(snap runSnapshot, agent herdr.Agent, 
 			"continuo は pane を閉じ、リトライの回数が残っていれば着手からやり直します。"
 	}
 	return fmt.Sprintf(
-		"continuo は herdr へ `agent.get` を投げて Claude Code の画面の版（pane の revision）を"+
-			"見比べています。その版が %s のあいだ、1回も増えませんでした"+
-			"（最後に見た状態: %s、画面の版: %d）。**止まったものと判断して打ち切りました。**"+
+		"continuo は herdr へ `agent.get` を投げて Claude Code の状態（`agent_status`）を見ています。"+
+			"%s のあいだ、hook が1件も届かず、`agent_status` も一度も `working` になりませんでした"+
+			"（最後に見た状態: %s）。**止まったものと判断して打ち切りました。**"+
 			"\n【確かめ方】%s"+
 			"\n【よくある原因】確認の画面が出て人間の入力を待っていた / "+
-			"応答の来ない相手を待ち続けていた / 画面を書き換えないコマンドが終わらなかった。"+
+			"応答の来ない相手を待ち続けていた / エージェントが応答を返し終えたまま次の指示を待っていた。"+
 			"\n【対処】原因を直してから Status を着手待ちへ戻してください。"+
-			"画面が変わらないまま待つ時間は WORKFLOW.md の `claude.turn_timeout_ms` で変えられます"+
+			"何も動かないまま待つ時間は WORKFLOW.md の `claude.turn_timeout_ms` で変えられます"+
 			"（いまは %d ミリ秒）。**この値は turn の総実行時間の上限ではありません。**"+
-			"画面が変わり続けている限り、1つの指示に何時間かかっても打ち切りません。",
-		formatDuration(now.Sub(snap.RevisionAt)), status, agent.Revision,
+			"`agent_status` が `working` である限り、1つの指示に何時間かかっても打ち切りません。",
+		formatDuration(now.Sub(snap.LastSeenAt)), status,
 		check, o.cfg.Claude.TurnTimeoutMs)
 }
 

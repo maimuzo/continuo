@@ -108,20 +108,12 @@ type runState struct {
 	//
 	// **これは「最後に hook を受けた時刻」ではない。**hook を1件も受けていなくても、
 	// turn を送った時点（beginTurn）・枠待ちを外した時点（clearWaitingQuota）・
-	// 画面の版が増えたのを確かめた時点（noteRevision）に現在時刻へ進む。
+	// **`agent_status` が `working` だったのを確かめた時点（noteWorking）**に現在時刻へ進む。
 	// **stall の判定にだけ使う。**「最後に hook を受けた時刻」は LastHookAt が持つ。
-	LastSeenAt time.Time
-	// LastRevision は最後に見た画面の版である（herdr の pane の revision）。
 	//
-	// **agent.start / 引き継いだ pane の値を種にし、以後は checkStalls が見るたびに更新する。**
-	// 種を入れないと、最初の判定が必ず「版が変わった」になり、打ち切りまでに閾値を2回
-	// またぐことになる。
-	LastRevision uint64
-	// RevisionAt は画面の版が最後に増えたのを確かめた時刻である。
-	//
-	// **人間へ見せる文面に「画面が最後に変わってからどれだけ経ったか」を書くために持つ。**
+	// **人間へ見せる打ち切りの文面も、この時計との差を「動かなかった長さ」として出す。**
 	// run を作った時点で現在時刻を入れる（ゼロ値のままだと 1970 年からの経過を表示してしまう）。
-	RevisionAt time.Time
+	LastSeenAt time.Time
 	// LastHookAt は最後に hook を実際に受けた時刻である。
 	//
 	// **進めるのは noteHook だけである。**1件も受けていなければゼロ値のままである。
@@ -471,7 +463,7 @@ func (rs *runState) clearStopSeen() {
 //
 // issueID: project item の ID。
 // issue: dispatch する時点の issue のスナップショット。
-// now: いまの時刻（LastSeenAt と RevisionAt の初期値。ゼロ値のままだと即座に stall と
+// now: いまの時刻（LastSeenAt の初期値。ゼロ値のままだと即座に stall と
 // 判定され、人間へ見せる経過時間も 1970 年起点になる）。
 // 戻り値: 組み立てた runState。
 func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
@@ -480,7 +472,6 @@ func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
 		IssueID:          issueID,
 		Issue:            issue,
 		LastSeenAt:       now,
-		RevisionAt:       now,
 		hookCh:           make(chan hookserver.HookEvent, hookChanSize),
 		workerStopCtx:    stopCtx,
 		workerStopCancel: stopCancel,
@@ -507,8 +498,6 @@ func (rs *runState) snapshot() runSnapshot {
 		BackoffUntil:     rs.BackoffUntil,
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
-		LastRevision:     rs.LastRevision,
-		RevisionAt:       rs.RevisionAt,
 		LastSeenAt:       rs.LastSeenAt,
 		LastHookAt:       rs.LastHookAt,
 		StartedAt:        rs.StartedAt,
@@ -540,8 +529,6 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
-	LastRevision     uint64
-	RevisionAt       time.Time
 	LastSeenAt       time.Time
 	LastHookAt       time.Time
 	StartedAt        time.Time
@@ -1210,28 +1197,25 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	// 消すのは `noteWeeklyShort(false, …)` である。**巡回のたびに、印の有無によらず呼ぶ。**
 }
 
-// noteRevision は画面の版を見た結果を記録する（設計 3-21）。
+// noteWorking は「agent が working だった」ことを記録し、打ち切りの時計を進める
+// （issue #173。[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 4-1）。
 //
-// **版が変わっていれば時計を起こし直す。**`LastSeenAt` を現在時刻にして、
-// もう一度 `claude.turn_timeout_ms` だけ待つ。**画面が変わり続けている限り、
-// 1つの turn に何時間かかっても打ち切らない。**
+// **打ち切りの判定は `revision`（pane の版）を見るのをやめた。**
+// **あれは画面を1バイトも見ておらず、continuo の pane では永久に動かない**
+// （実測で、働いている3つの pane が2分間ずっと `revision: 1` だった）。
+// **そのため「画面が動いているので待ち続けます」の枝は1度も発火していなかった。**
 //
-// **減る向きの変化も「変わった」として扱う。**版が減るのは pane を作り直したときだけで、
-// そのときも画面が別物になっているので待ち直すのが正しい。
+// **`agent_status` が `working` なら、長い1回のツール呼び出しの最中でもそう返る。**
+// **「1つの指示に何時間かかっても打ち切らない」という約束を果たす唯一の信号である。**
 //
-// rev: agent.get が返した pane の版。
+// **`LastRevision` と `RevisionAt` は消した**（2026-09-08）。
+// **判定に使わない値を控え続けると、次に読む人が「まだ版で測っている」と読む。**
+//
 // now: いまの時刻。
-// 戻り値: 版が変わっていたら true（＝画面が動いている）。同じなら false。
-func (rs *runState) noteRevision(rev uint64, now time.Time) bool {
+func (rs *runState) noteWorking(now time.Time) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if rs.LastRevision == rev {
-		return false
-	}
-	rs.LastRevision = rev
-	rs.RevisionAt = now
 	rs.LastSeenAt = now
-	return true
 }
 
 // markFinished は run が終わったことを記録する。turn ループはこれを見て止まる。

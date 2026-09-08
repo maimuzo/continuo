@@ -706,7 +706,7 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 // **割り込みは `currentWorker` が `terminating` を見ることで防いでいる。**
 //
 // **走っているサブエージェントを待つ段は置かない**（6段の段4 で issue #197 へ記録した）。
-// **`paneStopped` が `agent_status` と画面の版で「完全に止まっている」を確かめてから来る。**
+// **`paneStopped` が `agent_status` と `state_change_seq` で「完全に止まっている」を確かめてから来る。**
 // **待ち受ける `SubagentStop` は枠待ちの最中に来ない**ので、置くと必ず猶予を使い切り、
 // **`agent_status` が `idle` だと確かめたあとで「書きかけかもしれません」と毎回 `Warn` を出す。**
 //

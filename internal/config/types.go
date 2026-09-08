@@ -453,8 +453,12 @@ type ClaudeConfig struct {
 	// と定めている。1回の指示に数時間かかることは普通にあるので、総時間で測ってはならない。
 	//
 	// **continuo には app-server が無い。**「app-server の出力」に相当するのは
-	// 「端末の画面が変わったこと」であり、herdr はそれを pane の revision（画面の版）で表す。
-	// **版が増えていれば何時間かかっても待ち続け、版がこの時間だけ増えなければ打ち切る**（3-21）。
+	// **herdr の `agent_status` が `working` であること**である（3-21。issue #173）。
+	// **`working` なら何時間かかっても待ち続け、この時間だけ一度も `working` にならなければ打ち切る。**
+	//
+	// **pane の `revision`（画面の版）では測らない。**herdr が増やすのは端末タイトルの本文が
+	// 変わったときだけで、**continuo の pane では issue の識別子で固定されるので永久に動かない**
+	// （実測。docs/spec/turn_end_detect_mechanizm.md の 3-2）。
 	//
 	// **0 以下で打ち切りを行わない**（`SPEC.md` 8.4 の
 	// *"If stall_timeout_ms <= 0, skip stall detection entirely"* に合わせる）。

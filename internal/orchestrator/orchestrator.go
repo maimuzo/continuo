@@ -1148,10 +1148,6 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	rs.Base = state.Base
 	rs.SettingsPath = state.SettingsPath
 	rs.HerdrWorkspaceID = state.HerdrWorkspaceID
-	// **引き継いだ pane の画面の版を種にする**（設計 3-21）。種を入れないと、
-	// 最初の stall の判定が必ず「版が変わった」になり、打ち切りまでに
-	// `claude.turn_timeout_ms` を2回またぐことになる。
-	rs.LastRevision = state.Revision
 	// 引き継いだ時刻を入れる（「この run が書いたコメント」の判別に使う。設計 3-25）。
 	rs.StartedAt = now
 	rs.NeedsPrompt = needsPrompt
@@ -1190,11 +1186,6 @@ type AdoptedRun struct {
 	SettingsPath string
 	// HerdrWorkspaceID は herdr の workspace の ID である。
 	HerdrWorkspaceID string
-	// Revision は引き継いだ pane の画面の版である（`pane.list` が返す `revision`）。
-	//
-	// **stall の判定の種になる**（設計 3-21）。0 のままでも判定は動くが、
-	// 最初の判定が必ず「版が変わった」になるぶん、打ち切りが1周期ぶん遅れる。
-	Revision uint64
 	// AwaitTurnEnd は「turn を送らずに、走っている turn の終わりを待つ」ことを表す。
 	//
 	// **`agent_status` が `working` の run を引き継ぐときに真にする**（設計 3-4 の段5a2）。

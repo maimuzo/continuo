@@ -1372,15 +1372,10 @@ func (o *Orchestrator) launchClaude(
 	// `agent_not_found` で落ち、**その場で殺すのを、1 turn ぶん遅らせるだけになる。**
 	// **issue #235 の時系列が名指しした経路は、`confirmStartup` の側で塞いである**
 	// （19:41:55 の時点で `ErrStartupBusy` に倒れるので、19:42:24 のやり直しへ進まない）。
-	started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
-	if err != nil {
+	if _, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 		return i18n.Errorf(i18n.KeyOrchestratorStartRunAgentStartFailed, err)
 	}
 	rs.setAgentName(params.Name)
-	// **起動直後の画面の版を stall の判定の種にする**（設計 3-21）。種を入れないと、
-	// 最初の判定が必ず「版が変わった」になり、打ち切りまでに
-	// `claude.turn_timeout_ms` を2回またぐことになる。
-	rs.noteRevision(started.Agent.Revision, o.now())
 	if err := o.ws.SetAgentName(ctx, worktreePath, params.Name.String()); err != nil {
 		o.logger.Warn("身元ファイルへ agent 名を書けませんでした",
 			"identifier", rs.issue().Identifier, "error", err)
@@ -1706,14 +1701,11 @@ func (o *Orchestrator) confirmStartupWithRestart(
 		if attempt > 0 {
 			o.logger.Info("Claude Code が起動していないので agent.start をやり直します",
 				"identifier", rs.issue().Identifier, "回数", attempt, "前回の理由", summaryLine(lastErr.Error()))
-			started, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay)
-			if err != nil {
+			if _, err := o.herdr.AgentStartWithRetry(ctx, params, agentStartBusyBudget, agentStartRetryDelay); err != nil {
 				// **やり直しの失敗で run を捨てない。**期限まではもう一度試す。
 				// （既に登録されている場合も、ここへ来て次の確認で拾える。）
 				o.logger.Warn("agent.start のやり直しに失敗しました",
 					"identifier", rs.issue().Identifier, "error", err)
-			} else {
-				rs.noteRevision(started.Agent.Revision, o.now())
 			}
 		}
 
