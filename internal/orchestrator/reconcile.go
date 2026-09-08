@@ -383,11 +383,15 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 			// **飛ばすと、止める者が1人もいなくなる。**
 			continue
 		}
-		// **`idle` か `done` を読めた run だけを、打ち切りから守る**（issue #173）。
-		// **守るのは「1回目の観測は必ず偽を返す」という2巡回ぶんの隙間だけである。**
-		handling[rs] = true
 		if !stopped {
 			// **止まったと確かめられていない。**次の巡回でやり直す。
+			//
+			// **この巡回だけ、打ち切りから守る**（issue #173）。
+			// **守るのは「1回目の観測は必ず偽を返す」という2巡回ぶんの隙間だけである。**
+			// **手放しを撃ったあとは守らない。**撃って失敗し続ける run を守ると、
+			// **打ち切りが1回も来ず、リトライも積まれず、`failure_state` へも落ちない。**
+			// **pane とスロットを握ったまま、continuo を再起動するまで残る。**
+			handling[rs] = true
 			continue
 		}
 		o.releaseBecauseQuotaWaitAsync(ctx, rs)
