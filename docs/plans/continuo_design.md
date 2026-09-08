@@ -1649,7 +1649,7 @@ level=WARN msg="cleanup.on_states の \"Done\" が tracker.terminal_states に�
 ```
 
 **雛形は最初から揃えてある。**`continuo init` が置く `WORKFLOW.md` も、
-`continuo setup` が書き換えた結果（`tracker.terminal_states` と `cleanup.on_states` の
+`continuo github-app` が書き換えた結果（`tracker.terminal_states` と `cleanup.on_states` の
 両方へ同じ完了の Status を書く。3-32d）も、この関係を満たす。
 
 #### 3-9b. リポジトリの親 workspace を閉じる条件（段3b）
@@ -4315,7 +4315,7 @@ WORKFLOW.md の tracker.provider.owner がプレースホルダ（__FILL_ME__）
 clone した直後に `go build` を叩くと `No version is set for shim: go` で止まる（実測: 2026-08-20）。
 **mise は新しい設定ファイルを信頼しない**ので、`mise trust` を1回だけ叩く手順も手順書に書く。
 
-#### `continuo setup` は既にあるカンバンの Status を5つの役割へ割り当てる
+#### `continuo github-app` は既にあるカンバンの Status を5つの役割へ割り当てる
 
 **言いたいこと。****対話するコマンドはこれ1つだけである。**`continuo init` を対話にしないと決めた
 （標準入力を握ると自動で叩く経路が止まる）ので、対話を別のサブコマンドへ切り出した。
@@ -4371,13 +4371,13 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 
 **尋ねる回数は5回だけである。**番号を5つ打つ手間より、上の3つを抱える損のほうが大きい。
 
-#### `continuo setup` は既にある WORKFLOW.md の7行だけを書き換える
+#### `continuo github-app` は既にある WORKFLOW.md の7行だけを書き換える
 
 **言いたいこと。**setup は雛形を書き直さない。**`scaffold.UpdateStatuses`（`internal/scaffold/update.go`）が
 下の7つのキーの行だけを差し替え、他の行には触れない。**だから `--force` が要らない。
 
 **なぜ雛形で書き直さないか。**手順書は段3 で `continuo init` に `WORKFLOW.md` を作らせ、
-**「要らない行は消してください」と人間に編集させてから**段4 で `continuo setup` を叩かせる
+**「要らない行は消してください」と人間に編集させてから**段4 で `continuo github-app` を叩かせる
 （[docs/trying_it_out.md](../trying_it_out.md)）。雛形で丸ごと書き直すと、
 **その編集（`workspace.root`、`agent.max_concurrent_agents`、`trust.repositories` から消した行）が全部消える。**
 
@@ -4437,7 +4437,7 @@ clone した直後に `go build` を叩くと `No version is set for shim: go` �
 それだけでは1件も見つからない。**ログイン名で0件なら、所属する organization も探す。
 
 **なぜ要るか。**GitHub Enterprise で organization にカンバンを置いていた利用者が、
-**`continuo setup` で1歩も進めなかった**（issue #7）。
+**`continuo github-app` で1歩も進めなかった**（issue #7）。
 
 ```
 $ continuo setup
@@ -4507,7 +4507,7 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 **将来これを見直す条件。**herdr の Windows 版がベータを抜け、
 プロセスグループの扱いが Unix と揃うこと。**その前に continuo 側を直しても、土台が揺れている。**
 
-### 3-32d. `continuo setup` が書き換えるのは8つのキーである
+### 3-32d. `continuo github-app` が書き換えるのは8つのキーである
 
 **言いたいこと。**Status に関わる7つに `cleanup.on_states` を足して8つにする。
 **ここを雛形の `["Done"]` のまま残すと、完了の選択肢が別名のカンバンで片付けが一度も走らない。**
@@ -4529,7 +4529,7 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 片付けの契機は完了とは別に持てる（3-9。`Archived` へ移したときだけ消す、という設定が成立する）。
 **setup が既定を書くだけにして、書き換えたことは画面に出す。**
 
-### 3-32e. `continuo setup` は、値が行にぶら下がっていたら書かずに止める
+### 3-32e. `continuo github-app` は、値が行にぶら下がっていたら書かずに止める
 
 **言いたいこと。**setup はキーの行1本を組み立て直す。**値が下の行にある形（block 形式）で
 その行だけを差し替えると、下の行が残って YAML として読めなくなる。**書く前に止める。
@@ -4550,7 +4550,7 @@ internal/workspace/output.go:105:  undefined: syscall.Kill
 「キーがありません。`continuo init` で作り直してください」と案内する。**その案内に従うと、
 手で直した設定が雛形で潰れる。
 
-### 3-32f. `continuo setup` は、どのカンバンを読むかを WORKFLOW.md から決める
+### 3-32f. `continuo github-app` は、どのカンバンを読むかを WORKFLOW.md から決める
 
 **言いたいこと。**`--owner` / `--project` > WORKFLOW.md に書かれた値 > gh から引く、の順に決める。
 **書いてあるのに `--project` を要求しない。**決めたカンバンは画面に出す。
@@ -6773,7 +6773,7 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 | **読み取り専用の上書き** | `chmod 444` にした `WORKFLOW.md` を `continuo init --force` が置き換えるようになった。変更前は `permission denied` で拒否していた | **`os.Rename` に要るのは親ディレクトリへの書き込み権限であって、ファイル自身の権限ではない。**差し替えである以上、ファイルの権限では止められない。`--force` は「置き換えてよい」と利用者が明示した経路である |
 | **symlink の隙間** | `os.Lstat` で symlink を見てから `os.Rename` するまでの間に symlink へ差し替えられると、`ErrSymlink` を返さずに置き換える | 変更前は `syscall.O_NOFOLLOW` が kernel の open の時点で見ていたので隙間が無かった。**`rename(2)` には「symlink なら失敗する」という指定が無い。**新しく作る経路には隙間が無いままである |
 | **force で「既にあります」** | `--force` でも、まだ無いファイルへ書く経路は `O_EXCL` を通る。その隙間に別のプロセスが同じファイルを作ると `ErrAlreadyExists` になる | **単一の利用者が手で打つ CLI である。**`continuo init` を2つ同時に走らせる場面が無い |
-| **特殊ビットとハードリンク** | setgid / sticky が落ちる。hard link を張っていた相方は古い中身のまま残る | **差し替え方式に本質的な代償である。**`continuo setup` は変更前からこれを払っていた（`internal/scaffold/update.go`）。ここだけ別扱いにする理由が無い |
+| **特殊ビットとハードリンク** | setgid / sticky が落ちる。hard link を張っていた相方は古い中身のまま残る | **差し替え方式に本質的な代償である。**`continuo github-app` は変更前からこれを払っていた（`internal/scaffold/update.go`）。ここだけ別扱いにする理由が無い |
 | **FIFO の置き換え** | 書き込む先が FIFO だと、変更前は開いた時点で読み手を待って固まった。いまは通常のファイルに置き換えて成功する | **いまのほうが良い。**固まると `continuo init` が返ってこない |
 | **一時ファイルの残骸** | 強制終了や電源断で `.WORKFLOW.md.*` / `.settings.json.*` が残る。片付ける経路は無い | ディスクを少し食うだけである。**`WORKFLOW.md` の側は利用者に未追跡のファイルとして見えるので、ユースケースの事後条件に書いた**（[docs/spec/usecases/particular_case/設定ファイルを作る.rucm.md](../spec/usecases/particular_case/設定ファイルを作る.rucm.md) の `GLOBAL ALTERNATIVE FLOW 書き込み中の中断`） |
 
@@ -7980,9 +7980,9 @@ running_state・`status_signal_map` の遷移先・対応表の戻す先の3種�
 **当てる相手を `patch` の引数でも名指しする**（3-75c）。
 
 **continuo は書き換えない。**書き換えるのは `patch` である。
-**利用者が当てる前に差分を読める形にする**ためで、`continuo setup` のように直接書く形にはしない。
+**利用者が当てる前に差分を読める形にする**ためで、`continuo github-app` のように直接書く形にはしない。
 
-**`continuo setup` の `ErrKeysNotFound` とは別にする。**あちらが見るのは
+**`continuo github-app` の `ErrKeysNotFound` とは別にする。**あちらが見るのは
 Status を割り当てる8つのキーだけで、**雛形にあって設定に無いものを網羅的に見る仕組みではない。**
 **行を探す処理だけを共有する**（`scaffold.findKeyLine`）。
 
@@ -9045,13 +9045,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **`author_association` の行が、この設計の分かれ目である。**門は `OWNER` / `MEMBER` / `COLLABORATOR` しか通さないので、
 **`NONE` になる経路を採ると、このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（3-82e）。
 
-**GitHub の公式ドキュメントの原文**（`apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user`）。
-
-> "the GitHub UI will show the user's avatar photo along with the app's identicon badge as the author of the issue"
->
-> 訳: **GitHub の画面は、その issue の作者として、ユーザーのアバター写真と App の identicon のバッジを並べて表示する。**
-
-**実測では identicon は見えず、`– with <App の表示名>` の1行が出た。**案内にはそちらを書く。
+**公式ドキュメントは identicon のバッジが出ると書いているが、実測では見えなかった。**
+**出たのは `– with <App の表示名>` の1行である。**案内にはそちらを書く。
 
 **画面に実際に出るもの**（2026-09-08。上の実測で投稿した3件を、人間が画面で確かめて書き写した）。
 
@@ -9143,10 +9138,9 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **秘密鍵** | **残さない**（作成のときに返るが、捨てる） | — |
 | **アクセストークン** | **残さない** | — |
 
-**`--id` で分けない。**`--id` が分けているのは二重起動を止めるロックであり
-（[internal/instance/instance.go:40-45](../../internal/instance/instance.go#L40-L45)）、
-**資格情報は人間1人につき1つの認可であって、プロセスの排他ではない。**
-**分けると認可が `--id` の数だけ要り、外で走るセッション用にもう1組要る。**
+**`--id` で分けない。**あれが分けているのは二重起動を止めるロックで
+（[internal/instance/instance.go:99-103](../../internal/instance/instance.go#L99-L103)）、
+**資格情報は人間1人につき1つの認可である。**
 
 **`github-app-credentials.json` の中身。**
 
@@ -9219,7 +9213,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **失敗したときは、どれも終了コード 1 で標準出力は空にする。待たない。**
 更新用のトークンが無いか6か月で切れたときは、標準エラーへ
-「`continuo setup` で App を用意してください」と出す。
+「`continuo github-app` で App を用意してください」と出す。
 **このコマンドは設定を見ない。**エージェントの worktree からは WORKFLOW.md を読めないためである（3-82b）。
 **`false` の利用者は、そもそも指示書の枝がこのコマンドを呼ばない**（3-82k）。
 
@@ -9232,14 +9226,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **言いたいこと。**GitHub App は、**user が所有する Projects v2 へ届かない。**
 continuo のカンバンは user 所有である。**だから App は「コメントを書く口」としてだけ使い、カンバンは今までのトークンで読み書きする。**
 
-**GitHub の REST のドキュメントの原文**（`rest/projects/projects`。HTML から抜き出した）。
-
-> Fine-grained access tokens for "List projects for user" — This endpoint does not work with GitHub App user access tokens, GitHub App installation access tokens, or fine-grained personal access tokens.
->
-> 訳: **「ユーザーの project を一覧する」の fine-grained access token について。この endpoint は、GitHub App の user access token でも、installation access token でも、fine-grained personal access token でも動かない。**
-
-**権限の一覧の側にも無い。**`Projects` を許す権限は organization の側にしか存在せず、
-**repository の権限にも user の権限にも無い。**
+**REST のドキュメントが「user の project の endpoint は App のトークンでは動かない」と明記している。**
+**権限の一覧にも無い。**`Projects` を許す権限は organization の側にしかない。
 
 **2本になるトークンの役割。**
 
@@ -9268,10 +9256,8 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 
 | 何が壊れるか | どう壊れるか |
 | --- | --- |
-| **エージェントの成果の判定** | [internal/tracker/adapter.go:1164](../../internal/tracker/adapter.go#L1164) の `IsAgent` が立たず、[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383) が捨てる。**画面には成果報告が立っているのに、continuo は「書かれていない」と判定して書かせ直す** |
-| **持ち回りの入札** | **投稿者が bot になる一方、`viewer.Login` は人間のままである**（カンバンは今までのトークンで読むため）。**[internal/orchestrator/handoff.go:364](../../internal/orchestrator/handoff.go#L364) の `HasBidBy` が永久に偽になり、巡回のたびに入札が積み上がる。**同 387行は自分の入札に負けたと判定する |
-| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI（3本）と、利用者へ配る雛形（3本）の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか5箇所） |
-| **死活の時計** | [internal/handoff/assess.go:364](../../internal/handoff/assess.go#L364) が進捗報告の投稿者を担当者と突き合わせる。**止まった機械と見分けが付かなくなる** |
+| **投稿者を見ている判定が全部外れる** | 成果の判定（[internal/tracker/adapter.go:1164](../../internal/tracker/adapter.go#L1164)）・持ち回りの入札（[internal/orchestrator/handoff.go:364](../../internal/orchestrator/handoff.go#L364)）・死活の時計（[internal/handoff/assess.go:364](../../internal/handoff/assess.go#L364)）。**どれも `viewer.Login` は人間のままなので、突き合わせが永久に外れる** |
+| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか5箇所） |
 
 **入札の壊れ方がいちばん直しにくい。**3-77-0 が識別子を投稿者から取る理由を、こう書いている。
 
@@ -9327,25 +9313,17 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 **「App を作る」と「install する」の2つとも、押す前に画面で説明する。**
 **説明を読まずに押せる形にしない。**ボタンは説明の下に置く（人間の指摘。2026-09-09）。
 
-**App を作る前に、画面へ書くこと。**
+**画面へ書くこと。**App を作る前と install の前で、同じ5つを書く。
 
-| 何を | 中身 |
-| --- | --- |
-| **何が作られるか** | あなたのアカウントに GitHub App が1つ。**公開されない** |
-| **何ができる App か** | **issue のコメントを読み書きするだけ。**コードも pull request も触れない |
-| **押すと何が起きるか** | **GitHub の作成画面へ飛ぶ。**そこで中身を確かめてから、もう1度押す。**2段ある** |
-| **この機械に何が残るか** | **更新用のトークンだけが `~/.continuo/` へ。**本人だけが読める形で置く。**秘密鍵は捨てる** |
-| **やめたくなったら** | **GitHub の画面から App を削除できる。**置いたファイルも消せる |
+| 何を | App を作る前 | install の前 |
+| --- | --- | --- |
+| **何が起きるか** | あなたのアカウントに GitHub App が1つできる。**公開されない** | **その App が、選んだリポジトリの issue へ書けるようになる** |
+| **何ができるようになるか** | **issue のコメントの読み書きだけ。**コードも pull request も触れない | **あなたの代理として issue のコメントを書くこと。**それだけ |
+| **次に何が起きるか** | **GitHub の作成画面へ飛ぶ。**確かめてからもう1度押す | **認可の画面が1つ出る。**許すとこの機械へ戻る |
+| **選ぶもの** | 無し | **カンバンに載っているリポジトリだけ。**「全部」を選ばない |
+| **やめたくなったら** | **GitHub の画面から App を削除できる。**置いたファイルも消せる | GitHub の画面から install を外せる |
 
-**install の前に、画面へ書くこと。**
-
-| 何を | 中身 |
-| --- | --- |
-| **install とは何か** | **その App が、選んだリポジトリの issue へ書けるようになること** |
-| **どこを選ぶか** | **カンバンに載っているリポジトリだけ。**「全部のリポジトリ」を選ばない |
-| **そのあと何が起きるか** | **認可の画面が1つ出る。**許すと、この機械へ戻ってくる |
-| **何を許すことになるか** | **あなたの代理として issue のコメントを書くこと。**それだけ |
-| **やめたくなったら** | GitHub の画面から install を外せる |
+**この機械に残るのは、更新用のトークンだけである**（秘密鍵は捨てる）。**そのことも書く。**
 
 **送る中身も画面に出す。**利用者が読めない JSON を、読まずに送らせない。
 **2026-09-08 の実測でも、送る manifest を画面へ並べてから押してもらった。**
@@ -9355,13 +9333,29 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 （[internal/server/server.go:180-181](../../internal/server/server.go#L180-L181)）。
 **その中には continuo 自身が起動した Claude Code も含まれる。**
 
-**画面は `continuo setup` が開く。**常駐の起動（`continuo --port`）ではない。
-**起動時の検査が、その検査を通すための画面を塞ぐためである**（3-82h）。
-[internal/cli/cli.go:190](../../internal/cli/cli.go#L190) の `case "setup"` は `runMain` を通らず、
-**[internal/daemon/daemon.go:302](../../internal/daemon/daemon.go#L302) の起動時検査を1つも走らせない。**
-**ダッシュボードは、その検査より後ろで開く。**落ちると1度も開かない。
+**画面は `continuo github-app` が開く。**新しいサブコマンドを1本足す
+（[internal/cli/cli.go:184-205](../../internal/cli/cli.go#L184-L205) の `switch args[0]` へ1行）。
 
-**継続が既に持っている HTTP サーバの仕組みを使う。**新しいサーバの作りを起こさない。
+**常駐の起動（`continuo --port`）にしてはならない。**
+**起動時の検査が、その検査を通すための画面を塞ぐ**（[internal/daemon/daemon.go:302](../../internal/daemon/daemon.go#L302) が
+ダッシュボードを開く段より前にあり、落ちると1度も開かない）。
+
+**`continuo setup` にしてもならない。**あれは
+**「既にある WORKFLOW.md の Status の割り当てだけを書き換える」対話コマンドである**
+（[internal/cli/cli.go:679-682](../../internal/cli/cli.go#L679-L682)）。
+**WORKFLOW.md が無ければ落ち、カンバンを読み、5問聞いて8行書き換える。**
+**漏洩の対処中に、commit する設定ファイルへ差分を作ることになる。**
+
+**HTTP の待ち受けも自前で立てる。**[internal/server/server.go:166-168](../../internal/server/server.go#L166-L168) の
+`server.New` は **run の供給元を必須にしており**、このサブコマンドは Orchestrator を持たない。
+**`newMux` へ route を足すと、常駐のダッシュボードにも同じ口が生える。**
+**そこは認証を持たない**（[internal/server/server.go:180-181](../../internal/server/server.go#L180-L181)）ので、
+**この設計が名指しで避けた相手へ、認可の口を開けることになる。**
+
+**待ち受けるポートは、App へ登録する callback の URL と同じ値に固定する。**
+**App に登録した URL は変えられないので、2回目の認可が戻ってこなくなる。**
+**既定は 8931 とし、`continuo github-app --port <番号>` で変えられるようにする。**
+**常駐がそのポートを掴んでいることは無い**（常駐は `server.port` を使い、既定は null）。
 [internal/server/server.go:182](../../internal/server/server.go#L182) が `http.Server` を立てており、
 [internal/cli/cli.go:1620](../../internal/cli/cli.go#L1620) の `--port` が
 [internal/daemon/daemon.go:239](../../internal/daemon/daemon.go#L239) で `server.port` を上書きする。
@@ -9370,7 +9364,7 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 
 | 順 | 何をするか |
 | --- | --- |
-| 1 | **`continuo setup` を叩き、出た URL をブラウザで開く** |
+| 1 | **`continuo github-app` を叩き、出た URL をブラウザで開く** |
 | 2 | **説明を読んで「App を作る」を押す** |
 | 3 | GitHub の画面で **`Create GitHub App` を押す** |
 | 4 | **install するリポジトリを選び、認可する** |
@@ -9400,7 +9394,9 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 
 **`true` のときは、起動時に1回だけ実際にトークンを取り、通らなければ起動しない。**
 **人間が「continuo githubapp でアクセストークンが取得できることを確認しろ」と決めている**（上の引用）。
-**取ると更新用のトークンが回るが、起動時の1回なら許される。**巡回のたびには叩かない。
+**取ると更新用のトークンが回る。**書き戻しの直前で落ちれば、認可のやり直しになる（3-82c）。
+**それでも起動時に取るのは、doctor では捕まえられない故障があるためである**（上の表）。
+**巡回のたびには叩かない。**
 **投稿のときに取れなければ、投稿せずエラーで止める。**
 
 **投稿を止めるのは、run を失うことより重い判断である。**止めると成果報告が投稿できず、
@@ -9420,7 +9416,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | --- | --- |
 | **設定が `true` か** | `false` なら、以下は検査しない |
 | **資格情報が在るか** | `~/.continuo/github-app-credentials.json`。**権限が `0600` かも見る** |
-| **トークンが取れるか** | **回さずに確かめる。**更新用のトークンが在り、期限内で、`client_id` と `client_secret` が揃っていることを見る。**実際に叩くと資格情報が回り、doctor が continuo を起動不能にしうる** |
+| **資格情報が揃っているか** | **回さずに確かめる。**更新用のトークンが在り、期限内で、`client_id` と `client_secret` が揃っていることを見る。**実際に叩くと資格情報が回り、doctor が continuo を起動不能にしうる**。**「トークンが取れるか」は doctor では確かめられない。**App を消した／install を外した／secret を作り直したときも、ファイルは無傷なのでここは通る。**そこは起動時の検査が捕まえる** |
 | **更新用のトークンの残り** | **30日を切っていたら警告する。**切れてから気づくと、その場で作業が止まる |
 
 **`continuo doctor` は既に外へ出ている**
@@ -9466,7 +9462,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | --- | --- | --- |
 | **1** | **GitHub の画面で App の client secret を作り直し、古いほうを削除する** | **削除するまで古いものは生きている**（GitHub App は client secret を複数本持てる）。**作り直すだけでは止まらない** |
 | **2** | `~/.continuo/github-app-credentials.json` を消す | 手元から資格情報が消える |
-| **3** | **`continuo setup` で認可をやり直す** | 新しい更新用のトークンが入る |
+| **3** | **`continuo github-app` で認可をやり直す** | 新しい更新用のトークンが入る |
 | **4** | **急ぐなら、App の install を外す** | **既に配ったアクセストークンも即座に効かなくなる** |
 
 **既に配られたアクセストークンだけは、段1〜3では止まらない。**
@@ -9489,12 +9485,13 @@ continuo が「エージェントが書いていない」と判定して run を
 | どのクライアントか | 何に使うか | トークン |
 | --- | --- | --- |
 | いままでの1本 | **カンバンの読み書き、コメントの取得** | `tracker.provider.token_source` |
-| **足す1本** | **`PostComment` の全部** | **`continuo githubapp` が返すもの** |
+| **足す1本** | **`PostComment` の全部** | **同じ Go の関数を直に呼んで取る**（`continuo githubapp` が使うものと同じ実体）。**exec しない。**exec すると、動いている continuo とディスク上の実行ファイルが食い違う罠（3-82f）を、continuo 自身が踏む |
 
 **持ち回りのコメントも、この1本で書く。**除外するほうが分岐を1つ足す作業になる。
-**ただし hold は失敗の帰結が重い。**担当者を書いたあとに投稿するので、書けないと
-**「担当者はあるが hold は無い」状態が残り、その issue は18時間どの機械からも触れなくなる**
-（[internal/orchestrator/handoff.go:394-413](../../internal/orchestrator/handoff.go#L394-L413)）。**消し戻しが効くことを確かめる。**
+**ただし hold は失敗の帰結が重い。**書けないと
+[internal/orchestrator/handoff.go:423-428](../../internal/orchestrator/handoff.go#L423-L428) の `undoHandoffAcquire` が担当者を消し戻すが、
+**そこが書く released のコメントも同じ2本目を通るので、同じ理由で落ちる。**
+**残るのは「担当者なし・released なし」で、入札の回が区切られない。**
 **入札にも hold にも released にも、人間が画面で読む文が並んでいる**
 （[internal/handoff/handoff.go:514](../../internal/handoff/handoff.go#L514) の `FormatBid` ほか。
 **既存の `continuo:bid` などの目印は HTML のコメントなので画面には出ない**）。
@@ -9512,6 +9509,8 @@ interface も、検査の偽物も、1文字も変わらない。
 **`NewAdapter` には、トークンを取る関数を1つ渡す。**
 [internal/tracker/adapter.go:115](../../internal/tracker/adapter.go#L115) はいま `token string` を1回受け取るだけである。
 **関数にすると、テストが本物の GitHub と本物の資格情報を叩かずに済む。**
+**ただし呼び出しは42箇所ある**（本番4・テスト38）。**そのうち3つは `PostComment` を1度も呼ばない。**
+**署名を変えずに、2本目のトークンだけを別の口で渡す案と比べてから決める。**
 
 **`internal/lock/` に触るので、hook の門の検知に掛かる**（[CLAUDE.md](../../CLAUDE.md) が名指ししている）。
 **掛かるが、hook の4つの定義のどれにも当たらない。**`continuo hook` の引数も宛先も約束も終了コードも変わらない。
@@ -9548,7 +9547,13 @@ interface も、検査の偽物も、1文字も変わらない。
 
 | 何 | 何本か | 掛けるか |
 | --- | --- | --- |
-| **issue のコメント**（新規と書き足し） | **7本** | **掛ける。**うち2本は既存の `case` の入れ子の中の `PATCH` で、**3重の入れ子になる。形を別に決める** |
+| **issue のコメント**（新規と書き足し） | **7本** | **掛ける。**形が3通りあるので、下の表で分ける |
+
+| どの形か | 何本 | 何に気をつけるか |
+| --- | --- | --- |
+| `--body-file` の1行 | 2本 | 上の見本がそのまま当たる |
+| **複数行の `--body`** | **3本** | **行頭を1桁も動かさない。**[test/internal/prompt/progress_comment_test.go:226](../../test/internal/prompt/progress_comment_test.go#L226) が `!=` で見ており、**空白1つで落ちる。**字下げすると進捗報告が成果の報告として数えられ、**issue #178 が戻る** |
+| 既存の `case` の中の `PATCH` | 2本 | **5-3 は3重、7-2 は4重の入れ子になる** |
 | pull request（作成とコメント） | 2本 | **掛けない** |
 
 **印の無いコメントへ書き足させない。**指示書の 5-3 と 7-2 は、既にあるコメントへ `PATCH` で書き足す。
@@ -9556,7 +9561,11 @@ interface も、検査の偽物も、1文字も変わらない。
 **印の無いコメントへ書き足すと、機械が書いた文が「人間が書いた」ように見える。**
 **書き足す先が印を持たないなら、新しく投稿する。**
 **判定は REST で行う。**GraphQL には App を示す欄が無いので（3-82 の実測）、
-**5-3 の段1 と 7-2 の段1 の両方へ、`gh api repos/…/issues/comments/<ID> --jq .performed_via_github_app` を1本ずつ足す。**
+**5-3 は段2a の `gh api` へ `--jq '{body:.body, app:.performed_via_github_app}'` と足し、7-2 も同じ形にする。**
+**往復を増やさない。**
+**`--jq .performed_via_github_app` を単独で叩いてはならない。**印の無いコメントに対して
+**`null` という4文字を標準出力へ出すので、空かどうかで見ると必ず真になる。**
+**同じ罠を、この設計は 3-82f で、指示書は [internal/prompt/builtin.md:424-426](../prompt/builtin.md#L424-L426) で既に塞いでいる。**
 **設定を途中で `true` にした利用者の手元で、それ以前のコメントを相手に必ず起きる。**
 
 **変数を2つ足す。**どちらも `RenderData` と `SampleData` の両方へ登録し、
@@ -9602,7 +9611,11 @@ interface も、検査の偽物も、1文字も変わらない。
 **チームで WORKFLOW.md を共有しているときは、全員が資格情報を持つ必要がある**
 （[docs/FAQ.md:726-730](../FAQ.md#L726-L730) がその使い方を案内している）。
 **1人が `true` にして commit すると、資格情報を持たない全員の continuo が次の起動で止まる。**
-**2人目以降は App を作らず、認可だけを行う。**その入口も `continuo setup` に置き、
+**2人目以降は App を作らず、認可だけを行う。**
+**そのために `client_id` と `client_secret` を受け取る必要がある。**
+**渡し方は、この設計では決めない。**WORKFLOW.md へは書けない（commit されるため）。
+**チームでの共有を対象にするなら、渡し方を決めてから対象にする。**
+その入口も `continuo github-app` に置き、
 **起動を止めるときのエラーへ、その手順への案内を必ず入れる。**
 
 **非公開の App を、所有者以外が認可できるかは測っていない。**
@@ -11086,7 +11099,7 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 節ごと落ちる。**既定の言語が漏れるより、指示が無いほうがまだ良い。**
 
 **あとから `language` を変えても、既にある `WORKFLOW.md` は変わらない。**
-本文は利用者のものなので continuo は書き換えない（`continuo setup` も Status の行しか触らない）。
+本文は利用者のものなので continuo は書き換えない（`continuo github-app` も Status の行しか触らない）。
 **書き換えるのは利用者である。**目印のすぐ上のコメントがそう案内する。
 
 **組み込みの指示書は、いまのところ日本語だけである。**`language` が `en` でも大半は日本語のまま届く（5-3e）。
@@ -12537,7 +12550,7 @@ issue のテキスト表示と同じで、区切りが行頭の `--` だけで�
 `gh api repos/cli/cli/pulls/3/comments` では2件とも出る。
 
 **雛形を直しても、既に WORKFLOW.md を持っている利用者には届かない。**
-`continuo init` は既にあるファイルを作り直さず、`continuo setup` は Status の8つのキーの行しか
+`continuo init` は既にあるファイルを作り直さず、`continuo github-app` は Status の8つのキーの行しか
 書き換えない（[internal/scaffold/update.go](internal/scaffold/update.go)）。
 **本文は1文字も触らない。**したがって**新しい版へ上げても、古い本文のまま回り続ける。**
 
