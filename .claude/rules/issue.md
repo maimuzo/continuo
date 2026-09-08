@@ -86,14 +86,14 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:4331](../../docs/plans/continuo_design.md#L4331)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「GitHub Projects v2 の project #3 は本番のカンバンである」。**Status の値が全部消える** |
 | **段4 のあと、`Ice Box` の item はカンバン全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
-| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9521](../../docs/plans/continuo_design.md#L9521)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:406-408](../../internal/orchestrator/dispatch.go#L406-L408) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4272](../../docs/plans/continuo_design.md#L4272) の本文である**） |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9548](../../docs/plans/continuo_design.md#L9548)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:406-408](../../internal/orchestrator/dispatch.go#L406-L408) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4272](../../docs/plans/continuo_design.md#L4272) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
 | 何を | どこへ |
 | --- | --- |
 | **全 issue の着手順序** | **人間へチャットで示す** |
-| **グループごとの計画** | **そのグループの代表の issue のコメントへ残す**（[docs/plans/continuo_design.md:3581](../../docs/plans/continuo_design.md#L3581) の 3-26） |
+| **グループごとの計画** | **そのグループの代表の issue のコメントへ残す**（[docs/plans/continuo_design.md:3608](../../docs/plans/continuo_design.md#L3608) の 3-26） |
 
 **チャットだけに出すと、セッションが終わった時点で消える。**次のセッションが組み直すことになる。
 
