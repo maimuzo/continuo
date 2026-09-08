@@ -172,8 +172,11 @@ func lineEndingAt(prefix, suffix string) string {
 			return "\r\n"
 		}
 		// **末尾に改行が無い本文では、直前の行に終わり方が無い。**
-		// **1つ手前の改行を見る。**見ないと、CRLF の本文の最後だけ LF になる。
-		if !strings.HasSuffix(prefix, "\n") && strings.Contains(prefix, "\r\n") {
+		// **1つ手前の改行だけを見る。**見ないと、CRLF の本文の最後だけ LF になる。
+		//
+		// **本文のどこかに CRLF があるか、で見てはならない。**広すぎる。
+		// **改行が混ざった本文で、LF で終わった行の下へ CRLF を足すことになる。**
+		if i := strings.LastIndexByte(prefix, '\n'); i > 0 && prefix[i-1] == '\r' {
 			return "\r\n"
 		}
 		return "\n"
@@ -255,8 +258,14 @@ func ComposeCommentBody(body, selfMarker string) string {
 	// `repos/${REPO}/issues/${PR_NUMBER}/comments`）。
 	// **断りを実際に書くのは人間かエージェントの `gh pr comment` で、この関数を1度も通らない。**
 	// **例外を守っているのは組み込みの指示書の 5-6 と、その検査と、CI の案内文の3つである。**
+	// **中身の無い本文には、何も足さない。**
+	// **足すと、印だけのコメントが公開されて消せなくなる。**
+	// 足さなければ GitHub が空の本文を断るので、**呼び出し側の欠陥がログに出る。**
+	if strings.TrimSpace(body) == "" {
+		return body
+	}
 	full := withAIMarker(body)
-	if selfMarker != "" {
+	if selfMarker != "" && !strings.HasPrefix(strings.TrimSpace(full), selfMarker) {
 		// **改行の綴りを本文に合わせる。**`"\n"` で決め打ちにしてはならない。
 		// **CRLF の本文で1行目だけ LF になる**と、同じコメントの中で改行が混ざる。
 		// `withAIMarker` が `lineEndingAt` でそこを揃えているのに、

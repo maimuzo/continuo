@@ -10407,7 +10407,9 @@ gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
 
 **成果を書き終えたら、この run であなたが書いたコメントを読み直し、印の抜けを自分で直してください。**
 
-**過去の run のコメントは直しません。**「過去分は放置でよい」と人間が決めています。
+**直してよいのは、この run であなたが投稿したコメントだけです。**
+**投稿したときに `gh issue comment` が返した URL を控えておいてください。**
+**前の run のコメントは直しません。**「過去分は放置でよい」と人間が決めています。
 
 **なぜ要るか。**continuo は、この印を1つも数えていません。**落としても、何も止まりません。**
 **だから、落ちたことに気づけるのは、あなただけです。**
@@ -10419,13 +10421,13 @@ gh issue view {{.issue.url}} --json comments --jq '
   .comments[]
   | select(.viewerDidAuthor)
   | select(.body | startswith("<!-- continuo:agent -->"))
-  | select((.body | gsub("\r"; "") | split("\n") | .[0:5] | index("<!-- continuo:ai -->")) == null)
-  | .url'
+  | select((.body | gsub("\r"; "") | test("(?m)^<!-- continuo:ai -->")) | not)
+  | "\(.createdAt) \(.url)"'
 ```
 
 **何も返らなければ、抜けはありません。**そこで終わりです。
-
-**返った URL のうち、この run であなたが書いたものだけを直します。**
+**返った行のうち、この run であなたが投稿した URL と一致するものだけを直します。**
+**作成時刻も出しているので、前の run のものは見分けられます。**
 
 ```bash
 URL=<上が返した URL>
@@ -10434,9 +10436,16 @@ gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" > "/tmp/cont
   echo "読めませんでした。直しません"; exit 1; }
 jq -e '.body | startswith("<!-- continuo:agent -->")' "/tmp/continuo-comment-$ID.json" > /dev/null || {
   echo "本文が想定と違います。直しません"; exit 1; }
-jq '{body: (.body | ((if test("\r\n") then "\r\n" else "\n" end) as $eol
-  | sub("^(?<h>((<!--[^\n]*-->)?[ \t]*\r?\n)*)"; .h + "<!-- continuo:ai -->" + $eol)))}' \
-  "/tmp/continuo-comment-$ID.json" \
+jq '.body |= (
+  if (gsub("\r"; "") | test("(?m)^<!-- continuo:ai -->")) then .
+  else
+    ((capture("^(?<h>((<!--[^\n]*-->|[ \t]*)\r?\n)*<!--[^\n]*-->[ \t]*\r?\n)?") | .h) // "") as $h
+    | (if ($h | test("\r\n$")) then "\r\n"
+       elif ($h == "" and test("^[^\n]*\r\n")) then "\r\n"
+       else "\n" end) as $eol
+    | $h + "<!-- continuo:ai -->" + $eol + .[($h | length):]
+  end)' "/tmp/continuo-comment-$ID.json" \
+  | jq '{body}' \
   | gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --input -
 ```
 
@@ -10444,12 +10453,17 @@ jq '{body: (.body | ((if test("\r\n") then "\r\n" else "\n" end) as $eol
 **そのまま書き戻すと、あなたの成果報告がその JSON に置き換わります。**
 上の形は、本文を JSON のまま組み立てて渡すので、その事故が起きません。**末尾の空行も落ちません。**
 
-**この `jq` は、本文の先頭に並ぶ印の、いちばん後ろへ1行足します。**
-**改行の綴りは本文に合わせます**（CRLF の本文には CRLF で足す）。**先頭の印は1つも動きません。**
+**この `jq` は3つを守ります。**
+
+| 何を | どう守るか |
+| --- | --- |
+| **二重に付けない** | 行頭が印で始まる行が1つでもあれば、何もしません |
+| **改行の綴りを合わせる** | **差し込む位置の直前の行**から決めます。本文のどこかに CRLF があるか、では広すぎます |
+| **先頭に並ぶ印の、いちばん後ろへ入れる** | 印と印のあいだの空行は越えますが、**最後の印より後ろの空行は越えません** |
 
 **pull request と、グループでまとめて直した別の issue は、上のコマンドでは出ません。**
 **先頭の印が違い、書く先も違うためです。**
-**その2つは、この run で自分が書いたコメントを思い出して、同じ形で直してください。**
+**その2つは、この run で自分が投稿した URL を思い出して、同じ形で直してください。**
 **continuo はそちらを1度も読まないので、落としても誰も気づきません。**
 
 # 6. セキュリティ

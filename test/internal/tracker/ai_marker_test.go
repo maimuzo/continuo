@@ -579,3 +579,48 @@ func TestComposeCommentBody_selfMarkerもCRLFで繋ぐ(t *testing.T) {
 		t.Fatalf("改行の綴りが混ざりました:\n got %q\nwant %q", got, want)
 	}
 }
+
+// 目的: 中身の無い本文には何も足さないことを固定する（設計 3-82）。
+//
+// **足すと、印だけのコメントが公開される。**continuo はコメントを消せない。
+// **足さなければ GitHub が空の本文を断るので、呼び出し側の欠陥がログに出る。**
+//
+// 与える情報: 空の本文と、空白だけの本文。
+// 成功条件: 1文字も変わらないこと。
+func TestComposeCommentBody_中身が無ければ足さない(t *testing.T) {
+	for _, body := range []string{"", "   \n  ", "\r\n"} {
+		if got := tracker.ComposeCommentBody(body, "<!-- continuo:self -->"); got != body {
+			t.Errorf("中身の無い本文へ足しました: body=%q got=%q", body, got)
+		}
+	}
+}
+
+// 目的: self_marker を二重に足さないことを固定する（設計 3-82）。
+//
+// **印は二重にならないのに self_marker はなる、という食い違いを残さない。**
+// **組み立て直す呼び出し元ができた瞬間に、印が2行並ぶ。**
+//
+// 与える情報: 既に組み立て終えた本文を、もう一度同じ self_marker で通す。
+// 成功条件: 1文字も変わらないこと。
+func TestComposeCommentBody_selfMarkerを二重に足さない(t *testing.T) {
+	const self = "<!-- continuo:self -->"
+	once := tracker.ComposeCommentBody("Status を動かしました", self)
+	if got := tracker.ComposeCommentBody(once, self); got != once {
+		t.Fatalf("self_marker が2行になりました:\n got %q\nwant %q", got, once)
+	}
+}
+
+// 目的: 改行が混ざった本文で、差し込む位置の直前の行に合わせることを固定する（設計 3-82）。
+//
+// **本文のどこかに CRLF があるか、で決めてはならない。**広すぎる。
+// **LF で終わった行の下へ CRLF を足すことになる。**
+//
+// 与える情報: 見出しが LF で、その下が CRLF の本文。
+// 成功条件: 足した行が LF で終わること。
+func TestWithAIMarker_改行が混ざっても直前の行に合わせる(t *testing.T) {
+	body := "<!-- continuo:agent -->\n本文\r\nつづき\r\n"
+	want := "<!-- continuo:agent -->\n" + config.AIMarker + "\n本文\r\nつづき\r\n"
+	if got := tracker.ComposeCommentBody(body, ""); got != want {
+		t.Fatalf("改行の綴りが広すぎる決め方になっています:\n got %q\nwant %q", got, want)
+	}
+}

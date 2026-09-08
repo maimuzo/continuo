@@ -119,10 +119,12 @@ func BuildContinuationPrompt(
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	// **印の2行は字下げしない。**印は本文の行頭から始まらなければならない。
-	// **`FetchComments`（[internal/tracker/adapter.go](../tracker/adapter.go)）の先頭一致も、
-	// `handoff.StartsAsProgressReport`（[internal/handoff/assess.go](../handoff/assess.go)）も、
-	// 行頭ちょうどの印しか数えない。**
+	// **印の2行は字下げしない。**
+	// **行頭ちょうどを求めているのは `handoff.StartsAsProgressReport`
+	// （[internal/handoff/assess.go](../handoff/assess.go)）である。**
+	// `FetchComments`（[internal/tracker/adapter.go](../tracker/adapter.go)）は
+	// **本文全体を `TrimSpace` してから先頭を見る**ので、1行目の字下げは通る。
+	// **それでも字下げしないのは、2行目以降が通らないからである。**
 	// **字下げした見本を送ると、写したエージェントが違う形の本文を書く。**
 	// **囲みの中へ入れる。**行頭の `<!--` は、送る文面を組み立てる経路（`prompt.Build`）が
 	// **コメントとして落とす。**いまこの文面はその経路を通らないが、
