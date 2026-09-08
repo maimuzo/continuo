@@ -376,12 +376,18 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		if !o.stallDetectionOff() && !o.runIdleForTurnTimeout(rs) {
 			continue
 		}
-		// **ここまで来た run は、手放しの対象である。**
-		// **pane が止まったと確かめられるまで、打ち切りに殺させない。**
+		stopped, mine := o.paneStopped(ctx, rs)
+		if !mine {
+			// **この経路では二度と進まない run である**（`agent.get` を読めない、
+			// または `working` / `blocked` / `unknown`）。**打ち切りに任せる。**
+			// **飛ばすと、止める者が1人もいなくなる。**
+			continue
+		}
+		// **`idle` か `done` を読めた run だけを、打ち切りから守る**（issue #173）。
+		// **守るのは「1回目の観測は必ず偽を返す」という2巡回ぶんの隙間だけである。**
 		handling[rs] = true
-		if !o.paneStopped(ctx, rs) {
-			// **動いているなら、止まるまで待つ**（人間の決定。2026-09-06。issue #197）。
-			// **次の巡回でやり直す。**
+		if !stopped {
+			// **止まったと確かめられていない。**次の巡回でやり直す。
 			continue
 		}
 		o.releaseBecauseQuotaWaitAsync(ctx, rs)
@@ -421,15 +427,25 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // 戻り値: 完全に止まっていれば true。
-func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) bool {
+// 戻り値の2つ目は「手放しの判定が面倒を見ている run か」である（issue #173）。
+//
+// **偽なら、打ち切りに任せる。**`agent.get` を読めない run と、`working` / `blocked` / `unknown` の run は、
+// **手放しの経路では二度と進まない。**そこを打ち切りからも守ると、**止める者が1人もいなくなる。**
+// **turn ループは総実行時間では打ち切らない**（`turn.go` の待ちの説明）ので、
+// **その run は pane とスロットを握ったまま、continuo を再起動するまで残る。**
+// **枠がいちばん苦しい局面で、打ち切りという最後の安全網が選択的に外れることになる。**
+//
+// **真になるのは `idle` か `done` を読めたときだけである。**
+// **守りたいのは「1回目の観測は必ず偽を返す」という2巡回ぶんの隙間だけであり、それで足りる。**
+func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, bool) {
 	agent, err := o.agentInfo(ctx, rs)
 	if err != nil {
 		o.logger.Info("画面の状態を読めないので、1週間の枠の上限を超えていても手放しません（次の巡回でやり直します）",
 			"identifier", rs.issue().Identifier, "error", err)
-		return false
+		return false, false
 	}
 	if agent.AgentStatus != herdr.AgentStatusIdle && agent.AgentStatus != herdr.AgentStatusDone {
-		return false
+		return false, false
 	}
 	// **状態が変わっていれば、まだ動いている。**
 	//
@@ -448,7 +464,7 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) bool {
 	//
 	// **だから、この判定は自分が読んだ連番だけを覚える。**
 	// **2回続けて同じなら止まっている。**初回は必ず偽を返す。
-	return rs.noteQuotaProbe(agent.StateChangeSeq)
+	return rs.noteQuotaProbe(agent.StateChangeSeq), true
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる

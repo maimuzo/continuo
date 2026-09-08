@@ -961,6 +961,41 @@ func TestQuota_92パーセントでも打ち切られずに手放される(t *te
 	}
 }
 
+// TestQuota_手放せないrunは打ち切りに任せる は、打ち切りを飛ばす範囲を確かめる
+// （issue #173）。
+//
+// 目的: **手放しの対象を打ち切りから守る門を足したが、守る範囲を広げすぎてはならない。**
+// **`agent.get` を読めない run と、`working` / `blocked` / `unknown` の run は、
+// 手放しの経路では二度と進まない。**そこを打ち切りからも守ると、**止める者が1人もいなくなる。**
+// **turn ループは総実行時間では打ち切らない**ので、
+// **その run は pane とスロットを握ったまま、continuo を再起動するまで残る。**
+// **枠がいちばん苦しい局面で、最後の安全網が選択的に外れることになる。**
+//
+// 与える情報: 1週間の枠が **92%**（手放しの条件は満たすが、**枠待ちの印は立たない**）。
+// リセットは48時間後。**ただし agent は `working` のまま**（＝手放しの経路では進まない）。
+// **100% で試してはならない。**そこでは枠待ちの印が立ち、打ち切りが止まるのが元からの正しい振る舞いである。
+// **この検査が見たいのは、印が立たない帯で、私が足した門が打ち切りを止めていないかである。**
+// 成功条件: **打ち切られること。**握ったまま残らないこと。
+func TestQuota_手放せないrunは打ち切りに任せる(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 92, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W10")
+
+	// **`working` のまま固まった run にする。**手放しの経路はここで止まる。
+	fx.Herdr.SetStatus(herdr.AgentStatusWorking)
+
+	for i := 0; i < 60; i++ {
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			return // 打ち切られた（印から外れた）。それでよい
+		}
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("手放せない run が打ち切られずに残っています:\n%s", fx.Logs.String())
+}
+
 // TestQuota_5時間の枠だけなら上限を超えても待ち続ける は、人間が決めた表の1行目を確かめる。
 //
 // 目的: **2026-08-26 の決定「5時間枠 → 待つ。担当は変えない」。**
