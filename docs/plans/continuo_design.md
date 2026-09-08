@@ -9026,14 +9026,13 @@ turn の終わりと同じでなければならないので、それでは足り
 **「偽れない」ことまでは名乗らない。**印を付けずに投稿することも、人間が付けることもできる。
 **issue #245 の本文が「偽れないことまで求めるなら、それは別の issue です」と範囲を切っている。**
 
-#### 実装の前に測る2件
+#### 実装の前に測る1件
 
-**この2件が偽なら、下の節がまとめて成り立たなくなる。****実装より先に測る。**
+**これが偽なら、下の節がまとめて成り立たなくなる。****実装より先に測る。**
 
 | 何を測るか | 偽だったら何が崩れるか |
 | --- | --- |
 | **GraphQL の `addComment` で投稿したコメントに、画面の印が出るか** | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
-| **その1件を、人間が画面で確かめること** | **下の「画面に実際に出るもの」の表は、REST で投稿した2件を確かめたものである。**GraphQL で投稿した1件は、まだ画面で見ていない |
 
 #### 採る経路
 
@@ -9163,13 +9162,13 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | 何 | どこへ | 権限 |
 | --- | --- | --- |
 | **App の資格情報** | `~/.continuo/github-app-credentials.json` | `0600` |
+| **秘密鍵** | **置かない**（作成のときに返るが、捨てる） | — |
 
 **`--id` で分けない。**あれが分けるのは二重起動を止めるロックで
 （[internal/instance/instance.go:26-45](../../internal/instance/instance.go#L26-L45)）、
 **資格情報は人間1人につき1つの認可である。**
 **1台で2本動かしている人は、2本が同じ資格情報を共有する。**
 **だから起動時の検査も、3-82d のロックを取る。**取らないと、2本の起動が同じ更新用のトークンを取り合い、片方が必ず落ちる。
-| **秘密鍵** | **置かない**（作成のときに返るが、捨てる） | — |
 
 **中身。**
 
@@ -9289,8 +9288,18 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **印の無いコメントで書くと、この設計が守ると宣言した不変条件を、continuo 自身が破る。**
 **代わりに、止まった理由をログへ `Error` で出す。**
 **どの issue の、どの投稿が、なぜ落ちたか。**そのリポジトリ名と、
-**worktree のパスと会話の記録のパスも出す**（[internal/orchestrator/lifecycle.go:1163-1164](../../internal/orchestrator/lifecycle.go#L1163-L1164) の
-`snap.WorktreePath` と `snap.TranscriptPath`。落ちるその場に両方在る）。
+**run の写しを持っている出口では、worktree のパスと会話の記録のパスも出す**
+（[internal/orchestrator/lifecycle.go:1163-1164](../../internal/orchestrator/lifecycle.go#L1163-L1164) の
+`snap.WorktreePath` と `snap.TranscriptPath`）。
+**持っていない出口では出さない。**
+[internal/orchestrator/comment.go:498-500](../../internal/orchestrator/comment.go#L498-L500) の `postStatusMove` と、
+[internal/orchestrator/handoff.go:495-497](../../internal/orchestrator/handoff.go#L495-L497) の `postBid` は、
+**引数に run の写しを持たない。****持ち回りの入札は、そもそも worktree を作る前に走る。**
+
+**持ち回りの3種**（入札・hold・released）**では、投稿を止めない。**
+[internal/orchestrator/handoff.go:317-318](../../internal/orchestrator/handoff.go#L317-L318) が
+**「担当は既に外れている。コメントを書けなかったことで入札を止めない」**と既に決めている。
+**その決定を変えない。**投稿しないので、印の無いコメントは1件もできない。
 **ダッシュボードへは出さない。**既定では開かず、開いていても終わった run の欄は消える。
 
 **止めると何を失うか。**成果報告が投稿できず、continuo が「エージェントが書いていない」と判定して run を人間へ渡す
@@ -9331,7 +9340,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 #### 6-27 が「Go の経路を作らない」と決めたことと、衝突しない
 
-**[docs/plans/continuo_design.md:13178](continuo_design.md#L13178) が、こう決めている。**
+**[docs/plans/continuo_design.md:13323](continuo_design.md#L13323) が、こう決めている。**
 
 > **承知のうえで、Go の経路を作らない**（作ると 3-73 の絞り口へ寄せることになり、**continuo が代筆しない決定と衝突する**）。
 
@@ -9346,7 +9355,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **エージェントが書いたファイルを受け取って送るだけである。**
 **要約する材料を continuo が持っているかは、関係しない。**
 
-**13178 のもう1つの論拠（Go の経路を作ると実装が増える）は、事情が変わった。**
+**13323 のもう1つの論拠（Go の経路を作ると実装が増える）は、事情が変わった。**
 **GitHub App の資格情報を読んで GitHub を叩く経路は、本体の投稿のためにどのみち作る**（この節の下）。
 **委譲が足すのは、その経路への入口を1つ増やすことだけである。**
 
@@ -9371,7 +9380,19 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 `orchestratorDir = "../../../internal/orchestrator"` を走査の範囲に固定している。
 **`continuo comment` の実装を `internal/cli` に置くと、縮める場所が2箇所になり、検査は2箇所目を1件も見ない。**
 
-**順序を守る。****検査の走査範囲を広げてから、`continuo comment` を書く。**
+**範囲を広げるだけでは足りない。**壁は3つある。
+
+| 壁 | 範囲を広げても効かない理由 |
+| --- | --- |
+| **受け手の形が `o.tracker.PostComment` に固定** | [test/internal/redact/single_choke_point_test.go:85-96](../../test/internal/redact/single_choke_point_test.go#L85-L96) が `sel.X` の `tracker` と `o` まで見ている。**`internal/cli` は `Orchestrator` を持たないので、この形の呼び出しを1つも書かない** |
+| **許す先がファイルの基底名1つ** | `chokePointFile = "comment.go"` を基底名で比べているので、**範囲を広げると `internal/cli/comment.go` は無条件で許される** |
+| **範囲が `internal/orchestrator` に固定** | 設計が挙げていたもの |
+
+**だから、縮める処理と投稿を1つにした関数へ寄せる。**
+**その関数を `internal/orchestrator` の外からも呼べる場所へ置き、検査はその関数名だけを許す形へ組み替える。**
+**「縮める場所は1箇所」という 3-73 の決定は、そのまま守れる。**
+
+**順序を守る。****検査を組み替えてから、`continuo comment` を書く。**
 **逆順にすると、検査が緑のまま2箇所目ができあがり、緑であることが何も意味しなくなる。**
 
 #### `continuo comment` が何をするか
@@ -9402,6 +9423,35 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **`--marker` で渡された印が本文に在るかを確かめる** | **[test/internal/prompt/group_comment_test.go:240-263](../../test/internal/prompt/group_comment_test.go#L240-L263) が「門の外に置いても検査は通る」と警告している。****印が消えると、continuo は進捗報告を見つけられなくなり、18時間の時計が担当を取った時刻まで巻き戻る**（[internal/prompt/builtin.md:428-431](../prompt/builtin.md#L428-L431)） |
 | **印が無ければ終了コード 3 を返す** | エージェントは新しく1件投稿する |
 
+**指示書での使い方。**
+
+    {{if .github_app_attribution}}
+    {{.continuo.command}} comment --edit "$ID" --repo <owner>/<repo> \
+      --marker '<!-- continuo:progress -->' --body-file add.md
+    RC=$?
+    {{else}}
+    OLD=$(gh api "repos/<owner>/<repo>/issues/comments/$ID" --jq .body)
+    case "$OLD" in
+      *"<!-- continuo:progress -->"*) gh api --method PATCH … ; RC=0 ;;
+      *) RC=3 ;;
+    esac
+    {{end}}
+    case "$RC" in
+      0) ;;                       # 書き足せた
+      3) echo "段2b で新しく1件投稿します" ;;
+      *) echo "投稿できませんでした" >&2 ;;
+    esac
+
+**`{{else}}` の枝に `gh api --method PATCH` を残す。**
+**[test/internal/prompt/group_comment_test.go:244-248](../../test/internal/prompt/group_comment_test.go#L244-L248) が
+7-2 の `--method PATCH` をちょうど1個数えており、0個なら `Fatalf` する。**
+
+**前の本文をエージェントへ見せる段は、`{{else}}` の枝にだけ残す。**
+**7-2 の段2a は「まず、前に何を書いたかを読みます」と決めており**
+（[internal/prompt/builtin.md:652-653](../prompt/builtin.md#L652-L653)）**、
+[test/internal/prompt/group_comment_test.go:324](../../test/internal/prompt/group_comment_test.go#L324) が `printf` の行を見ている。**
+**真の枝では、`continuo comment` が中で読むので、エージェントは読まない。**
+
 **書き換えの API は、いまコードに1本も無い。**
 `internal/tracker` に在るのは [internal/tracker/query.go:374](../../internal/tracker/query.go#L374) の `addCommentMutation` だけで、
 **REST クライアントも無い。****新しい経路を1本作る作業である。**
@@ -9425,14 +9475,19 @@ continuo が「エージェントが成果を書いていない」と判定し�
 
 | 引数 | 何を渡すか |
 | --- | --- |
-| `--issue <URL>` | 投稿先。**エージェントが既に持っている値である** |
-| **`<番号> --repo <owner>/<repo>`** | **URL の代わりにこの形でも受け取る。**7-2 の2本がこの形で書かれており（[internal/prompt/builtin.md:734](../prompt/builtin.md#L734) と [745行](../prompt/builtin.md#L745)）、**`--repo` は「別のリポジトリの同じ番号へ投稿しない」ための安全装置である**（[internal/prompt/builtin.md:630-631](../prompt/builtin.md#L630-L631)）。**落としてはならない** |
+| `--issue <URL か番号>` | 投稿先。**URL でも issue の番号でも受け取る。**番号のときは `--repo` が要る |
+| `--repo <owner>/<repo>` | **`--issue` が番号のときに要る。**7-2 の2本がこの形で書かれており（[internal/prompt/builtin.md:734](../prompt/builtin.md#L734) と [745行](../prompt/builtin.md#L745)）、**「別のリポジトリの同じ番号へ投稿しない」ための安全装置である**（[internal/prompt/builtin.md:630-631](../prompt/builtin.md#L630-L631)）。**落としてはならない** |
 | `--body-file <パス>` か `--body <文字列>` | 本文。**`gh issue comment` と同じ形にする** |
 | **`--edit <コメントID> --marker <印>`** | **既にあるコメントへ書き足す。**下の3つを中でやる |
 
 **中でやること。**`~/.continuo/github-app-credentials.json` を読み、更新用のトークンで
 新しいアクセストークンを取り、**返ってきた新しい更新用のトークンとその期限を書き戻してから**投稿する。
-**`github_app_attribution` が `false` のときは、`gh auth token` で取ったトークンで投稿する**（いままでどおり）。
+**資格情報が無ければ、終了コード 1 で落ちる。**`gh auth token` へ落ちてはならない。
+**落ちると、印の無い機械のコメントが1件できる。**
+**この設計が守ると宣言した「印が無いコメントを2種類にしない」を、この設計が作ったコマンド自身が破ることになる。**
+
+**`false` の利用者は、そもそもこのコマンドを叩かない。**
+**指示書が `{{if}}` で分けており、`false` の枝には `gh issue comment` が出る**（3-82e）。
 
 **このコマンドは設定ファイルを読まない。**
 **資格情報の置き場所は固定で、印を付けるかどうかは「テンプレートがこのコマンドを出したこと」で既に決まっている。**
@@ -9449,7 +9504,9 @@ continuo が「エージェントが成果を書いていない」と判定し�
 **`~/.continuo/` の中に、資格情報の専用のロックを1本置く**（二重起動を止めるロックとは別にする）。
 **[internal/lock/lock.go:45](../../internal/lock/lock.go#L45) の `Acquire` は待たない**（`LOCK_NB`）**ので、待つ形を1つ足す。**
 **囲うのは「読む → 叩く → 書き戻す」の全体である。**書き戻しだけだと、2つが同じ古いトークンを読む。
-**上限は「往復の実測 × 8」とし、達したら終了コード 1 を返す。**
+**上限は「往復の実測 × 8」とし、達したら終了コード 2 を返す**（上の表）。
+**往復の実測値は、この文書にまだ無い。****暫定で 240秒を置く**（1回の往復を30秒と仮に置いた × 8）。
+**実装のときに1回測って、その値へ直す。**
 **標準エラーへ「ロックを取れませんでした。時間を置いて叩き直してください」と出す。**
 
 **回転の回数。****新しく投稿するときだけ回る。**
@@ -9550,13 +9607,19 @@ continuo 自身が Status を動かした記録を書くたびに、次の進捗
     post <その issue の番号> --repo <owner>/<repo> --body "<!-- continuo:group -->
     …"
 
-**掛ける先。**指示書の書き込みは9本ある。
+**掛ける先。**指示書の書き込みは、上の1本を足して10本になる（足す前は9本）。
 
 | 何 | 何本か | 掛けるか |
 | --- | --- | --- |
 | **issue のコメント**（新規の投稿） | **6本** | **掛ける。**下の1本を足す |
 | **issue のコメント**（既存への書き足し） | **2本** | **掛ける。**ただし `--edit` を使い、トークンは回らない |
 | pull request（作成とコメント） | 2本 | **掛けない。**App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ |
+
+**pull request のコメントは、この設計の対象外である。**
+**`/code-review` の判断票**（[internal/prompt/builtin.md:274](../prompt/builtin.md#L274) の `gh pr comment`）**は、
+いままでどおり人間と見分けが付かない。**
+**issue #245 が対象にしているのは issue のコメントである。**
+**pull request も対象にするなら、権限を足すことになり、3-82b の決定と衝突する。**
 
 **指示書へ投稿のコマンドを1本足す。**
 [internal/prompt/builtin.md:173-195](../prompt/builtin.md#L173-L195) の設計レビューの判断票は、
@@ -9591,6 +9654,13 @@ issue でいちばん人目に付く。**
 **`shellQuote` は [internal/orchestrator/settings.go:425](../../internal/orchestrator/settings.go#L425) の小文字始まりなので、
 共通の場所へ移して export する。**
 **写しを作ってはならない。**hook 側を直したときに、プロンプト側が取り残される。
+
+**この変更が偽にする記述が2つある。同じ commit で直す。**
+
+| どこ | いま何と書いてあるか | なぜ偽になるか |
+| --- | --- | --- |
+| [internal/prompt/builtin.md:638](../prompt/builtin.md#L638) | **7-2 のコメントは、あなたが `gh` で直に書くので、continuo が縮める処理を通りません** | **`continuo comment` を通るので、縮める処理を通る。**`true` の利用者のエージェントが、事実と違う説明を毎回読む |
+| [docs/plans/continuo_design.md:13323](continuo_design.md#L13323) | **承知のうえで、Go の経路を作らない** | **この設計が、その Go の経路を作る。**放置すると、次に 6-27 を読んだ人がこの設計を差し戻す |
 
 **`internal/prompt/builtin.md` を直したら、5-3 の写しも同じ commit で直す。**
 **そのとき、5-3 より後ろを指す行番号のリンクを検算する**
@@ -9629,14 +9699,20 @@ issue でいちばん人目に付く。**
 | **認可が終わった直後** | **そのトークンで `viewer` を引き、`gh api user` と突き合わせる。**通ったら `authorized_login` を書く |
 | **違っていたら** | **その場で画面へ出す。**「`gh` は A、認可したのは B です」と両方を並べる |
 | **起動時の検査** | **同じ突き合わせを行い、違っていたら起動しない** |
-| **`gh` のログイン名を取り直すとき**（既定で5分に1回） | **`authorized_login` と違っていたら、その巡回では dispatch しない** |
+
 | **`continuo doctor`** | **`authorized_login` と `gh api user` を突き合わせる。トークンは1度も取らない** |
 
-**取り直すたびに見るのは、走っている最中に `gh auth switch` を叩かれるためである。**
-**巡回のたびには引かない。**
-[internal/orchestrator/orchestrator.go:197-199](../../internal/orchestrator/orchestrator.go#L197-L199) が
-**「毎巡回では取り直さない（既定の巡回は30秒に1回）。取り直しは外部プロセスの起動であり、期限ぶん巡回そのものを遅らせる」**
-と決めており、`ghLoginRetryInterval` は5分である。**その周期に相乗りする。**
+**走っている最中に `gh auth switch` を叩かれた場合は、拾わない。**
+**拾う周期が無いためである。**
+[internal/orchestrator/orchestrator.go:778-783](../../internal/orchestrator/orchestrator.go#L778-L783) の `ghLoginDue` は
+**`o.selfLogin != ""` なら false を返す。****一度取れたら、そのあとは1回も走らない。**
+`ghLoginRetryInterval` の5分は「**まだ取れていないあいだ**」だけの間隔である。
+同じ関数の GoDoc が「**取れたら、そのあとは取り直さない。**持ち主が変わるのは `gh auth switch` を人間が叩いたときだけで、
+その操作は continuo を止めずに行うものではない」と書いている。
+
+**周期を新設しない。**新設すると、30秒の巡回のなかで `gh` の子プロセスを定期的に起こすことになり、
+**3-65 が明示的に決めたことを、この issue に1行も書かれていない理由で逆転させる。**
+**切り替えた人は、次に continuo を起動したときに起動時の検査で止まる。**そこで気づく。
 **既にある [internal/orchestrator/handoff.go:604](../../internal/orchestrator/handoff.go#L604) の `warnIfViewerDiffers` は
 WARN を1行出すだけで走り続けるが、ここでは止める。**理由は、ずれの性質が違うためである。
 
