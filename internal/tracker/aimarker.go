@@ -266,27 +266,16 @@ func ComposeCommentBody(body, selfMarker string) string {
 	// `repos/${REPO}/issues/${PR_NUMBER}/comments`）。
 	// **断りを実際に書くのは人間かエージェントの `gh pr comment` で、この関数を1度も通らない。**
 	// **例外を守っているのは組み込みの指示書の 5-6 と、その検査と、CI の案内文の3つである。**
-	// **本当に空の本文には、何も足さない。**
-	// **足すと、印だけのコメントが公開されて消せなくなる。**
-	// 足さなければ GitHub が空の本文を断るので、**呼び出し側の欠陥がログに出る。**
+	// **本文の中身は見ない。**空でも空白だけでも、そのまま組み立てる。
 	//
-	// **空白だけの本文は、ここで止めない。**止めると `self_marker` も付かず、
-	// **GitHub は空でない本文として受け付ける。**そのコメントは
-	// `FetchComments` が外せず、**continuo 自身の通知が毎 turn エージェントへ渡り続ける。**
-	if body == "" {
-		return body
-	}
-	// **既に `self_marker` が付いていれば、いったん外す。**
-	// **`self_marker` は HTML のコメントとは限らない**（`[continuo-self]` のような値にできる）。
-	// **付いたまま `withAIMarker` へ通すと、その行が印の行と数えられず、
-	// 印が `self_marker` より前へ入る。**外して組み立て直せば、二度通しても増えない。
-	core := body
-	if selfMarker != "" {
-		if t := strings.TrimSpace(body); strings.HasPrefix(t, selfMarker) {
-			core = strings.TrimLeft(strings.TrimPrefix(t, selfMarker), "\r\n")
-		}
-	}
-	full := withAIMarker(core)
+	// **「空なら何も足さない」も「既に `self_marker` が付いていれば外す」も、
+	// いったん入れて取り消した**（2026-09-08、実装レビュー4周目）。
+	// **前者は `self_marker` まで落とし、そのコメントを `FetchComments` が外せなくする。**
+	// 拠り所にしていた「GitHub が空の本文を断る」を、1度も測っていなかった。
+	// **後者は `self_marker` が短い値（`<!--` など）のときに、関門の案内の1行目を壊す。**
+	// **二度組み立て直す呼び出し元は、本番に1つも無い。**
+	// **起きない事故のために、起きる事故を作っていた。**
+	full := withAIMarker(body)
 	if selfMarker != "" {
 		// **改行の綴りを本文に合わせる。**`"\n"` で決め打ちにしてはならない。
 		// **CRLF の本文で1行目だけ LF になる**と、同じコメントの中で改行が混ざる。

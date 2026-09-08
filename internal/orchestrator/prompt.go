@@ -140,7 +140,7 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	// **「その印」と書かない**（issue #178）。**この段落が守っているのは `marker`
 	// （エージェントの印）であって、すぐ上で足させた `config.AIMarker` ではない。**
 	// **取り違えてそちらを外されると、`c.IsAgent` が偽になり、
-	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
+	// 書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
 	// **2度目も名前を書き切る。**値は `config.ProgressMarker` から作るので、定義は1つのままである。
 	fmt.Fprintf(&b,
 		"\n**新しく1件投稿してください。**途中経過の報告（本文のいちばん上の印の並びに、"+
