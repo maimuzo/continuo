@@ -285,3 +285,25 @@ func TestWithAIMarker_字下げした1行目の印も印として通す(t *testi
 		t.Fatalf("字下げした印の前に入りました:\n got %q\nwant %q", got, want)
 	}
 }
+
+// 目的: 本当に空の本文には、印も self_marker も足さないことを固定する（設計 3-82）。
+//
+// **足すと空でなくなるので GitHub が受け付け、見えないコメントが公開されて消せない**
+// （continuo にコメントを消す経路は無い）。**足さなければ GitHub が断り、呼び出し側の欠陥がログに出る。**
+//
+// **空白だけの本文は止めない。**止めると `self_marker` も落ちるが、
+// **GitHub は空白だけの本文を空でないものとして受け付ける。**
+// そのコメントは `FetchComments` が外せず、**continuo 自身の通知が毎 turn エージェントへ渡り続ける。**
+//
+// 与える情報: 空の本文と、空白だけの本文。
+// 成功条件: 空は1文字も変わらず、空白だけには self_marker が付くこと。
+func TestComposeCommentBody_本当に空のときだけ足さない(t *testing.T) {
+	const self = "<!-- continuo:self -->"
+	if got := tracker.ComposeCommentBody("", self); got != "" {
+		t.Errorf("空の本文へ足しました: got=%q", got)
+	}
+	got := tracker.ComposeCommentBody("   \n  ", self)
+	if !strings.HasPrefix(got, self) {
+		t.Errorf("空白だけの本文から self_marker が落ちました: got=%q", got)
+	}
+}

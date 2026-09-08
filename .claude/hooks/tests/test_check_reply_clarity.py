@@ -239,7 +239,7 @@ case(
 )
 case(
     "行番号があれば通る",
-    base("[docs/plans/continuo_design.md:12669-12715](docs/plans/continuo_design.md#L12669-L12715) を見てください。"),
+    base("[docs/plans/continuo_design.md:12-34](docs/plans/continuo_design.md#L12-L34) を見てください。"),
     False,
 )
 case(

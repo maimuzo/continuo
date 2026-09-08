@@ -212,12 +212,19 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 	// **見るのは機械の印だけである。**エージェントの印は、この文面では
 	// `gh issue comment … --body "<印>` の形でしか出てこず、**単独の行にならない。**
 	// 両方を見る形にすると、片方が必ず素通りして、**2つとも固定しているつもりになる。**
+	seen := false
 	for _, line := range strings.Split(sent, "\n") {
 		if strings.TrimSpace(line) != config.AIMarker {
 			continue
 		}
+		seen = true
 		if line != strings.TrimSpace(line) {
 			t.Errorf("見本の機械の印が字下げされています: %q", line)
 		}
+	}
+	// **1件も見つからなければ、この検査は何も守っていない。**
+	// 見本の形が変わったときに、黙って通り続けるのを防ぐ。
+	if !seen {
+		t.Fatal("見本に機械の印だけの行がありません（検査が的を外しています）")
 	}
 }

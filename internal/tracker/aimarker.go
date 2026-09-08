@@ -43,10 +43,10 @@ const (
 // **本文の先頭が特定の印で始まっているか**で判定しており、
 // **前へ1行入れると、その判定が全部外れる。**
 //
-// **見るのは1行目だけである。**印が2本以上並ぶ本文も、先頭が空白の本文も、
+// **見るのは、先頭の空行を飛ばした最初の1行だけである。**印が2本以上並ぶ本文は、
 // **投稿の経路には1件も無い**（2026-09-08、実装レビュー6周目のあとの突き合わせで、
 // `postComment` / `postOwnMarkedComment` の12箇所を1つずつ開いて数えた。
-// **散文が8件、1行で閉じた印が1本だけのものが4件**）。
+// **散文が7件、1行で閉じた印が1本だけのものが5件**。8周目に数え直した）。
 // **関門の案内だけは印が2行並ぶが、2行目の `self_marker` は
 // `ComposeCommentBody` があとから前へ足すので、ここへ来る本文は1行目が印である。**
 //
@@ -70,9 +70,21 @@ const (
 // body: 印を足す前の本文。**空文字は渡らない**（`ComposeCommentBody` が先に返す）。
 // 戻り値: 印を1行足した本文。**もとの本文は1文字も書き換えない。**
 func withAIMarker(body string) string {
-	line, rest := body, ""
-	if i := strings.IndexByte(body, '\n'); i >= 0 {
-		line, rest = body[:i+1], body[i+1:]
+	// **空行を飛ばしてから1行目を取る。**読む側は `TrimSpace(body)` してから先頭を見るので、
+	// **先頭に空行がある本文でも、あちらは次の行を先頭として読む。**
+	// 飛ばさないと、`"\n<!-- continuo:bid -->…"` のような本文で印が本物の印の前へ入り、
+	// **`IsMarked` も `FetchComments` も同時に外れる。**
+	head := 0
+	for head < len(body) {
+		i := strings.IndexByte(body[head:], '\n')
+		if i < 0 || strings.TrimSpace(body[head:head+i]) != "" {
+			break
+		}
+		head += i + 1
+	}
+	line, rest := body[head:], ""
+	if i := strings.IndexByte(body[head:], '\n'); i >= 0 {
+		line, rest = body[head:head+i+1], body[head+i+1:]
 	}
 	// **空白を落としてから見る。**読む側（`IsMarked` も `FetchComments` も）は
 	// `TrimSpace(body)` してから先頭を見るので、**字下げした1行目の印は、あちらでは印として通る。**
@@ -83,9 +95,9 @@ func withAIMarker(body string) string {
 	}
 	if rest == "" && !strings.HasSuffix(line, "\n") {
 		// 改行の無い、印1行だけの本文。**その後ろへ足す。**前へ入れると先頭一致が外れる。
-		return line + "\n" + config.AIMarker
+		return body + "\n" + config.AIMarker
 	}
-	return line + config.AIMarker + "\n" + rest
+	return body[:head] + line + config.AIMarker + "\n" + rest
 }
 
 // isMarkerLine は、その行が1行で閉じた HTML のコメント（＝印の行）かを返す。

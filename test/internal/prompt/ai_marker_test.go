@@ -63,7 +63,10 @@ func TestTemplate_コメントを書かせる節すべてに機械の印があ�
 		"## 5-6. あなたが書くコメントには、機械が書いた印を付ける",
 		"## 7-2. まとめて直したとき",
 	} {
-		section := sectionOf(t, body, heading)
+		// **5-6 の次は `# 6. セキュリティ`（`#` が1つ）である。**
+		// `sectionOf` は `## ` でしか切らないので、次の章まで飲む。
+		// **別の章の中身で緑にならないよう、章の切れ目でも止める。**
+		section := sectionUntilNextChapter(t, body, heading)
 		found := false
 		for _, line := range strings.Split(section, "\n") {
 			if strings.TrimSpace(line) == config.AIMarker {
