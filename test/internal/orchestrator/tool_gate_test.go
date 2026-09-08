@@ -610,6 +610,109 @@ func TestToolGate_担当先を告げる文は他の条件を免除しない(t *t
 	}
 }
 
+// 目的: **担当しているリポジトリの外への起票が免除されていること**を固定する（設計 3-64f）。
+//
+// **なぜ要るか。**人間は3つの起票を名指しで求めた（issue #246）。
+// 担当している製品の不具合をその製品のリポジトリへ、切り出したい作業を自分の別のリポジトリへ、
+// 使っている第三者の OSS へ見つけた不具合を。**後ろの2つは、定義からして担当先の外である。**
+//
+// 与える情報: `mode: on` の設定と、公開リポジトリの issue。
+// 成功条件: 相手を問わない免除があり、切り出しの起票と fork への push と本家への pull request が
+// 名指しで入っていること。**免除が他の条件に負けると書いてあること。**
+func TestToolGate_担当先の外への起票を免除する(t *testing.T) {
+	public := false
+	got, _ := writeSettingsForToolGate(t, config.ClaudeToolGateConfig{
+		Mode:  config.ClaudeToolGateModeOn,
+		Tools: []string{"Bash"},
+	}, &public)
+	prompt := promptOf(t, got)
+
+	for _, want := range []string{
+		// **相対の語を使わない。**「ほかの」だと、担当先の文が出なかったときに基準が消える。
+		"相手のリポジトリを問わず",
+		// **人間が挙げた3つを全部拾う。**「不具合の報告」だけだと、切り出しの起票が落ちる。
+		"別のリポジトリへ切り出したい作業の起票",
+		// **列挙に無いものが断られる側へ落ちるのを防ぐ。**
+		"fork へ push して本家のリポジトリへ pull request",
+		// **免除は他の条件に勝たない。**
+		"この免除も、上の条件を免除しない",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("担当先の外への免除に %q がありません:\n%s", want, prompt)
+		}
+	}
+
+	// **条件そのものを定義し直す文を書かない。**「ここで断るのは〜である」のような閉じた定義は、
+	// 断る条件の3つ目が挙げている例（他のリポジトリへの push・パッケージの公開・外部サービスへの投稿）を、
+	// その定義に当たらないものごと消す。
+	for _, banned := range []string{"ここで断るのは", "断るのは、相手のコード"} {
+		if strings.Contains(prompt, banned) {
+			t.Errorf("免除の中で断る条件を定義し直しています（%q）:\n"+
+				"条件3の例が、この定義に当たらないものごと消えます:\n%s", banned, prompt)
+		}
+	}
+}
+
+// 目的: **担当先の外への免除が、識別子が読めなくても出ること**を固定する（設計 3-64f）。
+//
+// **免除は担当先かどうかで中身が変わらない。**担当先を告げる文と一緒に消えてはならない。
+// **3版までは、免除が残って免除を縛る文だけが消える倒れ方をしていた。**
+// いまの免除には担当先を参照する語が無いので、その倒れ方は起きない。
+//
+// 与える情報: `Dispatchable` が真のまま、識別子だけを draft issue の形にした issue。
+// 成功条件: 担当先を告げる文は出ないが、担当先の外への免除は出ること。
+func TestToolGate_識別子が読めなくても担当先の外への免除は出る(t *testing.T) {
+	public := false
+	issue := sampleIssue(188, "Ready")
+	// **production では起きない組み合わせである**（draft issue は Dispatchable が偽）。
+	issue.Identifier = "draft:PVTI_lADOABCDEF"
+
+	got, _ := writeSettingsForToolGateIssue(t, config.ClaudeToolGateConfig{
+		Mode:  config.ClaudeToolGateModeOn,
+		Tools: []string{"Bash"},
+	}, &public, issue)
+	prompt := promptOf(t, got)
+
+	if strings.Contains(prompt, "いま担当しているのは") {
+		t.Errorf("識別子の形が違うのに、担当先を告げる文を書いています:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "相手のリポジトリを問わず") {
+		t.Errorf("担当先を告げる文と一緒に、担当先の外への免除まで消えています:\n%s", prompt)
+	}
+	// **相対の語が入っていないこと。**入っていると、基準が指示文から消える。
+	if strings.Contains(prompt, "ほかのリポジトリが相手でも") {
+		t.Errorf("免除が相対の語で書かれています。担当先の文が無いので「ほか」の基準がありません:\n%s", prompt)
+	}
+}
+
+// 目的: **担当先の外への免除が、囲いの外で、断る条件の中にあること**を固定する（設計 3-64f）。
+//
+// **囲いの中に入れると、外部が書いた文字列と同じ場所に並ぶ。**
+// **断る条件の外へ出すと、他の条件と衝突したときの勝ち負けが決まらない。**
+func TestToolGate_担当先の外への免除は断る条件の中にある(t *testing.T) {
+	public := false
+	got, _ := writeSettingsForToolGate(t, config.ClaudeToolGateConfig{
+		Mode:  config.ClaudeToolGateModeOn,
+		Tools: []string{"Bash"},
+	}, &public)
+	prompt := promptOf(t, got)
+	_, _, closeMark := toolGateFenceOf(t, prompt)
+
+	at := strings.Index(prompt, "相手のリポジトリを問わず")
+	closeAt := strings.Index(prompt, closeMark)
+	headAt := strings.Index(prompt, toolGateDenyListHead)
+	nextCondAt := strings.Index(prompt, "- 権限の昇格")
+	if at < 0 || closeAt < 0 || headAt < 0 || nextCondAt < 0 {
+		t.Fatalf("位置を測る目印が足りません: exempt=%d close=%d head=%d next=%d", at, closeAt, headAt, nextCondAt)
+	}
+	if !(closeAt < at) {
+		t.Errorf("免除が囲いより前にあります: close=%d exempt=%d", closeAt, at)
+	}
+	if !(headAt < at && at < nextCondAt) {
+		t.Errorf("免除が断る条件の3つ目の中にありません: head=%d exempt=%d next=%d", headAt, at, nextCondAt)
+	}
+}
+
 // 目的: **「関係のない」という限定を落としていないこと**を固定する（設計 3-64f）。
 //
 // **落とすと、fork へ push して本家のリポジトリへ PR を出す形が通らなくなる。**
