@@ -577,7 +577,15 @@ func (o *Orchestrator) removeOwnAssignee(
 		Reason: reason,
 	})
 	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
-		o.logger.Warn("担当者を消し戻したことを issue へ書けませんでした",
+		// **担当は既に外れている。**ここで偽を返して呼び出し側を止めてはならない
+		// （issue #173）。**止めると、担当者のいない issue に pane が付いたまま残る。**
+		//
+		// **ただし、書けなかったことは黙って流さない。**この1件が
+		// **次にこの issue を拾う機械へ「remote に続きが入っているか」を伝える唯一の手段である。**
+		// **無いと、その機械は remote から worktree を作り直す。**
+		// **`after_run` が push していなければ、手元の commit がそこで失われる。**
+		o.logger.Warn("担当者を消し戻したことを issue へ書けませんでした"+
+			"（次に拾う機械は remote から作り直します。push していない commit があれば失われます）",
 			"identifier", issue.Identifier, "error", err)
 	}
 	return viewer.Login, true
