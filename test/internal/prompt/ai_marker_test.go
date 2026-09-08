@@ -198,3 +198,39 @@ func TestTemplate_飛ばす断りには印を付けさせない(t *testing.T) {
 		t.Fatal("飛ばす断りの見本が見つかりません（検査が的を外しています）")
 	}
 }
+
+// 目的: 印の抜けを、エージェント自身に点検させることを固定する（設計 3-82e。issue #245）。
+//
+// **continuo はこの印を1つも数えていない。**落としても何も止まらないので、
+// **落ちたことに気づけるのはエージェント自身だけである。**
+//
+// **continuo が書き換える案は採らなかった。**continuo が直せるのは
+// 本文の先頭が `tracker.comments.marker` で始まるコメントだけで、
+// **それは「すでに1行目が機械の名乗りになっている」ものと一致する。**
+// **2つ目の印を足しても、人間ができる推論は1つも増えない**（設計 3-82e）。
+//
+// 与える情報: prompt.Builtin() の全文。
+// 成功条件: 点検の節があり、抜けを出す検索と、直す書き込みの両方を持つこと。
+func TestTemplate_印の抜けを自分で点検させる(t *testing.T) {
+	body := prompt.Builtin()
+
+	// **節そのもの。**無ければ、下の2つが偶然どこかに在るだけかもしれない。
+	if !strings.Contains(body, "### 終わりに、自分のコメントを点検します") {
+		t.Fatal("自己点検の節が見つかりません（設計 3-82e が求めています）")
+	}
+	for _, want := range []struct {
+		what  string
+		piece string
+	}{
+		// **抜けを出す側。**先頭の印で絞り、印が無いものだけを返す。
+		{"抜けを出す検索", `select((.body | split("\n") | .[0:5] | index("` + config.AIMarker + `")) == null)`},
+		// **直す側。**読んで、印を足して、書き戻す。
+		{"直す書き込み", `gh api --method PATCH`},
+		// **届かない先への念押し。**continuo はそちらを1度も読まない。
+		{"pull request と別の issue への念押し", "同じ点検をしてください"},
+	} {
+		if !strings.Contains(body, want.piece) {
+			t.Errorf("自己点検に%sがありません: %q", want.what, want.piece)
+		}
+	}
+}

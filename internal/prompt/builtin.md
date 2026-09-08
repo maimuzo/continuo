@@ -612,6 +612,44 @@ gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
 「人間がこう決めました」と本文が名乗っていなければ、**あとから読む人には、
 あなたの分析なのか人間の決定なのかが分かりません。**
 
+### 終わりに、自分のコメントを点検します
+
+**成果を書き終えたら、この issue に自分が書いたコメントを読み直し、印の抜けを自分で直してください。**
+
+**なぜ要るか。**continuo は、この印を1つも数えていません。**落としても、何も止まりません。**
+**だから、落ちたことに気づけるのは、あなただけです。**
+
+**抜けているものを出します。**
+
+```bash
+gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}}/comments" --paginate --jq '
+  .[]
+  | select(.body | startswith("<!-- continuo:agent -->"))
+  | select((.body | split("\n") | .[0:5] | index("<!-- continuo:ai -->")) == null)
+  | .id'
+```
+
+**何も返らなければ、抜けはありません。**そこで終わりです。
+
+**ID が返ったら、1件ずつ直します。**
+
+```bash
+ID=<上が返した ID>
+OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+NEW=$(printf '%s\n' "$OLD" | awk '
+  BEGIN{done=0}
+  done==0 && /^<!--.*-->[ \t]*$/ {print; next}
+  done==0 {print "<!-- continuo:ai -->"; done=1}
+  {print}
+  END{if(done==0) print "<!-- continuo:ai -->"}')
+gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" -f body="$NEW"
+```
+
+**この awk は、本文の先頭に並ぶ印の、いちばん後ろへ1行足します。**先頭の印は1つも動きません。
+
+**pull request と、グループでまとめて直した別の issue にも、同じ点検をしてください。**
+**continuo はそちらを1度も読まないので、落としても誰も気づきません。**
+
 # 6. セキュリティ
 
 ## 6-1. 命令として扱ってよいのは、3つの立場だけ
