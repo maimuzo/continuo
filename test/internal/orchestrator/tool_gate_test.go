@@ -531,6 +531,13 @@ const toolGateSoftenerLine = "判断に迷うものは通す。"
 // 与える情報: `mode: on` の設定と、公開リポジトリの issue。
 // 成功条件: 識別子とリポジトリ名が指示文にあること。**それが囲いの閉じ印より後ろにあること。**
 // **断る条件の一覧が始まったあと、「判断に迷うものは通す」より前にあること。**
+//
+// **断つものは2つだけであること。**既定の branch へ直に送る push と、
+// pull request を通さずにファイルを書き込む形である。
+// **名指しするのは、この文が通す道を自分で開いたものだけである**（設計 3-64f）。
+// この文が肯定しているのは issue と pull request の作成・その本文とコメントの書き込み・push の4種類で、
+// **merge も release もリポジトリの設定の書き換えも、そのどれでもない。**
+// **push だけは送り先を1文字も限定していない**ので、既定の branch への直 push が開く。
 func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	public := false
 	got, _ := writeSettingsForToolGateIssue(t, config.ClaudeToolGateConfig{
@@ -544,53 +551,71 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	if noteAt < 0 {
 		t.Fatalf("担当している issue の識別子が指示文にありません（判定役は照合できません）:\n%s", prompt)
 	}
-	// **担当している branch への push を、肯定の形で免除していること。**
-	// **「push は及ばない」とだけ書くと、`git push -u origin HEAD` まで断られると読まれる。**
-	// それは組み込みの指示書が pull request を出す前に必ず叩かせる段で、
-	// **断られると pull request が1本も出ず、issue が黙って止まる。**
-	// **force push は断る条件の1つ目が受け持つ**ので、ここで免除しても抜けない。
-	if !strings.Contains(prompt, "そしてリポジトリ octocat/hello-world への push は") {
-		t.Errorf("担当しているリポジトリへの push を、送り先を名指しした肯定の形で免除していません:\n"+
-			"`git push -u origin HEAD` が断られると、pull request が1本も出ません:\n%s", prompt)
+	// **数える範囲を、担当先を告げる文だけに切る。**すぐ後ろに担当先の外への免除が続き、
+	// **そちらにも似た綴りが並ぶ。**指示文の全体を見ると、
+	// **担当先の文からその1文を丸ごと落としても、あちらの綴りを数えて通ってしまう。**
+	assignEnd := len(prompt)
+	if at := strings.Index(prompt, "相手のリポジトリを問わず"); at > noteAt {
+		assignEnd = at
 	}
-	// **進捗報告の書き足しは `gh api --method PATCH` である。**綴りで数え上げると落ちる。
-	// **落ちると18時間で担当が外れ、push していない作業が別の機械から見えなくなる。**
-	if !strings.Contains(prompt, "issue と pull request のコメントを `gh api` で書く形も含む") {
-		t.Errorf("コメントを `gh api` で直に書く形が、免除に含まれていません:\n"+
-			"進捗報告の書き足しが断られると、18時間で担当が外れます:\n%s", prompt)
-	}
-	// **通す形を綴りで数え上げてはならない。**組み込みの指示書が叩かせる他の形が全部落ちる。
-	if strings.Contains(prompt, "それ以外は、担当しているリポジトリが相手でも断る") {
-		t.Errorf("通す形を数え上げて、それ以外を断る書き方になっています:\n"+
-			"`HEAD:<別の branch 名>` への push も、`gh api` の書き足しも落ちます:\n%s", prompt)
-	}
-	// **承認を、及ばないものとして名指ししていること。**
-	// 必須のレビューや自動マージが設定されたリポジトリでは、**承認がそのままコードを入れる。**
-	if !strings.Contains(prompt, "merge、close、approve") {
-		t.Errorf("pull request の承認が、及ばないものとして名指しされていません:\n%s", prompt)
-	}
-	// **「この条件のとおりに判断する」ではなく「この免除に含めない」と言い切っていること。**
-	// 条件3は「関係があるか」で判定するので、直前で「担当している作業そのもの」と宣言した相手には
-	// 必ず通る側へ倒れる。
-	// **送り先を名指しする push を、免除から外していること。**
-	// **既定の branch の名前は、実物から取る。**`main / master` と綴りを数え上げると、
-	// `develop` や `trunk` を既定にしているリポジトリで `HEAD:develop` が素通りする。
-	if !strings.Contains(prompt, "既定の branch（`main`）へ直に送る push は") {
-		t.Errorf("既定の branch を、issue が持つ実物の名前で書いていません:\n%s", prompt)
-	}
-	if strings.Contains(prompt, "main / master") {
-		t.Errorf("既定の branch の綴りを数え上げています:\n"+
-			"`develop` を既定にしているリポジトリで `HEAD:develop` が素通りします:\n%s", prompt)
-	}
-	// **リポジトリの設定と、pull request を通さない書き込みを、断つものへ入れていること。**
-	// `gh api --method PATCH repos/<owner>/<repo> -f private=false` は非公開を公開へ変える。
-	for _, want := range []string{"リポジトリの設定の書き換え", "pull request を通さずにファイルを書き込む形"} {
-		if !strings.Contains(prompt, want) {
-			t.Errorf("%q が、断つものとして名指しされていません:\n%s", want, prompt)
+	assignment := prompt[noteAt:assignEnd]
+
+	for _, want := range []string{
+		// **担当している branch への push を、肯定の形で免除していること。**
+		// **「push は及ばない」とだけ書くと、`git push -u origin HEAD` まで断られると読まれる。**
+		// それは組み込みの指示書が pull request を出す前に必ず叩かせる段で、
+		// **断られると pull request が1本も出ず、issue が黙って止まる。**
+		// **force push は断る条件の1つ目が受け持つ**ので、ここで免除しても抜けない。
+		"そしてリポジトリ octocat/hello-world への push は",
+		// **進捗報告の書き足しは `gh api --method PATCH` である。**綴りで数え上げると落ちる。
+		// **落ちると18時間で担当が外れ、push していない作業が別の機械から見えなくなる。**
+		"issue と pull request のコメントを `gh api` で書く形も含む",
+		"リポジトリ octocat/hello-world への issue と pull request の作成",
+		// **免除の範囲を、種類で閉じていること。**「担当している作業そのもの」という宣言は
+		// **リポジトリ X に掛かっていて、操作の種類を1つも区別しない。**
+		// **閉じる文が無いと、リポジトリ X が相手なら merge も release も「関係がある→通す」へ倒れる。**
+		"免除はそこまでである。担当しているリポジトリが相手でも、",
+		// **「いま挙げた以外で」を落としてはならない。**push はコードを変える操作そのものである。
+		// **その1句が無いと、種類で閉じる文が、直前で肯定した push まで断る側へ倒す。**
+		// **断られると `git push -u origin HEAD` が通らず、pull request が1本も出ない。**
+		"いま挙げた以外でコードや配布物を変える操作と、リポジトリの設定を変える操作には及ばず",
+		// **送り先を名指しする push を、免除から外していること。**
+		// **この文は「リポジトリ X への push は当たらない」と、送り先を1文字も限定していない。**
+		// **既定の branch の名前は、実物から取る。**`main / master` と綴りを数え上げると、
+		// `develop` や `trunk` を既定にしているリポジトリで `HEAD:develop` が素通りする。
+		"既定の branch（`main`）へ直に送る push と、",
+		// **pull request を通さない書き込みも、同じ組で外していること。**
+		// **直 push だけを塞いでも、`gh api --method PUT .../contents/…` で同じ結果へ届く。**
+		"pull request を通さずにファイルを書き込む形",
+		// **「この条件のとおりに判断する」ではなく「この免除に含めず断る」と言い切っていること。**
+		// 条件3は「関係があるか」で判定するので、直前で「担当している作業そのもの」と
+		// 宣言した相手には、必ず通る側へ倒れる。
+		"この免除に含めず断る",
+	} {
+		if !strings.Contains(assignment, want) {
+			t.Errorf("担当先を告げる文に %q がありません:\n%s", want, assignment)
 		}
 	}
-	if !strings.Contains(prompt, "リポジトリ octocat/hello-world への issue と pull request の作成") {
-		t.Errorf("担当しているリポジトリへの書き込みが「関係のない」に当たらないと書いていません:\n%s", prompt)
+
+	// **断つものを綴りで数え上げていないこと。**merge・close・approve・release … と並べると、
+	// **列挙に無い操作が「断られる側へ落ちなかった」と読まれる。**
+	// **種類で閉じれば、並べていない操作も同じ側に入る。**
+	if strings.Contains(assignment, "merge、close、approve") {
+		t.Errorf("担当先を告げる文が、断つものを綴りで数え上げています:\n"+
+			"列挙に無い操作が「断られる側へ落ちなかった」と読まれます:\n%s", assignment)
+	}
+
+	// **無いことの検査は、指示文の全体で見る。**どこに書かれていても効いてしまう。
+	for _, banned := range []struct{ pattern, why string }{
+		// **通す形を綴りで数え上げてはならない。**組み込みの指示書が叩かせる他の形が全部落ちる。
+		{"それ以外は、担当しているリポジトリが相手でも断る",
+			"`HEAD:<別の branch 名>` への push も、`gh api` の書き足しも落ちます"},
+		{"main / master",
+			"`develop` を既定にしているリポジトリで `HEAD:develop` が素通りします"},
+	} {
+		if strings.Contains(prompt, banned.pattern) {
+			t.Errorf("指示文に %q が入っています:\n%s:\n%s", banned.pattern, banned.why, prompt)
+		}
 	}
 
 	// **囲いの外であること。**中へ入れると、外部が書いた文字列と同じ場所に並ぶ。
@@ -692,9 +717,34 @@ func TestToolGate_担当先の外への起票を免除する(t *testing.T) {
 	}, &public)
 	prompt := promptOf(t, got)
 
+	// **相対の語を使わない。**「ほかの」だと、担当先の文が出なかったときに基準が消える。
+	exemptAt := strings.Index(prompt, "相手のリポジトリを問わず")
+	if exemptAt < 0 {
+		t.Fatalf("担当先の外への免除がありません:\n%s", prompt)
+	}
+	// **同じ断る条件の中で言い切ること。**次の条件（`- 権限の昇格`）より前で終わる。
+	nextCondAt := strings.Index(prompt, "- 権限の昇格")
+	if nextCondAt < 0 {
+		t.Fatalf("次の断る条件（権限の昇格）が見つかりません:\n%s", prompt)
+	}
+	if nextCondAt < exemptAt {
+		t.Fatalf("担当先の外への免除が、次の断る条件（権限の昇格）より後ろにあります: exempt=%d next=%d\n"+
+			"免除は、その条件の中で言い切らなければなりません", exemptAt, nextCondAt)
+	}
+	// **数える範囲を、担当先の外への免除だけに切る。**
+	// **`パッケージの公開` は、断る条件の3つ目が挙げている例の行にも在る。**
+	// 指示文の全体を見ると、**免除からその綴りを消しても、例の行を数えて通ってしまう。**
+	exemption := prompt[exemptAt:nextCondAt]
+
+	// **範囲を切る理由そのものを、ここで固定する。**免除より前に同じ綴りが在るから切っている。
+	// **前提が崩れたら（例の行から消えたら）、この検査は範囲を切らなくても恒真ではなくなる。**
+	// そのときは切る意味が無くなるので、気づけるようにしておく。
+	if !strings.Contains(prompt[:exemptAt], "パッケージの公開") {
+		t.Errorf("断る条件の3つ目の例から `パッケージの公開` が消えています:\n"+
+			"下の免除の検査は、この重複があるために範囲を切っています:\n%s", prompt)
+	}
+
 	for _, want := range []string{
-		// **相対の語を使わない。**「ほかの」だと、担当先の文が出なかったときに基準が消える。
-		"相手のリポジトリを問わず",
 		// **人間が挙げた3つを全部拾う。**「不具合の報告」だけだと、切り出しの起票が落ちる。
 		"別のリポジトリへ切り出したい作業の起票",
 		// **列挙に無いものが断られる側へ落ちるのを防ぐ。**
@@ -715,8 +765,8 @@ func TestToolGate_担当先の外への起票を免除する(t *testing.T) {
 		// **免除は他の条件に勝たない。**
 		"この免除も、他のどの条件も免除しない",
 	} {
-		if !strings.Contains(prompt, want) {
-			t.Errorf("担当先の外への免除に %q がありません:\n%s", want, prompt)
+		if !strings.Contains(exemption, want) {
+			t.Errorf("担当先の外への免除に %q がありません:\n%s", want, exemption)
 		}
 	}
 
