@@ -24,10 +24,10 @@ import (
 // **こちらは同じ行に `-->` があることも見る**（`isMarkerLine`）。
 // **複数行の HTML コメントの開きで、2つの判定が分かれる。**
 //
-// **1行目だけは例外になる。**本文全体の先頭の空白を先に落とすので、
-// **字下げした1行目の印は、印として通る。**
+// **1行目だけは例外になる。**`withAIMarker` は1行目の空白を落としてから印かどうかを見る。
 // **`handoff.IsMarked` も `FetchComments` も `TrimSpace(body)` してから先頭を見るので、
-// そちらでも同じように通る。**ここだけ通さないと、その2つと判定がずれる。
+// そちらでも字下げした1行目の印は通る。**ここで通さないと、その2つと判定がずれる。
+// **空白そのものは落とさない。**落とすと、4桁字下げのコード片で始まる本文の1行目だけが崩れる。
 //
 // **同じ前提に立つ定数が、他に3つある**（`StartsAsProgressReport` の説明にある一覧）。
 // **印の形を変えるときは4つとも動かすこと。**
@@ -70,17 +70,22 @@ const (
 // body: 印を足す前の本文。**空文字は渡らない**（`ComposeCommentBody` が先に返す）。
 // 戻り値: 印を1行足した本文。**もとの本文は1文字も書き換えない。**
 func withAIMarker(body string) string {
+	line, rest := body, ""
 	if i := strings.IndexByte(body, '\n'); i >= 0 {
-		if isMarkerLine(body[:i]) {
-			return body[:i+1] + config.AIMarker + "\n" + body[i+1:]
-		}
+		line, rest = body[:i+1], body[i+1:]
+	}
+	// **空白を落としてから見る。**読む側（`IsMarked` も `FetchComments` も）は
+	// `TrimSpace(body)` してから先頭を見るので、**字下げした1行目の印は、あちらでは印として通る。**
+	// **ここで通さないと、印がその前へ入り、あちらの先頭一致が全部外れる。**
+	// **空白そのものは落とさない。**落とすと、4桁字下げのコード片で始まる本文の1行目だけが崩れる。
+	if !isMarkerLine(strings.TrimSpace(line)) {
 		return config.AIMarker + "\n" + body
 	}
-	// 改行の無い本文。**印1行だけなら、その後ろへ足す。**前へ入れると先頭一致が外れる。
-	if isMarkerLine(body) {
-		return body + "\n" + config.AIMarker
+	if rest == "" && !strings.HasSuffix(line, "\n") {
+		// 改行の無い、印1行だけの本文。**その後ろへ足す。**前へ入れると先頭一致が外れる。
+		return line + "\n" + config.AIMarker
 	}
-	return config.AIMarker + "\n" + body
+	return line + config.AIMarker + "\n" + rest
 }
 
 // isMarkerLine は、その行が1行で閉じた HTML のコメント（＝印の行）かを返す。
@@ -120,8 +125,9 @@ func isMarkerLine(line string) bool {
 // selfMarker: 本文の先頭に付ける印（`tracker.comments.self_marker`）。
 // **空文字なら付けない。**持ち回りのコメント（入札・hold・released）は、
 // 本文が自分で印を持っているので空文字で渡ってくる。
-// 戻り値: 投稿する本文。**先頭に並ぶ印の、いちばん後ろに `config.AIMarker` が入る。**
-// **既にある印は1つも動かない。**
+// 戻り値: 投稿する本文。**先頭の印の直後に `config.AIMarker` が入る。**
+// **見るのは1行目だけである。**印が2行以上並ぶ本文を渡すと、**印はその2行のあいだへ入る。**
+// **本番の呼び出し元は、そういう本文を作らない**（`withAIMarker` の説明にある12箇所の数え）。
 // **`self_marker` の次とは限らない。**本文が自分で印を持っていれば、その後ろになる
 // （関門の案内は `self_marker` → `continuo:gated:*` → 印 の3行になる）。
 func ComposeCommentBody(body, selfMarker string) string {
@@ -166,7 +172,7 @@ func ComposeCommentBody(body, selfMarker string) string {
 	}
 	full := withAIMarker(body)
 	if selfMarker != "" {
-		// **改行は `\n` である。**CRLF は扱わない（理由は `spliceAIMarker` にある）。
+		// **改行は `\n` である。**CRLF は扱わない（理由は `withAIMarker` にある）。
 		full = selfMarker + "\n" + full
 	}
 	return full

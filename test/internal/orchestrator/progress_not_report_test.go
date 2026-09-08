@@ -207,14 +207,17 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 		t.Errorf("機械が書いた印が、エージェントの印より前にあります（%d と %d）:\n%s", i, j, sent)
 	}
 	// **見本の印は行頭から始めさせる。**字下げした見本を写すと、印が本文の一部になる。
-	// `FetchComments` の先頭一致も `handoff.StartsAsProgressReport` も、行頭の印しか数えない。
+	// `handoff.StartsAsProgressReport` は、行頭の印しか数えない。
+	//
+	// **見るのは機械の印だけである。**エージェントの印は、この文面では
+	// `gh issue comment … --body "<印>` の形でしか出てこず、**単独の行にならない。**
+	// 両方を見る形にすると、片方が必ず素通りして、**2つとも固定しているつもりになる。**
 	for _, line := range strings.Split(sent, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != config.AIMarker && trimmed != marker {
+		if strings.TrimSpace(line) != config.AIMarker {
 			continue
 		}
-		if line != trimmed {
-			t.Errorf("見本の印が字下げされています: %q", line)
+		if line != strings.TrimSpace(line) {
+			t.Errorf("見本の機械の印が字下げされています: %q", line)
 		}
 	}
 }

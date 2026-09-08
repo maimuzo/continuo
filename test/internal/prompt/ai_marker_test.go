@@ -44,8 +44,11 @@ var markersThatMustComeFirst = []string{
 // **印の値は `config.AIMarker` から取る。**リテラルで書くと、定数を変えたときに
 // **エージェントは古い印を書き続けるのに、この検査は落ちない。**
 //
+// **散文で名前を出しているだけでは通さない。**見本の中に、印だけの行として出ていることを見る。
+// `strings.Contains` で見ていたときは、**見本から印を消しても、同じ節の散文が印に触れていれば緑のままだった。**
+//
 // 与える情報: prompt.Builtin() の、コメントを書かせる節。
-// 成功条件: どの節にも印が入っていること。
+// 成功条件: どの節にも、印だけの行があること。
 func TestTemplate_コメントを書かせる節すべてに機械の印がある(t *testing.T) {
 	body := prompt.Builtin()
 
@@ -61,8 +64,15 @@ func TestTemplate_コメントを書かせる節すべてに機械の印があ�
 		"## 7-2. まとめて直したとき",
 	} {
 		section := sectionOf(t, body, heading)
-		if !strings.Contains(section, config.AIMarker) {
-			t.Errorf("%q の節が %s を書かせていません。"+
+		found := false
+		for _, line := range strings.Split(section, "\n") {
+			if strings.TrimSpace(line) == config.AIMarker {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%q の節の見本に、%s だけの行がありません。"+
 				"この節が書かせるコメントだけ、人間が書いたものと見分けが付かなくなります",
 				heading, config.AIMarker)
 		}

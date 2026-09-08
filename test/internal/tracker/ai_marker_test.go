@@ -267,3 +267,21 @@ func TestComposeCommentBody_続く行の綴りに引きずられない(t *testin
 		t.Fatalf("続く行の綴りに引きずられました:\n got %q\nwant %q", got, want)
 	}
 }
+
+// 目的: 字下げした1行目の印を、印として通すことを固定する（設計 3-82）。
+//
+// **読む側は `TrimSpace(body)` してから先頭を見る**（`handoff.IsMarked` も `FetchComments` も）。
+// **ここで通さないと、印がその前へ入り、あちらの先頭一致が全部外れる。**
+// 入札のコメントが別の機械から読めなくなり、continuo 自身の通知も外せなくなる。
+//
+// **空白そのものは落とさない。**落とすと、4桁字下げのコード片で始まる本文の1行目だけが崩れる。
+//
+// 与える情報: 1行目が字下げされた印の本文。
+// 成功条件: 印がその行の直後に入り、字下げが1文字も落ちないこと。
+func TestWithAIMarker_字下げした1行目の印も印として通す(t *testing.T) {
+	body := "  " + config.HandoffBidMarker + "\n{\"score\":190}\n"
+	want := "  " + config.HandoffBidMarker + "\n" + config.AIMarker + "\n{\"score\":190}\n"
+	if got := tracker.ComposeCommentBody(body, ""); got != want {
+		t.Fatalf("字下げした印の前に入りました:\n got %q\nwant %q", got, want)
+	}
+}
