@@ -214,24 +214,6 @@ func (o *Orchestrator) newWorkBlockedWith(
 	return skip
 }
 
-// newWorkThresholdPercent は、その枠がこれに達すると新規着手が止まる使用率を返す
-// （設計 3-77j）。
-//
-// **「これを超えたら」ではなく「これに達したら」である**（人間の決定。2026-09-06）。
-// 余裕値は `100 − 使用率 − マージン` で、**0 も「余裕が無い」に含める。**
-// 既定のマージン10なら、使用率90で余裕値0なので**止まるのは90からである。**
-//
-// **枠ごとに呼ぶ。**5時間と1週間でマージンが違う設定にできるので、
-// **1つにまとめると、どちらの枠にも当たらない値を出すことになる。**
-//
-// margin: その枠のマージン（%）。
-// 戻り値: これに達すると新規着手が止まる使用率（%）。
-func (o *Orchestrator) newWorkThresholdPercent(margin int) int {
-	// **100 をここで書かない**（issue #173）。**判定を持っている package から引く。**
-	// **写しを持つと、`handoff.Short` が使う線と、ここが出す数字が別々に動きうる。**
-	return handoff.ThresholdPercent(margin)
-}
-
 // quotaSnapshotWithStale は、最後に読んだ枠と「直前の読み取りに失敗しているか」を、
 // **1回のロックで**取り出す（設計 3-77j）。
 //
@@ -423,7 +405,13 @@ func (o *Orchestrator) logNewWorkBlocked(
 // margin: その枠のマージン（%）。
 // 戻り値: ログに出す値。
 func (o *Orchestrator) thresholdText(margin int) string {
-	return strconv.Itoa(o.newWorkThresholdPercent(margin)) + "% に達したら止まります"
+	// **「これを超えたら」ではなく「これに達したら」である**（人間の決定。2026-09-06）。
+	// 余裕値は `100 − 使用率 − マージン` で、**0 も「余裕が無い」に含める。**
+	// 既定のマージン10なら、使用率90で余裕値0なので**止まるのは90からである。**
+	//
+	// **100 をここで書かない**（issue #173）。**判定を持っている package から引く。**
+	// **写しを持つと、`handoff.Short` が使う線と、ここが出す数字が別々に動きうる。**
+	return strconv.Itoa(handoff.ThresholdPercent(margin)) + "% に達したら止まります"
 }
 
 // bidMargins は入札の余裕値を作るときに引くマージンを返す（設計 3-77。issue #173）。

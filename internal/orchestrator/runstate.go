@@ -182,6 +182,15 @@ type runState struct {
 	// **この項目は、手放しの判定が自分で読んだ連番だけを覚える。**
 	// **2回続けて同じなら「その間に状態が1度も変わっていない」である。**
 	QuotaProbeStateSeq uint64
+	// quotaReleaseUnknownWarned は「担当を確かめられないので見送ります」を
+	// 既に1回出したかどうかである（issue #173）。
+	//
+	// **run ごとに1回だけ出すために持つ。**issue がカンバンから見えなくなった run は
+	// 手放しの経路で永久に確かめられず、**毎巡回で出すと既定の30秒間隔で1時間に120行になる。**
+	// **理由を読みやすくするのが issue #173 の目的なので、そこを埋めてはならない。**
+	//
+	// **`beginAttempt` で偽へ戻す。**やり直した attempt では、また1回出してよい。
+	quotaReleaseUnknownWarned bool
 	// QuotaProbeSeen は、上の連番を1度でも読んだかを表す。
 	//
 	// **連番は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
@@ -1155,11 +1164,37 @@ func (rs *runState) noteQuotaProbe(seq uint64) (bool, bool) {
 	// **返す版では、この枝へ来ない。**`agent_status` が `idle` か `done` を返す時点で、
 	// **内部の状態は初期値の `Unknown` から必ず1度は変わっており、連番は1以上である。**
 	// **だから、ここで落ちるのは「返さない版」だけである。**
+	// **連番が 0 なら、何も覚えずに「まだ」と答える。**
+	// **この門は `paneStopped` の側にもある**（[internal/orchestrator/reconcile.go](reconcile.go) の
+	// `if agent.StateChangeSeq == 0`）**が、そちらに任せてはならない。**
+	// **この関数の doc と `beginAttempt` のコメントが「比べる前に落としている」と書いており、
+	// それを信じた2人目の呼び出し側が 0 と 0 を比べて恒真へ戻る。**
+	// **`revision` で踏んだ穴と同じ形である**（issue #173）。
+	if seq == 0 {
+		return false, false
+	}
 	first := !rs.QuotaProbeSeen
 	same := rs.QuotaProbeSeen && rs.QuotaProbeStateSeq == seq
 	rs.QuotaProbeStateSeq = seq
 	rs.QuotaProbeSeen = true
 	return same, first
+}
+
+// noteQuotaReleaseUnknown は「担当を確かめられないので見送ります」を出してよいかを返す
+// （issue #173）。
+//
+// **1回目だけ真を返す。**2回目からは偽である。
+// **`beginAttempt` が偽へ戻すので、やり直した attempt では また1回出せる。**
+//
+// 戻り値: この attempt で初めてなら true。
+func (rs *runState) noteQuotaReleaseUnknown() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.quotaReleaseUnknownWarned {
+		return false
+	}
+	rs.quotaReleaseUnknownWarned = true
+	return true
 }
 
 // markAfterRunDone は `workspace_hooks.after_run` を走らせ切ったことを覚える（issue #197）。
@@ -1893,10 +1928,14 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	// **attempt をまたいで持ち越すものは、ここで全部戻すのが筋である。**
 	//
 	// **「欄を返さない herdr の版で恒真へ戻る」経路は、ここが塞いでいるのではない。**
-	// **`noteQuotaProbe` が、比べる前に「連番が 0 なら偽」で落としている。**
+	// **`noteQuotaProbe` が、比べる前に「連番が 0 なら偽」で落としている**
+	// （2026-09-09 に、その門を `noteQuotaProbe` の本体へ入れた。
+	// それまでは `paneStopped` にしか無く、この文と食い違っていた）。
 	// **そちらを消すと、この2行があっても穴は開く。**
 	rs.QuotaProbeSeen = false
 	rs.QuotaProbeStateSeq = 0
+	// **「担当を確かめられない」の1回きりの Warn も戻す**（issue #173）。
+	rs.quotaReleaseUnknownWarned = false
 	// **「1週間の枠の余裕が無くなった時刻」も忘れる**（issue #173）。
 	//
 	// **やり直した attempt は、新しい agent と新しい pane である。**

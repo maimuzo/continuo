@@ -1010,10 +1010,16 @@ grep -E '枠に余裕が無いので|枠を読めないので' <ログの出力�
 1週間の枠が明けるのを待つ上限を超えたので、担当を手放しました（次の担当は入札で決め直します。
 worktree は残します。カンバンへは書きません）
   identifier=octocat/hello-world#188 外した担当者=octocat
+  after_run が成功したか=true
   weekly_wait_limit_minutes=300 余裕の無い枠=weekly_scoped
 ```
 
-**`余裕の無い枠` を見てください。**`weekly_scoped` は**モデル別の週次の枠**です。
+**まず `after_run が成功したか` を見てください。**
+**`true` なら、あなたが `workspace_hooks.after_run` に書いた `git push` が走り切っています。**
+**`false` なら走り切っていません。**手元の commit が残っている可能性があるので、
+worktree を開いて `git log --oneline HEAD --not --remotes` を叩いてください。
+
+**次に `余裕の無い枠` を見てください。**`weekly_scoped` は**モデル別の週次の枠**です。
 **claude.ai の画面に出る週次の全体（`weekly_all`）が30%でも、
 よく使っているモデルの `weekly_scoped` に余裕が無ければ、こちらで止まります。**
 **「余裕が無い」は `100 − 使用率 − マージン` が0以下のことです。**マージンが既定の10なら使用率90%からです。

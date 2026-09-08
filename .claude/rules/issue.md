@@ -15,18 +15,18 @@ issueは優先順位を計画して人間確認してから着手すること」
 **ここでいう AI は、人間と直接やりとりしているエージェントである。**
 **continuo が起動したエージェントは、この節が言う「カンバンの操作」をしない。**
 issue をカンバンへ載せることも、Status を付けることも、並べ替えることもしない
-（載せることと Status は [docs/plans/continuo_design.md:9453](../../docs/plans/continuo_design.md#L9453)、
+（載せることと Status は [docs/plans/continuo_design.md:9447](../../docs/plans/continuo_design.md#L9447)、
 並べ替えは [docs/plans/continuo_design.md:9634-9638](../../docs/plans/continuo_design.md#L9634-L9638) の 4-4 の表に
 「continuo が起動したエージェント」の行が無いこと）。
 **ただし「1バイトも触らない」ではない。**設計は、そのエージェントが自分で `gh` を叩いて
 `In Progress` → `Blocked` を動かす経路を認めている
-（[docs/plans/continuo_design.md:9459](../../docs/plans/continuo_design.md#L9459)）。
+（[docs/plans/continuo_design.md:9453](../../docs/plans/continuo_design.md#L9453)）。
 **組み込みの指示書は、それを勧めてはいない**
 （[internal/prompt/builtin.md:289](../../internal/prompt/builtin.md#L289) は「あなたが `gh` を叩く必要はありません」）。
 そちらは応答の最後に `CONTINUO-STATUS:` の1行を書くだけで、Status を動かすのは continuo である。
 
 **カンバンの操作は AI が行う。**ただし 4-1 の遷移表で「誰が」の欄が「人間」だけの3つは人間である
-（[docs/plans/continuo_design.md:9451-9462](../../docs/plans/continuo_design.md#L9451-L9462)）。
+（[docs/plans/continuo_design.md:9445-9457](../../docs/plans/continuo_design.md#L9445-L9457)）。
 
 | 遷移 | いつ |
 | --- | --- |
@@ -60,7 +60,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 `Ready` と `In Progress` の2つで（[internal/config/default.go:107](../../internal/config/default.go#L107)）、
 **`Ice Box` は入っていない。**段3 で issue を `Ice Box` へ置く以上、上げる段が要る。
 **上げるのは人間で、GitHub の画面から行う**
-（[docs/plans/continuo_design.md:9455](../../docs/plans/continuo_design.md#L9455) の 4-1 の遷移表）。
+（[docs/plans/continuo_design.md:9448](../../docs/plans/continuo_design.md#L9448) の 4-1 の遷移表）。
 **AI は、人間に名指しで頼まれない限り、ここを代行しない。**理由は3つある。
 
 | 何が | なぜ |
@@ -86,7 +86,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:4340](../../docs/plans/continuo_design.md#L4340)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「GitHub Projects v2 の project #3 は本番のカンバンである」。**Status の値が全部消える** |
 | **段4 のあと、`Ice Box` の item はカンバン全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
-| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9524](../../docs/plans/continuo_design.md#L9524)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:406-408](../../internal/orchestrator/dispatch.go#L406-L408) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4281](../../docs/plans/continuo_design.md#L4281) の本文である**） |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9524](../../docs/plans/continuo_design.md#L9524)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:445-446](../../internal/orchestrator/dispatch.go#L445-L446) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4281](../../docs/plans/continuo_design.md#L4281) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
@@ -125,7 +125,7 @@ typo1件のために104件のカンバンを並べ替えるのが、この節の
 | --- | --- | --- |
 | **1** | **AI** | 同一原因・同一ファイル・同一コンポーネントでまとめ、**代表を1つ決める** |
 | **2** | **AI** | **計画を代表の issue のコメントに書く** |
-| **3** | **AI** | **グループの代表以外のうち、`Ready` か `In Progress` に在るものを `Ice Box` へ落とす**（[docs/plans/continuo_design.md:9455](../../docs/plans/continuo_design.md#L9455) の 4-1 の遷移表）。`updateProjectV2ItemFieldValue` を叩く |
+| **3** | **AI** | **グループの代表以外のうち、`Ready` か `In Progress` に在るものを `Ice Box` へ落とす**（[docs/plans/continuo_design.md:9449](../../docs/plans/continuo_design.md#L9449) の 4-1 の遷移表）。`updateProjectV2ItemFieldValue` を叩く |
 | **4** | **AI** | **代表以外を、代表の sub-issue にする。**`addSubIssue` を叩く（下の実例のとおり `GraphQL-Features: sub_issues` のヘッダを付ける。2026-09-04 時点では無くても schema に出るが、付けておく） |
 | **5** | **AI** | **代表（とグループを持たない issue）を、リリース管理の issue の sub-issue にする。**無ければ1件立てる（下の「リリースに入れるものを、issue 1件で管理する」） |
 

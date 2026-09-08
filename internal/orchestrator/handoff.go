@@ -680,14 +680,36 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
-func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *runState) {
+func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *runState, shortKinds string) {
 	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		_ = o.releaseBecauseQuotaWaitClaimed(ctx, rs)
+		if o.releaseBecauseQuotaWaitClaimed(ctx, rs, shortKinds) {
+			return
+		}
+		// **見送ったなら、turn ループを立て直す**（issue #173）。
+		//
+		// **`beginTerminal` が `terminating` を立てた時点で、turn ループは抜けている。**
+		// `currentWorker` が `terminating` を見るようにしたためである
+		// （枠の上限で手放す経路が、`after_run` の最中に新しい指示を送られると
+		// 書きかけの木を push することになるので、そこは塞いだままにする）。
+		// **抜けた turn ループを立て直すのは、ここしかない。**
+		// `startTurnLoop` を呼ぶのは着手と復元だけで、**どちらもこの run には来ない。**
+		//
+		// **立て直さないと、run は pane とスロットを握ったまま、指示を送る者がいなくなる。**
+		// **枠が明けても再開できず、`claude.turn_timeout_ms`（既定1時間）後に
+		// 打ち切りがリトライを1つ焼いて片付けるまで残る。**
+		//
+		// **見送りは3通りある**（担当を確かめられない／`after_run` が終わらない／
+		// 担当者を外せない）。**どれも「次の巡回でやり直す」ことを前提にしている。**
+		if !o.startTurnLoop(ctx, rs, true) {
+			o.logger.Warn("手放しを見送ったあと、turn ループを立て直せませんでした"+
+				"（この run は打ち切りが片付けます）",
+				"identifier", rs.issue().Identifier)
+		}
 	}()
 }
 
@@ -740,14 +762,17 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 //
 // ctx: 呼び出しに適用するコンテキスト。**この中で作り直すので、期限切れでもよい。**
 // rs: 対象の run。
-func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState) bool {
+func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *runState, shortKinds string) bool {
 	issue := rs.issue()
-	// **どの枠に余裕が無いかを控える。**下の `Info` と `Warn` に載せる。
-	// **載せないと、`weekly_scoped`（1週間のモデル別の枠）が原因のときに、
-	// 人間が claude.ai の画面と突き合わせても食い違って見える。**
+	// **`shortKinds`（どの枠に余裕が無いか）は、呼び出し側が受け取って渡す。**
+	// **ここで `quotaSnapshotWithStale` を呼び直してはならない**（issue #173）。
+	// **手放すと決めたのは巡回が1回のロックで取った写しであり、
+	// この goroutine が走るころには `pollQuota` が差し替えているか、古い印が付いている。**
+	// **読み直すと、判定した写しとログに出す数字が別々の読み取りから作られる。**
+	// **利用者が claude.ai の画面と突き合わせたときに、どちらが根拠か決められなくなる。**
+	//
+	// **載せないという選択も採らない。**`weekly_scoped`（1週間のモデル別の枠）が原因のときに、
 	// **理由が既定の水準で出ないのは、issue #173 が直そうとしている症状そのものである。**
-	shortSnap, _ := o.quotaSnapshotWithStale()
-	shortKinds := strings.Join(shortSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
 
 	// **後片付けは「止めろ」と言われても最後までやる**（`stopBecauseHandoffLost` と同じ理由）。
 	// **`stopWorker` は待ちの ctx を殺す**ので、そのまま使うと後続の書き込みが打ち切られる。
@@ -788,9 +813,16 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		// **`verifyHandoff` と向きを変える。**あちらは「走っている run を止めてよいか」なので、
 		// **分からないときは止めない側へ倒す。**こちらは「push してよいか」なので、
 		// **分からないときは push しない側へ倒す。**
-		o.logger.Warn("枠の上限で担当を手放そうとしましたが、いまの担当を確かめられないので見送ります"+
-			"（次の巡回でやり直します）",
-			"identifier", issue.Identifier)
+		// **run ごとに1回だけ出す**（issue #173）。
+		// **issue がカンバンから見えなくなった run は、ここで永久に確かめられない。**
+		// **毎巡回で出すと、既定の30秒間隔で1時間に120行になる。**
+		// **理由を読みやすくするのが issue #173 の目的なので、そこを埋めてはならない。**
+		// **見えなくなった run は `reconcileRunning` が止める。**
+		if rs.noteQuotaReleaseUnknown() {
+			o.logger.Warn("枠の上限で担当を手放そうとしましたが、いまの担当を確かめられないので見送ります"+
+				"（次の巡回でやり直します。この行は run ごとに1回だけ出します）",
+				"identifier", issue.Identifier)
+		}
 		rs.endTerminal()
 		return false
 	case !mine:

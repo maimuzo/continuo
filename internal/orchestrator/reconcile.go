@@ -269,7 +269,14 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 		}
 		switch {
 		case !st.QuotaResetAt.IsZero() && !now.Before(st.QuotaResetAt):
+			// **ここでもログを出す**（issue #173）。
+			// **「枠待ちと判定したので stall の時計を止めます」に対になる行が要る。**
+			// **こちらがいちばん多い枝である**（枠は時刻で明ける）。
+			// **出さないと、止まった run が再開したのかどうかを利用者が読めない。**
 			rs.clearWaitingQuota(now)
+			o.logger.Info("枠のリセット時刻を過ぎたので、枠待ちの印を外します"+
+				"（入札できるとは限りません。余裕値はマージンのぶん手前で尽きます）",
+				"identifier", st.Identifier, "resets_at", st.QuotaResetAt)
 		case !full:
 			o.logger.Info("使い切っている枠が無くなったので、枠待ちの印を外します"+
 				"（入札できるとは限りません。余裕値はマージンのぶん手前で尽きます）",
@@ -394,7 +401,10 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 			handling[rs] = true
 			continue
 		}
-		o.releaseBecauseQuotaWaitAsync(ctx, rs)
+		// **どの枠に余裕が無いかは、判定に使ったこの写しから取る**（issue #173）。
+		// **手放しの本体で読み直すと、判定した写しとログに出す数字が別々になる。**
+		shortKinds := strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
+		o.releaseBecauseQuotaWaitAsync(ctx, rs, shortKinds)
 	}
 	return handling
 }
