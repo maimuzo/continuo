@@ -1149,7 +1149,13 @@ func (rs *runState) noteWeeklyShort(short bool, now time.Time) time.Time {
 //
 // seq: いま読んだ `state_change_seq`。
 // 戻り値: 前に読んだ連番と同じなら true。
-func (rs *runState) noteQuotaProbe(seq uint64) bool {
+// 戻り値の2つ目は「この呼び出しが1回目の観測だったか」である（issue #173）。
+//
+// **打ち切りから守ってよいのは、1回目を取った直後の1巡回だけである。**
+// **2回目以降も守ると、状態が往復する run**（巡回のたびに `idle` → `working` → `idle`）**が
+// 永久に守られる。**手放しは2回続けて同じ連番を見ないと成立しないので、
+// **その run は手放されもせず打ち切られもせず、pane とスロットを握ったまま残る。**
+func (rs *runState) noteQuotaProbe(seq uint64) (bool, bool) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	// **連番が 0 なら「読めなかった」として扱う**（issue #173）。
@@ -1162,15 +1168,11 @@ func (rs *runState) noteQuotaProbe(seq uint64) bool {
 	// **返す版では、この枝へ来ない。**`agent_status` が `idle` か `done` を返す時点で、
 	// **内部の状態は初期値の `Unknown` から必ず1度は変わっており、連番は1以上である。**
 	// **だから、ここで落ちるのは「返さない版」だけである。**
-	if seq == 0 {
-		rs.QuotaProbeStateSeq = 0
-		rs.QuotaProbeSeen = false
-		return false
-	}
+	first := !rs.QuotaProbeSeen
 	same := rs.QuotaProbeSeen && rs.QuotaProbeStateSeq == seq
 	rs.QuotaProbeStateSeq = seq
 	rs.QuotaProbeSeen = true
-	return same
+	return same, first
 }
 
 // markAfterRunDone は `workspace_hooks.after_run` を走らせ切ったことを覚える（issue #197）。

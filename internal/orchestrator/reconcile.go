@@ -476,7 +476,12 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 		// **判定できないときは、打ち切りに任せる。**
 		return false, false
 	}
-	return rs.noteQuotaProbe(agent.StateChangeSeq), true
+	stopped, first := rs.noteQuotaProbe(agent.StateChangeSeq)
+	// **守ってよいのは、1回目の観測を取った直後の1巡回だけである**（issue #173）。
+	// **2回目以降も守ると、状態が往復する run が永久に守られる。**
+	// **手放しは2回続けて同じ連番を見ないと成立しないので、
+	// その run は手放されもせず打ち切られもせず、pane とスロットを握ったまま残る。**
+	return stopped, stopped || first
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
