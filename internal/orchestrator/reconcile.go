@@ -416,7 +416,10 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 // **`runningSubagentList()` は使えない。**一度は3つ目の条件にしたが、取り下げた。
 // **あの一覧を空にする経路は、次の turn を始めるときと `SubagentStop` を受けたときの2つしか無い**
 // （`runState.beginTurn` と `noteSubagentStop`）。
-// **枠待ちの最中は、どちらも起きない。**次の turn は枠が明けるまで送られず、hook も来ない。
+// **3つ目がある。**`Stop` が `background_tasks` を空で載せて届いたときも空になる
+// （`runstate.go` の `noteHook`）。
+//
+// **枠待ちの最中は、3つとも起きない。**次の turn は枠が明けるまで送られず、hook も来ない。
 // **つまり、枠が尽きた瞬間にサブエージェントが走っていた run は、一覧が永久に空にならず、
 // この関数が二度と真を返さない。**手放しの仕組みが、いちばん効いてほしい場面で1回も動かなくなる。
 //
