@@ -891,6 +891,39 @@ func TestQuota_毎回状態が変わっていたら手放さない(t *testing.T)
 	}
 }
 
+// TestQuota_連番を返さない版では手放さない は、安全側へ倒すことを確かめる（issue #173）。
+//
+// 目的: **`state_change_seq` は `omitempty` である。**欄を返さない herdr の版では
+// **全 agent が 0 として読まれる。**そのまま比べると「2回続けて同じ」が常に成り立ち、
+// **判定は `revision` のときと同じ恒真へ戻る。**
+// **恒真へ戻るくらいなら、手放さない側へ倒す。**
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後（上限を超える）。
+// **連番は1度も増やさない**（＝欄を返さない版の再現）。
+// 成功条件: **何回巡回しても手放さないこと。**
+func TestQuota_連番を返さない版では手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W8")
+
+	// **欄を返さない版の herdr を作る。**
+	fx.Herdr.ClearStateSeq()
+
+	for i := 0; i < 60; i++ {
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			t.Fatalf("連番を読めない版なのに手放しました（%d 回目の巡回）:\n%s", i, fx.Logs.String())
+		}
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("担当者が変わっている: %v", got)
+	}
+}
+
 // TestQuota_5時間の枠だけなら上限を超えても待ち続ける は、人間が決めた表の1行目を確かめる。
 //
 // 目的: **2026-08-26 の決定「5時間枠 → 待つ。担当は変えない」。**

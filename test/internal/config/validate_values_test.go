@@ -241,6 +241,10 @@ func TestValidate_数値の範囲を外れたら弾く(t *testing.T) {
 		// **その機械は永久に入札せず、走っている run も全部手放す。**
 		{"5時間のマージンが100", "five_hour_margin_percent",
 			"      five_hour_margin_percent: 100", "five_hour_margin_percent"},
+		// **1週間の側も同じく弾く。**片方だけ検査すると、
+		// **もう片方を `> 100` へ戻す変更が通ってしまう**（周りの触っていないキーはその形である）。
+		{"1週間のマージンが100", "weekly_margin_percent",
+			"      weekly_margin_percent: 100", "weekly_margin_percent"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := loadWithReplaced(t, tc.key, tc.line)

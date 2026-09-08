@@ -1152,6 +1152,21 @@ func (rs *runState) noteWeeklyShort(short bool, now time.Time) time.Time {
 func (rs *runState) noteQuotaProbe(seq uint64) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
+	// **連番が 0 なら「読めなかった」として扱う**（issue #173）。
+	//
+	// **`state_change_seq` は `omitempty` である。**欄を返さない herdr の版では、
+	// **全 agent が 0 として読まれる。**そのまま比べると「2回続けて同じ」が常に成り立ち、
+	// **判定は `revision` のときと同じ恒真へ戻る。**
+	// **herdr 0.8.2 は返す**（実測。1378 / 1382 / 1384）が、**返さない版と見分けられない。**
+	//
+	// **返す版では、この枝へ来ない。**`agent_status` が `idle` か `done` を返す時点で、
+	// **内部の状態は初期値の `Unknown` から必ず1度は変わっており、連番は1以上である。**
+	// **だから、ここで落ちるのは「返さない版」だけである。**
+	if seq == 0 {
+		rs.QuotaProbeStateSeq = 0
+		rs.QuotaProbeSeen = false
+		return false
+	}
 	same := rs.QuotaProbeSeen && rs.QuotaProbeStateSeq == seq
 	rs.QuotaProbeStateSeq = seq
 	rs.QuotaProbeSeen = true

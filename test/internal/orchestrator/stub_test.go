@@ -55,7 +55,12 @@ type stubHerdr struct {
 // status: AgentGet / AgentWait が返す状態。
 // 戻り値: 組み立てた stub。
 func newStubHerdr(status herdr.AgentStatus) *stubHerdr {
-	return &stubHerdr{status: status}
+	// **連番は 1 から始める**（issue #173）。**実機がそう返す。**
+	// herdr は agent の状態が初期値の `Unknown` から1度でも変われば連番を刻むので、
+	// **`idle` や `working` を返す agent の連番は必ず1以上である。**
+	// **0 は「欄を返さない版の herdr」を意味し、手放しの判定はそれを安全側へ倒す。**
+	// **その振る舞いは `ClearStateSeq` で作る。**
+	return &stubHerdr{status: status, stateSeq: 1}
 }
 
 // SetStatus は AgentGet が返す状態を差し替える。
@@ -72,6 +77,16 @@ func (s *stubHerdr) BumpRevision() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.revision++
+}
+
+// ClearStateSeq は AgentGet が返す state_change_seq を 0 にする（issue #173）。
+//
+// **`state_change_seq` を返さない herdr の版の再現である。**
+// `omitempty` なので、欄が無ければ Go 側では 0 になる。
+func (s *stubHerdr) ClearStateSeq() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stateSeq = 0
 }
 
 // BumpStateSeq は AgentGet が返す state_change_seq を1つ増やす（issue #173）。

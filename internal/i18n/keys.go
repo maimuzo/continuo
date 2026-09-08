@@ -1388,7 +1388,7 @@ const (
 	// tracker.provider.handoff.on_assignee_gate に知らない値が入っているときに出る。
 	KeyConfigValidateHandoffOnAssigneeGate Key = "config.validate.handoff_on_assignee_gate"
 	// KeyConfigValidateRateLimitWeeklyWaitRange は
-	// rate_limit.weekly_wait_limit_minutes が負のときに出る（issue #197）。
+	// rate_limit.weekly_wait_limit_minutes が負のとき、または上限を超えたときに出る（issue #197）。
 	KeyConfigValidateRateLimitWeeklyWaitRange Key = "config.validate.rate_limit_weekly_wait_range"
 )
 
