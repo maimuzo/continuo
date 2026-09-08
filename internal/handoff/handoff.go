@@ -289,18 +289,29 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 // 戻り値: その枠を使い切っていれば true を返す関数。**`Snapshot` の選別に渡す。**
 func Full() func(l ratelimit.Limit) bool {
 	return func(l ratelimit.Limit) bool {
-		// **知らない種別も数える**（issue #173）。
+		// **知らない種別は数えない**（issue #173）。**`Short` と同じ集合である。**
 		//
-		// **一度、`Short` と同じ集合へ狭めたが、戻した。**
-		// **狭めると、使用量 API が種別を増やしたときに、100% のその枠で
-		// 本当に止まっている run が「枠待ちではない」と読まれて打ち切られる。**
-		// **リトライを焼き、いずれ `failure_state` へ落ちる。**
+		// **4つの判定を1つの集合に揃える。**`Full` / `Short` / `ShortWeekly` /
+		// `Evaluate`（`SessionPercent` と `WeeklyPercent`）の4つで、
+		// **見る種別が違うと、どれかが立てた状態をどれかが外せなくなる。**
 		//
-		// **こちらは広いほうが安全である。**この判定が真になると打ち切りの時計が止まる。
-		// **間違えて止めたときに失うのは「固まった run の片付けが遅れる」ことだけで、
-		// 打ち切りを切っている機械と同じ状態にすぎない。**
+		// **広げていた時期がある。**「100% の未知の枠で本当に止まっている run を
+		// 打ち切ってしまう」を避けるためだったが、**そちらのほうが重い状態を作っていた。**
 		//
-		// **`Short` との食い違いは、`Short` の側で塞いだ**（そちらも知らない種別を拾う）。
+		//	広い … 印が立ち、`Short` が偽なので手放しも起きず、`resets_at` が `null` なら
+		//	       時刻でも外れない。**その run は再起動まで凍り、スロットと pane を握り続ける。**
+		//	       しかも `Evaluate` はその枠を見ないので、**機械は新しい issue を取り続ける**
+		//	狭い … 印が立たず、`claude.turn_timeout_ms` で打ち切られてリトライを積む。
+		//	       **`agent.max_retries` で `failure_state` へ落ち、人間が Status を戻せば復帰する**
+		//
+		// **狭いほうの害は上限があり、人の目に見え、戻せる。**広いほうの害は上限が無い。
+		//
+		// **使用量 API が種別を増やしたときに入札を止めるのは、`Evaluate` の仕事である。**
+		// この関数ではない（`Short` の既定の枝も同じことを書いている）。
+		if !matchesKind(l.Kind, weeklyKinds) && !matchesKind(l.Kind, sessionKinds) {
+			return false
+		}
+		// **`>=` で比べる。**API が 100 を超える値を返しても取りこぼさない。
 		return l.Percent >= fullPercent
 	}
 }

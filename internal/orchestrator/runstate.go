@@ -201,6 +201,11 @@ type runState struct {
 	// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す。**
 	// **既定の30秒間隔で1時間に240行になる。**
 	quotaReleaseFailedWarned bool
+	// issueRefreshFailedWarned は「issue を取り直せません」を既に1回出したかである（issue #173）。
+	//
+	// **`refreshIssue` の呼び出し元4つに共通で効く。**枠の上限で担当を手放す経路は、
+	// **失敗すると毎巡回ここへ戻る**ので、GitHub が読めないあいだ1時間に120行になる。
+	issueRefreshFailedWarned bool
 	// QuotaProbeSeen は、上の連番を1度でも読んだかを表す。
 	//
 	// **連番は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
@@ -1164,12 +1169,17 @@ func (rs *runState) noteWeeklyShort(short bool, now time.Time) {
 // 戻り値: 前に読んだ連番と同じなら true。
 // 戻り値の2つ目は「この呼び出しが1回目の観測だったか」である（issue #173）。
 //
-// **2つ目の戻り値は、いまどこも読んでいない**（issue #173）。
-// **`paneStopped` は「連番を読めたなら守る」へ変えたので、1回目かどうかを見ない。**
-// **残してあるのは、`beginAttempt` が控えを戻す理由の説明が、この値の意味に乗っているためである。**
-// **2回目以降も守ると、状態が往復する run**（巡回のたびに `idle` → `working` → `idle`）**が
-// 永久に守られる。**手放しは2回続けて同じ連番を見ないと成立しないので、
-// **その run は手放されもせず打ち切られもせず、pane とスロットを握ったまま残る。**
+// **2つ目の戻り値は `paneStopped` が読む**（issue #173）。
+// **あちらは `stopped, stopped || first` を返す。**2つ目が真だと、その run は
+// **`checkStalls` の `releasing` の集合へ入り、その巡回では打ち切られない。**
+//
+// **1回目を守るのが要る理由。**手放しは2回続けて同じ連番を見ないと成立しない。
+// **1回目と2回目のあいだの1巡回で打ち切られると、手放しは永久に成立しない。**
+// **この行を「どこも読んでいない」と思って消してはならない。**
+//
+// **守るのは1回目だけである。**2回目以降も守ると、状態が往復する run
+// （巡回のたびに `idle` → `working` → `idle`）**が永久に守られ、
+// 手放されもせず打ち切られもせず、pane とスロットを握ったまま残る。**
 func (rs *runState) noteQuotaProbe(seq uint64) (bool, bool) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -1229,6 +1239,22 @@ func (rs *runState) notePaneUnreadable() bool {
 		return false
 	}
 	rs.paneUnreadableWarned = true
+	return true
+}
+
+// noteIssueRefreshFailed は「issue を取り直せません」を出してよいかを返す（issue #173）。
+//
+// **`refreshIssue` の呼び出し元4つに共通で効く。**枠の上限で担当を手放す経路は、
+// **失敗すると毎巡回ここへ戻る。**
+//
+// 戻り値: この attempt で初めてなら true。
+func (rs *runState) noteIssueRefreshFailed() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.issueRefreshFailedWarned {
+		return false
+	}
+	rs.issueRefreshFailedWarned = true
 	return true
 }
 
@@ -1998,6 +2024,7 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	rs.quotaReleaseUnknownWarned = false
 	rs.paneUnreadableWarned = false
 	rs.quotaReleaseFailedWarned = false
+	rs.issueRefreshFailedWarned = false
 	// **「1週間の枠の余裕が無くなった時刻」も忘れる**（issue #173）。
 	//
 	// **やり直した attempt は、新しい agent と新しい pane である。**

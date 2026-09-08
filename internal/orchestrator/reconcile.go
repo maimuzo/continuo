@@ -258,9 +258,22 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 // **枠の写しは呼び出し側が1回のロックで取ったものを受け取る。**
 // **ここで取り直すと、同じ巡回の中で run ごとに違う写しの答えが混ざる。**
 //
-// snap: この巡回で読んだ枠の写し。**nil なら「余裕が無い枠は無い」として扱う。**
+// snap: この巡回で読んだ枠の写し。**nil なら1件も外さずに戻る。**
 // now: いまの時刻。
 func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time.Time) {
+	// **1度も読めていないなら、何もしない**（issue #173）。
+	//
+	// **`AnySelected` は nil のレシーバに偽を返す。**そのまま進むと
+	// 「使い切っている枠は無い」と読み、**待っている run の印を全部外す。**
+	// **枠は尽きたままなので、外された run は打ち切られてリトライを積む。**
+	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840) の
+	// 「読めないことを理由に走行中の run を捨てない」に、真っ向から反する。
+	//
+	// **いまは `o.quota` を一度読めたあと nil へ戻す経路が無いので、ここへは来ない。**
+	// **それでも置く。**戻す経路が1本できた日に、静かに開く落とし穴だからである。
+	if snap == nil {
+		return
+	}
 	// **古い写しでも、最後に読めた値をそのまま使う**（issue #173）。
 	// **`stale` で止めてはならない。**
 	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840) が
@@ -692,9 +705,6 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **そのまま使うと、下で書く時計が全部その秒数だけ古くなる。**
 	now = o.now()
 
-	// **余裕の無い1週間の枠があるかを、同じ写しから見る。**
-	weeklyShort := quotaSnap.AnySelected(handoff.ShortWeekly(o.bidMargins()))
-
 	// **余裕が無くなった時刻は、枠待ちの印の有無によらず、巡回のたびに控える**（設計 3-27）。
 	// **`weeklyWaitExceeded` の中だけで控えてはならない。**あれは印が立っている run しか
 	// 通らないので、**印が別の経路で外れると、以後どこからも消されない。**
@@ -707,7 +717,12 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **nil や古い写しは「余裕がある」と答えるので、そのまま控えると
 	// `WeeklyShortSince` がゼロへ戻り、経過で測る道が閉じる。**
 	// **手放しの側が同じ理由で拒んでいるものを、こちらだけ受け入れてはならない。**
+	//
+	// **判定は門の中で作る**（issue #173）。**外に出すと、写しが古い巡回でも
+	// 枠の一覧を走査して closure を2つ確保することになる。**捨てる値である。
 	if quotaSnap != nil && !quotaStale {
+		// **余裕の無い1週間の枠があるかを、同じ写しから見る。**
+		weeklyShort := quotaSnap.AnySelected(handoff.ShortWeekly(o.bidMargins()))
 		for _, rs := range o.snapshotRuns() {
 			rs.noteWeeklyShort(weeklyShort, now)
 		}
@@ -719,8 +734,10 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **印を外す側は、写しが古くても走らせる**（issue #173）。
 	//
 	// **立てる側と外す側で、非対称にしてはならない。**
-	// **立てるのは `isQuotaWaitingWith` で、そちらへ古い写しを渡さない形にした**（下の段2）。
-	// **外す側まで止めると、古い写しで立った印を誰も外せなくなる。**
+	// **立てる側**（下の段2 の `isQuotaWaitingWith`）**にも、古い写しの門は置いていない。**
+	// **どちらも、最後に読めた値をそのまま使う**（6周目に決着させた。
+	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840)）。
+	// **片側だけ止めると、古い写しで立った印を誰も外せなくなる。**
 	// **資格情報が切れた機械は、切れる直前の値を1日中返す。**
 	// **その値が100%だったら、待っている run の打ち切りの時計が永久に止まる。**
 	//
@@ -830,7 +847,8 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 			continue
 		}
 
-		// 3. 版が止まったまま閾値を超えた。worker を止め、リトライを積む。
+		// 3. `working` でも枠待ちでもないまま閾値を超えた。worker を止め、リトライを積む。
+		// **「版が止まったまま」ではない**（issue #173）。**画面の版を見る形は消した。**
 		// **同期で呼んではならない**（設計 3-8）。打ち切りになった場合は 3-25 の9段を
 		// 通り、`agent.prompt` の待ち受けで既定1時間返らない。
 		o.abandonRunAsync(ctx, rs, o.stalledReason(snap, agent, now))

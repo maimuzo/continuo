@@ -781,6 +781,22 @@ tracker:
       weekly_margin_percent: 19
 ```
 
+**`pause_above_percent: 100` と書いていた人は、この式を使わないでください。**
+`100 − 100 − 1` は `-1` になり、**マージンに負の数を書くと continuo は起動しません**
+（`continuo doctor` が弾きます）。**`0` を書いてください。**
+
+```yaml
+tracker:
+  provider:
+    handoff:
+      five_hour_margin_percent: 0           # 使用率が100%になるまで止まらない
+      weekly_margin_percent: 0
+```
+
+**`100` はもう書けません。**`0` との違いは1つだけで、
+**`0` は「使い切るまで止まらない」、`100` は「1バイトも使っていなくても止まる」でした。**
+`pause_above_percent: 100`（＝止めない）に対応するのは `0` のほうです。
+
 **1を引くのは、比べ方が違うためです。**
 
 | 何 | 判定 | 既定でいつ止まるか |
