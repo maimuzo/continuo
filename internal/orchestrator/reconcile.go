@@ -324,6 +324,9 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	// **つまり、打ち切りが毎回勝つ。**
 	// **入札と手放しの線を余裕値へ移した意味が、既定の設定で丸ごと消える。**
 	handling := map[*runState]bool{}
+	// **どの枠に余裕が無いかは、run ごとに変わらない**（issue #173）。
+	// **ループの中で作ると、run の数だけ枠の一覧を走査して文字列を作り直すことになる。**
+	shortKinds := strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
 	// **写しは呼び出し側が1回だけ読む**（設計 3-27）。**ここで取り直してはならない。**
 	// **`checkStalls` は、このあと同じ run に `noteWeeklyShort` を当てる。**
 	// `pollQuota` は turn の goroutine から並行に走って写しを差し替えるので、
@@ -373,6 +376,11 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// そこへ `agent_status` が2回続けて `idle` を返すと、
 		// **枠が尽きてもいないのに、turn の開始から2巡回で担当を手放すことになる。**
 		// **打ち切りの側は、同じ述語を `LastSeenAt` の門の後ろでしか呼んでいない。**
+		// **`LastSeenAt` がゼロの run は、いまは存在しない**（`newRunState` が現在時刻を入れ、
+		// 進める側しかない）。**それでも残す**（issue #173）。
+		// **下の2つの門は、どちらもこの値からの経過を測る。**
+		// **ゼロが入る経路が将来できたとき、1970年からの経過として通ってしまう。**
+		// **通ると、着手した瞬間の run が「上限を超えた」と読まれて手放される。**
 		if snap.LastSeenAt.IsZero() {
 			continue
 		}
@@ -382,6 +390,25 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		}
 		if !o.stallDetectionOff() && !o.runIdleForTurnTimeout(rs) {
 			continue
+		}
+		// **打ち切りを切っている機械では、経過の床をここで置く**（issue #173）。
+		//
+		// **`claude.turn_timeout_ms` が0以下だと、上の2つの門がどちらも素通りになる。**
+		// 残るのは `paneStopped` だけで、**turn と turn のあいだで `idle` に見えるだけの
+		// 健全な run が、2巡回（既定60秒）で手放される。**
+		// **`workspace_hooks.after_run` を書いていない機械では、そのとき push が走らない。**
+		// **次に拾う機械は remote から作り直すので、push していない commit が失われる。**
+		//
+		// **床には `weekly_wait_limit_minutes` を使う。**利用者が「1週間の枠をどれだけ待つか」
+		// として書いた値であり、**新しい設定を増やさずに済む。**
+		// **`WeeklyShortSince` は巡回のたびに控えている**ので、そのまま使える。
+		//
+		// **打ち切りが効いている機械では、この床は要らない。**上の2つの門が既に効いている。
+		if o.stallDetectionOff() {
+			limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
+			if limit > 0 && (snap.WeeklyShortSince.IsZero() || now.Sub(snap.WeeklyShortSince) <= limit) {
+				continue
+			}
 		}
 		stopped, mine := o.paneStopped(ctx, rs)
 		if !mine {
@@ -401,9 +428,8 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 			handling[rs] = true
 			continue
 		}
-		// **どの枠に余裕が無いかは、判定に使ったこの写しから取る**（issue #173）。
+		// **`shortKinds` は、判定に使ったこの写しから、ループの外で作ってある**（issue #173）。
 		// **手放しの本体で読み直すと、判定した写しとログに出す数字が別々になる。**
-		shortKinds := strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
 		o.releaseBecauseQuotaWaitAsync(ctx, rs, shortKinds)
 	}
 	return handling
@@ -462,8 +488,16 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, bool) {
 	agent, err := o.agentInfo(ctx, rs)
 	if err != nil {
-		o.logger.Info("画面の状態を読めないので、1週間の枠の上限を超えていても手放しません（次の巡回でやり直します）",
-			"identifier", rs.issue().Identifier, "error", err)
+		// **run ごとに1回だけ出す**（issue #173。見送りの `Warn` と同じ理由）。
+		// **人間が pane を閉じた run は、ここで永久に読めない。**
+		// **`claude.turn_timeout_ms` が0以下だと打ち切りも来ないので、
+		// 既定の30秒間隔で1時間に120行になる。**
+		// **issue #173 が読めるようにしたいログを、そこで埋めることになる。**
+		if rs.noteQuotaReleaseUnknown() {
+			o.logger.Info("画面の状態を読めないので、1週間の枠の上限を超えていても手放しません"+
+				"（次の巡回でやり直します。この行は run ごとに1回だけ出します）",
+				"identifier", rs.issue().Identifier, "error", err)
+		}
 		return false, false
 	}
 	if agent.AgentStatus != herdr.AgentStatusIdle && agent.AgentStatus != herdr.AgentStatusDone {

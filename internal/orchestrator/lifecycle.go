@@ -983,8 +983,10 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	// **そのまま真として扱うと、1バイトも push していないのに
 	// 「実行済みです。remote の続きから始めてください」と issue へ書く。**
 	// **次に拾う機械は remote から worktree を作り直し、push していない commit を全部失う。**
-	if o.cfg.WorkspaceHooks.AfterRun == nil ||
-		strings.TrimSpace(*o.cfg.WorkspaceHooks.AfterRun) == "" {
+	// **判定は `internal/workspace` に持たせる**（issue #173）。
+	// **ここへ写すと、あちらが「設定されている」の規則を変えたときに、
+	// この1行だけが古い規則で答え続ける。**
+	if !o.ws.HookConfigured(workspace.HookAfterRun) {
 		return false
 	}
 	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、

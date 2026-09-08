@@ -154,7 +154,7 @@ func (o *Orchestrator) handoffGate(
 	}
 
 	// **入札できない機械は、担当者のいない issue のコメントを読まない**（設計 3-77a）。
-	// 枠を読めない・枠を使い過ぎた・余裕値がマイナス、のどれかなら、この issue で
+	// **枠を読めない**か**余裕値が0以下**なら、この issue で
 	// **できることは「黙る」だけである。**読んでから黙るのは、リクエストの無駄でしかない。
 	bid, skip := o.evaluateBidWith(quotaSnap)
 	if len(logins) == 0 && skip != handoff.SkipNone {
@@ -644,7 +644,16 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 		return false
 	}
 	weeklyShort := snap.AnySelected(shortWeekly)
-	since := rs.noteWeeklyShort(weeklyShort, o.now())
+	// **ここでは控えない。読むだけである**（issue #173）。
+	// **控える場所は `checkStalls` の1箇所だけにする。**
+	// **2箇所で書くと、それぞれが持つ「読めない写しでは控えない」の門を、
+	// 片方だけ直したときに黙って食い違う。**`WeeklyShortSince` は、
+	// **`resets_at` を1つも読めない機械で上限を測る唯一の道である。**
+	// **食い違って0へ戻ると、その道が永久に閉じる。**
+	//
+	// **巡回は、この判定より後で控える。**だから枠が短くなった最初の巡回では
+	// **ゼロのままで、経過で測る枝は発火しない。**それでよい（1巡回ぶん遅れるだけである）。
+	since := rs.snapshot().WeeklyShortSince
 
 	limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
 	if limit <= 0 || !weeklyShort {
@@ -705,7 +714,12 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 		//
 		// **見送りは3通りある**（担当を確かめられない／`after_run` が終わらない／
 		// 担当者を外せない）。**どれも「次の巡回でやり直す」ことを前提にしている。**
-		if !o.startTurnLoop(ctx, rs, true) {
+		// **`awaitFirst` は偽にする**（issue #173）。
+		// **真にすると、立て直した turn ループが「走っている turn の終わり」を待つ。**
+		// **ここへ来る run は、`idle` か `done` を2回続けて読まれて手放しの対象になった run である。**
+		// **待っている turn が無いので、`Stop` は永久に来ない。**
+		// **`poll_wait_ms` ごとに空回りし、`NeedsPrompt` も消費されない。**
+		if !o.startTurnLoop(ctx, rs, false) {
 			o.logger.Warn("手放しを見送ったあと、turn ループを立て直せませんでした"+
 				"（この run は打ち切りが片付けます）",
 				"identifier", rs.issue().Identifier)

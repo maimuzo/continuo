@@ -155,7 +155,7 @@ type runState struct {
 	// **run ごとに持つ。**機械に1つだけ持つと、**枠の余裕が無くなったあとに着手した run を、
 	// 1分も待たずに手放すことになる。**この run が余裕の無さを見てからの経過を測る。
 	//
-	// **写し（runSnapshot）には載せない。**読むのは `noteWeeklyShort` の戻り値だけであり、
+	// **写し（runSnapshot）に載せる**（issue #173）。**読むのは巡回と手放しの2箇所で、
 	// **写しへ載せると、そこを通さない古い値を正だと思って読む人が出る。**
 	WeeklyShortSince time.Time
 	// QuotaProbeStateSeq は、手放してよいかを見るときに読んだ
@@ -507,6 +507,7 @@ func (rs *runState) snapshot() runSnapshot {
 		BackoffUntil:     rs.BackoffUntil,
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
+		WeeklyShortSince: rs.WeeklyShortSince,
 		LastSeenAt:       rs.LastSeenAt,
 		LastHookAt:       rs.LastHookAt,
 		StartedAt:        rs.StartedAt,
@@ -538,6 +539,7 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
+	WeeklyShortSince time.Time
 	LastSeenAt       time.Time
 	LastHookAt       time.Time
 	StartedAt        time.Time

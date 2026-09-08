@@ -9,8 +9,8 @@
 - `docs/plans/continuo_design.md#3-77c`（期限が切れたときに担当が移る先と、そのとき失われるもの）
 - `docs/plans/continuo_design.md#3-27`（枠の読み方と、余裕値の1本の線）
 - `docs/plans/continuo_design.md#3-16`（着手の段の順番。担当が決まったあとに続く段）
-- `internal/ratelimit/ratelimit.go` の `Reader.Fetch`、`Snapshot`、`Snapshot.MaxPercent`
-- `internal/orchestrator/orchestrator.go` の `dispatchPaused`
+- `internal/ratelimit/ratelimit.go` の `Reader.Fetch`、`Snapshot`、`Snapshot.AnySelected`、`Snapshot.SelectedKinds`
+- `internal/handoff/handoff.go` の `Evaluate`、`Short`、`ShortWeekly`、`ThresholdPercent`
 - `internal/tracker/query.go` の `rawUserConn`（`assignees` を運んでいる）、`commentsQueryTemplate`、`defaultCommentsPerFetch`
 - `internal/config/default.go` の `Marker`、`SelfMarker`（エージェントへ渡すコメントの目印）
 

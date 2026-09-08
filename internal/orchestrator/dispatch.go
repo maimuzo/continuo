@@ -454,10 +454,25 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// **だから写しは、ここで1回だけ取って両方へ渡す。**
 	blockedSnap, blockedStale := o.quotaSnapshotWithStale()
 	blocked := o.newWorkBlockedWith(blockedSnap, blockedStale)
-	if blocked != handoff.SkipNone && len(candidates) > 0 {
-		// **候補が0件のときは出さない**（issue #173）。
-		// **枠が何かを止めたわけではない**ので、出すと嘘になる。
-		// **空のカンバンで巡回のたびに1行出し続けることにもなる。**
+	// **「入札の要る候補」が1件も無いときは出さない**（issue #173）。
+	// **候補が0件のときだけでは足りない。**候補が全部
+	// 「既に走っている」か「自分が担当者」なら、**枠は何も止めていない。**
+	// **そこで出すと嘘になり、しかも巡回のたびに1行出し続ける**
+	// （既定の30秒間隔で1時間に120行）。**issue #173 が読めるようにしたいログを、そこで埋める。**
+	//
+	// **判定は下の門と同じにする**（`len(assigneeLogins(issue)) == 0` で落とすもの）。
+	// **ずれると、落とした issue と数えた issue が別物になる。**
+	needsBid := false
+	for _, issue := range candidates {
+		if _, running := o.lookupRunByID(issue.ID); running {
+			continue
+		}
+		if len(assigneeLogins(issue)) == 0 {
+			needsBid = true
+			break
+		}
+	}
+	if blocked != handoff.SkipNone && needsBid {
 		o.logNewWorkBlocked(blocked, blockedSnap)
 	}
 	// **ここで巡回を打ち切ってはならない**（人間の決定。2026-09-06。issue #173）。
