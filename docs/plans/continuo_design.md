@@ -9040,6 +9040,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **GraphQL の `addComment`** | **叩ける。**投稿者も `OWNER` も印も、REST と同じ | 測っていない |
 | **編集（REST の `PATCH`）** | **印は残る。**書き足しても消えない | 測っていない |
 | **印の無いコメントを編集** | **印は付かない。**`null` のままである | 測っていない |
+| **印の付いたコメントを、印の無いトークンで編集** | **印は残る。**人間が画面から直しても消えない | 測っていない |
 
 **`author_association` の行が、この設計の分かれ目である。**門は `OWNER` / `MEMBER` / `COLLABORATOR` しか通さないので、
 **`NONE` になる経路を採ると、このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（3-82e）。
@@ -9050,8 +9051,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 >
 > 訳: **GitHub の画面は、その issue の作者として、ユーザーのアバター写真と App の identicon のバッジを並べて表示する。**
 
-**実測では identicon のバッジは見えず、`– with <App の表示名>` の1行が出た**（下の表）。
-**案内には、実測で見えたほうを書く。**
+**実測では identicon は見えず、`– with <App の表示名>` の1行が出た。**案内にはそちらを書く。
 
 **画面に実際に出るもの**（2026-09-08。上の実測で投稿した3件を、人間が画面で確かめて書き写した）。
 
@@ -9108,7 +9108,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **案内は [docs/FAQ.md](../FAQ.md) に置く。**
 
 **抜け道は残る。**`continuo githubapp` を叩かずに `gh` を叩けば、印は付かない。
-**エージェントは `Bash` を引数無制限で許可されており**（[internal/config/default.go:170-174](../../internal/config/default.go#L170-L174)）、
+**エージェントは `Bash` を引数無制限で許可されており**（[internal/config/default.go:176](../../internal/config/default.go#L176)）、
 **素の `gh issue comment` を止めるものは無い。**
 
 **だから「印が無い＝人間が書いた」の範囲を、はっきり狭めて名乗る。**
@@ -9191,7 +9191,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **逆にすると、配ったあとに次回が壊れる。書き戻しは一時ファイルからの `os.Rename` で行う。**
 
 **毎回 GitHub を叩くことの危険を、そのまま引き受ける。**
-**1つの run で叩く回数は投稿の数だけあり**（issue への書き込みは7本、進捗報告は1時間ごとに増える）、
+**1つの run で叩く回数は投稿の数だけある**（指示書に書かれた issue への書き込みが7本、進捗報告は1時間ごとに増え、**continuo 自身の投稿も加わる**）。
 **更新用のトークンは1回使うと無効になるので、叩くたびに入れ替わる。**
 **書き戻しの直前で落ちると、古いものは死んでいて新しいものは保存されておらず、認可のやり直しになる。**
 
@@ -9203,6 +9203,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **`~/.continuo/` の中に、ロックの専用のファイルを1本置く**（二重起動を止めるロックとは別にする。
 あちらは常駐 continuo が握っているので、握ったままでは誰も取れない）。
 **[internal/lock/lock.go:45](../../internal/lock/lock.go#L45) の `Acquire` は待たない**（`LOCK_NB`）。**待つ形を1つ足す。**
+**囲うのは「読む → 叩く → 書き戻す」の全体である。**書き戻しだけだと、2つが同じ古いトークンを読む。
 
 **待つ長さは、実測してから決める。**同時に走るエージェントは既定で2、continuo 本体も同じ資格情報を回すので、
 **取り合う主体は3つである。**1回の更新は GitHub との往復1回で済む。
@@ -9268,7 +9269,7 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 | 何が壊れるか | どう壊れるか |
 | --- | --- |
 | **エージェントの成果の判定** | [internal/tracker/adapter.go:1164](../../internal/tracker/adapter.go#L1164) の `IsAgent` が立たず、[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383) が捨てる。**画面には成果報告が立っているのに、continuo は「書かれていない」と判定して書かせ直す** |
-| **持ち回りの入札** | **同じカンバンを見張る機械が全部おなじ bot 名になる。**[internal/orchestrator/handoff.go:364](../../internal/orchestrator/handoff.go#L364) が他機械の入札を自分のものと数え、同 387行が自分の入札に負けたと判定する |
+| **持ち回りの入札** | **投稿者が bot になる一方、`viewer.Login` は人間のままである**（カンバンは今までのトークンで読むため）。**[internal/orchestrator/handoff.go:364](../../internal/orchestrator/handoff.go#L364) の `HasBidBy` が永久に偽になり、巡回のたびに入札が積み上がる。**同 387行は自分の入札に負けたと判定する |
 | **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI（3本）と、利用者へ配る雛形（3本）の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか5箇所） |
 | **死活の時計** | [internal/handoff/assess.go:364](../../internal/handoff/assess.go#L364) が進捗報告の投稿者を担当者と突き合わせる。**止まった機械と見分けが付かなくなる** |
 
@@ -9424,7 +9425,7 @@ continuo が「エージェントが書いていない」と判定して run を
 
 **`continuo doctor` は既に外へ出ている**
 （[internal/doctor/doctor.go:177-178](../../internal/doctor/doctor.go#L177-L178) が「gh / ghq / herdr / GitHub に触る」と書いている）。
-**だから既にある枠組みへ嵌める。**差し替え口を `Options` へ足し、**`Label` の定数と i18n のキーも足す**（[internal/doctor/report.go:21](../../internal/doctor/report.go#L21) が全項目を定数で持ち、`Run` は同じ数を返す）、
+**だから既にある枠組みへ嵌める。**差し替え口を `Options` へ足し、**`Label` の定数と i18n のキーも足す**（[internal/doctor/report.go:20](../../internal/doctor/report.go#L20) が全項目を定数で持ち、`Run` は同じ数を返す）、
 （足さないとテストが本物の GitHub を叩く。同 [78-79行](../../internal/doctor/doctor.go#L78-L79)）、
 位置は設定と `gh` の認証の下流に置く（上流が `✗` か `!` ならこの検査は `!`。同 [148-150行](../../internal/doctor/doctor.go#L148-L150)）。
 **更新用のトークンを回転させてはならない**（doctor は読み取りだけである。同 [42-44行](../../internal/doctor/doctor.go#L42-L44)）。
@@ -9491,10 +9492,9 @@ continuo が「エージェントが書いていない」と判定して run を
 | **足す1本** | **`PostComment` の全部** | **`continuo githubapp` が返すもの** |
 
 **持ち回りのコメントも、この1本で書く。**除外するほうが分岐を1つ足す作業になる。
-**ただし hold だけは、失敗の帰結が重い。**担当者を書いたあとに投稿するので、
-**書けないと「担当者はあるが hold は無い」状態が残り、その issue は18時間どの機械からも触れなくなる**
-（[internal/orchestrator/handoff.go:394-413](../../internal/orchestrator/handoff.go#L394-L413)）。
-**実装のときに、そこだけ消し戻しが効くことを確かめる。**
+**ただし hold は失敗の帰結が重い。**担当者を書いたあとに投稿するので、書けないと
+**「担当者はあるが hold は無い」状態が残り、その issue は18時間どの機械からも触れなくなる**
+（[internal/orchestrator/handoff.go:394-413](../../internal/orchestrator/handoff.go#L394-L413)）。**消し戻しが効くことを確かめる。**
 **入札にも hold にも released にも、人間が画面で読む文が並んでいる**
 （[internal/handoff/handoff.go:514](../../internal/handoff/handoff.go#L514) の `FormatBid` ほか。
 **既存の `continuo:bid` などの目印は HTML のコメントなので画面には出ない**）。
@@ -9515,7 +9515,9 @@ interface も、検査の偽物も、1文字も変わらない。
 
 **`internal/lock/` に触るので、hook の門の検知に掛かる**（[CLAUDE.md](../../CLAUDE.md) が名指ししている）。
 **掛かるが、hook の4つの定義のどれにも当たらない。**`continuo hook` の引数も宛先も約束も終了コードも変わらない。
-**この判定を、pull request の本文へ1段落で書く。**
+**`internal/cli/cli.go` にも触る**（`switch args[0]` へ `githubapp` を足す。判定は 3-82f）。
+**両方の判定を、pull request の本文へ1段落で書く。**
+**人間が読む文言は i18n のキーで持つ。**この設計が足すのは4本で、doctor の見出し語だけではない。
 
 **絶対パスを縮める関門を素通りさせない。**
 [internal/orchestrator/comment.go:515](../../internal/orchestrator/comment.go#L515) が「手元の絶対パスを `~` に縮める唯一の場所」で、
@@ -9546,7 +9548,7 @@ interface も、検査の偽物も、1文字も変わらない。
 
 | 何 | 何本か | 掛けるか |
 | --- | --- | --- |
-| **issue のコメント**（新規と書き足し） | **7本** | **掛ける** |
+| **issue のコメント**（新規と書き足し） | **7本** | **掛ける。**うち2本は既存の `case` の入れ子の中の `PATCH` で、**3重の入れ子になる。形を別に決める** |
 | pull request（作成とコメント） | 2本 | **掛けない** |
 
 **印の無いコメントへ書き足させない。**指示書の 5-3 と 7-2 は、既にあるコメントへ `PATCH` で書き足す。
@@ -9554,7 +9556,7 @@ interface も、検査の偽物も、1文字も変わらない。
 **印の無いコメントへ書き足すと、機械が書いた文が「人間が書いた」ように見える。**
 **書き足す先が印を持たないなら、新しく投稿する。**
 **判定は REST で行う。**GraphQL には App を示す欄が無いので（3-82 の実測）、
-**指示書の段1に `gh api repos/…/issues/comments/<ID> --jq .performed_via_github_app` を1本足す。**
+**5-3 の段1 と 7-2 の段1 の両方へ、`gh api repos/…/issues/comments/<ID> --jq .performed_via_github_app` を1本ずつ足す。**
 **設定を途中で `true` にした利用者の手元で、それ以前のコメントを相手に必ず起きる。**
 
 **変数を2つ足す。**どちらも `RenderData` と `SampleData` の両方へ登録し、
@@ -9566,7 +9568,7 @@ interface も、検査の偽物も、1文字も変わらない。
 | 変数 | 中身 | どこから来るか |
 | --- | --- | --- |
 | `.github_app_attribution` | 真偽 | `tracker.comments.github_app_attribution` |
-| `.continuo.command` | **実行ファイルの絶対パス。**`SampleData` には空でない見本を入れる（[internal/prompt/prompt.go:693](../../internal/prompt/prompt.go#L693)） | [internal/orchestrator/orchestrator.go:469](../../internal/orchestrator/orchestrator.go#L469) の `continuoPath` |
+| `.continuo.command` | **実行ファイルの絶対パス。**登録する最上位の名前は `continuo` で、その中に `command` を持つ。**`SampleData` には空でない見本を入れる**（[internal/prompt/prompt.go:693](../../internal/prompt/prompt.go#L693)） | [internal/orchestrator/orchestrator.go:469](../../internal/orchestrator/orchestrator.go#L469) の `continuoPath` |
 
 **`RenderData` の署名を変える段が要る。**いまは issue と2つのスカラーしか受け取らず、
 **実行ファイルのパスを持っていない。**
@@ -9590,15 +9592,12 @@ interface も、検査の偽物も、1文字も変わらない。
 絶対パスを取り、絶対パスでなければ起動を止めている。**同じ値をテンプレートへ埋める
 （hook のコマンド行と同じ形である。[internal/orchestrator/settings.go:352](../../internal/orchestrator/settings.go#L352)）。
 
-**この設定キーを、WORKFLOW.md の雛形へ足す**（[internal/scaffold/template.go:69-71](../../internal/scaffold/template.go#L69-L71) の `comments:` の下）。
-**足さないと、キーの存在に気づく経路が0本になる。**`continuo doctor` の「未記入の項目」の検査は
-**雛形と設定の原文を突き合わせる**ので（[internal/doctor/missing_keys.go:61](../../internal/doctor/missing_keys.go#L61)）、
-**雛形に無い項目は1度も出ない。**既定が `false` なので、**issue #245 が求めたものが誰の手元にも届かない。**
-
-**[docs/upgrading.md](../upgrading.md) にも段を足す。**front matter は未知のキーで起動を止める
-（[internal/config/config.go:157](../../internal/config/config.go#L157) の `yaml.Strict()`）。
-**チームで WORKFLOW.md を共有していると、まだ版を上げていない同僚は
-資格情報の話に到達する前に、YAML の未知キーのエラーで落ちる。**
+**このキーを WORKFLOW.md の雛形へ足す**（[internal/scaffold/template.go:69-71](../../internal/scaffold/template.go#L69-L71) の `comments:` の下）。
+**足さないと存在に気づく経路が0本になる。**doctor の「未記入の項目」は雛形と突き合わせるので
+（[internal/doctor/missing_keys.go:61](../../internal/doctor/missing_keys.go#L61)）、**雛形に無い項目は1度も出ない。**
+**[docs/upgrading.md](../upgrading.md) にも段を足す。**front matter は未知のキーで起動を止めるので
+（[internal/config/config.go:157](../../internal/config/config.go#L157) の `yaml.Strict()`）、
+**まだ版を上げていない同僚は、資格情報の話に到達する前に落ちる。**
 
 **チームで WORKFLOW.md を共有しているときは、全員が資格情報を持つ必要がある**
 （[docs/FAQ.md:726-730](../FAQ.md#L726-L730) がその使い方を案内している）。
