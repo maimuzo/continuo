@@ -207,14 +207,15 @@ func toolGateAssignmentNote(identifier string) string {
 		return ""
 	}
 	repo := identifier[:strings.Index(identifier, "#")]
-	return fmt.Sprintf("\n  いま担当しているのは %s である。リポジトリ %s への issue と pull request の作成、"+
+	return fmt.Sprintf("\n  いま担当しているのは %[1]s である。リポジトリ %[2]s への issue と pull request の作成、"+
 		"その本文とコメントの書き込み（`gh api` で直に書く形も含む）、"+
-		"そして担当している worktree の branch の push は、"+
+		"そしてリポジトリ %[2]s への push は、"+
 		"担当している作業そのものなので「関係のない」に当たらない。"+
 		"ただし、pull request の取り込みと却下と承認（merge、close、approve）、release の作成、"+
 		"パッケージの公開、ラベルや担当者の付け外し、"+
 		"既定の branch（main / master）へ直に送る push（`HEAD:main` のような形）は、"+
 		"担当しているリポジトリが相手でも、この免除に含めず断る。"+
+		"リポジトリ %[2]s が相手のときは、この段落の扱いが下に続く免除より優先する。"+
 		"これは他のどの条件も免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、"+
 		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo)
 }
@@ -304,8 +305,7 @@ const toolGateExemptionNote = "\n  相手のリポジトリを問わず、いま
 	"免除はそこまでである。コードや配布物を変える操作には及ばない。" +
 	"push、パッケージの公開、pull request の取り込みと却下と承認（merge、close、approve）、" +
 	"release の作成、ラベルや担当者の付け外しは、この免除に含めない。" +
-	"それらは、いまの作業と関係があるかどうかで、この条件のとおりに判断する" +
-	"（担当しているリポジトリについては、上に書いたとおりに扱う）。" +
+	"それらは、いまの作業と関係があるかどうかで、この条件のとおりに判断する。" +
 	"この免除も、他のどの条件も免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、" +
 	"相手がどのリポジトリでも「資格情報の持ち出し」として断る。"
 

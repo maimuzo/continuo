@@ -549,8 +549,8 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	// それは組み込みの指示書が pull request を出す前に必ず叩かせる段で、
 	// **断られると pull request が1本も出ず、issue が黙って止まる。**
 	// **force push は断る条件の1つ目が受け持つ**ので、ここで免除しても抜けない。
-	if !strings.Contains(prompt, "担当している worktree の branch の push は") {
-		t.Errorf("担当している worktree の branch への push を、肯定の形で免除していません:\n"+
+	if !strings.Contains(prompt, "そしてリポジトリ octocat/hello-world への push は") {
+		t.Errorf("担当しているリポジトリへの push を、送り先を名指しした肯定の形で免除していません:\n"+
 			"`git push -u origin HEAD` が断られると、pull request が1本も出ません:\n%s", prompt)
 	}
 	// **進捗報告の書き足しは `gh api --method PATCH` である。**綴りで数え上げると落ちる。
@@ -638,7 +638,15 @@ func TestToolGate_担当先を告げる文は他の条件を免除しない(t *t
 		t.Fatalf("担当先を告げる文が、次の断る条件（権限の昇格）より後ろにあります: note=%d next=%d\n"+
 			"免除は、その条件の中で言い切らなければなりません", noteAt, nextCondAt)
 	}
-	sameCondition := prompt[noteAt:nextCondAt]
+	// **範囲を担当先の文だけに切る。**次の断る条件までを取ると、担当先の外への免除まで入り、
+	// **担当先の文から資格情報の1文を丸ごと削っても通ってしまう。**
+	// 担当先の外への免除も同じ綴りで終わるためである。
+	exemptAt := strings.Index(prompt, "相手のリポジトリを問わず")
+	end := nextCondAt
+	if exemptAt > noteAt && exemptAt < end {
+		end = exemptAt
+	}
+	sameCondition := prompt[noteAt:end]
 
 	for _, want := range []string{"これは他のどの条件も免除しない", "資格情報の持ち出し"} {
 		if !strings.Contains(sameCondition, want) {

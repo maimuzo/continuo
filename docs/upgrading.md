@@ -141,7 +141,7 @@ $ gh issue create --repo <owner>/<repo> --title "…" --body "…"
 - いま担当している issue と関係のない外部への書き込み: 他のリポジトリへの push、パッケージの公開、外部サービスへの投稿
   いま担当しているのは <owner>/<repo>#<番号> である。リポジトリ <owner>/<repo> への issue と
   pull request の作成、その本文とコメントの書き込み（`gh api` で直に書く形も含む）、
-  そして担当している worktree の branch の push は、担当している作業そのものなので「関係のない」に当たらない。
+  そしてリポジトリ <owner>/<repo> への push は、担当している作業そのものなので「関係のない」に当たらない。
   ただし、merge・close・approve・release・パッケージの公開・既定の branch へ直に送る push は、
   担当しているリポジトリが相手でも、この免除に含めず断る。…
   （…）
