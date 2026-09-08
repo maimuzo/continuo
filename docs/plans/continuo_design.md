@@ -9188,7 +9188,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **更新用のトークンが6か月で切れた** | **終了コード 1。**標準エラーへ device flow のやり直しを案内する |
 | **GitHub が落ちている** | **終了コード 1。**標準出力は空 |
 
-**呼ぶ側は、空が返ったら投稿を止めない。**いままでのトークンで投稿し、**WARN を1行残す。**
+**呼ぶ側は、返ってきた文字列の形を確かめてから使う**（3-82f）。**空かどうかを見るだけでは足りない。**
+**空が返ったときは投稿を止めない。**いままでのトークンで投稿し、**WARN を1行残す。**
 **止めると、成果報告が投稿できず、continuo 自身が「エージェントが書いていない」と判定して
 run を `failure_state` へ落とす**（[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383)）。
 **印が付かないことより、run が失われることのほうが重い。**
@@ -9263,6 +9264,46 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 **App の bot がどれになるかの記述は無い。**だから実測が唯一の根拠である。
 **値の定義**（`OWNER` は "Author is the owner of the repository."、訳: **作者がそのリポジトリの所有者である**）
 **とも矛盾しない。**bot はリポジトリの所有者ではない。
+
+### 3-82f. 古い実行ファイルで `continuo githubapp` を叩くと、起動ログがトークンに入る
+
+**言いたいこと。**このサブコマンドを知らない実行ファイルは、`githubapp` を**設定ファイルのパスとして読む。**
+**そして起動のログを標準出力へ出す。**`$(...)` で受けると、**その文字列がトークンとして `gh` へ渡る。**
+**空ではないので、`gh` は keyring へ戻らず 401 で落ちる。**
+
+**実測**（2026-09-09）。このサブコマンドを持たない実行ファイルで叩いた。
+
+    $ continuo githubapp
+    Starting continuo (config file: <いまいるディレクトリ>/githubapp)
+    time=… level=ERROR msg="continuo を起動できません" error="cannot read WORKFLOW.md: …"
+    exit status 1
+
+**`switch args[0]` のどれにも当たらない引数は `runMain` へ落ちる**
+（[internal/cli/cli.go:184-205](../../internal/cli/cli.go#L184-L205)）。**そこは第1引数を設定ファイルのパスとして扱う。**
+
+**なぜ危ないか。**continuo は常駐プロセスで、`go build` は実行ファイルを差し替える。
+**エージェントは turn ごとにそのパスを叩くので、「本体は古い・指示書は新しい」という混ざった状態が必ず起きる**
+（[CLAUDE.md](../../CLAUDE.md) の「continuo で continuo 自身を直すとき…」が同じ形を書いている）。
+**そのとき、エージェントの `gh` が全部 401 で落ちる。**投稿も pull request も作れない。
+
+**防ぎ方。呼ぶ側が中身を確かめる。**
+
+    TOKEN=$(continuo githubapp 2>/dev/null)
+    case "$TOKEN" in
+      gh[us]_*) GH_TOKEN="$TOKEN" gh issue comment <URL> --body-file done.md ;;
+      *)        gh issue comment <URL> --body-file done.md ;;
+    esac
+
+**`case` で形を確かめてから使う。**空かどうかを見るだけでは足りない。
+**古い実行ファイルは空を返さず、起動のログを返す。**
+
+**組み込みの指示書には、この形で書く。**素の `GH_TOKEN=$(continuo githubapp) gh …` を書いてはならない。
+
+**このサブコマンドを足すこと自体は、hook の挙動を変えない。**
+[CLAUDE.md](../../CLAUDE.md) の4つの定義（hook が受け取る引数 / hook の宛先 / hook と本体の約束 /
+hook が Claude Code へ返すもの）**のどれにも当たらない。**
+既存の `hook` の名前も引数も終了コードも標準出力も、1つも変わらない。
+**同じ文書が「`internal/cli/cli.go` の別のサブコマンドへ処理を足す」を、止まらなくてよい例として挙げている。**
 
 ## 4. 人間が決めたこと
 
