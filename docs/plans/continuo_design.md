@@ -9050,6 +9050,22 @@ issue #1 へ、経路ごとに1件ずつ投稿して読み直した）。
 >
 > 訳: **App がユーザーの代理として行った API リクエストは、そのユーザーに帰属する。**
 
+**画面に実際に出るもの**（2026-09-08。上の実測で投稿した3件を、人間が画面で確かめた）。
+
+| どちらの経路で書いたか | 画面に並ぶもの |
+| --- | --- |
+| **人間の代理（採る）** | `maimuzo` / **`13m ago – with AI can post issues`** / `Author` |
+| App 自身（採らない） | `ai-can-post-issues` / **`bot`** / `9m ago – with AI can post issues` |
+
+**両方に `– with <App の表示名>` が付く。**公式ドキュメントは "identicon badge" と書いているが、
+**実際に出るのは App の表示名を添えた1行である。**
+**人間の代理で書いたほうには `Author` も並ぶ**（`author_association` が `OWNER` であることの画面上の現れ）。
+
+**この表示は API から取れない。**REST の `application/vnd.github.html+json` が返すのは
+本文の HTML（`body_html`）だけで、投稿者の表示は入らない。
+**GraphQL の `IssueComment` の37個の欄にも無い**（2026-09-08 に introspection で全件を見た）。
+**機械が判定するなら REST の `performed_via_github_app` を見る。人間は画面のこの1行を見る。**
+
 **なぜ投稿者が変わらない経路を採るか。**投稿者は、continuo の中で**身元そのもの**として使われている。
 **3つが同時にそこへぶら下がっている**（外した場合の帰結は 3-82c）。
 
