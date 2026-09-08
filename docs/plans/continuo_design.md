@@ -9137,8 +9137,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | 何 | 置き場所（既定） | `--id <名前>` を付けたとき | 権限 |
 | --- | --- | --- | --- |
-| **App の秘密鍵** | `~/.continuo/app.pem` | `~/.continuo/id/<名前>/app.pem` | `0600` |
-| **更新用のトークン** | `~/.continuo/app-refresh.json` | `~/.continuo/id/<名前>/app-refresh.json` | `0600` |
+| **App の秘密鍵** | `~/.continuo/github-app-private-key.pem` | `~/.continuo/id/<名前>/github-app-private-key.pem` | `0600` |
+| **更新用のトークン** | `~/.continuo/github-app-refresh-token.json` | `~/.continuo/id/<名前>/github-app-refresh-token.json` | `0600` |
 | **アクセストークン** | **残さない** | **残さない** | — |
 
 **`~/.continuo/` へ置く理由。**continuo は WORKFLOW.md のあるディレクトリで起動する。
@@ -9166,7 +9166,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | 順 | 何をするか |
 | --- | --- |
-| 1 | `~/.continuo/app-refresh.json` を読む。**無ければ device flow を回す**（下） |
+| 1 | `~/.continuo/github-app-refresh-token.json` を読む。**無ければ device flow を回す**（下） |
 | 2 | 更新用のトークンで、新しいアクセストークンを取る |
 | 3 | **返ってきた新しい更新用のトークンを書き戻す**（GitHub は1回使うごとに入れ替える） |
 | 4 | **アクセストークンを標準出力へ1行出す。ファイルへは書かない** |
@@ -9304,6 +9304,57 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 hook が Claude Code へ返すもの）**のどれにも当たらない。**
 既存の `hook` の名前も引数も終了コードも標準出力も、1つも変わらない。
 **同じ文書が「`internal/cli/cli.go` の別のサブコマンドへ処理を足す」を、止まらなくてよい例として挙げている。**
+
+### 3-82g. App の作成は `continuo setup-app` が用意する。人間はボタンを1回押す
+
+**言いたいこと。**App の名前・権限・install の範囲を**人間に手で入れさせない。**
+**continuo が JSON で組み立てて GitHub へ渡し、人間は「Create GitHub App」を1回押すだけにする。**
+**押した瞬間に App ID・秘密鍵・client secret が返るので、continuo がそのまま `~/.continuo/` へ置く。**
+
+**人間の要望（2026-09-08）。**
+
+> github app自体の作成をもっと自動化できないの?
+> 人間が操作すると設定間違いする場合もあるので、自動化したい
+
+**使うのは GitHub の公式の仕組みである**（App Manifest flow）。**自作の手順ではない。**
+
+**何が自動になるか。**
+
+| 何 | 手で作る場合 | `continuo setup-app` |
+| --- | --- | --- |
+| **App の名前** | 人間が入力 | **continuo が入れる** |
+| **権限**（Issues / Pull requests / Contents） | 人間が3つとも選ぶ | **continuo が入れる** |
+| **Device Flow の有効化** | 人間がチェックする。**外すと 3-82c が動かない** | **continuo が入れる** |
+| **Webhook の Active** | 人間が外す。**外し忘れると URL を求められる** | **continuo が省く** |
+| **install できる範囲** | 人間が選ぶ | **continuo が入れる** |
+| **秘密鍵の生成とダウンロード** | 人間が押して、ファイルを移す | **continuo が受け取って `~/.continuo/github-app-private-key.pem` へ 0600 で置く** |
+| **App の install 先を選ぶ** | 人間が選ぶ | **人間が選ぶ**（GitHub の仕様。ここだけは自動にできない） |
+
+**手順は3段である。**
+
+| 順 | 誰が | 何をするか |
+| --- | --- | --- |
+| **1** | continuo | 受け口を1つ開き、**その URL を画面に出す** |
+| **2** | 人間 | その URL を開き、**「Create GitHub App」を1回押す** |
+| **3** | continuo | 返ってきた JSON から App ID・秘密鍵・client secret を取り、`~/.continuo/` へ置く |
+
+**`hook_attributes` は省く。**公式ドキュメントは、この欄そのものを optional と書いている。
+**書くと、その中の URL が必須になり、公開インターネットから届かない URL は弾かれる。**
+
+**2026-09-08 に実測した。**受け口を `127.0.0.1` に置いて `hook_attributes` を書いたところ、GitHub がこう返した。
+
+    Error Hook url is not supported because it isn't reachable over the public Internet (127.0.0.1)
+    Error Hook is invalid
+
+**`active: false` を書いても検査される。**欄ごと省くのが正しい。
+**`redirect_url` のほうは同じ `127.0.0.1` で1度も咎められなかった。**受け口はそのままでよい。
+
+**受け口は、この作業のあいだだけ開く。**`continuo setup-app` が終わったら閉じる。
+**常駐しない。**待つのは、GitHub がその URL へ1回返してくるまでである。
+
+**install だけは人間が選ぶ。**GitHub は、どのリポジトリへ入れるかを App の作成者に選ばせる。
+**continuo は、install の画面の URL を出して案内する。**
+**「全部のリポジトリ」ではなく、カンバンに載っているリポジトリだけを選ぶよう書く。**
 
 ## 4. 人間が決めたこと
 
