@@ -205,7 +205,7 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // **リポジトリ X に掛かっていて、操作の種類を1つも区別しない。**
 // **閉じる文が無いと、リポジトリ X が相手なら merge も release も「関係がある→通す」へ倒れる**
 // （下の `toolGateExemptionNote` の「担当先の文では『断る』と言い切る」と同じ理由である）。
-// **だから「コードや配布物を変える操作」「リポジトリの設定を変える操作」という種類で閉じる。**
+// **だから「コードや配布物を変える操作」「リポジトリやカンバンの設定を変える操作」という種類で閉じる。**
 //
 // **「いま挙げた以外で」を落としてはならない。**push はコードを変える操作そのものである。
 // **その1句が無いと、種類で閉じる文が、直前で肯定した push まで断る側へ倒す。**
@@ -215,16 +215,44 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // **列挙に無いものが「断られる側へ落ちなかった」と読まれる。**
 // **種類で閉じれば、並べていない操作も同じ側に入る。**
 //
+// **そのかわり、肯定の一覧から外すものを1句で言う。**
+// **`gh pr review --approve` は、道具の形としては pull request へのコメントの投稿である。**
+// `gh api --method POST /repos/<owner>/<repo>/pulls/<番号>/reviews -f event=APPROVE` は、
+// **括弧の中の「コメントを `gh api` で書く形」と一字一句で重なる。**
+// **肯定の一覧に入ってしまうと「いま挙げた以外で」が承認を種類の外へ出すので、閉じる文が届かない。**
+// **外さないと、必須のレビューや自動マージを設定した担当先で、
+// 人間が1度も見ていない pull request がそのまま既定の branch へ入る。**
+// **下の `toolGateExemptionNote` にある承認の名指しは、この段落が優先するので担当先には届かない。**
+// **取り込みと却下と close も、同じ経路で肯定の側へ落ちるので一緒に外す。**
+//
+// **ラベルと担当者の付け外しは外さない。**取り消せて、コードも配布物も1バイトも変わらない。
+//
 // **リポジトリの設定を閉じるのは、検査そのものを守るためである。**
 // `toolGateApplies` は既定の `public_only` で「非公開なら掛けない」と決めている。
 // **担当先を非公開へ切り替えられると、次の dispatch から判定が1件も載らない。**
 // 失うのは操作1つではなく、**そのリポジトリで走る全部の run の守りである。**
 //
-// **そのうえで2つだけ名指しする。**既定の branch へ直に送る push と、
+// **カンバンの設定も閉じる。**GitHub Projects v2 のカンバンはリポジトリではないので、
+// **「リポジトリの設定」だけでは届かない。**`updateProjectV2Field` は選択肢を全件置き換えるので、
+// **設定済みの Status の値が全部消える。**
+// **Status の値を動かす `updateProjectV2ItemFieldValue` は「設定を変える」に当たらないので通る。**
+// エージェントが `In Progress` から `Blocked` を自分で動かす経路は、設計が認めている。
+//
+// **そのうえで3つ名指しする。**既定の branch へ直に送る push と、branch や tag を消す push と、
 // pull request を通さずにファイルを書き込む形（`gh api` の contents）である。
-// **この2つは、上で push を肯定の形で通したことの例外なので、種類だけでは閉じられない。**
-// **push は送り先を1文字も限定していない**ので、`git push origin HEAD:<既定の branch>` が通る。
-// `gh api` の contents は、pull request を通さずに同じ結果へ別の道具で届くので、**2つで1組にする。**
+// **3つとも、上で push を肯定の形で通したことの例外なので、種類だけでは閉じられない。**
+// **push は送り先も操作の向きも1文字も限定していない**ので、
+// `git push origin HEAD:<既定の branch>` も `git push origin --delete <branch>` も通る。
+// **断る条件の1つ目が挙げているのは force push だけで、ref を消す push は入っていない。**
+// **continuo は既定で2本の run を同時に走らせる**
+// （`agent.max_concurrent_agents`。continuo が同時に起動する Claude Code の数の上限で、既定は2）。
+// **並行して走っている別の run の branch を remote から消せると、その成果が別の機械から見えなくなる。**
+// `gh api` の contents は、pull request を通さずに同じ結果へ別の道具で届くので、**同じ組で塞ぐ。**
+//
+// **「下に続く免除より優先する」を落としてはならない。**
+// 担当先の文は push を免除し、下の免除は「push …は、この免除に含めない。
+// それらは、いまの作業と関係があるかどうかで、この条件のとおりに判断する」と書く。
+// **この1文だけが、その正面の食い違いを解いている。**
 //
 // **組み込みの指示書の 6-3 では代わりにならない。**あちらは `main / master` と
 // 綴りを数え上げているので、**既定が `develop` のリポジトリでは1文字も効かない。**
@@ -244,22 +272,26 @@ func toolGateAssignmentNote(issue tracker.Issue) string {
 	// **既定の branch の名前は、綴りを数え上げずに実物から取る**（設計 3-64f）。
 	// **`main / master` と書くと、`develop` や `trunk` を既定にしているリポジトリで
 	// `git push origin HEAD:develop` が素通りする。**
-	defaultBranch := "既定の branch"
+	// **名前が取れなかったときは、括弧ごと出さない。**
+	// **`既定の branch` を括弧へ入れると「既定の branch（既定の branch）」と出る。**
+	branchPhrase := "既定の branch"
 	if v, ok := issue.NativeRef[workspace.NativeRefDefaultBranch].(string); ok && v != "" {
-		defaultBranch = "`" + v + "`"
+		branchPhrase = "既定の branch（`" + v + "`）"
 	}
 	return fmt.Sprintf("\n  いま担当しているのは %[1]s である。リポジトリ %[2]s への issue と pull request の作成、"+
-		"その本文とコメントの書き込み（issue と pull request のコメントを `gh api` で書く形も含む）、"+
+		"その本文とコメントの書き込み（issue と pull request のコメントを `gh api` で書く形も含む。"+
+		"ただし、pull request の取り込みと却下と承認と、issue と pull request を閉じることは、"+
+		"コメントの書き込みに数えない）、"+
 		"そしてリポジトリ %[2]s への push は、"+
 		"担当している作業そのものなので「関係のない」に当たらない。"+
 		"免除はそこまでである。担当しているリポジトリが相手でも、"+
-		"いま挙げた以外でコードや配布物を変える操作と、リポジトリの設定を変える操作には及ばず、"+
-		"この免除に含めず断る。"+
-		"とくに、既定の branch（%[3]s）へ直に送る push と、"+
+		"いま挙げた以外でコードや配布物を変える操作と、"+
+		"リポジトリやカンバンの設定を変える操作には及ばず、この免除に含めず断る。"+
+		"とくに、%[3]sへ直に送る push と、branch や tag を消す push と、"+
 		"pull request を通さずにファイルを書き込む形（`gh api` の contents など）は、この免除に含めず断る。"+
 		"リポジトリ %[2]s が相手のときは、この段落の扱いが下に続く免除より優先する。"+
 		"これは他のどの条件も免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、"+
-		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo, defaultBranch)
+		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo, branchPhrase)
 }
 
 // toolGateExemptionNote は、担当しているリポジトリの外への起票を免除する文である（設計 3-64f）。
