@@ -2,7 +2,6 @@ package tracker
 
 import (
 	"strings"
-	"unicode"
 
 	"github.com/maimuzo/continuo/internal/config"
 )
@@ -37,20 +36,23 @@ const (
 	commentClose = "-->"
 )
 
-// withAIMarker は、本文の先頭に並ぶ印の、いちばん後ろへ config.AIMarker を1行足す（設計 3-82）。
+// withAIMarker は、本文の先頭の印の直後へ config.AIMarker を1行足す（設計 3-82）。
 //
-// **既にある印を1つも動かさない。**先頭へ割り込ませてはならない。
-// **本文の先頭から読む判定が、本番にいくつもある**（一覧は設計 3-82b）。
-// **数はここに書かない。**書くと、判定が1つ増えるたびに3箇所を数え直すことになる。
-// とくに CI の3本（`design-review-result` / `code-review-result` / `design-review-skipped`）は
-// `continuo init` が利用者のリポジトリへ置いたきりで、**continuo の版を上げても書き換わらない。**
-// **先頭へ入れると、その project の pull request が全部赤になり、continuo からは直せない。**
+// **先頭の印を動かさない。**先頭へ割り込ませてはならない。
+// `FetchComments`（[adapter.go](adapter.go)）も `handoff.IsMarked` も
+// **本文の先頭が特定の印で始まっているか**で判定しており、
+// **前へ1行入れると、その判定が全部外れる。**
 //
-// **先頭の印の並びに既に印があれば、そのまま返す。**二重に付けない。
-// **2行目以降で字下げして引用した印は、この並びに数えない。**そちらは本文であり、
-// **印について説明する報告には、名乗りの印を別に足す。**
-// **1行目だけは字下げしていても数える。**本文全体の先頭の空白を先に落とすためで、
-// **読む側（`TrimSpace` してから先頭を見る）と同じ扱いである。**
+// **見るのは1行目だけである。**印が2本以上並ぶ本文も、先頭が空白の本文も、
+// **投稿の経路には1件も無い**（2026-09-08、実装レビュー6周目のあとの突き合わせで、
+// `postComment` / `postOwnMarkedComment` の12箇所を1つずつ開いて数えた。
+// **散文が8件、1行で閉じた印が1本だけのものが4件**）。
+// **関門の案内だけは印が2行並ぶが、2行目の `self_marker` は
+// `ComposeCommentBody` があとから前へ足すので、ここへ来る本文は1行目が印である。**
+//
+// **来ない形のために走査を持たない。**以前は先頭に並ぶ印を辿る走査と、空行の扱いと、
+// 末尾の改行の扱いと、先頭の空白の扱いを持っていた。**実装レビューの6周で、
+// Critical 4件とその多くの High が、そこから出た。**本番の入力では1度も通らない枝だった。
 //
 // 例。
 //
@@ -62,103 +64,41 @@ const (
 // （[internal/handoff/handoff.go](../handoff/handoff.go)）は印の後ろの最初の `{` から
 // 最後の `}` までを取る。**config.AIMarker は `{` も `}` も持たない。**
 //
-// **本文の先頭の空白は、読む側と同じところから見る。**
-// `handoff.IsMarked` も `payloadAfterMarker` も `FetchComments` も
-// `strings.TrimSpace(body)` してから先頭を見るので、**ここで落とさないと判定がずれる。**
-// **先頭に空行が1つあるだけで、印が本物の印より前に入り、`IsMarked` が偽になる。**
-// そうなると入札も hold も読み戻せず、**continuo は自分が取った担当を人間のものと読む。**
+// **改行は `\n` である。**CRLF は扱わない。本文を作る12箇所は全部 Go の `"\n"` で組み立てており、
+// **外から来る文字列は git と gh の出力だけで、continuo が動く場所（darwin と linux）では LF である。**
 //
-// **空行では止めない。**印と印のあいだに空行を挟む書き方がありうる
-// （`handoff.StartsAsProgressReport` と同じ決まり）。
-// **ただし挿入するのは、最後に見つけた印の行の直後である。**後ろの空行までは越えない。
-//
-// body: 印を足す前の本文。
-// 戻り値: 印を1行足した本文。**印の行より後ろは1文字も書き換えない。**
-// **書き換えるのは2つだけである。**
-//
-//	足す先の直前が改行でなければ、改行を1つ補う（印だけのコメントで、2つの印が1行に繋がるため）
-//	本文の先頭が空白だけなら、その空白を落とす（残すと1行目が空白だけの行になる）
-//
-// **足す行の改行は `\n` である。**CRLF は扱わない（理由は `spliceAIMarker` にある）。
+// body: 印を足す前の本文。**空文字は渡らない**（`ComposeCommentBody` が先に返す）。
+// 戻り値: 印を1行足した本文。**もとの本文は1文字も書き換えない。**
 func withAIMarker(body string) string {
-	// **先頭の空白を読み飛ばす。**読む側が `TrimSpace` するので、ここも同じところから見る。
-	head := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
-	// **差し込む位置は、行の頭から数える。**
-	// **行の途中（先頭の空白を飛ばした位置）から数えると、
-	// 4桁字下げのコード片で始まる本文の1行目だけが崩れる**
-	// （`spliceAIMarker` が前を落とすので、2行目から下だけ字下げが残り、画面で散文とコード片に割れる）。
-	// **印より前の空行だけ越える。**越えないと、1行目が空白だけの行として残る。
-	// **印を1つでも見つけたあとの空行は越えない。**越えると、印の並びから離れた場所へ入る。
-	// **読む側は `TrimSpace(body)` してから先頭を見るので、どちらでも判定は変わらない。**
-	insert := 0
-	sawMarker := false
-	// **位置は offset 1本で持つ。**`rest` を別に持つと、行を読み飛ばすたびに
-	// **2つを揃えて進める義務が増え、片方を忘れてもコンパイラは教えてくれない。**
-	for offset := head; offset < len(body); {
-		rest := body[offset:]
-		line := rest
-		advance := len(rest)
-		if i := strings.IndexByte(rest, '\n'); i >= 0 {
-			line = rest[:i]
-			advance = i + 1
+	if i := strings.IndexByte(body, '\n'); i >= 0 {
+		if isMarkerLine(body[:i]) {
+			return body[:i+1] + config.AIMarker + "\n" + body[i+1:]
 		}
-		offset += advance
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case trimmed == "":
-			// 空行。印の並びはまだ続きうるので、止めずに読み進める。
-			// **印より前の空行だけ、位置を進める。**残すと、1行目が空白だけの行になる。
-			// **印のあとの空行では進めない。**進めると、印の並びから離れた場所へ入る。
-			if !sawMarker {
-				insert = offset
-			}
-		case !isMarkerLine(line):
-			// **本文が始まった。**ここから先の `<!--` は引用であって名乗りではない。
-			return spliceAIMarker(body, insert)
-		case strings.HasPrefix(trimmed, config.AIMarker):
-			// **先頭の印の並びに、既に印がある。**二重に付けない。
-			// **`<!-- continuo:ai --> 補足` のように後ろへ書き足した行も数える。**
-			// `isMarkerLine` がその形を印の行として通すので、
-			// **完全一致で見ると、印が2つ並ぶ本文を作ってしまう。**
-			//
-			// **先頭の空白だけは、ここでも落とす。**落とさないと、
-			// **既に印を持つ本文だけ、4桁字下げの1行目がコード片として描かれる。**
-			// **`spliceAIMarker` も同じ理由で落としている。**片方を変えるときは両方を見ること。
-			return body[head:]
-		default:
-			// 印の行。**この行の直後を、いまの挿入位置とする。**
-			sawMarker = true
-			insert = offset
-		}
+		return config.AIMarker + "\n" + body
 	}
-	return spliceAIMarker(body, insert)
+	// 改行の無い本文。**印1行だけなら、その後ろへ足す。**前へ入れると先頭一致が外れる。
+	if isMarkerLine(body) {
+		return body + "\n" + config.AIMarker
+	}
+	return config.AIMarker + "\n" + body
 }
 
 // isMarkerLine は、その行が1行で閉じた HTML のコメント（＝印の行）かを返す。
 //
+// **行頭ちょうどの `<!--` だけを印の行とみなす。**字下げした行は本文である。
+//
 // **開きだけでは足りない。**`<!--` で始まり、同じ行に `-->` が無い行は、
 // **複数行の HTML コメントの開きである。**印の行として数えると、
-// **その中へ印を差し込むことになる。**issue の画面では見えず、
-// 本文は `<!--` で始まったまま残る。
-//
-// **そのときは、そのコメントの前へ印を置く。**
-// **読む側は、`<!--` だけの行を印として数えない**（`IsMarked` も `FetchComments` も CI の正規表現も、
-// 印そのもので始まっているかを見る）。**だから前へ置いても、どの判定も動かない。**
-//
-// **いまの経路では、その本文は作れない。**`withAIMarker` を呼ぶのは
-// `ComposeCommentBody` 1つで、そこへ来る本文は continuo 自身の文言か、
-// 持ち回りの印そのもので始まる。**この判定は、呼び出し元が増えたときのための備えである。**
+// **その中へ印を差し込むことになり、issue の画面では見えなくなる。**
 //
 // **閉じの後ろに本文が続く行は、印の行として数える。**
-// `<!-- 方針 --> production へは push しないでください。` のような1行の書き方があり
-// （[internal/prompt/prompt.go](../prompt/prompt.go) の `stripCommentsFromLine` がそう書いている）、
+// `<!-- 方針 --> production へは push しないでください。` のような1行の書き方があり、
 // **その形だと、印は本文の1行の下へ入る。**見た目は良くない。
+// **それでも数えるほうを採る。**数えないと、その行より**前**へ印を入れることになり、
+// **`IsMarked` も `FetchComments` も先頭一致が同時に外れる。**
 //
-// **それでも数えるほうを採る。**数えないと、その行より**前**へ印を入れることになるからである。
-// **読む側は `TrimSpace(body)` してから先頭を見るので、`<!-- continuo:bid --> 立候補` のような
-// 1行を先頭に持つ本文は、`IsMarked` からは持ち回りのコメントに見える。**
-// **そこへ印を先に入れると、`IsMarked` も `FetchComments` も CI の正規表現も同時に外れる。**
-// **見た目が悪いことと、先頭一致が全部外れることを比べて、後者を避ける。**
+// **同じ前提に立つ定数が、他に3つある**（`StartsAsProgressReport` の説明にある一覧）。
+// **印の形を変えるときは4つとも動かすこと。**
 //
 // line: 見る行（行末の改行は含まない）。
 // 戻り値: 行頭ちょうどの `<!--` で始まり、同じ行に `-->` があれば真。
@@ -167,47 +107,6 @@ func isMarkerLine(line string) bool {
 		return false
 	}
 	return strings.Contains(line[len(commentOpen):], commentClose)
-}
-
-// spliceAIMarker は、本文の指定の位置へ config.AIMarker を1行差し込む。
-//
-// body: 差し込む前の本文。
-// at: 差し込む位置（バイト単位）。
-// 戻り値: 差し込んだ本文。
-func spliceAIMarker(body string, at int) string {
-	prefix, suffix := body[:at], body[at:]
-	// **本文の先頭の空白は落とす。**
-	// 残すと、1行目が空白だけの行になるか、**4桁字下げの1行目が GitHub の画面で
-	// コード片として描かれる**（先頭に並ぶ印が、隠れずに文字として出る）。
-	// **読む側は `TrimSpace(body)` してから先頭を見るので、落としても判定は変わらない。**
-	//
-	// **落としてから改行の綴りを決める。**順序を逆にすると、
-	// **先頭に空白がある本文で「先頭へ差し込む」の枝へ入らない。**
-	prefix = strings.TrimLeftFunc(prefix, unicode.IsSpace)
-	// **改行は `\n` である。**CRLF は扱わない。
-	//
-	// **本文を作る経路を全部たどって決めた**（2026-09-08、実装レビュー5周目）。
-	// 持ち回りのコメントも、関門の案内も、Status を動かした記録も、**全部 Go の `"\n"` で組み立てている。**
-	// 外から来る文字列は git と gh の出力だけで、**continuo が動く場所（darwin と linux）では LF である。**
-	// **CRLF を扱う処理は、測っていない場合のために置いて、3周続けてそこから欠陥を出した。**捨てた。
-	const eol = "\n"
-	// **もとの末尾に改行が在ったかを、補う前に控える。**
-	// **補ったあとで見ると、必ず「在った」になる。**
-	hadEOL := strings.HasSuffix(prefix, "\n")
-	// **行の途中へ足さない。**末尾に改行の無い本文では、印が前の行に繋がる。
-	if prefix != "" && !hadEOL {
-		prefix += eol
-	}
-	// **本文の末尾へ足すときも、もとの末尾の改行は保つ。**
-	// **消すと、doc が名乗っている「印の行より後ろは1文字も書き換えない」が偽になる。**
-	// **もとから改行が無ければ、増やさない。**
-	if suffix == "" {
-		if hadEOL {
-			return prefix + config.AIMarker + eol
-		}
-		return prefix + config.AIMarker
-	}
-	return prefix + config.AIMarker + eol + suffix
 }
 
 // ComposeCommentBody は、continuo が投稿する本文を組み立てる（設計 3-82）。
