@@ -853,6 +853,44 @@ func TestQuota_リセット時刻が読めなくても経過が上限を超え�
 	waitForRelease(t, fx, clock, issue.Identifier)
 }
 
+// TestQuota_毎回状態が変わっていたら手放さない は、手放しの2つ目の条件を確かめる
+// （issue #173）。
+//
+// 目的: **`revision`（pane の版）では、この場面を捕まえられなかった。**
+// あれは画面を1バイトも見ておらず、herdr が増やすのは端末タイトルの本文が変わったときだけである。
+// **continuo の pane ではタイトルが issue の識別子で固定されるので、永久に動かない**
+// （2026-09-08 の実測。働いている3つの pane が2分間ずっと `revision: 1` だった）。
+// **そのため2つ目の条件は常に真で、判定は実質「`agent_status` を2回読んだ」だけだった。**
+// **観測と観測の間に `working` の山が丸ごと入っていても気づけない。**
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後（上限を超える）。
+// **巡回のたびに agent の状態が変わったことにする**（`state_change_seq` を増やす）。
+// 成功条件: **手放さないこと。**印に残り、担当者も変わらないこと。
+//
+// **この検査は、実装を `revision` へ戻すと落ちる**（戻すと連番を見ないので、
+// 2回目の観測で「変わっていない」と答えて手放す）。
+func TestQuota_毎回状態が変わっていたら手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W7")
+
+	// **手放しのテストと同じだけ巡回を回す。**違いは、巡回のたびに状態が変わることだけである。
+	for i := 0; i < 60; i++ {
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			t.Fatalf("状態が変わり続けているのに手放しました（%d 回目の巡回）:\n%s", i, fx.Logs.String())
+		}
+		fx.Herdr.BumpStateSeq()
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("担当者が変わっている: %v", got)
+	}
+}
+
 // TestQuota_5時間の枠だけなら上限を超えても待ち続ける は、人間が決めた表の1行目を確かめる。
 //
 // 目的: **2026-08-26 の決定「5時間枠 → 待つ。担当は変えない」。**

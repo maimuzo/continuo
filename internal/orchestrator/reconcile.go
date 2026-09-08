@@ -403,19 +403,24 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) bool {
 	if agent.AgentStatus != herdr.AgentStatusIdle && agent.AgentStatus != herdr.AgentStatusDone {
 		return false
 	}
-	// **版が変わっていれば、まだ何かを書き出している。**
+	// **状態が変わっていれば、まだ動いている。**
 	//
-	// **`LastRevision` と比べてはならない。**あれを書くのは着手のときと巡回の stall 検知だけで、
-	// **枠待ちの印が立っている run と `claude.turn_timeout_ms` が0以下の機械では stall 検知が走らない。**
-	// **凍りついた値と比べることになり、画面が1度でも動いたあとは永久に一致しない。**
+	// **`revision`（pane の版）と比べてはならない**（issue #173）。
+	// **あれは画面を1バイトも見ていない。**herdr が増やすのは端末タイトルの本文が変わったときだけで、
+	// **continuo の pane では issue の識別子で固定されるので永久に動かない。**
+	// **実測（2026-09-08、herdr 0.8.2）で、働いている3つの pane が2分間ずっと `revision: 1` だった。**
+	// **比べても常に「同じ」なので、この判定は実質「`agent_status` を2回読んだ」だけになっていた。**
 	//
-	// **`noteRevision` を呼ぶのも駄目である。**版を控え直すので、
-	// **このあと `checkStalls` が同じ版を見て「変わっていない」と答え、
-	// 画面が動いている run を打ち切ることになる。**
+	// **`state_change_seq` は、その agent の状態が変わったときだけ刻み直される。**
+	// **30秒あけた2回の読み取りの間に `working` の山が入っていれば、値が動くので気づける。**
 	//
-	// **だから、この判定は自分が読んだ版だけを覚える。**
+	// **`checkStalls` の側の控え（`noteRevision`）を呼んではならない。**控え直すので、
+	// **このあと `checkStalls` が同じ値を見て「変わっていない」と答え、
+	// 動いている run を打ち切ることになる。**
+	//
+	// **だから、この判定は自分が読んだ連番だけを覚える。**
 	// **2回続けて同じなら止まっている。**初回は必ず偽を返す。
-	return rs.noteQuotaProbe(agent.Revision)
+	return rs.noteQuotaProbe(agent.StateChangeSeq)
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる

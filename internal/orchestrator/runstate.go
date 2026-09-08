@@ -166,22 +166,39 @@ type runState struct {
 	// **写し（runSnapshot）には載せない。**読むのは `noteWeeklyShort` の戻り値だけであり、
 	// **写しへ載せると、そこを通さない古い値を正だと思って読む人が出る。**
 	WeeklyShortSince time.Time
-	// QuotaProbeRevision は、手放してよいかを見るときに読んだ画面の版である
-	// （設計 3-27。issue #197）。
+	// QuotaProbeStateSeq は、手放してよいかを見るときに読んだ
+	// herdr の `state_change_seq`（agent の状態が変わるたびに増える連番）である
+	// （設計 3-27。issue #173 / #197）。
 	//
-	// **`LastRevision` を使ってはならない。**あちらを書くのは、着手のときと
-	// 巡回の stall 検知だけである。**枠待ちの印が立っている run と、
-	// `claude.turn_timeout_ms` を0以下にしている機械では、stall 検知が走らない。**
-	// **そのため `LastRevision` は着手のときの値のまま凍りつき、
-	// 画面が1度でも動いたあとは永久に一致しなくなる。**手放しが1回も起きない。
+	// **`revision`（pane の版）を使ってはならない**（issue #173）。
+	// **あれは画面を1バイトも見ていない。**herdr が増やすのは
+	// **端末タイトルの、装飾を落とした本文が変わったとき**だけである
+	// （落とす装飾は点字1文字か `·✢✳✶✻✽◐◓◑◒` の10文字）。
+	// **continuo は端末タイトルを設定しない。**書いているのは Claude Code 自身で、
+	// **continuo の pane では `<owner>/<repo>#<番号>` を最後まで変えない。**
+	// **実測（2026-09-08、herdr 0.8.2）で、働いている3つの pane が2分間ずっと `revision: 1` だった。**
+	// **つまり「2回続けて同じ版」は常に真で、判定は実質
+	// 「`agent_status` を2回読んだ」だけになっていた。**
+	// **30秒あけた2回の読み取りの間に `working` の山が丸ごと入っていても気づけない。**
 	//
-	// **この項目は、手放しの判定が自分で読んだ版だけを覚える。**
-	// **2回続けて同じ版なら「止まっている」である。**
-	QuotaProbeRevision uint64
-	// QuotaProbeSeen は、上の版を1度でも読んだかを表す。
+	// **連番は、その agent の状態が変わったときだけ刻み直される。**
+	// herdr は通し番号を全体で1本持つが、書き戻すのは状態が実際に変わった当の terminal だけである
+	// （`src/app/actions.rs` の `if change.previous_state != change.state`）。
+	// **他の agent が動いても、この agent の値は動かない。**
+	// **`idle` と `done` の行き来でも動かない**（違いは「人間がその tab を見たか」で、内部の状態は同じである）。
 	//
-	// **版は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
+	// **この項目は、手放しの判定が自分で読んだ連番だけを覚える。**
+	// **2回続けて同じなら「その間に状態が1度も変わっていない」である。**
+	QuotaProbeStateSeq uint64
+	// QuotaProbeSeen は、上の連番を1度でも読んだかを表す。
+	//
+	// **連番は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
 	// **初回は必ず「止まっていない」と答える**（そこからどれだけ止まっていたかが分からない）。
+	//
+	// **起動直後の run を守っているのは、この欄である。**
+	// 「連番が0なら偽」を別に足す案は採らない。**その枝には届かない。**
+	// **`agent_status` が `idle` か `done` を返す時点で、内部の状態は初期値の `Unknown` から
+	// 必ず1度は変わっており、連番は1以上である。**
 	QuotaProbeSeen bool
 	// AfterRunDone は、この run で `workspace_hooks.after_run` を走らせ切ったかを表す
 	// （issue #197）。
@@ -1122,19 +1139,21 @@ func (rs *runState) noteWeeklyShort(short bool, now time.Time) time.Time {
 	return rs.WeeklyShortSince
 }
 
-// noteQuotaProbe は、手放しの判定が読んだ画面の版を控え、止まっているかを返す
-// （設計 3-27。issue #197）。
+// noteQuotaProbe は、手放しの判定が読んだ状態の連番を控え、止まっているかを返す
+// （設計 3-27。issue #173 / #197）。
 //
-// **2回続けて同じ版なら「止まっている」である。**
+// **2回続けて同じ連番なら「その間に状態が1度も変わっていない」である。**
 // **初回は必ず偽を返す。**そこからどれだけ止まっていたかが分からないためである。
 //
-// rev: いま読んだ画面の版。
-// 戻り値: 前に読んだ版と同じなら true。
-func (rs *runState) noteQuotaProbe(rev uint64) bool {
+// **`revision` から替えた**（issue #173）。**理由は `QuotaProbeStateSeq` の説明にある。**
+//
+// seq: いま読んだ `state_change_seq`。
+// 戻り値: 前に読んだ連番と同じなら true。
+func (rs *runState) noteQuotaProbe(seq uint64) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	same := rs.QuotaProbeSeen && rs.QuotaProbeRevision == rev
-	rs.QuotaProbeRevision = rev
+	same := rs.QuotaProbeSeen && rs.QuotaProbeStateSeq == seq
+	rs.QuotaProbeStateSeq = seq
 	rs.QuotaProbeSeen = true
 	return same
 }
