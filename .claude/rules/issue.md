@@ -73,7 +73,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 **このとき決めているのは人間のままなので、上の約束は空文にならない。**
 **言われていないのに上げてはならない。**
 
-**段4 の並び順は、`updateProjectV2ItemPosition` で動かす**（[docs/plans/continuo_design.md:9516](../../docs/plans/continuo_design.md#L9516) の 4-2）。
+**段4 の並び順は、`updateProjectV2ItemPosition` で動かす**（[docs/plans/continuo_design.md:9510](../../docs/plans/continuo_design.md#L9510) の 4-2）。
 着手順序の逆順に「先頭へ送る」（3つ目の引数 `afterId` を省く）を繰り返すと、最後に送ったものが1位になる。
 **引数名は 2026-09-04 に読み取りだけの introspection で確かめた**（`UpdateProjectV2ItemPositionInput` の入力に `afterId` がある）。
 
@@ -86,7 +86,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 | **書き込みの間は1秒空ける** | GitHub が変更を伴うリクエストに求めている（[docs/plans/continuo_design.md:4359](../../docs/plans/continuo_design.md#L4359)）。104件の全並べ替えで約2分かかる |
 | **`updateProjectV2Field` は絶対に呼ばない** | [CLAUDE.md](../../CLAUDE.md) の「GitHub Projects v2 の project #3 は本番のカンバンである」。**Status の値が全部消える** |
 | **段4 のあと、`Ice Box` の item はカンバン全体の先頭に並ぶ** | そのため段7 で `Ready` へ上げた item は、前から待っている `Ready` の item より先に dispatch される。**それが着手順序どおりなので、そのままでよい** |
-| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9549](../../docs/plans/continuo_design.md#L9549)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:406-408](../../internal/orchestrator/dispatch.go#L406-L408) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4300](../../docs/plans/continuo_design.md#L4300) の本文である**） |
+| **動かすのは `Ice Box` の item だけにする** | **並び順は project 全体で1本しかない**（[docs/plans/continuo_design.md:9543](../../docs/plans/continuo_design.md#L9543)）。「先頭へ送る」はカンバン全体の先頭へ送る。**`Ready` や `In Progress` の item を動かすと、走っている continuo が次に dispatch する issue が変わる**（[internal/orchestrator/dispatch.go:406-408](../../internal/orchestrator/dispatch.go#L406-L408) が「返ってきた配列の順序をそのまま使う」と書いている。**同じ行のコメントは「並び順を決めるのは人間である」と続くが、それは 3-30 の旧い見出しのままで、正は [docs/plans/continuo_design.md:4300](../../docs/plans/continuo_design.md#L4300) の本文である**） |
 
 **段2 の着手順序は、2箇所へ出す。**
 
