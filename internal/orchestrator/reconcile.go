@@ -260,12 +260,18 @@ func (o *Orchestrator) reconcileWorktrees(ctx context.Context) {
 //
 // snap: この巡回で読んだ枠の写し。**nil なら「余裕が無い枠は無い」として扱う。**
 // now: いまの時刻。
-func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, stale bool, now time.Time) {
-	// **古い写しでは「使い切っている」と答えない**（issue #173）。
-	// **答えると、その写しで立った印を誰も外せなくなる。**
-	// **`resets_at` が `null` の枠だけが100%だった機械では、時刻でも外れない。**
-	// **資格情報が切れたまま、打ち切りの時計が永久に止まる。**
-	full := snap != nil && !stale && snap.AnySelected(handoff.Full())
+func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time.Time) {
+	// **古い写しでも、最後に読めた値をそのまま使う**（issue #173）。
+	// **`stale` で止めてはならない。**
+	// [internal/orchestrator/orchestrator.go:838-840](orchestrator.go#L838-L840) が
+	// 「**止めるのは入札だけである。**枠待ちと dispatch を止める閾値は、
+	// 最後に読めた値を使い続ける（**読めないことを理由に走行中の run を捨てない**）」と決めている。
+	//
+	// **3周ぶん、ここを行ったり来たりした**（4周目に外す側を止め、5周目に立てる側も止め、
+	// 6周目に両方戻した）。**片方だけ止めると印が永久に残り、両方止めると
+	// 使用量 API が1回こけただけで枠待ちの run が待ちを抜けて指示を送る。**
+	// **正しいのは、どちらも止めないことである。**
+	full := snap.AnySelected(handoff.Full())
 	for _, rs := range o.snapshotRuns() {
 		st := rs.snapshot()
 		if !st.WaitingQuota {
@@ -340,7 +346,12 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	handling := map[*runState]bool{}
 	// **どの枠に余裕が無いかは、run ごとに変わらない**（issue #173）。
 	// **ループの中で作ると、run の数だけ枠の一覧を走査して文字列を作り直すことになる。**
-	shortKinds := strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
+	// **読めない写しでは作らない**（issue #173）。
+	// **そのときは `weeklyWaitExceededWith` が全部の run で偽を返すので、1度も読まれない。**
+	var shortKinds string
+	if quotaSnap != nil && !quotaStale {
+		shortKinds = strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
+	}
 	// **写しは呼び出し側が1回だけ読む**（設計 3-27）。**ここで取り直してはならない。**
 	// **`checkStalls` は、このあと同じ run に `noteWeeklyShort` を当てる。**
 	// `pollQuota` は turn の goroutine から並行に走って写しを差し替えるので、
@@ -528,7 +539,7 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 		// **`claude.turn_timeout_ms` が0以下だと打ち切りも来ないので、
 		// 既定の30秒間隔で1時間に120行になる。**
 		// **issue #173 が読めるようにしたいログを、そこで埋めることになる。**
-		if rs.noteQuotaReleaseUnknown() {
+		if rs.notePaneUnreadable() {
 			o.logger.Info("画面の状態を読めないので、1週間の枠の上限を超えていても手放しません"+
 				"（次の巡回でやり直します。この行は run ごとに1回だけ出します）",
 				"identifier", rs.issue().Identifier, "error", err)
@@ -715,7 +726,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	//
 	// **外すのは安全な向きである。**外して困るのは「まだ枠が尽きているのに時計が動く」ことだけで、
 	// **そのとき run は打ち切られてリトライを積む。**握ったまま残るよりはるかに軽い。
-	o.clearQuotaWaitWhenBack(quotaSnap, quotaStale, now)
+	o.clearQuotaWaitWhenBack(quotaSnap, now)
 
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	if silence <= 0 {
@@ -727,6 +738,16 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		if snap.WaitingQuota {
 			// **印の出し入れは、上の `clearQuotaWaitWhenBack` が済ませている。**
 			// **上限は上の `releaseQuotaWaitExceeded` が見ている。**ここでは見ない。
+			continue
+		}
+		// **別の経路が終わらせている最中の run は飛ばす**（issue #173）。
+		// **手放しを撃った run は、その goroutine が印を握っている。**
+		// **ここで `agent.get` を叩くと、閉じたばかりの pane に当たって
+		// 「agent の状態を読めませんでした（止まったものとして扱います）」を出す。**
+		// **手放した run について、その文面は嘘である。**
+		// **`handling` へ入れて守るのではない**（撃ったあとも守ると、
+		// 撃って失敗し続ける run が永久に守られる）。**握られている間だけ飛ばす。**
+		if rs.terminalBusy() {
 			continue
 		}
 		if releasing[rs] {
@@ -793,10 +814,8 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		}
 
 		// 2. 動いていない。枠待ちかを見る。
-		// **古い写しでは印を立てない**（issue #173）。
-		// **立てると打ち切りの時計が止まり、外す側が古い写しを信じない限り誰も外せない。**
-		// **同じ巡回の `weeklyWaitExceededWith` と `noteWeeklyShort` も、そう倒している。**
-		if quotaSnap != nil && !quotaStale && o.isQuotaWaitingWith(quotaSnap, rs) {
+		// **古い写しでも立てる**（issue #173。上の `clearQuotaWaitWhenBack` と同じ理由）。
+		if o.isQuotaWaitingWith(quotaSnap, rs) {
 			// **ここでは手放さない**（人間の決定。2026-09-06。issue #197）。
 			// **手放しの入口は `releaseQuotaWaitExceeded` の1本だけである。**
 			// **印を立てるだけにしておけば、次の巡回の先頭でそちらが拾う。**

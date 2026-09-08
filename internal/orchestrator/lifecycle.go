@@ -989,6 +989,14 @@ func (o *Orchestrator) runAfterRunOK(ctx context.Context, rs *runState) bool {
 	if !o.ws.HookConfigured(workspace.HookAfterRun) {
 		return false
 	}
+	// **この run で既に走らせ切っていれば、そのまま真を返す**（issue #173）。
+	// **`RunAfterRunOnce` は「この worktree でまだ走らせていないので、いま走らせた」を返す。**
+	// **既に走らせたときは偽になるので、そのまま返すと
+	// 「`after_run` は走りませんでした。remote には続きが入っていないことがあります」を
+	// issue へ書くことになる。**push は済んでいるのに、である。
+	if rs.afterRunDone() {
+		return true
+	}
 	// **1つ目の戻り値を捨ててはならない。**あれは「この worktree でまだ走らせていないので、
 	// いま走らせた」を表す。**偽になるのは、既に走らせたときである。**
 	// **走らせ切ったことを run が覚えている**（issue #197）。

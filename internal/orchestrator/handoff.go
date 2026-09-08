@@ -594,8 +594,12 @@ func (o *Orchestrator) removeOwnAssignee(
 // weeklyWaitExceededWith は「1週間の枠が明けるのを待つ上限を超えたか」を、
 // 渡された写しから返す（設計 3-27。issue #197）。
 //
-// **満杯の1週間の枠を見た時刻を、この中で記録する。**判定と記録を分けると、
-// **呼ぶ側が記録を忘れたときに、経過が永久に0のままになる。**
+// **記録はここでしない。読むだけである**（issue #173）。
+// **控えるのは `checkStalls` の1箇所だけにしてある。**
+// **2箇所で書くと、それぞれが持つ「読めない写しでは控えない」の門を、
+// 片方だけ直したときに黙って食い違う。**
+// **`WeeklyShortSince` は、`resets_at` を1つも読めない機械で上限を測る唯一の道である。**
+// **`checkStalls` の `noteWeeklyShort` を「重複だ」と思って消してはならない。**
 //
 // **測り方は2通りある。**
 //
@@ -882,12 +886,17 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		// **この run が枠明けに完走しても、`finishRun` の `after_run` は走らない。**
 		// **push そのものは、いまの段1 で済んでいる。**そのあとに積んだ commit だけが
 		// push されないまま残る。**黙って進めない。**次に何を見ればよいかを1行で出す。
-		o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します）。"+
-			"workspace_hooks.after_run は既に走らせたので、この run が完走しても再実行されません",
-			"identifier", issue.Identifier,
-			"after_run が成功したか", afterRunOK,
-			"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
-			"余裕の無い枠", shortKinds)
+		// **attempt ごとに1回だけ出す**（issue #173）。
+		// **`RemoveAssignees` が落ち続ける run は、毎巡回ここへ来る。**
+		// **既定の30秒間隔で1時間に120行になる**（すぐ上の `removeOwnAssignee` の `Warn` と合わせて240行）。
+		if rs.noteQuotaReleaseFailed() {
+			o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します。この行は1回だけ出します）。"+
+				"workspace_hooks.after_run は既に走らせたので、この run が完走しても再実行されません",
+				"identifier", issue.Identifier,
+				"after_run が成功したか", afterRunOK,
+				"weekly_wait_limit_minutes", o.cfg.RateLimit.WeeklyWaitLimitMinutes,
+				"余裕の無い枠", shortKinds)
+		}
 		rs.endTerminal()
 		return false
 	}

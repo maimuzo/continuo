@@ -191,6 +191,16 @@ type runState struct {
 	//
 	// **`beginAttempt` で偽へ戻す。**やり直した attempt では、また1回出してよい。
 	quotaReleaseUnknownWarned bool
+	// paneUnreadableWarned は「画面の状態を読めない」を既に1回出したかである（issue #173）。
+	//
+	// **`quotaReleaseUnknownWarned` と分ける。**1つを共有すると、
+	// **先に出したほうが、もう一方を attempt のあいだ丸ごと黙らせる。**
+	paneUnreadableWarned bool
+	// quotaReleaseFailedWarned は「担当を手放せませんでした」を既に1回出したかである（issue #173）。
+	//
+	// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す。**
+	// **既定の30秒間隔で1時間に240行になる。**
+	quotaReleaseFailedWarned bool
 	// QuotaProbeSeen は、上の連番を1度でも読んだかを表す。
 	//
 	// **連番は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
@@ -1206,6 +1216,38 @@ func (rs *runState) noteQuotaReleaseUnknown() bool {
 	return true
 }
 
+// notePaneUnreadable は「画面の状態を読めない」を出してよいかを返す（issue #173）。
+//
+// **`noteQuotaReleaseUnknown` と札を分ける。**1つを共有すると、
+// **先に出したほうが、もう一方を attempt のあいだ丸ごと黙らせる。**
+//
+// 戻り値: この attempt で初めてなら true。
+func (rs *runState) notePaneUnreadable() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.paneUnreadableWarned {
+		return false
+	}
+	rs.paneUnreadableWarned = true
+	return true
+}
+
+// noteQuotaReleaseFailed は「担当を手放せませんでした」を出してよいかを返す（issue #173）。
+//
+// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す。**
+// **既定の30秒間隔で1時間に240行になる。**
+//
+// 戻り値: この attempt で初めてなら true。
+func (rs *runState) noteQuotaReleaseFailed() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.quotaReleaseFailedWarned {
+		return false
+	}
+	rs.quotaReleaseFailedWarned = true
+	return true
+}
+
 // markAfterRunDone は `workspace_hooks.after_run` を走らせ切ったことを覚える（issue #197）。
 func (rs *runState) markAfterRunDone() {
 	rs.mu.Lock()
@@ -1954,6 +1996,8 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	rs.QuotaProbeStateSeq = 0
 	// **「担当を確かめられない」の1回きりの Warn も戻す**（issue #173）。
 	rs.quotaReleaseUnknownWarned = false
+	rs.paneUnreadableWarned = false
+	rs.quotaReleaseFailedWarned = false
 	// **「1週間の枠の余裕が無くなった時刻」も忘れる**（issue #173）。
 	//
 	// **やり直した attempt は、新しい agent と新しい pane である。**
