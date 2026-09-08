@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "631872ff9171c1f5421c159b82e36476c76199e503b36bfc57cf88e774adee72",
+  "_source_sha256": "8ef7c1915f6386a49aeda52febeca5abf244f89b7340b8175bca0483d275e966",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -540,7 +540,7 @@
   "handoff.released.do_not_push": "**Do not push the work that was running under %s to this branch.**",
   "handoff.released.reassign": "**The assignee of this issue was removed. The next assignee is decided by a new round of bids.**",
   "handoff.released.weekly_wait_limit": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** workspace_hooks.after_run has already run. **If it includes `git push`, the next machine that picks up this branch can continue from the remote.** If it does not, the commits exist only in this worktree (the worktree has been kept).",
-  "handoff.released.weekly_wait_limit_no_push": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** **workspace_hooks.after_run did not run.** The remote for this branch may not have the latest commits. The worktree has been kept.",
+  "handoff.released.weekly_wait_limit_no_push": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** **It could not confirm that workspace_hooks.after_run pushed** (either it is not configured, or it ran and failed — **the log says which**). The remote for this branch may not have the latest commits. The worktree has been kept.",
   "herdr.agent.invalid_name": "The agent name does not fit herdr's allowed pattern (`^[a-z][a-z0-9_-]{0,31}$`; it must start with a lowercase letter and be at most 32 characters): %q",
   "herdr.agent.send_keys_empty": "%s needs at least one key",
   "herdr.call.canceled": "the call to herdr was canceled (method=%s)",

@@ -1028,8 +1028,8 @@ worktree を開いて `git log --oneline HEAD --not --remotes` を叩いてく�
 **外せなかったときは、`warn` でこう出ます。**
 
 ```
-枠の上限で担当を手放せませんでした（次の巡回でやり直します）。workspace_hooks.after_run は
-既に走らせたので、この run が完走しても再実行されません
+枠の上限で担当を手放せませんでした（次の巡回でやり直します。この行は1回だけ出します）。
+workspace_hooks.after_run は既に走らせたので、この run が完走しても再実行されません
 ```
 
 **issue にはこのコメントが付きます。**
@@ -1039,7 +1039,7 @@ worktree を開いて `git log --oneline HEAD --not --remotes` を叩いてく�
 {"from":"octocat","branch":"continuo/octocat/hello-world/188","at":"2026-08-30T09:00:00+09:00","reason":"weekly_wait_limit"}
 
 **この issue の担当は外れました。次の担当は入札で決め直します。**
-**octocat が1週間の枠を待つ上限を超えたので、自分で担当を手放しました。**workspace_hooks.after_run は実行済みです。この branch を次に取る機械は、remote の続きから始めてください。
+**octocat が1週間の枠を待つ上限を超えたので、自分で担当を手放しました。**workspace_hooks.after_run は実行済みです。**その中身が `git push` を含むなら、この branch を次に取る機械は remote の続きから始められます。**含まないなら、この worktree にだけ commit が残っています（worktree は残してあります）。
 ```
 
 **`"reason":"weekly_wait_limit"` が目印です。**
@@ -1063,9 +1063,13 @@ worktree を開いて `git log --oneline HEAD --not --remotes` を叩いてく�
 **`after_run` に push を書いていない場合、失われるのは最後のエージェントの push 以降ぶんです。**
 **エージェントは `progress_interval_ms`（既定1時間）ごとに push するよう指示されています。**
 
-**`after_run` が走らない場合。**次の4つのどれかに当たると走りません。
-**うち3つは「手放しそのものを見送る」で、1つだけは「手放さずに run を畳む」です。**
+**`after_run` が走らない場合。**次の6つのどれかに当たると走りません。
+**うち5つは「手放しそのものを見送る」で、1つだけは「手放さずに run を畳む」です**（表のいちばん下）。
 **この2つは結果が違うので、分けて読んでください。**
+
+**見送った run が、そのあとどうなるかも書いてあります。**
+**「そのまま残ります」と「打ち切りの判定へ回ります」は別です。**
+**後者は、無音が `claude.turn_timeout_ms` を超えていれば pane を閉じてリトライを1つ積みます。**
 
 | 何が起きているか | continuo はどうするか | run はどうなるか |
 | --- | --- | --- |

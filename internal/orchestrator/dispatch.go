@@ -582,9 +582,23 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// **担当者のいる issue は通す**ので、そこでは `preflight` が走り続ける。
 		// **通す理由は下にある**（期限切れの担当を外す経路が `handoffGate` の中にある）。
 		//
-		// **担当が既に自分にある issue は落とさない。**入札が要らないので、
-		// **枠に余裕が無くても着手する**（走っている run の面倒を見る経路がここしかない）。
-		// **`handoffGate` の中の「期限切れの担当を外す」経路も、担当者がいる issue しか通らない。**
+		// **担当者がいる issue は落とさない。**入札が要らないためである。
+		//
+		// **「走っている run の面倒を見る経路がここしかない」ではない**（issue #173）。
+		// **走っている run は、92行前の `lookupRunByID` が既に飛ばしている。**
+		// **ここへ来る「担当者がいる issue」は、この機械に run が無いものだけである。**
+		//
+		// **落とせない理由は2つある。**
+		//
+		//	1. **`handoffGate` の中の「期限切れの担当を外す」経路は、担当者がいる issue しか通らない。**
+		//	   落とすと、他機械が握ったまま放置した issue を誰も解けなくなる
+		//	2. **再起動のあとの拾い直し**（`restart.orphan_running_action: redispatch`）**が、この経路である。**
+		//	   落とすと、自分が `In Progress` にした issue を自分で拾い直せない
+		//
+		// **代償がある。**枠に余裕が無いまま2の経路を通ると、**動けない Claude Code を1つ起こす。**
+		// **使用率100なら枠待ちの印が立って打ち切りの時計が止まるが、90〜99%の帯では立たない**ので、
+		// **`claude.turn_timeout_ms`（既定1時間）でリトライを1つ焼く。**
+		// **それでも落とさない。**落とすほうは issue が誰にも解かれずに残る。
 		if blocked != handoff.SkipNone && len(assigneeLogins(issue)) == 0 {
 			// **枠が実際に落とした1件目で、この巡回の理由を1回だけ出す**（issue #173）。
 			if !blockedLogged {

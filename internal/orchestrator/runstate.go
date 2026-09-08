@@ -212,9 +212,10 @@ type runState struct {
 	// **初回は必ず「止まっていない」と答える**（そこからどれだけ止まっていたかが分からない）。
 	//
 	// **起動直後の run を守っているのは、この欄である。**
-	// 「連番が0なら偽」の門は `noteQuotaProbe` の本体にある（2026-09-09 に入れた）。
-	// **消してはならない。**`paneStopped` の側にも同じ門があるが、
-	// **`noteQuotaProbe` を別の場所から呼んだ人が、0 と 0 を比べて恒真へ戻る。**
+	// 「連番が0なら偽」の門は `noteQuotaProbe` の本体にある。**そこ1箇所だけである。**
+	// **消してはならない。**消すと、連番を返さない herdr の版で
+	// **0 と 0 を比べて恒真へ戻る**（`state_change_seq` は `omitempty` である）。
+	// **`paneStopped` の側には無い。**8周目に、同じ門を2箇所へ書いていたのをこちらへ寄せた。
 	// **`agent_status` が `idle` か `done` を返す時点で、内部の状態は初期値の `Unknown` から
 	// 必ず1度は変わっており、連番は1以上である。**
 	QuotaProbeSeen bool
@@ -524,7 +525,6 @@ func (rs *runState) snapshot() runSnapshot {
 		BackoffUntil:     rs.BackoffUntil,
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
-		AfterRunDone:     rs.AfterRunDone,
 		WeeklyShortSince: rs.WeeklyShortSince,
 		LastSeenAt:       rs.LastSeenAt,
 		LastHookAt:       rs.LastHookAt,
@@ -558,7 +558,6 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
-	AfterRunDone     bool
 	WeeklyShortSince time.Time
 	LastSeenAt       time.Time
 	LastHookAt       time.Time
@@ -1201,10 +1200,12 @@ func (rs *runState) noteQuotaProbe(seq uint64) (bool, bool) {
 	// **内部の状態は初期値の `Unknown` から必ず1度は変わっており、連番は1以上である。**
 	// **だから、ここで落ちるのは「返さない版」だけである。**
 	// **連番が 0 なら、何も覚えずに「まだ」と答える。**
-	// **この門は `paneStopped` の側にもある**（[internal/orchestrator/reconcile.go](reconcile.go) の
-	// `if agent.StateChangeSeq == 0`）**が、そちらに任せてはならない。**
-	// **この関数の doc と `beginAttempt` のコメントが「比べる前に落としている」と書いており、
-	// それを信じた2人目の呼び出し側が 0 と 0 を比べて恒真へ戻る。**
+	// **この門は、いまここ1箇所だけである。**8周目に `paneStopped` の側の写しを消した
+	// （[internal/orchestrator/reconcile.go](reconcile.go) の `paneStopped`。
+	// 呼ぶ側が先に効いて、こちらが死にコードになっていた）。
+	// **だからここを「重複だ」と思って消してはならない。**消すと、連番を返さない版で
+	// **`idle` か `done` の run が全部「止まった」と読まれ、confirm もせずに
+	// `after_run` を走らせ、担当を外し、pane を閉じる。**
 	// **`revision` で踏んだ穴と同じ形である**（issue #173）。
 	if seq == 0 {
 		return false, false

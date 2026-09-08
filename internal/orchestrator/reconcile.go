@@ -365,6 +365,12 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 	if quotaSnap != nil && !quotaStale {
 		shortKinds = strings.Join(quotaSnap.SelectedKinds(handoff.ShortWeekly(o.bidMargins())), ", ")
 	}
+	// **`claude.turn_timeout_ms` は、この巡回のあいだ1つの値に固定する**（issue #173）。
+	// **ループの中で3回読んでいた**（`silence` の計算と `stallDetectionOff()` を2回）。
+	// **`o.cfg` は `reloadConfig` が差し替えるので、3回が同じ値である保証が無い。**
+	// **run ごとに違う門で判定されることになる。**
+	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
+	stallOff := silence <= 0
 	// **写しは呼び出し側が1回だけ読む**（設計 3-27）。**ここで取り直してはならない。**
 	// **`checkStalls` は、このあと同じ run に `noteWeeklyShort` を当てる。**
 	// `pollQuota` は turn の goroutine から並行に走って写しを差し替えるので、
@@ -458,11 +464,10 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// （`settings.go` が張る8種類のうちの1つ）。**この門が守りたい「指示を送った直後の run」は、
 		// 必ずゼロ値ではない。**ゼロ値のまま残るのは、指示を1度も送れていない run だけで、
 		// **そちらは下の `paneStopped` が `idle` か `done` を2巡回続けて読むまで手放さない。**
-		if silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond; silence > 0 &&
-			!snap.LastBusyHookAt.IsZero() && now.Sub(snap.LastBusyHookAt) < silence {
+		if silence > 0 && !snap.LastBusyHookAt.IsZero() && now.Sub(snap.LastBusyHookAt) < silence {
 			continue
 		}
-		if !o.stallDetectionOff() && !o.runIdleForTurnTimeout(rs) {
+		if !stallOff && !o.runIdleForTurnTimeout(rs) {
 			continue
 		}
 		// **打ち切りを切っている機械では、経過の床をここで置く**（issue #173）。
@@ -478,7 +483,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// **`WeeklyShortSince` は巡回のたびに控えている**ので、そのまま使える。
 		//
 		// **打ち切りが効いている機械では、この床は要らない。**上の2つの門が既に効いている。
-		if o.stallDetectionOff() {
+		if stallOff {
 			limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
 			if limit > 0 && (snap.WeeklyShortSince.IsZero() || now.Sub(snap.WeeklyShortSince) <= limit) {
 				continue

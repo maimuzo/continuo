@@ -636,7 +636,10 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 	// **入札に使う余裕値と同じ線である**（`handoff.Short`）。
 	// **線を1本にしないと、使用率90〜99の帯で run が枠待ちにならないまま
 	// 手放しの条件だけを満たし、打ち切りと手放しが競走する。**
-	shortWeekly := handoff.ShortWeekly(o.bidMargins())
+	//
+	// **組み立てるのは、下の門を全部抜けてからである**（issue #173）。
+	// **入口で組み立てると、写しが読めない巡回でも run の数だけ closure を2つ確保して捨てる。**
+	//
 	// **読めなくなった写しでは、判定も記録もしない**（設計 3-77i。issue #197）。
 	// **この判定は GitHub へ2回書き、pane を閉じる。**
 	// **資格情報が切れた機械は、切れる直前の値を1日中返し続ける。**
@@ -647,7 +650,25 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 	if snap == nil || stale {
 		return false
 	}
-	weeklyShort := snap.AnySelected(shortWeekly)
+	limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
+	if limit <= 0 {
+		// **0 以下は「上限を設けない」**（`claude.turn_timeout_ms` と
+		// `tracker.provider.handoff.recheck_interval_ms` と同じ向き）。
+		// **5時間の枠だけならいつまでも待つ。**
+		//
+		// **枠の一覧を走査する前に返す**（issue #173）。上限を設けていない機械では、
+		// **run ごと・巡回ごとの走査がまるごと要らない。**
+		return false
+	}
+	// **1つだけ組み立てて、下の `LatestResetForWaitLimit` にも同じものを渡す**（issue #173）。
+	// **「余裕が無い」と数えた集合と、リセット時刻を引く集合がずれてはならない。**
+	shortWeekly := handoff.ShortWeekly(o.bidMargins())
+	if !snap.AnySelected(shortWeekly) {
+		return false
+	}
+	// **`WeeklyShortSince` は、ここまで来てから読む**（issue #173）。
+	// **入口で読むと、上の2つの門で戻る巡回でも run の鍵を取ることになる。**
+	//
 	// **ここでは控えない。読むだけである**（issue #173）。
 	// **控える場所は `checkStalls` の1箇所だけにする。**
 	// **2箇所で書くと、それぞれが持つ「読めない写しでは控えない」の門を、
@@ -658,14 +679,6 @@ func (o *Orchestrator) weeklyWaitExceededWith(
 	// **巡回は、この判定より後で控える。**だから枠が短くなった最初の巡回では
 	// **ゼロのままで、経過で測る枝は発火しない。**それでよい（1巡回ぶん遅れるだけである）。
 	since := rs.snapshot().WeeklyShortSince
-
-	limit := time.Duration(o.cfg.RateLimit.WeeklyWaitLimitMinutes) * time.Minute
-	if limit <= 0 || !weeklyShort {
-		// **0 以下は「上限を設けない」**（`claude.turn_timeout_ms` と
-		// `tracker.provider.handoff.recheck_interval_ms` と同じ向き）。
-		// **5時間の枠だけならいつまでも待つ。**
-		return false
-	}
 	// **人間が書いた式そのものである**（2026-08-26 / 2026-09-06）。
 	//
 	//	現在時刻 + weekly_wait_limit_minutes < 1週間の枠のリセット時刻
