@@ -207,14 +207,15 @@ func toolGateAssignmentNote(identifier string) string {
 		return ""
 	}
 	repo := identifier[:strings.Index(identifier, "#")]
-	return fmt.Sprintf("\n  いま担当しているのは %s である。リポジトリ %s へ issue と pull request を作ること、"+
-		"その本文とコメントを書くこと、そして `git push -u origin HEAD` のように"+
-		"いま居る branch をそのまま送ることは、担当している作業そのものなので「関係のない」に当たらない。"+
-		"それ以外は、担当しているリポジトリが相手でも断る。"+
-		"送り先の branch を名指しする push（`HEAD:main` のように既定の branch へ直に送る形）、"+
-		"pull request の取り込みと却下と承認（merge、close、approve）、release の作成、"+
-		"パッケージの公開、ラベルや担当者の付け外しは、この免除に含めない。"+
-		"ただし、これは他のどの条件も免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、"+
+	return fmt.Sprintf("\n  いま担当しているのは %s である。リポジトリ %s への issue と pull request の作成、"+
+		"その本文とコメントの書き込み（`gh api` で直に書く形も含む）、"+
+		"そして担当している worktree の branch の push は、"+
+		"担当している作業そのものなので「関係のない」に当たらない。"+
+		"ただし、pull request の取り込みと却下と承認（merge、close、approve）、release の作成、"+
+		"パッケージの公開、ラベルや担当者の付け外し、"+
+		"既定の branch（main / master）へ直に送る push（`HEAD:main` のような形）は、"+
+		"担当しているリポジトリが相手でも、この免除に含めず断る。"+
+		"これは他のどの条件も免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、"+
 		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo)
 }
 
@@ -243,11 +244,15 @@ func toolGateAssignmentNote(identifier string) string {
 // （[internal/prompt/builtin.md]）、**断られると pull request が1本も出ず、issue が黙って止まる。**
 // **force push は条件1（取り消せない破壊）が受け持つ**ので、ここで免除しても抜けない。
 //
-// **「担当している branch」と書かない。**判定役はコマンドの文字列しか見ないので、
-// **その branch が本当に担当のものかを確かめられない。**`git push origin HEAD:main` を
-// 「担当している branch への push」と読んで通す余地が残る。
-// **代わりに、通す形（`git push -u origin HEAD`）と通さない形（`HEAD:main` のように送り先を名指しする形）を、
-// コマンドの綴りで書き分ける。**
+// **通す形を綴りで数え上げてはならない。**「`git push -u origin HEAD` だけを通す。それ以外は断る」と
+// 書くと、**組み込みの指示書が叩かせる他の形が全部落ちる。**
+// 落ちるのは、2本目の pull request を出すときの `git push -u origin HEAD:<別の branch 名>`、
+// 進捗報告を書き足す `gh api --method PATCH .../issues/comments/<ID>`、
+// upstream を張ったあとの素の `git push` である。
+// **進捗報告が書けないと、18時間で担当が外れて、push していない作業が別の機械から見えなくなる。**
+//
+// **だから、通すものは種類で書き、断つものだけを名指しする。**
+// **既定の branch へ直に送る push は、送り先の綴り（`HEAD:main`）で見分けられるので名指しできる。**
 //
 // **及ばないものを「この条件のとおりに判断する」と書かない。**条件3の判定は
 // 「担当している issue と関係があるか」なので、**その直前で「担当している作業そのもの」と

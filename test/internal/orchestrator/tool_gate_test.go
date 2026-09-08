@@ -549,9 +549,20 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	// それは組み込みの指示書が pull request を出す前に必ず叩かせる段で、
 	// **断られると pull request が1本も出ず、issue が黙って止まる。**
 	// **force push は断る条件の1つ目が受け持つ**ので、ここで免除しても抜けない。
-	if !strings.Contains(prompt, "`git push -u origin HEAD` のように") {
-		t.Errorf("担当している branch への push を、肯定の形で免除していません:\n"+
+	if !strings.Contains(prompt, "担当している worktree の branch の push は") {
+		t.Errorf("担当している worktree の branch への push を、肯定の形で免除していません:\n"+
 			"`git push -u origin HEAD` が断られると、pull request が1本も出ません:\n%s", prompt)
+	}
+	// **進捗報告の書き足しは `gh api --method PATCH` である。**綴りで数え上げると落ちる。
+	// **落ちると18時間で担当が外れ、push していない作業が別の機械から見えなくなる。**
+	if !strings.Contains(prompt, "`gh api` で直に書く形も含む") {
+		t.Errorf("コメントを `gh api` で直に書く形が、免除に含まれていません:\n"+
+			"進捗報告の書き足しが断られると、18時間で担当が外れます:\n%s", prompt)
+	}
+	// **通す形を綴りで数え上げてはならない。**組み込みの指示書が叩かせる他の形が全部落ちる。
+	if strings.Contains(prompt, "それ以外は、担当しているリポジトリが相手でも断る") {
+		t.Errorf("通す形を数え上げて、それ以外を断る書き方になっています:\n"+
+			"`HEAD:<別の branch 名>` への push も、`gh api` の書き足しも落ちます:\n%s", prompt)
 	}
 	// **承認を、及ばないものとして名指ししていること。**
 	// 必須のレビューや自動マージが設定されたリポジトリでは、**承認がそのままコードを入れる。**
@@ -561,14 +572,11 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	// **「この条件のとおりに判断する」ではなく「この免除に含めない」と言い切っていること。**
 	// 条件3は「関係があるか」で判定するので、直前で「担当している作業そのもの」と宣言した相手には
 	// 必ず通る側へ倒れる。
-	if !strings.Contains(prompt, "それ以外は、担当しているリポジトリが相手でも断る") {
-		t.Errorf("担当先について、免除の外を断ると言い切っていません:\n%s", prompt)
-	}
 	// **送り先を名指しする push を、免除から外していること。**
 	if !strings.Contains(prompt, "HEAD:main") {
 		t.Errorf("既定の branch へ直に送る push を、免除から外していません:\n%s", prompt)
 	}
-	if !strings.Contains(prompt, "リポジトリ octocat/hello-world へ issue と pull request を作ること") {
+	if !strings.Contains(prompt, "リポジトリ octocat/hello-world への issue と pull request の作成") {
 		t.Errorf("担当しているリポジトリへの書き込みが「関係のない」に当たらないと書いていません:\n%s", prompt)
 	}
 
