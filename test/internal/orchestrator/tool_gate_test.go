@@ -599,6 +599,13 @@ func TestToolGate_担当先を告げる文は他の条件を免除しない(t *t
 	if nextCondAt < 0 {
 		t.Fatalf("次の断る条件（権限の昇格）が見つかりません:\n%s", prompt)
 	}
+	// **切り出す前に前後を確かめる。**免除の文が次の条件より後ろへ動くと、
+	// `prompt[noteAt:nextCondAt]` は panic になる。**この検査が防ぎたい退行そのもので起きるので、
+	// 読める失敗として出す。**
+	if noteAt > nextCondAt {
+		t.Fatalf("担当先を告げる文が、次の断る条件（権限の昇格）より後ろにあります: note=%d next=%d\n"+
+			"免除は、その条件の中で言い切らなければなりません", noteAt, nextCondAt)
+	}
 	sameCondition := prompt[noteAt:nextCondAt]
 
 	for _, want := range []string{"これは上の条件を免除しない", "資格情報の持ち出し"} {
@@ -633,12 +640,24 @@ func TestToolGate_担当先の外への起票を免除する(t *testing.T) {
 		// **人間が挙げた3つを全部拾う。**「不具合の報告」だけだと、切り出しの起票が落ちる。
 		"別のリポジトリへ切り出したい作業の起票",
 		// **列挙に無いものが断られる側へ落ちるのを防ぐ。**
-		"fork へ push して本家のリポジトリへ pull request",
+		// **push を免除するのではなく、免除が及ばないことを言い切る。**
+		"この免除が及ぶのは issue と pull request への書き込みだけである",
+		"それらは、いまの作業と関係があるかどうかで、この条件のとおりに判断する",
 		// **免除は他の条件に勝たない。**
 		"この免除も、上の条件を免除しない",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("担当先の外への免除に %q がありません:\n%s", want, prompt)
+		}
+	}
+
+	// **push を免除してはならない。**「fork へ push する形も同じである」と書くと、
+	// **任意のリポジトリへの push が「fork への push」と名乗るだけで素通りする。**
+	// 判定役は、その fork が本当に自分のものかを確かめられない。
+	for _, banned := range []string{"fork へ push", "push する形も、同じ"} {
+		if strings.Contains(prompt, banned) {
+			t.Errorf("免除が push に及んでいます（%q）:\n"+
+				"任意のリポジトリへの push が「fork への push」と名乗るだけで通ります:\n%s", banned, prompt)
 		}
 	}
 
