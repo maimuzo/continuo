@@ -433,17 +433,34 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		if snap.LastSeenAt.IsZero() {
 			continue
 		}
-		// **`after_run` を走らせ切った run は、この門で待たせない**（issue #173）。
-		// **この門は「指示を送った直後の run を手放さない」ために在る。**
-		// **既に `after_run` まで進んだ run は、その心配が無い。**
-		// **待たせると、5時間の枠が明けて `clearWaitingQuota` が `LastSeenAt` を進めた瞬間に、
-		// やり直しが `claude.turn_timeout_ms`（既定1時間）ぶん遠のく。**
-		// **そのあいだ、担当者は付いたまま・push は済んだまま・誰も動かない run が残る。**
-		if !snap.AfterRunDone {
-			if silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond; silence > 0 &&
-				now.Sub(snap.LastSeenAt) < silence {
-				continue
-			}
+		// **この門は「指示を送った直後の run を手放さない」ために在る**（issue #197）。
+		//
+		// **見るのは `LastBusyHookAt` である。`LastSeenAt` ではない**（issue #173）。
+		// **`LastSeenAt` は4箇所が進める**（`beginTurn` / `noteHook` / `noteWorking` /
+		// `clearWaitingQuota`）**が、4つ目は「枠が明けた」だけで、
+		// この run が生きている証拠を1つも含まない。**
+		// **5時間の枠が明けるたびに `claude.turn_timeout_ms`（既定1時間）ぶん再武装するので、
+		// `weekly_wait_limit_minutes` に何を書いても手放しがそのぶん遠のく。**
+		//
+		// **`LastHookAt` でも代われない。**あちらは `SessionStart` と
+		// `Notification`（`idle_prompt`）でも進む。**入力待ちで止まっている Claude Code は
+		// 60秒ごとにそれを出す**ので（実測。設計 1-3）、**門が永久に開かなくなる。**
+		//
+		// **`LastBusyHookAt` は、turn を処理している間にしか出ない hook でだけ進む**
+		// （`isBusyHook`。設計 3-80b）。**この門が本当に見たいものである。**
+		//
+		// **`AfterRunDone` の抜け道は消した**（5周目に足したもの）。
+		// **あれは `clearWaitingQuota` が再武装させる問題への迂回で、
+		// 根を直したので要らなくなった。**
+		//
+		// **1度も忙しい hook を受けていない run は、ゼロ値のままここを通る。**
+		// **通してよい。**指示を送れば `UserPromptSubmit` が飛び、それは忙しい hook である
+		// （`settings.go` が張る8種類のうちの1つ）。**この門が守りたい「指示を送った直後の run」は、
+		// 必ずゼロ値ではない。**ゼロ値のまま残るのは、指示を1度も送れていない run だけで、
+		// **そちらは下の `paneStopped` が `idle` か `done` を2巡回続けて読むまで手放さない。**
+		if silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond; silence > 0 &&
+			!snap.LastBusyHookAt.IsZero() && now.Sub(snap.LastBusyHookAt) < silence {
+			continue
 		}
 		if !o.stallDetectionOff() && !o.runIdleForTurnTimeout(rs) {
 			continue
@@ -553,12 +570,21 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 		// 既定の30秒間隔で1時間に120行になる。**
 		// **issue #173 が読めるようにしたいログを、そこで埋めることになる。**
 		if rs.notePaneUnreadable() {
+			// **「次の巡回でやり直します」と書いてはならない**（issue #173）。
+			// **偽を2つ返すので、この run は `handling` に入らない。**
+			// **同じ巡回の `checkStalls` が `agent.get` をもう1回叩き、同じ誤りを受け、
+			// 枠待ちの印も立っていなければ、その場で打ち切る。**
+			// **やり直す巡回は来ない。**そう書くと、来ない再挑戦を人間が待つ。
 			o.logger.Info("画面の状態を読めないので、1週間の枠の上限を超えていても手放しません"+
-				"（次の巡回でやり直します。この行は run ごとに1回だけ出します）",
+				"（打ち切りの判定へ回します。この行は run ごとに1回だけ出します）",
 				"identifier", rs.issue().Identifier, "error", err)
 		}
 		return false, false
 	}
+	// **読めたので、この文言の札を下ろす**（issue #173）。
+	// **下ろさないと、attempt の序盤の1回の失敗が、その attempt のあいだ
+	// 「画面の状態を読めない」を丸ごと黙らせる。**
+	rs.clearPaneUnreadableWarned()
 	if agent.AgentStatus != herdr.AgentStatusIdle && agent.AgentStatus != herdr.AgentStatusDone {
 		return false, false
 	}
@@ -579,14 +605,11 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 	//
 	// **だから、この判定は自分が読んだ連番だけを覚える。**
 	// **2回続けて同じなら止まっている。**初回は必ず偽を返す。
-	if agent.StateChangeSeq == 0 {
-		// **連番を返さない herdr の版である**（issue #173）。
-		// **この経路では二度と進まない。**`noteQuotaProbe` が常に偽を返すためである。
-		// **面倒を見ていると名乗ってはならない。**名乗ると打ち切りからも守ることになり、
-		// **止める者が1人もいなくなる。**pane とスロットを握ったまま、continuo を再起動するまで残る。
-		// **判定できないときは、打ち切りに任せる。**
-		return false, false
-	}
+	// **連番が0のとき**（連番を返さない herdr の版）**の門は、`noteQuotaProbe` が持っている。**
+	// **ここには置かない**（issue #173）。**2箇所に書くと、呼ぶ側のほうが先に効いて
+	// 呼ばれる側が死にコードになり、どちらが本物かを読む人が3つのコメントから探すことになる。**
+	// **`noteQuotaProbe` が `(false, false)` を返すので、下の式は `(false, false)` になる。**
+	// **結果は同じである。**
 	stopped, first := rs.noteQuotaProbe(agent.StateChangeSeq)
 	// **守るのは、1回目の観測を取った直後の1巡回だけである**（issue #173）。
 	//
@@ -903,7 +926,13 @@ func (o *Orchestrator) stalledReason(snap runSnapshot, agent herdr.Agent, now ti
 	}
 	return fmt.Sprintf(
 		"continuo は herdr へ `agent.get` を投げて Claude Code の状態（`agent_status`）を見ています。"+
-			"%s のあいだ hook が1件も届かなかったので、herdr へ状態を聞いたところ "+
+			// **「hook が1件も届かなかった」と書いてはならない**（issue #173）。
+			// **測っているのは `LastSeenAt` で、あれは hook のほかに
+			// turn を送った・枠待ちを外した・`working` を見たでも進む**（`LastSeenAt` の説明）。
+			// **枠待ちが明けた61分後に固まった run は「61分のあいだ hook が届かなかった」と
+			// 名乗るが、明ける直前までは届いていたかもしれない。**
+			// **読んだ人を hook の socket の調査へ走らせることになる。**
+			"%s のあいだ、この run が進んだ形跡がありませんでした。herdr へ状態を聞いたところ "+
 			"`working` ではありませんでした（そのとき見た状態: %s）。"+
 			"**止まったものと判断して打ち切りました。**"+
 			"\n【確かめ方】%s"+

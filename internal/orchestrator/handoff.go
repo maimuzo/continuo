@@ -808,6 +808,12 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 	// **毎巡回で herdr と `gh` を叩き、`Warn` を1行出し続けることになる。**
 	// **見えなくなった run は `reconcileRunning` が止める。**そちらへ任せる。
 	mine, known, newAccount := o.mayReleaseOwnWork(checkCtx, rs)
+	if known {
+		// **確かめられたので、この文言の札を下ろす**（issue #173）。
+		// **下ろさないと、attempt の序盤の1回の失敗が、その attempt のあいだ
+		// 「いまの担当を確かめられない」を丸ごと黙らせる。**
+		rs.clearQuotaReleaseUnknownWarned()
+	}
 	switch {
 	case !known:
 		// **分からないなら手放さない。**次の巡回でやり直す。

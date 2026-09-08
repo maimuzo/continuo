@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "c1a41684ca70fa4a0b924af257ac71be53f6e75382b573e5d2fec2f897965b57",
+  "_source_sha256": "631872ff9171c1f5421c159b82e36476c76199e503b36bfc57cf88e774adee72",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -539,7 +539,7 @@
   "handoff.lost.reason": "This issue is now held by %[1]s. **This continuo stops working here. It does not push either.**\nWhy: no new progress comment appeared for %[2]s after the assignee's last progress comment, so another continuo removed the assignee and started a new round of bids.\nHow to check: look at the assignee of this issue. That is the account holding it now.\nWhat to do: the new continuo continues on the same branch. Changes that were never pushed are lost.",
   "handoff.released.do_not_push": "**Do not push the work that was running under %s to this branch.**",
   "handoff.released.reassign": "**The assignee of this issue was removed. The next assignee is decided by a new round of bids.**",
-  "handoff.released.weekly_wait_limit": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** workspace_hooks.after_run has already run. The next machine that picks up this branch should continue from the remote.",
+  "handoff.released.weekly_wait_limit": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** workspace_hooks.after_run has already run. **If it includes `git push`, the next machine that picks up this branch can continue from the remote.** If it does not, the commits exist only in this worktree (the worktree has been kept).",
   "handoff.released.weekly_wait_limit_no_push": "**%s went past its limit for waiting on the weekly usage window, so it released the assignment itself.** **workspace_hooks.after_run did not run.** The remote for this branch may not have the latest commits. The worktree has been kept.",
   "herdr.agent.invalid_name": "The agent name does not fit herdr's allowed pattern (`^[a-z][a-z0-9_-]{0,31}$`; it must start with a lowercase letter and be at most 32 characters): %q",
   "herdr.agent.send_keys_empty": "%s needs at least one key",

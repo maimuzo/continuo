@@ -533,6 +533,13 @@ func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimel
 		}
 		return rs.issue(), true, false
 	}
+	// **読めたので、この文言の札を下ろす**（issue #173）。
+	// **下ろさないと、attempt の序盤の30秒の瞬断が、その attempt のあいだ
+	// この文言を丸ごと黙らせる。**18時間後に本物の障害が始まっても1行も出ない。
+	//
+	// **下ろすのはこの札だけである。**`agent.get` の札まで下ろすと、
+	// **GitHub が読めているだけで、herdr が落ち続ける run が毎巡回また鳴き出す。**
+	rs.clearIssueRefreshWarned()
 	if len(issues) == 0 {
 		return tracker.Issue{}, false, true
 	}

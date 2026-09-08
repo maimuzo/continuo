@@ -528,6 +528,7 @@ func (rs *runState) snapshot() runSnapshot {
 		WeeklyShortSince: rs.WeeklyShortSince,
 		LastSeenAt:       rs.LastSeenAt,
 		LastHookAt:       rs.LastHookAt,
+		LastBusyHookAt:   rs.LastBusyHookAt,
 		StartedAt:        rs.StartedAt,
 		WorktreePath:     rs.WorktreePath,
 		Base:             rs.Base,
@@ -561,6 +562,12 @@ type runSnapshot struct {
 	WeeklyShortSince time.Time
 	LastSeenAt       time.Time
 	LastHookAt       time.Time
+	// LastBusyHookAt は、**turn を処理している間にしか出ない** hook を最後に受けた時刻である。
+	//
+	// **`LastSeenAt` の代わりに、手放しの無音の門が見る**（issue #173）。
+	// **`LastSeenAt` は `clearWaitingQuota` も進めるので、5時間の枠が明けるたびに
+	// その門が再武装してしまう。**こちらは `noteHook` が忙しい hook を受けたときだけ進む。
+	LastBusyHookAt   time.Time
 	StartedAt        time.Time
 	WorktreePath     string
 	Base             normalize.SafeName
@@ -1207,6 +1214,42 @@ func (rs *runState) noteQuotaProbe(seq uint64) (bool, bool) {
 	rs.QuotaProbeStateSeq = seq
 	rs.QuotaProbeSeen = true
 	return same, first
+}
+
+// clearIssueRefreshWarned は「issue を取り直せません」の札を下ろす（issue #173）。
+//
+// **`refreshIssue` が読めたときに呼ぶ。**下ろさないと、**attempt の序盤の30秒の瞬断が、
+// その attempt のあいだ**（長いものは20時間ある）**この文言を丸ごと黙らせる。**
+// **18時間後に本物の障害が始まっても、ログが1行も出ない。**
+//
+// **札は別々に下ろす。**まとめて下ろすと、**GitHub が読めているだけで
+// herdr の札まで下り、`agent.get` が落ち続ける run が毎巡回また鳴き出す。**
+func (rs *runState) clearIssueRefreshWarned() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.issueRefreshFailedWarned = false
+}
+
+// clearPaneUnreadableWarned は「画面の状態を読めない」の札を下ろす（issue #173）。
+//
+// **`agent.get` が読めたときに呼ぶ。**理由は `clearIssueRefreshWarned` と同じである。
+func (rs *runState) clearPaneUnreadableWarned() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.paneUnreadableWarned = false
+}
+
+// clearQuotaReleaseUnknownWarned は「いまの担当を確かめられない」の札を下ろす（issue #173）。
+//
+// **担当を確かめられたときに呼ぶ。**理由は `clearIssueRefreshWarned` と同じである。
+//
+// **`quotaReleaseFailedWarned` には、これに当たる関数を置いていない。**
+// **あの札が立つのは「担当を外せなかった」ときで、外せた次の瞬間にこの run は終わる。**
+// **下ろす先が無い。**
+func (rs *runState) clearQuotaReleaseUnknownWarned() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.quotaReleaseUnknownWarned = false
 }
 
 // noteQuotaReleaseUnknown は「担当を確かめられないので見送ります」を出してよいかを返す
