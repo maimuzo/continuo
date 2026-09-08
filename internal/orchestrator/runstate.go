@@ -197,7 +197,9 @@ type runState struct {
 	// **初回は必ず「止まっていない」と答える**（そこからどれだけ止まっていたかが分からない）。
 	//
 	// **起動直後の run を守っているのは、この欄である。**
-	// 「連番が0なら偽」を別に足す案は採らない。**その枝には届かない。**
+	// 「連番が0なら偽」の門は `noteQuotaProbe` の本体にある（2026-09-09 に入れた）。
+	// **消してはならない。**`paneStopped` の側にも同じ門があるが、
+	// **`noteQuotaProbe` を別の場所から呼んだ人が、0 と 0 を比べて恒真へ戻る。**
 	// **`agent_status` が `idle` か `done` を返す時点で、内部の状態は初期値の `Unknown` から
 	// 必ず1度は変わっており、連番は1以上である。**
 	QuotaProbeSeen bool
@@ -1121,20 +1123,21 @@ func (rs *runState) setWaitingQuota(resetAt time.Time) {
 //
 // **枠待ちの印の出し入れとは無関係に動かす。**印は5時間の枠が明けるたびに外れる。
 //
+// **起点は返さない**（issue #173）。**読むのは写し（`runSnapshot.WeeklyShortSince`）からである。**
+// **返すと、それを正として使う2人目が現れ、写しから読む側と食い違う。**
+//
 // short: 余裕の無い1週間の枠があるか。
 // now: いまの時刻。
-// 戻り値: 余裕が無くなってからの経過を測る起点。**short が偽ならゼロ値。**
-func (rs *runState) noteWeeklyShort(short bool, now time.Time) time.Time {
+func (rs *runState) noteWeeklyShort(short bool, now time.Time) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	if !short {
 		rs.WeeklyShortSince = time.Time{}
-		return time.Time{}
+		return
 	}
 	if rs.WeeklyShortSince.IsZero() {
 		rs.WeeklyShortSince = now
 	}
-	return rs.WeeklyShortSince
 }
 
 // noteQuotaProbe は、手放しの判定が読んだ状態の連番を控え、止まっているかを返す
@@ -1982,6 +1985,26 @@ func (rs *runState) currentWorker(epoch int) bool {
 	// 待ちループが枠待ちを解いて指示を送り、push の最中に worktree が書き換わる。**
 	// **書きかけの木を push したうえで、そのあと殺されることになる。**
 	return !rs.Finished && !rs.workerStopped && !rs.terminating && rs.workerEpoch == epoch
+}
+
+// workerRetired は「この turn ループは、もう二度と回してはならないか」を返す（issue #173）。
+//
+// **`currentWorker` との違いは `terminating` を見ないことである。**
+//
+// **`terminating` は一時的な印である。**終わらせる処理が走っている最中だけ立ち、
+// **見送って `endTerminal` を呼べば下りる。**
+// **turn ループがそれで抜けてしまうと、見送ったあとに指示を送る者がいなくなる。**
+// **立て直す経路も無い**（`startTurnLoop` を呼ぶのは着手と復元だけである）。
+//
+// **`Finished` / `workerStopped` / 世代の食い違いは、そうではない。**
+// **どれも「この goroutine の役目は終わった」という取り返しのつかない印である。**
+//
+// epoch: この goroutine が回している worker の世代。
+// 戻り値: 二度と回してはならないなら true。
+func (rs *runState) workerRetired(epoch int) bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.Finished || rs.workerStopped || rs.workerEpoch != epoch
 }
 
 // terminalGate は `beginTerminal` が印を確保できたかどうかと、確保できなかった理由である

@@ -277,6 +277,16 @@ func Short(margins Margins) func(l ratelimit.Limit) bool {
 // 戻り値: その枠を使い切っていれば true を返す関数。**`Snapshot` の選別に渡す。**
 func Full() func(l ratelimit.Limit) bool {
 	return func(l ratelimit.Limit) bool {
+		// **知らない種別は数えない**（issue #173）。
+		// **`Short` と同じ集合にする。**`Short` の説明が「片方だけが真を返すと、
+		// 枠待ちの印が立つのに入札の側は素通しで新しい issue を取り続ける」と
+		// 警告しているのは、まさにこの形である。
+		// **使用量 API が種別を増やしたとき、ここだけが真を返すと、
+		// 走っている run の打ち切りの時計が全部止まり、
+		// そのあいだ新しい issue を取り続けることになる。**
+		if !IsWeeklyKind(l.Kind) && !matchesKind(l.Kind, sessionKinds) {
+			return false
+		}
 		return l.Percent >= fullPercent
 	}
 }

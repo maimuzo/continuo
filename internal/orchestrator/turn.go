@@ -35,6 +35,16 @@ const (
 	turnSendFailed
 )
 
+// terminatingPollInterval は、終わらせる印が下りるのを turn ループが待つ間隔である
+// （issue #173）。
+//
+// **印が下りたことを知らせる仕掛けは無い。**下りるのは `endTerminal` の1行だけで、
+// **手放しの見送りは長くて数十秒**（`gh` の2回の呼び出しと `after_run`）**なので、
+// 短い間隔で見に行けば足りる。**
+//
+// **`agent.prompt` は走っていない。**この待ちは goroutine を1つ寝かせるだけである。
+const terminatingPollInterval = 500 * time.Millisecond
+
 // startTurnLoop は run ごとの turn ループの goroutine を起こす（設計 3-8）。
 //
 // **巡回のループはこれでブロックしない。**`agent.prompt` を wait つきで呼ぶと turn の
@@ -109,8 +119,28 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 	defer context.AfterFunc(rs.workerStopContext(), waitCancel)()
 
 	for {
-		if ctx.Err() != nil || !rs.currentWorker(epoch) {
+		if ctx.Err() != nil {
 			return
+		}
+		if rs.workerRetired(epoch) {
+			// **取り返しのつかない印である。**この goroutine の役目は終わった。
+			return
+		}
+		if !rs.currentWorker(epoch) {
+			// **残るのは `terminating` だけである**（issue #173）。
+			// **終わらせる処理が走っている最中なので、指示を送ってはならない。**
+			// **だが抜けてもならない。**見送って印が下りたとき、指示を送る者がいなくなる。
+			// **立て直す経路が無い**（`startTurnLoop` を呼ぶのは着手と復元だけである）。
+			//
+			// **待って、もう一度見る。**`turnCtx` が切れれば上の枝で抜ける。
+			// **短い間隔で見る。**下りたことを知らせる仕掛けは無く、
+			// **下りるのは `endTerminal` の1行だけなので、待ちは長くて数十秒である。**
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(terminatingPollInterval):
+			}
+			continue
 		}
 
 		snap := rs.snapshot()

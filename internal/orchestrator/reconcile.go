@@ -450,12 +450,14 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 // **だから「止まっている」と言えるのは `idle` と `done` の2つだけである。**
 //
 // **`runningSubagentList()` は使えない。**一度は3つ目の条件にしたが、取り下げた。
+//
 // **あの一覧を空にする経路は4つあり、4つとも hook か次の turn で駆動する**
-// （`docs/spec/turn_end_detect_mechanizm.md` の 3-8 に並べてある）**
-// （`runState.beginTurn` と `noteSubagentStop`）。
-// **正しくは4つある**（`docs/spec/turn_end_detect_mechanizm.md` の 3-8）。
-// 上の2つに加えて、`Stop` が `background_tasks` を空で載せて届いたときと、
-// `background_tasks` が空で届いたとき（`Stop` に限らない）も空になる（`runstate.go` の `noteHook`）。
+// （`docs/spec/turn_end_detect_mechanizm.md` の 3-8 に並べてある）。
+//
+//  1. 次の turn を始める（`runState.beginTurn`）
+//  2. `SubagentStop` を受ける（`runState.noteSubagentStop`）
+//  3. `Stop` が `background_tasks` を空で載せて届く（`runstate.go` の `noteHook`）
+//  4. `background_tasks` が空で届く（`Stop` に限らない。同じく `noteHook`）
 //
 // **枠待ちの最中は、4つとも起きない。**次の turn は枠が明けるまで送られず、hook も来ない。
 // **つまり、枠が尽きた瞬間にサブエージェントが走っていた run は、一覧が永久に空にならず、
@@ -528,12 +530,23 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 		// **判定できないときは、打ち切りに任せる。**
 		return false, false
 	}
-	stopped, first := rs.noteQuotaProbe(agent.StateChangeSeq)
-	// **守ってよいのは、1回目の観測を取った直後の1巡回だけである**（issue #173）。
-	// **2回目以降も守ると、状態が往復する run が永久に守られる。**
+	stopped, _ := rs.noteQuotaProbe(agent.StateChangeSeq)
+	// **連番を読めたなら、この巡回は守る**（issue #173）。
+	//
+	// **「1回目の観測の直後の1巡回だけ」にしていたが、狭すぎた。**
+	// **2回目の観測で連番が変わっていた run は、そこで守りを失う。**
 	// **手放しは2回続けて同じ連番を見ないと成立しないので、
-	// その run は手放されもせず打ち切られもせず、pane とスロットを握ったまま残る。**
-	return stopped, stopped || first
+	// 連番が動いている限り、その run は毎回打ち切られる側へ落ちる。**
+	//
+	// **「永久に守られる」心配は当たらない。**
+	// **連番が動いているのは、その agent の状態が実際に変わっているということである。**
+	// **止まれば連番が止まり、2回続けて同じになった時点で手放しが成立する。**
+	// **本当に固まった run は、`agent_status` が `idle`/`done` のまま連番も止まるので、
+	// 2巡回で手放される。**
+	//
+	// **`idle`/`done` を読めなかった run と、連番が 0 の run は、ここへ来ない。**
+	// 上の2つの門が `(false, false)` で返している。**そちらは打ち切りに任せる。**
+	return stopped, true
 }
 
 // closeOrphanPane は印に入っていない worktree に付いている pane を閉じる
@@ -630,6 +643,12 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	now := o.now()
 	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
 	releasing := o.releaseQuotaWaitExceeded(ctx, quotaSnap, quotaStale, now)
+	// **時刻を取り直す**（issue #173）。
+	// **`releaseQuotaWaitExceeded` は run ごとに herdr を1回叩く。**
+	// `herdr.read_timeout_ms`（既定5000ミリ秒）まで待つので、
+	// **run が12件あれば60秒経っていることがある。**
+	// **そのまま使うと、下で書く時計が全部その秒数だけ古くなる。**
+	now = o.now()
 
 	// **余裕の無い1週間の枠があるかを、同じ写しから見る。**
 	weeklyShort := quotaSnap.AnySelected(handoff.ShortWeekly(o.bidMargins()))
@@ -655,7 +674,14 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **枠が明けた run の印を外すのも、`silence <= 0` より前で行う。**
 	// **あとに置くと、`claude.turn_timeout_ms` を0以下にしている機械では、
 	// 一度立った印を外す者が1人もいなくなる**（下の `clearQuotaWaitWhenBack` の説明）。
-	o.clearQuotaWaitWhenBack(quotaSnap, now)
+	// **読めない写しでは印を外さない**（issue #173）。
+	// **同じ巡回の `weeklyWaitExceededWith` と `noteWeeklyShort` は、既にそう倒している。**
+	// **1つの写しを3人が使うのに、使ってよいかの判定が食い違ってはならない。**
+	// **古い写しがたまたま全部100%未満だと、待っている run の印を全部外して
+	// `LastSeenAt` を進めてしまう。**資格情報が切れた機械は、切れる直前の値を1日中返す。
+	if quotaSnap != nil && !quotaStale {
+		o.clearQuotaWaitWhenBack(quotaSnap, now)
+	}
 
 	silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond
 	if silence <= 0 {

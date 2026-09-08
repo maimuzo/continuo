@@ -696,34 +696,17 @@ func (o *Orchestrator) releaseBecauseQuotaWaitAsync(ctx context.Context, rs *run
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		if o.releaseBecauseQuotaWaitClaimed(ctx, rs, shortKinds) {
-			return
-		}
-		// **見送ったなら、turn ループを立て直す**（issue #173）。
+		// **戻り値は捨ててよい**（issue #173）。
+		// **見送っても、turn ループは抜けていない。**
+		// `currentWorker` は `terminating` を見るが、**turn ループはそれで抜けずに待つ**
+		// （`turn.go` の `workerRetired` と `terminatingPollInterval`）。
+		// **`endTerminal` が印を下ろせば、そのまま指示を送る側へ戻る。**
 		//
-		// **`beginTerminal` が `terminating` を立てた時点で、turn ループは抜けている。**
-		// `currentWorker` が `terminating` を見るようにしたためである
-		// （枠の上限で手放す経路が、`after_run` の最中に新しい指示を送られると
-		// 書きかけの木を push することになるので、そこは塞いだままにする）。
-		// **抜けた turn ループを立て直すのは、ここしかない。**
-		// `startTurnLoop` を呼ぶのは着手と復元だけで、**どちらもこの run には来ない。**
-		//
-		// **立て直さないと、run は pane とスロットを握ったまま、指示を送る者がいなくなる。**
-		// **枠が明けても再開できず、`claude.turn_timeout_ms`（既定1時間）後に
-		// 打ち切りがリトライを1つ焼いて片付けるまで残る。**
-		//
-		// **見送りは3通りある**（担当を確かめられない／`after_run` が終わらない／
-		// 担当者を外せない）。**どれも「次の巡回でやり直す」ことを前提にしている。**
-		// **`awaitFirst` は偽にする**（issue #173）。
-		// **真にすると、立て直した turn ループが「走っている turn の終わり」を待つ。**
-		// **ここへ来る run は、`idle` か `done` を2回続けて読まれて手放しの対象になった run である。**
-		// **待っている turn が無いので、`Stop` は永久に来ない。**
-		// **`poll_wait_ms` ごとに空回りし、`NeedsPrompt` も消費されない。**
-		if !o.startTurnLoop(ctx, rs, false) {
-			o.logger.Warn("手放しを見送ったあと、turn ループを立て直せませんでした"+
-				"（この run は打ち切りが片付けます）",
-				"identifier", rs.issue().Identifier)
-		}
+		// **立て直してはならない。**`awaitFirst` を真にすると来ない `Stop` を待って空回りし、
+		// **偽にすると `max_dispatch_turns` を1つ焼いて `LastSeenAt` を進めるので、
+		// 「次の巡回でやり直す」が `claude.turn_timeout_ms` ぶん遅れる。**
+		// **どちらも試して、どちらも誤りだった。**
+		_ = o.releaseBecauseQuotaWaitClaimed(ctx, rs, shortKinds)
 	}()
 }
 

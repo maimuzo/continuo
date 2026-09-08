@@ -385,7 +385,7 @@ func (o *Orchestrator) logNewWorkBlocked(
 	if skip == handoff.SkipQuotaUnreadable {
 		msg = "枠を読めないので、入札の要る issue には着手しません" +
 			"（担当が既にこの機械にある issue は着手します。走行中の turn も止めません）。" +
-			"**マージンを下げても動き出しません。**rate_limit.token_source と資格情報を確かめてください"
+			"マージンを下げても動き出しません。rate_limit.token_source と資格情報を確かめてください"
 	}
 	o.logger.Info(msg, args...)
 }
