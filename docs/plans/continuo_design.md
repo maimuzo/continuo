@@ -9050,6 +9050,9 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 >
 > 訳: **GitHub の画面は、その issue の作者として、ユーザーのアバター写真と App の identicon のバッジを並べて表示する。**
 
+**実測では identicon のバッジは見えず、`– with <App の表示名>` の1行が出た**（下の表）。
+**案内には、実測で見えたほうを書く。**
+
 **画面に実際に出るもの**（2026-09-08。上の実測で投稿した3件を、人間が画面で確かめて書き写した）。
 
 | どちらの経路で書いたか | 画面に並ぶもの |
@@ -9157,7 +9160,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **WORKFLOW.md には資格情報を書かない。**そこは利用者が commit する場所であり
 （[docs/FAQ.md:730](../FAQ.md#L730)）、**エージェントの worktree からは読めない**
 （[internal/config/config.go:43-53](../../internal/config/config.go#L43-L53) の `ResolvePath` は直下しか見ない）。
-**`~/.continuo/` にはロックが既に在り、`--id` の分け方も権限 `0700` もそこから借りる**
+**`~/.continuo/` にはロックが既に在り、権限 `0700` はそこから借りる**
 （[internal/instance/instance.go:101](../../internal/instance/instance.go#L101) と
 [internal/instance/instance.go:56](../../internal/instance/instance.go#L56)）。
 
@@ -9215,7 +9218,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **失敗したときは、どれも終了コード 1 で標準出力は空にする。待たない。**
 更新用のトークンが無いか6か月で切れたときは、標準エラーへ
-「`continuo --port <番号>` で開いて App を用意してください」と出す。
+「`continuo setup` で App を用意してください」と出す。
 **このコマンドは設定を見ない。**エージェントの worktree からは WORKFLOW.md を読めないためである（3-82b）。
 **`false` の利用者は、そもそも指示書の枝がこのコマンドを呼ばない**（3-82k）。
 
@@ -9351,7 +9354,13 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 （[internal/server/server.go:180-181](../../internal/server/server.go#L180-L181)）。
 **その中には continuo 自身が起動した Claude Code も含まれる。**
 
-**画面は continuo が既に持っている HTTP サーバに置く。**新しいサーバを立てない。
+**画面は `continuo setup` が開く。**常駐の起動（`continuo --port`）ではない。
+**起動時の検査が、その検査を通すための画面を塞ぐためである**（3-82h）。
+[internal/cli/cli.go:190](../../internal/cli/cli.go#L190) の `case "setup"` は `runMain` を通らず、
+**[internal/daemon/daemon.go:302](../../internal/daemon/daemon.go#L302) の起動時検査を1つも走らせない。**
+**ダッシュボードは、その検査より後ろで開く。**落ちると1度も開かない。
+
+**継続が既に持っている HTTP サーバの仕組みを使う。**新しいサーバの作りを起こさない。
 [internal/server/server.go:182](../../internal/server/server.go#L182) が `http.Server` を立てており、
 [internal/cli/cli.go:1620](../../internal/cli/cli.go#L1620) の `--port` が
 [internal/daemon/daemon.go:239](../../internal/daemon/daemon.go#L239) で `server.port` を上書きする。
@@ -9360,7 +9369,7 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 
 | 順 | 何をするか |
 | --- | --- |
-| 1 | `continuo --port <番号>` で起動し、ブラウザで開く |
+| 1 | **`continuo setup` を叩き、出た URL をブラウザで開く** |
 | 2 | **説明を読んで「App を作る」を押す** |
 | 3 | GitHub の画面で **`Create GitHub App` を押す** |
 | 4 | **install するリポジトリを選び、認可する** |
@@ -9397,8 +9406,10 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 continuo が「エージェントが書いていない」と判定して run を人間へ渡す
 （[internal/orchestrator/comment.go:348](../../internal/orchestrator/comment.go#L348) の `hasRunComment`）。
 **それでも止める。**人間が「アクセストークンが取得できなかったならエラーで停止して良い」と決めたためである。
-**得るものは「印の無いコメントが1件増えない」ことで、失うものは run 1件である。**
-**この釣り合いは利用者が決める。**だから設定にした。
+**失うものは、いつ止まるかで違う。**投稿のときなら run 1件である。
+**起動のときなら、その機械が抱えていた run が全部、誰にも見張られないまま pane の中に残る**
+（[internal/daemon/daemon.go:302](../../internal/daemon/daemon.go#L302) の検査は復元より前にあり、
+落ちても生きている pane は閉じない）。**この釣り合いは利用者が決める。**だから設定にした。
 **`false` にすれば、その重さを引き受けずに済む。**
 
 
@@ -9410,7 +9421,6 @@ continuo が「エージェントが書いていない」と判定して run を
 | **資格情報が在るか** | `~/.continuo/github-app-credentials.json`。**権限が `0600` かも見る** |
 | **トークンが取れるか** | **回さずに確かめる。**更新用のトークンが在り、期限内で、`client_id` と `client_secret` が揃っていることを見る。**実際に叩くと資格情報が回り、doctor が continuo を起動不能にしうる** |
 | **更新用のトークンの残り** | **30日を切っていたら警告する。**切れてから気づくと、その場で作業が止まる |
-| **install の漏れ** | **カンバンに載っている全リポジトリに App が install されているか。**doctor は既にその一覧を持っている（[internal/doctor/doctor.go:119-127](../../internal/doctor/doctor.go#L119-L127) の `Repo`）。**漏れていると、そのリポジトリの run が全部人間へ渡る** |
 
 **`continuo doctor` は既に外へ出ている**
 （[internal/doctor/doctor.go:177-178](../../internal/doctor/doctor.go#L177-L178) が「gh / ghq / herdr / GitHub に触る」と書いている）。
@@ -9455,7 +9465,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | --- | --- | --- |
 | **1** | **GitHub の画面で App の client secret を作り直し、古いほうを削除する** | **削除するまで古いものは生きている**（GitHub App は client secret を複数本持てる）。**作り直すだけでは止まらない** |
 | **2** | `~/.continuo/github-app-credentials.json` を消す | 手元から資格情報が消える |
-| **3** | `continuo --port <番号>` で開いて認可をやり直す | 新しい更新用のトークンが入る |
+| **3** | **`continuo setup` で認可をやり直す** | 新しい更新用のトークンが入る |
 | **4** | **急ぐなら、App の install を外す** | **既に配ったアクセストークンも即座に効かなくなる** |
 
 **既に配られたアクセストークンだけは、段1〜3では止まらない。**
@@ -9464,9 +9474,6 @@ continuo が「エージェントが書いていない」と判定して run を
 **この手順を [docs/FAQ.md](../FAQ.md) へ書く。**
 **利用者が「漏れたかもしれない」と思ったときに、探して見つかる場所へ置く。**
 
-**継続的に減らす工夫は、この設計では持たない。**
-更新用のトークンを短くする設定も、使うたびに作り直す仕組みも、GitHub の側に無い。
-**持てるのは「権限を最小にする」と「漏れたら作り直す」の2つだけである。**
 
 ### 3-82j. 投稿する GraphQL のクライアントを2本に分ける
 
@@ -9484,9 +9491,13 @@ continuo が「エージェントが書いていない」と判定して run を
 | **足す1本** | **`PostComment` の全部** | **`continuo githubapp` が返すもの** |
 
 **持ち回りのコメントも、この1本で書く。**除外するほうが分岐を1つ足す作業になる。
+**ただし hold だけは、失敗の帰結が重い。**担当者を書いたあとに投稿するので、
+**書けないと「担当者はあるが hold は無い」状態が残り、その issue は18時間どの機械からも触れなくなる**
+（[internal/orchestrator/handoff.go:394-413](../../internal/orchestrator/handoff.go#L394-L413)）。
+**実装のときに、そこだけ消し戻しが効くことを確かめる。**
 **入札にも hold にも released にも、人間が画面で読む文が並んでいる**
 （[internal/handoff/handoff.go:514](../../internal/handoff/handoff.go#L514) の `FormatBid` ほか。
-**印は HTML のコメントなので画面には出ない**）。
+**既存の `continuo:bid` などの目印は HTML のコメントなので画面には出ない**）。
 **トークンを取れなくなると入札も投稿できないので、その機械はその巡回では issue を取らない**（3-82h）。
 
 **トークンは8時間で切れるので、2本目は使う直前に作り直す。**
@@ -9579,10 +9590,20 @@ interface も、検査の偽物も、1文字も変わらない。
 絶対パスを取り、絶対パスでなければ起動を止めている。**同じ値をテンプレートへ埋める
 （hook のコマンド行と同じ形である。[internal/orchestrator/settings.go:352](../../internal/orchestrator/settings.go#L352)）。
 
+**この設定キーを、WORKFLOW.md の雛形へ足す**（[internal/scaffold/template.go:69-71](../../internal/scaffold/template.go#L69-L71) の `comments:` の下）。
+**足さないと、キーの存在に気づく経路が0本になる。**`continuo doctor` の「未記入の項目」の検査は
+**雛形と設定の原文を突き合わせる**ので（[internal/doctor/missing_keys.go:61](../../internal/doctor/missing_keys.go#L61)）、
+**雛形に無い項目は1度も出ない。**既定が `false` なので、**issue #245 が求めたものが誰の手元にも届かない。**
+
+**[docs/upgrading.md](../upgrading.md) にも段を足す。**front matter は未知のキーで起動を止める
+（[internal/config/config.go:157](../../internal/config/config.go#L157) の `yaml.Strict()`）。
+**チームで WORKFLOW.md を共有していると、まだ版を上げていない同僚は
+資格情報の話に到達する前に、YAML の未知キーのエラーで落ちる。**
+
 **チームで WORKFLOW.md を共有しているときは、全員が資格情報を持つ必要がある**
 （[docs/FAQ.md:726-730](../FAQ.md#L726-L730) がその使い方を案内している）。
 **1人が `true` にして commit すると、資格情報を持たない全員の continuo が次の起動で止まる。**
-**2人目以降は App を作らず、認可だけを行う。**その入口を `continuo --port <番号>` の画面に置き、
+**2人目以降は App を作らず、認可だけを行う。**その入口も `continuo setup` に置き、
 **起動を止めるときのエラーへ、その手順への案内を必ず入れる。**
 
 **非公開の App を、所有者以外が認可できるかは測っていない。**
