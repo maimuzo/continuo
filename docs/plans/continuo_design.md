@@ -9079,7 +9079,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **レビュー結果を数える門** | [.github/workflows/review-gate.yml:162](../../.github/workflows/review-gate.yml#L162) |
 
 **比較した案。****本文の先頭へ `<!-- continuo:ai -->` のような印を書き込む形。**
-**採らない理由は、HTML のコメントが GitHub の画面に描画されないことである。**
+**採らない理由は、HTML のコメントが GitHub の画面に出ないことである。**
 **人間が画面を上から読み返すときに見えない。**見える文字列にすると本文が汚れる。
 **GitHub App のバッジは GitHub が投稿者の隣に描くので、本文へ何も足さずに画面へ出る。**
 
@@ -9199,7 +9199,9 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 #### 二、毎回叩く危険と、それを減らせない理由
 
 **毎回 GitHub を叩くことの危険を、そのまま引き受ける。**
-**1つの run で叩く回数は投稿の数だけある**（指示書に書かれた issue への書き込みが7本、進捗報告は1時間ごとに増える）。
+**1つの run で叩く回数は、新しく投稿する数だけである。**
+**書き足し（`PATCH`）では叩かない**（3-82j）。**進捗報告は2回目以降が書き足しなので、1時間ごとには増えない。**
+**18時間の run 1本で3回前後、2本同時なら1日に6回前後である。**
 **continuo 自身の投稿は、この数に入らない。**あちらは常駐しているので、
 **取ったトークンを期限までメモリで使い回し、8時間に1回しか回さない**（3-82i）。
 **このコマンドは1回叩かれて終わるので、持ち回す先が無い。**
@@ -9210,8 +9212,6 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **続く節（3-82i）が「メモリで使い回す」と決めるのは continuo 本体の投稿だけで、
 上に数えた7本と進捗報告には1つも効かない。**
 **回転の回数を支配しているのはエージェント側であり、そこは無対策である。**
-**18時間走る run 1本で、進捗報告だけで18回、成果と計画で2回。同時に2本走れば1日に40回前後になる。**
-
 **減らす案は2つある。どちらも採らない。**
 
 | 案 | なぜ採らないか |
@@ -9249,7 +9249,13 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **上限は「往復の実測 × 8」とする。**
 **8 は `agent.max_concurrent_agents` の既定 2 の4倍で、`--id` を2つ使っても足りる。**
-**根拠のある定数である。**測ったら値を直す。
+**測ったら値を直す。**
+
+**上限に達したら、待つのをやめて終了コード 1 を返す。**
+**`agent.max_concurrent_agents` を8に上げた利用者では、取り合う主体が9になって上限を超えうる。**
+**そのとき投稿できずに run が人間へ渡るが、それは 3-82g が決めた形と同じである。**
+**標準エラーへ「ロックを取れませんでした。同時に走るエージェントを減らすか、時間を置いて叩き直してください」と出す。**
+**負荷が高いときだけ起きるので、この一言が無いと再現しない故障として残る。**
 
 **実測**（2026-09-09。専用の App で web flow を1回通した）。
 
@@ -9466,7 +9472,7 @@ manifest に載せた名前が使われていれば、GitHub の作成画面は�
 | --- | --- |
 | `name` | `continuo-<アカウント名>` |
 | `url` | `https://github.com/maimuzo/continuo` |
-| `redirect_url` | `http://127.0.0.1:8931/github-app/created` |
+| `redirect_url` | `http://127.0.0.1:8931/github-app/created?state=<値>`。**`state` はここへ載せる。**manifest の中へ書いても redirect には載らない |
 | `callback_urls` | `["http://127.0.0.1:8931/github-app/authorized"]` |
 | `request_oauth_on_install` | `true`（install と認可を1回の流れにする） |
 | `public` | `false` |
@@ -9477,7 +9483,7 @@ manifest に載せた名前が使われていれば、GitHub の作成画面は�
 **「Hook url is not supported because it isn't reachable over the public Internet」**で拒む。
 **公式の一覧では省略できる項目なので、丸ごと落とす。**落としたら作成の画面が開いた。
 
-**測っていないことが3つある。どれも実装の前に測ること。**
+**測っていないことが4つある。どれも実装の前に測ること。**
 
 **一つ目。GraphQL の `addComment` で投稿したコメントに、画面のバッジが出るか。**
 **API の返り値は測ってあり、REST と同じだった**（3-82 の実測の表）。
@@ -9489,7 +9495,9 @@ manifest に載せた名前が使われていれば、GitHub の作成画面は�
 
 **二つ目。manifest で作った App の user-to-server token が、8時間で切れるか。**
 
-**三つ目。`public: false` の App を、自分が所有していない organization のリポジトリへ install できるか。**
+**三つ目。ロックを取ってから GitHub との往復が終わるまでの実測値**（3-82c の待ち時間の上限に使う）。
+
+**四つ目。`public: false` の App を、自分が所有していない organization のリポジトリへ install できるか。**
 **カンバンには、利用者が所有していないリポジトリの issue が載ることがある。**
 **できないなら、そのリポジトリの issue への投稿だけが権限不足で落ちる。**
 **落ちたときに何が残るかは 3-82g にある**（ログへ `Error` で、issue と worktree と会話の記録のパスを出す）。
@@ -9527,13 +9535,15 @@ doctor が continuo を起動不能にしうる**（下の表）。
 
 **そのためには、組み込みの指示書を設定で分岐させる必要がある**（3-82j）。
 
-**このキーを3箇所へ足す。**
+**このキーを4箇所へ足す。同じ commit で揃える。**
+**1つでも欠けるとテストが赤になる。**
 
 | どこへ | なぜ |
 | --- | --- |
 | **WORKFLOW.md の雛形**（[internal/scaffold/template.go:69-71](../../internal/scaffold/template.go#L69-L71) の `comments:` の下） | **足さないと存在に気づく経路が0本になる。**doctor の「未記入の項目」は雛形と突き合わせるので（[internal/doctor/missing_keys.go:61](../../internal/doctor/missing_keys.go#L61)）、**雛形に無い項目は1度も出ない** |
 | **[docs/upgrading.md](../upgrading.md)** | front matter は未知のキーで起動を止めるので（[internal/config/config.go:157](../../internal/config/config.go#L157) の `yaml.Strict()`）、**まだ版を上げていない同僚は、資格情報の話に到達する前に落ちる** |
-| **この設計文書の 5-2 の設定例**（`tracker.comments` の下。**行番号は書かない**） | **雛形だけに足すと、実装者が「どの階層に置くキーか」をここから読めない** |
+| **この設計文書の 5-2 の設定例**（`tracker.comments` の下。**行番号は書かない**） | **雛形だけに足すと、実装者が「どの階層に置くキーか」をここから読めない。**[test/internal/scaffold/design_template_test.go:37-40](../../test/internal/scaffold/design_template_test.go#L37-L40) が、5-2 の `yaml` ブロックと雛形の front matter のキー集合を突き合わせている。**片方だけ直すと3本のテストが落ちる**（実測した） |
+| **[internal/config/types.go:71-76](../../internal/config/types.go#L71-L76) の `TrackerCommentsConfig`** | いまは `Marker` と `SelfMarker` の2つしか持たない。**足さずに雛形へ書くと、[internal/config/config.go:157](../../internal/config/config.go#L157) の `yaml.Strict()` が未知のキーとして拒み、`continuo init` が置いた WORKFLOW.md を continuo 自身が読めなくなる** |
 
 **5-2 には `comments:` が2つある。**先に出るのが
 `tracker.provider.comments`（GitHub から何件どの順で取るか）で、
@@ -9556,9 +9566,12 @@ WORKFLOW.md は commit されるので、**1人が `true` にすると、資格�
 **巡回のたびには叩かない。**
 **投稿のときに取れなければ、投稿せずエラーで止める。**
 
-**起動時の検査は、`NewAdapter` へ渡したのと同じ「トークンを取る関数」を呼ぶ**（3-82i）。
-**別に取ってはならない。**
-**別々に取ってはならない。**[internal/daemon/daemon.go](../../internal/daemon/daemon.go) では
+**起動時の検査は、`Adapter` のメソッドを呼ぶ。**関数を直に呼んではならない。
+**`runStartupChecks` は `deps` を受け取る**（[internal/daemon/checks.go:43-49](../../internal/daemon/checks.go#L43-L49)）**ので、そこから届く。**
+
+**なぜ関数ではだめか。**使い回しの置き場所は `Adapter` である（3-82i）。
+**関数の側にキャッシュは無い。**
+**起動時の検査が関数を直に呼ぶと1回転し、最初の `PostComment` で `Adapter` がもう1回転する。**[internal/daemon/daemon.go](../../internal/daemon/daemon.go) では
 Adapter を組み立てる段が起動時の検査より前にあるので、**素直に書くと起動のたびに更新用のトークンが2回回る。**
 **開発中は実行ファイルを差し替えるたびに再起動するので、回数は少なくない。**
 
@@ -9635,6 +9648,12 @@ continuo が「エージェントが書いていない」と判定して run を
 **doctor でしか見ないと、doctor を叩かない利用者が181日後に突然止まる。**
 
 **起動時の検査は1回だけで、巡回のたびには叩かない。**確かめるのは「取り直せる状態か」であって、トークンそのものではない。
+
+**install がカンバンの全リポジトリに及ぶかは、どこでも検査しない。**
+**カンバンに新しいリポジトリの issue が載った日、そこへの投稿だけが権限不足で落ち、上の決まりで run が止まり、ログに理由が出る。**
+**先回りしても、人間はどのみちログを読む。**
+**同じ「投稿だけが落ちる」形は、更新用のトークンが切れた・secret を作り直した・install を外した、でも起きる。**
+**1つだけ先回りしても、残りは捕まらない。**
 
 ### 3-82h. 漏れたときに何ができるか。何で止めるか
 
@@ -9717,10 +9736,12 @@ continuo が「エージェントが書いていない」と判定して run を
 **更新用のトークンは1回使うと無効になる**（3-82c）。**叩くたびに書き戻しが起き、
 書き戻しの直前で落ちると資格情報が恒久的に死ぬ。**
 **continuo 本体が issue へ書く口は12箇所ある**（`o.postComment(` / `o.postOwnMarkedComment(` /
-`o.postCommentWithMarker(` を `internal/` の下で数えた）。**巡回のたびに複数が走る。**
+`o.postCommentWithMarker(` を `internal/` の下で数えると14行返り、
+**うち2行は [internal/orchestrator/comment.go:528](../../internal/orchestrator/comment.go#L528) と
+[544行](../../internal/orchestrator/comment.go#L544) の委譲なので、引いて12である**）。**巡回のたびに複数が走る。**
 **使い回せば、本体の側の危険は8時間に1回まで下がる。**
 
-**下がるのは本体の投稿だけである。**エージェント側は毎回回る（3-82c）。
+**下がるのは本体の投稿だけである。**エージェント側は新しく投稿するたびに回る（3-82c で3回前後と数えた）。
 
 **これは「ファイルへは出力しない」という人間の決定（2026-09-08）に反しない。**
 **禁じられたのは資格情報のファイルへ書くことであって、常駐している Go のプロセスが
@@ -9789,8 +9810,38 @@ interface も、検査の偽物も、1文字も変わらない。
 | どの形か | 何本 | 何に気をつけるか |
 | --- | --- | --- |
 | `--body-file` の1行 | 2本 | 上の見本がそのまま当たる |
-| **複数行の `--body`** | **3本** | **行頭を1桁も動かさない。**[test/internal/prompt/progress_comment_test.go:226](../../test/internal/prompt/progress_comment_test.go#L226) が `!=` で見ており、**空白1つで落ちる。**字下げすると進捗報告が成果の報告として数えられ、**issue #178 が戻る** |
+| **複数行の `--body`** | **3本** | **行頭を1桁も動かさない**（下の注意） |
 | pull request（作成とコメント） | 2本 | **掛けない** |
+
+**複数行の `--body` の3本には、2つの検査が掛かっている。**
+
+| どの検査 | 何を見ているか | どう壊れるか |
+| --- | --- | --- |
+| [test/internal/prompt/progress_comment_test.go:226](../../test/internal/prompt/progress_comment_test.go#L226) | **行頭を `!=` で見ている** | **空白1つで落ちる。**字下げすると進捗報告が成果の報告として数えられ、**issue #178 が戻る** |
+| **[test/internal/prompt/group_comment_test.go:302](../../test/internal/prompt/group_comment_test.go#L302)** | **`--body "<!-- continuo:group -->` で始まる行を数え、2件でなければ `Fatalf`** | **7-2 の2本を `{{if}}/{{else}}` にすると4件になる。**`prompt.Builtin()` はテンプレートを展開しないので、両方の枝が数えられる |
+
+**2つ目を避ける形。**`{{if}}/{{else}}` でコマンド全体を2回書かない。
+**環境変数の代入だけを分岐させ、`gh` の行は1本にする。**
+
+    {{if .github_app_attribution}}
+    TOKEN=$({{.continuo.command}} github-app token)
+    case "$TOKEN" in
+      ghu_*) ;;
+      *) echo "トークンを取れませんでした。投稿しません" >&2; exit 1 ;;
+    esac
+    export GH_TOKEN="$TOKEN"
+    {{end}}
+    gh issue comment <URL> --body "<!-- continuo:group -->
+    …"
+
+**`gh` の行が1本になるので、数える検査は2件のまま通る。**
+**`false` のときは `GH_TOKEN` を設定しないので、いままでどおり `gh` の認証で投稿する。**
+**この形を9本の全部に当てる。**
+
+**[internal/prompt/builtin.md](../prompt/builtin.md) を直したら、5-3 の写しも同じ commit で直す。**
+[test/internal/scaffold/design_template_test.go:100-102](../../test/internal/scaffold/design_template_test.go#L100-L102) が
+**設計 5-3 の ```markdown ブロックと builtin.md を1行ずつ比べている。**
+**片方だけ直すと赤になる。**
 
 **書き足し（`PATCH`）に掛けない理由。**
 **`PATCH` では印は付きも消えもしない**（3-82 の実測の表の3行）。
@@ -9813,12 +9864,28 @@ interface も、検査の偽物も、1文字も変わらない。
 **書き足す直前に、その1件を REST で引いて印の有無を見る。**
 
 **既存の `OLD=$(gh api … --jq .body)` は1文字も変えない。**
-**印を見る呼び出しを、その手前へ1行足す。**
+**印を見る呼び出しを、`{{if}}` の中に入れて、その手前へ足す。**
 
+    {{if .github_app_attribution}}
     APP=$(gh api "repos/…/issues/comments/$ID" --jq '.performed_via_github_app.id // ""')
+    {{else}}
+    APP=skip
+    {{end}}
     OLD=$(gh api "repos/…/issues/comments/$ID" --jq .body)
 
 **`APP` は、空でなければ書き足す。**空なら段2b で新しく1件投稿する。
+
+**`{{if}}` の外へ出してはならない。**
+**`false` のときは、機械が書いたコメントにも印が付かない。**
+**`--jq` は `null` を返し、`// ""` が空文字にするので、`APP` は必ず空になる。**
+**門を無条件に置くと、既定の `false` で動いている全利用者の進捗報告が毎回新規投稿になる。**
+**18時間の run で18件積まれる。**
+[internal/prompt/builtin.md:391](../prompt/builtin.md#L391) の
+「**コメントは増やさないでください。何十件も並ぶと、issue を開いても本題が読めなくなります**」が、
+**まさにそれを防いでいる。**
+**3-82g の「既定は `false`。1つも壊れない」が成り立たなくなる。**
+
+**`false` のときは `APP=skip` を入れて、門を素通りさせる。**空でなければ書き足すので、いままでどおり動く。
 **別の App の印と見分ける必要は無い。**
 **書き足す先は、段1 が `viewerDidAuthor` と2つの印で既に絞っている**
 （[internal/prompt/builtin.md:395-401](../prompt/builtin.md#L395-L401)）。
@@ -9866,6 +9933,8 @@ interface も、検査の偽物も、1文字も変わらない。
 
 **最上位の名前を2つ足す**（`github_app_attribution` と、`continuo` の下に `command`）。
 **`RenderData` と `SampleData` の両方へ登録し、`Validate` の枝を `.attempt` と同じく2通りへ振る。**
+**[test/internal/prompt/prompt_test.go:411-416](../../test/internal/prompt/prompt_test.go#L411-L416) の `want` にも足す。**
+最上位の名前を直書きしているので、足さないとその場で落ちる。
 **理由は [internal/prompt/prompt.go:614-615](../../internal/prompt/prompt.go#L614-L615) と
 [639-641行](../../internal/prompt/prompt.go#L639-L641) が持っているので、ここには写さない。**
 
@@ -9880,7 +9949,14 @@ interface も、検査の偽物も、1文字も変わらない。
 
 **囲うのは `RenderData` が値を入れる時点である。**テンプレートの側では囲えない。
 **hook のコマンド行は既にそうしている**（[internal/orchestrator/settings.go:352](../../internal/orchestrator/settings.go#L352) の
-`shellQuote(o.continuoPath)`）。**同じ関数を通す。**
+`shellQuote(o.continuoPath)`）。
+
+**その関数を、共通の場所へ移して export する。**
+**いまの `shellQuote` は [internal/orchestrator/settings.go:425](../../internal/orchestrator/settings.go#L425) の小文字始まりで、
+`internal/orchestrator` の外から呼べない。**
+**`RenderData` は `internal/prompt` にあり、`internal/orchestrator` が `internal/prompt` を import しているので、
+逆向きに import すると循環する。**
+**写しを作ってはならない。**hook 側を直したときに、プロンプト側が取り残される。
 その3行上のコメントが、なぜ囲うかを書いている。
 
 > **引用せずに繋ぐと、パスに空白が1つ入るだけでコマンド行が別の引数へ割れ**
@@ -9899,8 +9975,8 @@ interface も、検査の偽物も、1文字も変わらない。
 
 | 何を書かせるか | なぜ |
 | --- | --- |
-| **「トークンを取れなかったとき、`GH_TOKEN=` を外して投稿し直さないでください。投稿せずに `blocked` で返してください」** | **これが無いと、失敗した `Bash` を前にしたエージェントの、いちばん自然な直し方が「`GH_TOKEN=` を落として叩き直す」になる。**`Bash` は引数を限定せずに許可されている（[internal/config/default.go:171-182](../../internal/config/default.go#L171-L182)）。**印の無い機械のコメントが1件できた瞬間、「印が無い＝人間が書いた」がその issue で成り立たなくなる** |
-| **「失敗したときは『トークンを取れませんでした』とだけ書き、コマンド行を書かないでください」** | **指示書の別の場所が「何が問題なのかを書いてください」と求めており、素直に書くと絶対パスが公開の issue へ出る。**縮める仕組みは `PostComment` の中にあるので、エージェントが `gh` で直接書くコメントには効かない |
+| **「投稿が失敗したとき、`GH_TOKEN=` を外して投稿し直さないでください。投稿せずに `blocked` で返してください」** | **これが無いと、失敗した `Bash` を前にしたエージェントの、いちばん自然な直し方が「`GH_TOKEN=` を落として叩き直す」になる。**`Bash` は引数を限定せずに許可されている（[internal/config/default.go:171-182](../../internal/config/default.go#L171-L182)）。**印の無い機械のコメントが1件できた瞬間、「印が無い＝人間が書いた」がその issue で成り立たなくなる** |
+| **「失敗したときは『トークンを取れませんでした』とだけ書き、コマンド行と `$TOKEN` の中身を書かないでください」** | **指示書の別の場所が「何が問題なのかを書いてください」と求めており、素直に書くと絶対パスが公開の issue へ出る。**縮める仕組みは `PostComment` の中にあるので、エージェントが `gh` で直接書くコメントには効かない |
 
 **2つ目は「お願い」で塞ぐ形なので、完全ではない。**
 **それでも採る。**パスを pane の環境変数へ移す案は、
@@ -10335,10 +10411,6 @@ tracker:
                                             # warn_and_comment ならダッシュボードに出し、issue へも1回だけ書く。
                                             # warn_only にすると issue へは書かない（ダッシュボードには出る）
   comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
-    github_app_attribution: false           # true にすると、機械が書くコメントに GitHub App の印が付き、
-                                            # 人間が書いたのか機械が書いたのかを画面で見分けられる（3-82）。
-                                            # true にする前に `continuo github-app setup` で資格情報を用意すること。
-                                            # 用意せずに true にすると、continuo は起動しない
     marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
     self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
   status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが応答の最後に書く1行の先頭。continuo はこの行を読んで Status を動かす
