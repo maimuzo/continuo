@@ -349,6 +349,20 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		// **打ち切りを切っている機械では、この物差しが無い。**
 		// **そのときは画面の版と `agent_status` だけで判断する**（`paneStopped`）。
 		// **言えないことを理由に手放さないと、上限がその設定の機械で一度も効かない。**
+		// **打ち切りの側と同じ門を先に置く**（issue #173）。
+		// **`runIdleForTurnTimeout` は、この turn で hook を1件も受けていなければ
+		// 経過を測らずに真を返す**（`beginTurn` が毎 turn そこを偽へ戻す）。
+		// **門が無いと、指示を送った直後の run が「進んでいない」と読まれる。**
+		// そこへ `agent_status` が2回続けて `idle` を返すと、
+		// **枠が尽きてもいないのに、turn の開始から2巡回で担当を手放すことになる。**
+		// **打ち切りの側は、同じ述語を `LastSeenAt` の門の後ろでしか呼んでいない。**
+		if snap.LastSeenAt.IsZero() {
+			continue
+		}
+		if silence := time.Duration(o.cfg.Claude.TurnTimeoutMs) * time.Millisecond; silence > 0 &&
+			now.Sub(snap.LastSeenAt) < silence {
+			continue
+		}
 		if !o.stallDetectionOff() && !o.runIdleForTurnTimeout(rs) {
 			continue
 		}

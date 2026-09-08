@@ -1885,6 +1885,15 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	// 利用者が書いた `git push` が走らないまま「実行済みです。remote の続きから」と issue へ書き、
 	// **次に拾う機械が、push されていない commit を全部失う。**
 	rs.AfterRunDone = false
+	// **手放しの観測も忘れる**（issue #173）。
+	//
+	// **やり直した attempt は、新しい agent と新しい pane である。**
+	// 前の attempt で控えた連番を持ち越すと、**「初回は必ず止まっていないと答える」という約束が破れる。**
+	// `state_change_seq` は `omitempty` なので、**欄を返さない herdr の版では全 agent が 0 になる。**
+	// **そのとき `QuotaProbeSeen` が真のまま残っていると、新しい pane の1回目の観測で
+	// 「2回続けて同じ」と答えて手放す。**
+	rs.QuotaProbeSeen = false
+	rs.QuotaProbeStateSeq = 0
 	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
 	// 既に終わっているコンテキストを新しい turn ループへ渡すことになり、
 	// 最初の turn を送る前に待ちが打ち切られる。
