@@ -9083,6 +9083,11 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **持ち回りで機械を見分ける識別子** | 3-77-0。[internal/handoff/assess.go:382](../../internal/handoff/assess.go#L382) |
 | **レビュー結果を数える門** | [.github/workflows/review-gate.yml:162](../../.github/workflows/review-gate.yml#L162) |
 
+**比較した案。****本文の先頭へ `<!-- continuo:ai -->` のような印を書き込む形を、先に実装して捨てた。**
+**採らない理由は、印が本文の一部なので誰でも書けて、消せることである。**
+**GitHub App なら投稿者の側に付くので、書く人には触れない。**
+**印を足す側の手間も、本文を組み立てる12箇所すべてに掛かっていた。**
+
 **`performed_via_github_app` は、この経路でも非 null になる**（上の実測）。
 **公式ドキュメントにその記述は無いが、実際に測ると App の slug が入る。**
 
@@ -9263,7 +9268,7 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 | --- | --- |
 | **エージェントの成果の判定** | [internal/tracker/adapter.go:1164](../../internal/tracker/adapter.go#L1164) の `IsAgent` が立たず、[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383) が捨てる。**画面には成果報告が立っているのに、continuo は「書かれていない」と判定して書かせ直す** |
 | **持ち回りの入札** | **同じカンバンを見張る機械が全部おなじ bot 名になる。**[internal/orchestrator/handoff.go:364](../../internal/orchestrator/handoff.go#L364) が他機械の入札を自分のものと数え、同 387行が自分の入札に負けたと判定する |
-| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか2箇所） |
+| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI（3本）と、利用者へ配る雛形（3本）の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか5箇所） |
 | **死活の時計** | [internal/handoff/assess.go:364](../../internal/handoff/assess.go#L364) が進捗報告の投稿者を担当者と突き合わせる。**止まった機械と見分けが付かなくなる** |
 
 **入札の壊れ方がいちばん直しにくい。**3-77-0 が識別子を投稿者から取る理由を、こう書いている。
@@ -9377,7 +9382,7 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 | 3 | GitHub の画面で **`Create GitHub App` を押す** |
 | 4 | **install するリポジトリを選び、認可する** |
 
-**入力する欄は1つもない。**名前も権限も continuo が入れる（3-82b）。
+**入力する欄は1つもない。**名前も権限も continuo が入れる（3-82b）。**選ぶのは install するリポジトリだけである。**
 
 ### 3-82h. 印を付けるかは WORKFLOW.md で決める。付けると決めたら、取れないときは止まる
 
@@ -9427,6 +9432,13 @@ continuo が「エージェントが書いていない」と判定して run を
 **位置は設定と `gh` の認証の下流**（上流が `✗` か `!` ならこの検査は `!`。同 [148-150行](../../internal/doctor/doctor.go#L148-L150)）。
 **更新用のトークンを回転させてはならない**（doctor は読み取りだけである。同 [42-44行](../../internal/doctor/doctor.go#L42-L44)）。
 **叩けないときは `✗` にする。**「分からない」で通さない。
+
+**更新用のトークンの残りは、起動時と巡回時にも見る。**30日を切っていたら WARN を1行出す。
+**doctor でしか見ないと、doctor を叩かない利用者が181日後に突然止まる。**
+
+**`tracker.comments.github_app_attribution` は、走行中の差し替えの対象にしない**
+（[internal/config/reload.go:31](../../internal/config/reload.go#L31) の `Reloadable` に入れない）。
+**走っている最中に `true` へ変わると、2本目のクライアントを誰が作るかが決まらない。**
 
 **起動時の検査は1回だけ行う。**巡回のたびには叩かない。
 **トークンは8時間で切れるが、切れたら投稿のたびに取り直す**（3-82c）。
@@ -9515,6 +9527,10 @@ hook のコマンド行が実行ファイルの絶対パスを埋めているの
 **[internal/orchestrator/orchestrator.go:469](../../internal/orchestrator/orchestrator.go#L469) が `os.Executable()` で
 絶対パスを取り、絶対パスでなければ起動を止めている。**同じ値を使う。
 **`--id` を付けて動かしているなら、その値もテンプレートへ入る。**
+
+**`--id` ごとに認可をやり直す。**資格情報は `--id` ごとに分かれるので（3-82b）、
+**1台で2本動かすなら App の認可も2回行う。**
+**外で走るセッションは既定の置き場所しか見ない**ので、`--id` を使う人はそちらも用意する。
 
 #### 二、認可した人と `gh` の持ち主を突き合わせる
 
