@@ -422,7 +422,10 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 //
 // **サブエージェントは `agent_status` が受け持つ。**サブエージェントの出力も同じ pane へ出るので、
 // **何かが動いているあいだ herdr は `working` を返す。**
-// **ただし、これは herdr の実装を読んで確かめたものではない**（`working` の決め方は測っていない）。
+// **`working` の決め方そのものは測ってある**
+// （[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 3-4。
+// herdr が当てた規則は `osc_title_working` で、端末タイトルのスピナー1文字を見ている）。
+// **測っていないのは「subagent が走っている最中も、Claude Code がその1文字を書き続けるか」だけである**（同じ文書の6節）。
 // **測れていないので、`unknown` を「止まっている」に入れない形で安全側へ倒してある。**
 //
 // **herdr へ届かなければ「止まっていない」を返す。**確かめられないときは手放さない側へ倒す。
