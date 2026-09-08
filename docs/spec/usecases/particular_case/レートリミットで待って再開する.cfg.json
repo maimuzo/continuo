@@ -3,7 +3,7 @@
   "usecase_name": "レートリミットで待って再開する",
   "source": {
     "file": "docs/spec/usecases/particular_case/レートリミットで待って再開する.rucm.md",
-    "rucm_block_sha256": "162cce486c40a62e5b453894278555d62e8d219afa27b0641891c6ace64cd50e"
+    "rucm_block_sha256": "ffa7c72236e68f2711a9f8615791261897a77d2a41c3bce0aa18e4ef9a646a83"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -35,7 +35,7 @@
           4
         ]
       },
-      "postcondition": "run の枠待ちの印は立っていない。画面の版が変わっていた run は動いている。画面の版が止まっていた run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。"
+      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。"
     },
     "自動継続": {
       "rfs": {
@@ -83,7 +83,7 @@
       "postcondition": "herdr の pane は閉じている。issue の担当者から自分は外れている。worktree は残っている。issue の Status は running_state の選択肢のままである。"
     },
     "応答の途絶": {
-      "when": "継続の指示を送っても turn_timeout_ms のあいだ画面の版も hook も動かない場合",
+      "when": "継続の指示を送っても turn_timeout_ms のあいだ agent_status も working にならず hook も動かない場合",
       "branch_from": [
         {
           "flow": "BASIC FLOW",
@@ -276,14 +276,14 @@
       "type": "action",
       "flow": "枠の残り",
       "step": 1,
-      "statement": "システムは herdr に run の agent_status と pane の画面の版を要求する。"
+      "statement": "システムは herdr に run の agent_status を要求する。"
     },
     {
       "id": "枠の残り-2",
       "type": "condition",
       "flow": "枠の残り",
       "step": 2,
-      "statement": "IF 画面の版が前に見た値から変わっている THEN"
+      "statement": "IF agent_status が working である THEN"
     },
     {
       "id": "枠の残り-3",
@@ -293,38 +293,31 @@
       "statement": "システムは run の打ち切りの時計を現在時刻に進める。"
     },
     {
-      "id": "枠の残り-4",
+      "id": "枠の残り-5",
       "type": "action",
       "flow": "枠の残り",
-      "step": 4,
-      "statement": "システムは run の画面の版を新しい値に書き換える。"
+      "step": 5,
+      "statement": "システムは herdr の pane を閉じる。"
     },
     {
       "id": "枠の残り-6",
       "type": "action",
       "flow": "枠の残り",
       "step": 6,
-      "statement": "システムは herdr の pane を閉じる。"
+      "statement": "システムはリトライの回数を1つ増やす。"
     },
     {
       "id": "枠の残り-7",
       "type": "action",
       "flow": "枠の残り",
       "step": 7,
-      "statement": "システムはリトライの回数を1つ増やす。"
-    },
-    {
-      "id": "枠の残り-8",
-      "type": "action",
-      "flow": "枠の残り",
-      "step": 8,
       "statement": "システムはバックオフの期限を印に書く。"
     },
     {
-      "id": "枠の残り-10",
+      "id": "枠の残り-9",
       "type": "abort",
       "flow": "枠の残り",
-      "step": 10,
+      "step": 9,
       "statement": "ABORT"
     },
     {
@@ -596,7 +589,7 @@
       "from": "BASIC FLOW-15",
       "to": "応答の途絶-1",
       "kind": "global",
-      "condition": "継続の指示を送っても turn_timeout_ms のあいだ画面の版も hook も動かない場合"
+      "condition": "継続の指示を送っても turn_timeout_ms のあいだ agent_status も working にならず hook も動かない場合"
     },
     {
       "from": "BASIC FLOW-16",
@@ -647,22 +640,22 @@
       "from": "枠の残り-2",
       "to": "枠の残り-3",
       "kind": "true",
-      "condition": "画面の版が前に見た値から変わっている"
+      "condition": "agent_status が working である"
     },
     {
       "from": "枠の残り-2",
-      "to": "枠の残り-6",
+      "to": "枠の残り-5",
       "kind": "false",
-      "condition": "NOT 画面の版が前に見た値から変わっている"
+      "condition": "NOT agent_status が working である"
     },
     {
       "from": "枠の残り-3",
-      "to": "枠の残り-4",
+      "to": "枠の残り-9",
       "kind": "seq"
     },
     {
-      "from": "枠の残り-4",
-      "to": "枠の残り-10",
+      "from": "枠の残り-5",
+      "to": "枠の残り-6",
       "kind": "seq"
     },
     {
@@ -672,12 +665,7 @@
     },
     {
       "from": "枠の残り-7",
-      "to": "枠の残り-8",
-      "kind": "seq"
-    },
-    {
-      "from": "枠の残り-8",
-      "to": "枠の残り-10",
+      "to": "枠の残り-9",
       "kind": "seq"
     },
     {
@@ -849,7 +837,7 @@
         "システムは herdr に run の agent_status を要求する。",
         "システムは VALIDATES THAT agent_status が idle または done である。",
         "システムは Claude Code に継続の指示を送る。",
-        "CONDITION: 継続の指示を送っても turn_timeout_ms のあいだ画面の版も hook も動かない場合",
+        "CONDITION: 継続の指示を送っても turn_timeout_ms のあいだ agent_status も working にならず hook も動かない場合",
         "システムは herdr の pane を閉じる。",
         "システムは worktree を残す。",
         "システムは issue を再 dispatch の対象にする。",
@@ -1045,7 +1033,7 @@
       "id": "P008",
       "terminal": "abort",
       "terminal_flow": "枠の残り",
-      "postcondition": "run の枠待ちの印は立っていない。画面の版が変わっていた run は動いている。画面の版が止まっていた run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
+      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1054,8 +1042,7 @@
         "枠の残り-1",
         "枠の残り-2",
         "枠の残り-3",
-        "枠の残り-4",
-        "枠の残り-10"
+        "枠の残り-9"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -1063,10 +1050,9 @@
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
         "システムは VALIDATES THAT 使い切っている枠がある。",
         "CONDITION: NOT 使い切っている枠がある",
-        "システムは herdr に run の agent_status と pane の画面の版を要求する。",
-        "IF 画面の版が前に見た値から変わっている THEN",
+        "システムは herdr に run の agent_status を要求する。",
+        "IF agent_status が working である THEN",
         "システムは run の打ち切りの時計を現在時刻に進める。",
-        "システムは run の画面の版を新しい値に書き換える。",
         "ABORT"
       ]
     },
@@ -1074,7 +1060,7 @@
       "id": "P009",
       "terminal": "abort",
       "terminal_flow": "枠の残り",
-      "postcondition": "run の枠待ちの印は立っていない。画面の版が変わっていた run は動いている。画面の版が止まっていた run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
+      "postcondition": "run の枠待ちの印は立っていない。agent_status が working だった run は動いている。working でなかった run の herdr の pane は閉じている。issue の Status は running_state の選択肢のままである。",
       "node_ids": [
         "BASIC FLOW-1",
         "BASIC FLOW-2",
@@ -1082,10 +1068,10 @@
         "BASIC FLOW-4",
         "枠の残り-1",
         "枠の残り-2",
+        "枠の残り-5",
         "枠の残り-6",
         "枠の残り-7",
-        "枠の残り-8",
-        "枠の残り-10"
+        "枠の残り-9"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -1093,9 +1079,9 @@
         "システムは VALIDATES THAT 走行中の run が turn_timeout_ms のあいだ hook を1件も受けていない。",
         "システムは VALIDATES THAT 使い切っている枠がある。",
         "CONDITION: NOT 使い切っている枠がある",
-        "システムは herdr に run の agent_status と pane の画面の版を要求する。",
-        "IF 画面の版が前に見た値から変わっている THEN",
-        "CONDITION: NOT 画面の版が前に見た値から変わっている",
+        "システムは herdr に run の agent_status を要求する。",
+        "IF agent_status が working である THEN",
+        "CONDITION: NOT agent_status が working である",
         "システムは herdr の pane を閉じる。",
         "システムはリトライの回数を1つ増やす。",
         "システムはバックオフの期限を印に書く。",
@@ -1154,9 +1140,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 53,
-    "nodes_covered": 53,
-    "edges_total": 56,
-    "edges_covered": 56
+    "nodes_total": 52,
+    "nodes_covered": 52,
+    "edges_total": 55,
+    "edges_covered": 55
   }
 }

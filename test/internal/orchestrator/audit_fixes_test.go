@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4e7130891ff7bb6a73faefa369231913e1aacc265188f58a877ac8ae39ab395b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
@@ -300,8 +300,8 @@ func TestAbandon_打ち切りのときissueに残る理由が本当の理由で�
 			return nil, &rpcErr{Code: "agent_start_failed", Message: "No conversation found"}
 		}
 		started.Do(func() {})
-		// **既定の台本と同じ形で返す。**画面の版を勝手に載せると、stall の判定が
-		// 「版が動いた」と読んで打ち切りに入らない。
+		// **既定の台本と同じ形で返す。**`agent_status` を `working` にすると、
+		// stall の判定が「進んでいる」と読んで打ち切りに入らない。
 		return map[string]any{
 			"type":  "agent_started",
 			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true, "pane_id": params["pane_id"]},

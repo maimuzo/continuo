@@ -2427,7 +2427,8 @@ cd ~/continuo-work && continuo prompt --show | grep -c '^## 5-5\. '
 #### issue が急に `Blocked` になった
 
 **原因。**エージェントが判断を仰いだか、打ち切られました。
-打ち切りは、**herdr が見ている画面の版が変わらないまま** `claude.turn_timeout_ms`（既定1時間）が過ぎたときです。
+打ち切りは、**herdr が見ている agent の状態が一度も `working` にならないまま**
+`claude.turn_timeout_ms`（既定1時間）が過ぎたときです。
 
 **直し方。****issue のコメントを開いてください。**何が起きたか・どう確かめるか・どう直すかが書いてあります。
 対応方法をコメントに書いて `Ready` へ戻せば続きが動きます。
@@ -2437,7 +2438,8 @@ gh issue view https://github.com/<owner>/<repo>/issues/42 --comments
 ```
 
 **`turn_timeout_ms` は turn の総実行時間の上限ではありません。**
-画面が変わり続けている限り、1つの指示に何時間かかっても打ち切りません。
+agent の状態が `working` である限り、1つの指示に何時間かかっても打ち切りません。
+**長いツール呼び出しの最中も `working` のままです**（実測。2秒おきに60回読んで60回とも `working`）。
 
 #### 人間は何も触っていないのに Status が変わり、issue が止まった
 

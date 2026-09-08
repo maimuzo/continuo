@@ -93,9 +93,9 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 - [x] **表明が無かった turn の次に、それを促す1文を継続の指示へ差し込む**（設計 3-8 / 3-25）
   - **hook から差し戻す仕組みは採らない**（設計 3-25）
 - [x] **打ち切りの時計が `PreToolUse` / `PostToolUse` でリセットされる**
-- [x] **閾値を超えたら `agent.get` を1回呼び、状態と `revision`（画面の版）を1回で取る**（設計 3-21）
-  - **版が増えていれば `LastSeenAt` を現在時刻にして待ち続ける。**1つの turn に何時間かかっても打ち切らない
-  - **版が増えていなければ pane を閉じ、リトライを積む。**`agent_status` は根拠にしない（`working` のまま固まる場合があるため）
+- [x] **閾値を超えたら `agent.get` を1回呼び、`agent_status` と `state_change_seq` を1回で取る**（設計 3-21）
+  - **`working` なら `LastSeenAt` を現在時刻にして待ち続ける。**1つの turn に何時間かかっても打ち切らない
+  - **`working` でなければ pane を閉じ、リトライを積む。**`revision`（画面の版）は根拠にしない（continuo の pane では永久に動かない）
 - [x] **枠待ちの判定が2条件の連言になっている**（`percent` が 100、かつその run から hook が来ていない）
   - **`severity` は見ない。**上限を示す値が何かを実測できていない（設計 3-27）
 - [x] **`rate_limit.source: none` なら usage API を1回も叩かない**（設定の検証は対応済み）
@@ -192,7 +192,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | **`agent.wait` は現在の状態が `until` に含まれると即返る** | 待ち直しのループを `agent.wait` の戻りだけで回すと、`idle` のまま空回りする。**hook（`Stop` と `<task-notification>`）の到着を待ち合わせの主にした** |
 | **`blocked` のあとにコメントを書かせ直すと `agent.prompt` が2回になる** | 安全の要件は「**保留中の権限要求が残ったまま**次を投げないこと」である。`esc` と `pane.close` を挟んだあとの送信は別のセッションなので安全である。テストの検査もその順序で書いた |
 | **テスト用herdr mock で `worktree.remove` を成功させるだけでは `git branch -D` が通らない** | 本物の herdr と同じ結果になるよう、偽サーバに**実体の削除と `git worktree prune`** をさせた。これをしないと片付けの段4 を検証できない |
-| **`testing/synctest` の中では network I/O があると時計が進まない** | 時間に依存する検査（画面の版の見比べ・時計のリセット・バックオフの明け）だけは、**通信を1本も行わない stub** を使って bubble の中で回した（実時間ゼロ）。turn の終わりの判定と着手の13段はテスト用socket mockで検証している |
+| **`testing/synctest` の中では network I/O があると時計が進まない** | 時間に依存する検査（`agent_status` の見比べ・時計のリセット・バックオフの明け）だけは、**通信を1本も行わない stub** を使って bubble の中で回した（実時間ゼロ）。turn の終わりの判定と着手の13段はテスト用socket mockで検証している |
 
 ### テスト
 
@@ -205,7 +205,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | `dispatch_test.go` | 候補の取り方・空きスロット・印・巡回のリクエスト本数・検査の頻度・未信頼の通知・変数展開の失敗・段8 と段10 |
 | `turn_test.go` | 空の `Stop` だけで終わりと判定しない／項目が欠けていたら判定不能／表明の促し／`max_dispatch_turns`／`blocked` の `esc`／wait の掛け方 |
 | `group_test.go` | グループの表明（`Ice Box` の issue も動かす）／カンバンに無い対象／コメントを書かせ直す9段 |
-| `stall_test.go` | **`testing/synctest` で実時間ゼロ。**画面の版が増えている間は打ち切らない／版が止まったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
+| `stall_test.go` | **`testing/synctest` で実時間ゼロ。**`working` の間は打ち切らない／`working` でなくなったら打ち切る／`PreToolUse` で時計がリセットされる／バックオフの明け／打ち切りの文面 |
 | `quota_test.go` | 枠待ちの2条件／余裕値が0以下なら入札の要る issue だけ止める／`none` なら1回も叩かない／資格情報が無くても起動は続く／**枠明けに `working` なら継続の指示を送らない** |
 | `prompt_choice_test.go` | **復元で引き継いだ run には継続の指示（5-4）を送る**／**再着手はセッションへ復帰したうえで1回目の本文（5-3）を `.attempt` 付きで送る** |
 | `resume_session_test.go` | **新規の着手は `--session-id`、再着手は `--resume`**／身元ファイルの `session_uuid` を変えない／**復帰に失敗したら新しいセッションで始め直す**／**会話の記録が無い UUID へは `--resume` を投げない**（設計 3-3c）／**UUID がパスに使えない形なら復帰しない・置き場所を読めないときは復帰を試す** |

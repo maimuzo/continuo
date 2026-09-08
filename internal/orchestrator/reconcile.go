@@ -357,7 +357,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		//
 		// **これは「枠が満杯か」を1バイトも見ないので、余裕値の線を壊さない。**
 		// **打ち切りを切っている機械では、この物差しが無い。**
-		// **そのときは画面の版と `agent_status` だけで判断する**（`paneStopped`）。
+		// **そのときは `agent_status` と `state_change_seq` だけで判断する**（`paneStopped`）。
 		// **言えないことを理由に手放さないと、上限がその設定の機械で一度も効かない。**
 		// **打ち切りの側と同じ門を先に置く**（issue #173）。
 		// **`runIdleForTurnTimeout` は、この turn で hook を1件も受けていなければ

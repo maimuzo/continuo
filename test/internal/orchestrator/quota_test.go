@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "bf3c2eeee571788646c878801ba322ee4f7cec17eb585c8f1b4c88f325d56888", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "c2e26c7952eae88fca422e675ffb9ae190e2a87a68b01bb1906ce3801257aefd", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
 // 21本のパスは、9通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
@@ -668,7 +668,7 @@ func weeklyWaitFixture(
 
 // tickOnce は巡回を1回だけ回す（issue #197）。
 //
-// **1回では手放さない。**画面の版を初めて見た巡回では「そこからどれだけ止まっていたか」が
+// **1回では手放さない。**連番を初めて見た巡回では「そこからどれだけ止まっていたか」が
 // 分からないので、**次の巡回まで待つ**（設計 3-27 の段0b）。
 // **窓を満たすまで回すのは `waitForRelease` である。**
 //
@@ -679,7 +679,7 @@ func tickOnce(fx *stubFixture) {
 
 // waitForRelease は、担当を手放して印から外れるまで巡回を回す（issue #197）。
 //
-// **1回の巡回では手放さない。**画面の版を初めて見た巡回では
+// **1回の巡回では手放さない。**連番を初めて見た巡回では
 // 「そこからどれだけ止まっていたか」が分からないので、**次の巡回まで待つ**
 // （設計 3-27 の段0b）。**手放しは別の goroutine で走る**ので、
 // **巡回を止めて待つのではなく、時計を進めながら巡回を回し続ける。**
@@ -727,36 +727,34 @@ func assigneeLoginsOf(fx *stubFixture, id string) []string {
 // **そこへ1週間のモデル別の枠が100%だと条件が両方そろい、正常に走っている run が枠待ちと名乗る。**
 // **stall の時計が止まったまま戻らないので、そのあと本当に固まっても誰も止められない。**
 //
-// **専用の仕組みは持たない。**`checkStalls` の評価順で、画面の版を枠待ちの判定より前に置く。
+// **専用の仕組みは持たない。**`checkStalls` の評価順で、`agent_status` を枠待ちの判定より前に置く。
 //
-// 与える情報: 1週間のモデル別の枠が 100% で、リセットは48時間後。上限は300分。**画面の版が増えている。**
+// 与える情報: 1週間のモデル別の枠が 100% で、リセットは48時間後。上限は300分。**`agent_status` が `working` である。**
 // 成功条件: 枠待ちと判定しないこと。印から外れないこと。担当者が残っていること。
 //
 // **CFG のパスに対応づけない。**この判定は基本フローの stall の評価順であり、
 // 代替フローではない。
-func TestQuota_画面が動いていれば枠待ちと判定しない(t *testing.T) {
+func TestQuota_workingなら枠待ちと判定しない(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
 	fx, issue, _ := weeklyWaitFixture(t, []map[string]any{
 		{"kind": "weekly_scoped", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
 	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W6")
 
-	// **画面が動いている**（エージェントは長い1つのツール呼び出しの最中である）。
-	// **枠待ちと判定される前に動かす。**判定してからでは、標識が立った run は
-	// 次の巡回で画面を見に行かない（枠が明けたときに標識が外れる）。
-	fx.Herdr.BumpRevision()
+	// **エージェントは長い1つのツール呼び出しの最中である。**
+	// **枠待ちと判定される前に `working` にする。**判定してからでは、標識が立った run は
+	// 次の巡回で状態を見に行かない（枠が明けたときに標識が外れる）。
+	fx.Herdr.SetStatus(herdr.AgentStatusWorking)
 
 	fx.Orc.Tick(context.Background())
 	// **手放しの対象になった run は、打ち切りの本体まで落ちない**（issue #173）。
-	// **そのため「画面が変わっているので待ち続けます」は出ない。**
+	// **そのため「agent が working なので待ち続けます」は出ない。**
 	// **確かめるのは、打ち切られていないことそのものである。**
-	// **`revision` は continuo の pane では動かない**ので、あの文面はもともと実機で出ない
-	// （[docs/plans/continuo_design.md:2794-2820](../../../docs/plans/continuo_design.md#L2794-L2820) の訂正）。
 	if got := fx.Logs.String(); strings.Contains(got, "止まったものと判断して打ち切りました") {
-		t.Fatalf("画面が動いているのに打ち切っている:\n%s", got)
+		t.Fatalf("working なのに打ち切っている:\n%s", got)
 	}
 
 	if _, ok := viewOf(fx, issue.Identifier); !ok {
-		t.Fatalf("画面が動いているのに印から外している")
+		t.Fatalf("working なのに印から外している")
 	}
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
 		t.Fatalf("担当者が変わっている: %v", got)
@@ -853,7 +851,7 @@ func TestQuota_リセット時刻が読めなくても経過が上限を超え�
 	// **20分進める。**上限（10分）を超える。
 	clock.Advance(20 * time.Minute)
 	fx.Orc.Tick(context.Background())
-	// **この巡回で画面の版を初めて見る。**そこから窓（60秒）ぶん止まっていることを、
+	// **この巡回で連番を初めて見る。**そこから窓（60秒）ぶん止まっていることを、
 	// **次の巡回で確かめてから手放す**（設計 3-27 の段0b）。
 	waitForRelease(t, fx, clock, issue.Identifier)
 }
@@ -1101,7 +1099,7 @@ func TestQuota_5時間の枠の時刻で1週間の枠を判定しない(t *testi
 	fx.Orc.Tick(context.Background())
 	clock.Advance(20 * time.Minute)
 	fx.Orc.Tick(context.Background())
-	// **画面の版を初めて見た巡回では手放さない**（設計 3-27 の段0b）。
+	// **連番を初めて見た巡回では手放さない**（設計 3-27 の段0b）。
 	waitForRelease(t, fx, clock, issue.Identifier)
 }
 

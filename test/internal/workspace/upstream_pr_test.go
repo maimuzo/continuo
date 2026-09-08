@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "065bcb4e3c565798e567b17782f7ad234b2ef7eea433c4c0d000a348a2942dd3", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
+// {"RUCM-CFG-SHA256": "233d173ce64d93768f04ca25d7ca2498aa9591bf1e781106b22c917d70b83d94", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
 //
 // **「本家のリポジトリへ PR を出す」のうち、continuo 側の振る舞いだけを固定する。**
 // このユースケースは issue が非公開のリポジトリにあり、コードは public の fork にある。

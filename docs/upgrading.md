@@ -854,6 +854,10 @@ grep -nE 'five_hour_margin_percent|weekly_margin_percent' WORKFLOW.md
 **観測と観測の間に作業の山が丸ごと入っていても気づけません。**
 **published された版に、この判定は入っていません。**
 
+**同じ理由で、打ち切りの判定も `revision` を見るのをやめました。**
+**いまは agent の状態が `working` かどうかで測ります。**
+**この版より前は、「画面が動いているので待ち続けます」の枝が1度も発火していませんでした。**
+
 **待つ時間は `weekly_wait_limit_minutes` を超えることがあります。**
 pane が動いているかぎり待つためです。**書きかけの編集を持ったまま pane を閉じないための待ちです。**
 

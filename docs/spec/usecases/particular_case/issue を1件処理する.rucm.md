@@ -9,7 +9,7 @@
 - `docs/plans/continuo_design.md#3-8`（turn ループ。1回目の本文と継続の指示、max_dispatch_turns）
 - `docs/plans/continuo_design.md#3-16`（着手の手順の順番。段-1 から段11）
 - `docs/plans/continuo_design.md#3-18`（worktree の身元ファイル）
-- `docs/plans/continuo_design.md#3-21`（打ち切りは「画面の版」で測る）
+- `docs/plans/continuo_design.md#3-21`（打ち切りは `agent_status` で測る）
 - `docs/plans/continuo_design.md#3-23`（hook の中身は外部入力であり、そのまま信じない）
 - `docs/plans/continuo_design.md#3-25`（表明を transcript から読む。コメントが無かったらセッションを復元して書かせる）
 - `docs/plans/continuo_design.md#3-34`（候補の絞り込みはサーバ側の検索であり、書いた値の反映が遅れる）
@@ -371,8 +371,8 @@ POSTCONDITION: turn の本文は Claude Code に届いていない。herdr の p
 
 GLOBAL ALTERNATIVE FLOW 無音の打ち切り:
 BRANCH FROM BASIC FLOW 33
-WHEN turn_timeout_ms のあいだ hook が1件も届かず、画面の版も増えない場合
-1. システムは herdr に agent_status と pane の画面の版を要求する。
+WHEN turn_timeout_ms のあいだ hook が1件も届かず、agent_status も working にならない場合
+1. システムは herdr に agent_status を要求する。
 2. システムは herdr の pane を閉じる。
 3. システムはリトライの回数を1つ増やす。
 4. システムはバックオフの期限を印に書く。
@@ -702,7 +702,7 @@ continuo のログにだけ「書き込みました」が出るので、あと�
 | herdr の呼び出しが**一時的な理由**で失敗した（再起動・socket の一瞬の不通・応答の遅れ） | run を諦めない。turn の終わりを待ち直す印を立てて抜ける | 印は残る。リトライは増えない |
 | herdr が**送信そのものを断った**（pane が消えている・agent が受け取れない） | run を手放す。届いていないことを明記した理由を残す | 印は残る。リトライを1つ積む |
 | 待ち受けが返ったのに **Stop hook が来ない** | run を手放す。設定ファイルの hook を確かめさせる理由を残す | 印は残る。リトライを1つ積む |
-| **画面の版が turn_timeout_ms のあいだ増えない** | 巡回の停滞の検知が run を手放す | 印は残る。リトライを1つ積む |
+| **agent_status が turn_timeout_ms のあいだ working にならない** | 巡回の停滞の検知が run を手放す | 印は残る。リトライを1つ積む |
 
 **一時的な失敗でも `agent.prompt` を送り直さない。**届いていたかどうかは分からず、
 届いていた場合に送り直すと turn が二重に投入される。**黙って止まりもしない。**
@@ -717,7 +717,7 @@ continuo のログにだけ「書き込みました」が出るので、あと�
 | --- | --- |
 | `turnの終わりの取りこぼし` | 待ち受けが返ったのに settle_ms のあいだ Stop hook が来なかった |
 | `送信の失敗` | herdr が指示の送信そのものを断った |
-| `無音の打ち切り` | 画面の版が turn_timeout_ms のあいだ増えなかった |
+| `無音の打ち切り` | agent_status が turn_timeout_ms のあいだ working にならなかった |
 | `ボードから消えたissue` | turn の終わりに ID 指定で取り直したら、ボードから返らなかった |
 
 **尽きたときだけ、Status を failure_state へ落とし、理由を1件コメントし、印を外す。**
@@ -829,7 +829,7 @@ flowchart TD
     B31 -. "権限の確認: WHEN blocked が返った場合" .-> N28S1
     B31 -. "送信の失敗: WHEN herdr が送信そのものを断った場合" .-> N29S1
     B31 -. "一時的な送信の失敗: WHEN herdr の呼び出しが一時的な理由で失敗した場合" .-> N31S1
-    B33 -. "無音の打ち切り: WHEN hook も画面の版も動かない場合" .-> N30S1
+    B33 -. "無音の打ち切り: WHEN hook も届かず agent_status も working にならない場合" .-> N30S1
     B43 -. "既に同じStatus: WHEN 取り直した Status が遷移先と同じ場合" .-> N33S1
 
     subgraph SG01 ["SPECIFIC ALTERNATIVE FLOW 走行中のissue / RFS BASIC FLOW 3"]
@@ -960,7 +960,7 @@ flowchart TD
     end
 
     subgraph SG30 ["GLOBAL ALTERNATIVE FLOW 無音の打ち切り / BRANCH FROM BASIC FLOW 33"]
-        N30S1["1. agent_status と画面の版を要求する"] --> N30S2["2. pane を閉じる"] --> N30S3["3. リトライの回数を1つ増やす"] --> N30S4["4. バックオフの期限を印に書く"] --> N30S5["5. ABORT"]
+        N30S1["1. agent_status を要求する"] --> N30S2["2. pane を閉じる"] --> N30S3["3. リトライの回数を1つ増やす"] --> N30S4["4. バックオフの期限を印に書く"] --> N30S5["5. ABORT"]
     end
 
     subgraph SG31 ["GLOBAL ALTERNATIVE FLOW 一時的な送信の失敗 / BRANCH FROM BASIC FLOW 31"]
