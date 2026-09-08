@@ -13,6 +13,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
+	"github.com/maimuzo/continuo/internal/workspace"
 )
 
 // settingsFileName は issue ごとの Claude Code の設定ファイルの名前である（設計 3-12）。
@@ -200,24 +201,34 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // **公開リポジトリなら、その issue は誰でも読める。**だから、書き込む中身が
 // 鍵・トークン・資格情報・環境変数のときは断る、と同じ文の中で言い切る。
 //
-// identifier: 担当している issue の識別子（`tracker.Issue.Identifier`）。
-// 戻り値: 断る条件の3つ目へ足す文。形が違うときは空文字（条件はいまのまま残る）。
-func toolGateAssignmentNote(identifier string) string {
+// issue: 着手する issue。**識別子と、`NativeRef["default_branch"]` の既定の branch を使う。**
+// 戻り値: 断る条件の3つ目へ足す文。識別子の形が違うときは空文字（条件はいまのまま残る）。
+func toolGateAssignmentNote(issue tracker.Issue) string {
+	identifier := issue.Identifier
 	if !toolGateAssignmentPattern.MatchString(identifier) {
 		return ""
 	}
 	repo := identifier[:strings.Index(identifier, "#")]
+	// **既定の branch の名前は、綴りを数え上げずに実物から取る**（設計 3-64f）。
+	// **`main / master` と書くと、`develop` や `trunk` を既定にしているリポジトリで
+	// `git push origin HEAD:develop` が素通りする。**
+	defaultBranch := "既定の branch"
+	if v, ok := issue.NativeRef[workspace.NativeRefDefaultBranch].(string); ok && v != "" {
+		defaultBranch = "`" + v + "`"
+	}
 	return fmt.Sprintf("\n  いま担当しているのは %[1]s である。リポジトリ %[2]s への issue と pull request の作成、"+
-		"その本文とコメントの書き込み（`gh api` で直に書く形も含む）、"+
+		"その本文とコメントの書き込み（issue と pull request のコメントを `gh api` で書く形も含む）、"+
 		"そしてリポジトリ %[2]s への push は、"+
 		"担当している作業そのものなので「関係のない」に当たらない。"+
 		"ただし、pull request の取り込みと却下と承認（merge、close、approve）、release の作成、"+
 		"パッケージの公開、ラベルや担当者の付け外し、"+
-		"既定の branch（main / master）へ直に送る push（`HEAD:main` のような形）は、"+
+		"リポジトリの設定の書き換え（公開・非公開の切り替えなど）、"+
+		"pull request を通さずにファイルを書き込む形（`gh api` の contents など）、"+
+		"既定の branch（%[3]s）へ直に送る push は、"+
 		"担当しているリポジトリが相手でも、この免除に含めず断る。"+
 		"リポジトリ %[2]s が相手のときは、この段落の扱いが下に続く免除より優先する。"+
 		"これは他のどの条件も免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、"+
-		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo)
+		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo, defaultBranch)
 }
 
 // toolGateExemptionNote は、担当しているリポジトリの外への起票を免除する文である（設計 3-64f）。
@@ -402,13 +413,13 @@ JSON だけを返す。通すなら {"ok": true}。断るなら {"ok": false, "r
 // **合言葉だけに頼らない。**この設定ファイルは検査される側のエージェントが `Read` で
 // 読めるので、**読まれた場合に備えて位置の規則も同じ指示文に書く**（設計 3-64e）。
 //
-// identifier: 担当している issue の識別子（`tracker.Issue.Identifier`）。
+// issue: 着手する issue（識別子と既定の branch を使う）。
 // 戻り値: `prompt` の hook にそのまま載せる指示文。
-func toolGatePrompt(identifier string) string {
+func toolGatePrompt(issue tracker.Issue) string {
 	id := toolGateNewGateID()
 	return fmt.Sprintf(toolGatePromptTemplate,
 		toolGateFenceOpen(id), toolGateFenceClose(id),
-		toolGateAssignmentNote(identifier), toolGateExemptionNote)
+		toolGateAssignmentNote(issue), toolGateExemptionNote)
 }
 
 // toolGateMatcherAll は tool_gate.tools が空のときに使う matcher である（全部の道具に掛ける）。
@@ -447,7 +458,7 @@ func (o *Orchestrator) toolGateHookMatchers(issue tracker.Issue) []hookMatcher {
 			// 毎回変わるためである。この設定ファイルは検査される側のエージェントが
 			// Read で読めるので、**合言葉だけでは守れない。**読まれた場合に備えて、
 			// 指示文には「最後の閉じ印より後ろ」という位置の規則も書いてある。
-			Prompt: toolGatePrompt(issue.Identifier),
+			Prompt: toolGatePrompt(issue),
 			Model:  gate.Model,
 			// **必ず真である**（設計 3-64）。偽だと、断った時点で turn が終わる。
 			ContinueOnBlock: true,

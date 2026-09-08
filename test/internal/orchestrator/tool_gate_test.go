@@ -555,7 +555,7 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	}
 	// **進捗報告の書き足しは `gh api --method PATCH` である。**綴りで数え上げると落ちる。
 	// **落ちると18時間で担当が外れ、push していない作業が別の機械から見えなくなる。**
-	if !strings.Contains(prompt, "`gh api` で直に書く形も含む") {
+	if !strings.Contains(prompt, "issue と pull request のコメントを `gh api` で書く形も含む") {
 		t.Errorf("コメントを `gh api` で直に書く形が、免除に含まれていません:\n"+
 			"進捗報告の書き足しが断られると、18時間で担当が外れます:\n%s", prompt)
 	}
@@ -573,8 +573,21 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	// 条件3は「関係があるか」で判定するので、直前で「担当している作業そのもの」と宣言した相手には
 	// 必ず通る側へ倒れる。
 	// **送り先を名指しする push を、免除から外していること。**
-	if !strings.Contains(prompt, "HEAD:main") {
-		t.Errorf("既定の branch へ直に送る push を、免除から外していません:\n%s", prompt)
+	// **既定の branch の名前は、実物から取る。**`main / master` と綴りを数え上げると、
+	// `develop` や `trunk` を既定にしているリポジトリで `HEAD:develop` が素通りする。
+	if !strings.Contains(prompt, "既定の branch（`main`）へ直に送る push は") {
+		t.Errorf("既定の branch を、issue が持つ実物の名前で書いていません:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "main / master") {
+		t.Errorf("既定の branch の綴りを数え上げています:\n"+
+			"`develop` を既定にしているリポジトリで `HEAD:develop` が素通りします:\n%s", prompt)
+	}
+	// **リポジトリの設定と、pull request を通さない書き込みを、断つものへ入れていること。**
+	// `gh api --method PATCH repos/<owner>/<repo> -f private=false` は非公開を公開へ変える。
+	for _, want := range []string{"リポジトリの設定の書き換え", "pull request を通さずにファイルを書き込む形"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("%q が、断つものとして名指しされていません:\n%s", want, prompt)
+		}
 	}
 	if !strings.Contains(prompt, "リポジトリ octocat/hello-world への issue と pull request の作成") {
 		t.Errorf("担当しているリポジトリへの書き込みが「関係のない」に当たらないと書いていません:\n%s", prompt)
