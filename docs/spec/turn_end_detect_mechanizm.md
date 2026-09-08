@@ -331,12 +331,17 @@ if change.previous_state != change.state {
 
 ```
 $ herdr agent get continuo-continuo-173
-  返ってきた欄: agent, agent_session, agent_status, cwd, focused, foreground_cwd,
-                interactive_ready, name, pane_id, revision, state_change_seq, tab_id, ...
-  state_change_seq = 1401
+  返ってきた欄（2026-09-09 に全部を数え直した。14欄）:
+    agent, agent_session, agent_status, cwd, focused, foreground_cwd,
+    interactive_ready, name, pane_id, revision, state_change_seq, tab_id,
+    terminal_id, terminal_title, terminal_title_stripped, workspace_id
+  state_change_seq = 1448
   revision = 1
   agent_status = working
 ```
+
+**`...` で省いてはならない。**省いた位置に `terminal_title` と `terminal_title_stripped` が入っており、
+**8周目はそこを「型宣言があるから返るはず」と書いて、測らずに結論を出していた**（4-1 の限界(二)）。
 
 **`pane.list` では返らない。**実測で、`pane` の欄は
 `agent_status` / `cwd` / `focused` / `foreground_cwd` / `pane_id` / `revision` / `scroll` / `tab_id` / `terminal_id` / `workspace_id` の10個だけだった。
@@ -476,7 +481,7 @@ done
 > Runs when the main Claude Code agent has finished responding. Does not run if
 > the stoppage occurred due to a user interrupt. **API errors fire StopFailure instead.**
 
-**`StopFailure` の `error` に `rate_limit` が入る**（同 322 / 2574 / 2584行）。
+**`StopFailure` の `error` に `rate_limit` が入る**（`hooks.md` 322 / 2574 / 2584行）。
 **continuo は `StopFailure` を張っていない**（`git grep -c StopFailure -- internal/` が0）。
 **`-- internal/` を落としてはならない。**この文書自身が当たって非0を返す。
 
@@ -670,7 +675,7 @@ Claude Code の process が1回のツール呼び出しの途中で固まって�
 
 #### 限界(二): `working` の根拠は、端末タイトルのスピナー1文字である
 
-**この文書の3つの記述を並べると出てくる。**
+**この文書の4つの記述を並べると出てくる。**
 
 | どこ | 何と書いてあるか |
 | --- | --- |
@@ -692,24 +697,35 @@ Claude Code の process が1回のツール呼び出しの途中で固まって�
 **「長いツール呼び出しの run を、閾値のあとで必ず打ち切る」は、2026-09-08 まで実際にそうなっていた。**
 **新しく下回るわけではない。**それでも、**いま唯一の防波堤がその1文字に乗っている**ことは変わらない。
 
-**見分ける口は `agent.explain` だけではない。**
-**`agent.get` の応答が `terminal_title` と `terminal_title_stripped` を持っている**
-（[internal/herdr/types.go:270-273](../../internal/herdr/types.go#L270-L273)。
-`pane.list` の側にも同じ2つがある。[internal/herdr/types.go:196-199](../../internal/herdr/types.go#L196-L199)）。
-**これは 4-1 が既に読んでいる応答そのものである**（[internal/orchestrator/turn.go:1184-1189](../../internal/orchestrator/turn.go#L1184-L1189) の
+**`terminal_title` の2つの欄では見分けられない**（2026-09-09 に実測）。
+
+**欄は返ってくる。**`agent.get` も `agent.list` も `terminal_title` と `terminal_title_stripped` を詰めて返す
+（herdr 0.8.2。**この文書で唯一、`agent.get` の応答を直接見て確かめた欄である**）。
+**これは 4-1 が既に読んでいる応答そのもので、RPC を1本も増やさずに読める**
+（[internal/orchestrator/turn.go:1184-1189](../../internal/orchestrator/turn.go#L1184-L1189) の
 `agentInfo` が `got.Agent` を丸ごと返す）。
-**2つが違えば、herdr が装飾を1文字落としたということで、スピナーがまだ在る。**
-**RPC を1本も増やさずに測れる。**
 
-**それでも、いまは採らない。**理由は2つある。
+**だが「2つが違えば `working`」は成り立たない。**
 
-| 何 | 中身 |
-| --- | --- |
-| **頻度を測っていない** | 「`osc_title_working` が当たらなくなる」がどれくらい起きるかが分からないので、判定を1つ増やす価値を測れない（6節） |
-| **落とす装飾の一覧に依存する** | 2つの欄の差は、herdr が `src/terminal/title.rs` で決めた11文字（点字1文字＋10文字）でしか出ない。**Claude Code がその一覧に無い文字へ替えたら、差は出ない。**つまり、この口も同じ1文字に乗っている |
+```sh
+herdr agent list --json   # 2026-09-09。herdr 0.8.2。6つの agent
+```
 
-**`agent.explain` の `fallback_reason`**（3-4）**より、こちらのほうが安い。**
-**次にここを塞ぐときは、`agent.explain` ではなく `terminal_title` の2つの欄から試すこと。**
+| `agent_status` | 落ちた文字 | 何件 |
+| --- | --- | --- |
+| **`idle`** | **`✳ `** | 3 |
+| **`working`** | **`◐ `** | 3 |
+
+**6つとも2欄が違った。**`✳` も `◐` も、herdr が `src/terminal/title.rs` で落とす11文字（点字1文字＋10文字）に入っている。
+**つまり「装飾が1文字落ちた」は `idle` でも起きる。**
+**見分けるには、落ちた文字が `◐◓◑◒` のどれかであることまで見る必要がある。**
+**それは herdr が中でやっている照合を、continuo 側でもう一度・より細かくやり直すことである。**
+**同じ1文字への依存が、より強くなる。**
+
+**だから、この口は採らない。**
+**`agent.explain` の `fallback_reason`**（3-4）**が、いまも唯一の見分ける口である。**
+**そちらも採らない。**「`osc_title_working` が当たらなくなる」頻度を測っていないので、
+**判定を1つ増やす価値を測れない**（6節）。
 
 #### 限界(三): `blocked`（人間の入力待ち）も打ち切る
 
@@ -720,7 +736,15 @@ Claude Code の process が1回のツール呼び出しの途中で固まって�
 **その run を止める者が1人もいなくなる**（手放しも `blocked` を通さない）。
 **turn ループが生きていれば、そちらが先に拾って引き渡しへ回す**
 （[internal/orchestrator/turn.go:980-982](../../internal/orchestrator/turn.go#L980-L982)）。
-**`checkStalls` まで落ちてくるのは、turn ループが死んでいる run だけである**（4-5 の #1）。
+**`checkStalls` まで落ちてくるのは、ほとんどが turn ループの死んでいる run である**（4-5 の #1）。
+
+**例外が1つある。**turn ループが `blocked` を拾うと、`esc` を送る前に走っている subagent を待つ
+（[internal/orchestrator/turn.go:192](../../internal/orchestrator/turn.go#L192) → [internal/orchestrator/turn.go:314-345](../../internal/orchestrator/turn.go#L314-L345)）。
+**猶予は `claude.poll_wait_ms`（既定30秒）で、その間 run は印に残る。**
+**無音が既に閾値を超えていれば、その30秒に巡回が入り、打ち切りまで到達しうる。**
+**二重には走らない**（`beginTerminal` を両方が同期で取る。4-4）。
+**起きる条件は狭い**（`blocked` に落ちる直前まで、既定1時間 hook が1件も来ていないこと）。**実例は観測していない。**
+**この猶予を伸ばす変更を「安全」と判断してはならない。**
 **打ち切りは、そこでの最後の安全網である。**
 
 **`state_change_seq` を問A に使ってはならない。**
@@ -838,7 +862,7 @@ state_change_seq が2回続けて同じ             かつ
 | 呼び出し | 免除は成り立つか |
 | --- | --- |
 | [internal/orchestrator/turn.go:498](../../internal/orchestrator/turn.go#L498) | **成り立つ。**直前の `agent.prompt` を `claude.turn_timeout_ms` で待ち切っている（[internal/orchestrator/turn.go:481](../../internal/orchestrator/turn.go#L481)） |
-| [internal/orchestrator/turn.go:712](../../internal/orchestrator/turn.go#L712)（`afterQuotaReset`） | **入口による。**`afterQuotaReset` を呼ぶのは `afterWaitTimeout` の中だけで、その入口は [internal/orchestrator/turn.go:493](../../internal/orchestrator/turn.go#L493) と [internal/orchestrator/turn.go:977](../../internal/orchestrator/turn.go#L977) の2つ。**493 から来たなら閾値を待ち切っているので成り立つ。**977 から来たなら、その `confirmTurnEnd` の入口しだいである |
+| [internal/orchestrator/turn.go:712](../../internal/orchestrator/turn.go#L712)（`afterQuotaReset`） | **入口による。**`afterQuotaReset` を呼ぶのは `afterWaitTimeout` の中だけで、その入口は [internal/orchestrator/turn.go:493](../../internal/orchestrator/turn.go#L493) と [internal/orchestrator/turn.go:977](../../internal/orchestrator/turn.go#L977) の2つ。**[internal/orchestrator/turn.go:493](../../internal/orchestrator/turn.go#L493) から来たなら閾値を待ち切っているので成り立つ。**[internal/orchestrator/turn.go:977](../../internal/orchestrator/turn.go#L977) から来たなら、その `confirmTurnEnd` の入口しだいである |
 | [internal/orchestrator/turn.go:130](../../internal/orchestrator/turn.go#L130)（引き継いだ run の枝） | **成り立たない。**turn を1度も送らないので `beginTurn` が呼ばれず、`hookSeenThisTurn` が偽のまま |
 
 **`hookSeenThisTurn` は「枠待ちの間に hook を受けたか」ではない。**
@@ -861,7 +885,7 @@ state_change_seq が2回続けて同じ             かつ
 「窓そのものが `claude.turn_timeout_ms` である」と説明しているが、
 **`afterWaitTimeout` の呼び出しは2つあり**（[internal/orchestrator/turn.go:493](../../internal/orchestrator/turn.go#L493) と
 [internal/orchestrator/turn.go:977](../../internal/orchestrator/turn.go#L977)。
-**`internal/orchestrator/turn.go:562` は本体の1行目であって呼び出しではない**（定義は 561））**、
+**[internal/orchestrator/turn.go:562](../../internal/orchestrator/turn.go#L562) は本体の1行目であって呼び出しではない**（定義は [internal/orchestrator/turn.go:561](../../internal/orchestrator/turn.go#L561)））**、
 前者だけが `agent.prompt` を閾値で待ち切ったあとで、後者の窓は `settle_ms` か `poll_wait_ms` である。**
 **呼び出し元が複数ある述語を「1つだけ見て安全と書く」のが、この節で2度起きた誤りである。**
 
@@ -1090,6 +1114,7 @@ hook の無音は「ツールが長い」と区別できない。`background_tas
 | **`working` の見た目のまま固まった Claude Code が、実際にどれくらいの頻度で起きるか** | **意図的に作れない。**process を `SIGSTOP` で止めれば画面は固まるが、それは実運用の壊れ方と同じとは言えない。**頻度が分からないので、`working` が続いた時間の上限（4-1 の限界(一)）を何分に置くべきかも決められない** |
 | **herdr の `osc_title_working` が当たらなくなる頻度** | **Claude Code の端末タイトルの書き方が変わったときにだけ起きるので、こちらから作れない。**頻度が分からないので、見分ける判定を1つ増やす価値を測れない（4-1 の限界(二)） |
 | **`osc_title_working` が外れたとき、画面の側の規則が受け皿になるか** | **上と同じ理由で作れない。**3-4 の実測は、`osc_title_working` が当たっている瞬間に `visible_working` も `true` だったことしか示していない。**タイトルの規則が外れたときに画面の規則だけで `working` を返すかは、測っていない**（4-1 の限界(二)） |
+| **`herdr agent read` が pane の識別子を受け付けるか** | **測っていない。**3-5 の表の2行目（人間が対話に使っている pane）には continuo が付けた agent 名が無いので、**あの行を再現する手順が書けていない** |
 | **`agent_not_found` が返る条件と頻度** | **4-1 が「読めない＝打ち切る」を採っているので、判定の安全性を直接左右する。**3-4 の限界(二)が存在に触れているだけで、**いつ返るかは測っていない。**5-1 の2026-09-05 の直接の原因である |
 | **subagent が走っている最中も、Claude Code が端末タイトルへスピナーを書き続けるか** | **`working` の決め方そのものは測ってある**（3-4 の `matched_rule` が `osc_title_working`。4-1 の限界(二)）。**残っているのはこの1点だけである。**3-1 の実測は Bash の1コマンド（`go test`）で取ったもので、`Task`（subagent）・`WebFetch`・MCP の呼び出し中は測っていない。**外れると、枠が尽きた run の subagent を書きかけごと閉じる**（[internal/orchestrator/reconcile.go:428-434](../../internal/orchestrator/reconcile.go#L428-L434) が、この前提の上に立っている） |
 | **引き継いだ run の `confirmTurnEnd` から、`hookSeenThisTurn` が偽のまま枠待ちの印が立つ経路が実際に起きるか** | **再起動で `working` の pane を引き継ぎ、かつ枠が満杯という状態を作れない。**4-3 の末尾に書いた経路である。**起きても打ち切りの時計が止まるだけで、枠が明ければ印は外れる** |
@@ -1117,3 +1142,4 @@ hook の無音は「ツールが長い」と区別できない。`background_tas
 | **2026-09-08** | **敵対的レビューを受けて直した。****`hookSeenThisTurn` を偽へ戻すのは `beginTurn` の1箇所だけである**——「枠待ちの間は hook が来ないので偽」という説明は誤りだった。4-3 の塞げていない経路を2つから1つ（引き継いだ run の枝）へ数え直した。**4-6 の `working` の行を残す基準を書いた**（`working` は放っておけば `idle` へ落ちるが、`blocked` は解けない）。3-8 の空にする経路を `noteSubagentStop` へ指し直し、4つへ数え直した。**0節の検算を範囲リンクの終わりの行と、同名ファイルの取り違えまで広げた**——それまで47本の範囲リンクの終わりが1本も検査されていなかった |
 | **2026-09-08** | **敵対的レビューを受けて直した。****3-6 は「測らない信号」ではない**——hook の無音の実測（45秒の道具で 45.107〜45.116 秒、turn 外は 60.040〜60.058 秒）を持ち、**この文書で唯一、手法を再現できない実測である。**0節の分類を「測って書いた6つ」へ直し、出典を `docs/plans/continuo_design.md` の 1-3 へ貼り、測り直す形を書いた。**subagent の一覧を空にする経路の数が、3-8 で4・5節で2・実装のコメントで3に割れていた**ので4へ揃えた。4-6 の「何秒空くか」を直した——1つ目の待ちは `Stop` が来るまで繰り返すので上限が無い。2-1 の3行が分岐を落としていた（`confirmStartup` の `unknown` は `working` と逆にやり直す／`afterQuotaReset` の `blocked`／復元の `idle`/`done`）。**4-2 に、subagent を受け持たせている前提が未実測であることを書いた** |
 | **2026-09-08** | **敵対的レビューを受けて直した。****`agent.get` の応答は `terminal_title` と `terminal_title_stripped` を持っている**——`osc_title_working` が当たらなくなったことを、RPC を1本も増やさずに見分けられる。4-1 の限界(二) の「唯一の口は `agent.explain`」は誤りだった。**ファイル名なしの裸の行番号は、0節の検算が1本も拾わない**ので、書かない決まりにして6本を直した。3-6 の結論の1行が挿入で箇条書きから切り離されていたのを戻し、「何を答えるか」を足した。「5-1 の 2026-08-27」は同じ日付の行が2つあるので、内容で書き分けた。**subagent の一覧を空にする経路の「2つしか無い」が、実装とテストに残っていた**ので4へ揃えた。0節の1行目から周回数と Critical の件数を落とした（7節と衝突していた） |
+| **2026-09-09** | **敵対的レビューを受けて直した。****8周目の「`terminal_title` の2欄で見分けられる」を、実測して取り消した。**herdr 0.8.2 は2欄とも返す（`agent.get` の応答を直接見た。3-3 の欄の列挙も `...` をやめて全部書いた）**が、`idle` の agent も2欄が違う**——落ちる文字が `✳` か `◐` かの違いでしかない。**「装飾が1文字落ちた」は `idle` でも起きるので、`working` の判定には使えない。**見分ける口は `agent.explain` の `fallback_reason` だけである。**型宣言を「herdr が返す」の根拠にしていたのが誤りだった。**あわせて、裸の行番号3つ・「3つの記述」と4行の表・3-6 の「同」・限界(三) の言い切りを直した |
