@@ -436,22 +436,6 @@ func TestWithAIMarker_空白だけの行を残さない(t *testing.T) {
 	}
 }
 
-// 目的: CRLF の本文へ足す行も CRLF で終わることを固定する（設計 3-82）。
-//
-// **git の失敗をそのまま貼る経路がある**（`internal/orchestrator` の `postComment`）。
-// **実際に CRLF が混じったところは測っていない。**混じらないことも確かめていない。
-// **1行だけ LF になると、投稿した本文の改行が揃わない。**
-//
-// 与える情報: CRLF の本文。
-// 成功条件: 印の行が CRLF で終わり、先頭の1行が変わらないこと。
-func TestWithAIMarker_CRLFの本文にはCRLFで足す(t *testing.T) {
-	body := config.HandoffBidMarker + "\r\n{\"score\":190}\r\n"
-	want := config.HandoffBidMarker + "\r\n" + config.AIMarker + "\r\n{\"score\":190}\r\n"
-	if got := tracker.ComposeCommentBody(body, ""); got != want {
-		t.Fatalf("改行の綴りが揃いません:\n got %q\nwant %q", got, want)
-	}
-}
-
 // 目的: 複数行の HTML コメントの中へ印を差し込まないことを固定する（設計 3-82）。
 //
 // **`<!--` で始まり、同じ行に `-->` が無い行は、複数行のコメントの開きである。**
@@ -481,40 +465,6 @@ func TestWithAIMarker_字下げした印は名乗りに数えない(t *testing.T
 	want := "<!-- continuo:self -->\n" + config.AIMarker + "\n  " + config.AIMarker + "\n本文"
 	if got := tracker.ComposeCommentBody(body, ""); got != want {
 		t.Fatalf("字下げした引用を名乗りとして数えました:\n got %q\nwant %q", got, want)
-	}
-}
-
-// 目的: 改行が CRLF でも、先頭の1行が変わらないことを固定する（設計 3-82）。
-//
-// **git の失敗をそのまま貼る経路があるので、CRLF が混じりうる**
-// （`internal/orchestrator` の `postComment`）。
-// **先頭の1行さえ変わらなければ、読む側の先頭一致は全部通る。**
-//
-// 与える情報: CRLF の本文。
-// 成功条件: TrimSpace したあとの先頭が、元の印のままであること。
-func TestWithAIMarker_CRLFでも先頭の1行を変えない(t *testing.T) {
-	body := config.HandoffBidMarker + "\r\n{\"score\":190}\r\n"
-	got := tracker.ComposeCommentBody(body, "")
-	if !strings.HasPrefix(strings.TrimSpace(got), config.HandoffBidMarker) {
-		t.Fatalf("先頭の1行が変わりました:\n%q", got)
-	}
-	if !strings.Contains(got, config.AIMarker) {
-		t.Fatalf("印が入っていません:\n%q", got)
-	}
-}
-
-// 目的: 先頭に印が1つも無い CRLF の本文でも、足す行が CRLF で終わることを固定する（設計 3-82）。
-//
-// **git の失敗をそのまま貼る経路がある。**そこから CRLF が来るかは測っていない。
-// **直前の行だけを見ると、差し込む位置が先頭のときに LF が混ざる。**
-//
-// 与える情報: 印を1つも持たない CRLF の本文。
-// 成功条件: 1行目が印で、その行が CRLF で終わること。
-func TestComposeCommentBody_印の無いCRLFの本文にもCRLFで足す(t *testing.T) {
-	body := "git push が失敗しました\r\nfatal: 何か\r\n"
-	want := config.AIMarker + "\r\n" + body
-	if got := tracker.ComposeCommentBody(body, ""); got != want {
-		t.Fatalf("改行の綴りが揃いません:\n got %q\nwant %q", got, want)
 	}
 }
 
@@ -560,37 +510,5 @@ func TestComposeCommentBody_続く行の綴りに引きずられない(t *testin
 	want := config.HandoffBidMarker + "\n" + config.AIMarker + "\n{\"score\":190}\r\n"
 	if got := tracker.ComposeCommentBody(body, ""); got != want {
 		t.Fatalf("続く行の綴りに引きずられました:\n got %q\nwant %q", got, want)
-	}
-}
-
-// 目的: self_marker を前に足すときも、改行の綴りを本文に合わせることを固定する（設計 3-82）。
-//
-// **`"\n"` で決め打ちにすると、CRLF の本文で1行目だけ LF になる。**
-// **同じコメントの中で改行が混ざる。**`withAIMarker` は `lineEndingAt` でそこを揃えているので、
-// **前へ足すところだけ揃えないと、その手間が無駄になる。**
-//
-// 与える情報: CRLF の本文と、空でない self_marker。
-// 成功条件: 3行とも CRLF で繋がっていること。
-func TestComposeCommentBody_selfMarkerもCRLFで繋ぐ(t *testing.T) {
-	const self = "<!-- continuo:self -->"
-	body := "<!-- continuo:gated:human_assigned -->\r\n担当者が付いています\r\n"
-	want := self + "\r\n<!-- continuo:gated:human_assigned -->\r\n" + config.AIMarker + "\r\n担当者が付いています\r\n"
-	if got := tracker.ComposeCommentBody(body, self); got != want {
-		t.Fatalf("改行の綴りが混ざりました:\n got %q\nwant %q", got, want)
-	}
-}
-
-// 目的: 改行が混ざった本文で、差し込む位置の直前の行に合わせることを固定する（設計 3-82）。
-//
-// **本文のどこかに CRLF があるか、で決めてはならない。**広すぎる。
-// **LF で終わった行の下へ CRLF を足すことになる。**
-//
-// 与える情報: 見出しが LF で、その下が CRLF の本文。
-// 成功条件: 足した行が LF で終わること。
-func TestWithAIMarker_改行が混ざっても直前の行に合わせる(t *testing.T) {
-	body := "<!-- continuo:agent -->\n本文\r\nつづき\r\n"
-	want := "<!-- continuo:agent -->\n" + config.AIMarker + "\n本文\r\nつづき\r\n"
-	if got := tracker.ComposeCommentBody(body, ""); got != want {
-		t.Fatalf("改行の綴りが広すぎる決め方になっています:\n got %q\nwant %q", got, want)
 	}
 }

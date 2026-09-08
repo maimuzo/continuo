@@ -79,9 +79,7 @@ const (
 //	足す先の直前が改行でなければ、改行を1つ補う（印だけのコメントで、2つの印が1行に繋がるため）
 //	本文の先頭が空白だけなら、その空白を落とす（残すと1行目が空白だけの行になる）
 //
-// **足す行の改行は、差し込む位置の行に合わせる。**CRLF の本文には CRLF で足す。
-// **CRLF が実際に来るところは測っていない。**混じらないことも確かめていない。
-// **行の区切りは LF だけで数える。**CR だけで改行する本文は、continuo のどの経路も作らない。
+// **足す行の改行は `\n` である。**CRLF は扱わない（理由は `spliceAIMarker` にある）。
 func withAIMarker(body string) string {
 	// **先頭の空白を読み飛ばす。**読む側が `TrimSpace` するので、ここも同じところから見る。
 	head := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
@@ -156,38 +154,6 @@ func isMarkerLine(line string) bool {
 	return strings.Contains(line[len(commentOpen):], commentClose)
 }
 
-// lineEndingAt は、差し込む位置で使う改行の綴りを返す。
-//
-// **直前の行が CRLF で終わっていれば CRLF。**
-// **先頭へ差し込むときは、続く最初の行の終わり方に合わせる。**
-//
-// prefix: 差し込む位置より前の部分。
-// suffix: 差し込む位置より後ろの部分。
-// 戻り値: `\n` か `\r\n`。
-func lineEndingAt(prefix, suffix string) string {
-	if prefix != "" {
-		// **行の途中には差し込まない**（`spliceAIMarker` が改行を補う）ので、
-		// **直前の行の終わり方が、そのまま足す行の終わり方になる。**
-		if strings.HasSuffix(prefix, "\r\n") {
-			return "\r\n"
-		}
-		// **末尾に改行が無い本文では、直前の行に終わり方が無い。**
-		// **1つ手前の改行だけを見る。**見ないと、CRLF の本文の最後だけ LF になる。
-		//
-		// **本文のどこかに CRLF があるか、で見てはならない。**広すぎる。
-		// **改行が混ざった本文で、LF で終わった行の下へ CRLF を足すことになる。**
-		if i := strings.LastIndexByte(prefix, '\n'); i > 0 && prefix[i-1] == '\r' {
-			return "\r\n"
-		}
-		return "\n"
-	}
-	// **先頭へ差し込むときだけ、続く最初の行の終わり方に合わせる。**
-	if i := strings.IndexByte(suffix, '\n'); i > 0 && suffix[i-1] == '\r' {
-		return "\r\n"
-	}
-	return "\n"
-}
-
 // spliceAIMarker は、本文の指定の位置へ config.AIMarker を1行差し込む。
 //
 // body: 差し込む前の本文。
@@ -203,11 +169,13 @@ func spliceAIMarker(body string, at int) string {
 	// **落としてから改行の綴りを決める。**順序を逆にすると、
 	// **先頭に空白がある本文で「先頭へ差し込む」の枝へ入らない。**
 	prefix = strings.TrimLeftFunc(prefix, unicode.IsSpace)
-	// **改行の綴りは、差し込む位置の行から決める。**
-	// **直前の行だけを見ると、差し込む位置が先頭のときに LF が混ざる。**
-	// **本文のどこかに CRLF があれば CRLF、では広すぎる。**
-	// 末尾の1行だけが CRLF の本文で、LF の場所へ CRLF を足すことになる。
-	eol := lineEndingAt(prefix, suffix)
+	// **改行は `\n` である。**CRLF は扱わない。
+	//
+	// **本文を作る経路を全部たどって決めた**（2026-09-08、実装レビュー5周目）。
+	// 持ち回りのコメントも、関門の案内も、Status を動かした記録も、**全部 Go の `"\n"` で組み立てている。**
+	// 外から来る文字列は git と gh の出力だけで、**continuo が動く場所（darwin と linux）では LF である。**
+	// **CRLF を扱う処理は、測っていない場合のために置いて、3周続けてそこから欠陥を出した。**捨てた。
+	const eol = "\n"
 	// **もとの末尾に改行が在ったかを、補う前に控える。**
 	// **補ったあとで見ると、必ず「在った」になる。**
 	hadEOL := strings.HasSuffix(prefix, "\n")
@@ -279,7 +247,7 @@ func ComposeCommentBody(body, selfMarker string) string {
 	if selfMarker != "" {
 		// **改行の綴りを本文に合わせる。**`"\n"` で決め打ちにしてはならない。
 		// **CRLF の本文で1行目だけ LF になる**と、同じコメントの中で改行が混ざる。
-		full = selfMarker + lineEndingAt("", full) + full
+		full = selfMarker + "\n" + full
 	}
 	return full
 }
