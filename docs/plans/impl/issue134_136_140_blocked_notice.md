@@ -577,7 +577,7 @@ func (o *Orchestrator) markGateNoticeSkipped(issueID string, reason GateReason, 
 1ページ100件（[internal/tracker/query.go:318](../../../internal/tracker/query.go#L318) の `maxCommentsPerFetch`）で
 20ページ（[internal/tracker/query.go:266](../../../internal/tracker/query.go#L266) の `maxCommentPages`）が上限である。
 **取り方は新しい順（`orderBy: { field: UPDATED_AT, direction: DESC }`）なので、
-上限に達すると落ちるのは古い側である**（[internal/tracker/adapter.go:1237-1269](../../../internal/tracker/adapter.go#L1237-L1269)）。
+上限に達すると落ちるのは古い側である**（[internal/tracker/adapter.go:1238-1270](../../../internal/tracker/adapter.go#L1238-L1270)）。
 **前の起動で書いた案内は古い側にあるので、いちばん落ちやすい。**
 **書けないことより、同じ案内を2件書くことのほうが困る。**消す手段が無いからである（8-1）。
 
@@ -590,7 +590,7 @@ func (o *Orchestrator) markGateNoticeSkipped(issueID string, reason GateReason, 
 
 **そこで、打ち切ったかどうかをアダプタが返す。**
 **いま WARN を出している条件と同じものを、真偽値にして返すだけである**
-（[internal/tracker/adapter.go:1266-1269](../../../internal/tracker/adapter.go#L1266-L1269)。
+（[internal/tracker/adapter.go:1267-1270](../../../internal/tracker/adapter.go#L1267-L1270)。
 続きの cursor がありながら `maxCommentPages` を使い切ったとき）。
 
 ```go
@@ -612,7 +612,7 @@ func (a *Adapter) FetchAllComments(
 
 | どこ | どうするか |
 | --- | --- |
-| [internal/tracker/adapter.go:1227](../../../internal/tracker/adapter.go#L1227) の `fetchCommentNodes` | 戻り値に `truncated bool` を足す。**`keep` で抜けたときは偽**（狙って止めたので、切れていない） |
+| [internal/tracker/adapter.go:1228](../../../internal/tracker/adapter.go#L1228) の `fetchCommentNodes` | 戻り値に `truncated bool` を足す。**`keep` で抜けたときは偽**（狙って止めたので、切れていない） |
 | [internal/tracker/adapter.go:1061](../../../internal/tracker/adapter.go#L1061) の `FetchComments` | `_` で捨てる（`keep` で止める経路である） |
 | [internal/tracker/adapter.go:1150](../../../internal/tracker/adapter.go#L1150) の `FetchAllComments` | そのまま返す |
 | [internal/orchestrator/orchestrator.go:123](../../../internal/orchestrator/orchestrator.go#L123) の `Tracker` interface | 署名を揃える |
@@ -1201,10 +1201,10 @@ v1 は全部を出そうとして落ちた。**足すのは呼び出し1行な�
 
 | 主張 | 根拠 |
 | --- | --- |
-| **`FetchAllComments` は2000件までは落とさない** | [internal/tracker/adapter.go:1155](../../../internal/tracker/adapter.go#L1155) が `fetchCommentNodes(ctx, issueNodeID, maxCommentsPerFetch, 0)` を呼ぶ。`keep` が0なら `keep` では打ち切らない（[internal/tracker/adapter.go:1255](../../../internal/tracker/adapter.go#L1255) の `if keep > 0 && unmarked >= keep`）。**ページ数では打ち切る**（[internal/tracker/adapter.go:1237](../../../internal/tracker/adapter.go#L1237) の `for page := 0; page < maxCommentPages; page++`。`maxCommentPages` は20、`maxCommentsPerFetch` は100） |
-| **上限で落ちるのは古い側である** | [internal/tracker/query.go:253](../../../internal/tracker/query.go#L253) が `orderBy: { field: UPDATED_AT, direction: DESC }` で取り、[internal/tracker/adapter.go:1272-1275](../../../internal/tracker/adapter.go#L1272-L1275) が最後に反転して古い順へ戻す。**打ち切りは新しい側を読み終えた時点で起きる** |
-| **上限に達したことはログに出るが、戻り値からは分からない** | [internal/tracker/adapter.go:1266-1269](../../../internal/tracker/adapter.go#L1266-L1269) が `Warn("コメントが多すぎるので途中まででやめました（古いコメントは読めていません）", …)` を出すだけで、`FetchAllComments` の戻り値は `([]Comment, error)` のままである（[internal/tracker/adapter.go:1150-1158](../../../internal/tracker/adapter.go#L1150-L1158)）。**だから戻り値に真偽値を1つ足す**（7-1） |
-| **件数では切れを当てられない** | 打ち切りは [internal/tracker/adapter.go:1237](../../../internal/tracker/adapter.go#L1237) の `for page := 0; page < maxCommentPages; page++` を、続きの cursor を持ったまま抜けたかどうかで決まる。**`len(nodes)` は1ページの件数が100に満たなくても増えないので、2000未満のまま切れることがある** |
+| **`FetchAllComments` は2000件までは落とさない** | [internal/tracker/adapter.go:1155](../../../internal/tracker/adapter.go#L1155) が `fetchCommentNodes(ctx, issueNodeID, maxCommentsPerFetch, 0)` を呼ぶ。`keep` が0なら `keep` では打ち切らない（[internal/tracker/adapter.go:1256](../../../internal/tracker/adapter.go#L1256) の `if keep > 0 && unmarked >= keep`）。**ページ数では打ち切る**（[internal/tracker/adapter.go:1238](../../../internal/tracker/adapter.go#L1238) の `for page := 0; page < maxCommentPages; page++`。`maxCommentPages` は20、`maxCommentsPerFetch` は100） |
+| **上限で落ちるのは古い側である** | [internal/tracker/query.go:253](../../../internal/tracker/query.go#L253) が `orderBy: { field: UPDATED_AT, direction: DESC }` で取り、[internal/tracker/adapter.go:1273-1276](../../../internal/tracker/adapter.go#L1273-L1276) が最後に反転して古い順へ戻す。**打ち切りは新しい側を読み終えた時点で起きる** |
+| **上限に達したことはログに出るが、戻り値からは分からない** | [internal/tracker/adapter.go:1267-1270](../../../internal/tracker/adapter.go#L1267-L1270) が `Warn("コメントが多すぎるので途中まででやめました（古いコメントは読めていません）", …)` を出すだけで、`FetchAllComments` の戻り値は `([]Comment, error)` のままである（[internal/tracker/adapter.go:1150-1158](../../../internal/tracker/adapter.go#L1150-L1158)）。**だから戻り値に真偽値を1つ足す**（7-1） |
+| **件数では切れを当てられない** | 打ち切りは [internal/tracker/adapter.go:1238](../../../internal/tracker/adapter.go#L1238) の `for page := 0; page < maxCommentPages; page++` を、続きの cursor を持ったまま抜けたかどうかで決まる。**`len(nodes)` は1ページの件数が100に満たなくても増えないので、2000未満のまま切れることがある** |
 | **`FetchAllComments` の呼び出し元は2つだけである** | `grep -rn "FetchAllComments" --include="*.go" .`（`.claude/worktrees/` を除く）で、実装以外は [internal/orchestrator/handoff.go:108](../../../internal/orchestrator/handoff.go#L108) と [internal/orchestrator/handoff.go:725](../../../internal/orchestrator/handoff.go#L725)、interface が [internal/orchestrator/orchestrator.go:123](../../../internal/orchestrator/orchestrator.go#L123)、fake が [test/internal/orchestrator/helpers_test.go:1323](../../../test/internal/orchestrator/helpers_test.go#L1323) |
 | **担当者が2人以上の分岐は `viewerIdentity` より前にある** | [internal/orchestrator/handoff.go:78](../../../internal/orchestrator/handoff.go#L78) の `if len(logins) >= 2` に対し、[internal/orchestrator/handoff.go:95](../../../internal/orchestrator/handoff.go#L95) が `viewer, ok := o.viewerIdentity(ctx)` である。**だから 8-3 はこの分岐の中で自分で引く** |
 | **担当者が0人になっても、走っている run は止まらない** | [internal/orchestrator/handoff.go:708-720](../../../internal/orchestrator/handoff.go#L708-L720) が `if len(logins) == 0 { … return false, "" }` で「担当者が1人もいないだけでは止めない」と決めている |

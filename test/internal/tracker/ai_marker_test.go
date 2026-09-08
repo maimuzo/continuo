@@ -421,18 +421,20 @@ func TestWithAIMarker_閉じの後ろに本文が続く行の前へ入れない(
 	}
 }
 
-// 目的: 先頭の空白だけの行を作らないことを固定する（設計 3-82）。
+// 目的: 1行目が印になることを固定する（設計 3-82）。
 //
-// **`元の本文は1文字も書き換えない` という約束のうち、行の増やし方に当たる。**
-// 空白だけの1行目が残ると、issue の画面で空行から始まるコメントになる。
+// **空白だけの1行目が残ると、issue の画面で空行から始まるコメントになる。**
+//
+// **本文の字下げは落とさない。**落とすと、4桁字下げのコード片で始まる本文の1行目だけが崩れ、
+// **2行目から下は字下げのまま残るので、画面では散文とコード片に割れる。**
 //
 // 与える情報: 先頭に空白があり、印を1つも持たない本文。
-// 成功条件: 1行目が印であること。
-func TestWithAIMarker_空白だけの行を残さない(t *testing.T) {
+// 成功条件: 1行目が印で、本文の字下げが1文字も落ちないこと。
+func TestWithAIMarker_1行目が印になる(t *testing.T) {
 	got := tracker.ComposeCommentBody("  素の本文", "")
-	want := config.AIMarker + "\n素の本文"
+	want := config.AIMarker + "\n  素の本文"
 	if got != want {
-		t.Fatalf("空白だけの行が残りました:\n got %q\nwant %q", got, want)
+		t.Fatalf("1行目が印になっていないか、字下げが落ちました:\n got %q\nwant %q", got, want)
 	}
 }
 
@@ -510,5 +512,21 @@ func TestComposeCommentBody_続く行の綴りに引きずられない(t *testin
 	want := config.HandoffBidMarker + "\n" + config.AIMarker + "\n{\"score\":190}\r\n"
 	if got := tracker.ComposeCommentBody(body, ""); got != want {
 		t.Fatalf("続く行の綴りに引きずられました:\n got %q\nwant %q", got, want)
+	}
+}
+
+// 目的: 印が1つも無い本文では、先頭の空白を落とさないことを固定する（設計 3-82）。
+//
+// **落とすと、4桁字下げのコード片で始まる本文の1行目だけが崩れる。**
+// 2行目から下は字下げのまま残るので、**画面では散文とコード片に割れる。**
+// **読む側は `TrimSpace(body)` してから先頭を見るので、落とさなくても判定は変わらない。**
+//
+// 与える情報: 4桁字下げのコード片で始まる本文。
+// 成功条件: 字下げが1文字も落ちないこと。
+func TestWithAIMarker_印が無ければ先頭の空白を落とさない(t *testing.T) {
+	body := "    $ git push\n    error: failed to push\n"
+	want := config.AIMarker + "\n" + body
+	if got := tracker.ComposeCommentBody(body, ""); got != want {
+		t.Fatalf("先頭の字下げが落ちました:\n got %q\nwant %q", got, want)
 	}
 }

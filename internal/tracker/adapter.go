@@ -1189,8 +1189,9 @@ func (a *Adapter) FetchComments(
 // body: コメント本文（マーカーを含まない、素の本文）。
 // selfMarker: 本文の先頭に付ける印（tracker.comments.self_marker）。空文字なら
 // 印を付けずに投稿する（`config.AIMarker` は、それでも足す）。
-// **本文の中身は見ない。**空でも空白だけでも、そのまま組み立てる。
-// **空の本文を止めるのは呼び出し側である**（関門の案内は、本文が空なら投稿そのものをやめる）。
+// **本文が空文字のときだけは、印を足さない**（`ComposeCommentBody`）。
+// **足すと空でなくなるので GitHub が受け付け、見えないコメントが公開されて消せない。**
+// 足さなければ GitHub が断り、**呼び出し側の欠陥がログに出る。**
 // 戻り値: 投稿したコメント（IsSelf は常に true）。GraphQL 呼び出しが失敗した場合、または
 // 応答にコメントが含まれていない場合はエラーを返す。
 func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*Comment, error) {
