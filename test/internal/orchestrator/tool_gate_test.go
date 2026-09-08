@@ -544,7 +544,7 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	if noteAt < 0 {
 		t.Fatalf("担当している issue の識別子が指示文にありません（判定役は照合できません）:\n%s", prompt)
 	}
-	if !strings.Contains(prompt, "リポジトリ octocat/hello-world への issue・pull request・コメントの作成と更新") {
+	if !strings.Contains(prompt, "リポジトリ octocat/hello-world へ issue と pull request を作ること") {
 		t.Errorf("担当しているリポジトリへの書き込みが「関係のない」に当たらないと書いていません:\n%s", prompt)
 	}
 
@@ -608,7 +608,7 @@ func TestToolGate_担当先を告げる文は他の条件を免除しない(t *t
 	}
 	sameCondition := prompt[noteAt:nextCondAt]
 
-	for _, want := range []string{"これは上の条件を免除しない", "資格情報の持ち出し"} {
+	for _, want := range []string{"これは他のどの条件も免除しない", "資格情報の持ち出し"} {
 		if !strings.Contains(sameCondition, want) {
 			t.Errorf("免除の文と同じ条件の中に %q がありません:\n"+
 				"免除だけを読んだ判定役が、資格情報を公開の issue へ書く呼び出しまで通します:\n%s",
@@ -653,7 +653,7 @@ func TestToolGate_担当先の外への起票を免除する(t *testing.T) {
 		"merge、close",
 		"パッケージの公開",
 		// **免除は他の条件に勝たない。**
-		"この免除も、上の条件を免除しない",
+		"この免除も、他のどの条件も免除しない",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("担当先の外への免除に %q がありません:\n%s", want, prompt)
