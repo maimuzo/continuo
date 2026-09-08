@@ -464,6 +464,14 @@ func (o *Orchestrator) paneStopped(ctx context.Context, rs *runState) (bool, boo
 	//
 	// **だから、この判定は自分が読んだ連番だけを覚える。**
 	// **2回続けて同じなら止まっている。**初回は必ず偽を返す。
+	if agent.StateChangeSeq == 0 {
+		// **連番を返さない herdr の版である**（issue #173）。
+		// **この経路では二度と進まない。**`noteQuotaProbe` が常に偽を返すためである。
+		// **面倒を見ていると名乗ってはならない。**名乗ると打ち切りからも守ることになり、
+		// **止める者が1人もいなくなる。**pane とスロットを握ったまま、continuo を再起動するまで残る。
+		// **判定できないときは、打ち切りに任せる。**
+		return false, false
+	}
 	return rs.noteQuotaProbe(agent.StateChangeSeq), true
 }
 

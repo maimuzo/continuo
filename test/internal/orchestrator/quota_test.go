@@ -903,13 +903,14 @@ func TestQuota_毎回状態が変わっていたら手放さない(t *testing.T)
 // **判定は `revision` のときと同じ恒真へ戻る。**
 // **恒真へ戻るくらいなら、手放さない側へ倒す。**
 //
-// 与える情報: 1週間の枠が 100% でリセットは48時間後（上限を超える）。
-// **連番は1度も増やさない**（＝欄を返さない版の再現）。
-// 成功条件: **何回巡回しても手放さないこと。**
+// 与える情報: 1週間の枠が **92%**（手放しの条件は満たすが、**枠待ちの印は立たない**）。
+// リセットは48時間後。**連番は1度も増やさない**（＝欄を返さない版の再現）。
+// **100% で試してはならない。**そこでは枠待ちの印が立ち、打ち切りが止まるのが元からの正しい振る舞いである。
+// 成功条件: **手放さないこと。ただし打ち切りからも守らないこと。**
 func TestQuota_連番を返さない版では手放さない(t *testing.T) {
 	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
 	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
-		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+		{"kind": "weekly_all", "percent": 92, "resets_at": resetsAt, "severity": "normal"},
 	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W8")
 
 	// **欄を返さない版の herdr を作る。**
@@ -917,16 +918,20 @@ func TestQuota_連番を返さない版では手放さない(t *testing.T) {
 
 	for i := 0; i < 60; i++ {
 		if _, ok := viewOf(fx, issue.Identifier); !ok {
-			t.Fatalf("連番を読めない版なのに手放しました（%d 回目の巡回）:\n%s", i, fx.Logs.String())
+			// **打ち切られた。それでよい**（issue #173）。
+			// **手放しはしない**（連番を読めないので、止まっていると言えない）。
+			// **だが打ち切りからも守ってはならない。**守ると止める者が1人もいなくなり、
+			// **pane とスロットを握ったまま continuo の再起動まで残る。**
+			if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
+				t.Fatalf("連番を読めない版なのに手放しました:\n%s", got)
+			}
+			return
 		}
 		clock.Advance(2 * time.Minute)
 		fx.Orc.Tick(context.Background())
 		time.Sleep(50 * time.Millisecond)
 	}
-
-	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
-		t.Fatalf("担当者が変わっている: %v", got)
-	}
+	t.Fatalf("連番を読めない run が、手放されも打ち切られもせずに残っています:\n%s", fx.Logs.String())
 }
 
 // TestQuota_92パーセントでも打ち切られずに手放される は、90〜99%の帯を確かめる
