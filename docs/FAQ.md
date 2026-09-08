@@ -800,10 +800,9 @@ tracker:
 | キー | 揃えないと何が起きるか |
 | --- | --- |
 | **`tracker.provider.handoff.bid_window_ms`** | 締め切りの計算がずれ、機械ごとに勝者の判定が食い違います |
-| **`five_hour_margin_percent` / `weekly_margin_percent`** | マージンが大きい機械ほど余裕値が下がり、判定スコアで負け続けます |
+| **`five_hour_margin_percent` / `weekly_margin_percent`** | **2つ効きます。**マージンが大きい機械ほど余裕値が下がって**判定スコアで負け続け**、さらに**入札に参加する条件そのものが機械ごとに変わります**（余裕値が0以下なら入札しません） |
 | **`idle_timeout_ms` と `progress_interval_ms`** | **この2つは機械をまたいで組で効きます。**担当している側の `progress_interval_ms` が、見ている側の `idle_timeout_ms` より長いと、**エージェントが指示どおり書いていても担当が外れます。****1枚の中では検査されます**（`progress_interval_ms` が `idle_timeout_ms` 以上だと起動しません）。**機械をまたいだ組み合わせだけが検査されません** |
 | **`recheck_interval_ms`** | **0 を書いた機械は、走っている最中に担当を取られたことに気づきません** |
-| **`five_hour_margin_percent` と `weekly_margin_percent`** | 入札に参加する条件が機械ごとに変わります |
 | **`rate_limit.source`** | 片方だけ `none` にすると、**その機械が使用率0として常に入札し、勝ち続けます** |
 | **`herdr.worktree.branch_template`** | 担当が移ったとき、次の機械が前の機械の branch を同じ名前で見つけられません |
 | **`continuo setup` が書く8つの Status キー** | 機械ごとに違うと、片方が「作業中」と見ている issue を、もう片方が候補として拾い直します |

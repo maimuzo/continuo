@@ -1903,10 +1903,12 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	// **手放しの観測も忘れる**（issue #173）。
 	//
 	// **やり直した attempt は、新しい agent と新しい pane である。**
-	// 前の attempt で控えた連番を持ち越すと、**「初回は必ず止まっていないと答える」という約束が破れる。**
-	// `state_change_seq` は `omitempty` なので、**欄を返さない herdr の版では全 agent が 0 になる。**
-	// **そのとき `QuotaProbeSeen` が真のまま残っていると、新しい pane の1回目の観測で
-	// 「2回続けて同じ」と答えて手放す。**
+	// **前の attempt で控えた連番を、新しい pane の値と比べる意味は無い。**
+	// **attempt をまたいで持ち越すものは、ここで全部戻すのが筋である。**
+	//
+	// **「欄を返さない herdr の版で恒真へ戻る」経路は、ここが塞いでいるのではない。**
+	// **`noteQuotaProbe` が、比べる前に「連番が 0 なら偽」で落としている。**
+	// **そちらを消すと、この2行があっても穴は開く。**
 	rs.QuotaProbeSeen = false
 	rs.QuotaProbeStateSeq = 0
 	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
