@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
@@ -193,38 +192,5 @@ func TestComment_書き直しの文面は囲み付きの印を名指しで禁じ
 	bare := "continuo:progress"
 	if strings.Contains(sent, "<!-- "+bare+" -->") {
 		t.Errorf("進捗報告の印そのものが送る文面に埋まっています:\n%s", sent)
-	}
-
-	// **機械が書いた印も書かせる**（設計 3-82。issue #245）。
-	// **落とすと、書かせ直した報告だけ人間が書いたものと見分けが付かなくなる。**
-	if !strings.Contains(sent, config.AIMarker) {
-		t.Errorf("機械が書いた印（%s）を書かせていません:\n%s", config.AIMarker, sent)
-	}
-	// **エージェントの印より後ろに置かせる。**先に置かせると `c.IsAgent` が偽になり、
-	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
-	marker := fx.Config.Tracker.Comments.Marker
-	if i, j := strings.Index(sent, marker), strings.Index(sent, config.AIMarker); i < 0 || j < 0 || j < i {
-		t.Errorf("機械が書いた印が、エージェントの印より前にあります（%d と %d）:\n%s", i, j, sent)
-	}
-	// **見本の印は行頭から始めさせる。**字下げした見本を写すと、印が本文の一部になる。
-	// `handoff.StartsAsProgressReport` は、行頭の印しか数えない。
-	//
-	// **見るのは機械の印だけである。**エージェントの印は、この文面では
-	// `gh issue comment … --body "<印>` の形でしか出てこず、**単独の行にならない。**
-	// 両方を見る形にすると、片方が必ず素通りして、**2つとも固定しているつもりになる。**
-	seen := false
-	for _, line := range strings.Split(sent, "\n") {
-		if strings.TrimSpace(line) != config.AIMarker {
-			continue
-		}
-		seen = true
-		if line != strings.TrimSpace(line) {
-			t.Errorf("見本の機械の印が字下げされています: %q", line)
-		}
-	}
-	// **1件も見つからなければ、この検査は何も守っていない。**
-	// 見本の形が変わったときに、黙って通り続けるのを防ぐ。
-	if !seen {
-		t.Fatal("見本に機械の印だけの行がありません（検査が的を外しています）")
 	}
 }

@@ -312,11 +312,6 @@ func (o *Orchestrator) releaseExpiredAssignee(
 	// **投稿者は入れない。**この写しは回の区切りを決めるためだけのもので、
 	// **`RoundStart` は本文と作成時刻しか見ない。**
 	// **`CollectBids` は印の照合で先に落とす**ので、投稿者まで辿り着かない。
-	// **この控えは、GitHub に載る本文と違う**（設計 3-82）。
-	// `PostComment` が投稿の直前に `<!-- continuo:ai -->` を1行足す。
-	// **落とすものは無い。**本文は1文字も書き換わらない。
-	// **持ち回りの読み取りは先頭の印と JSON しか見ないので、どちらでも同じに読める。**
-	// **本文どうしを比べる処理を足すときは、この差に気を付けること。**
 	view := handoff.CommentView{Body: body, CreatedAt: now, UpdatedAt: now}
 	if err := o.postOwnMarkedComment(ctx, nodeID, body); err != nil {
 		// **担当は既に外れている。**コメントを書けなかったことで入札を止めない

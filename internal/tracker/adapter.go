@@ -1178,24 +1178,18 @@ func (a *Adapter) FetchComments(
 // セッションを復元して書かせる（設計 3-25 / 3-29）。
 // 自分が書いたものには self_marker の印を付け、次の turn の入力から外せるようにする。
 //
-// **あわせて `config.AIMarker` を1行足す**（設計 3-82）。**人間ではなく機械が書いた、と
-// 名乗るためである。**足す先は「先頭に並ぶ印のいちばん後ろ」であり、
-// **`self_marker` も、本文が自分で持っている持ち回りの印も、先頭のまま動かない。**
-// **持ち回りのコメント（`selfMarker` が空で、本文が `<!-- continuo:bid -->` などで始まるもの）でも足す。**
-// 人間が issue の画面で読むものであり、**印を付ける経路から外す理由が無い。**
-//
 // ctx: 呼び出しに適用するコンテキスト。
 // issueNodeID: 下敷きの GitHub issue のノード ID（Issue.NativeRef["issue_node_id"]）。
 // body: コメント本文（マーカーを含まない、素の本文）。
 // selfMarker: 本文の先頭に付ける印（tracker.comments.self_marker）。空文字なら
-// 印を付けずに投稿する（`config.AIMarker` は、それでも足す）。
-// **本文が空文字のときだけは、印を足さない**（`ComposeCommentBody`）。
-// **足すと空でなくなるので GitHub が受け付け、見えないコメントが公開されて消せない。**
-// 足さなければ GitHub が断り、**呼び出し側の欠陥がログに出る。**
+// 印を付けずに投稿する。
 // 戻り値: 投稿したコメント（IsSelf は常に true）。GraphQL 呼び出しが失敗した場合、または
 // 応答にコメントが含まれていない場合はエラーを返す。
 func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*Comment, error) {
-	full := ComposeCommentBody(body, selfMarker)
+	full := body
+	if selfMarker != "" {
+		full = selfMarker + "\n" + body
+	}
 
 	var resp addCommentResponse
 	vars := map[string]any{"subjectId": issueNodeID, "body": full}

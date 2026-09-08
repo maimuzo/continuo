@@ -107,11 +107,7 @@ func BuildContinuationPrompt(
 // しかも次の行が「本文の中では囲みを外した形で」と言うので、
 // **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
-// 書き分けは [docs/upgrading.md:368-376](docs/upgrading.md#L368-L376) に揃える。
-//
-// **機械が書いた印（`config.AIMarker`）も書かせる**（設計 3-82）。
-// **`marker` の次の行に置かせる。**先に置かせると `c.IsAgent` が偽になり、
-// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
+// 書き分けは [docs/upgrading.md:239-245](docs/upgrading.md#L239-L245) に揃える。
 //
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
@@ -119,43 +115,22 @@ func BuildContinuationPrompt(
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	// **印の2行は字下げしない。**
-	// **行頭ちょうどを求めているのは `handoff.StartsAsProgressReport`
-	// （[internal/handoff/assess.go](../handoff/assess.go)）である。**
-	// `FetchComments`（[internal/tracker/adapter.go](../tracker/adapter.go)）は
-	// **本文全体を `TrimSpace` してから先頭を見る**ので、1行目の字下げは通る。
-	// **それでも字下げしないのは、2行目以降が通らないからである。**
-	// **字下げした見本を送ると、写したエージェントが違う形の本文を書く。**
-	// **囲みの中へ入れる。**行頭の `<!--` は、送る文面を組み立てる経路（`prompt.Build`）が
-	// **コメントとして落とす。**いまこの文面はその経路を通らないが、
-	// **通す形へ変わったときに、印の行だけが黙って消える。**
-	// [internal/prompt/builtin.md](../prompt/builtin.md) の 5-3 も、同じ理由で囲みに入れている。
-	fmt.Fprintf(&b, "```bash\ngh issue comment %s --body \"%s\n%s\nここに何をしたかを書く\"\n```\n\n",
-		issueURL, marker, config.AIMarker)
+	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
-	// **印の順序を名指しする**（設計 3-82）。**`marker` を先に、`AIMarker` をその次に置く。**
-	// 逆にすると `c.IsAgent` が偽になり、**書いたのに `failure_state` へ落ちる。**
-	fmt.Fprintf(&b, "その次の行に %s を入れてください（人間ではなく機械が書いた、という印です）。"+
-		"**%s より前へ置かないでください。**\n", config.AIMarker, marker)
-	// **「その印」と書かない**（issue #178）。**この段落が守っているのは `marker`
-	// （エージェントの印）であって、すぐ上で足させた `config.AIMarker` ではない。**
-	// **取り違えてそちらを外されると、`c.IsAgent` が偽になり、
-	// 書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
+	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
+	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、
+	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
 	// **2度目も名前を書き切る。**値は `config.ProgressMarker` から作るので、定義は1つのままである。
 	fmt.Fprintf(&b,
 		"\n**新しく1件投稿してください。**途中経過の報告（本文のいちばん上の印の並びに、"+
 			"囲み付きの %[1]s（`<!` から始まるあの形）が入っているもの）へ書き足すと、"+
 			"continuo はそれを成果の報告として数えません。\n"+
 			"**この報告の先頭に、囲み付きの %[1]s を置かないでください。**"+
-			"%[2]s のほうは、本文の1行目として必ず入れてください。\n"+
+			"%[2]s のほうは、上のとおり必ず入れてください。\n"+
 			"**本文の中で %[1]s について書くときは、囲みを外した %[1]s の形で書いてください。**\n"+
 			"囲み付きのまま書くと、次の途中経過の報告が、この報告へ書き足されます。\n"+
 			"**%[2]s のほうは、囲みを外さないでください。**外すと、この報告が数えられません。\n",
 		bareProgressMarker(), marker)
-	// **印にも同じ決まりを書く**（設計 3-82）。**囲みを外させない。**
-	// 直前の段落が「本文の中では囲みを外して書く」と言っているので、
-	// **書かないと、そちらへ引きずられて印まで外される。**
-	fmt.Fprintf(&b, "**%s も、囲みを外さないでください。**外すと、誰が書いたのかを見分ける印になりません。\n", config.AIMarker)
 	return b.String()
 }
 
