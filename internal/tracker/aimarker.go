@@ -40,8 +40,8 @@ const (
 // withAIMarker は、本文の先頭に並ぶ印の、いちばん後ろへ config.AIMarker を1行足す（設計 3-82）。
 //
 // **既にある印を1つも動かさない。**先頭へ割り込ませてはならない。
-// **本文の先頭から読む判定が、本番に13ある**（一覧は設計 3-82b）。
-// **12が「先頭が特定の印で始まるか」、1つが「先頭に並ぶ印を辿るか」である。**
+// **本文の先頭から読む判定が、本番に14ある**（一覧は設計 3-82b）。
+// **13が「先頭が特定の印で始まるか」、1つが「先頭に並ぶ印を辿るか」である。**
 // とくに CI の3本（`design-review-result` / `code-review-result` / `design-review-skipped`）は
 // `continuo init` が利用者のリポジトリへ置いたきりで、**continuo の版を上げても書き換わらない。**
 // **先頭へ入れると、その project の pull request が全部赤になり、continuo からは直せない。**
@@ -257,7 +257,11 @@ func ComposeCommentBody(body, selfMarker string) string {
 	// **例外を守っているのは組み込みの指示書の 5-6 と、その検査と、CI の案内文の3つである。**
 	full := withAIMarker(body)
 	if selfMarker != "" {
-		full = selfMarker + "\n" + full
+		// **改行の綴りを本文に合わせる。**`"\n"` で決め打ちにしてはならない。
+		// **CRLF の本文で1行目だけ LF になる**と、同じコメントの中で改行が混ざる。
+		// `withAIMarker` が `lineEndingAt` でそこを揃えているのに、
+		// **前へ足すここだけ揃えないと、その手間が無駄になる。**
+		full = selfMarker + lineEndingAt("", full) + full
 	}
 	return full
 }

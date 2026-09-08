@@ -9021,7 +9021,7 @@ turn の終わりと同じでなければならないので、それでは足り
 
 **言いたいこと。**1つの issue に4種類の書き手が現れ、**4種類とも同じ GitHub アカウントで投稿する。**
 **機械が書いたものへ、綴りが固定された `<!-- continuo:ai -->` を1行足す。**
-**印は先頭へ置かない。**先頭に並ぶ印の、いちばん後ろへ足す（数える判定が 3-82b に13ある）。
+**印は先頭へ置かない。**先頭に並ぶ印の、いちばん後ろへ足す（数える判定が 3-82b に14ある）。
 **印が無いことは、いつのコメントでも人間が打鍵したことの証拠にはならない。**
 
 **何が起きていたか**（issue #245）。**投稿者でも `author_association` でも見分けられない。**
@@ -9100,7 +9100,7 @@ continuo 自身のコメントの1行目が HTML のコメントでなくなる*
 ### 3-82b. 本文の先頭から読む判定の一覧
 
 **言いたいこと。**印の形や並びを変える人が引く表である。
-**本文の先頭から読む判定は、本番に13ある。**12が「先頭が特定の印で始まるか」、1つが「先頭に並ぶ印を辿るか」。
+**本文の先頭から読む判定は、本番に14ある。**13が「先頭が特定の印で始まるか」、1つが「先頭に並ぶ印を辿るか」。
 **この一覧から落とすと、印の形を変える人が見落とす。**
 
 **数え方。****表の行ごとに、その行が見ている印の種類を数える。**
@@ -9111,7 +9111,7 @@ continuo 自身のコメントの1行目が HTML のコメントでなくなる*
 | --- | --- | --- |
 | [internal/tracker/adapter.go](../../internal/tracker/adapter.go) の `FetchComments` | `self_marker` / `marker` の先頭一致 | 2 |
 | [internal/handoff/handoff.go](../../internal/handoff/handoff.go) の `IsMarked` / `payloadAfterMarker` | 入札・hold・released の先頭一致 | 3 |
-| 組み込みの 5-3 と 7-2 の `jq` | `startswith("<!-- continuo:agent -->")` / `startswith("<!-- continuo:group -->")` | 2 |
+| 組み込みの 5-3 と 5-6 と 7-2 の `jq` | `startswith("<!-- continuo:agent -->")` が2つ（5-3 の書き足す先の判別と、5-6 の自己点検）／`startswith("<!-- continuo:group -->")` が1つ | 3 |
 | [.github/workflows/review-gate.yml](../../.github/workflows/review-gate.yml) と [internal/scaffold/ci_template.go](../../internal/scaffold/ci_template.go) | `design-review-result` / `code-review-result` / `design-review-skipped`。**`design-review-result` だけは `<!-- continuo:agent -->` を1つ挟んでよい** | 3 |
 | [.claude/hooks/block-merge-without-review.py](../../.claude/hooks/block-merge-without-review.py) | `code-review-result` の先頭一致（`\A` の錨） | 1 |
 | [scripts/check-release-ready.sh](../../scripts/check-release-ready.sh) | 同上 | 1 |
@@ -10405,40 +10405,51 @@ gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
 
 ### 終わりに、自分のコメントを点検します
 
-**成果を書き終えたら、この issue に自分が書いたコメントを読み直し、印の抜けを自分で直してください。**
+**成果を書き終えたら、この run であなたが書いたコメントを読み直し、印の抜けを自分で直してください。**
+
+**過去の run のコメントは直しません。**「過去分は放置でよい」と人間が決めています。
 
 **なぜ要るか。**continuo は、この印を1つも数えていません。**落としても、何も止まりません。**
 **だから、落ちたことに気づけるのは、あなただけです。**
 
-**抜けているものを出します。**
+**抜けている候補を出します。**
 
 ```bash
-gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/{{.issue.number}}/comments" --paginate --jq '
-  .[]
+gh issue view {{.issue.url}} --json comments --jq '
+  .comments[]
+  | select(.viewerDidAuthor)
   | select(.body | startswith("<!-- continuo:agent -->"))
-  | select((.body | split("\n") | .[0:5] | index("<!-- continuo:ai -->")) == null)
-  | .id'
+  | select((.body | gsub("\r"; "") | split("\n") | .[0:5] | index("<!-- continuo:ai -->")) == null)
+  | .url'
 ```
 
 **何も返らなければ、抜けはありません。**そこで終わりです。
 
-**ID が返ったら、1件ずつ直します。**
+**返った URL のうち、この run であなたが書いたものだけを直します。**
 
 ```bash
-ID=<上が返した ID>
-OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-NEW=$(printf '%s\n' "$OLD" | awk '
-  BEGIN{done=0}
-  done==0 && /^<!--.*-->[ \t]*$/ {print; next}
-  done==0 {print "<!-- continuo:ai -->"; done=1}
-  {print}
-  END{if(done==0) print "<!-- continuo:ai -->"}')
-gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" -f body="$NEW"
+URL=<上が返した URL>
+ID="${URL##*#issuecomment-}"
+gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" > "/tmp/continuo-comment-$ID.json" || {
+  echo "読めませんでした。直しません"; exit 1; }
+jq -e '.body | startswith("<!-- continuo:agent -->")' "/tmp/continuo-comment-$ID.json" > /dev/null || {
+  echo "本文が想定と違います。直しません"; exit 1; }
+jq '{body: (.body | ((if test("\r\n") then "\r\n" else "\n" end) as $eol
+  | sub("^(?<h>((<!--[^\n]*-->)?[ \t]*\r?\n)*)"; .h + "<!-- continuo:ai -->" + $eol)))}' \
+  "/tmp/continuo-comment-$ID.json" \
+  | gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --input -
 ```
 
-**この awk は、本文の先頭に並ぶ印の、いちばん後ろへ1行足します。**先頭の印は1つも動きません。
+**本文をシェルの変数へ受けないでください。**`gh api` は取得に失敗すると**エラーの JSON を標準出力へ出す**ので、
+**そのまま書き戻すと、あなたの成果報告がその JSON に置き換わります。**
+上の形は、本文を JSON のまま組み立てて渡すので、その事故が起きません。**末尾の空行も落ちません。**
 
-**pull request と、グループでまとめて直した別の issue にも、同じ点検をしてください。**
+**この `jq` は、本文の先頭に並ぶ印の、いちばん後ろへ1行足します。**
+**改行の綴りは本文に合わせます**（CRLF の本文には CRLF で足す）。**先頭の印は1つも動きません。**
+
+**pull request と、グループでまとめて直した別の issue は、上のコマンドでは出ません。**
+**先頭の印が違い、書く先も違うためです。**
+**その2つは、この run で自分が書いたコメントを思い出して、同じ形で直してください。**
 **continuo はそちらを1度も読まないので、落としても誰も気づきません。**
 
 # 6. セキュリティ

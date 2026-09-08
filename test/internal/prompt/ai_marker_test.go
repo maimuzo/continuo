@@ -222,12 +222,22 @@ func TestTemplate_印の抜けを自分で点検させる(t *testing.T) {
 		what  string
 		piece string
 	}{
-		// **抜けを出す側。**先頭の印で絞り、印が無いものだけを返す。
-		{"抜けを出す検索", `select((.body | split("\n") | .[0:5] | index("` + config.AIMarker + `")) == null)`},
-		// **直す側。**読んで、印を足して、書き戻す。
-		{"直す書き込み", `gh api --method PATCH`},
+		// **投稿者を絞る。**絞らないと、人間のコメントも古いコメントも書き換える。
+		{"投稿者の絞り込み", "select(.viewerDidAuthor)"},
+		// **抜けを出す側。**`\r` を落としてから数える。落とさないと CRLF の本文を取り違える。
+		{"抜けを出す検索", `select((.body | gsub("\r"; "") | split("\n") | .[0:5] | index("` + config.AIMarker + `")) == null)`},
+		// **直す側。**本文を JSON のまま組み立てて渡す。
+		// **シェルの変数へ受けると、取得に失敗したときのエラーの JSON をそのまま書き戻す。**
+		{"直す書き込み", "gh api --method PATCH"},
+		{"JSON のまま渡す", "--input -"},
+		// **取得に失敗したら直さない。**組み込みの他の2箇所と同じ守りである。
+		{"読めなかったときの守り", "読めませんでした。直しません"},
+		// **改行の綴りを本文に合わせる。**CRLF の本文に LF で足すと、印が先頭へ入る。
+		{"改行の綴りを合わせる", `if test("\r\n") then "\r\n" else "\n" end`},
+		// **過去分は放置する**（2026-09-06、人間の決定）。
+		{"過去の run は直さない", "過去の run のコメントは直しません"},
 		// **届かない先への念押し。**continuo はそちらを1度も読まない。
-		{"pull request と別の issue への念押し", "同じ点検をしてください"},
+		{"pull request と別の issue への念押し", "上のコマンドでは出ません"},
 	} {
 		if !strings.Contains(body, want.piece) {
 			t.Errorf("自己点検に%sがありません: %q", want.what, want.piece)

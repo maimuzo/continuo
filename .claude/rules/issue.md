@@ -57,7 +57,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 **やるのは AI である。**人間へ「載せてください」と渡さない。
 
 **段7 を飛ばすと、continuo は何も dispatch しない。**`tracker.active_states` の既定は
-`Ready` と `In Progress` の2つで（[internal/config/default.go:139](../../internal/config/default.go#L139)）、
+`Ready` と `In Progress` の2つで（[internal/config/default.go:153](../../internal/config/default.go#L153)）、
 **`Ice Box` は入っていない。**段3 で issue を `Ice Box` へ置く以上、上げる段が要る。
 **上げるのは人間で、GitHub の画面から行う**
 （[docs/plans/continuo_design.md:9298](../../docs/plans/continuo_design.md#L9298) の 4-1 の遷移表）。
@@ -116,7 +116,7 @@ issue をカンバンへ載せることも、Status を付けることも、並�
 typo1件のために104件のカンバンを並べ替えるのが、この節の目的から外れるためである。**
 
 **このとき issue は `Ice Box` のままである。**`tracker.active_states` に `Ice Box` は入っていないので
-（[internal/config/default.go:139](../../internal/config/default.go#L139)）、**continuo はこの issue を dispatch しない。**
+（[internal/config/default.go:153](../../internal/config/default.go#L153)）、**continuo はこの issue を dispatch しない。**
 **直すのは、いま動いている AI 自身である。**continuo に回したくなったら、人間が手順の段7 で `Ready` へ上げる。
 
 ## グループ化するときにやること
@@ -205,7 +205,7 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 ### 代表以外が処理される流れ
 
 **代表以外は、continuo が dispatch しない。**`Ice Box` は `tracker.active_states` の既定
-（`Ready` と `In Progress`。[internal/config/default.go:139](../../internal/config/default.go#L139)）に入っていないためである。
+（`Ready` と `In Progress`。[internal/config/default.go:153](../../internal/config/default.go#L153)）に入っていないためである。
 
 | 順 | 何が起きるか |
 | --- | --- |
@@ -215,7 +215,7 @@ gh api graphql -H "GraphQL-Features: sub_issues" \
 | 4 | pull request の本文の `Closes #NNN` で、マージ時にまとめてクローズされる |
 
 **代表以外には、何が直ったかが1行も残らない。**
-組み込みの指示書（[internal/prompt/builtin.md:736-751](../../internal/prompt/builtin.md#L736-L751) の 7-2）が、
+組み込みの指示書（[internal/prompt/builtin.md:747-762](../../internal/prompt/builtin.md#L747-L762) の 7-2）が、
 表明の1行と `Closes #45` しか書かせていないためである。
 **人間が代表の pull request を見て確かめること。**
 

@@ -562,3 +562,20 @@ func TestComposeCommentBody_続く行の綴りに引きずられない(t *testin
 		t.Fatalf("続く行の綴りに引きずられました:\n got %q\nwant %q", got, want)
 	}
 }
+
+// 目的: self_marker を前に足すときも、改行の綴りを本文に合わせることを固定する（設計 3-82）。
+//
+// **`"\n"` で決め打ちにすると、CRLF の本文で1行目だけ LF になる。**
+// **同じコメントの中で改行が混ざる。**`withAIMarker` は `lineEndingAt` でそこを揃えているので、
+// **前へ足すところだけ揃えないと、その手間が無駄になる。**
+//
+// 与える情報: CRLF の本文と、空でない self_marker。
+// 成功条件: 3行とも CRLF で繋がっていること。
+func TestComposeCommentBody_selfMarkerもCRLFで繋ぐ(t *testing.T) {
+	const self = "<!-- continuo:self -->"
+	body := "<!-- continuo:gated:human_assigned -->\r\n担当者が付いています\r\n"
+	want := self + "\r\n<!-- continuo:gated:human_assigned -->\r\n" + config.AIMarker + "\r\n担当者が付いています\r\n"
+	if got := tracker.ComposeCommentBody(body, self); got != want {
+		t.Fatalf("改行の綴りが混ざりました:\n got %q\nwant %q", got, want)
+	}
+}
