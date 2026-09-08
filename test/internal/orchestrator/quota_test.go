@@ -746,9 +746,14 @@ func TestQuota_画面が動いていれば枠待ちと判定しない(t *testing
 	fx.Herdr.BumpRevision()
 
 	fx.Orc.Tick(context.Background())
-	waitFor(t, 10*time.Second, "枠待ちと判定しない理由が出る", func() bool {
-		return strings.Contains(fx.Logs.String(), "画面が変わっているので待ち続けます")
-	})
+	// **手放しの対象になった run は、打ち切りの本体まで落ちない**（issue #173）。
+	// **そのため「画面が変わっているので待ち続けます」は出ない。**
+	// **確かめるのは、打ち切られていないことそのものである。**
+	// **`revision` は continuo の pane では動かない**ので、あの文面はもともと実機で出ない
+	// （[docs/plans/continuo_design.md:2794-2820](../../../docs/plans/continuo_design.md#L2794-L2820) の訂正）。
+	if got := fx.Logs.String(); strings.Contains(got, "止まったものと判断して打ち切りました") {
+		t.Fatalf("画面が動いているのに打ち切っている:\n%s", got)
+	}
 
 	if _, ok := viewOf(fx, issue.Identifier); !ok {
 		t.Fatalf("画面が動いているのに印から外している")
@@ -921,6 +926,38 @@ func TestQuota_連番を返さない版では手放さない(t *testing.T) {
 
 	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
 		t.Fatalf("担当者が変わっている: %v", got)
+	}
+}
+
+// TestQuota_92パーセントでも打ち切られずに手放される は、90〜99%の帯を確かめる
+// （issue #173 / #197）。
+//
+// 目的: **枠待ちの印は使用率100でしか立たない。**
+// **入札と手放しの線を余裕値へ移したので、92% の run は「手放しの対象」だが「枠待ちの印」は立たない。**
+// **そのまま打ち切りの本体まで落ちると、`revision` は動かず無音の閾値も超えているので、
+// 打ち切りが先に殺す。****手放しは2回続けて同じ連番を見る必要があるため、1回目は必ず「まだ」と答える。**
+// **つまり打ち切りが毎回勝ち、線を移した意味が既定の設定で丸ごと消える。**
+//
+// 与える情報: 1週間の枠が **92%**（余裕値は 100−92−10 = −2 で0以下。**ただし100ではない**）。
+// リセットは48時間後（上限を超える）。
+// 成功条件: **打ち切られずに、担当を手放すこと。**`failure_state` へ落ちないこと。
+func TestQuota_92パーセントでも打ち切られずに手放される(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 92, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W9")
+
+	waitForRelease(t, fx, clock, issue.Identifier)
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {
+		t.Fatalf("担当者が残っている: %v", got)
+	}
+	// **打ち切りの文面が出ていないこと。**出ていれば、打ち切りが先に勝っている。
+	if got := fx.Logs.String(); strings.Contains(got, "止まったものと判断して打ち切りました") {
+		t.Fatalf("手放しの対象なのに打ち切っている:\n%s", got)
+	}
+	if got := fx.Logs.String(); !strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("手放していない:\n%s", got)
 	}
 }
 

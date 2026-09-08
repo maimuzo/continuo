@@ -306,7 +306,17 @@ func (o *Orchestrator) clearQuotaWaitWhenBack(snap *ratelimit.Snapshot, now time
 // now: この巡回の時刻。
 func (o *Orchestrator) releaseQuotaWaitExceeded(
 	ctx context.Context, quotaSnap *ratelimit.Snapshot, quotaStale bool, now time.Time,
-) {
+) map[*runState]bool {
+	// **手放しの対象だと判定した run を返す**（issue #173）。
+	// **打ち切りの側は、この集合を飛ばす。**
+	//
+	// **飛ばさないと、90〜99%の帯で手放しが1回も成立しない。**
+	// 枠待ちの印は使用率100でしか立たないので、92%の run は打ち切りの本体まで落ちる。
+	// **そこで `revision` は動かず、無音の閾値も超えているので、打ち切りが先に殺す。**
+	// **手放しは2回続けて同じ連番を見る必要があるため、1回目の観測では必ず「まだ」と答える。**
+	// **つまり、打ち切りが毎回勝つ。**
+	// **入札と手放しの線を余裕値へ移した意味が、既定の設定で丸ごと消える。**
+	handling := map[*runState]bool{}
 	// **写しは呼び出し側が1回だけ読む**（設計 3-27）。**ここで取り直してはならない。**
 	// **`checkStalls` は、このあと同じ run に `noteWeeklyShort` を当てる。**
 	// `pollQuota` は turn の goroutine から並行に走って写しを差し替えるので、
@@ -366,6 +376,9 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		if !o.stallDetectionOff() && !o.runIdleForTurnTimeout(rs) {
 			continue
 		}
+		// **ここまで来た run は、手放しの対象である。**
+		// **pane が止まったと確かめられるまで、打ち切りに殺させない。**
+		handling[rs] = true
 		if !o.paneStopped(ctx, rs) {
 			// **動いているなら、止まるまで待つ**（人間の決定。2026-09-06。issue #197）。
 			// **次の巡回でやり直す。**
@@ -373,6 +386,7 @@ func (o *Orchestrator) releaseQuotaWaitExceeded(
 		}
 		o.releaseBecauseQuotaWaitAsync(ctx, rs)
 	}
+	return handling
 }
 
 // paneStopped は「この run の pane が完全に止まっているか」を返す
@@ -528,7 +542,7 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 	// **片方が控えた「余裕が無くなった時刻」を、もう片方が消しうる。**
 	now := o.now()
 	quotaSnap, quotaStale := o.quotaSnapshotWithStale()
-	o.releaseQuotaWaitExceeded(ctx, quotaSnap, quotaStale, now)
+	releasing := o.releaseQuotaWaitExceeded(ctx, quotaSnap, quotaStale, now)
 
 	// **余裕の無い1週間の枠があるかを、同じ写しから見る。**
 	weeklyShort := quotaSnap.AnySelected(handoff.ShortWeekly(o.bidMargins()))
@@ -566,6 +580,15 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 		if snap.WaitingQuota {
 			// **印の出し入れは、上の `clearQuotaWaitWhenBack` が済ませている。**
 			// **上限は上の `releaseQuotaWaitExceeded` が見ている。**ここでは見ない。
+			continue
+		}
+		if releasing[rs] {
+			// **手放しの対象である**（issue #173）。**打ち切ってはならない。**
+			// **枠待ちの印は使用率100でしか立たない**ので、90〜99%の帯の run はここまで落ちる。
+			// **手放しは2回続けて同じ連番を見る必要があり、1回目の観測では必ず「まだ」と答える。**
+			// **飛ばさないと、打ち切りが毎回先に殺し、手放しが1回も成立しない。**
+			// **枠が足りないだけの issue が `failure_state` へ落ちる**——
+			// **issue #173 が直そうとしている症状そのものである。**
 			continue
 		}
 		if !snap.BackoffUntil.IsZero() && now.Before(snap.BackoffUntil) {
