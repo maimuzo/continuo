@@ -9501,15 +9501,12 @@ hook のコマンド行が実行ファイルの絶対パスを埋めているの
 
 #### 三、認可した人と `gh` の持ち主を突き合わせる
 
-**continuo が「自分が書いたか」を判定する相手は、`gh api user` の返り値である**
+**continuo が「自分が書いたか」を判定する相手は `gh api user` の返り値である**
 （[internal/tracker/ghuser.go:38](../../internal/tracker/ghuser.go#L38)）。
-**ブラウザで認可したアカウントがそれと違うと、投稿者が別人になり、
-[internal/tracker/adapter.go:1168](../../internal/tracker/adapter.go#L1168) が `MarkedByOther` を立て、
-[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383) が全部捨てる。**
+**認可したアカウントがそれと違うと、[internal/tracker/adapter.go:1168](../../internal/tracker/adapter.go#L1168) が
+`MarkedByOther` を立て、[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383) が全部捨てる。**
 **エージェントが成果を書いても「書いていない」と判定され、run が人間へ渡る。**
-
-**個人のアカウントと仕事のアカウントを両方持っている人は、ふつうに居る。**
-**認可のときに、GitHub がどちらでログインしているかを人間は意識しない。**
+**個人と仕事のアカウントを両方持つ人はふつうに居て、認可のときにどちらでログインしているかを意識しない。**
 
 | いつ | 何をするか |
 | --- | --- |
