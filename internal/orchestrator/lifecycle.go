@@ -518,28 +518,14 @@ func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimel
 		issues, err = o.tracker.FetchIssuesByIDsWithoutTimeline(ctx, []string{rs.IssueID})
 	}
 	if err != nil {
-		// **attempt ごとに1回だけ出す**（issue #173）。
-		//
-		// **枠の上限で担当を手放す経路は、失敗すると毎巡回ここへ戻ってくる。**
-		// `mayReleaseOwnWork` → `refreshIssue` → 失敗 → `endTerminal` → 次の巡回、である。
-		// **GitHub が読めないあいだ、既定の30秒間隔で1時間に120行になる。**
-		// **issue #173 が読めるようにしたいログを、そこで埋める。**
-		//
-		// **呼び出し元4つに共通で効かせる。**同じ run の同じ attempt で
-		// 同じ失敗を何度も出す意味は、どの経路からでも無い。
-		if rs.noteIssueRefreshFailed() {
-			o.logger.Warn("issue を取り直せません（この行は run ごとに1回だけ出します）",
-				"identifier", rs.issue().Identifier, "error", err)
-		}
+		// **ここに1回きりの札を付けてはならない**（issue #173。9周目の6段で削除した）。
+		// **この `Warn` は `origin/main` から在る既存のログである。**
+		// **`refreshIssue` は4箇所から呼ばれ、枠の経路はそのうち1つでしかない。**
+		// 枠の話のために、残る3つの経路のログの出方まで変えることになる。
+		// **資料の 4-5 の #4 も、この症状を「直すものが無い」と結論している。**
+		o.logger.Warn("issue を取り直せません", "identifier", rs.issue().Identifier, "error", err)
 		return rs.issue(), true, false
 	}
-	// **読めたので、この文言の札を下ろす**（issue #173）。
-	// **下ろさないと、attempt の序盤の30秒の瞬断が、その attempt のあいだ
-	// この文言を丸ごと黙らせる。**18時間後に本物の障害が始まっても1行も出ない。
-	//
-	// **下ろすのはこの札だけである。**`agent.get` の札まで下ろすと、
-	// **GitHub が読めているだけで、herdr が落ち続ける run が毎巡回また鳴き出す。**
-	rs.clearIssueRefreshWarned()
 	if len(issues) == 0 {
 		return tracker.Issue{}, false, true
 	}

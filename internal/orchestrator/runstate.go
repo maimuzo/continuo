@@ -198,14 +198,10 @@ type runState struct {
 	paneUnreadableWarned bool
 	// quotaReleaseFailedWarned は「担当を手放せませんでした」を既に1回出したかである（issue #173）。
 	//
-	// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す。**
-	// **既定の30秒間隔で1時間に240行になる。**
+	// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す**（合計240行）。
+	// **この札が消すのは、そのうち1行ぶん**（120行）**である。**
+	// **もう1行**（`removeOwnAssignee` の側）**は既存のログなので、札を付けていない。**
 	quotaReleaseFailedWarned bool
-	// issueRefreshFailedWarned は「issue を取り直せません」を既に1回出したかである（issue #173）。
-	//
-	// **`refreshIssue` の呼び出し元4つに共通で効く。**枠の上限で担当を手放す経路は、
-	// **失敗すると毎巡回ここへ戻る**ので、GitHub が読めないあいだ1時間に120行になる。
-	issueRefreshFailedWarned bool
 	// QuotaProbeSeen は、上の連番を1度でも読んだかを表す。
 	//
 	// **連番は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
@@ -1217,23 +1213,10 @@ func (rs *runState) noteQuotaProbe(seq uint64) (bool, bool) {
 	return same, first
 }
 
-// clearIssueRefreshWarned は「issue を取り直せません」の札を下ろす（issue #173）。
-//
-// **`refreshIssue` が読めたときに呼ぶ。**下ろさないと、**attempt の序盤の30秒の瞬断が、
-// その attempt のあいだ**（長いものは20時間ある）**この文言を丸ごと黙らせる。**
-// **18時間後に本物の障害が始まっても、ログが1行も出ない。**
-//
-// **札は別々に下ろす。**まとめて下ろすと、**GitHub が読めているだけで
-// herdr の札まで下り、`agent.get` が落ち続ける run が毎巡回また鳴き出す。**
-func (rs *runState) clearIssueRefreshWarned() {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	rs.issueRefreshFailedWarned = false
-}
-
 // clearPaneUnreadableWarned は「画面の状態を読めない」の札を下ろす（issue #173）。
 //
-// **`agent.get` が読めたときに呼ぶ。**理由は `clearIssueRefreshWarned` と同じである。
+// **`agent.get` が読めたときに呼ぶ。****下ろさないと、attempt の序盤の1回の失敗が、
+// その attempt のあいだ**（長いものは20時間ある）**この文言を丸ごと黙らせる。**
 func (rs *runState) clearPaneUnreadableWarned() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -1242,7 +1225,8 @@ func (rs *runState) clearPaneUnreadableWarned() {
 
 // clearQuotaReleaseUnknownWarned は「いまの担当を確かめられない」の札を下ろす（issue #173）。
 //
-// **担当を確かめられたときに呼ぶ。**理由は `clearIssueRefreshWarned` と同じである。
+// **担当を確かめられたときに呼ぶ。****下ろさないと、attempt の序盤の1回の失敗が、
+// その attempt のあいだ**（長いものは20時間ある）**この文言を丸ごと黙らせる。**
 //
 // **`quotaReleaseFailedWarned` には、これに当たる関数を置いていない。**
 // **あの札が立つのは「担当を外せなかった」ときで、外せた次の瞬間にこの run は終わる。**
@@ -1286,26 +1270,12 @@ func (rs *runState) notePaneUnreadable() bool {
 	return true
 }
 
-// noteIssueRefreshFailed は「issue を取り直せません」を出してよいかを返す（issue #173）。
-//
-// **`refreshIssue` の呼び出し元4つに共通で効く。**枠の上限で担当を手放す経路は、
-// **失敗すると毎巡回ここへ戻る。**
-//
-// 戻り値: この attempt で初めてなら true。
-func (rs *runState) noteIssueRefreshFailed() bool {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	if rs.issueRefreshFailedWarned {
-		return false
-	}
-	rs.issueRefreshFailedWarned = true
-	return true
-}
-
 // noteQuotaReleaseFailed は「担当を手放せませんでした」を出してよいかを返す（issue #173）。
 //
-// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す。**
-// **既定の30秒間隔で1時間に240行になる。**
+// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す**
+// （既定の30秒間隔で1時間に240行）。**この札が消すのは、そのうち120行である。**
+// **もう1行**（`removeOwnAssignee` の側）**は `origin/main` から在る既存のログなので、
+// 枠の話のために触らない。**
 //
 // 戻り値: この attempt で初めてなら true。
 func (rs *runState) noteQuotaReleaseFailed() bool {
@@ -2068,7 +2038,6 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	rs.quotaReleaseUnknownWarned = false
 	rs.paneUnreadableWarned = false
 	rs.quotaReleaseFailedWarned = false
-	rs.issueRefreshFailedWarned = false
 	// **「1週間の枠の余裕が無くなった時刻」も忘れる**（issue #173）。
 	//
 	// **やり直した attempt は、新しい agent と新しい pane である。**

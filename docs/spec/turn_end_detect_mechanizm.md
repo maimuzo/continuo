@@ -79,7 +79,7 @@ EOF
 
 **行番号を、ファイル名なしで書いてはならない。**
 `lifecycle.go:573`・`697`・`761` のように2つ目以降を裸にすると、**上のコマンドが1本も拾わない。**
-**毎回 `internal/orchestrator/lifecycle.go:716` と書ききること。**長くなっても、検算に載るほうが大事である。
+**毎回 `internal/orchestrator/lifecycle.go:702` と書ききること。**長くなっても、検算に載るほうが大事である。
 
 **実測の環境。**特記が無ければ、次のとおりである。
 
@@ -519,7 +519,7 @@ done
 
 | 何 | 何を答えるか | 進む条件 |
 | --- | --- | --- |
-| **`LastSeenAt`** | 打ち切りの時計 | **run を作った時点**（[internal/orchestrator/runstate.go:501](../../internal/orchestrator/runstate.go#L501)）／hook を受けた／turn を送った／枠待ちを外した／**`agent_status` が `working` だったのを確かめた**（`noteWorking`）。**枠待ちの間は進めない** |
+| **`LastSeenAt`** | 打ち切りの時計 | **run を作った時点**（[internal/orchestrator/runstate.go:497](../../internal/orchestrator/runstate.go#L497)）／hook を受けた／turn を送った／枠待ちを外した／**`agent_status` が `working` だったのを確かめた**（`noteWorking`）。**枠待ちの間は進めない** |
 | **`LastHookAt`** | 最後に hook を受けた時刻 | **どの hook でも進む**（`SessionStart` と `Notification` を含む） |
 | **`LastBusyHookAt`** | **turn を処理している間にしか出ない hook** を最後に受けた時刻 | `UserPromptSubmit` / `PreToolUse` / `PostToolUse` / `SubagentStart` / `SubagentStop` / `Stop` の6つだけ。**turn をまたいで持ち越す** |
 | **`hookSeenThisTurn`** | この turn で hook を1件でも受けたか | **`beginTurn` が毎 turn 偽へ戻す** |
@@ -534,13 +534,13 @@ done
 
 > 今paneの内容が動いていたらそれが止まるまで待って**(つまりそのセッションのサブエージェントを含め完全停止するまで待って)**、止まったらすぐに担当を変更して…
 
-**実体。**[internal/orchestrator/runstate.go:1030](../../internal/orchestrator/runstate.go#L1030) の `runningSubagentList`。
-**2つの map を足したものを返す**（[internal/orchestrator/runstate.go:1011-1021](../../internal/orchestrator/runstate.go#L1011-L1021)）。
+**実体。**[internal/orchestrator/runstate.go:1026](../../internal/orchestrator/runstate.go#L1026) の `runningSubagentList`。
+**2つの map を足したものを返す**（[internal/orchestrator/runstate.go:1007-1017](../../internal/orchestrator/runstate.go#L1007-L1017)）。
 
 | 入口 | 何が書くか |
 | --- | --- |
 | `runningSubagents` | `SubagentStart` の hook で足し、`SubagentStop` で外す |
-| **`backgroundSubagents`** | **`background_tasks` を載せて届いた hook**（[internal/orchestrator/runstate.go:665](../../internal/orchestrator/runstate.go#L665) の `setBackgroundSubagentsLocked`）。**`SubagentStart` を1件も受けていない run でも、ここが埋まる** |
+| **`backgroundSubagents`** | **`background_tasks` を載せて届いた hook**（[internal/orchestrator/runstate.go:661](../../internal/orchestrator/runstate.go#L661) の `setBackgroundSubagentsLocked`）。**`SubagentStart` を1件も受けていない run でも、ここが埋まる** |
 
 **2つ目を落として読んではならない。**5-2 の1件目（2026-08-27）は、
 **`SubagentStop` 自身が、いま終わったその subagent を `background_tasks` に `running` のまま載せて届けた**事故である。
@@ -551,10 +551,10 @@ done
 
 | 空にする経路 | どこ |
 | --- | --- |
-| 次の turn を始める | [internal/orchestrator/runstate.go:605](../../internal/orchestrator/runstate.go#L605)（`beginTurn`） |
-| **`SubagentStop` を受ける** | [internal/orchestrator/runstate.go:715-729](../../internal/orchestrator/runstate.go#L715-L729)（`noteSubagentStop` が2つの map から `delete` する）。**`background_tasks` を受け直す [internal/orchestrator/runstate.go:665](../../internal/orchestrator/runstate.go#L665) ではない。**あちらは `SubagentStop` に限っては印を**残す**側で、[internal/orchestrator/runstate.go:663-664](../../internal/orchestrator/runstate.go#L663-L664) がその理由を書いている（5-2 の1件目） |
-| **`Stop` が `background_tasks` を空で載せて届く** | [internal/orchestrator/runstate.go:667-672](../../internal/orchestrator/runstate.go#L667-L672)（`resetSubagentsLocked`） |
-| **`background_tasks` が空で届く**（`Stop` に限らない） | [internal/orchestrator/runstate.go:748-750](../../internal/orchestrator/runstate.go#L748-L750)（`backgroundSubagents` だけを nil にする） |
+| 次の turn を始める | [internal/orchestrator/runstate.go:601](../../internal/orchestrator/runstate.go#L601)（`beginTurn`） |
+| **`SubagentStop` を受ける** | [internal/orchestrator/runstate.go:711-725](../../internal/orchestrator/runstate.go#L711-L725)（`noteSubagentStop` が2つの map から `delete` する）。**`background_tasks` を受け直す [internal/orchestrator/runstate.go:661](../../internal/orchestrator/runstate.go#L661) ではない。**あちらは `SubagentStop` に限っては印を**残す**側で、[internal/orchestrator/runstate.go:659-660](../../internal/orchestrator/runstate.go#L659-L660) がその理由を書いている（5-2 の1件目） |
+| **`Stop` が `background_tasks` を空で載せて届く** | [internal/orchestrator/runstate.go:663-668](../../internal/orchestrator/runstate.go#L663-L668)（`resetSubagentsLocked`） |
+| **`background_tasks` が空で届く**（`Stop` に限らない） | [internal/orchestrator/runstate.go:744-746](../../internal/orchestrator/runstate.go#L744-L746)（`backgroundSubagents` だけを nil にする） |
 
 **枠待ちの最中は、4つとも起きない。**次の turn は枠が明けるまで送られず、hook も来ないためである
 （[internal/orchestrator/reconcile.go:529](../../internal/orchestrator/reconcile.go#L529) が
@@ -639,7 +639,7 @@ agent.get が誤りを返した                        →  進んでいない�
 **実装した**（2026-09-08。issue #173）。
 [internal/orchestrator/reconcile.go:846-854](../../internal/orchestrator/reconcile.go#L846-L854) が
 `agentInfo` の応答の `agent.AgentStatus` を見て、`working` なら
-[internal/orchestrator/runstate.go:1380](../../internal/orchestrator/runstate.go#L1380) の
+[internal/orchestrator/runstate.go:1350](../../internal/orchestrator/runstate.go#L1350) の
 `noteWorking` で `LastSeenAt` を進め、その巡回を飛ばす。
 **`agent.get` を追加で叩いてはいない。**同じ応答を、ログに載せる代わりに判定へ回しただけである。
 
@@ -878,7 +878,7 @@ state_change_seq が2回続けて同じ             かつ
 | [internal/orchestrator/turn.go:160](../../internal/orchestrator/turn.go#L160)（引き継いだ run の枝） | **成り立たない。**turn を1度も送らないので `beginTurn` が呼ばれず、`hookSeenThisTurn` が偽のまま |
 
 **`hookSeenThisTurn` は「枠待ちの間に hook を受けたか」ではない。**
-**偽へ戻すのは [internal/orchestrator/runstate.go:602](../../internal/orchestrator/runstate.go#L602) の1行だけで、
+**偽へ戻すのは [internal/orchestrator/runstate.go:598](../../internal/orchestrator/runstate.go#L598) の1行だけで、
 そこは `beginTurn` の中である**（呼ぶのは [internal/orchestrator/turn.go:509](../../internal/orchestrator/turn.go#L509) の1箇所）。
 **turn を送ったあと道具が1回でも走れば真になり、そのあと枠が尽きても真のままである。**
 **だから `afterQuotaReset` を「枠待ちの間は hook が来ないので偽」と説明してはならない。**
@@ -949,7 +949,7 @@ state_change_seq が2回続けて同じ             かつ
 `isQuotaWaitingWith`（100%未満なので偽）**を全部通り、`abandonRunAsync` に到達する。**
 
 **二重に走らないのは、手放しも打ち切りも `beginTerminal()` を同期で取るからである。**
-[internal/orchestrator/runstate.go:2183-2187](../../internal/orchestrator/runstate.go#L2183-L2187) が
+[internal/orchestrator/runstate.go:2152-2156](../../internal/orchestrator/runstate.go#L2152-L2156) が
 `terminating || Finished` を見て `terminalTaken` を返し、**2人目は何もせずに戻る。**
 
 **呼び出しは6箇所ある**（検索パターン `beginTerminal\(\)`、対象パス `internal/`。`_test.go` を除く。
@@ -958,26 +958,26 @@ state_change_seq が2回続けて同じ             かつ
 | どこ | 何のために取るか |
 | --- | --- |
 | [internal/orchestrator/handoff.go:710](../../internal/orchestrator/handoff.go#L710) | 枠が尽きた run の手放し |
-| [internal/orchestrator/lifecycle.go:716](../../internal/orchestrator/lifecycle.go#L716) | **巡回の側の**打ち切り |
-| [internal/orchestrator/runstate.go:2211](../../internal/orchestrator/runstate.go#L2211) | `claimTerminal`。**書き戻しを待って取り直す唯一の経路である。****呼び出しは6箇所**（検索パターン `claimTerminal\(ctx\)`、対象パス `internal/orchestrator/`。`_test.go` を除く）——`internal/orchestrator/lifecycle.go:572`（`finishRun`）/ `internal/orchestrator/lifecycle.go:662`（`failRun`）/ `internal/orchestrator/lifecycle.go:699`（`abandonRun`）、`internal/orchestrator/handoff.go:1414`、`internal/orchestrator/dispatch.go:876`、`internal/orchestrator/unknownstate.go:587`。**打ち切りの入口は、巡回の側とここの2つある** |
-| [internal/orchestrator/lifecycle.go:592](../../internal/orchestrator/lifecycle.go#L592) | 正常な終了 |
-| [internal/orchestrator/lifecycle.go:780](../../internal/orchestrator/lifecycle.go#L780) | `stopAndReleaseAsync`。**worktree を残したまま worker を止めて印から外す。**Status は動かさない。呼ぶのは巡回の3箇所で、うち1つが引き渡し（[internal/orchestrator/reconcile.go:144](../../internal/orchestrator/reconcile.go#L144)） |
+| [internal/orchestrator/lifecycle.go:702](../../internal/orchestrator/lifecycle.go#L702) | **巡回の側の**打ち切り |
+| [internal/orchestrator/runstate.go:2180](../../internal/orchestrator/runstate.go#L2180) | `claimTerminal`。**書き戻しを待って取り直す唯一の経路である。****呼び出しは6箇所**（検索パターン `claimTerminal\(ctx\)`、対象パス `internal/orchestrator/`。`_test.go` を除く）——`internal/orchestrator/lifecycle.go:558`（`finishRun`）/ `internal/orchestrator/lifecycle.go:648`（`failRun`）/ `internal/orchestrator/lifecycle.go:685`（`abandonRun`）、`internal/orchestrator/handoff.go:1417`、`internal/orchestrator/dispatch.go:876`、`internal/orchestrator/unknownstate.go:587`。**打ち切りの入口は、巡回の側とここの2つある** |
+| [internal/orchestrator/lifecycle.go:578](../../internal/orchestrator/lifecycle.go#L578) | 正常な終了 |
+| [internal/orchestrator/lifecycle.go:766](../../internal/orchestrator/lifecycle.go#L766) | `stopAndReleaseAsync`。**worktree を残したまま worker を止めて印から外す。**Status は動かさない。呼ぶのは巡回の3箇所で、うち1つが引き渡し（[internal/orchestrator/reconcile.go:144](../../internal/orchestrator/reconcile.go#L144)） |
 | [internal/orchestrator/unknownstate.go:552](../../internal/orchestrator/unknownstate.go#L552) | 状態を読めなくなった run の始末 |
 
-**戻り値は3つある。**[internal/orchestrator/runstate.go:2176-2178](../../internal/orchestrator/runstate.go#L2176-L2178) が
+**戻り値は3つある。**[internal/orchestrator/runstate.go:2145-2147](../../internal/orchestrator/runstate.go#L2145-L2147) が
 `rewriting` のとき `terminalRewriting` を返す。
 **そのときの振る舞いは、呼び出し側で2つに割れる。**
 
 | 呼び出し側 | `terminalRewriting` を受けたら |
 | --- | --- |
-| **巡回の5箇所**（`internal/orchestrator/handoff.go:710` / `internal/orchestrator/lifecycle.go:592`・`internal/orchestrator/lifecycle.go:716`・`internal/orchestrator/lifecycle.go:780` / `internal/orchestrator/unknownstate.go:552`） | **`!= terminalClaimed` で黙って戻る。**その巡回では走らない |
-| **`claimTerminal`**（[internal/orchestrator/runstate.go:2211-2228](../../internal/orchestrator/runstate.go#L2211-L2228)） | **書き戻しの終わりを待ってから取り直す。**`switch` に `terminalRewriting` の枝が無いので、下の `select` へ落ちる |
+| **巡回の5箇所**（`internal/orchestrator/handoff.go:710` / `internal/orchestrator/lifecycle.go:578`・`internal/orchestrator/lifecycle.go:702`・`internal/orchestrator/lifecycle.go:766` / `internal/orchestrator/unknownstate.go:552`） | **`!= terminalClaimed` で黙って戻る。**その巡回では走らない |
+| **`claimTerminal`**（[internal/orchestrator/runstate.go:2180-2197](../../internal/orchestrator/runstate.go#L2180-L2197)） | **書き戻しの終わりを待ってから取り直す。**`switch` に `terminalRewriting` の枝が無いので、下の `select` へ落ちる |
 
 **つまり「書き戻しの間はどの経路も止まる」ではない。**
 **turn ループ側の打ち切り**（`abandonRun`）**は、書き戻しが終わった直後に走る。**
 **待たずに戻ると、turn の上限に達した run が Status も動かさず、
 引き渡しのコメントも出さず、印も外れないまま残る**
-（[internal/orchestrator/runstate.go:2183-2188](../../internal/orchestrator/runstate.go#L2183-L2188) がそう書いている）。
+（[internal/orchestrator/runstate.go:2152-2157](../../internal/orchestrator/runstate.go#L2152-L2157) がそう書いている）。
 
 **この節を読んで実装する人は、その集合だけを作ってはならない。**
 **それだけだと、5-3 が記録した事故——打ち切りと手放しが競走し、

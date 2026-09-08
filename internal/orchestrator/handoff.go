@@ -907,7 +907,10 @@ func (o *Orchestrator) releaseBecauseQuotaWaitClaimed(ctx context.Context, rs *r
 		// push されないまま残る。**黙って進めない。**次に何を見ればよいかを1行で出す。
 		// **attempt ごとに1回だけ出す**（issue #173）。
 		// **`RemoveAssignees` が落ち続ける run は、毎巡回ここへ来る。**
-		// **既定の30秒間隔で1時間に120行になる**（すぐ上の `removeOwnAssignee` の `Warn` と合わせて240行）。
+		// **既定の30秒間隔で1時間に120行になる。**
+		// **すぐ上の `removeOwnAssignee` の `Warn` には札を付けていない**ので、
+		// **この札で消えるのは半分である**（合計240行のうち120行）。**残る半分は既存の行で、
+		// 枠の話のために触ると、`removeOwnAssignee` を呼ぶ他の経路のログの出方まで変わる。**
 		if rs.noteQuotaReleaseFailed() {
 			o.logger.Warn("枠の上限で担当を手放せませんでした（次の巡回でやり直します。この行は1回だけ出します）。"+
 				"workspace_hooks.after_run は既に走らせたので、この run が完走しても再実行されません",
