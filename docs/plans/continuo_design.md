@@ -9464,6 +9464,61 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 更新用のトークンを短くする設定も、使うたびに作り直す仕組みも、GitHub の側に無い。
 **持てるのは「権限を最小にする」と「漏れたら作り直す」の2つだけである。**
 
+### 3-82j. 実装で外してはならない3つ
+
+**言いたいこと。**この3つは、書かないと実装者がその場で判断することになる。
+**どれも外すと、印が付かないか、run が失われる。**
+
+#### 一、投稿する GraphQL のクライアントを2本持つ
+
+**[internal/tracker/graphql.go:121](../../internal/tracker/graphql.go#L121) の `newGraphQLClient` は、
+トークンを組み立てのときに固定する。**呼び出しごとに差し替える口が無い。
+**同じ1本へ App のトークンを入れると、カンバンの読み書きが `FORBIDDEN` で全部落ちる**（3-82d）。
+
+**`Adapter` が2本目を持ち、`PostComment` だけがそちらを通る。**
+[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) が唯一の投稿の口なので、**直す場所は1箇所である。**
+
+| どのクライアントか | 何に使うか | トークン |
+| --- | --- | --- |
+| いままでの1本 | **カンバンの読み書き、コメントの取得** | `tracker.provider.token_source` |
+| **足す1本** | **`PostComment` だけ** | **`continuo githubapp` が返すもの** |
+
+**`github_app_attribution` が `false` なら、2本目を作らない。**いままでどおり1本で動く。
+
+#### 二、`--id` をエージェントへ渡す
+
+**置き場所は `--id` で分かれる**（3-82b）**が、エージェントは自分がどの `--id` に起動されたかを知らない。**
+**組み込みの指示書のテンプレートへ、その値を埋める。**
+hook のコマンド行が実行ファイルの絶対パスを埋めているのと同じ形である
+（[internal/orchestrator/settings.go:352](../../internal/orchestrator/settings.go#L352)）。
+
+    {{.continuo.command}} githubapp
+
+**`continuo` を裸で書かない。**pane の PATH に無いことがある。
+**[internal/orchestrator/orchestrator.go:469](../../internal/orchestrator/orchestrator.go#L469) が `os.Executable()` で
+絶対パスを取り、絶対パスでなければ起動を止めている。**同じ値を使う。
+**`--id` を付けて動かしているなら、その値もテンプレートへ入る。**
+
+#### 三、認可した人と `gh` の持ち主を突き合わせる
+
+**continuo が「自分が書いたか」を判定する相手は、`gh api user` の返り値である**
+（[internal/tracker/ghuser.go:38](../../internal/tracker/ghuser.go#L38)）。
+**ブラウザで認可したアカウントがそれと違うと、投稿者が別人になり、
+[internal/tracker/adapter.go:1168](../../internal/tracker/adapter.go#L1168) が `MarkedByOther` を立て、
+[internal/orchestrator/comment.go:383](../../internal/orchestrator/comment.go#L383) が全部捨てる。**
+**エージェントが成果を書いても「書いていない」と判定され、run が人間へ渡る。**
+
+**個人のアカウントと仕事のアカウントを両方持っている人は、ふつうに居る。**
+**認可のときに、GitHub がどちらでログインしているかを人間は意識しない。**
+
+| いつ | 何をするか |
+| --- | --- |
+| **認可が終わった直後** | **そのトークンで `viewer` を引き、`gh api user` の返り値と突き合わせる** |
+| **違っていたら** | **その場で画面へ出す。**「`gh` は A、認可したのは B です」と両方を並べる |
+| **`continuo doctor`** | 同じ突き合わせを行い、違っていたら `✗` |
+
+**違ったまま起動させない。**あとで気づくと、その間の run が全部失われている。
+
 ## 4. 人間が決めたこと
 
 ### 4-1. Status の構成 — `Ice Box` を未着手の置き場にし、`Blocked` を足す
