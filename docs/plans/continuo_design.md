@@ -9414,7 +9414,7 @@ continuo が「エージェントが書いていない」と判定して run を
 
 **`continuo doctor` は既に外へ出ている**
 （[internal/doctor/doctor.go:177-178](../../internal/doctor/doctor.go#L177-L178) が「gh / ghq / herdr / GitHub に触る」と書いている）。
-**だから既にある枠組みへ嵌める。**差し替え口を `Options` へ1つ足し
+**だから既にある枠組みへ嵌める。**差し替え口を `Options` へ足し、**`Label` の定数と i18n のキーも足す**（[internal/doctor/report.go:21](../../internal/doctor/report.go#L21) が全項目を定数で持ち、`Run` は同じ数を返す）、
 （足さないとテストが本物の GitHub を叩く。同 [78-79行](../../internal/doctor/doctor.go#L78-L79)）、
 位置は設定と `gh` の認証の下流に置く（上流が `✗` か `!` ならこの検査は `!`。同 [148-150行](../../internal/doctor/doctor.go#L148-L150)）。
 **更新用のトークンを回転させてはならない**（doctor は読み取りだけである。同 [42-44行](../../internal/doctor/doctor.go#L42-L44)）。
