@@ -630,13 +630,18 @@ gh issue view {{.issue.url}} --json comments --jq '
   .comments[]
   | select(.viewerDidAuthor)
   | select(.body | startswith("<!-- continuo:agent -->"))
-  | select((.body | gsub("\r"; "") | test("(?m)^<!-- continuo:ai -->")) | not)
+  | select((.body | gsub("\r"; "")
+            | ((capture("^(?<h>((<!--[^\n]*-->[^\n]*|[ \t]*)\n)*<!--[^\n]*-->[^\n]*\n)?") | .h) // "")
+            | test("(?m)^<!-- continuo:ai -->")) | not)
   | "\(.createdAt) \(.url)"'
 ```
 
 **何も返らなければ、抜けはありません。**そこで終わりです。
 **返った行のうち、この run であなたが投稿した URL と一致するものだけを直します。**
 **作成時刻も出しているので、前の run のものは見分けられます。**
+
+**見ているのは、本文の先頭に並ぶ印の中だけです。**
+**本文の途中で印を引用しただけの報告は、「抜けている」として正しく出ます。**
 
 ```bash
 URL=<上が返した URL>
@@ -646,33 +651,40 @@ gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" > "/tmp/cont
 jq -e '.body | startswith("<!-- continuo:agent -->")' "/tmp/continuo-comment-$ID.json" > /dev/null || {
   echo "本文が想定と違います。直しません"; exit 1; }
 jq '.body |= (
-  if (gsub("\r"; "") | test("(?m)^<!-- continuo:ai -->")) then .
-  else
-    ((capture("^(?<h>((<!--[^\n]*-->|[ \t]*)\r?\n)*<!--[^\n]*-->[ \t]*\r?\n)?") | .h) // "") as $h
-    | (if ($h | test("\r\n$")) then "\r\n"
+  ((capture("^(?<h>((<!--[^\n]*-->[^\n]*|[ \t]*)\r?\n)*<!--[^\n]*-->[^\n]*\r?\n)?") | .h) // "") as $h
+  | if ($h | test("(?m)^<!-- continuo:ai -->")) then .
+    else
+      (if ($h | test("\r\n$")) then "\r\n"
        elif ($h == "" and test("^[^\n]*\r\n")) then "\r\n"
        else "\n" end) as $eol
-    | $h + "<!-- continuo:ai -->" + $eol + .[($h | length):]
-  end)' "/tmp/continuo-comment-$ID.json" \
+      | $h + "<!-- continuo:ai -->" + $eol + .[($h | length):]
+    end)' "/tmp/continuo-comment-$ID.json" \
   | jq '{body}' \
   | gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --input -
 ```
 
-**本文をシェルの変数へ受けないでください。**`gh api` は取得に失敗すると**エラーの JSON を標準出力へ出す**ので、
-**そのまま書き戻すと、あなたの成果報告がその JSON に置き換わります。**
+**この点検では、本文をシェルの変数へ受けないでください。**`gh api` は取得に失敗すると
+**エラーの JSON を標準出力へ出す**ので、**そのまま書き戻すと、あなたの成果報告がその JSON に置き換わります。**
 上の形は、本文を JSON のまま組み立てて渡すので、その事故が起きません。**末尾の空行も落ちません。**
+
+**5-3 の段2a と 7-2 の段2a は、これとは別です。**あちらは `case` で印そのものを確かめてから書き込みます。
+**あの2つは、そのまま従ってください。**
 
 **この `jq` は3つを守ります。**
 
 | 何を | どう守るか |
 | --- | --- |
-| **二重に付けない** | 行頭が印で始まる行が1つでもあれば、何もしません |
+| **二重に付けない** | **先頭に並ぶ印の中**に印があれば、何もしません |
 | **改行の綴りを合わせる** | **差し込む位置の直前の行**から決めます。本文のどこかに CRLF があるか、では広すぎます |
 | **先頭に並ぶ印の、いちばん後ろへ入れる** | 印と印のあいだの空行は越えますが、**最後の印より後ろの空行は越えません** |
+
+**`<!-- design-review-skipped -->` の断りには、点検のときも付けないでください。**
+**上の検索には出ません**（先頭の印が違うため）**が、pull request を手で見て直すときに間違えないこと。**
 
 **pull request と、グループでまとめて直した別の issue は、上のコマンドでは出ません。**
 **先頭の印が違い、書く先も違うためです。**
 **その2つは、この run で自分が投稿した URL を思い出して、同じ形で直してください。**
+**ただし、飛ばす断りだけは例外です。**上の1行のとおり、付けません。
 **continuo はそちらを1度も読まないので、落としても誰も気づきません。**
 
 # 6. セキュリティ

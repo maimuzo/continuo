@@ -170,7 +170,7 @@ func TestCITemplate_このリポジトリのCIと同じ条件で数えている(
 		// pull request のコメントで、continuo は pull request のコメントを読まない。
 		`test("^[ \\t\\r\\n]*(<!-- continuo:agent -->[ \\t\\r\\n]*)?<!-- design-review-result -->")`,
 		`test("^[ \\t\\r\\n]*<!-- code-review-result -->")`,
-		`test("^[ \\t\\r\\n]*<!-- design-review-skipped -->[ \\t\\r\\n]*(?!<!--)[^ \\t\\r\\n]")`,
+		`test("^[ \\t\\r\\n]*<!-- design-review-skipped -->[ \\t\\r\\n]*[^ \\t\\r\\n]")`,
 	} {
 		if !strings.Contains(gate, want) {
 			t.Errorf("このリポジトリの CI に判定 %s がありません", want)

@@ -114,7 +114,7 @@ jobs:
           # 閉じの2文字を理由と読んでしまい、理由が空でも通ります。
           gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" --jq '
             .[]
-            | select((.body // "") | test("^[ \\t\\r\\n]*<!-- design-review-skipped -->[ \\t\\r\\n]*(?!<!--)[^ \\t\\r\\n]"))
+            | select((.body // "") | test("^[ \\t\\r\\n]*<!-- design-review-skipped -->[ \\t\\r\\n]*[^ \\t\\r\\n]"))
             | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
             | .id' > skipped.txt
           if [ "$(wc -l < skipped.txt | tr -d ' ')" -gt 0 ]; then

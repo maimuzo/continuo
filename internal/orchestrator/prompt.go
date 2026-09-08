@@ -107,7 +107,7 @@ func BuildContinuationPrompt(
 // しかも次の行が「本文の中では囲みを外した形で」と言うので、
 // **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
-// 書き分けは [docs/upgrading.md:329-333](docs/upgrading.md#L329-L333) に揃える。
+// 書き分けは [docs/upgrading.md:325-333](docs/upgrading.md#L325-L333) に揃える。
 //
 // **機械が書いた印（`config.AIMarker`）も書かせる**（設計 3-82）。
 // **`marker` の次の行に置かせる。**先に置かせると `c.IsAgent` が偽になり、
@@ -137,8 +137,9 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 	// 逆にすると `c.IsAgent` が偽になり、**書いたのに `failure_state` へ落ちる。**
 	fmt.Fprintf(&b, "その次の行に %s を入れてください（人間ではなく機械が書いた、という印です）。"+
 		"**%s より前へ置かないでください。**\n", config.AIMarker, marker)
-	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
-	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、
+	// **「その印」と書かない**（issue #178）。**この段落が守っているのは `marker`
+	// （エージェントの印）であって、すぐ上で足させた `config.AIMarker` ではない。**
+	// **取り違えてそちらを外されると、`c.IsAgent` が偽になり、
 	// **書いたのに `failure_state` へ落ちる。**この経路が防ごうとした結末そのものである。
 	// **2度目も名前を書き切る。**値は `config.ProgressMarker` から作るので、定義は1つのままである。
 	fmt.Fprintf(&b,
@@ -146,7 +147,7 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 			"囲み付きの %[1]s（`<!` から始まるあの形）が入っているもの）へ書き足すと、"+
 			"continuo はそれを成果の報告として数えません。\n"+
 			"**この報告の先頭に、囲み付きの %[1]s を置かないでください。**"+
-			"%[2]s のほうは、上のとおり必ず入れてください。\n"+
+			"%[2]s のほうは、本文の1行目として必ず入れてください。\n"+
 			"**本文の中で %[1]s について書くときは、囲みを外した %[1]s の形で書いてください。**\n"+
 			"囲み付きのまま書くと、次の途中経過の報告が、この報告へ書き足されます。\n"+
 			"**%[2]s のほうは、囲みを外さないでください。**外すと、この報告が数えられません。\n",

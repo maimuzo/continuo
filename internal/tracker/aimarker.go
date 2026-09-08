@@ -208,12 +208,20 @@ func spliceAIMarker(body string, at int) string {
 	// **本文のどこかに CRLF があれば CRLF、では広すぎる。**
 	// 末尾の1行だけが CRLF の本文で、LF の場所へ CRLF を足すことになる。
 	eol := lineEndingAt(prefix, suffix)
+	// **もとの末尾に改行が在ったかを、補う前に控える。**
+	// **補ったあとで見ると、必ず「在った」になる。**
+	hadEOL := strings.HasSuffix(prefix, "\n")
 	// **行の途中へ足さない。**末尾に改行の無い本文では、印が前の行に繋がる。
-	if prefix != "" && !strings.HasSuffix(prefix, "\n") {
+	if prefix != "" && !hadEOL {
 		prefix += eol
 	}
-	// **本文の末尾へ足すときは、改行を増やさない。**
+	// **本文の末尾へ足すときも、もとの末尾の改行は保つ。**
+	// **消すと、doc が名乗っている「印の行より後ろは1文字も書き換えない」が偽になる。**
+	// **もとから改行が無ければ、増やさない。**
 	if suffix == "" {
+		if hadEOL {
+			return prefix + config.AIMarker + eol
+		}
 		return prefix + config.AIMarker
 	}
 	return prefix + config.AIMarker + eol + suffix
@@ -258,18 +266,30 @@ func ComposeCommentBody(body, selfMarker string) string {
 	// `repos/${REPO}/issues/${PR_NUMBER}/comments`）。
 	// **断りを実際に書くのは人間かエージェントの `gh pr comment` で、この関数を1度も通らない。**
 	// **例外を守っているのは組み込みの指示書の 5-6 と、その検査と、CI の案内文の3つである。**
-	// **中身の無い本文には、何も足さない。**
+	// **本当に空の本文には、何も足さない。**
 	// **足すと、印だけのコメントが公開されて消せなくなる。**
 	// 足さなければ GitHub が空の本文を断るので、**呼び出し側の欠陥がログに出る。**
-	if strings.TrimSpace(body) == "" {
+	//
+	// **空白だけの本文は、ここで止めない。**止めると `self_marker` も付かず、
+	// **GitHub は空でない本文として受け付ける。**そのコメントは
+	// `FetchComments` が外せず、**continuo 自身の通知が毎 turn エージェントへ渡り続ける。**
+	if body == "" {
 		return body
 	}
-	full := withAIMarker(body)
-	if selfMarker != "" && !strings.HasPrefix(strings.TrimSpace(full), selfMarker) {
+	// **既に `self_marker` が付いていれば、いったん外す。**
+	// **`self_marker` は HTML のコメントとは限らない**（`[continuo-self]` のような値にできる）。
+	// **付いたまま `withAIMarker` へ通すと、その行が印の行と数えられず、
+	// 印が `self_marker` より前へ入る。**外して組み立て直せば、二度通しても増えない。
+	core := body
+	if selfMarker != "" {
+		if t := strings.TrimSpace(body); strings.HasPrefix(t, selfMarker) {
+			core = strings.TrimLeft(strings.TrimPrefix(t, selfMarker), "\r\n")
+		}
+	}
+	full := withAIMarker(core)
+	if selfMarker != "" {
 		// **改行の綴りを本文に合わせる。**`"\n"` で決め打ちにしてはならない。
 		// **CRLF の本文で1行目だけ LF になる**と、同じコメントの中で改行が混ざる。
-		// `withAIMarker` が `lineEndingAt` でそこを揃えているのに、
-		// **前へ足すここだけ揃えないと、その手間が無駄になる。**
 		full = selfMarker + lineEndingAt("", full) + full
 	}
 	return full

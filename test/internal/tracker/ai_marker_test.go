@@ -588,9 +588,17 @@ func TestComposeCommentBody_selfMarkerもCRLFで繋ぐ(t *testing.T) {
 // 与える情報: 空の本文と、空白だけの本文。
 // 成功条件: 1文字も変わらないこと。
 func TestComposeCommentBody_中身が無ければ足さない(t *testing.T) {
-	for _, body := range []string{"", "   \n  ", "\r\n"} {
-		if got := tracker.ComposeCommentBody(body, "<!-- continuo:self -->"); got != body {
-			t.Errorf("中身の無い本文へ足しました: body=%q got=%q", body, got)
+	// **本当に空のときだけ、何も足さない。**GitHub が断り、呼び出し側の欠陥がログに出る。
+	if got := tracker.ComposeCommentBody("", "<!-- continuo:self -->"); got != "" {
+		t.Errorf("空の本文へ足しました: got=%q", got)
+	}
+	// **空白だけの本文では止めない。**止めると `self_marker` も付かず、
+	// **GitHub は空でない本文として受け付ける。**そのコメントは `FetchComments` が外せず、
+	// **continuo 自身の通知が毎 turn エージェントへ渡り続ける。**
+	for _, body := range []string{"   \n  ", "\u3000"} {
+		got := tracker.ComposeCommentBody(body, "<!-- continuo:self -->")
+		if !strings.HasPrefix(got, "<!-- continuo:self -->") {
+			t.Errorf("空白だけの本文から self_marker が落ちました: body=%q got=%q", body, got)
 		}
 	}
 }
