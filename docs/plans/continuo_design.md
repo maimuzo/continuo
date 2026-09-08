@@ -9098,11 +9098,11 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **continuo はそのセッションを起動せず、環境も作らないためである。**
 
 **それでも、3-82k と同じ `case` の形を書けば足りる**（テンプレートは展開されないので、値を手で埋める）。
-**素の `GH_TOKEN=$(continuo githubapp) gh …` を書いてはならない**（理由は 3-82f）。
+**素の `GH_TOKEN=$(continuo github-app token) gh …` を書いてはならない**（理由は 3-82f）。
 **export もさせない。**export すると**人間が手で叩く `gh` にも印が付き、この issue が直したい向きの逆になる。**
 **案内は [docs/FAQ.md](../FAQ.md) に置く。**
 
-**抜け道は残る。**`continuo githubapp` を叩かずに `gh` を叩けば、印は付かない。
+**抜け道は残る。**`continuo github-app token` を叩かずに `gh` を叩けば、印は付かない。
 **エージェントは `Bash` を引数無制限で許可されており**（[internal/config/default.go:176](../../internal/config/default.go#L176)）、
 **素の `gh issue comment` を止めるものは無い。**
 
@@ -9171,13 +9171,13 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **レビューを通していないものがマージされる経路を、資格情報1つの漏洩で開くことになる。**
 **pull request のコメントに印が付かないのは、承知のうえで採る。**権限はあとから足せる。
 
-### 3-82c. `continuo githubapp` が何を返すか。無人で待たない
+### 3-82c. `continuo github-app token` が何を返すか。無人で待たない
 
 **言いたいこと。**標準出力へアクセストークンを1行。**それ以外は何も出さない。**
 **更新用のトークンが無いときは、待たずに終了コード 1 を返す。**
 **画面の前に人が居ない時間帯に、巡回が止まってはならない。**
 
-    $ continuo githubapp
+    $ continuo github-app token
     ghu_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 **中でやること。**`~/.continuo/github-app-credentials.json` を読み、更新用のトークンで
@@ -9213,7 +9213,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **失敗したときは、どれも終了コード 1 で標準出力は空にする。待たない。**
 更新用のトークンが無いか6か月で切れたときは、標準エラーへ
-「`continuo github-app` で App を用意してください」と出す。
+「`continuo github-app setup` で App を用意してください」と出す。
 **このコマンドは設定を見ない。**エージェントの worktree からは WORKFLOW.md を読めないためである（3-82b）。
 **`false` の利用者は、そもそも指示書の枝がこのコマンドを呼ばない**（3-82k）。
 
@@ -9269,9 +9269,9 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 **`author_association` は、専用の App を作って実測した**（2026-09-08）。
 **リポジトリの所有者のアカウントに install した App で、その所有者のリポジトリへ投稿しても `NONE` だった。**
 
-### 3-82f. 古い実行ファイルで `continuo githubapp` を叩くと、起動ログがトークンに入る
+### 3-82f. 古い実行ファイルで `continuo github-app token` を叩くと、起動ログがトークンに入る
 
-**言いたいこと。**このサブコマンドを知らない実行ファイルは、`githubapp` を**設定ファイルのパスとして読む。**
+**言いたいこと。**このサブコマンドを知らない実行ファイルは、`github-app` を**設定ファイルのパスとして読む。**
 **そして起動のログを標準出力へ出す。**`$(...)` で受けると、**その文字列がトークンとして `gh` へ渡る。**
 **空ではないので、`gh` は keyring へ戻らず 401 で落ちる。**
 
@@ -9279,6 +9279,9 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 
     $ continuo githubapp
     Starting continuo (config file: <いまいるディレクトリ>/githubapp)
+
+**この実測は、名前を決める前の `githubapp` で行った**（2026-09-05）。
+**`github-app` でも通る経路は同じである。**[internal/cli/cli.go:184-205](../../internal/cli/cli.go#L184-L205) の `switch args[0]` は**文字列の完全一致でしか分岐しない**ので、知らない名前はどれも `runMain` へ落ちる。
     time=… level=ERROR msg="continuo を起動できません" error="cannot read WORKFLOW.md: …"
     exit status 1
 
@@ -9287,7 +9290,7 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 
 **防ぎ方。呼ぶ側が中身を確かめる。**
 
-    TOKEN=$(continuo githubapp 2>/dev/null)
+    TOKEN=$(continuo github-app token 2>/dev/null)
     case "$TOKEN" in
       ghu_*) GH_TOKEN="$TOKEN" gh issue comment <URL> --body-file done.md ;;
       *)     echo "トークンを取れませんでした。投稿しません" >&2; exit 1 ;;
@@ -9299,7 +9302,7 @@ continuo のカンバンは user 所有である。**だから App は「コメ�
 **通しておくと、誤ってそちらを返す実装をしたときに `case` が素通りさせる。**
 **取れなかったら投稿しない**（3-82h）。**印の無いコメントを2種類にしないためである。**
 
-**組み込みの指示書には、この形で書く。**素の `GH_TOKEN=$(continuo githubapp) gh …` を書いてはならない。
+**組み込みの指示書には、この形で書く。**素の `GH_TOKEN=$(continuo github-app token) gh …` を書いてはならない。
 
 **このサブコマンドを足すこと自体は、hook の挙動を変えない。**
 [CLAUDE.md](../../CLAUDE.md) の4つの定義（hook が受け取る引数 / hook の宛先 / hook と本体の約束 /
@@ -9333,8 +9336,18 @@ hook が Claude Code へ返すもの）**のどれにも当たらない。**
 （[internal/server/server.go:180-181](../../internal/server/server.go#L180-L181)）。
 **その中には continuo 自身が起動した Claude Code も含まれる。**
 
-**画面は `continuo github-app` が開く。**新しいサブコマンドを1本足す
-（[internal/cli/cli.go:184-205](../../internal/cli/cli.go#L184-L205) の `switch args[0]` へ1行）。
+**画面は `continuo github-app setup` が開く。**
+
+**サブコマンドは `github-app` の1本で、その下に2つ置く。**
+[internal/cli/cli.go:184-205](../../internal/cli/cli.go#L184-L205) の `switch args[0]` へ足すのは1行である。
+
+| 何を叩くと | 何をするか |
+| --- | --- |
+| **`continuo github-app token`** | **アクセストークンを標準出力へ1行返す**（3-82c） |
+| **`continuo github-app setup`** | **App を作る画面と、認可の画面を開く**（この節） |
+
+**1文字違いの2つの名前にしてはならない。**`githubapp` と `github-app` のように分けると、
+**片方を足し忘れたときに `runMain` へ落ち、起動ログが標準出力へ出る**（3-82f）。
 
 **常駐の起動（`continuo --port`）にしてはならない。**
 **起動時の検査が、その検査を通すための画面を塞ぐ**（[internal/daemon/daemon.go:302](../../internal/daemon/daemon.go#L302) が
@@ -9462,7 +9475,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | --- | --- | --- |
 | **1** | **GitHub の画面で App の client secret を作り直し、古いほうを削除する** | **削除するまで古いものは生きている**（GitHub App は client secret を複数本持てる）。**作り直すだけでは止まらない** |
 | **2** | `~/.continuo/github-app-credentials.json` を消す | 手元から資格情報が消える |
-| **3** | **`continuo github-app` で認可をやり直す** | 新しい更新用のトークンが入る |
+| **3** | **`continuo github-app setup` で認可をやり直す** | 新しい更新用のトークンが入る |
 | **4** | **急ぐなら、App の install を外す** | **既に配ったアクセストークンも即座に効かなくなる** |
 
 **既に配られたアクセストークンだけは、段1〜3では止まらない。**
@@ -9485,7 +9498,7 @@ continuo が「エージェントが書いていない」と判定して run を
 | どのクライアントか | 何に使うか | トークン |
 | --- | --- | --- |
 | いままでの1本 | **カンバンの読み書き、コメントの取得** | `tracker.provider.token_source` |
-| **足す1本** | **`PostComment` の全部** | **同じ Go の関数を直に呼んで取る**（`continuo githubapp` が使うものと同じ実体）。**exec しない。**exec すると、動いている continuo とディスク上の実行ファイルが食い違う罠（3-82f）を、continuo 自身が踏む |
+| **足す1本** | **`PostComment` の全部** | **同じ Go の関数を直に呼んで取る**（`continuo github-app token` が使うものと同じ実体）。**exec しない。**exec すると、動いている continuo とディスク上の実行ファイルが食い違う罠（3-82f）を、continuo 自身が踏む |
 
 **持ち回りのコメントも、この1本で書く。**除外するほうが分岐を1つ足す作業になる。
 **ただし hold は失敗の帰結が重い。**書けないと
@@ -9497,10 +9510,30 @@ continuo が「エージェントが書いていない」と判定して run を
 **既存の `continuo:bid` などの目印は HTML のコメントなので画面には出ない**）。
 **トークンを取れなくなると入札も投稿できないので、その機械はその巡回では issue を取らない**（3-82h）。
 
-**トークンは8時間で切れるので、2本目は使う直前に作り直す。**
-`newGraphQLClient` はトークンを固定するので、**`Adapter` が2本目を「毎回作る」形にする。**
+**トークンは8時間で切れる。****2本目は、期限までメモリで使い回し、切れる手前で作り直す。**
+`newGraphQLClient` はトークンを固定するので、**`Adapter` が2本目とその期限を持ち、
+期限が近ければ作り直してから差し替える形にする。**
 **作り直さないと、起動から8時間後に人間向けのコメントだけが 401 で落ち始める。**
 **カンバンは別のトークンなので動き続け、いちばん切り分けの難しい状態になる。**
+
+**投稿のたびに作り直してはならない。**
+**更新用のトークンは1回使うと無効になる**（3-82c）。**叩くたびに書き戻しが起き、
+書き戻しの直前で落ちると資格情報が恒久的に死ぬ。**
+**1つの run で投稿は7本あり、進捗報告は1時間ごとに増える。**
+**使い回せば、その危険は8時間に1回まで下がる。**
+
+**これは「ファイルへは出力しない」という人間の決定（2026-09-08）に反しない。**
+**禁じられたのは資格情報のファイルへ書くことであって、常駐している Go のプロセスが
+メモリに持つことではない。**
+**メモリに持つのは、`continuo github-app token` を叩いた側も同じである。**
+**プロセスが終われば消える。**
+
+**作り直す線は、期限の5分前とする。**
+**GitHub が返す `expires_in` から期限の時刻を持ち、そこから5分を引いた時刻を過ぎていたら作り直す。**
+**ちょうどの時刻で見ると、投稿の途中で切れる。**
+
+**`continuo github-app token` の側は使い回さない。**
+**あちらは1回叩かれて終わるコマンドなので、持ち回す先が無い**（3-82c）。
 
 **署名は変えない。**[internal/tracker/adapter.go:1188](../../internal/tracker/adapter.go#L1188) の `PostComment` が
 **そのまま2本目を使う。**分岐が要らないので、[internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の
@@ -9514,7 +9547,7 @@ interface も、検査の偽物も、1文字も変わらない。
 
 **`internal/lock/` に触るので、hook の門の検知に掛かる**（[CLAUDE.md](../../CLAUDE.md) が名指ししている）。
 **掛かるが、hook の4つの定義のどれにも当たらない。**`continuo hook` の引数も宛先も約束も終了コードも変わらない。
-**`internal/cli/cli.go` にも触る**（`switch args[0]` へ `githubapp` を足す。判定は 3-82f）。
+**`internal/cli/cli.go` にも触る**（`switch args[0]` へ `github-app` を足す。判定は 3-82f）。
 **両方の判定を、pull request の本文へ1段落で書く。**
 **人間が読む文言は i18n のキーで持つ。**この設計が足すのは4本で、doctor の見出し語だけではない。
 
@@ -9527,11 +9560,11 @@ interface も、検査の偽物も、1文字も変わらない。
 
 ### 3-82k. 組み込みの指示書を、設定で分岐させる
 
-**言いたいこと。**`false` のまま `continuo githubapp` を前置きした形を配ると、
+**言いたいこと。**`false` のまま `continuo github-app token` を前置きした形を配ると、
 **資格情報を持たない利用者の投稿が全部落ちる。****指示書はテンプレートなので `{{if}}` で分けられる。**
 
     {{if .github_app_attribution}}
-    TOKEN=$({{.continuo.command}} githubapp 2>/dev/null)
+    TOKEN=$({{.continuo.command}} github-app token 2>/dev/null)
     case "$TOKEN" in
       ghu_*) GH_TOKEN="$TOKEN" gh issue comment <URL> --body-file done.md ;;
       *)     echo "トークンを取れませんでした。投稿しません" >&2; exit 1 ;;
@@ -9561,12 +9594,40 @@ interface も、検査の偽物も、1文字も変わらない。
 **印の無いコメントへ書き足すと、機械が書いた文が「人間が書いた」ように見える。**
 **書き足す先が印を持たないなら、新しく投稿する。**
 **判定は REST で行う。**GraphQL には App を示す欄が無いので（3-82 の実測）、
-**5-3 は段2a の `gh api` へ `--jq '{body:.body, app:.performed_via_github_app}'` と足し、7-2 も同じ形にする。**
-**往復を増やさない。**
-**`--jq .performed_via_github_app` を単独で叩いてはならない。**印の無いコメントに対して
-**`null` という4文字を標準出力へ出すので、空かどうかで見ると必ず真になる。**
+**書き足す直前に、その1件を REST で引いて印の有無を見る。**
+
+**本文を取る `--jq` を、JSON のオブジェクトへ変えてはならない。**
+**書き足しは、既存の本文を変数へ取ってから `printf` で継ぎ足す形で書かれている。**
+
+    OLD=$(gh api "repos/…/issues/comments/$ID" --jq .body)
+
+**ここを `--jq '{body:.body, app:.performed_via_github_app}'` にすると、`$OLD` に JSON が入る。**
+**そのまま継ぎ足すと、コメントの本文が `{"body":"…","app":…}` という1行に化ける。**
+**元の本文は復元できない。**編集履歴からしか読めなくなる。
+
+**だから、印を見る呼び出しを1行足す。**
+
+    APP=$(gh api "repos/…/issues/comments/$ID" --jq '.performed_via_github_app.slug // ""')
+    OLD=$(gh api "repos/…/issues/comments/$ID" --jq .body)
+
+**`// ""` を落としてはならない。**印の無いコメントに対して
+**`null` という4文字が標準出力へ出るので、空かどうかで見ると必ず真になる。**
+**`.slug` まで辿って `// ""` を付けると、印が無いときにちょうど空文字になる。**
 **同じ罠を、この設計は 3-82f で、指示書は [internal/prompt/builtin.md:424-426](../prompt/builtin.md#L424-L426) で既に塞いでいる。**
 **設定を途中で `true` にした利用者の手元で、それ以前のコメントを相手に必ず起きる。**
+
+**往復が1回増えることは、そのまま受ける。****本文が壊れるほうが重い。**
+
+**直す箇所は3つある**（`grep -n 'OLD=$(gh api' internal/prompt/builtin.md` で数えた。範囲は
+[internal/prompt/builtin.md](../prompt/builtin.md) の全体）。
+
+| どこ | 何行目 | 何をしているところか |
+| --- | --- | --- |
+| **5-3** | [internal/prompt/builtin.md:411](../prompt/builtin.md#L411) | 着手の報告へ書き足す |
+| **7-2** | [internal/prompt/builtin.md:662](../prompt/builtin.md#L662) | 進捗報告へ書き足す |
+| **7-2** | [internal/prompt/builtin.md:702](../prompt/builtin.md#L702) | 同じ節のもう1本 |
+
+**3つとも直す。**1つ残すと、その経路だけが印の無いコメントへ書き足す。
 
 **変数を2つ足す。**どちらも `RenderData` と `SampleData` の両方へ登録し、
 **[test/internal/prompt/prompt_test.go:411](../../test/internal/prompt/prompt_test.go#L411) の一覧も直す。**
@@ -9615,12 +9676,23 @@ interface も、検査の偽物も、1文字も変わらない。
 **そのために `client_id` と `client_secret` を受け取る必要がある。**
 **渡し方は、この設計では決めない。**WORKFLOW.md へは書けない（commit されるため）。
 **チームでの共有を対象にするなら、渡し方を決めてから対象にする。**
-その入口も `continuo github-app` に置き、
+その入口も `continuo github-app setup` に置き、
 **起動を止めるときのエラーへ、その手順への案内を必ず入れる。**
 
 **非公開の App を、所有者以外が認可できるかは測っていない。**
 **実測は1つのアカウントでしか行っていない。**
 **できないなら、チームでの共有はこの設計では非対応と明記する。**実装の前に測ること。
+
+**この設計文書の 5-2 の設定例へも、同じキーを足す。**
+[docs/plans/continuo_design.md:10024](continuo_design.md#L10024) の `comments:` の下である。
+**雛形だけに足して設計文書の設定例を放置すると、実装者が「どの階層に置くキーか」をここから読めない。**
+**`tracker.comments` の下であって `agent.comments` の下ではない**（5-2 は同じ名前の節を2つ持つ）。
+
+**足したら、そこより後ろを指すリンクを検算する。**
+[.claude/rules/plan-file.md](../../.claude/rules/plan-file.md) の
+「**設計文書へ1行でも足したら、そこを指すリンクを全部検算する**」が求めている。
+**5-2 は文書の後ろ寄りにあるので、4行足すと、それより後ろを指すリンクが全部ずれる。**
+**2026-09-04 には3行足して13本がずれ、うち3本が「主張の逆」を書いた行に着地した。**
 
 #### 二、認可した人と `gh` の持ち主を突き合わせる
 
@@ -9635,6 +9707,18 @@ interface も、検査の偽物も、1文字も変わらない。
 | --- | --- |
 | **認可が終わった直後** | **そのトークンで `viewer` を引き、`gh api user` の返り値と突き合わせる** |
 | **違っていたら** | **その場で画面へ出す。**「`gh` は A、認可したのは B です」と両方を並べる |
+| **起動時の検査**（3-82h） | **同じ突き合わせを行い、違っていたら起動しない** |
+| **`continuo doctor`** | **同じ突き合わせを行い、違っていたら `✗`** |
+
+**認可の直後だけでは足りない。**
+**認可のあとで `gh` のログインを切り替えた人の手元では、認可の直後の検査は既に通っている。**
+**その切り替えは `gh auth switch` の1回で起き、continuo には何の通知も来ない。**
+**次の起動から、そのマシンの run が全部、黙って人間へ渡り始める。**
+
+**起動時の検査は往復を増やさない。**3-82h が「起動時に1回だけ実際にトークンを取る」と決めており、
+**取れたそのトークンで `viewer` を引くだけである。**
+**`gh api user` の側は、continuo が既に起動時に引いている**
+（[internal/tracker/ghuser.go:38](../../internal/tracker/ghuser.go#L38) の `RunGHAPIUserLogin`）。
 
 **違ったまま起動させない。**あとで気づくと、その間の run が全部失われている。
 
@@ -9983,6 +10067,10 @@ tracker:
       max: 50                               # 1回の取得で何件ずつ取るか。GitHub は一度に100件までしか返さない。
                                             # 打ち切りの件数ではない。続きがある限り取り直して、コメントは全部読む
       order: oldest_first                   # 読む順番。古いコメントから読む
+      github_app_attribution: false         # true にすると、機械が書くコメントに GitHub App の印が付き、
+                                            # 人間が書いたのか機械が書いたのかを画面で見分けられる（3-82）。
+                                            # true にする前に `continuo github-app setup` で資格情報を用意すること。
+                                            # 用意せずに true にすると、continuo は起動しない
     handoff:                                # 同じカンバンを複数の機械で見張るときの取り決め。担当は issue の担当者で持つ
       bid_window_ms: 180000                 # 入札を締め切るまでの待ち時間。180000 なら3分。
                                             # 数えはじめるのは、その issue へ最初の入札が入った時刻である。
