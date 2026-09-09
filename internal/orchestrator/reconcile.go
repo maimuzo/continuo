@@ -160,10 +160,20 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		if seen[id] {
 			continue
 		}
+		// **人間が引き取っている run は、ここでも印から外さない**（設計 3-82）。
+		// **item を archive しただけでも、取り直しが一時的にその item を返さなかった
+		// だけでも、この分岐へ落ちる。**外すと、issue が戻ってきたときに巡回が
+		// この run を見失い、同じ worktree にもう1つ Claude Code が立つ。
+		//
+		// **`stopAndReleaseAsync` も自分で断るが、上の WARN を先に出してはならない。**
+		// あの文面は「印から外します」と言い切っており、外さないのに出すと嘘になる。
+		if rs.inHumanMode() {
+			o.logger.Warn("issue がカンバンから見えなくなりましたが、人間が引き取っているので何もしません（pane も印も残します）",
+				"identifier", rs.issue().Identifier)
+			continue
+		}
 		o.logger.Warn("issue がカンバンから見えなくなったので印から外します（continuo は面倒を見ません）",
 			"identifier", rs.issue().Identifier)
-		// **人間モードの run は `stopAndReleaseAsync` が自分で断る**（設計 3-82）。
-		// **その1行が唯一の防波堤である。**この WARN は出るが、pane も印も残る。
 		o.stopAndReleaseAsync(ctx, rs)
 	}
 }
