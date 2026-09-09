@@ -752,8 +752,11 @@ func (o *Orchestrator) decideOne(
 				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
 				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
 				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
-				"\n【対処】許可が要るなら WORKFLOW.md の `claude.permissions.allow` に足してから、"+
-				"Status を着手待ちへ戻してください。",
+				"\n【対処】許可が要るなら、`claude.permission_mode` が `auto` のときは"+
+				"**この issue のコメントに「その操作を許可します」と書いてください**（判定役が会話を読みます）。"+
+				"`dontAsk` のときと、恒久的に効かせたいときは WORKFLOW.md の "+
+				"`claude.permissions.allow` に足してください。"+
+				"そのうえで Status を着手待ちへ戻してください。",
 			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)
 		return adoption{}, false

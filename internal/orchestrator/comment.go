@@ -34,7 +34,8 @@ const commentRecheckWait = 2 * time.Second
 //  3. 身元ファイルからセッション UUID と設定ファイルのパスを読む
 //  4. worktree を herdr の workspace として開き直し（着手の段3 と同じ Prepare を通す）、
 //     その中の pane を pane.list で引く
-//  5. その pane で agent.start を呼ぶ（--resume <UUID> --settings <設定ファイル> --permission-mode dontAsk）
+//  5. その pane で agent.start を呼ぶ（--resume <UUID> --settings <設定ファイル>
+//     --permission-mode <claude.permission_mode の値。既定は auto>）
 //  6. agent_status が idle または done になるのを待つ
 //  7. agent.prompt で「作業の内容を issue のコメントに書いてください」とだけ送る
 //     → **この送信は turn 数に数えない**（max_dispatch_turns の判定に影響させない）

@@ -67,7 +67,8 @@ type hookMatcher struct {
 type claudeSettings struct {
 	// Hooks はイベント名から matcher の並びへの対応である。
 	Hooks map[string][]hookMatcher `json:"hooks"`
-	// Permissions は許可・拒否リストである（`dontAsk` のとき許可リストの外は全部拒否される）。
+	// Permissions は許可・拒否リストである（`dontAsk` のとき許可リストの外は全部拒否される。
+	// `auto` でも deny は効く）。
 	Permissions claudeSettingsPermissions `json:"permissions"`
 	// Env は Claude Code のプロセスへ渡す環境変数である。
 	//
@@ -319,7 +320,7 @@ func toolGateApplies(mode string, repoIsPrivate *bool) bool {
 //	{
 //	  "hooks": { "Stop": [{"hooks":[{"type":"command",
 //	              "command":"'/usr/local/bin/continuo' hook --socket '/…/hooks.sock' --pending-dir '/…/pending'"}]}], … },
-//	  "permissions": { "allow": ["Bash","Read","Glob","Grep","Edit","Write"], "deny": [] },
+//	  "permissions": { "allow": ["Bash","Read","Glob","Grep","Edit","Write"], "deny": ["AskUserQuestion"] },
 //	  "env": { "CLAUDE_CODE_RETRY_WATCHDOG": "1" }
 //	}
 //
