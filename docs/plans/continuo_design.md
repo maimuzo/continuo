@@ -9302,7 +9302,18 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 [internal/orchestrator/handoff.go:495-497](../../internal/orchestrator/handoff.go#L495-L497) の `postBid` は、
 **引数に run の写しを持たない。****持ち回りの入札は、そもそも worktree を作る前に走る。**
 
-**持ち回りの3種**（入札・hold・released）**では、入札そのものを止めない。**
+**持ち回りの3種は、2つに分かれる。**
+
+| 何 | 投稿できないとき、どうなるか |
+| --- | --- |
+| **入札と released** | **止めない。**[internal/orchestrator/handoff.go:317-318](../../internal/orchestrator/handoff.go#L317-L318) が「担当は既に外れている。コメントを書けなかったことで入札を止めない」と決めている |
+| **hold** | **着手ごと止まる。**[internal/orchestrator/handoff.go:408-429](../../internal/orchestrator/handoff.go#L408-L429) が「**hold を書けないまま着手させてはならない。だから着手しない**」と決め、`undoHandoffAcquire` で担当者を消し戻す |
+
+**hold が書けない状態が続くと、1件も dispatch されなくなる。**
+**入札に勝つたびに担当者を書いては消し戻し、次の巡回でまた入札する。**
+**その状態は、App のトークンが取れなくなった時点から続く**（App を消した・install を外した・secret を作り直した・書き戻しの直前で落ちた）。
+**人間が「エラーで停止して良い」と決めたときに見えていた損失は「run 1件」だったが、実際はカンバン全体が止まる。**
+**それでも止める。**印の無いコメントを1件出すより軽い。
 [internal/orchestrator/handoff.go:317-318](../../internal/orchestrator/handoff.go#L317-L318) が
 **「担当は既に外れている。コメントを書けなかったことで入札を止めない」**と既に決めている。
 **その決定を変えない。**投稿しないので、印の無いコメントは1件もできない。
@@ -9346,7 +9357,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 #### 6-27 が「Go の経路を作らない」と決めたことと、衝突しない
 
-**[docs/plans/continuo_design.md:13399](continuo_design.md#L13399) が、こう決めている。**
+**6-27（グループの他の issue にも、何をしたかを書かせる）の「承知のうえで受け入れる」表が、こう決めている。**
+**行番号は書かない。**この設計は伸び続けるので、指す先が動く（3周連続で外れた）。
 
 > **承知のうえで、Go の経路を作らない**（作ると 3-73 の絞り口へ寄せることになり、**continuo が代筆しない決定と衝突する**）。
 
@@ -9361,7 +9373,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **エージェントが書いたファイルを受け取って送るだけである。**
 **要約する材料を continuo が持っているかは、関係しない。**
 
-**13399 のもう1つの論拠（Go の経路を作ると実装が増える）は、事情が変わった。**
+**6-27 のもう1つの論拠（Go の経路を作ると実装が増える）は、事情が変わった。**
 **GitHub App の資格情報を読んで GitHub を叩く経路は、本体の投稿のためにどのみち作る**（この節の下）。
 **委譲が足すのは、その経路への入口を1つ増やすことだけである。**
 
@@ -9411,6 +9423,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **読むもの** | **`~/.continuo/github-app-credentials.json` だけ** |
 | **読まないもの** | **WORKFLOW.md。カンバン。**どちらも引かない |
 | **資格情報が無いとき** | **終了コード 1 で落ちる。**`gh auth token` へは落ちない |
+| **`--edit` のとき** | **同じである。**認証の出どころを経路で変えない（下の「書き足すとき」） |
 
 **なぜ REST か。**
 **GraphQL の `addComment` は投稿先のノード ID を要る。**
@@ -9450,20 +9463,35 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 #### 書き足すとき（`--edit`）
 
-**やることは4つある。1つでも落とすと壊れる。**
+**`--edit` は2回に分けて叩く。**1回で読みと書きを両方やらせてはならない。
+**`--body-file` はその起動の引数なので、1回で済ませると、
+エージェントは前の本文を読む前に書く内容を決めることになる。**
+
+| 何回目 | 何を渡すか | 何が返るか |
+| --- | --- | --- |
+| **1回目**（読む） | `--edit <ID> --repo <owner>/<repo> --marker <印>` | **前の本文を標準出力へ。**印が無ければ終了コード 3 |
+| **2回目**（書く） | 上に `--body-file <パス>` を足す | **投稿した URL を標準出力へ** |
+
+**`--body-file` も `--body` も付いていなければ、読むだけで終わる。**これが1回目である。
+
+**2回目でやること。**
 
 | 順 | 何を | なぜ |
 | --- | --- | --- |
-| **1** | **前の本文を読む**（`GET /repos/{owner}/{repo}/issues/comments/{id}` の `body`） | 継ぎ足す土台になる |
-| **2** | **`--marker` で渡された印が本文に在るかを確かめる。**無ければ終了コード 3 | **[test/internal/prompt/group_comment_test.go:240-263](../../test/internal/prompt/group_comment_test.go#L240-L263) が「門の外に置いても検査は通る」と警告している。****印が消えると、continuo は進捗報告を見つけられなくなり、18時間の時計が担当を取った時刻まで巻き戻る**（[internal/prompt/builtin.md:428-431](../prompt/builtin.md#L428-L431)） |
-| **3** | **読んだ本文を標準出力へ出す**（`--show-old` を付けたとき） | **下の「前の本文をエージェントへ返す」** |
-| **4** | **前の本文と、渡された本文を改行で繋いで `PATCH` する** | **置き換えてはならない。**書き足すたびに過去の分が消える |
+| **1** | **前の本文をもう一度読む** | 1回目との間に、人間が編集しているかもしれない |
+| **2** | **`--marker` の印が本文に在るかを確かめる。**無ければ終了コード 3 | **[test/internal/prompt/group_comment_test.go:240-263](../../test/internal/prompt/group_comment_test.go#L240-L263) が「門の外に置いても検査は通る」と警告している。****印が消えると、continuo は進捗報告を見つけられなくなり、18時間の時計が担当を取った時刻まで巻き戻る**（[internal/prompt/builtin.md:428-431](../prompt/builtin.md#L428-L431)） |
+| **3** | **渡された本文を、[internal/redact/redact.go:63](../../internal/redact/redact.go#L63) の `Paths` へ通す** | **手元の絶対パスを `~` へ縮める。**落とすと、この節が名乗った「絶対パスの漏れが機械で塞がる」が書き足しの経路で成り立たない |
+| **4** | **前の本文と、縮めた本文を改行で繋いで `PATCH` する** | **置き換えてはならない。**書き足すたびに過去の分が消える |
 
-**段4 を落としてはならない。**
-**いまの `gh api --method PATCH` が `-f body="$OLD` から始めているのは、まさにそれを避けるためである**
+**段3 と段4 を落としてはならない。**
+**いまの `gh api --method PATCH` が `-f body="$OLD` から始めているのは、段4 のためである**
 （[internal/prompt/builtin.md:705-707](../prompt/builtin.md#L705-L707)）。
+**段3 は新しい投稿の側にも同じく要る**（この節の上）。
 
-**印は付きも消えもしないので、トークンは回さない**（`gh auth token` で足りる）。
+**認証は、新しい投稿と同じである。**資格情報のファイルを読み、App のトークンで叩く。
+**`gh auth token` へ落ちない。**輪郭表の「読むもの」と「資格情報が無いとき」が、`--edit` にも当たる。
+**印は付きも消えもしないが**（3-82 の実測）**、認証の出どころを2つにすると、
+資格情報が無いときの振る舞いが経路ごとに変わる。**
 **書き換えの API は、いまコードに1本も無い。**
 `internal/tracker` に在るのは [internal/tracker/query.go:374](../../internal/tracker/query.go#L374) の `addCommentMutation` だけで、
 **REST クライアントも無い。****新しい経路を1本作る作業である。**
@@ -9479,14 +9507,29 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 （[internal/prompt/builtin.md:684](../prompt/builtin.md#L684)）。
 **中身が前の本文に依存する。**
 
-**だから `--show-old` を足す。**
-**付けると、`--edit` は書き足す前に、読んだ本文を標準出力へ出す。**
-**投稿した URL は標準エラーへ出す**（出し分けが要るため）。
+**だから2回に分ける。**1回目で読み、書く内容を決めてから、2回目で書く。
 
     URL=<段1が返した URL>
     ID=${URL##*#issuecomment-}
+    {{if .github_app_attribution}}
     OLD=$({{.continuo.command}} comment --edit "$ID" --repo <owner>/<repo> \
-      --marker '<!-- continuo:group -->' --show-old --body-file add.md)
+      --marker '<!-- continuo:group -->')
+    {{else}}
+    OLD=$(gh api "repos/<owner>/<repo>/issues/comments/$ID" --jq .body)
+    {{end}}
+    printf '%s\n' "$OLD"
+    # ここで前に書いていない分を決め、add.md へ書く
+    {{if .github_app_attribution}}
+    {{.continuo.command}} comment --edit "$ID" --repo <owner>/<repo> \
+      --marker '<!-- continuo:group -->' --body-file add.md
+    {{else}}
+    gh api --method PATCH "repos/<owner>/<repo>/issues/comments/$ID" -f body="$OLD
+    <前に書いていない分>"
+    {{end}}
+
+**`printf` の行を `{{if}}` の外に置く。**
+**[test/internal/prompt/group_comment_test.go:324](../../test/internal/prompt/group_comment_test.go#L324) が
+`printf '%s\n' "$OLD"` を見ており、真の枝にしか無いと `{{else}}` の側で落ちる。**
 
 **`URL=` と `ID=` を、`{{if}}` の中へ入れてはならない。**
 **`{{else}}` の枝でも同じ2行が要るので、`{{if}}` の外に置く。**
@@ -9689,7 +9732,7 @@ issue でいちばん人目に付く。**
 | どこ | いま何と書いてあるか | なぜ偽になるか |
 | --- | --- | --- |
 | [internal/prompt/builtin.md:638](../prompt/builtin.md#L638) | **7-2 のコメントは、あなたが `gh` で直に書くので、continuo が縮める処理を通りません** | **`continuo comment` を通るので、縮める処理を通る。**`true` の利用者のエージェントが、事実と違う説明を毎回読む |
-| [docs/plans/continuo_design.md:13399](continuo_design.md#L13399) | **承知のうえで、Go の経路を作らない** | **この設計が、その Go の経路を作る。**放置すると、次に 6-27 を読んだ人がこの設計を差し戻す |
+| **6-27 の「承知のうえで受け入れる」表** | **承知のうえで、Go の経路を作らない** | **この設計が、その Go の経路を作る。**放置すると、次に 6-27 を読んだ人がこの設計を差し戻す |
 
 **`internal/prompt/builtin.md` を直したら、5-3 の写しも同じ commit で直す。**
 **そのとき、5-3 より後ろを指す行番号のリンクを検算する**
