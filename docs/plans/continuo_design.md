@@ -9026,6 +9026,45 @@ turn の終わりと同じでなければならないので、それでは足り
 **「偽れない」ことまでは名乗らない。**attribution を付けずに投稿することも、人間が付けることもできる。
 **issue #245 の本文が「偽れないことまで求めるなら、それは別の issue です」と範囲を切っている。**
 
+#### いま何が見分けられていないか
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as 人間
+    participant C as continuo 本体
+    participant A as continuo が起動した Claude Code
+    participant O as 人間が自分で起動した Claude Code
+    participant G as issue
+    H->>G: コメント（マーカーは付かない）
+    C->>G: コメント（先頭に continuo:self）
+    A->>G: コメント（先頭に continuo:agent）
+    O->>G: コメント（マーカーは付かない）
+    Note over G: 4件とも同じアカウント名で並ぶ
+    Note over H,G: マーカーの無い2件を、あとから区別できない
+
+```
+
+**この設計が解くのは、マーカーの付かない2件である。**
+
+#### この設計を入れると、投稿がどう変わるか
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as continuo 本体
+    participant F as ~/.continuo/github-app-credentials.json
+    participant GH as GitHub の API
+    participant G as issue の画面
+    C->>F: 更新用のトークンを読む
+    C->>GH: 更新用のトークンを渡す
+    GH-->>C: アクセストークン（8時間）と、新しい更新用のトークン
+    C->>F: 新しい更新用のトークンと期限を書き戻す
+    Note over C,F: ここで落ちると、3-82g の認可からやり直しになる
+    C->>GH: そのアクセストークンで REST の POST
+    GH-->>G: 投稿者は人間のまま「– with App の表示名」が付く
+```
+
 #### 実装の前に測る2件
 
 **どちらも偽なら、下の節がまとめて成り立たなくなる。****実装より先に測る。**
@@ -9144,7 +9183,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **そのセッションも同じサブコマンドを叩けるので、 attribution を付けられる。**
 **[docs/FAQ.md](../FAQ.md) で案内する。**
 **「`~/.continuo/github-app-credentials.json` を置いてある人は、continuo の外で走るセッションからも `continuo comment` を使えます」と書く。**
-**条件を落としてはならない。**資格情報を作る経路は別の issue なので、
+**条件を落としてはならない。**資格情報は 3-82g の画面を通した人しか持たないので、
 **この設計が入った時点では、資格情報を持つ利用者が1人も居ない。**
 
 **強制はしない。**そのセッションは continuo の設定を読まないので、機械で止める手段が無い。
@@ -9372,18 +9411,36 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | いつ | どうするか |
 | --- | --- |
 | **起動時に取れない** | **起動しない。**人間が「エラーで停止して良い」と決めた |
-| **走行中に取れなくなった**（run を持つ口） | **理由を issue へ1件書いて、その run を `blocked` にする。**カンバンは止めない |
-| **走行中に取れなくなった**（run を持たない口） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない** |
+| **走行中に取れなくなった**（2本目で書く4つ） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない。カンバンも止めない** |
+| **1本目で書く8つ**（持ち回りの3種・引き渡しの通知・`moveToFailure` ほか） | **落ちない。**App のトークンを使わないので、取れなくても影響しない |
 
-**run を持つ口は2つだけである。**
-[internal/orchestrator/lifecycle.go:435](../../internal/orchestrator/lifecycle.go#L435) の `noteSignalTargetsMissing` と
-[467行](../../internal/orchestrator/lifecycle.go#L467) の `noteSignalTargetsClaimed` である。
-**残る5つ**（`postStatusMove`・`postGateNotice`・`noteUntrusted`・`moveToFailure`・`cleanupPath`）**は `runState` を受け取らない。**
-**そこで run を止めようとしてはならない。**
+**走行中に落ちたとき、run を `blocked` にしてはならない。7つとも同じ落ち方にする。**
+
+**2本目で書く口は4つで、4つとも `runState` を受け取らない。**
+`postStatusMove` は [internal/orchestrator/comment.go:498-500](../../internal/orchestrator/comment.go#L498-L500)、
+`postGateNotice` は [internal/orchestrator/gate.go:292](../../internal/orchestrator/gate.go#L292)、
+`noteUntrusted` は [internal/orchestrator/dispatch.go:678](../../internal/orchestrator/dispatch.go#L678)、
+`cleanupPath` は [internal/orchestrator/lifecycle.go:1013-1018](../../internal/orchestrator/lifecycle.go#L1013-L1018) である。
 **とくに `postStatusMove` は `In Review` へ動かした記録も書くので、
 「記録を書けなかったから blocked にする」を当てると、終わった run が `Blocked` へ引き戻される。**
-| **持ち回りの3種**（入札・hold・released） | **落ちない。**1本目で書くので、App のトークンが取れなくても影響しない |
-| **hold** | **落ちない。**1本目で書くので、App のトークンが取れなくても影響しない |
+
+**`runState` を受け取る2つも、同じ扱いにする。**
+[internal/orchestrator/lifecycle.go:435](../../internal/orchestrator/lifecycle.go#L435) の `noteSignalTargetsMissing` と
+[467行](../../internal/orchestrator/lifecycle.go#L467) の `noteSignalTargetsClaimed` である。
+**この2つは `runState` を持つが、それでも `blocked` にしない。**理由は2つある。
+
+**一つ。この2つは `applySignals` の `defer` から呼ばれる**
+（[internal/orchestrator/lifecycle.go:321-324](../../internal/orchestrator/lifecycle.go#L321-L324)）。
+**`defer` なので、[393-394行](../../internal/orchestrator/lifecycle.go#L393-L394) の `postStatusMove` が
+自分の issue を `In Review` へ動かし終えたあとに走る。**
+**そこで `blocked` にすると、いま `In Review` へ上げた issue を `Blocked` へ引き戻す。**
+**すぐ上で `postStatusMove` について退けたのと、同じ害である。**
+
+**二つ。この2つが運ぶのは、run の成否ではない。**
+**「表明に書かれた識別子が、このカンバンに載っていないので Status を動かせませんでした」という助言であり**
+（[internal/orchestrator/lifecycle.go:433-434](../../internal/orchestrator/lifecycle.go#L433-L434)）**、
+いまの実装も、落ちたら `Warn` を1行出すだけである**（[435-437行](../../internal/orchestrator/lifecycle.go#L435-L437)）。
+**別の issue の番号の書き間違いを伝える1件のために、走っている run を止める利得は無い。**
 
 **hold を1本目で書いてよい。**
 **持ち回りのコメントは機械どうしの取り決めで、人間が画面で読むものではない**
@@ -9453,11 +9510,18 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 [internal/orchestrator/comment.go:509-515](../../internal/orchestrator/comment.go#L509-L515) が
 **「continuo が issue へ書くものは、例外なくここを通す」**と書いている。
 **エージェントが `gh` で直接書くコメントは、いまその関門の外に居る。**
-**ただし、検査そのものを組み替えるのは別の issue とする**（この pull request では触らない。得るものが0人ぶんのため）。
-**つまり `continuo comment` が `Paths` を通すことは、当面は機械で守られない。**
-**[test/internal/redact/single_choke_point_test.go:26](../../test/internal/redact/single_choke_point_test.go#L26) の
-`orchestratorDir` が `internal/orchestrator` に固定されており、`internal/cli` を1バイトも読まないためである。**
-**follow-up の issue へ、そのことを書く。**
+**`continuo comment` が `Paths` を通すことも、この設計で機械に守らせる。**
+
+**いまの検査は届かない。**
+[test/internal/redact/single_choke_point_test.go:26](../../test/internal/redact/single_choke_point_test.go#L26) の
+`orchestratorDir` が `internal/orchestrator` に固定されていて、`internal/cli` を1バイトも読まない。
+**対象のディレクトリを足すだけでは届かない。**同じファイルの
+[80-94行](../../test/internal/redact/single_choke_point_test.go#L80-L94) の `isTrackerPostComment` が
+**受け手を `o.tracker` に固定している**ためで、`internal/cli` の呼び出しはその形にならない。
+
+**だから検査を1本足す。**対象は `internal/cli`。
+**`PostComment` を呼ぶファイルは、同じファイルの中で `redact.Paths` も呼んでいること。**
+**既にある検査は1バイトも変えない。**あちらは `internal/orchestrator` の迂回を止めるためのもので、目的が違う。
 
 #### `continuo comment` の輪郭
 
@@ -9566,13 +9630,11 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 > このアクセストークンはファイルには出力しない。
 （2026-09-08）
 
-#### 資格情報を新しく作るのは、この設計ではない
+#### 資格情報を新しく作る経路は、3-82g にある
 
-**`~/.continuo/github-app-credentials.json` を作る経路は、別の issue が受け持つ。**
-**この設計は、そのファイルを読み、更新用のトークンを回すたびに書き戻す。**
-**新しく作る経路だけが、別の issue である。**
-**そちらが出るまで、`github_app_attribution` を `true` にできる人は居ない。**
-**既定が `false` なので、それで1つも壊れない。**
+**`~/.continuo/github-app-credentials.json` を作るのは、ダッシュボードの画面である**（3-82g）。
+**この節が受け持つのは、そのファイルを読み、更新用のトークンを回すたびに書き戻すところだけである。**
+**既定が `false` なので、画面を通していない人の手元では、この経路が1度も走らない。**
 
 #### hook の門に掛かるが、挙動は変わらない
 
@@ -9750,7 +9812,15 @@ issue でいちばん人目に付く。**
 
 **指示書へ1行足す。**「**投稿が失敗したとき、`gh issue comment` へ切り替えて投稿し直さないでください。
 投稿せずに `blocked` で返してください**」。
-**「お願い」で塞ぐ形なので完全ではない。****機械で止めるのは follow-up の issue とする。**
+**「お願い」で塞ぐ形なので完全ではない。****それでも、この設計では機械で止めない。**
+
+**止めるには、エージェントの `Bash` が渡せる引数を絞ることになる**
+（[internal/config/default.go:174-182](../../internal/config/default.go#L174-L182) の `Allow` は、いまツール名しか見ていない）。
+**それは `PreToolUse` の hook を1本増やすか、いまの hook の解釈を変えるかのどちらかになる。**
+**[CLAUDE.md](../../CLAUDE.md) は、hook の挙動が変わる変更を、実装の前に人間へ見せて許可を得ることを求めている。**
+**この issue に hook のことは1行も書かれていない。**だから、ここでは止めない。
+**代わりに、切り替えられたことは画面で分かる。**`gh` で書き直したコメントには attribution が付かないので、
+**人間が読んだときに「機械が書いたのに印が無い」として見える。**
 
 ### 3-82f. 認可した人と `gh` の持ち主を突き合わせる
 
@@ -9767,8 +9837,32 @@ issue でいちばん人目に付く。**
 | --- | --- |
 | **認可が終わった直後** | **そのトークンで `viewer` を引き、`gh api user` と突き合わせる。**通ったら `authorized_login` を書く |
 | **違っていたら** | **その場で画面へ出す。**「`gh` は A、認可したのは B です」と両方を並べる |
-| **起動時の検査** | **`authorized_login` と `gh api user` を突き合わせる。****トークンは取らない**（取ると更新用のトークンが回る）。違っていたら起動しない |
+| **起動時の検査** | **`authorized_login` と `gh api user` を突き合わせる。****ここでトークンは取らない**（3-82c が同じ起動で既に1回取っているので、突き合わせのために2回転させない）。違っていたら起動しない |
+| **`gh api user` が取れなかった** | **突き合わせを行わずに起動する。**WARN を1行出すだけにする（下） |
 | **`continuo doctor`** | **`authorized_login` と `gh api user` を突き合わせる。トークンは1度も取らない** |
+
+#### `gh api user` が取れなかったときは、突き合わせずに起動する
+
+**このコードベースは既に「取れなくても止めない」を2箇所で決めている。**
+
+- [internal/orchestrator/orchestrator.go:727-728](../../internal/orchestrator/orchestrator.go#L727-L728) —
+  「**取れなくても起動も巡回も止めない。**止めると、`gh api` に一時的に届かないだけで continuo が動かなくなる」
+- [internal/tracker/ghuser.go:35-36](../../internal/tracker/ghuser.go#L35-L36) —
+  「**呼び出し側はこのエラーで起動を止めない**（設計 3-65）」
+
+**ここで「取れなければ止める」を選ぶと、`gh api` に一瞬届かないだけで continuo が起動しなくなる。**
+**この issue に1行も書かれていない理由で、既にある2つの決定を逆転させることになる。**
+**逆に、書かずに実装へ渡すと、実装者がどちらかを自分で選ぶ。**だからここで決める。
+
+**取れなかった起動で守りが働かないのは、そのとおりである。**
+**それでよい理由は、この検査が守るのが「初日から恒久的に続くずれ」だからである。**
+**恒久的なずれは、次に `gh api` が届いた起動で必ず捕まる。**
+
+**差し替え口を `Options` へ足す。**
+**`runStartupChecks` は `o.selfLogin` を持たない**（あれは `ensureGHLogin` が巡回のなかで遅れて取るもので、
+起動時の検査はその前に走る）。**だから起動時の検査は `gh api user` を自分で1回叩く。**
+**差し替え口が無いと、テストが本物の `gh api user` を叩き、
+検査結果が「テストを走らせたマシンで誰がログインしているか」で変わる。**
 
 **走っている最中に `gh auth switch` を叩かれた場合は、拾わない。**
 **拾う周期が無いためである。**
@@ -9794,6 +9888,119 @@ WARN を1行出すだけで走り続けるが、ここでは止める。**理由
 **この表を書かずに実装へ渡すと、実装者が既存の作法（WARN）に合わせて弱める。**
 
 **違ったまま起動させない。**あとで気づくと、その間の run が全部失われている。
+
+### 3-82g. App を作る導線を、ダッシュボードの画面に置く
+
+**言いたいこと。****App の作成は、人間が GitHub の設定画面で手入力するのではなく、
+`continuo` のダッシュボードのボタンから行う。**
+**押す前に、そのボタンが何をするかを画面へ出す。**設定の間違いを人間の手に残さないためである。
+
+**人間の決定（2026-09-08）。**
+
+> github app自体の作成をもっと自動化できないの?
+> 人間が操作すると設定間違いする場合もあるので、自動化したい
+
+> ボタンを押すと何が起こるのか、どういう仕組なのかを人間に提示しておかないと、怖がって人間がボタンを押せない。
+> 画面上で説明するようにして。installするときも同様
+
+> 問題は、webサーバ立ち上げる必要があるんだろうから、どういう導線で立ち上げるかだね。
+> continuo -port=8080で立ち上げるwebサーバの中にgithub app作成ボタン付けとけばいいのかな?
+
+#### 全体の流れ
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as 人間（ブラウザ）
+    participant D as continuo のダッシュボード
+    participant GH as github.com
+    participant F as 資格情報のファイル
+    H->>D: /github-app を開く
+    D-->>H: 段1の説明。何を作り、何の権限を与えるかを並べる
+    H->>D: 「GitHub App を作る」を押す
+    D->>GH: manifest を POST（名前・権限・戻り先を continuo が組む）
+    GH-->>H: GitHub の確認画面
+    H->>GH: 作成を承認
+    GH-->>D: /github-app/created?code=... へ戻る
+    D->>GH: code を資格情報へ交換
+    GH-->>D: client_id / client_secret / 秘密鍵
+    D->>F: client_id と client_secret だけ書く（秘密鍵は捨てる）
+    D-->>H: 段2の説明。install で何が起きるかを並べる
+    H->>GH: install を承認
+    GH-->>D: /github-app/installed?installation_id=... へ戻る
+    D-->>H: 段3の説明。認可で何が起きるかを並べる
+    H->>GH: 認可を承認
+    GH-->>D: /github-app/authorized?code=... へ戻る
+    D->>GH: code を更新用のトークンへ交換
+    D->>F: 更新用のトークンと期限と authorized_login を書く
+    D-->>H: 完了。認可したアカウント名を出す
+```
+
+#### 画面は4枚。押す前に必ず説明を出す
+
+| 画面 | 押す前に何を出すか | 押すと何が起きるか |
+| --- | --- | --- |
+| **段1（作る）** | **App の名前・与える権限2つ**（`Issues` の読み書き、`Metadata` の読み取り）**・戻り先の URL・「まだ何も書き込みません」** | GitHub の確認画面へ移る |
+| **段2（install）** | **どのリポジトリへ入れるか・「入れた先の issue にだけコメントできます」・「あとから GitHub の画面で外せます」** | GitHub の install の画面へ移る |
+| **段3（認可）** | **「ここから先、機械の投稿はあなたの名前のまま『– with <App の表示名>』が付きます」・約6か月で切れること** | GitHub の認可の画面へ移る |
+| **段4（完了）** | — | **認可したアカウント名を出す。**`gh api user` と違っていたら、その場で両方を並べる（3-82f） |
+
+**説明は inline の HTML で書く。**ダッシュボードは script を1つも読まない
+（[internal/server/server.go:452-462](../../internal/server/server.go#L452-L462) の
+`default-src 'none'` と `style-src 'unsafe-inline'`）。**その方針は変えない。**
+
+#### CSP を、この4枚だけ緩める
+
+**いまのダッシュボードは `form-action 'none'` を送っている**
+（[internal/server/server.go:455-456](../../internal/server/server.go#L455-L456)）。
+**`form-action` は `default-src` に落ちてこない別の指令なので、明示的に書いてある。**
+**このままだと、manifest を github.com へ POST する form が、ブラウザ側で止まる。**
+
+**この4枚に限り `form-action https://github.com` にする。**
+**ダッシュボードの他の画面は `'none'` のままにする。**
+**1枚のためにサーバ全体を緩めない。**
+
+#### 順序。資格情報が無いあいだは `github_app_attribution` を `false` にしておく
+
+**3-82c は「`true` なのにトークンが取れなければ起動しない」と決めている。**
+**`true` のまま資格情報が無いと、continuo が起動せず、ダッシュボードも立たず、App を作る画面へ辿り着けない。**
+
+**だから順序を決める。**
+
+| 順 | 何をするか |
+| --- | --- |
+| **1** | `github_app_attribution` は既定の `false` のまま、`server.port` を書いて continuo を起動する |
+| **2** | ダッシュボードの `/github-app` から段1〜段4 を通す |
+| **3** | `github_app_attribution` を `true` にして continuo を再起動する |
+
+**`server.port` を書いていない人は、この画面を開けない。**
+**`continuo doctor` が、`github_app_attribution` が `true` で資格情報が無く、`server.port` も無いときに、
+「`server.port` を書いて起動し、`/github-app` を開いてください」と出す。**
+**専用のサブコマンドは作らない。**人間が出した案がダッシュボードだからであり、
+**入口を2つにすると、どちらで作ったかで資格情報の置き場所が変わりうる。**
+
+#### 実測してあること
+
+**2026-09-08 に、専用の App を1つ作って通した。**
+
+| 何 | 実測 |
+| --- | --- |
+| **manifest から App を作れるか** | **作れた**（`continuo-manifest-test`） |
+| **`hook_attributes.url` に `http://127.0.0.1:8931/` を書くと** | **GitHub が断る。**`Hook url is not supported because it isn't reachable over the public Internet (127.0.0.1)` と `Hook is invalid` の2行 |
+| **戻り先の URL に `127.0.0.1` を書くと** | **咎められない。**同じ 127.0.0.1 でも、webhook の欄だけが弾かれる |
+| **install のあとの戻り先** | `http://127.0.0.1:8931/oauth?code=…&installation_id=…&setup_action=install` へ来た。**そのパスを配っていなかったので 404 になった** |
+| **人間の代理として投稿する認可** | **通った。**アクセストークン28800秒、更新用のトークン15638399秒、頭は `ghu_` |
+
+**この設計は webhook を1つも使わない。**だから manifest に `hook_attributes` を書かない。
+
+#### 実装の前に測る2件（この節のぶん）
+
+| 何を測るか | 測らないとどうなるか |
+| --- | --- |
+| **`hook_attributes` を manifest から省いたときに、GitHub が App を作るか** | **省けないなら、公開の URL を1つ用意することになる。**その場合、この節の導線ごと作り直しになる |
+| **manifest を GET のクエリで渡せるか。渡せないなら form の POST になる** | **POST なら、上の CSP の緩めが要る。**GET で足りるなら緩めなくてよい |
+
+**どちらも、App を1つ作れば1回で分かる。**
 
 ## 4. 人間が決めたこと
 
