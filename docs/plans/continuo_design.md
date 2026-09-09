@@ -5219,7 +5219,7 @@ release は1つも作られない。**インストーラーは release が無け
 
 | OS | 命令セット |
 | --- | --- |
-| macOS | Apple Silicon / Intel |
+| macOS | GitHub Apple Silicon / Intel |
 | Linux | x86-64 / arm64 |
 
 **Windows は作らない**（3-32b）。インストーラーは Windows を見つけたら **WSL2 を使うよう案内して止まる。**
@@ -8060,7 +8060,7 @@ Status を割り当てる8つのキーだけで、**雛形にあって設定に�
 | --- | --- | --- | --- |
 | GNU patch 2.7.6（ubuntu 24.04） | 当たる | **捨てる** | 当たる |
 | GNU patch 2.8（ubuntu 26.04 / debian trixie） | 当たる | **捨てる** | 当たる |
-| Apple patch 2.0-12u11（macOS） | 当たる | 当たる | 当たる |
+| GitHub Apple patch 2.0-12u11（macOS） | 当たる | 当たる | 当たる |
 
 **macOS の `/usr/bin/patch` はこの検査を持たない。**だから
 **手元で当たることは、利用者の手元で当たることの根拠にならない。**
@@ -9071,17 +9071,17 @@ sequenceDiagram
 
 | 何を測るか | 偽だったら何が崩れるか |
 | --- | --- |
-| **GraphQL の `addComment` で投稿したコメントに、画面の attribution が出るか**（偽なら、本体の投稿も REST へ移す。`continuo comment` が REST を採った理由は `Adapter` がカンバンの設定を要ることで、本体には当たらない） | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
-| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだに `continuo comment` が何度も回す**（3-82d）。**無効になるなら、本体は投稿のたびに 401 を受け、資格情報を読み直してトークンを取り直し、1回だけ再送する**（3-82d）。
+| **GraphQL の `addComment` で投稿したコメントに、画面の attribution が出るか**（偽なら、本体の投稿も REST へ移す。**エージェントの投稿も `gh` が GraphQL を使うので、同じ検査で決まる**） | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
+| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだにエージェントが `continuo github-app token` を何度も叩いて回す**（3-82d）。**無効になるなら、本体は投稿のたびに 401 を受け、資格情報を読み直してトークンを取り直し、1回だけ再送する**（3-82d）。
 **投稿は通る。****落ちるのではなく、更新用のトークンの回転が投稿の件数ぶん増える。**
 **書き戻しの直前で落ちる機会が、そのぶん増える。**
 **この門は「止める」ためではなく、回転の見積りを直すために測る。****測り方は、更新を1回通したあと、更新前のトークンで `GET /user` を叩いて 200 が返るかを見るだけである** |
 
 #### 採る経路
 
-**App が人間の代理として投稿する経路（user-to-server token）である。**
+**GitHub App が人間の代理として投稿する経路（user-to-server token）である。**
 
-**2つの経路を、専用の App を1つ作って実測した**（2026-09-08。検証用のリポジトリの
+**2つの経路を、専用の GitHub App を1つ作って実測した**（2026-09-08。検証用のリポジトリの
 issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [docs/test_environment.md](../test_environment.md)）。
 
 | 何 | **user-to-server（採る）** | installation（採らない） |
@@ -9094,7 +9094,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **GraphQL の `addComment`** | **叩ける。**投稿者も `OWNER` も `performed_via_github_app` も、REST と同じ。**画面は測っていない** | 測っていない |
 | **編集（REST の `PATCH`）** | **attribution は残る。**書き足しても消えない | 測っていない |
 | **attribution の無いコメントを編集** | **attribution は付かない。**`null` のままである | 測っていない |
-| **attribution の付いたコメントを、App でないトークンで編集** | **attribution は残る。**人間が画面から直しても消えない | 測っていない |
+| **attribution の付いたコメントを、GitHub App でないトークンで編集** | **attribution は残る。**人間が画面から直しても消えない | 測っていない |
 
 **`user.login` の行から、もう1つ導ける。**
 **エージェントが自分の投稿を探す段1 が見ている `.viewerDidAuthor` は、真のままである**
@@ -9105,7 +9105,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **`author_association` の行が、この設計の分かれ目である。**門は `OWNER` / `MEMBER` / `COLLABORATOR` しか通さないので、
 **`NONE` になる経路を採ると、このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（3-82a）。
 
-**編集の3行から、1つの決定が出る。****書き足し（`PATCH`）には App のトークンを掛けない。**
+**編集の3行から、1つの決定が出る。****書き足し（`PATCH`）には GitHub App のトークンを掛けない。**
 **掛けても attribution は付きも消えもしないので、画面の表示が1文字も変わらない。**
 
 #### 画面に実際に出るもの
@@ -9115,10 +9115,10 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | どちらの経路で書いたか | 画面に並ぶもの |
 | --- | --- |
-| **人間の代理（採る）** | **人間本人のログイン名** / **`– with <App の表示名>`** / **`Author`** |
-| App 自身（採らない） | `<App の slug>` / **`bot`** / **`– with <App の表示名>`** |
+| **人間の代理（採る）** | **人間本人のログイン名** / **`– with <GitHub App の表示名>`** / **`Author`** |
+| GitHub App 自身（採らない） | `<GitHub App の slug>` / **`bot`** / **`– with <GitHub App の表示名>`** |
 
-**両方に `– with <App の表示名>` が付く。****これが、人間が画面で見分ける手がかりである。**
+**両方に `– with <GitHub App の表示名>` が付く。****これが、人間が画面で見分ける手がかりである。**
 
 **この表示は API から取れない。**REST の `application/vnd.github.html+json` が返すのは
 本文の HTML（`body_html`）だけで、投稿者の表示は入らない。
@@ -9126,7 +9126,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **機械が判定するなら REST の `performed_via_github_app` を見る。人間は画面のこの行を見る。**
 
 **公式ドキュメントは identicon のバッジが出ると書いているが、実測では見えなかった。**
-**出たのは `– with <App の表示名>` の1行である。**案内にはそちらを書く。
+**出たのは `– with <GitHub App の表示名>` の1行である。**案内にはそちらを書く。
 
 ### 3-82a. 採らなかった3つの案と、その否定根拠
 
@@ -9143,7 +9143,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 > 今の設計だと、マーカーは不要の前提で設計できるよね。もうコード書いてあるなら、一旦それは破棄して。
 
-#### 二、App 自身として投稿する（installation token）
+#### 二、GitHub App 自身として投稿する（installation token）
 
 **投稿者が `<app>[bot]` に変わると、4つが同時に壊れる。**
 **下の表は2行だが、1行目の中に3つ畳まれている**（成果の判定・持ち回りの入札・死活の時計）。
@@ -9157,11 +9157,11 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 > **本文は第三者にも書けるので、他の continuo の名前を騙られると、騙られたほうは `HasBidBy` が真になって、その回は入札しない**
 
-**App は、その「騙れない投稿者」を、全機械で共有される1つの名前に変えてしまう。**
+**GitHub App は、その「騙れない投稿者」を、全機械で共有される1つの名前に変えてしまう。**
 
-#### 三、カンバンの読み書きも App へ移す
+#### 三、カンバンの読み書きも GitHub App へ移す
 
-**できない。**App のトークンで、人間が持つ Projects v2 を読むと `FORBIDDEN` が返る（2026-09-08 に実測）。
+**できない。**GitHub App のトークンで、人間が持つ Projects v2 を読むと `FORBIDDEN` が返る（2026-09-08 に実測）。
 
     {"type": "FORBIDDEN", "path": ["repositoryOwner", "projectV2"], "message": "Resource not accessible by integration"}
 
@@ -9179,10 +9179,10 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **人間** | **付かない。**それが正しい |
 | **人間と直接やりとりしている Claude Code**（continuo の外） | **付けられる。**ただし強制はしない（この節の下） |
 
-**4つ目には、`continuo comment` という手段を用意する。**
+**4つ目には、`continuo github-app token` という手段を用意する。**
 **そのセッションも同じサブコマンドを叩けるので、 attribution を付けられる。**
 **[docs/FAQ.md](../FAQ.md) で案内する。**
-**「`~/.continuo/github-app-credentials.json` を置いてある人は、continuo の外で走るセッションからも `continuo comment` を使えます」と書く。**
+**「`~/.continuo/github-app-credentials.json` を置いてある人は、continuo の外で走るセッションからも `GH_TOKEN=$(continuo github-app token) gh issue comment …` を使えます」と書く。**
 **条件を落としてはならない。**資格情報は 3-82g の画面を通した人しか持たないので、
 **この設計が入った時点では、資格情報を持つ利用者が1人も居ない。**
 
@@ -9198,7 +9198,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 > 範囲に入れたいが、PR権限書き込み権限増えると秘密鍵漏れた時危なくない? issueの書き込みだけなら被害は少ないと思うが
 
-#### App に与える権限
+#### GitHub App に与える権限
 
 | 何 | 何を許すか |
 | --- | --- |
@@ -9214,7 +9214,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | 何 | どこへ | 権限 |
 | --- | --- | --- |
-| **App の資格情報** | `~/.continuo/github-app-credentials.json` | `0600` |
+| **GitHub App の資格情報** | `~/.continuo/github-app-credentials.json` | `0600` |
 | **秘密鍵** | **置かない**（作成のときに返るが、捨てる） | — |
 
 **秘密鍵を置かないことは、人間が決めた**（2026-09-09）。
@@ -9249,14 +9249,14 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | いつ | 何を書くか |
 | --- | --- |
-| **App を作った直後** | `client_id` と `client_secret` |
+| **GitHub App を作った直後** | `client_id` と `client_secret` |
 | **認可を通した直後** | `refresh_token` と `refresh_token_expires_at` と `authorized_login` |
 
 **どちらも一時ファイルへ書いてから `os.Rename` で差し替える**（[CLAUDE.md](../../CLAUDE.md) の「一時ファイルへ書いてから差し替える」）。
 **書き戻すときは、新しい更新用のトークンと、その新しい期限を一緒に書く。**
 **期限を書き戻さないと、最初の認可から181日目に、資格情報が生きているのに全部止まる。**
 
-**実測**（2026-09-09。専用の App で web flow を1回通した）。
+**実測**（2026-09-09。専用の GitHub App で web flow を1回通した）。
 
 | 何 | 実測値 |
 | --- | --- |
@@ -9309,7 +9309,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | --- | --- |
 | **continuo 本体** | **WARN を1行出して、そのまま読む。**止めない |
 | **`continuo doctor`** | **`✗` を出す。**直し方（`chmod 600`）も一緒に出す |
-| **`continuo comment`** | **本体と同じ。**WARN を1行出して、そのまま読む |
+| **`continuo github-app token`** | **本体と同じ。**WARN を1行出して、そのまま読む |
 
 **本体で止めない理由。**止めると、**権限を直す案内が出る場所（doctor）へ到達する前に落ちる。**
 **`github_app_attribution` が `true` なら continuo ごと起動しないので、doctor を叩けと言う相手が居ない。**
@@ -9327,11 +9327,11 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | 何が漏れると | 何ができるか | いつまで |
 | --- | --- | --- |
-| **秘密鍵** | App 自身として動くトークンを作り放題 | **無期限** |
+| **秘密鍵** | GitHub App 自身として動くトークンを作り放題 | **無期限** |
 | **`client_secret` と更新用のトークン**（この設計が置くもの） | 人間の代理として動くトークンを作り放題 | **約6か月** |
 | アクセストークンだけ | **そのトークンで issue へ書ける。**新しいトークンは作れない | **8時間** |
 
-**どれも App の権限の範囲を超えない。**
+**どれも GitHub App の権限の範囲を超えない。**
 **だから、権限を `Issues` だけにすることが、いちばん効く守りである。**
 **秘密鍵を置かないのは、無期限を6か月へ縮める効果しか無い。**それでも縮める価値はある。
 
@@ -9381,16 +9381,78 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **5-2 には `comments:` が2つある。**先に出るのが `tracker.provider.comments`（GitHub から何件どの順で取るか）で、
 **25行しか離れていない。****足すのは下の `tracker.comments` のほうである。**
 
-**チームで WORKFLOW.md を共有する形は、この設計では非対応とする。**
-**1人が `true` にすると、資格情報を持たない同僚の continuo は次の起動で止まる。**
-**2人目以降へ `client_id` と `client_secret` を渡す経路が無いためである**（WORKFLOW.md は commit される）。
-**既定の `false` のままなら起きない。**
+**チームで WORKFLOW.md を共有する形に対応する。**
+
+**人間の決定（2026-09-09）。**
+
+> チーム間でWORKFLOW.mdは共有する。
+
+**WORKFLOW.md は commit される。**そこに `true` と書けば、チーム全員の continuo が `true` で動く。
+**資格情報は人ごとに違う。**user-to-server token は「誰の代理か」を持つので、共有できない。
+**だから「共有するもの」と「人ごとに持つもの」を分ける。**
+
+| 何 | どこに置くか | 共有するか |
+| --- | --- | --- |
+| **`github_app_attribution`** | WORKFLOW.md（commit される） | **する。**チームで1つ |
+| **GitHub App そのもの** | GitHub 上 | **しない。人ごとに1つ作る**（下） |
+| **`client_id` / `client_secret` / 更新用のトークン** | `~/.continuo/github-app-credentials.json` | **しない。**commit されない場所にある |
+
+#### GitHub App は、人ごとに1つ作る
+
+**1つの GitHub App をチームで使い回さない。**
+**使い回すには `client_secret` を人から人へ渡すことになり、その経路が無い**（WORKFLOW.md は commit されるので置けない）。
+
+**人ごとに作れば、渡すものが1つも無くなる。**
+**3-82g の画面が作成を自動化しているので、各自が1回ボタンを押すだけである。**
+
+**名前が衝突しないようにする。**GitHub App の名前は GitHub の中で世界に1つしか取れない。
+**画面が入れる既定の名前は `continuo-<gh api user のログイン名>` にする。**
+**それでも取られていたら、GitHub がエラーを返すので、画面で名前を直して押し直せるようにする。**
+
+**人ごとに別の GitHub App になるので、画面に出る `– with <GitHub App の表示名>` も人ごとに変わる。**
+**これは失うものではなく、得るものである。**どの機械が書いたのかが、画面から分かる。
+
+#### まだ設定していない同僚が、どうなるか
+
+**`true` の WORKFLOW.md を pull しただけの人は、資格情報を持っていない。**
+**その人の continuo は起動しない**（この節の「取れないときに止める」）。
+**人間の決定「アクセストークンが取得できなかったならエラーで停止して良い」のとおりである。**
+
+**止めたままにしない。何をすればよいかを、その場で出す。**
+
+    github_app_attribution が true ですが、GitHub App の資格情報がありません。
+    続けるには、次のどちらかを行ってください。
+
+      1. この機械で1回だけ設定する
+         continuo を server.port を書いた状態で起動し、
+         http://127.0.0.1:<port>/github-app を開いてボタンを3回押してください。
+         かかる時間は1分ほどです。
+
+      2. この機械では attribution を付けない
+         WORKFLOW.md の tracker.comments.github_app_attribution を false にしてください。
+         ただし WORKFLOW.md は commit されるので、チーム全員に効きます。
+
+**2つ目を書くのは、その人が急いでいるときに逃げ道を1本残すためである。**
+**書かないと、その人は「チームの設定を勝手に変えてよいのか」を判断できずに止まる。**
+
+**`continuo doctor` も同じ文面を出す。**
+**起動しない状態では doctor しか叩けないので、片方だけに書くと届かない。**
+
+#### `server.port` を書いていない同僚は、画面を開けない
+
+**その人には、`server.port` を書いて1度起動してもらう。**
+**上の文面の1つ目に、その手順まで書く。**
+
+**`server.port` は commit される WORKFLOW.md にある**（5-2）。
+**チームで1つの値になるので、同じポートを2人が同時に使うことは、同じ機械でしか起きない。**
+**同じ機械で2本動かしている人は、2本目の待ち受けが失敗する。**
+**これは `github_app_attribution` を入れる前からある挙動で、この設計では変えない。**
 
 #### 取れないときに止める
 
 **`true` のときは、起動時に1回だけ実際にトークンを取り、通らなければ起動しない。**
 **取ると更新用のトークンが回る。**書き戻しの直前で落ちれば、認可のやり直しになる（3-82b）。
-**それでも起動時に取るのは、doctor では捕まえられない故障があるためである**（App を消した・install を外した・secret を作り直した）。
+**それでも起動時に取るのは、doctor では捕まえられない故障があるためである**（GitHub App を消した・install を外した・secret を作り直した）。
 
 **起動時の検査は `Adapter` のメソッドを呼ぶ。**トークンを取る関数を直に呼んではならない。
 **使い回しの置き場所は `Adapter` なので**（3-82d）**、関数を直に呼ぶと起動のたびに2回転する。**
@@ -9400,7 +9462,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **ただし、書く相手のトークンは選べるようにする。**
 [internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の `PostComment` へ、
-**引数を1つ足す**（`useAppToken bool`）。
+**引数を1つ足す**（`useGitHub AppToken bool`）。
 
 **「interface も検査の偽物も1文字も変わらない」は撤回する。**
 **実装は2つしか無い**（[internal/tracker/adapter.go:1188](../../internal/tracker/adapter.go#L1188) の本物と、
@@ -9412,7 +9474,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **`PostComment` という名前ちょうど**なので、引数が増えても検査は落ちない。
 
 **振り分けないと、循環する。**
-**App のトークンが取れなかったこと自体が原因で `blocked` に落ちた run では、
+**GitHub App のトークンが取れなかったこと自体が原因で `blocked` に落ちた run では、
 理由を書く投稿も同じトークンを要求して落ちる。**
 **1件も書けず、issue には何も残らない。**
 
@@ -9436,7 +9498,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **この設計が足すのは、それを GitHub の画面でも見えるようにすることである。**
 **1件だけ画面で見えなくても、マーカーは付いているので判定は壊れない。**
 
-**どれを2本目（App のトークン）で書くか。**
+**どれを2本目（GitHub App のトークン）で書くか。**
 
 | 何 | どちらで書くか | なぜ |
 | --- | --- | --- |
@@ -9464,9 +9526,9 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 （[internal/orchestrator/restore.go:748](../../internal/orchestrator/restore.go#L748)・
 [773行](../../internal/orchestrator/restore.go#L773)・[893行](../../internal/orchestrator/restore.go#L893)）。
 
-**App のトークンが取れない状態で continuo を再起動すると、この3つが動く。**
+**GitHub App のトークンが取れない状態で continuo を再起動すると、この3つが動く。**
 **2本目で書くと、Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1行も残らない。**
-**2本目で書くと、App のトークンが取れずに止まった run では、理由も書けずに何も残らない。**
+**2本目で書くと、GitHub App のトークンが取れずに止まった run では、理由も書けずに何も残らない。**
 **attribution は付かないが、`<!-- continuo:self -->` は付くので、機械が書いたことは従来どおり判定できる。**
 
 **止まり方は、経路で違う。**
@@ -9475,7 +9537,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | --- | --- |
 | **起動時に取れない** | **起動しない。**人間が「エラーで停止して良い」と決めた |
 | **走行中に取れなくなった**（2本目で書く4つ） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない。カンバンも止めない** |
-| **1本目で書く8つ**（持ち回りの3種・引き渡しの通知・`moveToFailure` ほか） | **落ちない。**App のトークンを使わないので、取れなくても影響しない |
+| **1本目で書く8つ**（持ち回りの3種・引き渡しの通知・`moveToFailure` ほか） | **落ちない。**GitHub App のトークンを使わないので、取れなくても影響しない |
 
 **走行中に落ちたとき、run を `blocked` にしてはならない。7つとも同じ落ち方にする。**
 
@@ -9542,7 +9604,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 ### 3-82d. 投稿の経路。continuo が全部書く
 
 **言いたいこと。****エージェントにトークンを配らない。**
-**エージェントは `continuo comment` に投稿を委譲し、continuo が資格情報を読んで自分で GitHub を叩く。**
+**エージェントは `continuo github-app token` でトークンだけを取り、投稿は `gh` がそのまま行う。**
 **そうすると、資格情報は1つのプロセスの中に閉じる。**
 
 #### 6-27 が「Go の経路を作らない」と決めたことと、衝突しない
@@ -9558,70 +9620,94 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 > **作業の全体を要約したものではない。**continuo にはそれを判断する材料が無い。
 
 **書いてあるのは「誰が文章を組み立てるか」である。**
-**`continuo comment --body-file done.md` は、1文字も組み立てない。**
+**`continuo github-app token` は、1文字も組み立てない。**
 **エージェントが書いたファイルを受け取って送るだけである。**
 
-#### なぜ配らないか
+#### continuo は投稿の口を持たない。トークンだけを返す
 
-**配る形は、約330行の仕組み**（トークンを返すコマンド・ロック・`case` の門・attribution を見る `gh api`）**を要求する。**
-**そこまで払っても、守れる不変条件は「エージェントが指示書どおりに振る舞う限り」でしかない。**
-**エージェントの `Bash` は引数を限定せずに許可されており**
-（[internal/config/default.go:174-182](../../internal/config/default.go#L174-L182) の `Allow` はツール名だけ）、
-**素の `gh issue comment` を止めるものが無いためである。**
+**人間の決定（2026-09-09）。**
 
-**委譲すると、`true` のときは絶対パスの漏れも機械で塞がる。**
-[internal/orchestrator/comment.go:509-515](../../internal/orchestrator/comment.go#L509-L515) が
-**「continuo が issue へ書くものは、例外なくここを通す」**と書いている。
-**エージェントが `gh` で直接書くコメントは、いまその関門の外に居る。**
-**`continuo comment` が `Paths` を通すことも、この設計で機械に守らせる。**
+> issue本文を新規投稿する、issueコメントを追加する、本文やコメントを編集する、コメントを削除する。
+> これら全部continuo側でサポートするつもりか?
 
-**いまの検査は届かない。**
-[test/internal/redact/single_choke_point_test.go:26](../../test/internal/redact/single_choke_point_test.go#L26) の
-`orchestratorDir` が `internal/orchestrator` に固定されていて、`internal/cli` を1バイトも読まない。
-**対象のディレクトリを足すだけでは届かない。**同じファイルの
-[80-94行](../../test/internal/redact/single_choke_point_test.go#L80-L94) の `isTrackerPostComment` が
-**受け手を `o.tracker` に固定している**ためで、`internal/cli` の呼び出しはその形にならない。
+**しない。**エージェントが issue に対して行う操作は、この4つだけでは終わらない。
+**continuo が全部を持つと、`gh` の一部を作り直すことになる。**
 
-**だから検査を1本足す。**対象は `internal/cli`。
-**`PostComment` を呼ぶファイルは、同じファイルの中で `redact.Paths` も呼んでいること。**
-**既にある検査は1バイトも変えない。**あちらは `internal/orchestrator` の迂回を止めるためのもので、目的が違う。
+**代わりに、アクセストークンを標準出力へ1行返す。**投稿は `gh` がそのまま行う。
 
-#### `continuo comment` の輪郭
+    GH_TOKEN=$(continuo github-app token) gh issue comment {{.issue.url}} --body-file done.md
+
+**`gh` は `GH_TOKEN` で認証を差し替えられる。**
+**だから、いま指示書に書いてあるコマンドの前に1つ足すだけで、attribution が付く。**
+**`gh issue edit` でも `gh issue create` でも、同じ足し方で効く。**
+
+**人間の元の決定に戻したものである**（2026-09-08）。
+
+> それが揃っている時にcontinuo githubapp を実行するとアクセストークンが標準出力に返される。
+> このアクセストークンはファイルには出力しない。
+
+> 標準出力に出す方針にしたのは、シェルスクリプトなりgoなりでアクセストークンを受け取ることで、
+> AIに渡らない構造を作ることができるから。
+
+#### トークンがエージェントの記録に残らない理由
+
+**`$( )` の値は、子プロセスの環境変数へ入るだけである。**
+**エージェントの画面にも、その会話の記録にも、トークンの文字は1度も現れない。**
+
+**残るものと残らないものを分ける。**
+
+| 何 | トークンが見えるか |
+| --- | --- |
+| **エージェントの画面と会話の記録** | **見えない。**`$( )` の中身は展開された結果が表示されない |
+| **その `gh` の子プロセスの環境変数** | **見える。**同じ利用者の他のプロセスと、root から読める |
+| **`ps` の引数の一覧** | **見えない。**環境変数は引数ではない（`ps -E` を明示的に叩いた場合だけ見える） |
+
+**指示書には「値を表示しない」と書く。**
+**`continuo github-app token` の出力を、そのまま `echo` させたり、ファイルへ落とさせたりしない。**
+**必ず `GH_TOKEN=$(…)` の形で使わせる。**
+
+#### `continuo github-app token` の輪郭
 
 | 何 | 決めたこと |
 | --- | --- |
-| **投稿に使う口** | **REST。**`POST /repos/{owner}/{repo}/issues/{number}/comments` |
+| **引数** | **無し** |
+| **標準出力へ出すもの** | **アクセストークンを1行だけ。**改行以外は何も付けない |
+| **標準エラーへ出すもの** | 警告（資格情報の権限が `0600` でないなど）。**トークンは1文字も出さない** |
 | **読むもの** | **`~/.continuo/github-app-credentials.json` だけ**（WORKFLOW.md もカンバンも引かない） |
+| **ロック** | **`~/.continuo/github-app-credentials.lock` を取る**（下の「同時に叩かれたとき」） |
 | **資格情報が無いとき** | **終了コード 1 で落ちる。**`gh auth token` へは落ちない |
-| **縮める処理** | **投稿の直前に [internal/redact/redact.go:63](../../internal/redact/redact.go#L63) の `Paths` を通す。****縮められなくても投稿は止めない。**警告を1行出して、そのまま投稿する（[internal/orchestrator/comment.go:519-521](../../internal/orchestrator/comment.go#L519-L521) が「止めると人間は『なぜ止まったのか』を知る手立てを失う」と既に決めている） |
-
-**なぜ REST か。**GraphQL の `addComment` は投稿先のノード ID を要り、
-**それを引く `Adapter` は `tracker.provider` の3つの値が空だと止まる**
-（[internal/tracker/adapter.go:132-143](../../internal/tracker/adapter.go#L132-L143)）。
-**3つとも WORKFLOW.md にしか無い。**REST なら「owner / repo / 番号」で足りる。
-
-#### 引数と終了コード
-
-    $ continuo comment --issue <URL か番号> --repo <owner>/<repo> --body-file done.md
-    https://github.com/<owner>/<repo>/issues/45#issuecomment-123456789
-
-| 引数 | 何を渡すか |
-| --- | --- |
-| `--issue <URL か番号>` | 投稿先 |
-| `--repo <owner>/<repo>` | **`--issue` が番号のときに要る。**指示書は `{{.issue.owner}}/{{.issue.repo}}` を直に埋めており、**そこが固定であることが危険の源だと警告している**（[internal/prompt/builtin.md:630-631](../prompt/builtin.md#L630-L631)） |
-| `--body-file <パス>` か `--body <文字列>` | 本文 |
 
 **終了コードは2通りだけにする。**
 
 | 終了コード | 何が起きたか | エージェントは何をするか |
 | --- | --- | --- |
-| **0** | 投稿できた | 続ける |
-| **0 以外** | それ以外の全部 | **`gh issue comment` へ切り替えず、`blocked` で返す** |
+| **0** | トークンを返した | そのまま `gh` を叩く |
+| **0 以外** | それ以外の全部 | **素の `gh issue comment` へ切り替えず、`blocked` で返す** |
 
 **3通り以上に分けてはならない。**
 **[internal/cli/cli.go:1585-1590](../../internal/cli/cli.go#L1585-L1590) の `parseErrorExitCode` が
 引数の誤りに 2 を返し、8つのサブコマンドが同じ関数を通している。**
 **エージェントに終了コードを見分けさせると、その 2 と必ず衝突する。**
+
+**`GH_TOKEN=$(…)` は、コマンドが落ちても `gh` を止めない。**
+**シェルは空文字を渡し、`gh` は手元の認証で投稿する。**
+**だから指示書には、投稿の前に1度だけ取って確かめる形を書く。**
+
+    TOKEN=$({{.continuo.command}} github-app token) || exit 1
+    GH_TOKEN="$TOKEN" gh issue comment {{.issue.url}} --body-file done.md
+
+#### 縮める処理は通らない。それは今と同じである
+
+**エージェントが `gh` で直接書くコメントは、手元の絶対パスを縮める処理を通らない。**
+[internal/orchestrator/comment.go:509-515](../../internal/orchestrator/comment.go#L509-L515) の関門は
+**continuo 自身が書くものにしか掛からない。**
+
+**これは、この設計で悪くなるものではない。**
+**いまもエージェントは `gh issue comment` を直に叩いており、同じ関門の外に居る。**
+**`GH_TOKEN` を前に足しても、通る場所は1バイトも変わらない。**
+
+**指示書は既に「手元の絶対パスを書かないでください」と書いている**
+（[internal/prompt/builtin.md:399](../prompt/builtin.md#L399) の近く）。**そのままにする。**
 
 #### 書き足しには掛けない
 
@@ -9631,9 +9717,9 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | 何を測ったか | 結果 |
 | --- | --- |
-| **App のトークンで編集** | **attribution は残る**（既に在るものは消えない） |
+| **GitHub App のトークンで編集** | **attribution は残る**（既に在るものは消えない） |
 | **attribution の無いコメントを編集** | **attribution は付かない**（`null` のまま） |
-| **attribution の付いたコメントを、App でないトークンで編集** | **attribution は残る。**人間が画面から直しても消えない |
+| **attribution の付いたコメントを、GitHub App でないトークンで編集** | **attribution は残る。**人間が画面から直しても消えない |
 
 **3行の意味。****`performed_via_github_app` は作成のときに決まり、編集では動かない。**
 **掛けても画面の表示が1文字も変わらないので、掛けない。**
@@ -9649,15 +9735,15 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **[internal/tracker/graphql.go:121](../../internal/tracker/graphql.go#L121) の `newGraphQLClient` は、
 トークンを組み立てのときに固定する。**
-**同じ1本へ App のトークンを入れると、カンバンの読み書きが `FORBIDDEN` で全部落ちる**（3-82a の三）。
+**同じ1本へ GitHub App のトークンを入れると、カンバンの読み書きが `FORBIDDEN` で全部落ちる**（3-82a の三）。
 
 | どのクライアントか | 何に使うか | トークン |
 | --- | --- | --- |
 | いままでの1本 | **カンバンの読み書き、コメントの取得** | `tracker.provider.token_source` |
-| **足す1本** | **`useAppToken` が真のときの `PostComment`** | **App の資格情報から取る**（どれを真にするかは 3-82c の表） |
+| **足す1本** | **`useGitHub AppToken` が真のときの `PostComment`** | **GitHub App の資格情報から取る**（どれを真にするかは 3-82c の表） |
 
 **`github_app_attribution` が `false` なら、2本目を作らない。**
-**そのとき `useAppToken` が真で呼ばれても、1本目で書く。**エラーにしない。
+**そのとき `useGitHub AppToken` が真で呼ばれても、1本目で書く。**エラーにしない。
 
 **2本目は、期限までメモリで使い回し、切れる5分前に作り直す。**
 **`Adapter` が2本目とその期限を持つ。**
@@ -9670,7 +9756,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 #### 同時に叩かれたとき
 
-**ロックを取るのは、`continuo comment` だけではない。**
+**ロックを取るのは、`continuo github-app token` だけではない。**
 **本体が2本目を作り直すときも、起動時の検査で取るときも、同じロックを取る。**
 **更新用のトークンは1回使うと無効になるので、別々に回すと片方の資格情報が死ぬ。**
 **本体は、作り直すときに資格情報のファイルを読み直す。**
@@ -9705,7 +9791,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | どこ | 何をするか | 4つの定義に当たるか |
 | --- | --- | --- |
-| `internal/cli/cli.go` | `switch args[0]` へ `comment` を1行足す | **当たらない。**[CLAUDE.md](../../CLAUDE.md) 自身が「別のサブコマンドへ処理を足す」を、止まらなくてよい例として挙げている |
+| `internal/cli/cli.go` | `switch args[0]` へ `github-app` を1行足す | **当たらない。**[CLAUDE.md](../../CLAUDE.md) 自身が「別のサブコマンドへ処理を足す」を、止まらなくてよい例として挙げている |
 | `internal/orchestrator/settings.go` | `shellQuote` を共通の場所へ移して export する | **当たらない。**単一引用符で包むだけの純関数で、hook のコマンド行の組み立て方は1バイトも変わらない |
 | **`internal/lock/`** | **待つ形を1本足す**（この節の下） | **当たらない。**足すのは新しい関数で、二重起動を止めるロックの取り方は1バイトも変えない |
 | **`internal/orchestrator/orchestrator.go`** | **`Tracker` interface の `PostComment` へ引数を1つ足す** | **当たらない。**hook の引数も宛先も約束も終了コードも変わらない |
@@ -9716,7 +9802,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 ### 3-82e. 組み込みの指示書を、設定で分岐させる
 
-**言いたいこと。****`false` のまま `continuo comment` を配ると、資格情報を持たない利用者の投稿が全部落ちる。**
+**言いたいこと。****`false` のまま `GH_TOKEN=$(continuo github-app token)` を配ると、資格情報を持たない利用者の投稿が全部落ちる。**
 **指示書はテンプレートなので `{{if}}` で分けられる。**
 
 **分岐させるのは、新しく投稿する6本のコマンド名だけである。**
@@ -9734,7 +9820,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | --- | --- | --- |
 | **issue のコメント**（新しく投稿する） | **6本** | **掛ける** |
 | **issue のコメント**（既存への書き足し） | 2本 | **掛けない**（3-82d） |
-| pull request（作成とコメント） | 2本 | **掛けない。**App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ |
+| pull request（作成とコメント） | 2本 | **掛けない。**GitHub App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ |
 
 **7本目は、Go が組み立てて送る「書かせ直し」の指示である。**
 [internal/orchestrator/prompt.go:115-118](../../internal/orchestrator/prompt.go#L115-L118) の `buildCommentRequestPrompt` が
@@ -9742,16 +9828,16 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 （[internal/orchestrator/comment.go:263](../../internal/orchestrator/comment.go#L263) の段7）。
 **ここも分岐させる。**
 **分岐させるのは、エージェントが成果を書き忘れた run のためである。**
-**そこは App のトークンが生きているので、`continuo comment` で書かせれば attribution が付く。**
+**そこは GitHub App のトークンが生きているので、`GH_TOKEN` を前に足して書かせれば attribution が付く。**
 **分岐させないと、通常の書かせ直しで attribution の付かないコメントが1件できる。**
 
 **枝を分けない。**`{{if .github_app_attribution}}` の1つだけで足りる。
-**「App のトークンが取れなかった run」を見分ける手段が無いためである。**
+**「GitHub App のトークンが取れなかった run」を見分ける手段が無いためである。**
 [internal/orchestrator/prompt.go:115](../../internal/orchestrator/prompt.go#L115) の `buildCommentRequestPrompt` は
 **`issueURL` と `marker` の2つしか受け取らない。**
 **その状態を渡す口を新しく作ると、この設計の外側（`runState` の持ち回し）へ広がる。**
 
-**`true` の利用者で、App のトークンが死んだ run では、書かせ直しも落ちる。**
+**`true` の利用者で、GitHub App のトークンが死んだ run では、書かせ直しも落ちる。**
 **そのときエージェントは成果を書けない。**
 **それは受ける。**この設計は「attribution が無いコメントを1件も作らない」までは求めていない（3-82c）が、
 **見分ける手段が無いまま枝を作ると、実装者が勝手な条件を発明する。**
@@ -9952,9 +10038,9 @@ WARN を1行出すだけで走り続けるが、ここでは止める。**理由
 
 **違ったまま起動させない。**あとで気づくと、その間の run が全部失われている。
 
-### 3-82g. App を作る導線を、ダッシュボードの画面に置く
+### 3-82g. GitHub App を作る導線を、ダッシュボードの画面に置く
 
-**言いたいこと。****App の作成は、人間が GitHub の設定画面で手入力するのではなく、
+**言いたいこと。****GitHub App の作成は、人間が GitHub の設定画面で手入力するのではなく、
 `continuo` のダッシュボードのボタンから行う。**
 **押す前に、そのボタンが何をするかを画面へ出す。**設定の間違いを人間の手に残さないためである。
 
@@ -10003,9 +10089,9 @@ sequenceDiagram
 
 | 画面 | 押す前に何を出すか | 押すと何が起きるか |
 | --- | --- | --- |
-| **段1（作る）** | **App の名前・与える権限2つ**（`Issues` の読み書き、`Metadata` の読み取り）**・戻り先の URL・「まだ何も書き込みません」** | GitHub の確認画面へ移る |
+| **段1（作る）** | **GitHub App の名前・与える権限2つ**（`Issues` の読み書き、`Metadata` の読み取り）**・戻り先の URL・「まだ何も書き込みません」・「この GitHub App はあなた1人のものです」** | GitHub の確認画面へ移る |
 | **段2（install）** | **どのリポジトリへ入れるか・「入れた先の issue にだけコメントできます」・「あとから GitHub の画面で外せます」** | GitHub の install の画面へ移る |
-| **段3（認可）** | **「ここから先、機械の投稿はあなたの名前のまま『– with <App の表示名>』が付きます」・約6か月で切れること** | GitHub の認可の画面へ移る |
+| **段3（認可）** | **「ここから先、機械の投稿はあなたの名前のまま『– with <GitHub App の表示名>』が付きます」・約6か月で切れること** | GitHub の認可の画面へ移る |
 | **段4（完了）** | — | **認可したアカウント名を出す。**`gh api user` と違っていたら、その場で両方を並べる（3-82f） |
 
 **説明は inline の HTML で書く。**ダッシュボードは script を1つも読まない
@@ -10026,7 +10112,7 @@ sequenceDiagram
 #### 順序。資格情報が無いあいだは `github_app_attribution` を `false` にしておく
 
 **3-82c は「`true` なのにトークンが取れなければ起動しない」と決めている。**
-**`true` のまま資格情報が無いと、continuo が起動せず、ダッシュボードも立たず、App を作る画面へ辿り着けない。**
+**`true` のまま資格情報が無いと、continuo が起動せず、ダッシュボードも立たず、GitHub App を作る画面へ辿り着けない。**
 
 **だから順序を決める。**
 
@@ -10036,6 +10122,11 @@ sequenceDiagram
 | **2** | ダッシュボードの `/github-app` から段1〜段4 を通す |
 | **3** | `github_app_attribution` を `true` にして continuo を再起動する |
 
+**チームで使うときは、段3 を1人が行い、段1と段2 は各自が行う。**
+**`github_app_attribution` は commit される WORKFLOW.md にあるので、段3 はチームで1回きりである。**
+**段1と段2 は人ごとの GitHub App を作るので、全員が1回ずつ通す**（3-82c の「GitHub App は、人ごとに1つ作る」）。
+**段3 が先に入った同僚は、資格情報が無いので起動しない。**そのとき出す文面は 3-82c にある。
+
 **`server.port` を書いていない人は、この画面を開けない。**
 **`continuo doctor` が、`github_app_attribution` が `true` で資格情報が無く、`server.port` も無いときに、
 「`server.port` を書いて起動し、`/github-app` を開いてください」と出す。**
@@ -10044,11 +10135,11 @@ sequenceDiagram
 
 #### 実測してあること
 
-**2026-09-08 に、専用の App を1つ作って通した。**
+**2026-09-08 に、専用の GitHub App を1つ作って通した。**
 
 | 何 | 実測 |
 | --- | --- |
-| **manifest から App を作れるか** | **作れた**（`continuo-manifest-test`） |
+| **manifest から GitHub App を作れるか** | **作れた**（`continuo-manifest-test`） |
 | **`hook_attributes.url` に `http://127.0.0.1:8931/` を書くと** | **GitHub が断る。**`Hook url is not supported because it isn't reachable over the public Internet (127.0.0.1)` と `Hook is invalid` の2行 |
 | **戻り先の URL に `127.0.0.1` を書くと** | **咎められない。**同じ 127.0.0.1 でも、webhook の欄だけが弾かれる |
 | **install のあとの戻り先** | `http://127.0.0.1:8931/oauth?code=…&installation_id=…&setup_action=install` へ来た。**そのパスを配っていなかったので 404 になった** |
@@ -10060,10 +10151,10 @@ sequenceDiagram
 
 | 何を測るか | 測らないとどうなるか |
 | --- | --- |
-| **`hook_attributes` を manifest から省いたときに、GitHub が App を作るか** | **省けないなら、公開の URL を1つ用意することになる。**その場合、この節の導線ごと作り直しになる |
+| **`hook_attributes` を manifest から省いたときに、GitHub が GitHub App を作るか** | **省けないなら、公開の URL を1つ用意することになる。**その場合、この節の導線ごと作り直しになる |
 | **manifest を GET のクエリで渡せるか。渡せないなら form の POST になる** | **POST なら、上の CSP の緩めが要る。**GET で足りるなら緩めなくてよい |
 
-**どちらも、App を1つ作れば1回で分かる。**
+**どちらも、GitHub App を1つ作れば1回で分かる。**
 
 ## 4. 人間が決めたこと
 
@@ -13944,7 +14035,7 @@ timeout で返っても turn は打ち切らず、`agent.prompt` を再送せず
 | --- | --- |
 | 第10節（Codex app-server のプロトコル） | **continuo が動かすのは Claude Code であって Codex ではない。**受け入れ基準の 17.5 もほぼ全部が対象外になる |
 | 5.3.6 の `codex` セクション | `claude` セクションへ全面差し替え（5-2） |
-| Appendix A（SSH の worker 拡張） | OPTIONAL。continuo は1台のマシンで herdr の pane を使う |
+| GitHub Appendix A（SSH の worker 拡張） | OPTIONAL。continuo は1台のマシンで herdr の pane を使う |
 
 
 **6.2 Dynamic Reload（REQUIRED）は、一部だけ実装している**（3-24）。
