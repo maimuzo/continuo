@@ -9026,13 +9026,14 @@ turn の終わりと同じでなければならないので、それでは足り
 **「偽れない」ことまでは名乗らない。**印を付けずに投稿することも、人間が付けることもできる。
 **issue #245 の本文が「偽れないことまで求めるなら、それは別の issue です」と範囲を切っている。**
 
-#### 実装の前に測る1件
+#### 実装の前に測る2件
 
-**これが偽なら、下の節がまとめて成り立たなくなる。****実装より先に測る。**
+**どちらも偽なら、下の節がまとめて成り立たなくなる。****実装より先に測る。**
 
 | 何を測るか | 偽だったら何が崩れるか |
 | --- | --- |
 | **GraphQL の `addComment` で投稿したコメントに、画面の印が出るか** | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
+| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだに `continuo comment` が何度も回す**（3-82d）。**無効になるなら、エージェントの最初の1件で本体のトークンが死ぬ。**hold が落ちて `undoHandoffAcquire` が走り、**1件も dispatch されなくなる**（3-82c）。**測り方は、更新を1回通したあと、更新前のトークンで `GET /user` を叩いて 200 が返るかを見るだけである** |
 
 #### 採る経路
 
@@ -9253,7 +9254,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **既定は `false`。**書かない利用者の continuo は、いままでどおり動く。**印は付かないが、1つも壊れない。**
 
-**このキーを4箇所へ足す。同じ commit で揃える。1つでも欠けるとテストが赤になる。**
+**このキーを4箇所へ足す。同じ commit で揃える。**
+**下の3つは、1つでも欠けるとテストが赤になる。**[docs/upgrading.md](../upgrading.md) だけは、機械が見ていない。
 
 | どこへ | なぜ |
 | --- | --- |
@@ -9314,6 +9316,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **その状態は、App のトークンが取れなくなった時点から続く**（App を消した・install を外した・secret を作り直した・書き戻しの直前で落ちた）。
 **人間が「エラーで停止して良い」と決めたときに見えていた損失は「run 1件」だったが、実際はカンバン全体が止まる。**
 **それでも止める。**印の無いコメントを1件出すより軽い。
+
+**入札と released については、上の表のとおり止めない。**その決定を変えない。
 [internal/orchestrator/handoff.go:317-318](../../internal/orchestrator/handoff.go#L317-L318) が
 **「担当は既に外れている。コメントを書けなかったことで入札を止めない」**と既に決めている。
 **その決定を変えない。**投稿しないので、印の無いコメントは1件もできない。
@@ -9391,7 +9395,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **「continuo が issue へ書くものは、例外なくここを通す」「ここが、手元の絶対パスを `~` に縮める唯一の場所である」**
 と書いている。
 **エージェントが `gh` で直接書くコメントは、いまその関門の外に居る。**
-**委譲すると内側へ入るので、絶対パスの漏れが機械で塞がる。**
+**委譲すると内側へ入るので、`true` のときは絶対パスの漏れが機械で塞がる。**
+**`false` のときは、いままでどおり指示書の依頼だけである。**
 
 **ただし、いまの検査は `internal/orchestrator` の下しか見ない。**
 [test/internal/redact/single_choke_point_test.go:26](../../test/internal/redact/single_choke_point_test.go#L26) が
@@ -9407,8 +9412,26 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **範囲が `internal/orchestrator` に固定** | 設計が挙げていたもの |
 
 **だから、縮める処理と投稿を1つにした関数へ寄せる。**
-**その関数を `internal/orchestrator` の外からも呼べる場所へ置き、検査はその関数名だけを許す形へ組み替える。**
-**「縮める場所は1箇所」という 3-73 の決定は、そのまま守れる。**
+
+| 何 | 決めたこと |
+| --- | --- |
+| **置き場所** | **`internal/redact` に `PostIssueComment` を1本置く。**縮めてから投稿するところまでを、その1本が持つ |
+| **署名** | `PostIssueComment(ctx, client, owner, repo, number int, body string) (url string, err error)`。**`client` は REST を叩ける口の interface。**本体は `Adapter` が満たすものを渡し、`continuo comment` は自分で組み立てたものを渡す |
+| **検査が許す形** | **`redact.PostIssueComment(` という呼び出しだけ** |
+| **検査が禁じる形** | **`internal/` の下で、issue のコメントを投稿する API を直に叩く呼び出し全部。**REST の `POST /repos/{owner}/{repo}/issues/{number}/comments` と、GraphQL の `addComment` の2つを名前で拾う |
+| **`found == 0` の番人** | **残す。**[test/internal/redact/single_choke_point_test.go:76-78](../../test/internal/redact/single_choke_point_test.go#L76-L78) が「1件も見つからないのは、検査が的を外した合図である」と書いている |
+
+**本体の GraphQL は、この関数を通さない。**
+**`Adapter.PostComment` はノード ID を取り、`addComment` を叩く**（3-82d の下）。
+**そちらは [internal/orchestrator/comment.go:556-566](../../internal/orchestrator/comment.go#L556-L566) の
+`postCommentWithMarker` が縮めてから呼ぶ形のままである。**
+**検査は、その1本と `redact.PostIssueComment` の2つを許す。**
+
+**組み替えは、この pull request では行わない。**
+**得るものが0人ぶんだからである。**資格情報を作る経路は別の issue で、
+**そちらが出るまで `github_app_attribution` を `true` にできる人は居ない**（3-82d の下）。
+**`continuo comment` を出すのと同じ pull request で組み替える。**
+**この設計は、そのときに何をするかを決めておくだけである。**
 
 **順序を守る。****検査を組み替えてから、`continuo comment` を書く。**
 **逆順にすると、検査が緑のまま2箇所目ができあがり、緑であることが何も意味しなくなる。**
@@ -9452,9 +9475,24 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | 終了コード | 何が起きたか | エージェントは何をするか |
 | --- | --- | --- |
-| **2** | **ロックを取れなかった**（待ちの上限に達した） | **少し置いて叩き直す。**`blocked` にしない |
-| **3** | **書き足す先の印が無い**（`--edit` のとき） | **新しく1件投稿する**（指示書の段2b） |
+| **3** | **書き足せない**（印が無い・前の本文を読めない） | **新しく1件投稿する**（指示書の段2b） |
+| **4** | **ロックを取れなかった**（待ちの上限に達した） | **少し置いて叩き直す。**`blocked` にしない |
 | **1** | それ以外（資格情報が無い・権限不足・ネットワーク） | **投稿せずに `blocked` で返す** |
+| **2** | **引数の誤り。**このコマンドが自分で返すのではなく、`flag` のパースが返す | **`blocked` で返す。**叩き直しても直らない |
+
+**2 を「叩き直せ」に使ってはならない。**
+[internal/cli/cli.go:1585-1590](../../internal/cli/cli.go#L1585-L1590) の `parseErrorExitCode` が、
+**引数の誤りに 2 を返す。**8つのサブコマンドが同じ関数を通している。
+**2 を叩き直しに割り当てると、フラグを1文字打ち間違えたエージェントが叩き直し続ける。**
+**`max_dispatch_turns`（既定20。[internal/config/default.go:162](../../internal/config/default.go#L162)）に達するまで、その run は何も進まない。**
+
+**3 を「印が無い」だけにしてはならない。**
+**いまの指示書は、コメント ID を取れないときも、本文を読めないときも、印が無いときも、
+まとめて段2b（新しく1件投稿する）へ落とす**
+（[internal/prompt/builtin.md:419](../prompt/builtin.md#L419) と [668行](../prompt/builtin.md#L668) が
+どちらも「本文を読めませんでした。段2b で新しく1件投稿します」と書いている）。
+**3 を狭く取ると、`gh api` が一時的に失敗しただけで run が人間へ渡る。**
+**進捗報告は既定1時間ごとなので、18時間の run で十数回この経路を通る。**
 
 **終了コードを1つにしてはならない。**
 **指示書は「読めなかった」と「投稿できなかった」を書き分けて別の段へ落とす**
@@ -9509,27 +9547,79 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **だから2回に分ける。**1回目で読み、書く内容を決めてから、2回目で書く。
 
+**いまの [internal/prompt/builtin.md](../prompt/builtin.md) の構造を、1つも崩さない。**
+**塊の数も、`case` の門も、門の外れた枝の `echo` も、そのまま残す。**
+**差し替えるのは、`OLD=` の右辺と、書き換えのコマンドの2箇所だけである。**
+
     URL=<段1が返した URL>
     ID=${URL##*#issuecomment-}
-    {{if .github_app_attribution}}
-    OLD=$({{.continuo.command}} comment --edit "$ID" --repo <owner>/<repo> \
-      --marker '<!-- continuo:group -->')
-    {{else}}
-    OLD=$(gh api "repos/<owner>/<repo>/issues/comments/$ID" --jq .body)
-    {{end}}
-    printf '%s\n' "$OLD"
-    # ここで前に書いていない分を決め、add.md へ書く
-    {{if .github_app_attribution}}
-    {{.continuo.command}} comment --edit "$ID" --repo <owner>/<repo> \
-      --marker '<!-- continuo:group -->' --body-file add.md
-    {{else}}
-    gh api --method PATCH "repos/<owner>/<repo>/issues/comments/$ID" -f body="$OLD
-    <前に書いていない分>"
-    {{end}}
+    case "$ID" in
+      ''|*[!0-9]*) echo "コメント ID を取れませんでした。段2b で新しく1件投稿します" ;;
+      *)
+        {{if .github_app_attribution}}
+        OLD=$({{.continuo.command}} comment --edit "$ID" --repo <owner>/<repo> \
+          --marker '<!-- continuo:group -->')
+        {{else}}
+        OLD=$(gh api "repos/<owner>/<repo>/issues/comments/$ID" --jq .body)
+        {{end}}
+        case "$OLD" in
+          *"<!-- continuo:group -->"*)
+            printf '%s\n' "$OLD"
+            ;;
+          *)
+            echo "本文を読めませんでした。段2b で新しく1件投稿します"
+            ;;
+        esac
+        ;;
+    esac
 
-**`printf` の行を `{{if}}` の外に置く。**
-**[test/internal/prompt/group_comment_test.go:324](../../test/internal/prompt/group_comment_test.go#L324) が
-`printf '%s\n' "$OLD"` を見ており、真の枝にしか無いと `{{else}}` の側で落ちる。**
+**ここまでが1つ目の塊である。**エージェントは `$OLD` を読み、書く内容を決めて `add.md` へ書く。
+**2つ目の塊で、同じ門をもう一度通してから書き換える。**
+
+    URL=<段1が返した URL>
+    ID=${URL##*#issuecomment-}
+    case "$ID" in
+      ''|*[!0-9]*) echo "コメント ID を取れませんでした。段2b で新しく1件投稿します" ;;
+      *)
+        {{if .github_app_attribution}}
+        OLD=$({{.continuo.command}} comment --edit "$ID" --repo <owner>/<repo> \
+          --marker '<!-- continuo:group -->')
+        {{else}}
+        OLD=$(gh api "repos/<owner>/<repo>/issues/comments/$ID" --jq .body)
+        {{end}}
+        case "$OLD" in
+          *"<!-- continuo:group -->"*)
+            {{if .github_app_attribution}}
+            {{.continuo.command}} comment --edit "$ID" --repo <owner>/<repo> \
+              --marker '<!-- continuo:group -->' --body-file add.md
+            {{else}}
+            gh api --method PATCH "repos/<owner>/<repo>/issues/comments/$ID" -f body="$OLD
+    <前に書いていない分>"
+            {{end}}
+            ;;
+          *)
+            echo "本文を読めませんでした。段2b で新しく1件投稿します"
+            ;;
+        esac
+        ;;
+    esac
+
+**この形が守るもの。**当たる検査を1本ずつ数えた。
+
+| どの検査 | 何を要求しているか | 通るか |
+| --- | --- | --- |
+| [test/internal/prompt/group_comment_test.go:251-256](../../test/internal/prompt/group_comment_test.go#L251-L256) | `--method PATCH` より前に `*"<!-- continuo:group -->"*)` の枝が在ること | **通る。**`{{else}}` の枝の中に在る |
+| [test/internal/prompt/group_comment_test.go:272-277](../../test/internal/prompt/group_comment_test.go#L272-L277) | 同じ枝が2個以上あること | **通る。**塊が2つあるので4個 |
+| [test/internal/prompt/group_comment_test.go:397-403](../../test/internal/prompt/group_comment_test.go#L397-L403) | 「段2b で新しく1件投稿します」が5個以上あること | **通る。**`echo` が4つと本文の引用で5個 |
+| [test/internal/prompt/group_comment_test.go:324](../../test/internal/prompt/group_comment_test.go#L324) | `printf '%s\n' "$OLD"` が在ること | **通る。**1つ目の塊の門の中に在る |
+
+**門を `{{if}}` の外に置く。**
+**`{{else}}` の枝から門が消えると、`gh api` が取得に失敗したときのエラーの JSON を
+「前の本文」として書き戻し、`<!-- continuo:group -->` の印ごと本文が消える。**
+**それは既定の `false` で動いている利用者にも起きる。**
+
+**5-3 の段2a も同じ形にする。**あちらの印は `<!-- continuo:progress -->` である。
+**書かないと、実装者が同じ作り直しをもう一度やる。**
 
 **`URL=` と `ID=` を、`{{if}}` の中へ入れてはならない。**
 **`{{else}}` の枝でも同じ2行が要るので、`{{if}}` の外に置く。**
@@ -9552,6 +9642,9 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **同時に走るエージェントの既定は2である**（[internal/config/default.go:160](../../internal/config/default.go#L160)）。
 **`~/.continuo/` の中に、資格情報の専用のロックを1本置く**（二重起動を止めるロックとは別にする）。
+**このディレクトリは、資格情報のファイルが在る時点で既に在る。**
+**[internal/lock/lock.go:36](../../internal/lock/lock.go#L36) が「親ディレクトリは呼び出し側が事前に作成しておくこと」と書いているが、
+`continuo comment` は資格情報が無ければ終了コード 1 で落ちるので、そこへ到達したときには在る。**
 **[internal/lock/lock.go:45](../../internal/lock/lock.go#L45) の `Acquire` は待たない**（`LOCK_NB`）**ので、待つ形を1つ足す。**
 **囲うのは「読む → 叩く → 書き戻す」の全体である。**書き戻しだけだと、2つが同じ古いトークンを読む。
 
@@ -9565,7 +9658,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | --- | --- |
 | **`continuo comment`** | **終了コード 2 を返す。**エージェントは少し置いて叩き直す |
 | **continuo 本体**（2本目の作り直し） | **その投稿だけを諦め、次の巡回でやり直す。****run は止めない。**8時間に1回の作り直しなので、次の巡回までに解ける |
-| **起動時の検査** | **起動しない。**ここだけは止める。**資格情報が回せない状態で走り出すと、最初の投稿で全部落ちる** |
+| **起動時の検査** | **起動しない。**ここだけは止める。**資格情報が回せない状態で走り出すと、最初の投稿で全部落ちる。****上限は240秒とする**（巡回の外に居るので、30秒に縛る理由が無い） |
 
 **本体が最大240秒待つあいだ、その goroutine は止まる。**
 **巡回の間隔は既定30秒なので**（[internal/config/default.go:143](../../internal/config/default.go#L143)）**、待ちが巡回より長くなりうる。**
@@ -9630,8 +9723,9 @@ continuo 自身が Status を動かした記録を書くたびに、次の進捗
 [internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の interface も、検査の偽物も、1文字も変わらない。
 
 **別名のメソッドを足さない。**
-[test/internal/redact/single_choke_point_test.go:85](../../test/internal/redact/single_choke_point_test.go#L85) が
-**`PostComment` という名前ちょうどだけを見ている**ので、別名は検査を1件も落とさない。
+**足すと `Adapter` が2つの経路で状態を持ち、テストが「どちらの口から入ったか」で分岐する。**
+**呼び出しは42箇所ある**（本番4・テスト38）。
+**この根拠は、絞り口の検査を組み替えたあとも生き残る**（あちらの現行の形に依存しない）。
 
 ### 3-82e. 組み込みの指示書を、設定で分岐させる
 
@@ -9656,7 +9750,7 @@ continuo 自身が Status を動かした記録を書くたびに、次の進捗
 | [test/internal/prompt/progress_comment_test.go:213-226](../../test/internal/prompt/progress_comment_test.go#L213-L226) | **`gh issue comment ` を含む行を探し、その次の行の行頭を `!=` で見る** | **真の枝は `strings.Contains` に当たらないので、1行も検査されない。**字下げしても緑のまま、`true` の利用者だけ issue #178 が戻る。**真の枝も行頭を1桁も動かさない** |
 | [test/internal/prompt/group_comment_test.go:70](../../test/internal/prompt/group_comment_test.go#L70) | 7-2 の節に `--method PATCH` が在ること | 同上 |
 | [test/internal/prompt/group_comment_test.go:72](../../test/internal/prompt/group_comment_test.go#L72) | 7-2 の節に `gh issue comment` が在ること | **関数定義の `{{else}}` の枝に在るので通る** |
-| **[test/internal/prompt/group_comment_test.go:244-248](../../test/internal/prompt/group_comment_test.go#L244-L248)** | **7-2 の `--method PATCH` がちょうど1個であること。0個なら `Fatalf`** | **`--edit` へ寄せると落ちる** |
+| **[test/internal/prompt/group_comment_test.go:244-248](../../test/internal/prompt/group_comment_test.go#L244-L248)** | **7-2 の `--method PATCH` がちょうど1個であること**（`!= 1` なので、0個でも2個以上でも `Fatalf`） | **`--edit` へ寄せると落ちる。**`{{else}}` の枝に1個だけ残す |
 | **[test/internal/prompt/group_comment_test.go:283-309](../../test/internal/prompt/group_comment_test.go#L283-L309)** | **`--body "<!-- continuo:group -->` を `strings.Index` で探し、次の行を集める。**2件でなければ `Fatalf`。**そのあと2件が同じ文字列かも見る** | **関数定義にすれば2件のまま。****`--body` の行と次の行のあいだへ何も差し込めない** |
 | [test/internal/prompt/group_comment_test.go:449](../../test/internal/prompt/group_comment_test.go#L449) | 3-7 の節に `gh issue comment` が在ること | 通る |
 
@@ -9684,7 +9778,7 @@ continuo 自身が Status を動かした記録を書くたびに、次の進捗
 | 何 | 何本か | 掛けるか |
 | --- | --- | --- |
 | **issue のコメント**（新規の投稿） | **6本** | **掛ける。**下の1本を足す |
-| **issue のコメント**（既存への書き足し） | **2本** | **掛ける。**ただし `--edit` を使い、トークンは回らない |
+| **issue のコメント**（既存への書き足し） | **2本** | **掛ける。**`--edit` を使う。**トークンは回る**（認証の出どころを経路で変えないため。3-82d） |
 | pull request（作成とコメント） | 2本 | **掛けない。**App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ |
 
 **pull request のコメントは、この設計の対象外である。**
@@ -9716,6 +9810,7 @@ issue でいちばん人目に付く。**
 [internal/orchestrator/prompt.go:36](../../internal/orchestrator/prompt.go#L36) と
 [internal/cli/cli.go:576](../../internal/cli/cli.go#L576) で、**後者は `continuo prompt --show --url` である。**
 **両方へ同じ値を渡す。**
+**後者は `Orchestrator` を持たないので、そこで `os.Executable()` を叩いて `shellQuote` を通す。**
 [internal/prompt/prompt.go:631-637](../../internal/prompt/prompt.go#L631-L637) が
 **「ずれた瞬間、`--show --url` は『送られる文面』ではないものを見せることになり、そのコマンドの目的そのものを失う」**と書いている。
 理由は [internal/prompt/prompt.go:614-615](../../internal/prompt/prompt.go#L614-L615) と
@@ -9727,12 +9822,13 @@ issue でいちばん人目に付く。**
 共通の場所へ移して export する。**
 **写しを作ってはならない。**hook 側を直したときに、プロンプト側が取り残される。
 
-**この変更が偽にする記述が2つある。同じ commit で直す。**
+**この変更が偽にする記述が3つある。同じ commit で直す。**
 
 | どこ | いま何と書いてあるか | なぜ偽になるか |
 | --- | --- | --- |
 | [internal/prompt/builtin.md:638](../prompt/builtin.md#L638) | **7-2 のコメントは、あなたが `gh` で直に書くので、continuo が縮める処理を通りません** | **`continuo comment` を通るので、縮める処理を通る。**`true` の利用者のエージェントが、事実と違う説明を毎回読む |
 | **6-27 の「承知のうえで受け入れる」表** | **承知のうえで、Go の経路を作らない** | **この設計が、その Go の経路を作る。**放置すると、次に 6-27 を読んだ人がこの設計を差し戻す |
+| **同じ表のもう1行** | **エージェントの `gh issue comment` には門が無い** | **`true` の利用者のエージェントは `gh issue comment` を叩かない。**門が無いという結論は変わらない（`continuo comment` もカンバンを引かない）が、根拠の書き方が読めなくなる |
 
 **`internal/prompt/builtin.md` を直したら、5-3 の写しも同じ commit で直す。**
 **そのとき、5-3 より後ろを指す行番号のリンクを検算する**
@@ -9758,7 +9854,8 @@ issue でいちばん人目に付く。**
 
 #### hook の門に掛かるが、挙動は変わらない
 
-**`internal/cli/cli.go` の `switch args[0]` へ `comment` を1行足す。**
+**2つのファイルに触る。**`internal/cli/cli.go` の `switch args[0]` へ `comment` を1行足し、
+**`internal/orchestrator/settings.go` の `shellQuote` を共通の場所へ移して export する**（3-82e）。
 **[CLAUDE.md](../../CLAUDE.md) の検知の網は、このファイルを拾う。**
 **拾うが、hook の4つの定義のどれにも当たらない。**
 `continuo hook` の引数も、宛先も、本体との約束も、Claude Code へ返す終了コードも変わらない。
