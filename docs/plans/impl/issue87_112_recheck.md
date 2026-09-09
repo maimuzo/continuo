@@ -41,7 +41,7 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 | --- | --- | --- | --- |
 | **`--id` 本体とロックの固定** | 13 | +560 前後 | [internal/instance/instance.go](../../../internal/instance/instance.go)（+350）/ [internal/cli/cli.go](../../../internal/cli/cli.go)（+101）/ [internal/config](../../../internal/config) 5本（+27）/ [internal/i18n](../../../internal/i18n) 3本（+182）/ [internal/socketpath/socketpath.go](../../../internal/socketpath/socketpath.go) |
 | **置き場所と branch 名の派生** | 7 | +626 | [internal/workspace/instancemarker.go](../../../internal/workspace/instancemarker.go)（新規126）/ [internal/workspace/workspace.go](../../../internal/workspace/workspace.go) / [internal/workspace/layout.go](../../../internal/workspace/layout.go) / [internal/workspace/sweep.go](../../../internal/workspace/sweep.go) / [test/internal/workspace/instancemarker_test.go](../../../test/internal/workspace/instancemarker_test.go)（新規335） |
-| **ボードごとのロックと覚え書き** | 4 | +400 前後 | [internal/instance/board.go](../../../internal/instance/board.go)（新規168）と [internal/daemon/daemon.go](../../../internal/daemon/daemon.go) / [internal/abandon/abandon.go](../../../internal/abandon/abandon.go) / [internal/abandon/deps.go](../../../internal/abandon/deps.go) の一部 |
+| **カンバンごとのロックと覚え書き** | 4 | +400 前後 | [internal/instance/board.go](../../../internal/instance/board.go)（新規168）と [internal/daemon/daemon.go](../../../internal/daemon/daemon.go) / [internal/abandon/abandon.go](../../../internal/abandon/abandon.go) / [internal/abandon/deps.go](../../../internal/abandon/deps.go) の一部 |
 | **doctor の検査を2つ追加** | 6 | +678 | [internal/doctor/checks.go](../../../internal/doctor/checks.go)（+180）/ [test/internal/doctor/lock_file_test.go](../../../test/internal/doctor/lock_file_test.go)（新規321）/ [test/internal/doctor/no_home_test.go](../../../test/internal/doctor/no_home_test.go)（新規113） |
 | **`--dry-run` が何も作らない一式** | 3 | +244 | [internal/lock/lock.go:87-105](../../../internal/lock/lock.go#L87-L105) の `Probe` / [test/internal/lock/lock_test.go](../../../test/internal/lock/lock_test.go)（新規83）/ [test/internal/abandon/dryrun_test.go](../../../test/internal/abandon/dryrun_test.go)（新規120） |
 | **herdr の agent 名に名前を混ぜる** | 3 | +96 | [internal/orchestrator/agentname.go](../../../internal/orchestrator/agentname.go) / [internal/orchestrator/orchestrator.go](../../../internal/orchestrator/orchestrator.go) |
@@ -63,7 +63,7 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 | 足したもの | 消せるか | 減るファイル | 消すと消える指摘 |
 | --- | --- | --- | --- |
 | **置き場所と branch 名の派生**（根） | **消せる** | **7** | 名前の整え方を1関数に集める案 |
-| **ボードごとのロックと覚え書き** | **消せる** | **4** | 覚え書きで生死を見る Critical 1件、起動時刻・消す順序の High 2件 |
+| **カンバンごとのロックと覚え書き** | **消せる** | **4** | 覚え書きで生死を見る Critical 1件、起動時刻・消す順序の High 2件 |
 | **doctor の検査を2つ追加** | **消せる** | **6** | doctor が置き場所を5つ作る／打ち間違えた名前を作る／親だけ見て答える の High 3件 |
 | **`--dry-run` が何も作らない一式** | **消せる** | **3** | 観測の道具が存在しない High 1件（`lock.Probe` ごと消える） |
 | **herdr の agent 名に名前を混ぜる** | **消せる** | **3** | なし（レビュー1回目の指摘への対応） |
@@ -77,8 +77,8 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 `BranchPrefixForSweep`（[internal/workspace/layout.go:254-260](../../../internal/workspace/layout.go#L254-L260)）と
 [internal/workspace/sweep.go:70-92](../../../internal/workspace/sweep.go#L70-L92) の分岐を全部呼んでいる。**
 
-**ボードのロックは確定仕様と逆を向く。**確定仕様は「使われてなければブロックしない」だが、
-[internal/instance/board.go](../../../internal/instance/board.go) は `--id` が空いていても同じボードなら止める。
+**カンバンのロックは確定仕様と逆を向く。**確定仕様は「使われてなければブロックしない」だが、
+[internal/instance/board.go](../../../internal/instance/board.go) は `--id` が空いていても同じカンバンなら止める。
 覚え書きには [internal/instance/board.go:127-128](../../../internal/instance/board.go#L127-L128) に
 「書けなくても起動を止めてはならない。これは人間のための覚え書きであって、排他の一部ではない」とあり、
 **その「無くても動く」ファイルの不在を、設計 3-17i は `not_running` と読む。**
@@ -97,7 +97,7 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 
 | 案 | 何を出すか | 触るファイル | Critical / High は残るか |
 | --- | --- | --- | --- |
-| **いちばん小さい** | `--id` とロックの固定と文書だけ。派生・ボードのロック・doctor の追加検査・`--dry-run` 一式・agent 名・設計 3-17h〜3-17k を全部やめる | **約30** | **この PR 由来は0。**ボード全体の Critical 4 / High 13 は別の作業として残る |
+| **いちばん小さい** | `--id` とロックの固定と文書だけ。派生・カンバンのロック・doctor の追加検査・`--dry-run` 一式・agent 名・設計 3-17h〜3-17k を全部やめる | **約30** | **この PR 由来は0。**カンバン全体の Critical 4 / High 13 は別の作業として残る |
 | **中くらい** | いちばん小さい案に、`--dry-run` が何も作らない一式と、doctor の追加検査を「作らない形」に作り直したものを足す | **約38** | **この PR 由来は0。**ただし作り直した分の code-review が1回増える |
 | **いまのまま** | 55ファイル全部 | **55** | **Critical 6 / High 21 が残る。マージできない** |
 
@@ -112,7 +112,7 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
   `Probe` ごと消えるので、いままでどおりの挙動に戻る。
 - **セキュリティの穴は消えるか。****この PR が開けた穴は消える。**目印ファイルを書けば worktree を隠せる経路
   （[internal/workspace/instancemarker.go](../../../internal/workspace/instancemarker.go)）は、派生ごと無くなる。
-  **ボード全体のセキュリティの Critical 3件（hook の送り主を確かめない／グループ計画の書き手を確かめない／片付けの宛先を身元ファイルから読む）は1件も消えない。**
+  **カンバン全体のセキュリティの Critical 3件（hook の送り主を確かめない／グループ計画の書き手を確かめない／片付けの宛先を身元ファイルから読む）は1件も消えない。**
 
 ### 4-2. 中くらい
 
@@ -120,15 +120,15 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
   「その名前で起動できるか」を答える（[internal/socketpath/socketpath.go:239-254](../../../internal/socketpath/socketpath.go#L239-L254) と同じく
   `Lstat` で symlink・非ディレクトリ・権限の開きすぎを見るだけで、**作らない・掴まない**形に作り直す）。
   `continuo abandon --dry-run` が1バイトも書かない状態になる。
-- **何ができないままか。**ボードごとのロックは無いので、置き場所の分け忘れは止まらない（いちばん小さい案と同じ）。
-  agent 名は分かれないので、別のボードの同じ番号の issue が同じ agent 名になる。
+- **何ができないままか。**カンバンごとのロックは無いので、置き場所の分け忘れは止まらない（いちばん小さい案と同じ）。
+  agent 名は分かれないので、別のカンバンの同じ番号の issue が同じ agent 名になる。
 - **セキュリティの穴は消えるか。**いちばん小さい案と同じ。**doctor を作り直す分だけ、新しい欠陥が入る余地がある。**
   作り直した検査は、いままで3回のレビューで毎回指摘が出続けた場所である。
 
 ### 4-3. いまのまま
 
 - **何ができるようになるか。**`--id` で置き場所と branch と socket と agent 名が自動で分かれ、
-  ボードが同じなら2本目を止め、doctor が17項目を検査する。
+  カンバンが同じなら2本目を止め、doctor が17項目を検査する。
 - **何ができないままか。****マージできない。**この PR 由来だけで Critical 2 / High 8 が残る。
 - **セキュリティの穴は消えるか。**消えない。**この案を採る理由は無い。**
 
@@ -163,9 +163,9 @@ main との分岐点は commit `6a894fb`。**main は既に commit `73fb41a` ま
 | --- | --- | --- |
 | **「古いほうを止めてから入れ替える」を書く** | [docs/upgrading.md:75](../../../docs/upgrading.md#L75)（いま「破壊的変更はありません」で始まる節） | ロックの置き場所が変わるので、動かしたまま入れ替えると2つ起動する |
 | **警告を実行ファイルの差し替えより前に出す** | [install.sh:941-975](../../../install.sh#L941-L975) | いまは置いたあとに警告するので、「止めてから」が言えない |
-| **置き場所を分け忘れたときに何が起きるかを書く** | [docs/test_environment.md](../../../docs/test_environment.md) | ボードのロックを消すなら、危険は文書でしか伝えられない |
+| **置き場所を分け忘れたときに何が起きるかを書く** | [docs/test_environment.md](../../../docs/test_environment.md) | カンバンのロックを消すなら、危険は文書でしか伝えられない |
 | **main へ rebase する** | branch `feat/issue87-multi-instance` | 分岐点は commit `6a894fb`、main は commit `73fb41a` |
 
-**この PR を縮めても消えないもの。**ボード全体のレビュー90件のうち、この PR が触っていない
+**この PR を縮めても消えないもの。**カンバン全体のレビュー90件のうち、この PR が触っていない
 **Critical 4件（hook の送り主を確かめない／グループ計画の書き手を確かめない／片付けの宛先を身元ファイルから読む／枠が9割を超えると着手しなくなる）と High 13件は、別の issue として立てる必要がある。**
 **PR #112（1台で continuo を複数動かす）のマージ条件に混ぜてはならない。**混ぜると、この PR が永久に閉じられない。

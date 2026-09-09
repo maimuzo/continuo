@@ -192,7 +192,7 @@ func (o *Orchestrator) noteGate(issue tracker.Issue, reason GateReason, assignee
 // **issue に残っているコメントは、この機械が関門より前で飛ばしたくらいでは消えない。**
 // ここで消すと、`preflight` が1巡回だけ落ちただけで記録が作り直され、
 // **同じ本文の案内の2件目が issue へ書かれる。**書いたコメントを消す手段は無い。
-// **notices ごと落ちるのは `forgetGatedNotOnBoard` だけである**（issue がボードから消えたとき）。
+// **notices ごと落ちるのは `forgetGatedNotOnBoard` だけである**（issue がカンバンから消えたとき）。
 //
 // issueID: project item の ID。
 func (o *Orchestrator) clearGate(issueID string) {
@@ -366,7 +366,7 @@ func gateNoticedIn(comments []tracker.Comment, selfLogin string, reason GateReas
 	return time.Time{}, false
 }
 
-// forgetGatedNotOnBoard は、いまのボードの候補に居ない issue の記録を外す（設計 3-68）。
+// forgetGatedNotOnBoard は、いまのカンバンの候補に居ない issue の記録を外す（設計 3-68）。
 //
 // **候補の取得が成功した巡回でだけ呼ぶ。**失敗した巡回で呼ぶと全件が消える。
 // **`dispatchCandidates` のループは見ない。**空きスロットが尽きて途中で

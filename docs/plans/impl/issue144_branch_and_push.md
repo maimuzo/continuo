@@ -190,7 +190,7 @@ $
 
 | 誰が | 何をするか |
 | --- | --- |
-| **人間** | ボードで Status を `Ready` にする。**それだけ** |
+| **人間** | カンバンで Status を `Ready` にする。**それだけ** |
 | **continuo（段0）** | 通信しない。置き場所と branch の空きだけを見る |
 | **continuo（段4）** | 下のコマンドを叩く |
 | **エージェント** | 実装し、`git push -u origin HEAD` で push する |
@@ -486,8 +486,8 @@ if !strings.EqualFold(owner, r.issue.Owner) || !strings.EqualFold(repo, r.issue.
 
 **トラッカーは引かない。**[internal/abandon/deps.go:109-113](../../../internal/abandon/deps.go#L109-L113) の
 「トラッカーは遅延して呼ぶ」を1文字も変えない。**abandon は片付けの途中で落ちた後始末に使う道具であり、
-issue がボードから外れていても動かなければならない。**トラッカーを引く設計にすると、
-**ボードから外れた issue で abandon が使えなくなる。**
+issue がカンバンから外れていても動かなければならない。**トラッカーを引く設計にすると、
+**カンバンから外れた issue で abandon が使えなくなる。**
 
 **clone を引く相手は、照合を通った worktree のパスから取る。**
 `FindIssueBranch` / `DeleteIssueBranch` が使う clone
@@ -734,7 +734,7 @@ tag の取得だけで数秒かかる。**`--all` も `--prune` も付けない�
 
 **やり直しは1回だけ。**間隔は1秒。2回落ちたら上のとおり人間へ渡す。
 
-**段0（`CheckWorktreeUsable`）では絶対に叩かない。**あそこはボードの候補ぜんぶに対して
+**段0（`CheckWorktreeUsable`）では絶対に叩かない。**あそこはカンバンの候補ぜんぶに対して
 毎巡回で走る。**1件でも通信すると、候補の数だけ通信が増える。**
 
 ---
@@ -845,7 +845,7 @@ Status を1バイトも書かずに飛ばし、issue へ1回だけコメント�
 「issue のリポジトリの既定 branch」という別物の名前を base にしようとする。**
 **その組み合わせは必ず `ErrBaseUnknown` にする**（[internal/workspace/prepare.go:369-387](../../../internal/workspace/prepare.go#L369-L387) の `resolveBase`）。
 
-**設定の base は、リポジトリをまたいで効いてしまう。**fork を使うボードでは
+**設定の base は、リポジトリをまたいで効いてしまう。**fork を使うカンバンでは
 `herdr.worktree.base` を null のままにすること（[docs/FAQ.md](../../FAQ.md) に1行足す）。
 
 ---
@@ -1072,7 +1072,7 @@ Development のリンクを1本にしてから、Status を Ready に戻して�
 
 **コメントは、issue とこの理由の組につき1回だけ**（11e の冒頭で決めた仕組みをそのまま使う。
 鍵は identifier ＋ 理由、3回・60秒、メモリだけ）。
-**ここで3回・60秒を待つ意味は大きい。**ボードの候補一覧は GitHub のサーバ側の検索結果であり、
+**ここで3回・60秒を待つ意味は大きい。**カンバンの候補一覧は GitHub のサーバ側の検索結果であり、
 **索引の反映が遅れて1巡回だけ答えが揺れることがある**（3-34。
 [internal/orchestrator/dispatch.go:198-200](../../../internal/orchestrator/dispatch.go#L198-L200) が
 「直前に書いた値が索引へ反映される前に取り直すと」と書いて、同じ揺れに守りを置いている）。
@@ -1240,7 +1240,7 @@ push した branch の名前でも引いてください。
 | [docs/plans/continuo_design.md](../continuo_design.md) | **5-2 の front matter に `fetch_timeout_ms`**（11c）。**塊1・塊3でも触る** |
 | [internal/orchestrator/dispatch.go](../../../internal/orchestrator/dispatch.go) | `toIssueRef` の写し。**塊3でも触る** |
 | [internal/i18n](../../../internal/i18n) | 11e の文面1と2（keys / ja / en）。**塊3でも触る** |
-| [docs/FAQ.md](../../FAQ.md) | **fork を使うボードでは `herdr.worktree.base` を null にする**（11a）。**塊1・塊3でも触る** |
+| [docs/FAQ.md](../../FAQ.md) | **fork を使うカンバンでは `herdr.worktree.base` を null にする**（11a）。**塊1・塊3でも触る** |
 
 ---
 
@@ -1300,8 +1300,8 @@ push した branch の名前でも引いてください。
 **受け入れ（塊ごとに実機で1件通す）。**
 [.claude/rules/release.md](../../../.claude/rules/release.md) が「実機で issue を1件通してから出す」と
 決めている。**3つ目の塊は、開発者の環境の fork（`<ACCOUNT>/oss-project`）と
-テスト用のボード（project #10（実データを持たない検証用のボード））で通す。**
-**本番のボード（project #3（AI自動進行管理。実データが入っている））では試さない。**
+テスト用のカンバン（project #10（実データを持たない検証用のカンバン））で通す。**
+**本番のカンバン（project #3（AI自動進行管理。実データが入っている））では試さない。**
 
 ---
 
@@ -1328,7 +1328,7 @@ push した branch の名前でも引いてください。
 | 触る実ファイル | **14前後** | 25前後 |
 | 復元（3-49）・`abandon`・信頼の関門 | **1行も触らない** | 3つとも相手が変わる |
 | 置き場所の意味 | **変えない**（issue のリポジトリのまま） | コードのリポジトリへ移る |
-| 既存 OSS への PR | **使えない。**回避は fork 側に issue を立ててボードに載せること | 使える |
+| 既存 OSS への PR | **使えない。**回避は fork 側に issue を立ててカンバンに載せること | 使える |
 
 **案A で cross-repo をどう止めるか。**新しい仕組みは1つも足さない。
 `Issue.CodeRepoNameWithOwner` は塊2 で足すので（リンクの先を知るため）、
@@ -1409,7 +1409,7 @@ push した branch の名前でも引いてください。
 | 案 | 何が起きるか |
 | --- | --- |
 | **`parent` 固定** | 設定が増えない。**上の2つの形が扱えない** |
-| **`WORKFLOW.md` に `workspace.pr_target` を足す** | ボード全体に1つしか書けない。**リポジトリごとに変えられない** |
+| **`WORKFLOW.md` に `workspace.pr_target` を足す** | カンバン全体に1つしか書けない。**リポジトリごとに変えられない** |
 | **issue のラベルで上書き**（`continuo:pr-target=<owner>/<repo>`） | issue ごとに変えられる。**ラベルを新しい入口にする** |
 
 **推奨は `parent` 固定で出すこと。**上の2つの形が実際に出てきてから足す。
@@ -1424,7 +1424,7 @@ push した branch の名前でも引いてください。
 
 | 案 | 落とした理由 |
 | --- | --- |
-| **`WORKFLOW.md` に書かせる** | 設定はボードに1つしか無い。**issue ごとに fork が違う形を書けない** |
+| **`WORKFLOW.md` に書かせる** | 設定はカンバンに1つしか無い。**issue ごとに fork が違う形を書けない** |
 | **issue の本文に書かせる** | 本文は外部の人が書ける。**3-29 が「issue の中身は continuo が読まず、エージェントに直接読ませる」と決めている**ので、置き場所を決めるために本文を parse すると、そこだけ新しい入口になる |
 | **worktree の外に対応表を1つ持つ** | 新しい保存先が1つ増え、その寿命（作る・壊れる・消す）を全部設計することになる。**リンクを読めば済む** |
 | **身元ファイルに書いて、それを信じる** | 身元ファイルは worktree の直下にあり、エージェントが書き換えられる。**8b の検算が成立しなくなる** |

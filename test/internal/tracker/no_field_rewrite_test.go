@@ -1,4 +1,4 @@
-// **本番のボードの Status を全消しする mutation が、どこにも書かれていないことを守る。**
+// **本番のカンバンの Status を全消しする mutation が、どこにも書かれていないことを守る。**
 //
 // `updateProjectV2Field` は、選択肢の指定を**全件の置き換え**として扱う。
 // 呼んだ瞬間に、設定済みの Status の値が全部消える。**取り返せない。**
@@ -19,7 +19,7 @@ import (
 	"testing"
 )
 
-// TestSource_updateProjectV2Fieldを呼ぶコードがどこにも無い は、本番のボードを守る。
+// TestSource_updateProjectV2Fieldを呼ぶコードがどこにも無い は、本番のカンバンを守る。
 //
 // **コメントと文字列を区別する。**`internal/setup` などは、この mutation を
 // 「呼んではならない」と**コメントで説明している。**単純な部分文字列一致では、
@@ -111,7 +111,7 @@ func report(t *testing.T, path string, line int, text, forbidden, allowed string
 			idx = at + len(allowed)
 			continue
 		}
-		t.Errorf("%s:%d に %q があります。**呼ぶとボードの Status の選択肢が全部消えます。**"+
+		t.Errorf("%s:%d に %q があります。**呼ぶとカンバンの Status の選択肢が全部消えます。**"+
 			"選択肢を足すのは人間が GitHub の画面から行います: %s",
 			path, line, forbidden, strings.TrimSpace(text))
 		return

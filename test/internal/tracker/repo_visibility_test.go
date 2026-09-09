@@ -48,7 +48,7 @@ func TestFetchIssuesByStates_リポジトリが公開かどうかを取る(t *te
 // **nil を「公開ではない」に丸めてはならない。**丸めると、危ない道具の呼び出しの判定を
 // 掛けるかどうかの分岐が、取れなかった issue で静かに外れる。
 //
-// 与える情報: `isPrivate` が真・偽・無し、の3件が載ったボードの応答。
+// 与える情報: `isPrivate` が真・偽・無し、の3件が載ったカンバンの応答。
 // 成功条件: それぞれ true / false / nil になること。
 func TestFetchIssuesByStates_公開かどうかを取れなければnilにする(t *testing.T) {
 	nodes := []map[string]any{

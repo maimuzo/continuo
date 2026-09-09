@@ -29,7 +29,7 @@ type IssueRef struct {
 
 // Identifier は `<owner>/<repo>#<番号>` の形の人間可読な名前を返す。
 //
-// **ボードから issue を引く鍵である**（tracker.FetchIssueByIdentifier がこの形を取る）。
+// **カンバンから issue を引く鍵である**（tracker.FetchIssueByIdentifier がこの形を取る）。
 //
 // 戻り値: `octocat/hello-world#42` の形の文字列。
 func (r IssueRef) Identifier() string {

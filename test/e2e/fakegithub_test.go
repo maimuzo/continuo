@@ -10,7 +10,7 @@ import (
 
 // fakeGitHub は GitHub の GraphQL API の代わりに使う偽のサーバである。
 //
-// **本番のボード（project #3）へは1リクエストも送らない。**continuo は環境変数
+// **本番のカンバン（project #3）へは1リクエストも送らない。**continuo は環境変数
 // `CONTINUO_GITHUB_GRAPHQL_ENDPOINT` でここへ向く。
 //
 // **状態はテスト用gh mock と共有する。**返す中身も書き込む先も board.json であり、
@@ -19,7 +19,7 @@ import (
 type fakeGitHub struct {
 	// URL は偽サーバのエンドポイントである。
 	URL string
-	// BoardPath は読み書きするボードの JSON の絶対パスである。
+	// BoardPath は読み書きするカンバンの JSON の絶対パスである。
 	BoardPath string
 	// Queries は受け取ったクエリの種別の記録である。
 	Queries *queryLog
@@ -28,7 +28,7 @@ type fakeGitHub struct {
 // newFakeGitHub はテスト用GraphQL mockを1本立てる。
 //
 // t: 呼び出し元のテスト。後始末を t.Cleanup に登録する。
-// boardPath: 読み書きするボードの JSON の絶対パス。
+// boardPath: 読み書きするカンバンの JSON の絶対パス。
 // 戻り値: 起動した偽サーバ。
 func newFakeGitHub(t *testing.T, boardPath string) *fakeGitHub {
 	t.Helper()
@@ -41,7 +41,7 @@ func newFakeGitHub(t *testing.T, boardPath string) *fakeGitHub {
 
 // handle は1件の GraphQL リクエストに答える。
 //
-// **応答の組み立てはボードのロックを取ったまま行う。**テスト用gh mock（別プロセス）が
+// **応答の組み立てはカンバンのロックを取ったまま行う。**テスト用gh mock（別プロセス）が
 // 同時に書き換えていても、途中の状態を返さないようにするためである。
 //
 // w: 応答の書き出し先。
@@ -85,7 +85,7 @@ func (fg *fakeGitHub) handle(w http.ResponseWriter, r *http.Request) {
 //
 // **判別はクエリ本文の断片で行う**（internal/tracker/query.go の各テンプレートに対応する）。
 //
-// b: いまのボード。書き込み系のクエリではここを書き換える。
+// b: いまのカンバン。書き込み系のクエリではここを書き換える。
 // query: 受け取った GraphQL のクエリ本文。
 // vars: 受け取った変数。
 // 戻り値の1つ目: クエリの種別（記録に使う名前）。
@@ -95,7 +95,7 @@ func respond(b *ghBoard, query string, vars map[string]any) (string, map[string]
 	switch {
 	case strings.Contains(query, "field(name: $statusField)"):
 		// **綴りが違うフィールド名には NOT_FOUND を返す。**本物の GitHub と同じ挙動であり、
-		// docs/trying_it_out.md の段2 と段6 が載せている `✗ ボード` の出力はこれで出る。
+		// docs/trying_it_out.md の段2 と段6 が載せている `✗ カンバン` の出力はこれで出る。
 		if name, ok := vars["statusField"].(string); ok && name != b.StatusField {
 			return "bootstrap", nil, fieldNotFoundErrors(name)
 		}

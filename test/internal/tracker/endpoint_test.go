@@ -48,7 +48,7 @@ func TestNewAdapter_httpsでない接続先を拒否する(t *testing.T) {
 
 // 目的: loopback の http（テストの httptest.Server）だけは受け付けることを確認する。
 //
-// **これを弾くと、本番のボードへ接続しないためのテスト用の偽サーバが使えなくなる。**
+// **これを弾くと、本番のカンバンへ接続しないためのテスト用の偽サーバが使えなくなる。**
 //
 // 与える情報: 127.0.0.1 / localhost / [::1] の http URL。
 // 成功条件: いずれも NewAdapter が成功すること。
@@ -111,7 +111,7 @@ func TestNewAdapter_httpClientがnilでもDefaultClientを使わない(t *testin
 // 与える情報: 日本語だけの長い本文を返す 500 応答。
 // 成功条件: エラーメッセージが妥当な UTF-8 で、置換文字（U+FFFD）を含まないこと。
 func TestFetchIssuesByStates_エラー本文の切り詰めで日本語が壊れない(t *testing.T) {
-	body := strings.Repeat("ボードを読み取れませんでした。", 80)
+	body := strings.Repeat("カンバンを読み取れませんでした。", 80)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(body))

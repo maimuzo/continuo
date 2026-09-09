@@ -28,7 +28,7 @@
 
 ```rucm
 USE CASE NAME: 指示書に沿って issue を1件仕上げる
-BRIEF DESCRIPTION: システムは組み込みの指示書の前半と、利用者が WORKFLOW.md に書いた本文と、組み込みの指示書の後半を継ぎ合わせて1つの文面にし、エージェントへ送る。エージェントは worktree の分岐元を取り込んでから、issue と紐づく pull request と関連する記録を読み、計画を敵対的レビューに掛けてから実装し、commit して push し、pull request を出し、そのレビューを受けてから、何をしたかを issue へ書いて表明の1行で終わる。
+BRIEF DESCRIPTION: システムは組み込みの指示書の前半と、利用者が WORKFLOW.md に書いた本文と、組み込みの指示書の後半を継ぎ合わせて1つの文面にし、エージェントへ送る。エージェントは worktree の分岐元を取り込んでから、issue と紐づく pull request と関連する記録を読み、計画を issue へ書いてから敵対的レビューに掛け、実装し、commit して push し、pull request を出し、そのレビューを受けてから、何をしたかを issue へ書いて表明の1行で終わる。
 PRECONDITION: システムは常駐している。issue はカンバンの active_states に在り、システムはその issue の worktree を用意してエージェントを起動している。WORKFLOW.md は front matter と本文を持つ。
 PRIMARY ACTOR: エージェント
 SECONDARY ACTORS: システム、GitHub、利用者
@@ -50,22 +50,23 @@ BASIC FLOW:
 12. エージェントは issue から辿れるプランファイルと過去の issue を読む。
 13. エージェントは worktree の CLAUDE.md と AGENTS.md と CONTRIBUTING.md を読む。
 14. エージェントは実装の計画を書く。
-15. エージェントは計画を敵対的レビューの subagent へ渡す。
-16. エージェントは計画とレビューの判断票を issue へコメントする。
-17. エージェントは実装する。
-18. エージェントは commit して push する。
-19. エージェントは VALIDATES THAT この issue の pull request がまだ無い。
-20. エージェントは pull request を出す。
-21. エージェントは pull request を敵対的レビューの subagent へ渡す。
-22. エージェントは指摘ごとの判断票を pull request へコメントする。
-23. エージェントは指摘を直して push する。
-24. エージェントは何をしたかを issue へコメントする。
-25. エージェントは応答の最後に完了の表明を1行だけ書く。
-26. エージェントはシステムに turn の終わりを Stop hook で知らせる。
-27. システムはエージェントの会話の記録から表明を読む。
-28. システムはカンバンの issue の Status に引き渡し先を書く。
-29. システムは書いた Status を控える。
-30. システムは run を終える。
+15. エージェントは計画を issue へコメントする。
+16. エージェントは計画を敵対的レビューの subagent へ渡す。
+17. エージェントはレビューの判断票を issue へコメントする。
+18. エージェントは実装する。
+19. エージェントは commit して push する。
+20. エージェントは VALIDATES THAT この issue の pull request がまだ無い。
+21. エージェントは pull request を出す。
+22. エージェントは pull request を敵対的レビューの subagent へ渡す。
+23. エージェントは指摘ごとの判断票を pull request へコメントする。
+24. エージェントは指摘を直して push する。
+25. エージェントは何をしたかを issue へコメントする。
+26. エージェントは応答の最後に完了の表明を1行だけ書く。
+27. エージェントはシステムに turn の終わりを Stop hook で知らせる。
+28. システムはエージェントの会話の記録から表明を読む。
+29. システムはカンバンの issue の Status に引き渡し先を書く。
+30. システムは書いた Status を控える。
+31. システムは run を終える。
 POSTCONDITION: pull request がある。issue にエージェントのコメントがある。issue の Status は引き渡し先である。システムは run を終えている。
 
 SPECIFIC ALTERNATIVE FLOW 本文が空になる:
@@ -99,20 +100,20 @@ RFS BASIC FLOW 9
 POSTCONDITION: マージの途中の状態は残っていない。commit は remote に載っている。issue に衝突したことが書かれている。issue の Status は人間へ渡す先である。
 
 SPECIFIC ALTERNATIVE FLOW 既にあるpullrequestを使う:
-RFS BASIC FLOW 19
+RFS BASIC FLOW 20
 1. エージェントは既にある pull request の番号を、いま居る branch から引く。
-2. RESUME STEP 21
+2. RESUME STEP 22
 POSTCONDITION: pull request は1本のままである。
 
 GLOBAL ALTERNATIVE FLOW 進捗報告を書く:
-BRANCH FROM BASIC FLOW 17
+BRANCH FROM BASIC FLOW 18
 WHEN エージェントが1時間以上コメントを書かないまま作業を続けている場合
 1. エージェントは issue のいちばん下のコメントが自分の進捗報告かを調べる。
 2. エージェントは VALIDATES THAT いちばん下のコメントが自分の進捗報告である。
 3. エージェントは進捗報告の本文を読む。
 4. エージェントは VALIDATES THAT 読んだ本文に進捗報告の印が入っている。
 5. エージェントは読んだ本文の末尾に1行足して書き戻す。
-6. RESUME STEP 17
+6. RESUME STEP 18
 POSTCONDITION: 進捗報告のコメントが1件だけある。そのコメントの最終更新日時が新しくなっている。
 
 SPECIFIC ALTERNATIVE FLOW 進捗報告を新しく投稿する:
@@ -129,7 +130,7 @@ RFS 進捗報告を書く 4
 POSTCONDITION: 進捗報告のコメントが増えている。前の進捗報告の本文は壊れていない。
 
 GLOBAL ALTERNATIVE FLOW 判断に迷って止まる:
-BRANCH FROM BASIC FLOW 17
+BRANCH FROM BASIC FLOW 18
 WHEN エージェントが指示書の決めていないことに当たった場合
 1. エージェントは何に迷ったかを issue へコメントする。
 2. エージェントは応答の最後に判断を仰ぐ表明を1行だけ書く。
@@ -162,8 +163,10 @@ sequenceDiagram
     CC->>CC: 身元ファイルから分岐元を決めて取り込む
     CC->>GH: issue と紐づく pull request を JSON で読む
     GH-->>CC: 本文・コメント・立場
-    CC->>CC: 計画を書き、敵対的レビューを受ける
-    CC->>GH: 計画と判断票を issue へコメントする
+    CC->>CC: 計画を書く
+    CC->>GH: 計画を issue へコメントする
+    CC->>CC: 敵対的レビューを受ける
+    CC->>GH: 判断票を issue へコメントする
     CC->>CC: 実装する
     loop 1時間ごと
         CC->>GH: 進捗報告のコメントを1件だけ編集する
@@ -190,7 +193,7 @@ flowchart TD
     G --> G2{"分岐元をマージできるか"}
     G2 -->|できない| G3["理由を issue へ書き、判断を仰ぐ表明で終える"]
     G2 -->|できる| H["issue と紐づく pull request と記録を読む"]
-    H --> I["計画を書き、敵対的レビューを受ける"]
+    H --> I["計画を書いて issue へ書き、敵対的レビューを受ける"]
     I --> J["判断票を issue へ書く"]
     J --> K["実装する"]
     K --> L["commit して push する"]

@@ -59,7 +59,7 @@ sh scripts/test-live.sh        # 数秒。herdr が無ければ静かに skip �
 | pull request を出す前 | `scripts/test-like-ci.sh` は herdr を隠すので、これは走りません |
 
 **叩くのは herdr だけです。**Claude Code は起動しません（枠を消費するため）。
-GitHub の GraphQL も `gh` も叩きません（認証と本番のボードが要るため）。
+GitHub の GraphQL も `gh` も叩きません（認証と本番のカンバンが要るため）。
 
 **herdr が居なければ静かに skip します。**PATH に `herdr` が無い・socket が無い・
 socket へ繋がらないのいずれかで飛びます。CI では必ず飛びます（runner に herdr は居ません）。
@@ -272,7 +272,7 @@ curl -sL https://raw.githubusercontent.com/openai/symphony/main/SPEC.md -o docs/
 | --- | --- |
 | ログ | 常駐して動かしているあいだの出力 |
 | [internal/config/validate.go](internal/config/validate.go) の要件の文（`0より大きい整数にすること` など） | `continuo doctor` の `config` の行。設定に不正な値を書いたとき |
-| [internal/tracker](internal/tracker) のエラーの本文 | `continuo doctor` の `board` の行。ボードを読めなかったとき |
+| [internal/tracker](internal/tracker) のエラーの本文 | `continuo doctor` の「カンバン」の行。カンバンを読めなかったとき |
 
 **番兵エラー**（`errors.New` で package の変数として持つエラー）**を資源へ移すときは
 `i18n.Sentinel` を使ってください。**`errors.New` に文言を直接書くと、

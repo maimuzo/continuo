@@ -117,7 +117,7 @@ func TestLoad_0に意味がある設定値は0でも通る(t *testing.T) {
 // 目的: agent.max_concurrent_agents_by_state に 0 以下を書くと起動が止まることを確認する。
 //
 // 0 を書くと internal/orchestrator の hasFreeSlot が `inRunningState < limit` で常に偽を返し、
-// ボード全体の dispatch が永久に止まる。**ログにも何も出ないので、無人運用では
+// カンバン全体の dispatch が永久に止まる。**ログにも何も出ないので、無人運用では
 // 止まっていることに誰も気づけない。**`SPEC.md` 5.3.5 は非正の値を黙って無視すると
 // 定めるが、continuo は起動時に名指しで落とす。
 //

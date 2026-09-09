@@ -17,10 +17,10 @@ import (
 //
 // 目的: 第6段階の受け入れの基準（「1件の issue が候補に上がってから Done で片付くまで」）を
 // 1本のテストで通す。**着手の13段・turn の終わりの判定・表明の読み取り・完了の真実の源が
-// ボードであること・worktree と branch の片付け**を、この1本がまとめて通る。
+// カンバンであること・worktree と branch の片付け**を、この1本がまとめて通る。
 //
 // 与える情報:
-//   - ボードに `Ready` の issue が1件（本物の git の clone がある）
+//   - カンバンに `Ready` の issue が1件（本物の git の clone がある）
 //   - テスト用herdr mock（実 herdr は使わない）
 //   - `agent.prompt` を受けたら、Claude Code が「実装して push し、コメントを書き、
 //     自分で `gh` を叩いて Status を `Done` へ動かし、`CONTINUO-STATUS: review` を書いて
@@ -31,7 +31,7 @@ import (
 //   - worktree が本物の git で作られ、身元ファイルと設定ファイルが置かれる（段3〜6）
 //   - **pane を新しく作らない**（`pane.split` も `tab.create` も呼ばない）
 //   - agent が起動し、1回目の turn が送られる（段9〜11）
-//   - 表明を受けても、ボードが既に `Done` なら Status を書き戻さない
+//   - 表明を受けても、カンバンが既に `Done` なら Status を書き戻さない
 //   - `pane.close` で worker が止まり、worktree と branch が本当に消える
 //   - 印（実行中の一覧）から外れる
 func TestTick_1件のissueが候補に上がってからDoneで片付くまで通る(t *testing.T) {
@@ -51,7 +51,7 @@ func TestTick_1件のissueが候補に上がってからDoneで片付くまで�
 		})
 		// 何をしたかは**エージェントが**コメントに残す（continuo は代筆しない。設計 3-25 / 3-29）。
 		fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
-		// **完了の真実の源はボードである。**エージェントが gh で Done へ動かした状況を作る。
+		// **完了の真実の源はカンバンである。**エージェントが gh で Done へ動かした状況を作る。
 		fx.Tracker.SetState(issue.ID, "Done")
 
 		if !fx.Orc.OnHook(stopEvent("session-1", path, "p1")) {
@@ -73,7 +73,7 @@ func TestTick_1件のissueが候補に上がってからDoneで片付くまで�
 	if fx.Tracker.CountCall("UpdateStatus") == 0 {
 		t.Fatalf("Status を1度も書いていない: %v", fx.Tracker.Calls())
 	}
-	// 表明（review）を受けても、ボードが既に Done なので書き戻していない。
+	// 表明（review）を受けても、カンバンが既に Done なので書き戻していない。
 	if got := fx.Tracker.StateOf(issue.ID); got != "Done" {
 		t.Fatalf("Done を巻き戻してしまった: got %q, want %q", got, "Done")
 	}

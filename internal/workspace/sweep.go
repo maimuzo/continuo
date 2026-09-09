@@ -13,8 +13,8 @@ import (
 
 // OrphanBranchSweepRequest は孤児 branch の掃除の入力である（3-9 の手順6b）。
 //
-// **対象のリポジトリはボードを読まずに決まる。**置き場所の走査（3-4 の段2）で見つかった
-// worktree が属するリポジトリだけを見る。ボードに載っていないリポジトリの branch を
+// **対象のリポジトリはカンバンを読まずに決まる。**置き場所の走査（3-4 の段2）で見つかった
+// worktree が属するリポジトリだけを見る。カンバンに載っていないリポジトリの branch を
 // 消さないためである。
 type OrphanBranchSweepRequest struct {
 	// Worktrees は置き場所の走査で見つかった worktree の絶対パスである。

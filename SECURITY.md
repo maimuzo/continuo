@@ -33,12 +33,12 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 | **`curl … \| sh` で配る** | インストーラーはネットワークから取ってきて実行されます |
 | **資格情報を読む** | 定額プランの枠を読むために、`~/.claude/.credentials.json` か macOS の Keychain を読みます |
 | **`continuo abandon` は消す** | worktree と branch と herdr の workspace を消します。**`--force` を付けると、コミットしていない変更と push していない commit ごと消えます**（`--dry-run` で何が消えるかを先に見られます） |
-| **`continuo abandon` はボードも書き換える** | continuo が動いていれば、手を離させるために Status を `--park`（既定は `tracker.failure_state`）へ動かします。`--to` を付ければ片付けたあとにも動かします。**`--dry-run` はどちらも書かず、書く値を予告するだけです** |
+| **`continuo abandon` はカンバンも書き換える** | continuo が動いていれば、手を離させるために Status を `--park`（既定は `tracker.failure_state`）へ動かします。`--to` を付ければ片付けたあとにも動かします。**`--dry-run` はどちらも書かず、書く値を予告するだけです** |
 
 **これらを踏まえたうえで、想定を超える挙動があれば報告してください。**たとえば次のようなものです。
 
 - **意図していないリポジトリ**が信頼登録される
-- **ボードに載せていない** issue が処理される
+- **カンバンに載せていない** issue が処理される
 - インストーラーが**取ってくる先を、警告なしに変えられる**
 - 秘密が**ログや issue のコメントに漏れる**
 - worktree の**外**へ書き込まれる

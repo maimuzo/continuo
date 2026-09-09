@@ -184,7 +184,7 @@ func (c *graphqlClient) do(ctx context.Context, query string, variables map[stri
 // `errors` にも `NOT_FOUND` を返す。**そこで `data` を捨てると、生き残っている issue まで
 // 読めなくなる**（2026-08-21 に実運用で発生。設計 6-2）。
 //
-// **ほかの呼び出しでは使ってはならない。**フィールド名やボードの解決に失敗したときも
+// **ほかの呼び出しでは使ってはならない。**フィールド名やカンバンの解決に失敗したときも
 // `NOT_FOUND` が返るので、握りつぶすと**設定の綴り違いに永久に気づけない。**
 //
 // ctx / query / variables / out: do と同じ。
@@ -259,7 +259,7 @@ func (c *graphqlClient) doWith(ctx context.Context, query string, variables map[
 		// **消えた ID の扱いは呼び出し側が決める**（FetchIssuesByIDs は `null` を
 		// 「もう見えない」として省く。SPEC.md 11.1）。
 		//
-		// 実運用で、ボードごと消したあとに毎巡回でこのエラーが出続けた（2026-08-21。設計 6-2）。
+		// 実運用で、カンバンごと消したあとに毎巡回でこのエラーが出続けた（2026-08-21。設計 6-2）。
 		if !allowNotFound || !onlyNotFound(envelope.Errors) {
 			return &Error{
 				Category: CategoryResponse,

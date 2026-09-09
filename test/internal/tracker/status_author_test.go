@@ -2,7 +2,7 @@
 //
 // **`wasAutomated` は組み込みの自動化でも false を返す**（設計 2-6 の実測）。
 // 見分けに使うのは `actor.__typename` であり、**`Bot` なら自動化、`User` なら人間か
-// continuo 自身**である。ここではその読み取りと、絞り込み（自分のボード・いまの Status・
+// continuo 自身**である。ここではその読み取りと、絞り込み（自分のカンバン・いまの Status・
 // いちばん新しいイベント）が効いていることを見る。
 package tracker_test
 
@@ -83,9 +83,9 @@ func TestStatusAuthor_誰が書いたかの読み取り(t *testing.T) {
 			wantLogin:     "",
 		},
 		{
-			name: "別のボードのイベントは数えない",
+			name: "別のカンバンのイベントは数えない",
 			events: []map[string]any{
-				// **1つの issue が複数のボードに載っていると、両方のイベントが同じ配列で返る**
+				// **1つの issue が複数のカンバンに載っていると、両方のイベントが同じ配列で返る**
 				// （設計 2-6 の実測）。project.number で絞れていなければ、ここで自動化と誤判定する。
 				statusEventJSON("2026-08-26T12:32:35Z", "In Progress",
 					"Bot", "github-project-automation", false, 11),
@@ -234,7 +234,7 @@ func TestStatusAuthor_記録を読まない取り直しはtimelineを要求し�
 
 // TestStatusAuthor_識別子での照合はtimelineを要求しない は、設計 3-54 を確かめる。
 //
-// 目的: 識別子での照合（`FetchIssueByIdentifier`）は**ボードを丸ごと読む**（設計 3-25）。
+// 目的: 識別子での照合（`FetchIssueByIdentifier`）は**カンバンを丸ごと読む**（設計 3-25）。
 // **候補の取得と同じ理由で、ここにも timeline を足してはならない。**
 //
 // 与える情報: 識別子で1件引く。
@@ -251,7 +251,7 @@ func TestStatusAuthor_識別子での照合はtimelineを要求しない(t *test
 		t.Fatalf("リクエストの件数が想定と違う: got %d, want 1", len(reqs))
 	}
 	if strings.Contains(reqs[0].Query, "timelineItems") {
-		t.Errorf("識別子での照合のクエリに timelineItems が入っている（ボードを丸ごと読む側である）:\n%s", reqs[0].Query)
+		t.Errorf("識別子での照合のクエリに timelineItems が入っている（カンバンを丸ごと読む側である）:\n%s", reqs[0].Query)
 	}
 }
 

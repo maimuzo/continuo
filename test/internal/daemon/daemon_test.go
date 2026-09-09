@@ -321,7 +321,7 @@ func (e *daemonEnv) startProgram(t *testing.T, name string, args []string) (*exe
 //   - **終了時に pane を閉じないこと**（次の起動で引き継ぐ）
 //
 // 与える情報:
-//   - テスト用herdr mock（実 herdr には繋がない）とテスト用GitHub mock（本番のボードへは接続しない）
+//   - テスト用herdr mock（実 herdr には繋がない）とテスト用GitHub mock（本番のカンバンへは接続しない）
 //   - `In Progress` の issue が2件。どちらも worktree と身元ファイルがディスクにある
 //   - issue #188 の pane は `idle`、issue #189 の pane は `working`
 //   - `agent.prompt` を受けたら、エージェントが実装して push しコメントを書き、
@@ -396,7 +396,7 @@ func TestDaemon_復元を終えてから巡回が始まり1件のissueが通る(
 		// エージェントが作業を終えた状態を作る。
 		writeTranscript(t, transcriptPath)
 		env.GitHub.AddComment("I_node188", "<!-- continuo:agent -->\n実装して push しました")
-		// **完了の真実の源はボードである。**エージェントが gh で Done へ動かした状況にする。
+		// **完了の真実の源はカンバンである。**エージェントが gh で Done へ動かした状況にする。
 		env.GitHub.SetState("PVTI_item188", "Done")
 		// `continuo hook` と同じ1行を socket へ書く。
 		sendHook(t, env.SocketPath, map[string]any{

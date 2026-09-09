@@ -122,11 +122,11 @@ type Manager struct {
 
 	// clonePaths は `ghq list -p -e <owner>/<repo>` の答えを短い間だけ覚える
 	// （clonePathCacheTTL）。信頼の判定と、破壊的な git コマンドの宛先の検算が
-	// issue ごとに ghq を起動するので、そのままではボードの件数ぶんプロセスが立つ。
+	// issue ごとに ghq を起動するので、そのままではカンバンの件数ぶんプロセスが立つ。
 	clonePaths *ttlCache[string]
 	// trustResults は信頼の判定の結果を短い間だけ覚える（trustCacheTTL）。
 	// **判定1回につき ghq と git を1本ずつ起動し `~/.claude.json` を読み直す**ので、
-	// ボードの項目ごとに呼ばれると費用が跳ね上がる（3-6）。
+	// カンバンの項目ごとに呼ばれると費用が跳ね上がる（3-6）。
 	trustResults *ttlCache[bool]
 	// identityMu は身元ファイルと `info/exclude` の読んで書き戻す処理を鍵ごとに直列化する。
 	// 鍵は identityLockKey / excludeLockKey が作る。

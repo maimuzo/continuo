@@ -15,7 +15,7 @@ import (
 
 // setupAnswers は `continuo setup` の対話へ流す番号である。
 //
-// 偽のボードの Status の選択肢は `Ice Box, Ready, In Progress, Blocked, In Review, Done`
+// 偽のカンバンの Status の選択肢は `Ice Box, Ready, In Progress, Blocked, In Review, Done`
 // の6つなので、手順書の段4 と同じ答えになる。
 //
 //	[1/5] 着手待ち    → 2（Ready）
@@ -30,13 +30,13 @@ const setupAnswers = "2\n3\n5\n4\n6\n"
 //
 // 目的:
 //   - **段7〜段9（issue を実際に処理する部分）を初めて通す。**
-//     ここは実物を使うと枠を消費し、リポジトリが変更され、ボードが書き換わるため、
+//     ここは実物を使うと枠を消費し、リポジトリが変更され、カンバンが書き換わるため、
 //     これまで一度も動かせていなかった
 //   - mockどうし（テスト用gh mock・テスト用GraphQL mock・テスト用herdr mock・隔離したホームディレクトリ・
 //     テスト用Claude Code mock）が繋がって、1件の issue が `Ready` から `Done` まで通ること
 //
 // 与える情報:
-//   - 既に issue が1件（`Ice Box`）載っている偽のボード
+//   - 既に issue が1件（`Ice Box`）載っている偽のカンバン
 //   - 本物の git の bare リポジトリと clone（worktree の作成・削除・push の判定に要る）
 //   - `agent.prompt` を受けたら、テスト用Claude Code mock が commit して push し、
 //     issue にコメントを書き、transcript に `CONTINUO-STATUS: review` を書いて、
@@ -57,7 +57,7 @@ func TestE2E_手順書の段1から段9までをmockだけで通す(t *testing.T
 		t.Fatalf("段1: `continuo init --help` の終了コードが 0 ではありません: %d\n%s", res.Code, res.Out)
 	}
 
-	// ===== 段2. 使うボードを確かめる（作らない） =====
+	// ===== 段2. 使うカンバンを確かめる（作らない） =====
 	stage2ReadBoard(t, env)
 
 	// ===== 段3. 設定を置く =====
@@ -92,7 +92,7 @@ func TestE2E_手順書の段1から段9までをmockだけで通す(t *testing.T
 	stage9Stop(t, env, cmd, logs, worktreePath)
 }
 
-// stage2ReadBoard は段2（使うボードを確かめる）を叩く。
+// stage2ReadBoard は段2（使うカンバンを確かめる）を叩く。
 //
 // **テスト用gh mock を直接叩く。**手順書がここで案内しているのは continuo ではなく gh である。
 //
@@ -103,7 +103,7 @@ func stage2ReadBoard(t *testing.T, env *e2eEnv) {
 	gh := filepath.Join(env.BinDir, "gh")
 
 	out := runTool(t, env, gh, "project", "list", "--owner", env.Owner)
-	mustContain(t, "段2 の `gh project list`", out, "continuo 試用ボード", "open")
+	mustContain(t, "段2 の `gh project list`", out, "continuo 試用カンバン", "open")
 
 	out = runTool(t, env, gh, "project", "field-list", "7", "--owner", env.Owner, "--format", "json")
 	mustContain(t, "段2 の `gh project field-list`", out,
@@ -246,7 +246,7 @@ func mustHaveNoFailure(t *testing.T, label, out string) {
 
 // stage7PrepareIssue は段7（issue を1件用意する）を叩く。
 //
-// **`Ready` にするのは人間の画面の作業なので、ここではボードを直接書き換える。**
+// **`Ready` にするのは人間の画面の作業なので、ここではカンバンを直接書き換える。**
 // continuo は GraphQL 経由でしか書かないため、画面の操作を再現できるのはここだけである。
 //
 // t: 呼び出し元のテスト。
@@ -268,7 +268,7 @@ func stage7PrepareIssue(t *testing.T, env *e2eEnv) string {
 
 	// **足した item はまだ Status が空である。**人間が画面で `Ready` にする。
 	if got := env.Board.StateOfURL(t, issueURL); got != "" {
-		t.Fatalf("段7: ボードへ足した直後の Status が空ではありません: %q", got)
+		t.Fatalf("段7: カンバンへ足した直後の Status が空ではありません: %q", got)
 	}
 	env.Board.SetStateByURL(t, issueURL, "Ready")
 
@@ -497,19 +497,19 @@ func readFileString(t *testing.T, path string) string {
 	return string(raw)
 }
 
-// TestE2E_status_fieldの綴りが違うとボードを読めない は、手順書の段2 と段6 が載せている
-// **`✗ ボード` の出力**を、テスト用GitHub GraphQL mock サーバに対して実際に出す。
+// TestE2E_status_fieldの綴りが違うとカンバンを読めない は、手順書の段2 と段6 が載せている
+// **`✗ カンバン` の出力**を、テスト用GitHub GraphQL mock サーバに対して実際に出す。
 //
-// 目的: 「綴りが1文字でも違うとボードを読めない」という手順書の記述が、
+// 目的: 「綴りが1文字でも違うとカンバンを読めない」という手順書の記述が、
 // **文面まで含めて本当かどうか**を確かめる。以前は偽のサーバが `statusField` を
-// 見ていなかったため、綴りを間違えても `✓ ボード` になっていた。
+// 見ていなかったため、綴りを間違えても `✓ カンバン` になっていた。
 //
 // 与える情報: 段3〜段5 まで通した `WORKFLOW.md` の `status_field` を、
-// ボードに存在しない `continuo Status` へ書き換えた写し。
+// カンバンに存在しない `continuo Status` へ書き換えた写し。
 //
-// 成功条件: `continuo doctor` の終了コードが 1 で、`✗ ボード` の行に
+// 成功条件: `continuo doctor` の終了コードが 1 で、`✗ カンバン` の行に
 // GitHub が返す `NOT_FOUND` の文面が出ること。
-func TestE2E_status_fieldの綴りが違うとボードを読めない(t *testing.T) {
+func TestE2E_status_fieldの綴りが違うとカンバンを読めない(t *testing.T) {
 	env := newE2EEnv(t)
 
 	if res := env.Run(t, env.TryDir, "", "init"); res.Code != 0 {

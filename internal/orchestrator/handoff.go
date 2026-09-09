@@ -20,9 +20,9 @@ import (
 // `FetchAllComments` が走り、コメントの多い issue では最大 maxCommentPages 回の
 // GraphQL になる。**入札に負け続ける機械は空きスロットを埋めないので、
 // `dispatchCandidates` のループは候補の最後まで止まらない。**
-// 104件のボードでは、30秒の巡回1回が数百リクエストになる。
+// 104件のカンバンでは、30秒の巡回1回が数百リクエストになる。
 //
-// **使い切ったらその巡回は打ち切る。**候補はボードの並び順で来るので、
+// **使い切ったらその巡回は打ち切る。**候補はカンバンの並び順で来るので、
 // **上から順に見ることは保たれる。**次の巡回で続きを見る。
 const maxHandoffFetchesPerPoll = 10
 
@@ -43,7 +43,7 @@ type handoffDecision struct {
 // handoffGate は「この機械がこの issue を処理してよいか」を、着手の前に決める
 // （設計 3-77 / 3-77a / 3-77b / 3-77c）。
 //
-// **見るのは担当者（assignee）とコメントの全件だけである。**ボードに新しい欄は足さない。
+// **見るのは担当者（assignee）とコメントの全件だけである。**カンバンに新しい欄は足さない。
 //
 //	担当者が2人以上                                触らない。WARN を出す
 //	担当者が無い                                   入札する。勝ったら自分を担当者に加えて hold を書く
@@ -89,7 +89,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	logins := assigneeLogins(issue)
 	// **コメントを読まずに答えが出るものを先に処理する。**
 	//
-	// **コメントの取得は issue 1件につき1本以上の GraphQL である。**候補が多いボードで
+	// **コメントの取得は issue 1件につき1本以上の GraphQL である。**候補が多いカンバンで
 	// 全件に掛けると、巡回1回のリクエストが候補の数だけ増える（設計 3-31）。
 	if len(logins) >= 2 {
 		o.logger.Warn("担当者が2人以上いるので触りません（人間が触っています）",
@@ -616,7 +616,7 @@ func (o *Orchestrator) warnIfViewerDiffers(login string) {
 //
 // **1回の巡回で読める issue の数に上限を置く**（maxHandoffFetchesPerPoll）。
 // **入札に負け続ける機械は空きスロットを埋めないので、候補のループが最後まで止まらない。**
-// 104件のボードでは、30秒の巡回1回が数百リクエストになる。
+// 104件のカンバンでは、30秒の巡回1回が数百リクエストになる。
 //
 // 戻り値: 枠を取れたら true。**偽ならこの巡回はここで打ち切る。**
 func (o *Orchestrator) takeHandoffFetch() bool {
@@ -885,8 +885,8 @@ func (o *Orchestrator) logReleasedRecord(
 
 // stopBecauseHandoffLost は、担当が移った run を止める（設計 3-77c）。
 //
-// **ボードへは1バイトも書かない。**Status を動かすと、新しい担当の機械が着手しようと
-// しているボードを、**外された機械が横から書き換える**ことになる。
+// **カンバンへは1バイトも書かない。**Status を動かすと、新しい担当の機械が着手しようと
+// しているカンバンを、**外された機械が横から書き換える**ことになる。
 //
 // **issue へもコメントしない。**この機械はもうこの issue の担当ではない。
 // **エージェントに成果を書かせ直す経路（`ensureAgentComment`）も通さない。**

@@ -34,7 +34,7 @@ func TestFetchIssuesByIDs_見つからないIDは省く(t *testing.T) {
 // TestFetchIssuesByIDs_Status未設定が混ざっても残りを返す は、
 // 「候補の集合に居ない item」で全件を落とさないことを固定する。
 //
-// 目的: 人間がボードの画面で Status を空にするのは異常な操作ではない（本番のボードでも
+// 目的: 人間がカンバンの画面で Status を空にするのは異常な操作ではない（本番のカンバンでも
 // 104件中4件が未設定である）。**それをエラーにすると、同じ呼び出しに乗った他の run が
 // 全部巻き添えになる**（実行中 issue の照合・取り残された worktree の照合・
 // 再起動時の復元が、その1件のせいで丸ごと飛ぶ）。
@@ -192,7 +192,7 @@ func TestFetchIssuesByIDs_draftIssueも取り直せる(t *testing.T) {
 // **これは部分的な成功である。**
 //
 // **`errors` があるからと `data` を捨てると、生き残っている issue まで読めなくなる。**
-// 実運用で、ボードごと消したあとに毎巡回でこのエラーが出続けた（2026-08-21。設計 6-2）。
+// 実運用で、カンバンごと消したあとに毎巡回でこのエラーが出続けた（2026-08-21。設計 6-2）。
 //
 // 目的: `NOT_FOUND` だけが返ったとき、`data` を使って残りを返すこと。
 // 与える情報: 1件が正常・1件が null の `data` と、`NOT_FOUND` の `errors` を同時に返す偽サーバ。
@@ -238,7 +238,7 @@ func TestFetchIssuesByIDs_NOT_FOUND以外が混ざればエラーにする(t *te
 		"data": byIDsPayload([]any{found, nil}),
 		"errors": []any{
 			map[string]any{"type": "NOT_FOUND", "message": "消えた ID があります"},
-			map[string]any{"type": "FORBIDDEN", "message": "このボードを読む権限がありません"},
+			map[string]any{"type": "FORBIDDEN", "message": "このカンバンを読む権限がありません"},
 		},
 	}}))
 	a := newAdapterForFetch(t, fs)

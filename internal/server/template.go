@@ -159,6 +159,33 @@ section { margin-bottom: 2rem; }
 <p class="meta">{{ t "dashboard.note_tokens" }}</p>
 </section>
 
+<section>
+<table>
+<caption>{{ t "dashboard.caption_cumulative" }}</caption>
+<thead>
+<tr>
+<th class="num">{{ t "dashboard.col_api_calls" }}</th>
+<th class="num">{{ t "dashboard.col_input" }}</th>
+<th class="num">{{ t "dashboard.col_cache_creation" }}</th>
+<th class="num">{{ t "dashboard.col_cache_read" }}</th>
+<th class="num">{{ t "dashboard.col_output" }}</th>
+<th class="num">{{ t "dashboard.col_tokens_total" }}</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="num">{{ formatInt .CumulativeTotals.APICalls }}</td>
+<td class="num">{{ formatInt .CumulativeTotals.Input }}</td>
+<td class="num">{{ formatInt .CumulativeTotals.CacheCreation }}</td>
+<td class="num">{{ formatInt .CumulativeTotals.CacheRead }}</td>
+<td class="num">{{ formatInt .CumulativeTotals.Output }}</td>
+<td class="num"><strong>{{ formatInt .CumulativeTotals.Total }}</strong></td>
+</tr>
+</tbody>
+</table>
+<p class="meta">{{ t "dashboard.note_cumulative" }}</p>
+</section>
+
 </body>
 </html>
 `

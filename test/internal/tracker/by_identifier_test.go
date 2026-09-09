@@ -11,7 +11,7 @@ import (
 // 目的: 識別子で1件引けること、そのときに **Status で絞らない**ことを確認する
 // （設計 3-25 / 3-26: グループの他の issue は `Ice Box` に置かれるので、`active_states` で
 // 絞ると表明が1件も反映されない）。
-// 与える情報: `Ice Box` の item を含むボードの応答。
+// 与える情報: `Ice Box` の item を含むカンバンの応答。
 // 成功条件: `Ice Box` の issue が引けて、送ったクエリに Status の絞り込み（`query:` 変数）が
 // 入っていないこと。
 func TestFetchIssueByIdentifier_IceBoxのissueもStatusで絞らずに引ける(t *testing.T) {
@@ -28,7 +28,7 @@ func TestFetchIssueByIdentifier_IceBoxのissueもStatusで絞らずに引ける(
 		t.Fatalf("識別子で引くのに失敗した: %v", err)
 	}
 	if !ok {
-		t.Fatalf("ボードに載っている issue を引けなかった")
+		t.Fatalf("カンバンに載っている issue を引けなかった")
 	}
 	if issue.ID != "item-45" || issue.State != "Ice Box" {
 		t.Fatalf("引いた issue が想定と違う: id=%q state=%q", issue.ID, issue.State)
@@ -46,11 +46,11 @@ func TestFetchIssueByIdentifier_IceBoxのissueもStatusで絞らずに引ける(
 	}
 }
 
-// 目的: ボードに載っていない識別子を渡しても**エラーにしない**ことを確認する
-// （06_orchestrator.md:「bool は『ボードに載っているか』である。載っていなければ
+// 目的: カンバンに載っていない識別子を渡しても**エラーにしない**ことを確認する
+// （06_orchestrator.md:「bool は『カンバンに載っているか』である。載っていなければ
 // (ゼロ値, false, nil) を返す。エージェントが存在しない issue 番号を書くことはありうるので、
 // それをエラーにしない」）。
-// 与える情報: 別の識別子の item だけが載っているボードの応答。
+// 与える情報: 別の識別子の item だけが載っているカンバンの応答。
 // 成功条件: エラーが nil、bool が false、Issue がゼロ値であること。
 func TestFetchIssueByIdentifier_載っていなければエラーにせずfalseを返す(t *testing.T) {
 	item := issueItemJSON(testIssueItemOpts{
@@ -73,7 +73,7 @@ func TestFetchIssueByIdentifier_載っていなければエラーにせずfalse�
 	}
 }
 
-// 目的: ページをまたいでも引けることを確認する（104件のボードは1リクエストで収まるが、
+// 目的: ページをまたいでも引けることを確認する（104件のカンバンは1リクエストで収まるが、
 // それを超えたときに黙って取り逃さないこと）。
 // 与える情報: 1ページ目に別の item、2ページ目に目的の item がある応答。
 // 成功条件: 2ページ目の issue を引けること。
@@ -105,9 +105,9 @@ func TestFetchIssueByIdentifier_ページをまたいでも引ける(t *testing.
 // 確認する（レビュー指摘「照合の前に item ごとに信頼判定が走る」の回帰テスト）。
 //
 // **信頼の判定は毎回 ghq と git を起動して `~/.claude.json` を読み直す**（約56ミリ秒／件）。
-// 照合の前に全件へ掛けると、表明1行あたりボード104件ぶん・外部プロセス208回になる。
+// 照合の前に全件へ掛けると、表明1行あたりカンバン104件ぶん・外部プロセス208回になる。
 //
-// 与える情報: 3件の item が載ったボードと、呼ばれた `<owner>/<repo>` を記録する判定関数。
+// 与える情報: 3件の item が載ったカンバンと、呼ばれた `<owner>/<repo>` を記録する判定関数。
 // 成功条件: 判定関数が呼ばれたのは一致した1件のリポジトリだけであること。
 // 引いた Issue の Dispatchable にその判定結果が反映されていること。
 func TestFetchIssueByIdentifier_一致した1件にだけ信頼判定を掛ける(t *testing.T) {
@@ -144,7 +144,7 @@ func TestFetchIssueByIdentifier_一致した1件にだけ信頼判定を掛け�
 		t.Fatalf("識別子で引くのに失敗した: %v", err)
 	}
 	if !ok {
-		t.Fatalf("ボードに載っている issue を引けなかった")
+		t.Fatalf("カンバンに載っている issue を引けなかった")
 	}
 	if !issue.Dispatchable {
 		t.Fatalf("一致した1件に信頼の判定が反映されていない")
@@ -175,21 +175,21 @@ func TestFetchIssueByIdentifier_信頼されていなければDispatchableが偽
 		t.Fatalf("識別子で引くのに失敗した: %v", err)
 	}
 	if !ok {
-		t.Fatalf("ボードに載っている issue を引けなかった")
+		t.Fatalf("カンバンに載っている issue を引けなかった")
 	}
 	if issue.Dispatchable {
 		t.Fatalf("信頼登録されていないのに Dispatchable が真である")
 	}
 }
 
-// 目的: ボードのページ数に上限があり、超えたら CategoryPagination で落ちることを確認する
+// 目的: カンバンのページ数に上限があり、超えたら CategoryPagination で落ちることを確認する
 // （レビュー指摘「両方のページングに上限が無い」の回帰テスト）。
 //
-// **上限が無いと、ボードが育つほど1回の呼び出しのコストが黙って増える。**
-// 表明の対象1件ごとにボードを全ページ読むので、GitHub の API 枠（5,000 point/時。設計 3-31）
+// **上限が無いと、カンバンが育つほど1回の呼び出しのコストが黙って増える。**
+// 表明の対象1件ごとにカンバンを全ページ読むので、GitHub の API 枠（5,000 point/時。設計 3-31）
 // を無言で食い潰す。
 //
-// 与える情報: 常に hasNextPage が真で、目的の識別子が1件も載っていないボードの応答。
+// 与える情報: 常に hasNextPage が真で、目的の識別子が1件も載っていないカンバンの応答。
 // 成功条件: 無限に読み続けず、CategoryPagination のエラーで止まること。
 func TestFetchIssueByIdentifier_ページ数の上限を超えたら落とす(t *testing.T) {
 	item := issueItemJSON(testIssueItemOpts{

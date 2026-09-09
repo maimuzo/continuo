@@ -7,15 +7,15 @@ import (
 	"github.com/maimuzo/continuo/internal/i18n"
 )
 
-// checkRewriteKeys は `tracker.automated_state_rewrite` のキーがボードの Status の
+// checkRewriteKeys は `tracker.automated_state_rewrite` のキーがカンバンの Status の
 // 選択肢にあるかを見る（見出し語 `対応表のキー`。設計 3-57。issue #67）。
 //
 // **判定は書き直さない。**internal/config の `RewriteKeysOutsideBoard` をそのまま呼ぶ。
 // 起動時の警告（internal/tracker の `missingRewriteKeys`）も同じ関数を呼んでいる。
 // **違うのは出し方だけである。**
 //
-// **記号は `✗` ではなく `!` にする。**キーはボードに実在しなくてよい。
-// **`✗` にすると、ボードの自動化をやめて選択肢を消した人が抜け出せなくなる**（issue #67）。
+// **記号は `✗` ではなく `!` にする。**キーはカンバンに実在しなくてよい。
+// **`✗` にすると、カンバンの自動化をやめて選択肢を消した人が抜け出せなくなる**（issue #67）。
 //
 // **なぜこの見出し語が要るのか。**キーの綴りを打ち間違えると、対応表のその行は
 // 一度も引かれないまま黙って死ぬ。起動時には警告が出るが、**`continuo doctor` は
@@ -26,11 +26,11 @@ import (
 // 「一方が他方を語の並びとして丸ごと含む」だけで、`In Progres` と `In Progress` は
 // **どちらにも当たらない。**
 //
-// **ボードを読んだときの応答を使い回すので、リクエストは増えない。**
+// **カンバンを読んだときの応答を使い回すので、リクエストは増えない。**
 //
 // cfg: 読めた場合の設定。
-// boardOptions: ボード側の Status の選択肢名（tracker.Adapter.StatusOptionNames の戻り値）。
-// boardSymbol: 上流（ボード）の記号。
+// boardOptions: カンバン側の Status の選択肢名（tracker.Adapter.StatusOptionNames の戻り値）。
+// boardSymbol: 上流（カンバン）の記号。
 // 戻り値: 検査結果。
 func checkRewriteKeys(cfg loadedConfig, boardOptions []string, boardSymbol Symbol) Result {
 	if !cfg.OK {
