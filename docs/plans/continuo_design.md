@@ -9065,7 +9065,7 @@ sequenceDiagram
     GH-->>G: 投稿者は人間のまま「– with App の表示名」が付く
 ```
 
-#### 実装の前に測る2件
+#### 実装の前に測ること
 
 **どちらも偽なら、下の節がまとめて成り立たなくなる。****実装より先に測る。**
 
@@ -9125,7 +9125,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 #### 画面に実際に出るもの
 
 **2026-09-08。REST で投稿した2件を、人間が画面で確かめて書き写した。**
-**GraphQL で投稿した1件は、この表に入っていない。**上の「実装の前に測る2件」の1つ目がそれである。
+**GraphQL で投稿した1件は、この表に入っていない。**上の「実装の前に測ること」の1つ目がそれである。
 
 | どちらの経路で書いたか | 画面に並ぶもの |
 | --- | --- |
@@ -9435,7 +9435,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **使い回すには `client_secret` を人から人へ渡すことになり、その経路が無い**（WORKFLOW.md は commit されるので置けない）。
 
 **人ごとに作れば、渡すものが1つも無くなる。**
-**3-82g の画面が作成を自動化しているので、各自が1回ボタンを押すだけである。**
+**3-82g の画面が作成を自動化しているので、各自がボタンを3回押すだけである**（作る・install・認可）。
 
 **名前が衝突しないようにする。**GitHub App の名前は GitHub の中で世界に1つしか取れない。
 **画面が入れる既定の名前は `continuo-<gh api user のログイン名>` にする。**
@@ -9447,22 +9447,21 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 #### まだ設定していない同僚が、どうなるか
 
 **`true` の WORKFLOW.md を pull しただけの人は、資格情報を持っていない。**
-**その人の continuo は巡回を始めない**（この節の「取れないときに止める」）。
+**その人の continuo は起動しない**（この節の「取れないときに止める」）。
 **人間の決定「アクセストークンが取得できなかったならエラーで停止して良い」のとおりである。**
 
-**止めたままにしない。何をすればよいかを、その場で出す。**
-**`server.port` があるときは、ダッシュボードだけ立っているので、そこへ案内する**（下の「止まったときに、作り直す画面へ戻れるようにする」）。
+**止めたままにしない。何をすればよいかを、その場で出す**（下の「資格情報が無いときに、どうやって作る画面へ行くか」）。
 
     github_app_attribution が true ですが、GitHub App の資格情報がありません。
-    巡回は始めていません。ダッシュボードだけ開いてあります。
+    起動しません。次の手順で、1分ほどで設定できます。
 
-      1. この機械で1回だけ設定する
-         http://127.0.0.1:<port>/github-app を開いてボタンを3回押してください。
-         かかる時間は1分ほどです。押し終えたら、その画面から巡回を始められます。
+      1. WORKFLOW.md の tracker.comments.github_app_attribution を、手元だけ false にする
+         （commit しないでください。commit すると、チーム全員の attribution が消えます）
+      2. continuo を起動する
+      3. http://127.0.0.1:<port>/github-app を開き、ボタンを3回押す
+      4. github_app_attribution を true に戻して、continuo を再起動する
 
-      2. この機械では attribution を付けない
-         WORKFLOW.md の tracker.comments.github_app_attribution を false にしてください。
-         ただし WORKFLOW.md は commit されるので、チーム全員に効きます。
+    server.port を書いていないときは、先に書いてください。
 
 **2つ目を書くのは、その人が急いでいるときに逃げ道を1本残すためである。**
 **書かないと、その人は「チームの設定を勝手に変えてよいのか」を判断できずに止まる。**
@@ -9471,51 +9470,35 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **起動しない状態では doctor しか叩けないので、片方だけに書くと届かない。**
 
 
-#### 止まったときに、作り直す画面へ戻れるようにする
+#### 資格情報が無いときに、どうやって作る画面へ行くか
 
-**「起動しない」は、いまのままだと復旧できない。**
-**[internal/daemon/daemon.go:302-305](../../internal/daemon/daemon.go#L302-L305) の段3 が落ちると `shutdown()` して return するので、
-段4c の [329-333行](../../internal/daemon/daemon.go#L329-L333) で開くダッシュボードは1度も立たない。**
-**3-82g の `/github-app` は、そのダッシュボードが配る画面である。**
-**つまり「起動して `/github-app` を開いてください」という案内は、その状態では実行できない。**
+**段を新しく作らない。**GitHub App の検査は、他の起動時の検査と同じ段3 に置く
+（[internal/daemon/daemon.go:302-305](../../internal/daemon/daemon.go#L302-L305) の `runStartupChecks`）。
+**落ちたら、いままでどおり起動しない。**
 
-**「起動しない」の意味を、ここで決め直す。**
+**一度そう決めて、段4d（ダッシュボードの後ろ）へ移す案を書いたが、取り下げた。**
+**取り下げた理由は3つある。**
 
-| 何 | どうするか |
+| 何 | なぜ成り立たないか |
 | --- | --- |
-| **カンバンの巡回** | **始めない。**issue を1件も dispatch しない |
-| **復元** | **行わない。**走っている run を引き継がない |
-| **ダッシュボード** | **`server.port` があれば立てる。**`/github-app` と、止まっている理由を出す画面を配る |
-| **`server.port` が無い** | **いままでどおり、エラーの文言を出して終わる** |
+| **復元をどうするかが決まらない** | **復元を飛ばすと、hook の受け口が1つも開かない。**[internal/orchestrator/restore.go:134](../../internal/orchestrator/restore.go#L134) の `hs.Start()`・[138行](../../internal/orchestrator/restore.go#L138) の `ReplayPending()`・[161行](../../internal/orchestrator/restore.go#L161) の `StartDelivery()` は、どれも `Restore` の中にある。**飛ばさずに待つと、引き継いだ run が巡回されないまま止まる** |
+| **待ち状態から抜ける手段が要る** | 「画面のボタンから巡回を始める」は、経路も HTTP のメソッドも daemon への合図も決まっていない。**いま配っているのは読み取りの2本だけである**（[internal/server/server.go:338-339](../../internal/server/server.go#L338-L339)） |
+| **再起動を避ける理由が無かった** | 「`server.port` を消してから起動し直す手順が要る」と書いたが、**待っている人は `server.port` を書いてある。**消す手順は要らない |
 
-**段の並びを変える。**GitHub App の検査だけを、段4c のダッシュボードより後ろへ動かす。
-**他の起動時の検査は段3 のままにする。**あちらが落ちる原因は設定の誤りで、画面を見せても直せない。
+**代わりに、`false` で起動して画面を通す。**
+**`/github-app` の画面は `github_app_attribution` の値を見ない。**`false` でもダッシュボードは立ち、画面は開ける。
 
-| 段 | 何をするか |
+| 順 | 何をするか |
 | --- | --- |
-| 3 | いままでの起動時の検査（GitHub App のぶんを除く） |
-| 4 / 4b | 復元と掃除 |
-| **4c** | **ダッシュボードを立てる**（`server.port` があるとき） |
-| **4d（新設）** | **GitHub App の検査。**落ちたら、巡回へ進まずに待つ |
-| 5 | 巡回を始める |
+| **1** | WORKFLOW.md の `github_app_attribution` を、**手元だけ `false` にする**（commit しない） |
+| **2** | continuo を起動する。**起動時の検査は通る** |
+| **3** | `http://127.0.0.1:<port>/github-app` を開き、ボタンを3回押す |
+| **4** | `github_app_attribution` を `true` に戻して、continuo を再起動する |
 
-**4d が落ちたときは、プロセスを終わらせない。**
-**ダッシュボードを開いたまま、標準エラーへ案内を出して待つ。**
-**人間が `/github-app` を通し終えたら、画面のボタンから巡回を始められるようにする。**
-**再起動を求めない。**再起動を求めると、`server.port` を消してから起動し直す手順が要り、
-**そこで人間がもう1度つまずく。**
+**手元だけ `false` にするのは、WORKFLOW.md が commit されるからである**（3-82c の「チームで WORKFLOW.md を共有する形に対応する」）。
+**commit すると、チーム全員の attribution が消える。**
 
-**復元を段4 のまま先に行うことに、危険は無い。**
-**復元は人間の `gh` の認証で行う**（カンバンの読み書きは 3-82a の三で GitHub App へ移さないと決めた）。
-**GitHub App のトークンが取れなくても、復元は通る。**
-
-**`server.port` が無い人には、そのことを案内へ書く。**
-
-    github_app_attribution が true ですが、GitHub App の資格情報がありません。
-    WORKFLOW.md に server.port を書いて起動し直すと、
-    http://127.0.0.1:<port>/github-app から1分ほどで設定できます。
-
-**doctor も同じ文面を出す。**
+**この手順を、落ちたときの文面と `continuo doctor` の両方へ書く。**
 
 #### `server.port` を書いていない同僚は、画面を開けない
 
@@ -9633,7 +9616,7 @@ sequenceDiagram
 | **`failure_state` へ落とした通知**（[internal/orchestrator/restore.go:934](../../internal/orchestrator/restore.go#L934) の `moveToFailure`） | **人間の認証** | **これも「止まった理由」である**（下） |
 | **カンバンに載っていなかった・別の run が担当中だった・worktree を残した**（[internal/orchestrator/lifecycle.go:435](../../internal/orchestrator/lifecycle.go#L435)・[467行](../../internal/orchestrator/lifecycle.go#L467)・[1058行](../../internal/orchestrator/lifecycle.go#L1058)） | **GitHub App のトークン** | 同じ |
 | **引き渡しの通知**（[internal/orchestrator/lifecycle.go:1161](../../internal/orchestrator/lifecycle.go#L1161) の `postHandoffComment`） | **人間の認証** | **これが「止まった理由」を運ぶ唯一の経路である**（下） |
-| **持ち回りの3種**（入札・hold・released） | **人間の認証** | **機械どうしの取り決めで、指示書が「読み飛ばします」と書いている** |
+| **持ち回りの4呼び出し**（入札・hold・released が2箇所。[internal/orchestrator/handoff.go:316](../../internal/orchestrator/handoff.go#L316)・[408行](../../internal/orchestrator/handoff.go#L408)・[477行](../../internal/orchestrator/handoff.go#L477)・[500行](../../internal/orchestrator/handoff.go#L500)） | **人間の認証** | **機械どうしの取り決めで、指示書が「読み飛ばします」と書いている** |
 
 **この12箇所で全部である。**表に無い箇所は無い。
 **continuo は成果を代筆しない**（[internal/orchestrator/lifecycle.go:1104](../../internal/orchestrator/lifecycle.go#L1104) の
@@ -9652,8 +9635,8 @@ sequenceDiagram
 [773行](../../internal/orchestrator/restore.go#L773)・[893行](../../internal/orchestrator/restore.go#L893)）。
 
 **GitHub App のトークンが取れない状態で continuo を再起動すると、この3つが動く。**
-**GitHub App のトークンで書くと、Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1行も残らない。**
-**GitHub App のトークンで書くと、GitHub App のトークンが取れずに止まった run では、理由も書けずに何も残らない。**
+**GitHub App のトークンで書くと、GitHub App のトークンが取れずに止まった run では、
+Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1行も残らない。**
 **attribution は付かないが、`<!-- continuo:self -->` は付くので、機械が書いたことは従来どおり判定できる。**
 
 **止まり方は、経路で違う。**
@@ -9663,6 +9646,19 @@ sequenceDiagram
 | **起動時に取れない** | **起動しない。**人間が「エラーで停止して良い」と決めた |
 | **走行中に取れなくなった**（GitHub App のトークンで書く6つ） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない。カンバンも止めない** |
 | **人間の認証で書く6つ**（持ち回りの4呼び出し・引き渡しの通知・`moveToFailure`） | **落ちない。**GitHub App のトークンを使わないので、取れなくても影響しない |
+| **エージェントの投稿7本**（新しく投稿する6本と、書かせ直しの1本） | **その run は `blocked` で返る。**指示書が「素の `gh issue comment` へ切り替えず、`blocked` で返してください」と書いているためである（3-82e） |
+
+**エージェントの側だけ、run が止まる。**本体の側は止まらない。
+**この差は意図したものである。**
+
+| どちらか | なぜ違うか |
+| --- | --- |
+| **本体の投稿** | **落ちても、run の成果は失われない。**投稿は run の記録であって、成果そのものではない |
+| **エージェントの投稿** | **成果そのものである。**書けないまま進めると、人間が結果を受け取れない run が `In Review` へ上がる |
+
+**走行中に GitHub App のトークンが死ぬのは、人間が GitHub App を消した・install を外した・secret を作り直したときである。**
+**そのとき走っている run は、全部 `Blocked` で返る。**
+**戻し方は、上の「資格情報が無いときに、どうやって作る画面へ行くか」と同じである。**
 
 
 **走行中に取れなくなったとき。**
@@ -9820,6 +9816,12 @@ sequenceDiagram
 | **エージェントの画面と会話の記録** | **`$( )` の形で使うかぎり見えない。**ただし**エージェントが `echo "$TOKEN"` を1回叩けば、平文で残る。**指示書で禁じるが、**機械では止めない** |
 | **その `gh` の子プロセスの環境変数** | **見える。**同じ利用者の他のプロセスと、root から読める |
 | **`ps` の引数の一覧** | **見えない。**環境変数は引数ではない（`ps -E` を明示的に叩いた場合だけ見える） |
+| **`~/.continuo/github-app-credentials.json` そのもの** | **エージェントが読める。**同じ利用者で走るので `0600` は効かない。**そこに在るのは8時間のアクセストークンではなく、`client_secret` と更新用のトークンである** |
+
+**最後の行を落としてはならない。**
+**`client_secret` と更新用のトークンが揃うと、人間の代理として動くトークンを約6か月ぶん作り放題になる**（3-82b の「漏れたら何ができるか」）。
+**塞ぐ手段は無い。**エージェントは同じ利用者で走り、`Bash` は引数を絞っていない。
+**書くのは、露出を8時間だと見積もらせないためである。**
 
 **指示書には「値を表示しない」と書く。**
 **`continuo github-app token` の出力を、そのまま `echo` させたり、ファイルへ落とさせたりしない。**
@@ -10009,8 +10011,9 @@ sequenceDiagram
 **`GH_TOKEN=$(…)` の1行だけだと、トークンを取るコマンドが落ちてもシェルは空文字を渡し、
 `gh` が手元の認証でそのまま投稿する**（3-82d）。**そうなると、落ちたことに誰も気づけない。**
 
-**`gh issue comment` の行そのものは、1文字も変えない。**
-**前に2行足し、`GH_TOKEN=` を頭に付けるだけである。**
+**`gh issue comment` から後ろの並びを、1文字も変えない。**
+**前に2行足し、`gh issue comment` の頭へ `GH_TOKEN="$TOKEN" ` を付けるだけである。**
+**検査が見ているのは `gh issue comment ` という並びなので、頭に足しても当たる。**
 
 #### 掛ける先
 
@@ -10055,10 +10058,28 @@ sequenceDiagram
 **そこは GitHub App のトークンが生きているので、`GH_TOKEN` を前に足して書かせれば attribution が付く。**
 **分岐させないと、通常の書かせ直しで attribution の付かないコメントが1件できる。**
 
-**枝を分けない。**`{{if .github_app_attribution}}` の1つだけで足りる。
-**「GitHub App のトークンが取れなかった run」を見分ける手段が無いためである。**
+**7本目は、テンプレートを1度も通らない。**`{{if}}` と書いてはならない。
 [internal/orchestrator/prompt.go:115](../../internal/orchestrator/prompt.go#L115) の `buildCommentRequestPrompt` は
-**`issueURL` と `marker` の2つしか受け取らない。**
+`fmt.Fprintf` で文字列を組み立てるだけで、[internal/orchestrator/comment.go:263](../../internal/orchestrator/comment.go#L263) が
+**その結果をそのまま `herdr.AgentPromptParams` の `Text` へ渡す。**
+**`{{if …}}` と書けば、その6文字がそのままエージェントへ届く。**
+
+**だから Go の側で分ける。引数を2つ足す。**
+
+| 引数 | 何を渡すか | どこから来るか |
+| --- | --- | --- |
+| `useAppToken bool` | 真なら `TOKEN=$(…)` の2行を頭に付ける | `o.cfg.Tracker.Comments.GitHubAppAttribution` |
+| `continuoPath string` | 実行ファイルの絶対パス | **本体が自分の実行ファイルを指す値。**[internal/orchestrator/settings.go:352](../../internal/orchestrator/settings.go#L352) が hook のコマンド行を組み立てるのに使っているものと同じ |
+
+**呼び出しは1箇所しか無い**（[internal/orchestrator/comment.go:263](../../internal/orchestrator/comment.go#L263)）。
+**そこには `o` が届いているので、2つとも渡せる。**
+
+**素の `continuo` と書いてはならない。**
+**開発中に worktree の中でビルドした実行ファイルで continuo を動かし、その worktree を片付けると、
+`TOKEN=$(continuo github-app token) || exit 1` が `command not found` でそこで終わる。**
+**書かせ直しは成果を書かせる最後の経路なので、その run は成果0件のまま `failure_state` へ落ちる。**
+
+**枝は1つだけにする。**「GitHub App のトークンが取れなかった run」を見分ける手段は無い。
 **その状態を渡す関数を新しく作ると、この設計の外側（`runState` の持ち回し）へ広がる。**
 
 **`true` の利用者で、GitHub App のトークンが死んだ run では、書かせ直しも落ちる。**
@@ -10151,9 +10172,16 @@ issue #178（進捗報告のコメントの本文が、指示書の見本どお�
 **書き足しに触らないので、`--method PATCH` を数える検査には当たらない。**
 
 **あわせて、[test/internal/prompt/progress_comment_test.go:209](../../test/internal/prompt/progress_comment_test.go#L209) の
-コメントを直す。**「`gh issue comment` は4箇所にある」と書いてあるが、**実際は5箇所である**
-（[internal/prompt/builtin.md:143](../prompt/builtin.md#L143) の 3-2 の計画が抜けている）。
-**この設計が触るすぐ隣なので、同じ commit で直す。**
+コメントを直す。**「`gh issue comment` は4箇所にある」と書いてあるが、**この設計を入れると増える。**
+
+**数字を書かない形へ直す。**この設計は判断票の投稿を1本新設し、`--body-file` の3本を `{{if}}` で分けるので、
+**展開前の文面で数えると行数が変わる**（[test/internal/prompt/progress_comment_test.go:207](../../test/internal/prompt/progress_comment_test.go#L207) の
+`prompt.Builtin()` は展開前を返す）。
+**「4箇所」を「5箇所」へ書き換えると、同じ commit の中でまた合わなくなる。**
+**「複数箇所にある」と書き、件数を持たせない。**
+
+**判定そのものは通る。**[test/internal/prompt/progress_comment_test.go:213-219](../../test/internal/prompt/progress_comment_test.go#L213-L219) は
+「次の行が `continuo:progress` の行」だけを見るので、行が増えても落ちない。**落ちるのは人が読む数字だけである。**
 
 #### 変数を2つ足す
 
@@ -10246,8 +10274,12 @@ issue #178（進捗報告のコメントの本文が、指示書の見本どお�
 **差し替えられる関数を `Options` へ足す。**
 **`runStartupChecks` は `o.selfLogin` を持たない**（あれは `ensureGHLogin` が巡回のなかで遅れて取るもので、
 起動時の検査はその前に走る）。**だから起動時の検査は `gh api user` を自分で1回叩く。**
-**差し替えられる関数が無いと、テストが本物の `gh api user` を叩き、
-検査結果が「テストを走らせたマシンで誰がログインしているか」で変わる。**
+**`Orchestrator` には既にある。**
+[internal/orchestrator/orchestrator.go:246](../../internal/orchestrator/orchestrator.go#L246) が
+「**nil なら `gh api user --jq .login`（`tracker.RunGHAPIUserLogin`）を使う**」と書き、
+[510行](../../internal/orchestrator/orchestrator.go#L510) が既定を入れている。**そこを使う。新しく足さない。**
+**足すと、同じ外部の呼び出しに差し替え口が2つできる。**
+**テストが片方だけを渡すと、落ちるのではなく「たまたま通る」形で現れる**（3-82c が doctor について同じことを禁じている）。
 
 **走っている最中に `gh auth switch` を叩かれた場合は、拾わない。**
 **拾う周期が無いためである。**
@@ -10391,7 +10423,7 @@ sequenceDiagram
 **人間の決定「ボタンを押すと何が起こるのか…画面上で説明するようにして。installするときも同様」に反する。**
 **だから分ける。**
 
-**`false` にしても分かれるかは、まだ測っていない。**上の「実装の前に測る2件」へ足す。
+**`false` にしても分かれるかは、まだ測っていない。**この節の「実装の前に測ること」へ足してある。
 
 #### CSP を、この4枚だけ緩める
 
@@ -10400,7 +10432,10 @@ sequenceDiagram
 **`form-action` は `default-src` に落ちてこない別の指令なので、明示的に書いてある。**
 **このままだと、manifest を github.com へ POST する form が、ブラウザ側で止まる。**
 
-**この4枚に限り `form-action https://github.com` にする。**
+**この4枚に限り `form-action 'self' https://github.com` にする。**
+**`'self'` を落としてはならない。**落とすと、同じ4枚から `127.0.0.1` へ出す form が全部止まる
+（GitHub App の名前が取られていたときの入力し直しが、そこに当たる）。
+**ブラウザは画面に何も出さずに送信を捨てるので、人間には「ボタンが効かない」としか見えない。**
 **ダッシュボードの他の画面は `'none'` のままにする。**
 **1枚のためにサーバ全体を緩めない。**
 
@@ -10413,6 +10448,19 @@ sequenceDiagram
 
 | 順 | 何をするか |
 | --- | --- |
+**認可だけをやり直す画面も置く。**
+**更新用のトークンの回転は1日に12回以上あり**（3-82d の「回転の回数」）**、
+書き戻しの直前で落ちると認可のやり直しになる。**
+**そのたびに GitHub App を作り直させてはならない。**既定の名前は `continuo-<ログイン名>` なので、2つ目は必ず衝突する。
+
+| 資格情報の状態 | どの画面から始めるか |
+| --- | --- |
+| **何も無い** | **段1（作る）から** |
+| **`client_id` と `client_secret` はある。更新用のトークンが無いか、切れている** | **段3（認可）から。**`/github-app/authorize` を直に開ける |
+| **全部ある** | **何もしない。**画面は「設定済みです」と出す |
+
+**画面はこの3つを、資格情報のファイルを読んで自分で見分ける。**人間に選ばせない。
+
 | **1** | `github_app_attribution` は既定の `false` のまま、`server.port` を書いて continuo を起動する |
 | **2** | ダッシュボードの `/github-app` から段1〜段4 を通す |
 | **3** | `github_app_attribution` を `true` にして continuo を再起動する |
@@ -10442,7 +10490,7 @@ sequenceDiagram
 
 **この設計は webhook を1つも使わない。**だから manifest に `hook_attributes` を書かない。
 
-#### 実装の前に測る2件（この節のぶん）
+#### 実装の前に測ること（この節のぶん）
 
 | 何を測るか | 測らないとどうなるか |
 | --- | --- |
@@ -10451,7 +10499,7 @@ sequenceDiagram
 | **`request_oauth_on_install` を `false` にすると、install と認可が分かれるか** | **分かれないなら、認可のときに何が起きるかを人間へ見せる画面が消える。**人間の決定に反する |
 | **`state` が manifest の流れでも往復するか** | **往復しないなら、作成のコールバックだけ別の守り方が要る** |
 
-**どちらも、GitHub App を1つ作れば1回で分かる。**
+**4つとも、GitHub App を1つ作れば1回で分かる。**
 
 ## 4. 人間が決めたこと
 
