@@ -529,8 +529,8 @@ type runSnapshot struct {
 	URL              string
 	// HumanMode は「人間が pane で直接続けている」ことを表す（設計 3-82）。
 	// **stall の判定はこれが真の run を飛ばす。**
-	HumanMode bool
-	Tokens    TokenUsage
+	HumanMode        bool
+	Tokens           TokenUsage
 	TokensAt         time.Time
 	hookSeenThisTurn bool
 }

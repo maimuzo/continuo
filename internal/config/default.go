@@ -118,11 +118,11 @@ func DefaultConfig() *Config {
 			},
 			RequiredLabels: []string{},
 			// In Progress を必ず含める（3-10）。ここで欠かすと dispatch 直後に自分の worker を殺す。
-			ActiveStates:      []string{"Ready", "In Progress"},
-			TerminalStates:    []string{"Done"},
-			RunningState:      "In Progress",
-			DispatchState:     "Ready",
-			FailureState:      "Blocked",
+			ActiveStates:   []string{"Ready", "In Progress"},
+			TerminalStates: []string{"Done"},
+			RunningState:   "In Progress",
+			DispatchState:  "Ready",
+			FailureState:   "Blocked",
 			// 人間が pane で直接続けている間だけ置く Status（設計 3-82）。
 			// **既定は空である。**空でなければカンバンに実在することを起動時に要求するので、
 			// 既定に名前を入れると、その選択肢を持たない全利用者の continuo が起動しなくなる。
