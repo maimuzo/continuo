@@ -613,7 +613,7 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 		"ref を消す push",
 		// **pull request を通さない書き込みも、同じ組で外していること。**
 		// **直 push を塞いでも、`gh api --method PUT .../contents/…` で同じ結果へ届く。**
-		"pull request を通さずにファイルを書き込む形",
+		"pull request を通さずにリポジトリ octocat/hello-world のファイルを書き込む形",
 		"この肯定に含めず、断る",
 		// **閉じる文が、結論を固定していること。**
 		// **「〜を理由に通してはならない」は推論を1本封じるだけで、判定役には別の理由が残る。**
@@ -624,8 +624,9 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 		// **GitHub Projects v2 のカンバンはリポジトリではない**ので、`updateProjectV2Field` に届かない。
 		// **そして手元の `git commit` や `cat > plan.md` まで含むと読める**
 		// （判定へ回るのは Bash なので、worktree の中を書き換えるコマンドは全部届く）。
-		"リポジトリ octocat/hello-world の GitHub 上のもの（issue、pull request、ref、release、設定）と",
-		"GitHub Projects v2 のカンバン（project）への書き込みのうち、いま肯定した形に当たらないものは",
+		"リポジトリ octocat/hello-world の GitHub 上のもの（issue、pull request、ref、release、設定）への書き込みと削除",
+		"GitHub Projects v2 のカンバン（project）への書き込みと削除のうち、",
+		"いま肯定した形に当たらないものは、いま担当している issue に関係していても断る",
 		// **下に続く免除より優先すると書いてあること。**
 		// **担当先の文は push を免除し、下の免除は「push …は、この免除に含めない。
 		// それらは、いまの作業と関係があるかどうかで、この条件のとおりに判断する」と書く。**
