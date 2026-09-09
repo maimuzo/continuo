@@ -96,7 +96,7 @@ type runState struct {
 	BackoffUntil time.Time
 	// WaitingQuota は枠待ちと判定したことを表す（設計 3-27）。
 	// **真の間は stall と turn_timeout の判定を飛ばす。**
-	// 外す契機は「枠の resets_at を過ぎたこと」だけである。
+	// 外す契機は2つある（枠の resets_at を過ぎたこと／使い切っている枠が無くなったこと）。
 	WaitingQuota bool
 	// NeedsPrompt は次の turn を送るべき状態であることを表す（設計 3-4 の段5b）。
 	// turn ループが拾って agent.prompt を送り、送ったら false へ戻す。
@@ -108,20 +108,12 @@ type runState struct {
 	//
 	// **これは「最後に hook を受けた時刻」ではない。**hook を1件も受けていなくても、
 	// turn を送った時点（beginTurn）・枠待ちを外した時点（clearWaitingQuota）・
-	// 画面の版が増えたのを確かめた時点（noteRevision）に現在時刻へ進む。
+	// **`agent_status` が `working` だったのを確かめた時点（noteWorking）**に現在時刻へ進む。
 	// **stall の判定にだけ使う。**「最後に hook を受けた時刻」は LastHookAt が持つ。
-	LastSeenAt time.Time
-	// LastRevision は最後に見た画面の版である（herdr の pane の revision）。
 	//
-	// **agent.start / 引き継いだ pane の値を種にし、以後は checkStalls が見るたびに更新する。**
-	// 種を入れないと、最初の判定が必ず「版が変わった」になり、打ち切りまでに閾値を2回
-	// またぐことになる。
-	LastRevision uint64
-	// RevisionAt は画面の版が最後に増えたのを確かめた時刻である。
-	//
-	// **人間へ見せる文面に「画面が最後に変わってからどれだけ経ったか」を書くために持つ。**
+	// **人間へ見せる打ち切りの文面も、この時計との差を「動かなかった長さ」として出す。**
 	// run を作った時点で現在時刻を入れる（ゼロ値のままだと 1970 年からの経過を表示してしまう）。
-	RevisionAt time.Time
+	LastSeenAt time.Time
 	// LastHookAt は最後に hook を実際に受けた時刻である。
 	//
 	// **進めるのは noteHook だけである。**1件も受けていなければゼロ値のままである。
@@ -153,6 +145,83 @@ type runState struct {
 	TranscriptPath string
 	// QuotaResetAt は枠待ちを外す時刻である（設計 3-27）。
 	QuotaResetAt time.Time
+	// WeeklyShortSince は、この run について余裕の無い1週間の枠を最初に見た時刻である
+	// （設計 3-27。issue #197）。
+	//
+	// **枠待ちの印（WaitingQuota）とは切り離して持つ。**
+	// 印は5時間の枠に余裕が戻るたびに外れるので（reconcile.go の checkStalls）、
+	// **印に紐づけると、外れるたびに0へ戻って経過が永久に伸びない。**
+	//
+	// **run ごとに持つ。**機械に1つだけ持つと、**枠の余裕が無くなったあとに着手した run を、
+	// 1分も待たずに手放すことになる。**この run が余裕の無さを見てからの経過を測る。
+	//
+	// **写し（runSnapshot）に載せる**（issue #173）。**読むのは巡回と手放しの2箇所で、
+	// **写しへ載せると、そこを通さない古い値を正だと思って読む人が出る。**
+	WeeklyShortSince time.Time
+	// QuotaProbeStateSeq は、手放してよいかを見るときに読んだ
+	// herdr の `state_change_seq`（agent の状態が変わるたびに増える連番）である
+	// （設計 3-27。issue #173 / #197）。
+	//
+	// **`revision`（pane の版）を使ってはならない**（issue #173）。
+	// **あれは画面を1バイトも見ていない。**herdr が増やすのは
+	// **端末タイトルの、装飾を落とした本文が変わったとき**だけである
+	// （落とす装飾は点字1文字か `·✢✳✶✻✽◐◓◑◒` の10文字）。
+	// **continuo は端末タイトルを設定しない。**書いているのは Claude Code 自身で、
+	// **continuo の pane では `<owner>/<repo>#<番号>` を最後まで変えない。**
+	// **実測（2026-09-08、herdr 0.8.2）で、働いている3つの pane が2分間ずっと `revision: 1` だった。**
+	// **つまり「2回続けて同じ版」は常に真で、判定は実質
+	// 「`agent_status` を2回読んだ」だけになっていた。**
+	// **30秒あけた2回の読み取りの間に `working` の山が丸ごと入っていても気づけない。**
+	//
+	// **連番は、その agent の状態が変わったときだけ刻み直される。**
+	// herdr は通し番号を全体で1本持つが、書き戻すのは状態が実際に変わった当の terminal だけである
+	// （`src/app/actions.rs` の `if change.previous_state != change.state`）。
+	// **他の agent が動いても、この agent の値は動かない。**
+	// **`idle` と `done` の行き来でも動かない**（違いは「人間がその tab を見たか」で、内部の状態は同じである）。
+	//
+	// **この項目は、手放しの判定が自分で読んだ連番だけを覚える。**
+	// **2回続けて同じなら「その間に状態が1度も変わっていない」である。**
+	QuotaProbeStateSeq uint64
+	// quotaReleaseUnknownWarned は「担当を確かめられないので見送ります」を
+	// 既に1回出したかどうかである（issue #173）。
+	//
+	// **run ごとに1回だけ出すために持つ。**issue がカンバンから見えなくなった run は
+	// 手放しの経路で永久に確かめられず、**毎巡回で出すと既定の30秒間隔で1時間に120行になる。**
+	// **理由を読みやすくするのが issue #173 の目的なので、そこを埋めてはならない。**
+	//
+	// **`beginAttempt` で偽へ戻す。**やり直した attempt では、また1回出してよい。
+	quotaReleaseUnknownWarned bool
+	// paneUnreadableWarned は「画面の状態を読めない」を既に1回出したかである（issue #173）。
+	//
+	// **`quotaReleaseUnknownWarned` と分ける。**1つを共有すると、
+	// **先に出したほうが、もう一方を attempt のあいだ丸ごと黙らせる。**
+	paneUnreadableWarned bool
+	// quotaReleaseFailedWarned は「担当を手放せませんでした」を既に1回出したかである（issue #173）。
+	//
+	// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す**（合計240行）。
+	// **この札が消すのは、そのうち1行ぶん**（120行）**である。**
+	// **もう1行**（`removeOwnAssignee` の側）**は既存のログなので、札を付けていない。**
+	quotaReleaseFailedWarned bool
+	// QuotaProbeSeen は、上の連番を1度でも読んだかを表す。
+	//
+	// **連番は0から始まるので、値だけでは「まだ読んでいない」と「0だった」を分けられない。**
+	// **初回は必ず「止まっていない」と答える**（そこからどれだけ止まっていたかが分からない）。
+	//
+	// **起動直後の run を守っているのは、この欄である。**
+	// 「連番が0なら偽」の門は `noteQuotaProbe` の本体にある。**そこ1箇所だけである。**
+	// **消してはならない。**消すと、連番を返さない herdr の版で
+	// **0 と 0 を比べて恒真へ戻る**（`state_change_seq` は `omitempty` である）。
+	// **`paneStopped` の側には無い。**8周目に、同じ門を2箇所へ書いていたのをこちらへ寄せた。
+	// **`agent_status` が `idle` か `done` を返す時点で、内部の状態は初期値の `Unknown` から
+	// 必ず1度は変わっており、連番は1以上である。**
+	QuotaProbeSeen bool
+	// AfterRunDone は、この run で `workspace_hooks.after_run` を走らせ切ったかを表す
+	// （issue #197）。
+	//
+	// **やり直しのために持つ。**`RunAfterRunOnce` は2回目以降「走らせていない」を返すので、
+	// **担当を外すのに失敗して次の巡回でやり直すと、既に push してあるのに
+	// 「remote に続きが入っていないことがあります」と issue へ書くことになる。**
+	AfterRunDone bool
 	// Tokens はこの run が始めてからの累計のトークンである（設計 3-15）。
 	//
 	// **中身は「いまのセッションの transcript を `requestId` で重複排除して足した値」＋
@@ -417,7 +486,7 @@ func (rs *runState) clearStopSeen() {
 //
 // issueID: project item の ID。
 // issue: dispatch する時点の issue のスナップショット。
-// now: いまの時刻（LastSeenAt と RevisionAt の初期値。ゼロ値のままだと即座に stall と
+// now: いまの時刻（LastSeenAt の初期値。ゼロ値のままだと即座に stall と
 // 判定され、人間へ見せる経過時間も 1970 年起点になる）。
 // 戻り値: 組み立てた runState。
 func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
@@ -426,7 +495,6 @@ func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
 		IssueID:          issueID,
 		Issue:            issue,
 		LastSeenAt:       now,
-		RevisionAt:       now,
 		hookCh:           make(chan hookserver.HookEvent, hookChanSize),
 		workerStopCtx:    stopCtx,
 		workerStopCancel: stopCancel,
@@ -453,10 +521,10 @@ func (rs *runState) snapshot() runSnapshot {
 		BackoffUntil:     rs.BackoffUntil,
 		WaitingQuota:     rs.WaitingQuota,
 		QuotaResetAt:     rs.QuotaResetAt,
-		LastRevision:     rs.LastRevision,
-		RevisionAt:       rs.RevisionAt,
+		WeeklyShortSince: rs.WeeklyShortSince,
 		LastSeenAt:       rs.LastSeenAt,
 		LastHookAt:       rs.LastHookAt,
+		LastBusyHookAt:   rs.LastBusyHookAt,
 		StartedAt:        rs.StartedAt,
 		WorktreePath:     rs.WorktreePath,
 		Base:             rs.Base,
@@ -486,10 +554,15 @@ type runSnapshot struct {
 	BackoffUntil     time.Time
 	WaitingQuota     bool
 	QuotaResetAt     time.Time
-	LastRevision     uint64
-	RevisionAt       time.Time
+	WeeklyShortSince time.Time
 	LastSeenAt       time.Time
 	LastHookAt       time.Time
+	// LastBusyHookAt は、**turn を処理している間にしか出ない** hook を最後に受けた時刻である。
+	//
+	// **`LastSeenAt` の代わりに、手放しの無音の門が見る**（issue #173）。
+	// **`LastSeenAt` は `clearWaitingQuota` も進めるので、5時間の枠が明けるたびに
+	// その門が再武装してしまう。**こちらは `noteHook` が忙しい hook を受けたときだけ進む。
+	LastBusyHookAt   time.Time
 	StartedAt        time.Time
 	WorktreePath     string
 	Base             normalize.SafeName
@@ -1061,6 +1134,174 @@ func (rs *runState) setWaitingQuota(resetAt time.Time) {
 	rs.QuotaResetAt = resetAt
 }
 
+// noteWeeklyShort は、余裕の無い1週間の枠を見たかどうかを記録する（設計 3-27。issue #197）。
+//
+// **既に立っている時刻を上書きしない。**上書きすると経過が永久に伸びない。
+// **余裕の無い1週間の枠が1つも無くなったらゼロへ戻す。**戻さないと、枠が空いたあとも
+// 古い時刻が残り、**次に余裕が無くなった run を1分も待たずに手放す。**
+//
+// **枠待ちの印の出し入れとは無関係に動かす。**印は5時間の枠が明けるたびに外れる。
+//
+// **起点は返さない**（issue #173）。**読むのは写し（`runSnapshot.WeeklyShortSince`）からである。**
+// **返すと、それを正として使う2人目が現れ、写しから読む側と食い違う。**
+//
+// short: 余裕の無い1週間の枠があるか。
+// now: いまの時刻。
+func (rs *runState) noteWeeklyShort(short bool, now time.Time) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if !short {
+		rs.WeeklyShortSince = time.Time{}
+		return
+	}
+	if rs.WeeklyShortSince.IsZero() {
+		rs.WeeklyShortSince = now
+	}
+}
+
+// noteQuotaProbe は、手放しの判定が読んだ状態の連番を控え、止まっているかを返す
+// （設計 3-27。issue #173 / #197）。
+//
+// **2回続けて同じ連番なら「その間に状態が1度も変わっていない」である。**
+// **初回は必ず偽を返す。**そこからどれだけ止まっていたかが分からないためである。
+//
+// **`revision` から替えた**（issue #173）。**理由は `QuotaProbeStateSeq` の説明にある。**
+//
+// seq: いま読んだ `state_change_seq`。
+// 戻り値: 前に読んだ連番と同じなら true。
+// 戻り値の2つ目は「この呼び出しが1回目の観測だったか」である（issue #173）。
+//
+// **2つ目の戻り値は `paneStopped` が読む**（issue #173）。
+// **あちらは `stopped, stopped || first` を返す。**2つ目が真だと、その run は
+// **`checkStalls` の `releasing` の集合へ入り、その巡回では打ち切られない。**
+//
+// **1回目を守るのが要る理由。**手放しは2回続けて同じ連番を見ないと成立しない。
+// **1回目と2回目のあいだの1巡回で打ち切られると、手放しは永久に成立しない。**
+// **この行を「どこも読んでいない」と思って消してはならない。**
+//
+// **守るのは1回目だけである。**2回目以降も守ると、状態が往復する run
+// （巡回のたびに `idle` → `working` → `idle`）**が永久に守られ、
+// 手放されもせず打ち切られもせず、pane とスロットを握ったまま残る。**
+func (rs *runState) noteQuotaProbe(seq uint64) (bool, bool) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	// **連番が 0 なら「読めなかった」として扱う**（issue #173）。
+	//
+	// **`state_change_seq` は `omitempty` である。**欄を返さない herdr の版では、
+	// **全 agent が 0 として読まれる。**そのまま比べると「2回続けて同じ」が常に成り立ち、
+	// **判定は `revision` のときと同じ恒真へ戻る。**
+	// **herdr 0.8.2 は返す**（実測。1378 / 1382 / 1384）が、**返さない版と見分けられない。**
+	//
+	// **返す版では、この枝へ来ない。**`agent_status` が `idle` か `done` を返す時点で、
+	// **内部の状態は初期値の `Unknown` から必ず1度は変わっており、連番は1以上である。**
+	// **だから、ここで落ちるのは「返さない版」だけである。**
+	// **連番が 0 なら、何も覚えずに「まだ」と答える。**
+	// **この門は、いまここ1箇所だけである。**8周目に `paneStopped` の側の写しを消した
+	// （[internal/orchestrator/reconcile.go](reconcile.go) の `paneStopped`。
+	// 呼ぶ側が先に効いて、こちらが死にコードになっていた）。
+	// **だからここを「重複だ」と思って消してはならない。**消すと、連番を返さない版で
+	// **`idle` か `done` の run が全部「止まった」と読まれ、confirm もせずに
+	// `after_run` を走らせ、担当を外し、pane を閉じる。**
+	// **`revision` で踏んだ穴と同じ形である**（issue #173）。
+	if seq == 0 {
+		return false, false
+	}
+	first := !rs.QuotaProbeSeen
+	same := rs.QuotaProbeSeen && rs.QuotaProbeStateSeq == seq
+	rs.QuotaProbeStateSeq = seq
+	rs.QuotaProbeSeen = true
+	return same, first
+}
+
+// clearPaneUnreadableWarned は「画面の状態を読めない」の札を下ろす（issue #173）。
+//
+// **`agent.get` が読めたときに呼ぶ。****下ろさないと、attempt の序盤の1回の失敗が、
+// その attempt のあいだ**（長いものは20時間ある）**この文言を丸ごと黙らせる。**
+func (rs *runState) clearPaneUnreadableWarned() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.paneUnreadableWarned = false
+}
+
+// clearQuotaReleaseUnknownWarned は「いまの担当を確かめられない」の札を下ろす（issue #173）。
+//
+// **担当を確かめられたときに呼ぶ。****下ろさないと、attempt の序盤の1回の失敗が、
+// その attempt のあいだ**（長いものは20時間ある）**この文言を丸ごと黙らせる。**
+//
+// **`quotaReleaseFailedWarned` には、これに当たる関数を置いていない。**
+// **あの札が立つのは「担当を外せなかった」ときで、外せた次の瞬間にこの run は終わる。**
+// **下ろす先が無い。**
+func (rs *runState) clearQuotaReleaseUnknownWarned() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.quotaReleaseUnknownWarned = false
+}
+
+// noteQuotaReleaseUnknown は「担当を確かめられないので見送ります」を出してよいかを返す
+// （issue #173）。
+//
+// **1回目だけ真を返す。**2回目からは偽である。
+// **`beginAttempt` が偽へ戻すので、やり直した attempt では また1回出せる。**
+//
+// 戻り値: この attempt で初めてなら true。
+func (rs *runState) noteQuotaReleaseUnknown() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.quotaReleaseUnknownWarned {
+		return false
+	}
+	rs.quotaReleaseUnknownWarned = true
+	return true
+}
+
+// notePaneUnreadable は「画面の状態を読めない」を出してよいかを返す（issue #173）。
+//
+// **`noteQuotaReleaseUnknown` と札を分ける。**1つを共有すると、
+// **先に出したほうが、もう一方を attempt のあいだ丸ごと黙らせる。**
+//
+// 戻り値: この attempt で初めてなら true。
+func (rs *runState) notePaneUnreadable() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.paneUnreadableWarned {
+		return false
+	}
+	rs.paneUnreadableWarned = true
+	return true
+}
+
+// noteQuotaReleaseFailed は「担当を手放せませんでした」を出してよいかを返す（issue #173）。
+//
+// **`RemoveAssignees` が落ち続ける run は、毎巡回2行の `Warn` を出す**
+// （既定の30秒間隔で1時間に240行）。**この札が消すのは、そのうち120行である。**
+// **もう1行**（`removeOwnAssignee` の側）**は `origin/main` から在る既存のログなので、
+// 枠の話のために触らない。**
+//
+// 戻り値: この attempt で初めてなら true。
+func (rs *runState) noteQuotaReleaseFailed() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if rs.quotaReleaseFailedWarned {
+		return false
+	}
+	rs.quotaReleaseFailedWarned = true
+	return true
+}
+
+// markAfterRunDone は `workspace_hooks.after_run` を走らせ切ったことを覚える（issue #197）。
+func (rs *runState) markAfterRunDone() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.AfterRunDone = true
+}
+
+// afterRunDone は `workspace_hooks.after_run` を走らせ切ったかを返す（issue #197）。
+func (rs *runState) afterRunDone() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.AfterRunDone
+}
+
 // clearWaitingQuota は枠待ちの印を外し、stall の時計を動かし直す（設計 3-27）。
 //
 // now: いまの時刻。
@@ -1069,31 +1310,47 @@ func (rs *runState) clearWaitingQuota(now time.Time) {
 	defer rs.mu.Unlock()
 	rs.WaitingQuota = false
 	rs.QuotaResetAt = time.Time{}
+	// **打ち切りの時計は進めるが、手放しの側の門はここで再武装させたくない**（issue #173）。
+	//
+	// **進めるのは、枠待ちのあいだ止めていた時計を、明けた時点から測り直すためである。**
+	// **止めた時点からの経過をそのまま使うと、明けた瞬間に閾値を超えて打ち切られる。**
+	//
+	// **`WeeklyShortSince` は消さない**（下の説明）。
+	// **手放しの上限は、そちらの経過で測る。**
+	// **`LastSeenAt` を進めると手放しの無音の門が1時間ぶん再武装するが、
+	// 5時間の枠が明けるたびにそれが起きても、1週間の枠の経過は `WeeklyShortSince` が持ち続ける。**
 	rs.LastSeenAt = now
+	// **余裕の無い1週間の枠を最初に見た時刻は、ここでは消さない**（設計 3-27。issue #197）。
+	// **消す契機は「1週間の枠に余裕が戻ったこと」だけである。**
+	//
+	// **ここで消すと、5時間の枠が明けるたびに0へ戻る。**
+	// 標識を外す時刻は種別を選ばないので、**5時間の枠のほうが早く明ければその時刻になる。**
+	// **`weekly_wait_limit_minutes: 300`（既定）を設定した人の待ち時間が、
+	// 「5時間の枠の残り＋`claude.turn_timeout_ms`」ぶん超過する。**
+	// **既定値では約6時間の超過になり、上限が1度も効かないこともある。**
+	//
+	// 消すのは `noteWeeklyShort(false, …)` である。**巡回のたびに、印の有無によらず呼ぶ。**
 }
 
-// noteRevision は画面の版を見た結果を記録する（設計 3-21）。
+// noteWorking は「agent が working だった」ことを記録し、打ち切りの時計を進める
+// （issue #173。[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 4-1）。
 //
-// **版が変わっていれば時計を起こし直す。**`LastSeenAt` を現在時刻にして、
-// もう一度 `claude.turn_timeout_ms` だけ待つ。**画面が変わり続けている限り、
-// 1つの turn に何時間かかっても打ち切らない。**
+// **打ち切りの判定は `revision`（pane の版）を見るのをやめた。**
+// **あれは画面を1バイトも見ておらず、continuo の pane では永久に動かない**
+// （実測で、働いている3つの pane が2分間ずっと `revision: 1` だった）。
+// **そのため「画面が動いているので待ち続けます」の枝は1度も発火していなかった。**
 //
-// **減る向きの変化も「変わった」として扱う。**版が減るのは pane を作り直したときだけで、
-// そのときも画面が別物になっているので待ち直すのが正しい。
+// **`agent_status` が `working` なら、長い1回のツール呼び出しの最中でもそう返る。**
+// **「1つの指示に何時間かかっても打ち切らない」という約束を果たす唯一の信号である。**
 //
-// rev: agent.get が返した pane の版。
+// **`LastRevision` と `RevisionAt` は消した**（2026-09-08）。
+// **判定に使わない値を控え続けると、次に読む人が「まだ版で測っている」と読む。**
+//
 // now: いまの時刻。
-// 戻り値: 版が変わっていたら true（＝画面が動いている）。同じなら false。
-func (rs *runState) noteRevision(rev uint64, now time.Time) bool {
+func (rs *runState) noteWorking(now time.Time) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if rs.LastRevision == rev {
-		return false
-	}
-	rs.LastRevision = rev
-	rs.RevisionAt = now
 	rs.LastSeenAt = now
-	return true
 }
 
 // markFinished は run が終わったことを記録する。turn ループはこれを見て止まる。
@@ -1754,6 +2011,41 @@ func (rs *runState) beginAttempt(resumed bool) int {
 	rs.workerStopped = false
 	rs.terminating = false
 	rs.SendFirstPrompt = true
+	// **`after_run` を走らせ切った覚えも、ここで戻す**（issue #197）。
+	//
+	// **戻さないと、やり直した attempt の `after_run` が1回も走らない。**
+	// worktree の側の「1回だけ」の印は `Prepare` の中の `BeginRun` が消すので、
+	// **`RunAfterRunOnce` は「まだ走らせていない」を返す。**
+	// **ところが `runAfterRunOK` は、この欄が立っていると `RunAfterRunOnce` を呼ばずに真を返す。**
+	// **成果を出したのは、やり直したほうの attempt である。**
+	// 利用者が書いた `git push` が走らないまま「実行済みです。remote の続きから」と issue へ書き、
+	// **次に拾う機械が、push されていない commit を全部失う。**
+	rs.AfterRunDone = false
+	// **手放しの観測も忘れる**（issue #173）。
+	//
+	// **やり直した attempt は、新しい agent と新しい pane である。**
+	// **前の attempt で控えた連番を、新しい pane の値と比べる意味は無い。**
+	// **attempt をまたいで持ち越すものは、ここで全部戻すのが筋である。**
+	//
+	// **「欄を返さない herdr の版で恒真へ戻る」経路は、ここが塞いでいるのではない。**
+	// **`noteQuotaProbe` が、比べる前に「連番が 0 なら偽」で落としている**
+	// （2026-09-09 に、その門を `noteQuotaProbe` の本体へ入れた。
+	// それまでは `paneStopped` にしか無く、この文と食い違っていた）。
+	// **そちらを消すと、この2行があっても穴は開く。**
+	rs.QuotaProbeSeen = false
+	rs.QuotaProbeStateSeq = 0
+	// **「担当を確かめられない」の1回きりの Warn も戻す**（issue #173）。
+	rs.quotaReleaseUnknownWarned = false
+	rs.paneUnreadableWarned = false
+	rs.quotaReleaseFailedWarned = false
+	// **「1週間の枠の余裕が無くなった時刻」も忘れる**（issue #173）。
+	//
+	// **やり直した attempt は、新しい agent と新しい pane である。**
+	// **前の attempt が何時間も前に控えた時刻を持ち越すと、
+	// リセット時刻を読めない枠では、その差が最初から上限を超えている。**
+	// **新しい pane が2巡回だけ静かにしていれば、1分も待たずに手放すことになる。**
+	// **新しく始めた run はこの欄がゼロ値なので、そちらと揃える。**
+	rs.WeeklyShortSince = time.Time{}
 	// **「止めた」の合図も作り直す**（設計 3-51）。前の世代のものを使い回すと、
 	// 既に終わっているコンテキストを新しい turn ループへ渡すことになり、
 	// 最初の turn を送る前に待ちが打ち切られる。
@@ -1783,7 +2075,45 @@ func (rs *runState) workerGeneration() int {
 func (rs *runState) currentWorker(epoch int) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return !rs.Finished && !rs.workerStopped && rs.workerEpoch == epoch
+	// **`terminating` も見る**（issue #197）。
+	// **終わらせる処理が走っている最中に、turn ループが新しい指示を送ってはならない。**
+	// 1週間の枠の上限で手放す経路は、印を取ってから `after_run`（利用者の `git push`）と
+	// GitHub への書き込みで最大90秒かかる。**その間に5時間の枠が明けると、
+	// 待ちループが枠待ちを解いて指示を送り、push の最中に worktree が書き換わる。**
+	// **書きかけの木を push したうえで、そのあと殺されることになる。**
+	return !rs.Finished && !rs.workerStopped && !rs.terminating && rs.workerEpoch == epoch
+}
+
+// terminalBusy は「この run は、もう終わりに向かっているか」を読むだけで返す（issue #173）。
+//
+// **印を立てない。**`beginTerminal` で確かめると、立てた印を turn ループが見て
+// **500ms 待つ**ことになる（`turn.go` の `terminatingPollInterval`）。
+//
+// 戻り値: 終わっている・終わらせている最中・書き戻しが飛んでいる、のどれかなら true。
+func (rs *runState) terminalBusy() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.Finished || rs.terminating || rs.rewriting
+}
+
+// workerRetired は「この turn ループは、もう二度と回してはならないか」を返す（issue #173）。
+//
+// **`currentWorker` との違いは `terminating` を見ないことである。**
+//
+// **`terminating` は一時的な印である。**終わらせる処理が走っている最中だけ立ち、
+// **見送って `endTerminal` を呼べば下りる。**
+// **turn ループがそれで抜けてしまうと、見送ったあとに指示を送る者がいなくなる。**
+// **立て直す経路も無い**（`startTurnLoop` を呼ぶのは着手と復元だけである）。
+//
+// **`Finished` / `workerStopped` / 世代の食い違いは、そうではない。**
+// **どれも「この goroutine の役目は終わった」という取り返しのつかない印である。**
+//
+// epoch: この goroutine が回している worker の世代。
+// 戻り値: 二度と回してはならないなら true。
+func (rs *runState) workerRetired(epoch int) bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.Finished || rs.workerStopped || rs.workerEpoch != epoch
 }
 
 // terminalGate は `beginTerminal` が印を確保できたかどうかと、確保できなかった理由である

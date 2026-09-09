@@ -3,7 +3,7 @@
   "usecase_name": "本家のリポジトリへ PR を出す",
   "source": {
     "file": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.rucm.md",
-    "rucm_block_sha256": "dbedb8abf1e863b3c5538404bb4382f2773932191927d850109a1dbc84319f21"
+    "rucm_block_sha256": "9764bc71890d39a0267cedc13178854315c5fe3389d0783b35cfc4c10d249f8a"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -328,7 +328,7 @@
       "type": "action",
       "flow": "作業ディレクトリがworktreeの外",
       "step": 3,
-      "statement": "システムは画面の版が turn_timeout_ms のあいだ増えないことを見つける。"
+      "statement": "システムは agent_status が turn_timeout_ms のあいだ working にならないことを見つける。"
     },
     {
       "id": "作業ディレクトリがworktreeの外-4",
@@ -1053,7 +1053,7 @@
         "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
         "システムは Stop hook を捨てる。",
         "システムは turn の終わりを検知しない。",
-        "システムは画面の版が turn_timeout_ms のあいだ増えないことを見つける。",
+        "システムは agent_status が turn_timeout_ms のあいだ working にならないことを見つける。",
         "システムはエージェントを止める。",
         "システムは issue に打ち切った理由をコメントする。",
         "ABORT"
@@ -1450,7 +1450,7 @@
         "CONDITION: NOT Stop hook の cwd が worktree の外だと分かっていない",
         "システムは Stop hook を捨てる。",
         "システムは turn の終わりを検知しない。",
-        "システムは画面の版が turn_timeout_ms のあいだ増えないことを見つける。",
+        "システムは agent_status が turn_timeout_ms のあいだ working にならないことを見つける。",
         "システムはエージェントを止める。",
         "システムは issue に打ち切った理由をコメントする。",
         "ABORT"

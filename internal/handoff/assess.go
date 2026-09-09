@@ -579,7 +579,20 @@ func HasBidBy(bids []Bid, login string) (Bid, bool) {
 // r: 書く released。
 // 戻り値: 印を先頭に置いたコメント本文。
 func FormatReleased(r Released) string {
+	var second string
+	switch r.Reason {
+	case ReleaseReasonWeeklyWaitLimit:
+		// **自分から手放した側は、その直前に `workspace_hooks.after_run` を走らせている**
+		// （設計 3-27 の段1）。**そこに `git push` を書いている人は、もう push が済んでいる。**
+		// **「push しないでください」を出すと、push した本人がそう書くことになる。**
+		second = i18n.T(i18n.KeyHandoffReleasedWeeklyWaitLimit, r.From)
+	case ReleaseReasonWeeklyWaitLimitNoPush:
+		// **`after_run` が走らなかった。**remote に続きが入っていない可能性がある。
+		second = i18n.T(i18n.KeyHandoffReleasedWeeklyWaitLimitNoPush, r.From)
+	default:
+		// **理由が空なら、他の機械に外された側である**（設計 3-77c）。
+		second = i18n.T(i18n.KeyHandoffReleasedDoNotPush, r.From)
+	}
 	return config.HandoffReleasedMarker + "\n" + marshalLine(r) + "\n\n" +
-		i18n.T(i18n.KeyHandoffReleasedReassign) + "\n" +
-		i18n.T(i18n.KeyHandoffReleasedDoNotPush, r.From) + "\n"
+		i18n.T(i18n.KeyHandoffReleasedReassign) + "\n" + second + "\n"
 }

@@ -61,8 +61,8 @@ func TestFetch_資格情報ファイルからトークンを読んで枠を取�
 	if len(snap.Limits) != 2 {
 		t.Fatalf("枠の件数が想定と違う: got %d, want 2", len(snap.Limits))
 	}
-	if snap.MaxPercent() != 7 {
-		t.Fatalf("MaxPercent が想定と違う: got %d, want 7", snap.MaxPercent())
+	if !snap.AnySelected(func(l ratelimit.Limit) bool { return l.Percent == 7 }) {
+		t.Fatalf("使用率の読み取りが想定と違う: got %d, want 7", len(snap.Limits))
 	}
 	if gotMethod != http.MethodGet {
 		t.Fatalf("GET で送っていない: got %q", gotMethod)

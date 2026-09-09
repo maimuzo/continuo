@@ -84,6 +84,20 @@ func (m *Manager) command(phase HookPhase) (string, bool) {
 	return *raw, true
 }
 
+// HookConfigured は、その hook が設定されているかを返す（issue #173）。
+//
+// **「設定されているか」の判定を、この package の外へ写させないために置く。**
+// **写されると、この package が判定を変えたときに、写した側だけが古い規則で答え続ける。**
+// **手放しのコメントは「`after_run` は実行済みです／走りませんでした」と言い切るので、
+// 古い規則で答えると「remote の続きから始めてください」と嘘を書くことになる。**
+//
+// phase: 見る hook。
+// 戻り値: 設定されていれば true。
+func (m *Manager) HookConfigured(phase HookPhase) bool {
+	_, ok := m.command(phase)
+	return ok
+}
+
 // RunHook は workspace_hooks のコマンドを1本実行する。
 //
 // cwd は dir である（after_run と before_remove では worktree、

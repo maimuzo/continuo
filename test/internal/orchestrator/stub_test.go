@@ -1,6 +1,7 @@
 package orchestrator_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
@@ -34,9 +35,12 @@ type stubHerdr struct {
 	mu sync.Mutex
 	// status は AgentGet / AgentWait が返す agent の状態である。
 	status herdr.AgentStatus
-	// revision は AgentGet が返す画面の版である（herdr の pane の revision）。
-	// **stall の判定はこの値が増えるかどうかで決まる**（設計 3-21）。
-	revision uint64
+	// stateSeq は AgentGet が返す state_change_seq である
+	// （agent の状態が変わるたびに増える連番。issue #173）。
+	//
+	// **手放しの判定（`paneStopped`）はこれを見る。**
+	// **打ち切りの判定（`checkStalls`）は `agent_status` を見る**（issue #173）。
+	stateSeq uint64
 	// closedPanes は PaneClose に渡された pane の ID である。
 	closedPanes []string
 	// sentKeys は AgentSendKeys に渡されたキーである。
@@ -48,7 +52,12 @@ type stubHerdr struct {
 // status: AgentGet / AgentWait が返す状態。
 // 戻り値: 組み立てた stub。
 func newStubHerdr(status herdr.AgentStatus) *stubHerdr {
-	return &stubHerdr{status: status}
+	// **連番は 1 から始める**（issue #173）。**実機がそう返す。**
+	// herdr は agent の状態が初期値の `Unknown` から1度でも変われば連番を刻むので、
+	// **`idle` や `working` を返す agent の連番は必ず1以上である。**
+	// **0 は「欄を返さない版の herdr」を意味し、手放しの判定はそれを安全側へ倒す。**
+	// **その振る舞いは `ClearStateSeq` で作る。**
+	return &stubHerdr{status: status, stateSeq: 1}
 }
 
 // SetStatus は AgentGet が返す状態を差し替える。
@@ -58,13 +67,24 @@ func (s *stubHerdr) SetStatus(status herdr.AgentStatus) {
 	s.status = status
 }
 
-// BumpRevision は AgentGet が返す画面の版を1つ増やす。
+// ClearStateSeq は AgentGet が返す state_change_seq を 0 にする（issue #173）。
 //
-// **「エージェントの画面が変わった」ことの再現である。**
-func (s *stubHerdr) BumpRevision() {
+// **`state_change_seq` を返さない herdr の版の再現である。**
+// `omitempty` なので、欄が無ければ Go 側では 0 になる。
+func (s *stubHerdr) ClearStateSeq() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.revision++
+	s.stateSeq = 0
+}
+
+// BumpStateSeq は AgentGet が返す state_change_seq を1つ増やす（issue #173）。
+//
+// **「エージェントの状態が変わった」ことの再現である。**
+// herdr は、その agent の状態が実際に変わったときだけこの連番を刻み直す。
+func (s *stubHerdr) BumpStateSeq() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stateSeq++
 }
 
 // ClosedPanes は閉じた pane の ID を返す。
@@ -139,9 +159,9 @@ func (s *stubHerdr) AgentGet(_ context.Context, params herdr.AgentGetParams) (*h
 	return &herdr.AgentGetResult{
 		Type: "agent_info",
 		Agent: herdr.Agent{
-			Name:        params.Target.String(),
-			AgentStatus: s.status,
-			Revision:    s.revision,
+			Name:           params.Target.String(),
+			AgentStatus:    s.status,
+			StateChangeSeq: s.stateSeq,
 		},
 	}, nil
 }
@@ -169,6 +189,36 @@ type stubFixture struct {
 	Herdr *stubHerdr
 	// Config は Orchestrator に渡した設定である。
 	Config config.Config
+	// Logs は Orchestrator が出したログである（issue #173）。
+	//
+	// **止めた理由が既定の水準で出ることを、検査から確かめるために持つ。**
+	// **競合の検査つきで走らせるので、書き込みは mutex で守る。**
+	Logs *syncBuffer
+}
+
+// syncBuffer は競合の検査つきでも安全に読み書きできるログの受け皿である。
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+// Write は slog のハンドラから呼ばれる。
+//
+// p: 書き込む内容。
+// 戻り値: 書き込んだバイト数とエラー。
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+// String はここまでに書かれた内容を返す。
+//
+// 戻り値: ログの全文。
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // stubFixtureOptions は newStubFixture の任意の入力である。
@@ -181,6 +231,10 @@ type stubFixtureOptions struct {
 	RateLimit *ratelimit.Reader
 	// GHAuthCheck は `gh` の認証の検査である。nil なら検査しない。
 	GHAuthCheck func(ctx context.Context) error
+	// Now は現在時刻を返す関数である。nil なら time.Now を使う。
+	//
+	// **時間で決まる判定（枠待ちの経過など）を、実時間を待たずに検査するために渡す。**
+	Now func() time.Time
 	// GHLogin は「continuo が使う gh の持ち主」を取る関数である（設計 3-65）。
 	//
 	// **nil なら testGHLogin を返す偽物を渡す。**渡さないと本物の `gh` が起動する
@@ -204,7 +258,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		status = herdr.AgentStatusIdle
 	}
 	stub := newStubHerdr(status)
-	ft := newFakeTracker(time.Now)
+	ft := newFakeTracker(opts.Now)
 
 	root := t.TempDir()
 	cfg := *config.DefaultConfig()
@@ -217,7 +271,8 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		opts.Mutate(&cfg)
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logs := &syncBuffer{}
+	logger := slog.New(slog.NewTextHandler(logs, nil))
 	mgr, err := workspace.New(workspace.Options{
 		Config:  cfg,
 		Logger:  logger,
@@ -238,6 +293,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 		HookSocketPath: filepath.Join(root, "hooks.sock"),
 		ContinuoPath:   "/opt/continuo/bin/continuo",
 		Logger:         logger,
+		Now:            opts.Now,
 		GHAuthCheck:    opts.GHAuthCheck,
 		// **本物の `gh` を起動させない**（設計 3-65）。
 		GHLogin: ghLoginForTest(opts.GHLogin),
@@ -245,7 +301,7 @@ func newStubFixture(t *testing.T, opts stubFixtureOptions) *stubFixture {
 	if err != nil {
 		t.Fatalf("orchestrator.New に失敗した: %v", err)
 	}
-	return &stubFixture{Orc: orc, Tracker: ft, Herdr: stub, Config: cfg}
+	return &stubFixture{Orc: orc, Tracker: ft, Herdr: stub, Config: cfg, Logs: logs}
 }
 
 // adoptRun は turn を送らずに run を印の集合へ入れる（設計 3-4 の段6 と同じ入口）。

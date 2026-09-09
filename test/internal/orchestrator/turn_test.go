@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4e7130891ff7bb6a73faefa369231913e1aacc265188f58a877ac8ae39ab395b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -676,7 +676,7 @@ func TestTurn_一時的な送信の失敗ではpaneを閉じない(t *testing.T)
 // 目的: 設計 3-2 / 3-40 の「**待ち受けが返ったあとに Stop hook が来なかったこと**だけが
 // 『Stop hook が届かなかった』と言ってよい場所である」を示す。
 // **巡回の停滞の検知（`claude.turn_timeout_ms` の沈黙）とは別の経路である。**
-// あちらは画面の版で測るが、こちらは待ち受けが返った直後の `settle_ms` だけを見る。
+// あちらは `agent_status` が `working` かで測るが、こちらは待ち受けが返った直後の `settle_ms` だけを見る。
 //
 // 与える情報: `agent.prompt` は `idle` で返るのに、Stop hook が1件も届かない。
 // 成功条件: 「turn が終わったことを検知できませんでした」を理由にリトライを1つ積み、

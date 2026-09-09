@@ -254,7 +254,6 @@ type runState struct {
     PromptID     string    // 直前に投げたプロンプトの ID（Stop hook の prompt_id と突き合わせる）
     TurnCount    int       // continuo が送ったプロンプトの回数
     LastSeenAt   time.Time // 最後に「動いている」のを見た時刻（打ち切りの時計）
-    LastRevision uint64    // 最後に見た pane の revision（画面の版）
 }
 ```
 
@@ -404,11 +403,12 @@ branch 名: continuo/{{.issue.owner}}/{{.issue.repo}}/{{.issue.number}}
 ```mermaid
 flowchart TB
     poll["巡回（30秒ごと）"] --> usage["usage API を読む<br/>5分に1回"]
-    usage --> over{"どれかの枠が<br/>pause_above_percent を超えたか"}
-    over -->|"超えた"| stop["新規の dispatch を止める<br/>走行中の turn は止めない"]
-    over -->|"超えていない"| normal["ふつうに dispatch する"]
+    usage --> over{"余裕値が0以下の<br/>枠があるか"}
+    over -->|"0以下"| stop["入札の要る issue を取らない<br/>担当が自分の issue は取る<br/>走行中の turn は止めない"]
+    over -->|"余裕あり"| normal["ふつうに dispatch する"]
 
-    stop --> waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
+    usage --> full{"使い切っている枠が<br/>あるか（使用率100）"}
+    full -->|"ある"| waiting["枠待ちとして記録する<br/>打ち切りの時計を止める"]
     waiting --> reset{"resets_at を過ぎたか"}
     reset -->|"まだ"| waiting
     reset -->|"過ぎた"| probe["走行中の run へ<br/>継続の指示を1回送る"]
@@ -629,7 +629,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 | `read_timeout_ms` の相手が違う | herdr の socket API の応答を測る |
 | **Status を動かすのは continuo のコード** | エージェントは1行書くだけ |
 | **issue の中身をプロンプトに埋め込まない** | owner / repo / 番号だけを渡し、`gh` の JSON 出力で直接読ませる |
-| 無音の測り方 | app-server の出力ではなく、pane の `revision`（画面の版）で測る |
+| 無音の測り方 | app-server の出力ではなく、herdr の `agent_status` が `working` かで測る |
 | `tracker` に仕様外のキーを足す | `dispatch_state` / `failure_state` / `status_signal_prefix` / `status_signal_map` |
 | 再起動後は引き渡し状態の worker を止めない | pane を残して人間に見せる |
 
@@ -648,7 +648,7 @@ continuo               # 常駐する（WORKFLOW.md を読んで巡回を始め�
 
 | キー | 仕様のどこ | なぜ持たないか |
 | --- | --- | --- |
-| `codex.stall_timeout_ms` | 5.3.6 | 観測点は pane の `revision`（画面の版）1つ。同じ時計に閾値を2つ置くと片方が死ぬ |
+| `codex.stall_timeout_ms` | 5.3.6 | 観測点は herdr の `agent_status` 1つ。同じ時計に閾値を2つ置くと片方が死ぬ |
 | `claude.liveness_hooks` | 仕様に無い | 読むコードが1行も無かった |
 | `tracker.write_interval_ms` | 仕様に無い | 読むコードが無い。書き込みはもともと間隔が空く |
 | `workspace.layout` | 仕様に無い | `gwq` 以外を弾くだけで、値を見て処理を変える場所が無い |

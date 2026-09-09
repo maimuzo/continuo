@@ -7,7 +7,7 @@
 - `docs/plans/continuo_design.md#3-12`（issue ごとの設定ファイルを worktree の外に作る）
 - `docs/plans/continuo_design.md#3-16`（着手の手順の順番）
 - `docs/plans/continuo_design.md#3-18`（worktree の身元ファイルと除外の一覧への登録）
-- `docs/plans/continuo_design.md#3-21`（打ち切りは「画面の版」で測る）
+- `docs/plans/continuo_design.md#3-21`（打ち切りは `agent_status` で測る）
 - `docs/plans/continuo_design.md#3-22`（base の決め方。`herdr.worktree.base` が null なら既定 branch）
 - `docs/plans/continuo_design.md#3-23`（hook の中身は外部入力であり、そのまま信じない）
 - `docs/plans/continuo_design.md#3-64`（危ない道具の呼び出しの判定。`public_only` の既定）
@@ -80,7 +80,7 @@ SPECIFIC ALTERNATIVE FLOW 作業ディレクトリがworktreeの外:
 RFS BASIC FLOW 20
 1. システムは Stop hook を捨てる。
 2. システムは turn の終わりを検知しない。
-3. システムは画面の版が turn_timeout_ms のあいだ増えないことを見つける。
+3. システムは agent_status が turn_timeout_ms のあいだ working にならないことを見つける。
 4. システムはエージェントを止める。
 5. システムは issue に打ち切った理由をコメントする。
 6. ABORT
@@ -152,7 +152,7 @@ flowchart TD
     B19 --> B20{"20. VALIDATES THAT Stop hook の cwd が worktree の外だと分かっていない"}
     B20 -- 偽 --> O1["作業ディレクトリがworktreeの外 1. Stop hook を捨てる"]
     O1 --> O2["作業ディレクトリがworktreeの外 2. turn の終わりを検知しない"]
-    O2 --> O3["作業ディレクトリがworktreeの外 3. 画面の版が増えないことを見つける"]
+    O2 --> O3["作業ディレクトリがworktreeの外 3. agent_status が working にならないことを見つける"]
     O3 --> O4["作業ディレクトリがworktreeの外 4. エージェントを止める"]
     O4 --> O5["作業ディレクトリがworktreeの外 5. 打ち切った理由をコメントする"]
     O5 --> OEND([ABORT])
@@ -218,7 +218,7 @@ sequenceDiagram
     end
     CC->>SYS: 19. turn の終わりを Stop hook で知らせる
     alt Stop hook の cwd が worktree の外だと分かった
-        SYS->>SYS: 作業ディレクトリがworktreeの外 1-3. hook を捨て画面の版を見張る
+        SYS->>SYS: 作業ディレクトリがworktreeの外 1-3. hook を捨て agent_status を見張る
         SYS->>CC: 作業ディレクトリがworktreeの外 4. エージェントを止める
         SYS->>BOARD: 作業ディレクトリがworktreeの外 5. 打ち切った理由をコメントする
         Note over SYS,BOARD: ABORT worktree は残っている

@@ -1,7 +1,7 @@
-// {"RUCM-CFG-SHA256": "84fe18b373fccaaaa45abd54d35647770fded53bfa246c36c3e7178accdb62d7", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
+// {"RUCM-CFG-SHA256": "c2e26c7952eae88fca422e675ffb9ae190e2a87a68b01bb1906ce3801257aefd", "SOURCE": "docs/spec/usecases/particular_case/レートリミットで待って再開する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**「レートリミットで待って再開する」の
-// 15本のパスは、6通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
+// 21本のパスは、9通りの結末の組み合わせである。**終端フローごとに代表を1本ずつ**対応づける。
 package orchestrator_test
 
 import (
@@ -9,13 +9,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
+	"github.com/maimuzo/continuo/internal/normalize"
+	"github.com/maimuzo/continuo/internal/orchestrator"
 	"github.com/maimuzo/continuo/internal/ratelimit"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // newUsageServer は Claude の OAuth usage API の代わりに使う偽のサーバを立てる。
@@ -51,11 +55,10 @@ func newUsageReader(t *testing.T, endpoint, tokenEnv string) *ratelimit.Reader {
 	t.Setenv(tokenEnv, "test-token")
 	reader, err := ratelimit.NewReader(ratelimit.Options{
 		Config: config.RateLimitConfig{
-			Source:            ratelimit.SourceOAuthUsageAPI,
-			TokenSource:       ratelimit.TokenSourceEnv,
-			TokenEnv:          tokenEnv,
-			PauseAbovePercent: 95,
-			PollIntervalMs:    1,
+			Source:         ratelimit.SourceOAuthUsageAPI,
+			TokenSource:    ratelimit.TokenSourceEnv,
+			TokenEnv:       tokenEnv,
+			PollIntervalMs: 1,
 		},
 		Endpoint: endpoint,
 	})
@@ -126,15 +129,16 @@ func TestQuota_100パーセントかつhookが来ていないrunだけを枠待�
 
 // {"RUCM-PATH": "P004"}
 //
-// TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める は、
-// 「新規を止める閾値」と「この run は枠待ちである」を分けていることを確かめる。
+// TestQuota_余裕値が0以下でも走行中のrunの時計は止めない は、
+// 「新規の着手を止めること」と「この run は枠待ちである」を分けていることを確かめる。
 //
-// 目的: 設計 3-27 の「`pause_above_percent`（既定95%）を超えただけでは、枠待ちとみなさない。
-// **走行中の turn は止めないし、時計も止めない**」を守っていることを示す。
+// 目的: 設計 3-27 の「**走行中の turn は止めないし、時計も止めない**」を守っていることを示す。
+// **枠待ちの条件は2つの連言である**ので、余裕値が0以下でも、
+// **hook が来ている run の時計は止まらない。**
 //
-// 与える情報: 枠が 96%（100 には達していない）。`Ready` の issue が1件。
+// 与える情報: 5時間の枠が 96%（マージン10なので余裕値は −6）。`Ready` の issue が1件。
 // 成功条件: 新規の dispatch が起きず、既にある run は枠待ちにならない。
-func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止める(t *testing.T) {
+func TestQuota_余裕値が0以下でも走行中のrunの時計は止めない(t *testing.T) {
 	endpoint, _ := newUsageServer(t, []map[string]any{
 		{"kind": "session", "percent": 96, "resets_at": nil, "severity": "normal"},
 	})
@@ -145,7 +149,6 @@ func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止�
 		Mutate: func(cfg *config.Config) {
 			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
 			cfg.RateLimit.PollIntervalMs = 1
-			cfg.RateLimit.PauseAbovePercent = 95
 			cfg.Trust.RequireRepoTrusted = false
 		},
 	})
@@ -156,10 +159,10 @@ func TestQuota_pause_above_percentを超えたら新規のdispatchだけを止�
 
 	for _, v := range fx.Orc.RunViews() {
 		if v.Identifier == "octocat/hello-world#190" {
-			t.Fatalf("閾値を超えているのに新規を dispatch している: %+v", v)
+			t.Fatalf("余裕値が0以下なのに新規を dispatch している: %+v", v)
 		}
 		if v.Identifier == running.Identifier && v.WaitingQuota {
-			t.Fatalf("95%%を超えただけで走行中の run の時計を止めている: %+v", v)
+			t.Fatalf("hook が来ている走行中の run の時計を止めている: %+v", v)
 		}
 	}
 }
@@ -351,7 +354,7 @@ func TestQuota_枠明けにClaudeCodeが自分で継続していたら継続の�
 	})
 }
 
-// {"RUCM-PATH": "P005"}
+// {"RUCM-PATH": "P008"}
 //
 // TestQuota_枠を使い切っていなければ待ち直さない は、枠待ちの条件その1 を確かめる。
 //
@@ -420,4 +423,761 @@ func TestQuota_resets_atがnullの枠は待ち時間を決められない(t *tes
 	time.Sleep(120 * time.Millisecond)
 	// **落ちないことを確かめる。**時刻を決められないまま進むと、ここで panic するか固まる。
 	fx.Orc.Tick(context.Background())
+}
+
+// **CFG のパスに対応づけない。**このユースケース記述は「走っている run が枠明けを待って
+// 再開するまで」を書いたもので、**新しい issue を取るかどうかの門は1段も持っていない。**
+// 対応づけると、無関係なパスに代表を立てたことになる。
+//
+// TestQuota_枠を読めなければ入札の要るissueには着手しない は、2つの門を1つに揃えたことを
+// 確かめる（設計 3-77j。issue #173）。
+//
+// 目的: **枠を読めないとき、入札は「黙る」、新規 dispatch は「止めない」で逆を向いていた。**
+// 入札が先に効くので後ろは一度も効かず、**ボードが1件も進まないのに出るのは `Debug` の1行だけ**
+// だった。**判定を1つに揃え、既定の水準で理由を出すことを示す。**
+//
+// 与える情報: usage API が 500 を返す（枠を読めない）。担当者のいない `Ready` の issue が1件。
+// 成功条件: その issue が dispatch されず、`Info` で理由が出ること。
+func TestQuota_枠を読めなければ入札の要るissueには着手しない(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_UNREADABLE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(sampleIssue(190, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#190" {
+			t.Fatalf("枠を読めないのに入札の要る issue へ着手している: %+v", v)
+		}
+	}
+	// **止まったことが人間に見えなければ、直したことにならない。**
+	got := fx.Logs.String()
+	if !strings.Contains(got, "level=INFO") || !strings.Contains(got, "枠を読めないので") {
+		t.Fatalf("止めたことを INFO で出していない:\n%s", got)
+	}
+	if !strings.Contains(got, "枠を読めない") {
+		t.Fatalf("止めた理由を出していない:\n%s", got)
+	}
+	// **直し方を取り違えさせない。**枠を読めないのは資格情報の話であって、
+	// **マージンをいくら下げても動き出さない。**
+	if !strings.Contains(got, "マージンを下げても動き出しません") {
+		t.Fatalf("枠を読めないときに、マージンでは直らないと書いていない:\n%s", got)
+	}
+}
+
+// TestQuota_枠を読めなくても自分が担当のissueには着手する は、巡回を打ち切っていないことを
+// 確かめる（設計 3-77j。issue #173）。
+//
+// 目的: **枠を読めないだけで巡回を打ち切ってはならない。**打ち切ると、
+// **この機械が既に担当者になっている issue まで着手されなくなる**（印が無いのでこの経路からしか
+// 拾えない）。**期限切れの担当を外す経路も通らない。**
+//
+// 与える情報: usage API が 500 を返す。**この機械（gh の持ち主）が担当者の `Ready` の issue が1件。**
+// 成功条件: その issue が dispatch されること。
+func TestQuota_枠を読めなくても自分が担当のissueには着手する(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_MINE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(assignedIssue(191, "Ready", testGHLogin))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#191" {
+			return
+		}
+	}
+	t.Fatalf("既に自分が担当の issue にまで着手していない（枠を読めないだけで巡回を打ち切っている）:\n%s",
+		fx.Logs.String())
+}
+
+// TestQuota_枠が逼迫していても担当が自分のissueには着手する は、
+// 止める範囲が入札の要る issue だけであることを確かめる（設計 3-27。issue #173）。
+//
+// 目的: **巡回を丸ごと打ち切ってはならない。**
+// **以前は `rate_limit.pause_above_percent` を超えると `dispatchCandidates` が即 `return` していた。**
+// **その設定は消えた**（人間の決定。2026-09-06）。**打ち切ると、この機械が既に担当者に
+// なっている issue まで着手されなくなる**（印が無いのでこの経路からしか拾えない）。
+// **再起動で復元した run も拾えない**（`restart.orphan_running_action` の既定 `redispatch` は
+// 復元では何もせず、次の巡回に委ねる）。**`handoffGate` の中にある「期限切れの担当を外す」
+// 経路も通らなくなる**ので、詰まったカンバンを誰も解けない。
+//
+// 与える情報: 1回目は 99% を返し、2回目以降は 500 を返す usage API。
+// **この機械が担当者の `Ready` の issue が1件**（入札を要さない経路）。
+// 成功条件: その issue に着手すること。
+func TestQuota_枠が逼迫していても担当が自分のissueには着手する(t *testing.T) {
+	var reads atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if reads.Add(1) > 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		body := map[string]any{"limits": []map[string]any{
+			{"kind": "session", "percent": 99, "resets_at": nil, "severity": "normal"},
+		}}
+		if err := json.NewEncoder(w).Encode(body); err != nil {
+			t.Errorf("偽の usage API が応答を書けません: %v", err)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	reader := newUsageReader(t, srv.URL, "CONTINUO_TEST_OAUTH_TOKEN_STALE")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(assignedIssue(192, "Ready", testGHLogin))
+
+	// 1回目で 99% を読み、2回目からは読めなくなる。
+	fx.Orc.Tick(context.Background())
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#192" {
+			return
+		}
+	}
+	t.Fatalf("担当が自分の issue にまで着手していない（巡回を丸ごと打ち切っている）:\n%s",
+		fx.Logs.String())
+}
+
+// TestQuota_マージンが先に効いて止まり使用率と閾値が出る は、出す1行の中身を確かめる
+// （設計 3-77j。issue #173）。
+//
+// 目的: **新規着手が止まる使用率は `100 − マージン` である。**
+// マージン10なら **90% から**である（`rate_limit.pause_above_percent` は消えた。issue #173）。
+// **観測した使用率と、枠ごとの閾値の両方を出さないと、どちらの枠が原因かを読めない。**
+//
+// 与える情報: 1週間の枠が 92%。担当者のいない `Ready` の issue が1件。
+// 成功条件: dispatch されず、使用率と閾値が1行に出ること。
+func TestQuota_マージンが先に効いて止まり使用率と閾値が出る(t *testing.T) {
+	endpoint, _ := newUsageServer(t, []map[string]any{
+		{"kind": "session", "percent": 30, "resets_at": nil, "severity": "normal"},
+		{"kind": "weekly_all", "percent": 92, "resets_at": nil, "severity": "normal"},
+	})
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_MARGIN")
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		RateLimit: reader,
+		Mutate: func(cfg *config.Config) {
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.Tracker.Provider.Handoff.FiveHourMarginPercent = 10
+			cfg.Tracker.Provider.Handoff.WeeklyMarginPercent = 10
+			cfg.Trust.RequireRepoTrusted = false
+		},
+	})
+	fx.Tracker.AddIssue(sampleIssue(193, "Ready"))
+
+	fx.Orc.Tick(context.Background())
+
+	for _, v := range fx.Orc.RunViews() {
+		if v.Identifier == "octocat/hello-world#193" {
+			t.Fatalf("余裕値がマイナスなのに着手している: %+v", v)
+		}
+	}
+	got := fx.Logs.String()
+	for _, want := range []string{
+		"余裕値が0以下",
+		"1週間の枠の使用率=92",
+		"5時間の枠の使用率=30",
+		`1週間の枠の閾値="90% に達したら止まります"`,
+		`5時間の枠の閾値="90% に達したら止まります"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("1行に %q が入っていない:\n%s", want, got)
+		}
+	}
+}
+
+// weeklyWaitFixture は「1週間の枠を待つ上限」の検査で使う一式を組み立てる（issue #197）。
+//
+// **担当者はこの機械（gh の持ち主）である。**手放す相手が自分でないと、外す対象が見つからない。
+// **枠待ちの条件その2（turn_timeout_ms のあいだ hook が来ていない）は、時計を進めて作る。**
+//
+// t: 呼び出し元のテスト。
+// limits: usage API が返す枠の一覧。
+// limitMinutes: `rate_limit.weekly_wait_limit_minutes` に入れる値。
+// tokenEnv: トークンを入れる環境変数の名前（テストごとに変える）。
+// 戻り値: 組み立てた一式・印へ入れた issue・進められる時計。
+func weeklyWaitFixture(
+	t *testing.T, limits []map[string]any, limitMinutes int, tokenEnv string,
+) (*stubFixture, tracker.Issue, *testClock) {
+	t.Helper()
+	endpoint, _ := newUsageServer(t, limits)
+	reader := newUsageReader(t, endpoint, tokenEnv)
+	clock := newTestClock()
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		// **「止まっている」を表す状態にする**（issue #197）。
+		// **`unknown` では手放さない。**herdr が状態を判定できないという意味であり、
+		// **確かめられていないのに pane を閉じて担当を外すことになる。**
+		AgentStatus: herdr.AgentStatusIdle,
+		RateLimit:   reader,
+		Now:         clock.Now,
+		Mutate: func(cfg *config.Config) {
+			cfg.Claude.TurnTimeoutMs = 60000
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.WeeklyWaitLimitMinutes = limitMinutes
+		},
+	})
+
+	// **担当者をこの機械にした issue を、印へ入れる。**
+	issue := assignedIssue(188, "In Progress", testGHLogin)
+	fx.Tracker.AddIssue(issue)
+	fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
+		AgentName:        normalize.SafeName("continuo-hello-world-188"),
+		PaneID:           "w1:p1",
+		SessionUUID:      "session-188",
+		HerdrWorkspaceID: "w1",
+	}, false)
+
+	// **枠待ちの条件その2 を満たす**（turn_timeout_ms のあいだ hook が来ていない）。
+	clock.Advance(2 * time.Minute)
+	return fx, issue, clock
+}
+
+// tickOnce は巡回を1回だけ回す（issue #197）。
+//
+// **1回では手放さない。**連番を初めて見た巡回では「そこからどれだけ止まっていたか」が
+// 分からないので、**次の巡回まで待つ**（設計 3-27 の段0b）。
+// **窓を満たすまで回すのは `waitForRelease` である。**
+//
+// fx: 対象の一式。
+func tickOnce(fx *stubFixture) {
+	fx.Orc.Tick(context.Background())
+}
+
+// waitForRelease は、担当を手放して印から外れるまで巡回を回す（issue #197）。
+//
+// **1回の巡回では手放さない。**連番を初めて見た巡回では
+// 「そこからどれだけ止まっていたか」が分からないので、**次の巡回まで待つ**
+// （設計 3-27 の段0b）。**手放しは別の goroutine で走る**ので、
+// **巡回を止めて待つのではなく、時計を進めながら巡回を回し続ける。**
+//
+// t: 呼び出し元のテスト。
+// fx: 対象の一式。
+// clock: 進められる時計。
+// identifier: 対象の issue の識別子。
+func waitForRelease(t *testing.T, fx *stubFixture, clock *testClock, identifier string) {
+	t.Helper()
+	for i := 0; i < 60; i++ {
+		if _, ok := viewOf(fx, identifier); !ok {
+			return
+		}
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("担当を手放して印から外れませんでした:\n%s", fx.Logs.String())
+}
+
+// assigneeLoginsOf は、いまボードに載っている担当者のログイン名を返す。
+//
+// fx: 対象の一式。
+// id: issue の ID。
+// 戻り値: 担当者のログイン名。
+func assigneeLoginsOf(fx *stubFixture, id string) []string {
+	issue, ok := fx.Tracker.IssueByID(id)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(issue.Assignees))
+	for _, a := range issue.Assignees {
+		out = append(out, a.Login)
+	}
+	return out
+}
+
+// TestQuota_画面が動いていれば枠待ちと判定しない は、stall の評価順を確かめる
+// （設計 3-27。issue #197）。
+//
+// 目的: **枠待ちの条件は「使用率が100」と「hook が来ていない」の2つで、
+// 「枠を待っている」と「長い1つの仕事をしている」を区別できない。**
+// hook はツールが終わってから飛ぶので、**1時間を超える1回のツール呼び出しの最中は1件も来ない。**
+// **そこへ1週間のモデル別の枠が100%だと条件が両方そろい、正常に走っている run が枠待ちと名乗る。**
+// **stall の時計が止まったまま戻らないので、そのあと本当に固まっても誰も止められない。**
+//
+// **専用の仕組みは持たない。**`checkStalls` の評価順で、`agent_status` を枠待ちの判定より前に置く。
+//
+// 与える情報: 1週間のモデル別の枠が 100% で、リセットは48時間後。上限は300分。**`agent_status` が `working` である。**
+// 成功条件: 枠待ちと判定しないこと。印から外れないこと。担当者が残っていること。
+//
+// **CFG のパスに対応づけない。**この判定は基本フローの stall の評価順であり、
+// 代替フローではない。
+func TestQuota_workingなら枠待ちと判定しない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, _ := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_scoped", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W6")
+
+	// **エージェントは長い1つのツール呼び出しの最中である。**
+	// **枠待ちと判定される前に `working` にする。**判定してからでは、標識が立った run は
+	// 次の巡回で状態を見に行かない（枠が明けたときに標識が外れる）。
+	fx.Herdr.SetStatus(herdr.AgentStatusWorking)
+
+	fx.Orc.Tick(context.Background())
+	// **手放しの対象になった run は、打ち切りの本体まで落ちない**（issue #173）。
+	// **そのため「agent が working なので待ち続けます」は出ない。**
+	// **確かめるのは、打ち切られていないことそのものである。**
+	if got := fx.Logs.String(); strings.Contains(got, "止まったものと判断して打ち切りました") {
+		t.Fatalf("working なのに打ち切っている:\n%s", got)
+	}
+
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("working なのに印から外している")
+	}
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("担当者が変わっている: %v", got)
+	}
+	if got := fx.Logs.String(); strings.Contains(got, "枠待ちと判定したので") {
+		t.Fatalf("画面が動いているのに枠待ちと判定している:\n%s", got)
+	}
+}
+
+// {"RUCM-PATH": "P006"}
+//
+// TestQuota_担当が移っていたらafter_runを走らせずに止める は、代替フロー「待つ上限を超えた」の
+// 担当の確かめで引き返す枝を検査する（設計 3-27 / 3-77c。issue #197）。
+//
+// 目的: **枠待ちのあいだ、担当は自分の意思と無関係に外れる。**
+// `idle_timeout_ms` は「担当者の最後の進捗報告から」で数え、**枠待ち中は hook が来ないので
+// 進捗のコメントも増えない。**
+// **3-77c は「担当を外された機械は、その branch へ push してはならない」と決めている。**
+// **確かめずに `after_run` を走らせると、利用者が書いた `git push` が別の機械の branch へ飛ぶ。**
+//
+// 与える情報: 1週間の枠が 100% で、リセットは48時間後。上限は300分。**担当者は別の人である。**
+// 成功条件: 印から外れること。**別の人の担当者が残っていること**（こちらは触らない）。
+func TestQuota_担当が移っていたらafter_runを走らせずに止める(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W7")
+
+	// **待っているあいだに、別の機械が担当を取っていった。**
+	// **`testGHLogin` とは違うアカウントにする。**同じにすると「担当は自分のまま」になる。
+	fx.Tracker.SetAssignees(issue.ID, "another-machine")
+
+	waitForRelease(t, fx, clock, issue.Identifier)
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != "another-machine" {
+		t.Fatalf("担当が移っているのに担当者へ触っている: %v", got)
+	}
+	if got := fx.Logs.String(); !strings.Contains(got, "担当が移ったので") {
+		t.Fatalf("担当が移ったことを出していない:\n%s", got)
+	}
+	if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("担当が移っているのに手放しの経路を通っている:\n%s", got)
+	}
+}
+
+// {"RUCM-PATH": "P007"}
+//
+// TestQuota_1週間の枠のリセットが上限より先なら担当を手放す は、#197 の本体を確かめる
+// （時刻で測る側）。
+//
+// 目的: **1週間の枠は最長で7日先までリセットされない。**待つ上限を設けないと、
+// その issue を抱えたまま何日も止まる。
+//
+// 与える情報: 1週間の枠が 100% で、リセットは48時間後。上限は300分（5時間）。
+// 成功条件: 印から外れ（スロットが空き）、担当者が空になること。
+func TestQuota_1週間の枠のリセットが上限より先なら担当を手放す(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W1")
+
+	tickOnce(fx)
+	waitForRelease(t, fx, clock, issue.Identifier)
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {
+		t.Fatalf("担当者が残っている: %v", got)
+	}
+	// **結果の1行が既定の水準で出ること。**
+	// 「上限を超えたので手放します」は `Debug` である（手放せずに戻る経路が毎巡回で通るため）。
+	if got := fx.Logs.String(); !strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("手放したことを出していない:\n%s", got)
+	}
+}
+
+// TestQuota_リセット時刻が読めなくても経過が上限を超えたら手放す は、#197 の本体を確かめる
+// （経過で測る側）。
+//
+// 目的: **`resets_at` を持たない1週間の枠がある。**時刻で測れない以上、
+// **上限を掛けないと、印を外す条件も無いまま待ち続ける。**
+//
+// 与える情報: 1週間の枠が 100% で `resets_at` が null。上限は10分。
+// 成功条件: 満杯を見た直後（経過0）では手放さず、10分を過ぎたら手放すこと。
+func TestQuota_リセット時刻が読めなくても経過が上限を超えたら手放す(t *testing.T) {
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_scoped", "percent": 100, "resets_at": nil, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W2")
+
+	// 1回目の巡回で「満杯を見た時刻」が入る。**まだ経過は0なので手放さない。**
+	fx.Orc.Tick(context.Background())
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("満杯を見た直後（経過0）で手放している:\n%s", fx.Logs.String())
+	}
+
+	// **20分進める。**上限（10分）を超える。
+	clock.Advance(20 * time.Minute)
+	fx.Orc.Tick(context.Background())
+	// **この巡回で連番を初めて見る。**そこから窓（60秒）ぶん止まっていることを、
+	// **次の巡回で確かめてから手放す**（設計 3-27 の段0b）。
+	waitForRelease(t, fx, clock, issue.Identifier)
+}
+
+// TestQuota_毎回状態が変わっていたら手放さない は、手放しの2つ目の条件を確かめる
+// （issue #173）。
+//
+// 目的: **`revision`（pane の版）では、この場面を捕まえられなかった。**
+// あれは画面を1バイトも見ておらず、herdr が増やすのは端末タイトルの本文が変わったときだけである。
+// **continuo の pane ではタイトルが issue の識別子で固定されるので、永久に動かない**
+// （2026-09-08 の実測。働いている3つの pane が2分間ずっと `revision: 1` だった）。
+// **そのため2つ目の条件は常に真で、判定は実質「`agent_status` を2回読んだ」だけだった。**
+// **観測と観測の間に `working` の山が丸ごと入っていても気づけない。**
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後（上限を超える）。
+// **巡回のたびに agent の状態が変わったことにする**（`state_change_seq` を増やす）。
+// 成功条件: **手放さないこと。**印に残り、担当者も変わらないこと。
+//
+// **この検査は、実装を `revision` へ戻すと落ちる**（戻すと連番を見ないので、
+// 2回目の観測で「変わっていない」と答えて手放す）。
+func TestQuota_毎回状態が変わっていたら手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W7")
+
+	// **手放しのテストと同じだけ巡回を回す。**違いは、巡回のたびに状態が変わることだけである。
+	for i := 0; i < 60; i++ {
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			t.Fatalf("状態が変わり続けているのに手放しました（%d 回目の巡回）:\n%s", i, fx.Logs.String())
+		}
+		fx.Herdr.BumpStateSeq()
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 1 || got[0] != testGHLogin {
+		t.Fatalf("担当者が変わっている: %v", got)
+	}
+}
+
+// TestQuota_連番を返さない版では手放さない は、安全側へ倒すことを確かめる（issue #173）。
+//
+// 目的: **`state_change_seq` は `omitempty` である。**欄を返さない herdr の版では
+// **全 agent が 0 として読まれる。**そのまま比べると「2回続けて同じ」が常に成り立ち、
+// **判定は `revision` のときと同じ恒真へ戻る。**
+// **恒真へ戻るくらいなら、手放さない側へ倒す。**
+//
+// 与える情報: 1週間の枠が **92%**（手放しの条件は満たすが、**枠待ちの印は立たない**）。
+// リセットは48時間後。**連番は1度も増やさない**（＝欄を返さない版の再現）。
+// **100% で試してはならない。**そこでは枠待ちの印が立ち、打ち切りが止まるのが元からの正しい振る舞いである。
+// 成功条件: **手放さないこと。ただし打ち切りからも守らないこと。**
+func TestQuota_連番を返さない版では手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 92, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W8")
+
+	// **欄を返さない版の herdr を作る。**
+	fx.Herdr.ClearStateSeq()
+
+	for i := 0; i < 60; i++ {
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			// **打ち切られた。それでよい**（issue #173）。
+			// **手放しはしない**（連番を読めないので、止まっていると言えない）。
+			// **だが打ち切りからも守ってはならない。**守ると止める者が1人もいなくなり、
+			// **pane とスロットを握ったまま continuo の再起動まで残る。**
+			if got := fx.Logs.String(); strings.Contains(got, "担当を手放しました") {
+				t.Fatalf("連番を読めない版なのに手放しました:\n%s", got)
+			}
+			return
+		}
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("連番を読めない run が、手放されも打ち切られもせずに残っています:\n%s", fx.Logs.String())
+}
+
+// TestQuota_92パーセントでも打ち切られずに手放される は、90〜99%の帯を確かめる
+// （issue #173 / #197）。
+//
+// 目的: **枠待ちの印は使用率100でしか立たない。**
+// **入札と手放しの線を余裕値へ移したので、92% の run は「手放しの対象」だが「枠待ちの印」は立たない。**
+// **そのまま打ち切りの本体まで落ちると、`revision` は動かず無音の閾値も超えているので、
+// 打ち切りが先に殺す。****手放しは2回続けて同じ連番を見る必要があるため、1回目は必ず「まだ」と答える。**
+// **つまり打ち切りが毎回勝ち、線を移した意味が既定の設定で丸ごと消える。**
+//
+// 与える情報: 1週間の枠が **92%**（余裕値は 100−92−10 = −2 で0以下。**ただし100ではない**）。
+// リセットは48時間後（上限を超える）。
+// 成功条件: **打ち切られずに、担当を手放すこと。**`failure_state` へ落ちないこと。
+func TestQuota_92パーセントでも打ち切られずに手放される(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 92, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W9")
+
+	waitForRelease(t, fx, clock, issue.Identifier)
+
+	if got := assigneeLoginsOf(fx, issue.ID); len(got) != 0 {
+		t.Fatalf("担当者が残っている: %v", got)
+	}
+	// **打ち切りの文面が出ていないこと。**出ていれば、打ち切りが先に勝っている。
+	if got := fx.Logs.String(); strings.Contains(got, "止まったものと判断して打ち切りました") {
+		t.Fatalf("手放しの対象なのに打ち切っている:\n%s", got)
+	}
+	if got := fx.Logs.String(); !strings.Contains(got, "担当を手放しました") {
+		t.Fatalf("手放していない:\n%s", got)
+	}
+}
+
+// TestQuota_手放せないrunは打ち切りに任せる は、打ち切りを飛ばす範囲を確かめる
+// （issue #173）。
+//
+// 目的: **手放しの対象を打ち切りから守る門を足したが、守る範囲を広げすぎてはならない。**
+// **`agent.get` を読めない run と、`blocked` / `unknown` の run は、
+// 手放しの経路では二度と進まない**（`paneStopped` が `idle` と `done` しか通さない）。
+// そこを打ち切りからも守ると、**止める者が1人もいなくなる。**
+// **turn ループは総実行時間では打ち切らない**ので、
+// **その run は pane とスロットを握ったまま、continuo を再起動するまで残る。**
+// **枠がいちばん苦しい局面で、最後の安全網が選択的に外れることになる。**
+//
+// 与える情報: 1週間の枠が **92%**（手放しの条件は満たすが、**枠待ちの印は立たない**）。
+// リセットは48時間後。**ただし agent は `unknown` のまま**（＝手放しの経路では進まない）。
+// **100% で試してはならない。**そこでは枠待ちの印が立ち、打ち切りが止まるのが元からの正しい振る舞いである。
+// **この検査が見たいのは、印が立たない帯で、私が足した門が打ち切りを止めていないかである。**
+//
+// **`working` で試してはならない**（2026-09-08 に前提を入れ替えた。issue #173）。
+// **`working` は「進んでいる」の唯一の信号なので、打ち切りの側が意図して見送る**
+// （[docs/spec/turn_end_detect_mechanizm.md](../../docs/spec/turn_end_detect_mechanizm.md) の 4-1）。
+// **`unknown` は、どちらの経路にも拾われない状態の代表である。**
+// 成功条件: **打ち切られること。**握ったまま残らないこと。
+func TestQuota_手放せないrunは打ち切りに任せる(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 92, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W10")
+
+	// **`unknown` のまま固まった run にする。**手放しの経路はここで止まる。
+	fx.Herdr.SetStatus(herdr.AgentStatusUnknown)
+
+	for i := 0; i < 60; i++ {
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			return // 打ち切られた（印から外れた）。それでよい
+		}
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("手放せない run が打ち切られずに残っています:\n%s", fx.Logs.String())
+}
+
+// TestQuota_5時間の枠だけなら上限を超えても待ち続ける は、人間が決めた表の1行目を確かめる。
+//
+// 目的: **2026-08-26 の決定「5時間枠 → 待つ。担当は変えない」。**
+// 5時間の枠は待てば必ず明けるので、担当を動かす必要が無い。
+//
+// 与える情報: 5時間の枠だけが 100% で、リセットは48時間後（上限をはるかに超える）。
+// 成功条件: 印から外れないこと。
+func TestQuota_5時間の枠だけなら上限を超えても待ち続ける(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "session", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 300, "CONTINUO_TEST_OAUTH_TOKEN_W3")
+
+	fx.Orc.Tick(context.Background())
+	clock.Advance(10 * time.Hour)
+	fx.Orc.Tick(context.Background())
+
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("5時間の枠だけなのに担当を手放している:\n%s", fx.Logs.String())
+	}
+}
+
+// TestQuota_画面の状態を判定できないうちは手放さない は、確かめられないときの倒し方を確かめる
+// （設計 3-27。issue #197）。
+//
+// 目的: **herdr の `unknown` は「agent は居るが状態を判定できない」である。**
+// **確かめられていないのに手放してはならない。**この判定の先には GitHub への2回の書き込みと
+// pane を閉じる操作があり、**書きかけの編集を持ったまま閉じると、その編集は戻らない。**
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。
+// **`agent_status` は `unknown`。**
+// 成功条件: 上限を超えていても手放さないこと。
+func TestQuota_画面の状態を判定できないうちは手放さない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_UNKNOWN")
+	fx.Herdr.SetStatus(herdr.AgentStatusUnknown)
+
+	for i := 0; i < 5; i++ {
+		clock.Advance(2 * time.Minute)
+		fx.Orc.Tick(context.Background())
+	}
+
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("画面の状態を判定できないのに担当を手放した:\n%s", fx.Logs.String())
+	}
+}
+
+// TestQuota_走っている印が残っていても止まっていれば手放す は、
+// 「サブエージェントの一覧を手放しの条件にしない」を確かめる（設計 3-27。issue #197）。
+//
+// 目的: **`runningSubagentList()` を条件にすると、この仕組みが1回も動かなくなる。**
+// **あの一覧を空にする経路は4つあり、4つとも hook か次の turn で駆動する。**
+// （`docs/spec/turn_end_detect_mechanizm.md` の 3-8 に並べてある）
+// **枠待ちの最中は、どちらも起きない。**次の turn は枠が明けるまで送られず、hook も来ない。
+// **つまり、枠が尽きた瞬間にサブエージェントが走っていた run は、一覧が永久に空にならない。**
+// **手放しの仕組みが、いちばん効いてほしい場面で1回も動かなくなる。**
+//
+// **人間の指示（2026-09-06）は「サブエージェントを含め完全停止するまで待って」である。**
+// **それは `agent_status` が受け持つ。**サブエージェントの出力も同じ pane へ出るので、
+// 何かが動いているあいだ herdr は `working` を返す。
+//
+// 与える情報: 1週間の枠が 100% でリセットは48時間後。上限は10分。
+// **走っているサブエージェントの印が1つ残っているが、`agent_status` は `idle`。**
+// 成功条件: 手放すこと。
+func TestQuota_走っている印が残っていても止まっていれば手放す(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W_SUBAGENT")
+	// **`SubagentStop` が来ないまま枠が尽きた状態を作る。**
+	fx.Orc.OnHook(subagentStartEvent("session-188", "", "a1f9f743842d397e1", "Explore"))
+
+	waitForRelease(t, fx, clock, issue.Identifier)
+}
+
+// TestQuota_5時間の枠の時刻で1週間の枠を判定しない は、待つ先の取り方を確かめる。
+//
+// 目的: **`LatestResetForClearing` は種別を選ばない。**1週間の枠が `resets_at` を持たず、
+// 5時間の枠が2時間後に明けるとき、**あれを使うと「2時間後」で判定してしまい、
+// 上限（10分）を超えないので手放さない。**
+//
+// 与える情報: 1週間の枠が 100% で `resets_at` が null。5時間の枠も 100% で2時間後。上限は10分。
+// 成功条件: 経過で測って手放すこと（5時間の枠の時刻に引きずられない）。
+func TestQuota_5時間の枠の時刻で1週間の枠を判定しない(t *testing.T) {
+	soon := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "session", "percent": 100, "resets_at": soon, "severity": "normal"},
+		{"kind": "weekly_scoped", "percent": 100, "resets_at": nil, "severity": "normal"},
+	}, 10, "CONTINUO_TEST_OAUTH_TOKEN_W4")
+
+	fx.Orc.Tick(context.Background())
+	clock.Advance(20 * time.Minute)
+	fx.Orc.Tick(context.Background())
+	// **連番を初めて見た巡回では手放さない**（設計 3-27 の段0b）。
+	waitForRelease(t, fx, clock, issue.Identifier)
+}
+
+// TestQuota_上限が0なら1週間の枠でも待ち続ける は、逃げ道を確かめる。
+//
+// 目的: **`weekly_wait_limit_minutes: 0` は「上限を設けない」である。**
+// `claude.turn_timeout_ms` と `tracker.provider.handoff.recheck_interval_ms` と同じ向きである。
+//
+// 与える情報: 1週間の枠が 100% で、リセットは48時間後。**上限は0。**
+// 成功条件: 印から外れないこと。
+func TestQuota_上限が0なら1週間の枠でも待ち続ける(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	fx, issue, clock := weeklyWaitFixture(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	}, 0, "CONTINUO_TEST_OAUTH_TOKEN_W5")
+
+	fx.Orc.Tick(context.Background())
+	clock.Advance(10 * time.Hour)
+	fx.Orc.Tick(context.Background())
+
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("上限が0なのに担当を手放している:\n%s", fx.Logs.String())
+	}
+}
+
+// TestQuota_打ち切りを切っていても巡回は落ちない は、判定の置き場所を確かめる
+// （設計 3-27。issue #197）。
+//
+// 目的: **`claude.turn_timeout_ms` が0以下だと、巡回の打ち切りの判定は行わない**
+// （`SPEC.md` 8.4 が「0 以下なら stall 検知を行わない」と決めている）。
+// **それでも枠待ちの印は立つ**（hook を1件も受けていない run は、無音の長さを見ずに
+// 枠待ちと判定される）。**だから上限の判定を打ち切りの門より前へ出した。**
+//
+// 与える情報: `claude.turn_timeout_ms: 0`。1週間の枠が 100% で、リセットは48時間後。上限は300分。
+// 成功条件: 巡回が落ちず、**枠待ちでない run を誤って手放さない**こと。
+func TestQuota_打ち切りを切っていても巡回は落ちない(t *testing.T) {
+	resetsAt := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	endpoint, _ := newUsageServer(t, []map[string]any{
+		{"kind": "weekly_all", "percent": 100, "resets_at": resetsAt, "severity": "normal"},
+	})
+	reader := newUsageReader(t, endpoint, "CONTINUO_TEST_OAUTH_TOKEN_W6")
+	clock := newTestClock()
+
+	fx := newStubFixture(t, stubFixtureOptions{
+		AgentStatus: herdr.AgentStatusUnknown,
+		RateLimit:   reader,
+		Now:         clock.Now,
+		Mutate: func(cfg *config.Config) {
+			// **打ち切りの判定を切る。**この設定は validate が明示的に許している。
+			cfg.Claude.TurnTimeoutMs = 0
+			cfg.RateLimit.Source = ratelimit.SourceOAuthUsageAPI
+			cfg.RateLimit.PollIntervalMs = 1
+			cfg.RateLimit.WeeklyWaitLimitMinutes = 300
+		},
+	})
+
+	issue := assignedIssue(188, "In Progress", testGHLogin)
+	fx.Tracker.AddIssue(issue)
+	fx.Orc.Adopt(issue, orchestrator.AdoptedRun{
+		AgentName:        normalize.SafeName("continuo-hello-world-188"),
+		PaneID:           "w1:p1",
+		SessionUUID:      "session-188",
+		HerdrWorkspaceID: "w1",
+	}, false)
+
+	// **この検査は「落ちないこと」までしか確かめられない。**
+	// **枠待ちの印を、巡回に入る前に立てる手立てが無いためである**
+	// （`orchestrator.AdoptedRun` に枠待ちの欄が無く、その型は
+	// このリポジトリの決まりで触れないファイルにある）。
+	// **印を立てられるのは turn の待ちループだけで、そこを通すには turn を1回走らせる必要がある。**
+	//
+	// **確かめられているのは、`claude.turn_timeout_ms` が0以下でも巡回が落ちないことと、
+	// 枠待ちでない run を誤って手放さないことの2つである。**
+	// **上限そのものは、上の5本が確かめている。**
+	fx.Orc.Tick(context.Background())
+
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Fatalf("枠待ちでない run を手放している:\n%s", fx.Logs.String())
+	}
 }

@@ -3,7 +3,7 @@
   "usecase_name": "issue の担当を入札で決める",
   "source": {
     "file": "docs/spec/usecases/particular_case/issue の担当を入札で決める.rucm.md",
-    "rucm_block_sha256": "7a80f3b347ccddb8245a41c49f6d16b43f278a3672ed4339c6cbd3a58752cd8c"
+    "rucm_block_sha256": "b2c4edb18c3f3b4b82f69b102ba1642a371b9ddedd00b471ad72e4f91b8a81de"
   },
   "root": "BASIC FLOW-1",
   "flows": {
@@ -55,20 +55,11 @@
       },
       "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
     },
-    "枠の使い過ぎ": {
+    "余裕値が0以下": {
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          9
-        ]
-      },
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
-    },
-    "余裕値がマイナス": {
-      "rfs": {
-        "flow": "BASIC FLOW",
-        "steps": [
-          12
+          11
         ]
       },
       "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。"
@@ -77,7 +68,7 @@
       "rfs": {
         "flow": "BASIC FLOW",
         "steps": [
-          17
+          16
         ]
       },
       "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。"
@@ -154,107 +145,100 @@
     },
     {
       "id": "BASIC FLOW-9",
-      "type": "condition",
+      "type": "action",
       "flow": "BASIC FLOW",
       "step": 9,
-      "statement": "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。"
+      "statement": "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。"
     },
     {
       "id": "BASIC FLOW-10",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 10,
-      "statement": "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。"
-    },
-    {
-      "id": "BASIC FLOW-11",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 11,
       "statement": "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。"
     },
     {
-      "id": "BASIC FLOW-12",
+      "id": "BASIC FLOW-11",
       "type": "condition",
       "flow": "BASIC FLOW",
+      "step": 11,
+      "statement": "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。"
+    },
+    {
+      "id": "BASIC FLOW-12",
+      "type": "action",
+      "flow": "BASIC FLOW",
       "step": 12,
-      "statement": "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。"
+      "statement": "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。"
     },
     {
       "id": "BASIC FLOW-13",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 13,
-      "statement": "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。"
+      "statement": "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。"
     },
     {
       "id": "BASIC FLOW-14",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 14,
-      "statement": "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。"
+      "statement": "システムは bid_window_ms のあいだ待つ。"
     },
     {
       "id": "BASIC FLOW-15",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 15,
-      "statement": "システムは bid_window_ms のあいだ待つ。"
-    },
-    {
-      "id": "BASIC FLOW-16",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 16,
       "statement": "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。"
     },
     {
-      "id": "BASIC FLOW-17",
+      "id": "BASIC FLOW-16",
       "type": "condition",
       "flow": "BASIC FLOW",
-      "step": 17,
+      "step": 16,
       "statement": "システムは VALIDATES THAT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である。"
+    },
+    {
+      "id": "BASIC FLOW-17",
+      "type": "action",
+      "flow": "BASIC FLOW",
+      "step": 17,
+      "statement": "システムはこの機械の投稿者を先頭の issue の担当者に加える。"
     },
     {
       "id": "BASIC FLOW-18",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 18,
-      "statement": "システムはこの機械の投稿者を先頭の issue の担当者に加える。"
+      "statement": "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。"
     },
     {
-      "id": "BASIC FLOW-19",
+      "id": "BASIC FLOW-20",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 19,
-      "statement": "システムは担当者と branch の名前と時刻を書いた hold のコメントを、hold の印を先頭に置いて issue に1件書く。"
+      "step": 20,
+      "statement": "システムは入札のコメントを1件も書かない。"
     },
     {
       "id": "BASIC FLOW-21",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 21,
-      "statement": "システムは入札のコメントを1件も書かない。"
+      "statement": "システムは hold のコメントを1件も書かない。"
     },
     {
-      "id": "BASIC FLOW-22",
+      "id": "BASIC FLOW-23",
       "type": "action",
       "flow": "BASIC FLOW",
-      "step": 22,
-      "statement": "システムは hold のコメントを1件も書かない。"
+      "step": 23,
+      "statement": "システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。"
     },
     {
       "id": "BASIC FLOW-24",
       "type": "action",
       "flow": "BASIC FLOW",
       "step": 24,
-      "statement": "システムは入札の印と hold の印と released の印が先頭に付いたコメントを、エージェントへ渡す入力から外す。"
-    },
-    {
-      "id": "BASIC FLOW-25",
-      "type": "action",
-      "flow": "BASIC FLOW",
-      "step": 25,
       "statement": "システムは先頭の issue を、この機械が着手または引き継ぎを行う相手として次の段へ渡す。"
     },
     {
@@ -391,44 +375,23 @@
       "statement": "ABORT"
     },
     {
-      "id": "枠の使い過ぎ-1",
+      "id": "余裕値が0以下-1",
       "type": "action",
-      "flow": "枠の使い過ぎ",
+      "flow": "余裕値が0以下",
       "step": 1,
       "statement": "システムは入札のコメントを1件も書かない。"
     },
     {
-      "id": "枠の使い過ぎ-2",
+      "id": "余裕値が0以下-2",
       "type": "action",
-      "flow": "枠の使い過ぎ",
+      "flow": "余裕値が0以下",
       "step": 2,
       "statement": "システムは先頭の issue を着手の対象から外す。"
     },
     {
-      "id": "枠の使い過ぎ-3",
+      "id": "余裕値が0以下-3",
       "type": "abort",
-      "flow": "枠の使い過ぎ",
-      "step": 3,
-      "statement": "ABORT"
-    },
-    {
-      "id": "余裕値がマイナス-1",
-      "type": "action",
-      "flow": "余裕値がマイナス",
-      "step": 1,
-      "statement": "システムは入札のコメントを1件も書かない。"
-    },
-    {
-      "id": "余裕値がマイナス-2",
-      "type": "action",
-      "flow": "余裕値がマイナス",
-      "step": 2,
-      "statement": "システムは先頭の issue を着手の対象から外す。"
-    },
-    {
-      "id": "余裕値がマイナス-3",
-      "type": "abort",
-      "flow": "余裕値がマイナス",
+      "flow": "余裕値が0以下",
       "step": 3,
       "statement": "ABORT"
     },
@@ -537,7 +500,7 @@
     },
     {
       "from": "BASIC FLOW-6",
-      "to": "BASIC FLOW-21",
+      "to": "BASIC FLOW-20",
       "kind": "false",
       "condition": "NOT 先頭の issue に担当者が1人もいない"
     },
@@ -561,14 +524,7 @@
     {
       "from": "BASIC FLOW-9",
       "to": "BASIC FLOW-10",
-      "kind": "true",
-      "condition": "どの枠の使用率も rate_limit.pause_above_percent を超えていない"
-    },
-    {
-      "from": "BASIC FLOW-9",
-      "to": "枠の使い過ぎ-1",
-      "kind": "false",
-      "condition": "NOT どの枠の使用率も rate_limit.pause_above_percent を超えていない"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-10",
@@ -578,19 +534,19 @@
     {
       "from": "BASIC FLOW-11",
       "to": "BASIC FLOW-12",
-      "kind": "seq"
+      "kind": "true",
+      "condition": "5時間余裕値と1週間余裕値がどちらも 0 より大きい"
+    },
+    {
+      "from": "BASIC FLOW-11",
+      "to": "余裕値が0以下-1",
+      "kind": "false",
+      "condition": "NOT 5時間余裕値と1週間余裕値がどちらも 0 より大きい"
     },
     {
       "from": "BASIC FLOW-12",
       "to": "BASIC FLOW-13",
-      "kind": "true",
-      "condition": "5時間余裕値と1週間余裕値がどちらも 0 以上である"
-    },
-    {
-      "from": "BASIC FLOW-12",
-      "to": "余裕値がマイナス-1",
-      "kind": "false",
-      "condition": "NOT 5時間余裕値と1週間余裕値がどちらも 0 以上である"
+      "kind": "seq"
     },
     {
       "from": "BASIC FLOW-13",
@@ -616,43 +572,38 @@
     {
       "from": "BASIC FLOW-16",
       "to": "BASIC FLOW-17",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-17",
-      "to": "BASIC FLOW-18",
       "kind": "true",
       "condition": "判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である"
     },
     {
-      "from": "BASIC FLOW-17",
+      "from": "BASIC FLOW-16",
       "to": "入札に負けた-1",
       "kind": "false",
       "condition": "NOT 判定スコアがこの機械の入札より大きい入札が1件も無く、判定スコアがこの機械の入札と等しい入札のうちいちばん先に投稿されたものがこの機械の入札である"
     },
     {
-      "from": "BASIC FLOW-18",
-      "to": "BASIC FLOW-19",
+      "from": "BASIC FLOW-17",
+      "to": "BASIC FLOW-18",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-19",
-      "to": "BASIC FLOW-24",
+      "from": "BASIC FLOW-18",
+      "to": "BASIC FLOW-23",
+      "kind": "seq"
+    },
+    {
+      "from": "BASIC FLOW-20",
+      "to": "BASIC FLOW-21",
       "kind": "seq"
     },
     {
       "from": "BASIC FLOW-21",
-      "to": "BASIC FLOW-22",
+      "to": "BASIC FLOW-23",
       "kind": "seq"
     },
     {
-      "from": "BASIC FLOW-22",
+      "from": "BASIC FLOW-23",
       "to": "BASIC FLOW-24",
-      "kind": "seq"
-    },
-    {
-      "from": "BASIC FLOW-24",
-      "to": "BASIC FLOW-25",
       "kind": "seq"
     },
     {
@@ -745,23 +696,13 @@
       "kind": "seq"
     },
     {
-      "from": "枠の使い過ぎ-1",
-      "to": "枠の使い過ぎ-2",
+      "from": "余裕値が0以下-1",
+      "to": "余裕値が0以下-2",
       "kind": "seq"
     },
     {
-      "from": "枠の使い過ぎ-2",
-      "to": "枠の使い過ぎ-3",
-      "kind": "seq"
-    },
-    {
-      "from": "余裕値がマイナス-1",
-      "to": "余裕値がマイナス-2",
-      "kind": "seq"
-    },
-    {
-      "from": "余裕値がマイナス-2",
-      "to": "余裕値がマイナス-3",
+      "from": "余裕値が0以下-2",
+      "to": "余裕値が0以下-3",
       "kind": "seq"
     },
     {
@@ -820,9 +761,8 @@
         "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25"
+        "BASIC FLOW-23",
+        "BASIC FLOW-24"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -833,10 +773,9 @@
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
         "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
         "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
         "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。",
+        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
         "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
         "システムは bid_window_ms のあいだ待つ。",
@@ -870,7 +809,6 @@
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
-        "BASIC FLOW-17",
         "入札に負けた-1",
         "入札に負けた-2",
         "入札に負けた-3",
@@ -885,10 +823,9 @@
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
         "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
         "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
         "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。",
+        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
         "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
         "システムは bid_window_ms のあいだ待つ。",
@@ -936,13 +873,13 @@
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
         "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
         "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
         "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。",
+        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
         "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
         "システムは bid_window_ms のあいだ待つ。",
+        "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。",
         "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
         "システムは締め切りを待つのをやめる。",
         "システムはこの機械の投稿者を担当者に加えない。",
@@ -953,7 +890,7 @@
     {
       "id": "P004",
       "terminal": "abort",
-      "terminal_flow": "余裕値がマイナス",
+      "terminal_flow": "余裕値が0以下",
       "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
@@ -967,10 +904,9 @@
         "BASIC FLOW-9",
         "BASIC FLOW-10",
         "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "余裕値がマイナス-1",
-        "余裕値がマイナス-2",
-        "余裕値がマイナス-3"
+        "余裕値が0以下-1",
+        "余裕値が0以下-2",
+        "余裕値が0以下-3"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -981,11 +917,10 @@
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
         "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
         "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
         "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。",
-        "CONDITION: NOT 5時間余裕値と1週間余裕値がどちらも 0 以上である",
+        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "CONDITION: NOT 5時間余裕値と1週間余裕値がどちらも 0 より大きい",
         "システムは入札のコメントを1件も書かない。",
         "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
@@ -993,41 +928,6 @@
     },
     {
       "id": "P005",
-      "terminal": "abort",
-      "terminal_flow": "枠の使い過ぎ",
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "枠の使い過ぎ-1",
-        "枠の使い過ぎ-2",
-        "枠の使い過ぎ-3"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
-        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
-        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
-        "CONDITION: NOT どの枠の使用率も rate_limit.pause_above_percent を超えていない",
-        "システムは入札のコメントを1件も書かない。",
-        "システムは先頭の issue を着手の対象から外す。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P006",
       "terminal": "abort",
       "terminal_flow": "枠を読めない",
       "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
@@ -1060,7 +960,7 @@
       ]
     },
     {
-      "id": "P007",
+      "id": "P006",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
@@ -1071,10 +971,10 @@
         "BASIC FLOW-4",
         "BASIC FLOW-5",
         "BASIC FLOW-6",
+        "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-22",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25"
+        "BASIC FLOW-23",
+        "BASIC FLOW-24"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -1091,7 +991,7 @@
       ]
     },
     {
-      "id": "P008",
+      "id": "P007",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
@@ -1120,9 +1020,8 @@
         "BASIC FLOW-16",
         "BASIC FLOW-17",
         "BASIC FLOW-18",
-        "BASIC FLOW-19",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25"
+        "BASIC FLOW-23",
+        "BASIC FLOW-24"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -1140,10 +1039,9 @@
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
         "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
         "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
         "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。",
+        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
         "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
         "システムは bid_window_ms のあいだ待つ。",
@@ -1156,7 +1054,7 @@
       ]
     },
     {
-      "id": "P009",
+      "id": "P008",
       "terminal": "abort",
       "terminal_flow": "入札に負けた",
       "postcondition": "先頭の issue の担当者はこの機械の投稿者ではない。issue にはこの機械が書いた入札のコメントが1件だけ残っている。hold のコメントは1件も増えていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。issue の Status は変わっていない。",
@@ -1183,7 +1081,6 @@
         "BASIC FLOW-14",
         "BASIC FLOW-15",
         "BASIC FLOW-16",
-        "BASIC FLOW-17",
         "入札に負けた-1",
         "入札に負けた-2",
         "入札に負けた-3",
@@ -1205,10 +1102,9 @@
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
         "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
         "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
         "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。",
+        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
         "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
         "システムは bid_window_ms のあいだ待つ。",
@@ -1222,7 +1118,7 @@
       ]
     },
     {
-      "id": "P010",
+      "id": "P009",
       "terminal": "abort",
       "terminal_flow": "締め切り待ちの中断",
       "postcondition": "先頭の issue に担当者は1人もいない。issue にはこの機械が書いた入札のコメントが1件残っている。この機械が書いた hold のコメントは1件も無い。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。continuo は常駐していない。",
@@ -1269,13 +1165,13 @@
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
         "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
         "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
         "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。",
+        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
         "システムは判定スコアを、5時間余裕値の2倍と1週間余裕値の和にする。",
         "システムは5時間余裕値と1週間余裕値と判定スコアと投稿の時刻を書いた入札のコメントを、入札の印を先頭に置いて issue に1件書く。",
         "システムは bid_window_ms のあいだ待つ。",
+        "システムは issue のコメントを取り直し、締め切りまでに届いた入札の印のコメントを1件残らず読む。",
         "CONDITION: 利用者が continuo を動かしている端末で Ctrl+C を入力する場合",
         "システムは締め切りを待つのをやめる。",
         "システムはこの機械の投稿者を担当者に加えない。",
@@ -1284,9 +1180,9 @@
       ]
     },
     {
-      "id": "P011",
+      "id": "P010",
       "terminal": "abort",
-      "terminal_flow": "余裕値がマイナス",
+      "terminal_flow": "余裕値が0以下",
       "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
       "node_ids": [
         "BASIC FLOW-1",
@@ -1306,10 +1202,9 @@
         "BASIC FLOW-9",
         "BASIC FLOW-10",
         "BASIC FLOW-11",
-        "BASIC FLOW-12",
-        "余裕値がマイナス-1",
-        "余裕値がマイナス-2",
-        "余裕値がマイナス-3"
+        "余裕値が0以下-1",
+        "余裕値が0以下-2",
+        "余裕値が0以下-3"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -1327,66 +1222,17 @@
         "IF 先頭の issue に担当者が1人もいない THEN",
         "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
         "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
         "システムは5時間余裕値を、100 から5時間の使用率と5時間マージンを引いた値にする。",
         "システムは1週間余裕値を、100 から1週間の使用率と1週間マージンを引いた値にする。",
-        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 以上である。",
-        "CONDITION: NOT 5時間余裕値と1週間余裕値がどちらも 0 以上である",
+        "システムは VALIDATES THAT 5時間余裕値と1週間余裕値がどちらも 0 より大きい。",
+        "CONDITION: NOT 5時間余裕値と1週間余裕値がどちらも 0 より大きい",
         "システムは入札のコメントを1件も書かない。",
         "システムは先頭の issue を着手の対象から外す。",
         "ABORT"
       ]
     },
     {
-      "id": "P012",
-      "terminal": "abort",
-      "terminal_flow": "枠の使い過ぎ",
-      "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
-      "node_ids": [
-        "BASIC FLOW-1",
-        "BASIC FLOW-2",
-        "BASIC FLOW-3",
-        "BASIC FLOW-4",
-        "BASIC FLOW-5",
-        "他人の担当-1",
-        "他人の担当-2",
-        "他人の担当-3",
-        "他人の担当-4",
-        "他人の担当-5",
-        "他人の担当-6",
-        "BASIC FLOW-6",
-        "BASIC FLOW-7",
-        "BASIC FLOW-8",
-        "BASIC FLOW-9",
-        "枠の使い過ぎ-1",
-        "枠の使い過ぎ-2",
-        "枠の使い過ぎ-3"
-      ],
-      "steps": [
-        "巡回タイマーはシステムに巡回の開始を要求する。",
-        "システムはボードから dispatch_state の issue の一覧を取る。",
-        "システムは先頭の issue の担当者と、issue のコメントを1件残らず取る。",
-        "システムは VALIDATES THAT 先頭の issue の担当者が1人以下である。",
-        "システムは VALIDATES THAT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である。",
-        "CONDITION: NOT 先頭の issue に担当者が1人もいないか、担当者がこの機械の投稿者である",
-        "システムは VALIDATES THAT 先頭の issue に hold の印が先頭に付いたコメントが1件以上ある。",
-        "システムは VALIDATES THAT 担当者が最後に書いた進捗報告の時刻から idle_timeout_ms を過ぎている。",
-        "システムは担当者を先頭の issue から外す。",
-        "システムは外した担当者のアカウント名と branch の名前と時刻を書いた released のコメントを、released の印を先頭に置いて issue に1件書く。",
-        "システムは外した担当者の名前と、担当者の最後の進捗報告の時刻を記録に残す。",
-        "RESUME STEP 6",
-        "IF 先頭の issue に担当者が1人もいない THEN",
-        "システムは VALIDATES THAT Claude の usage API から5時間の枠と1週間の枠の使用率を読める。",
-        "システムは1週間全体の枠とモデル別の枠のうち、いちばん大きい使用率を1週間の使用率にする。",
-        "システムは VALIDATES THAT どの枠の使用率も rate_limit.pause_above_percent を超えていない。",
-        "CONDITION: NOT どの枠の使用率も rate_limit.pause_above_percent を超えていない",
-        "システムは入札のコメントを1件も書かない。",
-        "システムは先頭の issue を着手の対象から外す。",
-        "ABORT"
-      ]
-    },
-    {
-      "id": "P013",
+      "id": "P011",
       "terminal": "abort",
       "terminal_flow": "枠を読めない",
       "postcondition": "先頭の issue に担当者は1人もいない。この機械は入札のコメントを1件も書いていない。期限の切れた担当を外してから来た経路では、released の印が先頭に付いたコメントが1件増えている。担当を外さずに来た経路では、issue にコメントは1件も増えていない。ほかの機械が書いた入札のコメントは残っている。issue の Status は変わっていない。",
@@ -1432,7 +1278,7 @@
       ]
     },
     {
-      "id": "P014",
+      "id": "P012",
       "terminal": "end",
       "terminal_flow": "BASIC FLOW",
       "postcondition": "先頭の issue の担当者はこの機械の投稿者1人である。担当者が1人もいなかった issue には、入札のコメントが1件と hold のコメントが1件増えている。期限の切れた担当を外してから入札した issue には、released のコメントも1件増えている。担当者がこの機械の投稿者だった issue には、コメントが1件も増えていない。issue の Status は変わっていない。エージェントへ渡す入力に入札の印と hold の印と released の印のコメントは1件も入っていない。",
@@ -1449,10 +1295,10 @@
         "他人の担当-5",
         "他人の担当-6",
         "BASIC FLOW-6",
+        "BASIC FLOW-20",
         "BASIC FLOW-21",
-        "BASIC FLOW-22",
-        "BASIC FLOW-24",
-        "BASIC FLOW-25"
+        "BASIC FLOW-23",
+        "BASIC FLOW-24"
       ],
       "steps": [
         "巡回タイマーはシステムに巡回の開始を要求する。",
@@ -1476,7 +1322,7 @@
       ]
     },
     {
-      "id": "P015",
+      "id": "P013",
       "terminal": "abort",
       "terminal_flow": "期限内の担当",
       "postcondition": "担当者はほかの機械の投稿者のまま変わっていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。",
@@ -1508,7 +1354,7 @@
       ]
     },
     {
-      "id": "P016",
+      "id": "P014",
       "terminal": "abort",
       "terminal_flow": "人間が付けた担当",
       "postcondition": "担当者は人間が付けたまま変わっていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。",
@@ -1538,7 +1384,7 @@
       ]
     },
     {
-      "id": "P017",
+      "id": "P015",
       "terminal": "abort",
       "terminal_flow": "担当者が2人以上",
       "postcondition": "担当者は1人も増えず、1人も減っていない。issue にコメントは1件も増えていない。ボードへは1バイトも書いていない。issue の Status は変わっていない。",
@@ -1564,9 +1410,9 @@
     }
   ],
   "coverage": {
-    "nodes_total": 56,
-    "nodes_covered": 56,
-    "edges_total": 57,
-    "edges_covered": 57
+    "nodes_total": 52,
+    "nodes_covered": 52,
+    "edges_total": 53,
+    "edges_covered": 53
   }
 }

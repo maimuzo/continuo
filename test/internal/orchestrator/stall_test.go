@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4e7130891ff7bb6a73faefa369231913e1aacc265188f58a877ac8ae39ab395b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **RUCM のテストパスに対応づけたテストである。**
 package orchestrator_test
@@ -20,20 +20,22 @@ import (
 // （`claude.turn_timeout_ms`。fake の時計で進める）。
 const stallTimeout = 60 * time.Second
 
-// TestCheckStalls_画面の版が増えている間は何時間かかっても打ち切らない は、
+// TestCheckStalls_workingの間は何時間かかっても打ち切らない は、
 // 打ち切りの物差しが turn の総実行時間ではないことを確かめる。
 //
 // 目的: `SPEC.md` 10.6 の "maximum silence interval while a turn stream is active; each
 // app-server output resets it, so it is not a total turn runtime cap"（turn の流れが動いて
 // いる間の最大の沈黙の間隔。app-server の出力ごとにリセットされる。総実行時間の上限では
-// ない）を、continuo では **herdr の pane の `revision`（画面の版）** で測っていることを示す。
+// ない）を、continuo では **herdr の `agent_status` が `working` であること** で
+// 測っていることを示す（issue #173）。
 //
-// 与える情報: hook を1件も出さず、`agent_status` も `working` のまま変わらない run。
-// **画面の版だけが巡回のたびに増える。**閾値を200回またぐ（3時間20分ぶん）。
+// 与える情報: hook を1件も出さず、`agent_status` が `working` のまま変わらない run。
+// **`state_change_seq` も動かさない**（`working` が続く間、herdr は連番を刻まない）。
+// 閾値を200回またぐ（3時間20分ぶん）。
 // 成功条件: 一度も打ち切られない（リトライが積まれず、pane も閉じられない）。
 //
 // **実時間はゼロである。**`testing/synctest` の bubble の中で時計を進める。
-func TestCheckStalls_画面の版が増えている間は何時間かかっても打ち切らない(t *testing.T) {
+func TestCheckStalls_workingの間は何時間かかっても打ち切らない(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fx := newStubFixture(t, stubFixtureOptions{
 			AgentStatus: herdr.AgentStatusWorking,
@@ -44,43 +46,48 @@ func TestCheckStalls_画面の版が増えている間は何時間かかって�
 		adoptRun(fx, 188)
 
 		// 閾値を200回またぐ（60秒 × 201 ≒ 3時間21分）。
-		// **そのたびに画面の版が1つ増える。**
+		// **`agent_status` は `working` のまま、何も動かさない。**
 		const rounds = 200
 		for i := range rounds {
-			fx.Herdr.BumpRevision()
 			time.Sleep(stallTimeout + time.Second)
 			fx.Orc.Tick(context.Background())
 			synctest.Wait()
 
 			v, ok := viewOf(fx, "octocat/hello-world#188")
 			if !ok {
-				t.Fatalf("画面が変わり続けている run を印から外した（%d 周目）", i+1)
+				t.Fatalf("working の run を印から外した（%d 周目）", i+1)
 			}
 			if v.RetryCount != 0 {
-				t.Fatalf("画面の版が増えているのに打ち切った（%d 周目）: retry_count = %d", i+1, v.RetryCount)
+				t.Fatalf("working なのに打ち切った（%d 周目）: retry_count = %d", i+1, v.RetryCount)
 			}
 		}
 		if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
-			t.Fatalf("画面が変わり続けている run の pane を閉じた: %v", ids)
+			t.Fatalf("working の run の pane を閉じた: %v", ids)
 		}
 	})
 }
 
 // {"RUCM-PATH": "P016"}
 //
-// TestCheckStalls_画面の版が止まったまま閾値を超えたら打ち切る は、打ち切りの条件を確かめる。
+// TestCheckStalls_止まったまま閾値を超えたら打ち切る は、打ち切りの条件を確かめる。
 //
-// 目的: 設計 3-21 の「版が `claude.turn_timeout_ms` のあいだ増えなければ打ち切る」を示す。
-// **猶予は与えない。**`agent_status` が `working` でも、画面が変わっていなければ止まっている。
+// 目的: **`agent_status` が `working` でないまま `claude.turn_timeout_ms` 経ったら打ち切る**
+// （issue #173。[docs/spec/turn_end_detect_mechanizm.md](../../../docs/spec/turn_end_detect_mechanizm.md) の 4-1）。
 //
-// 与える情報: 画面の版が一度も増えない run（`agent_status` は `working` のまま）。
+// **`working` を打ち切ってはならない。**この検査は 2026-09-08 に前提を入れ替えた。
+// **それまでは「`working` でも `revision`（画面の版）が増えなければ打ち切る」を固定していた。**
+// **その版は画面を1バイトも見ておらず、continuo の pane では永久に動かない**
+// （実測で、働いている3つの pane が2分間ずっと `revision: 1` だった）。
+// **つまり、あの検査は「長いツール呼び出しの run を必ず殺す」ことを固定していた。**
+//
+// 与える情報: `agent_status` が `idle` のまま動かない run。
 // 成功条件: 最初に閾値をまたいだ巡回でリトライが1つ積まれ、pane が閉じられる。
 //
 // **実時間はゼロである。**
-func TestCheckStalls_画面の版が止まったまま閾値を超えたら打ち切る(t *testing.T) {
+func TestCheckStalls_止まったまま閾値を超えたら打ち切る(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fx := newStubFixture(t, stubFixtureOptions{
-			AgentStatus: herdr.AgentStatusWorking,
+			AgentStatus: herdr.AgentStatusIdle,
 			Mutate: func(cfg *config.Config) {
 				cfg.Claude.TurnTimeoutMs = int(stallTimeout / time.Millisecond)
 			},
@@ -110,7 +117,7 @@ func TestCheckStalls_画面の版が止まったまま閾値を超えたら打�
 			t.Fatalf("バックオフ中の run を印から外している（30秒後の巡回で即座に拾い直される）")
 		}
 		if v.RetryCount != 1 {
-			t.Fatalf("画面の版が止まったまま閾値を超えたのにリトライを積んでいない: retry_count = %d", v.RetryCount)
+			t.Fatalf("止まったまま閾値を超えたのにリトライを積んでいない: retry_count = %d", v.RetryCount)
 		}
 		if v.BackoffUntil.IsZero() {
 			t.Fatalf("バックオフの期限を入れていない")
@@ -216,16 +223,19 @@ func TestResumeBackoff_バックオフが明けたrunを巡回の先頭で拾い
 // **案内する設定キーとコマンドが実在する**ことを示す。**存在しないキーを案内した事故が
 // 実際に起きている**（設計 3-34b の表）。
 //
-// 与える情報: 画面の版が増えないまま閾値を超え、**リトライの回数が尽きている** run
+// 与える情報: **`agent_status` が `working` でないまま**閾値を超え、
+// **リトライの回数が尽きている** run
 // （`agent.max_retries` が 0 なので1回目の打ち切りで人間へ渡す）。worktree のパスを持たせる。
 // 成功条件: issue に付いた引き渡しの通知が、4つの見出しと `claude.turn_timeout_ms` の
 // 現在値と、そのままコピーして叩ける `git -C` のコマンドを含むこと。
+//
+// **前提を 2026-09-08 に入れ替えた**（issue #173）。**`working` は打ち切らない。**
 //
 // **実時間はゼロである。**
 func TestCheckStalls_打ち切りの文面は原因と対処を必ず書く(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fx := newStubFixture(t, stubFixtureOptions{
-			AgentStatus: herdr.AgentStatusWorking,
+			AgentStatus: herdr.AgentStatusIdle,
 			Mutate: func(cfg *config.Config) {
 				cfg.Claude.TurnTimeoutMs = int(stallTimeout / time.Millisecond)
 				cfg.Agent.MaxRetries = 0

@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "3604427e4f9b11445c8095a767711511d937a95d502844f4894e3fd53994e26f", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
+// {"RUCM-CFG-SHA256": "4e7130891ff7bb6a73faefa369231913e1aacc265188f58a877ac8ae39ab395b", "SOURCE": "docs/spec/usecases/particular_case/issue を1件処理する.cfg.json"}
 //
 // **全コード監査（2026-08-25）で確かめた指摘のうち、着手と turn と復元の7件の検査である。**
 //
@@ -300,8 +300,8 @@ func TestAbandon_打ち切りのときissueに残る理由が本当の理由で�
 			return nil, &rpcErr{Code: "agent_start_failed", Message: "No conversation found"}
 		}
 		started.Do(func() {})
-		// **既定の台本と同じ形で返す。**画面の版を勝手に載せると、stall の判定が
-		// 「版が動いた」と読んで打ち切りに入らない。
+		// **既定の台本と同じ形で返す。**`agent_status` を `working` にすると、
+		// stall の判定が「進んでいる」と読んで打ち切りに入らない。
 		return map[string]any{
 			"type":  "agent_started",
 			"agent": map[string]any{"name": params["name"], "agent_status": "idle", "interactive_ready": true, "pane_id": params["pane_id"]},
@@ -490,7 +490,7 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 // （設計 3-27）。**その待ち直しの最中に herdr が再起動すると、run を捨ててはならない。**
 // 捨てると、枠が明けるのを待っていただけの issue が failure_state へ落ちる。
 //
-// 与える情報: 着手のときは枠が空いていて（`pause_above_percent` に掛からない）、
+// 与える情報: 着手のときは枠が空いていて（入札の余裕値が残っている）、
 // turn を送った瞬間に 100% になる偽の usage API。`agent.prompt` は herdr の `timeout` を返し、
 // `agent.wait` は応答を書かずに接続を切る。リトライは 0 回。
 // 成功条件: Status が `In Progress` のままで、issue にコメントが1件も残らず、
@@ -498,7 +498,7 @@ func TestTurn_herdrが一瞬落ちただけでrunを捨てない(t *testing.T) {
 // 先に stall として諦めることになる）。
 func TestTurn_枠待ちの待ち直しがherdrへ届かなくてもrunを捨てない(t *testing.T) {
 	resetsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
-	// **着手が済むまでは枠を空けておく。**100% のままだと `pause_above_percent` で
+	// **着手が済むまでは枠を空けておく。**100% のままだと余裕値の判定で
 	// dispatch が止まり、turn の経路に1度も入れない。
 	var full atomic.Bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
