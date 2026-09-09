@@ -9033,9 +9033,10 @@ turn の終わりと同じでなければならないので、それでは足り
 | 何を測るか | 偽だったら何が崩れるか |
 | --- | --- |
 | **GraphQL の `addComment` で投稿したコメントに、画面の attribution が出るか**（偽なら、本体の投稿も REST へ移す。`continuo comment` が REST を採った理由は `Adapter` がカンバンの設定を要ることで、本体には当たらない） | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
-| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだに `continuo comment` が何度も回す**（3-82d）。**無効になるなら、エージェントの最初の1件で本体のトークンが死ぬ。**
-**人間が画面で読むコメント（Status を動かした記録・着手の門の案内・dispatch の案内・復元の案内ほか）が、そこから先ぜんぶ落ちる**（3-82c の表）。
-**持ち回りと引き渡しの通知は1本目なので落ちない。****測り方は、更新を1回通したあと、更新前のトークンで `GET /user` を叩いて 200 が返るかを見るだけである** |
+| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだに `continuo comment` が何度も回す**（3-82d）。**無効になるなら、本体は投稿のたびに 401 を受け、資格情報を読み直してトークンを取り直し、1回だけ再送する**（3-82d）。
+**投稿は通る。****落ちるのではなく、更新用のトークンの回転が投稿の件数ぶん増える。**
+**書き戻しの直前で落ちる機会が、そのぶん増える。**
+**この門は「止める」ためではなく、回転の見積りを直すために測る。****測り方は、更新を1回通したあと、更新前のトークンで `GET /user` を叩いて 200 が返るかを見るだけである** |
 
 #### 採る経路
 
@@ -9302,6 +9303,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **「interface も検査の偽物も1文字も変わらない」は撤回する。**
 **実装は2つしか無い**（[internal/tracker/adapter.go:1188](../../internal/tracker/adapter.go#L1188) の本物と、
 [test/internal/orchestrator/helpers_test.go:1358](../../test/internal/orchestrator/helpers_test.go#L1358) の偽物）。
+**直すファイルは3つである。**呼び出し側の
+[test/internal/tracker/comments_test.go:115](../../test/internal/tracker/comments_test.go#L115) も変わる。
 **別名のメソッドを足すのとは違う。**
 [test/internal/redact/single_choke_point_test.go:85](../../test/internal/redact/single_choke_point_test.go#L85) が見ているのは
 **`PostComment` という名前ちょうど**なので、引数が増えても検査は落ちない。
@@ -9336,7 +9339,9 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | 何 | どちらで書くか | なぜ |
 | --- | --- | --- |
 | **Status を動かした記録**（[internal/orchestrator/comment.go:504](../../internal/orchestrator/comment.go#L504) の `postStatusMove`） | **2本目** | **人間が画面で読む** |
-| **着手の門の案内・dispatch の案内・復元の案内**（[internal/orchestrator/gate.go:313](../../internal/orchestrator/gate.go#L313)・[dispatch.go:705](../../internal/orchestrator/dispatch.go#L705)・[restore.go:934](../../internal/orchestrator/restore.go#L934)） | **2本目** | 同じ |
+| **着手の門の案内**（[internal/orchestrator/gate.go:313](../../internal/orchestrator/gate.go#L313) の `postGateNotice`） | **2本目** | 同じ |
+| **未信頼のリポジトリを飛ばした通知**（[internal/orchestrator/dispatch.go:705](../../internal/orchestrator/dispatch.go#L705) の `noteUntrusted`） | **2本目** | 同じ |
+| **`failure_state` へ落とした通知**（[internal/orchestrator/restore.go:934](../../internal/orchestrator/restore.go#L934) の `moveToFailure`） | **1本目** | **これも「止まった理由」である**（下） |
 | **カンバンに載っていなかった・別の run が担当中だった・worktree を残した**（[internal/orchestrator/lifecycle.go:435](../../internal/orchestrator/lifecycle.go#L435)・[467行](../../internal/orchestrator/lifecycle.go#L467)・[1058行](../../internal/orchestrator/lifecycle.go#L1058)） | **2本目** | 同じ |
 | **引き渡しの通知**（[internal/orchestrator/lifecycle.go:1161](../../internal/orchestrator/lifecycle.go#L1161) の `postHandoffComment`） | **1本目** | **これが「止まった理由」を運ぶ唯一の経路である**（下） |
 | **持ち回りの3種**（入札・hold・released） | **1本目** | **機械どうしの取り決めで、指示書が「読み飛ばします」と書いている** |
@@ -9345,11 +9350,20 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **continuo は成果を代筆しない**（[internal/orchestrator/lifecycle.go:1104](../../internal/orchestrator/lifecycle.go#L1104) の
 「**成果の要約は書かない**（設計 3-29）」）**ので、成果報告はこの表に入らない。**
 
-**引き渡しの通知を1本目で書く理由。**
-**「止まった理由」を書く口は、`postHandoffComment` の1本しか無い。**
-**呼び出しは8件あるが、どれも同じ [internal/orchestrator/lifecycle.go:1161](../../internal/orchestrator/lifecycle.go#L1161) の
-`o.postComment` へ落ちる**（`grep -c 'postHandoffComment(' internal/orchestrator/*.go` で数えた）。
-**呼び出し箇所ごとに分けることはできない。**
+**引き渡しの通知と `moveToFailure` を1本目で書く理由。**
+**「止まった理由」を書く口は2つある。**
+`buildHandoffComment` を呼ぶのは
+[internal/orchestrator/lifecycle.go:1162](../../internal/orchestrator/lifecycle.go#L1162) と
+[internal/orchestrator/restore.go:935](../../internal/orchestrator/restore.go#L935) で、**2つとも同じ本文を組み立てる。**
+
+**`moveToFailure` は「復元の案内」ではない。**
+**`UpdateStatus` で `failure_state`（既定 `Blocked`）へ落としたうえで、その理由を書く関数である。**
+**呼び出しは3つあり、どれも Status を動かす**
+（[internal/orchestrator/restore.go:748](../../internal/orchestrator/restore.go#L748)・
+[773行](../../internal/orchestrator/restore.go#L773)・[893行](../../internal/orchestrator/restore.go#L893)）。
+
+**App のトークンが取れない状態で continuo を再起動すると、この3つが動く。**
+**2本目で書くと、Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1行も残らない。**
 **2本目で書くと、App のトークンが取れずに止まった run では、理由も書けずに何も残らない。**
 **attribution は付かないが、`<!-- continuo:self -->` は付くので、機械が書いたことは従来どおり判定できる。**
 
@@ -9358,8 +9372,17 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | いつ | どうするか |
 | --- | --- |
 | **起動時に取れない** | **起動しない。**人間が「エラーで停止して良い」と決めた |
-| **走行中に取れなくなった** | **理由を issue へ1件書いて、その run を `blocked` にする。**カンバンは止めない |
-| **持ち回りの入札と released** | **止めない。**[internal/orchestrator/handoff.go:317-318](../../internal/orchestrator/handoff.go#L317-L318) が既にそう決めている |
+| **走行中に取れなくなった**（run を持つ口） | **理由を issue へ1件書いて、その run を `blocked` にする。**カンバンは止めない |
+| **走行中に取れなくなった**（run を持たない口） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない** |
+
+**run を持つ口は2つだけである。**
+[internal/orchestrator/lifecycle.go:435](../../internal/orchestrator/lifecycle.go#L435) の `noteSignalTargetsMissing` と
+[467行](../../internal/orchestrator/lifecycle.go#L467) の `noteSignalTargetsClaimed` である。
+**残る5つ**（`postStatusMove`・`postGateNotice`・`noteUntrusted`・`moveToFailure`・`cleanupPath`）**は `runState` を受け取らない。**
+**そこで run を止めようとしてはならない。**
+**とくに `postStatusMove` は `In Review` へ動かした記録も書くので、
+「記録を書けなかったから blocked にする」を当てると、終わった run が `Blocked` へ引き戻される。**
+| **持ち回りの3種**（入札・hold・released） | **落ちない。**1本目で書くので、App のトークンが取れなくても影響しない |
 | **hold** | **落ちない。**1本目で書くので、App のトークンが取れなくても影響しない |
 
 **hold を1本目で書いてよい。**
@@ -9597,10 +9620,17 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **そこは App のトークンが生きているので、`continuo comment` で書かせれば attribution が付く。**
 **分岐させないと、通常の書かせ直しで attribution の付かないコメントが1件できる。**
 
-**App のトークンが取れずに `blocked` で返した run では、話が別である。**
-**そこでは `continuo comment` も落ちるので、`gh issue comment` へ落として書かせる。**
-**attribution は付かないが、この設計は「attribution が無いコメントを1件も作らない」までは求めていない**（3-82c）。
-**エージェントが何をしたかが1文字も残らないほうが重い。**
+**枝を分けない。**`{{if .github_app_attribution}}` の1つだけで足りる。
+**「App のトークンが取れなかった run」を見分ける手段が無いためである。**
+[internal/orchestrator/prompt.go:115](../../internal/orchestrator/prompt.go#L115) の `buildCommentRequestPrompt` は
+**`issueURL` と `marker` の2つしか受け取らない。**
+**その状態を渡す口を新しく作ると、この設計の外側（`runState` の持ち回し）へ広がる。**
+
+**`true` の利用者で、App のトークンが死んだ run では、書かせ直しも落ちる。**
+**そのときエージェントは成果を書けない。**
+**それは受ける。**この設計は「attribution が無いコメントを1件も作らない」までは求めていない（3-82c）が、
+**見分ける手段が無いまま枝を作ると、実装者が勝手な条件を発明する。**
+**その条件が「毎回トークンを取ってみて判定する」になると、更新用のトークンが1回転する。**
 
 **6本目は、設計レビューの判断票である。**
 [internal/prompt/builtin.md:173-195](../prompt/builtin.md#L173-L195) は本文の形しか書いておらず、**投稿するコマンドが1行も無い。**
@@ -9664,10 +9694,19 @@ issue でいちばん人目に付く。**
 
 | どの検査 | 何を要求しているか | 通るか |
 | --- | --- | --- |
-| [test/internal/prompt/progress_comment_test.go:213-226](../../test/internal/prompt/progress_comment_test.go#L213-L226) | `gh issue comment ` を含む行の、次の行の行頭 | **真の枝は `strings.Contains` に当たらないので検査されない。****真の枝も行頭を1桁も動かさない** |
+| [test/internal/prompt/progress_comment_test.go:213-226](../../test/internal/prompt/progress_comment_test.go#L213-L226) | `gh issue comment ` を含む行の、次の行の行頭 | **検査の起点を移す。**いまの形だと、`true` のとき実際に送られる真の枝を1行も見ない。**`--body "<!-- continuo:agent -->` で終わる行を起点にすれば、両方の枝が同じ1つの検査に当たる。****この検査は issue #178 の再発を止めるために作られたもので、真の枝だけ見張らないままにはできない** |
 | [test/internal/prompt/group_comment_test.go:283-309](../../test/internal/prompt/group_comment_test.go#L283-L309) | `--body "<!-- continuo:group -->` がちょうど2件 | **通る。**関数にすれば `--body` の塊は1本のまま |
 
+| [test/internal/prompt/progress_comment_test.go:52](../../test/internal/prompt/progress_comment_test.go#L52) | 5-3 の節に `gh issue comment` が在ること | **通る。**偽の枝が残る |
+| [test/internal/prompt/group_comment_test.go:72](../../test/internal/prompt/group_comment_test.go#L72) | 7-2 の節に `gh issue comment` が在ること | **通る。**`post()` の定義行が持つ |
+| [test/internal/prompt/group_comment_test.go:449](../../test/internal/prompt/group_comment_test.go#L449) | 3-7 の節に `gh issue comment` が在ること | **通る** |
+
 **書き足しに触らないので、`--method PATCH` を数える検査には当たらない。**
+
+**あわせて、[test/internal/prompt/progress_comment_test.go:209](../../test/internal/prompt/progress_comment_test.go#L209) の
+コメントを直す。**「`gh issue comment` は4箇所にある」と書いてあるが、**実際は5箇所である**
+（[internal/prompt/builtin.md:143](../prompt/builtin.md#L143) の 3-2 の計画が抜けている）。
+**この設計が触るすぐ隣なので、同じ commit で直す。**
 
 #### 変数を2つ足す
 
@@ -9678,9 +9717,13 @@ issue でいちばん人目に付く。**
 
 **`RenderData` と `SampleData` の両方へ登録し、`Validate` の枝を `.attempt` と同じく2通りへ振る。**
 **[test/internal/prompt/prompt_test.go:411-416](../../test/internal/prompt/prompt_test.go#L411-L416) の `want` にも足す。**
-**`RenderData` の呼び出しは本番に2箇所ある**（[internal/orchestrator/prompt.go:36](../../internal/orchestrator/prompt.go#L36) と
-[internal/cli/cli.go:576](../../internal/cli/cli.go#L576)）。**両方へ同じ値を渡す。**
-**後者は `Orchestrator` を持たないので、そこで `os.Executable()` を叩いて `shellQuote` を通す。**
+**`RenderData` の呼び出しは7箇所ある**（本番2・テスト5）。
+本番は [internal/orchestrator/prompt.go:36](../../internal/orchestrator/prompt.go#L36) と
+[internal/cli/cli.go:576](../../internal/cli/cli.go#L576) で、**両方へ同じ値を渡す。**
+**引数を足すとテストの5箇所も直す。**
+**後者は `Orchestrator` を持たないので、そこで `os.Executable()` を叩く。**
+**包むのは `RenderData` の中だけである。**呼ぶ側は包まない。
+**二重に包むと `''\''/home/…/continuo'\'''` になり、`command not found` で全投稿が落ちる。**
 
 **`shellQuote` は [internal/orchestrator/settings.go:425](../../internal/orchestrator/settings.go#L425) の小文字始まりなので、
 `internal/shellquote` を新設して移す。****写しを作ってはならない。**
@@ -9724,7 +9767,7 @@ issue でいちばん人目に付く。**
 | --- | --- |
 | **認可が終わった直後** | **そのトークンで `viewer` を引き、`gh api user` と突き合わせる。**通ったら `authorized_login` を書く |
 | **違っていたら** | **その場で画面へ出す。**「`gh` は A、認可したのは B です」と両方を並べる |
-| **起動時の検査** | **同じ突き合わせを行い、違っていたら起動しない** |
+| **起動時の検査** | **`authorized_login` と `gh api user` を突き合わせる。****トークンは取らない**（取ると更新用のトークンが回る）。違っていたら起動しない |
 | **`continuo doctor`** | **`authorized_login` と `gh api user` を突き合わせる。トークンは1度も取らない** |
 
 **走っている最中に `gh auth switch` を叩かれた場合は、拾わない。**
