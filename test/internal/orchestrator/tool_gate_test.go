@@ -545,9 +545,8 @@ const toolGateSoftenerLine = "判断に迷うものは通す。"
 // **そのうえで、肯定の一覧から承認・取り込み・close を1句で外していること。**
 // **`gh pr review --approve` は、道具の形としては pull request へのコメントの投稿である。**
 //
-// **push は丸ごと肯定してから、コマンドの文字列だけで読み取れる3つを外すこと。**
-// **`git push -u origin HEAD` の送り先は、コマンドの文字列のどこにも書かれていない。**
-// **肯定の側を branch で限ると、判定役は確かめられず、断る側へ落ちる。**
+// **push には1文字も触らないこと。**この変更の前から通っており（2026-09-09 の実測）、
+// **この変更が緩めたものではない。**肯定を書くと、そこから外すものを足すことになる。
 func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 	public := false
 	got, _ := writeSettingsForToolGateIssue(t, config.ClaudeToolGateConfig{
@@ -613,9 +612,10 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 		"GitHub Projects v2 のカンバン（project）への書き込みと削除のうち、",
 		"いま肯定した形に当たらないものは、いま担当している issue に関係していても断る",
 		// **下に続く免除より優先すると書いてあること。**
-		// **担当先の文は push を免除し、下の免除は「push …は、この免除に含めない。
+		// **担当先の文は merge を断り、下の免除は「merge …は、この免除に含めない。
 		// それらは、いまの作業と関係があるかどうかで、この条件のとおりに判断する」と書く。**
-		// **この1文だけが、その正面の食い違いを解いている。**
+		// **担当先が相手なら「関係がある→通す」へ倒れるので、この1文だけがそれを断る側へ固定している。**
+		// **消すと、担当先の `gh pr merge` と `gh release create` とラベルの付け外しが通る。**
 		"リポジトリ octocat/hello-world が相手のときは、この段落の扱いが下に続く免除より優先する",
 	} {
 		if !strings.Contains(assignment, want) {

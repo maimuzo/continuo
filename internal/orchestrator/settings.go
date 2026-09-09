@@ -309,11 +309,12 @@ func toolGateAssignmentNote(issue tracker.Issue) string {
 // **断る条件の3つ目が挙げている例（他のリポジトリへの push、パッケージの公開、
 // 外部サービスへの投稿）を、書いた定義に当たらないものごと消す。**免除したいものを並べるだけにする。
 //
-// **担当している branch への push は、担当先の文で肯定の形で免除する。**
-// **「push は及ばない」とだけ書くと、`git push -u origin HEAD` まで断られると読まれる。**
+// **push は、担当先の文で1文字も触らない。**この変更の前から通っており
+// （2026-09-09 の実測）、**この変更が緩めたものではない。**
+// **「push は及ばない」と書いてはならない。**`git push -u origin HEAD` まで断られると読まれる。**
 // それは組み込みの指示書が pull request を出す前に必ず叩かせる段であり
 // （[internal/prompt/builtin.md]）、**断られると pull request が1本も出ず、issue が黙って止まる。**
-// **force push は条件1（取り消せない破壊）が受け持つ**ので、ここで免除しても抜けない。
+// **force push は条件1（取り消せない破壊）が受け持つ。**
 //
 // **通す形を綴りで数え上げてはならない。**「`git push -u origin HEAD` だけを通す。それ以外は断る」と
 // 書くと、**組み込みの指示書が叩かせる他の形が全部落ちる。**
@@ -322,8 +323,7 @@ func toolGateAssignmentNote(issue tracker.Issue) string {
 // upstream を張ったあとの素の `git push` である。
 // **進捗報告が書けないと、18時間で担当が外れて、push していない作業が別の機械から見えなくなる。**
 //
-// **だから、通すものは種類で書き、断つものだけを名指しする。**
-// **既定の branch へ直に送る push は、送り先の綴り（`HEAD:main`）で見分けられるので名指しできる。**
+// **だから、通すものは種類で書く。**
 //
 // **2つの免除で、及ばないものの扱いを書き分ける。**
 //
@@ -468,7 +468,7 @@ JSON だけを返す。通すなら {"ok": true}。断るなら {"ok": false, "r
 // **合言葉だけに頼らない。**この設定ファイルは検査される側のエージェントが `Read` で
 // 読めるので、**読まれた場合に備えて位置の規則も同じ指示文に書く**（設計 3-64e）。
 //
-// issue: 着手する issue（識別子と既定の branch を使う）。
+// issue: 着手する issue（識別子を使う）。
 // 戻り値: `prompt` の hook にそのまま載せる指示文。
 func toolGatePrompt(issue tracker.Issue) string {
 	id := toolGateNewGateID()
