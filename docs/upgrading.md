@@ -114,7 +114,16 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | --- | --- |
 | **途中から人間が pane で直接チャットを続けられるようになりました** | **要りません。**使いたい人だけ、カンバンに選択肢を1つ足して `WORKFLOW.md` に1行書きます（下の節） |
 
-**`WORKFLOW.md` に消すキーはありません。**足すキーも、使わないなら要りません。
+**`WORKFLOW.md` に消すキーはありません。**
+
+**ただし `continuo doctor` の `設定項目` が `?` を1つ出します。**雛形に `tracker.human_state` が
+増えたので、**既にある `WORKFLOW.md` では「書かれていない」と数えられます。**
+**書かなくても、いままでどおり動きます**（空と同じ扱いです）。
+気になるなら、次のコマンドが足す1行を作ります。
+
+```bash
+continuo doctor --missing-keys-patch ~/continuo-work
+```
 
 ### 人間が pane で直接続けるあいだ、continuo が手を出さないようにできます
 

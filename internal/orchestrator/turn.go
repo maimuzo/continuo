@@ -123,6 +123,16 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 				"identifier", rs.issue().Identifier)
 			return
 		}
+		// **待ちを打ち切るコンテキストが既に死んでいる**（人間モードへ入って、また抜けたあと）。
+		// **`leaveHumanMode` は新しいものを張るが、走っている turn ループはそれを読まない**
+		// （読むのは起動時の1回だけである）。このまま送ると、送る前に打ち切られて
+		// **turn 数だけが増える。**抜けて、新しい turn ループに張り直させる。
+		if waitCtx.Err() != nil {
+			o.logger.Info("待ちのコンテキストが切れているので、この turn ループは畳みます（次の巡回が起こし直します）",
+				"identifier", rs.issue().Identifier)
+			rs.setNeedsPrompt()
+			return
+		}
 
 		snap := rs.snapshot()
 

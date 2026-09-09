@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/normalize"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -80,6 +81,19 @@ func (o *Orchestrator) decideAfterTurn(
 	ctx context.Context, rs *runState, current tracker.Issue, mayRewrite bool,
 ) bool {
 	switch {
+	case config.IsHumanState(o.cfg.Tracker, current.State):
+		// **人間が引き取った**（設計 3-82）。**巡回より先に turn の終わりが来ただけである。**
+		//
+		// **引き渡しとして扱ってはならない。**`default` へ落とすと `finishRun` が
+		// 引き渡しの通知を投稿し、`ensureAgentComment` が人間の pane へ指示を送り、
+		// **pane を閉じる。**カードを動かしてから話しかけた利用者が、そのまま踏む。
+		//
+		// **ここで人間モードへ入れておく。**巡回を待たずに、この run のすべての門が閉まる。
+		if rs.enterHumanMode() {
+			o.logger.Info("人間が引き取りました（turn の終わりで気づきました。pane も worktree も残します）",
+				"identifier", current.Identifier, "状態", current.State)
+		}
+		return true
 	case containsFold(o.cfg.Tracker.TerminalStates, current.State):
 		o.finishRun(ctx, rs, "", fmt.Sprintf("Status が %s になりました", current.State))
 		return true
@@ -388,7 +402,7 @@ func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals m
 			nodeID = issueNodeID(found)
 		}
 
-		moved, err := o.tracker.UpdateStatus(ctx, itemID, *next, o.cfg.Tracker.TerminalStates)
+		moved, err := o.tracker.UpdateStatus(ctx, itemID, *next, o.protectedStates())
 		if err != nil {
 			o.logger.Warn("表明どおりに Status を動かせません",
 				"identifier", rs.issue().Identifier, "対象", target, "遷移先", *next, "error", err)
@@ -598,6 +612,9 @@ func (o *Orchestrator) finishRunAsync(ctx context.Context, rs *runState, failure
 // failureState: 落とす先の Status。空なら落とさない。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failureState, reason string) {
+	if o.abortTerminalForHuman(rs, reason) {
+		return
+	}
 	o.logger.Info("run を終えます", "identifier", rs.issue().Identifier, "理由", summaryLine(reason))
 
 	// **pane を閉じる前に、turn の終わりと同じ判定を1度通す**（設計 3-81）。
@@ -612,7 +629,7 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	o.waitForBackgroundTasks(ctx, rs)
 
 	if failureState != "" {
-		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.cfg.Tracker.TerminalStates)
+		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, failureState, o.protectedStates())
 		if err != nil {
 			o.logger.Warn("Status を落とせません",
 				"identifier", rs.issue().Identifier, "遷移先", failureState, "error", err)
@@ -636,6 +653,65 @@ func (o *Orchestrator) finishRunClaimed(ctx context.Context, rs *runState, failu
 	o.release(rs)
 }
 
+// abortTerminalForHuman は「人間が引き取ったので、この run を終わらせるのをやめる」を判定する
+// （設計 3-82）。
+//
+// **終わらせる処理は、印を取ってから終わるまでに長くかかる。**`ensureAgentComment` は
+// `agent.prompt` を最大 `claude.turn_timeout_ms`（既定1時間）待つ。**その間に人間が
+// カードを動かすことがある。**
+//
+// **`stopWorker` の門だけでは足りない。**あの門は pane を守るが、この経路はそのあとで
+// **`release` を呼んで印まで外す。**外れると、`reconcileWorktrees` から見て
+// 「取り残された worktree」になり、**人間が戻した巡回で pane を閉じられる**（手順7b）。
+//
+// **取った印は必ず返す**（`endTerminal`）。返さないと、人間モードを抜けたあとに
+// この run を終わらせる者が誰も居なくなる。
+//
+// rs: 対象の run。
+// reason: 終わらせようとしていた理由（ログに出す）。
+// 戻り値: 人間が引き取っているのでやめるなら true。
+func (o *Orchestrator) abortTerminalForHuman(rs *runState, reason string) bool {
+	if !rs.inHumanMode() {
+		return false
+	}
+	o.logger.Info("人間が引き取ったので、この run を終わらせるのをやめます（pane も印も worktree も残します）",
+		"identifier", rs.issue().Identifier, "やめた理由", summaryLine(reason))
+	rs.endTerminal()
+	return true
+}
+
+// protectedStates は「この Status になっていたら Status を書き込まない」一覧を返す
+// （`tracker.UpdateStatus` の `blockedStates`）。
+//
+// **`tracker.terminal_states` に `tracker.human_state` を足したものである**（設計 3-82）。
+//
+// **人間が引き取ったカードの上へ書いてはならない。**書くと Status が人間モードから外れ、
+// **次の巡回が pane を閉じにいく。**とくに危ないのは表明の適用（`applySignals`）である。
+// 人間と話している最中のエージェントの応答に `CONTINUO-STATUS: blocked` の1行が入るのは
+// よくあることで、**それがそのままカードを `Blocked` へ動かしていた。**
+// **issue #263 が名指ししている症状そのものである。**
+//
+// **`tracker.human_state` が空なら `terminal_states` そのものを返す。**
+//
+// **`dispatchBlockedStates` は別である。**あちらは `active_states` の外を全部拒否するので、
+// 人間モードの Status も既に入っている。
+//
+// 戻り値: 書き込みを断る Status の一覧。
+func (o *Orchestrator) protectedStates() []string {
+	human := strings.TrimSpace(o.cfg.Tracker.HumanState)
+	if human == "" {
+		return o.cfg.Tracker.TerminalStates
+	}
+	// **元の並びを書き換えない。**呼び出しごとに新しい並びを作る。
+	out := make([]string, 0, len(o.cfg.Tracker.TerminalStates)+1)
+	out = append(out, o.cfg.Tracker.TerminalStates...)
+	if containsFold(o.cfg.Tracker.TerminalStates, human) {
+		// **設定の検査が起動前に弾いているので、ここへは来ない。**来ても二重に足さない。
+		return out
+	}
+	return append(out, human)
+}
+
 // failRun は着手やテンプレートの変数展開に失敗した run を失敗として扱う。
 //
 // **worktree は残す。**次の巡回に委ねられる場合があるためである。
@@ -654,7 +730,10 @@ func (o *Orchestrator) failRun(ctx context.Context, rs *runState, reason string)
 	if !rs.claimTerminal(ctx) {
 		return
 	}
-	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+	if o.abortTerminalForHuman(rs, reason) {
+		return
+	}
+	moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.protectedStates())
 	if err != nil {
 		o.logger.Warn("Status を落とせません",
 			"identifier", rs.issue().Identifier, "遷移先", o.cfg.Tracker.FailureState, "error", err)
@@ -721,6 +800,9 @@ func (o *Orchestrator) abandonRunAsync(ctx context.Context, rs *runState, reason
 // rs: 対象の run。
 // reason: 人間へ見せる理由。
 func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reason string) {
+	if o.abortTerminalForHuman(rs, reason) {
+		return
+	}
 	snap := rs.snapshot()
 	if snap.RetryCount >= o.cfg.Agent.MaxRetries {
 		o.logger.Warn("リトライの回数を使い切りました（人間へ渡します）",
@@ -730,7 +812,7 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 		// 先に ensureAgentComment を呼ぶと、その中の failCommentRecovery が
 		// 「作業を終えたと表明したのに何も書き残さなかった」という別の文面で枠を使い切り、
 		// **stall で打ち切ったという本当の理由が issue に1文字も残らない。**
-		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+		moved, err := o.tracker.UpdateStatus(ctx, rs.IssueID, o.cfg.Tracker.FailureState, o.protectedStates())
 		if err != nil {
 			o.logger.Warn("Status を落とせません", "identifier", snap.Identifier, "error", err)
 		}

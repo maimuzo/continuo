@@ -101,6 +101,9 @@ func TestHumanMode_作業中のStatusへ戻すと同じpaneへ続きの指示を
 			t.Fatalf("人間モードへ入れた巡回で指示を送った: %v", got)
 		}
 
+		// ★ エージェントは応答を書き終えている（人間が切りのいいところで戻す、が前提）。
+		fx.Herdr.SetStatus(herdr.AgentStatusIdle)
+
 		// 人間が continuo へ返す。
 		fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
 		fx.Orc.Tick(context.Background())
@@ -118,6 +121,39 @@ func TestHumanMode_作業中のStatusへ戻すと同じpaneへ続きの指示を
 		}
 		if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
 			t.Fatalf("戻すときに pane を閉じた（同じ pane に送るはずである）: %v", ids)
+		}
+	})
+}
+
+// TestHumanMode_エージェントが動いている最中に戻したら指示を送らない は、turn の混ざりを防ぐ。
+//
+// 目的: **人間が話しかけた直後（エージェントが応答を書いている最中）にカードを戻すのは
+// 自然な操作である。**そこへ `agent.prompt` を投げると turn が混ざる。
+// 復元の段5a2（設計 3-4）が同じ場面で「送らずに turn の終わりを待つ」と決めているので、
+// **人間モードから戻すときも同じ判断にする。**
+//
+// 与える情報: 人間モードに入れたあと、`agent_status` が `working` のまま
+// Status を `In Progress` へ戻した run。
+// 成功条件: 指示が1つも飛ばないこと（turn の終わりを待つ側へ倒れていること）。
+func TestHumanMode_エージェントが動いている最中に戻したら指示を送らない(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fx := withHumanState(t) // AgentStatus は working のまま
+		defer fx.Orc.Close()
+		issue := adoptRun(fx, 188)
+
+		fx.Tracker.SetState(issue.ID, humanState)
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
+
+		if got := fx.Herdr.Prompts(); len(got) != 0 {
+			t.Fatalf("エージェントが動いている最中に指示を送った（turn が混ざる）: %v", got)
+		}
+		if _, ok := viewOf(fx, issue.Identifier); !ok {
+			t.Fatal("戻したのに印から外れている")
 		}
 	})
 }
@@ -153,6 +189,70 @@ func TestHumanMode_完了のStatusへ動かすと人間モードを抜けて片�
 			t.Fatal("完了へ動かしたのに印から外れていない")
 		}
 	})
+}
+
+// TestHumanMode_話している最中の表明でカードを奪われない は、issue #263 が名指しした症状を塞ぐ。
+//
+// 目的: **人間が pane で話しかけた返事に `CONTINUO-STATUS: blocked` の1行が入っていても、
+// 人間モードのカードを `Blocked` へ書き換えないこと。**
+// 書き換えると Status が人間モードから外れ、そのまま引き渡しとして pane が閉じる。
+// **これが「AIの判断でblockedなどに遷移し、チャットが強制切断される」の中身である。**
+//
+// **巡回が人間モードを立てるより先に turn の終わりが来る筋も、同時に確かめている。**
+// カードを動かしてから巡回を1回も回さずに `Stop` を流すので、continuo が人間モードを
+// 知るのは `decideAfterTurn` が Status を取り直した時点である。
+//
+// 与える情報: `human_state` を設定した fixture。着手して1回目の turn が待ち受けに入った run。
+// その最中に人間がカードを `Human` へ動かし、エージェントの応答には `blocked` の表明がある。
+// 成功条件: Status が `Human` のまま、pane が1つも閉じず、2回目の指示も飛ばないこと。
+func TestHumanMode_話している最中の表明でカードを奪われない(t *testing.T) {
+	fx := newFixture(t, fixtureOptions{
+		Mutate: func(cfg *config.Config) { cfg.Tracker.HumanState = humanState },
+	})
+	fx.Tracker.AddIssue(sampleIssue(188, "Ready"))
+	releasePrompt := blockFirstPrompt(t, fx)
+
+	fx.Orc.Tick(context.Background())
+	waitFor(t, 15*time.Second, "1回目の turn が送られる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) > 0
+	})
+
+	// ★ 人間が pane に入る前に、カードを人間モードへ動かした（FAQ の手順1）。
+	fx.Tracker.SetState("PVTI_item188", humanState)
+	// **エージェントのコメントを置いておく。**無いと run を終えるときに
+	// 「コメントの取り戻し」（設計 3-25 の9段）へ入り、そこでも `agent.prompt` を呼ぶ。
+	fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
+
+	// ★ 人間に返事をしたエージェントが、その応答に `blocked` の表明を書いた。
+	transcriptDir := t.TempDir()
+	path := writeTranscript(t, transcriptDir, "session-1.jsonl", []any{
+		typedUserLine("p1", "ここはどうしますか"),
+		assistantLine("req1", "判断を仰ぎたいです。\n\nCONTINUO-STATUS: blocked", false),
+	})
+	fx.Orc.OnHook(stopEvent(fx.Sessions[0], path, "p1"))
+	releasePrompt()
+
+	// turn の終わりの処理が Status を書きに行くところまで進むのを待つ。
+	waitFor(t, 20*time.Second, "表明の適用が Status を書きに行く", func() bool {
+		return fx.Tracker.CountCall("UpdateStatus") > 0
+	})
+	// **書きに行っても、人間モードのカードは動かない**（`protectedStates`）。
+	waitFor(t, 20*time.Second, "turn ループが畳まれる", func() bool {
+		return fx.Herdr.CountMethod(herdr.MethodAgentPrompt) == 1
+	})
+
+	if got := fx.Tracker.StateOf("PVTI_item188"); got != humanState {
+		t.Fatalf("人間が引き取ったカードを continuo が動かした: got %q, want %q", got, humanState)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodPaneClose); got != 0 {
+		t.Fatalf("人間が話している pane を閉じた: pane.close が %d 回", got)
+	}
+	if got := fx.Herdr.CountMethod(herdr.MethodAgentPrompt); got != 1 {
+		t.Fatalf("人間が話している pane へ continuo が指示を送った: agent.prompt が %d 回（1回のはず）", got)
+	}
+	if len(fx.Orc.RunningIdentifiers()) != 1 {
+		t.Fatalf("人間が引き取っている run を印から外した: %v", fx.Orc.RunningIdentifiers())
+	}
 }
 
 // TestHumanMode_設定していなければいままでどおり止める は、既定の振る舞いを守る。

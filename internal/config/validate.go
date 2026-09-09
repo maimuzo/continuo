@@ -610,11 +610,12 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 // validateHumanState は `tracker.human_state` が他の役割と重なっていないかを見る（設計 3-82）。
 //
 // **空なら何も見ない。**空はこの機能を使わないという意味であり、
-// ボードに選択肢を足す必要も無い（`KnownStates` も空を捨てる）。
+// カンバンに選択肢を足す必要も無い（`KnownStates` も空を捨てる）。
 //
 // **`automated_state_rewrite` のキーとの重なりは、ここでは見ない。**
-// `validateAutomatedStateRewrite` が先に呼ばれ、`NamedStates`（`KnownStates` を含む）に
-// 名前が出てくるキーを既に弾いている。**ここへ同じ検査を置いても1度も到達しない。**
+// `validateAutomatedStateRewrite` が `NamedStates`（`KnownStates` を含む）に名前が
+// 出てくるキーを弾くので、**`human_state` と同じ名前をキーに書いた設定は、そちらで落ちる。**
+// **ここへ同じ検査を置いても、弾く相手が1件も残らない。**
 //
 // cfg: 検証する設定。
 // 戻り値: 重なっていれば理由付きのエラー。

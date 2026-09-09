@@ -104,7 +104,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		// **`tracker.human_state` 以外へ動いたら、どの Status でも抜ける。**
 		// 抜けないと `stopWorker` の門が閉じたままになり、**`Done` へ動かしても
 		// pane が残り、worktree も片付かない。**
-		o.updateHumanMode(rs, issue)
+		o.updateHumanMode(ctx, rs, issue)
 		if rs.inHumanMode() {
 			// **人間が引き取っている。何もしない**（設計 3-82）。
 			// **`clearExternalMove` も呼ばない。**外から動かされた記録は、
@@ -195,9 +195,14 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 // 1回目の指示で `failure_state` へ落ちる**（人間はそこから `dispatch_state` へ戻せば、
 // 新しい着手として数え直される）。
 //
+// **戻したときにエージェントが動いていたら、指示を送らずに turn の終わりを待つ。**
+// 人間が話しかけた直後（応答を書いている最中）に戻すのは自然な操作で、そこへ投げると
+// **turn が混ざる**（設計 3-4 の段5a2 が復元で同じ判断をしている）。
+//
+// ctx: `agent.get` に適用するコンテキスト。
 // rs: 対象の run。
 // issue: 取り直した issue。
-func (o *Orchestrator) updateHumanMode(rs *runState, issue tracker.Issue) {
+func (o *Orchestrator) updateHumanMode(ctx context.Context, rs *runState, issue tracker.Issue) {
 	if config.IsHumanState(o.cfg.Tracker, issue.State) {
 		if rs.enterHumanMode() {
 			o.logger.Info("人間が引き取りました（turn は送らず、pane も worktree も残します）",
@@ -208,14 +213,23 @@ func (o *Orchestrator) updateHumanMode(rs *runState, issue tracker.Issue) {
 	if !rs.leaveHumanMode() {
 		return
 	}
-	if containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
-		o.logger.Info("continuo の管理へ戻りました（同じ pane へ続きの指示を送ります）",
+	if !containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
+		o.logger.Info("人間モードを抜けました（作業中の Status ではないので、続きの指示は送りません）",
 			"identifier", issue.Identifier, "状態", issue.State)
-		rs.setNeedsPrompt()
 		return
 	}
-	o.logger.Info("人間モードを抜けました（作業中の Status ではないので、続きの指示は送りません）",
+	// **`agent.get` は1回だけである。**人間モードを抜けた巡回でしか通らない。
+	// **読めなかったときは送る側に倒す。**待ちに倒すと、herdr が答えないあいだ
+	// この run は1つも指示を受け取らない。
+	if st, err := o.agentStatus(ctx, rs); err == nil && st == herdr.AgentStatusWorking {
+		o.logger.Info("continuo の管理へ戻りましたが、エージェントが動いているので turn の終わりを待ちます",
+			"identifier", issue.Identifier, "状態", issue.State)
+		rs.setAwaitTurnEnd()
+		return
+	}
+	o.logger.Info("continuo の管理へ戻りました（同じ pane へ続きの指示を送ります）",
 		"identifier", issue.Identifier, "状態", issue.State)
+	rs.setNeedsPrompt()
 }
 
 // reconcileWorktrees は worktree を走査して身元ファイルを読み、Status を ID 指定で
