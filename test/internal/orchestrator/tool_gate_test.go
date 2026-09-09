@@ -595,36 +595,21 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 		// **必須のレビューや自動マージを設定した担当先で、
 		// 人間が1度も見ていない pull request がそのまま既定の branch へ入る。**
 		"コメントの書き込みに数えない",
-		// **push は丸ごと肯定してから、読み取れるものだけを外していること。**
-		// **判定役が受け取るのは道具の名前と入力だけで、`git push -u origin HEAD` の送り先は
-		// コマンドの文字列のどこにも書かれていない。**
-		// **肯定の側を「既定の branch 以外の branch へ」と限ると、判定役はそれに当たるかを確かめられず、
-		// 断る側へ落ちる。落ちると pull request が1本も出ない。**
-		"そしてリポジトリ octocat/hello-world への push は",
-		// **外すのは、コマンドの文字列だけで読み取れる3つである。**
-		// **既定の branch の名前は、実物から取る。**`main / master` と綴りを数え上げると、
-		// `develop` や `trunk` を既定にしているリポジトリで `HEAD:develop` が素通りする。
-		"送り先が既定の branch（`main`）だと読み取れる push",
-		// **タグを作る push は、`v*` で release を公開する workflow を持つリポジトリでは、
-		// `gh release create` と同じ結果へ届く。**
-		"branch でない ref（tag など）だと読み取れる push",
-		// **断る条件の1つ目が挙げているのは force push だけで、ref を消す push は入っていない。**
-		// **並行して走っている別の run の branch を remote から消せると、その成果が別の機械から見えなくなる。**
-		"ref を消す push",
-		// **pull request を通さない書き込みも、同じ組で外していること。**
-		// **直 push を塞いでも、`gh api --method PUT .../contents/…` で同じ結果へ届く。**
-		"pull request を通さずにリポジトリ octocat/hello-world のファイルを書き込む形",
-		"この肯定に含めず、断る",
 		// **閉じる文が、結論を固定していること。**
 		// **「〜を理由に通してはならない」は推論を1本封じるだけで、判定役には別の理由が残る。**
 		// **`gh pr merge <この issue を閉じる pull request>` は、担当先だからではなく、
 		// その pull request がこの issue を閉じるものだから「関係がある」と言える。**
 		"いま担当している issue に関係していても断る",
+		// **主語に `ref` を入れないこと。**入れると `git push` そのものが閉じる文に当たり、
+		// **`git push -u origin HEAD` が断られて pull request が1本も出ない。**
+		// **push は、この変更の前から通っていた**（2026-09-09 の実測）。
+		// **この変更が緩めたものではないので、肯定も除外も1文字も書かない。**
+		//
 		// **主語を「リポジトリ X への書き込み」で止めないこと。**2つ落ちる。
 		// **GitHub Projects v2 のカンバンはリポジトリではない**ので、`updateProjectV2Field` に届かない。
 		// **そして手元の `git commit` や `cat > plan.md` まで含むと読める**
 		// （判定へ回るのは Bash なので、worktree の中を書き換えるコマンドは全部届く）。
-		"リポジトリ octocat/hello-world の GitHub 上のもの（issue、pull request、ref、release、設定）への書き込みと削除",
+		"リポジトリ octocat/hello-world の issue、pull request、release、リポジトリの設定への書き込みと削除",
 		"GitHub Projects v2 のカンバン（project）への書き込みと削除のうち、",
 		"いま肯定した形に当たらないものは、いま担当している issue に関係していても断る",
 		// **下に続く免除より優先すると書いてあること。**

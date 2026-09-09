@@ -13,7 +13,6 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
-	"github.com/maimuzo/continuo/internal/workspace"
 )
 
 // settingsFileName は issue ごとの Claude Code の設定ファイルの名前である（設計 3-12）。
@@ -206,64 +205,58 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // **閉じる文が無いと、リポジトリ X が相手なら merge も release も「関係がある→通す」へ倒れる**
 // （下の `toolGateExemptionNote` の「担当先の文では『断る』と言い切る」と同じ理由である）。
 //
-// **閉じるのは1文である。**「リポジトリ X の GitHub 上のもの（issue、pull request、ref、release、設定）への
+// **閉じるのは1文である。**「リポジトリ X の issue、pull request、release、リポジトリの設定への
 // 書き込みと削除、そして GitHub Projects v2 のカンバン（project）への書き込みと削除のうち、
 // いま肯定した形に当たらないものは、**いま担当している issue に関係していても断る**」。
 //
-// **「いま挙げた形」と書いてはならない。**直前が除外の文なので、
-// **除外したもの自身を指すとも読める。**そう読まれると閉じる文が届かない。
-//
-// **「への書き込み」を2回書く。**1回で済ませて「リポジトリ X の A と B への書き込み」と書くと、
-// **「リポジトリ X の」がカンバンにも掛かると読める。**そう読まれると、
-// **判定役はノード ID からそれがリポジトリ X のカンバンかを確かめられず、実測のとおり通る側へ倒れる。**
-//
-// **「削除」を書き添える。**「への書き込み」だけだと、`gh api --method DELETE .../git/refs/…` や
-// `deleteProjectV2Item` が当たるかどうかで読みが割れる。
-//
-// **除外の側にも「リポジトリ X の」を書く。**
-// **「pull request を通さずにファイルを書き込む形」とだけ書いて「断る」を足すと、
-// 組み込みの指示書が必ず叩く `cat > plan.md` に文字どおり当たる。**
-// あれは計画のコメントと判断票と成果の報告を書く1段目で、
-// **断られると設計レビューの判断票が1件も貼られず、CI の検査が赤のまま残る。**
-//
 // **「〜を理由に通してはならない」と書いてはならない。**それは推論を1本封じるだけで、
-// **結論（断る）を固定しない。**判定役には別の理由が残る。
-// **`gh pr merge <この issue を閉じる pull request>` は、担当先だからではなく、
-// その pull request がこの issue を閉じるものだから「関係がある」と言える。**
+// **結論を固定しない。**`gh pr merge <この issue を閉じる pull request>` は、担当先だからではなく、
+// **その pull request がこの issue を閉じるものだから「関係がある」と言える。**
 // **条件の末尾の「判断に迷うものは通す」が、迷った場合を通す側へ倒す。**
 //
-// **種類で閉じる形も採らない**（「コードや配布物を変える操作」「リポジトリの設定を変える操作」など）。
+// **種類で閉じる形も採らない**（「コードや配布物を変える操作」など）。
 // **承認と close は、その瞬間にコードも配布物も設定も1バイトも変えないので、どの種類にも当たらない。**
 //
 // **綴りで数え上げてもならない。**merge・close・approve・release …と並べると、
 // **列挙に無いものが「断られる側へ落ちなかった」と読まれる。**
 //
-// **主語を「リポジトリ X への書き込み」で止めてはならない。**2つ落ちる。
+// **主語に `ref` を入れてはならない。**入れると `git push` そのものが閉じる文に当たり、
+// **`git push -u origin HEAD` が断られて pull request が1本も出ない。**
+// **push は、この変更の前から通っていた**（2026-09-09 の実測。
+// この判定役が載った状態で `git push -u origin HEAD` を何度も叩き、全部通った）。
+// **この変更が緩めたものではないので、肯定も除外も1文字も書かない。**
+//
+// **主語を「リポジトリ X への書き込み」で止めてもならない。**2つ落ちる。
 // **GitHub Projects v2 のカンバンはリポジトリではない**ので、`updateProjectV2Field` に届かない
 // （あれは選択肢を全件置き換えるので、設定済みの Status の値が全部消える）。
 // **そして手元の `git commit` や `cat > plan.md` まで含むと読める。**
 // 判定へ回るのは Bash なので、**worktree の中を書き換えるコマンドは全部この判定役に届く。**
-// **だから「GitHub 上のもの」と書いて remote 側へ寄せ、カンバンを主語に足す。**
 //
 // **カンバンを「その issue が載っているカンバン」と限ってはならない。**
 // **判定役が受け取るのはノード ID だけで、それがどのカンバンかは読み取れない。**
-// **push で解いたのと同じ形の欠陥になる。**`GitHub Projects v2 のカンバン（project）` と書けば、
-// **`updateProjectV2` の綴りだけで当てられる。**
+// `GitHub Projects v2 のカンバン（project）` と書けば、**`updateProjectV2` の綴りだけで当てられる。**
 //
-// **`gh pr ready` は肯定に足す。**`continuo init` が置く `WORKFLOW.md` の雛形が
-// 「draft で作ってからレビューを通して外す」を例示している（[internal/scaffold/template.go]）。
-// **足さないと、雛形どおりに書いた利用者の pull request が毎回 draft で止まる。**
-// **draft を外すことは、その瞬間にコードも配布物も1バイトも変えない。**
+// **「削除」を書き添える。**「への書き込み」だけだと、`deleteProjectV2Item` が当たるかどうかで読みが割れる。
+//
+// **エージェントが `gh` で `In Progress` から `Blocked` を動かす経路は、この閉じる文が断る。**
+// 設計はその経路を認めているが、**組み込みの指示書は「あなたが `gh` を叩く必要はありません」と書いており、
+// 表明の1行を書く経路が別に在る。**塞いだことは設計文書と案内へ書く。
 //
 // **肯定の一覧から、承認・取り込み・close を1句で外す。**
 // **`gh pr review --approve` は、道具の形としては pull request へのコメントの投稿である。**
 // `gh api --method POST /repos/<owner>/<repo>/pulls/<番号>/reviews -f event=APPROVE` は、
 // **括弧の中の「`gh api` で書く形」と一字一句で重なる。**
 // **外さないと肯定の一覧に入ってしまい、閉じる文が届かない。**
-// **必須のレビューや自動マージを設定した担当先で、
-// 人間が1度も見ていない pull request がそのまま既定の branch へ入る。**
+// **「自分の pull request は承認できない」は理由にならない。**
+// **リポジトリ X の pull request が、いつも自分のものだとは限らない。**
 // **「却下」の語は使わない。**下の `toolGateExemptionNote` が「却下（close）」と定義しており、
 // **同じ語が2段落のあいだで違うものを指すことになる。**「閉じること」で close を受ける。
+//
+// **`gh pr ready`（draft を外すこと）は肯定に足す。**
+// **閉じる文が既定で断るので、足さないと draft の pull request が永久に外れない。**
+// `continuo init` が置く `WORKFLOW.md` の雛形が「draft で作ってからレビューを通して外す」を
+// 例示している（[internal/scaffold/template.go]）。
+// **draft を外すことは、その瞬間にコードも配布物も1バイトも変えない。**
 //
 // **issue の本文は、作成のときだけ肯定する。**「その本文の書き込み」と書くと、
 // `gh api --method PATCH repos/X/issues/<番号> -f body=…` が肯定に入り、
@@ -275,50 +268,7 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // **取り消せてコードも配布物も変わらないが、組み込みの指示書はこれを1度も叩かせない**
 // （[internal/prompt/builtin.md] を `gh label` で検索して0件）。**通す必要が無い。**
 //
-// **push は、肯定してから「読み取れるもの」だけを外す。**
-// **判定役が受け取るのは道具の名前と入力だけで、`git push -u origin HEAD` の送り先は
-// コマンドの文字列のどこにも書かれていない。**
-// **肯定の側を「既定の branch 以外の branch へ」と限ると、その形に当たるかを確かめられない。**
-//
-// **確かめられないものがどちらへ落ちるかは、実測で「通る側」だった**（2026-09-09）。
-// **この判定役が載った状態で `git push -u origin HEAD` を何度も叩き、全部通った。**
-// **そのときの文面には push の肯定が1文字も無い**ので、
-// **判定役は送り先を確かめられないまま通したことになる。**
-// 条件の末尾の「判断に迷うものは通す」が効いている。
-//
-// **だから、外す側を「読み取れるもの」に限る。**読み取れなければ肯定に残る。
-// **そして外したものは「断る」と言い切る。**「この肯定に含めない」で止めると、
-// **肯定から外れるだけで結論が固定されず、上の実測のとおり迷いが通る側へ倒れる。**
-//
-// **外すのは4つである。**送り先が既定の branch だと読み取れる push／
-// branch でない ref（tag など）だと読み取れる push／ref を消す push／
-// **pull request を通さずにリポジトリ X の**ファイルを書き込む形。
-// **2つ目まで「読み取れる」を付ける。**`git push origin v1.2.3` は
-// **`v1.2.3` という名前の branch を git が許すので、tag だと決められない。**
-// **決められないものは肯定に残る**（そう決めたことを、ここへ書いておく）。
-// **3つ目には付けない。**`--delete` と `:<名前>` は綴りで読めるうえ、
-// **付けると迷ったときに肯定へ残ってしまう。**
-// **タグを作る push は、`v*` で release を公開する workflow を持つリポジトリでは、
-// `gh release create` と同じ結果へ届く。**
-// **断る条件の1つ目が挙げているのは force push だけで、ref を消す push は入っていない。**
-// **continuo は既定で2本の run を同時に走らせる**
-// （`agent.max_concurrent_agents`。continuo が同時に起動する Claude Code の数の上限で、既定は2）。
-// **並行して走っている別の run の branch を remote から消せると、その成果が別の機械から見えなくなる。**
-// `gh api` の contents は、pull request を通さずに同じ結果へ別の道具で届くので、**同じ組で外す。**
-//
-// **「下に続く免除より優先する」を落としてはならない。**
-// 担当先の文は push を免除し、下の免除は「push …は、この免除に含めない。
-// それらは、いまの作業と関係があるかどうかで、この条件のとおりに判断する」と書く。
-// **この1文だけが、その正面の食い違いを解いている。**
-//
-// **組み込みの指示書の 6-3 では代わりにならない。**あちらは `main / master` と
-// 綴りを数え上げているので、**既定が `develop` のリポジトリでは1文字も効かない。**
-// こちらは実物の名前を使う。
-// **「作業側が曲げられたら判定役も一緒に倒れる」を理由にしてはならない。**
-// 6-3 は作業しているエージェントへの指示、判定役は別の呼び出しで走る別のモデルで、
-// **判定役には issue の本文が1文字も届かない。**この2層は一緒には倒れない。
-//
-// issue: 着手する issue。**識別子と、`NativeRef["default_branch"]` の既定の branch を使う。**
+// issue: 着手する issue。**識別子だけを使う。**
 // 戻り値: 断る条件の3つ目へ足す文。識別子の形が違うときは空文字（条件はいまのまま残る）。
 func toolGateAssignmentNote(issue tracker.Issue) string {
 	identifier := issue.Identifier
@@ -326,34 +276,18 @@ func toolGateAssignmentNote(issue tracker.Issue) string {
 		return ""
 	}
 	repo := identifier[:strings.Index(identifier, "#")]
-	// **既定の branch の名前は、綴りを数え上げずに実物から取る**（設計 3-64f）。
-	// **`main / master` と書くと、`develop` や `trunk` を既定にしているリポジトリで
-	// `git push origin HEAD:develop` が素通りする。**
-	// **名前が取れなかったときは、括弧ごと出さない。**
-	// **`既定の branch` を括弧へ入れると「既定の branch（既定の branch）」と出る。**
-	// **名前が取れなかったときは、綴りを数え上げた形へ落とす。**
-	// **「既定の branch」とだけ書くと、判定役はそのリポジトリの既定の branch が何かを知らないので、
-	// この除外が1件も発火しない。**`develop` は取り逃がすが、いちばん多い `main` は捕まえる。
-	branchPhrase := "既定の branch（`main` か `master`）"
-	if v, ok := issue.NativeRef[workspace.NativeRefDefaultBranch].(string); ok && v != "" {
-		branchPhrase = "既定の branch（`" + v + "`）"
-	}
 	return fmt.Sprintf("\n  いま担当しているのは %[1]s である。リポジトリ %[2]s への issue と pull request の作成、"+
 		"そのときに付ける本文、pull request の本文の書き込み、pull request の draft を外すこと、"+
 		"issue と pull request へのコメントの書き込み（`gh api` で書く形も含む。"+
 		"ただし、pull request の取り込みと承認と、issue と pull request を閉じることは、"+
-		"コメントの書き込みに数えない）、"+
-		"そしてリポジトリ %[2]s への push は、担当している作業そのものなので「関係のない」に当たらない。"+
-		"ただし、送り先が%[3]sだと読み取れる push と、"+
-		"branch でない ref（tag など）だと読み取れる push と、ref を消す push と、"+
-		"pull request を通さずにリポジトリ %[2]s のファイルを書き込む形（`gh api` の contents など）は、"+
-		"この肯定に含めず、断る。"+
-		"リポジトリ %[2]s の GitHub 上のもの（issue、pull request、ref、release、設定）への書き込みと削除、"+
+		"コメントの書き込みに数えない）は、"+
+		"担当している作業そのものなので「関係のない」に当たらない。"+
+		"リポジトリ %[2]s の issue、pull request、release、リポジトリの設定への書き込みと削除、"+
 		"そして GitHub Projects v2 のカンバン（project）への書き込みと削除のうち、"+
 		"いま肯定した形に当たらないものは、いま担当している issue に関係していても断る。"+
 		"リポジトリ %[2]s が相手のときは、この段落の扱いが下に続く免除より優先する。"+
 		"これは他のどの条件も免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、"+
-		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo, branchPhrase)
+		"担当しているリポジトリが相手でも「資格情報の持ち出し」として断る。", identifier, repo)
 }
 
 // toolGateExemptionNote は、担当しているリポジトリの外への起票を免除する文である（設計 3-64f）。
