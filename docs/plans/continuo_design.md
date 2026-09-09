@@ -10454,6 +10454,8 @@ sequenceDiagram
 **このままだと、manifest を github.com へ POST する form が、ブラウザ側で止まる。**
 
 **この4枚に限り `form-action 'self' https://github.com` にする。**
+**緩めるのは避けられない。**manifest を GET のクエリで渡せないことを実測した（下の「実測してあること」）。
+**リンク1本では GitHub App を作れず、POST の form が要る。**
 **`'self'` を落としてはならない。**落とすと、同じ4枚から `127.0.0.1` へ出す form が全部止まる
 （GitHub App の名前が取られていたときの入力し直しが、そこに当たる）。
 **ブラウザは画面に何も出さずに送信を捨てるので、人間には「ボタンが効かない」としか見えない。**
@@ -10499,28 +10501,51 @@ sequenceDiagram
 
 #### 実測してあること
 
-**2026-09-08 に、専用の GitHub App を1つ作って通した。**
+**2026-09-08 と 2026-09-09 に、専用の GitHub App を作って通した。**
+**測定に使った GitHub App は、測り終えたあとに2つとも消した。**
 
 | 何 | 実測 |
 | --- | --- |
-| **manifest から GitHub App を作れるか** | **作れた**（`continuo-manifest-test`） |
+| **manifest から GitHub App を作れるか** | **作れた**（2回とも） |
+| **manifest を GET のクエリで渡せるか** | **渡せない。**`?manifest=<URL 符号化した JSON>` を付けても**空の入力フォームが出るだけ**で、値は1つも入らない |
+| **POST の form なら渡せるか** | **渡せた。**`https://github.com/settings/apps/manifest` へ飛び、名前が入った確認画面が出る |
+| **`hook_attributes` を省いて作れるか** | **作れた。**`events` は空で返り、webhook は設定されない |
 | **`hook_attributes.url` に `http://127.0.0.1:8931/` を書くと** | **GitHub が断る。**`Hook url is not supported because it isn't reachable over the public Internet (127.0.0.1)` と `Hook is invalid` の2行 |
 | **戻り先の URL に `127.0.0.1` を書くと** | **咎められない。**同じ 127.0.0.1 でも、webhook の欄だけが弾かれる |
-| **install のあとの戻り先** | `http://127.0.0.1:8931/oauth?code=…&installation_id=…&setup_action=install` へ来た。**そのパスを配っていなかったので 404 になった** |
+| **`state` が manifest の流れで往復するか** | **往復した。**戻り先のクエリは `code` と `state` の2つで、送った値と一致した |
+| **作成の前に何が挟まるか** | **sudo mode の再認証。**`Confirm access` の画面が出て、パスキー等での認証を求められた |
+| **作成の確認画面に何が出るか** | **GitHub App の名前1つと、`Create GitHub App for <ログイン名>` のボタン1つだけ。**権限も戻り先も出ない |
+| **`code` を交換して返る欄** | `client_id` / `client_secret` / `pem` / `webhook_secret` / `permissions` / `events` / `id` / `slug` / `html_url` / `name` / `owner` / `node_id` / `description` / `external_url` / `created_at` / `updated_at` の16 |
+| **`request_oauth_on_install` を `false` にすると** | **install と認可が分かれる。**install のあとの戻り先に来るのは `installation_id` と `setup_action` の2つだけで、`code` は来ない |
+| **`true` のとき**（2026-09-08 の測定） | `?code=…&installation_id=…&setup_action=install` へ来た。**1回で終わる** |
+| **install の画面に何が出るか** | **権限と範囲を GitHub 自身が出す。**「Read access to metadata」「Read and write access to issues」と、「All repositories」「Only select repositories」の2択 |
 | **人間の代理として投稿する認可** | **通った。**アクセストークン28800秒、更新用のトークン15638399秒、頭は `ghu_` |
 
 **この設計は webhook を1つも使わない。**だから manifest に `hook_attributes` を書かない。
 
-#### 実装の前に測ること（この節のぶん）
+**説明を足すのは段1（作る）である。**
+**GitHub の作成の確認画面は名前しか出さない。**
+**install の画面は権限も範囲も出すので、そちらは GitHub に任せてよい。**
 
-| 何を測るか | 測らないとどうなるか |
-| --- | --- |
-| **`hook_attributes` を manifest から省いたときに、GitHub が GitHub App を作るか** | **省けないなら、公開の URL を1つ用意することになる。**その場合、この節の導線ごと作り直しになる |
-| **manifest を GET のクエリで渡せるか。渡せないなら form の POST になる** | **POST なら、上の CSP の緩めが要る。**GET で足りるなら緩めなくてよい |
-| **`request_oauth_on_install` を `false` にすると、install と認可が分かれるか** | **分かれないなら、認可のときに何が起きるかを人間へ見せる画面が消える。**人間の決定に反する |
-| **`state` が manifest の流れでも往復するか** | **往復しないなら、作成のコールバックだけ別の守り方が要る** |
+**段1 の説明に、再認証のことを書く。**
+**「GitHub 側で、パスキーなどの再認証を求められることがあります」と1行。**
+**書かないと、押した人が「壊れた」と思って止まる。**
 
-**4つとも、GitHub App を1つ作れば1回で分かる。**
+**変換で `pem`（秘密鍵）と `webhook_secret` も返る。**
+**どちらもファイルへ書かない**（3-82b）。**受け取ったその場で捨てる。**
+
+**トークンの長さを決め打ちしない。**
+GitHub が設定の画面で告知している（2026-09-09 に読み取った）。
+
+> **Upcoming change to GitHub App installation token format**
+> GitHub App installation tokens will soon use a new stateless format (ghs_...) and may be longer (~520 characters).
+> Apps with hardcoded length assumptions may break.
+>
+> （訳: **GitHub App の installation token の形式が変わります。**近くステートレスな新しい形式（`ghs_…`）になり、
+> **520文字ほどまで長くなることがあります。長さを決め打ちしているアプリは壊れます**）
+
+**この設計が使うのは user-to-server token（`ghu_`）で、installation token ではない。**
+**それでも、長さを検査する処理は入れない。**受け取った文字列をそのまま渡す。
 
 ## 4. 人間が決めたこと
 
