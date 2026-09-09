@@ -1366,13 +1366,16 @@ stateDiagram-v2
 
 **「active でなくなったこと」を完了と呼んではならない。**`Blocked` は `active_states` に入らないが、
 **失敗と判断待ちの置き場である。**これを完了に数えると、失敗した issue が成功として記録される。
-Status は3つに分けて扱う。
+Status は4つに分けて扱う。
 
 | 分類 | どの Status か | 何を意味するか |
 | --- | --- | --- |
 | **作業中** | `active_states`（`Ready` / `In Progress`） | continuo が面倒を見る |
 | **完了** | `terminal_states`（`Done`） | 片付けてよい |
-| **引き渡し** | どちらでもない（`In Review` / `Blocked`） | **人間へ渡した。**worker は止めるが worktree は残す |
+| **引き渡し** | 上のどれでもない（`In Review` / `Blocked`） | **人間へ渡した。**worker は止めるが worktree は残す |
+| **人間が引き取っている** | `human_state`（既定は空＝使わない） | **人間が pane で直接話している。worker も worktree も残す**（3-82） |
+
+**4つ目だけが「worker を止めない」側である。**残る3つは、続けるか止めるかの違いでしかない。
 
 **1つの turn で何が起きるか。**
 
@@ -9012,6 +9015,93 @@ turn の終わりと同じでなければならないので、それでは足り
 もう1つは、**`<task-notification>` が届くと Claude Code は新しい turn を始めるので、
 そこで待ちを終えると別の形の道連れになること**である。
 
+### 3-82. 人間が pane で直接続けるあいだ、continuo は手を出さない
+
+**言いたいこと。**人間が herdr の pane に入って直接チャットすると、continuo が pane を閉じて会話が切れる。
+**「手を離すが pane は残す」状態が1つも無かった。**それを表す Status を1つ設け、
+その Status のあいだは `pane.close` を1回も呼ばない。
+
+**採る形。**`tracker.human_state` に Status 名を1つ書く（**既定は空＝この機能を使わない**）。
+
+| 何を | 人間モードのあいだ |
+| --- | --- |
+| turn を送る | **送らない** |
+| 表明（`status_signal_prefix` の1行）を読む | **読まない。Status も動かさない** |
+| stall 検知（3-21） | **対象にしない** |
+| pane | **閉じない** |
+| worktree | **消さない** |
+| 「自分が取った」印（`o.runs`） | **持ち続ける** |
+
+**出入りを決めるのは巡回だけである**（`reconcileRunning`）。
+**`tracker.human_state` になったら入り、それ以外になったら、どの Status でも抜ける。**
+抜けた先が `active_states` なら、**同じ pane・同じセッションのまま**継続の指示を1回送る。
+
+**抜ける条件を「`active_states` へ戻ったとき」に絞ってはならない。**
+絞ると `Done` へ動かしたときに印が立ったままになり、下の門が pane を守り続けて**worktree も片付かない。**
+
+#### 守りは `stopWorker` の門1つに寄せる
+
+**経路ごとに検査を置く形は採らない。**`stopWorker` の呼び出しは12箇所あり、
+**3つは巡回の分岐の外にある。**
+
+| どこ | なぜ巡回の分岐で止められないか |
+| --- | --- |
+| `finishRunClaimed` | `claimTerminal` を取ったあと `ensureAgentComment` が `agent.prompt` を最大 `claude.turn_timeout_ms`（既定1時間）待つ。**その間にカードを動かしても、巡回の分岐はこの経路の外にある** |
+| `reconcileRunning` の「issue がカンバンから見えなくなった」ループ | `switch` の**外**にある。item を archive しただけでも、取り直しが一時的にその item を返さなかっただけでも通る |
+| `stopBecauseHandoffLost` | 担当が別の機械へ移ったとき。**Status を1度も見ない** |
+
+**だから「人間モードの run に対して `pane.close` を呼ばない」を不変条件にし、`stopWorker` の入口で1回だけ見る。**
+
+**それとは別に、次の6箇所でも見る。**門だけでは足りないからである。
+
+| どこ | 門だけでは足りない理由 |
+| --- | --- |
+| turn ループの先頭 | **`agent.max_dispatch_turns` の判定より前に置く。**あとだと `finishRun(failure_state)` が Status を動かし、**人間モードから外れて次の巡回で pane が閉じる** |
+| turn ループの `switch outcome` の手前 | `turnBlocked` は esc を送ってから引き渡す。**送られた esc は取り消せない** |
+| `handleTurnEnd` の入口 | すり抜けると `applySignals` が走り、**人間が動かしたカードを `Blocked` へ書き換える** |
+| `checkStalls` | 打ち切りは `failure_state` を書く。**Status が動けば人間モードから外れる** |
+| `wakeRuns`（**担当の確認より前**） | あとに置くと、人間が自分を担当者に付けた瞬間に `stopBecauseHandoffLost` が走る |
+| `stopAndReleaseAsync` | 門は pane を守るが**印は外れる。**外れると、issue が戻ってきたときに巡回がこの run を見失う |
+
+**hook の受け口へも流さない。**turn ループが居ないので読む者がおらず、
+**256件で埋まったあとは人間の発言1回ごとに「あふれたので捨てました」の WARN が出る。**
+捨てても判定は壊れない。`beginTurn` が turn を送る直前に `stopSeenAt` と受け口を洗い直す。
+
+#### なぜボードの Status で切り替えるのか
+
+| 案 | 採らない理由 |
+| --- | --- |
+| **ボードの Status を1つ足す（採用）** | — |
+| 走っている continuo へ CLI から指示を送る | **hook を受ける socket に新しいメッセージ種別を足すことになる。**受け口は `HookEvent` 1種類しか解釈しない。加えて、同じボードを見張る別の機械からは見えない |
+| ファイルに印を置いて毎巡回で読む | ボードに出ないので、別の機械に見えない。再起動をまたぐ保証も自前で作ることになる |
+| ダッシュボードにボタンを付ける | 5-2 は「書き込みの経路は作らない」と決めている（認証を持たないため） |
+| いまの `Blocked` のまま pane を閉じない | **`Blocked` は打ち切り・失敗の落とし先でもある。**失敗した issue の Claude Code が全部残り、`agent.max_concurrent_agents` の枠が空かない |
+| 既にある `Ice Box` を使う | 設定のどこにも名前が出てこない「知らない Status」なので、猶予（3-50）のあと worker が止まる |
+
+#### 代償
+
+| 何 | 中身 |
+| --- | --- |
+| **選択肢は人間が GitHub の画面から足す** | API で足すと**設定済みの Status が全部消える**（4-1） |
+| **効くまで最大1巡回**（既定30秒） | その間に表明や stall が走ると pane は閉じる。**会話は `--resume` で残る**が画面は消える |
+| **再起動をまたぐと枠の勘定から外れる** | 復元は人間モードの run を印に入れない（3-4 の段5a と同じ扱い）。**pane は残るが `agent.max_concurrent_agents` には数えられない。**戻したときは 3-9 の手順7b が pane を作り直す |
+| **`--permission-mode dontAsk` のまま** | `claude.permissions.allow` に無い道具は確認を出さずに拒否される（3-11）。**人間は pane の中で自分で切り替えられるが、切り替えたまま戻すと次の turn が確認の画面で止まりうる** |
+| **18時間を超えると担当を奪われうる** | 人間モード中は進捗のコメントが書かれない（3-77b の `idle_timeout_ms`）。**1台で動かしているなら起きない。**奪われても `stopBecauseHandoffLost` が push せずに止める |
+| **turn 数は数え直さない** | 上限に達したまま戻した issue は、1回目の指示で `failure_state` へ落ちる。**人間が2回切り替えるだけで上限が外れる形にはしない** |
+| **バックオフ待ちの run は守らない** | そこでは pane が既に閉じている。バックオフが明けると着手をやり直し、Status が人間モードなので何も書かずに印から外れる |
+
+#### 設定の検査
+
+**空でなければ、`active_states` / `terminal_states` / `running_state` / `dispatch_state` /
+`failure_state` / `status_signal_map` の遷移先 / `cleanup.on_states` と重ならないことを起動前に要求する。**
+**`automated_state_rewrite` のキーとの重なりは、既存の検査が先に弾く**（`KnownStates` に入るため）。
+
+**`continuo abandon --park` の行き先にもしてはならない。**そこへ動かしても pane が閉じないので、
+**pane が閉じるのを待つ段（3-37 の段1）が待ち切れず、何も消せない。**`internal/abandon` が起動前に断る。
+
+**`config.KnownStates` に入れる。**入れないと「知らない Status」として扱われ、猶予のあとで worker が止まる。
+**入れたことで、起動時にボードへ実在することも要求される**（3-57）。
+
 
 ## 4. 人間が決めたこと
 
@@ -9045,7 +9135,15 @@ stateDiagram-v2
     InProgress --> Ready: continuo｜再起動して実体が見つからないとき
     Blocked --> Ready: 人間｜コメントで回答して戻す
     InReview --> Done: 人間｜レビューして完了させる
+    InProgress --> Human: 人間｜pane で直接続けるために引き取る
+    Human --> InProgress: 人間｜切りがついたので continuo へ返す
     Done --> [*]
+    note right of Human
+        tracker.human_state を設定したときだけ現れる。
+        このあいだ continuo は turn を送らず、
+        表明も読まず、pane も閉じない（3-82）。
+        既定は空なので、この2本は既定では現れない。
+    end note
     note right of InProgress
         Status を動かすのは continuo のコードである。
         エージェントは最終応答に
@@ -9074,6 +9172,8 @@ stateDiagram-v2
 | `In Progress` → `Ready` | **continuo** | 再起動して worktree も pane も見つからず、**設定の `orphan_running_action` が `to_dispatch_state` のとき**（既定は `redispatch` なので既定では起きない） | GraphQL |
 | `Blocked` → `Ready` | 人間 | コメントで回答したとき | GitHub の画面 |
 | `In Review` → `Done` | 人間 | レビューを終えたとき | GitHub の画面 |
+| `In Progress` → `human_state` | 人間 | **pane に入って自分でチャットを続けたいとき**（3-82）。**`tracker.human_state` を設定したときだけ使える。**動かした先で continuo は turn を送らず、表明も読まず、**pane も worktree も残す** | GitHub の画面 |
+| `human_state` → `In Progress` | 人間 | **切りがついて continuo へ返すとき**（3-82）。**同じ pane・同じセッションのまま**続きの指示が飛ぶ | GitHub の画面 |
 
 **Status を実際に書き換えるのは continuo である。**エージェントは「どう動かすべきか」を最終応答の1行で表明するだけで、
 コマンドを組み立てて実行する必要が無い（3-25）。**プロンプトで依頼した処理は確率で実行されないため、実行を機械へ寄せた。**
@@ -9393,6 +9493,13 @@ tracker:
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
+  human_state: ""                           # 人間が pane に入って直接エージェントと話すあいだだけ置く Status。
+                                            # ここへ動かすと continuo は指示を送らず、応答の1行も読まず、
+                                            # pane を閉じず worktree も消さない。上の active_states へ戻すと、
+                                            # 同じ pane のまま続きの指示を送る。
+                                            # 使うなら、カンバンの画面で Status の選択肢を1つ足してから、その名前を書くこと
+                                            # （API で足すと設定済みの Status が全部消える）。
+                                            # 空なら、この機能は使わない。選択肢を足す必要も無い
   verify_states_every: 20                   # 上に書いた Status 名がカンバンに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
   unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。

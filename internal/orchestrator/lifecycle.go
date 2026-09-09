@@ -26,6 +26,17 @@ import (
 // rs: 対象の run。
 // 戻り値: この run が終わったら true（turn ループを止める）。
 func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
+	// **人間が引き取っていたら、この turn の表明を1行も読まない**（設計 3-82）。
+	//
+	// **turn ループの手前の検査と2重になっているが、外してはならない。**すり抜けると
+	// `applySignals` が走り、**人間がさっき動かしたカードが `Blocked` へ書き換えられる。**
+	// そうなると Status が人間モードから外れ、次の巡回が pane を閉じにいく。
+	if rs.inHumanMode() {
+		o.logger.Info("人間が引き取っているので、この turn の表明は読みません（pane は閉じません）",
+			"identifier", rs.issue().Identifier)
+		return true
+	}
+
 	// **担当が自分でなくなっていないかを、turn の終わりで確かめる**（設計 3-77c）。
 	// **確かめるのは `recheck_interval_ms` に1回だけである**（既定1時間）。
 	// **移っていたらここで止める。push しない。**
@@ -734,6 +745,20 @@ func (o *Orchestrator) abandonRunClaimed(ctx context.Context, rs *runState, reas
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
+	// **人間が引き取っている run は、印からも外さない**（設計 3-82）。
+	//
+	// **ここへ来る道が1つある。**巡回が「この issue はカンバンから見えなくなった」と
+	// 判断したときである（`reconcileRunning` の最後のループ）。**item を archive しただけでも、
+	// 取り直しが一時的にその item を返さなかっただけでも同じ形になる。**
+	// **印を外すと、issue が戻ってきたときに巡回がこの run を見失い、
+	// 同じ worktree にもう1つ Claude Code が立つ。**
+	//
+	// **`stopWorker` の門だけでは足りない。**あちらは pane を守るが、印は外れる。
+	if rs.inHumanMode() {
+		o.logger.Info("人間が引き取っているので、印からも外しません（pane も worktree も残します）",
+			"identifier", rs.issue().Identifier)
+		return
+	}
 	if rs.beginTerminal() != terminalClaimed {
 		return
 	}
@@ -883,6 +908,22 @@ func retryBackoff(retryCount int, max time.Duration) time.Duration {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
+	// **人間が引き取っている run の pane は、どの経路から呼ばれても閉じない**（設計 3-82）。
+	//
+	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは12箇所あり、
+	// そのうち3つは巡回の分岐の外にある（`ensureAgentComment` が `agent.prompt` を
+	// 最大 `claude.turn_timeout_ms`（既定1時間）待っている間 / 「issue がカンバンから
+	// 見えなくなった」ループ / 担当が別の機械へ移ったとき）。**1箇所でも漏らすと、
+	// 人間が話している画面が予告なく消える。**だから門をここに1つ置く。
+	//
+	// **印（`o.runs`）を外すことまでは止めない。**外れても、Status が
+	// `tracker.human_state` のあいだは巡回も dispatch もその issue を触らないので、
+	// pane はそのまま残る。
+	if rs.inHumanMode() {
+		o.logger.Info("人間が引き取っているので pane を閉じません（人間モードのままです）",
+			"identifier", rs.issue().Identifier)
+		return
+	}
 	rs.mu.Lock()
 	paneID := rs.PaneID
 	rs.PaneID = ""

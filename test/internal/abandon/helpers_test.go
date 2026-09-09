@@ -831,6 +831,30 @@ rate_limit:
 	}
 }
 
+// addTrackerKey は、テスト用の WORKFLOW.md の `tracker:` の直下へ1行足す。
+//
+// **`newFixtureWithConfig` の extra は front matter の最上位へ足すので、
+// `tracker:` の中のキーは書けない**（同じ最上位のキーを2回書くことになる）。
+//
+// t: 呼び出し元のテスト。
+// path: WORKFLOW.md のパス。
+// line: 足す行（`  human_state: "Human"` のように、インデントを含む全文）。
+func addTrackerKey(t *testing.T, path, line string) {
+	t.Helper()
+	raw, err := os.ReadFile(path) //nolint:gosec // テストが自分で書いた一時ファイルである
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	before, after, found := strings.Cut(string(raw), "tracker:\n")
+	if !found {
+		t.Fatalf("WORKFLOW.md に tracker: がありません")
+	}
+	out := before + "tracker:\n" + line + "\n" + after
+	if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+}
+
 // issueURL はテストで使う issue の URL を組み立てる。
 //
 // number: issue 番号。

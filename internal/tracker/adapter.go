@@ -170,8 +170,11 @@ func NewAdapter(
 
 // requiredStatesForBootstrap は「ボードに実在しなければ起動を止める」Status 名を、
 // cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
-// failure_state・status_signal_map の遷移先を含める
+// failure_state・human_state・status_signal_map の遷移先を含める
 // （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
+//
+// **`human_state` は空でなければ入る**（設計 3-82）。**空なら1件も増えない**ので、
+// この機能を使わない利用者のボードに選択肢を足させることはない。
 //
 // **集めるのは `config.KnownStates` の1箇所だけである**（設計 3-57）。**自前で集め直さない。**
 // **実行時に「知っている Status か」を判定する一覧**（orchestrator の `knownStates`）

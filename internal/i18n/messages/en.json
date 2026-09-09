@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "91cd52b95dab51c8559dae6fa8a105953513ccc8c18f259e6abe239d655479ee",
+  "_source_sha256": "f0cabfadbd8807605e1b98d50d436e7c80759a98a3c82f875404361a82fb1ffa",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -18,6 +18,7 @@
   "abandon.err_pane_wait_interrupted": "interrupted (remaining pane: %s). Nothing was deleted.",
   "abandon.err_pane_wait_interrupted_unknown": "interrupted (could not ask herdr for the pane list: %v). Nothing was deleted.",
   "abandon.err_park_active": "the value %q given to --park is one of tracker.active_states. Moving Status there would not make continuo let go, so nothing was deleted. Specify a value that is not in tracker.active_states.",
+  "abandon.err_park_human": "the value %q given to --park is tracker.human_state. Moving Status there makes continuo never close the pane, so the wait for the pane to close would time out and nothing could be deleted. Specify a value that is not the human mode Status, such as tracker.failure_state.",
   "abandon.err_park_failed": "could not move Status to %q: %v",
   "abandon.err_park_state_unknown": "continuo is running, but Status for issue %[1]s cannot be checked, so nothing is being done: %[2]s",
   "abandon.err_scan": "cannot scan the worktree root: %v",
@@ -258,6 +259,7 @@
   "config.validate.branch_template_needs_issue_number": "Always include %s. Without the issue number, different issues get the same branch name, and cleanup for a missing worktree would delete the branch of a different issue than the one named",
   "config.validate.handoff_bid_window_range": "Use 0 or greater (0 decides the winner without waiting for a deadline)",
   "config.validate.handoff_idle_timeout_range": "Use 0 or greater (0 uses the default of 18 hours)",
+  "config.validate.human_state_conflict": "Use a Status name different from %s (this Status is set only while a human keeps talking to the agent in the pane, so overlapping with another role silently breaks either that role or the human mode; see 3-82)",
   "config.validate.handoff_progress_interval_range": "Use 60000 (one minute) or greater. The value is handed to the agent in minutes, so anything up to 59999 becomes \"do not stay silent for more than 0 minutes\"",
   "config.validate.handoff_progress_interval_too_long": "Use a value shorter than tracker.provider.handoff.idle_timeout_ms (%d ms). If it is longer, the assignment is released before the agent writes, even when the agent follows the instruction",
   "config.validate.handoff_margin_range": "Use a value from 0 to 100",

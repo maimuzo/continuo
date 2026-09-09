@@ -199,6 +199,23 @@ type TrackerConfig struct {
 	DispatchState string `yaml:"dispatch_state"`
 	// FailureState は打ち切り・失敗のときに落とす先の状態である（4-1）。
 	FailureState string `yaml:"failure_state"`
+	// HumanState は「人間が pane で直接エージェントと話している」状態である（3-82）。
+	//
+	// **この Status のあいだ、continuo はその run に手を出さない。**turn を送らず、
+	// 表明（`status_signal_prefix` の1行）も読まず、Status も動かさず、stall 検知の
+	// 対象にもせず、**pane を閉じず worktree も消さない。**
+	// `active_states` へ戻すと、**同じ pane・同じセッションのまま**続きの指示を送る。
+	//
+	// **既定は空文字である。**空なら、この機能は一切効かない
+	// （ボードに選択肢を足す必要も無い）。**空でなければ、その名前がボードに実在することを
+	// 起動時に要求する**（`config.KnownStates` に入るため）。
+	//
+	// **`active_states` / `terminal_states` / `running_state` / `dispatch_state` /
+	// `failure_state` / `status_signal_map` の遷移先 / `cleanup.on_states` と
+	// 重ならないことを `Validate` が起動前に要求する**（3-82）。
+	// **`automated_state_rewrite` のキーとの重なりは、既存の検査が先に弾く**
+	// （`validateAutomatedStateRewrite`。`KnownStates` に入った名前はキーにできない）。
+	HumanState string `yaml:"human_state"`
 	// VerifyStatesEvery は Status の選択肢名を照合する間隔（巡回の回数）である（設計 3-6）。
 	// 毎巡回では行わない。選択肢名が変わるのは人間がボードを触ったときだけなので、
 	// 20 巡回に1回で足りる。0 なら起動時の1回だけ行う。

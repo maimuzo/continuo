@@ -41,6 +41,9 @@ type stubHerdr struct {
 	closedPanes []string
 	// sentKeys は AgentSendKeys に渡されたキーである。
 	sentKeys [][]string
+	// prompts は AgentPrompt に渡された本文である。
+	// **「turn を1つも送っていない」を確かめるために持つ**（設計 3-82）。
+	prompts []string
 }
 
 // newStubHerdr は stub を作る。
@@ -112,10 +115,20 @@ func (s *stubHerdr) AgentStartWithRetry(
 	}, nil
 }
 
+// Prompts は AgentPrompt に渡された本文を返す。
+func (s *stubHerdr) Prompts() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, len(s.prompts))
+	copy(out, s.prompts)
+	return out
+}
+
 // AgentPrompt は現在の状態のまま返る（turn を終わらせない）。
 func (s *stubHerdr) AgentPrompt(_ context.Context, params herdr.AgentPromptParams) (*herdr.AgentPromptResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.prompts = append(s.prompts, params.Text)
 	return &herdr.AgentPromptResult{
 		Type:  "agent_prompted",
 		Agent: herdr.Agent{Name: params.Target.String(), AgentStatus: s.status},

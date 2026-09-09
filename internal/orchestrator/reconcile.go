@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/tracker"
 	"github.com/maimuzo/continuo/internal/workspace"
@@ -99,6 +100,18 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		}
 		rs.setIssue(issue)
 
+		// **人間モードの出入りは、下の switch より前に1回で決める**（設計 3-82）。
+		// **`tracker.human_state` 以外へ動いたら、どの Status でも抜ける。**
+		// 抜けないと `stopWorker` の門が閉じたままになり、**`Done` へ動かしても
+		// pane が残り、worktree も片付かない。**
+		o.updateHumanMode(rs, issue)
+		if rs.inHumanMode() {
+			// **人間が引き取っている。何もしない**（設計 3-82）。
+			// **`clearExternalMove` も呼ばない。**外から動かされた記録は、
+			// 人間モードを抜けたあとの巡回が付け直す。
+			continue
+		}
+
 		switch {
 		case containsFold(o.cfg.Tracker.TerminalStates, issue.State):
 			// **書いたのがボードの自動化なら、turn の終わりを待つ**（設計 3-74）。
@@ -149,8 +162,50 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		}
 		o.logger.Warn("issue がカンバンから見えなくなったので印から外します（continuo は面倒を見ません）",
 			"identifier", rs.issue().Identifier)
+		// **人間モードの run は `stopAndReleaseAsync` が自分で断る**（設計 3-82）。
+		// **その1行が唯一の防波堤である。**この WARN は出るが、pane も印も残る。
 		o.stopAndReleaseAsync(ctx, rs)
 	}
+}
+
+// updateHumanMode は、取り直した Status で人間モードの出入りを決める（設計 3-82）。
+//
+//	tracker.human_state になった       … 人間モードへ入る（turn を送らず、pane も閉じない）
+//	tracker.human_state 以外になった   … 人間モードを抜ける
+//	抜けた先が active_states           … 続きの指示を送る印を立てる（**同じ pane・同じセッション**）
+//
+// **`tracker.human_state` が空なら1バイトも効かない。**
+//
+// **抜ける判定を「`active_states` へ戻ったとき」に絞ってはならない。**絞ると、
+// `Done` へ動かしたときに印が立ったままになり、`stopWorker` の門が pane を守り続けて
+// **worktree も片付かない。**
+//
+// **抜けた直後に turn 数を数え直したりはしない。**上限（`agent.max_dispatch_turns`）は
+// 人間が2回切り替えるだけで外れてはならない。**上限に達したまま戻した issue は、
+// 1回目の指示で `failure_state` へ落ちる**（人間はそこから `dispatch_state` へ戻せば、
+// 新しい着手として数え直される）。
+//
+// rs: 対象の run。
+// issue: 取り直した issue。
+func (o *Orchestrator) updateHumanMode(rs *runState, issue tracker.Issue) {
+	if config.IsHumanState(o.cfg.Tracker, issue.State) {
+		if rs.enterHumanMode() {
+			o.logger.Info("人間が引き取りました（turn は送らず、pane も worktree も残します）",
+				"identifier", issue.Identifier, "状態", issue.State)
+		}
+		return
+	}
+	if !rs.leaveHumanMode() {
+		return
+	}
+	if containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
+		o.logger.Info("continuo の管理へ戻りました（同じ pane へ続きの指示を送ります）",
+			"identifier", issue.Identifier, "状態", issue.State)
+		rs.setNeedsPrompt()
+		return
+	}
+	o.logger.Info("人間モードを抜けました（作業中の Status ではないので、続きの指示は送りません）",
+		"identifier", issue.Identifier, "状態", issue.State)
 }
 
 // reconcileWorktrees は worktree を走査して身元ファイルを読み、Status を ID 指定で
@@ -319,6 +374,12 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
+		if snap.HumanMode {
+			// **人間が画面の前にいる**（設計 3-82）。**画面が止まっていても打ち切らない。**
+			// 打ち切ると `failure_state` へ落ちて Status が人間モードから外れ、
+			// **人間モードを抜けた次の巡回で pane が閉じる。**
+			continue
+		}
 		if snap.WaitingQuota {
 			// 枠が明けたら印を外す。**外す契機は「resets_at を過ぎたこと」だけである。**
 			if !snap.QuotaResetAt.IsZero() && !now.Before(snap.QuotaResetAt) {

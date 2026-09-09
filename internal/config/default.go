@@ -109,6 +109,10 @@ func DefaultConfig() *Config {
 			RunningState:      "In Progress",
 			DispatchState:     "Ready",
 			FailureState:      "Blocked",
+			// 人間が pane で直接続けている間だけ置く Status（設計 3-82）。
+			// **既定は空である。**空でなければボードに実在することを起動時に要求するので、
+			// 既定に名前を入れると、その選択肢を持たない全利用者の continuo が起動しなくなる。
+			HumanState:        "",
 			VerifyStatesEvery: 20,
 			// 知らない Status を見つけてから worker を止めるまでの猶予（設計 3-50）。
 			// **既定は10分。**turn 1回ぶんの表明を読めれば足りる長さにしてある。

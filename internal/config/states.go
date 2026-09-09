@@ -8,7 +8,12 @@ import (
 // KnownStates は continuo が意味を知っている Status 名をすべて返す（設計 3-50 / 3-55）。
 //
 // **`active_states` / `terminal_states` / `running_state` / `dispatch_state` /
-// `failure_state` / `status_signal_map` の遷移先**を、書かれた順に集める。
+// `failure_state` / `human_state` / `status_signal_map` の遷移先**を、書かれた順に集める。
+//
+// **`human_state` は空でなければ入れる**（設計 3-82）。**入れないと、その Status へ
+// 動かされた issue が「知らない Status」として扱われ、猶予のあとで worker が止まる
+// （＝pane が閉じてチャットが切れる）。**あわせて、起動時にボードへ実在することも
+// この一覧が要求する。
 //
 // **`automated_state_rewrite` は、キーも値もここへ入れない**（設計 3-54 / 3-55）。
 //
@@ -56,6 +61,7 @@ func KnownStates(cfg TrackerConfig) []string {
 	add(cfg.RunningState)
 	add(cfg.DispatchState)
 	add(cfg.FailureState)
+	add(cfg.HumanState)
 	// **map の反復順に頼らない。**遷移先を読んだ順で並べると、実行のたびに出力が変わる。
 	// この一覧は起動時の照合のメッセージと issue のコメントにそのまま載る。
 	for _, target := range sortedSignalTargets(cfg.StatusSignalMap) {
@@ -113,6 +119,27 @@ func NamedStates(cfg TrackerConfig) []string {
 		out = append(out, from)
 	}
 	return out
+}
+
+// IsHumanState は、その Status が「人間が pane で直接続けている」を表すかを返す（設計 3-82）。
+//
+// **判定をこの1箇所に置く。**呼ぶ側で書くと、前後の空白の扱いが場所ごとにずれる。
+//
+// **`human_state` が空文字か空白だけなら、常に偽である。**空白だけを書いた設定で
+// 前後の空白を落として比べると、**Status が未設定の item に一致してしまう**
+// （巡回は `issue.State` が空の場合を明示的に扱っている）。
+//
+// **比べ方は SPEC.md 11.3 に合わせる**（大文字小文字と前後の空白を無視する）。
+//
+// cfg: WORKFLOW.md の front matter の tracker セクション。
+// state: 判定する Status 名。
+// 戻り値: 人間が引き取っている Status なら true。
+func IsHumanState(cfg TrackerConfig, state string) bool {
+	want := strings.TrimSpace(cfg.HumanState)
+	if want == "" {
+		return false
+	}
+	return strings.EqualFold(want, strings.TrimSpace(state))
 }
 
 // RewriteKeysOutsideBoard は `tracker.automated_state_rewrite` のキーのうち、

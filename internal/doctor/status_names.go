@@ -24,6 +24,8 @@ const (
 	stateOriginDispatchState = "tracker.dispatch_state"
 	// stateOriginFailureState は `tracker.failure_state` に書いた名前である。
 	stateOriginFailureState = "tracker.failure_state"
+	// stateOriginHumanState は `tracker.human_state` に書いた名前である（設計 3-82）。
+	stateOriginHumanState = "tracker.human_state"
 	// stateOriginStatusSignalMap は `tracker.status_signal_map` の遷移先に書いた名前である。
 	stateOriginStatusSignalMap = "tracker.status_signal_map"
 	// stateOriginAutomatedStateRewrite は `tracker.automated_state_rewrite` の**キー**
@@ -166,6 +168,10 @@ func configuredStates(cfg config.Config) []configuredState {
 	add(stateOriginRunningState, cfg.Tracker.RunningState)
 	add(stateOriginDispatchState, cfg.Tracker.DispatchState)
 	add(stateOriginFailureState, cfg.Tracker.FailureState)
+	// **`tracker.human_state` も含める**（設計 3-82）。空なら `add` が捨てる。
+	// **足さないと、綴りを取り違えた人の `continuo doctor` は緑のままなのに、
+	// 起動だけが「Status の選択肢名が設定と一致しません」で止まる。**
+	add(stateOriginHumanState, cfg.Tracker.HumanState)
 	// **map の反復順に頼らない。**遷移先を読んだ順で並べると、実行のたびに出力が変わる。
 	signals := make([]string, 0, len(cfg.Tracker.StatusSignalMap))
 	for signal := range cfg.Tracker.StatusSignalMap {

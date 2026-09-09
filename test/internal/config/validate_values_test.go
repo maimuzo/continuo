@@ -188,6 +188,133 @@ func TestValidate_書き戻しの対応表は空でも書いてあっても通�
 	}
 }
 
+// TestValidate_人間モードのStatusが他の役割と重なったら弾く は、設計 3-82 の検査を確かめる。
+//
+// **`tracker.human_state` は「人間が pane で直接続けているあいだだけ置く Status」である。**
+// **他の役割と重なると、その役割か人間モードのどちらかが黙って壊れる。**
+// たとえば `failure_state` と同じにすると、**打ち切った run の pane が1つも閉じなくなり、
+// `agent.max_concurrent_agents` の枠が永久に空かない。**
+//
+// 目的: 重なりを起動する前に弾き、**どのキーと重なったのかをエラーに入れること。**
+// 与える情報: `human_state` の1行だけを差し替えた WORKFLOW.md。
+// 成功条件: エラーになり、`tracker.human_state` と、重なった相手のキー名が文面に入っていること。
+func TestValidate_人間モードのStatusが他の役割と重なったら弾く(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		line string
+		want string
+	}{
+		{"作業中の Status と同じ", `  human_state: "In Progress"`, "tracker.active_states"},
+		{"完了の Status と同じ", `  human_state: "Done"`, "tracker.terminal_states"},
+		{"着手待ちの Status と同じ", `  human_state: "Ready"`, "tracker.active_states"},
+		{"打ち切りの落とし先と同じ", `  human_state: "Blocked"`, "tracker.failure_state"},
+		{"表明の遷移先と同じ", `  human_state: "In Review"`, "tracker.status_signal_map"},
+		// **大文字小文字が違うだけでも重なりである**（Status の照合は SPEC.md 11.3 で
+		// 大文字小文字と前後の空白を無視する）。完全一致で見ていると、ここだけ素通りする。
+		{"綴りの大文字小文字だけが違う", `  human_state: "in progress"`, "tracker.active_states"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := loadWithReplaced(t, "human_state", tc.line)
+			if err == nil {
+				t.Fatalf("%s を弾いていない", tc.name)
+			}
+			if !strings.Contains(err.Error(), "tracker.human_state") {
+				t.Errorf("どのキーが悪いか分からない: %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("何と重なったのか分からない（%s が欲しい）: %v", tc.want, err)
+			}
+		})
+	}
+}
+
+// TestValidate_人間モードのStatusは空でも別の名前でも通る は、既定と正しい設定を守る。
+//
+// **既定は空である。**空でなければボードに実在することを起動時に要求するので、
+// **既定に名前を入れると、その選択肢を持たない全利用者の continuo が起動しなくなる。**
+//
+// 目的: 空のままと、他の役割と重ならない名前のどちらも通すこと。
+// 与える情報: `human_state` の1行だけを差し替えた WORKFLOW.md。
+// 成功条件: どちらもエラーにならないこと。
+func TestValidate_人間モードのStatusは空でも別の名前でも通る(t *testing.T) {
+	if err := loadWithReplaced(t, "human_state", `  human_state: ""`); err != nil {
+		t.Fatalf("空の human_state で起動が止まった: %v", err)
+	}
+	if err := loadWithReplaced(t, "human_state", `  human_state: "Human"`); err != nil {
+		t.Fatalf("重なりの無い human_state で起動が止まった: %v", err)
+	}
+}
+
+// TestKnownStates_人間モードのStatusは空でなければ知っているStatusになる は、
+// 設計 3-82 の「`config.KnownStates` に入れる」を確かめる。
+//
+// **入れないと「知らない Status」として扱われ、猶予のあとで worker が止まる**
+// （＝pane が閉じてチャットが切れる）。**入れたことで、起動時にボードへ実在することも
+// この一覧が要求する**（`requiredStatesForBootstrap`）。
+//
+// 目的: 空なら1件も増やさず、書いてあれば1件増やすこと。
+// 与える情報: `human_state` が空の設定と、`Human` を書いた設定。
+// 成功条件: 空では含まれず、書いてあれば含まれること。
+func TestKnownStates_人間モードのStatusは空でなければ知っているStatusになる(t *testing.T) {
+	cfg := config.DefaultConfig().Tracker
+	for _, s := range config.KnownStates(cfg) {
+		if s == "Human" {
+			t.Fatalf("human_state が空なのに知っている Status に入っている: %v", config.KnownStates(cfg))
+		}
+	}
+	// **空白だけの値も入れない。**入れるとボードに存在しない選択肢を起動時に要求する。
+	cfg.HumanState = "   "
+	if got := len(config.KnownStates(cfg)); got != len(config.KnownStates(config.DefaultConfig().Tracker)) {
+		t.Errorf("空白だけの human_state を数えた: %v", config.KnownStates(cfg))
+	}
+
+	cfg.HumanState = "Human"
+	found := false
+	for _, s := range config.KnownStates(cfg) {
+		if s == "Human" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("human_state が知っている Status に入っていない: %v", config.KnownStates(cfg))
+	}
+}
+
+// TestIsHumanState_空白だけの値はどのStatusにも一致しない は、設計 3-82 の判定を確かめる。
+//
+// **`human_state: "  "` を書いた設定で前後の空白を落として比べると、
+// Status が未設定（空文字）の item に一致してしまう。**巡回は Status が空の場合を
+// 明示的に扱っているので、そこへ人間モードが混ざると、**ボードから Status が消えた issue が
+// 「人間が引き取っている」ものとして扱われ、continuo が永久に手を離す。**
+//
+// 目的: 空文字と空白だけの `human_state` では、常に偽を返すこと。
+// 与える情報: 空・空白だけ・正しい名前の3通り。
+// 成功条件: 前2つは何と比べても偽、3つ目は前後の空白と大文字小文字を無視して真。
+func TestIsHumanState_空白だけの値はどのStatusにも一致しない(t *testing.T) {
+	cfg := config.DefaultConfig().Tracker
+
+	cfg.HumanState = ""
+	if config.IsHumanState(cfg, "") || config.IsHumanState(cfg, "Human") {
+		t.Error("human_state が空なのに一致した")
+	}
+
+	cfg.HumanState = "   "
+	if config.IsHumanState(cfg, "") {
+		t.Error("空白だけの human_state が、Status 未設定の item に一致した")
+	}
+	if config.IsHumanState(cfg, "   ") {
+		t.Error("空白だけの human_state が一致した")
+	}
+
+	cfg.HumanState = "Human"
+	if !config.IsHumanState(cfg, " human ") {
+		t.Error("前後の空白と大文字小文字を無視していない（SPEC.md 11.3）")
+	}
+	if config.IsHumanState(cfg, "In Progress") {
+		t.Error("別の Status に一致した")
+	}
+}
+
 // TestValidate_running_stateはactive_statesに入っていること は、整合の検査を確かめる。
 //
 // **`running_state` は「着手したときに書く Status」である。**

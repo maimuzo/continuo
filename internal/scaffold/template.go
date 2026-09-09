@@ -80,6 +80,13 @@ tracker:
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
+  human_state: ""                           # 人間が pane に入って直接エージェントと話すあいだだけ置く Status。
+                                            # ここへ動かすと continuo は指示を送らず、応答の1行も読まず、
+                                            # pane を閉じず worktree も消さない。上の active_states へ戻すと、
+                                            # 同じ pane のまま続きの指示を送る。
+                                            # 使うなら、カンバンの画面で Status の選択肢を1つ足してから、その名前を書くこと
+                                            # （API で足すと設定済みの Status が全部消える）。
+                                            # 空なら、この機能は使わない。選択肢を足す必要も無い
   verify_states_every: 20                   # 上に書いた Status 名がカンバンに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
   unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。

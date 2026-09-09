@@ -887,6 +887,15 @@ func (o *Orchestrator) wakeRuns(ctx context.Context) {
 		if rs.isFinished() {
 			continue
 		}
+		// **人間が引き取っている run は起こさない**（設計 3-82）。
+		//
+		// **担当の確認より前に置くことが要である。**あとに置くと、
+		// `handoffLostOnResume` が「担当が自分でない」と判定した瞬間に
+		// `stopBecauseHandoffLost` が走る。**人間がチャットしながら自分を
+		// 担当者に付けるのは普通の操作であり、そこで画面が消える。**
+		if rs.inHumanMode() {
+			continue
+		}
 		// **turn を送る前に、担当がこの機械のままかを1回だけ確かめる**（設計 3-77c）。
 		// **効くのは復元した run と、この機能より前に着手した run だけである。**
 		// **確かめずに送ると、担当が既に移っていても丸ごと1回ぶん働く**（`after_run` も走る）。
@@ -1136,6 +1145,20 @@ func (o *Orchestrator) OnHook(ev hookserver.HookEvent) bool {
 	}
 
 	if !isTurnBoundaryHook(ev) {
+		return true
+	}
+	// **人間モードでは受け口へ流さない**（設計 3-82）。
+	//
+	// **読む者が居ない。**turn ループは人間モードでは走らないので、流しても溜まるだけである。
+	// 受け口は256件で埋まり、**人間が話しかけるたびに「あふれたので捨てました」の WARN が
+	// 1行ずつ出てログが埋まる。**
+	//
+	// **捨てても turn の終わりの判定は壊れない。**`beginTurn` は turn を送る直前に
+	// `stopSeenAt` と `hookSeenThisTurn` を消し、受け口も空にする。**戻したあとの
+	// 1回目の判定は、人間が話していた間の hook を1件も見ない。**
+	if rs.inHumanMode() {
+		o.logger.Debug("人間が引き取っているので、turn の終わりの判定に使う hook は流しません",
+			"identifier", rs.issue().Identifier, "hook", ev.HookEventName)
 		return true
 	}
 	select {

@@ -105,9 +105,22 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 	waitCtx, waitCancel := context.WithCancel(ctx)
 	defer waitCancel()
 	defer context.AfterFunc(rs.workerStopContext(), waitCancel)()
+	// **人間が引き取ったら、herdr の待ちだけをやめる**（設計 3-82）。
+	// **`pane.close` は呼ばない。**呼ぶと、人間が話している画面が消える。
+	// **読むのはここで1回だけである。**このあと `leaveHumanMode` が張り直したものは、
+	// 次に立つ turn ループが読む。
+	defer context.AfterFunc(rs.humanPauseContext(), waitCancel)()
 
 	for {
 		if ctx.Err() != nil || !rs.currentWorker(epoch) {
+			return
+		}
+		// **人間モードでは1文字も送らない**（設計 3-82）。
+		// **`max_dispatch_turns` の判定より前に置く。**あとに置くと、上限に達している run が
+		// `finishRun(failure_state)` へ落ちて pane を閉じにいく。
+		if rs.inHumanMode() {
+			o.logger.Info("人間が引き取っているので turn を送りません（pane は閉じません）",
+				"identifier", rs.issue().Identifier)
 			return
 		}
 
@@ -175,6 +188,16 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 		// ここで諦めると RetryCount を無駄に消費し、引き渡しのコメントまで投稿される。
 		if ctx.Err() != nil {
 			o.logger.Debug("止められたので、この run はそのままにします（次の起動で引き継ぎます）",
+				"identifier", snap.Identifier)
+			return
+		}
+		// **待っている間に人間が引き取った**（設計 3-82）。**run は諦めない。pane も閉じない。**
+		//
+		// **`switch outcome` より手前に置くことが要である。**あとに置くと、
+		// `turnBlocked` が esc を送って `finishRun(failure_state)` を呼び、
+		// `turnStalled` / `turnSendFailed` が `abandonRun` を呼ぶ。**どれも pane を閉じる。**
+		if rs.inHumanMode() {
+			o.logger.Info("待っている間に人間が引き取ったので、この turn は終わりにします（pane は閉じません）",
 				"identifier", snap.Identifier)
 			return
 		}
