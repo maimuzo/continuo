@@ -9071,11 +9071,13 @@ sequenceDiagram
 
 | 何を測るか | 偽だったら何が崩れるか |
 | --- | --- |
-| **GraphQL の `addComment` で投稿したコメントに、画面の attribution が出るか**（偽だったときの逃げ道は下に書く） | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
-| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだにエージェントが `continuo github-app token` を何度も叩いて回す**（3-82d）。**無効になるなら、本体は投稿のたびに 401 を受け、資格情報を読み直してトークンを取り直し、1回だけ再送する**（3-82d）。
-**投稿は通る。****落ちるのではなく、更新用のトークンの回転が投稿の件数ぶん増える。**
-**書き戻しの直前で落ちる機会が、そのぶん増える。**
-**この門は「止める」ためではなく、回転の見積りを直すために測る。****測り方は、更新を1回通したあと、更新前のトークンで `GET /user` を叩いて 200 が返るかを見るだけである** |
+| **~~GraphQL の `addComment` で投稿したコメントに、画面の attribution が出るか~~** | **2026-09-09 に測った。出た。**（下の「画面に実際に出るもの」）。**これで、continuo 本体の GraphQL の投稿も、エージェントの `gh issue comment` も、どちらも画面で見分けられることが確かめられた** |
+| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **無効になるなら、本体は投稿のたびに 401 を受け、資格情報を読み直してトークンを取り直し、1回だけ再送する**（3-82d）。**投稿は通るが、更新用のトークンの回転が投稿の件数ぶん増える** |
+
+**2つ目の測り方。**更新を1回通したあと、**更新前のアクセストークンで `GET /user` を叩いて 200 が返るかを見るだけである。**
+**この門は「止める」ためではなく、回転の見積りを直すために測る。**
+**本体は8時間ぶんをメモリに持ち続け、そのあいだにエージェントが `continuo github-app token` を何度も叩いて回す**（3-82d）ので、
+**無効になるなら、書き戻しの直前で落ちる機会がそのぶん増える。**
 
 **1つ目が偽だったときに、何をするか。**この設計の土台なので、偽のときの分岐を先に決めておく。
 
@@ -9124,13 +9126,26 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 #### 画面に実際に出るもの
 
-**2026-09-08。REST で投稿した2件を、人間が画面で確かめて書き写した。**
-**GraphQL で投稿した1件は、この表に入っていない。**上の「実装の前に測ること」の1つ目がそれである。
+**2026-09-08 に REST の2件を、2026-09-09 に GraphQL の1件を、画面を開いて読み取った。**
 
 | どちらの経路で書いたか | 画面に並ぶもの |
 | --- | --- |
-| **人間の代理（採る）** | **人間本人のログイン名** / **`– with <GitHub App の表示名>`** / **`Author`** |
-| GitHub App 自身（採らない） | `<GitHub App の slug>` / **`bot`** / **`– with <GitHub App の表示名>`** |
+| **人間の代理（採る）× REST** | **人間本人のログイン名** / **`– with <GitHub App の表示名>`** / **`Author`** |
+| GitHub App 自身（採らない）× REST | `<GitHub App の slug>` / **`bot`** / **`– with <GitHub App の表示名>`** |
+| **GitHub App 自身 × GraphQL**（`gh issue comment`） | **同じ。**`<slug>` / `bot` / **`– with <GitHub App の表示名>`** |
+| **人間の代理 × GraphQL** | **測っていない**（下） |
+
+**GraphQL でも画面に出る。**これが、エージェントに `gh issue comment` をそのまま使わせてよい根拠である。
+**`gh issue comment` は GraphQL の `addComment` を叩く。**
+
+**人間の代理 × GraphQL の1マスだけ、測っていない。**
+検証用の資格情報に `client_secret` が入っておらず、更新用のトークンを回せないためである。
+**画面の表示は `performed_via_github_app` から描かれ、その欄は経路によらず同じ値が入ることを測ってある**（上の表）。
+**だから残る1マスも出ると考えるが、これは推測である。**
+
+**編集しても消えないことも、画面で確かめた**（2026-09-09）。
+人間の代理として投稿し、あとから編集したコメントに、
+**`– with <GitHub App の表示名>` と `Last edited by <人間のログイン名>` が両方出ていた。**
 
 **両方に `– with <GitHub App の表示名>` が付く。****これが、人間が画面で見分ける手がかりである。**
 
@@ -10046,8 +10061,14 @@ sequenceDiagram
 | **issue のコメント**（新しく投稿する） | **6本** | **掛ける** |
 | **issue のコメント**（既存への書き足し） | 2本 | **掛けない**（3-82d） |
 | pull request の作成（[internal/prompt/builtin.md:241](../prompt/builtin.md#L241)） | 1本 | **掛けない。**GitHub App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ |
-| pull request のコメント（[internal/prompt/builtin.md:274](../prompt/builtin.md#L274)） | 1本 | **いまは掛けない。****ただし `Issues` の権限で通るかを測っていない**（下） |
+| pull request のコメント（[internal/prompt/builtin.md:274](../prompt/builtin.md#L274)） | 1本 | **掛けない。**`Issues` の権限だけでは通らないことを実測した（下） |
 | **Go が組み立てる書かせ直し**（[internal/orchestrator/prompt.go:115](../../internal/orchestrator/prompt.go#L115) の `buildCommentRequestPrompt`） | 1本 | **掛ける**（下） |
+
+**pull request のコメントに掛けられないことは、実測した**（2026-09-09）。
+`issues: write` と `metadata: read` だけを与えた GitHub App のトークンで `gh pr comment` を叩くと、
+**終了コード 1 で落ち、`GraphQL: Resource not accessible by integration (repository.pullRequest)` が返る。**
+**`gh pr comment` は GraphQL で `repository.pullRequest` を引くので、`Pull requests` の読み取りが要る。**
+**掛けるには権限を足すことになり、人間の決定に反する**（3-82b）。
 
 **7本目は、Go が組み立てて送る「書かせ直し」の指示である。**
 [internal/orchestrator/prompt.go:115-118](../../internal/orchestrator/prompt.go#L115-L118) の `buildCommentRequestPrompt` が
