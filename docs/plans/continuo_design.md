@@ -9033,7 +9033,9 @@ turn の終わりと同じでなければならないので、それでは足り
 | 何を測るか | 偽だったら何が崩れるか |
 | --- | --- |
 | **GraphQL の `addComment` で投稿したコメントに、画面の attribution が出るか**（偽なら、本体の投稿も REST へ移す。`continuo comment` が REST を採った理由は `Adapter` がカンバンの設定を要ることで、本体には当たらない） | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
-| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだに `continuo comment` が何度も回す**（3-82d）。**無効になるなら、エージェントの最初の1件で本体のトークンが死ぬ。**hold が落ちて `undoHandoffAcquire` が走り、**1件も dispatch されなくなる**（3-82c）。**測り方は、更新を1回通したあと、更新前のトークンで `GET /user` を叩いて 200 が返るかを見るだけである** |
+| **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだに `continuo comment` が何度も回す**（3-82d）。**無効になるなら、エージェントの最初の1件で本体のトークンが死ぬ。**
+**人間が画面で読むコメント（Status を動かした記録・着手の門の案内・dispatch の案内・復元の案内ほか）が、そこから先ぜんぶ落ちる**（3-82c の表）。
+**持ち回りと引き渡しの通知は1本目なので落ちない。****測り方は、更新を1回通したあと、更新前のトークンで `GET /user` を叩いて 200 が返るかを見るだけである** |
 
 #### 採る経路
 
@@ -9109,7 +9111,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | 何が壊れるか | どう壊れるか |
 | --- | --- |
 | **投稿者を見ている判定が全部外れる** | 成果の判定（[internal/tracker/adapter.go:1164](../../internal/tracker/adapter.go#L1164)）・持ち回りの入札（[internal/orchestrator/handoff.go:364](../../internal/orchestrator/handoff.go#L364)）・死活の時計（[internal/handoff/assess.go:364](../../internal/handoff/assess.go#L364)）。**どれも `viewer.Login` は人間のままなので、突き合わせが永久に外れる** |
-| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか5箇所） |
+| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか7箇所） |
 
 **入札の壊れ方がいちばん直しにくい。**3-77-0 が識別子を投稿者から取る理由を、こう書いている。
 
@@ -9139,7 +9141,10 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **4つ目には、`continuo comment` という手段を用意する。**
 **そのセッションも同じサブコマンドを叩けるので、 attribution を付けられる。**
-**[docs/FAQ.md](../FAQ.md) で「continuo の外で走るセッションから issue へ書くときは、`continuo comment` を使ってください」と案内する。**
+**[docs/FAQ.md](../FAQ.md) で案内する。**
+**「`~/.continuo/github-app-credentials.json` を置いてある人は、continuo の外で走るセッションからも `continuo comment` を使えます」と書く。**
+**条件を落としてはならない。**資格情報を作る経路は別の issue なので、
+**この設計が入った時点では、資格情報を持つ利用者が1人も居ない。**
 
 **強制はしない。**そのセッションは continuo の設定を読まないので、機械で止める手段が無い。
 **「範囲外」ではなく「手段は在るが強制しない」である。**
@@ -9330,9 +9335,23 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | 何 | どちらで書くか | なぜ |
 | --- | --- | --- |
-| **成果報告・引き渡しの通知・Status を動かした記録・着手の門の案内・dispatch の案内・復元の案内** | **2本目** | **人間が画面で読むコメントである** |
+| **Status を動かした記録**（[internal/orchestrator/comment.go:504](../../internal/orchestrator/comment.go#L504) の `postStatusMove`） | **2本目** | **人間が画面で読む** |
+| **着手の門の案内・dispatch の案内・復元の案内**（[internal/orchestrator/gate.go:313](../../internal/orchestrator/gate.go#L313)・[dispatch.go:705](../../internal/orchestrator/dispatch.go#L705)・[restore.go:934](../../internal/orchestrator/restore.go#L934)） | **2本目** | 同じ |
+| **カンバンに載っていなかった・別の run が担当中だった・worktree を残した**（[internal/orchestrator/lifecycle.go:435](../../internal/orchestrator/lifecycle.go#L435)・[467行](../../internal/orchestrator/lifecycle.go#L467)・[1058行](../../internal/orchestrator/lifecycle.go#L1058)） | **2本目** | 同じ |
+| **引き渡しの通知**（[internal/orchestrator/lifecycle.go:1161](../../internal/orchestrator/lifecycle.go#L1161) の `postHandoffComment`） | **1本目** | **これが「止まった理由」を運ぶ唯一の経路である**（下） |
 | **持ち回りの3種**（入札・hold・released） | **1本目** | **機械どうしの取り決めで、指示書が「読み飛ばします」と書いている** |
-| **止まった理由** | **1本目** | **2本目が取れないことが原因で止まるので、2本目では書けない** |
+
+**この12箇所で全部である。**表に無い口は無い。
+**continuo は成果を代筆しない**（[internal/orchestrator/lifecycle.go:1104](../../internal/orchestrator/lifecycle.go#L1104) の
+「**成果の要約は書かない**（設計 3-29）」）**ので、成果報告はこの表に入らない。**
+
+**引き渡しの通知を1本目で書く理由。**
+**「止まった理由」を書く口は、`postHandoffComment` の1本しか無い。**
+**呼び出しは8件あるが、どれも同じ [internal/orchestrator/lifecycle.go:1161](../../internal/orchestrator/lifecycle.go#L1161) の
+`o.postComment` へ落ちる**（`grep -c 'postHandoffComment(' internal/orchestrator/*.go` で数えた）。
+**呼び出し箇所ごとに分けることはできない。**
+**2本目で書くと、App のトークンが取れずに止まった run では、理由も書けずに何も残らない。**
+**attribution は付かないが、`<!-- continuo:self -->` は付くので、機械が書いたことは従来どおり判定できる。**
 
 **止まり方は、経路で違う。**
 
@@ -9341,7 +9360,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **起動時に取れない** | **起動しない。**人間が「エラーで停止して良い」と決めた |
 | **走行中に取れなくなった** | **理由を issue へ1件書いて、その run を `blocked` にする。**カンバンは止めない |
 | **持ち回りの入札と released** | **止めない。**[internal/orchestrator/handoff.go:317-318](../../internal/orchestrator/handoff.go#L317-L318) が既にそう決めている |
-| **hold** | **その issue の着手だけ見送る。**[internal/orchestrator/handoff.go:408-429](../../internal/orchestrator/handoff.go#L408-L429) の `undoHandoffAcquire` が走る。**次の巡回で、いままでの1本目で書けるなら着手できる** |
+| **hold** | **落ちない。**1本目で書くので、App のトークンが取れなくても影響しない |
 
 **hold を1本目で書いてよい。**
 **持ち回りのコメントは機械どうしの取り決めで、人間が画面で読むものではない**
@@ -9368,6 +9387,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **`Label` の定数と i18n のキーも足す**（[internal/doctor/report.go:20](../../internal/doctor/report.go#L20) が全項目を定数で持つ）。
 
 **更新用のトークンの残りは、起動時と巡回時にも見る。**30日を切っていたら WARN を1行出す。
+**ただし1日1回までにする。**巡回の既定は30秒なので（[internal/config/default.go:142-143](../../internal/config/default.go#L142-L143)）、
+**毎巡回で出すと30日で8万行を超え、本当に読みたい WARN が埋もれる。**
 **doctor でしか見ないと、doctor を叩かない利用者が181日後に突然止まる。**
 
 **install がカンバンの全リポジトリに及ぶかは、どこでも検査しない。**
@@ -9483,9 +9504,10 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | どのクライアントか | 何に使うか | トークン |
 | --- | --- | --- |
 | いままでの1本 | **カンバンの読み書き、コメントの取得** | `tracker.provider.token_source` |
-| **足す1本** | **`PostComment` の全部** | **App の資格情報から取る** |
+| **足す1本** | **`useAppToken` が真のときの `PostComment`** | **App の資格情報から取る**（どれを真にするかは 3-82c の表） |
 
 **`github_app_attribution` が `false` なら、2本目を作らない。**
+**そのとき `useAppToken` が真で呼ばれても、1本目で書く。**エラーにしない。
 
 **2本目は、期限までメモリで使い回し、切れる5分前に作り直す。**
 **`Adapter` が2本目とその期限を持つ。**
@@ -9521,10 +9543,11 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 > このアクセストークンはファイルには出力しない。
 （2026-09-08）
 
-#### 資格情報を作るのは、この設計ではない
+#### 資格情報を新しく作るのは、この設計ではない
 
 **`~/.continuo/github-app-credentials.json` を作る経路は、別の issue が受け持つ。**
-**この設計は、そのファイルを読むだけである。**
+**この設計は、そのファイルを読み、更新用のトークンを回すたびに書き戻す。**
+**新しく作る経路だけが、別の issue である。**
 **そちらが出るまで、`github_app_attribution` を `true` にできる人は居ない。**
 **既定が `false` なので、それで1つも壊れない。**
 
@@ -9570,9 +9593,14 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 `gh issue comment` を文字列として組み立て、**エージェントが成果を書かずに turn を終えたときに送る**
 （[internal/orchestrator/comment.go:263](../../internal/orchestrator/comment.go#L263) の段7）。
 **ここも分岐させる。**
-**分岐させないと、App のトークンが取れずに `blocked` で返した run で、
-continuo 自身が「`gh issue comment` で書いてください」と送ることになる。**
-**attribution の付かない機械のコメントが、まさにその run で必ず1件できる。**
+**分岐させるのは、エージェントが成果を書き忘れた run のためである。**
+**そこは App のトークンが生きているので、`continuo comment` で書かせれば attribution が付く。**
+**分岐させないと、通常の書かせ直しで attribution の付かないコメントが1件できる。**
+
+**App のトークンが取れずに `blocked` で返した run では、話が別である。**
+**そこでは `continuo comment` も落ちるので、`gh issue comment` へ落として書かせる。**
+**attribution は付かないが、この設計は「attribution が無いコメントを1件も作らない」までは求めていない**（3-82c）。
+**エージェントが何をしたかが1文字も残らないほうが重い。**
 
 **6本目は、設計レビューの判断票である。**
 [internal/prompt/builtin.md:173-195](../prompt/builtin.md#L173-L195) は本文の形しか書いておらず、**投稿するコマンドが1行も無い。**
@@ -9582,11 +9610,33 @@ issue でいちばん人目に付く。**
 
 **足す形。**判断票の節へ、`{{if}}` 付きの投稿のコマンドを1本新設する。
 
+    cat > judgement.md <<'JUDGE'
+    <!-- continuo:agent -->
+    <!-- design-review-result -->
+    ## レビューの判断票（計画）
+    …
+    JUDGE
     {{if .github_app_attribution}}
     {{.continuo.command}} comment --issue <URL> --body-file judgement.md
     {{else}}
     gh issue comment <URL> --body-file judgement.md
     {{end}}
+
+**`cat > judgement.md` の段を落としてはならない。**
+**計画と成果は既にこの形で書いている**（[internal/prompt/builtin.md:143](../prompt/builtin.md#L143) と [302行](../prompt/builtin.md#L302)）。
+**落とすと、存在しないファイルを渡して投稿が必ず落ち、CI が永久に赤になる。**
+
+#### 5-3 段2b は、塊ごと複製する
+
+**[internal/prompt/builtin.md:437](../prompt/builtin.md#L437) は複数行の `--body "` を持つ。**
+**コマンド名だけを差し替えると、`gh issue comment{{end}}` になって末尾の空白が消え、
+[test/internal/prompt/progress_comment_test.go:214](../../test/internal/prompt/progress_comment_test.go#L214) の
+`strings.Contains(line, "gh issue comment ")` に当たらない。**
+**232行の `t.Fatal` で落ちる。**
+
+**だから `{{if}}/{{else}}` で塊ごと複製する。**
+**真の枝は `strings.Contains` に当たらず、偽の枝が従来どおり検査される。**
+**両方の枝で、行頭を1桁も動かさない。**
 
 #### 7-2 の2本だけ、関数にする
 
@@ -9633,7 +9683,10 @@ issue でいちばん人目に付く。**
 **後者は `Orchestrator` を持たないので、そこで `os.Executable()` を叩いて `shellQuote` を通す。**
 
 **`shellQuote` は [internal/orchestrator/settings.go:425](../../internal/orchestrator/settings.go#L425) の小文字始まりなので、
-共通の場所へ移して export する。****写しを作ってはならない。**
+`internal/shellquote` を新設して移す。****写しを作ってはならない。**
+**使う側は3つある**（hook のコマンド行・`internal/prompt` の `RenderData`・`internal/cli` の `continuo prompt --show`）。
+**`internal/orchestrator` の下へ置くと、`internal/cli` から呼べない。**
+**新しい package は hook の門の網に掛からない。**
 
 **`internal/prompt/builtin.md` を直したら、5-3 の写しも同じ commit で直す。**
 [test/internal/scaffold/design_template_test.go:100-102](../../test/internal/scaffold/design_template_test.go#L100-L102) が1行ずつ比べている。
@@ -9644,6 +9697,10 @@ issue でいちばん人目に付く。**
 **両方の枝で真になる形へ直す。**
 
 > **手元の絶対パスを書かないでください。**縮める処理が通らない経路があります。
+
+**同じ前提が [test/internal/prompt/group_comment_test.go:75-76](../../test/internal/prompt/group_comment_test.go#L75-L76) の
+`why` にも書かれている**（「手元の絶対パスは、エージェントが直接書くコメントでは縮められません」）。
+**判定には効かない**（`needle` は `相対パス`）**が、同じ commit で直す。**
 
 **`{{if}}` で分けない。**分けると、既定の `false` の利用者にだけ
 「新しい投稿は縮まる」と読める文が届く（`false` では新しい投稿も `gh` を直に叩くので縮まらない）。
@@ -9675,7 +9732,8 @@ issue でいちばん人目に付く。**
 [internal/orchestrator/orchestrator.go:778-783](../../internal/orchestrator/orchestrator.go#L778-L783) の `ghLoginDue` は
 **`o.selfLogin != ""` なら false を返す。****一度取れたら、そのあとは1回も走らない。**
 `ghLoginRetryInterval` の5分は「**まだ取れていないあいだ**」だけの間隔である。
-同じ関数の GoDoc が「**取れたら、そのあとは取り直さない。**持ち主が変わるのは `gh auth switch` を人間が叩いたときだけで、
+[internal/orchestrator/orchestrator.go:735-736](../../internal/orchestrator/orchestrator.go#L735-L736) の
+`ensureGHLogin` の GoDoc が「**取れたら、そのあとは取り直さない。**持ち主が変わるのは `gh auth switch` を人間が叩いたときだけで、
 その操作は continuo を止めずに行うものではない」と書いている。
 
 **周期を新設しない。**新設すると、30秒の巡回のなかで `gh` の子プロセスを定期的に起こすことになり、
