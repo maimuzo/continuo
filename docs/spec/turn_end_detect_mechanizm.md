@@ -234,8 +234,44 @@ match (state, seen) {
 **つまり「何秒黙っていたら idle」ではない。**
 
 **(二) どの規則にも当たらなかったときの既定値が `idle` である。**
-`src/detect/manifest.rs:565-573` の `fallback_explain` が、Claude と分かっている pane では `AgentState::Idle` を返す。
+`src/detect/manifest.rs:498` の `fallback_explain` が、Claude と分かっている pane では `AgentState::Idle` を返す
+（**`529-533` がその分岐**。tag `v0.8.2` で測り直した。2026-09-09。**以前この文書は `565-573` と書いていたが、
+そこは別の関数だった**）。
 **「本当にプロンプトが見えている `idle`」と「herdr が読めなかった `idle`」が、`agent.get` の戻り値では区別できない。**
+
+**(三) 判定表は herdr のバイナリに入っていない。**`https://herdr.dev/agent-detection/index.toml` から落ちてきて、
+`~/.local/state/herdr/agent-detection/remote/claude.toml` に置かれ、**そちらが優先される**
+（`src/detect/manifest_update.rs:16` の `DEFAULT_CATALOG_URL`、`src/main.rs:163-164` の `manifest_check`。既定で有効）。
+**つまり herdr の版を固定しても、判定の中身は変わる。**
+
+| 何 | 版 | ルールの本数 |
+| --- | --- | --- |
+| **0.8.2 のバイナリに同梱** | 2026.08.13.1 | 12本 |
+| **この機械でいま使われている** | **2026.09.04.1** | **16本** |
+
+**(四) 2026-09-04 より前は、サブエージェント待ち・bash の完了待ちで `idle` が返っていた。**
+**足された4本のうち3本が `working` を出すためのもので**（`live_turn_working` / `background_agents_working` /
+`background_mcp_task_working`）**、古い表には `working` を出せるルールが2本しか無かった。**
+**OSC のタイトルの回転記号が唯一の頼りで、それが取れない瞬間は `live_prompt_box`（idle）が勝っていた。**
+**人間が「サブエージェント待ちで idle になっているのをよく見る」と報告しており**（2026-09-09。issue #173）**、
+herdr 側が3本を足したこと自体が、その誤判定が実在した証拠である。**
+
+**(五) いまも `idle` に落ちる経路が5つ残っている。**
+
+| 経路 | 中身 |
+| --- | --- |
+| **OSC のタイトルが消える** | エージェントの process が変わると `clear_agent_osc_state()` が呼ばれる（`src/pane.rs:835`） |
+| **OSC のタイトルが上書きされる** | 保持するのは最後の1本だけ。**pane の中の別のプログラムが設定すると置き換わる** |
+| **作業中の行が末尾12行から外れる** | 2本のルールが見るのは `bottom_non_empty_lines(12)` だけ |
+| **Claude Code の表示の文言が変わる** | 3本とも文言の正規表現で当てている |
+| **遷移の保留が効かない** | `working` → `idle` の保留は最大700ミリ秒だが、条件が `!visible_idle` なので、**入力欄が見えている `idle` は保留されず即座に公開される**（`src/pane/agent_detection.rs:47-51`） |
+
+**(六) `done` は人間の視線で消える。**`done` は `(Idle, seen=false)` から作られるので、
+`agent.focus` / `pane.focus` を叩くか、**人間が herdr の画面でそのタブを見ると `idle` へ変わり、二度と戻らない**
+（`src/app/agents.rs:82`、`src/app/api/panes.rs:177`、`src/app/actions.rs:3110-3115`）。
+**そのとき `state_change_seq` は動かない**ので、変わったことにも気づけない。
+**continuo は `agent.focus` も `pane.focus` も叩いていない**（検索パターン `AgentFocus\|agent\.focus\|PaneFocus\|pane\.focus`、
+対象パス `internal/`、`_test.go` を除いて0件）。
 
 **長い1回のツール呼び出しで黙っている間は `working` のままである。**
 **実測（2026-09-08。herdr 0.8.2）：**測る pane で `go test` を1回叩かせながら、その pane の agent を2秒おきに60回読み、
@@ -366,6 +402,11 @@ $ herdr agent get continuo-continuo-173
 **(二) `omitempty` である**（`internal/herdr/types.go` の `json:"state_change_seq,omitempty"`）。
 **欄を返さない herdr の版では、全 agent が 0 として読まれる。**
 **0 を「変わっていない」と読むと、`revision` と同じ恒真へ戻る。**
+
+**pane の shell を作り直すと、その pane の連番だけが 0 へ戻る**
+（`src/terminal/state.rs:2061` の `clear_agent_runtime_identity_after_respawn` が
+`last_agent_state_change_seq` を `None` にし、API では 0 として出る。2026-09-09 に tag `v0.8.2` で確認）。
+**herdr 全体の再起動だけではない。**
 
 **herdr を再起動すると 0 から振り直される**（`src/app/mod.rs:487` と `src/app/state.rs:1059` の
 `next_agent_state_change_seq: 0`）。**continuo は再起動を検知できない。**
