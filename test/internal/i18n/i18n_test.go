@@ -425,7 +425,7 @@ func TestT_英語でも件数の順番が入れ替わらない(t *testing.T) {
 		!strings.Contains(got.Error(), "larger (4096 bytes) than the limit (1024 bytes)") {
 		t.Errorf("上限1024バイトに対して4096バイトだった場合の英文が違う: %v", got)
 	}
-	// internal/doctor/status_names.go は `T(key, 設定の場所, 設定の Status 名, ボードの選択肢, 理由)` の順で渡す。
+	// internal/doctor/status_names.go は `T(key, 設定の場所, 設定の Status 名, カンバンの選択肢, 理由)` の順で渡す。
 	got := target.T(i18n.KeyDoctorStatusNamesNote, "tracker.running_state", "In Progress", "In progress", "same")
 	if !strings.Contains(got, `"In Progress" in tracker.running_state`) {
 		t.Errorf("設定の場所と Status の名前が入れ替わっている: %q", got)

@@ -14,12 +14,12 @@
 
 | 言葉 | 何を指すか |
 | --- | --- |
-| **表明** | エージェントが応答の最後に書く `CONTINUO-STATUS: review` のような1行。continuo はこの行を読んで、ボードの Status を動かす |
+| **表明** | エージェントが応答の最後に書く `CONTINUO-STATUS: review` のような1行。continuo はこの行を読んで、カンバンの Status を動かす |
 | **turn** | continuo がエージェントへ指示を1つ送り、エージェントが応答し終えるまでの1往復 |
 | **run** | 1つの issue に対して continuo が面倒を見ている作業のまとまり。worktree・pane・Claude Code のセッションが1組ぶら下がる |
 | **印** | continuo が「この issue は自分が取った」と覚えている記録。プロセスのメモリの中にある `map` である |
-| **巡回** | `polling.interval_ms`（既定30秒）ごとに、ボードを読んで状態を突き合わせる処理 |
-| **ボード** | GitHub Projects v2 のプロジェクト1枚。continuo はこの Status フィールドを読み書きする |
+| **巡回** | `polling.interval_ms`（既定30秒）ごとに、カンバンを読んで状態を突き合わせる処理 |
+| **カンバン** | GitHub Projects v2 のプロジェクト1枚。continuo はこの Status フィールドを読み書きする |
 
 ## 一覧
 
@@ -27,7 +27,7 @@
 | --- | --- |
 | [表明の受け取り口](#表明の受け取り口) | turn が途中で止められると、エージェントが言おうとしていたことが誰にも読まれずに捨てられる |
 | [止める側と待つ側](#止める側と待つ側) | 巡回が pane を閉じても、待っている turn ループはそれを知らない |
-| [共有されたボード](#共有されたボード) | GitHub の組み込みの自動化もボードを書き換える。誰が書いたかは記録から引けるが、戻し先は設定に書いてもらうしかない |
+| [共有されたカンバン](#共有されたカンバン) | GitHub の組み込みの自動化もカンバンを書き換える。誰が書いたかは記録から引けるが、戻し先は設定に書いてもらうしかない |
 | [メモリの中の印](#メモリの中の印) | 「自分が取った」印は他の機械から見えない。2台で動かすと同じ issue を両方が取る |
 | [3つの Status の集合](#3つの-status-の集合) | 設定に Status の集合が3つあり、重なり方によっては終わっていない issue を片付ける |
 | [配り直せない雛形](#配り直せない雛形) | 雛形を直しても、既に動かしている人の `WORKFLOW.md` には届かない |
@@ -60,7 +60,7 @@ Claude Code が turn を終える
   → turn ループの confirmTurnEnd が Stop を確かめ、turnEnded を返す
   → handleTurnEnd が readSignals を呼ぶ
   → 会話の記録を開いて CONTINUO-STATUS: の行を拾う
-  → applySignals がボードの Status を書き込む
+  → applySignals がカンバンの Status を書き込む
 ```
 
 **この道に入らない終わり方が5つあります。**どれも `handleTurnEnd` を通りません。
@@ -71,12 +71,12 @@ Claude Code が turn を終える
 | Stop hook が届かなかった | hook の socket が変わった / エージェントが設定を上書きした |
 | 指示を送れなかった | pane が消えた / herdr が応答しない |
 | herdr との通信が一時的に失敗した | herdr を再起動した / socket が一瞬切れた |
-| 巡回が横から run を終わらせた | ボードの Status が動いた / 画面が止まったと判定された |
+| 巡回が横から run を終わらせた | カンバンの Status が動いた / 画面が止まったと判定された |
 
 ### どう噛みつくか
 
 **issue #33 で実際に起きています。**エージェントが PR を作ったところ、GitHub の組み込みの
-自動化がボードの Status を `In Progress`（continuo の設定に無い値）へ動かしました。
+自動化がカンバンの Status を `In Progress`（continuo の設定に無い値）へ動かしました。
 巡回はこれを「人間が引き渡した」と解釈して pane を閉じました。**その run は turn の途中でした。**
 エージェントが何を書こうとしていたかは、読まれずに終わりました。
 
@@ -89,7 +89,7 @@ Claude Code が turn を終える
 ### 触るときに気をつけること
 
 - **`readSignals` の呼び出し元を増やすときは、二重に反映されないかを先に確かめてください。**
-  同じ turn の表明を2回読むと、`applySignals` が Status を2回書き、ボードへの書き込みが2倍になります。
+  同じ turn の表明を2回読むと、`applySignals` が Status を2回書き、カンバンへの書き込みが2倍になります。
 - **run を終わらせる新しい経路を足すときは、「表明を読むか」を必ず決めてください。**
   いまは「読む経路」と「読まない経路」が混ざっており、どちらが正しいかはコードに書かれていません。
 - **会話の記録は turn の範囲を `promptId` で切り出しています。**
@@ -111,7 +111,7 @@ Claude Code が turn を終える
 | ファイル | 何をしているか |
 | --- | --- |
 | `internal/orchestrator/orchestrator.go` | `Tick` が巡回を1回回す。`Run` が `polling.interval_ms` ごとにそれを呼ぶ |
-| `internal/orchestrator/reconcile.go` | `reconcileRunning` がボードと突き合わせ、`checkStalls` が画面の止まりを判定する。**どちらも run を止めうる** |
+| `internal/orchestrator/reconcile.go` | `reconcileRunning` がカンバンと突き合わせ、`checkStalls` が画面の止まりを判定する。**どちらも run を止めうる** |
 | `internal/orchestrator/lifecycle.go` | `stopAndReleaseAsync` / `abandonRunAsync` / `finishRunAsync` が、別の goroutine で `stopWorker` を呼ぶ。`stopWorker` が `pane.close` を打つ |
 | `internal/orchestrator/turn.go` | `turnLoop` が run ごとに1本走り、`agent.prompt` を待ち受けつきで呼んで止まっている |
 | `internal/orchestrator/runstate.go` | `workerGeneration` / `currentWorker` / `beginTerminal` が「二重に諦めない」ための仕掛け |
@@ -154,11 +154,11 @@ turn.go にはそのための分類が5つ（`turnEnded` / `turnBlocked` / `turn
 
 ---
 
-## 共有されたボード
+## 共有されたカンバン
 
 ### どういう形の問題か
 
-**ボードは continuo だけのものではありません。**人間も、GitHub Projects v2 の組み込みの
+**カンバンは continuo だけのものではありません。**人間も、GitHub Projects v2 の組み込みの
 自動化も、同じ Status を書き換えます。**書いたのが自動化かどうかは、issue の記録
 （`ProjectV2ItemStatusChangedEvent`）の `actor.__typename` が `Bot` かどうかで引けます。**
 
@@ -195,7 +195,7 @@ turn.go にはそのための分類が5つ（`turnEnded` / `turnBlocked` / `turn
 `["AI Ready", "AI In Progress"]` なので、`In Progress` はどこにも入りません。
 **人間は何も操作していないのに、worker が止まりました。**
 **いまは書いた主体を見て、対応表に戻し先があれば書き戻します**（設計 3-54）。
-**対応表を書いていないボードでは、いまも止まります。**
+**対応表を書いていないカンバンでは、いまも止まります。**
 
 **issue #35。**PR をマージすると、組み込みの自動化「Pull request merged」が
 Status を `Done` へ動かしました。設定は `terminal_states: ["AI Done"]` なので
@@ -205,27 +205,27 @@ Status を `Done` へ動かしました。設定は `terminal_states: ["AI Done"
 
 **遷移先を起動時に確かめることはできません。**GraphQL の `ProjectV2Workflow` から引けるのは
 `number` / `name` / `enabled` の3つだけで、**どの Status へ動かすかは返ってきません。**
-ボードの画面で見るしかありません。
+カンバンの画面で見るしかありません。
 
-**continuo が動かしたときだけは、記録が残ります。**continuo がボードへ書き込むと、
+**continuo が動かしたときだけは、記録が残ります。**continuo がカンバンへ書き込むと、
 **何から何へ動かしたのか・なぜ動かしたのか・いつ動かしたのかを issue にコメントします**
-（設計 3-29）。**ボードの自動化が動かしたぶんは、いまも何も残りません。**
+（設計 3-29）。**カンバンの自動化が動かしたぶんは、いまも何も残りません。**
 **ただし continuo がそれを書き戻したときは、書き戻したぶんの記録が1件残ります。**
 記録の無い遷移を見つけたら、それは continuo 以外が書いたということです。
 
 ### 触るときに気をつけること
 
 - **「知らない Status＝人間の引き渡し」という前提のコードを増やさないでください。**
-  その前提はもう成立していません。書いた主体は人間・continuo・ボードの自動化の3つあります。
-- **`actor.__typename` を見る経路を増やすときは、`project.number` で自分のボードへ絞ってください。**
-  1つの issue が2枚のボードに載っていると、**両方のボードのイベントが同じ配列で返ります。**
+  その前提はもう成立していません。書いた主体は人間・continuo・カンバンの自動化の3つあります。
+- **`actor.__typename` を見る経路を増やすときは、`project.number` で自分のカンバンへ絞ってください。**
+  1つの issue が2枚のカンバンに載っていると、**両方のカンバンのイベントが同じ配列で返ります。**
 - **Status を書く経路を足すときは、書く前に読み直してください。**
   `UpdateStatus` は読んでから書きますが、**読み直しと書き込みの間に他人が動かした場合は上書きします。**
   GitHub Projects v2 に compare-and-swap はありません。
-- **`updateProjectV2Field` を実データの入ったボードで呼んではいけません。**
+- **`updateProjectV2Field` を実データの入ったカンバンで呼んではいけません。**
   選択肢の指定は全件置き換えとして扱われ、設定済みの Status の値が全部消えます。
   選択肢を足すのは人間が画面から行う操作です。
-- **新しい Status の役割を設定に足すときは、ボードの自動化が同じ値を書きうるかを先に考えてください。**
+- **新しい Status の役割を設定に足すときは、カンバンの自動化が同じ値を書きうるかを先に考えてください。**
 
 ---
 
@@ -234,8 +234,8 @@ Status を `Done` へ動かしました。設定は `terminal_states: ["AI Done"
 ### どういう形の問題か
 
 **「この issue は自分が取った」という印は、continuo のプロセスのメモリの中にしかありません。**
-ファイルにも、ボードにも、共有された場所にも書かれません。
-**他の機械からは見えないので、2台で同じボードを見張ると同じ issue を両方が取ります。**
+ファイルにも、カンバンにも、共有された場所にも書かれません。
+**他の機械からは見えないので、2台で同じカンバンを見張ると同じ issue を両方が取ります。**
 
 ### どこにあるか
 
@@ -270,7 +270,7 @@ Status を `Done` へ動かしました。設定は `terminal_states: ["AI Done"
   複数台を前提にした話を足すときは、その但し書きが要ります。
 - **共有された印を作るなら、比較して書き換えられる場所が要ります。**
   issue #36 は git の ref を候補にしています（既にある ref への非 fast-forward な push を
-  GitHub が断ることを利用する）。ボードの Status では代用できません。
+  GitHub が断ることを利用する）。カンバンの Status では代用できません。
 - **`agent.max_concurrent_agents` は1台あたりの上限です。**3台で動かすと3倍になります。
 - **印を取ったまま機械が落ちると、その worktree はその機械にしかありません。**
   他の機械からは「印はあるが誰も動いていない」と見分けられません。
@@ -386,7 +386,7 @@ continuo は次のように振る舞います。
 ### どう噛みつくか
 
 **issue #35 がこの形です。**`cleanup.on_states` は、当時 `continuo setup` の
-書き換え対象に入っていませんでした。そのため、利用者がボードの Status を
+書き換え対象に入っていませんでした。そのため、利用者がカンバンの Status を
 `AI Done` に割り当てても、**`cleanup.on_states` は雛形の `["Done"]` のまま残りました。**
 
 **いまは `statusKeys` に入っています。**しかしそれが効くのは、

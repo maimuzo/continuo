@@ -12,14 +12,14 @@ import (
 //
 // **`automated_state_rewrite` は、キーも値もここへ入れない**（設計 3-54 / 3-55）。
 //
-//	キー … 「ボードの自動化が書く、continuo が知らない Status」である。
+//	キー … 「カンバンの自動化が書く、continuo が知らない Status」である。
 //	       **ここへ入れると知っている Status になり、書き戻しの分岐が二度と通らなくなる**
 //	値   … `Validate` が「`active_states` に入っていること」を起動前に要求しているので
 //	       （`validateAutomatedStateRewrite`）、**足しても1件も増えない**
 //
-// **起動時に「ボードに実在しなければ起動を止める」一覧も、これである**
+// **起動時に「カンバンに実在しなければ起動を止める」一覧も、これである**
 // （`tracker` の `requiredStatesForBootstrap`。設計 3-57）。
-// **キーも含む一覧が要るのは、ボード側の選択肢が設定に出てくるかを見るときだけである**
+// **キーも含む一覧が要るのは、カンバン側の選択肢が設定に出てくるかを見るときだけである**
 // （`NamedStates`）。
 //
 // **集めるのはこの1箇所だけである。**同じ処理を tracker と orchestrator の両方に書くと、
@@ -68,17 +68,17 @@ func KnownStates(cfg TrackerConfig) []string {
 //
 // **`KnownStates` に `automated_state_rewrite` のキーを足したものである。**
 //
-// **使うのは「ボードの選択肢が設定に出てくるか」を見る向きだけである**
+// **使うのは「カンバンの選択肢が設定に出てくるか」を見る向きだけである**
 // （`tracker` の `unknownStatusOptions`）。**キーは人間が WORKFLOW.md に書いた名前である**ので、
 // **「continuo が知らない Status」として名前を挙げてはならない。**
 // WORKFLOW.md に書いたその名前を「知らない」と言われると、人間は直す先を見失う。
 //
 // **「キーの Status では worker が止まらないから」ではない。**書き戻して worker を続けるのは
-// **ボードの自動化がその Status を書いたときだけ**であり（設計 3-54）、
+// **カンバンの自動化がその Status を書いたときだけ**であり（設計 3-54）、
 // **人間がキーの Status へ動かしたときは、いままでどおり worker を止めて人間へ渡す**（設計 3-50）。
 //
-// **逆向き（設定の名前がボードに実在するか）には使わない。**そちらは `KnownStates` である。
-// **キーはボードに実在しなくてよい**（消した人が抜け出せなくなる。設計 3-57）。
+// **逆向き（設定の名前がカンバンに実在するか）には使わない。**そちらは `KnownStates` である。
+// **キーはカンバンに実在しなくてよい**（消した人が抜け出せなくなる。設計 3-57）。
 //
 // **キーは名前順で末尾に足す。**map の反復順は決まらないので、そのまま回すと
 // 出てくる並びが実行のたびに変わる。
@@ -116,14 +116,14 @@ func NamedStates(cfg TrackerConfig) []string {
 }
 
 // RewriteKeysOutsideBoard は `tracker.automated_state_rewrite` のキーのうち、
-// ボードの Status の選択肢に無いものを、書いてある綴りのまま返す（設計 3-57）。
+// カンバンの Status の選択肢に無いものを、書いてある綴りのまま返す（設計 3-57）。
 //
-// **「その行が一度も効かない」ことを見つけるためにある。**キーはボードの自動化が書く
-// Status 名なので、ボードにその選択肢が無ければ、対応表のその行は永久に引かれない。
+// **「その行が一度も効かない」ことを見つけるためにある。**キーはカンバンの自動化が書く
+// Status 名なので、カンバンにその選択肢が無ければ、対応表のその行は永久に引かれない。
 //
-// **これで起動を止めてはならない。**キーはボードに実在しなくてよい
+// **これで起動を止めてはならない。**キーはカンバンに実在しなくてよい
 // （`tracker` の `requiredStatesForBootstrap` はキーを照合しない）。
-// **止めると、ボードの自動化をやめて選択肢を消した人が抜け出せなくなる。**
+// **止めると、カンバンの自動化をやめて選択肢を消した人が抜け出せなくなる。**
 // **だが「綴りを打ち間違えた」と「使わなくなったので選択肢を消した」は同じ形に見える**ので、
 // 黙って通すこともできない。**知らせるだけにする。**
 //
@@ -137,8 +137,8 @@ func NamedStates(cfg TrackerConfig) []string {
 // SPEC.md 11.3）。ここだけ完全一致で比べると、実行時には引ける行を「効かない」と報告する。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション。
-// boardOptions: ボード側の Status の選択肢名（`tracker.Adapter.StatusOptionNames` の戻り値）。
-// 戻り値: ボードに無いキー（設定に書いてある綴りのまま。名前順。1件も無ければ nil）。
+// boardOptions: カンバン側の Status の選択肢名（`tracker.Adapter.StatusOptionNames` の戻り値）。
+// 戻り値: カンバンに無いキー（設定に書いてある綴りのまま。名前順。1件も無ければ nil）。
 func RewriteKeysOutsideBoard(cfg TrackerConfig, boardOptions []string) []string {
 	onBoard := make(map[string]bool, len(boardOptions))
 	for _, name := range boardOptions {
@@ -192,7 +192,7 @@ func sortedSignalTargets(m map[string]*string) []string {
 //	cleanup.on_states       … その issue の worktree を片付けてよいか
 //
 // **片付ける値が「終わった」に入っていないと、continuo は同じ issue を
-// 「終わっていない」と判定した直後に worktree を消す。**実際に、ボードの自動化が
+// 「終わっていない」と判定した直後に worktree を消す。**実際に、カンバンの自動化が
 // PR のマージで `Done` を書く運用で起きた（issue #35）。
 //
 // **起動は止めない。**止めると、いま動いている人の continuo が版を上げた瞬間に

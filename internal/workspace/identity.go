@@ -53,7 +53,7 @@ type Identity struct {
 	IssueURL string `json:"issue_url"`
 	// IssueIdentifier は `<owner>/<repo>#<番号>` の形の人間可読な名前である。
 	IssueIdentifier string `json:"issue_identifier"`
-	// ProjectItemID は project item の ID である。ボードを ID 指定でまとめて取り直すのに使う。
+	// ProjectItemID は project item の ID である。カンバンを ID 指定でまとめて取り直すのに使う。
 	ProjectItemID string `json:"project_item_id"`
 	// Branch は worktree が指す branch 名である。片付けで消す対象を確定するのに使う。
 	Branch string `json:"branch"`

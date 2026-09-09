@@ -39,7 +39,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 	o.applySignals(ctx, rs, signals)
 
 	// **ここだけは「誰が Status を書いたか」も取る**（設計 3-61）。この写しを `rs.setIssue` で
-	// 控え、`decideAfterTurn` が「ボードの自動化が書いたのか」を判定する。
+	// 控え、`decideAfterTurn` が「カンバンの自動化が書いたのか」を判定する。
 	current, ok, _ := o.refreshIssue(ctx, rs, true)
 	if !ok {
 		// 見つからない。continuo は面倒を見ない（設計 3-10 の「いつ手放すか」）。
@@ -62,7 +62,7 @@ func (o *Orchestrator) handleTurnEnd(ctx context.Context, rs *runState) bool {
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 // current: 取り直した issue。
-// mayRewrite: ボードの自動化が書いた Status を書き戻してよいか。
+// mayRewrite: カンバンの自動化が書いた Status を書き戻してよいか。
 // **書き戻したあとの判定し直しでは偽で呼ぶ**（同じ turn で二度書きに行かないため）。
 // 戻り値: この run が終わったら true（turn ループを止める）。
 func (o *Orchestrator) decideAfterTurn(
@@ -95,7 +95,7 @@ func (o *Orchestrator) decideAfterTurn(
 	}
 }
 
-// rewriteAndDecide は、ボードの自動化が動かした Status を書き戻し、
+// rewriteAndDecide は、カンバンの自動化が動かした Status を書き戻し、
 // **書き込みの結果が示す Status で「終わりかどうか」を判定し直す**（設計 3-56）。
 //
 // **戻す先が `terminal_states` になることはない。**`tracker.automated_state_rewrite` の
@@ -104,10 +104,10 @@ func (o *Orchestrator) decideAfterTurn(
 // **`"Done": "AI Done"` のような終端への書き戻しは、そもそも起動しない。**
 //
 // **`UpdateStatus` は書いたあとに読み直さない。**返る `Previous` は
-// **書きに行く直前**のボードの値である。だから「書いた直後にさらに動かされた値」は、
+// **書きに行く直前**のカンバンの値である。だから「書いた直後にさらに動かされた値」は、
 // この経路のどこにも現れない。**判定し直すのは、書けなかったときのためである。**
 //
-//	書けた（Wrote）             … ボードは target になっている。target は active_states なので次の turn へ
+//	書けた（Wrote）             … カンバンは target になっている。target は active_states なので次の turn へ
 //	既に target だった（Reached）… 同上
 //	Previous が返って Reached が偽 … **人間が `terminal_states` へ動かしていた**ので書き戻しを断られた。
 //	                              **その値で判定し直す**（終わった issue へ次の指示を送らない）
@@ -116,7 +116,7 @@ func (o *Orchestrator) decideAfterTurn(
 // **書き込みのあいだだけ `beginRewrite` で書き戻しの印を取る**（設計 3-56）。
 // turn の終わりの処理は表明を読む1秒ほどの待ちと2往復の書き込みを含む。
 // **その間に巡回が「人間が動かした」と判断して run を手放すと、印が消えたあとに
-// 「作業中」の Status がボードへ書かれる。**次の巡回はそれを候補として拾い直し、
+// 「作業中」の Status がカンバンへ書かれる。**次の巡回はそれを候補として拾い直し、
 // **同じ worktree に2本目の Claude Code を立てる。**
 // **書き終えたら必ず印を返す**（`endRewrite`）。返さないと、このあと続く
 // `decideAfterTurn` の `finishRun` が書き戻しの終わりを永久に待つ。
@@ -174,7 +174,7 @@ func (o *Orchestrator) rewriteAndDecide(
 		rs.clearExternalMove()
 		return false
 	case !moved.Reached:
-		// **書きに行く直前のボードは `terminal_states` に入っていた。**
+		// **書きに行く直前のカンバンは `terminal_states` に入っていた。**
 		// 人間が「終わった」にしたということなので、**その値で判定し直す。**
 		next = moved.Previous
 	}
@@ -183,7 +183,7 @@ func (o *Orchestrator) rewriteAndDecide(
 	movedIssue.State = next
 	if next == target {
 		// **書いたのは continuo である。**自動化が書いたという印を残したままにすると、
-		// このあと止める経路が「ボードの自動化が書きました」という的外れな案内を出す。
+		// このあと止める経路が「カンバンの自動化が書きました」という的外れな案内を出す。
 		movedIssue.StatusChangedBy = ""
 		movedIssue.StatusChangedByAutomation = false
 	}
@@ -210,6 +210,10 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 	rs.mu.Lock()
 	path := rs.TranscriptPath
 	promptID := rs.PromptID
+	// **セッション UUID を、パスと同じ区間で写し取る**（issue #238）。
+	// **別々に読むと、その間に `restartWithNewSession` がセッションを採り直したときに、
+	// 別のセッションのパスと UUID の対を台帳へ入れることになる。**
+	sessionUUID := rs.SessionUUID
 	rs.mu.Unlock()
 
 	if path == "" {
@@ -238,35 +242,55 @@ func (o *Orchestrator) readSignals(ctx context.Context, rs *runState) map[string
 		}
 		last = result
 		if len(result.Signals) > 0 {
-			o.logTokens(rs, result.Usage)
+			o.logTokens(rs, path, sessionUUID, result.Usage)
 			return result.Signals
 		}
 	}
 
 	if last != nil {
-		o.logTokens(rs, last.Usage)
+		o.logTokens(rs, path, sessionUUID, last.Usage)
 	}
 	o.logger.Info("この turn には表明がありませんでした（次の turn で促します）", "identifier", snap.Identifier)
 	return nil
 }
 
-// logTokens は集計したトークンをログに出し、`runState` に控える（設計 3-15）。
+// logTokens は集計したトークンをログに出し、`runState` と run をまたぐ累計に控える
+// （設計 3-15 / issue #238）。
 //
 // **控えるのはダッシュボード（第9段階）が読むためだけである。**判断には使わない。
 // **HTTP の要求ごとに transcript を開き直さない**ので、turn の終わりに1回だけ書く。
 //
+// **書き込みは `addTokenUsage` が1つの `o.mu` の区間でまとめて行う。**
+// 累計と run ごとの値を別々に書くと、その隙間にダッシュボードが両方を読み切ったときに
+// **「累計が走行中の run の合計より小さい」写しができる。**
+// **ここで順序を守る必要は無い**（`addTokenUsage` の doc コメントを見よ）。
+//
+// **`addTokenUsage` は `rs.mu` の外で呼ぶ。**中で `o.mu` → `rs.mu` の順に取るので、
+// `rs.mu` を持ったまま呼ぶと逆向きの入れ子ができる。
+//
+// **`path` は、ログに出すためだけに受け取る。**台帳が使うのはセッション UUID である
+// （hook の `transcript_path` はエージェントが書き換えられる外部入力なので、鍵にしない）。
+//
 // rs: 対象の run。
-// usage: 集計したトークン。
-func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
-	rs.setTokens(usage, o.now())
+// path: `usage` を読み出した transcript のパス（ログに出す）。
+// sessionUUID: そのパスのセッション UUID。**`readSignals` がパスと同じ区間で写し取ったもの。**
+// usage: 集計したトークン（その transcript 1ファイルの絶対値）。
+func (o *Orchestrator) logTokens(rs *runState, path, sessionUUID string, usage TokenUsage) {
+	identifier := rs.issue().Identifier
+	clamped := o.addTokenUsage(rs, identifier, sessionUUID, usage, o.now())
 	o.logger.Info("トークンを集計しました",
-		"identifier", rs.issue().Identifier,
+		"identifier", identifier,
 		"api_calls", usage.APICalls,
 		"input", usage.Input,
 		"cache_creation", usage.CacheCreation,
 		"cache_read", usage.CacheRead,
 		"output", usage.Output,
 	)
+	if clamped {
+		// **黙って丸めない。**累計が実際より小さくなったことを、あとから確かめられるようにする。
+		o.logger.Warn("transcript の集計のうち、前回より小さかった項目の差分を0にしました",
+			"identifier", identifier, "transcript_path", path)
+	}
 }
 
 // applySignals は拾った表明どおりに Status を動かす（設計 3-25 / 3-26）。
@@ -275,8 +299,8 @@ func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
 // `FetchIssueByIdentifier` で item を引く（その issue は `Ice Box` にあるので、巡回で
 // 読んだ候補には入っていない）。
 //
-// **ボードに載っていなかったら、その行を捨て、issue のコメントに
-// 「ボードに無いので動かせなかった」と書く**（人間が気づけるようにする）。
+// **カンバンに載っていなかったら、その行を捨て、issue のコメントに
+// 「カンバンに無いので動かせなかった」と書く**（人間が気づけるようにする）。
 //
 // **この機械の別の run が印を持っている issue にも書き込まない**（設計 3-26 の「安全のための制約」）。
 // **書き間違えた1行で、別のエージェントが turn の途中で止まる**ためである。
@@ -289,7 +313,7 @@ func (o *Orchestrator) logTokens(rs *runState, usage TokenUsage) {
 // rs: 対象の run。
 // signals: 拾った表明。
 func (o *Orchestrator) applySignals(ctx context.Context, rs *runState, signals map[string]string) {
-	// **ボードに載っていなかった対象は溜めて、1 turn につき1件のコメントにまとめる。**
+	// **カンバンに載っていなかった対象は溜めて、1 turn につき1件のコメントにまとめる。**
 	// 対象ごとに投稿すると、表明の行数ぶんだけ issue へコメントを書くことになる。
 	var missing []string
 	// **別の run が担当している対象も同じように溜める。**理由が違うので別のコメントにする。
@@ -389,7 +413,7 @@ func signalMoveReason(identifier, target, value string, self bool) string {
 		identifier, target, value)
 }
 
-// noteSignalTargetsMissing は、表明が指す issue がボードに載っていなかったことを
+// noteSignalTargetsMissing は、表明が指す issue がカンバンに載っていなかったことを
 // issue のコメントに残す（設計 3-25）。
 //
 // **1 turn につき1件にまとめる。**対象ごとに投稿すると、エージェントが印を並べた
@@ -473,7 +497,7 @@ func lookupSignalTarget(m map[string]*string, value string) (*string, bool) {
 // そこだけが取り直した issue を `rs.setIssue` で控え、知らない Status の判定
 // （`decideAfterTurn` → `claimAutomatedRewrite` / `finishRunUnknownState`）がそれを読む。
 // 戻り値の1つ目: 取り直した issue。**取り直せなかったときは、控えてある古い写しである。**
-// 戻り値の2つ目: ボードから見えていれば true。
+// 戻り値の2つ目: カンバンから見えていれば true。
 // 戻り値の3つ目: **本当に GitHub から取り直せたなら true。**
 //
 //	**偽のときの1つ目は、着手したときの写しである。**担当者もラベルも Status も、そのあと動いている見込みがある。
@@ -481,7 +505,7 @@ func lookupSignalTarget(m map[string]*string, value string) (*string, bool) {
 //	古い写しから答えると、担当を外された run が push まで走り切る（設計 3-77c）。
 //	**`handleTurnEnd` と `finishRunClaimed` は、取り直せなくても古い写しで続ける。**
 //	止めるほうが害が大きいためである（turn の結果を捨てる／片付けを止める）。
-//	**代償は、古い Status からボードへ書く場合があることである**（`handleTurnEnd` は
+//	**代償は、古い Status からカンバンへ書く場合があることである**（`handleTurnEnd` は
 //	`decideAfterTurn` を通って Status を書き直しうる）。**`origin/main` から同じ形である。**
 func (o *Orchestrator) refreshIssue(ctx context.Context, rs *runState, withTimeline bool) (tracker.Issue, bool, bool) {
 	var (
@@ -743,7 +767,7 @@ func (o *Orchestrator) stopAndReleaseAsync(ctx context.Context, rs *runState) {
 		// **後片付けは「止めろ」と言われても最後までやる。**
 		//
 		// この run は既に終わったものとして扱われている（Status は動かした、
-		// コメントも投稿した）。**そこで pane だけ閉じ損ねると、ボード上は終わった issue の
+		// コメントも投稿した）。**そこで pane だけ閉じ損ねると、カンバン上は終わった issue の
 		// pane が残り続ける。**`Close` は `wg.Wait()` でここを待つので、
 		// 終わるまで待たせてよい。
 		//
@@ -909,7 +933,7 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	// **止められていても pane は閉じる。**
 	//
 	// ここへ来た run は既に終わったものとして扱われている（Status を動かし、
-	// コメントも投稿した）。**そこで閉じ損ねると、ボード上は終わった issue の pane が
+	// コメントも投稿した）。**そこで閉じ損ねると、カンバン上は終わった issue の pane が
 	// 残り続ける。**`Close` は `wg.Wait()` でここを待つので、終わるまで待たせてよい。
 	//
 	// **期限は付ける。**herdr が応答しないときに停止が永久に返らなくなるのを防ぐ。
@@ -949,6 +973,19 @@ func (o *Orchestrator) runAfterRun(ctx context.Context, rs *runState) {
 // **見送った理由は、身元ファイルの cleanup_deferred_at がゼロ値のときだけ issue へ書く**
 // （毎巡回で警告を積まない。設計 3-9 の手順2c）。
 //
+// **実際に消えたときだけ、トークンの台帳からもこの issue を落とす**（issue #238）。
+// **worktree が残っているうちは落とせない。**残っていると、人間が Status を戻したときに
+// 同じセッションへ `--resume` で復帰し、**同じ transcript が最初から全部足される。**
+// **消えなかったとき（`cleanupPath` が false）は落とさない**ので、見送りでも二重に数えない。
+//
+// **`cleanupPath` を呼ぶ場所は他にも2つある**（`SweepOnStartup` と復元の `cleanupInto`）。
+// **そちらは台帳を落としていない。**どちらも起動時にしか走らず、その時点で台帳は空だからである。
+// **巡回の最中に走る片付けを新しく足すなら、そこでも `forgetTokenLedger` を呼ぶこと。**
+//
+// **`reconcileWorktrees` も巡回の最中に worktree を消すが、台帳を落としていない。**
+// **これは欠陥ではない。**理由と、そこへ足すときの注意は
+// docs/plans/impl/09_dashboard.md の「いつ台帳を消すか」にある（**そちらが正である**）。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // rs: 対象の run。
 func (o *Orchestrator) cleanupWorktree(ctx context.Context, rs *runState) {
@@ -956,7 +993,9 @@ func (o *Orchestrator) cleanupWorktree(ctx context.Context, rs *runState) {
 	if snap.WorktreePath == "" {
 		return
 	}
-	o.cleanupPath(ctx, snap.Identifier, snap.WorktreePath, snap.Base, issueNodeID(rs.issue()))
+	if o.cleanupPath(ctx, snap.Identifier, snap.WorktreePath, snap.Base, issueNodeID(rs.issue())) {
+		o.forgetTokenLedger(snap.Identifier)
+	}
 }
 
 // cleanupPath は worktree と branch と設定ファイルを、パスを指定して片付ける（設計 3-9）。
@@ -1139,7 +1178,7 @@ func (o *Orchestrator) postHandoffComment(ctx context.Context, rs *runState, rea
 
 // containsFold は states に target が（大文字小文字を無視して）含まれるかを返す。
 //
-// **比較は大文字小文字を無視する**（表示はボードの綴りをそのまま保つ。設計 3-13）。
+// **比較は大文字小文字を無視する**（表示はカンバンの綴りをそのまま保つ。設計 3-13）。
 //
 // states: 照合する Status 名の一覧。
 // target: 探す Status 名。

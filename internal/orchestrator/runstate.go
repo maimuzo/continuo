@@ -135,7 +135,7 @@ type runState struct {
 	// Issue は dispatch した時点の issue のスナップショットである。
 	// プロンプトの変数展開・表明の対象の解決・コメントの投稿先に使う。
 	Issue tracker.Issue
-	// LastWrittenState は continuo がこの run のためにボードへ最後に書いた Status である。
+	// LastWrittenState は continuo がこの run のためにカンバンへ最後に書いた Status である。
 	//
 	// **知らない Status になった issue へ「元は何だったか」を書くために持つ**（設計 3-50）。
 	// **書き込みが成功した時点でだけ入れる。**入れるのは着手の段2（running_state）と、
@@ -211,7 +211,7 @@ type runState struct {
 	// できてしまい、この印を見て「終わらせる処理が走っている」と判断する場所が
 	// すべて誤判定する。書き戻しは `rewriting` を使う。
 	terminating bool
-	// rewriting は「ボードの自動化が動かした Status の書き戻し」が飛んでいる最中である
+	// rewriting は「カンバンの自動化が動かした Status の書き戻し」が飛んでいる最中である
 	// ことを表す（設計 3-56）。
 	//
 	// **`terminating` とは別の印である。**書き戻しは run を終わらせない。
@@ -354,19 +354,19 @@ type runState struct {
 	// 自動化に `Done` へ動かされることがある。起点を繰り越すと、そこから測る猶予が
 	// 残り1分しかない。**別の理由で止まりかけたのだから、猶予は最初から数え直す。**
 	externalMoveKind externalMoveKind
-	// automatedRewrites は、ボードの自動化が動かした Status を書き戻した回数である
+	// automatedRewrites は、カンバンの自動化が動かした Status を書き戻した回数である
 	// （設計 3-56）。**キーは自動化が書いた Status（小文字にして前後の空白を落としたもの）。**
 	//
 	// **上限を持たないと止まらない。**書き戻した直後に自動化がまた動く組み合わせがあると、
-	// continuo とボードが同じ issue の Status を押し合い続ける。
+	// continuo とカンバンが同じ issue の Status を押し合い続ける。
 	automatedRewrites map[string]int
-	// automatedRewriteFailures は、書き戻しが**ボードを1ミリも動かせないまま終わった**回数である
+	// automatedRewriteFailures は、書き戻しが**カンバンを1ミリも動かせないまま終わった**回数である
 	// （設計 3-56）。キーは automatedRewrites と同じ作り方である。
 	//
-	// **押し合いの上限とは別に数える。**ボードが動かなかったぶんは押し合いの枠を返すので、
+	// **押し合いの上限とは別に数える。**カンバンが動かなかったぶんは押し合いの枠を返すので、
 	// **返すだけだと「毎回失敗する書き込みを永久に打ち続ける」ことになる。**
-	// 人間が戻す先の選択肢をボードから消した場合がそれである。
-	// **ボードが目的の Status になったら 0 に戻す。**
+	// 人間が戻す先の選択肢をカンバンから消した場合がそれである。
+	// **カンバンが目的の Status になったら 0 に戻す。**
 	// **上限に達したまま時間が経ったときも 0 に戻す**（`expireAutomatedRewriteFailures`）。
 	// 戻さないと「続けて何回」を数えているつもりで、**通信が回復しても永久に拒む。**
 	automatedRewriteFailures map[string]int
@@ -1252,7 +1252,7 @@ func (rs *runState) setIssue(issue tracker.Issue) {
 	rs.Issue = issue
 }
 
-// setLastWrittenState は continuo がボードへ書いた Status を控える（設計 3-50）。
+// setLastWrittenState は continuo がカンバンへ書いた Status を控える（設計 3-50）。
 //
 // **書き込みが成功したときだけ呼ぶ。**知らない Status になった issue へ
 // 「元は何だったか」を書くための唯一の材料である。
@@ -1264,7 +1264,7 @@ func (rs *runState) setLastWrittenState(state string) {
 	rs.LastWrittenState = state
 }
 
-// lastWrittenState は continuo がボードへ最後に書いた Status を返す。
+// lastWrittenState は continuo がカンバンへ最後に書いた Status を返す。
 //
 // 戻り値: 書いた Status 名。1度も書いていなければ空文字。
 func (rs *runState) lastWrittenState() string {
@@ -1287,7 +1287,7 @@ const (
 	// externalMoveOwnHandoff は continuo 自身が引き渡しの Status を書き、turn の終わりの
 	// 経路がまだ処理中であることを表す（設計 3-74c）。
 	externalMoveOwnHandoff externalMoveKind = iota + 100
-	// externalMoveAutomatedHandoff はボードの自動化が終端・引き渡しの Status を書いたことを
+	// externalMoveAutomatedHandoff はカンバンの自動化が終端・引き渡しの Status を書いたことを
 	// 表す（設計 3-74）。
 	externalMoveAutomatedHandoff
 )
@@ -1390,7 +1390,7 @@ func (rs *runState) handoffNeverChecked() bool {
 // **枠を取った側だけが返せる形にしてある。**枠を Status 名だけで返す作りにすると、
 // **巡回の goroutine と turn ループが同じ Status について同時に取ったとき、
 // 片方の失敗がもう片方の枠を返してしまう。**返った枠は次の巡回がまた取れるので、
-// **ボードが実際に動いた回数が上限を超える。**逆に、同じ失敗の経路を2度通ると
+// **カンバンが実際に動いた回数が上限を超える。**逆に、同じ失敗の経路を2度通ると
 // **1回の確保で2回ぶん返し、押し合いの数え方が壊れる。**
 //
 // **`release` は何度呼んでも1回しか返さない**（`sync.Once`）。
@@ -1406,12 +1406,12 @@ type rewriteClaim struct {
 
 // release は確保した書き戻しの1回ぶんを返す（設計 3-56）。
 //
-// **ボードが1ミリも動かなかったときに呼ぶ。**通信が失敗した・item がもう見えない・
+// **カンバンが1ミリも動かなかったときに呼ぶ。**通信が失敗した・item がもう見えない・
 // 既にその値だった・`terminal_states` に入っていたので書かなかった、のいずれかである。
 //
 // **返さないと、押し合いが1度も起きていない run が止まる。**枠は
-// 「continuo とボードの自動化が同じ issue を押し合っている」ことを数えるためにあり、
-// **押し合いはボードが動いたときにだけ起きる。**GitHub への書き込みが3回続けて
+// 「continuo とカンバンの自動化が同じ issue を押し合っている」ことを数えるためにあり、
+// **押し合いはカンバンが動いたときにだけ起きる。**GitHub への書き込みが3回続けて
 // 失敗しただけで上限に達すると、**その run はそこから書き戻しをやめ、次に自動化が
 // 動いた時点で worker ごと止まる。**
 func (c *rewriteClaim) release() {
@@ -1466,7 +1466,7 @@ func (rs *runState) releaseAutomatedRewrite(state string) {
 	rs.automatedRewrites[key] = done - 1
 }
 
-// noteAutomatedRewriteFailure は「書き戻したが、ボードは1ミリも動かなかった」を数える
+// noteAutomatedRewriteFailure は「書き戻したが、カンバンは1ミリも動かなかった」を数える
 // （設計 3-56）。
 //
 // **押し合いの枠とは別に数える。**枠は失敗のたびに返るので、
@@ -1493,7 +1493,7 @@ func (rs *runState) noteAutomatedRewriteFailure(state string, add int, now time.
 
 // clearAutomatedRewriteFailures は「戻せなかった」回数を 0 に戻す（設計 3-56）。
 //
-// **ボードが目的の Status になったときに呼ぶ。**一度でも戻せたのなら、
+// **カンバンが目的の Status になったときに呼ぶ。**一度でも戻せたのなら、
 // それまでの失敗は一時的なものだったということである。
 //
 // state: 自動化が書いた Status 名。
@@ -1553,9 +1553,9 @@ func (rs *runState) automatedRewriteFailureCount(state string) int {
 type automatedHandoffReason string
 
 const (
-	// handoffByPushback は「continuo とボードの自動化が押し合って上限に達した」である。
+	// handoffByPushback は「continuo とカンバンの自動化が押し合って上限に達した」である。
 	handoffByPushback automatedHandoffReason = "押し合いの上限"
-	// handoffByFailures は「書き戻しがボードを1ミリも動かせないまま上限に達した」である。
+	// handoffByFailures は「書き戻しがカンバンを1ミリも動かせないまま上限に達した」である。
 	handoffByFailures automatedHandoffReason = "戻せない失敗の上限"
 )
 

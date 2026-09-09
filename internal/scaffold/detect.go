@@ -23,7 +23,7 @@ import (
 const DefaultDetectTimeout = 15 * time.Second
 
 // ghProjectListLimit は `gh project list` に渡す取得件数の上限である。
-// gh の既定は30件なので、ボードが多い人の分まで引けるように明示する。
+// gh の既定は30件なので、カンバンが多い人の分まで引けるように明示する。
 const ghProjectListLimit = "100"
 
 // OwnerKey は雛形の中で owner を書くキーのパスである。報告の見出しに使う。
@@ -38,7 +38,7 @@ const RepositoriesKey = "trust.repositories"
 // ghProjectItemListLimit は `gh project item-list` に渡す取得件数の上限である。
 //
 // **拾うのは「どのリポジトリが載っているか」だけで、issue の中身は使わない。**
-// gh の既定は30件で、本番のボードは100件を超えるので明示する。
+// gh の既定は30件で、本番のカンバンは100件を超えるので明示する。
 // **この数で頭打ちになったら、その旨を人間に伝える**（拾い漏れたリポジトリがありうる）。
 const ghProjectItemListLimit = 500
 
@@ -51,20 +51,20 @@ type GHRunner func(ctx context.Context, args ...string) ([]byte, error)
 // ErrGHNotFound は gh コマンドそのものが見つからなかったことを表す。
 var ErrGHNotFound = i18n.Sentinel(i18n.KeyScaffoldGHNotFound)
 
-// Project は `gh project list` が返したボードの候補である。
+// Project は `gh project list` が返したカンバンの候補である。
 type Project struct {
-	// Owner はそのボードを持つ user / organization の名前である。
+	// Owner はそのカンバンを持つ user / organization の名前である。
 	//
-	// **`gh api user` はログイン名しか返さない。**organization に置いたボードは
+	// **`gh api user` はログイン名しか返さない。**organization に置いたカンバンは
 	// ログイン名で探しても1件も出ない。実際、GitHub Enterprise で organization に
-	// ボードを置いていた利用者が `continuo setup` で1歩も進めなかった（issue #7）。
+	// カンバンを置いていた利用者が `continuo setup` で1歩も進めなかった（issue #7）。
 	// **候補ごとに、どの owner のものかを持つ。**
 	Owner string
-	// Number はボードの番号である（tracker.provider.project_number に書く値）。
+	// Number はカンバンの番号である（tracker.provider.project_number に書く値）。
 	Number int
-	// Title はボードの表示名である。人が候補を選ぶために出す。
+	// Title はカンバンの表示名である。人が候補を選ぶために出す。
 	Title string
-	// URL はボードの URL である。人が候補を選ぶために出す。
+	// URL はカンバンの URL である。人が候補を選ぶために出す。
 	URL string
 }
 
@@ -82,7 +82,7 @@ type Field struct {
 	Reason string
 	// Advice は、埋められなかったときに人が何をすればよいかである。1行に1つ。
 	Advice []string
-	// Candidates はボードの候補が複数あったときの一覧である。それ以外では空。
+	// Candidates はカンバンの候補が複数あったときの一覧である。それ以外では空。
 	Candidates []Project
 }
 
@@ -114,7 +114,7 @@ type DetectOptions struct {
 	// Owner は `--owner` で明示された user / organization 名である。
 	// 空でなければ gh を叩かずにこの値を使う。
 	Owner string
-	// ProjectNumber は `--project` で明示されたボードの番号である。
+	// ProjectNumber は `--project` で明示されたカンバンの番号である。
 	// 0 より大きければ gh を叩かずにこの値を使う。
 	ProjectNumber int
 	// RunGH は gh を実行する関数である。nil なら RunGH（本物のコマンド実行）を使う。
@@ -168,10 +168,10 @@ func Detect(ctx context.Context, opts DetectOptions) Detection {
 	owner := detectOwner(ctx, opts, run, timeout)
 	project, number, boardOwner := detectProject(ctx, opts, run, timeout, owner.Value)
 
-	// **ボードが別の owner のものだったら、owner を決め直す**（設計 3-32）。
+	// **カンバンが別の owner のものだったら、owner を決め直す**（設計 3-32）。
 	//
-	// ログイン名でボードが見つからず、organization で見つかったときに起こる。
-	// **決め直さないと、`project_number` は organization のボードを指すのに
+	// ログイン名でカンバンが見つからず、organization で見つかったときに起こる。
+	// **決め直さないと、`project_number` は organization のカンバンを指すのに
 	// `owner` はログイン名のまま**という、どこにも存在しない組み合わせが書かれる。
 	if boardOwner != "" && boardOwner != owner.Value {
 		owner.Value, owner.Filled = boardOwner, true
@@ -194,10 +194,10 @@ func Detect(ctx context.Context, opts DetectOptions) Detection {
 	return d
 }
 
-// detectRepositories は trust.repositories へ並べる owner/repo をボードから拾う（3-33）。
+// detectRepositories は trust.repositories へ並べる owner/repo をカンバンから拾う（3-33）。
 //
 // **拾うだけである。信頼は登録しない。**登録するのは `continuo trust` であり、その対象は
-// 人間がこの一覧から要らない行を消したあとに残ったものである。**ボードは他人が編集できる**
+// 人間がこの一覧から要らない行を消したあとに残ったものである。**カンバンは他人が編集できる**
 // ので、拾った一覧をそのまま信頼させてはならない。
 //
 // **draft issue は数えない。**リポジトリに属していないため、信頼させる対象が存在しない。
@@ -206,7 +206,7 @@ func Detect(ctx context.Context, opts DetectOptions) Detection {
 // run: gh の実行関数。
 // timeout: gh の呼び出し1回あたりの制限時間。
 // owner: 決まった owner。空文字なら引かない。
-// number: 決まったボードの番号。0 以下なら引かない。
+// number: 決まったカンバンの番号。0 以下なら引かない。
 // 戻り値の1つ目: trust.repositories についての Field。
 // 戻り値の2つ目: 拾った owner/repo（辞書順・重複なし）。拾えなかった場合は nil。
 func detectRepositories(ctx context.Context, run GHRunner, timeout time.Duration, owner string, number int) (Field, []string) {
@@ -388,7 +388,7 @@ func ownerAdvice() []string {
 // run: gh の実行関数。
 // timeout: gh の呼び出し1回あたりの制限時間。
 // owner: 決まった owner。空文字なら候補を引かない。
-// 戻り値: project_number についての Field と、埋めたボードの番号（埋まらなかった場合は 0）。
+// 戻り値: project_number についての Field と、埋めたカンバンの番号（埋まらなかった場合は 0）。
 func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeout time.Duration, owner string) (Field, int, string) {
 	f := Field{Key: ProjectKey}
 
@@ -422,11 +422,11 @@ func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeou
 		return f, 0, ""
 	}
 
-	// **ログイン名のボードが1件も無ければ、所属する organization も探す**（設計 3-32）。
+	// **ログイン名のカンバンが1件も無ければ、所属する organization も探す**（設計 3-32）。
 	//
-	// `gh api user` はログイン名しか返さないので、**organization に置いたボードは
+	// `gh api user` はログイン名しか返さないので、**organization に置いたカンバンは
 	// ログイン名で探しても1件も出ない。**実際、GitHub Enterprise で organization に
-	// ボードを置いていた利用者が、`continuo setup` で1歩も進めなかった（issue #7）。
+	// カンバンを置いていた利用者が、`continuo setup` で1歩も進めなかった（issue #7）。
 	searched := []string{owner}
 	if len(projects) == 0 {
 		for _, org := range listOrgs(ctx, run, timeout) {
@@ -474,17 +474,17 @@ func detectProject(ctx context.Context, opts DetectOptions, run GHRunner, timeou
 	return f, number, boardOwner
 }
 
-// parseProjectList は `gh project list --format json` の出力からボードの候補を取り出す。
+// parseProjectList は `gh project list --format json` の出力からカンバンの候補を取り出す。
 //
 // out: gh の標準出力。
-// 戻り値: 閉じていないボードの一覧（gh が返した並び順のまま）。JSON として読めない場合はエラー。
-// listProjects は、その owner のボードの候補を引く。
+// 戻り値: 閉じていないカンバンの一覧（gh が返した並び順のまま）。JSON として読めない場合はエラー。
+// listProjects は、その owner のカンバンの候補を引く。
 //
 // ctx: 実行に適用するコンテキスト。
 // run: gh を起動する関数。
 // timeout: 1回の呼び出しの上限。
 // owner: user / organization の名前。
-// 戻り値: 閉じていないボードの候補と、失敗したときのエラー。
+// 戻り値: 閉じていないカンバンの候補と、失敗したときのエラー。
 func listProjects(ctx context.Context, run GHRunner, timeout time.Duration, owner string) ([]Project, error) {
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -497,12 +497,12 @@ func listProjects(ctx context.Context, run GHRunner, timeout time.Duration, owne
 
 // listOrgs は、利用者が所属する organization の名前を引く。
 //
-// **`gh api user` はログイン名しか返さない。**organization に置いたボードを見つけるには、
+// **`gh api user` はログイン名しか返さない。**organization に置いたカンバンを見つけるには、
 // 所属を別に引く必要がある。
 //
 // **失敗しても空を返す。**organization に所属していないことも、
 // 認証の scope が足りないことも、どちらも「探せなかった」だけである。
-// **ここで止めると、ログイン名のボードだけで足りる人まで巻き添えになる。**
+// **ここで止めると、ログイン名のカンバンだけで足りる人まで巻き添えになる。**
 //
 // ctx: 実行に適用するコンテキスト。
 // run: gh を起動する関数。
@@ -529,9 +529,9 @@ func listOrgs(ctx context.Context, run GHRunner, timeout time.Duration) []string
 // parseProjectList は `gh project list` の出力を候補の並びに直す。
 //
 // out: `gh project list --format json` の出力。
-// owner: そのボードを持つ user / organization の名前。**候補ごとに持たせる**
+// owner: そのカンバンを持つ user / organization の名前。**候補ごとに持たせる**
 // （ログイン名と organization の候補が混ざりうるため）。
-// 戻り値: 閉じていないボードの候補。
+// 戻り値: 閉じていないカンバンの候補。
 func parseProjectList(out []byte, owner string) ([]Project, error) {
 	var payload struct {
 		Projects []struct {
@@ -547,7 +547,7 @@ func parseProjectList(out []byte, owner string) ([]Project, error) {
 
 	projects := make([]Project, 0, len(payload.Projects))
 	for _, p := range payload.Projects {
-		// 閉じたボードは選ばせない。gh は既定で closed を返さないが、
+		// 閉じたカンバンは選ばせない。gh は既定で closed を返さないが、
 		// 返ってきたときに「候補が1件」の判定を狂わせないよう、ここでも落とす。
 		if p.Closed {
 			continue

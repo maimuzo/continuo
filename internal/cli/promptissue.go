@@ -13,7 +13,7 @@ import (
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// promptFetchTimeout は `continuo prompt --show --url` がボードを読むのに使う上限である。
+// promptFetchTimeout は `continuo prompt --show --url` がカンバンを読むのに使う上限である。
 //
 // **人間が手で叩いて待つコマンドなので、返らないまま待たせない。**
 // **`continuo doctor` と同じ30秒にしてある。**あちらも同じ性質のコマンドである。
@@ -40,7 +40,7 @@ func promptIssueIdentifier(raw string) (string, error) {
 	return ref.Identifier(), nil
 }
 
-// fetchIssueForPrompt は、識別子でボードから issue を1件引く（設計 5-3f）。
+// fetchIssueForPrompt は、識別子でカンバンから issue を1件引く（設計 5-3f）。
 //
 // **`Bootstrap` を呼ばない。**`FetchIssueByIdentifier` が使うのは
 // `owner` / `project_number` / `status_field` の3つを名前のまま渡すことだけで、
@@ -48,7 +48,7 @@ func promptIssueIdentifier(raw string) (string, error) {
 // **前例がある。**`internal/abandon` の `readBoard` も同じく通していない。
 //
 // **`Bootstrap` は Status の選択肢名の照合もしている。**呼ばないぶん、
-// `tracker.provider.status_field` の綴りがボードとずれていると**全件が Status 未設定に見える。**
+// `tracker.provider.status_field` の綴りがカンバンとずれていると**全件が Status 未設定に見える。**
 // **そのため、引けなかったときの文言で `continuo doctor` を案内する**（`runPrompt`）。
 //
 // **信頼の判定関数は渡さない**（`NewAdapter` の最後の引数が nil）。
@@ -60,8 +60,8 @@ func promptIssueIdentifier(raw string) (string, error) {
 // endpoint: GraphQL API の接続先。空なら本番の GitHub。**呼び出し側が検査してある。**
 // identifier: `<owner>/<repo>#<番号>` の形の識別子。
 // 戻り値の1つ目: 見つかった issue。
-// 戻り値の2つ目: ボードに載っていて、issue として組み立てられたなら true。
-// 戻り値の3つ目: `gh` が無い場合・トークンを引けない場合・ボードを読めない場合のエラー。
+// 戻り値の2つ目: カンバンに載っていて、issue として組み立てられたなら true。
+// 戻り値の3つ目: `gh` が無い場合・トークンを引けない場合・カンバンを読めない場合のエラー。
 func fetchIssueForPrompt(
 	ctx context.Context,
 	cfg config.TrackerConfig,
@@ -77,7 +77,7 @@ func fetchIssueForPrompt(
 	}
 	// **logger を捨てる。**nil を渡すと `NewAdapter` が `slog.Default()` を入れ、
 	// **`runPrompt` が受け取った `stderr` を通らない生の行が `os.Stderr` へ直接出る。**
-	// ボードに載っていない issue では、下の i18n の断りと**同じことを2つの書式で二重に出す。**
+	// カンバンに載っていない issue では、下の i18n の断りと**同じことを2つの書式で二重に出す。**
 	// **姉妹コマンドは2つとも捨てている**（`internal/abandon` と `internal/doctor`）。
 	adapter, err := tracker.NewAdapter(
 		cfg, endpoint, token, &http.Client{Timeout: daemon.DefaultTrackerTimeout},

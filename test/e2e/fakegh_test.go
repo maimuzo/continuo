@@ -71,7 +71,7 @@ type ghIssue struct {
 	CreatedAt     string @BQ@json:"created_at"@BQ@
 }
 
-// ghBoard は偽のボード1枚ぶんの状態である。
+// ghBoard は偽のカンバン1枚ぶんの状態である。
 type ghBoard struct {
 	Login         string                 @BQ@json:"login"@BQ@
 	Owner         string                 @BQ@json:"owner"@BQ@
@@ -174,18 +174,18 @@ func printJSON(v any) {
 	fmt.Println(string(encoded))
 }
 
-// loadBoard はボードの JSON を読む。
+// loadBoard はカンバンの JSON を読む。
 //
-// path: ボードの JSON のパス。
-// 戻り値: 読み取ったボード。
+// path: カンバンの JSON のパス。
+// 戻り値: 読み取ったカンバン。
 func loadBoard(path string) *ghBoard {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		fail("偽のボードを読めません: %v", err)
+		fail("偽のカンバンを読めません: %v", err)
 	}
 	var b ghBoard
 	if err := json.Unmarshal(raw, &b); err != nil {
-		fail("偽のボードを解釈できません: %v", err)
+		fail("偽のカンバンを解釈できません: %v", err)
 	}
 	if b.Comments == nil {
 		b.Comments = map[string][]ghComment{}
@@ -193,27 +193,27 @@ func loadBoard(path string) *ghBoard {
 	return &b
 }
 
-// saveBoard はボードの JSON を書く（一時ファイルへ書いてから rename する）。
+// saveBoard はカンバンの JSON を書く（一時ファイルへ書いてから rename する）。
 //
-// path: ボードの JSON のパス。
-// b: 書き出すボード。
+// path: カンバンの JSON のパス。
+// b: 書き出すカンバン。
 func saveBoard(path string, b *ghBoard) {
 	encoded, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
-		fail("偽のボードを JSON にできません: %v", err)
+		fail("偽のカンバンを JSON にできません: %v", err)
 	}
 	tmp := path + ".tmp.gh"
 	if err := os.WriteFile(tmp, append(encoded, '\n'), 0o600); err != nil {
-		fail("偽のボードを書けません: %v", err)
+		fail("偽のカンバンを書けません: %v", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		fail("偽のボードを置き換えられません: %v", err)
+		fail("偽のカンバンを置き換えられません: %v", err)
 	}
 }
 
 // main は1回の gh の呼び出しを処理する。
 //
-// **ボードのロックを取ってから読み、処理し、書き戻す。**GraphQL 側と同時に走るため。
+// **カンバンのロックを取ってから読み、処理し、書き戻す。**GraphQL 側と同時に走るため。
 func main() {
 	args := os.Args[1:]
 	if len(args) < 2 {
@@ -244,7 +244,7 @@ func main() {
 
 // dispatch はサブコマンドごとの処理を行う。
 //
-// b: いまのボード。書き込み系のサブコマンドではここを書き換える。
+// b: いまのカンバン。書き込み系のサブコマンドではここを書き換える。
 // args: gh に渡された引数。
 func dispatch(b *ghBoard, args []string) {
 	rest := args[2:]
@@ -276,7 +276,7 @@ func dispatch(b *ghBoard, args []string) {
 
 // authStatus は @BQ@gh auth status@BQ@ の出力を返す（**継続できる認証**の形）。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 func authStatus(b *ghBoard) {
 	fmt.Println("github.com")
 	fmt.Println("  ✓ Logged in to github.com account " + b.Login + " (keyring)")
@@ -288,7 +288,7 @@ func authStatus(b *ghBoard) {
 
 // projectList は @BQ@gh project list@BQ@ の出力を返す。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // args: サブコマンドより後ろの引数。
 func projectList(b *ghBoard, args []string) {
 	if wantJSON(args) {
@@ -315,7 +315,7 @@ func projectList(b *ghBoard, args []string) {
 // **Status のほかに single-select でないフィールドも返す。**continuo が
 // 名前と型の両方で選んでいることを確かめられるようにする。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // args: サブコマンドより後ろの引数。
 func projectFieldList(b *ghBoard, args []string) {
 	options := []any{}
@@ -339,7 +339,7 @@ func projectFieldList(b *ghBoard, args []string) {
 
 // projectItemList は @BQ@gh project item-list@BQ@ の出力を返す。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // args: サブコマンドより後ろの引数。
 func projectItemList(b *ghBoard, args []string) {
 	items := []any{}
@@ -367,9 +367,9 @@ func projectItemList(b *ghBoard, args []string) {
 	}
 }
 
-// projectItemAdd は @BQ@gh project item-add@BQ@ を処理する（**ボードへ載せる**）。
+// projectItemAdd は @BQ@gh project item-add@BQ@ を処理する（**カンバンへ載せる**）。
 //
-// b: いまのボード。書き換える。
+// b: いまのカンバン。書き換える。
 // args: サブコマンドより後ろの引数。
 func projectItemAdd(b *ghBoard, args []string) {
 	url, ok := flagValue(args, "--url")
@@ -395,9 +395,9 @@ func projectItemAdd(b *ghBoard, args []string) {
 	fail("テスト用gh mock: %s という issue がありません", url)
 }
 
-// issueCreate は @BQ@gh issue create@BQ@ を処理する（**ボードには載せない**）。
+// issueCreate は @BQ@gh issue create@BQ@ を処理する（**カンバンには載せない**）。
 //
-// b: いまのボード。書き換える。
+// b: いまのカンバン。書き換える。
 // args: サブコマンドより後ろの引数。
 func issueCreate(b *ghBoard, args []string) {
 	repo, ok := flagValue(args, "--repo")
@@ -424,7 +424,7 @@ func issueCreate(b *ghBoard, args []string) {
 
 // issueView は @BQ@gh issue view@BQ@ の出力を返す（エージェントが叩く）。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // args: サブコマンドより後ろの引数。
 func issueView(b *ghBoard, args []string) {
 	target := firstPositional(args)
@@ -449,7 +449,7 @@ func issueView(b *ghBoard, args []string) {
 
 // issueComment は @BQ@gh issue comment@BQ@ を処理する（エージェントが叩く）。
 //
-// b: いまのボード。書き換える。
+// b: いまのカンバン。書き換える。
 // args: サブコマンドより後ろの引数。
 func issueComment(b *ghBoard, args []string) {
 	target := firstPositional(args)
@@ -478,7 +478,7 @@ func issueComment(b *ghBoard, args []string) {
 
 // findByURLOrNumber は URL か番号で issue を引く。
 //
-// b: いまのボード。
+// b: いまのカンバン。
 // target: URL か issue 番号の文字列。
 // args: --repo を読むための引数の並び。
 // 戻り値: 見つかった issue。無ければ nil。
@@ -501,10 +501,10 @@ func findByURLOrNumber(b *ghBoard, target string, args []string) *ghIssue {
 	return nil
 }
 
-// onBoard はボードに載っている issue を、載せた順に返す。
+// onBoard はカンバンに載っている issue を、載せた順に返す。
 //
-// b: いまのボード。
-// 戻り値: ボードに載っている issue。
+// b: いまのカンバン。
+// 戻り値: カンバンに載っている issue。
 func onBoard(b *ghBoard) []*ghIssue {
 	var out []*ghIssue
 	for _, is := range b.Issues {

@@ -73,15 +73,15 @@ const itemFieldsFragmentTemplate = `
 // **見分けに使うのは `actor.__typename` である**（自動化は `Bot`、人間と continuo 自身は `User`）。
 // **`wasAutomated` も一緒に読む。**同じ応答に載るので費用が増えず、GitHub が将来直せば自動で効く。
 //
-// **`project { number }` を必ず読む。**1つの issue が複数のボードに載っていると、
-// 他のボードのイベントが同じ配列で返る（設計 2-6 の実測）。絞り込みに要る。
+// **`project { number }` を必ず読む。**1つの issue が複数のカンバンに載っていると、
+// 他のカンバンのイベントが同じ配列で返る（設計 2-6 の実測）。絞り込みに要る。
 //
 // **`last: 50` である。**要るのは「いまの Status を書いた最後の1件」だけだが、
-// **窓を絞るのはボードで絞り込む前である。**`timelineItems` に「どのボードのイベントか」で
-// 絞る引数は無いので、**別のボードで Status が何度も動くと、自分のボードのイベントが
+// **窓を絞るのはカンバンで絞り込む前である。**`timelineItems` に「どのカンバンのイベントか」で
+// 絞る引数は無いので、**別のカンバンで Status が何度も動くと、自分のカンバンのイベントが
 // 窓から押し出される**（`judgeStatusAuthor` が絞るのは、返ってきた50件の中だけである）。
 // **押し出されると「誰が書いたか分からない」になり、自動化の書き戻しが効かないまま
-// worker が止まる。**1つの issue が載るボードの数だけ余裕を持たせる。
+// worker が止まる。**1つの issue が載るカンバンの数だけ余裕を持たせる。
 //
 // **ネストした connection が1本増えるので、この断片を候補の取得（100件返る）へ
 // 足してはならない。**足すのは ID 指定の取り直しだけで、しかも
@@ -101,7 +101,7 @@ const statusChangedTimelineFragment = `
       }`
 
 // itemFieldsFragment は候補の取得（fetch_issues_by_states）と識別子での照合が使う断片である。
-// **timeline を含まない。**どちらも100件単位でボードを読むので、1件ずつにしか意味の無い
+// **timeline を含まない。**どちらも100件単位でカンバンを読むので、1件ずつにしか意味の無い
 // timeline を足すと費用だけが増える。
 var itemFieldsFragment = fmt.Sprintf(itemFieldsFragmentTemplate, "")
 
@@ -115,7 +115,7 @@ var itemFieldsWithTimelineFragment = fmt.Sprintf(itemFieldsFragmentTemplate, sta
 // （自前で並べ替えない。設計 4-2）。
 //
 // **`orderBy: { field: POSITION, direction: ASC }` を明示的に渡す。**POSITION の昇順は
-// 「人間がボード上でドラッグして決めた並び順」そのものであり、continuo は実行順序の全部を
+// 「人間がカンバン上でドラッグして決めた並び順」そのものであり、continuo は実行順序の全部を
 // この順序に賭けている（設計 4-2 / 4-4）。**省略してもいまは同じ既定値になる**
 // （2026-08-18 の introspection で `{field: POSITION, direction: ASC}` を実測）**が、
 // 既定値は provider 側の都合で変わりうる。**黙って実行順序が変わるのを防ぐため、
@@ -310,8 +310,8 @@ const maxCommentPages = 20
 // **ノード ID が要る。**担当者を書き足す `addAssigneesToAssignable` はログイン名を受け付けず、
 // **ノード ID しか受け付けない。**
 //
-// **`gh api user` ではなく GraphQL で取る。**ボードの読み書きと同じ経路・同じ認証で取れるので、
-// **「ボードは読めるのに持ち主だけ取れない」という食い違いが起きない。**
+// **`gh api user` ではなく GraphQL で取る。**カンバンの読み書きと同じ経路・同じ認証で取れるので、
+// **「カンバンは読めるのに持ち主だけ取れない」という食い違いが起きない。**
 const viewerQuery = `
 query {
   viewer { id login }
@@ -465,7 +465,7 @@ type rawActor struct {
 	Login    string `json:"login"`
 }
 
-// rawEventProject は timeline のイベントが指すボードである。番号での絞り込みにだけ使う。
+// rawEventProject は timeline のイベントが指すカンバンである。番号での絞り込みにだけ使う。
 type rawEventProject struct {
 	Number int `json:"number"`
 }
@@ -528,7 +528,7 @@ type rawItem struct {
 	// items() 経由（fetch_issues_by_states）では常に ProjectV2Item なので送っていない。
 	Typename string `json:"__typename"`
 	ID       string `json:"id"`
-	// IsArchived は item がボード上で archive されているかどうかである。
+	// IsArchived は item がカンバン上で archive されているかどうかである。
 	// **archive 済みの item は「もう見えない」として扱う**（mapRawItemToIssue）。
 	IsArchived       bool            `json:"isArchived"`
 	FieldValueByName *rawStatusValue `json:"fieldValueByName"`
@@ -575,14 +575,14 @@ type rawItemCount struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// rawWorkflow はボードの自動化1件の応答である（設計 3-32 の見出し語 `自動化`）。
+// rawWorkflow はカンバンの自動化1件の応答である（設計 3-32 の見出し語 `自動化`）。
 type rawWorkflow struct {
 	Number  int    `json:"number"`
 	Name    string `json:"name"`
 	Enabled bool   `json:"enabled"`
 }
 
-// rawWorkflowConnection はボードの自動化の一覧の応答である。
+// rawWorkflowConnection はカンバンの自動化の一覧の応答である。
 type rawWorkflowConnection struct {
 	Nodes []rawWorkflow `json:"nodes"`
 }
@@ -768,15 +768,15 @@ func buildNoFieldQuery(field string) string {
 //	-no:"nosuchfield"   → 105件、no:"nosuchfield"   → 105件（どちらも全件。解決できていない）
 //
 // **判定は「両方が全件と一致するか」だけで行い、合計との差では見ない。**
-// 数えている最中に人間がボードへ item を足すと合計が1件ずれることがあり、
+// 数えている最中に人間がカンバンへ item を足すと合計が1件ずれることがあり、
 // 差で見ると誤検知する。両方が全件に一致するのは、解決できていない場合だけである
 // （解決できていて全件に値が入っているなら、空の件数は0になる）。
 //
-// total: ボード上の item の全件数。
+// total: カンバン上の item の全件数。
 // withValue: `-no:"<status_field>"` の件数。
 // withoutValue: `no:"<status_field>"` の件数。
 // 戻り値: 絞り込みのキーとして使えていれば true。
-// **全件が0（item が1件も無いボード）のときは判定できないので true を返す。**
+// **全件が0（item が1件も無いカンバン）のときは判定できないので true を返す。**
 func judgeFilterKeyUsable(total, withValue, withoutValue int) bool {
 	if total <= 0 {
 		return true
@@ -819,7 +819,7 @@ const actorTypeBot = "Bot"
 
 // statusAuthor は「いまの Status を書いたのは誰か」の判定結果である（設計 3-54）。
 type statusAuthor struct {
-	// Automated は、書いたのがボードの自動化（`Bot`）だったかどうかである。
+	// Automated は、書いたのがカンバンの自動化（`Bot`）だったかどうかである。
 	// **イベントが1件も引けなければ false である**（分からないなら「自動化ではない」に倒す）。
 	Automated bool
 	// Login は書いた主体のログイン名である。ログと issue のコメントに出すためだけに持つ。
@@ -830,9 +830,9 @@ type statusAuthor struct {
 // judgeStatusAuthor は timeline のイベントから「いまの Status を書いたのは誰か」を決める
 // （設計 2-6 / 3-54）。
 //
-// **自分のボードのイベントだけを見る。**1つの issue が複数のボードに載っていると、
-// 他のボードのイベントが同じ配列で返る（設計 2-6 の実測）。**絞り込まないと、
-// 別のボードで自動化が動いただけで「自動化が動かした」と判定してしまう。**
+// **自分のカンバンのイベントだけを見る。**1つの issue が複数のカンバンに載っていると、
+// 他のカンバンのイベントが同じ配列で返る（設計 2-6 の実測）。**絞り込まないと、
+// 別のカンバンで自動化が動いただけで「自動化が動かした」と判定してしまう。**
 //
 // **いまの Status と一致する、いちばん新しいイベントを採る。**古いイベントを採ると、
 // そのあと誰かが上書きしても、最初の書き手を指し続ける。
@@ -842,7 +842,7 @@ type statusAuthor struct {
 //
 // items: timelineItems の応答（nil なら判定しない）。
 // state: いまの Status 名（大文字小文字と前後の空白は無視して照合する）。
-// projectNumber: 自分のボードの番号。**0 以下なら絞り込まない**（テストの都合で番号を
+// projectNumber: 自分のカンバンの番号。**0 以下なら絞り込まない**（テストの都合で番号を
 // 持たない偽サーバに合わせるためではなく、番号が未設定のアダプタを作れないので実際には起きない）。
 // 戻り値: 判定結果。一致するイベントが1件も無ければゼロ値。
 func judgeStatusAuthor(items *rawTimelineItems, state string, projectNumber int) statusAuthor {
@@ -1023,7 +1023,7 @@ type mapItemResult struct {
 	// 「もう見えない」と「壊れている」は意味が違い、前者の省略は SPEC.md 11.1 が
 	// 明示的に許している（"IDs no longer visible in the configured scope are omitted"）。
 	//
-	// これに当たるのは、**ボードとしては正常なのに continuo の候補の集合に入らない**3つである。
+	// これに当たるのは、**カンバンとしては正常なのに continuo の候補の集合に入らない**3つである。
 	//
 	//	archive 済み            … 候補の取得（items）は最初から返さない
 	//	Status が未設定          … 候補の取得は Status で絞るので返らない（104件中4件が該当）
@@ -1056,7 +1056,7 @@ type mapItemResult struct {
 // statusFieldName: エラーメッセージ用（tracker.provider.status_field の値）。
 // repoTrusted: `<owner>/<repo>` が Claude Code に信頼登録されているかを判定する関数
 // （設計 3-13 の「リポジトリが信頼済み」）。nil なら全て信頼済みとして扱う。
-// projectNumber: 自分のボードの番号（timeline のイベントを自分のボードへ絞るのに使う。設計 3-54）。
+// projectNumber: 自分のカンバンの番号（timeline のイベントを自分のカンバンへ絞るのに使う。設計 3-54）。
 // 戻り値: Ok が true なら Issue が有効。false なら Reason に理由（人間可読）が入る。
 // **Gone が true のものは「壊れている」ではなく「候補の集合にもう居ない」である**
 // （呼び出し側は ID 指定の取り直しでもエラーにせず省く）。
@@ -1071,7 +1071,7 @@ func mapRawItemToIssue(
 	raw *rawItem, statusFieldName string, repoTrusted RepoTrustFunc, projectNumber int,
 ) mapItemResult {
 	if raw.IsArchived {
-		// archive 済みの item はボード上でもう見えない。候補の取得は `items(...)` の既定
+		// archive 済みの item はカンバン上でもう見えない。候補の取得は `items(...)` の既定
 		// （archivedStates: [NOT_ARCHIVED]）で最初から返らないが、ID 指定の取り直しには
 		// その既定が効かないため、ここで弾く。**「まだ作業中の状態にある」と誤認しないため。**
 		return mapItemResult{
@@ -1086,7 +1086,7 @@ func mapRawItemToIssue(
 	if raw.FieldValueByName == nil || strings.TrimSpace(raw.FieldValueByName.Name) == "" {
 		// **Status 未設定は「壊れている」ではなく「候補の集合にもう居ない」である。**
 		// 候補の取得（`items(...)`）は Status で絞るので、この item は最初から返らない。
-		// 人間がボードの画面で Status を空にするのは異常な操作ではない（本番のボードでも
+		// 人間がカンバンの画面で Status を空にするのは異常な操作ではない（本番のカンバンでも
 		// 104件中4件が未設定）。ここをエラーにすると、**1件が未設定なだけで
 		// ID 指定の取り直しが丸ごと失敗し、同じ呼び出しに乗った他の run が全部巻き添えになる。**
 		return mapItemResult{

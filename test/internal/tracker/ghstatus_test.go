@@ -22,7 +22,7 @@ const ghAuthStatusOutput = `github.com
 // TestCheckGHProjectScope_有効なアカウントにprojectがあれば通る は、
 // 起動時の検査の合格の条件を確かめる。
 //
-// 目的: 設計 3-6。scope に `project` が無いとボードを読めない。
+// 目的: 設計 3-6。scope に `project` が無いとカンバンを読めない。
 //
 // 与える情報: `Active account: true` のブロックに `project` を含む出力。
 //

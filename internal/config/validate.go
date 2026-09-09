@@ -149,7 +149,7 @@ func validate(cfg *Config) error {
 	// automated_state_rewrite は「自動化が書いた Status → 戻す先の Status」の対応表である（3-54）。
 	// **空文字は Status 名として存在しない。**そして**キーと値が同じ値だと1バイトも動かない**
 	// （同じ値の書き込みは省かれるので、知らない Status のまま巡回のたびに書きに行き続ける）。
-	// 名前がボードに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。
+	// 名前がカンバンに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。
 	//
 	// **キーを名前順に見る。**map の反復順は決まらないので、そのまま回すと
 	// **同じ設定ファイルなのに、実行のたびに違う行のエラーが出る。**
@@ -159,7 +159,7 @@ func validate(cfg *Config) error {
 
 	// status_signal_map の値は「動かす先の Status 名」である。null は「Status を動かさない」
 	// という意味を持つので許すが、空文字の Status 名は存在しないので誤りとして止める。
-	// 名前がボードに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。
+	// 名前がカンバンに実在するかどうかは、起動時に Status の選択肢名と照合して検査する（3-6）。
 	for signal, state := range cfg.Tracker.StatusSignalMap {
 		if signal == "" {
 			return requiredValueError("tracker.status_signal_map のキー（表明の値）")
@@ -204,7 +204,7 @@ func validate(cfg *Config) error {
 		return invalidValueError("agent.max_dispatch_turns", cfg.Agent.MaxDispatchTurns, "0より大きい整数にすること")
 	}
 	// **状態ごとの上限に 0 以下を書かせない。**`In Progress: 0` と書くと空きスロットの
-	// 判定（hasFreeSlot）が常に偽になり、ボード全体の dispatch が永久に止まる。
+	// 判定（hasFreeSlot）が常に偽になり、カンバン全体の dispatch が永久に止まる。
 	// ログにも何も出ないので、無人運用では止まっていることに誰も気づけない。
 	// `SPEC.md` 5.3.5 は "Invalid entries (non-positive or non-numeric) are ignored"
 	// （**訳:** 不正な項目（非正の値・数値でない値）は無視する）と定めるが、

@@ -11,14 +11,14 @@
 | --- | --- | --- | --- |
 | `[x]` | 01 | [設定・ログ・CLI](01_config.md) | 設定を読んで検証し、2つ目のプロセスが立たない。**`continuo init` が雛形を置く** |
 | `[x]` | 02 | [herdr クライアント](02_herdr.md) | pane を作り、agent を起動し、turn の終わりまで待てる |
-| `[x]` | 03 | [トラッカーのアダプタ](03_tracker.md) | ボードから issue を取り、ID 指定で取り直し、Status を書ける |
+| `[x]` | 03 | [トラッカーのアダプタ](03_tracker.md) | カンバンから issue を取り、ID 指定で取り直し、Status を書ける |
 | `[x]` | 04 | [hook の受け口](04_hook.md) | Claude Code の hook を受け取り、turn の終わりを判定できる |
 | `[x]` | 05 | [workspace の管理](05_workspace.md) | issue ごとに worktree を用意し、誰のものかディスクだけから分かり、片付けられる |
 | `[x]` | 06 | [orchestrator](06_orchestrator.md) | **1件の issue を最初から最後まで通せる** |
 | `[x]` | 07 | [再起動時の復元](07_restore.md) | どの段で落としても取り残される issue が出ない |
 | `[x]` | 08 | [continuo doctor](08_doctor.md) | 使い始めるときに前提が揃っているかを検査できる |
 | `[x]` | 09 | [HTTP ダッシュボード](09_dashboard.md) | run の状況を人間が見られる（任意） |
-| `[x]` | 10 | `continuo setup`（タスクファイル無し） | **既にあるボードの Status を5つの役割へ対話で割り当てる。**設計 3-32 |
+| `[x]` | 10 | `continuo setup`（タスクファイル無し） | **既にあるカンバンの Status を5つの役割へ対話で割り当てる。**設計 3-32 |
 | `[x]` | 11 | `continuo trust`（タスクファイル無し） | **列挙したリポジトリの信頼を登録する。**`--dry-run` で要求内容を見せる。設計 3-33 |
 | `[x]` | 12 | `internal/i18n`（タスクファイル無し） | **多言語化の器。**日本語を正とし、英語のリソースは後で作る |
 | `[x]` | 13 | `continuo abandon`（タスクファイル無し） | **間違えて着手した issue を着手前へ戻す。**worktree・pane・herdr の workspace・branch をまとめて消す。設計 3-37 |
@@ -136,7 +136,7 @@ cd /path/to/continuo && \
 **[CLAUDE.md](../../../CLAUDE.md) の再掲。**worker への指示にも必ず含める。
 
 - **`claude -p` は使わない。**提案もしない。Claude Agent SDK と API の直叩きも同じ理由で対象外
-- **GitHub Projects v2 の project #3 は本番のボードである。**検証では書き込まない。**`.claude/rules/issue.md` の手順が求めるボードの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）だけは、この禁止の対象ではない**
+- **GitHub Projects v2 の project #3 は本番のカンバンである。**検証では書き込まない。**`.claude/rules/issue.md` の手順が求めるカンバンの操作（`Ice Box` を付ける・並び順・sub-issue の関連付け）だけは、この禁止の対象ではない**
 - **`updateProjectV2Field` を呼ばない。**選択肢の指定は全件置き換えとして扱われ、設定済みの Status が全部消える
 - **`~/.claude/projects/` 配下を消さない**
 - **`~/.claude.json` を書き換えない。**読み取るだけ

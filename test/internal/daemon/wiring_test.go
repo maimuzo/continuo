@@ -539,7 +539,7 @@ func TestWatchInterrupt_stopを2回呼んでも落ちない(t *testing.T) {
 // （復元にも巡回にも進まない）。
 //
 // 与える情報: 応答を返さないテスト用GraphQL mock（127.0.0.1）と、200ms の起動時検査の期限。
-// gh と herdr は答える（止まるのはボードの読み取りだけ）。
+// gh と herdr は答える（止まるのはカンバンの読み取りだけ）。
 //
 // 成功条件: 30 秒以内に起動の段のエラーで返り、文言が起動時検査の失敗を指すこと。
 func TestRun_起動時検査が期限内に終わらなければ起動を止める(t *testing.T) {
@@ -552,7 +552,7 @@ func TestRun_起動時検査が期限内に終わらなければ起動を止め�
 	}
 	// **テスト用gh / ghq mock を PATH の先頭に置く。**本物の認証情報を読ませない。
 	writeFakeGH(t, binDir, root)
-	// **テスト用herdr mock は ping に答える。**止まるのはボードの読み取りだけにする。
+	// **テスト用herdr mock は ping に答える。**止まるのはカンバンの読み取りだけにする。
 	newFakeHerdr(t, root, &timeline{})
 
 	// **応答を1バイトも返さないサーバ。**
@@ -586,7 +586,7 @@ func TestRun_起動時検査が期限内に終わらなければ起動を止め�
 	elapsed := time.Since(start)
 
 	if err == nil {
-		t.Fatal("ボードが応答しないのに起動できてしまった")
+		t.Fatal("カンバンが応答しないのに起動できてしまった")
 	}
 	if elapsed > 30*time.Second {
 		t.Fatalf("期限を過ぎても待ち続けた: %v", elapsed)

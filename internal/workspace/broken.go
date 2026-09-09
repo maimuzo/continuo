@@ -65,7 +65,7 @@ type PathClue struct {
 
 // IssueURL は手掛かりから組み立てた issue の URL を返す。
 //
-// **人間への案内に出すためだけの値である。**この URL でボードを引くわけではない
+// **人間への案内に出すためだけの値である。**この URL でカンバンを引くわけではない
 // （引くのは `<owner>/<repo>#<番号>` の識別子である）。
 //
 // 戻り値: `https://<host>/<owner>/<repo>/issues/<番号>`。
@@ -79,7 +79,7 @@ func (c *PathClue) IssueURL() string {
 
 // Identifier は手掛かりから組み立てた `<owner>/<repo>#<番号>` を返す。
 //
-// **ボードを1件引くための鍵である**（tracker の FetchIssueByIdentifier に渡す）。
+// **カンバンを1件引くための鍵である**（tracker の FetchIssueByIdentifier に渡す）。
 //
 // 戻り値: `<owner>/<repo>#<番号>`。**番号を切り出せていなければ空文字である。**
 func (c *PathClue) Identifier() string {
@@ -163,7 +163,7 @@ func (m *Manager) BrokenWorktreeGuidance(worktreePath string) []string {
 // （3-37-9d を設定の検査が強制する）ので、テンプレートを「番号だけ差し替えて」
 // 変数展開すれば、番号がスラグのどこに現れるかが分かる。
 //
-// **切り出した番号を信じてはならない。**呼び出し側は、この番号でボードを引き直し、
+// **切り出した番号を信じてはならない。**呼び出し側は、この番号でカンバンを引き直し、
 // **取れた issue から作り直したスラグが元のディレクトリ名と一致すること**を
 // 必ず確かめること（ExpectedSlugFor）。
 //

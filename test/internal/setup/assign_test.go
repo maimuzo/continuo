@@ -6,7 +6,7 @@
 // 確かめたいことは RUCM「既存のボードの Status を割り当てる」の基本フローと代替フローである。
 // docs/spec/usecases/particular_case/既存のボードの Status を割り当てる.rucm.md
 //
-// **ボードは1回も読まない。**選択肢は引数で渡すので、本番のボードにも GitHub にも触れない。
+// **カンバンは1回も読まない。**選択肢は引数で渡すので、本番のカンバンにも GitHub にも触れない。
 package setup_test
 
 import (
@@ -18,7 +18,7 @@ import (
 	"github.com/maimuzo/continuo/internal/setup"
 )
 
-// boardOptions は本番のボード（project #3）と同じ並びの選択肢である。
+// boardOptions は本番のカンバン（project #3）と同じ並びの選択肢である。
 //
 // **並び順ごと写してある。**番号で選ばせるので、並びが変わると番号の意味が変わる。
 var boardOptions = []string{"Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done"}
@@ -26,7 +26,7 @@ var boardOptions = []string{"Ice Box", "Ready", "In Progress", "Blocked", "In Re
 // runAssign は番号を流し込んで setup.Assign を1回走らせる。
 //
 // t: 呼び出し元のテスト。
-// options: ボードから読んだことにする選択肢。
+// options: カンバンから読んだことにする選択肢。
 // input: 標準入力へ流し込む行（末尾に改行を付けて連結する）。
 // 戻り値の1つ目: 決まった割り当て。
 // 戻り値の2つ目: Assign が返したエラー。

@@ -539,15 +539,15 @@ func TestRestore_Doneでもcleanup_on_statesに入っていなければ片付け
 // TestRestore_取り直しで見つからないrunはpaneもworktreeも残して印から外す は、
 // 設計 3-4 の段5a の「取り直しで見つからなかった」を確かめる。
 //
-// 目的: ボードから外された・archive された issue を勝手に消さない。
+// 目的: カンバンから外された・archive された issue を勝手に消さない。
 //
-// 与える情報: 身元ファイルはあるが、ボードに載っていない issue。
+// 与える情報: 身元ファイルはあるが、カンバンに載っていない issue。
 //
 // 成功条件: pane も worktree も残り、印に入らず、ログに残る。
 func TestRestore_取り直しで見つからないrunはpaneもworktreeも残して印から外す(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
-	// **ボードには足さない。**
+	// **カンバンには足さない。**
 	wt := prepareWorktree(t, fx, issue, identityOverride{})
 	installPanes(fx, livePane{
 		PaneID: "p-188", Cwd: wt.Path, AgentName: "continuo-hello-world-188",
@@ -557,10 +557,10 @@ func TestRestore_取り直しで見つからないrunはpaneもworktreeも残し
 	restore(t, fx)
 
 	if got := fx.Orc.RunningIdentifiers(); len(got) != 0 {
-		t.Fatalf("ボードに無い run を印へ入れてしまった: got %v", got)
+		t.Fatalf("カンバンに無い run を印へ入れてしまった: got %v", got)
 	}
 	if ids := closedPaneIDs(fx); len(ids) != 0 {
-		t.Fatalf("ボードに無い run の pane を閉じてしまった: %v", ids)
+		t.Fatalf("カンバンに無い run の pane を閉じてしまった: %v", ids)
 	}
 	if _, err := os.Stat(wt.Path); err != nil {
 		t.Fatalf("worktree を消してしまった: %v", err)
@@ -714,7 +714,7 @@ func TestRestore_paneが無くIn_Reviewなら何もしない(t *testing.T) {
 // 目的: continuo のものと断定できないので、閉じずに人間へ見せる（設計 3-4 の段9）。
 //
 // 与える情報: 置き場所の中にあるが身元ファイルを持たない worktree と、その pane。
-// **その issue はボードに載せない。**載せると復元（設計 3-49）が身元ファイルを
+// **その issue はカンバンに載せない。**載せると復元（設計 3-49）が身元ファイルを
 // 書き直してしまい、段9 へ入らない。**飛ばす設定にして、起動が止まらないようにする。**
 //
 // 成功条件: pane を閉じず、ログに残る。
@@ -751,7 +751,7 @@ func TestRestore_身元ファイルの無いworktreeのpaneは閉じずにログ
 // 目的: 段6 の書き込み途中で落ちた場合に起こる。**消してはならない。**
 //
 // 与える情報: JSON が壊れた身元ファイルを持つ worktree。
-// **その issue はボードに載せない。**載せると復元（設計 3-49）が身元ファイルを
+// **その issue はカンバンに載せない。**載せると復元（設計 3-49）が身元ファイルを
 // 書き直してしまう。**飛ばす設定にして、起動が止まらないようにする。**
 //
 // 成功条件: Restore が落ちず、worktree が残り、ログに出る。
@@ -1122,16 +1122,16 @@ func TestRestore_agentの一覧を取れなくてもpaneを1つも閉じない(t
 	}
 }
 
-// TestRestore_身元ファイルが無くても置き場所とボードから復元する は、設計 3-49 を確かめる。
+// TestRestore_身元ファイルが無くても置き場所とカンバンから復元する は、設計 3-49 を確かめる。
 //
 // 目的: 着手は worktree を作ってから身元ファイルを書く（設計 3-16 の段6〜段9）ので、
 // **その間で落ちると身元ファイルの無い worktree ができる。**それは「壊れた」のではなく
-// 「書き終える前に落ちた」だけであり、置き場所とボードから組み立て直せる。
+// 「書き終える前に落ちた」だけであり、置き場所とカンバンから組み立て直せる。
 //
-// 与える情報: 身元ファイルを持たない worktree と、その pane と、ボードに載っている issue。
+// 与える情報: 身元ファイルを持たない worktree と、その pane と、カンバンに載っている issue。
 //
 // 成功条件: 身元ファイルが書き直され、その run が引き継がれること。
-func TestRestore_身元ファイルが無くても置き場所とボードから復元する(t *testing.T) {
+func TestRestore_身元ファイルが無くても置き場所とカンバンから復元する(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -1171,10 +1171,10 @@ func TestRestore_身元ファイルが無くても置き場所とボードから
 //
 // TestRestore_復元できない壊れたworktreeがあれば起動を止める は、設計 3-49 を確かめる。
 //
-// 目的: 飛ばして走り続けると、その issue はボードの上で running_state のまま誰にも
+// 目的: 飛ばして走り続けると、その issue はカンバンの上で running_state のまま誰にも
 // 触られず、**人間が気づくのは何時間も後になる。**既定は止める側である。
 //
-// 与える情報: JSON が壊れた身元ファイルを持つ worktree と、**ボードに載っていない issue。**
+// 与える情報: JSON が壊れた身元ファイルを持つ worktree と、**カンバンに載っていない issue。**
 //
 // 成功条件: Restore がエラーを返し、**worktree は消えず**、エラーに「何が起きているか」と
 // 「次に何をすべきか」の両方が入っていること。
@@ -1218,7 +1218,7 @@ func TestRestore_復元できない壊れたworktreeがあれば起動を止め�
 // 引き直した issue からスラグを作り直し、目の前のディレクトリ名と一致することを確かめる。
 //
 // 与える情報: issue 188 の置き場所に立つ、身元ファイルの無い worktree。
-// その pane の label は issue 999 を指し、**ボードには 999 だけが載っている。**
+// その pane の label は issue 999 を指し、**カンバンには 999 だけが載っている。**
 //
 // 成功条件: 身元ファイルを書かないこと（別の issue のものとして復元しない）。
 func TestRestore_paneのlabelが置き場所と食い違えば復元しない(t *testing.T) {

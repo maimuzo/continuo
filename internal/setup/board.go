@@ -32,26 +32,26 @@ const singleSelectFieldType = "ProjectV2SingleSelectField"
 var (
 	// ErrScopeMissing は gh の scope に project が無いことを表す。
 	ErrScopeMissing = errors.New("gh の scope に project がありません")
-	// ErrStatusFieldNotFound は、指定した名前の single-select フィールドがボードに無いことを表す。
+	// ErrStatusFieldNotFound は、指定した名前の single-select フィールドがカンバンに無いことを表す。
 	ErrStatusFieldNotFound = errors.New("カンバンに single-select の Status フィールドがありません")
 	// ErrRateLimited は GitHub のレートリミットに当たったことを表す。**一時的である。**
 	ErrRateLimited = errors.New("GitHub のレートリミットに当たりました")
 )
 
-// StatusField はボードから読んだ Status フィールドである。
+// StatusField はカンバンから読んだ Status フィールドである。
 type StatusField struct {
 	// Name はフィールドの名前である（画面に出す）。
 	Name string
-	// Options は選択肢の名前である。**ボードの並び順のまま**入れる。
-	// 番号で選ばせるので、画面の並びとボードの並びを一致させる。
+	// Options は選択肢の名前である。**カンバンの並び順のまま**入れる。
+	// 番号で選ばせるので、画面の並びとカンバンの並びを一致させる。
 	Options []string
 }
 
 // FetchOptions は FetchStatusField の入力である。
 type FetchOptions struct {
-	// Owner はボードの owner（GitHub の user / organization 名）である。
+	// Owner はカンバンの owner（GitHub の user / organization 名）である。
 	Owner string
-	// ProjectNumber はボードの番号である。
+	// ProjectNumber はカンバンの番号である。
 	ProjectNumber int
 	// FieldName は読む single-select フィールドの名前である。空なら DefaultStatusFieldName。
 	FieldName string
@@ -61,13 +61,13 @@ type FetchOptions struct {
 	Timeout time.Duration
 }
 
-// FetchStatusField はボードの Status フィールドの選択肢を読む。
+// FetchStatusField はカンバンの Status フィールドの選択肢を読む。
 //
 // **読み取りだけである。**呼ぶのは `gh project field-list`（GET 相当）だけで、
-// ボードにも item にも1文字も書き込まない。
+// カンバンにも item にも1文字も書き込まない。
 //
 // ctx: 呼び出しに適用するコンテキスト。
-// opts: ボードの場所とフィールドの名前、gh の実行関数。
+// opts: カンバンの場所とフィールドの名前、gh の実行関数。
 // 戻り値: フィールドの名前と選択肢の一覧。
 // エラー: ErrScopeMissing / ErrRateLimited / ErrStatusFieldNotFound を errors.Is で
 // 判定できる形で返す。それ以外は gh の出力を添えたエラーを返す。

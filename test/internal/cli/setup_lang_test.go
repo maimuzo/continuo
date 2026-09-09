@@ -53,7 +53,7 @@ func writeWorkflowWithLanguage(t *testing.T, lang string) string {
 // 目的: `language: ja` と書いた WORKFLOW.md があるとき、環境変数 LANG が英語を指していても
 // 対話が日本語で出ること。
 // 与える情報: `language: ja` を書いた WORKFLOW.md と、`LANG=en_US.UTF-8`。
-// 成功条件: 決まった言語が日本語で、どのボードを読むかの1行が日本語の原文で出ること。
+// 成功条件: 決まった言語が日本語で、どのカンバンを読むかの1行が日本語の原文で出ること。
 // {"RUCM-PATH": "P001"}
 func TestRunSetup_設定の言語で対話を出す(t *testing.T) {
 	// **`i18n.FromEnv(os.Getenv)` で戻してはならない。**開発者の手元の LANG 次第で
@@ -71,7 +71,7 @@ func TestRunSetup_設定の言語で対話を出す(t *testing.T) {
 		t.Errorf("設定の language が効いていない: %v", lang)
 	}
 	if !strings.Contains(stdout, "使うカンバン") {
-		t.Errorf("どのボードを読むかの1行が日本語で出ていない:\n%s", stdout)
+		t.Errorf("どのカンバンを読むかの1行が日本語で出ていない:\n%s", stdout)
 	}
 }
 
@@ -82,7 +82,7 @@ func TestRunSetup_設定の言語で対話を出す(t *testing.T) {
 // 目的: `language: en` と書いた WORKFLOW.md があるとき、環境変数 LANG が日本語を指していても
 // 対話が英語で出ること。
 // 与える情報: `language: en` を書いた WORKFLOW.md と、`LANG=ja_JP.UTF-8`。
-// 成功条件: 決まった言語が英語で、日本語の原文がどのボードを読むかの1行に出ないこと。
+// 成功条件: 決まった言語が英語で、日本語の原文がどのカンバンを読むかの1行に出ないこと。
 // {"RUCM-PATH": "P001"}
 func TestRunSetup_設定が英語なら環境変数が日本語でも英語で出す(t *testing.T) {
 	t.Cleanup(func() { i18n.Use(i18n.SourceLang) })
@@ -115,7 +115,7 @@ func TestRunSetup_設定が英語なら環境変数が日本語でも英語で�
 //
 // 目的: `language` に資源の無い値を書いたとき、理由を出したうえで対話へ進むこと。
 // 与える情報: `language: jp` を書いた WORKFLOW.md と、`LANG=ja_JP.UTF-8`。
-// 成功条件: 書ける値の一覧が出ていて、そのあとどのボードを読むかの1行も出ること。
+// 成功条件: 書ける値の一覧が出ていて、そのあとどのカンバンを読むかの1行も出ること。
 // {"RUCM-PATH": "P007"}
 func TestRunSetup_設定を読めなければ理由を出して対話は続ける(t *testing.T) {
 	t.Cleanup(func() { i18n.Use(i18n.SourceLang) })
@@ -138,7 +138,7 @@ func TestRunSetup_設定を読めなければ理由を出して対話は続け�
 			t.Errorf("language に書ける値 %s が一覧に出ていない:\n%s", want, stderr)
 		}
 	}
-	// **止まっていないこと。**対話へ進んでいれば、どのボードを読むかの1行が出る。
+	// **止まっていないこと。**対話へ進んでいれば、どのカンバンを読むかの1行が出る。
 	if !strings.Contains(stdout, "使うカンバン") {
 		t.Errorf("設定を読めなかっただけで対話を止めている:\n%s", stdout)
 	}

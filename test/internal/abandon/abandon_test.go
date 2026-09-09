@@ -35,13 +35,13 @@ import (
 //
 // 目的: 片付ける worktree が1つも見つからないとき、何も消さずに終了コード 0 で
 // 終わることを確認する（設計 3-4 の段2。消すものが無いのは失敗ではない）。
-// **ボードも読まないこと**もあわせて確かめる（読むと `gh` を起動して API 枠を使う）。
+// **カンバンも読まないこと**もあわせて確かめる（読むと `gh` を起動して API 枠を使う）。
 // **残った branch も無いことを言うこと**もあわせて確かめる（issue #27）。
 // 「worktree はありません」だけでは、branch が残っているかどうかが分からない。
 // 与える情報: issue 188 の worktree だけがある置き場所と、issue 999 の URL。
 // 成功条件: 終了コードが 0、issue 188 の worktree が残っている、
 // herdr へ worktree.remove を送っていない、branch も残っていないことが出ている、
-// ボードのアダプタを1度も作っていないこと。
+// カンバンのアダプタを1度も作っていないこと。
 func TestAbandon_worktreeが無ければ何も消さずに終わる(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -55,7 +55,7 @@ func TestAbandon_worktreeが無ければ何も消さずに終わる(t *testing.T
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 	if fx.TrackerBuilds() != 0 {
-		t.Fatalf("消すものが無いのにボードのアダプタを %d 回作っている", fx.TrackerBuilds())
+		t.Fatalf("消すものが無いのにカンバンのアダプタを %d 回作っている", fx.TrackerBuilds())
 	}
 }
 
@@ -240,15 +240,15 @@ func TestAbandon_未コミットの変更があればforceなしでは消さな�
 // 目的: **手を離させる書き込みを済ませた実行**で失うものが見つかったとき、
 // Status が park の値のまま残ることを1行で言うことを確認する
 // （代替フロー「失うものがある」の段2）。
-// **「--force を付けてください」だけでは、ボードも元のままだと読まれる。**
-// worktree は残るのにボードは書き換わっているので、その issue はそこに置き去りになる。
+// **「--force を付けてください」だけでは、カンバンも元のままだと読まれる。**
+// worktree は残るのにカンバンは書き換わっているので、その issue はそこに置き去りになる。
 //
 // **この経路 P015 は、畳んだ条件「手を離させる書き込みを行ったときだけ」の
 // 真の側である。**偽の側は
 // TestAbandon_未コミットの変更があればforceなしでは消さない が通している。
 // 与える情報: テストが先に掴んだロックファイル、3回目の問い合わせで消える pane、
 // 未追跡のファイルが残った worktree、`--park Ice Box`。
-// 成功条件: 終了コードが 1、ボードへの書き込みが Ice Box の1件だけ、
+// 成功条件: 終了コードが 1、カンバンへの書き込みが Ice Box の1件だけ、
 // worktree が残っている、Status が park の値のまま残ることを伝える1行が出ていること。
 func TestAbandon_park後に失うものが見つかればStatusが残ることを言う(t *testing.T) {
 	fx := newFixture(t)
@@ -353,7 +353,7 @@ func TestAbandon_herdrに繋げずforceも無ければ消さない(t *testing.T)
 // **ロックファイルの食い違いを疑わせない**ことを確認する（設計 3-4 の段4 の前）。
 //
 // **止まる理由は2つあり、呼ぶ側はどちらかを知っている。**継続監視が動いていなかった
-// 場合と、動いてはいるがボードの Status が `tracker.active_states` の外だった場合である。
+// 場合と、動いてはいるがカンバンの Status が `tracker.active_states` の外だった場合である。
 // 1つの文言で受けると「『continuo は動いていません』と表示されていたなら」のような
 // 条件付きの案内になり、**別の文言の文面を直書きすることになる。**
 // **動いていると判定できている実行にロックの食い違いを疑わせると、無いものを探しに行かせる。**
@@ -435,7 +435,7 @@ func TestAbandon_身元ファイルを読めないworktreeを飛ばしたこと�
 // （設計 3-4 の段5。片付けたあとの置き場所は、その issue をこれからどうするかで
 // 決まるので、continuo が勝手に決めてはならない）。
 // 与える情報: 失うものが無い issue 188 の worktree と、`--to` を付けない実行。
-// 成功条件: 終了コードが 0、worktree が消えている、ボードへの書き込みが0件、
+// 成功条件: 終了コードが 0、worktree が消えている、カンバンへの書き込みが0件、
 // 「Status は動かしていません」が出ていること。
 func TestAbandon_toを付けなければStatusを動かさない(t *testing.T) {
 	fx := newFixture(t)
@@ -455,8 +455,8 @@ func TestAbandon_toを付けなければStatusを動かさない(t *testing.T) {
 //
 // 目的: `--to` を付けたときだけ Status がその値へ動くことを確認する（設計 3-4 の段5）。
 // 与える情報: 失うものが無い issue 188 の worktree と `--to Ice Box`。
-// 成功条件: 終了コードが 0、worktree が消えている、ボードへの書き込みが1件で
-// 値が `Ice Box`、宛先がボードから引いた project item の ID であること
+// 成功条件: 終了コードが 0、worktree が消えている、カンバンへの書き込みが1件で
+// 値が `Ice Box`、宛先がカンバンから引いた project item の ID であること
 // （**身元ファイルの project_item_id を宛先にしてはならない。**エージェントが
 // 書き換えられる値なので、別の issue の Status を動かせてしまう）。
 func TestAbandon_toを付ければStatusをその値へ動かす(t *testing.T) {
@@ -471,7 +471,7 @@ func TestAbandon_toを付ければStatusをその値へ動かす(t *testing.T) {
 
 	updates := fx.Tracker.Updates()
 	if len(updates) != 1 {
-		t.Fatalf("ボードへの書き込みが1件ではなく %d 件だった: %v", len(updates), updates)
+		t.Fatalf("カンバンへの書き込みが1件ではなく %d 件だった: %v", len(updates), updates)
 	}
 	if updates[0].State != "Ice Box" {
 		t.Fatalf("Status を %q ではなく %q へ動かした", "Ice Box", updates[0].State)
@@ -480,7 +480,7 @@ func TestAbandon_toを付ければStatusをその値へ動かす(t *testing.T) {
 		t.Fatalf("書き込みの宛先が %q ではなく %q だった", "PVTI_test", updates[0].ItemID)
 	}
 	if fx.Tracker.Fetches() == 0 {
-		t.Fatal("ボードから現在の Status を引かずに書き込んでいる")
+		t.Fatal("カンバンから現在の Status を引かずに書き込んでいる")
 	}
 }
 
@@ -533,11 +533,11 @@ func TestAbandon_continuoが動いていればparkへ動かしてpaneが消え�
 // **`--to` が無い実行の締めの1行も、ここで押さえる。**手を離させるために動かしたのは
 // continuo である。**そこで「Status は動かしていません」と言うと嘘になる**うえ、
 // その1行が「park の値のまま残っています」を黙らせるので、
-// **ボードが Blocked になったことを誰も言わないまま終わる。**
+// **カンバンが Blocked になったことを誰も言わないまま終わる。**
 //
-// 与える情報: テストが先に掴んだロックファイル、Status が In Progress のボード、
+// 与える情報: テストが先に掴んだロックファイル、Status が In Progress のカンバン、
 // pane が1つも無いテスト用herdr mock、`--park` を付けない実行。
-// 成功条件: 終了コードが 0、ボードへの書き込みが既定の failure_state（Blocked）1件、
+// 成功条件: 終了コードが 0、カンバンへの書き込みが既定の failure_state（Blocked）1件、
 // **「Status は動かしていません」が出ておらず、park の値のまま残ることが出ている**こと。
 func TestAbandon_parkの指定が無ければfailureStateへ動かす(t *testing.T) {
 	fx := newFixture(t)
@@ -550,7 +550,7 @@ func TestAbandon_parkの指定が無ければfailureStateへ動かす(t *testing
 	assertExit(t, fx, code, abandon.ExitOK)
 	updates := fx.Tracker.Updates()
 	if len(updates) != 1 {
-		t.Fatalf("ボードへの書き込みが1件ではなく %d 件だった: %v", len(updates), updates)
+		t.Fatalf("カンバンへの書き込みが1件ではなく %d 件だった: %v", len(updates), updates)
 	}
 	if updates[0].State != fx.Config.Tracker.FailureState {
 		t.Fatalf("手を離させる先が %q ではなく %q だった",
@@ -620,7 +620,7 @@ func TestAbandon_動いていてpaneが閉じなくてもforceで消し切る(t 
 // 両方言う**ことを確認する（設計 3-4 の段1）。
 //
 // **この経路にはテストが1本も無かった。**pane 待ちの中の herdr の失敗だけが
-// `--force` を見ずに止まっていたので、**ボードを park の値へ動かし終えた実行が、
+// `--force` を見ずに止まっていたので、**カンバンを park の値へ動かし終えた実行が、
 // herdr を直すまで取り消せない状態で終わっていた。**
 //
 // 与える情報: テストが先に掴んだロックファイル（＝動いている）、`tracker.active_states`
@@ -644,7 +644,7 @@ func TestAbandon_pane待ちでherdrが答えずforceも無ければ越え方を�
 	assertContains(t, fx, i18n.T(i18n.KeyAbandonParkLeftBehind, fx.Config.Tracker.FailureState))
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
-	// **ここへ来る実行は、ボードを park の値へ動かし終えている。**
+	// **ここへ来る実行は、カンバンを park の値へ動かし終えている。**
 	if updates := fx.Tracker.Updates(); len(updates) != 1 {
 		t.Fatalf("手を離させる書き込みが1件ではなく %d 件だった: %v", len(updates), updates)
 	}
@@ -655,7 +655,7 @@ func TestAbandon_pane待ちでherdrが答えずforceも無ければ越え方を�
 // 目的: **pane が消えるのを待っている最中に herdr が答えなくなっても、`--force` があれば
 // 片付けを最後まで通す**ことを確認する（設計 3-4 の段1）。
 //
-// **越えられないと、ボードだけ park の値へ動いた状態が残る。**手を離させる書き込みは
+// **越えられないと、カンバンだけ park の値へ動いた状態が残る。**手を離させる書き込みは
 // もう済んでいるので、`abandon` を叩き直しても herdr が直るまで前へ進めない。
 // **手を離させていない側の同じ検査（`stopIfPaneAlive`）は同じ失敗を `--force` で
 // 越えさせる**ので、こちらだけ越えられないのは筋が通らない。
@@ -686,7 +686,7 @@ func TestAbandon_pane待ちでherdrが答えなくてもforceなら越える(t *
 //
 // **同じ `--force` で待ち時間が2通りになってはならない。**pane が生きている場合は
 // 上限（この試験では3秒）まで待ってから越えるのに、herdr が答えない場合だけ
-// **1度も待たずに越えていた。****ここへ来る実行はボードを park の値へ動かした直後であり、
+// **1度も待たずに越えていた。****ここへ来る実行はカンバンを park の値へ動かした直後であり、
 // 継続監視がその pane を閉じにいく1周はまだ回っていない。**待たずに越えるのは、
 // 手を離させたばかりの pane を、閉じる暇も与えずに消すことである。
 //
@@ -781,9 +781,9 @@ func TestAbandon_herdrが答えないpane待ちを中断されたら何も消さ
 // そこで待つと必ず時間切れになり、`In Review` や `Blocked` の issue は
 // **`--force` の有無にかかわらず取り消せなくなる。**
 //
-// 与える情報: テストが先に掴んだロックファイル、Status が `In Review` のボード、
+// 与える情報: テストが先に掴んだロックファイル、Status が `In Review` のカンバン、
 // いつまでも同じ pane を返し続けるテスト用herdr mock、`--force`。
-// 成功条件: 終了コードが 0、worktree が消えている、ボードへの書き込みが0件、
+// 成功条件: 終了コードが 0、worktree が消えている、カンバンへの書き込みが0件、
 // **待っている最中の1行が出ておらず、時計も1秒も進んでいない**（＝1度も待っていない）こと。
 func TestAbandon_手を離させる書き込みが入らなければpaneを待たない(t *testing.T) {
 	fx := newFixture(t)
@@ -821,7 +821,7 @@ func TestAbandon_手を離させる書き込みが入らなければpaneを待�
 // 「消すものが無い」と答えてしまう。**言い分けなければ、利用者は打ち間違いに気づけない。
 // 与える情報: issue 188 の worktree と、pull request の URL。
 // 成功条件: 終了コードが 1、worktree が残っている、herdr へ worktree.remove を
-// 送っていない、ボードのアダプタを1度も作っていない、読めない理由が出ていること。
+// 送っていない、カンバンのアダプタを1度も作っていない、読めない理由が出ていること。
 func TestAbandon_issueのURLとして読めなければ何も触らない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -839,7 +839,7 @@ func TestAbandon_issueのURLとして読めなければ何も触らない(t *tes
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 	if fx.TrackerBuilds() != 0 {
-		t.Fatalf("URL を読めていないのにボードのアダプタを %d 回作っている", fx.TrackerBuilds())
+		t.Fatalf("URL を読めていないのにカンバンのアダプタを %d 回作っている", fx.TrackerBuilds())
 	}
 }
 
@@ -899,14 +899,14 @@ func TestAbandon_ロックファイルを開けなければ止まる(t *testing.
 
 // {"RUCM-PATH": "P021"}
 //
-// 目的: continuo が動いているのに issue がボードに載っていないとき、**何も消さずに**
+// 目的: continuo が動いているのに issue がカンバンに載っていないとき、**何も消さずに**
 // 終了コード 1 で止まることを確認する（設計 3-4 の段1）。
 // **Status を確かめられないまま消すと、走っているエージェントの足元から
 // ディレクトリが消える。**手を離させたかどうかを確かめられないからである。
-// 与える情報: テストが先に掴んだロックファイルと、その issue を載せていないボード。
+// 与える情報: テストが先に掴んだロックファイルと、その issue を載せていないカンバン。
 // 成功条件: 終了コードが 1、worktree が残っている、herdr へ worktree.remove を
-// 送っていない、ボードへの書き込みが0件、確かめられない理由が出ていること。
-func TestAbandon_動いているのにボードから引けなければ何もしない(t *testing.T) {
+// 送っていない、カンバンへの書き込みが0件、確かめられない理由が出ていること。
+func TestAbandon_動いているのにカンバンから引けなければ何もしない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
 	fx.Tracker.SetNotListed()
@@ -927,12 +927,12 @@ func TestAbandon_動いているのにボードから引けなければ何もし
 
 // {"RUCM-PATH": "P020"}
 //
-// 目的: 手を離させるための書き込みがボードに入らなかったとき、**何も消さずに**
+// 目的: 手を離させるための書き込みがカンバンに入らなかったとき、**何も消さずに**
 // 終了コード 1 で止まることを確認する（設計 3-4 の段1）。
 // **書けなければ continuo はその issue を掴んだままである。**掴んだまま worktree を
 // 消せば、走っているエージェントの足元からディレクトリが消える。
 // 与える情報: テストが先に掴んだロックファイル、tracker.active_states に入る Status、
-// 書き込みを受け付けないボード。
+// 書き込みを受け付けないカンバン。
 // 成功条件: 終了コードが 1、worktree が残っている、herdr へ worktree.remove を
 // 送っていない、書けなかったことを伝える1行が出ていること。
 func TestAbandon_手を離させる書き込みが入らなければ何も消さない(t *testing.T) {
@@ -953,11 +953,11 @@ func TestAbandon_手を離させる書き込みが入らなければ何も消さ
 // {"RUCM-PATH": "P008"}
 //
 // 目的: continuo が動いていても、Status が tracker.active_states に入っていなければ
-// **ボードへ1文字も書かずに**片付けへ進むことを確認する（設計 3-4 の段1）。
+// **カンバンへ1文字も書かずに**片付けへ進むことを確認する（設計 3-4 の段1）。
 // **その issue はもう continuo の手を離れている。**離れているものを動かせば、
 // 人間が置いた値を continuo が勝手に上書きすることになる。
-// 与える情報: テストが先に掴んだロックファイルと、Status が `Done` のボード。
-// 成功条件: 終了コードが 0、ボードへの書き込みが0件、動かさない理由が出ている、
+// 与える情報: テストが先に掴んだロックファイルと、Status が `Done` のカンバン。
+// 成功条件: 終了コードが 0、カンバンへの書き込みが0件、動かさない理由が出ている、
 // worktree が消えていること。
 func TestAbandon_作業中の状態でなければ手を離させる書き込みをしない(t *testing.T) {
 	fx := newFixture(t)
@@ -1019,7 +1019,7 @@ func TestAbandon_pane待ちを中断されたら何も消さない(t *testing.T)
 // 目的: 片付けそのものに失敗したとき、**Status を動かさずに**終了コード 1 で
 // 止まることを確認する（設計 3-4 の段4 と段5）。
 // **段5 は段4 が済んだときだけ走る。**worktree が残っているのに「片付けたあとの
-// Status」へ動かすと、ボードの上では終わったことになって人間の目から消える。
+// Status」へ動かすと、カンバンの上では終わったことになって人間の目から消える。
 //
 // **herdr にエラーを返させるだけでは足りない。**herdr が断ったときは、continuo が
 // worktree の実体を自分で消しにいく（issue #23）。**その手も塞いで初めて
@@ -1027,7 +1027,7 @@ func TestAbandon_pane待ちを中断されたら何も消さない(t *testing.T)
 // 書き込みの権限を落として、実体を1つも消せなくする。
 // 与える情報: issue 188 の worktree、`worktree.remove` にエラーを返す
 // テスト用herdr mock、書き込みできない worktree のディレクトリ、`--to Ice Box`。
-// 成功条件: 終了コードが 1、worktree が残っている、ボードへの書き込みが0件、
+// 成功条件: 終了コードが 1、worktree が残っている、カンバンへの書き込みが0件、
 // 片付けに失敗した理由が出ていること。
 func TestAbandon_片付けに失敗したらStatusを動かさない(t *testing.T) {
 	fx := newFixture(t)
@@ -1050,8 +1050,8 @@ func TestAbandon_片付けに失敗したらStatusを動かさない(t *testing.
 // 目的: **手を離させる書き込みを済ませた実行**で片付けに失敗したとき、
 // Status が park の値のまま残ることを1行で言うことを確認する
 // （代替フロー「片付けの失敗」の段2）。
-// **worktree は残るのにボードは書き換わっている。**「片付けを見送りました」だけでは、
-// ボードも元のままだと読まれて、その issue はそこに置き去りになる。
+// **worktree は残るのにカンバンは書き換わっている。**「片付けを見送りました」だけでは、
+// カンバンも元のままだと読まれて、その issue はそこに置き去りになる。
 //
 // **この経路 P013 は、畳んだ条件「手を離させる書き込みを行ったときだけ」の
 // 真の側である。**偽の側は TestAbandon_片付けに失敗したらStatusを動かさない が
@@ -1060,7 +1060,7 @@ func TestAbandon_片付けに失敗したらStatusを動かさない(t *testing.
 // `worktree.remove` にエラーを返すテスト用herdr mock、書き込みできない worktree の
 // ディレクトリ、`--park Ice Box`。
 // 成功条件: 終了コードが 1、worktree が残っている、片付けに失敗した理由が出ている、
-// ボードへの書き込みが Ice Box の1件だけ、Status が park の値のまま残ることを
+// カンバンへの書き込みが Ice Box の1件だけ、Status が park の値のまま残ることを
 // 伝える1行が出ていること。
 func TestAbandon_park後に片付けへ失敗したらStatusが残ることを言う(t *testing.T) {
 	fx := newFixture(t)
@@ -1126,14 +1126,14 @@ func TestAbandon_branchを消さなかったら消したと言わない(t *testi
 
 // {"RUCM-PATH": "P007"}
 //
-// 目的: `--to` があるのに issue をボードから引けないとき、**片付けは済ませたうえで**
+// 目的: `--to` があるのに issue をカンバンから引けないとき、**片付けは済ませたうえで**
 // 終了コード 1 で終わることを確認する（設計 3-4 の段5）。
 // **片付けを巻き戻さない。**worktree はもう消えており、戻す手段は無い。
 // 人間には「消えたが Status は動いていない」と伝えるほかない。
-// 与える情報: issue 188 の worktree、その issue を載せていないボード、`--to Ice Box`。
-// 成功条件: 終了コードが 1、worktree が消えている、ボードへの書き込みが0件、
+// 与える情報: issue 188 の worktree、その issue を載せていないカンバン、`--to Ice Box`。
+// 成功条件: 終了コードが 1、worktree が消えている、カンバンへの書き込みが0件、
 // 引けなかった理由が出ていること。
-func TestAbandon_片付けたあとにボードから引けなければ1で終わる(t *testing.T) {
+func TestAbandon_片付けたあとにカンバンから引けなければ1で終わる(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
 	fx.Tracker.SetNotListed()
@@ -1145,17 +1145,17 @@ func TestAbandon_片付けたあとにボードから引けなければ1で終�
 		"octocat/hello-world#188", i18n.T(i18n.KeyAbandonBoardNotListed, "octocat/hello-world#188")))
 	assertWorktreeGone(t, fx, prepared.Path)
 	if len(fx.Tracker.Updates()) != 0 {
-		t.Fatalf("ボードから引けないのに書き込んでいる: %v", fx.Tracker.Updates())
+		t.Fatalf("カンバンから引けないのに書き込んでいる: %v", fx.Tracker.Updates())
 	}
 }
 
 // {"RUCM-PATH": "P006"}
 //
-// 目的: `--to` の書き込みがボードに入らなかったとき、**片付けは済ませたうえで**
+// 目的: `--to` の書き込みがカンバンに入らなかったとき、**片付けは済ませたうえで**
 // 終了コード 1 で終わることを確認する（設計 3-4 の段5）。
-// **「消えたが Status は動いていない」を 0 で返してはならない。**利用者はボードを
+// **「消えたが Status は動いていない」を 0 で返してはならない。**利用者はカンバンを
 // 見ずに次へ進むので、動いていないことに気づけない。
-// 与える情報: issue 188 の worktree、書き込みを受け付けないボード、`--to Ice Box`。
+// 与える情報: issue 188 の worktree、書き込みを受け付けないカンバン、`--to Ice Box`。
 // 成功条件: 終了コードが 1、worktree が消えている、書けなかったことを伝える1行が
 // 出ていること。
 func TestAbandon_片付けたあとの書き込みが入らなければ1で終わる(t *testing.T) {
@@ -1176,8 +1176,8 @@ func TestAbandon_片付けたあとの書き込みが入らなければ1で終�
 // まま残ることを言う**ことを確認する（設計 3-4 の段5）。
 //
 // **「消せたかどうか」で言い添えを止めてはならない。**worktree は消えているので
-// 段5 は「Status を動かしていません」も出さず、**ボードがどこにあるのかを誰も言わない**
-// まま終了コード 1 で終わっていた。利用者はボードを見ずに次へ進むので、
+// 段5 は「Status を動かしていません」も出さず、**カンバンがどこにあるのかを誰も言わない**
+// まま終了コード 1 で終わっていた。利用者はカンバンを見ずに次へ進むので、
 // **手を離させるために書いた `Blocked` がそのまま残っていることに気づけない。**
 //
 // **この経路は `TestAbandon_片付けたあとの書き込みが入らなければ1で終わる` と同じ
@@ -1185,7 +1185,7 @@ func TestAbandon_片付けたあとの書き込みが入らなければ1で終�
 // 通すのがこちらで、偽の側を通すのがあちらである。
 //
 // 与える情報: テストが先に掴んだロックファイル、`tracker.active_states` に入る Status、
-// pane を1つも返さないテスト用herdr mock、**2件目の書き込みだけを落とすボード**、`--to Ice Box`。
+// pane を1つも返さないテスト用herdr mock、**2件目の書き込みだけを落とすカンバン**、`--to Ice Box`。
 // 成功条件: 終了コードが 1、worktree が消えている、書けなかったことが出ている、
 // **Status が park の値のまま残ることを伝える1行が出ている**こと。
 func TestAbandon_片付けたあとの書き込みに失敗したらparkの行き先を言う(t *testing.T) {
@@ -1203,13 +1203,13 @@ func TestAbandon_片付けたあとの書き込みに失敗したらparkの行�
 	assertWorktreeGone(t, fx, prepared.Path)
 	updates := fx.Tracker.Updates()
 	if len(updates) != 2 {
-		t.Fatalf("ボードへの書き込みが2件ではなく %d 件だった: %v", len(updates), updates)
+		t.Fatalf("カンバンへの書き込みが2件ではなく %d 件だった: %v", len(updates), updates)
 	}
 }
 
 // {"RUCM-PATH": "P005"}
 //
-// 目的: continuo が動いている状態で `--to` まで通したとき、ボードへの書き込みが
+// 目的: continuo が動いている状態で `--to` まで通したとき、カンバンへの書き込みが
 // **手を離させる1件と片付けたあとの1件の、この順の2件だけ**になることを確認する
 // （設計 3-4 の段1 と段5）。
 // **順番が入れ替わると、片付けたあとの値がすぐ park の値へ上書きされる。**
@@ -1238,7 +1238,7 @@ func TestAbandon_動いている状態でtoまで通せば書き込みは2件だ
 
 	updates := fx.Tracker.Updates()
 	if len(updates) != 2 {
-		t.Fatalf("ボードへの書き込みが2件ではなく %d 件だった: %v", len(updates), updates)
+		t.Fatalf("カンバンへの書き込みが2件ではなく %d 件だった: %v", len(updates), updates)
 	}
 	if updates[0].State != fx.Config.Tracker.FailureState {
 		t.Fatalf("1件目が手を離させる書き込み（%q）ではなく %q だった",
@@ -1251,7 +1251,7 @@ func TestAbandon_動いている状態でtoまで通せば書き込みは2件だ
 
 // {"RUCM-PATH": "P016"}
 //
-// 目的: 継続監視が動いている状態で `--dry-run` を叩いても、**ボードへ1文字も書かず、
+// 目的: 継続監視が動いている状態で `--dry-run` を叩いても、**カンバンへ1文字も書かず、
 // エージェントに手を離させない**ことを確認する（設計 3-4 の段1。`--dry-run` は
 // 段1 の後半を通らない）。
 // **README は「先に `--dry-run` を叩け」と勧めている。**勧めた手順が Status を書き換え、
@@ -1261,11 +1261,11 @@ func TestAbandon_動いている状態でtoまで通せば書き込みは2件だ
 // テスト用herdr mock、`--dry-run`。
 // **「先に手を離させます」と言わないこともここで押さえる。**`--dry-run` は
 // 手を離させる段を通らないので、言えば**しない約束をしたことになる。**
-// 成功条件: 終了コードが 0、ボードへの書き込みが0件、worktree が残っている、
+// 成功条件: 終了コードが 0、カンバンへの書き込みが0件、worktree が残っている、
 // herdr へ worktree.remove を送っていない、実行したときに動かす先の予告と
 // 「何も消していません」が出ている、**`--dry-run` 用の1行が出ていて
 // 「先に手を離させます」の1行が出ていない**こと。
-func TestAbandon_動いていてもdryRunならボードへ書かない(t *testing.T) {
+func TestAbandon_動いていてもdryRunならカンバンへ書かない(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
 
@@ -1285,7 +1285,7 @@ func TestAbandon_動いていてもdryRunならボードへ書かない(t *testi
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 	if len(fx.Tracker.Updates()) != 0 {
-		t.Fatalf("--dry-run なのにボードへ書いている: %v", fx.Tracker.Updates())
+		t.Fatalf("--dry-run なのにカンバンへ書いている: %v", fx.Tracker.Updates())
 	}
 }
 
@@ -1522,14 +1522,14 @@ func TestAbandon_番号を書き換えた身元ファイルで別のissueのwork
 
 // {"RUCM-PATH": "P022"}
 //
-// 目的: `--to` の値がボードの Status の選択肢に無いとき、**消す前に**止まることを
+// 目的: `--to` の値がカンバンの Status の選択肢に無いとき、**消す前に**止まることを
 // 確認する（設計 3-4 の段2 の直後）。
 // **確かめるのが段5 だと、綴り違いのときに worktree と branch を失ったうえに
 // Status も動かない。**
 // 与える情報: issue 188 の worktree と、選択肢に無い `--to Dnoe`。
 // 成功条件: 終了コードが 1、worktree が残っている、branch も残っている、
-// herdr へ worktree.remove を送っていない、ボードへの書き込みが0件であること。
-func TestAbandon_toがボードの選択肢に無ければ消す前に止まる(t *testing.T) {
+// herdr へ worktree.remove を送っていない、カンバンへの書き込みが0件であること。
+func TestAbandon_toがカンバンの選択肢に無ければ消す前に止まる(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
 
@@ -1542,19 +1542,19 @@ func TestAbandon_toがボードの選択肢に無ければ消す前に止まる(
 		t.Fatalf("branch %s が消えている", prepared.Branch.String())
 	}
 	if len(fx.Tracker.Updates()) != 0 {
-		t.Fatalf("止まったのにボードへ書いている: %v", fx.Tracker.Updates())
+		t.Fatalf("止まったのにカンバンへ書いている: %v", fx.Tracker.Updates())
 	}
 }
 
 // {"RUCM-PATH": "P023"}
 //
 // 目的: `--park` に作業中の状態（tracker.active_states の値）を渡したとき、
-// **ボードへ1文字も書かずに**止まることを確認する（設計 3-4 の段2 の直後）。
+// **カンバンへ1文字も書かずに**止まることを確認する（設計 3-4 の段2 の直後）。
 // **そこへ動かしても継続監視は手を離さず、pane も閉じない。**pane の一覧を引いた
 // 瞬間だけ空だった場合に、手を離していない issue の worktree を消してしまう。
 // 与える情報: テストが先に掴んだロックファイル（＝継続監視が動いている）、
 // issue 188 の worktree、`--park In Progress`（tracker.active_states の値）。
-// 成功条件: 終了コードが 1、ボードへの書き込みが0件、worktree が残っている、
+// 成功条件: 終了コードが 1、カンバンへの書き込みが0件、worktree が残っている、
 // herdr へ worktree.remove を送っていないこと。
 func TestAbandon_parkが作業中の状態なら書く前に止まる(t *testing.T) {
 	fx := newFixture(t)
@@ -1570,7 +1570,7 @@ func TestAbandon_parkが作業中の状態なら書く前に止まる(t *testing
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 	if len(fx.Tracker.Updates()) != 0 {
-		t.Fatalf("止まったのにボードへ書いている: %v", fx.Tracker.Updates())
+		t.Fatalf("止まったのにカンバンへ書いている: %v", fx.Tracker.Updates())
 	}
 }
 
@@ -1578,12 +1578,12 @@ func TestAbandon_parkが作業中の状態なら書く前に止まる(t *testing
 //
 // 目的: 片付ける worktree が無いとき、`--to` の指定を黙って捨てないことを確認する
 // （設計 3-4 の段2）。
-// **黙って終わると、指定した人間は「動いた」と受け取るが、ボードには1文字も書かれていない。**
+// **黙って終わると、指定した人間は「動いた」と受け取るが、カンバンには1文字も書かれていない。**
 // **代わりに Status だけを動かすこともしない。**worktree が無い理由は URL の
 // 打ち間違いでもあり、そのときは無関係な issue の Status を動かすことになる。
 // 与える情報: issue 188 の worktree だけがある置き場所と、issue 999 の URL と `--to Ice Box`。
 // 成功条件: 終了コードが 0、「動かしていません」の1行が出ている、
-// ボードのアダプタを1度も作っていないこと。
+// カンバンのアダプタを1度も作っていないこと。
 func TestAbandon_worktreeが無ければtoを捨てたことを言う(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -1595,7 +1595,7 @@ func TestAbandon_worktreeが無ければtoを捨てたことを言う(t *testing
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 	if fx.TrackerBuilds() != 0 {
-		t.Fatalf("消すものが無いのにボードのアダプタを %d 回作っている", fx.TrackerBuilds())
+		t.Fatalf("消すものが無いのにカンバンのアダプタを %d 回作っている", fx.TrackerBuilds())
 	}
 }
 
@@ -1611,7 +1611,7 @@ func TestAbandon_worktreeが無ければtoを捨てたことを言う(t *testing
 //
 // 与える情報: 身元ファイルの JSON を壊した issue 188 の worktree と `--to Ice Box`。
 // 成功条件: 終了コードが 1、「動かしていません」の1行が出ている、
-// ボードのアダプタを1度も作っていないこと。
+// カンバンのアダプタを1度も作っていないこと。
 func TestAbandon_候補から外したworktreeがあればtoを捨てたことを言う(t *testing.T) {
 	fx := newFixture(t)
 	prepared := fx.Prepare(t, 188)
@@ -1628,7 +1628,7 @@ func TestAbandon_候補から外したworktreeがあればtoを捨てたこと�
 	assertWorktreeExists(t, fx, prepared.Path)
 	assertNoRemoval(t, fx)
 	if fx.TrackerBuilds() != 0 {
-		t.Fatalf("消すものが無いのにボードのアダプタを %d 回作っている", fx.TrackerBuilds())
+		t.Fatalf("消すものが無いのにカンバンのアダプタを %d 回作っている", fx.TrackerBuilds())
 	}
 }
 
@@ -1636,7 +1636,7 @@ func TestAbandon_候補から外したworktreeがあればtoを捨てたこと�
 //
 // 目的: 手を離させる書き込みを済ませたあとに何も消さずに止まったとき、Status が
 // その値のまま残ることを人間へ言うことを確認する（設計 3-4 の段1）。
-// **「何も消していません」だけでは、ボードも元のままだと読まれる。**
+// **「何も消していません」だけでは、カンバンも元のままだと読まれる。**
 // 与える情報: テストが先に掴んだロックファイルと、いつまでも閉じない pane。
 // 成功条件: 終了コードが 1、Status が park の値のままであることを伝える1行が出ていること。
 //
@@ -1661,7 +1661,7 @@ func TestAbandon_park後に止まったらStatusが残ることを言う(t *test
 // {"RUCM-PATH": "P008"}
 //
 // 目的: 手を離させたあとの計画表示に、park の**あと**の Status が出ることを確認する。
-// **ボードは1回しか読まない**ので、書いた値を持ち回りへ反映しないと、これから消す
+// **カンバンは1回しか読まない**ので、書いた値を持ち回りへ反映しないと、これから消す
 // worktree の issue が「まだ作業中」に見える。
 // 与える情報: テストが先に掴んだロックファイルと、3回目の問い合わせで消える pane。
 // 成功条件: 終了コードが 0、計画表示の Status が park の値（Ice Box）であり、
@@ -1728,7 +1728,7 @@ func TestAbandon_実在しないbranchを残ったものとして言わない(t 
 // 与える情報: issue 999 の worktree は無く、branch だけがあるリポジトリと `--force`。
 // 成功条件: 終了コードが 0、その branch が消えている、消したことと戻すための
 // コマンドが出ている、別の issue の worktree と branch に手を出していない、
-// ボードのアダプタを1度も作っていないこと。
+// カンバンのアダプタを1度も作っていないこと。
 func TestAbandon_worktreeが無くても残ったbranchをforceで消す(t *testing.T) {
 	fx := newFixture(t)
 	other := fx.Prepare(t, 188)
@@ -1749,7 +1749,7 @@ func TestAbandon_worktreeが無くても残ったbranchをforceで消す(t *test
 		t.Fatalf("別の issue の branch %s を消している", other.Branch.String())
 	}
 	if fx.TrackerBuilds() != 0 {
-		t.Fatalf("branch を消しただけなのにボードのアダプタを %d 回作っている", fx.TrackerBuilds())
+		t.Fatalf("branch を消しただけなのにカンバンのアダプタを %d 回作っている", fx.TrackerBuilds())
 	}
 }
 
@@ -1783,7 +1783,7 @@ func TestAbandon_worktreeが無いときforceが無ければbranchを消さな�
 // **止まる経路だけが `--to` を黙って捨てていた。**worktree が無い経路は、
 // 消せたときと `--dry-run` のときと「branch も無い」ときには「動かしていません」を
 // 出していたのに、**`--force` が無くて止まるときと消せずに止まるときは何も言わずに終わっていた。**
-// 指定した人間は「動いた」と受け取るので、ボードの値を誤解したまま次へ進む。
+// 指定した人間は「動いた」と受け取るので、カンバンの値を誤解したまま次へ進む。
 //
 // 与える情報: issue 999 の worktree は無く、branch だけがあるリポジトリと `--to Ice Box`。
 // 成功条件: 終了コードが 1、branch が残っている、`--force` が要ることと

@@ -6,7 +6,7 @@ import (
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
-// failureClearGrace は、失敗の記録をボードの Status で消してよいと判断するまでの猶予である。
+// failureClearGrace は、失敗の記録をカンバンの Status で消してよいと判断するまでの猶予である。
 //
 // **なぜ猶予が要るか。**候補の一覧は GitHub のサーバ側の検索結果であり、
 // continuo が直前に書いた Status が索引へ反映されるまで遅れる（設計 3-34）。
@@ -27,7 +27,7 @@ type failureNote struct {
 	LastAt time.Time
 	// Reason は最後の失敗の理由の要約である（ログに出す）。
 	Reason string
-	// MovedToFailure は、その失敗でボードの Status を `failure_state` へ実際に書けたかである。
+	// MovedToFailure は、その失敗でカンバンの Status を `failure_state` へ実際に書けたかである。
 	//
 	// **書けたかどうかで「人間が動かした」の見分け方が変わる。**書けていれば、
 	// そのあと候補（active_states）に見えること自体が人間の操作の証拠になる。
@@ -45,7 +45,7 @@ type failureNote struct {
 //
 // issueID: project item の ID。
 // reason: 人間へ見せる理由。
-// movedToFailure: その失敗でボードの Status を `failure_state` へ書けたか。
+// movedToFailure: その失敗でカンバンの Status を `failure_state` へ書けたか。
 // 戻り値: 数え終わったあとの回数。
 func (o *Orchestrator) noteFailure(issueID, reason string, movedToFailure bool) int {
 	o.mu.Lock()
@@ -75,7 +75,7 @@ func (o *Orchestrator) forgetFailure(issueID string) {
 
 // skipByFailure は、過去の失敗を理由にこの候補を飛ばすかを判定する。
 //
-// **`agent.max_retries` を超えた issue は、人間がボードの Status を動かすまで拾わない。**
+// **`agent.max_retries` を超えた issue は、人間がカンバンの Status を動かすまで拾わない。**
 // 超えていない issue はそのまま着手してよい（待てば通る失敗もあるため）。
 //
 // 記録をいつ消すかは forgettableLocked が決める。
@@ -120,9 +120,9 @@ func (o *Orchestrator) skipByFailure(issue tracker.Issue) bool {
 //
 // **o.mu を保持したまま呼ぶこと。**
 //
-// **見分け方は、失敗のときにボードへ failure_state を書けたかで変わる。**
+// **見分け方は、失敗のときにカンバンへ failure_state を書けたかで変わる。**
 //
-//	書けた     … ボードは failure_state にある。それが候補（active_states）に
+//	書けた     … カンバンは failure_state にある。それが候補（active_states）に
 //	             見えている以上、**人間が Status を動かした**ということである。
 //	             ただし絞り込みの索引の遅れを踏むので、failureClearGrace のあいだは信じない
 //	書けなかった … Status は動いていないので、人間が動かしたかを Status から知る手立てが無い。
@@ -139,7 +139,7 @@ func (o *Orchestrator) forgettableLocked(note *failureNote) bool {
 	return o.now().Sub(note.LastAt) >= o.failureCooldown()
 }
 
-// failureCooldown は「ボードへ落とせなかった失敗」を数え直すまでの間隔を返す。
+// failureCooldown は「カンバンへ落とせなかった失敗」を数え直すまでの間隔を返す。
 //
 // 戻り値: `agent.max_retry_backoff_ms`（ただし failureClearGrace を下回らない）。
 func (o *Orchestrator) failureCooldown() time.Duration {

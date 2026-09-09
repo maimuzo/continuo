@@ -18,13 +18,13 @@
 // 持つ pane が消えるまで待つ」ので、**待つ相手が決まっていなければ始められない。**
 // worktree が1つも見つからなければ、消すものも待つものも無いので、そこで終わる。
 //
-// **`--dry-run` は段1 の後半を通らない。**段1 の後半はボードへ書き込み、エージェントに
+// **`--dry-run` は段1 の後半を通らない。**段1 の後半はカンバンへ書き込み、エージェントに
 // 手を離させる。**見せるだけの実行が副作用を起こしてはならない。**代わりに段3 で
 // 「実行したら Status をどこへ動かすか」を1行で予告する。
 //
 // **書きうる Status の値は、消す前に確かめる**（段2 の直後の verifyTargets）。
 // `--to` の綴り違いが分かるのが `UpdateStatus` を呼ぶ段5 だと、**worktree と branch を
-// 失ったうえに Status も動かない。**確かめるのは読み取りだけで、ボードへは1文字も書かない。
+// 失ったうえに Status も動かない。**確かめるのは読み取りだけで、カンバンへは1文字も書かない。
 //
 // **判断を書き直さない。**未コミット・未 push の判定は internal/workspace の
 // Inspect（Cleanup と同じ関数を呼ぶ）、片付けは Cleanup、Status は internal/tracker、
@@ -38,7 +38,7 @@
 // **例外は、worktree の `.git` が別のリポジトリを指していたときだけである**
 // （書き換えの痕跡なので1バイトも消さない。3-20 / 3-22）。
 //
-// **本番のボードへ書き込む経路は2つだけである**（段1 の手を離させる書き込みと、
+// **本番のカンバンへ書き込む経路は2つだけである**（段1 の手を離させる書き込みと、
 // 段5 の `--to`）。どちらも人間が明示した実行でしか通らない。テストは
 // httptest.Server で立てたテスト用GraphQL mock サーバに向けること。
 package abandon
@@ -97,7 +97,7 @@ type Options struct {
 	// **これが無ければ、失うものがあった時点で何も消さずに止まる。**
 	Force bool
 	// ToState は片付けたあとに Status を動かす先である。
-	// **空なら動かさない**（ボードでどうするかは人間が決める）。
+	// **空なら動かさない**（カンバンでどうするかは人間が決める）。
 	ToState string
 	// ParkState は continuo に手を離させるために一時的に動かす先である。
 	// **空なら tracker.failure_state を使う。**
@@ -134,7 +134,7 @@ type Options struct {
 
 // runner は1回の実行のあいだ持ち回る状態である。
 //
-// **引数で配り歩かない。**設定・出力先・ボードの読み取り結果を段ごとに渡すと、
+// **引数で配り歩かない。**設定・出力先・カンバンの読み取り結果を段ごとに渡すと、
 // 段が増えるたびに引数が伸びる。
 type runner struct {
 	opts   Options
@@ -145,19 +145,19 @@ type runner struct {
 	errOut io.Writer
 	logger *slog.Logger
 
-	// tr はボードのアダプタである。**最初に必要になったときだけ作る。**
+	// tr はカンバンのアダプタである。**最初に必要になったときだけ作る。**
 	tr Tracker
 	// trErr はアダプタを作れなかった理由である。
 	trErr error
 	// bootstrapped は Bootstrap を通したかどうかである。
 	bootstrapped bool
-	// board はボードから引いた issue である。
+	// board はカンバンから引いた issue である。
 	board tracker.Issue
-	// boardFound はボードにその issue が載っていたかどうかである。
+	// boardFound はカンバンにその issue が載っていたかどうかである。
 	boardFound bool
-	// boardErr はボードを読めなかった理由である。
+	// boardErr はカンバンを読めなかった理由である。
 	boardErr error
-	// boardRead はボードを1度でも読んだかどうかである（読み直しを避ける）。
+	// boardRead はカンバンを1度でも読んだかどうかである（読み直しを避ける）。
 	boardRead bool
 
 	// parkDeferred は「継続監視は動いているが、`--dry-run` なので手を離させなかった」
@@ -297,7 +297,7 @@ func (r *runner) run(ctx context.Context) int {
 	}
 
 	// 段1 の後半: 動いているなら手を離させ、pane が消えるまで待つ。
-	// **`--dry-run` では通らない。**ボードへ書き込み、エージェントに手を離させるからである。
+	// **`--dry-run` では通らない。**カンバンへ書き込み、エージェントに手を離させるからである。
 	//
 	// **手を離させる書き込みが入らなかったときは待たない。**Status が
 	// `tracker.active_states` に入っていなければ park は何も書かずに戻り、
@@ -345,7 +345,7 @@ func (r *runner) run(ctx context.Context) int {
 	// 入っていなければ pane 待ち（waitPaneGone）を飛ばしているので、確かめる口がここしか無い。
 	//
 	// **入らない理由は2つある。**継続監視が動いていなかった場合と、動いてはいるが
-	// ボードの Status が `tracker.active_states` の外だった場合である。
+	// カンバンの Status が `tracker.active_states` の外だった場合である。
 	// **前者はロックの判定を疑う理由になる。**ロックの場所は `~/.continuo`
 	// （`--id` を付けたなら `~/.continuo/id/<名前>/`）に機械で固定してあり、
 	// **環境変数では動かない**（3-17）。**したがって食い違う理由は1つだけで、
@@ -601,9 +601,9 @@ func (r *runner) pathAgrees(w workspace.ScannedWorktree) bool {
 //
 // **Status は動かさない。**worktree が無い実行で `--to` を通さないのは、
 // **URL の打ち間違いと区別できないから**である（find を見よ）。branch を1本消しても、
-// その issue をボードでどこへ置くべきかは決まらない。
+// その issue をカンバンでどこへ置くべきかは決まらない。
 // **だが黙って捨てない。**止まる経路も含めて、**どの出口でも reportToSkipped を通す。**
-// 指定した人間は「動いた」と受け取るので、言わずに終わるとボードの値を誤解したまま次へ進む。
+// 指定した人間は「動いた」と受け取るので、言わずに終わるとカンバンの値を誤解したまま次へ進む。
 // **段ごとに書かず、入り口で1度だけ仕掛ける**（run の reportParkLeftBehind と同じ形）。
 // **写すと、あとから出口が増えたときに書き漏らし、ビルドもテストも気づかない。**
 //
@@ -671,7 +671,7 @@ func (r *runner) abandonOrphanBranch(ctx context.Context) int {
 // reportToSkipped は、`--to` を指定されたのに Status を動かさなかったことを言う。
 //
 // **`--to` を黙って捨てない。**指定した人間は「動いた」と受け取るが、
-// worktree が無い経路ではボードに1文字も書かれない。
+// worktree が無い経路ではカンバンに1文字も書かれない。
 // **代わりに段5 を通すことはしない。**worktree が無い理由は「もう片付けた」とは限らず、
 // **URL の打ち間違い**でもある。打ち間違えた相手の Status を動かすほうが害が大きい。
 func (r *runner) reportToSkipped() {
@@ -684,7 +684,7 @@ func (r *runner) reportToSkipped() {
 //
 // **確かめるのは2つである。**
 //
-//	その値がボードの Status の選択肢にあるか（`--to` と park の先）
+//	その値がカンバンの Status の選択肢にあるか（`--to` と park の先）
 //	park の先が `tracker.active_states` に入っていないか
 //
 // **選択肢の照合を段5 まで遅らせてはならない。**`UpdateStatus` は選択肢に無い名前を
@@ -696,7 +696,7 @@ func (r *runner) reportToSkipped() {
 // worktree を消す。**`tracker.failure_state` が作業中の状態でないことは設定の検証が
 // 保証しているが、**`--park` はその検証を通らない。**
 //
-// **ボードへは1文字も書かない。**読むだけなので `--dry-run` でも通す。
+// **カンバンへは1文字も書かない。**読むだけなので `--dry-run` でも通す。
 //
 // ctx: 実行に適用するコンテキスト。
 // running: 継続監視が動いているか（park の先を確かめるかどうかがこれで決まる）。
@@ -736,7 +736,7 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 
 // stopIfPaneAlive は、手を離させる書き込みを行っていない実行で pane の生死を確かめる（段4 の前）。
 //
-// **継続監視が動いていない実行だけではない。**動いていても、ボードの Status が
+// **継続監視が動いていない実行だけではない。**動いていても、カンバンの Status が
 // `tracker.active_states` の外なら park は何も書かずに戻るので、その実行もここへ来る。
 // **どちらの原因かは呼ぶ側が知っているので、running で受け取って文言を選ぶ**
 // （i18n の `abandon.err_pane_alive_not_running` と `abandon.err_pane_alive_running`）。
@@ -816,7 +816,7 @@ func (r *runner) parkTarget() string {
 
 // park は、動いている continuo にその issue から手を離させる（段1 の後半）。
 //
-// **ボードから現在の Status を取り直してから決める。**身元ファイルには Status が
+// **カンバンから現在の Status を取り直してから決める。**身元ファイルには Status が
 // 書いていないうえ、書いてあっても古い。`tracker.active_states` に入っていなければ、
 // continuo はもうその issue を持っていないので何もしない。
 //
@@ -862,7 +862,7 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 		fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonParkNotWritten, target))
 		return ExitStopped
 	}
-	// **持ち回っている Status を書いた値へ更新する。**ボードは1回しか読まないので、
+	// **持ち回っている Status を書いた値へ更新する。**カンバンは1回しか読まないので、
 	// 更新しないと段3 の計画表示が park の**前**の値を出す（人間には、これから消す
 	// worktree の issue がまだ作業中に見える）。
 	r.board.State = target
@@ -882,7 +882,7 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 // **herdr が答えないときも `--force` で越える。ただし越えるのは期限を過ぎてからである。**
 // 兄弟の検査（stopIfPaneAlive）は同じ失敗を越えさせるので、**ここだけ越えられないと
 // 「herdr が答えられない」が「pane がある」より厳しくなる。**しかもここへ来る実行は
-// **ボードを park の値へ動かし終えている**ので、越えられないと**ボードだけ動いた状態のまま、
+// **カンバンを park の値へ動かし終えている**ので、越えられないと**カンバンだけ動いた状態のまま、
 // herdr を直すまで取り消せない。**
 //
 // **期限を見ずに越えてはならない。**herdr が答えなければ、**待ちそのものを1度も行えていない。**
@@ -895,7 +895,7 @@ func (r *runner) park(ctx context.Context, found *workspace.ScannedWorktree) int
 // 有無より外側にあるので、herdr が答えないときの待ち時間は4通りとも上限に揃う。
 //
 // **叩き直したときに再び上限まで待つのは、Status が `active_states` に戻っているときだけである。**
-// 上限まで待って止まった実行は**ボードを park の値（`failure_state`）へ動かし終えている**ので、
+// 上限まで待って止まった実行は**カンバンを park の値（`failure_state`）へ動かし終えている**ので、
 // 叩き直した実行は手を離させる段を通らず、**この関数を1度も呼ばない**（待ち時間は0である）。
 // **上限の2回ぶんに届くのは、2回の実行のあいだに Status が `active_states` へ戻された場合だけである。**
 //
@@ -945,8 +945,8 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 				continue
 			}
 			// **期限を過ぎたら、herdr の失敗を `--force` で越えられない壁にしない**
-			// （stopIfPaneAlive と同じ扱い）。**ここへ来た実行はボードを park の値へ
-			// 動かし終えている。**越えられないと、herdr を直すまでボードだけ動いた状態が残る。
+			// （stopIfPaneAlive と同じ扱い）。**ここへ来た実行はカンバンを park の値へ
+			// 動かし終えている。**越えられないと、herdr を直すまでカンバンだけ動いた状態が残る。
 			if !r.opts.Force {
 				fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrPaneListCheck, err))
 				return ExitStopped
@@ -987,7 +987,7 @@ func (r *runner) waitPaneGone(ctx context.Context, worktreePath string) int {
 // reportParkLeftBehind は、手を離させる書き込みを済ませたあとに何も消さずに止まったとき、
 // Status がその値のまま残ることを人間へ言う。
 //
-// **「何も消していません」だけでは足りない。**ボードは既に書き換わっており、
+// **「何も消していません」だけでは足りない。**カンバンは既に書き換わっており、
 // **消さなかったのだから元のままだろう**と読まれると、その issue はそこに置き去りになる。
 //
 // **continuo は元へ戻さない。**戻した瞬間に、動いている継続監視がその issue を
@@ -1125,7 +1125,7 @@ func (r *runner) remove(ctx context.Context, worktreePath string, leftover *work
 //
 // **ただし park で動かした実行に「動かしていません」と言ってはならない。**
 // 手を離させるために動かしたのは continuo である。**そこで「動かしていません」と言うと、
-// ボードが park の値になっていることを誰も言わないまま終わる**（この1行が
+// カンバンが park の値になっていることを誰も言わないまま終わる**（この1行が
 // reportParkLeftBehind を黙らせる）。**park で動かしたときは、その1行に言わせる。**
 //
 // ctx: 実行に適用するコンテキスト。
@@ -1135,7 +1135,7 @@ func (r *runner) moveStatus(ctx context.Context) int {
 	if target == "" {
 		if r.parkedTo != "" {
 			// **statusSettled を立てない。**立てると reportParkLeftBehind が黙り、
-			// **ボードが park の値のまま残ったことを誰も言わなくなる。**
+			// **カンバンが park の値のまま残ったことを誰も言わなくなる。**
 			return ExitOK
 		}
 		fmt.Fprintln(r.out, i18n.T(i18n.KeyAbandonStatusLeftAlone))
@@ -1172,10 +1172,10 @@ func (r *runner) moveStatus(ctx context.Context) int {
 	return ExitOK
 }
 
-// tracker はボードのアダプタを1回だけ作って使い回す。
+// tracker はカンバンのアダプタを1回だけ作って使い回す。
 //
 // **必要になるまで作らない。**作るときに `gh` を起動してトークンを引くので、
-// ボードを読まずに済む実行（worktree が無かった場合）で API 枠を使わない。
+// カンバンを読まずに済む実行（worktree が無かった場合）で API 枠を使わない。
 //
 // ctx: トークンの取得に適用するコンテキスト。
 // 戻り値: アダプタと、作れなかった場合のエラー。
@@ -1192,7 +1192,7 @@ func (r *runner) tracker(ctx context.Context) (Tracker, error) {
 // **UpdateStatus はこれを通していないと必ず失敗する**（internal/tracker）。
 //
 // ctx: 実行に適用するコンテキスト。
-// tr: ボードのアダプタ。
+// tr: カンバンのアダプタ。
 // 戻り値: 解決に失敗した場合のエラー。
 func (r *runner) bootstrap(ctx context.Context, tr Tracker) error {
 	if r.bootstrapped {
@@ -1205,7 +1205,7 @@ func (r *runner) bootstrap(ctx context.Context, tr Tracker) error {
 	return nil
 }
 
-// currentState はボードから現在の Status と project item の ID を引く（1回だけ読む）。
+// currentState はカンバンから現在の Status と project item の ID を引く（1回だけ読む）。
 //
 // **身元ファイルの `project_item_id` は使わない。**worktree の中にあり、
 // エージェントが書き換えられる値なので、それを宛先にして Status を書くと
@@ -1214,7 +1214,7 @@ func (r *runner) bootstrap(ctx context.Context, tr Tracker) error {
 // ctx: 実行に適用するコンテキスト。
 // 戻り値の1つ目: 現在の Status 名。
 // 戻り値の2つ目: project item の ID。
-// 戻り値の3つ目: ボードから引けたなら true。**偽のときは r.boardReason() に理由が入る。**
+// 戻り値の3つ目: カンバンから引けたなら true。**偽のときは r.boardReason() に理由が入る。**
 func (r *runner) currentState(ctx context.Context) (string, string, bool) {
 	r.readBoard(ctx)
 	if !r.boardFound {
@@ -1223,7 +1223,7 @@ func (r *runner) currentState(ctx context.Context) (string, string, bool) {
 	return r.board.State, r.board.ID, true
 }
 
-// readBoard はボードから issue を1件だけ引き、結果を持ち回る値へ入れる。
+// readBoard はカンバンから issue を1件だけ引き、結果を持ち回る値へ入れる。
 //
 // **1回の実行で1度しか読まない。**段1 と段3 と段5 が同じ値を使う。
 //
@@ -1252,7 +1252,7 @@ func (r *runner) readBoard(ctx context.Context) {
 	r.boardFound = true
 }
 
-// boardReason はボードから引けなかった理由を1行で返す。
+// boardReason はカンバンから引けなかった理由を1行で返す。
 //
 // 戻り値: 理由の文言。理由が無ければ空文字。
 func (r *runner) boardReason() string {
@@ -1267,7 +1267,7 @@ func (r *runner) boardReason() string {
 // **消す前に必ず全部出す。**`--dry-run` でも `--force` でも同じものを出す。
 //
 // **`--dry-run` で継続監視が動いているときは、実行したら Status をどこへ動かすかも予告する。**
-// `--dry-run` はボードへ1文字も書かないので、書かれる値をここで見せなければ、
+// `--dry-run` はカンバンへ1文字も書かないので、書かれる値をここで見せなければ、
 // 人間は実行して初めてそれを知ることになる。
 //
 // ctx: 実行に適用するコンテキスト（Status の読み取りに使う）。

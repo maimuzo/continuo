@@ -548,7 +548,7 @@ func (m *Manager) logWarnings(warnings []normalize.Warning) {
 // **1バイトも書かずに**判定する（3-22 の段2・段3 と同じ判断を、着手の段0 で行う）。
 //
 // **なぜ Prepare と同じ判断を2箇所に持つのか。**Prepare（着手の段3）は、
-// ボードの Status を running_state へ書いたあと（段2）に走る。目的のパスに
+// カンバンの Status を running_state へ書いたあと（段2）に走る。目的のパスに
 // 実体があるのに git の worktree として登録されていない場合、着手は必ず失敗するのに
 // **その前に Status だけが書き換わる。**`In Progress` は active_states なので
 // 次の巡回でまた候補に上がり、`In Progress` と `Blocked` の往復が永久に続く。
@@ -590,7 +590,7 @@ func (m *Manager) CheckWorktreeUsable(ctx context.Context, issue IssueRef) error
 	}
 
 	// **clone の場所は短い間だけ覚える**（clonePath）。判定のたびに ghq のプロセスを
-	// 起こすと、ボードの件数ぶん外部プロセスが立つ。
+	// 起こすと、カンバンの件数ぶん外部プロセスが立つ。
 	repoPath, err := m.clonePath(ctx, issue.Owner, issue.Repo)
 	if err != nil || repoPath == "" {
 		m.logger.Debug("着手できるかを段0 で判定できませんでした（段3 に任せます）",

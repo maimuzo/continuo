@@ -297,7 +297,7 @@ func toolHook(sessionID, name string) hookserver.HookEvent {
 //
 // 目的: **知っている Status の一覧は組み立てのときに1度だけ計算する。**
 // その計算に使う設定が空のまま渡されても、いままでは黙って通っていた。
-// **1つも取れないと、continuo はボード上のどの Status も「知らない Status」と判定し、
+// **1つも取れないと、continuo はカンバン上のどの Status も「知らない Status」と判定し、
 // 着手した run を片端から止める。**しかも止めた理由には「いま知っているのは です」と
 // 空欄が出るだけで、人間には原因が読み取れない。
 // **他の必須の依存（Tracker / Herdr / Workspace）と同じく、名前つきのエラーで弾く。**

@@ -17,12 +17,12 @@ import (
 // （SPEC.md 11.2 が要求する「exact supported tracker.kind value」の公表）。
 const KindGitHubProjectsV2 = "github_projects_v2"
 
-// maxItemPages はボードを読むときに辿るページ数の上限である（1ページ100件）。
+// maxItemPages はカンバンを読むときに辿るページ数の上限である（1ページ100件）。
 //
-// **上限が無いと、ボードが育つほど1回の呼び出しのコストが黙って増える。**
-// 巡回は30秒ごとに走り、表明の対象1件ごとにもボードを読むので、気づかないうちに
+// **上限が無いと、カンバンが育つほど1回の呼び出しのコストが黙って増える。**
+// 巡回は30秒ごとに走り、表明の対象1件ごとにもカンバンを読むので、気づかないうちに
 // GitHub の API 枠（5,000 point/時。設計 3-31）を食い潰す。
-// 2,000件は本番のボード（104件）の約20倍であり、超えたときは無言で飲み込まず
+// 2,000件は本番のカンバン（104件）の約20倍であり、超えたときは無言で飲み込まず
 // CategoryPagination で落として人間に気づかせる。
 const maxItemPages = 20
 
@@ -79,7 +79,7 @@ type Adapter struct {
 	statusOptionNamesFold map[string]string
 }
 
-// ProjectWorkflow はボードの組み込みの自動化1件である（設計 3-32 の見出し語 `自動化`）。
+// ProjectWorkflow はカンバンの組み込みの自動化1件である（設計 3-32 の見出し語 `自動化`）。
 //
 // **持てるのは名前と有効かどうかだけである。**`ProjectV2Workflow` が公開しているのは
 // `createdAt` / `enabled` / `fullDatabaseId` / `id` / `name` / `number` / `project` /
@@ -87,7 +87,7 @@ type Adapter struct {
 // **どの Status を書くかを返すフィールドは1つも無い。**
 // だから `continuo doctor` は「Status を書きうる」までしか言えない。
 type ProjectWorkflow struct {
-	// Number はボードの中での自動化の番号である（GitHub の画面に出る `#1` など）。
+	// Number はカンバンの中での自動化の番号である（GitHub の画面に出る `#1` など）。
 	Number int
 	// Name は自動化の名前である（`Pull request linked to issue` など。GitHub の綴りのまま）。
 	Name string
@@ -99,7 +99,7 @@ type ProjectWorkflow struct {
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション（設計 5-2）。
 // endpoint: GraphQL API の URL。空文字なら本番の GitHub GraphQL API を使う。
-// テストでは httptest.Server の URL を渡して本番のボードへ接続しないようにすること。
+// テストでは httptest.Server の URL を渡して本番のカンバンへ接続しないようにすること。
 // **https 以外は受け付けない**（loopback の http だけは例外。トークンを平文で第三者へ
 // 送らないため。newGraphQLClient を参照）。既定と違う接続先のときは警告を1行残す。
 // token: 認証トークン（ResolveToken で取得した値）。
@@ -168,7 +168,7 @@ func NewAdapter(
 	}, nil
 }
 
-// requiredStatesForBootstrap は「ボードに実在しなければ起動を止める」Status 名を、
+// requiredStatesForBootstrap は「カンバンに実在しなければ起動を止める」Status 名を、
 // cfg から重複無く集める。active_states・terminal_states・running_state・dispatch_state・
 // failure_state・status_signal_map の遷移先を含める
 // （3-6: 「書き込みに要る ID をすべて解決して覚える」）。
@@ -178,10 +178,10 @@ func NewAdapter(
 // **とぴったり同じにする。**ずれると、起動時に通した設定が実行時には別の意味になる。
 //
 // **`automated_state_rewrite` のキーは入れない**（設計 3-57）。
-// キーは定義上「continuo が知らない Status」であり、**ボードに実在しなくてよい。**
-// 入れると、**ボードの自動化をやめて選択肢を消した人が抜け出せなくなる。**
+// キーは定義上「continuo が知らない Status」であり、**カンバンに実在しなくてよい。**
+// 入れると、**カンバンの自動化をやめて選択肢を消した人が抜け出せなくなる。**
 // 設定は正しいままなのに、起動は止まり、走っている continuo は巡回ごとの照合に落ちて
-// **ボード全体の dispatch を飛ばし続ける。**
+// **カンバン全体の dispatch を飛ばし続ける。**
 // **綴りの打ち間違いは、起動を止めずに知らせる**（`missingRewriteKeys`）。
 //
 // **戻す先（値）も足さない。**`config.Validate` が「戻す先は `active_states` に入っていること」を
@@ -190,10 +190,10 @@ func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
 	return config.KnownStates(cfg)
 }
 
-// missingRewriteKeys は `tracker.automated_state_rewrite` のキーのうち、ボードの Status の
+// missingRewriteKeys は `tracker.automated_state_rewrite` のキーのうち、カンバンの Status の
 // 選択肢に無いものを返す（設計 3-57）。
 //
-// **これは起動を止めない。**キーはボードに実在しなくてよい（`requiredStatesForBootstrap`）。
+// **これは起動を止めない。**キーはカンバンに実在しなくてよい（`requiredStatesForBootstrap`）。
 // **だが「綴りを打ち間違えた」と「使わなくなったので選択肢を消した」は同じ形に見える。**
 // 前者はその行が一度も効かないまま黙って死ぬので、**起動時に1回だけ名前で知らせる。**
 //
@@ -205,7 +205,7 @@ func requiredStatesForBootstrap(cfg config.TrackerConfig) []string {
 // 空を返す。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション。
-// 戻り値: ボードに無いキー（設定に書いてある綴りのまま。名前順）。
+// 戻り値: カンバンに無いキー（設定に書いてある綴りのまま。名前順）。
 func (a *Adapter) missingRewriteKeys(cfg config.TrackerConfig) []string {
 	a.mu.RLock()
 	bootstrapped := a.bootstrapped
@@ -214,7 +214,7 @@ func (a *Adapter) missingRewriteKeys(cfg config.TrackerConfig) []string {
 		names = append(names, name)
 	}
 	a.mu.RUnlock()
-	// **通っていなければ「全部ボードに無い」ではなく「1件も無い」を返す。**
+	// **通っていなければ「全部カンバンに無い」ではなく「1件も無い」を返す。**
 	// 選択肢の一覧を持っていないだけで、キーが実在しないと分かったわけではない。
 	if !bootstrapped {
 		return nil
@@ -245,7 +245,7 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 		"project_number", a.projectNumber,
 		"status_options", a.statusOptionCount(),
 	)
-	// **起動時に1回だけ、ボードにあって設定に無い Status を名前で出す**（設計 3-50）。
+	// **起動時に1回だけ、カンバンにあって設定に無い Status を名前で出す**（設計 3-50）。
 	//
 	// **件数だけでは気づけない。**`status_options=11` とだけ出しても、そのうち
 	// どれを continuo が扱えないのかが分からない。**扱えない Status へ動かされた issue は
@@ -261,7 +261,7 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 			"知らない Status", strings.Join(unknown, ", "),
 		)
 	}
-	// **対応表のキーがボードに無くても起動は止めない**（設計 3-57）。
+	// **対応表のキーがカンバンに無くても起動は止めない**（設計 3-57）。
 	// **だが綴りの打ち間違いと見分けが付かない**ので、起動時に1回だけ名前で知らせる。
 	if missing := a.missingRewriteKeys(cfg); len(missing) > 0 {
 		a.logger.Warn("tracker.automated_state_rewrite のキーがカンバンの Status の選択肢にありません"+
@@ -274,10 +274,10 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 	return nil
 }
 
-// unknownStatusOptions はボードにあって設定に無い Status の選択肢名を返す（設計 3-50）。
+// unknownStatusOptions はカンバンにあって設定に無い Status の選択肢名を返す（設計 3-50）。
 //
-// **照合の向きが `Bootstrap` の検査と逆である。**`Bootstrap` は「設定の名前がボードに
-// 在るか」を見る（無ければ起動を止める）。こちらは「ボードの名前が設定に在るか」を見る
+// **照合の向きが `Bootstrap` の検査と逆である。**`Bootstrap` は「設定の名前がカンバンに
+// 在るか」を見る（無ければ起動を止める）。こちらは「カンバンの名前が設定に在るか」を見る
 // （無くても止めない。知らせるだけである）。
 //
 // **`Bootstrap` を通したあとに呼ぶこと。**通っていなければ選択肢の一覧を持っていないので、
@@ -290,11 +290,11 @@ func (a *Adapter) Bootstrap(ctx context.Context, cfg config.TrackerConfig) error
 // **書いてある名前を挙げると嘘になる。**
 //
 // **「キーの Status では worker が止まらないから」ではない。**書き戻して worker を続けるのは
-// **ボードの自動化がその Status を書いたときだけ**であり（設計 3-54）、
+// **カンバンの自動化がその Status を書いたときだけ**であり（設計 3-54）、
 // **人間がキーの Status へ動かしたときは、いままでどおり worker を止める**（設計 3-50）。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション。
-// 戻り値: 設定に名前が出てこない選択肢名（ボードの綴りのまま。名前順）。
+// 戻り値: 設定に名前が出てこない選択肢名（カンバンの綴りのまま。名前順）。
 func (a *Adapter) unknownStatusOptions(cfg config.TrackerConfig) []string {
 	wanted := make(map[string]bool)
 	for _, s := range config.NamedStates(cfg) {
@@ -331,7 +331,7 @@ func (a *Adapter) unknownStatusOptions(cfg config.TrackerConfig) []string {
 // GraphQL 呼び出し自体が失敗した場合はそのエラーをそのまま返す。
 func (a *Adapter) VerifyStatusOptions(ctx context.Context, cfg config.TrackerConfig) error {
 	// **絞り込みキーの検査は起動時（Bootstrap）だけで行う。**設定の status_field は
-	// 実行中に変わらず、フィールドがボード側で改名されれば下の field(name:) が
+	// 実行中に変わらず、フィールドがカンバン側で改名されれば下の field(name:) が
 	// 見つからずエラーになるため、巡回のたびに数え直す必要が無い。
 	if err := a.resolveStatusOptions(ctx, cfg, false); err != nil {
 		return err
@@ -480,11 +480,11 @@ func (a *Adapter) statusOptionCount() int {
 	return len(a.statusOptionIDs)
 }
 
-// StatusOptionNames はボード側の Status の選択肢名を、GitHub の綴りのまま全部返す。
+// StatusOptionNames はカンバン側の Status の選択肢名を、GitHub の綴りのまま全部返す。
 //
 // **設定に書いた名前だけでは、取り違えを見つけられないから公開してある。**
-// `Bootstrap` が照合するのは「設定に書いた名前がボードに在るか」だけである。
-// **ボードに `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。**
+// `Bootstrap` が照合するのは「設定に書いた名前がカンバンに在るか」だけである。
+// **カンバンに `In Progress` と `AI In Progress` が並んでいても、片方が設定に在れば通る。**
 // `continuo doctor` はここで全部の選択肢名を受け取り、設定の名前と紛らわしい組を警告する。
 //
 // **Bootstrap（または VerifyStatusOptions）を通してから呼ぶこと。**通っていなければ nil を返す。
@@ -563,7 +563,7 @@ func (a *Adapter) FetchProjectWorkflows(ctx context.Context) ([]ProjectWorkflow,
 // 戻り値の2つ目: Status フィールドの ID。
 // 戻り値の3つ目: targetState に対応する選択肢 ID。
 // 戻り値の4つ目: Bootstrap（または VerifyStatusOptions）を通っていれば true。
-// 戻り値の5つ目: targetState がボード側の選択肢に在れば true。
+// 戻り値の5つ目: targetState がカンバン側の選択肢に在れば true。
 func (a *Adapter) writeTargets(targetState string) (string, string, string, bool, bool) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -578,7 +578,7 @@ func (a *Adapter) writeTargets(targetState string) (string, string, string, bool
 	return a.projectID, a.statusFieldID, optionID, true, ok
 }
 
-// VerifyKnownStates は states がすべてボード側の Status 選択肢に存在するかを確かめる。
+// VerifyKnownStates は states がすべてカンバン側の Status 選択肢に存在するかを確かめる。
 //
 // **書き込む前に、書き込む先の名前を確かめるために公開してある。**`UpdateStatus` は
 // 選択肢に無い名前を渡されると失敗するが、**それを知るのは書きにいったときである。**
@@ -589,19 +589,19 @@ func (a *Adapter) writeTargets(targetState string) (string, string, string, bool
 // 照合に使う選択肢の一覧をまだ持っていないので、何も検査せずに nil を返す。
 //
 // states: 検査する Status 名の一覧（大文字小文字は無視して照合する）。
-// 戻り値: ボード側に無い名前が1つでもあれば CategoryInvalidConfig の *Error
+// 戻り値: カンバン側に無い名前が1つでもあれば CategoryInvalidConfig の *Error
 // （見つからなかった名前をすべて列挙する）。
 func (a *Adapter) VerifyKnownStates(states []string) error {
 	return a.verifyKnownStates(states)
 }
 
-// verifyKnownStates は states がすべてボード側の Status 選択肢に存在するかを確かめる。
+// verifyKnownStates は states がすべてカンバン側の Status 選択肢に存在するかを確かめる。
 //
 // **Bootstrap（または VerifyStatusOptions）を通っていないときは何も検査しない。**
 // 照合に使う選択肢の一覧をまだ持っていないためである。
 //
 // states: 検査する Status 名の一覧。
-// 戻り値: ボード側に無い名前が1つでもあれば CategoryInvalidConfig の *Error
+// 戻り値: カンバン側に無い名前が1つでもあれば CategoryInvalidConfig の *Error
 // （見つからなかった名前をすべて列挙する）。
 func (a *Adapter) verifyKnownStates(states []string) error {
 	a.mu.RLock()
@@ -633,7 +633,7 @@ func (a *Adapter) verifyKnownStates(states []string) error {
 	}
 }
 
-// FetchIssuesByStates は states に含まれる Status を持つ issue を、ボードの並び順のまま
+// FetchIssuesByStates は states に含まれる Status を持つ issue を、カンバンの並び順のまま
 // すべて取得する（SPEC.md 11.1 の fetch_issues_by_states。設計「その2」）。
 //
 // **呼び出し側は active_states に入っている Status をすべて渡すこと。**
@@ -650,14 +650,14 @@ func (a *Adapter) verifyKnownStates(states []string) error {
 // 戻り値: 正規化した Issue のスライス。Status 未設定の item・archive 済みの item・
 // content が Issue でも DraftIssue でもない item は、この呼び出しでは省いてログに残す
 // （SHOULD。SPEC.md 11.1 / 設計 3-13）。draft issue は Dispatchable=false のまま含める
-// （省かない）。states にボード側へ存在しない Status 名が含まれている場合は
+// （省かない）。states にカンバン側へ存在しない Status 名が含まれている場合は
 // CategoryInvalidConfig の *Error を返す（**0件を返さない。**下記の理由による）。
 // GraphQL 呼び出し自体が失敗した場合はそのエラーを返す。
 //
-// **ボードに無い Status 名を渡されたら、0件ではなくエラーにする。**GitHub の検索は
+// **カンバンに無い Status 名を渡されたら、0件ではなくエラーにする。**GitHub の検索は
 // 綴りが違うだけで黙って0件を返すため、そのまま返すと「対象が無い」と区別がつかず、
 // キューが無言で止まる（設計 2-2 / 3-6 の最大の落とし穴）。照合には Bootstrap（または
-// VerifyStatusOptions）で覚えたボード側の選択肢名を使うので、**それらを一度も呼んで
+// VerifyStatusOptions）で覚えたカンバン側の選択肢名を使うので、**それらを一度も呼んで
 // いない場合はこの検査は行わない。**
 func (a *Adapter) FetchIssuesByStates(ctx context.Context, states []string) ([]Issue, error) {
 	if len(states) == 0 {
@@ -769,7 +769,7 @@ const filterMismatchMinSample = 4
 // dispatch までその巡回で止まる。
 //
 // **「設定の誤り」との見分け方。**絞り込みのキーを解決できていない場合、GitHub は
-// 条件ごと無かったことにして**ボードのほぼ全件**を返す。つまり外れる item は多数派になる。
+// 条件ごと無かったことにして**カンバンのほぼ全件**を返す。つまり外れる item は多数派になる。
 // 反映待ちで外れるのは continuo 自身が直前に書いた item だけで、必ず少数派である。
 // そこで、**外れた item が過半数を占め、かつ見分けがつく件数がある場合に限って**
 // 設定の誤りとしてエラーにする。
@@ -951,7 +951,7 @@ type StatusWrite struct {
 	// Wrote は「書き込みの mutation を実際に呼んだか」である。
 	//
 	// **issue へ「Status を動かした」と書いてよいのは、これが真のときだけである。**
-	// Reached が真でも Wrote が偽なら、ボードは何も動いていないので書くことがない。
+	// Reached が真でも Wrote が偽なら、カンバンは何も動いていないので書くことがない。
 	Wrote bool
 	// Previous は書き込む直前に ID 指定で取り直した Status である。
 	//
@@ -1044,7 +1044,7 @@ func (a *Adapter) UpdateStatus(
 	// 比較は foldStatus で行う（statusOptionNamesFold の作り方と同じ正規化。SPEC.md 11.3）。
 	// **選択肢の正式名ではなく targetState と比べる。**
 	// **Reached は真、Wrote は偽である。**目的の Status にはなっているので呼び出し側は
-	// 先へ進んでよいが、ボードは動いていないので「何から何へ動かした」を issue へ書かない。
+	// 先へ進んでよいが、カンバンは動いていないので「何から何へ動かした」を issue へ書かない。
 	if foldStatus(previous) == foldStatus(targetState) {
 		a.logger.Info("Status は既にその値でした（書き込みを省きました）",
 			"item_id", itemID, "target_state", targetState)

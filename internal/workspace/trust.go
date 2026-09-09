@@ -25,7 +25,7 @@ const trustCheckTimeout = 10 * time.Second
 // trustCacheTTL は信頼の判定の結果を覚えておく時間である。
 //
 // **判定1回につき ghq と git を1本ずつ起動し、`~/.claude.json` を読み直す。**
-// ボードの項目ごとに呼ばれるので、覚えないと1巡回で数百回のプロセス起動になる。
+// カンバンの項目ごとに呼ばれるので、覚えないと1巡回で数百回のプロセス起動になる。
 // **人間が信頼を承認してから、最大でこの時間だけ「未信頼」のままになる**
 // （巡回の間隔と同じ桁なので、次の巡回では効く）。
 const trustCacheTTL = 30 * time.Second
@@ -145,7 +145,7 @@ func CheckTrustForClonePath(clonePath, homeDir string) (bool, string, error) {
 // どれも false になる。理由が要る場合（doctor）は CheckTrust を直接使うこと。
 // 判定できなかった場合は警告をログに出す（無言で false にしない）。
 //
-// **結果は trustCacheTTL のあいだ覚える。**この関数はボードの項目ごとに呼ばれるので、
+// **結果は trustCacheTTL のあいだ覚える。**この関数はカンバンの項目ごとに呼ばれるので、
 // 覚えないと1巡回で ghq と git を数百回起動する（判定できなかった場合は覚えない）。
 //
 // 戻り値: owner と repo を受け取り、信頼済みなら true を返す関数。

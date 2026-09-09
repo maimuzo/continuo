@@ -1,7 +1,7 @@
 // **continuo が Status を動かしたら、何から何へ動かしたかを issue に残す**（設計 3-29）。
 //
 // **Status を書くのは continuo であって、エージェントではない。**エージェントは最終応答に
-// `CONTINUO-STATUS: review` の1行を書くだけであり、それを受けてボードへ書き込むのは
+// `CONTINUO-STATUS: review` の1行を書くだけであり、それを受けてカンバンへ書き込むのは
 // continuo の Go のコードである（設計 3-25）。ここで確かめるのは、その書き込みの記録である。
 //
 // **「何から」は `UpdateStatus` が書く直前に取り直した値でなければならない。**巡回で読んだ
@@ -91,7 +91,7 @@ func TestStatusMove_着手と表明のそれぞれで何から何へを残す(t 
 // `UpdateStatus` が書く直前に取り直した値とは限らない。**古い値を「何から」として書くと、
 // この機能そのものが嘘をつく。**
 //
-// 与える情報: 着手で `In Progress` を書いたあと、表明を反映する直前にボードだけを
+// 与える情報: 着手で `In Progress` を書いたあと、表明を反映する直前にカンバンだけを
 // `Ready` へ戻す（人間が画面から動かした状況の再現）。**continuo が持っている写しは
 // `In Progress` のままである。**
 // 成功条件: 表明の記録が `Ready → In Review` になっている（`In Progress → In Review` ではない）。
@@ -107,7 +107,7 @@ func TestStatusMove_何からは書く直前に取り直した値である(t *te
 	})
 	fx.Herdr.Handle(herdr.MethodAgentPrompt, func(params map[string]any) (any, *rpcErr) {
 		fx.Tracker.AddComment("I_node188", "<!-- continuo:agent -->\n実装しました", true, time.Now())
-		// **ボードだけを動かす。**continuo が持っている写しは In Progress のままである。
+		// **カンバンだけを動かす。**continuo が持っている写しは In Progress のままである。
 		fx.Tracker.SetState(issue.ID, "Ready")
 		fx.Orc.OnHook(stopEvent("session-1", path, "p1"))
 		return map[string]any{
@@ -189,9 +189,9 @@ func TestStatusMove_20turn回しても記録は着手と終わりの2件だけ(t
 // TestStatusMove_既に同じ値なら記録を残さない は、書き込みが起きない経路を確かめる。
 //
 // 目的: 取り直した値が既に遷移先と同じなら、`UpdateStatus` は書き込みの mutation を
-// 送らない。**ボードは何も動いていないので、記録を書いてはならない。**
+// 送らない。**カンバンは何も動いていないので、記録を書いてはならない。**
 //
-// 与える情報: 表明を反映する直前に、ボードを遷移先と同じ `In Review` にしておく。
+// 与える情報: 表明を反映する直前に、カンバンを遷移先と同じ `In Review` にしておく。
 // 成功条件: Status を動かした記録が1件（着手のぶん）だけである。
 func TestStatusMove_既に同じ値なら記録を残さない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
@@ -233,8 +233,8 @@ func TestStatusMove_既に同じ値なら記録を残さない(t *testing.T) {
 // **人間やエージェントが先に `Done` へ動かした結果を巻き戻さない**ためである（設計 3-4）。
 // 書いていない以上、記録も出してはならない。
 //
-// 与える情報: 表明を反映する直前に、ボードを `Done` にしておく。
-// 成功条件: Status を動かした記録が1件（着手のぶん）だけで、ボードは `Done` のままである。
+// 与える情報: 表明を反映する直前に、カンバンを `Done` にしておく。
+// 成功条件: Status を動かした記録が1件（着手のぶん）だけで、カンバンは `Done` のままである。
 func TestStatusMove_書いてはいけない状態なら記録を残さない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "Ready")
