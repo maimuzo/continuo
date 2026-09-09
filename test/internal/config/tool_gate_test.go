@@ -11,22 +11,26 @@ import (
 	"github.com/maimuzo/continuo/internal/scaffold"
 )
 
-// 目的: `claude.tool_gate` の既定値を固定する（設計 3-64）。
+// 目的: `claude.tool_gate` の既定値を固定する（設計 3-64。issue #259）。
 //
-// **既定は「公開リポジトリの issue にだけ掛ける」である。**公開リポジトリの issue は
-// 誰でも書けるので、指示そのものが攻撃になりうる。既定を `off` にすると、
-// 何も書かずに使い始めた人だけが守られない。
+// **既定は「掛けない」である**（2026-09-09 の OWNER の判断）。
+// この判定は hook の入力の JSON だけを見て会話を読まないので、
+// **人間が issue のコメントで許可を出しても通らない。**
+// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
+//
+// **公開リポジトリの issue が誰でも書けることは変わらない。**掛けたい人は
+// `public_only` か `on` を書く。**その案内は SECURITY.md の「使う前に減らせる危険」にある。**
 //
 // **既定のモデルは空である**（設計 3-64）。判定に使えるモデルの名前の一覧は公式文書に無く、
 // 通らない名前を書いたときにどう倒れるかを確かめていない。**だから名前を書かず、
 // Claude Code の既定に任せる。**
 //
 // 与える情報: config.DefaultConfig()。
-// 成功条件: mode が `public_only`、モデルが空、判定に回す道具が Bash だけであること。
-func TestDefaultConfig_危ない呼び出しの判定は公開リポジトリだけに掛ける(t *testing.T) {
+// 成功条件: mode が `off`、モデルが空、判定に回す道具が Bash だけであること。
+func TestDefaultConfig_危ない呼び出しの判定は既定では掛けない(t *testing.T) {
 	got := config.DefaultConfig().Claude.ToolGate
-	if got.Mode != config.ClaudeToolGateModePublicOnly {
-		t.Fatalf("既定の mode が違う: got %q, want %q", got.Mode, config.ClaudeToolGateModePublicOnly)
+	if got.Mode != config.ClaudeToolGateModeOff {
+		t.Fatalf("既定の mode が違う: got %q, want %q", got.Mode, config.ClaudeToolGateModeOff)
 	}
 	if got.Model != "" {
 		t.Fatalf("既定の判定モデルに名前が入っている（受け付ける名前の一覧が公式文書に無い）: %q", got.Model)

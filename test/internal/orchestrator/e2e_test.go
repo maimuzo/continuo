@@ -291,7 +291,7 @@ func TestTick_設定ファイルに8つのhookと環境変数を書く(t *testin
 	}
 	args, _ := startParams["args"].([]any)
 	joined := joinAny(args)
-	for _, want := range []string{"--settings", settingsPath, "--session-id", "session-1", "--permission-mode", "dontAsk"} {
+	for _, want := range []string{"--settings", settingsPath, "--session-id", "session-1", "--permission-mode", "auto"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("起動フラグに %q が無い: %v", want, args)
 		}

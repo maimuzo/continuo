@@ -352,11 +352,37 @@ type AgentConfig struct {
 
 // ClaudePermissionsConfig は Claude Code の許可リストである。
 // permission_mode が dontAsk のとき、許可リストの外は全部拒否される（3-11）。
+// auto のときは、保護対象パス以外の読み書きはこの一覧で決まり、シェルのコマンドは
+// 判定役（classifier）へ回る。**deny は auto でも効く**（実測。3-11）。
 type ClaudePermissionsConfig struct {
 	// Allow は許可するツール・コマンドのパターンである。
 	Allow []string `yaml:"allow"`
 	// Deny は明示的に拒否するパターンである。
 	Deny []string `yaml:"deny"`
+}
+
+// ClaudePermissionModeAuto は permission_mode の「判定役に会話ごと見せて決めさせる」である。
+//
+// **保護対象パス**（`.claude` 配下と `.mcp.json`）**への書き込みと、シェルのコマンドが
+// 判定役へ回る**（公式の permission modes の表。2026-09-09 に取得）。
+// **会話の中で人間が出した許可を読む**ので、issue のコメントで許した操作が通る。
+// **`dontAsk` にはこの経路が無い**（権限は設定ファイルからしか来ない）。
+const ClaudePermissionModeAuto = "auto"
+
+// ClaudePermissionModeDontAsk は permission_mode の「許可の一覧の外は確認せずに拒否する」である。
+//
+// **入力を待たないことが保証される唯一のモードである**（公式 *"the session never waits for input"*）。
+// **そのぶん、保護対象パスへの書き込みは何をしても通らない**（3-11 の実測）。
+const ClaudePermissionModeDontAsk = "dontAsk"
+
+// ClaudePermissionModes は permission_mode に書ける値の全部である。
+// **起動時の検査はこの一覧だけを見る**（validateClaude）。
+//
+// **公開する。**検査は test/internal/config という別の package にあり、
+// 非公開だと期待値をそこへ書き写すことになる。
+var ClaudePermissionModes = []string{
+	ClaudePermissionModeAuto,
+	ClaudePermissionModeDontAsk,
 }
 
 // ClaudeToolGateModeOff は tool_gate.mode の「掛けない」である。
@@ -400,12 +426,15 @@ var ClaudeToolGateModes = []string{
 type ClaudeToolGateConfig struct {
 	// Mode は判定を掛ける範囲である。ClaudeToolGateModes のどれかを書く。
 	//
-	//	off          … 掛けない
+	//	off          … 掛けない（既定）
 	//	on           … いつでも掛ける
-	//	public_only  … 公開リポジトリの issue にだけ掛ける（既定）
+	//	public_only  … 公開リポジトリの issue にだけ掛ける
 	//
-	// **既定を public_only にする理由。**公開リポジトリの issue は誰でも書けるので、
-	// 指示そのものが攻撃になりうる（3-64）。
+	// **既定を off にする理由**（2026-09-09 の OWNER の判断。issue #259）。
+	// この判定は会話を読まないので、**人間が issue のコメントで許可を出しても通らない。**
+	// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
+	// **公開リポジトリの issue が誰でも書けることは変わらない**ので、掛けたい人は
+	// public_only か on を書く（SECURITY.md の「使う前に減らせる危険」）。
 	Mode string `yaml:"mode"`
 	// Model は判定させるモデルである。**既定は空である**（設計 3-64）。
 	// 空なら settings.json へ `model` を書かず、Claude Code の既定の速いモデルに任せる。
@@ -437,9 +466,10 @@ type ClaudeHookBridgeConfig struct {
 type ClaudeConfig struct {
 	// Kind は herdr に渡す agent の種別である。
 	Kind string `yaml:"kind"`
-	// PermissionMode は Claude Code の権限モードである。入力を待たない唯一のモードである "dontAsk" を使う（3-11）。
+	// PermissionMode は Claude Code の権限モードである。ClaudePermissionModes のどれかを書く（3-11）。
+	// **既定は "auto"。**"dontAsk" を選べば、いままでどおり入力を待たない。
 	PermissionMode string `yaml:"permission_mode"`
-	// Permissions は dontAsk のときに参照される許可・拒否リストである。
+	// Permissions は許可・拒否リストである。**auto でも deny は効く**（3-11 の実測）。
 	Permissions ClaudePermissionsConfig `yaml:"permissions"`
 	// Env は Claude Code の起動時に渡す環境変数である。値は展開しない（5-5）。
 	Env map[string]string `yaml:"env"`

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 )
@@ -239,7 +240,8 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// **原因を断定しない。**何が確認の画面を出したかは continuo の側に残らない
 			// （設計 3-11。`Notification` hook は出ず、拒否は静かに起きる）。
 			// 書けるのは「記録を見て確かめてください」までである。
-			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState, blockedHandoffReason(stillRunning))
+			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
+				blockedHandoffReason(o.cfg.Claude.PermissionMode, stillRunning))
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
@@ -393,9 +395,14 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // **全部並べるとコメントが名前で埋まる。**記録のパスと同じ上限で切り、
 // 残りは件数だけ書く。**「動いていた件数」そのものは切らずに出す。**
 //
+// **権限モードで【対処】の書き方が変わる**（設計 3-11。issue #259）。`dontAsk` なら
+// 許可の一覧に足すのが対処になるが、**`auto` では許可の一覧を増やしても解けない。**
+// `auto` の判定役は会話の流れを読むので、**issue のコメントで許可を書くのが対処である。**
+//
+// mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
 // stillRunning: esc を送る時点でまだ走っていた subagent の名前の並び。空なら1件も無い。
 // 戻り値: 引き渡しの通知に載せる理由。
-func blockedHandoffReason(stillRunning []string) string {
+func blockedHandoffReason(mode string, stillRunning []string) string {
 	var b strings.Builder
 	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
 		"continuo は esc を送って画面を閉じましたが、" +
@@ -426,14 +433,41 @@ func blockedHandoffReason(stillRunning []string) string {
 		"**サブエージェントの記録も見てください。**" +
 		"親の記録の末尾には何も残っていないことがあります。" +
 		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
-		"**何の確認だったかは continuo の側には残りません。**" +
-		"\n【dontAsk について】continuo は `--permission-mode dontAsk` で起動しており、" +
-		"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
-		"**この停止は拒否とは別の原因のことがあります。**" +
-		"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
-		"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
-		"そのうえで Status を着手待ちへ戻してください。")
+		"**何の確認だったかは continuo の側には残りません。**")
+	b.WriteString(permissionRemedyText(mode))
 	return b.String()
+}
+
+// permissionRemedyText は、権限で止まったときの対処の文面を組み立てる（設計 3-11。issue #259）。
+//
+// **モードで対処が変わる。**`dontAsk` は許可の一覧に足すのが対処だが、
+// **`auto` では許可の一覧を増やしても解けない。**判定役は会話の流れを読むので、
+// **issue のコメントに許可を書くのが対処である。**
+//
+// **見出しはモード名から作る。**決め打ちにすると、受け付ける値が増えたときに
+// 別のモードを `auto` と名乗ってしまう（ClaudePermissionModes は増やせる）。
+//
+// **文面をここ1箇所に置く。**同じ案内が turn.go と restore.go の2箇所にあり、
+// 片方だけ直すと食い違う。
+//
+// mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
+// 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
+func permissionRemedyText(mode string) string {
+	if mode == config.ClaudePermissionModeDontAsk {
+		return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しており、" +
+			"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
+			"**この停止は拒否とは別の原因のことがあります。**" +
+			"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
+			"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
+			"そのうえで Status を着手待ちへ戻してください。"
+	}
+	return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
+		"**このモードの判定役は会話の流れを読むので、許可の一覧を増やしても解けないことがあります。**" +
+		"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
+		"**この issue のコメントに「その操作を許可します」と書いてください。**" +
+		"判定役はそれを読みます。**恒久的に効かせたいものは " +
+		"WORKFLOW.md の `claude.permissions.allow` に足してください。**" +
+		"そのうえで Status を着手待ちへ戻してください。"
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。
