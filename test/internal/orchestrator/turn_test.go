@@ -576,7 +576,10 @@ func TestTurn_blockedで引き渡すときサブエージェントの記録も�
 		"agent-a1f9f743.jsonl",
 		"サブエージェントの記録の置き場所",
 		"下記の【調べるところ】に挙げた記録",
-		"dontAsk",
+		// **既定は auto なので、対処は「コメントで許可を書く」である**（設計 3-11。issue #259）。
+		// dontAsk のときだけ「allow に足す」を案内する。
+		"auto",
+		"この issue のコメントに「その操作を許可します」と書いてください",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("引き渡しの通知に %q が無い:\n%s", want, body)

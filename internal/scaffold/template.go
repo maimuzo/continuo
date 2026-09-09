@@ -129,16 +129,21 @@ agent:
 # ===== Claude Code をどう起動するか =====
 claude:
   kind: claude                              # herdr に起動させるエージェントの種別
-  permission_mode: dontAsk                  # 人間に確認を出さない唯一のモード。無人で回すので必ずこれにする
-  permissions:                              # dontAsk のとき、allow に書いていないツールは全部拒否される
+  permission_mode: auto                     # auto か dontAsk。auto は判定役が会話の流れを読んで決めるので、
+                                            # issue のコメントで出した許可が通る。.claude/ と .mcp.json にも書ける。
+                                            # dontAsk は allow に書いたものだけを通し、それ以外は確認せず拒否する
+  permissions:                              # auto ではシェルのコマンドが判定役へ回る。deny は auto でも効く。
+                                            # dontAsk のとき、allow に書いていないツールは全部拒否される
     allow:
-      - "Bash"                              # ツール名だけを書く。引数まで絞ると書き込み系の操作が拒否される
+      - "Bash"                              # ツール名だけを書く。dontAsk では引数まで絞ると書き込み系の操作が拒否される
       - "Read"
       - "Glob"
       - "Grep"
       - "Edit"
       - "Write"
-    deny: []                                # 明示的に禁じるツール。subagent を起動するツールは allow に書かなくても動く
+    deny: ["AskUserQuestion"]               # 明示的に禁じるツール。AskUserQuestion はエージェントが人間に選択肢を出す道具で、
+                                            # 外すと無人運転中に質問の画面が出て pane が止まる（次の指示が回答として食われる）。
+                                            # subagent を起動するツールは allow に書かなくても動く
   env:                                      # Claude Code に渡す環境変数
     CLAUDE_CODE_RETRY_WATCHDOG: "1"         # turn の途中で 429 / 529 が返ってきたときに、リトライを続けさせる
   poll_wait_ms: 30000                       # エージェントの状態を1回待つ時間。短く切って、経過時間は continuo 側で数える
@@ -152,8 +157,12 @@ claude:
     listen: null                            # hook を受け取る socket の置き場所。null なら continuo が決める。書くなら絶対パス。
                                             # ホーム直下のような共用のディレクトリを指さないこと。権限が 0700 でなければ起動を止める
   tool_gate:                                # 危ない道具の呼び出しを、Claude Code の中のモデルに実行の前に断らせる仕掛け
-    mode: public_only                       # off なら掛けない。on ならいつでも掛ける。public_only なら公開リポジトリの issue にだけ掛ける。
-                                            # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）
+    mode: "off"                             # off なら掛けない（既定）。on ならいつでも掛ける。
+                                            # public_only なら公開リポジトリの issue にだけ掛ける。
+                                            # 公開かどうかを取れなかった issue にも掛ける（分からないものを公開ではないと決めない）。
+                                            # この判定は会話を読まないので、コメントで許可を出しても通らない。
+                                            # off は引用符で囲む。YAML 1.1 の道具（PyYAML / yq など）は
+                                            # 裸の off を真偽値の false として読むため
     model: ""                               # 判定させるモデル。空なら Claude Code の既定の速いモデルに任せる（既定）。
                                             # 書ける名前の一覧は公式文書に無いので、書くなら自分の手元で1件通してから
     tools: ["Bash"]                         # 判定に回す道具の名前。空なら全部の道具に掛かり、道具1回ごとに判定の待ち時間が乗る
