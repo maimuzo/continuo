@@ -586,7 +586,7 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 		// 「その本文の書き込み」と書くと、`gh api --method PATCH repos/X/issues/<番号> -f body=…` が
 		// 肯定に入り、**人間が書いた issue の本文を、判定役に止められないまま置き換えられる。**
 		// **pull request の本文の書き換えは肯定に残す**（組み込みの指示書が `Closes #45` を足させる）。
-		"そのときに付ける本文、pull request の本文の書き込み",
+		"そのときに付ける本文、pull request の本文の書き込み、pull request の draft を外すこと",
 		// **肯定の一覧から、承認・取り込み・close を外していること。**
 		// **`gh pr review --approve` は、道具の形としては pull request へのコメントの投稿である。**
 		// `gh api --method POST .../pulls/<番号>/reviews -f event=APPROVE` は、
@@ -607,14 +607,14 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 		"送り先が既定の branch（`main`）だと読み取れる push",
 		// **タグを作る push は、`v*` で release を公開する workflow を持つリポジトリでは、
 		// `gh release create` と同じ結果へ届く。**
-		"branch でない ref（tag など）への push",
+		"branch でない ref（tag など）だと読み取れる push",
 		// **断る条件の1つ目が挙げているのは force push だけで、ref を消す push は入っていない。**
 		// **並行して走っている別の run の branch を remote から消せると、その成果が別の機械から見えなくなる。**
 		"ref を消す push",
 		// **pull request を通さない書き込みも、同じ組で外していること。**
 		// **直 push を塞いでも、`gh api --method PUT .../contents/…` で同じ結果へ届く。**
 		"pull request を通さずにファイルを書き込む形",
-		"この肯定に含めない",
+		"この肯定に含めず、断る",
 		// **閉じる文が、結論を固定していること。**
 		// **「〜を理由に通してはならない」は推論を1本封じるだけで、判定役には別の理由が残る。**
 		// **`gh pr merge <この issue を閉じる pull request>` は、担当先だからではなく、
@@ -625,7 +625,7 @@ func TestToolGate_担当しているissueを判定役へ渡す(t *testing.T) {
 		// **そして手元の `git commit` や `cat > plan.md` まで含むと読める**
 		// （判定へ回るのは Bash なので、worktree の中を書き換えるコマンドは全部届く）。
 		"リポジトリ octocat/hello-world の GitHub 上のもの（issue、pull request、ref、release、設定）と",
-		"その issue が載っているカンバンへの書き込みのうち、いま挙げた形に当たらないものは",
+		"GitHub Projects v2 のカンバン（project）への書き込みのうち、いま肯定した形に当たらないものは",
 		// **下に続く免除より優先すると書いてあること。**
 		// **担当先の文は push を免除し、下の免除は「push …は、この免除に含めない。
 		// それらは、いまの作業と関係があるかどうかで、この条件のとおりに判断する」と書く。**

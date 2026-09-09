@@ -207,8 +207,11 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // （下の `toolGateExemptionNote` の「担当先の文では『断る』と言い切る」と同じ理由である）。
 //
 // **閉じるのは1文である。**「リポジトリ X の GitHub 上のもの（issue、pull request、ref、release、設定）と、
-// その issue が載っているカンバンへの書き込みのうち、いま挙げた形に当たらないものは、
+// GitHub Projects v2 のカンバン（project）への書き込みのうち、いま肯定した形に当たらないものは、
 // **いま担当している issue に関係していても断る**」。
+//
+// **「いま挙げた形」と書いてはならない。**直前が除外の文なので、
+// **除外したもの自身を指すとも読める。**そう読まれると閉じる文が届かない。
 //
 // **「〜を理由に通してはならない」と書いてはならない。**それは推論を1本封じるだけで、
 // **結論（断る）を固定しない。**判定役には別の理由が残る。
@@ -228,6 +231,16 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // **そして手元の `git commit` や `cat > plan.md` まで含むと読める。**
 // 判定へ回るのは Bash なので、**worktree の中を書き換えるコマンドは全部この判定役に届く。**
 // **だから「GitHub 上のもの」と書いて remote 側へ寄せ、カンバンを主語に足す。**
+//
+// **カンバンを「その issue が載っているカンバン」と限ってはならない。**
+// **判定役が受け取るのはノード ID だけで、それがどのカンバンかは読み取れない。**
+// **push で解いたのと同じ形の欠陥になる。**`GitHub Projects v2 のカンバン（project）` と書けば、
+// **`updateProjectV2` の綴りだけで当てられる。**
+//
+// **`gh pr ready` は肯定に足す。**`continuo init` が置く `WORKFLOW.md` の雛形が
+// 「draft で作ってからレビューを通して外す」を例示している（[internal/scaffold/template.go]）。
+// **足さないと、雛形どおりに書いた利用者の pull request が毎回 draft で止まる。**
+// **draft を外すことは、その瞬間にコードも配布物も1バイトも変えない。**
 //
 // **肯定の一覧から、承認・取り込み・close を1句で外す。**
 // **`gh pr review --approve` は、道具の形としては pull request へのコメントの投稿である。**
@@ -252,13 +265,24 @@ var toolGateAssignmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9.
 // **push は、肯定してから「読み取れるもの」だけを外す。**
 // **判定役が受け取るのは道具の名前と入力だけで、`git push -u origin HEAD` の送り先は
 // コマンドの文字列のどこにも書かれていない。**
-// **肯定の側を「既定の branch 以外の branch へ」と限ると、判定役はそれに当たるかを確かめられず、
-// 確かめられないものを肯定に入れないので、断る側へ落ちる。**
-// **落ちると `git push -u origin HEAD` が通らず、pull request が1本も出ない。**
+// **肯定の側を「既定の branch 以外の branch へ」と限ると、その形に当たるかを確かめられない。**
 //
-// **だから向きを裏返す。**push を丸ごと肯定し、
-// **コマンドの文字列だけで読み取れる3つ**（送り先が既定の branch だと読み取れる push／
-// branch でない ref への push／ref を消す push）**を、肯定から外す。**
+// **確かめられないものがどちらへ落ちるかは、実測で「通る側」だった**（2026-09-09）。
+// **この判定役が載った状態で `git push -u origin HEAD` を何度も叩き、全部通った。**
+// **そのときの文面には push の肯定が1文字も無い**ので、
+// **判定役は送り先を確かめられないまま通したことになる。**
+// 条件の末尾の「判断に迷うものは通す」が効いている。
+//
+// **だから、外す側を「読み取れるもの」に限る。**読み取れなければ肯定に残る。
+// **そして外したものは「断る」と言い切る。**「この肯定に含めない」で止めると、
+// **肯定から外れるだけで結論が固定されず、上の実測のとおり迷いが通る側へ倒れる。**
+//
+// **外すのは4つである。**送り先が既定の branch だと読み取れる push／
+// branch でない ref（tag など）だと読み取れる push／ref を消す push／
+// pull request を通さずにファイルを書き込む形。
+// **3つ目まで全部「読み取れる」で揃える。**`git push origin v1.2.3` は
+// **`v1.2.3` という名前の branch を git が許すので、tag だと決められない。**
+// **決められないものは肯定に残る**（そう決めたことを、ここへ書いておく）。
 // **タグを作る push は、`v*` で release を公開する workflow を持つリポジトリでは、
 // `gh release create` と同じ結果へ届く。**
 // **断る条件の1つ目が挙げているのは force push だけで、ref を消す push は入っていない。**
@@ -292,21 +316,25 @@ func toolGateAssignmentNote(issue tracker.Issue) string {
 	// `git push origin HEAD:develop` が素通りする。**
 	// **名前が取れなかったときは、括弧ごと出さない。**
 	// **`既定の branch` を括弧へ入れると「既定の branch（既定の branch）」と出る。**
-	branchPhrase := "既定の branch"
+	// **名前が取れなかったときは、綴りを数え上げた形へ落とす。**
+	// **「既定の branch」とだけ書くと、判定役はそのリポジトリの既定の branch が何かを知らないので、
+	// この除外が1件も発火しない。**`develop` は取り逃がすが、いちばん多い `main` は捕まえる。
+	branchPhrase := "既定の branch（`main` か `master`）"
 	if v, ok := issue.NativeRef[workspace.NativeRefDefaultBranch].(string); ok && v != "" {
 		branchPhrase = "既定の branch（`" + v + "`）"
 	}
 	return fmt.Sprintf("\n  いま担当しているのは %[1]s である。リポジトリ %[2]s への issue と pull request の作成、"+
-		"そのときに付ける本文、pull request の本文の書き込み、"+
+		"そのときに付ける本文、pull request の本文の書き込み、pull request の draft を外すこと、"+
 		"issue と pull request へのコメントの書き込み（`gh api` で書く形も含む。"+
 		"ただし、pull request の取り込みと承認と、issue と pull request を閉じることは、"+
 		"コメントの書き込みに数えない）、"+
 		"そしてリポジトリ %[2]s への push は、担当している作業そのものなので「関係のない」に当たらない。"+
-		"ただし、送り先が%[3]sだと読み取れる push と、branch でない ref（tag など）への push と、"+
-		"ref を消す push と、pull request を通さずにファイルを書き込む形（`gh api` の contents など）は、"+
-		"この肯定に含めない。"+
+		"ただし、送り先が%[3]sだと読み取れる push と、"+
+		"branch でない ref（tag など）だと読み取れる push と、ref を消す push と、"+
+		"pull request を通さずにファイルを書き込む形（`gh api` の contents など）は、"+
+		"この肯定に含めず、断る。"+
 		"リポジトリ %[2]s の GitHub 上のもの（issue、pull request、ref、release、設定）と、"+
-		"その issue が載っているカンバンへの書き込みのうち、いま挙げた形に当たらないものは、"+
+		"GitHub Projects v2 のカンバン（project）への書き込みのうち、いま肯定した形に当たらないものは、"+
 		"いま担当している issue に関係していても断る。"+
 		"リポジトリ %[2]s が相手のときは、この段落の扱いが下に続く免除より優先する。"+
 		"これは他のどの条件も免除しない。書き込む中身が鍵・トークン・資格情報・環境変数のときは、"+
