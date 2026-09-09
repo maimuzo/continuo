@@ -1552,8 +1552,8 @@ upstream だけを見ると、push 先を分けた worktree が永久に片付�
 | **3** | upstream が無く base があれば `git diff --quiet <base>...HEAD` | 差分が無ければ消してよい |
 | **4** | 段1 が偽で、upstream も base も無い | **消さない。**判定できないので見送る |
 
-**段1 が段2 より前にある。**逆にすると、「upstream は1本目の PR の branch のままで、
-2本目を別名へ push した」worktree が `@{u}..HEAD` の件数だけで見送られる。
+**段1 が段2 より前にある。**逆にすると、「upstream は人間の認証のクライアントの PR の branch のままで、
+GitHub App のクライアントを別名へ push した」worktree が `@{u}..HEAD` の件数だけで見送られる。
 **段1 が偽なら段2 も必ず偽である**（upstream もリモート追跡 ref の1つだから）。
 **段2 は理由の文面を作るためだけに残す。**
 
@@ -2006,7 +2006,7 @@ agent_transcript_path  : …/00000000-0000-4000-8000-000000000007/subagents/agen
 | 何を見るか | どこから来るか | 片方だけでは足りない理由 |
 | --- | --- | --- |
 | `SubagentStart` 〜 `SubagentStop` の `agent_id` | `SubagentStart` / `SubagentStop` | 親が subagent を待っている間は `Stop` が来ないので `background_tasks` は空のまま |
-| 直近の `background_tasks` | `Stop` / `SubagentStop`（3-2 が既に読んでいる） | `SubagentStart` を取りこぼすと1本目が空のまま |
+| 直近の `background_tasks` | `Stop` / `SubagentStop`（3-2 が既に読んでいる） | `SubagentStart` を取りこぼすと人間の認証のクライアントが空のまま |
 
 **`id` と `agent_id` は突き合わせられる**（1-3。`SubagentStart.agent_id` /
 `Stop.background_tasks[].id` / `SubagentStop.agent_id` は named subagent 15件すべてで
@@ -6531,7 +6531,7 @@ tracker:
 **書き込みのあいだは書き戻し専用の印を取る**（`beginRewrite` / `endRewrite`。**分け方は 3-58**）。
 **巡回からの書き戻しも、turn の終わりからの書き戻しも同じである。**
 **その間に巡回が run を手放すと、印が消えたあとに「作業中」の Status がカンバンへ書かれ、
-次の巡回が同じ worktree に2本目の Claude Code を立てる。**
+次の巡回が同じ worktree にGitHub App のクライアントの Claude Code を立てる。**
 
 **「戻せない」の回数は時間でも切り直す**（`automatedRewriteFailureRetryAfter` = 5分）。
 数えているのは「続けて何回」だが、**上限に達した run は書き戻しそのものをやめるので、
@@ -6678,7 +6678,7 @@ continuo が最後に書いた値は `In Review` のこともあり、**その�
 | turn ループ・着手の失敗（`claimTerminal`） | **終わるまで待ってから印を取る。**待たないと、この run を終わらせる者が誰も居なくなる |
 | 書き戻し（`beginRewrite`） | 終わらせる処理が走っている・待っているなら**書かずに戻る。**別の書き戻しが飛んでいるだけなら**run は終わっていない**ので、turn ループは続ける |
 
-**「同じ worktree に2本目の worker が立たない」は保たれる。**
+**「同じ worktree にGitHub App のクライアントの worker が立たない」は保たれる。**
 書き戻しの印が立っている間、run を手放す経路は1つも通らない（巡回の経路は戻り、
 turn ループの経路は待つ）。**待っている間は新しい書き戻しも始めない**（`terminalWaiting`）。
 始めさせると、待っている側が書き戻しの列に永久に割り込まれる。
@@ -6823,7 +6823,7 @@ Linux で 0x200 と値が違ううえ `1024` とも書けるので、数値の�
 | --- | --- | --- |
 | **引数で渡す** | `FetchIssuesByIDs(ctx, ids, withTimeline bool)` の1本にする | 呼び出し側が真偽値だけを見ることになり、**表と照らさないと何を頼んだのか読めない。**偽の tracker で呼び分けを数えるのも難しくなる |
 | **常に取って捨てる** | いままでどおり全部取り、使わない側は無視する | **点数は返る node の数で決まる**（3-31）。捨てる前に払っている |
-| **記録だけ別に引く** | 要るときに timeline を2本目のリクエストで引く | **読む側は巡回のたびに要る。**1本が2本になり、いちばん多い経路が重くなる |
+| **記録だけ別に引く** | 要るときに timeline をGitHub App のクライアントのリクエストで引く | **読む側は巡回のたびに要る。**1本が2本になり、いちばん多い経路が重くなる |
 
 **戻らないように検査を置いた。**
 [test/internal/orchestrator/timeline_scope_test.go](../../test/internal/orchestrator/timeline_scope_test.go) が
@@ -7832,7 +7832,7 @@ turn の途中でも即座に止まっていた。**エージェントが自分�
 | **書いた主体を見ずに猶予を掛ける** | 知らない Status と完全に同じ扱いにする | **人間が `In Review` へ引き取る操作が既定10分効かなくなる。**人間の引き渡しは即座に効くのが正しい |
 | **`terminal_states` だけ直す** | 引き渡しはそのままにする | **同じ自動化が `In Review` も書く**（PR を issue に紐づけたとき）。片方だけ塞いでも同じ形で殺される |
 | **自動化が書いた終端を無視する** | `Done` を人間が書くまで終わらせない | **人間がマージして終わらせる運用が終わらなくなる。**待つのは turn の終わりまでで足りる |
-| **起点を種類ごとに別の欄で持つ** | `externalMoveSince` を2本に分ける | **同時には起きない**ので2本目は常にゼロ値になる。種類を1つ覚えるだけで足りる |
+| **起点を種類ごとに別の欄で持つ** | `externalMoveSince` を2本に分ける | **同時には起きない**のでGitHub App のクライアントは常にゼロ値になる。種類を1つ覚えるだけで足りる |
 
 ### 3-74b. エージェントが終えたことに気づく経路は2つある
 
@@ -7968,7 +7968,7 @@ running_state・`status_signal_map` の遷移先・対応表の戻す先の3種�
 
 **差分は別の口から出す。**検査結果の内訳は見出し語の桁に揃えて字下げされるので、
 **そのままでは `patch` に渡せない。**差分だけを字下げなしで出す口
-（`continuo doctor --missing-keys-patch <パス>`）を持ち、その口は検査を1つも行わない。
+（`continuo doctor --missing-keys-patch <パス>`）を持ち、その経路は検査を1つも行わない。
 
 **直し方（`Remedies`）には2行出す。**読む口と、当てる口である。
 
@@ -8801,8 +8801,8 @@ turn の終わりを決められず、**`settle_ms` の窓が閉じた瞬間に 
 1 run あたり10分である。**刻んでも本物の書き直しは取り逃がさない。**上の実測は 0.1 秒ごとに
 `agent.get` を読んでおり、**書き直しの最中に `idle` が返った瞬間は1度も無かった。**
 
-**`stop_hook_active` は判定にも記録にも使わない。**1本目の `Stop`（差し戻される側）では偽であり、
-真になるのは書き直しが終わったあとの2本目だけなので、**防ぎたい瞬間には必ず偽である。**
+**`stop_hook_active` は判定にも記録にも使わない。**人間の認証のクライアントの `Stop`（差し戻される側）では偽であり、
+真になるのは書き直しが終わったあとのGitHub App のクライアントだけなので、**防ぎたい瞬間には必ず偽である。**
 
 **測ったもの。****差し戻しの最中、herdr は一貫して `working` を返す**
 （[docs/evidence/stop_hook_block_20260902.md](../evidence/stop_hook_block_20260902.md)。
@@ -9219,7 +9219,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 | 何 | 何を許すか |
 | --- | --- |
-| **`Issues`** | **読み書き。**この設計が使う唯一の口である |
+| **`Issues`** | **読み書き。**この設計が使う唯一の経路である |
 | **`Metadata`** | **読み取り。**GitHub が必須にしている |
 
 **`Pull requests` を足さない。**足すと、漏れたときに**レビューを通していない pull request をマージされうる。**
@@ -9305,8 +9305,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **既にあるディレクトリの権限は変えない。**同じファイルの GoDoc が
 「**continuo は、自分が作っていないディレクトリの権限を書き換えない**」と決めている。
 
-**ホームディレクトリは、差し替え口から引く。**
-[internal/cli/cli.go:84-86](../../internal/cli/cli.go#L84-L86) に `UserHomeDir` の差し替え口が既にある。
+**ホームディレクトリは、差し替えられる関数から引く。**
+[internal/cli/cli.go:84-86](../../internal/cli/cli.go#L84-L86) に `UserHomeDir` の差し替えられる関数が既にある。
 **`os.UserHomeDir()` を直に呼んではならない。**呼ぶと、テストが本物のホームの資格情報を読み書きする。
 
 **`--id` で分けない。**
@@ -9331,10 +9331,10 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **本体で止めない理由。**止めると、**権限を直す案内が出る場所（doctor）へ到達する前に落ちる。**
 **`github_app_attribution` が `true` なら continuo ごと起動しないので、doctor を叩けと言う相手が居ない。**
 
-**置き場所を環境変数で変える口は作らない。**
+**置き場所を環境変数で変える設定は作らない。**
 **二重起動を止めるロックが `~/.continuo` に固定されている**（[docs/plans/continuo_design.md:3105](continuo_design.md#L3105) の 3-17）。
 **片方だけ動かせるようにすると、doctor と [docs/FAQ.md](../FAQ.md) の案内が2通りになる。**
-**テストは、上の `UserHomeDir` の差し替え口から一時ディレクトリを渡す。**
+**テストは、上の `UserHomeDir` の差し替えられる関数から一時ディレクトリを渡す。**
 
 #### 漏れたら何ができるか
 
@@ -9462,10 +9462,37 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **`server.port` は commit される WORKFLOW.md にある**（5-2）。
 **チームで1つの値になるので、同じポートを2人が同時に使うことは、同じ機械でしか起きない。**
-**同じ機械で2本動かしている人は、2本目の待ち受けが失敗する。**
+**同じ機械で2本動かしている人は、GitHub App のクライアントの待ち受けが失敗する。**
 **これは `github_app_attribution` を入れる前からある挙動で、この設計では変えない。**
 
 #### 取れないときに止める
+
+**起動から投稿までの流れ。**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as 人間
+    participant C as continuo 本体
+    participant F as 資格情報のファイル
+    participant GH as GitHub
+    H->>C: continuo を起動する
+    C->>C: WORKFLOW.md を読む
+    alt github_app_attribution が false
+        C->>C: 何も検査しない。いままでどおり動く
+    else true
+        C->>F: ロックを取り、資格情報を読む
+        C->>GH: 更新用のトークンを1回だけ回す
+        alt 取れた
+            GH-->>C: アクセストークン
+            C->>F: 新しい更新用のトークンを書き戻す
+            C->>C: authorized_login と gh api user を突き合わせる
+            C->>C: 巡回を始める
+        else 取れない
+            C-->>H: エラーを出して起動しない
+        end
+    end
+```
 
 **`true` のときは、起動時に1回だけ実際にトークンを取り、通らなければ起動しない。**
 **取ると更新用のトークンが回る。**書き戻しの直前で落ちれば、認可のやり直しになる（3-82b）。
@@ -9495,15 +9522,15 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 理由を書く投稿も同じトークンを要求して落ちる。**
 **1件も書けず、issue には何も残らない。**
 
-**投稿の口は12箇所ある**（`o.postComment(` ほか2つを `internal/` の下で数えると14行返り、
+**投稿する箇所は12箇所ある**（`o.postComment(` ほか2つを `internal/` の下で数えると14行返り、
 うち2行は [internal/orchestrator/comment.go:528](../../internal/orchestrator/comment.go#L528) と [544行](../../internal/orchestrator/comment.go#L544) の委譲なので、引いて12である）。
-**どれを2本目で書くかは、下の表で決める。**
+**どれをGitHub App のトークンで書くかは、下の表で決める。**
 
 **止まった理由は、issue へ1件書く。**人間がこう決めている（2026-09-08）。
 
 > なんでblockedに移ったのかコメント書かないとわからないだろ
 
-**書けるのは、いままでの1本目のクライアントである。**`tracker.provider.token_source` のトークンで書く。
+**書けるのは、いままでの人間の認証のクライアントのクライアントである。**`tracker.provider.token_source` のトークンで書く。
 **そのコメントには `<!-- continuo:self -->` が付くので、機械が書いたことは従来どおり判定できる。**
 **GitHub App の attribution は付かないが、それでよい。**
 
@@ -9515,24 +9542,24 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **この設計が足すのは、それを GitHub の画面でも見えるようにすることである。**
 **1件だけ画面で見えなくても、マーカーは付いているので判定は壊れない。**
 
-**どれを2本目（GitHub App のトークン）で書くか。**
+**どれをGitHub App のクライアント（GitHub App のトークン）で書くか。**
 
 | 何 | どちらで書くか | なぜ |
 | --- | --- | --- |
-| **Status を動かした記録**（[internal/orchestrator/comment.go:504](../../internal/orchestrator/comment.go#L504) の `postStatusMove`） | **2本目** | **人間が画面で読む** |
-| **着手の門の案内**（[internal/orchestrator/gate.go:313](../../internal/orchestrator/gate.go#L313) の `postGateNotice`） | **2本目** | 同じ |
-| **未信頼のリポジトリを飛ばした通知**（[internal/orchestrator/dispatch.go:705](../../internal/orchestrator/dispatch.go#L705) の `noteUntrusted`） | **2本目** | 同じ |
-| **`failure_state` へ落とした通知**（[internal/orchestrator/restore.go:934](../../internal/orchestrator/restore.go#L934) の `moveToFailure`） | **1本目** | **これも「止まった理由」である**（下） |
-| **カンバンに載っていなかった・別の run が担当中だった・worktree を残した**（[internal/orchestrator/lifecycle.go:435](../../internal/orchestrator/lifecycle.go#L435)・[467行](../../internal/orchestrator/lifecycle.go#L467)・[1058行](../../internal/orchestrator/lifecycle.go#L1058)） | **2本目** | 同じ |
-| **引き渡しの通知**（[internal/orchestrator/lifecycle.go:1161](../../internal/orchestrator/lifecycle.go#L1161) の `postHandoffComment`） | **1本目** | **これが「止まった理由」を運ぶ唯一の経路である**（下） |
-| **持ち回りの3種**（入札・hold・released） | **1本目** | **機械どうしの取り決めで、指示書が「読み飛ばします」と書いている** |
+| **Status を動かした記録**（[internal/orchestrator/comment.go:504](../../internal/orchestrator/comment.go#L504) の `postStatusMove`） | **GitHub App のトークン** | **人間が画面で読む** |
+| **着手の門の案内**（[internal/orchestrator/gate.go:313](../../internal/orchestrator/gate.go#L313) の `postGateNotice`） | **GitHub App のトークン** | 同じ |
+| **未信頼のリポジトリを飛ばした通知**（[internal/orchestrator/dispatch.go:705](../../internal/orchestrator/dispatch.go#L705) の `noteUntrusted`） | **GitHub App のトークン** | 同じ |
+| **`failure_state` へ落とした通知**（[internal/orchestrator/restore.go:934](../../internal/orchestrator/restore.go#L934) の `moveToFailure`） | **人間の認証** | **これも「止まった理由」である**（下） |
+| **カンバンに載っていなかった・別の run が担当中だった・worktree を残した**（[internal/orchestrator/lifecycle.go:435](../../internal/orchestrator/lifecycle.go#L435)・[467行](../../internal/orchestrator/lifecycle.go#L467)・[1058行](../../internal/orchestrator/lifecycle.go#L1058)） | **GitHub App のトークン** | 同じ |
+| **引き渡しの通知**（[internal/orchestrator/lifecycle.go:1161](../../internal/orchestrator/lifecycle.go#L1161) の `postHandoffComment`） | **人間の認証** | **これが「止まった理由」を運ぶ唯一の経路である**（下） |
+| **持ち回りの3種**（入札・hold・released） | **人間の認証** | **機械どうしの取り決めで、指示書が「読み飛ばします」と書いている** |
 
-**この12箇所で全部である。**表に無い口は無い。
+**この12箇所で全部である。**表に無い箇所は無い。
 **continuo は成果を代筆しない**（[internal/orchestrator/lifecycle.go:1104](../../internal/orchestrator/lifecycle.go#L1104) の
 「**成果の要約は書かない**（設計 3-29）」）**ので、成果報告はこの表に入らない。**
 
-**引き渡しの通知と `moveToFailure` を1本目で書く理由。**
-**「止まった理由」を書く口は2つある。**
+**引き渡しの通知と `moveToFailure` を人間の認証で書く理由。**
+**「止まった理由」を書く箇所は2つある。**
 `buildHandoffComment` を呼ぶのは
 [internal/orchestrator/lifecycle.go:1162](../../internal/orchestrator/lifecycle.go#L1162) と
 [internal/orchestrator/restore.go:935](../../internal/orchestrator/restore.go#L935) で、**2つとも同じ本文を組み立てる。**
@@ -9544,8 +9571,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 [773行](../../internal/orchestrator/restore.go#L773)・[893行](../../internal/orchestrator/restore.go#L893)）。
 
 **GitHub App のトークンが取れない状態で continuo を再起動すると、この3つが動く。**
-**2本目で書くと、Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1行も残らない。**
-**2本目で書くと、GitHub App のトークンが取れずに止まった run では、理由も書けずに何も残らない。**
+**GitHub App のトークンで書くと、Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1行も残らない。**
+**GitHub App のトークンで書くと、GitHub App のトークンが取れずに止まった run では、理由も書けずに何も残らない。**
 **attribution は付かないが、`<!-- continuo:self -->` は付くので、機械が書いたことは従来どおり判定できる。**
 
 **止まり方は、経路で違う。**
@@ -9553,12 +9580,29 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | いつ | どうするか |
 | --- | --- |
 | **起動時に取れない** | **起動しない。**人間が「エラーで停止して良い」と決めた |
-| **走行中に取れなくなった**（2本目で書く4つ） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない。カンバンも止めない** |
-| **1本目で書く8つ**（持ち回りの3種・引き渡しの通知・`moveToFailure` ほか） | **落ちない。**GitHub App のトークンを使わないので、取れなくても影響しない |
+| **走行中に取れなくなった**（GitHub App のトークンで書く4つ） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない。カンバンも止めない** |
+| **人間の認証で書く8つ**（持ち回りの3種・引き渡しの通知・`moveToFailure` ほか） | **落ちない。**GitHub App のトークンを使わないので、取れなくても影響しない |
+
+
+**走行中に取れなくなったとき。**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as continuo 本体
+    participant GH as GitHub
+    participant G as issue
+    C->>GH: GitHub App のトークンで投稿しようとする
+    GH-->>C: 落ちた（GitHub App を消された・install を外された など）
+    C->>C: Error を1行ログに出す
+    Note over C: run は止めない。カンバンも止めない
+    C->>G: その投稿だけを諦める
+    Note over C,G: 人間の認証で書く8つは影響を受けない
+```
 
 **走行中に落ちたとき、run を `blocked` にしてはならない。7つとも同じ落ち方にする。**
 
-**2本目で書く口は4つで、4つとも `runState` を受け取らない。**
+**GitHub App のトークンで書く箇所は4つで、4つとも `runState` を受け取らない。**
 `postStatusMove` は [internal/orchestrator/comment.go:498-500](../../internal/orchestrator/comment.go#L498-L500)、
 `postGateNotice` は [internal/orchestrator/gate.go:292](../../internal/orchestrator/gate.go#L292)、
 `noteUntrusted` は [internal/orchestrator/dispatch.go:678](../../internal/orchestrator/dispatch.go#L678)、
@@ -9584,7 +9628,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 いまの実装も、落ちたら `Warn` を1行出すだけである**（[435-437行](../../internal/orchestrator/lifecycle.go#L435-L437)）。
 **別の issue の番号の書き間違いを伝える1件のために、走っている run を止める利得は無い。**
 
-**hold を1本目で書いてよい。**
+**hold を人間の認証のクライアントで書いてよい。**
 **持ち回りのコメントは機械どうしの取り決めで、人間が画面で読むものではない**
 （[internal/prompt/builtin.md:322-326](../prompt/builtin.md#L322-L326) が「読み飛ばします」と書いている）。
 **そこへ attribution を付ける利得は無い。**
@@ -9602,7 +9646,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | **更新用のトークンの残り** | **30日を切っていたら警告する** |
 | **認可した人が `gh` の持ち主と同じか** | **`authorized_login` と `gh api user` を突き合わせる**（3-82f）。**トークンは1度も取らない** |
 
-**差し替え口を `Options` へ2つ足す。**資格情報のファイルを読む口と、**`gh api user` を叩く口**である。
+**差し替えられる関数を `Options` へ2つ足す。**資格情報のファイルを読む関数と、**`gh api user` を叩く関数**である。
 **いま `internal/doctor` は `gh api user` を1度も呼んでいない**ので、後者を足さないと
 **doctor のテストが本物の `gh api user` を叩き、検査結果が「テストを走らせたマシンで誰がログインしているか」で変わる**
 （[internal/doctor/doctor.go:78-79](../../internal/doctor/doctor.go#L78-L79) が禁じている）。
@@ -9640,7 +9684,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **`continuo github-app token` は、1文字も組み立てない。**
 **エージェントが書いたファイルを受け取って送るだけである。**
 
-#### continuo は投稿の口を持たない。トークンだけを返す
+#### continuo は投稿する箇所を持たない。トークンだけを返す
 
 **人間の決定（2026-09-09）。**
 
@@ -9750,6 +9794,26 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 #### continuo 本体の投稿
 
+**人間の認証のクライアントとGitHub App のクライアントの使い分け。**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant O as continuo 本体
+    participant T1 as 人間の gh の認証で書くクライアント
+    participant T2 as GitHub App のトークンで書くクライアント
+    participant GH as GitHub
+    O->>T1: カンバンを読む
+    T1->>GH: GraphQL（Projects v2）
+    O->>T1: 入札・hold・引き渡しの通知・止まった理由を書く
+    T1->>GH: GraphQL（addComment）
+    Note over T1: attribution は付かない。continuo:self のマーカーは付く
+    O->>T2: Status を動かした記録などを書く
+    T2->>GH: GraphQL（addComment）
+    Note over T2: attribution が付く
+    Note over O,T2: GitHub App のトークンは期限までメモリで使い回し、切れる5分前に作り直す
+```
+
 **[internal/tracker/graphql.go:121](../../internal/tracker/graphql.go#L121) の `newGraphQLClient` は、
 トークンを組み立てのときに固定する。**
 **同じ1本へ GitHub App のトークンを入れると、カンバンの読み書きが `FORBIDDEN` で全部落ちる**（3-82a の三）。
@@ -9759,11 +9823,11 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | いままでの1本 | **カンバンの読み書き、コメントの取得** | `tracker.provider.token_source` |
 | **足す1本** | **`useGitHub AppToken` が真のときの `PostComment`** | **GitHub App の資格情報から取る**（どれを真にするかは 3-82c の表） |
 
-**`github_app_attribution` が `false` なら、2本目を作らない。**
-**そのとき `useGitHub AppToken` が真で呼ばれても、1本目で書く。**エラーにしない。
+**`github_app_attribution` が `false` なら、GitHub App のクライアントを作らない。**
+**そのとき `useGitHub AppToken` が真で呼ばれても、人間の認証で書く。**エラーにしない。
 
-**2本目は、期限までメモリで使い回し、切れる5分前に作り直す。**
-**`Adapter` が2本目とその期限を持つ。**
+**GitHub App のクライアントは、期限までメモリで使い回し、切れる5分前に作り直す。**
+**`Adapter` がGitHub App のクライアントとその期限を持つ。**
 **401 を受けたら、資格情報を読み直してトークンを取り直し、1回だけ再送する。**
 **エージェントが更新用のトークンを回した直後に、本体の手元のものが古くなりうるためである。**
 
@@ -9774,7 +9838,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 #### 同時に叩かれたとき
 
 **ロックを取るのは、`continuo github-app token` だけではない。**
-**本体が2本目を作り直すときも、起動時の検査で取るときも、同じロックを取る。**
+**本体がGitHub App のクライアントを作り直すときも、起動時の検査で取るときも、同じロックを取る。**
 **更新用のトークンは1回使うと無効になるので、別々に回すと片方の資格情報が死ぬ。**
 **本体は、作り直すときに資格情報のファイルを読み直す。**
 
@@ -9833,6 +9897,30 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 #### 掛ける先
 
+**設定で、エージェントの投稿の仕方が変わる。**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as continuo 本体
+    participant A as Claude Code
+    participant CT as continuo github-app token
+    participant GHc as gh コマンド
+    participant GH as GitHub
+    C->>A: 指示書を渡す（github_app_attribution の値で分岐）
+    alt true のとき
+        A->>CT: continuo github-app token
+        CT-->>A: アクセストークンを標準出力へ1行
+        A->>GHc: GH_TOKEN=<そのトークン> gh issue comment …
+        GHc->>GH: GraphQL の addComment
+        Note over GH: attribution が付く
+    else false のとき
+        A->>GHc: gh issue comment …
+        GHc->>GH: GraphQL の addComment
+        Note over GH: attribution は付かない
+    end
+```
+
 | 何 | 何本か | 掛けるか |
 | --- | --- | --- |
 | **issue のコメント**（新しく投稿する） | **6本** | **掛ける** |
@@ -9852,7 +9940,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **「GitHub App のトークンが取れなかった run」を見分ける手段が無いためである。**
 [internal/orchestrator/prompt.go:115](../../internal/orchestrator/prompt.go#L115) の `buildCommentRequestPrompt` は
 **`issueURL` と `marker` の2つしか受け取らない。**
-**その状態を渡す口を新しく作ると、この設計の外側（`runState` の持ち回し）へ広がる。**
+**その状態を渡す関数を新しく作ると、この設計の外側（`runState` の持ち回し）へ広がる。**
 
 **`true` の利用者で、GitHub App のトークンが死んだ run では、書かせ直しも落ちる。**
 **そのときエージェントは成果を書けない。**
@@ -10024,10 +10112,10 @@ issue でいちばん人目に付く。**
 **それでよい理由は、この検査が守るのが「初日から恒久的に続くずれ」だからである。**
 **恒久的なずれは、次に `gh api` が届いた起動で必ず捕まる。**
 
-**差し替え口を `Options` へ足す。**
+**差し替えられる関数を `Options` へ足す。**
 **`runStartupChecks` は `o.selfLogin` を持たない**（あれは `ensureGHLogin` が巡回のなかで遅れて取るもので、
 起動時の検査はその前に走る）。**だから起動時の検査は `gh api user` を自分で1回叩く。**
-**差し替え口が無いと、テストが本物の `gh api user` を叩き、
+**差し替えられる関数が無いと、テストが本物の `gh api user` を叩き、
 検査結果が「テストを走らせたマシンで誰がログインしているか」で変わる。**
 
 **走っている最中に `gh auth switch` を叩かれた場合は、拾わない。**
@@ -11865,8 +11953,8 @@ URL を打ち間違えた人が終了コード 1（設定を読めない）を�
 
 | 何 | どこ |
 | --- | --- |
-| **2枚を書く口** | [internal/scaffold/init.go](../../internal/scaffold/init.go) の `WriteAll`。**エラーは戻り値の中に入れる**（片方だけ落ちる状態を1つのエラーで表せない） |
-| **2枚目だけを書く口** | 同じファイルの `WriteCIWorkflowWithValues` |
+| **2枚を書く箇所** | [internal/scaffold/init.go](../../internal/scaffold/init.go) の `WriteAll`。**エラーは戻り値の中に入れる**（片方だけ落ちる状態を1つのエラーで表せない） |
+| **2枚目だけを書く箇所** | 同じファイルの `WriteCIWorkflowWithValues` |
 | **どちらを失敗として扱うか** | 同じファイルの `WorkflowFailed` / `CIFailed` / `BothExisted` |
 | **画面に出す** | [internal/cli/cli.go](../../internal/cli/cli.go) の `runInit` と `printInitCI` |
 
@@ -12222,7 +12310,7 @@ push できる状態のときだけ**である。
 | 何を書くか | なぜ |
 | --- | --- |
 | **打ち消しの口は開けない** | **2026-09-03 の人間の判断である。**「まったく根拠がないだけでなく、害がある。変更するな」。**調査だけ・レビューだけの issue は、continuo に渡さない側で分ける。****この決定を確かめる検査は無い。**[test/internal/prompt/pull_request_test.go:61-68](../../test/internal/prompt/pull_request_test.go#L61-L68) に経緯のコメントが在るだけで、`t.Error` に繋がる条件は1つも無い。**送る文面を書き直す人は、このコメントを読んで判断すること** |
-| **既にある PR は、いま居る branch から引かせる** | `gh pr list --head "$(git branch --show-current)" --state open` を叩かせる。2回目以降の turn と、`attempt` が2以上の起動で2本目ができるのを防ぐ |
+| **既にある PR は、いま居る branch から引かせる** | `gh pr list --head "$(git branch --show-current)" --state open` を叩かせる。2回目以降の turn と、`attempt` が2以上の起動でGitHub App のクライアントができるのを防ぐ |
 | **`## 4-2. 紐づく pull request を読む` の一覧から選ばせない** | **あの一覧は「この issue を閉じる PR」ではなく「この issue に言及があった PR」を返す。**実測（2026-09-03）: issue #60 の timeline は PR #112 を返すが、PR #112 が閉じるのは issue #87 であり、本文に `#60` は0件である。**その branch へ push させると、別の issue で動いているエージェントの作業が消える。**`state` の綴りも取り方で `OPEN` と `open` の2通りになる |
 | **既にあると断られたら、それを行き先にする** | 判定が外れたときの出口が `blocked` だけだと、**PR はあるのに人間待ちで止まる** |
 | **別のリポジトリへ出すときは `Closes <owner>/<repo>#<番号>`** | `Closes #<番号>` は、**PR を出したリポジトリの同じ番号の issue を指す** |
@@ -12248,7 +12336,7 @@ push できる状態のときだけ**である。
 | 案 | 採るか | 理由 |
 | --- | --- | --- |
 | **雛形の本文に「PR を作ってください」と書く** | **採らない** | **本文は利用者が消せる。**消した人のところでだけ、成果が人間に届かなくなる |
-| **設定のキーで作る／作らないを切り替える** | **採らない** | **打ち消しの口そのものを開けないと決めた**（上の表の1行目）。**口を開けないのだから、その口を front matter にも作る理由が無い。**調査だけ・レビューだけの issue は、continuo に渡さない側で分ける |
+| **設定のキーで作る／作らないを切り替える** | **採らない** | **打ち消しの口そのものを開けないと決めた**（上の表の1行目）。**口を開けないのだから、その経路を front matter にも作る理由が無い。**調査だけ・レビューだけの issue は、continuo に渡さない側で分ける |
 | **コードのリポジトリが別のときだけ作らせる** | **採らない** | 「通常」の側でも人間が PR を作ることになり、上の2つの役割から外れる |
 
 **この節の文面を直すときは、5-3 の組み込みのプロンプトも同時に直す。**
@@ -13184,7 +13272,7 @@ front matter と違って本文は起動を止めない（未知のキーでは�
 （`AgentStartWithRetry` の失敗・`confirmStartup` の失敗・`hasRunComment` の再確認）。
 **本体の関数を書くと、読んだ人が条件を1つも持たない関数へ行き着く。**
 
-**リトライを積む出口は4つあるが、尽きたときの後始末は `abandonRunClaimed` の1本しかない。**
+**リトライを積む出箇所は4つあるが、尽きたときの後始末は `abandonRunClaimed` の1本しかない。**
 `turnの終わりの取りこぼし`・`送信の失敗`・`無音の打ち切り`・`カンバンから消えたissue` が
 そこへ入る。**`リトライの尽き` は1本だけ書く。**
 
