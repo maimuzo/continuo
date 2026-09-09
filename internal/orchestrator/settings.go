@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/maimuzo/continuo/internal/atomicfile"
@@ -245,6 +246,10 @@ func toolGatePrompt() string {
 	return fmt.Sprintf(toolGatePromptTemplate, toolGateFenceOpen(id), toolGateFenceClose(id))
 }
 
+// askUserQuestionTool は、エージェントが人間に選択肢を出す道具の名前である（設計 3-11）。
+// **dontAsk は元から拒否するが、auto では拒否が外れる。**
+const askUserQuestionTool = "AskUserQuestion"
+
 // toolGateMatcherAll は tool_gate.tools が空のときに使う matcher である（全部の道具に掛ける）。
 const toolGateMatcherAll = "*"
 
@@ -363,6 +368,20 @@ func (o *Orchestrator) writeSettingsFile(issue tracker.Issue) (string, error) {
 	// （設計 3-64）。掛けないと決めたときは何も足さない。
 	if gate := o.toolGateHookMatchers(issue.RepoIsPrivate); len(gate) > 0 {
 		hooks[hookPreToolUse] = append(hooks[hookPreToolUse], gate...)
+	}
+
+	// **`auto` なのに AskUserQuestion を禁じていなければ、警告を出す**（設計 3-11。issue #259）。
+	// **黙って足さない。**利用者が deny を空にして外せることは、設計が決めた逃がし口である。
+	// **だが外れたまま無人で走ると、静かに止まる。**その道具が呼ばれた瞬間に質問の画面が出て
+	// pane が待ちに入り、**continuo が次に送る指示が、その質問への回答として消費される**（実測）。
+	// 既定を dontAsk から auto へ移す途中で、2行のうち1行だけを当てた人がここに落ちる。
+	if o.cfg.Claude.PermissionMode != config.ClaudePermissionModeDontAsk &&
+		!slices.Contains(o.cfg.Claude.Permissions.Deny, askUserQuestionTool) {
+		o.logger.Warn("permission_mode が dontAsk 以外なのに、claude.permissions.deny に "+
+			askUserQuestionTool+" がありません（エージェントが質問の画面を出すと pane が止まり、"+
+			"次に送る指示がその回答として消費されます）",
+			"permission_mode", o.cfg.Claude.PermissionMode,
+			"deny", o.cfg.Claude.Permissions.Deny)
 	}
 
 	settings := claudeSettings{
