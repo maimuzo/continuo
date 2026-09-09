@@ -9071,11 +9071,25 @@ sequenceDiagram
 
 | 何を測るか | 偽だったら何が崩れるか |
 | --- | --- |
-| **GraphQL の `addComment` で投稿したコメントに、画面の attribution が出るか**（偽なら、本体の投稿も REST へ移す。**エージェントの投稿も `gh` が GraphQL を使うので、同じ検査で決まる**） | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
+| **GraphQL の `addComment` で投稿したコメントに、画面の attribution が出るか**（偽だったときの逃げ道は下に書く） | **continuo 本体は GraphQL でしか投稿しない**（[internal/tracker/adapter.go:1196](../../internal/tracker/adapter.go#L1196) の `addCommentMutation`）。**出ないなら、本体の投稿は1件も見分けられない。**API の返り値は測ってあり REST と同じだったが、**画面は測っていない。**1件投稿して画面を見ること |
 | **更新用のトークンを回したあと、既に配ったアクセストークンが生きるか** | **本体は8時間ぶんをメモリに持ち続け、そのあいだにエージェントが `continuo github-app token` を何度も叩いて回す**（3-82d）。**無効になるなら、本体は投稿のたびに 401 を受け、資格情報を読み直してトークンを取り直し、1回だけ再送する**（3-82d）。
 **投稿は通る。****落ちるのではなく、更新用のトークンの回転が投稿の件数ぶん増える。**
 **書き戻しの直前で落ちる機会が、そのぶん増える。**
 **この門は「止める」ためではなく、回転の見積りを直すために測る。****測り方は、更新を1回通したあと、更新前のトークンで `GET /user` を叩いて 200 が返るかを見るだけである** |
+
+**1つ目が偽だったときに、何をするか。**この設計の土台なので、偽のときの分岐を先に決めておく。
+
+| 誰の投稿か | 偽だったらどうするか |
+| --- | --- |
+| **continuo 本体の6箇所** | **REST へ移す。**投稿先は `POST /repos/{owner}/{repo}/issues/{number}/comments`。owner / repo / 番号は `Adapter` が既に持っている |
+| **エージェントの7本** | **`gh issue comment` をやめ、`gh api --method POST /repos/<owner>/<repo>/issues/<番号>/comments -F body=@<ファイル>` へ書き換える。**`gh api` は REST を叩くので attribution が付く |
+
+**エージェントの側を書かずに済ませない。**
+**エージェントの投稿は6本＋書かせ直しの1本で、本体の6箇所より多い。**
+**3-82e という節が丸ごとそこに乗っているので、偽だったときは 3-82e を書き直すことになる。**
+
+**`gh issue comment` が GraphQL を使うことは、まだ確かめていない。**
+**投稿したコメントに `performed_via_github_app` が付くかを見れば、上の門を測るときに同じ1件で分かる。**
 
 #### 採る経路
 
@@ -9151,7 +9165,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 | 何が壊れるか | どう壊れるか |
 | --- | --- |
 | **投稿者を見ている判定が全部外れる** | 成果の判定（[internal/tracker/adapter.go:1164](../../internal/tracker/adapter.go#L1164)）・持ち回りの入札（[internal/orchestrator/handoff.go:364](../../internal/orchestrator/handoff.go#L364)）・死活の時計（[internal/handoff/assess.go:364](../../internal/handoff/assess.go#L364)）。**どれも `viewer.Login` は人間のままなので、突き合わせが永久に外れる** |
-| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか7箇所） |
+| **レビュー結果を数える門** | **`author_association` が `NONE` になる**（実測）。**このリポジトリの CI と、利用者へ配る雛形の両方が赤になる**（[internal/scaffold/ci_template.go:118](../../internal/scaffold/ci_template.go#L118) ほか5箇所。同じファイルで6件） |
 
 **入札の壊れ方がいちばん直しにくい。**3-77-0 が識別子を投稿者から取る理由を、こう書いている。
 
@@ -9225,7 +9239,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **`Pull requests` を足さない。**足すと、漏れたときに**レビューを通していない pull request をマージされうる。**
 **この差が、権限を足さない理由である。**
 
-**カンバンの権限も足さない。**足しても届かない（3-82a の三）。
+**カンバンの権限も足さない。**理由は権限そのものであって、届くかどうかではない（3-82a の三。**届くかは測っていない**）。
 
 #### 置くもの
 
@@ -9359,7 +9373,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 ### 3-82c. attribution を付けるかは WORKFLOW.md で決める。取れないときは止まる
 
-**言いたいこと。****`true` にしたら、機械の投稿には attribution が付く。**
+**言いたいこと。****`true` にしたら、機械の投稿の一部に attribution が付く。**
+**付く範囲はこの節の振り分けの表が決める。**全部には付かない（本体の12箇所のうち6箇所・pull request の2本・書き足しの2本には付かない）。
 **取れないときは、取れないと分かる形で止まる。**黙って attribution 無しで投稿しない。
 
 **「attribution が無いコメントを1件も作らない」までは求めない。**
@@ -9432,18 +9447,18 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 #### まだ設定していない同僚が、どうなるか
 
 **`true` の WORKFLOW.md を pull しただけの人は、資格情報を持っていない。**
-**その人の continuo は起動しない**（この節の「取れないときに止める」）。
+**その人の continuo は巡回を始めない**（この節の「取れないときに止める」）。
 **人間の決定「アクセストークンが取得できなかったならエラーで停止して良い」のとおりである。**
 
 **止めたままにしない。何をすればよいかを、その場で出す。**
+**`server.port` があるときは、ダッシュボードだけ立っているので、そこへ案内する**（下の「止まったときに、作り直す画面へ戻れるようにする」）。
 
     github_app_attribution が true ですが、GitHub App の資格情報がありません。
-    続けるには、次のどちらかを行ってください。
+    巡回は始めていません。ダッシュボードだけ開いてあります。
 
       1. この機械で1回だけ設定する
-         continuo を server.port を書いた状態で起動し、
          http://127.0.0.1:<port>/github-app を開いてボタンを3回押してください。
-         かかる時間は1分ほどです。
+         かかる時間は1分ほどです。押し終えたら、その画面から巡回を始められます。
 
       2. この機械では attribution を付けない
          WORKFLOW.md の tracker.comments.github_app_attribution を false にしてください。
@@ -9454,6 +9469,53 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **`continuo doctor` も同じ文面を出す。**
 **起動しない状態では doctor しか叩けないので、片方だけに書くと届かない。**
+
+
+#### 止まったときに、作り直す画面へ戻れるようにする
+
+**「起動しない」は、いまのままだと復旧できない。**
+**[internal/daemon/daemon.go:302-305](../../internal/daemon/daemon.go#L302-L305) の段3 が落ちると `shutdown()` して return するので、
+段4c の [329-333行](../../internal/daemon/daemon.go#L329-L333) で開くダッシュボードは1度も立たない。**
+**3-82g の `/github-app` は、そのダッシュボードが配る画面である。**
+**つまり「起動して `/github-app` を開いてください」という案内は、その状態では実行できない。**
+
+**「起動しない」の意味を、ここで決め直す。**
+
+| 何 | どうするか |
+| --- | --- |
+| **カンバンの巡回** | **始めない。**issue を1件も dispatch しない |
+| **復元** | **行わない。**走っている run を引き継がない |
+| **ダッシュボード** | **`server.port` があれば立てる。**`/github-app` と、止まっている理由を出す画面を配る |
+| **`server.port` が無い** | **いままでどおり、エラーの文言を出して終わる** |
+
+**段の並びを変える。**GitHub App の検査だけを、段4c のダッシュボードより後ろへ動かす。
+**他の起動時の検査は段3 のままにする。**あちらが落ちる原因は設定の誤りで、画面を見せても直せない。
+
+| 段 | 何をするか |
+| --- | --- |
+| 3 | いままでの起動時の検査（GitHub App のぶんを除く） |
+| 4 / 4b | 復元と掃除 |
+| **4c** | **ダッシュボードを立てる**（`server.port` があるとき） |
+| **4d（新設）** | **GitHub App の検査。**落ちたら、巡回へ進まずに待つ |
+| 5 | 巡回を始める |
+
+**4d が落ちたときは、プロセスを終わらせない。**
+**ダッシュボードを開いたまま、標準エラーへ案内を出して待つ。**
+**人間が `/github-app` を通し終えたら、画面のボタンから巡回を始められるようにする。**
+**再起動を求めない。**再起動を求めると、`server.port` を消してから起動し直す手順が要り、
+**そこで人間がもう1度つまずく。**
+
+**復元を段4 のまま先に行うことに、危険は無い。**
+**復元は人間の `gh` の認証で行う**（カンバンの読み書きは 3-82a の三で GitHub App へ移さないと決めた）。
+**GitHub App のトークンが取れなくても、復元は通る。**
+
+**`server.port` が無い人には、そのことを案内へ書く。**
+
+    github_app_attribution が true ですが、GitHub App の資格情報がありません。
+    WORKFLOW.md に server.port を書いて起動し直すと、
+    http://127.0.0.1:<port>/github-app から1分ほどで設定できます。
+
+**doctor も同じ文面を出す。**
 
 #### `server.port` を書いていない同僚は、画面を開けない
 
@@ -9506,13 +9568,32 @@ sequenceDiagram
 
 **ただし、書く相手のトークンは選べるようにする。**
 [internal/orchestrator/orchestrator.go:122](../../internal/orchestrator/orchestrator.go#L122) の `PostComment` へ、
-**引数を1つ足す**（`useGitHub AppToken bool`）。
+**引数を1つ足す**（`useAppToken bool`）。
 
 **「interface も検査の偽物も1文字も変わらない」は撤回する。**
 **実装は2つしか無い**（[internal/tracker/adapter.go:1188](../../internal/tracker/adapter.go#L1188) の本物と、
 [test/internal/orchestrator/helpers_test.go:1358](../../test/internal/orchestrator/helpers_test.go#L1358) の偽物）。
-**直すファイルは3つである。**呼び出し側の
-[test/internal/tracker/comments_test.go:115](../../test/internal/tracker/comments_test.go#L115) も変わる。
+**直すファイルは4つである。**上の2つと、呼び出し側の
+[test/internal/tracker/comments_test.go:115](../../test/internal/tracker/comments_test.go#L115) と、
+**`o.tracker.PostComment` を呼ぶ唯一の場所である
+[internal/orchestrator/comment.go:564](../../internal/orchestrator/comment.go#L564) の `postCommentWithMarker`** である。
+
+**どちらのトークンで書くかを、12箇所からそこまで運ぶ形も決める。**
+**決めずに渡すと、実装者が別名のメソッドを生やす形を選びうる。**
+**そうすると [test/internal/redact/single_choke_point_test.go:37](../../test/internal/redact/single_choke_point_test.go#L37) の検査を通すために、
+縮める処理を迂回する経路が生まれ、手元の絶対パスが公開の issue へ出る守りが1本抜ける。**
+
+**運び方。**`postCommentWithMarker` の1つ上の2つにも、同じ引数を足す。
+
+| 関数 | いまの形 | 足したあと |
+| --- | --- | --- |
+| [internal/orchestrator/comment.go:527](../../internal/orchestrator/comment.go#L527) の `postComment` | `(ctx, nodeID, body)` | `(ctx, nodeID, body, useAppToken)` |
+| [internal/orchestrator/comment.go:543](../../internal/orchestrator/comment.go#L543) の `postOwnMarkedComment` | `(ctx, nodeID, body)` | `(ctx, nodeID, body, useAppToken)` |
+| [internal/orchestrator/comment.go:556](../../internal/orchestrator/comment.go#L556) の `postCommentWithMarker` | `(ctx, nodeID, body, marker)` | `(ctx, nodeID, body, marker, useAppToken)` |
+
+**呼び出しは `o.postComment(` が8件、`o.postOwnMarkedComment(` が4件である**（`internal/` の下で数えた）。
+**12箇所とも、上の振り分けの表のとおりに真偽を書く。**
+**既定値を持たせない。**持たせると、新しい投稿を足した人が何も書かずに済み、**どちらで書かれるかが暗黙になる。**
 **別名のメソッドを足すのとは違う。**
 [test/internal/redact/single_choke_point_test.go:85](../../test/internal/redact/single_choke_point_test.go#L85) が見ているのは
 **`PostComment` という名前ちょうど**なので、引数が増えても検査は落ちない。
@@ -9524,13 +9605,13 @@ sequenceDiagram
 
 **投稿する箇所は12箇所ある**（`o.postComment(` ほか2つを `internal/` の下で数えると14行返り、
 うち2行は [internal/orchestrator/comment.go:528](../../internal/orchestrator/comment.go#L528) と [544行](../../internal/orchestrator/comment.go#L544) の委譲なので、引いて12である）。
-**どれをGitHub App のトークンで書くかは、下の表で決める。**
+**どれを GitHub App のトークンで書くかは、下の表で決める。**
 
 **止まった理由は、issue へ1件書く。**人間がこう決めている（2026-09-08）。
 
 > なんでblockedに移ったのかコメント書かないとわからないだろ
 
-**書けるのは、いままでの人間の認証のクライアントのクライアントである。**`tracker.provider.token_source` のトークンで書く。
+**書けるのは、いままでの人間の `gh` の認証のクライアントである。**`tracker.provider.token_source` のトークンで書く。
 **そのコメントには `<!-- continuo:self -->` が付くので、機械が書いたことは従来どおり判定できる。**
 **GitHub App の attribution は付かないが、それでよい。**
 
@@ -9542,7 +9623,7 @@ sequenceDiagram
 **この設計が足すのは、それを GitHub の画面でも見えるようにすることである。**
 **1件だけ画面で見えなくても、マーカーは付いているので判定は壊れない。**
 
-**どれをGitHub App のクライアント（GitHub App のトークン）で書くか。**
+**どれを GitHub App のトークンで書くか。**
 
 | 何 | どちらで書くか | なぜ |
 | --- | --- | --- |
@@ -9580,8 +9661,8 @@ sequenceDiagram
 | いつ | どうするか |
 | --- | --- |
 | **起動時に取れない** | **起動しない。**人間が「エラーで停止して良い」と決めた |
-| **走行中に取れなくなった**（GitHub App のトークンで書く4つ） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない。カンバンも止めない** |
-| **人間の認証で書く8つ**（持ち回りの3種・引き渡しの通知・`moveToFailure` ほか） | **落ちない。**GitHub App のトークンを使わないので、取れなくても影響しない |
+| **走行中に取れなくなった**（GitHub App のトークンで書く6つ） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない。カンバンも止めない** |
+| **人間の認証で書く6つ**（持ち回りの4呼び出し・引き渡しの通知・`moveToFailure`） | **落ちない。**GitHub App のトークンを使わないので、取れなくても影響しない |
 
 
 **走行中に取れなくなったとき。**
@@ -9597,12 +9678,12 @@ sequenceDiagram
     C->>C: Error を1行ログに出す
     Note over C: run は止めない。カンバンも止めない
     C->>G: その投稿だけを諦める
-    Note over C,G: 人間の認証で書く8つは影響を受けない
+    Note over C,G: 人間の認証で書く6つは影響を受けない
 ```
 
-**走行中に落ちたとき、run を `blocked` にしてはならない。7つとも同じ落ち方にする。**
+**走行中に落ちたとき、run を `blocked` にしてはならない。6つとも同じ落ち方にする。**
 
-**GitHub App のトークンで書く箇所は4つで、4つとも `runState` を受け取らない。**
+**GitHub App のトークンで書く6つのうち、4つは `runState` を受け取らない。**
 `postStatusMove` は [internal/orchestrator/comment.go:498-500](../../internal/orchestrator/comment.go#L498-L500)、
 `postGateNotice` は [internal/orchestrator/gate.go:292](../../internal/orchestrator/gate.go#L292)、
 `noteUntrusted` は [internal/orchestrator/dispatch.go:678](../../internal/orchestrator/dispatch.go#L678)、
@@ -9646,7 +9727,18 @@ sequenceDiagram
 | **更新用のトークンの残り** | **30日を切っていたら警告する** |
 | **認可した人が `gh` の持ち主と同じか** | **`authorized_login` と `gh api user` を突き合わせる**（3-82f）。**トークンは1度も取らない** |
 
-**差し替えられる関数を `Options` へ2つ足す。**資格情報のファイルを読む関数と、**`gh api user` を叩く関数**である。
+**差し替えられる関数を `Options` へ1つだけ足す。****`gh api user` を叩く関数**である。
+
+**資格情報のファイルを読む口は足さない。**
+[internal/doctor/doctor.go:86-91](../../internal/doctor/doctor.go#L86-L91) の `HomeDir` が既にあり、
+**`~/.claude.json` などはそれで差し替えている。**同じ口から `~/.continuo/` も引く。
+**足すと、ホームを差し替える口が doctor に2つできる。**
+**テストが片方だけを渡すと、資格情報は一時ディレクトリを見るのに `~/.claude.json` は本物を見る、という混ざった状態になる。**
+**その状態は、テストが落ちるのではなく「たまたま通る」形で現れる。**
+
+**`gh api user` のほうは足す。**
+[internal/doctor/doctor.go:78-79](../../internal/doctor/doctor.go#L78-L79) が
+「**差し替えられる口は、外部のプロセスと外部のサービスに触るものだけである**」と決めており、**これはその線の内側である。**
 **いま `internal/doctor` は `gh api user` を1度も呼んでいない**ので、後者を足さないと
 **doctor のテストが本物の `gh api user` を叩き、検査結果が「テストを走らせたマシンで誰がログインしているか」で変わる**
 （[internal/doctor/doctor.go:78-79](../../internal/doctor/doctor.go#L78-L79) が禁じている）。
@@ -9711,16 +9803,21 @@ sequenceDiagram
 > 標準出力に出す方針にしたのは、シェルスクリプトなりgoなりでアクセストークンを受け取ることで、
 > AIに渡らない構造を作ることができるから。
 
-#### トークンがエージェントの記録に残らない理由
+#### トークンが見えうる場所
 
 **`$( )` の値は、子プロセスの環境変数へ入るだけである。**
-**エージェントの画面にも、その会話の記録にも、トークンの文字は1度も現れない。**
+**その形で使うかぎり、エージェントの画面にも会話の記録にも、トークンの文字は現れない。**
+
+**「AI に渡らない構造」までは名乗らない。**
+**コマンドを組み立てるのはエージェント自身なので、表示させることはできる。**
+**この設計が用意する守りは、指示書のお願い1行だけである。**
+**3-82e が別の件（素の `gh` へ切り替えないこと）について「お願いで塞ぐ形なので完全ではない」と書いているのと、同じ強さである。**
 
 **残るものと残らないものを分ける。**
 
 | 何 | トークンが見えるか |
 | --- | --- |
-| **エージェントの画面と会話の記録** | **見えない。**`$( )` の中身は展開された結果が表示されない |
+| **エージェントの画面と会話の記録** | **`$( )` の形で使うかぎり見えない。**ただし**エージェントが `echo "$TOKEN"` を1回叩けば、平文で残る。**指示書で禁じるが、**機械では止めない** |
 | **その `gh` の子プロセスの環境変数** | **見える。**同じ利用者の他のプロセスと、root から読める |
 | **`ps` の引数の一覧** | **見えない。**環境変数は引数ではない（`ps -E` を明示的に叩いた場合だけ見える） |
 
@@ -9732,7 +9829,7 @@ sequenceDiagram
 
 | 何 | 決めたこと |
 | --- | --- |
-| **引数** | **無し** |
+| **引数** | **フラグは受け取らない。**`github-app` の次の語は `token` の1つだけを受ける。**それ以外の語と、語が無い場合は、使い方を標準エラーへ出して終了コード 1 で落ちる** |
 | **標準出力へ出すもの** | **アクセストークンを1行だけ。**改行以外は何も付けない |
 | **標準エラーへ出すもの** | 警告（資格情報の権限が `0600` でないなど）。**トークンは1文字も出さない** |
 | **読むもの** | **`~/.continuo/github-app-credentials.json` だけ**（WORKFLOW.md もカンバンも引かない） |
@@ -9822,10 +9919,10 @@ sequenceDiagram
 | どのクライアントか | 何に使うか | トークン |
 | --- | --- | --- |
 | いままでの1本 | **カンバンの読み書き、コメントの取得** | `tracker.provider.token_source` |
-| **足す1本** | **`useGitHub AppToken` が真のときの `PostComment`** | **GitHub App の資格情報から取る**（どれを真にするかは 3-82c の表） |
+| **足す1本** | **`useAppToken` が真のときの `PostComment`** | **GitHub App の資格情報から取る**（どれを真にするかは 3-82c の表） |
 
 **`github_app_attribution` が `false` なら、GitHub App のクライアントを作らない。**
-**そのとき `useGitHub AppToken` が真で呼ばれても、人間の認証で書く。**エラーにしない。
+**そのとき `useAppToken` が真で呼ばれても、人間の認証で書く。**エラーにしない。
 
 **GitHub App のクライアントは、期限までメモリで使い回し、切れる5分前に作り直す。**
 **`Adapter` がGitHub App のクライアントとその期限を持つ。**
@@ -9850,9 +9947,20 @@ sequenceDiagram
 
 #### 回転の回数
 
-**新しく投稿するときだけ回る。**書き足しでは回らない。
-**1つの run で6本**（計画・設計レビューの判断票・進捗の初回・成果・グループの代表以外×2）。
-**2本同時なら1日に12回前後である。**
+**回るのは6種類ある。**書き足しでは回らない。
+
+| いつ回るか | 1日に何回 |
+| --- | --- |
+| **エージェントが新しく投稿するとき** | **1つの run で6本**（計画・設計レビューの判断票・進捗の初回・成果・グループの代表以外×2）。2本同時なら**12回前後** |
+| **書かせ直し**（3-82e の7本目） | **成果を書き忘れた run のぶんだけ** |
+| **continuo の起動時の検査** | **起動1回につき1回。**continuo で continuo 自身を直していると、実行ファイルを差し替えるたびに再起動するので積み上がる |
+| **本体が自分のトークンを作り直すとき** | **8時間ごとに1回**（切れる5分前） |
+| **本体が 401 を受けたとき** | **エージェントが回した直後に本体が投稿すると起きる** |
+| **continuo の外で走るセッション**（3-82a が [docs/FAQ.md](../FAQ.md) で勧める形） | **人間が叩いた回数だけ** |
+
+**合計は測っていない。**上の1つ目だけで12回前後、それ以外が積み上がる。
+**回転1回ごとに「書き戻しの直前で落ちると、認可のやり直しになる」窓が開く。**
+**だから見積りを低く書かない。**
 
 **この危険はそのまま残る。**更新用のトークンは1回使うと無効になるので、
 **書き戻しの直前で落ちると、認可のやり直しになる。**
@@ -9891,10 +9999,18 @@ sequenceDiagram
 **書き足しの2本は1文字も触らない**（3-82d）。
 
     {{if .github_app_attribution}}
-    {{.continuo.command}} comment --issue <URL> --body-file done.md
+    TOKEN=$({{.continuo.command}} github-app token) || exit 1
+    GH_TOKEN="$TOKEN" gh issue comment {{.issue.url}} --body-file done.md
     {{else}}
-    gh issue comment <URL> --body-file done.md
+    gh issue comment {{.issue.url}} --body-file done.md
     {{end}}
+
+**真の枝は2行になる。**1行では書かせない。
+**`GH_TOKEN=$(…)` の1行だけだと、トークンを取るコマンドが落ちてもシェルは空文字を渡し、
+`gh` が手元の認証でそのまま投稿する**（3-82d）。**そうなると、落ちたことに誰も気づけない。**
+
+**`gh issue comment` の行そのものは、1文字も変えない。**
+**前に2行足し、`GH_TOKEN=` を頭に付けるだけである。**
 
 #### 掛ける先
 
@@ -9926,7 +10042,9 @@ sequenceDiagram
 | --- | --- | --- |
 | **issue のコメント**（新しく投稿する） | **6本** | **掛ける** |
 | **issue のコメント**（既存への書き足し） | 2本 | **掛けない**（3-82d） |
-| pull request（作成とコメント） | 2本 | **掛けない。**GitHub App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ |
+| pull request の作成（[internal/prompt/builtin.md:241](../prompt/builtin.md#L241)） | 1本 | **掛けない。**GitHub App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ |
+| pull request のコメント（[internal/prompt/builtin.md:274](../prompt/builtin.md#L274)） | 1本 | **いまは掛けない。****ただし `Issues` の権限で通るかを測っていない**（下） |
+| **Go が組み立てる書かせ直し**（[internal/orchestrator/prompt.go:115](../../internal/orchestrator/prompt.go#L115) の `buildCommentRequestPrompt`） | 1本 | **掛ける**（下） |
 
 **7本目は、Go が組み立てて送る「書かせ直し」の指示である。**
 [internal/orchestrator/prompt.go:115-118](../../internal/orchestrator/prompt.go#L115-L118) の `buildCommentRequestPrompt` が
@@ -9964,59 +10082,71 @@ issue でいちばん人目に付く。**
     …
     JUDGE
     {{if .github_app_attribution}}
-    {{.continuo.command}} comment --issue <URL> --body-file judgement.md
+    TOKEN=$({{.continuo.command}} github-app token) || exit 1
+    GH_TOKEN="$TOKEN" gh issue comment {{.issue.url}} --body-file judgement.md
     {{else}}
-    gh issue comment <URL> --body-file judgement.md
+    gh issue comment {{.issue.url}} --body-file judgement.md
     {{end}}
 
 **`cat > judgement.md` の段を落としてはならない。**
 **計画と成果は既にこの形で書いている**（[internal/prompt/builtin.md:143](../prompt/builtin.md#L143) と [302行](../prompt/builtin.md#L302)）。
 **落とすと、存在しないファイルを渡して投稿が必ず落ち、CI が永久に赤になる。**
 
-#### 5-3 段2b は、塊ごと複製する
+#### 5-3 段2b は、前に2行足すだけでよい
 
 **[internal/prompt/builtin.md:437](../prompt/builtin.md#L437) は複数行の `--body "` を持つ。**
-**コマンド名だけを差し替えると、`gh issue comment{{end}}` になって末尾の空白が消え、
-[test/internal/prompt/progress_comment_test.go:214](../../test/internal/prompt/progress_comment_test.go#L214) の
-`strings.Contains(line, "gh issue comment ")` に当たらない。**
-**232行の `t.Fatal` で落ちる。**
+**この設計は `gh issue comment` の行そのものを1文字も変えないので、その塊を複製する必要が無い。**
+**`{{if}}` で前に2行を足し、`gh issue comment` の頭へ `GH_TOKEN="$TOKEN" ` を付けるだけである。**
 
-**だから `{{if}}/{{else}}` で塊ごと複製する。**
-**真の枝は `strings.Contains` に当たらず、偽の枝が従来どおり検査される。**
-**両方の枝で、行頭を1桁も動かさない。**
+    {{if .github_app_attribution}}
+    TOKEN=$({{.continuo.command}} github-app token) || exit 1
+    GH_TOKEN="$TOKEN" {{end}}gh issue comment <URL> --body "<!-- continuo:agent -->
+    …"
 
-#### 7-2 の2本だけ、関数にする
+**`{{end}}` を `GH_TOKEN="$TOKEN" ` の直後に置く。**
+**そうすると偽の枝では行頭が1桁も動かず、真の枝でも `gh issue comment ` の並びがそのまま残る。**
+**[test/internal/prompt/progress_comment_test.go:214](../../test/internal/prompt/progress_comment_test.go#L214) の
+`strings.Contains(line, "gh issue comment ")` は、両方の枝で当たる。**
+**検査の起点を移す必要は無い。**
+
+#### 7-2 の2本も、前に足すだけでよい。関数にしない
 
 **7-2 のグループ投稿は、`--body` の塊を1本に保つ必要がある。**
 **[test/internal/prompt/group_comment_test.go:283-309](../../test/internal/prompt/group_comment_test.go#L283-L309) が
 `--body "<!-- continuo:group -->` を数え、2件でなければ `Fatalf` するためである。**
 
+**`gh issue comment` の行を変えないので、この検査には当たらない。**
+
     {{if .github_app_attribution}}
-    post() { {{.continuo.command}} comment --issue "$@"; }
-    {{else}}
-    post() { gh issue comment "$@"; }
-    {{end}}
-    post <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
+    TOKEN=$({{.continuo.command}} github-app token) || exit 1
+    GH_TOKEN="$TOKEN" {{end}}gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
     …"
 
-**変数（`POST="…"`）にしてはならない。**
-**`.continuo.command` は `shellQuote` で単一引用符に包まれるので、変数へ入れて展開すると引用符が第1語に残る。**
+**関数（`post()`）にしない。**
+**関数にすると、7-2 の投稿2本が別の塊にあるので**（[internal/prompt/builtin.md:734](../prompt/builtin.md#L734) と [745行](../prompt/builtin.md#L745)。あいだに散文が3行）**、
+塊ごとに定義し直すことになる**（[internal/prompt/builtin.md:688](../prompt/builtin.md#L688)。塊をまたぐと関数は引き継がれない）。
+**前に2行足す形なら、塊ごとにその2行を置くだけで済み、引数の並びも変わらない。**
 
-**関数の定義を、塊ごとに置く。**
-**7-2 の投稿2本は別の塊にあり**（[internal/prompt/builtin.md:734](../prompt/builtin.md#L734) と [745行](../prompt/builtin.md#L745)。あいだに散文が3行）**、
-塊をまたぐと関数も引き継がれない**（[internal/prompt/builtin.md:688](../prompt/builtin.md#L688)）。
-**1回だけ定義すると、`blocked` を出した issue への投稿が `post: command not found` で落ちる。**
+**変数（`POST="…"`）にもしない。**
+**`.continuo.command` は `shellQuote` で単一引用符に包まれるので、変数へ入れて展開すると引用符が第1語に残る。**
+**`$( )` の中で使うぶんには、包まれたままシェルが解いてくれる。**
 
 #### 当たる検査
 
+**`gh issue comment` の行を1文字も変えないので、5つとも通る。**
+**検査の起点も、検査そのものも、1バイトも触らない。**
+
 | どの検査 | 何を要求しているか | 通るか |
 | --- | --- | --- |
-| [test/internal/prompt/progress_comment_test.go:213-226](../../test/internal/prompt/progress_comment_test.go#L213-L226) | `gh issue comment ` を含む行の、次の行の行頭 | **検査の起点を移す。**いまの形だと、`true` のとき実際に送られる真の枝を1行も見ない。**`--body "<!-- continuo:agent -->` で終わる行を起点にすれば、両方の枝が同じ1つの検査に当たる。****この検査は issue #178 の再発を止めるために作られたもので、真の枝だけ見張らないままにはできない** |
-| [test/internal/prompt/group_comment_test.go:283-309](../../test/internal/prompt/group_comment_test.go#L283-L309) | `--body "<!-- continuo:group -->` がちょうど2件 | **通る。**関数にすれば `--body` の塊は1本のまま |
-
-| [test/internal/prompt/progress_comment_test.go:52](../../test/internal/prompt/progress_comment_test.go#L52) | 5-3 の節に `gh issue comment` が在ること | **通る。**偽の枝が残る |
-| [test/internal/prompt/group_comment_test.go:72](../../test/internal/prompt/group_comment_test.go#L72) | 7-2 の節に `gh issue comment` が在ること | **通る。**`post()` の定義行が持つ |
+| [test/internal/prompt/progress_comment_test.go:213-226](../../test/internal/prompt/progress_comment_test.go#L213-L226) | `gh issue comment ` を含む行の、次の行の行頭 | **通る。**真の枝は `GH_TOKEN="$TOKEN" gh issue comment ` で、`gh issue comment ` を含む。**次の行の行頭も動かない** |
+| [test/internal/prompt/group_comment_test.go:283-309](../../test/internal/prompt/group_comment_test.go#L283-L309) | `--body "<!-- continuo:group -->` がちょうど2件 | **通る。**`--body` の塊を複製しない |
+| [test/internal/prompt/progress_comment_test.go:52](../../test/internal/prompt/progress_comment_test.go#L52) | 5-3 の節に `gh issue comment` が在ること | **通る** |
+| [test/internal/prompt/group_comment_test.go:72](../../test/internal/prompt/group_comment_test.go#L72) | 7-2 の節に `gh issue comment` が在ること | **通る** |
 | [test/internal/prompt/group_comment_test.go:449](../../test/internal/prompt/group_comment_test.go#L449) | 3-7 の節に `gh issue comment` が在ること | **通る** |
+
+**この5つが全部通ることが、`gh issue comment` の行を変えない形を採った理由である。**
+**コマンド名ごと差し替える形だと、1つ目の起点を移すことになり、
+issue #178（進捗報告のコメントの本文が、指示書の見本どおりにならない）の再発を止めている検査を触ることになる。**
 
 **書き足しに触らないので、`--method PATCH` を数える検査には当たらない。**
 
@@ -10204,6 +10334,65 @@ sequenceDiagram
 （[internal/server/server.go:452-462](../../internal/server/server.go#L452-L462) の
 `default-src 'none'` と `style-src 'unsafe-inline'`）。**その方針は変えない。**
 
+
+#### `state` を必ず突き合わせる。突き合わせないと、資格情報を上書きされる
+
+**GitHub から戻ってくる要求が、本当に自分が始めた流れの続きかを確かめる。**
+
+**確かめないと何が起きるか。**
+**いまダッシュボードが持っている守りは `Host` ヘッダの検査だけである**
+（[internal/server/server.go:403-440](../../internal/server/server.go#L403-L440) の `withHostCheck` と `allowedHost`）。
+**別のサイトのページからの要求も、ブラウザが `Host: 127.0.0.1:<port>` を付けるので通る。**
+**攻める側は、自分で manifest の流れを1回通して自分の GitHub App の `code` を手に入れ、
+人間がダッシュボードを開いているあいだにその `code` で `/github-app/created` を叩かせればよい。**
+**`~/.continuo/github-app-credentials.json` が、攻める側の `client_id` と `client_secret` で上書きされる。**
+**人間は続く画面を「自分の GitHub App の認可」だと思って承認し、攻める側のアプリが
+`Issues: write` で人間の代理として動くトークンを得る。**
+
+**秘密鍵も `client_secret` も1バイトも漏れずに、3-82b の「漏れたら何ができるか」の被害が成立する。**
+**秘密鍵を置かない判断で無期限を6か月へ縮めた効果を、この穴が丸ごと打ち消す。**
+
+**決めること。**
+
+| 何 | どうするか |
+| --- | --- |
+| **`state` の作り方** | **`crypto/rand` で32バイト取り、base64url で符号化する** |
+| **どこに持つか** | **`Server` のメモリの中。**ファイルにも資格情報にも書かない |
+| **いつ作るか** | **段1・段2・段3 の画面を出すたびに作り直す** |
+| **いつ捨てるか** | **1回使ったら捨てる。**10分で期限切れにする |
+| **合わなかったら** | **資格情報を1バイトも書かずに、画面へ「この要求は受け付けられません」と出す** |
+
+**GitHub は manifest の流れでも認可の流れでも `state` を返す。**
+**manifest は `https://github.com/settings/apps/new?state=<値>`、認可は `&state=<値>` で渡す。**
+**install の戻りには `state` が無いので、そこは `installation_id` を控えて次の画面で使うだけにする**
+（install そのものは資格情報を書き換えない）。
+
+#### manifest に何を書くか
+
+**戻り先は3つある。**どれがどれかを決めずに実装へ渡すと、実装者が当てることになる。
+
+| manifest の欄 | 何を書くか | どの画面へ戻るか |
+| --- | --- | --- |
+| **`name`** | `continuo-<gh api user のログイン名>` | — |
+| **`url`** | `https://github.com/maimuzo/continuo` | — |
+| **`redirect_url`** | `http://127.0.0.1:<port>/github-app/created` | **作成のあと**（`?code=…&state=…`） |
+| **`setup_url`** | `http://127.0.0.1:<port>/github-app/installed` | **install のあと**（`?installation_id=…`） |
+| **`callback_urls`** | `["http://127.0.0.1:<port>/github-app/authorized"]` | **認可のあと**（`?code=…&state=…`） |
+| **`request_oauth_on_install`** | **`false`** | install と認可を分ける |
+| **`public`** | `false` | 自分だけが使う |
+| **`default_permissions`** | `{"issues": "write", "metadata": "read"}` | — |
+| **`hook_attributes`** | **書かない**（この設計は webhook を1つも使わない） | — |
+
+**`request_oauth_on_install` を `false` にする理由。**
+**2026-09-08 の実測では、install のあとの戻り先に `code` が一緒に来た**
+（`?code=…&installation_id=…&setup_action=install`）。
+**あれは install と認可が1回で終わる経路で、この設計の4画面とは別物である。**
+**1回で終わらせると、認可のときに何が起きるかを人間へ見せる画面が消える。**
+**人間の決定「ボタンを押すと何が起こるのか…画面上で説明するようにして。installするときも同様」に反する。**
+**だから分ける。**
+
+**`false` にしても分かれるかは、まだ測っていない。**上の「実装の前に測る2件」へ足す。
+
 #### CSP を、この4枚だけ緩める
 
 **いまのダッシュボードは `form-action 'none'` を送っている**
@@ -10259,6 +10448,8 @@ sequenceDiagram
 | --- | --- |
 | **`hook_attributes` を manifest から省いたときに、GitHub が GitHub App を作るか** | **省けないなら、公開の URL を1つ用意することになる。**その場合、この節の導線ごと作り直しになる |
 | **manifest を GET のクエリで渡せるか。渡せないなら form の POST になる** | **POST なら、上の CSP の緩めが要る。**GET で足りるなら緩めなくてよい |
+| **`request_oauth_on_install` を `false` にすると、install と認可が分かれるか** | **分かれないなら、認可のときに何が起きるかを人間へ見せる画面が消える。**人間の決定に反する |
+| **`state` が manifest の流れでも往復するか** | **往復しないなら、作成のコールバックだけ別の守り方が要る** |
 
 **どちらも、GitHub App を1つ作れば1回で分かる。**
 
