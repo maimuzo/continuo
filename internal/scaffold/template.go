@@ -84,7 +84,8 @@ tracker:
                                             # ここへ動かすと continuo は指示を送らず、応答の1行も読まず、
                                             # Status も動かさず、pane を閉じず worktree も消さない。
                                             # pane がまだ無ければ、ここで1つ用意する
-                                            # （continuo がその issue を処理中でないときだけ）。
+                                            # （continuo がその issue をまだ抱えていないときだけ。
+                                            #   やり直し待ちの issue も「抱えている」に入る）。
                                             # 上の active_states へ戻すと、同じ pane・同じ会話のまま続きの指示を送る。
                                             # 使うには、カンバンの画面で Status の選択肢をこの名前で1つ足すこと
                                             # （API で足すと設定済みの Status が全部消える）。
