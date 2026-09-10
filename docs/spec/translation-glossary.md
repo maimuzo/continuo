@@ -72,7 +72,6 @@
 | 日本語 | 英語 | なぜそう決めたか |
 | --- | --- | --- |
 | 身元ファイル | identity file | キーが `workspace.identity_file`。`marker file` と書くとキーと繋がらない |
-| 第三者（OWNER / MEMBER / COLLABORATOR 以外） | a stranger | SECURITY.md の危険の表で使う。`a third party` は契約の語に読める。`anyone else` は「他の誰か」で、立場の区別を持たない |
 | worktree の置き場所 | worktree root | README の "the worktree root"。設定されたディレクトリなので root |
 | hook の置き場所 | hook socket location | README が doctor の検査をこの語で並べている。doctor のラベルは `hook socket` に縮める |
 | 置き場所（一般） | location / where X lives | README の "resolving where a clone lives"。`storage location` は使わない |
