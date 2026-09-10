@@ -108,19 +108,17 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.15 から v0.1.16 へ
 
-**破壊的変更が1つあります。****`Direct Chat` という Status 名を、いま別の役割に使っている人だけが当たります。**
+**破壊的変更が1つあります。****カンバンに `Direct Chat` という列を既に持っている人だけが当たります。**
 
 **何が起きるか。**`tracker.direct_chat_state` というキーが増え、**既定値が `"Direct Chat"` です。**
-**この名前が `WORKFLOW.md` の他の役割と重なっていると、continuo は起動を断ります。**
-重なりを見る先は8つです。
+**カンバンにその名前の列を既に持っていて、自分用の置き場として使っていた人は、
+設定を1行も書いていなくても挙動が変わります。**
 
-| どこと重なると断るか | 例 |
+| いままで | これから |
 | --- | --- |
-| `active_states` / `terminal_states` / `running_state` / `dispatch_state` / `failure_state` / `status_signal_map` の遷移先 / `cleanup.on_states` の**7つ** | `active_states: ["Ready", "In Progress", "Direct Chat"]` と書いている |
-| **`automated_state_rewrite` のキー** | `automated_state_rewrite: {"Direct Chat": "In Progress"}` と書いている。**カンバンの自動化が `Direct Chat` を書く運用の人は、これが正しい書き方でした** |
+| `Direct Chat` は「continuo が知らない Status」だったので、**猶予（既定10分）のあとで pane を閉じ、worker を止めていました** | **止めません。**continuo が手を離し、**pane を開いたまま、同時実行の枠（`agent.max_concurrent_agents`。既定2）を1つ持ち続けます** |
 
-**エラーの文面は `tracker.direct_chat_state` を名指しします。****あなたの `WORKFLOW.md` には、そのキーが1行も書いていないはずです。**
-**それでも、この既定値のせいで断られています。**
+**枠が空かないので、他の issue の着手が半分になります。**
 
 **直し方。****`WORKFLOW.md` の `tracker:` の下へ1行足してください。**
 
@@ -131,13 +129,18 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 **別の名前にすれば、機能はそのまま使えます**（例: `direct_chat_state: "人間が対応中"`）。
 **その名前でカンバンに選択肢を1つ足してください**（下の節）。
 
-**当たらない人には何も起きません。**`Direct Chat` を他の役割に書いていなければ、
-**このキーを書かなくても、いままでどおり起動します。**
+**起動しなくなることはありません。**`Direct Chat` を `active_states` などの他の役割にも書いている場合、
+**continuo は起動を断らず、この機能だけを無効にして警告を1行出します。**
+その1行は `direct_chat_state` を名指ししますが、**あなたの `WORKFLOW.md` にそのキーが無いのは正常です**
+（既定値が使われています）。
+
+**当たらない人には何も起きません。**カンバンに `Direct Chat` という列が無ければ、
+**このキーを書かなくても、いままでどおり動きます。**
 
 | 何が変わったか | 当てる必要 |
 | --- | --- |
 | **Claude Code を起動するときの既定が3つ変わりました** | **要りません。**`continuo init` が置いた `WORKFLOW.md` には値が書いてあり、書いてある値が勝ちます（下の節） |
-| **途中から人間が pane で直接チャットを続けられるようになりました（direct chat）** | **`Direct Chat` を他の役割に使っている人だけ、1行足します**（上）。使いたい人は、カンバンに `Direct Chat` という選択肢を1つ足します（下の節） |
+| **途中から人間が pane で直接チャットを続けられるようになりました（direct chat）** | **カンバンに `Direct Chat` という列を既に持っている人だけ、1行足します**（上）。使いたい人は、カンバンに `Direct Chat` という選択肢を1つ足します（下の節） |
 
 **`WORKFLOW.md` に消すキーはありません。**足すキーが1つあるのは、上の破壊的変更に当たる人だけです。
 
