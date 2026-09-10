@@ -712,13 +712,13 @@ func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkActive, park))
 			return ExitStopped
 		}
-		// **park の先を人間モードの Status にしてはならない**（設計 3-82）。
+		// **park の先をdirect chat の Status にしてはならない**（設計 3-82）。
 		// **そこは「作業中の状態」ではないので上の検査を素通りするが、動かした先で
 		// continuo は pane を1回も閉じない。**この関数のあとに続く段1 の後半は
 		// 「その worktree を cwd に持つ pane が消えるまで待つ」ので、**待ち切れずに
 		// 何も消さずに止まる。**待つ前に、はっきりした理由で断る。
-		if config.IsHumanState(r.cfg.Tracker, park) {
-			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkHuman, park))
+		if config.IsDirectChatState(r.cfg.Tracker, park) {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkDirectChat, park))
 			return ExitStopped
 		}
 		targets = append(targets, park)

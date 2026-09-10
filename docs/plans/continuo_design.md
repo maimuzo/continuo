@@ -1373,7 +1373,7 @@ Status は4つに分けて扱う。
 | **作業中** | `active_states`（`Ready` / `In Progress`） | continuo が面倒を見る |
 | **完了** | `terminal_states`（`Done`） | 片付けてよい |
 | **引き渡し** | 上のどれでもない（`In Review` / `Blocked`） | **人間へ渡した。**worker は止めるが worktree は残す |
-| **人間が引き取っている** | `human_state`（既定は空＝使わない） | **人間が pane で直接話している。worker も worktree も残す**（3-82） |
+| **direct chat** | `direct_chat_state`（既定 `Direct Chat`） | **人間が pane で直接話している。worker も worktree も残す**（3-82） |
 
 **4つ目だけが「worker を止めない」側である。**残る3つは、続けるか止めるかの違いでしかない。
 
@@ -9020,33 +9020,104 @@ turn の終わりと同じでなければならないので、それでは足り
 もう1つは、**`<task-notification>` が届くと Claude Code は新しい turn を始めるので、
 そこで待ちを終えると別の形の道連れになること**である。
 
-### 3-82. 人間が pane で直接続けるあいだ、continuo は手を出さない
+### 3-82. direct chat — 人間が pane で直接続けるあいだ、continuo は手を出さない
 
 **言いたいこと。**人間が herdr の pane に入って直接チャットすると、continuo が pane を閉じて会話が切れる。
 **「手を離すが pane は残す」状態が1つも無かった。**それを表す Status を1つ設け、
-その Status のあいだは `pane.close` を1回も呼ばない。
+その Status のあいだは `pane.close` を1回も呼ばず、Status も1バイトも書かない。
 
-**採る形。**`tracker.human_state` に Status 名を1つ書く（**既定は空＝この機能を使わない**）。
+**採る形。**`tracker.direct_chat_state`（**既定 `"Direct Chat"`**）に Status 名を1つ書く。
+**空にすると、この機能は一切効かない。**
 
-| 何を | 人間モードのあいだ |
+| 何を | direct chat のあいだ |
 | --- | --- |
 | turn を送る | **送らない** |
 | 表明（`status_signal_prefix` の1行）を読む | **読まない。Status も動かさない** |
 | stall 検知（3-21） | **対象にしない** |
-| pane | **閉じない** |
-| worktree | **消さない** |
+| pane | **閉じない。無ければ1つ用意する** |
+| worktree | **消さない。無ければ用意する** |
 | 「自分が取った」印（`o.runs`） | **持ち続ける** |
+| `rate_limit.pause_above_percent` | **当てない**（完全マニュアルのため） |
+| 入札（3-77） | **しない。**担当者の門だけ通す |
 
-**出入りを決めるのは巡回だけである**（`reconcileRunning`）。
-**`tracker.human_state` になったら入り、それ以外になったら、どの Status でも抜ける。**
-抜けた先が `active_states` なら、**同じ pane・同じセッションのまま**継続の指示を1回送る。
+#### 既定に名前が入っているのに、起動が止まらない理由
 
-**抜ける条件を「`active_states` へ戻ったとき」に絞ってはならない。**
-絞ると `Done` へ動かしたときに印が立ったままになり、下の門が pane を守り続けて**worktree も片付かない。**
+**「カンバンに実在しなければ起動を止める」一覧から、この Status だけを外す**（`config.RequiredBoardStates`）。
+
+**止める理由が、この Status には当てはまらない。**止めるのは
+「**GraphQL はエラーを出さずに0件を返し続ける**」ためであり、`active_states` の綴りがずれると
+**issue が1件も見つからないのに正常に見える。**
+**`direct_chat_state` は違う。**選択肢が無ければ、そこへ遷移できる issue が存在しない。
+**黙って壊れる経路が無い。**
+
+**外す一覧は3つある。1つでも漏らすと、選択肢を作っていない人の continuo が止まる。**
+
+| どこ | 漏らすと何が起きるか |
+| --- | --- |
+| **起動時の照合**（`requiredStatesForBootstrap`） | **起動しない** |
+| **巡回ごとの照合**（`VerifyStatusOptions`。既定20巡回に1回） | 起動は通るのに、**20巡回目からカンバン全体の dispatch を飛ばし続ける** |
+| **候補を取りに行く Status の一覧**（`FetchIssuesByStates`） | **毎巡回で候補の取得が丸ごと落ち、1件も着手されない**。出るのは WARN 1行だけなので、「カンバンが空なのだろう」と読める |
+
+**3つ目だけは、設定を見ても決められない。**カンバンの選択肢を実際に読んでから決める
+（`Orchestrator.candidateStates`。`StatusOptionNames` に在るときだけ足す）。
+**読めていないうちは足さない。**分からないものを足すのは、無いものを足すのと同じ結果になる。
+
+**`config.KnownStates` には入れる。**入れないと「知らない Status」として扱われ、
+猶予（3-50）のあとで worker が止まる（＝pane が閉じてチャットが切れる）。
+
+#### 用意するか、渡すか、引き取るか
+
+**判定の材料は、カンバンの Status と pane の有無の2つだけである。**
+
+```mermaid
+flowchart TD
+    A["巡回：候補を取る<br/>active_states ＋（実在すれば）direct_chat_state"] --> B{"Status は<br/>direct_chat_state か"}
+    B -- "いいえ" --> C["いままでどおり"]
+    B -- "はい" --> D{"この worktree に<br/>pane が1枚でもあるか"}
+    D -- "ある" --> E["何もしない<br/>（渡したまま）"]
+    D -- "無い" --> F{"人間が付けた<br/>担当者が他人か"}
+    F -- "はい" --> G["触らない<br/>（その人の PC の担当）"]
+    F -- "いいえ" --> H["着手の段を踏む<br/>段2 と段11 は飛ばす"]
+    H --> I["issue へ1件書く<br/>「話しかけられます」"]
+```
+
+**「Claude Code が居るか」では判定しない。**判定する手段が無いためである。
+herdr が agent を登録していないことは、Claude Code が居ないことを意味しない（3-80）。
+**取り違えて `agent.start` を投げると、人間が話している画面へ `claude …` というコマンド行が届く。**
+**だから「pane が1枚でもあれば触らない」に倒す。**取りこぼす側の代償は「人間が自分で立て直す」であり、
+取り違える側の代償は「会話が汚れる」である。**前者は人間が気づけるが、後者は気づけない。**
+
+#### 候補のループの9つの門を、どれ1つ黙って通さない
+
+| 門 | direct chat では | なぜ |
+| --- | --- | --- |
+| `rate_limit.pause_above_percent`（巡回ごと） | **当てない** | 完全マニュアルなので、達していれば人間がその場で気づく。**達している日ほど、人間は手で直したくなる** |
+| 既に印がある | **飛ばす**（何もしない） | 走っている run は巡回の側が direct chat へ入れる |
+| Status が `active_states` か | **`direct_chat_state` も通す** | 通さないと WARN 付きで飛ばされる |
+| pane が1枚でもあるか | **在れば触らない**（新設） | 上のとおり |
+| 同じ理由で失敗し続けている | **見ない** | **人間はまさに、その失敗を自分で解きほぐすためにカードを動かしている** |
+| リポジトリが信頼済みか | **効かせる** | 未信頼のリポジトリで Claude Code を起動しない |
+| `tracker.required_labels` | **見ない** | あれは「continuo に任せる issue を選ぶ」絞り込みである。**人間が自分でカードを動かしたことは、それより強い意思表示である** |
+| 空きスロット（`agent.max_concurrent_agents`） | **効かせる** | その pane で Claude Code が動くので、1つ使う |
+| 担当の持ち回り（3-77） | **入札しない。担当者の門だけ通す** | 下 |
+
+#### 入札はしないが、担当者は見る
+
+**入札（bid / hold）も、担当者の書き込みも、期限切れの担当を外すことも行わない。**
+**カンバンへの書き込みは、そのカードを `direct_chat_state` から動かしうるうえ、
+担当を外すと他の機械が入札で取りに来る。**人間は自分の PC の前に座っているので、
+他の機械が pane を立てても意味が無い。
+
+**担当者が1人もいない（または自分）ときだけ進む。**それ以外はすべて触らない。
+3-77b の「**他人1人＋その担当者の hold が1件も無い → 触らない。人間が付けた担当である**」を、
+direct chat でもそのまま守る。
+
+**レートリミットの門は、担当者の門より手前にある。**そこを素通りさせないと、
+**担当者が1人もいない普通の状態で、direct chat のカードが黙って飛ばされる。**
 
 #### 守りは `stopWorker` の門1つに寄せる
 
-**経路ごとに検査を置く形は採らない。**`stopWorker` の呼び出しは12箇所あり、
+**経路ごとに検査を置く形は採らない。**`stopWorker` の呼び出しは**13箇所・11関数**であり、
 **3つは巡回の分岐の外にある。**
 
 | どこ | なぜ巡回の分岐で止められないか |
@@ -9055,22 +9126,40 @@ turn の終わりと同じでなければならないので、それでは足り
 | `reconcileRunning` の「issue がカンバンから見えなくなった」ループ | `switch` の**外**にある。item を archive しただけでも、取り直しが一時的にその item を返さなかっただけでも通る |
 | `stopBecauseHandoffLost` | 担当が別の機械へ移ったとき。**Status を1度も見ない** |
 
-**だから「人間モードの run に対して `pane.close` を呼ばない」を不変条件にし、`stopWorker` の入口で1回だけ見る。**
+**だから「direct chat の run に対して `pane.close` を呼ばない」を不変条件にし、`stopWorker` の入口で1回だけ見る。**
 
-**それとは別に、次の6箇所でも見る。**門だけでは足りないからである。
+**それとは別に、次の7箇所でも見る。**門だけでは足りないからである。
 
 | どこ | 門だけでは足りない理由 |
 | --- | --- |
-| turn ループの先頭 | **`agent.max_dispatch_turns` の判定より前に置く。**あとだと `finishRun(failure_state)` が Status を動かし、**人間モードから外れて次の巡回で pane が閉じる** |
+| turn ループの先頭 | **`agent.max_dispatch_turns` の判定より前に置く。**あとだと `finishRun(failure_state)` が Status を動かし、**direct chat から外れて次の巡回で pane が閉じる** |
 | turn ループの `switch outcome` の手前 | `turnBlocked` は esc を送ってから引き渡す。**送られた esc は取り消せない** |
 | `handleTurnEnd` の入口 | すり抜けると `applySignals` が走り、**人間が動かしたカードを `Blocked` へ書き換える** |
-| `checkStalls` | 打ち切りは `failure_state` を書く。**Status が動けば人間モードから外れる** |
+| `checkStalls` | 打ち切りは `failure_state` を書く。**Status が動けば direct chat から外れる** |
 | `wakeRuns`（**担当の確認より前**） | あとに置くと、人間が自分を担当者に付けた瞬間に `stopBecauseHandoffLost` が走る |
 | `stopAndReleaseAsync` | 門は pane を守るが**印は外れる。**外れると、issue が戻ってきたときに巡回がこの run を見失う |
+| **用意が落ちたとき**（`failDirectChatSetup`） | 通常の失敗は `failure_state` を書くか、バックオフして再 dispatch する。**どちらも Status を動かす。**direct chat の用意では**カンバンへ1バイトも書かず**、自分が開いた pane だけ閉じて次の巡回でやり直す |
 
 **hook の受け口へも流さない。**turn ループが居ないので読む者がおらず、
 **256件で埋まったあとは人間の発言1回ごとに「あふれたので捨てました」の WARN が出る。**
 捨てても判定は壊れない。`beginTurn` が turn を送る直前に `stopSeenAt` と受け口を洗い直す。
+
+#### 出るとき
+
+**`direct_chat_state` 以外へ動いたら、その Status の既存の経路にそのまま乗せる。**
+
+| どこへ | どうなるか |
+| --- | --- |
+| `running_state`（既定 `In Progress`） | **同じ pane・同じ会話のまま続きの指示を1回送る。**応答を書いている最中なら、送らずに turn の終わりを待つ（3-4 の段5a2 と同じ判断） |
+| `dispatch_state`（既定 `Ready`） | 上に加えて、**`running_state` を書く。**書かないと、エージェントが走っているのにカードは着手待ちに見え、`agent.max_concurrent_agents_by_state` の勘定からも外れる。**この書き込みは新設である。既存の経路には無い** |
+| `In Review` / `Blocked` | pane を閉じ、worktree は残す。**人間が先に Claude Code を終了させていても同じ経路である**（閉じる相手が居ないだけ） |
+| `Done` | pane を閉じ、`cleanup.on_states` なら片付ける。**未コミット・未 push があれば片付けを断る**（既定で有効） |
+| `Ice Box` | 「知らない Status」の経路（3-50）。**`tracker.unknown_state_grace_ms`（既定10分）待ち、issue へコメントを1件書いてから** worker を止める。worktree は残す |
+
+**送るのは継続の指示（5-4）である。1回目の本文（5-3）ではない。**
+着手の段5b が立てる `SendFirstPrompt` を、direct chat の用意が済んだ時点で下ろす。
+**下ろさないと、戻した最初の turn で「この issue を読むこと」「紐づく PR も読むこと」から始まる本文が送られ、
+人間が pane で積み上げた誘導を、エージェントが最初からやり直す。**この issue が消したかった症状そのものである。
 
 #### なぜカンバンの Status で切り替えるのか
 
@@ -9087,13 +9176,21 @@ turn の終わりと同じでなければならないので、それでは足り
 
 | 何 | 中身 |
 | --- | --- |
-| **選択肢は人間が GitHub の画面から足す** | API で足すと**設定済みの Status が全部消える**（4-1） |
+| **選択肢は人間が GitHub の画面から足す** | API で足すと**設定済みの Status が全部消える**（4-1）。足すまでは、この機能が使えないだけで他は何も変わらない |
 | **効くまで最大1巡回**（既定30秒） | その間に表明や stall が走ると pane は閉じる。**会話は `--resume` で残る**が画面は消える |
-| **再起動をまたぐと枠の勘定から外れる** | 復元は人間モードの run を印に入れない（3-4 の段5a と同じ扱い）。**pane は残るが `agent.max_concurrent_agents` には数えられない。**戻したときは 3-9 の手順7b が pane を作り直す |
-| **`--permission-mode dontAsk` のまま** | `claude.permissions.allow` に無い道具は確認を出さずに拒否される（3-11）。**人間は pane の中で自分で切り替えられるが、切り替えたまま戻すと次の turn が確認の画面で止まりうる** |
-| **18時間を超えると担当を奪われうる** | 人間モード中は進捗のコメントが書かれない（3-77b の `idle_timeout_ms`）。**1台で動かしているなら起きない。**奪われても `stopBecauseHandoffLost` が push せずに止める |
-| **turn 数は数え直さない** | 上限に達したまま戻した issue は、1回目の指示で `failure_state` へ落ちる。**人間が2回切り替えるだけで上限が外れる形にはしない** |
-| **バックオフ待ちの run は守らない** | そこでは pane が既に閉じている。バックオフが明けると着手をやり直し、Status が人間モードなので何も書かずに印から外れる |
+| **用意した直後の数秒は守られない** | 段3 で pane を作ってから段10 を通るまで、その run はまだ direct chat に入っていない。**その数秒のあいだに人間がその pane へ打ち込むと、用意が落ちたときに一緒に閉じる** |
+| **再起動をまたぐと、戻したときに1度だけ画面が消える** | 復元は direct chat の run を印に入れない（3-4 の段5a）。**direct chat のあいだは誰も閉じない**（`active_states` ではないので 3-9 の手順7b も通らない）。**だが人間が `In Progress` へ戻した最初の巡回で、手順7b が pane を閉じる。**そのあと 3-16 が同じセッションへ `--resume` で立て直すので**会話は残る。**枠（`agent.max_concurrent_agents`）に数えられるのも、そこからである |
+| **18時間を超えると担当を奪われうる** | direct chat 中は進捗のコメントが書かれない（3-77b の `idle_timeout_ms`）。**1台で動かしているなら起きない。**奪われても `stopBecauseHandoffLost` が push せずに止める |
+| **turn 数は数え直さない** | 上限に達したまま戻した issue は、1回目の指示で `failure_state` へ落ちる。**人間が2回切り替えるだけで上限が外れる形にはしない。**戻したいときは人間が `dispatch_state` へ動かす |
+| **バックオフ待ちの run は守らない** | そこでは pane が既に閉じている。バックオフが明けると着手をやり直し、Status が direct chat なので `redispatch` の入口の検査に落ちる |
+| **`agent.max_concurrent_agents` を1つ使う** | pane で Claude Code が動くためである。**印に入っているあいだだけ数える**（上の再起動の行） |
+
+#### 権限モード
+
+**既定は `auto` である**（`claude.permission_mode`）。分類器が会話を読んで判断するので、
+**人間が pane で「その操作を許可します」と書けば、その turn の中で通る。**
+`dontAsk` を選んでいる場合は `claude.permissions.allow` に無い道具が確認を出さずに拒否されるので、
+**人間は pane の中で自分で切り替えられるが、切り替えたまま戻すと次の turn が確認の画面で止まりうる。**
 
 #### 設定の検査
 
@@ -9104,8 +9201,19 @@ turn の終わりと同じでなければならないので、それでは足り
 **`continuo abandon --park` の行き先にもしてはならない。**そこへ動かしても pane が閉じないので、
 **pane が閉じるのを待つ段（3-37 の段1）が待ち切れず、何も消せない。**`internal/abandon` が起動前に断る。
 
-**`config.KnownStates` に入れる。**入れないと「知らない Status」として扱われ、猶予のあとで worker が止まる。
-**入れたことで、起動時にカンバンへ実在することも要求される**（3-57）。
+#### `continuo setup` と `continuo doctor`
+
+**`continuo setup` は6つ目の役割として尋ねる。ただし、この役割だけは飛ばせる**（番号 `0`）。
+
+| 何 | どうするか |
+| --- | --- |
+| **必要な選択肢の数** | **5のまま**（`RequiredRoleCount`）。6にすると、選択肢がちょうど5つのカンバンで**1問も尋ねずに終わる** |
+| **番号 `0` を入れたとき** | **飛ばして次へ進む。**他の5つでは打ち切りだが、ここで打ち切ると**この機能を使わない人から `continuo setup` そのものを奪う** |
+| **既存の WORKFLOW.md にキーが無いとき** | **書き込みを断らない。**このキーは新しく足したもので、それより前に作られた WORKFLOW.md には1行も無い。断ると、**カンバンの Status を改名した人が割り当てを直せなくなる** |
+
+**`continuo doctor` は、選択肢が無いことを `!` で出す。**`✗` にしない。
+**起動は止まらないので、止まる `✗` と同じ記号にすると区別が付かなくなる。**
+**「未記入の項目」の見出し語は、WORKFLOW.md にこのキーが無いことを別に知らせる**（3-75）。
 
 
 ## 4. 人間が決めたこと
@@ -9140,14 +9248,18 @@ stateDiagram-v2
     InProgress --> Ready: continuo｜再起動して実体が見つからないとき
     Blocked --> Ready: 人間｜コメントで回答して戻す
     InReview --> Done: 人間｜レビューして完了させる
-    InProgress --> Human: 人間｜pane で直接続けるために引き取る
-    Human --> InProgress: 人間｜切りがついたので continuo へ返す
+    InProgress --> DirectChat: 人間｜pane で直接続けるために引き取る
+    DirectChat --> InProgress: 人間｜切りがついたので continuo へ返す
+    Ready --> DirectChat: 人間｜着手前から自分で話したいとき
+    DirectChat --> Ready: 人間｜continuo へ返す（continuo が In Progress を書く）
     Done --> [*]
-    note right of Human
-        tracker.human_state を設定したときだけ現れる。
+    note right of DirectChat
+        tracker.direct_chat_state（既定 Direct Chat）。
         このあいだ continuo は turn を送らず、
-        表明も読まず、pane も閉じない（3-82）。
-        既定は空なので、この2本は既定では現れない。
+        表明も読まず、Status も動かさず、pane も閉じない（3-82）。
+        pane がまだ無ければ、ここで1つ用意する。
+        カンバンにこの選択肢を作るまでは、
+        どの issue もここへは来られない。
     end note
     note right of InProgress
         Status を動かすのは continuo のコードである。
@@ -9177,8 +9289,9 @@ stateDiagram-v2
 | `In Progress` → `Ready` | **continuo** | 再起動して worktree も pane も見つからず、**設定の `orphan_running_action` が `to_dispatch_state` のとき**（既定は `redispatch` なので既定では起きない） | GraphQL |
 | `Blocked` → `Ready` | 人間 | コメントで回答したとき | GitHub の画面 |
 | `In Review` → `Done` | 人間 | レビューを終えたとき | GitHub の画面 |
-| `In Progress` → `human_state` | 人間 | **pane に入って自分でチャットを続けたいとき**（3-82）。**`tracker.human_state` を設定したときだけ使える。**動かした先で continuo は turn を送らず、表明も読まず、**pane も worktree も残す** | GitHub の画面 |
-| `human_state` → `In Progress` | 人間 | **切りがついて continuo へ返すとき**（3-82）。**同じ pane・同じセッションのまま**続きの指示が飛ぶ | GitHub の画面 |
+| `Ready` / `In Progress` → `direct_chat_state` | 人間 | **pane に入って自分でチャットしたいとき**（3-82）。**カンバンにこの選択肢を作ってあるときだけ使える。**動かした先で continuo は turn を送らず、表明も読まず、Status も動かさず、**pane も worktree も残す。pane がまだ無ければ1つ用意する** | GitHub の画面 |
+| `direct_chat_state` → `Ready` / `In Progress` | 人間 | **切りがついて continuo へ返すとき**（3-82）。**同じ pane・同じ会話のまま**続きの指示が飛ぶ | GitHub の画面 |
+| `direct_chat_state` → `In Progress` | **continuo** | 人間が `Ready` へ戻したとき（3-82）。**着手待ちのまま走らせない**ため、continuo が `running_state` を書く | GraphQL |
 
 **Status を実際に書き換えるのは continuo である。**エージェントは「どう動かすべきか」を最終応答の1行で表明するだけで、
 コマンドを組み立てて実行する必要が無い（3-25）。**プロンプトで依頼した処理は確率で実行されないため、実行を機械へ寄せた。**
@@ -9498,13 +9611,15 @@ tracker:
   running_state: "In Progress"              # エージェントを起動したときに書き込む Status
   dispatch_state: "Ready"                   # 着手待ちの Status。取り残された issue はここへ戻す
   failure_state: "Blocked"                  # 打ち切ったとき・失敗したときに落とす Status
-  human_state: ""                           # 人間が pane に入って直接エージェントと話すあいだだけ置く Status。
+  direct_chat_state: "Direct Chat"          # 人間が pane に入って直接エージェントと話すあいだだけ置く Status。
                                             # ここへ動かすと continuo は指示を送らず、応答の1行も読まず、
-                                            # pane を閉じず worktree も消さない。上の active_states へ戻すと、
-                                            # 同じ pane のまま続きの指示を送る。
-                                            # 使うなら、カンバンの画面で Status の選択肢を1つ足してから、その名前を書くこと
+                                            # Status も動かさず、pane を閉じず worktree も消さない。
+                                            # pane がまだ無ければ、ここで1つ用意する。
+                                            # 上の active_states へ戻すと、同じ pane・同じ会話のまま続きの指示を送る。
+                                            # 使うには、カンバンの画面で Status の選択肢をこの名前で1つ足すこと
                                             # （API で足すと設定済みの Status が全部消える）。
-                                            # 空なら、この機能は使わない。選択肢を足す必要も無い
+                                            # 足すまでは、この機能が使えないだけで、他は何も変わらない。
+                                            # 空にすると、この機能は一切効かない
   verify_states_every: 20                   # 上に書いた Status 名がカンバンに実在するかを、何巡回ごとに照合するか。
                                             # 0 なら起動したときだけ照合する。名前がずれていると issue が1件も見つからなくなる
   unknown_state_grace_ms: 600000            # ここに書いていない Status へ動かされた issue を、何ミリ秒待ってから止めるか。

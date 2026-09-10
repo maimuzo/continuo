@@ -100,15 +100,15 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		}
 		rs.setIssue(issue)
 
-		// **人間モードの出入りは、下の switch より前に1回で決める**（設計 3-82）。
-		// **`tracker.human_state` 以外へ動いたら、どの Status でも抜ける。**
+		// **direct chat の出入りは、下の switch より前に1回で決める**（設計 3-82）。
+		// **`tracker.direct_chat_state` 以外へ動いたら、どの Status でも抜ける。**
 		// 抜けないと `stopWorker` の門が閉じたままになり、**`Done` へ動かしても
 		// pane が残り、worktree も片付かない。**
-		o.updateHumanMode(ctx, rs, issue)
-		if rs.inHumanMode() {
+		o.updateDirectChatMode(ctx, rs, issue)
+		if rs.inDirectChatMode() {
 			// **人間が引き取っている。何もしない**（設計 3-82）。
 			// **`clearExternalMove` も呼ばない。**外から動かされた記録は、
-			// 人間モードを抜けたあとの巡回が付け直す。
+			// direct chat を抜けたあとの巡回が付け直す。
 			continue
 		}
 
@@ -167,7 +167,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		//
 		// **`stopAndReleaseAsync` も自分で断るが、上の WARN を先に出してはならない。**
 		// あの文面は「印から外します」と言い切っており、外さないのに出すと嘘になる。
-		if rs.inHumanMode() {
+		if rs.inDirectChatMode() {
 			o.logger.Warn("issue がカンバンから見えなくなりましたが、人間が引き取っているので何もしません（pane も印も残します）",
 				"identifier", rs.issue().Identifier)
 			continue
@@ -178,13 +178,13 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 	}
 }
 
-// updateHumanMode は、取り直した Status で人間モードの出入りを決める（設計 3-82）。
+// updateDirectChatMode は、取り直した Status でdirect chat の出入りを決める（設計 3-82）。
 //
-//	tracker.human_state になった       … 人間モードへ入る（turn を送らず、pane も閉じない）
-//	tracker.human_state 以外になった   … 人間モードを抜ける
+//	tracker.direct_chat_state になった       … direct chat へ入る（turn を送らず、pane も閉じない）
+//	tracker.direct_chat_state 以外になった   … direct chatを抜ける
 //	抜けた先が active_states           … 続きの指示を送る印を立てる（**同じ pane・同じセッション**）
 //
-// **`tracker.human_state` が空なら1バイトも効かない。**
+// **`tracker.direct_chat_state` が空なら1バイトも効かない。**
 //
 // **抜ける判定を「`active_states` へ戻ったとき」に絞ってはならない。**絞ると、
 // `Done` へ動かしたときに印が立ったままになり、`stopWorker` の門が pane を守り続けて
@@ -202,23 +202,46 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 // ctx: `agent.get` に適用するコンテキスト。
 // rs: 対象の run。
 // issue: 取り直した issue。
-func (o *Orchestrator) updateHumanMode(ctx context.Context, rs *runState, issue tracker.Issue) {
-	if config.IsHumanState(o.cfg.Tracker, issue.State) {
-		if rs.enterHumanMode() {
+func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, issue tracker.Issue) {
+	if config.IsDirectChatState(o.cfg.Tracker, issue.State) {
+		if rs.enterDirectChatMode() {
 			o.logger.Info("人間が引き取りました（turn は送らず、pane も worktree も残します）",
 				"identifier", issue.Identifier, "状態", issue.State)
 		}
 		return
 	}
-	if !rs.leaveHumanMode() {
+	if !rs.leaveDirectChatMode() {
 		return
 	}
 	if !containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
-		o.logger.Info("人間モードを抜けました（作業中の Status ではないので、続きの指示は送りません）",
+		o.logger.Info("direct chat を抜けました（作業中の Status ではないので、続きの指示は送りません）",
 			"identifier", issue.Identifier, "状態", issue.State)
 		return
 	}
-	// **`agent.get` は1回だけである。**人間モードを抜けた巡回でしか通らない。
+	// **`dispatch_state`（既定 `Ready`）へ戻されたら、`running_state` を書く**（設計 3-82）。
+	//
+	// **着手の段2 は、この run では1度も通っていない。**direct chat の用意は段2 を飛ばすし、
+	// 走行中の run を人間が引き取った場合は、そのとき既に `running_state` である。
+	// **書かないと、エージェントが走っているのにカードは着手待ちに見える。**
+	// `agent.max_concurrent_agents_by_state` は `running_state` のバケツで数えるので、
+	// **その run は上限の勘定からも外れる。**同じカンバンを見張る別の機械からは、
+	// 担当者の付いていない着手待ちの issue に見える。
+	if target, need := directChatReturnState(o.cfg.Tracker, issue.State); need {
+		moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.protectedStates())
+		switch {
+		case err != nil:
+			// **書けなくても続ける。**指示を送るほうが、Status の見た目より重い。
+			o.logger.Warn("direct chat から戻った issue の Status を書けませんでした（指示は送ります）",
+				"identifier", issue.Identifier, "書こうとした Status", target, "error", err)
+		case moved.Reached:
+			rs.setIssueState(target)
+			rs.setLastWrittenState(target)
+			o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue),
+				newStatusMove(moved, target),
+				"direct chat から continuo の管理へ戻ったためです")
+		}
+	}
+	// **`agent.get` は1回だけである。**direct chat を抜けた巡回でしか通らない。
 	// **読めなかったときは送る側に倒す。**待ちに倒すと、herdr が答えないあいだ
 	// この run は1つも指示を受け取らない。
 	if st, err := o.agentStatus(ctx, rs); err == nil && st == herdr.AgentStatusWorking {
@@ -398,10 +421,10 @@ func (o *Orchestrator) checkStalls(ctx context.Context) {
 
 	for _, rs := range o.snapshotRuns() {
 		snap := rs.snapshot()
-		if snap.HumanMode {
+		if snap.DirectChatMode {
 			// **人間が画面の前にいる**（設計 3-82）。**画面が止まっていても打ち切らない。**
-			// 打ち切ると `failure_state` へ落ちて Status が人間モードから外れ、
-			// **人間モードを抜けた次の巡回で pane が閉じる。**
+			// 打ち切ると `failure_state` へ落ちて Status がdirect chat から外れ、
+			// **direct chat を抜けた次の巡回で pane が閉じる。**
 			continue
 		}
 		if snap.WaitingQuota {

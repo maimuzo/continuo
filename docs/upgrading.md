@@ -113,13 +113,14 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | 何が変わったか | 当てる必要 |
 | --- | --- |
 | **Claude Code を起動するときの既定が3つ変わりました** | **要りません。**`continuo init` が置いた `WORKFLOW.md` には値が書いてあり、書いてある値が勝ちます（下の節） |
-| **途中から人間が pane で直接チャットを続けられるようになりました** | **要りません。**使いたい人だけ、カンバンに選択肢を1つ足して `WORKFLOW.md` に1行書きます（下の節） |
+| **途中から人間が pane で直接チャットを続けられるようになりました（direct chat）** | **要りません。**使いたい人だけ、カンバンに `Direct Chat` という選択肢を1つ足します（下の節） |
 
 **`WORKFLOW.md` に消すキーはありません。**
 
-**ただし `continuo doctor` の `設定項目` が `?` を1つ出します。**雛形に `tracker.human_state` が
+**ただし `continuo doctor` の `未記入の項目` が1つ増えます。**雛形に `tracker.direct_chat_state` が
 増えたので、**既にある `WORKFLOW.md` では「書かれていない」と数えられます。**
-**書かなくても、いままでどおり動きます**（空と同じ扱いです）。
+**書かなくても、いままでどおり動きます**（書かなければ Go が持つ既定の `Direct Chat` が使われますが、
+**その選択肢がカンバンに無いあいだは、この機能が使えないだけで他は何も変わりません**）。
 気になるなら、次のコマンドが足す1行を作ります。
 
 ```bash
@@ -197,38 +198,54 @@ continuo が次に送る指示が、その質問への回答として消費さ�
 
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
-### 人間が pane で直接続けるあいだ、continuo が手を出さないようにできます
+### 人間が pane で直接続けるあいだ、continuo が手を出さないようにできます（direct chat）
 
-**何が変わったか。**`tracker.human_state` というキーが1つ増えました。**既定は空で、空なら1つも挙動が変わりません。**
+**何が変わったか。**`tracker.direct_chat_state` というキーが1つ増えました。**既定は `"Direct Chat"` です。**
+**カンバンにその選択肢を足すまでは、この機能が使えないだけで、他の動きは1つも変わりません。**
 
 **何が困っていたか。**何度やり直しても収束しない issue で、人間が herdr の pane に入って直接話しかけると、
 **continuo がその pane を閉じて会話が切れていました。**
 エージェントの返事に `CONTINUO-STATUS: blocked` の1行が入る、人間が考えている間に画面が変わらず打ち切られる、
 といった経路が4つあり、**どれも「continuo が手を離す」＝「pane を閉じる」だったためです。**
 
-**どう変わったか。**`tracker.human_state` に Status 名を書いておくと、カードをその Status へ動かしているあいだ、
-continuo は**指示を送らず、`CONTINUO-STATUS:` の行も読まず、pane も worktree も片付けません。**
-`In Progress` へ戻すと、**同じ pane・同じセッションのまま**続きの指示を送ります。
+**どう変わったか。**カードを `Direct Chat` へ動かしているあいだ、
+continuo は**指示を送らず、`CONTINUO-STATUS:` の行も読まず、Status も動かさず、pane も worktree も片付けません。**
+**pane がまだ無ければ、そこで1つ用意します。**
+`In Progress` か `Ready` へ戻すと、**同じ pane・同じ会話のまま**続きの指示を送ります。
 
-**使うなら2つ要ります。**
+**使うのに要るのは1つだけです。カンバンの画面で Status の選択肢を1つ足してください**（名前は `Direct Chat`）。
 
-1. **カンバンの画面で Status の選択肢を1つ足す**（例: `Human`）。
-   **API で足してはいけません。**設定済みの Status の値が全部消えます。
-2. `WORKFLOW.md` にその名前を書く。
+> **API（`gh project field-create` / `updateProjectV2Field`）で足してはいけません。**
+> **設定済みの Status の値が全部消えます。**
+
+**別の名前にしたいときだけ、`WORKFLOW.md` に書きます。**`continuo setup` も6つ目の質問として尋ねます
+（番号 `0` で飛ばせます）。
 
 ```yaml
 tracker:
-  human_state: "Human"
+  direct_chat_state: "Direct Chat"
 ```
 
 **書いたら再起動してください。**このキーは動いている最中には読み直しません。
-**書いた名前がカンバンに無いと、起動が止まります**（`Status の選択肢名が設定と一致しません`）。
 
-**使い方と気をつけることは [docs/FAQ.md](FAQ.md) の「途中から人間が直接チャットで進めたいとき」にあります。**
+**書いた名前がカンバンに無くても、起動は止まりません。**`continuo doctor` の `Status の名前` が `!` を出します。
+**この Status だけの扱いです。**他の Status の名前がカンバンに無いときは、いままでどおり起動を止めます
+（そちらは、綴りがずれると issue が1件も見つからないのに正常に見えるためです）。
 
-### `continuo abandon --park` に人間モードの Status を渡すと、書く前に断ります
+**使わないなら、`tracker.direct_chat_state` を空文字にしてください。**
 
-**`tracker.human_state` を設定した人だけに関係します。**
+**使い方と気をつけることは [docs/FAQ.md](FAQ.md) の「途中から人間が直接チャットで進めたいとき（direct chat）」にあります。**
+
+### 古い continuo で新しい `WORKFLOW.md` は読めません
+
+**`tracker.direct_chat_state` を書き足したら、continuo も一緒に上げてください。**
+設定の読み込みは知らないキーをエラーにするので、**古い実行ファイルで起動すると
+`unknown field "direct_chat_state"` で止まります。**
+**順番は「実行ファイルを入れ替える → `WORKFLOW.md` を書き足す」です。**
+
+### `continuo abandon --park` に direct chat の Status を渡すと、書く前に断ります
+
+**`tracker.direct_chat_state` の Status をカンバンに作った人だけに関係します。**
 そこへ動かしても continuo は pane を閉じないので、`continuo abandon` は pane が閉じるのを待ち切れず、
 **結局何も消せません。**待つ前に理由を出して止まるようにしました。**設定に足すものはありません。**
 

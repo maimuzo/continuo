@@ -42,7 +42,7 @@ continuo --help
 | コマンド | 何をするか |
 | --- | --- |
 | `continuo init [ディレクトリ]` | `WORKFLOW.md` の雛形を置く。`--force` は setup 済みなら使わない |
-| `continuo setup [ディレクトリ]` | カンバンの Status を5つの役割へ対応づける（対話） |
+| `continuo setup [ディレクトリ]` | カンバンの Status を6つの役割へ対応づける（対話。6つ目の direct chat は `0` で飛ばせる） |
 | `continuo trust [ディレクトリ]` | 対象リポジトリを Claude Code に信頼登録する。`--dry-run` で下見 |
 | `continuo doctor [ディレクトリ]` | 前提が揃っているかを15の見出し語で調べる |
 | `continuo abandon <URL> [ディレクトリ]` | 間違えて着手した issue を着手前へ戻す |
@@ -403,7 +403,7 @@ continuo setup --owner <owner> --project <番号> ~/continuo-work
 #### `✗ カンバン  Status の選択肢名が設定と一致しません`
 
 **原因。**GitHub の既定の Status は `Todo` / `In Progress` / `Done` の3つだけです。
-continuo は5つの役割それぞれに別の選択肢を使います。
+continuo は5つの役割それぞれに別の選択肢を使います（6つ目の direct chat は飛ばせるので、5個あれば足ります）。
 GraphQL はエラーを出さずに0件を返し続けるので、起動時の検査でここで止めています。
 
 **直し方。****足りない選択肢は GitHub の画面から足します。**
@@ -412,7 +412,7 @@ GraphQL はエラーを出さずに0件を返し続けるので、起動時の�
 
 ```bash
 gh project field-list <番号> --owner <owner>   # いまの選択肢を確かめる
-continuo setup ~/continuo-work                      # 5つの役割に、どの選択肢を使うかを対話で決める
+continuo setup ~/continuo-work                      # 6つの役割に、どの選択肢を使うかを対話で決める
 ```
 
 **API（`gh project field-create` / `updateProjectV2Field`）で足してはいけません。**
@@ -642,10 +642,10 @@ cleanup:
 **`continuo doctor` の `片付けの状態` が `!` なら、この形になっています。**
 **書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
 
-### 途中から人間が直接チャットで進めたいとき
+### 途中から人間が直接チャットで進めたいとき（direct chat）
 
 **何度やり直しても収束しない issue は、人間が pane に入って直接話したほうが早いことがあります。**
-そのあいだ continuo に手を出させないための Status を、1つ足せます。
+そのあいだ continuo に手を出させないための Status が1つあります。**`Direct Chat` です。**
 
 #### 何もしないとどうなるか
 
@@ -662,47 +662,59 @@ cleanup:
 
 #### 使えるようにする
 
-**2つ要ります。**
+**カンバンに Status の選択肢を1つ足すだけです。**`WORKFLOW.md` は既定で
+`tracker.direct_chat_state: "Direct Chat"` になっています。
 
-**1. カンバンに Status の選択肢を1つ足す。**名前は何でも構いません（以下は `Human` とします）。
-
-カンバンの `Settings` → 左の `Custom fields` の `Status` → `Options` の `Add option...`。
+カンバンの `Settings` → 左の `Custom fields` の `Status` → `Options` の `Add option...` で
+**`Direct Chat` という選択肢を1つ足してください。**
 
 > **API（`gh project field-create` / `updateProjectV2Field`）で足してはいけません。**
 > 選択肢の指定は全件の置き換えとして扱われ、GitHub が ID を採番し直すので、
 > **設定済みの Status の値が全部消えます。**
 
-**2. `WORKFLOW.md` にその名前を書く。**
+**足すまでは、この機能が使えないだけです。**continuo は起動しますし、他の動きは1つも変わりません。
+**`continuo doctor` の `Status の名前` が `!` を出して、選択肢が無いことを知らせます。**
+
+**別の名前にしたいときは、`WORKFLOW.md` の `tracker.direct_chat_state` をその名前に書き換えてください。**
+`continuo setup` を実行すると、6つ目の質問として尋ねます（番号 `0` で飛ばせます）。
 
 ```yaml
 tracker:
-  human_state: "Human"   # 人間が pane で直接話すあいだだけ置く Status
+  direct_chat_state: "Direct Chat"   # 人間が pane で直接話すあいだだけ置く Status
 ```
 
-**書いたら continuo を再起動してください。**このキーは動いている最中には読み直しません。
+**使わないなら、空文字にしてください。**空なら、この機能は一切効きません。
 
-**空のままなら、いままでと1つも変わりません。**カンバンに選択肢を足す必要もありません。
+**書き換えたら continuo を再起動してください。**このキーは動いている最中には読み直しません。
 
 #### 使い方
 
 | 順 | 何をするか |
 | --- | --- |
-| **1** | **話しかける前に、カードを `Human` へ動かす。**動かしてから最大1巡回（既定30秒）で continuo が手を離します |
-| **2** | **pane で好きなだけ話す。**continuo は指示を送らず、`CONTINUO-STATUS:` の行も読まず、pane も worktree も片付けません |
-| **3** | **切りがついたら、カードを `In Progress` へ戻す。**同じ pane に続きの指示が飛びます |
+| **1** | **カードを `Direct Chat` へ動かす。**動かしてから最大1巡回（既定30秒）で continuo が手を離します |
+| **2** | **pane で好きなだけ話す。**continuo は指示を送らず、`CONTINUO-STATUS:` の行も読まず、Status も動かさず、pane も worktree も片付けません |
+| **3** | **切りがついたら、カードを `In Progress` か `Ready` へ戻す。**同じ pane・同じ会話のまま、続きの指示が飛びます |
 
-**先にカードを動かしてから話しかけてください。**話しかけてから動かすと、その30秒の間に上の4つが走ることがあります。
+**まだ着手していない issue も `Direct Chat` へ動かせます。**pane が無ければ continuo が1つ用意し、
+**「話しかけられます」というコメントを issue へ1件書きます。**そこから話しかけてください。
+
+**既に走っている issue では、先にカードを動かしてから話しかけてください。**
+話しかけてから動かすと、その30秒の間に上の4つが走ることがあります。
 
 #### 気をつけること
 
 | 何 | 中身 |
 | --- | --- |
-| **`Human` のあいだも枠を1つ使います** | その pane では Claude Code が動いていて、レートリミットを実際に使います。`agent.max_concurrent_agents` の数え方も同じです |
-| **確認の画面は出ません** | continuo は `--permission-mode dontAsk` で起動しているので、`claude.permissions.allow` に無い道具は確認を出さずに拒否されます。**pane の中で自分で権限モードを切り替えられますが、切り替えたまま戻すと、次の指示が確認の画面で止まります。**戻す前に元へ戻してください |
+| **`Direct Chat` のあいだも `agent.max_concurrent_agents` を1つ使います** | その pane では Claude Code が動いていて、レートリミットを実際に使います |
+| **レートリミットが減っていても pane は用意します** | direct chat は完全に手動なので、達していればその場で分かります。`rate_limit.pause_above_percent` は当てません |
+| **pane が既にあるときは、何もしません** | その pane に Claude Code が居るかどうかを continuo は判別できません。**判別できないものへコマンドを送ると、あなたの会話に `claude …` という行が混ざります。**だから触りません。pane はあるのに Claude Code が居ないときは、**自分でその pane から `claude --resume` してください** |
 | **指示の回数は数え直しません** | `agent.max_dispatch_turns` に達していた issue を戻すと、1回目の指示で `Blocked` へ落ちます。**そのときは `Blocked` から `Ready` へ戻してください。**新しい着手として数え直します |
-| **18時間を超えるなら、コメントを1件書いてください** | 何台かの PC で同じカンバンを見張っている場合だけです。`Human` のあいだは進捗の報告が書かれないので、18時間（`idle_timeout_ms`）を超えると別の PC が担当を引き取りにきます。本文の先頭に進捗の目印（`WORKFLOW.md` の雛形にある `continuo:progress` の HTML コメント）を置いたコメントを1件書けば、そこから数え直します |
-| **continuo を再起動した場合** | pane はそのまま残ります。ただし印から外れるので、**戻したときに pane を作り直します**（会話は残ります） |
+| **確認の画面について** | 権限モードの既定は `auto` なので、分類器が会話を読んで判断します。**pane の中で「その操作を許可します」と書けば、その turn の中で通ります。**`dontAsk` を選んでいる場合は、`claude.permissions.allow` に無い道具が確認を出さずに拒否されます。**pane の中で切り替えられますが、切り替えたまま戻すと次の指示が確認の画面で止まります** |
+| **18時間を超えるなら、コメントを1件書いてください** | 何台かの PC で同じカンバンを見張っている場合だけです。`Direct Chat` のあいだは進捗の報告が書かれないので、18時間（`idle_timeout_ms`）を超えると別の PC が担当を引き取りにきます。本文の先頭に進捗の目印（`WORKFLOW.md` の雛形にある `continuo:progress` の HTML コメント）を置いたコメントを1件書けば、そこから数え直します |
+| **他の人が担当者に付いている issue では、pane を用意しません** | その人の PC が面倒を見ているはずだからです。自分で話したいなら、担当者を自分に付け替えるか外してください |
+| **continuo を再起動した場合** | **`Direct Chat` のあいだは pane を閉じません。**ただし印から外れるので、**`In Progress` へ戻した最初の巡回で1度だけ pane を作り直します**（同じ会話へ復帰するので、話した内容は残ります） |
 | **`continuo abandon --park` には使えません** | そこへ動かしても pane が閉じないので、`continuo abandon` は待ち切れずに何も消せません。起動する前に断ります |
+
 
 ### 何台かの PC で分担したいとき
 

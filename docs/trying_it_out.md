@@ -396,9 +396,10 @@ cd ~/continuo-try && /tmp/continuo prompt --show --builtin
 
 ## 段4. Status の割り当てを合わせる
 
-**言いたいこと。**`continuo setup` が、カンバンの選択肢を continuo の5つの役割へ割り当てる。
+**言いたいこと。**`continuo setup` が、カンバンの選択肢を continuo の6つの役割へ割り当てる。
 **役割の説明が出るので、それを読んで番号で選ぶ。**
-**書き換わるのは `Status` に関する7行だけで、段3 で手を入れた行はそのまま残る。**
+**6つ目（direct chat）だけは `0` で飛ばせる。**この手順で作るカンバンには、その選択肢が無い。
+**書き換わるのは `Status` に関する行だけで、段3 で手を入れた行はそのまま残る。**
 
 **段3 で作った `WORKFLOW.md` に対して実行する。**`continuo setup` は雛形を作らないので、
 `WORKFLOW.md` が無いときは段3 をやり直すよう案内して止まる（終了コード 1）。
@@ -440,36 +441,42 @@ cd ~/continuo-try
   5  In Review
   6  Done
 
-これから 5 個の役割について、それぞれどの選択肢を使うかを尋ねます。番号で答えてください。
+これから 6 個の役割について、それぞれどの選択肢を使うかを尋ねます。番号で答えてください。
 その役割に使える選択肢がカンバンに無い場合は 0 を入力してください。
 Ctrl+C で中断できます。中断したときは WORKFLOW.md を書き換えません。
 
-[1/5] dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?
+[1/6] dispatch_state: continuo が自動的に処理を開始する Status は何番ですか?
 番号> 2
   → dispatch_state に "Ready" を割り当てました
 
-[2/5] running_state: continuo が処理を開始したときに移動する Status は何番ですか?
+[2/6] running_state: continuo が処理を開始したときに移動する Status は何番ですか?
 番号> 3
   → running_state に "In Progress" を割り当てました
 
-[3/5] status_signal_map.review: エージェントが作業を完了したときに移動する Status は何番ですか?
+[3/6] status_signal_map.review: エージェントが作業を完了したときに移動する Status は何番ですか?
 番号> 5
   → status_signal_map.review に "In Review" を割り当てました
 
-[4/5] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する Status は何番ですか?
+[4/6] status_signal_map.blocked / failure_state: エージェントが判断を仰ぐとき・打ち切ったときに移動する Status は何番ですか?
 番号> 4
   → status_signal_map.blocked / failure_state に "Blocked" を割り当てました
 
-[5/5] terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?
+[5/6] terminal_states: 人間がここへissueを移動したら作業完了とみなしgit worktreeを削除する Status は何番ですか?
 番号> 6
   → terminal_states に "Done" を割り当てました
 
-5 個の役割の割り当ては次のとおりです。
+[6/6] direct_chat_state: 人間が pane に入って直接エージェントと話すあいだだけ置く Status は何番ですか?（ここへ動かすと continuo は指示を送らず、pane も worktree も閉じません。使わないなら 0 を入力して飛ばせます）
+この役割は 0 を入力すると飛ばせます。
+番号> 0
+direct_chat_state を飛ばしました。WORKFLOW.md のこの項目は空のままにします。
+
+6 個の役割の割り当ては次のとおりです。
   dispatch_state: "Ready"
   running_state: "In Progress"
   status_signal_map.review: "In Review"
   status_signal_map.blocked / failure_state: "Blocked"
   terminal_states: "Done"
+  direct_chat_state: （飛ばしました。この項目は空のままです）
 
 WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/WORKFLOW.md
 書き換えたキー:
@@ -505,10 +512,10 @@ WORKFLOW.md の Status の割り当てを書き換えました: ~/continuo-try/W
 | 起きること | どうなるか |
 | --- | --- |
 | **`WORKFLOW.md` が無い** | **止める。**`continuo init` を先に実行するよう案内する（雛形は作らない） |
-| **7つのキーのどれかが `WORKFLOW.md` から消されている** | **尋ねる前に止める。**消したキーを名指しする（5問答えさせてから捨てない） |
+| **必ず要る7つのキーのどれかが `WORKFLOW.md` から消されている** | **尋ねる前に止める。**消したキーを名指しする（答えさせてから捨てない）。**`tracker.direct_chat_state` は例外で、無くても止めない**（新しく足したキーなので、それより前に作った `WORKFLOW.md` には無い） |
 | 同じ選択肢を2つの役割に選ぶ | **拒否して同じ役割をもう一度尋ねる**（打ち切らない） |
-| **番号 `0`**（その役割に使える選択肢が無い） | **打ち切る。**`WORKFLOW.md` は書き換えない |
-| 選択肢が5個未満のカンバン | **尋ねる前に止める。**足す手順を出す |
+| **番号 `0`**（その役割に使える選択肢が無い） | **打ち切る。**`WORKFLOW.md` は書き換えない。**ただし6つ目（direct chat）だけは飛ばして次へ進む** |
+| 選択肢が5個未満のカンバン | **尋ねる前に止める。**足す手順を出す。**6個は要らない**（6つ目は飛ばせるため） |
 | `Ctrl+C` | 中断する。`WORKFLOW.md` は書き換えない |
 
 ### 手で書き換えることもできる

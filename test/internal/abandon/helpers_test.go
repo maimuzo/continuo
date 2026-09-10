@@ -838,7 +838,7 @@ rate_limit:
 //
 // t: 呼び出し元のテスト。
 // path: WORKFLOW.md のパス。
-// line: 足す行（`  human_state: "Human"` のように、インデントを含む全文）。
+// line: 足す行（`  direct_chat_state: "Human"` のように、インデントを含む全文）。
 func addTrackerKey(t *testing.T, path, line string) {
 	t.Helper()
 	raw, err := os.ReadFile(path) //nolint:gosec // テストが自分で書いた一時ファイルである

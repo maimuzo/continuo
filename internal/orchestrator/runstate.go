@@ -328,26 +328,26 @@ type runState struct {
 	// `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	// 巡回が拾って turn ループを起こし、起こしたら偽へ戻す。
 	awaitTurnEnd bool
-	// humanMode は「人間が pane で直接エージェントと話している」ことを表す（設計 3-82）。
+	// directChatMode は「人間が pane で直接エージェントと話している」ことを表す（設計 3-82）。
 	//
 	// **立っているあいだ、continuo はこの run に手を出さない。**turn を送らず、
 	// 表明も読まず、stall 検知の対象にもせず、**`pane.close` を1回も呼ばない。**
 	//
 	// **立てるのも下ろすのも巡回だけである**（`reconcileRunning`）。
-	// カンバンの Status が `tracker.human_state` になったら立て、それ以外になったら下ろす。
-	humanMode bool
-	// humanPauseCtx は、人間モードへ入ったときに終わるコンテキストである（設計 3-82）。
+	// カンバンの Status が `tracker.direct_chat_state` になったら立て、それ以外になったら下ろす。
+	directChatMode bool
+	// directChatPauseCtx は、direct chat へ入ったときに終わるコンテキストである（設計 3-82）。
 	//
 	// **turn ループはこれで herdr の待ちだけを打ち切る。**`workerStopCtx` を流用しては
 	// ならない。あちらは「continuo が pane を閉じた」という意味で、`selfStoppedTurn` が
 	// その印を見て失敗の扱いを変える。**混ぜると、pane が生きているのに
 	// 「自分で止めた」と記録される。**
 	//
-	// **`humanMode` と同じ mutex の中で入れ替える。**turn ループが読むのは起動時の1回
+	// **`directChatMode` と同じ mutex の中で入れ替える。**turn ループが読むのは起動時の1回
 	// だけなので、下ろすのと張り直すのが割れると、次に入ったときにどちらの ctx が
 	// 切られるかが実行のたびに変わる。
-	humanPauseCtx    context.Context
-	humanPauseCancel context.CancelFunc
+	directChatPauseCtx    context.Context
+	directChatPauseCancel context.CancelFunc
 	// externalMoveSince は「continuo が意図していない Status へ外から動かされている」と
 	// 最初に見た時刻である（設計 3-50 / 3-74）。ゼロ値なら、いまは continuo が
 	// 意図した Status（`active_states` のいずれか）である。
@@ -442,19 +442,19 @@ func (rs *runState) clearStopSeen() {
 // 戻り値: 組み立てた runState。
 func newRunState(issueID string, issue tracker.Issue, now time.Time) *runState {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
-	// **人間モードの ctx は必ずここで張る**（設計 3-82）。張り忘れると turn ループの
+	// **direct chat の ctx は必ずここで張る**（設計 3-82）。張り忘れると turn ループの
 	// `context.AfterFunc(nil, …)` が panic する。
 	humanCtx, humanCancel := context.WithCancel(context.Background())
 	return &runState{
-		IssueID:          issueID,
-		Issue:            issue,
-		LastSeenAt:       now,
-		RevisionAt:       now,
-		hookCh:           make(chan hookserver.HookEvent, hookChanSize),
-		workerStopCtx:    stopCtx,
-		workerStopCancel: stopCancel,
-		humanPauseCtx:    humanCtx,
-		humanPauseCancel: humanCancel,
+		IssueID:               issueID,
+		Issue:                 issue,
+		LastSeenAt:            now,
+		RevisionAt:            now,
+		hookCh:                make(chan hookserver.HookEvent, hookChanSize),
+		workerStopCtx:         stopCtx,
+		workerStopCancel:      stopCancel,
+		directChatPauseCtx:    humanCtx,
+		directChatPauseCancel: humanCancel,
 	}
 }
 
@@ -495,7 +495,7 @@ func (rs *runState) snapshot() runSnapshot {
 		URL:              issueURL(rs.Issue),
 		Tokens:           rs.Tokens,
 		TokensAt:         rs.TokensAt,
-		HumanMode:        rs.humanMode,
+		DirectChatMode:   rs.directChatMode,
 		hookSeenThisTurn: rs.hookSeenThisTurn,
 	}
 }
@@ -527,9 +527,9 @@ type runSnapshot struct {
 	State            string
 	Title            string
 	URL              string
-	// HumanMode は「人間が pane で直接続けている」ことを表す（設計 3-82）。
+	// DirectChatMode は「人間が pane で直接続けている」ことを表す（設計 3-82）。
 	// **stall の判定はこれが真の run を飛ばす。**
-	HumanMode        bool
+	DirectChatMode   bool
 	Tokens           TokenUsage
 	TokensAt         time.Time
 	hookSeenThisTurn bool
@@ -1655,7 +1655,22 @@ func (rs *runState) stoppedByContinuo() bool {
 	return rs.workerStopped
 }
 
-// enterHumanMode は「人間が pane で直接続けている」印を立てる（設計 3-82）。
+// clearSendFirstPrompt は「次の turn は1回目の本文（5-3）である」印を下ろす（設計 3-82）。
+//
+// **direct chat の用意でだけ呼ぶ。**着手の段5b（`beginAttempt`）がこの印を立て、
+// 下ろすのは段11 を通る `beginTurn` だけである。**direct chat は段11 を踏まないので、
+// 明示的に下ろさないと立ったまま残る。**
+//
+// **残ると何が起きるか。**人間が continuo へ返した最初の turn で、
+// **「この issue を読むこと」「紐づく PR も読むこと」から始まる1回目の本文が送られる。**
+// 人間が pane で積み上げた誘導を、エージェントが最初からやり直す。
+func (rs *runState) clearSendFirstPrompt() {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.SendFirstPrompt = false
+}
+
+// enterDirectChatMode は「人間が pane で直接続けている」印を立てる（設計 3-82）。
 //
 // **turn ループへ「待つのをやめろ」と伝える。**伝えないと、`agent.prompt` の待ち受けは
 // `claude.turn_timeout_ms`（既定1時間）まで返らず、その間に人間が話しかけると
@@ -1665,14 +1680,14 @@ func (rs *runState) stoppedByContinuo() bool {
 //
 // 戻り値: この呼び出しで初めて立てたら true。既に立っていたら false
 // （**巡回のたびに同じログを出さないためである**）。
-func (rs *runState) enterHumanMode() bool {
+func (rs *runState) enterDirectChatMode() bool {
 	rs.mu.Lock()
-	if rs.humanMode {
+	if rs.directChatMode {
 		rs.mu.Unlock()
 		return false
 	}
-	rs.humanMode = true
-	cancel := rs.humanPauseCancel
+	rs.directChatMode = true
+	cancel := rs.directChatPauseCancel
 	rs.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -1680,46 +1695,46 @@ func (rs *runState) enterHumanMode() bool {
 	return true
 }
 
-// leaveHumanMode は人間モードの印を下ろし、次に入るためのコンテキストを張り直す（設計 3-82）。
+// leaveDirectChatMode はdirect chat の印を下ろし、次に入るためのコンテキストを張り直す（設計 3-82）。
 //
 // **印を下ろすのと張り直すのを同じ mutex の中で行う。**割れると、素早く往復したときに
 // turn ループが読む ctx が「既に切れているもの」か「これから切るもの」かが実行のたびに変わる。
 //
 // 戻り値: この呼び出しで初めて下ろしたら true。立っていなければ false。
-func (rs *runState) leaveHumanMode() bool {
+func (rs *runState) leaveDirectChatMode() bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if !rs.humanMode {
+	if !rs.directChatMode {
 		return false
 	}
-	rs.humanMode = false
-	if rs.humanPauseCancel != nil {
+	rs.directChatMode = false
+	if rs.directChatPauseCancel != nil {
 		// **切れたままの ctx を捨てる前に必ず cancel を呼ぶ**（context のリークを防ぐ）。
-		rs.humanPauseCancel()
+		rs.directChatPauseCancel()
 	}
-	rs.humanPauseCtx, rs.humanPauseCancel = context.WithCancel(context.Background())
+	rs.directChatPauseCtx, rs.directChatPauseCancel = context.WithCancel(context.Background())
 	return true
 }
 
-// inHumanMode は人間モードかどうかを返す（設計 3-82）。
+// inDirectChatMode はdirect chat かどうかを返す（設計 3-82）。
 //
 // 戻り値: 人間が引き取っていれば true。
-func (rs *runState) inHumanMode() bool {
+func (rs *runState) inDirectChatMode() bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return rs.humanMode
+	return rs.directChatMode
 }
 
-// humanPauseContext は、人間モードへ入ったときに終わるコンテキストを返す（設計 3-82）。
+// directChatPauseContext は、direct chat へ入ったときに終わるコンテキストを返す（設計 3-82）。
 //
-// **turn ループは起動時に1回だけ読む。**読んだあとに `leaveHumanMode` が張り直しても、
+// **turn ループは起動時に1回だけ読む。**読んだあとに `leaveDirectChatMode` が張り直しても、
 // その turn ループが見張るのは読んだ時点のものである（新しい turn ループが新しいものを読む）。
 //
-// 戻り値: 人間モードへ入ったときに終わるコンテキスト。
-func (rs *runState) humanPauseContext() context.Context {
+// 戻り値: direct chat へ入ったときに終わるコンテキスト。
+func (rs *runState) directChatPauseContext() context.Context {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return rs.humanPauseCtx
+	return rs.directChatPauseCtx
 }
 
 // workerStopContext は「この世代の worker を止めた」ときに終わるコンテキストを返す。

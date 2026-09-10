@@ -199,7 +199,7 @@ type TrackerConfig struct {
 	DispatchState string `yaml:"dispatch_state"`
 	// FailureState は打ち切り・失敗のときに落とす先の状態である（4-1）。
 	FailureState string `yaml:"failure_state"`
-	// HumanState は「人間が pane で直接エージェントと話している」状態である（3-82）。
+	// DirectChatState は「人間が pane で直接エージェントと話している」状態である（3-82）。
 	//
 	// **この Status のあいだ、continuo はその run に手を出さない。**turn を送らず、
 	// 表明（`status_signal_prefix` の1行）も読まず、Status も動かさず、stall 検知の
@@ -215,7 +215,7 @@ type TrackerConfig struct {
 	// 重ならないことを `Validate` が起動前に要求する**（3-82）。
 	// **`automated_state_rewrite` のキーとの重なりは、既存の検査が先に弾く**
 	// （`validateAutomatedStateRewrite`。`KnownStates` に入った名前はキーにできない）。
-	HumanState string `yaml:"human_state"`
+	DirectChatState string `yaml:"direct_chat_state"`
 	// VerifyStatesEvery は Status の選択肢名を照合する間隔（巡回の回数）である（設計 3-6）。
 	// 毎巡回では行わない。選択肢名が変わるのは人間がカンバンを触ったときだけなので、
 	// 20 巡回に1回で足りる。0 なら起動時の1回だけ行う。

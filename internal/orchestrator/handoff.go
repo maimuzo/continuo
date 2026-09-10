@@ -63,7 +63,7 @@ type handoffDecision struct {
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 着手しようとしている issue。
 // 戻り値: 着手してよいか・この巡回で担当者になったか・この巡回を打ち切るか。
-func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) handoffDecision {
+func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue, directChat bool) handoffDecision {
 	nodeID := issueNodeID(issue)
 	if nodeID == "" {
 		// **draft issue にはコメントも担当者も書けない。**そもそも Dispatchable が偽なので
@@ -131,7 +131,11 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 	// 枠を読めない・枠を使い過ぎた・余裕値がマイナス、のどれかなら、この issue で
 	// **できることは「黙る」だけである。**読んでから黙るのは、リクエストの無駄でしかない。
 	bid, skip := o.evaluateBid()
-	if len(logins) == 0 && skip != handoff.SkipNone {
+	// **direct chat では、レートリミットで落とさない**（設計 3-82。人間の決定）。
+	// この早い戻りは「入札できない機械は、担当者のいない issue のコメントを読まない」
+	// ためのものである。**direct chat はそもそも入札しないので、読まない理由が
+	// 「入札できないから」ではなくなる。**担当者の門を通すためにコメントは要る。
+	if !directChat && len(logins) == 0 && skip != handoff.SkipNone {
 		o.logger.Debug("入札しません（この issue は他の機械に任せます）",
 			"identifier", issue.Identifier, "理由", skip.String())
 		return handoffDecision{}
@@ -168,6 +172,24 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue) han
 		Now:         o.now(),
 		IdleTimeout: o.handoffIdleTimeout(),
 	})
+
+	// **direct chat は、担当者が1人もいない（または自分）ときだけ進む**（設計 3-82）。
+	// **入札もしないし、担当者も書かないし、期限切れの担当を外しもしない。**
+	// **書かない理由。**カンバンへの書き込みは、そのカードを `direct_chat_state` から
+	// 動かしうるうえ、担当を外すと**他の機械が入札で取りに来る。**
+	// 人間は自分の PC の前に座っているので、他の機械が pane を立てても意味が無い。
+	if directChat {
+		switch assessment.Action {
+		case handoff.ActionProceed, handoff.ActionBid:
+			return handoffDecision{proceed: true}
+		default:
+			o.logger.Info("担当者が付いているので direct chat の pane を用意しません"+
+				"（この issue は、その担当者の機械が面倒を見ています）",
+				"identifier", issue.Identifier, "担当者", assessment.Assignee,
+				"判定", assessment.Action.String())
+			return handoffDecision{}
+		}
+	}
 
 	switch assessment.Action {
 	case handoff.ActionProceed:

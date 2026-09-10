@@ -340,6 +340,21 @@ type statusKey struct {
 	path []string
 	// value は割り当てから、そのキーへ書く YAML の値を組み立てる。
 	value func(Statuses) string
+	// optional は「そのキーが WORKFLOW.md に無くても、書き込み全体を止めない」ことを表す
+	// （設計 3-82）。
+	//
+	// **`direct_chat_state` だけが真である。**このキーは continuo が新しく足したもので、
+	// **それより前に作られた WORKFLOW.md には1行も無い。**止めると、
+	// **既存の利用者から `continuo setup` そのものを奪う**ことになり、
+	// カンバンの Status を改名した人が割り当てを直せなくなる。
+	//
+	// **無いことは `continuo doctor` の「未記入の項目」が別に知らせる。**
+	optional bool
+	// skip は「今回はこのキーを書き換えない」を返す（設計 3-82）。
+	//
+	// **飛ばせる役割を利用者が飛ばしたときに使う。**空文字を書き込むと、
+	// 既に名前が書いてある WORKFLOW.md を空へ潰してしまう。
+	skip func(Statuses) bool
 }
 
 // statusKeys は `continuo setup` が書き換える8つのキーである。**ここに無いキーは触らない。**
@@ -374,6 +389,12 @@ var statusKeys = []statusKey{
 	{
 		path:  []string{"tracker", "failure_state"},
 		value: func(st Statuses) string { return fmt.Sprintf("%q", st.Blocked) },
+	},
+	{
+		path:     []string{"tracker", "direct_chat_state"},
+		value:    func(st Statuses) string { return fmt.Sprintf("%q", st.DirectChat) },
+		optional: true,
+		skip:     func(st Statuses) bool { return st.DirectChat == "" },
 	},
 	{
 		// **片付けを始める Status も割り当てから書く。**ここを雛形の `["Done"]` のまま
@@ -420,9 +441,17 @@ type Statuses struct {
 	Blocked string
 	// Done は完了の Status である（terminal_states の1つめ）。
 	Done string
+	// DirectChat は direct chat の Status である（direct_chat_state。設計 3-82）。
+	//
+	// **空でよい。**利用者が対話で飛ばしたときと、この機能を使わないときに空になる。
+	// **空なら `direct_chat_state` の行を1文字も触らない。**空文字を書き込むと、
+	// 既に名前が書いてある WORKFLOW.md を潰す。
+	DirectChat string
 }
 
-// Complete は5つの役割すべてに選択肢名が入っているかを返す。
+// Complete は、必ず要る5つの役割に選択肢名が入っているかを返す。
+//
+// **`DirectChat` は数えない**（設計 3-82）。あれは飛ばせる役割で、空でも continuo は動く。
 //
 // 戻り値: 5つとも空文字でなければ真。
 func (s Statuses) Complete() bool {
@@ -458,8 +487,19 @@ func applyStatuses(s string, st Statuses) (string, []string, []string) {
 
 	var missing, blocked []string
 	for _, k := range statusKeys {
+		// **今回書かないと決めたキーは、1文字も触らない**（設計 3-82）。
+		if k.skip != nil && k.skip(st) {
+			continue
+		}
 		i, found := findKeyLine(lines, start, end, k.path)
 		if !found {
+			if k.optional {
+				// **書き込み全体を止めない**（設計 3-82）。この変更より前に作られた
+				// WORKFLOW.md には、このキーが1行も無い。**止めると、既存の利用者が
+				// `continuo setup` を最後まで通せなくなる。**
+				// **無いことは `continuo doctor` の「未記入の項目」が知らせる。**
+				continue
+			}
 			missing = append(missing, strings.Join(k.path, "."))
 			continue
 		}

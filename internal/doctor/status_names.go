@@ -24,8 +24,8 @@ const (
 	stateOriginDispatchState = "tracker.dispatch_state"
 	// stateOriginFailureState は `tracker.failure_state` に書いた名前である。
 	stateOriginFailureState = "tracker.failure_state"
-	// stateOriginHumanState は `tracker.human_state` に書いた名前である（設計 3-82）。
-	stateOriginHumanState = "tracker.human_state"
+	// stateOriginDirectChatState は `tracker.direct_chat_state` に書いた名前である（設計 3-82）。
+	stateOriginDirectChatState = "tracker.direct_chat_state"
 	// stateOriginStatusSignalMap は `tracker.status_signal_map` の遷移先に書いた名前である。
 	stateOriginStatusSignalMap = "tracker.status_signal_map"
 	// stateOriginAutomatedStateRewrite は `tracker.automated_state_rewrite` の**キー**
@@ -99,8 +99,30 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 		}
 	}
 
+	// **direct chat の選択肢が無いことは、ここで `!` として出す**（設計 3-82）。
+	//
+	// **`✗` にしない。**この Status がカンバンに無くても continuo は起動するし、
+	// 巡回も dispatch も止まらない。**止まる `✗` と同じ記号にすると、区別が付かなくなる。**
+	//
+	// **`カンバン` の見出し語では出ない。**起動時の照合の一覧から外してあるためである
+	// （`config.RequiredBoardStates`）。**だからここで出さないと、どこにも出ない。**
+	// **`未記入の項目` とは別の話である。**あちらは「WORKFLOW.md にキーが書かれていない」を
+	// 見ており、こちらは「書いた名前がカンバンに無い」を見ている。
+	directChatMissing := directChatOptionMissing(cfg.Config, boardOptions)
+
 	pairs := findConfusingPairs(configuredStates(cfg.Config), boardOptions)
 	if len(pairs) == 0 {
+		if directChatMissing != "" {
+			return Result{
+				Label:  LabelStatusNames,
+				Symbol: SymbolUnknown,
+				Detail: i18n.T(i18n.KeyDoctorStatusNamesDirectChatMissing, directChatMissing),
+				Remedies: []string{
+					i18n.T(i18n.KeyDoctorStatusNamesRemedyDirectChat),
+					i18n.T(i18n.KeyDoctorStatusNamesRemedyPickOne),
+				},
+			}
+		}
 		return Result{
 			Label:  LabelStatusNames,
 			Symbol: SymbolOK,
@@ -108,7 +130,10 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 		}
 	}
 
-	notes := make([]string, 0, len(pairs))
+	notes := make([]string, 0, len(pairs)+1)
+	if directChatMissing != "" {
+		notes = append(notes, i18n.T(i18n.KeyDoctorStatusNamesDirectChatMissing, directChatMissing))
+	}
 	for _, p := range pairs {
 		reason := i18n.T(i18n.KeyDoctorStatusNamesReasonSame)
 		if p.Kind == confusionContains {
@@ -128,6 +153,28 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 			i18n.T(i18n.KeyDoctorStatusNamesRemedyOverlap),
 		},
 	}
+}
+
+// directChatOptionMissing は、`tracker.direct_chat_state` に書いた名前がカンバンの
+// 選択肢に無いときだけ、その名前を返す（設計 3-82）。
+//
+// **空文字を書いてある（この機能を使わない）ときは、何も返さない。**
+// **比べ方は SPEC.md 11.3 に合わせる**（大文字小文字と前後の空白を無視する）。
+//
+// cfg: 読めた設定。
+// boardOptions: カンバン側の Status の選択肢名。
+// 戻り値: 無かったときだけ、設定に書いてある綴りのままの名前。あれば空文字。
+func directChatOptionMissing(cfg config.Config, boardOptions []string) string {
+	want := strings.TrimSpace(cfg.Tracker.DirectChatState)
+	if want == "" {
+		return ""
+	}
+	for _, opt := range boardOptions {
+		if strings.EqualFold(strings.TrimSpace(opt), want) {
+			return ""
+		}
+	}
+	return want
 }
 
 // configuredStates は設定に書いた Status 名を、出どころ付きで重複なく集める。
@@ -168,10 +215,10 @@ func configuredStates(cfg config.Config) []configuredState {
 	add(stateOriginRunningState, cfg.Tracker.RunningState)
 	add(stateOriginDispatchState, cfg.Tracker.DispatchState)
 	add(stateOriginFailureState, cfg.Tracker.FailureState)
-	// **`tracker.human_state` も含める**（設計 3-82）。空なら `add` が捨てる。
+	// **`tracker.direct_chat_state` も含める**（設計 3-82）。空なら `add` が捨てる。
 	// **足さないと、綴りを取り違えた人の `continuo doctor` は緑のままなのに、
 	// 起動だけが「Status の選択肢名が設定と一致しません」で止まる。**
-	add(stateOriginHumanState, cfg.Tracker.HumanState)
+	add(stateOriginDirectChatState, cfg.Tracker.DirectChatState)
 	// **map の反復順に頼らない。**遷移先を読んだ順で並べると、実行のたびに出力が変わる。
 	signals := make([]string, 0, len(cfg.Tracker.StatusSignalMap))
 	for signal := range cfg.Tracker.StatusSignalMap {

@@ -222,7 +222,7 @@ func newFakeGitHub(t *testing.T, owner string, items ...boardItem) *fakeGitHub {
 	fg := &fakeGitHub{
 		Owner:         owner,
 		items:         items,
-		statusOptions: []string{"Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done"},
+		statusOptions: []string{"Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done", "Direct Chat"},
 		workflows:     []fakeWorkflow{},
 		failure:       failureNone,
 	}

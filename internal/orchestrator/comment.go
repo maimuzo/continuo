@@ -71,14 +71,14 @@ func (o *Orchestrator) ensureAgentComment(ctx context.Context, rs *runState) {
 	// **人間が引き取っている run では、1文字も書かせに行かない**（設計 3-82）。
 	//
 	// **段2 の `stopWorker` が門で止まるためである。**あの1行は「同じセッション UUID が
-	// 2つ生きるのを防ぐ」ために置かれているのに、人間モードでは pane を閉じない。
+	// 2つ生きるのを防ぐ」ために置かれているのに、direct chat では pane を閉じない。
 	// **その直後に段5 が同じセッションへ `--resume` で新しい Claude Code を立てるので、
 	// 人間が話している相手と、continuo が立てた2本目が、同じ worktree と同じ会話の記録を
 	// 同時に書く。**
 	//
 	// **書かせないことの代償は小さい。**この run は人間が続けている最中であり、
 	// 成果の報告は人間が戻したあとの turn で書かせられる。
-	if rs.inHumanMode() {
+	if rs.inDirectChatMode() {
 		o.logger.Info("人間が引き取っているので、コメントを書かせに行きません（2本目の Claude Code を立てないため）",
 			"identifier", rs.issue().Identifier)
 		return

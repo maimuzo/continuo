@@ -134,9 +134,9 @@ func validate(cfg *Config) error {
 		}
 	}
 
-	// human_state は「人間が pane で直接続けている」状態である（設計 3-82）。
-	// **他の役割と重なると、その役割か人間モードのどちらかが黙って壊れる。**
-	if err := validateHumanState(cfg); err != nil {
+	// direct_chat_state は「人間が pane で直接続けている」状態である（設計 3-82）。
+	// **他の役割と重なると、その役割かdirect chat のどちらかが黙って壊れる。**
+	if err := validateDirectChatState(cfg); err != nil {
 		return err
 	}
 
@@ -596,7 +596,7 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 				"tracker.automated_state_rewrite のキー",
 				from,
 				"tracker の他のキー（active_states / terminal_states / running_state / "+
-					"dispatch_state / failure_state / human_state / status_signal_map の遷移先）"+
+					"dispatch_state / failure_state / direct_chat_state / status_signal_map の遷移先）"+
 					"に無い Status 名にすること"+
 					"（既に名前の出てくる Status は「知らない Status」にならないので、この行は1度も効かない）",
 			)
@@ -613,20 +613,20 @@ func validateAutomatedStateRewrite(cfg *Config) error {
 	return nil
 }
 
-// validateHumanState は `tracker.human_state` が他の役割と重なっていないかを見る（設計 3-82）。
+// validateDirectChatState は `tracker.direct_chat_state` が他の役割と重なっていないかを見る（設計 3-82）。
 //
 // **空なら何も見ない。**空はこの機能を使わないという意味であり、
 // カンバンに選択肢を足す必要も無い（`KnownStates` も空を捨てる）。
 //
 // **`automated_state_rewrite` のキーとの重なりは、ここでは見ない。**
 // `validateAutomatedStateRewrite` が `NamedStates`（`KnownStates` を含む）に名前が
-// 出てくるキーを弾くので、**`human_state` と同じ名前をキーに書いた設定は、そちらで落ちる。**
+// 出てくるキーを弾くので、**`direct_chat_state` と同じ名前をキーに書いた設定は、そちらで落ちる。**
 // **ここへ同じ検査を置いても、弾く相手が1件も残らない。**
 //
 // cfg: 検証する設定。
 // 戻り値: 重なっていれば理由付きのエラー。
-func validateHumanState(cfg *Config) error {
-	state := strings.TrimSpace(cfg.Tracker.HumanState)
+func validateDirectChatState(cfg *Config) error {
+	state := strings.TrimSpace(cfg.Tracker.DirectChatState)
 	if state == "" {
 		return nil
 	}
@@ -641,21 +641,21 @@ func validateHumanState(cfg *Config) error {
 		{"tracker.active_states", containsStateFold(cfg.Tracker.ActiveStates, state)},
 		// 完了として扱われ、worktree を片付けにいく。
 		{"tracker.terminal_states", containsStateFold(cfg.Tracker.TerminalStates, state)},
-		// 着手した直後に人間モードへ入り、1回も turn を送れなくなる。
+		// 着手した直後にdirect chat へ入り、1回も turn を送れなくなる。
 		{"tracker.running_state", containsStateFold([]string{cfg.Tracker.RunningState}, state)},
 		// 着手待ちの issue が全部、人間が引き取っているものとして扱われる。
 		{"tracker.dispatch_state", containsStateFold([]string{cfg.Tracker.DispatchState}, state)},
 		// 打ち切った run の pane が閉じなくなり、`agent.max_concurrent_agents` の枠が空かない。
 		{"tracker.failure_state", containsStateFold([]string{cfg.Tracker.FailureState}, state)},
-		// エージェントが自分の表明1行で人間モードへ入れてしまう（切り替えるのは人間である）。
+		// エージェントが自分の表明1行でdirect chat へ入れてしまう（切り替えるのは人間である）。
 		{"tracker.status_signal_map", containsStateFold(sortedSignalTargets(cfg.Tracker.StatusSignalMap), state)},
 		// 人間がチャットしている worktree を片付けにいく。
 		{"cleanup.on_states", containsStateFold(cfg.Cleanup.OnStates, state)},
 	} {
 		if conflict.hit {
 			return invalidValueError(
-				"tracker.human_state", cfg.Tracker.HumanState,
-				i18n.T(i18n.KeyConfigValidateHumanStateConflict, conflict.key),
+				"tracker.direct_chat_state", cfg.Tracker.DirectChatState,
+				i18n.T(i18n.KeyConfigValidateDirectChatStateConflict, conflict.key),
 			)
 		}
 	}

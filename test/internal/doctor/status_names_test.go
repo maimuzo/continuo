@@ -22,7 +22,7 @@ import (
 // 直し方に `active_states` の副作用が出て、終了コードが 0 であること。
 func TestDoctor_カンバンに紛らわしいStatusが並んでいれば注意を出す(t *testing.T) {
 	fx := newFixture(t)
-	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "AI In Progress", "In Progress", "Blocked", "In Review", "Done")
+	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "AI In Progress", "In Progress", "Blocked", "In Review", "Done", "Direct Chat")
 
 	report := fx.Run(t)
 
@@ -60,7 +60,7 @@ func TestDoctor_カンバンに紛らわしいStatusが並んでいれば注意�
 // 成功条件: `Status の名前` が `!` で、内訳の理由が「大文字小文字と空白・記号を無視すると同じ綴り」であること。
 func TestDoctor_区切りと大文字小文字だけが違うStatusも注意を出す(t *testing.T) {
 	fx := newFixture(t)
-	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "In Progress", "InProgress", "Blocked", "In Review", "Done")
+	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "In Progress", "InProgress", "Blocked", "In Review", "Done", "Direct Chat")
 
 	report := fx.Run(t)
 
@@ -84,7 +84,7 @@ func TestDoctor_区切りと大文字小文字だけが違うStatusも注意を�
 // 成功条件: `Status の名前` が `✓` であること。
 func TestDoctor_語の途中でたまたま一致するStatusは注意を出さない(t *testing.T) {
 	fx := newFixture(t)
-	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done", "Abandoned")
+	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done", "Abandoned", "Direct Chat")
 
 	report := fx.Run(t)
 
@@ -136,5 +136,31 @@ func TestDoctor_設定ファイルを読めなければStatusの名前は確か�
 	res := assertSymbol(t, report, doctor.LabelStatusNames, doctor.SymbolUnknown)
 	if !strings.Contains(res.Detail, "照合する Status 名が決まりません") {
 		t.Fatalf("設定を読めなかったことが理由に出ていない: %q", res.Detail)
+	}
+}
+
+// 目的: direct chat の Status がカンバンに無いとき、`Status の名前` が `!` を出すことを確認する（設計 3-82）。
+//
+// **`✗` にしない。**この Status がカンバンに無くても continuo は起動するし、
+// 巡回も dispatch も止まらない。**止まる `✗` と同じ記号にすると、区別が付かなくなる。**
+//
+// **`カンバン` の見出し語では出ない。**起動時の照合の一覧から外してあるためである。
+// **だからここで出さないと、綴りを取り違えた人はどこでも気づけない。**
+//
+// 与える情報: `Direct Chat` が無いカンバンと、既定（`direct_chat_state: "Direct Chat"`）の設定。
+// 成功条件: 記号が `!` で、説明に設定した名前が入っていて、`✗` が1件も出ないこと。
+func TestDoctor_directChatのStatusがカンバンに無ければ注意を出す(t *testing.T) {
+	fx := newFixture(t)
+	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done")
+
+	report := fx.Run(t)
+	res := assertSymbol(t, report, doctor.LabelStatusNames, doctor.SymbolUnknown)
+	if !strings.Contains(res.Detail, "Direct Chat") {
+		t.Errorf("設定した名前が説明に入っていない: %s", res.Detail)
+	}
+	for _, r := range report.Results {
+		if r.Symbol == doctor.SymbolMissing {
+			t.Errorf("起動を止めない話なのに ✗ が出ている: %s / %s", doctor.LabelText(r.Label), r.Detail)
+		}
 	}
 }
