@@ -108,14 +108,38 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.15 から v0.1.16 へ
 
-**破壊的変更はありません。**
+**破壊的変更が1つあります。****`Direct Chat` という Status 名を、いま別の役割に使っている人だけが当たります。**
+
+**何が起きるか。**`tracker.direct_chat_state` というキーが増え、**既定値が `"Direct Chat"` です。**
+**この名前が `WORKFLOW.md` の他の役割と重なっていると、continuo は起動を断ります。**
+重なりを見る先は8つです。
+
+| どこと重なると断るか | 例 |
+| --- | --- |
+| `active_states` / `terminal_states` / `running_state` / `dispatch_state` / `failure_state` / `status_signal_map` の遷移先 / `cleanup.on_states` の**7つ** | `active_states: ["Ready", "In Progress", "Direct Chat"]` と書いている |
+| **`automated_state_rewrite` のキー** | `automated_state_rewrite: {"Direct Chat": "In Progress"}` と書いている。**カンバンの自動化が `Direct Chat` を書く運用の人は、これが正しい書き方でした** |
+
+**エラーの文面は `tracker.direct_chat_state` を名指しします。****あなたの `WORKFLOW.md` には、そのキーが1行も書いていないはずです。**
+**それでも、この既定値のせいで断られています。**
+
+**直し方。****`WORKFLOW.md` の `tracker:` の下へ1行足してください。**
+
+```yaml
+  direct_chat_state: ""            # この機能を使わない
+```
+
+**別の名前にすれば、機能はそのまま使えます**（例: `direct_chat_state: "人間が対応中"`）。
+**その名前でカンバンに選択肢を1つ足してください**（下の節）。
+
+**当たらない人には何も起きません。**`Direct Chat` を他の役割に書いていなければ、
+**このキーを書かなくても、いままでどおり起動します。**
 
 | 何が変わったか | 当てる必要 |
 | --- | --- |
 | **Claude Code を起動するときの既定が3つ変わりました** | **要りません。**`continuo init` が置いた `WORKFLOW.md` には値が書いてあり、書いてある値が勝ちます（下の節） |
-| **途中から人間が pane で直接チャットを続けられるようになりました（direct chat）** | **要りません。**使いたい人だけ、カンバンに `Direct Chat` という選択肢を1つ足します（下の節） |
+| **途中から人間が pane で直接チャットを続けられるようになりました（direct chat）** | **`Direct Chat` を他の役割に使っている人だけ、1行足します**（上）。使いたい人は、カンバンに `Direct Chat` という選択肢を1つ足します（下の節） |
 
-**`WORKFLOW.md` に消すキーはありません。**
+**`WORKFLOW.md` に消すキーはありません。**足すキーが1つあるのは、上の破壊的変更に当たる人だけです。
 
 **ただし `continuo doctor` の `未記入の項目` が1つ増えます。**雛形に `tracker.direct_chat_state` が
 増えたので、**既にある `WORKFLOW.md` では「書かれていない」と数えられます。**
