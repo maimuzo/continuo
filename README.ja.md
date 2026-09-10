@@ -97,7 +97,7 @@ issue もコメントも第三者が書けます。**「このリポジトリを
 | --- | --- |
 | OS | macOS / Linux。**Windows ネイティブは非対応**（WSL2 を使う） |
 | [herdr](https://github.com/herdrdev/herdr) | **pane と worktree を束ねる常駐プロセス。**continuo は herdr を通して Claude Code を動かす。**0.8.0 で動作を確認**（socket の protocol が食い違うと、continuo は起動しない） |
-| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.233 で動作を確認 |
+| [Claude Code](https://claude.com/claude-code) | **定額プランで使う。**2.1.266 で動作を確認 |
 | [`gh`](https://cli.github.com/) | `gh auth login -s project` でログイン済みであること。2.97.0 で動作を確認 |
 | [`git`](https://git-scm.com/) / [`ghq`](https://github.com/x-motemen/ghq) | worktree の作成と、clone の場所の解決に使う |
 | [Go](https://go.dev/dl/) 1.26+ | ビルドにだけ必要 |

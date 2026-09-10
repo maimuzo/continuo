@@ -26,9 +26,10 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 
 | 何 | どういうことか |
 | --- | --- |
-| **確認ダイアログが出ない** | Claude Code を `--permission-mode dontAsk` で起動し、`Bash` を引数の制限なしに許可します |
+| **確認ダイアログが出ない** | Claude Code を `--permission-mode auto` で起動します（既定）。**保護対象パスへの書き込みとシェルのコマンドは、Claude Code の中の判定役が会話の流れを読んで決めます。**`dontAsk` を選ぶと、許可の一覧の外は確認せずに拒否されます |
 | **リポジトリを書き換えて push する** | エージェントは commit も push もします |
 | **issue の本文が指示になる** | 既定の指示書は issue の本文とコメントを全部読ませます。**第三者が書いた文が、あなたの機械でコマンドとして実行されえます** |
+| **第三者のコメントが、実行の可否の判定に混ざりえます** | 既定の `--permission-mode auto` では、Claude Code の中の判定役が会話の流れを読んで実行の可否を決めます。**エージェントは issue のコメントを読むので、その出力も会話に載ります。**組み込みの指示書は、`OWNER` / `MEMBER` / `COLLABORATOR` 以外が書いたものを指示として扱わないよう**エージェントへ**指示していますが、**判定役がその区別を使うかどうかは測っていません。** 減らし方は2つです。**`claude.permission_mode` を `dontAsk` にする**（そのぶん `.claude/` 配下と `.mcp.json` へ書けなくなります。[docs/upgrading.md](docs/upgrading.md)）。または **`claude.tool_gate.mode` を `public_only` にする**（既定では `Bash` だけが判定に回ります。`.claude/` への書き込みも見せたいなら `claude.tool_gate.tools` に `Write` と `Edit` を足してください） |
 | **信頼の登録を書き換える** | `continuo trust` は `~/.claude.json` を書き換え、対象リポジトリを Claude Code に信頼登録します |
 | **`curl … \| sh` で配る** | インストーラーはネットワークから取ってきて実行されます |
 | **資格情報を読む** | 定額プランの枠を読むために、`~/.claude/.credentials.json` か macOS の Keychain を読みます |
@@ -50,6 +51,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 | **自分が書いた issue だけを進める** | `Ready` へ動かすのは人間です。知らない issue を動かさないでください |
 | **ラベルで絞る** | `tracker.required_labels` に印を入れ、それが付いた issue だけを対象にします |
 | **信頼するリポジトリを減らす** | `continuo init` が並べた `trust.repositories` から、要らない行を消してください |
+| **危ない道具の呼び出しを断らせる** | `claude.tool_gate.mode` は既定で `off` です。`public_only` にすると、公開リポジトリの issue のときだけ `Bash` の呼び出しを実行の前に検査します（`on` ならいつでも）。**この判定は会話を読まないので、コメントで許可を出しても通りません** |
 | **隔離して動かす** | 専用のアカウントか、捨ててよい機械・コンテナで動かしてください |
 
 ---
@@ -74,9 +76,10 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 
 | What | What it means |
 | --- | --- |
-| **No permission prompts** | Claude Code is started with `--permission-mode dontAsk` and `Bash` allowed without argument restrictions |
+| **No permission prompts** | Claude Code is started with `--permission-mode auto` (the default). **Writes to protected paths and shell commands are decided by a classifier inside Claude Code that reads the conversation.** Choosing `dontAsk` denies anything outside the allow list without asking |
 | **It commits and pushes** | The agent writes to your repository and pushes |
 | **Issue text is instructions** | The default brief has the agent read the issue body and every comment. **Text written by other people can execute on your machine** |
+| **A stranger's comment can enter the decision about what may run** | With the default `--permission-mode auto`, a classifier inside Claude Code decides what may run by reading the conversation. **The agent reads the issue comments, so that output is part of the conversation too.** The built-in brief tells the *agent* not to treat text from anyone outside `OWNER` / `MEMBER` / `COLLABORATOR` as an instruction, **but whether the classifier uses the same distinction is not something we have measured.** There are two ways to reduce this. **Set `claude.permission_mode` to `dontAsk`** (writes to `.claude/` and `.mcp.json` then stop working — see [docs/upgrading.md](docs/upgrading.md)). Or **set `claude.tool_gate.mode` to `public_only`** (by default only `Bash` is sent to that check; add `Write` and `Edit` to `claude.tool_gate.tools` to cover writes as well) |
 | **It edits your trust settings** | `continuo trust` rewrites `~/.claude.json` to trust the target repositories |
 | **It is installed via `curl … \| sh`** | The installer is fetched from the network and executed |
 | **It reads credentials** | To read your plan's usage window, it reads `~/.claude/.credentials.json` or the macOS Keychain |
@@ -98,4 +101,5 @@ Use GitHub's **[private vulnerability reporting](https://github.com/maimuzo/cont
 | **Only advance issues you wrote** | A human moves things into `Ready`. Do not move an issue you did not read |
 | **Filter by label** | Set `tracker.required_labels` so only issues carrying your marker are eligible |
 | **Trust fewer repositories** | Delete the lines you do not need from the `trust.repositories` list that `continuo init` writes |
+| **Have dangerous tool calls refused** | `claude.tool_gate.mode` defaults to `off`. Set it to `public_only` to inspect `Bash` calls before they run when the issue is in a public repository (`on` for always). **This check does not read the conversation, so granting permission in a comment does not get past it** |
 | **Isolate it** | Run it under a dedicated account, or on a machine or container you can discard |

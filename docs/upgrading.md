@@ -106,6 +106,81 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## v0.1.15 から v0.1.16 へ
+
+### 既定が3つ変わりました。**あなたの `WORKFLOW.md` は書き換わりません**
+
+**この版から、continuo は Claude Code を `--permission-mode auto` で起動します**（既定のままの場合）。
+**Claude Code が古いと、このフラグを知らずに起動に失敗します。**
+**2.1.266 で動作を確認しました。**`claude --version` で確かめてください。
+**それより古い版で `auto` が使えるかは測っていません。**
+
+**`continuo init` が置いた `WORKFLOW.md` には、3つとも値が書いてあります。**
+**既定を変えても、書いてある値が勝ちます。**
+**`continuo doctor --missing-keys-patch` も、既にあるキーには触りません。**
+
+**まず、いまの値を見てください。**
+
+```bash
+grep -n -A2 'permission_mode\|tool_gate' ~/continuo-work/WORKFLOW.md
+```
+
+### 新しい既定にする書き換え
+
+**下の yaml は、どこに何が入るかの図です。塊ごと貼り替えないでください。**
+**貼り替えると `permissions.allow` が消えます。**
+**変えるのは、右にコメントを付けた3行だけです。**
+
+```yaml
+claude:
+  kind: claude
+  permission_mode: auto        # ← dontAsk から変える
+  permissions:
+    allow:                     # ← 触りません。dontAsk へ戻したくなったときに要ります
+      - "Bash"
+      - "Read"
+      - "Glob"
+      - "Grep"
+      - "Edit"
+      - "Write"
+    deny: ["AskUserQuestion"]  # ← [] から変える
+  tool_gate:
+    mode: off                  # ← 下の表のとおり
+```
+
+**`permission_mode` と `deny` は、必ず2つセットで変えてください。**
+**`permission_mode: auto` だけを当てて `deny` を当て忘れると、`AskUserQuestion` の拒否が外れます。**
+そうなると、スキルなどからその道具が呼ばれた瞬間に**質問の画面が出て pane が止まり、
+continuo が次に送る指示が、その質問への回答として消費されます**（実測）。
+
+**`tool_gate` は、いまの値によって変わります。**
+
+| `mode:` の値 | いま何が起きているか | 何をするか |
+| --- | --- | --- |
+| **`public_only`**（v0.1.10 以降の `continuo init` の既定） | 公開リポジトリの issue にだけ判定が掛かっている | **`off` へ書き換える。**掛けたままにしたいなら、そのままで構いません |
+| **`off`**（自分で止めた人） | 判定は掛かっていない | **何もしなくて構いません。**新しい既定と同じです |
+| **`on`**（自分で強めた人） | いつでも判定が掛かっている | **何もしなくて構いません。**書き換えると、自分で強めた守りを外すことになります |
+| **1行も出ない**（v0.1.9 以前の `continuo init`） | **既定がそのまま効いている** | **版を上げた時点で判定が止まります。**続けたいなら `mode: public_only` を手で書いてください。**`continuo doctor --missing-keys-patch` では戻りません**（新しい雛形の値、つまり `off` が入ります） |
+
+### `permission_mode: auto` にすると何が変わるか
+
+| 何 | どうなるか |
+| --- | --- |
+| **`.claude/` 配下と `.mcp.json` への書き込み** | **通るようになります。**`dontAsk` では、`permissions.allow` に書いても `PreToolUse` hook を張っても通りませんでした |
+| **エージェントに許可を出す方法** | **issue のコメントに「その操作を許可します」と書けば通ります。**判定役が会話の流れを読みます。**公開リポジトリの issue では、同じことを第三者も書けます**（減らし方は [SECURITY.md](../SECURITY.md) の危険の表）。`dontAsk` では設定ファイルを書き換えるしかありませんでした |
+| **止まり方** | **確認の画面へ戻ることがあります**（**この経路は実機で観測できていません**）。戻ったときは、continuo が esc を送って Status を `tracker.failure_state`（既定は `Blocked`）へ動かし、issue に引き渡しを書きます。**固まりはしませんが、人間が見るまで進みません** |
+| **速さ** | **シェルのコマンドは毎回、Claude Code 側の判定を通ります。**どれだけ遅くなるかは測っていません |
+
+**いままでどおり「入力を待たない」ことを最優先するなら、`permission_mode: dontAsk` のままにしてください。**
+**そのモードは残してあります。**
+
+**`mode: off` にすると、公開 issue の本文がコマンドになる経路を、continuo 側では止めなくなります。**
+戻し方は上の表と [SECURITY.md](../SECURITY.md) の「使う前に減らせる危険」にあります。
+
+**書き換えたら continuo を再起動してください。**動いている最中は設定を読み直しません。
+
+---
+
 ## v0.1.14 から v0.1.15 へ
 
 **破壊的変更が1つあります。****表のいちばん上の1行だけです。**

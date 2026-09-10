@@ -229,8 +229,14 @@ func validate(cfg *Config) error {
 	if cfg.Claude.Kind == "" {
 		return requiredValueError("claude.kind")
 	}
-	if cfg.Claude.PermissionMode != "dontAsk" {
-		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode, `無人運用で入力を待たない唯一のモードである "dontAsk" のみサポートする（設計 3-11）`)
+	// **空文字も弾く**（設計 3-11）。空だと orchestrator が --permission-mode を付けずに
+	// 起動するため、Claude Code 側の既定で走る。利用者の手元の設定しだいで挙動が変わる。
+	if !slices.Contains(ClaudePermissionModes, cfg.Claude.PermissionMode) {
+		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode,
+			`"auto" か "dontAsk" のどちらかにすること（設計 3-11）。`+
+				`既定は "auto"（判定役が会話の流れを読んで決める。保護対象パスへ書ける。`+
+				`公開リポジトリでは第三者のコメントも会話に載る）。`+
+				`"dontAsk" は許可の一覧の外を確認せずに拒否し、入力を待たない`)
 	}
 
 	// 時間を表す値をまとめて検査する。**ここを検査しないと待ちが成立しない。**
