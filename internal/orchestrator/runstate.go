@@ -177,11 +177,6 @@ type runState struct {
 	// Finished は run が終わって印から外したことを表す。
 	// turn ループが自分の goroutine を止める判定に使う。
 	Finished bool
-	// directChatSetup は direct chat の pane をいま用意している最中かどうかである（設計 3-82）。
-	//
-	// **立っているあいだ、巡回は direct chat の印を立てない。**用意が落ちたときの
-	// 後始末が `stopWorker` の門に止められると、**自分で開いた pane を閉じられなくなる。**
-	directChatSetup bool
 	// SendFirstPrompt は「次に送る turn は1回目の本文（5-3）である」ことを表す。
 	//
 	// **会話履歴の有無を表す値ではない**（設計 3-3b）。以前は「いまのセッションに
@@ -1658,37 +1653,6 @@ func (rs *runState) stoppedByContinuo() bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	return rs.workerStopped
-}
-
-// beginDirectChatSetup は「direct chat の pane をいま用意している最中である」印を立てる（設計 3-82）。
-//
-// **この印が立っているあいだ、巡回は direct chat の印を立てない。**
-//
-// **なぜ要るか。**用意は別の goroutine で走り、`herdr.startup_timeout_ms`（既定60秒）は
-// 巡回の間隔（既定30秒）より長い。**その間に巡回が direct chat の印を立てると、
-// 用意が落ちたときの後始末が `stopWorker` の門に止められ、pane を閉じられない。**
-// **印だけは外れるので、壊れた Claude Code の入った pane が永久に残り、
-// 次の巡回はそれを「もう在る」と読み続ける。**
-func (rs *runState) beginDirectChatSetup() {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	rs.directChatSetup = true
-}
-
-// endDirectChatSetup は用意中の印を下ろす（設計 3-82）。
-//
-// **成功したときも失敗したときも、必ず通ること。**
-func (rs *runState) endDirectChatSetup() {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	rs.directChatSetup = false
-}
-
-// inDirectChatSetup は direct chat の pane を用意している最中かどうかを返す（設計 3-82）。
-func (rs *runState) inDirectChatSetup() bool {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	return rs.directChatSetup
 }
 
 // resetStallClock は stall 検知の時計を、いまから数え直させる（設計 3-82）。

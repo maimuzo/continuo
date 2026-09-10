@@ -132,7 +132,7 @@ func TemplateWithValues(values Values) string {
 		// **雛形には8つのキーが必ずあり、どれも値を同じ行に持つので、
 		// 見つからないことも書き換えられないことも起こらない。**
 		// 雛形を壊したときは test/internal/scaffold/statuses_test.go が落とす。
-		out, _, _ = applyStatuses(out, values.Statuses)
+		out, _, _, _ = applyStatuses(out, values.Statuses)
 	}
 	return out
 }
@@ -352,7 +352,7 @@ type statusKey struct {
 	optional bool
 }
 
-// statusKeys は `continuo setup` が書き換える8つのキーである。**ここに無いキーは触らない。**
+// statusKeys は `continuo setup` が書き換える9つのキーである。**ここに無いキーは触らない。**
 //
 // **値は %q で囲む。**選択肢名は空白を含みうる（`In Progress`）し、`Done` のような
 // 素の語でも YAML の別の型として読まれうるので、必ず引用符を付ける。
@@ -426,8 +426,9 @@ func StatusKeyNames() []string {
 // ここに値が揃っていると、TemplateWithValues が雛形の既定値
 // （`Ready` / `In Progress` / `In Review` / `Blocked` / `Done`）を置き換える。
 //
-// **5つのうち1つでも空なら、雛形の既定値をそのまま残す。**一部だけ差し替えると、
+// **必ず要る5つのうち1つでも空なら、雛形の既定値をそのまま残す。**一部だけ差し替えると、
 // 置き換えた Status と既定値のままの Status が混ざった WORKFLOW.md ができる。
+// **`DirectChat` は数えない。**あれは飛ばせる役割で、空でも continuo は動く。
 type Statuses struct {
 	// Dispatch は着手待ちの Status である（dispatch_state と active_states の1つめ）。
 	Dispatch string
@@ -442,8 +443,9 @@ type Statuses struct {
 	// DirectChat は direct chat の Status である（direct_chat_state。設計 3-82）。
 	//
 	// **空でよい。**利用者が対話で飛ばしたときと、この機能を使わないときに空になる。
-	// **空なら `direct_chat_state` の行を1文字も触らない。**空文字を書き込むと、
-	// 既に名前が書いてある WORKFLOW.md を潰す。
+	// **空のときは `direct_chat_state: ""` を書く。**「飛ばした」は
+	// 「この項目を空にする」という意味なので、行に触らないと**雛形の既定が残り、
+	// 切ったつもりの利用者に警告が出続ける。**
 	DirectChat string
 }
 
@@ -475,15 +477,21 @@ func (s Statuses) Complete() bool {
 // 戻り値の1つ目: 差し替えた全文。
 // 戻り値の2つ目: 見つからなかったキーの名前（ドット区切り）。
 // 戻り値の3つ目: 見つかったが書き換えられない形だったキーの名前（ドット区切り）。
-// front matter を切り出せない場合は、全文をそのまま返し、全部を見つからなかったものとして返す。
-func applyStatuses(s string, st Statuses) (string, []string, []string) {
+// 戻り値の4つ目: **飛ばせるキーのうち、WORKFLOW.md に無くて書けなかったものの名前**
+// （設計 3-82。**書き込みは止めないが、黙って捨ててはならない**）。
+// front matter を切り出せない場合は、全文をそのまま返し、必ず要るキーを全部
+// 見つからなかったものとして返す。
+func applyStatuses(s string, st Statuses) (string, []string, []string, []string) {
 	lines := strings.Split(s, "\n")
 	start, end, ok := frontMatterRange(lines)
 	if !ok {
-		return s, StatusKeyNames(), nil
+		// **飛ばせるキーは名指ししない**（設計 3-82）。
+		// **すぐ下の分岐が「無くても止めない」と決めているキーを、
+		// ここだけ必須として返すと、利用者は足す必要の無いキーを足しに行く。**
+		return s, requiredStatusKeyNames(), nil, nil
 	}
 
-	var missing, blocked []string
+	var missing, blocked, skipped []string
 	for _, k := range statusKeys {
 		i, found := findKeyLine(lines, start, end, k.path)
 		if !found {
@@ -491,7 +499,10 @@ func applyStatuses(s string, st Statuses) (string, []string, []string) {
 				// **書き込み全体を止めない**（設計 3-82）。この変更より前に作られた
 				// WORKFLOW.md には、このキーが1行も無い。**止めると、既存の利用者が
 				// `continuo setup` を最後まで通せなくなる。**
-				// **無いことは `continuo doctor` の「未記入の項目」が知らせる。**
+				//
+				// **だが黙って捨ててはならない。**利用者はその役割に答えている。
+				// **答えを書けなかったことを `Result.Skipped` で返し、呼び出し側に出させる。**
+				skipped = append(skipped, strings.Join(k.path, "."))
 				continue
 			}
 			missing = append(missing, strings.Join(k.path, "."))
@@ -506,9 +517,26 @@ func applyStatuses(s string, st Statuses) (string, []string, []string) {
 	// **書き換えられない形が1つでもあれば、1行も書き換えない。**一部だけ書き換えた全文を
 	// 返すと、呼び出し側が止めても「途中まで当たった文字列」が残る。
 	if len(blocked) > 0 {
-		return s, missing, blocked
+		return s, missing, blocked, skipped
 	}
-	return strings.Join(lines, "\n"), missing, blocked
+	return strings.Join(lines, "\n"), missing, blocked, skipped
+}
+
+// requiredStatusKeyNames は `continuo setup` が**必ず**書き換えるキーの名前を返す（設計 3-82）。
+//
+// **飛ばせるキーは入れない。**`applyStatuses` が「無くても止めない」と決めているキーを
+// 「見つからなかった」として返すと、**利用者は足す必要の無いキーを足しに行く。**
+//
+// 戻り値: `tracker.dispatch_state` のような名前の並び。
+func requiredStatusKeyNames() []string {
+	out := make([]string, 0, len(statusKeys))
+	for _, k := range statusKeys {
+		if k.optional {
+			continue
+		}
+		out = append(out, strings.Join(k.path, "."))
+	}
+	return out
 }
 
 // hasNestedValue は、キーの行の値が下の行にぶら下がっているかを返す。

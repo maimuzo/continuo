@@ -142,16 +142,23 @@ func checkStatusNames(cfg loadedConfig, boardOptions []string, boardSymbol Symbo
 		notes = append(notes, i18n.T(i18n.KeyDoctorStatusNamesNote,
 			p.Configured.Origin, p.Configured.Name, p.BoardOption, reason))
 	}
+	remedies := []string{
+		i18n.T(i18n.KeyDoctorStatusNamesRemedyPickOne),
+		i18n.T(i18n.KeyDoctorStatusNamesRemedyActiveStates),
+		i18n.T(i18n.KeyDoctorStatusNamesRemedyOverlap),
+	}
+	if directChatMissing != "" {
+		// **紛らわしい組があるときも、direct chat の直し方を落とさない**（設計 3-82）。
+		// **この Status は起動時の照合から外してあるので、`continuo doctor` が
+		// 直し方を出す唯一の場所である。**
+		remedies = append(remedies, i18n.T(i18n.KeyDoctorStatusNamesRemedyDirectChat))
+	}
 	return Result{
-		Label:  LabelStatusNames,
-		Symbol: SymbolUnknown,
-		Detail: i18n.T(i18n.KeyDoctorStatusNamesConfusing, len(pairs)),
-		Notes:  notes,
-		Remedies: []string{
-			i18n.T(i18n.KeyDoctorStatusNamesRemedyPickOne),
-			i18n.T(i18n.KeyDoctorStatusNamesRemedyActiveStates),
-			i18n.T(i18n.KeyDoctorStatusNamesRemedyOverlap),
-		},
+		Label:    LabelStatusNames,
+		Symbol:   SymbolUnknown,
+		Detail:   i18n.T(i18n.KeyDoctorStatusNamesConfusing, len(pairs)),
+		Notes:    notes,
+		Remedies: remedies,
 	}
 }
 

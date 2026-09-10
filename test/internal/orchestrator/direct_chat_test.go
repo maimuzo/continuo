@@ -411,3 +411,53 @@ func containsFoldStr(values []string, target string) bool {
 	}
 	return false
 }
+
+// TestDirectChat_カードがdirectChatになった巡回では何もしない は、
+// 巡回の分岐を確かめる（設計 3-82）。
+//
+// 目的: **カードが `direct_chat_state` になった最初の巡回で、pane も印も触らない**ことを示す。
+//
+// **この検査は、実装レビュー2周目で出た Critical そのものは再現していない。**
+// あれは「pane の用意が走っている最中は印を立てない」という印を足していたときにだけ起きた。
+// **その印はやめたので、いまは `updateDirectChatMode` が同じ巡回の中で印を立てる。**
+// **だから印で判定してもカードの Status で判定しても、この検査は通る。**
+// **不変条件（巡回はカードの Status だけを見る）を機械で押さえられてはいない。**
+// 押さえるには着手の13段を通す必要があり、この stub には git の worktree が無い。
+//
+// 与える情報: 実行中の一覧へ入れた run と、`direct_chat_state` になったカード。
+// 成功条件: pane が1つも閉じられず、印にも残っていること。
+func TestDirectChat_カードがdirectChatになった巡回では何もしない(t *testing.T) {
+	fx := withDirectChatState(t)
+	issue := adoptRun(fx, 193)
+
+	fx.Tracker.SetState(issue.ID, humanState)
+
+	// **巡回を2回まわす。**1回目で印が立ち、2回目は印が立った状態で通る。
+	for range 2 {
+		fx.Orc.Tick(context.Background())
+	}
+
+	if ids := fx.Herdr.ClosedPanes(); len(ids) != 0 {
+		t.Errorf("カードが direct chat なのに pane を閉じた: %v", ids)
+	}
+	if _, ok := viewOf(fx, issue.Identifier); !ok {
+		t.Errorf("カードが direct chat なのに印から外れた（実行中: %v）", fx.Orc.RunningIdentifiers())
+	}
+}
+
+// TestDirectChat_段2の拒否リストにdirectChatのStatusが入っている は、
+// 着手の最後の砦を確かめる（設計 3-82）。
+//
+// 目的: **`dispatchBlockedStates` は拒否リストであって「`active_states` の外を全部」ではない。**
+// **足さないと、人間が着手の隙間にカードを direct chat へ動かしたとき、
+// 段2 が `running_state` で上書きする。**
+//
+// 与える情報: `direct_chat_state` を設定した設定。
+// 成功条件: `dispatchBlockedStates` の戻りに direct chat の Status が入っていること。
+func TestDirectChat_段2の拒否リストにdirectChatのStatusが入っている(t *testing.T) {
+	fx := withDirectChatState(t)
+	got := fx.Orc.DispatchBlockedStatesForTest()
+	if !containsFoldStr(got, humanState) {
+		t.Errorf("段2 の拒否リストに direct chat の Status が入っていない: %v", got)
+	}
+}

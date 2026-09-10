@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "1b6a7e2acd88db685542086360cbab7b7c722e0ea5b7abb09b0ba16139a6c58d",
+  "_source_sha256": "91cfc4301d32e6954b6849f7293982b2f4cc242862bb8790a283321876da99a4",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -222,6 +222,7 @@
   "cli.setup.flag_owner": "GitHub user/organization name of the kanban board to read Status options from (defaults to what gh reports)",
   "cli.setup.flag_project": "Number of the kanban board to read Status options from (defaults to what gh reports)",
   "cli.setup.flag_status_field": "Name of the single-select field that reads and writes Status (default: Status)",
+  "cli.setup.key_not_written": "%[1]s is not present in this WORKFLOW.md, so your answer could not be applied: %[2]s\n  Add the line under tracker: by hand (for example %[3]s: \"Direct Chat\"). continuo doctor --missing-keys-patch can also generate it.",
   "cli.setup.updated": "Rewrote the Status mapping in WORKFLOW.md: %s",
   "cli.setup.updated_key": "  %s",
   "cli.setup.updated_keys_note": "Keys rewritten:",

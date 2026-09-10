@@ -91,7 +91,7 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue, dir
 	//
 	// **コメントの取得は issue 1件につき1本以上の GraphQL である。**候補が多いカンバンで
 	// 全件に掛けると、巡回1回のリクエストが候補の数だけ増える（設計 3-31）。
-	if len(logins) >= 2 {
+	if len(logins) >= 2 && !directChat {
 		o.logger.Warn("担当者が2人以上いるので触りません（人間が触っています）",
 			"identifier", issue.Identifier, "担当者の人数", issue.AssigneeCount,
 			"担当者", strings.Join(logins, ", "))
@@ -127,6 +127,12 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue, dir
 		return handoffDecision{}
 	}
 
+	// **direct chat は、担当者が何人いても止まらない**（設計 3-82）。
+	// **上の「2人以上なら触らない」は、入札で issue を奪い合わないための規則である。**
+	// direct chat は入札しないので、当てる相手が無い。**当てると、既に continuo の
+	// 担当が付いている issue で人間が自分を足したときに、pane を得られなくなる。**
+	// **断るのは「別の機械が期限内で担当している」ときだけである**（下の分岐）。
+	//
 	// **入札できない機械は、担当者のいない issue のコメントを読まない**（設計 3-77a）。
 	// 枠を読めない・枠を使い過ぎた・余裕値がマイナス、のどれかなら、この issue で
 	// **できることは「黙る」だけである。**読んでから黙るのは、リクエストの無駄でしかない。

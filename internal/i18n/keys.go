@@ -621,6 +621,8 @@ const (
 	KeyDoctorStatusNamesDirectChatMissing Key = "doctor.status_names.direct_chat_missing"
 	// KeyDoctorStatusNamesRemedyDirectChat はその直し方に出る（設計 3-82）。
 	KeyDoctorStatusNamesRemedyDirectChat Key = "doctor.status_names.remedy_direct_chat"
+	// KeyCLISetupKeyNotWritten は、飛ばせるキーが WORKFLOW.md に無くて書けなかったときに出る（設計 3-82）。
+	KeyCLISetupKeyNotWritten Key = "cli.setup.key_not_written"
 )
 
 // `continuo setup` の対話の文言。
@@ -2810,6 +2812,7 @@ var allKeys = []Key{
 	KeySetupSummarySkipped,
 	KeyDoctorStatusNamesDirectChatMissing,
 	KeyDoctorStatusNamesRemedyDirectChat,
+	KeyCLISetupKeyNotWritten,
 	KeySetupPromptOptionsHeader,
 	KeySetupPromptOptionLine,
 	KeySetupPromptIntroCount,

@@ -693,8 +693,9 @@ func (o *Orchestrator) abortTerminalForHuman(rs *runState, reason string) bool {
 //
 // **`tracker.direct_chat_state` が空なら `terminal_states` そのものを返す。**
 //
-// **`dispatchBlockedStates` は別である。**あちらは `active_states` の外を全部拒否するので、
-// direct chat の Status も既に入っている。
+// **`dispatchBlockedStates` は別の一覧である。**あちらは着手の段2 が使う拒否リストで、
+// `terminal_states` / `failure_state` / `dispatch_state` / `status_signal_map` の遷移先 /
+// **`direct_chat_state`** を集める。**「`active_states` の外を全部」ではない。**
 //
 // 戻り値: 書き込みを断る Status の一覧。
 func (o *Orchestrator) protectedStates() []string {
@@ -1016,7 +1017,7 @@ func retryBackoff(retryCount int, max time.Duration) time.Duration {
 func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	// **人間が引き取っている run の pane は、どの経路から呼ばれても閉じない**（設計 3-82）。
 	//
-	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは13箇所あり、
+	// **経路ごとに検査を置く形にしてはならない。**`stopWorker` の呼び出しは12箇所あり、
 	// そのうち3つは巡回の分岐の外にある（`ensureAgentComment` が `agent.prompt` を
 	// 最大 `claude.turn_timeout_ms`（既定1時間）待っている間 / 「issue がカンバンから
 	// 見えなくなった」ループ / 担当が別の機械へ移ったとき）。**1箇所でも漏らすと、
@@ -1044,11 +1045,12 @@ func (o *Orchestrator) stopWorker(ctx context.Context, rs *runState) {
 	// 通知の出どころを、人間が辿れない。**
 	//
 	// **`waitForBackgroundTasks` ではなくここに置く。**`stopWorker` の呼び出しは
-	// **13箇所・11関数**である（`git grep -n 'o\.stopWorker(' -- internal/` で実測。
-	// 2026-09-10 に `failDirectChatSetup` が1つ増えて13になった）。
+	// **12箇所・10関数**である（`git grep -n 'o\.stopWorker(' -- internal/` で実測）。
 	// `finishRunClaimed` / `failRun` / `abandonRunClaimed` / `stopAndReleaseAsync` /
 	// `ensureAgentComment` の段2 / `failCommentRecovery` / コメントが書けたので閉じる道 /
-	// 知らない Status / 担当が移った / 着手をやめた / direct chat の用意に失敗した）。
+	// 知らない Status / 担当が移った / 着手をやめた）。
+	// **direct chat の用意に失敗した道は、ここを通らない**（`closeDirectChatSetupPane` が
+	// pane ID を直接閉じる。設計 3-82）。
 	// **待つのは1つだけだが、道連れにするのは全部だからである。**
 	if left := rs.runningBackgroundTasks(); len(left) > 0 {
 		o.logger.Warn("バックグラウンド処理が残ったまま pane を閉じます（走っていたものは途中で終わります）",

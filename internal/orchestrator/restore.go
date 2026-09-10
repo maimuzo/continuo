@@ -644,11 +644,17 @@ func (o *Orchestrator) decideOne(
 ) (adoption, bool) {
 	identifier := c.Identity.IssueIdentifier
 
-	// 段3 の分岐: 取り直しそのものに失敗した run は引き継げない。**pane は閉じる。**
+	// 段3 の分岐: 取り直しそのものに失敗した run は引き継げない。**pane は閉じない。**
+	//
+	// **閉じてはならない理由**（設計 3-82）。**ここでは Status がまだ読めていない。**
+	// カードが `direct_chat_state` だったかどうかを知る手立てが1つも無いので、
+	// **GitHub が一瞬落ちただけで、人間が話している会話が消えることになる。**
+	//
+	// **閉じなくても取り残さない。**Status が読めた次の巡回で、
+	// `reconcileWorktrees` の手順7b が「印に入っていない worktree の pane」として扱う。
 	if fetchFailed {
-		o.logger.Warn("取り直しに失敗したので引き継ぎません（pane を閉じ、worktree と Status は残します）",
+		o.logger.Warn("取り直しに失敗したので引き継ぎません（pane も worktree も Status も残します。次の巡回で見ます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
-		o.closePaneInto(ctx, pane.PaneID, result)
 		return adoption{}, false
 	}
 
@@ -668,7 +674,7 @@ func (o *Orchestrator) decideOne(
 
 	// **direct chat のカードでは、この関数は pane を1枚も閉じない**（設計 3-82）。
 	//
-	// **閉じる道が、この関数の中だけで6つある。**socket のパスが変わった・agent 名が無い・
+	// **閉じる道が、この関数の中だけで7つある。**socket のパスが変わった・agent 名が無い・
 	// セッション UUID が取れない・worktree が使えない・引き継ぎの上限、などである。
 	// **どれも「continuo が引き継げない」という意味であって、
 	// 「人間が話している画面を消してよい」という意味ではない。**
@@ -691,7 +697,7 @@ func (o *Orchestrator) decideOne(
 		// **terminal_states ではない**（既定値はどちらも Done だが別のキーである）。
 		o.logger.Info("Status が cleanup.on_states なので pane を閉じて片付けます",
 			"identifier", identifier, "状態", issue.State)
-		closePane("socket のパスが前回と違う")
+		closePane("Status が cleanup.on_states")
 		o.cleanupInto(ctx, c, issue, result)
 		return adoption{}, false
 	case containsFold(o.cfg.Tracker.ActiveStates, issue.State):
@@ -717,7 +723,7 @@ func (o *Orchestrator) decideOne(
 				"（pane を閉じます。worktree と Status は残すので次の巡回で再 dispatch されます）",
 			"identifier", identifier,
 			"前回のパス", c.Identity.SocketPath, "今回のパス", o.socketPath)
-		closePane("pane に agent 名が無い")
+		closePane("socket のパスが前回と違う")
 		return adoption{}, false
 	}
 
@@ -728,7 +734,7 @@ func (o *Orchestrator) decideOne(
 		// 段8b: pane はあるが agent 名が無い → pane を閉じ、worktree と Status は残す。
 		o.logger.Warn("pane に agent 名が無いので、この Claude Code へはもう送れません（pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
-		closePane("セッション UUID を取れない")
+		closePane("pane に agent 名が無い")
 		return adoption{}, false
 	}
 	agentName, warnings := normalize.Normalize(agent.Name)
@@ -747,7 +753,7 @@ func (o *Orchestrator) decideOne(
 		// **対応づけを復元できないので引き継がない**（段8b と同じ扱い）。
 		o.logger.Warn("セッション UUID を取れないので hook の対応づけを復元できません（pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
-		closePane("worktree を使えない")
+		closePane("セッション UUID を取れない")
 		return adoption{}, false
 	}
 
@@ -944,8 +950,11 @@ func (o *Orchestrator) applyOrphanRunningAction(ctx context.Context, issue track
 // reason: 人間へ見せる理由。
 // hc: 「調べるところ」に出す場所。空の項目は行ごと出さない。
 func (o *Orchestrator) moveToFailure(ctx context.Context, issue tracker.Issue, reason string, hc handoffContext) {
+	// **`protectedStates()` を渡す**（設計 3-82）。`terminal_states` だけでは
+	// **人間が置いた direct chat のカードへ `failure_state` を書いてしまう。**
+	// 書かれるとカードが direct chat から外れ、以後この機能が効かない。
 	moved, err := o.tracker.UpdateStatus(
-		ctx, issue.ID, o.cfg.Tracker.FailureState, o.cfg.Tracker.TerminalStates)
+		ctx, issue.ID, o.cfg.Tracker.FailureState, o.protectedStates())
 	if err != nil {
 		o.logger.Warn("Status を落とせません",
 			"identifier", issue.Identifier, "遷移先", o.cfg.Tracker.FailureState, "error", err)
@@ -1157,12 +1166,41 @@ func (o *Orchestrator) panesByCwd(ctx context.Context) (map[string]herdr.Pane, m
 // 戻り値の2つ目: pane の ID から agent を引く写像。
 // 戻り値の3つ目: `pane.list` が失敗した理由。**失敗したときの写像は空である。**
 func (o *Orchestrator) panesByCwdErr(ctx context.Context) (map[string]herdr.Pane, map[string]herdr.Agent, error) {
-	byCwd := map[string]herdr.Pane{}
+	byCwd, err := o.paneMapByCwd(ctx)
+	if err != nil {
+		return byCwd, map[string]herdr.Agent{}, err
+	}
 	byPane := map[string]herdr.Agent{}
+	agents, err := o.herdr.AgentList(ctx)
+	if err != nil {
+		// **pane は引けている。**agent 名だけが分からないので、pane の写像は返して続ける。
+		// **これはエラーとして返さない。**呼び出し側が知りたいのは「pane を数えられたか」である。
+		o.logger.Warn("agent の一覧を取れないので、agent 名を復元の手掛かりに使いません", "error", err)
+		return byCwd, byPane, nil
+	}
+	for _, a := range agents.Agents {
+		if a.PaneID == "" || a.Name == "" {
+			continue
+		}
+		byPane[a.PaneID] = a
+	}
+	return byCwd, byPane, nil
+}
+
+// paneMapByCwd は pane だけを、解決済みの cwd から引ける形にする（設計 3-82）。
+//
+// **`agent.list` を投げない。**pane の有無しか要らない呼び出し元のために分けてある。
+// **分けないと、direct chat の候補がある巡回のたびに、使わない `agent.list` が1本飛ぶ。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// 戻り値の1つ目: 解決済みの cwd から pane を引く写像。
+// 戻り値の2つ目: `pane.list` が失敗した理由。**失敗したときの写像は空である。**
+func (o *Orchestrator) paneMapByCwd(ctx context.Context) (map[string]herdr.Pane, error) {
+	byCwd := map[string]herdr.Pane{}
 
 	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
 	if err != nil {
-		return byCwd, byPane, err
+		return byCwd, err
 	}
 	for _, pane := range list.Panes {
 		if pane.Cwd == "" {
@@ -1182,21 +1220,7 @@ func (o *Orchestrator) panesByCwdErr(ctx context.Context) (map[string]herdr.Pane
 		}
 		byCwd[resolved] = pane
 	}
-
-	agents, err := o.herdr.AgentList(ctx)
-	if err != nil {
-		// **pane は引けている。**agent 名だけが分からないので、pane の写像は返して続ける。
-		// **これはエラーとして返さない。**呼び出し側が知りたいのは「pane を数えられたか」である。
-		o.logger.Warn("agent の一覧を取れないので、agent 名を復元の手掛かりに使いません", "error", err)
-		return byCwd, byPane, nil
-	}
-	for _, a := range agents.Agents {
-		if a.PaneID == "" || a.Name == "" {
-			continue
-		}
-		byPane[a.PaneID] = a
-	}
-	return byCwd, byPane, nil
+	return byCwd, nil
 }
 
 // recoverIdentity は、身元ファイルを読めない worktree の身元ファイルを書き直す（設計 3-49）。

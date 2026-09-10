@@ -115,6 +115,11 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 	}
 	add(o.cfg.Tracker.FailureState)
 	add(o.cfg.Tracker.DispatchState)
+	// **`direct_chat_state` も入れる**（設計 3-82）。
+	// **この一覧は拒否リストであって「`active_states` の外を全部」ではない。**
+	// 入れないと、**人間が着手の隙間にカードを direct chat へ動かしたとき、
+	// 段2 の最後の砦が素通りして `running_state` で上書きする。**
+	add(o.cfg.Tracker.DirectChatState)
 	for _, dest := range o.cfg.Tracker.StatusSignalMap {
 		if dest != nil {
 			add(*dest)
@@ -342,6 +347,19 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
 		if free, blocker, limit := o.freeSlotBlocker(); !free {
+			if directChat {
+				// **direct chat のときだけ WARN にする**（設計 3-82）。
+				// **人間はカードを動かしてから、pane ができるのを待っている。**
+				// INFO で流すと、なぜ pane ができないのかを知る手立てが1つも無い。
+				// **direct chat の run は自分では終わらないので、枠は人間が
+				// カードを戻すまで空かない。**
+				o.logger.Warn("空きスロットが尽きているので direct chat の pane を用意できません。"+
+					"どれかの issue を direct chat から戻すか、"+blocker+" を上げてください",
+					"identifier", issue.Identifier,
+					"上限に達した設定", blocker, "その上限", limit)
+				o.clearGate(issue.ID)
+				continue
+			}
 			// **INFO のままにする**（issue #134。上の dispatchPaused と同じ理由）。
 			// **同時に動かす数の上限に達しただけで、異常ではない。**
 			//
@@ -601,11 +619,7 @@ func (o *Orchestrator) claimForDispatch(ctx context.Context, issue tracker.Issue
 	// 状態ごとの上限の勘定が、次の巡回で取り直すまで1件ぶんずれる。**
 	if !directChat {
 		rs.setIssueState(o.cfg.Tracker.RunningState)
-		return rs, true
 	}
-	// **用意している最中であることを立てる**（設計 3-82）。
-	// **巡回はこの印を見て、direct chat の印を立てるのを待つ。**
-	rs.beginDirectChatSetup()
 	return rs, true
 }
 

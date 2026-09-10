@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
@@ -13,8 +14,8 @@ import (
 
 // directChatPanes は、この巡回で使う pane の写像を1回だけ作る（設計 3-82）。
 //
-// **候補1件ごとに引き直してはならない。**`panesByCwdErr` は `pane.list` と `agent.list` の
-// 2本を投げて機械中の pane の写像を作るので、**候補が N 件あると巡回1回で 2N 本になる。**
+// **候補1件ごとに引き直してはならない。**`pane.list` は機械中の pane を全部返すので、
+// **候補が N 件あると巡回1回で N 本になる。**
 //
 // **引けなかったときは、その理由を返す。**呼び出し側は「pane が無い」と混ぜてはならない。
 //
@@ -22,11 +23,8 @@ import (
 // 戻り値の1つ目: 解決済みの cwd から pane を引く写像。
 // 戻り値の2つ目: 引けなかった理由。
 func (o *Orchestrator) directChatPanes(ctx context.Context) (map[string]herdr.Pane, error) {
-	byCwd, _, err := o.panesByCwdErr(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return byCwd, nil
+	// **`agent.list` は投げない**（設計 3-82）。pane の有無しか要らない。
+	return o.paneMapByCwd(ctx)
 }
 
 // directChatPaneExists は、その issue の worktree に pane が1枚でもあるかを返す（設計 3-82）。
@@ -83,10 +81,8 @@ func (o *Orchestrator) directChatPaneExists(panes map[string]herdr.Pane, issue t
 // issue: 対象の issue。
 func (o *Orchestrator) enterDirectChatAfterSetup(ctx context.Context, rs *runState, issue tracker.Issue) {
 	rs.clearSendFirstPrompt()
-	// **用意中の印を下ろしてから、direct chat の印を立てる**（設計 3-82）。
-	// 順番を逆にすると、その隙間に巡回が入っても何も起きないが、
-	// **落とし忘れると、以後この run は二度と direct chat へ入れない。**
-	rs.endDirectChatSetup()
+	// **巡回が先に立てていることが多い**（用意は最大60秒かかり、巡回は30秒ごとに回る）。
+	// **二重に立てても何も起きない。**
 	rs.enterDirectChatMode()
 	o.logger.Info("direct chat の pane を用意しました（ここから先は人間が話しかけます。continuo は指示を送りません）",
 		"identifier", issue.Identifier, "状態", issue.State)
@@ -115,15 +111,57 @@ func (o *Orchestrator) enterDirectChatAfterSetup(ctx context.Context, rs *runSta
 func (o *Orchestrator) failDirectChatSetup(ctx context.Context, rs *runState, issue tracker.Issue, err error) {
 	o.logger.Warn("direct chat の用意に失敗しました（カンバンは触りません。次の巡回でやり直します）",
 		"identifier", issue.Identifier, "error", err)
-	// **用意中の印を先に下ろす**（設計 3-82）。**下ろさないと巡回が direct chat の印を
-	// 立てられないままになるが、それより大事なのは、この時点で `stopWorker` の門が
-	// 開いていることである。**開いていないと、自分で開いた pane を閉じられない。
-	rs.endDirectChatSetup()
+	// **`stopWorker` を通さない**（設計 3-82）。あれは direct chat の門で必ず止まる。
+	// **止まると、自分で開いた pane が閉じないまま印だけ外れ、
+	// 壊れた Claude Code の入った pane が永久に残る。**
+	// **次の巡回はそれを「もう在る」と読むので、continuo は二度とやり直さない。**
+	//
+	// **閉じる相手は、continuo がたったいま開いたものである。**この経路へ来るのは
+	// 「用意を始める前に pane が1枚も無かった」場合だけなので（`directChatPaneExists`）、
+	// **人間の会話は入っていない。**
+	//
 	// **`claimTerminal` を通す**（設計 3-56）。書き戻しが飛んでいたら終わるまで待つ。
 	if rs.claimTerminal(ctx) {
-		o.stopWorker(ctx, rs)
+		o.closeDirectChatSetupPane(ctx, rs)
 		o.release(rs)
 	}
+}
+
+// closeDirectChatSetupPane は、direct chat の用意で自分が開いた pane を閉じる（設計 3-82）。
+//
+// **`stopWorker` を通らない。**あれは direct chat の run では必ず門で止まるので、
+// **用意に失敗した run の pane を1枚も閉じられない。**
+//
+// **`markWorkerStopped` は呼ぶ。**呼ばないと、この run を待っている turn ループが
+// あった場合に返らなくなる（direct chat では turn ループを立てていないので、
+// 実際には待っている者はいないが、印の意味を壊さない）。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 用意に失敗した run。
+func (o *Orchestrator) closeDirectChatSetupPane(ctx context.Context, rs *runState) {
+	rs.mu.Lock()
+	paneID := rs.PaneID
+	rs.PaneID = ""
+	rs.mu.Unlock()
+	rs.markWorkerStopped()
+	if paneID == "" {
+		return
+	}
+	// **期限は付ける。**herdr が応答しないときに停止が永久に返らなくなるのを防ぐ
+	// （`stopWorker` と同じ扱い）。
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx),
+			time.Duration(o.cfg.Herdr.ReadTimeoutMs)*time.Millisecond)
+		defer cancel()
+	}
+	if _, err := o.herdr.PaneClose(ctx, herdr.PaneCloseParams{PaneID: paneID}); err != nil {
+		o.logger.Warn("direct chat の用意で開いた pane を閉じられませんでした",
+			"identifier", rs.issue().Identifier, "pane_id", paneID, "error", err)
+		return
+	}
+	o.logger.Info("direct chat の用意で開いた pane を閉じました（次の巡回でやり直します）",
+		"identifier", rs.issue().Identifier, "pane_id", paneID)
 }
 
 // postDirectChatReady は「話しかけられます」を issue へ1件書く（設計 3-82）。

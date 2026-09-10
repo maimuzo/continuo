@@ -105,7 +105,14 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		// 抜けないと `stopWorker` の門が閉じたままになり、**`Done` へ動かしても
 		// pane が残り、worktree も片付かない。**
 		o.updateDirectChatMode(ctx, rs, issue)
-		if rs.inDirectChatMode() {
+		// **飛ばすかどうかは、カードの Status だけで決める**（設計 3-82）。
+		//
+		// **`rs.inDirectChatMode()` で決めてはならない。**印は着手の goroutine が
+		// 非同期に立て、ここは巡回が同期に読むので、**必ず隙間ができる。**
+		// **その隙間に落ちると、下の `default` が `stopAndReleaseAsync` を呼び、
+		// 人間が話している pane を閉じて印まで外す。**この issue が消したかった症状そのものである。
+		// **カードの Status は、いまこの巡回が取り直した値そのものなので、隙間が無い。**
+		if config.IsDirectChatState(o.cfg.Tracker, issue.State) {
 			// **人間が引き取っている。何もしない**（設計 3-82）。
 			// **`clearExternalMove` も呼ばない。**外から動かされた記録は、
 			// direct chat を抜けたあとの巡回が付け直す。
@@ -204,12 +211,8 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 // issue: 取り直した issue。
 func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, issue tracker.Issue) {
 	if config.IsDirectChatState(o.cfg.Tracker, issue.State) {
-		// **用意している最中は、まだ印を立てない**（設計 3-82）。
-		// **立てると `stopWorker` の門が閉じ、用意が落ちたときに
-		// 自分で開いた pane を閉じられなくなる。**用意が済んだ側が自分で立てる。
-		if rs.inDirectChatSetup() {
-			return
-		}
+		// **用意している最中でも印を立てる**（設計 3-82）。
+		// **用意が落ちたときの後始末は、この門に頼らず pane ID を直接閉じる。**
 		if rs.enterDirectChatMode() {
 			o.logger.Info("人間が引き取りました（turn は送らず、pane も worktree も残します）",
 				"identifier", issue.Identifier, "状態", issue.State)

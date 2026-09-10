@@ -221,6 +221,7 @@
   "cli.setup.flag_owner": "Status の選択肢を読むカンバンの GitHub の user / organization 名（省略すると gh から引く）",
   "cli.setup.flag_project": "Status の選択肢を読むカンバンの番号（省略すると gh から引く）",
   "cli.setup.flag_status_field": "Status を読み書きする single-select フィールドの名前（既定 Status）",
+  "cli.setup.key_not_written": "%s は、この WORKFLOW.md に書かれていないので反映できませんでした: %s\n  この行を tracker: の下へ手で足してください（例: %s: \"Direct Chat\"）。continuo doctor --missing-keys-patch でも作れます。",
   "cli.setup.updated": "WORKFLOW.md の Status の割り当てを書き換えました: %s",
   "cli.setup.updated_key": "  %s",
   "cli.setup.updated_keys_note": "書き換えたキー:",

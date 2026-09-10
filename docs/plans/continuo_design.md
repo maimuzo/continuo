@@ -9110,6 +9110,10 @@ herdr が agent を登録していないことは、Claude Code が居ないこ�
 
 **断るのは「別の機械が期限内で担当している」ときだけである。**その機械が用意するからである。
 
+**「担当者が2人以上いるので触らない」の早い戻りも、direct chat では通す。**
+あれは入札で issue を奪い合わないための規則で、**direct chat は入札しないので当てる相手が無い。**
+**当てると、既に continuo の担当が付いている issue で人間が自分を足したときに、pane を得られなくなる。**
+
 **人間が付けた担当者では断らない。**3-77b の「他人1人＋hold が1件も無い → 触らない」は、
 **入札で issue を奪い合わないための規則である。**direct chat は入札しないので、当てる相手が無い。
 **当てると、自分の PC で自分を担当者に付けた人が pane を得られなくなる。**
@@ -9121,7 +9125,7 @@ herdr が agent を登録していないことは、Claude Code が居ないこ�
 
 #### 守りは `stopWorker` の門1つに寄せる
 
-**経路ごとに検査を置く形は採らない。**`stopWorker` の呼び出しは**13箇所・11関数**であり、
+**経路ごとに検査を置く形は採らない。**`stopWorker` の呼び出しは**12箇所・10関数**であり、
 **3つは巡回の分岐の外にある。**
 
 | どこ | なぜ巡回の分岐で止められないか |
@@ -9131,6 +9135,22 @@ herdr が agent を登録していないことは、Claude Code が居ないこ�
 | `stopBecauseHandoffLost` | 担当が別の機械へ移ったとき。**Status を1度も見ない** |
 
 **だから「direct chat の run に対して `pane.close` を呼ばない」を不変条件にし、`stopWorker` の入口で1回だけ見る。**
+
+#### 巡回が飛ばすかどうかは、内部の印ではなくカードの Status で決める
+
+**`rs.inDirectChatMode()` で決めてはならない。**印は着手の goroutine が非同期に立て、
+巡回は同期に読むので、**必ず隙間ができる。**
+**その隙間に落ちた run は、巡回の `default` の分岐で `stopAndReleaseAsync` を呼ばれ、
+pane を閉じられて印まで外れる。**この設計が消したかった症状そのものである。
+
+**カードの Status は、その巡回が取り直した値そのものなので、隙間が無い。**
+**用意の最中でも、カードは `direct_chat_state` にある。**
+
+**同じ理由で、用意に失敗したときの後始末は `stopWorker` を通さない。**
+あれは direct chat の門で必ず止まるので、**自分で開いた pane を1枚も閉じられない。**
+**pane の ID を直接閉じる。**閉じる相手は continuo がたったいま開いたものであり
+（この経路へ来るのは「用意を始める前に pane が1枚も無かった」場合だけである）、
+**人間の会話は入っていない。**
 
 **それとは別に、次の7箇所でも見る。**門だけでは足りないからである。
 
@@ -9142,7 +9162,10 @@ herdr が agent を登録していないことは、Claude Code が居ないこ�
 | `checkStalls` | 打ち切りは `failure_state` を書く。**Status が動けば direct chat から外れる** |
 | `wakeRuns`（**担当の確認より前**） | あとに置くと、人間が自分を担当者に付けた瞬間に `stopBecauseHandoffLost` が走る |
 | `stopAndReleaseAsync` | 門は pane を守るが**印は外れる。**外れると、issue が戻ってきたときに巡回がこの run を見失う |
-| **用意が落ちたとき**（`failDirectChatSetup`） | 通常の失敗は `failure_state` を書くか、バックオフして再 dispatch する。**どちらも Status を動かす。**direct chat の用意では**カンバンへ1バイトも書かず**、自分が開いた pane だけ閉じて次の巡回でやり直す |
+| **用意が落ちたとき**（`failDirectChatSetup`） | 通常の失敗は `failure_state` を書くか、バックオフして再 dispatch する。**どちらも Status を動かす。**direct chat の用意では**カンバンへ1バイトも書かず**、自分が開いた pane だけ pane ID で閉じて、次の巡回でやり直す |
+| **着手の段2 の拒否リスト**（`dispatchBlockedStates`） | あれは拒否リストであって「`active_states` の外を全部」ではない。**`direct_chat_state` を明示的に足さないと、人間が着手の隙間にカードを動かしたとき、`running_state` で上書きされる** |
+| **復元の `moveToFailure`** | `terminal_states` だけを渡していると、**人間が置いた direct chat のカードへ `failure_state` を書く。**書かれると以後この機能が効かない |
+| **復元で取り直しに失敗したとき** | **pane を閉じない。**そこでは Status がまだ読めていないので、direct chat だったかどうかを知る手立てが無い。**GitHub が一瞬落ちただけで会話が消えることになる。**閉じなくても取り残さない（Status が読めた次の巡回で 3-9 の手順7b が扱う） |
 
 **hook の受け口へも流さない。**turn ループが居ないので読む者がおらず、
 **256件で埋まったあとは人間の発言1回ごとに「あふれたので捨てました」の WARN が出る。**
@@ -9197,7 +9220,8 @@ herdr が agent を登録していないことは、Claude Code が居ないこ�
 | **18時間を超えると担当を奪われうる** | direct chat 中は進捗のコメントが書かれない（3-77b の `idle_timeout_ms`）。**1台で動かしているなら起きない。**奪われても `stopBecauseHandoffLost` が push せずに止める |
 | **turn 数は数え直さない** | 上限に達したまま戻した issue は、1回目の指示で `failure_state` へ落ちる。**人間が2回切り替えるだけで上限が外れる形にはしない。**戻したいときは人間が `dispatch_state` へ動かす |
 | **バックオフ待ちの run は守らない** | そこでは pane が既に閉じている。バックオフが明けると着手をやり直し、Status が direct chat なので `redispatch` の入口の検査に落ちる |
-| **`agent.max_concurrent_agents` を1つ使う** | pane で Claude Code が動くためである。**印に入っているあいだだけ数える**（上の再起動の行） |
+| **`agent.max_concurrent_agents` を1つ使い、自分では返さない** | pane で Claude Code が動くためである。**direct chat の run は自分では終わらないので、枠は人間がカードを戻すまで空かない。**既定は2なので、**1件置きっぱなしにすると通常の着手が半分になる。**枠が尽きて用意しなかったことは WARN で名指しする（INFO だと、なぜ pane ができないのかを知る手立てが無い） |
+| **既にその名前の列を持っている人は、上げただけで挙動が変わる** | 既定が `"Direct Chat"` なので、**その列を自分用の置き場に使っていた人の issue が、いままでの「知らない Status」の扱いから外れる。**猶予のあとで worker が止まっていたものが、止まらなくなる。**`tracker.direct_chat_state` を空か別名にすれば元に戻る**（[docs/upgrading.md](../../docs/upgrading.md) が手順を持っている） |
 
 #### 権限モード
 

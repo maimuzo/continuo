@@ -572,16 +572,22 @@ func TestRestore_取り直しで見つからないrunはpaneもworktreeも残し
 
 // {"RUCM-PATH": "P016"}
 //
-// TestRestore_取り直しに失敗しても起動を続けpaneを閉じる は、設計 3-4 の段3 を確かめる。
+// TestRestore_取り直しに失敗しても起動を続けpaneは閉じない は、設計 3-4 の段3 を確かめる。
 //
 // 目的: 認証切れ・ネットワーク断・レートリミットで取り直せなくても起動は続ける。
-// ただし引き継げないので pane は閉じる（残すと次の巡回で2つ目が立つ）。
+// **引き継がないが、pane も閉じない。**
+//
+// **閉じない理由**（設計 3-82）。**ここでは Status がまだ読めていない。**
+// カードが `tracker.direct_chat_state` だったかどうかを知る手立てが1つも無いので、
+// **GitHub が一瞬落ちただけで、人間が pane で話している会話が消えることになる。**
+// **閉じなくても取り残さない。**Status が読めた次の巡回で、3-9 の手順7b が
+// 「印に入っていない worktree の pane」として扱う。
 //
 // 与える情報: ID 指定の取り直しが必ず失敗するトラッカー
 // （`SetIDsError` は記録を取る側と取らない側の両方に効く。復元が呼ぶのは取らない側である）。
 //
-// 成功条件: Restore がエラーを返さず、pane が閉じられ、worktree は残る。
-func TestRestore_取り直しに失敗しても起動を続けpaneを閉じる(t *testing.T) {
+// 成功条件: Restore がエラーを返さず、**pane は1つも閉じられず**、worktree は残る。
+func TestRestore_取り直しに失敗しても起動を続けpaneは閉じない(t *testing.T) {
 	fx := newFixture(t, fixtureOptions{})
 	issue := sampleIssue(188, "In Progress")
 	fx.Tracker.AddIssue(issue)
@@ -597,8 +603,8 @@ func TestRestore_取り直しに失敗しても起動を続けpaneを閉じる(t
 	if want := []string{"Start", "ReplayPending", "StartDelivery"}; !equalStrings(hs.Calls(), want) {
 		t.Fatalf("取り直しに失敗したのに起動を続けていない: got %v", hs.Calls())
 	}
-	if ids := closedPaneIDs(fx); indexOf(ids, "p-188") < 0 {
-		t.Fatalf("引き継げなかった run の pane を閉じていない: %v", ids)
+	if ids := closedPaneIDs(fx); len(ids) != 0 {
+		t.Fatalf("取り直しに失敗しただけなのに pane を閉じた: %v", ids)
 	}
 	if _, err := os.Stat(wt.Path); err != nil {
 		t.Fatalf("worktree を消してしまった: %v", err)
