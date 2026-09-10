@@ -902,15 +902,16 @@ sequenceDiagram
 **一時的な失敗（投稿は成ったのに応答だけが失われた）でも書き直すので、同じ本文が2件並ぶことがある。受ける。**`addComment` は冪等ではなく、成ったかどうかを確かめる往復を足すより、雑音1件のほうが安い。持ち回りの4件は最新の1件だけが読まれるので（[internal/handoff/assess.go:205](../../../internal/handoff/assess.go#L205) の `LatestHoldFor`）、実害は無い。install の範囲に入っていないリポジトリでは、トークンは取れるのに投稿が落ちる（**403 か 404 と考える。測っていない。**7-5 で測ったのは install 済みのリポジトリの pull request で、範囲外のリポジトリは1件も測っていない）。**401 だけを見ると、そこで書き直しが発火しない。**
 **そのとき本文の先頭（`<!-- continuo:self -->` の次の行）に、断りを1行入れる。**
 **ただし、持ち回りの4件（入札・hold・released）には入れない。**その4件は `self_marker` を付けず、本文が `<!-- continuo:bid -->` などの印で始まり、続きが JSON の取り決めである（[internal/handoff/handoff.go:666-678](../../../internal/handoff/handoff.go#L666-L678) の `payloadAfterMarker` が印の直後を JSON として読む）。**印の前に行を挟むと、`HasPrefix` が偽になって他の機械が hold を読めなくなり、担当を期限で外せなくなる**（[internal/orchestrator/handoff.go:415-421](../../../internal/orchestrator/handoff.go#L415-L421)）。印の直後なら読めるが（`payloadAfterMarker` は最初の `{` から最後の `}` までを取る）、**JSON の塊は人間が読んでも機械だと分かるので、どこにも断りを入れない。**
-**`Adapter` は `selfMarker` が空なら断りを入れない。**それが、この4件を見分ける条件である。**その条件が成り立つように、`tracker.comments.self_marker` を空にできなくする**（[internal/config/validate.go:61-75](../../../internal/config/validate.go#L61-L75) に検査を1つ足す。空だと continuo 自身のコメントを次の turn の入力から外せなくなるので、この設計と関係なく空は誤りである。**起動を止める検査が1つ増えるので、[docs/upgrading.md](../../upgrading.md) に「`self_marker: ""` と書いてある人は起動しなくなる」と書く**）（[internal/orchestrator/comment.go:544-546](../../../internal/orchestrator/comment.go#L544-L546) の `postOwnMarkedComment` が空で渡す）。
+**`Adapter` は `selfMarker` が空なら断りを入れない。**それが、この4件を見分ける条件である。**`self_marker` を空にした利用者では、書き直しに断りが付かない。受ける。**空を禁じる検査は足さない（この設計と関係の無い起動の失敗を、全利用者に1つ増やすことになる）（[internal/orchestrator/comment.go:544-546](../../../internal/orchestrator/comment.go#L544-L546) の `postOwnMarkedComment` が空で渡す）。
 
     <!-- continuo:self -->
-    **GitHub App のトークンで投稿できなかったので、attribution 無しで投稿しています**（理由: <理由>）。continuo のログと `continuo doctor` を確かめてください。
+    **GitHub App のトークンで投稿できなかったので、attribution 無しで投稿しています。**continuo のログと `continuo doctor` を確かめてください。
     （もとの本文）
 
-**`<理由>` には、`Adapter` が受けた失敗を4通りのどれかで入れる。**「資格情報が取れない」「401 が2回」「403 か 404（install の範囲に入っていないか、権限が足りない）」「その他（continuo のログを見てください）」。
-**エラーの文言そのものは入れない。**`Adapter` が足す文字列は、手元の絶対パスを縮める唯一の場所（[internal/orchestrator/comment.go:558](../../../internal/orchestrator/comment.go#L558) の `redact.Paths`）を通らない。ロックの取得失敗や資格情報の読み取り失敗の文言は `~/.continuo/…` の絶対パスを含み、公開の issue へ出る。**4通りの固定の文だけを入れ、文言は `Warn` のログへ出す。**
-**「トークンが取れなかった」と決め打ちしない。**install の範囲外ではトークンは取れていて、`continuo doctor` は `✓` を返す（doctor は install の範囲を見ない）。理由を書かないと、人間は doctor で手がかりを失う。
+**断りは、この1文だけである。理由は入れない。**
+理由（資格情報が取れない・401 が2回・403 か 404・その他）は `Warn` のログへ出す。
+**見分けるためには固定の1文で足りる。**理由の分類は診断の助けにしかならず、その全文はログにある。
+**エラーの文言そのものも入れない。**`Adapter` が足す文字列は、手元の絶対パスを縮める唯一の場所（[internal/orchestrator/comment.go:558](../../../internal/orchestrator/comment.go#L558) の `redact.Paths`）を通らない。ロックの取得失敗や資格情報の読み取り失敗の文言は `~/.continuo/…` の絶対パスを含み、公開の issue へ出る。
 
 **なぜ書き直すか。**人間がこう決めている（2026-09-08。印が欠けたコメントについて）。
 
@@ -1772,8 +1773,8 @@ sequenceDiagram
 
 **GitHub は manifest の流れでも認可の流れでも `state` を返す。**
 **manifest は `https://github.com/settings/apps/new?state=<値>`、認可は `&state=<値>` で渡す。**
-**install の戻りには `state` が無いので、そこは `installation_id` を控えて次の画面で使うだけにする**
-（install そのものは資格情報を書き換えない）。
+**install の戻りには `state` が無い。**戻りの `installation_id` は使わずに読み捨て、段3 の画面を出すだけにする
+（install そのものは資格情報を書き換えない。install 済みかどうかは資格情報からは分からない。この節の「順序」の表）。
 
 #### manifest に何を書くか
 
@@ -2322,6 +2323,19 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 
 **削った段は、issue #245 のコメント（2026-09-10 の「3周目のあとの突き合わせ」）に原文のまま残してある。**
 
+### 6周目のあとの突き合わせ
+
+**目的の取り出しは3周目のあとと同じ報告を使い（人間のコメントは増えていない）、敵対的レビュワーが4〜6周目で足した・変えた要素20件を判定した。いる18 / いらない2 / 足りない0。**
+
+| 判定 | 何 | どうしたか |
+| --- | --- | --- |
+| **いらない** | 断りの1行に理由を4通りで入れる（3-82c） | **削った。**見分けるには固定の1文で足り、理由はログにある。「403 か 404 は install の範囲外」は測っていない解釈で、それを機械が公開の issue へ投稿する形だった |
+| **いらない** | `tracker.comments.self_marker` を空にできなくする起動時の検査と、その `docs/upgrading.md` への追記（3-82c・10-3） | **削った。**設計自身が「この設計と関係なく」と書いており目的の外。失うのは、`self_marker` を空にした利用者で GitHub App のトークンも落ちたときに断りが付かないことだけ |
+| 観察 | 3-82g の「`installation_id` を控えて次の画面で使う」は、使う先が無い | 「使わずに読み捨てる」に直した |
+
+**「直すたびに新しい穴が開く」系統は1本だけで、持ち回りの4件にも attribution を付ける → 書き直しと断り → 理由の4通り → `self_marker` の検査、の4段だった。**根が人間の原文にある2段は残し、末端の2段を削った。
+**削った段は、issue #245 のコメント（2026-09-10 の「6周目のあとの突き合わせ」）に原文のまま残してある。**
+
 ### 設計レビュー4周目の対応表
 
 **件数。Critical 1 / High 3 / Medium 4 / Low 3 = 11件。収まっていません。**
@@ -2464,12 +2478,12 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 | 14 | PR #254（issue のコメントを GitHub App の attribution で見分けられるようにする（設計のみ））の本文を、このファイルを指す形へ直す | **済**（設計文書の行番号リンクを、このファイルへのリンクに替えた） |
 | 15 | 曖昧な表現の点検（「App」→「GitHub App」、自作の呼び方を消す） | **済** |
 | 16 | 設計文書 5-2 の設定例へ `github_app_attribution` を足す | **実装のとき。**雛形とキー集合を突き合わせる検査（3-82c の表）が、同じ commit で揃えることを求める |
-| 17 | [docs/FAQ.md](../../FAQ.md) と [docs/upgrading.md](../../upgrading.md) へ書く（`github_app_attribution` の設定・チームでの使い方・漏れたときの復旧・`self_marker` を空にできなくなったこと） | **実装のとき。**設計が固まる前に書くと、固まったあとに書き直しになる |
+| 17 | [docs/FAQ.md](../../FAQ.md) と [docs/upgrading.md](../../upgrading.md) へ書く（`github_app_attribution` の設定・チームでの使い方・漏れたときの復旧） | **実装のとき。**設計が固まる前に書くと、固まったあとに書き直しになる |
 | 18 | **このファイルの 6 を、[docs/plans/continuo_design.md](../continuo_design.md) の 3-82〜3-82g として移す** | **人間がこのファイルで設計を確認したあと** |
 
 ### 10-4. 進め方
 
 | # | 何を | 状態 |
 | --- | --- | --- |
-| 19 | **設計レビューを回す** | **人間が 2026-09-10 に許可した**（「では、これで設計はまとまったものとする。設計レビュー、実装、実装レビューを進めてPR作って」）。3周目で収まらず、突き合わせを通した（8）。**4周目から続ける** |
+| 19 | **設計レビューを回す** | **人間が 2026-09-10 に許可した**（「では、これで設計はまとまったものとする。設計レビュー、実装、実装レビューを進めてPR作って」）。3周目と6周目で収まらず、そのつど突き合わせを通した（8）。**7周目から続ける。9周目で収まらなければまた突き合わせ、10周目で収まらなければ止まる** |
 | 20 | 実装 | 設計レビューが収まったあと。[.claude/rules/design-review.md](../../../.claude/rules/design-review.md) の段5 |
