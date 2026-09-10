@@ -5,7 +5,8 @@
 GitHub の画面に `– with <GitHub App の表示名>` が並び、人間が書いたものと見分けられる。
 
 **このファイルが、issue #245（issue のコメントを人間が書いたのか AI が書いたのか、あとから見分けられない）の設計の正である。**
-**人間はこのファイルの上で設計を確認する。**
+**人間はこのファイルの上で設計を確認する。2026-09-10 に人間が確認し、「これで設計はまとまったものとする」と決めた。**
+**ここから先は、設計レビュー（3周目から）→ 実装 → 実装レビュー → pull request の順に進める**（10-4）。
 **[docs/plans/continuo_design.md](../continuo_design.md) には、人間が確認したあとで移す。**
 6 の節番号（3-82〜3-82g）は、そのときの節番号である。**移すまで、あちらにこの設計は無い。**
 
@@ -73,7 +74,13 @@ sequenceDiagram
     Note over C,F: A1 は捨てる。アクセストークンはファイルへ書かない（人間の決定）
 ```
 
-### 1-2. 回転。更新用のトークンを使うと、古いものは死ぬ
+### 1-2. 回転。更新用のトークンを使うと、古いアクセストークンは失効する
+
+**一言でいうと、こうである**（人間の要約。2026-09-10）。
+
+- 更新用のトークンを使って新しいアクセストークンを取得すると、古い方のアクセストークンは失効する
+- よって、アクセストークンをメモリ内に保存し使い回すと、いつの間にか失効している可能性があるので、悪手となる
+- だから、アクセストークンを使うときに「新規取得 → それで issue などを投稿 → すぐ捨てる」とした
 
 **2026-09-09 に実測した**（7-7）。
 
@@ -168,6 +175,7 @@ sequenceDiagram
 | 「これを更新し続けろ。これが設計の全てにしろ」はそのセッション限定の話をしているのであって、全てのissueでそうしろとは言ってない。continuo_design.mdの該当部分を削除しろ。 | **設計文書から 3-82〜3-82g を外し、このファイルへ移した** |
 | そもそも更新用のトークンってなんだよ。単語の説明にもないし、今までも出てきてないだろ。…可能な限りシーケンス図で説明しろ。 | **0 と 1** |
 | このissueのコメントに書いてあること全てをプランファイルにまとめろ。…プランファイル上で設計の確認を行う。 | **このファイル** |
+| では、これで設計はまとまったものとする。設計レビュー、実装、実装レビューを進めてPR作って | **設計レビューの3周目から進める**（10-4） |
 
 ---
 
@@ -883,7 +891,7 @@ sequenceDiagram
 **直すファイルは4つである。**上の2つと、呼び出し側の
 [test/internal/tracker/comments_test.go:115](../../../test/internal/tracker/comments_test.go#L115) と、
 **`o.tracker.PostComment` を呼ぶ唯一の場所である
-[internal/orchestrator/comment.go:564](../../../internal/orchestrator/comment.go#L564) の `postCommentWithMarker`** である。
+[internal/orchestrator/comment.go:565](../../../internal/orchestrator/comment.go#L565) の `postCommentWithMarker`** である。
 
 **どちらのトークンで書くかを、12箇所からそこまで運ぶ形も決める。**
 **決めずに渡すと、実装者が別名のメソッドを生やす形を選びうる。**
@@ -894,9 +902,9 @@ sequenceDiagram
 
 | 関数 | いまの形 | 足したあと |
 | --- | --- | --- |
-| [internal/orchestrator/comment.go:527](../../../internal/orchestrator/comment.go#L527) の `postComment` | `(ctx, nodeID, body)` | `(ctx, nodeID, body, useAppToken)` |
-| [internal/orchestrator/comment.go:543](../../../internal/orchestrator/comment.go#L543) の `postOwnMarkedComment` | `(ctx, nodeID, body)` | `(ctx, nodeID, body, useAppToken)` |
-| [internal/orchestrator/comment.go:556](../../../internal/orchestrator/comment.go#L556) の `postCommentWithMarker` | `(ctx, nodeID, body, marker)` | `(ctx, nodeID, body, marker, useAppToken)` |
+| [internal/orchestrator/comment.go:528](../../../internal/orchestrator/comment.go#L528) の `postComment` | `(ctx, nodeID, body)` | `(ctx, nodeID, body, useAppToken)` |
+| [internal/orchestrator/comment.go:544](../../../internal/orchestrator/comment.go#L544) の `postOwnMarkedComment` | `(ctx, nodeID, body)` | `(ctx, nodeID, body, useAppToken)` |
+| [internal/orchestrator/comment.go:557](../../../internal/orchestrator/comment.go#L557) の `postCommentWithMarker` | `(ctx, nodeID, body, marker)` | `(ctx, nodeID, body, marker, useAppToken)` |
 
 **呼び出しは `o.postComment(` が8件、`o.postOwnMarkedComment(` が4件である**（`internal/` の下で数えた）。
 **12箇所とも、上の振り分けの表のとおりに真偽を書く。**
@@ -911,7 +919,7 @@ sequenceDiagram
 **1件も書けず、issue には何も残らない。**
 
 **投稿する箇所は12箇所ある**（`o.postComment(` ほか2つを `internal/` の下で数えると14行返り、
-うち2行は [internal/orchestrator/comment.go:528](../../../internal/orchestrator/comment.go#L528) と [544行](../../../internal/orchestrator/comment.go#L544) の委譲なので、引いて12である）。
+うち2行は [internal/orchestrator/comment.go:529](../../../internal/orchestrator/comment.go#L529) と [545行](../../../internal/orchestrator/comment.go#L545) の委譲なので、引いて12である）。
 **どれを GitHub App のトークンで書くかは、下の表で決める。**
 
 **止まった理由は、issue へ1件書く。**人間がこう決めている（2026-09-08）。
@@ -934,10 +942,10 @@ sequenceDiagram
 
 | 何 | どちらで書くか | なぜ |
 | --- | --- | --- |
-| **Status を動かした記録**（[internal/orchestrator/comment.go:504](../../../internal/orchestrator/comment.go#L504) の `postStatusMove`） | **GitHub App のトークン** | **人間が画面で読む** |
+| **Status を動かした記録**（[internal/orchestrator/comment.go:505](../../../internal/orchestrator/comment.go#L505) の `postStatusMove`） | **GitHub App のトークン** | **人間が画面で読む** |
 | **着手の門の案内**（[internal/orchestrator/gate.go:313](../../../internal/orchestrator/gate.go#L313) の `postGateNotice`） | **GitHub App のトークン** | 同じ |
 | **未信頼のリポジトリを飛ばした通知**（[internal/orchestrator/dispatch.go:705](../../../internal/orchestrator/dispatch.go#L705) の `noteUntrusted`） | **GitHub App のトークン** | 同じ |
-| **`failure_state` へ落とした通知**（[internal/orchestrator/restore.go:934](../../../internal/orchestrator/restore.go#L934) の `moveToFailure`） | **人間の認証** | **これも「止まった理由」である**（下） |
+| **`failure_state` へ落とした通知**（[internal/orchestrator/restore.go:933](../../../internal/orchestrator/restore.go#L933) の `moveToFailure`） | **人間の認証** | **これも「止まった理由」である**（下） |
 | **カンバンに載っていなかった・別の run が担当中だった・worktree を残した**（[internal/orchestrator/lifecycle.go:435](../../../internal/orchestrator/lifecycle.go#L435)・[467行](../../../internal/orchestrator/lifecycle.go#L467)・[1058行](../../../internal/orchestrator/lifecycle.go#L1058)） | **GitHub App のトークン** | 同じ |
 | **引き渡しの通知**（[internal/orchestrator/lifecycle.go:1161](../../../internal/orchestrator/lifecycle.go#L1161) の `postHandoffComment`） | **人間の認証** | **これが「止まった理由」を運ぶ唯一の経路である**（下） |
 | **持ち回りの4呼び出し**（入札・hold・released が2箇所。[internal/orchestrator/handoff.go:316](../../../internal/orchestrator/handoff.go#L316)・[408行](../../../internal/orchestrator/handoff.go#L408)・[477行](../../../internal/orchestrator/handoff.go#L477)・[500行](../../../internal/orchestrator/handoff.go#L500)） | **人間の認証** | **機械どうしの取り決めで、指示書が「読み飛ばします」と書いている** |
@@ -950,13 +958,13 @@ sequenceDiagram
 **「止まった理由」を書く箇所は2つある。**
 `buildHandoffComment` を呼ぶのは
 [internal/orchestrator/lifecycle.go:1162](../../../internal/orchestrator/lifecycle.go#L1162) と
-[internal/orchestrator/restore.go:935](../../../internal/orchestrator/restore.go#L935) で、**2つとも同じ本文を組み立てる。**
+[internal/orchestrator/restore.go:934](../../../internal/orchestrator/restore.go#L934) で、**2つとも同じ本文を組み立てる。**
 
 **`moveToFailure` は「復元の案内」ではない。**
 **`UpdateStatus` で `failure_state`（既定 `Blocked`）へ落としたうえで、その理由を書く関数である。**
 **呼び出しは3つあり、どれも Status を動かす**
 （[internal/orchestrator/restore.go:748](../../../internal/orchestrator/restore.go#L748)・
-[773行](../../../internal/orchestrator/restore.go#L773)・[893行](../../../internal/orchestrator/restore.go#L893)）。
+[772行](../../../internal/orchestrator/restore.go#L772)・[892行](../../../internal/orchestrator/restore.go#L892)）。
 
 **GitHub App のトークンが取れない状態で continuo を再起動すると、この3つが動く。**
 **GitHub App のトークンで書くと、GitHub App のトークンが取れずに止まった run では、
@@ -1004,7 +1012,7 @@ sequenceDiagram
 **走行中に落ちたとき、run を `blocked` にしてはならない。6つとも同じ落ち方にする。**
 
 **GitHub App のトークンで書く6つのうち、4つは `runState` を受け取らない。**
-`postStatusMove` は [internal/orchestrator/comment.go:498-500](../../../internal/orchestrator/comment.go#L498-L500)、
+`postStatusMove` は [internal/orchestrator/comment.go:499-501](../../../internal/orchestrator/comment.go#L499-L501)、
 `postGateNotice` は [internal/orchestrator/gate.go:292](../../../internal/orchestrator/gate.go#L292)、
 `noteUntrusted` は [internal/orchestrator/dispatch.go:678](../../../internal/orchestrator/dispatch.go#L678)、
 `cleanupPath` は [internal/orchestrator/lifecycle.go:1013-1018](../../../internal/orchestrator/lifecycle.go#L1013-L1018) である。
@@ -1399,7 +1407,7 @@ sequenceDiagram
 **7本目は、Go が組み立てて送る「書かせ直し」の指示である。**
 [internal/orchestrator/prompt.go:115-118](../../../internal/orchestrator/prompt.go#L115-L118) の `buildCommentRequestPrompt` が
 `gh issue comment` を文字列として組み立て、**エージェントが成果を書かずに turn を終えたときに送る**
-（[internal/orchestrator/comment.go:263](../../../internal/orchestrator/comment.go#L263) の段7）。
+（[internal/orchestrator/comment.go:264](../../../internal/orchestrator/comment.go#L264) の段7）。
 **ここも分岐させる。**
 **分岐させるのは、エージェントが成果を書き忘れた run のためである。**
 **そこは GitHub App のトークンが生きているので、`GH_TOKEN` を前に足して書かせれば attribution が付く。**
@@ -1407,7 +1415,7 @@ sequenceDiagram
 
 **7本目は、テンプレートを1度も通らない。**`{{if}}` と書いてはならない。
 [internal/orchestrator/prompt.go:115](../../../internal/orchestrator/prompt.go#L115) の `buildCommentRequestPrompt` は
-`fmt.Fprintf` で文字列を組み立てるだけで、[internal/orchestrator/comment.go:263](../../../internal/orchestrator/comment.go#L263) が
+`fmt.Fprintf` で文字列を組み立てるだけで、[internal/orchestrator/comment.go:264](../../../internal/orchestrator/comment.go#L264) が
 **その結果をそのまま `herdr.AgentPromptParams` の `Text` へ渡す。**
 **`{{if …}}` と書けば、その6文字がそのままエージェントへ届く。**
 
@@ -1416,9 +1424,9 @@ sequenceDiagram
 | 引数 | 何を渡すか | どこから来るか |
 | --- | --- | --- |
 | `useAppToken bool` | 真なら `TOKEN=$(…)` の2行を頭に付ける | `o.cfg.Tracker.Comments.GitHubAppAttribution` |
-| `continuoPath string` | 実行ファイルの絶対パス | **本体が自分の実行ファイルを指す値。**[internal/orchestrator/settings.go:352](../../../internal/orchestrator/settings.go#L352) が hook のコマンド行を組み立てるのに使っているものと同じ |
+| `continuoPath string` | 実行ファイルの絶対パス | **本体が自分の実行ファイルを指す値。**[internal/orchestrator/settings.go:359](../../../internal/orchestrator/settings.go#L359) が hook のコマンド行を組み立てるのに使っているものと同じ |
 
-**呼び出しは1箇所しか無い**（[internal/orchestrator/comment.go:263](../../../internal/orchestrator/comment.go#L263)）。
+**呼び出しは1箇所しか無い**（[internal/orchestrator/comment.go:264](../../../internal/orchestrator/comment.go#L264)）。
 **そこには `o` が届いているので、2つとも渡せる。**
 
 **素の `continuo` と書いてはならない。**
@@ -1547,7 +1555,7 @@ issue #178（進捗報告のコメントの本文が、指示書の見本どお�
 **包むのは `RenderData` の中だけである。**呼ぶ側は包まない。
 **二重に包むと `''\''/home/…/continuo'\'''` になり、`command not found` で全投稿が落ちる。**
 
-**`shellQuote` は [internal/orchestrator/settings.go:425](../../../internal/orchestrator/settings.go#L425) の小文字始まりなので、
+**`shellQuote` は [internal/orchestrator/settings.go:445](../../../internal/orchestrator/settings.go#L445) の小文字始まりなので、
 `internal/shellquote` を新設して移す。****写しを作ってはならない。**
 **使う側は3つある**（hook のコマンド行・`internal/prompt` の `RenderData`・`internal/cli` の `continuo prompt --show`）。
 **`internal/orchestrator` の下へ置くと、`internal/cli` から呼べない。**
@@ -1590,7 +1598,7 @@ issue #178（進捗報告のコメントの本文が、指示書の見本どお�
 **continuo が「自分が書いたか」を判定する相手は `gh api user` の返り値である**
 （[internal/tracker/ghuser.go:38](../../../internal/tracker/ghuser.go#L38)）。
 **認可したアカウントがそれと違うと、[internal/tracker/adapter.go:1168](../../../internal/tracker/adapter.go#L1168) が
-`MarkedByOther` を立て、[internal/orchestrator/comment.go:383](../../../internal/orchestrator/comment.go#L383) が全部捨てる。**
+`MarkedByOther` を立て、[internal/orchestrator/comment.go:384](../../../internal/orchestrator/comment.go#L384) が全部捨てる。**
 **個人と仕事のアカウントを両方持つ人はふつうに居て、認可のときにどちらでログインしているかを意識しない。**
 
 | いつ | 何をするか |
@@ -2095,7 +2103,7 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 
 **設計レビューは2周回した。**方針が変わった 2026-09-09（GitHub App の作成をこの設計に含める）から数え直したものである。
 **Critical と High が0件になっていないので、収まっていない。**
-**3周目以降は、人間の許可待ちである**（10-4）。issue #245 のコメントに貼った判断票を、そのまま写す。
+**3周目以降は、2026-09-10 の人間の許可で回す**（10-4）。issue #245 のコメントに貼った判断票を、そのまま写す。
 **判断票の中の行番号は、当時の [docs/plans/continuo_design.md](../continuo_design.md) のものである。**いまは 3-82 をこのファイルへ移したので、その行は指せない。
 
 | 周 | Critical | High | Medium | Low | Info |
@@ -2119,7 +2127,7 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 | **12箇所の振り分けが4通りに割れている** | **High** | 表は6と6、地の文は4・7・8と書いている | **直す** | **確かめました。**表は GitHub App のトークンへ6件（`postStatusMove`・`postGateNotice`・`noteUntrusted`・`lifecycle.go` の435/467/1058）、人間の認証へ6件（`moveToFailure`・`postHandoffComment`・持ち回りの4呼び出し）。**6と6が正しい** |
 | **OAuth の `state` が1度も出てこない** | **High** | ダッシュボードのコールバックが、自分の始めた流れかを確かめない。別のサイトから資格情報を上書きされうる | **直す** | **確かめました。**3-82 の範囲で `state` は6件で、6件とも `runState` と `failure_state` です。**OAuth の `state` は0件。**いまの守りは Host の検査だけで、それは別サイトからの要求も通します |
 | **manifest に何を書くかが決まっていない** | **High** | 戻り先の欄が3つあるのに、どれも名指ししていない。3-82g の流れ図が、同じ節の実測（install と認可が1回で終わった）と食い違う | **直す** | 検索パターン `callback|redirect|setup_url|request_oauth|manifest|oauth` で7件、名指しは `hook_attributes` だけ |
-| **`PostComment` の引数を12箇所から運ぶ道が無い** | **High** | 「直すファイルは3つ」に `comment.go` が入っていない。`postComment` と `postOwnMarkedComment` を経由して運ぶ形が1行も書かれていない | **直す** | `o.tracker.PostComment` を呼ぶのは [internal/orchestrator/comment.go:564](../../../internal/orchestrator/comment.go#L564) の1箇所だけです |
+| **`PostComment` の引数を12箇所から運ぶ道が無い** | **High** | 「直すファイルは3つ」に `comment.go` が入っていない。`postComment` と `postOwnMarkedComment` を経由して運ぶ形が1行も書かれていない | **直す** | `o.tracker.PostComment` を呼ぶのは [internal/orchestrator/comment.go:565](../../../internal/orchestrator/comment.go#L565) の1箇所だけです |
 | **GraphQL の門が偽のとき、エージェント側の逃げ道が無い** | **High** | 逃げ道は「本体の投稿も REST へ移す」だけ。エージェントの7本をどうするかが無い | **直す** | エージェントの投稿は6本＋書かせ直し1本で、本体より多い |
 | **「足しても届かない」が、同じ設計の「測っていない」と食い違う** | Medium | 3-82a は「一般化できない」、3-82b は「足しても届かない」 | **直す** | 3-82b の1行を直します |
 | **回転の回数を4つ数え漏らしている** | Medium | 起動時の検査・書かせ直し・本体の取り直し・continuo の外のセッションが入っていない | **直す** | 見積りが低いほど、認可のやり直しの危険が小さく見えます |
@@ -2158,7 +2166,7 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 | **待ち状態から抜ける手段に仕様が無い** | **High** | 「画面のボタンから巡回を始める」に経路も HTTP のメソッドも daemon への合図も無い | **直す** | 配っているのは読み取りの2本だけです（[internal/server/server.go:338-339](../../../internal/server/server.go#L338-L339)） | **1周目の直しが持ち込んだ** |
 | **アカウントの突き合わせがどの段で走るか決まっていない** | **High** | 段3 か段4d かで、画面へ戻れるかどうかが変わる | **直す** | 段を1つに戻したので、この分岐そのものが消えました | **1周目の直しが持ち込んだ** |
 | **止まり方の表に、エージェントの投稿が1本も無い** | **High** | 表は本体の6箇所だけ。エージェントの7本は逆に run ごと `blocked` へ落ちる | **直す** | 表を読んだ人は「ログが1行増えるだけ」と受け取ります | 前の周に既に在った |
-| **7本目の分岐が、テンプレートを通らない場所に書いてある** | **High** | `{{if}}` と書くと、その6文字がそのままエージェントへ届く | **直す** | **確かめました。**[internal/orchestrator/prompt.go:115](../../../internal/orchestrator/prompt.go#L115) は `fmt.Fprintf` で組み立てるだけで、[internal/orchestrator/comment.go:263](../../../internal/orchestrator/comment.go#L263) がそのまま `Text` へ渡します | 前の周に既に在った |
+| **7本目の分岐が、テンプレートを通らない場所に書いてある** | **High** | `{{if}}` と書くと、その6文字がそのままエージェントへ届く | **直す** | **確かめました。**[internal/orchestrator/prompt.go:115](../../../internal/orchestrator/prompt.go#L115) は `fmt.Fprintf` で組み立てるだけで、[internal/orchestrator/comment.go:264](../../../internal/orchestrator/comment.go#L264) がそのまま `Text` へ渡します | 前の周に既に在った |
 | **「認可のやり直し」と3回言うのに、やり直す入口が無い** | **High** | 回転が1回失敗するたびに GitHub App を作り直すことになる。既定の名前は必ず衝突する | **直す** | 回転は1日に12回以上と自分で見積もっています | 前の周に既に在った |
 | **CSP を `https://github.com` だけに緩めると、ローカルの form が止まる** | Medium | `'self'` が無い。名前の入力し直しが送信できない | **直す** | ブラウザは何も出さずに捨てるので、人間には「ボタンが効かない」としか見えません | 前の周に既に在った |
 | **「実装の前に測る2件」が2件ではない** | Medium | 4行あり、締めが「どちらも」 | **直す** | 題から件数を外しました | **1周目の直しが持ち込んだ** |
@@ -2290,5 +2298,5 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 
 | # | 何を | 状態 |
 | --- | --- | --- |
-| 19 | **設計レビューの3周目以降を回す** | **人間の許可待ち。**「このissueに関しては、人間が許可を出すまで絶対にレビューを進めるな」 |
+| 19 | **設計レビューの3周目以降を回す** | **人間が 2026-09-10 に許可した**（「では、これで設計はまとまったものとする。設計レビュー、実装、実装レビューを進めてPR作って」）。3周目から回す |
 | 20 | 実装 | 設計レビューが収まったあと。[.claude/rules/design-review.md](../../../.claude/rules/design-review.md) の段5 |
