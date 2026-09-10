@@ -234,7 +234,8 @@ func validate(cfg *Config) error {
 	if !slices.Contains(ClaudePermissionModes, cfg.Claude.PermissionMode) {
 		return invalidValueError("claude.permission_mode", cfg.Claude.PermissionMode,
 			`"auto" か "dontAsk" のどちらかにすること（設計 3-11）。`+
-				`既定は "auto"（判定役が会話の流れを読んで決める。保護対象パスへ書ける）。`+
+				`既定は "auto"（判定役が会話の流れを読んで決める。保護対象パスへ書ける。`+
+				`公開リポジトリでは第三者のコメントも会話に載る）。`+
 				`"dontAsk" は許可の一覧の外を確認せずに拒否し、入力を待たない`)
 	}
 

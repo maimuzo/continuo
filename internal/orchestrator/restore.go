@@ -752,7 +752,7 @@ func (o *Orchestrator) decideOne(
 				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
 				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
 				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
-				permissionRemedyText(o.cfg.Claude.PermissionMode),
+				permissionRemedyText(o.cfg.Claude.PermissionMode, issue.RepoIsPrivate),
 			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)
 		return adoption{}, false
