@@ -131,6 +131,7 @@ claude:
   kind: claude                              # herdr に起動させるエージェントの種別
   permission_mode: auto                     # auto か dontAsk。auto は判定役が会話の流れを読んで決めるので、
                                             # issue のコメントで出した許可が通る。.claude/ と .mcp.json にも書ける。
+                                            # 公開リポジトリの issue では、同じことを第三者も書ける（SECURITY.md の危険の表）。
                                             # dontAsk は allow に書いたものだけを通し、それ以外は確認せず拒否する
   permissions:                              # auto ではシェルのコマンドが判定役へ回る。deny は auto でも効く。
                                             # dontAsk のとき、allow に書いていないツールは全部拒否される
