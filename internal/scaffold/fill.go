@@ -350,11 +350,6 @@ type statusKey struct {
 	//
 	// **無いことは `continuo doctor` の「未記入の項目」が別に知らせる。**
 	optional bool
-	// skip は「今回はこのキーを書き換えない」を返す（設計 3-82）。
-	//
-	// **飛ばせる役割を利用者が飛ばしたときに使う。**空文字を書き込むと、
-	// 既に名前が書いてある WORKFLOW.md を空へ潰してしまう。
-	skip func(Statuses) bool
 }
 
 // statusKeys は `continuo setup` が書き換える8つのキーである。**ここに無いキーは触らない。**
@@ -391,10 +386,13 @@ var statusKeys = []statusKey{
 		value: func(st Statuses) string { return fmt.Sprintf("%q", st.Blocked) },
 	},
 	{
+		// **飛ばしたときは空文字を書く。**行に触らない形にしてはならない。
+		// **`continuo setup` は「この項目は空のままにします」と画面へ出すので、
+		// 触らないと雛形の `"Direct Chat"` が残り、利用者は切ったつもりで
+		// 起動時の警告と `continuo doctor` の `!` を受け取ることになる。**
 		path:     []string{"tracker", "direct_chat_state"},
 		value:    func(st Statuses) string { return fmt.Sprintf("%q", st.DirectChat) },
 		optional: true,
-		skip:     func(st Statuses) bool { return st.DirectChat == "" },
 	},
 	{
 		// **片付けを始める Status も割り当てから書く。**ここを雛形の `["Done"]` のまま
@@ -487,10 +485,6 @@ func applyStatuses(s string, st Statuses) (string, []string, []string) {
 
 	var missing, blocked []string
 	for _, k := range statusKeys {
-		// **今回書かないと決めたキーは、1文字も触らない**（設計 3-82）。
-		if k.skip != nil && k.skip(st) {
-			continue
-		}
 		i, found := findKeyLine(lines, start, end, k.path)
 		if !found {
 			if k.optional {

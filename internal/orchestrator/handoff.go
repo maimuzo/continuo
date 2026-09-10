@@ -173,21 +173,32 @@ func (o *Orchestrator) handoffGate(ctx context.Context, issue tracker.Issue, dir
 		IdleTimeout: o.handoffIdleTimeout(),
 	})
 
-	// **direct chat は、担当者が1人もいない（または自分）ときだけ進む**（設計 3-82）。
+	// **direct chat が断るのは「別の機械が期限内で担当している」ときだけである**（設計 3-82）。
+	//
 	// **入札もしないし、担当者も書かないし、期限切れの担当を外しもしない。**
 	// **書かない理由。**カンバンへの書き込みは、そのカードを `direct_chat_state` から
 	// 動かしうるうえ、担当を外すと**他の機械が入札で取りに来る。**
-	// 人間は自分の PC の前に座っているので、他の機械が pane を立てても意味が無い。
+	//
+	// **人間が付けた担当者では断らない。**人間が自分を担当者に付けるのは普通の操作であり
+	// （`wakeRuns` の分岐が同じことを書いている）、**自分の PC の前に座っている本人を
+	// 「他人の機械が面倒を見ている」と読んで pane を用意しないのは誤りである。**
+	// **人間の決定が防ぎたかったのは「入札して別の機械で direct chat が始まる」ことで、
+	// 入札はもう飛ばしている。**
 	if directChat {
 		switch assessment.Action {
-		case handoff.ActionProceed, handoff.ActionBid:
-			return handoffDecision{proceed: true}
-		default:
-			o.logger.Info("担当者が付いているので direct chat の pane を用意しません"+
-				"（この issue は、その担当者の機械が面倒を見ています）",
+		case handoff.ActionSkipHeld:
+			o.logger.Info("別の機械が期限内で担当しているので、direct chat の pane を用意しません"+
+				"（その機械が用意します）",
 				"identifier", issue.Identifier, "担当者", assessment.Assignee,
-				"判定", assessment.Action.String())
+				"最後の進捗報告（無ければ担当を取った時刻）", assessment.LastProgress)
 			return handoffDecision{}
+		case handoff.ActionSkipSelfUnknown:
+			o.logger.Warn("gh の持ち主が分からないので、担当の付いた issue には触りません",
+				"identifier", issue.Identifier, "担当者", assessment.Assignee)
+			return handoffDecision{}
+		default:
+			// **担当者がいない・自分・人間が付けた・期限切れ、のどれでも進む。**
+			return handoffDecision{proceed: true}
 		}
 	}
 

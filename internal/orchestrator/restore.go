@@ -666,17 +666,42 @@ func (o *Orchestrator) decideOne(
 		return adoption{}, false
 	}
 
+	// **direct chat のカードでは、この関数は pane を1枚も閉じない**（設計 3-82）。
+	//
+	// **閉じる道が、この関数の中だけで6つある。**socket のパスが変わった・agent 名が無い・
+	// セッション UUID が取れない・worktree が使えない・引き継ぎの上限、などである。
+	// **どれも「continuo が引き継げない」という意味であって、
+	// 「人間が話している画面を消してよい」という意味ではない。**
+	// **引き継げないときは、印に入れずに pane だけ残す。**
+	// 人間がカードを戻した巡回で、`reconcileWorktrees` が閉じ、着手が同じセッションへ
+	// `--resume` で立て直す（3-9 の手順7b）。
+	directChat := config.IsDirectChatState(o.cfg.Tracker, issue.State)
+	closePane := func(reason string) {
+		if directChat {
+			o.logger.Warn("direct chat のカードなので pane は閉じません（引き継ぎはしません）",
+				"identifier", identifier, "理由", reason, "pane_id", pane.PaneID)
+			return
+		}
+		o.closePaneInto(ctx, pane.PaneID, result)
+	}
+
 	switch {
 	case o.ws.ShouldCleanup(issue.State):
 		// 段5a: cleanup.on_states → pane を閉じてから worktree と branch を片付ける。
 		// **terminal_states ではない**（既定値はどちらも Done だが別のキーである）。
 		o.logger.Info("Status が cleanup.on_states なので pane を閉じて片付けます",
 			"identifier", identifier, "状態", issue.State)
-		o.closePaneInto(ctx, pane.PaneID, result)
+		closePane("socket のパスが前回と違う")
 		o.cleanupInto(ctx, c, issue, result)
 		return adoption{}, false
 	case containsFold(o.cfg.Tracker.ActiveStates, issue.State):
 		// 引き継ぐ側。段5a2 以降へ進む。
+	case directChat:
+		// **direct chat も引き継ぐ側である**（設計 3-82）。
+		// **引き継がないと、人間がカードを戻した最初の巡回で
+		// `reconcileWorktrees` が pane を閉じ、着手が1回目の指示書を送ることになる。**
+		// **人間が pane で積み上げた誘導を、エージェントが最初からやり直す。**
+		// この issue が消したかった症状そのものである。
 	default:
 		// 段5a: 引き渡し（In Review / Blocked）→ **pane も worktree も残す。**
 		// **Status を巻き戻してはならない。**印にも実行中の一覧にも入れない。
@@ -692,7 +717,7 @@ func (o *Orchestrator) decideOne(
 				"（pane を閉じます。worktree と Status は残すので次の巡回で再 dispatch されます）",
 			"identifier", identifier,
 			"前回のパス", c.Identity.SocketPath, "今回のパス", o.socketPath)
-		o.closePaneInto(ctx, pane.PaneID, result)
+		closePane("pane に agent 名が無い")
 		return adoption{}, false
 	}
 
@@ -703,7 +728,7 @@ func (o *Orchestrator) decideOne(
 		// 段8b: pane はあるが agent 名が無い → pane を閉じ、worktree と Status は残す。
 		o.logger.Warn("pane に agent 名が無いので、この Claude Code へはもう送れません（pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
-		o.closePaneInto(ctx, pane.PaneID, result)
+		closePane("セッション UUID を取れない")
 		return adoption{}, false
 	}
 	agentName, warnings := normalize.Normalize(agent.Name)
@@ -722,7 +747,7 @@ func (o *Orchestrator) decideOne(
 		// **対応づけを復元できないので引き継がない**（段8b と同じ扱い）。
 		o.logger.Warn("セッション UUID を取れないので hook の対応づけを復元できません（pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
-		o.closePaneInto(ctx, pane.PaneID, result)
+		closePane("worktree を使えない")
 		return adoption{}, false
 	}
 
@@ -754,13 +779,13 @@ func (o *Orchestrator) decideOne(
 				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
 				permissionRemedyText(o.cfg.Claude.PermissionMode, issue.RepoIsPrivate),
 			handoffContext{WorktreePath: c.Path})
-		o.closePaneInto(ctx, pane.PaneID, result)
+		closePane("確認の画面で止まっている")
 		return adoption{}, false
 	default:
 		// 取れない / 知らない値 → pane を閉じ、worktree と Status を残す（段8b と同じ）。
 		o.logger.Warn("agent_status を判断できないので引き継ぎません（pane を閉じます）",
 			"identifier", identifier, "agent_status", string(agent.AgentStatus))
-		o.closePaneInto(ctx, pane.PaneID, result)
+		closePane("agent_status を判断できない")
 		return adoption{}, false
 	}
 
@@ -778,7 +803,7 @@ func (o *Orchestrator) decideOne(
 				"引き継ぎの上限は WORKFLOW.md の `agent.max_takeover` で変えられます（いまは %d）。",
 			o.cfg.Agent.MaxTakeover, o.cfg.Agent.MaxTakeover),
 			handoffContext{WorktreePath: c.Path})
-		o.closePaneInto(ctx, pane.PaneID, result)
+		closePane("引き継いだ回数が上限に達した")
 		return adoption{}, false
 	}
 	if _, err := o.ws.IncrementTakeover(ctx, c.Path); err != nil {
@@ -800,9 +825,11 @@ func (o *Orchestrator) decideOne(
 			SettingsPath:     c.Identity.SettingsPath,
 			HerdrWorkspaceID: c.Identity.HerdrWorkspaceID,
 			Revision:         pane.Revision,
-			AwaitTurnEnd:     awaitTurnEnd,
+			AwaitTurnEnd:     awaitTurnEnd && !directChat,
+			DirectChat:       directChat,
 		},
-		NeedsPrompt: needsPrompt,
+		// **direct chat では指示を送らない**（設計 3-82）。送るのは人間である。
+		NeedsPrompt: needsPrompt && !directChat,
 		Branch:      c.Identity.Branch,
 	}, true
 }
@@ -1104,17 +1131,38 @@ func (o *Orchestrator) handleBrokenWorktrees(ctx context.Context) error {
 // **段4 の matchPanes とは別に引く。**あちらは身元ファイルを読めた worktree だけを
 // 相手にするので、**まさに読めなかった worktree の pane が入らない。**
 //
+// **引けなかったことを知りたい呼び出し元は `panesByCwdErr` を使う**（設計 3-82）。
+// **こちらは「引けなければ空」で丸める。**復元の手掛かりに使うだけなので、
+// 空でも「手掛かりが無い」として正しく振る舞える。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // 戻り値の1つ目: 解決済みの cwd から pane を引く写像。**引けなければ空である。**
 // 戻り値の2つ目: pane の ID から agent を引く写像。**引けなければ空である。**
 func (o *Orchestrator) panesByCwd(ctx context.Context) (map[string]herdr.Pane, map[string]herdr.Agent) {
+	byCwd, byPane, err := o.panesByCwdErr(ctx)
+	if err != nil {
+		o.logger.Warn("pane の一覧を取れないので、pane の label を復元の手掛かりに使いません", "error", err)
+	}
+	return byCwd, byPane
+}
+
+// panesByCwdErr は panesByCwd と同じ写像を作り、**引けなかった理由も返す**（設計 3-82）。
+//
+// **direct chat は「引けなかった」と「pane が無い」を混ぜてはならない。**
+// 混ぜると、herdr の socket が一瞬落ちただけで
+// **人間が話している pane の隣に2枚目を開き、`agent.start` を投げることになる。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// 戻り値の1つ目: 解決済みの cwd から pane を引く写像。
+// 戻り値の2つ目: pane の ID から agent を引く写像。
+// 戻り値の3つ目: `pane.list` が失敗した理由。**失敗したときの写像は空である。**
+func (o *Orchestrator) panesByCwdErr(ctx context.Context) (map[string]herdr.Pane, map[string]herdr.Agent, error) {
 	byCwd := map[string]herdr.Pane{}
 	byPane := map[string]herdr.Agent{}
 
 	list, err := o.herdr.PaneList(ctx, herdr.PaneListParams{})
 	if err != nil {
-		o.logger.Warn("pane の一覧を取れないので、pane の label を復元の手掛かりに使いません", "error", err)
-		return byCwd, byPane
+		return byCwd, byPane, err
 	}
 	for _, pane := range list.Panes {
 		if pane.Cwd == "" {
@@ -1137,8 +1185,10 @@ func (o *Orchestrator) panesByCwd(ctx context.Context) (map[string]herdr.Pane, m
 
 	agents, err := o.herdr.AgentList(ctx)
 	if err != nil {
+		// **pane は引けている。**agent 名だけが分からないので、pane の写像は返して続ける。
+		// **これはエラーとして返さない。**呼び出し側が知りたいのは「pane を数えられたか」である。
 		o.logger.Warn("agent の一覧を取れないので、agent 名を復元の手掛かりに使いません", "error", err)
-		return byCwd, byPane
+		return byCwd, byPane, nil
 	}
 	for _, a := range agents.Agents {
 		if a.PaneID == "" || a.Name == "" {
@@ -1146,7 +1196,7 @@ func (o *Orchestrator) panesByCwd(ctx context.Context) (map[string]herdr.Pane, m
 		}
 		byPane[a.PaneID] = a
 	}
-	return byCwd, byPane
+	return byCwd, byPane, nil
 }
 
 // recoverIdentity は、身元ファイルを読めない worktree の身元ファイルを書き直す（設計 3-49）。

@@ -206,9 +206,14 @@ type TrackerConfig struct {
 	// 対象にもせず、**pane を閉じず worktree も消さない。**
 	// `active_states` へ戻すと、**同じ pane・同じセッションのまま**続きの指示を送る。
 	//
-	// **既定は空文字である。**空なら、この機能は一切効かない
-	// （カンバンに選択肢を足す必要も無い）。**空でなければ、その名前がカンバンに実在することを
-	// 起動時に要求する**（`config.KnownStates` に入るため）。
+	// **既定は `"Direct Chat"` である。**標準機能なので、既定に名前が入っている。
+	// **空にすると、この機能は一切効かない。**
+	//
+	// **この名前だけは、カンバンに実在することを起動時に要求しない**
+	// （`RequiredBoardStates` が `KnownStates` から差し引く）。**要求すると、
+	// その選択肢をまだ作っていない全利用者の continuo が起動しなくなる。**
+	// **綴りの取り違えは起動時には捕まらない。**`continuo doctor` の
+	// `Status の名前` が `!` で知らせる。
 	//
 	// **`active_states` / `terminal_states` / `running_state` / `dispatch_state` /
 	// `failure_state` / `status_signal_map` の遷移先 / `cleanup.on_states` と

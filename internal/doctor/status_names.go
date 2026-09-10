@@ -216,8 +216,9 @@ func configuredStates(cfg config.Config) []configuredState {
 	add(stateOriginDispatchState, cfg.Tracker.DispatchState)
 	add(stateOriginFailureState, cfg.Tracker.FailureState)
 	// **`tracker.direct_chat_state` も含める**（設計 3-82）。空なら `add` が捨てる。
-	// **足さないと、綴りを取り違えた人の `continuo doctor` は緑のままなのに、
-	// 起動だけが「Status の選択肢名が設定と一致しません」で止まる。**
+	// **この Status は起動を止めない**（`config.RequiredBoardStates` が起動時の照合から
+	// 差し引いている）。**だから綴りを取り違えても、気づける場所が `continuo doctor` しか無い。**
+	// **紛らわしい組の検査に載せ、選択肢が無いこと自体は `directChatOptionMissing` が別に見る。**
 	add(stateOriginDirectChatState, cfg.Tracker.DirectChatState)
 	// **map の反復順に頼らない。**遷移先を読んだ順で並べると、実行のたびに出力が変わる。
 	signals := make([]string, 0, len(cfg.Tracker.StatusSignalMap))

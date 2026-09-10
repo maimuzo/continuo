@@ -106,6 +106,10 @@ func TestDirectChatMode_作業中のStatusへ戻すと同じpaneへ続きの指�
 
 		// 人間が continuo へ返す。
 		fx.Tracker.SetState(issue.ID, fx.Config.Tracker.RunningState)
+		// **戻すときの後始末は巡回のループの外で走る**（設計 3-82）。
+		// **1回目の巡回で印が立ち、2回目の `wakeRuns` が指示を送る。**
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 
@@ -349,6 +353,9 @@ func TestDirectChat_着手待ちへ戻したら作業中のStatusを書く(t *te
 
 		fx.Herdr.SetStatus(herdr.AgentStatusIdle)
 		fx.Tracker.SetState(issue.ID, fx.Config.Tracker.DispatchState)
+		// **戻すときの後始末は巡回のループの外で走る**（設計 3-82）。
+		fx.Orc.Tick(context.Background())
+		synctest.Wait()
 		fx.Orc.Tick(context.Background())
 		synctest.Wait()
 

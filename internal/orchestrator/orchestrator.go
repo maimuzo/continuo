@@ -472,7 +472,13 @@ func New(opts Options) (*Orchestrator, error) {
 	// 空欄が出るだけで、原因が読み取れない。
 	// **他の必須の依存と同じく、ここで名前つきのエラーにする。**
 	knownStateNames := config.KnownStates(opts.Config.Tracker)
-	if len(knownStateNames) == 0 {
+	// **門は `RequiredBoardStates` で数える**（設計 3-82）。
+	//
+	// **`KnownStates` で数えてはならない。**`tracker.direct_chat_state` の既定は
+	// `"Direct Chat"` なので、他の Status を全部空にした設定でも1件返ってしまい、
+	// **この門が二度と発火しない。**`RequiredBoardStates` はそこから direct chat だけを
+	// 差し引くので、「continuo が実際に動かす Status」の件数になる。
+	if len(config.RequiredBoardStates(opts.Config.Tracker)) == 0 {
 		return nil, errors.New(
 			"continuo が扱う Status が1つも設定されていません（Config）" +
 				"（WORKFLOW.md の tracker.active_states / terminal_states / running_state / " +
@@ -1245,6 +1251,13 @@ func (o *Orchestrator) Adopt(issue tracker.Issue, state AdoptedRun, needsPrompt 
 	// **`agent_status` が `working` の run はこちらを立てる**（設計 3-4 の段5a2）。
 	// turn は送らないが、走っている turn の `Stop` を読む goroutine は要る。
 	rs.awaitTurnEnd = state.AwaitTurnEnd
+	// **direct chat の run は、印に入れたその場で direct chat へ入れる**（設計 3-82）。
+	// **入れないと、`reconcileWorktrees` が「取り残された worktree」として
+	// 人間の pane を閉じる隙間ができる**（巡回は `reconcileRunning` より先に
+	// この印を見る保証が無い）。
+	if state.DirectChat {
+		rs.enterDirectChatMode()
+	}
 	// **SendFirstPrompt は立てない**（ゼロ値の偽のままにする）。走っている worker を
 	// そのまま引き継いでいるので、送るのは**継続の指示（5-4）**である。
 	// **1回目の本文（5-3）ではない**（設計 3-4 の段5c）。
@@ -1288,6 +1301,11 @@ type AdoptedRun struct {
 	// **`NeedsPrompt` とは同時に立てない。**立てないと turn ループの goroutine が1本も
 	// 起きず、その run の `Stop` hook を誰も読まないまま claude.turn_timeout_ms まで放置される。
 	AwaitTurnEnd bool
+	// DirectChat は「direct chat の run として引き継ぐ」ことを表す（設計 3-82）。
+	//
+	// **真なら turn を1つも送らず、pane も閉じない。**`NeedsPrompt` とも
+	// `AwaitTurnEnd` とも同時に立てない。**指示を送るのは人間である。**
+	DirectChat bool
 }
 
 // OnHook は hookserver から hook を1件受け取る（hookserver.HookSink の実装）。

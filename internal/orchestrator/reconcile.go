@@ -204,6 +204,12 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 // issue: 取り直した issue。
 func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, issue tracker.Issue) {
 	if config.IsDirectChatState(o.cfg.Tracker, issue.State) {
+		// **用意している最中は、まだ印を立てない**（設計 3-82）。
+		// **立てると `stopWorker` の門が閉じ、用意が落ちたときに
+		// 自分で開いた pane を閉じられなくなる。**用意が済んだ側が自分で立てる。
+		if rs.inDirectChatSetup() {
+			return
+		}
 		if rs.enterDirectChatMode() {
 			o.logger.Info("人間が引き取りました（turn は送らず、pane も worktree も残します）",
 				"identifier", issue.Identifier, "状態", issue.State)
@@ -213,46 +219,76 @@ func (o *Orchestrator) updateDirectChatMode(ctx context.Context, rs *runState, i
 	if !rs.leaveDirectChatMode() {
 		return
 	}
+	// **stall の時計を、いまから数え直させる**（設計 3-82）。
+	// **direct chat の間は `checkStalls` を飛ばしているので、`LastSeenAt` も画面の版も
+	// 止まったままである。**引き直さないと、**人間が3時間黙って考えていただけで、
+	// 戻した巡回の `checkStalls` が「止まっている」と読み、pane を閉じて
+	// `failure_state` を書く。**指示を1回も送る前に、である
+	// （Tick は reconcileRunning → checkStalls → dispatch → wakeRuns の順に走る）。
+	rs.resetStallClock(o.now())
 	if !containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
 		o.logger.Info("direct chat を抜けました（作業中の Status ではないので、続きの指示は送りません）",
 			"identifier", issue.Identifier, "状態", issue.State)
 		return
 	}
-	// **`dispatch_state`（既定 `Ready`）へ戻されたら、`running_state` を書く**（設計 3-82）。
-	//
-	// **着手の段2 は、この run では1度も通っていない。**direct chat の用意は段2 を飛ばすし、
-	// 走行中の run を人間が引き取った場合は、そのとき既に `running_state` である。
-	// **書かないと、エージェントが走っているのにカードは着手待ちに見える。**
-	// `agent.max_concurrent_agents_by_state` は `running_state` のバケツで数えるので、
-	// **その run は上限の勘定からも外れる。**同じカンバンを見張る別の機械からは、
-	// 担当者の付いていない着手待ちの issue に見える。
-	if target, need := directChatReturnState(o.cfg.Tracker, issue.State); need {
-		moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.protectedStates())
-		switch {
-		case err != nil:
-			// **書けなくても続ける。**指示を送るほうが、Status の見た目より重い。
-			o.logger.Warn("direct chat から戻った issue の Status を書けませんでした（指示は送ります）",
-				"identifier", issue.Identifier, "書こうとした Status", target, "error", err)
-		case moved.Reached:
-			rs.setIssueState(target)
-			rs.setLastWrittenState(target)
-			o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue),
-				newStatusMove(moved, target),
-				"direct chat から continuo の管理へ戻ったためです")
+	o.returnFromDirectChatAsync(ctx, rs, issue)
+}
+
+// returnFromDirectChatAsync は、direct chat から continuo の管理へ戻す後始末を行う（設計 3-82）。
+//
+// **巡回のループから同期で呼んではならない。**ここは通信を最大4本行う
+// （`UpdateStatus` は ID 指定の取り直しと書き込みで2本、`PostComment` が1本、
+// `agent.get` が1本）。**`reconcileRunning` の中で待つと、GitHub が遅い日に
+// stall 検知もレートリミットの取得も巡回ごと止まる。**
+// **同じ switch の他の分岐は全部、この理由で async へ逃がしている**
+// （`finishRunAsync` / `abandonRunAsync` / `stopAndReleaseAsync`）。
+//
+// **代償。**指示を送る印が立つのは次の巡回になる（既定30秒）。
+// **人間が切りのいいところで戻す操作なので、その待ちは問題にならない。**
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 戻す run。
+// issue: 取り直した issue。
+func (o *Orchestrator) returnFromDirectChatAsync(ctx context.Context, rs *runState, issue tracker.Issue) {
+	o.wg.Add(1)
+	go func() {
+		defer o.wg.Done()
+		// **`dispatch_state`（既定 `Ready`）へ戻されたら、`running_state` を書く**（設計 3-82）。
+		//
+		// **着手の段2 は、この run では1度も通っていない。**direct chat の用意は段2 を飛ばすし、
+		// 走行中の run を人間が引き取った場合は、そのとき既に `running_state` である。
+		// **書かないと、エージェントが走っているのにカードは着手待ちに見える。**
+		// `agent.max_concurrent_agents_by_state` は `running_state` のバケツで数えるので、
+		// **その run は上限の勘定からも外れる。**同じカンバンを見張る別の機械からは、
+		// 担当者の付いていない着手待ちの issue に見える。
+		if target, need := directChatReturnState(o.cfg.Tracker, issue.State); need {
+			moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.protectedStates())
+			switch {
+			case err != nil:
+				// **書けなくても続ける。**指示を送るほうが、Status の見た目より重い。
+				o.logger.Warn("direct chat から戻った issue の Status を書けませんでした（指示は送ります）",
+					"identifier", issue.Identifier, "書こうとした Status", target, "error", err)
+			case moved.Reached:
+				rs.setIssueState(target)
+				rs.setLastWrittenState(target)
+				o.postStatusMove(ctx, issue.Identifier, issueNodeID(issue),
+					newStatusMove(moved, target),
+					"direct chat から continuo の管理へ戻ったためです")
+			}
 		}
-	}
-	// **`agent.get` は1回だけである。**direct chat を抜けた巡回でしか通らない。
-	// **読めなかったときは送る側に倒す。**待ちに倒すと、herdr が答えないあいだ
-	// この run は1つも指示を受け取らない。
-	if st, err := o.agentStatus(ctx, rs); err == nil && st == herdr.AgentStatusWorking {
-		o.logger.Info("continuo の管理へ戻りましたが、エージェントが動いているので turn の終わりを待ちます",
+		// **`agent.get` は1回だけである。**direct chat を抜けた巡回でしか通らない。
+		// **読めなかったときは送る側に倒す。**待ちに倒すと、herdr が答えないあいだ
+		// この run は1つも指示を受け取らない。
+		if st, err := o.agentStatus(ctx, rs); err == nil && st == herdr.AgentStatusWorking {
+			o.logger.Info("continuo の管理へ戻りましたが、エージェントが動いているので turn の終わりを待ちます",
+				"identifier", issue.Identifier, "状態", issue.State)
+			rs.setAwaitTurnEnd()
+			return
+		}
+		o.logger.Info("continuo の管理へ戻りました（同じ pane へ続きの指示を送ります）",
 			"identifier", issue.Identifier, "状態", issue.State)
-		rs.setAwaitTurnEnd()
-		return
-	}
-	o.logger.Info("continuo の管理へ戻りました（同じ pane へ続きの指示を送ります）",
-		"identifier", issue.Identifier, "状態", issue.State)
-	rs.setNeedsPrompt()
+		rs.setNeedsPrompt()
+	}()
 }
 
 // reconcileWorktrees は worktree を走査して身元ファイルを読み、Status を ID 指定で

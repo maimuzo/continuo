@@ -211,6 +211,13 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 	// **持ち回りの判定でコメントを読む枠を、巡回1回ぶんに戻す**（設計 3-77a）。
 	o.resetHandoffFetchBudget()
 
+	// **pane の写像は、この巡回で1回だけ作る**（設計 3-82）。
+	// **候補ごとに引き直すと、`pane.list` と `agent.list` が候補の数だけ飛ぶ。**
+	// **direct chat の候補が1件も無い巡回では1本も飛ばさない**（遅延して作る）。
+	var directChatPanes map[string]herdr.Pane
+	var directChatPanesErr error
+	directChatPanesDone := false
+
 	var claimed []claimedRun
 	for _, issue := range candidates {
 		if ctx.Err() != nil {
@@ -305,7 +312,20 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		//
 		// **調べられなかったときも触らない。**分からないものを触ってよい理由が無い。
 		if directChat {
-			exists, err := o.directChatPaneExists(ctx, issue)
+			if !directChatPanesDone {
+				directChatPanes, directChatPanesErr = o.directChatPanes(ctx)
+				directChatPanesDone = true
+			}
+			if directChatPanesErr != nil {
+				// **「引けなかった」を「pane が無い」と混ぜない**（設計 3-82）。
+				// 混ぜると、herdr の socket が一瞬落ちただけで
+				// **人間が話している pane の隣に2枚目を開くことになる。**
+				o.logger.Warn("pane の一覧を取れないので、direct chat には触りません（次の巡回で見ます）",
+					"identifier", issue.Identifier, "error", directChatPanesErr)
+				o.clearGate(issue.ID)
+				continue
+			}
+			exists, err := o.directChatPaneExists(directChatPanes, issue)
 			if err != nil {
 				o.logger.Warn("direct chat の worktree の置き場所を決められないので、この巡回では触りません",
 					"identifier", issue.Identifier, "error", err)
@@ -581,7 +601,11 @@ func (o *Orchestrator) claimForDispatch(ctx context.Context, issue tracker.Issue
 	// 状態ごとの上限の勘定が、次の巡回で取り直すまで1件ぶんずれる。**
 	if !directChat {
 		rs.setIssueState(o.cfg.Tracker.RunningState)
+		return rs, true
 	}
+	// **用意している最中であることを立てる**（設計 3-82）。
+	// **巡回はこの印を見て、direct chat の印を立てるのを待つ。**
+	rs.beginDirectChatSetup()
 	return rs, true
 }
 
@@ -661,6 +685,21 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 // rs: 再 dispatch する run。
 func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 	issue := rs.issue()
+	// **direct chat のカードは再 dispatch しない**（設計 3-82）。
+	//
+	// **`preflight` は Status を1バイトも見ない。**見るのは信頼登録・置き場所・
+	// worktree の使えるかどうかだけである。**だからここで見ないと素通りする。**
+	// 素通りすると `clearBackoff` が先に走り、段2 の許可リストで落ちたときには
+	// **`stopWorker` が direct chat の門を通らないまま呼ばれる**
+	// （バックオフ待ちの run は巡回が印を立てないので、門は開いている）。
+	//
+	// **バックオフ待ちの run では pane は既に閉じているので、いま失うものは無い。**
+	// **だが「閉じるはずのない run で `pane.close` を呼べる道が残っている」こと自体を残さない。**
+	if config.IsDirectChatState(o.cfg.Tracker, issue.State) {
+		o.logger.Info("direct chat のカードなので、バックオフ明けの再 dispatch を見送ります",
+			"identifier", issue.Identifier, "状態", issue.State)
+		return
+	}
 	if !o.preflight(ctx, issue) {
 		// 検査に落ちたら、この巡回では何もしない。次の巡回でまた見る。
 		return
@@ -671,8 +710,7 @@ func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		// **再 dispatch は direct chat では起きない。**バックオフ待ちの run は
-		// Status が `direct_chat_state` になった時点で `redispatch` の入口の検査に落ちる。
+		// **再 dispatch は direct chat では起きない**（上の入口の検査で落としてある）。
 		o.runStartOrFail(ctx, rs, issue, true, false)
 	}()
 }
