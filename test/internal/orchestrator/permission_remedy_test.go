@@ -44,7 +44,7 @@ func TestBlockedHandoff_非公開なら会話で許可を出す案内を書く(t
 func TestBlockedHandoff_公開なら会話で許可を出す案内を書かない(t *testing.T) {
 	public := false
 	for name, repoIsPrivate := range map[string]*bool{
-		"公開":       &public,
+		"公開":     &public,
 		"取れなかった": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
