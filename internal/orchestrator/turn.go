@@ -241,7 +241,7 @@ func (o *Orchestrator) turnLoop(ctx context.Context, rs *runState, epoch int, aw
 			// （設計 3-11。`Notification` hook は出ず、拒否は静かに起きる）。
 			// 書けるのは「記録を見て確かめてください」までである。
 			o.finishRun(ctx, rs, o.cfg.Tracker.FailureState,
-				blockedHandoffReason(o.cfg.Claude.PermissionMode, stillRunning))
+				blockedHandoffReason(o.cfg.Claude.PermissionMode, rs.issue().RepoIsPrivate, stillRunning))
 			return
 		case turnStalled:
 			o.abandonRun(ctx, rs, "Claude Code の turn が終わったことを検知できませんでした。"+
@@ -400,9 +400,10 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // `auto` の判定役は会話の流れを読むので、**issue のコメントで許可を書くのが対処である。**
 //
 // mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
+// repoIsPrivate: リポジトリが非公開かどうか。nil は「取れなかった」である。
 // stillRunning: esc を送る時点でまだ走っていた subagent の名前の並び。空なら1件も無い。
 // 戻り値: 引き渡しの通知に載せる理由。
-func blockedHandoffReason(mode string, stillRunning []string) string {
+func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []string) string {
 	var b strings.Builder
 	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
 		"continuo は esc を送って画面を閉じましたが、" +
@@ -434,7 +435,7 @@ func blockedHandoffReason(mode string, stillRunning []string) string {
 		"親の記録の末尾には何も残っていないことがあります。" +
 		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
 		"**何の確認だったかは continuo の側には残りません。**")
-	b.WriteString(permissionRemedyText(mode))
+	b.WriteString(permissionRemedyText(mode, repoIsPrivate))
 	return b.String()
 }
 
@@ -450,9 +451,17 @@ func blockedHandoffReason(mode string, stillRunning []string) string {
 // **文面をここ1箇所に置く。**同じ案内が turn.go と restore.go の2箇所にあり、
 // 片方だけ直すと食い違う。
 //
+// **公開リポジトリでは、コメントで許可を出す案内を書かない。**判定役が読む会話には
+// issue のコメントが載るので、**「ここへ許可を書けば通る」と公開の場所へ書くと、
+// それを読んだ第三者が同じ文を書ける。****判定役が書いた人の立場を見るかどうかは
+// 測っていない**ので、通らない前提を置かない。**代わりに `permissions.allow` を案内する。**
+// あちらは設定ファイルなので、第三者は書けない。
+//
 // mode: `claude.permission_mode` の値（起動時に綴りを検査済み）。
+// repoIsPrivate: リポジトリが非公開かどうか。**nil は「取れなかった」である。**
+// 取れなかったときは公開として扱う（分からないものを非公開と決めない）。
 // 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
-func permissionRemedyText(mode string) string {
+func permissionRemedyText(mode string, repoIsPrivate *bool) string {
 	if mode == config.ClaudePermissionModeDontAsk {
 		return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しており、" +
 			"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
@@ -461,13 +470,23 @@ func permissionRemedyText(mode string) string {
 			"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
 			"そのうえで Status を着手待ちへ戻してください。"
 	}
-	return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
-		"**このモードの判定役は会話の流れを読むので、許可の一覧を増やしても解けないことがあります。**" +
+	head := "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
+		"**このモードの判定役は会話の流れを読むので、許可の一覧を増やしても解けないことがあります。**"
+	if repoIsPrivate != nil && *repoIsPrivate {
+		return head +
+			"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
+			"**この issue のコメントに「その操作を許可します」と書いてください。**" +
+			"判定役はそれを読みます。" +
+			"\n**恒久的に効かせたいものは、WORKFLOW.md の `claude.permissions.allow` に足してください。**" +
+			"そのうえで Status を着手待ちへ戻してください。"
+	}
+	return head +
 		"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
-		"**この issue のコメントに「その操作を許可します」と書いてください。**" +
-		"判定役はそれを読みます。**恒久的に効かせたいものは " +
-		"WORKFLOW.md の `claude.permissions.allow` に足してください。**" +
-		"そのうえで Status を着手待ちへ戻してください。"
+		"**WORKFLOW.md の `claude.permissions.allow` に足してください。**" +
+		"\n**このリポジトリは公開なので、issue のコメントで許可を出す方法は案内しません。**" +
+		"判定役が読む会話には issue のコメントが載るため、**同じ文を第三者も書けます。**" +
+		"判定役が書いた人の立場を見るかどうかは測っていません（SECURITY.md の危険の表）。" +
+		"\nそのうえで Status を着手待ちへ戻してください。"
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。
