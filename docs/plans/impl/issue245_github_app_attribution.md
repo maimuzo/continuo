@@ -132,6 +132,7 @@ sequenceDiagram
     A->>F: R3 を書き戻す
     A->>L: ロックを外す
     A-->>A: A3 を標準出力へ1行。gh がそれで投稿する
+    Note over A,GH: ロックを外してから gh が投稿するまでの間に別の誰かが回すと、A3 は失効する（401）。そのときは1回だけ取り直す
     Note over O,GH: どちらも「ロックの中で回して、すぐ使って、捨てる」。持ち続けない
 ```
 
@@ -546,7 +547,8 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 **4つ目には、`continuo github-app token` という手段を用意する。**
 **そのセッションも同じサブコマンドを叩けるので、 attribution を付けられる。**
 **[docs/FAQ.md](../../FAQ.md) で案内する。**
-**「`~/.continuo/github-app-credentials.json` を置いてある人は、continuo の外で走るセッションからも `GH_TOKEN=$(continuo github-app token) gh issue comment …` を使えます」と書く。**
+**「`~/.continuo/github-app-credentials.json` を置いてある人は、continuo の外で走るセッションからも、`TOKEN=$(continuo github-app token) || exit 1` のあとに `GH_TOKEN="$TOKEN" gh issue comment …` と叩けば attribution が付きます」と書く。**
+**1行の `GH_TOKEN=$(…) gh …` の形は、FAQ にも見本にも書かない**（3-82d。トークンが取れなかったとき、手元の認証で投稿してしまう）。
 **条件を落としてはならない。**資格情報は 3-82g の画面を通した人しか持たないので、
 **この設計が入った時点では、資格情報を持つ利用者が1人も居ない。**
 
@@ -654,7 +656,9 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **ホームディレクトリは、差し替えられる関数から引く。**
 [internal/cli/cli.go:84-86](../../../internal/cli/cli.go#L84-L86) に `UserHomeDir` の差し替えられる関数が既にある。
+**その GoDoc は `~/.claude.json` しか名乗っていないので、`~/.continuo/` の資格情報もここから引く、と1行書き足す。**
 **`os.UserHomeDir()` を直に呼んではならない。**呼ぶと、テストが本物のホームの資格情報を読み書きする。
+**読み書きと回転の処理は、新しい package `internal/githubapp` に置く。**本体（3-82d）・`continuo github-app token`（3-82d）・`continuo doctor`（3-82c）・ダッシュボード（3-82g）の4つが、同じ処理を使う。
 
 **`--id` で分けない。**
 **ロックも分けない。**資格情報が1人に1つなので、`--id` ごとにロックを分けると、
@@ -966,9 +970,10 @@ sequenceDiagram
 （[internal/orchestrator/restore.go:748](../../../internal/orchestrator/restore.go#L748)・
 [772行](../../../internal/orchestrator/restore.go#L772)・[892行](../../../internal/orchestrator/restore.go#L892)）。
 
-**GitHub App のトークンが取れない状態で continuo を再起動すると、この3つが動く。**
-**GitHub App のトークンで書くと、GitHub App のトークンが取れずに止まった run では、
-Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1行も残らない。**
+**この3つが走るのは復元の中である。**起動時の検査は「資格情報が無い・取れない」なら起動を止めるので（この節の「取れないときに止める」）、そのときは復元そのものが走らない。
+**理由が要るのは、起動時には取れたトークンが、走行中に使えなくなる場合である**
+（install の範囲に入っていないリポジトリの issue・走行中に GitHub App を消した・install を外した・secret を作り直した）。
+**そのとき GitHub App のトークンで書くと、Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1行も残らない。**
 **attribution は付かないが、`<!-- continuo:self -->` は付くので、機械が書いたことは従来どおり判定できる。**
 
 **止まり方は、経路で違う。**
@@ -976,7 +981,7 @@ Status は `Blocked` へ動くのに、なぜ `Blocked` になったのかが1�
 | いつ | どうするか |
 | --- | --- |
 | **起動時に取れない** | **起動しない。**人間が「エラーで停止して良い」と決めた |
-| **走行中に取れなくなった**（GitHub App のトークンで書く6つ） | **`Error` で1行ログに出して、その投稿だけを諦める。****run は止めない。カンバンも止めない** |
+| **走行中に取れなくなった**（GitHub App のトークンで書く6つ） | **`Warn` で1行ログに出して、その投稿だけを諦める**（いまの6箇所と同じ水準。下）。**run は止めない。カンバンも止めない** |
 | **人間の認証で書く6つ**（持ち回りの4呼び出し・引き渡しの通知・`moveToFailure`） | **落ちない。**GitHub App のトークンを使わないので、取れなくても影響しない |
 | **エージェントの投稿7本**（新しく投稿する6本と、書かせ直しの1本） | **その run は `blocked` で返る。**指示書が「素の `gh issue comment` へ切り替えず、`blocked` で返してください」と書いているためである（3-82e） |
 
@@ -1042,8 +1047,10 @@ sequenceDiagram
 （[internal/prompt/builtin.md:322-326](../../../internal/prompt/builtin.md#L322-L326) が「読み飛ばします」と書いている）。
 **そこへ attribution を付ける利得は無い。**
 
-**あわせて、ログへ `Error` で出す。**
-**どの issue の、どの投稿が、なぜ落ちたか。**そのリポジトリ名も入れる。
+**ログの水準は、いまの6箇所と同じ `Warn` にする。**
+6箇所とも既に、落ちたら識別子を添えて `Warn` を1行出している（例: [internal/orchestrator/comment.go:506](../../../internal/orchestrator/comment.go#L506)）。**そこは変えない。**
+**どの issue の、どの投稿かは、その `Warn` が持つ。**なぜ落ちたか（GitHub App のトークンが取れなかった・401 で2回落ちた）は、`Adapter` が返すエラーの文言に入れる（`Adapter` は `issueNodeID` しか持たないので、識別子は書けない）。
+**`Error` へ上げない。**上げると、トークンとは関係の無い失敗（GraphQL の一時的な失敗）まで `Error` になる。
 
 #### `continuo doctor` が検査すること
 
@@ -1059,7 +1066,7 @@ sequenceDiagram
 
 **資格情報のファイルを読む口は足さない。**
 [internal/doctor/doctor.go:86-91](../../../internal/doctor/doctor.go#L86-L91) の `HomeDir` が既にあり、
-**`~/.claude.json` などはそれで差し替えている。**同じ口から `~/.continuo/` も引く。
+**`~/.claude.json` などはそれで差し替えている。**同じ口から `~/.continuo/` も引く。**その GoDoc にも `~/.continuo/` を1行書き足す**（いまは `~/.claude*` しか名乗っていない）。
 **足すと、ホームを差し替える口が doctor に2つできる。**
 **テストが片方だけを渡すと、資格情報は一時ディレクトリを見るのに `~/.claude.json` は本物を見る、という混ざった状態になる。**
 **その状態は、テストが落ちるのではなく「たまたま通る」形で現れる。**
@@ -1078,15 +1085,17 @@ sequenceDiagram
 **doctor でしか見ないと、doctor を叩かない利用者が181日後に突然止まる。**
 
 **install がカンバンの全リポジトリに及ぶかは、どこでも検査しない。**
-**カンバンに新しいリポジトリの issue が載った日、そこへの投稿だけが落ち、run が止まり、ログに理由が出る。**
+**カンバンに新しいリポジトリの issue が載った日、そこへの投稿だけが落ち、run が `blocked` で返る。止まった理由は人間の認証で issue に残る**（この節の振り分けの表）。
 **同じ「投稿だけが落ちる」形は、トークンが切れた・secret を作り直した・install を外した、でも起きる。**
 **1つだけ先回りしても、残りは捕まらない。**
+**着手の前に範囲を確かめるには、GitHub App のトークンが要る。**確かめるたびに更新用のトークンが1回転し、書き戻しの直前で落ちる窓が着手のたびに開く（3-82d の「回転の回数」）。**その代わり、3-82g の段2（install）の説明で「All repositories」を勧める。**
 
-### 3-82d. 投稿の経路。continuo はトークンだけを返し、投稿は `gh` が行う
+### 3-82d. 投稿の経路。エージェントの投稿は `gh` が行い、continuo はトークンだけを返す
 
-**言いたいこと。****continuo は投稿する箇所を持たない。**
+**言いたいこと。****continuo は、エージェントの代わりに投稿する経路を持たない。**
 **`continuo github-app token` がアクセストークンを標準出力へ1行返し、投稿は `gh` がそのまま行う。**
 **そうすると、issue の新規投稿・コメント・編集・削除を continuo が作り直さずに済む。**
+**continuo 本体が自分で書く12箇所は、これとは別である。**3-82c の表のとおり、うち6箇所を GitHub App のトークンで書く（この節の「continuo 本体の投稿」）。
 
 #### 6-27 が「Go の経路を作らない」と決めたことと、衝突しない
 
@@ -1105,7 +1114,7 @@ sequenceDiagram
 **アクセストークンを返すだけで、本文には触れない。**
 **送るのは `gh` であり、この設計はそこに1バイトも足さない。**
 
-#### continuo は投稿する箇所を持たない。トークンだけを返す
+#### continuo は、エージェントの代わりに投稿しない。トークンだけを返す
 
 **人間の決定（2026-09-09）。**
 
@@ -1117,7 +1126,8 @@ sequenceDiagram
 
 **代わりに、アクセストークンを標準出力へ1行返す。**投稿は `gh` がそのまま行う。
 
-    GH_TOKEN=$(continuo github-app token) gh issue comment {{.issue.url}} --body-file done.md
+    TOKEN=$(continuo github-app token) || exit 1
+    GH_TOKEN="$TOKEN" gh issue comment {{.issue.url}} --body-file done.md
 
 **`gh` は `GH_TOKEN` で認証を差し替えられる。**
 **だから、いま指示書に書いてあるコマンドの前に1つ足すだけで、attribution が付く。**
@@ -1157,7 +1167,7 @@ sequenceDiagram
 
 **指示書には「値を表示しない」と書く。**
 **`continuo github-app token` の出力を、そのまま `echo` させたり、ファイルへ落とさせたりしない。**
-**必ず `GH_TOKEN=$(…)` の形で使わせる。**
+**必ず、いったん変数へ受けてから `GH_TOKEN="$TOKEN"` で `gh` へ渡す形（下の「輪郭」の2行）で使わせる。**
 
 #### `continuo github-app token` の輪郭
 
@@ -1270,13 +1280,17 @@ sequenceDiagram
 **本体が取り直すと、エージェントが持っているトークンが死ぬ。**
 **2つが交互に回すと、互いのトークンを殺し合う。**
 
-**毎回取り直せば、殺し合いは起きない。**
-**ロックが直列化するので、取ったトークンは、次に誰かが回すまで生きている。**
-**その「次」は自分の投稿より後になる。**
+**毎回取り直しても、窓は残る。**
+**ロックが直列化するのは「回す」ところまでで、取ったトークンは、次に誰かが回すまでしか生きていない。**
+**本体は、ロックの中で取って、ロックを外してから投稿する**（1-3）。**その間に別のプロセスが回すと、投稿は 401 で落ちる。**
+**401 を受けたら、資格情報を読み直してトークンを取り直し、1回だけ再送する。**2回目も落ちたら、その投稿だけを諦める（3-82c の「止まり方」の表）。
 
-**それでも 401 の枝は残す。**
-**ロックを取る前に別のプロセスが回していれば、取った直後に死んでいることがありうる。**
-**401 を受けたら、資格情報を読み直してトークンを取り直し、1回だけ再送する。**
+**エージェントにも同じ窓がある。**
+**ロックは `continuo github-app token` が終わった時点で外れ、`gh` の投稿はそのあとに走る。**
+**その間に本体か、もう1本のエージェントが回すと、渡したトークンは投稿の前に失効し、`gh` は 401 で落ちる。**
+**回転は1日に12回前後あるので（下の「回転の回数」）、起きない前提は置けない。**
+**だからエージェントにも1回だけ取り直させる。**指示書に「`gh` が `HTTP 401` で落ちたときだけ、`TOKEN=$(…)` の行からもう1回やり直す。2回目も落ちたら `blocked` で返す」と書く（3-82e）。
+**お願いで塞ぐ形なので完全ではない**（この節の「トークンが見えうる場所」と同じ強さ）。**2回続けて窓に当たる確率は、1回の確率の2乗である。**
 
 **`NewAdapter` には、トークンを取る関数を1つ渡す。**
 **関数にすると、テストが本物の GitHub と本物の資格情報を叩かずに済む。**呼び出しは42箇所ある（本番4・テスト38）。
@@ -1552,6 +1566,7 @@ issue #178（進捗報告のコメントの本文が、指示書の見本どお�
 [internal/cli/cli.go:576](../../../internal/cli/cli.go#L576) で、**両方へ同じ値を渡す。**
 **引数を足すとテストの5箇所も直す。**
 **後者は `Orchestrator` を持たないので、そこで `os.Executable()` を叩く。**
+**`github_app_attribution` は、そこに既に届いている `trackerCfg.Comments.GitHubAppAttribution` から渡す。**決め打ちしない。決め打ちすると、`continuo prompt --show` が実際に送られる文面と違うものを見せる。
 **包むのは `RenderData` の中だけである。**呼ぶ側は包まない。
 **二重に包むと `''\''/home/…/continuo'\'''` になり、`command not found` で全投稿が落ちる。**
 
@@ -1578,8 +1593,9 @@ issue #178（進捗報告のコメントの本文が、指示書の見本どお�
 **`{{if}}` で分けない。**分けると、既定の `false` の利用者にだけ
 「新しい投稿は縮まる」と読める文が届く（`false` では新しい投稿も `gh` を直に叩くので縮まらない）。
 
-**指示書へ1行足す。**「**投稿が失敗したとき、`gh issue comment` へ切り替えて投稿し直さないでください。
-投稿せずに `blocked` で返してください**」。
+**指示書へ2行足す。**「**`gh` が `HTTP 401` で落ちたときだけ、`TOKEN=$(…)` の行からもう1回だけやり直してください**」と
+「**それ以外で失敗したとき、または2回目も落ちたときは、`gh issue comment` へ切り替えて投稿し直さないでください。
+投稿せずに `blocked` で返してください**」。**401 で取り直す理由は 3-82d にある**（ロックを外してから投稿するまでの窓）。
 **「お願い」で塞ぐ形なので完全ではない。****それでも、この設計では機械で止めない。**
 
 **止めるには、エージェントの `Bash` が渡せる引数を絞ることになる**
@@ -1626,15 +1642,14 @@ issue #178（進捗報告のコメントの本文が、指示書の見本どお�
 **それでよい理由は、この検査が守るのが「初日から恒久的に続くずれ」だからである。**
 **恒久的なずれは、次に `gh api` が届いた起動で必ず捕まる。**
 
-**差し替えられる関数を `Options` へ足す。**
-**`runStartupChecks` は `o.selfLogin` を持たない**（あれは `ensureGHLogin` が巡回のなかで遅れて取るもので、
-起動時の検査はその前に走る）。**だから起動時の検査は `gh api user` を自分で1回叩く。**
-**`Orchestrator` には既にある。**
-[internal/orchestrator/orchestrator.go:246](../../../internal/orchestrator/orchestrator.go#L246) が
-「**nil なら `gh api user --jq .login`（`tracker.RunGHAPIUserLogin`）を使う**」と書き、
-[510行](../../../internal/orchestrator/orchestrator.go#L510) が既定を入れている。**そこを使う。新しく足さない。**
-**足すと、同じ外部の呼び出しに差し替え口が2つできる。**
-**テストが片方だけを渡すと、落ちるのではなく「たまたま通る」形で現れる**（3-82c が doctor について同じことを禁じている）。
+**差し替えられる関数は、検査を置く package の `Options` に1つ足す。**
+**起動時の検査は [internal/daemon/checks.go:43-49](../../../internal/daemon/checks.go#L43-L49) の `runStartupChecks` にあり、`Orchestrator` の `ghLogin`（[internal/orchestrator/orchestrator.go:280](../../../internal/orchestrator/orchestrator.go#L280)。非公開）には触れない。**
+**`o.selfLogin` も持たない**（あれは `ensureGHLogin` が巡回のなかで遅れて取るもので、起動時の検査はその前に走る）。
+**だから `daemon.Options` に `GHLogin tracker.GHLoginFunc` を足し、同じ値を [internal/orchestrator/orchestrator.go:246](../../../internal/orchestrator/orchestrator.go#L246) の `orchestrator.Options.GHLogin`（既にある口）へも渡す。**
+**nil なら両方とも `tracker.RunGHAPIUserLogin` になる**（[510行](../../../internal/orchestrator/orchestrator.go#L510) が既定を入れている）。
+**`Orchestrator` の側には新しい口を足さない。**同じ外部の呼び出しに差し替え口が2つできると、
+**テストが片方だけを渡したとき、落ちるのではなく「たまたま通る」形で現れる**（3-82c が doctor について同じことを禁じている）。
+**`continuo doctor` は `doctor.Options` に同じ型の口を1つ足す**（3-82c の「`continuo doctor` が検査すること」）。
 
 **走っている最中に `gh auth switch` を叩かれた場合は、拾わない。**
 **拾う周期が無いためである。**
@@ -1713,7 +1728,7 @@ sequenceDiagram
 | 画面 | 押す前に何を出すか | 押すと何が起きるか |
 | --- | --- | --- |
 | **段1（作る）** | **GitHub App の名前・与える権限2つ**（`Issues` の読み書き、`Metadata` の読み取り）**・戻り先の URL・「まだ何も書き込みません」・「この GitHub App はあなた1人のものです」** | GitHub の確認画面へ移る |
-| **段2（install）** | **どのリポジトリへ入れるか・「入れた先の issue にだけコメントできます」・「あとから GitHub の画面で外せます」** | GitHub の install の画面へ移る |
+| **段2（install）** | **どのリポジトリへ入れるか・「入れた先の issue にだけコメントできます。カンバンに載るリポジトリが増えても困らないよう、All repositories を勧めます」・「あとから GitHub の画面で外せます」** | GitHub の install の画面へ移る |
 | **段3（認可）** | **「ここから先、機械の投稿はあなたの名前のまま『– with <GitHub App の表示名>』が付きます」・約6か月で切れること** | GitHub の認可の画面へ移る |
 | **段4（完了）** | — | **認可したアカウント名を出す。**`gh api user` と違っていたら、その場で両方を並べる（3-82f） |
 
@@ -1765,6 +1780,12 @@ sequenceDiagram
 | **`redirect_url`** | `http://127.0.0.1:<port>/github-app/created` | **作成のあと**（`?code=…&state=…`） |
 | **`setup_url`** | `http://127.0.0.1:<port>/github-app/installed` | **install のあと**（`?installation_id=…`） |
 | **`callback_urls`** | `["http://127.0.0.1:<port>/github-app/authorized"]` | **認可のあと**（`?code=…&state=…`） |
+
+**`<port>` には、設定の値ではなく `Addr()` が返す実際のポートを入れる**（[internal/server/server.go:238-250](../../../internal/server/server.go#L238-L250)）。
+**`server.port: 0` は OS が空きポートを選ぶ**ので、設定の値をそのまま埋めると戻り先が `127.0.0.1:0` になり、GitHub から戻れない。
+
+| manifest の欄 | 何を書くか | どの画面へ戻るか |
+| --- | --- | --- |
 | **`request_oauth_on_install`** | **`false`** | install と認可を分ける |
 | **`public`** | `false` | 自分だけが使う |
 | **`default_permissions`** | `{"issues": "write", "metadata": "read"}` | — |
@@ -1779,6 +1800,24 @@ sequenceDiagram
 **だから分ける。**
 
 **`false` にすると分かれることは、実測した**（下の「実測してあること」、7-6）。
+
+#### ダッシュボードに、ホームと GitHub への差し替え口を足す
+
+**`server.Options` は `Port` / `Source` / `Logger` / `Now` の4つしか持たない**（[internal/server/server.go:117-128](../../../internal/server/server.go#L117-L128)）。
+**このままでは、資格情報の置き場所と github.com への接続を差し替えられない。**テストが本物の `~/.continuo/github-app-credentials.json` を上書きし、本物の github.com を叩く。
+
+**足すのは `GitHubApp *server.GitHubAppOptions` の1つで、中身は次の5つである。**
+
+| 何 | 中身 | テストは何を渡すか |
+| --- | --- | --- |
+| **資格情報の置き場所** | `githubapp.Store`（ホームの絶対パスから作る。本番は `instance.Root()` と同じホーム） | 一時ディレクトリ |
+| **HTTP のクライアント** | `*http.Client` | `httptest.Server` へ向けたもの |
+| **GitHub の接続先** | `githubapp.Endpoints`（`https://github.com` と `https://api.github.com`） | `httptest.Server` の URL |
+| **`gh api user` を叩く関数** | `tracker.GHLoginFunc`（3-82f の `daemon.Options.GHLogin` と同じ値） | 固定のログイン名を返す関数 |
+| **manifest の `url`** | `https://github.com/maimuzo/continuo` | 任意の URL |
+
+**`nil` なら `/github-app` の経路を張らない。**既にあるダッシュボードのテストは、この値を渡さないので変わらない。
+**`internal/server` から `os.UserHomeDir()` を直に呼ばない**（3-82b）。
 
 #### CSP を、この4枚だけ緩める
 
@@ -2101,7 +2140,7 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 
 ## 8. 設計レビューの記録
 
-**設計レビューは2周回した。**方針が変わった 2026-09-09（GitHub App の作成をこの設計に含める）から数え直したものである。
+**設計レビューは3周回した。**方針が変わった 2026-09-09（GitHub App の作成をこの設計に含める）から数え直したものである。
 **Critical と High が0件になっていないので、収まっていない。**
 **3周目以降は、2026-09-10 の人間の許可で回す**（10-4）。issue #245 のコメントに貼った判断票を、そのまま写す。
 **判断票の中の行番号は、当時の [docs/plans/continuo_design.md](../continuo_design.md) のものである。**いまは 3-82 をこのファイルへ移したので、その行は指せない。
@@ -2110,6 +2149,7 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 | --- | --- | --- | --- | --- | --- |
 | 1周目 | 2 | 5 | 7 | 3 | 1 |
 | 2周目 | 0 | 6 | 6 | 5 | 1 |
+| 3周目 | 0 | 5 | 3 | 3 | 0 |
 
 ### 設計レビュー1周目の対応表（方針が変わったので0から数え直したもの）
 
@@ -2207,6 +2247,31 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 **分類について。**レビュワーは「`git` を叩けないので、前の周の commit でその行が違っていたことは1件も示せていない」と明記しています。
 **渡した対応表が「新設した」「揃えた」「書き直した」と書いている段の中にある指摘だけを「1周目の直しが持ち込んだ」とし、残りは全部「前の周に既に在った」として扱った、とも書いています。**
 **この扱いは [.claude/skills/worker-briefing/SKILL.md](../../../.claude/skills/worker-briefing/SKILL.md) の 2-6 のとおりなので、そのまま採ります。**
+
+### 設計レビュー3周目の対応表
+
+**件数。Critical 0 / High 5 / Medium 3 / Low 3 = 11件。収まっていません**（Critical と High が0件ではない）。
+**設計が指すコードの行番号は、レビュワーが38本を開いて照合し、ずれは0件でした。**
+
+**11件のうち10件を直します。**直さないのは Medium の1件（install の範囲を着手の前に検査する）で、理由は表にあります。
+
+| 短縮名 | レベル | 指摘内容 | 直す | 合理的理由と、私の検算 | 分類 |
+| --- | --- | --- | --- | --- | --- |
+| **ダッシュボードが資格情報を書く口が無い** | **High** | 3-82g はダッシュボードに資格情報の書き込みと github.com との交換をさせるのに、ホームと HTTP の差し替え口が設計に無い。3-82b は `os.UserHomeDir()` を禁じている | **直す** | **確かめました。**`server.Options` は `Port` / `Source` / `Logger` / `Now` の4つだけです（[internal/server/server.go:117-128](../../../internal/server/server.go#L117-L128)）。`GitHubApp *server.GitHubAppOptions`（置き場所・HTTP のクライアント・接続先・`gh api user` の関数・manifest の `url`）を足し、`nil` なら経路を張らない、と 3-82g に書きました | 前の周に既に在った |
+| **禁じた1行の形を、FAQ と見本が配る** | **High** | `GH_TOKEN=$(…) gh …` の1行の形が 3-82a・3-82d に3箇所あり、同じ 3-82d と 3-82e が「1行では書かせない」と決めている | **直す** | **確かめました。**`GH_TOKEN=$(` で検索して3件（549・1120・1160行）。3件とも `TOKEN=$(…) \|\| exit 1` のあとに `GH_TOKEN="$TOKEN"` で渡す2行の形へ直しました | 前の周に既に在った |
+| **エージェントのトークンは投稿の前に失効しうる** | **High** | ロックは `continuo github-app token` が終わった時点で外れ、`gh` の投稿はそのあと。その間に別のプロセスが回すと 401 で落ち、エージェントには再送が無い | **直す** | **確かめました。**1-3 の図が「ロックを外す」→「投稿する」の順で、本体も同じ窓を持ちます。**エージェントにも1回だけ取り直させます**（指示書に「`HTTP 401` のときだけ `TOKEN=$(…)` の行からやり直す。2回目も落ちたら `blocked`」）。お願いで塞ぐ形なので完全ではないと明記しました | 前の周に既に在った |
+| **「Options へ足す」と「新しく足さない」が同じ段落に並ぶ** | **High** | 3-82f が4行のあいだで両方を言う。指している `ghLogin` は非公開で、検査を置く `internal/daemon` から触れない | **直す** | **確かめました。**`daemon.Options` に `GHLogin` は無く（`grep GHLogin internal/daemon/` で0件）、`orchestrator.Options.GHLogin` はあります。**`daemon.Options` に1つ足し、同じ値を orchestrator の既にある口へも渡す**形へ書き直しました | 前の周に既に在った（2周目の直しがこの段落を触っている） |
+| **3-82d の見出しが本体の投稿を否定している** | **High** | 「continuo は投稿する箇所を持たない」が、同じ節の「continuo 本体の投稿」と 3-82c の12箇所の表と正反対 | **直す** | 見出しを「エージェントの投稿は `gh` が行い、continuo はトークンだけを返す」に変え、言いたいことに「本体が自分で書く12箇所は別である」を足しました | 前の周に既に在った |
+| **install の範囲外のリポジトリを着手の前に検査しない** | Medium | 静的に分かる install の範囲を、既にある着手前の関門（`noteUntrusted`）で捕まえられる | **直さない** | **確かめるにはトークンが要ります。**着手のたびに更新用のトークンが1回転し、書き戻しの直前で落ちる窓が着手のたびに開きます（3-82d の「回転の回数」）。`noteUntrusted` は `~/.claude.json` を読むだけでトークンを使いません。**範囲外だったときは run が `blocked` で返り、止まった理由は人間の認証で issue に残る**（3-82c の表）ので、人間が気づけます。**代わりに 3-82g の段2 の説明で「All repositories」を勧める**1文を足しました | 前の周に既に在った |
+| **moveToFailure を人間の認証にする理由が、起動時検査と両立しない** | Medium | 「取れない状態で再起動すると3つが動く」が根拠だが、取れなければ起動しないので復元が走らない | **直す** | **確かめました。**[internal/daemon/daemon.go:302-308](../../../internal/daemon/daemon.go#L302-L308) は検査に落ちたら `return` し、復元（308行）は走りません。理由を「起動時には取れたトークンが走行中に使えなくなる場合（install の範囲外・消した・外した・作り直した）」へ書き替えました。振り分けは変えません | 前の周に既に在った |
+| **走行中の失敗のログの水準が、同じ節で割れている** | Medium | 「`Error` で出す」と「いまの実装は `Warn`」が同じ節にあり、`Error` に入れろという中身は `Adapter` に届かない | **直す** | **確かめました。**6箇所とも識別子を添えて `Warn` を出しています（例: [internal/orchestrator/comment.go:506](../../../internal/orchestrator/comment.go#L506)）。**`Warn` に揃え、なぜ落ちたかは `Adapter` のエラーの文言に入れる**と書き直しました。`Error` へ上げると、トークンと関係の無い失敗まで上がります | 前の周に既に在った |
+| **server.port が 0 のとき、戻り先が 127.0.0.1:0 になる** | Low | manifest の戻り先に設定の値を埋めると、`server.port: 0` の人は GitHub から戻れない | **直す** | [internal/server/server.go:238-250](../../../internal/server/server.go#L238-L250) の `Addr()` を使う、と1段落足しました | 前の周に既に在った |
+| **ホームを引く2つの GoDoc が `~/.claude` しか名乗っていない** | Low | 資格情報を引く口として使う2つの GoDoc が、`~/.claude*` だけを名乗っている | **直す** | 2つとも「`~/.continuo/` も引く」と1行書き足す、と設計に書きました。あわせて、読み書きと回転の処理を `internal/githubapp` に置くことを 3-82b に書きました | 前の周に既に在った |
+| **`continuo prompt --show` へ真偽をどこから渡すかが無い** | Low | `internal/cli` の側で `github_app_attribution` の出どころが書かれていない | **直す** | [internal/cli/cli.go:576](../../../internal/cli/cli.go#L576) には `trackerCfg` が届いています。そこから渡す、決め打ちしない、と書きました | 前の周に既に在った |
+
+**Info の2件（資格情報のロックの60秒・設定キーの置き場所）は、レビュワーが新しい根拠なしには挙げませんでした。**そのままです。
+
+**3周目で収まらなかったので、issue と設計を突き合わせ直してから4周目を回す**（10-4）。
 
 ---
 
