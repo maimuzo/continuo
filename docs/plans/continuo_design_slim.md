@@ -513,7 +513,7 @@ JSON なら本文は `body` の値にしかならず、**本文から `authorAss
 ```yaml
 claude:
   tool_gate:
-    mode: off                               # off / on / public_only。既定は off
+    mode: "off"                             # off / on / public_only。既定は off
     model: ""                               # 判定させるモデル。既定は空（名前の一覧が公式文書に無い。3-64c）
     tools: ["Bash"]                         # 判定に回す道具。空なら全部
 ```

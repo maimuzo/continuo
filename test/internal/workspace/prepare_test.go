@@ -1,4 +1,4 @@
-// {"RUCM-CFG-SHA256": "065bcb4e3c565798e567b17782f7ad234b2ef7eea433c4c0d000a348a2942dd3", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
+// {"RUCM-CFG-SHA256": "92ded46d6909f69a05604c9e8f51c65d956f3f77322ad2747742950263cd9d7d", "SOURCE": "docs/spec/usecases/particular_case/本家のリポジトリへ PR を出す.cfg.json"}
 package workspace_test
 
 import (
