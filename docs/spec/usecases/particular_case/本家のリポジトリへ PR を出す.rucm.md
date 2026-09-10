@@ -10,7 +10,7 @@
 - `docs/plans/continuo_design.md#3-21`（打ち切りは「画面の版」で測る）
 - `docs/plans/continuo_design.md#3-22`（base の決め方。`herdr.worktree.base` が null なら既定 branch）
 - `docs/plans/continuo_design.md#3-23`（hook の中身は外部入力であり、そのまま信じない）
-- `docs/plans/continuo_design.md#3-64`（危ない道具の呼び出しの判定。`public_only` の既定）
+- `docs/plans/continuo_design.md#3-64`（危ない道具の呼び出しの判定。`public_only` のときの掛かり方）
 - `docs/plans/continuo_design.md#3-78b`（雛形の WORKFLOW.md へ足す本文。hook の cwd の実測）
 - `docs/plans/continuo_design.md#4-1`（誰がどの遷移を起こすか）
 - `internal/workspace/prepare.go` の `resolveBase` と `NativeRefDefaultBranch`
@@ -26,7 +26,7 @@
 ```rucm
 USE CASE NAME: 本家のリポジトリへ PR を出す
 BRIEF DESCRIPTION: issue は非公開のリポジトリにあり、コードは public の fork にある。システムは issue のリポジトリの既定 branch を base にした worktree を1つ作り、エージェントをそこで起動する。エージェントは issue からコードのリポジトリの名前を読み、worktree の外の clone でコードを直し、fork の origin へ push し、本家のリポジトリへ PR を出す。システムは worktree の中身を見ずに Status を動かし、成果が worktree の外にあるままでも片付けを通す。
-PRECONDITION: システムは常駐している。issue のリポジトリは非公開であり、コードを持たない。コードのリポジトリは public の fork であり、本家のリポジトリを upstream に持つ。claude.tool_gate.mode は既定の public_only である。claude.permission_mode は既定の dontAsk であり、システムはエージェントに --add-dir を渡さない。cleanup.on_states は Done だけを持つ。WORKFLOW.md の本文は worktree の外の clone で直してよいと書いている。issue の本文にコードのリポジトリの名前を書いたのは OWNER である。
+PRECONDITION: システムは常駐している。issue のリポジトリは非公開であり、コードを持たない。コードのリポジトリは public の fork であり、本家のリポジトリを upstream に持つ。claude.tool_gate.mode は public_only である。claude.permission_mode は dontAsk であり、システムはエージェントに --add-dir を渡さない。cleanup.on_states は Done だけを持つ。WORKFLOW.md の本文は worktree の外の clone で直してよいと書いている。issue の本文にコードのリポジトリの名前を書いたのは OWNER である。
 PRIMARY ACTOR: 巡回タイマー
 SECONDARY ACTORS: エージェント、GitHub Projects v2、利用者
 DEPENDENCY: なし

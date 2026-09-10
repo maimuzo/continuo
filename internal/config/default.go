@@ -200,7 +200,7 @@ func DefaultConfig() *Config {
 			HookBridge: ClaudeHookBridgeConfig{
 				Listen: nil,
 			},
-			// **既定では判定を掛けない**（2026-09-09 の OWNER の判断。issue #259）。
+			// **既定では判定を掛けない。**
 			// この判定は会話を読まないので、**人間が issue のコメントで許可を出しても通らない。**
 			// 担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。
 			// 掛けたい人は public_only か on を書く。
