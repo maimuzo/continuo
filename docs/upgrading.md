@@ -226,7 +226,7 @@ continuo が次に送る指示が、その質問への回答として消費さ�
 
 **どう変わったか。**カードを `Direct Chat` へ動かしているあいだ、
 continuo は**指示を送らず、`CONTINUO-STATUS:` の行も読まず、Status も動かさず、pane も worktree も片付けません。**
-**pane がまだ無ければ、そこで1つ用意します。**
+**pane がまだ無ければ、そこで1つ用意します**（continuo がその issue を処理中でないときだけです）。
 `In Progress` か `Ready` へ戻すと、**同じ pane・同じ会話のまま**続きの指示を送ります。
 
 **使うのに要るのは1つだけです。カンバンの画面で Status の選択肢を1つ足してください**（名前は `Direct Chat`）。
