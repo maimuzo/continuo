@@ -73,6 +73,16 @@ type TrackerCommentsConfig struct {
 	Marker string `yaml:"marker"`
 	// SelfMarker は continuo 自身が書くコメントの印である。次の turn の入力からはこの印のコメントを外す。
 	SelfMarker string `yaml:"self_marker"`
+	// GitHubAppAttribution は、機械（continuo 本体と、continuo が起動したエージェント）が issue へ
+	// 新しく書くコメントを GitHub App のトークンで投稿し、GitHub の画面に attribution
+	// （`– with <GitHub App の表示名>`）を付けるかどうかである
+	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c）。
+	//
+	// **既定は偽。**書かない利用者の continuo はいままでどおり動く。
+	// **真にすると、起動時に GitHub App のトークンが取れなければ起動しない。**
+	// 資格情報（`~/.continuo/github-app-credentials.json`）は commit されないので、
+	// **チームで WORKFLOW.md を共有していても、GitHub App は人ごとに1つ作る。**
+	GitHubAppAttribution bool `yaml:"github_app_attribution"`
 }
 
 // TrackerProviderConfig は GitHub Projects v2 アダプタが所有する設定である。

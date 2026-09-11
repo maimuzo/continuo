@@ -6,8 +6,10 @@
 package lock
 
 import (
+	"errors"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/maimuzo/continuo/internal/i18n"
 )
@@ -88,4 +90,43 @@ func (l *Lock) Release() error {
 		return i18n.Errorf(i18n.KeyLockReleaseCloseFailed, err)
 	}
 	return nil
+}
+
+// acquireWaitInterval は AcquireWait がロックを取り直す間隔である。
+//
+// **flock(2) には「空くまで待つ」形（LOCK_EX だけ）があるが、それを使うと期限を切れない。**
+// 期限が要るのは、資格情報のロックを掴んだまま落ちた相手を待ち続けないためである。
+const acquireWaitInterval = 100 * time.Millisecond
+
+// AcquireWait は Acquire と同じロックを、別のプロセスが放すまで timeout を上限に待って取る
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「同時に叩かれたとき」）。
+//
+// **二重起動を止めるロックには使わない。**あちらは待たずに即座に終了する（Acquire）。
+// **使うのは GitHub App の資格情報のロック**（`~/.continuo/github-app-credentials.lock`）だけである。
+// 更新用のトークンは1回使うと無効になるので、本体・`continuo github-app token`・ダッシュボードが
+// 「読む → 回す → 書き戻す」を同時に走らせると、片方の資格情報が死ぬ。だから待つ形が要る。
+//
+// **hook の挙動は変えない。**足したのは新しい関数で、Acquire の取り方は1バイトも変えていない
+// （CLAUDE.md の「hook の挙動が変化する変更」の門には当たらない）。
+//
+// path: ロックファイルの絶対パス。親ディレクトリは呼び出し側が事前に作成しておくこと。
+// timeout: 待つ上限。0 以下なら1回だけ試す（Acquire と同じ）。
+// 戻り値: ロックを獲得できれば *Lock を返す。上限まで待っても別のプロセスが放さなければ
+// ErrAlreadyRunning を包んだエラーを返す。ファイルを開けない場合は待たずにそのエラーを返す
+// （Acquire と同じく ErrAlreadyRunning を包まない）。
+func AcquireWait(path string, timeout time.Duration) (*Lock, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		l, err := Acquire(path)
+		if err == nil {
+			return l, nil
+		}
+		if !errors.Is(err, ErrAlreadyRunning) {
+			return nil, err
+		}
+		if !time.Now().Before(deadline) {
+			return nil, i18n.Errorf(i18n.KeyLockAcquireWaitTimeout, ErrAlreadyRunning, path, timeout)
+		}
+		time.Sleep(acquireWaitInterval)
+	}
 }

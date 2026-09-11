@@ -282,7 +282,7 @@ func asProjectV2ItemNode(item map[string]any) map[string]any {
 // trusted: `<owner>/<repo>` が信頼登録されているかを返す関数。nil なら全て信頼済み扱い。
 func newAdapterWithTrust(t *testing.T, fs *fakeGraphQLServer, trusted tracker.RepoTrustFunc) *tracker.Adapter {
 	t.Helper()
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, trusted)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, trusted, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -297,7 +297,7 @@ func newBootstrappedAdapter(
 	fs *fakeGraphQLServer,
 ) *tracker.Adapter {
 	t.Helper()
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}

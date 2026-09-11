@@ -1172,7 +1172,7 @@ open http://127.0.0.1:8787/          # issue / Status / turn 数 / 最後に hoo
 curl -s http://127.0.0.1:8787/api/v1/state | jq .
 ```
 
-**127.0.0.1 からしか繋がらない**（読むだけの窓であり、外へ晒すものではない）。
+**127.0.0.1 からしか繋がらない**（読むだけの窓であり、外へ晒すものではない。例外は GitHub App を作る `/github-app` の画面だけで、そこは `~/.continuo/github-app-credentials.json` を書く）。
 
 **トークンの表は2つあります。**上は**いま走っている run のぶん**で、
 run が終わると画面から消えます。下の「run をまたぐ累計」（JSON では `cumulative_totals`）は、

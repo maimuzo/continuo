@@ -221,5 +221,8 @@ func translate(key string, args ...any) string {
 // （設計 3-35）。テンプレートに書いたキーは Go の定数ではないので、
 // このファイルを読まないと打ち間違いを見つけられない。
 //
-// 戻り値: テンプレートの原文。
-func TemplateSource() string { return templateText }
+// **GitHub App の画面のテンプレート（githubapp_template.go）の原文も繋げて返す。**
+// 別々に返すと、片方のキーの打ち間違いが検査を素通りする。
+//
+// 戻り値: テンプレートの原文（2枚ぶん）。
+func TemplateSource() string { return templateText + "\n" + githubAppTemplateText }

@@ -5,15 +5,18 @@
 // 起動するかどうかは `New` が決める。null を渡すと `New` は `nil` を返し、
 // **socket も goroutine も1つも作らない。**
 //
-// **読むだけの窓である。**やることは3つだけである。
+// **読むだけの窓に、GitHub App を作る導線を1本足したものである。**やることは4つである。
 //
 //	実行中の run の一覧を出す   … issue / Status / turn 数 / 最後に hook を受けた時刻
 //	トークンの集計を出す        … `requestId` で重複排除済みの累計（設計 3-15）
 //	それを HTML と JSON で返す  … GET だけ
+//	GitHub App を作る導線を出す … `/github-app` の5本（docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。これも GET だけ
 //
-// **書き込みの経路は作らない。**run を止める・Status を書くといった操作は
+// **run を動かす書き込みの経路は作らない。**run を止める・Status を書くといった操作は
 // 一切受け付けない。**このサーバは認証を持たない**ので、操作を受け付けたら
 // 同じマシンの任意のプロセスから continuo を動かせてしまう。
+// **書くのは GitHub App の5本の経路が触る資格情報のファイル（`~/.continuo/github-app-credentials.json`）だけで、
+// 書く先は GitHub との往復の結果に限る。**`state` が合わない要求は1バイトも書かない（3-82g）。
 //
 // **待ち受けるアドレスは 127.0.0.1 に固定である**（`LoopbackHost`）。設定から変えられない。
 // run の中身（issue の URL・worktree のパス・トークンの消費）は外へ晒すものではない。
@@ -38,8 +41,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/githubapp"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // LoopbackHost は待ち受けるアドレスである。
@@ -80,10 +85,15 @@ const (
 
 	// DefaultShutdownTimeout は Close が処理中の応答を待つ上限である。
 	//
-	// **1秒しか待たない。**このダッシュボードは読み取り専用で（`GET` しか受けない）、
-	// 途中で切れて困る書き込みが1つも無い。終了は3段の直列（ダッシュボード →
+	// **1秒しか待たない。**このダッシュボードは `GET` しか受けず、run の状態を変える
+	// 書き込みが1つも無い。終了は3段の直列（ダッシュボード →
 	// hook の受け口 → turn ループ）なので、ここで長く待つと、その分だけ
 	// 「Ctrl+C を押したのに何も起きない」時間が伸びる。
+	//
+	// **GitHub App の経路（3-82g）が資格情報を書く往復も、この1秒で切る。この値は伸ばさない。**
+	// 途中で切れると使い捨ての `code` を消費したのに何も書けない状態になるが、段1 と段3 の画面が
+	// 「途中で continuo を止めたら、この段からやり直してください」と案内する。伸ばすと、
+	// run の面倒を見る仕事の終了が、設定の画面のために遅れる。
 	//
 	// **この期限を過ぎたら待つのをやめて叩き切る**（`http.Server.Close`）。
 	// 期限切れを「閉じられなかった」として持ち帰らない。
@@ -125,6 +135,30 @@ type Options struct {
 	Logger *slog.Logger
 	// Now は現在時刻を返す関数である。nil なら time.Now を使う。
 	Now func() time.Time
+	// GitHubApp は GitHub App を作る導線（`/github-app` の5本の経路）に要るものである
+	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。
+	// **nil なら、その5本の経路を張らない。**既にあるダッシュボードのテストは渡さないので変わらない。
+	// **internal/daemon は、ダッシュボードが開くかぎり `github_app_attribution` の値に関わらず常に渡す**
+	// （`false` で起動して画面を通す手順が、これに依る。3-82c）。
+	GitHubApp *GitHubAppOptions
+}
+
+// GitHubAppOptions は `/github-app` の画面が GitHub と資格情報に触るための口である（設計 3-82g）。
+//
+// **`internal/server` から `os.UserHomeDir()` を直に呼ばない**（3-82b）。置き場所は Store で受け取る。
+// **テストは一時ディレクトリの Store と、httptest.Server へ向けた HTTPClient と Endpoints を渡す。**
+type GitHubAppOptions struct {
+	// Store は資格情報の置き場所である（本番は `~/.continuo/`）。
+	Store githubapp.Store
+	// HTTPClient は github.com と往復するクライアントである。nil なら githubapp が既定を組み立てる。
+	HTTPClient *http.Client
+	// Endpoints は GitHub の接続先である。空の欄は本番の値になる。
+	Endpoints githubapp.Endpoints
+	// GHLogin は `gh api user` を叩く関数である（既定の名前 `continuo-<ログイン名>` と、
+	// 認可した人との突き合わせに使う。3-82f）。nil なら tracker.RunGHAPIUserLogin。
+	GHLogin tracker.GHLoginFunc
+	// ProjectURL は manifest の `url` に書く値である（continuo のリポジトリの URL）。
+	ProjectURL string
 }
 
 // Server は HTTP ダッシュボードの listener と応答の組み立てを持つ。
@@ -137,6 +171,13 @@ type Server struct {
 	logger *slog.Logger
 	now    func() time.Time
 	http   *http.Server
+	// githubApp は `/github-app` の経路に要るものである。nil なら経路を張らない（設計 3-82g）。
+	githubApp *GitHubAppOptions
+	// createState は段1（作る）の `state`、authorizeState は段3（認可）の `state` である
+	// （3-82g「`state` を必ず突き合わせる」）。**別々に1本ずつ持ち、それぞれ専用の mutex で守る。**
+	// `mu` は使わない（`ln` と `closed` 用）。
+	createState    oauthState
+	authorizeState oauthState
 
 	// mu は ln と closed を守る。
 	mu     sync.Mutex
@@ -176,7 +217,7 @@ func New(opts Options) (*Server, error) {
 		now = time.Now
 	}
 
-	s := &Server{port: port, source: opts.Source, logger: logger, now: now}
+	s := &Server{port: port, source: opts.Source, logger: logger, now: now, githubApp: opts.GitHubApp}
 	// **期限を4つとも埋める。**このサーバは認証を持たないので、同じマシンの
 	// どのプロセスからでも接続できる。1本の接続で goroutine を握られ続けないようにする。
 	s.http = &http.Server{
@@ -254,9 +295,12 @@ func (s *Server) Addr() string {
 // **`nil` レシーバでも安全である**（`New` が返した nil をそのまま渡してよい）。
 //
 // **期限を過ぎたら待たない。**`http.Server.Close` で接続ごと落とす。
-// **そうしてよい理由は、このサーバが読み取り専用だからである。**`GET` しか受けず、
-// 途中で切れて困る書き込みが1つも無い。応答を読まない相手が1本いるだけで
+// **そうしてよい理由は、このサーバが run の状態を変える書き込みを1つも持たないからである。**
+// `GET` しか受けない。応答を読まない相手が1本いるだけで
 // continuo の終了が伸びるほうが、運用の妨げになる。
+// **GitHub App の経路（3-82g）が資格情報を書く往復も、ここで切られうる。**切られても
+// ファイルは「古い内容のまま」か「新しい内容」のどちらかにしかならず（一時ファイルへ書いてから
+// 差し替える）、画面がその段からやり直すよう案内する。
 //
 // ctx: 処理中の応答を待つ上限。**期限を持つものを渡すこと**（`DefaultShutdownTimeout` が
 // その目安である）。期限が無いと、応答が返らない相手を待って終了が止まる。
@@ -283,8 +327,8 @@ func (s *Server) Close(ctx context.Context) error {
 	}
 
 	// **待たずに叩き切る側へ倒す。**`Shutdown` は処理中の応答が終わるのを待つが、
-	// このサーバは読み取り専用なので、途中で切れて困る書き込みが1つも無い。
-	// 期限を過ぎたら `Close` で接続ごと落とす。
+	// このサーバは run の状態を変える書き込みを1つも持たない（GitHub App の経路が書く
+	// 資格情報は、切られても壊れない。上の GoDoc）。期限を過ぎたら `Close` で接続ごと落とす。
 	if err := s.http.Shutdown(ctx); err != nil {
 		s.logger.Warn("ダッシュボードの応答が期限内に終わらないので、接続を切って閉じます",
 			"timeout", DefaultShutdownTimeout, "reason", err)
@@ -324,12 +368,20 @@ func (s *Server) Handler() http.Handler {
 //
 // **GET（と、その裏返しの HEAD）しか受けない。**`net/http` の ServeMux は
 // メソッド付きのパターンに一致しないリクエストへ 405 を返すので、
-// **POST / PUT / DELETE はハンドラまで届かない。**書き込みの経路は存在しない。
+// **POST / PUT / DELETE はハンドラまで届かない。**run を動かす書き込みの経路は存在しない。
 //
-// 経路は2本である（`SPEC.md` 13.7.1 / 13.7.2）。
+// 経路は、仕様の2本（`SPEC.md` 13.7.1 / 13.7.2）と、GitHub App を作る導線の5本である
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。
+// **5本は `Options.GitHubApp` が nil なら張らない。全部 GET である。**
+// GitHub App の経路は資格情報のファイルを書くが、書く先は GitHub との往復の結果に限る。
 //
-//	GET /               人間が読む HTML（13.7.1）
-//	GET /api/v1/state   いまの状態の JSON（13.7.2 が最低限として挙げるもの）
+//	GET /                       人間が読む HTML（13.7.1）
+//	GET /api/v1/state           いまの状態の JSON（13.7.2 が最低限として挙げるもの）
+//	GET /github-app             段1〜段3 を状態で出し分ける入口。`?name=…` で名前を入れ直す
+//	GET /github-app/created     作成のあとの戻り先（`?code=…&state=…`）
+//	GET /github-app/installed   install のあとの戻り先（`?installation_id=…`。読み捨てる）
+//	GET /github-app/authorize   再認可の入口
+//	GET /github-app/authorized  認可のあとの戻り先（`?code=…&state=…`）
 //
 // 戻り値: 経路を張ったハンドラ。
 func (s *Server) newMux() http.Handler {
@@ -337,7 +389,20 @@ func (s *Server) newMux() http.Handler {
 	// `{$}` は「そのパスちょうど」を意味する。これが無いと `/` が全部の経路を飲み込む。
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("GET "+APIStatePath, s.handleAPIState)
+	if s.githubApp != nil {
+		// **名前の入れ直しも GET である**（`/github-app?name=…`）。POST の経路にすると、
+		// この mux が 405 を返して、名前が取られた人が先へ進めない（3-82g）。
+		// **`/{$}` を付けない。**`/` で終わらないパターンは、そのパスちょうどにしか一致しない
+		// （付けると `/github-app` が `/github-app/` へ 307 で転送され、`?name=` が付いた form の
+		// 戻りも転送を1回挟む）。
+		mux.HandleFunc("GET "+GitHubAppPath, s.handleGitHubApp)
+		mux.HandleFunc("GET "+GitHubAppCreatedPath, s.handleGitHubAppCreated)
+		mux.HandleFunc("GET "+GitHubAppInstalledPath, s.handleGitHubAppInstalled)
+		mux.HandleFunc("GET "+GitHubAppAuthorizePath, s.handleGitHubAppAuthorize)
+		mux.HandleFunc("GET "+GitHubAppAuthorizedPath, s.handleGitHubAppAuthorized)
+	}
 	// **安全側のヘッダは外側で付ける。**断った応答（421）にも同じヘッダを載せる。
+	// GitHub App の5本だけは、ハンドラが CSP を自分の版で `Set` し直す（`githubAppCSP`）。
 	return withSafetyHeaders(s.withHostCheck(mux))
 }
 
@@ -360,7 +425,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // handleAPIState は実行中の run の一覧を JSON で返す（`SPEC.md` 13.7.2 の `GET /api/v1/state`）。
 //
-// **読み取り専用である。**
+// **この経路は何も書かない**（ファイルを書く経路は GitHub App の5本だけである。`newMux`）。
 //
 // w: 応答の書き出し先。
 // r: 受け取ったリクエスト。
@@ -439,6 +504,26 @@ func (s *Server) allowedHost(host string) bool {
 	return true
 }
 
+// 応答に付ける Content-Security-Policy である。**2本を並べて定義する**
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g「CSP を、この5本の経路だけ緩める」）。
+// 片方だけを直すと、もう片方が `frame-ancestors 'none'` や `base-uri 'none'` を落としたまま残る。
+const (
+	// safetyCSP は全応答に `withSafetyHeaders` が付ける版である。
+	//
+	// **`form-action 'none'`。**この指令は `default-src` に落ちてこない別の指令なので、明示的に書く。
+	safetyCSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"
+
+	// githubAppCSP は GitHub App の5本の経路（`/github-app` …）のハンドラが、応答を書く前に
+	// `Set` し直す版である。**変えるのは `form-action` の1指令だけで、`'self' https://github.com` にする。**
+	//
+	// **緩めるのは避けられない。**manifest を GET のクエリで渡せないことを実測した（3-82g）。
+	// リンク1本では GitHub App を作れず、github.com へ POST する form が要る。
+	// **`'self'` を落としてはならない。**落とすと、名前の入れ直しの form（`/github-app?name=…`）が
+	// ブラウザ側で止まり、人間には「ボタンが効かない」としか見えない。
+	// **ダッシュボードの他の経路は `safetyCSP` のままである。**1枚のためにサーバ全体を緩めない。
+	githubAppCSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://github.com; base-uri 'none'; frame-ancestors 'none'"
+)
+
 // withSafetyHeaders は応答に安全側のヘッダを足す。
 //
 // **script を一切読み込ませない**（`default-src 'none'`）。ダッシュボードは
@@ -452,8 +537,7 @@ func (s *Server) allowedHost(host string) bool {
 func withSafetyHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Content-Security-Policy",
-			"default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
+		h.Set("Content-Security-Policy", safetyCSP)
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		// **中身は run の実況なので、途中の proxy にも履歴にも残させない。**

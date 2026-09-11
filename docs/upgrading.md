@@ -106,6 +106,162 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ---
 
+## 次の版へ
+
+**この節の版の番号は、この変更をリリースするときに決めます。**決まるまで「次の版」と書いておきます。
+
+### 機械の投稿に GitHub App の attribution を付けられるようになりました — 設定に足すものは1つ。既定のままなら何も変わりません
+
+**何が変わったか。**issue のコメントは、人間も continuo も continuo が起動した Claude Code も、
+同じ GitHub アカウントで投稿します。**投稿者を見ても、人間が書いたのか機械が書いたのかは分かりませんでした。**
+**次の版から、機械の投稿を GitHub App 経由にできます。**投稿者はあなたのアカウントのままで、
+**投稿者の名前の横に `– with <GitHub App の表示名>` が並びます。**人間が書いたものには並びません。
+**これが、画面で見分ける手がかりです。**
+
+| 誰が書くか | `– with <GitHub App の表示名>` が付くか |
+| --- | --- |
+| **continuo 本体**（Status を動かした記録・止まった理由・着手の門の案内など） | **付く** |
+| **continuo が起動した Claude Code**（計画・判断票・進捗・成果） | **付く** |
+| **人間** | 付かない |
+| **pull request の本文とコメント** | **付かない。**代わりに「continuo が起動した Claude Code が書きました（pull request には GitHub App の印が付きません）」の1行が入ります（下の「権限は `Issues` だけです」） |
+
+**足す設定は1つです。**`tracker.comments` の下に足します
+（`tracker.provider.comments` ではありません。`comments:` という名前の節が2つあります）。
+
+```yaml
+tracker:
+  comments:
+    github_app_attribution: false   # true にすると、機械の投稿に GitHub App の attribution が付く。
+                                    # 資格情報は --port の画面（/github-app）で人ごとに作る。無いと起動しない
+```
+
+#### 何もしないとどうなるか
+
+**壊れません。**既定は `false` で、書かなければ、いままでどおり人間の認証で投稿します。**attribution が付かないだけです。**
+`continuo doctor` の `! 未記入の項目` にこのキーが並びます。
+足す差分は `continuo doctor --missing-keys-patch WORKFLOW.md` で出せます（上の「何が足りないかは `continuo doctor` が出す」）。
+
+**`true` を書くのは、版を上げてからにしてください。**front matter は知らないキーで起動を止めます
+（[FAQ.md](FAQ.md) の「「front matter が不正です: unknown field "…"」で止まる」）。
+**チームで `WORKFLOW.md` を共有しているなら、まだ版を上げていない同僚の continuo が、
+資格情報の話に到達する前に、そこで起動しなくなります。**
+
+#### `true` にする前に、GitHub App を作ります — ボタンを3回押すだけです
+
+**順序が決まっています。**`true` のまま資格情報が無いと continuo は起動しません。
+**起動しないとダッシュボードも立たず、GitHub App を作る画面に辿り着けません。**だから `false` のまま作ります。
+
+| 順 | 何をするか |
+| --- | --- |
+| **1** | `github_app_attribution` は既定の `false` のまま、**`server.port` を書いて** continuo を起動する。**`0` にしているときは、具体的な番号にしてください** |
+| **2** | `http://127.0.0.1:<port>/github-app` を開き、**ボタンを3回押す**（作る → install → 認可）。**押す前に、そのボタンが何をするかが画面に出ます** |
+| **3** | `github_app_attribution` を `true` にして、continuo を再起動する |
+
+**ボタンを押すと何が起きるか。**画面にも同じことが出ます。
+
+| 押すもの | 何が起きるか |
+| --- | --- |
+| **作る** | **あなた1人のための GitHub App を、continuo が組んだ manifest で作ります。**名前の既定は `continuo-<あなたの gh のログイン名>` です。GitHub の中で同じ名前が取られていたら GitHub がエラーを返すので、画面で名前を直して押し直せます。**この段では、issue にはまだ何も書き込みません** |
+| **install** | **どのリポジトリの issue へ書けるかを決めます。**入れた先の issue にだけコメントできます。**カンバンに載るリポジトリが増えても困らないよう、画面は All repositories を勧めます。**あとから GitHub の画面で外せます |
+| **認可** | **ここから先、機械の投稿はあなたの名前のまま `– with <GitHub App の表示名>` が付きます。**認可は約6か月で切れます（実測 約181日）。切れたら、同じ画面の「認可だけをやり直す」（`http://127.0.0.1:<port>/github-app/authorize`）から通し直します |
+
+**押し終わると、`~/.continuo/github-app-credentials.json`（権限 `0600`）が書かれます。**
+中身は `client_id` / `client_secret` / 更新用のトークンとその期限 / 認可したアカウント名 / GitHub App の slug の6つです。
+**秘密鍵は置きません。**作成のときに返りますが、使わないので捨てます。
+**アクセストークンもファイルには書きません。**投稿のたびに更新用のトークンから取り（8時間で切れます）、使ったらすぐ捨てます。
+**途中で continuo を止めたら、その段からやり直してください。**画面の「作る」と「認可」の段にも同じことが書いてあります。
+
+**`server.port` を書いていない人は、この画面を開けません。**専用のサブコマンドはありません。
+`WORKFLOW.md` の `server.port` を書いて1度起動してください。
+書き方は [FAQ.md](FAQ.md) の「`--port` で開く画面は何のためのものですか」にあります。
+
+#### 権限は `Issues` だけです。秘密鍵は置きません
+
+| 権限 | 何を許すか |
+| --- | --- |
+| **`Issues`** | **読み書き。**投稿に使う唯一の経路です |
+| **`Metadata`** | **読み取り。**GitHub が必須にしています |
+
+**`Pull requests` は与えません。**漏れたときに、レビューを通していない pull request をマージされうるためです。
+**だから pull request の本文とコメントには attribution が付かず、代わりに可視の1行が入ります**（上の表）。
+**漏れたときに何ができるかと、止め方は [FAQ.md](FAQ.md) の「資格情報が漏れたかもしれないとき（GitHub App）」にあります。**
+
+#### チームで使うとき — 設定はチームで1つ、GitHub App は人ごとに1つ
+
+| 何 | どこに置くか | 共有するか |
+| --- | --- | --- |
+| **`github_app_attribution`** | `WORKFLOW.md`（commit される） | **する。**チームで1つ |
+| **GitHub App そのもの** | GitHub 上 | **しない。人ごとに1つ作る** |
+| **資格情報** | `~/.continuo/github-app-credentials.json` | **しない。**commit されない場所にある |
+
+**1つの GitHub App をチームで使い回さないでください。**使い回すには `client_secret` を人から人へ渡すことになり、
+`WORKFLOW.md` は commit されるので置けません。**人ごとに作れば、渡すものが1つも無くなります。**
+人ごとに別の GitHub App になるので、画面の `– with <GitHub App の表示名>` も人ごとに変わります。
+**どの機械が書いたのかが、画面から分かります。**
+
+**上の3段のうち、段3（`true` にする）はチームで1回、段1と段2 は各自が1回ずつです。**
+**段3 を1人が commit すると、まだ段1と段2 を通していない同僚の continuo は起動しません。**
+資格情報が無いので、次の文面を出して止まります。
+
+```
+github_app_attribution が true ですが、GitHub App の資格情報がありません。
+起動しません。次の手順で、1分ほどで設定できます。
+
+  1. WORKFLOW.md の tracker.comments.github_app_attribution を、手元だけ false にする
+     （commit しないでください。commit すると、チーム全員の attribution が消えます）
+  2. continuo を起動する
+  3. http://127.0.0.1:<port>/github-app を開き、ボタンを3回押す
+  4. github_app_attribution を true に戻して、continuo を再起動する
+
+server.port を書いていないときは、先に書いてください。0 にしているときは、具体的な番号にしてください。
+```
+
+**手元だけ `false` にするのは、`WORKFLOW.md` が commit されるからです。**commit すると、チーム全員の attribution が消えます。
+**`continuo doctor` も同じ文面を出します。**
+
+**資格情報は在るのに、更新用のトークンが回せないときは、文面が変わります**
+（回転の書き戻しの直前で continuo が落ちた・GitHub App を消した・client secret を作り直した）。
+
+```
+github_app_attribution が true ですが、GitHub App の更新用のトークンを回せませんでした（<GitHub が返した error の値>）。
+起動しません。
+
+  1. WORKFLOW.md の tracker.comments.github_app_attribution を、手元だけ false にする
+  2. continuo を起動する
+  3. http://127.0.0.1:<port>/github-app/authorize を開き、認可をやり直す
+     （回転の書き戻しの直前で continuo が落ちたときは、これで直ります）
+  4. 認可が通らないときは、GitHub App を消したか、client secret を作り直しています。
+     ~/.continuo/github-app-credentials.json を消し、GitHub の Settings → Developer settings → GitHub Apps に
+     古い GitHub App が残っていれば Danger zone から消してから、http://127.0.0.1:<port>/github-app で作り直してください。
+  5. github_app_attribution を true に戻して、continuo を再起動する
+
+server.port を書いていないときは、先に書いてください。0 にしているときは、具体的な番号にしてください。
+```
+
+**この2つ目は、起動時の検査だけが出します。**`continuo doctor` は更新用のトークンを回さないので、回せないことを知りようがありません。
+
+#### `continuo doctor` に `GitHub App` の行が増えます
+
+**`github_app_attribution` が `false` なら、何も検査しません。**
+`true` のとき、次を見ます。**トークンは1度も取りません**
+（取ると更新用のトークンが回り、doctor を叩いただけで continuo が起動できなくなりうるためです）。
+
+| 何を | どうなると赤いか |
+| --- | --- |
+| **資格情報が在るか** | `~/.continuo/github-app-credentials.json` が無い。**権限が `0600` でない** |
+| **揃っているか** | 更新用のトークンが無い（認可を通していない）・期限が切れている・`client_id` / `client_secret` / 認可したアカウント名のどれかが欠けている |
+| **更新用のトークンの残り** | **30日を切ると `!`**（警告） |
+| **認可した人が `gh` の持ち主と同じか** | 資格情報の認可したアカウント名と `gh api user` が違う |
+
+**直し方は [FAQ.md](FAQ.md) の「continuo doctor の GitHub App が赤いとき」にあります。**
+
+**起動時の検査は、doctor と違ってトークンを実際に1回取ります。**
+GitHub App を消した・install を外した・client secret を作り直した、は doctor では捕まらないためです。**取れなければ起動しません。**
+**走っている最中に取れなくなったときは止めません。**人間の認証で同じ本文を投稿し直し、断りの1行を入れます
+（[FAQ.md](FAQ.md) の「issue のコメントを、人間が書いたのか機械が書いたのかを画面で見分けたいとき」）。
+
+---
+
 ## v0.1.15 から v0.1.16 へ
 
 ### 既定が3つ変わりました。**あなたの `WORKFLOW.md` は書き換わりません**

@@ -574,6 +574,14 @@ type fixture struct {
 	// **newFixture は「入っている」状態で初期化する。**無い状態を試す test は、
 	// これを空文字にしてから doctor.Run を呼ぶこと。
 	ClaudePath string
+	// GHLogin は `gh api user --jq .login` の代わりに返すログイン名である
+	// （見出し語 `GitHub App` が、認可した人と突き合わせる相手。3-82f）。
+	//
+	// **newFixture は `octocat` で初期化する。**違う人がログインしている状態を試す test は、
+	// これを書き換えてから doctor.Run を呼ぶこと。**本物の `gh api user` は呼ばない。**
+	GHLogin string
+	// GHLoginErr は `gh api user` を落とすときのエラーである。nil なら GHLogin を返す。
+	GHLoginErr error
 }
 
 // newFixture はテスト用herdr mock・テスト用GitHub mock・本物の git のリポジトリ・WORKFLOW.md を用意する。
@@ -643,6 +651,8 @@ func newFixture(t *testing.T) *fixture {
 			boardItem{ItemID: "PVTI_1", NameWithOwner: "octocat/hello-world", Number: 188, State: "Ready"}),
 		Env:      map[string]string{},
 		GhqPaths: map[string]string{"octocat/hello-world": repoDir},
+		// **既定は「gh の持ち主は octocat」である。**GitHub App を認可した人と同じにしてある。
+		GHLogin: "octocat",
 	}
 	fx.WriteWorkflow(t, "")
 
@@ -728,6 +738,27 @@ func (fx *fixture) WriteWorkflow(t *testing.T, rateLimit string) {
 		content = setFrontMatterValue(t, content, o.path, o.value)
 	}
 
+	if err := os.WriteFile(fx.WorkflowPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WORKFLOW.md を書けません: %v", err)
+	}
+}
+
+// SetFrontMatter は、書いてある WORKFLOW.md の front matter の1つのキーの値を差し替える。
+//
+// **WriteWorkflow は `rate_limit` の節しか受け取らない。**3段の入れ子（`tracker.comments.github_app_attribution`）
+// や `server.port` を差し替える test は、WriteWorkflow のあとにこれを呼ぶ。
+// **キーは動かさず値だけを差し替える**ので、見出し語 `未記入の項目` は `✓` のまま残る。
+//
+// t: 呼び出し元のテスト。
+// path: 差し替えるキーのパス（`[]string{"tracker", "comments", "github_app_attribution"}` など）。
+// value: 書き込む値（YAML としてそのまま書く）。
+func (fx *fixture) SetFrontMatter(t *testing.T, path []string, value string) {
+	t.Helper()
+	raw, err := os.ReadFile(fx.WorkflowPath)
+	if err != nil {
+		t.Fatalf("WORKFLOW.md を読めません: %v", err)
+	}
+	content := setFrontMatterValue(t, string(raw), path, value)
 	if err := os.WriteFile(fx.WorkflowPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("WORKFLOW.md を書けません: %v", err)
 	}
@@ -857,6 +888,14 @@ func (fx *fixture) Options() doctor.Options {
 				return "", exec.ErrNotFound
 			}
 			return fx.ClaudePath, nil
+		},
+		// **本物の `gh api user` を呼ばない。**呼ぶと、見出し語 `GitHub App` の結果が
+		// 「テストを走らせたマシンで誰がログインしているか」で変わる。
+		GHLogin: func(_ context.Context) (string, error) {
+			if fx.GHLoginErr != nil {
+				return "", fx.GHLoginErr
+			}
+			return fx.GHLogin, nil
 		},
 	}
 	if fx.GhqPaths != nil {

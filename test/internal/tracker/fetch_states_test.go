@@ -11,7 +11,7 @@ import (
 // Bootstrap を呼ばずに Adapter を作る（この2つのメソッドは Bootstrap を前提にしない）。
 func newAdapterForFetch(t *testing.T, fs *fakeGraphQLServer) *tracker.Adapter {
 	t.Helper()
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}

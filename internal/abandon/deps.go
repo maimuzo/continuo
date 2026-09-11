@@ -254,7 +254,7 @@ func newTracker(
 	// Dispatchable は読まない。渡すと issue 1件を引くたびに ghq と git が起動する。
 	adapter, err := tracker.NewAdapter(
 		cfg.Tracker, endpoint, token,
-		&http.Client{Timeout: daemon.DefaultTrackerTimeout}, logger, nil)
+		&http.Client{Timeout: daemon.DefaultTrackerTimeout}, logger, nil, nil)
 	if err != nil {
 		return nil, err
 	}

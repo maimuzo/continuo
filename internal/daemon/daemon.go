@@ -14,6 +14,8 @@
 //	4c ダッシュボードを開く      … **`server.port` が null なら開かない**（設計 5-2。任意）。
 //	                              **開けなくても起動は止めない**（任意の機能の失敗で
 //	                              引き継いだ pane を放置しない）
+//	4d 更新用のトークンの残りを見張る … `github_app_attribution` が真のときだけ。1日1回、読むだけ
+//	                              （docs/plans/impl/issue245_github_app_attribution.md の 3-82c）
 //	5 巡回を始める              … poll_interval_ms ごとに Tick を回す
 //
 // **巡回より先に復元を終える。**先に巡回を始めると、これから引き継ぐ run の worktree に
@@ -43,6 +45,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
+	"github.com/maimuzo/continuo/internal/githubapp"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
 	"github.com/maimuzo/continuo/internal/i18n"
@@ -164,6 +167,29 @@ type Options struct {
 	// TrackerTimeout は GitHub の GraphQL API への1リクエストの上限である。
 	// **0 なら DefaultTrackerTimeout を使う。**テストが短い期限を与えるための口である。
 	TrackerTimeout time.Duration
+	// GHLogin は「continuo が使う gh の持ち主」を取る関数である
+	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82f）。
+	//
+	// **nil なら `gh api user --jq .login`（tracker.RunGHAPIUserLogin）を使う。**
+	// **起動時の検査（認可した人との突き合わせ）と orchestrator の両方へ、同じ1つを渡す。**
+	// 同じ外部の呼び出しに差し替え口が2つあると、テストが片方だけを渡したときに
+	// 「たまたま通る」形で現れる。**テストは偽の関数を渡して外部プロセスの起動を避けること。**
+	GHLogin tracker.GHLoginFunc
+	// HomeDir は GitHub App の資格情報（`~/.continuo/github-app-credentials.json`）を探す
+	// ホームディレクトリである（3-82b / 3-82f）。空なら os.UserHomeDir() の結果を使う。
+	//
+	// **既定値の解決は Run が Options を受け取った直後の1箇所だけで行う**（doctor.Options.HomeDir と同じ形）。
+	// **internal/daemon の他の場所で os.UserHomeDir() や instance.Root() を資格情報のために呼ばない。**
+	// **テストは必ず一時ディレクトリを渡すこと。**渡さないと、`github_app_attribution: true` を通す
+	// テストが本物の資格情報を読み、起動時の検査が本物の更新用のトークンを1回転させる
+	// （回すと古いものが死ぬ）。
+	HomeDir string
+	// GitHubAppEndpoints は GitHub App のトークンを取る先である。**空の欄は本番の GitHub になる。**
+	// テストは httptest.Server の URL を渡す。**設定ファイルのキーにはしない。**
+	GitHubAppEndpoints githubapp.Endpoints
+	// GitHubAppHTTPClient は GitHub App のトークンを取る往復に使うクライアントである。
+	// **nil なら newTrackerHTTPClient と同じ期限のクライアントを組み立てる。**
+	GitHubAppHTTPClient *http.Client
 }
 
 // Run は continuo の常駐ループを回す。ctx が終わるまで返らない。
@@ -211,6 +237,32 @@ func Run(ctx context.Context, opts Options) error {
 	if inst.ID() != "" {
 		logger.Info("--id で二重起動防止のロックを分けます",
 			"id", inst.ID(), "lock_file", inst.LockPath())
+	}
+
+	// **GitHub App の資格情報の置き場所と `gh api user` の口は、ここで1回だけ決める**（3-82f）。
+	// **`HomeDir` の既定値の解決はここだけである。**下の build も起動時の検査も、
+	// この `ga` から Store を作る（口が2つあると、テストが片方だけ差し替えて「たまたま通る」）。
+	ghLogin := opts.GHLogin
+	if ghLogin == nil {
+		ghLogin = tracker.RunGHAPIUserLogin
+	}
+	homeDir := opts.HomeDir
+	if homeDir == "" {
+		resolved, err := os.UserHomeDir()
+		if err != nil {
+			return i18n.Errorf(i18n.KeyDaemonRunHomeDirFailed, ErrStartup, err)
+		}
+		homeDir = resolved
+	}
+	ga := githubAppWiring{
+		Store:   githubapp.NewStore(homeDir),
+		Client:  githubapp.Client{HTTP: opts.GitHubAppHTTPClient, Endpoints: opts.GitHubAppEndpoints},
+		GHLogin: ghLogin,
+	}
+	if ga.Client.HTTP == nil {
+		// **`http.DefaultClient` に落とさない。**`Timeout` が 0 なので、応答ヘッダを返さない相手に
+		// 当たると、資格情報のロックを掴んだまま無期限に止まる。
+		ga.Client.HTTP = newTrackerHTTPClient(opts.TrackerTimeout)
 	}
 
 	// **起動は止めずに、噛み合っていない Status の集合だけを知らせる**（設計 3-9e。issue #35）。
@@ -286,7 +338,7 @@ func Run(ctx context.Context, opts Options) error {
 	// 段2b: 依存を組み立てる。**ここで `gh auth token` が走る**（`token_source` の既定は
 	// `gh_auth`）。外部プロセスを起こす段なので、起動時検査と同じ期限を掛ける。
 	deps, err := build(ctx, cfg, &fileCfg, loaded.Path, frag, sockPath, runtimeDir, opts.ContinuoPath,
-		endpoint, opts.TrackerTimeout, opts.StartupCheckTimeout, logger)
+		endpoint, opts.TrackerTimeout, opts.StartupCheckTimeout, ga, logger)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrStartup, err)
 	}
@@ -299,7 +351,7 @@ func Run(ctx context.Context, opts Options) error {
 	// 落ちる原因は continuo 側の前提が揃っていないことであって、エージェントの側に
 	// 問題があるわけではない。**設定の誤りで、動いているエージェントの作業を殺さない。**
 	// 人間が直して起動し直せば、復元の段5 で引き継げる。
-	if err := runStartupChecks(ctx, cfg, deps, opts.StartupCheckTimeout, logger); err != nil {
+	if err := runStartupChecks(ctx, cfg, deps, ga, opts.StartupCheckTimeout, logger); err != nil {
 		shutdown()
 		return i18n.Errorf(i18n.KeyDaemonRunStartupChecksFailed, ErrStartup, err)
 	}
@@ -333,6 +385,15 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	} else {
 		logger.Info("ダッシュボードは開きません（server.port が未設定）")
+	}
+
+	// 段4d: 更新用のトークンの残りを、走行中も1日1回見る（3-82c）。**真のときだけ。**
+	// **読むだけで回さない。**起動時の1回は段3 の検査が出している。
+	// **巡回と同じ ctx で止まる。**`deps.close` の順序には入れない（閉じるものを持たない）。
+	if cfg.Tracker.Comments.GitHubAppAttribution {
+		watchCtx, stopWatch := context.WithCancel(ctx)
+		defer stopWatch()
+		go WatchRefreshTokenExpiry(watchCtx, ga.Store, RefreshTokenCheckInterval, time.Now, logger)
 	}
 
 	// 段5: 巡回を始める。
@@ -700,6 +761,7 @@ func isLoopbackHost(host string) bool {
 // trackerTimeout: GraphQL の1リクエストの上限。0 なら DefaultTrackerTimeout。
 // tokenTimeout: トークンの取得（`gh auth token`）の上限。0 以下なら
 // DefaultStartupCheckTimeout。
+// ga: GitHub App の資格情報の置き場所・GitHub との往復・`gh api user` の口（3-82f）。
 // logger: ログの出力先。
 // 戻り値: 組み立てた依存と、組み立てに失敗した場合のエラー。
 func build(
@@ -710,6 +772,7 @@ func build(
 	frag prompt.Fragments,
 	sockPath, runtimeDir, continuoPath, graphqlEndpoint string,
 	trackerTimeout, tokenTimeout time.Duration,
+	ga githubAppWiring,
 	logger *slog.Logger,
 ) (*deps, error) {
 	herdrSocket, err := herdr.ResolveSocketPath(cfg.Herdr.Socket)
@@ -760,8 +823,16 @@ func build(
 	if cfg.Trust.RequireRepoTrusted {
 		repoTrusted = ws.TrustFunc()
 	}
+	// **`github_app_attribution` が真のときだけ、GitHub App のトークンを取る関数を渡す**（3-82d）。
+	// **偽なら nil。**nil の Adapter は、いままでどおり人間の認証（`tracker.provider.token_source`）で書く。
+	// 渡すのは `githubapp.TokenSource` の1つだけで、起動時の検査も `ProbeAppToken` でこれを通る
+	// （検査が別に関数を持つと、テストが片方だけ差し替えて「たまたま通る」形になる。3-82c）。
+	var appToken tracker.AppTokenFunc
+	if cfg.Tracker.Comments.GitHubAppAttribution {
+		appToken = githubapp.TokenSource(ga.Store, ga.Client, githubapp.DefaultLockTimeout, nil, logger)
+	}
 	adapter, err := tracker.NewAdapter(
-		cfg.Tracker, graphqlEndpoint, token, newTrackerHTTPClient(trackerTimeout), logger, repoTrusted)
+		cfg.Tracker, graphqlEndpoint, token, newTrackerHTTPClient(trackerTimeout), logger, repoTrusted, appToken)
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildTrackerFailed, err)
 	}
@@ -790,6 +861,8 @@ func build(
 		// **巡回ごとの `gh` の認証の検査は `tracker.verify_states_every` の頻度で走る**
 		// （毎巡回で外部プロセスを起動しない。設計 3-6）。
 		GHAuthCheck: func(ctx context.Context) error { return tracker.CheckGHProjectScope(ctx, nil) },
+		// **起動時の検査と同じ1つを渡す**（3-82f）。orchestrator の側には新しい口を足さない。
+		GHLogin: ga.GHLogin,
 	})
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildOrchestratorFailed, err)
@@ -808,10 +881,21 @@ func build(
 	}
 
 	// **`server.port` が null なら dash は nil になる**（listen しない。設計 5-2）。
+	//
+	// **`/github-app` の画面に要るものは、ダッシュボードが開くかぎり常に渡す**（3-82c）。
+	// **`github_app_attribution` の値は見ない。**`false` で起動して画面を通す手順
+	// （資格情報を持たない同僚が最初に踏む道）が、これに依る。
 	dash, err := server.New(server.Options{
 		Port:   cfg.Server.Port,
 		Source: orc,
 		Logger: logger,
+		GitHubApp: &server.GitHubAppOptions{
+			Store:      ga.Store,
+			HTTPClient: ga.Client.HTTP,
+			Endpoints:  ga.Client.Endpoints,
+			GHLogin:    ga.GHLogin,
+			ProjectURL: ProjectURL,
+		},
 	})
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildDashboardFailed, err)

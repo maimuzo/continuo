@@ -30,7 +30,7 @@ import (
 // 与える情報: 作り物の issue から作った `RenderData` と、`SampleData`。
 // 成功条件: 入れ子まで含めた名前の集合が完全に一致すること。
 func TestRenderData_返す名前がSampleDataと一致する(t *testing.T) {
-	got := prompt.RenderData(tracker.Issue{}, nil, 0)
+	got := prompt.RenderData(tracker.Issue{}, nil, 0, false, "/usr/local/bin/continuo")
 	want := prompt.SampleData()
 
 	if diff := nameDiff(got, want); diff != "" {
@@ -61,7 +61,7 @@ func TestRenderData_渡した値がそのまま変数になる(t *testing.T) {
 	}
 
 	// 1回目（attempt は nil）。
-	got := prompt.RenderData(issue, nil, 3600000)
+	got := prompt.RenderData(issue, nil, 3600000, false, "/usr/local/bin/continuo")
 	if got["attempt"] != nil {
 		t.Errorf("1回目の attempt が nil ではありません: %#v", got["attempt"])
 	}
@@ -74,7 +74,7 @@ func TestRenderData_渡した値がそのまま変数になる(t *testing.T) {
 
 	// やり直し（attempt に回数が入る）。
 	n := 3
-	got = prompt.RenderData(issue, &n, 60000)
+	got = prompt.RenderData(issue, &n, 60000, false, "/usr/local/bin/continuo")
 	if got["attempt"] != 3 {
 		t.Errorf("attempt が回数になっていません: %#v", got["attempt"])
 	}
@@ -83,7 +83,7 @@ func TestRenderData_渡した値がそのまま変数になる(t *testing.T) {
 	}
 
 	// リンクも URL も無い issue。**空文字にする。**nil を入れると変数展開で落ちる。
-	got = prompt.RenderData(tracker.Issue{}, nil, 0)
+	got = prompt.RenderData(tracker.Issue{}, nil, 0, false, "/usr/local/bin/continuo")
 	if got["push_branch"] != "" {
 		t.Errorf("リンクが無いのに push_branch が空文字ではありません: %#v", got["push_branch"])
 	}
@@ -119,7 +119,7 @@ func TestRenderData_組み込みの文面を実際に展開できる(t *testing.
 		{"やり直し", func() *int { n := 2; return &n }()},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			out, err := frag.Render(prompt.RenderData(issue, c.attempt, 3600000))
+			out, err := frag.Render(prompt.RenderData(issue, c.attempt, 3600000, false, "/usr/local/bin/continuo"))
 			if err != nil {
 				t.Fatalf("変数展開に失敗しました: %v", err)
 			}

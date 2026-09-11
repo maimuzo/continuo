@@ -413,6 +413,10 @@ func TestSampleData_送る文面が使える変数の一覧(t *testing.T) {
 		"push_branch":               true,
 		"attempt":                   true,
 		"progress_interval_minutes": true,
+		// **GitHub App の attribution**（docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+		// `github_app_attribution` は `{{if}}` の条件、`continuo` は `{{.continuo.command}}` の入れ子。
+		"github_app_attribution": true,
+		"continuo":               true,
 	}
 	got := prompt.SampleData()
 

@@ -121,6 +121,17 @@ const (
 	// **言い切らない。**検査は作り物の issue で2回変数展開するだけであり、
 	// 値そのもので分かれる枝の中までは届かない。文言に検査した範囲を書く。
 	LabelPromptVariables = i18n.KeyDoctorLabelPromptVariables
+	// LabelGitHubApp は、`tracker.comments.github_app_attribution` が真のときに、GitHub App の
+	// 資格情報（`~/.continuo/github-app-credentials.json`）が揃っていて、認可した人が `gh` の
+	// 持ち主と同じかの検査である（docs/plans/impl/issue245_github_app_attribution.md の 3-82c / 3-82f）。
+	//
+	// **トークンは1度も取らない。回さない。**取ると更新用のトークンが回り、doctor が
+	// continuo を起動不能にしうる。「実際に取れるか」は起動時の検査が受け持つ。
+	//
+	// **`✗` にする。**真なのに資格情報が欠けていれば、continuo は起動しない。
+	// 認可した人が違えば、その機械の run が全部、黙って人間へ渡る（3-82f）。
+	// **残りが30日を切っているだけなら `!`。**動くが、181日目に突然止まる前に知らせる。
+	LabelGitHubApp = i18n.KeyDoctorLabelGitHubApp
 )
 
 // LabelText は見出し語のキーを、いま使っている言語の語に直す。

@@ -1263,6 +1263,9 @@ const (
 	KeyLockReleaseUnlockFailed Key = "lock.release.unlock_failed"
 	// KeyLockReleaseCloseFailed はロックファイルのクローズに失敗したときに出る。
 	KeyLockReleaseCloseFailed Key = "lock.release.close_failed"
+	// KeyLockAcquireWaitTimeout は AcquireWait が上限まで待っても別のプロセスがロックを
+	// 放さなかったときに出る（GitHub App の資格情報のロック）。
+	KeyLockAcquireWaitTimeout Key = "lock.acquire_wait.timeout"
 )
 
 // hook を受ける socket の置き場所（internal/socketpath）のエラーの文言。
@@ -2552,6 +2555,280 @@ const (
 	KeyCLIPromptBreakdownAttempt Key = "cli.prompt.breakdown_attempt"
 )
 
+// GitHub App の attribution（docs/plans/impl/issue245_github_app_attribution.md）のうち、
+// 起動時の検査（internal/daemon。3-82c / 3-82f）・`continuo github-app token`（internal/cli。3-82d）・
+// `continuo doctor` の見出し語 `GitHub App`（internal/doctor。3-82c）に出る文言である。
+const (
+	// KeyCLIGitHubAppUsage は `continuo github-app` の引数が `token` でないときに標準エラーへ出す使い方である。
+	KeyCLIGitHubAppUsage Key = "cli.github_app.usage"
+	// KeyCLIGitHubAppErrHomeDir は `continuo github-app token` がホームディレクトリを引けないときに出る。
+	KeyCLIGitHubAppErrHomeDir Key = "cli.github_app.err_home_dir"
+	// KeyCLIGitHubAppErrToken は `continuo github-app token` がトークンを取れなかったときに出る。
+	KeyCLIGitHubAppErrToken Key = "cli.github_app.err_token"
+
+	// KeyDaemonRunHomeDirFailed は起動時にホームディレクトリを決められなかったときに出る
+	// （GitHub App の資格情報の置き場所が決まらない）。
+	KeyDaemonRunHomeDirFailed Key = "daemon.run.home_dir_failed"
+	// KeyDaemonStartupGitHubAppCredentialsMissing は github_app_attribution が true なのに資格情報が無いときに出る
+	// （3-82c の1通り目の文面。引数は `<port>` の値と、server.port についての末尾の1行）。
+	KeyDaemonStartupGitHubAppCredentialsMissing Key = "daemon.startup.github_app.credentials_missing"
+	// KeyDaemonStartupGitHubAppRotateFailed は資格情報は在るのに更新用のトークンを回せなかったときに出る
+	// （3-82c の2通り目の文面。引数は GitHub が返した error の値・`<port>` の値2つ・末尾の1行）。
+	KeyDaemonStartupGitHubAppRotateFailed Key = "daemon.startup.github_app.rotate_failed"
+	// KeyDaemonStartupGitHubAppPortUnset は上の2通りの末尾に、server.port を書いていないときだけ足す1行である。
+	KeyDaemonStartupGitHubAppPortUnset Key = "daemon.startup.github_app.port_unset"
+	// KeyDaemonStartupGitHubAppPortZero は上の2通りの末尾に、server.port が 0 のときだけ足す1行である。
+	KeyDaemonStartupGitHubAppPortZero Key = "daemon.startup.github_app.port_zero"
+	// KeyDaemonStartupGitHubAppLoginMismatch は認可した人と gh の持ち主が違うときに出る（3-82f）。
+	// 引数は gh の持ち主と認可した人を、文面に出る順に6つ（同じ引数の番号を2回使えないため）。
+	KeyDaemonStartupGitHubAppLoginMismatch Key = "daemon.startup.github_app.login_mismatch"
+	// KeyDaemonStartupGitHubAppAuthorizedLoginMissing は資格情報に authorized_login が無いときに出る。
+	KeyDaemonStartupGitHubAppAuthorizedLoginMissing Key = "daemon.startup.github_app.authorized_login_missing"
+
+	// KeyDoctorLabelGitHubApp は GitHub App の資格情報の検査の見出し語である。
+	KeyDoctorLabelGitHubApp Key = "doctor.label.github_app"
+	// KeyDoctorGitHubAppConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorGitHubAppConfigUnreadable Key = "doctor.github_app.config_unreadable"
+	// KeyDoctorGitHubAppRemedyFixConfig は同じときの直し方に出る。
+	KeyDoctorGitHubAppRemedyFixConfig Key = "doctor.github_app.remedy_fix_config"
+	// KeyDoctorGitHubAppDisabled は github_app_attribution が false のときの説明に出る。
+	KeyDoctorGitHubAppDisabled Key = "doctor.github_app.disabled"
+	// KeyDoctorGitHubAppFileMissing は資格情報のファイルが無いときの説明に出る。
+	KeyDoctorGitHubAppFileMissing Key = "doctor.github_app.file_missing"
+	// KeyDoctorGitHubAppRemedyStep1 は資格情報が無いときの直し方の1段目（手元だけ false にする）である。
+	KeyDoctorGitHubAppRemedyStep1 Key = "doctor.github_app.remedy_step1"
+	// KeyDoctorGitHubAppRemedyStep2 は同じ直し方の2段目（continuo を起動する）である。
+	KeyDoctorGitHubAppRemedyStep2 Key = "doctor.github_app.remedy_step2"
+	// KeyDoctorGitHubAppRemedyStep3 は同じ直し方の3段目（/github-app を開く。引数は `<port>` の値）である。
+	KeyDoctorGitHubAppRemedyStep3 Key = "doctor.github_app.remedy_step3"
+	// KeyDoctorGitHubAppRemedyStep4 は同じ直し方の4段目（true に戻して再起動する）である。
+	KeyDoctorGitHubAppRemedyStep4 Key = "doctor.github_app.remedy_step4"
+	// KeyDoctorGitHubAppRemedyPortUnset は server.port を書いていないときに足す直し方である。
+	KeyDoctorGitHubAppRemedyPortUnset Key = "doctor.github_app.remedy_port_unset"
+	// KeyDoctorGitHubAppRemedyPortZero は server.port が 0 のときに足す直し方である。
+	KeyDoctorGitHubAppRemedyPortZero Key = "doctor.github_app.remedy_port_zero"
+	// KeyDoctorGitHubAppReadFailed は資格情報のファイルは在るのに読めない（壊れている）ときの説明に出る。
+	KeyDoctorGitHubAppReadFailed Key = "doctor.github_app.read_failed"
+	// KeyDoctorGitHubAppRemedyRecreate は同じときの直し方（消して作り直す）に出る。
+	KeyDoctorGitHubAppRemedyRecreate Key = "doctor.github_app.remedy_recreate"
+	// KeyDoctorGitHubAppPermWrong は資格情報の権限が 0600 でないときの説明に出る。
+	KeyDoctorGitHubAppPermWrong Key = "doctor.github_app.perm_wrong"
+	// KeyDoctorGitHubAppRemedyChmod は同じときの直し方に出る。
+	KeyDoctorGitHubAppRemedyChmod Key = "doctor.github_app.remedy_chmod"
+	// KeyDoctorGitHubAppIncomplete は資格情報に要る欄が欠けているときの説明に出る。
+	KeyDoctorGitHubAppIncomplete Key = "doctor.github_app.incomplete"
+	// KeyDoctorGitHubAppNoteAuthorizedLogin は authorized_login が欠けているときに添える説明である。
+	KeyDoctorGitHubAppNoteAuthorizedLogin Key = "doctor.github_app.note_authorized_login"
+	// KeyDoctorGitHubAppRemedyReauthorize は認可をやり直す直し方に出る（引数は `<port>` の値）。
+	KeyDoctorGitHubAppRemedyReauthorize Key = "doctor.github_app.remedy_reauthorize"
+	// KeyDoctorGitHubAppExpired は更新用のトークンの期限が切れているときの説明に出る。
+	KeyDoctorGitHubAppExpired Key = "doctor.github_app.expired"
+	// KeyDoctorGitHubAppExpiresSoon は更新用のトークンの残りが30日を切っているときの説明に出る。
+	KeyDoctorGitHubAppExpiresSoon Key = "doctor.github_app.expires_soon"
+	// KeyDoctorGitHubAppRemedyExtend は同じときの直し方（認可をやり直すと延びる）に出る。
+	KeyDoctorGitHubAppRemedyExtend Key = "doctor.github_app.remedy_extend"
+	// KeyDoctorGitHubAppLoginMismatch は認可した人と gh の持ち主が違うときの説明に出る（3-82f）。
+	KeyDoctorGitHubAppLoginMismatch Key = "doctor.github_app.login_mismatch"
+	// KeyDoctorGitHubAppRemedyLoginSwitch は同じときの直し方の1つ目（gh auth switch）に出る。
+	KeyDoctorGitHubAppRemedyLoginSwitch Key = "doctor.github_app.remedy_login_switch"
+	// KeyDoctorGitHubAppRemedyLoginReauthorize は同じときの直し方の2つ目（認可をやり直す）に出る。
+	KeyDoctorGitHubAppRemedyLoginReauthorize Key = "doctor.github_app.remedy_login_reauthorize"
+	// KeyDoctorGitHubAppGHLoginFailed は `gh api user` が取れず突き合わせられなかったときの説明に出る。
+	KeyDoctorGitHubAppGHLoginFailed Key = "doctor.github_app.gh_login_failed"
+	// KeyDoctorGitHubAppGHLoginTimeout は `gh api user` が期限内に返らなかったときの説明に出る。
+	KeyDoctorGitHubAppGHLoginTimeout Key = "doctor.github_app.gh_login_timeout"
+	// KeyDoctorGitHubAppOK は全部通ったときの説明に出る。
+	KeyDoctorGitHubAppOK Key = "doctor.github_app.ok"
+)
+
+// GitHub App の資格情報の読み書きと、トークンの取得に出る文言である
+// （internal/githubapp。docs/plans/impl/issue245_github_app_attribution.md の 3-82b / 3-82d / 3-82g）。
+const (
+	// KeyGitHubAppCredentialsNotFound は番兵エラー `githubapp.ErrNotFound` の文言である。
+	KeyGitHubAppCredentialsNotFound Key = "githubapp.credentials.not_found"
+	// KeyGitHubAppCredentialsNotFoundAt は資格情報のファイルが無いときに、そのパスを添えて出る。
+	KeyGitHubAppCredentialsNotFoundAt Key = "githubapp.credentials.not_found_at"
+	// KeyGitHubAppCredentialsReadFailed は資格情報のファイルを読めないときに出る。
+	KeyGitHubAppCredentialsReadFailed Key = "githubapp.credentials.read_failed"
+	// KeyGitHubAppCredentialsParseFailed は資格情報のファイルが JSON として壊れているときに出る。
+	KeyGitHubAppCredentialsParseFailed Key = "githubapp.credentials.parse_failed"
+	// KeyGitHubAppCredentialsBadExpiry は refresh_token_expires_at が RFC 3339 として読めないときに出る。
+	KeyGitHubAppCredentialsBadExpiry Key = "githubapp.credentials.bad_expiry"
+	// KeyGitHubAppCredentialsDirCreateFailed は `~/.continuo/` を作れないときに出る。
+	KeyGitHubAppCredentialsDirCreateFailed Key = "githubapp.credentials.dir_create_failed"
+	// KeyGitHubAppCredentialsWriteFailed は資格情報のファイルを書けないときに出る。
+	KeyGitHubAppCredentialsWriteFailed Key = "githubapp.credentials.write_failed"
+	// KeyGitHubAppCredentialsIncomplete は更新用のトークンが無い（認可を通していない）ときに出る。
+	KeyGitHubAppCredentialsIncomplete Key = "githubapp.credentials.incomplete"
+	// KeyGitHubAppCredentialsNoApp は client_id と client_secret が無い（GitHub App を作っていない）ときに出る。
+	KeyGitHubAppCredentialsNoApp Key = "githubapp.credentials.no_app"
+	// KeyGitHubAppLockFailed は資格情報のロックを取れないときに出る。
+	KeyGitHubAppLockFailed Key = "githubapp.lock.failed"
+	// KeyGitHubAppTokenRequestFailed はトークンの要求の往復そのものが失敗したときに出る。
+	KeyGitHubAppTokenRequestFailed Key = "githubapp.token.request_failed"
+	// KeyGitHubAppTokenStatus はトークンの要求に GitHub が非 2xx を返したときに出る。
+	KeyGitHubAppTokenStatus Key = "githubapp.token.status"
+	// KeyGitHubAppTokenParseFailed はトークンの応答を JSON として読めないときに出る。
+	KeyGitHubAppTokenParseFailed Key = "githubapp.token.parse_failed"
+	// KeyGitHubAppTokenDenied は GitHub がトークンの発行を断った（`error` を返した）ときに出る。
+	KeyGitHubAppTokenDenied Key = "githubapp.token.denied"
+	// KeyGitHubAppTokenEmpty は応答にアクセストークンが無いときに出る。
+	KeyGitHubAppTokenEmpty Key = "githubapp.token.empty"
+	// KeyGitHubAppViewerRequestFailed は `GET /user` の往復が失敗したときに出る。
+	KeyGitHubAppViewerRequestFailed Key = "githubapp.viewer.request_failed"
+	// KeyGitHubAppViewerStatus は `GET /user` が非 2xx を返したときに出る。
+	KeyGitHubAppViewerStatus Key = "githubapp.viewer.status"
+	// KeyGitHubAppViewerParseFailed は `GET /user` の応答を JSON として読めないときに出る。
+	KeyGitHubAppViewerParseFailed Key = "githubapp.viewer.parse_failed"
+	// KeyGitHubAppViewerEmpty は `GET /user` の応答に login が無いときに出る。
+	KeyGitHubAppViewerEmpty Key = "githubapp.viewer.empty"
+	// KeyGitHubAppConvertRequestFailed は manifest の変換の往復が失敗したときに出る。
+	KeyGitHubAppConvertRequestFailed Key = "githubapp.convert.request_failed"
+	// KeyGitHubAppConvertStatus は manifest の変換に GitHub が非 2xx を返したときに出る。
+	KeyGitHubAppConvertStatus Key = "githubapp.convert.status"
+	// KeyGitHubAppConvertParseFailed は manifest の変換の応答を JSON として読めないときに出る。
+	KeyGitHubAppConvertParseFailed Key = "githubapp.convert.parse_failed"
+	// KeyGitHubAppConvertIncomplete は manifest の変換の応答に要る欄が無いときに出る。
+	KeyGitHubAppConvertIncomplete Key = "githubapp.convert.incomplete"
+)
+
+// ダッシュボードの GitHub App を作る導線（`/github-app` の4枚の画面と、そのハンドラのエラー文言。
+// internal/server/githubapp.go と githubapp_template.go。docs/plans/impl/issue245_github_app_attribution.md の 3-82g）に出る文言である。
+const (
+	// KeyDashboardGitHubAppTitle は GitHub App の画面の題名である。
+	KeyDashboardGitHubAppTitle Key = "dashboard.github_app.title"
+	// KeyDashboardGitHubAppBack はダッシュボードへ戻るリンクの文言である。
+	KeyDashboardGitHubAppBack Key = "dashboard.github_app.back"
+	// KeyDashboardGitHubAppCreateHeading は段1（作る）の見出しである。
+	KeyDashboardGitHubAppCreateHeading Key = "dashboard.github_app.create.heading"
+	// KeyDashboardGitHubAppCreateIntro は段1 の導入の1段落である。
+	KeyDashboardGitHubAppCreateIntro Key = "dashboard.github_app.create.intro"
+	// KeyDashboardGitHubAppCreateNameLabel は段1 の名前の欄のラベルである。
+	KeyDashboardGitHubAppCreateNameLabel Key = "dashboard.github_app.create.name_label"
+	// KeyDashboardGitHubAppCreateNameApply は段1 の名前を入れ直すボタンの文言である。
+	KeyDashboardGitHubAppCreateNameApply Key = "dashboard.github_app.create.name_apply"
+	// KeyDashboardGitHubAppCreateNameNote は段1 の名前の欄の注意書きである。
+	KeyDashboardGitHubAppCreateNameNote Key = "dashboard.github_app.create.name_note"
+	// KeyDashboardGitHubAppCreateWhatHappens は段1 の「ボタンを押すと何が起きるか」の見出しである。
+	KeyDashboardGitHubAppCreateWhatHappens Key = "dashboard.github_app.create.what_happens"
+	// KeyDashboardGitHubAppCreateStepManifest は段1 の手順1（manifest を送る）である。
+	KeyDashboardGitHubAppCreateStepManifest Key = "dashboard.github_app.create.step_manifest"
+	// KeyDashboardGitHubAppCreateStepConfirm は段1 の手順2（GitHub の確認画面）である。
+	KeyDashboardGitHubAppCreateStepConfirm Key = "dashboard.github_app.create.step_confirm"
+	// KeyDashboardGitHubAppCreateStepReturn は段1 の手順3（戻ってきて code を交換する）である。
+	KeyDashboardGitHubAppCreateStepReturn Key = "dashboard.github_app.create.step_return"
+	// KeyDashboardGitHubAppCreateStepStore は段1 の手順4（資格情報を書く）である。
+	KeyDashboardGitHubAppCreateStepStore Key = "dashboard.github_app.create.step_store"
+	// KeyDashboardGitHubAppCreatePermissionsHeading は段1 の権限の見出しである。
+	KeyDashboardGitHubAppCreatePermissionsHeading Key = "dashboard.github_app.create.permissions_heading"
+	// KeyDashboardGitHubAppCreatePermissionIssues は段1 の権限の1つ目（Issues）である。
+	KeyDashboardGitHubAppCreatePermissionIssues Key = "dashboard.github_app.create.permission_issues"
+	// KeyDashboardGitHubAppCreatePermissionMetadata は段1 の権限の2つ目（Metadata）である。
+	KeyDashboardGitHubAppCreatePermissionMetadata Key = "dashboard.github_app.create.permission_metadata"
+	// KeyDashboardGitHubAppCreatePermissionNote は段1 の権限の注意書きである。
+	KeyDashboardGitHubAppCreatePermissionNote Key = "dashboard.github_app.create.permission_note"
+	// KeyDashboardGitHubAppCreateRedirectsHeading は段1 の戻り先の見出しである。
+	KeyDashboardGitHubAppCreateRedirectsHeading Key = "dashboard.github_app.create.redirects_heading"
+	// KeyDashboardGitHubAppCreateRedirectCreated は段1 の戻り先の1つ目（作成のあと）のラベルである。
+	KeyDashboardGitHubAppCreateRedirectCreated Key = "dashboard.github_app.create.redirect_created"
+	// KeyDashboardGitHubAppCreateRedirectInstalled は段1 の戻り先の2つ目（install のあと）のラベルである。
+	KeyDashboardGitHubAppCreateRedirectInstalled Key = "dashboard.github_app.create.redirect_installed"
+	// KeyDashboardGitHubAppCreateRedirectAuthorized は段1 の戻り先の3つ目（認可のあと）のラベルである。
+	KeyDashboardGitHubAppCreateRedirectAuthorized Key = "dashboard.github_app.create.redirect_authorized"
+	// KeyDashboardGitHubAppCreateNoteNothingWritten は段1 の「まだ何も書き込まない」の1行である。
+	KeyDashboardGitHubAppCreateNoteNothingWritten Key = "dashboard.github_app.create.note_nothing_written"
+	// KeyDashboardGitHubAppCreateNotePersonal は段1 の「あなた1人のもの」の1行である。
+	KeyDashboardGitHubAppCreateNotePersonal Key = "dashboard.github_app.create.note_personal"
+	// KeyDashboardGitHubAppCreateNoteSudo は段1 の再認証の1行である。
+	KeyDashboardGitHubAppCreateNoteSudo Key = "dashboard.github_app.create.note_sudo"
+	// KeyDashboardGitHubAppCreateNoteInterrupted は段1 の「途中で止めたらこの段から」の1行である。
+	KeyDashboardGitHubAppCreateNoteInterrupted Key = "dashboard.github_app.create.note_interrupted"
+	// KeyDashboardGitHubAppCreateButton は段1 のボタンの文言である。
+	KeyDashboardGitHubAppCreateButton Key = "dashboard.github_app.create.button"
+	// KeyDashboardGitHubAppInstallHeading は段2（install）の見出しである。
+	KeyDashboardGitHubAppInstallHeading Key = "dashboard.github_app.install.heading"
+	// KeyDashboardGitHubAppInstallCreated は段2 の、作った直後に出る1行である。
+	KeyDashboardGitHubAppInstallCreated Key = "dashboard.github_app.install.created"
+	// KeyDashboardGitHubAppInstallResume は段2 の、あとから開いたときに出る1行である。
+	KeyDashboardGitHubAppInstallResume Key = "dashboard.github_app.install.resume"
+	// KeyDashboardGitHubAppInstallAppSettings は段2 の GitHub App の設定画面へのリンクの文言である。
+	KeyDashboardGitHubAppInstallAppSettings Key = "dashboard.github_app.install.app_settings"
+	// KeyDashboardGitHubAppInstallIntro は段2 の導入の1段落である。
+	KeyDashboardGitHubAppInstallIntro Key = "dashboard.github_app.install.intro"
+	// KeyDashboardGitHubAppInstallScope は段2 の範囲の勧めの1行である。
+	KeyDashboardGitHubAppInstallScope Key = "dashboard.github_app.install.scope"
+	// KeyDashboardGitHubAppInstallRemovable は段2 の「あとから外せる」の1行である。
+	KeyDashboardGitHubAppInstallRemovable Key = "dashboard.github_app.install.removable"
+	// KeyDashboardGitHubAppInstallNoteNothingWritten は段2 の「まだ何も書き込まない」の1行である。
+	KeyDashboardGitHubAppInstallNoteNothingWritten Key = "dashboard.github_app.install.note_nothing_written"
+	// KeyDashboardGitHubAppInstallButton は段2 のボタンの文言である。
+	KeyDashboardGitHubAppInstallButton Key = "dashboard.github_app.install.button"
+	// KeyDashboardGitHubAppInstallAlready は段2 の「install 済みなら認可へ」のリンクの文言である。
+	KeyDashboardGitHubAppInstallAlready Key = "dashboard.github_app.install.already"
+	// KeyDashboardGitHubAppAuthorizeHeading は段3（認可）の見出しである。
+	KeyDashboardGitHubAppAuthorizeHeading Key = "dashboard.github_app.authorize.heading"
+	// KeyDashboardGitHubAppAuthorizeExpired は段3 の、更新用のトークンが切れていたときの1行である。
+	KeyDashboardGitHubAppAuthorizeExpired Key = "dashboard.github_app.authorize.expired"
+	// KeyDashboardGitHubAppAuthorizeIntro は段3 の導入の1段落である。
+	KeyDashboardGitHubAppAuthorizeIntro Key = "dashboard.github_app.authorize.intro"
+	// KeyDashboardGitHubAppAuthorizeAttribution は段3 の attribution の説明の1行である。
+	KeyDashboardGitHubAppAuthorizeAttribution Key = "dashboard.github_app.authorize.attribution"
+	// KeyDashboardGitHubAppAuthorizeExpiry は段3 の期限の説明の1行である。
+	KeyDashboardGitHubAppAuthorizeExpiry Key = "dashboard.github_app.authorize.expiry"
+	// KeyDashboardGitHubAppAuthorizeNoteStored は段3 の「何を書くか」の1行である。
+	KeyDashboardGitHubAppAuthorizeNoteStored Key = "dashboard.github_app.authorize.note_stored"
+	// KeyDashboardGitHubAppAuthorizeNoteInterrupted は段3 の「途中で止めたらこの段から」の1行である。
+	KeyDashboardGitHubAppAuthorizeNoteInterrupted Key = "dashboard.github_app.authorize.note_interrupted"
+	// KeyDashboardGitHubAppAuthorizeButton は段3 のボタンの文言である。
+	KeyDashboardGitHubAppAuthorizeButton Key = "dashboard.github_app.authorize.button"
+	// KeyDashboardGitHubAppDoneHeading は段4（完了）の見出しである。
+	KeyDashboardGitHubAppDoneHeading Key = "dashboard.github_app.done.heading"
+	// KeyDashboardGitHubAppDoneAuthorizedAs は段4 の認可したアカウント名の1行である。
+	KeyDashboardGitHubAppDoneAuthorizedAs Key = "dashboard.github_app.done.authorized_as"
+	// KeyDashboardGitHubAppDoneStored は段4 の「何を書いたか」の1行である。
+	KeyDashboardGitHubAppDoneStored Key = "dashboard.github_app.done.stored"
+	// KeyDashboardGitHubAppDoneMismatch は段4 の、gh の持ち主と認可したアカウントが違うときの1段落である（3-82f）。
+	KeyDashboardGitHubAppDoneMismatch Key = "dashboard.github_app.done.mismatch"
+	// KeyDashboardGitHubAppDoneReauthorize は段4 の「認可だけをやり直す」のリンクの文言である。
+	KeyDashboardGitHubAppDoneReauthorize Key = "dashboard.github_app.done.reauthorize"
+	// KeyDashboardGitHubAppDoneGHUnknown は段4 の、gh api user を叩けなかったときの1行である。
+	KeyDashboardGitHubAppDoneGHUnknown Key = "dashboard.github_app.done.gh_unknown"
+	// KeyDashboardGitHubAppDoneNext は段4 の次にやることの1行である。
+	KeyDashboardGitHubAppDoneNext Key = "dashboard.github_app.done.next"
+	// KeyDashboardGitHubAppConfiguredHeading は「設定済み」の見出しである。
+	KeyDashboardGitHubAppConfiguredHeading Key = "dashboard.github_app.configured.heading"
+	// KeyDashboardGitHubAppConfiguredDetail は「設定済み」の内容の1段落である。
+	KeyDashboardGitHubAppConfiguredDetail Key = "dashboard.github_app.configured.detail"
+	// KeyDashboardGitHubAppConfiguredReauthorizeNote は「設定済み」の、認可のやり直しが要る場合の説明である。
+	KeyDashboardGitHubAppConfiguredReauthorizeNote Key = "dashboard.github_app.configured.reauthorize_note"
+	// KeyDashboardGitHubAppConfiguredReauthorize は「設定済み」の「認可だけをやり直す」のリンクの文言である。
+	KeyDashboardGitHubAppConfiguredReauthorize Key = "dashboard.github_app.configured.reauthorize"
+	// KeyDashboardGitHubAppErrorHeading は続けられなかったときの見出しである。
+	KeyDashboardGitHubAppErrorHeading Key = "dashboard.github_app.error.heading"
+	// KeyDashboardGitHubAppErrorRestart は続けられなかったときの「最初からやり直す」のリンクの文言である。
+	KeyDashboardGitHubAppErrorRestart Key = "dashboard.github_app.error.restart"
+	// KeyServerGitHubAppStateMismatch は GitHub から戻った `state` が合わないときに出る（資格情報は書かない）。
+	KeyServerGitHubAppStateMismatch Key = "server.github_app.state_mismatch"
+	// KeyServerGitHubAppCodeMissing は GitHub から `code` が戻っていないときに出る。
+	KeyServerGitHubAppCodeMissing Key = "server.github_app.code_missing"
+	// KeyServerGitHubAppNoApp は認可の段で `client_id` が無いときに出る。
+	KeyServerGitHubAppNoApp Key = "server.github_app.no_app"
+	// KeyServerGitHubAppReadFailed は資格情報を読めないときに出る。
+	KeyServerGitHubAppReadFailed Key = "server.github_app.read_failed"
+	// KeyServerGitHubAppLockFailed は資格情報のロックを取れないときに出る。
+	KeyServerGitHubAppLockFailed Key = "server.github_app.lock_failed"
+	// KeyServerGitHubAppStateFailed は `state` の乱数を作れないときに出る。
+	KeyServerGitHubAppStateFailed Key = "server.github_app.state_failed"
+	// KeyServerGitHubAppConvertFailed は manifest の変換に失敗したときに出る（資格情報は書かない）。
+	KeyServerGitHubAppConvertFailed Key = "server.github_app.convert_failed"
+	// KeyServerGitHubAppExchangeFailed は認可の `code` の交換に失敗したときに出る（資格情報は書かない）。
+	KeyServerGitHubAppExchangeFailed Key = "server.github_app.exchange_failed"
+	// KeyServerGitHubAppViewerFailed は交換は通ったのに `viewer` を引けなかったときに出る（更新用のトークンは書いてある）。
+	KeyServerGitHubAppViewerFailed Key = "server.github_app.viewer_failed"
+	// KeyServerGitHubAppWriteFailed は資格情報を書けないときに出る。
+	KeyServerGitHubAppWriteFailed Key = "server.github_app.write_failed"
+)
+
 // allKeys は宣言済みのキーを全部並べたものである。
 //
 // **新しいキーを足したらここにも足すこと。**test/internal/i18n がこの一覧と
@@ -3506,6 +3783,136 @@ var allKeys = []Key{
 	KeyCLIPromptErrRenderFailed,
 	KeyCLIPromptBreakdownExpanded,
 	KeyCLIPromptBreakdownAttempt,
+	// GitHub App の起動時の検査・`continuo github-app token`・doctor の `GitHub App`（issue #245）。
+	KeyCLIGitHubAppUsage,
+	KeyCLIGitHubAppErrHomeDir,
+	KeyCLIGitHubAppErrToken,
+	KeyDaemonRunHomeDirFailed,
+	KeyDaemonStartupGitHubAppCredentialsMissing,
+	KeyDaemonStartupGitHubAppRotateFailed,
+	KeyDaemonStartupGitHubAppPortUnset,
+	KeyDaemonStartupGitHubAppPortZero,
+	KeyDaemonStartupGitHubAppLoginMismatch,
+	KeyDaemonStartupGitHubAppAuthorizedLoginMissing,
+	KeyDoctorLabelGitHubApp,
+	KeyDoctorGitHubAppConfigUnreadable,
+	KeyDoctorGitHubAppRemedyFixConfig,
+	KeyDoctorGitHubAppDisabled,
+	KeyDoctorGitHubAppFileMissing,
+	KeyDoctorGitHubAppRemedyStep1,
+	KeyDoctorGitHubAppRemedyStep2,
+	KeyDoctorGitHubAppRemedyStep3,
+	KeyDoctorGitHubAppRemedyStep4,
+	KeyDoctorGitHubAppRemedyPortUnset,
+	KeyDoctorGitHubAppRemedyPortZero,
+	KeyDoctorGitHubAppReadFailed,
+	KeyDoctorGitHubAppRemedyRecreate,
+	KeyDoctorGitHubAppPermWrong,
+	KeyDoctorGitHubAppRemedyChmod,
+	KeyDoctorGitHubAppIncomplete,
+	KeyDoctorGitHubAppNoteAuthorizedLogin,
+	KeyDoctorGitHubAppRemedyReauthorize,
+	KeyDoctorGitHubAppExpired,
+	KeyDoctorGitHubAppExpiresSoon,
+	KeyDoctorGitHubAppRemedyExtend,
+	KeyDoctorGitHubAppLoginMismatch,
+	KeyDoctorGitHubAppRemedyLoginSwitch,
+	KeyDoctorGitHubAppRemedyLoginReauthorize,
+	KeyDoctorGitHubAppGHLoginFailed,
+	KeyDoctorGitHubAppGHLoginTimeout,
+	KeyDoctorGitHubAppOK,
+	// GitHub App の資格情報とトークンの取得（internal/githubapp。issue #245）。
+	KeyLockAcquireWaitTimeout,
+	KeyGitHubAppCredentialsNotFound,
+	KeyGitHubAppCredentialsNotFoundAt,
+	KeyGitHubAppCredentialsReadFailed,
+	KeyGitHubAppCredentialsParseFailed,
+	KeyGitHubAppCredentialsBadExpiry,
+	KeyGitHubAppCredentialsDirCreateFailed,
+	KeyGitHubAppCredentialsWriteFailed,
+	KeyGitHubAppCredentialsIncomplete,
+	KeyGitHubAppCredentialsNoApp,
+	KeyGitHubAppLockFailed,
+	KeyGitHubAppTokenRequestFailed,
+	KeyGitHubAppTokenStatus,
+	KeyGitHubAppTokenParseFailed,
+	KeyGitHubAppTokenDenied,
+	KeyGitHubAppTokenEmpty,
+	KeyGitHubAppViewerRequestFailed,
+	KeyGitHubAppViewerStatus,
+	KeyGitHubAppViewerParseFailed,
+	KeyGitHubAppViewerEmpty,
+	KeyGitHubAppConvertRequestFailed,
+	KeyGitHubAppConvertStatus,
+	KeyGitHubAppConvertParseFailed,
+	KeyGitHubAppConvertIncomplete,
+	// ダッシュボードの GitHub App の画面（internal/server。issue #245 の 3-82g）。
+	KeyDashboardGitHubAppTitle,
+	KeyDashboardGitHubAppBack,
+	KeyDashboardGitHubAppCreateHeading,
+	KeyDashboardGitHubAppCreateIntro,
+	KeyDashboardGitHubAppCreateNameLabel,
+	KeyDashboardGitHubAppCreateNameApply,
+	KeyDashboardGitHubAppCreateNameNote,
+	KeyDashboardGitHubAppCreateWhatHappens,
+	KeyDashboardGitHubAppCreateStepManifest,
+	KeyDashboardGitHubAppCreateStepConfirm,
+	KeyDashboardGitHubAppCreateStepReturn,
+	KeyDashboardGitHubAppCreateStepStore,
+	KeyDashboardGitHubAppCreatePermissionsHeading,
+	KeyDashboardGitHubAppCreatePermissionIssues,
+	KeyDashboardGitHubAppCreatePermissionMetadata,
+	KeyDashboardGitHubAppCreatePermissionNote,
+	KeyDashboardGitHubAppCreateRedirectsHeading,
+	KeyDashboardGitHubAppCreateRedirectCreated,
+	KeyDashboardGitHubAppCreateRedirectInstalled,
+	KeyDashboardGitHubAppCreateRedirectAuthorized,
+	KeyDashboardGitHubAppCreateNoteNothingWritten,
+	KeyDashboardGitHubAppCreateNotePersonal,
+	KeyDashboardGitHubAppCreateNoteSudo,
+	KeyDashboardGitHubAppCreateNoteInterrupted,
+	KeyDashboardGitHubAppCreateButton,
+	KeyDashboardGitHubAppInstallHeading,
+	KeyDashboardGitHubAppInstallCreated,
+	KeyDashboardGitHubAppInstallResume,
+	KeyDashboardGitHubAppInstallAppSettings,
+	KeyDashboardGitHubAppInstallIntro,
+	KeyDashboardGitHubAppInstallScope,
+	KeyDashboardGitHubAppInstallRemovable,
+	KeyDashboardGitHubAppInstallNoteNothingWritten,
+	KeyDashboardGitHubAppInstallButton,
+	KeyDashboardGitHubAppInstallAlready,
+	KeyDashboardGitHubAppAuthorizeHeading,
+	KeyDashboardGitHubAppAuthorizeExpired,
+	KeyDashboardGitHubAppAuthorizeIntro,
+	KeyDashboardGitHubAppAuthorizeAttribution,
+	KeyDashboardGitHubAppAuthorizeExpiry,
+	KeyDashboardGitHubAppAuthorizeNoteStored,
+	KeyDashboardGitHubAppAuthorizeNoteInterrupted,
+	KeyDashboardGitHubAppAuthorizeButton,
+	KeyDashboardGitHubAppDoneHeading,
+	KeyDashboardGitHubAppDoneAuthorizedAs,
+	KeyDashboardGitHubAppDoneStored,
+	KeyDashboardGitHubAppDoneMismatch,
+	KeyDashboardGitHubAppDoneReauthorize,
+	KeyDashboardGitHubAppDoneGHUnknown,
+	KeyDashboardGitHubAppDoneNext,
+	KeyDashboardGitHubAppConfiguredHeading,
+	KeyDashboardGitHubAppConfiguredDetail,
+	KeyDashboardGitHubAppConfiguredReauthorizeNote,
+	KeyDashboardGitHubAppConfiguredReauthorize,
+	KeyDashboardGitHubAppErrorHeading,
+	KeyDashboardGitHubAppErrorRestart,
+	KeyServerGitHubAppStateMismatch,
+	KeyServerGitHubAppCodeMissing,
+	KeyServerGitHubAppNoApp,
+	KeyServerGitHubAppReadFailed,
+	KeyServerGitHubAppLockFailed,
+	KeyServerGitHubAppStateFailed,
+	KeyServerGitHubAppConvertFailed,
+	KeyServerGitHubAppExchangeFailed,
+	KeyServerGitHubAppViewerFailed,
+	KeyServerGitHubAppWriteFailed,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

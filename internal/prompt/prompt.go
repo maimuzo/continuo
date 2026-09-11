@@ -27,6 +27,12 @@ import (
 	"text/template"
 
 	"github.com/maimuzo/continuo/internal/i18n"
+	// **`internal/shellquote` を import している。**送る文面へ埋める `continuo` の実行ファイルの
+	// パス（`.continuo.command`）を、ここで単一引用符に包むためである
+	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+	// **包むのはこの package の `RenderData` の中だけである。**呼ぶ側は包まない。
+	// 二重に包むと `''\''/home/…/continuo'\'''` になり、`command not found` で全投稿が落ちる。
+	"github.com/maimuzo/continuo/internal/shellquote"
 	// **`internal/tracker` を import している。**`RenderData` を1箇所へ寄せるために要る
 	// （issue #183）。**その代わり、`internal/config` はこの package を import できない。**
 	// `prompt → tracker → config` になるためである。
@@ -608,8 +614,12 @@ func renderOne(it Fragment, data map[string]any) (string, error) {
 
 // Validate は、断片が解釈でき、一覧にある変数だけを使っていることを確かめる（設計 5-3c）。
 //
-// **作り物の issue で2回変数展開する。**1回目は `.attempt` を空、2回目は 2 にする。
-// **`{{if .attempt}}` の中は、空のときには一度も解釈されない**ためである。
+// **作り物の issue で4回変数展開する。**`.attempt` の2通り（空と 2）と、
+// `.github_app_attribution` の2通り（偽と真）の組み合わせである。
+// **`{{if .attempt}}` の中は、空のときには一度も解釈されない**ためであり、
+// **`{{if .github_app_attribution}}` の中も、偽のときには一度も解釈されない**
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+// 片方だけを回すと、もう片方の枝に書いた一覧に無い変数を、起動するまで誰も見つけられない。
 //
 // **これで全部を捕まえられるわけではない。**`{{if eq .issue.state "Done"}}` のように
 // 値そのもので分かれる枝の中までは届かない。**doctor の文言は、そう言い切らない形にしてある。**
@@ -617,10 +627,13 @@ func renderOne(it Fragment, data map[string]any) (string, error) {
 // 戻り値: 最初に見つけた誤り。誤りが無ければ nil。
 func (f Fragments) Validate() error {
 	for _, attempt := range []any{nil, 2} {
-		data := SampleData()
-		data["attempt"] = attempt
-		if _, err := f.Render(data); err != nil {
-			return err
+		for _, attribution := range []bool{false, true} {
+			data := SampleData()
+			data["attempt"] = attempt
+			data["github_app_attribution"] = attribution
+			if _, err := f.Render(data); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -648,8 +661,25 @@ func (f Fragments) Validate() error {
 //	**分へ直すのはこの中である。**呼び出し側で割らせない。
 //	割り算が2箇所に散ると、片方を直したときにずれる。
 //
+// githubAppAttribution: `tracker.comments.github_app_attribution` の値。真なら、送る文面の
+// 新しく投稿する6本の `gh issue comment` が `continuo github-app token` でトークンを取ってから
+// 投稿する形に展開される（`{{if .github_app_attribution}}`。
+// docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+// continuoPath: continuo 自身の実行ファイルの絶対パス（hook のコマンド行に書いているものと同じ）。
+//
+//	**単一引用符で包むのはこの中である。**呼び出し側で包ませない。
+//	二重に包むと `''\''/home/…/continuo'\'''` になり、`command not found` で全投稿が落ちる。
+//	**素の `continuo` と書かせない。**開発中に worktree の中でビルドした実行ファイルで動かし、
+//	その worktree を片付けると、走っている run のエージェントの投稿だけが `command not found` で落ちる。
+//
 // 戻り値: 送る文面が使う名前を全部持つ変数の一覧。
-func RenderData(issue tracker.Issue, attempt *int, progressIntervalMs int) map[string]any {
+func RenderData(
+	issue tracker.Issue,
+	attempt *int,
+	progressIntervalMs int,
+	githubAppAttribution bool,
+	continuoPath string,
+) map[string]any {
 	url := ""
 	if issue.URL != nil {
 		url = *issue.URL
@@ -685,6 +715,16 @@ func RenderData(issue tracker.Issue, attempt *int, progressIntervalMs int) map[s
 		// **ミリ秒ではなく分で渡す。**送る文面は人間が読む日本語であり、
 		// **「3600000ミリ秒以上黙らないでください」では通じない。**
 		"progress_interval_minutes": progressIntervalMs / 60000,
+		// **GitHub App の attribution を付けるかどうか**
+		// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+		// 偽のまま `TOKEN=$(… github-app token) || exit 1` を配ると、
+		// 資格情報を持たない利用者の投稿が全部落ちる。だから文面の側で `{{if}}` で分ける。
+		"github_app_attribution": githubAppAttribution,
+		// **continuo 自身を指す値**（同 3-82e）。`{{.continuo.command}}` と書けるように入れ子にする。
+		// `$( )` の中で使うぶんには、包まれたままシェルが解く。
+		"continuo": map[string]any{
+			"command": shellquote.Quote(continuoPath),
+		},
 	}
 }
 
@@ -716,6 +756,15 @@ func SampleData() map[string]any {
 		// 送る文面が `{{.progress_interval_minutes}}` で使うので、ここにも要る。
 		// **入れ忘れると `continuo doctor` の `prompt vars` が赤になる。**
 		"progress_interval_minutes": 60,
+		// **GitHub App の attribution を付けるかどうか**
+		// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+		// **`Validate` が偽と真の両方へ入れ直す。**ここの値は「空でないもの」として真にしてある。
+		"github_app_attribution": true,
+		// **continuo 自身を指す値**（同 3-82e）。`RenderData` と同じく、単一引用符で包んだ形で持つ。
+		// 架空のパスである。実行ファイルの本当の場所は `RenderData` の呼び出し側が渡す。
+		"continuo": map[string]any{
+			"command": "'/usr/local/bin/continuo'",
+		},
 	}
 }
 

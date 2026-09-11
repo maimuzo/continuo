@@ -671,7 +671,7 @@ func checkBoard(
 	}
 
 	adapter, err := tracker.NewAdapter(
-		cfg.Config.Tracker, opts.GraphQLEndpoint, token, opts.HTTPClient, opts.Logger, nil)
+		cfg.Config.Tracker, opts.GraphQLEndpoint, token, opts.HTTPClient, opts.Logger, nil, nil)
 	if err != nil {
 		return Result{
 			Label:    LabelBoard,
