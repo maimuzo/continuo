@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
@@ -114,6 +115,11 @@ func (o *Orchestrator) dispatchBlockedStates() []string {
 	}
 	add(o.cfg.Tracker.FailureState)
 	add(o.cfg.Tracker.DispatchState)
+	// **`direct_chat_state` も入れる**（設計 3-82）。
+	// **この一覧は拒否リストであって「`active_states` の外を全部」ではない。**
+	// 入れないと、**人間が着手の隙間にカードを direct chat へ動かしたとき、
+	// 段2 の最後の砦が素通りして `running_state` で上書きする。**
+	add(o.cfg.Tracker.DirectChatState)
 	for _, dest := range o.cfg.Tracker.StatusSignalMap {
 		if dest != nil {
 			add(*dest)
@@ -187,21 +193,35 @@ func (o *Orchestrator) dispatchStatusAllowed(ctx context.Context, itemID, identi
 // ctx: 呼び出しに適用するコンテキスト。
 // candidates: `active_states` で取った候補（カンバンの並び順）。
 func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []tracker.Issue) {
-	if o.dispatchPaused() {
+	// **レートリミットの門は、direct chat には当てない**（設計 3-82）。
+	//
+	// **だから「巡回ごとに return する」形をやめ、issue ごとに飛ばす形へ変えた。**
+	// direct chat は人間が付きっきりで動かすものなので、レートリミットに達していれば
+	// その場で本人が気づく。**達している日ほど、人間は手で直したくなる。**
+	// **その日にだけ direct chat が使えない形にしてはならない。**
+	paused := o.dispatchPaused()
+	if paused {
 		// **INFO のままにする**（issue #134）。
 		// **一度 WARN へ上げたが、8本のテストが落ちた**（v0.1.11 で試した）。
 		// どれも正常な動作を作っているもので、
 		// **「異常ではないものを異常として出そうとしている」という信号だった。**
 		// 枠が戻れば自分で再開するので、人間が手を動かす必要は無い。
 		// **代わりに、戻し方を同じ行に書いた。**探し当てた人が次にすることが分かる。
-		o.logger.Info("枠が閾値を超えているので新規の dispatch を止めます（走行中の turn は止めません）。"+
-			"枠が戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください",
+		o.logger.Info("レートリミットが閾値を超えているので新規の dispatch を止めます"+
+			"（走行中の turn は止めません。direct chat の用意だけは続けます）。"+
+			"戻れば自分で再開します。すぐ動かしたいときは rate_limit.pause_above_percent を上げてください",
 			"pause_above_percent", o.cfg.RateLimit.PauseAbovePercent)
-		return
 	}
 
 	// **持ち回りの判定でコメントを読む枠を、巡回1回ぶんに戻す**（設計 3-77a）。
 	o.resetHandoffFetchBudget()
+
+	// **pane の写像は、この巡回で1回だけ作る**（設計 3-82）。
+	// **候補ごとに引き直すと、`pane.list` と `agent.list` が候補の数だけ飛ぶ。**
+	// **direct chat の候補が1件も無い巡回では1本も飛ばさない**（遅延して作る）。
+	var directChatPanes map[string]herdr.Pane
+	var directChatPanesErr error
+	directChatPanesDone := false
 
 	var claimed []claimedRun
 	for _, issue := range candidates {
@@ -215,14 +235,20 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			o.clearGate(issue.ID)
 			continue
 		}
-		// **候補の Status が active_states に入っていることを自分で確かめる。**
+		// **direct chat の候補は、別の門をくぐる**（設計 3-82）。
+		// **どの門を通し、どの門を飛ばすかは、この下の分岐に1つずつ理由付きで書いてある。**
+		directChat := config.IsDirectChatState(o.cfg.Tracker, issue.State)
+		if paused && !directChat {
+			continue
+		}
+		// **候補の Status が active_states（か direct_chat_state）に入っていることを自分で確かめる。**
 		// 一覧は GitHub のサーバ側の検索結果であり、直前に書いた値が索引へ反映される
 		// 前に取り直すと、`Blocked` にした issue がそのまま返ってくる（設計 3-34）。
 		// **候補に載っていること自体は「いま着手してよい」の根拠にならない。**
-		if !containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
+		if !directChat && !containsFold(o.cfg.Tracker.ActiveStates, issue.State) {
 			o.logger.Warn("頼んだ Status に無い候補が返ったので飛ばします（絞り込みの反映待ちの可能性があります）",
 				"identifier", issue.Identifier, "返ってきた Status", issue.State,
-				"頼んだ Status", strings.Join(o.cfg.Tracker.ActiveStates, ", "))
+				"頼んだ Status", strings.Join(o.candidateStates(), ", "))
 			// **ここも関門より前である**（設計 6-1）。人間が Status を動かした直後は
 			// この分岐へ落ち続けるので、消さないと「担当者を全部外してください」という
 			// **いまは効かない直し方**をダッシュボードが出し続ける。
@@ -231,7 +257,10 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			continue
 		}
 		// 同じ理由で失敗し続けている issue は、人間が Status を動かすまで拾わない。
-		if o.skipByFailure(issue) {
+		// **direct chat では見ない**（設計 3-82）。**人間はまさに、その失敗を自分で
+		// 解きほぐすためにカードを動かしている。**ここで飛ばすと、いちばん要る場面で
+		// pane が用意されない。
+		if !directChat && o.skipByFailure(issue) {
 			o.clearGate(issue.ID)
 			continue
 		}
@@ -247,7 +276,12 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			o.clearGate(issue.ID)
 			continue
 		}
-		if missing := missingRequiredLabels(issue, o.cfg.Tracker.RequiredLabels); len(missing) > 0 {
+		// **必須ラベルの門も direct chat では見ない**（設計 3-82）。
+		// `tracker.required_labels` は「continuo に任せる issue を選ぶ」ための絞り込みである。
+		// **人間が自分でカードを direct chat へ動かしたことは、それより強い意思表示である。**
+		if directChat {
+			// ここは何もしない（下の required_labels の門を通さないための分岐）。
+		} else if missing := missingRequiredLabels(issue, o.cfg.Tracker.RequiredLabels); len(missing) > 0 {
 			// **黙って飛ばさない**（issue #134）。ここは v0.1.10 まで1行も出さなかった。
 			// **設定した本人でも、どの issue がどのラベル待ちなのかを知る手立てが無かった。**
 			//
@@ -274,8 +308,58 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			continue
 		}
 
+		// **direct chat は、pane が1枚でも在れば触らない**（設計 3-82）。
+		//
+		// **「Claude Code が居るか」は判定しない。**判定する手段が無い。
+		// herdr が agent を登録していないことは、Claude Code が居ないことを意味しない
+		// （`confirmStartup` の `agent_not_found` の扱い）。**取り違えて `agent.start` を
+		// 投げると、人間が話している画面へ `claude …` というコマンド行が届く。**
+		//
+		// **調べられなかったときも触らない。**分からないものを触ってよい理由が無い。
+		if directChat {
+			if !directChatPanesDone {
+				directChatPanes, directChatPanesErr = o.directChatPanes(ctx)
+				directChatPanesDone = true
+			}
+			if directChatPanesErr != nil {
+				// **「引けなかった」を「pane が無い」と混ぜない**（設計 3-82）。
+				// 混ぜると、herdr の socket が一瞬落ちただけで
+				// **人間が話している pane の隣に2枚目を開くことになる。**
+				o.logger.Warn("pane の一覧を取れないので、direct chat には触りません（次の巡回で見ます）",
+					"identifier", issue.Identifier, "error", directChatPanesErr)
+				o.clearGate(issue.ID)
+				continue
+			}
+			exists, err := o.directChatPaneExists(directChatPanes, issue)
+			if err != nil {
+				o.logger.Warn("direct chat の worktree の置き場所を決められないので、この巡回では触りません",
+					"identifier", issue.Identifier, "error", err)
+				o.clearGate(issue.ID)
+				continue
+			}
+			if exists {
+				o.logger.Debug("direct chat の pane は既にあるので何もしません",
+					"identifier", issue.Identifier)
+				o.clearGate(issue.ID)
+				continue
+			}
+		}
+
 		// 段-1: 空きスロットを数える。**印を付ける前に行う**（付けてから弾くと印が残る）。
 		if free, blocker, limit := o.freeSlotBlocker(); !free {
+			if directChat {
+				// **direct chat のときだけ WARN にする**（設計 3-82）。
+				// **人間はカードを動かしてから、pane ができるのを待っている。**
+				// INFO で流すと、なぜ pane ができないのかを知る手立てが1つも無い。
+				// **direct chat の run は自分では終わらないので、枠は人間が
+				// カードを戻すまで空かない。**
+				o.logger.Warn("空きスロットが尽きているので direct chat の pane を用意できません。"+
+					"どれかの issue を direct chat から戻すか、"+blocker+" を上げてください",
+					"identifier", issue.Identifier,
+					"上限に達した設定", blocker, "その上限", limit)
+				o.clearGate(issue.ID)
+				continue
+			}
 			// **INFO のままにする**（issue #134。上の dispatchPaused と同じ理由）。
 			// **同時に動かす数の上限に達しただけで、異常ではない。**
 			//
@@ -303,7 +387,10 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// 段-0: 担当の持ち回りを決める（設計 3-77）。**空きスロットを数えたあとに行う。**
 		// 入札に勝つのは「いま着手できる機械」でなければならず、
 		// **枠が空いていない機械が勝つと、issue は誰にも着手されないまま止まる。**
-		decision := o.handoffGate(ctx, issue)
+		// **direct chat では入札しない**（設計 3-82。人間の決定）。
+		// **担当者の門だけは通す。**他人が担当している issue で pane を立てると、
+		// その人の機械でも同じことが起きて pane が2つになる。
+		decision := o.handoffGate(ctx, issue, directChat)
 		if decision.stop {
 			// **コメントを読む枠を使い切った。**候補はカンバンの並び順で来るので、
 			// 上から順に見ることは保たれる。**続きは次の巡回で見る。**
@@ -313,7 +400,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			continue
 		}
 
-		rs, ok := o.claimForDispatch(ctx, issue)
+		rs, ok := o.claimForDispatch(ctx, issue, directChat)
 		if !ok {
 			if decision.acquired {
 				// **この巡回で書いた担当者を消し戻す**（設計 3-77c）。
@@ -325,7 +412,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 		// 進めないと、最初の turn の終わりで必ず issue を1件取り直すことになる。
 		rs.markHandoffChecked(o.now())
 		rs.setHandoffAcquired(decision.acquired)
-		claimed = append(claimed, claimedRun{rs: rs, issue: issue})
+		claimed = append(claimed, claimedRun{rs: rs, issue: issue, directChat: directChat})
 	}
 	if len(claimed) == 0 {
 		return
@@ -338,7 +425,7 @@ func (o *Orchestrator) dispatchCandidates(ctx context.Context, candidates []trac
 			if ctx.Err() != nil {
 				return
 			}
-			o.runStartOrFail(ctx, c.rs, c.issue, false)
+			o.runStartOrFail(ctx, c.rs, c.issue, false, c.directChat)
 		}
 	}()
 }
@@ -349,6 +436,9 @@ type claimedRun struct {
 	rs *runState
 	// issue は着手する issue のスナップショットである。
 	issue tracker.Issue
+	// directChat は direct chat の用意かどうかである（設計 3-82）。
+	// **真なら段2（Status の書き込み）と段11（1回目の turn）を踏まない。**
+	directChat bool
 }
 
 // hasFreeSlot は空きスロットがあるかを返す（設計 3-16 の段-1）。
@@ -509,7 +599,7 @@ func normalizedLabels(labels []string) []string {
 //
 // ctx: 呼び出しに適用するコンテキスト。
 // issue: 着手する issue。
-func (o *Orchestrator) claimForDispatch(ctx context.Context, issue tracker.Issue) (*runState, bool) {
+func (o *Orchestrator) claimForDispatch(ctx context.Context, issue tracker.Issue, directChat bool) (*runState, bool) {
 	// **段0（dispatch の直前の検査）は呼び出し側が済ませている。**
 	// **持ち回りの判定より先に通しておく必要がある**（設計 3-77b）。ここで呼ぶと、
 	// 担当者を書いたあとで落ちることになり、着手しなかった issue が18時間塞がる。
@@ -523,7 +613,13 @@ func (o *Orchestrator) claimForDispatch(ctx context.Context, issue tracker.Issue
 	// **印を付けた時点で書き換える。**段2 は別の goroutine で走るので、そこまで待つと
 	// 同じ巡回の次の候補を数えるときに dispatch 前の Status（Ready）のまま数えてしまい、
 	// 上限を越えて dispatch できてしまう。
-	rs.setIssueState(o.cfg.Tracker.RunningState)
+	//
+	// **direct chat では書き換えない**（設計 3-82）。段2 を踏まないので、カンバンの
+	// カードは `direct_chat_state` のままである。**写しだけ `running_state` にすると、
+	// 状態ごとの上限の勘定が、次の巡回で取り直すまで1件ぶんずれる。**
+	if !directChat {
+		rs.setIssueState(o.cfg.Tracker.RunningState)
+	}
 	return rs, true
 }
 
@@ -535,9 +631,17 @@ func (o *Orchestrator) claimForDispatch(ctx context.Context, issue tracker.Issue
 // rs: 印を付けた run。
 // issue: 着手する issue。
 // reuse: 再 dispatch かどうか。
-func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue tracker.Issue, reuse bool) {
-	err := o.startRun(ctx, rs, issue, reuse)
+func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue tracker.Issue, reuse bool, directChat bool) {
+	err := o.startRun(ctx, rs, issue, reuse, directChat)
 	if err == nil {
+		return
+	}
+	// **direct chat の用意が落ちたときは、カンバンへ1バイトも書かない**（設計 3-82）。
+	// 下の3つの道はどれも Status を動かす（`failure_state` か、再 dispatch の待ち）。
+	// **人間が置いたカードを continuo が動かすと、そのカードは direct chat から外れ、
+	// 次の巡回で pane が閉じる。**
+	if directChat {
+		o.failDirectChatSetup(ctx, rs, issue, err)
 		return
 	}
 	label := "着手"
@@ -595,6 +699,21 @@ func (o *Orchestrator) runStartOrFail(ctx context.Context, rs *runState, issue t
 // rs: 再 dispatch する run。
 func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 	issue := rs.issue()
+	// **direct chat のカードは再 dispatch しない**（設計 3-82）。
+	//
+	// **`preflight` は Status を1バイトも見ない。**見るのは信頼登録・置き場所・
+	// worktree の使えるかどうかだけである。**だからここで見ないと素通りする。**
+	// 素通りすると `clearBackoff` が先に走り、段2 の許可リストで落ちたときには
+	// **`stopWorker` が direct chat の門を通らないまま呼ばれる**
+	// （バックオフ待ちの run は巡回が印を立てないので、門は開いている）。
+	//
+	// **バックオフ待ちの run では pane は既に閉じているので、いま失うものは無い。**
+	// **だが「閉じるはずのない run で `pane.close` を呼べる道が残っている」こと自体を残さない。**
+	if config.IsDirectChatState(o.cfg.Tracker, issue.State) {
+		o.logger.Info("direct chat のカードなので、バックオフ明けの再 dispatch を見送ります",
+			"identifier", issue.Identifier, "状態", issue.State)
+		return
+	}
 	if !o.preflight(ctx, issue) {
 		// 検査に落ちたら、この巡回では何もしない。次の巡回でまた見る。
 		return
@@ -605,7 +724,8 @@ func (o *Orchestrator) redispatch(ctx context.Context, rs *runState) {
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		o.runStartOrFail(ctx, rs, issue, true)
+		// **再 dispatch は direct chat では起きない**（上の入口の検査で落としてある）。
+		o.runStartOrFail(ctx, rs, issue, true, false)
 	}()
 }
 
@@ -771,7 +891,13 @@ func (o *Orchestrator) clearUntrusted(owner, repo string) {
 // issue: 着手する issue。
 // reuse: 再 dispatch かどうか（真なら身元ファイルの takeover_count を1つ増やす）。
 // 戻り値: いずれかの段で失敗した場合のエラー。
-func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker.Issue, reuse bool) error {
+func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker.Issue, reuse bool, directChat bool) error {
+	if directChat {
+		// **段2 を丸ごと飛ばす**（設計 3-82）。direct chat のあいだ continuo は
+		// Status を1バイトも動かさない。**動かすと、人間が置いたカードが
+		// `direct_chat_state` から外れ、次の巡回で pane が閉じる。**
+		return o.startRunFromWorktree(ctx, rs, issue, reuse, true)
+	}
 	// 段2: カンバンの Status を tracker.running_state へ書く。**ハードコードしない。**
 	//
 	// **書く前に ID 指定で取り直し、`active_states` にあるときだけ書く**（許可リスト）。
@@ -805,6 +931,22 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	// 「元は何だったか」を書くために要る。
 	rs.setLastWrittenState(o.cfg.Tracker.RunningState)
 
+	return o.startRunFromWorktree(ctx, rs, issue, reuse, false)
+}
+
+// startRunFromWorktree は着手の段3〜段11 を実行する（設計 3-16）。
+//
+// **段2（Status の書き込み）は呼び出し側が済ませている。**direct chat では踏まない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// rs: 印を付けた run。
+// issue: 着手する issue。
+// reuse: 再 dispatch かどうか（真なら身元ファイルの takeover_count を1つ増やす）。
+// directChat: direct chat の用意かどうか。**真なら段11 を踏まず、代わりに direct chat へ入る。**
+// 戻り値: いずれかの段で失敗した場合のエラー。
+func (o *Orchestrator) startRunFromWorktree(
+	ctx context.Context, rs *runState, issue tracker.Issue, reuse bool, directChat bool,
+) error {
 	// 段3: worktree を用意し、herdr workspace として開く。
 	prepared, err := o.ws.Prepare(ctx, toIssueRef(issue))
 	if err != nil {
@@ -1024,6 +1166,14 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 		//
 		// **1回目の本文は捨てない。**`awaitFirst` の周は `beginTurn` を通らないので
 		// `SendFirstPrompt` は真のまま残り、走っている turn が終わった次の周で送られる。
+		if directChat {
+			// **direct chat では、これが正常な着地である**（設計 3-82）。
+			// herdr が登録していないだけで Claude Code は生きているので、
+			// **人間はもう話しかけられる。**turn の終わりを待つ印は立てない。
+			rs.markStartedIfZero(o.now())
+			o.enterDirectChatAfterSetup(ctx, rs, issue)
+			return nil
+		}
 		o.logger.Info("Claude Code は走っているので、1回目の指示を送らずに turn の終わりを待ちます",
 			"identifier", issue.Identifier)
 		// **働き始めた時刻を入れる**（設計 3-80）。**この道は `beginTurn` を通らない。**
@@ -1035,6 +1185,13 @@ func (o *Orchestrator) startRun(ctx context.Context, rs *runState, issue tracker
 	}
 	if startErr != nil {
 		return startErr
+	}
+
+	if directChat {
+		// **段11 は踏まない**（設計 3-82）。指示を送るのは人間である。
+		rs.markStartedIfZero(o.now())
+		o.enterDirectChatAfterSetup(ctx, rs, issue)
+		return nil
 	}
 
 	// 段11: 1回目の turn を送る。**巡回のループはここでブロックしない。**

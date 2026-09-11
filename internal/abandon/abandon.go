@@ -704,12 +704,30 @@ func (r *runner) reportToSkipped() {
 func (r *runner) verifyTargets(ctx context.Context, running bool) int {
 	var targets []string
 	if target := strings.TrimSpace(r.opts.ToState); target != "" {
+		// **`--to` の先を direct chat の Status にしてはならない**（設計 3-82）。
+		// **`--park` と同じ理由である。**そこへ動かすと、次に continuo が起動したとき、
+		// **いま消したばかりの issue の worktree と pane を作り直す**
+		// （巡回が direct chat の候補として拾い、pane が無いので用意する）。
+		// **`running` かどうかに関わらず断る。**書き込むのは continuo が止まっていても同じである。
+		if config.IsDirectChatState(r.cfg.Tracker, target) {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkDirectChat, target))
+			return ExitStopped
+		}
 		targets = append(targets, target)
 	}
 	if running {
 		park := r.parkTarget()
 		if containsFold(r.cfg.Tracker.ActiveStates, park) {
 			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkActive, park))
+			return ExitStopped
+		}
+		// **park の先をdirect chat の Status にしてはならない**（設計 3-82）。
+		// **そこは「作業中の状態」ではないので上の検査を素通りするが、動かした先で
+		// continuo は pane を1回も閉じない。**この関数のあとに続く段1 の後半は
+		// 「その worktree を cwd に持つ pane が消えるまで待つ」ので、**待ち切れずに
+		// 何も消さずに止まる。**待つ前に、はっきりした理由で断る。
+		if config.IsDirectChatState(r.cfg.Tracker, park) {
+			fmt.Fprintln(r.errOut, i18n.T(i18n.KeyAbandonErrParkDirectChat, park))
 			return ExitStopped
 		}
 		targets = append(targets, park)

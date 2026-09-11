@@ -309,12 +309,13 @@ git worktree remove "$ROLLBACK"
 
 ### 設計のレビュー
 
-[.claude/rules/design-review.md](.claude/rules/design-review.md) に従うこと。とくに次の4点。
+[.claude/rules/design-review.md](.claude/rules/design-review.md) に従うこと。とくに次の5点。
 
 - **設計が固まったら、実装の前にレビューを通す。**段を飛ばさない
 - **3回ごとに issue と実装を突き合わせ直す。**3・6・9回目で収まらなければ、issue に無い内容の合理的理由を敵対的レビュワーへ説明し、説得できないものを削除する。**そのうえで実装を止め、設計を敵対的レビューしてから実装し直し、次のレビューを回す。**経緯は人間へ報告するが、返事は待たない。設計レビューと実装レビューをそれぞれ別に数え、どちらかが連続10回で収まらなかったら完全に止まる**
 - **設計を書く前に、そもそも対応するかを疑う**
 - **レビュワーには1回で全部挙げさせ、根拠を否定できるなら直さない。**徹底の度合いは [.claude/skills/worker-briefing/SKILL.md](.claude/skills/worker-briefing/SKILL.md) の 2-6、根拠の書き方は 2-7 にある
+- **直す側もレビューする側も、毎周、対になる issue と pull request のコメントを1件残らず、省略せずに読む。****要約で済ませない。1周目から全部読む。****過去の周で否定された方向を知らないまま直すと、その方向へまた進む。**否定の理由は、要約でいちばん最初に落ちる
 
 ### 並列で進める
 
@@ -364,7 +365,7 @@ Read で開かせること。**前置きをプロンプトへ書き写さない�
 [.claude/rules/issue.md](.claude/rules/issue.md) に従うこと。とくに次の4点。
 
 - **issue を作ることと、着手することは別。**作ったらグループ化し、カンバンへ載せ、着手順序に並べてから**人間の指示を待つ。**指示が出たら、その issue が `Ready` へ上がったことを確かめてから着手する（`Ice Box` のままだと continuo は拾わない）
-- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:9076](docs/plans/continuo_design.md#L9077) が認めている）。**カンバンへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
+- **カンバンの操作は AI が行う**（continuo が起動したエージェントは除く。そちらはカンバンの操作をしない。`In Progress` → `Blocked` を自分で `gh` から動かす経路だけは、[docs/plans/continuo_design.md:10058](docs/plans/continuo_design.md#L10058) が認めている）。**カンバンへ載せて `Ice Box` を付けるのも**、**代表以外を代表の sub-issue にする**のも、**並び順を着手順序へ並べ替える**のも AI である。**人間がやるのは、4-1 の遷移表で「誰が」の欄が「人間」だけの3つ**（`Ice Box` → `Ready` / `Blocked` → `Ready` / `In Review` → `Done`）。**`Ice Box` → `Ready` だけは、人間が名指しで依頼したときに AI が代行してよい。****代表以外の Status を外してはならない**（未設定の item は continuo から見えなくなり、グループの表明が1件も通らない）
 - **閉じられるものを先に外す。**issue の題名だけで「未修正」と判断せず、現行コードと突き合わせる
 - **同時に進める issue は2か3まで。**これは continuo の設定 `agent.max_concurrent_agents` とは別物である
 

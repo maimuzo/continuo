@@ -443,7 +443,7 @@ func (o *Orchestrator) rewriteAutomatedState(
 	}
 	// **`terminal_states` は渡す。**その issue を人間が「終わった」にしていたら、
 	// 書き戻しで巻き戻してはならない（`UpdateStatus` の blockedStates）。
-	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.cfg.Tracker.TerminalStates)
+	moved, err := o.tracker.UpdateStatus(ctx, issue.ID, target, o.protectedStates())
 	if err != nil {
 		// **枠を返す。**カンバンは動いていない（押し合いは起きていない）。
 		claim.release()

@@ -105,7 +105,7 @@ func TestDoctor_片付ける状態が終わったとみなす状態の外にあ�
 func TestDoctor_片付ける状態が全部終わったとみなす状態に入っていれば通る(t *testing.T) {
 	fx := newFixture(t)
 	// **`AI Done` もカンバンの選択肢に足す。**Bootstrap は terminal_states を照合する。
-	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done", "AI Done")
+	fx.GitHub.SetStatusOptions("Ice Box", "Ready", "In Progress", "Blocked", "In Review", "Done", "AI Done", "Direct Chat")
 	writeCleanupStatesWorkflow(t, fx, `["AI Done", "Done"]`, "  enabled: true\n  on_states: [\"Done\"]\n")
 
 	report := fx.Run(t)

@@ -866,12 +866,17 @@ func TestRunSetup_選択肢が5つ未満なら尋ねずに落とす(t *testing.T
 	}
 }
 
-// TestRunSetup_5つ答えれば WORKFLOW.md へ書き込む は、`continuo setup` の本筋を確かめる。
+// TestRunSetup_必ず要る5つに答えれば WORKFLOW.md へ書き込む は、`continuo setup` の本筋を確かめる。
 //
-// 目的: 選択肢が5つあるカンバンで、5問に答えたら7つのキーを書き換えること。
-// 与える情報: 選択肢を5つ返す setupFetchStatusField と、番号の入力。
+// 目的: 選択肢が5つあるカンバンで、必ず要る5問に答え、飛ばせる1問を飛ばしたら書き換えること。
+//
+// **6問目は direct chat である**（設計 3-82）。**選択肢が5つしか無いので、当てる相手がいない。**
+// **そこで打ち切ってはならない。**打ち切ると、この機能を使わない人から
+// `continuo setup` そのものを奪うことになる。
+//
+// 与える情報: 選択肢を5つ返す setupFetchStatusField と、番号の入力（最後は 0 で飛ばす）。
 // 成功条件: 終了コードが 0 で、WORKFLOW.md に割り当てた選択肢名が入ること。
-func TestRunSetup_5つ答えればWORKFLOWmdへ書き込む(t *testing.T) {
+func TestRunSetup_必ず要る5つに答えればWORKFLOWmdへ書き込む(t *testing.T) {
 	deps := cli.Deps{ScaffoldDetect: fixedDetection, SetupFetchStatusField: func(_ context.Context, _ setup.FetchOptions) (setup.StatusField, error) {
 		return setup.StatusField{
 			Name:    "Status",
@@ -880,7 +885,7 @@ func TestRunSetup_5つ答えればWORKFLOWmdへ書き込む(t *testing.T) {
 	}}
 
 	dir := writeWorkflowFor(t)
-	code, stdout, stderr := runCLIWith(deps, []string{"setup", dir}, "1\n2\n3\n4\n5\n")
+	code, stdout, stderr := runCLIWith(deps, []string{"setup", dir}, "1\n2\n3\n4\n5\n0\n")
 	if code != 0 {
 		t.Fatalf("終了コードが 0 でない: %d（stdout: %s / stderr: %s）", code, stdout, stderr)
 	}

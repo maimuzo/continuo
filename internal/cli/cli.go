@@ -845,8 +845,22 @@ func runSetup(d Deps, args []string, stdin io.Reader, stdout, stderr io.Writer) 
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdated, result.Path))
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKeysNote))
+	skipped := map[string]bool{}
+	for _, k := range result.SkippedKeys {
+		skipped[k] = true
+	}
 	for _, k := range scaffold.StatusKeyNames() {
+		if skipped[k] {
+			// **書けなかったキーを「書き換えた」の一覧へ混ぜない**（設計 3-82）。
+			continue
+		}
 		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupUpdatedKey, k))
+	}
+	// **書けなかったキーは名指しで出す**（設計 3-82）。
+	// **黙って捨ててはならない。**利用者はその役割に答えている。
+	for _, k := range result.SkippedKeys {
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, i18n.T(i18n.KeyCLISetupKeyNotWritten, k, result.Path, k))
 	}
 	return 0
 }

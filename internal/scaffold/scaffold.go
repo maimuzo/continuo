@@ -58,6 +58,12 @@ type Result struct {
 	//
 	// **CheckUpdatable だけが埋める。**プレースホルダ（0）のままなら 0 である。
 	ProjectNumber int
+	// SkippedKeys は、飛ばせるキーのうち WORKFLOW.md に無くて書けなかったものである
+	// （設計 3-82。ドット区切りの名前）。
+	//
+	// **書き込みは止めないが、黙って捨ててもならない。**利用者はその役割に答えている。
+	// **`continuo setup` はこれを画面へ出し、手で足す先を案内する。**
+	SkippedKeys []string
 }
 
 // 区別が要る失敗は sentinel error で返す。cmd/continuo はこれを見て終了コードと文言を決める。
