@@ -513,14 +513,14 @@ JSON なら本文は `body` の値にしかならず、**本文から `authorAss
 ```yaml
 claude:
   tool_gate:
-    mode: public_only                       # off / on / public_only。既定は public_only
+    mode: "off"                             # off / on / public_only。既定は off
     model: ""                               # 判定させるモデル。既定は空（名前の一覧が公式文書に無い。3-64c）
     tools: ["Bash"]                         # 判定に回す道具。空なら全部
 ```
 
 | 決めたこと | 中身 |
 | --- | --- |
-| **既定は `public_only`** | 何も書かずに使い始めた人が守られる側に倒れる。**そのぶん版を上げただけで挙動が変わる**ので、[../upgrading.md](../upgrading.md) と [../FAQ.md](../FAQ.md) の両方に書く |
+| **既定は `off`** | 掛けると、担当中のリポジトリへの起票まで断る誤判定が出る。**掛けたい人は `public_only` か `on` を書く。**版を上げると挙動が変わるので、[../upgrading.md](../upgrading.md) と [../FAQ.md](../FAQ.md) の両方に書く |
 | **公開かどうかを取れなかった issue には掛ける** | 分からないものを「公開ではない」と決めない |
 | **`continueOnBlock: true` を必ず立てる** | 立てないと、断った時点で turn が終わって無人運用が壊れる |
 | **`command` の hook は残す** | turn の終わりを知るための hook（第3節）は判定の有無に関わらず要る。**判定は2つ目の塊として足す** |

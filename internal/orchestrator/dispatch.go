@@ -1235,9 +1235,16 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 				return nil
 			case herdr.AgentStatusBlocked:
 				o.sendEscape(ctx, rs)
+				// **【対処】は文言の側に埋めない**（設計 3-11。issue #259）。
+				// **公開リポジトリでは、コメントで許可を出す案内を書いてはならない。**
+				// 判定役が読む会話には issue のコメントが載るので、
+				// **「ここへ許可を書けば通る」と公開の場所へ書くと、それを読んだ第三者が同じ文を書ける。**
+				// turn.go と restore.go は既に `permissionRemedyText` を通しており、
+				// **この経路だけが固定の文言を投稿していた。**3本とも同じ関数へ寄せる。
 				return i18n.Errorf(
 					i18n.KeyOrchestratorConfirmStartupBlocked,
-					rs.agentName(), rs.agentName())
+					rs.agentName(), rs.agentName(),
+					permissionRemedyText(o.cfg.Claude.PermissionMode, rs.issue().RepoIsPrivate))
 			case herdr.AgentStatusWorking:
 				if o.now().After(deadline) {
 					return i18n.Errorf(
