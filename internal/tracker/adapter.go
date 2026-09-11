@@ -1218,6 +1218,27 @@ func (a *Adapter) FetchComments(
 	return result, nil
 }
 
+// AppTokenFallbackNote は、GitHub App のトークンで投稿できなかったときに、人間の認証で
+// 書き直す本文へ挟む断りの1行である
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c「取れないときに止める」）。
+//
+// **この1文で固定する。理由もエラーの文言も入れない。**
+// 画面で「機械が書いた」と見分けるためには固定の1文で足りる。理由の全文は Warn のログにある。
+// エラーの文言を入れると、ロックの取得失敗や資格情報の読み取り失敗が持つ `~/.continuo/…` の
+// 絶対パスが公開の issue へ出る。Adapter が足す文字列は、手元の絶対パスを縮める唯一の場所
+// （internal/orchestrator の `postCommentWithMarker` が通す `redact.Paths`）を通らないためである。
+//
+// **backtick・`$`・二重引用符を入れない。**エージェントの投稿（internal/prompt/builtin.md の
+// 5-6）は同じ1文を `--body "…"` の二重引用符で bash へ渡すので、backtick は command
+// substitution として実行され、`$` は展開される。`continuo doctor` を backtick で囲むと、
+// 断りが消えて doctor の出力（手元のパスを含む）が公開の issue に入る。
+//
+// **internal/prompt/builtin.md の 5-6 に書く文言と、1文字も違えてはならない。**
+// 本体の投稿とエージェントの投稿で断りが揃っていないと、指示書が「この1行があるコメントは
+// 印が無くても機械が書いたものです」と照合させる手掛かりが2通りになり、片方に当たらない。
+// test/internal/tracker がこの定数の中身（文言そのものと、上の3文字が無いこと）を検査している。
+const AppTokenFallbackNote = "GitHub App のトークンで投稿できなかったので、attribution 無しで投稿しています。continuo のログと continuo doctor を確かめてください"
+
 // PostComment は continuo 自身が issue へコメントを投稿する。
 //
 // 投稿するのは人間への引き渡しの通知と、Status を動かした記録の2つだけである（設計 3-29）。
@@ -1225,11 +1246,26 @@ func (a *Adapter) FetchComments(
 // セッションを復元して書かせる（設計 3-25 / 3-29）。
 // 自分が書いたものには self_marker の印を付け、次の turn の入力から外せるようにする。
 //
+// **どのトークンで書くかは、ここで決める。呼ぶ側は知らないし、引数も増えない**
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「continuo 本体の投稿」）。
+//
+//   - appToken が nil なら、人間の認証（NewAdapter へ渡した token）で1回書く。いままでどおり。
+//   - appToken が nil でなければ、投稿のたびに GitHub App のトークンを取り、そのトークンで書く
+//     （attribution が付く）。401 なら1回だけ取り直して叩き直す（postWithAppToken）。
+//     それでも落ちたら、**理由を問わず**、人間の認証で同じ本文を書き直す
+//     （3-82c「止まり方は、経路で違う」）。書き直す本文には、selfMarker が空でなければ、
+//     先頭に並ぶ印を全部通したあとに AppTokenFallbackNote を1行挟む。selfMarker が空なら
+//     挟まない（持ち回りの4件。印の直後に JSON の取り決めが続くので、行を挟むと他の機械が
+//     読めなくなる）。書き直しに入ったことは Warn で1行出す。書き直しも落ちたら、そのエラーを返す。
+//
+// **run は止めない。**戻り値のエラーが出るのは書き直しも落ちたときだけで、呼び出し側
+// （internal/orchestrator の12箇所）はいままでどおり Warn を出して先へ進む。
+//
 // ctx: 呼び出しに適用するコンテキスト。
 // issueNodeID: 下敷きの GitHub issue のノード ID（Issue.NativeRef["issue_node_id"]）。
 // body: コメント本文（マーカーを含まない、素の本文）。
 // selfMarker: 本文の先頭に付ける印（tracker.comments.self_marker）。空文字なら
-// 印を付けずに投稿する。
+// 印を付けずに投稿する（断りも入れない）。
 // 戻り値: 投稿したコメント（IsSelf は常に true）。GraphQL 呼び出しが失敗した場合、または
 // 応答にコメントが含まれていない場合はエラーを返す。
 func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker string) (*Comment, error) {
@@ -1238,9 +1274,101 @@ func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker
 		full = selfMarker + "\n" + body
 	}
 
+	if a.appToken == nil {
+		return a.addComment(ctx, a.gql, issueNodeID, full)
+	}
+
+	comment, appErr := a.postWithAppToken(ctx, issueNodeID, full)
+	if appErr == nil {
+		return comment, nil
+	}
+
+	// **黙って諦めない。**人間の認証で同じ本文を書き直し、attribution が無いことを画面で
+	// 見分けられるように断りを1行入れる（3-82c）。
+	// **この Warn にトークンを載せない。**appErr が持つのは、資格情報のパス・ロックのパス・
+	// GitHub の応答の抜粋（401 なら "Bad credentials"）であって、トークンそのものではない
+	// （test/internal/tracker が、ログに `ghu_` が無いことを数えている）。
+	a.logger.Warn("GitHub App のトークンで投稿できなかったので、人間の認証で書き直します",
+		"issue_node_id", issueNodeID, "error", appErr)
+	fallback := full
+	if selfMarker != "" {
+		// selfMarker の行は必ず1行目に置く（FetchComments が HasPrefix で自分の投稿を外すため。
+		// selfMarker が `<!--` で始まらない設定でも壊れない）。断りは、その次に並ぶ印を
+		// 全部通したあとに挟む。
+		fallback = selfMarker + "\n" + insertAfterLeadingMarkers(body, AppTokenFallbackNote)
+	}
+	return a.addComment(ctx, a.gql, issueNodeID, fallback)
+}
+
+// postWithAppToken は GitHub App のトークンで addComment を叩く。401 なら1回だけ取り直す
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「continuo 本体の投稿」）。
+//
+// **取ったトークンは、この1件の投稿にしか使わない。**フィールドへ持たない（AppTokenFunc）。
+// ロックは a.appToken の中（githubapp.AcquireToken）が取って放し、投稿はロックの外で行う
+// （投稿1件のあいだ他のプロセスを待たせない。同文書 1-3 の図）。だから、取ってから叩くまでの
+// 窓で別のプロセス（`continuo github-app token`・ダッシュボード）が回すと、このトークンは
+// 叩く前に失効して 401 で落ちる。**そのときだけ、読み直して取り直し、1回だけ叩き直す。**
+// 401 以外（403・404・5xx・レートリミット・応答の欠け・接続の失敗）は取り直しても直らないので、
+// そのまま返す（呼び出し側が人間の認証で書き直す）。
+//
+// **401 の判定は CategoryMissingSecret で行う。**classifyHTTPStatus が 401 をそれに分類している。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// issueNodeID: 投稿先の issue のノード ID。
+// full: 印を含めた本文そのもの。
+// 戻り値: 通れば投稿したコメント。落ちた理由（取れない・401 が2回・その他）をそのまま返す。
+func (a *Adapter) postWithAppToken(ctx context.Context, issueNodeID, full string) (*Comment, error) {
+	token, err := a.appToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	comment, err := a.addCommentWithToken(ctx, token, issueNodeID, full)
+	if err == nil || !IsCategory(err, CategoryMissingSecret) {
+		return comment, err
+	}
+
+	// 401。取ってから叩くまでの窓で、別のプロセスが更新用のトークンを回した。
+	token, err = a.appToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return a.addCommentWithToken(ctx, token, issueNodeID, full)
+}
+
+// addCommentWithToken は、token を載せたクライアントをその場で作って addComment を1回叩く。
+//
+// **クライアントを Adapter のフィールドへ持ってはならない。**newGraphQLClient はトークンを
+// 組み立てのときに固定するので、持つとメモリで使い回すことになり、次に誰かが回した瞬間に
+// 死ぬ（AppTokenFunc）。httpClient（接続の pool）は a.gql と共有してよい。トークンを持つのは
+// graphqlClient のほうである。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// token: この1件にだけ使う GitHub App のトークン。
+// issueNodeID: 投稿先の issue のノード ID。
+// full: 印を含めた本文そのもの。
+// 戻り値: addComment と同じ。
+func (a *Adapter) addCommentWithToken(ctx context.Context, token, issueNodeID, full string) (*Comment, error) {
+	gql, err := newGraphQLClient(a.gql.endpoint, token, a.gql.httpClient)
+	if err != nil {
+		return nil, err
+	}
+	return a.addComment(ctx, gql, issueNodeID, full)
+}
+
+// addComment は gql で addComment を1回叩き、応答をコメントに組み立てる。
+//
+// PostComment の3つの経路（人間の認証・GitHub App のトークン・書き直し）が、同じ1つを通る。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// gql: 叩くクライアント。a.gql（人間の認証）か、addCommentWithToken がその場で作ったもの。
+// issueNodeID: 投稿先の issue のノード ID。
+// full: 印を含めた本文そのもの。
+// 戻り値: 投稿したコメント（IsSelf は常に true）。GraphQL 呼び出しが失敗した場合、または
+// 応答にコメントが含まれていない場合はエラー。
+func (a *Adapter) addComment(ctx context.Context, gql *graphqlClient, issueNodeID, full string) (*Comment, error) {
 	var resp addCommentResponse
 	vars := map[string]any{"subjectId": issueNodeID, "body": full}
-	if err := a.gql.do(ctx, addCommentMutation, vars, &resp); err != nil {
+	if err := gql.do(ctx, addCommentMutation, vars, &resp); err != nil {
 		return nil, err
 	}
 	if resp.AddComment == nil || resp.AddComment.CommentEdge == nil {
@@ -1253,6 +1381,36 @@ func (a *Adapter) PostComment(ctx context.Context, issueNodeID, body, selfMarker
 	comment := rawCommentToComment(resp.AddComment.CommentEdge.Node)
 	comment.IsSelf = true
 	return &comment, nil
+}
+
+// insertAfterLeadingMarkers は、s の先頭に並ぶ印（`<!--` で始まる行）を全部通した直後に
+// note の行を挟む（docs/plans/impl/issue245_github_app_attribution.md の 3-82c
+// 「本文の先頭に並ぶ印を全部通したあとの行」）。
+//
+// **「先頭の印の次の行」ではない。**着手の門の案内は `<!-- continuo:gated:… -->` を本文の
+// 1行目に持ち、エージェントの投稿も `<!-- continuo:agent -->` の次に
+// `<!-- design-review-result -->` などが並ぶ。印の並びの途中に挟むと、印の並びを HasPrefix で
+// 切る判定（internal/handoff/assess.go の進捗の判定）と、印が空白だけを挟んで隣り合うことを
+// 求める CI の正規表現（.github/workflows/review-gate.yml）が外れる。
+//
+// **行の単位で見る。**`<!--` で始まる行を印として数える。複数行にまたがる HTML コメントは
+// 想定しない（continuo とエージェントの印は全部1行である）。
+//
+// s: 本文。先頭が印でなければ、いちばん上に挟む。
+// note: 挟む1行。末尾に改行を含めない。
+// 戻り値: note を挟んだ本文。**s の中身は1文字も変えない。**s が改行で終わっていなくても、
+// 末尾の行を壊さない（印だけで改行が無ければ、改行を足してから note を置く）。
+func insertAfterLeadingMarkers(s, note string) string {
+	pos := 0
+	for pos < len(s) && strings.HasPrefix(s[pos:], "<!--") {
+		nl := strings.IndexByte(s[pos:], '\n')
+		if nl < 0 {
+			// 最後の行が印で、改行で終わっていない。
+			return s + "\n" + note
+		}
+		pos += nl + 1
+	}
+	return s[:pos] + note + "\n" + s[pos:]
 }
 
 // FetchAllComments は issue に付いたコメントを1件残らず取る（設計 3-77a）。
