@@ -645,7 +645,21 @@ func runPromptExpanded(
 		return 1
 	}
 
-	data := prompt.RenderData(issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs)
+	// **continuo 自身の実行ファイルのパスは、ここでは `os.Executable()` から取る**
+	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+	// このコマンドは `Orchestrator` を持たないので、常駐が hook のコマンド行に書いている
+	// `o.continuoPath` を引けない。**決め打ちしない。**決め打ちすると、このコマンドが
+	// 「送られる文面」ではないものを見せる。**取れなければ落とす**（部分的な文面を出さない）。
+	// **`github_app_attribution` も、ここに届いている設定の値をそのまま渡す。**
+	// **包まない。**単一引用符に包むのは `RenderData` の中である。
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIErrGeneric, err))
+		return 1
+	}
+	data := prompt.RenderData(
+		issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs,
+		trackerCfg.Comments.GitHubAppAttribution, exe)
 	// **全文と断片を一度に受け取る。**`Render` と `RenderItems` を続けて呼ぶと、
 	// 同じ解釈と実行を2回することになる。
 	text, rendered, err := frag.RenderAll(data)

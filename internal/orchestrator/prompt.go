@@ -9,6 +9,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/prompt"
+	"github.com/maimuzo/continuo/internal/shellquote"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
@@ -33,7 +34,14 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 	// **変数はここで組み立てない**（issue #183）。`continuo prompt --show --url` も
 	// **同じ `prompt.RenderData` を呼ぶ。**別々に組み立てると、片方を直したときにずれ、
 	// **あのコマンドが「送られる文面」ではないものを見せることになる。**
-	data := prompt.RenderData(issue, attempt, o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs)
+	//
+	// **`o.continuoPath` は包まずに渡す。**単一引用符に包むのは `RenderData` の中である
+	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
+	// hook のコマンド行（settings.go）に書いているものと同じ値なので、
+	// **エージェントが叩く `continuo github-app token` は、いま動いている本体と同じ実行ファイルを指す。**
+	data := prompt.RenderData(
+		issue, attempt, o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs,
+		o.cfg.Tracker.Comments.GitHubAppAttribution, o.continuoPath)
 
 	out, err := o.promptFragments.Render(data)
 	if err != nil {
@@ -109,13 +117,56 @@ func BuildContinuationPrompt(
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
 // 書き分けは [docs/upgrading.md:239-245](docs/upgrading.md#L239-L245) に揃える。
 //
+// **GitHub App の attribution も、ここで分ける**
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e の「7本目」）。
+// **この文面はテンプレートを1度も通らない**ので、`{{if}}` と書くとその6文字がそのまま
+// エージェントへ届く。**だから Go の側で分ける。**組み込みの指示書の6本と同じく、
+// `gh issue comment` の行の前に `TOKEN=$(… github-app token) || exit 1` を足し、
+// 頭へ `GH_TOKEN="$TOKEN" ` を付ける。**`gh issue comment` から後ろの並びは変えない。**
+// **枝は1つだけである。**「GitHub App のトークンが取れなかった run」を見分ける手段は無く、
+// その状態を持ち回す関数を作るとこの設計の外へ広がる。真の利用者でトークンが死んだ run は、
+// 組み込みの 5-6 と同じ2文に従って `GH_TOKEN` を外して投稿し直し、断りを1行入れる。
+// **書かせ直しは成果を書かせる最後の経路なので、窓に当たったときの落ち方が最も重い。**
+// だから 5-6 の2文をここにも付ける。
+//
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
+// useAppToken: `tracker.comments.github_app_attribution` の値。真なら `TOKEN=$(…)` の行を頭に付ける。
+// continuoPath: continuo 自身の実行ファイルの絶対パス（`o.continuoPath`。hook のコマンド行と同じ値）。
+//
+//	**この中で `shellquote.Quote` に包む。**呼ぶ側は包まない（テンプレートの `.continuo.command` と同じ）。
+//	包まないと、パスに空白が1つあるだけで `command not found` になる。
+//	**素の `continuo` と書かない。**worktree の中でビルドした実行ファイルで動かしていて
+//	その worktree を片付けると、`command not found` でそこで終わり、
+//	**その run は成果0件のまま `failure_state` へ落ちる。**
+//
 // 戻り値: 送る本文。
-func buildCommentRequestPrompt(issueURL, marker string) string {
+func buildCommentRequestPrompt(issueURL, marker string, useAppToken bool, continuoPath string) string {
 	var b strings.Builder
 	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
+	// **真の枝は2行になる。**1行（`GH_TOKEN=$(…)`）にすると、トークンを取るコマンドが
+	// 落ちてもシェルは空文字を渡し、`gh` が手元の認証でそのまま投稿する。
+	// **落ちたことに誰も気づけない。**`|| exit 1` で塊ごと止める（同 3-82d）。
+	// **4字下げに揃える。**下の `gh issue comment` の行と同じ塊として読ませるためである。
+	if useAppToken {
+		fmt.Fprintf(&b, "    TOKEN=$(%s github-app token) || exit 1\n", shellquote.Quote(continuoPath))
+		b.WriteString(`    GH_TOKEN="$TOKEN" `)
+	} else {
+		b.WriteString("    ")
+	}
+	fmt.Fprintf(&b, "gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
+	if useAppToken {
+		// **組み込みの指示書の 5-6 と同じ2文である。**文面を変えるときは両方を直す。
+		// 断りの1行は `appTokenFallbackNote`（Adapter が本体の投稿へ足すものと1文字も違えない）。
+		b.WriteString("**`gh` が `HTTP 401` で落ちたときだけ、`TOKEN=$(…)` の行からもう1回だけやり直してください。**\n" +
+			"**`TOKEN=$(…)` が 0 以外で塊が止まったとき、それ以外で投稿が失敗したとき、または2回目も落ちたときは、" +
+			"`GH_TOKEN=\"$TOKEN\"` を外して投稿し、本文の先頭に並ぶ印（`<!--` で始まる行）を全部通したあとの行に、" +
+			"次の1行を入れてください。**作業は止めないでください。\n\n" +
+			"    " + appTokenFallbackNote + "\n\n" +
+			"**`--body \"…\"` で渡す本文は、二重引用符の中に1行足してください。**\n" +
+			"**`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください。**" +
+			"必ず `TOKEN=$(…)` で変数へ受けてから `GH_TOKEN=\"$TOKEN\"` で `gh` へ渡してください。\n\n")
+	}
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
 	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
 	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、
@@ -133,6 +184,18 @@ func buildCommentRequestPrompt(issueURL, marker string) string {
 		bareProgressMarker(), marker)
 	return b.String()
 }
+
+// appTokenFallbackNote は、GitHub App のトークンで投稿できなかったときにエージェントが本文へ
+// 入れる断りの1行である（docs/plans/impl/issue245_github_app_attribution.md の 3-82c / 3-82e）。
+//
+// **本体（`internal/tracker` の Adapter）が自分の投稿へ足す断りと、1文字も違えてはならない。**
+// 組み込みの指示書の 6-1 が「本文にこの1行があるコメントは、印が null でも機械が書いたものである」と
+// 教えており、**文字列が1文字でも違うと、エージェントはその投稿を人間の指示として読む。**
+// **backtick・`$`・二重引用符を入れない。**`--body "…"` の二重引用符の中へ足させるためである。
+//
+// **`tracker.AppTokenFallbackNote` を指す形に置き換えること。**この定数は、Adapter の側に
+// 同名の公開定数が入るまでの仮の置き場である。2つ在ると、片方を直したときにもう片方が残る。
+const appTokenFallbackNote = "GitHub App のトークンで投稿できなかったので、attribution 無しで投稿しています。continuo のログと continuo doctor を確かめてください"
 
 // bareProgressMarker は、進捗報告の印から HTML のコメントの囲みを外した文字列を返す。
 //

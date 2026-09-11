@@ -66,8 +66,10 @@ func TestPrompt_取得したコメントを平文へ潰す指示が本文に無�
 // TestPrompt_本文はJSONのまま読ませる は、issue #60 を確かめる。
 //
 // 目的: **投稿者の立場は、JSON のキーの値として届いて初めて本文と分かれる。**
-// issue のコメントは `--json comments`、issue の本文は REST の `author_association` で取る
-// （`gh issue view --json` が受け付ける項目に issue 本文の投稿者の立場は無い。gh 2.97.0 で実測）。
+// issue のコメントも本文も REST の `author_association` で取る
+// （`gh issue view --json` が受け付ける項目に issue 本文の投稿者の立場は無い。gh 2.97.0 で実測。
+// **コメントも REST にした。**GraphQL の `--json comments` には GitHub App の attribution
+// （`performed_via_github_app`）が無い。docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。
 //
 // **PR 側も同じ扱いにする。**レビューの指摘は PR に書かれるので、
 // **issue だけ JSON にしても、PR 経由で同じ偽装が通る。**
@@ -78,8 +80,9 @@ func TestPrompt_本文はJSONのまま読ませる(t *testing.T) {
 	got := renderedPrompt(t)
 
 	wantEach := []string{
-		// issue のコメント。要素に authorAssociation が入る。
-		"gh issue view 188 --repo octocat/hello-world --json comments",
+		// issue のコメント。立場は REST の author_association で、GitHub App の attribution
+		// （performed_via_github_app）も同じ要素に入る。
+		"gh api repos/octocat/hello-world/issues/188/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association",
 		// issue の本文。立場は REST の author_association にしか無い。
 		"gh api repos/octocat/hello-world/issues/188 --jq '{author: .user.login, author_association: .author_association, body: .body}'",
 		// PR の説明。立場は REST の author_association にしか無い。
@@ -220,20 +223,27 @@ const commandLinePrefix = "    gh "
 
 // jqCommandCount は、投稿者の立場を `gh api` で取るコマンドの本数である。
 //
-// **issue の本文 / PR の説明 / PR のレビューコメント / PR のレビュー の4本。**
-// 残る2本（issue のコメント / PR の会話のコメント）は `--json comments` で取るので
-// `--jq` を使わない。**合わせて、読ませる場所は5種類すべてを覆う。**
-const jqCommandCount = 4
+// **issue のコメント / issue の本文 / PR の説明 / PR のレビューコメント / PR のレビュー の5本。**
+// 残る1本（PR の会話のコメント）は `--json comments` で取るので `--jq` を使わない。
+// **合わせて、読ませる場所は5種類すべてを覆う。**
+//
+// **issue のコメントは REST（`author_association`）で読む**
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。GraphQL の `--json comments` には
+// GitHub App の attribution（`performed_via_github_app`）が無く、エージェントが
+// 「人間が決めたのか AI が書いたのか」を見分けられない。**この番人の意図は減っていない。**
+// 立場を読ませる場所は5種類のままで、issue のコメントを読む手段が GraphQL から REST へ変わっただけである。
+const jqCommandCount = 5
 
 // jsonCommentsCommandCount は、**コメントを全件そのまま読ませる** `--json comments` の本数である
-// （issue のコメントと、PR の会話のコメント）。**この2本が authorAssociation を返す。**
+// （PR の会話のコメント）。**この1本が authorAssociation を返す。**
+// issue のコメントは REST に替えたので、ここには数えない（上の `jqCommandCount` の側で数える）。
 //
 // **`--jq` で絞り込む `--json comments` は、ここに数えない。**
 // 組み込みには、進捗の報告を書き足す先を1件だけ引く
 // `gh issue view … --json comments --jq '.comments[-1:][] …'` がある（設計 5-3j）。
 // **あれは投稿者の立場を1文字も読まないので、authorAssociation の綴りを教える役には立たない。**
 // **数に入れると、立場を読ませる場所が1つ減ったときに、この検査が気づかなくなる。**
-const jsonCommentsCommandCount = 2
+const jsonCommentsCommandCount = 1
 
 // TestPrompt_jqが出すキーの名前を変えていない は、
 // **雛形の `--jq` が、投稿者の立場のキーを別の名前で出していないこと**を確かめる。
@@ -245,7 +255,7 @@ const jsonCommentsCommandCount = 2
 // 全部止めるかのどちらかになる。**どちらも守りが機能していない状態である。**
 //
 // 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
-// **4本それぞれで、キーの名前が1つ以上見つかることを求める。**
+// **5本それぞれで、キーの名前が1つ以上見つかることを求める。**
 // **名前ごと消えた場合を見逃さないためである。**`--jq \'.author_association\'` のように
 // キーを付けずに値だけを出す形へ変えると、**探す名前が1つも無くなるので
 // 「どれも author_association である」は素通りしてしまう。**
@@ -253,8 +263,8 @@ const jsonCommentsCommandCount = 2
 // **本文が指示している author_association という名前は、出力のどこにも現れない。**
 //
 // 成功条件: `--jq` の出力のキーがどれも author_association であること。
-// **`gh api` でその値を取る行が4本あること**（issue の本文 / PR の説明 /
-// PR のレビューコメント / PR のレビュー）。**その4本それぞれにキーの名前があること。**
+// **`gh api` でその値を取る行が5本あること**（issue のコメント / issue の本文 / PR の説明 /
+// PR のレビューコメント / PR のレビュー）。**その5本それぞれにキーの名前があること。**
 func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
 	got := renderedPrompt(t)
 
@@ -282,7 +292,7 @@ func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
 	}
 	if found != jqCommandCount {
 		t.Errorf("投稿者の立場を gh api で取る行が %d 本しかない（%d 本あるはず: "+
-			"issue の本文 / PR の説明 / PR のレビューコメント / PR のレビュー）", found, jqCommandCount)
+			"issue のコメント / issue の本文 / PR の説明 / PR のレビューコメント / PR のレビュー）", found, jqCommandCount)
 	}
 }
 
@@ -294,8 +304,9 @@ func TestPrompt_jqが出すキーの名前を変えていない(t *testing.T) {
 // **本文のどこかにそれ以外の綴りが書かれていたら落とす。**
 //
 // **`gh api` の `--jq` は出力のキーを自分で決める**ので、決めた名前をそのまま採る。
-// **`gh issue view --json comments` と `gh pr view --json comments` は
-// authorAssociation という綴りで返す**（gh 2.97.0 で実測）。
+// **`gh pr view --json comments` は authorAssociation という綴りで返す**（gh 2.97.0 で実測。
+// `gh issue view --json comments` も同じ綴りだが、issue のコメントを全件読む 4-1 は REST に替えたので、
+// 本文に残る `gh issue view … --json comments` は `--jq` で絞り込むものだけである）。
 // **この2つは綴りが違うだけで同じものである。**本文はその違いを説明していなければならない。
 //
 // 与える情報: 雛形の本文をそのまま変数展開したプロンプト。
@@ -315,17 +326,18 @@ func TestPrompt_指示する名前はどれかのコマンドが返す名前で�
 				produced[m[1]] = cmd
 			}
 		case strings.Contains(cmd, "--json comments") && !strings.Contains(cmd, "--jq"):
-			// gh issue view / gh pr view の --json comments は authorAssociation で返す。
+			// gh pr view の --json comments は authorAssociation で返す
+			// （issue のコメントを全件読む 4-1 は REST に替えた）。
 			//
 			// **`--jq` で絞り込むものは数えない。**進捗の報告を書き足す先を1件だけ引く
-			// コマンド（設計 5-3j）は、投稿者の立場を1文字も読まない。
+			// コマンド（設計 5-3j）と、7-2 の段1 は、投稿者の立場を1文字も読まない。
 			produced["authorAssociation"] = cmd
 			jsonComments++
 		}
 	}
 	if jsonComments != jsonCommentsCommandCount {
 		t.Errorf("コメントを全件そのまま読ませる --json comments が %d 本しかない（%d 本あるはず: "+
-			"issue のコメント / PR の会話のコメント）", jsonComments, jsonCommentsCommandCount)
+			"PR の会話のコメント）", jsonComments, jsonCommentsCommandCount)
 	}
 	if len(produced) == 0 {
 		t.Fatalf("投稿者の立場を取るコマンドが本文に1本もありません:\n%s", got)
