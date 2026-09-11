@@ -9,6 +9,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
+	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // turnOutcome は1つの turn を送って待った結果である。
@@ -430,30 +431,12 @@ func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []strin
 // 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
 func permissionRemedyText(mode string, repoIsPrivate *bool) string {
 	if mode == config.ClaudePermissionModeDontAsk {
-		return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しており、" +
-			"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
-			"**この停止は拒否とは別の原因のことがあります。**" +
-			"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
-			"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
-			"そのうえで Status を着手待ちへ戻してください。"
+		return i18n.T(i18n.KeyOrchestratorPermissionRemedyDontAsk, mode, mode)
 	}
-	head := "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
-		"**このモードの判定役は会話の流れを読むので、許可の一覧を増やしても解けないことがあります。**"
 	if repoIsPrivate != nil && *repoIsPrivate {
-		return head +
-			"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
-			"**この issue のコメントに「その操作を許可します」と書いてください。**" +
-			"判定役はそれを読みます。" +
-			"\n**恒久的に効かせたいものは、WORKFLOW.md の `claude.permissions.allow` に足してください。**" +
-			"そのうえで Status を着手待ちへ戻してください。"
+		return i18n.T(i18n.KeyOrchestratorPermissionRemedyAutoPrivate, mode, mode)
 	}
-	return head +
-		"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
-		"**WORKFLOW.md の `claude.permissions.allow` に足してください。**" +
-		"\n**このリポジトリは公開なので、issue のコメントで許可を出す方法は案内しません。**" +
-		"判定役が読む会話には issue のコメントが載るため、**同じ文を第三者も書けます。**" +
-		"判定役が書いた人の立場を見るかどうかは測っていません（SECURITY.md の危険の表）。" +
-		"\nそのうえで Status を着手待ちへ戻してください。"
+	return i18n.T(i18n.KeyOrchestratorPermissionRemedyAutoPublic, mode, mode)
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。

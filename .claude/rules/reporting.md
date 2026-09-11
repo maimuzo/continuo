@@ -148,7 +148,8 @@
 
 ### 削ってはならない下限
 
-**節ごとの7つ（引用 → 三行まとめ → 前提 → 単語の説明 → 既存の構造がどうなっているか → 何が問題なのか → 詳細）と、引用80文字は、短くする対象ではない。**
+**節ごとの見出しと、引用80文字は、短くする対象ではない。**
+**issue と pull request のコメントは7つ、chat の返答は5つである**（下の「chat の返答は、当面この形にする」）。
 **下の「絶対条件：話題ごとに節を立て、節の中を7つの順で書く」と「絶対条件：引用は80文字以上」が、そのまま効き続ける。**
 
 **なぜ念を押すか。****短くしすぎると、検査そのものが働かなくなるためである。**
@@ -272,7 +273,7 @@ sequenceDiagram
     autonumber
     participant C as continuo
     participant A as Claude Code
-    C->>A: herdr agent start --kind claude --pane pane-7f2a<br/>args: ["--settings", "/tmp/continuo/issues/maimuzo-continuo-259/settings.json", "--permission-mode", "auto"]
+    C->>A: herdr agent start --kind claude --pane pane-7f2a<br/>args: ["--settings", "/tmp/continuo/issues/octocat-hello-world-42/settings.json", "--permission-mode", "auto"]
     A-->>C: {"agent_status": "working", "argv": ["claude", "--settings", "...", "--permission-mode", "auto"]}
 ```
 
@@ -309,7 +310,7 @@ sequenceDiagram
 | どの hook | 何を見ているか |
 | --- | --- |
 | `maimuzo-chat-response` plugin の `check-reply-structure.py` | `三行まとめ` `何が言いたいのか` `結果` `詳細` の**4つが、この順で並んでいるか。**見出しの深さ（`##` か `###` か）は問わない |
-| [.claude/hooks/check-reply-clarity.py](../hooks/check-reply-clarity.py) の `REQUIRED_AFTER_DIVIDER` | **区切り線より後ろの塊ごとに、`三行まとめ` と `何が言いたいのか` の両方があるか** |
+| [.claude/hooks/check-reply-clarity.py:139-143](../hooks/check-reply-clarity.py#L139-L143) の `REQUIRED_AFTER_DIVIDER` | **区切り線より後ろの塊ごとに、`三行まとめ` と `何が言いたいのか` の両方があるか** |
 
 **7つの形を chat で使うと、`### 詳細` が節1の末尾に来る。**
 **そこへ `## 結果` を後ろから足すと、plugin は「結果 の後に 詳細」として止める。**

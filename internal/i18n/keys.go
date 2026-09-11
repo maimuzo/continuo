@@ -2372,6 +2372,13 @@ const (
 	KeyOrchestratorConfirmStartupAgentGetFailed Key = "orchestrator.confirm_startup.agent_get_failed"
 	// KeyOrchestratorConfirmStartupBlocked は起動直後に確認の画面（blocked）で止まったときに出る。
 	KeyOrchestratorConfirmStartupBlocked Key = "orchestrator.confirm_startup.blocked"
+	// KeyOrchestratorPermissionRemedyDontAsk はdontAsk で権限に阻まれたときの【対処】である。
+	KeyOrchestratorPermissionRemedyDontAsk Key = "orchestrator.permission_remedy.dont_ask"
+	// KeyOrchestratorPermissionRemedyAutoPrivate は非公開リポジトリで判定役に止められたときの【対処】である。
+	KeyOrchestratorPermissionRemedyAutoPrivate Key = "orchestrator.permission_remedy.auto_private"
+	// KeyOrchestratorPermissionRemedyAutoPublic は公開リポジトリで判定役に止められたときの【対処】である。
+	// **公開の場所へ投稿されるので、コメントで許可を出す方法は案内しない。**
+	KeyOrchestratorPermissionRemedyAutoPublic Key = "orchestrator.permission_remedy.auto_public"
 	// KeyOrchestratorConfirmStartupWorkingTimeout はstartup_timeout_ms を過ぎても working のままだったときに出る。
 	KeyOrchestratorConfirmStartupWorkingTimeout Key = "orchestrator.confirm_startup.working_timeout"
 	// KeyOrchestratorConfirmStartupUnknownStatus はherdr が idle / done / blocked / working 以外の状態を返したときに出る。
@@ -3440,6 +3447,9 @@ var allKeys = []Key{
 	KeyOrchestratorResolvePanePaneCountUnexpected,
 	KeyOrchestratorConfirmStartupAgentGetFailed,
 	KeyOrchestratorConfirmStartupBlocked,
+	KeyOrchestratorPermissionRemedyDontAsk,
+	KeyOrchestratorPermissionRemedyAutoPrivate,
+	KeyOrchestratorPermissionRemedyAutoPublic,
 	KeyOrchestratorConfirmStartupWorkingTimeout,
 	KeyOrchestratorConfirmStartupUnknownStatus,
 	KeyOrchestratorConfirmStartupNotInteractive,

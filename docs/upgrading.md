@@ -145,7 +145,7 @@ claude:
       - "Write"
     deny: ["AskUserQuestion"]  # ← [] から変える
   tool_gate:
-    mode: off                  # ← 下の表のとおり
+    mode: "off"                # ← 下の表のとおり
 ```
 
 **`permission_mode` と `deny` は、必ず2つセットで変えてください。**

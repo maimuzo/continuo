@@ -32,6 +32,8 @@ const grantRecipeEN = "I allow that operation"
 // 与える情報: 両方の言語の `orchestrator.confirm_startup.blocked` の文言。
 // 成功条件: 許可の出し方が1文字も入っていないこと。
 func TestStartupBlocked_許可の出し方を文言に埋めない(t *testing.T) {
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
 	for _, lang := range []i18n.Lang{i18n.LangJA, i18n.LangEN} {
 		i18n.Use(lang)
 
@@ -44,7 +46,6 @@ func TestStartupBlocked_許可の出し方を文言に埋めない(t *testing.T)
 			}
 		}
 	}
-	i18n.Use(i18n.LangJA)
 }
 
 // 目的: 3つ目の引数（【対処】）が、文言の中で使われていることを固定する。
@@ -57,6 +58,8 @@ func TestStartupBlocked_許可の出し方を文言に埋めない(t *testing.T)
 func TestStartupBlocked_渡した対処が文言に入る(t *testing.T) {
 	const marker = "<<ここに対処が入る>>"
 
+	t.Cleanup(func() { i18n.Use(i18n.DefaultLang) })
+
 	for _, lang := range []i18n.Lang{i18n.LangJA, i18n.LangEN} {
 		i18n.Use(lang)
 
@@ -67,5 +70,4 @@ func TestStartupBlocked_渡した対処が文言に入る(t *testing.T) {
 				"出力: %q", lang, got)
 		}
 	}
-	i18n.Use(i18n.LangJA)
 }

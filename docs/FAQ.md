@@ -2339,7 +2339,7 @@ jq -r .base <worktree のパス>/.continuo.json
 **入っているかは、送る文面で確かめられます。**
 
 ```bash
-cd ~/continuo-work && continuo prompt --show | grep -c '^## 5-5\. '
+cd ~/continuo-work && continuo prompt --show | grep -c '### 既存の構造がどうなっているか'
 ```
 
 **`1` が返れば入っています。**
