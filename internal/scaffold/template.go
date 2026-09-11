@@ -69,6 +69,8 @@ tracker:
   comments:                                 # continuo とエージェントのあいだの取り決め。GitHub 固有ではない
     marker: "<!-- continuo:agent -->"       # エージェントが書くコメントの先頭に必ず入れさせる目印
     self_marker: "<!-- continuo:self -->"   # continuo 自身が書くコメントの目印。引き渡しの連絡だけで、成果は書かない
+    github_app_attribution: false         # true にすると、機械の投稿に GitHub App の attribution が付く。
+                                            # 資格情報は --port の画面（/github-app）で人ごとに作る。無いと起動しない
   status_signal_prefix: "CONTINUO-STATUS:"  # エージェントが応答の最後に書く1行の先頭。continuo はこの行を読んで Status を動かす
   status_signal_map:                        # その1行に書かれた値と、書き込む Status の対応
     review: "In Review"                     # 作業が終わり、人間のレビューに回してよいとき

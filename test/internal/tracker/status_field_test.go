@@ -55,7 +55,7 @@ func bootstrapProjectPayloadWithCounts(
 // 完全に一致すること（キーが引用符で囲まれ、値がカンマ区切りで並ぶこと）。
 func TestFetchIssuesByStates_status_fieldを絞り込みのキーに使う(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nil, false, ""))))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestFetchIssuesByStates_status_fieldを絞り込みのキーに使う(t *te
 // 成功条件: 送られた `q` が `status:` で始まらないこと。
 func TestFetchIssuesByStates_既定以外なら組み込みのstatusキーを使わない(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(candidateItemsPayload(nil, false, ""))))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestBootstrap_絞り込みキーの検査クエリを同じリクエスト�
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		bootstrapProjectPayloadWithCounts(testStatusOptions, 105, 100, 5),
 	)))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestBootstrap_絞り込みのキーに使えないstatus_fieldを弾く(t *
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		bootstrapProjectPayloadWithCounts(testStatusOptions, 105, 105, 105),
 	)))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestBootstrap_絞り込みのキーに使えるなら通す(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		bootstrapProjectPayloadWithCounts(testStatusOptions, 105, 100, 5),
 	)))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestBootstrap_全件に値が入っていても誤検知しない(t *testin
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		bootstrapProjectPayloadWithCounts(testStatusOptions, 105, 105, 0),
 	)))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestBootstrap_item0件のカンバンでは絞り込みキーを検査し�
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		bootstrapProjectPayloadWithCounts(testStatusOptions, 0, 0, 0),
 	)))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -281,7 +281,7 @@ func TestVerifyStatusOptions_絞り込みキーの判定はしない(t *testing.
 	fs := newFakeGraphQLServer(t, single(dataResponse(
 		bootstrapProjectPayloadWithCounts(testStatusOptions, 105, 105, 105),
 	)))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -296,7 +296,7 @@ func TestVerifyStatusOptions_絞り込みキーの判定はしない(t *testing.
 // 成功条件: GraphQL 変数 statusField が "continuo Status" であること。
 func TestFetchIssuesByIDs_status_fieldをそのまま渡す(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(byIDsPayload([]any{nil}))))
-	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(customStatusFieldConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}

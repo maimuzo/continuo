@@ -58,6 +58,11 @@ type Adapter struct {
 	// nil なら全て信頼済みとして扱う。
 	repoTrusted RepoTrustFunc
 
+	// appToken は GitHub App のトークンを取る関数である（3-82d）。nil なら人間の認証で書く。
+	//
+	// **投稿のたびに呼ぶ。**取ったトークンは、その1件の投稿にしか使わない（AppTokenFunc）。
+	appToken AppTokenFunc
+
 	// mu は Bootstrap / VerifyStatusOptions が解決した値
 	// （bootstrapped・projectID・statusFieldID・statusOptionIDs・statusOptionNamesFold）を守る。
 	//
@@ -95,6 +100,20 @@ type ProjectWorkflow struct {
 	Enabled bool
 }
 
+// AppTokenFunc は GitHub App の資格情報からアクセストークンを1本取る関数の型である
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「continuo 本体の投稿」）。
+//
+// **呼ぶたびに更新用のトークンが1回転する。**返ったトークンは、次に誰か（本体・
+// `continuo github-app token`・ダッシュボード）が回すまでしか生きていない（回転すると古いものは
+// 即座に死ぬ。2026-09-09 に実測）。**メモリで使い回してはならない。**投稿の直前に取り、
+// 使ったらすぐ捨てる。
+//
+// 本番は `githubapp.TokenSource` が返す関数である。テストは固定の文字列を返す関数を渡す。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// 戻り値: アクセストークン（`ghu_` で始まる user-to-server token）と、取れなかった場合のエラー。
+type AppTokenFunc func(ctx context.Context) (string, error)
+
 // NewAdapter は Adapter を作る。
 //
 // cfg: WORKFLOW.md の front matter の tracker セクション（設計 5-2）。
@@ -109,6 +128,11 @@ type ProjectWorkflow struct {
 // repoTrusted: リポジトリが Claude Code に信頼登録されているかを判定する関数（設計 3-13）。
 // **nil を渡すと全てのリポジトリを信頼済みとして扱う。**信頼の判定を orchestrator 側へ
 // 出さないために、ここで受け取って Issue.Dispatchable に畳み込む。
+// appToken: GitHub App のトークンを取る関数（3-82d）。**nil なら `github_app_attribution` が
+// 偽と同じで、PostComment は token（人間の認証）で書く。**nil でなければ、PostComment は
+// 投稿のたびにこれでトークンを取り、GitHub App のトークンで書く。取れない・401 が2回・403 など
+// 理由を問わず落ちたら、token（人間の認証）で同じ本文を書き直す（3-82c「止まり方」）。
+// **別名のメソッドを足さない。**足すと Adapter が2つの経路で状態を持ち、テストが分岐する。
 // 戻り値: cfg.Kind が KindGitHubProjectsV2 以外の場合は CategoryUnsupportedKind、
 // owner / project_number / status_field のいずれかが未設定の場合、および endpoint が
 // https でない（loopback の http でもない）場合は CategoryInvalidConfig の *Error を返す。
@@ -119,6 +143,7 @@ func NewAdapter(
 	httpClient *http.Client,
 	logger *slog.Logger,
 	repoTrusted RepoTrustFunc,
+	appToken AppTokenFunc,
 ) (*Adapter, error) {
 	if cfg.Kind != KindGitHubProjectsV2 {
 		return nil, &Error{
@@ -165,7 +190,29 @@ func NewAdapter(
 		statusField:   cfg.Provider.StatusField,
 		logger:        logger,
 		repoTrusted:   repoTrusted,
+		appToken:      appToken,
 	}, nil
+}
+
+// ProbeAppToken は GitHub App のトークンが実際に取れることを確かめる
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82c「取れないときに止める」）。
+//
+// **起動時の検査が呼ぶ。**トークンを取る関数は NewAdapter へ渡した1つだけなので、検査は
+// この経路を通る（検査が別に関数を持つと、テストが片方だけ差し替えて「たまたま通る」形になる）。
+//
+// **取れたトークンは捨てる。**使い回せない（AppTokenFunc）。**呼ぶたびに更新用のトークンが
+// 1回転する**ので、起動1回につき1回しか呼ばない。
+//
+// ctx: 呼び出しに適用するコンテキスト。
+// 戻り値: 取る関数が渡されていなければ nil。取れなければそのエラー。
+func (a *Adapter) ProbeAppToken(ctx context.Context) error {
+	if a.appToken == nil {
+		return nil
+	}
+	if _, err := a.appToken(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 // requiredStatesForBootstrap は「カンバンに実在しなければ起動を止める」Status 名を、

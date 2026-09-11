@@ -37,7 +37,7 @@ func TestFetchProjectWorkflows_応答に載った自動化をそのまま返す(
 		{"number": 2, "name": "Pull request merged", "enabled": false},
 	}))))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestFetchProjectWorkflows_応答に載った自動化をそのまま返す(
 func TestFetchProjectWorkflows_応答に無ければnilを返す(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(workflowsPayload(nil))))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestFetchProjectWorkflows_応答に無ければnilを返す(t *testing.T) {
 func TestFetchProjectWorkflows_1件も無いカンバンでは長さ0を返す(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(workflowsPayload([]map[string]any{}))))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestFetchProjectWorkflows_1件も無いカンバンでは長さ0を返す(t
 func TestBootstrap_起動時の検査のクエリに自動化を混ぜない(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}

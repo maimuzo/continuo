@@ -20,7 +20,7 @@ import (
 func TestBootstrap_選択肢名が設定と一致すれば成功する(t *testing.T) {
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestBootstrap_選択肢名が食い違うとエラーになる(t *testing.T
 	}
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(missingInProgress))))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestBootstrap_Status名の比較は大文字小文字を無視する(t *tes
 	}
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(lowered))))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestBootstrap_projectが見つからないとエラーになる(t *testing.
 		"repositoryOwner": map[string]any{"projectV2": nil},
 	})))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestNewAdapter_対応外のkindはエラーになる(t *testing.T) {
 	cfg := testTrackerConfig()
 	cfg.Kind = "jira"
 
-	_, err := tracker.NewAdapter(cfg, "http://example.invalid", "test-token", nil, nil, nil)
+	_, err := tracker.NewAdapter(cfg, "http://example.invalid", "test-token", nil, nil, nil, nil)
 	if err == nil {
 		t.Fatalf("対応外の kind なのに NewAdapter が成功した")
 	}
@@ -131,7 +131,7 @@ func TestNewAdapter_owner未設定はエラーになる(t *testing.T) {
 	cfg := testTrackerConfig()
 	cfg.Provider.Owner = ""
 
-	_, err := tracker.NewAdapter(cfg, "http://example.invalid", "test-token", nil, nil, nil)
+	_, err := tracker.NewAdapter(cfg, "http://example.invalid", "test-token", nil, nil, nil, nil)
 	if err == nil {
 		t.Fatalf("owner が空なのに NewAdapter が成功した")
 	}
@@ -150,7 +150,7 @@ func TestBootstrap_認証が無いとMissingSecretに分類される(t *testing.
 		Body:   map[string]any{"message": "Bad credentials"},
 	}))
 
-	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "invalid-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(testTrackerConfig(), fs.URL(), "invalid-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestBootstrap_カンバンに無い対応表のキーは起動を止めず�
 	cfg.AutomatedStateRewrite = map[string]string{"In Progres": "In Progress"}
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
 
-	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, logger, nil)
+	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, logger, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestVerifyStatusOptions_対応表のキーがカンバンから消えても
 		return dataResponse(bootstrapProjectPayload(withoutIceBox))
 	})
 
-	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, nil, nil)
+	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestBootstrap_カンバンに在る対応表のキーは起動も知らせ�
 	cfg.AutomatedStateRewrite = map[string]string{"Ice Box": "In Progress"}
 	fs := newFakeGraphQLServer(t, single(dataResponse(bootstrapProjectPayload(testStatusOptions))))
 
-	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, logger, nil)
+	a, err := tracker.NewAdapter(cfg, fs.URL(), "test-token", nil, logger, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAdapter が失敗した: %v", err)
 	}

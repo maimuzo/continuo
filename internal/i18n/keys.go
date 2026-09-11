@@ -1263,6 +1263,9 @@ const (
 	KeyLockReleaseUnlockFailed Key = "lock.release.unlock_failed"
 	// KeyLockReleaseCloseFailed はロックファイルのクローズに失敗したときに出る。
 	KeyLockReleaseCloseFailed Key = "lock.release.close_failed"
+	// KeyLockAcquireWaitTimeout は AcquireWait が上限まで待っても別のプロセスがロックを
+	// 放さなかったときに出る（GitHub App の資格情報のロック）。
+	KeyLockAcquireWaitTimeout Key = "lock.acquire_wait.timeout"
 )
 
 // hook を受ける socket の置き場所（internal/socketpath）のエラーの文言。
@@ -2552,6 +2555,57 @@ const (
 	KeyCLIPromptBreakdownAttempt Key = "cli.prompt.breakdown_attempt"
 )
 
+// GitHub App の資格情報の読み書きと、トークンの取得に出る文言である
+// （internal/githubapp。docs/plans/impl/issue245_github_app_attribution.md の 3-82b / 3-82d / 3-82g）。
+const (
+	// KeyGitHubAppCredentialsNotFound は番兵エラー `githubapp.ErrNotFound` の文言である。
+	KeyGitHubAppCredentialsNotFound Key = "githubapp.credentials.not_found"
+	// KeyGitHubAppCredentialsNotFoundAt は資格情報のファイルが無いときに、そのパスを添えて出る。
+	KeyGitHubAppCredentialsNotFoundAt Key = "githubapp.credentials.not_found_at"
+	// KeyGitHubAppCredentialsReadFailed は資格情報のファイルを読めないときに出る。
+	KeyGitHubAppCredentialsReadFailed Key = "githubapp.credentials.read_failed"
+	// KeyGitHubAppCredentialsParseFailed は資格情報のファイルが JSON として壊れているときに出る。
+	KeyGitHubAppCredentialsParseFailed Key = "githubapp.credentials.parse_failed"
+	// KeyGitHubAppCredentialsBadExpiry は refresh_token_expires_at が RFC 3339 として読めないときに出る。
+	KeyGitHubAppCredentialsBadExpiry Key = "githubapp.credentials.bad_expiry"
+	// KeyGitHubAppCredentialsDirCreateFailed は `~/.continuo/` を作れないときに出る。
+	KeyGitHubAppCredentialsDirCreateFailed Key = "githubapp.credentials.dir_create_failed"
+	// KeyGitHubAppCredentialsWriteFailed は資格情報のファイルを書けないときに出る。
+	KeyGitHubAppCredentialsWriteFailed Key = "githubapp.credentials.write_failed"
+	// KeyGitHubAppCredentialsIncomplete は更新用のトークンが無い（認可を通していない）ときに出る。
+	KeyGitHubAppCredentialsIncomplete Key = "githubapp.credentials.incomplete"
+	// KeyGitHubAppCredentialsNoApp は client_id と client_secret が無い（GitHub App を作っていない）ときに出る。
+	KeyGitHubAppCredentialsNoApp Key = "githubapp.credentials.no_app"
+	// KeyGitHubAppLockFailed は資格情報のロックを取れないときに出る。
+	KeyGitHubAppLockFailed Key = "githubapp.lock.failed"
+	// KeyGitHubAppTokenRequestFailed はトークンの要求の往復そのものが失敗したときに出る。
+	KeyGitHubAppTokenRequestFailed Key = "githubapp.token.request_failed"
+	// KeyGitHubAppTokenStatus はトークンの要求に GitHub が非 2xx を返したときに出る。
+	KeyGitHubAppTokenStatus Key = "githubapp.token.status"
+	// KeyGitHubAppTokenParseFailed はトークンの応答を JSON として読めないときに出る。
+	KeyGitHubAppTokenParseFailed Key = "githubapp.token.parse_failed"
+	// KeyGitHubAppTokenDenied は GitHub がトークンの発行を断った（`error` を返した）ときに出る。
+	KeyGitHubAppTokenDenied Key = "githubapp.token.denied"
+	// KeyGitHubAppTokenEmpty は応答にアクセストークンが無いときに出る。
+	KeyGitHubAppTokenEmpty Key = "githubapp.token.empty"
+	// KeyGitHubAppViewerRequestFailed は `GET /user` の往復が失敗したときに出る。
+	KeyGitHubAppViewerRequestFailed Key = "githubapp.viewer.request_failed"
+	// KeyGitHubAppViewerStatus は `GET /user` が非 2xx を返したときに出る。
+	KeyGitHubAppViewerStatus Key = "githubapp.viewer.status"
+	// KeyGitHubAppViewerParseFailed は `GET /user` の応答を JSON として読めないときに出る。
+	KeyGitHubAppViewerParseFailed Key = "githubapp.viewer.parse_failed"
+	// KeyGitHubAppViewerEmpty は `GET /user` の応答に login が無いときに出る。
+	KeyGitHubAppViewerEmpty Key = "githubapp.viewer.empty"
+	// KeyGitHubAppConvertRequestFailed は manifest の変換の往復が失敗したときに出る。
+	KeyGitHubAppConvertRequestFailed Key = "githubapp.convert.request_failed"
+	// KeyGitHubAppConvertStatus は manifest の変換に GitHub が非 2xx を返したときに出る。
+	KeyGitHubAppConvertStatus Key = "githubapp.convert.status"
+	// KeyGitHubAppConvertParseFailed は manifest の変換の応答を JSON として読めないときに出る。
+	KeyGitHubAppConvertParseFailed Key = "githubapp.convert.parse_failed"
+	// KeyGitHubAppConvertIncomplete は manifest の変換の応答に要る欄が無いときに出る。
+	KeyGitHubAppConvertIncomplete Key = "githubapp.convert.incomplete"
+)
+
 // allKeys は宣言済みのキーを全部並べたものである。
 //
 // **新しいキーを足したらここにも足すこと。**test/internal/i18n がこの一覧と
@@ -3506,6 +3560,31 @@ var allKeys = []Key{
 	KeyCLIPromptErrRenderFailed,
 	KeyCLIPromptBreakdownExpanded,
 	KeyCLIPromptBreakdownAttempt,
+	// GitHub App の資格情報とトークンの取得（internal/githubapp。issue #245）。
+	KeyLockAcquireWaitTimeout,
+	KeyGitHubAppCredentialsNotFound,
+	KeyGitHubAppCredentialsNotFoundAt,
+	KeyGitHubAppCredentialsReadFailed,
+	KeyGitHubAppCredentialsParseFailed,
+	KeyGitHubAppCredentialsBadExpiry,
+	KeyGitHubAppCredentialsDirCreateFailed,
+	KeyGitHubAppCredentialsWriteFailed,
+	KeyGitHubAppCredentialsIncomplete,
+	KeyGitHubAppCredentialsNoApp,
+	KeyGitHubAppLockFailed,
+	KeyGitHubAppTokenRequestFailed,
+	KeyGitHubAppTokenStatus,
+	KeyGitHubAppTokenParseFailed,
+	KeyGitHubAppTokenDenied,
+	KeyGitHubAppTokenEmpty,
+	KeyGitHubAppViewerRequestFailed,
+	KeyGitHubAppViewerStatus,
+	KeyGitHubAppViewerParseFailed,
+	KeyGitHubAppViewerEmpty,
+	KeyGitHubAppConvertRequestFailed,
+	KeyGitHubAppConvertStatus,
+	KeyGitHubAppConvertParseFailed,
+	KeyGitHubAppConvertIncomplete,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

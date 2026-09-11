@@ -761,7 +761,7 @@ func build(
 		repoTrusted = ws.TrustFunc()
 	}
 	adapter, err := tracker.NewAdapter(
-		cfg.Tracker, graphqlEndpoint, token, newTrackerHTTPClient(trackerTimeout), logger, repoTrusted)
+		cfg.Tracker, graphqlEndpoint, token, newTrackerHTTPClient(trackerTimeout), logger, repoTrusted, nil)
 	if err != nil {
 		return nil, i18n.Errorf(i18n.KeyDaemonBuildTrackerFailed, err)
 	}
