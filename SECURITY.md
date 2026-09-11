@@ -33,6 +33,7 @@ GitHub の **[Private vulnerability reporting](https://github.com/maimuzo/contin
 | **信頼の登録を書き換える** | `continuo trust` は `~/.claude.json` を書き換え、対象リポジトリを Claude Code に信頼登録します |
 | **`curl … \| sh` で配る** | インストーラーはネットワークから取ってきて実行されます |
 | **資格情報を読む** | 定額プランの枠を読むために、`~/.claude/.credentials.json` か macOS の Keychain を読みます |
+| **GitHub App の資格情報を書き、更新用のトークンを回す** | `tracker.comments.github_app_attribution` を `true` にすると、`~/.continuo/github-app-credentials.json`（`0600`）を読み、投稿のたびに GitHub App の更新用のトークンを回して書き戻します。**そのファイルを作るのは `--port` の画面（`/github-app`）だけで、GitHub との往復の結果しか書きません。**秘密鍵は置きません。権限は `Issues` の読み書きと `Metadata` の読み取りだけです（[docs/upgrading.md](docs/upgrading.md) の「機械の投稿に GitHub App の attribution を付けられるようになりました」） |
 | **`continuo abandon` は消す** | worktree と branch と herdr の workspace を消します。**`--force` を付けると、コミットしていない変更と push していない commit ごと消えます**（`--dry-run` で何が消えるかを先に見られます） |
 | **`continuo abandon` はカンバンも書き換える** | continuo が動いていれば、手を離させるために Status を `--park`（既定は `tracker.failure_state`）へ動かします。`--to` を付ければ片付けたあとにも動かします。**`--dry-run` はどちらも書かず、書く値を予告するだけです** |
 
