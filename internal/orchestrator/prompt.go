@@ -157,12 +157,12 @@ func buildCommentRequestPrompt(issueURL, marker string, useAppToken bool, contin
 	fmt.Fprintf(&b, "gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
 	if useAppToken {
 		// **組み込みの指示書の 5-6 と同じ2文である。**文面を変えるときは両方を直す。
-		// 断りの1行は `appTokenFallbackNote`（Adapter が本体の投稿へ足すものと1文字も違えない）。
+		// 断りの1行は `tracker.AppTokenFallbackNote`（Adapter が本体の投稿へ足すものと同じ定数。1文字も違えない）。
 		b.WriteString("**`gh` が `HTTP 401` で落ちたときだけ、`TOKEN=$(…)` の行からもう1回だけやり直してください。**\n" +
 			"**`TOKEN=$(…)` が 0 以外で塊が止まったとき、それ以外で投稿が失敗したとき、または2回目も落ちたときは、" +
 			"`GH_TOKEN=\"$TOKEN\"` を外して投稿し、本文の先頭に並ぶ印（`<!--` で始まる行）を全部通したあとの行に、" +
 			"次の1行を入れてください。**作業は止めないでください。\n\n" +
-			"    " + appTokenFallbackNote + "\n\n" +
+			"    " + tracker.AppTokenFallbackNote + "\n\n" +
 			"**`--body \"…\"` で渡す本文は、二重引用符の中に1行足してください。**\n" +
 			"**`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください。**" +
 			"必ず `TOKEN=$(…)` で変数へ受けてから `GH_TOKEN=\"$TOKEN\"` で `gh` へ渡してください。\n\n")
@@ -184,18 +184,6 @@ func buildCommentRequestPrompt(issueURL, marker string, useAppToken bool, contin
 		bareProgressMarker(), marker)
 	return b.String()
 }
-
-// appTokenFallbackNote は、GitHub App のトークンで投稿できなかったときにエージェントが本文へ
-// 入れる断りの1行である（docs/plans/impl/issue245_github_app_attribution.md の 3-82c / 3-82e）。
-//
-// **本体（`internal/tracker` の Adapter）が自分の投稿へ足す断りと、1文字も違えてはならない。**
-// 組み込みの指示書の 6-1 が「本文にこの1行があるコメントは、印が null でも機械が書いたものである」と
-// 教えており、**文字列が1文字でも違うと、エージェントはその投稿を人間の指示として読む。**
-// **backtick・`$`・二重引用符を入れない。**`--body "…"` の二重引用符の中へ足させるためである。
-//
-// **`tracker.AppTokenFallbackNote` を指す形に置き換えること。**この定数は、Adapter の側に
-// 同名の公開定数が入るまでの仮の置き場である。2つ在ると、片方を直したときにもう片方が残る。
-const appTokenFallbackNote = "GitHub App のトークンで投稿できなかったので、attribution 無しで投稿しています。continuo のログと continuo doctor を確かめてください"
 
 // bareProgressMarker は、進捗報告の印から HTML のコメントの囲みを外した文字列を返す。
 //

@@ -30,15 +30,12 @@ const tokenLine = "TOKEN=$('" + sampleContinuoPath + "' github-app token) || exi
 // **`gh issue comment ` から後ろの並びは変えない。**頭に `GH_TOKEN="$TOKEN" ` を付けるだけである。
 const postPrefix = `GH_TOKEN="$TOKEN" gh issue comment `
 
-// appTokenFallbackNote は、GitHub App のトークンで投稿できなかったときに本文へ入れる断りの1行である
-// （3-82c / 3-82e）。
+// appTokenFallbackNote は、GitHub App のトークンで投稿できなかったときに本文へ入れる断りの1行である。
 //
-// **本体（`internal/tracker` の Adapter）が自分の投稿へ足す断りと1文字も違えてはならない。**
-// 6-1 が「本文にこの1行があるコメントは、印が null でも機械が書いたもの」と教えているので、
-// **1文字でも違うと、エージェントはその投稿を人間の指示として読む。**
-// **`tracker.AppTokenFallbackNote` が入ったら、この定数をそれへ置き換えて比べること。**
-// この検査を書いた時点では、Adapter の側にまだその定数が無い。
-const appTokenFallbackNote = "GitHub App のトークンで投稿できなかったので、attribution 無しで投稿しています。continuo のログと continuo doctor を確かめてください"
+// **Adapter が本体の投稿へ足す定数そのものを比べる**（`tracker.AppTokenFallbackNote`）。
+// 指示書の 5-6 と Adapter の断りが1文字でも違うと、6-1 の照合（この1行があるコメントは機械が書いた）が
+// 片方に当たらない。
+const appTokenFallbackNote = tracker.AppTokenFallbackNote
 
 // prVisibleLine は、pull request の2本（3-5 の作成と 3-6 の判断票）の本文へ入れる可視の1行である（3-82e）。
 //
