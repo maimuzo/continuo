@@ -108,11 +108,26 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 
 ## v0.1.15 から v0.1.16 へ
 
-**破壊的変更が1つあります。****カンバンに `Direct Chat` という列を既に持っている人だけが当たります。**
+**破壊的変更が2つあります。****`Direct Chat` という名前を、設定かカンバンで既に使っている人だけが当たります。**
 
-**何が起きるか。**`tracker.direct_chat_state` というキーが増え、**既定値が `"Direct Chat"` です。**
-**カンバンにその名前の列を既に持っていて、自分用の置き場として使っていた人は、
-設定を1行も書いていなくても挙動が変わります。**
+**当たる人は2通りです。**
+
+**1つ目。`WORKFLOW.md` の他の役割に `Direct Chat` と書いている人は、起動しなくなります。**
+`tracker.direct_chat_state` というキーが増え、**既定値が `"Direct Chat"` です。**
+**この名前が `active_states` などと重なっていると、continuo は起動を断ります。**
+
+**重なりを見る先は7つです。**`active_states` / `terminal_states` / `running_state` /
+`dispatch_state` / `failure_state` / `status_signal_map` の遷移先 / `cleanup.on_states`。
+**`automated_state_rewrite` のキーに書いている場合も、既存の検査が断ります。**
+
+**エラーの文面は `tracker.direct_chat_state` を名指しします。**
+**あなたの `WORKFLOW.md` にそのキーが1行も無いのは正常です**（既定値が使われています）。
+
+**なぜ断るのか。**重なったまま動かすと、**同じカードが「continuo が手を離す」と「continuo が着手する」の
+両方に当たります。**ログにも issue にも理由が出ないので、**気づく手立てがありません。**
+
+**2つ目。カンバンに `Direct Chat` という列を既に持っている人は、挙動が変わります。**
+設定を1行も書いていなくても当たります。
 
 | いままで | これから |
 | --- | --- |
@@ -129,12 +144,16 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 **別の名前にすれば、機能はそのまま使えます**（例: `direct_chat_state: "人間が対応中"`）。
 **その名前でカンバンに選択肢を1つ足してください**（下の節）。
 
-**起動しなくなることはありません。**`Direct Chat` を `active_states` などの他の役割にも書いている場合、
-**continuo は起動を断らず、この機能だけを無効にして警告を1行出します。**
-その1行は `direct_chat_state` を名指ししますが、**あなたの `WORKFLOW.md` にそのキーが無いのは正常です**
-（既定値が使われています）。
+**足した1行は、どちらの破壊的変更にも効きます。**空にすれば起動も通り、挙動も元のままです。
 
-**当たらない人には何も起きません。**カンバンに `Direct Chat` という列が無ければ、
+**書いた値が正しいかは、2つのコマンドで確かめられます。**
+
+```bash
+continuo doctor      # 重なっていれば ! を出し、どのキーと重なったかを出します
+continuo setup       # 選び直させます。重なる名前は書き込みません
+```
+
+**当たらない人には何も起きません。**`Direct Chat` という名前を設定にもカンバンにも使っていなければ、
 **このキーを書かなくても、いままでどおり動きます。**
 
 | 何が変わったか | 当てる必要 |
@@ -142,7 +161,7 @@ diff /tmp/continuo-template/WORKFLOW.md ~/continuo-work/WORKFLOW.md
 | **Claude Code を起動するときの既定が3つ変わりました** | **要りません。**`continuo init` が置いた `WORKFLOW.md` には値が書いてあり、書いてある値が勝ちます（下の節） |
 | **途中から人間が pane で直接チャットを続けられるようになりました（direct chat）** | **カンバンに `Direct Chat` という列を既に持っている人だけ、1行足します**（上）。使いたい人は、カンバンに `Direct Chat` という選択肢を1つ足します（下の節） |
 
-**`WORKFLOW.md` に消すキーはありません。**足すキーが1つあるのは、上の破壊的変更に当たる人だけです。
+**`WORKFLOW.md` に消すキーはありません。**足すキーが1つあるのは、上の2つの破壊的変更に当たる人だけです。
 
 **ただし `continuo doctor` の `未記入の項目` が1つ増えます。**雛形に `tracker.direct_chat_state` が
 増えたので、**既にある `WORKFLOW.md` では「書かれていない」と数えられます。**
@@ -256,7 +275,7 @@ continuo は**指示を送らず、`CONTINUO-STATUS:` の行も読まず、Statu
 **pane がまだ無ければ、そこで1つ用意します**（continuo がその issue をまだ抱えていないときだけです）。
 **「抱えている」には、やり直し待ちの issue も入ります。**着手に失敗して待っている issue は、
 pane が無くても抱えたままなので、**動かしてもその場では pane ができません。**
-**そのまま待てば、抱えている状態が自分で解けて pane ができます**（合わせて最大5分半）。
+**そのまま待てば、抱えている状態が自分で解けて pane ができます**（合わせて最大5分半。**信頼登録が外れているなどの場合は、待っても直りません**）。
 `In Progress` か `Ready` へ戻すと、**同じ pane・同じ会話のまま**続きの指示を送ります。
 
 **使うのに要るのは1つだけです。カンバンの画面で Status の選択肢を1つ足してください**（名前は `Direct Chat`）。
@@ -289,7 +308,7 @@ tracker:
 `unknown field "direct_chat_state"` で止まります。**
 **順番は「実行ファイルを入れ替える → `WORKFLOW.md` を書き足す」です。**
 
-### `continuo abandon --park` に direct chat の Status を渡すと、書く前に断ります
+### `continuo abandon` が direct chat の Status を3通りで断ります
 
 **`tracker.direct_chat_state` の Status をカンバンに作った人だけに関係します。**
 そこへ動かしても continuo は pane を閉じないので、`continuo abandon` は pane が閉じるのを待ち切れず、
