@@ -38,8 +38,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/githubapp"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/orchestrator"
+	"github.com/maimuzo/continuo/internal/tracker"
 )
 
 // LoopbackHost は待ち受けるアドレスである。
@@ -125,6 +127,30 @@ type Options struct {
 	Logger *slog.Logger
 	// Now は現在時刻を返す関数である。nil なら time.Now を使う。
 	Now func() time.Time
+	// GitHubApp は GitHub App を作る導線（`/github-app` の5本の経路）に要るものである
+	// （docs/plans/impl/issue245_github_app_attribution.md の 3-82g）。
+	// **nil なら、その5本の経路を張らない。**既にあるダッシュボードのテストは渡さないので変わらない。
+	// **internal/daemon は、ダッシュボードが開くかぎり `github_app_attribution` の値に関わらず常に渡す**
+	// （`false` で起動して画面を通す手順が、これに依る。3-82c）。
+	GitHubApp *GitHubAppOptions
+}
+
+// GitHubAppOptions は `/github-app` の画面が GitHub と資格情報に触るための口である（設計 3-82g）。
+//
+// **`internal/server` から `os.UserHomeDir()` を直に呼ばない**（3-82b）。置き場所は Store で受け取る。
+// **テストは一時ディレクトリの Store と、httptest.Server へ向けた HTTPClient と Endpoints を渡す。**
+type GitHubAppOptions struct {
+	// Store は資格情報の置き場所である（本番は `~/.continuo/`）。
+	Store githubapp.Store
+	// HTTPClient は github.com と往復するクライアントである。nil なら githubapp が既定を組み立てる。
+	HTTPClient *http.Client
+	// Endpoints は GitHub の接続先である。空の欄は本番の値になる。
+	Endpoints githubapp.Endpoints
+	// GHLogin は `gh api user` を叩く関数である（既定の名前 `continuo-<ログイン名>` と、
+	// 認可した人との突き合わせに使う。3-82f）。nil なら tracker.RunGHAPIUserLogin。
+	GHLogin tracker.GHLoginFunc
+	// ProjectURL は manifest の `url` に書く値である（continuo のリポジトリの URL）。
+	ProjectURL string
 }
 
 // Server は HTTP ダッシュボードの listener と応答の組み立てを持つ。
@@ -137,6 +163,8 @@ type Server struct {
 	logger *slog.Logger
 	now    func() time.Time
 	http   *http.Server
+	// githubApp は `/github-app` の経路に要るものである。nil なら経路を張らない（設計 3-82g）。
+	githubApp *GitHubAppOptions
 
 	// mu は ln と closed を守る。
 	mu     sync.Mutex
@@ -176,7 +204,7 @@ func New(opts Options) (*Server, error) {
 		now = time.Now
 	}
 
-	s := &Server{port: port, source: opts.Source, logger: logger, now: now}
+	s := &Server{port: port, source: opts.Source, logger: logger, now: now, githubApp: opts.GitHubApp}
 	// **期限を4つとも埋める。**このサーバは認証を持たないので、同じマシンの
 	// どのプロセスからでも接続できる。1本の接続で goroutine を握られ続けないようにする。
 	s.http = &http.Server{
