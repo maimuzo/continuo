@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/daemon"
 	"github.com/maimuzo/continuo/internal/doctor"
+	"github.com/maimuzo/continuo/internal/githubapp"
 	"github.com/maimuzo/continuo/internal/hookclient"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/instance"
@@ -83,7 +85,15 @@ type Deps struct {
 	) (tracker.Issue, bool, error)
 	// UserHomeDir はホームディレクトリを引く。`~/.claude.json` を書き換える先が決まるので、
 	// **検査では必ず一時ディレクトリへ向ける。**
+	// **`~/.continuo/` の GitHub App の資格情報もここから引く**
+	// （`continuo github-app token` と常駐の `daemon.Options.HomeDir`。3-82b）。
 	UserHomeDir func() (string, error)
+	// GitHubAppToken は GitHub App の更新用のトークンを1回転させ、アクセストークンを返す
+	// （`continuo github-app token`。docs/plans/impl/issue245_github_app_attribution.md の 3-82d）。
+	//
+	// **本物の GitHub を叩き、`~/.continuo/` の資格情報を書き戻すので、検査では必ず差し替える。**
+	// 既定は `githubapp.AcquireToken`（ロックを取る → 読む → 回す → 書き戻す → 放す）である。
+	GitHubAppToken func(ctx context.Context, store githubapp.Store, logger *slog.Logger) (string, error)
 	// DaemonRun は常駐の本体である。
 	DaemonRun func(ctx context.Context, opts daemon.Options) error
 	// SetupFetchStatusField はカンバンの Status のフィールドを読む。
@@ -122,6 +132,11 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.UserHomeDir == nil {
 		d.UserHomeDir = os.UserHomeDir
+	}
+	if d.GitHubAppToken == nil {
+		d.GitHubAppToken = func(ctx context.Context, store githubapp.Store, logger *slog.Logger) (string, error) {
+			return githubapp.AcquireToken(ctx, store, githubapp.Client{}, githubapp.DefaultLockTimeout, nil, logger)
+		}
 	}
 	if d.DaemonRun == nil {
 		d.DaemonRun = daemon.Run
@@ -199,11 +214,68 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 			return runAbandon(d, args[1:], stdout, stderr)
 		case "allow-keychain-access":
 			return runAllowKeychainAccess(d, args[1:], stdout, stderr)
+		case "github-app":
+			return runGitHubApp(d, args[1:], stdout, stderr)
 		case "version":
 			return runVersion(stdout)
 		}
 	}
 	return runMain(d, args, stdout, stderr)
+}
+
+// githubAppTokenTimeout は `continuo github-app token` 全体の上限である。
+//
+// **資格情報のロックを待つ上限（60秒）に、GitHub への1往復ぶんを足したものである**
+// （3-82d「同時に叩かれたとき」）。期限が無いと、GitHub が応答を返さないときに
+// エージェントの `TOKEN=$(…)` が永久に返らず、その run の turn が止まる。
+const githubAppTokenTimeout = githubapp.DefaultLockTimeout + 30*time.Second
+
+// runGitHubApp は `continuo github-app token` サブコマンドである
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「`continuo github-app token` の輪郭」）。
+//
+// **更新用のトークンを1回転させ、アクセストークンを標準出力へ1行だけ出す。**投稿は `gh` が行う
+// （`GH_TOKEN="$TOKEN" gh issue comment …`）。continuo はエージェントの代わりに投稿しない。
+//
+// **読むのは `~/.continuo/github-app-credentials.json` だけである。**WORKFLOW.md もカンバンも読まない
+// （useLanguageFromConfig も呼ばない。言語は環境変数の `LANG` だけで決まる）。
+//
+// **終了コードは2通りだけである。**0 はトークンを返した、それ以外の全部が 1。
+// **引数の誤りも 1 にする**（他のサブコマンドの parseErrorExitCode の 2 と混ぜない）。
+// エージェントに終了コードを見分けさせると、その 2 と必ず衝突するためである。
+// **資格情報が無いときも 1 で落ちる。**`gh auth token` へは落ちない。
+//
+// **標準エラーへトークンを1文字も出さない。**権限が 0600 でないときの WARN は
+// `logger`（標準エラー）へ出るが、トークンは `AcquireToken` がログに出さない。
+//
+// args: `continuo github-app` に続く引数。`token` の1語だけを受け付ける。フラグは受け取らない。
+// stdout: アクセストークンを1行で出す先。
+// stderr: 使い方・失敗の理由・警告を出す先。
+// 戻り値: 終了コード。0 はトークンを返した、1 はそれ以外の全部。
+func runGitHubApp(d Deps, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 || args[0] != "token" {
+		// **`--help` / `-h` も、語が無い場合も、知らない語も、同じ使い方を出して 1 で終わる。**
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIGitHubAppUsage))
+		return 1
+	}
+	home, err := d.UserHomeDir()
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIGitHubAppErrHomeDir, err))
+		return 1
+	}
+	store := githubapp.NewStore(home)
+	// **警告は標準エラーへ出す。**標準出力はトークン1行だけにする（`TOKEN=$(…)` が受ける）。
+	logger := logging.New(stderr, slog.LevelInfo)
+
+	ctx, cancel := context.WithTimeout(context.Background(), githubAppTokenTimeout)
+	defer cancel()
+	token, err := d.GitHubAppToken(ctx, store, logger)
+	if err != nil {
+		fmt.Fprintln(stderr, i18n.T(i18n.KeyCLIGitHubAppErrToken, err))
+		return 1
+	}
+	// **トークンを1行だけ。**改行以外は何も付けない。
+	fmt.Fprintln(stdout, token)
+	return 0
 }
 
 // runInit は `continuo init` サブコマンドである。WORKFLOW.md の雛形を1つだけ置く（設計 3-32）。
@@ -1699,12 +1771,18 @@ func runMain(d Deps, args []string, stdout, stderr io.Writer) int {
 	// 起動できない理由をログに出すので、ここでは環境変数から決めた言語のまま進む。
 	useLanguageFromConfig(path)
 
+	// **GitHub App の資格情報の置き場所（`~/.continuo/`）は、ここで引いたホームを渡す**（3-82b）。
+	// **取れなければ空のまま渡す。**daemon が os.UserHomeDir() へ落とすので、取れないことで
+	// ここでは起動を止めない（`GHLogin` は渡さない。nil で既定の `gh api user` になる）。
+	homeDir, _ := d.UserHomeDir()
+
 	fmt.Fprintln(stdout, i18n.T(i18n.KeyCLIMainStarting, path))
 	if err := d.DaemonRun(ctx, daemon.Options{
 		ConfigPath: path,
 		Logger:     logger,
 		Port:       port,
 		Instance:   inst,
+		HomeDir:    homeDir,
 	}); err != nil {
 		// **起動できなかったのか、動いていたものが落ちたのかを言い分ける。**
 		// 無人運用のログを後から読む人間が、起動失敗と実行中の異常終了を取り違えないようにする。

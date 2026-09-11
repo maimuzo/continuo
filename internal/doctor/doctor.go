@@ -25,6 +25,7 @@
 //	clone            … 対象リポジトリが `ghq list -p -e` で見つかるか
 //	信頼登録          … 対象リポジトリの clone のパスが `~/.claude.json` で承認済みか
 //	資格情報          … rate_limit の設定に応じて、環境変数・ファイル・Keychain のいずれかから取れるか
+//	GitHub App        … `github_app_attribution` が真なら、資格情報が揃っていて認可した人が gh の持ち主と同じか
 //
 // **1つ失敗しても残りを全部検査する。**最初の失敗で止めない。
 //
@@ -85,10 +86,18 @@ type Options struct {
 	GraphQLEndpoint string
 	// HomeDir は `~/.claude.json` と `~/.claude/.credentials.json` を探すホームディレクトリである。
 	// **`~/.claude/session-env` に書けるかの検査もここを基準にする。**
+	// **`~/.continuo/` の GitHub App の資格情報もここを基準にする**（3-82c。口を2つにしない）。
 	// 空なら os.UserHomeDir() の結果を使う。
 	//
 	// **テストは必ずこれを渡すこと。**本物のホームディレクトリへ書き込みを試すことになる。
 	HomeDir string
+	// GHLogin は `gh api user --jq .login` を実行する関数である（見出し語 `GitHub App` が、
+	// 認可した人と gh の持ち主を突き合わせるのに使う。3-82f）。nil なら本物を実行する。
+	//
+	// **テストは必ずこれを渡すこと。**本物を呼ぶと、検査結果が
+	// 「テストを走らせたマシンで誰がログインしているか」で変わってしまう。
+	// **口はこの1つだけである。**資格情報のファイルを読む口は足さない（HomeDir から引く）。
+	GHLogin tracker.GHLoginFunc
 	// HTTPClient は GraphQL のリクエストを送るクライアントである。nil なら http.DefaultClient。
 	HTTPClient *http.Client
 	// GHAuthStatus は `gh auth status` を実行する関数である。nil なら本物を実行する。
@@ -144,6 +153,7 @@ func (r Repo) String() string { return r.Owner + "/" + r.Name }
 //	                                        ├─ clone
 //	                                        └─ 信頼登録
 //	資格情報（設定が読めたかどうかだけを見る。飛ばさない）
+//	GitHub App（設定が読めたかどうかだけを見る。飛ばさない。`gh の認証` の下流にはしない）
 //
 // **この線は設計 3-32 の依存の図そのままである。**`gh の認証` が読む値は設定に無い
 // （対象のホストは github.com に固定）が、**依存の図と「上流が `✗` か `!` なら下流は `!`」の
@@ -161,6 +171,9 @@ func Run(ctx context.Context, opts Options) Report {
 	}
 	if opts.GhqList == nil {
 		opts.GhqList = workspace.RunGhqList
+	}
+	if opts.GHLogin == nil {
+		opts.GHLogin = tracker.RunGHAPIUserLogin
 	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = DefaultTimeout
@@ -288,6 +301,13 @@ func Run(ctx context.Context, opts Options) Report {
 	// 確認のダイアログが出たまま誰も答えないと返らないためである。
 	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
 		return checkCredentials(ctx, opts, cfg, configResult.Symbol)
+	}))
+
+	// 段9: GitHub App。**`github_app_attribution` が真のときだけ中身を見る**（3-82c）。
+	// **トークンは1度も取らない。**取ると更新用のトークンが回り、doctor が continuo を
+	// 起動不能にしうる。**期限を切る。**認可した人との突き合わせに `gh api user` を叩く（3-82f）。
+	report.add(withCheckTimeout(ctx, opts.CheckTimeout, func(ctx context.Context) Result {
+		return checkGitHubApp(ctx, opts, cfg, configResult.Symbol, time.Now())
 	}))
 
 	return report

@@ -2555,6 +2555,92 @@ const (
 	KeyCLIPromptBreakdownAttempt Key = "cli.prompt.breakdown_attempt"
 )
 
+// GitHub App の attribution（docs/plans/impl/issue245_github_app_attribution.md）のうち、
+// 起動時の検査（internal/daemon。3-82c / 3-82f）・`continuo github-app token`（internal/cli。3-82d）・
+// `continuo doctor` の見出し語 `GitHub App`（internal/doctor。3-82c）に出る文言である。
+const (
+	// KeyCLIGitHubAppUsage は `continuo github-app` の引数が `token` でないときに標準エラーへ出す使い方である。
+	KeyCLIGitHubAppUsage Key = "cli.github_app.usage"
+	// KeyCLIGitHubAppErrHomeDir は `continuo github-app token` がホームディレクトリを引けないときに出る。
+	KeyCLIGitHubAppErrHomeDir Key = "cli.github_app.err_home_dir"
+	// KeyCLIGitHubAppErrToken は `continuo github-app token` がトークンを取れなかったときに出る。
+	KeyCLIGitHubAppErrToken Key = "cli.github_app.err_token"
+
+	// KeyDaemonRunHomeDirFailed は起動時にホームディレクトリを決められなかったときに出る
+	// （GitHub App の資格情報の置き場所が決まらない）。
+	KeyDaemonRunHomeDirFailed Key = "daemon.run.home_dir_failed"
+	// KeyDaemonStartupGitHubAppCredentialsMissing は github_app_attribution が true なのに資格情報が無いときに出る
+	// （3-82c の1通り目の文面。引数は `<port>` の値と、server.port についての末尾の1行）。
+	KeyDaemonStartupGitHubAppCredentialsMissing Key = "daemon.startup.github_app.credentials_missing"
+	// KeyDaemonStartupGitHubAppRotateFailed は資格情報は在るのに更新用のトークンを回せなかったときに出る
+	// （3-82c の2通り目の文面。引数は GitHub が返した error の値・`<port>` の値2つ・末尾の1行）。
+	KeyDaemonStartupGitHubAppRotateFailed Key = "daemon.startup.github_app.rotate_failed"
+	// KeyDaemonStartupGitHubAppPortUnset は上の2通りの末尾に、server.port を書いていないときだけ足す1行である。
+	KeyDaemonStartupGitHubAppPortUnset Key = "daemon.startup.github_app.port_unset"
+	// KeyDaemonStartupGitHubAppPortZero は上の2通りの末尾に、server.port が 0 のときだけ足す1行である。
+	KeyDaemonStartupGitHubAppPortZero Key = "daemon.startup.github_app.port_zero"
+	// KeyDaemonStartupGitHubAppLoginMismatch は認可した人と gh の持ち主が違うときに出る（3-82f）。
+	// 引数は gh の持ち主と認可した人を、文面に出る順に6つ（同じ引数の番号を2回使えないため）。
+	KeyDaemonStartupGitHubAppLoginMismatch Key = "daemon.startup.github_app.login_mismatch"
+	// KeyDaemonStartupGitHubAppAuthorizedLoginMissing は資格情報に authorized_login が無いときに出る。
+	KeyDaemonStartupGitHubAppAuthorizedLoginMissing Key = "daemon.startup.github_app.authorized_login_missing"
+
+	// KeyDoctorLabelGitHubApp は GitHub App の資格情報の検査の見出し語である。
+	KeyDoctorLabelGitHubApp Key = "doctor.label.github_app"
+	// KeyDoctorGitHubAppConfigUnreadable は上流の設定ファイルが落ちたときの説明に出る。
+	KeyDoctorGitHubAppConfigUnreadable Key = "doctor.github_app.config_unreadable"
+	// KeyDoctorGitHubAppRemedyFixConfig は同じときの直し方に出る。
+	KeyDoctorGitHubAppRemedyFixConfig Key = "doctor.github_app.remedy_fix_config"
+	// KeyDoctorGitHubAppDisabled は github_app_attribution が false のときの説明に出る。
+	KeyDoctorGitHubAppDisabled Key = "doctor.github_app.disabled"
+	// KeyDoctorGitHubAppFileMissing は資格情報のファイルが無いときの説明に出る。
+	KeyDoctorGitHubAppFileMissing Key = "doctor.github_app.file_missing"
+	// KeyDoctorGitHubAppRemedyStep1 は資格情報が無いときの直し方の1段目（手元だけ false にする）である。
+	KeyDoctorGitHubAppRemedyStep1 Key = "doctor.github_app.remedy_step1"
+	// KeyDoctorGitHubAppRemedyStep2 は同じ直し方の2段目（continuo を起動する）である。
+	KeyDoctorGitHubAppRemedyStep2 Key = "doctor.github_app.remedy_step2"
+	// KeyDoctorGitHubAppRemedyStep3 は同じ直し方の3段目（/github-app を開く。引数は `<port>` の値）である。
+	KeyDoctorGitHubAppRemedyStep3 Key = "doctor.github_app.remedy_step3"
+	// KeyDoctorGitHubAppRemedyStep4 は同じ直し方の4段目（true に戻して再起動する）である。
+	KeyDoctorGitHubAppRemedyStep4 Key = "doctor.github_app.remedy_step4"
+	// KeyDoctorGitHubAppRemedyPortUnset は server.port を書いていないときに足す直し方である。
+	KeyDoctorGitHubAppRemedyPortUnset Key = "doctor.github_app.remedy_port_unset"
+	// KeyDoctorGitHubAppRemedyPortZero は server.port が 0 のときに足す直し方である。
+	KeyDoctorGitHubAppRemedyPortZero Key = "doctor.github_app.remedy_port_zero"
+	// KeyDoctorGitHubAppReadFailed は資格情報のファイルは在るのに読めない（壊れている）ときの説明に出る。
+	KeyDoctorGitHubAppReadFailed Key = "doctor.github_app.read_failed"
+	// KeyDoctorGitHubAppRemedyRecreate は同じときの直し方（消して作り直す）に出る。
+	KeyDoctorGitHubAppRemedyRecreate Key = "doctor.github_app.remedy_recreate"
+	// KeyDoctorGitHubAppPermWrong は資格情報の権限が 0600 でないときの説明に出る。
+	KeyDoctorGitHubAppPermWrong Key = "doctor.github_app.perm_wrong"
+	// KeyDoctorGitHubAppRemedyChmod は同じときの直し方に出る。
+	KeyDoctorGitHubAppRemedyChmod Key = "doctor.github_app.remedy_chmod"
+	// KeyDoctorGitHubAppIncomplete は資格情報に要る欄が欠けているときの説明に出る。
+	KeyDoctorGitHubAppIncomplete Key = "doctor.github_app.incomplete"
+	// KeyDoctorGitHubAppNoteAuthorizedLogin は authorized_login が欠けているときに添える説明である。
+	KeyDoctorGitHubAppNoteAuthorizedLogin Key = "doctor.github_app.note_authorized_login"
+	// KeyDoctorGitHubAppRemedyReauthorize は認可をやり直す直し方に出る（引数は `<port>` の値）。
+	KeyDoctorGitHubAppRemedyReauthorize Key = "doctor.github_app.remedy_reauthorize"
+	// KeyDoctorGitHubAppExpired は更新用のトークンの期限が切れているときの説明に出る。
+	KeyDoctorGitHubAppExpired Key = "doctor.github_app.expired"
+	// KeyDoctorGitHubAppExpiresSoon は更新用のトークンの残りが30日を切っているときの説明に出る。
+	KeyDoctorGitHubAppExpiresSoon Key = "doctor.github_app.expires_soon"
+	// KeyDoctorGitHubAppRemedyExtend は同じときの直し方（認可をやり直すと延びる）に出る。
+	KeyDoctorGitHubAppRemedyExtend Key = "doctor.github_app.remedy_extend"
+	// KeyDoctorGitHubAppLoginMismatch は認可した人と gh の持ち主が違うときの説明に出る（3-82f）。
+	KeyDoctorGitHubAppLoginMismatch Key = "doctor.github_app.login_mismatch"
+	// KeyDoctorGitHubAppRemedyLoginSwitch は同じときの直し方の1つ目（gh auth switch）に出る。
+	KeyDoctorGitHubAppRemedyLoginSwitch Key = "doctor.github_app.remedy_login_switch"
+	// KeyDoctorGitHubAppRemedyLoginReauthorize は同じときの直し方の2つ目（認可をやり直す）に出る。
+	KeyDoctorGitHubAppRemedyLoginReauthorize Key = "doctor.github_app.remedy_login_reauthorize"
+	// KeyDoctorGitHubAppGHLoginFailed は `gh api user` が取れず突き合わせられなかったときの説明に出る。
+	KeyDoctorGitHubAppGHLoginFailed Key = "doctor.github_app.gh_login_failed"
+	// KeyDoctorGitHubAppGHLoginTimeout は `gh api user` が期限内に返らなかったときの説明に出る。
+	KeyDoctorGitHubAppGHLoginTimeout Key = "doctor.github_app.gh_login_timeout"
+	// KeyDoctorGitHubAppOK は全部通ったときの説明に出る。
+	KeyDoctorGitHubAppOK Key = "doctor.github_app.ok"
+)
+
 // GitHub App の資格情報の読み書きと、トークンの取得に出る文言である
 // （internal/githubapp。docs/plans/impl/issue245_github_app_attribution.md の 3-82b / 3-82d / 3-82g）。
 const (
@@ -3697,6 +3783,44 @@ var allKeys = []Key{
 	KeyCLIPromptErrRenderFailed,
 	KeyCLIPromptBreakdownExpanded,
 	KeyCLIPromptBreakdownAttempt,
+	// GitHub App の起動時の検査・`continuo github-app token`・doctor の `GitHub App`（issue #245）。
+	KeyCLIGitHubAppUsage,
+	KeyCLIGitHubAppErrHomeDir,
+	KeyCLIGitHubAppErrToken,
+	KeyDaemonRunHomeDirFailed,
+	KeyDaemonStartupGitHubAppCredentialsMissing,
+	KeyDaemonStartupGitHubAppRotateFailed,
+	KeyDaemonStartupGitHubAppPortUnset,
+	KeyDaemonStartupGitHubAppPortZero,
+	KeyDaemonStartupGitHubAppLoginMismatch,
+	KeyDaemonStartupGitHubAppAuthorizedLoginMissing,
+	KeyDoctorLabelGitHubApp,
+	KeyDoctorGitHubAppConfigUnreadable,
+	KeyDoctorGitHubAppRemedyFixConfig,
+	KeyDoctorGitHubAppDisabled,
+	KeyDoctorGitHubAppFileMissing,
+	KeyDoctorGitHubAppRemedyStep1,
+	KeyDoctorGitHubAppRemedyStep2,
+	KeyDoctorGitHubAppRemedyStep3,
+	KeyDoctorGitHubAppRemedyStep4,
+	KeyDoctorGitHubAppRemedyPortUnset,
+	KeyDoctorGitHubAppRemedyPortZero,
+	KeyDoctorGitHubAppReadFailed,
+	KeyDoctorGitHubAppRemedyRecreate,
+	KeyDoctorGitHubAppPermWrong,
+	KeyDoctorGitHubAppRemedyChmod,
+	KeyDoctorGitHubAppIncomplete,
+	KeyDoctorGitHubAppNoteAuthorizedLogin,
+	KeyDoctorGitHubAppRemedyReauthorize,
+	KeyDoctorGitHubAppExpired,
+	KeyDoctorGitHubAppExpiresSoon,
+	KeyDoctorGitHubAppRemedyExtend,
+	KeyDoctorGitHubAppLoginMismatch,
+	KeyDoctorGitHubAppRemedyLoginSwitch,
+	KeyDoctorGitHubAppRemedyLoginReauthorize,
+	KeyDoctorGitHubAppGHLoginFailed,
+	KeyDoctorGitHubAppGHLoginTimeout,
+	KeyDoctorGitHubAppOK,
 	// GitHub App の資格情報とトークンの取得（internal/githubapp。issue #245）。
 	KeyLockAcquireWaitTimeout,
 	KeyGitHubAppCredentialsNotFound,
