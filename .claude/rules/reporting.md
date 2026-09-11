@@ -283,15 +283,42 @@ sequenceDiagram
 
 **日本語へ訳さない。**`worktree` / `pane` / `hook` / `branch` / `commit` / `classifier` はそのまま書く。
 
-### chat の返答には、2つの見出しを足す
+### chat の返答は、当面この形にする
 
-**`maimuzo-chat-response` plugin の Stop hook が、`三行まとめ` `何が言いたいのか` `結果` `詳細` の4つを見出しとして数えている。**
-**1つでも欠けると turn を終えられず、書き直しになる。**
+**節ごとに引用を置くところまでは同じである。**
+**ただし節の中の見出しは、上の7つではなく、次の5つにする。**
 
-**だから chat の返答では、上の7つに加えて `## 何が言いたいのか` と `## 結果` を置く。**
-**issue と pull request のコメントには要らない。**plugin はそちらを見ない。
+    ## <一言で中身が想像できる節の題名>
+
+    > （その節が答えている原文だけを引く）
+
+    ## 三行まとめ
+
+    ## 何が言いたいのか
+
+    ## 結果
+
+    ## 詳細
+
+**話題を変えるときは `-----` の区切り線を入れ、その先も同じ5つで書く。**
 
 **`## 何が言いたいのか` の冒頭では、報告 / 質問 / 確認 のどれかを名乗る。**
+
+**なぜ7つにできないか。**2つの Stop hook が、この5つを機械で強制している。
+
+| どの hook | 何を見ているか |
+| --- | --- |
+| `maimuzo-chat-response` plugin の `check-reply-structure.py` | `三行まとめ` `何が言いたいのか` `結果` `詳細` の**4つが、この順で並んでいるか。**見出しの深さ（`##` か `###` か）は問わない |
+| [.claude/hooks/check-reply-clarity.py](../hooks/check-reply-clarity.py) の `REQUIRED_AFTER_DIVIDER` | **区切り線より後ろの塊ごとに、`三行まとめ` と `何が言いたいのか` の両方があるか** |
+
+**7つの形を chat で使うと、`### 詳細` が節1の末尾に来る。**
+**そこへ `## 結果` を後ろから足すと、plugin は「結果 の後に 詳細」として止める。**
+**節ごとに `### 三行まとめ` だけを置くと、repository 側の hook が「区切り線の先に何が言いたいのかが無い」として止める。**
+
+**plugin は別のリポジトリ**（`~/.claude/plugins/marketplaces/maimuzo-marketplace/plugins/maimuzo-chat-response/`）**にある。**
+**そこを直すまで、chat の返答はこの5つで書く。**
+
+**issue と pull request のコメントは、上の7つで書く。**plugin も repository 側の hook も、そちらを見ない。
 
 ### 引用は、結びの1文だけを引かない
 
