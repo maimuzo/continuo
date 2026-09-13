@@ -1,0 +1,292 @@
+# Claude Codeを主に、Codexを併用する運用案
+
+Claude側を正本として維持し、Codexには公式の互換機能とsymlinkで接続する。
+推奨は「公式連携プラグイン＋CLAUDE.mdのfallback読み込み＋既存marketplaceの再利用」。
+高度なhooks制御と、このリポジトリ固有の移植設計は対象外とする。
+
+調査基準日: 2026-09-12。公式Web仕様と、手元のCodex CLI 0.154.0・Herdr 0.8.2のヘルプを確認した。以下は運用の選定案であり、設定変更・プラグイン導入・モデルを使った互換性試験は実施していない。
+
+## 1. 採用する構成
+
+指示・スキル本文の編集先を増やさず、実行環境ごとの設定だけを最小限持つ。
+プラグインは同じ配布元から両者に入れる。配布時のキャッシュが別でも、本文の二重保守にはならない。
+
+| 対象 | 推奨方法 | 人が保守するもの |
+| --- | --- | --- |
+| ClaudeからCodexへの委任・レビュー | OpenAI公式 `codex-plugin-cc` | 通常は追加実装なし |
+| プロジェクトの基本指示 | Codexのfallbackに `CLAUDE.md` を指定 | 既存のCLAUDE.mdのみ |
+| 個人共通の基本指示 | CodexのグローバルAGENTS.mdから既存CLAUDE.mdへsymlink | 既存の個人CLAUDE.mdのみ |
+| `.claude/rules/` | CLAUDE.mdにCodex向け読取手順を短く追記 | 既存rulesと短い接続指示 |
+| `.claude/skills/` | 共有対象のskillディレクトリを `.agents/skills/` へsymlink | 既存のSKILL.mdと付属ファイル |
+| 指定のClaudeプラグイン群 | 既存marketplaceをCodexにも登録し、必要なpluginを選択 | 既存の配布元・本文 |
+| Claude固有の実行機能 | Claude側に残す。必要なものだけ後日対応 | 当面は変更なし |
+| Claude停止時の継続 | HerdrからCodexを起動し、session resumeまたは公式import | 通常は追加実装なし |
+
+OpenAI公式には、Claude互換manifestとmarketplaceの受け入れ、Codex CLIのplugin管理、Claude設定のimportがある。「Codex用manifestを全件自作する」ことを出発点にしない。[プラグイン仕様](https://developers.openai.com/plugins/build/plugins)、[CodexのPlugins](https://learn.chatgpt.com/docs/plugins)、[Import](https://learn.chatgpt.com/docs/import)
+
+## 2. 普段は公式プラグインからCodexを呼ぶ
+
+Claudeが作業の窓口を担い、Codexにまとまった調査・実装・レビューを渡す。
+独自MCPサーバーやCLI実行ラッパーは初期構成に加えない。
+
+採用するのは [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)。公式READMEはClaudeを使い続けながらCodexへ委任する用途を明示している。ローカルのCodex app-serverを使い、Codex直接起動と同じ認証・設定を参照する。
+
+未導入の環境では、Claude Code内で次を実行する。導入済みなら再インストールせず `/codex:setup` から確認する。
+
+```text
+/plugin marketplace add openai/codex-plugin-cc
+/plugin install codex@openai-codex
+/reload-plugins
+/codex:setup
+```
+
+| 用途 | Claude Code内での操作 |
+| --- | --- |
+| 差分の通常レビュー | `/codex:review --background` |
+| 方針・設計を含む批判的レビュー | `/codex:adversarial-review --background 検証してほしい観点` |
+| 実装・調査の委任 | `/codex:rescue --background 目的・対象・完了条件` |
+| 進捗・結果の確認 | `/codex:status`、`/codex:result` |
+| Claudeの会話をCodexへ引き継ぐ | `/codex:transfer` |
+
+通常レビューはread-onlyで、任意の観点を渡す用途にはadversarial-reviewを使う。親の会話・skills・権限がすべて自動継承されるとは考えず、対象ディレクトリ、目的、変更範囲、検証方法は依頼に含める。Codex側の資産共有設定は別途必要である。
+
+Codex側はChatGPTアカウントでログインして利用できる。APIキー利用も可能だが、契約枠で運用する場合は既存認証を確認し、APIキー経路へ切り替えない。料金・利用枠は [公式の認証説明](https://learn.chatgpt.com/docs/auth) と契約に従う。
+
+## 3. CLAUDE.mdは移動せず読み込ませる
+
+最も変更が少ないのはCodexの `project_doc_fallback_filenames` を使う方法である。
+各リポジトリにAGENTS.mdを新設する必要がなく、Claude側の探索・読み込みは変わらない。
+
+初期設定時に利用者またはセットアップ担当が、既存の `~/.codex/config.toml` のトップレベルへ次を追加する。ファイル全体を上書きせず、既存値があれば統合する。
+
+```toml
+project_doc_fallback_filenames = ["CLAUDE.md"]
+project_doc_max_bytes = 131072
+```
+
+`131072` は本案の初期値であり公式推奨値ではない。指示が短ければ既定値でよい。Codexの既定上限は32KiBなので、長いCLAUDE.mdを共有するときは実サイズを測って調整する。上限引き上げは切り捨てを避ける対策であり、長文への遵守精度を保証しない。
+
+探索は各ディレクトリで `AGENTS.override.md` → `AGENTS.md` → fallbackの順で、原則1ファイルを選ぶ。既存AGENTS.mdがあるとCLAUDE.mdは追加されない。開始ディレクトリまでの階層を読むため、Claudeの「後から触った下位ディレクトリの指示を読む」動作との完全一致も前提にしない。[公式のAGENTS.md仕様](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+
+他のマシンにも設定なしで入口を配布したい場合だけ、リポジトリのルートに次の相対symlinkを置く。
+
+```sh
+ln -s CLAUDE.md AGENTS.md
+```
+
+実行前に同名ファイルがないことを確認する。既存AGENTS.mdへ強制上書きしない。fallbackとsymlinkを両方採る必要はない。CLAUDE.mdを `.claude/CLAUDE.md` に置くプロジェクトでは、symlinkの参照先をその実位置に合わせる。
+
+## 4. グローバル指示とrulesの扱い
+
+グローバル指示はsymlinkで共有し、rulesは既存ファイルを読む手順をCLAUDE.mdに足す。
+rulesのパス条件がCodexで自動再現されるとは扱わない。
+
+既存の個人CLAUDE.mdを共用でき、Codex側にAGENTS.mdがない場合の初回設定例:
+
+```sh
+ln -s ../.claude/CLAUDE.md ~/.codex/AGENTS.md
+```
+
+Codexのグローバル探索はプロジェクトのfallbackとは別である。すでにCodex固有の指示がある場合は上書きせず、そのAGENTS.mdを短い入口にして既存CLAUDE.mdを読むよう指定する。これは入口の差分管理であり、規則本文を複製する必要はない。[公式のグローバル指示](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+
+Claudeは `.claude/rules/` 内のMarkdownを読み、`paths` による条件付き読み込みも行う。Codexの `.rules` はコマンド実行ポリシーであり、Claudeの自然言語rulesをそこへsymlinkしても代替にならない。[Claudeのmemory/rules](https://code.claude.com/docs/en/memory)、[CodexのRules](https://learn.chatgpt.com/docs/agent-configuration/rules)
+
+共有化の担当者が、各プロジェクトのCLAUDE.mdへ一度だけ追記する接続指示の例:
+
+```markdown
+## Codexで作業する場合
+
+- 作業前に、このCLAUDE.mdに対応する .claude/rules/ 内のMarkdownを
+  サブディレクトリも含めて列挙する。
+- paths指定のない規則はすべて読み、paths指定のある規則は対象ファイルが
+  条件に合う作業を始める前に読む。対象範囲が増えたら再確認する。
+- このファイルから参照する文書は、参照元ファイルを基準に解決して読む。
+- Claude専用ツール・実行機能を要する手順は、同等機能が利用できるか
+  確認する。利用できない手順を実施済みとして扱わない。
+```
+
+これはモデルへの読取指示であり、Claudeと同じ自動注入機構ではない。個人の `~/.claude/rules/` も共有する場合は、同じ読取指示を個人CLAUDE.mdに置く。`@path` のimportは、Codexには参照先を明示的に読むよう指示する必要があり、symlinkだけでClaudeの展開機構まで移植できるわけではない。厳密な条件付き適用が必要になった場合は、11節の変換ツールを再評価する。Claudeでの通常の読み込みを維持するため、rules全件をCLAUDE.mdへ連結しない。
+
+## 5. 単体skillsはディレクトリ単位でsymlinkする
+
+SKILL.mdだけでなくscripts・referencesもまとめて共有する。
+既存の `.agents/skills/` を残せる、skillごとのsymlinkを標準にする。
+
+初回セットアップで、プロジェクトルートから実行する例。`example-skill` は実在する共有対象の名前に置き換える。リンク先の実在と、リンクを置くパスが未使用であることを確認し、既存ファイル・ディレクトリがあれば上書きせず整理する。
+
+```sh
+mkdir -p .agents/skills
+ln -s ../../.claude/skills/example-skill .agents/skills/example-skill
+```
+
+```text
+project/
+├── CLAUDE.md                       # 指示の正本
+├── .claude/
+│   ├── rules/                      # 規則の正本
+│   └── skills/example-skill/       # SKILL.mdと付属ファイルの正本
+└── .agents/skills/example-skill -> ../../.claude/skills/example-skill
+```
+
+全skillsが共有可能で `.agents/skills` が未作成なら、`.agents/skills -> ../.claude/skills` というディレクトリ全体のリンクでもよい。両方式を重ねない。個人skillsも同様に `~/.agents/skills/<name>` から `~/.claude/skills/<name>` へリンクできる。
+
+Codexは `.agents/skills/` と `~/.agents/skills/` を探索し、symlinkされたskillディレクトリをサポートする。初期コンテキストは名前・説明を中心に、本文は必要時に読む方式である。[公式Skills仕様](https://learn.chatgpt.com/docs/build-skills)
+
+Claude向け本文はそのまま残す。コードや資料の相対参照はskillディレクトリ基準に整理し、`$CLAUDE_PLUGIN_ROOT` などが必須なら、単体skillとしての共有対象からいったん外す。グローバルな絶対symlinkをリポジトリへコミットしない。
+
+## 6. 指定のプラグイン群は同じmarketplaceから導入する
+
+既存のClaude形式をCodexが読める経路を先に使う。
+Claudeのインストールキャッシュを直接リンクする方式は、標準運用にはしない。
+
+対象はユーザー指定の [maimuzo-claude-plugins](https://github.com/maimuzo/maimuzo-claude-plugins)。手元の同リポジトリのcleanなcheckout、commit `01f58ad6fa19bdbe2a6c2687c788c2737f05e873` を確認した。marketplaceは14プラグイン、SKILL.mdは54件。最新版の全件実行結果ではなく、構成を判断するための確認値である。
+
+Codex CLI 0.154.0のヘルプで確認できた導入構文は次のとおり。初期セットアップで実行し、Codexの新規セッションから確認する。
+
+```sh
+codex plugin marketplace add maimuzo/maimuzo-claude-plugins
+codex plugin add maimuzo-go@maimuzo-marketplace
+```
+
+これは指定された配布元を再利用する具体例であり、全14件を無条件に導入する指示ではない。Codexの `/plugins` から必要なものを選ぶ運用でもよい。
+
+根拠は、公式仕様のClaude互換manifest受け入れと既存marketplace互換、および公式実装の `.claude-plugin/plugin.json` 対応である。ただしmanifestを読めることと、個々のskill・agentの実行意味が一致することは別である。[公式パッケージ仕様](https://developers.openai.com/plugins/build/plugins)、[公式manifest実装](https://github.com/openai/codex/blob/main/codex-rs/core-plugins/src/manifest.rs)
+
+更新時はClaude側を通常どおり更新し、Codex側でもmarketplaceを更新する。
+
+```sh
+codex plugin marketplace upgrade maimuzo-marketplace
+```
+
+このコマンドはGit marketplaceのsnapshot更新用である。インストール済みpluginの反映状況は `/plugins` と新規セッションで確認する。Claudeの更新だけでCodexのcacheまで即座に変わるとは扱わない。双方の更新確認を一つの運用手順にすれば、本文の二重保守は発生しない。
+
+## 7. プラグイン内のどこまで共有するか
+
+共有可否はプラグイン名ではなく、中の手順が必要とする機能で判断する。
+Claudeの機能を削って全skillを最低共通機能へ落とす方法は採らない。
+
+| 資産の種類 | 指定プラグイン内の例 | 判断 |
+| --- | --- | --- |
+| コーディング規約・検討手順 | Go/TSガイド、命名・設計根拠など | 本文を共有する候補。対象プロジェクトとの適合は別に確認 |
+| CLIやMCPを使うワークフロー | issue操作、Pencil、RUCMなど | 依存コマンド・MCP接続・実行手順が揃うものを選択 |
+| Claudeの環境操作・チーム制御 | usage確認、model切替、cosper-team | Claude専用として残す |
+| 隔離実行に依存するレビュー | co-reviewの `context: fork` / `Skill` 呼び出し | 同等の隔離実行を検証するまでは移植対象外 |
+| Claudeのブラウザに依存 | auto-debugのClaude in Chrome呼び出し | Codexに同じツールがあるとは扱わない |
+| hook・session内部形式に依存 | completion・応答検査など | 13節の別課題 |
+
+たとえばGo/TSプラグインには規約だけでなく、Claudeのhookやagent利用を説明するskillもある。プラグイン単位で「全部共通」と判定しない。Codex側で不要なskillを無効化するか、少数だけ必要なら5節の選択リンクを使う。[skillの無効化設定](https://learn.chatgpt.com/docs/build-skills#enable-or-disable-local-codex-skills)
+
+`user-invocable`、`disable-model-invocation`、`allowed-tools`、`context: fork`、`agent`、`model`、`$ARGUMENTS`、動的シェル展開はClaudeの拡張と実行契約を含む。SKILL.mdが読めるだけで同じ効果があると判断しない。Claude側のfrontmatterは保持し、必要な差分だけ同じskillの本文または追加メタデータで扱う。[ClaudeのSkills仕様](https://code.claude.com/docs/en/skills)
+
+Codexの暗黙呼び出しを止める場合は `agents/openai.yaml` の `policy.allow_implicit_invocation: false` が使える。ただし、これは `user-invocable: false` の置き換えではない。前者は自動選択、後者はClaudeの利用者による呼び出し可否に関係し、意味が異なる。
+
+## 8. キャッシュへのsymlinkを第一候補にしない理由
+
+symlinkで同じ実体を読むことはできても、pluginの有効化・更新・名前空間までは共有されない。
+既存の配布機構を使うほうが、今回の運用全体では保守量が少ない。
+
+Claudeのplugin cacheは通常 `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` のようにバージョンを含む。そこへリンクを固定すると更新に追従せず、残った旧版を読み続ける可能性がある。インストール登録と有効化も同一ではない。[Claudeのプラグイン仕様](https://code.claude.com/docs/en/plugins-reference)
+
+また、指定プラグインではGoとTSの両方に `ecc-testing` など同名skillが存在する。単体skillsとして平坦化すると衝突しやすく、リンク名だけ変えてもSKILL.mdの `name` は変わらない。pluginの単位と名前空間を保つことに利点がある。
+
+それでも「Claudeがいま導入している版と必ず同じ実体を読む」が必須なら、小さなリンク管理機能を追加する。責務は有効なインストール先の解決、選択対象のリンク更新、名前衝突・参照切れの検査に限定する。実行機能のエミュレーターにはしない。
+
+この場合はuser/project/localの有効範囲、更新後のリンク差し替え、アンインストール後の扱いまで必要になる。初期構成では自作しない。native plugin導入と単体symlinkの両方から同じskillを重複登録することも避ける。
+
+## 9. Claudeが止まったらHerdrからCodexを使う
+
+事前にCodexの認証と共有設定を済ませておけば、切り替えのためにClaudeの復帰を待つ必要はない。
+「Codexに委任済みの仕事」と「Claudeだけが持つ会話」は別の経路で引き継ぐ。
+
+| 状態 | 切り替え方法 |
+| --- | --- |
+| Codexへ委任済み | `/codex:result` 等で得たsession IDを `codex resume <session-id>` へ渡す |
+| Claudeがまだ応答できる | `/codex:transfer` が返すresumeコマンドをHerdrのshellで実行 |
+| Claudeが既にレートリミット | Codexを直接起動し `/import` からClaudeの会話を選ぶ |
+| import非対応版・対象会話なし | 新規Codexへ目的・現状・未完了事項を渡し、作業ツリーと既存記録を確認させる |
+
+`/codex:transfer` はClaudeの会話から継続可能なCodex threadを作る公式機能である。Codexの `/import` はローカルセッションで利用できるが、実行中タスク・remote session・ローカルapp-server daemon接続中には利用できない。CLIの会話importは直近30日・最大50件という範囲がある。[公式連携README](https://github.com/openai/codex-plugin-cc)、[公式Import仕様](https://learn.chatgpt.com/docs/import)
+
+Herdrの既存shell paneで `codex` または `codex resume <session-id>` を実行すればよい。別の空いているpaneをエージェントとして起動する場合の構文例:
+
+```text
+herdr agent start codex-worker --kind codex --pane <pane-id>
+herdr agent start codex-worker --kind codex --pane <pane-id> -- resume <session-id>
+```
+
+後者は前者との選択であり、同じpaneへ続けて実行しない。pane IDはHerdrが返した実値を使う。構文はHerdr 0.8.2の `herdr agent` で確認した。[Herdr](https://github.com/herdrdev/herdr)
+
+同じ作業ツリーで書き込み担当を交代するときは、前の担当の書き込みが止まったことを確認する。同時に別の実装を進める場合はworktreeを分ける。引き継ぎは目的・判断・変更・テスト状態の再確認を含み、会話importが完全な実行状態移送になるとは扱わない。
+
+## 10. 公式importの使いどころ
+
+importは「同じファイルを読む」以外の公式選択肢であり、特に会話の救出に使う。
+設定の継続共有は、importとsymlinkが同じ出力先を管理しないようにする。
+
+公式importは指示・skills・plugins・MCP・commands・subagents・hooksなどを対象にし、元のClaude設定を変更しない。デスクトップアプリには自動更新もあるため、「公式importは一回限りだから使えない」と切り捨てる理由はない。[公式Import仕様](https://learn.chatgpt.com/docs/import)
+
+ただし、CLI中心のHerdr運用で、自動更新がどの資産・衝突・削除まで扱うかを公式の概要だけから保証できない。Claudeの任意の拡張手順も完全変換されるとは書かれていない。本案では次のように使い分ける。
+
+- 指示と単体skillsは3〜5節の直接参照を基本にする。
+- pluginsは6節の同じmarketplaceからの導入を基本にする。
+- 会話移送と、必要なMCP・subagentの初期移行にはimportを利用する。
+- デスクトップアプリの自動同期を採る場合は、同じ資産のsymlink・別の変換器を重ねず、更新・削除・名前衝突を試してから一本化する。
+
+## 11. 既存ツールと実践記事の比較
+
+必要な部品は既に存在する。今回は公式機能を中心にし、全面的な共通形式への移行はしない。
+rulesの管理が複雑になった時点で、変換部分だけ既存ツールを追加する。
+
+| 候補 | 役割 | 今回の判断 |
+| --- | --- | --- |
+| [OpenAI codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | ClaudeからCodexへのレビュー・委任・会話移送 | 採用 |
+| [公式Import](https://learn.chatgpt.com/docs/import) | 設定・会話の移行、desktopの自動更新 | 会話移送と選択的な初期移行に採用 |
+| [Vercel Skills CLI](https://github.com/vercel-labs/skills) | 複数エージェントへのskills配布、symlink、更新 | 新たに取得する共通skill向け。既存Claude plugin全体の代替にはしない |
+| [Rulesync](https://github.com/dyoshikawa/rulesync) | rules等のimport・生成・直接変換 | 次点。複雑なrules共有が必要になったら採用候補 |
+| [Ruler](https://github.com/intellectronica/ruler) | 共通指示を各エージェントへ配布 | `.ruler/` 中心への移行は今回のClaude主軸に対して変更が大きい |
+| [codex-in-claude](https://github.com/briandconnelly/codex-in-claude) | MCP経由のCodex委任・レビュー | 公式連携と重複するため初期構成には追加しない |
+
+Rulesyncには共通 `.rulesync/` を正本にする方式だけでなく、`convert --from ... --to ...` による直接変換もある。したがって「必ずClaude資産の移動が必要」とは言えない。一方、生成後の同期タイミング・出力先の所有・条件付きrulesの意味は確認が必要で、今回の小さな接続指示より管理対象が増える。
+
+Vercel Skills CLIのsymlinkはcanonical copyを各エージェントから参照する仕組みであり、Claudeが導入した任意のplugin cacheをそのまま継続追跡する機能と混同しない。[作者のREADME](https://github.com/vercel-labs/skills)
+
+実践例として、John Davenportの [One Skill, Three Platforms](https://dev.codemyspec.com/blog/skill-portability) は `.claude/skills/` を正本にしてCodexへsymlinkする同種の運用を紹介している。方向性は採るが、記事の全frontmatter互換表やコマンド例を仕様として採用せず、公式文書と相対パス計算で確認する。記事中の「共通機能だけに絞る」という方向は、Claudeの機能を落としたくない今回の条件にはそのまま採らない。
+
+## 12. 導入順序と合格条件
+
+小さな共有設定から始め、ClaudeとCodexの両方で同じ資産を使えることを確認する。
+確認が終わるまで、plugin全件移植や同期ツールの開発へ広げない。
+
+1. Codexの認証と公式連携プラグインを確認する。
+2. CLAUDE.mdのfallbackと必要な読み込み上限を設定する。
+3. rulesの読取指示を既存CLAUDE.mdに一度追加する。
+4. 単体skillを一つsymlinkし、同じmarketplaceから小さなpluginを一つ導入する。
+5. Claude内の委任と、Herdr上のCodex直接起動の両方で使う。
+6. 確認済みの対象だけ増やす。Claude専用資産はそのまま残す。
+
+| 確認 | 合格条件 |
+| --- | --- |
+| 指示 | CLAUDE.md先頭・末尾の規則と参照先を実際に確認でき、切り捨てがない |
+| rules | 無条件rulesを読み、対象を変えたとき条件付きrulesも確認する |
+| skills | 明示呼び出しと適切な暗黙選択が働き、付属scripts/referencesを解決できる |
+| 更新 | 正本の一箇所の編集を、各方式の反映タイミング後に両者が読む |
+| plugin | 必要skill・依存ツールが利用でき、同名skillの混同がない |
+| 引き継ぎ | Claudeが応答しなくてもCodexを起動でき、対象の仕事を継続できる |
+| Claude側の維持 | 既存の呼び出し・frontmatter・段階的読み込みが変わらない |
+
+ロードしたというモデルの自己申告だけでなく、実ファイルの参照、具体的な規則の適用、意図したskill選択まで確認する。symlinkは即時に実体を共有するが、起動時に読む指示は新規セッションで確認する。pluginはcache更新後の新規セッションで確認する。
+
+## 13. 今回のスコープから外す課題
+
+高度なhooks制御の同等性は、今回の導入条件にしない。
+ただし「共有ができたから同じ機械的制約も効く」とは扱わない。
+
+| 課題 | 後日確認する点 |
+| --- | --- |
+| hooks・権限の同等性 | 発火点、入力・出力、環境変数、trust、失敗時の挙動 |
+| transcript依存の制御 | ClaudeとCodexの記録形式、安定した代替イベントの有無 |
+| fork・agent・Workflow依存 | 隔離・役割・継続・ツール権限を維持できるか |
+| 厳密なpath条件の適用 | rulesの読取指示で不足する場合の公式機能・Rulesync等の評価 |
+| インストール版の完全同期 | native更新で十分か、cache参照を管理する小さな補助が必要か |
+
+Codexにもhooksはあり、plugin互換用の環境変数なども存在する。「hooksはCodexにない」という前提は置かない。互換性を評価する際は [現行の公式Hooks仕様](https://learn.chatgpt.com/docs/hooks) を基準とする。公式連携プラグインの追加review gateも今回の基本構成には含めない。
