@@ -4,7 +4,7 @@ Claude側を正本として維持し、Codexには公式の互換機能とsymlin
 推奨は「公式連携プラグイン＋CLAUDE.mdのfallback読み込み＋既存marketplaceの再利用」。
 高度なhooks制御と、このリポジトリ固有の移植設計は対象外とする。
 
-調査基準日: 2026-09-12。公式Web仕様と、手元のCodex CLI 0.154.0・Herdr 0.8.2のヘルプを確認した。以下は運用の選定案であり、設定変更・プラグイン導入・モデルを使った互換性試験は実施していない。
+調査基準日: 2026-09-12。導入確認日: 2026-09-14。Codex CLI 0.154.0・Herdr 0.8.2を使用。基本設定と選択した資産の導入は適用済み。確認済みの範囲と残る実運用試験は14節、復元方法は15節に示す。
 
 ## 1. 採用する構成
 
@@ -91,7 +91,7 @@ Codexのグローバル探索はプロジェクトのfallbackとは別である�
 
 Claudeは `.claude/rules/` 内のMarkdownを読み、`paths` による条件付き読み込みも行う。Codexの `.rules` はコマンド実行ポリシーであり、Claudeの自然言語rulesをそこへsymlinkしても代替にならない。[Claudeのmemory/rules](https://code.claude.com/docs/en/memory)、[CodexのRules](https://learn.chatgpt.com/docs/agent-configuration/rules)
 
-共有化の担当者が、各プロジェクトのCLAUDE.mdへ一度だけ追記する接続指示の例:
+接続指示は個人のCLAUDE.mdに一度だけ置けば、各プロジェクトへの重複追記を避けられる。今回はこちらを採用し、Codexにのみ適用すると明記する。プロジェクト単独で配布する場合の接続指示の例:
 
 ```markdown
 ## Codexで作業する場合
@@ -290,3 +290,42 @@ Vercel Skills CLIのsymlinkはcanonical copyを各エージェントから参照
 | インストール版の完全同期 | native更新で十分か、cache参照を管理する小さな補助が必要か |
 
 Codexにもhooksはあり、plugin互換用の環境変数なども存在する。「hooksはCodexにない」という前提は置かない。互換性を評価する際は [現行の公式Hooks仕様](https://learn.chatgpt.com/docs/hooks) を基準とする。公式連携プラグインの追加review gateも今回の基本構成には含めない。
+
+## 14. 適用済みの構成と確認範囲
+
+Claude側の資産本文を移動・複製せず、Codexの入口と標準plugin導入で接続している。
+基本設定の読み込みは確認済み。12節の実運用上の合格条件を、すべて試験済みとは扱わない。
+
+| 対象 | 適用内容・確認結果 |
+| --- | --- |
+| プロジェクト指示 | 3節のfallbackと上限を設定。再開後のセッションにCLAUDE.mdの先頭から末尾のcommit規則まで渡されたことを確認 |
+| 個人指示 | 新設した `~/.claude/CLAUDE.md` にCodex限定のrules・import読取手順を集約。`~/.codex/AGENTS.md` は `../.claude/CLAUDE.md` へのsymlink |
+| 単体skill | `.agents/skills/worker-briefing` は `../../.claude/skills/worker-briefing` へのsymlink。Codexの `skills/list` が正本のパスへ解決し、利用可能と返すことを確認 |
+| 既存共有skill | 個人のHerdr skillは既に共有配置だったため変更なし。`skills/list` でも利用可能 |
+| marketplace | 指定の既存配布元をCodex CLIで登録し、Goガイドのpluginを一つ導入。本文の変換・独自manifest追加なし |
+| 選択的な有効化 | Goガイド・coding・git・patterns・security・testingの6 skillsが有効。Claude固有のagents・hooks・performanceの3 skillsはCodex設定で無効化 |
+| 公式連携 | 導入済みの公式Claude連携plugin 1.0.6のsetup診断が `ready: true`。ChatGPT認証の検証とapp-server接続を確認。追加review gateは無効のまま |
+| 既存設定 | 導入前後のconfig差分を確認。モデル・権限設定・既存hooksを変更していない |
+
+`skills/list` の結果は読み込みエラーなし。これは発見・名前空間・有効状態の検証であり、暗黙選択や各skill内の全手順の互換性を保証しない。
+通常の開発作業では本文と必要な付属資料を読み、Claude専用のWorkflow・ツール等は実行済みと扱わない。
+
+Codex側で無効化したskillの設定はplugin cacheのバージョン付きパスを参照する。plugin更新後は、新しいパスで無効化が維持されているか `skills/list` と新規セッションで再確認する。設定の実値は個人バックアップ側に保持し、公開リポジトリへ個人のconfigを複製しない。
+
+未検証として残るのは、Claude画面からの実タスク委任・会話移送、全skillの明示／暗黙選択、付属scriptsの実行、正本編集後の両製品での再読込、Claude側の回帰試験である。Herdr上の再開セッションで共有指示が渡ることは確認できたが、Claudeのレートリミットを発生させる障害試験は行っていない。
+次の実タスクで12節の該当条件を確認し、未確認のpluginを一括で増やさない。高度なhooks制御は13節の課題のままとする。
+
+## 15. 復元方法
+
+リポジトリの変更はcommitで戻し、ホーム配下の設定は個人バックアップで戻す。
+Gitの取り消しだけでは個人設定は復元されない。後から加えた変更がある場合は丸ごと上書きしない。
+
+導入前のcommitは `1355524d`。導入完了のcommitは、この文書と `.agents/skills/worker-briefing` の履歴から確認できる。
+リポジトリの未コミット変更を保護したうえで、完了commitだけを `git revert <完了commit>` で取り消す。履歴や無関係の変更を消す `git reset --hard` は使わない。
+
+個人設定のバックアップ先は `~/.codex/backups/claude-coexistence-20260914/`。
+セットアップ担当が導入前に `config.before.toml`、導入後に `config.after.toml` と `CLAUDE.after.md`、復元用の `RESTORE.md` を保存している。
+これらは個人設定を含むため、この公開リポジトリにはコミットしない。
+
+復元時は `RESTORE.md` に従い、現在値と導入完了時のコピーを比較してから、今回のplugin・marketplaceだけを取り消す。configは同じディレクトリの一時ファイル経由で戻し、新設した個人CLAUDE.mdとAGENTS.mdは削除せずバックアップ先へ退避する。
+導入前からあった公式Claude連携plugin・hooks・認証データは取り消し対象ではない。復元後は新しいセッションで開始する。
