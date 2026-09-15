@@ -373,7 +373,7 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // 戻り値: 引き渡しの通知に載せる理由。
 func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []string) string {
 	var b strings.Builder
-	b.WriteString(i18n.T(i18n.KeyOrchestratorBlockedHandoffHead))
+	b.WriteString(handoffReasonT(i18n.KeyOrchestratorBlockedHandoffHead))
 	if len(stillRunning) > 0 {
 		shown := stillRunning
 		omitted := 0
@@ -387,12 +387,12 @@ func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []strin
 		}
 		names := strings.Join(quoted, " / ")
 		if omitted > 0 {
-			names += i18n.T(i18n.KeyOrchestratorBlockedHandoffOmitted, omitted)
+			names += handoffReasonT(i18n.KeyOrchestratorBlockedHandoffOmitted, omitted)
 		}
-		b.WriteString(i18n.T(i18n.KeyOrchestratorBlockedHandoffSubagents,
+		b.WriteString(handoffReasonT(i18n.KeyOrchestratorBlockedHandoffSubagents,
 			len(stillRunning), names))
 	}
-	b.WriteString(i18n.T(i18n.KeyOrchestratorBlockedHandoffHowToCheck))
+	b.WriteString(handoffReasonT(i18n.KeyOrchestratorBlockedHandoffHowToCheck))
 	b.WriteString(permissionRemedyText(mode, repoIsPrivate))
 	return b.String()
 }
@@ -421,12 +421,12 @@ func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []strin
 // 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
 func permissionRemedyText(mode string, repoIsPrivate *bool) string {
 	if mode == config.ClaudePermissionModeDontAsk {
-		return i18n.T(i18n.KeyOrchestratorPermissionRemedyDontAsk, mode, mode)
+		return handoffReasonT(i18n.KeyOrchestratorPermissionRemedyDontAsk, mode, mode)
 	}
 	if repoIsPrivate != nil && *repoIsPrivate {
-		return i18n.T(i18n.KeyOrchestratorPermissionRemedyAutoPrivate, mode, mode)
+		return handoffReasonT(i18n.KeyOrchestratorPermissionRemedyAutoPrivate, mode, mode)
 	}
-	return i18n.T(i18n.KeyOrchestratorPermissionRemedyAutoPublic, mode, mode)
+	return handoffReasonT(i18n.KeyOrchestratorPermissionRemedyAutoPublic, mode, mode)
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。

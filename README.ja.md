@@ -69,7 +69,7 @@ herdr agent read continuo-hello-world-188 --source recent-unwrapped --lines 40
 
 ## 始める前に知っておくこと
 
-**エージェントは、あなたのリポジトリを実際に編集し、commit して push します。**continuo は Claude Code を `--permission-mode auto`（既定）で起動し、引数を制限せずに `Bash` を許可します。**人手の確認は待ちません。**道具を使ってよいかは、会話を読む判定役が決めます。
+**エージェントは、あなたのリポジトリを実際に編集し、commit して push します。**continuo は Claude Code を `--permission-mode auto`（既定）で起動し、引数を制限せずに `Bash` を許可します。**一歩ずつの承認は求めません。**道具を使ってよいかは、会話を読む判定役が決めます。**確認の画面で止まったときは、continuo が画面を閉じて issue をあなたへ渡します。**
 
 **issue の本文とコメントは、そのままエージェントへの指示になります。**既定の指示書には、
 本文とコメントを **JSON で**読むように書いてあります。GitHub が付けた投稿者の立場（`authorAssociation`）が、本文と混ざらずに届きます。

@@ -746,7 +746,7 @@ func (o *Orchestrator) decideOne(
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
 		o.moveToFailure(ctx, issue,
-			i18n.T(i18n.KeyOrchestratorRestoreBlockedHandoff)+
+			handoffReasonT(i18n.KeyOrchestratorRestoreBlockedHandoff)+
 				permissionRemedyText(o.cfg.Claude.PermissionMode, issue.RepoIsPrivate),
 			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)
