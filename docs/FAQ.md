@@ -2342,7 +2342,7 @@ jq -r .base <worktree のパス>/.continuo.json
 cd ~/continuo-work && continuo prompt --show | grep -c '### 既存の構造がどうなっているか'
 ```
 
-**`1` が返れば入っています。**
+**`2` が返れば入っています**（表と骨組みの2箇所に在るため）**。**
 
 ### issue が勝手に止まる・戻るとき
 

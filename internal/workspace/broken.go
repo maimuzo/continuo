@@ -47,7 +47,7 @@ const (
 // PathClue は worktree の置き場所のパスだけから引ける手掛かりである（設計 3-49）。
 //
 // **身元ファイルを1バイトも読まずに作る。**身元ファイルは worktree の直下にあり、
-// その worktree ではエージェントが `--permission-mode auto`（既定） で動く（3-16 の段9）。
+// その worktree ではエージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）。
 // **パスは封じ込め検査（3-20）を通ったものなので、エージェントには書き換えられない。**
 type PathClue struct {
 	// Host は置き場所の1階層目である（issue の URL のホスト部）。

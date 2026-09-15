@@ -67,7 +67,7 @@ type restoreCandidate struct {
 	// Repo は同じくリポジトリ名である。
 	//
 	// **身元ファイルからは読まない。**身元ファイルは worktree の直下にあり、
-	// その worktree ではエージェントが `--permission-mode auto`（既定） で動く（設計 3-16 の段9）。
+	// その worktree ではエージェントが `--permission-mode auto`（既定）で動く（設計 3-16 の段9）。
 	// **パスは封じ込め検査（設計 3-20）を通ったものなので、エージェントには書き換えられない。**
 	Owner string
 	Repo  string
@@ -255,7 +255,7 @@ func (o *Orchestrator) scanIdentities() ([]restoreCandidate, []string) {
 // **別の issue の生きている run を乗っ取れる。**
 //
 // **何が起きるか。**worktree の直下の身元ファイル（`<worktree>/.continuo.json`）で、
-// その worktree のエージェントは `--permission-mode auto`（既定） で動く（設計 3-16 の段9）。
+// その worktree のエージェントは `--permission-mode auto`（既定）で動く（設計 3-16 の段9）。
 // そこで `project_item_id` を走行中の別 issue のものに書き換え、`created_at` を新しくすると、
 // 復元の段2 は「同じ issue の worktree が2つある」と判定して**被害者の worktree を
 // 『捨てた身元』にし、段4 でその生きた pane を閉じる。**以後その issue の run は
@@ -746,12 +746,7 @@ func (o *Orchestrator) decideOne(
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
 		o.moveToFailure(ctx, issue,
-			"再起動したとき、Claude Code が確認の画面で止まっていました（herdr が返した状態: blocked）。"+
-				"**このまま turn を送ると、保留中の権限の要求が承認されて実行されます**"+
-				"（実測で3回中3回）。だから引き継がずに人間へ渡しました。"+
-				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
-				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
-				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
+			i18n.T(i18n.KeyOrchestratorRestoreBlockedHandoff)+
 				permissionRemedyText(o.cfg.Claude.PermissionMode, issue.RepoIsPrivate),
 			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)
@@ -861,7 +856,7 @@ func (o *Orchestrator) restoreWithoutPane(
 // applyOrphanRunningAction は `restart.orphan_running_action` の3値で分岐する
 // （設計 3-4。**`active_states` のときだけ効く**）。
 //
-//	redispatch（既定）  … **復元の中では何もしない。**印にも入れず、次の巡回に委ねる
+//	redispatch（既定） … **復元の中では何もしない。**印にも入れず、次の巡回に委ねる
 //	to_dispatch_state  … Status を dispatch_state へ戻す
 //	to_failure_state   … Status を failure_state へ落として人間に渡す
 //

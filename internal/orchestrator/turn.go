@@ -373,9 +373,7 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // 戻り値: 引き渡しの通知に載せる理由。
 func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []string) string {
 	var b strings.Builder
-	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
-		"continuo は esc を送って画面を閉じましたが、" +
-		"**この issue は人間が見ないと進みません。**")
+	b.WriteString(i18n.T(i18n.KeyOrchestratorBlockedHandoffHead))
 	if len(stillRunning) > 0 {
 		shown := stillRunning
 		omitted := 0
@@ -391,18 +389,10 @@ func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []strin
 		if omitted > 0 {
 			names += fmt.Sprintf(" ほか %d 件", omitted)
 		}
-		b.WriteString(fmt.Sprintf(
-			"\n【走行中のサブエージェントを止めました】esc を送った時点で %d 件が動いていました（%s）。"+
-				"**worktree には書きかけの変更が残っている可能性があります。**"+
-				"下記の【調べるところ】の worktree を確かめてください。",
+		b.WriteString(i18n.T(i18n.KeyOrchestratorBlockedHandoffSubagents,
 			len(stillRunning), names))
 	}
-	b.WriteString("\n【確かめ方】下記の【調べるところ】に挙げた記録を開き、" +
-		"末尾で何をしようとしていたかを見てください。" +
-		"**サブエージェントの記録も見てください。**" +
-		"親の記録の末尾には何も残っていないことがあります。" +
-		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
-		"**何の確認だったかは continuo の側には残りません。**")
+	b.WriteString(i18n.T(i18n.KeyOrchestratorBlockedHandoffHowToCheck))
 	b.WriteString(permissionRemedyText(mode, repoIsPrivate))
 	return b.String()
 }

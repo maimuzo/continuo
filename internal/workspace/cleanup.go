@@ -359,7 +359,7 @@ func (m *Manager) effectiveBase(requested normalize.SafeName, identity *Identity
 // resolveWorkspaceID は worktree.remove に渡す herdr workspace の ID を確定する（3-9 の段3）。
 //
 // **なぜ検算が要るか。**身元ファイルは worktree の直下にあり、その worktree では
-// エージェントが `--permission-mode auto`（既定） で動く（3-16 の段9）。
+// エージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）。
 // **つまり herdr_workspace_id はエージェントが書き換えられる。**検算せずに
 // `worktree.remove`（force）へ渡すと、**同じ機械で動いている別の run の worktree を
 // 消させられる。**封じ込め検査（3-20）も未コミットの検査（3-9 の手順2）も、
@@ -501,7 +501,7 @@ const (
 // 検算する（3-9 の段4）。
 //
 // **なぜ検算が要るか。**身元ファイルは worktree の直下（`<worktree>/.continuo.json`。3-18）に
-// あり、その worktree ではエージェントが `--permission-mode auto`（既定） で動く（3-16 の段9）。
+// あり、その worktree ではエージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）。
 // **つまり branch の値はエージェントが書き換えられる。**検算せずに渡すと、
 // 利用者の clone の別 branch（`main` など）を消させられる。
 //
