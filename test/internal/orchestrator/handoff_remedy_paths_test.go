@@ -36,11 +36,14 @@ type remedyCase struct {
 
 // remedyCases は、試す公開・非公開の組み合わせを返す。
 //
-// 戻り値: 非公開（true）と、取れなかった（nil。公開として扱う）の2通り。
+// **明示的な公開（false）を必ず入れる。**nil だけだと、「値が入っていれば非公開と扱う」誤りを検出できない。
+//
+// 戻り値: 非公開（true）、公開（false）、取れなかった（nil。公開として扱う）の3通り。
 func remedyCases() []remedyCase {
-	private := true
+	private, public := true, false
 	return []remedyCase{
 		{name: "非公開", repoIsPrivate: &private, wantPrivate: true},
+		{name: "公開", repoIsPrivate: &public, wantPrivate: false},
 		{name: "取れなかった", repoIsPrivate: nil, wantPrivate: false},
 	}
 }

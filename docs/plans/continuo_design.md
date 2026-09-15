@@ -7399,7 +7399,7 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 
 **訳。**teammate はリードの許可設定で始まる。
 
-**continuo は `--permission-mode auto`（既定）で起動する。**継ぐなら、リード自身は人手の確認を待たないはずである。
+**continuo は既定で `--permission-mode auto` で起動する。**teammate がそれを継ぐなら、teammate の確認も判定役が受け持つはずである（公式文書は、判定役の遮断が続くと確認の画面へ戻ると書いている）。
 **だが報告された `meta.json` は3件とも `permissionMode: "default"` だった**（2026-08-27、外部の利用者の実測）。
 
 **`meta.json` の `permissionMode` が「継いだ実効値」か「spawn 時に明示した値」かは、
