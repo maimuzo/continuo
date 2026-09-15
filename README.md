@@ -69,9 +69,9 @@ How many issues run at once is a setting (two by default).
 
 ## Before you start
 
-**The agent edits your repository, commits, and pushes.** continuo starts Claude Code with `--permission-mode auto` (the default) and allows `Bash` without argument restrictions. It does not ask you to approve each step: a classifier that reads the conversation decides what may run. If it ever stops at a confirmation screen, continuo closes the screen and hands the issue back to you.
+**The agent edits your repository, commits, and pushes.** continuo starts Claude Code with permission prompts turned off and allows `Bash` without argument restrictions. Nothing will stop and ask you.
 
-**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. **That narrows the hole; it does not close it.** The agent still runs `Bash` without asking you, so whatever the classifier lets through, runs.
+**Issue text is agent instructions.** The default brief tells the agent to read the issue body and every comment **as JSON**, so GitHub's own `authorAssociation` arrives beside the text instead of inside it, and to obey instructions only from `OWNER` / `MEMBER` / `COLLABORATOR`. Anything else is read as a report. **That narrows the hole; it does not close it.** The agent still runs `Bash` with no prompt, so whatever it decides to run, runs.
 
 **On a public repository, that text is written by other people.** Anyone can open an issue or leave a comment. **If it says "delete this repository", that is what runs.**
 

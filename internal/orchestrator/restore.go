@@ -746,7 +746,12 @@ func (o *Orchestrator) decideOne(
 		o.logger.Warn("権限の確認で止まっているので引き継ぎません（failure_state へ落として pane を閉じます）",
 			"identifier", identifier, "pane_id", pane.PaneID)
 		o.moveToFailure(ctx, issue,
-			handoffReasonT(i18n.KeyOrchestratorRestoreBlockedHandoff)+
+			"再起動したとき、Claude Code が確認の画面で止まっていました（herdr が返した状態: blocked）。"+
+				"**このまま turn を送ると、保留中の権限の要求が承認されて実行されます**"+
+				"（実測で3回中3回）。だから引き継がずに人間へ渡しました。"+
+				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
+				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
+				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
 				permissionRemedyText(o.cfg.Claude.PermissionMode, issue.RepoIsPrivate),
 			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)
@@ -856,7 +861,7 @@ func (o *Orchestrator) restoreWithoutPane(
 // applyOrphanRunningAction は `restart.orphan_running_action` の3値で分岐する
 // （設計 3-4。**`active_states` のときだけ効く**）。
 //
-//	redispatch（既定） … **復元の中では何もしない。**印にも入れず、次の巡回に委ねる
+//	redispatch（既定）  … **復元の中では何もしない。**印にも入れず、次の巡回に委ねる
 //	to_dispatch_state  … Status を dispatch_state へ戻す
 //	to_failure_state   … Status を failure_state へ落として人間に渡す
 //

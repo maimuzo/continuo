@@ -168,7 +168,7 @@ git は本物・herdr はテスト用socket mockで通している。
 | `host` / `owner` / `repo` の各階層でスラッシュをハイフンに置き換える | `normalize.Normalize` は branch 名のためにスラッシュを許す。そのまま階層名にすると1つの値が2階層に割れ、**固定4階層の走査（3-4 の段2）と食い違う** |
 | after_run の「1回だけ」の印を `Prepare` が消す（`BeginRun`） | 3-9 の段0 の「1回だけ」は **run 単位**である。3-18 は「再利用するということは、その issue が再び dispatch されたということであり、そこから先は別の run である」と定めている。worktree 単位の印にすると、**2回目の run で after_run が二度と実行されない** |
 | `Manager` を goroutine から同時に呼んでよい型にした（`afterRunMu`） | turn ループは run ごとの goroutine で動き（3-8）、`agent.max_concurrent_agents` の既定は 2 である。`Manager` は1つを共有するので、**排他が無いと2つの run が同時に終わったとき concurrent map write で落ちる** |
-| `git branch -D` に渡す branch を3つの条件で検算する（`deletableBranch`） | 身元ファイルは worktree の直下にあり、その worktree ではエージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）。**branch の値は書き換えられる。**そのまま渡すと利用者の `main` を消させられる。通すのは「正規化で変わらない」「`branch_template` の接頭辞で始まる」「**worktree が実際にチェックアウトしている branch と一致する**」の全部を満たす場合だけ |
+| `git branch -D` に渡す branch を3つの条件で検算する（`deletableBranch`） | 身元ファイルは worktree の直下にあり、その worktree ではエージェントが `--permission-mode dontAsk` で動く（3-16 の段9）。**branch の値は書き換えられる。**そのまま渡すと利用者の `main` を消させられる。通すのは「正規化で変わらない」「`branch_template` の接頭辞で始まる」「**worktree が実際にチェックアウトしている branch と一致する**」の全部を満たす場合だけ |
 | `settings_path` を消すのは `Options.SettingsRoot` の内側にあるときだけにした | 同じ理由で `settings_path` も書き換えられる。3-12 が置き場所を `<実行時ディレクトリ>/issues/<issue>/settings.json` と定めているので、**その置き場所を `Options.SettingsRoot` で受け取り、内側かどうかを字句で確かめる**（`..` は `filepath.Clean` が畳む）。**渡されていなければ消さない** |
 | `workspace.identity_file` がファイルの名前かを `New` が確かめる（`ValidateIdentityFileName`） | 3-18 はこの値を「ファイルの名前」と定めている。`../secret.json` のような値だと**身元ファイルが worktree の外へ書かれ、`info/exclude` に書く行も `/../secret.json` になる。**`normalize.Normalize` はドットもスラッシュも通すので、別に弾く必要がある |
 

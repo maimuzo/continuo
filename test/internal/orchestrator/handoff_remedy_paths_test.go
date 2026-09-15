@@ -1,19 +1,15 @@
-// 引き渡しの通知を投稿する3本の経路が、それぞれ正しい【対処】を持つことの検査である
-// （設計 3-11。issue #259）。
+// 引き渡しの通知を投稿する経路が、それぞれ正しい【対処】を持つことの検査である（設計 3-11。issue #259）。
 //
-//	経路1  turn の終わりに blocked を受け取った      … turn_test.go が見ている
-//	経路2  復元した run が blocked だった            … このファイル。公開かどうかで【対処】を変える
-//	経路3  起動直後の確認で blocked が返った          … このファイル。【対処】を足さない
+//	経路2  復元した run が blocked だった    … 公開かどうかで【対処】を変える
+//	経路3  起動直後の確認で blocked が返った  … コメントに書く許可の文を持たない
+//
+// **経路1（turn の終わりに blocked）は `TestTurn_blockedで引き渡すときサブエージェントの記録も案内する` が見ている。**
+//
+// **この package は `lang_test.go` の `TestMain`（`testlang.Run`）で日本語に固定されている。**
+// だから日本語の文字列で見る。
 //
 // **経路2 は非公開の場合を必ず試す。**`sampleIssue` は `RepoIsPrivate` を立てないので、nil しか試さないと
-// **「正しく渡している」と「リテラルの nil を渡している」が同じ文面になり、区別できない。**
-//
-// **経路3 は【対処】を足さない。**起動直後は1回目の指示を送る前なので、エージェントは道具を
-// 1つも使っていない。**その画面は権限の確認ではなく、フォルダの信頼などの確認である。**
-// 非公開の場合も試すのは、**公開かどうかで【対処】を足す形へ戻っていないこと**を確かめるためである。
-//
-// **経路1 は既に `TestTurn_blockedで引き渡すときサブエージェントの記録も案内する` が見ている。**
-// ここで重ねない。
+// 「正しく渡している」と「渡し忘れて nil になっている」が同じ文面になり、区別できない。
 package orchestrator_test
 
 import (
@@ -25,11 +21,17 @@ import (
 	"github.com/maimuzo/continuo/internal/herdr"
 )
 
-// remedyCase は、公開・非公開のどちらとして issue を置くかと、そのとき本文に何が出るべきかである。
+// handoffPublicRefusal は、公開リポジトリ（と、公開かどうかを取れなかったとき）の【対処】にだけ出る断りである。
+const handoffPublicRefusal = "このリポジトリは公開なので、issue のコメントで許可を出す方法は案内しません"
+
+// handoffGrantSentence は、コメントに書く許可の文である。起動直後の文言には入ってはならない。
+const handoffGrantSentence = "その操作を許可します"
+
+// remedyCase は、公開・非公開のどちらとして issue を置くかと、非公開の案内を期待するかである。
 type remedyCase struct {
 	name          string
 	repoIsPrivate *bool
-	wantPrivate   bool // true なら非公開の案内が出て、公開の断りが出ないこと
+	wantPrivate   bool
 }
 
 // remedyCases は、試す公開・非公開の組み合わせを返す。
@@ -57,40 +59,12 @@ func handoffBodyOf(fx *fixture, nodeID string) string {
 	return ""
 }
 
-// assertRemedyFor は、引き渡しの本文が、公開・非公開に合った【対処】を持つことを確かめる。
-//
-// t: テスト。
-// where: どの経路か（落ちたときの案内に出す）。
-// body: 投稿された本文。
-// wantPrivate: 非公開の案内を期待するなら true。
-func assertRemedyFor(t *testing.T, where, body string, wantPrivate bool) {
-	t.Helper()
-	if body == "" {
-		t.Fatalf("%s: 引き渡しの通知が投稿されていない", where)
-	}
-	// **どちらでも、continuo 自身は許可の文を書かない。**
-	if strings.Contains(body, grantSentence) {
-		t.Errorf("%s: continuo 自身が許可の文を書いている:\n%s", where, body)
-	}
-	hasGuidance := strings.Contains(body, commentGrantGuidance)
-	hasRefusal := strings.Contains(body, publicRefusal)
-	if wantPrivate {
-		if !hasGuidance || hasRefusal {
-			t.Errorf("%s: 非公開なのに、非公開の案内になっていない"+
-				"（RepoIsPrivate を渡し損ねている疑い。案内=%v 断り=%v）:\n%s", where, hasGuidance, hasRefusal, body)
-		}
-		return
-	}
-	if hasGuidance || !hasRefusal {
-		t.Errorf("%s: 公開として扱うべきなのに、公開の断りになっていない（案内=%v 断り=%v）:\n%s",
-			where, hasGuidance, hasRefusal, body)
-	}
-}
-
 // 目的: 経路2（復元した run が blocked）が、issue の `RepoIsPrivate` を【対処】まで渡していることを固定する。
 //
+// **渡し損ねると、非公開リポジトリの利用者に対処が届かないか、公開リポジトリへ許可の出し方が載る。**
+//
 // 与える情報: `In Progress` の issue（非公開 / 取れなかった）と、agent_status が blocked の pane。
-// 成功条件: 投稿された引き渡しの本文が、公開・非公開に合った【対処】を持つこと。
+// 成功条件: 非公開なら許可の出し方の案内が入り公開の断りが入らない。取れなかったならその逆。
 func TestHandoff_復元したrunがblockedなら公開かどうかで対処を変える(t *testing.T) {
 	for _, tc := range remedyCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -111,20 +85,28 @@ func TestHandoff_復元したrunがblockedなら公開かどうかで対処を�
 			waitFor(t, 10*time.Second, "引き渡しの通知が投稿される", func() bool {
 				return handoffBodyOf(fx, "I_node188") != ""
 			})
-			assertRemedyFor(t, "経路2（復元）", handoffBodyOf(fx, "I_node188"), tc.wantPrivate)
+			body := handoffBodyOf(fx, "I_node188")
+			hasGuidance := strings.Contains(body, commentGrantGuidance)
+			hasRefusal := strings.Contains(body, handoffPublicRefusal)
+			if tc.wantPrivate && (!hasGuidance || hasRefusal) {
+				t.Errorf("非公開なのに、非公開の【対処】になっていない"+
+					"（RepoIsPrivate を渡し損ねている疑い。案内=%v 断り=%v）:\n%s", hasGuidance, hasRefusal, body)
+			}
+			if !tc.wantPrivate && (hasGuidance || !hasRefusal) {
+				t.Errorf("公開として扱うべきなのに、公開の【対処】になっていない（案内=%v 断り=%v）:\n%s",
+					hasGuidance, hasRefusal, body)
+			}
 		})
 	}
 }
 
-// 目的: 経路3（起動直後の確認で blocked）が、公開・非公開のどちらでも【対処】を足さず、信頼の案内を持つことを固定する。
+// 目的: 経路3（起動直後の確認で blocked）が、公開・非公開のどちらでも、コメントに書く許可の文を持たないことを固定する。
 //
-// **足すと、効かない手を人間に打たせ、すぐ前の `continuo trust` の案内を埋もれさせる。**
-// **公開リポジトリなら、許可の出し方を第三者に教えることにもなる。**
+// **この文言は公開かどうかを見ずに投稿される。**許可の文が戻ると、公開リポジトリの issue へも載る。
 //
 // 与える情報: `Ready` の issue（非公開 / 取れなかった）と、`agent.get` が blocked を返す台本。
-// 成功条件: 投稿された引き渡しの本文に、許可の文・非公開の案内・公開の断り・【auto について】のどれも無く、
-// `continuo trust` があること。
-func TestHandoff_起動直後のblockedには対処を足さず信頼を案内する(t *testing.T) {
+// 成功条件: 投稿された本文に許可の文が無く、`continuo trust` があること。
+func TestHandoff_起動直後のblockedは許可の文を持たず信頼を案内する(t *testing.T) {
 	for _, tc := range remedyCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			fx := newFixture(t, fixtureOptions{})
@@ -147,13 +129,13 @@ func TestHandoff_起動直後のblockedには対処を足さず信頼を案内�
 			})
 			fx.WaitRunsDrained(t, 15*time.Second)
 			body := handoffBodyOf(fx, "I_node188")
-			for _, ng := range []string{grantSentence, commentGrantGuidance, publicRefusal, "【auto について】"} {
+			for _, ng := range []string{commentGrantGuidance, handoffGrantSentence} {
 				if strings.Contains(body, ng) {
-					t.Errorf("経路3（起動直後）: 足してはならない %q が入っている:\n%s", ng, body)
+					t.Errorf("起動直後の引き渡しに %q が入っている:\n%s", ng, body)
 				}
 			}
 			if !strings.Contains(body, "continuo trust") {
-				t.Errorf("経路3（起動直後）: `continuo trust` の案内が無い:\n%s", body)
+				t.Errorf("起動直後の引き渡しに `continuo trust` の案内が無い:\n%s", body)
 			}
 		})
 	}

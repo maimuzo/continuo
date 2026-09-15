@@ -1235,12 +1235,10 @@ func (o *Orchestrator) confirmStartup(ctx context.Context, rs *runState, since t
 				return nil
 			case herdr.AgentStatusBlocked:
 				o.sendEscape(ctx, rs)
-				// **【対処】を足さない**（設計 3-11。issue #259）。
-				// 起動直後は1回目の指示を送る前なので、**エージェントはまだ道具を1つも使っていない。**
-				// **この画面は権限の確認ではなく、フォルダの信頼などの確認である。**
-				// 判定役へ許可を伝える【対処】（permissionRemedyText）は効かないうえ、
-				// 文言にある `continuo trust` の案内を埋もれさせる。
-				// **許可の出し方を issue へ投稿しないという守りも、何も足さないことで保たれる。**
+				// **起動直後の文言は、issue のコメントに書く許可の文を持たない**（設計 3-11。issue #259）。
+				// この文言は、公開かどうかを見ずに issue のコメントとして投稿される。
+				// **何の確認だったかは continuo の側に残らない**ので、許可の出し方を案内しても合っているか分からない。
+				// 案内するのは、よくある原因（フォルダの信頼登録）の直し方だけにする。
 				return i18n.Errorf(
 					i18n.KeyOrchestratorConfirmStartupBlocked,
 					rs.agentName(), rs.agentName())

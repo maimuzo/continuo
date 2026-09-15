@@ -9,7 +9,6 @@ import (
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/hookserver"
-	"github.com/maimuzo/continuo/internal/i18n"
 )
 
 // turnOutcome は1つの turn を送って待った結果である。
@@ -373,7 +372,9 @@ func (o *Orchestrator) waitForRunningSubagents(ctx context.Context, rs *runState
 // 戻り値: 引き渡しの通知に載せる理由。
 func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []string) string {
 	var b strings.Builder
-	b.WriteString(handoffReasonT(i18n.KeyOrchestratorBlockedHandoffHead))
+	b.WriteString("Claude Code が作業の途中で確認の画面に止まりました。" +
+		"continuo は esc を送って画面を閉じましたが、" +
+		"**この issue は人間が見ないと進みません。**")
 	if len(stillRunning) > 0 {
 		shown := stillRunning
 		omitted := 0
@@ -387,12 +388,20 @@ func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []strin
 		}
 		names := strings.Join(quoted, " / ")
 		if omitted > 0 {
-			names += handoffReasonT(i18n.KeyOrchestratorBlockedHandoffOmitted, omitted)
+			names += fmt.Sprintf(" ほか %d 件", omitted)
 		}
-		b.WriteString(handoffReasonT(i18n.KeyOrchestratorBlockedHandoffSubagents,
+		b.WriteString(fmt.Sprintf(
+			"\n【走行中のサブエージェントを止めました】esc を送った時点で %d 件が動いていました（%s）。"+
+				"**worktree には書きかけの変更が残っている可能性があります。**"+
+				"下記の【調べるところ】の worktree を確かめてください。",
 			len(stillRunning), names))
 	}
-	b.WriteString(handoffReasonT(i18n.KeyOrchestratorBlockedHandoffHowToCheck))
+	b.WriteString("\n【確かめ方】下記の【調べるところ】に挙げた記録を開き、" +
+		"末尾で何をしようとしていたかを見てください。" +
+		"**サブエージェントの記録も見てください。**" +
+		"親の記録の末尾には何も残っていないことがあります。" +
+		"\n【よくある原因】herdr が `blocked`（確認の画面で入力を待っている状態）を返しました。" +
+		"**何の確認だったかは continuo の側には残りません。**")
 	b.WriteString(permissionRemedyText(mode, repoIsPrivate))
 	return b.String()
 }
@@ -421,12 +430,30 @@ func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []strin
 // 戻り値: 引き渡しの通知に足す【<モード名> について】と【対処】。
 func permissionRemedyText(mode string, repoIsPrivate *bool) string {
 	if mode == config.ClaudePermissionModeDontAsk {
-		return handoffReasonT(i18n.KeyOrchestratorPermissionRemedyDontAsk, mode, mode)
+		return "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しており、" +
+			"許可の一覧に無いツールは確認を出さずにその場で拒否されるので、" +
+			"**この停止は拒否とは別の原因のことがあります。**" +
+			"\n【対処】記録を見て、許してよい操作だと分かったときだけ " +
+			"WORKFLOW.md の `claude.permissions.allow` に足してください。" +
+			"そのうえで Status を着手待ちへ戻してください。"
 	}
+	head := "\n【" + mode + " について】continuo は `--permission-mode " + mode + "` で起動しています。" +
+		"**このモードの判定役は会話の流れを読むので、許可の一覧を増やしても解けないことがあります。**"
 	if repoIsPrivate != nil && *repoIsPrivate {
-		return handoffReasonT(i18n.KeyOrchestratorPermissionRemedyAutoPrivate, mode, mode)
+		return head +
+			"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
+			"**この issue のコメントに「その操作を許可します」と書いてください。**" +
+			"判定役はそれを読みます。" +
+			"\n**恒久的に効かせたいものは、WORKFLOW.md の `claude.permissions.allow` に足してください。**" +
+			"そのうえで Status を着手待ちへ戻してください。"
 	}
-	return handoffReasonT(i18n.KeyOrchestratorPermissionRemedyAutoPublic, mode, mode)
+	return head +
+		"\n【対処】記録を見て、許してよい操作だと分かったときだけ、" +
+		"**WORKFLOW.md の `claude.permissions.allow` に足してください。**" +
+		"\n**このリポジトリは公開なので、issue のコメントで許可を出す方法は案内しません。**" +
+		"判定役が読む会話には issue のコメントが載るため、**同じ文を第三者も書けます。**" +
+		"判定役が書いた人の立場を見るかどうかは測っていません（SECURITY.md の危険の表）。" +
+		"\nそのうえで Status を着手待ちへ戻してください。"
 }
 
 // buildTurnText はこの turn で送る本文を決める（設計 3-8 / 5-3 / 5-4）。
