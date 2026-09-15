@@ -313,7 +313,7 @@ Claude側の資産本文を移動・複製せず、Codexの入口と標準plugin
 Codex側で無効化したskillの設定はplugin cacheのバージョン付きパスを参照する。plugin更新後は、新しいパスで無効化が維持されているか `skills/list` と新規セッションで再確認する。設定の実値は個人バックアップ側に保持し、公開リポジトリへ個人のconfigを複製しない。
 
 実タスク委任、Goガイド6種の明示指定、複数領域の暗黙選択、正本との同版一致、相対参照、会話移送とCodexでの継続、正本更新後の両製品の再読込は確認済み。今回の共有対象に付属scriptsはない。確認方法は16節に示す。
-共有対象7 skillsのfrontmatter確認と、更新後の名前なし自動選択も実施した。指定marketplaceの54 skills全体には公式validatorも適用し、Codexの形式上の受入範囲を測定した。残るのはClaude側の既存開発フロー全般と、frontmatterキーの実行意味の完全同等性である。詳細は17節に示す。高度なhooks制御は13節の課題のままとする。
+共有対象7 skillsのfrontmatter確認と、更新後の名前なし自動選択も実施した。指定marketplaceの54 skills全体には公式validatorも適用し、Codexの形式上の受入範囲を測定した。残るのはClaude側の既存開発フロー全般と、frontmatterキーの実行意味の完全同等性であり、外部状態を変更しない今回の検証では保留する。詳細は17節に示す。高度なhooks制御は13節の課題のままとする。
 
 ## 15. 復元方法
 
@@ -346,6 +346,7 @@ ClaudeからCodexへの読み取り専用タスク委任と、Codexでのスキ�
 | 更新後の暗黙選択 | skill名を渡さず、更新後も対象領域に合うskillを選ぶ | 合格。名前なしのcommit前セキュリティ確認依頼で `ecc-security` を選択し、選択理由とテスト併用方針を返した。別試験ではgitガイド単独の依頼から `ecc-git` を選択 |
 | 共有対象frontmatter | Claude由来のキーをCodexが保証する範囲を区別する | 合格。共有対象7 skillsを静的監査し、`user-invocable` は7件、`allowed-tools` はworker-briefingの1件のみ。いずれもCodexでClaudeと同じ意味になるとは扱わない |
 | marketplace全体の形式検査 | 指定配布元のskillがCodex validatorで受け入れられる | 限定結果。54件中5件がvalid、49件が失敗。失敗は `user-invocable` 43件、`argument-hint` 3件、`context` と `user-invocable` の併用1件、YAML不正1件などで、Claude側本文は変更していない |
+| marketplace付属資産の分類 | scripts・MCP・外部CLI依存を把握し、無条件共有しない | 合格。skill配下に9個の実行scriptがあり、`mcp__claude`・`claude -p`・`gh`・Claude専用agent/fork参照を静的に特定。外部状態を変更するscriptは実行していない |
 | frontmatter runtime | Claude固有キーを含むskillのCodex発見・本文読取を確認する | 合格。隔離fixtureの `github-project-update`・`naming-brainstorming`・`co-reviewer` は3件とも発見・本文読取に成功したが、`allowed-tools`・`argument-hint`・`context: fork`・`user-invocable` の意味は確認できなかった |
 | Claude clean runtime | 起動前からfixture内symlinkがあるClaudeで通常skillを読む | 合格。新規Claude sessionで `naming-brainstorming` を発見・明示実行し、他2件もReadできた。外部アクセス・gh・スクリプト・ファイル変更・実レビュー起動は行っていない |
 | Claude/Codexの本文一致 | Go6種の同一バージョンがバイト単位で一致 | 合格。両cacheの `0.1.0/skills/<skill>/SKILL.md` を `cmp -s`。6種すべてexit 0 |
@@ -374,7 +375,7 @@ Codex単独の試験は `codex exec --sandbox read-only --json <検証依頼>`�
 | Claude固有設定 | gitガイドに `~/.claude/settings.json` のattribution設定への依存がある。Codexへ同じ設定が継承されるとは扱わない。明示指定試験のCodex回答もこの非互換を指摘 |
 | プロジェクト前提 | Goガイドの `go run ./cmd/manager/` と `bash unit_and_e2e_test.sh` はplugin同梱資産ではない。対象プロジェクトで存在を確かめる。共有設定の検証を製品固有の修正へ広げない |
 | 正本更新の反映 | 隔離fixtureのCLAUDE.md・symlink先skill・相対参照の3値を更新前の値から更新後の値へ変更。Codexの新規sessionとClaudeの新規Herdr sessionが、`PROJECT-R2-9136`・`SKILL-R2-2748`・`REFERENCE-R2-6502` を同じく返した。運用中の正本を編集する試験は未実施 |
-| 残りの自動選択・回帰 | 共有対象の更新後暗黙選択は `ecc-git` と `ecc-security` で確認済み。Claude側の既存開発フロー全般と、各frontmatterキーの実行意味の完全同等性は未検証。今回の限定試験を全互換と一般化しない |
+| 残りの自動選択・回帰 | 共有対象の更新後暗黙選択は `ecc-git` と `ecc-security` で確認済み。Claude側の既存開発フロー全般と、各frontmatterキーの実行意味の完全同等性は保留。issue操作・auto-debug・co-review等を実行すると外部書込みや編集が発生するため、読み取り専用の今回スコープでは試験しない。今回の限定試験を全互換と一般化しない |
 | 既存hooksの警告 | Codex単独試験で `hooks.json` と `config.toml` の二重読込、およびSessionEndのtimeoutを3秒へ制限する警告が出た。試験自体は完了。hooks変更は今回の範囲外で、既存設定を変更していない |
 
 Claudeのレートリミットを意図的に発生させる試験はしていない。代わりの合格条件である「移送済みの会話をClaudeに依存せずCodexで継続できること」は16節の試験で満たした。次に残る確認を行う場合も、lunaを明示し、300秒上限を付けてから開始する。
