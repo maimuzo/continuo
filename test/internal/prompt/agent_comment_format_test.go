@@ -146,6 +146,14 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	skeleton := strings.Index(section, "骨組み。")
 	marker := strings.Index(section, "    <!-- continuo:agent -->")
 	firstHeading := strings.Index(section, "    ### 三行まとめ")
+	// **引用の行も、印の行と最初の見出しのあいだに置く。**
+	// 7つの1つ目が引用なので、引用の行が印より上へ動くと、そのまま写した時点で印が本文の先頭から外れる。
+	// 印と見出しの順だけを見ると、引用がどこへ動いても素通りする。
+	if quote := strings.Index(section, "\n    > "); quote < 0 || !(marker < quote && quote < firstHeading) {
+		t.Errorf("%q の骨組みで、引用の行が印の行と最初の見出しのあいだにありません（印 %d / 引用 %d / 見出し %d）。"+
+			"引用が印より上にあると、そのまま写された時点で印が本文の先頭から外れ、continuo が成果を数えません",
+			commentFormatHeading, marker, quote, firstHeading)
+	}
 	if skeleton < 0 || marker < 0 || firstHeading < 0 {
 		t.Fatalf("%q の節に骨組み（%d）か印の行（%d）か最初の見出し（%d）がありません",
 			commentFormatHeading, skeleton, marker, firstHeading)

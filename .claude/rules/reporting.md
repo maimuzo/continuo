@@ -117,8 +117,8 @@
 **長い報告は、自分で確かめきれない。**
 **確かめられる量だけ書く。**
 
-**上の34回の訂正は、1623回の返答の中で起きている。**
-**その多くは進捗報告だった。**
+**確かめきれない長さで書くと、誤りが混ざっても自分で気づけない。**
+**進捗報告も同じである。**
 
 ### 何を削るか
 
@@ -241,6 +241,10 @@
 | 6 | **`### 何が問題なのか`。**症状と、放っておくと何が起きるか |
 | 7 | **`### 詳細`。**根拠・仕組み・データ |
 
+**目印を持つコメントは、目印を本文の先頭に置き、引用はその下から始める。**
+判断票（`<!-- code-review-result -->` / `<!-- design-review-result -->`）と、continuo のエージェントが書くコメント（`<!-- continuo:agent -->`）である。
+**引用を先頭に置くと目印が本文の先頭から外れ、CI の検査もリリース前の検査も continuo も、そのコメントを数えない。**
+
 ### 説明はシーケンス図で書き、具体的な値を載せる
 
 **文章だけで構造を説明しない。**`sequenceDiagram` を多用する。
@@ -252,9 +256,9 @@
 sequenceDiagram
     autonumber
     participant C as continuo
-    participant A as Claude Code
-    C->>A: herdr agent start --kind claude --pane pane-7f2a<br/>args: ["--settings", "/tmp/continuo/issues/octocat-hello-world-42/settings.json", "--permission-mode", "auto"]
-    A-->>C: {"agent_status": "working", "argv": ["claude", "--settings", "...", "--permission-mode", "auto"]}
+    participant H as herdr（socket）
+    C->>H: agent.start {"name": "continuo-hello-world-42", "kind": "claude", "pane_id": "（pane.split の結果）",<br/>"args": ["--settings", "$TMPDIR/continuo/issues/octocat-hello-world-42/settings.json", "--session-id", "（採番した UUID）", "--permission-mode", "auto"]}
+    H-->>C: {"type": "agent_started", "agent": {"name": "continuo-hello-world-42", …}, "argv": ["claude", "--settings", "…", "--session-id", "…", "--permission-mode", "auto"]}
 ```
 
 **具体的な値を載せると、書く側が具体を詰めることになる。**そこで設計の穴が出る。
@@ -289,7 +293,7 @@ sequenceDiagram
 
 | どの hook | 何を見ているか |
 | --- | --- |
-| `maimuzo-chat-response` plugin の `check-reply-structure.py` | `三行まとめ` `何が言いたいのか` `結果` `詳細` の**4つが、この順で並んでいるか。**見出しの深さ（`##` か `###` か）は問わない |
+| `maimuzo-chat-response` plugin の `check-reply-structure.py` | **`三行まとめ` より前に行頭 `> ` の引用があり、そのあとに** `三行まとめ` `何が言いたいのか` `結果` `詳細` の**4つが、この順で並んでいるか。**見出しの深さ（`##` か `###` か）は問わない。**各見出しの下に、空白を除いて4文字以上の中身が要る**（`MIN_SECTION_BODY = 4`） |
 | [.claude/hooks/check-reply-clarity.py:139-143](../hooks/check-reply-clarity.py#L139-L143) の `REQUIRED_AFTER_DIVIDER` | **区切り線より後ろの塊ごとに、`三行まとめ` と `何が言いたいのか` の両方があるか** |
 
 **7つの形を chat で使うと、`### 詳細` が節1の末尾に来る。**
