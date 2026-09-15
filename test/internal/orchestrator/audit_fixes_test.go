@@ -84,7 +84,7 @@ func TestDispatch_active_statesに無いStatusのissueを着手が上書きし�
 // 巡回の worktree の照合（設計 3-9 の手順7b）が身元ファイルを検算することを確かめる。
 //
 // 目的: 身元ファイルは worktree の直下にあり、その worktree ではエージェントが
-// `--permission-mode dontAsk` で動く（設計 3-16 の段9）。**`herdr_workspace_id` は
+// `--permission-mode auto`（既定）で動く（設計 3-16 の段9）。**`herdr_workspace_id` は
 // エージェントが書き換えられる。**検算せずに `pane.close` へ渡すと、
 // **無関係の issue で走っている Claude Code を turn の途中で殺せる。**
 //

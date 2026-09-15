@@ -1873,7 +1873,7 @@ grep -n 'permission_mode' ~/continuo-work/WORKFLOW.md
 **どちらの場合も、そのあと Status を着手待ちへ戻してください。**
 
 **それでも、何が確認の画面を出したのか分からないときは、次の節を読んでください。**
-**agent teams が有効だと、`dontAsk` で起動していても確認の画面が出ます。**
+**agent teams が有効だと、`dontAsk` を選んでいても確認の画面が出ます。**
 
 #### 「作業の途中で確認の画面に止まりました」と出る（agent teams が有効な場合）
 
@@ -1900,7 +1900,7 @@ continuo はそれを「人間の入力を待っている」と読み、esc を�
 出典: [Orchestrate teams of Claude Code sessions](https://code.claude.com/docs/en/agent-teams)（2026-09-01 取得）
 
 **上の節の「`dontAsk` では確認の画面が出ない」と食い違って見えますが、両方とも起きます。**
-continuo は `--permission-mode dontAsk` で起動するので、**リード自身は確認の画面を出しません。**
+continuo は `--permission-mode auto`（既定）で起動します。**リード自身の許可は判定役が決めます**（`dontAsk` を選んだときは、許可の一覧の外がその場で拒否されます）。**どちらでも、リードが人手の確認を待つことは想定していません。**
 **ところが teammate はそれを継がず、`default` で走ることが観測されています**
 （2026-08-27、外部の利用者の実測。報告された `meta.json` が3件とも `permissionMode: "default"` でした）。
 **公式は「teammate はリードの許可設定を継ぐ」と書いており、この観測と食い違っています。**

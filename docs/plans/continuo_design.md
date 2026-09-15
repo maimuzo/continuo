@@ -1783,10 +1783,10 @@ terminal_states: ["Done"]
 
 | 止まる箇所 | 打つ手 |
 | --- | --- |
-| **権限の確認** | **`--permission-mode auto` で起動する（既定）。**保護対象パス（`.claude` 配下と `.mcp.json`）への書き込みとシェルのコマンドが判定役へ回り、**会話の中で人間が出した許可を読んで判断される。**`dontAsk` では、それらは何をしても通らなかった（下の実測）。**遮断が続いたときに確認へ戻るかは実機で観測できていない**（公式の原文は `block` としか書いていない）。**戻る場合でも固まりはしない。**continuo が esc を送って `tracker.failure_state` へ落とし、人間へ渡す（3-25）。**subagent が `auto` を上書きできるかは測っていない。****`dontAsk` を選べば、公式が *"the session never waits for input"*（**訳:** そのセッションは決して入力を待たない）と書いているとおり、入力を待たない。**`--dangerously-skip-permissions` は使わない** |
+| **権限の確認** | **`--permission-mode auto` で起動する（既定）。**保護対象パス（`.claude` 配下と `.mcp.json`）への書き込みとシェルのコマンドが判定役へ回り、**会話の中で人間が出した許可を読んで判断される。**`dontAsk` では、それらは何をしても通らなかった（下の実測）。**遮断が続いたときに確認へ戻るかは実機で観測できていない**（公式の原文は `block` としか書いていない）。**戻る場合でも固まりはしない。**continuo が esc を送って `tracker.failure_state` へ落とし、人間へ渡す（3-25）。**subagent が `auto` を上書きできるかは測っていない。****`dontAsk` を選べば、公式が *"the session never waits for input"*（**訳:** そのセッションは決して入力を待たない）と書いているとおり、入力を待たない。**`--dangerously-skip-permissions` は使わない。****判定を別に掛ける仕組み**（`claude.tool_gate`）**は既定で `off` である。**あの判定は会話を読まないので、**人間が issue のコメントで出した許可が通らない。**担当中のリポジトリへの起票まで断る誤判定が実測で19回出た。**掛けたい人は `public_only` か `on` を書く。** |
 | — **`--permission-mode` とは何か** | **`claude` コマンドの起動フラグである。**そのセッション全体で、ツールの実行に人間の許可を求めるかどうかを決める。**`dontAsk` は「許可リストに載っているものだけを確認なしで実行し、それ以外は拒否する」という意味である。**拒否であって、確認ではない |
 | — **止まらないことと、人間に判断を仰ぐことは別である** | **権限で拒否されたり、判断に迷ったりしたら、エージェントは `CONTINUO-STATUS: blocked` を出す**（3-25）。continuo はそれを受けて Status を `Blocked` へ動かし、**人間に渡す。**「絶対に止まらない」とは「**キー入力を待って固まらない**」という意味であって、「人間の判断を仰がない」という意味ではない |
-| — **`auto` を既定にした理由** | **`dontAsk` では保護対象パス**（`.claude` 配下と `.mcp.json`）**へどうやっても書けない。**`permissions.allow` に書いても、`PreToolUse` hook が `allow` を返しても、`Bash` のリダイレクトでも拒否された（実測）。**人間が issue のコメントで許可を出しても、権限は設定ファイルからしか来ないので何も変わらない。**`auto` の判定役は会話の流れを読むので、そのコメントが効く。**代償は、遮断が続いたときに確認へ戻りうること**（この経路は観測できていない）。**そのときも固まらず、continuo が esc を送って `failure_state` へ落とす。**入力を待たないことを最優先するなら `dontAsk` を選ぶ |
+| — **`auto` を既定にした理由** | **`dontAsk` では保護対象パス**（`.claude` 配下と `.mcp.json`）**へどうやっても書けない。**`permissions.allow` に書いても、`PreToolUse` hook が `allow` を返しても、`Bash` のリダイレクトでも拒否された（実測）。**人間が issue のコメントで許可を出しても、権限は設定ファイルからしか来ないので何も変わらない。**`auto` の判定役は会話の流れを読むので、そのコメントが効く。**代償は、遮断が続いたときに確認へ戻りうること**（この経路は観測できていない）。**そのときも固まらず、continuo が esc を送って `failure_state` へ落とす。**入力を待たないことを最優先するなら `dontAsk` を選ぶ。****continuo 自身は、その【対処】に許可の文そのものを書かない。**この文面は issue のコメントとして投稿され、**次の turn の会話に載る。**continuo が「その操作を許可します」と書けば、**人間が1文字も書いていないのに、判定役の読む会話へ許可の表明が載る**（自己注入）。**第三者を1人も必要としない。**だから公開・非公開のどちらでも書かず、**許可の文は人間に書かせる。****公開リポジトリでは、さらに「コメントで許可を出せること」自体を案内しない。**読んだ第三者が同じことをできるためである。**`RepoIsPrivate` が nil（取れなかった）なら公開として扱う。**`toolGateApplies` と同じ向きで、**分からないものを非公開と決めない。****`dontAsk` では公開かどうかを見ない。**権限が設定ファイルからしか来ないので、**コメントに何が書かれても結論が変わらない。****成果の代筆を取りに行く経路**（3-80c）**には、この【対処】を載せない。**あの経路の文面は日本語の直書きで、i18n を通った【対処】を挿すと言語が混ざる。**枠ごと i18n へ移すまで、理由はログにだけ残す。** |
 | — `dontAsk` で実行できるもの | **3つだけ。**(1) `permissions.allow` に一致する操作、(2) 組み込みの読み取り専用 Bash コマンド、(3) `PreToolUse` hook が allow を返した呼び出し。**`AskUserQuestion` ツールも拒否される**ので、エージェント側から人間に質問して止まる経路が塞がれる |
 | **フォルダの信頼確認** | **リポジトリごとに人間が1度だけ承認しておく。**continuo は **dispatch の直前に issue ごとに**「承認済みか」を `~/.claude.json` から**読み取って**検査し、未承認ならその issue を飛ばす。**起動そのものは止めない**（3-6）。**巡回のループは書き換えない**（4-3）。**登録は `continuo trust` を人間が叩いたときだけ行う**（3-33） |
 | **レートリミット** | **`CLAUDE_CODE_RETRY_WATCHDOG=1` を環境変数で渡す。**公式ドキュメントが「リセット時刻まで待って自動的に再開する」と書いている（3-27 に原文）。**これは turn の途中で `429` が返ったときの API リクエストのリトライである** |
@@ -2091,7 +2091,7 @@ sequenceDiagram
 
     Note over ORC: 段9
     ORC->>HERDR: agent.start（args に起動フラグ）
-    Note over HERDR,CC: --settings < そのパス ><br/>--session-id < UUID ><br/>--permission-mode dontAsk
+    Note over HERDR,CC: --settings < そのパス ><br/>--session-id < UUID ><br/>--permission-mode auto
     HERDR->>CC: 起動
     CC->>FS: 設定ファイルを読む
     Note over CC: hook が登録される
@@ -2319,7 +2319,7 @@ curl -sS "https://api.anthropic.com/api/oauth/usage" \
    → pane.rename を呼び、label に `owner/repo/issues/N` を書く（3-3）
 9. その pane で Claude Code を起動する（agent.start）
    → 起動フラグは args に載せる（2-1）。
-     --settings <設定ファイル> / --session-id <UUID> か --resume <UUID>（段5b）/ --permission-mode dontAsk
+     --settings <設定ファイル> / --session-id <UUID> か --resume <UUID>（段5b）/ --permission-mode auto（既定）
    → **環境変数は設定ファイル（--settings）の env に書く。**pane にも agent.start にも渡さない
      （どちらにも env を渡す手段が無い。設定ファイル経由で届くことは実測で確認済み。3-12）
    → 起動直後は agent_pane_busy が返ることがあるのでリトライする（2-1）
@@ -2640,7 +2640,7 @@ herdr workspace の ID は段3で、設定ファイルのパスは段5で手に�
 これは**worktree という外部の副作用に、それが誰のものかという札を付けるもの**である。
 
 **読むときは上限を掛け、symlink は辿らない。**このファイルは worktree の直下にあり、
-そこでエージェントが `--permission-mode dontAsk` で動く（3-16 の段9）。
+そこでエージェントが `--permission-mode auto`（既定）で動く（3-16 の段9）。
 **つまり中身も、ファイルそのものも書き換えられる。**
 
 | 何を | どうするか | 掛けないと何が起きるか |
@@ -3495,7 +3495,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
      **偽の herdr が自分で pane を1つ作っているだけである。**
      本物が0件を返すなら、9段は毎回ここで終わり、**段9 の7つの穴の1つに落ちて issue には1文字も残らない**
 5. その pane で agent.start を呼ぶ。args に次を載せる
-   --resume <UUID> --settings <設定ファイル> --permission-mode dontAsk
+   --resume <UUID> --settings <設定ファイル> --permission-mode auto（既定）
    → 起動経路は着手の段9 と同じである。continuo が claude を直接 exec することはない
 6. agent_status が idle または done になるのを待つ
 7. agent.prompt で「作業の内容を issue のコメントに書いてください」とだけ送る
@@ -3549,7 +3549,7 @@ FetchIssueByIdentifier(ctx, "octocat/hello-world#45") → (Issue, bool, error)
 | 何を | なぜ |
 | --- | --- |
 | **`--settings` を毎回渡し直す** | **復元されない。**`--mcp-config` / `--plugin-dir` / `--add-dir` も同じ。**渡し直さないと hook が1つも効かない** |
-| **`--permission-mode dontAsk` を毎回渡す** | 復帰したセッションは元のモードを引き継ぐが、**明示すれば確実に上書きできる** |
+| **`--permission-mode <設定値>` を毎回渡す** | 復帰したセッションは元のモードを引き継ぐが、**明示すれば確実に上書きできる** |
 | **`CLAUDE_CODE_CHILD_SESSION` を pane の env から取り除く** | **この変数があると transcript が保存されず、`--resume` が `No conversation found` で失敗する**（実測）。continuo を Claude Code の中から起動して動作確認するときに必ず当たる |
 
 **これは仕様から外れる。**`SPEC.md` 11.5 はチケットの変更をエージェントが行うモデルを前提にしている。**差分は第8節に載せた。**
@@ -5781,7 +5781,7 @@ text/template は受け付けるためである。
 別の issue の worktree を消せる。**スラグ（置き場所の4階層目）まで比べる。
 
 **何が起きるか。**issue 42 の worktree で動くエージェントが、自分の `.continuo.json` の
-`issue_url` を issue 99 に書き換える（worktree の直下にあり `--permission-mode dontAsk` で
+`issue_url` を issue 99 に書き換える（worktree の直下にあり `--permission-mode auto`（既定）で
 動くので書き換えられる）。issue 99 の worktree がまだ無ければ、
 `continuo abandon <issue 99 の URL>` は候補1件として **42 の worktree と branch を消す。**
 `--force` を付けた実行なら未コミットの成果ごと消える。
@@ -5930,7 +5930,7 @@ continuo が `In Progress` へ上書きし、その worktree で Claude Code を
 **攻撃の形。**引き渡し（`In Review` など）で run が終わり worktree が残っているとき、
 その worktree の `.continuo.json` の `project_item_id` を `active_states` の別 issue に、
 `herdr_workspace_id` を走行中の別 run の workspace ID にしておく。
-**エージェントは `--permission-mode dontAsk` で worktree の直下に書けるので、通常の道具だけでできる。**
+**エージェントは `--permission-mode auto`（既定）で worktree の直下に書けるので、通常の道具だけでできる。**
 
 ---
 
@@ -7399,7 +7399,7 @@ pane が失われた run は引き継がれないので、一覧に載らない�
 
 **訳。**teammate はリードの許可設定で始まる。
 
-**continuo は `--permission-mode dontAsk` で起動する。**継ぐなら確認の画面は出ないはずである。
+**continuo は `--permission-mode auto`（既定）で起動する。**継ぐなら、リード自身は人手の確認を待たないはずである。
 **だが報告された `meta.json` は3件とも `permissionMode: "default"` だった**（2026-08-27、外部の利用者の実測）。
 
 **`meta.json` の `permissionMode` が「継いだ実効値」か「spawn 時に明示した値」かは、
@@ -11303,7 +11303,7 @@ Claude Code を手で使うときの1往復とは値段が違う。
 | --- | --- |
 | turn の終わりをどう判定するか | 1-3 / 3-2 |
 | 表明の1行をどこから読むか | 3-25 |
-| `--permission-mode dontAsk` と subagent の関係 | 3-11 |
+| `--permission-mode` と subagent の関係 | 3-11 |
 
 ### 6-1. 運用に入ったら記録すること
 
@@ -12350,7 +12350,7 @@ releasePrompt()
 ### 6-23. 公開 issue から実行させられる経路を、どう塞ぐか
 
 **言いたいこと。**この1件が片付くまで、**continuo をこのリポジトリのカンバンで動かさない**（2026-08-28、人間の判断）。
-**外部の第三者が書いた issue とコメントが、`dontAsk` で `Bash` を持つエージェントへ確認なしで届く。**
+**外部の第三者が書いた issue とコメントが、既定の `auto` で `Bash` を持つエージェントへ届く。****判定役は通すことがある。**
 **「読ませない」では解けない。**外部のバグ報告は情報源として要る（2026-08-28、人間の判断）。
 
 **塞がっているところ。**カンバンは非公開なので、外部から Status は動かせない。
