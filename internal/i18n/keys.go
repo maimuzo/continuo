@@ -2383,6 +2383,8 @@ const (
 	KeyOrchestratorBlockedHandoffHead Key = "orchestrator.blocked_handoff.head"
 	// KeyOrchestratorBlockedHandoffSubagents はesc を送った時点で走っていた subagent を並べる。
 	KeyOrchestratorBlockedHandoffSubagents Key = "orchestrator.blocked_handoff.subagents"
+	// KeyOrchestratorBlockedHandoffOmitted は並べきれなかった subagent の件数である（先頭に空白を含む）。
+	KeyOrchestratorBlockedHandoffOmitted Key = "orchestrator.blocked_handoff.omitted"
 	// KeyOrchestratorBlockedHandoffHowToCheck は確かめ方とよくある原因である。
 	KeyOrchestratorBlockedHandoffHowToCheck Key = "orchestrator.blocked_handoff.how_to_check"
 	// KeyOrchestratorRestoreBlockedHandoff は再起動したとき確認の画面で止まっていた場合の本文である。
@@ -3460,6 +3462,7 @@ var allKeys = []Key{
 	KeyOrchestratorPermissionRemedyAutoPublic,
 	KeyOrchestratorBlockedHandoffHead,
 	KeyOrchestratorBlockedHandoffSubagents,
+	KeyOrchestratorBlockedHandoffOmitted,
 	KeyOrchestratorBlockedHandoffHowToCheck,
 	KeyOrchestratorRestoreBlockedHandoff,
 	KeyOrchestratorConfirmStartupWorkingTimeout,

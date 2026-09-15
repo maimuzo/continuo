@@ -65,14 +65,16 @@ var japaneseAllowance = map[string]int{
 	"internal/hookserver": 8,
 	// 識別子の正規化で情報が落ちたときの警告。
 	"internal/normalize": 1,
-	// 常駐プロセスの本体。**引き渡しコメントの文面は i18n へ移し終えている**
+	// 常駐プロセスの本体。**引き渡しコメントのうち、権限で止まったときの段は i18n へ移した**
 	// （orchestrator.blocked_handoff.* と orchestrator.restore.blocked_handoff、
-	// orchestrator.permission_remedy.*）。**ここに残るのはログと組み立ての誤りである。**
+	// orchestrator.permission_remedy.*）。**移し終えてはいない。**
+	// 引き渡しコメントの枠（internal/orchestrator/prompt.go の buildHandoffComment の書き出しと
+	// 「調べるところ」の各行）と、turn が固まったときの理由（turn.go の turnStalled）は、まだ日本語の直書きである。
 	//
 	// **この数は fmt.Sprintf / fmt.Errorf / errors.New しか数えない。**
 	// strings.Builder.WriteString や `+` で組んだ文字列は1件も数えない。
 	// **だから、この数が変わらないことは「日本語が漏れていない」の証拠にならない。**
-	"internal/orchestrator": 27,
+	"internal/orchestrator": 26,
 	// ダッシュボードの組み立ての誤り。
 	"internal/server": 3,
 	// `continuo setup` の対話。

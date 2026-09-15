@@ -387,7 +387,7 @@ func blockedHandoffReason(mode string, repoIsPrivate *bool, stillRunning []strin
 		}
 		names := strings.Join(quoted, " / ")
 		if omitted > 0 {
-			names += fmt.Sprintf(" ほか %d 件", omitted)
+			names += i18n.T(i18n.KeyOrchestratorBlockedHandoffOmitted, omitted)
 		}
 		b.WriteString(i18n.T(i18n.KeyOrchestratorBlockedHandoffSubagents,
 			len(stillRunning), names))

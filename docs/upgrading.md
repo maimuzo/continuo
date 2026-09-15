@@ -1776,7 +1776,7 @@ front matter が重複キーになることはありません。
 claude:
   # …（ほかの設定）
   tool_gate:
-    mode: off      # 既定は public_only。この値を書き換える（off なら v0.1.9 までと同じ動き）
+    mode: "off"    # 既定は public_only。この値を書き換える（off なら v0.1.9 までと同じ動き）
 ```
 
 **`on` にすると、非公開リポジトリの issue にも掛かります。**
