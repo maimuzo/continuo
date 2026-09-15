@@ -312,8 +312,8 @@ Claude側の資産本文を移動・複製せず、Codexの入口と標準plugin
 
 Codex側で無効化したskillの設定はplugin cacheのバージョン付きパスを参照する。plugin更新後は、新しいパスで無効化が維持されているか `skills/list` と新規セッションで再確認する。設定の実値は個人バックアップ側に保持し、公開リポジトリへ個人のconfigを複製しない。
 
-実タスク委任、Goガイド6種の明示指定、5種の暗黙選択、正本との同版一致、相対参照、会話移送とCodexでの継続、正本更新後の両製品の再読込は確認済み。今回の共有対象に付属scriptsはない。確認方法は16節に示す。
-残るのは全frontmatterの同等性、Claude側の全般的な回帰試験、更新後の全自動選択である。詳細は17節に示す。未確認のpluginを一括で増やさず、高度なhooks制御は13節の課題のままとする。
+実タスク委任、Goガイド6種の明示指定、複数領域の暗黙選択、正本との同版一致、相対参照、会話移送とCodexでの継続、正本更新後の両製品の再読込は確認済み。今回の共有対象に付属scriptsはない。確認方法は16節に示す。
+共有対象7 skillsのfrontmatter確認と、更新後の名前なし自動選択も実施した。残るのはClaude側の全般的な回帰試験と、未確認pluginを含む全frontmatterの同等性である。詳細は17節に示す。高度なhooks制御は13節の課題のままとする。
 
 ## 15. 復元方法
 
@@ -342,11 +342,14 @@ ClaudeからCodexへの読み取り専用タスク委任と、Codexでのスキ�
 | 委任先の指示・相対参照 | CLAUDE.mdの規則とworker-briefingの参照文書を実際に読む | 合格。helperログに読取コマンドとexit 0。禁止起動方法・commit形式が実ファイルと一致。主担当も該当箇所を再照合 |
 | 暗黙のスキル選択 | 名前を渡さず、5領域の問いに対応する本文を読んで答える | 合格。関数コメント・エラー処理・セキュリティ・テスト・パターンの問いから対応する5種を選択。JSONLに各SKILL.mdの読取と回答を記録 |
 | 明示的なスキル指定 | 導入済みGo6種の名前を渡して各本文の規則を返す | 合格。同じ検証threadをresumeし `$<plugin>:<skill>` の形式で6種を指定。既読5種を再利用し、未読のgitガイドを読んで6行の回答を返す |
+| Claude側のskill回帰 | 既存Claudeから共有対象の本文を読める | 合格。Herdr上のClaude検証paneでGo6種を明示指定し、各SKILL.mdから1規則ずつ返す処理がexit 0で完了 |
+| 更新後の暗黙選択 | skill名を渡さず、更新後も対象領域に合うskillを選ぶ | 合格。名前なしのcommit前セキュリティ確認依頼で `ecc-security` を選択し、選択理由とテスト併用方針を返した。別試験ではgitガイド単独の依頼から `ecc-git` を選択 |
+| 共有対象frontmatter | Claude由来のキーをCodexが保証する範囲を区別する | 合格。共有対象7 skillsを静的監査し、`user-invocable` は7件、`allowed-tools` はworker-briefingの1件のみ。いずれもCodexでClaudeと同じ意味になるとは扱わない |
 | Claude/Codexの本文一致 | Go6種の同一バージョンがバイト単位で一致 | 合格。両cacheの `0.1.0/skills/<skill>/SKILL.md` を `cmp -s`。6種すべてexit 0 |
 | 相対参照の解決 | worker-briefingの参照先が正本基準で存在する | 合格。symlinkの実体を確認し、参照先6種類を存在確認 |
 | 付属scriptsの実行 | 共有対象にscriptsがある場合のみ実行を確認 | 該当なし。Go6種・worker-briefing・Herdrの8ディレクトリを隠しファイル込みで列挙し、実行scriptsは0件 |
 
-暗黙選択は、利用可能なスキルから選ぶよう依頼した試験である。実装中に追加の案内なしで必ず選ばれることの証明ではない。
+暗黙選択は、利用可能なスキルから選ぶよう依頼した限定試験である。実装中に追加の案内なしで必ず選ばれることの証明ではない。frontmatter監査も共有対象7 skillsの範囲であり、marketplace全件の互換性を保証しない。
 明示指定はCLIのプロンプト内の名前指定であり、対話画面の `$` 候補一覧・slashコマンドの挙動までは試していない。
 
 Codex単独の試験は `codex exec --sandbox read-only --json <検証依頼>`、継続は `codex exec --sandbox read-only resume --json <検証thread> <明示指定の依頼>` を使用。どちらも終了コード0と `turn.completed` を確認した。
@@ -368,7 +371,7 @@ Codex単独の試験は `codex exec --sandbox read-only --json <検証依頼>`�
 | Claude固有設定 | gitガイドに `~/.claude/settings.json` のattribution設定への依存がある。Codexへ同じ設定が継承されるとは扱わない。明示指定試験のCodex回答もこの非互換を指摘 |
 | プロジェクト前提 | Goガイドの `go run ./cmd/manager/` と `bash unit_and_e2e_test.sh` はplugin同梱資産ではない。対象プロジェクトで存在を確かめる。共有設定の検証を製品固有の修正へ広げない |
 | 正本更新の反映 | 隔離fixtureのCLAUDE.md・symlink先skill・相対参照の3値を更新前の値から更新後の値へ変更。Codexの新規sessionとClaudeの新規Herdr sessionが、`PROJECT-R2-9136`・`SKILL-R2-2748`・`REFERENCE-R2-6502` を同じく返した。運用中の正本を編集する試験は未実施 |
-| 残りの自動選択・回帰 | gitガイド単独の暗黙選択、全frontmatterの同等性、Claude側の既存開発フロー全般は未検証。今回の限定試験を全互換と一般化しない |
+| 残りの自動選択・回帰 | 共有対象の更新後暗黙選択は `ecc-git` と `ecc-security` で確認済み。未確認pluginを含む全frontmatterの同等性と、Claude側の既存開発フロー全般は未検証。今回の限定試験を全互換と一般化しない |
 | 既存hooksの警告 | Codex単独試験で `hooks.json` と `config.toml` の二重読込、およびSessionEndのtimeoutを3秒へ制限する警告が出た。試験自体は完了。hooks変更は今回の範囲外で、既存設定を変更していない |
 
 Claudeのレートリミットを意図的に発生させる試験はしていない。代わりの合格条件である「移送済みの会話をClaudeに依存せずCodexで継続できること」は16節の試験で満たした。次に残る確認を行う場合も、lunaを明示し、300秒上限を付けてから開始する。
