@@ -52,7 +52,7 @@ func resolveOrClean(path string) string {
 //
 // **置き場所は `<root>/<host>/<owner>/<repo>/<スラグ>` の固定4階層である**（3-22）。
 // **この2つを身元ファイルから読んではならない。**身元ファイルは worktree の直下にあり、
-// その worktree ではエージェントが `--permission-mode dontAsk` で動く（3-16 の段9）ので、
+// その worktree ではエージェントが `--permission-mode auto`（既定） で動く（3-16 の段9）ので、
 // 中身は書き換えられる。**パスは封じ込め検査（3-20）を通ったものなので、書き換えられない。**
 //
 // resolvedRoot: EnsureRoot が返した解決済みの置き場所。
@@ -77,7 +77,7 @@ func ownerRepoFromWorktreePath(resolvedRoot, worktreePath string) (string, strin
 // OwnerRepoOf は worktree の絶対パスから owner とリポジトリ名を取り出す（3-22）。
 //
 // **身元ファイルを読まない。**身元ファイルは worktree の直下にあり、その worktree では
-// エージェントが `--permission-mode dontAsk` で動くので中身を書き換えられる。
+// エージェントが `--permission-mode auto`（既定） で動くので中身を書き換えられる。
 // **パスは封じ込め検査（3-20）を通ったものなので、書き換えられない。**
 //
 // **`continuo abandon` が「消す相手を取り違えていないか」を検算するのに使う。**

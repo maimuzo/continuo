@@ -87,7 +87,7 @@ type Options struct {
 	//
 	// **片付けが身元ファイルの settings_path を消す前に、このディレクトリの内側かを
 	// 確かめるために持つ。**身元ファイルは worktree の直下にあり、その worktree では
-	// エージェントが `--permission-mode dontAsk` で動く（3-16 の段9）ので、
+	// エージェントが `--permission-mode auto`（既定） で動く（3-16 の段9）ので、
 	// **settings_path はエージェントが書き換えられる値である。**検査せずに os.Remove へ
 	// 渡すと、任意の1ファイルを消させられる。
 	//

@@ -26,7 +26,7 @@ const excludeFilePerm os.FileMode = 0o644
 // identityFileLimit は身元ファイルを読む上限（バイト）である。
 //
 // **上限が無いと、エージェントが書いた任意の大きさのファイルが常駐プロセスのメモリに載る。**
-// 身元ファイルは worktree の直下にあり、そこでエージェントが `--permission-mode dontAsk` で
+// 身元ファイルは worktree の直下にあり、そこでエージェントが `--permission-mode auto`（既定） で
 // 動く（3-16 の段9）。git の出力に gitOutputLimit を掛けているのとまったく同じ理由である
 // （git.go の gitOutputLimit を見よ）。
 //
@@ -195,7 +195,7 @@ func (m *Manager) ReadIdentity(worktreePath string) (*Identity, error) {
 //
 // **os.ReadFile をそのまま呼んではならない。**上限が無く、symlink も辿るためである。
 // この2つが要る理由は同じで、**身元ファイルは worktree の直下にあり、そこで
-// エージェントが `--permission-mode dontAsk` で動く**（3-16 の段9）。
+// エージェントが `--permission-mode auto`（既定） で動く**（3-16 の段9）。
 //
 //	上限     … 67 MiB の身元ファイルを置かれても読み切ってしまう（実測: 2026-08-24）
 //	O_NOFOLLOW … 置き場所の外を指す symlink に差し替えられると、その中身が
