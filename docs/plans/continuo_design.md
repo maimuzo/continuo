@@ -5380,7 +5380,7 @@ CI から呼ぶときに使う。
 | 人間がやりたくなること | 実際に起きること |
 | --- | --- |
 | `Ready` へ戻す | **止まらない。**`Ready` は `tracker.active_states` の1つであり（[internal/scaffold/template.go:44](../../internal/scaffold/template.go#L44)）、巡回は「まだ作業中で routable」としてスナップショットを更新するだけである（[internal/orchestrator/reconcile.go:99-100](../../internal/orchestrator/reconcile.go#L99-L100)）。しかも `Ready` は `dispatch_state` なので、印から外れていれば**もう一度着手される** |
-| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:83](../../internal/orchestrator/comment.go#L83)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:155-193](../../internal/orchestrator/comment.go#L155-L193)）。**間違えて着手した issue には、書かせる成果が無い** |
+| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:86](../../internal/orchestrator/comment.go#L86)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:155-193](../../internal/orchestrator/comment.go#L155-L193)）。**間違えて着手した issue には、書かせる成果が無い** |
 
 **採るやり方。**`continuo abandon <issue の URL> [ディレクトリ]` を1本置く
 （[internal/abandon/abandon.go](../../internal/abandon/abandon.go)。`internal/cli` は引数を受けて渡すだけである）。
@@ -11097,7 +11097,7 @@ push できる状態のときだけ**である。
 
 **push で止めると、3つ目が人間に生える。**branch を自分で見つけて `gh pr create` を叩く仕事である。
 
-**採る形。**[internal/prompt/builtin.md:224-258](../../internal/prompt/builtin.md#L224-L258) の
+**採る形。**[internal/prompt/builtin.md:224-257](../../internal/prompt/builtin.md#L224-L257) の
 作業の手順の中に `## 3-5. pull request を出す` を置く。
 **ここは組み込みの前半である**（目印の行より上）。**本文より前に読まれる。**
 **`## 3-7. 終わりを書く`（表明の1行）より前に置く。**後ろだと、`review` を出したあとに目に入る。
@@ -12350,7 +12350,7 @@ releasePrompt()
 ### 6-23. 公開 issue から実行させられる経路を、どう塞ぐか
 
 **言いたいこと。**この1件が片付くまで、**continuo をこのリポジトリのカンバンで動かさない**（2026-08-28、人間の判断）。
-**外部の第三者が書いた issue とコメントが、`dontAsk` で `Bash` を持つエージェントへ確認なしで届く。**
+**外部の第三者が書いた issue とコメントが、`Bash` を持つエージェントへ届く。**既定の `auto` では、allow の規則に当たらず読み取りだけでもないシェルのコマンドが判定役へ回る（公式文書 permission-modes の「How the classifier evaluates actions」）。判定役がそこで止めるかは測っていない。
 **「読ませない」では解けない。**外部のバグ報告は情報源として要る（2026-08-28、人間の判断）。
 
 **塞がっているところ。**カンバンは非公開なので、外部から Status は動かせない。
@@ -12427,7 +12427,7 @@ sequenceDiagram
     end
 
     rect rgba(230, 130, 60, 0.1)
-    Note over A,J: 守り 2: 道具の判定（Claude Code の中で閉じる）
+    Note over A,J: 守り 2: 道具の判定（Claude Code の中で閉じる）<br/>既定では張らない。掛けるには tool_gate.mode を書く
     A->>J: PreToolUse。危ないコマンドを判定役へ渡す
     J-->>A: deny（理由つき）。turn は続く
     Note over C: continuo は判定を仲介しない。<br/>着手の段で張った settings.json だけが効く
@@ -12453,7 +12453,7 @@ sequenceDiagram
 | 守り | どの段で効くか | 破られたら何が起きるか |
 | --- | --- | --- |
 | **立場の札**（3-72） | **エージェントがコメントを読む瞬間** | 外部の指示を仕様だと思い込む |
-| **道具の判定**（3-64） | **危ないコマンドを実行する直前** | そのコマンドが走る |
+| **道具の判定**（3-64） | **危ないコマンドを実行する直前。****既定では掛からない**（6-23 の冒頭） | そのコマンドが走る |
 | **印の照合**（3-65） | **turn が終わったあと** | **エージェントが報告を書いていないのに「書いた」と誤認し、書き直させるのをやめる** |
 
 **守り1と守り2の破られ方。**
@@ -12465,16 +12465,16 @@ sequenceDiagram
 
 **この3つで塞ぎ切れないものは、6-25 のとおり機械では塞げない。**
 
-### 6-24. 採らなかった塞ぎ方と、その理由
+### 6-24. 検討した塞ぎ方と、採らなかった理由
 
-**言いたいこと。**6-23 を決めるまでに5つ検討して落とした。**同じ案が再び出たときのために残す。**
+**言いたいこと。**6-23 を決めるまでに7つ検討した。`auto` モードは既定として採り、残りは落とした。**同じ案が再び出たときのために残す。**
 
-| 案 | 落とした理由 |
+| 案 | 採ったか・落とした理由 |
 | --- | --- |
 | **外部のコメントを読ませない** | **外部のバグ報告は情報源である。**読めないと修正できない（2026-08-28、人間の判断） |
 | **private な task 用リポジトリに指示を置く** | worktree も branch も「その issue のリポジトリ」に作られるので、**直したいコードがそこに無い。**PR のレビューコメントも塞がらない |
 | **docker で囲う** | **continuo にも herdr にも pane をコンテナの中に作る経路が無い。**turn の終わりの検知は Unix socket 1本に賭かっており、macOS で host の socket を渡すには Docker Desktop 4.87 と VMM が要る。**clone の `.git` を書き込み可で mount した時点で隔離が破れる** |
-| **`auto` モードにする** | **この案は採用済みで、既定はこちらである。**採らない案として残していたのは、3回連続または累計20回の遮断で一時停止して確認を出すという公式の記述による。**その経路は実機で観測できていない**（3-11） |
+| **`auto` モードにする** | **採った。既定である**（3-11）。**これだけでは、公開 issue の文がコマンドになる経路は塞がらない。**公式文書は、判定役が3回続けて、または通算20回遮断すると確認の画面へ戻ると書いているが、**その経路は実機で観測できていない** |
 | **allowlist（これだけ通す）** | **この脅威に効かない。**加害の手段が仕事に必ず要るコマンドそのものである。`git` と `gh` を許さないと1件も回せず、許した瞬間に force push も PR の merge も通る |
 | **専用の OS ユーザー** | **使いづらい。**こんな構造を強いられると誰も使わない（2026-08-28、人間の判断） |
 | **Claude Code の Bash sandbox** | **守れないものの側に、止めたいものが全部入っている**（3-63）。`gh` を外へ出さざるを得ず、出した瞬間に持ち出しが素通りする（2026-08-28、人間の判断） |

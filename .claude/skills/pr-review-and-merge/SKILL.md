@@ -23,8 +23,8 @@ user-invocable: true
 **worker（subagent / Workflow の agent）に `gh pr merge` を実行させてはならない。**
 **マージできる状態かどうかの確認も、メインエージェントが自分で行う。**
 
-**なぜか。**2026-09-01、worker に6本のマージを任せ、**2本をレビュー未実施のままマージした。**
-原因はメインエージェントが渡した確認コマンドで、`contains` を使っていた。
+**なぜか。**worker に任せると、**レビュー未実施のままマージされることがある。**
+メインエージェントが渡す確認コマンドが `contains` を使うと、そうなる。
 
 ```bash
 # 誤り。本文のどこかに含まれていれば1と数える
@@ -65,7 +65,7 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
 **これを忘れると、レビュー結果を貼ったのに赤いまま、マージできない状態になる。**
 
 **赤いままだとマージは本当に止まる。**`code-review-result` は `main` の branch protection の
-必須の検査である（2026-09-01 に登録した）。確かめ方。
+必須の検査である。確かめ方。
 
 ```bash
 gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks \
@@ -135,17 +135,30 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 **先頭に目印を置く。**
 **題名は issue と PR を対で書き、何周目かと対応表を同じコメントに入れる**
 （列と書き方は [CLAUDE.md](../../../CLAUDE.md) の「コードレビュー記録フロー」）。
+**節の中は、[.claude/rules/reporting.md](../../rules/reporting.md) の7つの見出しで書く。**対応表は `### 詳細` の中に置く。
 
 ```markdown
 <!-- code-review-result -->
-## code-review の結果（issue #<番号>（issue の題名）に対する PR #<番号>（PR の題名） / <n>周目）
+# レビューの判断票（issue #<番号>（issue の題名）に対する PR #<番号>（PR の題名）の実装。<n>周目）— <一言の結論>
 
-### 対応表
+## 1. <一言で中身が想像できる節の題名>
 
-（列は CLAUDE.md の「対応表の列」のとおり。ここには写さない）
+> （その節が答えている原文。人間の指示など）
 
-### レビューの出力
-…
+### 三行まとめ
+
+### 前提
+
+### 単語の説明
+
+### 既存の構造がどうなっているか
+
+### 何が問題なのか
+
+### 詳細
+
+（対応表。列は CLAUDE.md の「対応表の列」のとおり。ここには写さない。
+数えた件数と、レビューの出力もここに置く）
 ```
 
 **本文は Write ツールでファイルへ書き出し、`--body-file` で渡す。**

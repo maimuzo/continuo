@@ -98,7 +98,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// **sectionOf は使えない。**あれは次の `## ` までを切るが、
 	// **5-5 の次の見出しは `# 6. セキュリティ` で、井桁が1つである。**
 	// そのまま使うと、次の `## 6-1.` までが入る。**いま余分に入るのは空行と `# 6.` の2行だけだが**
-	// （実測。`## ` で切ると43行、`# ` でも切ると41行）、**6章の頭に節が増えれば、そのぶん全部入る。**
+	// （実測。`## ` で切ると77行、`# ` でも切ると75行）、**6章の頭に節が増えれば、そのぶん全部入る。**
 	// 入った語で通ってしまうと、5-5 から中身が消えても素通りする。
 	section := sectionUntilNextChapter(t, body, commentFormatHeading)
 
@@ -134,7 +134,9 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 			"読む人は決めるための材料を持てません"},
 		{"### 詳細", "根拠が無いと、結論だけを信じるかどうかの判断になります"},
 	} {
-		if n := strings.Count(section, want.needle); n < 2 {
+		// **見出しの後ろが続いていないものだけを数える。**表では backtick、骨組みでは改行が続く。
+		// 部分一致で数えると、`### 前提` が旧い見出し `### 前提条件` にも当たり、4つの形へ戻っても通る。
+		if n := strings.Count(section, want.needle+"`") + strings.Count(section, want.needle+"\n"); n < 2 {
 			t.Errorf("%q の節に %q が %d 箇所しかありません（表と骨組みの2箇所に要ります）。%s",
 				commentFormatHeading, want.needle, n, want.why)
 		}
@@ -146,14 +148,6 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	skeleton := strings.Index(section, "骨組み。")
 	marker := strings.Index(section, "    <!-- continuo:agent -->")
 	firstHeading := strings.Index(section, "    ### 三行まとめ")
-	// **引用の行も、印の行と最初の見出しのあいだに置く。**
-	// 7つの1つ目が引用なので、引用の行が印より上へ動くと、そのまま写した時点で印が本文の先頭から外れる。
-	// 印と見出しの順だけを見ると、引用がどこへ動いても素通りする。
-	if quote := strings.Index(section, "\n    > "); quote < 0 || !(marker < quote && quote < firstHeading) {
-		t.Errorf("%q の骨組みで、引用の行が印の行と最初の見出しのあいだにありません（印 %d / 引用 %d / 見出し %d）。"+
-			"引用が印より上にあると、そのまま写された時点で印が本文の先頭から外れ、continuo が成果を数えません",
-			commentFormatHeading, marker, quote, firstHeading)
-	}
 	if skeleton < 0 || marker < 0 || firstHeading < 0 {
 		t.Fatalf("%q の節に骨組み（%d）か印の行（%d）か最初の見出し（%d）がありません",
 			commentFormatHeading, skeleton, marker, firstHeading)
@@ -162,6 +156,16 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 		t.Errorf("%q の骨組みが、印の行より先に見出しを置いています。"+
 			"そのまま写されると印が本文の先頭から外れ、continuo が成果を数えません",
 			commentFormatHeading)
+	}
+	// **引用の行も、印の行と最初の見出しのあいだに置く。**
+	// 7つの1つ目が引用なので、引用の行が印より上へ動くと、そのまま写した時点で印が本文の先頭から外れる。
+	// 印と見出しの順だけを見ると、引用がどこへ動いても素通りする。
+	// **印と見出しが揃っていることを確かめてから見る。**先に見ると、見出しが消えたときに
+	// 「引用が見出しより後ろにある」という紛らわしい文言が、本当の原因より先に出る。
+	if quote := strings.Index(section, "\n    > "); quote < 0 || !(marker < quote && quote < firstHeading) {
+		t.Errorf("%q の骨組みで、引用の行が印の行と最初の見出しのあいだにありません（印 %d / 引用 %d / 見出し %d）。"+
+			"引用が印より上にあると、そのまま写された時点で印が本文の先頭から外れ、continuo が成果を数えません",
+			commentFormatHeading, marker, quote, firstHeading)
 	}
 
 	// **当たる先と、当たらない先を、どちらも名指しさせる。**
