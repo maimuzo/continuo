@@ -175,12 +175,42 @@ func sectionOf(t *testing.T, body, heading string) string {
 	if start < 0 {
 		t.Fatalf("本文から %q の見出しを取り出せません", heading)
 	}
+	inFence := false
 	for i := start; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], "## ") {
+		// **囲みの中の `## ` では切らない。**見本は囲みの中に行頭から書いてあり、
+		// 本文の見出し（`## <節の題名>` など）を持つ。そこで切ると、後ろの文への検査が黙って素通りする。
+		if isFenceLine(lines[i]) {
+			inFence = !inFence
+			continue
+		}
+		if !inFence && strings.HasPrefix(lines[i], "## ") {
 			return strings.Join(lines[start:i], "\n")
 		}
 	}
 	return strings.Join(lines[start:], "\n")
+}
+
+// isFenceLine は、その行がコード囲みの開きか閉じかを返す。
+//
+// line: 見る行。
+// 戻り値: 行頭が3つの backtick なら true。
+func isFenceLine(line string) bool {
+	return strings.HasPrefix(line, "```")
+}
+
+// countLines は、条件に当たる行の数を返す。
+//
+// s: 数える元の文面。
+// match: 行を受け取り、数えるなら true を返す関数。
+// 戻り値: 当たった行の数。
+func countLines(s string, match func(string) bool) int {
+	n := 0
+	for _, line := range strings.Split(s, "\n") {
+		if match(line) {
+			n++
+		}
+	}
+	return n
 }
 
 // 目的: 進捗報告の見本が、印を行の先頭から書かせることを固定する
@@ -231,10 +261,37 @@ func TestTemplate_進捗報告の見本は印を行頭から書かせる(t *test
 	if !found {
 		t.Fatal("組み込みのプロンプトに、進捗報告の本文を書かせる見本がありません（issue #178）")
 	}
-	if !strings.Contains(body, `gh issue comment {{.issue.url}} --body-file "$F"`) {
+	// **投稿の行は、進捗報告の見本の囲みの中から探す。**全文から探すと、見本から投稿の行が消えても、
+	// 別の節の同じ行に当たって通る。
+	if !fenceHasLine(lines, `<<'PROGRESS'`, `gh issue comment {{.issue.url}} --body-file "$F"`) {
 		t.Error("進捗報告の見本が、本文をファイルから渡していません。" +
 			"二重引用符の中へ書かせると、本文の backtick と `$` をシェルが実行します")
 	}
+}
+
+// fenceHasLine は、marker を行末に持つ行を含むコード囲みの中に、want と一致する行があるかを返す。
+//
+// lines: 文面を行に分けたもの。
+// marker: 囲みを見つけるための、行末の文字列。
+// want: 探す行（行全体で比べる）。
+// 戻り値: 見つかれば true。
+func fenceHasLine(lines []string, marker, want string) bool {
+	start := -1
+	for i, line := range lines {
+		if isFenceLine(line) {
+			start = i
+			continue
+		}
+		if !strings.HasSuffix(line, marker) || start < 0 {
+			continue
+		}
+		for k := start + 1; k < len(lines) && !isFenceLine(lines[k]); k++ {
+			if lines[k] == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // 目的: 組み込みのプロンプトが、コメントと pull request の本文を二重引用符の中へ書かせないことを固定する。

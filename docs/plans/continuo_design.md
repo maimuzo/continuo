@@ -5380,7 +5380,7 @@ CI から呼ぶときに使う。
 | 人間がやりたくなること | 実際に起きること |
 | --- | --- |
 | `Ready` へ戻す | **止まらない。**`Ready` は `tracker.active_states` の1つであり（[internal/scaffold/template.go:44](../../internal/scaffold/template.go#L44)）、巡回は「まだ作業中で routable」としてスナップショットを更新するだけである（[internal/orchestrator/reconcile.go:99-100](../../internal/orchestrator/reconcile.go#L99-L100)）。しかも `Ready` は `dispatch_state` なので、印から外れていれば**もう一度着手される** |
-| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:83](../../internal/orchestrator/comment.go#L83)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:155-193](../../internal/orchestrator/comment.go#L155-L193)）。**間違えて着手した issue には、書かせる成果が無い** |
+| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:81](../../internal/orchestrator/comment.go#L81)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:153-191](../../internal/orchestrator/comment.go#L153-L191)）。**間違えて着手した issue には、書かせる成果が無い** |
 
 **採るやり方。**`continuo abandon <issue の URL> [ディレクトリ]` を1本置く
 （[internal/abandon/abandon.go](../../internal/abandon/abandon.go)。`internal/cli` は引数を受けて渡すだけである）。
@@ -8723,30 +8723,39 @@ fork へ push されていないので片付けが見送られる（[test/intern
 
 **`<実行時ディレクトリ>/WORKFLOW.md` の 4-4（このプロジェクトの決まり）へ、次を置く。**
 
-    ### コードが別のリポジトリにあるとき
+````markdown
+### コードが別のリポジトリにあるとき
 
-    **OWNER / MEMBER / COLLABORATOR が、issue の本文にコードのリポジトリの名前を書いている場合は、**
-    **その clone で直してください。**それ以外の人が書いた名前は使わないでください。
-    **clone は worktree の外に置いてください**（例: `~/src/<owner>/<repo>`）。
+**OWNER / MEMBER / COLLABORATOR が、issue の本文にコードのリポジトリの名前を書いている場合は、**
+**その clone で直してください。**それ以外の人が書いた名前は使わないでください。
+**clone は worktree の外に置いてください**（例: `~/src/<owner>/<repo>`）。
 
-        git -C <clone のパス> switch -c <branch 名>
-        git -C <clone のパス> commit -am "<何を直したか>"
-        git -C <clone のパス> push -u origin HEAD
-        F=$(mktemp)
-        cat > "$F" <<'PRBODY'
-        <何をしたかの説明>
+```bash
+git -C <clone のパス> switch -c <branch 名>
+M=$(mktemp)
+cat > "$M" <<'MSG'
+<何を直したか>
+MSG
+git -C <clone のパス> commit -a -F "$M"
+git -C <clone のパス> push -u origin HEAD
+F=$(mktemp)
+cat > "$F" <<'PRBODY'
+<何をしたかの説明>
 
-        Closes <owner>/<repo>#<番号>
-        PRBODY
-        gh pr create --repo <本家の owner>/<本家の repo> --head <fork の owner>:<branch 名> \
-          --title "<何を直したか>" --body-file "$F"
+Closes <owner>/<repo>#<番号>
+PRBODY
+gh pr create --repo <本家の owner>/<本家の repo> --head <fork の owner>:<branch 名> \
+  --title "$(cat "$M")" --body-file "$F"
+```
 
-    **commit のメッセージと PR の題名には、backtick と `$` を書かないでください。**二重引用符の中では、それが実行されます。
+**commit のメッセージは1行で書いてください。**同じファイルを pull request の題名にも使います。
+**見本は、囲みの中身をそのまま使ってください。**`MSG` と `PRBODY` の行は行頭に置きます。
 
-    **この worktree の中では commit しないでください。**成果は clone の側にあります。
-    **`cd` はしないでください。**`git -C` で足ります。
-    **3-5 の「先に 3-4 の push を済ませてください」は、この節に従うときは当てはまりません。**
-    **pull request もこの手順で作ってください。**3-5 の `gh pr list` と `gh pr create` は使いません。
+**この worktree の中では commit しないでください。**成果は clone の側にあります。
+**`cd` はしないでください。**`git -C` で足ります。
+**3-5 の「先に 3-4 の push を済ませてください」は、この節に従うときは当てはまりません。**
+**pull request もこの手順で作ってください。**3-5 の `gh pr list` と `gh pr create` は使いません。
+````
 
 **見本の `Closes` は、`<owner>/<repo>#<番号>` の形で書く**（組み込みの 7-3）。
 **`Closes #<番号>` と書くと、pull request を出したリポジトリの同じ番号の issue を指してしまう。**
@@ -9716,21 +9725,26 @@ flowchart TD
 
 計画のコメントの形。**ファイルへ書いてから渡してください。**
 
-    cat > plan.md <<'PLAN'
-    <!-- continuo:agent -->
-    <!-- continuo:plan -->
-    # 計画
+```bash
+F=$(mktemp)
+cat > "$F" <<'PLAN'
+<!-- continuo:agent -->
+<!-- continuo:plan -->
+# 計画
 
-    ## <一言で中身が想像できる節の題名>
+## <一言で中身が想像できる節の題名>
 
-    ここに 5-5 の7つの見出しを置く
-    （原因は「### 何が問題なのか」へ、どのファイルをどう直すかと
-     決まっていないことと図は「### 詳細」へ書く）
-    PLAN
-    gh issue comment {{.issue.url}} --body-file plan.md
+ここに 5-5 の7つの見出しを置く
+（原因は「### 何が問題なのか」へ、どのファイルをどう直すかと
+ 決まっていないことと図は「### 詳細」へ書く）
+PLAN
+gh issue comment {{.issue.url}} --body-file "$F"
+```
 
 **`--body "…"` で渡さないでください。**計画にはファイル名と行番号を書くので、
 backtick とドルの記号が混ざります。**二重引用符の中では、それが実行されます。**
+**見本は、囲みの中身をそのまま使ってください。**`PLAN` の行は行頭に置きます。字下げすると、そこで終わりと読まれません。
+`mktemp` で作ったファイルは、消さなくてかまいません。
 
 **2行目の `<!-- continuo:plan -->` を落とさないでください。**
 **落とすと、continuo が「この run は成果を書いた」と誤って数えます。**
@@ -9759,14 +9773,16 @@ Critical と High は原則すべて直します。直さない場合は理由�
 
 判断票の形。**1行目と2行目の並びを変えないでください。**
 
-    <!-- continuo:agent -->
-    <!-- design-review-result -->
-    ## レビューの判断票（計画）
+```markdown
+<!-- continuo:agent -->
+<!-- design-review-result -->
+## レビューの判断票（計画）
 
-    | 指摘 | 深刻さ | 中身 | 直すか | 理由 |
-    | --- | --- | --- | --- | --- |
-    | 片付けの順序 | High | worktree を消す前に branch を消している | 直す | — |
-    | 変数名の揺れ | Low | repoDir と repoPath が混在 | 直さない | この issue の範囲外 |
+| 指摘 | 深刻さ | 中身 | 直すか | 理由 |
+| --- | --- | --- | --- | --- |
+| 片付けの順序 | High | worktree を消す前に branch を消している | 直す | — |
+| 変数名の揺れ | Low | repoDir と repoPath が混在 | 直さない | この issue の範囲外 |
+```
 
 1列目には番号ではなく内容が予想できる短い名前を書いてください。
 
@@ -9825,16 +9841,21 @@ gh が「どこへ push するか」を対話で聞いてきて、そこで止�
 
 `[]` が返ったときだけ、新しく作ります。
 
-    F=$(mktemp)
-    cat > "$F" <<'PRBODY'
-    <何をしたかの説明>
+```bash
+T=$(mktemp)
+cat > "$T" <<'TITLE'
+<何を直したか>
+TITLE
+F=$(mktemp)
+cat > "$F" <<'PRBODY'
+<何をしたかの説明>
 
-    Closes #{{.issue.number}}
-    PRBODY
-    gh pr create --title "<何を直したか>" --body-file "$F"
+Closes #{{.issue.number}}
+PRBODY
+gh pr create --title "$(cat "$T")" --body-file "$F"
+```
 
-**本文は、ファイルへ書いてから `--body-file` で渡してください**（3-2 と同じ理由です）。
-**題名には backtick と `$` を書かないでください。**二重引用符の中では、それが実行されます。
+**題名も本文も、ファイルへ書いてから渡してください**（3-2 と同じ理由です）。**題名は1行で書いてください。**
 
 `Closes #{{.issue.number}}` を落とさないでください。
 **この1行が pull request と issue を結びつけます。**落とすと、次に起動されたときに 4-2 の一覧からこの pull request が出てこず、レビューの指摘を読む先が消えます。
@@ -9860,14 +9881,17 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 
 **計画のコメントと同じく、ファイルへ書いてから渡してください**（理由は 3-2 と同じです）。
 
-    cat > review.md <<'REVIEW'
-    <!-- code-review-result -->
-    <!-- continuo:agent -->
-    ## レビューの判断票（実装）
+```bash
+F=$(mktemp)
+cat > "$F" <<'REVIEW'
+<!-- code-review-result -->
+<!-- continuo:agent -->
+## レビューの判断票（実装）
 
-    ここに 3-2 と同じ形の表を書く
-    REVIEW
-    gh pr comment <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file review.md
+ここに 3-2 と同じ形の表を書く
+REVIEW
+gh pr comment <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
 
 **1行目の目印を変えないでください。**コメントの本文の先頭に無いと数えられません。
 
@@ -9891,11 +9915,14 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 あわせて、何をしたかを issue のコメントに残します。
 **これもファイルへ書いてから渡してください**（理由は 3-2 と同じです）。
 
-    cat > done.md <<'DONE'
-    <!-- continuo:agent -->
-    ここに何をしたかを書く
-    DONE
-    gh issue comment {{.issue.url}} --body-file done.md
+```bash
+F=$(mktemp)
+cat > "$F" <<'DONE'
+<!-- continuo:agent -->
+ここに何をしたかを書く
+DONE
+gh issue comment {{.issue.url}} --body-file "$F"
+```
 
 **新しく1件投稿してください。**5-3 の「コメントは増やさないでください」は途中経過の報告どうしの話で、
 この成果の報告には当てはまりません。
@@ -10003,23 +10030,26 @@ issue に書かれていない実装が要ると判断したときは、その�
 
 **段2a。数字が返ったときは、その1件に書き足します。**
 
-    ID=<段1が返した数字>
-    OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-    case "$OLD" in
-      *"<!-- continuo:progress -->"*)
-        F=$(mktemp)
-        printf '%s\n' "$OLD" > "$F"
-        printf -- '- %s いま ' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$F"
-        cat >> "$F" <<'NOW'
-    <何をしているか>
-    NOW
-        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-          -F body=@"$F"
-        ;;
-      *)
-        echo "本文を読めませんでした。段2b で新しく1件投稿します"
-        ;;
-    esac
+```bash
+ADD=$(mktemp)
+printf -- '- %s いま ' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ADD"
+cat >> "$ADD" <<'NOW'
+<何をしているか>
+NOW
+ID=<段1が返した数字>
+OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+case "$OLD" in
+  *"<!-- continuo:progress -->"*)
+    F=$(mktemp)
+    { printf '%s\n' "$OLD"; cat "$ADD"; } > "$F"
+    gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+      -F body=@"$F"
+    ;;
+  *)
+    echo "本文を読めませんでした。段2b で新しく1件投稿します"
+    ;;
+esac
+```
 
 **`case` で印そのものを確かめてから書き込みます。**
 **中身が空でないかを見るだけでは足りません。**`gh api` は、取得に失敗したとき
@@ -10132,25 +10162,27 @@ backtick や `$` を書くと、シェルがそれを実行します（段2a も
 骨組み。**印の行は、そのコメントの節の見本のものをそのまま使ってください。**
 下の見本が置いているのは、3-2 の計画のコメントの印です。
 
-    <!-- continuo:agent -->
-    <!-- continuo:plan -->
-    # 計画
+```markdown
+<!-- continuo:agent -->
+<!-- continuo:plan -->
+# 計画
 
-    ## <一言で中身が想像できる節の題名>
+## <一言で中身が想像できる節の題名>
 
-    > （その節が答えている原文だけを引く）
+> （その節が答えている原文だけを引く）
 
-    ### 三行まとめ
+### 三行まとめ
 
-    ### 前提
+### 前提
 
-    ### 単語の説明
+### 単語の説明
 
-    ### 既存の構造がどうなっているか
+### 既存の構造がどうなっているか
 
-    ### 何が問題なのか
+### 何が問題なのか
 
-    ### 詳細
+### 詳細
+```
 
 **話題が2つ以上あるときは、`## ` の節を並べてください。**節ごとに引用が付くので、
 **どの引用がどの説明に対応するかが、位置で分かります。**
@@ -10251,6 +10283,24 @@ issue ごとに1行ずつ表明を書きます。
     CONTINUO-STATUS: #45 review      （同じグループの別の issue）
 
 pull request の本文にも、その issue の分を1行ずつ足します（`Closes #45` のように書きます）。
+**足し方は次のとおりです。**本文を読めなかったとき（`gh` が失敗したか、中身が空だったとき）は書き戻さず、そのことを応答に書いてください。
+
+```bash
+F=$(mktemp)
+if gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --json body --jq .body > "$F" && [ -s "$F" ]; then
+  if grep -qx 'Closes #<その issue の番号>' "$F"; then
+    echo "もう入っています"
+  else
+    printf '\nCloses #%s\n' '<その issue の番号>' >> "$F"
+    gh pr edit <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+  fi
+else
+  echo "PR の本文を読めませんでした。書き換えていません"
+fi
+```
+
+**読めたことを確かめずに `gh pr edit` を叩かないでください。**読めないまま書き戻すと、
+本文が足した1行だけになり、`Closes #{{.issue.number}}` と説明が消えます。
 
 別のリポジトリの issue は、この worktree では直せません。直さずにこう書きます。
 
@@ -10327,30 +10377,33 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 読み取りに失敗したまま書き換えると、
 **`<!-- continuo:group -->` の印ごと本文が消え、段1 がその成果報告を二度と見つけられなくなります。**
 
-    URL=<段1が返した URL>
-    ID=${URL##*#issuecomment-}
-    case "$ID" in
-      '' | *[!0-9]*)
-        echo "コメントの ID を取れませんでした。段2b で新しく1件投稿します"
+```bash
+ADD=$(mktemp)
+cat > "$ADD" <<'LINE'
+- <上の表で決めた行>
+LINE
+URL=<段1が返した URL>
+ID=${URL##*#issuecomment-}
+case "$ID" in
+  '' | *[!0-9]*)
+    echo "コメントの ID を取れませんでした。段2b で新しく1件投稿します"
+    ;;
+  *)
+    OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+    case "$OLD" in
+      *"<!-- continuo:group -->"*)
+        F=$(mktemp)
+        { printf '%s\n' "$OLD"; cat "$ADD"; } > "$F"
+        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+          -F body=@"$F"
         ;;
       *)
-        OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-        case "$OLD" in
-          *"<!-- continuo:group -->"*)
-            F=$(mktemp)
-            printf '%s\n' "$OLD" > "$F"
-            cat >> "$F" <<'LINE'
-    - <上の表で決めた行>
-    LINE
-            gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-              -F body=@"$F"
-            ;;
-          *)
-            echo "本文を読めませんでした。段2b で新しく1件投稿します"
-            ;;
-        esac
+        echo "本文を読めませんでした。段2b で新しく1件投稿します"
         ;;
     esac
+    ;;
+esac
+```
 
 **段2b。段1 が何も返さなかったとき、または段2a が「段2b で新しく1件投稿します」と出したときは、
 新しく1件投稿します。**
@@ -10370,16 +10423,18 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 
 **`review` を出した issue には、こう書きます。**
 
-    F=$(mktemp)
-    cat > "$F" <<'GROUP'
-    <!-- continuo:group -->
-    {{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
+```bash
+F=$(mktemp)
+cat > "$F" <<'GROUP'
+<!-- continuo:group -->
+{{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
 
-    - 何を直したか: <この issue が書いている症状に対して、何を変えたか>
-    - 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
-    - pull request: <PR の URL>
-    GROUP
-    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+- 何を直したか: <この issue が書いている症状に対して、何を変えたか>
+- 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
+- pull request: <PR の URL>
+GROUP
+gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
 
 **本文は、ファイルへ書いてから `--body-file` で渡してください。**二重引用符の中へ書くと、backtick と `$` をシェルが実行します。
 
@@ -10387,15 +10442,17 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 **「まとめて直しました」と書かないでください。**無い pull request の URL も書かないでください。
 **直していない issue に、直したという記録が残ります。**代わりにこう書きます。
 
-    F=$(mktemp)
-    cat > "$F" <<'GROUP'
-    <!-- continuo:group -->
-    {{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
+```bash
+F=$(mktemp)
+cat > "$F" <<'GROUP'
+<!-- continuo:group -->
+{{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
 
-    - どこまで見たか: <調べたことと、分かったこと>
-    - なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>
-    GROUP
-    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+- どこまで見たか: <調べたことと、分かったこと>
+- なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>
+GROUP
+gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
 
 **先頭の印は `<!-- continuo:group -->` です。**3-7 や 5-3 の `<!-- continuo:agent -->` を使わないでください。
 **その印は「いま担当している issue のエージェントが書いた」という意味で、continuo が
@@ -11143,7 +11200,7 @@ push できる状態のときだけ**である。
 
 **push で止めると、3つ目が人間に生える。**branch を自分で見つけて `gh pr create` を叩く仕事である。
 
-**採る形。**[internal/prompt/builtin.md:224-266](../../internal/prompt/builtin.md#L224-L266) の
+**採る形。**[internal/prompt/builtin.md:231-278](../../internal/prompt/builtin.md#L231-L278) の
 作業の手順の中に `## 3-5. pull request を出す` を置く。
 **ここは組み込みの前半である**（目印の行より上）。**本文より前に読まれる。**
 **`## 3-7. 終わりを書く`（表明の1行）より前に置く。**後ろだと、`review` を出したあとに目に入る。
@@ -11287,6 +11344,47 @@ Claude Code を手で使うときの1往復とは値段が違う。
 片方だけ直すと `TestTemplate_組み込みのプロンプトが設計5_3と一致する` が落ちる。
 **節そのものの有無は
 [test/internal/prompt/agent_comment_format_test.go](../../test/internal/prompt/agent_comment_format_test.go) が見張る。**
+
+### 5-3s. コメントと pull request の本文・題名を、シェルに実行させずに渡す
+
+**言いたいこと。**組み込みの指示書（5-3）は、本文も題名も一時ファイルへ書かせ、`--body-file` と `"$(cat "$T")"` で渡させる。
+**見本はコード囲みに入れ、中身を行頭から書く。**字下げした見本を写すと、ヒアドキュメントが閉じずに何も投稿されない。
+
+**採る形。**
+
+| 何を渡すか | 渡し方 | 見本の場所 |
+| --- | --- | --- |
+| **issue のコメント** | `cat > "$F" <<'DONE'` … `gh issue comment … --body-file "$F"` | 組み込みの 3-2・3-7・5-3 の段2b・7-2 の段2b |
+| **コメントへの書き足し** | 足す行を `ADD` へ書き、読めたことを `case` で確かめてから `{ printf '%s\n' "$OLD"; cat "$ADD"; } > "$F"` と `gh api --method PATCH … -F body=@"$F"` | 組み込みの 5-3 と 7-2 の段2a |
+| **pull request の本文と題名** | 題名を `T` へ、本文を `F` へ書き、`gh pr create --title "$(cat "$T")" --body-file "$F"` | 組み込みの 3-5 |
+| **pull request の本文への1行** | `gh pr view … --jq .body > "$F"` が成功し中身が空でないときだけ、`printf '\nCloses #%s\n'` で足して `gh pr edit … --body-file "$F"` | 組み込みの 7-2 |
+| **別のリポジトリへの commit と pull request** | メッセージを `M` へ書き、`git commit -a -F "$M"` と `--title "$(cat "$M")"` | 3-78b（利用者が 4-4 へ置く） |
+| **書かせ直しの報告** | 3-7 と同じ | [internal/orchestrator/prompt.go](../../internal/orchestrator/prompt.go) の `buildCommentRequestPrompt` |
+
+**なぜこの形か。**2026-09-17 に測った。
+
+- **二重引用符の中の `` `…` `` と `$( )` は、bash が実行した。**区切りを引用したヒアドキュメント（`<<'E'`）の中では実行しなかった。`"$(cat "$T")"` の中身を、シェルがもう一度実行することは無い。
+- **指示書は表示されず、文字列のまま届く。**4桁の字下げのまま写した見本を bash と zsh に渡すと、`case` を持たない見本は終わりの行が閉じず、後ろの `gh` まで本文に取り込まれて終了コード 0 で終わった。`case` の中にある見本は、構文の誤りで止まった。
+- **一時ファイルへの書き込みは、既定の `auto`（continuo が起動した Claude Code）でも、許可 `["Bash"]` の `dontAsk` でも拒否されなかった。**
+- **`gh pr view <番号> --json body --jq .body` は、読めないとき終了コード 1 で標準出力が空だった。**
+
+**採らなかった案。**
+
+| 案 | 採らない理由 |
+| --- | --- |
+| **`--body "…"` の二重引用符で渡す** | 報告に書いた backtick や、issue から引いた `$(…)` が worktree の中で実行される |
+| **本文や題名を一重引用符で渡す** | `don't` のような `'` で引用が切れ、その後ろがコマンドになる |
+| **見本を4桁の字下げのままにする** | 字下げを外して写すかは測っていない。外さないと、報告が1件も出ないまま終了コード 0 で終わる |
+| **`<<-'E'` にする** | `<<-` が外すのはタブだけで、markdown の字下げは空白である |
+| **本文を worktree の中の `plan.md` などへ書く** | 未追跡のファイルが残り、片付け（3-9 の `cleanup.require_clean_worktree`）が見送られる。`git add -A` で commit に混ざる |
+| **一時ファイルを `rm -f "$F"` で消させる** | 既定の `auto` で拒否された。公式文書（permission-modes の「Repeated blocks」）では、3回続けてか合わせて20回拒否されると auto mode が止まる |
+
+**成果の報告が印を途中で引用しても、報告として数える。**計画の印も進捗報告の印も、
+見るのは本文の先頭の印の並びだけである（[internal/handoff/assess.go](../../internal/handoff/assess.go) の `StartsAsPlan` と `StartsAsProgressReport`）。
+
+**見張るテスト。**[test/internal/prompt/heredoc_sample_test.go](../../test/internal/prompt/heredoc_sample_test.go) が、
+ヒアドキュメントが囲みの中で行頭の終わりの行で閉じること、題名を直に渡させないこと、
+本文のファイルを worktree の中に作らせないこと、計画の見本の2行目が計画の印であることを見る。
 
 ### 5-4. 2回目以降のプロンプト
 

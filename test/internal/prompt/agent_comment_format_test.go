@@ -134,7 +134,9 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 			"読む人は決めるための材料を持てません"},
 		{"### 詳細", "根拠が無いと、結論だけを信じるかどうかの判断になります"},
 	} {
-		if n := strings.Count(section, want.needle); n < 2 {
+		// **見出しの後ろが続いていないものだけを数える。**表では backtick、骨組みでは改行が続く。
+		// 部分一致で数えると、`### 前提` が旧い見出し `### 前提条件` にも当たり、4つの形へ戻っても通る。
+		if n := strings.Count(section, want.needle+"`") + strings.Count(section, want.needle+"\n"); n < 2 {
 			t.Errorf("%q の節に %q が %d 箇所しかありません（表と骨組みの2箇所に要ります）。%s",
 				commentFormatHeading, want.needle, n, want.why)
 		}
@@ -144,8 +146,9 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// **印を持たない骨組みを置くと、そのとおりに写した時点で印が本文の先頭から外れる。**
 	// 外れると continuo が成果を数えず、CI の検査も落ちる。
 	skeleton := strings.Index(section, "骨組み。")
-	marker := strings.Index(section, "    <!-- continuo:agent -->")
-	firstHeading := strings.Index(section, "    ### 三行まとめ")
+	// **骨組みは囲みの中に行頭から書く。**字下げした見本をそのまま写すと、本文全体がコードとして表示される。
+	marker := strings.Index(section, "\n<!-- continuo:agent -->")
+	firstHeading := strings.Index(section, "\n### 三行まとめ")
 	if skeleton < 0 || marker < 0 || firstHeading < 0 {
 		t.Fatalf("%q の節に骨組み（%d）か印の行（%d）か最初の見出し（%d）がありません",
 			commentFormatHeading, skeleton, marker, firstHeading)
@@ -160,7 +163,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// 印と見出しの順だけを見ると、引用がどこへ動いても素通りする。
 	// **印と見出しが揃っていることを確かめてから見る。**先に見ると、見出しが消えたときに
 	// 「引用が見出しより後ろにある」という紛らわしい文言が、本当の原因より先に出る。
-	if quote := strings.Index(section, "\n    > "); quote < 0 || !(marker < quote && quote < firstHeading) {
+	if quote := strings.Index(section, "\n> "); quote < 0 || !(marker < quote && quote < firstHeading) {
 		t.Errorf("%q の骨組みで、引用の行が印の行と最初の見出しのあいだにありません（印 %d / 引用 %d / 見出し %d）。"+
 			"引用が印より上にあると、そのまま写された時点で印が本文の先頭から外れ、continuo が成果を数えません",
 			commentFormatHeading, marker, quote, firstHeading)
@@ -243,8 +246,14 @@ func sectionUntilNextChapter(t *testing.T, body, heading string) string {
 	if start < 0 {
 		t.Fatalf("本文から %q の見出しを取り出せません", heading)
 	}
+	inFence := false
 	for i := start; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ") {
+		// **囲みの中の `# ` と `## ` では切らない。**骨組みの見本は `# 計画` を行頭に持つ。
+		if isFenceLine(lines[i]) {
+			inFence = !inFence
+			continue
+		}
+		if !inFence && (strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ")) {
 			return strings.Join(lines[start:i], "\n")
 		}
 	}

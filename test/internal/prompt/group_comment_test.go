@@ -22,7 +22,7 @@ const groupMarker = "<!-- continuo:group -->"
 // groupBodyStart は、グループの他の issue へ書く成果報告の本文を、ファイルへ書かせ始める行の末尾である。
 //
 // **本文は二重引用符の中へ書かせない。**シェルが本文の backtick と `$` を実行するためである。
-// この行の次の行（4桁の字下げ）が、本文の1行目（印）になる。
+// この行の次の行（囲みの中の行頭）が、本文の1行目（印）になる。
 const groupBodyStart = `cat > "$F" <<'GROUP'`
 
 // 目的: 組み込みのプロンプトが、グループの他の issue にも「何をしたか」を書かせることを固定する
@@ -175,10 +175,14 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 	// **投稿させる本文は2つある**（`review` 用と `blocked` 用）。**両方の先頭がグループの印である。**
 	// **件数で見る。**`Contains` を1回叩くだけだと、**片方を第三の印へ書き換えても通る。**
 	// **本文はファイルへ書いてから `--body-file` で渡させる**（二重引用符の中の backtick と `$` をシェルが実行するため）。
-	// **本文の塊は `<<'GROUP'` で始まり、その次の行が印である**（4桁の字下げはコード片の字下げ）。
+	// **本文の塊は `<<'GROUP'` で始まり、その次の行が行頭の印である**（見本は囲みの中に行頭から書く）。
+	// **数える投稿は `gh issue comment` の行だけである。**同じ節の PR の本文の見本（`gh pr edit`）も
+	// `--body-file "$F"` を持つので、全部を数えると本文の塊と数が合わない。
 	posts := strings.Count(section, groupBodyStart)
-	marked := strings.Count(section, groupBodyStart+"\n    "+groupMarker)
-	if n := strings.Count(section, `--body-file "$F"`); n != posts {
+	marked := strings.Count(section, groupBodyStart+"\n"+groupMarker)
+	if n := countLines(section, func(line string) bool {
+		return strings.HasPrefix(line, "gh issue comment ") && strings.HasSuffix(line, `--body-file "$F"`)
+	}); n != posts {
 		t.Errorf("%q の節で、本文の塊 %d 個に対して、それを投稿するコマンドが %d 個です。"+
 			"本文を書かせても投稿させないと、成果の報告が残りません", groupHeading, posts, n)
 	}
@@ -216,14 +220,14 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 	if agentMarker == "" {
 		t.Fatal("既定の tracker.comments.marker が空です（検査が素通りします）")
 	}
-	if strings.Contains(section, groupBodyStart+"\n    "+agentMarker) {
+	if strings.Contains(section, groupBodyStart+"\n"+agentMarker) {
 		t.Errorf("%q の節が、投稿する本文の先頭に %q を置かせています。"+
 			"その印は「いま担当している issue のエージェントが書いた」という意味で、"+
 			"continuo が書かせ直しの要否を決めるのに使っています", groupHeading, agentMarker)
 	}
 
 	// **進捗の印も付けさせてはならない。**付けると、次の進捗報告がこの成果報告へ書き足す。
-	if strings.Contains(section, groupBodyStart+"\n    "+config.ProgressMarker) {
+	if strings.Contains(section, groupBodyStart+"\n"+config.ProgressMarker) {
 		t.Errorf("%q の節が、投稿する本文の先頭に %q を置かせています。"+
 			"付けると、次の進捗報告がこの成果報告に書き足します", groupHeading, config.ProgressMarker)
 	}
@@ -298,11 +302,11 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 	// **禁止文の存在だけを見る検査では、見本を戻されても落ちない。**
 	var heads []string
 	for at := 0; ; {
-		i := strings.Index(section[at:], groupBodyStart+"\n    "+groupMarker)
+		i := strings.Index(section[at:], groupBodyStart+"\n"+groupMarker)
 		if i < 0 {
 			break
 		}
-		i += at + len(groupBodyStart+"\n    "+groupMarker)
+		i += at + len(groupBodyStart+"\n"+groupMarker)
 		nl := strings.Index(section[i:], "\n")
 		if nl < 0 {
 			break
@@ -337,7 +341,12 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 	//
 	// **この塊を消しても、他の検査は全部通る**（`--method PATCH` は残る塊にあり、
 	// `URL=` と `ID=` は両方とも同時に1つ減るので件数の検査も通る）。**だから名指しで見る。**
-	if !strings.Contains(section, `printf '%s\n' "$OLD"`) {
+	//
+	// **行全体で比べる。**書き換えの塊にも `printf '%s\n' "$OLD"` を含む行があるので、
+	// 部分一致で探すと、表示の塊を消しても書き換えの行に当たって通る。
+	if countLines(section, func(line string) bool {
+		return strings.TrimSpace(line) == `printf '%s\n' "$OLD"`
+	}) == 0 {
 		t.Errorf("%q の節が、前に書いた本文を表示させていません。"+
 			"変数へ入れるだけでは、エージェントは前の中身を見られず、"+
 			"「前に書いていない分」を決められません", groupHeading)

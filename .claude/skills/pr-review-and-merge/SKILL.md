@@ -23,8 +23,8 @@ user-invocable: true
 **worker（subagent / Workflow の agent）に `gh pr merge` を実行させてはならない。**
 **マージできる状態かどうかの確認も、メインエージェントが自分で行う。**
 
-**なぜか。**2026-09-01、worker に6本のマージを任せ、**2本をレビュー未実施のままマージした。**
-原因はメインエージェントが渡した確認コマンドで、`contains` を使っていた。
+**なぜか。**worker に任せると、**レビュー未実施のままマージされることがある。**
+メインエージェントが渡す確認コマンドが `contains` を使うと、そうなる。
 
 ```bash
 # 誤り。本文のどこかに含まれていれば1と数える
@@ -65,7 +65,7 @@ gh pr view <番号> --json mergeable,mergeStateStatus \
 **これを忘れると、レビュー結果を貼ったのに赤いまま、マージできない状態になる。**
 
 **赤いままだとマージは本当に止まる。**`code-review-result` は `main` の branch protection の
-必須の検査である（2026-09-01 に登録した）。確かめ方。
+必須の検査である。確かめ方。
 
 ```bash
 gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks \
@@ -139,7 +139,7 @@ gh pr checks <番号> --json name,bucket --jq '.[]|"\(.name): \(.bucket)"'
 
 ```markdown
 <!-- code-review-result -->
-# レビューの判断票（実装。<n>周目）— <一言の結論>
+# レビューの判断票（issue #<番号>（issue の題名）に対する PR #<番号>（PR の題名）の実装。<n>周目）— <一言の結論>
 
 ## 1. <一言で中身が想像できる節の題名>
 
