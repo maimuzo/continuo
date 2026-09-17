@@ -5380,7 +5380,7 @@ CI から呼ぶときに使う。
 | 人間がやりたくなること | 実際に起きること |
 | --- | --- |
 | `Ready` へ戻す | **止まらない。**`Ready` は `tracker.active_states` の1つであり（[internal/scaffold/template.go:44](../../internal/scaffold/template.go#L44)）、巡回は「まだ作業中で routable」としてスナップショットを更新するだけである（[internal/orchestrator/reconcile.go:99-100](../../internal/orchestrator/reconcile.go#L99-L100)）。しかも `Ready` は `dispatch_state` なので、印から外れていれば**もう一度着手される** |
-| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:86](../../internal/orchestrator/comment.go#L86)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:155-193](../../internal/orchestrator/comment.go#L155-L193)）。**間違えて着手した issue には、書かせる成果が無い** |
+| `Done` へ動かす | **Claude Code が起動し直される。**`terminal_states` に入ると、片付けの前にこの run が書いたコメントの有無を確かめ（[internal/orchestrator/comment.go:86](../../internal/orchestrator/comment.go#L86)）、無ければ `--resume` でセッションを復元して「作業の内容を書いてください」と送る（[internal/orchestrator/comment.go:183-264](../../internal/orchestrator/comment.go#L183-L264)）。**間違えて着手した issue には、書かせる成果が無い** |
 
 **採るやり方。**`continuo abandon <issue の URL> [ディレクトリ]` を1本置く
 （[internal/abandon/abandon.go](../../internal/abandon/abandon.go)。`internal/cli` は引数を受けて渡すだけである）。
@@ -9719,8 +9719,8 @@ sequenceDiagram
     ## <一言で中身が想像できる節の題名>
 
     ここに 5-5 の7つの見出しを置く
-    （原因は「### 何が問題なのか」へ、どのファイルをどう直すかと
-     決まっていないことと図は「### 詳細」へ書く）
+    （症状は「### 何が問題なのか」へ、原因（ファイル名と行番号つき）と
+     どのファイルをどう直すかと、決まっていないことと図は「### 詳細」へ書く）
     PLAN
     gh issue comment {{.issue.url}} --body-file plan.md
 
@@ -9888,7 +9888,7 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 この1行を読んで Status を動かすのは continuo です。あなたが `gh` を叩く必要はありません。
 
 **グループでまとめて直したときは、下のコメントを書く前に 7-2 を通してください。**
-7-2 は issue ごとの説明を書かせ、**その URL を、下のコメントの中に並べさせます。**
+7-2 は issue ごとの説明を書かせ、**その URL を、下のコメントの中（`### 詳細`）に並べさせます。**
 **先に下のコメントを投稿すると、並べる先が無くなります。**
 
 あわせて、何をしたかを issue のコメントに残します。
