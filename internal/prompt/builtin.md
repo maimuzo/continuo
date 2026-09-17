@@ -243,7 +243,16 @@ gh が「どこへ push するか」を対話で聞いてきて、そこで止�
 
 `[]` が返ったときだけ、新しく作ります。
 
-    gh pr create --title "<何を直したか>" --body "<何をしたかの説明> Closes #{{.issue.number}}"
+    F=$(mktemp)
+    cat > "$F" <<'PRBODY'
+    <何をしたかの説明>
+
+    Closes #{{.issue.number}}
+    PRBODY
+    gh pr create --title "<何を直したか>" --body-file "$F"
+
+**本文は、ファイルへ書いてから `--body-file` で渡してください**（3-2 と同じ理由です）。
+**題名には backtick と `$` を書かないでください。**二重引用符の中では、それが実行されます。
 
 `Closes #{{.issue.number}}` を落とさないでください。
 **この1行が pull request と issue を結びつけます。**落とすと、次に起動されたときに 4-2 の一覧からこの pull request が出てこず、レビューの指摘を読む先が消えます。
@@ -416,9 +425,14 @@ issue に書かれていない実装が要ると判断したときは、その�
     OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
     case "$OLD" in
       *"<!-- continuo:progress -->"*)
+        F=$(mktemp)
+        printf '%s\n' "$OLD" > "$F"
+        printf -- '- %s いま ' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$F"
+        cat >> "$F" <<'NOW'
+    <何をしているか>
+    NOW
         gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-          -f body="$OLD
-    - $(date -u +%Y-%m-%dT%H:%M:%SZ) いま <何をしているか>"
+          -F body=@"$F"
         ;;
       *)
         echo "本文を読めませんでした。段2b で新しく1件投稿します"
@@ -439,12 +453,22 @@ issue に書かれていない実装が要ると判断したときは、その�
 **印の2行は、行の先頭から書きます。**下の見本のとおり、字下げしないでください。
 
 ```bash
-gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
+F=$(mktemp)
+cat > "$F" <<'PROGRESS'
+<!-- continuo:agent -->
 <!-- continuo:progress -->
 まだ作業中です。
 
-- $(date -u +%Y-%m-%dT%H:%M:%SZ) いま <何をしているか>"
+PROGRESS
+printf -- '- %s いま ' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$F"
+cat >> "$F" <<'NOW'
+<何をしているか>
+NOW
+gh issue comment {{.issue.url}} --body-file "$F"
 ```
+
+**`<何をしているか>` は、`<<'NOW'` の下に書きます。**二重引用符の中へ書かないでください。
+backtick や `$` を書くと、シェルがそれを実行します（段2a も同じです）。
 
 **2行目の `<!-- continuo:progress -->` を落とさないでください。**
 **continuo が「進捗が書かれた」と数えるのは、この印が付いたコメントだけです。**
@@ -731,9 +755,13 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
         OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
         case "$OLD" in
           *"<!-- continuo:group -->"*)
+            F=$(mktemp)
+            printf '%s\n' "$OLD" > "$F"
+            cat >> "$F" <<'LINE'
+    - <上の表で決めた行>
+    LINE
             gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-              -f body="$OLD
-    - <上の表で決めた行>"
+              -F body=@"$F"
             ;;
           *)
             echo "本文を読めませんでした。段2b で新しく1件投稿します"
@@ -760,22 +788,32 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 
 **`review` を出した issue には、こう書きます。**
 
-    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
+    F=$(mktemp)
+    cat > "$F" <<'GROUP'
+    <!-- continuo:group -->
     {{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
 
     - 何を直したか: <この issue が書いている症状に対して、何を変えたか>
     - 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
-    - pull request: <PR の URL>"
+    - pull request: <PR の URL>
+    GROUP
+    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+
+**本文は、ファイルへ書いてから `--body-file` で渡してください。**二重引用符の中へ書くと、backtick と `$` をシェルが実行します。
 
 **`blocked` を出した issue には、直せていません。**
 **「まとめて直しました」と書かないでください。**無い pull request の URL も書かないでください。
 **直していない issue に、直したという記録が残ります。**代わりにこう書きます。
 
-    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
+    F=$(mktemp)
+    cat > "$F" <<'GROUP'
+    <!-- continuo:group -->
     {{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
 
     - どこまで見たか: <調べたことと、分かったこと>
-    - なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>"
+    - なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>
+    GROUP
+    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
 
 **先頭の印は `<!-- continuo:group -->` です。**3-7 や 5-3 の `<!-- continuo:agent -->` を使わないでください。
 **その印は「いま担当している issue のエージェントが書いた」という意味で、continuo が

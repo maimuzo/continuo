@@ -107,15 +107,22 @@ func BuildContinuationPrompt(
 // しかも次の行が「本文の中では囲みを外した形で」と言うので、
 // **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
-// 書き分けは [docs/upgrading.md:428-430](docs/upgrading.md#L428-L430) に揃える。
+// 書き分けは [docs/upgrading.md:446-448](docs/upgrading.md#L446-L448) に揃える。
 //
 // issueURL: コメントを書く先の issue の URL。
 // marker: コメントの先頭に書かせる印（`tracker.comments.marker`）。
 // 戻り値: 送る本文。
 func buildCommentRequestPrompt(issueURL, marker string) string {
 	var b strings.Builder
-	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n\n")
-	fmt.Fprintf(&b, "    gh issue comment %s --body \"%s\n    ここに何をしたかを書く\"\n\n", issueURL, marker)
+	b.WriteString("この作業で何をしたかを、issue のコメントに書いてください。\n")
+	// **本文は二重引用符の中へ書かせない。**シェルは二重引用符の中の backtick と `$( )` を展開するので、
+	// 報告に書いた `auto` のような語や、引用した第三者の `$(…)` が worktree の中で実行される。
+	// 組み込みの指示書の 3-2 と 5-5 と同じく、ファイルへ書いてから `--body-file` で渡させる。
+	b.WriteString("本文は、ファイルへ書いてから `--body-file` で渡してください。" +
+		"二重引用符の中へ書くと、backtick と `$` をシェルが実行します。\n\n")
+	b.WriteString("    F=$(mktemp)\n")
+	fmt.Fprintf(&b, "    cat > \"$F\" <<'DONE'\n    %s\n    ここに何をしたかを書く\n    DONE\n", marker)
+	fmt.Fprintf(&b, "    gh issue comment %s --body-file \"$F\"\n\n", issueURL)
 	fmt.Fprintf(&b, "コメントの先頭には必ず %s の1行を入れてください。\n", marker)
 	// **「その印」と書かない**（issue #178）。**直前の文が名乗っているのは `marker`
 	// （エージェントの印）である。**取り違えてそちらを外されると、`c.IsAgent` が偽になり、

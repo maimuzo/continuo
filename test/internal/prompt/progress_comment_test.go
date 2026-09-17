@@ -201,35 +201,59 @@ func sectionOf(t *testing.T, body, heading string) string {
 // **見本そのものを行頭から書ける形にする。**バッククォートの囲みの中は
 // `stripComments` がそのまま残すので、行頭の印が消えずに送れる。
 //
+// **本文はファイルへ書いてから `--body-file` で渡させる。**二重引用符の中へ書かせると、
+// 本文の backtick と `$` をシェルが実行する。**見本の本文は `<<'PROGRESS'` で始まる塊である。**
+//
 // 与える情報: prompt.Builtin() の全文。
-// 成功条件: 投稿の見本にある印の2行が、どちらも行頭から始まっていること。
+// 成功条件: 本文の塊の1行目がエージェントの印、2行目が進捗報告の印で、どちらも行頭から始まり、
+// その本文を `--body-file` で投稿させていること。
 func TestTemplate_進捗報告の見本は印を行頭から書かせる(t *testing.T) {
 	body := prompt.Builtin()
+	agentMarker := config.DefaultConfig().Tracker.Comments.Marker
+	if agentMarker == "" {
+		t.Fatal("既定の tracker.comments.marker が空です（検査が素通りします）")
+	}
 
-	// **`gh issue comment` は4箇所にある**（3-7 の成果の報告、5-3 の進捗報告、7-2 の2つの書式）。
-	// **進捗報告の見本は、次の行に進捗報告の印が来るほうである。**
 	lines := strings.Split(body, "\n")
 	found := false
 	for i, line := range lines {
-		if !strings.Contains(line, "gh issue comment ") {
-			continue
-		}
-		if i+1 >= len(lines) || !strings.Contains(lines[i+1], "continuo:progress") {
+		if !strings.HasSuffix(line, `<<'PROGRESS'`) {
 			continue
 		}
 		found = true
-		// 1行目は `gh issue comment … --body "<!-- continuo:agent -->` である。
-		if !strings.HasSuffix(line, `--body "<!-- continuo:agent -->`) {
-			t.Errorf("見本の1行目が想定と違います: %q", line)
-		}
-		// **2行目が進捗報告の印。行頭から始まっていなければならない。**
-		if lines[i+1] != config.ProgressMarker {
-			t.Errorf("見本の2行目が、行頭から始まる進捗報告の印ではありません: %q\n"+
+		// **1行目がエージェントの印、2行目が進捗報告の印。どちらも行頭から始まっていなければならない。**
+		if i+2 >= len(lines) || lines[i+1] != agentMarker || lines[i+2] != config.ProgressMarker {
+			t.Errorf("進捗報告の見本の本文が、行頭から始まる %q と %q の2行で始まっていません（%q の次の2行）。"+
 				"字下げすると、それを写して投稿したエージェントの進捗報告が数えられません（issue #178）",
-				lines[i+1])
+				agentMarker, config.ProgressMarker, line)
 		}
 	}
 	if !found {
-		t.Fatal("組み込みのプロンプトに、進捗報告を投稿する見本がありません（issue #178）")
+		t.Fatal("組み込みのプロンプトに、進捗報告の本文を書かせる見本がありません（issue #178）")
+	}
+	if !strings.Contains(body, `gh issue comment {{.issue.url}} --body-file "$F"`) {
+		t.Error("進捗報告の見本が、本文をファイルから渡していません。" +
+			"二重引用符の中へ書かせると、本文の backtick と `$` をシェルが実行します")
+	}
+}
+
+// 目的: 組み込みのプロンプトが、コメントと pull request の本文を二重引用符の中へ書かせないことを固定する。
+//
+// **なぜ要るか。**シェルは二重引用符の中の backtick と `$( )` を展開する。
+// **エージェントが報告に書いた `auto` のような語や、引用した第三者の `$(…)` が、worktree の中で実行される。**
+// 3-2 と 5-5 は「`--body "…"` で渡さないでください」と書いており、見本がそれに反すると指示が食い違う。
+//
+// 与える情報: prompt.Builtin() の全文。
+// 成功条件: `--body "` を含む行が、それを禁じる文だけであり、`-f body="` を含む行が無いこと。
+func TestTemplate_コメントとPRの本文を二重引用符で渡させない(t *testing.T) {
+	for i, line := range strings.Split(prompt.Builtin(), "\n") {
+		if strings.Contains(line, `--body "`) && !strings.Contains(line, "渡さないでください") {
+			t.Errorf("組み込みのプロンプトの %d 行目が、本文を二重引用符で渡させています: %q。"+
+				"ファイルへ書いてから `--body-file` で渡させてください", i+1, line)
+		}
+		if strings.Contains(line, `-f body="`) {
+			t.Errorf("組み込みのプロンプトの %d 行目が、書き足す本文を二重引用符で渡させています: %q。"+
+				"ファイルへ書いてから `-F body=@ファイル` で渡させてください", i+1, line)
+		}
 	}
 }

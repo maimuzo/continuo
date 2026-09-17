@@ -19,6 +19,12 @@ const groupHeading = "## 7-2. まとめて直したとき"
 // **したがって、この印の正は組み込みのプロンプトだけであり、ここはその写しである。**
 const groupMarker = "<!-- continuo:group -->"
 
+// groupBodyStart は、グループの他の issue へ書く成果報告の本文を、ファイルへ書かせ始める行の末尾である。
+//
+// **本文は二重引用符の中へ書かせない。**シェルが本文の backtick と `$` を実行するためである。
+// この行の次の行（4桁の字下げ）が、本文の1行目（印）になる。
+const groupBodyStart = `cat > "$F" <<'GROUP'`
+
 // 目的: 組み込みのプロンプトが、グループの他の issue にも「何をしたか」を書かせることを固定する
 // （#237（グループの代表を直しても、代表以外の issue には「Status を動かしました」の1行しか残らない）。
 // 設計 6-27）。
@@ -168,8 +174,18 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 
 	// **投稿させる本文は2つある**（`review` 用と `blocked` 用）。**両方の先頭がグループの印である。**
 	// **件数で見る。**`Contains` を1回叩くだけだと、**片方を第三の印へ書き換えても通る。**
-	posts := strings.Count(section, `--body "`)
-	marked := strings.Count(section, `--body "`+groupMarker)
+	// **本文はファイルへ書いてから `--body-file` で渡させる**（二重引用符の中の backtick と `$` をシェルが実行するため）。
+	// **本文の塊は `<<'GROUP'` で始まり、その次の行が印である**（4桁の字下げはコード片の字下げ）。
+	posts := strings.Count(section, groupBodyStart)
+	marked := strings.Count(section, groupBodyStart+"\n    "+groupMarker)
+	if n := strings.Count(section, `--body-file "$F"`); n != posts {
+		t.Errorf("%q の節で、本文の塊 %d 個に対して、それを投稿するコマンドが %d 個です。"+
+			"本文を書かせても投稿させないと、成果の報告が残りません", groupHeading, posts, n)
+	}
+	if strings.Contains(section, `--body "`) {
+		t.Errorf("%q の節が、本文を二重引用符で渡させています。"+
+			"本文の backtick と `$` をシェルが実行します", groupHeading)
+	}
 	if posts < 2 {
 		t.Fatalf("%q の節に、投稿する本文が %d 個しかありません。"+
 			"`review` と `blocked` で書式を分けているので2つ以上あるはずです（検査が的を外しています）",
@@ -200,14 +216,14 @@ func TestTemplate_グループの成果報告の印はエージェントの印�
 	if agentMarker == "" {
 		t.Fatal("既定の tracker.comments.marker が空です（検査が素通りします）")
 	}
-	if strings.Contains(section, `--body "`+agentMarker) {
+	if strings.Contains(section, groupBodyStart+"\n    "+agentMarker) {
 		t.Errorf("%q の節が、投稿する本文の先頭に %q を置かせています。"+
 			"その印は「いま担当している issue のエージェントが書いた」という意味で、"+
 			"continuo が書かせ直しの要否を決めるのに使っています", groupHeading, agentMarker)
 	}
 
 	// **進捗の印も付けさせてはならない。**付けると、次の進捗報告がこの成果報告へ書き足す。
-	if strings.Contains(section, `--body "`+config.ProgressMarker) {
+	if strings.Contains(section, groupBodyStart+"\n    "+config.ProgressMarker) {
 		t.Errorf("%q の節が、投稿する本文の先頭に %q を置かせています。"+
 			"付けると、次の進捗報告がこの成果報告に書き足します", groupHeading, config.ProgressMarker)
 	}
@@ -282,11 +298,11 @@ func TestTemplate_書き換えは印を確かめる門の中で行わせる(t *t
 	// **禁止文の存在だけを見る検査では、見本を戻されても落ちない。**
 	var heads []string
 	for at := 0; ; {
-		i := strings.Index(section[at:], `--body "`+groupMarker)
+		i := strings.Index(section[at:], groupBodyStart+"\n    "+groupMarker)
 		if i < 0 {
 			break
 		}
-		i += at + len(`--body "`+groupMarker)
+		i += at + len(groupBodyStart+"\n    "+groupMarker)
 		nl := strings.Index(section[i:], "\n")
 		if nl < 0 {
 			break
