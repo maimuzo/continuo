@@ -977,7 +977,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 [test/internal/scaffold/design_template_test.go:99-101](../../../test/internal/scaffold/design_template_test.go#L99-L101) の
 `TestTemplate_雛形の本文が設計5_3の本文と一致する` が突き合わせるのは、
 **5-3 の ```markdown ブロック（本文）だけ**である
-（[:325-334](../../../test/internal/scaffold/design_template_test.go#L325-L334) の
+（[:331-340](../../../test/internal/scaffold/design_template_test.go#L331-L340) の
 `readDesignBodyExample` がそのブロックを読む）。表は人間が読むためのものなので、忘れても落ちない。
 **だから 11d の変数を足したときは、表を直したことを PR の説明で名指しして確かめる。**
 
@@ -1016,7 +1016,7 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 **引き合いに出さない。**
 
 **`<!-- continuo:agent -->` も本文に書かない。**あれは
-[internal/orchestrator/prompt.go:401](../../../internal/orchestrator/prompt.go#L401) が書いているとおり
+[internal/orchestrator/prompt.go:412](../../../internal/orchestrator/prompt.go#L412) が書いているとおり
 `PostComment` が自分で付けるものであり、**本文に書くと二重になる。**
 
 **依存する別の作業。**#134（ダッシュボードに「着手できずに止まっているもの」を出す）の設計が
