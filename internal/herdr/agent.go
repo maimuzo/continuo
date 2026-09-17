@@ -70,7 +70,7 @@ type AgentStartParams struct {
 	Name normalize.SafeName `json:"name"`
 	// Kind は herdr に渡す agent の種別である（設定の claude.kind。例: "claude"）。
 	Kind string `json:"kind"`
-	// PaneID は agent を起動する pane の ID である（pane.split の結果から得る）。
+	// PaneID は agent を起動する pane の ID である（pane.list の結果から得る）。
 	PaneID string `json:"pane_id"`
 	// Args は Claude Code へ渡す起動フラグである
 	// （例: ["--settings", "<設定ファイル>", "--session-id", "<UUID>",
