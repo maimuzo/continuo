@@ -2353,28 +2353,6 @@ cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 何に対�
 
 **件数そのものは見ないでください。**在るかどうかだけで見分けられます。いくつ出るかは指示書の書き方で変わります。
 
-#### エージェントのコメントで、backtick で囲んだ語が消えている
-
-**v0.1.16 で直りました。**上げてください。**設定に足すものはありません。**
-
-**v0.1.15 まで何が起きていたか。**組み込みの指示書は、コメントや PR の本文を `--body "…"` の二重引用符の中へ直に書かせていました。
-**二重引用符の中では、シェルが backtick と `$( )` をコマンドとして実行します。**
-報告に `` `auto` `` と書くと、`auto` というコマンドが worktree の中で走り、その部分はコマンドの出力（無ければ空）に置き換わります。
-issue から `$(…)` を含む文を引いた場合も同じです。
-
-**v0.1.16 から。**本文と題名を一時ファイルへ書いてから `gh` へ渡します。
-計画や成果の報告の本文を worktree の中の `plan.md`・`done.md` へ書かせるのもやめたので、残ったファイルのせいで worktree が片付かないこともなくなりました。
-
-**入っているかは、送る文面で確かめられます。**
-
-```bash
-cd ~/continuo-work && continuo prompt --show --builtin | grep -cF -- '--body-file "$F"'
-```
-
-**`1` 以上なら v0.1.16 の形です。**`0` なら上げてください。
-
-**`WORKFLOW.md` の本文で `--body "…"` の形を自分で指示している場合は、そこも直してください。**直し方は [docs/upgrading.md](upgrading.md) の「v0.1.15 から v0.1.16 へ」にあります。
-
 ### issue が勝手に止まる・戻るとき
 
 #### issue が急に `Blocked` になった
@@ -2555,13 +2533,10 @@ gh pr view <PR番号> --repo <owner>/<repo> --json closingIssuesReferences --jq 
 **直し方。**PR の本文へ1行足します。エージェントが次に起動されたときから見えるようになります。
 
 ```bash
-F=$(mktemp)
-gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body > "$F" \
-  && printf '\nCloses #<issue の番号>\n' >> "$F" \
-  && gh pr edit <PR番号> --repo <owner>/<repo> --body-file "$F"
-```
+gh pr edit <PR番号> --repo <owner>/<repo> --body "$(gh pr view <PR番号> --repo <owner>/<repo> --json body --jq .body)
 
-**本文を読めなかったときは、書き戻しません。**読めないまま書き戻すと、本文が足した1行だけになります。
+Closes #<issue の番号>"
+```
 
 **組み込みのプロンプトは、この1行を入れるようエージェントに指示しています。**
 **それでも落ちていたときの直し方が、これです。**

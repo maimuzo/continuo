@@ -276,30 +276,6 @@ func IsProgressReport(body string) bool {
 // body: コメント本文。
 // 戻り値: 先頭の印の並びに進捗報告の印があれば true。
 func StartsAsProgressReport(body string) bool {
-	return leadingMarkersInclude(body, config.ProgressMarker)
-}
-
-// StartsAsPlan は、そのコメントが計画として書き出されたかを返す（設計 5-3q）。
-//
-// **見るのは本文の先頭にある印の並びだけである**（`StartsAsProgressReport` と同じ）。
-// 組み込みの指示書は、計画のコメントの2行目に計画の印を書かせている（3-2）。
-//
-// **本文のどこかに印が在るかで見てはならない。**成果の報告が計画の印について書いただけで
-// 「成果の報告ではない」とされ、continuo はセッションを復元して書かせ直し、
-// **2度目も同じなら `failure_state` へ落とす。**書いてあるのに、書かなかったことにされる。
-//
-// body: コメント本文。
-// 戻り値: 先頭の印の並びに計画の印があれば true。
-func StartsAsPlan(body string) bool {
-	return leadingMarkersInclude(body, config.PlanMarker)
-}
-
-// leadingMarkersInclude は、本文の先頭にある印の並びに marker があるかを返す。
-//
-// body: コメント本文。
-// marker: 探す印（行頭がこの文字列で始まる行を、その印の行とみなす）。
-// 戻り値: 先頭の印の並びに marker の行があれば true。
-func leadingMarkersInclude(body, marker string) bool {
 	// **本文全体の先頭の空白だけを落とす。**`Comment.IsAgent` は
 	// `strings.TrimSpace(body)` してから印を見るので（internal/tracker の `FetchComments`）、
 	// **落とさないと2つの判定がずれる。**本文の先頭に空白が1つあるだけで、
@@ -318,8 +294,8 @@ func leadingMarkersInclude(body, marker string) bool {
 			continue
 		}
 		// **字下げした行は、名乗りではない。**行頭ちょうどの `<!--` だけを見る。
-		// **4桁の字下げは、組み込みのプロンプトが囲みの外で印を「見せる」ときの書き方である**
-		// （internal/prompt の stripComments が、その形と囲みの中の行を落とさずに残している）。
+		// **4桁の字下げは、組み込みのプロンプトが印を「見せる」ときの書き方そのものである**
+		// （internal/prompt の stripComments が、その形を落とさずに残している）。
 		// **字下げを許すと、印について説明する成果の報告が、いちばん起きやすい形で捨てられる。**
 		if !strings.HasPrefix(line, commentOpen) {
 			// **本文が始まった。**ここから先の印は、引用であって名乗りではない。
@@ -330,7 +306,7 @@ func leadingMarkersInclude(body, marker string) bool {
 		// 例: `<!-- この報告に <!-- continuo:progress --> は付けていません -->` は、
 		// 行頭が `<!--` で、印を文字列として含む。**書いてあるのに「書かれていない」と
 		// 判定され、復元が走り、2度目も同じなら `failure_state` へ落ちる**（issue #178 の再発）。
-		if strings.HasPrefix(line, marker) {
+		if strings.HasPrefix(line, config.ProgressMarker) {
 			return true
 		}
 	}

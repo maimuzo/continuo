@@ -146,9 +146,8 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// **印を持たない骨組みを置くと、そのとおりに写した時点で印が本文の先頭から外れる。**
 	// 外れると continuo が成果を数えず、CI の検査も落ちる。
 	skeleton := strings.Index(section, "骨組み。")
-	// **骨組みは囲みの中に行頭から書く。**字下げした見本をそのまま写すと、本文全体がコードとして表示される。
-	marker := strings.Index(section, "\n<!-- continuo:agent -->")
-	firstHeading := strings.Index(section, "\n### 三行まとめ")
+	marker := strings.Index(section, "    <!-- continuo:agent -->")
+	firstHeading := strings.Index(section, "    ### 三行まとめ")
 	if skeleton < 0 || marker < 0 || firstHeading < 0 {
 		t.Fatalf("%q の節に骨組み（%d）か印の行（%d）か最初の見出し（%d）がありません",
 			commentFormatHeading, skeleton, marker, firstHeading)
@@ -163,7 +162,7 @@ func TestTemplate_組み込みのプロンプトはコメントの節の形を�
 	// 印と見出しの順だけを見ると、引用がどこへ動いても素通りする。
 	// **印と見出しが揃っていることを確かめてから見る。**先に見ると、見出しが消えたときに
 	// 「引用が見出しより後ろにある」という紛らわしい文言が、本当の原因より先に出る。
-	if quote := strings.Index(section, "\n> "); quote < 0 || !(marker < quote && quote < firstHeading) {
+	if quote := strings.Index(section, "\n    > "); quote < 0 || !(marker < quote && quote < firstHeading) {
 		t.Errorf("%q の骨組みで、引用の行が印の行と最初の見出しのあいだにありません（印 %d / 引用 %d / 見出し %d）。"+
 			"引用が印より上にあると、そのまま写された時点で印が本文の先頭から外れ、continuo が成果を数えません",
 			commentFormatHeading, marker, quote, firstHeading)
@@ -246,14 +245,8 @@ func sectionUntilNextChapter(t *testing.T, body, heading string) string {
 	if start < 0 {
 		t.Fatalf("本文から %q の見出しを取り出せません", heading)
 	}
-	inFence := false
 	for i := start; i < len(lines); i++ {
-		// **囲みの中の `# ` と `## ` では切らない。**骨組みの見本は `# 計画` を行頭に持つ。
-		if isFenceLine(lines[i]) {
-			inFence = !inFence
-			continue
-		}
-		if !inFence && (strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ")) {
+		if strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ") {
 			return strings.Join(lines[start:i], "\n")
 		}
 	}

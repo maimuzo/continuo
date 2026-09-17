@@ -3,8 +3,10 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/handoff"
 	"github.com/maimuzo/continuo/internal/herdr"
 	"github.com/maimuzo/continuo/internal/redact"
@@ -407,10 +409,8 @@ func (o *Orchestrator) hasRunComment(ctx context.Context, nodeID string, snap ru
 			// **除かないと、turn が途中で終わった run で書かせ直しが飛ぶ。**
 			// とくに計画は run の最初に書かれるので、判定はほぼ必ず外れる。
 			// 「何をしたか」が1行も残らないまま、issue が次へ進む。
-			//
-			// **見るのは先頭の印の並びだけである**（進捗報告は上の `StartsAsProgressReport` で除いた）。
-			// 本文のどこかに印が在るかで見ると、計画の印について書いた成果の報告が捨てられる。
-			if handoff.StartsAsPlan(c.Body) {
+			if strings.Contains(c.Body, config.PlanMarker) ||
+				strings.Contains(c.Body, config.ProgressMarker) {
 				continue
 			}
 			found = true

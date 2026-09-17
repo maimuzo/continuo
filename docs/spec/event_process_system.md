@@ -151,7 +151,7 @@ sequenceDiagram
 
 **3 が最大1時間かかることがある。**
 エージェントがコメントを書き忘れていたら、セッションを復元して書かせるためである
-（[internal/orchestrator/comment.go:183-186](../../internal/orchestrator/comment.go#L183-L186)。
+（[internal/orchestrator/comment.go:185-188](../../internal/orchestrator/comment.go#L185-L188)。
 `claude.turn_timeout_ms` の既定は1時間）。
 
 **だから同期では呼べない。**ただし `finishRunAsync` は別スレッドへ逃がしているので、**巡回のループは止まらない。**

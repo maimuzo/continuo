@@ -56,7 +56,7 @@ func TestStartsAsProgressReport_先頭の印の並びだけを見る(t *testing.
 			false,
 		},
 		{
-			// **4桁の字下げは、組み込みのプロンプトが囲みの外で印を「見せる」ときの書き方である。**
+			// **4桁の字下げは、組み込みのプロンプトが印を「見せる」ときの書き方そのものである。**
 			// **印について説明する成果の報告が、いちばん取りやすい形で引用してくる。**
 			// **字下げを許すと、その報告が捨てられて人間へ渡る。**
 			"**成果の報告が字下げしたコード片で引用している**",
@@ -148,36 +148,5 @@ func TestStartsAsProgressReport_引用した印は名乗りではない(t *testi
 	// **裏を取る。**行そのものが印で始まっていれば、いままでどおり真である。
 	if !handoff.StartsAsProgressReport("<!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。\n") {
 		t.Error("行頭から書かれた印を、名乗りとして数えていません")
-	}
-}
-
-// 目的: 計画かどうかを、本文の先頭にある印の並びだけで見分けることを固定する（設計 5-3q）。
-//
-// **なぜ要るか。**`hasRunComment` は、これが真になるコメントを「この run の成果の報告」から外す。
-// **本文のどこかに計画の印があれば真、という判定にすると、計画の印について書いた成果の報告が捨てられ、**
-// continuo はセッションを復元して書かせ直す。2度目も同じなら `failure_state` へ落とす。
-//
-// 与える情報: 組み込みが書かせる計画の形・印を引用した成果の報告・進捗報告。
-// 成功条件: 先頭の印の並びに計画の印があるものだけが真になること。
-func TestStartsAsPlan_先頭の印の並びだけを見る(t *testing.T) {
-	cases := []struct {
-		name string
-		body string
-		want bool
-	}{
-		{"組み込みが書かせる計画の形", "<!-- continuo:agent -->\n" + config.PlanMarker + "\n# 計画\n", true},
-		{"成果の報告が本文の途中で計画の印を引用している",
-			"<!-- continuo:agent -->\n計画の2行目（" + config.PlanMarker + "）を直しました\n", false},
-		{"成果の報告が字下げしたコード片で計画の印を引用している",
-			"<!-- continuo:agent -->\n\n    " + config.PlanMarker + "\n\nこの印の扱いを直しました\n", false},
-		{"進捗報告", "<!-- continuo:agent -->\n" + config.ProgressMarker + "\nまだ作業中です。\n", false},
-		{"印の無い成果の報告", "<!-- continuo:agent -->\nこの run でやったことを書きました\n", false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := handoff.StartsAsPlan(c.body); got != c.want {
-				t.Errorf("StartsAsPlan() = %v, want %v（本文 %q）", got, c.want, c.body)
-			}
-		})
 	}
 }
