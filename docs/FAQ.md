@@ -2339,9 +2339,11 @@ jq -r .base <worktree のパス>/.continuo.json
 **入っているかは、送る文面で確かめられます。**v0.1.15 と v0.1.16 で見出しが違うので、2本数えます。
 
 ```bash
-cd ~/continuo-work && continuo prompt --show | grep -c '### 既存の構造がどうなっているか'
-cd ~/continuo-work && continuo prompt --show | grep -c '### 何に対する返答か'
+cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 既存の構造がどうなっているか'
+cd ~/continuo-work && continuo prompt --show --builtin | grep -c '### 何に対する返答か'
 ```
+
+**`--builtin` を付けるのは、組み込みの指示書だけを数えるためです。**付けないと `WORKFLOW.md` の本文も数えるので、本文に同じ見出しを書いた人は版を取り違えます。
 
 | 1本目 | 2本目 | 入っている形 |
 | --- | --- | --- |
