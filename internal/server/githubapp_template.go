@@ -134,7 +134,7 @@ input[type=text] { font: inherit; padding: .3rem .5rem; border: 1px solid #8888;
 {{- end }}
 <p>{{ t "dashboard.github_app.authorize.intro" .Slug }}</p>
 <ul class="notes">
-<li>{{ t "dashboard.github_app.authorize.attribution" .Slug }}</li>
+<li>{{ t "dashboard.github_app.authorize.attribution" }}</li>
 <li>{{ t "dashboard.github_app.authorize.expiry" }}</li>
 <li>{{ t "dashboard.github_app.authorize.note_stored" .CredentialsPath }}</li>
 <li>{{ t "dashboard.github_app.authorize.note_interrupted" }}</li>

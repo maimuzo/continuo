@@ -638,7 +638,9 @@ func (f Fragments) Validate() error {
 				data["attempt"] = attempt
 				data["github_app_attribution"] = attribution
 				// **SampleData は毎回作り直すので、書き換えても次の周に残らない。**
-				// 型が違えば Render が `missingkey=error` で落ちるので、ここでは黙って通す。
+				// **型が違えば、この枝は静かに振られなくなる**（`text/template` は
+				// `map[string]string` でも `.continuo.self_marker` を引けるので、Render は落ちない）。
+				// **SampleData の型を変えるなら、ここも同時に直すこと。**
 				if inner, ok := data["continuo"].(map[string]any); ok {
 					inner["self_marker"] = selfMarker
 				}

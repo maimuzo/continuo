@@ -47,28 +47,6 @@ type githubAppWiring struct {
 	GHLogin tracker.GHLoginFunc
 }
 
-// checkGitHubAppStartup は `github_app_attribution` が真のとき、GitHub App のトークンが実際に取れることと、
-// 認可した人が `gh` の持ち主と同じことを確かめる（3-82c「取れないときに止める」・3-82f）。
-//
-// **偽なら何もしない。**書かない利用者の continuo は、いままでどおり動く。
-//
-// **トークンは `Adapter` のメソッドを通してだけ取る**（ProbeAppToken）。取る関数は `NewAdapter` へ
-// 渡した1つだけなので、検査が別に持つとテストが片方だけ差し替えて「たまたま通る」形になる。
-// **取ると更新用のトークンが1回転する**ので、起動1回につき1回しか取らない。突き合わせのために
-// もう1回取ることはしない（`authorized_login` を資格情報から読む）。
-//
-// **`gh api user` が取れなかったら、突き合わせずに起動する**（3-82f）。このコードベースは
-// 「取れなくても止めない」を2箇所で決めており（設計 3-65）、恒久的なずれは次に `gh api` が
-// 届いた起動で必ず捕まる。WARN を1行出すだけにする。
-//
-// ctx: 呼び出しに適用するコンテキスト（runStartupChecks の期限が掛かっている）。
-// cfg: 検証済みの設定。
-// d: 組み立て済みの依存（`d.Tracker.ProbeAppToken` を呼ぶ）。
-// ga: 資格情報の置き場所と `gh api user` を叩く関数。
-// now: いまの時刻（更新用のトークンの残りを見る）。
-// logger: ログの出力先。
-// 戻り値: 起動を止める理由。文面は 3-82c の2通りと 3-82f の1つのいずれか。
-
 // startupTimedOut は、起動時の GitHub App の検査が「時間が足りなかった」で落ちたかを返す。
 //
 // **3通りある。**どれも資格情報そのものは壊れていない。
@@ -90,6 +68,27 @@ func startupTimedOut(err error) bool {
 	return errors.As(err, &ne) && ne.Timeout()
 }
 
+// checkGitHubAppStartup は `github_app_attribution` が真のとき、GitHub App のトークンが実際に取れることと、
+// 認可した人が `gh` の持ち主と同じことを確かめる（3-82c「取れないときに止める」・3-82f）。
+//
+// **偽なら何もしない。**書かない利用者の continuo は、いままでどおり動く。
+//
+// **トークンは `Adapter` のメソッドを通してだけ取る**（ProbeAppToken）。取る関数は `NewAdapter` へ
+// 渡した1つだけなので、検査が別に持つとテストが片方だけ差し替えて「たまたま通る」形になる。
+// **取ると更新用のトークンが1回転する**ので、起動1回につき1回しか取らない。突き合わせのために
+// もう1回取ることはしない（`authorized_login` を資格情報から読む）。
+//
+// **`gh api user` が取れなかったら、突き合わせずに起動する**（3-82f）。このコードベースは
+// 「取れなくても止めない」を2箇所で決めており（設計 3-65）、恒久的なずれは次に `gh api` が
+// 届いた起動で必ず捕まる。WARN を1行出すだけにする。
+//
+// ctx: 呼び出しに適用するコンテキスト（runStartupChecks の期限が掛かっている）。
+// cfg: 検証済みの設定。
+// d: 組み立て済みの依存（`d.Tracker.ProbeAppToken` を呼ぶ）。
+// ga: 資格情報の置き場所と `gh api user` を叩く関数。
+// now: いまの時刻（更新用のトークンの残りを見る）。
+// logger: ログの出力先。
+// 戻り値: 起動を止める理由。文面は 3-82c の2通りと 3-82f の1つのいずれか。
 func checkGitHubAppStartup(
 	ctx context.Context,
 	cfg config.Config,

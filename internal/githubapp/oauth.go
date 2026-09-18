@@ -183,13 +183,6 @@ func (c Client) postToken(ctx context.Context, form url.Values) (tokenResponse, 
 	if tr.RefreshToken == "" {
 		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenNoRefresh, contentTypeOf(resp))
 	}
-	// **期限も同じ扱いにする。**返らないまま受けると、新しい更新用のトークンに
-	// **過ぎているかもしれない古い期限が付く。**そうなると `continuo doctor` は
-	// 「期限が切れています」、入口の画面は認可の段を出すので、
-	// **トークンは生きているのに人間が認可をやり直す**（回転の窓をもう1回開ける）。
-	if tr.RefreshTokenExpiresIn <= 0 {
-		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenNoRefreshExpiry, contentTypeOf(resp))
-	}
 	return tr, nil
 }
 
@@ -200,6 +193,15 @@ func (c Client) postToken(ctx context.Context, form url.Values) (tokenResponse, 
 func applyToken(c Credentials, tr tokenResponse, now time.Time) Credentials {
 	if tr.RefreshToken != "" {
 		c.RefreshToken = tr.RefreshToken
+		// **新しいトークンを受けたら、古い期限はいったん捨てる。**
+		// 古い期限は前のトークンのもので、新しいトークンには当たらない。
+		// **零にすると RefreshTokenExpired も RefreshTokenExpiresSoon も偽を返す**
+		// （どちらも `IsZero()` を先に見る）。期限を知らない、という状態である。
+		//
+		// **落とさないのは、落とすと Rotate が書き戻さずに返るためである。**
+		// GitHub が返したばかりの新しいトークンを捨て、いま無効になった古いトークンを
+		// ファイルへ残すことになり、**以後の回転が永久に通らなくなる**（実装レビュー5周目）。
+		c.RefreshTokenExpiresAt = time.Time{}
 	}
 	if tr.RefreshTokenExpiresIn > 0 {
 		c.RefreshTokenExpiresAt = now.Add(time.Duration(tr.RefreshTokenExpiresIn) * time.Second).UTC()

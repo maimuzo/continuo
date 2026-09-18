@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "6a82961b946820984df738eeca2389eb1da58e0cbe55f59c6c53da45af86f1de",
+  "_source_sha256": "233d839335eeefb2752afec0f8dbaac2b785f38755755f1cdda3f9fca509bd7c",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -378,7 +378,7 @@
   "dashboard.github_app.authorize.heading": "Step 3 of 3: Authorize posting on your behalf",
   "dashboard.github_app.authorize.expired": "The refresh token expired at %s. Repeat this step.",
   "dashboard.github_app.authorize.intro": "The button below takes you to GitHub's authorization page. Once you approve, continuo and its agents can comment on issues on your behalf through the GitHub App \"%s\".",
-  "dashboard.github_app.authorize.attribution": "From here on, machine posts keep your name, with \"– with\" and this GitHub App's display name shown next to it (its URL name is %s; you can check the display name on GitHub). Comments you write yourself do not.",
+  "dashboard.github_app.authorize.attribution": "From here on, machine posts keep your name, with \"– with\" and this GitHub App's display name shown next to it (you can check the display name on GitHub; it may differ from the slug above). Comments you write yourself do not.",
   "dashboard.github_app.authorize.expiry": "The authorization expires after about 6 months. continuo rotates the refresh token on every post, so it keeps extending while in use; once it expires, repeat only this step.",
   "dashboard.github_app.authorize.note_stored": "When authorization completes, continuo writes the refresh token, its expiry, and the authorized account name to %s. Access tokens are kept neither in a file nor in memory.",
   "dashboard.github_app.authorize.note_interrupted": "If you stop continuo partway through, start again from this step.",
@@ -729,7 +729,6 @@
   "githubapp.token.denied": "GitHub refused to issue a token: %[1]s (%[2]s)",
   "githubapp.token.empty": "The response from GitHub has no access token (Content-Type: %s; the body is not shown because it can contain tokens)",
   "githubapp.token.no_refresh": "GitHub did not return a refresh token (Content-Type: %s; the body is not shown because it can contain tokens). This happens when \"Expire user authorization tokens\" is off for the GitHub App. Turn it on under Settings → Developer settings → GitHub Apps → Optional features, then authorize again",
-  "githubapp.token.no_refresh_expiry": "GitHub did not return the refresh token expiry (refresh_token_expires_in) (Content-Type: %s; the body is not included because it may contain a token). Writing back without the expiry would attach the old expiry to the new token, and continuo doctor would wrongly report that it has expired. Please authorize again.",
   "githubapp.viewer.request_failed": "GET /user to GitHub failed: %w",
   "githubapp.viewer.status": "GitHub returned %d for GET /user: %s",
   "githubapp.viewer.parse_failed": "Cannot parse the GET /user response from GitHub as JSON (%s): %w",

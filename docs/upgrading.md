@@ -163,7 +163,7 @@ tracker:
 | --- | --- |
 | **作る** | **あなた1人のための GitHub App を、continuo が組んだ manifest で作ります。**名前の既定は `continuo-<あなたの gh のログイン名>` です。GitHub の中で同じ名前が取られていたら GitHub がエラーを返すので、画面で名前を直して押し直せます。**この段では、issue にはまだ何も書き込みません** |
 | **install** | **どのリポジトリの issue へ書けるかを決めます。**入れた先の issue にだけコメントできます。**カンバンに載るリポジトリが増えても困らないよう、画面は All repositories を勧めます。**あとから GitHub の画面で外せます |
-| **認可** | **ここから先、機械の投稿はあなたの名前のまま `– with <GitHub App の表示名>` が付きます。****更新用のトークンは、最後に回してから約6か月で切れます**（実測 約181日）。continuo が投稿のたびに回して期限を書き直すので、**使い続けているあいだは切れません。**止めていたあいだに切れたら、同じ画面の「認可だけをやり直す」（`http://127.0.0.1:<port>/github-app/authorize`）から通し直します |
+| **認可** | **ここから先、機械の投稿はあなたの名前のまま `– with <GitHub App の表示名>` が付きます。****更新用のトークンは、最後に回してから約6か月で切れます**（実測 約181日）。continuo が投稿のたびに回して期限を書き直すので、**使い続けているあいだは切れません。**止めていたあいだに切れたら、**`github_app_attribution` を手元だけ `false` にして continuo を起動し**、同じ画面の「認可だけをやり直す」（`http://127.0.0.1:<port>/github-app/authorize`）から通し直します。**`true` のままでは起動時の検査が止めるので、その URL へ辿り着けません** |
 
 **押し終わると、`~/.continuo/github-app-credentials.json`（権限 `0600`）が書かれます。**
 中身は `client_id` / `client_secret` / 更新用のトークンとその期限 / 認可したアカウント名 / GitHub App の slug の6つです。
@@ -223,7 +223,7 @@ server.port を書いていないときは、先に書いてください。0 に
 **`continuo doctor` も同じ文面を出します。**
 
 **資格情報は在るのに、更新用のトークンが回せないときは、文面が変わります**
-（回転の書き戻しの直前で continuo が落ちた・GitHub App を消した・client secret を作り直した）。
+（回転の書き戻しの直前で continuo が落ちた・**`server.port` を GitHub App を作ったときと別の番号にした**・GitHub App を消した・client secret を作り直した）。
 
 ```
 github_app_attribution が true ですが、GitHub App の更新用のトークンを回せませんでした（<GitHub が返した error の値>）。
@@ -233,10 +233,13 @@ github_app_attribution が true ですが、GitHub App の更新用のトーク�
   2. continuo を起動する
   3. http://127.0.0.1:<port>/github-app/authorize を開き、認可をやり直す
      （回転の書き戻しの直前で continuo が落ちたときは、これで直ります）
-  4. 認可が通らないときは、GitHub App を消したか、client secret を作り直しています。
+  4. 認可の画面で GitHub が「戻り先が違う」と断るときは、server.port を GitHub App を作ったときと
+     別の番号にしています。GitHub の Settings → Developer settings → GitHub Apps でその GitHub App を開き、
+     Callback URL のポートをいまの番号へ書き換えてください（作り直す必要はありません）。
+  5. それでも認可が通らないときは、GitHub App を消したか、client secret を作り直しています。
      ~/.continuo/github-app-credentials.json を消し、GitHub の Settings → Developer settings → GitHub Apps に
      古い GitHub App が残っていれば Danger zone から消してから、http://127.0.0.1:<port>/github-app で作り直してください。
-  5. github_app_attribution を true に戻して、continuo を再起動する
+  6. github_app_attribution を true に戻して、continuo を再起動する
 
 server.port を書いていないときは、先に書いてください。0 にしているときは、具体的な番号にしてください。
 ```
