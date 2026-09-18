@@ -124,6 +124,13 @@ func checkGitHubApp(ctx context.Context, opts Options, cfg loadedConfig, configS
 		// **その資格情報では `/github-app/authorize` を開いても「先に GitHub App を作ってください」で止まる。**
 		// 認可のやり直しを案内すると、指示どおり開いた人が1回無駄足を踏む。
 		remedy := []string{i18n.T(i18n.KeyDoctorGitHubAppRemedyReauthorize, portText)}
+		if creds.HasApp() && !creds.HasRefreshToken() {
+			// **認可のやり直しを案内してはならない。**GitHub App は作ってあるが install も認可も
+			// 通っていない状態で、**入口の画面はこの資格情報に段2（install）を出す**（設計 3-82g の表）。
+			// 認可だけを先に通すと、install していない GitHub App のトークンでは issue へ書けないので、
+			// **起動は通るのに投稿が全部断り付きになる。**
+			remedy = []string{i18n.T(i18n.KeyDoctorGitHubAppRemedyOpenEntry, portText)}
+		}
 		if !creds.HasApp() {
 			remedy = []string{
 				i18n.T(i18n.KeyDoctorGitHubAppRemedyStep1),

@@ -607,7 +607,7 @@ pane が残っていればそちらから引けるが、**pane が無ければ�
 **この穴が開くのは「落ちたあとに人間が pane を閉じた」場合に限られる。**
 
 **`on_broken_worktree: skip` を選べば、この worktree があっても起動は続く**
-（[internal/config/types.go:249-252](../../../internal/config/types.go#L249-L252)）。
+（[internal/config/types.go:259-262](../../../internal/config/types.go#L259-L262)）。
 **既定を変えることは、この設計では提案しない。**
 
 ---
@@ -1008,8 +1008,8 @@ front matter と [internal/config/default.go:89-95](../../../internal/config/def
 
 | なぜ読み返せないか | 実装 |
 | --- | --- |
-| `postComment` が本文の先頭に `self_marker` を付ける | [internal/orchestrator/comment.go:373-375](../../../internal/orchestrator/comment.go#L373-L375) |
-| `FetchComments` が、自分が書いた `self_marker` 付きのコメントを結果から外す | [internal/tracker/adapter.go:1080-1082](../../../internal/tracker/adapter.go#L1080-L1082) の `continue` |
+| `postComment` が本文の先頭に `self_marker` を付ける | [internal/orchestrator/comment.go:378-380](../../../internal/orchestrator/comment.go#L378-L380) |
+| `FetchComments` が、自分が書いた `self_marker` 付きのコメントを結果から外す | [internal/tracker/adapter.go:1127-1129](../../../internal/tracker/adapter.go#L1127-L1129) の `continue` |
 
 **だから「既に書いてあるか」を issue のコメントからは確かめられない。**
 `cleanup_deferred_at` は身元ファイルに書く時刻であって、コメントを読み返す仕組みではない。
@@ -1290,7 +1290,7 @@ push した branch の名前でも引いてください。
 
 **`RepoTrustFunc` の型（[internal/tracker/tracker.go:36](../../../internal/tracker/tracker.go#L36)）は変えない。**
 渡す引数を替えるだけである。
-[internal/daemon/daemon.go:666-671](../../../internal/daemon/daemon.go#L666-L671) が
+[internal/daemon/daemon.go:727-732](../../../internal/daemon/daemon.go#L727-L732) が
 `trust.require_repo_trusted` が偽のときに nil を渡す形も変えない。
 
 **理由は [internal/workspace/trust.go:69-85](../../../internal/workspace/trust.go#L69-L85) にある。**

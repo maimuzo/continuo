@@ -167,6 +167,18 @@ func (c Client) postToken(ctx context.Context, form url.Values) (tokenResponse, 
 	if tr.AccessToken == "" {
 		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenEmpty, contentTypeOf(resp))
 	}
+	// **更新用のトークンが返らなかったら、そこで落とす。**黙って受けると、二重に失う。
+	//
+	//   - 認可（Exchange）で返らないと、画面は「書きました」と名乗るのに、入口の画面は段2 を出す。
+	//     `true` で再起動すると資格情報が欠けていると言われ、認可をやり直しても同じになる（抜け道が無い）。
+	//   - 回転（Rotate）で返らないと、**使い終わって無効になった古いトークンを書き戻す。**
+	//     期限内のまま永久に回らず、以後の投稿が全部「attribution 無しで投稿しています」の断り付きになる。
+	//
+	// **設計 3-82b「更新用のトークンとその期限を一緒に書く」と 3-82d「1回使うと無効になる」が、
+	// 返ってくることを前提にしている。**前提が崩れたことを、その場で言う。
+	if tr.RefreshToken == "" {
+		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenNoRefresh, contentTypeOf(resp))
+	}
 	return tr, nil
 }
 

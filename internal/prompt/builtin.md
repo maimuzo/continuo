@@ -149,8 +149,9 @@ flowchart TD
 
 **`TOKEN=$(…)` が落ちて塊が止まったときも、投稿が落ちたときも、5-6 を見てください。**
 
-**`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください。**
+{{if .github_app_attribution}}**`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください。**
 必ず `TOKEN=$(…)` で変数へ受けてから `GH_TOKEN="$TOKEN"` で `gh` へ渡してください。
+{{end}}
 
 **`--body "…"` で渡さないでください。**計画にはファイル名と行番号を書くので、
 backtick とドルの記号が混ざります。**二重引用符の中では、それが実行されます。**

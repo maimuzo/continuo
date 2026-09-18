@@ -9725,8 +9725,9 @@ flowchart TD
 
 **`TOKEN=$(…)` が落ちて塊が止まったときも、投稿が落ちたときも、5-6 を見てください。**
 
-**`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください。**
+{{if .github_app_attribution}}**`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください。**
 必ず `TOKEN=$(…)` で変数へ受けてから `GH_TOKEN="$TOKEN"` で `gh` へ渡してください。
+{{end}}
 
 **`--body "…"` で渡さないでください。**計画にはファイル名と行番号を書くので、
 backtick とドルの記号が混ざります。**二重引用符の中では、それが実行されます。**
@@ -10632,7 +10633,7 @@ front matter と本文を1つの文字列リテラルとして持つので、`co
 
 **落とす処理は、変化が無くなるまで繰り返す。**子を落とした結果として空になった親が残るためである。
 
-**「本文があるか」は、取り除いたあとで決める**（[internal/prompt/prompt.go:441-442](../../internal/prompt/prompt.go#L441-L442) の `Build`）。
+**「本文があるか」は、取り除いたあとで決める**（[internal/prompt/prompt.go:447-448](../../internal/prompt/prompt.go#L447-L448) の `Build`）。
 取り除く前で決めると、**本文が案内のコメントだけだったときに「本文はあります」と言いながら断片は足されず、
 `continuo doctor` の `prompt vars` が「本文はあります」と言い続ける。**
 **`continuo prompt --show` の内訳は `HasBody()` を読まない**（展開後の断片から数え直す。5-3f）。
@@ -13028,7 +13029,7 @@ orchestrator はそれとは別に受け取ったイベントの間隔を測る�
 （検索パターン `hook_bridge`、対象パス `internal/` `test/` `cmd/`）、
 [internal/config/expand.go:16](../../internal/config/expand.go#L16) の展開のキー名、
 [internal/socketpath/socketpath.go:114-147](../../internal/socketpath/socketpath.go#L114-L147) の探索順の説明、
-[internal/i18n/messages/ja.json:380](../../internal/i18n/messages/ja.json#L380) の画面に出す文言まで書き換えることになる。
+[internal/i18n/messages/ja.json:446](../../internal/i18n/messages/ja.json#L446) の画面に出す文言まで書き換えることになる。
 **入れ子のままなら、そのどれも触らずに済む。**
 
 ### 8-5. 名前を変えた設定キー

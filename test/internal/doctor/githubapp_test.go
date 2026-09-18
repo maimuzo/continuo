@@ -405,3 +405,31 @@ func TestDoctor_GitHubApp_GitHubAppを作っていなければ作る手順を出
 		t.Fatalf("作る4段の手順が直し方に入っていない: %v", res.Remedies)
 	}
 }
+
+// 目的: GitHub App は作ってあるが更新用のトークンが無いとき、認可のやり直しではなく
+// 入口の画面（`/github-app`）を案内することを確認する（実装レビュー3周目の Low）。
+//
+// **入口の画面はこの資格情報に段2（install）を出す。**認可だけを先に通すと、install していない
+// GitHub App のトークンでは issue へ書けず、**起動は通るのに投稿が全部断り付きになる。**
+//
+// 与える情報: `client_id` / `client_secret` / `slug` だけの資格情報。
+// 成功条件: `✗` で、直し方が `/github-app` を案内し、`/github-app/authorize` を案内しないこと。
+func TestDoctor_GitHubApp_更新用のトークンが無ければ入口の画面を案内する(t *testing.T) {
+	fx := newFixture(t)
+	enableAttribution(t, fx)
+	creds := validCredentials(180 * 24 * time.Hour)
+	creds.RefreshToken = ""
+	creds.RefreshTokenExpiresAt = time.Time{}
+	writeCredentials(t, fx, creds)
+
+	report := fx.Run(t)
+
+	res := assertSymbol(t, report, doctor.LabelGitHubApp, doctor.SymbolMissing)
+	remedies := strings.Join(res.Remedies, "\n")
+	if strings.Contains(remedies, "/github-app/authorize") {
+		t.Fatalf("install がまだなのに認可のやり直しを案内している: %v", res.Remedies)
+	}
+	if !strings.Contains(remedies, "/github-app") {
+		t.Fatalf("入口の画面を案内していない: %v", res.Remedies)
+	}
+}

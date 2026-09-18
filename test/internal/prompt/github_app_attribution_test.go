@@ -278,8 +278,13 @@ func TestTemplate_5_6はトークンで投稿できなかったときの直し�
 			t.Errorf("attribution=%v: 5-6 を指す1行が %d 本あります（6本のはず: 投稿の塊ごとに1本）", attribution, n)
 		}
 		// **トークンを表示させない。**`echo` した瞬間に平文で記録に残る。
-		if !strings.Contains(out, "`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください") {
-			t.Errorf("attribution=%v: トークンを表示させない指示がありません", attribution)
+		//
+		// **この1行も設定で分ける。**偽の利用者の文面には `TOKEN=$(…)` が1つも出てこないので、
+		// 「必ず `TOKEN=$(…)` で変数へ受けてから」と書くと、**存在しないコマンドを必ず使えと読ませる。**
+		// 叩けば終了コード 1 で落ち、5-6 に従って全部のコメントに断りの1行が付きうる。
+		const noEcho = "`continuo github-app token` の出力を `echo` したり、ファイルへ落としたりしないでください"
+		if got := strings.Contains(out, noEcho); got != attribution {
+			t.Errorf("attribution=%v: トークンを表示させない指示の有無が %v（真のときだけ出るはず）", attribution, got)
 		}
 	}
 }

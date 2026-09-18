@@ -2623,6 +2623,8 @@ const (
 	KeyDoctorGitHubAppNoteAuthorizedLogin Key = "doctor.github_app.note_authorized_login"
 	// KeyDoctorGitHubAppRemedyReauthorize は認可をやり直す直し方に出る（引数は `<port>` の値）。
 	KeyDoctorGitHubAppRemedyReauthorize Key = "doctor.github_app.remedy_reauthorize"
+	// KeyDoctorGitHubAppRemedyOpenEntry は、GitHub App は作ってあるが install か認可がまだのときに出る。
+	KeyDoctorGitHubAppRemedyOpenEntry Key = "doctor.github_app.remedy_open_entry"
 	// KeyDoctorGitHubAppExpired は更新用のトークンの期限が切れているときの説明に出る。
 	KeyDoctorGitHubAppExpired Key = "doctor.github_app.expired"
 	// KeyDoctorGitHubAppExpiresSoon は更新用のトークンの残りが30日を切っているときの説明に出る。
@@ -2676,6 +2678,10 @@ const (
 	KeyGitHubAppTokenDenied Key = "githubapp.token.denied"
 	// KeyGitHubAppTokenEmpty は応答にアクセストークンが無いときに出る。
 	KeyGitHubAppTokenEmpty Key = "githubapp.token.empty"
+	// KeyGitHubAppTokenNoRefresh は応答に更新用のトークンが無いときに出る。
+	//
+	// **黙って受けてはならない。**回転で返らないと、使い終わって無効になった古いトークンを書き戻す。
+	KeyGitHubAppTokenNoRefresh Key = "githubapp.token.no_refresh"
 	// KeyGitHubAppViewerRequestFailed は `GET /user` の往復が失敗したときに出る。
 	KeyGitHubAppViewerRequestFailed Key = "githubapp.viewer.request_failed"
 	// KeyGitHubAppViewerStatus は `GET /user` が非 2xx を返したときに出る。
@@ -2745,6 +2751,13 @@ const (
 	KeyDashboardGitHubAppCreateNoteSudo Key = "dashboard.github_app.create.note_sudo"
 	// KeyDashboardGitHubAppCreateNoteInterrupted は段1 の「途中で止めたらこの段から」の1行である。
 	KeyDashboardGitHubAppCreateNoteInterrupted Key = "dashboard.github_app.create.note_interrupted"
+	// KeyDashboardGitHubAppCreateNoteReopen は、画面を開き直すと前の画面のボタンが使えなくなることを言う1行である。
+	KeyDashboardGitHubAppCreateNoteReopen Key = "dashboard.github_app.create.note_reopen"
+	// KeyDashboardGitHubAppCreateNoteEphemeralPort は `server.port: 0` のときだけ出る警告である。
+	//
+	// **戻り先の URL は GitHub App を作るときに決まる。**`0` のままだと次の起動でポートが変わり、
+	// 認可のやり直しが塞がる（日々の投稿は callback を使わないので、その日まで誰にも見えない）。
+	KeyDashboardGitHubAppCreateNoteEphemeralPort Key = "dashboard.github_app.create.note_ephemeral_port"
 	// KeyDashboardGitHubAppCreateButton は段1 のボタンの文言である。
 	KeyDashboardGitHubAppCreateButton Key = "dashboard.github_app.create.button"
 	// KeyDashboardGitHubAppInstallHeading は段2（install）の見出しである。
@@ -2829,6 +2842,11 @@ const (
 	KeyServerGitHubAppViewerFailed Key = "server.github_app.viewer_failed"
 	// KeyServerGitHubAppWriteFailed は資格情報を書けないときに出る。
 	KeyServerGitHubAppWriteFailed Key = "server.github_app.write_failed"
+	// KeyServerGitHubAppWriteFailedCreate は段1（作る）で資格情報を書けなかったときに出る。
+	//
+	// **段3 の文面（KeyServerGitHubAppWriteFailed）と分ける。**段1 ではまだ認可も更新用のトークンも
+	// 無いので、「認可をやり直せ」と案内すると `/github-app/authorize` の行き止まりへ送ることになる。
+	KeyServerGitHubAppWriteFailedCreate Key = "server.github_app.write_failed_create"
 )
 
 // allKeys は宣言済みのキーを全部並べたものである。
@@ -3814,6 +3832,7 @@ var allKeys = []Key{
 	KeyDoctorGitHubAppIncomplete,
 	KeyDoctorGitHubAppNoteAuthorizedLogin,
 	KeyDoctorGitHubAppRemedyReauthorize,
+	KeyDoctorGitHubAppRemedyOpenEntry,
 	KeyDoctorGitHubAppExpired,
 	KeyDoctorGitHubAppExpiresSoon,
 	KeyDoctorGitHubAppRemedyExtend,
@@ -3841,6 +3860,7 @@ var allKeys = []Key{
 	KeyGitHubAppTokenParseFailed,
 	KeyGitHubAppTokenDenied,
 	KeyGitHubAppTokenEmpty,
+	KeyGitHubAppTokenNoRefresh,
 	KeyGitHubAppViewerRequestFailed,
 	KeyGitHubAppViewerStatus,
 	KeyGitHubAppViewerParseFailed,
@@ -3874,6 +3894,8 @@ var allKeys = []Key{
 	KeyDashboardGitHubAppCreateNotePersonal,
 	KeyDashboardGitHubAppCreateNoteSudo,
 	KeyDashboardGitHubAppCreateNoteInterrupted,
+	KeyDashboardGitHubAppCreateNoteReopen,
+	KeyDashboardGitHubAppCreateNoteEphemeralPort,
 	KeyDashboardGitHubAppCreateButton,
 	KeyDashboardGitHubAppInstallHeading,
 	KeyDashboardGitHubAppInstallCreated,
@@ -3916,6 +3938,7 @@ var allKeys = []Key{
 	KeyServerGitHubAppExchangeFailed,
 	KeyServerGitHubAppViewerFailed,
 	KeyServerGitHubAppWriteFailed,
+	KeyServerGitHubAppWriteFailedCreate,
 }
 
 // AllKeys は宣言済みのキーを全部返す。

@@ -92,6 +92,10 @@ input[type=text] { font: inherit; padding: .3rem .5rem; border: 1px solid #8888;
 <li>{{ t "dashboard.github_app.create.note_personal" }}</li>
 <li>{{ t "dashboard.github_app.create.note_sudo" }}</li>
 <li>{{ t "dashboard.github_app.create.note_interrupted" }}</li>
+<li>{{ t "dashboard.github_app.create.note_reopen" }}</li>
+{{- if .EphemeralPort }}
+<li><strong>{{ t "dashboard.github_app.create.note_ephemeral_port" }}</strong></li>
+{{- end }}
 </ul>
 
 <form method="post" action="{{ .ManifestAction }}" class="action">
@@ -133,6 +137,7 @@ input[type=text] { font: inherit; padding: .3rem .5rem; border: 1px solid #8888;
 <li>{{ t "dashboard.github_app.authorize.expiry" }}</li>
 <li>{{ t "dashboard.github_app.authorize.note_stored" .CredentialsPath }}</li>
 <li>{{ t "dashboard.github_app.authorize.note_interrupted" }}</li>
+<li>{{ t "dashboard.github_app.create.note_reopen" }}</li>
 </ul>
 <p class="action"><a class="button" href="{{ .AuthorizeURL }}">{{ t "dashboard.github_app.authorize.button" }}</a></p>
 </section>

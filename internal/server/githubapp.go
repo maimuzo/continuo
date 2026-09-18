@@ -196,6 +196,13 @@ type githubAppPage struct {
 	ManifestAction string
 	// ManifestJSON は hidden の入力に入れる manifest の JSON である。
 	ManifestJSON string
+	// EphemeralPort は `server.port` が 0（OS が毎回選ぶ）かどうかである。
+	//
+	// **真なら、戻り先の URL に焼き付くポートが次の起動で変わる。**GitHub App の `callback_urls` は
+	// 作るときに決まるので、変わった時点で認可のやり直し（`/github-app/authorize`）が塞がる。
+	// **日々の投稿は callback を使わないので、塞がっていることは再認可の日まで誰にも見えない。**
+	// だから、作る前に画面で言う。
+	EphemeralPort bool
 	// RedirectURL / SetupURL / CallbackURL は戻り先の3つである（画面で人間に見せる）。
 	RedirectURL string
 	SetupURL    string
@@ -480,6 +487,10 @@ func (s *Server) renderCreate(w http.ResponseWriter, r *http.Request, name strin
 		return
 	}
 	page := s.newGitHubAppPage(githubAppStageCreate)
+	// **`server.port: 0` なら、戻り先の URL に焼き付くポートが次の起動で変わる**（3-82g）。
+	// GitHub App の `callback_urls` は作るときに決まるので、**変わった時点で認可のやり直しが塞がる。**
+	// 日々の投稿（回転）は callback を使わないので、塞がっていることは再認可の日まで誰にも見えない。
+	page.EphemeralPort = s.port == 0
 	page.Name = name
 	page.ManifestAction = s.githubWeb() + "/settings/apps/new?" + url.Values{"state": {state}}.Encode()
 	page.ManifestJSON = string(data)
@@ -577,7 +588,9 @@ func (s *Server) handleGitHubAppCreated(w http.ResponseWriter, r *http.Request) 
 		Slug:         converted.Slug,
 	}
 	if err := s.githubApp.Store.Write(creds); err != nil {
-		s.renderGitHubAppError(w, r, http.StatusInternalServerError, i18n.KeyServerGitHubAppWriteFailed,
+		// **段1 の文面を使う。**この段では更新用のトークンも認可もまだ無いので、
+		// 「認可をやり直せ」と案内すると `/github-app/authorize` の行き止まりへ送ることになる。
+		s.renderGitHubAppError(w, r, http.StatusInternalServerError, i18n.KeyServerGitHubAppWriteFailedCreate,
 			s.githubApp.Store.Path(), err)
 		return
 	}
@@ -691,6 +704,10 @@ func (s *Server) handleGitHubAppAuthorized(w http.ResponseWriter, r *http.Reques
 			s.githubApp.Store.Path(), err)
 		return
 	}
+	// **書き戻したので、ここで放す**（設計 3-82d）。**この下の枝も画面を1枚書くので、
+	// 放さずに進むと、応答を読まない相手が1本いるだけで最大3分ロックが空かない。**
+	s.releaseLock(l)
+	locked = false
 	if viewerErr != nil {
 		// **更新用のトークンは書いてある。**認可し直せば `authorized_login` も入る。
 		s.logger.Warn("認可は通りましたが、認可したアカウント名を引けませんでした（更新用のトークンは書きました）",
@@ -699,8 +716,6 @@ func (s *Server) handleGitHubAppAuthorized(w http.ResponseWriter, r *http.Reques
 			s.githubApp.Store.Path(), viewerErr)
 		return
 	}
-	s.releaseLock(l)
-	locked = false
 	// **更新用のトークンは1文字も出さない。**
 	s.logger.Info("GitHub App の認可を通し、更新用のトークンと期限と認可したアカウント名を書きました（段3 → 段4）",
 		"path", s.githubApp.Store.Path(), "authorized_login", login,

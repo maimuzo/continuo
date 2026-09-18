@@ -433,3 +433,30 @@ func TestTokenSource_呼ぶたびに回す(t *testing.T) {
 		t.Errorf("2回目の回転が古い更新用のトークン %q を使った（want ghr_new）", got)
 	}
 }
+
+// 目的: GitHub が更新用のトークンを返さなかったら、黙って受けずに落ちることを確認する
+// （実装レビュー3周目の Medium）。
+//
+// **黙って受けると二重に失う。**回転で返らないと、使い終わって無効になった古いトークンを書き戻し、
+// 期限内のまま永久に回らなくなる（以後の投稿が全部、断りの1行つきになる）。
+//
+// 与える情報: `access_token` だけを返す偽の GitHub と、認可済みの資格情報。
+// 成功条件: Rotate も Exchange もエラーになり、資格情報が書き換わらないこと。
+func TestRotate_更新用のトークンが返らなければ落ちる(t *testing.T) {
+	f := newFakeGitHub(t)
+	f.tokenResponses = []string{`{"access_token":"ghu_new","expires_in":28800,"token_type":"bearer"}`}
+	_, updated, err := f.client().Rotate(context.Background(), fullCredentials(), time.Now())
+	if err == nil {
+		t.Fatal("更新用のトークンが無いのに通ってしまった")
+	}
+	if updated.RefreshToken != "ghr_example" {
+		t.Errorf("落ちたのに資格情報が書き換わった: %+v", updated)
+	}
+
+	g := newFakeGitHub(t)
+	g.tokenResponses = []string{`{"access_token":"ghu_new","expires_in":28800,"token_type":"bearer"}`}
+	if _, _, err := g.client().Exchange(context.Background(),
+		githubapp.Credentials{ClientID: "id", ClientSecret: "secret"}, "code-1", time.Now()); err == nil {
+		t.Fatal("認可の交換で、更新用のトークンが無いのに通ってしまった")
+	}
+}
