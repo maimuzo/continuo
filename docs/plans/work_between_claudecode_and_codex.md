@@ -2,9 +2,9 @@
 
 Claude側を正本として維持し、Codexには公式の互換機能とsymlinkで接続する。
 推奨は「公式連携プラグイン＋CLAUDE.mdのfallback読み込み＋既存marketplaceの再利用」。
-高度なhooks制御と、このリポジトリ固有の移植設計は対象外とする。
+先に保留したhooks・agents・rules・permissions・Workflowも、変換なしで共有できる境界を再調査して判断する。
 
-調査基準日: 2026-09-18。導入確認日: 2026-09-14、実行検証日: 2026-09-15。Codex CLI 0.154.0・Herdr 0.8.2を使用。基本設定と選択した資産の導入は適用済み。構成は14節、復元方法は15節、実行検証と残件は16・17節、未対応範囲の比較調査と選定は18〜21節に示す。
+調査基準日: 2026-09-18。導入確認日: 2026-09-14、実行検証日: 2026-09-15。Codex CLI 0.154.0・Herdr 0.8.2を使用。基本設定と選択した資産の導入は適用済み。構成は14節、復元方法は15節、実行検証と残件は16・17節、対象外解除後の比較調査と追加採用候補は18〜22節に示す。
 
 ## 1. 採用する構成
 
@@ -19,7 +19,7 @@ Claude側を正本として維持し、Codexには公式の互換機能とsymlin
 | `.claude/rules/` | CLAUDE.mdにCodex向け読取手順を短く追記 | 既存rulesと短い接続指示 |
 | `.claude/skills/` | 共有対象のskillディレクトリを `.agents/skills/` へsymlink | 既存のSKILL.mdと付属ファイル |
 | 指定のClaudeプラグイン群 | 既存marketplaceをCodexにも登録し、必要なpluginを選択 | 既存の配布元・本文 |
-| Claude固有の実行機能 | Claude側に残す。必要なものだけ後日対応 | 当面は変更なし |
+| Claude固有の実行機能 | Codex native機能へ直接接続できるものを個別採用 | 本文・script正本はClaude側、宣言だけCodex側 |
 | Claude停止時の継続 | HerdrからCodexを起動し、session resumeまたは公式import | 通常は追加実装なし |
 
 OpenAI公式には、Claude互換manifestとmarketplaceの受け入れ、Codex CLIのplugin管理、会話を移送するimportがある。「Codex用manifestを全件自作する」ことを出発点にしない。設定本文のimportは今回の正本共有には使わない。[プラグイン仕様](https://developers.openai.com/plugins/build/plugins)、[CodexのPlugins](https://learn.chatgpt.com/docs/plugins)、[Import](https://learn.chatgpt.com/docs/import)
@@ -169,10 +169,10 @@ Claudeの機能を削って全skillを最低共通機能へ落とす方法は採
 | --- | --- | --- |
 | コーディング規約・検討手順 | Go/TSガイド、命名・設計根拠など | 本文を共有する候補。対象プロジェクトとの適合は別に確認 |
 | CLIやMCPを使うワークフロー | issue操作、Pencil、RUCMなど | 依存コマンド・MCP接続・実行手順が揃うものを選択 |
-| Claudeの環境操作・チーム制御 | usage確認、model切替、cosper-team | Claude専用として残す |
-| 隔離実行に依存するレビュー | co-reviewの `context: fork` / `Skill` 呼び出し | 同等の隔離実行を検証するまでは移植対象外 |
+| Claudeの環境操作・チーム制御 | usage確認、model切替、cosper-team | Codexのnative機能へ同じ本文を参照させる。Claude固有の自動制御はClaude側に残す |
+| 隔離実行に依存するレビュー | co-reviewの `context: fork` / `Skill` 呼び出し | Codexのworker/explorer・subagent設定で近似できる範囲を検証する。自動同一性は保証しない |
 | Claudeのブラウザに依存 | auto-debugのClaude in Chrome呼び出し | Codexに同じツールがあるとは扱わない |
-| hook・session内部形式に依存 | completion・応答検査など | 13節の別課題 |
+| hook・session内部形式に依存 | completion・応答検査など | Codexのnative hooksへ同じscriptを接続できるものと、transcript依存で接続できないものを分ける |
 
 たとえばGo/TSプラグインには規約だけでなく、Claudeのhookやagent利用を説明するskillもある。プラグイン単位で「全部共通」と判定しない。Codex側で不要なskillを無効化するか、少数だけ必要なら5節の選択リンクを使う。[skillの無効化設定](https://learn.chatgpt.com/docs/build-skills#enable-or-disable-local-codex-skills)
 
@@ -276,20 +276,23 @@ Vercel Skills CLIのsymlinkはcanonical copyを各エージェントから参照
 
 ロードしたというモデルの自己申告だけでなく、実ファイルの参照、具体的な規則の適用、意図したskill選択まで確認する。symlinkは即時に実体を共有するが、起動時に読む指示は新規セッションで確認する。pluginはcache更新後の新規セッションで確認する。
 
-## 13. 今回のスコープから外す課題
+## 13. 対象外解除後の調査対象
 
-高度なhooks制御の同等性は、今回の導入条件にしない。
-ただし「共有ができたから同じ機械的制約も効く」とは扱わない。
+先に保留した機能を一括移植するのではなく、Claudeの正本を変えずにCodexへ接続できる最小経路を調べる。
+「接続できる」と「同じ強制力・同じ失敗時挙動になる」は別の判定にする。
 
-| 課題 | 後日確認する点 |
+| 課題 | 今回確認する境界 |
 | --- | --- |
-| hooks・権限の同等性 | 発火点、入力・出力、環境変数、trust、失敗時の挙動 |
-| transcript依存の制御 | ClaudeとCodexの記録形式、安定した代替イベントの有無 |
-| fork・agent・Workflow依存 | 隔離・役割・継続・ツール権限を維持できるか |
-| 厳密なpath条件の適用 | rulesの読取指示で不足する場合の公式機能・Rulesync等の評価 |
-| インストール版の完全同期 | native更新で十分か、cache参照を管理する小さな補助が必要か |
+| hooks・権限 | event、入力、出力、trust、timeout、失敗時挙動をClaude/Codex公式仕様で照合 |
+| transcript依存 | `Stop`の共通payloadで足りるか、Codex transcriptを読む実装が必要かを分離 |
+| fork・agent・Workflow | Codexのworker/explorer/subagentで正本Markdownを参照させる経路と、同一lifecycle不可の境界 |
+| 厳密なpath条件 | CLAUDE.mdからの実行時参照、AGENTS入口、Rulesync等の生成方式を比較 |
+| frontmatter・commands | 標準キーの共用、Claude拡張の無視、command本文のskill参照可否を確認 |
+| permissions・MCP | Codexのapproval/sandbox/hooks/plugin MCPを使い、Claude設定を変換せずに同じ危険操作を止められるか確認 |
+| plugin・Workflow | Claude pluginをnative導入し、Codex plugin manifestとshared hooksの追加が必要か確認 |
+| インストール版同期 | native marketplace更新、symlink、薄い宣言ファイルのどれが正本更新に追随するか比較 |
 
-Codexにもhooksはあり、plugin互換用の環境変数なども存在する。「hooksはCodexにない」という前提は置かない。互換性を評価する際は [現行の公式Hooks仕様](https://learn.chatgpt.com/docs/hooks) を基準とする。公式連携プラグインの追加review gateも今回の基本構成には含めない。
+Codexの現行Hooks仕様は `PreToolUse`・`Stop`・`SessionStart`・`PostToolUse` などを持ち、Claude互換の `hookSpecificOutput` も受け付ける。ただし `prompt`/`agent` handlerは実行されず、transcript形式は安定したAPIではない。従って、hooksは「全面対象外」ではなく、native eventへ直接接続できるscriptから段階的に採用する。[Codex Hooks](https://developers.openai.com/codex/hooks)
 
 ## 14. 適用済みの構成と確認範囲
 
@@ -313,7 +316,7 @@ Claude側の資産本文を移動・複製せず、Codexの入口と標準plugin
 Codex側で無効化したskillの設定はplugin cacheのバージョン付きパスを参照する。plugin更新後は、新しいパスで無効化が維持されているか `skills/list` と新規セッションで再確認する。設定の実値は個人バックアップ側に保持し、公開リポジトリへ個人のconfigを複製しない。
 
 実タスク委任、Goガイド6種の明示指定、複数領域の暗黙選択、正本との同版一致、相対参照、会話移送とCodexでの継続、正本更新後の両製品の再読込は確認済み。今回の共有対象に付属scriptsはない。確認方法は16節に示す。
-共有対象7 skillsのfrontmatter確認と、更新後の名前なし自動選択も実施した。指定marketplaceの54 skills全体には公式validatorも適用し、Codexの形式上の受入範囲を測定した。残るのはClaude側の既存開発フロー全般と、frontmatterキーの実行意味の完全同等性であり、外部状態を変更しない今回の検証では保留する。詳細は17節に示す。高度なhooks制御は13節の課題のままとする。
+共有対象7 skillsのfrontmatter確認と、更新後の名前なし自動選択も実施した。指定marketplaceの54 skills全体には公式validatorも適用し、Codexの形式上の受入範囲を測定した。残るClaude側の既存開発フロー全般とfrontmatterキーの実行意味は、18〜22節のnative機能・実行時参照の条件付き採用として整理する。外部状態を変更する検証は、fixtureの採用条件を満たすまで実施済みとは扱わない。
 
 ## 15. 復元方法
 
@@ -376,14 +379,14 @@ Codex単独の試験は `codex exec --sandbox read-only --json <検証依頼>`�
 | プロジェクト前提 | Goガイドの `go run ./cmd/manager/` と `bash unit_and_e2e_test.sh` はplugin同梱資産ではない。対象プロジェクトで存在を確かめる。共有設定の検証を製品固有の修正へ広げない |
 | 正本更新の反映 | 隔離fixtureのCLAUDE.md・symlink先skill・相対参照の3値を更新前の値から更新後の値へ変更。Codexの新規sessionとClaudeの新規Herdr sessionが、`PROJECT-R2-9136`・`SKILL-R2-2748`・`REFERENCE-R2-6502` を同じく返した。運用中の正本を編集する試験は未実施 |
 | 残りの自動選択・回帰 | 共有対象の更新後暗黙選択は `ecc-git` と `ecc-security` で確認済み。Claude側の既存開発フロー全般と、各frontmatterキーの実行意味の完全同等性は保留。issue操作・auto-debug・co-review等を実行すると外部書込みや編集が発生するため、読み取り専用の今回スコープでは試験しない。今回の限定試験を全互換と一般化しない |
-| 既存hooksの警告 | Codex単独試験で `hooks.json` と `config.toml` の二重読込、およびSessionEndのtimeoutを3秒へ制限する警告が出た。試験自体は完了。hooks変更は今回の範囲外で、既存設定を変更していない |
+| 既存hooksの警告 | Codex単独試験で `hooks.json` と `config.toml` の二重読込、およびSessionEndのtimeoutを3秒へ制限する警告が出た。試験自体は完了。重複読込を避ける薄い宣言と、Codex側のtrustを別途検証する |
 
 Claudeのレートリミットを意図的に発生させる試験はしていない。代わりの合格条件である「移送済みの会話をClaudeに依存せずCodexで継続できること」は16節の試験で満たした。次に残る確認を行う場合も、lunaを明示し、300秒上限を付けてから開始する。
 
 ## 18. 未対応範囲の比較調査
 
 本文・配布・実行意味を分けると、既存資産を壊さずに対応できる範囲が明確になる。
-結論は「標準のSKILL.mdはsymlink、Claude拡張も本文をそのまま参照し実行意味は保証しない、agentsとhooksはClaude側に残す」である。
+結論は「標準本文はsymlink、実行宣言はnative形式、hooksは互換payloadのscriptだけ同じ実体を接続する」である。
 
 ### 18.1 公式仕様で確認した境界
 
@@ -393,7 +396,7 @@ OpenAIのClaude plugin移植仕様は、SKILL.md・scripts・references・resour
 
 Codexのcustom subagentは `.codex/agents/*.toml` の独自形式であり、ClaudeのMarkdown agentをそのままsymlinkできない。[subagents](https://developers.openai.com/es-419/docs/agent-configuration/subagents)
 
-Claudeのhooksはprompt/agent hookと終了コード2によるイベント制御を持つ。一方、Codexのhooksは現行仕様ではcommandとmcp_toolが中心で、prompt/agent handlerは互換実行されない。[Claude hooks](https://code.claude.com/docs/en/hooks)、[Codex hooks](https://developers.openai.com/fr-FR/docs/hooks)
+Claudeのhooksはcommand・HTTP・MCP・prompt・agentと終了コード2によるイベント制御を持つ。Codexも `PreToolUse`・`Stop`・`SessionStart`・`PostToolUse` などのcommand/MCP hooksを持ち、`hookSpecificOutput.permissionDecision` と `decision:block` を受け付ける。一方、Codexの `prompt`/`agent` handlerは現在実行されず、transcript形式は安定したAPIではないため、同じscriptでもeventごとの適合性を検査する。[Claude hooks](https://code.claude.com/docs/en/hooks)、[Codex hooks](https://developers.openai.com/codex/hooks)
 
 ### 18.2 候補の比較
 
@@ -401,11 +404,14 @@ Claudeのhooksはprompt/agent hookと終了コード2によるイベント制御
 | --- | --- | --- | --- | --- |
 | Claudeを正本にして標準SKILL.mdをsymlink | 本文・scripts・references・resources | 最小 | 共有対象を選べばなし | **採用** |
 | [OpenAI migrate-to-codex](https://github.com/openai/skills/tree/main/skills/.curated/migrate-to-codex) | Claudeのinstructions・skills・MCP・subagentsをCodex形式へ投影 | 小〜中 | Codex側の生成物と再変換が必要。実行意味もlossy | **不採用** |
-| [Vercel Skills CLI](https://github.com/vercel-labs/skills) | Agent Skills対応のskill配布。symlinkが推奨 | 小 | Claude plugin/rules/agents/hooksは対象外 | 補助採用候補 |
+| [Vercel Skills CLI](https://github.com/vercel-labs/skills) | Agent Skills対応のskill配布。symlinkが推奨 | 小 | Claude plugin/rules/agents/hooksのnative宣言までは扱わない | 補助採用候補 |
 | [sync-claude-skills-to-codex](https://github.com/ariccb/sync-claude-skills-to-codex) | Claude plugin cacheと個人skillをCodexへsymlink | 小 | plugin更新でリンク再作成が必要。frontmatter意味は未変換 | 参考採用。全面導入しない |
 | [Rulesync](https://github.com/dyoshikawa/rulesync) | rules・commands・subagents・skills・hooksをimport/生成/convert | 中〜大 | 生成物と変換差分がClaude側へ影響し得る | 不採用。生成物の保守が条件に反する |
 | [Ruler](https://github.com/intellectronica/ruler) | `.ruler`から各agentの設定を生成 | 中 | CLAUDE.mdを生成物にするため正本変更が大きい | 不採用 |
 | [agentsync](https://github.com/spxrogers/agentsync) / [aitoolsync](https://github.com/EvanL1/aitoolsync) | 多agentへの投影と差分報告 | 中〜大 | subagent・command・hooksがlossy | 不採用。将来の比較対象 |
+| [codex-hooks](https://github.com/hatayama/codex-hooks) | Claude settingsを読み、Codex session JSONLから通知・完了・中断へcommand hookを再生 | 小 | Claudeのblock/decision出力を解釈せず、独自wrapperが必要。native hooksの方が強い | 通知など副作用限定の補助候補 |
+| Codex native hooks + 共有script | `.codex/hooks.json`またはplugin `hooks/hooks.json`だけを薄く追加し、既存scriptを直接呼ぶ | 小 | ClaudeとCodexで同じstdin/outputになるeventだけ採用。Codexのtrustとmanifestを別管理 | **追加採用候補** |
+| Codex native hooks + dual-protocol core | 既存scriptをprovider検出型にし、Claude/Codexのpayload差を同じ正本で処理 | 中 | script変更がClaudeへも届くため、両方のfixtureと回帰試験が必須 | transcript依存hookの次段候補 |
 | 自作の全面変換器 | 全拡張を個別変換 | 最大 | Claude仕様を変換都合に合わせる危険 | 不採用 |
 | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | Claude内のCodex review・rescue・transfer | 小 | 既存Claude資産を変更しない | **採用済み** |
 
@@ -421,9 +427,10 @@ OpenAIのmigrate-to-codexは公式の変換器だが、Claude agentをCodex TOML
 2. Claude拡張frontmatterを含むskillも本文は同じsymlinkを読む。`user-invocable`、`argument-hint`、`context: fork`、`agent`、`background`、動的注入、Claude専用tool名はCodexで同じ意味になると扱わず、変換もしない。
 3. Claude agentはClaude専用として残す。Codexで同じ役割が必要なときは、標準の`worker`/`explorer`へ依頼文で正本Markdownのパスを指定して読ませる。`.codex/agents/*.toml`のsidecarや変換ファイルは作らない。
 4. 同じmarketplaceをCodexへ登録し、必要pluginだけをnative導入する。ローカルskillはsymlinkし、plugin本文は同じ配布元から各CLIへ導入する。Claude cacheのバージョン付きパスをCodexへ直結しない。
-5. rulesはCLAUDE.mdのCodex向け読取指示から正本を参照する。hooks、Claudeの権限・Workflow・agent teamは今回共有しない。
+5. rulesはCLAUDE.mdのCodex向け読取指示から正本を参照する。hooksはCodexの薄い宣言から既存scriptを直接呼び、agents・Workflow・agent teamは標準worker/explorerへ正本Markdownを明示して近似する。
+6. ClaudeのpermissionsはCodexのapproval/sandboxへ機械変換しない。危険操作の同じ拒否が必要なものだけ、正本設定を読み取るCodex PreToolUse/PermissionRequest hookとして追加検証する。
 
-この方法なら、Claudeの既存frontmatter・plugin・agents・hooksを変更せず、共有できる本文だけをCodexから参照できる。Codexのcustom agent機能をClaude agentと同一視しない代わりに、Codex用の変換ファイルを保守しない。
+この方法なら、Claudeの既存frontmatter・plugin・hook script本文を変えず、共有できる本文と互換eventだけをCodexから参照できる。Codexのcustom agent機能をClaude agentと同一視せず、Codex用の大きな変換ファイルを保守しない。native宣言が必要な箇所は、実装本文を複製しない薄い接続として扱う。
 
 ### 19.2 残件ごとの実現性
 
@@ -434,11 +441,13 @@ OpenAIのmigrate-to-codexは公式の変換器だが、Claude agentをCodex TOML
 | Claudeの基本指示・個人指示 | 高い | fallbackとAGENTS.md symlink |
 | 条件付きrulesの自動適用 | 部分的 | CLAUDE.mdのCodex読取手順。厳密化はRulesyncを再評価 |
 | Claude agentの同一実行 | 低い | Codex側へ変換・sidecar化しない。必要時は標準agentに正本Markdownを明示的に読ませる |
-| frontmatterの実行意味 | 部分的 | standardと拡張を分類し、無理に共用しない |
-| Claude hooksの同一挙動 | 低い | 今回は対象外。別経路で再設計 |
+| frontmatterの実行意味 | 部分的 | standardはそのまま、Claude拡張はCodexで保証しない。呼出制御はCodex native設定で必要時だけ補う |
+| Claude hooksの同一挙動 | 中（event別） | `block-merge` と `check-reply-clarity` はnative hookへ直接接続候補。transcript依存の `check-verified-commands` はevent journal設計を追加検証 |
+| permissions・MCP | 部分的 | Claude設定を変換せず、Codex native approval/sandbox/plugin MCPを使う。denyの同一強制はhookでfixture検証後に採用 |
+| Workflow・agent team | 部分的 | Codexのsubagent/worker/explorerへ同じ正本Markdownを渡す。lifecycle・自動spawnの同一性は保証しない |
 | Claude内からのCodex委任・会話移送 | 高い | 公式pluginを採用済み |
 
-「未対応」は一括移植を意味しない。高い項目だけを本文共有で使い、Codex固有形式が必要なagentとhooksはClaude側に残す。
+「未採用」は一括移植を意味しない。本文はsymlinkで共有し、Codex固有形式が必要なagent・hook宣言・permissionsは最小のnative接続だけを追加する。実行意味が一致しない部分は、Claude側の正本を守るため無理に近似しない。
 
 ## 20. 未完了項目と判定
 
@@ -452,19 +461,43 @@ OpenAIのmigrate-to-codexは公式の変換器だが、Claude agentをCodex TOML
 | Claude agentのCodex共有 | 不採用 | Codex custom agentは`name`・`description`・`developer_instructions`必須のTOMLで、Claude Markdownをsymlinkできない。変換すると更新のたびに再生成・再検証が必要になるため、Claude専用として残す |
 | Codexでのagent役割利用 | 限定対応 | Codexの標準`worker`/`explorer`へ、作業時だけ正本Markdownのパスを明示して読ませる。自動spawn・frontmatter・Claude専用toolsの同等性は保証しない |
 | 条件付きrules | 保留（追加調査済み） | Codexの指示探索には`.claude/rules/`の`paths`条件と同じ自動適用機構がない。現行のCodex向け読取指示を正本へ残し、実タスクで漏れが観測されても本文変換は行わず、Codex側の入口だけを再検討する |
-| hooksの同等化 | 対象外 | ユーザー指定どおり高度なhooks制御は今回実装しない。Claude hooksをsymlinkせず、別設計として残す |
+| hooksの段階接続 | 追加採用候補を選定 | Codex native hooksがClaude互換の入力・出力を持つ `PreToolUse`/`Stop` を確認。既存 `block-merge-without-review.py` と `check-reply-clarity.py` は同じscriptを直接呼ぶ薄い宣言で再利用できる見込み。`check-verified-commands.py` はCodex transcript形式が不安定なため、PostToolUse journal方式を別fixtureで検証する |
+| permissions | 追加検証 | Claude `permissions.allow/deny` とCodex `approval_policy`/`sandbox_mode` は別契約。危険操作のdenyだけをCodex native hookへ移し、通常の承認は既存のCodex設定を正本とする |
+| commands・MCP | 部分採用 | command本文は標準skillへsymlinkできるものだけ選ぶ。MCPはClaude `.mcp.json`を変換せず、plugin native MCPまたはCodex側の既存接続を使う |
+| Workflow・agent team | 限定採用 | Codexのworker/explorer/subagentへ正本Markdownを読ませる。Claudeの自動spawn・fork・権限lifecycleは同一化しない |
 
-本文共有・plugin導入・Claudeからの委任・HerdrからのCodex直接利用・代表frontmatter検証に加え、agentを変換しない境界まで確認した。未対応なのは、Codex固有形式が避けられないagentの自動実行、条件付きrulesの完全自動化、hooksであり、Claude側の性能と正本を守るため隔離する。
+本文共有・plugin導入・Claudeからの委任・HerdrからのCodex直接利用・代表frontmatter検証に加え、保留していたhooks・permissions・Workflowまで比較した。追加採用は、既存scriptを直接呼ぶnative hook宣言、Codex標準agentへの正本参照、native approval/sandboxの併用に限定する。Claude側の本文・frontmatter・hook挙動を弱める変換は採らない。
 
 ## 21. 変換なしで残件を扱う手順
 
-Claudeの正本を変更せず、Codexが必要とする範囲だけ実行時に参照する。
-Codex用のagent TOMLや変換済み本文は作らない。
+Claudeの正本を変更せず、Codexが必要とする範囲だけnative設定から実行時に参照する。
+Codex用のagent TOMLや変換済み本文は作らない。薄いhook/plugin宣言は本文を持たない接続として許容する。
 
 1. ローカルskillは`.agents/skills/<name>`からClaude側のskillディレクトリへsymlinkする。Codex公式もskillディレクトリのsymlink探索をサポートしている。
 2. plugin skillはClaudeとCodexの両方で同じmarketplaceからnative導入する。Claude cacheの版付きディレクトリを直接symlinkしない。
 3. Claude agentが本文で参照されたとき、Codexでは実行済みと扱わず、必要なら依頼文に正本Markdownのパスを渡して標準agentに読ませる。
 4. rulesはCLAUDE.mdのCodex向け読取指示に従って必要なMarkdownを読む。`paths`条件が自動適用されたとは扱わない。
-5. 初めて使う組み合わせだけread-only fixtureで確認し、処理には300秒上限を付ける。hooksの同等化は別課題のままにする。
+5. hooksはCodexの `.codex/hooks.json` またはplugin `hooks/hooks.json` から、git root基準で既存scriptを呼ぶ。設定と `~/.codex/config.toml` の二重登録は避け、Codexのtrust確認を完了する。
+6. `PreToolUse`/`Stop`の入出力をClaude fixtureとCodex fixtureで比較する。transcript依存hookはCodexのsession JSONLを正本と見なさず、PostToolUseのイベントjournal方式を別設計として検証する。
+7. permissionsは `approval_policy = "on-request"`・`sandbox_mode = "workspace-write"` をCodexのnative設定として維持し、Claude `allow/deny` は同じ設定へ機械変換しない。危険操作の追加denyだけhookで測定する。
+8. 初めて使う組み合わせだけread-only fixtureで確認し、処理には300秒上限を付ける。Claude側の既存hookテストも再実行し、Codexでの不成立を理由にClaude本文を弱めない。
 
-この運用なら、Claudeの更新時にCodex側の再変換を要求しない。CodexでClaude agentの自動選択・権限・lifecycleまで同じになるとは扱わず、必要なときだけ正本を読ませる。
+この運用なら、Claudeの更新時にCodex側の本文再変換を要求しない。CodexでClaude agentの自動選択・権限・lifecycleまで同じになるとは扱わず、必要なときだけ正本を読ませる。hook宣言やplugin manifestの変更は、本文の複製ではないが、Codex仕様変更時に再検証する。
+
+## 22. 追加採用候補と優先順位
+
+追加採用の第一候補は、同じscriptをCodex native hookから呼ぶことだ。
+Claude専用payloadを前提にしたscriptは、そのまま共有せず、差分を測ってから次段へ進める。
+
+| 優先 | 追加するもの | 方法 | 採用条件 |
+| --- | --- | --- | --- |
+| 1 | `block-merge-without-review.py` | Codex `PreToolUse` matcher `Bash` から同じscriptを呼ぶ薄い宣言 | `hookSpecificOutput.permissionDecision=deny`、`tool_input.command`、`gh` timeout、fail-openをfixtureで確認 |
+| 2 | `check-reply-clarity.py` | Codex `Stop` から同じscriptを呼ぶ | `last_assistant_message`・`stop_hook_active`と`decision:block`が一致。`gh`題名取得失敗時もClaudeと同じfail-openを確認 |
+| 3 | pluginの通知・session hooks | Codex pluginの`hooks/hooks.json`と`.codex-plugin/plugin.json`を薄く追加し、`CLAUDE_PLUGIN_ROOT`互換を利用 | plugin sourceの同じscriptがClaudeで変わらず、Codex trust・timeout・環境変数をfixtureで確認 |
+| 4 | Claude `permissions.deny`の危険操作 | Codex `PreToolUse`/`PermissionRequest`へ正本設定を読み取るhookを追加 | `rm`等のdenyをworkspace-write下でも止め、allow/approvalの誤ブロックがないことを測定 |
+| 5 | `check-verified-commands.py` | Codex `PostToolUse`でコマンド署名をjournalへ記録し、`Stop`で同じ判定coreを呼ぶ | 実機Codex JSONLは`event_msg`/`response_item`等の構造で、現行scriptのClaude transcript走査（`user`/`tool_use`）と一致しない。Codex transcriptを直接解釈せず、journal欠落・並列hook・session終了時cleanupをfixtureで確認 |
+| 6 | Claude agent / Workflow / commands | 変換せず、Codex標準worker/explorerへ正本Markdownを依頼文で渡す。commandは標準SKILL.mdへリンク可能なものだけ選ぶ | 手動引き継ぎで目的・制約・検証が再現し、Claude側の自動spawn/forkを壊さない |
+
+従って、先に実施した内容へ直ちに足すのは1〜3の「薄いnative宣言＋同じscript」の範囲である。4〜5はhookの強制力と状態管理を変えるため、read-only fixtureとClaude回帰試験を先に行う。agent・Workflow・commands・MCPは、正本本文のsymlinkと実行時参照までを追加採用し、Codex固有の大きな変換ファイルは作らない。
+
+追加調査のローカル測定では、3本の既存Python hook scriptを`py_compile`で検査し、Codex形式の`Stop` payloadを`check-reply-clarity.py`へ渡すとClaudeと同じ`decision:block` JSONが返り、`PreToolUse`の非対象Bashは無出力・終了0だった。一方、実機Codexのsession JSONLは`event_msg`・`response_item`等を持ち、`check-verified-commands.py`が読むClaude形式の`user`・`tool_use`列とは一致しない。これは直接共有を2本へ限定し、検証hookをjournal方式へ分ける根拠である。

@@ -1,20 +1,21 @@
 # Claude Codeを正本にしたCodex併用セットアップ手順
 
-Claude Codeの既存 `CLAUDE.md`・`.claude/rules/`・選択したskillsを正本のまま使い、Codexの入口だけを追加する。
-本文はsymlinkで共有し、Claude専用のagent・Workflow・hooksは移植しない。
-この手順は、既に検証した低リスク範囲を別のmacOS/Linux環境へ反映するためのものである。
+Claude Codeの既存 `CLAUDE.md`・`.claude/rules/`・選択したskills・hook scriptを正本のまま使い、Codexの入口とnative宣言だけを追加する。
+本文やscriptはsymlink・直接参照で共有し、Codex固有の宣言が必要な部分だけ薄い接続を置く。
+この手順は、既に検証した範囲と、追加検証が必要なhooks・permissions・agent連携を分けて別のmacOS/Linux環境へ反映するものである。
 
 ## 1. 対象と前提
 
-対象は次の範囲に限る。
+基本セットアップの対象は次の範囲で、追加候補は12節の条件を満たしたものだけ有効化する。
 
 - Codexが `CLAUDE.md` をプロジェクト指示として読む設定
 - 個人指示の `~/.codex/AGENTS.md` から `~/.claude/CLAUDE.md` へのsymlink
 - Claudeの標準的なskillディレクトリを、プロジェクトの `.agents/skills/` または `~/.agents/skills/` へskill単位でsymlink
 - 同じmarketplaceからCodexへ必要なpluginだけを導入
 - Claude内からCodexを呼ぶ公式pluginと、HerdrからCodexを直接起動する経路
+- Codex native hooksから、互換性を確認したClaude hook scriptを直接呼ぶ経路
 
-Claudeのhook、`context: fork`、Claude agent、外部状態を書き換えるskill、MCP secretはこの手順で共有しない。共有候補は `name`・`description` を持つskillで、依存コマンドと参照資料が対象環境にあるものだけにする。
+Claudeのhook設定JSONをCodexへsymlinkしない。共有候補は、Codexのevent payloadとoutput契約が一致するhook script、`name`・`description`を持つskill、依存コマンドと参照資料が対象環境にあるpluginである。transcript依存hook、`context: fork`、Claude agent、MCP secretは追加検証が終わるまで有効化しない。
 
 ## 2. 作業前の確認とバックアップ
 
@@ -87,11 +88,11 @@ readlink ".agents/skills/$skill"
 
 個人skillは同じ考え方で `~/.agents/skills/<skill>` から `~/.claude/skills/<skill>` へリンクする。`.agents/skills` 全体をリンクする方法は、そこにある全skillがCodexで安全に読めると確認できた環境だけで使う。既存のplugin cacheを直接symlinkして更新を追跡する方法は採らない。
 
-次のfrontmatter・実行機能を含むskillは、リンクせずClaude側だけに残す。Codex用sidecarや変換ファイルは作らない。
+次のfrontmatter・実行機能を含むskillは、まずClaude側の正本をリンクし、Codexで意味が保証されない機能だけを実行しない。Codex用sidecarや本文変換ファイルは作らない。
 
 - `user-invocable`、`argument-hint`、`context: fork`、`agent`、`background`
 - `!` による動的シェル注入、`${CLAUDE_PLUGIN_ROOT}`、`mcp__claude` などのClaude専用参照
-- Claudeのagent team、Workflow、hook、外部状態を書き換えるscript
+- Claudeのagent team、Workflow、transcript依存hook、外部状態を書き換えるscript
 
 ## 6. 必要なpluginだけをCodexへ導入する
 
@@ -165,6 +166,48 @@ Claude側では `/skills` と `/codex:setup` を確認し、代表skillを明示
 | skillが一覧に出ない | symlinkのリンク先、`SKILL.md` の存在、対象scopeを確認。plugin cacheを直接編集しない |
 | skillは出るが実行意味が違う | Claude拡張frontmatter・tool名・動的注入を分類し、Codex側では無理に実行しない |
 | plugin導入後にClaudeの挙動が変わった | Claude側のpluginを戻さず、まずCodex側のplugin有効化を解除して切り分ける |
-| hookを共有したくなった | ここで止める。Claude hooksをsymlinkせず、Codex command/mcp_tool用の別設計とread-only検証を起票する |
+| hookを共有したくなった | Claude settingsをsymlinkせず、12節のCodex native宣言から同じscriptを呼ぶ。payload/outputが一致しないhookやtranscript依存hookは有効化しない |
 
 この手順で解決しないものは「未対応」として記録する。Claudeの性能を保つため、共通化のためにClaude側の正本・frontmatter・既存hooksを弱めない。
+
+## 12. hooks・permissionsを追加する場合
+
+Codexの設定JSONとClaudeの設定JSONはsymlinkしない。Codex native hookの薄い宣言から、正本のscriptをgit root基準で直接呼ぶ。
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/block-merge-without-review.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/check-reply-clarity.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+この例は候補であり、`~/.codex/config.toml` と `.codex/hooks.json` の両方へ同じhookを登録しない。Codexのhooks trustを確認し、`PreToolUse`のdeny、`Stop`の`decision:block`、timeout/fail-openをread-only fixtureで確認してから有効化する。Codexは`CLAUDE_PLUGIN_ROOT`をplugin hookへ設定するが、project hookでは`CLAUDE_PROJECT_DIR`が保証されないため、git rootを使う。
+
+`check-verified-commands.py`のようにClaude transcriptの内部形状を読むhookは、このまま有効化しない。Codexのtranscriptは安定したhook APIではないため、必要なら`PostToolUse`で署名journalを作り、`Stop`で同じ判定coreを呼ぶ別設計をfixtureで検証する。Claude側の既存設定・script・テストは変更しない。
+
+Claudeの`permissions.allow/deny`はCodexの`approval_policy`・`sandbox_mode`へ変換しない。通常の確認はCodex native設定を使い、危険操作を追加で止める必要がある場合だけ`PreToolUse`または`PermissionRequest`でdenyする。allowが広すぎる・workspace-writeで実行できる操作をdenyできない場合は、Claude側の性能を守るためCodex hookを有効化しない。
+
+Codex pluginへhookを同梱する場合は、共有scriptと`hooks/hooks.json`をplugin sourceに置き、`.codex-plugin/plugin.json`の`hooks`エントリから参照する。Claude側の`.claude-plugin/plugin.json`は変更せず、Codex manifestは薄い宣言に限定する。plugin hookはインストール後もtrustが必要である。
