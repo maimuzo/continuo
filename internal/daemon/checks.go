@@ -52,7 +52,21 @@ func runStartupChecks(
 	logger *slog.Logger,
 ) error {
 	if timeout <= 0 {
-		timeout = DefaultStartupCheckTimeout
+		// **GitHub App の検査を回すときは、直列の待ちを足したぶんを上乗せする**（3-82c）。
+		//
+		// `DefaultStartupCheckTimeout`（60秒）は6本の検査で分け合う予算である。
+		// **最後に置く GitHub App の検査は、資格情報のロックの待ち（既定60秒）と
+		// GitHub の往復（既定30秒）を直列で持つので、分け合った残りでは足りない。**
+		// `continuo github-app token` が同じ足し算をしている
+		// （`internal/cli` の `githubAppTokenTimeout`）。
+		//
+		// **足さないと、資格情報が1バイトも壊れていないのに continuo が起動を拒む。**
+		// そのとき出る文面（回転を断られたときの2通り目）は原因を3つしか挙げていないので、
+		// **人間は健全な資格情報を消して GitHub App を作り直す段へ進む。**
+		//
+		// **呼び出し側が明示した上限には足さない。**あれは期限を短く与えるための口であり
+		// （`Options.StartupCheckTimeout`）、足すと短く与えられなくなる。
+		timeout = StartupCheckBudget(cfg.Tracker.Comments.GitHubAppAttribution)
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

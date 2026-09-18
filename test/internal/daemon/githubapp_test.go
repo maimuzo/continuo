@@ -35,6 +35,9 @@ type fakeOAuth struct {
 	// RefreshExpiresIn は回転に成功したときに返す、新しい更新用のトークンの残り（秒）である。
 	// **0 なら本物の GitHub の実測値（15638399秒。約181日）を返す**（3-82b）。
 	RefreshExpiresIn int
+	// Delay は応答を返すまで待つ時間である。**GitHub が遅い日を作る。**
+	// 呼ぶ側の HTTP クライアントの上限より長くすると、往復が時間切れで落ちる。
+	Delay time.Duration
 
 	mu    sync.Mutex
 	calls int
@@ -51,7 +54,11 @@ func newFakeOAuth(t *testing.T, deny string) *fakeOAuth {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fo.mu.Lock()
 		fo.calls++
+		delay := fo.Delay
 		fo.mu.Unlock()
+		if delay > 0 {
+			time.Sleep(delay)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path != "/login/oauth/access_token" {
 			w.WriteHeader(http.StatusNotFound)
@@ -249,6 +256,75 @@ func assertNotGitHubAppFailure(t *testing.T, err error) {
 	for _, bad := range []string{"github_app_attribution が true ですが", "gh の持ち主は", "authorized_login がありません"} {
 		if strings.Contains(err.Error(), bad) {
 			t.Fatalf("GitHub App の検査で止まっている: %v", err)
+		}
+	}
+}
+
+// 目的: 起動時検査の既定の上限が、GitHub App の検査が直列で持つ待ちを飲み込む長さであることを固定する（3-82c）。
+//
+// **`DefaultStartupCheckTimeout`（60秒）は6本の検査で分け合う予算である。**
+// 最後に置く GitHub App の検査は、資格情報のロックの待ち（既定60秒）と GitHub の往復（既定30秒）を
+// **直列で持つ**ので、分け合った残りでは足りない。
+//
+// **足さないと何が起きるか。**GitHub が遅い日や、エージェントの `continuo github-app token` と
+// ロックがぶつかった瞬間に、**資格情報が1バイトも壊れていないのに continuo が起動を拒む。**
+// そのとき出る「回転を断られた」の文面は、資格情報を消して GitHub App を作り直す段まで案内する。
+//
+// 与える情報: `StartupCheckBudget` の真と偽。
+// 成功条件: 真のとき、ロックの待ちと往復の合計より長いこと。偽のとき、既定のままであること。
+func TestStartupCheckBudget_GitHubAppのぶんを足す(t *testing.T) {
+	serial := githubapp.DefaultLockTimeout + githubapp.DefaultHTTPTimeout
+
+	if got := daemon.StartupCheckBudget(false); got != daemon.DefaultStartupCheckTimeout {
+		t.Errorf("false のとき %v（既定の %v のはず）", got, daemon.DefaultStartupCheckTimeout)
+	}
+	got := daemon.StartupCheckBudget(true)
+	if got <= serial {
+		t.Errorf("true のとき %v。**直列で持つ待ちの合計 %v を超えていない。**"+
+			"資格情報が壊れていなくても起動を拒むことになる", got, serial)
+	}
+	if want := daemon.DefaultStartupCheckTimeout + serial; got != want {
+		t.Errorf("true のとき %v（%v のはず。他の5本の予算に直列の待ちを足したもの）", got, want)
+	}
+}
+
+// 目的: 回転が時間切れで落ちたとき、資格情報を作り直す文面を出さないことを確認する（3-82c）。
+//
+// **時間切れでは、資格情報は1バイトも壊れていない。**
+// 「回転を断られた」の文面は「認可をやり直す → 通らなければ資格情報を消して作り直す」と案内するので、
+// **時間切れでそれを出すと、健全な資格情報を人間が捨てる。**
+//
+// 与える情報: 呼ぶ側の HTTP の上限（5秒）より長く待つ偽の OAuth と、揃った資格情報。
+// 成功条件: `ErrStartup` を包み、文面に「回す時間が足りませんでした」と「資格情報は壊れていません」が入り、
+// 「作り直してください」と「client secret を作り直しています」が入らないこと。
+func TestRun_GitHubApp_往復が時間切れなら作り直しを案内しない(t *testing.T) {
+	env := newGitHubAppEnv(t, "", true, "")
+	env.OAuth.Delay = 8 * time.Second
+	writeCredentials(t, env.Home, 180*24*time.Hour)
+
+	err := daemon.Run(context.Background(), env.options(octocatLogin, slog.New(slog.DiscardHandler)))
+	if err == nil {
+		t.Fatal("往復が時間切れなのに起動できてしまった")
+	}
+	if !errors.Is(err, daemon.ErrStartup) {
+		t.Fatalf("起動の段の失敗として印が付いていない: %v", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"回す時間が足りませんでした",
+		"資格情報は壊れていません",
+		"もう一度 continuo を起動する",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("文面に %q が入っていない:\n%s", want, msg)
+		}
+	}
+	for _, bad := range []string{
+		"client secret を作り直しています",
+		"github-app で作り直してください",
+	} {
+		if strings.Contains(msg, bad) {
+			t.Errorf("時間切れなのに %q と案内している。**健全な資格情報を捨てさせる:**\n%s", bad, msg)
 		}
 	}
 }

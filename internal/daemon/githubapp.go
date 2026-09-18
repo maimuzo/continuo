@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/githubapp"
+	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
@@ -66,6 +68,27 @@ type githubAppWiring struct {
 // now: いまの時刻（更新用のトークンの残りを見る）。
 // logger: ログの出力先。
 // 戻り値: 起動を止める理由。文面は 3-82c の2通りと 3-82f の1つのいずれか。
+// startupTimedOut は、起動時の GitHub App の検査が「時間が足りなかった」で落ちたかを返す。
+//
+// **3通りある。**どれも資格情報そのものは壊れていない。
+//
+//   - 起動時の検査の予算が尽きた（`context.DeadlineExceeded`）
+//   - 資格情報のロックを待ち切れなかった（`lock.ErrAlreadyRunning`。別のプロセスが握っている）
+//   - GitHub との往復が返らなかった（`net.Error` の `Timeout()`）
+//
+// **`context.Canceled` は含めない。**人間が Ctrl+C を押したときなので、
+// 「もう一度起動してください」と案内する場面ではない。
+//
+// err: 検査が返したエラー。
+// 戻り値: 時間が足りなかったなら true。
+func startupTimedOut(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, lock.ErrAlreadyRunning) {
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
 func checkGitHubAppStartup(
 	ctx context.Context,
 	cfg config.Config,
@@ -92,6 +115,14 @@ func checkGitHubAppStartup(
 	if err := d.Tracker.ProbeAppToken(ctx); err != nil {
 		if errors.Is(err, githubapp.ErrNotFound) {
 			return i18n.Errorf(i18n.KeyDaemonStartupGitHubAppCredentialsMissing, serverPortText(port), serverPortHint(port))
+		}
+		// **時間切れは、回せなかったのとは別の文面にする**（3-82c）。
+		//
+		// 2通り目の文面は「認可をやり直す → 通らなければ資格情報を消して作り直す」と案内する。
+		// **時間切れでそれを出すと、1バイトも壊れていない資格情報を人間が捨てることになる。**
+		// 予算を足しても、ロックを握ったままのプロセスが居れば当たりうるので、分ける。
+		if startupTimedOut(err) {
+			return i18n.Errorf(i18n.KeyDaemonStartupGitHubAppTimedOut, err)
 		}
 		// **`<GitHub が返した error の値>` には、GitHub が断ったなら `error` の値そのもの
 		// （`bad_refresh_token` など）を、往復の失敗ならその文言を入れる。**

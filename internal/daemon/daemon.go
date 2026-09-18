@@ -135,6 +135,27 @@ func ShutdownBudget() time.Duration {
 // **errors.Is が見るのはこの変数の identity なので、資源から引いても切り分けは壊れない。**
 var ErrStartup = i18n.Sentinel(i18n.KeyDaemonErrStartup)
 
+// StartupCheckBudget は、起動時検査に与える上限を返す（3-82c）。
+//
+// **GitHub App の検査を回すときは、直列の待ちを足す。**
+// `DefaultStartupCheckTimeout`（60秒）は6本の検査で分け合う予算だが、
+// **最後に置く GitHub App の検査は、資格情報のロックの待ち（既定60秒）と
+// GitHub の往復（既定30秒）を直列で持つので、分け合った残りでは足りない。**
+// `continuo github-app token` が同じ足し算をしている（`internal/cli` の `githubAppTokenTimeout`）。
+//
+// **足さないと、資格情報が1バイトも壊れていないのに continuo が起動を拒む。**
+// そのとき出る「回転を断られた」の文面は原因を3つしか挙げていないので、
+// **人間は健全な資格情報を消して GitHub App を作り直す段へ進む。**
+//
+// githubAppAttribution: `tracker.comments.github_app_attribution` の値。
+// 戻り値: 起動時検査全体に与える上限。
+func StartupCheckBudget(githubAppAttribution bool) time.Duration {
+	if !githubAppAttribution {
+		return DefaultStartupCheckTimeout
+	}
+	return DefaultStartupCheckTimeout + githubapp.DefaultLockTimeout + githubapp.DefaultHTTPTimeout
+}
+
 // Options は Run の入力である。
 type Options struct {
 	// ConfigPath は読み込む WORKFLOW.md の絶対パスである。必須。
@@ -162,7 +183,8 @@ type Options struct {
 	// **同じ名前で2度 Resolve しない。**
 	Instance *instance.Layout
 	// StartupCheckTimeout は起動時検査（設計 3-6）全体の上限である。
-	// **0 なら DefaultStartupCheckTimeout を使う。**テストが短い期限を与えるための口である。
+	// **0 なら StartupCheckBudget が決める。**テストが短い期限を与えるための口である。
+	// **明示した値には GitHub App のぶんを足さない。**足すと短く与えられなくなる。
 	StartupCheckTimeout time.Duration
 	// TrackerTimeout は GitHub の GraphQL API への1リクエストの上限である。
 	// **0 なら DefaultTrackerTimeout を使う。**テストが短い期限を与えるための口である。

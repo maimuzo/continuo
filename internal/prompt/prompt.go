@@ -679,6 +679,7 @@ func RenderData(
 	progressIntervalMs int,
 	githubAppAttribution bool,
 	continuoPath string,
+	selfMarker string,
 ) map[string]any {
 	url := ""
 	if issue.URL != nil {
@@ -724,6 +725,16 @@ func RenderData(
 		// `$( )` の中で使うぶんには、包まれたままシェルが解く。
 		"continuo": map[string]any{
 			"command": shellquote.Quote(continuoPath),
+			// **continuo 本体が自分の投稿に置く印**（同 3-82e）。
+			// `tracker.comments.self_marker` の値をそのまま渡す。
+			//
+			// **既定値を文面へ焼き付けてはならない。**この設定を別の値にしているチームでは、
+			// GitHub App のトークンが死んだ日に、continuo 本体の投稿（止まった理由・Status を動かした記録）を
+			// **エージェントが人間の指示として読む。**
+			//
+			// **空のときは、文面の `{{if .continuo.self_marker}}` の外へ落ちる。**
+			// 印で見分けられない利用者は、断りの1行だけを頼る。
+			"self_marker": selfMarker,
 		},
 	}
 }
@@ -763,7 +774,8 @@ func SampleData() map[string]any {
 		// **continuo 自身を指す値**（同 3-82e）。`RenderData` と同じく、単一引用符で包んだ形で持つ。
 		// 架空のパスである。実行ファイルの本当の場所は `RenderData` の呼び出し側が渡す。
 		"continuo": map[string]any{
-			"command": "'/usr/local/bin/continuo'",
+			"command":     "'/usr/local/bin/continuo'",
+			"self_marker": "<!-- continuo:self -->",
 		},
 	}
 }

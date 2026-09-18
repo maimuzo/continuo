@@ -8,7 +8,7 @@ import (
 )
 
 // 目的: shell のコマンド行へ埋め込む1語が、単一引用符で包まれることを確認する
-// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e「変数を2つ足す」）。
+// （docs/plans/impl/issue245_github_app_attribution.md の 3-82e「変数を3つ足す」）。
 //
 // **包み方は internal/orchestrator/settings.go にあった `shellQuote` と同じでなければならない。**
 // hook のコマンド行と、送る文面の `{{.continuo.command}}` が同じ関数を通るので、

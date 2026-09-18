@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "92f5e81090ab5aa8e593c59d4fd6d8b77346c6c13c7d76fa90267d38b6b9a1da",
+  "_source_sha256": "4f02537bbd96e43035fc5785c732f267a9dd4e2c8da693bf2561052f4fd413c3",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -363,6 +363,7 @@
   "dashboard.github_app.create.note_interrupted": "If you stop continuo partway through, start again from this step.",
   "dashboard.github_app.create.note_reopen": "Reopening this page invalidates the buttons on the page you opened before (it mints a fresh one-time value). Use the buttons on the page you opened last.",
   "dashboard.github_app.create.note_ephemeral_port": "server.port is 0, so this port changes every time continuo restarts. A GitHub App's return URLs are fixed when you create it, so creating it now means you cannot re-authorize after the next restart (you would have to create the GitHub App again). Set a fixed number in server.port in WORKFLOW.md and restart continuo first.",
+  "dashboard.github_app.create.note_port_frozen": "The three return URLs above are registered with GitHub when the GitHub App is created, and continuo cannot change them later. If you later set server.port in WORKFLOW.md to a different number, GitHub will reject re-authorization (/github-app/authorize). Day-to-day comments do not use the return URLs, so you will not notice until the day you authorize again. When that happens, open this GitHub App under GitHub Settings → Developer settings → GitHub Apps and change the port in the Callback URL. You do not need to recreate the GitHub App.",
   "dashboard.github_app.create.button": "Create the GitHub App \"%s\" (takes you to GitHub's confirmation page)",
   "dashboard.github_app.install.heading": "Step 2 of 3: Install the GitHub App on your repositories",
   "dashboard.github_app.install.created": "Created the GitHub App \"%[1]s\" and wrote its client_id and client_secret to %[2]s.",
@@ -539,6 +540,7 @@
   "daemon.run.home_dir_failed": "%[1]w: cannot determine the home directory (the location of the GitHub App credentials is undecided): %[2]w",
   "daemon.startup.github_app.credentials_missing": "github_app_attribution is true, but there are no GitHub App credentials.\ncontinuo will not start. The following steps take about a minute.\n\n  1. Set tracker.comments.github_app_attribution in WORKFLOW.md to false locally only\n     (do not commit it; committing removes attribution for the whole team)\n  2. Start continuo\n  3. Open http://127.0.0.1:%[1]s/github-app and press the three buttons\n  4. Set github_app_attribution back to true and restart continuo%[2]s",
   "daemon.startup.github_app.rotate_failed": "github_app_attribution is true, but the GitHub App refresh token could not be rotated (%[1]s).\ncontinuo will not start.\n\n  1. Set tracker.comments.github_app_attribution in WORKFLOW.md to false locally only\n  2. Start continuo\n  3. Open http://127.0.0.1:%[2]s/github-app/authorize and authorize again\n     (this fixes the case where continuo crashed right before writing back the rotation)\n  4. If authorization fails, the GitHub App was deleted or the client secret was regenerated.\n     Delete ~/.continuo/github-app-credentials.json, remove the old GitHub App from the Danger zone under\n     GitHub Settings → Developer settings → GitHub Apps if it is still there, then recreate it at http://127.0.0.1:%[3]s/github-app.\n  5. Set github_app_attribution back to true and restart continuo%[4]s",
+  "daemon.startup.github_app.timed_out": "github_app_attribution is true, but there was not enough time to rotate the GitHub App refresh token (%s).\ncontinuo will not start.\n\nYour credentials are not broken. You do not need to authorize again or recreate the GitHub App.\n\n  1. Start continuo again\n  2. If it keeps happening, check whether another continuo or continuo github-app token is\n     still holding ~/.continuo/github-app-credentials.json.lock\n  3. If GitHub is slow, wait a little before starting",
   "daemon.startup.github_app.port_unset": "If server.port is not set, set it first.",
   "daemon.startup.github_app.port_zero": "If it is 0, use a concrete port number.",
   "daemon.startup.github_app.login_mismatch": "gh belongs to %[1]s, but the GitHub App was authorized by %[2]s. Either switch gh from %[3]s to %[4]s with gh auth switch, or set github_app_attribution to false locally, start continuo, and re-authorize at /github-app/authorize as %[6]s instead of %[5]s",

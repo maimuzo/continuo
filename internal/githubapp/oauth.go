@@ -51,15 +51,19 @@ type Client struct {
 	Endpoints Endpoints
 }
 
-// defaultHTTPTimeout は HTTP を渡されなかったときに組み立てるクライアントの全体の待ち時間である。
-const defaultHTTPTimeout = 30 * time.Second
+// DefaultHTTPTimeout は HTTP を渡されなかったときに組み立てるクライアントの全体の待ち時間である。
+//
+// **呼ぶ側が時間の予算を組み立てるのに使う。**この往復は資格情報のロックの中で直列に起きるので、
+// 呼ぶ側の上限が `DefaultLockTimeout + DefaultHTTPTimeout` を下回ると、
+// **資格情報が1バイトも壊れていないのに落ちる**（3-82c）。
+const DefaultHTTPTimeout = 30 * time.Second
 
 // http は使うクライアントを返す。
 func (c Client) http() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
 	}
-	return &http.Client{Timeout: defaultHTTPTimeout}
+	return &http.Client{Timeout: DefaultHTTPTimeout}
 }
 
 // maxBodyForError はエラーの文言に載せる応答本文の上限である。

@@ -228,7 +228,7 @@ func RunWith(deps Deps, args []string, stdin io.Reader, stdout, stderr io.Writer
 // **資格情報のロックを待つ上限（60秒）に、GitHub への1往復ぶんを足したものである**
 // （3-82d「同時に叩かれたとき」）。期限が無いと、GitHub が応答を返さないときに
 // エージェントの `TOKEN=$(…)` が永久に返らず、その run の turn が止まる。
-const githubAppTokenTimeout = githubapp.DefaultLockTimeout + 30*time.Second
+const githubAppTokenTimeout = githubapp.DefaultLockTimeout + githubapp.DefaultHTTPTimeout
 
 // runGitHubApp は `continuo github-app token` サブコマンドである
 // （docs/plans/impl/issue245_github_app_attribution.md の 3-82d「`continuo github-app token` の輪郭」）。
@@ -659,7 +659,8 @@ func runPromptExpanded(
 	}
 	data := prompt.RenderData(
 		issue, attempt, trackerCfg.Provider.Handoff.ProgressIntervalMs,
-		trackerCfg.Comments.GitHubAppAttribution, exe)
+		trackerCfg.Comments.GitHubAppAttribution, exe,
+		trackerCfg.Comments.SelfMarker)
 	// **全文と断片を一度に受け取る。**`Render` と `RenderItems` を続けて呼ぶと、
 	// 同じ解釈と実行を2回することになる。
 	text, rendered, err := frag.RenderAll(data)

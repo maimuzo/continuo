@@ -1209,6 +1209,25 @@ GitHub App のトークンで投稿できなかったので、attribution 無し
 
 **走っている continuo は、直すまでこの1行が付いた投稿を続けます。**止まりませんが、断りが付くので人間の投稿とは見分けられます。
 
+#### `/github-app/authorize` を開くと、GitHub が「戻り先が違う」と断る
+
+**原因。**GitHub App の戻り先の URL は、**GitHub App を作った時点で GitHub 側へ登録され、あとから continuo は変えられません。**
+`WORKFLOW.md` の `server.port` を作ったときと別の番号にすると、登録済みのものと一致しなくなります。
+`server.port` を `0` にしている場合は、**起動のたびに OS が別のポートを選ぶので、次の起動から必ず一致しません。**
+
+**日々の投稿は戻り先を使いません。**だから、塞がっていることは**認可をやり直す日まで見えません。**
+
+**直し方。**2つあります。**どちらも GitHub App を作り直す必要はありません。**
+
+| どうするか | 何をするか |
+| --- | --- |
+| **GitHub 側を、いまのポートに合わせる** | GitHub の Settings → Developer settings → GitHub Apps でその GitHub App を開き、**Callback URL のポートを、いま continuo が開いている番号へ書き換える** |
+| **continuo 側を、作ったときのポートに戻す** | `WORKFLOW.md` の `server.port` を、GitHub App を作ったときの番号へ戻して continuo を再起動する |
+
+**`server.port` を `0` にしているなら、先に具体的な番号を書いてください。**`0` のままでは、直した次の起動でまた外れます。
+
+**いま continuo が開いているポートは、起動時のログに出ます。**`continuo doctor` の `Dashboard` の行でも見られます。
+
 #### pull request に「continuo が起動した Claude Code が書きました（pull request には GitHub App の印が付きません）」と出る
 
 **原因。**GitHub App に `Pull requests` の権限を与えていないので、pull request の本文とコメントには attribution が付きません。
@@ -1707,7 +1726,7 @@ cd ~/continuo-work && continuo prompt --show
 | 何が漏れると | 何ができるか | いつまで |
 | --- | --- | --- |
 | **`client_secret` と更新用のトークン**（このファイルにあるもの） | あなたの代理として issue へ書けるトークンを作り放題 | **約6か月**（更新用のトークンの期限まで） |
-| **アクセストークンだけ**（`continuo github-app token` の出力など） | **そのトークンで issue へ書ける。**新しいトークンは作れない | **8時間** |
+| **アクセストークンだけ**（`continuo github-app token` の出力など） | **そのトークンで issue へ書ける。**新しいトークンは作れない | **8時間。**ただし**次の回転で死にます。**回転は投稿の件数とほぼ同じ回数だけ起きるので、**実際は数分であることが多いです** |
 | 秘密鍵 | **continuo は置きません。**作成のときに返りますが捨てます | — |
 
 **止め方。**3つとも行ってください。1つでも飛ばすと止まりません。

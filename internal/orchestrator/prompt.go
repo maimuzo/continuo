@@ -41,7 +41,8 @@ func (o *Orchestrator) renderFirstPrompt(issue tracker.Issue, attempt *int) (str
 	// **エージェントが叩く `continuo github-app token` は、いま動いている本体と同じ実行ファイルを指す。**
 	data := prompt.RenderData(
 		issue, attempt, o.cfg.Tracker.Provider.Handoff.ProgressIntervalMs,
-		o.cfg.Tracker.Comments.GitHubAppAttribution, o.continuoPath)
+		o.cfg.Tracker.Comments.GitHubAppAttribution, o.continuoPath,
+		o.cfg.Tracker.Comments.SelfMarker)
 
 	out, err := o.promptFragments.Render(data)
 	if err != nil {

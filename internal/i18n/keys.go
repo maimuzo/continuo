@@ -2577,6 +2577,12 @@ const (
 	// KeyDaemonStartupGitHubAppRotateFailed は資格情報は在るのに更新用のトークンを回せなかったときに出る
 	// （3-82c の2通り目の文面。引数は GitHub が返した error の値・`<port>` の値2つ・末尾の1行）。
 	KeyDaemonStartupGitHubAppRotateFailed Key = "daemon.startup.github_app.rotate_failed"
+	// KeyDaemonStartupGitHubAppTimedOut は、更新用のトークンを回す時間が足りなかったときに出る（3-82c）。
+	//
+	// **回せなかったとき（rotate_failed）と分ける。**あちらは「認可をやり直す →
+	// 通らなければ資格情報を消して作り直す」と案内するので、**時間切れで出すと
+	// 1バイトも壊れていない資格情報を人間が捨てる。**
+	KeyDaemonStartupGitHubAppTimedOut Key = "daemon.startup.github_app.timed_out"
 	// KeyDaemonStartupGitHubAppPortUnset は上の2通りの末尾に、server.port を書いていないときだけ足す1行である。
 	KeyDaemonStartupGitHubAppPortUnset Key = "daemon.startup.github_app.port_unset"
 	// KeyDaemonStartupGitHubAppPortZero は上の2通りの末尾に、server.port が 0 のときだけ足す1行である。
@@ -2758,6 +2764,13 @@ const (
 	// **戻り先の URL は GitHub App を作るときに決まる。**`0` のままだと次の起動でポートが変わり、
 	// 認可のやり直しが塞がる（日々の投稿は callback を使わないので、その日まで誰にも見えない）。
 	KeyDashboardGitHubAppCreateNoteEphemeralPort Key = "dashboard.github_app.create.note_ephemeral_port"
+	// KeyDashboardGitHubAppCreateNotePortFrozen は、戻り先が作るときに固まることを言う1行である（3-82g）。
+	//
+	// **`server.port` が 0 でなくても出す。**あとで番号を別のものへ変えると、
+	// 登録済みの `callback_urls` と一致しなくなり、認可のやり直しを GitHub が断る。
+	// **日々の投稿は callback を使わないので、塞がっていることは再認可の日まで誰にも見えない。**
+	// その日に出る文面は資格情報を作り直す段まで案内するので、ここで先に戻し方を言う。
+	KeyDashboardGitHubAppCreateNotePortFrozen Key = "dashboard.github_app.create.note_port_frozen"
 	// KeyDashboardGitHubAppCreateButton は段1 のボタンの文言である。
 	KeyDashboardGitHubAppCreateButton Key = "dashboard.github_app.create.button"
 	// KeyDashboardGitHubAppInstallHeading は段2（install）の見出しである。
@@ -3810,6 +3823,7 @@ var allKeys = []Key{
 	KeyDaemonRunHomeDirFailed,
 	KeyDaemonStartupGitHubAppCredentialsMissing,
 	KeyDaemonStartupGitHubAppRotateFailed,
+	KeyDaemonStartupGitHubAppTimedOut,
 	KeyDaemonStartupGitHubAppPortUnset,
 	KeyDaemonStartupGitHubAppPortZero,
 	KeyDaemonStartupGitHubAppLoginMismatch,
@@ -3896,6 +3910,7 @@ var allKeys = []Key{
 	KeyDashboardGitHubAppCreateNoteInterrupted,
 	KeyDashboardGitHubAppCreateNoteReopen,
 	KeyDashboardGitHubAppCreateNoteEphemeralPort,
+	KeyDashboardGitHubAppCreateNotePortFrozen,
 	KeyDashboardGitHubAppCreateButton,
 	KeyDashboardGitHubAppInstallHeading,
 	KeyDashboardGitHubAppInstallCreated,

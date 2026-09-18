@@ -93,6 +93,7 @@ input[type=text] { font: inherit; padding: .3rem .5rem; border: 1px solid #8888;
 <li>{{ t "dashboard.github_app.create.note_sudo" }}</li>
 <li>{{ t "dashboard.github_app.create.note_interrupted" }}</li>
 <li>{{ t "dashboard.github_app.create.note_reopen" }}</li>
+<li>{{ t "dashboard.github_app.create.note_port_frozen" }}</li>
 {{- if .EphemeralPort }}
 <li><strong>{{ t "dashboard.github_app.create.note_ephemeral_port" }}</strong></li>
 {{- end }}
