@@ -116,7 +116,7 @@ func BuildContinuationPrompt(
 // しかも次の行が「本文の中では囲みを外した形で」と言うので、
 // **外した形だけが禁止だと読める。**囲み付きを先頭に置いたエージェントの報告は
 // `hasRunComment` に飛ばされ、**書いたのに `failure_state` へ落ちる。**
-// 書き分けは [docs/upgrading.md:239-245](docs/upgrading.md#L239-L245) に揃える。
+// 書き分けは [docs/upgrading.md:426-432](docs/upgrading.md#L426-L432) に揃える。
 //
 // **GitHub App の attribution も、ここで分ける**
 // （docs/plans/impl/issue245_github_app_attribution.md の 3-82e の「7本目」）。

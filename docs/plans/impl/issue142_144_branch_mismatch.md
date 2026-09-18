@@ -422,7 +422,7 @@ LinkedBranches []string
 **14 の1つ目が「分けてよい」で決まったときに足す。**
 **`data` に鍵を足しても既存の WORKFLOW.md は壊れない**
 （`missingkey=error` は参照した鍵が無いときだけ落ちる。
-[internal/orchestrator/prompt.go:31](../../../internal/orchestrator/prompt.go#L31)）ので、後から足せる。
+[internal/orchestrator/prompt.go:30](../../../internal/orchestrator/prompt.go#L30)）ので、後から足せる。
 
 **雛形に `gh issue develop --list <番号>` を書く案は採らない。**
 **出力の形が未検証である。**#144 の投稿者自身が「1本以上あるときの出力の形は確かめられていない」と書いている。

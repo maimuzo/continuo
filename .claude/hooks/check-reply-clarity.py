@@ -110,9 +110,9 @@ CATEGORY_WORDS = ("報告", "質問", "確認")
 # 引用（`> `）の合計がこの文字数に満たなければ、対象が分からないと見なす。
 #
 # **1文だけ引いても、何の話への返答かは伝わらない。**
-# 実例（2026-08-29）: 「これでなにか問題があるか検討し、問題なければ実装して良い」だけを引いたところ、
-# **「引用がこれだけでは、何を指しているのかわからない。引用範囲をもっと広く取って」**と指摘された。
-# その依頼は、その前に7行の仕様が並んでいて、**結びの1文だけでは仕様のほうが読み取れなかった。**
+# 例: 依頼の結びの「これでなにか問題があるか検討し、問題なければ実装して良い」だけを引くと、
+# **「これ」が何を指すのかが、読む人に分からない。**
+# 結びの前に仕様が並んでいる依頼では、**結びの1文だけでは仕様のほうが読み取れない。**
 #
 # **だから、結びの1文ではなく、判断の材料になった部分から引く。**
 MIN_QUOTE_CHARS = 80
@@ -959,7 +959,7 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0
             "読む側は、どのファイルの何行目かを毎回訊き直すことになります。\n"
             "**markdown link 形式で、行番号を含めて書いてください。**\n"
             "  悪い: 設計 6-23b に書きました\n"
-            "  良い: [docs/plans/continuo_design.md:12106-12152](docs/plans/continuo_design.md#L12117-L12163) に書きました\n"
+            "  良い: [docs/plans/foo.md:12-34](docs/plans/foo.md#L12-L34) に書きました\n"
             "同じ行に markdown link があれば通ります。\n"
         )
 
@@ -968,7 +968,7 @@ def build_reason(bare_refs, no_category, thin_quote, late_blocks, section_refs=0
         parts.append(
             "\n**ファイルを指すときは、行番号まで書くこと。**\n"
             "  悪い: [docs/plans/continuo_design.md](docs/plans/continuo_design.md)\n"
-            "  良い: [docs/plans/continuo_design.md:12106-12152](docs/plans/continuo_design.md#L12117-L12163)\n"
+            "  良い: [docs/plans/foo.md:12-34](docs/plans/foo.md#L12-L34)\n"
             "**行番号が無いと、読む側はファイルを開いてから探すことになります。**\n"
         )
 
@@ -1004,8 +1004,8 @@ def main() -> int:
     no_category = missing_category(masked)
     # **引用が1文字も無い場合も止める。**
     # 0 を見逃すと、**引用を消すのがいちばん安い逃げ道になる。**
-    # 実例（2026-08-29 のレビュー）: 閾値を 80 へ上げた結果、
-    # 「40文字だけ正直に引く」は止まり、「1文字も引かない」は通る状態になっていた。
+    # 閾値だけを上げると、
+    # 「40文字だけ正直に引く」は止まり、「1文字も引かない」は通る状態になる。
     # **罰する範囲だけを広げて、逃げ道を残してはならない。**
     qchars = quote_chars(masked)
     thin_quote = qchars < MIN_QUOTE_CHARS
