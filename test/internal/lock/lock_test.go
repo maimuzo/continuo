@@ -117,18 +117,22 @@ func TestAcquireWait_空いていれば待たずに取れる(t *testing.T) {
 // 直列化する必要があり、待たないと片方が必ず落ちる。
 //
 // 与える情報: 先に Acquire で掴んだロックと、200ms 後にそれを放す goroutine。
-// 成功条件: AcquireWait がエラーを返さず、放されたあとに *Lock を返すこと。
+// 成功条件: AcquireWait がエラーを返さず、**掴まれていた 200ms より短い時間では返らない**こと。
 func TestAcquireWait_放されるまで待って取る(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "github-app-credentials.lock")
 	first, err := lock.Acquire(path)
 	if err != nil {
 		t.Fatalf("1回目の Acquire に失敗した: %v", err)
 	}
-	released := make(chan struct{})
+	// **待ったことは、経った時間で見る。**
+	// 「放した」を知らせる channel で見てはならない。`Release` が返った瞬間にロックは空くので、
+	// **その goroutine が channel を閉じる前に、待っている側が取れてしまう。**
+	// 実測: 手元では20回とも通ったが、CI の混んだ runner で1回落ちた（実装レビュー7周目）。
+	const held = 200 * time.Millisecond
+	start := time.Now()
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(held)
 		_ = first.Release()
-		close(released)
 	}()
 
 	second, err := lock.AcquireWait(context.Background(), path, 5*time.Second)
@@ -136,10 +140,9 @@ func TestAcquireWait_放されるまで待って取る(t *testing.T) {
 		t.Fatalf("放されたあとも取れなかった: %v", err)
 	}
 	defer second.Release()
-	select {
-	case <-released:
-	default:
-		t.Fatal("1回目が放される前に2回目が取れてしまった（待っていない）")
+	if elapsed := time.Since(start); elapsed < held {
+		t.Fatalf("1回目が放される前に2回目が取れてしまった（%v しか待っていない。%v は握られていたはず）",
+			elapsed, held)
 	}
 }
 
