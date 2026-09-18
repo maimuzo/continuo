@@ -183,6 +183,13 @@ func (c Client) postToken(ctx context.Context, form url.Values) (tokenResponse, 
 	if tr.RefreshToken == "" {
 		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenNoRefresh, contentTypeOf(resp))
 	}
+	// **期限も同じ扱いにする。**返らないまま受けると、新しい更新用のトークンに
+	// **過ぎているかもしれない古い期限が付く。**そうなると `continuo doctor` は
+	// 「期限が切れています」、入口の画面は認可の段を出すので、
+	// **トークンは生きているのに人間が認可をやり直す**（回転の窓をもう1回開ける）。
+	if tr.RefreshTokenExpiresIn <= 0 {
+		return tokenResponse{}, i18n.Errorf(i18n.KeyGitHubAppTokenNoRefreshExpiry, contentTypeOf(resp))
+	}
 	return tr, nil
 }
 

@@ -368,7 +368,13 @@ func TestDoctor_GitHubApp_壊れていれば消して作り直す案内を出す
 		t.Fatalf("説明が読めないことを指していない: %q", res.Detail)
 	}
 	remedies := strings.Join(res.Remedies, "\n")
-	for _, want := range []string{store.Path() + " を消してから", "/github-app"} {
+	// **`github_app_attribution` を手元だけ false にして起動する段も見る**（実装レビュー4周目の Medium）。
+	// **この直し方が出るとき、continuo は起動していない。**段が無いと、案内された URL を開いても何も出ない。
+	for _, want := range []string{
+		store.Path() + " を消し",
+		"github_app_attribution を手元だけ false にして起動",
+		"/github-app",
+	} {
 		if !strings.Contains(remedies, want) {
 			t.Errorf("直し方に %q が入っていない:\n%s", want, remedies)
 		}

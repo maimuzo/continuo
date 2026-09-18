@@ -626,13 +626,25 @@ func renderOne(it Fragment, data map[string]any) (string, error) {
 //
 // 戻り値: 最初に見つけた誤り。誤りが無ければ nil。
 func (f Fragments) Validate() error {
+	// **本体の印は、空と非空の2通りを振る**（設計 3-82e）。
+	// 6-1 が `{{if .continuo.self_marker}}` で分けるので、
+	// **非空だけを展開すると、空にした利用者が書いた `{{else}}` の側を1度も見ない。**
+	// その利用者では `continuo doctor` の `prompt vars` が緑のまま、
+	// 最初の dispatch の変数展開で `missingkey=error` に当たって落ちる。
 	for _, attempt := range []any{nil, 2} {
 		for _, attribution := range []bool{false, true} {
-			data := SampleData()
-			data["attempt"] = attempt
-			data["github_app_attribution"] = attribution
-			if _, err := f.Render(data); err != nil {
-				return err
+			for _, selfMarker := range []string{"<!-- continuo:self -->", ""} {
+				data := SampleData()
+				data["attempt"] = attempt
+				data["github_app_attribution"] = attribution
+				// **SampleData は毎回作り直すので、書き換えても次の周に残らない。**
+				// 型が違えば Render が `missingkey=error` で落ちるので、ここでは黙って通す。
+				if inner, ok := data["continuo"].(map[string]any); ok {
+					inner["self_marker"] = selfMarker
+				}
+				if _, err := f.Render(data); err != nil {
+					return err
+				}
 			}
 		}
 	}

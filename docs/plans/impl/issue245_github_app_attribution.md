@@ -301,7 +301,7 @@ sequenceDiagram
 
 | どこ | 何が起きるか |
 | --- | --- |
-| **投稿者を見ている判定**（[internal/prompt/builtin.md:476](../../../internal/prompt/builtin.md#L476) と [769行](../../internal/prompt/builtin.md#L769) の `viewerDidAuthor`・[internal/orchestrator/handoff.go:364](../../../internal/orchestrator/handoff.go#L364)・[internal/handoff/assess.go:364](../../../internal/handoff/assess.go#L364)） | **投稿者が `<GitHub App の slug>[bot]` になり、エージェントが自分の投稿を探す `viewerDidAuthor` と、持ち回りの投稿者の照合が外れる**（3-82a の二）。continuo 自身の通知は、どちらの経路でも命令ではない（3-82e の「エージェントの読む側にも当てる」） |
+| **投稿者を見ている判定**（[internal/prompt/builtin.md:476](../../../internal/prompt/builtin.md#L476) と [769行](../../../internal/prompt/builtin.md#L769) の `viewerDidAuthor`・[internal/orchestrator/handoff.go:364](../../../internal/orchestrator/handoff.go#L364)・[internal/handoff/assess.go:364](../../../internal/handoff/assess.go#L364)） | **投稿者が `<GitHub App の slug>[bot]` になり、エージェントが自分の投稿を探す `viewerDidAuthor` と、持ち回りの投稿者の照合が外れる**（3-82a の二）。continuo 自身の通知は、どちらの経路でも命令ではない（3-82e の「エージェントの読む側にも当てる」） |
 | **このリポジトリの CI**（[.github/workflows/review-gate.yml](../../../.github/workflows/review-gate.yml)） | **レビュー結果のコメントを数える条件が「投稿者が `OWNER` / `MEMBER` / `COLLABORATOR`」。**`NONE` の投稿は数えられず、**pull request が永久に赤のままになる** |
 | **利用者へ配る雛形の CI**（[internal/scaffold/ci_template.go:118](../../../internal/scaffold/ci_template.go#L118) と [169行](../../../internal/scaffold/ci_template.go#L169)） | **同じ条件が入っている。**利用者の手元でも同じことが起きる |
 
@@ -443,7 +443,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 
 **`user.login` の行から、もう1つ導ける。**
 **エージェントが自分の投稿を探す段1 が見ている `.viewerDidAuthor` は、真のままである**
-（[internal/prompt/builtin.md:476](../../../internal/prompt/builtin.md#L476) と [769行](../../internal/prompt/builtin.md#L769)）。
+（[internal/prompt/builtin.md:476](../../../internal/prompt/builtin.md#L476) と [769行](../../../internal/prompt/builtin.md#L769)）。
 **投稿者が人間本人のままだからである。**
 **偽になっていたら、書き足しの経路が丸ごと壊れる。**
 
@@ -846,7 +846,7 @@ issue へ、経路ごとに1件ずつ投稿して読み直した。手順は [do
 #### 資格情報が無いときに、どうやって作る画面へ行くか
 
 **段を新しく作らない。**GitHub App の検査は、他の起動時の検査と同じ段3 に置く
-（[internal/daemon/daemon.go:354-357](../../../internal/daemon/daemon.go#L354-L357) の `runStartupChecks`）。
+（[internal/daemon/checks.go:46](../../../internal/daemon/checks.go#L46) の `runStartupChecks`）。
 **落ちたら、いままでどおり起動しない。**
 
 **GitHub App の検査だけをダッシュボードの後ろ（段4d）へ移す案は採らない。**理由は3つある。
@@ -921,7 +921,7 @@ sequenceDiagram
 
 **起動時の検査に与える時間は、この検査が直列で持つものを足して決める。**
 資格情報のロックを待つぶん（[internal/githubapp/githubapp.go:59](../../../internal/githubapp/githubapp.go#L59) の `DefaultLockTimeout`。既定60秒）と、
-GitHub との1往復（[internal/githubapp/oauth.go:55](../../../internal/githubapp/oauth.go#L55) の `defaultHTTPTimeout`。既定30秒）の2つである。
+GitHub との1往復（[internal/githubapp/oauth.go:59](../../../internal/githubapp/oauth.go#L59) の `DefaultHTTPTimeout`。既定30秒）の2つである。
 **`continuo github-app token` は、同じ足し算で 60＋30＝90秒にしている**（[internal/cli/cli.go:231](../../../internal/cli/cli.go#L231) の `githubAppTokenTimeout`）。**起動時の検査も、そこへ揃える。**
 **`DefaultStartupCheckTimeout`（[internal/daemon/daemon.go:90](../../../internal/daemon/daemon.go#L90) の60秒）を、他の5本と分け合ったままにしてはならない。**
 GitHub App の検査は6本目で、前に5本が走る（書ける場所・`gh` の有無・`gh` の scope・herdr の socket・`Bootstrap`。[internal/daemon/checks.go:65-84](../../../internal/daemon/checks.go#L65-L84)）。
@@ -983,12 +983,12 @@ GitHub App の検査は6本目で、前に5本が走る（書ける場所・`gh`
 
 | 何 | どこ |
 | --- | --- |
-| **Status を動かした記録** | [internal/orchestrator/comment.go:510](../../../internal/orchestrator/comment.go#L510) の `postStatusMove` |
-| **着手の門の案内** | [internal/orchestrator/gate.go:313](../../../internal/orchestrator/gate.go#L313) の `postGateNotice` |
-| **未信頼のリポジトリを飛ばした通知** | [internal/orchestrator/dispatch.go:705](../../../internal/orchestrator/dispatch.go#L705) の `noteUntrusted` |
+| **Status を動かした記録** | [internal/orchestrator/comment.go:504](../../../internal/orchestrator/comment.go#L504) の `postStatusMove` |
+| **着手の門の案内** | [internal/orchestrator/gate.go:292](../../../internal/orchestrator/gate.go#L292) の `postGateNotice` |
+| **未信頼のリポジトリを飛ばした通知** | [internal/orchestrator/dispatch.go:678](../../../internal/orchestrator/dispatch.go#L678) の `noteUntrusted` |
 | **カンバンに載っていなかった・別の run が担当中だった・worktree を残した** | [internal/orchestrator/lifecycle.go:435](../../../internal/orchestrator/lifecycle.go#L435)・[467行](../../../internal/orchestrator/lifecycle.go#L467)・[1058行](../../../internal/orchestrator/lifecycle.go#L1058) |
-| **引き渡しの通知**（止まった理由を運ぶ） | [internal/orchestrator/lifecycle.go:1161](../../../internal/orchestrator/lifecycle.go#L1161) の `postHandoffComment` |
-| **`failure_state` へ落とした通知**（これも止まった理由） | [internal/orchestrator/restore.go:933](../../../internal/orchestrator/restore.go#L933) の `moveToFailure` |
+| **引き渡しの通知**（止まった理由を運ぶ） | [internal/orchestrator/lifecycle.go:1116](../../../internal/orchestrator/lifecycle.go#L1116) の `postHandoffComment` |
+| **`failure_state` へ落とした通知**（これも止まった理由） | [internal/orchestrator/restore.go:919](../../../internal/orchestrator/restore.go#L919) の `moveToFailure` |
 | **持ち回りの4呼び出し**（入札・hold・released が2箇所） | [internal/orchestrator/handoff.go:316](../../../internal/orchestrator/handoff.go#L316)・[408行](../../../internal/orchestrator/handoff.go#L408)・[477行](../../../internal/orchestrator/handoff.go#L477)・[500行](../../../internal/orchestrator/handoff.go#L500) |
 
 **continuo は成果を代筆しない**（[internal/orchestrator/lifecycle.go:1104](../../../internal/orchestrator/lifecycle.go#L1104) の
@@ -1050,8 +1050,8 @@ sequenceDiagram
 「記録を書けなかったから blocked にする」を当てると、終わった run が `Blocked` へ引き戻される。**
 
 **`runState` を受け取る2つも、同じ扱いにする。**
-[internal/orchestrator/lifecycle.go:435](../../../internal/orchestrator/lifecycle.go#L435) の `noteSignalTargetsMissing` と
-[467行](../../../internal/orchestrator/lifecycle.go#L467) の `noteSignalTargetsClaimed` である。
+[internal/orchestrator/lifecycle.go:425](../../../internal/orchestrator/lifecycle.go#L425) の `noteSignalTargetsMissing` と
+[454行](../../../internal/orchestrator/lifecycle.go#L454) の `noteSignalTargetsClaimed` である。
 **この2つは `runState` を持つが、それでも `blocked` にしない。**理由は2つある。
 
 **一つ。この2つは `applySignals` の `defer` から呼ばれる**
@@ -1411,7 +1411,7 @@ sequenceDiagram
     {{end}}
 
 **真の枝は2行になる。**1行では書かせない。
-**足す行は、その投稿の塊と同じ字下げにする。**5本のうち4本（[internal/prompt/builtin.md:155](../../../internal/prompt/builtin.md#L155)・[370行](../../internal/prompt/builtin.md#L370)・[861行](../../internal/prompt/builtin.md#L861)・[876行](../../internal/prompt/builtin.md#L876)）は4字下げの塊の中にあり、1本（[516行](../../internal/prompt/builtin.md#L516)）だけが行頭から始まる `bash` の塊である。**塊の外に出た行は、エージェントが実行するコマンドとして読まない。**
+**足す行は、その投稿の塊と同じ字下げにする。**5本のうち4本（[internal/prompt/builtin.md:155](../../../internal/prompt/builtin.md#L155)・[370行](../../../internal/prompt/builtin.md#L370)・[861行](../../../internal/prompt/builtin.md#L861)・[876行](../../../internal/prompt/builtin.md#L876)）は4字下げの塊の中にあり、1本（[516行](../../../internal/prompt/builtin.md#L516)）だけが行頭から始まる `bash` の塊である。**塊の外に出た行は、エージェントが実行するコマンドとして読まない。**
 **`GH_TOKEN=$(…)` の1行だけだと、トークンを取るコマンドが落ちてもシェルは空文字を渡し、
 `gh` が手元の認証でそのまま投稿する**（3-82d）。**そうなると、落ちたことに誰も気づけない。**
 
@@ -1450,7 +1450,7 @@ sequenceDiagram
 | --- | --- | --- |
 | **issue のコメント**（新しく投稿する） | **6本** | **掛ける** |
 | **issue のコメント**（既存への書き足し） | 2本 | **掛けない**（3-82d） |
-| pull request の作成（[internal/prompt/builtin.md:293](../../../internal/prompt/builtin.md#L293)） | 1本 | **掛けない。**GitHub App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ。**代わりに、本文の先頭に可視の1行を入れる**（下） |
+| pull request の作成（[internal/prompt/builtin.md:294](../../../internal/prompt/builtin.md#L294)） | 1本 | **掛けない。**GitHub App の権限は `Issues` だけなので、掛けると pull request が作られず run が死ぬ。**代わりに、本文の先頭に可視の1行を入れる**（下） |
 | pull request のコメント（[internal/prompt/builtin.md:332](../../../internal/prompt/builtin.md#L332)） | 1本 | **掛けない。**`Issues` の権限だけでは、`gh pr comment`（GraphQL）も REST の issue コメントも通らないことを実測した（下と 7-5）。**代わりに、先頭の印を全部通したあとに可視の1行を入れる**（下） |
 | **Go が組み立てる書かせ直し**（[internal/orchestrator/prompt.go:144](../../../internal/orchestrator/prompt.go#L144) の `buildCommentRequestPrompt`） | 1本 | **掛ける**（下） |
 
@@ -1524,13 +1524,13 @@ issue でいちばん人目に付く。**
     {{end}}
 
 **`cat > judgement.md` の段を落としてはならない。**
-**計画と成果は既にこの形で書いている**（[internal/prompt/builtin.md:155](../../../internal/prompt/builtin.md#L155) と [370行](../../internal/prompt/builtin.md#L370)）。
+**計画と成果は既にこの形で書いている**（[internal/prompt/builtin.md:155](../../../internal/prompt/builtin.md#L155) と [370行](../../../internal/prompt/builtin.md#L370)）。
 **落とすと、存在しないファイルを渡して投稿が必ず落ち、CI が永久に赤になる。**
 
 #### エージェントの読む側にも当てる。4-1 の読み方を REST に替え、6-1 に1段落足す
 
 **書く側を塞いでも、エージェントは attribution を見られない。**
-エージェントが issue のコメントを読むコマンドは [internal/prompt/builtin.md:387](../../../internal/prompt/builtin.md#L387) の `gh issue view … --json comments`（GraphQL）で、
+エージェントが issue のコメントを読むコマンドは [internal/prompt/builtin.md:475](../../../internal/prompt/builtin.md#L475) の `gh issue view … --json comments`（GraphQL）で、
 **GraphQL の `IssueComment` には `performed_via_github_app` が無い**（7-3）。
 **このままだと、2026-09-05 の実害（エージェントが「人間が決めたのか AI が書いたのか」を判断できず止まり、人間が記憶で答えた。3-2）が、そのまま再発する。**
 人間の目的は「人間が言ったことと、AIが言ったことを区別して扱えるようにしたい。(セキュリティや信頼性の話)」（2 の表）なので、読む側にも当てる。
@@ -1566,7 +1566,7 @@ issue でいちばん人目に付く。**
 
 | どこ | いま | 直したあと |
 | --- | --- | --- |
-| [85行](../../../test/internal/orchestrator/prompt_author_association_test.go#L85) の `wantEach` | `gh issue view 188 --repo octocat/hello-world --json comments` | 新しい REST の行（`gh api repos/octocat/hello-world/issues/188/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association`） |
+| [82行](../../../test/internal/orchestrator/prompt_author_association_test.go#L82) の `wantEach` | `gh issue view 188 --repo octocat/hello-world --json comments` | 新しい REST の行（`gh api repos/octocat/hello-world/issues/188/comments --paginate --jq '.[] | {author: .user.login, author_association: .author_association`） |
 | [235行](../../../test/internal/orchestrator/prompt_author_association_test.go#L235) の `jqCommandCount` | 4 | **5**（REST の行が `--jq` と `.author_association` を含む） |
 | [246行](../../../test/internal/orchestrator/prompt_author_association_test.go#L246) の `jsonCommentsCommandCount` | 2 | **1**（`--jq` の付かない `--json comments` は 4-2 の pull request の1本だけになる） |
 
@@ -1605,8 +1605,8 @@ issue でいちばん人目に付く。**
     …"
 
 **関数（`post()`）にしない。**
-**関数にすると、7-2 の投稿2本が別の塊にあるので**（[internal/prompt/builtin.md:861](../../../internal/prompt/builtin.md#L861) と [876行](../../internal/prompt/builtin.md#L876)。あいだに散文が3行）**、
-塊ごとに定義し直すことになる**（[internal/prompt/builtin.md:813](../../../internal/prompt/builtin.md#L813)。塊をまたぐと関数は引き継がれない）。
+**関数にすると、7-2 の投稿2本が別の塊にあるので**（[internal/prompt/builtin.md:861](../../../internal/prompt/builtin.md#L861) と [876行](../../../internal/prompt/builtin.md#L876)。あいだに散文が3行）**、
+塊ごとに定義し直すことになる**（[internal/prompt/builtin.md:816](../../../internal/prompt/builtin.md#L816)。塊をまたぐと関数は引き継がれない）。
 **前に2行足す形なら、塊ごとにその2行を置くだけで済み、引数の並びも変わらない。**
 
 **変数（`POST="…"`）にもしない。**
@@ -2489,7 +2489,7 @@ GitHub が設定の画面で告知している（2026-09-09 に読み取った�
 
 | 短縮名 | レベル | 指摘内容 | 直す | 合理的理由と、私の検算 | 分類 |
 | --- | --- | --- | --- | --- | --- |
-| **エージェントの読み取り経路に attribution が届かない** | **High** | 書く側は12＋7本を塞いだが、エージェントは GraphQL（`gh issue view --json comments`）で読むので `performed_via_github_app` が見えない | **直す** | **確かめました。**[internal/prompt/builtin.md:387](../../../internal/prompt/builtin.md#L387) が GraphQL で、7-3 の実測どおり GraphQL にはその欄がありません。**4-1 のコメントの読み方を REST（`gh api …/issues/N/comments --paginate`）に替え、`via_github_app` を返させ、6-1 に「null でなければ機械が書いたもの。OWNER でも人間の指示ではない」の1段落を足します。**`false` の利用者では常に null なので、読み方は変わりません | 前の周に既に在った |
+| **エージェントの読み取り経路に attribution が届かない** | **High** | 書く側は12＋7本を塞いだが、エージェントは GraphQL（`gh issue view --json comments`）で読むので `performed_via_github_app` が見えない | **直す** | **確かめました。**[internal/prompt/builtin.md:475](../../../internal/prompt/builtin.md#L475) が GraphQL で、7-3 の実測どおり GraphQL にはその欄がありません。**4-1 のコメントの読み方を REST（`gh api …/issues/N/comments --paginate`）に替え、`via_github_app` を返させ、6-1 に「null でなければ機械が書いたもの。OWNER でも人間の指示ではない」の1段落を足します。**`false` の利用者では常に null なので、読み方は変わりません | 前の周に既に在った |
 | **断りの1行が、広げた発火条件と合っていない** | Medium | 発火は「理由を問わず」に広げたのに、文面は「トークンが取れなかった」1通り。403 では偽で、案内先の doctor は install の範囲を見ない | **直す** | 文面を「投稿できなかったので…（理由: <理由>）」にし、理由を4通り（取れない / 401 が2回 / 403 / その他）から `Adapter` が入れる、と決めました | 4周目の直しが持ち込んだ（発火の条件を広げた変更） |
 | **ダッシュボードの書き込みが、ロックを取る側の一覧に無い** | Medium | 資格情報を書く4つのうち、ロックを取ると書いてあるのは3つ | **直す** | 3-82d の一覧にダッシュボードを足しました。再認可の画面と本体の回転が重なると、片方の書き込みが消えます | 前の周に既に在った |
 | **「読み取り専用」の前提を1箇所しか直していない** | Medium | 同じ前提が `server.go` に6箇所あり、1秒で叩き切る根拠にもなっている。名前の入れ直しの form のメソッドも決めていない | **直す** | **確かめました。**6箇所（14・83・257・286・327・363行）を同じ commit で直す、名前の form は GET、1秒は変えずに画面へ「途中で止めたらこの段からやり直す」を書く、と決めました。4周目で指した「書き込みの経路は存在しない」は [371行](../../../internal/server/server.go#L371) で、指した範囲の外でした | 4周目の直しが持ち込んだ（`newMux` の1箇所だけを対象にした変更） |

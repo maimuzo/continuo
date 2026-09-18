@@ -530,7 +530,14 @@ func TestGitHubApp_installの戻りで段3を出す(t *testing.T) {
 	if want := "http://" + server.LoopbackHost + server.GitHubAppAuthorizedPath; q.Get("redirect_uri") != want {
 		t.Errorf("認可のリンクの redirect_uri が違う: %q（want %q）", q.Get("redirect_uri"), want)
 	}
-	for _, must := range []string{"– with " + fakeSlug, "約6か月", "途中で continuo を止めたら"} {
+	// **「– with」の次に slug を置かせない**（実装レビュー4周目の Medium）。
+	// GitHub が出すのは slug ではなく表示名で、slug は小文字化とハイフン化を受けている。
+	// **画面が約束した文字列を issue で探す人が、見つけられなくなる。**
+	// slug は「この GitHub App はどれか」を指す識別子として、別に出す。
+	if strings.Contains(body, "– with "+fakeSlug) {
+		t.Errorf("段3 が「– with」の次に slug を置いている。GitHub が出すのは表示名である:\n%s", body)
+	}
+	for _, must := range []string{"「– with」とこの GitHub App の表示名", fakeSlug, "約6か月", "途中で continuo を止めたら"} {
 		if !strings.Contains(body, must) {
 			t.Errorf("段3 の説明 %q が無い:\n%s", must, body)
 		}

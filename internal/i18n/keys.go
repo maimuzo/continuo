@@ -2688,6 +2688,11 @@ const (
 	//
 	// **黙って受けてはならない。**回転で返らないと、使い終わって無効になった古いトークンを書き戻す。
 	KeyGitHubAppTokenNoRefresh Key = "githubapp.token.no_refresh"
+	// KeyGitHubAppTokenNoRefreshExpiry は応答に更新用のトークンの期限が無いときに出る。
+	//
+	// **トークンだけ受けて期限を残すと、古い期限が新しいトークンに付く。**
+	// `continuo doctor` が「期限が切れています」と言い、人間が要らない認可をやり直す。
+	KeyGitHubAppTokenNoRefreshExpiry Key = "githubapp.token.no_refresh_expiry"
 	// KeyGitHubAppViewerRequestFailed は `GET /user` の往復が失敗したときに出る。
 	KeyGitHubAppViewerRequestFailed Key = "githubapp.viewer.request_failed"
 	// KeyGitHubAppViewerStatus は `GET /user` が非 2xx を返したときに出る。
@@ -3875,6 +3880,7 @@ var allKeys = []Key{
 	KeyGitHubAppTokenDenied,
 	KeyGitHubAppTokenEmpty,
 	KeyGitHubAppTokenNoRefresh,
+	KeyGitHubAppTokenNoRefreshExpiry,
 	KeyGitHubAppViewerRequestFailed,
 	KeyGitHubAppViewerStatus,
 	KeyGitHubAppViewerParseFailed,
