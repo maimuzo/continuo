@@ -67,7 +67,7 @@ type restoreCandidate struct {
 	// Repo は同じくリポジトリ名である。
 	//
 	// **身元ファイルからは読まない。**身元ファイルは worktree の直下にあり、
-	// その worktree ではエージェントが `--permission-mode dontAsk` で動く（設計 3-16 の段9）。
+	// その worktree ではエージェントが `--permission-mode auto`（既定）で動く（設計 3-16 の段9）。
 	// **パスは封じ込め検査（設計 3-20）を通ったものなので、エージェントには書き換えられない。**
 	Owner string
 	Repo  string
@@ -255,7 +255,7 @@ func (o *Orchestrator) scanIdentities() ([]restoreCandidate, []string) {
 // **別の issue の生きている run を乗っ取れる。**
 //
 // **何が起きるか。**worktree の直下の身元ファイル（`<worktree>/.continuo.json`）で、
-// その worktree のエージェントは `--permission-mode dontAsk` で動く（設計 3-16 の段9）。
+// その worktree のエージェントは `--permission-mode auto`（既定）で動く（設計 3-16 の段9）。
 // そこで `project_item_id` を走行中の別 issue のものに書き換え、`created_at` を新しくすると、
 // 復元の段2 は「同じ issue の worktree が2つある」と判定して**被害者の worktree を
 // 『捨てた身元』にし、段4 でその生きた pane を閉じる。**以後その issue の run は
@@ -752,7 +752,7 @@ func (o *Orchestrator) decideOne(
 				"\n【確かめ方】continuo が pane を閉じたので画面は残っていません。"+
 				"worktree の中身（下記）を見て、どこまで進んだかを確かめてください。"+
 				"\n【よくある原因】許可されていないコマンドを実行しようとした / フォルダの信頼が切れた。"+
-				permissionRemedyText(o.cfg.Claude.PermissionMode, issue.RepoIsPrivate),
+				permissionRemedyText(o.cfg.Claude.PermissionMode),
 			handoffContext{WorktreePath: c.Path})
 		o.closePaneInto(ctx, pane.PaneID, result)
 		return adoption{}, false

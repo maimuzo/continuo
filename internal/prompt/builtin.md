@@ -137,21 +137,26 @@ sequenceDiagram
 
 計画のコメントの形。**ファイルへ書いてから渡してください。**
 
-    cat > plan.md <<'PLAN'
-    <!-- continuo:agent -->
-    <!-- continuo:plan -->
-    # 計画
+```bash
+F=$(mktemp)
+cat > "$F" <<'PLAN'
+<!-- continuo:agent -->
+<!-- continuo:plan -->
+# 計画
 
-    ## <一言で中身が想像できる節の題名>
+## <一言で中身が想像できる節の題名>
 
-    ここに 5-5 の7つの見出しを置く
-    （症状は「### 何が問題なのか」へ、原因（ファイル名と行番号つき）と
-     どのファイルをどう直すかと、決まっていないことと図は「### 詳細」へ書く）
-    PLAN
-    gh issue comment {{.issue.url}} --body-file plan.md
+ここに 5-5 の7つの見出しを置く
+（症状は「### 何が問題なのか」へ、原因（ファイル名と行番号つき）と
+ どのファイルをどう直すかと、決まっていないことと図は「### 詳細」へ書く）
+PLAN
+gh issue comment {{.issue.url}} --body-file "$F"
+```
 
 **`--body "…"` で渡さないでください。**計画にはファイル名と行番号を書くので、
 backtick とドルの記号が混ざります。**二重引用符の中では、それが実行されます。**
+**見本は、囲みの中身をそのまま使ってください。**`PLAN` の行は行頭に置きます。字下げすると、そこで終わりと読まれません。
+`mktemp` で作ったファイルは、消さなくてかまいません。
 
 **2行目の `<!-- continuo:plan -->` を落とさないでください。**
 **落とすと、continuo が「この run は成果を書いた」と誤って数えます。**
@@ -180,30 +185,32 @@ Critical と High は原則すべて直します。直さない場合は理由�
 
 判断票の形。**1行目と2行目の並びを変えないでください。**
 
-    <!-- continuo:agent -->
-    <!-- design-review-result -->
-    # レビューの判断票（計画）
+```markdown
+<!-- continuo:agent -->
+<!-- design-review-result -->
+# レビューの判断票（計画）
 
-    ## <一言で中身が想像できる節の題名>
+## <一言で中身が想像できる節の題名>
 
-    > （その節が答えている原文だけを引く）
+> （その節が答えている原文だけを引く）
 
-    ### 三行まとめ
+### 三行まとめ
 
-    ### 前提
+### 前提
 
-    ### 単語の説明
+### 単語の説明
 
-    ### 既存の構造がどうなっているか
+### 既存の構造がどうなっているか
 
-    ### 何が問題なのか
+### 何が問題なのか
 
-    ### 詳細
+### 詳細
 
-    | 指摘 | 深刻さ | 中身 | 直すか | 理由 |
-    | --- | --- | --- | --- | --- |
-    | 片付けの順序 | High | worktree を消す前に branch を消している | 直す | — |
-    | 変数名の揺れ | Low | repoDir と repoPath が混在 | 直さない | この issue の範囲外 |
+| 指摘 | 深刻さ | 中身 | 直すか | 理由 |
+| --- | --- | --- | --- | --- |
+| 片付けの順序 | High | worktree を消す前に branch を消している | 直す | — |
+| 変数名の揺れ | Low | repoDir と repoPath が混在 | 直さない | この issue の範囲外 |
+```
 
 **表は `### 詳細` の中に置いてください。**
 1列目には番号ではなく内容が予想できる短い名前を書いてください。
@@ -263,7 +270,21 @@ gh が「どこへ push するか」を対話で聞いてきて、そこで止�
 
 `[]` が返ったときだけ、新しく作ります。
 
-    gh pr create --title "<何を直したか>" --body "<何をしたかの説明> Closes #{{.issue.number}}"
+```bash
+T=$(mktemp)
+cat > "$T" <<'TITLE'
+<何を直したか>
+TITLE
+F=$(mktemp)
+cat > "$F" <<'PRBODY'
+<何をしたかの説明>
+
+Closes #{{.issue.number}}
+PRBODY
+gh pr create --title "$(cat "$T")" --body-file "$F"
+```
+
+**題名も本文も、ファイルへ書いてから渡してください**（3-2 と同じ理由です）。**題名は1行で書いてください。**
 
 `Closes #{{.issue.number}}` を落とさないでください。
 **この1行が pull request と issue を結びつけます。**落とすと、次に起動されたときに 4-2 の一覧からこの pull request が出てこず、レビューの指摘を読む先が消えます。
@@ -289,14 +310,17 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 
 **計画のコメントと同じく、ファイルへ書いてから渡してください**（理由は 3-2 と同じです）。
 
-    cat > review.md <<'REVIEW'
-    <!-- code-review-result -->
-    <!-- continuo:agent -->
-    # レビューの判断票（実装）
+```bash
+F=$(mktemp)
+cat > "$F" <<'REVIEW'
+<!-- code-review-result -->
+<!-- continuo:agent -->
+# レビューの判断票（実装）
 
-    ここに 3-2 の判断票と同じ形で書く（5-5 の7つの見出し。表は ### 詳細 の中）
-    REVIEW
-    gh pr comment <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file review.md
+ここに 3-2 の判断票と同じ形で書く（5-5 の7つの見出し。表は ### 詳細 の中）
+REVIEW
+gh pr comment <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
 
 **1行目の目印を変えないでください。**コメントの本文の先頭に無いと数えられません。
 
@@ -320,13 +344,16 @@ pull request のレビューでは、差分に当たる観点へ書き換えて�
 あわせて、何をしたかを issue のコメントに残します。
 **これもファイルへ書いてから渡してください**（理由は 3-2 と同じです）。
 
-    cat > done.md <<'DONE'
-    <!-- continuo:agent -->
-    # <何をしたかを一言で>
+```bash
+F=$(mktemp)
+cat > "$F" <<'DONE'
+<!-- continuo:agent -->
+# <何をしたかを一言で>
 
-    ここに 5-5 の7つの見出しで、何をしたかを書く（印は上の1行だけ）
-    DONE
-    gh issue comment {{.issue.url}} --body-file done.md
+ここに 5-5 の7つの見出しで、何をしたかを書く（印は上の1行だけ）
+DONE
+gh issue comment {{.issue.url}} --body-file "$F"
+```
 
 **新しく1件投稿してください。**5-3 の「コメントは増やさないでください」は途中経過の報告どうしの話で、
 この成果の報告には当てはまりません。
@@ -434,18 +461,26 @@ issue に書かれていない実装が要ると判断したときは、その�
 
 **段2a。数字が返ったときは、その1件に書き足します。**
 
-    ID=<段1が返した数字>
-    OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-    case "$OLD" in
-      *"<!-- continuo:progress -->"*)
-        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-          -f body="$OLD
-    - $(date -u +%Y-%m-%dT%H:%M:%SZ) いま <何をしているか>"
-        ;;
-      *)
-        echo "本文を読めませんでした。段2b で新しく1件投稿します"
-        ;;
-    esac
+```bash
+ADD=$(mktemp)
+printf -- '- %s いま ' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ADD"
+cat >> "$ADD" <<'NOW'
+<何をしているか>
+NOW
+ID=<段1が返した数字>
+OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+case "$OLD" in
+  *"<!-- continuo:progress -->"*)
+    F=$(mktemp)
+    { printf '%s\n' "$OLD"; cat "$ADD"; } > "$F"
+    gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+      -F body=@"$F"
+    ;;
+  *)
+    echo "本文を読めませんでした。段2b で新しく1件投稿します"
+    ;;
+esac
+```
 
 **`case` で印そのものを確かめてから書き込みます。**
 **中身が空でないかを見るだけでは足りません。**`gh api` は、取得に失敗したとき
@@ -461,12 +496,22 @@ issue に書かれていない実装が要ると判断したときは、その�
 **印の2行は、行の先頭から書きます。**下の見本のとおり、字下げしないでください。
 
 ```bash
-gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
+F=$(mktemp)
+cat > "$F" <<'PROGRESS'
+<!-- continuo:agent -->
 <!-- continuo:progress -->
 まだ作業中です。
 
-- $(date -u +%Y-%m-%dT%H:%M:%SZ) いま <何をしているか>"
+PROGRESS
+printf -- '- %s いま ' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$F"
+cat >> "$F" <<'NOW'
+<何をしているか>
+NOW
+gh issue comment {{.issue.url}} --body-file "$F"
 ```
+
+**`<何をしているか>` は、`<<'NOW'` の下に書きます。**二重引用符の中へ書かないでください。
+backtick や `$` を書くと、シェルがそれを実行します（段2a も同じです）。
 
 **2行目の `<!-- continuo:progress -->` を落とさないでください。**
 **continuo が「進捗が書かれた」と数えるのは、この印が付いたコメントだけです。**
@@ -554,25 +599,27 @@ gh issue comment {{.issue.url}} --body "<!-- continuo:agent -->
 骨組み。**印の行は、そのコメントの節の見本のものをそのまま使ってください。**
 下の見本が置いているのは、3-2 の計画のコメントの印です。
 
-    <!-- continuo:agent -->
-    <!-- continuo:plan -->
-    # 計画
+```markdown
+<!-- continuo:agent -->
+<!-- continuo:plan -->
+# 計画
 
-    ## <一言で中身が想像できる節の題名>
+## <一言で中身が想像できる節の題名>
 
-    > （その節が答えている原文だけを引く）
+> （その節が答えている原文だけを引く）
 
-    ### 三行まとめ
+### 三行まとめ
 
-    ### 前提
+### 前提
 
-    ### 単語の説明
+### 単語の説明
 
-    ### 既存の構造がどうなっているか
+### 既存の構造がどうなっているか
 
-    ### 何が問題なのか
+### 何が問題なのか
 
-    ### 詳細
+### 詳細
+```
 
 **話題が2つ以上あるときは、`## ` の節を並べてください。**節ごとに引用が付くので、
 **どの引用がどの説明に対応するかが、位置で分かります。**
@@ -673,6 +720,24 @@ issue ごとに1行ずつ表明を書きます。
     CONTINUO-STATUS: #45 review      （同じグループの別の issue）
 
 pull request の本文にも、その issue の分を1行ずつ足します（`Closes #45` のように書きます）。
+**足し方は次のとおりです。**本文を読めなかったとき（`gh` が失敗したか、中身が空だったとき）は書き戻さず、そのことを応答に書いてください。
+
+```bash
+F=$(mktemp)
+if gh pr view <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --json body --jq .body > "$F" && [ -s "$F" ]; then
+  if grep -qx 'Closes #<その issue の番号>' "$F"; then
+    echo "もう入っています"
+  else
+    printf '\nCloses #%s\n' '<その issue の番号>' >> "$F"
+    gh pr edit <PR番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+  fi
+else
+  echo "PR の本文を読めませんでした。書き換えていません"
+fi
+```
+
+**読めたことを確かめずに `gh pr edit` を叩かないでください。**読めないまま書き戻すと、
+本文が足した1行だけになり、`Closes #{{.issue.number}}` と説明が消えます。
 
 別のリポジトリの issue は、この worktree では直せません。直さずにこう書きます。
 
@@ -749,26 +814,33 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 読み取りに失敗したまま書き換えると、
 **`<!-- continuo:group -->` の印ごと本文が消え、段1 がその成果報告を二度と見つけられなくなります。**
 
-    URL=<段1が返した URL>
-    ID=${URL##*#issuecomment-}
-    case "$ID" in
-      '' | *[!0-9]*)
-        echo "コメントの ID を取れませんでした。段2b で新しく1件投稿します"
+```bash
+ADD=$(mktemp)
+cat > "$ADD" <<'LINE'
+- <上の表で決めた行>
+LINE
+URL=<段1が返した URL>
+ID=${URL##*#issuecomment-}
+case "$ID" in
+  '' | *[!0-9]*)
+    echo "コメントの ID を取れませんでした。段2b で新しく1件投稿します"
+    ;;
+  *)
+    OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
+    case "$OLD" in
+      *"<!-- continuo:group -->"*)
+        F=$(mktemp)
+        { printf '%s\n' "$OLD"; cat "$ADD"; } > "$F"
+        gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
+          -F body=@"$F"
         ;;
       *)
-        OLD=$(gh api "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" --jq .body)
-        case "$OLD" in
-          *"<!-- continuo:group -->"*)
-            gh api --method PATCH "repos/{{.issue.owner}}/{{.issue.repo}}/issues/comments/$ID" \
-              -f body="$OLD
-    - <上の表で決めた行>"
-            ;;
-          *)
-            echo "本文を読めませんでした。段2b で新しく1件投稿します"
-            ;;
-        esac
+        echo "本文を読めませんでした。段2b で新しく1件投稿します"
         ;;
     esac
+    ;;
+esac
+```
 
 **段2b。段1 が何も返さなかったとき、または段2a が「段2b で新しく1件投稿します」と出したときは、
 新しく1件投稿します。**
@@ -788,22 +860,36 @@ pull request の本文にも、その issue の分を1行ずつ足します（`C
 
 **`review` を出した issue には、こう書きます。**
 
-    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
-    {{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
+```bash
+F=$(mktemp)
+cat > "$F" <<'GROUP'
+<!-- continuo:group -->
+{{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
 
-    - 何を直したか: <この issue が書いている症状に対して、何を変えたか>
-    - 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
-    - pull request: <PR の URL>"
+- 何を直したか: <この issue が書いている症状に対して、何を変えたか>
+- 触ったファイル: <リポジトリの根からの相対パス（src/app.ts のように）と、そこを変えた理由>
+- pull request: <PR の URL>
+GROUP
+gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
+
+**本文は、ファイルへ書いてから `--body-file` で渡してください。**二重引用符の中へ書くと、backtick と `$` をシェルが実行します。
 
 **`blocked` を出した issue には、直せていません。**
 **「まとめて直しました」と書かないでください。**無い pull request の URL も書かないでください。
 **直していない issue に、直したという記録が残ります。**代わりにこう書きます。
 
-    gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body "<!-- continuo:group -->
-    {{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
+```bash
+F=$(mktemp)
+cat > "$F" <<'GROUP'
+<!-- continuo:group -->
+{{.issue.identifier}} と一緒に見ました。この issue の分は次のとおりです。
 
-    - どこまで見たか: <調べたことと、分かったこと>
-    - なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>"
+- どこまで見たか: <調べたことと、分かったこと>
+- なぜ止まったか: <人間に決めてほしいこと、または失敗した内容>
+GROUP
+gh issue comment <その issue の番号> --repo {{.issue.owner}}/{{.issue.repo}} --body-file "$F"
+```
 
 **先頭の印は `<!-- continuo:group -->` です。**3-7 や 5-3 の `<!-- continuo:agent -->` を使わないでください。
 **その印は「いま担当している issue のエージェントが書いた」という意味で、continuo が
