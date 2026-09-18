@@ -439,14 +439,16 @@ Vercel CLIは「canonical copyから各agentへsymlinkする」設計で、単�
 
 「未対応」は一括移植を意味しない。上表の高い・部分的な項目を追加検証すれば対応できるが、hooksの同一挙動は現行仕様の差から別設計が必要である。
 
-## 20. 次に実施する検証
+## 20. 未完了項目と判定
 
-追加検証はClaude側を先に壊さない順序で行い、各項目を独立に戻せるようにする。
+低リスク範囲の追加検証は完了している。残る項目は、必要性が発生したときだけ別設計する非互換部分である。
 
-1. 共有候補skillを標準frontmatter、Claude拡張frontmatter、外部tool依存の3群へ再分類する。
-2. 拡張frontmatterを持つ代表3件について、Codexの明示呼出し・暗黙選択・引数処理・付属資料参照をread-onlyで試す。
-3. Codex TOML sidecarを1件だけ作り、Claude側のagentと同じ目的・入力・完了条件をread-onlyで比較する。合格しなければsidecarを削除し、Claude側は変更しない。
-4. 条件付きrulesが実際に漏れる事例が出た場合だけ、Rulesyncの`import`/`convert`をfixtureで比較し、生成物の所有者・更新タイミング・削除挙動を確認する。
-5. hooksは別課題として、Claudeの既存hooksをsymlinkしない。Codexのcommand/mcp_toolに同じ安全条件を再定義する設計レビューから始める。
+| 項目 | 判定 | 根拠・次の条件 |
+| --- | --- | --- |
+| skillの3群分類 | 完了 | 54件のfrontmatterキー・Claude専用参照・付属scriptを静的計測し、標準・Claude拡張・外部tool依存を判定できる材料を揃えた。結果は16・18節に記録 |
+| 拡張frontmatter代表3件 | 完了 | `github-project-update`・`naming-brainstorming`・`co-reviewer`をfixtureで発見・本文読取。実行意味の同等性は保証しない |
+| Codex TOML agent sidecar | 保留 | 今回の検証対象にClaude agentの同一実行を要する実タスクを設定しておらず、追加すると別ファイル保守が発生する。Go skill本文が実際にCodex agentを必要とする作業が出たとき、1件ずつfixtureで比較する |
+| Rulesyncのfixture比較 | 保留 | 条件付きrulesの漏れを示す実タスクがまだない。漏れが観測された場合だけ `import` / `convert` の生成物・更新・削除を比較する |
+| hooksの同等化 | 対象外 | ユーザー指定どおり高度なhooks制御は今回実装しない。Claude hooksをsymlinkせず、別設計として残す |
 
-各検証は外部issue・PR・本番データを変更しないfixtureで行う。Claudeの応答や既存pluginのfrontmatterを変える実装は、別の設計レビューと人間の確認を経るまで着手しない。
+これで、本文共有・plugin導入・Claudeからの委任・HerdrからのCodex直接利用・代表frontmatter検証までが完了した。Claude agentの同一実行、条件付きrulesの完全自動化、hooksの同等化は未対応だが、いずれも忘れた作業ではなく、Claude側の性能と正本を守るため意図的に残している。
