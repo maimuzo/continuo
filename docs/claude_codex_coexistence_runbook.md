@@ -87,7 +87,7 @@ readlink ".agents/skills/$skill"
 
 個人skillは同じ考え方で `~/.agents/skills/<skill>` から `~/.claude/skills/<skill>` へリンクする。`.agents/skills` 全体をリンクする方法は、そこにある全skillがCodexで安全に読めると確認できた環境だけで使う。既存のplugin cacheを直接symlinkして更新を追跡する方法は採らない。
 
-次のfrontmatter・実行機能を含むskillは、リンクせずClaude側だけに残すか、別途Codex用sidecarを設計する。
+次のfrontmatter・実行機能を含むskillは、リンクせずClaude側だけに残す。Codex用sidecarや変換ファイルは作らない。
 
 - `user-invocable`、`argument-hint`、`context: fork`、`agent`、`background`
 - `!` による動的シェル注入、`${CLAUDE_PLUGIN_ROOT}`、`mcp__claude` などのClaude専用参照
