@@ -304,7 +304,7 @@ language: ja
 | `continuo github-app token` | **`~/.continuo/github-app-credentials.json` だけを読みます。**`WORKFLOW.md` もカンバンも読みません |
 | `continuo allow-keychain-access` | macOS で1回だけ叩くものです |
 
-**この4つは、環境変数 `LANG` から決めた言語で出ます**（決まらなければ英語です）。
+**この5つは、環境変数 `LANG` から決めた言語で出ます**（決まらなければ英語です）。
 
 **残りのコマンドは `language:` に従います**（`continuo setup` の対話も、`continuo doctor` の検査結果も、
 `continuo abandon` も、常駐プロセスも同じです）。

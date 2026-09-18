@@ -110,7 +110,11 @@ func checkGitHubAppStartup(
 		return err
 	}
 	if creds.AuthorizedLogin == "" {
-		return i18n.Errorf(i18n.KeyDaemonStartupGitHubAppAuthorizedLoginMissing, serverPortText(port))
+		// **末尾の1行（`server.port` を書け／番号にしろ）も付ける。**ほかの2通りの文面と揃える。
+		// 付けないと、`server.port` を書いていない人には literal の `<port>` だけが出て、
+		// **何をすればよいかがどこにも出ない。**
+		return i18n.Errorf(i18n.KeyDaemonStartupGitHubAppAuthorizedLoginMissing,
+			serverPortText(port), serverPortHint(port))
 	}
 	ghLogin, err := ga.GHLogin(ctx)
 	switch {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/maimuzo/continuo/internal/githubapp"
+	"github.com/maimuzo/continuo/internal/i18n"
 	"github.com/maimuzo/continuo/internal/server"
 )
 
@@ -905,7 +906,13 @@ func TestGitHubApp_段4の突き合わせは大文字小文字を見ない(t *te
 	if code != http.StatusOK {
 		t.Fatalf("状態コードが違う: got %d\n%s", code, body)
 	}
-	if strings.Contains(body, "違います") {
+	// **画面に出る文言そのもので確かめる。**「違います」のような、どの状態でも出ない語で
+	// 確かめると、`strings.EqualFold` を元の `!=` へ戻しても緑のままになる。
+	mismatch := i18n.T(i18n.KeyDashboardGitHubAppDoneMismatch, "OctoCat", "octocat")
+	if strings.Contains(body, mismatch) {
 		t.Errorf("大文字小文字だけの違いで食い違いを出している:\n%s", body)
+	}
+	if !strings.Contains(body, "octocat") {
+		t.Errorf("認可したアカウント名が画面に出ていない:\n%s", body)
 	}
 }

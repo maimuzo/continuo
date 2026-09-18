@@ -402,6 +402,8 @@ func (s *Server) readCredentials() (githubapp.Credentials, error) {
 //	何も無い                                   … 段1（作る）
 //	client_id と client_secret はある。更新用のトークンが無い … 段2（install）。「install 済みなら認可へ」も出す
 //	更新用のトークンが切れている               … 段3（認可）
+//	更新用のトークンはあるが authorized_login が無い … 段3（認可）。認可は通ったが `GET /user` が落ちた状態で、
+//	                                            起動時の検査はここで止まる。「設定済み」と出してはならない
 //	全部ある                                   … 「設定済み」と「認可だけをやり直す」のリンク
 //
 // `?name=<名前>` が付いていれば段1 の名前の欄にその値を入れる（名前が取られていたときの入れ直し）。
@@ -554,7 +556,16 @@ func (s *Server) handleGitHubAppCreated(w http.ResponseWriter, r *http.Request) 
 		s.renderGitHubAppError(w, r, http.StatusServiceUnavailable, i18n.KeyServerGitHubAppLockFailed, err)
 		return
 	}
-	defer s.releaseLock(l)
+	// **書き戻したら、そこで放す**（設計 3-82d「取ったトークンを使う段は囲わない」）。
+	// **画面を組み立てる段まで握ってはならない。**応答を読まない相手が1本いるだけで、
+	// 応答の期限（`githubAppWriteDeadline` の3分）まで資格情報のロックが空かず、
+	// **その間の本体の投稿が `DefaultLockTimeout`（60秒）で落ちて attribution が消える。**
+	locked := true
+	defer func() {
+		if locked {
+			s.releaseLock(l)
+		}
+	}()
 	// **在るものを読んで写すのではなく、3欄だけの資格情報を書く**（設計 3-82b「このファイルは2回書かれる」）。
 	// **読んで写すと、古い更新用のトークンが新しい `client_id` と組で残る。**
 	// `state` を出してから戻るまでの30分に、別のプロセス（同じホームを共有する2本目の continuo）が
@@ -570,6 +581,8 @@ func (s *Server) handleGitHubAppCreated(w http.ResponseWriter, r *http.Request) 
 			s.githubApp.Store.Path(), err)
 		return
 	}
+	s.releaseLock(l)
+	locked = false
 	// **client_secret は1文字も出さない。**
 	s.logger.Info("GitHub App を作り、client_id と client_secret と slug を書きました（段1 → 段2）",
 		"path", s.githubApp.Store.Path(), "slug", converted.Slug, "name", converted.Name)
@@ -647,7 +660,13 @@ func (s *Server) handleGitHubAppAuthorized(w http.ResponseWriter, r *http.Reques
 		s.renderGitHubAppError(w, r, http.StatusServiceUnavailable, i18n.KeyServerGitHubAppLockFailed, err)
 		return
 	}
-	defer s.releaseLock(l)
+	// **書き戻したら、そこで放す**（上の段1 と同じ理由。設計 3-82d）。
+	locked := true
+	defer func() {
+		if locked {
+			s.releaseLock(l)
+		}
+	}()
 	creds, err := s.readCredentials()
 	if err != nil {
 		s.renderGitHubAppError(w, r, http.StatusInternalServerError, i18n.KeyServerGitHubAppReadFailed, err)
@@ -680,6 +699,8 @@ func (s *Server) handleGitHubAppAuthorized(w http.ResponseWriter, r *http.Reques
 			s.githubApp.Store.Path(), viewerErr)
 		return
 	}
+	s.releaseLock(l)
+	locked = false
 	// **更新用のトークンは1文字も出さない。**
 	s.logger.Info("GitHub App の認可を通し、更新用のトークンと期限と認可したアカウント名を書きました（段3 → 段4）",
 		"path", s.githubApp.Store.Path(), "authorized_login", login,

@@ -76,7 +76,7 @@ func truncate(b []byte) string {
 	return string(b)
 }
 
-// contentTypeOf は応答の `Content-Type` を返す。空なら `(無し)` と書く。
+// contentTypeOf は応答の `Content-Type` を返す。空なら `dashboard.none` の文言（`—`）を返す。
 //
 // **トークンを運ぶ端点で、応答本文の代わりにエラーの文言へ載せるものである。**
 // 本文には `access_token` と `refresh_token` がそのまま入っており、
@@ -88,12 +88,16 @@ func truncate(b []byte) string {
 // **`Content-Type` だけなら、何が返ったか（JSON か form か HTML か）は分かる。**
 //
 // resp: 読んだ応答。
-// 戻り値: `Content-Type` の値。無ければ `(無し)`。
+// 戻り値: `Content-Type` の値。無ければ `dashboard.none` の文言。
+//
+//	**日本語を直に書かない。**この値は英語の文言の引数にも入るので、直に書くと
+//	`language: en` の利用者の画面に日本語が混じる（しかも Go に埋まっているので、
+//	文言で検索しても資源に出てこない）。
 func contentTypeOf(resp *http.Response) string {
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		return ct
 	}
-	return "(無し)"
+	return i18n.T(i18n.KeyDashboardNone)
 }
 
 // tokenResponse は `POST /login/oauth/access_token` の応答である。
