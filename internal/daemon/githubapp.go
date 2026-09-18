@@ -11,8 +11,8 @@ import (
 
 	"github.com/maimuzo/continuo/internal/config"
 	"github.com/maimuzo/continuo/internal/githubapp"
-	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/i18n"
+	"github.com/maimuzo/continuo/internal/lock"
 	"github.com/maimuzo/continuo/internal/tracker"
 )
 
