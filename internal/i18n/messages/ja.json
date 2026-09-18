@@ -377,7 +377,7 @@
   "dashboard.github_app.authorize.heading": "段3/3: あなたの代理として投稿することを認可する",
   "dashboard.github_app.authorize.expired": "更新用のトークンの期限（%s）が切れています。この段をやり直してください。",
   "dashboard.github_app.authorize.intro": "下のボタンを押すと GitHub の認可の画面へ移ります。承認すると、continuo とそのエージェントが GitHub App「%s」を通して、あなたの代理として issue にコメントできるようになります。",
-  "dashboard.github_app.authorize.attribution": "ここから先、機械の投稿はあなたの名前のまま、横に「– with」とこの GitHub App の表示名が並びます（表示名は GitHub の画面で確かめられます。上の slug と同じとは限りません）。あなたが自分で書いたコメントには付きません。",
+  "dashboard.github_app.authorize.attribution": "ここから先、機械の投稿はあなたの名前のまま、横に「– with」とこの GitHub App の表示名が並びます（表示名は GitHub の画面で確かめられます。上の「GitHub App「…」」に出ている名前と同じとは限りません）。あなたが自分で書いたコメントには付きません。",
   "dashboard.github_app.authorize.expiry": "認可は約6か月で切れます。continuo は投稿のたびに更新用のトークンを回すので、使い続けているあいだは延びますが、切れたらこの段だけをやり直します。",
   "dashboard.github_app.authorize.note_stored": "認可が終わると、更新用のトークンとその期限と認可したアカウント名を %s に書きます。アクセストークンはファイルにもメモリにも残しません。",
   "dashboard.github_app.authorize.note_interrupted": "途中で continuo を止めたら、この段からやり直してください。",

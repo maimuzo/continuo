@@ -614,8 +614,9 @@ func renderOne(it Fragment, data map[string]any) (string, error) {
 
 // Validate は、断片が解釈でき、一覧にある変数だけを使っていることを確かめる（設計 5-3c）。
 //
-// **作り物の issue で4回変数展開する。**`.attempt` の2通り（空と 2）と、
-// `.github_app_attribution` の2通り（偽と真）の組み合わせである。
+// **作り物の issue で8回変数展開する。**`.attempt` の2通り（空と 2）と、
+// `.github_app_attribution` の2通り（偽と真）と、
+// `.continuo.self_marker` の2通り（空と非空）の組み合わせである。
 // **`{{if .attempt}}` の中は、空のときには一度も解釈されない**ためであり、
 // **`{{if .github_app_attribution}}` の中も、偽のときには一度も解釈されない**
 // （docs/plans/impl/issue245_github_app_attribution.md の 3-82e）。

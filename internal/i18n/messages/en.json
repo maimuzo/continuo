@@ -1,5 +1,5 @@
 {
-  "_source_sha256": "233d839335eeefb2752afec0f8dbaac2b785f38755755f1cdda3f9fca509bd7c",
+  "_source_sha256": "7765acccb768240b5952eaa5f7d0893fe9d2fa00311e2af06f639253e75f8281",
   "abandon.board_not_listed": "Issue %s is not listed on the kanban board",
   "abandon.deferred_reason": "  Reason: %s",
   "abandon.dry_run_note": "This is --dry-run. Nothing was deleted.",
@@ -378,7 +378,7 @@
   "dashboard.github_app.authorize.heading": "Step 3 of 3: Authorize posting on your behalf",
   "dashboard.github_app.authorize.expired": "The refresh token expired at %s. Repeat this step.",
   "dashboard.github_app.authorize.intro": "The button below takes you to GitHub's authorization page. Once you approve, continuo and its agents can comment on issues on your behalf through the GitHub App \"%s\".",
-  "dashboard.github_app.authorize.attribution": "From here on, machine posts keep your name, with \"– with\" and this GitHub App's display name shown next to it (you can check the display name on GitHub; it may differ from the slug above). Comments you write yourself do not.",
+  "dashboard.github_app.authorize.attribution": "From here on, machine posts keep your name, with \"– with\" and this GitHub App's display name shown next to it. You can check the display name on GitHub. It may differ from the name shown above. Comments you write yourself do not.",
   "dashboard.github_app.authorize.expiry": "The authorization expires after about 6 months. continuo rotates the refresh token on every post, so it keeps extending while in use; once it expires, repeat only this step.",
   "dashboard.github_app.authorize.note_stored": "When authorization completes, continuo writes the refresh token, its expiry, and the authorized account name to %s. Access tokens are kept neither in a file nor in memory.",
   "dashboard.github_app.authorize.note_interrupted": "If you stop continuo partway through, start again from this step.",

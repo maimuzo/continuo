@@ -118,7 +118,7 @@ const (
 	// **`✗` にする。**この誤りがあると **issue が1件も着手できない。**
 	// `未記入の項目` と違い、**既定値で代わりが利かない。**
 	//
-	// **言い切らない。**検査は作り物の issue で4回変数展開するだけであり、
+	// **言い切らない。**検査は作り物の issue で8回変数展開するだけであり、
 	// 値そのもので分かれる枝の中までは届かない。文言に検査した範囲を書く。
 	LabelPromptVariables = i18n.KeyDoctorLabelPromptVariables
 	// LabelGitHubApp は、`tracker.comments.github_app_attribution` が真のときに、GitHub App の

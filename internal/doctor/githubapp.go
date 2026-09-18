@@ -152,7 +152,15 @@ func checkGitHubApp(ctx context.Context, opts Options, cfg loadedConfig, configS
 		return res
 	}
 
-	expiresAt := creds.RefreshTokenExpiresAt.UTC().Format(time.RFC3339)
+	// **零は「期限を知らない」である。**GitHub が新しい更新用のトークンを返しながら
+	// その期限を返さなかったときに、`applyToken` が古い期限を捨てて零にする
+	// （[internal/githubapp/oauth.go](../githubapp/oauth.go) の `applyToken`）。
+	// **守らないと `0001-01-01T00:00:00Z` を `✓` で出す。**
+	// ダッシュボードの `formatExpiry` は同じ状態を `—` と出すので、揃える。
+	expiresAt := i18n.T(i18n.KeyDashboardNone)
+	if !creds.RefreshTokenExpiresAt.IsZero() {
+		expiresAt = creds.RefreshTokenExpiresAt.UTC().Format(time.RFC3339)
+	}
 	if creds.RefreshTokenExpired(now) {
 		return Result{
 			Label:    LabelGitHubApp,

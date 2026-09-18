@@ -434,6 +434,49 @@ func TestTokenSource_呼ぶたびに回す(t *testing.T) {
 	}
 }
 
+// 目的: 更新用のトークンは返ったが期限が返らなかったとき、古い期限を捨てて零にすることを確認する
+// （実装レビュー5周目の Medium）。
+//
+// **落としてはならない。**落とすと Rotate が書き戻さずに返り、GitHub が返したばかりの
+// 新しいトークンを捨てて、いま無効になった古いトークンをファイルへ残す。以後の回転が永久に通らない。
+// **古い期限を残してもならない。**それは前のトークンの期限で、新しいトークンには当たらない。
+// 残すと `continuo doctor` が「期限が切れています」と誤って言い、人間が要らない認可をやり直す。
+//
+// 与える情報: `refresh_token` は返すが `refresh_token_expires_in` を返さない偽の GitHub と、
+// 期限が入っている認可済みの資格情報。
+// 成功条件: 落ちず、新しい更新用のトークンが書き戻され、期限が零になること。
+// 零のとき RefreshTokenExpired と RefreshTokenExpiresSoon が両方とも偽であること。
+func TestRotate_期限が返らなければ古い期限を捨てる(t *testing.T) {
+	f := newFakeGitHub(t)
+	f.tokenResponses = []string{
+		`{"access_token":"ghu_new","expires_in":28800,"refresh_token":"ghr_new","token_type":"bearer"}`,
+	}
+	creds := fullCredentials()
+	creds.RefreshTokenExpiresAt = time.Now().Add(-24 * time.Hour) // 過ぎた期限をわざと置く
+	now := time.Now()
+
+	token, updated, err := f.client().Rotate(context.Background(), creds, now)
+	if err != nil {
+		t.Fatalf("期限が返らないだけで落ちた（新しいトークンを捨てることになる）: %v", err)
+	}
+	if token != "ghu_new" {
+		t.Errorf("アクセストークンが返っていない: %q", token)
+	}
+	if updated.RefreshToken != "ghr_new" {
+		t.Errorf("新しい更新用のトークンを書き戻していない: %q", updated.RefreshToken)
+	}
+	if !updated.RefreshTokenExpiresAt.IsZero() {
+		t.Errorf("古い期限が残っている: %v（零のはず）", updated.RefreshTokenExpiresAt)
+	}
+	// **零は「期限を知らない」である。**切れているとも、もうすぐ切れるとも言わせない。
+	if updated.RefreshTokenExpired(now) {
+		t.Error("期限を知らない状態を「切れている」と言っている")
+	}
+	if updated.RefreshTokenExpiresSoon(now) {
+		t.Error("期限を知らない状態を「もうすぐ切れる」と言っている")
+	}
+}
+
 // 目的: GitHub が更新用のトークンを返さなかったら、黙って受けずに落ちることを確認する
 // （実装レビュー3周目の Medium）。
 //

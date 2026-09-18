@@ -223,7 +223,8 @@ server.port を書いていないときは、先に書いてください。0 に
 **`continuo doctor` も同じ文面を出します。**
 
 **資格情報は在るのに、更新用のトークンが回せないときは、文面が変わります**
-（回転の書き戻しの直前で continuo が落ちた・**`server.port` を GitHub App を作ったときと別の番号にした**・GitHub App を消した・client secret を作り直した）。
+（回転の書き戻しの直前で continuo が落ちた・GitHub App を消した・client secret を作り直した）。
+**`server.port` を変えただけでは、ここには来ません。**回転は戻り先の URL を1バイトも使わないためです。ポートが効くのは、上の文面の段3（認可のやり直し）で、そこは段4 が受け持ちます。
 
 ```
 github_app_attribution が true ですが、GitHub App の更新用のトークンを回せませんでした（<GitHub が返した error の値>）。
